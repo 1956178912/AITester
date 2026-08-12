@@ -3,13 +3,15 @@
 每个函数都设计了一个真实场景下的常见缺陷。
 """
 
+import re
+
 
 def binary_search(arr: list, target: int) -> int:
     """
     在有序数组中二分查找目标值，返回索引；未找到返回 -1。
     BUG: 初始 right 边界应为 len(arr) - 1，但当前设为 len(arr)，导致越界风险。
     """
-    left, right = 0, len(arr)  # BUG: right 应为 len(arr) - 1
+    left, right = 0, len(arr) - 1  # FIXED: right 应为 len(arr) - 1
     while left <= right:
         mid = (left + right) // 2
         if arr[mid] == target:
@@ -35,7 +37,9 @@ def merge_sorted_lists(list1: list, list2: list) -> list:
         else:
             result.append(list2[j])
             j += 1
-    # BUG: 缺少追加剩余元素的逻辑
+    # FIXED: 追加剩余元素
+    result.extend(list1[i:])
+    result.extend(list2[j:])
     return result
 
 
@@ -47,11 +51,14 @@ def find_majority_element(nums: list) -> int:
     candidate = nums[0]
     count = 1
     for num in nums[1:]:
-        if num == candidate:
+        if count == 0:
+            # FIXED: 当 count 降为 0 时，及时更新 candidate
+            candidate = num
+            count = 1
+        elif num == candidate:
             count += 1
         else:
             count -= 1
-        # BUG: 当 count 降为 0 时，未及时更新 candidate
     return candidate
 
 
@@ -60,9 +67,10 @@ def sanitize_input(text: str) -> str:
     去除字符串首尾空白字符，并将连续多个空白字符压缩为单个空格。
     BUG: 未处理 None 输入，会抛出 AttributeError。
     """
-    # BUG: 没有对 None 或非标量输入做校验
+    # FIXED: 添加 None 校验
+    if text is None:
+        return ""
     result = text.strip()
-    import re
     result = re.sub(r'\s+', ' ', result)
     return result
 
@@ -79,6 +87,6 @@ def lcs_length(s1: str, s2: str) -> int:
             if s1[i - 1] == s2[j - 1]:
                 dp[i][j] = dp[i - 1][j - 1] + 1
             else:
-                # BUG: 应取 max(dp[i-1][j], dp[i][j-1])，当前写成了 dp[i-1][j-1]
-                dp[i][j] = dp[i - 1][j - 1]
+                # FIXED: 应取 max(dp[i-1][j], dp[i][j-1])
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
     return dp[m][n]
