@@ -31,8 +31,8 @@ def init_database() -> None:
     cursor = conn.cursor()
 
     # 创建数据库（若不存在）
-    cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{MYSQL_DATABASE}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-    cursor.execute(f"USE `{MYSQL_DATABASE}`")
+    cursor.execute("CREATE DATABASE IF NOT EXISTS %s CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", (MYSQL_DATABASE,))
+    cursor.execute("USE %s", (MYSQL_DATABASE,))
 
     # tasks 表：记录每个测试任务
     cursor.execute("""
