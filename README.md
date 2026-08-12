@@ -253,10 +253,5 @@ DOCKER_IMAGE=python:3.11-slim
 3. Docker 模式需要本地 Docker 守护进程
 4. 本系统为研究原型，未做大规模并发优化
 
-## 学术引用
-
-本项目可用于软件工程领域的实验验证，适用于 ICSE、FSE、ASE 及中文期刊《软件学报》等学术会议和期刊。
-
-## License
 
 MIT License
