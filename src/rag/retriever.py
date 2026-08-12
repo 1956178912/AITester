@@ -1,6 +1,8 @@
 """
-检索增强生成（RAG）模块：使用 ChromaDB 存储和检索历史成功测试用例与修复补丁。
-在 Generator 和 Debugger 生成前，检索相似代码片段作为参考，提升生成质量。
+检索增强生成（RAG）模块：使用 ChromaDB 存储和检索历史测试用例与修复补丁。
+
+在 Generator 和 Debugger 生成前，检索相似代码片段作为参考，
+提升生成质量和修复效率。支持持久化存储，便于实验重复使用。
 """
 
 from __future__ import annotations
@@ -29,8 +31,8 @@ class TestCaseRetriever:
     检索最相似的历史案例作为参考，实现检索增强生成（RAG）。
 
     属性:
-        collection_name: ChromaDB 集合名称。
-        persist_path: 持久化路径（None 表示内存模式）。
+        collection_name: ChromaDB 集合名称，用于区分不同数据集。
+        persist_path: 持久化路径（None 表示内存模式，重启后数据丢失）。
         client: ChromaDB 客户端实例。
         collection: ChromaDB 集合对象。
     """
@@ -45,13 +47,11 @@ class TestCaseRetriever:
 
         Args:
             collection_name: ChromaDB 集合名称，用于区分不同数据集。
-            persist_path: 持久化路径，None 时使用内存模式（重启后数据丢失）。
-                          建议设置为项目目录下的 rag_data/ 以保证可复现性。
+            persist_path: 持久化路径，None 时使用内存模式。
+                         建议设置为项目目录下的 rag_data/ 以保证可复现性。
         """
         if not CHROMA_AVAILABLE:
-            raise ImportError(
-                "chromadb 未安装，请执行: pip install chromadb"
-            )
+            raise ImportError("chromadb 未安装，请执行: pip install chromadb")
 
         self.collection_name = collection_name
         self.persist_path = persist_path
@@ -61,10 +61,10 @@ class TestCaseRetriever:
         settings = Settings(persist_directory=persist_path) if persist_path else Settings()
         self.client = chromadb.Client(settings)
 
-        # 获取或创建集合
+        # 获取或创建集合，使用余弦相似度作为距离度量
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
-            metadata={"hnsw:space": "cosine"},  # 使用余弦相似度
+            metadata={"hnsw:space": "cosine"},
         )
         logger.info("RAG 检索器已初始化，集合=%s，持久化路径=%s",
                      collection_name, persist_path or "内存")
@@ -78,9 +78,7 @@ class TestCaseRetriever:
     ) -> None:
         """
         添加一个成功测试用例到检索库。
-
-        只有 passed=True 的测试用例才会被入库，
-        确保检索到的案例都是经过验证的高质量样本。
+        只有 passed=True 的测试用例才会被入库，确保检索到的案例都是高质量样本。
 
         Args:
             code: 被测代码原文。
@@ -96,7 +94,6 @@ class TestCaseRetriever:
         doc_id = hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16]
 
         # 构建检索文档：将被测代码和测试代码拼接为检索文本
-        # 这样检索时能同时匹配被测代码特征和测试风格
         document = f"def target_code:\n{code}\n\ndef test_code:\n{test_code}"
 
         # 准备元数据
@@ -122,7 +119,6 @@ class TestCaseRetriever:
     ) -> None:
         """
         添加一个修复案例到检索库。
-
         用于 Debugger 在遇到相似错误时参考历史修复方案。
 
         Args:
@@ -134,6 +130,7 @@ class TestCaseRetriever:
         import hashlib
         doc_id = hashlib.md5(f"{original_code}|{patch}".encode()).hexdigest()[:16]
 
+        # 构建检索文档，包含错误类型和代码
         document = (
             f"error_category: {error_category}\n"
             f"original_code:\n{original_code}\n"
@@ -159,6 +156,7 @@ class TestCaseRetriever:
     ) -> List[Dict[str, Any]]:
         """
         检索与被测代码最相似的历史测试用例。
+        ChromaDB 使用余弦相似度进行向量检索。
 
         Args:
             target_code: 当前被测代码。
@@ -193,6 +191,7 @@ class TestCaseRetriever:
     ) -> List[Dict[str, Any]]:
         """
         检索与当前错误类型和被测代码最相似的历史修复方案。
+        通过 where 过滤器限定同类型错误，提高检索准确性。
 
         Args:
             error_category: 当前错误类型。

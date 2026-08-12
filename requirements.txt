@@ -1,13 +1,26 @@
+# langchain: LLM 应用开发框架，提供 Prompt 模板和消息管理
 langchain>=1.0.0
+# langchain-openai: OpenAI API 适配器，支持 gpt-4o-mini 等模型
 langchain-openai>=1.0.0
+# langgraph: 多智能体状态机编排框架，实现工作流有向图
 langgraph>=1.0.0
+# pymysql: MySQL 数据库驱动，用于实验数据持久化
 pymysql>=1.0.0
+# click: 命令行接口框架，提供 aitester run 等子命令
 click>=8.0.0
+# pytest: Python 测试框架，运行单元测试
 pytest>=8.0.0
+# pytest-cov: pytest 覆盖率插件，生成行覆盖率报告
 pytest-cov>=4.0.0
+# python-dotenv: 从 .env 文件加载环境变量
 python-dotenv>=1.0.0
+# radon: 代码复杂度分析工具，可辅助理解被测代码
 radon>=6.0.0
+# requests: HTTP 请求库（当前未直接使用，保留供扩展）
 requests>=2.31.0
-choma>=0.2.0
+# chromadb: 向量数据库，RAG 模块依赖，用于存储检索历史测试用例
+chromadb>=0.5.0
+# matplotlib: 图表绘制库，用于实验结果可视化
 matplotlib>=3.7.0
+# pandas: 数据分析库，用于结果表格生成和统计
 pandas>=2.0.0

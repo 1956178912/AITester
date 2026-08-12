@@ -1,5 +1,9 @@
 """
-AITester CLI 入口：使用 click 提供命令行接口。
+AITester CLI 入口模块：提供命令行接口，调用 LangGraph 工作流完成测试生成与修复。
+
+使用方式：
+    python main.py run examples/calculator.py --func divide
+    python main.py list-examples
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from src.graph.workflow import build_workflow
 from src.graph.state import AITesterState
 from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
 
-# 配置模块级日志：INFO 级别输出到控制台，DEBUG 级别输出到文件
+# 配置模块级日志：INFO 级别输出到控制台，DEBUG 级别输出到 aitester.log 文件
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -34,23 +38,30 @@ def cli() -> None:
 
 @cli.command()
 @click.argument("target_file", type=click.Path(exists=True))
-@click.option("--func", "-f", default=None, help="指定被测函数名")
-@click.option("--max-iterations", default=MAX_ITERATIONS, help="最大修复迭代次数")
-@click.option("--coverage-threshold", default=COVERAGE_THRESHOLD, help="覆盖率阈值")
+@click.option("--func", "-f", default=None, help="指定被测函数名，不指定则测试全部函数")
+@click.option("--max-iterations", default=MAX_ITERATIONS, help=f"最大修复迭代次数，默认 {MAX_ITERATIONS}")
+@click.option("--coverage-threshold", default=COVERAGE_THRESHOLD, help=f"覆盖率阈值百分比，默认 {COVERAGE_THRESHOLD}")
 def run(target_file: str, func: Optional[str], max_iterations: int, coverage_threshold: float) -> None:
     """
     运行单个测试任务。
 
-    TARGET_FILE: 被测 Python 文件路径。
+    TARGET_FILE: 被测 Python 文件路径（必须存在）。
+
+    流程：
+    1. 读取目标代码
+    2. 初始化工作流状态
+    3. 运行多智能体工作流（Planner → Generator → Executor → Debugger → PatchApplier）
+    4. 输出执行结果摘要
     """
     logger.info("开始测试任务：file=%s, func=%s", target_file, func)
 
-    # 读取目标代码
+    # 读取被测代码文件内容
     with open(target_file, "r", encoding="utf-8") as f:
         target_code = f.read()
 
-    # 初始化状态
+    # 初始化工作流状态：所有字段均为 None，由工作流逐步填充
     state: AITesterState = {
+        # 任务唯一标识，便于日志追踪
         "task_uuid": f"{os.path.basename(target_file)}_{func or 'all'}_{int(__import__('time').time())}",
         "target_file": target_file,
         "target_function": func,
@@ -69,11 +80,11 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
         "repair_history": [],
     }
 
-    # 构建并运行工作流
+    # 构建并运行 LangGraph 工作流
     graph = build_workflow()
     final_state = graph.invoke(state)
 
-    # 输出结果摘要
+    # 输出结果摘要到控制台
     click.echo(f"\n{'='*50}")
     click.echo(f"任务完成：{target_file}")
     if func:
@@ -84,6 +95,7 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
     click.echo(f"修复迭代：{final_state.get('iteration', 0)}/{max_iterations}")
     click.echo(f"{'='*50}")
 
+    # 根据测试结果输出不同提示
     if final_state.get("test_passed"):
         click.echo("\n✓ 测试全部通过！")
     else:
@@ -98,7 +110,7 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
 
 @cli.command()
 def list_examples() -> None:
-    """列出 examples 目录下的示例文件"""
+    """列出 examples 目录下的所有示例 Python 文件，供用户选择测试对象。"""
     examples_dir = os.path.join(os.path.dirname(__file__), "examples")
     if os.path.exists(examples_dir):
         for f in sorted(os.listdir(examples_dir)):

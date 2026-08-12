@@ -12,7 +12,8 @@ def reverse_string(s: str) -> str:
 def is_palindrome(s: str) -> bool:
     """
     判断字符串是否为回文（忽略大小写和非字母数字字符）。
-    BUG: 未过滤非字母数字字符，导致 "A man, a plan, a canal: Panama" 判断错误。
+    BUG: 未过滤非字母数字字符，也未统一大小写，
+         导致 "A man, a plan, a canal: Panama" 判断为 False。
     """
     # BUG: 没有去除非字母数字字符和统一大小写
     return s == s[::-1]
@@ -31,7 +32,7 @@ def capitalize_words(s: str) -> str:
 def caesar_cipher(text: str, shift: int) -> str:
     """
     实现 Caesar 密码加密/解密（仅处理英文字母，保留大小写）。
-    BUG: 移位计算未处理边界 wrap-around，导致大写/小写字母超出 ASCII 范围。
+    BUG: 移位计算未处理边界 wrap-around，导致 'z' + 1 变成 '{'（超出字母范围）。
     """
     result = []
     for ch in text:
@@ -46,7 +47,7 @@ def caesar_cipher(text: str, shift: int) -> str:
 def longest_common_prefix(strs: list) -> str:
     """
     找出字符串列表的最长公共前缀。
-    BUG: 当输入为空列表时未处理，会抛出 IndexError。
+    BUG: 当输入为空列表时未处理，直接 strs[0] 会抛出 IndexError。
     """
     # BUG: 没有处理空列表的情况
     strs.sort()

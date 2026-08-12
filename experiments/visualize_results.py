@@ -2,8 +2,7 @@
 实验结果可视化脚本：读取 benchmark JSON 结果，生成对比图表。
 输出：
 - experiments/results/charts/baseline_comparison.png（柱状图对比）
-- experiments/results/charts/coverage_trend.png（覆盖率趋势）
-- experiments/results/charts/iteration_dist.png（迭代次数分布）
+- experiments/results/charts/results_table.csv（详细数据表格）
 """
 
 from __future__ import annotations
@@ -29,12 +28,16 @@ CHARTS_DIR = os.path.join(RESULTS_DIR, "charts")
 def load_latest_result(results_dir: str = RESULTS_DIR) -> str:
     """
     找到最新的 benchmark JSON 结果文件。
+    按文件名排序（时间戳格式），取最后一个。
 
     Args:
         results_dir: 结果目录路径。
 
     Returns:
         最新结果文件的完整路径。
+
+    Raises:
+        FileNotFoundError: 结果目录下没有 JSON 文件时抛出。
     """
     files = sorted(
         [f for f in os.listdir(results_dir) if f.endswith(".json")],
@@ -48,6 +51,7 @@ def load_latest_result(results_dir: str = RESULTS_DIR) -> str:
 def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
     """
     绘制各基线方法的对比柱状图（成功率、平均覆盖率、平均迭代次数）。
+    三个子图并排显示，便于直观对比。
 
     Args:
         summary: benchmark 汇总结果字典。
@@ -62,7 +66,7 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    # 成功率
+    # 成功率柱状图
     bars1 = axes[0].bar(x, success_rates, width, color="#4C72B0")
     axes[0].set_title("测试成功率 (%)", fontsize=12)
     axes[0].set_xticks(x)
@@ -72,7 +76,7 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
         axes[0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
                       f"{val:.1f}", ha="center", va="bottom", fontsize=9)
 
-    # 平均覆盖率
+    # 平均覆盖率柱状图
     bars2 = axes[1].bar([xi + width for xi in x], coverages, width, color="#55A868")
     axes[1].set_title("平均覆盖率 (%)", fontsize=12)
     axes[1].set_xticks([xi + width for xi in x])
@@ -82,7 +86,7 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
         axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
                       f"{val:.1f}", ha="center", va="bottom", fontsize=9)
 
-    # 平均迭代次数
+    # 平均迭代次数柱状图
     bars3 = axes[2].bar([xi + width * 2 for xi in x], iterations, width, color="#C44E52")
     axes[2].set_title("平均修复迭代", fontsize=12)
     axes[2].set_xticks([xi + width * 2 for xi in x])
@@ -100,6 +104,7 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
 def plot_detail_table(summary: Dict[str, Any]) -> None:
     """
     生成详细结果表格（CSV 格式），便于论文引用。
+    表格包含成功率、覆盖率、迭代次数、执行时间等关键指标。
 
     Args:
         summary: benchmark 汇总结果字典。
