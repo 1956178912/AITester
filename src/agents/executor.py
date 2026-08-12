@@ -72,8 +72,10 @@ class ExecutorAgent:
             env = os.environ.copy()
             env["PYTHONPATH"] = target_dir + os.pathsep + env.get("PYTHONPATH", "")
 
+            # 使用当前 Python 解释器路径，避免依赖系统 python 命令
+            python_path = sys.executable
             cmd = [
-                "python", "-m", "pytest",
+                python_path, "-m", "pytest",
                 test_file,
                 "-v",
                 "--tb=short",
