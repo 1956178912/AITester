@@ -1,7 +1,7 @@
 """
 全局状态定义：所有智能体之间通过此状态传递信息。
 使用 TypedDict 确保类型安全。
-新增 error_category 字段用于记录分层错误修复的错误类型。
+新增 error_category、rag_references 字段支持分层修复和检索增强生成。
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ class AITesterState(TypedDict, total=False):
         iteration (int): 当前修复迭代次数。
         max_iterations (int): 最大迭代次数（来自配置）。
         repair_history (List[Dict[str, Any]]): 每次修复的详情记录。
+        rag_references (List[Dict[str, Any]] | None): RAG 检索到的相似历史案例。
     """
 
     task_uuid: str
@@ -48,3 +49,4 @@ class AITesterState(TypedDict, total=False):
     iteration: int
     max_iterations: int
     repair_history: List[Dict[str, Any]]
+    rag_references: List[Dict[str, Any]] | None
