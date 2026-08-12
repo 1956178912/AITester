@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 from typing import Any, Dict
+import sys
 
 
 def _extract_error_from_block(block_lines: list[str]) -> str:
