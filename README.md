@@ -2,8 +2,6 @@
 
 > AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
 > 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**。
-> 
-> 本系统面向学术研究，已在[研究动机文档](research_motivation.md)和[算法形式化描述](algorithm_paper.md)中提供了论文写作所需的全部素材。
 
 ## 快速开始
 
@@ -63,9 +61,7 @@ AITester/
 │   ├── test_code_analyzer.py     # code_analyzer 模块测试
 │   ├── test_error_classifier.py  # error_classifier 模块测试
 │   └── test_patch_applier.py     # patch_applier 模块测试
-├── research_motivation.md        # 研究动机、问题定义和研究问题（RQ）
-├── algorithm_paper.md            # 算法形式化描述（状态转移、伪代码、复杂度分析）
-├── main.py                       # CLI 入口（click 框架）
+├── main.py                       # CLI 入口
 ├── config.py                     # 全局配置（从 .env 读取）
 ├── init_db.py                    # 数据库初始化脚本
 ├── setup.py                      # 包管理配置（pip install -e .）
@@ -104,53 +100,6 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 **技术实现**：
 - [src/rag/retriever.py](src/rag/retriever.py) 中的 `TestCaseRetriever` 类
 - 在 [src/graph/workflow.py](src/graph/workflow.py) 中通过 `RAG_ENABLED` 标志控制启用/禁用
-
-## 论文写作指导
-
-### 推荐论文结构
-```
-1. 引言（Introduction）
-   - 自动化测试的重要性
-   - 现有方法的局限性
-   - 本文贡献
-
-2. 相关工作（Related Work）
-   - 传统测试生成工具（Pynguin、EvoSuite）
-   - LLM 驱动测试生成（TestLoter、CHATTESTER）
-   - 多智能体协作系统
-
-3. 方法设计（Methodology）
-   - 系统架构（参考 algorithm_paper.md）
-   - 逻辑驱动思维链
-   - 分层错误修复机制
-   - RAG 增强模块
-
-4. 实验设置（Experimental Setup）
-   - 数据集（examples/ 下的示例代码）
-   - 基线方法（直接 LLM 生成、单智能体方案）
-   - 评估指标（成功率、覆盖率、修复轮数）
-
-5. 结果与分析（Results and Analysis）
-   - 基准测试结果（参考 experiments/results/）
-   - 消融实验（移除 Planner/Debugger/RAG）
-   - 案例分析
-
-6. 讨论（Discussion）
-   - 方法优势
-   - 局限性
-   - 未来工作
-
-7. 结论（Conclusion）
-```
-
-### 论文素材位置
-| 内容 | 文件位置 |
-|------|----------|
-| 研究背景与动机 | [research_motivation.md](research_motivation.md) |
-| 算法形式化描述 | [algorithm_paper.md](algorithm_paper.md) |
-| System Prompt 设计 | [src/prompts/templates.py](src/prompts/templates.py) |
-| 实验脚本 | [experiments/run_benchmark.py](experiments/run_benchmark.py) |
-| 可视化脚本 | [experiments/visualize_results.py](experiments/visualize_results.py) |
 
 ## 实验复现
 
@@ -226,9 +175,3 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 - **测试框架**: pytest + pytest-cov
 - **命令行**: Click
 - **可视化**: matplotlib + pandas
-
-## 作者与研究信息
-
-- 项目名称: AITester
-- 目标期刊: 《软件学报》《计算机学报》
-- 提交时间: 2026年8月
