@@ -1,5 +1,8 @@
 """
-全局配置文件：所有环境变量和常量在此集中管理。
+全局配置文件：集中管理所有环境变量和常量。
+
+此模块从 .env 文件读取配置，为整个项目提供统一的配置接口。
+修改配置项时，优先修改此文件，而非在各处硬编码。
 """
 
 from __future__ import annotations
@@ -7,34 +10,41 @@ from __future__ import annotations
 import os
 from dotenv import load_dotenv
 
-# 加载 .env 文件中的环境变量
+# 加载 .env 文件中的环境变量，使配置与代码分离
 load_dotenv()
 
 # ─── LLM 配置 ───────────────────────────────────────────────────────────────
-# OpenAI 兼容 API 基地址，支持 DeepSeek / Qwen 等替换
+# OpenAI API 密钥，用于调用语言模型生成测试计划和代码
+# 若使用 DeepSeek、Qwen 等兼容 API，需同时设置 OPENAI_BASE_URL
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+# OpenAI 兼容 API 的基地址，支持切换至 DeepSeek、Qwen 等模型提供商
 OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+# 使用的模型名称，默认为 gpt-4o-mini（轻量级，成本较低）
 MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
-# 温度，控制输出随机性
+# 温度参数，控制模型输出的随机性；越低越确定性，越高越有创造性
 TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
 
 # ─── 数据库配置 ──────────────────────────────────────────────────────────────
+# MySQL 数据库连接参数
 MYSQL_HOST: str = os.getenv("MYSQL_HOST", "localhost")
+# MySQL 端口，默认 3306
 MYSQL_PORT: int = int(os.getenv("MYSQL_PORT", "3306"))
 MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
+# 数据库密码，建议通过环境变量注入，避免硬编码
 MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
+# 数据库名称，AITester 的所有表将创建在此数据库中
 MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 
 # ─── 执行环境配置 ────────────────────────────────────────────────────────────
-# 是否启用 Docker 隔离执行，false 时回退到本地执行
+# 是否启用 Docker 隔离执行测试；false 时在本地执行（速度更快）
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
-# Docker 镜像
+# Docker 镜像名称，用于容器化测试执行环境
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
-# 单次测试最大运行时间（秒）
+# 单次测试执行的最大超时时间（秒），防止死循环导致进程卡死
 EXECUTION_TIMEOUT: int = int(os.getenv("EXECUTION_TIMEOUT", "30"))
 
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
-# 最大修复迭代次数
+# 最大修复迭代次数：达到此次数后停止修复，无论测试是否通过
 MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
-# 覆盖率阈值（达到此阈值视为合格）
+# 覆盖率阈值：当代码覆盖率达到此百分比时视为测试合格
 COVERAGE_THRESHOLD: float = float(os.getenv("COVERAGE_THRESHOLD", "80.0"))
