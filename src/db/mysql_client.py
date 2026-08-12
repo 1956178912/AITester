@@ -1,10 +1,12 @@
 """
 MySQL 数据库操作封装（单例模式）。
 提供任务记录、测试运行记录、修复历史等 CRUD 操作。
+output 字段使用 MEDIUMTEXT 类型，不再截断。
 """
 
 from __future__ import annotations
 
+import logging
 import pymysql
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
@@ -16,6 +18,8 @@ from config import (
     MYSQL_PASSWORD,
     MYSQL_DATABASE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MySQLClient:
@@ -111,13 +115,13 @@ class MySQLClient:
         iteration: int = 1,
     ) -> str:
         """
-        创建测试运行记录。
+        创建测试运行记录。output 字段使用 MEDIUMTEXT，不截断。
 
         Args:
             task_id: 关联任务 ID。
             test_code: 执行的测试代码。
             passed: 是否通过。
-            output: 测试输出。
+            output: 测试输出（完整文本，不截断）。
             coverage: 覆盖率。
             iteration: 迭代次数。
 
@@ -145,12 +149,12 @@ class MySQLClient:
         iteration: int,
     ) -> str:
         """
-        创建修复历史记录。
+        创建修复历史记录。patch 字段使用 MEDIUMTEXT，不截断。
 
         Args:
             task_id: 关联任务 ID。
             diagnosis: 根因诊断。
-            patch: 修复代码。
+            patch: 修复代码（完整文本，不截断）。
             iteration: 迭代次数。
 
         Returns:
