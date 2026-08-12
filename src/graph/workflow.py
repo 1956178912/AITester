@@ -1,13 +1,13 @@
 """
 LangGraph 工作流编排：定义智能体节点和执行路由逻辑。
-引入分层错误修复和逻辑驱动思维链的实验支撑。
+集成 RAG 检索增强和分层错误修复。
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from langgraph.graph import StateGraph, END
 
@@ -21,6 +21,15 @@ from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
 
 # 模块级 logger
 logger = logging.getLogger(__name__)
+
+# 可选导入 RAG 检索器（未安装 chromadb 时 gracefully degrade）
+try:
+    from src.rag.retriever import TestCaseRetriever
+    RAG_ENABLED = True
+except ImportError:
+    RAG_ENABLED = False
+    TestCaseRetriever = None
+    logger.info("RAG 模块未就绪（chromadb 未安装），将跳过检索增强")
 
 
 def _create_workflow() -> StateGraph:
@@ -99,22 +108,42 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
 def _generator_node(state: AITesterState) -> Dict[str, Any]:
     """
     GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
+    若 RAG 可用，先检索相似历史测试用例作为参考。
 
     Args:
         state: 当前状态。
 
     Returns:
-        更新后的状态字典（包含 generated_test 字段）。
+        更新后的状态字典（包含 generated_test、rag_references）。
     """
     agent = GeneratorAgent()
-    generated_test = agent.generate(state["test_plan"], state["target_code"])
+
+    # RAG 检索：查找相似历史测试用例
+    rag_refs: Optional[list] = None
+    if RAG_ENABLED and TestCaseRetriever is not None:
+        try:
+            retriever = TestCaseRetriever()
+            rag_refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
+            logger.info("RAG 检索到 %d 个相似测试用例", len(rag_refs) if rag_refs else 0)
+        except Exception as e:
+            logger.warning("RAG 检索失败，跳过增强: %s", e)
+
+    generated_test = agent.generate(
+        state["test_plan"],
+        state["target_code"],
+        rag_references=rag_refs,
+    )
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
-    return {"generated_test": generated_test}
+    return {
+        "generated_test": generated_test,
+        "rag_references": rag_refs,
+    }
 
 
 def _executor_node(state: AITesterState) -> Dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
+    测试通过后自动入库，供后续 RAG 检索使用。
 
     Args:
         state: 当前状态。
@@ -139,6 +168,21 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
         result["coverage"],
         len(result["failed_cases"]),
     )
+
+    # 测试通过后入库，供后续检索
+    if result["passed"] and RAG_ENABLED and TestCaseRetriever is not None:
+        try:
+            retriever = TestCaseRetriever()
+            retriever.add_case(
+                code=state["target_code"],
+                test_code=state["generated_test"],
+                passed=True,
+                metadata={"function": state.get("target_function"), "coverage": result["coverage"]},
+            )
+            logger.debug("成功测试用例已入库 RAG")
+        except Exception as e:
+            logger.warning("RAG 入库失败: %s", e)
+
     return {
         "test_passed": result["passed"],
         "test_output": result["output"],
@@ -147,9 +191,10 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
     }
 
 
-def _debugger_node(state: AITesterState) -> Dict[str, Any]:
+def _debugger_node(state: AITTesterState) -> Dict[str, Any]:
     """
     DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
+    若 RAG 可用，检索相似历史修复案例作为参考。
 
     Args:
         state: 当前状态。
@@ -158,10 +203,28 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         更新后的状态字典（包含 diagnosis, error_category, patch）。
     """
     agent = DebuggerAgent()
+
+    # RAG 检索：查找相似历史修复案例
+    rag_refs: Optional[list] = None
+    if RAG_ENABLED and TestCaseRetriever is not None and state.get("failed_cases"):
+        try:
+            # 使用已分类的错误类型（若有）或 UNKNOWN
+            error_cat = state.get("error_category", "unknown")
+            retriever = TestCaseRetriever()
+            rag_refs = retriever.retrieve_repairs(
+                error_category=error_cat,
+                target_code=state["target_code"],
+                top_k=2,
+            )
+            logger.info("RAG 检索到 %d 个相似修复案例", len(rag_refs) if rag_refs else 0)
+        except Exception as e:
+            logger.warning("RAG 检索失败，跳过增强: %s", e)
+
     result = agent.debug(
         target_code=state["target_code"],
         test_output=state.get("test_output", ""),
         failed_cases=state.get("failed_cases", []) or [],
+        rag_references=rag_refs,
     )
     logger.info(
         "Debugger 完成第 %d 轮修复：类别=%s，根因=%s",
@@ -169,6 +232,20 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         result.get("error_category", "unknown"),
         result.get("root_cause", "")[:80],
     )
+
+    # 修复案例入库（无论是否成功，都记录以供后续检索）
+    if RAG_ENABLED and TestCaseRetriever is not None:
+        try:
+            retriever = TestCaseRetriever()
+            retriever.add_repair(
+                original_code=state["target_code"],
+                patch=result.get("patch", ""),
+                error_category=result.get("error_category", "unknown"),
+            )
+            logger.debug("修复案例已入库 RAG")
+        except Exception as e:
+            logger.warning("RAG 修复入库失败: %s", e)
+
     return {
         "diagnosis": result["root_cause"],
         "error_category": result.get("error_category", "unknown"),
