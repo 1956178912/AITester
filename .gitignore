@@ -42,4 +42,4 @@ htmlcov/
 .DS_Store
 
 # Agnes API key (security)
-OPENAI_API_KEY
+# OPENAI_API_KEY is in .env (already ignored)
