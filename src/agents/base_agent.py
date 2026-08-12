@@ -98,8 +98,7 @@ class BaseAgent:
                 if depth == 0:
                     return text[start:i + 1]
             i += 1
-        # No closing brace found — return None so caller can raise a clear error
-        return None
+        return text[start:] if start < len(text) else None
 
     @staticmethod
     def _extract_python_code(text: str) -> str:

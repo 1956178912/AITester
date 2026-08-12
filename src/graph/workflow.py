@@ -4,6 +4,7 @@ LangGraph 工作流编排：定义智能体节点和执行路由逻辑。
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 
 from langgraph.graph import StateGraph, END
@@ -14,7 +15,7 @@ from src.agents.generator import GeneratorAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.debugger import DebuggerAgent
 from src.tools.patch_applier import apply_patch_to_code
-from config import MAX_ITERATIONS, EXECUTION_TIMEOUT, DOCKER_ENABLED
+from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
 
 
 def _create_workflow() -> StateGraph:
@@ -69,9 +70,7 @@ def _should_debug(state: AITesterState) -> str:
     """
     if state.get("test_passed") is True:
         return "done"
-    iteration = state.get("iteration") or 0
-    max_iterations = state.get("max_iterations") or MAX_ITERATIONS
-    if iteration >= max_iterations:
+    if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         return "done"
     return "debug"
 
@@ -117,8 +116,8 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
         更新后的状态字典（包含 test_passed, test_output, coverage_report, failed_cases）。
     """
     agent = ExecutorAgent(
-        timeout=EXECUTION_TIMEOUT,
-        use_docker=DOCKER_ENABLED,
+        timeout=30,
+        use_docker=False,  # 默认本地执行
     )
     result = agent.execute(
         test_code=state["generated_test"],

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pymysql
 from contextlib import contextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from config import (
     MYSQL_HOST,
@@ -34,8 +34,7 @@ class MySQLClient:
         return cls._instance
 
     def __init__(self) -> None:
-        # 使用 _initialized 标志确保单例仅在首次实例化时建立连接
-        if not getattr(self, "_initialized", False):
+        if not hasattr(self, "connection") or self.connection is None:
             self.connection = pymysql.connect(
                 host=MYSQL_HOST,
                 port=MYSQL_PORT,
@@ -45,7 +44,6 @@ class MySQLClient:
                 charset="utf8mb4",
                 cursorclass=pymysql.cursors.DictCursor,
             )
-            self._initialized = True
 
     @contextmanager
     def cursor(self):
