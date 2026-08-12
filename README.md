@@ -1,262 +1,177 @@
-# AITester - 多智能体自动化测试与自修复系统
+# AITester：逻辑驱动的多智能体测试生成与自修复系统
 
-基于 LangGraph 多智能体协作的自动化测试系统，可自动为 Python 代码生成 pytest 单元测试，并在测试失败时利用大语言模型（LLM）分析根因并尝试修复代码，直至测试通过或达到最大迭代次数。
+> AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
+> 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**。
 
-## 功能特性
-
-- **自动化测试生成**：Planner + Generator 双智能体协作生成 pytest 测试用例
-- **智能调试修复**：Debugger 分析测试失败，自动生成代码补丁
-- **多轮迭代修复**：最多 3 轮修复尝试，自动验证修复效果
-- **多 LLM 支持**：兼容 OpenAI、DeepSeek、Qwen 等 API
-- **实验数据记录**：MySQL 数据库记录任务、测试结果和修复历史
-
-## 系统架构
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Planner   │────▶│  Generator  │────▶│   Executor  │
-│  (测试规划)  │     │  (测试生成)  │     │  (测试执行)  │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                              │
-                    ┌─────────────────────────┘
-                    │  测试失败?
-                    ▼
-              ┌─────────────┐     ┌─────────────┐
-              │  Debugger   │────▶│PatchApplier │
-              │  (智能调试)  │     │  (补丁应用)  │
-              └─────────────┘     └──────┬──────┘
-                                         │
-                                         ▼
-                                    ┌─────────────┐
-                                    │   Re-test   │
-                                    │  (重新测试)  │
-                                    └─────────────┘
-```
-
-## 环境要求
-
-- Python 3.11+
-- MySQL 8.0+
-- Docker（可选，默认本地执行）
-
-## 安装步骤
-
-### 1. 克隆项目
+## 快速开始
 
 ```bash
-git clone <repository-url>
-cd AITester
-```
-
-### 2. 创建虚拟环境
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate     # Windows
-```
-
-### 3. 安装依赖
-
-```bash
+# 1. 安装依赖（需要 Python 3.10+）
 pip install -r requirements.txt
-```
 
-### 4. 配置环境变量
-
-```bash
+# 2. 配置环境变量
 cp .env.example .env
-```
+# 编辑 .env，填入 API Key 等信息
 
-编辑 `.env` 文件，配置以下变量：
-
-```bash
-# LLM API 配置（示例：OpenAI）
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-MODEL_NAME=gpt-4o-mini
-TEMPERATURE=0.2
-
-# LLM API 配置（示例：Agnes AI）
-# OPENAI_API_KEY=sk-xxxx
-# OPENAI_BASE_URL=https://apihub.agnes-ai.com/v1
-# MODEL_NAME=agnes-2.5-flash
-
-# 数据库配置
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=your_password
-MYSQL_DATABASE=aitester
-
-# 工作流配置
-MAX_ITERATIONS=3
-COVERAGE_THRESHOLD=80.0
-```
-
-### 5. 初始化数据库
-
-```bash
+# 3. 初始化数据库（可选，如需持久化实验数据）
 python init_db.py
-```
 
-## 使用方法
-
-### 基本使用
-
-```bash
-# 激活虚拟环境
-source venv/bin/activate
-
-# 运行单个测试任务
+# 4. 运行单个文件测试
 python main.py run examples/calculator.py --func divide
 
-# 指定最大迭代次数
-python main.py run examples/calculator.py --func divide --max-iterations 5
+# 5. 批量基准测试（对 examples/ 下所有文件运行）
+python experiments/run_benchmark.py
 
-# 列出可用示例
-python main.py list-examples
+# 6. 可视化实验结果
+python experiments/visualize_results.py
 ```
 
-### 输出示例
+## 项目结构
 
 ```
-补丁已应用到文件: examples/calculator.py
-
-==================================================
-任务完成：examples/calculator.py
-被测函数：divide
-测试通过：True
-修复迭代：1/3
-==================================================
-
-✓ 测试全部通过！
+AITester/
+├── src/                          # 核心源代码
+│   ├── agents/                   # 多智能体模块
+│   │   ├── base_agent.py         # 智能体基类（LLM 调用、JSON 解析）
+│   │   ├── planner.py            # 测试规划师（含逻辑驱动思维链）
+│   │   ├── generator.py          # 测试代码生成器（支持 RAG 增强）
+│   │   ├── executor.py           # 测试执行器（带超时和重试）
+│   │   ├── debugger.py           # 调试修复师（分层错误修复）
+│   │   └── error_classifier.py   # 错误类型分类器（规则匹配）
+│   ├── tools/                    # 工具函数模块
+│   │   ├── code_analyzer.py      # AST 代码分析（精确替换，避免正则误匹配）
+│   │   └── patch_applier.py      # 补丁应用（支持完整文件和单函数模式）
+│   ├── graph/                    # 工作流编排模块
+│   │   ├── workflow.py           # LangGraph 工作流图（Planner→Generator→Executor→Debugger）
+│   │   └── state.py              # 全局状态定义（TypedDict）
+│   ├── prompts/                  # Prompt 模板模块
+│   │   └── templates.py          # 各智能体的 System Prompt 集中管理
+│   ├── db/                       # 数据库模块
+│   │   └── mysql_client.py       # MySQL 单例客户端（任务、测试、修复记录）
+│   └── rag/                      # 检索增强生成模块
+│       └── retriever.py          # ChromaDB 向量检索器（测试用例与修复案例）
+├── examples/                     # 示例被测代码（含已知 bug）
+│   ├── calculator.py             # 计算器示例（除零、负数阶乘 bug）
+│   ├── buggy_library.py          # 算法库示例（二分查找、排序合并等）
+│   └── string_utils.py           # 字符串工具示例（回文、Caesar 密码等）
+├── experiments/                  # 实验脚本模块
+│   ├── run_benchmark.py          # 批量基准测试（输出 JSON 结果）
+│   └── visualize_results.py      # 结果可视化（柱状图 + 详细表格）
+├── tests/                        # 单元测试
+│   ├── test_code_analyzer.py     # code_analyzer 模块测试
+│   ├── test_error_classifier.py  # error_classifier 模块测试
+│   └── test_patch_applier.py     # patch_applier 模块测试
+├── main.py                       # CLI 入口
+├── config.py                     # 全局配置（从 .env 读取）
+├── init_db.py                    # 数据库初始化脚本
+├── setup.py                      # 包管理配置（pip install -e .）
+├── requirements.txt              # Python 依赖列表
+├── Dockerfile                    # Docker 镜像定义（一键复现实验环境）
+└── .env.example                  # 环境变量模板（复制为 .env 后填写真实值）
 ```
 
-### 命令行参数
+## 核心方法
 
-**run 命令参数：**
-- `target_file`：被测 Python 文件路径（必填）
-- `--func, -f`：指定被测函数名
-- `--max-iterations`：最大修复迭代次数（默认 3）
-- `--coverage-threshold`：覆盖率阈值（默认 80%）
+### 1. 逻辑驱动思维链（Logic-driven Chain-of-Thought）
+Planner 在输出测试计划前，先对函数进行**输入域、输出域、前置条件、后置条件、边界情况**的显式分析，引导 Generator 按逻辑覆盖生成测试用例。
 
-## 示例说明
+**技术实现**：
+- [src/agents/planner.py](src/agents/planner.py) 中的 `PlannerAgent.plan()` 方法
+- [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
-### 示例代码 (examples/calculator.py)
+### 2. 分层错误修复机制（Hierarchical Repair Strategy）
+将测试失败分为五类：**语法错误（syntax）、断言失败（assertion）、运行时异常（runtime）、超时（timeout）、未知（unknown）**，每类采用差异化修复策略。
 
-```python
-def add(a: float, b: float) -> float:
-    return a + b
+**技术实现**：
+- [src/agents/error_classifier.py](src/agents/error_classifier.py) 中的 `ErrorClassifier` 类（规则匹配）
+- [src/agents/debugger.py](src/agents/debugger.py) 中的 `DebuggerAgent.debug()` 方法
+- [src/prompts/templates.py](src/prompts/templates.py) 中的 `DEBUGGER_SYSTEM_PROMPT`
 
-def divide(a: float, b: float) -> float:
-    # BUG: 除零时未做检查
-    return a / b
+### 3. AST 精确代码替换
+使用 `ast` 模块进行函数解析和替换，避免正则表达式在嵌套函数或同名函数场景下的误匹配问题。
 
-def factorial(n: int) -> int:
-    # BUG: 负数输入未做处理
-    if n == 0:
-        return 1
-    return n * factorial(n - 1)
-```
+**技术实现**：
+- [src/tools/code_analyzer.py](src/tools/code_analyzer.py) 中的 `replace_function_code()` 函数
+- [src/tools/patch_applier.py](src/tools/patch_applier.py) 中的 `apply_patch_to_code()` 函数
 
-### 工作流程
+### 4. 检索增强生成（RAG）
+使用 ChromaDB 存储历史成功测试用例和修复补丁，在 Generator 和 Debugger 生成前检索相似案例作为参考。
 
-1. **Planner** 分析代码，生成测试计划
-2. **Generator** 根据计划生成 pytest 测试代码
-3. **Executor** 执行测试，捕获结果
-4. 如果测试失败：
-   - **Debugger** 分析失败原因，生成修复补丁
-   - **PatchApplier** 将补丁应用到源代码
-   - 重新执行测试，直到通过或达到最大迭代次数
+**技术实现**：
+- [src/rag/retriever.py](src/rag/retriever.py) 中的 `TestCaseRetriever` 类
+- 在 [src/graph/workflow.py](src/graph/workflow.py) 中通过 `RAG_ENABLED` 标志控制启用/禁用
 
-## 数据库表结构
+## 实验复现
 
-### tasks 表
+### 环境要求
+- Python 3.10+
+- MySQL 5.7/8.0（可选，用于持久化实验数据）
+- LLM API Key（如 OpenAI、DeepSeek 等）
 
-记录每个测试任务的基本信息。
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INT | 主键 |
-| target_file | VARCHAR(500) | 被测文件路径 |
-| target_function | VARCHAR(200) | 被测函数名 |
-| created_at | TIMESTAMP | 创建时间 |
-| status | ENUM | 任务状态 |
-| result | TEXT | 执行结果 |
-
-### test_runs 表
-
-记录每次测试执行的结果。
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INT | 主键 |
-| task_id | INT | 关联任务 |
-| test_code | MEDIUMTEXT | 测试代码 |
-| passed | BOOLEAN | 是否通过 |
-| output | MEDIUMTEXT | 测试输出 |
-| coverage | FLOAT | 覆盖率 |
-| iteration | INT | 迭代次数 |
-| created_at | TIMESTAMP | 创建时间 |
-
-### repair_history 表
-
-记录每次修复尝试的详情。
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INT | 主键 |
-| task_id | INT | 关联任务 |
-| diagnosis | TEXT | 根因诊断 |
-| patch | MEDIUMTEXT | 修复补丁 |
-| iteration | INT | 迭代次数 |
-| created_at | TIMESTAMP | 创建时间 |
-
-## 扩展开发
-
-### 添加新智能体
-
-1. 在 `src/agents/` 下新建智能体类，继承 `BaseAgent`
-2. 在 `src/prompts/templates.py` 中添加 System Prompt
-3. 在 `src/graph/workflow.py` 中注册节点并调整路由逻辑
-
-### 更换 LLM 提供商
-
-修改 `.env` 配置文件：
-- `OPENAI_API_KEY`：API 密钥
-- `OPENAI_BASE_URL`：API 地址
-- `MODEL_NAME`：模型名称
-
-### 启用 Docker 执行
-
-设置 `.env`：
+### 复现步骤
 ```bash
-DOCKER_ENABLED=true
-DOCKER_IMAGE=python:3.11-slim
+# 1. 克隆仓库
+git clone <repository-url>
+cd AITester
+
+# 2. 安装依赖
+pip install -r requirements.txt
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填入 API Key 等信息
+
+# 4. 初始化数据库（可选）
+python init_db.py
+
+# 5. 运行基准测试
+python experiments/run_benchmark.py
+
+# 6. 查看结果
+ls experiments/results/
+python experiments/visualize_results.py
 ```
+
+### Docker 一键复现
+```bash
+# 构建镜像
+docker build -t aitester:latest .
+
+# 运行测试
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  aitester:latest \
+  python experiments/run_benchmark.py
+```
+
+## 单元测试
+
+```bash
+# 运行所有测试
+pytest tests/ -v
+
+# 运行测试并生成覆盖率报告
+pytest tests/ -v --cov=src --cov-report=term-missing
+```
+
+## 配置说明
+
+所有配置项统一在 [config.py](config.py) 中管理，通过 `.env` 文件注入：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `OPENAI_API_KEY` | LLM API 密钥 | 必填 |
+| `MODEL_NAME` | LLM 模型名称 | gpt-4o-mini |
+| `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
+| `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
+| `EXECUTION_TIMEOUT` | 单次执行超时（秒） | 30 |
 
 ## 技术栈
 
-- **核心语言**：Python 3.11+
-- **AI 框架**：LangChain, LangGraph
-- **LLM 接口**：OpenAI 兼容 API
-- **测试框架**：pytest, pytest-cov
-- **数据库**：MySQL, pymysql
-- **CLI**：click
-
-## 注意事项
-
-1. 确保 `.env` 中配置了有效的 API Key
-2. MySQL 服务需提前启动
-3. Docker 模式需要本地 Docker 守护进程
-4. 本系统为研究原型，未做大规模并发优化
-
-## 学术引用
-
-本项目可用于软件工程领域的实验验证，适用于 ICSE、FSE、ASE 及中文期刊《软件学报》等学术会议和期刊。
-
-## License
-
-MIT License
+- **LLM 框架**: LangChain + LangGraph
+- **数据库**: MySQL（pymysql 驱动）
+- **向量数据库**: ChromaDB（RAG 模块）
+- **测试框架**: pytest + pytest-cov
+- **命令行**: Click
+- **可视化**: matplotlib + pandas

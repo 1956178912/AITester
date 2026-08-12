@@ -12,6 +12,7 @@ build/
 *.whl
 
 # Virtual environment
+.venv
 venv/
 env/
 ENV/
@@ -41,5 +42,10 @@ htmlcov/
 # macOS
 .DS_Store
 
-# Agnes API key (security)
-OPENAI_API_KEY
+# Local private config
+.local/
+
+# Academic files (local use only, not for GitHub)
+algorithm_paper.md
+research_motivation.md
+PAPER_GUIDE.md
