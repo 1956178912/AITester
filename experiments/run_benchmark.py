@@ -1,6 +1,6 @@
 """
 批量实验脚本：对 examples 目录下的所有示例文件运行 AITester 并记录结果。
-支持多基线方法对比和消融实验。
+支持多基线方法对比和消融实验，输出 JSON 格式的实验结果。
 """
 
 from __future__ import annotations
@@ -27,18 +27,20 @@ def run_benchmark(
 ) -> Dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比。
+    当前实现仅支持 AITester 主方法，后续可扩展其他基线。
 
     Args:
         examples_dir: 示例代码目录。
         output_dir: 结果输出目录。
-        baselines: 要运行的基线方法列表，默认为 ["aitester", "direct_llm", "single_agent"]。
+        baselines: 要运行的基线方法列表，默认为 ["aitester"]。
 
     Returns:
-        汇总结果字典。
+        汇总结果字典，包含各基线的统计指标和详细结果。
     """
     if baselines is None:
-        baselines = ["aitester", "direct_llm", "single_agent"]
+        baselines = ["aitester"]
 
+    # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
     all_results: Dict[str, List[Dict[str, Any]]] = {bl: [] for bl in baselines}
     total_time = 0.0
@@ -52,7 +54,7 @@ def run_benchmark(
         with open(filepath, "r", encoding="utf-8") as f:
             target_code = f.read()
 
-        # 提取所有函数名
+        # 提取所有函数名，逐个运行测试
         functions = parse_function_nodes(target_code)
         func_names = [fn["name"] for fn in functions]
         logger.info("正在处理：%s（函数：%s）", filename, func_names)
@@ -61,6 +63,7 @@ def run_benchmark(
             for baseline in baselines:
                 start_time = time.time()
 
+                # 初始化工作流状态
                 state: AITesterState = {
                     "task_uuid": f"{filename}_{func_name}_{baseline}_{int(start_time)}",
                     "target_file": filepath,
@@ -80,12 +83,14 @@ def run_benchmark(
                     "repair_history": [],
                 }
 
+                # 运行工作流
                 graph = build_workflow()
                 final_state = graph.invoke(state)
 
                 elapsed = time.time() - start_time
                 total_time += elapsed
 
+                # 记录结果
                 all_results[baseline].append({
                     "file": filename,
                     "function": func_name,

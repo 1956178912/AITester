@@ -21,19 +21,18 @@ def multiply(a: float, b: float) -> float:
 def divide(a: float, b: float) -> float:
     """
     返回两数之商。
-    注意：当前实现存在除零 bug（应抛出 ValueError）。
+    BUG: 除零时未抛出异常，而是返回浮点数 inf，应抛出 ValueError。
     """
-    if b == 0:
-        raise ValueError("除数不能为零")
+    # BUG: b == 0 时应抛出 ValueError，但当前直接除法会得到 inf
     return a / b
 
 
 def factorial(n: int) -> int:
     """
     返回 n 的阶乘。
-    注意：当前实现存在负数处理 bug。
+    BUG: 负数输入未做处理，会递归导致 RecursionError。
     """
-    # BUG: 负数输入未做处理，会递归导致 RecursionError
+    # BUG: 负数输入未检查，递归到系统栈溢出
     if n == 0:
         return 1
     return n * factorial(n - 1)
