@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import click
 import os
 import json
 import time
@@ -112,5 +111,5 @@ def run_benchmark(examples_dir: str = "examples", output_dir: str = "experiments
 
 
 if __name__ == "__main__":
-
+    import click
     run_benchmark()

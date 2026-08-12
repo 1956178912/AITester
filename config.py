@@ -10,19 +10,9 @@ from dotenv import load_dotenv
 # 加载 .env 文件中的环境变量
 load_dotenv()
 
-# ─── 配置校验 ────────────────────────────────────────────────────────────────
-def _require_env(name: str) -> str:
-    val = os.getenv(name, "")
-    if not val:
-        raise ValueError(
-            f"缺少必要的环境变量: {name}，请在 .env 文件中配置。"
-        )
-    return val
-
-OPENAI_API_KEY: str = _require_env("OPENAI_API_KEY")
-
 # ─── LLM 配置 ───────────────────────────────────────────────────────────────
 # OpenAI 兼容 API 基地址，支持 DeepSeek / Qwen 等替换
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4o-mini")
 # 温度，控制输出随机性

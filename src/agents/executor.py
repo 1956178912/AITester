@@ -8,17 +8,6 @@ import os
 import re
 import subprocess
 from typing import Any, Dict
-import sys
-
-
-def _extract_error_from_block(block_lines: list[str]) -> str:
-    """从失败块中提取错误信息，优先取最后一个 E 前缀行。"""
-    for line in reversed(block_lines):
-        if line.startswith("E"):
-            return line[1:].strip()
-    if block_lines:
-        return block_lines[-1].strip()
-    return ""
 
 
 class ExecutorAgent:
@@ -73,10 +62,8 @@ class ExecutorAgent:
             env = os.environ.copy()
             env["PYTHONPATH"] = target_dir + os.pathsep + env.get("PYTHONPATH", "")
 
-            # 使用当前 Python 解释器路径，避免依赖系统 python 命令
-            python_path = sys.executable
             cmd = [
-                python_path, "-m", "pytest",
+                "python", "-m", "pytest",
                 test_file,
                 "-v",
                 "--tb=short",
@@ -133,11 +120,6 @@ class ExecutorAgent:
         """
         从 pytest 输出中解析失败的用例列表。
 
-        解析策略：
-        1. 优先从 FAILURES 详细区块中提取（--- test_name --- 分隔块），
-           取最后一个以 "E" 开头的行作为错误信息。
-        2. 若无 FAILURES 区块，回退到解析短格式 FAILED 行（含 "- error" 后缀）。
-
         Args:
             output: pytest 输出文本。
 
@@ -146,49 +128,30 @@ class ExecutorAgent:
         """
         failed = []
         lines = output.splitlines()
-
-        # Find the FAILURES section boundaries
-        failures_start = failures_end = None
-        for i, line in enumerate(lines):
-            if "=================================== FAILURES ===================================" in line:
-                failures_start = i + 1
-            elif (
-                "===========================" in line
-                and "short test summary" in line.lower()
-            ):
-                failures_end = i
-                break
-
-        if failures_start is not None:
-            # Parse failure blocks between ___ separators
-            block_pattern = re.compile(r"^_{30,}\s*(\w+(?:\.\w+)?)\s*_{30,}$")
-            current_test = None
-            current_block: list[str] = []
-            for i in range(failures_start, failures_end):
-                m = block_pattern.match(lines[i])
-                if m:
-                    if current_test is not None:
-                        error = _extract_error_from_block(current_block)
-                        failed.append(
-                            {"name": f"test::{current_test}", "error": error}
-                        )
-                    current_test = m.group(1)
-                    current_block = []
-                elif current_test is not None:
-                    current_block.append(lines[i])
-            # Last block
-            if current_test is not None:
-                error = _extract_error_from_block(current_block)
-                failed.append({"name": f"test::{current_test}", "error": error})
-
-        # Fallback: also parse short-format FAILED lines (when no FAILURES section)
-        if not failed:
-            short_pattern = re.compile(r"FAILED\s+(.+?\.py::\S+)\s*-\s*(.+)")
-            for line in lines:
-                m = short_pattern.search(line)
-                if m:
-                    failed.append(
-                        {"name": m.group(1).strip(), "error": m.group(2).strip()}
-                    )
-
+        pattern = re.compile(r"FAILED\s+(.+?\.py::\S+)")
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            m = pattern.search(line)
+            if m:
+                case_name = m.group(1).strip()
+                error_lines = []
+                j = i + 1
+                while j < len(lines):
+                    l = lines[j]
+                    if "FAILED" in l and ".py::" in l:
+                        break
+                    if "======" in l and "short" in l:
+                        break
+                    if l.strip() and not l.startswith("WARNING"):
+                        error_lines.append(l)
+                    j += 1
+                if error_lines:
+                    failed.append({
+                        "name": case_name,
+                        "error": "\n".join(error_lines),
+                    })
+                i = j
+            else:
+                i += 1
         return failed
