@@ -48,3 +48,6 @@ htmlcov/
 # 学术相关（仅本地保留，不上传 GitHub）
 algorithm_paper.md
 research_motivation.md
+
+# 论文写作指导（本地使用，不推送）
+PAPER_GUIDE.md
