@@ -5,6 +5,11 @@
 
 from __future__ import annotations
 
+import logging
+
+# 模块级日志记录器，用于替代 print 输出
+logger = logging.getLogger(__name__)
+
 import pymysql
 from config import (
     MYSQL_HOST,
@@ -19,6 +24,9 @@ def init_database() -> None:
     """
     连接 MySQL 并创建 AITester 所需的数据表。
     若数据库不存在则先创建。
+    
+    Returns:
+        None
     """
     # 先连接默认数据库（无需指定 database）
     conn = pymysql.connect(
@@ -30,11 +38,11 @@ def init_database() -> None:
     )
     cursor = conn.cursor()
 
-    # 创建数据库（若不存在）
+    # 创建数据库（若不存在），使用 utf8mb4 字符集支持 Unicode
     cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{MYSQL_DATABASE}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     cursor.execute(f"USE `{MYSQL_DATABASE}`")
 
-    # tasks 表：记录每个测试任务
+    # tasks 表：记录每个测试任务的基本信息
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,7 +54,7 @@ def init_database() -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
-    # test_runs 表：记录每次测试执行结果
+    # test_runs 表：记录每次测试执行结果，含覆盖率数据
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS test_runs (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -61,7 +69,7 @@ def init_database() -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
-    # repair_history 表：记录每次修复尝试
+    # repair_history 表：记录每次修复尝试的诊断与补丁
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS repair_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,10 +82,12 @@ def init_database() -> None:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
+    # 提交事务并关闭连接
     conn.commit()
     cursor.close()
     conn.close()
-    print(f"数据库 `{MYSQL_DATABASE}` 初始化完成，包含表：tasks, test_runs, repair_history")
+    # 初始化完成后记录日志（INFO 级别），替代原有 print 输出
+    logger.info("数据库 `%s` 初始化完成，包含表：tasks, test_runs, repair_history", MYSQL_DATABASE)
 
 
 if __name__ == "__main__":

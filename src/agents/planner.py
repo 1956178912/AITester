@@ -1,8 +1,8 @@
 """
-测试规划师智能体，分析被测代码并输出逻辑驱动的结构化测试计划。
-引入逻辑驱动思维链（Logic-driven Chain-of-Thought）：
-Planner 在输出测试计划前，先对函数进行输入域、输出域、前置条件、后置条件的显式分析，
-引导 Generator 按逻辑覆盖生成测试用例。
+测试规划师模块：实现逻辑驱动思维链（Logic-driven Chain-of-Thought）。
+
+Planner 在输出测试计划前，先对函数进行输入域、输出域、前置条件、
+后置条件、边界情况的显式分析，引导 Generator 按逻辑覆盖生成测试用例。
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from typing import Any, Dict, List
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import PLANNER_SYSTEM_PROMPT
 
-# 模块级 logger
+# 模块级日志记录器
 logger = logging.getLogger(__name__)
 
 
 class LogicAnalysisResult:
     """
-    逻辑分析结果：记录 Planner 对单个函数的输入域、输出域、前置/后置条件的分析。
+    逻辑分析结果：记录 Planner 对单个函数的结构化分析。
 
     属性:
         input_domain: 输入参数描述（含类型、取值范围、特殊值）。
@@ -46,7 +46,13 @@ class LogicAnalysisResult:
         self.edge_cases = edge_cases
 
     def to_dict(self) -> Dict[str, Any]:
-        """将逻辑分析结果序列化为字典，便于 JSON 存储和传递。"""
+        """
+        将逻辑分析结果序列化为字典。
+        便于 JSON 存储、传递和后续使用。
+
+        Returns:
+            包含五个字段的字典。
+        """
         return {
             "input_domain": self.input_domain,
             "output_domain": self.output_domain,
@@ -59,6 +65,11 @@ class LogicAnalysisResult:
 class PlannerAgent(BaseAgent):
     """
     测试规划师：读取目标代码，先生成逻辑分析（思维链），再输出结构化测试计划。
+
+    工作流程：
+    1. 接收被测代码和可选的目标函数名
+    2. 调用 LLM，要求其先进行逻辑分析，再生成测试计划 JSON
+    3. 解析响应，确保包含 logic_analysis 字段
 
     输入:
         target_code: 被测 Python 源代码字符串。
@@ -102,16 +113,20 @@ class PlannerAgent(BaseAgent):
         Raises:
             RuntimeError: LLM 调用失败或返回非 JSON 格式时抛出。
         """
+        # 构建查询：包含代码和可选的函数限定
         query = f"请分析以下代码并制定测试计划：\n\n```\n{target_code}\n```"
         if target_function:
             # 明确指定要测试的函数，要求输出中包含该函数名
             query += f"\n\n**重要：请只针对以下函数生成测试计划，不要分析其他函数：**\n`{target_function}`"
             query += f"\n\n输出的 function_name 字段必须是 `{target_function}`。"
 
+        # 调用 LLM 获取原始响应
         raw = self._call_llm(query)
+        # 解析 JSON 响应
         result = self._extract_json(raw)
 
-        # 确保返回的 JSON 包含逻辑分析字段（兼容性处理）
+        # 兼容性处理：确保返回的 JSON 包含 logic_analysis 字段
+        # 若 LLM 未输出，填充空值以避免下游代码崩溃
         if "logic_analysis" not in result or result["logic_analysis"] is None:
             result["logic_analysis"] = {
                 "input_domain": "",
@@ -122,5 +137,6 @@ class PlannerAgent(BaseAgent):
             }
             logger.warning("LLM 未输出 logic_analysis，已填充空值")
 
+        # 记录规划完成日志
         logger.info("Planner 完成对 %s 的逻辑分析", result.get("function_name", "unknown"))
         return result

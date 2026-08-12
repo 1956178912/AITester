@@ -1,6 +1,9 @@
 """
-错误分类器：将测试失败原因归类为语法错误、断言错误、运行时异常三类。
-用于分层修复策略，针对不同错误类型选择差异化修复方案。
+错误分类器模块：将测试失败原因归类为五类错误。
+
+分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
+使用正则规则匹配而非 LLM，确保分类速度快且结果稳定。
+分类结果用于指导 Debugger 选择合适的修复策略。
 """
 
 from __future__ import annotations
