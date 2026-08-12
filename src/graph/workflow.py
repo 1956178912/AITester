@@ -1,9 +1,11 @@
 """
 LangGraph 工作流编排：定义智能体节点和执行路由逻辑。
+引入分层错误修复和逻辑驱动思维链的实验支撑。
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict
 
@@ -16,6 +18,9 @@ from src.agents.executor import ExecutorAgent
 from src.agents.debugger import DebuggerAgent
 from src.tools.patch_applier import apply_patch_to_code
 from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
+
+# 模块级 logger
+logger = logging.getLogger(__name__)
 
 
 def _create_workflow() -> StateGraph:
@@ -77,31 +82,33 @@ def _should_debug(state: AITesterState) -> str:
 
 def _planner_node(state: AITesterState) -> Dict[str, Any]:
     """
-    PlannerAgent 节点：生成测试计划。
+    PlannerAgent 节点：生成逻辑驱动的结构化测试计划。
 
     Args:
         state: 当前状态。
 
     Returns:
-        更新后的状态字典（仅包含 test_plan 字段）。
+        更新后的状态字典（包含 test_plan 和 logic_analysis）。
     """
     agent = PlannerAgent()
     test_plan = agent.plan(state["target_code"], state.get("target_function"))
+    logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
     return {"test_plan": test_plan}
 
 
 def _generator_node(state: AITesterState) -> Dict[str, Any]:
     """
-    GeneratorAgent 节点：生成 pytest 测试代码。
+    GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
 
     Args:
         state: 当前状态。
 
     Returns:
-        更新后的状态字典（仅包含 generated_test 字段）。
+        更新后的状态字典（包含 generated_test 字段）。
     """
     agent = GeneratorAgent()
     generated_test = agent.generate(state["test_plan"], state["target_code"])
+    logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
     return {"generated_test": generated_test}
 
 
@@ -116,13 +123,21 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
         更新后的状态字典（包含 test_passed, test_output, coverage_report, failed_cases）。
     """
     agent = ExecutorAgent(
-        timeout=30,
+        timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")),
         use_docker=False,  # 默认本地执行
     )
     result = agent.execute(
         test_code=state["generated_test"],
         target_file=state["target_file"],
         target_function=state.get("target_function"),
+    )
+    status = "PASS" if result["passed"] else "FAIL"
+    logger.info(
+        "Executor 完成第 %d 轮测试：%s，覆盖率=%.1f%%，失败用例数=%d",
+        state.get("iteration", 0) + 1,
+        status,
+        result["coverage"],
+        len(result["failed_cases"]),
     )
     return {
         "test_passed": result["passed"],
@@ -134,13 +149,13 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
 
 def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     """
-    DebuggerAgent 节点：分析失败原因并生成补丁。
+    DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
 
     Args:
         state: 当前状态。
 
     Returns:
-        更新后的状态字典（包含 diagnosis, patch）。
+        更新后的状态字典（包含 diagnosis, error_category, patch）。
     """
     agent = DebuggerAgent()
     result = agent.debug(
@@ -148,8 +163,15 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         test_output=state.get("test_output", ""),
         failed_cases=state.get("failed_cases", []) or [],
     )
+    logger.info(
+        "Debugger 完成第 %d 轮修复：类别=%s，根因=%s",
+        state.get("iteration", 0) + 1,
+        result.get("error_category", "unknown"),
+        result.get("root_cause", "")[:80],
+    )
     return {
         "diagnosis": result["root_cause"],
+        "error_category": result.get("error_category", "unknown"),
         "patch": result["patch"],
     }
 
@@ -168,18 +190,19 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
         original_code=state["target_code"],
         patch=state.get("patch", ""),
     )
-    
+
     # 写回目标文件，确保后续测试使用修复后的代码
     if applied and new_code != state["target_code"]:
         with open(state["target_file"], "w", encoding="utf-8") as f:
             f.write(new_code)
-        print(f"补丁已应用到文件: {state['target_file']}")
+        logger.info("补丁已应用到文件: %s", state["target_file"])
 
     # 记录修复历史
     history = state.get("repair_history", []) or []
     history.append({
         "iteration": state.get("iteration", 0) + 1,
         "diagnosis": state.get("diagnosis", ""),
+        "error_category": state.get("error_category", "unknown"),
         "patch_applied": applied,
     })
     return {
