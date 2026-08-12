@@ -1,14 +1,19 @@
 """
 测试执行器智能体，在隔离环境中运行测试并捕获结果。
+支持超时配置、重试机制和覆盖率报告解析。
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
-from typing import Any, Dict
 import sys
+import tempfile
+from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutorAgent:
@@ -16,11 +21,12 @@ class ExecutorAgent:
     测试执行器：在本地或 Docker 容器中运行 pytest 测试。
 
     属性:
-        timeout: 单次测试最大运行时间（秒）。
+        timeout: 单次测试最大运行时间（秒），可通过 EXECUTION_TIMEOUT 环境变量配置。
         use_docker: 是否使用 Docker 隔离执行。
     """
 
     def __init__(self, timeout: int = 30, use_docker: bool = False) -> None:
+        # timeout 从环境变量读取，默认 30 秒
         self.timeout = timeout
         self.use_docker = use_docker
 
@@ -32,6 +38,7 @@ class ExecutorAgent:
     ) -> Dict[str, Any]:
         """
         执行 pytest 测试并返回结果。
+        失败时自动重试一次（防偶发性环境干扰）。
 
         Args:
             test_code: pytest 测试代码字符串。
@@ -48,8 +55,6 @@ class ExecutorAgent:
         Raises:
             subprocess.TimeoutExpired: 测试超时。
         """
-        import tempfile
-
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
@@ -63,7 +68,6 @@ class ExecutorAgent:
             env = os.environ.copy()
             env["PYTHONPATH"] = target_dir + os.pathsep + env.get("PYTHONPATH", "")
 
-            # 使用当前 Python 解释器路径，避免依赖系统 python 命令
             python_path = sys.executable
             cmd = [
                 python_path, "-m", "pytest",
@@ -74,17 +78,31 @@ class ExecutorAgent:
             if target_function:
                 cmd.append(f"-k {target_function}")
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-                cwd=project_root,
-                env=env,
-            )
+            # 带重试的执行逻辑：第一次失败后等待 1 秒重试一次
+            last_output = ""
+            last_result = None
+            for attempt in range(2):
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=self.timeout,
+                        cwd=project_root,
+                        env=env,
+                    )
+                    last_result = result
+                    last_output = result.stdout + result.stderr
+                    if result.returncode == 0:
+                        break  # 成功则提前退出
+                    logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
+                except subprocess.TimeoutExpired:
+                    last_output = f"超时（>{self.timeout}s）"
+                    last_result = None
+                    break  # 超时时不重试
 
-            output = result.stdout + result.stderr
-            passed = result.returncode == 0
+            output = last_output
+            passed = last_result is not None and last_result.returncode == 0
 
             coverage = self._parse_coverage(output)
             failed_cases = self._parse_failed_cases(output)

@@ -4,6 +4,7 @@ AITester CLI 入口：使用 click 提供命令行接口。
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import click
@@ -12,6 +13,17 @@ from typing import Optional
 from src.graph.workflow import build_workflow
 from src.graph.state import AITesterState
 from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
+
+# 配置模块级日志：INFO 级别输出到控制台，DEBUG 级别输出到文件
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("aitester.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -31,13 +43,15 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
 
     TARGET_FILE: 被测 Python 文件路径。
     """
+    logger.info("开始测试任务：file=%s, func=%s", target_file, func)
+
     # 读取目标代码
     with open(target_file, "r", encoding="utf-8") as f:
         target_code = f.read()
 
     # 初始化状态
     state: AITesterState = {
-        "task_uuid": "local_run",
+        "task_uuid": f"{os.path.basename(target_file)}_{func or 'all'}_{int(__import__('time').time())}",
         "target_file": target_file,
         "target_function": func,
         "target_code": target_code,
@@ -48,6 +62,7 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
         "coverage_report": None,
         "failed_cases": None,
         "diagnosis": None,
+        "error_category": None,
         "patch": None,
         "iteration": 0,
         "max_iterations": max_iterations,
@@ -58,7 +73,7 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
     graph = build_workflow()
     final_state = graph.invoke(state)
 
-    # 输出结果
+    # 输出结果摘要
     click.echo(f"\n{'='*50}")
     click.echo(f"任务完成：{target_file}")
     if func:
@@ -75,6 +90,10 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
         click.echo("\n✗ 测试未通过，已达到最大迭代次数。")
         if final_state.get("diagnosis"):
             click.echo(f"\n根因诊断：{final_state['diagnosis']}")
+        if final_state.get("error_category"):
+            click.echo(f"错误类型：{final_state['error_category']}")
+
+    logger.info("任务完成，结果已输出到控制台和 aitester.log")
 
 
 @cli.command()
