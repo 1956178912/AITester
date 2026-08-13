@@ -48,3 +48,22 @@ EXECUTION_TIMEOUT: int = int(os.getenv("EXECUTION_TIMEOUT", "30"))
 MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
 # 覆盖率阈值：当代码覆盖率达到此百分比时视为测试合格
 COVERAGE_THRESHOLD: float = float(os.getenv("COVERAGE_THRESHOLD", "80.0"))
+
+# ─── 消融实验开关 ────────────────────────────────────────────────────────────
+# 启用/禁用 Planner 节点（测试计划生成）
+# False 时 Generator 直接基于目标代码生成测试，跳过逻辑分析阶段
+ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
+
+# 启用/禁用 RAG 检索增强（Generator 和 Debugger 的相似案例检索）
+# 需安装 chromadb（pip install "aitester[rag]"）
+ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
+
+# 启用/禁用 Debugger 修复节点（调试自修复循环）
+# False 时 Executor 失败后直接结束，不进行修复
+ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
+
+# ─── 实验配置 ────────────────────────────────────────────────────────────────
+# 批量基准测试的并行度（同时运行的任务数，0 表示串行）
+BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
+# 单个任务的 LLM 调用超时（秒）
+LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))

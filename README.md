@@ -6,7 +6,11 @@
 ## 快速开始
 
 ```bash
-# 1. 安装依赖（需要 Python 3.10+）
+# 0. 创建虚拟环境（推荐 Python 3.10+）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 1. 安装依赖
 pip install -r requirements.txt
 
 # 2. 配置环境变量
@@ -19,10 +23,17 @@ python init_db.py
 # 4. 运行单个文件测试
 python main.py run examples/calculator.py --func divide
 
-# 5. 批量基准测试（对 examples/ 下所有文件运行）
-python experiments/run_benchmark.py
+# 5. 批量基准测试（内置示例数据集，三种基线对比）
+python experiments/run_benchmark.py --dataset examples --baselines aitester,plain_llm,single_agent
 
-# 6. 可视化实验结果
+# 6. 仅运行完整系统 + 限制任务数
+python experiments/run_benchmark.py --dataset examples --task-limit 2
+
+# 7. 消融实验：仅启用 Planner
+ENABLE_PLANNER=true ENABLE_DEBUGGER=false python experiments/run_benchmark.py --dataset examples
+
+
+# 8. 可视化实验结果
 python experiments/visualize_results.py
 ```
 
@@ -30,44 +41,48 @@ python experiments/visualize_results.py
 
 ```
 AITester/
-├── src/                          # 核心源代码
-│   ├── agents/                   # 多智能体模块
-│   │   ├── base_agent.py         # 智能体基类（LLM 调用、JSON 解析）
-│   │   ├── planner.py            # 测试规划师（含逻辑驱动思维链）
-│   │   ├── generator.py          # 测试代码生成器（支持 RAG 增强）
-│   │   ├── executor.py           # 测试执行器（带超时和重试）
-│   │   ├── debugger.py           # 调试修复师（分层错误修复）
-│   │   └── error_classifier.py   # 错误类型分类器（规则匹配）
-│   ├── tools/                    # 工具函数模块
-│   │   ├── code_analyzer.py      # AST 代码分析（精确替换，避免正则误匹配）
-│   │   └── patch_applier.py      # 补丁应用（支持完整文件和单函数模式）
-│   ├── graph/                    # 工作流编排模块
-│   │   ├── workflow.py           # LangGraph 工作流图（Planner→Generator→Executor→Debugger）
-│   │   └── state.py              # 全局状态定义（TypedDict）
-│   ├── prompts/                  # Prompt 模板模块
-│   │   └── templates.py          # 各智能体的 System Prompt 集中管理
-│   ├── db/                       # 数据库模块
-│   │   └── mysql_client.py       # MySQL 单例客户端（任务、测试、修复记录）
-│   └── rag/                      # 检索增强生成模块
-│       └── retriever.py          # ChromaDB 向量检索器（测试用例与修复案例）
-├── examples/                     # 示例被测代码（含已知 bug）
-│   ├── calculator.py             # 计算器示例（除零、负数阶乘 bug）
-│   ├── buggy_library.py          # 算法库示例（二分查找、排序合并等）
-│   └── string_utils.py           # 字符串工具示例（回文、Caesar 密码等）
-├── experiments/                  # 实验脚本模块
-│   ├── run_benchmark.py          # 批量基准测试（输出 JSON 结果）
-│   └── visualize_results.py      # 结果可视化（柱状图 + 详细表格）
-├── tests/                        # 单元测试
-│   ├── test_code_analyzer.py     # code_analyzer 模块测试
-│   ├── test_error_classifier.py  # error_classifier 模块测试
-│   └── test_patch_applier.py     # patch_applier 模块测试
-├── main.py                       # CLI 入口
-├── config.py                     # 全局配置（从 .env 读取）
-├── init_db.py                    # 数据库初始化脚本
-├── setup.py                      # 包管理配置（pip install -e .）
-├── requirements.txt              # Python 依赖列表
-├── Dockerfile                    # Docker 镜像定义（一键复现实验环境）
-└── .env.example                  # 环境变量模板（复制为 .env 后填写真实值）
+├── src/                              # 核心源代码
+│   ├── agents/                       # 多智能体模块
+│   │   ├── base_agent.py             # 智能体基类（LLM 调用、JSON 解析）
+│   │   ├── planner.py                # 测试规划师（含逻辑驱动思维链）
+│   │   ├── generator.py              # 测试代码生成器（支持 RAG 增强）
+│   │   ├── executor.py               # 测试执行器（带超时和重试）
+│   │   ├── debugger.py               # 调试修复师（分层错误修复）
+│   │   └── error_classifier.py       # 错误类型分类器（规则匹配）
+│   ├── tools/                        # 工具函数模块
+│   │   ├── code_analyzer.py          # AST 代码分析（精确替换，避免正则误匹配）
+│   │   └── patch_applier.py          # 补丁应用（支持完整文件和单函数模式）
+│   ├── graph/                        # 工作流编排模块
+│   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关）
+│   │   └── state.py                  # 全局状态定义（TypedDict）
+│   ├── prompts/                      # Prompt 模板模块
+│   │   └── templates.py              # 各智能体的 System Prompt 集中管理
+│   ├── db/                           # 数据库模块
+│   │   └── mysql_client.py           # MySQL 单例客户端（任务、测试、修复记录）
+│   ├── rag/                          # 检索增强生成模块
+│   │   └── retriever.py              # ChromaDB 向量检索器（测试用例与修复案例）
+│   └── dataset_loader.py             # 数据集加载层（SWE-bench / Defects4J-Python）
+├── experiments/                      # 实验脚本模块
+│   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验）
+│   └── visualize_results.py          # 结果可视化（柱状图 + 详细表格）
+├── tests/                            # 单元测试
+│   ├── test_code_analyzer.py
+│   ├── test_error_classifier.py
+│   ├── test_patch_applier.py
+│   └── test_dataset_loader.py        # 数据集加载器测试（新增）
+├── docs/                             # 文档
+│   └── algorithm_design.md           # 算法设计与理论描述（新增）
+├── examples/                         # 示例被测代码（含已知 bug）
+│   ├── calculator.py                 # 计算器示例（除零、负数阶乘 bug）
+│   ├── buggy_library.py              # 算法库示例（二分查找、排序合并等）
+│   └── string_utils.py               # 字符串工具示例（回文、Caesar 密码等）
+├── main.py                           # CLI 入口
+├── config.py                         # 全局配置（含消融实验开关）
+├── init_db.py                        # 数据库初始化脚本
+├── setup.py                          # 包管理配置
+├── requirements.txt                  # Python 依赖列表
+├── Dockerfile                        # Docker 镜像定义
+└── .env.example                      # 环境变量模板
 ```
 
 ## 核心方法
@@ -99,7 +114,39 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 
 **技术实现**：
 - [src/rag/retriever.py](src/rag/retriever.py) 中的 `TestCaseRetriever` 类
-- 在 [src/graph/workflow.py](src/graph/workflow.py) 中通过 `RAG_ENABLED` 标志控制启用/禁用
+- 在 [src/graph/workflow.py](src/graph/workflow.py) 中通过 `ENABLE_RAG` 标志控制启用/禁用
+
+### 5. 多基线对比与消融实验（新增）
+支持四种实验配置，一键对比不同组件的贡献：
+
+| 基线名称 | 配置 | 说明 |
+|---------|------|------|
+| `aitester` | Planner+Debugger 均启用 | 完整多智能体系统 |
+| `plain_llm` | Planner+Debugger 均禁用 | 纯 LLM 单次调用基线 |
+| `single_agent` | Planner+Debugger 合并为一次调用 | 单智能体对比基线 |
+
+**消融实验开关**（在 [.env](.env) 或 [config.py](config.py) 中配置）：
+```bash
+ENABLE_PLANNER=true      # 启用 Planner（默认 true）
+ENABLE_DEBUGGER=true     # 启用 Debugger 修复循环（默认 true）
+ENABLE_RAG=false         # 启用 RAG 检索增强（默认 false）
+```
+
+### 6. 标准数据集集成（新增）
+通过 `src/dataset_loader.py` 支持 SWE-bench 和 Defects4J-Python 标准基准：
+
+```python
+from src.dataset_loader import SWEBenchDataset, load_dataset
+
+# 加载内置示例数据集（无需下载）
+dataset = load_dataset("examples")
+
+# 加载 SWE-bench（需先下载数据）
+dataset = SWEBenchDataset(subset="lite")  # 500 个任务
+
+# 从 HuggingFace 下载
+SWEBenchDataset.download_from_huggingface(subset="mini")
+```
 
 ## 实验复现
 
@@ -124,35 +171,75 @@ cp .env.example .env
 # 4. 初始化数据库（可选）
 python init_db.py
 
-# 5. 运行基准测试
-python experiments/run_benchmark.py
+# 5. 运行基准测试（内置示例数据集，三种基线对比）
+python experiments/run_benchmark.py --dataset examples --baselines aitester,plain_llm,single_agent
 
-# 6. 查看结果
+# 6. 限制任务数量（快速验证）
+python experiments/run_benchmark.py --dataset examples --task-limit 2
+
+# 7. 查看结果
 ls experiments/results/
 python experiments/visualize_results.py
 ```
 
-### Docker 一键复现
+### 运行 SWE-bench 基准（需下载数据）
+```bash
+# 方式一：从 HuggingFace 下载 lite 子集（约 500 任务）
+python -c "from src.dataset_loader import SWEBenchDataset; SWEBenchDataset.download_from_huggingface(subset='lite')"
+
+# 方式二：手动下载后放入 ~/.cache/aitester/swe_bench/swe_bench_instances.jsonl
+
+# 运行 benchmark
+python experiments/run_benchmark.py --dataset swe_bench --subset lite --task-limit 10
+```
+
+### 结果文件说明
+
+基准测试结果保存在 `experiments/results/` 目录下，格式为 JSON：
+```
+experiments/results/benchmark_examples_20260813_125502.json
+```
+该目录已加入 `.gitignore`，不会提交到版本库。
+
+---
+
+## Docker 一键复现
 ```bash
 # 构建镜像
 docker build -t aitester:latest .
 
-# 运行测试
+# 运行 benchmark
 docker run --rm \
   -v $(pwd):/workspace \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   aitester:latest \
-  python experiments/run_benchmark.py
+  python experiments/run_benchmark.py --dataset examples --task-limit 1
+
+# 运行单个文件测试
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  aitester:latest \
+  python main.py run examples/calculator.py
 ```
 
 ## 单元测试
 
 ```bash
-# 运行所有测试
-pytest tests/ -v
+# 运行所有测试（当前 50 个用例全部通过）
+.venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
-pytest tests/ -v --cov=src --cov-report=term-missing
+.venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
+
+# 运行指定模块测试
+.venv/bin/python -m pytest tests/test_dataset_loader.py -v
+```
+
+**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（15 用例）。
+
+# 运行测试并生成覆盖率报告
+.venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 ## 配置说明
@@ -166,6 +253,13 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `EXECUTION_TIMEOUT` | 单次执行超时（秒） | 30 |
+| `ENABLE_PLANNER` | 启用 Planner（消融开关） | true |
+| `ENABLE_DEBUGGER` | 启用 Debugger 修复循环（消融开关） | true |
+| `ENABLE_RAG` | 启用 RAG 检索增强 | false |
+| `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
+| `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
+| `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
+| `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
 
 ## 技术栈
 
@@ -174,4 +268,5 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 - **向量数据库**: ChromaDB（RAG 模块）
 - **测试框架**: pytest + pytest-cov
 - **命令行**: Click
+- **数据集**: SWE-bench / Defects4J-Python（通过 HuggingFace datasets 库加载）
 - **可视化**: matplotlib + pandas

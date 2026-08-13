@@ -81,6 +81,8 @@ class ExecutorAgent:
                 test_file,
                 "-v",           # 详细输出
                 "--tb=short",   # 缩短 traceback
+                f"--cov={target_dir}",  # 只收集目标目录的覆盖率
+                "--cov-report=term",  # 终端输出覆盖率
             ]
             if target_function:
                 cmd.append(f"-k {target_function}")
