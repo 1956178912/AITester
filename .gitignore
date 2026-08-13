@@ -49,3 +49,9 @@ htmlcov/
 algorithm_paper.md
 research_motivation.md
 PAPER_GUIDE.md
+
+# Experimental results
+experiments/results/
+
+# Model cache (can be large)
+~/.cache/aitester/
