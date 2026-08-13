@@ -1,11 +1,23 @@
 """
 LangGraph 工作流编排模块：定义智能体节点和执行路由逻辑。
 集成 RAG 检索增强和分层错误修复。
-工作流程：Planner → Generator → Executor → (Debugger → PatchApplier) × N → END
+
+工作流程（完整版）：
+    Planner → Generator → Executor → (Debugger → PatchApplier) × N → END
+
+工作流程（消融模式 - 无 Planner）：
+    Generator → Executor → (Debugger → PatchApplier) × N → END
+
+工作流程（消融模式 - 无 Debugger）：
+    Planner → Generator → Executor → END
+
+工作流程（消融模式 - 无 Planner/Debugger）：
+    Generator → Executor → END  （纯 LLM 基线）
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Dict, Optional
@@ -18,7 +30,13 @@ from src.agents.generator import GeneratorAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.debugger import DebuggerAgent
 from src.tools.patch_applier import apply_patch_to_code
-from config import MAX_ITERATIONS, COVERAGE_THRESHOLD
+from config import (
+    MAX_ITERATIONS,
+    COVERAGE_THRESHOLD,
+    ENABLE_PLANNER,
+    ENABLE_RAG,
+    ENABLE_DEBUGGER,
+)
 
 # 模块级 logger，用于记录工作流执行过程
 logger = logging.getLogger(__name__)
@@ -26,9 +44,9 @@ logger = logging.getLogger(__name__)
 # 可选导入 RAG 检索器（未安装 chromadb 时 gracefully degrade，不影响主流程）
 try:
     from src.rag.retriever import TestCaseRetriever
-    RAG_ENABLED = True
+    RAG_MODULE_AVAILABLE = True
 except ImportError:
-    RAG_ENABLED = False
+    RAG_MODULE_AVAILABLE = False
     TestCaseRetriever = None
     logger.info("RAG 模块未就绪（chromadb 未安装），将跳过检索增强")
 
@@ -36,39 +54,53 @@ except ImportError:
 def _create_workflow() -> StateGraph:
     """
     构建多智能体工作流图。
-    使用 LangGraph 的 StateGraph API 定义有向图，节点为各智能体，边为状态转移。
+
+    根据 config.py 中的消融开关动态选择启用的节点：
+    - ENABLE_PLANNER=True  → 包含 Planner 节点
+    - ENABLE_DEBUGGER=True → 包含 Debugger + PatchApplier 循环
+    - ENABLE_RAG=True      → Generator/Debugger 使用 RAG 增强
 
     Returns:
         已注册的 StateGraph 实例（尚未编译，需调用 .compile() 后才能运行）。
     """
     workflow = StateGraph(AITesterState)
 
-    # 注册四个核心节点：planner、generator、executor、debugger、patch_applier
-    workflow.add_node("planner", _planner_node)
+    # ── 始终注册的节点 ──────────────────────────────────────────────────────
+    # Generator 和 Executor 是必选项
     workflow.add_node("generator", _generator_node)
     workflow.add_node("executor", _executor_node)
-    workflow.add_node("debugger", _debugger_node)
-    workflow.add_node("patch_applier", _patch_applier_node)
 
-    # 设置入口：从 planner 开始
-    workflow.set_entry_point("planner")
-
-    # 定义边：planner → generator → executor
-    workflow.add_edge("planner", "generator")
+    # ── 固定边：Generator → Executor ─────────────────────────────────────────
     workflow.add_edge("generator", "executor")
 
-    # 条件路由：executor 根据测试结果决定进入 debugger 还是结束
-    workflow.add_conditional_edges(
-        "executor",
-        _should_debug,  # 路由函数，返回 "debug" 或 "done"
-        {
-            "debug": "debugger",   # 需要修复时进入 debugger
-            "done": END,           # 测试通过或达到最大迭代时结束
-        },
-    )
-    # debugger 修复后应用补丁，然后重新执行测试
-    workflow.add_edge("debugger", "patch_applier")
-    workflow.add_edge("patch_applier", "executor")
+    # ── 条件注册：Planner（消融开关控制）────────────────────────────────────
+    if ENABLE_PLANNER:
+        workflow.add_node("planner", _planner_node)
+        # 入口：从 planner 开始
+        workflow.set_entry_point("planner")
+        workflow.add_edge("planner", "generator")
+    else:
+        # 无 Planner 模式：直接从 generator 开始
+        workflow.set_entry_point("generator")
+
+    # ── 条件注册：Debugger + PatchApplier（消融开关控制）────────────────────
+    if ENABLE_DEBUGGER:
+        workflow.add_node("debugger", _debugger_node)
+        workflow.add_node("patch_applier", _patch_applier_node)
+        # Executor → 条件路由 → debugger 或 END
+        workflow.add_conditional_edges(
+            "executor",
+            _should_debug,
+            {
+                "debug": "debugger",   # 需要修复时进入 debugger
+                "done": END,           # 测试通过或达到最大迭代时结束
+            },
+        )
+        workflow.add_edge("debugger", "patch_applier")
+        workflow.add_edge("patch_applier", "executor")
+    else:
+        # 无 Debugger 模式：Executor 直接到 END
+        workflow.add_edge("executor", END)
 
     return workflow
 
@@ -88,14 +120,14 @@ def _should_debug(state: AITesterState) -> str:
     Returns:
         "debug" 表示进入调试，"done" 表示流程结束。
     """
-    # 测试已通过，无需修复
     if state.get("test_passed") is True:
         return "done"
-    # 已达到最大迭代次数，停止修复
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         return "done"
-    # 需要进入 debugger 进行修复
     return "debug"
+
+
+# ─── 节点函数定义 ────────────────────────────────────────────────────────────
 
 
 def _planner_node(state: AITesterState) -> Dict[str, Any]:
@@ -104,6 +136,7 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
 
     负责分析被测代码的输入域、输出域、前置/后置条件和边界情况，
     输出包含 logic_analysis 和 test_cases 的结构化计划。
+    若 LLM 返回格式不良的 JSON，使用默认计划兜底。
 
     Args:
         state: 当前状态，包含 target_code 和 target_function。
@@ -112,16 +145,30 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
         更新后的状态字典，包含 test_plan 字段。
     """
     agent = PlannerAgent()
-    # 调用 Planner 生成测试计划（含逻辑分析）
-    test_plan = agent.plan(state["target_code"], state.get("target_function"))
-    logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
+    try:
+        test_plan = agent.plan(state["target_code"], state.get("target_function"))
+        logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
+    except (json.JSONDecodeError, RuntimeError) as e:
+        logger.warning("Planner JSON 解析失败，使用默认计划: %s", e)
+        test_plan = {
+            "function_name": state.get("target_function", "unknown"),
+            "description": "自动生成的默认测试计划",
+            "logic_analysis": {
+                "input_domain": "未知",
+                "output_domain": "未知",
+                "preconditions": [],
+                "postconditions": [],
+                "edge_cases": [],
+            },
+            "test_cases": [],
+        }
     return {"test_plan": test_plan}
 
 
 def _generator_node(state: AITesterState) -> Dict[str, Any]:
     """
     GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
-    若 RAG 可用，先检索相似历史测试用例作为参考。
+    若 RAG 可用且已启用，先检索相似历史测试用例作为参考。
 
     Args:
         state: 当前状态。
@@ -131,9 +178,8 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
     """
     agent = GeneratorAgent()
 
-    # RAG 检索：查找相似历史测试用例
     rag_refs: Optional[list] = None
-    if RAG_ENABLED and TestCaseRetriever is not None:
+    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
             retriever = TestCaseRetriever()
             rag_refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
@@ -141,9 +187,8 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("RAG 检索失败，跳过增强: %s", e)
 
-    # 调用 Generator 生成测试代码
     generated_test = agent.generate(
-        state["test_plan"],
+        state["test_plan"] if ENABLE_PLANNER else None,
         state["target_code"],
         rag_references=rag_refs,
     )
@@ -157,7 +202,7 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
 def _executor_node(state: AITesterState) -> Dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
-    测试通过后自动入库，供后续 RAG 检索使用。
+    测试通过后自动入库（若 RAG 可用且已启用），供后续检索使用。
 
     Args:
         state: 当前状态。
@@ -167,9 +212,8 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
     """
     agent = ExecutorAgent(
         timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")),
-        use_docker=False,  # 默认本地执行，Docker 模式需额外配置
+        use_docker=False,
     )
-    # 执行测试
     result = agent.execute(
         test_code=state["generated_test"],
         target_file=state["target_file"],
@@ -184,9 +228,7 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
         len(result["failed_cases"]),
     )
 
-    # 测试通过后入库，供后续 RAG 检索使用
-    # 这样随着实验进行，RAG 库会积累更多高质量测试案例
-    if result["passed"] and RAG_ENABLED and TestCaseRetriever is not None:
+    if result["passed"] and ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
             retriever = TestCaseRetriever()
             retriever.add_case(
@@ -210,7 +252,7 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
 def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     """
     DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
-    若 RAG 可用，检索相似历史修复案例作为参考。
+    若 RAG 可用且已启用，检索相似历史修复案例作为参考。
 
     Args:
         state: 当前状态。
@@ -220,11 +262,9 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     """
     agent = DebuggerAgent()
 
-    # RAG 检索：查找相似历史修复案例
     rag_refs: Optional[list] = None
-    if RAG_ENABLED and TestCaseRetriever is not None and state.get("failed_cases"):
+    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None and state.get("failed_cases"):
         try:
-            # 使用已分类的错误类型（若有）或默认 UNKNOWN
             error_cat = state.get("error_category", "unknown")
             retriever = TestCaseRetriever()
             rag_refs = retriever.retrieve_repairs(
@@ -236,7 +276,6 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("RAG 检索失败，跳过增强: %s", e)
 
-    # 调用 Debugger 分析失败原因并生成修复补丁
     result = agent.debug(
         target_code=state["target_code"],
         test_output=state.get("test_output", ""),
@@ -250,9 +289,7 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         result.get("root_cause", "")[:80],
     )
 
-    # 修复案例入库（无论是否成功，都记录以供后续检索）
-    # 这有助于 Debugger 在遇到类似错误时参考历史修复方案
-    if RAG_ENABLED and TestCaseRetriever is not None:
+    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
             retriever = TestCaseRetriever()
             retriever.add_repair(
@@ -282,20 +319,16 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
     Returns:
         更新后的状态字典，包含更新后的 target_code 和修复历史。
     """
-    # 调用补丁应用工具
     new_code, applied = apply_patch_to_code(
         original_code=state["target_code"],
         patch=state.get("patch", ""),
     )
 
-    # 写回目标文件，确保后续测试使用修复后的代码
-    # 注意：此操作会修改原始文件，若需保留原文件应使用备份
     if applied and new_code != state["target_code"]:
         with open(state["target_file"], "w", encoding="utf-8") as f:
             f.write(new_code)
         logger.info("补丁已应用到文件: %s", state["target_file"])
 
-    # 记录修复历史，便于后续分析和实验统计
     history = state.get("repair_history", []) or []
     history.append({
         "iteration": state.get("iteration", 0) + 1,
