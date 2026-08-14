@@ -1,0 +1,36 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# AITester 本地敏感配置模板（LLM API Keys / Base URLs / Models）
+#
+# 使用方法：
+#   cp config.local.example .env.local
+#   然后填入真实值，或删除不需要的配置项。
+#
+# ⚠️  此文件绝对不要提交到 Git！已在 .gitignore 中排除。
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── LLM 配置（可添加多个，编号从 1 开始递增）──────────────────────────────────
+# 每个 LLM Provider 需要填写以下三个字段：
+#   LLM_N_API_KEY    — API Key（必填）
+#   LLM_N_BASE_URL   — OpenAI 兼容接口地址（必填）
+#   LLM_N_MODEL_NAME — 模型名称（必填）
+#
+# 至少配置一组，更多组会自动加入故障转移列表。
+
+# ── 第 1 个 LLM（必填，推荐使用）───────────────────────────────────────────────
+LLM_1_API_KEY=<YOUR_FIRST_API_KEY_HERE>
+LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
+LLM_1_MODEL_NAME=agnes-2.5-flash
+
+# ── 第 2 个 LLM（可选，备用 / 分摊限流）────────────────────────────────────────
+# LLM_2_API_KEY=<YOUR_SECOND_API_KEY_HERE>
+# LLM_2_BASE_URL=https://api.deepseek.com
+# LLM_2_MODEL_NAME=deepseek-chat
+
+# ── 第 3 个 LLM（可选，再备用）─────────────────────────────────────────────────
+# LLM_3_API_KEY=<YOUR_THIRD_API_KEY_HERE>
+# LLM_3_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
+# LLM_3_MODEL_NAME=GLM-4-Flash
+
+
+# ─── 全局温度参数（可选，未配置则默认 0.2）────────────────────────────────────
+# TEMPERATURE=0.2
