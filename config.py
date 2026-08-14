@@ -68,3 +68,14 @@ ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
 # 单个任务的 LLM 调用超时（秒）
 LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
+# LLM 限流等待时间（秒），用于 rate limit 后重试
+LLM_RETRY_WAIT: int = int(os.getenv("LLM_RETRY_WAIT", "30"))
+# 第二个 LLM API 配置（可选，用于并行基准测试分摊限流压力）
+OPENAI_API_KEY_2: str = os.getenv("OPENAI_API_KEY_2", "")
+OPENAI_BASE_URL_2: str = os.getenv("OPENAI_BASE_URL_2", "")
+
+# ─── 第三个 LLM API 配置（BigModel 备用）────────────────────────────────────
+# 当 Agnes 国际/国内 API 限流或失败时自动切换
+OPENAI_API_KEY_3: str = os.getenv("OPENAI_API_KEY_3", "")
+OPENAI_BASE_URL_3: str = os.getenv("OPENAI_BASE_URL_3", "")
+LLM_MODEL_BIGMODEL: str = os.getenv("LLM_MODEL_BIGMODEL", "GLM-4-Flash")

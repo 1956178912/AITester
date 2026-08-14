@@ -8,17 +8,52 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from typing import Any, Dict
 
 from langchain_openai import ChatOpenAI
+import threading
 from config import (
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
     MODEL_NAME,
     TEMPERATURE,
+    OPENAI_API_KEY_2,
+    OPENAI_BASE_URL_2,
+    OPENAI_API_KEY_3,
+    OPENAI_BASE_URL_3,
+    LLM_MODEL_BIGMODEL,
 )
+
+logger = logging.getLogger(__name__)
+
+
+_thread_local = threading.local()
+
+
+def _get_llm_config() -> tuple[str, str]:
+    """获取当前线程使用的 LLM 配置，优先返回线程局部覆盖值。"""
+    if hasattr(_thread_local, 'api_key') and _thread_local.api_key:
+        return _thread_local.api_key, _thread_local.base_url
+    return OPENAI_API_KEY, OPENAI_BASE_URL
+
+
+def _get_all_api_configs() -> list[tuple[str, str, str]]:
+    """获取所有可用的 API 配置列表（按优先级排列）。
+    
+    Returns:
+        列表，每项为 (api_key, base_url, model_name)，仅包含已配置的项。
+    """
+    configs = []
+    if OPENAI_API_KEY and OPENAI_BASE_URL:
+        configs.append((OPENAI_API_KEY, OPENAI_BASE_URL, MODEL_NAME))
+    if OPENAI_API_KEY_2 and OPENAI_BASE_URL_2:
+        configs.append((OPENAI_API_KEY_2, OPENAI_BASE_URL_2, MODEL_NAME))
+    if OPENAI_API_KEY_3 and OPENAI_BASE_URL_3:
+        configs.append((OPENAI_API_KEY_3, OPENAI_BASE_URL_3, LLM_MODEL_BIGMODEL))
+    return configs
 
 
 class BaseAgent:
@@ -27,7 +62,7 @@ class BaseAgent:
 
     封装了与 LLM 交互的底层逻辑，包括：
     - 初始化 LangChain ChatOpenAI 客户端
-    - 带重试的 LLM 调用（指数退避）
+    - 带重试的 LLM 调用（指数退避 + API 自动切换）
     - JSON 输出提取（处理 LLM 可能输出的 markdown 包裹）
     - Python 代码块提取
 
@@ -38,11 +73,12 @@ class BaseAgent:
 
     def __init__(self, system_prompt: str) -> None:
         # 使用配置文件中的参数初始化 LLM 客户端
+        api_key, base_url = _get_llm_config()
         self.llm = ChatOpenAI(
             model=MODEL_NAME,
             temperature=TEMPERATURE,
-            openai_api_key=OPENAI_API_KEY,
-            base_url=OPENAI_BASE_URL,
+            openai_api_key=api_key,
+            base_url=base_url,
         )
         # 每个智能体携带自己的 System Prompt，定义其角色和行为约束
         self.system_prompt = system_prompt
@@ -51,41 +87,67 @@ class BaseAgent:
         """
         调用 LLM 并返回文本响应。
         失败时进行最多 max_retries 次重试，采用指数退避策略（1s, 2s, 4s）。
+        若所有重试均失败，自动切换到备用 API 继续尝试。
 
         Args:
             user_message: 用户消息内容。
-            max_retries: 最大重试次数，默认 3 次。
+            max_retries: 单次 API 的最大重试次数，默认 3 次。
 
         Returns:
             LLM 返回的文本字符串。
 
         Raises:
-            RuntimeError: 所有重试均失败时抛出。
+            RuntimeError: 所有 API 和重试均失败时抛出。
         """
-        # 延迟导入，避免循环依赖
         from langchain_core.messages import SystemMessage, HumanMessage
 
-        for attempt in range(max_retries):
-            try:
-                # 构造包含 System Prompt 和用户消息的消息列表
-                response = self.llm.invoke([
-                    SystemMessage(content=self.system_prompt),
-                    HumanMessage(content=user_message),
-                ])
-                # 清理响应文本：去除首尾空白
-                text: str = response.content.strip()
-                # 空响应视为错误
-                if not text:
-                    raise RuntimeError("LLM 返回空响应")
-                return text
-            except Exception as e:
-                # 仍有重试机会时，等待后继续（指数退避：2^attempt 秒）
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # 第0次等1s，第1次等2s，第2次等4s
-                    time.sleep(wait_time)
-                    continue
-                # 所有重试耗尽，抛出最终异常
-                raise RuntimeError(f"LLM 调用失败: {e}") from e
+        all_configs = _get_all_api_configs()
+        if not all_configs:
+            raise RuntimeError("未配置任何 LLM API")
+
+        last_error: Exception | None = None
+
+        # 依次尝试每个 API 配置
+        for api_key, base_url, model_name in all_configs:
+            llm = ChatOpenAI(
+                model=model_name,
+                temperature=TEMPERATURE,
+                openai_api_key=api_key,
+                base_url=base_url,
+            )
+            
+            for attempt in range(max_retries):
+                try:
+                    response = llm.invoke([
+                        SystemMessage(content=self.system_prompt),
+                        HumanMessage(content=user_message),
+                    ])
+                    text = response.content.strip()
+                    if not text:
+                        raise RuntimeError("LLM 返回空响应")
+                    if attempt > 0 or api_key != OPENAI_API_KEY:
+                        logger.info("API 调用成功 (api=%s, attempt=%d)", 
+                                   base_url.split('/')[2] if '/' in base_url else base_url, attempt)
+                    return text
+                except Exception as e:
+                    last_error = e
+                    # 指数退避
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        logger.warning("API %s 调用失败 (attempt %d/%d): %s，等待 %ds", 
+                                      base_url, attempt + 1, max_retries, e, wait_time)
+                        time.sleep(wait_time)
+                        continue
+                    # 当前 API 所有重试耗尽，尝试下一个 API
+                    logger.warning("API %s 所有重试失败，切换到备用 API", base_url)
+                    break
+            else:
+                # 未通过 break 退出内层循环（即成功），继续外层循环到下一个 API
+                continue
+            # break 触发了，继续外层循环尝试下一个 API
+            continue
+        
+        raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {last_error}") from last_error
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:
@@ -93,6 +155,7 @@ class BaseAgent:
         从 LLM 输出中提取 JSON 对象。
         LLM 有时会在 JSON 前后添加 markdown 代码块标记（```json ... ```），
         此方法会先清理这些标记，再用括号平衡法找到完整的 JSON 对象。
+        若解析失败，尝试用正则提取候选 JSON 作为降级方案。
 
         Args:
             text: LLM 返回的原始文本。
@@ -112,10 +175,18 @@ class BaseAgent:
             raise json.JSONDecodeError("No JSON found in response", text, 0)
         # 用括号平衡法提取完整 JSON
         json_str = BaseAgent._find_balanced_json(cleaned, start)
-        if json_str is None:
-            raise json.JSONDecodeError("Could not find complete JSON", text, start)
-        # 解析 JSON 字符串为字典
-        return json.loads(json_str.strip())
+        if json_str is not None:
+            try:
+                return json.loads(json_str.strip())
+            except json.JSONDecodeError:
+                pass
+        # 降级：用正则匹配候选 JSON 对象（从后往前找第一个合法 JSON）
+        for m in reversed(list(re.finditer(r"\{[^{}]*\}", cleaned))):
+            try:
+                return json.loads(m.group())
+            except json.JSONDecodeError:
+                continue
+        raise json.JSONDecodeError("Could not find complete JSON", text, start)
 
     @staticmethod
     def _find_balanced_json(text: str, start: int) -> str | None:

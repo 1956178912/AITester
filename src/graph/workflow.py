@@ -95,6 +95,7 @@ def _create_workflow() -> StateGraph:
             {
                 "debug": "debugger",   # 需要修复时进入 debugger
                 "done": END,           # 测试通过或达到最大迭代时结束
+                "regenerate": "generator",  # 测试生成错误时重新生成测试代码
             },
         )
         workflow.add_edge("debugger", "patch_applier")
@@ -112,18 +113,27 @@ def _should_debug(state: AITesterState) -> str:
 
     路由条件：
     - 测试已通过 → 结束流程（"done"）
-    - 已达到最大迭代次数 → 结束流程（"done"）
+    - 已达到最大迭代次数 → 若诊断表明是测试生成错误，重新生成测试（"regenerate"）
+                         → 否则结束流程（"done"）
     - 否则 → 进入 debugger（"debug"）
 
     Args:
         state: 当前工作流状态。
 
     Returns:
-        "debug" 表示进入调试，"done" 表示流程结束。
+        "debug" 表示进入调试，"done" 表示流程结束，"regenerate" 表示重新生成测试代码。
     """
     if state.get("test_passed") is True:
         return "done"
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
+        diagnosis = state.get("diagnosis", "") or ""
+        # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
+        # 重新生成测试代码而不是放弃
+        test_gen_keywords = ["测试生成错误", "测试设计存在错误", "test code", "AttributeError",
+                             "NameError", "SyntaxError", "测试用例", "期望的异常类型"]
+        if any(kw in diagnosis for kw in test_gen_keywords):
+            logger.info("诊断表明测试生成错误，触发重新生成测试代码")
+            return "regenerate"
         return "done"
     return "debug"
 
@@ -278,12 +288,21 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("RAG 检索失败，跳过增强: %s", e)
 
-    result = agent.debug(
-        target_code=state["target_code"],
-        test_output=state.get("test_output", ""),
-        failed_cases=state.get("failed_cases", []) or [],
-        rag_references=rag_refs,
-    )
+    try:
+        result = agent.debug(
+            target_code=state["target_code"],
+            test_output=state.get("test_output", ""),
+            failed_cases=state.get("failed_cases", []) or [],
+            rag_references=rag_refs,
+        )
+    except (json.JSONDecodeError, RuntimeError) as e:
+        logger.warning("Debugger JSON 解析失败，跳过本轮修复: %s", e)
+        result = {
+            "root_cause": f"JSON 解析失败: {e}",
+            "error_category": "unknown",
+            "fix_strategy": "",
+            "patch": "",
+        }
     logger.info(
         "Debugger 完成第 %d 轮修复：类别=%s，根因=%s",
         state.get("iteration", 0) + 1,
