@@ -64,6 +64,11 @@ GENERATOR_SYSTEM_PROMPT = """\
 7. 若未给出模块名，根据目标代码推断合理的模块名。
 8. 确保 import 语句与目标代码中的函数名完全匹配。
 9. 只输出 Python 代码，用 ```python 代码块包裹。
+10. 异常测试正确写法：with pytest.raises(SomeException): func(...). 禁止访问不存在属性（如 expected.expect）。
+11. 若测试计划标注期望异常，必须转换为 pytest.raises 用例，异常类型不确定时用 Exception。
+12. 重要：若被测函数对空列表、未找到元素等边界情况**返回特定值**（如 -1、None、0）而非抛异常，
+    必须用 assert 断言返回值，禁止使用 pytest.raises。例如：
+    `assert binary_search([], 1) == -1`，而不是 `pytest.raises(IndexError)`。
 """
 
 # ─── Executor ──────────────────────────────────────────────────────────────────
@@ -86,6 +91,7 @@ DEBUGGER_SYSTEM_PROMPT = """\
 【分层修复规则】
 - syntax（语法错误）：代码无法编译，直接让 LLM 重新生成完整文件，确保 import 和语法正确。
 - runtime（运行时异常）：分析异常栈，找到引发异常的代码行，修复有 bug 的函数逻辑。
+  特别注意：若异常来自测试代码自身（如 Attribute error、NameError），说明是测试生成错误而非被测代码 bug，应让 Generator 重新生成测试代码。
 - assertion（断言失败）：判断是代码逻辑错误还是测试预期值错误，分别处理。
 - timeout（超时）：检查死循环或无限递归，添加退出条件。
 - unknown（未知）：仔细分析后自行判断并修复。
