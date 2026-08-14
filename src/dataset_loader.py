@@ -440,7 +440,9 @@ class InMemoryDataset(BaseDatasetLoader):
         super().__init__()
 
     def _load_raw_data(self) -> None:
-        pass
+        # InMemoryDataset 的数据由 add_sample_tasks() 在 __init__ 中手动填充，
+        # 无需从外部文件读取，因此此处留空。子类覆盖此方法以加载真实数据集。
+        return None
 
     def add_task(self, task: BenchmarkTask) -> None:
         """手动添加一个任务到数据集。"""
@@ -598,8 +600,15 @@ def load_dataset(
         "defects4j_python": Defects4JPYDataset,
         "d4j_py": Defects4JPYDataset,
         "in_memory": InMemoryDataset,
+        # "synthetic": SyntheticDataset,  # 使用懒加载避免循环导入
+        # "synth": SyntheticDataset,  # 使用懒加载避免循环导入
     }
 
+    # 懒加载 synthetic 以避免循环导入
+    if name_lower in ("synthetic", "synth"):
+        from src.synthetic_dataset import SyntheticDataset
+        return SyntheticDataset(subset=subset, **kwargs)
+    
     loader_class = dataset_map.get(name_lower, InMemoryDataset)
     instance = loader_class(subset=subset, **kwargs)
     # InMemoryDataset (including "examples" alias) should be pre-populated

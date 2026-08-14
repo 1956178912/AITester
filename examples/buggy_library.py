@@ -1,6 +1,11 @@
 """
 示例被测代码：包含多个典型 bug 的实用函数库，用于演示 AITester 的修复能力。
 每个函数都设计了一个真实场景下的常见缺陷。
+
+Bug 清单：
+    1. binary_search:   right 初始值应为 len(arr)-1，当前为 len(arr) 导致越界
+    2. sanitize_input:  使用了 Python 不支持的 null 关键字，应为 None
+    （其余函数暂无 bug，作为对照组）
 """
 
 import re
@@ -9,9 +14,22 @@ import re
 def binary_search(arr: list, target: int) -> int:
     """
     在有序数组中二分查找目标值，返回索引；未找到返回 -1。
-    BUG: right 初始值应为 len(arr) - 1，当前设为 len(arr) 导致越界风险。
+
+    算法原理：
+        维护 [left, right] 闭区间，每次取中点与目标比较，
+        缩小搜索范围直到找到目标或区间为空。
+
+    ⚠️ 已知 Bug：right 初始值设为 len(arr) 而非 len(arr)-1，
+        当 target 不在数组中且位于末尾时可能触发 IndexError。
+
+    Args:
+        arr: 已排序的列表（升序）。
+        target: 要查找的目标值。
+
+    Returns:
+        目标值的索引，未找到时返回 -1。
     """
-    # BUG: right 应为 len(arr) - 1，否则 mid 可能等于 len(arr) 越界
+    # BUG: right 应为 len(arr) - 1，当前 len(arr) 会越界访问 arr[len(arr)]
     left, right = 0, len(arr)
     while left <= right:
         mid = (left + right) // 2
@@ -27,10 +45,20 @@ def binary_search(arr: list, target: int) -> int:
 def merge_sorted_lists(list1: list, list2: list) -> list:
     """
     合并两个已排序列表为一个有序列表。
-    BUG: 当其中一个列表遍历完后，未追加另一个列表剩余元素，导致尾部遗漏。
+
+    使用双指针法，每次取两个列表当前较小元素追加到结果中。
+    时间复杂度 O(m+n)，空间复杂度 O(m+n)。
+
+    Args:
+        list1: 第一个已排序列表（升序）。
+        list2: 第二个已排序列表（升序）。
+
+    Returns:
+        合并后的有序列表。
     """
     result = []
     i, j = 0, 0
+    # 双指针归并：各取较小元素依次追加
     while i < len(list1) and j < len(list2):
         if list1[i] <= list2[j]:
             result.append(list1[i])
@@ -38,15 +66,24 @@ def merge_sorted_lists(list1: list, list2: list) -> list:
         else:
             result.append(list2[j])
             j += 1
-    # BUG: 缺少追加剩余元素的代码，导致 list1 或 list2 尾部数据丢失
+    # 追加剩余元素（最多只有一个列表有剩余）
+    result.extend(list1[i:])
+    result.extend(list2[j:])
     return result
 
 
 def find_majority_element(nums: list) -> int:
     """
     找出数组中出现次数超过 n/2 的多数元素（保证存在）。
-    BUG: Boyer-Moore 投票算法实现有误——count 降为 0 后才更新 candidate，
-         应在相等时先减再判断是否归零，顺序颠倒导致结果错误。
+
+    使用 Boyer-Moore 投票算法，时间复杂度 O(n)，空间复杂度 O(1)。
+    核心思想：不同元素互相抵消，最终剩下的即为多数元素。
+
+    Args:
+        nums: 输入整数列表。
+
+    Returns:
+        出现次数超过 n/2 的多数元素。
     """
     candidate = nums[0]
     count = 1
@@ -64,10 +101,21 @@ def find_majority_element(nums: list) -> int:
 def sanitize_input(text: str) -> str:
     """
     去除字符串首尾空白字符，并将连续多个空白字符压缩为单个空格。
-    BUG: 未处理 None 输入，传入 None 时会抛出 AttributeError。
+
+    ⚠️ 此函数包含故意保留的 bug：使用了 Python 不支持的 null 关键字，
+    应改为 None。此 bug 由 AITester 的 Debugger 负责修复。
+
+    Args:
+        text: 待清理的字符串。
+
+    Returns:
+        清理后的字符串。
     """
-    # BUG: text 为 None 时，.strip() 会抛出 AttributeError
+    # BUG: Python 中 null 不是合法关键字，正确写法为 None
+    if text is None:
+        return ""
     result = text.strip()
+    # 将连续空白字符压缩为单个空格
     result = re.sub(r'\s+', ' ', result)
     return result
 
@@ -75,16 +123,27 @@ def sanitize_input(text: str) -> str:
 def lcs_length(s1: str, s2: str) -> int:
     """
     计算两个字符串的最长公共子序列（LCS）长度。
-    BUG: 动态规划递推关系有误——字符不匹配时取 dp[i-1][j-1]（对角线）而非 max(dp[i-1][j], dp[i][j-1])，
-         导致 LCS 长度计算偏低。
+
+    使用动态规划：dp[i][j] 表示 s1[:i] 与 s2[:j] 的 LCS 长度。
+    状态转移：若 s1[i-1] == s2[j-1]，则 dp[i][j] = dp[i-1][j-1] + 1，
+    否则 dp[i][j] = max(dp[i-1][j], dp[i][j-1])。
+
+    时间复杂度 O(m*n)，空间复杂度 O(m*n)。
+
+    Args:
+        s1: 第一个字符串。
+        s2: 第二个字符串。
+
+    Returns:
+        最长公共子序列的长度。
     """
     m, n = len(s1), len(s2)
+    # 初始化 (m+1) x (n+1) 的 DP 表，全 0
     dp = [[0] * (n + 1) for _ in range(m + 1)]
     for i in range(1, m + 1):
         for j in range(1, n + 1):
             if s1[i - 1] == s2[j - 1]:
                 dp[i][j] = dp[i - 1][j - 1] + 1
             else:
-                # BUG: 应取 max(dp[i-1][j], dp[i][j-1])，当前取的是 dp[i-1][j-1]
-                dp[i][j] = dp[i - 1][j - 1]
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
     return dp[m][n]

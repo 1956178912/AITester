@@ -7,7 +7,7 @@ langgraph>=1.0.0
 # pymysql: MySQL 数据库驱动，用于实验数据持久化
 pymysql>=1.0.0
 # click: 命令行接口框架，提供 aitester run 等子命令
-click>=8.0.0
+click>=8.0.0  # CLI 框架，提供 aitester run/list-examples 等子命令
 # pytest: Python 测试框架，运行单元测试
 pytest>=8.0.0
 # pytest-cov: pytest 覆盖率插件，生成行覆盖率报告
@@ -15,21 +15,21 @@ pytest-cov>=4.0.0
 # python-dotenv: 从 .env 文件加载环境变量
 python-dotenv>=1.0.0
 # radon: 代码复杂度分析工具，可辅助理解被测代码
-radon>=6.0.0
+radon>=6.0.0  # 代码复杂度分析工具，可辅助理解被测代码结构
 # requests: HTTP 请求库（当前未直接使用，保留供扩展）
-requests>=2.31.0
+requests>=2.31.0  # HTTP 请求库（当前未直接使用，保留供未来扩展）
 # chromadb: 向量数据库，RAG 模块依赖，用于存储检索历史测试用例
-chromadb>=0.5.0
+chromadb>=0.5.0  # 向量数据库，RAG 模块依赖，用于存储和检索历史测试用例
 # matplotlib: 图表绘制库，用于实验结果可视化
-matplotlib>=3.7.0
+matplotlib>=3.7.0  # 图表绘制库，用于实验结果可视化（柱状图、热力图等）
 # pandas: 数据分析库，用于结果表格生成和统计
-pandas>=2.0.0
+pandas>=2.0.0  # 数据分析库，用于结果表格生成和统计汇总
 
 # ─── 实验与数据集依赖 ─────────────────────────────────────────────────────────
 # datasets: HuggingFace 数据集加载库（SWE-bench 下载用）
-datasets>=2.14.0
+datasets>=2.14.0  # HuggingFace 数据集加载库，SWE-bench 数据下载依赖
 # scipy: 统计检验（消融实验结果分析）
-scipy>=1.10.0
+scipy>=1.10.0  # 统计检验库，用于配对 t 检验和 Mann-Whitney U 检验
 
 # ─── 开发工具（可选，用于本地开发）──────────────────────────────────────────────
 # ruff: 快速 lint 检查
