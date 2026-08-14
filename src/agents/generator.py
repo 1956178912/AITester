@@ -108,7 +108,6 @@ class GeneratorAgent(BaseAgent):
         return code
 
     @staticmethod
-    @staticmethod
     def _validate_parametrize(code: str) -> bool:
         """
         校验 pytest.mark.parametrize 的参数定义与用例元组是否匹配。
