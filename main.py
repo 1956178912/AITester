@@ -65,6 +65,7 @@ def run(target_file: str, func: Optional[str], max_iterations: int, coverage_thr
         "task_uuid": f"{os.path.basename(target_file)}_{func or 'all'}_{int(__import__('time').time())}",
         "target_file": target_file,
         "target_function": func,
+        "module_name": os.path.splitext(os.path.basename(target_file))[0],
         "target_code": target_code,
         "test_plan": None,
         "generated_test": None,
