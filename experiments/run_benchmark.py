@@ -39,6 +39,8 @@ import shutil
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import openai
+
 # 确保项目根目录在路径中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -52,8 +54,11 @@ from src.dataset_loader import (
     InMemoryDataset,
     load_dataset,
 )
-from src.tools.code_analyzer import parse_function_nodes
-from config import MAX_ITERATIONS, COVERAGE_THRESHOLD, ENABLE_PLANNER, ENABLE_DEBUGGER
+from config import (
+    MAX_ITERATIONS, COVERAGE_THRESHOLD, ENABLE_PLANNER, ENABLE_DEBUGGER,
+    LLM_RETRY_WAIT, OPENAI_API_KEY_2, OPENAI_BASE_URL_2,
+    OPENAI_API_KEY_3, OPENAI_BASE_URL_3,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +125,84 @@ class _DummyProgressBar:
         pass
 
 
+# ─── API 配置管理 ──────────────────────────────────────────────────────────────
+
+
+# 所有可用的 API 配置（按优先级排列）
+_ALL_APIS = [
+    {"key": "", "url": "", "model": ""},  # 主 API (从环境变量读取)
+    {"key": OPENAI_API_KEY_2, "url": OPENAI_BASE_URL_2, "model": "agnes-2.5-flash"},
+    {"key": OPENAI_API_KEY_3, "url": OPENAI_BASE_URL_3, "model": "GLM-4-Flash"},
+]
+
+# 过滤掉未配置的 API
+_VALID_APIS = [api for api in _ALL_APIS if api["key"] and api["url"]]
+
+
+def _get_api_for_task(task_index: int) -> dict:
+    """根据任务索引分配 API（轮询分摊限流压力）。"""
+    if not _VALID_APIS:
+        return {"key": "", "url": "", "model": ""}
+    return _VALID_APIS[task_index % len(_VALID_APIS)]
+
+
+def _set_thread_api(task_index: int) -> None:
+    """为当前线程设置 API 配置。"""
+    from src.agents.base_agent import _thread_local
+    api = _get_api_for_task(task_index)
+    _thread_local.api_key = api["key"]
+    _thread_local.base_url = api["url"]
+
+
+def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 3) -> str:
+    """
+    调用 LLM，失败时自动切换到备用 API。
+    
+    Args:
+        prompt: 用户消息
+        system_prompt: System 提示词
+        max_retries: 每个 API 的最大重试次数
+        
+    Returns:
+        LLM 响应文本
+    """
+    from src.agents.base_agent import _get_all_api_configs
+    
+    for api_key, base_url, model in _get_all_api_configs():
+        client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        for attempt in range(max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=4096,
+                )
+                text = response.choices[0].message.content.strip()
+                if text:
+                    logger.debug("API %s 调用成功", base_url.split('/')[2])
+                    return text
+                raise ValueError("空响应")
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    logger.warning("API %s 调用失败 (attempt %d/%d): %s, 等待 %ds", 
+                                  base_url, attempt+1, max_retries, e, wait_time)
+                    time.sleep(wait_time)
+                    continue
+                logger.warning("API %s 所有重试失败，切换备用 API: %s", base_url, e)
+                break
+        else:
+            continue
+        break
+    else:
+        raise RuntimeError(f"所有 API 调用失败: {max_retries} 次重试后仍失败")
+    
+    raise RuntimeError(f"LLM 调用失败，已尝试所有 API")
+
+
 # ─── 基线方法实现 ─────────────────────────────────────────────────────────────
 
 
@@ -155,7 +238,6 @@ def run_plain_llm_baseline(
         最终状态字典。
     """
     # 临时关闭 Planner 和 Debugger，重新加载 workflow 模块获取新图
-    # 注意：通过全局变量修改后 reload 是关键，否则已有的 graph 实例不会变化
     import importlib
     import src.graph.workflow as wf_module
     global ENABLE_PLANNER, ENABLE_DEBUGGER
@@ -282,7 +364,6 @@ def run_single_task(
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
         # 写入 instance_code 到临时文件
-        # 从 repo_name 推导模块文件名（如 "examples/calculator" → "calculator.py"）
         module_name = task.repo_name.split("/")[-1] if "/" in task.repo_name else task.task_id.split("__")[-1]
         instance_file = os.path.join(tmp_dir, f"{module_name}.py")
         with open(instance_file, "w", encoding="utf-8") as f:
@@ -309,8 +390,12 @@ def run_single_task(
             "repair_history": [],
         }
 
+        # 为每个基线分配不同的 API（轮询）
         results: Dict[str, Dict[str, Any]] = {}
-        for baseline in baselines:
+        for baseline_idx, baseline in enumerate(baselines):
+            # 根据任务索引和基线索引分配 API
+            _set_thread_api(hash(task.task_id) % len(_VALID_APIS) if _VALID_APIS else 0)
+            
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
 
@@ -333,12 +418,45 @@ def run_single_task(
                     "task_metadata": task.metadata,
                 }
 
-                status = "✓ PASS" if final_state.get("test_passed") else "✗ FAIL"
+                status = "PASS" if final_state.get("test_passed") else "FAIL"
                 logger.info(
                     "    [%s] %s: %s (%.1fs, coverage=%.1f%%)",
                     baseline, task.task_id, status, elapsed,
                     final_state.get("coverage_report", 0.0),
                 )
+            except openai.RateLimitError as e:
+                # 限流：等待后重试
+                elapsed = time.time() - start_time
+                logger.warning("    [%s] %s 触发 API 限流，等待 %ds 后重试...", baseline, task.task_id, LLM_RETRY_WAIT)
+                time.sleep(LLM_RETRY_WAIT)
+                try:
+                    final_state = BASELINE_REGISTRY[baseline](state)
+                    elapsed = time.time() - start_time
+                    results[baseline] = {
+                        "task_id": task.task_id,
+                        "repo": task.repo_name,
+                        "passed": final_state.get("test_passed", False),
+                        "coverage": final_state.get("coverage_report") or 0.0,
+                        "iterations": final_state.get("iteration", 0),
+                        "diagnosis": final_state.get("diagnosis", ""),
+                        "error_category": final_state.get("error_category", ""),
+                        "elapsed_seconds": round(elapsed, 2),
+                        "task_metadata": task.metadata,
+                    }
+                except Exception as e2:
+                    elapsed = time.time() - start_time
+                    logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
+                    results[baseline] = {
+                        "task_id": task.task_id,
+                        "repo": task.repo_name,
+                        "passed": False,
+                        "coverage": 0.0,
+                        "iterations": 0,
+                        "diagnosis": f"限流重试失败: {e2}",
+                        "error_category": "rate_limit",
+                        "elapsed_seconds": round(elapsed, 2),
+                        "task_metadata": task.metadata,
+                    }
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error("    [%s] %s 执行失败: %s", baseline, task.task_id, e)
@@ -357,22 +475,14 @@ def run_single_task(
         return results
 
     finally:
-        # 清理临时目录，确保不留下被测代码副本（可能含 API Key 敏感信息）
+        # 清理临时目录
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _run_task_with_progress(
     args: tuple
 ) -> tuple[BenchmarkTask, Dict[str, Any]]:
-    """
-    并行执行任务包装器，用于 ThreadPoolExecutor。
-
-    Args:
-        args: (task, baselines, output_dir, verbose) 元组。
-
-    Returns:
-        (task, results) 元组。
-    """
+    """并行执行任务包装器。"""
     task, baselines, output_dir, verbose = args
     results = run_single_task(task, baselines, output_dir, verbose)
     return task, results
@@ -395,31 +505,27 @@ def run_benchmark(
     批量运行基准测试，支持多基线方法对比和消融实验。
 
     Args:
-        dataset_name: 数据集名称（"examples"/"swe_bench"/"defects4j_py"）。
-        subset: 数据子集（如 "lite"/"mini"/"full"）。
-        baselines: 要运行的基线方法列表，默认为 ["aitester"]。
+        dataset_name: 数据集名称。
+        subset: 数据子集。
+        baselines: 要运行的基线方法列表。
         output_dir: 结果输出目录。
         verbose: 是否输出详细日志。
-        task_limit: 限制运行任务数量（用于快速验证，None 表示全部）。
-        task_count: 合成数据集任务数量（--dataset synthetic 时有效，默认 60）。
-        parallel: 并行任务数（None 表示使用环境变量 BENCHMARK_PARALLELISM，0 表示串行）。
+        task_limit: 限制运行任务数量。
+        task_count: 合成数据集任务数量。
+        parallel: 并行任务数。
 
     Returns:
-        汇总结果字典，包含各基线的统计指标和详细结果。
+        汇总结果字典。
     """
-    # 默认基线
     if baselines is None:
         baselines = ["aitester"]
 
-    # 验证基线名称
     unknown = [b for b in baselines if b not in BASELINE_REGISTRY]
     if unknown:
         raise ValueError(f"不支持的基线方法: {unknown}，支持: {list(BASELINE_REGISTRY.keys())}")
 
-    # 加载数据集
     logger.info("加载数据集: %s (subset=%s)", dataset_name, subset)
 
-    # synthetic 数据集：本地生成，支持自定义规模
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
         logger.info("生成合成数据集：%d 个任务", tc)
@@ -436,34 +542,27 @@ def run_benchmark(
         logger.warning("数据集为空，尝试使用内置示例数据集")
         dataset = InMemoryDataset.create_with_samples()
 
-    # 任务限制
     tasks = dataset.tasks[:task_limit] if task_limit else dataset.tasks
+    logger.info("可用 API 配置数: %d", len(_VALID_APIS))
 
-    # 获取并行度配置
     if parallel is None:
         parallel = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
 
     use_progress = HAS_TQDM
     logger.info("待运行任务数: %d，基线: %s，并行度: %d", len(tasks), baselines, parallel)
 
-    # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
     all_results: Dict[str, List[Dict[str, Any]]] = {bl: [] for bl in baselines}
     total_time = 0.0
 
-    # 使用进度条
     desc = f"基准测试 [{', '.join(baselines)}]"
 
     with ProgressBar(len(tasks), desc=desc, enabled=use_progress) as pbar:
         if parallel > 1:
-            # 并行执行
             logger.info("启用并行执行，并发度: %d", parallel)
             with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
                 futures = {
-                    executor.submit(
-                        _run_task_with_progress,
-                        (task, baselines, output_dir, verbose)
-                    ): task
+                    executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose)): task
                     for task in tasks
                 }
                 for future in concurrent.futures.as_completed(futures):
@@ -482,7 +581,6 @@ def run_benchmark(
                     pbar.update(1)
                     pbar.set_description(f"{desc} - 耗时: {total_time:.1f}s")
         else:
-            # 串行执行
             for task in tasks:
                 logger.info("处理任务: %s", task.task_id)
                 task_results = run_single_task(task, baselines, output_dir, verbose)
@@ -490,7 +588,6 @@ def run_benchmark(
                 for baseline, result in task_results.items():
                     all_results[baseline].append(result)
 
-                # 打印当前进度
                 elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
                 total_time += elapsed_this
                 logger.info("  本轮耗时: %.1fs（累计 %.1fs）", elapsed_this, total_time)
@@ -506,8 +603,9 @@ def run_benchmark(
         "baselines": baselines,
         "enable_planner": ENABLE_PLANNER,
         "enable_debugger": ENABLE_DEBUGGER,
-        "enable_rag": False,  # RAG 在此处不启用（实验可复现性）
+        "enable_rag": False,
         "parallelism": parallel,
+        "valid_apis": len(_VALID_APIS),
         "results": {},
     }
 
@@ -533,10 +631,7 @@ def run_benchmark(
 
     # 保存结果
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = os.path.join(
-        output_dir,
-        f"benchmark_{dataset_name}_{timestamp_str}.json",
-    )
+    output_file = os.path.join(output_dir, f"benchmark_{dataset_name}_{timestamp_str}.json")
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
@@ -549,7 +644,6 @@ def run_benchmark(
             baseline, bl["success_rate"], bl["avg_coverage"], bl["avg_iterations"],
         )
 
-    # 打印最终摘要
     if use_progress:
         print("\n" + "="*60)
         print("基准测试完成！")
@@ -568,17 +662,15 @@ if __name__ == "__main__":
     import click
 
     @click.command()
-    @click.option("--dataset", "-d", default="examples", help="数据集名称 (examples/swe_bench/defects4j_py)")
-    @click.option("--subset", "-s", default=None, help="数据子集 (lite/mini/full)")
+    @click.option("--dataset", "-d", default="examples", help="数据集名称")
+    @click.option("--subset", "-s", default=None, help="数据子集")
     @click.option("--baselines", "-b", default="aitester,plain_llm,single_agent",
-                  help="基线方法列表（逗号分隔），默认: aitester,plain_llm,single_agent")
+                  help="基线方法列表（逗号分隔）")
     @click.option("--output-dir", "-o", default="experiments/results", help="结果输出目录")
     @click.option("--verbose", "-v", is_flag=True, help="详细日志输出")
-    @click.option("--task-count", "-c", default=None, type=int,
-                  help="合成数据集任务数量（--dataset synthetic 时有效，默认 60）")
-    @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量（快速验证）")
-    @click.option("--parallel", "-p", default=None, type=int,
-                  help="并行任务数（默认使用 BENCHMARK_PARALLELISM 环境变量，0 表示串行）")
+    @click.option("--task-count", "-c", default=None, type=int, help="合成数据集任务数量")
+    @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量")
+    @click.option("--parallel", "-p", default=None, type=int, help="并行任务数")
     def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]

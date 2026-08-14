@@ -30,8 +30,14 @@ class GeneratorAgent(BaseAgent):
         rag_references: RAG 检索到的相似历史测试用例列表（可选）。
 
     输出:
-        完整的 pytest 测试代码字符串。
+    完整的 pytest 测试代码字符串。
     """
+
+    # 已知合法的外部包，不应被替换为被测模块名
+    _KNOWN_MODULES = {'pytest', 'unittest', 'typing', 're', 'os', 'sys',
+                      'json', 'collections', 'itertools', 'functools',
+                      'abc', 'dataclasses', 'enum', 'pathlib', 'math',
+                      'datetime', 'string', 'random', 'hashlib', 'logging'}
 
     def __init__(self) -> None:
         # 使用生成器专用 system prompt
