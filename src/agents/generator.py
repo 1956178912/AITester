@@ -102,46 +102,55 @@ class GeneratorAgent(BaseAgent):
             code = self._extract_python_code(raw)
             if module_name:
                 code = self._fix_import_module(code, module_name)
+            # 二次校验：若仍失败则警告但不重试，避免 LLM 反复生成相同错误代码
+            if not self._validate_parametrize(code):
+                logger.warning("二次 parametrize 校验仍失败，继续执行（可能 LLM 无法修正）")
         return code
 
+    @staticmethod
     @staticmethod
     def _validate_parametrize(code: str) -> bool:
         """
         校验 pytest.mark.parametrize 的参数定义与用例元组是否匹配。
-        LLM 有时会错误地加入 case_name 导致参数数量不匹配。
+        使用 ast 解析确保语法合法，再校验 parametrize 参数数量是否匹配。
 
         Returns:
             True 表示格式正确，False 表示需要重试。
         """
-        import re
-        # 收集所有 @pytest.mark.parametrize 块
-        pattern = re.compile(
-            r'@pytest\.mark\.parametrize\s*\(\s*"([^"]+)"\s*,\s*\[([\s\S]*?)\]\s*,',
-            re.MULTILINE
-        )
-        for m in pattern.finditer(code):
-            param_names = [n.strip() for n in m.group(1).split(",")]
-            cases_str = m.group(2)
-            # 提取所有元组：('name', val1, val2) 或 (val1, val2)
-            tuples = re.findall(r"\(\s*([^)]+?)\s*\)", cases_str)
-            for t in tuples:
-                # 去掉字符串内容中的括号干扰
-                t_clean = re.sub(r"'[^']*'", "", t)
-                t_clean = re.sub(r'"[^"]*"', "", t_clean)
-                parts = [p.strip() for p in t_clean.split(",") if p.strip()]
-                if len(parts) != len(param_names):
-                    logger.warning(
-                        "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
-                        len(param_names), len(parts),
-                    )
-                    return False
+        import ast
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            logger.warning("测试代码语法错误：%s → 需要重试", e)
+            return False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for decorator in node.decorator_list:
+                if not (isinstance(decorator, ast.Call)
+                        and isinstance(decorator.func, ast.Attribute)
+                        and decorator.func.attr == "parametrize"):
+                    continue
+                if not decorator.args:
+                    continue
+                arg_expr = decorator.args[0]
+                if not isinstance(arg_expr, ast.Constant) or not isinstance(arg_expr.value, str):
+                    continue
+                param_names = [n.strip() for n in arg_expr.value.split(",")]
+                if len(decorator.args) < 2:
+                    continue
+                cases_arg = decorator.args[1]
+                if not isinstance(cases_arg, ast.List):
+                    continue
+                for elt in cases_arg.elts:
+                    if isinstance(elt, (ast.Tuple, ast.List)):
+                        if len(elt.elts) != len(param_names):
+                            logger.warning(
+                                "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
+                                len(param_names), len(elt.elts),
+                            )
+                            return False
         return True
-
-    # 已知合法的外部包，不应被替换
-    _KNOWN_MODULES = {'pytest', 'unittest', 'typing', 're', 'os', 'sys',
-                      'json', 'collections', 'itertools', 'functools',
-                      'abc', 'dataclasses', 'enum', 'pathlib', 'math',
-                      'datetime', 'string', 'random', 'hashlib', 'logging'}
 
     @staticmethod
     def _fix_import_module(code: str, expected_module: str) -> str:

@@ -327,9 +327,15 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
     )
 
     if applied and new_code != state["target_code"]:
-        with open(state["target_file"], "w", encoding="utf-8") as f:
-            f.write(new_code)
-        logger.info("补丁已应用到文件: %s", state["target_file"])
+        # 安全检查：补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）
+        if not new_code or len(new_code) < len(state["target_code"]) * 0.1:
+            logger.error("补丁内容异常（空或过短），跳过写入: %s", state["target_file"])
+        elif not any(line.strip().startswith("def ") for line in new_code.splitlines()):
+            logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
+        else:
+            with open(state["target_file"], "w", encoding="utf-8") as f:
+                f.write(new_code)
+            logger.info("补丁已应用到文件: %s", state["target_file"])
 
     history = state.get("repair_history", []) or []
     history.append({
