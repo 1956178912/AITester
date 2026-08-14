@@ -88,6 +88,7 @@ def _create_workflow() -> StateGraph:
         workflow.add_node("debugger", _debugger_node)
         workflow.add_node("patch_applier", _patch_applier_node)
         # Executor → 条件路由 → debugger 或 END
+        # Executor → Debugger 条件路由：根据测试是否通过/迭代次数决定是否进入修复循环
         workflow.add_conditional_edges(
             "executor",
             _should_debug,

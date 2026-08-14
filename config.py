@@ -40,7 +40,8 @@ MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
 # Docker 镜像名称，用于容器化测试执行环境
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
-# 单次测试执行的最大超时时间（秒），防止死循环导致进程卡死
+# 单次测试执行的最大超时时间（秒），防止被测函数死循环导致进程卡死
+# 可通过环境变量 EXECUTION_TIMEOUT 覆盖，默认 30 秒
 EXECUTION_TIMEOUT: int = int(os.getenv("EXECUTION_TIMEOUT", "30"))
 
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
@@ -63,7 +64,7 @@ ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
 ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
-# 批量基准测试的并行度（同时运行的任务数，0 表示串行）
+# 批量基准测试的并行度（同时运行的任务数，0 表示串行，暂未实现多线程）
 BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
 # 单个任务的 LLM 调用超时（秒）
 LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))

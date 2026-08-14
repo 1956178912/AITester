@@ -65,9 +65,11 @@ AITester/
 │   ├── rag/                          # 检索增强生成模块
 │   │   └── retriever.py              # ChromaDB 向量检索器（测试用例与修复案例）
 │   └── dataset_loader.py             # 数据集加载层（SWE-bench / Defects4J-Python）
+│   └── synthetic_dataset.py          # 合成数据集生成器（本地生成，无需外部下载）
 ├── experiments/                      # 实验脚本模块
 │   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验）
-│   └── visualize_results.py          # 结果可视化（柱状图 + 详细表格）
+│   └── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
+├── reproduce.sh                    # 一键实验复现脚本（quick/full 模式）
 ├── tests/                            # 单元测试
 │   ├── test_code_analyzer.py
 │   ├── test_error_classifier.py
@@ -136,19 +138,21 @@ ENABLE_RAG=false         # 启用 RAG 检索增强（默认 false）
 ```
 
 ### 6. 标准数据集集成（新增）
-通过 `src/dataset_loader.py` 支持 SWE-bench 和 Defects4J-Python 标准基准：
+通过 `src/dataset_loader.py` 和 `src/synthetic_dataset.py` 支持多种数据集：
 
 ```python
 from src.dataset_loader import SWEBenchDataset, load_dataset
+from src.synthetic_dataset import SyntheticDataset
 
-# 加载内置示例数据集（无需下载）
+# 加载内置示例数据集（无需下载，3 个预定义 bug 任务）
 dataset = load_dataset("examples")
 
 # 加载 SWE-bench（需先下载数据）
 dataset = SWEBenchDataset(subset="lite")  # 500 个任务
-
-# 从 HuggingFace 下载
 SWEBenchDataset.download_from_huggingface(subset="mini")
+
+# 生成合成数据集（本地生成，无需外部数据）
+dataset = SyntheticDataset(task_count=50, seed=42)
 ```
 
 ## 实验复现
@@ -200,7 +204,7 @@ python experiments/run_benchmark.py --dataset swe_bench --subset lite --task-lim
 
 基准测试结果保存在 `experiments/results/` 目录下，格式为 JSON：
 ```
-experiments/results/benchmark_examples_20260813_125502.json
+experiments/results/benchmark_<dataset>_<timestamp>.json  # 例：benchmark_examples_20260814_120000.json、benchmark_synthetic_20260814_120000.json
 ```
 该目录已加入 `.gitignore`，不会提交到版本库。
 

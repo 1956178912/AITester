@@ -207,6 +207,8 @@ class TestCaseRetriever:
         # 构造查询文本，同时匹配错误类型和代码内容
         query_text = f"error_category: {error_category}\n{target_code}"
 
+        # 构建检索查询文本：包含错误类型和代码上下文
+        query_text = f"error_category: {error_category}\ntarget_code:\n{target_code}"
         results = self.collection.query(
             query_texts=[query_text],
             n_results=top_k,

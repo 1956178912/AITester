@@ -126,7 +126,7 @@ class PlannerAgent(BaseAgent):
         result = self._extract_json(raw)
 
         # 兼容性处理：确保返回的 JSON 包含 logic_analysis 字段
-        # 若 LLM 未输出，填充空值以避免下游代码崩溃
+        # 旧版模型可能跳过思维链步骤直接输出测试计划，填充空值避免下游崩溃
         if "logic_analysis" not in result or result["logic_analysis"] is None:
             result["logic_analysis"] = {
                 "input_domain": "",

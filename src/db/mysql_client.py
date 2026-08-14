@@ -83,6 +83,8 @@ class MySQLClient:
             新创建的任务 UUID。
         """
         with self.cursor() as cur:
+            # 使用参数化查询（%s 占位符）防止 SQL 注入
+            # lastrowid 返回最后一次 INSERT 的自增主键
             cur.execute(
                 "INSERT INTO tasks (target_file, target_function) VALUES (%s, %s)",
                 (target_file, target_function),
@@ -100,6 +102,7 @@ class MySQLClient:
             任务字典，未找到时返回 None。
         """
         with self.cursor() as cur:
+            # fetchone() 返回第一行结果（字典格式），未找到时返回 None
             cur.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
             return cur.fetchone()
 

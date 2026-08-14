@@ -1,17 +1,23 @@
 """
-单元测试：测试错误分类器 ErrorClassifier 和策略函数。
-覆盖所有五种错误类型及策略生成。
+单元测试：测试错误分类器 ErrorClassifier 和策略函数 get_fix_strategy。
+
+覆盖范围：
+    - 全部五种错误类型（SYNTAX、RUNTIME、ASSERTION、TIMEOUT、UNKNOWN）的分类正确性
+    - 分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT
+    - failed_cases 的 error 字段参与分类
+    - 每种错误类型对应的修复策略关键词完整性
 """
 
 import pytest
 from src.agents.error_classifier import ErrorClassifier, ErrorCategory, get_fix_strategy
 
 
+# ─── TestErrorClassifier：错误分类器 ──────────────────────────────────────────
 class TestErrorClassifier:
     """测试错误分类器的规则匹配逻辑。"""
 
     def setup_method(self):
-        """为每个测试方法创建分类器实例。"""
+        """为每个测试方法创建独立的分类器实例。"""
         self.classifier = ErrorClassifier()
 
     def test_syntax_error_classification(self):
@@ -53,12 +59,13 @@ class TestErrorClassifier:
 
     def test_syntax_priority_over_runtime(self):
         """验证语法错误优先级高于运行时错误。"""
-        # 同时包含两类错误时，优先匹配到先检查的类别
+        # 同时包含两类错误时，优先匹配到先检查的 SYNTAX 类别
         output = "SyntaxError: invalid syntax\nZeroDivisionError: ..."
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.SYNTAX
 
 
+# ─── TestFixStrategy：修复策略映射 ────────────────────────────────────────────
 class TestFixStrategy:
     """测试错误类型到修复策略的映射。"""
 

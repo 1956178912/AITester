@@ -62,21 +62,23 @@ def compute_cyclomatic_complexity(source_code: str) -> int:
     """
     计算代码的圈复杂度（Cyclomatic Complexity）。
     复杂度 = 1 + 所有决策点（if/elif/for/while/except/and/or）数量。
+    圈复杂度越高，说明分支越多、测试难度越大，通常 > 10 需要重构。
 
     Args:
         source_code: Python 源代码字符串。
 
     Returns:
-        圈复杂度整数值。
+        圈复杂度整数值（越高越复杂）。
     """
     tree = ast.parse(source_code)
-    complexity = 1  # 基础复杂度
+    complexity = 1  # 基础复杂度（无分支时的最小值）
 
     for node in ast.walk(tree):
+        # 每个控制流节点（if/while/for/except）增加一条独立路径
         if isinstance(node, (ast.If, ast.While, ast.For, ast.ExceptHandler)):
             complexity += 1
         elif isinstance(node, ast.BoolOp):
-            # and/or 各增加一个决策点
+            # and/or 各增加一个决策点（a and b and c 有 2 个 BoolOp 节点）
             complexity += len(node.values) - 1
 
     return complexity
