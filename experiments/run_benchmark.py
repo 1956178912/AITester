@@ -21,11 +21,14 @@
 
     # 保存结果到指定目录
     python experiments/run_benchmark.py --output-dir ./my_results --verbose
+
+    # 并行执行（需设置 BENCHMARK_PARALLELISM 环境变量或 --parallel 参数）
+    BENCHMARK_PARALLELISM=4 python experiments/run_benchmark.py --dataset synthetic --task-count 10
 """
 
 from __future__ import annotations
 
-import asyncio
+import concurrent.futures
 import json
 import logging
 import os
@@ -53,6 +56,68 @@ from src.tools.code_analyzer import parse_function_nodes
 from config import MAX_ITERATIONS, COVERAGE_THRESHOLD, ENABLE_PLANNER, ENABLE_DEBUGGER
 
 logger = logging.getLogger(__name__)
+
+# 进度条支持
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+    tqdm = None  # type: ignore
+
+
+# ─── 进度条工具 ───────────────────────────────────────────────────────────────
+
+
+class ProgressBar:
+    """进度条包装类，兼容有无 tqdm 的情况。"""
+
+    def __init__(self, total: int, desc: str = "处理任务", enabled: bool = True):
+        self.total = total
+        self.desc = desc
+        self.enabled = enabled
+        self._pbar = None
+
+        if enabled and HAS_TQDM and tqdm is not None:
+            self._pbar = tqdm(
+                total=total,
+                desc=desc,
+                unit="task",
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+            )
+        else:
+            self._pbar = _DummyProgressBar()
+
+    def update(self, n: int = 1) -> None:
+        """更新进度。"""
+        self._pbar.update(n)
+
+    def set_description(self, desc: str) -> None:
+        """设置描述。"""
+        self._pbar.set_description(desc)
+
+    def close(self) -> None:
+        """关闭进度条。"""
+        self._pbar.close()
+
+    def __enter__(self) -> "ProgressBar":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()
+
+
+class _DummyProgressBar:
+    """无 tqdm 时的占位进度条。"""
+
+    def update(self, n: int = 1) -> None:
+        pass
+
+    def set_description(self, desc: str) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
 
 
 # ─── 基线方法实现 ─────────────────────────────────────────────────────────────
@@ -296,6 +361,23 @@ def run_single_task(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _run_task_with_progress(
+    args: tuple
+) -> tuple[BenchmarkTask, Dict[str, Any]]:
+    """
+    并行执行任务包装器，用于 ThreadPoolExecutor。
+
+    Args:
+        args: (task, baselines, output_dir, verbose) 元组。
+
+    Returns:
+        (task, results) 元组。
+    """
+    task, baselines, output_dir, verbose = args
+    results = run_single_task(task, baselines, output_dir, verbose)
+    return task, results
+
+
 # ─── 主基准测试函数 ────────────────────────────────────────────────────────────
 
 
@@ -307,6 +389,7 @@ def run_benchmark(
     verbose: bool = False,
     task_limit: Optional[int] = None,
     task_count: Optional[int] = None,
+    parallel: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -319,6 +402,7 @@ def run_benchmark(
         verbose: 是否输出详细日志。
         task_limit: 限制运行任务数量（用于快速验证，None 表示全部）。
         task_count: 合成数据集任务数量（--dataset synthetic 时有效，默认 60）。
+        parallel: 并行任务数（None 表示使用环境变量 BENCHMARK_PARALLELISM，0 表示串行）。
 
     Returns:
         汇总结果字典，包含各基线的统计指标和详细结果。
@@ -334,7 +418,7 @@ def run_benchmark(
 
     # 加载数据集
     logger.info("加载数据集: %s (subset=%s)", dataset_name, subset)
-    
+
     # synthetic 数据集：本地生成，支持自定义规模
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
@@ -354,24 +438,64 @@ def run_benchmark(
 
     # 任务限制
     tasks = dataset.tasks[:task_limit] if task_limit else dataset.tasks
-    logger.info("待运行任务数: %d，基线: %s", len(tasks), baselines)
+
+    # 获取并行度配置
+    if parallel is None:
+        parallel = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
+
+    use_progress = HAS_TQDM
+    logger.info("待运行任务数: %d，基线: %s，并行度: %d", len(tasks), baselines, parallel)
 
     # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
     all_results: Dict[str, List[Dict[str, Any]]] = {bl: [] for bl in baselines}
     total_time = 0.0
 
-    for i, task in enumerate(tasks, start=1):
-        logger.info("[%d/%d] 处理任务: %s", i, len(tasks), task.task_id)
-        task_results = run_single_task(task, baselines, output_dir, verbose=verbose)
+    # 使用进度条
+    desc = f"基准测试 [{', '.join(baselines)}]"
 
-        for baseline, result in task_results.items():
-            all_results[baseline].append(result)
+    with ProgressBar(len(tasks), desc=desc, enabled=use_progress) as pbar:
+        if parallel > 1:
+            # 并行执行
+            logger.info("启用并行执行，并发度: %d", parallel)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
+                futures = {
+                    executor.submit(
+                        _run_task_with_progress,
+                        (task, baselines, output_dir, verbose)
+                    ): task
+                    for task in tasks
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    task = futures[future]
+                    try:
+                        _, task_results = future.result()
+                    except Exception as e:
+                        logger.error("任务 %s 执行失败: %s", task.task_id, e)
+                        task_results = {}
 
-        # 打印当前进度
-        elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
-        total_time += elapsed_this
-        logger.info("  本轮耗时: %.1fs（累计 %.1fs）", elapsed_this, total_time)
+                    for baseline, result in task_results.items():
+                        all_results[baseline].append(result)
+
+                    elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
+                    total_time += elapsed_this
+                    pbar.update(1)
+                    pbar.set_description(f"{desc} - 耗时: {total_time:.1f}s")
+        else:
+            # 串行执行
+            for task in tasks:
+                logger.info("处理任务: %s", task.task_id)
+                task_results = run_single_task(task, baselines, output_dir, verbose)
+
+                for baseline, result in task_results.items():
+                    all_results[baseline].append(result)
+
+                # 打印当前进度
+                elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
+                total_time += elapsed_this
+                logger.info("  本轮耗时: %.1fs（累计 %.1fs）", elapsed_this, total_time)
+                pbar.update(1)
+                pbar.set_description(f"{desc} - 耗时: {total_time:.1f}s")
 
     # 生成汇总统计
     summary = {
@@ -383,6 +507,7 @@ def run_benchmark(
         "enable_planner": ENABLE_PLANNER,
         "enable_debugger": ENABLE_DEBUGGER,
         "enable_rag": False,  # RAG 在此处不启用（实验可复现性）
+        "parallelism": parallel,
         "results": {},
     }
 
@@ -424,6 +549,18 @@ def run_benchmark(
             baseline, bl["success_rate"], bl["avg_coverage"], bl["avg_iterations"],
         )
 
+    # 打印最终摘要
+    if use_progress:
+        print("\n" + "="*60)
+        print("基准测试完成！")
+        print("="*60)
+        for baseline in baselines:
+            bl = summary["results"][baseline]
+            print(f"  [{baseline}] 成功率: {bl['success_rate']}%, 平均覆盖率: {bl['avg_coverage']}%")
+        print(f"总耗时: {total_time:.1f}s")
+        print(f"结果文件: {output_file}")
+        print("="*60)
+
     return summary
 
 
@@ -440,9 +577,12 @@ if __name__ == "__main__":
     @click.option("--task-count", "-c", default=None, type=int,
                   help="合成数据集任务数量（--dataset synthetic 时有效，默认 60）")
     @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量（快速验证）")
-    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count):
+    @click.option("--parallel", "-p", default=None, type=int,
+                  help="并行任务数（默认使用 BENCHMARK_PARALLELISM 环境变量，0 表示串行）")
+    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
+
         summary = run_benchmark(
             dataset_name=dataset,
             subset=subset,
@@ -451,6 +591,7 @@ if __name__ == "__main__":
             verbose=verbose,
             task_limit=task_limit,
             task_count=task_count,
+            parallel=parallel,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 
