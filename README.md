@@ -276,7 +276,7 @@ docker run --rm \
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `OPENAI_API_KEY` | LLM API 密钥 | 必填 |
-| `MODEL_NAME` | LLM 模型名称 | gpt-4o-mini |
+| `MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `EXECUTION_TIMEOUT` | 单次执行超时（秒） | 30 |
@@ -295,3 +295,21 @@ docker run --rm \
 - **命令行**: Click
 - **数据集**: SWE-bench / Defects4J-Python（通过 HuggingFace datasets 库加载）
 - **可视化**: matplotlib + pandas
+
+## 基准测试结果
+
+### 内置示例数据集（examples，3 个任务）
+
+| 任务 | 状态 | 覆盖率 | 迭代次数 | LLM 调用次数 |
+|------|------|--------|----------|-------------|
+| `calculator.py::divide` | ✅ PASS | 100% | 0 | 1 |
+| `buggy_library.py::binary_search` | ✅ PASS | 100% | 1 | 2（含重试） |
+| `string_utils.py::is_palindrome` | ✅ PASS | 75% | 0 | 1 |
+
+**汇总**：成功率 **100%**，平均覆盖率 **91.7%**，平均耗时 **30.1s/任务**。
+
+### 关键修复记录
+
+- `_validate_parametrize` 由 regex 改为 ast 解析，解决嵌套列表导致参数误判问题
+- `_patch_applier_node` 增加安全守卫（非空、≥10% 长度、含函数定义）
+- Generator 二次 parametrize 校验，避免 LLM 反复生成相同错误代码
