@@ -32,9 +32,12 @@ python experiments/run_benchmark.py --dataset examples --task-limit 2
 # 7. 消融实验：仅启用 Planner
 ENABLE_PLANNER=true ENABLE_DEBUGGER=false python experiments/run_benchmark.py --dataset examples
 
+# 8. 运行合成数据集基准测试（无需外部下载，可自定义规模）
+python experiments/run_benchmark.py --dataset synthetic --task-count 50 --baselines aitester,plain_llm,single_agent
 
-# 8. 可视化实验结果
+# 9. 可视化实验结果（含统计显著性检验）
 python experiments/visualize_results.py
+python experiments/visualize_results.py --results-dir experiments/results/synthetic_full
 ```
 
 ## 项目结构
@@ -203,9 +206,33 @@ experiments/results/benchmark_examples_20260813_125502.json
 
 ---
 
+## 合成数据集与统计检验
+
+### 合成数据集
+AITester 内置了 `SyntheticDataset`，可在不依赖 SWE-bench/Defects4J 的情况下生成任意规模的缺陷任务：
+- 10 种预定义 bug 模式（除零、边界条件、逻辑错误等）
+- 通过 `--task-count` 控制任务数量（建议 ≥ 50 以满足发表要求）
+- 固定 seed 保证结果可复现
+
+### 统计显著性检验
+`visualize_results.py` 自动输出：
+- **配对 t 检验**：比较基线间通过率的统计显著性
+- **Mann-Whitney U 检验**：非参数检验作为补充
+- **Cohen's d**：量化效应量大小
+- **p 值热力图**：直观展示显著性差异
+
+输出文件：
+- `experiments/results/charts/statistical_significance.png`
+- `experiments/results/charts/summary_stats.md`
+
+---
+
 ## Docker 一键复现
+
+使用 Docker 可以完全隔离执行环境，避免本地依赖冲突。
+
 ```bash
-# 构建镜像
+# 构建镜像（首次约需 5 分钟，取决于网络速度）
 docker build -t aitester:latest .
 
 # 运行 benchmark
@@ -226,7 +253,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 50 个用例全部通过）
+# 运行所有测试（当前 68 个用例全部通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -236,11 +263,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（15 用例）。
-
-# 运行测试并生成覆盖率报告
-.venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
-```
+**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（15 用例）、`test_synthetic_dataset.py`（18 用例）。
 
 ## 配置说明
 
@@ -256,8 +279,6 @@ docker run --rm \
 | `ENABLE_PLANNER` | 启用 Planner（消融开关） | true |
 | `ENABLE_DEBUGGER` | 启用 Debugger 修复循环（消融开关） | true |
 | `ENABLE_RAG` | 启用 RAG 检索增强 | false |
-| `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
-| `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
 

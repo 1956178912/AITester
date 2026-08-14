@@ -1,3 +1,10 @@
+"""
+AITester 包管理配置文件。
+
+使用 python setup.py install 或 pip install -e . 进行安装。
+包含基础依赖与可选 extras：[rag], [viz], [dev]。
+"""
+
 from setuptools import setup, find_packages
 
 setup(
