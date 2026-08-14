@@ -19,18 +19,109 @@ from config import LLM_CONFIGS, TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
-
 _thread_local = threading.local()
 
 
-def _get_llm_config() -> tuple[str, str]:
-    """获取当前线程使用的 LLM 配置，优先返回线程局部覆盖值。"""
+def _is_zai_compatible(base_url: str) -> bool:
+    """判断是否为 zai SDK 兼容的 API（如 BigModel 智谱）。
+    
+    OpenAI 兼容接口返回 401 但 zai SDK 可用的服务商需走特殊路径。
+    """
+    zai_domains = ["bigmodel.cn", "zhipuai"]
+    return any(d in base_url for d in zai_domains)
+
+
+def _call_zai(api_key: str, base_url: str, model_name: str,
+              system_prompt: str, user_message: str, max_retries: int = 3) -> str:
+    """使用 zai SDK 调用 LLM（用于 BigModel 等非 OpenAI 兼容接口）。
+    
+    Args:
+        api_key: API Key。
+        base_url: API Base URL。
+        model_name: 模型名称。
+        system_prompt: System Prompt。
+        user_message: 用户消息。
+        max_retries: 最大重试次数。
+        
+    Returns:
+        LLM 返回的文本内容。
+        
+    Raises:
+        RuntimeError: 所有重试均失败时抛出。
+    """
+    from zai import ZhipuAiClient
+    from zai.core._errors import APIReachLimitError, APIStatusError
+    
+    client = ZhipuAiClient(
+        api_key=api_key,
+        base_url=base_url,
+    )
+    
+    last_error: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            # glm-4.7-flash 默认开启深度思考，关闭以获取普通响应
+            kwargs: dict[str, Any] = {"thinking": {"type": "disabled"}}
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=4096,
+                **kwargs,
+            )
+            msg = response.choices[0].message
+            # 优先取 content，回退到 reasoning_content
+            text = (msg.content or msg.reasoning_content or "").strip()
+            if not text:
+                raise RuntimeError("LLM 返回空响应")
+            logger.info("zai API 调用成功 (model=%s, attempt=%d)", model_name, attempt)
+            return text
+        except APIReachLimitError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt * 5  # zai 限流等待更长
+                logger.warning("zai API 限流 (attempt %d/%d): %s，等待 %ds",
+                              attempt + 1, max_retries, e, wait_time)
+                time.sleep(wait_time)
+                continue
+            raise
+        except APIStatusError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning("zai API 错误 (attempt %d/%d): %s，等待 %ds",
+                              attempt + 1, max_retries, e, wait_time)
+                time.sleep(wait_time)
+                continue
+            raise
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning("zai API 调用失败 (attempt %d/%d): %s，等待 %ds",
+                              attempt + 1, max_retries, e, wait_time)
+                time.sleep(wait_time)
+                continue
+            raise
+    
+    raise RuntimeError(f"zai API 调用失败: {last_error}") from last_error
+
+
+def _get_llm_config() -> tuple[str, str, str]:
+    """获取当前线程使用的 LLM 配置，优先返回线程局部覆盖值。
+    
+    Returns:
+        (api_key, base_url, model_name) 三元组。
+    """
     if hasattr(_thread_local, "api_key") and _thread_local.api_key:
-        return _thread_local.api_key, _thread_local.base_url
+        model = getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name if LLM_CONFIGS else "gpt-4o-mini")
+        return _thread_local.api_key, _thread_local.base_url, model
     if LLM_CONFIGS:
         cfg = LLM_CONFIGS[0]
-        return cfg.api_key, cfg.base_url
-    return "", ""
+        return cfg.api_key, cfg.base_url, cfg.model_name
+    return "", "", "gpt-4o-mini"
 
 
 def _get_all_api_configs() -> list[tuple[str, str, str]]:
@@ -48,7 +139,7 @@ class BaseAgent:
 
     封装了与 LLM 交互的底层逻辑，包括：
     - 初始化 LangChain ChatOpenAI 客户端
-    - 带重试的 LLM 调用（指数退避 + API 自动切换）
+    - 带重试的 LLM 调用（指数退避 + API 自动切换，支持 zai SDK）
     - JSON 输出提取（处理 LLM 可能输出的 markdown 包裹）
     - Python 代码块提取
 
@@ -59,8 +150,7 @@ class BaseAgent:
 
     def __init__(self, system_prompt: str) -> None:
         # 使用默认 LLM 配置初始化 LLM 客户端
-        api_key, base_url = _get_llm_config()
-        model_name = LLM_CONFIGS[0].model_name if LLM_CONFIGS else "gpt-4o-mini"
+        api_key, base_url, model_name = _get_llm_config()
         self.llm = ChatOpenAI(
             model=model_name,
             temperature=TEMPERATURE,
@@ -75,6 +165,7 @@ class BaseAgent:
         调用 LLM 并返回文本响应。
         失败时进行最多 max_retries 次重试，采用指数退避策略（1s, 2s, 4s）。
         若所有重试均失败，自动切换到备用 API 继续尝试。
+        支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
 
         Args:
             user_message: 用户消息内容。
@@ -92,20 +183,26 @@ class BaseAgent:
         if not all_configs:
             raise RuntimeError("未配置任何 LLM API")
 
-        last_error: Exception | None = None
         primary_key = all_configs[0][0] if all_configs else ""
+        last_error: Exception | None = None
 
         # 依次尝试每个 API 配置
         for api_key, base_url, model_name in all_configs:
-            llm = ChatOpenAI(
-                model=model_name,
-                temperature=TEMPERATURE,
-                openai_api_key=api_key,
-                base_url=base_url,
-            )
+            is_zai = _is_zai_compatible(base_url)
             
-            for attempt in range(max_retries):
-                try:
+            try:
+                if is_zai:
+                    # BigModel 等非 OpenAI 兼容接口：使用 zai SDK
+                    text = _call_zai(api_key, base_url, model_name,
+                                    self.system_prompt, user_message, max_retries)
+                else:
+                    # OpenAI 兼容接口：使用 LangChain ChatOpenAI
+                    llm = ChatOpenAI(
+                        model=model_name,
+                        temperature=TEMPERATURE,
+                        openai_api_key=api_key,
+                        base_url=base_url,
+                    )
                     response = llm.invoke([
                         SystemMessage(content=self.system_prompt),
                         HumanMessage(content=user_message),
@@ -113,36 +210,19 @@ class BaseAgent:
                     text = response.content.strip()
                     if not text:
                         raise RuntimeError("LLM 返回空响应")
-                    if attempt > 0 or api_key != primary_key:
-                        logger.info(
-                            "API 调用成功 (api=%s, attempt=%d)",
-                            base_url.split("/")[2] if "/" in base_url else base_url,
-                            attempt,
-                        )
-                    return text
-                except Exception as e:
-                    last_error = e
-                    # 指数退避
-                    if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
-                        logger.warning(
-                            "API %s 调用失败 (attempt %d/%d): %s，等待 %ds",
-                            base_url,
-                            attempt + 1,
-                            max_retries,
-                            e,
-                            wait_time,
-                        )
-                        time.sleep(wait_time)
-                        continue
-                    # 当前 API 所有重试耗尽，尝试下一个 API
-                    logger.warning("API %s 所有重试失败，切换到备用 API", base_url)
-                    break
-            else:
-                # 未通过 break 退出内层循环（即成功），继续外层循环到下一个 API
+                
+                # 记录成功日志
+                if max_retries > 1:  # 仅在有多次尝试可能时才打印详细日志
+                    logger.info("API 调用成功 (api=%s, model=%s)", 
+                               base_url.split("/")[2] if "/" in base_url else base_url,
+                               model_name)
+                return text
+                
+            except Exception as e:
+                last_error = e
+                logger.warning("API %s (%s) 调用失败: %s", base_url, model_name, e)
+                # 当前 API 所有重试耗尽，尝试下一个 API
                 continue
-            # break 触发了，继续外层循环尝试下一个 API
-            continue
         
         raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {last_error}") from last_error
 
@@ -164,7 +244,7 @@ class BaseAgent:
             json.JSONDecodeError: 无法找到有效 JSON 时抛出。
         """
         # 移除 markdown 代码块标记（如 ```json 或 ```）
-        cleaned = re.sub(r"```(?:json)?\s*\n?", "", text)
+        cleaned = re.sub(r"```(?:json)?\\s*\\n?", "", text)
         cleaned = re.sub(r"```", "", cleaned)
         # 找到第一个左花括号的位置
         start = cleaned.find("{")
@@ -251,17 +331,17 @@ class BaseAgent:
             提取出的 Python 代码字符串。
         """
         # 尝试标准 markdown 格式：```python ... ```
-        match = re.search(r"```python\s*\n(.*?)\n\s*```", text, re.DOTALL)
+        match = re.search(r"```python\\s*\\n(.*?)\\n\\s*```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         # 尝试通用 markdown 格式：``` ... ```
-        match = re.search(r"```\s*\n(.*?)\n```", text, re.DOTALL)
+        match = re.search(r"```\\s*\\n(.*?)\\n```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         # 尝试 "python" 前缀格式（某些模型输出不带反引号）
         stripped = text.strip()
         if stripped.lower().startswith("python"):
-            stripped = re.sub(r"^python\s*\n", "", stripped, flags=re.IGNORECASE)
+            stripped = re.sub(r"^python\\s*\\n", "", stripped, flags=re.IGNORECASE)
             return stripped.strip()
         # 返回原始文本（无标记时直接返回）
         return text.strip()
