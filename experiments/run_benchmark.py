@@ -153,9 +153,15 @@ def _set_thread_api(task_index: int) -> None:
     _thread_local.base_url = api["url"]
 
 
+def _is_zai_url(base_url: str) -> bool:
+    """判断是否为 zai SDK 兼容的 API（如 BigModel 智谱）。"""
+    return any(d in base_url for d in ["bigmodel.cn", "zhipuai"])
+
+
 def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 3) -> str:
     """
     调用 LLM，失败时自动切换到备用 API。
+    支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
     
     Args:
         prompt: 用户消息
@@ -168,34 +174,80 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
     from src.agents.base_agent import _get_all_api_configs
     
     for api_key, base_url, model in _get_all_api_configs():
-        client = openai.OpenAI(api_key=api_key, base_url=base_url)
-        for attempt in range(max_retries):
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=4096,
-                )
-                text = response.choices[0].message.content.strip()
-                if text:
-                    logger.debug("API %s 调用成功", base_url.split('/')[2])
-                    return text
-                raise ValueError("空响应")
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    logger.warning("API %s 调用失败 (attempt %d/%d): %s, 等待 %ds", 
-                                  base_url, attempt+1, max_retries, e, wait_time)
-                    time.sleep(wait_time)
+        is_zai = _is_zai_url(base_url)
+        
+        try:
+            if is_zai:
+                # BigModel 等非 OpenAI 兼容接口：使用 zai SDK
+                from zai import ZhipuAiClient
+                from zai.core._errors import APIReachLimitError, APIStatusError
+                
+                client = ZhipuAiClient(api_key=api_key, base_url=base_url)
+                for attempt in range(max_retries):
+                    try:
+                        response = client.chat.completions.create(
+                            model=model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": prompt},
+                            ],
+                            max_tokens=4096,
+                            thinking={"type": "disabled"},
+                        )
+                        msg = response.choices[0].message
+                        text = (msg.content or msg.reasoning_content or "").strip()
+                        if text:
+                            logger.debug("zai API %s 调用成功", base_url.split("/")[2])
+                            return text
+                        raise ValueError("空响应")
+                    except (APIReachLimitError, APIStatusError) as e:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt * 5
+                            logger.warning("zai API 限流 (attempt %d/%d): %s", attempt+1, max_retries, e)
+                            time.sleep(wait_time)
+                            continue
+                        raise
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt
+                            logger.warning("zai API %s 调用失败 (attempt %d/%d): %s", 
+                                          base_url, attempt+1, max_retries, e)
+                            time.sleep(wait_time)
+                            continue
+                        raise
+            else:
+                # OpenAI 兼容接口：使用 openai SDK
+                import openai
+                client = openai.OpenAI(api_key=api_key, base_url=base_url)
+                for attempt in range(max_retries):
+                    try:
+                        response = client.chat.completions.create(
+                            model=model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": prompt},
+                            ],
+                            max_tokens=4096,
+                        )
+                        text = response.choices[0].message.content.strip()
+                        if text:
+                            logger.debug("API %s 调用成功", base_url.split("/")[2])
+                            return text
+                        raise ValueError("空响应")
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt
+                            logger.warning("API %s 调用失败 (attempt %d/%d): %s, 等待 %ds", 
+                                          base_url, attempt+1, max_retries, e, wait_time)
+                            time.sleep(wait_time)
+                            continue
+                        logger.warning("API %s 所有重试失败，切换备用 API: %s", base_url, e)
+                        break
+                else:
                     continue
-                logger.warning("API %s 所有重试失败，切换备用 API: %s", base_url, e)
                 break
-        else:
+        except Exception:
             continue
-        break
     else:
         raise RuntimeError(f"所有 API 调用失败: {max_retries} 次重试后仍失败")
     
