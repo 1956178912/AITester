@@ -116,12 +116,12 @@ def _get_llm_config() -> tuple[str, str, str]:
         (api_key, base_url, model_name) 三元组。
     """
     if hasattr(_thread_local, "api_key") and _thread_local.api_key:
-        model = getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name if LLM_CONFIGS else "gpt-4o-mini")
+        model = getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name if LLM_CONFIGS else "")
         return _thread_local.api_key, _thread_local.base_url, model
     if LLM_CONFIGS:
         cfg = LLM_CONFIGS[0]
         return cfg.api_key, cfg.base_url, cfg.model_name
-    return "", "", "gpt-4o-mini"
+    return "", "", ""
 
 
 def _get_all_api_configs() -> list[tuple[str, str, str]]:
