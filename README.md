@@ -267,7 +267,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（15 用例）、`test_synthetic_dataset.py`（18 用例）。
+**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（17 用例）、`test_synthetic_dataset.py`（18 用例）。
 
 ## 配置说明
 
@@ -275,7 +275,7 @@ docker run --rm \
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `OPENAI_API_KEY` | LLM API 密钥 | 必填 |
+| `LLM_N_API_KEY` | LLM API 密钥（配置见 `config.local.example`）| 必填 |
 | `MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
@@ -313,3 +313,35 @@ docker run --rm \
 - `_validate_parametrize` 由 regex 改为 ast 解析，解决嵌套列表导致参数误判问题
 - `_patch_applier_node` 增加安全守卫（非空、≥10% 长度、含函数定义）
 - Generator 二次 parametrize 校验，避免 LLM 反复生成相同错误代码
+
+
+## 常见问题
+
+### Q: 运行时报 `ModuleNotFoundError`
+
+**原因**：测试文件与模块不在同一目录，Python 无法找到被测模块。
+**解决**：确保 `target_file` 路径正确，或检查 `module_name` 配置。
+
+### Q: LLM 返回非 JSON 格式
+
+**原因**：模型输出不符合预期格式。
+**解决**：检查 `.env` 中的 `MODEL_NAME` 和 `OPENAI_BASE_URL`，确保 API Key 有效。
+
+### Q: 覆盖率始终为 0%
+
+**原因**：覆盖率统计文件未生成或路径错误。
+**解决**：检查 `pytest-cov` 是否正确安装，确认 `--cov` 参数传递。
+
+### Q: 合成数据集成功率低（< 10%）
+
+**原因**：合成数据集 bug 模式较复杂，单轮修复可能不足以覆盖所有场景。
+**解决**：
+1. 增加 `MAX_ITERATIONS`（默认 3，可调至 5）
+2. 启用 RAG 增强：`ENABLE_RAG=true`
+3. 使用更强大的模型（如 `gpt-4o` 替代 `gpt-4o-mini`）
+
+---
+
+## 许可证
+
+MIT License

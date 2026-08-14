@@ -90,7 +90,7 @@ DEFAULT_LLM_CONFIG: LLMConfig | None = LLM_CONFIGS[0] if LLM_CONFIGS else None
 OPENAI_API_KEY: str = DEFAULT_LLM_CONFIG.api_key if DEFAULT_LLM_CONFIG else ""
 OPENAI_BASE_URL: str = DEFAULT_LLM_CONFIG.base_url if DEFAULT_LLM_CONFIG else ""
 MODEL_NAME: str = DEFAULT_LLM_CONFIG.model_name if DEFAULT_LLM_CONFIG else ""
-# TEMPERATURE 仍从 .env 读取（非敏感，可留在 .env 或 .env.local 均可）
+# TEMPERATURE 非敏感配置，可留在 .env 或 .env.local 中
 TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
 
 
