@@ -1,6 +1,12 @@
 """
 数据库初始化脚本：创建所需表结构。
 手动运行此脚本以初始化 MySQL 数据库。
+
+创建三张表：
+    - tasks:       记录每个测试任务的基本信息（目标文件、函数名、状态）
+    - test_runs:   记录每次测试执行的详细结果（覆盖率、输出文本、通过状态）
+    - repair_history: 记录每次修复尝试的诊断与补丁（迭代次数关联）
+test_runs.output 和 repair_history.patch 使用 MEDIUMTEXT，可存储完整的测试输出和代码补丁。
 """
 
 from __future__ import annotations

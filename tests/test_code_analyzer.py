@@ -1,6 +1,13 @@
 """
 单元测试：测试 code_analyzer 模块的核心功能。
-覆盖 parse_function_nodes、extract_function_code、compute_cyclomatic_complexity、replace_function_code。
+
+覆盖范围：
+    - parse_function_nodes:        AST 函数节点解析
+    - extract_function_code:       按名称提取函数代码
+    - compute_cyclomatic_complexity: 圈复杂度计算
+    - replace_function_code:       基于 AST 的代码替换
+
+所有测试使用同一段 SAMPLE_CODE（含 add、divide、factorial 三个函数）。
 """
 
 import pytest
@@ -12,6 +19,8 @@ from src.tools.code_analyzer import (
 )
 
 
+# ─── 公共测试样本 ──────────────────────────────────────────────────────────────
+# 包含三个函数：add（简单）、divide（含条件分支）、factorial（含递归调用）
 SAMPLE_CODE = '''\
 """示例模块。"""
 
@@ -41,6 +50,7 @@ def factorial(n: int) -> int:
 '''
 
 
+# ─── TestParseFunctionNodes：函数节点解析 ──────────────────────────────────────
 class TestParseFunctionNodes:
     """测试函数节点解析功能。"""
 
@@ -68,6 +78,7 @@ class TestParseFunctionNodes:
         assert funcs == []
 
 
+# ─── TestExtractFunctionCode：函数代码提取 ─────────────────────────────────────
 class TestExtractFunctionCode:
     """测试函数代码提取功能。"""
 
@@ -89,6 +100,7 @@ class TestExtractFunctionCode:
         assert "raise ValueError" in code
 
 
+# ─── TestComputeCyclomaticComplexity：圈复杂度计算 ─────────────────────────────
 class TestComputeCyclomaticComplexity:
     """测试圈复杂度计算功能。"""
 
@@ -113,6 +125,7 @@ class TestComputeCyclomaticComplexity:
         assert compute_cyclomatic_complexity(SAMPLE_CODE) >= 2
 
 
+# ─── TestReplaceFunctionCode：基于 AST 的代码替换 ───────────────────────────────
 class TestReplaceFunctionCode:
     """测试基于 AST 的代码替换功能。"""
 

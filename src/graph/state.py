@@ -18,6 +18,7 @@ class AITesterState(TypedDict, total=False):
         task_uuid (str): 数据库任务主键，用于记录实验数据。
         target_file (str): 被测代码文件路径。
         target_function (str | None): 指定被测函数名，None 表示测试全部函数。
+        module_name (str): 模块文件名（不含 .py 后缀），用于生成正确的 import 语句。
         target_code (str): 被测代码全文。
         test_plan (Dict[str, Any] | None): PlannerAgent 输出的测试计划（含 logic_analysis）。
         generated_test (str | None): GeneratorAgent 生成的测试代码。
@@ -39,6 +40,7 @@ class AITesterState(TypedDict, total=False):
     # 输入信息
     target_file: str
     target_function: str | None
+    module_name: str
     target_code: str
     # Planner 输出
     test_plan: Dict[str, Any] | None

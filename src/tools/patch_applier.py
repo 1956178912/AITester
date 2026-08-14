@@ -36,13 +36,15 @@ def apply_patch_to_code(original_code: str, patch: str) -> Tuple[str, bool]:
     # 移除可能的 "python" 前缀（LLM 有时输出不带反引号的格式）
     clean_patch = re.sub(r"^python\s*\n?", "", clean_patch, flags=re.IGNORECASE)
 
-    # 检测补丁是否为完整文件模式
+    # 检测补丁是否为完整文件模式：含 docstring/import/多函数定义时视为完整文件
+    # has_docstring: 补丁以 triple-quote 开头，通常是完整模块文件
+    # has_import: 前200字符含 import，说明是完整文件而非单函数补丁
     has_docstring = bool(re.match(r'^"""', clean_patch))
     has_import = "import " in clean_patch[:200]
     patch_defs = re.findall(r"^def\s+\w+\s*\(", clean_patch, re.MULTILINE)
     original_defs = re.findall(r"^def\s+\w+\s*\(", original_code, re.MULTILINE)
 
-    # 如果补丁是完整文件（有 docstring/import 或多函数），直接替换
+    # 若补丁是完整文件，直接替换整个文件（需包含原代码所有函数，防止部分替换）
     if has_docstring or has_import or (len(patch_defs) >= 2 and len(original_defs) >= 2):
         # 检查补丁是否包含原始代码的所有函数（防止部分替换）
         patch_func_names = {m.group(1) for m in re.finditer(r"def\s+(\w+)\s*\(", clean_patch)}

@@ -10,6 +10,7 @@
     - examples     : 内置示例数据集（InMemoryDataset，无需下载）
     - swe_bench    : SWE-bench 数据集（需提前下载到 ~/.cache/aitester/swe_bench/）
     - defects4j_py : Defects4J-Python 数据集（需提前下载）
+    - synthetic    : 合成数据集（本地生成，支持自定义规模，无需外部下载）
 
 使用方式：
     # 仅运行内置示例数据集
@@ -89,6 +90,7 @@ def run_plain_llm_baseline(
         最终状态字典。
     """
     # 临时关闭 Planner 和 Debugger，重新加载 workflow 模块获取新图
+    # 注意：通过全局变量修改后 reload 是关键，否则已有的 graph 实例不会变化
     import importlib
     import src.graph.workflow as wf_module
     global ENABLE_PLANNER, ENABLE_DEBUGGER
@@ -101,7 +103,7 @@ def run_plain_llm_baseline(
         return graph.invoke(state)
     finally:
         ENABLE_PLANNER, ENABLE_DEBUGGER = old_planner, old_debugger
-        importlib.reload(wf_module)  # 恢复模块
+        importlib.reload(wf_module)  # 恢复模块，避免影响后续测试
 
 
 def run_single_agent_baseline(
@@ -226,6 +228,7 @@ def run_single_task(
             "task_uuid": f"{task.task_id}_{{baseline}}",
             "target_file": instance_file,
             "target_function": None,
+            "module_name": module_name,
             "target_code": task.instance_code,
             "test_plan": None,
             "generated_test": None,
@@ -289,7 +292,7 @@ def run_single_task(
         return results
 
     finally:
-        # 清理临时目录
+        # 清理临时目录，确保不留下被测代码副本（可能含 API Key 敏感信息）
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
@@ -303,6 +306,7 @@ def run_benchmark(
     output_dir: str = "experiments/results",
     verbose: bool = False,
     task_limit: Optional[int] = None,
+    task_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -314,6 +318,7 @@ def run_benchmark(
         output_dir: 结果输出目录。
         verbose: 是否输出详细日志。
         task_limit: 限制运行任务数量（用于快速验证，None 表示全部）。
+        task_count: 合成数据集任务数量（--dataset synthetic 时有效，默认 60）。
 
     Returns:
         汇总结果字典，包含各基线的统计指标和详细结果。
@@ -329,11 +334,19 @@ def run_benchmark(
 
     # 加载数据集
     logger.info("加载数据集: %s (subset=%s)", dataset_name, subset)
-    try:
-        dataset = load_dataset(dataset_name, subset=subset)
-    except Exception as e:
-        logger.error("数据集加载失败: %s", e)
-        raise
+    
+    # synthetic 数据集：本地生成，支持自定义规模
+    if dataset_name in ("synthetic", "synth"):
+        tc = task_count or 60
+        logger.info("生成合成数据集：%d 个任务", tc)
+        from src.synthetic_dataset import SyntheticDataset
+        dataset = SyntheticDataset(task_count=tc, seed=42)
+    else:
+        try:
+            dataset = load_dataset(dataset_name, subset=subset)
+        except Exception as e:
+            logger.error("数据集加载失败: %s", e)
+            raise
 
     if dataset.size == 0:
         logger.warning("数据集为空，尝试使用内置示例数据集")
@@ -424,8 +437,10 @@ if __name__ == "__main__":
                   help="基线方法列表（逗号分隔），默认: aitester,plain_llm,single_agent")
     @click.option("--output-dir", "-o", default="experiments/results", help="结果输出目录")
     @click.option("--verbose", "-v", is_flag=True, help="详细日志输出")
+    @click.option("--task-count", "-c", default=None, type=int,
+                  help="合成数据集任务数量（--dataset synthetic 时有效，默认 60）")
     @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量（快速验证）")
-    def cli(dataset, subset, baselines, output_dir, verbose, task_limit):
+    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
         summary = run_benchmark(
@@ -435,6 +450,7 @@ if __name__ == "__main__":
             output_dir=output_dir,
             verbose=verbose,
             task_limit=task_limit,
+            task_count=task_count,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

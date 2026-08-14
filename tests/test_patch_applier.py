@@ -1,12 +1,19 @@
 """
 单元测试：测试 patch_applier 模块的补丁应用逻辑。
-覆盖完整文件替换和单函数替换两种模式。
+
+覆盖两种补丁模式：
+    - 完整文件模式：补丁含 docstring/import/多函数时，直接替换整个文件
+    - 单函数模式：补丁仅含单个函数定义时，精确替换对应函数
+
+边界情况：
+    - 空补丁、不存在的函数名、连续空行压缩等
 """
 
 import pytest
 from src.tools.patch_applier import apply_patch_to_code, _extract_patch_code
 
 
+# 测试用原始代码：两个简单函数
 ORIGINAL_CODE = '''\
 """示例模块。"""
 
@@ -20,6 +27,7 @@ def multiply(a: int, b: int) -> int:
 '''
 
 
+# ─── TestExtractPatchCode：从 LLM 输出中提取补丁代码 ──────────────────────────
 class TestExtractPatchCode:
     """测试从 LLM 输出中提取补丁代码。"""
 
@@ -48,6 +56,7 @@ class TestExtractPatchCode:
         assert result == "def foo(): pass"
 
 
+# ─── TestApplyPatchToCode：补丁应用到原始代码 ─────────────────────────────────
 class TestApplyPatchToCode:
     """测试补丁应用到原始代码。"""
 

@@ -1,3 +1,15 @@
+"""
+Prompt 模板模块：集中管理所有智能体的 System Prompt。
+
+包含四个智能体的系统提示词：
+    - PLANNER_SYSTEM_PROMPT: 逻辑驱动测试规划，要求 LLM 先进行输入域/输出域/前置-后置条件/边界情况
+      的显式分析，再生成结构化测试计划 JSON。
+    - GENERATOR_SYSTEM_PROMPT: 测试代码生成，根据测试计划和目标代码生成可运行的 pytest 代码。
+    - EXECUTOR_SYSTEM_PROMPT: 执行器（不使用 LLM，仅占位）。
+    - DEBUGGER_SYSTEM_PROMPT: 分层错误修复，根据错误类型（syntax/runtime/assertion/timeout/unknown）
+      调用差异化修复策略，输出完整修复后代码文件。
+"""
+
 # 各智能体的 System Prompt 模板集中存放，便于统一维护和修改
 
 # ─── Planner（含逻辑驱动思维链）───────────────────────────────────────────────
@@ -48,7 +60,10 @@ GENERATOR_SYSTEM_PROMPT = """\
 4. **重要：被测函数应从目标模块 import，不要重新定义函数。**
    例如：`from calculator import divide`
 5. 代码必须可以直接通过 pytest 运行，无需额外配置。
-6. 只输出 Python 代码，用 ```python 代码块包裹。
+6. 如果给出了模块名（module_name），必须使用该模块名作为 import 来源。
+7. 若未给出模块名，根据目标代码推断合理的模块名。
+8. 确保 import 语句与目标代码中的函数名完全匹配。
+9. 只输出 Python 代码，用 ```python 代码块包裹。
 """
 
 # ─── Executor ──────────────────────────────────────────────────────────────────
@@ -82,3 +97,10 @@ DEBUGGER_SYSTEM_PROMPT = """\
 4. 如果判断无法通过代码修复解决（如设计缺陷），root_cause 中注明原因，patch 留空字符串。
 5. patch 中的代码要保留原始文档字符串和注释风格。
 """
+
+
+if __name__ == "__main__":
+    # 快速验证：打印各 prompt 的字符数，便于排查 token 超限问题
+    for name, value in locals().items():
+        if isinstance(value, str) and name.isupper():
+            print(f"{name}: {len(value)} 字符\n")
