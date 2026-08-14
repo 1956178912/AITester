@@ -55,9 +55,12 @@ from src.dataset_loader import (
     load_dataset,
 )
 from config import (
-    MAX_ITERATIONS, COVERAGE_THRESHOLD, ENABLE_PLANNER, ENABLE_DEBUGGER,
-    LLM_RETRY_WAIT, OPENAI_API_KEY_2, OPENAI_BASE_URL_2,
-    OPENAI_API_KEY_3, OPENAI_BASE_URL_3,
+    LLM_CONFIGS,
+    MAX_ITERATIONS,
+    COVERAGE_THRESHOLD,
+    ENABLE_PLANNER,
+    ENABLE_DEBUGGER,
+    LLM_RETRY_WAIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,15 +131,11 @@ class _DummyProgressBar:
 # ─── API 配置管理 ──────────────────────────────────────────────────────────────
 
 
-# 所有可用的 API 配置（按优先级排列）
-_ALL_APIS = [
-    {"key": "", "url": "", "model": ""},  # 主 API (从环境变量读取)
-    {"key": OPENAI_API_KEY_2, "url": OPENAI_BASE_URL_2, "model": "agnes-2.5-flash"},
-    {"key": OPENAI_API_KEY_3, "url": OPENAI_BASE_URL_3, "model": "GLM-4-Flash"},
+# 所有可用的 API 配置（从 config.LLM_CONFIGS 读取）
+_VALID_APIS = [
+    {"key": c.api_key, "url": c.base_url, "model": c.model_name}
+    for c in LLM_CONFIGS
 ]
-
-# 过滤掉未配置的 API
-_VALID_APIS = [api for api in _ALL_APIS if api["key"] and api["url"]]
 
 
 def _get_api_for_task(task_index: int) -> dict:
