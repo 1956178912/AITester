@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from src.agents.base_agent import BaseAgent
@@ -40,6 +41,7 @@ class GeneratorAgent(BaseAgent):
         self,
         test_plan: Dict[str, Any],
         target_code: str,
+        module_name: str = "",
         rag_references: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
@@ -49,6 +51,7 @@ class GeneratorAgent(BaseAgent):
         Args:
             test_plan: 测试计划字典（PlannerAgent 输出）。
             target_code: 被测代码全文。
+            module_name: 模块名（不含 .py），用于生成 import 语句。
             rag_references: RAG 检索到的相似历史案例，每项含 test_code 字段。
 
         Returns:
@@ -64,8 +67,13 @@ class GeneratorAgent(BaseAgent):
         query = (
             f"测试计划（JSON）：\n{plan_json}\n\n"
             f"目标代码：\n```\n{target_code}\n```"
+            f"\n\n被测模块名：{module_name}"
             f"\n\n请根据以上计划生成完整的 pytest 测试代码。"
         )
+
+        # 强约束：必须使用给定的 module_name 作为 import 来源
+        if module_name:
+            query += f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，即 `from {module_name} import ...`"
 
         # RAG 增强：若检索到相似案例，注入参考代码
         # 最多取前 3 个案例，避免 prompt 过长导致 token 浪费
@@ -83,4 +91,74 @@ class GeneratorAgent(BaseAgent):
         # 调用 LLM 生成测试代码
         raw = self._call_llm(query)
         # 从响应中提取 Python 代码块（去除 markdown 包裹）
-        return self._extract_python_code(raw)
+        code = self._extract_python_code(raw)
+        # Import 验证：修正错误的模块名
+        if module_name:
+            code = self._fix_import_module(code, module_name)
+        # Parametrize 格式校验：LLM 有时会在 parametrize 中混入 case_name 导致参数不匹配
+        if not self._validate_parametrize(code):
+            logger.warning("Generator 检测到 parametrize 格式错误，触发重试")
+            raw = self._call_llm(query)
+            code = self._extract_python_code(raw)
+            if module_name:
+                code = self._fix_import_module(code, module_name)
+        return code
+
+    @staticmethod
+    def _validate_parametrize(code: str) -> bool:
+        """
+        校验 pytest.mark.parametrize 的参数定义与用例元组是否匹配。
+        LLM 有时会错误地加入 case_name 导致参数数量不匹配。
+
+        Returns:
+            True 表示格式正确，False 表示需要重试。
+        """
+        import re
+        # 收集所有 @pytest.mark.parametrize 块
+        pattern = re.compile(
+            r'@pytest\.mark\.parametrize\s*\(\s*"([^"]+)"\s*,\s*\[([\s\S]*?)\]\s*,',
+            re.MULTILINE
+        )
+        for m in pattern.finditer(code):
+            param_names = [n.strip() for n in m.group(1).split(",")]
+            cases_str = m.group(2)
+            # 提取所有元组：('name', val1, val2) 或 (val1, val2)
+            tuples = re.findall(r"\(\s*([^)]+?)\s*\)", cases_str)
+            for t in tuples:
+                # 去掉字符串内容中的括号干扰
+                t_clean = re.sub(r"'[^']*'", "", t)
+                t_clean = re.sub(r'"[^"]*"', "", t_clean)
+                parts = [p.strip() for p in t_clean.split(",") if p.strip()]
+                if len(parts) != len(param_names):
+                    logger.warning(
+                        "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
+                        len(param_names), len(parts),
+                    )
+                    return False
+        return True
+
+    # 已知合法的外部包，不应被替换
+    _KNOWN_MODULES = {'pytest', 'unittest', 'typing', 're', 'os', 'sys',
+                      'json', 'collections', 'itertools', 'functools',
+                      'abc', 'dataclasses', 'enum', 'pathlib', 'math',
+                      'datetime', 'string', 'random', 'hashlib', 'logging'}
+
+    @staticmethod
+    def _fix_import_module(code: str, expected_module: str) -> str:
+        """
+        验证并修正测试代码中的 import 模块名。
+        将错误的模块名替换为期望的模块名，避免 ModuleNotFoundError。
+        跳过已知的外部包（pytest、unittest 等）。
+        """
+        pattern = re.compile(r'^from\s+(\S+)\s+import', re.MULTILINE)
+        matches = pattern.findall(code)
+        changed = False
+        for wm in matches:
+            if wm == expected_module:
+                continue
+            if wm in GeneratorAgent._KNOWN_MODULES:
+                continue
+            code = code.replace(f'from {wm} import', f'from {expected_module} import')
+            logger.warning('Generator 修正了错误模块名：%s → %s', wm, expected_module)
+            changed = True
+        return code
