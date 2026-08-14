@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class ExecutorAgent:
     """
     测试执行器：在本地或 Docker 容器中运行 pytest 测试。
+    注意：use_docker 参数目前保留用于未来扩展，实际执行始终在本地进行。
 
     属性:
         timeout: 单次测试最大运行时间（秒），可通过 EXECUTION_TIMEOUT 环境变量配置。
