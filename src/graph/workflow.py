@@ -191,6 +191,7 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
     generated_test = agent.generate(
         state["test_plan"] if ENABLE_PLANNER else None,
         state["target_code"],
+        module_name=state.get("module_name", ""),
         rag_references=rag_refs,
     )
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
