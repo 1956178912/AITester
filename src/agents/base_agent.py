@@ -15,17 +15,7 @@ from typing import Any, Dict
 
 from langchain_openai import ChatOpenAI
 import threading
-from config import (
-    OPENAI_API_KEY,
-    OPENAI_BASE_URL,
-    MODEL_NAME,
-    TEMPERATURE,
-    OPENAI_API_KEY_2,
-    OPENAI_BASE_URL_2,
-    OPENAI_API_KEY_3,
-    OPENAI_BASE_URL_3,
-    LLM_MODEL_BIGMODEL,
-)
+from config import LLM_CONFIGS, TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +25,12 @@ _thread_local = threading.local()
 
 def _get_llm_config() -> tuple[str, str]:
     """获取当前线程使用的 LLM 配置，优先返回线程局部覆盖值。"""
-    if hasattr(_thread_local, 'api_key') and _thread_local.api_key:
+    if hasattr(_thread_local, "api_key") and _thread_local.api_key:
         return _thread_local.api_key, _thread_local.base_url
-    return OPENAI_API_KEY, OPENAI_BASE_URL
+    if LLM_CONFIGS:
+        cfg = LLM_CONFIGS[0]
+        return cfg.api_key, cfg.base_url
+    return "", ""
 
 
 def _get_all_api_configs() -> list[tuple[str, str, str]]:
@@ -46,14 +39,7 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
     Returns:
         列表，每项为 (api_key, base_url, model_name)，仅包含已配置的项。
     """
-    configs = []
-    if OPENAI_API_KEY and OPENAI_BASE_URL:
-        configs.append((OPENAI_API_KEY, OPENAI_BASE_URL, MODEL_NAME))
-    if OPENAI_API_KEY_2 and OPENAI_BASE_URL_2:
-        configs.append((OPENAI_API_KEY_2, OPENAI_BASE_URL_2, MODEL_NAME))
-    if OPENAI_API_KEY_3 and OPENAI_BASE_URL_3:
-        configs.append((OPENAI_API_KEY_3, OPENAI_BASE_URL_3, LLM_MODEL_BIGMODEL))
-    return configs
+    return [(c.api_key, c.base_url, c.model_name) for c in LLM_CONFIGS]
 
 
 class BaseAgent:
@@ -72,10 +58,11 @@ class BaseAgent:
     """
 
     def __init__(self, system_prompt: str) -> None:
-        # 使用配置文件中的参数初始化 LLM 客户端
+        # 使用默认 LLM 配置初始化 LLM 客户端
         api_key, base_url = _get_llm_config()
+        model_name = LLM_CONFIGS[0].model_name if LLM_CONFIGS else "gpt-4o-mini"
         self.llm = ChatOpenAI(
-            model=MODEL_NAME,
+            model=model_name,
             temperature=TEMPERATURE,
             openai_api_key=api_key,
             base_url=base_url,
@@ -106,6 +93,7 @@ class BaseAgent:
             raise RuntimeError("未配置任何 LLM API")
 
         last_error: Exception | None = None
+        primary_key = all_configs[0][0] if all_configs else ""
 
         # 依次尝试每个 API 配置
         for api_key, base_url, model_name in all_configs:
@@ -125,17 +113,26 @@ class BaseAgent:
                     text = response.content.strip()
                     if not text:
                         raise RuntimeError("LLM 返回空响应")
-                    if attempt > 0 or api_key != OPENAI_API_KEY:
-                        logger.info("API 调用成功 (api=%s, attempt=%d)", 
-                                   base_url.split('/')[2] if '/' in base_url else base_url, attempt)
+                    if attempt > 0 or api_key != primary_key:
+                        logger.info(
+                            "API 调用成功 (api=%s, attempt=%d)",
+                            base_url.split("/")[2] if "/" in base_url else base_url,
+                            attempt,
+                        )
                     return text
                 except Exception as e:
                     last_error = e
                     # 指数退避
                     if attempt < max_retries - 1:
                         wait_time = 2 ** attempt
-                        logger.warning("API %s 调用失败 (attempt %d/%d): %s，等待 %ds", 
-                                      base_url, attempt + 1, max_retries, e, wait_time)
+                        logger.warning(
+                            "API %s 调用失败 (attempt %d/%d): %s，等待 %ds",
+                            base_url,
+                            attempt + 1,
+                            max_retries,
+                            e,
+                            wait_time,
+                        )
                         time.sleep(wait_time)
                         continue
                     # 当前 API 所有重试耗尽，尝试下一个 API
@@ -216,7 +213,7 @@ class BaseAgent:
                 i += 1
                 continue
             # 遇到反斜杠，下一个字符被转义
-            if ch == chr(92):  # chr(92) = '\'
+            if ch == chr(92):  # chr(92) = '\\'
                 escape = True
                 i += 1
                 continue
@@ -258,7 +255,7 @@ class BaseAgent:
         if match:
             return match.group(1).strip()
         # 尝试通用 markdown 格式：``` ... ```
-        match = re.search(r"```\s*\n(.*?)\n\s*```", text, re.DOTALL)
+        match = re.search(r"```\s*\n(.*?)\n```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         # 尝试 "python" 前缀格式（某些模型输出不带反引号）
