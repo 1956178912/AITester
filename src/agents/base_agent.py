@@ -15,7 +15,7 @@ from typing import Any, Dict
 
 from langchain_openai import ChatOpenAI
 import threading
-from config import LLM_CONFIGS, TEMPERATURE
+from config import LLM_CONFIGS, TEMPERATURE, LLM_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,45 @@ _DEFAULT_LLM_MAX_RETRIES = 3
 # JSON 提取降级正则：匹配最内层无嵌套的 `{...}` 对象
 _JSON_LEAF_PATTERN = r"\{[^{}]*\}"
 # ───────────────────────────────────────────────────────────────────────────
+
+
+def _retry_with_exponential_backoff(
+    func,
+    max_retries: int,
+    base_wait: int = 1,
+    retryable_exceptions: tuple = (),
+) -> Any:
+    """带指数退避的重试通用工具函数。
+
+    对给定函数执行带重试的调用，失败时按 2^attempt 秒指数退避等待后重试。
+    可用于 _call_zai 和 _call_llm 中的重试逻辑，避免代码重复。
+
+    Args:
+        func: 要执行的函数（无参数或仅接受内部参数）。
+        max_retries: 最大重试次数（不含首次尝试）。
+        base_wait: 基础等待秒数（首次重试等待 base_wait，后续翻倍）。
+        retryable_exceptions: 可重试的异常类型元组，为空则捕获所有异常。
+
+    Returns:
+        函数执行的返回值。
+
+    Raises:
+        RuntimeError: 所有重试均失败时抛出，携带最后一次异常信息。
+    """
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):  # attempt 0 是首次尝试
+        try:
+            return func()
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                wait_time = base_wait ** attempt
+                logger.warning("调用失败 (attempt %d/%d): %s，等待 %ds",
+                               attempt + 1, max_retries + 1, e, wait_time)
+                time.sleep(wait_time)
+            else:
+                break
+    raise RuntimeError(f"调用失败，已重试 {max_retries} 次: {last_error}") from last_error
 
 
 def _is_zai_compatible(base_url: str) -> bool:
@@ -84,65 +123,41 @@ def _call_zai(api_key: str, base_url: str, model_name: str,
         base_url=base_url,
     )
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries):
-        try:
-            # glm-4.7-flash 默认开启深度思考，关闭以获取普通响应
-            # thinking.disabled 可避免返回过长的推理链，节省 token 并加快响应
-            kwargs: dict[str, Any] = {"thinking": {"type": "disabled"}}
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                max_tokens=_ZAI_MAX_TOKENS,
-                **kwargs,
-            )
-            msg = response.choices[0].message
-            # 优先取 content（普通响应），回退到 reasoning_content（深度思考内容）
-            # 两者均为空说明模型异常返回，抛出明确错误以便重试
-            text = (msg.content or msg.reasoning_content or "").strip()
-            if not text:
-                raise RuntimeError("LLM 返回空响应")
-            logger.info("zai API 调用成功 (model=%s, attempt=%d)", model_name, attempt)
-            return text
+    # 定义 zai SDK 特有的可重试异常类型
+    _ZAI_RETRYABLE_EXCEPTIONS = (APIReachLimitError, APIStatusError, Exception)
 
-        except APIReachLimitError as e:
-            # 速率限制：等比增长等待时间，基准 5 秒（zai 限流比普通 API 更严格）
-            last_error = e
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt * _ZAI_RATE_LIMIT_WAIT_BASE_SECONDS
-                logger.warning("zai API 限流 (attempt %d/%d): %s，等待 %ds",
-                               attempt + 1, max_retries, e, wait_time)
-                time.sleep(wait_time)
-                continue
-            raise
+    def _do_zai_call() -> str:
+        """执行单次 zai API 调用（内部辅助函数）。"""
+        kwargs: dict[str, Any] = {"thinking": {"type": "disabled"}}
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=_ZAI_MAX_TOKENS,
+            timeout=LLM_TIMEOUT,
+            **kwargs,
+        )
+        msg = response.choices[0].message
+        # 优先取 content（普通响应），回退到 reasoning_content（深度思考内容）
+        text = (msg.content or msg.reasoning_content or "").strip()
+        if not text:
+            raise RuntimeError("LLM 返回空响应")
+        logger.info("zai API 调用成功 (model=%s)", model_name)
+        return text
 
-        except APIStatusError as e:
-            # API 状态错误（4xx/5xx）：指数退避重试
-            last_error = e
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                logger.warning("zai API 错误 (attempt %d/%d): %s，等待 %ds",
-                               attempt + 1, max_retries, e, wait_time)
-                time.sleep(wait_time)
-                continue
-            raise
-
-        except Exception as e:
-            # 其他未知异常（网络断开、解析错误等）：统一指数退避
-            last_error = e
-            if attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                logger.warning("zai API 调用失败 (attempt %d/%d): %s，等待 %ds",
-                               attempt + 1, max_retries, e, wait_time)
-                time.sleep(wait_time)
-                continue
-            raise
-
-    # 所有重试耗尽，抛出最终错误（chain from last_error 保留异常链）
-    raise RuntimeError(f"zai API 调用失败: {last_error}") from last_error
+    try:
+        # 使用通用重试工具函数，zai 限流时使用更长的等待基准（5秒）
+        return _retry_with_exponential_backoff(
+            func=_do_zai_call,
+            max_retries=max_retries,
+            base_wait=_ZAI_RATE_LIMIT_WAIT_BASE_SECONDS,  # zai 限流基准 5 秒
+            retryable_exceptions=_ZAI_RETRYABLE_EXCEPTIONS,
+        )
+    except Exception as e:
+        # 重新抛出带有明确上下文的异常
+        raise RuntimeError(f"zai API 调用失败: {e}") from e
 
 
 def _get_llm_config() -> tuple[str, str, str]:
@@ -256,7 +271,7 @@ class BaseAgent:
                     response = llm.invoke([
                         SystemMessage(content=self.system_prompt),
                         HumanMessage(content=user_message),
-                    ])
+                    ], timeout=LLM_TIMEOUT)
                     text = response.content.strip()
                     # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
                     if not text:

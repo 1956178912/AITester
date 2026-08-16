@@ -118,7 +118,14 @@ class GeneratorAgent(BaseAgent):
         # Parametrize 格式校验：LLM 有时会在 parametrize 中混入 case_name 导致参数不匹配
         if not self._validate_parametrize(code):
             logger.warning("Generator 检测到 parametrize 格式错误，触发重试")
-            raw = self._call_llm(query)
+            # 重试时追加负面反馈提示，避免 LLM 用相同 query 生成相同错误
+            retry_query = query + (
+                "\n\n【修正要求】上次生成的测试代码中，"
+                "pytest.mark.parametrize 的参数定义与用例元组长度不匹配。"
+                "请确保每个用例元组的元素数量与参数名列表完全一致，"
+                "不要混入 case_name 等额外字段。"
+            )
+            raw = self._call_llm(retry_query)
             code = self._extract_python_code(raw)
             if module_name:
                 code = self._fix_import_module(code, module_name)

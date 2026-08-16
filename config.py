@@ -11,6 +11,7 @@ LLM 配置（API Key / Base URL / Model）属于敏感信息，
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -101,10 +102,38 @@ MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 
+# ─── 超时配置验证函数 ────────────────────────────────────────────────────────
+def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default: int) -> int:
+    """验证超时配置值是否在合理范围内。
+
+    若配置值超出范围，记录警告并使用默认值，防止因错误配置导致服务卡死或超时过短。
+
+    Args:
+        value: 用户配置的值。
+        name: 配置项名称（用于日志）。
+        min_val: 允许的最小值。
+        max_val: 允许的最大值。
+        default: 超出范围时的默认值。
+
+    Returns:
+        验证后的有效值（在 [min_val, max_val] 范围内）。
+    """
+    if value < min_val or value > max_val:
+        logging.getLogger(__name__).warning(
+            "%s 配置值 %d 超出范围 [%d, %d]，使用默认值 %d",
+            name, value, min_val, max_val, default,
+        )
+        return default
+    return value
+
+
 # ─── 执行环境配置 ────────────────────────────────────────────────────────────
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
-EXECUTION_TIMEOUT: int = int(os.getenv("EXECUTION_TIMEOUT", "30"))
+_EXECUTION_TIMEOUT_RAW = int(os.getenv("EXECUTION_TIMEOUT", "30"))
+EXECUTION_TIMEOUT: int = _validate_timeout(
+    _EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30
+)
 
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
 MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
@@ -117,5 +146,8 @@ ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
-LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
+_LLM_TIMEOUT_RAW = int(os.getenv("LLM_TIMEOUT", "60"))
+LLM_TIMEOUT: int = _validate_timeout(
+    _LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 60
+)
 LLM_RETRY_WAIT: int = int(os.getenv("LLM_RETRY_WAIT", "30"))

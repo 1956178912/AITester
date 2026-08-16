@@ -364,11 +364,9 @@ class TestBuggyLibrary:
         assert result == 4
     
     def test_binary_search_not_found(self):
-        """二分查找未找到元素：返回 -1（⚠️ 已知 bug：当 target 不在数组中时可能 IndexError）"""
-        # BUG: right 初始值为 len(arr) 而非 len(arr)-1，导致越界访问
-        # 此测试预期会失败（IndexError），标记为 xfail
-        with pytest.raises(IndexError):
-            binary_search([1, 2, 3, 4, 5], 6)
+        """二分查找未找到元素：返回 -1"""
+        # bug 已修复：right 初始值已改为 len(arr) - 1
+        assert binary_search([1, 2, 3, 4, 5], 6) == -1
     
     def test_binary_search_not_found_at_start(self):
         """查找不存在的第一个元素"""
@@ -383,21 +381,14 @@ class TestBuggyLibrary:
         assert binary_search([5], 3) == -1
     
     def test_binary_search_empty_list(self):
-        """空列表应返回 -1（⚠️ 已知 bug：空列表会触发 IndexError）"""
-        # BUG: right = len([]) = 0，循环条件 left <= right 为 0 <= 0，进入循环
-        # mid = 0，访问 arr[0] 导致 IndexError
-        with pytest.raises(IndexError):
-            binary_search([], 5)
+        """空列表应返回 -1"""
+        # bug 已修复：空列表正确返回 -1
+        assert binary_search([], 5) == -1
     
-    def test_binary_search_bug_with_target_at_end(self):
-        """Bug 测试：target 在数组末尾但超出边界时可能越界"""
-        # 当 target > 最大元素时，算法会尝试访问 arr[len(arr)]
-        # 这会导致 IndexError（这是已知 bug）
-        # 我们测试预期的行为：未找到时返回 -1
-        # 但由于 bug，这个测试可能会失败（抛出 IndexError）
-        # 因此我们捕获异常
-        with pytest.raises((IndexError, ValueError)):
-            binary_search([1, 2, 3], 10)
+    def test_binary_search_target_at_end(self):
+        """target 超出数组范围时正确返回 -1"""
+        # bug 已修复：超出边界的 target 正确返回 -1
+        assert binary_search([1, 2, 3], 10) == -1
     
     # ------------------------------------------------------------------
     # merge_sorted_lists 函数测试
