@@ -38,7 +38,89 @@ python experiments/run_benchmark.py --dataset synthetic --task-count 50 --baseli
 # 9. 可视化实验结果（含统计显著性检验）
 python experiments/visualize_results.py
 python experiments/visualize_results.py --results-dir experiments/results/synthetic_full
+
+# 10. 并发执行基准测试（加速多任务处理）
+BENCHMARK_PARALLELISM=4 python experiments/run_benchmark.py --dataset synthetic --task-count 20
+
+# 11. 使用 --parallel 参数指定并行度
+python experiments/run_benchmark.py --dataset examples --parallel 4
+
+# 12. 使用 --timeout 参数设置全局超时
+python main.py run examples/calculator.py --func divide --timeout 120
+
+# 13. 使用 --json 参数输出 JSON 格式结果
+python experiments/run_benchmark.py --dataset examples --json
 ```
+
+## 性能优化说明
+
+### RAG 检索器单例化
+
+系统已实现 RAG 检索器的**懒加载单例模式**，在整个工作流执行期间只初始化一次 ChromaDB 客户端，避免重复加载嵌入模型（约 100MB）和打开向量索引的开销。
+
+**性能收益**：每个任务节省 2-6 秒初始化时间。
+
+**技术实现**：`src/graph/workflow.py` 中的 `get_rag_retriever()` 函数。
+
+### LLM 调用超时配置
+
+通过 `LLM_TIMEOUT` 配置项控制单次 LLM 调用的超时时间，防止 API 响应过慢导致任务卡死。
+
+```bash
+# .env 文件配置
+LLM_TIMEOUT=60          # 单次 LLM 调用超时（秒），默认 60
+LLM_RETRY_WAIT=30       # LLM 重试等待时间（秒），默认 30
+EXECUTION_TIMEOUT=30    # pytest 执行超时（秒），默认 30
+```
+
+### 并发执行（BENCHMARK_PARALLELISM）
+
+支持多线程并行执行多个 benchmark 任务，显著缩短大批量测试的总耗时。
+
+```bash
+# 使用 4 个线程并行执行（环境变量方式）
+BENCHMARK_PARALLELISM=4 python experiments/run_benchmark.py --dataset synthetic --task-count 50
+
+# 使用 --parallel 参数（命令行方式）
+python experiments/run_benchmark.py --dataset synthetic --task-count 50 --parallel 4
+
+# 串行执行（默认）
+python experiments/run_benchmark.py --dataset synthetic --task-count 50
+```
+
+**注意**：并发执行需要为每个线程配置独立的 API Key，可通过 `LLM_1_*`, `LLM_2_*` 等多组配置实现 API Key 轮询。
+
+更多细节请参考 [性能调优指南](docs/performance_guide.md)。
+
+### 超时控制（--timeout）
+
+通过 `--timeout` 参数或 `EXECUTION_TIMEOUT` 环境变量控制单次测试执行的超时时间，防止任务卡死。
+
+```bash
+# 命令行指定超时（秒）
+python main.py run examples/calculator.py --func divide --timeout 120
+
+# 或环境变量方式
+EXECUTION_TIMEOUT=120 python main.py run examples/calculator.py --func divide
+```
+
+超时后测试被强制终止，状态标记为 `timeout`，Debugger 可针对超时场景进行专项修复。
+
+### JSON 输出模式（--json）
+
+通过 `--json` 参数将实验结果以结构化 JSON 格式输出到控制台，便于程序化处理或管道传输。
+
+```bash
+# 输出结构化 JSON 结果
+python experiments/run_benchmark.py --dataset examples --json
+
+# 结合 --output-dir 保存 JSON 文件
+python experiments/run_benchmark.py --dataset examples --output-dir ./results --json
+```
+
+JSON 输出包含完整的结果统计、各基线详细数据和性能指标，可直接用于后续分析脚本。
+
+更多细节请参考 [性能调优指南](docs/performance_guide.md)。
 
 ## 项目结构
 
@@ -298,12 +380,94 @@ docker run --rm \
 | `MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
-| `EXECUTION_TIMEOUT` | 单次执行超时（秒） | 30 |
+| `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
+| `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
+| `LLM_RETRY_WAIT` | LLM 重试等待时间（秒） | 30 |
 | `ENABLE_PLANNER` | 启用 Planner（消融开关） | true |
 | `ENABLE_DEBUGGER` | 启用 Debugger 修复循环（消融开关） | true |
 | `ENABLE_RAG` | 启用 RAG 检索增强 | false |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
-| `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
+| `TEMPERATURE` | LLM 采样温度 | 0.2 |
+
+---
+
+## CLI 命令参考
+
+### `python main.py run` — 运行单个测试任务
+
+```
+python main.py run <target_file> [OPTIONS]
+
+参数：
+  target_file    被测 Python 文件路径（必须存在）
+
+选项：
+  --func, -f          指定被测函数名，不指定则测试全部函数
+  --max-iterations    最大修复迭代次数，默认 3
+  --coverage-threshold  覆盖率阈值百分比，默认 80.0
+  --timeout           pytest 执行超时（秒），覆盖 EXECUTION_TIMEOUT 配置
+  --json              以 JSON 格式输出结果
+```
+
+**示例：**
+```bash
+# 测试单个函数
+python main.py run examples/calculator.py --func divide
+
+# 指定最大迭代次数
+python main.py run examples/buggy_library.py --func binary_search --max-iterations 5
+
+# JSON 输出结果
+python main.py run examples/string_utils.py --func is_palindrome --json
+```
+
+### `python experiments/run_benchmark.py` — 批量基准测试
+
+```
+python experiments/run_benchmark.py [OPTIONS]
+
+选项：
+  --dataset, -d       数据集名称（examples/synthetic/swe_bench/defects4j_py）
+  --subset, -s        数据子集（swe_bench_lite 等）
+  --baselines, -b     基线方法列表，逗号分隔（默认：aitester,plain_llm,single_agent）
+  --output-dir, -o    结果输出目录（默认：experiments/results）
+  --verbose, -v       详细日志输出
+  --task-limit, -n    限制运行任务数量
+  --task-count, -c    合成数据集任务数量
+  --parallel, -p      并行任务数（替代 BENCHMARK_PARALLELISM 环境变量）
+  --timeout           全局执行超时（秒）
+  --json              JSON 格式输出结果
+```
+
+**示例：**
+```bash
+# 快速验证（2 个任务，单基线）
+python experiments/run_benchmark.py --dataset examples --task-limit 2 --baselines aitester
+
+# 并行执行（4 线程，100 个合成任务）
+python experiments/run_benchmark.py --dataset synthetic --task-count 100 \
+    --baselines aitester,plain_llm,single_agent --parallel 4
+
+# 仅运行 aitester 完整系统，JSON 输出
+python experiments/run_benchmark.py --dataset examples --baselines aitester --json
+```
+
+### `python main.py list-examples` — 列出示例文件
+
+```
+python main.py list-examples
+```
+
+## 数据集说明
+
+| 数据集名称 | 数据来源 | 任务数 | 下载要求 |
+|-----------|---------|-------|---------|
+| `examples` | 内置示例（calculator/buggy_library/string_utils） | 3 | 无需下载 |
+| `synthetic` / `synth` | 本地生成，支持自定义规模 | 可配置 | 无需下载 |
+| `swe_bench` | HuggingFace SWE-bench | 500 (lite) | 需调用 download_from_huggingface() |
+| `defects4j_python` | Defects4J-Python 数据集 | 可变 | 需手动下载 |
+
+更多细节请参考 [性能调优指南](docs/performance_guide.md) 和 [API 参考](docs/api_reference.md)。
 
 ## 技术栈
 

@@ -38,10 +38,17 @@ class DebuggerAgent(BaseAgent):
     """
     调试修复师：分析测试失败，输出根因诊断、错误分类和代码补丁。
 
-    引入分层错误修复机制：
+    引入分层错误修复机制，根据错误类型采用不同策略：
     1. 先用规则分类器快速判断错误类型（不消耗 LLM token）
     2. 将错误类型及对应修复策略注入 prompt，引导 LLM 按类修复
     3. 若提供 RAG 参考，注入历史修复案例增强生成质量
+
+    错误分类策略:
+        - SYNTAX: 语法错误，直接让 LLM 重写完整文件
+        - RUNTIME: 运行时异常，分析异常栈定位 bug
+        - ASSERTION: 断言失败，判断是代码逻辑错误还是测试预期值错误
+        - TIMEOUT: 超时，检查死循环/无限递归
+        - UNKNOWN: 通用分析
 
     输入:
         target_code: 被测代码全文。
@@ -51,6 +58,16 @@ class DebuggerAgent(BaseAgent):
 
     输出:
         包含 root_cause、error_category、fix_strategy、patch 的字典。
+
+    使用示例:
+        >>> agent = DebuggerAgent()
+        >>> result = agent.debug(
+        ...     target_code="def add(a, b): return a - b",
+        ...     test_output="AssertionError: expected 5, got -1",
+        ...     failed_cases=[{"name": "test_add", "error": "expected 5, got -1"}],
+        ... )
+        >>> result["error_category"]
+        <ErrorCategory.ASSERTION: 'assertion'>
     """
 
     def __init__(self) -> None:

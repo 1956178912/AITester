@@ -22,12 +22,26 @@ class LogicAnalysisResult:
     """
     逻辑分析结果：记录 Planner 对单个函数的结构化分析。
 
+    该结果包含函数的输入域、输出域、前置/后置条件和边界情况，
+    用于引导后续测试生成器覆盖所有重要路径。
+
     属性:
         input_domain: 输入参数描述（含类型、取值范围、特殊值）。
         output_domain: 返回值描述（含类型、可能的异常）。
         preconditions: 调用前的前提条件列表。
         postconditions: 调用后的后置条件列表。
         edge_cases: 边界情况列表（如除零、空集合、负数等）。
+
+    使用示例:
+        >>> result = LogicAnalysisResult(
+        ...     input_domain="整数 a, b，无范围限制",
+        ...     output_domain="整数，a+b 的算术和",
+        ...     preconditions=["a, b 均为整数"],
+        ...     postconditions=["result == a + b"],
+        ...     edge_cases=["a=0", "b=0", "大整数溢出"],
+        ... )
+        >>> result.to_dict()
+        {'input_domain': '整数 a, b，无范围限制', ...}
     """
 
     def __init__(

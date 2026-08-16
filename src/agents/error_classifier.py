@@ -31,6 +31,60 @@ class ErrorCategory(Enum):
     UNKNOWN = "unknown"
 
 
+class ErrorPatterns:
+    """
+    错误分类正则表达式常量类。
+
+    将所有预编译的正则表达式统一存储在此类中，便于维护和扩展。
+    每个模式都已预编译为 re.Pattern 对象，避免重复编译开销。
+    """
+
+    # 语法/编译错误关键字模式
+    SYNTAX = [
+        re.compile(r"SyntaxError", re.IGNORECASE),
+        re.compile(r"ImportError", re.IGNORECASE),
+        re.compile(r"ModuleNotFoundError", re.IGNORECASE),
+        re.compile(r"IndentationError", re.IGNORECASE),
+        re.compile(r"TabError", re.IGNORECASE),
+        re.compile(r"IncompleteInput", re.IGNORECASE),
+        re.compile(r"cannot import name", re.IGNORECASE),
+        re.compile(r"No module named", re.IGNORECASE),
+        # pytest 格式：E   path/file.py:line:col: syntax error
+        re.compile(r"E\s*\S+\.py:\d+:\d+:\s*syntax error", re.IGNORECASE),
+    ]
+
+    # 运行时异常关键字模式
+    RUNTIME = [
+        re.compile(r"ZeroDivisionError", re.IGNORECASE),
+        re.compile(r"TypeError", re.IGNORECASE),
+        re.compile(r"ValueError", re.IGNORECASE),
+        re.compile(r"KeyError", re.IGNORECASE),
+        re.compile(r"IndexError", re.IGNORECASE),
+        re.compile(r"AttributeError", re.IGNORECASE),
+        re.compile(r"RecursionError", re.IGNORECASE),
+        re.compile(r"NameError", re.IGNORECASE),
+        # TypeError 的常见子类型描述
+        re.compile(r"TypeError.*not support", re.IGNORECASE),
+        re.compile(r"TypeError.*takes\s+\d+\s+positional", re.IGNORECASE),
+    ]
+
+    # 断言失败关键字模式
+    ASSERTION = [
+        re.compile(r"AssertionError", re.IGNORECASE),
+        re.compile(r"assert\s+", re.IGNORECASE),
+        re.compile(r"Expected.*but got", re.IGNORECASE),
+        re.compile(r"assert\s+\w+\s*==", re.IGNORECASE),
+        re.compile(r"Expected exception", re.IGNORECASE),
+    ]
+
+    # 超时时标模式
+    TIMEOUT = [
+        re.compile(r"timeout", re.IGNORECASE),
+        re.compile(r"TimedOut", re.IGNORECASE),
+        re.compile(r"Test ran for longer than", re.IGNORECASE),
+    ]
+
+
 class ErrorClassifier:
     """
     测试失败原因分类器。
@@ -46,49 +100,12 @@ class ErrorClassifier:
     5. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
-    # 语法/编译错误关键字模式：这类错误无需语义分析，直接重写即可
-    _SYNTAX_PATTERNS = [
-        r"SyntaxError",
-        r"ImportError",
-        r"ModuleNotFoundError",
-        r"IndentationError",
-        r"TabError",
-        r"IncompleteInput",
-        r"cannot import name",
-        r"No module named",
-        # pytest 格式：E   path/file.py:line:col: syntax error
-        r"E\s*\S+\.py:\d+:\d+:\s*syntax error",
-    ]
-
-    # 运行时异常关键字模式：需分析异常来源，可能涉及代码修复
-    _RUNTIME_PATTERNS = [
-        r"ZeroDivisionError",
-        r"TypeError",
-        r"ValueError",
-        r"KeyError",
-        r"IndexError",
-        r"AttributeError",
-        r"RecursionError",
-        r"NameError",
-        # TypeError 的常见子类型描述
-        r"TypeError.*not support",
-        r"TypeError.*takes\s+\d+\s+positional",
-    ]
-
-    # 断言失败关键字模式：期望值不匹配，需调整测试或代码逻辑
-    _ASSERTION_PATTERNS = [
-        r"AssertionError",
-        r"assert\s+",
-        r"Expected.*but got",
-        r"assert\s+\w+\s*==",
-        r"Expected exception",
-    ]
-
-    # 超时时标模式：通常说明被测函数存在死循环或无限递归
-    _TIMEOUT_PATTERNS = [
-        r"timeout",
-        r"TimedOut",
-        r"Test ran for longer than",
+    # 错误分类优先级映射（从高到低）
+    _PRIORITY_ORDER = [
+        (ErrorCategory.SYNTAX, ErrorPatterns.SYNTAX),
+        (ErrorCategory.RUNTIME, ErrorPatterns.RUNTIME),
+        (ErrorCategory.ASSERTION, ErrorPatterns.ASSERTION),
+        (ErrorCategory.TIMEOUT, ErrorPatterns.TIMEOUT),
     ]
 
     def classify(self, test_output: str, failed_cases: List[dict]) -> ErrorCategory:
@@ -114,40 +131,28 @@ class ErrorClassifier:
             case.get("error", "") for case in failed_cases[:3]
         )
 
-        # 优先检查语法错误（这类错误无需语义分析，直接重写生成即可）
-        if self._matches_patterns(combined, self._SYNTAX_PATTERNS):
-            return ErrorCategory.SYNTAX
-
-        # 检查运行时异常（需要分析异常来源，可能涉及代码修复）
-        if self._matches_patterns(combined, self._RUNTIME_PATTERNS):
-            return ErrorCategory.RUNTIME
-
-        # 检查断言失败（期望值不匹配，需调整测试或代码逻辑）
-        if self._matches_patterns(combined, self._ASSERTION_PATTERNS):
-            return ErrorCategory.ASSERTION
-
-        # 检查超时（通常说明被测函数存在死循环）
-        if self._matches_patterns(combined, self._TIMEOUT_PATTERNS):
-            return ErrorCategory.TIMEOUT
+        # 按优先级顺序检查各类错误
+        for category, patterns in self._PRIORITY_ORDER:
+            if self._matches_patterns(combined, patterns):
+                return category
 
         # 默认返回 UNKNOWN，由 Debugger 自行判断
         return ErrorCategory.UNKNOWN
 
     @staticmethod
-    def _matches_patterns(text: str, patterns: List[str]) -> bool:
+    def _matches_patterns(text: str, patterns: list) -> bool:
         """
-        在文本中逐一尝试正则模式匹配。
-        使用 re.IGNORECASE 进行大小写不敏感匹配，兼容不同 pytest 版本输出格式。
+        在文本中逐一尝试预编译的正则模式匹配。
 
         Args:
             text: 待匹配的文本。
-            patterns: 正则模式列表。
+            patterns: 已预编译的 re.Pattern 对象列表。
 
         Returns:
             存在任意匹配时返回 True。
         """
         for pattern in patterns:
-            if re.search(pattern, text, re.IGNORECASE):
+            if pattern.search(text):
                 return True
         return False
 
