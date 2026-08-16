@@ -1,15 +1,17 @@
 """
-单元测试：测试 BaseAgent 静态方法（无需 LLM）。
+单元测试：测试 BaseAgent 静态方法（无需 LLM）和线程局部配置。
 
 覆盖范围：
     - _extract_json：正常 JSON、markdown 包裹、不完整 JSON、嵌套 JSON、转义字符、空花括号
     - _find_balanced_json：括号深度平衡、字符串内括号、转义引号
     - _extract_python_code：```python 包裹、``` 通用包裹、python: 前缀、无标记纯代码
+    - _get_llm_config：线程局部配置和全局配置
+    - _get_all_api_configs：API 配置列表获取
 """
 
 import json
 import pytest
-from src.agents.base_agent import BaseAgent
+from src.agents.base_agent import BaseAgent, _get_llm_config, _get_all_api_configs
 
 
 # ─── TestExtractJson：JSON 提取方法 ────────────────────────────────────────────
