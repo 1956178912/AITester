@@ -37,9 +37,16 @@ class ErrorClassifier:
 
     根据 pytest 输出文本判断错误类别，为 Debugger 提供结构化输入。
     使用规则匹配而非 LLM，确保分类速度快且结果稳定。
+
+    分类优先级（由高到低）：
+    1. SYNTAX - 语法错误：无需语义分析，直接让 LLM 重写整个文件
+    2. RUNTIME - 运行时异常：需分析异常栈，定位 bug 所在函数
+    3. ASSERTION - 断言失败：判断是代码逻辑错误还是测试预期值错误
+    4. TIMEOUT - 执行超时：通常说明被测函数存在死循环
+    5. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
-    # 语法/编译错误关键字模式
+    # 语法/编译错误关键字模式：这类错误无需语义分析，直接重写即可
     _SYNTAX_PATTERNS = [
         r"SyntaxError",
         r"ImportError",
@@ -49,10 +56,11 @@ class ErrorClassifier:
         r"IncompleteInput",
         r"cannot import name",
         r"No module named",
+        # pytest 格式：E   path/file.py:line:col: syntax error
         r"E\s*\S+\.py:\d+:\d+:\s*syntax error",
     ]
 
-    # 运行时异常关键字模式
+    # 运行时异常关键字模式：需分析异常来源，可能涉及代码修复
     _RUNTIME_PATTERNS = [
         r"ZeroDivisionError",
         r"TypeError",
@@ -62,11 +70,12 @@ class ErrorClassifier:
         r"AttributeError",
         r"RecursionError",
         r"NameError",
+        # TypeError 的常见子类型描述
         r"TypeError.*not support",
         r"TypeError.*takes\s+\d+\s+positional",
     ]
 
-    # 断言失败关键字模式
+    # 断言失败关键字模式：期望值不匹配，需调整测试或代码逻辑
     _ASSERTION_PATTERNS = [
         r"AssertionError",
         r"assert\s+",
@@ -75,7 +84,7 @@ class ErrorClassifier:
         r"Expected exception",
     ]
 
-    # 超时时标模式
+    # 超时时标模式：通常说明被测函数存在死循环或无限递归
     _TIMEOUT_PATTERNS = [
         r"timeout",
         r"TimedOut",
@@ -89,6 +98,9 @@ class ErrorClassifier:
         分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
         规则匹配优先于 LLM 兜底分类。
 
+        合并策略：将 test_output 和最多前 3 个 failed_cases 的 error 信息拼接后统一匹配，
+        确保能从失败用例的详细错误信息中识别出错误类型。
+
         Args:
             test_output: pytest 完整输出文本。
             failed_cases: 失败用例列表，每项含 name 和 error 字段。
@@ -97,6 +109,7 @@ class ErrorClassifier:
             最匹配的 ErrorCategory 枚举值。
         """
         # 合并 test_output 和 failed_cases 的 error 信息用于分类
+        # 最多取前 3 个失败用例的错误信息，避免过长
         combined = test_output + "\n" + "\n".join(
             case.get("error", "") for case in failed_cases[:3]
         )
@@ -124,6 +137,7 @@ class ErrorClassifier:
     def _matches_patterns(text: str, patterns: List[str]) -> bool:
         """
         在文本中逐一尝试正则模式匹配。
+        使用 re.IGNORECASE 进行大小写不敏感匹配，兼容不同 pytest 版本输出格式。
 
         Args:
             text: 待匹配的文本。
@@ -141,6 +155,13 @@ class ErrorClassifier:
 def get_fix_strategy(category: ErrorCategory) -> str:
     """
     根据错误类型返回推荐修复策略描述。
+
+    不同错误类型需要不同的修复策略：
+    - SYNTAX：代码无法编译，需重写整个文件
+    - RUNTIME：需分析异常栈，修复 bug 所在函数
+    - ASSERTION：需判断是代码错还是测试预期值错
+    - TIMEOUT：需添加循环/递归终止条件
+    - UNKNOWN：通用分析，由 LLM 自行判断
 
     Args:
         category: 已分类的错误类型。
