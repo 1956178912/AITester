@@ -47,6 +47,7 @@ class TestTestCaseRetriever:
         """passed=True 的测试用例应被入库。"""
         mock_client = MagicMock()
         mock_collection = MagicMock()
+        mock_collection.count.return_value = 0  # 模拟空集合
         mock_client.get_or_create_collection.return_value = mock_collection
         mock_chromadb.Client.return_value = mock_client
 
@@ -118,6 +119,7 @@ class TestTestCaseRetriever:
         """add_repair 应将修复案例入库。"""
         mock_client = MagicMock()
         mock_collection = MagicMock()
+        mock_collection.count.return_value = 0  # 模拟空集合
         mock_client.get_or_create_collection.return_value = mock_collection
         mock_chromadb.Client.return_value = mock_client
 

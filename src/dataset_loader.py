@@ -218,6 +218,9 @@ class SWEBenchDataset(BaseDatasetLoader):
         优先从 data_dir 读取 JSONL 文件；
         若文件不存在，打印提示并返回空列表（允许 gracefully degrade）。
         """
+        # 清空任务列表，避免重复加载时数据累积
+        self._tasks.clear()
+
         jsonl_path = os.path.join(self.data_dir, "swe_bench_instances.jsonl")
 
         if not os.path.exists(jsonl_path):
@@ -356,6 +359,9 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 tests/      # 测试套件
                 info.json   # 元数据
         """
+        # 清空任务列表，避免重复加载时数据累积
+        self._tasks.clear()
+
         projects_dir = os.path.join(self.data_dir, "projects")
 
         if not os.path.exists(projects_dir):

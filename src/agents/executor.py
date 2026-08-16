@@ -73,12 +73,18 @@ class ExecutorAgent:
         # 被测代码所在目录，用于设置 PYTHONPATH（使 pytest 能找到被测模块）
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
+        # P0 改进：自动检测并修复模块导入路径
+        # 分析测试代码中的 import 语句，动态添加 sys.path
+        fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
+        if fixed_test_code != test_code:
+            logger.info(f"已自动修复模块导入路径")
+
         # 将测试代码写入临时文件，便于 pytest 执行
         # delete=False：py.test 需要文件存在于磁盘，不能是内存对象
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".py", delete=False, encoding="utf-8"
         ) as f:
-            f.write(test_code)
+            f.write(fixed_test_code)
             test_file = f.name
 
         try:
@@ -120,9 +126,28 @@ class ExecutorAgent:
                     if result.returncode == 0:
                         break  # 成功则提前退出，不浪费重试次数
                     logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
-                except subprocess.TimeoutExpired:
+                except subprocess.TimeoutExpired as e:
                     # 超时时不重试：超时意味着被测代码有死循环，重试也不会改善
+                    logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
                     last_output = f"超时（>{self.timeout}s）"
+                    last_result = None
+                    break
+                except FileNotFoundError as e:
+                    # Python 解释器或 pytest 未找到
+                    logger.error("执行环境错误（找不到 pytest）: %s", e)
+                    last_output = f"执行环境错误: {e}"
+                    last_result = None
+                    break
+                except PermissionError as e:
+                    # 权限不足，无法执行文件
+                    logger.error("权限错误: %s", e)
+                    last_output = f"权限错误: {e}"
+                    last_result = None
+                    break
+                except Exception as e:
+                    # 其他未知异常（网络、子进程启动失败等）
+                    logger.error("测试执行异常: %s", e)
+                    last_output = f"执行异常: {e}"
                     last_result = None
                     break
 
@@ -142,7 +167,123 @@ class ExecutorAgent:
             }
         finally:
             # 清理临时文件，避免磁盘垃圾堆积
-            os.unlink(test_file)
+            try:
+                if os.path.exists(test_file):
+                    os.unlink(test_file)
+                    logger.debug("已清理临时测试文件: %s", test_file)
+            except OSError as e:
+                # 文件清理失败不影响测试结果，仅记录警告
+                logger.warning("清理临时文件失败: %s", e)
+
+    @staticmethod
+    def _search_module_path(module_name: str, root_path: "Path", max_depth: int = 3) -> list[str]:
+        """
+        搜索指定模块在给定根目录下的路径。
+
+        搜索策略（按优先级）：
+        1. 直接匹配文件名（root_path/module_name.py）
+        2. 检查常见子目录（src/, lib/, tests/, ./）
+        3. rglob 深度限制搜索
+        4. 查找包目录（module_name/__init__.py）
+
+        Args:
+            module_name: 模块名称（不含 .py 后缀）。
+            root_path: 项目根目录 Path 对象。
+            max_depth: 最大搜索深度，默认 3 层。
+
+        Returns:
+            匹配的目录路径列表（去重）。
+        """
+        from pathlib import Path
+
+        matched_dirs = set()
+
+        # 策略 1：直接匹配文件名
+        py_file = root_path / f"{module_name}.py"
+        if py_file.exists():
+            matched_dirs.add(str(py_file.parent))
+            return list(matched_dirs)
+
+        # 策略 2：检查常见子目录
+        common_dirs = ["src", "lib", "tests", "."]
+        for common_dir in common_dirs:
+            candidate = root_path / common_dir / f"{module_name}.py"
+            if candidate.exists():
+                matched_dirs.add(str(candidate.parent))
+                return list(matched_dirs)
+
+        # 策略 3：深度限制的 rglob 搜索
+        for found_file in root_path.rglob(f"{module_name}.py"):
+            rel_parts = found_file.relative_to(root_path).parts
+            if len(rel_parts) <= max_depth:
+                matched_dirs.add(str(found_file.parent))
+                break
+
+        # 策略 4：查找包目录
+        pkg_dir = root_path / module_name
+        if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists():
+            matched_dirs.add(str(pkg_dir))
+
+        return list(matched_dirs)
+
+    @staticmethod
+    def _auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str:
+        """
+        自动修复模块导入路径（P0 改进）
+
+        分析测试代码中的 import 语句，动态添加 sys.path，解决 ModuleNotFoundError。
+
+        Args:
+            test_code: 原始测试代码。
+            target_file: 被测代码文件路径。
+            project_root: 项目根目录。
+
+        Returns:
+            修复后的测试代码（如无需修改则返回原代码）。
+        """
+        import re
+        from pathlib import Path
+
+        # 提取所有 import 语句
+        imports = []
+        pattern1 = r'from\s+([\w.]+)\s+import'
+        pattern2 = r'^import\s+([\w.]+)'
+
+        for line in test_code.split('\n'):
+            line = line.strip()
+            match1 = re.match(pattern1, line)
+            match2 = re.match(pattern2, line)
+            if match1:
+                imports.append(match1.group(1))
+            elif match2:
+                imports.append(match2.group(1))
+
+        if not imports:
+            return test_code
+
+        # 查找模块文件路径
+        root_path = Path(project_root)
+        module_dirs = set()
+        # 限制 rglob 搜索深度，避免大型项目遍历过慢（默认最多 3 层）
+        _MAX_SEARCH_DEPTH = 3
+
+        for module_name in imports:
+            # 使用提取的搜索函数
+            found_dirs = ExecutorAgent._search_module_path(module_name, root_path, _MAX_SEARCH_DEPTH)
+            module_dirs.update(found_dirs)
+
+        if not module_dirs:
+            return test_code
+
+        # 生成 sys.path 修改代码
+        sys_path_code = "\n".join([f"import sys\nsys.path.insert(0, {repr(d)})" for d in sorted(module_dirs)])
+
+        # 在测试代码开头插入路径修复
+        fixed_code = f"""{sys_path_code}
+
+{test_code}
+"""
+        return fixed_code
 
     @staticmethod
     def _parse_coverage(output: str) -> float:

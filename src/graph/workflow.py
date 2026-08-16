@@ -18,6 +18,23 @@ LangGraph 工作流编排模块：定义多智能体协作的工作流图和执�
 
 工作流程（消融模式 - 无 Planner/Debugger）：
     Generator → Executor → END  （纯 LLM 基线）
+
+设计原则：
+- 各节点函数接收状态字典并返回更新后的字段，保持状态无副作用
+- 条件路由函数 _should_debug 实现循环终止逻辑
+- 使用 try-except 捕获 LLM 调用异常，确保工作流不因单点故障而崩溃
+
+使用示例：
+    from src.graph.workflow import build_workflow
+    from src.graph.state import AITesterState
+
+    graph = build_workflow()
+    initial_state: AITesterState = {
+        "target_code": "def add(a, b): return a + b",
+        "target_file": "/path/to/target.py",
+        "target_function": "add",
+    }
+    result = graph.invoke(initial_state)
 """
 
 from __future__ import annotations
@@ -25,6 +42,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from typing import Any, Dict, Optional
 
 from langgraph.graph import StateGraph, END
@@ -59,6 +77,45 @@ except ImportError:
 # 最大修复迭代次数常量（来自 config.py），控制 Debugger 循环的上限
 # 避免 LLM 反复生成相同错误补丁导致无限循环
 _DEFAULT_MAX_ITERATIONS = 3
+
+# ─── RAG 检索器单例 ────────────────────────────────────────────────────────────
+# _rag_retriever 模块级缓存：避免每次节点调用都重新初始化 ChromaDB 客户端
+# ChromaDB 客户端初始化涉及模型加载和向量存储打开，耗时 2-6 秒
+# 单例化后整个工作流执行期间只初始化一次
+_rag_retriever = None
+# 线程锁：保护单例初始化的双重检查锁定，确保多线程环境下的安全性
+_rag_lock = threading.Lock()
+
+
+def get_rag_retriever():
+    """
+    获取 RAG 检索器单例实例（线程安全版本）。
+
+    使用双重检查锁定模式（Double-Checked Locking）：
+    - 第一次检查（无锁）：若已初始化直接返回，避免后续调用的锁开销
+    - 加锁后第二次检查：防止多线程并发时多次初始化
+
+    保证 ChromaDB 客户端在整个工作流执行期间只初始化一次，
+    避免每个节点都创建新实例导致的 2-6 秒重复初始化开销。
+
+    Returns:
+        TestCaseRetriever 实例。若 RAG 模块不可用则返回 None。
+    """
+    global _rag_retriever
+    # 第一次检查：无锁快速路径，已初始化时直接返回
+    if _rag_retriever is not None:
+        return _rag_retriever
+    # 加锁进行二次检查和初始化
+    with _rag_lock:
+        # 第二次检查：防止多线程并发时多次初始化
+        if _rag_retriever is None and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
+            try:
+                _rag_retriever = TestCaseRetriever()
+                logger.info("RAG 检索器单例已初始化")
+            except Exception as e:
+                logger.warning("RAG 检索器初始化失败，将跳过 RAG 增强: %s", e)
+                _rag_retriever = None  # 标记为不可用，避免重复尝试
+    return _rag_retriever
 
 
 def _create_workflow() -> StateGraph:
@@ -238,11 +295,12 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
     # 仅当 RAG 开关开启、模块可用、且存在失败用例时才进行检索
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
-            # 创建 RAG 检索器实例，检索与被测代码最相似的 3 个历史测试用例
-            # top_k=3 是经验值：太多会增加 prompt 长度，太少可能缺乏代表性
-            retriever = TestCaseRetriever()
-            rag_refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
-            logger.info("RAG 检索到 %d 个相似测试用例", len(rag_refs) if rag_refs else 0)
+            # 使用单例检索器，避免重复初始化 ChromaDB 客户端
+            retriever = get_rag_retriever()
+            if retriever is not None:
+                # top_k=3 是经验值：太多会增加 prompt 长度，太少可能缺乏代表性
+                rag_refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
+                logger.info("RAG 检索到 %d 个相似测试用例", len(rag_refs) if rag_refs else 0)
         except Exception as e:
             # RAG 检索失败时记录警告但不中断流程，Generator 仍可使用无 RAG 模式生成
             logger.warning("RAG 检索失败，跳过增强: %s", e)
@@ -298,14 +356,16 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
 
     if result["passed"] and ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
-            retriever = TestCaseRetriever()
-            retriever.add_case(
-                code=state["target_code"],
-                test_code=state["generated_test"],
-                passed=True,
-                metadata={"function": state.get("target_function"), "coverage": result["coverage"]},
-            )
-            logger.debug("成功测试用例已入库 RAG")
+            # 使用单例检索器入库成功测试用例
+            retriever = get_rag_retriever()
+            if retriever is not None:
+                retriever.add_case(
+                    code=state["target_code"],
+                    test_code=state["generated_test"],
+                    passed=True,
+                    metadata={"function": state.get("target_function"), "coverage": result["coverage"]},
+                )
+                logger.debug("成功测试用例已入库 RAG")
         except Exception as e:
             logger.warning("RAG 入库失败: %s", e)
 
@@ -334,13 +394,15 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None and state.get("failed_cases"):
         try:
             error_cat = state.get("error_category", "unknown")
-            retriever = TestCaseRetriever()
-            rag_refs = retriever.retrieve_repairs(
-                error_category=error_cat,
-                target_code=state["target_code"],
-                top_k=2,
-            )
-            logger.info("RAG 检索到 %d 个相似修复案例", len(rag_refs) if rag_refs else 0)
+            # 使用单例检索器
+            retriever = get_rag_retriever()
+            if retriever is not None:
+                rag_refs = retriever.retrieve_repairs(
+                    error_category=error_cat,
+                    target_code=state["target_code"],
+                    top_k=2,
+                )
+                logger.info("RAG 检索到 %d 个相似修复案例", len(rag_refs) if rag_refs else 0)
         except Exception as e:
             logger.warning("RAG 检索失败，跳过增强: %s", e)
 
@@ -368,13 +430,15 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
 
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
-            retriever = TestCaseRetriever()
-            retriever.add_repair(
-                original_code=state["target_code"],
-                patch=result.get("patch", ""),
-                error_category=result.get("error_category", "unknown"),
-            )
-            logger.debug("修复案例已入库 RAG")
+            # 使用单例检索器入库修复案例
+            retriever = get_rag_retriever()
+            if retriever is not None:
+                retriever.add_repair(
+                    original_code=state["target_code"],
+                    patch=result.get("patch", ""),
+                    error_category=result.get("error_category", "unknown"),
+                )
+                logger.debug("修复案例已入库 RAG")
         except Exception as e:
             logger.warning("RAG 修复入库失败: %s", e)
 
@@ -419,6 +483,10 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
         "error_category": state.get("error_category", "unknown"),
         "patch_applied": applied,
     })
+    # 限制 repair_history 大小，避免无限增长占用内存（最多保留 5 条）
+    _MAX_REPAIR_HISTORY = 5
+    if len(history) > _MAX_REPAIR_HISTORY:
+        history = history[-_MAX_REPAIR_HISTORY:]
     return {
         "target_code": new_code,
         "repair_history": history,
