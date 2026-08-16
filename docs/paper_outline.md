@@ -268,3 +268,44 @@ docker run --rm -v $(pwd):/workspace \
 | 合成数据集 | [src/synthetic_dataset.py](src/synthetic_dataset.py) |
 | 基准测试脚本 | [experiments/run_benchmark.py](experiments/run_benchmark.py) |
 | 可视化脚本 | [experiments/visualize_results.py](experiments/visualize_results.py) |
+
+---
+
+## 附录 B：GitHub 公开文档说明
+
+> ⚠️ 本仓库的 GitHub 公开版本已移除以下敏感内容：
+> - 论文全文及草稿（`algorithm_paper.md`、`research_motivation.md`）
+> - API Key 配置（`.env` 文件已加入 `.gitignore`）
+> - 实验详细结果（`experiments/results/` 目录已加入 `.gitignore`）
+> 
+> 完整的学术论文和数据集可通过联系作者获取。
+
+## 附录 C：本地复现指南
+
+### 所需环境
+- Python 3.10+
+- LLM API Key（OpenAI / DeepSeek / Agnes AI 均可）
+- 可选：MySQL 5.7+（用于持久化实验数据）
+
+### 快速验证（5 分钟）
+```bash
+cd AITester
+pip install -r requirements.txt
+cp .env.example .env
+# 编辑 .env，填入 OPENAI_API_KEY
+python experiments/run_benchmark.py --dataset examples --task-limit 3
+```
+
+### 完整实验（约 2 小时，60 任务）
+```bash
+python experiments/run_benchmark.py --dataset synthetic --task-count 60 \
+    --baselines aitester,plain_llm,single_agent
+python experiments/visualize_results.py
+```
+
+### 数据集说明
+- `examples`：3 个预定义 bug 任务，用于开发调试
+- `synthetic`：本地生成，10 种 bug 模式，可自定义规模
+- `swe_bench_lite`：500 个真实 GitHub 问题（需从 HuggingFace 下载）
+
+⚠️ 注意：`swe_bench` 数据集受版权限制，仅可用于学术研究，不得商用。

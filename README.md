@@ -257,7 +257,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 68 个用例全部通过）
+# 运行所有测试（当前 185 个用例全部通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -267,7 +267,26 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**：`test_code_analyzer.py`（14 用例）、`test_error_classifier.py`（12 用例）、`test_patch_applier.py`（9 用例）、`test_dataset_loader.py`（17 用例）、`test_synthetic_dataset.py`（18 用例）。
+**测试覆盖模块**（17 个文件，185 个用例）：
+
+| 测试文件 | 用例数 | 覆盖范围 |
+|---------|-------|---------|
+| `test_base_agent.py` | 20 | JSON 提取、Python 代码块提取 |
+| `test_planner.py` | 6 | PlannerAgent 规划逻辑序列化 |
+| `test_generator.py` | 13 | parametrize 校验、import 修正、LLM 调用 |
+| `test_debugger.py` | 5 | 错误诊断、RAG 注入、failed_cases 截断 |
+| `test_executor.py` | 11 | 覆盖率解析、失败用例解析 |
+| `test_workflow.py` | 11 | _should_debug 路由、工作流图构建 |
+| `test_state.py` | 5 | AITesterState TypedDict 结构完整性 |
+| `test_prompts.py` | 14 | 各智能体 System Prompt 完整性校验 |
+| `test_retriever.py` | 7 | RAG 检索器增删查清功能 |
+| `test_config.py` | 15 | MySQLClient 单例/事务、config.py 默认值 |
+| `test_patch_applier.py` | 9 | 补丁应用（完整文件/单函数模式） |
+| `test_patch_applier_boundary.py` | 10 | 补丁应用边界情况 |
+| `test_code_analyzer.py` | 14 | AST 解析、圈复杂度、代码替换 |
+| `test_error_classifier.py` | 12 | 五类错误分类与修复策略映射 |
+| `test_dataset_loader.py` | 15 | 数据集加载器（InMemory/SWEBench） |
+| `test_synthetic_dataset.py` | 18 | 合成数据集生成与确定性验证 |
 
 ## 配置说明
 
