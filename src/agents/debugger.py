@@ -22,6 +22,17 @@ from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
 
+# ─── 魔数常量（统一管理，便于后续调整）─────────────────────────────────────
+# 失败用例摘要最大展示数量：避免 prompt 过长导致 token 浪费
+_MAX_FAILED_CASES_SUMMARY = 5
+# 失败用例错误信息截断长度（字符数）：单条用例错误信息最长展示此长度
+_FAILED_CASE_ERROR_TRUNCATE_LEN = 200
+# RAG 修复参考案例最大数量：同时限制 each original_code 的截断长度
+_MAX_RAG_REPAIR_REFS = 2
+# RAG 参考案例中 original_code 截断长度（字符数）：避免 prompt 过长
+_RAG_ORIGINAL_CODE_TRUNCATE_LEN = 500
+# ───────────────────────────────────────────────────────────────────────────
+
 
 class DebuggerAgent(BaseAgent):
     """
@@ -45,7 +56,7 @@ class DebuggerAgent(BaseAgent):
     def __init__(self) -> None:
         # 使用分层修复专用 system prompt
         super().__init__(DEBUGGER_SYSTEM_PROMPT)
-        # 实例化分类器，用于在调用 LLM 前先确定错误类型
+        # 实例化分类器，用于在调用 LLM 前先确定错误类型（不消耗 LLM token）
         self.classifier = ErrorClassifier()
 
     def debug(
@@ -86,9 +97,11 @@ class DebuggerAgent(BaseAgent):
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
-        # 构建失败用例摘要（最多展示前5个，避免 prompt 过长）
+        # 构建失败用例摘要（最多展示前 _MAX_FAILED_CASES_SUMMARY 个，避免 prompt 过长）
+        # 每条用例的错误信息截断至 _FAILED_CASE_ERROR_TRUNCATE_LEN 字符
         cases_summary = "\n".join(
-            [f"- {case['name']}: {case['error'][:200]}" for case in failed_cases[:5]]
+            [f"- {case['name']}: {case['error'][:_FAILED_CASE_ERROR_TRUNCATE_LEN]}"
+             for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]]
         )
 
         # 在 prompt 中显式注入错误类型和修复策略，引导 LLM 分层处理
@@ -101,11 +114,12 @@ class DebuggerAgent(BaseAgent):
         )
 
         # RAG 增强：若检索到相似修复案例，注入参考补丁
-        # 最多取前2个案例，同时截断 original_code 避免 prompt 过长
+        # 最多取前 _MAX_RAG_REPAIR_REFS 个案例
+        # 同时截断 original_code 至 _RAG_ORIGINAL_CODE_TRUNCATE_LEN 字符，避免 prompt 过长
         if rag_references:
             refs_text = []
-            for i, ref in enumerate(rag_references[:2], start=1):
-                orig = ref.get("original_code", "")[:500]  # 截断避免过长
+            for i, ref in enumerate(rag_references[:_MAX_RAG_REPAIR_REFS], start=1):
+                orig = ref.get("original_code", "")[:_RAG_ORIGINAL_CODE_TRUNCATE_LEN]
                 patch = ref.get("patch", "")
                 if orig and patch:
                     refs_text.append(
