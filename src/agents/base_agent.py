@@ -263,7 +263,7 @@ class BaseAgent:
                 return json.loads(m.group())
             except json.JSONDecodeError:
                 continue
-        raise json.JSONDecodeError("Could not find complete JSON", text, start)
+        raise json.JSONDecodeError("无法找到完整 JSON 对象", text, start)
 
     @staticmethod
     def _find_balanced_json(text: str, start: int) -> str | None:
@@ -284,6 +284,8 @@ class BaseAgent:
         depth = 0          # 当前括号深度
         in_string = False  # 是否处于 JSON 字符串内部
         escape = False     # 是否处于转义状态（处理 \" 等）
+        if start < 0 or start >= len(text):
+            return None
         i = start
         while i < len(text):
             ch = text[i]
@@ -331,17 +333,17 @@ class BaseAgent:
             提取出的 Python 代码字符串。
         """
         # 尝试标准 markdown 格式：```python ... ```
-        match = re.search(r"```python\\s*\\n(.*?)\\n\\s*```", text, re.DOTALL)
+        match = re.search(r"```python\s*\n(.*?)\n\s*```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         # 尝试通用 markdown 格式：``` ... ```
-        match = re.search(r"```\\s*\\n(.*?)\\n```", text, re.DOTALL)
+        match = re.search(r"```\s*\n(.*?)\n```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         # 尝试 "python" 前缀格式（某些模型输出不带反引号）
         stripped = text.strip()
         if stripped.lower().startswith("python"):
-            stripped = re.sub(r"^python\\s*\\n", "", stripped, flags=re.IGNORECASE)
+            stripped = re.sub(r"^python\s*\n", "", stripped, flags=re.IGNORECASE)
             return stripped.strip()
         # 返回原始文本（无标记时直接返回）
         return text.strip()

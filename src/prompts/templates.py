@@ -72,7 +72,7 @@ GENERATOR_SYSTEM_PROMPT = """\
 """
 
 # ─── Executor ──────────────────────────────────────────────────────────────────
-EXECUTOR_SYSTEM_PROMPT = "Executor agent does not use LLM."
+EXECUTOR_SYSTEM_PROMPT = "执行器智能体不使用 LLM（仅为占位符）。"
 
 # ─── Debugger（分层错误修复）───────────────────────────────────────────────────
 DEBUGGER_SYSTEM_PROMPT = """\
