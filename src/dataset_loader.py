@@ -611,7 +611,7 @@ def load_dataset(
     
     loader_class = dataset_map.get(name_lower, InMemoryDataset)
     instance = loader_class(subset=subset, **kwargs)
-    # InMemoryDataset (including "examples" alias) should be pre-populated
+    # InMemoryDataset（含 "examples" 别名）需要预填充示例任务
     if isinstance(instance, InMemoryDataset):
         instance.add_sample_tasks()
     return instance

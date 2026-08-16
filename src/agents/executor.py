@@ -175,6 +175,10 @@ class ExecutorAgent:
                 case_name = m.group(1).strip()
                 # 收集该用例的错误信息（直到下一个 FAILED 或分隔线）
                 error_lines = []
+                # 先提取 FAILED 行本身的错误信息（如 "- AssertionError: ..."）
+                after_match = line[m.end():].strip()
+                if after_match:
+                    error_lines.append(after_match)
                 j = i + 1
                 while j < len(lines):
                     l = lines[j]
