@@ -144,7 +144,67 @@
       "dependencies": [],
       "createdAt": 1786955376517,
       "updatedAt": 1786955603982
+    },
+    {
+      "id": "t9",
+      "subject": "代码重构优化",
+      "description": "对 src/agents/ 和 src/tools/ 目录下的核心代码进行重构优化，提升代码可读性和可维护性。重点关注：1) 提取重复逻辑到公共函数 2) 优化条件分支结构 3) 增强类型注解 4) 添加缺失的文档字符串",
+      "status": "claimed",
+      "dependencies": [],
+      "createdAt": 1786957436564,
+      "updatedAt": 1786957507183,
+      "assignee": "executor-improver"
+    },
+    {
+      "id": "t10",
+      "subject": "性能优化",
+      "description": "优化 Executor 和 ErrorClassifier 的性能表现。重点关注：1) 减少不必要的字符串操作 2) 优化正则表达式编译和使用 3) 减少内存分配 4) 添加性能基准测试",
+      "status": "in_progress",
+      "dependencies": [],
+      "createdAt": 1786957436574,
+      "updatedAt": 1786957516564,
+      "assignee": "performance-analyst"
+    },
+    {
+      "id": "t11",
+      "subject": "错误处理增强",
+      "description": "增强所有组件的错误处理能力。重点关注：1) 添加更详细的错误信息 2) 实现统一的异常处理策略 3) 添加错误恢复机制 4) 记录完整的错误上下文",
+      "status": "in_progress",
+      "dependencies": [],
+      "createdAt": 1786957436582,
+      "updatedAt": 1786957602587,
+      "assignee": "error-classifier-improver"
+    },
+    {
+      "id": "t12",
+      "subject": "集成测试补充",
+      "description": "补充端到端集成测试，覆盖核心工作流。重点关注：1) Planner -> Generator -> Executor -> Debugger 完整流程 2) 错误恢复场景 3) 边界条件测试 4) 性能基准测试",
+      "status": "in_progress",
+      "dependencies": [],
+      "createdAt": 1786957436591,
+      "updatedAt": 1786957517038,
+      "assignee": "test-writer"
+    },
+    {
+      "id": "t13",
+      "subject": "安全审计",
+      "description": "审查代码中的潜在安全风险。重点关注：1) 输入验证和 sanitization 2) 避免命令注入 3) 文件路径处理安全 4) API 密钥保护",
+      "status": "in_progress",
+      "dependencies": [],
+      "createdAt": 1786957436599,
+      "updatedAt": 1786957516535,
+      "assignee": "dataset-improver"
+    },
+    {
+      "id": "t14",
+      "subject": "文档完善",
+      "description": "完善代码文档和用户文档。重点关注：1) 更新 API 文档 2) 添加使用示例 3) 更新 README 4) 添加贡献指南",
+      "status": "in_progress",
+      "dependencies": [],
+      "createdAt": 1786957436609,
+      "updatedAt": 1786957519201,
+      "assignee": "prompt-engineer"
     }
   ],
-  "taskSeq": 8
+  "taskSeq": 14
 }
