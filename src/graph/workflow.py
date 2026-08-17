@@ -53,6 +53,7 @@ from src.agents.generator import GeneratorAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.debugger import DebuggerAgent
 from src.tools.patch_applier import apply_patch_to_code
+from src.graph.llm_cache import cached_llm_call, get_cache_stats, reset_cache_stats
 from config import (
     MAX_ITERATIONS,
     COVERAGE_THRESHOLD,
@@ -191,6 +192,31 @@ def _create_workflow() -> StateGraph:
     return workflow
 
 
+def _should_skip_debugger(state: AITesterState) -> bool:
+    """
+    智能判断是否可以跳过 Debugger 节点。
+    
+    优化策略：
+    - 若连续多次修复后测试仍失败，说明问题可能无法通过补丁解决
+    - 若诊断表明是测试代码自身错误（非被测代码 bug），应触发重新生成而非修复
+    
+    Args:
+        state: 当前工作流状态。
+    
+    Returns:
+        True 表示应跳过 Debugger，False 表示应继续修复。
+    """
+    if not state.get("test_passed") and ENABLE_DEBUGGER:
+        repair_history = state.get("repair_history", []) or []
+        # 若最近 2 次修复均未成功应用或无效，考虑跳过
+        if len(repair_history) >= 2:
+            recent = repair_history[-2:]
+            if all(not h.get("patch_applied", False) for h in recent):
+                logger.info("连续多次修复无效，跳过 Debugger")
+                return True
+    return False
+
+
 def _should_debug(state: AITesterState) -> str:
     """
     判断是否进入调试修复环节的路由函数。
@@ -209,6 +235,10 @@ def _should_debug(state: AITesterState) -> str:
     """
     if state.get("test_passed") is True:
         return "done"
+    # 智能优化：若连续修复无效，直接结束而非继续浪费 token
+    if _should_skip_debugger(state):
+        return "done"
+    
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
@@ -228,6 +258,9 @@ def _should_debug(state: AITesterState) -> str:
 def _planner_node(state: AITesterState) -> Dict[str, Any]:
     """
     PlannerAgent 节点：生成逻辑驱动的结构化测试计划。
+    
+    优化：添加输出验证，确保 Planner 返回符合预期的 JSON 结构。
+    若验证失败，使用默认计划兜底。
 
     这是工作流的第一个节点（当 ENABLE_PLANNER=True 时），负责：
     1. 调用 PlannerAgent 对被测代码进行逻辑分析（输入域/输出域/前置-后置条件/边界情况）
@@ -236,6 +269,7 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
 
     设计考虑：
     - 使用 try-except 捕获 LLM 调用失败，避免单点故障导致整个流程崩溃
+    - 验证输出结构，确保包含必需的字段（function_name, logic_analysis）
     - 默认计划包含空逻辑分析，下游 Generator 仍可基于目标代码生成测试
 
     Args:
@@ -249,6 +283,10 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
         # 调用 Planner 生成测试计划，传入被测代码和可选的目标函数名
         # 若指定了 target_function，Planner 将只分析该函数，缩小分析范围
         test_plan = agent.plan(state["target_code"], state.get("target_function"))
+        # 验证输出结构
+        if not _validate_planner_output(test_plan):
+            logger.warning("Planner 输出结构不完整，使用默认计划")
+            test_plan = _get_default_test_plan(state.get("target_function"))
         logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
     except (json.JSONDecodeError, RuntimeError) as e:
         # LLM 调用失败或返回非 JSON 格式时，使用默认计划兜底
@@ -494,6 +532,63 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
     }
 
 
+# ─── 辅助函数：Planner 输出验证 ────────────────────────────────────────────────
+
+
+def _validate_planner_output(test_plan: Dict[str, Any]) -> bool:
+    """
+    验证 Planner 输出是否符合预期结构。
+    
+    检查必需字段：function_name 和 logic_analysis。
+    
+    Args:
+        test_plan: PlannerAgent 输出的测试计划字典。
+    
+    Returns:
+        True 表示结构完整，False 表示需要降级使用默认计划。
+    """
+    if not isinstance(test_plan, dict):
+        return False
+    # 必需字段检查
+    required_keys = ["function_name", "logic_analysis"]
+    for key in required_keys:
+        if key not in test_plan:
+            logger.warning("Planner 输出缺少必需字段: %s", key)
+            return False
+    # logic_analysis 内部结构验证
+    la = test_plan.get("logic_analysis", {})
+    if not isinstance(la, dict):
+        return False
+    return True
+
+
+def _get_default_test_plan(function_name: str | None) -> Dict[str, Any]:
+    """
+    生成默认测试计划（降级方案）。
+    
+    Args:
+        function_name: 目标函数名。
+    
+    Returns:
+        默认测试计划字典。
+    """
+    return {
+        "function_name": function_name or "unknown",
+        "description": "自动生成的默认测试计划",
+        "logic_analysis": {
+            "input_domain": "未知",
+            "output_domain": "未知",
+            "preconditions": [],
+            "postconditions": [],
+            "edge_cases": [],
+        },
+        "test_cases": [],
+    }
+
+
+# ─── 工作流编译与缓存 ──────────────────────────────────────────────────────────
+
+
 def build_workflow() -> Any:
     """
     编译工作流图并返回可执行的 graph 对象。
@@ -504,3 +599,25 @@ def build_workflow() -> Any:
     """
     workflow = _create_workflow()
     return workflow.compile()
+
+
+def get_workflow_stats() -> Dict[str, Any]:
+    """
+    获取工作流执行统计信息。
+    
+    包含：
+    - llm_cache: LLM 调用缓存统计
+    - workflow_config: 当前启用的功能开关
+    
+    Returns:
+        统计信息字典。
+    """
+    return {
+        "llm_cache": get_cache_stats(),
+        "workflow_config": {
+            "ENABLE_PLANNER": ENABLE_PLANNER,
+            "ENABLE_DEBUGGER": ENABLE_DEBUGGER,
+            "ENABLE_RAG": ENABLE_RAG,
+            "MAX_ITERATIONS": MAX_ITERATIONS,
+        }
+    }
