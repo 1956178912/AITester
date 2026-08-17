@@ -312,46 +312,58 @@ class BaseAgent:
         # 记录最后一次异常，用于最终报错信息
         last_error: Exception | None = None
 
-        # 依次尝试每个 API 配置（自动故障转移：主 API 失败 → 备用 API）
+        # 按 base_url 分组配置，支持同一 API 内切换模型
+        # 结构：{base_url: [(api_key, model_name), ...]}
+        api_groups: dict[str, list[tuple[str, str]]] = {}
         for api_key, base_url, model_name in all_configs:
+            if base_url not in api_groups:
+                api_groups[base_url] = []
+            api_groups[base_url].append((api_key, model_name))
+
+        # 依次尝试每个 API 组（自动故障转移：主 API 失败 → 备用 API）
+        # 同一 API 内也尝试不同模型（额度用完时自动切换）
+        for base_url, models in api_groups.items():
             # 判断当前 API 是否为 zai SDK 兼容接口，分流至不同调用路径
             is_zai = _is_zai_compatible(base_url)
 
-            try:
-                if is_zai:
-                    # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
-                    text = _call_zai(api_key, base_url, model_name,
-                                     self.system_prompt, user_message, max_retries)
-                else:
-                    # OpenAI 兼容接口：使用 LangChain ChatOpenAI 统一路径
-                    llm = ChatOpenAI(
-                        model=model_name,
-                        temperature=TEMPERATURE,
-                        openai_api_key=api_key,
-                        base_url=base_url,
-                    )
-                    response = llm.invoke([
-                        SystemMessage(content=self.system_prompt),
-                        HumanMessage(content=user_message),
-                    ], timeout=LLM_TIMEOUT)
-                    text = response.content.strip()
-                    # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
-                    if not text:
-                        raise RuntimeError("LLM 返回空响应")
+            for api_key, model_name in models:
+                try:
+                    if is_zai:
+                        # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
+                        text = _call_zai(api_key, base_url, model_name,
+                                         self.system_prompt, user_message, max_retries)
+                    else:
+                        # OpenAI 兼容接口：使用 LangChain ChatOpenAI 统一路径
+                        llm = ChatOpenAI(
+                            model=model_name,
+                            temperature=TEMPERATURE,
+                            openai_api_key=api_key,
+                            base_url=base_url,
+                        )
+                        response = llm.invoke([
+                            SystemMessage(content=self.system_prompt),
+                            HumanMessage(content=user_message),
+                        ], timeout=LLM_TIMEOUT)
+                        text = response.content.strip()
+                        # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
+                        if not text:
+                            raise RuntimeError("LLM 返回空响应")
 
-                # 打印成功日志（仅在有重试可能时打印，避免单次调用产生过多日志）
-                if max_retries > 1:
-                    # 从 base_url 提取主机名作为 API 标识（如 "open.bigmodel.cn"）
+                    # 打印成功日志
                     api_id = base_url.split("/")[2] if "/" in base_url else base_url
                     logger.info("API 调用成功 (api=%s, model=%s)", api_id, model_name)
-                return text
+                    return text
 
-            except Exception as e:
-                # 记录当前 API 失败原因，继续尝试下一个 API（不立即抛出）
-                last_error = e
-                logger.warning("API %s (%s) 调用失败: %s", base_url, model_name, e)
-                # 当前 API 所有重试耗尽，尝试下一个 API（for 循环自动 continue）
-                continue
+                except Exception as e:
+                    # 记录当前模型失败原因，继续尝试同 API 的下一个模型
+                    last_error = e
+                    logger.warning("模型 %s 调用失败: %s，尝试同 API 的其他模型", model_name, e)
+                    continue
+
+            # 当前 API 的所有模型都失败，记录并尝试下一个 API
+            api_id = base_url.split("/")[2] if "/" in base_url else base_url
+            logger.warning("API %s 所有模型均失败，尝试备用 API", api_id)
+            continue
 
         # 所有 API 均失败，抛出包含最后一次异常信息的 RuntimeError
         raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {last_error}") from last_error
