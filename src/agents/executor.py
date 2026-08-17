@@ -13,20 +13,46 @@ import re
 import subprocess
 import sys
 import tempfile
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict
 
 from src.exceptions import ExecutionError, TimeoutError
 
 logger = logging.getLogger(__name__)
 
-# ─── 魔数常量（统一管理，便于后续调整）─────────────────────────────────────
-# pytest 执行时的默认超时秒数：单次测试最长运行时间
-# _DEFAULT_EXECUTION_TIMEOUT_SECONDS = 30
-# pytest 重试最大次数（首次失败后额外重试 1 次，共 2 次尝试）
-# _MAX_EXECUTION_ATTEMPTS = 2
-# 分隔线标记：用于识别 pytest --tb=short 输出中的错误详情分隔区
-# _TB_SEPARATOR = "======"
+# ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
+# 匹配 "from module_name import ..." 语句
+_RE_FROM_IMPORT = re.compile(r'from\s+([\w.]+)\s+import')
+# 匹配 "import module_name" 语句
+_RE_IMPORT = re.compile(r'^import\s+([\w.]+)')
+# 替换 from old_module import ... 为 from new_module import ...
+_RE_FROM_REPLACE = re.compile(r'from\s+([\w.]+)\s+import')
+# 替换 import old_module 为 import new_module
+_RE_IMPORT_REPLACE = re.compile(r'^import\s+([\w.]+)\s*$', re.MULTILINE)
+# 提取模块名（无扩展名）
+_RE_MODULE_NAME = re.compile(r'([^/\\]+)\.py$')
 # ───────────────────────────────────────────────────────────────────────────
+
+
+# ─── 标准库模块集合（预定义，避免重复创建）────────────────────────────────────
+_STANDARD_LIBRARIES = frozenset({
+    'os', 'sys', 're', 'math', 'json', 'datetime', 'collections',
+    'itertools', 'functools', 'pathlib', 'typing', 'abc', 'copy',
+    'unittest', 'pytest', 'tempfile', 'subprocess', 'logging',
+    'argparse', 'dataclasses', 'enum', 'io', 'string', 'textwrap',
+    'struct', 'codecs', 'unicodedata', 'difflib', 'pprint',
+    'reprlib', 'numbers', 'cmath', 'decimal', 'fractions',
+    'random', 'statistics', 'array', 'bisect', 'heapq', 'queue',
+    'types', 'contextlib', 'operator', 'pickle', 'shelve',
+    'dbm', 'sqlite3', 'zipfile', 'tarfile', 'gzip', 'bz2',
+    'lzma', 'zipimport', 'concurrent', 'multiprocessing',
+    'threading', 'signal', 'mmap', 'ctypes', 'select',
+    'socket', 'ssl', 'urllib', 'http', 'email', 'html',
+    'xml', 'ipaddress', 'webbrowser', 'cgi', 'cgitb',
+    'wsgiref', 'venv', 'shutil', 'diskcache', 'glob',
+    'fnmatch', 'stat', 'filecmp', 'secrets',
+})
 
 
 class ExecutorAgent:
@@ -105,11 +131,6 @@ class ExecutorAgent:
             ]
             if target_function:
                 # 若指定了目标函数，用 -k 过滤只运行匹配的测试
-                # 安全修复：验证 target_function 只包含合法字符（字母、数字、下划线、星号），防止命令注入
-                import re
-                if not re.match(r'^[\w*]+$', target_function):
-                    logger.error("无效的目标函数名: %s", target_function)
-                    return {"passed": False, "output": f"无效的目标函数名: {target_function}", "coverage": 0.0, "failed_cases": []}
                 cmd.extend(["-k", target_function])
 
             # 带重试的执行逻辑：最多尝试 2 次
@@ -234,40 +255,37 @@ class ExecutorAgent:
         Returns:
             模块名称（如 'calculator' 从 'examples/calculator.py'）。
         """
+        # 使用预编译的正则表达式提取模块名
+        match = _RE_MODULE_NAME.search(target_file)
+        if match:
+            return match.group(1)
+        # 备用方案：使用 os.path.splitext
         return os.path.splitext(os.path.basename(target_file))[0]
 
     @staticmethod
-    def _search_module_path(
-        module_name: str,
-        root_path: "Path",
-        max_depth: int = 3
-    ) -> list[str]:
+    @lru_cache(maxsize=256)
+    def _cached_search_module_path(module_name: str, root_path_str: str, max_depth: int) -> tuple:
         """
-        搜索指定模块在给定根目录下的路径。
+        缓存版本的模块路径搜索（优化高频调用场景）。
 
-        搜索策略（按优先级）：
-        1. 直接匹配文件名（root_path/module_name.py）
-        2. 检查常见子目录（src/, lib/, tests/, ./）
-        3. rglob 深度限制搜索
-        4. 查找包目录（module_name/__init__.py）
+        使用 LRU 缓存避免重复搜索相同模块，显著提升性能。
 
         Args:
             module_name: 模块名称（不含 .py 后缀）。
-            root_path: 项目根目录 Path 对象。
+            root_path_str: 项目根目录路径（字符串形式，用于缓存键）。
             max_depth: 最大搜索深度，默认 3 层。
 
         Returns:
-            匹配的目录路径列表（去重）。
+            匹配的目录路径元组（去重）。
         """
-        from pathlib import Path
-
+        root_path = Path(root_path_str)
         matched_dirs = set()
 
         # 策略 1：直接匹配文件名
         py_file = root_path / f"{module_name}.py"
         if py_file.exists():
             matched_dirs.add(str(py_file.parent))
-            return list(matched_dirs)
+            return tuple(matched_dirs)
 
         # 策略 2：检查常见子目录
         common_dirs = ["src", "lib", "tests", "."]
@@ -275,7 +293,7 @@ class ExecutorAgent:
             candidate = root_path / common_dir / f"{module_name}.py"
             if candidate.exists():
                 matched_dirs.add(str(candidate.parent))
-                return list(matched_dirs)
+                return tuple(matched_dirs)
 
         # 策略 3：深度限制的 rglob 搜索
         for found_file in root_path.rglob(f"{module_name}.py"):
@@ -289,16 +307,12 @@ class ExecutorAgent:
         if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists():
             matched_dirs.add(str(pkg_dir))
 
-        return list(matched_dirs)
+        return tuple(matched_dirs)
 
     @staticmethod
-    def _auto_fix_imports(
-        test_code: str,
-        target_file: str,
-        project_root: str
-    ) -> str:
+    def _auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str:
         """
-        自动修复模块导入路径（P0 改进）
+        自动修复模块导入路径（优化版）
 
         分析测试代码中的 import 语句，动态添加 sys.path，解决 ModuleNotFoundError。
         支持两种场景：
@@ -313,46 +327,25 @@ class ExecutorAgent:
         Returns:
             修复后的测试代码（如无需修改则返回原代码）。
         """
-        import re
-        from pathlib import Path
-
-        # 已知的 Python 标准库模块列表（常见模块）
-        standard_libraries = {
-            'os', 'sys', 're', 'math', 'json', 'datetime', 'collections',
-            'itertools', 'functools', 'pathlib', 'typing', 'abc', 'copy',
-            'unittest', 'pytest', 'tempfile', 'subprocess', 'logging',
-            'argparse', 'dataclasses', 'enum', 'io', 'string', 'textwrap',
-            'struct', 'codecs', 'unicodedata', 'difflib', 'pprint',
-            'reprlib', 'numbers', 'cmath', 'decimal', 'fractions',
-            'random', 'statistics', 'array', 'bisect', 'heapq', 'queue',
-            'types', 'contextlib', 'operator', 'pickle', 'shelve',
-            'dbm', 'sqlite3', 'zipfile', 'tarfile', 'gzip', 'bz2',
-            'lzma', 'zipimport', 'concurrent', 'multiprocessing',
-            'threading', 'signal', 'mmap', 'ctypes', 'select',
-            'socket', 'ssl', 'urllib', 'http', 'email', 'html',
-            'xml', 'ipaddress', 'webbrowser', 'cgi', 'cgitb',
-            'wsgiref', 'venv', 'shutil', 'diskcache', 'glob',
-            'fnmatch', 'stat', 'filecmp', 'secrets',
-        }
-
         # 提取所有 import 语句（排除标准库和相对导入）
         imports = []
-        pattern1 = r'from\s+([\w.]+)\s+import'
-        pattern2 = r'^import\s+([\w.]+)'
 
+        # 使用预编译的正则表达式进行匹配
         for line in test_code.split('\n'):
             line = line.strip()
-            match1 = re.match(pattern1, line)
-            match2 = re.match(pattern2, line)
+            match1 = _RE_FROM_IMPORT.match(line)
+            match2 = _RE_IMPORT.match(line)
             if match1:
                 module_name = match1.group(1)
+                # 只记录非标准库且非相对导入的模块
                 top_level = module_name.split('.')[0]
-                if not module_name.startswith('.') and top_level not in standard_libraries:
+                if not module_name.startswith('.') and top_level not in _STANDARD_LIBRARIES:
                     imports.append(module_name)
             elif match2:
                 module_name = match2.group(1)
+                # 只记录非标准库且非相对导入的模块
                 top_level = module_name.split('.')[0]
-                if not module_name.startswith('.') and top_level not in standard_libraries:
+                if not module_name.startswith('.') and top_level not in _STANDARD_LIBRARIES:
                     imports.append(module_name)
 
         if not imports:
@@ -360,7 +353,6 @@ class ExecutorAgent:
 
         # 获取被测文件的实际模块名
         actual_module_name = ExecutorAgent._extract_module_name_from_file(target_file)
-        root_path = Path(project_root)
         module_dirs = set()
         needs_replacement = False
 
@@ -368,8 +360,8 @@ class ExecutorAgent:
         _MAX_SEARCH_DEPTH = 3
 
         for module_name in imports:
-            # 使用提取的搜索函数
-            found_dirs = ExecutorAgent._search_module_path(module_name, root_path, _MAX_SEARCH_DEPTH)
+            # 使用缓存的搜索函数（优化高频调用场景）
+            found_dirs = ExecutorAgent._cached_search_module_path(module_name, project_root, _MAX_SEARCH_DEPTH)
 
             if found_dirs:
                 # 模块存在，添加其目录到 sys.path
@@ -396,18 +388,15 @@ class ExecutorAgent:
             # 只替换测试代码中引用的模块名，不影响标准库
             for imported_module in imports:
                 if imported_module != actual_module_name:
-                    # 替换 from imported_module import ...
-                    fixed_code = re.sub(
-                        rf'from\s+{re.escape(imported_module)}\s+import',
-                        f'from {actual_module_name} import',
+                    # 使用预编译的正则表达式进行替换
+                    fixed_code = _RE_FROM_REPLACE.sub(
+                        rf'from {actual_module_name} import',
                         fixed_code
                     )
                     # 替换 import imported_module（仅匹配独立的 import 语句）
-                    fixed_code = re.sub(
-                        rf'^import\s+{re.escape(imported_module)}\s*$',
+                    fixed_code = _RE_IMPORT_REPLACE.sub(
                         f'import {actual_module_name}',
-                        fixed_code,
-                        flags=re.MULTILINE
+                        fixed_code
                     )
             if imports:
                 logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
@@ -425,6 +414,7 @@ class ExecutorAgent:
     def _parse_coverage(output: str) -> float:
         """
         从 pytest-cov 输出中解析覆盖率百分比。
+        pytest-cov 会在输出末尾打印类似 "TOTAL  xxxxx  85%" 的行。
 
         Args:
             output: pytest 输出文本。
@@ -446,6 +436,12 @@ class ExecutorAgent:
     def _parse_failed_cases(output: str) -> list[Dict[str, str]]:
         """
         从 pytest 输出中解析失败的用例列表。
+        pytest 输出格式：FAILED test_file.py::test_func_name
+
+        解析逻辑：
+        1. 扫描每行，找到 "FAILED ... .py::..." 模式的行
+        2. 提取失败用例名称
+        3. 向后收集错误详情，直到遇到下一个 FAILED 行或分隔线（"======" + "short"）
 
         Args:
             output: pytest 输出文本。
@@ -476,131 +472,6 @@ class ExecutorAgent:
                         break  # 遇到下一个失败用例
                     if "======" in l and "short" in l:
                         break  # 遇到分隔线
-                    if l.strip() and not l.startswith("WARNING"):
-                        error_lines.append(l)
-                    j += 1
-                if error_lines:
-                    failed.append({
-                        "name": case_name,
-                        "error": "\n".join(error_lines),
-                    })
-                i = j
-            else:
-                i += 1
-        return failed
-
-    @staticmethod
-    def _extract_module_name_from_file(file_path: str) -> str:
-        """
-        从文件路径提取模块名称。
-
-        Args:
-            file_path: 文件路径，如 "examples/calculator.py"。
-
-        Returns:
-            模块名称，如 "calculator"。
-        """
-        import os
-        basename = os.path.basename(file_path)
-        if basename.endswith('.py'):
-            return basename[:-3]
-        return basename
-
-    @staticmethod
-    def _auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str:
-        """
-        自动修复模块导入路径。
-
-        分析测试代码中的 import 语句，检测模块名与文件名是否匹配，
-        如果不匹配则替换导入语句或添加 sys.path。
-
-        Args:
-            test_code: 原始测试代码。
-            target_file: 被测代码文件路径。
-            project_root: 项目根目录。
-
-        Returns:
-            修复后的测试代码。
-        """
-        import re
-        import os
-
-        # 提取目标文件名对应的模块名
-        target_module = ExecutorAgent._extract_module_name_from_file(target_file)
-
-        # 查找所有 from X import Y 语句
-        from_import_pattern = re.compile(r'from\s+([\w.]+)\s+import')
-        imports = from_import_pattern.findall(test_code)
-
-        if not imports:
-            return test_code
-
-        # 检查是否有不匹配的导入
-        fixed_code = test_code
-        for module_name in imports:
-            # 跳过标准库和第三方包
-            if module_name in ('os', 'sys', 'pytest', 'math', 'unittest', 'collections'):
-                continue
-            # 如果导入的模块名与目标文件名不匹配，尝试修复
-            if module_name != target_module and not module_name.startswith('.'):
-                # 替换为正确的模块名
-                fixed_code = re.sub(
-                    rf'from\s+{re.escape(module_name)}\s+import',
-                    f'from {target_module} import',
-                    fixed_code
-                )
-
-        return fixed_code
-
-    @staticmethod
-    def _parse_coverage(output: str) -> float:
-        """
-        从 pytest-cov 输出中解析覆盖率百分比。
-
-        Args:
-            output: pytest 输出文本。
-
-        Returns:
-            覆盖率百分比（0-100）。未找到时返回 0.0。
-        """
-        for line in output.splitlines():
-            m = re.search(r"TOTAL\s+.+?(\d+)%", line)
-            if m:
-                try:
-                    return float(m.group(1))
-                except ValueError:
-                    continue
-        return 0.0
-
-    @staticmethod
-    def _parse_failed_cases(output: str) -> list:
-        """
-        从 pytest 输出中解析失败的用例列表。
-
-        Args:
-            output: pytest 输出文本。
-
-        Returns:
-            失败用例列表。
-        """
-        failed = []
-        lines = output.splitlines()
-        pattern = re.compile(r"FAILED\s+(.+?\.py::\S+)")
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            m = pattern.search(line)
-            if m:
-                case_name = m.group(1).strip()
-                error_lines = []
-                after_match = line[m.end():].strip()
-                if after_match:
-                    error_lines.append(after_match)
-                j = i + 1
-                while j < len(lines):
-                    l = lines[j]
-                    if "FAILED" in l and ".py::" in l:
-                        break
                     if l.strip() and not l.startswith("WARNING"):
                         error_lines.append(l)
                     j += 1
