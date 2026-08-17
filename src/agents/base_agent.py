@@ -41,6 +41,11 @@ _DEFAULT_LLM_MAX_RETRIES = 3
 # JSON 提取降级正则：匹配最内层无嵌套的 `{...}` 对象
 _JSON_LEAF_PATTERN = r"\{[^{}]*\}"
 # ───────────────────────────────────────────────────────────────────────────
+# Token 优化常量
+# 单条代码输入最大字符数：超长代码截断，避免 token 浪费
+_CODE_MAX_CHARS = 3000
+# 代码截断提示信息
+_CODE_TRUNCATED_MSG = "\n\n[代码已截断，仅显示前 {max} 字符]"
 
 
 def _retry_with_exponential_backoff(
@@ -513,3 +518,28 @@ class BaseAgent:
             return stripped.strip()
         # 返回原始文本（无标记时直接返回，由调用方决定是否有效）
         return text.strip()
+
+    @staticmethod
+    def truncate_code(code: str, max_chars: int = _CODE_MAX_CHARS) -> str:
+        """截断超长代码，避免 LLM token 浪费。
+
+        当代码超过 max_chars 字符时，保留头部和尾部各一半，
+        中间用省略号替换，并添加截断提示。
+
+        Args:
+            code: 原始代码字符串。
+            max_chars: 最大允许字符数，默认 3000。
+
+        Returns:
+            截断后的代码字符串。
+        """
+        if len(code) <= max_chars:
+            return code
+        # 头部和尾部各保留一半
+        head_len = max_chars // 2
+        tail_len = max_chars - head_len - len(_CODE_TRUNCATED_MSG.format(max=max_chars))
+        head = code[:head_len]
+        tail = code[-tail_len:] if tail_len > 0 else ""
+        truncated = head + _CODE_TRUNCATED_MSG.format(max=max_chars) + tail
+        logger.info("代码已截断：%d → %d 字符", len(code), len(truncated))
+        return truncated
