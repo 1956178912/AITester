@@ -512,9 +512,13 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
         else:
             # 安全检查：验证目标文件路径合法性，防止路径穿越攻击
             import os
+            import tempfile
             target_file_path = os.path.abspath(state["target_file"])
             project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-            if not target_file_path.startswith(project_root):
+            temp_dir = os.path.abspath(tempfile.gettempdir())
+            # 允许项目目录内或系统临时目录
+            allowed_prefixes = [project_root, temp_dir]
+            if not any(target_file_path.startswith(prefix) for prefix in allowed_prefixes):
                 logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
             else:
                 with open(target_file_path, "w", encoding="utf-8") as f:

@@ -1,7 +1,7 @@
 # AITester 性能分析报告
 
 > 分析时间：2026-08-16  
-> 分析范围：`/Users/wangchenyu/workspace/AITester/src/` 全部 Python 源文件  
+> 分析范围：`<PROJECT_PATH>/src/` 全部 Python 源文件  
 > 分析人：performance-analyzer（aitester-review-team 成员）
 
 ---

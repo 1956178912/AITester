@@ -110,7 +110,7 @@ docker pull texlive/texlive:latest
 
 ### 4.2 编译论文
 ```bash
-cd /Users/wangchenyu/Workspace/AITester/docs/paper
+cd <PROJECT_PATH>/docs/paper
 docker run --rm -v "$(pwd)":/tmp:ro texlive/texlive:latest pdflatex -interaction=nonstopmode /tmp/paper.tex
 ```
 
@@ -120,7 +120,7 @@ docker run --rm -v "$(pwd)":/tmp:ro texlive/texlive:latest pdflatex -interaction
 
 ### 步骤 1: 进入论文目录
 ```bash
-cd /Users/wangchenyu/Workspace/AITester/docs/paper
+cd <PROJECT_PATH>/docs/paper
 ```
 
 ### 步骤 2: 首次编译
@@ -214,7 +214,7 @@ tlmgr install collection-fontsrecommended
 curl -fsSL https://yihui.org/tinytex/install.sh | sh
 
 # 2. 编译论文（2 分钟）
-cd /Users/wangchenyu/Workspace/AITester/docs/paper
+cd <PROJECT_PATH>/docs/paper
 pdflatex -interaction=nonstopmode paper.tex
 bibtex paper
 pdflatex -interaction=nonstopmode paper.tex
