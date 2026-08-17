@@ -115,6 +115,11 @@ class DebuggerAgent(BaseAgent):
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
+        # 截断超长代码，节省 token
+        target_code = BaseAgent.truncate_code(target_code)
+        # 截断超长测试输出，保留关键错误信息
+        test_output = BaseAgent.truncate_code(test_output, max_chars=1500)
+
         # 构建失败用例摘要（最多展示前 _MAX_FAILED_CASES_SUMMARY 个，避免 prompt 过长）
         # 每条用例的错误信息截断至 _FAILED_CASE_ERROR_TRUNCATE_LEN 字符
         cases_summary = "\n".join(

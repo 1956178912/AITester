@@ -84,6 +84,9 @@ class GeneratorAgent(BaseAgent):
         # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 
+        # 截断超长代码，节省 token
+        target_code = BaseAgent.truncate_code(target_code)
+
         # 构建基础查询，包含测试计划和目标代码
         query = (
             f"测试计划（JSON）：\n{plan_json}\n\n"
