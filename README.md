@@ -360,7 +360,7 @@ docker run --rm \
 | `test_executor.py` | 11 | 覆盖率解析、失败用例解析 |
 | `test_workflow.py` | 11 | _should_debug 路由、工作流图构建 |
 | `test_state.py` | 5 | AITesterState TypedDict 结构完整性 |
-| `test_prompts.py` | 14 | 各智能体 System Prompt 完整性校验 |
+| `test_prompts.py` | 26 | 各智能体 System Prompt 完整性校验（含新格式约束） |
 | `test_retriever.py` | 7 | RAG 检索器增删查清功能 |
 | `test_config.py` | 15 | MySQLClient 单例/事务、config.py 默认值 |
 | `test_patch_applier.py` | 9 | 补丁应用（完整文件/单函数模式） |
@@ -467,7 +467,7 @@ python main.py list-examples
 | `swe_bench` | HuggingFace SWE-bench | 500 (lite) | 需调用 download_from_huggingface() |
 | `defects4j_python` | Defects4J-Python 数据集 | 可变 | 需手动下载 |
 
-更多细节请参考 [性能调优指南](docs/performance_guide.md) 和 [API 参考](docs/api_reference.md)。
+更多细节请参考 [性能调优指南](docs/performance_guide.md)、[API 参考](docs/api_reference.md) 和 [使用示例](docs/usage_examples.md)。
 
 ## 技术栈
 
@@ -522,6 +522,12 @@ python main.py list-examples
 1. 增加 `MAX_ITERATIONS`（默认 3，可调至 5）
 2. 启用 RAG 增强：`ENABLE_RAG=true`
 3. 使用更强大的模型（如 `gpt-4o` 替代 `gpt-4o-mini`）
+
+---
+
+## 贡献指南
+
+欢迎贡献代码！请阅读 [贡献指南](docs/contributing.md) 了解如何参与项目开发。
 
 ---
 

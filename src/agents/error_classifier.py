@@ -142,7 +142,6 @@ class ErrorPatterns:
         re.compile(r"TypeError.*takes\s+\d+\s+positional", re.IGNORECASE),
         # NameError 的子类型
         re.compile(r"NameError.*name\s+'\w+' is not defined", re.IGNORECASE),
-        re.compile(r"NameError.*name\s+'\w+' is not defined", re.IGNORECASE),
     ]
 
     # ─── Assertion 模式 ────────────────────────────────────────────────────────
@@ -185,15 +184,33 @@ class ErrorClassifier:
         (ErrorCategory.TIMEOUT, ErrorPatterns.TIMEOUT),
     ]
 
+    @staticmethod
+    def _combine_error_messages(
+        test_output: str,
+        failed_cases: List[dict],
+        max_cases: int = 3
+    ) -> str:
+        """
+        合并测试输出和失败用例的错误信息。
+
+        Args:
+            test_output: pytest 完整输出文本。
+            failed_cases: 失败用例列表。
+            max_cases: 最多合并的失败用例数，默认 3。
+
+        Returns:
+            合并后的错误信息字符串。
+        """
+        return test_output + "\n" + "\n".join(
+            case.get("error", "") for case in failed_cases[:max_cases]
+        )
+
     def classify(self, test_output: str, failed_cases: List[dict]) -> ErrorCategory:
         """
         根据测试输出和失败用例分类错误类型。
 
         分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
         规则匹配优先于 LLM 兜底分类。
-
-        合并策略：将 test_output 和最多前 3 个 failed_cases 的 error 信息拼接后统一匹配，
-        确保能从失败用例的详细错误信息中识别出错误类型。
 
         Args:
             test_output: pytest 完整输出文本。
@@ -202,11 +219,7 @@ class ErrorClassifier:
         Returns:
             最匹配的 ErrorCategory 枚举值。
         """
-        # 合并 test_output 和 failed_cases 的 error 信息用于分类
-        # 最多取前 3 个失败用例的错误信息，避免过长
-        combined = test_output + "\n" + "\n".join(
-            case.get("error", "") for case in failed_cases[:3]
-        )
+        combined = self._combine_error_messages(test_output, failed_cases)
 
         # 按优先级顺序检查各类错误
         for category, patterns in self._PRIORITY_ORDER:
@@ -237,6 +250,76 @@ class ErrorClassifier:
         context = self.extract_error_context(test_output, failed_cases)
         return category, context
 
+    @staticmethod
+    def _try_extract_module_name(combined: str) -> Optional[Tuple[str, SyntaxSubtype]]:
+        """
+        尝试从错误信息中提取模块名称。
+
+        Args:
+            combined: 合并后的错误信息。
+
+        Returns:
+            (模块名, 子类型) 元组，如果未匹配则返回 None。
+        """
+        # ModuleNotFoundError: No module named 'xxx'
+        module_match = re.search(
+            r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
+            combined, re.IGNORECASE
+        )
+        if module_match:
+            return module_match.group(1), SyntaxSubtype.IMPORT_ERROR
+
+        # ImportError: cannot import name 'xxx'
+        import_match = re.search(
+            r"ImportError:\s*cannot import name\s+'(\w+)'",
+            combined, re.IGNORECASE
+        )
+        if import_match:
+            return import_match.group(1), SyntaxSubtype.IMPORT_ERROR
+
+        return None
+
+    @staticmethod
+    def _try_extract_file_location(
+        combined: str
+    ) -> Optional[Tuple[Optional[str], Optional[int], Optional[int]]]:
+        """
+        尝试从错误信息中提取文件位置（文件名、行号、列号）。
+
+        支持的格式：
+        - filename.py:line:col: message
+        - filename.py:line: message
+        - E path/file.py:line:col
+        - File "path", line N
+
+        Args:
+            combined: 合并后的错误信息。
+
+        Returns:
+            (filename, line, column) 元组，未找到则返回 None。
+        """
+        # 格式：filename.py:line:col: message
+        match = re.search(r"(\w+\.py):(\d+):(\d+):\s*(.+)", combined)
+        if match:
+            return match.group(1), int(match.group(2)), int(match.group(3))
+
+        # 格式：filename.py:line: message
+        match = re.search(r"(\w+\.py):(\d+):\s*(.+)", combined)
+        if match:
+            return match.group(1), int(match.group(2)), None
+
+        # pytest 格式：E   path/file.py:line:col
+        match = re.search(r"E\s*\S+\.py:(\d+):(\d+)", combined)
+        if match:
+            return None, int(match.group(1)), int(match.group(2))
+
+        # traceback 格式：File "path", line N
+        match = re.search(r"File\s+\"([^\"]+)\",\s*line\s+(\d+)", combined)
+        if match:
+            return match.group(1), int(match.group(2)), None
+
+        return None
+
     def extract_error_context(
         self, test_output: str, failed_cases: List[dict]
     ) -> ErrorContext:
@@ -253,74 +336,26 @@ class ErrorClassifier:
             ErrorContext 对象，包含提取的上下文信息。
         """
         # 合并所有错误信息
-        combined = test_output + "\n" + "\n".join(
-            case.get("error", "") for case in failed_cases
-        )
+        combined = self._combine_error_messages(test_output, failed_cases, max_cases=None)
 
         context = ErrorContext(error_message=combined[:500])  # 限制长度
 
-        # 尝试提取模块名称（ImportError/ModuleNotFoundError）
-        module_match = re.search(
-            r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
-            combined, re.IGNORECASE
-        )
-        if module_match:
-            context.module_name = module_match.group(1)
-            context.subtype = SyntaxSubtype.IMPORT_ERROR
+        # 尝试提取模块名称
+        module_result = self._try_extract_module_name(combined)
+        if module_result:
+            context.module_name, context.subtype = module_result
             return context
 
-        import_name_match = re.search(
-            r"ImportError:\s*cannot import name\s+'(\w+)'",
-            combined, re.IGNORECASE
-        )
-        if import_name_match:
-            context.module_name = import_name_match.group(1)
-            context.subtype = SyntaxSubtype.IMPORT_ERROR
-            return context
-
-        # 尝试提取文件路径、行号、列号（SyntaxError/IndentationError 等）
-        # 格式：filename.py:line:col: message 或 filename.py:line: message
-        file_line_match = re.search(
-            r"(\w+\.py):(\d+):(\d+):\s*(.+)",
-            combined
-        )
-        if file_line_match:
-            context.filename = file_line_match.group(1)
-            context.line = int(file_line_match.group(2))
-            context.column = int(file_line_match.group(3))
-            context.subtype = SyntaxSubtype.SYNTAX_ERROR
-            return context
-
-        # 格式：filename.py:line: message
-        file_line_match = re.search(
-            r"(\w+\.py):(\d+):\s*(.+)",
-            combined
-        )
-        if file_line_match:
-            context.filename = file_line_match.group(1)
-            context.line = int(file_line_match.group(2))
-            context.subtype = SyntaxSubtype.SYNTAX_ERROR
-            return context
-
-        # pytest 格式：E   path/file.py:line:col
-        pytest_match = re.search(
-            r"E\s*\S+\.py:(\d+):(\d+)",
-            combined
-        )
-        if pytest_match:
-            context.line = int(pytest_match.group(1))
-            context.column = int(pytest_match.group(2))
-            context.subtype = SyntaxSubtype.SYNTAX_ERROR
-            return context
-
-        # 尝试从 traceback 中提取文件名
-        traceback_match = re.search(
-            r"File\s+\"([^\"]+)\",\s*line\s+(\d+)",
-            combined
-        )
-        if traceback_match:
-            context.filename = traceback_match.group(1)
-            context.line = int(traceback_match.group(2))
+        # 尝试提取文件位置
+        location_result = self._try_extract_file_location(combined)
+        if location_result:
+            filename, line, column = location_result
+            if filename:
+                context.filename = filename
+            if line is not None:
+                context.line = line
+            if column is not None:
+                context.column = column
             context.subtype = SyntaxSubtype.SYNTAX_ERROR
             return context
 
@@ -344,7 +379,7 @@ class ErrorClassifier:
         return False
 
 
-def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> str:
+def get_fix_strategy(category: ErrorCategory, context: Optional[ErrorContext] = None) -> str:
     """
     根据错误类型和上下文返回推荐修复策略描述。
 

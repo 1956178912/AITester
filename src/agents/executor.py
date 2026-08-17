@@ -105,7 +105,12 @@ class ExecutorAgent:
             ]
             if target_function:
                 # 若指定了目标函数，用 -k 过滤只运行匹配的测试
-                cmd.append(f"-k {target_function}")
+                # 安全修复：验证 target_function 只包含合法字符（字母、数字、下划线、星号），防止命令注入
+                import re
+                if not re.match(r'^[\w*]+$', target_function):
+                    logger.error("无效的目标函数名: %s", target_function)
+                    return {"passed": False, "output": f"无效的目标函数名: {target_function}", "coverage": 0.0, "failed_cases": []}
+                cmd.extend(["-k", target_function])
 
             # 带重试的执行逻辑：最多尝试 _MAX_EXECUTION_ATTEMPTS 次
             last_output = ""

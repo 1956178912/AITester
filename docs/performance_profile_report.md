@@ -1,38 +1,38 @@
 # AITester 性能分析报告
 
-生成时间: 2026-08-16 19:55:51
+生成时间: 2026-08-17 17:05:24
 
 ## 1. CPU 性能分析
 
 ### BaseAgent JSON/代码提取
 
 ```
-         3513338 function calls (3428391 primitive calls) in 1.034 seconds
+         3514867 function calls (3429920 primitive calls) in 1.013 seconds
 
    Ordered by: cumulative time
    List reduced from 11847 to 20 due to restriction <20>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        5    0.000    0.000    1.041    0.208 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:96(test_base_agent_parsing)
-   2748/3    0.004    0.000    1.023    0.341 <frozen importlib._bootstrap>:1360(_find_and_load)
-   2216/3    0.004    0.000    1.023    0.341 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
-   6179/6    0.001    0.000    1.023    0.170 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
-   2154/5    0.002    0.000    1.022    0.204 <frozen importlib._bootstrap>:914(_load_unlocked)
-   2094/5    0.001    0.000    1.022    0.204 <frozen importlib._bootstrap_external>:753(exec_module)
-   2228/5    0.015    0.000    1.022    0.204 {built-in method builtins.exec}
-        1    0.000    0.000    0.800    0.800 /Users/wangchenyu/workspace/AITester/src/agents/base_agent.py:1(<module>)
-        1    0.000    0.000    0.785    0.785 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/__init__.py:1(<module>)
-        1    0.000    0.000    0.752    0.752 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/chat_models/__init__.py:1(<module>)
-        1    0.000    0.000    0.752    0.752 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/chat_models/azure.py:1(<module>)
- 1796/379    0.001    0.000    0.724    0.002 {built-in method builtins.__import__}
-5999/5967    0.019    0.000    0.646    0.000 {built-in method builtins.__build_class__}
- 1266/572    0.001    0.000    0.517    0.001 <frozen importlib._bootstrap>:1409(_handle_fromlist)
-1934/1932    0.017    0.000    0.507    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_model_construction.py:84(__new__)
-        1    0.000    0.000    0.465    0.465 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/openai/__init__.py:1(<module>)
-        1    0.000    0.000    0.295    0.295 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/openai/types/__init__.py:1(<module>)
-1933/1931    0.003    0.000    0.272    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_model_construction.py:566(set_model_fields)
-1933/1931    0.021    0.000    0.269    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_fields.py:224(collect_model_fields)
-        5    0.000    0.000    0.233    0.047 /Users/wangchenyu/workspace/AITester/src/agents/base_agent.py:212(__init__)
+        5    0.000    0.000    1.019    0.204 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:96(test_base_agent_parsing)
+   2748/3    0.004    0.000    1.002    0.334 <frozen importlib._bootstrap>:1360(_find_and_load)
+   2216/3    0.004    0.000    1.001    0.334 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
+   6179/6    0.001    0.000    1.001    0.167 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
+   2154/5    0.002    0.000    1.001    0.200 <frozen importlib._bootstrap>:914(_load_unlocked)
+   2094/5    0.001    0.000    1.001    0.200 <frozen importlib._bootstrap_external>:753(exec_module)
+   2228/5    0.014    0.000    1.001    0.200 {built-in method builtins.exec}
+        1    0.000    0.000    0.779    0.779 /Users/wangchenyu/workspace/AITester/src/agents/base_agent.py:1(<module>)
+        1    0.000    0.000    0.767    0.767 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/__init__.py:1(<module>)
+        1    0.000    0.000    0.735    0.735 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/chat_models/__init__.py:1(<module>)
+        1    0.000    0.000    0.735    0.735 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langchain_openai/chat_models/azure.py:1(<module>)
+ 1796/379    0.001    0.000    0.713    0.002 {built-in method builtins.__import__}
+5999/5967    0.018    0.000    0.618    0.000 {built-in method builtins.__build_class__}
+ 1266/572    0.001    0.000    0.513    0.001 <frozen importlib._bootstrap>:1409(_handle_fromlist)
+1934/1932    0.016    0.000    0.489    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_model_construction.py:84(__new__)
+        1    0.000    0.000    0.444    0.444 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/openai/__init__.py:1(<module>)
+        1    0.000    0.000    0.284    0.284 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/openai/types/__init__.py:1(<module>)
+1933/1931    0.002    0.000    0.263    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_model_construction.py:566(set_model_fields)
+1933/1931    0.020    0.000    0.260    0.000 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic/_internal/_fields.py:224(collect_model_fields)
+        5    0.000    0.000    0.232    0.046 /Users/wangchenyu/workspace/AITester/src/agents/base_agent.py:212(__init__)
 
 
 ```
@@ -40,32 +40,32 @@
 ### ErrorClassifier 分类
 
 ```
-         69022 function calls (68945 primitive calls) in 0.012 seconds
+         77891 function calls (77508 primitive calls) in 0.013 seconds
 
    Ordered by: cumulative time
-   List reduced from 180 to 20 due to restriction <20>
+   List reduced from 226 to 20 due to restriction <20>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        5    0.000    0.000    0.012    0.002 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:125(test_error_classifier)
-     2500    0.001    0.000    0.011    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:111(classify)
-     7000    0.002    0.000    0.009    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:142(_matches_patterns)
-    42000    0.006    0.000    0.006    0.000 {method 'search' of 're.Pattern' objects}
-        1    0.000    0.000    0.001    0.001 <frozen importlib._bootstrap>:1360(_find_and_load)
-        1    0.000    0.000    0.001    0.001 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
-        1    0.000    0.000    0.001    0.001 <frozen importlib._bootstrap>:914(_load_unlocked)
-        1    0.000    0.000    0.001    0.001 <frozen importlib._bootstrap_external>:753(exec_module)
-        2    0.000    0.000    0.001    0.001 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
-        1    0.000    0.000    0.001    0.001 {built-in method builtins.exec}
-        1    0.000    0.000    0.001    0.001 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:1(<module>)
-        3    0.000    0.000    0.001    0.000 {built-in method builtins.__build_class__}
-        1    0.000    0.000    0.001    0.001 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:34(ErrorPatterns)
-       27    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/__init__.py:287(compile)
-       27    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/__init__.py:330(_compile)
-       27    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_compiler.py:757(compile)
-     2508    0.000    0.000    0.001    0.000 {method 'join' of 'str' objects}
-       27    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:963(parse)
-       27    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:452(_parse_sub)
-     5000    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:130(<genexpr>)
+        5    0.000    0.000    0.013    0.003 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:125(test_error_classifier)
+     2500    0.001    0.000    0.010    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:188(classify)
+     7000    0.003    0.000    0.008    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:329(_matches_patterns)
+    43000    0.006    0.000    0.006    0.000 {method 'search' of 're.Pattern' objects}
+        1    0.000    0.000    0.003    0.003 <frozen importlib._bootstrap>:1360(_find_and_load)
+        1    0.000    0.000    0.003    0.003 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
+        1    0.000    0.000    0.003    0.003 <frozen importlib._bootstrap>:914(_load_unlocked)
+        1    0.000    0.000    0.003    0.003 <frozen importlib._bootstrap_external>:753(exec_module)
+        2    0.000    0.000    0.003    0.001 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
+      2/1    0.000    0.000    0.003    0.003 {built-in method builtins.exec}
+        1    0.000    0.000    0.003    0.003 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:1(<module>)
+        5    0.000    0.000    0.002    0.000 {built-in method builtins.__build_class__}
+        1    0.000    0.000    0.002    0.002 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:70(ErrorPatterns)
+       38    0.000    0.000    0.002    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/__init__.py:287(compile)
+       38    0.000    0.000    0.002    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/__init__.py:330(_compile)
+       36    0.000    0.000    0.002    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_compiler.py:757(compile)
+       36    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:963(parse)
+    59/36    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:452(_parse_sub)
+    59/36    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:512(_parse)
+     2519    0.000    0.000    0.001    0.000 {method 'join' of 'str' objects}
 
 
 ```
@@ -80,25 +80,25 @@
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
         5    0.001    0.000    0.132    0.026 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:144(test_code_analyzer)
-    78000    0.015    0.000    0.090    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:386(walk)
+    78000    0.015    0.000    0.089    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:386(walk)
       500    0.007    0.000    0.085    0.000 /Users/wangchenyu/workspace/AITester/src/tools/code_analyzer.py:20(parse_function_nodes)
-    77250    0.011    0.000    0.072    0.000 {method 'extend' of 'collections.deque' objects}
-   153750    0.031    0.000    0.061    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:280(iter_child_nodes)
-      250    0.005    0.000    0.045    0.000 /Users/wangchenyu/workspace/AITester/src/tools/code_analyzer.py:92(compute_cyclomatic_complexity)
+    77250    0.011    0.000    0.071    0.000 {method 'extend' of 'collections.deque' objects}
+   153750    0.030    0.000    0.060    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:280(iter_child_nodes)
+      250    0.005    0.000    0.044    0.000 /Users/wangchenyu/workspace/AITester/src/tools/code_analyzer.py:92(compute_cyclomatic_complexity)
       250    0.001    0.000    0.043    0.000 /Users/wangchenyu/workspace/AITester/src/tools/code_analyzer.py:58(extract_function_code)
       750    0.000    0.000    0.022    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:26(parse)
       750    0.022    0.000    0.022    0.000 {built-in method builtins.compile}
-   211500    0.016    0.000    0.021    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:268(iter_fields)
+   211500    0.015    0.000    0.021    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:268(iter_fields)
    350007    0.014    0.000    0.014    0.000 {built-in method builtins.isinstance}
    134264    0.006    0.000    0.006    0.000 {built-in method builtins.getattr}
     77250    0.003    0.000    0.003    0.000 {method 'popleft' of 'collections.deque' objects}
      1500    0.000    0.000    0.001    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py:294(get_docstring)
       500    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/inspect.py:790(cleandoc)
       2/1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1360(_find_and_load)
-      2/1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
       750    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1409(_handle_fromlist)
+      2/1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
       5/3    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
-        2    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:914(_load_unlocked)
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.__import__}
 
 
 ```
@@ -123,14 +123,14 @@
         1    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py:1422(dataclass)
         1    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py:1439(wrap)
         1    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py:986(_process_class)
-       50    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:572(load_dataset)
+       50    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:578(load_dataset)
         1    0.000    0.000    0.000    0.000 /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/dataclasses.py:478(add_fns_to_class)
         1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:826(get_code)
-       55    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:451(add_sample_tasks)
+       55    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:457(add_sample_tasks)
         1    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap_external>:509(_compile_bytecode)
         1    0.000    0.000    0.000    0.000 {built-in method marshal.loads}
         5    0.000    0.000    0.000    0.000 {built-in method builtins.__build_class__}
-       55    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:439(__init__)
+       55    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:445(__init__)
        55    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/dataset_loader.py:96(__init__)
 
 
@@ -139,32 +139,32 @@
 ### Workflow 构建
 
 ```
-         5147267 function calls (5008034 primitive calls) in 0.895 seconds
+         5178288 function calls (5038348 primitive calls) in 0.901 seconds
 
    Ordered by: cumulative time
-   List reduced from 3911 to 20 due to restriction <20>
+   List reduced from 3912 to 20 due to restriction <20>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        5    0.000    0.000    0.907    0.181 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:196(test_workflow_build)
-    606/1    0.001    0.000    0.673    0.673 <frozen importlib._bootstrap>:1360(_find_and_load)
-    586/1    0.001    0.000    0.673    0.673 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
-    552/2    0.001    0.000    0.673    0.336 <frozen importlib._bootstrap>:914(_load_unlocked)
-    528/2    0.000    0.000    0.672    0.336 <frozen importlib._bootstrap_external>:753(exec_module)
-   1603/3    0.001    0.000    0.672    0.224 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
-    646/2    0.012    0.000    0.672    0.336 {built-in method builtins.exec}
-        1    0.000    0.000    0.672    0.672 /Users/wangchenyu/workspace/AITester/src/graph/workflow.py:1(<module>)
-        1    0.000    0.000    0.626    0.626 /Users/wangchenyu/workspace/AITester/src/rag/retriever.py:1(<module>)
-        1    0.000    0.000    0.625    0.625 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/chromadb/__init__.py:1(<module>)
-1320/1292    0.005    0.000    0.455    0.000 {built-in method builtins.__build_class__}
+        5    0.000    0.000    0.913    0.183 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:196(test_workflow_build)
+    607/1    0.001    0.000    0.676    0.676 <frozen importlib._bootstrap>:1360(_find_and_load)
+    587/1    0.001    0.000    0.676    0.676 <frozen importlib._bootstrap>:1308(_find_and_load_unlocked)
+    553/2    0.001    0.000    0.676    0.338 <frozen importlib._bootstrap>:914(_load_unlocked)
+    529/2    0.000    0.000    0.676    0.338 <frozen importlib._bootstrap_external>:753(exec_module)
+   1605/3    0.001    0.000    0.676    0.225 <frozen importlib._bootstrap>:483(_call_with_frames_removed)
+    647/2    0.012    0.000    0.676    0.338 {built-in method builtins.exec}
+        1    0.000    0.000    0.676    0.676 /Users/wangchenyu/workspace/AITester/src/graph/workflow.py:1(<module>)
+        1    0.000    0.000    0.627    0.627 /Users/wangchenyu/workspace/AITester/src/rag/retriever.py:1(<module>)
+        1    0.000    0.000    0.627    0.627 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/chromadb/__init__.py:1(<module>)
+1320/1292    0.005    0.000    0.458    0.000 {built-in method builtins.__build_class__}
    832/49    0.000    0.000    0.278    0.006 {built-in method builtins.__import__}
-        7    0.000    0.000    0.276    0.039 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/main.py:193(__init__)
-        7    0.000    0.000    0.250    0.036 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/main.py:484(_settings_build_values)
-        7    0.006    0.001    0.235    0.034 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/sources/providers/dotenv.py:122(__call__)
-       25    0.000    0.000    0.234    0.009 /Users/wangchenyu/workspace/AITester/src/graph/workflow.py:497(build_workflow)
+        7    0.000    0.000    0.278    0.040 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/main.py:193(__init__)
+        7    0.000    0.000    0.251    0.036 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/main.py:484(_settings_build_values)
+       25    0.000    0.000    0.237    0.009 /Users/wangchenyu/workspace/AITester/src/graph/workflow.py:592(build_workflow)
+        7    0.006    0.001    0.236    0.034 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/pydantic_settings/sources/providers/dotenv.py:122(__call__)
         1    0.000    0.000    0.220    0.220 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/chromadb/api/__init__.py:1(<module>)
-      124    0.000    0.000    0.218    0.002 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/overrides/overrides.py:152(_overrides)
-       97    0.000    0.000    0.200    0.002 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/overrides/overrides.py:112(override)
-       25    0.000    0.000    0.191    0.008 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/graph/state.py:1177(compile)
+       97    0.039    0.000    0.201    0.002 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/overrides/overrides.py:112(override)
+       25    0.000    0.000    0.194    0.008 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/graph/state.py:1177(compile)
+      150    0.001    0.000    0.189    0.001 /Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/graph/state.py:1444(attach_node)
 
 
 ```
@@ -172,17 +172,17 @@
 ### 完整流程（简化）
 
 ```
-         1416 function calls in 0.001 seconds
+         1466 function calls in 0.001 seconds
 
    Ordered by: cumulative time
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
         5    0.000    0.000    0.001    0.000 /Users/wangchenyu/Workspace/AITester/scripts/performance_profile.py:205(test_full_pipeline)
-       50    0.000    0.000    0.001    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:111(classify)
-      150    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:142(_matches_patterns)
-     1000    0.000    0.000    0.000    0.000 {method 'search' of 're.Pattern' objects}
+       50    0.000    0.000    0.001    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:188(classify)
+      150    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:329(_matches_patterns)
+     1050    0.000    0.000    0.000    0.000 {method 'search' of 're.Pattern' objects}
        50    0.000    0.000    0.000    0.000 {method 'join' of 'str' objects}
-      100    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:130(<genexpr>)
+      100    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/error_classifier.py:207(<genexpr>)
         1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
        50    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
         5    0.000    0.000    0.000    0.000 /Users/wangchenyu/workspace/AITester/src/agents/executor.py:40(__init__)
