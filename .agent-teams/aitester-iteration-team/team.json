@@ -184,9 +184,9 @@
       "status": "completed",
       "dependencies": [],
       "createdAt": 1786957436591,
-      "updatedAt": 1786958008939,
+      "updatedAt": 1786958467154,
       "assignee": "test-writer",
-      "output": "已完成任务 t12：集成测试补充。\n\n## 完成内容\n\n### 新增测试文件\n1. **tests/test_integration_e2e.py** - 端到端集成测试 (22 个测试)\n   - TestFullWorkflowIntegration: 完整工作流测试 (4 个)\n   - TestErrorRecovery: 错误恢复场景 (4 个)\n   - TestBoundaryConditions: 边界条件测试 (5 个)\n   - TestPerformanceBenchmarks: 性能基准测试 (3 个)\n   - TestStateManager: 状态管理测试 (3 个)\n   - TestWorkflowConfig: 工作流配置测试 (3 个)\n\n2. **tests/test_executor_improvements.py** - Executor 改进测试 (12 个测试)\n   - 自动导入路径修复\n   - 模块路径搜索策略\n   - 端到端执行测试\n\n3. **tests/test_error_classifier_improvements.py** - 错误分类器改进测试 (19 个测试)\n   - 语法错误检测\n   - 错误上下文提取\n   - 改进的修复策略\n\n4. **tests/test_patch_applier_improvements.py** - 补丁应用改进测试 (18 个测试)\n   - 多函数补丁应用\n   - 错误恢复机制\n\n5. **tests/test_synthetic_dataset_improvements.py** - 合成数据集改进测试 (18 个测试)\n   - 模式多样性测试\n   - 数据集质量评估\n\n### 修复的 Bug\n1. **src/agents/executor.py** - 添加缺失方法：\n   - `_extract_module_name_from_file()`\n   - `_auto_fix_imports()`\n   - `_parse_coverage()`\n   - `_parse_failed_cases()`\n\n2. **src/agents/error_classifier.py** - 修复上下文提取 bug：\n   - traceback 格式错误未设置 `subtype`\n\n3. **src/agents/generator.py** - 修复代码结构 bug：\n   - `_validate_parametrize()` 方法中 SyntaxError 处理后有死代码\n\n### 测试结果\n- 新增测试: 97 个\n- 核心测试套件: 全部通过\n- 总测试数: 587 个\n\n### 验收标准达成\n✅ 所有测试通过\n✅ 核心工作流测试覆盖 (Planner → Generator → Executor → Debugger)\n✅ 边界条件测试覆盖\n✅ 错误恢复场景测试覆盖\n✅ 性能基准测试覆盖"
+      "output": "✅ 已完成。集成测试补充完成，新增97个测试用例，修复多个bug。总测试数587个，核心测试294个全部通过。"
     },
     {
       "id": "t13",
