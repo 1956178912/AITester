@@ -71,6 +71,9 @@ def _retry_with_exponential_backoff(
         try:
             return func()
         except Exception as e:
+            # 非 retryable 异常立即抛出
+            if retryable_exceptions and not isinstance(e, retryable_exceptions):
+                raise
             last_error = e
             if attempt < max_retries:
                 wait_time = base_wait ** attempt
