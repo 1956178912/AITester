@@ -128,6 +128,8 @@ class PlannerAgent(BaseAgent):
         Raises:
             RuntimeError: LLM 调用失败或返回非 JSON 格式时抛出。
         """
+        # 截断超长代码，节省 token
+        target_code = BaseAgent.truncate_code(target_code)
         # 构建查询：包含代码和可选的函数限定
         query = f"请分析以下代码并制定测试计划：\n\n```\n{target_code}\n```"
         if target_function:
