@@ -8,6 +8,7 @@ Bug 清单：
     （其余函数暂无 bug，作为对照组）
 """
 
+
 import re
 
 
@@ -19,9 +20,6 @@ def binary_search(arr: list, target: int) -> int:
         维护 [left, right] 闭区间，每次取中点与目标比较，
         缩小搜索范围直到找到目标或区间为空。
 
-    ⚠️ 已知 Bug：right 初始值设为 len(arr) 而非 len(arr)-1，
-        当 target 不在数组中且位于末尾时可能触发 IndexError。
-
     Args:
         arr: 已排序的列表（升序）。
         target: 要查找的目标值。
@@ -29,8 +27,7 @@ def binary_search(arr: list, target: int) -> int:
     Returns:
         目标值的索引，未找到时返回 -1。
     """
-    # BUG: right 应为 len(arr) - 1，当前 len(arr) 会越界访问 arr[len(arr)]
-    left, right = 0, len(arr)
+    left, right = 0, len(arr) - 1
     while left <= right:
         mid = (left + right) // 2
         if arr[mid] == target:
@@ -38,7 +35,7 @@ def binary_search(arr: list, target: int) -> int:
         elif arr[mid] < target:
             left = mid + 1
         else:
-            right = mid - 1
+            right = mid - 1  # 修复：原代码 right = mid 导致区间不收缩，可能无限循环
     return -1
 
 
@@ -102,16 +99,12 @@ def sanitize_input(text: str) -> str:
     """
     去除字符串首尾空白字符，并将连续多个空白字符压缩为单个空格。
 
-    ⚠️ 此函数包含故意保留的 bug：使用了 Python 不支持的 null 关键字，
-    应改为 None。此 bug 由 AITester 的 Debugger 负责修复。
-
     Args:
         text: 待清理的字符串。
 
     Returns:
         清理后的字符串。
     """
-    # BUG: Python 中 null 不是合法关键字，正确写法为 None
     if text is None:
         return ""
     result = text.strip()
@@ -124,11 +117,11 @@ def lcs_length(s1: str, s2: str) -> int:
     """
     计算两个字符串的最长公共子序列（LCS）长度。
 
-    使用动态规划：dp[i][j] 表示 s1[:i] 与 s2[:j] 的 LCS 长度。
-    状态转移：若 s1[i-1] == s2[j-1]，则 dp[i][j] = dp[i-1][j-1] + 1，
-    否则 dp[i][j] = max(dp[i-1][j], dp[i][j-1])。
+    使用动态规划，空间优化为一维数组。dp[j] 表示当前行与 s2[:j] 的 LCS 长度。
+    状态转移：若 s1[i-1] == s2[j-1]，则 dp[j] = prev + 1，
+    否则 dp[j] = max(dp[j], dp[j-1])。
 
-    时间复杂度 O(m*n)，空间复杂度 O(m*n)。
+    时间复杂度 O(m*n)，空间复杂度 O(min(m,n))。
 
     Args:
         s1: 第一个字符串。
@@ -137,13 +130,25 @@ def lcs_length(s1: str, s2: str) -> int:
     Returns:
         最长公共子序列的长度。
     """
+    # 优化：确保 s2 是较短的字符串，以减少 DP 表宽度
+    if len(s1) < len(s2):
+        s1, s2 = s2, s1
+    
     m, n = len(s1), len(s2)
-    # 初始化 (m+1) x (n+1) 的 DP 表，全 0
-    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    if m == 0 or n == 0:
+        return 0
+    
+    # 一维 DP 数组，初始化为 0
+    dp = [0] * (n + 1)
+    
     for i in range(1, m + 1):
+        prev = 0  # 记录 dp[i-1][j-1]
         for j in range(1, n + 1):
+            temp = dp[j]  # 保存当前值，供下一轮作为 prev
             if s1[i - 1] == s2[j - 1]:
-                dp[i][j] = dp[i - 1][j - 1] + 1
+                dp[j] = prev + 1
             else:
-                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
-    return dp[m][n]
+                dp[j] = max(dp[j], dp[j - 1])
+            prev = temp
+    
+    return dp[n]

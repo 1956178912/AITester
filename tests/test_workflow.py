@@ -12,13 +12,17 @@ import pytest
 from unittest.mock import patch, MagicMock
 from src.graph.workflow import (
     _should_debug,
+    _should_skip_debugger,
     _create_workflow,
     build_workflow,
+    get_workflow_stats,
     _planner_node,
     _generator_node,
     _executor_node,
     _debugger_node,
     _patch_applier_node,
+    _validate_planner_output,
+    _get_default_test_plan,
 )
 
 
@@ -378,3 +382,158 @@ class TestPatchApplierNode:
         }
         result = _patch_applier_node(state)
         assert result["iteration"] == 1
+
+
+# ─── TestShouldSkipDebugger：智能跳过优化 ─────────────────────────────────────
+class TestShouldSkipDebugger:
+    """测试智能跳过 Debugger 的优化逻辑。"""
+
+    def test_skip_when_consecutive_failures(self):
+        """连续修复失败时应跳过 Debugger。"""
+        state = {
+            "test_passed": False,
+            "iteration": 2,
+            "repair_history": [
+                {"iteration": 1, "patch_applied": False},
+                {"iteration": 2, "patch_applied": False},
+            ],
+        }
+        with patch("src.graph.workflow.ENABLE_DEBUGGER", True):
+            assert _should_skip_debugger(state) is True
+
+    def test_no_skip_when_patch_applied(self):
+        """有补丁成功应用时不应跳过。"""
+        state = {
+            "test_passed": False,
+            "iteration": 2,
+            "repair_history": [
+                {"iteration": 1, "patch_applied": True},
+                {"iteration": 2, "patch_applied": False},
+            ],
+        }
+        with patch("src.graph.workflow.ENABLE_DEBUGGER", True):
+            assert _should_skip_debugger(state) is False
+
+    def test_no_skip_when_history_too_short(self):
+        """历史记录不足时不应跳过。"""
+        state = {
+            "test_passed": False,
+            "iteration": 1,
+            "repair_history": [
+                {"iteration": 1, "patch_applied": False},
+            ],
+        }
+        with patch("src.graph.workflow.ENABLE_DEBUGGER", True):
+            assert _should_skip_debugger(state) is False
+
+    def test_no_skip_when_debugger_disabled(self):
+        """Debugger 禁用时不检查跳过逻辑。"""
+        state = {
+            "test_passed": False,
+            "iteration": 2,
+            "repair_history": [
+                {"iteration": 1, "patch_applied": False},
+                {"iteration": 2, "patch_applied": False},
+            ],
+        }
+        with patch("src.graph.workflow.ENABLE_DEBUGGER", False):
+            assert _should_skip_debugger(state) is False
+
+
+# ─── TestValidatePlannerOutput：Planner 输出验证 ───────────────────────────────
+class TestValidatePlannerOutput:
+    """测试 Planner 输出验证逻辑。"""
+
+    def test_valid_output(self):
+        """有效输出应返回 True。"""
+        valid_plan = {
+            "function_name": "divide",
+            "logic_analysis": {
+                "input_domain": "整数",
+                "output_domain": "浮点数",
+                "preconditions": [],
+                "postconditions": [],
+                "edge_cases": [],
+            },
+        }
+        assert _validate_planner_output(valid_plan) is True
+
+    def test_missing_function_name(self):
+        """缺少 function_name 应返回 False。"""
+        invalid_plan = {
+            "logic_analysis": {"input_domain": "", "output_domain": "", "preconditions": [], "postconditions": [], "edge_cases": []}
+        }
+        assert _validate_planner_output(invalid_plan) is False
+
+    def test_missing_logic_analysis(self):
+        """缺少 logic_analysis 应返回 False。"""
+        invalid_plan = {"function_name": "foo"}
+        assert _validate_planner_output(invalid_plan) is False
+
+    def test_non_dict_input(self):
+        """非字典输入应返回 False。"""
+        assert _validate_planner_output("invalid") is False
+        assert _validate_planner_output(None) is False
+
+    def test_invalid_logic_analysis_type(self):
+        """logic_analysis 非字典类型应返回 False。"""
+        invalid_plan = {
+            "function_name": "foo",
+            "logic_analysis": "not a dict",
+        }
+        assert _validate_planner_output(invalid_plan) is False
+
+
+# ─── TestGetDefaultTestPlan：默认计划生成 ──────────────────────────────────────
+class TestGetDefaultTestPlan:
+    """测试默认测试计划生成。"""
+
+    def test_with_function_name(self):
+        """指定函数名时应正确设置。"""
+        plan = _get_default_test_plan("divide")
+        assert plan["function_name"] == "divide"
+        assert "logic_analysis" in plan
+
+    def test_without_function_name(self):
+        """未指定函数名时默认 'unknown'。"""
+        plan = _get_default_test_plan(None)
+        assert plan["function_name"] == "unknown"
+
+
+# ─── TestGetWorkflowStats：工作流统计 ──────────────────────────────────────────
+class TestGetWorkflowStats:
+    """测试工作流统计信息获取。"""
+
+    def test_returns_stats_dict(self):
+        """应返回包含 llm_cache 和 workflow_config 的字典。"""
+        stats = get_workflow_stats()
+        assert isinstance(stats, dict)
+        assert "llm_cache" in stats
+        assert "workflow_config" in stats
+
+    def test_workflow_config_has_expected_keys(self):
+        """workflow_config 应包含所有配置项。"""
+        stats = get_workflow_stats()
+        config = stats["workflow_config"]
+        assert "ENABLE_PLANNER" in config
+        assert "ENABLE_DEBUGGER" in config
+        assert "ENABLE_RAG" in config
+        assert "MAX_ITERATIONS" in config
+
+
+# ─── TestShouldDebugWithOptimization：路由优化测试 ─────────────────────────────
+class TestShouldDebugWithOptimization:
+    """测试带优化的 _should_debug 路由逻辑。"""
+
+    def test_skip_optimization_triggers_done(self):
+        """智能跳过时应返回 done。"""
+        state = {
+            "test_passed": False,
+            "iteration": 2,
+            "repair_history": [
+                {"iteration": 1, "patch_applied": False},
+                {"iteration": 2, "patch_applied": False},
+            ],
+        }
+        with patch("src.graph.workflow.ENABLE_DEBUGGER", True):
+            assert _should_debug(state) == "done"
