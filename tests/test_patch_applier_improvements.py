@@ -114,12 +114,15 @@ def add(a, b):
 
     def test_safe_apply_syntax_error_rolls_back(self):
         """测试语法错误时回滚到原代码。"""
+        from src.tools.patch_applier import safe_apply_patch
         original = "def foo(): return 1\n"
         # 无效的 Python 代码作为补丁
         patch = "def foo(): return \n    invalid syntax"
-        new_code, success = apply_patch_to_code(original, patch)
-        # 由于补丁包含语法错误，应保持原代码
-        assert success is False or "invalid syntax" not in new_code
+        # 使用 safe_apply_patch 进行测试，它会验证语法并回滚
+        new_code, success = safe_apply_patch(original, patch)
+        # 由于补丁包含语法错误，应回滚到原代码
+        assert success is False
+        assert new_code == original
 
     def test_safe_apply_empty_patch(self):
         """测试空补丁时返回原代码。"""
@@ -231,12 +234,17 @@ class TestGenerateDiff:
 
     def test_generate_diff_basic(self):
         """测试基本的差异生成。"""
-        original = "line1\nline2\nline3\n"
-        patch = "line1\nline2_modified\nline3\n"
-        # 这个测试验证补丁能被正确提取和应用
-        new_code, success = apply_patch_to_code(original, patch)
+        from src.tools.patch_applier import generate_diff
+        original = "def foo():\n    return 1\n"
+        patch_code = "def foo():\n    return 2\n"
+        # 先应用补丁得到新代码
+        new_code, success = apply_patch_to_code(original, patch_code)
         assert success is True
-        assert "line2_modified" in new_code
+        assert "return 2" in new_code
+        # 然后生成 diff
+        diff = generate_diff(original, new_code)
+        assert "return 1" in diff or "-return 1" in diff
+        assert "return 2" in diff or "+return 2" in diff
 
     def test_generate_diff_empty(self):
         """测试空补丁的差异。"""
