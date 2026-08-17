@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import GENERATOR_SYSTEM_PROMPT
 from src.graph.llm_cache import cached_llm_call, get_cache_stats
+from src.exceptions import SyntaxParseError
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -154,7 +155,13 @@ class GeneratorAgent(BaseAgent):
             tree = ast.parse(code)
         except SyntaxError as e:
             # 语法错误说明 LLM 输出了非法代码，需要重试
-            logger.warning("测试代码语法错误：%s → 需要重试", e)
+            error_msg = f"测试代码语法错误: {e.msg}"
+            context = {
+                "lineno": e.lineno or 0,
+                "offset": e.offset or 0,
+                "text": e.text[:100] if e.text else "",
+            }
+            logger.warning("%s → 需要重试", error_msg)
             return False
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):

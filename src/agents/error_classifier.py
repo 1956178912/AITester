@@ -67,98 +67,51 @@ class ErrorContext:
     subtype: Optional[SyntaxSubtype] = None
 
 
-class ErrorPatterns:
-    """
-    错误分类正则表达式常量类。
-
-    将所有预编译的正则表达式统一存储在此类中，便于维护和扩展。
-    每个模式都已预编译为 re.Pattern 对象，避免重复编译开销。
-    """
-
-    # ─── Syntax 子类型：Import Error 模式 ─────────────────────────────────────
-    IMPORT_ERROR = [
-        # ModuleNotFoundError: No module named 'xxx'
-        re.compile(
-            r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
-            re.IGNORECASE
-        ),
-        # ImportError: cannot import name 'xxx' from 'yyy'
-        re.compile(
-            r"ImportError:\s*cannot import name\s+'(\w+)'(?:\s*from\s+'(\w+)')?",
-            re.IGNORECASE
-        ),
-        # ImportError: cannot import name 'xxx'
-        re.compile(
-            r"ImportError:\s*cannot import name\s+'(\w+)'",
-            re.IGNORECASE
-        ),
-        # ModuleNotFoundError: No module named 'xxx' (带路径)
-        re.compile(
-            r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
-            re.IGNORECASE
-        ),
-    ]
-
-    # ─── Syntax 子类型：Syntax Error 模式 ─────────────────────────────────────
-    SYNTAX_ERROR = [
-        # SyntaxError: invalid syntax
-        re.compile(r"SyntaxError.*?(\w+\.py):?(\d+)?:?(\d+)?:?\s*(.+)"),
-        # IndentationError: expected an indented block
-        re.compile(r"IndentationError.*?(\w+\.py):?(\d+)?:?(\d+)?:?\s*(.+)"),
-        # TabError: inconsistent use of tabs and spaces
-        re.compile(r"TabError.*?(\w+\.py):?(\d+)?:?(\d+)?:?\s*(.+)"),
-        # IncompleteInput
-        re.compile(r"IncompleteInput.*?(\w+\.py):?(\d+)?:?(\d+)?:?\s*(.+)"),
-        # pytest 格式：E   path/file.py:line:col: syntax error
-        re.compile(r"E\s*\S+\.py:(\d+):(\d+):\s*syntax error", re.IGNORECASE),
-        # 通用语法错误
-        re.compile(r"syntax error", re.IGNORECASE),
-    ]
-
-    # ─── Syntax 通用检测模式（用于初步分类） ───────────────────────────────────
-    SYNTAX_GENERIC = [
-        re.compile(r"SyntaxError", re.IGNORECASE),
-        re.compile(r"ImportError", re.IGNORECASE),
-        re.compile(r"ModuleNotFoundError", re.IGNORECASE),
-        re.compile(r"IndentationError", re.IGNORECASE),
-        re.compile(r"TabError", re.IGNORECASE),
-        re.compile(r"IncompleteInput", re.IGNORECASE),
-        re.compile(r"cannot import name", re.IGNORECASE),
-        re.compile(r"No module named", re.IGNORECASE),
-    ]
-
-    # ─── Runtime 模式 ──────────────────────────────────────────────────────────
-    RUNTIME = [
-        re.compile(r"ZeroDivisionError", re.IGNORECASE),
-        re.compile(r"TypeError", re.IGNORECASE),
-        re.compile(r"ValueError", re.IGNORECASE),
-        re.compile(r"KeyError", re.IGNORECASE),
-        re.compile(r"IndexError", re.IGNORECASE),
-        re.compile(r"AttributeError", re.IGNORECASE),
-        re.compile(r"RecursionError", re.IGNORECASE),
-        re.compile(r"NameError", re.IGNORECASE),
-        # TypeError 的常见子类型描述
-        re.compile(r"TypeError.*not support", re.IGNORECASE),
-        re.compile(r"TypeError.*takes\s+\d+\s+positional", re.IGNORECASE),
-        # NameError 的子类型
-        re.compile(r"NameError.*name\s+'\w+' is not defined", re.IGNORECASE),
-    ]
-
-    # ─── Assertion 模式 ────────────────────────────────────────────────────────
-    ASSERTION = [
-        re.compile(r"AssertionError", re.IGNORECASE),
-        re.compile(r"assert\s+", re.IGNORECASE),
-        re.compile(r"Expected.*but got", re.IGNORECASE),
-        re.compile(r"assert\s+\w+\s*==", re.IGNORECASE),
-        re.compile(r"Expected exception", re.IGNORECASE),
-    ]
-
-    # ─── Timeout 模式 ──────────────────────────────────────────────────────────
-    TIMEOUT = [
-        re.compile(r"timeout", re.IGNORECASE),
-        re.compile(r"TimedOut", re.IGNORECASE),
-        re.compile(r"Test ran for longer than", re.IGNORECASE),
-    ]
+# ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
+# Import Error 检测模式
+_RE_MODULE_NOT_FOUND = re.compile(
+    r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
+    re.IGNORECASE
+)
+_RE_IMPORT_ERROR = re.compile(
+    r"ImportError:\s*cannot import name\s+'(\w+)'",
+    re.IGNORECASE
+)
+# Syntax Error 检测模式
+_RE_SYNTAX_ERROR_FILE_LINE = re.compile(
+    r"(\w+\.py):(\d+):(\d+):\s*(.+)"
+)
+_RE_PYTEST_SYNTAX = re.compile(
+    r"E\s*\S+\.py:(\d+):(\d+)",
+    re.IGNORECASE
+)
+_RE_TRACEBACK = re.compile(
+    r'File\s+"([^"]+)",\s*line\s+(\d+)'
+)
+# Runtime Error 检测模式
+_RE_RUNTIME_ERRORS = [
+    re.compile(r"ZeroDivisionError", re.IGNORECASE),
+    re.compile(r"TypeError", re.IGNORECASE),
+    re.compile(r"ValueError", re.IGNORECASE),
+    re.compile(r"KeyError", re.IGNORECASE),
+    re.compile(r"IndexError", re.IGNORECASE),
+    re.compile(r"AttributeError", re.IGNORECASE),
+    re.compile(r"RecursionError", re.IGNORECASE),
+    re.compile(r"NameError", re.IGNORECASE),
+]
+# Assertion Error 检测模式
+_RE_ASSERTION_ERRORS = [
+    re.compile(r"AssertionError", re.IGNORECASE),
+    re.compile(r"assert\s+", re.IGNORECASE),
+    re.compile(r"Expected.*but got", re.IGNORECASE),
+]
+# Timeout Error 检测模式
+_RE_TIMEOUT_ERRORS = [
+    re.compile(r"timeout", re.IGNORECASE),
+    re.compile(r"TimedOut", re.IGNORECASE),
+    re.compile(r"Test ran for longer than", re.IGNORECASE),
+]
+# ───────────────────────────────────────────────────────────────────────────
 
 
 class ErrorClassifier:
@@ -176,41 +129,15 @@ class ErrorClassifier:
     5. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
-    # 错误分类优先级映射（从高到低）
-    _PRIORITY_ORDER = [
-        (ErrorCategory.SYNTAX, ErrorPatterns.SYNTAX_GENERIC),
-        (ErrorCategory.RUNTIME, ErrorPatterns.RUNTIME),
-        (ErrorCategory.ASSERTION, ErrorPatterns.ASSERTION),
-        (ErrorCategory.TIMEOUT, ErrorPatterns.TIMEOUT),
-    ]
-
-    @staticmethod
-    def _combine_error_messages(
-        test_output: str,
-        failed_cases: List[dict],
-        max_cases: int = 3
-    ) -> str:
-        """
-        合并测试输出和失败用例的错误信息。
-
-        Args:
-            test_output: pytest 完整输出文本。
-            failed_cases: 失败用例列表。
-            max_cases: 最多合并的失败用例数，默认 3。
-
-        Returns:
-            合并后的错误信息字符串。
-        """
-        return test_output + "\n" + "\n".join(
-            case.get("error", "") for case in failed_cases[:max_cases]
-        )
-
     def classify(self, test_output: str, failed_cases: List[dict]) -> ErrorCategory:
         """
         根据测试输出和失败用例分类错误类型。
 
         分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
         规则匹配优先于 LLM 兜底分类。
+
+        合并策略：将 test_output 和最多前 3 个 failed_cases 的 error 信息拼接后统一匹配，
+        确保能从失败用例的详细错误信息中识别出错误类型。
 
         Args:
             test_output: pytest 完整输出文本。
@@ -219,14 +146,27 @@ class ErrorClassifier:
         Returns:
             最匹配的 ErrorCategory 枚举值。
         """
-        combined = self._combine_error_messages(test_output, failed_cases)
+        # 合并 test_output 和 failed_cases 的 error 信息用于分类
+        # 最多取前 3 个失败用例的错误信息，避免过长
+        combined = test_output + "\n" + "\n".join(
+            case.get("error", "") for case in failed_cases[:3]
+        )
 
         # 按优先级顺序检查各类错误
-        for category, patterns in self._PRIORITY_ORDER:
-            if self._matches_patterns(combined, patterns):
-                return category
-
-        # 默认返回 UNKNOWN，由 Debugger 自行判断
+        # 1. 检查 Syntax 错误
+        if self._is_syntax_error(combined):
+            return ErrorCategory.SYNTAX
+        # 2. 检查 Runtime 错误
+        if self._is_runtime_error(combined):
+            return ErrorCategory.RUNTIME
+        # 3. 检查 Assertion 错误
+        if self._is_assertion_error(combined):
+            return ErrorCategory.ASSERTION
+        # 4. 检查 Timeout 错误
+        if self._is_timeout_error(combined):
+            return ErrorCategory.TIMEOUT
+        
+        # 默认返回 UNKNOWN
         return ErrorCategory.UNKNOWN
 
     def classify_with_context(
@@ -250,76 +190,6 @@ class ErrorClassifier:
         context = self.extract_error_context(test_output, failed_cases)
         return category, context
 
-    @staticmethod
-    def _try_extract_module_name(combined: str) -> Optional[Tuple[str, SyntaxSubtype]]:
-        """
-        尝试从错误信息中提取模块名称。
-
-        Args:
-            combined: 合并后的错误信息。
-
-        Returns:
-            (模块名, 子类型) 元组，如果未匹配则返回 None。
-        """
-        # ModuleNotFoundError: No module named 'xxx'
-        module_match = re.search(
-            r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
-            combined, re.IGNORECASE
-        )
-        if module_match:
-            return module_match.group(1), SyntaxSubtype.IMPORT_ERROR
-
-        # ImportError: cannot import name 'xxx'
-        import_match = re.search(
-            r"ImportError:\s*cannot import name\s+'(\w+)'",
-            combined, re.IGNORECASE
-        )
-        if import_match:
-            return import_match.group(1), SyntaxSubtype.IMPORT_ERROR
-
-        return None
-
-    @staticmethod
-    def _try_extract_file_location(
-        combined: str
-    ) -> Optional[Tuple[Optional[str], Optional[int], Optional[int]]]:
-        """
-        尝试从错误信息中提取文件位置（文件名、行号、列号）。
-
-        支持的格式：
-        - filename.py:line:col: message
-        - filename.py:line: message
-        - E path/file.py:line:col
-        - File "path", line N
-
-        Args:
-            combined: 合并后的错误信息。
-
-        Returns:
-            (filename, line, column) 元组，未找到则返回 None。
-        """
-        # 格式：filename.py:line:col: message
-        match = re.search(r"(\w+\.py):(\d+):(\d+):\s*(.+)", combined)
-        if match:
-            return match.group(1), int(match.group(2)), int(match.group(3))
-
-        # 格式：filename.py:line: message
-        match = re.search(r"(\w+\.py):(\d+):\s*(.+)", combined)
-        if match:
-            return match.group(1), int(match.group(2)), None
-
-        # pytest 格式：E   path/file.py:line:col
-        match = re.search(r"E\s*\S+\.py:(\d+):(\d+)", combined)
-        if match:
-            return None, int(match.group(1)), int(match.group(2))
-
-        # traceback 格式：File "path", line N
-        match = re.search(r"File\s+\"([^\"]+)\",\s*line\s+(\d+)", combined)
-        if match:
-            return match.group(1), int(match.group(2)), None
-
-        return None
-
     def extract_error_context(
         self, test_output: str, failed_cases: List[dict]
     ) -> ErrorContext:
@@ -336,56 +206,86 @@ class ErrorClassifier:
             ErrorContext 对象，包含提取的上下文信息。
         """
         # 合并所有错误信息
-        combined = self._combine_error_messages(test_output, failed_cases, max_cases=None)
+        combined = test_output + "\n" + "\n".join(
+            case.get("error", "") for case in failed_cases
+        )
 
         context = ErrorContext(error_message=combined[:500])  # 限制长度
 
-        # 尝试提取模块名称
-        module_result = self._try_extract_module_name(combined)
-        if module_result:
-            context.module_name, context.subtype = module_result
+        # 尝试提取模块名称（ImportError/ModuleNotFoundError）
+        module_match = _RE_MODULE_NOT_FOUND.search(combined)
+        if module_match:
+            context.module_name = module_match.group(1)
+            context.subtype = SyntaxSubtype.IMPORT_ERROR
             return context
 
-        # 尝试提取文件位置
-        location_result = self._try_extract_file_location(combined)
-        if location_result:
-            filename, line, column = location_result
-            if filename:
-                context.filename = filename
-            if line is not None:
-                context.line = line
-            if column is not None:
-                context.column = column
+        import_name_match = _RE_IMPORT_ERROR.search(combined)
+        if import_name_match:
+            context.module_name = import_name_match.group(1)
+            context.subtype = SyntaxSubtype.IMPORT_ERROR
+            return context
+
+        # 尝试提取文件路径、行号、列号（SyntaxError/IndentationError 等）
+        file_line_match = _RE_SYNTAX_ERROR_FILE_LINE.search(combined)
+        if file_line_match:
+            context.filename = file_line_match.group(1)
+            context.line = int(file_line_match.group(2))
+            context.column = int(file_line_match.group(3))
+            context.subtype = SyntaxSubtype.SYNTAX_ERROR
+            return context
+
+        # pytest 格式：E   path/file.py:line:col
+        pytest_match = _RE_PYTEST_SYNTAX.search(combined)
+        if pytest_match:
+            context.line = int(pytest_match.group(1))
+            context.column = int(pytest_match.group(2))
+            context.subtype = SyntaxSubtype.SYNTAX_ERROR
+            return context
+
+        # 尝试从 traceback 中提取文件名
+        traceback_match = _RE_TRACEBACK.search(combined)
+        if traceback_match:
+            context.filename = traceback_match.group(1)
+            context.line = int(traceback_match.group(2))
             context.subtype = SyntaxSubtype.SYNTAX_ERROR
             return context
 
         return context
 
     @staticmethod
-    def _matches_patterns(text: str, patterns: list) -> bool:
-        """
-        在文本中逐一尝试预编译的正则模式匹配。
+    def _is_syntax_error(text: str) -> bool:
+        """检查是否为 Syntax 错误（导入错误或语法错误）。"""
+        # 检查导入错误
+        if _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text):
+            return True
+        # 检查语法错误关键词
+        syntax_keywords = ['SyntaxError', 'ImportError', 'ModuleNotFoundError', 
+                          'IndentationError', 'TabError', 'IncompleteInput']
+        return any(kw in text for kw in syntax_keywords)
 
-        Args:
-            text: 待匹配的文本。
-            patterns: 已预编译的 re.Pattern 对象列表。
+    @staticmethod
+    def _is_runtime_error(text: str) -> bool:
+        """检查是否为 Runtime 错误。"""
+        return any(pattern.search(text) for pattern in _RE_RUNTIME_ERRORS)
 
-        Returns:
-            存在任意匹配时返回 True。
-        """
-        for pattern in patterns:
-            if pattern.search(text):
-                return True
-        return False
+    @staticmethod
+    def _is_assertion_error(text: str) -> bool:
+        """检查是否为 Assertion 错误。"""
+        return any(pattern.search(text) for pattern in _RE_ASSERTION_ERRORS)
+
+    @staticmethod
+    def _is_timeout_error(text: str) -> bool:
+        """检查是否为 Timeout 错误。"""
+        return any(pattern.search(text) for pattern in _RE_TIMEOUT_ERRORS)
 
 
-def get_fix_strategy(category: ErrorCategory, context: Optional[ErrorContext] = None) -> str:
+def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> str:
     """
     根据错误类型和上下文返回推荐修复策略描述。
 
     不同错误类型需要不同的修复策略：
     - SYNTAX：代码无法编译，需重写整个文件
-    - RUNTIME：需分析异常栈，修复 bug 所在函数
+    - RUNTIME：需分析异常栈，定位 bug 所在函数
     - ASSERTION：需判断是代码错还是测试预期值错
     - TIMEOUT：需添加循环/递归终止条件
     - UNKNOWN：通用分析，由 LLM 自行判断

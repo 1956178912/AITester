@@ -17,6 +17,15 @@ from langchain_openai import ChatOpenAI
 import threading
 from config import LLM_CONFIGS, TEMPERATURE, LLM_TIMEOUT
 
+from src.exceptions import (
+    APIError,
+    RateLimitError,
+    AuthenticationError,
+    JSONParseError,
+    AITesterError,
+    retry_with_backoff,
+)
+
 logger = logging.getLogger(__name__)
 
 # 线程局部存储：用于在并发场景下为每个线程覆盖默认 LLM 配置
