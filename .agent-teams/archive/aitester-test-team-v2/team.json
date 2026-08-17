@@ -1,0 +1,149 @@
+{
+  "name": "aitester-test-team-v2",
+  "id": "aitester-test-team-v2",
+  "description": "AITester 测试团队：修复 dataset_loader Bug 并补充测试，目标覆盖率 80%+",
+  "captainSessionId": "session-29613ce4-5724-4691-9f04-835b77db2446",
+  "createdAt": 1786883310662,
+  "members": [
+    {
+      "id": "956d5d5a-7b02-4b84-bca9-f6b1a77845b5",
+      "name": "bug-fixer-1",
+      "role": "Bug 修复工程师 - dataset_loader",
+      "joinedAt": 1786883310667,
+      "status": "idle"
+    },
+    {
+      "id": "f135e680-7d3a-4e1b-8c30-2deedbb1b9da",
+      "name": "test-writer-1",
+      "role": "测试编写工程师 - SWE-bench",
+      "joinedAt": 1786883310677,
+      "status": "idle"
+    },
+    {
+      "id": "9b8a6d0f-52bb-4593-84c0-d2bba66a6352",
+      "name": "test-writer-2",
+      "role": "测试编写工程师 - Defects4J",
+      "joinedAt": 1786883310693,
+      "status": "idle"
+    },
+    {
+      "id": "20130335-a33c-4a46-9d57-6b514165b1a2",
+      "name": "test-writer-3",
+      "role": "测试编写工程师 - base_agent",
+      "joinedAt": 1786883310713,
+      "status": "idle"
+    },
+    {
+      "id": "bd9bdc62-f092-4da8-b524-8c106d1cca0c",
+      "name": "coverage-analyzer",
+      "role": "覆盖率分析师",
+      "joinedAt": 1786883310778,
+      "status": "idle"
+    },
+    {
+      "id": "de3a9e66-ae69-4bc2-8ca1-e37182106809",
+      "name": "integration-tester-1",
+      "role": "集成测试工程师 - workflow",
+      "joinedAt": 1786883310811,
+      "status": "idle"
+    },
+    {
+      "id": "bbf782aa-2b58-49af-ac8f-9c06350e70c4",
+      "name": "integration-tester-2",
+      "role": "集成测试工程师 - agents",
+      "joinedAt": 1786883310873,
+      "status": "idle"
+    },
+    {
+      "id": "ce95660b-7e0b-41c7-a999-11bab20834da",
+      "name": "qa-engineer-1",
+      "role": "QA 工程师 - 回归测试",
+      "joinedAt": 1786883310900,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "修复 dataset_loader Bug",
+      "description": "修复 dataset_loader.py 中的 Bug：1) _load_raw_data() 未清空 _tasks 导致数据累积 2) 确保所有子类正确实现 3) 运行测试确认修复",
+      "status": "claimed",
+      "assignee": "bug-fixer-1",
+      "dependencies": [],
+      "createdAt": 1786883337859,
+      "updatedAt": 1786883337900
+    },
+    {
+      "id": "t2",
+      "subject": "SWE-bench 测试补充",
+      "description": "为 SWEBenchDataset 补充测试：1) 修复现有失败测试 2) 添加边界条件测试 3) 确保覆盖率提升",
+      "status": "in_progress",
+      "assignee": "test-writer-1",
+      "dependencies": [],
+      "createdAt": 1786883337865,
+      "updatedAt": 1786883402625
+    },
+    {
+      "id": "t3",
+      "subject": "Defects4J 测试补充",
+      "description": "为 Defects4JPYDataset 补充测试：1) 修复现有失败测试 2) 添加边界条件测试 3) 确保覆盖率提升",
+      "status": "claimed",
+      "assignee": "test-writer-2",
+      "dependencies": [],
+      "createdAt": 1786883337870,
+      "updatedAt": 1786883337909
+    },
+    {
+      "id": "t4",
+      "subject": "base_agent 测试补充",
+      "description": "为 base_agent.py 补充测试：1) 测试 zai SDK 路径 2) 测试 LLM_TIMEOUT 配置 3) 测试重试逻辑",
+      "status": "claimed",
+      "assignee": "test-writer-3",
+      "dependencies": [],
+      "createdAt": 1786883337875,
+      "updatedAt": 1786883337914
+    },
+    {
+      "id": "t5",
+      "subject": "覆盖率分析",
+      "description": "分析覆盖率报告，识别未覆盖代码，生成覆盖率提升建议报告",
+      "status": "in_progress",
+      "assignee": "coverage-analyzer",
+      "dependencies": [],
+      "createdAt": 1786883337880,
+      "updatedAt": 1786883403509
+    },
+    {
+      "id": "t6",
+      "subject": "Workflow 集成测试",
+      "description": "执行 workflow 集成测试，确保各节点正常工作",
+      "status": "claimed",
+      "assignee": "integration-tester-1",
+      "dependencies": [],
+      "createdAt": 1786883337885,
+      "updatedAt": 1786883337924
+    },
+    {
+      "id": "t7",
+      "subject": "Agents 集成测试",
+      "description": "执行 agents 层集成测试，确保各 Agent 协同工作正常",
+      "status": "in_progress",
+      "assignee": "integration-tester-2",
+      "dependencies": [],
+      "createdAt": 1786883337890,
+      "updatedAt": 1786883383158,
+      "output": "Claimed task t7. Starting integration test work for agents layer."
+    },
+    {
+      "id": "t8",
+      "subject": "回归测试",
+      "description": "执行回归测试，确保所有改动无回归问题",
+      "status": "in_progress",
+      "assignee": "qa-engineer-1",
+      "dependencies": [],
+      "createdAt": 1786883337895,
+      "updatedAt": 1786883380909
+    }
+  ],
+  "taskSeq": 8
+}

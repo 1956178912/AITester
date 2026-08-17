@@ -227,11 +227,27 @@ class ExecutorAgent:
         return list(matched_dirs)
 
     @staticmethod
+    def _extract_module_name_from_file(target_file: str) -> str:
+        """
+        从文件路径提取模块名（不含扩展名）。
+
+        Args:
+            target_file: 被测代码文件路径。
+
+        Returns:
+            模块名称（如 'calculator' 从 'examples/calculator.py'）。
+        """
+        return os.path.splitext(os.path.basename(target_file))[0]
+
+    @staticmethod
     def _auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str:
         """
         自动修复模块导入路径（P0 改进）
 
         分析测试代码中的 import 语句，动态添加 sys.path，解决 ModuleNotFoundError。
+        支持两种场景：
+        1. 模块名与文件名匹配：添加对应的目录到 sys.path
+        2. 模块名与文件名不匹配：替换导入语句中的模块名为实际文件名
 
         Args:
             test_code: 原始测试代码。
@@ -244,8 +260,27 @@ class ExecutorAgent:
         import re
         from pathlib import Path
 
-        # 提取所有 import 语句
+        # 提取所有 import 语句（排除标准库和相对导入）
         imports = []
+        # 已知的 Python 标准库模块列表（常见模块）
+        standard_libraries = {
+            'os', 'sys', 're', 'math', 'json', 'datetime', 'collections',
+            'itertools', 'functools', 'pathlib', 'typing', 'abc', 'copy',
+            'unittest', 'pytest', 'tempfile', 'subprocess', 'logging',
+            'argparse', 'dataclasses', 'enum', 'io', 'string', 'textwrap',
+            'struct', 'codecs', 'unicodedata', 'difflib', 'pprint',
+            'reprlib', 'numbers', 'cmath', 'decimal', 'fractions',
+            'random', 'statistics', 'array', 'bisect', 'heapq', 'queue',
+            'types', 'contextlib', 'operator', 'pickle', 'shelve',
+            'dbm', 'sqlite3', 'zipfile', 'tarfile', 'gzip', 'bz2',
+            'lzma', 'zipimport', 'concurrent', 'multiprocessing',
+            'threading', 'signal', 'mmap', 'ctypes', 'select',
+            'socket', 'ssl', 'urllib', 'http', 'email', 'html',
+            'xml', 'ipaddress', 'webbrowser', 'cgi', 'cgitb',
+            'wsgiref', 'venv', 'shutil', 'diskcache', 'glob',
+            'fnmatch', 'stat', 'filecmp', 'tempfile', 'secrets',
+        }
+
         pattern1 = r'from\s+([\w.]+)\s+import'
         pattern2 = r'^import\s+([\w.]+)'
 
@@ -254,35 +289,82 @@ class ExecutorAgent:
             match1 = re.match(pattern1, line)
             match2 = re.match(pattern2, line)
             if match1:
-                imports.append(match1.group(1))
+                module_name = match1.group(1)
+                # 只记录非标准库且非相对导入的模块
+                top_level = module_name.split('.')[0]
+                if not module_name.startswith('.') and top_level not in standard_libraries:
+                    imports.append(module_name)
             elif match2:
-                imports.append(match2.group(1))
+                module_name = match2.group(1)
+                # 只记录非标准库且非相对导入的模块
+                top_level = module_name.split('.')[0]
+                if not module_name.startswith('.') and top_level not in standard_libraries:
+                    imports.append(module_name)
 
         if not imports:
             return test_code
 
-        # 查找模块文件路径
+        # 获取被测文件的实际模块名
+        actual_module_name = ExecutorAgent._extract_module_name_from_file(target_file)
         root_path = Path(project_root)
         module_dirs = set()
+        needs_replacement = False
+
         # 限制 rglob 搜索深度，避免大型项目遍历过慢（默认最多 3 层）
         _MAX_SEARCH_DEPTH = 3
 
         for module_name in imports:
             # 使用提取的搜索函数
             found_dirs = ExecutorAgent._search_module_path(module_name, root_path, _MAX_SEARCH_DEPTH)
-            module_dirs.update(found_dirs)
 
-        if not module_dirs:
+            if found_dirs:
+                # 模块存在，添加其目录到 sys.path
+                module_dirs.update(found_dirs)
+            else:
+                # 模块不存在，检查是否需要替换为实际模块名
+                if module_name != actual_module_name:
+                    needs_replacement = True
+                    # 添加被测文件所在目录，以便导入实际模块
+                    target_dir = os.path.dirname(os.path.abspath(target_file))
+                    module_dirs.add(target_dir)
+
+        if not module_dirs and not needs_replacement:
             return test_code
 
         # 生成 sys.path 修改代码
         sys_path_code = "\n".join([f"import sys\nsys.path.insert(0, {repr(d)})" for d in sorted(module_dirs)])
 
-        # 在测试代码开头插入路径修复
-        fixed_code = f"""{sys_path_code}
+        fixed_code = test_code
 
-{test_code}
+        # 如果需要替换模块名，执行导入语句替换
+        if needs_replacement:
+            # 替换 from module_name import ... 为 from actual_module_name import ...
+            # 只替换测试代码中引用的模块名，不影响标准库
+            for imported_module in imports:
+                if imported_module != actual_module_name:
+                    # 替换 from imported_module import ...
+                    fixed_code = re.sub(
+                        rf'from\s+{re.escape(imported_module)}\s+import',
+                        f'from {actual_module_name} import',
+                        fixed_code
+                    )
+                    # 替换 import imported_module（仅匹配独立的 import 语句）
+                    fixed_code = re.sub(
+                        rf'^import\s+{re.escape(imported_module)}\s*$',
+                        f'import {actual_module_name}',
+                        fixed_code,
+                        flags=re.MULTILINE
+                    )
+            if imports:
+                logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
+
+        # 在测试代码开头插入路径修复
+        if sys_path_code:
+            fixed_code = f"""{sys_path_code}
+
+{fixed_code}
 """
+
         return fixed_code
 
     @staticmethod

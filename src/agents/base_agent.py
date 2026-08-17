@@ -222,6 +222,59 @@ class BaseAgent:
         # 每个智能体携带自己的 System Prompt，定义其角色和行为约束
         self.system_prompt = system_prompt
 
+    def _call_llm_with_cache(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
+        """
+        带缓存的 LLM 调用方法。
+        
+        首次调用时执行完整的 LLM 请求并缓存结果，
+        后续相同输入直接返回缓存响应，节省 token 和延迟。
+        
+        Args:
+            user_message: 用户消息内容。
+            max_retries: 单次 API 的最大重试次数。
+        
+        Returns:
+            LLM 返回的文本字符串（来自缓存或实时调用）。
+        """
+        # 生成缓存键（基于 prompt 和 system_prompt）
+        cache_key = f"{user_message}:{self.system_prompt[:100]}"  # 截取前100字符作为标识
+        
+        # 尝试从缓存获取
+        import os
+        cache_file = os.path.join(os.path.dirname(__file__), '..', 'cache', f'{hash(cache_key) % 10000}.json')
+        cache_file = os.path.normpath(cache_file)
+        
+        try:
+            if os.path.exists(cache_file):
+                import json
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    cached_data = json.load(f)
+                    if cached_data.get('prompt') == user_message and cached_data.get('system') == self.system_prompt:
+                        logger.info("LLM 缓存命中: %s", cache_key[:50])
+                        return cached_data['response']
+        except Exception as e:
+            logger.debug("缓存读取失败: %s", e)
+        
+        # 未命中，执行实际调用
+        response = self._call_llm(user_message, max_retries)
+        
+        # 写入缓存
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            import json
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'prompt': user_message,
+                    'system': self.system_prompt,
+                    'response': response,
+                    'timestamp': os.path.getmtime(cache_file) if os.path.exists(cache_file) else 0
+                }, f, ensure_ascii=False)
+            logger.info("LLM 缓存已更新: %s", cache_key[:50])
+        except Exception as e:
+            logger.debug("缓存写入失败: %s", e)
+        
+        return response
+
     def _call_llm(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
         """
         调用 LLM 并返回文本响应。

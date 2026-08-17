@@ -1,0 +1,131 @@
+{
+  "name": "aitester-iteration4-team",
+  "id": "aitester-iteration4-team",
+  "description": "AITester 第四轮迭代：1) 测试覆盖率提升至 80%+ 2) 稳定性增强 3) 新功能开发 4) 代码重构优化",
+  "captainSessionId": "session-29613ce4-5724-4691-9f04-835b77db2446",
+  "createdAt": 1786881775343,
+  "members": [
+    {
+      "id": "ab3a4281-8d95-4b2e-8530-cd450e19ff02",
+      "name": "test-lead",
+      "role": "测试负责人 - 覆盖率提升",
+      "joinedAt": 1786881775349,
+      "status": "idle"
+    },
+    {
+      "id": "16ec82fd-8dab-4da2-94e5-d9123201d304",
+      "name": "stability-engineer",
+      "role": "稳定性工程师",
+      "joinedAt": 1786881775360,
+      "status": "idle"
+    },
+    {
+      "id": "9943074e-8b7e-4fec-a70e-148e77c1d730",
+      "name": "feature-architect",
+      "role": "功能架构师",
+      "joinedAt": 1786881775378,
+      "status": "idle"
+    },
+    {
+      "id": "4e68a1bb-c20f-4bab-979f-92214a1f1d41",
+      "name": "refactor-lead",
+      "role": "重构主管",
+      "joinedAt": 1786881775408,
+      "status": "idle"
+    },
+    {
+      "id": "522d12d5-8c80-4085-965d-9ce7b4bb0380",
+      "name": "devops-engineer",
+      "role": "DevOps 工程师",
+      "joinedAt": 1786881775463,
+      "status": "idle"
+    },
+    {
+      "id": "11130f7c-835e-45ba-95c4-b6e9239143f5",
+      "name": "tech-writer",
+      "role": "技术写作者",
+      "joinedAt": 1786881775520,
+      "status": "idle"
+    },
+    {
+      "id": "ab37b946-7c69-4a72-9aca-314922caa56e",
+      "name": "release-manager",
+      "role": "发布经理",
+      "joinedAt": 1786881775543,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "覆盖率提升至 75%+",
+      "description": "为 base_agent.py 和 dataset_loader.py 补充 integration tests，目标覆盖率从 55%/54% 提升至 75%+。重点：1) Mock 外部 API 调用 2) 测试条件导入路径 3) 测试异常处理 4) 测试边界条件。使用 pytest fixtures 和 parametrize 提高效率。",
+      "status": "claimed",
+      "assignee": "test-lead",
+      "dependencies": [],
+      "createdAt": 1786881843563,
+      "updatedAt": 1786881843624
+    },
+    {
+      "id": "t2",
+      "subject": "系统稳定性增强",
+      "description": "增强系统稳定性：1) 添加超时重试机制 2) 改进错误恢复逻辑 3) 添加健康检查端点 4) 优化资源清理。确保长时间运行不泄漏内存。",
+      "status": "in_progress",
+      "assignee": "stability-engineer",
+      "dependencies": [],
+      "createdAt": 1786881843573,
+      "updatedAt": 1786881846403
+    },
+    {
+      "id": "t3",
+      "subject": "新功能开发",
+      "description": "开发新功能：1) 添加测试用例自动学习功能 2) 支持自定义 LLM 模板 3) 添加测试报告导出功能。确保新功能与现有架构兼容。",
+      "status": "claimed",
+      "assignee": "feature-architect",
+      "dependencies": [],
+      "createdAt": 1786881843583,
+      "updatedAt": 1786881843640
+    },
+    {
+      "id": "t4",
+      "subject": "代码重构优化",
+      "description": "代码重构：1) 提取公共工具函数 2) 优化模块依赖结构 3) 添加类型注解 4) 消除代码重复。确保重构后测试全部通过。",
+      "status": "claimed",
+      "assignee": "refactor-lead",
+      "dependencies": [],
+      "createdAt": 1786881843591,
+      "updatedAt": 1786881843649
+    },
+    {
+      "id": "t5",
+      "subject": "DevOps 优化",
+      "description": "DevOps 优化：1) 添加 CI/CD 配置 2) 优化 Docker 镜像 3) 添加性能监控 4) 改进日志收集。确保部署流程自动化。",
+      "status": "in_progress",
+      "assignee": "devops-engineer",
+      "dependencies": [],
+      "createdAt": 1786881843599,
+      "updatedAt": 1786881907279
+    },
+    {
+      "id": "t6",
+      "subject": "技术文档完善",
+      "description": "技术文档完善：1) 添加架构图 2) 编写 API 文档 3) 更新用户手册 4) 添加故障排查指南。确保文档与代码同步。",
+      "status": "in_progress",
+      "assignee": "tech-writer",
+      "dependencies": [],
+      "createdAt": 1786881843607,
+      "updatedAt": 1786881847532
+    },
+    {
+      "id": "t7",
+      "subject": "发布准备",
+      "description": "发布准备：1) 版本号升级 2) 生成 release notes 3) 准备发布包 4) 运行最终验证测试。确保发布质量。",
+      "status": "in_progress",
+      "assignee": "release-manager",
+      "dependencies": [],
+      "createdAt": 1786881843615,
+      "updatedAt": 1786881846040
+    }
+  ],
+  "taskSeq": 7
+}

@@ -1,0 +1,131 @@
+{
+  "name": "aitester-iteration-team",
+  "id": "aitester-iteration-team",
+  "description": "AITester 项目迭代团队：1) 覆盖率为短板（base_agent 55%, dataset_loader 54%）2) 端到端测试验证 3) 新增功能测试 4) 代码重构优化",
+  "captainSessionId": "session-29613ce4-5724-4691-9f04-835b77db2446",
+  "createdAt": 1786881117749,
+  "members": [
+    {
+      "id": "2308a16b-4de2-4c61-bf0e-6982a9e526a4",
+      "name": "coverage-engineer",
+      "role": "覆盖率提升工程师",
+      "joinedAt": 1786881117755,
+      "status": "idle"
+    },
+    {
+      "id": "84f68818-1aa9-4e50-b521-e0205cc2a7ae",
+      "name": "e2e-tester",
+      "role": "端到端测试工程师",
+      "joinedAt": 1786881117767,
+      "status": "idle"
+    },
+    {
+      "id": "7177ac72-e5bb-4ec5-8fed-88044352dfa1",
+      "name": "feature-developer",
+      "role": "新功能开发工程师",
+      "joinedAt": 1786881117781,
+      "status": "idle"
+    },
+    {
+      "id": "b97f39d6-1b68-410d-8320-b63778fd04b8",
+      "name": "refactor-engineer",
+      "role": "代码重构工程师",
+      "joinedAt": 1786881117809,
+      "status": "idle"
+    },
+    {
+      "id": "157f851f-f59e-4d42-bf58-aeb4776bec9b",
+      "name": "perf-analyzer",
+      "role": "性能分析师",
+      "joinedAt": 1786881117857,
+      "status": "idle"
+    },
+    {
+      "id": "f4376ab8-64e8-414e-a415-bbed65e9a119",
+      "name": "docs-engineer",
+      "role": "文档工程师",
+      "joinedAt": 1786881117877,
+      "status": "idle"
+    },
+    {
+      "id": "d04ceec2-a84d-4307-b2f2-10b484b54f2d",
+      "name": "qa-engineer",
+      "role": "质量保障工程师",
+      "joinedAt": 1786881117906,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "提升 base_agent 和 dataset_loader 覆盖率",
+      "description": "为 src/agents/base_agent.py 和 src/dataset_loader.py 补充 integration tests（非 unit tests），目标将覆盖率从 55%/54% 提升至 70%+。重点：1) Mock 外部 API 调用（使用 unittest.mock.patch）2) 测试条件导入路径 3) 测试异常处理逻辑 4) 测试边界条件。参考现有 tests/test_base_agent.py 风格。",
+      "status": "claimed",
+      "assignee": "coverage-engineer",
+      "dependencies": [],
+      "createdAt": 1786881148077,
+      "updatedAt": 1786881168834
+    },
+    {
+      "id": "t2",
+      "subject": "端到端功能测试",
+      "description": "执行端到端功能测试，验证 AITester 完整工作流：1) python main.py run examples/calculator.py --func divide 2) python main.py run examples/string_utils.py --func is_palindrome 3) python main.py run examples/buggy_library.py --func binary_search。记录每次执行的耗时、覆盖率、修复轮次。",
+      "status": "claimed",
+      "assignee": "e2e-tester",
+      "dependencies": [],
+      "createdAt": 1786881148086,
+      "updatedAt": 1786881168840
+    },
+    {
+      "id": "t3",
+      "subject": "新增 CLI 功能",
+      "description": "基于性能分析报告，实施以下新功能：1) 添加 --parallel 命令行参数支持并发执行 2) 添加 --timeout 配置超时时间 3) 添加 JSON 格式输出选项。确保向后兼容，不影响现有功能。",
+      "status": "in_progress",
+      "assignee": "feature-developer",
+      "dependencies": [],
+      "createdAt": 1786881148094,
+      "updatedAt": 1786881359132
+    },
+    {
+      "id": "t4",
+      "subject": "代码重构优化",
+      "description": "重构以下代码以提升可维护性：1) 提取 _auto_fix_imports 中的路径搜索逻辑为独立函数 2) 统一错误分类器的正则表达式存储方式 3) 优化 RAG 检索器的缓存策略。确保重构后测试全部通过。",
+      "status": "claimed",
+      "assignee": "refactor-engineer",
+      "dependencies": [],
+      "createdAt": 1786881148102,
+      "updatedAt": 1786881168853
+    },
+    {
+      "id": "t5",
+      "subject": "性能分析与优化建议",
+      "description": "分析项目性能瓶颈并生成报告：1) 使用 cProfile 分析关键路径 2) 识别 CPU/内存热点 3) 提出进一步优化建议。输出 docs/performance_profile_report.md。",
+      "status": "claimed",
+      "assignee": "perf-analyzer",
+      "dependencies": [],
+      "createdAt": 1786881148110,
+      "updatedAt": 1786881168859
+    },
+    {
+      "id": "t6",
+      "subject": "文档更新与完善",
+      "description": "更新项目文档：1) 更新 README.md 添加新功能说明 2) 更新 CHANGELOG.md 记录本次迭代 3) 添加 API 参考文档（docs/api_reference.md）4) 更新架构图反映最新改动。",
+      "status": "in_progress",
+      "assignee": "docs-engineer",
+      "dependencies": [],
+      "createdAt": 1786881148117,
+      "updatedAt": 1786881328013
+    },
+    {
+      "id": "t7",
+      "subject": "全面质量检查",
+      "description": "执行全面质量检查：1) 运行所有测试确认无回归 2) 检查代码风格（ruff/flake8）3) 检查类型注解（mypy）4) 检查安全漏洞（bandit）5) 生成质量报告。",
+      "status": "in_progress",
+      "assignee": "qa-engineer",
+      "dependencies": [],
+      "createdAt": 1786881148125,
+      "updatedAt": 1786881160729
+    }
+  ],
+  "taskSeq": 7
+}

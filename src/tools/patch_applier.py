@@ -16,8 +16,11 @@
 
 from __future__ import annotations
 
+import ast
 import re
-from typing import Tuple
+import tokenize
+import io
+from typing import List, Dict, Tuple
 
 
 def apply_patch_to_code(
@@ -127,6 +130,164 @@ def apply_patch_to_code(
     # 拼接为完整代码字符串，末尾加换行符
     new_code = "\n".join(collapsed).strip() + "\n"
     return new_code, True
+
+
+def apply_multi_function_patch(
+    code: str,
+    patches: List[Dict],
+) -> Tuple[str, bool]:
+    """
+    应用多个函数的修改（支持递归函数和多函数同时修改）。
+
+    该函数接收一个补丁列表，每个补丁包含：
+    - function_name: 目标函数名
+    - patch: LLM 生成的修复代码
+
+    算法：
+        1. 按起始行号从高到低排序（从后往前应用，避免行号偏移）
+        2. 逐个应用单个函数补丁
+        3. 返回最终代码和成功标志
+
+    Args:
+        code: 原始代码
+        patches: 补丁列表，每项为 {"function_name": str, "patch": str}
+
+    Returns:
+        Tuple[str, bool]: (修复后的代码, 是否全部成功)
+            - 所有补丁成功时返回 (新代码, True)
+            - 任一补丁失败时返回 (当前代码, False)
+    """
+    if not patches:
+        return code, True
+
+    # 按起始行号从高到低排序（从后往前应用，避免行号偏移）
+    sorted_patches = sorted(
+        patches,
+        key=lambda p: _find_function_start_line(code, p["function_name"]),
+        reverse=True
+    )
+
+    current_code = code
+    all_success = True
+
+    for patch_info in sorted_patches:
+        func_name = patch_info["function_name"]
+        patch = patch_info["patch"]
+
+        new_code, success = apply_patch_to_code(current_code, patch)
+        if not success:
+            all_success = False
+            # 继续尝试其他补丁，不中断
+            continue
+        current_code = new_code
+
+    return current_code, all_success
+
+
+def _find_function_start_line(code: str, func_name: str) -> int:
+    """
+    查找函数在代码中的起始行号。
+
+    Args:
+        code: Python 代码字符串
+        func_name: 函数名
+
+    Returns:
+        函数起始行号（从0开始），未找到返回 -1
+    """
+    lines = code.split("\n")
+    for i, line in enumerate(lines):
+        if re.match(rf"^def\s+{re.escape(func_name)}\s*\(", line):
+            return i
+    return -1
+
+
+def safe_apply_patch(
+    code: str,
+    patch: str,
+) -> Tuple[str, bool]:
+    """
+    安全应用 patch，失败时自动回滚。
+
+    该函数在应用补丁后会验证生成的代码语法是否正确。
+    如果语法错误，自动回滚到原始代码。
+
+    Args:
+        code: 原始代码
+        patch: LLM 生成的补丁代码
+
+    Returns:
+        Tuple[str, bool]: (应用后的代码, 是否成功)
+    """
+    # 尝试应用补丁
+    new_code, success = apply_patch_to_code(code, patch)
+    if not success:
+        return code, False
+
+    # 验证生成的代码语法是否正确
+    try:
+        ast.parse(new_code)
+        return new_code, True
+    except SyntaxError:
+        # 语法错误，回滚到原始代码
+        return code, False
+
+
+def safe_apply_multi_function_patch(
+    code: str,
+    patches: List[Dict],
+) -> Tuple[str, bool]:
+    """
+    安全应用多个函数的修改，失败时自动回滚。
+
+    Args:
+        code: 原始代码
+        patches: 补丁列表，每项为 {"function_name": str, "patch": str}
+
+    Returns:
+        Tuple[str, bool]: (修复后的代码, 是否全部成功)
+    """
+    # 尝试应用所有补丁
+    new_code, success = apply_multi_function_patch(code, patches)
+    if not success:
+        return code, False
+
+    # 验证生成的代码语法是否正确
+    try:
+        ast.parse(new_code)
+        return new_code, True
+    except SyntaxError:
+        # 语法错误，回滚到原始代码
+        return code, False
+
+
+def generate_diff(old_code: str, new_code: str) -> str:
+    """
+    生成 unified diff 格式的补丁。
+
+    使用 difflib 生成标准的 unified diff，包含上下文行。
+
+    Args:
+        old_code: 原始代码
+        new_code: 修改后的代码
+
+    Returns:
+        unified diff 格式的字符串
+    """
+    import difflib
+
+    old_lines = old_code.splitlines(keepends=True)
+    new_lines = new_code.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="original",
+        tofile="modified",
+        n=3  # 3行上下文
+    )
+
+    return "".join(diff)
 
 
 def _extract_patch_code(patch: str) -> str:

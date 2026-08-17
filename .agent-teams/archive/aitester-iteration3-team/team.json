@@ -1,0 +1,131 @@
+{
+  "name": "aitester-iteration3-team",
+  "id": "aitester-iteration3-team",
+  "description": "AITester 项目第三轮迭代团队：1) 修复剩余 Bug 和问题 2) 提升代码质量 3) 优化用户体验 4) 完善测试覆盖",
+  "captainSessionId": "session-29613ce4-5724-4691-9f04-835b77db2446",
+  "createdAt": 1786881520424,
+  "members": [
+    {
+      "id": "ef6b0684-dc8b-41b0-9697-33d609fe0667",
+      "name": "bug-hunter",
+      "role": "Bug 猎手",
+      "joinedAt": 1786881520433,
+      "status": "idle"
+    },
+    {
+      "id": "4af0f050-ae7c-40cf-811a-c906a0c636da",
+      "name": "quality-engineer",
+      "role": "质量工程师",
+      "joinedAt": 1786881520451,
+      "status": "idle"
+    },
+    {
+      "id": "53555fcf-4011-475f-b1c1-1c485a1bad24",
+      "name": "ux-improver",
+      "role": "用户体验优化师",
+      "joinedAt": 1786881520469,
+      "status": "idle"
+    },
+    {
+      "id": "374e78e2-e893-4191-ad9f-531c7686d045",
+      "name": "test-optimizer",
+      "role": "测试优化师",
+      "joinedAt": 1786881520486,
+      "status": "idle"
+    },
+    {
+      "id": "aab0655d-6097-4739-9631-2bffad8d6fd5",
+      "name": "perf-tuner",
+      "role": "性能调优师",
+      "joinedAt": 1786881520508,
+      "status": "idle"
+    },
+    {
+      "id": "8141bdce-2b0d-48fa-819a-9ac3773d88cc",
+      "name": "security-auditor",
+      "role": "安全审计师",
+      "joinedAt": 1786881520546,
+      "status": "idle"
+    },
+    {
+      "id": "e26a84c7-ae60-486d-b5bd-2253c7bbda01",
+      "name": "docs-master",
+      "role": "文档大师",
+      "joinedAt": 1786881520576,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "Bug 扫描与修复",
+      "description": "扫描项目代码寻找潜在 Bug：1) 运行时错误风险 2) 逻辑错误 3) 边界条件遗漏 4) 资源泄漏 5) 并发安全问题。输出 bug_report.md 包含问题列表、严重程度、修复建议。",
+      "status": "claimed",
+      "assignee": "bug-hunter",
+      "dependencies": [],
+      "createdAt": 1786881544213,
+      "updatedAt": 1786881565298
+    },
+    {
+      "id": "t2",
+      "subject": "代码质量检查",
+      "description": "执行全面代码质量检查：1) 运行 ruff/flake8 检查代码风格 2) 运行 mypy 检查类型注解 3) 运行 bandit 检查安全漏洞 4) 运行 pylint 检查代码复杂度 5) 生成 quality_report.md",
+      "status": "in_progress",
+      "assignee": "quality-engineer",
+      "dependencies": [],
+      "createdAt": 1786881544219,
+      "updatedAt": 1786881568878
+    },
+    {
+      "id": "t3",
+      "subject": "用户体验优化",
+      "description": "优化用户体验：1) 改进 CLI 帮助信息 2) 添加进度条显示 3) 优化错误提示 4) 添加彩色输出 5) 改进日志格式。确保不影响现有功能。",
+      "status": "in_progress",
+      "assignee": "ux-improver",
+      "dependencies": [],
+      "createdAt": 1786881544225,
+      "updatedAt": 1786881570976
+    },
+    {
+      "id": "t4",
+      "subject": "测试套件优化",
+      "description": "优化测试套件：1) 修复现有测试中的问题 2) 添加缺失的测试用例 3) 优化测试执行时间 4) 提高测试覆盖率到 80%+。确保所有测试通过。",
+      "status": "claimed",
+      "assignee": "test-optimizer",
+      "dependencies": [],
+      "createdAt": 1786881544230,
+      "updatedAt": 1786881565315
+    },
+    {
+      "id": "t5",
+      "subject": "性能进一步优化",
+      "description": "进一步优化性能：1) 分析热点代码路径 2) 减少不必要的对象创建 3) 优化内存使用 4) 添加缓存策略。输出 perf_optimization_report.md。",
+      "status": "claimed",
+      "assignee": "perf-tuner",
+      "dependencies": [],
+      "createdAt": 1786881544235,
+      "updatedAt": 1786881565321
+    },
+    {
+      "id": "t6",
+      "subject": "安全审计",
+      "description": "安全审计：1) 检查 SQL 注入风险 2) 检查路径遍历漏洞 3) 检查敏感信息泄露 4) 检查依赖安全漏洞 5) 输出 security_audit_report.md",
+      "status": "in_progress",
+      "assignee": "security-auditor",
+      "dependencies": [],
+      "createdAt": 1786881544240,
+      "updatedAt": 1786881570310
+    },
+    {
+      "id": "t7",
+      "subject": "文档完善",
+      "description": "完善文档：1) 更新 API 参考文档 2) 添加架构图 3) 编写贡献指南 4) 更新 CHANGELOG 5) 确保文档与代码同步。",
+      "status": "claimed",
+      "assignee": "docs-master",
+      "dependencies": [],
+      "createdAt": 1786881544245,
+      "updatedAt": 1786881565333
+    }
+  ],
+  "taskSeq": 7
+}

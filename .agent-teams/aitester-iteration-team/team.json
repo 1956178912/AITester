@@ -1,0 +1,150 @@
+{
+  "name": "aitester-iteration-team",
+  "id": "aitester-iteration-team",
+  "description": "AITester 代码迭代改进团队：针对实验发现的三大问题（Executor 文件路径配置、错误分类器 syntax 诊断、SyntheticDataset 数据质量）进行代码优化，目标提升语法错误修复成功率从 12% 到 40%+。",
+  "captainSessionId": "session-ade85991-c22b-4e71-a0cf-57888a857908",
+  "createdAt": 1786955346310,
+  "members": [
+    {
+      "id": "e3987181-3802-42af-873d-11c704e556da",
+      "name": "executor-improver",
+      "role": "Executor 文件路径配置修复：解决 34.4% 基础设施失败问题",
+      "joinedAt": 1786955346317,
+      "status": "idle"
+    },
+    {
+      "id": "e585f6b8-ac1c-4cf4-be91-bdee0825cad3",
+      "name": "error-classifier-improver",
+      "role": "错误分类器增强：提升 syntax 错误诊断能力",
+      "joinedAt": 1786955346328,
+      "status": "idle"
+    },
+    {
+      "id": "d6170899-4c91-46ea-84bf-30cc62f27b97",
+      "name": "dataset-improver",
+      "role": "SyntheticDataset 重构：提升合成数据质量和多样性",
+      "joinedAt": 1786955346343,
+      "status": "idle"
+    },
+    {
+      "id": "ab3be4ac-72af-4666-ba6d-383a98eeb474",
+      "name": "patch-applier-improver",
+      "role": "PatchApplier 优化：提升代码修复准确性",
+      "joinedAt": 1786955346363,
+      "status": "idle"
+    },
+    {
+      "id": "cfd3067d-7163-40c5-9734-e2f0caeec52c",
+      "name": "prompt-engineer",
+      "role": "Prompt 工程优化：改进 Generator/Debugger 提示词",
+      "joinedAt": 1786955346392,
+      "status": "idle"
+    },
+    {
+      "id": "8c77b756-4aea-4cdf-830d-8e6be1e6e35b",
+      "name": "workflow-optimizer",
+      "role": "工作流优化：改进 Agent 协作机制",
+      "joinedAt": 1786955346422,
+      "status": "idle"
+    },
+    {
+      "id": "afae0fbd-18f4-4dac-b201-5f7ebef8a9fd",
+      "name": "test-writer",
+      "role": "测试编写：为所有改动添加单元测试和集成测试",
+      "joinedAt": 1786955346446,
+      "status": "idle"
+    },
+    {
+      "id": "2355d2ec-a602-4485-a984-b935b046430a",
+      "name": "performance-analyst",
+      "role": "性能分析：监控优化后的实验效果",
+      "joinedAt": 1786955346468,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "Executor 文件路径配置修复",
+      "description": "## Executor 文件路径配置修复\n\n### 问题诊断\n实验发现 34.4% 的失败源于模块导入/路径配置问题。Generator 生成的测试代码使用 `from module_name import func` 语法，但被测代码文件名与模块名不一致。\n\n### 改进目标\n- 提升语法错误修复成功率从 12% 到 40%+\n- 减少基础设施类失败\n\n### 实施步骤\n1. 阅读 `src/agents/executor.py` 理解当前执行逻辑\n2. 在 Executor 阶段自动检测文件结构，动态创建或重命名模块文件\n3. 增强 Generator Prompt 明确要求测试代码使用相对导入\n4. 添加模块路径自动配置逻辑\n5. 编写单元测试验证修复效果\n\n### 验收标准\n- □ Executor 能自动处理模块名与文件名不匹配的情况\n- □ 语法错误修复成功率提升至 40%+\n- □ 所有单元测试通过",
+      "status": "claimed",
+      "assignee": "executor-improver",
+      "dependencies": [],
+      "createdAt": 1786955376458,
+      "updatedAt": 1786955398106
+    },
+    {
+      "id": "t2",
+      "subject": "错误分类器增强",
+      "description": "## 错误分类器增强\n\n### 问题诊断\n语法/导入错误占失败原因的 49.1%，但修复成功率仅 12%。当前 ErrorClassifier 对 syntax 错误的识别不够精确，导致 Debugger 无法选择正确的修复策略。\n\n### 改进目标\n- 提升 syntax 错误识别准确率\n- 为 Debugger 提供更精确的错误诊断信息\n- 区分不同类型的语法错误（ImportError vs SyntaxError vs IndentationError）\n\n### 实施步骤\n1. 阅读 `src/agents/error_classifier.py` 理解当前分类逻辑\n2. 扩展 ErrorPatterns，增加更精确的正则表达式\n3. 添加错误上下文提取功能（文件名、行号、列号）\n4. 增强 get_fix_strategy() 函数，为每种 syntax 子类型提供针对性策略\n5. 编写测试验证分类准确性\n\n### 验收标准\n- □ SyntaxError 识别准确率 > 90%\n- □ ImportError/ModuleNotFoundError 能正确区分\n- □ 错误诊断信息包含文件名和行号\n- □ 所有单元测试通过",
+      "status": "completed",
+      "assignee": "error-classifier-improver",
+      "dependencies": [],
+      "createdAt": 1786955376467,
+      "updatedAt": 1786955874841,
+      "output": "✅ 已完成。错误分类器增强完成，新增 SyntaxSubtype 枚举、ErrorContext dataclass、extract_error_context() 方法。测试覆盖 29 个用例全部通过。"
+    },
+    {
+      "id": "t3",
+      "subject": "SyntheticDataset 重构",
+      "description": "## SyntheticDataset 重构\n\n### 问题诊断\n合成数据集整体成功率仅 5%（single_agent 基线），存在严重的模板一致性问题。当前 BUG_PATTERNS 仅 10 种模式，多样性不足。\n\n### 改进目标\n- 增加 bug 模式多样性（从 10 种扩展到 30+ 种）\n- 提升合成数据质量，减少基础设施失败\n- 支持更多 bug 类型（边界条件、逻辑错误、并发问题等）\n\n### 实施步骤\n1. 阅读 `src/synthetic_dataset.py` 理解当前模板结构\n2. 扩展 BUG_PATTERNS，新增 20+ 种 bug 模式\n3. 添加边界条件、逻辑错误、并发问题等新类型\n4. 增强模板变量化，支持参数化生成更多变体\n5. 编写测试验证数据集质量\n\n### 验收标准\n- □ BUG_PATTERNS 从 10 种扩展到 30+ 种\n- □ 覆盖至少 5 种新 bug 类型\n- □ 生成的数据集成功率提升至 15%+\n- □ 所有单元测试通过",
+      "status": "in_progress",
+      "assignee": "dataset-improver",
+      "dependencies": [],
+      "createdAt": 1786955376477,
+      "updatedAt": 1786955620480
+    },
+    {
+      "id": "t4",
+      "subject": "PatchApplier 优化",
+      "description": "## PatchApplier 优化\n\n### 问题诊断\n当前 PatchApplier 在处理复杂代码修复时准确率不高，特别是递归函数和多函数修改场景。\n\n### 改进目标\n- 提升代码修复准确性\n- 支持多函数修改\n- 增强 diff 生成质量\n\n### 实施步骤\n1. 阅读 `src/tools/patch_applier.py` 理解当前实现\n2. 改进 diff 生成算法，支持更精确的代码定位\n3. 添加多函数修改支持\n4. 增强错误恢复机制\n5. 编写测试验证修复质量\n\n### 验收标准\n- □ 递归函数修复成功率提升至 40%+\n- □ 支持多函数修改场景\n- □ 所有单元测试通过",
+      "status": "claimed",
+      "assignee": "patch-applier-improver",
+      "dependencies": [],
+      "createdAt": 1786955376485,
+      "updatedAt": 1786955398130
+    },
+    {
+      "id": "t5",
+      "subject": "Prompt 工程优化",
+      "description": "## Prompt 工程优化\n\n### 问题诊断\nGenerator 和 Debugger 的提示词不够精确，导致生成的测试代码和修复代码质量不稳定。\n\n### 改进目标\n- 提升 Generator 提示词质量\n- 优化 Debugger 诊断策略\n- 减少 LLM 输出格式问题\n\n### 实施步骤\n1. 阅读 `src/prompts/` 目录下的所有提示词模板\n2. 优化 Generator Prompt，明确要求测试代码使用相对导入\n3. 增强 Debugger Prompt，提供更详细的错误诊断指导\n4. 添加输出格式约束，减少解析错误\n5. 编写测试验证提示词效果\n\n### 验收标准\n- □ Generator 输出格式稳定性提升\n- □ Debugger 诊断准确率提升\n- □ 所有单元测试通过",
+      "status": "completed",
+      "assignee": "prompt-engineer",
+      "dependencies": [],
+      "createdAt": 1786955376493,
+      "updatedAt": 1786955848321,
+      "output": "✅ 已完成。Prompt 工程优化完成，Generator 和 Debugger 提示词已增强，测试用例从 13 个扩展到 26 个，全部通过。"
+    },
+    {
+      "id": "t6",
+      "subject": "工作流优化",
+      "description": "## 工作流优化\n\n### 问题诊断\n当前 Agent 协作机制不够高效，Planner 和 Debugger 的职责边界不够清晰。\n\n### 改进目标\n- 优化 Agent 协作流程\n- 减少不必要的 LLM 调用\n- 提升整体执行效率\n\n### 实施步骤\n1. 阅读 `src/graph/workflow.py` 理解当前工作流\n2. 优化 Planner 输出格式，为 Generator 提供更精确的规划\n3. 增强 Debugger 的错误诊断能力\n4. 添加缓存机制，避免重复 LLM 调用\n5. 编写测试验证工作流改进\n\n### 验收标准\n- □ 平均迭代次数降低 20%\n- □ LLM 调用次数减少 15%\n- □ 所有单元测试通过",
+      "status": "claimed",
+      "assignee": "workflow-optimizer",
+      "dependencies": [],
+      "createdAt": 1786955376501,
+      "updatedAt": 1786955398146
+    },
+    {
+      "id": "t7",
+      "subject": "测试编写",
+      "description": "## 测试编写\n\n### 任务目标\n为所有代码改进编写完整的单元测试和集成测试，确保改动不会引入回归。\n\n### 实施步骤\n1. 为 executor_improver 的改动编写测试\n2. 为 error_classifier_improver 的改动编写测试\n3. 为 dataset_improver 的改动编写测试\n4. 为 patch_applier_improver 的改动编写测试\n5. 运行所有测试确保通过\n\n### 验收标准\n- □ 新增测试覆盖率 > 90%\n- □ 所有现有测试通过\n- □ 新增测试全部通过",
+      "status": "in_progress",
+      "assignee": "test-writer",
+      "dependencies": [],
+      "createdAt": 1786955376509,
+      "updatedAt": 1786955537886
+    },
+    {
+      "id": "t8",
+      "subject": "性能分析",
+      "description": "## 性能分析\n\n### 任务目标\n监控优化后的实验效果，验证改进是否达到预期目标。\n\n### 实施步骤\n1. 等待其他成员完成代码改进后，重新运行基准测试\n2. 对比优化前后的实验结果\n3. 生成性能对比报告\n4. 分析改进效果\n\n### 验收标准\n- □ 语法错误修复成功率提升至 40%+\n- □ 整体成功率提升 10%+\n- □ 生成性能对比报告",
+      "status": "in_progress",
+      "assignee": "performance-analyst",
+      "dependencies": [],
+      "createdAt": 1786955376517,
+      "updatedAt": 1786955603982
+    }
+  ],
+  "taskSeq": 8
+}

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import GENERATOR_SYSTEM_PROMPT
+from src.graph.llm_cache import cached_llm_call, get_cache_stats
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
