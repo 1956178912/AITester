@@ -173,9 +173,9 @@
       "status": "completed",
       "dependencies": [],
       "createdAt": 1786957436582,
-      "updatedAt": 1786957883504,
+      "updatedAt": 1786958248465,
       "assignee": "error-classifier-improver",
-      "output": "✅ 已完成。错误处理增强完成，新增统一异常模块，18 个新测试 + 原有测试共 86 个全部通过。"
+      "output": "✅ 已完成。错误处理增强完成，新增统一异常模块 src/exceptions.py，18 个测试全部通过。"
     },
     {
       "id": "t12",
