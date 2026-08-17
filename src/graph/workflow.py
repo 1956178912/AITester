@@ -510,9 +510,16 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
         elif not any(line.strip().startswith("def ") for line in new_code.splitlines()):
             logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
         else:
-            with open(state["target_file"], "w", encoding="utf-8") as f:
-                f.write(new_code)
-            logger.info("补丁已应用到文件: %s", state["target_file"])
+            # 安全检查：验证目标文件路径合法性，防止路径穿越攻击
+            import os
+            target_file_path = os.path.abspath(state["target_file"])
+            project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            if not target_file_path.startswith(project_root):
+                logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
+            else:
+                with open(target_file_path, "w", encoding="utf-8") as f:
+                    f.write(new_code)
+                logger.info("补丁已应用到文件: %s", target_file_path)
 
     history = state.get("repair_history", []) or []
     history.append({
