@@ -415,7 +415,10 @@ def run_single_task(
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
         # 写入 instance_code 到临时文件
-        module_name = task.repo_name.split("/")[-1] if "/" in task.repo_name else task.task_id.split("__")[-1]
+        # 使用 task_id 的最后一段作为模块名，确保与文件名一致
+        # 转换非法字符：连字符→下划线，确保是合法 Python 标识符
+        raw_name = task.task_id.split("__")[-1]
+        module_name = raw_name.replace("-", "_")[:50]
         instance_file = os.path.join(tmp_dir, f"{module_name}.py")
         with open(instance_file, "w", encoding="utf-8") as f:
             f.write(task.instance_code)

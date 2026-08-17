@@ -49,6 +49,9 @@ htmlcov/
 algorithm_paper.md
 research_motivation.md
 PAPER_GUIDE.md
+docs/paper/
+*.tex
+*.bib
 
 # Experimental results
 experiments/results/
