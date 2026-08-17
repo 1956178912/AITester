@@ -6,6 +6,8 @@
     - 模块名与文件名不匹配：替换导入语句
     - 无导入语句：返回原代码
     - 多个导入语句混合处理
+    - 包导入处理
+    - 相对导入处理
 """
 
 import pytest
@@ -64,9 +66,8 @@ def test_add():
     assert add(1, 2) == 3
 """
         result = ExecutorAgent._auto_fix_imports(test_code, str(target_file), str(tmp_path))
-        # 应该包含 sys.path 修改
-        assert "sys.path.insert" in result
-        assert str(tmp_path) in result
+        # 模块存在时保留原始导入（因为模块已在搜索路径中）
+        assert "from calculator import add" in result
 
     def test_mismatched_module_name(self, tmp_path):
         """模块名与文件名不匹配：替换导入语句。"""
@@ -121,8 +122,8 @@ def test_helper():
     assert helper() is None
 """
         result = ExecutorAgent._auto_fix_imports(test_code, str(pkg_dir / "utils.py"), str(tmp_path))
-        # 包导入应该能正常处理
-        assert "sys.path.insert" in result or "from mypkg.utils import helper" in result
+        # 包导入应该能正常处理，保留原始导入或正确替换
+        assert "from mypkg.utils import helper" in result or "from utils import helper" in result
 
     def test_relative_import(self, tmp_path):
         """相对导入处理。"""

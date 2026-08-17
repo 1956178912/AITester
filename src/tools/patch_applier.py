@@ -18,9 +18,86 @@ from __future__ import annotations
 
 import ast
 import re
-import tokenize
-import io
-from typing import List, Dict, Tuple
+import difflib
+from typing import List, Dict, Tuple, Optional, Set
+
+
+def _extract_function_names(code: str) -> Set[str]:
+    """
+    从代码中提取所有函数名称。
+
+    Args:
+        code: Python 代码字符串。
+
+    Returns:
+        函数名称集合。
+    """
+    return {m.group(1) for m in re.finditer(r"def\s+(\w+)\s*\(", code)}
+
+
+def _count_function_defs(code: str) -> int:
+    """
+    统计代码中的函数定义数量。
+
+    Args:
+        code: Python 代码字符串。
+
+    Returns:
+        函数定义数量。
+    """
+    return len(re.findall(r"^def\s+\w+\s*\(", code, re.MULTILINE))
+
+
+def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
+    """
+    判断补丁是否为完整文件模式。
+
+    完整文件模式的判断条件（满足任一即可）：
+        (a) 补丁以 triple-quote 开头 → 含 docstring，通常是完整模块文件
+        (b) 前 200 字符含 import 语句 → 含导入，说明是完整文件而非单函数补丁
+        (c) 补丁含 >=2 个函数定义 且 原代码也含 >=2 个函数 → 多函数补丁
+
+    Args:
+        clean_patch: 清理后的补丁代码。
+        original_code: 原始代码。
+
+    Returns:
+        True 表示使用完整文件模式，False 表示使用单函数模式。
+    """
+    has_docstring = bool(re.match(r'^"""', clean_patch))
+    has_import = "import " in clean_patch[:200]
+    patch_func_count = _count_function_defs(clean_patch)
+    original_func_count = _count_function_defs(original_code)
+
+    return has_docstring or has_import or (patch_func_count >= 2 and original_func_count >= 2)
+
+
+def _find_function_range(
+    lines: List[str],
+    func_name: str,
+    start_idx: int
+) -> Tuple[int, int]:
+    """
+    查找函数在代码中的起止行范围。
+
+    Args:
+        lines: 代码行列表。
+        func_name: 函数名称。
+        start_idx: 函数起始行索引。
+
+    Returns:
+        (start_idx, end_idx) 元组，end_idx 为函数结束后的下一行索引。
+    """
+    end_idx = len(lines)  # 默认到文件末尾
+
+    for i in range(start_idx + 1, len(lines)):
+        line = lines[i]
+        # 结束条件：遇到下一个顶层定义或非空无缩进行
+        if re.match(r"^(def |class |@|#)", line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
+            end_idx = i
+            break
+
+    return start_idx, end_idx
 
 
 def apply_patch_to_code(
@@ -55,25 +132,12 @@ def apply_patch_to_code(
     clean_patch = re.sub(r"^python\s*\n?", "", clean_patch, flags=re.IGNORECASE)
 
     # Step 3: 检测补丁类型（完整文件模式 or 单函数模式）
-    # 完整文件模式的判断条件（满足任一即可）：
-    #   (a) 补丁以 triple-quote 开头 → 含 docstring，通常是完整模块文件
-    #   (b) 前 200 字符含 import 语句 → 含导入，说明是完整文件而非单函数补丁
-    #   (c) 补丁含 >=2 个函数定义 且 原代码也含 >=2 个函数 → 多函数补丁
-    has_docstring = bool(re.match(r'^"""', clean_patch))
-    has_import = "import " in clean_patch[:200]
-    # 统计补丁中的函数定义数量（匹配 "def 函数名(" 行）
-    patch_defs = re.findall(r"^def\s+\w+\s*\(", clean_patch, re.MULTILINE)
-    # 统计原代码中的函数定义数量
-    original_defs = re.findall(r"^def\s+\w+\s*\(", original_code, re.MULTILINE)
+    if _is_full_file_patch(clean_patch, original_code):
+        # Step 4a: 完整文件模式 —— 验证并替换
+        patch_func_names = _extract_function_names(clean_patch)
+        orig_func_names = _extract_function_names(original_code)
 
-    # Step 4a: 完整文件模式 —— 直接替换整个文件
-    if has_docstring or has_import or (len(patch_defs) >= 2 and len(original_defs) >= 2):
-        # 安全检查：提取补丁中所有函数名
-        patch_func_names = {m.group(1) for m in re.finditer(r"def\s+(\w+)\s*\(", clean_patch)}
-        # 提取原代码中所有函数名
-        orig_func_names = {m.group(1) for m in re.finditer(r"def\s+(\w+)\s*\(", original_code)}
         # 验证补丁包含原代码的全部函数（防止部分替换导致函数丢失）
-        # 原代码无函数时跳过检查（允许空文件补丁）
         if orig_func_names and orig_func_names.issubset(patch_func_names):
             # 追加换行符确保代码以换行结尾（PEP 8 风格）
             return clean_patch + "\n", True
@@ -88,29 +152,20 @@ def apply_patch_to_code(
     patch_func_name = func_match.group(1)
     # 将原代码按行分割，便于按行号定位和替换
     lines = original_code.split("\n")
-    start_idx = None  # 目标函数起始行的索引
-    end_idx = None    # 目标函数结束行的索引（下一个顶层定义的起始行）
+    start_idx = None
 
-    # 遍历原代码行，定位目标函数的行范围
+    # 遍历原代码行，定位目标函数的起始行
     for i, line in enumerate(lines):
-        # 匹配目标函数的 def 行（使用 re.escape 防止函数名含特殊字符）
         if re.match(rf"^def\s+{re.escape(patch_func_name)}\s*\(", line):
             start_idx = i
-        elif start_idx is not None and i > start_idx:
-            # 已找到起始行，继续寻找结束位置
-            # 结束条件：遇到下一个顶层定义（def/class/@装饰器/#注释）
-            # 或遇到无缩进的非空行（函数体结束）
-            if re.match(r"^(def |class |@|#)", line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
-                end_idx = i
-                break
+            break
 
     # 未找到目标函数，返回原代码
     if start_idx is None:
         return original_code, False
 
-    # 若未找到明确的结束行（目标函数是文件中最后一个定义），结束位置为文件末尾
-    if end_idx is None:
-        end_idx = len(lines)
+    # 查找函数结束位置
+    _, end_idx = _find_function_range(lines, patch_func_name, start_idx)
 
     # Step 5: 执行替换 — 将原函数行范围替换为补丁函数代码
     patch_lines = clean_patch.split("\n")
@@ -118,18 +173,35 @@ def apply_patch_to_code(
     new_lines = lines[:start_idx] + [""] + patch_lines + [""] + lines[end_idx:]
 
     # Step 6: 压缩连续空行，保持代码整洁（PEP 8 要求空行不超过 2 个）
+    collapsed = _collapse_blank_lines(new_lines)
+
+    # 拼接为完整代码字符串，末尾加换行符
+    new_code = "\n".join(collapsed).strip() + "\n"
+    return new_code, True
+
+
+def _collapse_blank_lines(lines: List[str]) -> List[str]:
+    """
+    压缩连续空行，最多保留一个空行。
+
+    Args:
+        lines: 代码行列表。
+
+    Returns:
+        压缩后的行列表。
+    """
     collapsed = []
-    prev_blank = False  # 记录上一行是否为空行
-    for line in new_lines:
+    prev_blank = False
+
+    for line in lines:
         is_blank = line.strip() == ""
         # 跳过连续空行（保留一个空行作为间隔）
         if is_blank and prev_blank:
             continue
         collapsed.append(line)
         prev_blank = is_blank
-    # 拼接为完整代码字符串，末尾加换行符
-    new_code = "\n".join(collapsed).strip() + "\n"
-    return new_code, True
+
+    return collapsed
 
 
 def apply_multi_function_patch(
@@ -195,8 +267,7 @@ def _find_function_start_line(code: str, func_name: str) -> int:
     Returns:
         函数起始行号（从0开始），未找到返回 -1
     """
-    lines = code.split("\n")
-    for i, line in enumerate(lines):
+    for i, line in enumerate(code.split("\n")):
         if re.match(rf"^def\s+{re.escape(func_name)}\s*\(", line):
             return i
     return -1
@@ -274,8 +345,6 @@ def generate_diff(old_code: str, new_code: str) -> str:
     Returns:
         unified diff 格式的字符串
     """
-    import difflib
-
     old_lines = old_code.splitlines(keepends=True)
     new_lines = new_code.splitlines(keepends=True)
 
