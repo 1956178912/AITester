@@ -133,3 +133,175 @@ class TestTestCaseRetriever:
         doc = mock_collection.upsert.call_args[1]["documents"][0]
         assert "runtime" in doc
         assert "original_code" in doc
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_add_case_capacity_limit_skips_insert(self, mock_chromadb):
+        """达到容量上限时应跳过添加并记录警告。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 1000  # 达到上限
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(max_cases=1000)
+        retriever.add_case(
+            code="def foo(): pass",
+            test_code="def test_foo(): pass",
+            passed=True,
+        )
+        mock_collection.upsert.assert_not_called()
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_add_repair_capacity_limit_skips_insert(self, mock_chromadb):
+        """add_repair 达到容量上限时应跳过添加。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 1000
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(max_cases=1000)
+        retriever.add_repair(
+            original_code="def buggy(): pass",
+            patch="def fixed(): pass",
+            error_category="syntax",
+        )
+        mock_collection.upsert.assert_not_called()
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_retrieve_test_cases_with_results(self, mock_chromadb):
+        """retrieve_test_cases 返回检索结果。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 1
+        mock_collection.query.return_value = {
+            "documents": [["def foo(): pass"]],
+            "metadatas": [[{"test_code": "def test_foo(): pass", "distance": 0.9}]],
+        }
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever()
+        result = retriever.retrieve_test_cases("def foo(): pass", top_k=3)
+        assert len(result) == 1
+        assert result[0]["test_code"] == "def test_foo(): pass"
+        assert result[0]["similarity"] == 0.9
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_retrieve_repairs_with_results(self, mock_chromadb):
+        """retrieve_repairs 返回检索结果。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 1
+        mock_collection.query.return_value = {
+            "documents": [["error: runtime\ndef buggy()"]],
+            "metadatas": [[{"patch": "def fixed()", "distance": 0.85}]],
+        }
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever()
+        result = retriever.retrieve_repairs("runtime", "def foo(): pass")
+        assert len(result) == 1
+        assert result[0]["patch"] == "def fixed()"
+        assert result[0]["similarity"] == 0.85
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_cleanup_expired_removes_old_entries(self, mock_chromadb):
+        """cleanup_expired 应清理过期条目。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.get.return_value = {
+            "ids": ["id1", "id2"],
+            "metadatas": [
+                {"_added_at": 0},  # 过期（假设 ttl=3600）
+                {"_added_at": 9999999999},  # 未过期
+            ],
+        }
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(ttl_seconds=3600)
+        count = retriever.cleanup_expired()
+        assert count == 1
+        mock_collection.delete.assert_called_once_with(ids=["id1"])
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_cleanup_expired_no_expired_entries(self, mock_chromadb):
+        """cleanup_expired 无过期条目时返回 0。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.get.return_value = {"ids": [], "metadatas": []}
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(ttl_seconds=3600)
+        count = retriever.cleanup_expired()
+        assert count == 0
+        mock_collection.delete.assert_not_called()
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_add_case_with_metadata(self, mock_chromadb):
+        """add_case 应正确传递元数据。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.count.return_value = 0
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever()
+        retriever.add_case(
+            code="def foo(): pass",
+            test_code="def test_foo(): pass",
+            passed=True,
+            metadata={"function": "foo", "line": 10},
+        )
+        call_args = mock_collection.upsert.call_args
+        meta = call_args[1]["metadatas"][0]
+        assert meta["function"] == "foo"
+        assert meta["line"] == 10
+        assert "_added_at" in meta
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_cleanup_expired_and_excess_skips_empty(self, mock_chromadb):
+        """_cleanup_expired_and_excess 无条目时不应报错。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.get.return_value = {"ids": [], "metadatas": []}
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(ttl_seconds=3600)
+        retriever._cleanup_expired_and_excess()
+        mock_collection.delete.assert_not_called()
+
+    @patch("src.rag.retriever.CHROMA_AVAILABLE", True)
+    @patch("src.rag.retriever.chromadb")
+    def test_cleanup_expired_and_excess_removes_overcapacity(self, mock_chromadb):
+        """_cleanup_expired_and_excess 移除超额条目。"""
+        mock_client = MagicMock()
+        mock_collection = MagicMock()
+        # 模拟 5 个条目，max_cases=3
+        mock_collection.get.return_value = {
+            "ids": ["id1", "id2", "id3", "id4", "id5"],
+            "metadatas": [
+                {"_added_at": 100}, {"_added_at": 200},
+                {"_added_at": 300}, {"_added_at": 400},
+                {"_added_at": 500},
+            ],
+        }
+        mock_client.get_or_create_collection.return_value = mock_collection
+        mock_chromadb.Client.return_value = mock_client
+
+        retriever = TestCaseRetriever(ttl_seconds=99999, max_cases=3)
+        retriever._cleanup_expired_and_excess()
+        # 应删除 2 个最旧的条目
+        assert mock_collection.delete.call_count == 1
