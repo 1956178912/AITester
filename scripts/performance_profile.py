@@ -15,7 +15,8 @@ from functools import wraps
 from typing import Any, Dict
 
 # 添加项目根目录到路径
-sys.path.insert(0, '/Users/wangchenyu/workspace/AITester')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def benchmark(func):
@@ -266,7 +267,7 @@ def main():
     # 3. 生成报告
     print("\n【3. 生成性能报告】\n")
     
-    report_path = '/Users/wangchenyu/workspace/AITester/docs/performance_profile_report.md'
+    report_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'docs', 'performance_profile_report.md')
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write("# AITester 性能分析报告\n\n")

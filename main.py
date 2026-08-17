@@ -138,12 +138,12 @@ def print_rich_table(results: List[Dict[str, Any]]) -> None:
         coverage = f"{r.get('coverage', 'N/A')}%" if r.get('coverage') else "N/A"
         
         table.add_row(
-            style=status_style,
             status_icon,
             os.path.basename(r.get("file", "")),
             r.get("func", "all"),
             coverage,
             str(r.get("iterations", 0)),
+            style=status_style,
         )
     
     console.print(table)
@@ -310,7 +310,7 @@ def _run_single_task(
 @click.option("--coverage-threshold", default=COVERAGE_THRESHOLD, help=f"覆盖率阈值百分比（默认 {COVERAGE_THRESHOLD}%）")
 @click.option("--parallel", "-p", default=1, type=int, help="并发执行的文件数量（默认 1，单线程）")
 @click.option("--timeout", "-t", default=None, type=int, help=f"单个任务执行超时秒数（默认 {EXECUTION_TIMEOUT}s）")
-@click.option("--json", is_flag=True, help="输出 JSON 格式结果（适合管道处理）")
+@click.option("--json", "json_output", is_flag=True, help="输出 JSON 格式结果（适合管道处理）")
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志输出（DEBUG 级别）")
 def run(
     target_files: tuple,
@@ -395,7 +395,17 @@ def run(
     if parallel > 1 and len(expanded_files) > 1:
         # 并发模式 - 使用进度条
         if _rich_available():
-            with print_progress_bar(len(expanded_files), "执行测试任务") as progress:
+            console = Console()
+            progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]执行测试任务[/bold blue]"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+                console=console,
+            )
+            with progress:
+                task = progress.add_task("运行中...", total=len(expanded_files))
                 with ThreadPoolExecutor(max_workers=parallel) as executor:
                     future_to_file = {
                         executor.submit(
@@ -404,7 +414,6 @@ def run(
                         ): f
                         for f in expanded_files
                     }
-                    task = progress.add_task("运行中...", total=len(expanded_files))
                     for future in as_completed(future_to_file):
                         try:
                             result = future.result()
@@ -483,6 +492,9 @@ def run(
         if failed > 0:
             warning_msg(f"{failed}/{total} 个测试失败")
 
+    total = len(results)
+    passed = sum(1 for r in results if r.get("passed"))
+    failed = total - passed
     logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
 
 

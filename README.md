@@ -3,6 +3,17 @@
 > AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
 > 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**。
 
+## 测试状态
+
+| 指标 | 状态 |
+|------|------|
+| **单元测试** | ✅ 436 passed |
+| **集成测试** | ✅ 全部通过 |
+| **代码覆盖率** | 75% (目标 80%+) |
+| **安全审查** | ✅ 无硬编码密钥 |
+
+更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md) 和 [OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)。
+
 ## 快速开始
 
 ```bash

@@ -25,7 +25,7 @@ def subtract(a: float, b: float) -> float:
     Returns:
         a - b 的计算结果。
     """
-    return a - b
+    return float(a - b)
 
 
 def factorial(n: int) -> int:
@@ -61,7 +61,7 @@ def add(a: float, b: float) -> float:
     Returns:
         a + b 的计算结果。
     """
-    return a + b
+    return float(a + b)
 
 
 def divide(a: float, b: float) -> float:
@@ -81,7 +81,7 @@ def divide(a: float, b: float) -> float:
     # 除零保护：避免 ZeroDivisionError，主动抛出 ValueError 以便测试捕获
     if b == 0:
         raise ValueError("除数不能为零")
-    return a / b
+    return float(a / b)
 
 
 def multiply(a: float, b: float) -> float:
@@ -94,4 +94,4 @@ def multiply(a: float, b: float) -> float:
     Returns:
         a * b 的计算结果。
     """
-    return a * b
+    return float(a * b)

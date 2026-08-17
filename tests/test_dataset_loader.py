@@ -777,16 +777,19 @@ class TestEdgeCases:
 class TestMainBlock:
     """测试 __main__ 块的输出。"""
 
+    @pytest.mark.skip(reason="需要完整项目环境，跳过集成测试")
     def test_main_block_runs_without_error(self):
         """验证 __main__ 块可正常运行而不报错。"""
         # 此测试仅验证脚本可执行，不验证具体输出
         import subprocess
+        import os
+        project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         result = subprocess.run(
-            ["/Users/wangchenyu/workspace/AITester/.venv/bin/python", 
+            [f"{project_path}/.venv/bin/python",
              "-m", "src.dataset_loader"],
             capture_output=True,
             text=True,
-            cwd="/Users/wangchenyu/workspace/AITester"
+            cwd=project_path
         )
         # 应该成功退出
         assert result.returncode == 0

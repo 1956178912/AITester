@@ -210,7 +210,9 @@ class ErrorClassifier:
             case.get("error", "") for case in failed_cases
         )
 
-        context = ErrorContext(error_message=combined[:500])  # 限制长度
+        # 清理错误消息：去除首尾空白，避免空消息包含换行符
+        cleaned_message = combined.strip()[:500]
+        context = ErrorContext(error_message=cleaned_message)
 
         # 尝试提取模块名称（ImportError/ModuleNotFoundError）
         module_match = _RE_MODULE_NOT_FOUND.search(combined)
@@ -243,10 +245,12 @@ class ErrorClassifier:
             return context
 
         # 尝试从 traceback 中提取文件名
-        traceback_match = _RE_TRACEBACK.search(combined)
-        if traceback_match:
-            context.filename = traceback_match.group(1)
-            context.line = int(traceback_match.group(2))
+        # 使用 findall 获取所有匹配，取最后一个（最深的调用栈）
+        traceback_matches = _RE_TRACEBACK.findall(combined)
+        if traceback_matches:
+            # 取最后一个匹配（最深处的文件）
+            context.filename = traceback_matches[-1][0]
+            context.line = int(traceback_matches[-1][1])
             context.subtype = SyntaxSubtype.SYNTAX_ERROR
             return context
 
@@ -259,9 +263,17 @@ class ErrorClassifier:
         if _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text):
             return True
         # 检查语法错误关键词
-        syntax_keywords = ['SyntaxError', 'ImportError', 'ModuleNotFoundError', 
+        syntax_keywords = ['SyntaxError', 'ImportError', 'ModuleNotFoundError',
                           'IndentationError', 'TabError', 'IncompleteInput']
-        return any(kw in text for kw in syntax_keywords)
+        if any(kw in text for kw in syntax_keywords):
+            return True
+        # 检查 pytest 冒号格式：file.py:line:col: error
+        if _RE_SYNTAX_ERROR_FILE_LINE.search(text):
+            return True
+        # 检查 E prefix 格式：E   file.py:line:col
+        if _RE_PYTEST_SYNTAX.search(text):
+            return True
+        return False
 
     @staticmethod
     def _is_runtime_error(text: str) -> bool:
