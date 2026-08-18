@@ -1,0 +1,150 @@
+{
+  "name": "aitester-optimization-team",
+  "id": "aitester-optimization-team",
+  "description": "AITester项目迭代优化团队 - 修复测试失败问题并提升质量",
+  "captainSessionId": "session-823f0f0b-afe8-49a2-b983-4ac93e51705a",
+  "createdAt": 1786967449950,
+  "members": [
+    {
+      "id": "deaeeec8-d8f5-4720-b341-654be365423c",
+      "name": "开发工程师1",
+      "role": "错误分类器修复专家",
+      "joinedAt": 1786967449955,
+      "status": "idle"
+    },
+    {
+      "id": "9f18e908-4dbe-4a28-83a0-250e124e113a",
+      "name": "开发工程师2",
+      "role": "补丁应用修复专家",
+      "joinedAt": 1786967449962,
+      "status": "idle"
+    },
+    {
+      "id": "031333e8-175c-4d2e-b6d5-9d9699cb13c3",
+      "name": "开发工程师3",
+      "role": "覆盖率提升专家",
+      "joinedAt": 1786967449983,
+      "status": "idle"
+    },
+    {
+      "id": "d41fc8fa-732d-4ae1-8ab2-d622ebaf5ee1",
+      "name": "开发工程师4",
+      "role": "依赖升级专家",
+      "joinedAt": 1786967450031,
+      "status": "idle"
+    },
+    {
+      "id": "d6f2c82f-964a-451e-a46f-d0da3745d73f",
+      "name": "测试工程师1",
+      "role": "回归测试工程师",
+      "joinedAt": 1786967450054,
+      "status": "idle"
+    },
+    {
+      "id": "1bea02e8-0548-402e-a069-4d321a44df49",
+      "name": "测试工程师2",
+      "role": "新测试编写工程师",
+      "joinedAt": 1786967450090,
+      "status": "idle"
+    },
+    {
+      "id": "66467b31-cc0a-49e6-bd77-6ad669876c92",
+      "name": "测试工程师3",
+      "role": "报告生成工程师",
+      "joinedAt": 1786967450113,
+      "status": "idle"
+    },
+    {
+      "id": "f51b8ace-28ea-43f1-9e8a-627d7adf1775",
+      "name": "质量工程师",
+      "role": "质量保证与代码审查",
+      "joinedAt": 1786967450167,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "修复错误分类器模块的4个失败测试",
+      "description": "修复test_error_classifier_improvements.py中的4个失败测试: 1) test_syntax_error_with_colon_format - 冒号格式语法错误未正确分类 2) test_traceback_context_extraction - traceback文件名提取错误 3) test_multiline_traceback - 多行traceback解析问题 4) test_empty_error_message - 空错误消息边界处理",
+      "status": "pending",
+      "assignee": "开发工程师1",
+      "dependencies": [],
+      "createdAt": 1786967463975,
+      "updatedAt": 1786967463975
+    },
+    {
+      "id": "t2",
+      "subject": "修复补丁应用模块的2个失败测试",
+      "description": "修复test_patch_applier_improvements.py中的2个失败测试: 1) test_safe_apply_syntax_error_rolls_back - 语法错误回滚机制失效 2) test_generate_diff_basic - diff生成功能异常",
+      "status": "completed",
+      "assignee": "开发工程师2",
+      "dependencies": [],
+      "createdAt": 1786967463981,
+      "updatedAt": 1786967959678,
+      "output": "补丁应用模块测试验证：所有20个测试用例通过 ✅。代码实现正确，测试覆盖全面，无需修复。"
+    },
+    {
+      "id": "t3",
+      "subject": "提升测试覆盖率至80%+",
+      "description": "补充base_agent.py(49%)和dataset_loader.py(41%)的测试用例,目标覆盖率提升至80%+。使用mock技术覆盖LLM调用和网络请求。",
+      "status": "pending",
+      "assignee": "开发工程师3",
+      "dependencies": [],
+      "createdAt": 1786967463986,
+      "updatedAt": 1786967463986
+    },
+    {
+      "id": "t4",
+      "subject": "升级chromadb依赖修复安全漏洞",
+      "description": "升级chromadb依赖以修复安全漏洞PYSEC-2026-311。检查兼容性并更新requirements.txt。",
+      "status": "pending",
+      "assignee": "开发工程师4",
+      "dependencies": [],
+      "createdAt": 1786967463991,
+      "updatedAt": 1786967463991
+    },
+    {
+      "id": "t5",
+      "subject": "回归测试验证",
+      "description": "对所有修复进行回归测试,确保修复后测试通过且不引入新问题。运行完整测试套件验证。",
+      "status": "completed",
+      "assignee": "测试工程师1",
+      "dependencies": [],
+      "createdAt": 1786967463997,
+      "updatedAt": 1786968186464,
+      "output": "回归测试完成。总测试数: 587，通过: 570，失败: 9，通过率: 97.0%（优化前 98.8%）。发现 5 个新增失败测试，主要在 test_base_agent_extended.py（重试/缓存/JSON 解析功能回归）和 test_dataset_loader.py（网络测试配置问题）。核心模块测试全部通过。详细报告已保存至 test_report/regression_test_report_20260817.md"
+    },
+    {
+      "id": "t6",
+      "subject": "补充新测试用例",
+      "description": "为新补充的测试用例编写测试,重点覆盖base_agent.py和dataset_loader.py的低覆盖率路径。",
+      "status": "pending",
+      "assignee": "测试工程师2",
+      "dependencies": [],
+      "createdAt": 1786967464002,
+      "updatedAt": 1786967464002
+    },
+    {
+      "id": "t7",
+      "subject": "生成优化后测试报告",
+      "description": "生成迭代优化后的测试报告,对比优化前后的测试通过率、覆盖率、安全问题等指标变化。",
+      "status": "pending",
+      "assignee": "测试工程师3",
+      "dependencies": [],
+      "createdAt": 1786967464007,
+      "updatedAt": 1786967464007
+    },
+    {
+      "id": "t8",
+      "subject": "代码审查与质量把关",
+      "description": "审查所有代码改动,确保符合项目规范,无安全问题,代码质量良好。",
+      "status": "pending",
+      "assignee": "质量工程师",
+      "dependencies": [],
+      "createdAt": 1786967464012,
+      "updatedAt": 1786967464012
+    }
+  ],
+  "taskSeq": 8
+}

@@ -1,0 +1,75 @@
+{
+  "name": "aitester-testing-team",
+  "id": "aitester-testing-team",
+  "description": "AITester 项目完整测试：包含单元测试、集成测试、端到端功能测试、边界测试和性能测试，使用多智能体并行执行提高测试效率",
+  "captainSessionId": "session-f0465ea9-d99b-4278-bbed-6284ee0854f4",
+  "createdAt": 1786959866436,
+  "members": [
+    {
+      "id": "abb56445-49e4-4b2f-a141-9740e968373d",
+      "name": "test-runner",
+      "role": "测试执行工程师：负责运行单元测试、集成测试，收集测试结果和覆盖率报告",
+      "joinedAt": 1786959890986,
+      "status": "idle"
+    },
+    {
+      "id": "74472ea2-85bc-4a72-8644-b9dfe7efdc81",
+      "name": "e2e-tester",
+      "role": "端到端测试工程师：负责执行 main.py CLI 的完整功能测试，验证端到端流程",
+      "joinedAt": 1786959891004,
+      "status": "idle"
+    },
+    {
+      "id": "8f008b85-f7fc-4529-98c4-53e73808929b",
+      "name": "quality-reviewer",
+      "role": "质量审查员：分析测试结果，生成测试报告，识别潜在问题",
+      "joinedAt": 1786959891020,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "运行单元测试套件",
+      "description": "在项目目录 /Users/wangchenyu/Workspace/AITester 中运行 pytest 单元测试套件，收集所有测试用例的执行结果、失败原因和覆盖率报告。\n\n具体任务：\n1. 检查 Python 环境和依赖安装情况\n2. 运行 pytest tests/ --collect-only 列出所有测试用例\n3. 运行 pytest tests/ 执行全部单元测试\n4. 运行 pytest tests/ -v --tb=short 获取详细输出\n5. 运行 pytest tests/ --cov=src --cov-report=term-missing 获取覆盖率报告\n6. 记录所有失败/错误的测试用例名称和错误信息\n7. 将结果汇总报告写入 /Users/wangchenyu/Workspace/AITester/test_report/unit_test_report.md",
+      "status": "completed",
+      "assignee": "test-runner",
+      "dependencies": [],
+      "createdAt": 1786959905927,
+      "updatedAt": 1786960853871,
+      "output": "单元测试完成。515个测试执行，509通过(98.8%)，6失败。覆盖率75%。报告已写入 test_report/unit_test_report.md"
+    },
+    {
+      "id": "t2",
+      "subject": "执行端到端功能测试",
+      "description": "对项目 main.py CLI 进行端到端功能测试，验证完整工作流。\n\n具体任务：\n1. 测试 list-examples 命令：python main.py list-examples\n2. 测试单个文件测试：python main.py run examples/calculator.py --func add\n3. 测试多文件并发：python main.py run examples/calculator.py examples/string_utils.py --parallel=2\n4. 测试 JSON 输出：python main.py run examples/calculator.py --func divide --json\n5. 测试参数验证（负数 parallel、max-iterations、覆盖率阈值）\n6. 测试错误路径（不存在的文件、非法参数）\n7. 将所有测试结果和截图写入 /Users/wangchenyu/Workspace/AITester/test_report/e2e_test_report.md",
+      "status": "completed",
+      "assignee": "e2e-tester",
+      "dependencies": [],
+      "createdAt": 1786959905934,
+      "updatedAt": 1786960853879,
+      "output": "端到端测试完成。9 PASS / 2 TIMEOUT / 0 FAIL。发现并修复4个Bug。报告已写入 test_report/e2e_test_report.md"
+    },
+    {
+      "id": "t3",
+      "subject": "代码质量和安全检查",
+      "description": "对项目源码进行质量审查和安全检查。\n\n具体任务：\n1. 检查 config.py 中是否有硬编码的敏感信息（API Key、密码等）\n2. 检查 .env 文件中是否有真实密钥被提交到版本控制\n3. 检查 .gitignore 是否正确排除了敏感文件\n4. 检查 src/ 目录下各模块的代码质量（导入、异常处理、日志）\n5. 检查是否有潜在的 SQL 注入或命令注入风险\n6. 分析测试覆盖率报告，识别未覆盖的关键代码路径\n7. 将发现的问题按严重程度分类，写入 /Users/wangchenyu/Workspace/AITester/test_report/quality_report.md",
+      "status": "completed",
+      "assignee": "quality-reviewer",
+      "dependencies": [],
+      "createdAt": 1786959905940,
+      "updatedAt": 1786960736830,
+      "output": "代码质量和安全检查完成。发现1个严重安全问题（API密钥泄露）。报告已写入 test_report/quality_report.md"
+    },
+    {
+      "id": "t4",
+      "subject": "生成综合测试总结报告",
+      "description": "汇总所有测试团队的任务结果，生成最终的综合测试报告。\n\n前置任务：\n- 等待 test-runner 完成单元测试报告\n- 等待 e2e-tester 完成端到端测试报告\n- 等待 quality-reviewer 完成质量审查报告\n\n最终输出：\n- 生成 /Users/wangchenyu/Workspace/AITester/TESTING_SUMMARY.md\n- 包含：测试概览、通过率统计、失败用例分析、覆盖率分析、安全发现、改进建议",
+      "status": "pending",
+      "dependencies": [],
+      "createdAt": 1786959905945,
+      "updatedAt": 1786959905945
+    }
+  ],
+  "taskSeq": 4
+}
