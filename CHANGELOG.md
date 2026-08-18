@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+### 全量功能验证（2026-08-18）
+- **测试结果**：873 个测试用例收集，860 通过（98.6%），12 失败（已知边界问题），1 跳过
+- **验证范围**：单元测试 + 集成测试 + CLI端到端 + 模块导入 + 实验脚本
+- **已通过模块**：
+  - CLI：`run`、`list-examples` 命令正常
+  - Agent 层：BaseAgent(46)、ExecutorAgent(30)、PlannerAgent(5)、ErrorClassifier(44)、GeneratorAgent(7)、DebuggerAgent(5)
+  - 工具层：CodeAnalyzer(12)、PatchApplier(33)
+  - 工作流层：workflow(63)、state(5)、llm_cache(24)
+  - 集成测试：integration(52)、e2e(34)、examples(90)
+  - API 管理器：APIManager(50，含 22 节点大规模测试)
+  - RAG 检索器：retriever(16)、report_generator(43)
+  - 数据集：dataset_loader_extended(33)、synthetic_dataset(40)
+  - 实验脚本：run_benchmark/run_large_scale/visualize_results/statistical_analysis/analyze_failures 全部可用
+- **已知失败**：
+  - `test_retriever_extended.py` 6 个（Python 3.14 MagicMock 行为变化）
+  - `test_base_agent_zai.py` 2 个（API 配额耗尽）
+  - `test_dataset_loader.py` 3 个（HuggingFace mock 配置）
+  - `test_concurrent_execution_safety` 1 个（随机性，重跑通过）
+- **详细报告**：[FUNCTIONAL_VALIDATION_REPORT_20260818.md](FUNCTIONAL_VALIDATION_REPORT_20260818.md)
+
 ### 新增功能
 - **API 管理器增强**：新增 `src/api_manager.py` 模块，支持多 Provider 轮询和高可用故障转移
   - 实现轮询、加权随机、健康感知、最快优先四种策略
