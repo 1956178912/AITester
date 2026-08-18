@@ -6,13 +6,12 @@
 """
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from src.reports import ReportGenerator, ReportFormat
 from src.agents.error_classifier import ErrorCategory
+from src.reports import ReportFormat, ReportGenerator
 
 
 class TestReportGeneratorIntegration:
