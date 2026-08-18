@@ -129,3 +129,63 @@ PASSED test_bar.py::test_two
         result = ExecutorAgent._parse_failed_cases(output)
         assert len(result) == 1
         assert result[0]["name"] == "test_foo.py::test_one"
+
+    def test_mixed_pass_fail_output(self):
+        """混合通过和失败输出时正确解析。"""
+        output = """
+============================= test session ==============================
+collected 3 items
+
+test_a.py::test_pass PASSED                                           [ 33%]
+test_b.py::test_fail FAILED                                           [ 66%]
+test_c.py::test_pass PASSED                                           [100%]
+
+=========================== short test summary ============================
+FAILED test_b.py::test_fail - AssertionError: expected 1, got 2
+========================= 1 failed, 2 passed in 0.1s =========================
+"""
+        result = ExecutorAgent._parse_failed_cases(output)
+        assert len(result) == 1
+        assert "test_b.py::test_fail" in result[0]["name"]
+
+    def test_unicode_error_message(self):
+        """含 Unicode 字符的错误信息正确解析。"""
+        output = """
+FAILED test_chinese.py::test_unicode - AssertionError: 期望值与实际值不匹配
+"""
+        result = ExecutorAgent._parse_failed_cases(output)
+        assert len(result) == 1
+        assert "test_unicode" in result[0]["name"]
+
+    def test_no_failed_keyword(self):
+        """无 FAILED 关键字时返回空列表。"""
+        output = """
+============================= test session ==============================
+collected 5 items
+
+test_a.py::test_one PASSED                                            [ 20%]
+test_b.py::test_two PASSED                                            [ 40%]
+test_c.py::test_three PASSED                                          [ 60%]
+test_d.py::test_four PASSED                                           [ 80%]
+test_e.py::test_five PASSED                                           [100%]
+
+============================== 5 passed in 0.1s ==============================
+"""
+        result = ExecutorAgent._parse_failed_cases(output)
+        assert result == []
+
+    def test_empty_string(self):
+        """空字符串输入返回空列表。"""
+        result = ExecutorAgent._parse_failed_cases("")
+        assert result == []
+
+    def test_syntax_error_output(self):
+        """语法错误输出时正确解析。"""
+        output = """
+  File "test_syntax.py", line 5
+    def test_func(
+                  ^
+SyntaxError: unexpected EOF while parsing
+"""
+        result = ExecutorAgent._parse_failed_cases(output)
+        assert isinstance(result, list)
