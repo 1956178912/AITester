@@ -249,13 +249,14 @@ class BaseAgent:
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
-        # 生成缓存键（基于 prompt 和 system_prompt）
-        cache_key = f"{user_message}:{self.system_prompt[:100]}"  # 截取前100字符作为标识
-
-        # 尝试从缓存获取
+        # 生成缓存键（基于完整 prompt 和 system_prompt）
+        # 使用 hashlib.md5 替代 hash()，确保跨会话缓存命中（hash() 在 Python 3.3+ 默认随机化）
+        cache_key = f"{user_message}:{self.system_prompt}"
+        import hashlib
         import os
 
-        cache_file = os.path.join(os.path.dirname(__file__), "..", "cache", f"{hash(cache_key) % 10000}.json")
+        cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
+        cache_file = os.path.join(os.path.dirname(__file__), "..", "cache", f"{cache_hash}.json")
         cache_file = os.path.normpath(cache_file)
 
         try:

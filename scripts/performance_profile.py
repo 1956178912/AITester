@@ -195,7 +195,7 @@ def test_workflow_build():
     from src.graph.workflow import build_workflow
 
     for _ in range(5):
-        graph = build_workflow()
+        build_workflow()
         # 不实际执行，只测试构建时间
 
 
@@ -205,7 +205,7 @@ def test_full_pipeline():
     from src.agents.executor import ExecutorAgent
 
     # 测试执行器初始化
-    executor = ExecutorAgent(timeout=5)
+    ExecutorAgent(timeout=5)
 
     # 测试错误分类
     classifier = ErrorClassifier()

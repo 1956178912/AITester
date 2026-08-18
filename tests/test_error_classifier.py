@@ -39,7 +39,7 @@ class TestErrorClassifier:
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.SYNTAX
 
-    def test_syntax_error_classification(self):
+    def test_syntax_error_only(self):
         """验证 SyntaxError 被正确分类为 SYNTAX。"""
         output = "SyntaxError: invalid syntax"
         result = self.classifier.classify(output, [])

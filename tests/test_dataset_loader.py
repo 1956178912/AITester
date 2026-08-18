@@ -429,6 +429,19 @@ class TestSWEBenchDataset:
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
                 SWEBenchDataset.download_from_huggingface()
 
+    def test_download_from_huggingface_success(self, tmp_path):
+        """验证下载成功时返回正确路径。"""
+        # 使用 MagicMock 避免实际下载
+        from unittest.mock import MagicMock
+        mock_item = MagicMock()
+        mock_item.__getitem__ = lambda self, key: {"instance_id": "test__1", "repository": "test/repo"}.get(key)
+        mock_dataset = [mock_item]
+
+        with patch("src.dataset_loader.load_dataset", return_value=mock_dataset):
+            result = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path))
+            assert result == str(tmp_path / "swe_bench_instances.jsonl")
+            assert (tmp_path / "swe_bench_instances.jsonl").exists()
+
 
 # ─── Defects4JPYDataset 测试 ────────────────────────────────────────────────────
 class TestDefects4JPYDataset:

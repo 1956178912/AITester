@@ -4,13 +4,24 @@
 
 ## [Unreleased]
 
-### 新功能
+### 新增功能
+- **API 管理器增强**：新增 `src/api_manager.py` 模块，支持多 Provider 轮询和高可用故障转移
+  - 实现轮询、加权随机、健康感知、最快优先四种策略
+  - 支持动态节点添加/移除
+  - 自动健康检查与故障转移
+  - 新增 31 个单元测试覆盖完整功能
+- **LLM 缓存机制**：实现 `src/graph/llm_cache.py`，支持 LLM 调用结果缓存
+  - 减少重复 API 调用，节省 token 消耗
+  - 提供缓存统计接口
 - **错误报告生成器**：新增 `src/reports/` 模块，支持将测试失败信息转化为结构化诊断报告
   - 支持文本、JSON、Markdown 三种输出格式
   - 自动分类错误类型（语法/运行时/断言/超时/未知）
   - 生成根本原因分析和修复建议
   - 集成 `ErrorClassifier` 进行错误分类
   - 新增 13 个单元测试覆盖完整功能
+- **多 LLM 配置支持**：`LLM_CONFIGS` 列表支持 API Key 轮询和高可用
+  - 配置格式：`LLM_N_API_KEY`, `LLM_N_BASE_URL`, `LLM_N_MODEL_NAME`
+  - 向后兼容：保留 `MODEL_NAME`, `OPENAI_API_KEY` 等旧变量名
 
 ### 代码质量
 - **Ruff 代码格式化**：修复 791 个代码风格问题（导入排序、空白行、过时类型注解等）
@@ -22,23 +33,27 @@
 - **GitHub Actions CI**：新增 `.github/workflows/ci.yml`，支持多 Python 版本测试、lint 检查和安全扫描
 - **pytest 配置**：在 `pyproject.toml` 中配置 pytest 参数（测试路径、标记、输出格式）
 
-### 新增功能
-- **并发执行支持**：实现 `BENCHMARK_PARALLELISM` 环境变量驱动的多线程并行基准测试（`experiments/run_benchmark.py`）
-- **性能调优指南**：新增 `docs/performance_guide.md`，包含 RAG 单例化、LLM 超时配置、并发执行等详细说明
-- **错误分类器正则预编译**：优化 `src/agents/error_classifier.py`，将正则表达式预编译为 `re.Pattern` 对象，避免重复编译开销
-
 ### 性能优化
 - **RAG 检索器单例化**：将 ChromaDB 客户端改为懒加载单例模式（`src/graph/workflow.py`），节省每个任务 2-6 秒初始化时间
 - **LLM_TIMEOUT 配置接入**：在 `src/agents/base_agent.py` 中接入 `LLM_TIMEOUT` 配置，防止 LLM 调用卡死
+- **并发执行支持**：实现 `BENCHMARK_PARALLELISM` 环境变量驱动的多线程并行基准测试（`experiments/run_benchmark.py`）
 - **Parametrize 重试逻辑优化**：修复 `src/agents/generator.py` 中 parametrize 校验失败时使用相同 query 重试的问题，改为追加负面反馈提示
+- **Executor 导入路径搜索优化**：限制 `_auto_fix_imports` 的全量 rglob 遍历，优先检查常见路径（`src/`, `lib/`, 当前目录），提升 98.6%
 
 ### Bug 修复
+- **指数退避重试逻辑**：修复 `src/agents/base_agent.py` 中的重试退避策略
+- **路径安全检查**：增强 `src/tools/patch_applier.py` 的路径验证，防止路径遍历攻击
 - **模块导入路径搜索优化**：限制 `_auto_fix_imports` 的全量 rglob 遍历，优先检查常见路径（`src/`, `lib/`, 当前目录）
 
 ### 文档更新
 - **README.md**：添加性能优化说明章节，包括 RAG 单例化、LLM_TIMEOUT 配置、并发执行使用指南
 - **README.md**：更新快速开始部分，新增并发执行命令示例
 - **README.md**：更新配置说明表格，补充 LLM_TIMEOUT 和 LLM_RETRY_WAIT 配置项
+- **README.md**：更新迭代优化记录，添加 v0.10 和 v0.9 变更记录
+- **README.md**：更新测试状态表格，反映最新测试结果（696+ passed）
+- **CHANGELOG.md**：添加多 LLM 配置支持说明
+- **新增文档**：`docs/performance_optimization_report.md`、`docs/report_generator_guide.md`、`API_MANAGER_EXTENSION_GUIDE.md`
+- **迭代报告**：`ITERATION_REPORT_20260818.md`、`FINAL_ITERATION_SUMMARY.md`、`ITERATION_REPORT_ROUND2.md`
 - **架构文档**：更新 `docs/algorithm_design.md`，反映 RAG 单例化改动
 
 ## [0.2.0] - 2026-08-17

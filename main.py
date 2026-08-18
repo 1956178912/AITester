@@ -37,7 +37,6 @@ try:
     from rich.console import Console
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
     from rich.table import Table
-    from rich.text import Text
 
     RICH_AVAILABLE = True
 except ImportError:
@@ -45,7 +44,7 @@ except ImportError:
     Console = None
 
 try:
-    from tqdm import tqdm as _tqdm
+    import tqdm  # noqa: F401  # 用于检测是否可用
 
     TQDM_AVAILABLE = True
 except ImportError:

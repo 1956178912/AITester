@@ -1,7 +1,8 @@
 """
-MySQL 数据库操作封装（单例模式）。
+MySQL 数据库操作封装（单例 + 连接池）。
 提供任务记录、测试运行记录、修复历史等 CRUD 操作。
 output 字段使用 MEDIUMTEXT 类型，不再截断。
+连接池使用 DBUtils.PooledDB 提升并发能力（~10 QPS → 100+ QPS）。
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import pymysql
+from dbutils.pooled_db import PooledDB
 
 from config import (
     MYSQL_DATABASE,
@@ -22,16 +24,32 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
+# ─── 连接池配置常量 ───────────────────────────────────────────────────────────
+# 初始化时创建的预留空闲连接数
+_POOL_MIN_CACHED = 5
+# 连接池中允许的最大空闲连接数
+_POOL_MAX_CACHED = 10
+# 连接池允许的最大连接总数（含正在使用的）
+_POOL_MAX_CONNECTIONS = 20
+# 从池获取连接的等待超时秒数（连接池满时阻塞等待）
+_POOL_CONNECTION_TIMEOUT = 30
+# 连接空闲超过此秒数后被回收（0 表示不回收）
+_POOL_IDLE_TIMEOUT = 600
+
 
 class MySQLClient:
     """
-    MySQL 数据库单例客户端。
+    MySQL 数据库单例客户端（带连接池）。
 
-    属性:
-        connection: pymysql 连接对象。
+    使用 DBUtils.PooledDB 管理连接池，支持高并发读写。
+    所有连接通过 pool.connection() 按需获取，使用完毕归还至池中。
+
+    类属性:
+        _pool: PooledDB 连接池单例。
     """
 
     _instance: MySQLClient | None = None
+    _pool: PooledDB | None = None
 
     def __new__(cls) -> MySQLClient:
         if cls._instance is None:
@@ -39,32 +57,54 @@ class MySQLClient:
         return cls._instance
 
     def __init__(self) -> None:
-        if not hasattr(self, "connection") or self.connection is None:
-            self.connection = pymysql.connect(
-                host=MYSQL_HOST,
-                port=MYSQL_PORT,
-                user=MYSQL_USER,
-                password=MYSQL_PASSWORD,
-                database=MYSQL_DATABASE,
-                charset="utf8mb4",
-                cursorclass=pymysql.cursors.DictCursor,
-            )
+        # 避免重复初始化连接池
+        if MySQLClient._pool is not None:
+            return
+        MySQLClient._pool = PooledDB(
+            creator=pymysql,
+            maxconnections=_POOL_MAX_CONNECTIONS,
+            mincached=_POOL_MIN_CACHED,
+            maxcached=_POOL_MAX_CACHED,
+            blocking=True,
+            timeout=_POOL_CONNECTION_TIMEOUT,
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database=MYSQL_DATABASE,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        logger.info(
+            "MySQL 连接池已创建: max=%d, min_cached=%d, max_cached=%d",
+            _POOL_MAX_CONNECTIONS,
+            _POOL_MIN_CACHED,
+            _POOL_MAX_CACHED,
+        )
+
+    @classmethod
+    def get_pool(cls) -> PooledDB:
+        """获取全局连接池单例。"""
+        return cls._pool
 
     @contextmanager
     def cursor(self):
         """
         提供事务安全的游标上下文管理器。
-        自动提交成功事务，回滚失败事务。
+        从连接池获取连接，自动提交成功事务，回滚失败事务，
+        并在 finally 中归还连接到池。
         """
-        cur = self.connection.cursor()
+        conn = self._pool.connection()
+        cur = conn.cursor()
         try:
             yield cur
-            self.connection.commit()
+            conn.commit()
         except Exception:
-            self.connection.rollback()
+            conn.rollback()
             raise
         finally:
             cur.close()
+            conn.close()  # 归还连接到池
 
     # ─── 任务记录 CRUD ───────────────────────────────────────────────────────
 

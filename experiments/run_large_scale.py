@@ -18,10 +18,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import click
+import click  # noqa: E402
 
-from experiments.run_benchmark import run_benchmark
-from src.synthetic_dataset import SyntheticDataset
+from experiments.run_benchmark import run_benchmark  # noqa: E402
+from src.synthetic_dataset import SyntheticDataset  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

@@ -105,52 +105,62 @@ class ErrorReport:
         ]
 
         if self.error_context:
-            lines.extend([
-                "--- 错误位置 ---",
-                f"文件: {self.error_context.filename}",
-                f"行号: {self.error_context.line}",
-                f"列号: {self.error_context.column}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "--- 错误位置 ---",
+                    f"文件: {self.error_context.filename}",
+                    f"行号: {self.error_context.line}",
+                    f"列号: {self.error_context.column}",
+                    "",
+                ]
+            )
 
-        lines.extend([
-            "--- 根本原因 ---",
-            self.root_cause or "（待分析）",
-            "",
-            "--- 修复建议 ---",
-            self.suggested_fix or "（暂无建议）",
-            "",
-        ])
+        lines.extend(
+            [
+                "--- 根本原因 ---",
+                self.root_cause or "（待分析）",
+                "",
+                "--- 修复建议 ---",
+                self.suggested_fix or "（暂无建议）",
+                "",
+            ]
+        )
 
         if self.failed_cases:
-            lines.extend([
-                "--- 失败测试用例 ---",
-                f"共 {len(self.failed_cases)} 个失败用例",
-            ])
+            lines.extend(
+                [
+                    "--- 失败测试用例 ---",
+                    f"共 {len(self.failed_cases)} 个失败用例",
+                ]
+            )
             for i, case in enumerate(self.failed_cases[:5], 1):  # 最多显示5个
                 lines.append(f"  {i}. {case.get('name', 'unknown')}")
-                if case.get('error'):
+                if case.get("error"):
                     lines.append(f"     错误: {case['error'][:100]}...")
             if len(self.failed_cases) > 5:
                 lines.append(f"  ... 还有 {len(self.failed_cases) - 5} 个失败用例")
             lines.append("")
 
         if self.history:
-            lines.extend([
-                "--- 历史修复记录 ---",
-                f"共 {len(self.history)} 次修复尝试",
-            ])
+            lines.extend(
+                [
+                    "--- 历史修复记录 ---",
+                    f"共 {len(self.history)} 次修复尝试",
+                ]
+            )
             for i, record in enumerate(self.history[-3:], 1):  # 显示最近3次
                 lines.append(f"  第 {i} 次: {record.get('action', 'unknown')}")
-                if record.get('result'):
+                if record.get("result"):
                     lines.append(f"         结果: {record['result']}")
             lines.append("")
 
-        lines.extend([
-            "=" * 60,
-            f"报告生成时间: {self.created_at}",
-            "=" * 60,
-        ])
+        lines.extend(
+            [
+                "=" * 60,
+                f"报告生成时间: {self.created_at}",
+                "=" * 60,
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -178,34 +188,40 @@ class ErrorReport:
         ]
 
         if self.error_context:
-            lines.extend([
-                "## 错误位置",
-                "",
-                f"- **文件**: `{self.error_context.filename}`",
-                f"- **行号**: {self.error_context.line}",
-                f"- **列号**: {self.error_context.column}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## 错误位置",
+                    "",
+                    f"- **文件**: `{self.error_context.filename}`",
+                    f"- **行号**: {self.error_context.line}",
+                    f"- **列号**: {self.error_context.column}",
+                    "",
+                ]
+            )
 
-        lines.extend([
-            "## 根本原因",
-            "",
-            self.root_cause or "（待分析）",
-            "",
-            "## 修复建议",
-            "",
-            self.suggested_fix or "（暂无建议）",
-            "",
-        ])
+        lines.extend(
+            [
+                "## 根本原因",
+                "",
+                self.root_cause or "（待分析）",
+                "",
+                "## 修复建议",
+                "",
+                self.suggested_fix or "（暂无建议）",
+                "",
+            ]
+        )
 
         if self.failed_cases:
-            lines.extend([
-                f"## 失败测试用例（共 {len(self.failed_cases)} 个）",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"## 失败测试用例（共 {len(self.failed_cases)} 个）",
+                    "",
+                ]
+            )
             for i, case in enumerate(self.failed_cases[:5], 1):
                 lines.append(f"{i}. **{case.get('name', 'unknown')}**")
-                if case.get('error'):
+                if case.get("error"):
                     lines.append("   ```python")
                     lines.append(f"   {case['error'][:200]}")
                     lines.append("   ```")
@@ -368,7 +384,7 @@ class ReportGenerator:
             if "ZeroDivisionError" in error_output:
                 suggestions.append("1. 在被除数使用前添加零值检查")
                 suggestions.append("2. 使用 try-except 捕获除零异常")
-                suggestions.append('3. 添加测试用例覆盖除数为 0 的场景')
+                suggestions.append("3. 添加测试用例覆盖除数为 0 的场景")
             elif "TypeError" in error_output:
                 suggestions.append("1. 检查函数调用时的参数类型")
                 suggestions.append("2. 添加类型注解和参数校验")

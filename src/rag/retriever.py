@@ -151,7 +151,7 @@ class TestCaseRetriever:
         # 分离过期和未过期条目
         valid_ids = []
         expired_ids = []
-        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"]):
+        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
             added_at = meta.get("_added_at", 0)
             if current_time - added_at <= self.ttl_seconds:
                 valid_ids.append(doc_id)
@@ -170,10 +170,9 @@ class TestCaseRetriever:
             # 按添加时间排序，保留最新的 max_cases 个
             id_time_pairs = [
                 (doc_id, meta.get("_added_at", 0))
-                for doc_id, meta in zip(valid_results["ids"], valid_results["metadatas"])
+                for doc_id, meta in zip(valid_results["ids"], valid_results["metadatas"], strict=False)
             ]
             id_time_pairs.sort(key=lambda x: x[1], reverse=True)  # 按时间降序
-            keep_ids = [id for id, _ in id_time_pairs[: self.max_cases]]
             remove_ids = [id for id, _ in id_time_pairs[self.max_cases :]]
 
             if remove_ids:
@@ -304,7 +303,7 @@ class TestCaseRetriever:
         )
 
         cases = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+        for _doc, meta in zip(results["documents"][0], results["metadatas"][0], strict=False):
             cases.append(
                 {
                     "test_code": meta.get("test_code", ""),
@@ -348,7 +347,7 @@ class TestCaseRetriever:
         )
 
         repairs = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
+        for _doc, meta in zip(results["documents"][0], results["metadatas"][0], strict=False):
             repairs.append(
                 {
                     "patch": meta.get("patch", ""),
@@ -375,7 +374,7 @@ class TestCaseRetriever:
             return 0
 
         expired_ids = []
-        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"]):
+        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
             added_at = meta.get("_added_at", 0)
             if current_time - added_at > self.ttl_seconds:
                 expired_ids.append(doc_id)

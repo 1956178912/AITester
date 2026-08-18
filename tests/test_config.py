@@ -17,43 +17,50 @@ import pytest
 class TestMySQLClient:
     """测试 MySQLClient 单例模式和事务行为。"""
 
-    @patch("src.db.mysql_client.pymysql.connect")
-    def test_singleton_pattern(self, mock_connect):
+    @patch("src.db.mysql_client.PooledDB")
+    def test_singleton_pattern(self, mock_pool_cls):
         """多次初始化应返回同一实例。"""
-        mock_connect.return_value = MagicMock()
+        mock_pool = MagicMock()
+        mock_pool_cls.return_value = mock_pool
         from src.db.mysql_client import MySQLClient
 
-        # 清除已有实例以确保测试独立
+        # 清除已有实例和连接池以确保测试独立
         MySQLClient._instance = None
+        MySQLClient._pool = None
         client1 = MySQLClient()
         client2 = MySQLClient()
         assert client1 is client2
+        mock_pool_cls.assert_called_once()
 
-    @patch("src.db.mysql_client.pymysql.connect")
-    def test_cursor_commits_on_success(self, mock_connect):
+    @patch("src.db.mysql_client.PooledDB")
+    def test_cursor_commits_on_success(self, mock_pool_cls):
         """cursor 上下文管理器在正常执行时应提交事务。"""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_pool = mock_pool_cls.return_value
+        mock_pool.connection.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
 
         MySQLClient._instance = None
+        MySQLClient._pool = None
         client = MySQLClient()
         with client.cursor() as cur:
             cur.execute("SELECT 1")
         mock_conn.commit.assert_called_once()
 
-    @patch("src.db.mysql_client.pymysql.connect")
-    def test_cursor_rolls_back_on_error(self, mock_connect):
+    @patch("src.db.mysql_client.PooledDB")
+    def test_cursor_rolls_back_on_error(self, mock_pool_cls):
         """cursor 上下文管理器在异常时应回滚事务。"""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_pool = mock_pool_cls.return_value
+        mock_pool.connection.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
 
         MySQLClient._instance = None
+        MySQLClient._pool = None
         client = MySQLClient()
         with pytest.raises(ValueError):
             with client.cursor() as cur:
@@ -61,33 +68,37 @@ class TestMySQLClient:
                 raise ValueError("模拟错误")
         mock_conn.rollback.assert_called_once()
 
-    @patch("src.db.mysql_client.pymysql.connect")
-    def test_create_task_returns_string_id(self, mock_connect):
+    @patch("src.db.mysql_client.PooledDB")
+    def test_create_task_returns_string_id(self, mock_pool_cls):
         """create_task 应返回任务 ID 字符串。"""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.lastrowid = 42
         mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_pool = mock_pool_cls.return_value
+        mock_pool.connection.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
 
         MySQLClient._instance = None
+        MySQLClient._pool = None
         client = MySQLClient()
         task_id = client.create_task("examples/calculator.py", "divide")
         assert task_id == "42"
         mock_cursor.execute.assert_called_once()
 
-    @patch("src.db.mysql_client.pymysql.connect")
-    def test_get_task_returns_none_when_not_found(self, mock_connect):
+    @patch("src.db.mysql_client.PooledDB")
+    def test_get_task_returns_none_when_not_found(self, mock_pool_cls):
         """查询不存在任务时应返回 None。"""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = None
         mock_conn.cursor.return_value = mock_cursor
-        mock_connect.return_value = mock_conn
+        mock_pool = mock_pool_cls.return_value
+        mock_pool.connection.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
 
         MySQLClient._instance = None
+        MySQLClient._pool = None
         client = MySQLClient()
         result = client.get_task("999")
         assert result is None

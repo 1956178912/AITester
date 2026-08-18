@@ -281,7 +281,7 @@ class TestSWEBenchDatasetLocal:
         """下载时网络错误抛出 RuntimeError。"""
         from src.dataset_loader import SWEBenchDataset
 
-        with patch("src.dataset_loader.load_dataset", side_effect=Exception("network timeout")):
+        with patch("datasets.load_dataset", side_effect=Exception("network timeout")):
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
                 SWEBenchDataset.download_from_huggingface()
 
@@ -428,15 +428,15 @@ class TestBaseDatasetLoaderAbstract:
             BaseDatasetLoader()
 
     def test_subclass_without_impl_raises(self):
-        """未实现 _load_raw_data 的子类调用时抛出 NotImplementedError。"""
+        """未实现 _load_raw_data 的子类实例化时抛出 TypeError。"""
         from src.dataset_loader import BaseDatasetLoader
 
-        class IncompleteLoader(BaseDatasetLoader):
-            pass
+        with pytest.raises(TypeError, match="_load_raw_data"):
 
-        loader = IncompleteLoader()
-        with pytest.raises(NotImplementedError):
-            loader._load_raw_data()
+            class IncompleteLoader(BaseDatasetLoader):
+                pass
+
+            IncompleteLoader()
 
     def test_get_task_by_id_not_found(self, tmp_path):
         """找不到任务时返回 None。"""

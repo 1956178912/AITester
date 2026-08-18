@@ -236,7 +236,6 @@ def apply_multi_function_patch(
     all_success = True
 
     for patch_info in sorted_patches:
-        func_name = patch_info["function_name"]
         patch = patch_info["patch"]
 
         new_code, success = apply_patch_to_code(current_code, patch)
