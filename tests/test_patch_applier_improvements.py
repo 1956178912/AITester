@@ -7,11 +7,7 @@
     - 边界情况处理
 """
 
-import pytest
-import tempfile
-import os
-from pathlib import Path
-from src.tools.patch_applier import apply_patch_to_code, _extract_patch_code
+from src.tools.patch_applier import apply_patch_to_code
 
 
 # ─── TestMultiFunctionPatch：多函数补丁测试 ───────────────────────────────────
@@ -20,7 +16,7 @@ class TestMultiFunctionPatch:
 
     def test_apply_multiple_patches(self):
         """测试同时修改多个函数。"""
-        original = '''\
+        original = """\
 def add(a, b):
     return a + b
 
@@ -29,7 +25,7 @@ def subtract(a, b):
 
 def multiply(a, b):
     return a * b
-'''
+"""
         patch = '''\
 """修复后的计算器模块。"""
 
@@ -57,7 +53,7 @@ def multiply(a, b):
 
     def test_apply_single_patch_from_list(self):
         """测试从补丁列表应用单个补丁。"""
-        original = '''\
+        original = """\
 def func_a():
     return 1
 
@@ -66,12 +62,12 @@ def func_b():
 
 def func_c():
     return 3
-'''
+"""
         # 只替换 func_b
-        patch = '''\
+        patch = """\
 def func_b():
     return 20  # 修改后的值
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "return 20" in new_code
@@ -100,14 +96,14 @@ class TestErrorRecovery:
 
     def test_safe_apply_valid_patch(self):
         """测试有效补丁的安全应用。"""
-        original = '''\
+        original = """\
 def add(a, b):
     return a + b
-'''
-        patch = '''\
+"""
+        patch = """\
 def add(a, b):
     return a + b + 1  # 修复后的版本
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "return a + b + 1" in new_code
@@ -115,6 +111,7 @@ def add(a, b):
     def test_safe_apply_syntax_error_rolls_back(self):
         """测试语法错误时回滚到原代码。"""
         from src.tools.patch_applier import safe_apply_patch
+
         original = "def foo(): return 1\n"
         # 无效的 Python 代码作为补丁
         patch = "def foo(): return \n    invalid syntax"
@@ -140,13 +137,13 @@ def add(a, b):
 
     def test_partial_function_replacement(self):
         """测试部分函数替换的完整性。"""
-        original = '''\
+        original = """\
 def add(a, b):
     return a + b
 
 def subtract(a, b):
     return a - b
-'''
+"""
         # 只替换 add，保留 subtract
         patch = '''\
 def add(a, b):
@@ -185,7 +182,7 @@ class TestSafeApplyMultiFunctionPatch:
 
     def test_safe_multi_function_valid(self):
         """测试有效的多函数补丁。"""
-        original = '''\
+        original = """\
 def func_a(x):
     return x + 1
 
@@ -194,8 +191,8 @@ def func_b(x):
 
 def func_c(x):
     return x - 1
-'''
-        patch = '''\
+"""
+        patch = """\
 def func_a(x):
     return x + 10  # 修改常数
 
@@ -204,7 +201,7 @@ def func_b(x):
 
 def func_c(x):
     return x - 1  # 保持不变
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "return x + 10" in new_code
@@ -213,16 +210,16 @@ def func_c(x):
 
     def test_safe_multi_function_syntax_error(self):
         """测试多函数补丁含语法错误时的处理。"""
-        original = '''\
+        original = """\
 def good_func():
     return 1
-'''
+"""
         # 含语法错误的补丁
-        patch = '''\
+        patch = """\
 def broken_func():
     return 
     invalid
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         # 应回滚或失败
         assert success is False or "invalid" not in new_code
@@ -235,6 +232,7 @@ class TestGenerateDiff:
     def test_generate_diff_basic(self):
         """测试基本的差异生成。"""
         from src.tools.patch_applier import generate_diff
+
         original = "def foo():\n    return 1\n"
         patch_code = "def foo():\n    return 2\n"
         # 先应用补丁得到新代码
@@ -259,36 +257,36 @@ class TestEdgeCases:
 
     def test_nested_function_replacement(self):
         """测试嵌套函数的替换。"""
-        original = '''\
+        original = """\
 def outer():
     def inner():
         return 1
     return inner()
-'''
-        patch = '''\
+"""
+        patch = """\
 def outer():
     def inner():
         return 2  # 修改内层函数
     return inner()
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "return 2" in new_code
 
     def test_function_with_class(self):
         """测试函数与类定义共存时的替换。"""
-        original = '''\
+        original = """\
 def standalone_func():
     return 1
 
 class MyClass:
     def method(self):
         return 2
-'''
-        patch = '''\
+"""
+        patch = """\
 def standalone_func():
     return 100  # 修改独立函数
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "return 100" in new_code
@@ -304,14 +302,14 @@ def standalone_func():
 
     def test_unicode_in_code(self):
         """测试含 Unicode 字符的代码。"""
-        original = '''\
+        original = """\
 def greet(name):
     return f"你好, {name}!"
-'''
-        patch = '''\
+"""
+        patch = """\
 def greet(name):
     return f"您好, {name}! 欢迎回来。"
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "您好" in new_code
@@ -319,14 +317,14 @@ def greet(name):
 
     def test_empty_functions(self):
         """测试空函数的替换。"""
-        original = '''\
+        original = """\
 def empty_func():
     pass
-'''
-        patch = '''\
+"""
+        patch = """\
 def empty_func():
     return "not empty anymore"
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         assert success is True
         assert "not empty anymore" in new_code

@@ -5,10 +5,11 @@
     - debug() 正常流程、failed_cases 截断、RAG 注入
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from src.agents.debugger import DebuggerAgent
-from src.agents.error_classifier import ErrorCategory
 
 
 # ─── TestDebuggerAgent：调试修复师 ────────────────────────────────────────────
@@ -24,7 +25,11 @@ class TestDebuggerAgent:
     def test_debug_normal_flow(self, mock_extract, mock_llm):
         """正常流程：分类 → 构建 prompt → LLM 调用 → 返回结构化结果。"""
         mock_llm.return_value = '{"root_cause": "除零错误", "fix_strategy": "添加边界检查", "patch": "def foo(x): return 1 if x != 0 else 0"}'
-        mock_extract.return_value = {"root_cause": "除零错误", "fix_strategy": "添加边界检查", "patch": "def foo(x): return 1 if x != 0 else 0"}
+        mock_extract.return_value = {
+            "root_cause": "除零错误",
+            "fix_strategy": "添加边界检查",
+            "patch": "def foo(x): return 1 if x != 0 else 0",
+        }
         agent = self._make_agent()
         target = "def foo(x): return 1/x"
         output = "ZeroDivisionError: division by zero"

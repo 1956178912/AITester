@@ -9,23 +9,20 @@
 """
 
 import pytest
-import time
-from typing import Any, Dict
 
 from src.exceptions import (
     AITesterError,
+    APIError,
+    AuthenticationError,
     ConfigurationError,
     ExecutionError,
-    TimeoutError,
-    ParsingError,
     JSONParseError,
-    SyntaxParseError,
-    APIError,
     RateLimitError,
-    AuthenticationError,
+    SyntaxParseError,
+    TimeoutError,
     retry_with_backoff,
-    with_error_context,
     safe_execute,
+    with_error_context,
 )
 
 
@@ -145,11 +142,7 @@ class TestRetryWithBackoff:
         """测试只捕获指定异常类型。"""
         call_count = 0
 
-        @retry_with_backoff(
-            max_retries=2,
-            base_wait=0.01,
-            catch_exceptions=(ValueError,)
-        )
+        @retry_with_backoff(max_retries=2, base_wait=0.01, catch_exceptions=(ValueError,))
         def mixed_failures():
             nonlocal call_count
             call_count += 1
@@ -162,6 +155,7 @@ class TestRetryWithBackoff:
 
     def test_custom_logger_name(self):
         """测试自定义日志记录器名称。"""
+
         @retry_with_backoff(max_retries=1, base_wait=0.01, logger_name="test_logger")
         def func_with_logger():
             raise ValueError("测试")
@@ -176,6 +170,7 @@ class TestWithErrorContext:
 
     def test_context_collection(self):
         """测试自动收集函数参数上下文。"""
+
         @with_error_context()
         def func_with_args(a: int, b: str) -> str:
             raise ValueError("测试错误")
@@ -190,6 +185,7 @@ class TestWithErrorContext:
 
     def test_custom_context_getter(self):
         """测试自定义上下文获取函数。"""
+
         @with_error_context(context_getter=lambda: {"custom": "value"})
         def func_with_custom_context():
             raise RuntimeError("测试")
@@ -207,6 +203,7 @@ class TestSafeExecute:
 
     def test_successful_execution(self):
         """测试成功执行的情况。"""
+
         def good_func(x: int) -> int:
             return x * 2
 
@@ -215,6 +212,7 @@ class TestSafeExecute:
 
     def test_exception_returns_default(self):
         """测试异常时返回默认值。"""
+
         def bad_func(x: int) -> int:
             raise ValueError("错误")
 
@@ -223,6 +221,7 @@ class TestSafeExecute:
 
     def test_custom_exception_type(self):
         """测试自定义异常类型捕获。"""
+
         def raises_value_error(x: int) -> int:
             raise ValueError("值错误")
 
@@ -231,22 +230,12 @@ class TestSafeExecute:
 
         # 只捕获 ValueError，不捕获 TypeError
         # 对于 ValueError，应该返回默认值
-        result = safe_execute(
-            raises_value_error,
-            default=-1,
-            catch_exceptions=(ValueError,),
-            x=5
-        )
+        result = safe_execute(raises_value_error, default=-1, catch_exceptions=(ValueError,), x=5)
         assert result == -1
 
         # 对于 TypeError，应该抛出异常
         with pytest.raises(TypeError):
-            safe_execute(
-                raises_type_error,
-                default=-1,
-                catch_exceptions=(ValueError,),
-                x=5
-            )
+            safe_execute(raises_type_error, default=-1, catch_exceptions=(ValueError,), x=5)
 
     def test_error_handler_callback(self):
         """测试错误处理回调。"""

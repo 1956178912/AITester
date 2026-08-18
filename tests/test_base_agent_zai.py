@@ -7,9 +7,9 @@
     - BaseAgent._call_llm：OpenAI 兼容路径成功、zai 兼容路径成功、API 故障转移、空响应处理
 """
 
-import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestCallZai:
@@ -27,8 +27,7 @@ class TestCallZai:
         mock_response.choices = [MagicMock(message=mock_msg)]
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
-        result = _call_zai("key", "https://open.bigmodel.cn/api", "glm-4.7-flash",
-                           "sys", "user")
+        result = _call_zai("key", "https://open.bigmodel.cn/api", "glm-4.7-flash", "sys", "user")
         assert result == "Hello world"
         mock_client_cls.assert_called_once_with(api_key="key", base_url="https://open.bigmodel.cn/api")
         mock_client_cls.return_value.chat.completions.create.assert_called_once()
@@ -45,14 +44,13 @@ class TestCallZai:
         mock_response.choices = [MagicMock(message=mock_msg)]
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
-        result = _call_zai("key", "https://open.bigmodel.cn/api", "glm-4.7-flash",
-                           "sys", "user")
+        result = _call_zai("key", "https://open.bigmodel.cn/api", "glm-4.7-flash", "sys", "user")
         assert result == "reasoning text"
 
     @patch("zai.ZhipuAiClient")
     def test_empty_response_raises_runtime_error(self, mock_client_cls):
         """content 和 reasoning_content 均为空时抛出 RuntimeError。"""
-        from src.agents.base_agent import _call_zai, _DEFAULT_LLM_MAX_RETRIES
+        from src.agents.base_agent import _DEFAULT_LLM_MAX_RETRIES, _call_zai
 
         mock_response = MagicMock()
         mock_msg = MagicMock()
@@ -62,8 +60,9 @@ class TestCallZai:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         with pytest.raises(RuntimeError, match="zai API 调用失败"):
-            _call_zai("key", "https://open.bigmodel.cn/api", "model", "sys", "user",
-                      max_retries=_DEFAULT_LLM_MAX_RETRIES)
+            _call_zai(
+                "key", "https://open.bigmodel.cn/api", "model", "sys", "user", max_retries=_DEFAULT_LLM_MAX_RETRIES
+            )
         # 应尝试 1 + max_retries 次（首次 + 重试）
         assert mock_client_cls.return_value.chat.completions.create.call_count == _DEFAULT_LLM_MAX_RETRIES + 1
 
@@ -71,8 +70,9 @@ class TestCallZai:
     @patch("zai.ZhipuAiClient")
     def test_rate_limit_retries_then_succeeds(self, mock_client_cls, mock_sleep):
         """速率限制时指数退避重试，最终成功。"""
-        from src.agents.base_agent import _call_zai
         from zai.core._errors import APIReachLimitError
+
+        from src.agents.base_agent import _call_zai
 
         mock_response = MagicMock()
         mock_msg = MagicMock()
@@ -87,8 +87,7 @@ class TestCallZai:
             mock_response,
         ]
 
-        result = _call_zai("key", "https://open.bigmodel.cn/api", "model", "sys", "user",
-                           max_retries=3)
+        result = _call_zai("key", "https://open.bigmodel.cn/api", "model", "sys", "user", max_retries=3)
         assert result == "OK"
         assert mock_client_cls.return_value.chat.completions.create.call_count == 3
         # 验证等待时间：指数退避 base_wait=5，attempt=0 时 5^0=1s，attempt=1 时 5^1=5s
@@ -99,8 +98,9 @@ class TestCallZai:
     @patch("zai.ZhipuAiClient")
     def test_status_error_retries_then_succeeds(self, mock_client_cls, mock_sleep):
         """API 状态错误时指数退避重试（1s, 2s），最终成功。"""
-        from src.agents.base_agent import _call_zai
         from zai.core._errors import APIStatusError
+
+        from src.agents.base_agent import _call_zai
 
         mock_response = MagicMock()
         mock_msg = MagicMock()
@@ -113,8 +113,7 @@ class TestCallZai:
             mock_response,
         ]
 
-        result = _call_zai("key", "https://open.bigmodel.cn/api", "model", "sys", "user",
-                           max_retries=2)
+        result = _call_zai("key", "https://open.bigmodel.cn/api", "model", "sys", "user", max_retries=2)
         assert result == "OK"
         # 使用指数退避（base_wait=1），第一次等 1s
         assert mock_sleep.call_args_list[0][0][0] == 1
@@ -123,7 +122,7 @@ class TestCallZai:
     @patch("zai.ZhipuAiClient")
     def test_generic_exception_retries_then_fails(self, mock_client_cls, mock_sleep):
         """通用异常重试耗尽后抛出 RuntimeError。"""
-        from src.agents.base_agent import _call_zai, _DEFAULT_LLM_MAX_RETRIES
+        from src.agents.base_agent import _DEFAULT_LLM_MAX_RETRIES, _call_zai
 
         mock_client_cls.return_value.chat.completions.create.side_effect = ValueError("network error")
 
@@ -315,8 +314,9 @@ class TestCallLlm:
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_api_id_extracted_from_url(self, mock_get_configs, mock_llm_cls):
         """成功调用时日志中包含 API 主机名。"""
-        from src.agents.base_agent import BaseAgent
         import logging
+
+        from src.agents.base_agent import BaseAgent
 
         mock_get_configs.return_value = [("key", "https://open.bigmodel.cn/api/v1", "model")]
         mock_instance = MagicMock()

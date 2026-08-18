@@ -8,8 +8,10 @@
     - clear 方法重建集合
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, call
+
 from src.rag.retriever import TestCaseRetriever
 
 
@@ -293,8 +295,10 @@ class TestTestCaseRetriever:
         mock_collection.get.return_value = {
             "ids": ["id1", "id2", "id3", "id4", "id5"],
             "metadatas": [
-                {"_added_at": 100}, {"_added_at": 200},
-                {"_added_at": 300}, {"_added_at": 400},
+                {"_added_at": 100},
+                {"_added_at": 200},
+                {"_added_at": 300},
+                {"_added_at": 400},
                 {"_added_at": 500},
             ],
         }

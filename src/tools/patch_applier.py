@@ -17,12 +17,11 @@
 from __future__ import annotations
 
 import ast
-import re
 import difflib
-from typing import List, Dict, Tuple, Optional, Set
+import re
 
 
-def _extract_function_names(code: str) -> Set[str]:
+def _extract_function_names(code: str) -> set[str]:
     """
     从代码中提取所有函数名称。
 
@@ -72,11 +71,7 @@ def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
     return has_docstring or has_import or (patch_func_count >= 2 and original_func_count >= 2)
 
 
-def _find_function_range(
-    lines: List[str],
-    func_name: str,
-    start_idx: int
-) -> Tuple[int, int]:
+def _find_function_range(lines: list[str], func_name: str, start_idx: int) -> tuple[int, int]:
     """
     查找函数在代码中的起止行范围。
 
@@ -93,7 +88,9 @@ def _find_function_range(
     for i in range(start_idx + 1, len(lines)):
         line = lines[i]
         # 结束条件：遇到下一个顶层定义或非空无缩进行
-        if re.match(r"^(def |class |@|#)", line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
+        if re.match(r"^(def |class |@|#)", line) or (
+            line.strip() and not line.startswith(" ") and not line.startswith("\t")
+        ):
             end_idx = i
             break
 
@@ -103,7 +100,7 @@ def _find_function_range(
 def apply_patch_to_code(
     original_code: str,
     patch: str,
-) -> Tuple[str, bool]:
+) -> tuple[str, bool]:
     """
     将补丁代码应用到原始代码。
 
@@ -180,7 +177,7 @@ def apply_patch_to_code(
     return new_code, True
 
 
-def _collapse_blank_lines(lines: List[str]) -> List[str]:
+def _collapse_blank_lines(lines: list[str]) -> list[str]:
     """
     压缩连续空行，最多保留一个空行。
 
@@ -206,8 +203,8 @@ def _collapse_blank_lines(lines: List[str]) -> List[str]:
 
 def apply_multi_function_patch(
     code: str,
-    patches: List[Dict],
-) -> Tuple[str, bool]:
+    patches: list[dict],
+) -> tuple[str, bool]:
     """
     应用多个函数的修改（支持递归函数和多函数同时修改）。
 
@@ -233,11 +230,7 @@ def apply_multi_function_patch(
         return code, True
 
     # 按起始行号从高到低排序（从后往前应用，避免行号偏移）
-    sorted_patches = sorted(
-        patches,
-        key=lambda p: _find_function_start_line(code, p["function_name"]),
-        reverse=True
-    )
+    sorted_patches = sorted(patches, key=lambda p: _find_function_start_line(code, p["function_name"]), reverse=True)
 
     current_code = code
     all_success = True
@@ -276,7 +269,7 @@ def _find_function_start_line(code: str, func_name: str) -> int:
 def safe_apply_patch(
     code: str,
     patch: str,
-) -> Tuple[str, bool]:
+) -> tuple[str, bool]:
     """
     安全应用 patch，失败时自动回滚。
 
@@ -306,8 +299,8 @@ def safe_apply_patch(
 
 def safe_apply_multi_function_patch(
     code: str,
-    patches: List[Dict],
-) -> Tuple[str, bool]:
+    patches: list[dict],
+) -> tuple[str, bool]:
     """
     安全应用多个函数的修改，失败时自动回滚。
 
@@ -353,7 +346,7 @@ def generate_diff(old_code: str, new_code: str) -> str:
         new_lines,
         fromfile="original",
         tofile="modified",
-        n=3  # 3行上下文
+        n=3,  # 3行上下文
     )
 
     return "".join(diff)

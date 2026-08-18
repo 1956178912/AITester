@@ -12,10 +12,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-from itertools import combinations
-from typing import Any, Dict, List
+from typing import Any
 
 import matplotlib
+
 matplotlib.use("Agg")  # 无 GUI 环境下的后端
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -72,7 +72,7 @@ def _interpret_d(d: float) -> str:
     return "negligible"
 
 
-def compute_significance(summary: Dict[str, Any]) -> Dict[str, Any]:
+def compute_significance(summary: dict[str, Any]) -> dict[str, Any]:
     """
     对所有基线两两配对，进行统计显著性检验。
 
@@ -98,12 +98,12 @@ def compute_significance(summary: Dict[str, Any]) -> Dict[str, Any]:
     all_task_ids = sorted(all_task_ids)
 
     # 构建每基线按 task_id 索引的通过率表（1.0=通过，0.0=失败）
-    rate_by_task: Dict[str, Dict[str, float]] = {}
+    rate_by_task: dict[str, dict[str, float]] = {}
     for bl in baselines:
         rate_by_task[bl] = {r["task_id"]: (1.0 if r["passed"] else 0.0) for r in details_map[bl]}
 
     # 各基线汇总统计
-    per_baseline: Dict[str, Dict[str, float]] = {}
+    per_baseline: dict[str, dict[str, float]] = {}
     for bl in baselines:
         rates = [v for v in rate_by_task[bl].values()]
         n = len(rates)
@@ -136,9 +136,19 @@ def compute_significance(summary: Dict[str, Any]) -> Dict[str, Any]:
             d = mean_diff / std_diff if std_diff > 0 else 0.0
 
             sig = _interpret_p(p_val)
-            pairwise.append((ref, bl, round(t_stat, 3), round(p_val, 4),
-                             round(u_stat, 1), round(mw_p, 4),
-                             round(d, 3), sig, _interpret_d(d)))
+            pairwise.append(
+                (
+                    ref,
+                    bl,
+                    round(t_stat, 3),
+                    round(p_val, 4),
+                    round(u_stat, 1),
+                    round(mw_p, 4),
+                    round(d, 3),
+                    sig,
+                    _interpret_d(d),
+                )
+            )
 
     return {"pairwise": pairwise, "per_baseline": per_baseline, "n_tasks": len(all_task_ids)}
 
@@ -146,7 +156,7 @@ def compute_significance(summary: Dict[str, Any]) -> Dict[str, Any]:
 # ─── 图表绘制 ────────────────────────────────────────────────────────────────────
 
 
-def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
+def plot_baseline_comparison(summary: dict[str, Any]) -> None:
     """绘制三个并排柱状图：成功率、平均覆盖率、平均迭代次数，便于直观对比基线优劣。"""
     baselines = list(summary["results"].keys())
     success_rates = [summary["results"][bl]["success_rate"] for bl in baselines]
@@ -165,8 +175,9 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
     axes[0].set_xticklabels(baselines, rotation=15, ha="right")
     axes[0].set_ylim(0, 100)
     for bar, val in zip(bars1, success_rates):
-        axes[0].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                      f"{val:.1f}", ha="center", va="bottom", fontsize=9)
+        axes[0].text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f"{val:.1f}", ha="center", va="bottom", fontsize=9
+        )
 
     # 平均覆盖率柱状图
     bars2 = axes[1].bar([xi + width for xi in x], coverages, width, color="#55A868")
@@ -175,8 +186,9 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
     axes[1].set_xticklabels(baselines, rotation=15, ha="right")
     axes[1].set_ylim(0, 100)
     for bar, val in zip(bars2, coverages):
-        axes[1].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                      f"{val:.1f}", ha="center", va="bottom", fontsize=9)
+        axes[1].text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f"{val:.1f}", ha="center", va="bottom", fontsize=9
+        )
 
     # 平均迭代次数柱状图
     bars3 = axes[2].bar([xi + width * 2 for xi in x], iterations, width, color="#C44E52")
@@ -184,16 +196,22 @@ def plot_baseline_comparison(summary: Dict[str, Any]) -> None:
     axes[2].set_xticks([xi + width * 2 for xi in x])
     axes[2].set_xticklabels(baselines, rotation=15, ha="right")
     for bar, val in zip(bars3, iterations):
-        axes[2].text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
-                      f"{val:.1f}", ha="center", va="bottom", fontsize=9)
+        axes[2].text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.02,
+            f"{val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
 
     plt.tight_layout()
     plt.savefig(os.path.join(_charts_dir, "baseline_comparison.png"), dpi=150)
     plt.close()
-    print(f"图表已保存: baseline_comparison.png")
+    print("图表已保存: baseline_comparison.png")
 
 
-def plot_statistical_significance(sig_result: Dict[str, Any]) -> None:
+def plot_statistical_significance(sig_result: dict[str, Any]) -> None:
     """
     绘制统计检验结果：p 值热力图 + Cohen's d 效应量柱状图。
     仅在有至少 2 个基线时生成。
@@ -218,17 +236,28 @@ def plot_statistical_significance(sig_result: Dict[str, Any]) -> None:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # p 值热力图
-    im1 = ax1.imshow([[1 if s in ("***", "**", "*") else 0.3 for s in row] for row in p_values],
-                      cmap="RdYlGn_r", vmin=0, vmax=1, aspect="auto")
+    im1 = ax1.imshow(
+        [[1 if s in ("***", "**", "*") else 0.3 for s in row] for row in p_values],
+        cmap="RdYlGn_r",
+        vmin=0,
+        vmax=1,
+        aspect="auto",
+    )
     ax1.set_xticks(range(len(baselines)))
     ax1.set_yticks(range(len(baselines)))
     ax1.set_xticklabels(baselines, rotation=45, ha="right")
     ax1.set_yticklabels(baselines)
     for i in range(len(baselines)):
         for j in range(len(baselines)):
-            text = ax1.text(j, i, p_values[i][j], ha="center", va="center",
-                            color="white" if p_values[i][j] in ("***", "**", "*") else "black",
-                            fontsize=11)
+            text = ax1.text(
+                j,
+                i,
+                p_values[i][j],
+                ha="center",
+                va="center",
+                color="white" if p_values[i][j] in ("***", "**", "*") else "black",
+                fontsize=11,
+            )
     ax1.set_title("配对 t 检验 p 值（*** p<0.001, ** p<0.01, * p<0.05）", fontsize=11)
     fig.colorbar(im1, ax=ax1, shrink=0.8)
 
@@ -241,41 +270,44 @@ def plot_statistical_significance(sig_result: Dict[str, Any]) -> None:
     ax2.set_title("Cohen's d 效应量（右侧=aitester 优势）", fontsize=11)
     ax2.set_xlabel("Cohen's d")
     for bar, d in zip(bars, d_vals):
-        ax2.text(bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2,
-                 f"{d:.2f}", ha="left", va="center", fontsize=9)
+        ax2.text(
+            bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{d:.2f}", ha="left", va="center", fontsize=9
+        )
     plt.tight_layout()
     plt.savefig(os.path.join(_charts_dir, "statistical_significance.png"), dpi=150)
     plt.close()
-    print(f"图表已保存: statistical_significance.png")
+    print("图表已保存: statistical_significance.png")
 
 
-def plot_detail_table(summary: Dict[str, Any]) -> None:
+def plot_detail_table(summary: dict[str, Any]) -> None:
     """生成详细结果表格（CSV 格式），便于论文引用。"""
     rows = []
     for bl, data in summary["results"].items():
-        rows.append({
-            "baseline": bl,
-            "total_functions": data["total_functions"],
-            "passed": data["passed_count"],
-            "failed": data["failure_count"],
-            "success_rate_pct": data["success_rate"],
-            "avg_coverage_pct": data["avg_coverage"],
-            "avg_iterations": data["avg_iterations"],
-            "avg_time_s": data["avg_elapsed_seconds"],
-            "total_time_s": data["total_time"],
-        })
+        rows.append(
+            {
+                "baseline": bl,
+                "total_functions": data["total_functions"],
+                "passed": data["passed_count"],
+                "failed": data["failure_count"],
+                "success_rate_pct": data["success_rate"],
+                "avg_coverage_pct": data["avg_coverage"],
+                "avg_iterations": data["avg_iterations"],
+                "avg_time_s": data["avg_elapsed_seconds"],
+                "total_time_s": data["total_time"],
+            }
+        )
 
     df = pd.DataFrame(rows)
     csv_path = os.path.join(_charts_dir, "results_table.csv")
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-    print(f"结果表格已保存: results_table.csv")
+    print("结果表格已保存: results_table.csv")
     print(df.to_string(index=False))
 
 
-def write_summary_md(summary: Dict[str, Any], sig_result: Dict[str, Any]) -> None:
+def write_summary_md(summary: dict[str, Any], sig_result: dict[str, Any]) -> None:
     """生成 Markdown 格式的汇总报告，便于论文引用。"""
     lines = [
-        f"# Benchmark Results Summary",
+        "# Benchmark Results Summary",
         "",
         f"**数据集**: {summary.get('dataset', 'unknown')}  |  **子集**: {summary.get('subset', 'N/A')}  |  **任务数**: {sig_result.get('n_tasks', 'N/A')}",
         "",
@@ -306,7 +338,7 @@ def write_summary_md(summary: Dict[str, Any], sig_result: Dict[str, Any]) -> Non
     md_path = os.path.join(_charts_dir, "summary_stats.md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"汇总报告已保存: summary_stats.md")
+    print("汇总报告已保存: summary_stats.md")
 
 
 def main() -> None:
@@ -321,7 +353,7 @@ def main() -> None:
     result_file = load_latest_result(results_dir)
     print(f"加载结果: {result_file}")
 
-    with open(result_file, "r", encoding="utf-8") as f:
+    with open(result_file, encoding="utf-8") as f:
         summary = json.load(f)
 
     plot_baseline_comparison(summary)

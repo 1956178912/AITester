@@ -7,9 +7,11 @@
 """
 
 import json
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from src.agents.planner import PlannerAgent, LogicAnalysisResult
+
+from src.agents.planner import LogicAnalysisResult, PlannerAgent
 
 
 # ─── TestLogicAnalysisResult：逻辑分析结果序列化 ───────────────────────────────
@@ -35,8 +37,11 @@ class TestLogicAnalysisResult:
     def test_to_dict_empty_lists(self):
         """空前置/后置/边界条件列表也能正确序列化。"""
         result = LogicAnalysisResult(
-            input_domain="", output_domain="",
-            preconditions=[], postconditions=[], edge_cases=[],
+            input_domain="",
+            output_domain="",
+            preconditions=[],
+            postconditions=[],
+            edge_cases=[],
         )
         d = result.to_dict()
         assert d["preconditions"] == []

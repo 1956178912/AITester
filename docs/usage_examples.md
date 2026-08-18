@@ -303,7 +303,7 @@ print(f"修复后代码:\n{result['final_code']}")
 ```python
 # examples/my_module.py
 def my_function(x: int) -> int:
-    '''返回 x 的平方。'''
+    """返回 x 的平方。"""
     return x * x  # 正常实现
 ```
 

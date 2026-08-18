@@ -17,8 +17,9 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class BenchmarkTask:
     test_code: str
     expected_pass_count: int
     total_test_count: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed_count(self) -> int:
@@ -70,7 +71,10 @@ class BenchmarkTask:
         self.metadata["passed_count"] = count
         logger.debug(
             "任务 %s: 通过 %d/%d 测试，通过率 %.1f%%",
-            self.task_id, count, self.total_test_count, self.pass_rate,
+            self.task_id,
+            count,
+            self.total_test_count,
+            self.pass_rate,
         )
 
 
@@ -89,11 +93,9 @@ class BaseDatasetLoader(ABC):
     """
 
     DATASET_NAME: str = "base"
-    DEFAULT_CACHE_DIR: str = os.path.join(
-        os.path.expanduser("~"), ".cache", "aitester"
-    )
+    DEFAULT_CACHE_DIR: str = os.path.join(os.path.expanduser("~"), ".cache", "aitester")
 
-    def __init__(self, subset: Optional[str] = None) -> None:
+    def __init__(self, subset: str | None = None) -> None:
         """
         初始化数据集加载器。
 
@@ -102,7 +104,7 @@ class BaseDatasetLoader(ABC):
         """
         self.subset = subset
         self.data_dir = os.path.join(self.DEFAULT_CACHE_DIR, self.DATASET_NAME)
-        self._tasks: List[BenchmarkTask] = []
+        self._tasks: list[BenchmarkTask] = []
         self._loaded = False
 
     def _ensure_loaded(self) -> None:
@@ -112,13 +114,13 @@ class BaseDatasetLoader(ABC):
             self._loaded = True
 
     @property
-    def tasks(self) -> List[BenchmarkTask]:
+    def tasks(self) -> list[BenchmarkTask]:
         """返回所有任务列表（惰性加载）。"""
         self._ensure_loaded()
         return self._tasks
 
     @property
-    def task_ids(self) -> List[str]:
+    def task_ids(self) -> list[str]:
         """返回所有任务 ID 列表。"""
         return [t.task_id for t in self.tasks]
 
@@ -143,7 +145,7 @@ class BaseDatasetLoader(ABC):
         self._ensure_loaded()
         return iter(self._tasks)
 
-    def get_task_by_id(self, task_id: str) -> Optional[BenchmarkTask]:
+    def get_task_by_id(self, task_id: str) -> BenchmarkTask | None:
         """
         按 task_id 查找任务。
 
@@ -159,7 +161,7 @@ class BaseDatasetLoader(ABC):
                 return task
         return None
 
-    def filter_by_repo(self, repo_pattern: str) -> List[BenchmarkTask]:
+    def filter_by_repo(self, repo_pattern: str) -> list[BenchmarkTask]:
         """
         按仓库名称正则过滤任务。
 
@@ -199,16 +201,16 @@ class SWEBenchDataset(BaseDatasetLoader):
     使用方式：
         dataset = SWEBenchDataset(subset="full")
         for task in dataset.tasks:
-            print(task.task_id, task.problem_statement[:50])
+            logger.info("%s: %s", task.task_id, task.problem_statement[:50])
     """
 
     DATASET_NAME = "swe_bench"
 
     # 可选子集及其对应的任务数量（用于快速预览）
-    SUBSET_MAP: Dict[str, int] = {
-        "lite": 500,       # Lite 子集：500 个任务，适合快速验证
-        "mini": 50,        # Mini 子集：50 个任务，适合开发调试
-        "full": 2294,      # 完整数据集：2294 个任务
+    SUBSET_MAP: dict[str, int] = {
+        "lite": 500,  # Lite 子集：500 个任务，适合快速验证
+        "mini": 50,  # Mini 子集：50 个任务，适合开发调试
+        "full": 2294,  # 完整数据集：2294 个任务
     }
 
     def _load_raw_data(self) -> None:
@@ -234,7 +236,7 @@ class SWEBenchDataset(BaseDatasetLoader):
             return
 
         loaded = 0
-        with open(jsonl_path, "r", encoding="utf-8") as f:
+        with open(jsonl_path, encoding="utf-8") as f:
             for line_num, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
@@ -283,7 +285,7 @@ class SWEBenchDataset(BaseDatasetLoader):
     @classmethod
     def download_from_huggingface(
         cls,
-        cache_dir: Optional[str] = None,
+        cache_dir: str | None = None,
         subset: str = "lite",
     ) -> str:
         """
@@ -303,9 +305,7 @@ class SWEBenchDataset(BaseDatasetLoader):
         try:
             from datasets import load_dataset
         except ImportError:
-            raise ImportError(
-                "请下载 HuggingFace datasets 库: pip install datasets"
-            )
+            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets")
 
         target_dir = cache_dir or cls.DEFAULT_CACHE_DIR
         os.makedirs(target_dir, exist_ok=True)
@@ -344,8 +344,13 @@ class Defects4JPYDataset(BaseDatasetLoader):
     DATASET_NAME = "defects4j_python"
 
     KNOWN_PROJECTS = [
-        "requests", "pytest", "httpie", "matplotlib",
-        "numpy", "pandas", "scikit-learn",
+        "requests",
+        "pytest",
+        "httpie",
+        "matplotlib",
+        "numpy",
+        "pandas",
+        "scikit-learn",
     ]
 
     def _load_raw_data(self) -> None:
@@ -366,8 +371,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
 
         if not os.path.exists(projects_dir):
             logger.warning(
-                "Defects4J-Python 数据未找到: %s\n"
-                "请从 https://github.com/rustcodex/defects4jpython 下载数据",
+                "Defects4J-Python 数据未找到: %s\n请从 https://github.com/rustcodex/defects4jpython 下载数据",
                 projects_dir,
             )
             return
@@ -383,7 +387,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 if not os.path.exists(info_path):
                     continue
                 try:
-                    with open(info_path, "r", encoding="utf-8") as f:
+                    with open(info_path, encoding="utf-8") as f:
                         info = json.load(f)
                 except json.JSONDecodeError:
                     continue
@@ -393,7 +397,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 if os.path.isdir(buggy_dir):
                     for fname in os.listdir(buggy_dir):
                         if fname.endswith(".py"):
-                            with open(os.path.join(buggy_dir, fname), "r", encoding="utf-8") as ff:
+                            with open(os.path.join(buggy_dir, fname), encoding="utf-8") as ff:
                                 buggy_code += ff.read() + "\n"
 
                 test_code = ""
@@ -401,7 +405,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 if os.path.isdir(tests_dir):
                     for fname in sorted(os.listdir(tests_dir)):
                         if fname.startswith("test_") and fname.endswith(".py"):
-                            with open(os.path.join(tests_dir, fname), "r", encoding="utf-8") as ff:
+                            with open(os.path.join(tests_dir, fname), encoding="utf-8") as ff:
                                 test_code += ff.read() + "\n"
 
                 task_id = f"{project_name}__{version_dir}"
@@ -442,7 +446,7 @@ class InMemoryDataset(BaseDatasetLoader):
 
     DATASET_NAME = "in_memory"
 
-    def __init__(self, subset: Optional[str] = None) -> None:
+    def __init__(self, subset: str | None = None) -> None:
         super().__init__()
 
     def _load_raw_data(self) -> None:
@@ -456,11 +460,12 @@ class InMemoryDataset(BaseDatasetLoader):
 
     def add_sample_tasks(self) -> None:
         """添加一组预定义的示例任务（用于快速验证）。"""
-        self.add_task(BenchmarkTask(
-            task_id="examples__calculator_divide",
-            repo_name="examples/calculator",
-            problem_statement="修复 divide 函数的除零 bug",
-            instance_code='''\
+        self.add_task(
+            BenchmarkTask(
+                task_id="examples__calculator_divide",
+                repo_name="examples/calculator",
+                problem_statement="修复 divide 函数的除零 bug",
+                instance_code="""\
 def add(a: float, b: float) -> float:
     return a + b
 
@@ -479,8 +484,8 @@ def factorial(n: int) -> int:
     if n == 0:
         return 1
     return n * factorial(n - 1)
-''',
-            test_code='''\
+""",
+                test_code="""\
 from calculator import divide, factorial
 import pytest
 
@@ -494,17 +499,19 @@ def test_divide_normal():
 def test_factorial_negative():
     with pytest.raises(RecursionError):
         factorial(-1)
-''',
-            expected_pass_count=0,
-            total_test_count=3,
-            metadata={"source": "examples"},
-        ))
+""",
+                expected_pass_count=0,
+                total_test_count=3,
+                metadata={"source": "examples"},
+            )
+        )
 
-        self.add_task(BenchmarkTask(
-            task_id="examples__binary_search",
-            repo_name="examples/buggy_library",
-            problem_statement="修复二分查找的索引越界 bug",
-            instance_code='''\
+        self.add_task(
+            BenchmarkTask(
+                task_id="examples__binary_search",
+                repo_name="examples/buggy_library",
+                problem_statement="修复二分查找的索引越界 bug",
+                instance_code="""\
 def binary_search(arr: list, target: int) -> int:
     # BUG: right 初始值应为 len(arr) - 1
     left, right = 0, len(arr)
@@ -517,8 +524,8 @@ def binary_search(arr: list, target: int) -> int:
         else:
             right = mid - 1
     return -1
-''',
-            test_code='''\
+""",
+                test_code="""\
 from buggy_library import binary_search
 
 def test_binary_search_found():
@@ -529,25 +536,27 @@ def test_binary_search_not_found():
 
 def test_binary_search_empty():
     assert binary_search([], 1) == -1
-''',
-            expected_pass_count=0,
-            total_test_count=3,
-            metadata={"source": "examples"},
-        ))
+""",
+                expected_pass_count=0,
+                total_test_count=3,
+                metadata={"source": "examples"},
+            )
+        )
 
-        self.add_task(BenchmarkTask(
-            task_id="examples__is_palindrome",
-            repo_name="examples/string_utils",
-            problem_statement="修复 is_palindrome 未处理大小写和非字母数字字符的 bug",
-            instance_code='''\
+        self.add_task(
+            BenchmarkTask(
+                task_id="examples__is_palindrome",
+                repo_name="examples/string_utils",
+                problem_statement="修复 is_palindrome 未处理大小写和非字母数字字符的 bug",
+                instance_code="""\
 def is_palindrome(s: str) -> bool:
     # BUG: 未过滤非字母数字字符和统一大小写
     return s == s[::-1]
 
 def reverse_string(s: str) -> str:
     return s[::-1]
-''',
-            test_code='''\
+""",
+                test_code="""\
 from string_utils import is_palindrome
 
 def test_is_palindrome_simple():
@@ -558,14 +567,15 @@ def test_is_palindrome_with_punctuation():
 
 def test_is_palindrome_mixed_case():
     assert is_palindrome("Racecar") is True
-''',
-            expected_pass_count=0,
-            total_test_count=3,
-            metadata={"source": "examples"},
-        ))
+""",
+                expected_pass_count=0,
+                total_test_count=3,
+                metadata={"source": "examples"},
+            )
+        )
 
     @classmethod
-    def create_with_samples(cls) -> "InMemoryDataset":
+    def create_with_samples(cls) -> InMemoryDataset:
         """创建并预填充示例任务的数据集实例。"""
         dataset = cls()
         dataset.add_sample_tasks()
@@ -577,7 +587,7 @@ def test_is_palindrome_mixed_case():
 
 def load_dataset(
     name: str,
-    subset: Optional[str] = None,
+    subset: str | None = None,
     **kwargs: Any,
 ) -> BaseDatasetLoader:
     """
@@ -599,7 +609,7 @@ def load_dataset(
     """
     name_lower = name.lower().replace("-", "_").replace(" ", "_")
 
-    dataset_map: Dict[str, type] = {
+    dataset_map: dict[str, type] = {
         "examples": InMemoryDataset,
         "swe_bench": SWEBenchDataset,
         "swebench": SWEBenchDataset,
@@ -613,8 +623,9 @@ def load_dataset(
     # 懒加载 synthetic 以避免循环导入
     if name_lower in ("synthetic", "synth"):
         from src.synthetic_dataset import SyntheticDataset
+
         return SyntheticDataset(subset=subset, **kwargs)
-    
+
     loader_class = dataset_map.get(name_lower, InMemoryDataset)
     instance = loader_class(subset=subset, **kwargs)
     # InMemoryDataset（含 "examples" 别名）需要预填充示例任务
@@ -623,23 +634,27 @@ def load_dataset(
     return instance
 
 
-def get_available_datasets() -> List[str]:
+def get_available_datasets() -> list[str]:
     """
     返回当前支持的所有数据集名称列表。
 
     Returns:
         数据集名称列表。
     """
-    return list({
-        "swe_bench", "swebench",
-        "defects4j_python", "d4j_py",
-        "in_memory",
-    })
+    return list(
+        {
+            "swe_bench",
+            "swebench",
+            "defects4j_python",
+            "d4j_py",
+            "in_memory",
+        }
+    )
 
 
 if __name__ == "__main__":
     # 快速验证：加载内置示例数据集
     ds = InMemoryDataset.create_with_samples()
-    print(f"内置示例数据集规模: {ds.size} 个任务")
+    logger.info("内置示例数据集规模: %d 个任务", ds.size)
     for task in ds.tasks:
-        print(f"  - {task.task_id}: {task.problem_statement}")
+        logger.info("  - %s: %s", task.task_id, task.problem_statement)

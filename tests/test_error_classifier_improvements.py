@@ -7,12 +7,11 @@
     - 改进的修复策略
 """
 
-import pytest
 from src.agents.error_classifier import (
-    ErrorClassifier,
     ErrorCategory,
-    SyntaxSubtype,
+    ErrorClassifier,
     ErrorContext,
+    SyntaxSubtype,
     get_fix_strategy,
 )
 
@@ -72,7 +71,7 @@ class TestErrorContextExtraction:
 
     def test_traceback_context_extraction(self):
         """测试从 traceback 提取文件名和行号。"""
-        output = '''
+        output = """
 Traceback (most recent call last):
   File "test_runner.py", line 42, in run_test
     result = test_func()
@@ -80,7 +79,7 @@ Traceback (most recent call last):
     x =
          ^
 SyntaxError: invalid syntax
-'''
+"""
         category, context = self.classifier.classify_with_context(output, [])
         assert category == ErrorCategory.SYNTAX
         assert context.subtype == SyntaxSubtype.SYNTAX_ERROR
@@ -116,12 +115,7 @@ SyntaxError: invalid syntax
     def test_failed_cases_context_extraction(self):
         """测试从 failed_cases 提取上下文。"""
         output = ""
-        cases = [
-            {
-                "name": "test_import",
-                "error": "ModuleNotFoundError: No module named 'numpy'"
-            }
-        ]
+        cases = [{"name": "test_import", "error": "ModuleNotFoundError: No module named 'numpy'"}]
         category, context = self.classifier.classify_with_context(output, cases)
         assert category == ErrorCategory.SYNTAX
         assert context.module_name == "numpy"
@@ -152,7 +146,7 @@ class TestImprovedFixStrategy:
             filename="calculator.py",
             line=25,
             column=10,
-            error_message="SyntaxError: invalid syntax"
+            error_message="SyntaxError: invalid syntax",
         )
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
         assert "calculator.py" in strategy
@@ -164,7 +158,7 @@ class TestImprovedFixStrategy:
         context = ErrorContext(
             subtype=SyntaxSubtype.IMPORT_ERROR,
             module_name="pandas",
-            error_message="ModuleNotFoundError: No module named 'pandas'"
+            error_message="ModuleNotFoundError: No module named 'pandas'",
         )
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
         assert "pandas" in strategy

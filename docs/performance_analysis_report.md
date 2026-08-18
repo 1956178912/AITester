@@ -142,6 +142,7 @@ LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
 ```python
 _SYNTAX_PATTERNS = [r"SyntaxError", r"ImportError", ...]  # 列表含原始字符串
 
+
 def _matches_patterns(text: str, patterns: List[str]) -> bool:
     for pattern in patterns:
         if re.search(pattern, text, re.IGNORECASE):  # 每次循环重新编译
@@ -223,6 +224,7 @@ for found_file in root_path.rglob(f"{module_name}.py"):
 ```python
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
 def run_benchmark_parallel(tasks: list[dict], max_workers: int = 4):
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -252,10 +254,10 @@ def run_benchmark_parallel(tasks: list[dict], max_workers: int = 4):
 
 ```python
 # config.py
-EXECUTION_TIMEOUT = 30    # pytest 执行超时
-LLM_TIMEOUT = 60          # LLM 调用超时（实际未直接使用）
-LLM_RETRY_WAIT = 30       # LLM 重试等待时间（实际未直接使用）
-MAX_ITERATIONS = 3        # 最大修复迭代次数
+EXECUTION_TIMEOUT = 30  # pytest 执行超时
+LLM_TIMEOUT = 60  # LLM 调用超时（实际未直接使用）
+LLM_RETRY_WAIT = 30  # LLM 重试等待时间（实际未直接使用）
+MAX_ITERATIONS = 3  # 最大修复迭代次数
 ```
 
 ### 5.2 问题发现
@@ -277,7 +279,9 @@ TASK_TOTAL_TIMEOUT: int = int(os.getenv("TASK_TOTAL_TIMEOUT", "600"))  # 默认 
 
 # 在 workflow.py 中包装 invoke
 import time
+
 start_time = time.time()
+
 
 def invoke_with_timeout(graph, state, config):
     remaining = TASK_TOTAL_TIMEOUT - (time.time() - start_time)
@@ -347,6 +351,7 @@ def invoke_with_timeout(graph, state, config):
 # 在模块级别创建共享检索器
 _rag_retriever: Optional[TestCaseRetriever] = None
 
+
 def get_rag_retriever() -> Optional[TestCaseRetriever]:
     global _rag_retriever
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and _rag_retriever is None:
@@ -356,6 +361,7 @@ def get_rag_retriever() -> Optional[TestCaseRetriever]:
             logger.warning("RAG 检索器初始化失败: %s", e)
             _rag_retriever = None
     return _rag_retriever
+
 
 # 在各节点中使用
 retriever = get_rag_retriever()
@@ -370,8 +376,7 @@ if retriever:
 ```python
 if not self._validate_parametrize(code):
     # 追加负面反馈到 query，避免 LLM 重复相同错误
-    feedback = ("\n\n【重要反馈】上次生成的代码中 parametrize 参数不匹配，"
-                "请确保每个用例元组的长度与参数声明一致。")
+    feedback = "\n\n【重要反馈】上次生成的代码中 parametrize 参数不匹配，请确保每个用例元组的长度与参数声明一致。"
     raw = self._call_llm(query + feedback)
 ```
 

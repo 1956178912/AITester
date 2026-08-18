@@ -7,9 +7,10 @@
     - config.py：默认值验证、LLM_CONFIGS 为空列表、load_env_local
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, call
 import os
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 # ─── TestMySQLClient：数据库客户端 ─────────────────────────────────────────────
@@ -21,6 +22,7 @@ class TestMySQLClient:
         """多次初始化应返回同一实例。"""
         mock_connect.return_value = MagicMock()
         from src.db.mysql_client import MySQLClient
+
         # 清除已有实例以确保测试独立
         MySQLClient._instance = None
         client1 = MySQLClient()
@@ -35,6 +37,7 @@ class TestMySQLClient:
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
+
         MySQLClient._instance = None
         client = MySQLClient()
         with client.cursor() as cur:
@@ -49,6 +52,7 @@ class TestMySQLClient:
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
+
         MySQLClient._instance = None
         client = MySQLClient()
         with pytest.raises(ValueError):
@@ -66,6 +70,7 @@ class TestMySQLClient:
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
+
         MySQLClient._instance = None
         client = MySQLClient()
         task_id = client.create_task("examples/calculator.py", "divide")
@@ -81,6 +86,7 @@ class TestMySQLClient:
         mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
         from src.db.mysql_client import MySQLClient
+
         MySQLClient._instance = None
         client = MySQLClient()
         result = client.get_task("999")
@@ -94,41 +100,49 @@ class TestConfig:
     def test_temperature_default(self):
         """TEMPERATURE 默认值应为 0.2。"""
         from config import TEMPERATURE
+
         assert TEMPERATURE == 0.2
 
     def test_max_iterations_default(self):
         """MAX_ITERATIONS 默认值应为 3。"""
         from config import MAX_ITERATIONS
+
         assert MAX_ITERATIONS == 3
 
     def test_coverage_threshold_default(self):
         """COVERAGE_THRESHOLD 默认值应为 80.0。"""
         from config import COVERAGE_THRESHOLD
+
         assert COVERAGE_THRESHOLD == 80.0
 
     def test_execution_timeout_default(self):
         """EXECUTION_TIMEOUT 默认值应为 30。"""
         from config import EXECUTION_TIMEOUT
+
         assert EXECUTION_TIMEOUT == 30
 
     def test_enable_planner_default(self):
         """ENABLE_PLANNER 默认值应为 True。"""
         from config import ENABLE_PLANNER
+
         assert ENABLE_PLANNER is True
 
     def test_enable_debugger_default(self):
         """ENABLE_DEBUGGER 默认值应为 True。"""
         from config import ENABLE_DEBUGGER
+
         assert ENABLE_DEBUGGER is True
 
     def test_enable_rag_default(self):
         """ENABLE_RAG 默认值应为 False。"""
         from config import ENABLE_RAG
+
         assert ENABLE_RAG is False
 
     def test_llm_configs_empty_without_env(self):
         """直接测试 _load_llm_configs：无 LLM_* 环境变量时返回空列表。"""
         import config as config_module
+
         # 移除所有 LLM_* 环境变量（保留非 LLM 变量）
         keys_to_remove = [k for k in os.environ if k.startswith("LLM_")]
         original_values = {}
@@ -144,7 +158,8 @@ class TestConfig:
 
     def test_mysql_defaults(self):
         """MySQL 默认连接参数正确。"""
-        from config import MYSQL_HOST, MYSQL_PORT, MYSQL_DATABASE
+        from config import MYSQL_DATABASE, MYSQL_HOST, MYSQL_PORT
+
         assert MYSQL_HOST == "localhost"
         assert MYSQL_PORT == 3306
         assert MYSQL_DATABASE == "aitester"
@@ -152,5 +167,6 @@ class TestConfig:
     def test_docker_defaults(self):
         """Docker 相关配置默认值正确。"""
         from config import DOCKER_ENABLED, DOCKER_IMAGE
+
         assert DOCKER_ENABLED is False
         assert DOCKER_IMAGE == "python:3.11-slim"

@@ -148,20 +148,21 @@ pytest tests/test_dataset_loader.py::TestMainBlock::test_main_block_runs_without
 # tests/test_dataset_loader.py
 import os
 
+
 def test_main_block_runs_without_error(self):
     """验证 __main__ 块可正常运行而不报错。"""
     import subprocess
-    
+
     # 动态获取项目根目录
     project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
+
     result = subprocess.run(
         [f"{project_path}/.venv/bin/python", "-m", "src.dataset_loader"],
         capture_output=True,
         text=True,
-        cwd=project_path
+        cwd=project_path,
     )
-    
+
     assert result.returncode == 0
     assert "内置示例数据集规模" in result.stdout
 ```

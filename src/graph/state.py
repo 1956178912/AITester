@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 
 class AITesterState(TypedDict, total=False):
@@ -109,14 +109,14 @@ class AITesterState(TypedDict, total=False):
     module_name: str
     target_code: str
     # Planner 输出
-    test_plan: Dict[str, Any] | None
+    test_plan: dict[str, Any] | None
     # Generator 输出
     generated_test: str | None
     # Executor 输出
     test_passed: bool | None
     test_output: str | None
     coverage_report: float | None
-    failed_cases: List[Dict[str, str]] | None
+    failed_cases: list[dict[str, str]] | None
     # Debugger 输出
     diagnosis: str | None
     error_category: str | None
@@ -124,6 +124,6 @@ class AITesterState(TypedDict, total=False):
     # 迭代控制
     iteration: int
     max_iterations: int
-    repair_history: List[Dict[str, Any]]
+    repair_history: list[dict[str, Any]]
     # RAG 检索结果
-    rag_references: List[Dict[str, Any]] | None
+    rag_references: list[dict[str, Any]] | None

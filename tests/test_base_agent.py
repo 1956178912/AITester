@@ -10,8 +10,10 @@
 """
 
 import json
+
 import pytest
-from src.agents.base_agent import BaseAgent, _get_llm_config, _get_all_api_configs
+
+from src.agents.base_agent import BaseAgent
 
 
 # ─── TestExtractJson：JSON 提取方法 ────────────────────────────────────────────
@@ -127,25 +129,25 @@ class TestExtractPythonCode:
 
     def test_generic_fence(self):
         """```（无语言标记）格式也能提取。"""
-        text = '```\ndef foo(): pass\n```'
+        text = "```\ndef foo(): pass\n```"
         result = BaseAgent._extract_python_code(text)
-        assert result == 'def foo(): pass'
+        assert result == "def foo(): pass"
 
     def test_python_prefix(self):
         """python: 前缀格式（无反引号）能提取。"""
-        text = 'python:\ndef foo():\n    return 1'
+        text = "python:\ndef foo():\n    return 1"
         result = BaseAgent._extract_python_code(text)
-        assert 'def foo():' in result
-        assert 'return 1' in result
+        assert "def foo():" in result
+        assert "return 1" in result
 
     def test_no_markers_returns_stripped(self):
         """无标记时直接返回原文（strip 后）。"""
-        text = 'def bar():\n    return True'
+        text = "def bar():\n    return True"
         result = BaseAgent._extract_python_code(text)
-        assert result == 'def bar():\n    return True'
+        assert result == "def bar():\n    return True"
 
     def test_python_fence_with_extra_text(self):
         """代码块前后有冗余文字时仍正确提取。"""
-        text = '以下是代码：\n```python\ndef main(): pass\n```\n结束。'
+        text = "以下是代码：\n```python\ndef main(): pass\n```\n结束。"
         result = BaseAgent._extract_python_code(text)
-        assert result == 'def main(): pass'
+        assert result == "def main(): pass"

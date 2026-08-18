@@ -51,7 +51,7 @@ def is_palindrome(s: str) -> bool:
         True
     """
     # 过滤非字母数字字符并统一转为小写，确保"Racecar"和"racecar"视为相同
-    cleaned = ''.join(c.lower() for c in s if c.isalnum())
+    cleaned = "".join(c.lower() for c in s if c.isalnum())
     return cleaned == cleaned[::-1]
 
 
@@ -66,7 +66,7 @@ def count_vowels(s: str) -> int:
     Returns:
         元音字母的数量。
     """
-    return sum(1 for c in s.lower() if c in 'aeiou')
+    return sum(1 for c in s.lower() if c in "aeiou")
 
 
 def capitalize_words(s: str) -> str:
@@ -109,13 +109,13 @@ def caesar_cipher(text: str, shift: int) -> str:
     for ch in text:
         if ch.isalpha():
             # 根据大小写选择基准字母（'A'=65 或 'a'=97）
-            base = ord('A') if ch.isupper() else ord('a')
+            base = ord("A") if ch.isupper() else ord("a")
             # 循环移位：(当前位置 + 偏移量) % 26
             result.append(chr((ord(ch) - base + shift) % 26 + base))
         else:
             # 非字母字符原样保留
             result.append(ch)
-    return ''.join(result)
+    return "".join(result)
 
 
 def longest_common_prefix(strs: list) -> str:
@@ -139,7 +139,7 @@ def longest_common_prefix(strs: list) -> str:
         ''
     """
     if not strs:
-        return ''
+        return ""
     # 排序后首尾差异最大，只需比较首尾即可
     strs.sort()
     s1, s2 = strs[0], strs[-1]

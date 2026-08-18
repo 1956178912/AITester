@@ -24,6 +24,7 @@ ChromaDB 客户端初始化涉及：
 # 模块级缓存
 _rag_retriever = None
 
+
 def get_rag_retriever():
     """获取 RAG 检索器单例实例。"""
     global _rag_retriever
@@ -98,7 +99,7 @@ for attempt in range(max_retries):
         response = llm.invoke(messages, timeout=LLM_TIMEOUT)
         return response
     except APIReachLimitError:
-        wait_time = 2 ** attempt * LLM_RETRY_WAIT
+        wait_time = 2**attempt * LLM_RETRY_WAIT
         time.sleep(wait_time)
         continue
     except Exception:
@@ -139,6 +140,7 @@ BENCHMARK_PARALLELISM=0 python experiments/run_benchmark.py ...
 ```python
 # base_agent.py
 _thread_local = threading.local()
+
 
 def set_thread_llm_config(api_key, base_url, model_name):
     """设置当前线程的 LLM 配置。"""

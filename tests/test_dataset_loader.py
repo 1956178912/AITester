@@ -9,21 +9,21 @@
     - load_dataset：工厂函数（含未知名称回退、synthetic 懒加载）
     - 边界情况：空数据、无效 JSON、网络错误、_tasks 累积问题
 """
+
 import json
 import os
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
 from src.dataset_loader import (
-    BenchmarkTask,
     BaseDatasetLoader,
-    SWEBenchDataset,
+    BenchmarkTask,
     Defects4JPYDataset,
     InMemoryDataset,
-    load_dataset,
+    SWEBenchDataset,
     get_available_datasets,
+    load_dataset,
 )
 
 
@@ -49,8 +49,13 @@ class TestBenchmarkTask:
     def test_mark_passed_updates_state(self):
         """验证 mark_passed 正确更新通过数并刷新通过率。"""
         task = BenchmarkTask(
-            task_id="t1", repo_name="r", problem_statement="",
-            instance_code="", test_code="", expected_pass_count=0, total_test_count=5,
+            task_id="t1",
+            repo_name="r",
+            problem_statement="",
+            instance_code="",
+            test_code="",
+            expected_pass_count=0,
+            total_test_count=5,
         )
         task.mark_passed(3)
         assert task.passed_count == 3
@@ -59,16 +64,26 @@ class TestBenchmarkTask:
     def test_zero_total_tests_returns_zero_rate(self):
         """总测试数为 0 时通过率应为 0.0（避免除零）。"""
         task = BenchmarkTask(
-            task_id="t2", repo_name="r", problem_statement="",
-            instance_code="", test_code="", expected_pass_count=0, total_test_count=0,
+            task_id="t2",
+            repo_name="r",
+            problem_statement="",
+            instance_code="",
+            test_code="",
+            expected_pass_count=0,
+            total_test_count=0,
         )
         assert task.pass_rate == 0.0
 
     def test_metadata_defaults_to_empty_dict(self):
         """验证 metadata 默认为空字典。"""
         task = BenchmarkTask(
-            task_id="t3", repo_name="r", problem_statement="",
-            instance_code="", test_code="", expected_pass_count=0, total_test_count=1,
+            task_id="t3",
+            repo_name="r",
+            problem_statement="",
+            instance_code="",
+            test_code="",
+            expected_pass_count=0,
+            total_test_count=1,
         )
         assert task.metadata == {}
 
@@ -110,9 +125,13 @@ class TestInMemoryDataset:
         """验证可手动添加自定义任务。"""
         ds = InMemoryDataset()
         task = BenchmarkTask(
-            task_id="custom__1", repo_name="custom", problem_statement="test",
-            instance_code="x=1", test_code="def test_x(): pass",
-            expected_pass_count=0, total_test_count=1,
+            task_id="custom__1",
+            repo_name="custom",
+            problem_statement="test",
+            instance_code="x=1",
+            test_code="def test_x(): pass",
+            expected_pass_count=0,
+            total_test_count=1,
         )
         ds.add_task(task)
         assert len(ds._tasks) == 1
@@ -222,24 +241,28 @@ class TestSWEBenchDataset:
         """验证从有效的 JSONL 文件正确加载数据。"""
         jsonl_path = tmp_path / "swe_bench_instances.jsonl"
         data_lines = [
-            json.dumps({
-                "instance_id": "django__django-12345",
-                "repository": "django/django",
-                "problem_statement": "Fix ticket 12345",
-                "test_before_patches": "def test_foo(): pass",
-                "n_tests_before": 10,
-                "pass_num_before": 5,
-                "pass_num_after": 8,
-            }),
-            json.dumps({
-                "instance_id": "django__django-67890",
-                "repository": "django/django",
-                "problem_statement": "Fix ticket 67890",
-                "test_before_patches": "def test_bar(): pass",
-                "n_tests_before": 8,
-                "pass_num_before": 4,
-                "pass_num_after": 7,
-            }),
+            json.dumps(
+                {
+                    "instance_id": "django__django-12345",
+                    "repository": "django/django",
+                    "problem_statement": "Fix ticket 12345",
+                    "test_before_patches": "def test_foo(): pass",
+                    "n_tests_before": 10,
+                    "pass_num_before": 5,
+                    "pass_num_after": 8,
+                }
+            ),
+            json.dumps(
+                {
+                    "instance_id": "django__django-67890",
+                    "repository": "django/django",
+                    "problem_statement": "Fix ticket 67890",
+                    "test_before_patches": "def test_bar(): pass",
+                    "n_tests_before": 8,
+                    "pass_num_before": 4,
+                    "pass_num_after": 7,
+                }
+            ),
         ]
         jsonl_path.write_text("\n".join(data_lines) + "\n", encoding="utf-8")
 
@@ -395,13 +418,13 @@ class TestSWEBenchDataset:
 
     def test_download_from_huggingface_missing_import(self):
         """验证缺少 datasets 库时抛出 ImportError。"""
-        with patch.dict('sys.modules', {'datasets': None}):
+        with patch.dict("sys.modules", {"datasets": None}):
             with pytest.raises(ImportError, match="pip install datasets"):
                 SWEBenchDataset.download_from_huggingface()
 
     def test_download_from_huggingface_failure(self):
         """验证下载失败时抛出 RuntimeError。"""
-        with patch('src.dataset_loader.load_dataset') as mock_load:
+        with patch("src.dataset_loader.load_dataset") as mock_load:
             mock_load.side_effect = Exception("Network error")
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
                 SWEBenchDataset.download_from_huggingface()
@@ -433,19 +456,19 @@ class TestDefects4JPYDataset:
         (projects_dir / "info.json").write_text(json.dumps(info), encoding="utf-8")
 
         # 创建 buggy Python 文件
-        buggy_code = 'def get(url):\n    return requests.get(url)\n'
+        buggy_code = "def get(url):\n    return requests.get(url)\n"
         buggy_dir = projects_dir / "buggy"
         buggy_dir.mkdir()
         (buggy_dir / "client.py").write_text(buggy_code, encoding="utf-8")
 
         # 创建测试文件
-        test_code = '''\
+        test_code = """\
 def test_get_success():
     pass
 
 def test_get_failure():
     pass
-'''
+"""
         tests_dir = projects_dir / "tests"
         tests_dir.mkdir()
         (tests_dir / "test_client.py").write_text(test_code, encoding="utf-8")
@@ -511,10 +534,7 @@ def test_get_failure():
         for project in ["requests", "pytest"]:
             proj_dir = tmp_path / "projects" / project / "v1.0"
             proj_dir.mkdir(parents=True)
-            (proj_dir / "info.json").write_text(
-                json.dumps({"description": f"Bug in {project}"}),
-                encoding="utf-8"
-            )
+            (proj_dir / "info.json").write_text(json.dumps({"description": f"Bug in {project}"}), encoding="utf-8")
 
         ds = Defects4JPYDataset()
         ds.data_dir = str(tmp_path)
@@ -531,10 +551,7 @@ def test_get_failure():
         for version in ["v1.0", "v2.0"]:
             proj_dir = tmp_path / "projects" / "requests" / version
             proj_dir.mkdir(parents=True)
-            (proj_dir / "info.json").write_text(
-                json.dumps({"description": f"Bug in {version}"}),
-                encoding="utf-8"
-            )
+            (proj_dir / "info.json").write_text(json.dumps({"description": f"Bug in {version}"}), encoding="utf-8")
 
         ds = Defects4JPYDataset()
         ds.data_dir = str(tmp_path)
@@ -661,7 +678,7 @@ class TestEdgeCases:
     def test_synthetic_dataset_lazy_loading(self):
         """验证 synthetic 数据集使用懒加载。"""
         # 测试懒加载逻辑：当 SyntheticDataset 不存在时，load_dataset 应抛出 ImportError
-        with patch.dict('sys.modules', {'src.synthetic_dataset': None}):
+        with patch.dict("sys.modules", {"src.synthetic_dataset": None}):
             # 尝试加载 synthetic 数据集，应该失败
             with pytest.raises((ImportError, ModuleNotFoundError)):
                 load_dataset("synthetic")
@@ -675,17 +692,24 @@ class TestEdgeCases:
         ds.data_dir = str(tmp_path)
         ds._loaded = False
         ds._load_raw_data()
-        
+
         # 验证初始加载成功
         assert ds.size == 1
-        
+
         # 添加额外任务到 _tasks
-        ds._tasks.append(BenchmarkTask(
-            task_id="extra__task", repo_name="extra", problem_statement="",
-            instance_code="", test_code="", expected_pass_count=0, total_test_count=0,
-        ))
+        ds._tasks.append(
+            BenchmarkTask(
+                task_id="extra__task",
+                repo_name="extra",
+                problem_statement="",
+                instance_code="",
+                test_code="",
+                expected_pass_count=0,
+                total_test_count=0,
+            )
+        )
         assert ds.size == 2  # 现在应该有 2 个任务
-        
+
         # 调用 reload 应该清空并重新加载
         ds.reload()
         assert ds.size == 1  # 应该恢复到 1 个任务
@@ -698,31 +722,30 @@ class TestEdgeCases:
             {"instance_id": "test__1", "repository": "test/repo"},
             {"instance_id": "test__2", "repository": "test/repo2"},
         ]
-        
-        with patch('src.dataset_loader.load_dataset') as mock_load:
+
+        with patch("src.dataset_loader.load_dataset") as mock_load:
             mock_load.return_value = mock_dataset
-            
+
             # 由于我们没有导入 datasets 库，需要同时 mock 导入
-            with patch.dict('sys.modules', {'datasets': MagicMock()}):
-                result = SWEBenchDataset.download_from_huggingface(
-                    cache_dir=str(tmp_path), subset="lite"
-                )
-                
+            with patch.dict("sys.modules", {"datasets": MagicMock()}):
+                result = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="lite")
+
                 # 验证返回值是文件路径
                 assert result.endswith("swe_bench_instances.jsonl")
                 assert os.path.exists(result)
-                
+
                 # 验证文件内容
-                with open(result, 'r', encoding='utf-8') as f:
+                with open(result, encoding="utf-8") as f:
                     lines = f.readlines()
                     assert len(lines) == 2
 
     def test_base_class_abstract_method(self):
         """验证抽象基类必须实现 _load_raw_data。"""
+
         class ConcreteLoader(BaseDatasetLoader):
             def _load_raw_data(self):
                 pass
-        
+
         loader = ConcreteLoader()
         # 不应抛出异常
         loader._load_raw_data()
@@ -781,15 +804,15 @@ class TestMainBlock:
     def test_main_block_runs_without_error(self):
         """验证 __main__ 块可正常运行而不报错。"""
         # 此测试仅验证脚本可执行，不验证具体输出
-        import subprocess
         import os
+        import subprocess
+
         project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         result = subprocess.run(
-            [f"{project_path}/.venv/bin/python",
-             "-m", "src.dataset_loader"],
+            [f"{project_path}/.venv/bin/python", "-m", "src.dataset_loader"],
             capture_output=True,
             text=True,
-            cwd=project_path
+            cwd=project_path,
         )
         # 应该成功退出
         assert result.returncode == 0

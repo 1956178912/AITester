@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import click
 
@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-def load_all_results(results_dir: str) -> List[Dict[str, Any]]:
+def load_all_results(results_dir: str) -> list[dict[str, Any]]:
     """加载所有实验结果文件，展平为任务级列表。"""
     all_tasks = []
     results_path = Path(results_dir)
@@ -42,7 +42,7 @@ def load_all_results(results_dir: str) -> List[Dict[str, Any]]:
     return all_tasks
 
 
-def classify_failures(tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def classify_failures(tasks: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     """将失败任务按基线和错误类型分组。"""
     failed = [t for t in tasks if not t.get("passed", True)]
     by_bl_err = defaultdict(lambda: defaultdict(list))
@@ -53,7 +53,7 @@ def classify_failures(tasks: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, A
     return dict(by_bl_err)
 
 
-def generate_report(tasks: List[Dict[str, Any]], output_path: str) -> None:
+def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
     """生成失败案例分析报告。"""
     failed = [t for t in tasks if not t.get("passed", True)]
     passed = [t for t in tasks if t.get("passed", False)]
@@ -63,7 +63,7 @@ def generate_report(tasks: List[Dict[str, Any]], output_path: str) -> None:
     lines.append("")
     lines.append(f"> 生成时间: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append(f"> 总任务数: {len(tasks)}，成功: {len(passed)}，失败: {len(failed)}")
-    lines.append(f"> 整体失败率: {len(failed)/len(tasks)*100:.1f}%" if tasks else "")
+    lines.append(f"> 整体失败率: {len(failed) / len(tasks) * 100:.1f}%" if tasks else "")
     lines.append("")
 
     # 按基线统计
@@ -80,7 +80,7 @@ def generate_report(tasks: List[Dict[str, Any]], output_path: str) -> None:
         bl_failed_correct = [t for t in bl_tasks if t.get("passed") is not True]
         lines.append(f"### {bl}")
         lines.append(f"- 总任务: {len(bl_tasks)}，成功: {len(bl_passed_correct)}，失败: {len(bl_failed_correct)}")
-        lines.append(f"- 成功率: {len(bl_passed_correct)/len(bl_tasks)*100:.1f}%" if bl_tasks else "")
+        lines.append(f"- 成功率: {len(bl_passed_correct) / len(bl_tasks) * 100:.1f}%" if bl_tasks else "")
         lines.append("")
 
     # 错误类型分布
@@ -91,7 +91,7 @@ def generate_report(tasks: List[Dict[str, Any]], output_path: str) -> None:
         lines.append(f"### {bl}")
         total_failed = sum(len(v) for v in err_map.values())
         for err, err_tasks in sorted(err_map.items(), key=lambda x: -len(x[1])):
-            lines.append(f"- {err}: {len(err_tasks)} 个任务 ({len(err_tasks)/total_failed*100:.0f}%)")
+            lines.append(f"- {err}: {len(err_tasks)} 个任务 ({len(err_tasks) / total_failed * 100:.0f}%)")
         lines.append("")
 
     # 失败案例详情
@@ -115,11 +115,14 @@ def generate_report(tasks: List[Dict[str, Any]], output_path: str) -> None:
     # 基础设施问题汇总
     lines.append("## 4. 基础设施问题汇总")
     lines.append("")
-    infra_issues = [t for t in failed
-                    if t.get("error_category") == "syntax"
-                    or t.get("error") == "syntax"
-                    or "ModuleNotFoundError" in str(t.get("diagnosis", ""))
-                    or "ImportError" in str(t.get("diagnosis", ""))]
+    infra_issues = [
+        t
+        for t in failed
+        if t.get("error_category") == "syntax"
+        or t.get("error") == "syntax"
+        or "ModuleNotFoundError" in str(t.get("diagnosis", ""))
+        or "ImportError" in str(t.get("diagnosis", ""))
+    ]
     lines.append(f"共发现 {len(infra_issues)} 个基础设施类失败（模块导入/文件名不匹配）。")
     lines.append("")
     lines.append("**主要原因**：")

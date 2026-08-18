@@ -8,21 +8,21 @@
     - 节点函数：_planner_node, _generator_node, _executor_node, _debugger_node, _patch_applier_node
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from src.graph.workflow import (
+    _create_workflow,
+    _debugger_node,
+    _executor_node,
+    _generator_node,
+    _get_default_test_plan,
+    _patch_applier_node,
+    _planner_node,
     _should_debug,
     _should_skip_debugger,
-    _create_workflow,
+    _validate_planner_output,
     build_workflow,
     get_workflow_stats,
-    _planner_node,
-    _generator_node,
-    _executor_node,
-    _debugger_node,
-    _patch_applier_node,
-    _validate_planner_output,
-    _get_default_test_plan,
 )
 
 
@@ -159,7 +159,13 @@ class TestPlannerNode:
         mock_agent = MagicMock()
         mock_agent.plan.return_value = {
             "function_name": "divide",
-            "logic_analysis": {"input_domain": "", "output_domain": "", "preconditions": [], "postconditions": [], "edge_cases": []},
+            "logic_analysis": {
+                "input_domain": "",
+                "output_domain": "",
+                "preconditions": [],
+                "postconditions": [],
+                "edge_cases": [],
+            },
             "test_cases": [],
         }
         mock_planner_class.return_value = mock_agent
@@ -176,6 +182,7 @@ class TestPlannerNode:
     def test_planner_node_json_error_fallback(self, mock_planner_class):
         """JSON 解析失败时使用默认计划兜底。"""
         import json
+
         mock_agent = MagicMock()
         mock_agent.plan.side_effect = json.JSONDecodeError("Expecting value", "", 0)
         mock_planner_class.return_value = mock_agent
@@ -209,6 +216,7 @@ class TestGeneratorNode:
     def test_generator_node_success(self):
         """正常流程：GeneratorAgent 返回测试代码。"""
         from unittest.mock import patch
+
         with patch("src.graph.workflow.GeneratorAgent") as mock_gen_class:
             mock_agent = MagicMock()
             mock_agent.generate.return_value = "def test_foo(): pass"
@@ -227,6 +235,7 @@ class TestGeneratorNode:
     def test_generator_node_no_plan(self):
         """无测试计划时传入 None。"""
         from unittest.mock import patch
+
         with patch("src.graph.workflow.GeneratorAgent") as mock_gen_class:
             mock_agent = MagicMock()
             mock_agent.generate.return_value = "def test_bar(): pass"
@@ -251,6 +260,7 @@ class TestExecutorNode:
     def test_executor_node_pass(self):
         """测试通过时标记为 PASS。"""
         from unittest.mock import patch
+
         with patch("src.graph.workflow.ExecutorAgent") as mock_exec_class:
             mock_agent = MagicMock()
             mock_agent.execute.return_value = {
@@ -275,6 +285,7 @@ class TestExecutorNode:
     def test_executor_node_fail(self):
         """测试失败时记录失败用例。"""
         from unittest.mock import patch
+
         with patch("src.graph.workflow.ExecutorAgent") as mock_exec_class:
             mock_agent = MagicMock()
             mock_agent.execute.return_value = {
@@ -302,6 +313,7 @@ class TestDebuggerNode:
     def test_debugger_node_success(self):
         """正常流程：DebuggerAgent 返回诊断结果。"""
         from unittest.mock import patch
+
         with patch("src.graph.workflow.DebuggerAgent") as mock_dbg_class:
             mock_agent = MagicMock()
             mock_agent.debug.return_value = {
@@ -324,8 +336,9 @@ class TestDebuggerNode:
 
     def test_debugger_node_json_error(self):
         """JSON 解析失败时返回默认值。"""
-        from unittest.mock import patch
         import json
+        from unittest.mock import patch
+
         with patch("src.graph.workflow.DebuggerAgent") as mock_dbg_class:
             mock_agent = MagicMock()
             mock_agent.debug.side_effect = json.JSONDecodeError("Expecting value", "", 0)
@@ -461,7 +474,13 @@ class TestValidatePlannerOutput:
     def test_missing_function_name(self):
         """缺少 function_name 应返回 False。"""
         invalid_plan = {
-            "logic_analysis": {"input_domain": "", "output_domain": "", "preconditions": [], "postconditions": [], "edge_cases": []}
+            "logic_analysis": {
+                "input_domain": "",
+                "output_domain": "",
+                "preconditions": [],
+                "postconditions": [],
+                "edge_cases": [],
+            }
         }
         assert _validate_planner_output(invalid_plan) is False
 

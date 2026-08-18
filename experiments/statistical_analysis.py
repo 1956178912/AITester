@@ -5,14 +5,13 @@
 """
 
 import json
-import os
 from pathlib import Path
-from typing import Dict, List, Tuple
-import scipy.stats as stats
+
 import numpy as np
+import scipy.stats as stats
 
 
-def load_experiment_results(results_dir: str) -> Dict[str, List[Dict]]:
+def load_experiment_results(results_dir: str) -> dict[str, list[dict]]:
     """
     加载实验结果数据
 
@@ -44,10 +43,8 @@ def load_experiment_results(results_dir: str) -> Dict[str, List[Dict]]:
 
 
 def paired_t_test(
-    aitester_results: List[Dict],
-    baseline_results: List[Dict],
-    baseline_name: str
-) -> Tuple[float, float]:
+    aitester_results: list[dict], baseline_results: list[dict], baseline_name: str
+) -> tuple[float, float]:
     """
     配对 t 检验
 
@@ -69,7 +66,7 @@ def paired_t_test(
     baseline_pass = baseline_pass[:min_len]
 
     if min_len < 3:
-        return (float('nan'), float('nan'))
+        return (float("nan"), float("nan"))
 
     # 配对 t 检验
     differences = [a - b for a, b in zip(aitester_pass, baseline_pass)]
@@ -84,10 +81,7 @@ def paired_t_test(
     return t_stat, p_value
 
 
-def cohens_d(
-    aitester_results: List[Dict],
-    baseline_results: List[Dict]
-) -> float:
+def cohens_d(aitester_results: list[dict], baseline_results: list[dict]) -> float:
     """
     计算 Cohen's d 效应量
 
@@ -108,13 +102,12 @@ def cohens_d(
     baseline_pass = baseline_pass[:min_len]
 
     if min_len < 2:
-        return float('nan')
+        return float("nan")
 
     # 计算合并标准差
     pooled_std = np.sqrt(
-        ((min_len - 1) * np.std(aitester_pass, ddof=1)**2 +
-         (min_len - 1) * np.std(baseline_pass, ddof=1)**2) /
-        (2 * min_len - 2)
+        ((min_len - 1) * np.std(aitester_pass, ddof=1) ** 2 + (min_len - 1) * np.std(baseline_pass, ddof=1) ** 2)
+        / (2 * min_len - 2)
     )
 
     if pooled_std == 0:
@@ -134,7 +127,7 @@ def cohens_d(
     else:
         effect = "large"
 
-    print(f"\nCohen's d 效应量：AITester vs baseline")
+    print("\nCohen's d 效应量：AITester vs baseline")
     print(f"  d = {d:.4f} ({effect})")
 
     return d
@@ -155,7 +148,7 @@ def run_all_statistics(results_dir: str):
     data = load_experiment_results(results_dir)
 
     # 统计样本数
-    print(f"\n数据概览：")
+    print("\n数据概览：")
     print(f"  AITester: {len(data['aitester'])} 个任务")
     print(f"  plain_llm: {len(data['plain_llm'])} 个任务")
     print(f"  single_agent: {len(data['single_agent'])} 个任务")

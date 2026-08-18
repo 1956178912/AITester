@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Any, Dict, List
+from typing import Any
 
-from src.dataset_loader import BenchmarkTask, BaseDatasetLoader
+from src.dataset_loader import BaseDatasetLoader, BenchmarkTask
 
 logger = logging.getLogger(__name__)
 
 # 预定义的合成 bug 模式库
-BUG_PATTERNS: List[Dict[str, Any]] = [
+BUG_PATTERNS: list[dict[str, Any]] = [
     {
         "name": "divide_by_zero_missing",
         "description": "除零时未检查除数",
@@ -303,7 +303,7 @@ def test_safe_div_zero_neg():
 class SyntheticDataset(BaseDatasetLoader):
     """
     合成缺陷数据集：通过预定义模板自动生成大量缺陷任务，无需外部数据。
-    
+
     用途：
     - 在无法访问 SWE-bench/Defects4J 时进行快速验证
     - 生成 >= 50 个任务以满足论文实验规模要求
@@ -320,14 +320,14 @@ class SyntheticDataset(BaseDatasetLoader):
     def _load_raw_data(self) -> None:
         """根据模板库生成指定数量的合成缺陷任务。"""
         rng = random.Random(self._seed)
-        tasks: List[BenchmarkTask] = []
+        tasks: list[BenchmarkTask] = []
         n_patterns = len(BUG_PATTERNS)
 
         for i in range(self._task_count):
             pattern = BUG_PATTERNS[i % n_patterns]
             noise = rng.randint(0, 9999)
             task_id = f"synthetic__{pattern['name']}_{i:04d}"
-            
+
             # 生成带噪声的实例代码（保持函数名不变，在末尾添加噪声注释）
             # 测试代码引用原始函数名，不能破坏导入
             instance_code = pattern["template"] + f"\n# noise_seed={noise}"
@@ -355,6 +355,6 @@ class SyntheticDataset(BaseDatasetLoader):
 
 if __name__ == "__main__":
     ds = SyntheticDataset(task_count=60, seed=42)
-    print(f"合成数据集规模: {ds.size} 个任务")
+    logger.info("合成数据集规模: %d 个任务", ds.size)
     for task in ds.tasks[:5]:
-        print(f"  - {task.task_id}: {task.problem_statement}")
+        logger.info("  - %s: %s", task.task_id, task.problem_statement[:50])

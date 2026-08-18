@@ -13,10 +13,10 @@ LLM 调用缓存模块：减少重复 LLM 调用，提升执行效率。
 
 使用示例：
     from src.graph.llm_cache import get_cached_llm_response, clear_cache
-    
+
     # 获取缓存（无则返回 None）
     cached = get_cached_llm_response(prompt, system_prompt)
-    
+
     # 清空所有缓存
     clear_cache()
 """
@@ -26,8 +26,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import threading
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -38,18 +38,18 @@ _MAX_CACHE_SIZE = 1024
 _CACHE_PREFIX = "aitester_llm"
 
 
-def _compute_cache_key(prompt: str, system_prompt: str, extra: Optional[str] = None) -> str:
+def _compute_cache_key(prompt: str, system_prompt: str, extra: str | None = None) -> str:
     """
     计算缓存键：基于 prompt 和 system_prompt 的哈希值。
-    
+
     使用 SHA-256 哈希确保键的唯一性和不可逆性。
     附加可选的 extra 参数（如 model_name）以区分不同模型的缓存。
-    
+
     Args:
         prompt: 用户消息内容。
         system_prompt: 系统提示词。
         extra: 额外区分字段（如模型名称），可选。
-    
+
     Returns:
         缓存键字符串（64 字符十六进制）。
     """
@@ -58,7 +58,7 @@ def _compute_cache_key(prompt: str, system_prompt: str, extra: Optional[str] = N
     if extra:
         key_material += f"\n{extra}"
     # SHA-256 哈希，确保键长度固定且唯一
-    return hashlib.sha256(key_material.encode('utf-8')).hexdigest()
+    return hashlib.sha256(key_material.encode("utf-8")).hexdigest()
 
 
 # ─── 线程本地缓存计数器 ──────────────────────────────────────────────────────
@@ -68,24 +68,24 @@ _thread_stats = threading.local()
 
 def _get_stats() -> dict:
     """获取当前线程的缓存统计（惰性初始化）。"""
-    if not hasattr(_thread_stats, 'stats'):
-        _thread_stats.stats = {'hits': 0, 'misses': 0, 'evictions': 0}
+    if not hasattr(_thread_stats, "stats"):
+        _thread_stats.stats = {"hits": 0, "misses": 0, "evictions": 0}
     return _thread_stats.stats
 
 
 def _increment_hit():
     """增加缓存命中计数。"""
-    _get_stats()['hits'] += 1
+    _get_stats()["hits"] += 1
 
 
 def _increment_miss():
     """增加缓存未命中计数。"""
-    _get_stats()['misses'] += 1
+    _get_stats()["misses"] += 1
 
 
 def _increment_eviction():
     """增加缓存淘汰计数（用于监控）。"""
-    _get_stats()['evictions'] += 1
+    _get_stats()["evictions"] += 1
 
 
 # ─── 缓存包装函数 ─────────────────────────────────────────────────────────────
@@ -96,50 +96,50 @@ _stats_lock = threading.Lock()
 def cached_llm_call(func: Callable[..., str]) -> Callable[..., str]:
     """
     装饰器：为 LLM 调用函数添加缓存层。
-    
+
     工作原理：
     1. 首次调用时执行原函数，结果存入缓存
     2. 后续相同输入直接返回缓存结果
     3. 缓存满时自动淘汰最久未使用的条目
-    
+
     Args:
         func: 被装饰的 LLM 调用函数，签名应为 (prompt: str) -> str。
-    
+
     Returns:
         带缓存功能的包装函数。
-    
+
     使用示例：
         @cached_llm_call
         def call_my_llm(prompt: str) -> str:
             return llm.invoke(prompt)
-        
+
         # 相同 prompt 第二次调用将直接从缓存返回，不消耗 token
     """
+
     # 创建 LRU 缓存包装，maxsize 控制最大条目数
     @lru_cache(maxsize=_MAX_CACHE_SIZE)
     def wrapper(prompt: str) -> str:
         return func(prompt)
-    
+
     # 暴露缓存清除方法（便于测试和调试）
     wrapper.cache_clear = wrapper.cache_clear
     wrapper.cache_info = wrapper.cache_info
-    
+
     return wrapper
 
 
-def get_cached_response(prompt: str, system_prompt: str, 
-                        extra: Optional[str] = None) -> Optional[str]:
+def get_cached_response(prompt: str, system_prompt: str, extra: str | None = None) -> str | None:
     """
     查询缓存中是否已存在该请求的响应。
-    
+
     注意：此函数需配合 set_cached_response 使用，因为 lru_cache 的密钥计算需要
     在装饰器内部完成。这里提供一个手动查询接口供高级用法。
-    
+
     Args:
         prompt: 用户消息。
         system_prompt: 系统提示词。
         extra: 额外区分字段。
-    
+
     Returns:
         缓存中的响应字符串，若未命中则返回 None。
     """
@@ -149,11 +149,10 @@ def get_cached_response(prompt: str, system_prompt: str,
     return None
 
 
-def set_cached_response(prompt: str, system_prompt: str, 
-                        response: str, extra: Optional[str] = None) -> None:
+def set_cached_response(prompt: str, system_prompt: str, response: str, extra: str | None = None) -> None:
     """
     手动设置缓存响应（用于绕过装饰器的场景）。
-    
+
     Args:
         prompt: 用户消息。
         system_prompt: 系统提示词。
@@ -174,7 +173,7 @@ def clear_cache() -> None:
 def get_cache_stats() -> dict:
     """
     获取当前缓存统计信息。
-    
+
     Returns:
         包含 hits/misses/evictions 的字典。
     """
