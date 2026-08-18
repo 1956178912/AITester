@@ -5,7 +5,7 @@ AITester 包管理配置文件。
 包含基础依赖与可选 extras：[rag], [viz], [dev]。
 """
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="aitester",

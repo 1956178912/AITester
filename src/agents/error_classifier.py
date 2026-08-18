@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 class ErrorCategory(Enum):
@@ -25,6 +24,7 @@ class ErrorCategory(Enum):
         TIMEOUT: 执行超时
         UNKNOWN: 无法识别的错误类型
     """
+
     SYNTAX = "syntax"
     ASSERTION = "assertion"
     RUNTIME = "runtime"
@@ -41,6 +41,7 @@ class SyntaxSubtype(Enum):
         SYNTAX_ERROR: 语法错误，如 SyntaxError、IndentationError
         UNRECOGNIZED: 无法识别的子类型
     """
+
     IMPORT_ERROR = "import_error"
     SYNTAX_ERROR = "syntax_error"
     UNRECOGNIZED = "unrecognized"
@@ -59,35 +60,23 @@ class ErrorContext:
         error_message: 完整的错误消息
         subtype: 错误子类型（仅 SYNTAX 类别有值）
     """
-    filename: Optional[str] = None
-    line: Optional[int] = None
-    column: Optional[int] = None
-    module_name: Optional[str] = None
+
+    filename: str | None = None
+    line: int | None = None
+    column: int | None = None
+    module_name: str | None = None
     error_message: str = ""
-    subtype: Optional[SyntaxSubtype] = None
+    subtype: SyntaxSubtype | None = None
 
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
 # Import Error 检测模式
-_RE_MODULE_NOT_FOUND = re.compile(
-    r"ModuleNotFoundError:\s*No module named\s+'(\w+)'",
-    re.IGNORECASE
-)
-_RE_IMPORT_ERROR = re.compile(
-    r"ImportError:\s*cannot import name\s+'(\w+)'",
-    re.IGNORECASE
-)
+_RE_MODULE_NOT_FOUND = re.compile(r"ModuleNotFoundError:\s*No module named\s+'(\w+)'", re.IGNORECASE)
+_RE_IMPORT_ERROR = re.compile(r"ImportError:\s*cannot import name\s+'(\w+)'", re.IGNORECASE)
 # Syntax Error 检测模式
-_RE_SYNTAX_ERROR_FILE_LINE = re.compile(
-    r"(\w+\.py):(\d+):(\d+):\s*(.+)"
-)
-_RE_PYTEST_SYNTAX = re.compile(
-    r"E\s*\S+\.py:(\d+):(\d+)",
-    re.IGNORECASE
-)
-_RE_TRACEBACK = re.compile(
-    r'File\s+"([^"]+)",\s*line\s+(\d+)'
-)
+_RE_SYNTAX_ERROR_FILE_LINE = re.compile(r"(\w+\.py):(\d+):(\d+):\s*(.+)")
+_RE_PYTEST_SYNTAX = re.compile(r"E\s*\S+\.py:(\d+):(\d+)", re.IGNORECASE)
+_RE_TRACEBACK = re.compile(r'File\s+"([^"]+)",\s*line\s+(\d+)')
 # Runtime Error 检测模式
 _RE_RUNTIME_ERRORS = [
     re.compile(r"ZeroDivisionError", re.IGNORECASE),
@@ -129,7 +118,7 @@ class ErrorClassifier:
     5. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
-    def classify(self, test_output: str, failed_cases: List[dict]) -> ErrorCategory:
+    def classify(self, test_output: str, failed_cases: list[dict]) -> ErrorCategory:
         """
         根据测试输出和失败用例分类错误类型。
 
@@ -148,9 +137,7 @@ class ErrorClassifier:
         """
         # 合并 test_output 和 failed_cases 的 error 信息用于分类
         # 最多取前 3 个失败用例的错误信息，避免过长
-        combined = test_output + "\n" + "\n".join(
-            case.get("error", "") for case in failed_cases[:3]
-        )
+        combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases[:3])
 
         # 按优先级顺序检查各类错误
         # 1. 检查 Syntax 错误
@@ -165,13 +152,11 @@ class ErrorClassifier:
         # 4. 检查 Timeout 错误
         if self._is_timeout_error(combined):
             return ErrorCategory.TIMEOUT
-        
+
         # 默认返回 UNKNOWN
         return ErrorCategory.UNKNOWN
 
-    def classify_with_context(
-        self, test_output: str, failed_cases: List[dict]
-    ) -> tuple:
+    def classify_with_context(self, test_output: str, failed_cases: list[dict]) -> tuple:
         """
         分类错误类型并提取错误上下文。
 
@@ -190,9 +175,7 @@ class ErrorClassifier:
         context = self.extract_error_context(test_output, failed_cases)
         return category, context
 
-    def extract_error_context(
-        self, test_output: str, failed_cases: List[dict]
-    ) -> ErrorContext:
+    def extract_error_context(self, test_output: str, failed_cases: list[dict]) -> ErrorContext:
         """
         提取错误上下文信息，包括文件名、行号、列号、模块名等。
 
@@ -206,9 +189,7 @@ class ErrorClassifier:
             ErrorContext 对象，包含提取的上下文信息。
         """
         # 合并所有错误信息
-        combined = test_output + "\n" + "\n".join(
-            case.get("error", "") for case in failed_cases
-        )
+        combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases)
 
         # 清理错误消息：去除首尾空白，避免空消息包含换行符
         cleaned_message = combined.strip()[:500]
@@ -263,8 +244,14 @@ class ErrorClassifier:
         if _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text):
             return True
         # 检查语法错误关键词
-        syntax_keywords = ['SyntaxError', 'ImportError', 'ModuleNotFoundError',
-                          'IndentationError', 'TabError', 'IncompleteInput']
+        syntax_keywords = [
+            "SyntaxError",
+            "ImportError",
+            "ModuleNotFoundError",
+            "IndentationError",
+            "TabError",
+            "IncompleteInput",
+        ]
         if any(kw in text for kw in syntax_keywords):
             return True
         # 检查 pytest 冒号格式：file.py:line:col: error

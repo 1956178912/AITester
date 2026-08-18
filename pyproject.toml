@@ -1,0 +1,53 @@
+[tool.ruff]
+# Ruff 配置文件
+# 快速 Python lint 工具，替代 flake8 + pydocstyle + isort
+
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# 启用的规则集
+select = [
+    "E",   # pycodestyle 错误
+    "W",   # pycodestyle 警告
+    "F",   # pyflakes
+    "I",   # isort 导入排序
+    "C90", # mccabe 复杂度检查
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+
+# 忽略的规则（与项目风格冲突的）
+ignore = [
+    "E501",  # 行长度由 line-length 控制
+    "W191",  # 允许缩进使用空格
+]
+
+[tool.ruff.lint.isort]
+# 导入排序配置
+known-first-party = ["src", "config"]
+known-third-party = ["langchain", "langgraph", "pytest"]
+force-single-line = false
+case-sensitive = true
+
+[tool.ruff.lint.mccabe]
+# 最大复杂度阈值
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# 测试文件忽略某些规则
+"tests/**" = ["PLR2004"]  # 允许测试中的魔数
+"examples/**" = ["E501"]  # 示例代码允许长行
+
+[tool.pytest.ini_options]
+# pytest 配置
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: 标记为慢速测试（需 API）",
+    "integration: 集成测试",
+    "unit: 单元测试",
+]

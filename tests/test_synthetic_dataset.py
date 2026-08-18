@@ -10,8 +10,10 @@
     - bug_type 分布（runtime + assertion 两类均有覆盖）
     - BUG_PATTERNS 数据结构完整性（字段、语法合法性）
 """
+
 import pytest
-from src.synthetic_dataset import SyntheticDataset, BUG_PATTERNS
+
+from src.synthetic_dataset import BUG_PATTERNS, SyntheticDataset
 
 
 # ─── TestSyntheticDataset：合成数据集测试 ──────────────────────────────────────
@@ -111,8 +113,16 @@ class TestBugPatterns:
 
     def test_each_pattern_has_required_fields(self):
         """每个 pattern 必须具备所有必需字段。"""
-        required = {"name", "description", "template", "fixed", "test_cases",
-                    "bug_type", "expected_pass", "total_tests"}
+        required = {
+            "name",
+            "description",
+            "template",
+            "fixed",
+            "test_cases",
+            "bug_type",
+            "expected_pass",
+            "total_tests",
+        }
         for p in BUG_PATTERNS:
             missing = required - set(p.keys())
             assert not missing, f"Pattern {p.get('name', '?')} 缺少字段: {missing}"
@@ -120,6 +130,7 @@ class TestBugPatterns:
     def test_template_is_valid_python(self):
         """每个 template 必须是合法 Python 代码（AST 可解析）。"""
         import ast
+
         for p in BUG_PATTERNS:
             try:
                 ast.parse(p["template"])
@@ -129,6 +140,7 @@ class TestBugPatterns:
     def test_fixed_is_valid_python(self):
         """每个 fixed 必须是合法 Python 代码（AST 可解析）。"""
         import ast
+
         for p in BUG_PATTERNS:
             try:
                 ast.parse(p["fixed"])
@@ -138,6 +150,7 @@ class TestBugPatterns:
     def test_test_cases_are_valid_python(self):
         """每个 test_cases 必须是合法 Python 代码（AST 可解析）。"""
         import ast
+
         for p in BUG_PATTERNS:
             try:
                 ast.parse(p["test_cases"])

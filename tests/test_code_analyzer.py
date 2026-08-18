@@ -10,14 +10,12 @@
 所有测试使用同一段 SAMPLE_CODE（含 add、divide、factorial 三个函数）。
 """
 
-import pytest
 from src.tools.code_analyzer import (
-    parse_function_nodes,
-    extract_function_code,
     compute_cyclomatic_complexity,
+    extract_function_code,
+    parse_function_nodes,
     replace_function_code,
 )
-
 
 # ─── 公共测试样本 ──────────────────────────────────────────────────────────────
 # 包含三个函数：add（简单）、divide（含条件分支）、factorial（含递归调用）
@@ -141,9 +139,7 @@ class TestReplaceFunctionCode:
 
     def test_replace_nonexistent_function(self):
         """验证替换不存在的函数不改变原代码。"""
-        new_code, success = replace_function_code(
-            SAMPLE_CODE, "nonexistent", "def nonexistent(): pass"
-        )
+        new_code, success = replace_function_code(SAMPLE_CODE, "nonexistent", "def nonexistent(): pass")
         assert success is False
         assert new_code == SAMPLE_CODE
 
@@ -157,7 +153,5 @@ class TestReplaceFunctionCode:
 
     def test_replace_invalid_syntax(self):
         """验证新代码语法错误时返回原代码。"""
-        new_code, success = replace_function_code(
-            SAMPLE_CODE, "add", "def add(a: int) -> int\n    return a"
-        )
+        new_code, success = replace_function_code(SAMPLE_CODE, "add", "def add(a: int) -> int\n    return a")
         assert success is False

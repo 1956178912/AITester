@@ -8,12 +8,74 @@
 | 指标 | 状态 |
 |------|------|
 | **单元测试** | ✅ 99+ passed (核心模块) |
-| **集成测试** | ⏳ 需 API 环境 |
+| **集成测试** | ✅ 52 passed (含工作流节点测试) |
 | **代码覆盖率** | 75% (目标 80%+) |
 | **安全审查** | ✅ 无硬编码密钥 |
 | **最新修复** | ✅ 指数退避重试逻辑 + 路径安全检查 |
 
 更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md) 和 [OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)。
+
+## 开发工具
+
+### Lint 与格式化
+
+项目使用 [Ruff](https://docs.astral.sh/ruff/) 进行代码检查和格式化：
+
+```bash
+# 安装 ruff（若未安装）
+pip install ruff
+
+# 检查代码
+ruff check .
+
+# 自动修复可修复的问题
+ruff check --fix .
+
+# 格式化代码
+ruff format .
+
+# 检查格式化（不修改）
+ruff format --check .
+```
+
+### Pre-commit Hooks
+
+推荐使用 pre-commit hooks 在提交前自动执行检查：
+
+```bash
+# 安装 pre-commit
+pip install pre-commit
+
+# 安装 hooks
+pre-commit install
+
+# 手动运行所有 hooks
+pre-commit run --all-files
+```
+
+### CI/CD
+
+项目配置了 GitHub Actions 持续集成，支持：
+- 多 Python 版本测试（3.10, 3.11, 3.12）
+- Ruff lint 检查
+- pytest 测试 + 覆盖率报告
+- 依赖安全扫描
+
+### 测试命令
+
+```bash
+# 运行所有单元测试
+.venv/bin/python -m pytest tests/ -v
+
+# 运行测试并显示覆盖率
+.venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
+
+# 仅运行集成测试
+.venv/bin/python -m pytest tests/test_integration.py -v
+
+# 仅运行示例测试
+.venv/bin/python -m pytest tests/test_examples.py -v
+```
 
 ## 快速开始
 

@@ -89,7 +89,11 @@ DEBUGGER_SYSTEM_PROMPT = """\
 
 if __name__ == "__main__":
     # 快速验证：打印各 prompt 的字符数，便于排查 token 超限问题
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
     items = list(locals().items())
     for name, value in items:
         if isinstance(value, str) and name.isupper():
-            print(f"{name}: {len(value)} 字符\n")
+            logger.info("%s: %d 字符", name, len(value))

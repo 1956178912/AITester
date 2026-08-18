@@ -9,8 +9,10 @@
 """
 
 import ast
+
 import pytest
-from src.synthetic_dataset import SyntheticDataset, BUG_PATTERNS
+
+from src.synthetic_dataset import BUG_PATTERNS, SyntheticDataset
 
 
 # ─── TestPatternDiversity：模式多样性测试 ─────────────────────────────────────
@@ -88,14 +90,14 @@ class TestDatasetQuality:
         """测试任务结构完整性。"""
         ds = SyntheticDataset(task_count=20, seed=42)
         for task in ds.tasks:
-            assert hasattr(task, 'task_id')
-            assert hasattr(task, 'repo_name')
-            assert hasattr(task, 'problem_statement')
-            assert hasattr(task, 'instance_code')
-            assert hasattr(task, 'test_code')
-            assert hasattr(task, 'expected_pass_count')
-            assert hasattr(task, 'total_test_count')
-            assert hasattr(task, 'metadata')
+            assert hasattr(task, "task_id")
+            assert hasattr(task, "repo_name")
+            assert hasattr(task, "problem_statement")
+            assert hasattr(task, "instance_code")
+            assert hasattr(task, "test_code")
+            assert hasattr(task, "expected_pass_count")
+            assert hasattr(task, "total_test_count")
+            assert hasattr(task, "metadata")
 
     def test_expected_pass_count_reasonable(self):
         """测试期望通过数合理。"""

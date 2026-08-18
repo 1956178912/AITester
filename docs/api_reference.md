@@ -293,10 +293,12 @@ dataset = load_dataset("examples")
 
 # 加载合成数据集
 from src.synthetic_dataset import SyntheticDataset
+
 dataset = SyntheticDataset(task_count=50, seed=42)
 
 # 加载 SWE-bench 数据集
 from src.dataset_loader import SWEBenchDataset
+
 dataset = SWEBenchDataset(subset="lite")
 ```
 
@@ -371,10 +373,11 @@ print(config["MAX_ITERATIONS"])  # 3
 ```python
 from src.agents.base_agent import BaseAgent
 
+
 class MyAgent(BaseAgent):
     def __init__(self):
         super().__init__(MY_SYSTEM_PROMPT)
-    
+
     def my_method(self, input_data):
         # 实现逻辑
         pass
@@ -389,10 +392,11 @@ class MyAgent(BaseAgent):
 ```python
 from src.dataset_loader import Dataset
 
+
 class CustomDataset(Dataset):
     def __init__(self):
         self.tasks = [...]
-    
+
     def __iter__(self):
         return iter(self.tasks)
 ```

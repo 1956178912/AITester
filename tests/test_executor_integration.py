@@ -6,8 +6,7 @@
     - _parse_failed_cases: 失败用例解析
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestParseCoverage:
@@ -16,6 +15,7 @@ class TestParseCoverage:
     def test_normal_coverage(self):
         """正常覆盖率解析。"""
         from src.agents.executor import ExecutorAgent
+
         output = """
 ============================= test session starts ==============================
 collected 1 item
@@ -36,6 +36,7 @@ TOTAL                      1043    223    79%
     def test_no_coverage_info(self):
         """无覆盖率信息时返回 0.0。"""
         from src.agents.executor import ExecutorAgent
+
         output = """
 ============================= test session starts ==============================
 collected 1 item
@@ -48,6 +49,7 @@ test_foo.py .                                                              [100%
     def test_coverage_int_only(self):
         """覆盖率只有整数时正确解析。"""
         from src.agents.executor import ExecutorAgent
+
         output = """
 TOTAL                      100     10    90%
 """
@@ -61,6 +63,7 @@ class TestParseFailedCases:
     def test_normal_failures(self):
         """正常解析失败用例。"""
         from src.agents.executor import ExecutorAgent
+
         output = """
 FAILED test_foo.py::test_bar - AssertionError: expected 1, got 2
 FAILED test_baz.py::test_qux - ValueError: invalid literal
@@ -73,6 +76,7 @@ FAILED test_baz.py::test_qux - ValueError: invalid literal
     def test_no_failures(self):
         """无失败用例时返回空列表。"""
         from src.agents.executor import ExecutorAgent
+
         output = """
 ============================== 1 passed in 0.5s ===============================
 """
@@ -86,6 +90,7 @@ class TestExecutorNode:
     def test_executor_node_pass(self):
         """测试通过时标记为 PASS。"""
         from src.graph.workflow import _executor_node
+
         with patch("src.graph.workflow.ExecutorAgent") as mock_exec_class:
             mock_agent = MagicMock()
             mock_agent.execute.return_value = {
@@ -108,6 +113,7 @@ class TestExecutorNode:
     def test_executor_node_fail(self):
         """测试失败时记录失败用例。"""
         from src.graph.workflow import _executor_node
+
         with patch("src.graph.workflow.ExecutorAgent") as mock_exec_class:
             mock_agent = MagicMock()
             mock_agent.execute.return_value = {

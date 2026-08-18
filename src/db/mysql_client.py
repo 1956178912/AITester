@@ -7,16 +7,17 @@ output 字段使用 MEDIUMTEXT 类型，不再截断。
 from __future__ import annotations
 
 import logging
-import pymysql
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+import pymysql
 
 from config import (
+    MYSQL_DATABASE,
     MYSQL_HOST,
+    MYSQL_PASSWORD,
     MYSQL_PORT,
     MYSQL_USER,
-    MYSQL_PASSWORD,
-    MYSQL_DATABASE,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,9 @@ class MySQLClient:
         connection: pymysql 连接对象。
     """
 
-    _instance: Optional["MySQLClient"] = None
+    _instance: MySQLClient | None = None
 
-    def __new__(cls) -> "MySQLClient":
+    def __new__(cls) -> MySQLClient:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -70,7 +71,7 @@ class MySQLClient:
     def create_task(
         self,
         target_file: str,
-        target_function: Optional[str] = None,
+        target_function: str | None = None,
     ) -> str:
         """
         创建新任务记录。
@@ -91,7 +92,7 @@ class MySQLClient:
             )
             return str(cur.lastrowid)
 
-    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
         """
         查询任务记录。
 

@@ -10,21 +10,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
-from typing import Any, Dict
+from typing import Any
 
 from langchain_openai import ChatOpenAI
-import threading
-from config import LLM_CONFIGS, TEMPERATURE, LLM_TIMEOUT
 
-from src.exceptions import (
-    APIError,
-    RateLimitError,
-    AuthenticationError,
-    JSONParseError,
-    AITesterError,
-    retry_with_backoff,
-)
+from config import LLM_CONFIGS, LLM_TIMEOUT, TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +73,8 @@ def _retry_with_exponential_backoff(
                 raise
             last_error = e
             if attempt < max_retries:
-                wait_time = base_wait ** attempt
-                logger.warning("调用失败 (attempt %d/%d): %s，等待 %ds",
-                               attempt + 1, max_retries + 1, e, wait_time)
+                wait_time = base_wait**attempt
+                logger.warning("调用失败 (attempt %d/%d): %s，等待 %ds", attempt + 1, max_retries + 1, e, wait_time)
                 time.sleep(wait_time)
             else:
                 break
@@ -107,9 +98,14 @@ def _is_zai_compatible(base_url: str) -> bool:
     return any(d in base_url for d in zai_domains)
 
 
-def _call_zai(api_key: str, base_url: str, model_name: str,
-              system_prompt: str, user_message: str,
-              max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
+def _call_zai(
+    api_key: str,
+    base_url: str,
+    model_name: str,
+    system_prompt: str,
+    user_message: str,
+    max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+) -> str:
     """使用 zai SDK 调用 LLM（用于 BigModel 等非 OpenAI 兼容接口）。
 
     实现带指数退避的重试策略：
@@ -242,54 +238,61 @@ class BaseAgent:
     def _call_llm_with_cache(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
         """
         带缓存的 LLM 调用方法。
-        
+
         首次调用时执行完整的 LLM 请求并缓存结果，
         后续相同输入直接返回缓存响应，节省 token 和延迟。
-        
+
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数。
-        
+
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
         # 生成缓存键（基于 prompt 和 system_prompt）
         cache_key = f"{user_message}:{self.system_prompt[:100]}"  # 截取前100字符作为标识
-        
+
         # 尝试从缓存获取
         import os
-        cache_file = os.path.join(os.path.dirname(__file__), '..', 'cache', f'{hash(cache_key) % 10000}.json')
+
+        cache_file = os.path.join(os.path.dirname(__file__), "..", "cache", f"{hash(cache_key) % 10000}.json")
         cache_file = os.path.normpath(cache_file)
-        
+
         try:
             if os.path.exists(cache_file):
                 import json
-                with open(cache_file, 'r', encoding='utf-8') as f:
+
+                with open(cache_file, encoding="utf-8") as f:
                     cached_data = json.load(f)
-                    if cached_data.get('prompt') == user_message and cached_data.get('system') == self.system_prompt:
+                    if cached_data.get("prompt") == user_message and cached_data.get("system") == self.system_prompt:
                         logger.info("LLM 缓存命中: %s", cache_key[:50])
-                        return cached_data['response']
+                        return cached_data["response"]
         except Exception as e:
             logger.debug("缓存读取失败: %s", e)
-        
+
         # 未命中，执行实际调用
         response = self._call_llm(user_message, max_retries)
-        
+
         # 写入缓存
         try:
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             import json
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'prompt': user_message,
-                    'system': self.system_prompt,
-                    'response': response,
-                    'timestamp': os.path.getmtime(cache_file) if os.path.exists(cache_file) else 0
-                }, f, ensure_ascii=False)
+
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "prompt": user_message,
+                        "system": self.system_prompt,
+                        "response": response,
+                        "timestamp": os.path.getmtime(cache_file) if os.path.exists(cache_file) else 0,
+                    },
+                    f,
+                    ensure_ascii=False,
+                )
             logger.info("LLM 缓存已更新: %s", cache_key[:50])
         except Exception as e:
             logger.debug("缓存写入失败: %s", e)
-        
+
         return response
 
     def _call_llm(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
@@ -310,7 +313,7 @@ class BaseAgent:
             RuntimeError: 所有 API 和重试均失败时抛出。
         """
         # 延迟导入：避免循环导入（base_agent 被 planner/generator/debugger 导入）
-        from langchain_core.messages import SystemMessage, HumanMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         # 获取所有已配置的 API，未配置时直接报错不进入重试循环
         all_configs = _get_all_api_configs()
@@ -338,8 +341,7 @@ class BaseAgent:
                 try:
                     if is_zai:
                         # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
-                        text = _call_zai(api_key, base_url, model_name,
-                                         self.system_prompt, user_message, max_retries)
+                        text = _call_zai(api_key, base_url, model_name, self.system_prompt, user_message, max_retries)
                     else:
                         # OpenAI 兼容接口：使用 LangChain ChatOpenAI 统一路径
                         llm = ChatOpenAI(
@@ -348,10 +350,13 @@ class BaseAgent:
                             openai_api_key=api_key,
                             base_url=base_url,
                         )
-                        response = llm.invoke([
-                            SystemMessage(content=self.system_prompt),
-                            HumanMessage(content=user_message),
-                        ], timeout=LLM_TIMEOUT)
+                        response = llm.invoke(
+                            [
+                                SystemMessage(content=self.system_prompt),
+                                HumanMessage(content=user_message),
+                            ],
+                            timeout=LLM_TIMEOUT,
+                        )
                         text = response.content.strip()
                         # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
                         if not text:
@@ -377,7 +382,7 @@ class BaseAgent:
         raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {last_error}") from last_error
 
     @staticmethod
-    def _extract_json(text: str) -> Dict[str, Any]:
+    def _extract_json(text: str) -> dict[str, Any]:
         """
         从 LLM 输出中提取 JSON 对象。
         LLM 有时会在 JSON 前后添加 markdown 代码块标记（```json ... ```），
@@ -443,9 +448,9 @@ class BaseAgent:
         Returns:
             完整的 JSON 字符串，未找到匹配时返回 None。
         """
-        depth = 0          # 当前括号深度（遇 '{' +1，遇 '}' -1）
+        depth = 0  # 当前括号深度（遇 '{' +1，遇 '}' -1）
         in_string = False  # 是否处于 JSON 字符串字面量内部
-        escape = False     # 是否处于转义状态（上一个字符是反斜杠）
+        escape = False  # 是否处于转义状态（上一个字符是反斜杠）
         # 边界检查：start 超出文本范围则直接返回 None
         if start < 0 or start >= len(text):
             return None
@@ -478,7 +483,7 @@ class BaseAgent:
                 depth -= 1
                 # 深度归零表示找到匹配的右花括号，返回完整 JSON 切片
                 if depth == 0:
-                    return text[start:i + 1]
+                    return text[start : i + 1]
             i += 1
         # 遍历结束仍未归零（JSON 对象未闭合），返回剩余部分供调用方降级处理
         return text[start:] if start < len(text) else None

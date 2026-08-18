@@ -9,12 +9,11 @@
     - EXECUTOR 为非空占位符
 """
 
-import pytest
 from src.prompts.templates import (
-    PLANNER_SYSTEM_PROMPT,
-    GENERATOR_SYSTEM_PROMPT,
-    EXECUTOR_SYSTEM_PROMPT,
     DEBUGGER_SYSTEM_PROMPT,
+    EXECUTOR_SYSTEM_PROMPT,
+    GENERATOR_SYSTEM_PROMPT,
+    PLANNER_SYSTEM_PROMPT,
 )
 
 

@@ -8,7 +8,6 @@ Bug 清单：
     （其余函数暂无 bug，作为对照组）
 """
 
-
 import re
 
 
@@ -109,7 +108,7 @@ def sanitize_input(text: str) -> str:
         return ""
     result = text.strip()
     # 将连续空白字符压缩为单个空格
-    result = re.sub(r'\s+', ' ', result)
+    result = re.sub(r"\s+", " ", result)
     return result
 
 
@@ -133,14 +132,14 @@ def lcs_length(s1: str, s2: str) -> int:
     # 优化：确保 s2 是较短的字符串，以减少 DP 表宽度
     if len(s1) < len(s2):
         s1, s2 = s2, s1
-    
+
     m, n = len(s1), len(s2)
     if m == 0 or n == 0:
         return 0
-    
+
     # 一维 DP 数组，初始化为 0
     dp = [0] * (n + 1)
-    
+
     for i in range(1, m + 1):
         prev = 0  # 记录 dp[i-1][j-1]
         for j in range(1, n + 1):
@@ -150,5 +149,5 @@ def lcs_length(s1: str, s2: str) -> int:
             else:
                 dp[j] = max(dp[j], dp[j - 1])
             prev = temp
-    
+
     return dp[n]

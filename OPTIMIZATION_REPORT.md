@@ -58,10 +58,11 @@
 - **代码变更**:
   ```python
   # 之前
-  sys.path.insert(0, '<PROJECT_PATH>')
-  
+  sys.path.insert(0, "<PROJECT_PATH>")
+
   # 之后
   import os
+
   sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   ```
 

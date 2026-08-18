@@ -8,8 +8,7 @@
     - 补丁函数名在原代码中不存在
 """
 
-import pytest
-from src.tools.patch_applier import apply_patch_to_code, _extract_patch_code
+from src.tools.patch_applier import _extract_patch_code, apply_patch_to_code
 
 
 # ─── TestApplyPatchBoundary：补丁应用边界情况 ──────────────────────────────────
@@ -18,16 +17,16 @@ class TestApplyPatchBoundary:
 
     def test_patch_with_import_treated_as_full_file(self):
         """含 import 的补丁被视为完整文件模式。"""
-        original = '''\
+        original = """\
 def add(a, b):
     return a + b
-'''
-        patch = '''\
+"""
+        patch = """\
 import math
 
 def add(a, b):
     return a + b
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         # 补丁含 import，应被识别为完整文件模式
         assert success is True
@@ -35,17 +34,17 @@ def add(a, b):
 
     def test_patch_with_two_functions_on_single_func_original(self):
         """补丁含两个函数但原代码只有一个函数时，按单函数模式处理。"""
-        original = '''\
+        original = """\
 def only_one(a):
     return a
-'''
-        patch = '''\
+"""
+        patch = """\
 def add(a, b):
     return a + b
 
 def multiply(a, b):
     return a * b
-'''
+"""
         new_code, success = apply_patch_to_code(original, patch)
         # 原代码只有1个函数，补丁有2个，走单函数模式（替换第一个匹配的）
         # 由于补丁中第一个函数是 add，原代码中没有 add，所以应返回 False

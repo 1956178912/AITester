@@ -10,12 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import GENERATOR_SYSTEM_PROMPT
-from src.graph.llm_cache import cached_llm_call, get_cache_stats
-from src.exceptions import SyntaxParseError
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -42,10 +40,28 @@ class GeneratorAgent(BaseAgent):
 
     # 已知合法的外部包，不应被替换为被测模块名
     # 这些是 Python 标准库和常用测试框架，import 它们属于正常行为
-    _KNOWN_MODULES = {'pytest', 'unittest', 'typing', 're', 'os', 'sys',
-                      'json', 'collections', 'itertools', 'functools',
-                      'abc', 'dataclasses', 'enum', 'pathlib', 'math',
-                      'datetime', 'string', 'random', 'hashlib', 'logging'}
+    _KNOWN_MODULES = {
+        "pytest",
+        "unittest",
+        "typing",
+        "re",
+        "os",
+        "sys",
+        "json",
+        "collections",
+        "itertools",
+        "functools",
+        "abc",
+        "dataclasses",
+        "enum",
+        "pathlib",
+        "math",
+        "datetime",
+        "string",
+        "random",
+        "hashlib",
+        "logging",
+    }
 
     def __init__(self) -> None:
         # 使用生成器专用 system prompt
@@ -53,10 +69,10 @@ class GeneratorAgent(BaseAgent):
 
     def generate(
         self,
-        test_plan: Dict[str, Any],
+        test_plan: dict[str, Any],
         target_code: str,
         module_name: str = "",
-        rag_references: Optional[List[Dict[str, Any]]] = None,
+        rag_references: list[dict[str, Any]] | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -98,7 +114,9 @@ class GeneratorAgent(BaseAgent):
         # 强约束：必须使用给定的 module_name 作为 import 来源
         # 避免 LLM 随意猜测模块名导致 ModuleNotFoundError
         if module_name:
-            query += f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，即 `from {module_name} import ...`"
+            query += (
+                f"\n\n【重要约束】import 语句必须使用以下模块名：`{module_name}`，即 `from {module_name} import ...`"
+            )
 
         # RAG 增强：若检索到相似案例，注入参考代码
         # 最多取前 _MAX_RAG_REFERENCES 个案例，避免 prompt 过长导致 token 浪费
@@ -154,6 +172,7 @@ class GeneratorAgent(BaseAgent):
             True 表示格式正确，False 表示需要重试。
         """
         import ast
+
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
@@ -171,9 +190,11 @@ class GeneratorAgent(BaseAgent):
                 continue
             for decorator in node.decorator_list:
                 # 检查装饰器是否为 @pytest.mark.parametrize(...)
-                if not (isinstance(decorator, ast.Call)
-                        and isinstance(decorator.func, ast.Attribute)
-                        and decorator.func.attr == "parametrize"):
+                if not (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "parametrize"
+                ):
                     continue
                 if not decorator.args:
                     continue
@@ -195,7 +216,8 @@ class GeneratorAgent(BaseAgent):
                         if len(elt.elts) != len(param_names):
                             logger.warning(
                                 "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
-                                len(param_names), len(elt.elts),
+                                len(param_names),
+                                len(elt.elts),
                             )
                             return False
         return True
@@ -219,7 +241,7 @@ class GeneratorAgent(BaseAgent):
             修正后的代码字符串。
         """
         # 匹配所有 "from X import ..." 语句（X 为模块名）
-        pattern = re.compile(r'^from\s+(\S+)\s+import', re.MULTILINE)
+        pattern = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
         matches = pattern.findall(code)
         changed = False
         for wm in matches:
@@ -230,7 +252,7 @@ class GeneratorAgent(BaseAgent):
             if wm in GeneratorAgent._KNOWN_MODULES:
                 continue
             # 将错误的模块名替换为期望模块名
-            code = code.replace(f'from {wm} import', f'from {expected_module} import')
-            logger.warning('Generator 修正了错误模块名：%s → %s', wm, expected_module)
+            code = code.replace(f"from {wm} import", f"from {expected_module} import")
+            logger.warning("Generator 修正了错误模块名：%s → %s", wm, expected_module)
             changed = True
         return code

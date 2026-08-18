@@ -43,24 +43,23 @@ import json
 import logging
 import os
 import threading
-from typing import Any, Dict, Optional
+from typing import Any
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from src.graph.state import AITesterState
-from src.agents.planner import PlannerAgent
-from src.agents.generator import GeneratorAgent
-from src.agents.executor import ExecutorAgent
-from src.agents.debugger import DebuggerAgent
-from src.tools.patch_applier import apply_patch_to_code
-from src.graph.llm_cache import cached_llm_call, get_cache_stats, reset_cache_stats
 from config import (
-    MAX_ITERATIONS,
-    COVERAGE_THRESHOLD,
+    ENABLE_DEBUGGER,
     ENABLE_PLANNER,
     ENABLE_RAG,
-    ENABLE_DEBUGGER,
+    MAX_ITERATIONS,
 )
+from src.agents.debugger import DebuggerAgent
+from src.agents.executor import ExecutorAgent
+from src.agents.generator import GeneratorAgent
+from src.agents.planner import PlannerAgent
+from src.graph.llm_cache import get_cache_stats
+from src.graph.state import AITesterState
+from src.tools.patch_applier import apply_patch_to_code
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -69,6 +68,7 @@ logger = logging.getLogger(__name__)
 # 使用延迟导入而非 top-level import，避免 chromadb 未安装时整个项目无法启动
 try:
     from src.rag.retriever import TestCaseRetriever
+
     RAG_MODULE_AVAILABLE = True
 except ImportError:
     RAG_MODULE_AVAILABLE = False
@@ -175,8 +175,8 @@ def _create_workflow() -> StateGraph:
             "executor",
             _should_debug,
             {
-                "debug": "debugger",   # 需要修复时进入 debugger
-                "done": END,           # 测试通过或达到最大迭代时结束
+                "debug": "debugger",  # 需要修复时进入 debugger
+                "done": END,  # 测试通过或达到最大迭代时结束
                 "regenerate": "generator",  # 测试生成错误时重新生成测试代码
             },
         )
@@ -195,14 +195,14 @@ def _create_workflow() -> StateGraph:
 def _should_skip_debugger(state: AITesterState) -> bool:
     """
     智能判断是否可以跳过 Debugger 节点。
-    
+
     优化策略：
     - 若连续多次修复后测试仍失败，说明问题可能无法通过补丁解决
     - 若诊断表明是测试代码自身错误（非被测代码 bug），应触发重新生成而非修复
-    
+
     Args:
         state: 当前工作流状态。
-    
+
     Returns:
         True 表示应跳过 Debugger，False 表示应继续修复。
     """
@@ -238,13 +238,21 @@ def _should_debug(state: AITesterState) -> str:
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
     if _should_skip_debugger(state):
         return "done"
-    
+
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
         # 重新生成测试代码而不是放弃
-        test_gen_keywords = ["测试生成错误", "测试设计存在错误", "test code", "AttributeError",
-                             "NameError", "SyntaxError", "测试用例", "期望的异常类型"]
+        test_gen_keywords = [
+            "测试生成错误",
+            "测试设计存在错误",
+            "test code",
+            "AttributeError",
+            "NameError",
+            "SyntaxError",
+            "测试用例",
+            "期望的异常类型",
+        ]
         if any(kw in diagnosis for kw in test_gen_keywords):
             logger.info("诊断表明测试生成错误，触发重新生成测试代码")
             return "regenerate"
@@ -255,10 +263,10 @@ def _should_debug(state: AITesterState) -> str:
 # ─── 节点函数定义 ────────────────────────────────────────────────────────────
 
 
-def _planner_node(state: AITesterState) -> Dict[str, Any]:
+def _planner_node(state: AITesterState) -> dict[str, Any]:
     """
     PlannerAgent 节点：生成逻辑驱动的结构化测试计划。
-    
+
     优化：添加输出验证，确保 Planner 返回符合预期的 JSON 结构。
     若验证失败，使用默认计划兜底。
 
@@ -307,7 +315,7 @@ def _planner_node(state: AITesterState) -> Dict[str, Any]:
     return {"test_plan": test_plan}
 
 
-def _generator_node(state: AITesterState) -> Dict[str, Any]:
+def _generator_node(state: AITesterState) -> dict[str, Any]:
     """
     GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
 
@@ -329,7 +337,7 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
     agent = GeneratorAgent()
 
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
-    rag_refs: Optional[list] = None
+    rag_refs: list | None = None
     # 仅当 RAG 开关开启、模块可用、且存在失败用例时才进行检索
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
         try:
@@ -363,7 +371,7 @@ def _generator_node(state: AITesterState) -> Dict[str, Any]:
     }
 
 
-def _executor_node(state: AITesterState) -> Dict[str, Any]:
+def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
     测试通过后自动入库（若 RAG 可用且已启用），供后续检索使用。
@@ -415,7 +423,7 @@ def _executor_node(state: AITesterState) -> Dict[str, Any]:
     }
 
 
-def _debugger_node(state: AITesterState) -> Dict[str, Any]:
+def _debugger_node(state: AITesterState) -> dict[str, Any]:
     """
     DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
     若 RAG 可用且已启用，检索相似历史修复案例作为参考。
@@ -428,7 +436,7 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     """
     agent = DebuggerAgent()
 
-    rag_refs: Optional[list] = None
+    rag_refs: list | None = None
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None and state.get("failed_cases"):
         try:
             error_cat = state.get("error_category", "unknown")
@@ -487,7 +495,7 @@ def _debugger_node(state: AITesterState) -> Dict[str, Any]:
     }
 
 
-def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
+def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     """
     补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
     应用后更新 iteration 计数器，供下次循环使用。
@@ -513,6 +521,7 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
             # 安全检查：验证目标文件路径合法性，防止路径穿越攻击
             import os
             import tempfile
+
             target_file_path = os.path.abspath(state["target_file"])
             project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             temp_dir = os.path.abspath(tempfile.gettempdir())
@@ -526,12 +535,14 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
                 logger.info("补丁已应用到文件: %s", target_file_path)
 
     history = state.get("repair_history", []) or []
-    history.append({
-        "iteration": state.get("iteration", 0) + 1,
-        "diagnosis": state.get("diagnosis", ""),
-        "error_category": state.get("error_category", "unknown"),
-        "patch_applied": applied,
-    })
+    history.append(
+        {
+            "iteration": state.get("iteration", 0) + 1,
+            "diagnosis": state.get("diagnosis", ""),
+            "error_category": state.get("error_category", "unknown"),
+            "patch_applied": applied,
+        }
+    )
     # 限制 repair_history 大小，避免无限增长占用内存（最多保留 5 条）
     _MAX_REPAIR_HISTORY = 5
     if len(history) > _MAX_REPAIR_HISTORY:
@@ -546,15 +557,15 @@ def _patch_applier_node(state: AITesterState) -> Dict[str, Any]:
 # ─── 辅助函数：Planner 输出验证 ────────────────────────────────────────────────
 
 
-def _validate_planner_output(test_plan: Dict[str, Any]) -> bool:
+def _validate_planner_output(test_plan: dict[str, Any]) -> bool:
     """
     验证 Planner 输出是否符合预期结构。
-    
+
     检查必需字段：function_name 和 logic_analysis。
-    
+
     Args:
         test_plan: PlannerAgent 输出的测试计划字典。
-    
+
     Returns:
         True 表示结构完整，False 表示需要降级使用默认计划。
     """
@@ -573,13 +584,13 @@ def _validate_planner_output(test_plan: Dict[str, Any]) -> bool:
     return True
 
 
-def _get_default_test_plan(function_name: str | None) -> Dict[str, Any]:
+def _get_default_test_plan(function_name: str | None) -> dict[str, Any]:
     """
     生成默认测试计划（降级方案）。
-    
+
     Args:
         function_name: 目标函数名。
-    
+
     Returns:
         默认测试计划字典。
     """
@@ -612,14 +623,14 @@ def build_workflow() -> Any:
     return workflow.compile()
 
 
-def get_workflow_stats() -> Dict[str, Any]:
+def get_workflow_stats() -> dict[str, Any]:
     """
     获取工作流执行统计信息。
-    
+
     包含：
     - llm_cache: LLM 调用缓存统计
     - workflow_config: 当前启用的功能开关
-    
+
     Returns:
         统计信息字典。
     """
@@ -630,5 +641,5 @@ def get_workflow_stats() -> Dict[str, Any]:
             "ENABLE_DEBUGGER": ENABLE_DEBUGGER,
             "ENABLE_RAG": ENABLE_RAG,
             "MAX_ITERATIONS": MAX_ITERATIONS,
-        }
+        },
     }
