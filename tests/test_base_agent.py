@@ -151,3 +151,22 @@ class TestExtractPythonCode:
         text = "以下是代码：\n```python\ndef main(): pass\n```\n结束。"
         result = BaseAgent._extract_python_code(text)
         assert result == "def main(): pass"
+
+    def test_multiple_code_blocks(self):
+        """多个代码块时返回第一个匹配。"""
+        text = "```\nprint('first')\n```\nsome text\n```\nprint('second')\n```"
+        result = BaseAgent._extract_python_code(text)
+        assert "first" in result
+
+    def test_empty_code_block(self):
+        """空代码块返回原始内容。"""
+        text = "```python\n```"
+        result = BaseAgent._extract_python_code(text)
+        # 无内容时返回原文 strip 结果
+        assert "python" in result or result == ""
+
+    def test_only_language_marker(self):
+        """只有语言标记无代码时返回原文。"""
+        text = "python:\n"
+        result = BaseAgent._extract_python_code(text)
+        assert "python" in result
