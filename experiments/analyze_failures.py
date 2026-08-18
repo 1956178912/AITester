@@ -73,8 +73,8 @@ def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
     for t in tasks:
         by_bl[t.get("baseline", "?")].append(t)
     for bl, bl_tasks in sorted(by_bl.items()):
-        bl_failed = [t for t in bl_tasks if not t.get("passed", True)]
-        bl_passed = [t for t in bl_tasks if t.get("passed", False) is False]
+        [t for t in bl_tasks if not t.get("passed", True)]
+        [t for t in bl_tasks if t.get("passed", False) is False]
         # 修正：passed 为 True 表示成功
         bl_passed_correct = [t for t in bl_tasks if t.get("passed") is True]
         bl_failed_correct = [t for t in bl_tasks if t.get("passed") is not True]

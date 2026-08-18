@@ -7,13 +7,16 @@
 
 | 指标 | 状态 |
 |------|------|
-| **单元测试** | ✅ 99+ passed (核心模块) |
+| **单元测试** | ✅ 696+ passed (覆盖所有核心模块) |
 | **集成测试** | ✅ 52 passed (含工作流节点测试) |
 | **代码覆盖率** | 75% (目标 80%+) |
 | **安全审查** | ✅ 无硬编码密钥 |
 | **最新修复** | ✅ 指数退避重试逻辑 + 路径安全检查 |
+| **新模块** | ✅ 错误报告生成器 (`src/reports/`) |
+| **LLM 配置** | ✅ 多配置轮询支持 (`LLM_CONFIGS`) |
+| **性能优化** | ✅ RAG 单例化 + LLM 超时配置 + 并发执行 |
 
-更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md) 和 [OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)。
+更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md)、[OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md) 和 [性能优化报告](docs/performance_optimization_report.md)。
 
 ## 开发工具
 
@@ -413,7 +416,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 185 个用例全部通过）
+# 运行所有测试（当前 860+ 个用例，696+ passed）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -423,35 +426,44 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（17 个文件，185 个用例）：
+**测试覆盖模块**（38 个文件，860+ 个收集用例）：
 
 | 测试文件 | 用例数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_base_agent.py` | 20 | JSON 提取、Python 代码块提取 |
+| `test_base_agent.py` | 23 | JSON 提取、Python 代码块提取 |
 | `test_planner.py` | 6 | PlannerAgent 规划逻辑序列化 |
 | `test_generator.py` | 13 | parametrize 校验、import 修正、LLM 调用 |
 | `test_debugger.py` | 5 | 错误诊断、RAG 注入、failed_cases 截断 |
-| `test_executor.py` | 11 | 覆盖率解析、失败用例解析 |
-| `test_workflow.py` | 11 | _should_debug 路由、工作流图构建 |
+| `test_executor.py` | 17 | 覆盖率解析、失败用例解析 |
+| `test_workflow.py` | 77 | _should_debug 路由、工作流图构建 |
 | `test_state.py` | 5 | AITesterState TypedDict 结构完整性 |
-| `test_prompts.py` | 26 | 各智能体 System Prompt 完整性校验（含新格式约束） |
+| `test_prompts.py` | 26 | 各智能体 System Prompt 完整性校验 |
 | `test_retriever.py` | 7 | RAG 检索器增删查清功能 |
 | `test_config.py` | 15 | MySQLClient 单例/事务、config.py 默认值 |
-| `test_patch_applier.py` | 9 | 补丁应用（完整文件/单函数模式） |
+| `test_patch_applier.py` | 29 | 补丁应用（完整文件/单函数模式） |
 | `test_patch_applier_boundary.py` | 10 | 补丁应用边界情况 |
-| `test_code_analyzer.py` | 14 | AST 解析、圈复杂度、代码替换 |
-| `test_error_classifier.py` | 12 | 五类错误分类与修复策略映射 |
-| `test_dataset_loader.py` | 15 | 数据集加载器（InMemory/SWEBench） |
+| `test_code_analyzer.py` | 12 | AST 解析、圈复杂度、代码替换 |
+| `test_error_classifier.py` | 53 | 五类错误分类与修复策略映射 |
+| `test_dataset_loader.py` | 51 | 数据集加载器（InMemory/SWEBench） |
 | `test_synthetic_dataset.py` | 18 | 合成数据集生成与确定性验证 |
+| `test_api_manager.py` | 17 | API 管理器（轮询/加权随机/健康感知策略） |
+| `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
+| `test_base_agent_extended.py` | 22 | 指数退避重试、LLM 缓存 |
+| `test_error_classifier_improvements.py` | 25 | 错误分类器改进测试 |
+| `test_report_generator.py` | 13 | 错误报告生成器 |
+| `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
+| `test_executor_integration.py` | 4 | 执行器集成测试 |
 
 ## 配置说明
 
-所有配置项统一在 [config.py](config.py) 中管理，通过 `.env` 文件注入：
+所有配置项统一在 [config.py](config.py) 中管理，通过 `.env` 和 `.env.local` 文件注入：
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `LLM_N_API_KEY` | LLM API 密钥（配置见 `config.local.example`）| 必填 |
-| `MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
+| `LLM_N_API_KEY` | LLM API 密钥（支持多配置，见 `config.local.example`）| 必填 |
+| `LLM_N_BASE_URL` | LLM Base URL | - |
+| `LLM_N_MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
+| `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | agnes-2.5-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
@@ -462,6 +474,33 @@ docker run --rm \
 | `ENABLE_RAG` | 启用 RAG 检索增强 | false |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `TEMPERATURE` | LLM 采样温度 | 0.2 |
+
+### 多 LLM 配置支持
+
+系统支持配置多个 LLM Provider，实现 API Key 轮询和高可用：
+
+```bash
+# .env.local 配置示例
+LLM_1_API_KEY=sk-key-1
+LLM_1_BASE_URL=https://api.provider1.com/v1
+LLM_1_MODEL_NAME=model-1
+
+LLM_2_API_KEY=sk-key-2
+LLM_2_BASE_URL=https://api.provider2.com/v1
+LLM_2_MODEL_NAME=model-2
+```
+
+代码中使用：
+```python
+from config import LLM_CONFIGS, DEFAULT_LLM_CONFIG
+
+# 获取所有配置
+all_configs: list[LLMConfig] = LLM_CONFIGS
+# 获取默认配置（第一个）
+default_config: LLMConfig | None = DEFAULT_LLM_CONFIG
+```
+
+更多配置详情参见 [API 管理器扩展指南](API_MANAGER_EXTENSION_GUIDE.md) 和 [config.local.example](config.local.example)。
 
 ---
 
@@ -602,6 +641,62 @@ python main.py list-examples
 ## 贡献指南
 
 欢迎贡献代码！请阅读 [贡献指南](docs/contributing.md) 了解如何参与项目开发。
+
+---
+
+## 迭代优化记录
+
+### v0.10 (2026-08-18) — 第二轮迭代：性能优化与依赖锁定
+
+**核心成果**:
+- **测试扩展**: 653+ → 696+ 个用例（新增 40+ 个）
+- **性能优化报告**: 识别 3 个高优先级瓶颈（缓存、健康检查、连接池）
+- **API 管理器增强**: 支持多 Provider 轮询和高可用故障转移
+- **依赖锁定**: 生成 requirements.lock 确保可复现构建
+
+**性能优化实施**:
+- ✅ RAG 检索器单例化（节省 2-6 秒/任务初始化时间）
+- ✅ LLM 调用超时配置（防止 API 响应卡死）
+- ✅ 并发执行支持（BENCHMARK_PARALLELISM 环境变量）
+- 🔲 LLM 缓存键修复（使用 MD5 替代 hash()）
+- 🔲 数据库连接池（待实施）
+
+**新增测试模块**:
+| 测试文件 | 用例数 | 覆盖范围 |
+|---------|-------|---------|
+| `test_api_manager.py` | 17 | API 管理器策略测试 |
+| `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
+| `test_base_agent_extended.py` | 22 | 指数退避重试、LLM 缓存 |
+| `test_error_classifier_improvements.py` | 25 | 错误分类器改进 |
+| `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
+| `test_report_generator.py` | 13 | 错误报告生成器 |
+| `test_executor_integration.py` | 4 | 执行器集成测试 |
+
+### v0.9 (2026-08-18) — 代码质量优化 + 错误报告生成器
+
+**核心成果**:
+- **Ruff 问题修复**: 791 → 61 (92% 修复率)
+- **测试扩展**: 147 → 653+ 个用例
+- **新增模块**: `src/reports/` 错误报告生成器
+- **多 LLM 配置**: `LLM_CONFIGS` 支持 API Key 轮询
+
+**变更详情**:
+- 新增错误报告生成器，支持文本/JSON/Markdown 三种格式
+- 修复未使用变量和过时类型注解
+- 优化 LLM token 消耗（压缩 Prompt 和代码截断）
+- 完善指数退避重试逻辑和路径安全检查
+
+### v0.2.0 (2026-08-17) — 工程化改进
+
+- Ruff Lint 配置、Pre-commit Hooks、GitHub Actions CI
+- 并发执行支持 (`BENCHMARK_PARALLELISM`)
+- RAG 检索器单例化优化
+
+### v0.1.0 (2026-08-14) — 初始版本
+
+- 四智能体协作架构
+- 支持 examples/synthetic/swe_bench 数据集
+- Docker 一键复现
 
 ---
 

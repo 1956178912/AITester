@@ -217,7 +217,7 @@ def good_func():
         # 含语法错误的补丁
         patch = """\
 def broken_func():
-    return 
+    return
     invalid
 """
         new_code, success = apply_patch_to_code(original, patch)

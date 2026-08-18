@@ -69,7 +69,7 @@ def paired_t_test(
         return (float("nan"), float("nan"))
 
     # 配对 t 检验
-    differences = [a - b for a, b in zip(aitester_pass, baseline_pass)]
+    [a - b for a, b in zip(aitester_pass, baseline_pass, strict=False)]
     t_stat, p_value = stats.ttest_rel(aitester_pass, baseline_pass)
 
     print(f"\n配对 t 检验：AITester vs {baseline_name}")

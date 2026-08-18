@@ -46,20 +46,21 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config import (
+# 延迟导入，避免 E402
+from config import (  # noqa: E402
     ENABLE_DEBUGGER,
     ENABLE_PLANNER,
     LLM_CONFIGS,
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
 )
-from src.dataset_loader import (
+from src.dataset_loader import (  # noqa: E402
     BenchmarkTask,
     InMemoryDataset,
     load_dataset,
 )
-from src.graph.state import AITesterState
-from src.graph.workflow import build_workflow
+from src.graph.state import AITesterState  # noqa: E402
+from src.graph.workflow import build_workflow  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -454,7 +455,7 @@ def run_single_task(
 
         # 为每个基线分配不同的 API（轮询）
         results: dict[str, dict[str, Any]] = {}
-        for baseline_idx, baseline in enumerate(baselines):
+        for _baseline_idx, baseline in enumerate(baselines):
             # 根据任务索引和基线索引分配 API
             _set_thread_api(hash(task.task_id) % len(_VALID_APIS) if _VALID_APIS else 0)
 
@@ -595,6 +596,8 @@ def run_benchmark(
         from src.synthetic_dataset import SyntheticDataset
 
         dataset = SyntheticDataset(task_count=tc, seed=42)
+        # 确保数据集已加载
+        _ = dataset.tasks
     else:
         try:
             dataset = load_dataset(dataset_name, subset=subset)

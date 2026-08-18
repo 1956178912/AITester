@@ -139,7 +139,7 @@ class TestGeneratorAgent:
         agent = self._make_agent()
         test_plan = {"function_name": "bar", "test_cases": []}
         rag = [{"test_code": "参考代码1"}, {"test_code": "参考代码2"}]
-        result = agent.generate(test_plan, "def bar(): pass", rag_references=rag)
+        agent.generate(test_plan, "def bar(): pass", rag_references=rag)
         # 验证 LLM 被调用（prompt 中含 RAG 内容）
         call_args = mock_llm.call_args[0][0]
         assert "参考代码1" in call_args
@@ -156,6 +156,6 @@ class TestGeneratorAgent:
         mock_extract.side_effect = [bad_code, good_code]
         agent = self._make_agent()
         test_plan = {"function_name": "x", "test_cases": []}
-        result = agent.generate(test_plan, "def x(): pass", module_name="m")
+        agent.generate(test_plan, "def x(): pass", module_name="m")
         # 第二次调用 LLM 应被触发（重试）
         assert mock_llm.call_count == 2

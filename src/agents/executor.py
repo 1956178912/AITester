@@ -158,129 +158,50 @@ class ExecutorAgent:
             - failed_cases (List[dict]): 失败的用例列表。
             - error_info (dict): 错误详情（可选）。
         """
-        # 获取项目根目录（本文件在 src/agents/ 下，根目录为其上两级）
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # 被测代码所在目录，用于设置 PYTHONPATH（使 pytest 能找到被测模块）
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
-        # P0 改进：自动检测并修复模块导入路径
-        # 分析测试代码中的 import 语句，动态添加 sys.path
         fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
         if fixed_test_code != test_code:
             logger.info("已自动修复模块导入路径")
 
-        # 将测试代码写入临时文件，便于 pytest 执行
-        # delete=False：py.test 需要文件存在于磁盘，不能是内存对象
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
             f.write(fixed_test_code)
             test_file = f.name
 
         try:
-            # 复制当前环境变量，并追加被测代码目录到 PYTHONPATH
-            # 这样 pytest 在执行测试时能 import 被测模块
             env = os.environ.copy()
             env["PYTHONPATH"] = target_dir + os.pathsep + env.get("PYTHONPATH", "")
 
-            python_path = sys.executable  # 使用当前 Python 解释器
-            # 构建 pytest 命令
+            python_path = sys.executable
             cmd = [
                 python_path,
                 "-m",
                 "pytest",
                 test_file,
-                "-v",  # 详细输出（显示每个用例的 PASS/FAIL）
-                "--tb=short",  # 缩短 traceback（只显示关键错误位置）
-                f"--cov={target_dir}",  # 只收集目标目录的覆盖率
-                "--cov-report=term",  # 终端输出覆盖率报告
+                "-v",
+                "--tb=short",
+                f"--cov={target_dir}",
+                "--cov-report=term",
             ]
             if target_function:
-                # 若指定了目标函数，用 -k 过滤只运行匹配的测试
                 cmd.extend(["-k", target_function])
 
-            # 带重试的执行逻辑：最多尝试 2 次
-            last_output = ""
-            last_result = None
-            max_attempts = 2
-            for attempt in range(max_attempts):
-                try:
-                    # 执行 pytest，捕获 stdout 和 stderr
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=self.timeout,
-                        cwd=project_root,
-                        env=env,
-                    )
-                    last_result = result
-                    last_output = result.stdout + result.stderr
-                    if result.returncode == 0:
-                        break  # 成功则提前退出，不浪费重试次数
-                    logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
-                except subprocess.TimeoutExpired as e:
-                    # 超时时不重试：超时意味着被测代码有死循环，重试也不会改善
-                    error_msg = f"测试执行超时（>{self.timeout}s）"
-                    logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
-                    # 返回包含详细错误信息的字典
-                    return {
-                        "passed": False,
-                        "output": error_msg,
-                        "coverage": 0.0,
-                        "failed_cases": [],
-                        "error_info": {
-                            "type": "timeout",
-                            "message": error_msg,
-                            "timeout_seconds": self.timeout,
-                            "command": " ".join(cmd[:5]) if len(cmd) > 5 else " ".join(cmd),
-                        },
-                    }
-                except FileNotFoundError as e:
-                    # Python 解释器或 pytest 未找到
-                    error_msg = "执行环境错误（找不到 pytest 或 Python 解释器）"
-                    logger.error("执行环境错误（找不到 pytest）: %s", e)
-                    return {
-                        "passed": False,
-                        "output": error_msg,
-                        "coverage": 0.0,
-                        "failed_cases": [],
-                        "error_info": {
-                            "type": "file_not_found",
-                            "message": error_msg,
-                            "detail": str(e),
-                        },
-                    }
-                except PermissionError as e:
-                    # 权限不足，无法执行文件
-                    error_msg = "权限不足，无法执行测试文件"
-                    logger.error("权限错误: %s", e)
-                    return {
-                        "passed": False,
-                        "output": error_msg,
-                        "coverage": 0.0,
-                        "failed_cases": [],
-                        "error_info": {
-                            "type": "permission_error",
-                            "message": error_msg,
-                            "file_path": str(e.filename) if hasattr(e, "filename") else "",
-                        },
-                    }
-                except Exception as e:
-                    # 其他未知异常（网络、子进程启动失败等）
-                    error_msg = f"测试执行异常: {type(e).__name__}: {e}"
-                    logger.error("测试执行异常: %s", e)
-                    last_output = error_msg
-                    last_result = None
-                    break
+            output, last_result = self._run_pytest_with_retry(cmd, env, project_root)
+            # 检查是否需要立即返回（超时/环境问题）
+            if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
+                return {
+                    "passed": False,
+                    "output": output,
+                    "coverage": 0.0,
+                    "failed_cases": [],
+                    "error_info": last_result[1],
+                }
 
-            output = last_output
-            # 通过 returncode == 0 判断是否全部测试通过
-            passed = last_result is not None and last_result.returncode == 0
-
-            # 解析覆盖率和失败用例
             coverage = self._parse_coverage(output)
             failed_cases = self._parse_failed_cases(output)
+            passed = last_result is not None and last_result.returncode == 0
 
-            # 构建返回结果，包含详细的错误信息（如果有）
             result_dict = {
                 "passed": passed,
                 "output": output,
@@ -288,25 +209,101 @@ class ExecutorAgent:
                 "failed_cases": failed_cases,
             }
 
-            # 如果有错误信息，添加到结果中
             if last_result and last_result.returncode != 0:
-                result_dict["error_info"] = {
-                    "type": "test_failure",
-                    "returncode": last_result.returncode,
-                    "has_syntax_error": "SyntaxError" in output or "ImportError" in output,
-                    "has_runtime_error": any(e in output for e in ["TypeError", "ValueError", "ZeroDivisionError"]),
-                }
+                result_dict["error_info"] = self._build_error_info(last_result, output)
 
             return result_dict
         finally:
-            # 清理临时文件，避免磁盘垃圾堆积
+            self._cleanup_temp_file(test_file)
+
+    @staticmethod
+    def _build_error_info(last_result, output: str) -> dict:
+        """根据测试结果构建错误信息字典。"""
+        return {
+            "type": "test_failure",
+            "returncode": last_result.returncode,
+            "has_syntax_error": "SyntaxError" in output or "ImportError" in output,
+            "has_runtime_error": any(e in output for e in ["TypeError", "ValueError", "ZeroDivisionError"]),
+        }
+
+    @staticmethod
+    def _cleanup_temp_file(test_file: str) -> None:
+        """清理临时测试文件，失败时仅记录警告。"""
+        try:
+            if os.path.exists(test_file):
+                os.unlink(test_file)
+                logger.debug("已清理临时测试文件: %s", test_file)
+        except OSError as e:
+            logger.warning("清理临时文件失败: %s", e)
+
+    def _run_pytest_with_retry(self, cmd: list, env: dict, project_root: str) -> tuple[str, Any]:
+        """
+        带重试的 pytest 执行逻辑，最多尝试 2 次。
+        超时/环境问题直接返回 error 字典，其他异常仅记录日志并返回空结果。
+
+        Returns:
+            (output, last_result) 元组，last_result 为 subprocess.CompletedProcess 或 None。
+        """
+        max_attempts = 2
+        last_output = ""
+        last_result = None
+
+        for attempt in range(max_attempts):
             try:
-                if os.path.exists(test_file):
-                    os.unlink(test_file)
-                    logger.debug("已清理临时测试文件: %s", test_file)
-            except OSError as e:
-                # 文件清理失败不影响测试结果，仅记录警告
-                logger.warning("清理临时文件失败: %s", e)
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                    cwd=project_root,
+                    env=env,
+                )
+                last_result = result
+                last_output = result.stdout + result.stderr
+                if result.returncode == 0:
+                    break
+                logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
+            except subprocess.TimeoutExpired as e:
+                error_msg = f"测试执行超时（>{self.timeout}s）"
+                logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
+                error_info = {
+                    "type": "timeout",
+                    "message": error_msg,
+                    "timeout_seconds": self.timeout,
+                    "command": " ".join(cmd[:5]) if len(cmd) > 5 else " ".join(cmd),
+                }
+                # 超时/环境错误需由调用方直接 return，这里用特殊标记
+                return last_output, ("EARLY_RETURN", error_info)
+            except FileNotFoundError as e:
+                error_msg = "执行环境错误（找不到 pytest 或 Python 解释器）"
+                logger.error("执行环境错误（找不到 pytest）: %s", e)
+                return last_output, (
+                    "EARLY_RETURN",
+                    {
+                        "type": "file_not_found",
+                        "message": error_msg,
+                        "detail": str(e),
+                    },
+                )
+            except PermissionError as e:
+                error_msg = "权限不足，无法执行测试文件"
+                logger.error("权限错误: %s", e)
+                return last_output, (
+                    "EARLY_RETURN",
+                    {
+                        "type": "permission_error",
+                        "message": error_msg,
+                        "file_path": str(e.filename) if hasattr(e, "filename") else "",
+                    },
+                )
+            except Exception as e:
+                error_msg = f"测试执行异常: {type(e).__name__}: {e}"
+                logger.error("测试执行异常: %s", e)
+                last_output = error_msg
+                last_result = None
+                break
+
+        return last_output, last_result
 
     @staticmethod
     def _extract_module_name_from_file(target_file: str) -> str:
@@ -391,81 +388,78 @@ class ExecutorAgent:
         Returns:
             修复后的测试代码（如无需修改则返回原代码）。
         """
-        # 提取所有 import 语句（排除标准库和相对导入）
-        imports = []
-
-        # 使用预编译的正则表达式进行匹配
-        for line in test_code.split("\n"):
-            line = line.strip()
-            match1 = _RE_FROM_IMPORT.match(line)
-            match2 = _RE_IMPORT.match(line)
-            if match1:
-                module_name = match1.group(1)
-                # 只记录非标准库且非相对导入的模块
-                top_level = module_name.split(".")[0]
-                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
-                    imports.append(module_name)
-            elif match2:
-                module_name = match2.group(1)
-                # 只记录非标准库且非相对导入的模块
-                top_level = module_name.split(".")[0]
-                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
-                    imports.append(module_name)
-
+        imports = ExecutorAgent._extract_imports(test_code)
         if not imports:
             return test_code
 
-        # 获取被测文件的实际模块名
         actual_module_name = ExecutorAgent._extract_module_name_from_file(target_file)
-        module_dirs = set()
-        needs_replacement = False
-
-        # 限制 rglob 搜索深度，避免大型项目遍历过慢（默认最多 3 层）
-        _MAX_SEARCH_DEPTH = 3
-
-        for module_name in imports:
-            # 使用缓存的搜索函数（优化高频调用场景）
-            found_dirs = ExecutorAgent._cached_search_module_path(module_name, project_root, _MAX_SEARCH_DEPTH)
-
-            if found_dirs:
-                # 模块存在，添加其目录到 sys.path
-                module_dirs.update(found_dirs)
-            else:
-                # 模块不存在，检查是否需要替换为实际模块名
-                if module_name != actual_module_name:
-                    needs_replacement = True
-                    # 添加被测文件所在目录，以便导入实际模块
-                    target_dir = os.path.dirname(os.path.abspath(target_file))
-                    module_dirs.add(target_dir)
+        module_dirs, needs_replacement = ExecutorAgent._resolve_module_paths(
+            imports, actual_module_name, project_root, target_file
+        )
 
         if not module_dirs and not needs_replacement:
             return test_code
 
-        # 生成 sys.path 修改代码
-        sys_path_code = "\n".join([f"import sys\nsys.path.insert(0, {repr(d)})" for d in sorted(module_dirs)])
+        sys_path_code = ExecutorAgent._build_sys_path_code(module_dirs)
+        fixed_code = ExecutorAgent._apply_import_replacements(test_code, imports, actual_module_name, needs_replacement)
 
+        if sys_path_code:
+            fixed_code = f"{sys_path_code}\n\n{fixed_code}\n"
+
+        return fixed_code
+
+    @staticmethod
+    def _extract_imports(test_code: str) -> list[str]:
+        """提取测试代码中的非标准库导入模块名（排除相对导入）。"""
+        imports = []
+        for line in test_code.split("\n"):
+            line = line.strip()
+            match1 = _RE_FROM_IMPORT.match(line)
+            match2 = _RE_IMPORT.match(line)
+            if match1 or match2:
+                module_name = (match1 or match2).group(1)
+                top_level = module_name.split(".")[0]
+                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
+                    imports.append(module_name)
+        return imports
+
+    @staticmethod
+    def _resolve_module_paths(
+        imports: list[str], actual_module_name: str, project_root: str, target_file: str
+    ) -> tuple[set, bool]:
+        """根据导入列表解析模块路径，返回 (module_dirs, needs_replacement)。"""
+        module_dirs = set()
+        needs_replacement = False
+        _MAX_SEARCH_DEPTH = 3
+
+        for module_name in imports:
+            found_dirs = ExecutorAgent._cached_search_module_path(module_name, project_root, _MAX_SEARCH_DEPTH)
+            if found_dirs:
+                module_dirs.update(found_dirs)
+            elif module_name != actual_module_name:
+                needs_replacement = True
+                target_dir = os.path.dirname(os.path.abspath(target_file))
+                module_dirs.add(target_dir)
+
+        return module_dirs, needs_replacement
+
+    @staticmethod
+    def _build_sys_path_code(module_dirs: set) -> str:
+        """生成 sys.path 修改代码。"""
+        return "\n".join([f"import sys\nsys.path.insert(0, {repr(d)})" for d in sorted(module_dirs)])
+
+    @staticmethod
+    def _apply_import_replacements(
+        test_code: str, imports: list[str], actual_module_name: str, needs_replacement: bool
+    ) -> str:
+        """对测试代码应用导入替换，返回修改后的代码。"""
         fixed_code = test_code
-
-        # 如果需要替换模块名，执行导入语句替换
-        if needs_replacement:
-            # 替换 from module_name import ... 为 from actual_module_name import ...
-            # 只替换测试代码中引用的模块名，不影响标准库
+        if needs_replacement and imports:
             for imported_module in imports:
                 if imported_module != actual_module_name:
-                    # 使用预编译的正则表达式进行替换
                     fixed_code = _RE_FROM_REPLACE.sub(rf"from {actual_module_name} import", fixed_code)
-                    # 替换 import imported_module（仅匹配独立的 import 语句）
                     fixed_code = _RE_IMPORT_REPLACE.sub(f"import {actual_module_name}", fixed_code)
-            if imports:
-                logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
-
-        # 在测试代码开头插入路径修复
-        if sys_path_code:
-            fixed_code = f"""{sys_path_code}
-
-{fixed_code}
-"""
-
+            logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
         return fixed_code
 
     @staticmethod
@@ -509,38 +503,34 @@ class ExecutorAgent:
         """
         failed = []
         lines = output.splitlines()
-        # 匹配 "FAILED test_file.py::test_func_name" 行
         pattern = re.compile(r"FAILED\s+(.+?\.py::\S+)")
-        i = 0
-        while i < len(lines):
-            line = lines[i]
+
+        for i, line in enumerate(lines):
             m = pattern.search(line)
             if m:
                 case_name = m.group(1).strip()
-                # 收集该用例的错误信息（直到下一个 FAILED 或分隔线）
-                error_lines = []
-                # 先提取 FAILED 行本身的错误信息（如 "- AssertionError: ..."）
-                after_match = line[m.end() :].strip()
-                if after_match:
-                    error_lines.append(after_match)
-                j = i + 1
-                while j < len(lines):
-                    l = lines[j]
-                    if "FAILED" in l and ".py::" in l:
-                        break  # 遇到下一个失败用例
-                    if "======" in l and "short" in l:
-                        break  # 遇到分隔线
-                    if l.strip() and not l.startswith("WARNING"):
-                        error_lines.append(l)
-                    j += 1
+                error_lines = ExecutorAgent._collect_error_lines(lines, i, m.end())
                 if error_lines:
-                    failed.append(
-                        {
-                            "name": case_name,
-                            "error": "\n".join(error_lines),
-                        }
-                    )
-                i = j
-            else:
-                i += 1
+                    failed.append({"name": case_name, "error": "\n".join(error_lines)})
+
         return failed
+
+    @staticmethod
+    def _collect_error_lines(lines: list[str], start_idx: int, match_end: int) -> list[str]:
+        """从指定位置收集错误行，直到遇到下一个 FAILED 行或分隔线。"""
+        error_lines = []
+        # 先提取 FAILED 行本身的错误信息（如 "- AssertionError: ..."）
+        after_match = lines[start_idx][match_end:].strip()
+        if after_match:
+            error_lines.append(after_match)
+
+        for j in range(start_idx + 1, len(lines)):
+            line_content = lines[j]
+            if "FAILED" in line_content and ".py::" in line_content:
+                break  # 遇到下一个失败用例
+            if "======" in line_content and "short" in line_content:
+                break  # 遇到分隔线
+            if line_content.strip() and not line_content.startswith("WARNING"):
+                error_lines.append(line_content)
+
+        return error_lines

@@ -67,7 +67,7 @@ def test_factorial():
         times = []
         for _ in range(iterations):
             start = time.perf_counter()
-            result = agent._auto_fix_imports(code, "/tmp/test.py", PROJECT_ROOT)
+            agent._auto_fix_imports(code, "/tmp/test.py", PROJECT_ROOT)
             end = time.perf_counter()
             times.append(end - start)
 
@@ -115,7 +115,7 @@ def benchmark_error_classifier():
 
         for _ in range(iterations):
             start = time.perf_counter()
-            result = classifier.classify(output, cases)
+            classifier.classify(output, cases)
             end = time.perf_counter()
             times.append(end - start)
 
@@ -138,7 +138,7 @@ def benchmark_error_classifier():
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
-        result = classifier.extract_error_context(test_output, failed_cases)
+        classifier.extract_error_context(test_output, failed_cases)
         end = time.perf_counter()
         times.append(end - start)
 
@@ -184,7 +184,7 @@ def benchmark_base_agent():
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
-        result = agent._extract_json(json_text)
+        agent._extract_json(json_text)
         end = time.perf_counter()
         times.append(end - start)
 
@@ -196,7 +196,7 @@ def benchmark_base_agent():
     times = []
     for _ in range(iterations):
         start = time.perf_counter()
-        result = agent._extract_python_code(code_text)
+        agent._extract_python_code(code_text)
         end = time.perf_counter()
         times.append(end - start)
 

@@ -216,7 +216,6 @@ class TestSafeApplyPatch:
     def test_safe_apply_syntax_error_rolls_back(self):
         """验证语法错误的补丁自动回滚。"""
         # 故意构造语法错误的补丁
-        patch = "def add(a: int, b: int) -> int:\n    return a + b"
         # 这个补丁本身语法正确，但测试语法错误回滚
         syntax_error_patch = "def broken():\n    if True\n        pass"
         new_code, success = safe_apply_patch(ORIGINAL_CODE, syntax_error_patch)

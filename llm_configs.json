@@ -1,0 +1,121 @@
+[
+  {
+    "model_name": "qwen-max",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "qwen-plus",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "qwen-turbo",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "qwen-long",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "deepseek-chat",
+    "provider": "deepseek",
+    "provider_description": "DeepSeek",
+    "base_url": "https://api.deepseek.com/v1",
+    "required_api_key": "DEEPSEEK_API_KEY"
+  },
+  {
+    "model_name": "deepseek-coder",
+    "provider": "deepseek",
+    "provider_description": "DeepSeek",
+    "base_url": "https://api.deepseek.com/v1",
+    "required_api_key": "DEEPSEEK_API_KEY"
+  },
+  {
+    "model_name": "deepseek-v3",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "deepseek-v4-pro",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "deepseek-v4-flash",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "glm-4",
+    "provider": "bigmodel",
+    "provider_description": "BigModel 智谱",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "required_api_key": "BIGMODEL_API_KEY"
+  },
+  {
+    "model_name": "glm-4-plus",
+    "provider": "bigmodel",
+    "provider_description": "BigModel 智谱",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "required_api_key": "BIGMODEL_API_KEY"
+  },
+  {
+    "model_name": "glm-4-air",
+    "provider": "bigmodel",
+    "provider_description": "BigModel 智谱",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "required_api_key": "BIGMODEL_API_KEY"
+  },
+  {
+    "model_name": "glm-4-flash",
+    "provider": "bigmodel",
+    "provider_description": "BigModel 智谱",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "required_api_key": "BIGMODEL_API_KEY"
+  },
+  {
+    "model_name": "glm-4.7",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "glm-4.7-flash",
+    "provider": "bigmodel",
+    "provider_description": "BigModel 智谱",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+    "required_api_key": "BIGMODEL_API_KEY"
+  },
+  {
+    "model_name": "kimi-k2.7-code",
+    "provider": "aliyun_bailian",
+    "provider_description": "阿里云百炼（通义千问）",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "required_api_key": "ALIYUN_BAILIAN_API_KEY"
+  },
+  {
+    "model_name": "agnes-2.5-flash",
+    "provider": "agnes_domestic",
+    "provider_description": "Agnes AI 国内站",
+    "base_url": "https://api.agnes-ai.cn/v1",
+    "required_api_key": "AGNES_DOMESTIC_API_KEY"
+  }
+]

@@ -129,7 +129,6 @@ class TestReplaceFunctionCode:
 
     def test_replace_simple_function(self):
         """验证能正确替换简单函数。"""
-        new_body = "    return a * b\n"
         new_code, success = replace_function_code(
             SAMPLE_CODE, "add", "def add(a: int, b: int) -> int:\n    return a * b"
         )

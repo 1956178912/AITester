@@ -304,8 +304,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         """
         try:
             from datasets import load_dataset
-        except ImportError:
-            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets")
+        except ImportError as e:
+            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets") from e
 
         target_dir = cache_dir or cls.DEFAULT_CACHE_DIR
         os.makedirs(target_dir, exist_ok=True)

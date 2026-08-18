@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import re
@@ -158,15 +159,62 @@ class GeneratorAgent(BaseAgent):
         return code
 
     @staticmethod
+    def _check_parametrize_decorator(decorator) -> tuple | None:
+        """
+        检查装饰器是否为 @pytest.mark.parametrize，若是则返回参数信息。
+
+        Args:
+            decorator: AST 装饰器节点。
+
+        Returns:
+            (param_names, cases_arg) 元组，否则返回 None。
+        """
+        if not (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "parametrize"
+        ):
+            return None
+        if not decorator.args:
+            return None
+        arg_expr = decorator.args[0]
+        if not isinstance(arg_expr, ast.Constant) or not isinstance(arg_expr.value, str):
+            return None
+        param_names = [n.strip() for n in arg_expr.value.split(",")]
+        if len(decorator.args) < 2:
+            return None
+        cases_arg = decorator.args[1]
+        if not isinstance(cases_arg, ast.List):
+            return None
+        return param_names, cases_arg
+
+    @staticmethod
+    def _validate_case_tuple(elt, param_names: list[str]) -> bool:
+        """
+        校验单个用例元组的长度是否与参数名数量匹配。
+
+        Args:
+            elt: AST 元组/列表节点。
+            param_names: 参数名列表。
+
+        Returns:
+            True 表示匹配，False 表示不匹配。
+        """
+        if isinstance(elt, (ast.Tuple, ast.List)):
+            if len(elt.elts) != len(param_names):
+                logger.warning(
+                    "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
+                    len(param_names),
+                    len(elt.elts),
+                )
+                return False
+        return True
+
+    @staticmethod
     def _validate_parametrize(code: str) -> bool:
         """
         校验 pytest.mark.parametrize 的参数定义与用例元组是否匹配。
         使用 ast 解析确保语法合法，再校验 parametrize 参数数量是否匹配。
-
-        校验逻辑：
-        1. ast.parse 检查整体语法合法性（语法错误直接返回 False）
-        2. 遍历所有函数定义，查找 @pytest.mark.parametrize 装饰器
-        3. 对每个 parametrize，提取参数名列表，逐一比对用例元组的长度
 
         Returns:
             True 表示格式正确，False 表示需要重试。
@@ -176,50 +224,19 @@ class GeneratorAgent(BaseAgent):
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
-            # 语法错误说明 LLM 输出了非法代码，需要重试
-            error_msg = f"测试代码语法错误: {e.msg}"
-            context = {
-                "lineno": e.lineno or 0,
-                "offset": e.offset or 0,
-                "text": e.text[:100] if e.text else "",
-            }
-            logger.warning("%s → 需要重试", error_msg)
+            logger.warning("测试代码语法错误: %s → 需要重试", e.msg)
             return False
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):
                 continue
             for decorator in node.decorator_list:
-                # 检查装饰器是否为 @pytest.mark.parametrize(...)
-                if not (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Attribute)
-                    and decorator.func.attr == "parametrize"
-                ):
+                result = GeneratorAgent._check_parametrize_decorator(decorator)
+                if result is None:
                     continue
-                if not decorator.args:
-                    continue
-                arg_expr = decorator.args[0]
-                # 第一个参数应是参数名字符串（如 "x,y"）
-                if not isinstance(arg_expr, ast.Constant) or not isinstance(arg_expr.value, str):
-                    continue
-                # 解析参数名字符串，去除多余空格
-                param_names = [n.strip() for n in arg_expr.value.split(",")]
-                # 第二个参数应是用例列表
-                if len(decorator.args) < 2:
-                    continue
-                cases_arg = decorator.args[1]
-                if not isinstance(cases_arg, ast.List):
-                    continue
-                # 逐一校验每个用例元组的长度是否与参数名数量一致
+                param_names, cases_arg = result
                 for elt in cases_arg.elts:
-                    if isinstance(elt, (ast.Tuple, ast.List)):
-                        if len(elt.elts) != len(param_names):
-                            logger.warning(
-                                "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
-                                len(param_names),
-                                len(elt.elts),
-                            )
-                            return False
+                    if not GeneratorAgent._validate_case_tuple(elt, param_names):
+                        return False
         return True
 
     @staticmethod
@@ -243,7 +260,6 @@ class GeneratorAgent(BaseAgent):
         # 匹配所有 "from X import ..." 语句（X 为模块名）
         pattern = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
         matches = pattern.findall(code)
-        changed = False
         for wm in matches:
             # 若已是期望模块名，无需修改
             if wm == expected_module:
@@ -254,5 +270,4 @@ class GeneratorAgent(BaseAgent):
             # 将错误的模块名替换为期望模块名
             code = code.replace(f"from {wm} import", f"from {expected_module} import")
             logger.warning("Generator 修正了错误模块名：%s → %s", wm, expected_module)
-            changed = True
         return code

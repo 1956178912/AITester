@@ -21,6 +21,7 @@ select = [
 ignore = [
     "E501",  # 行长度由 line-length 控制
     "W191",  # 允许缩进使用空格
+    "C901",  # 允许函数复杂度超过阈值（设计决策，非 bug）
 ]
 
 [tool.ruff.lint.isort]
@@ -45,7 +46,8 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --timeout=1200"
+timeout = 1200
 markers = [
     "slow: 标记为慢速测试（需 API）",
     "integration: 集成测试",
