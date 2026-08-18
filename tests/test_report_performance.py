@@ -5,9 +5,8 @@
 确保在大规模场景下仍能保持高效响应。
 """
 
-import time
 import statistics
-from typing import Callable
+import time
 
 import pytest
 
