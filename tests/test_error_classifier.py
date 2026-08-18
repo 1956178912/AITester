@@ -10,12 +10,11 @@
     - 每种错误类型对应的修复策略关键词完整性
 """
 
-import pytest
 from src.agents.error_classifier import (
-    ErrorClassifier,
     ErrorCategory,
-    SyntaxSubtype,
+    ErrorClassifier,
     ErrorContext,
+    SyntaxSubtype,
     get_fix_strategy,
 )
 
@@ -115,7 +114,7 @@ class TestClassifyWithContext:
 
     def test_syntax_error_context_extraction(self):
         """验证 SyntaxError 能正确提取文件名和行号。"""
-        output = "SyntaxError: invalid syntax\n  File \"test.py\", line 10\n    x ="
+        output = 'SyntaxError: invalid syntax\n  File "test.py", line 10\n    x ='
         category, context = self.classifier.classify_with_context(output, [])
         assert category == ErrorCategory.SYNTAX
         assert context.subtype == SyntaxSubtype.SYNTAX_ERROR
@@ -143,10 +142,7 @@ class TestClassifyWithContext:
     def test_module_name_in_failed_cases(self):
         """验证 failed_cases 中的模块名能被正确提取。"""
         output = ""
-        cases = [{
-            "name": "test_import",
-            "error": "ModuleNotFoundError: No module named 'numpy'"
-        }]
+        cases = [{"name": "test_import", "error": "ModuleNotFoundError: No module named 'numpy'"}]
         category, context = self.classifier.classify_with_context(output, cases)
         assert category == ErrorCategory.SYNTAX
         assert context.module_name == "numpy"
@@ -183,22 +179,14 @@ class TestFixStrategy:
 
     def test_import_error_strategy_with_module_name(self):
         """验证 ImportError 策略包含模块名建议。"""
-        context = ErrorContext(
-            subtype=SyntaxSubtype.IMPORT_ERROR,
-            module_name="pandas"
-        )
+        context = ErrorContext(subtype=SyntaxSubtype.IMPORT_ERROR, module_name="pandas")
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
         assert "pandas" in strategy
         assert "依赖" in strategy or "模块" in strategy
 
     def test_syntax_error_strategy_with_location(self):
         """验证 SyntaxError 策略包含位置信息。"""
-        context = ErrorContext(
-            subtype=SyntaxSubtype.SYNTAX_ERROR,
-            filename="test.py",
-            line=10,
-            column=3
-        )
+        context = ErrorContext(subtype=SyntaxSubtype.SYNTAX_ERROR, filename="test.py", line=10, column=3)
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
         assert "test.py" in strategy
         assert "10" in strategy
@@ -233,10 +221,7 @@ class TestEdgeCases:
     def test_many_failed_cases_truncation(self):
         """验证超过 3 个 failed_cases 时只取前 3 个。"""
         output = ""
-        cases = [
-            {"name": f"test_{i}", "error": "TypeError: ..."}
-            for i in range(10)
-        ]
+        cases = [{"name": f"test_{i}", "error": "TypeError: ..."} for i in range(10)]
         result = self.classifier.classify(output, cases)
         assert result == ErrorCategory.RUNTIME
 

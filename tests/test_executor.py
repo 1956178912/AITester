@@ -6,7 +6,6 @@
     - _parse_failed_cases：正常解析、多个失败用例、无失败
 """
 
-import pytest
 from src.agents.executor import ExecutorAgent
 
 

@@ -10,8 +10,7 @@
     - 元数据传递
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestCleanupExpiredAndExcess:
@@ -39,16 +38,18 @@ class TestCleanupExpiredAndExcess:
 
         # 直接替换 time 模块引用
         import time as real_time
-        with patch.object(real_time, 'time', return_value=1000.0):
+
+        with patch.object(real_time, "time", return_value=1000.0):
             retriever._cleanup_expired_and_excess()
-        
+
         mock_collection.delete.assert_not_called()
 
     @patch("builtins.__import__")
     def test_expired_entries_are_deleted(self, mock_import):
         """TTL 过期的条目应被删除。"""
-        from src.rag.retriever import TestCaseRetriever
         import time as real_time
+
+        from src.rag.retriever import TestCaseRetriever
 
         current = 1000.0
 
@@ -65,16 +66,17 @@ class TestCleanupExpiredAndExcess:
         retriever.collection = mock_collection
         retriever.ttl_seconds = 3600
 
-        with patch.object(real_time, 'time', return_value=current):
+        with patch.object(real_time, "time", return_value=current):
             retriever._cleanup_expired_and_excess()
-        
+
         mock_collection.delete.assert_called_once_with(ids=["doc1"])
 
     @patch("builtins.__import__")
     def test_valid_entries_not_deleted(self, mock_import):
         """未过期的条目不应被删除。"""
-        from src.rag.retriever import TestCaseRetriever
         import time as real_time
+
+        from src.rag.retriever import TestCaseRetriever
 
         current = 1000.0
 
@@ -91,16 +93,17 @@ class TestCleanupExpiredAndExcess:
         retriever.collection = mock_collection
         retriever.ttl_seconds = 3600
 
-        with patch.object(real_time, 'time', return_value=current):
+        with patch.object(real_time, "time", return_value=current):
             retriever._cleanup_expired_and_excess()
-        
+
         mock_collection.delete.assert_not_called()
 
     @patch("builtins.__import__")
     def test_excess_entries_trimmed_keeps_newest(self, mock_import):
         """超过 max_cases 时删除最旧的条目，保留最新的。"""
-        from src.rag.retriever import TestCaseRetriever
         import time as real_time
+
+        from src.rag.retriever import TestCaseRetriever
 
         current = 1000.0
 
@@ -122,9 +125,9 @@ class TestCleanupExpiredAndExcess:
         retriever.collection = mock_collection
         retriever.ttl_seconds = 3600
 
-        with patch.object(real_time, 'time', return_value=current):
+        with patch.object(real_time, "time", return_value=current):
             retriever._cleanup_expired_and_excess()
-        
+
         delete_call = mock_collection.delete.call_args
         assert "doc3" in delete_call[1]["ids"]
 
@@ -135,8 +138,9 @@ class TestCleanupExpiredPublic:
     @patch("builtins.__import__")
     def test_cleanup_returns_count(self, mock_import):
         """cleanup_expired 返回清理的过期条目数。"""
-        from src.rag.retriever import TestCaseRetriever
         import time as real_time
+
+        from src.rag.retriever import TestCaseRetriever
 
         current = 1000.0
 
@@ -157,9 +161,9 @@ class TestCleanupExpiredPublic:
         retriever.collection = mock_collection
         retriever.ttl_seconds = 3600
 
-        with patch.object(real_time, 'time', return_value=current):
+        with patch.object(real_time, "time", return_value=current):
             count = retriever.cleanup_expired()
-        
+
         assert count == 2
         deleted_ids = mock_collection.delete.call_args[1]["ids"]
         assert "old1" in deleted_ids
@@ -168,8 +172,9 @@ class TestCleanupExpiredPublic:
     @patch("builtins.__import__")
     def test_cleanup_no_expired_returns_zero(self, mock_import):
         """无过期条目时返回 0。"""
-        from src.rag.retriever import TestCaseRetriever
         import time as real_time
+
+        from src.rag.retriever import TestCaseRetriever
 
         current = 1000.0
 
@@ -186,7 +191,7 @@ class TestCleanupExpiredPublic:
         retriever.collection = mock_collection
         retriever.ttl_seconds = 3600
 
-        with patch.object(real_time, 'time', return_value=current):
+        with patch.object(real_time, "time", return_value=current):
             assert retriever.cleanup_expired() == 0
 
 
@@ -244,12 +249,16 @@ class TestRetrieveRepairsResult:
         mock_collection.count.return_value = 1
         mock_collection.query.return_value = {
             "documents": [["error_category: runtime\ndef buggy(): pass\ndef fixed(): pass"]],
-            "metadatas": [[{
-                "error_category": "runtime",
-                "original_code": "def buggy(): pass",
-                "patch": "def fixed(): pass",
-                "distance": 0.15,
-            }]],
+            "metadatas": [
+                [
+                    {
+                        "error_category": "runtime",
+                        "original_code": "def buggy(): pass",
+                        "patch": "def fixed(): pass",
+                        "distance": 0.15,
+                    }
+                ]
+            ],
         }
         mock_client.get_or_create_collection.return_value = mock_collection
 

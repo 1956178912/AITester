@@ -14,10 +14,10 @@
 from __future__ import annotations
 
 import ast
-from typing import Any, Dict, List
+from typing import Any
 
 
-def parse_function_nodes(source_code: str) -> List[Dict[str, Any]]:
+def parse_function_nodes(source_code: str) -> list[dict[str, Any]]:
     """
     解析 Python 源码中的所有函数/方法定义。
 
@@ -44,14 +44,16 @@ def parse_function_nodes(source_code: str) -> List[Dict[str, Any]]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # 提取参数名列表：跳过 self/cls 等接收者参数（索引 0 通常为 self）
             args = [arg.arg for arg in node.args.args]
-            functions.append({
-                "name": node.name,
-                "lineno": node.lineno,
-                "end_lineno": node.end_lineno,
-                "args": args,
-                # ast.get_docstring 返回第一个 docstring 节点的内容，无则返回 None
-                "docstring": ast.get_docstring(node),
-            })
+            functions.append(
+                {
+                    "name": node.name,
+                    "lineno": node.lineno,
+                    "end_lineno": node.end_lineno,
+                    "args": args,
+                    # ast.get_docstring 返回第一个 docstring 节点的内容，无则返回 None
+                    "docstring": ast.get_docstring(node),
+                }
+            )
     return functions
 
 
@@ -184,7 +186,7 @@ def replace_function_code(
             # lineno: 函数定义行（def xxx(...):）
             # end_lineno: 函数体最后一行
             start_line = node.lineno - 1  # 0-based 起始行索引
-            end_line = node.end_lineno    # 0-based 结束行索引（包含）
+            end_line = node.end_lineno  # 0-based 结束行索引（包含）
 
             # 将新函数代码按行分割为列表
             new_lines = new_function_code.splitlines()

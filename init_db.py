@@ -17,12 +17,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 import pymysql
+
 from config import (
+    MYSQL_DATABASE,
     MYSQL_HOST,
+    MYSQL_PASSWORD,
     MYSQL_PORT,
     MYSQL_USER,
-    MYSQL_PASSWORD,
-    MYSQL_DATABASE,
 )
 
 
@@ -30,7 +31,7 @@ def init_database() -> None:
     """
     连接 MySQL 并创建 AITester 所需的数据表。
     若数据库不存在则先创建。
-    
+
     Returns:
         None
     """

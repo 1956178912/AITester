@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 # ─── 基础配置加载（.env，非敏感项）───────────────────────────────────────────
@@ -22,7 +23,7 @@ load_dotenv()
 
 def load_env_local() -> None:
     """加载本地敏感配置文件 .env.local（若存在），覆盖 .env 中的 LLM 配置。
-    
+
     .env.local 不得提交到版本库，开发者需自行创建：
         cp config.local.example .env.local
         # 然后填入真实值
@@ -53,6 +54,7 @@ load_env_local()  # 加载 .env.local，覆盖敏感 LLM 配置
 @dataclass(frozen=True)
 class LLMConfig:
     """单个 LLM Provider 的配置，包含 api_key、base_url、model_name。"""
+
     api_key: str
     base_url: str
     model_name: str
@@ -60,12 +62,12 @@ class LLMConfig:
 
 def _load_llm_configs() -> list[LLMConfig]:
     """从环境变量中读取所有 LLM_N_* 配置，返回非空配置列表。
-    
+
     环境变量命名规则：
         LLM_1_API_KEY, LLM_1_BASE_URL, LLM_1_MODEL_NAME   → 第 1 个配置
         LLM_2_API_KEY, LLM_2_BASE_URL, LLM_2_MODEL_NAME   → 第 2 个配置
         ...
-    
+
     只有 api_key、base_url、model_name 三项均非空时，该配置才会被加入列表。
     """
     configs: list[LLMConfig] = []
@@ -102,6 +104,7 @@ MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 
+
 # ─── 超时配置验证函数 ────────────────────────────────────────────────────────
 def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default: int) -> int:
     """验证超时配置值是否在合理范围内。
@@ -121,7 +124,11 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
     if value < min_val or value > max_val:
         logging.getLogger(__name__).warning(
             "%s 配置值 %d 超出范围 [%d, %d]，使用默认值 %d",
-            name, value, min_val, max_val, default,
+            name,
+            value,
+            min_val,
+            max_val,
+            default,
         )
         return default
     return value
@@ -131,9 +138,7 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
 _EXECUTION_TIMEOUT_RAW = int(os.getenv("EXECUTION_TIMEOUT", "30"))
-EXECUTION_TIMEOUT: int = _validate_timeout(
-    _EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30
-)
+EXECUTION_TIMEOUT: int = _validate_timeout(_EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30)
 
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
 MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
@@ -147,7 +152,5 @@ ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
 _LLM_TIMEOUT_RAW = int(os.getenv("LLM_TIMEOUT", "60"))
-LLM_TIMEOUT: int = _validate_timeout(
-    _LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 60
-)
+LLM_TIMEOUT: int = _validate_timeout(_LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 60)
 LLM_RETRY_WAIT: int = int(os.getenv("LLM_RETRY_WAIT", "30"))

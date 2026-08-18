@@ -12,16 +12,14 @@
     - 空补丁、不存在的函数名、连续空行压缩等
 """
 
-import pytest
 from src.tools.patch_applier import (
-    apply_patch_to_code,
     _extract_patch_code,
     apply_multi_function_patch,
-    safe_apply_patch,
-    safe_apply_multi_function_patch,
+    apply_patch_to_code,
     generate_diff,
+    safe_apply_multi_function_patch,
+    safe_apply_patch,
 )
-
 
 # 测试用原始代码：两个简单函数
 ORIGINAL_CODE = '''\
@@ -104,7 +102,9 @@ class TestApplyPatchToCode:
 
     def test_full_file_replacement(self):
         """验证完整文件补丁能替换整个代码。"""
-        patch = '"""\n修复后的模块。\n"""\n\ndef add(a, b):\n    return a + b\n\ndef multiply(a, b):\n    return a * b\n'
+        patch = (
+            '"""\n修复后的模块。\n"""\n\ndef add(a, b):\n    return a + b\n\ndef multiply(a, b):\n    return a * b\n'
+        )
         new_code, success = apply_patch_to_code(ORIGINAL_CODE, patch)
         assert success is True
         assert "修复后的模块" in new_code
@@ -171,14 +171,8 @@ class TestMultiFunctionPatch:
     def test_apply_multiple_patches(self):
         """验证可以同时修改多个函数。"""
         patches = [
-            {
-                "function_name": "func_a",
-                "patch": "def func_a(x: int) -> int:\n    return x + 10"
-            },
-            {
-                "function_name": "func_b",
-                "patch": "def func_b(x: int) -> int:\n    return x * 3"
-            }
+            {"function_name": "func_a", "patch": "def func_a(x: int) -> int:\n    return x + 10"},
+            {"function_name": "func_b", "patch": "def func_b(x: int) -> int:\n    return x * 3"},
         ]
         new_code, success = apply_multi_function_patch(MULTI_FUNC_CODE, patches)
         assert success is True
@@ -188,12 +182,7 @@ class TestMultiFunctionPatch:
 
     def test_apply_single_patch_from_list(self):
         """验证单元素补丁列表正常工作。"""
-        patches = [
-            {
-                "function_name": "func_a",
-                "patch": "def func_a(x: int) -> int:\n    return x + 100"
-            }
-        ]
+        patches = [{"function_name": "func_a", "patch": "def func_a(x: int) -> int:\n    return x + 100"}]
         new_code, success = apply_multi_function_patch(MULTI_FUNC_CODE, patches)
         assert success is True
         assert "return x + 100" in new_code
@@ -207,12 +196,7 @@ class TestMultiFunctionPatch:
 
     def test_patch_nonexistent_function(self):
         """验证修改不存在的函数时返回失败。"""
-        patches = [
-            {
-                "function_name": "nonexistent",
-                "patch": "def nonexistent(): pass"
-            }
-        ]
+        patches = [{"function_name": "nonexistent", "patch": "def nonexistent(): pass"}]
         new_code, success = apply_multi_function_patch(MULTI_FUNC_CODE, patches)
         assert success is False
         assert new_code == MULTI_FUNC_CODE
@@ -253,14 +237,8 @@ class TestSafeApplyMultiFunctionPatch:
     def test_safe_multi_function_valid(self):
         """验证有效的多函数补丁成功应用。"""
         patches = [
-            {
-                "function_name": "func_a",
-                "patch": "def func_a(x: int) -> int:\n    return x + 10"
-            },
-            {
-                "function_name": "func_b",
-                "patch": "def func_b(x: int) -> int:\n    return x * 3"
-            }
+            {"function_name": "func_a", "patch": "def func_a(x: int) -> int:\n    return x + 10"},
+            {"function_name": "func_b", "patch": "def func_b(x: int) -> int:\n    return x * 3"},
         ]
         new_code, success = safe_apply_multi_function_patch(MULTI_FUNC_CODE, patches)
         assert success is True
@@ -270,14 +248,11 @@ class TestSafeApplyMultiFunctionPatch:
     def test_safe_multi_function_syntax_error(self):
         """验证包含语法错误的多函数补丁自动回滚。"""
         patches = [
-            {
-                "function_name": "func_a",
-                "patch": "def func_a(x: int) -> int:\n    return x + 10"
-            },
+            {"function_name": "func_a", "patch": "def func_a(x: int) -> int:\n    return x + 10"},
             {
                 "function_name": "func_b",
-                "patch": "def func_b(x: int) -> int:\n    if True\n        pass"  # 语法错误
-            }
+                "patch": "def func_b(x: int) -> int:\n    if True\n        pass",  # 语法错误
+            },
         ]
         new_code, success = safe_apply_multi_function_patch(MULTI_FUNC_CODE, patches)
         # 由于包含语法错误，应该回滚
@@ -312,7 +287,7 @@ class TestEdgeCases:
 
     def test_nested_function_replacement(self):
         """验证嵌套函数不会被误替换。"""
-        code = '''\
+        code = """\
 def outer():
     def inner():
         return 42
@@ -320,26 +295,26 @@ def outer():
 
 def other():
     return 1
-'''
-        patch = '''def other():
-    return 2'''
+"""
+        patch = """def other():
+    return 2"""
         new_code, success = apply_patch_to_code(code, patch)
         assert success is True
         assert "return 42" in new_code  # inner 未受影响
-        assert "return 2" in new_code   # other 已修改
+        assert "return 2" in new_code  # other 已修改
 
     def test_function_with_class(self):
         """验证包含类的代码可以正确替换。"""
-        code = '''\
+        code = """\
 class MyClass:
     def method(self):
         return 1
 
 def standalone():
     return 2
-'''
-        patch = '''def standalone():
-    return 3'''
+"""
+        patch = """def standalone():
+    return 3"""
         new_code, success = apply_patch_to_code(code, patch)
         assert success is True
         assert "return 1" in new_code  # 类方法未受影响
@@ -347,15 +322,15 @@ def standalone():
 
     def test_whitespace_variations(self):
         """验证不同缩进格式的处理。"""
-        code = '''\
+        code = """\
 def func(x):
     if x > 0:
       return x
     else:
         return -x
-'''
-        patch = '''def func(x):
-    return abs(x)'''
+"""
+        patch = """def func(x):
+    return abs(x)"""
         new_code, success = apply_patch_to_code(code, patch)
         assert success is True
         assert "return abs(x)" in new_code

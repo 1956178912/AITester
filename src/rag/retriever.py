@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 try:
     import chromadb
     from chromadb.config import Settings
+
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
@@ -25,7 +26,7 @@ except ImportError:
 
 # 缓存配置常量
 _DEFAULT_TTL_SECONDS = 3600  # 默认 TTL：1 小时
-_DEFAULT_MAX_CASES = 1000    # 默认最大缓存条目数
+_DEFAULT_MAX_CASES = 1000  # 默认最大缓存条目数
 
 
 class TestCaseRetriever:
@@ -74,7 +75,7 @@ class TestCaseRetriever:
     def __init__(
         self,
         collection_name: str = "aitester_cases",
-        persist_path: Optional[str] = None,
+        persist_path: str | None = None,
         ttl_seconds: int = _DEFAULT_TTL_SECONDS,
         max_cases: int = _DEFAULT_MAX_CASES,
     ) -> None:
@@ -106,10 +107,15 @@ class TestCaseRetriever:
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
-        logger.info("RAG 检索器已初始化，集合=%s，持久化路径=%s，TTL=%ds，最大容量=%d",
-                     collection_name, persist_path or "内存", ttl_seconds, max_cases)
+        logger.info(
+            "RAG 检索器已初始化，集合=%s，持久化路径=%s，TTL=%ds，最大容量=%d",
+            collection_name,
+            persist_path or "内存",
+            ttl_seconds,
+            max_cases,
+        )
 
-    def _add_timestamp_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _add_timestamp_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         """
         添加时间戳元数据（用于 TTL 过期机制）。
 
@@ -120,6 +126,7 @@ class TestCaseRetriever:
             添加了时间戳信息的元数据字典。
         """
         import time
+
         metadata = metadata.copy()
         metadata["_added_at"] = time.time()
         return metadata
@@ -133,6 +140,7 @@ class TestCaseRetriever:
         2. 如果条目数仍超过 max_cases，清理最旧的条目
         """
         import time
+
         current_time = time.time()
 
         # 步骤 1：获取所有条目，筛选出未过期的
@@ -158,18 +166,15 @@ class TestCaseRetriever:
         # 步骤 2：如果仍超容量，清理最旧的条目
         if len(valid_ids) > self.max_cases:
             # 获取所有有效条目的时间戳
-            valid_results = self.collection.get(
-                ids=valid_ids,
-                include=["metadatas"]
-            )
+            valid_results = self.collection.get(ids=valid_ids, include=["metadatas"])
             # 按添加时间排序，保留最新的 max_cases 个
             id_time_pairs = [
                 (doc_id, meta.get("_added_at", 0))
                 for doc_id, meta in zip(valid_results["ids"], valid_results["metadatas"])
             ]
             id_time_pairs.sort(key=lambda x: x[1], reverse=True)  # 按时间降序
-            keep_ids = [id for id, _ in id_time_pairs[:self.max_cases]]
-            remove_ids = [id for id, _ in id_time_pairs[self.max_cases:]]
+            keep_ids = [id for id, _ in id_time_pairs[: self.max_cases]]
+            remove_ids = [id for id, _ in id_time_pairs[self.max_cases :]]
 
             if remove_ids:
                 self.collection.delete(ids=remove_ids)
@@ -180,7 +185,7 @@ class TestCaseRetriever:
         code: str,
         test_code: str,
         passed: bool,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         添加一个成功测试用例到检索库。
@@ -206,6 +211,7 @@ class TestCaseRetriever:
 
         # 生成唯一 ID：使用代码 hash 避免重复入库
         import hashlib
+
         doc_id = hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16]
 
         # 构建检索文档：将被测代码和测试代码拼接为检索文本
@@ -230,7 +236,7 @@ class TestCaseRetriever:
         original_code: str,
         patch: str,
         error_category: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         添加一个修复案例到检索库。
@@ -253,14 +259,11 @@ class TestCaseRetriever:
 
         # 生成唯一 ID：使用代码 hash 避免重复入库
         import hashlib
+
         doc_id = hashlib.md5(f"{original_code}|{patch}".encode()).hexdigest()[:16]
 
         # 构建检索文档，包含错误类型和代码
-        document = (
-            f"error_category: {error_category}\n"
-            f"original_code:\n{original_code}\n"
-            f"patch:\n{patch}"
-        )
+        document = f"error_category: {error_category}\noriginal_code:\n{original_code}\npatch:\n{patch}"
 
         # 准备元数据（添加时间戳用于 TTL 机制）
         meta = self._add_timestamp_metadata(metadata or {})
@@ -279,7 +282,7 @@ class TestCaseRetriever:
         self,
         target_code: str,
         top_k: int = 3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         检索与被测代码最相似的历史测试用例。
         ChromaDB 使用余弦相似度进行向量检索。
@@ -302,11 +305,13 @@ class TestCaseRetriever:
 
         cases = []
         for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            cases.append({
-                "test_code": meta.get("test_code", ""),
-                "similarity": meta.get("distance", 0.0),
-                "metadata": meta,
-            })
+            cases.append(
+                {
+                    "test_code": meta.get("test_code", ""),
+                    "similarity": meta.get("distance", 0.0),
+                    "metadata": meta,
+                }
+            )
         return cases
 
     def retrieve_repairs(
@@ -314,7 +319,7 @@ class TestCaseRetriever:
         error_category: str,
         target_code: str,
         top_k: int = 2,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         检索与当前错误类型和被测代码最相似的历史修复方案。
         通过 where 过滤器限定同类型错误，提高检索准确性。
@@ -344,12 +349,14 @@ class TestCaseRetriever:
 
         repairs = []
         for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            repairs.append({
-                "patch": meta.get("patch", ""),
-                "original_code": meta.get("original_code", ""),
-                "similarity": meta.get("distance", 0.0),
-                "metadata": meta,
-            })
+            repairs.append(
+                {
+                    "patch": meta.get("patch", ""),
+                    "original_code": meta.get("original_code", ""),
+                    "similarity": meta.get("distance", 0.0),
+                    "metadata": meta,
+                }
+            )
         return repairs
 
     def cleanup_expired(self) -> int:
@@ -360,6 +367,7 @@ class TestCaseRetriever:
             清理的过期条目数量。
         """
         import time
+
         current_time = time.time()
 
         all_results = self.collection.get(include=["metadatas"])

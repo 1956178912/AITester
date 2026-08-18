@@ -13,12 +13,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.agents.base_agent import BaseAgent
-from src.agents.error_classifier import ErrorCategory, ErrorClassifier, get_fix_strategy
+from src.agents.error_classifier import ErrorClassifier, get_fix_strategy
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
-from src.graph.llm_cache import cached_llm_call, get_cache_stats
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -81,9 +80,9 @@ class DebuggerAgent(BaseAgent):
         self,
         target_code: str,
         test_output: str,
-        failed_cases: List[Dict[str, str]],
-        rag_references: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, str]:
+        failed_cases: list[dict[str, str]],
+        rag_references: list[dict[str, Any]] | None = None,
+    ) -> dict[str, str]:
         """
         分析测试失败并生成修复补丁。
 
@@ -123,8 +122,10 @@ class DebuggerAgent(BaseAgent):
         # 构建失败用例摘要（最多展示前 _MAX_FAILED_CASES_SUMMARY 个，避免 prompt 过长）
         # 每条用例的错误信息截断至 _FAILED_CASE_ERROR_TRUNCATE_LEN 字符
         cases_summary = "\n".join(
-            [f"- {case['name']}: {case['error'][:_FAILED_CASE_ERROR_TRUNCATE_LEN]}"
-             for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]]
+            [
+                f"- {case['name']}: {case['error'][:_FAILED_CASE_ERROR_TRUNCATE_LEN]}"
+                for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]
+            ]
         )
 
         # 在 prompt 中显式注入错误类型和修复策略，引导 LLM 分层处理
@@ -146,9 +147,7 @@ class DebuggerAgent(BaseAgent):
                 patch = ref.get("patch", "")
                 if orig and patch:
                     refs_text.append(
-                        f"【参考修复案例 {i}】\n"
-                        f"原始代码：\n```python\n{orig}\n```\n"
-                        f"修复代码：\n```python\n{patch}\n```"
+                        f"【参考修复案例 {i}】\n原始代码：\n```python\n{orig}\n```\n修复代码：\n```python\n{patch}\n```"
                     )
             if refs_text:
                 query += "\n\n以下历史修复案例可作为参考：\n" + "\n\n".join(refs_text)

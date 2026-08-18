@@ -7,8 +7,8 @@
     - 可通过 dict 构造
 """
 
-import pytest
 from typing import get_type_hints
+
 from src.graph.state import AITesterState
 
 
@@ -22,7 +22,10 @@ class TestAITesterState:
         hints = get_type_hints(AITesterState)
         # 核心必填字段
         required_keys = [
-            "target_file", "target_code", "iteration", "max_iterations",
+            "target_file",
+            "target_code",
+            "iteration",
+            "max_iterations",
             "repair_history",
         ]
         for key in required_keys:
@@ -32,10 +35,18 @@ class TestAITesterState:
         """验证所有可选字段均已定义。"""
         hints = get_type_hints(AITesterState)
         optional_keys = [
-            "task_uuid", "target_function", "module_name",
-            "test_plan", "generated_test", "test_passed",
-            "test_output", "coverage_report", "failed_cases",
-            "diagnosis", "error_category", "patch",
+            "task_uuid",
+            "target_function",
+            "module_name",
+            "test_plan",
+            "generated_test",
+            "test_passed",
+            "test_output",
+            "coverage_report",
+            "failed_cases",
+            "diagnosis",
+            "error_category",
+            "patch",
             "rag_references",
         ]
         for key in optional_keys:

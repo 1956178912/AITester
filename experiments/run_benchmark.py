@@ -32,12 +32,12 @@ import concurrent.futures
 import json
 import logging
 import os
-import sys
-import time
-import tempfile
 import shutil
+import sys
+import tempfile
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import openai
 
@@ -46,28 +46,27 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.graph.workflow import build_workflow
-from src.graph.state import AITesterState
+from config import (
+    ENABLE_DEBUGGER,
+    ENABLE_PLANNER,
+    LLM_CONFIGS,
+    LLM_RETRY_WAIT,
+    MAX_ITERATIONS,
+)
 from src.dataset_loader import (
-    BaseDatasetLoader,
     BenchmarkTask,
     InMemoryDataset,
     load_dataset,
 )
-from config import (
-    LLM_CONFIGS,
-    MAX_ITERATIONS,
-    COVERAGE_THRESHOLD,
-    ENABLE_PLANNER,
-    ENABLE_DEBUGGER,
-    LLM_RETRY_WAIT,
-)
+from src.graph.state import AITesterState
+from src.graph.workflow import build_workflow
 
 logger = logging.getLogger(__name__)
 
 # 进度条支持
 try:
     from tqdm import tqdm
+
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
@@ -108,7 +107,7 @@ class ProgressBar:
         """关闭进度条。"""
         self._pbar.close()
 
-    def __enter__(self) -> "ProgressBar":
+    def __enter__(self) -> ProgressBar:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -132,10 +131,7 @@ class _DummyProgressBar:
 
 
 # 所有可用的 API 配置（从 config.LLM_CONFIGS 读取）
-_VALID_APIS = [
-    {"key": c.api_key, "url": c.base_url, "model": c.model_name}
-    for c in LLM_CONFIGS
-]
+_VALID_APIS = [{"key": c.api_key, "url": c.base_url, "model": c.model_name} for c in LLM_CONFIGS]
 
 
 def _get_api_for_task(task_index: int) -> dict:
@@ -148,6 +144,7 @@ def _get_api_for_task(task_index: int) -> dict:
 def _set_thread_api(task_index: int) -> None:
     """为当前线程设置 API 配置。"""
     from src.agents.base_agent import _thread_local
+
     api = _get_api_for_task(task_index)
     _thread_local.api_key = api["key"]
     _thread_local.base_url = api["url"]
@@ -162,26 +159,26 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
     """
     调用 LLM，失败时自动切换到备用 API。
     支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
-    
+
     Args:
         prompt: 用户消息
         system_prompt: System 提示词
         max_retries: 每个 API 的最大重试次数
-        
+
     Returns:
         LLM 响应文本
     """
     from src.agents.base_agent import _get_all_api_configs
-    
+
     for api_key, base_url, model in _get_all_api_configs():
         is_zai = _is_zai_url(base_url)
-        
+
         try:
             if is_zai:
                 # BigModel 等非 OpenAI 兼容接口：使用 zai SDK
                 from zai import ZhipuAiClient
                 from zai.core._errors import APIReachLimitError, APIStatusError
-                
+
                 client = ZhipuAiClient(api_key=api_key, base_url=base_url)
                 for attempt in range(max_retries):
                     try:
@@ -202,22 +199,24 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
                         raise ValueError("空响应")
                     except (APIReachLimitError, APIStatusError) as e:
                         if attempt < max_retries - 1:
-                            wait_time = 2 ** attempt * 5
-                            logger.warning("zai API 限流 (attempt %d/%d): %s", attempt+1, max_retries, e)
+                            wait_time = 2**attempt * 5
+                            logger.warning("zai API 限流 (attempt %d/%d): %s", attempt + 1, max_retries, e)
                             time.sleep(wait_time)
                             continue
                         raise
                     except Exception as e:
                         if attempt < max_retries - 1:
-                            wait_time = 2 ** attempt
-                            logger.warning("zai API %s 调用失败 (attempt %d/%d): %s", 
-                                          base_url, attempt+1, max_retries, e)
+                            wait_time = 2**attempt
+                            logger.warning(
+                                "zai API %s 调用失败 (attempt %d/%d): %s", base_url, attempt + 1, max_retries, e
+                            )
                             time.sleep(wait_time)
                             continue
                         raise
             else:
                 # OpenAI 兼容接口：使用 openai SDK
                 import openai
+
                 client = openai.OpenAI(api_key=api_key, base_url=base_url)
                 for attempt in range(max_retries):
                     try:
@@ -236,9 +235,15 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
                         raise ValueError("空响应")
                     except Exception as e:
                         if attempt < max_retries - 1:
-                            wait_time = 2 ** attempt
-                            logger.warning("API %s 调用失败 (attempt %d/%d): %s, 等待 %ds", 
-                                          base_url, attempt+1, max_retries, e, wait_time)
+                            wait_time = 2**attempt
+                            logger.warning(
+                                "API %s 调用失败 (attempt %d/%d): %s, 等待 %ds",
+                                base_url,
+                                attempt + 1,
+                                max_retries,
+                                e,
+                                wait_time,
+                            )
                             time.sleep(wait_time)
                             continue
                         logger.warning("API %s 所有重试失败，切换备用 API: %s", base_url, e)
@@ -250,8 +255,8 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
             continue
     else:
         raise RuntimeError(f"所有 API 调用失败: {max_retries} 次重试后仍失败")
-    
-    raise RuntimeError(f"LLM 调用失败，已尝试所有 API")
+
+    raise RuntimeError("LLM 调用失败，已尝试所有 API")
 
 
 # ─── 基线方法实现 ─────────────────────────────────────────────────────────────
@@ -259,7 +264,7 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
 
 def run_aitester_baseline(
     state: AITesterState,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     完整 AITester 基线：Planner → Generator → Executor → (Debugger → PatchApplier) × N。
 
@@ -275,7 +280,7 @@ def run_aitester_baseline(
 
 def run_plain_llm_baseline(
     state: AITesterState,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     纯 LLM 基线（Baseline B）：不启用 Planner，不进行修复循环。
     Generator 直接基于目标代码生成测试，Executor 执行一次，无 Debugger。
@@ -290,7 +295,9 @@ def run_plain_llm_baseline(
     """
     # 临时关闭 Planner 和 Debugger，重新加载 workflow 模块获取新图
     import importlib
+
     import src.graph.workflow as wf_module
+
     global ENABLE_PLANNER, ENABLE_DEBUGGER
     old_planner, old_debugger = ENABLE_PLANNER, ENABLE_DEBUGGER
     try:
@@ -306,7 +313,7 @@ def run_plain_llm_baseline(
 
 def run_single_agent_baseline(
     state: AITesterState,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     单智能体基线（Baseline C）：将 Planner + Generator + Debugger 功能合并为一次 LLM 调用。
     无工作流，只有一个大 Prompt 让 LLM 直接输出测试代码，并允许一轮修复。
@@ -319,8 +326,8 @@ def run_single_agent_baseline(
     Returns:
         最终状态字典（test_passed, coverage_report 等）。
     """
-    from src.agents.generator import GeneratorAgent
     from src.agents.executor import ExecutorAgent
+    from src.agents.generator import GeneratorAgent
 
     agent = GeneratorAgent()
     executor = ExecutorAgent(timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")))
@@ -362,6 +369,7 @@ def run_single_agent_baseline(
         fix_code = agent._extract_python_code(fix_raw)
         if fix_code:
             from src.tools.patch_applier import apply_patch_to_code
+
             new_code, applied = apply_patch_to_code(state["target_code"], fix_code)
             if applied:
                 state["target_code"] = new_code
@@ -383,7 +391,7 @@ def run_single_agent_baseline(
 
 
 # 基线方法注册表
-BASELINE_REGISTRY: Dict[str, callable] = {
+BASELINE_REGISTRY: dict[str, callable] = {
     "aitester": run_aitester_baseline,
     "plain_llm": run_plain_llm_baseline,
     "single_agent": run_single_agent_baseline,
@@ -395,10 +403,10 @@ BASELINE_REGISTRY: Dict[str, callable] = {
 
 def run_single_task(
     task: BenchmarkTask,
-    baselines: List[str],
+    baselines: list[str],
     output_dir: str,
     verbose: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     对单个 BenchmarkTask 运行所有指定的基线方法，返回汇总结果。
 
@@ -445,11 +453,11 @@ def run_single_task(
         }
 
         # 为每个基线分配不同的 API（轮询）
-        results: Dict[str, Dict[str, Any]] = {}
+        results: dict[str, dict[str, Any]] = {}
         for baseline_idx, baseline in enumerate(baselines):
             # 根据任务索引和基线索引分配 API
             _set_thread_api(hash(task.task_id) % len(_VALID_APIS) if _VALID_APIS else 0)
-            
+
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
 
@@ -475,10 +483,13 @@ def run_single_task(
                 status = "PASS" if final_state.get("test_passed") else "FAIL"
                 logger.info(
                     "    [%s] %s: %s (%.1fs, coverage=%.1f%%)",
-                    baseline, task.task_id, status, elapsed,
+                    baseline,
+                    task.task_id,
+                    status,
+                    elapsed,
                     final_state.get("coverage_report", 0.0),
                 )
-            except openai.RateLimitError as e:
+            except openai.RateLimitError:
                 # 限流：等待后重试
                 elapsed = time.time() - start_time
                 logger.warning("    [%s] %s 触发 API 限流，等待 %ds 后重试...", baseline, task.task_id, LLM_RETRY_WAIT)
@@ -533,9 +544,7 @@ def run_single_task(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _run_task_with_progress(
-    args: tuple
-) -> tuple[BenchmarkTask, Dict[str, Any]]:
+def _run_task_with_progress(args: tuple) -> tuple[BenchmarkTask, dict[str, Any]]:
     """并行执行任务包装器。"""
     task, baselines, output_dir, verbose = args
     results = run_single_task(task, baselines, output_dir, verbose)
@@ -547,14 +556,14 @@ def _run_task_with_progress(
 
 def run_benchmark(
     dataset_name: str = "examples",
-    subset: Optional[str] = None,
-    baselines: Optional[List[str]] = None,
+    subset: str | None = None,
+    baselines: list[str] | None = None,
     output_dir: str = "experiments/results",
     verbose: bool = False,
-    task_limit: Optional[int] = None,
-    task_count: Optional[int] = None,
-    parallel: Optional[int] = None,
-) -> Dict[str, Any]:
+    task_limit: int | None = None,
+    task_count: int | None = None,
+    parallel: int | None = None,
+) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
 
@@ -584,6 +593,7 @@ def run_benchmark(
         tc = task_count or 60
         logger.info("生成合成数据集：%d 个任务", tc)
         from src.synthetic_dataset import SyntheticDataset
+
         dataset = SyntheticDataset(task_count=tc, seed=42)
     else:
         try:
@@ -606,7 +616,7 @@ def run_benchmark(
     logger.info("待运行任务数: %d，基线: %s，并行度: %d", len(tasks), baselines, parallel)
 
     os.makedirs(output_dir, exist_ok=True)
-    all_results: Dict[str, List[Dict[str, Any]]] = {bl: [] for bl in baselines}
+    all_results: dict[str, list[dict[str, Any]]] = {bl: [] for bl in baselines}
     total_time = 0.0
 
     desc = f"基准测试 [{', '.join(baselines)}]"
@@ -695,19 +705,22 @@ def run_benchmark(
         bl = summary["results"][baseline]
         logger.info(
             "  [%s] 成功率=%.1f%%, 平均覆盖率=%.1f%%, 平均迭代=%.1f",
-            baseline, bl["success_rate"], bl["avg_coverage"], bl["avg_iterations"],
+            baseline,
+            bl["success_rate"],
+            bl["avg_coverage"],
+            bl["avg_iterations"],
         )
 
     if use_progress:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("基准测试完成！")
-        print("="*60)
+        print("=" * 60)
         for baseline in baselines:
             bl = summary["results"][baseline]
             print(f"  [{baseline}] 成功率: {bl['success_rate']}%, 平均覆盖率: {bl['avg_coverage']}%")
         print(f"总耗时: {total_time:.1f}s")
         print(f"结果文件: {output_file}")
-        print("="*60)
+        print("=" * 60)
 
     return summary
 
@@ -718,8 +731,7 @@ if __name__ == "__main__":
     @click.command()
     @click.option("--dataset", "-d", default="examples", help="数据集名称")
     @click.option("--subset", "-s", default=None, help="数据子集")
-    @click.option("--baselines", "-b", default="aitester,plain_llm,single_agent",
-                  help="基线方法列表（逗号分隔）")
+    @click.option("--baselines", "-b", default="aitester,plain_llm,single_agent", help="基线方法列表（逗号分隔）")
     @click.option("--output-dir", "-o", default="experiments/results", help="结果输出目录")
     @click.option("--verbose", "-v", is_flag=True, help="详细日志输出")
     @click.option("--task-count", "-c", default=None, type=int, help="合成数据集任务数量")

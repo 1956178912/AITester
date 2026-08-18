@@ -2,7 +2,7 @@
 # 建议在测试运行环境中执行以下命令以修复环境问题：
 # pip install pytest-cov
 
-'''
+"""
 示例被测代码：简易计算器模块，包含若干典型 bug 用于演示 AITester 的修复能力。
 
 本文件同时作为"无 bug 版本"的对照基准，供 Debugger 在修复其他文件时参考。
@@ -12,7 +12,7 @@
     - multiply:  两数乘法
     - divide:    两数除法（含除零保护）
     - factorial: 阶乘（递归实现，含负数保护）
-'''
+"""
 
 
 def subtract(a: float, b: float) -> float:

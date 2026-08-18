@@ -10,31 +10,27 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import click
-from src.dataset_loader import load_dataset
-from src.synthetic_dataset import SyntheticDataset
+
 from experiments.run_benchmark import run_benchmark
+from src.synthetic_dataset import SyntheticDataset
 
 logger = logging.getLogger(__name__)
 
 
 @click.command()
 @click.option("--task-count", "-c", default=100, type=int, help="合成数据集任务数量（默认 100）")
-@click.option("--baselines", "-b", default="aitester,plain_llm,single_agent",
-              help="基线方法列表（逗号分隔）")
+@click.option("--baselines", "-b", default="aitester,plain_llm,single_agent", help="基线方法列表（逗号分隔）")
 @click.option("--seed", "-s", default=42, type=int, help="随机种子（默认 42）")
-@click.option("--output-dir", "-o", default="experiments/results/large_scale",
-              help="结果输出目录")
+@click.option("--output-dir", "-o", default="experiments/results/large_scale", help="结果输出目录")
 @click.option("--parallel", "-p", default=0, type=int, help="并行任务数（0=顺序执行）")
 @click.option("--verbose", "-v", is_flag=True, help="详细日志")
 def cli(task_count: int, baselines: str, seed: int, output_dir: str, parallel: int, verbose: bool):
@@ -79,7 +75,8 @@ def cli(task_count: int, baselines: str, seed: int, output_dir: str, parallel: i
                 "avg_iterations": summary["results"][bl]["avg_iterations"],
                 "total_time": summary["results"][bl]["total_time"],
             }
-            for bl in bl_list if bl in summary.get("results", {})
+            for bl in bl_list
+            if bl in summary.get("results", {})
         },
     }
     meta_file = Path(output_dir) / "experiment_meta.json"

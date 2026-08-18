@@ -7,13 +7,11 @@ Planner 在输出测试计划前，先对函数进行输入域、输出域、前
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import PLANNER_SYSTEM_PROMPT
-from src.graph.llm_cache import cached_llm_call, get_cache_stats
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -49,9 +47,9 @@ class LogicAnalysisResult:
         self,
         input_domain: str,
         output_domain: str,
-        preconditions: List[str],
-        postconditions: List[str],
-        edge_cases: List[str],
+        preconditions: list[str],
+        postconditions: list[str],
+        edge_cases: list[str],
     ) -> None:
         # 初始化各字段
         self.input_domain = input_domain
@@ -60,7 +58,7 @@ class LogicAnalysisResult:
         self.postconditions = postconditions
         self.edge_cases = edge_cases
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         将逻辑分析结果序列化为字典。
         便于 JSON 存储、传递和后续使用。
@@ -98,7 +96,7 @@ class PlannerAgent(BaseAgent):
         # 使用增强版 system prompt，要求先输出逻辑分析再输出测试计划
         super().__init__(PLANNER_SYSTEM_PROMPT)
 
-    def plan(self, target_code: str, target_function: str | None = None) -> Dict[str, Any]:
+    def plan(self, target_code: str, target_function: str | None = None) -> dict[str, Any]:
         """
         生成测试计划（含逻辑驱动思维链）。
 

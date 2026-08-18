@@ -23,12 +23,13 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from typing import Any, Callable, Dict, Optional, Type, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 # 类型变量：用于泛型装饰器
-F = TypeVar('F', bound=Callable[..., Any])
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 class AITesterError(Exception):
@@ -36,7 +37,8 @@ class AITesterError(Exception):
 
     所有自定义异常都应继承此类，以便统一捕获和处理。
     """
-    def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
+
+    def __init__(self, message: str, context: dict[str, Any] | None = None):
         """初始化异常。
 
         Args:
@@ -64,6 +66,7 @@ class ConfigurationError(AITesterError):
 
     当配置文件缺失、格式错误或必需参数未设置时抛出。
     """
+
     pass
 
 
@@ -72,6 +75,7 @@ class ExecutionError(AITesterError):
 
     当测试执行失败时抛出，包括超时、权限不足等。
     """
+
     pass
 
 
@@ -80,6 +84,7 @@ class TimeoutError(ExecutionError):
 
     当操作超过指定时间限制时抛出。
     """
+
     pass
 
 
@@ -88,6 +93,7 @@ class ParsingError(AITesterError):
 
     当解析失败时抛出，包括 JSON 解析、语法解析等。
     """
+
     pass
 
 
@@ -96,6 +102,7 @@ class JSONParseError(ParsingError):
 
     当 JSON 字符串格式不正确或无法解析时抛出。
     """
+
     def __init__(self, message: str, json_str: str, pos: int):
         """初始化 JSON 解析错误。
 
@@ -114,6 +121,7 @@ class SyntaxParseError(ParsingError):
 
     当 Python 代码语法不正确时抛出。
     """
+
     def __init__(self, message: str, filename: str = "", lineno: int = 0, offset: int = 0):
         """初始化语法解析错误。
 
@@ -138,6 +146,7 @@ class APIError(AITesterError):
 
     当外部 API 调用失败时抛出。
     """
+
     pass
 
 
@@ -146,7 +155,8 @@ class RateLimitError(APIError):
 
     当 API 返回速率限制响应时抛出。
     """
-    def __init__(self, message: str, retry_after: Optional[int] = None):
+
+    def __init__(self, message: str, retry_after: int | None = None):
         """初始化速率限制错误。
 
         Args:
@@ -164,6 +174,7 @@ class AuthenticationError(APIError):
 
     当 API 认证失败时抛出。
     """
+
     pass
 
 
@@ -172,7 +183,7 @@ def retry_with_backoff(
     base_wait: float = 1.0,
     exponential_base: float = 2.0,
     catch_exceptions: tuple = (Exception,),
-    logger_name: Optional[str] = None,
+    logger_name: str | None = None,
 ) -> Callable[[F], F]:
     """带指数退避的重试装饰器。
 
@@ -196,17 +207,18 @@ def retry_with_backoff(
     Returns:
         装饰后的函数。
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_exception: Optional[Exception] = None
+            last_exception: Exception | None = None
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except catch_exceptions as e:
                     last_exception = e
                     if attempt < max_retries:
-                        wait_time = base_wait * (exponential_base ** attempt)
+                        wait_time = base_wait * (exponential_base**attempt)
                         log = logger_name and logging.getLogger(logger_name) or logger
                         log.warning(
                             "函数 %s 调用失败 (尝试 %d/%d): %s，等待 %.1f 秒后重试",
@@ -222,12 +234,14 @@ def retry_with_backoff(
             if last_exception:
                 raise last_exception
             return None  # 理论上不会到达这里
+
         return wrapper  # type: ignore[return-value]
+
     return decorator
 
 
 def with_error_context(
-    context_getter: Optional[Callable[[], Dict[str, Any]]] = None,
+    context_getter: Callable[[], dict[str, Any]] | None = None,
 ) -> Callable[[F], F]:
     """错误上下文收集装饰器。
 
@@ -239,17 +253,18 @@ def with_error_context(
     Returns:
         装饰后的函数。
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
                 return func(*args, **kwargs)
-            except AITesterError as e:
+            except AITesterError:
                 # 已有上下文，直接抛出
                 raise
             except Exception as e:
                 # 收集上下文信息
-                context: Dict[str, Any] = {}
+                context: dict[str, Any] = {}
                 if context_getter:
                     try:
                         context.update(context_getter())
@@ -261,7 +276,9 @@ def with_error_context(
                 context["kwargs_count"] = len(kwargs)
                 # 抛出带上下文的异常
                 raise AITesterError(str(e), context) from e
+
         return wrapper  # type: ignore[return-value]
+
     return decorator
 
 
@@ -269,7 +286,7 @@ def safe_execute(
     func: Callable[..., Any],
     default: Any = None,
     catch_exceptions: tuple = (Exception,),
-    error_handler: Optional[Callable[[Exception], Any]] = None,
+    error_handler: Callable[[Exception], Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     """安全执行函数，捕获异常并返回默认值。

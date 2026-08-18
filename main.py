@@ -27,19 +27,18 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
 import click
-from click import style
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 尝试导入可选依赖，提供优雅降级
 try:
     from rich.console import Console
-    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeRemainingColumn, BarColumn
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
     from rich.table import Table
     from rich.text import Text
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -47,13 +46,14 @@ except ImportError:
 
 try:
     from tqdm import tqdm as _tqdm
+
     TQDM_AVAILABLE = True
 except ImportError:
     TQDM_AVAILABLE = False
 
-from src.graph.workflow import build_workflow
+from config import COVERAGE_THRESHOLD, EXECUTION_TIMEOUT, MAX_ITERATIONS
 from src.graph.state import AITesterState
-from config import MAX_ITERATIONS, COVERAGE_THRESHOLD, EXECUTION_TIMEOUT
+from src.graph.workflow import build_workflow
 
 # ─── 日志配置 ─────────────────────────────────────────────────────────────────
 # 统一日志格式：[时间] [级别] 模块: 消息
@@ -75,6 +75,7 @@ logger = logging.getLogger(__name__)
 # ─── 彩色输出工具 ─────────────────────────────────────────────────────────────
 class Colors:
     """终端颜色常量，基于 ANSI 转义序列"""
+
     RED = "\033[91m"
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
@@ -118,25 +119,25 @@ def _rich_available() -> bool:
     return RICH_AVAILABLE and Console is not None
 
 
-def print_rich_table(results: List[Dict[str, Any]]) -> None:
+def print_rich_table(results: list[dict[str, Any]]) -> None:
     """使用 rich 库打印格式化表格"""
     if not _rich_available():
         return
-    
+
     console = Console()
     table = Table(title="测试执行结果", show_header=True, header_style="bold magenta")
-    
+
     table.add_column("状态", style="bold", width=8)
     table.add_column("文件", max_width=40)
     table.add_column("函数", max_width=20)
     table.add_column("覆盖率", justify="right", max_width=10)
     table.add_column("迭代", justify="right", max_width=8)
-    
+
     for r in results:
         status_icon = "✓" if r.get("passed") else "✗"
         status_style = "green" if r.get("passed") else "red"
-        coverage = f"{r.get('coverage', 'N/A')}%" if r.get('coverage') else "N/A"
-        
+        coverage = f"{r.get('coverage', 'N/A')}%" if r.get("coverage") else "N/A"
+
         table.add_row(
             status_icon,
             os.path.basename(r.get("file", "")),
@@ -145,7 +146,7 @@ def print_rich_table(results: List[Dict[str, Any]]) -> None:
             str(r.get("iterations", 0)),
             style=status_style,
         )
-    
+
     console.print(table)
 
 
@@ -153,7 +154,7 @@ def print_progress_bar(total: int, desc: str = "处理中") -> None:
     """创建进度条上下文管理器"""
     if not _rich_available():
         return
-    
+
     console = Console()
     progress = Progress(
         SpinnerColumn(),
@@ -163,7 +164,7 @@ def print_progress_bar(total: int, desc: str = "处理中") -> None:
         TimeRemainingColumn(),
         console=console,
     )
-    
+
     with progress:
         progress.add_task(desc, total=total)
         yield progress
@@ -172,12 +173,12 @@ def print_progress_bar(total: int, desc: str = "处理中") -> None:
 # ─── CLI 分组帮助模板 ─────────────────────────────────────────────────────────
 class UXGroup(click.Group):
     """自定义 CLI 组，支持分组帮助信息"""
-    
+
     def get_help(self, ctx: click.Context) -> str:
         """重写 help 生成逻辑，添加示例命令"""
         # 获取默认 help
         help_text = super().get_help(ctx)
-        
+
         # 添加示例命令
         examples = """
 {\b 示例命令\b}
@@ -196,7 +197,7 @@ class UXGroup(click.Group):
 @click.version_option(version="0.8.0", prog_name="AITester")
 def cli() -> None:
     """AITester - 多智能体自动化测试与自修复系统
-    
+
     一个基于 LangGraph 的多智能体系统，自动为 Python 代码生成测试、诊断错误、
     并尝试修复问题，直至测试通过或达到最大迭代次数。
     """
@@ -205,11 +206,11 @@ def cli() -> None:
 
 def _run_single_task(
     target_file: str,
-    func: Optional[str],
+    func: str | None,
     max_iterations: int,
     timeout: int,
     output_json: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     运行单个测试任务的内部函数。
 
@@ -226,7 +227,7 @@ def _run_single_task(
     logger.info("开始测试任务：file=%s, func=%s, timeout=%ds", target_file, func, timeout)
 
     # 读取被测代码文件内容
-    with open(target_file, "r", encoding="utf-8") as f:
+    with open(target_file, encoding="utf-8") as f:
         target_code = f.read()
 
     # 初始化工作流状态
@@ -307,18 +308,20 @@ def _run_single_task(
 @click.argument("target_files", type=click.Path(exists=True), nargs=-1)
 @click.option("--func", "-f", default=None, help="指定被测函数名，不指定则测试全部函数")
 @click.option("--max-iterations", default=MAX_ITERATIONS, help=f"最大修复迭代次数（默认 {MAX_ITERATIONS}）")
-@click.option("--coverage-threshold", default=COVERAGE_THRESHOLD, help=f"覆盖率阈值百分比（默认 {COVERAGE_THRESHOLD}%）")
+@click.option(
+    "--coverage-threshold", default=COVERAGE_THRESHOLD, help=f"覆盖率阈值百分比（默认 {COVERAGE_THRESHOLD}%）"
+)
 @click.option("--parallel", "-p", default=1, type=int, help="并发执行的文件数量（默认 1，单线程）")
 @click.option("--timeout", "-t", default=None, type=int, help=f"单个任务执行超时秒数（默认 {EXECUTION_TIMEOUT}s）")
 @click.option("--json", "json_output", is_flag=True, help="输出 JSON 格式结果（适合管道处理）")
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志输出（DEBUG 级别）")
 def run(
     target_files: tuple,
-    func: Optional[str],
+    func: str | None,
     max_iterations: int,
     coverage_threshold: float,
     parallel: int,
-    timeout: Optional[int],
+    timeout: int | None,
     json_output: bool,
     verbose: bool,
 ) -> None:
@@ -362,7 +365,8 @@ def run(
 
     # 支持 glob 模式展开（如 examples/*.py）
     import glob as glob_module
-    expanded_files: List[str] = []
+
+    expanded_files: list[str] = []
     for pattern in target_files:
         matched = glob_module.glob(pattern)
         if matched:
@@ -389,9 +393,9 @@ def run(
         click.echo("")
 
     # 并发执行
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     start_time = time.time()
-    
+
     if parallel > 1 and len(expanded_files) > 1:
         # 并发模式 - 使用进度条
         if _rich_available():
@@ -408,10 +412,7 @@ def run(
                 task = progress.add_task("运行中...", total=len(expanded_files))
                 with ThreadPoolExecutor(max_workers=parallel) as executor:
                     future_to_file = {
-                        executor.submit(
-                            _run_single_task,
-                            f, func, max_iterations, exec_timeout, json_output
-                        ): f
+                        executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, json_output): f
                         for f in expanded_files
                     }
                     for future in as_completed(future_to_file):
@@ -420,23 +421,22 @@ def run(
                             results.append(result)
                         except Exception as e:
                             logger.error("任务执行异常：file=%s, error=%s", future_to_file[future], e)
-                            results.append({
-                                "success": False,
-                                "file": future_to_file[future],
-                                "func": func or "all",
-                                "passed": False,
-                                "error": str(e),
-                            })
+                            results.append(
+                                {
+                                    "success": False,
+                                    "file": future_to_file[future],
+                                    "func": func or "all",
+                                    "passed": False,
+                                    "error": str(e),
+                                }
+                            )
                         finally:
                             progress.update(task, advance=1)
         else:
             # 无 rich 时的简单进度显示
             with ThreadPoolExecutor(max_workers=parallel) as executor:
                 future_to_file = {
-                    executor.submit(
-                        _run_single_task,
-                        f, func, max_iterations, exec_timeout, json_output
-                    ): f
+                    executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, json_output): f
                     for f in expanded_files
                 }
                 for future in as_completed(future_to_file):
@@ -446,13 +446,15 @@ def run(
                         click.echo(f"  ✓ 完成：{os.path.basename(future_to_file[future])}")
                     except Exception as e:
                         logger.error("任务执行异常：file=%s, error=%s", future_to_file[future], e)
-                        results.append({
-                            "success": False,
-                            "file": future_to_file[future],
-                            "func": func or "all",
-                            "passed": False,
-                            "error": str(e),
-                        })
+                        results.append(
+                            {
+                                "success": False,
+                                "file": future_to_file[future],
+                                "func": func or "all",
+                                "passed": False,
+                                "error": str(e),
+                            }
+                        )
     else:
         # 单线程模式
         for target_file in expanded_files:
@@ -466,7 +468,7 @@ def run(
         total = len(results)
         passed = sum(1 for r in results if r.get("passed"))
         failed = total - passed
-        
+
         separator = "=" * 50
         click.echo(f"\n{separator}")
         click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
@@ -476,16 +478,16 @@ def run(
             click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
         click.echo(f"  耗时：{elapsed_time:.2f}s")
         click.echo(f"{separator}")
-        
+
         # 打印结果表格
         if _rich_available():
             print_rich_table(results)
         else:
             for r in results:
                 status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
-                coverage = f"{r.get('coverage', 'N/A')}%" if r.get('coverage') else "N/A"
+                coverage = f"{r.get('coverage', 'N/A')}%" if r.get("coverage") else "N/A"
                 click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
-        
+
         # 显示执行统计
         if passed > 0:
             success_msg(f"{passed}/{total} 个测试通过")

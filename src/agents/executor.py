@@ -15,44 +15,109 @@ import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict
-
-from src.exceptions import ExecutionError, TimeoutError
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
 # 匹配 "from module_name import ..." 语句
-_RE_FROM_IMPORT = re.compile(r'from\s+([\w.]+)\s+import')
+_RE_FROM_IMPORT = re.compile(r"from\s+([\w.]+)\s+import")
 # 匹配 "import module_name" 语句
-_RE_IMPORT = re.compile(r'^import\s+([\w.]+)')
+_RE_IMPORT = re.compile(r"^import\s+([\w.]+)")
 # 替换 from old_module import ... 为 from new_module import ...
-_RE_FROM_REPLACE = re.compile(r'from\s+([\w.]+)\s+import')
+_RE_FROM_REPLACE = re.compile(r"from\s+([\w.]+)\s+import")
 # 替换 import old_module 为 import new_module
-_RE_IMPORT_REPLACE = re.compile(r'^import\s+([\w.]+)\s*$', re.MULTILINE)
+_RE_IMPORT_REPLACE = re.compile(r"^import\s+([\w.]+)\s*$", re.MULTILINE)
 # 提取模块名（无扩展名）
-_RE_MODULE_NAME = re.compile(r'([^/\\]+)\.py$')
+_RE_MODULE_NAME = re.compile(r"([^/\\]+)\.py$")
 # ───────────────────────────────────────────────────────────────────────────
 
 
 # ─── 标准库模块集合（预定义，避免重复创建）────────────────────────────────────
-_STANDARD_LIBRARIES = frozenset({
-    'os', 'sys', 're', 'math', 'json', 'datetime', 'collections',
-    'itertools', 'functools', 'pathlib', 'typing', 'abc', 'copy',
-    'unittest', 'pytest', 'tempfile', 'subprocess', 'logging',
-    'argparse', 'dataclasses', 'enum', 'io', 'string', 'textwrap',
-    'struct', 'codecs', 'unicodedata', 'difflib', 'pprint',
-    'reprlib', 'numbers', 'cmath', 'decimal', 'fractions',
-    'random', 'statistics', 'array', 'bisect', 'heapq', 'queue',
-    'types', 'contextlib', 'operator', 'pickle', 'shelve',
-    'dbm', 'sqlite3', 'zipfile', 'tarfile', 'gzip', 'bz2',
-    'lzma', 'zipimport', 'concurrent', 'multiprocessing',
-    'threading', 'signal', 'mmap', 'ctypes', 'select',
-    'socket', 'ssl', 'urllib', 'http', 'email', 'html',
-    'xml', 'ipaddress', 'webbrowser', 'cgi', 'cgitb',
-    'wsgiref', 'venv', 'shutil', 'diskcache', 'glob',
-    'fnmatch', 'stat', 'filecmp', 'secrets',
-})
+_STANDARD_LIBRARIES = frozenset(
+    {
+        "os",
+        "sys",
+        "re",
+        "math",
+        "json",
+        "datetime",
+        "collections",
+        "itertools",
+        "functools",
+        "pathlib",
+        "typing",
+        "abc",
+        "copy",
+        "unittest",
+        "pytest",
+        "tempfile",
+        "subprocess",
+        "logging",
+        "argparse",
+        "dataclasses",
+        "enum",
+        "io",
+        "string",
+        "textwrap",
+        "struct",
+        "codecs",
+        "unicodedata",
+        "difflib",
+        "pprint",
+        "reprlib",
+        "numbers",
+        "cmath",
+        "decimal",
+        "fractions",
+        "random",
+        "statistics",
+        "array",
+        "bisect",
+        "heapq",
+        "queue",
+        "types",
+        "contextlib",
+        "operator",
+        "pickle",
+        "shelve",
+        "dbm",
+        "sqlite3",
+        "zipfile",
+        "tarfile",
+        "gzip",
+        "bz2",
+        "lzma",
+        "zipimport",
+        "concurrent",
+        "multiprocessing",
+        "threading",
+        "signal",
+        "mmap",
+        "ctypes",
+        "select",
+        "socket",
+        "ssl",
+        "urllib",
+        "http",
+        "email",
+        "html",
+        "xml",
+        "ipaddress",
+        "webbrowser",
+        "cgi",
+        "cgitb",
+        "wsgiref",
+        "venv",
+        "shutil",
+        "diskcache",
+        "glob",
+        "fnmatch",
+        "stat",
+        "filecmp",
+        "secrets",
+    }
+)
 
 
 class ExecutorAgent:
@@ -65,8 +130,7 @@ class ExecutorAgent:
         use_docker: 是否使用 Docker 隔离执行（当前未启用，保留接口）。
     """
 
-    def __init__(self, timeout: int = 30,
-                 use_docker: bool = False) -> None:
+    def __init__(self, timeout: int = 30, use_docker: bool = False) -> None:
         # timeout 从参数传入，默认 30 秒
         self.timeout = timeout
         self.use_docker = use_docker
@@ -76,7 +140,7 @@ class ExecutorAgent:
         test_code: str,
         target_file: str,
         target_function: str | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         执行 pytest 测试并返回结果。
         失败时自动重试一次（防止偶发性环境干扰导致误判），最多尝试 2 次。
@@ -107,9 +171,7 @@ class ExecutorAgent:
 
         # 将测试代码写入临时文件，便于 pytest 执行
         # delete=False：py.test 需要文件存在于磁盘，不能是内存对象
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
             f.write(fixed_test_code)
             test_file = f.name
 
@@ -122,12 +184,14 @@ class ExecutorAgent:
             python_path = sys.executable  # 使用当前 Python 解释器
             # 构建 pytest 命令
             cmd = [
-                python_path, "-m", "pytest",
+                python_path,
+                "-m",
+                "pytest",
                 test_file,
-                "-v",                   # 详细输出（显示每个用例的 PASS/FAIL）
-                "--tb=short",           # 缩短 traceback（只显示关键错误位置）
+                "-v",  # 详细输出（显示每个用例的 PASS/FAIL）
+                "--tb=short",  # 缩短 traceback（只显示关键错误位置）
                 f"--cov={target_dir}",  # 只收集目标目录的覆盖率
-                "--cov-report=term",    # 终端输出覆盖率报告
+                "--cov-report=term",  # 终端输出覆盖率报告
             ]
             if target_function:
                 # 若指定了目标函数，用 -k 过滤只运行匹配的测试
@@ -197,7 +261,7 @@ class ExecutorAgent:
                         "error_info": {
                             "type": "permission_error",
                             "message": error_msg,
-                            "file_path": str(e.filename) if hasattr(e, 'filename') else "",
+                            "file_path": str(e.filename) if hasattr(e, "filename") else "",
                         },
                     }
                 except Exception as e:
@@ -331,21 +395,21 @@ class ExecutorAgent:
         imports = []
 
         # 使用预编译的正则表达式进行匹配
-        for line in test_code.split('\n'):
+        for line in test_code.split("\n"):
             line = line.strip()
             match1 = _RE_FROM_IMPORT.match(line)
             match2 = _RE_IMPORT.match(line)
             if match1:
                 module_name = match1.group(1)
                 # 只记录非标准库且非相对导入的模块
-                top_level = module_name.split('.')[0]
-                if not module_name.startswith('.') and top_level not in _STANDARD_LIBRARIES:
+                top_level = module_name.split(".")[0]
+                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
                     imports.append(module_name)
             elif match2:
                 module_name = match2.group(1)
                 # 只记录非标准库且非相对导入的模块
-                top_level = module_name.split('.')[0]
-                if not module_name.startswith('.') and top_level not in _STANDARD_LIBRARIES:
+                top_level = module_name.split(".")[0]
+                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
                     imports.append(module_name)
 
         if not imports:
@@ -389,15 +453,9 @@ class ExecutorAgent:
             for imported_module in imports:
                 if imported_module != actual_module_name:
                     # 使用预编译的正则表达式进行替换
-                    fixed_code = _RE_FROM_REPLACE.sub(
-                        rf'from {actual_module_name} import',
-                        fixed_code
-                    )
+                    fixed_code = _RE_FROM_REPLACE.sub(rf"from {actual_module_name} import", fixed_code)
                     # 替换 import imported_module（仅匹配独立的 import 语句）
-                    fixed_code = _RE_IMPORT_REPLACE.sub(
-                        f'import {actual_module_name}',
-                        fixed_code
-                    )
+                    fixed_code = _RE_IMPORT_REPLACE.sub(f"import {actual_module_name}", fixed_code)
             if imports:
                 logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
 
@@ -433,7 +491,7 @@ class ExecutorAgent:
         return 0.0
 
     @staticmethod
-    def _parse_failed_cases(output: str) -> list[Dict[str, str]]:
+    def _parse_failed_cases(output: str) -> list[dict[str, str]]:
         """
         从 pytest 输出中解析失败的用例列表。
         pytest 输出格式：FAILED test_file.py::test_func_name
@@ -462,7 +520,7 @@ class ExecutorAgent:
                 # 收集该用例的错误信息（直到下一个 FAILED 或分隔线）
                 error_lines = []
                 # 先提取 FAILED 行本身的错误信息（如 "- AssertionError: ..."）
-                after_match = line[m.end():].strip()
+                after_match = line[m.end() :].strip()
                 if after_match:
                     error_lines.append(after_match)
                 j = i + 1
@@ -476,10 +534,12 @@ class ExecutorAgent:
                         error_lines.append(l)
                     j += 1
                 if error_lines:
-                    failed.append({
-                        "name": case_name,
-                        "error": "\n".join(error_lines),
-                    })
+                    failed.append(
+                        {
+                            "name": case_name,
+                            "error": "\n".join(error_lines),
+                        }
+                    )
                 i = j
             else:
                 i += 1
