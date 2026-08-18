@@ -1,0 +1,143 @@
+{
+  "name": "aitester-code-iteration-2026",
+  "id": "aitester-code-iteration-2026",
+  "description": "AITester项目代码迭代优化团队 - 修复已知问题、提升代码质量、增加覆盖率",
+  "captainSessionId": "session-8fcee1f4-29ff-4759-b001-351e151a6ff2",
+  "createdAt": 1787032739639,
+  "members": [
+    {
+      "id": "297e2245-72df-47fa-a9b6-2066c28d9db9",
+      "name": "code-quality-lead",
+      "role": "代码质量负责人：负责圈复杂度优化和代码规范",
+      "joinedAt": 1787032744617,
+      "status": "idle"
+    },
+    {
+      "id": "7b2bc381-c2d3-47a3-88ce-c6226bd096b2",
+      "name": "test-fix-engineer",
+      "role": "测试修复工程师：修复失败的测试用例",
+      "joinedAt": 1787032744633,
+      "status": "idle"
+    },
+    {
+      "id": "01170bf1-1471-47a2-bc9b-1e0ab5546120",
+      "name": "coverage-engineer",
+      "role": "覆盖率工程师：提升核心模块测试覆盖率到80%+",
+      "joinedAt": 1787032744648,
+      "status": "idle"
+    },
+    {
+      "id": "0c5a784a-3cf6-45b2-997f-dcf00c0ddd65",
+      "name": "perf-optimizer",
+      "role": "性能优化工程师：优化执行器和API管理器性能",
+      "joinedAt": 1787032744722,
+      "status": "idle"
+    },
+    {
+      "id": "17269a92-d79d-481a-9992-3cd4a43962b1",
+      "name": "security-reviewer",
+      "role": "安全审查员：检查安全漏洞和敏感信息泄露",
+      "joinedAt": 1787032744764,
+      "status": "idle"
+    },
+    {
+      "id": "54217d81-ecf3-40cf-92ca-17acb1cd86e5",
+      "name": "doc-writer",
+      "role": "文档工程师：更新README和技术文档",
+      "joinedAt": 1787032744783,
+      "status": "idle"
+    },
+    {
+      "id": "8daad278-6266-42ef-8016-f294705d8cf0",
+      "name": "refactor-engineer",
+      "role": "重构工程师：代码重构和命名优化",
+      "joinedAt": 1787032744805,
+      "status": "idle"
+    },
+    {
+      "id": "c75c6d57-7462-4b78-919d-0a3692f834b0",
+      "name": "bug-fix-engineer",
+      "role": "Bug修复工程师：修复已知的2个失败测试",
+      "joinedAt": 1787032744843,
+      "status": "idle"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "subject": "修复失败的测试用例",
+      "description": "修复2个失败的测试用例：\n1. test_dataset_loader_extended.py::TestSWEBenchDatasetLocal::test_download_network_error - 网络超时问题，需要使用mock替代真实网络调用\n2. test_dataset_loader_extended.py::TestBaseDatasetLoaderAbstract::test_subclass_without_impl_raises - TypeError错误消息不匹配，需要从'load_data'改为'load_raw_data'\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "completed",
+      "assignee": "bug-fix-engineer",
+      "dependencies": [],
+      "createdAt": 1787032801756,
+      "updatedAt": 1787033152714,
+      "output": "任务完成：修复了2个失败的测试用例\n1. test_download_network_error: 修改mock路径从'src.dataset_loader.load_dataset'到'datasets.load_dataset'\n2. test_subclass_without_impl_raises: 修正测试期望，改为验证TypeError而非NotImplementedError\n\n验证结果：2 passed in 0.39s"
+    },
+    {
+      "id": "t2",
+      "subject": "优化executor.py圈复杂度",
+      "description": "优化executor.py的圈复杂度：\n1. execute方法（line 138）：当前复杂度12，需降至10以下\n2. _auto_fix_imports方法（line 377）：当前复杂度16，需降至10以下\n3. 修复变量名歧义：line 528的l改为line_content\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "completed",
+      "assignee": "code-quality-lead",
+      "dependencies": [],
+      "createdAt": 1787032801761,
+      "updatedAt": 1787033448054,
+      "output": "任务完成：executor.py圈复杂度优化\n\n## 优化结果\n- execute: CC 15 → 9 ✅\n- _auto_fix_imports: CC 20 → 5 ✅\n- _parse_failed_cases: CC 12 → 4 ✅\n- 最大CC: 20 → 9\n- 平均CC: 9.1 → 4.9\n- 全部35个executor测试通过"
+    },
+    {
+      "id": "t3",
+      "subject": "提升核心模块测试覆盖率",
+      "description": "提升核心模块测试覆盖率到80%+：\n重点关注低覆盖率模块：\n- src/graph/llm_cache.py (60%)\n- src/graph/workflow.py (73%)\n- src/api_manager.py (74%)\n- src/reports/generator.py (75%)\n\n为这些模块补充缺失的测试用例。\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "claimed",
+      "assignee": "coverage-engineer",
+      "dependencies": [],
+      "createdAt": 1787032801766,
+      "updatedAt": 1787032843744
+    },
+    {
+      "id": "t4",
+      "subject": "安全审查",
+      "description": "检查项目安全性：\n1. 确认无硬编码API Key（检查.env文件是否被忽略）\n2. 验证SQL参数化查询\n3. 检查路径遍历防护\n4. 审查依赖安全漏洞\n\n运行命令：\n.venv/bin/python -m pip-audit  # 如有\n检查.gitignore和.env文件\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "completed",
+      "assignee": "security-reviewer",
+      "dependencies": [],
+      "createdAt": 1787032801776,
+      "updatedAt": 1787033152724,
+      "output": "任务完成：安全审查通过\n安全评分：85/100\n\n✅ 通过项（4/5）：\n- 敏感信息管理良好（.env已加入.gitignore，无硬编码密钥）\n- SQL注入防护到位（所有查询使用参数化）\n- 路径遍历无风险（文件操作路径固定）\n- API安全机制完善（超时、重试、健康检查均已实现）\n\n⚠️ 需改进项（1/5）：\n- 依赖版本未锁定（建议使用pip freeze生成lock文件）"
+    },
+    {
+      "id": "t5",
+      "subject": "更新项目文档",
+      "description": "更新项目文档：\n1. 更新README.md中的测试状态表格\n2. 添加最新的功能特性说明\n3. 更新配置说明（如有新增配置项）\n4. 添加迭代优化变更记录\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "completed",
+      "assignee": "doc-writer",
+      "dependencies": [],
+      "createdAt": 1787032801782,
+      "updatedAt": 1787033421638,
+      "output": "任务完成：项目文档更新\n\n## 交付物\n1. README.md - 更新测试状态(653+ passed)、配置说明(多LLM配置)、迭代记录(v0.9)\n2. CHANGELOG.md - 添加多LLM配置支持和文档更新记录\n3. ITERATION_REPORT_20260818.md - 新增完整迭代报告(8KB)\n\n## 关键更新\n- 测试状态：99+ → 653+ passed (99.2%通过率)\n- 配置说明：新增 LLM_N_BASE_URL、LLM_N_MODEL_NAME，含轮询配置示例\n- 迭代记录：v0.9(代码质量+报告生成器)、v0.2.0、v0.1.0"
+    },
+    {
+      "id": "t6",
+      "subject": "性能优化分析",
+      "description": "优化性能相关代码：\n1. 检查LLM缓存机制（llm_cache.py）\n2. 优化API管理器轮询逻辑\n3. 检查并发执行的线程安全问题\n4. 分析瓶颈并提供优化建议\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "completed",
+      "assignee": "perf-optimizer",
+      "dependencies": [],
+      "createdAt": 1787032801788,
+      "updatedAt": 1787033262328,
+      "output": "任务完成：性能优化分析\n\n## 核心发现\n\n**3 个高优先级瓶颈**：\n1. 🔴 LLM缓存失效：hash()随机化导致跨会话缓存命中率为0，建议改用MD5哈希\n2. 🔴 API健康检查未自动化：配置了60s间隔但无调度器，故障恢复延迟高\n3. 🔴 数据库单连接：无连接池，并发能力仅~10 QPS，建议引入DBUtils连接池\n\n**5 个中优先级问题**：\n- 线程安全问题（全局单例无锁）\n- 健康检查串行执行（100节点需10s）\n- 线程数配置无上限\n- 异常处理不完善\n- 统计信息缺失\n\n## 预期收益\n- Token消耗降低40-60%\n- API故障恢复提速70-80%\n- 数据库并发提升10倍\n- 端到端执行时间缩短30-50%\n\n## 交付物\n📄 详细报告：docs/performance_optimization_report.md"
+    },
+    {
+      "id": "t7",
+      "subject": "代码重构优化",
+      "description": "代码重构和命名优化：\n1. 检查是否有冗余代码可提取为公共函数\n2. 优化变量和函数命名（确保语义清晰）\n3. 检查重复逻辑并提取\n4. 确保遵循SOLID原则\n\n工作目录：/Users/wangchenyu/Workspace/AITester",
+      "status": "in_progress",
+      "assignee": "refactor-engineer",
+      "dependencies": [],
+      "createdAt": 1787032801798,
+      "updatedAt": 1787032999447
+    }
+  ],
+  "taskSeq": 7
+}

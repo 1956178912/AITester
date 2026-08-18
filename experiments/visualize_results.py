@@ -130,7 +130,7 @@ def compute_significance(summary: dict[str, Any]) -> dict[str, Any]:
             # Mann-Whitney U 检验（非参数）
             u_stat, mw_p = scipy_stats.mannwhitneyu(ref_rates, cmp_rates, alternative="two-sided")
             # Cohen's d（配对差值的标准化均值）
-            diffs = [r - c for r, c in zip(ref_rates, cmp_rates)]
+            diffs = [r - c for r, c in zip(ref_rates, cmp_rates, strict=False)]
             mean_diff = sum(diffs) / n_pairs if n_pairs else 0.0
             std_diff = (sum((d - mean_diff) ** 2 for d in diffs) / (n_pairs - 1)) ** 0.5 if n_pairs > 1 else 1.0
             d = mean_diff / std_diff if std_diff > 0 else 0.0
@@ -174,7 +174,7 @@ def plot_baseline_comparison(summary: dict[str, Any]) -> None:
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(baselines, rotation=15, ha="right")
     axes[0].set_ylim(0, 100)
-    for bar, val in zip(bars1, success_rates):
+    for bar, val in zip(bars1, success_rates, strict=False):
         axes[0].text(
             bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f"{val:.1f}", ha="center", va="bottom", fontsize=9
         )
@@ -185,7 +185,7 @@ def plot_baseline_comparison(summary: dict[str, Any]) -> None:
     axes[1].set_xticks([xi + width for xi in x])
     axes[1].set_xticklabels(baselines, rotation=15, ha="right")
     axes[1].set_ylim(0, 100)
-    for bar, val in zip(bars2, coverages):
+    for bar, val in zip(bars2, coverages, strict=False):
         axes[1].text(
             bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f"{val:.1f}", ha="center", va="bottom", fontsize=9
         )
@@ -195,7 +195,7 @@ def plot_baseline_comparison(summary: dict[str, Any]) -> None:
     axes[2].set_title("平均修复迭代", fontsize=12)
     axes[2].set_xticks([xi + width * 2 for xi in x])
     axes[2].set_xticklabels(baselines, rotation=15, ha="right")
-    for bar, val in zip(bars3, iterations):
+    for bar, val in zip(bars3, iterations, strict=False):
         axes[2].text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + 0.02,
@@ -249,7 +249,7 @@ def plot_statistical_significance(sig_result: dict[str, Any]) -> None:
     ax1.set_yticklabels(baselines)
     for i in range(len(baselines)):
         for j in range(len(baselines)):
-            text = ax1.text(
+            ax1.text(
                 j,
                 i,
                 p_values[i][j],
@@ -269,7 +269,7 @@ def plot_statistical_significance(sig_result: dict[str, Any]) -> None:
     ax2.axvline(x=0, color="black", linewidth=0.8)
     ax2.set_title("Cohen's d 效应量（右侧=aitester 优势）", fontsize=11)
     ax2.set_xlabel("Cohen's d")
-    for bar, d in zip(bars, d_vals):
+    for bar, d in zip(bars, d_vals, strict=False):
         ax2.text(
             bar.get_width() + 0.02, bar.get_y() + bar.get_height() / 2, f"{d:.2f}", ha="left", va="center", fontsize=9
         )

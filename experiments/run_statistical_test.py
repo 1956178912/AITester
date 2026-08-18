@@ -58,8 +58,8 @@ def paired_t_test(
         (t_statistic, p_value, n_pairs)
     """
     # 提取通过率
-    aitester_pass = [1 if r.get("passed") else 0 for r in aitester_results]
-    baseline_pass = [1 if r.get("passed") else 0 for r in baseline_results]
+    [1 if r.get("passed") else 0 for r in aitester_results]
+    [1 if r.get("passed") else 0 for r in baseline_results]
 
     # 按task_id配对
     aitester_by_task = {r["task_id"]: (1 if r.get("passed") else 0) for r in aitester_results}
@@ -111,7 +111,7 @@ def cohens_d(aitester_results: list[dict], baseline_results: list[dict], n_pairs
     paired_baseline = [baseline_by_task[t] for t in sorted_tasks]
 
     # 计算差值
-    differences = [a - b for a, b in zip(paired_aitester, paired_baseline)]
+    differences = [a - b for a, b in zip(paired_aitester, paired_baseline, strict=False)]
 
     # Cohen's d = mean_diff / std_diff
     mean_diff = np.mean(differences)

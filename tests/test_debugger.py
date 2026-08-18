@@ -51,7 +51,7 @@ class TestDebuggerAgent:
         failed = [{"name": f"test_{i}", "error": f"错误信息 {i}"} for i in range(8)]
         target = "def foo(): pass"
         output = "FAILED"
-        result = agent.debug(target, output, failed)
+        agent.debug(target, output, failed)
         # 验证 LLM 调用中包含截断后的用例（最多 5 个）
         call_args = mock_llm.call_args[0][0]
         # 不应包含第 6 个及以后的用例名
@@ -74,7 +74,7 @@ class TestDebuggerAgent:
         target = "def foo(): pass"
         output = "AssertionError"
         failed = [{"name": "test_1", "error": "assert False"}]
-        result = agent.debug(target, output, failed, rag_references=rag)
+        agent.debug(target, output, failed, rag_references=rag)
         call_args = mock_llm.call_args[0][0]
         # 前两个参考应出现在 prompt 中
         assert "patch_a" in call_args

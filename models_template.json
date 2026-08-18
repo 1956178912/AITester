@@ -1,0 +1,130 @@
+{
+  "models": [
+    {
+      "model_name": "qwen-max",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "通义千问-max"
+    },
+    {
+      "model_name": "qwen-plus",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "通义千问-plus"
+    },
+    {
+      "model_name": "qwen-turbo",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "通义千问-turbo（快速响应）"
+    },
+    {
+      "model_name": "qwen-long",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "通义千问-long（长上下文）"
+    },
+    {
+      "model_name": "deepseek-v3",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "DeepSeek-V3"
+    },
+    {
+      "model_name": "deepseek-v4-pro",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "DeepSeek-V4-Pro"
+    },
+    {
+      "model_name": "deepseek-v4-flash",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "DeepSeek-V4-Flash（快速版本）"
+    },
+    {
+      "model_name": "glm-4",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+      "api_key": "YOUR_BIGMODEL_API_KEY",
+      "provider": "BigModel 智谱",
+      "description": "GLM-4"
+    },
+    {
+      "model_name": "glm-4-plus",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+      "api_key": "YOUR_BIGMODEL_API_KEY",
+      "provider": "BigModel 智谱",
+      "description": "GLM-4-Plus"
+    },
+    {
+      "model_name": "glm-4-air",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+      "api_key": "YOUR_BIGMODEL_API_KEY",
+      "provider": "BigModel 智谱",
+      "description": "GLM-4-Air（快速版本）"
+    },
+    {
+      "model_name": "glm-4-flash",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+      "api_key": "YOUR_BIGMODEL_API_KEY",
+      "provider": "BigModel 智谱",
+      "description": "GLM-4-Flash（最快版本）"
+    },
+    {
+      "model_name": "glm-4.7",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "GLM-4.7（通过百炼）"
+    },
+    {
+      "model_name": "glm-4.7-flash",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4/",
+      "api_key": "YOUR_BIGMODEL_API_KEY",
+      "provider": "BigModel 智谱",
+      "description": "GLM-4.7-Flash"
+    },
+    {
+      "model_name": "kimi-k2.7-code",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "YOUR_ALIYUN_API_KEY",
+      "provider": "阿里云百炼",
+      "description": "Kimi K2.7 Code（代码专用）"
+    },
+    {
+      "model_name": "agnes-2.5-flash",
+      "base_url": "https://api.agnes-ai.cn/v1",
+      "api_key": "YOUR_AGNES_API_KEY",
+      "provider": "Agnes AI",
+      "description": "Agnes 2.5 Flash"
+    },
+    {
+      "model_name": "agnes-2.5-pro",
+      "base_url": "https://api.agnes-ai.cn/v1",
+      "api_key": "YOUR_AGNES_API_KEY",
+      "provider": "Agnes AI",
+      "description": "Agnes 2.5 Pro"
+    },
+    {
+      "model_name": "deepseek-chat",
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "YOUR_DEEPSEEK_API_KEY",
+      "provider": "DeepSeek",
+      "description": "DeepSeek Chat（官方 API）"
+    },
+    {
+      "model_name": "deepseek-coder",
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "YOUR_DEEPSEEK_API_KEY",
+      "provider": "DeepSeek",
+      "description": "DeepSeek Coder（代码专用）"
+    }
+  ]
+}

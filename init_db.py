@@ -16,9 +16,9 @@ import logging
 # 模块级日志记录器，用于替代 print 输出
 logger = logging.getLogger(__name__)
 
-import pymysql
+import pymysql  # noqa: E402
 
-from config import (
+from config import (  # noqa: E402
     MYSQL_DATABASE,
     MYSQL_HOST,
     MYSQL_PASSWORD,

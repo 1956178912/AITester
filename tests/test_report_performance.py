@@ -38,7 +38,7 @@ class TestReportPerformance:
         iterations = 100
         for i in range(iterations):
             start = time.perf_counter()
-            report = generator.generate(
+            generator.generate(
                 task_id=f"perf_test_{i}",
                 target_file="test.py",
                 target_function="func",
@@ -51,9 +51,9 @@ class TestReportPerformance:
         max_time = max(times)
 
         # 断言：平均生成时间应 < 10ms
-        assert avg_time < 0.01, f"平均生成时间 {avg_time*1000:.2f}ms 超过 10ms 阈值"
+        assert avg_time < 0.01, f"平均生成时间 {avg_time * 1000:.2f}ms 超过 10ms 阈值"
         # 断言：最大生成时间应 < 50ms
-        assert max_time < 0.05, f"最大生成时间 {max_time*1000:.2f}ms 超过 50ms 阈值"
+        assert max_time < 0.05, f"最大生成时间 {max_time * 1000:.2f}ms 超过 50ms 阈值"
 
     def test_large_error_output_processing(self, generator: ReportGenerator) -> None:
         """测试处理大错误输出的性能。"""
@@ -72,7 +72,7 @@ class TestReportPerformance:
         # 验证错误消息被截断
         assert len(report.error_message) <= 500
         # 断言：处理时间应 < 100ms
-        assert elapsed < 0.1, f"处理大错误输出耗时 {elapsed*1000:.2f}ms 超过 100ms 阈值"
+        assert elapsed < 0.1, f"处理大错误输出耗时 {elapsed * 1000:.2f}ms 超过 100ms 阈值"
 
     def test_multiple_format_generation(self, generator: ReportGenerator) -> None:
         """测试多种格式生成的性能。"""
@@ -100,7 +100,7 @@ class TestReportPerformance:
 
             avg_time = statistics.mean(times)
             # 断言：每种格式生成时间应 < 5ms
-            assert avg_time < 0.005, f"{format_name} 格式平均生成时间 {avg_time*1000:.2f}ms 超过 5ms 阈值"
+            assert avg_time < 0.005, f"{format_name} 格式平均生成时间 {avg_time * 1000:.2f}ms 超过 5ms 阈值"
 
     def test_report_save_performance(self, generator: ReportGenerator, tmp_path) -> None:
         """测试报告保存性能。"""
@@ -115,7 +115,7 @@ class TestReportPerformance:
 
         # 测量保存时间
         times = []
-        for i in range(20):
+        for _i in range(20):
             start = time.perf_counter()
             generator.save_report(report, output_dir=str(output_dir), format=ReportFormat.TEXT)
             elapsed = time.perf_counter() - start
@@ -123,7 +123,7 @@ class TestReportPerformance:
 
         avg_time = statistics.mean(times)
         # 断言：平均保存时间应 < 10ms
-        assert avg_time < 0.01, f"平均保存时间 {avg_time*1000:.2f}ms 超过 10ms 阈值"
+        assert avg_time < 0.01, f"平均保存时间 {avg_time * 1000:.2f}ms 超过 10ms 阈值"
 
     def test_concurrent_report_generation(self, generator: ReportGenerator) -> None:
         """测试并发报告生成的性能。"""

@@ -192,8 +192,8 @@ def second(b):
         assert applied is True
         lines = new_code.split("\n")
         # 确认 first 在 second 之前
-        first_idx = next(i for i, l in enumerate(lines) if "def first" in l)
-        second_idx = next(i for i, l in enumerate(lines) if "def second" in l)
+        first_idx = next(i for i, line in enumerate(lines) if "def first" in line)
+        second_idx = next(i for i, line in enumerate(lines) if "def second" in line)
         assert first_idx < second_idx
 
 
