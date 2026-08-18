@@ -7,16 +7,18 @@
 
 | 指标 | 状态 |
 |------|------|
-| **单元测试** | ✅ 696+ passed (覆盖所有核心模块) |
-| **集成测试** | ✅ 52 passed (含工作流节点测试) |
-| **代码覆盖率** | 75% (目标 80%+) |
+| **总测试数** | ✅ 873 collected |
+| **单元测试** | ✅ 860 passed (98.6%) |
+| **集成测试** | ✅ 86 passed (含 E2E/工作流节点测试) |
+| **已知失败** | ⚠️ 12 个（Mock 兼容性 + API 配额） |
+| **代码覆盖率** | 75% → 目标 80%+ |
 | **安全审查** | ✅ 无硬编码密钥 |
 | **最新修复** | ✅ 指数退避重试逻辑 + 路径安全检查 |
 | **新模块** | ✅ 错误报告生成器 (`src/reports/`) |
-| **LLM 配置** | ✅ 多配置轮询支持 (`LLM_CONFIGS`) |
+| **LLM 配置** | ✅ 多配置轮询支持 (`LLM_CONFIGS`, 22 个 Provider) |
 | **性能优化** | ✅ RAG 单例化 + LLM 超时配置 + 并发执行 |
 
-更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md)、[OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md) 和 [性能优化报告](docs/performance_optimization_report.md)。
+更多详情参见 [TESTING_REPORT.md](TESTING_REPORT.md)、[OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)、[功能验证报告](FUNCTIONAL_VALIDATION_REPORT_20260818.md) 和 [性能优化报告](docs/performance_optimization_report.md)。
 
 ## 开发工具
 
