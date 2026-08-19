@@ -24,7 +24,11 @@ class TestDebuggerAgent:
     @patch.object(DebuggerAgent, "_extract_json")
     def test_debug_normal_flow(self, mock_extract, mock_llm):
         """正常流程：分类 → 构建 prompt → LLM 调用 → 返回结构化结果。"""
-        mock_llm.return_value = '{"root_cause": "除零错误", "fix_strategy": "添加边界检查", "patch": "def foo(x): return 1 if x != 0 else 0"}'
+        mock_llm.return_value = (
+            '{"root_cause": "除零错误", '
+            '"fix_strategy": "添加边界检查", '
+            '"patch": "def foo(x): return 1 if x != 0 else 0"}'
+        )
         mock_extract.return_value = {
             "root_cause": "除零错误",
             "fix_strategy": "添加边界检查",

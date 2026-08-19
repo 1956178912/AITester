@@ -111,7 +111,9 @@ class TestPatchApplier:
     def test_apply_full_file_patch(self):
         """完整文件补丁：补丁包含所有原函数，应替换整个文件"""
         original = "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n"
-        patch_code = 'def add(a, b):\n    """加法"""\n    return a + b\n\ndef subtract(a, b):\n    """减法"""\n    return a - b\n'
+        patch_add = 'def add(a, b):\n    """加法"""\n    return a + b\n'
+        patch_subtract = 'def subtract(a, b):\n    """减法"""\n    return a - b\n'
+        patch_code = patch_add + patch_subtract
 
         new_code, applied = apply_patch_to_code(original, patch_code)
 
@@ -690,7 +692,12 @@ class TestDebuggerAgent:
                 "root_cause": "除零错误未处理",
                 "error_category": "runtime",
                 "fix_strategy": "添加除零检查",
-                "patch": "def divide(a, b):\n    if b == 0:\n        raise ValueError('除数不能为零')\n    return a / b",
+                "patch": (
+                    "def divide(a, b):\n"
+                    "    if b == 0:\n"
+                    "        raise ValueError('除数不能为零')\n"
+                    "    return a / b"
+                ),
             }
         )
 
@@ -1002,7 +1009,12 @@ def test_divide():
                 "root_cause": "缺少除零检查",
                 "error_category": "runtime",
                 "fix_strategy": "添加检查",
-                "patch": "def divide(a, b):\n    if b == 0:\n        raise ValueError('除数不能为零')\n    return a / b",
+                "patch": (
+                    "def divide(a, b):\n"
+                    "    if b == 0:\n"
+                    "        raise ValueError('除数不能为零')\n"
+                    "    return a / b"
+                ),
             }
 
             with patch("src.graph.workflow.DebuggerAgent") as MockDbg:
