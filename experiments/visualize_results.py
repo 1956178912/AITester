@@ -309,11 +309,13 @@ def write_summary_md(summary: dict[str, Any], sig_result: dict[str, Any]) -> Non
     lines = [
         "# Benchmark Results Summary",
         "",
-        f"**数据集**: {summary.get('dataset', 'unknown')}  |  **子集**: {summary.get('subset', 'N/A')}  |  **任务数**: {sig_result.get('n_tasks', 'N/A')}",
+        f"**数据集**: {summary.get('dataset', 'unknown')}",
+        f"**子集**: {summary.get('subset', 'N/A')}  |  **任务数**: {sig_result.get('n_tasks', 'N/A')}",
         "",
         "## 各基线汇总统计",
         "",
-        "| Baseline | Tasks | Passed | Success Rate (%) | Avg Coverage (%) | Avg Iterations | Mean Rate (%) | Std (%) |",
+        "| Baseline | Tasks | Passed | Success Rate | Avg Coverage |",
+        "| Avg Iterations | Mean Rate | Std |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for bl, stats in sig_result.get("per_baseline", {}).items():

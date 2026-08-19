@@ -47,8 +47,9 @@ class TestCallZai:
         result = _call_zai("key", "https://open.bigmodel.cn/api", "glm-4.7-flash", "sys", "user")
         assert result == "reasoning text"
 
+    @patch("src.agents.base_agent.time.sleep")
     @patch("zai.ZhipuAiClient")
-    def test_empty_response_raises_runtime_error(self, mock_client_cls):
+    def test_empty_response_raises_runtime_error(self, mock_client_cls, mock_sleep):
         """content 和 reasoning_content 均为空时抛出 RuntimeError。"""
         from src.agents.base_agent import _DEFAULT_LLM_MAX_RETRIES, _call_zai
 
@@ -65,6 +66,8 @@ class TestCallZai:
             )
         # 应尝试 1 + max_retries 次（首次 + 重试）
         assert mock_client_cls.return_value.chat.completions.create.call_count == _DEFAULT_LLM_MAX_RETRIES + 1
+        # 验证 sleep 被调用 max_retries 次
+        assert mock_sleep.call_count == _DEFAULT_LLM_MAX_RETRIES
 
     @patch("src.agents.base_agent.time.sleep")
     @patch("zai.ZhipuAiClient")
@@ -266,16 +269,18 @@ class TestCallLlm:
             ("key1", "https://api.openai.com", "gpt-4"),
             ("key2", "https://api.backup.com", "gpt-3.5"),
         ]
+        mock_is_zai.return_value = False  # 使用 OpenAI 兼容路径
 
         # 第一个 API 抛异常，第二个成功
         mock_llm_instance_fail = MagicMock()
         mock_llm_instance_fail.invoke.side_effect = RuntimeError("api down")
-        mock_llm_cls.side_effect = [mock_llm_instance_fail, MagicMock()]
-
-        mock_llm_instance_ok = mock_llm_cls.return_value
+        mock_llm_instance_ok = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "backup ok"
+        mock_llm_instance_fail.invoke.return_value = mock_response
         mock_llm_instance_ok.invoke.return_value = mock_response
+
+        mock_llm_cls.side_effect = [mock_llm_instance_fail, mock_llm_instance_ok]
 
         agent = BaseAgent(system_prompt="test")
         result = agent._call_llm("hello")
@@ -311,22 +316,27 @@ class TestCallLlm:
             agent._call_llm("hello")
 
     @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_api_id_extracted_from_url(self, mock_get_configs, mock_llm_cls):
+    def test_api_id_extracted_from_url(self, mock_get_configs, mock_is_zai, mock_llm_cls):
         """成功调用时日志中包含 API 主机名。"""
         import logging
 
         from src.agents.base_agent import BaseAgent
 
-        mock_get_configs.return_value = [("key", "https://open.bigmodel.cn/api/v1", "model")]
+        mock_get_configs.return_value = [("key", "https://api.openai.com", "gpt-4")]
+        mock_is_zai.return_value = False  # 使用 OpenAI 兼容路径
+
         mock_instance = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "ok"
         mock_instance.invoke.return_value = mock_response
+        mock_llm_cls.return_value = mock_instance
 
         agent = BaseAgent(system_prompt="test")
         with patch.object(logging.getLogger("src.agents.base_agent"), "info") as mock_info:
-            agent._call_llm("hello")
+            result = agent._call_llm("hello")
+            assert result == "ok"
             # 成功日志应包含主机名
             called_args = [call[0][1] for call in mock_info.call_args_list]
-            assert any("open.bigmodel.cn" in str(a) for a in called_args)
+            assert any("api.openai.com" in str(a) for a in called_args)
