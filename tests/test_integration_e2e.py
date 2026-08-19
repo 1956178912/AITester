@@ -655,7 +655,9 @@ def test_divide_by_zero():
 
             assert exec_result["test_passed"] is False
             # 应检测到 ZeroDivisionError
-            assert "ZeroDivisionError" in exec_result.get("test_output", "") or len(exec_result.get("failed_cases", [])) > 0
+            test_output = exec_result.get("test_output", "")
+            failed_cases = exec_result.get("failed_cases", [])
+            assert "ZeroDivisionError" in test_output or len(failed_cases) > 0
 
     def test_assertion_error_fix(self):
         """测试断言错误的修复流程。"""

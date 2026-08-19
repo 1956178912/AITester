@@ -61,7 +61,12 @@ class TestPlannerAgent:
     @patch.object(PlannerAgent, "_extract_json")
     def test_plan_normal_json(self, mock_extract, mock_llm):
         """正常 JSON 响应时 plan() 返回完整计划字典。"""
-        mock_llm.return_value = '{"function_name": "foo", "logic_analysis": {"input_domain": "int", "output_domain": "bool", "preconditions": [], "postconditions": [], "edge_cases": []}, "test_cases": [{"name": "test_foo"}]}'
+        mock_llm.return_value = (
+            '{"function_name": "foo", '
+            '"logic_analysis": {"input_domain": "int", "output_domain": "bool", '
+            '"preconditions": [], "postconditions": [], "edge_cases": []}, '
+            '"test_cases": [{"name": "test_foo"}]}'
+        )
         mock_extract.return_value = json.loads(mock_llm.return_value)
         agent = self._make_agent()
         result = agent.plan("def foo(x): return x > 0", "foo")
