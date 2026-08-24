@@ -17,10 +17,9 @@ AITester 核心模块测试套件（v4 - 最终版）
 
 import pytest
 
-from src.dataset_loader import BenchmarkTask, InMemoryDataset, load_dataset
-from src.agents.planner import PlannerAgent
 from src.agents.executor import ExecutorAgent
-
+from src.agents.planner import PlannerAgent
+from src.dataset_loader import BenchmarkTask, InMemoryDataset, load_dataset
 
 # ============================================================================
 # BenchmarkTask 测试

@@ -43,9 +43,10 @@ GENERATOR_SYSTEM_PROMPT = """\
 
 【测试设计】
 7. 函数名以 test_ 开头，语义清晰
-8. 异常用例用 pytest.raises
-9. 禁止访问不存在属性（如 expected.expect）
-10. 若被测函数对边界情况返回特定值（如 -1、None），必须用 assert 断言：`assert binary_search([], 1) == -1`
+8. **必须包含目标函数名**：每个测试函数名必须包含被测函数名，如 `test_{function_name}_xxx`（例如 `test_divide_by_zero`、`test_binary_search_not_found`）
+9. 异常用例用 pytest.raises
+10. 禁止访问不存在属性（如 expected.expect）
+11. 若被测函数对边界情况返回特定值（如 -1、None），必须用 assert 断言：`assert binary_search([], 1) == -1`
 
 【输出】
 - 完整 Python 文件，包含所有 import

@@ -70,13 +70,12 @@ def merge_sorted_lists(list1: list, list2: list) -> list:
 
 def find_majority_element(nums: list) -> int:
     """
-    找出数组中出现次数超过 n/2 的多数元素（保证存在）。
+    找出数组中出现次数超过 n/2 的多数元素。
 
     使用 Boyer-Moore 投票算法，时间复杂度 O(n)，空间复杂度 O(1)。
-    核心思想：不同元素互相抵消，最终剩下的即为多数元素。
 
     Args:
-        nums: 输入整数列表。
+        nums: 非空整数列表。
 
     Returns:
         出现次数超过 n/2 的多数元素。
