@@ -168,7 +168,7 @@ def load_and_analyze(result_file: str) -> dict[str, Any]:
     Returns:
         分析结果字典。
     """
-    with open(result_file, "r", encoding="utf-8") as f:
+    with open(result_file, encoding="utf-8") as f:
         data = json.load(f)
 
     return analyze_experiment_results(data)

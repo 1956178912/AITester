@@ -12,6 +12,8 @@
     - multiply:  两数乘法
     - divide:    两数除法（含除零保护）
     - factorial: 阶乘（递归实现，含负数保护）
+    - binary_search: 二分查找（补充缺失函数）
+    - count_vowels: 统计字符串中元音字母数量
 """
 
 
@@ -95,3 +97,38 @@ def multiply(a: float, b: float) -> float:
         a * b 的计算结果。
     """
     return float(a * b)
+
+
+def binary_search(arr: list, target) -> int:
+    """在有序列表 arr 中二分查找 target，返回其索引；若不存在则返回 -1。
+
+    Args:
+        arr: 已按升序排列的列表。
+        target: 要查找的目标值。
+
+    Returns:
+        target 在 arr 中的索引，不存在时返回 -1。
+    """
+    left, right = 0, len(arr) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1
+
+
+def count_vowels(text: str) -> int:
+    """统计字符串中元音字母（a, e, i, o, u，不区分大小写）的数量。
+
+    Args:
+        text: 待统计的字符串。
+
+    Returns:
+        元音字母的个数。
+    """
+    vowels = set("aeiouAEIOU")
+    return sum(1 for char in text if char in vowels)
