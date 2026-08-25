@@ -16,8 +16,8 @@ AITester 完整对比实验脚本（v2）
 import os
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # 实验配置
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -110,7 +110,7 @@ def run_experiment(exp_config: dict) -> dict:
         "--seed", str(exp_config["seed"]),
     ]
 
-    print(f"\n📊 执行命令:")
+    print("\n📊 执行命令:")
     print(f"   {' '.join(cmd)}\n")
 
     # 执行实验
@@ -127,12 +127,12 @@ def run_experiment(exp_config: dict) -> dict:
         # 记录输出
         log_file = output_dir / f"{exp_config['name']}.log"
         with open(log_file, "w", encoding="utf-8") as f:
-            f.write(f"=== 实验配置 ===\n")
+            f.write("=== 实验配置 ===\n")
             for k, v in exp_config["env_vars"].items():
                 f.write(f"{k}={v}\n")
-            f.write(f"\n=== 标准输出 ===\n")
+            f.write("\n=== 标准输出 ===\n")
             f.write(result.stdout)
-            f.write(f"\n=== 标准错误 ===\n")
+            f.write("\n=== 标准错误 ===\n")
             f.write(result.stderr)
 
         print(f"✅ 实验完成: {exp_config['name']}")

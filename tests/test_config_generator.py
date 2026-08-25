@@ -121,7 +121,7 @@ class TestGenerateConfigJson:
 
     def test_generate_json_writes_to_file(self, tmp_path):
         output = str(tmp_path / "configs.json")
-        result = generate_config_json(output)
+        generate_config_json(output)
         assert os.path.exists(output)
         with open(output, encoding="utf-8") as f:
             data = json.load(f)
