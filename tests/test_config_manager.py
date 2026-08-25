@@ -84,7 +84,6 @@ class TestAddLLMConfig:
     """测试 add_llm_config（使用 mock 文件系统）"""
 
     def test_add_valid_config(self, tmp_path):
-        env_file = str(tmp_path / ".env.local")
         with patch("src.config_manager.os.path.exists", return_value=False):
             with patch("src.config_manager.open", mock_open()):
                 with patch("src.config_manager.load_dotenv"):
@@ -110,7 +109,6 @@ class TestAddLLMConfig:
         assert result is False
 
     def test_add_config_auto_index(self, tmp_path):
-        env_file = str(tmp_path / ".env.local")
         with patch("src.config_manager.os.path.exists", return_value=False):
             with patch("src.config_manager.open", mock_open()):
                 with patch("src.config_manager.load_dotenv"):
