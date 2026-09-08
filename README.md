@@ -605,6 +605,26 @@ python main.py list-examples
 
 **汇总**：成功率 **100%**，平均覆盖率 **91.7%**，平均耗时 **30.1s/任务**。
 
+### 合成数据集实验（50个任务，3种基线对比）
+
+| 基线方法 | 成功率 (%) | 平均覆盖率 (%) | 平均迭代次数 | 平均耗时 (s) |
+|---------|-----------|---------------|-------------|-------------|
+| **AITester** | **68.0** | **98.0** | 1.26 | 47.2 |
+| Plain LLM | 68.0 | 95.2 | 1.10 | 348.3 |
+| Single Agent | 22.0 | 71.1 | 0.62 | 17.3 |
+
+**关键发现**：
+- AITester 与 Plain LLM 成功率相当，但覆盖率更高（98.0% vs 95.2%）
+- AITester 执行速度提升 **7.4倍**（47.2s vs 348.3s），体现多智能体协作效率
+- Single Agent 基线表现显著较差（22.0%），验证多智能体架构的必要性
+- 统计检验显示 AITester vs Single Agent 差异显著（p < 0.001, Cohen's d = 0.848）
+
+详细结果参见 [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/)
+
+### SWE-bench Lite 实验（20个任务）
+
+当前处于实验阶段，受API限流影响，已完成7个任务。详细结果将在API配额恢复后补充。
+
 ### 关键修复记录
 
 - `_validate_parametrize` 由 regex 改为 ast 解析，解决嵌套列表导致参数误判问题
@@ -636,6 +656,24 @@ python main.py list-examples
 1. 增加 `MAX_ITERATIONS`（默认 3，可调至 5）
 2. 启用 RAG 增强：`ENABLE_RAG=true`
 3. 使用更强大的模型（如 `gpt-4o` 替代 `gpt-4o-mini`）
+
+---
+
+## 论文与文档
+
+### 学术论文
+
+完整论文草稿：[paper.md](paper.md)
+
+**摘要**：
+> AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。核心创新包括逻辑驱动思维链（Logic-driven CoT）和分层错误修复协议（Hierarchical Repair）。在合成数据集（50任务）上的实验表明，AITester 达到 68% 成功率，98% 平均覆盖率，相比单智能体基线（22%）具有统计显著性优势（p < 0.001）。
+
+### 技术文档
+
+- [算法设计文档](docs/algorithm_design.md)：核心算法形式化描述
+- [失败案例分析](docs/failure_analysis.md)：32% 失败率的根因分析与改进路线图
+- [性能调优指南](docs/performance_guide.md)：并发执行、RAG单例化、超时配置
+- [API参考文档](docs/api_reference.md)：模块接口说明
 
 ---
 
