@@ -353,6 +353,75 @@ class Defects4JPYDataset(BaseDatasetLoader):
         "scikit-learn",
     ]
 
+    def _load_project_version(
+        self, version_path: str, project_name: str, version_dir: str
+    ) -> BenchmarkTask | None:
+        """
+        加载单个项目版本的缺陷数据。
+
+        Args:
+            version_path: 版本目录路径
+            project_name: 项目名称
+            version_dir: 版本目录名
+        Returns:
+            BenchmarkTask 对象，失败时返回 None
+        """
+        info_path = os.path.join(version_path, "info.json")
+        if not os.path.exists(info_path):
+            return None
+
+        try:
+            with open(info_path, encoding="utf-8") as f:
+                info = json.load(f)
+        except json.JSONDecodeError:
+            return None
+
+        # 加载有缺陷的代码
+        buggy_code = ""
+        buggy_dir = os.path.join(version_path, "buggy")
+        if os.path.isdir(buggy_dir):
+            for fname in os.listdir(buggy_dir):
+                if fname.endswith(".py"):
+                    with open(
+                        os.path.join(buggy_dir, fname), encoding="utf-8"
+                    ) as ff:
+                        buggy_code += ff.read() + "\n"
+
+        # 加载测试代码
+        test_code = ""
+        tests_dir = os.path.join(version_path, "tests")
+        if os.path.isdir(tests_dir):
+            for fname in sorted(os.listdir(tests_dir)):
+                if fname.startswith("test_") and fname.endswith(".py"):
+                    with open(
+                        os.path.join(tests_dir, fname), encoding="utf-8"
+                    ) as ff:
+                        test_code += ff.read() + "\n"
+
+        # 统计测试函数
+        test_funcs = re.findall(r"def test_\w+", test_code)
+        total_tests = len(test_funcs)
+        expected_pass = info.get("expected_pass", total_tests)
+
+        task_id = f"{project_name}__{version_dir}"
+        return BenchmarkTask(
+            task_id=task_id,
+            repo_name=project_name,
+            problem_statement=info.get(
+                "description", f"Bug in {project_name}"
+            ),
+            instance_code=buggy_code,
+            test_code=test_code,
+            expected_pass_count=expected_pass,
+            total_test_count=total_tests,
+            metadata={
+                "project": project_name,
+                "version": version_dir,
+                "bug_type": info.get("bug_type", "unknown"),
+                "source": "defects4j_python",
+            },
+        )
+
     def _load_raw_data(self) -> None:
         """
         从本地目录加载 Defects4J-Python 数据。
@@ -383,53 +452,12 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 continue
             for version_dir in os.listdir(project_dir):
                 version_path = os.path.join(project_dir, version_dir)
-                info_path = os.path.join(version_path, "info.json")
-                if not os.path.exists(info_path):
-                    continue
-                try:
-                    with open(info_path, encoding="utf-8") as f:
-                        info = json.load(f)
-                except json.JSONDecodeError:
-                    continue
-
-                buggy_code = ""
-                buggy_dir = os.path.join(version_path, "buggy")
-                if os.path.isdir(buggy_dir):
-                    for fname in os.listdir(buggy_dir):
-                        if fname.endswith(".py"):
-                            with open(os.path.join(buggy_dir, fname), encoding="utf-8") as ff:
-                                buggy_code += ff.read() + "\n"
-
-                test_code = ""
-                tests_dir = os.path.join(version_path, "tests")
-                if os.path.isdir(tests_dir):
-                    for fname in sorted(os.listdir(tests_dir)):
-                        if fname.startswith("test_") and fname.endswith(".py"):
-                            with open(os.path.join(tests_dir, fname), encoding="utf-8") as ff:
-                                test_code += ff.read() + "\n"
-
-                task_id = f"{project_name}__{version_dir}"
-                test_funcs = re.findall(r"def test_\w+", test_code)
-                total_tests = len(test_funcs)
-                expected_pass = info.get("expected_pass", total_tests)
-
-                task = BenchmarkTask(
-                    task_id=task_id,
-                    repo_name=project_name,
-                    problem_statement=info.get("description", f"Bug in {project_name}"),
-                    instance_code=buggy_code,
-                    test_code=test_code,
-                    expected_pass_count=expected_pass,
-                    total_test_count=total_tests,
-                    metadata={
-                        "project": project_name,
-                        "version": version_dir,
-                        "bug_type": info.get("bug_type", "unknown"),
-                        "source": "defects4j_python",
-                    },
+                task = self._load_project_version(
+                    version_path, project_name, version_dir
                 )
-                self._tasks.append(task)
-                loaded += 1
+                if task is not None:
+                    self._tasks.append(task)
+                    loaded += 1
 
         logger.info("Defects4J-Python 加载完成：%d 个任务", loaded)
 

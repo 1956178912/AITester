@@ -104,6 +104,79 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         return False
 
 
+def _is_model_config_line(line: str, model_name: str) -> bool:
+    """
+    检查行是否属于指定模型的配置。
+
+    Args:
+        line: 要检查的行
+        model_name: 模型名称
+    Returns:
+        如果是目标模型的配置行返回 True
+    """
+    return f"LLM_{model_name}" in line or (
+        "MODEL_NAME=" in line and model_name in line
+    )
+
+
+def _is_model_comment(line: str) -> bool:
+    """
+    检查行是否是模型注释。
+
+    Args:
+        line: 要检查的行
+    Returns:
+        如果是模型注释返回 True
+    """
+    return line.startswith("#") and "模型" in line
+
+
+def _find_and_remove_model_block(
+    lines: list[str], model_name: str
+) -> tuple[list[str], bool]:
+    """
+    从行列表中查找并移除指定模型的配置块。
+
+    Args:
+        lines: 配置文件行列表
+        model_name: 要移除的模型名称
+    Returns:
+        (新行列表，是否成功移除)
+    """
+    new_lines = []
+    removed = False
+    skip_mode = False
+
+    for line in lines:
+        # 检查是否是目标模型的配置行
+        if _is_model_config_line(line, model_name):
+            skip_mode = True
+            removed = True
+            continue
+
+        # 处理跳过模式
+        if skip_mode:
+            # 继续跳过同一模型的配置行
+            if line.startswith("LLM_") and "_MODEL_NAME=" not in line:
+                continue
+            # 跳过模型注释
+            if _is_model_comment(line):
+                continue
+            # 遇到空行，结束跳过
+            if line.strip() == "":
+                skip_mode = False
+                if not removed:
+                    new_lines.append(line)
+                continue
+            # 遇到其他内容，结束跳过
+            skip_mode = False
+            new_lines.append(line)
+        else:
+            new_lines.append(line)
+
+    return new_lines, removed
+
+
 def remove_llm_config(model_name: str) -> bool:
     """
     从配置中移除指定模型
@@ -117,42 +190,22 @@ def remove_llm_config(model_name: str) -> bool:
         if not os.path.exists(env_file):
             logger.warning("配置文件不存在: %s", env_file)
             return False
+
         # 读取现有内容
         with open(env_file, encoding="utf-8") as f:
             lines = f.readlines()
+
         # 找到并移除该模型的配置块
-        new_lines = []
-        skip_until_next_model = False
-        removed = False
-        for line in lines:
-            # 检查是否是目标模型的配置
-            if f"LLM_{model_name}" in line or (not removed and "MODEL_NAME=" in line and model_name in line):
-                skip_until_next_model = True
-                removed = True
-                continue
-            # 跳过属于该模型的其他配置行
-            if skip_until_next_model:
-                if line.startswith("LLM_") and "_MODEL_NAME=" not in line:
-                    continue
-                elif line.startswith("#") and "模型" in line:
-                    continue
-                elif line.strip() == "":
-                    # 遇到空行，结束跳过
-                    skip_until_next_model = False
-                    if not removed:
-                        new_lines.append(line)
-                    continue
-                else:
-                    skip_until_next_model = False
-                    new_lines.append(line)
-            else:
-                new_lines.append(line)
+        new_lines, removed = _find_and_remove_model_block(lines, model_name)
+
         if not removed:
             logger.warning("未找到模型: %s", model_name)
             return False
+
         # 写回文件
         with open(env_file, "w", encoding="utf-8") as f:
             f.writelines(new_lines)
+
         # 重新加载配置
         load_dotenv(env_file, override=True)
         logger.info("成功移除模型配置: %s", model_name)

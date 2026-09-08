@@ -7,14 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 593 collected |
-| **单元测试** | ✅ 593 passed (100%) |
-| **代码覆盖率** | 53% → **92%** (+39%) |
-| **已知失败** | ✅ 0 (全部修复) |
+| **总测试数** | ✅ 686 collected |
+| **单元测试** | ✅ 551 passed (核心), 6 skipped |
+| **代码覆盖率** | 70% (核心模块 85%+) |
+| **已知失败** | ⚠️ 5 (网络超时，数据集下载测试) |
 | **安全审查** | ✅ 无硬编码密钥 |
-| **最新优化** | ✅ v2.0 测试覆盖率优化：6 个新测试模块，覆盖率从 53% 提升至 92% |
-| **核心模块覆盖** | ✅ debugger.py (100%), retriever.py (93%), workflow.py (85%), api_manager.py (82%), base_agent.py (83%) |
-| **新测试文件** | ✅ test_debugger.py, test_rag_retriever.py, test_workflow_extended.py, test_api_manager_extended.py, test_base_agent_extended.py, test_dataset_loader_extended.py |
+| **最新优化** | ✅ v3.0 代码质量优化：修复代码规范问题，降低函数复杂度 |
+| **核心模块覆盖** | ✅ debugger.py (100%), api_manager.py (97%), retriever.py (93%), generator.py (93%), patch_applier.py (92%) |
+| **代码规范** | ✅ Ruff 检查全部通过 (E501, C901) |
+| **最近改动** | ✅ 重构 config_manager.py 和 dataset_loader.py，降低代码复杂度 |
 
 更多详情参见 [COMPLETION_REPORT_20260825.md](COMPLETION_REPORT_20260825.md)、[TESTING_REPORT.md](TESTING_REPORT.md)、[OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)。
 
