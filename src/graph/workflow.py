@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 from typing import Any
 
@@ -518,10 +519,6 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         elif not any(line.strip().startswith("def ") for line in new_code.splitlines()):
             logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
         else:
-            # 安全检查：验证目标文件路径合法性，防止路径穿越攻击
-            import os
-            import tempfile
-
             target_file_path = os.path.abspath(state["target_file"])
             project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             temp_dir = os.path.abspath(tempfile.gettempdir())

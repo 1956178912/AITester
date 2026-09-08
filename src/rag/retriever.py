@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -125,8 +127,6 @@ class TestCaseRetriever:
         Returns:
             添加了时间戳信息的元数据字典。
         """
-        import time
-
         metadata = metadata.copy()
         metadata["_added_at"] = time.time()
         return metadata
@@ -139,8 +139,6 @@ class TestCaseRetriever:
         1. 清理 TTL 过期的条目（当前时间 - 添加时间 > ttl_seconds）
         2. 如果条目数仍超过 max_cases，清理最旧的条目
         """
-        import time
-
         current_time = time.time()
 
         # 步骤 1：获取所有条目，筛选出未过期的
@@ -209,7 +207,6 @@ class TestCaseRetriever:
             return
 
         # 生成唯一 ID：使用代码 hash 避免重复入库
-        import hashlib
 
         doc_id = hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16]
 
@@ -257,7 +254,6 @@ class TestCaseRetriever:
             return
 
         # 生成唯一 ID：使用代码 hash 避免重复入库
-        import hashlib
 
         doc_id = hashlib.md5(f"{original_code}|{patch}".encode()).hexdigest()[:16]
 
@@ -334,9 +330,6 @@ class TestCaseRetriever:
         if self.collection.count() == 0:
             return []
 
-        # 构造查询文本，同时匹配错误类型和代码内容
-        query_text = f"error_category: {error_category}\n{target_code}"
-
         # 构建检索查询文本：包含错误类型和代码上下文
         query_text = f"error_category: {error_category}\ntarget_code:\n{target_code}"
         results = self.collection.query(
@@ -365,8 +358,6 @@ class TestCaseRetriever:
         Returns:
             清理的过期条目数量。
         """
-        import time
-
         current_time = time.time()
 
         all_results = self.collection.get(include=["metadatas"])

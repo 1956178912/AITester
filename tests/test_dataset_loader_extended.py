@@ -15,8 +15,6 @@
 
 import json
 import logging
-import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,7 +28,6 @@ from src.dataset_loader import (
     get_available_datasets,
     load_dataset,
 )
-
 
 # =============================================================================
 # 辅助类：使用子类隔离 _loaded 状态
@@ -254,12 +251,12 @@ class TestSWEBenchDownload:
         ])
 
         with patch("src.dataset_loader.load_dataset", return_value=mock_ds):
-            output = SWEBenchDataset.download_from_huggingface(
+            SWEBenchDataset.download_from_huggingface(
                 cache_dir=str(tmp_path), subset="full"
             )
 
         content = (tmp_path / "swe_bench_instances.jsonl").read_text()
-        lines = [l for l in content.strip().split("\n") if l]
+        lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 2
         for line in lines:
             data = json.loads(line)
@@ -605,7 +602,6 @@ class TestLoadDatasetExtended:
 
     def test_synthetic_import_without_error(self):
         """synthetic 名称触发导入但不立即加载"""
-        from src.synthetic_dataset import SyntheticDataset
 
         # 验证 SyntheticDataset 可导入
         # load_dataset 会传递 subset 参数，但 SyntheticDataset 不接受

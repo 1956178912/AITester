@@ -7,8 +7,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -252,8 +254,6 @@ class BaseAgent:
         # 生成缓存键（基于完整 prompt 和 system_prompt）
         # 使用 hashlib.md5 替代 hash()，确保跨会话缓存命中（hash() 在 Python 3.3+ 默认随机化）
         cache_key = f"{user_message}:{self.system_prompt}"
-        import hashlib
-        import os
 
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
         cache_file = os.path.join(os.path.dirname(__file__), "..", "cache", f"{cache_hash}.json")
@@ -261,8 +261,6 @@ class BaseAgent:
 
         try:
             if os.path.exists(cache_file):
-                import json
-
                 with open(cache_file, encoding="utf-8") as f:
                     cached_data = json.load(f)
                     if cached_data.get("prompt") == user_message and cached_data.get("system") == self.system_prompt:
@@ -277,8 +275,6 @@ class BaseAgent:
         # 写入缓存
         try:
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            import json
-
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(
                     {

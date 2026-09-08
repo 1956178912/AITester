@@ -15,7 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.dirname(__import__('os').path.abspath(__file__))))
 
 from src.agents.debugger import DebuggerAgent
-from src.agents.error_classifier import ErrorClassifier, ErrorCategory
+from src.agents.error_classifier import ErrorClassifier
 
 
 class TestDebuggerAgentInit:
@@ -159,7 +159,7 @@ class TestDebuggerDebug:
             }
         ]
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def add(a, b): return a - b",
                 test_output="AssertionError: expected 5, got -1",
                 failed_cases=[{"name": "test_add", "error": "expected 5, got -1"}],
@@ -180,7 +180,7 @@ class TestDebuggerDebug:
             "patch": "```python\ndef add(a, b): return a + b\n```"
         })
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def add(a, b): return a - b",
                 test_output="AssertionError: expected 5",
                 failed_cases=[{"name": "test_add", "error": "expected 5"}],
@@ -200,7 +200,7 @@ class TestDebuggerDebug:
             "patch": "```python\ndef add(a, b): return a + b\n```"
         })
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def add(a, b): return a - b",
                 test_output="AssertionError: expected 5",
                 failed_cases=[{"name": "test_add", "error": "expected 5"}],
@@ -221,7 +221,7 @@ class TestDebuggerDebug:
         })
         long_code = "x = 1\n" * 2000  # 生成超长代码
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code=long_code,
                 test_output="AssertionError",
                 failed_cases=[{"name": "test", "error": "failed"}]
@@ -241,7 +241,7 @@ class TestDebuggerDebug:
         })
         long_output = "Error: " * 1000  # 生成超长输出
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def f(): pass",
                 test_output=long_output,
                 failed_cases=[{"name": "test", "error": "failed"}]
@@ -262,7 +262,7 @@ class TestDebuggerDebug:
         # 创建超过最大数量的失败用例
         failed_cases = [{"name": f"test_{i}", "error": f"error_{i}"} for i in range(10)]
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def f(): pass",
                 test_output="AssertionError",
                 failed_cases=failed_cases
@@ -284,15 +284,14 @@ class TestDebuggerDebug:
         })
         long_error = "x" * 500  # 超长错误信息
         failed_cases = [{"name": "test_long", "error": long_error}]
-        with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+        with patch.object(self.agent, '_call_llm', return_value=mock_response):
+            self.agent.debug(
                 target_code="def f(): pass",
                 test_output="AssertionError",
                 failed_cases=failed_cases
             )
 
         # 验证错误信息被截断
-        call_args = mock_call.call_args[0][0]
         # 单条错误信息不应超过截断长度
         assert len(long_error) > 200
 
@@ -310,7 +309,7 @@ class TestDebuggerDebug:
             for i in range(5)
         ]
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def f(): pass",
                 test_output="AssertionError",
                 failed_cases=[],
@@ -334,15 +333,14 @@ class TestDebuggerDebug:
         })
         long_code = "x" * 1000
         rag_refs = [{"original_code": long_code, "patch": "patch"}]
-        with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+        with patch.object(self.agent, '_call_llm', return_value=mock_response):
+            self.agent.debug(
                 target_code="def f(): pass",
                 test_output="AssertionError",
                 failed_cases=[],
                 rag_references=rag_refs
             )
 
-        call_args = mock_call.call_args[0][0]
         # original_code 应被截断
         assert len(long_code) > 500
 
@@ -399,7 +397,7 @@ class TestDebuggerDebug:
             {"name": "test_3", "error": "expected 5, got 6"},
         ]
         with patch.object(self.agent, '_call_llm', return_value=mock_response) as mock_call:
-            result = self.agent.debug(
+            self.agent.debug(
                 target_code="def f(x): return x + 1",
                 test_output="AssertionError",
                 failed_cases=failed_cases
@@ -561,7 +559,7 @@ class TestDebuggerEdgeCases:
                     test_output="Error",
                     failed_cases=[]
                 )
-                assert False, "应该抛出异常"
+                raise AssertionError("应该抛出异常")
             except json.JSONDecodeError:
                 pass  # 期望抛出 JSONDecodeError
 

@@ -74,12 +74,14 @@ class APIHealth:
         """标记成功调用"""
         self.is_healthy = True
         self.consecutive_failures = 0
+        self.total_requests += 1
         self.success_count += 1
         self._response_times.append(response_time_ms)
         self.rate_limit_remaining = max(0, self.rate_limit_remaining - 1)
 
     def mark_failure(self, error_type: str = "unknown") -> None:
         """标记失败调用"""
+        self.total_requests += 1
         self.error_count += 1
         self.consecutive_failures += 1
         # 连续失败3次标记为不健康
@@ -264,7 +266,8 @@ class APIManger:
             logger.warning("API 限流: %s", node.config.model_name)
             return False
         except openai.APIError as e:
-            node.mark_failure(f"api_error:{e.status_code}")
+            status = getattr(e, 'status_code', 'unknown')
+            node.mark_failure(f"api_error:{status}")
             logger.warning("API 错误: %s - %s", node.config.model_name, e)
             return False
         except Exception as e:
@@ -330,7 +333,6 @@ class APIManger:
         )
         elapsed_ms = (time.time() - start) * 1000
         node.mark_success(elapsed_ms)
-        node.total_requests += 1
         if attempt > 0:
             logger.info("故障转移成功: %s -> %s", node.config.model_name, node.config.model_name)
         return response
@@ -338,7 +340,6 @@ class APIManger:
     def _handle_rate_limit(self, node, attempt: int, primary_count: int) -> None:
         """处理限流错误，根据配置决定是否等待重试。"""
         node.mark_failure("rate_limit")
-        node.total_requests += 1
         logger.warning("限流: %s (attempt %d)", node.config.model_name, attempt + 1)
         if self.config.fallback_on_failure and attempt < primary_count - 1:
             time.sleep(2)
@@ -347,16 +348,15 @@ class APIManger:
 
     def _handle_api_error(self, e, node) -> None:
         """处理API错误，根据配置决定是否抛出。"""
-        node.mark_failure(f"api_error:{e.status_code}")
-        node.total_requests += 1
+        node.mark_failure(f"api_error:{getattr(e, 'status_code', 'unknown')}")
         logger.warning("API 错误: %s - %s", node.config.model_name, e)
         if not self.config.fallback_on_failure:
+            # fallback 禁用时，记录错误后直接抛出原始异常
             raise
 
     def _handle_generic_error(self, e, node) -> None:
         """处理通用异常，根据配置决定是否抛出。"""
         node.mark_failure(f"error:{type(e).__name__}")
-        node.total_requests += 1
         logger.error("调用失败: %s - %s", node.config.model_name, e)
         if not self.config.fallback_on_failure:
             raise

@@ -13,12 +13,11 @@ TestCaseRetriever 单元测试套件
 """
 
 import time
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.rag.retriever import TestCaseRetriever
-
 
 # ============================================================================
 #  fixtures

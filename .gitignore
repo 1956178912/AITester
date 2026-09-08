@@ -45,16 +45,21 @@ htmlcov/
 # Local private config
 .local/
 
+# Private isolation directory (paper, experiments, test reports - never commit)
+.private/
+
 # Academic files (local use only, not for GitHub)
 algorithm_paper.md
 research_motivation.md
 PAPER_GUIDE.md
-docs/paper/
 *.tex
 *.bib
 
 # Experimental results
 experiments/results/
+experiments/*.md
+experiments/statistical_report.md
 
-# Model cache (can be large)
-~/.cache/aitester/
+# Report generation artifacts
+test_report/
+docs/report_generator_guide.md
