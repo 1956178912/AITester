@@ -1,8 +1,6 @@
 """测试 Dataset Loader 核心功能"""
 import json
 import os
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,7 +14,6 @@ from src.dataset_loader import (
     get_available_datasets,
     load_dataset,
 )
-
 
 # =============================================================================
 # BenchmarkTask
@@ -307,7 +304,6 @@ class TestSWEBenchDataset:
 
     def test_load_raw_data_file_not_found(self, caplog):
         """JSONL 文件不存在时记录 warning 并返回空列表"""
-        import logging
         ds = SWEBenchDataset()
         with patch.object(ds, "data_dir", "/nonexistent/path"):
             ds._load_raw_data()
@@ -417,12 +413,11 @@ class TestSWEBenchDataset:
 
         assert output == str(tmp_path / "swe_bench_instances.jsonl")
         content = (tmp_path / "swe_bench_instances.jsonl").read_text()
-        lines = [l for l in content.strip().split("\n") if l]
+        lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 2
 
     def test_download_from_huggingface_runtime_error(self):
         """下载失败时抛 RuntimeError"""
-        from datasets import load_dataset as _ld
 
         with patch("src.dataset_loader.load_dataset", side_effect=Exception("network error")):
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
@@ -467,7 +462,6 @@ class TestDefects4JPYDataset:
 
     def test_load_raw_data_dir_not_found(self, caplog):
         """projects 目录不存在时返回空列表"""
-        import logging
         ds = Defects4JPYDataset()
         with patch.object(ds, "data_dir", "/nonexistent"):
             ds._load_raw_data()
@@ -738,7 +732,7 @@ class TestLoadDataset:
         """名称大小写不敏感"""
         ds1 = load_dataset("SWE_BENCH")
         ds2 = load_dataset("swe_bench")
-        assert type(ds1) == type(ds2)
+        assert type(ds1) is type(ds2)
 
     def test_hyphen_and_space_normalized(self):
         """连字符和空格被规范化为下划线"""

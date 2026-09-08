@@ -16,28 +16,24 @@ API Manager 扩展测试套件
 """
 
 import sys
-import time
 import threading
-
-import openai
+import time
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
 
 sys.path.insert(0, ".")
 
+from config import LLMConfig
 from src.api_manager import (
     APIHealth,
-    APIManagerConfig,
     APIManger,
     HealthCheckerThread,
     RotationStrategy,
-    get_manager,
     print_status_table,
     reset_manager,
 )
-from config import LLMConfig
-
 
 # ════════════════════════════════════════════════════════════════════════════
 #  辅助工具
@@ -109,13 +105,13 @@ class TestAPIHealthEdgeCases:
         assert self.health.avg_response_time_ms == pytest.approx(250.0)
 
     def test_success_rate_all_failures(self):
-        """全部失败时：mark_failure 不增加 total_requests，故分母为 0，success_rate 返回 1.0（设计行为）"""
+        """全部失败时：total_requests > 0，success_rate 返回 0.0"""
         for _ in range(5):
             self.health.mark_failure("error")
-        # mark_failure 只增加 error_count，不增加 total_requests
-        # success_rate = success_count / total_requests，total_requests=0 时返回 1.0
-        assert self.health.success_rate == pytest.approx(1.0)
+        # mark_failure 同时递增 total_requests 和 error_count
+        assert self.health.success_rate == pytest.approx(0.0)
         assert self.health.error_count == 5
+        assert self.health.total_requests == 5
         assert self.health.is_healthy is False
 
     def test_consecutive_failures_reset_on_success(self):
@@ -171,7 +167,7 @@ class TestTryCallNode:
         result = mgr._try_call_node(node, [{"role": "user", "content": "hi"}], {}, "model1", 0)
         assert result is not None
         assert node.success_count == 1
-        assert node.total_requests == 1
+        assert node.total_requests == 1  # mark_success 内部已递增 total_requests
         assert node.is_healthy is True
         mock_client.chat.completions.create.assert_called_once()
 
@@ -238,12 +234,13 @@ class TestErrorHandlers:
         assert self.node.total_requests == 1
 
     def test_handle_api_error_raises_when_fallback_disabled(self):
-        """fallback 禁用时 _handle_api_error 重新抛出异常"""
+        """fallback 禁用时 _handle_api_error 会触发 bare raise（无 active exception → RuntimeError）"""
         self.mgr.config.fallback_on_failure = False
         mock_error = MagicMock()
         mock_error.status_code = 500
-        # 应抛出原始异常
-        with pytest.raises(Exception):
+        # _handle_api_error 在 fallback_disabled 时执行 bare `raise`，
+        # 但此时没有正在处理的异常，会抛出 RuntimeError: No active exception to reraise
+        with pytest.raises(RuntimeError, match="No active exception"):
             self.mgr._handle_api_error(mock_error, self.node)
 
     def test_handle_api_error_no_raise_when_fallback_enabled(self):
@@ -368,11 +365,8 @@ class TestCallFallbackScenarios:
 
     @patch("src.api_manager.openai.OpenAI")
     def test_call_fallback_disabled_raises_on_first_error(self, mock_openai_class):
-        """禁用 fallback 时首个节点 APIError 触发 _handle_api_error re-raise
-
-        注意：新版 openai SDK (v2.x) 的 APIError 没有 status_code 属性，
-        source 代码 e.status_code 会触发 AttributeError。此测试验证该 bug 行为。
-        """
+        """禁用 fallback 时首个节点 APIError：修复后 _handle_api_error 不再访问 e.status_code，
+        会直接抛出原始异常。"""
         # 新版 openai SDK (v2.x): APIError(message, request, *, body=None)，无 status_code
         mock_req = MagicMock()
         mock_client = _mock_client(
@@ -385,8 +379,9 @@ class TestCallFallbackScenarios:
         mgr._client_cache["model1"] = mock_client
         mgr.config.fallback_on_failure = False
 
-        # source _handle_api_error 中 e.status_code 在新版 SDK 上不存在 → AttributeError
-        with pytest.raises(AttributeError, match="status_code"):
+        # 修复后：_handle_api_error 使用 getattr(e, 'status_code', 'unknown')，不会 AttributeError
+        # fallback 禁用时，直接 re-raise 原始 APIError
+        with pytest.raises(openai.APIError):
             mgr.call(messages=[{"role": "user", "content": "hi"}])
 
     @patch("src.api_manager.openai.OpenAI")
@@ -445,32 +440,36 @@ class TestHealthCheckExceptions:
 
     @patch("src.api_manager.openai.OpenAI")
     def test_check_health_connection_error_marks_unhealthy(self, mock_openai_class):
-        """ConnectionError 时节点被标记为不健康（source 代码对非 APIError 异常有 bug，测试最终状态）"""
+        """ConnectionError 时节点 error_count 递增，但不至于标记为不健康（需连续3次）"""
         mock_client = _mock_client(side_effect=ConnectionError("connection lost"))
         mock_openai_class.return_value = mock_client
-        node = self.mgr.health_nodes["model1"]
-        # source check_health 中 except Exception 分支会执行 mark_failure(f"error:{type(e).__name__}")
-        # 但由于 ConnectionError 被 openai SDK 包装为 APIConnectionError，
-        # APIConnectionError 不是 RateLimitError/APIError 子类，走到 except Exception
-        # 而 source 的 except Exception 分支: node.mark_failure(f"error:{type(e).__name__}") - 这行没问题
-        # 但实际 openai SDK 内部会将 ConnectionError 包装为 APIConnectionError
-        # APIConnectionError 没有 status_code，但 except Exception 分支不会访问 status_code
-        # 验证：节点应该变为不健康（连续失败3次）或 error_count > 0
-        with pytest.raises(AttributeError):
-            self.mgr.check_health(node)
-        # 无论是否 AttributeError，验证 error_count 有变化
-        assert node.error_count >= 0
+
+        reset_manager()
+        test_mgr = APIManger()
+        test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
+        node = test_mgr.health_nodes["model1"]
+        # 修复后：except Exception 分支处理 ConnectionError，不会 raise AttributeError
+        result = test_mgr.check_health(node)
+        assert result is False
+        assert node.error_count >= 1
+        # 连续失败1次不足以标记为不健康
+        assert node.is_healthy is True
 
     @patch("src.api_manager.openai.OpenAI")
     def test_check_health_timeout_error_marks_unhealthy(self, mock_openai_class):
-        """TimeoutError 时节点被标记为不健康（同样受 source 代码 bug 影响）"""
+        """TimeoutError 时节点 error_count 递增，但不至于标记为不健康"""
         mock_client = _mock_client(side_effect=TimeoutError("request timeout"))
         mock_openai_class.return_value = mock_client
-        node = self.mgr.health_nodes["model1"]
-        # TimeoutError 被 openai SDK 包装，同样触发 AttributeError
-        with pytest.raises(AttributeError):
-            self.mgr.check_health(node)
-        assert node.error_count >= 0
+
+        reset_manager()
+        test_mgr = APIManger()
+        test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
+        node = test_mgr.health_nodes["model1"]
+        # 修复后：except Exception 分支处理 TimeoutError，不会 raise AttributeError
+        result = test_mgr.check_health(node)
+        assert result is False
+        assert node.error_count >= 1
+        assert node.is_healthy is True
 
     def test_check_health_none_client_after_removal(self):
         """节点客户端被移除后 check_health 返回 False"""
@@ -658,7 +657,6 @@ class TestHealthCheckerThreadExceptions:
 
     def test_thread_run_logs_exception(self, caplog):
         """健康检查线程异常时被记录到日志"""
-        import logging
         mgr = _empty_mgr()
 
         def always_raise(*args, **kwargs):
@@ -785,9 +783,8 @@ class TestStatusDataIntegrity:
         """成功率和小数值四舍五入精度正确"""
         status = self.mgr.get_status()
         node_info = list(status["nodes"].values())[0]
-        # 2 成功 0 失败（mark_failure 不增加 total_requests），total=0 → success_rate=1.0
-        # 用 3 次成功验证 avg_response_time
-        assert node_info["success_rate"] == pytest.approx(1.0)
+        # 2 成功 1 失败，total_requests=3，success_rate=2/3≈0.667
+        assert node_info["success_rate"] == pytest.approx(2/3, abs=0.01)
         assert node_info["avg_response_time_ms"] == pytest.approx(125.0)
 
     def test_status_healthy_nodes_count_matches_filter(self):
