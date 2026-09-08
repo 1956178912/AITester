@@ -305,6 +305,8 @@ class TestSWEBenchDataset:
     def test_load_raw_data_file_not_found(self, caplog):
         """JSONL 文件不存在时记录 warning 并返回空列表"""
         ds = SWEBenchDataset()
+        # 重置 _loaded 标志，确保 _load_raw_data 会被调用
+        ds._loaded = False
         with patch.object(ds, "data_dir", "/nonexistent/path"):
             ds._load_raw_data()
         assert ds.size == 0

@@ -12,7 +12,8 @@ import json
 import sys
 from unittest.mock import patch
 
-sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.dirname(__import__('os').path.abspath(__file__))))
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.debugger import DebuggerAgent
 from src.agents.error_classifier import ErrorClassifier
@@ -78,7 +79,12 @@ class TestDebuggerDebug:
             "root_cause": "除零错误",
             "error_category": "runtime",
             "fix_strategy": "添加除零检查",
-            "patch": "```python\ndef divide(a, b):\n    if b == 0:\n        raise ValueError('除数不能为零')\n    return a / b\n```"
+            "patch": """```python
+def divide(a, b):
+    if b == 0:
+        raise ValueError('除数不能为零')
+    return a / b
+```"""
         })
         with patch.object(self.agent, '_call_llm', return_value=mock_response):
             result = self.agent.debug(
@@ -114,7 +120,12 @@ class TestDebuggerDebug:
             "root_cause": "无限递归导致超时",
             "error_category": "timeout",
             "fix_strategy": "添加递归终止条件",
-            "patch": "```python\ndef factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n```"
+            "patch": """```python
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+```"""
         })
         with patch.object(self.agent, '_call_llm', return_value=mock_response):
             result = self.agent.debug(
@@ -456,7 +467,12 @@ class TestDebuggerIntegration:
             "root_cause": "除零未处理",
             "error_category": "runtime",
             "fix_strategy": "添加边界检查",
-            "patch": "```python\ndef divide(a, b):\n    if b == 0:\n        raise ValueError('除数不能为零')\n    return a / b\n```"
+            "patch": """```python
+def divide(a, b):
+    if b == 0:
+        raise ValueError('除数不能为零')
+    return a / b
+```"""
         })
         with patch.object(agent, '_call_llm', return_value=mock_response):
             result = agent.debug(

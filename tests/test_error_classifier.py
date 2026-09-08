@@ -11,7 +11,8 @@ ErrorClassifier 单元测试
 
 import sys
 
-sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.dirname(__import__('os').path.abspath(__file__))))
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.error_classifier import (
     ErrorCategory,

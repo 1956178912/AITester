@@ -265,7 +265,10 @@ class TestRetrieveTestCases:
         retriever.collection.query.return_value = {
             "documents": [["doc1_content", "doc2_content"]],
             "metadatas": [
-                [{"test_code": "def test_add(): pass", "distance": 0.95}, {"test_code": "def test_sub(): pass", "distance": 0.87}],
+                [
+                    {"test_code": "def test_add(): pass", "distance": 0.95},
+                    {"test_code": "def test_sub(): pass", "distance": 0.87},
+                ],
             ],
         }
 
