@@ -55,10 +55,6 @@ PAPER_GUIDE.md
 *.tex
 *.bib
 
-# New paper and analysis documents (for publication)
-paper.md
-TASK_SUMMARY.md
-
 # Experimental results
 experiments/results/
 experiments/*.md
