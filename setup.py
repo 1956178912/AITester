@@ -21,7 +21,7 @@ setup(
         "pytest>=8.0.0",
         "pytest-cov>=4.0.0",
         "python-dotenv>=1.0.0",
-        "radon>=6.0.0",
+        # 注：radon 于 2026-09-09 依赖审计中移除（全项目无 import 引用）
         "requests>=2.31.0",
     ],
     extras_require={
