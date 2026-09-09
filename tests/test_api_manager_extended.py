@@ -31,6 +31,7 @@ from src.api.api_manager import (
     APIManger,
     HealthCheckerThread,
     RotationStrategy,
+    get_manager,
     print_status_table,
     reset_manager,
 )
@@ -185,6 +186,20 @@ class TestTryCallNode:
         with caplog.at_level(logging.INFO):
             mgr._try_call_node(node, [], {}, "model1", 2)
         assert "故障转移成功" in caplog.text
+
+    def test_fallback_log_shows_previous_model(self, caplog):
+        """故障转移日志应为 "上一个节点 -> 当前节点"（此前误把当前节点名打印两遍）"""
+        import logging
+
+        mgr = _empty_mgr()
+        mgr.add_node(LLMConfig("key1", "url1", "model_a"))
+        mgr.add_node(LLMConfig("key2", "url2", "model_b"))
+        mgr._client_cache["model_b"] = _mock_client()
+        node_b = mgr.health_nodes["model_b"]
+
+        with caplog.at_level(logging.INFO):
+            mgr._try_call_node(node_b, [], {}, "model_b", 1, prev_model="model_a")
+        assert "model_a -> model_b" in caplog.text
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -831,3 +846,87 @@ class TestPrintStatusTable:
         print_status_table(mgr)
         captured = capsys.readouterr()
         assert "0" in captured.out  # total_nodes=0
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Section 13: 单例线程卫生与故障转移日志（0.9.2 新增）
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class TestSingletonThreadHygiene:
+    """测试 get_manager/reset_manager 的线程卫生与单例语义。
+
+    背景：APIManger 初始化会启动后台健康检查守护线程（每 60s 发起真实
+    LLM 探测请求）。reset_manager 此前只清全局引用，残留线程继续对旧
+    实例发起健康检查（消耗 API 配额）；现 reset 前显式停止并等待线程退出。
+    """
+
+    @patch("src.api.api_manager.LLM_CONFIGS", [])
+    def test_get_manager_returns_same_instance(self):
+        """连续 get_manager 返回同一实例，reset 后换新实例"""
+        reset_manager()
+        m1 = get_manager()
+        m2 = get_manager()
+        assert m1 is m2
+        reset_manager()
+        m3 = get_manager()
+        assert m3 is not m1
+        reset_manager()
+
+    @patch("src.api.api_manager.LLM_CONFIGS", [])
+    def test_reset_manager_stops_health_checker_thread(self):
+        """reset_manager 停止后台健康检查线程（不再残留发起 LLM 探测）"""
+        reset_manager()
+        mgr = get_manager()
+        checker = mgr._health_checker
+        assert checker is not None
+        assert checker.is_alive()
+        reset_manager()
+        # 线程已退出，且管理器引用被清除
+        assert not checker.is_alive()
+        assert mgr._health_checker is None
+
+    @patch("src.api.api_manager.LLM_CONFIGS", [])
+    def test_concurrent_get_manager_creates_single_instance(self):
+        """多线程并发 get_manager 只创建一个实例（双重检查锁）"""
+        reset_manager()
+        threads: list[threading.Thread] = []
+        seen: list[APIManger] = []
+        seen_lock = threading.Lock()
+        barrier = threading.Barrier(8)
+
+        def grab():
+            m = get_manager()
+            barrier.wait()  # 所有线程都拿到实例后再比对
+            with seen_lock:
+                seen.append(m)
+
+        for _ in range(8):
+            t = threading.Thread(target=grab)
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+        assert len({id(m) for m in seen}) == 1
+        reset_manager()
+
+    @patch("src.api.api_manager.openai.OpenAI")
+    def test_call_failover_logs_transition(self, mock_openai_class, caplog):
+        """call() 故障转移成功日志包含 "上一节点 -> 当前节点" 的迁移信息"""
+        import logging
+
+        mock_client_a = _mock_client(side_effect=ConnectionError("connection lost"))
+        mock_client_b = _mock_client()
+        mock_openai_class.side_effect = [mock_client_a, mock_client_b]
+
+        mgr = _empty_mgr()
+        mgr.add_node(LLMConfig("key1", "url1", "model_a"))
+        mgr.add_node(LLMConfig("key2", "url2", "model_b"))
+        mgr._client_cache["model_a"] = mock_client_a
+        mgr._client_cache["model_b"] = mock_client_b
+
+        with caplog.at_level(logging.INFO):
+            result = mgr.call(messages=[{"role": "user", "content": "hi"}], model="model_a")
+        assert result is not None
+        mock_client_b.chat.completions.create.assert_called_once()
+        assert "model_a -> model_b" in caplog.text
