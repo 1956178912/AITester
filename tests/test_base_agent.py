@@ -85,6 +85,24 @@ class TestRetryWithExponentialBackoff:
             )
         assert call_count[0] == 3  # 首次 + 2 次重试
 
+    def test_backoff_wait_progression(self):
+        """等待时间按 base_wait * 2^attempt 指数递增（回归：此前误写为 base_wait**attempt）。
+
+        base_wait=1 时等待序列应为 1s, 2s, 4s；
+        旧公式 1**attempt 会退化为固定 1s，zai 的 base=5 则膨胀为 5,25,125。
+        """
+        waits = []
+
+        def always_fails():
+            raise ValueError("persistent error")
+
+        with patch("time.sleep", side_effect=lambda s: waits.append(s)):
+            with pytest.raises(RuntimeError):
+                _retry_with_exponential_backoff(
+                    always_fails, max_retries=3, base_wait=1, retryable_exceptions=(ValueError,)
+                )
+        assert waits == [1, 2, 4]
+
 
 class TestIsZaiCompatible:
     """测试 zai SDK 兼容性检测。"""
