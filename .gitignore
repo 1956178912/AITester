@@ -52,14 +52,9 @@ htmlcov/
 algorithm_paper.md
 research_motivation.md
 PAPER_GUIDE.md
+paper.md
 *.tex
 *.bib
 
-# Experimental results
-experiments/results/
-experiments/*.md
-experiments/statistical_report.md
-
-# Report generation artifacts
-test_report/
-docs/report_generator_guide.md
+# Private data and experiments
+.private/

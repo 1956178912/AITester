@@ -16,7 +16,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.tools.patch_applier import (
     _count_function_defs,
     _extract_function_names,
-    _extract_patch_code,
     _find_function_range,
     _is_full_file_patch,
     apply_multi_function_patch,
@@ -24,6 +23,7 @@ from src.tools.patch_applier import (
     generate_diff,
     safe_apply_patch,
 )
+from src.utils.helpers import extract_code_block
 
 
 class TestExtractFunctionNames:
@@ -160,31 +160,31 @@ class TestExtractPatchCode:
     def test_extract_python_fenced(self):
         """提取 ```python 标记的代码。"""
         patch = "```python\ndef foo(): pass\n```"
-        result = _extract_patch_code(patch)
+        result = extract_code_block(patch)
         assert "def foo():" in result
 
     def test_extract_generic_fenced(self):
         """提取通用 ``` 标记的代码。"""
         patch = "```\ndef foo(): pass\n```"
-        result = _extract_patch_code(patch)
+        result = extract_code_block(patch)
         assert "def foo():" in result
 
     def test_extract_python_prefix(self):
         """提取 python: 前缀的代码。"""
         patch = "python:\ndef foo(): pass"
-        result = _extract_patch_code(patch)
+        result = extract_code_block(patch)
         assert "def foo():" in result
 
     def test_extract_plain_text(self):
         """无标记时直接返回原文。"""
         patch = "def foo(): pass"
-        result = _extract_patch_code(patch)
+        result = extract_code_block(patch)
         assert result == "def foo(): pass"
 
     def test_extract_with_whitespace(self):
         """提取时去除空白。"""
         patch = "  \n```python\ndef foo(): pass\n```  \n"
-        result = _extract_patch_code(patch)
+        result = extract_code_block(patch)
         assert result.strip() == "def foo(): pass"
 
 

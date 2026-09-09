@@ -20,6 +20,8 @@ import ast
 import difflib
 import re
 
+from src.utils.helpers import extract_code_block
+
 
 def _extract_function_names(code: str) -> set[str]:
     """
@@ -120,7 +122,7 @@ def apply_patch_to_code(
             - 失败时返回 (原代码, False)
     """
     # Step 1: 从补丁文本中提取纯代码（去除 markdown 包裹和前缀）
-    clean_patch = _extract_patch_code(patch)
+    clean_patch = extract_code_block(patch)
     # 补丁为空时无法应用，直接返回原代码
     if not clean_patch:
         return original_code, False
@@ -349,39 +351,3 @@ def generate_diff(old_code: str, new_code: str) -> str:
     )
 
     return "".join(diff)
-
-
-def _extract_patch_code(patch: str) -> str:
-    """
-    从 LLM 输出中提取补丁代码。
-
-    LLM 输出的代码可能包裹在各种格式标记中，本函数统一提取纯代码内容。
-    支持的格式（按优先级）：
-        1. ```python ... ```  —— 带语言标记的 markdown 代码块
-        2. ``` ... ```        —— 通用 markdown 代码块
-        3. python: ...        —— python: 前缀格式（无反引号）
-        4. 纯文本             —— 无标记，直接返回原文
-
-    Args:
-        patch: LLM 输出的原始文本。
-
-    Returns:
-        提取出的纯代码字符串（去除包裹标记后的内容）。
-    """
-    # 格式 1: ```python ... ```
-    # re.DOTALL 使 . 匹配换行符，(.*?) 非贪婪匹配代码内容
-    match = re.search(r"```python\s*\n(.*?)\n\s*```", patch, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    # 格式 2: ``` ... ```（通用代码块）
-    match = re.search(r"```\s*\n(.*?)\n```", patch, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    # 格式 3: python: 前缀（某些模型输出不带反引号）
-    stripped = patch.strip()
-    if stripped.lower().startswith("python"):
-        # 移除 "python:" 前缀及随后的空白字符
-        stripped = re.sub(r"^python\s*:\s*", "", stripped, flags=re.IGNORECASE)
-        return stripped.strip()
-    # 格式 4: 无标记，直接返回原文（strip 去除首尾空白）
-    return patch.strip()
