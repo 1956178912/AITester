@@ -39,6 +39,47 @@ _CODE_MAX_CHARS = 3000
 # 代码截断提示信息
 _CODE_TRUNCATED_MSG = "\n\n[代码已截断，仅显示前 {max} 字符]"
 
+# ─── LLM 客户端复用缓存（性能优化）────────────────────────────────────────────
+# _call_llm 此前每次调用都新建 ChatOpenAI 实例，其底层 httpx 连接池随实例
+# 创建/销毁，无法复用 TCP/TLS 连接；改为按 (model, temperature, api_key,
+# base_url) 缓存实例，进程内复用连接，降低每次 LLM 调用的构建与握手开销。
+# ChatOpenAI 内部客户端线程安全，可被并发任务（--parallel）共享。
+# 缓存上限：配置组合数远小于 16，超出时按 FIFO 淘汰（防止 key 轮换场景膨胀）
+_MAX_CACHED_LLM_CLIENTS = 16
+_llm_client_cache: dict[tuple[str, float, str, str], ChatOpenAI] = {}
+
+
+def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str, base_url: str) -> ChatOpenAI:
+    """获取（或创建）缓存的 ChatOpenAI 客户端实例。
+
+    以 (model_name, temperature, api_key, base_url) 为缓存键，相同组合复用
+    同一实例，避免每次 LLM 调用重复构建 OpenAI SDK 客户端与 HTTP 连接池。
+
+    Args:
+        model_name: 模型名称。
+        temperature: 采样温度（与 config.TEMPERATURE 保持一致）。
+        api_key: API 密钥。
+        base_url: 服务 Base URL。
+
+    Returns:
+        ChatOpenAI 实例（缓存命中或新建）。
+    """
+    key = (model_name, temperature, api_key, base_url)
+    client = _llm_client_cache.get(key)
+    if client is not None:
+        return client
+    client = ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        openai_api_key=api_key,
+        base_url=base_url,
+    )
+    # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
+    if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:
+        _llm_client_cache.pop(next(iter(_llm_client_cache)))
+    _llm_client_cache[key] = client
+    return client
+
 
 def _retry_with_exponential_backoff(
     func,
@@ -361,13 +402,8 @@ class BaseAgent:
                         # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
                         text = _call_zai(api_key, base_url, model_name, self.system_prompt, user_message, max_retries)
                     else:
-                        # OpenAI 兼容接口：使用 LangChain ChatOpenAI 统一路径
-                        llm = ChatOpenAI(
-                            model=model_name,
-                            temperature=TEMPERATURE,
-                            openai_api_key=api_key,
-                            base_url=base_url,
-                        )
+                        # OpenAI 兼容接口：复用缓存的 ChatOpenAI 客户端（连接池跨调用复用）
+                        llm = _get_or_create_chat_client(model_name, TEMPERATURE, api_key, base_url)
                         response = llm.invoke(
                             [
                                 SystemMessage(content=self.system_prompt),

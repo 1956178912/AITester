@@ -5,6 +5,7 @@ BaseAgent 单元测试
 - _retry_with_exponential_backoff
 - _is_zai_compatible
 - _get_llm_config
+- _get_or_create_chat_client（客户端复用缓存）
 - BaseAgent 静态方法 (_extract_json, _find_balanced_json, _extract_python_code, truncate_code)
 """
 
@@ -21,7 +22,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.agents.base_agent import (
     BaseAgent,
     _get_llm_config,
+    _get_or_create_chat_client,
     _is_zai_compatible,
+    _llm_client_cache,
     _retry_with_exponential_backoff,
 )
 
@@ -285,3 +288,76 @@ class TestBaseAgentInit:
         assert agent.system_prompt == "test prompt"
         assert agent.llm == mock_llm
         mock_chat_openai.assert_called_once()
+
+
+class TestChatClientReuse:
+    """测试 _get_or_create_chat_client 客户端复用缓存（性能优化）。"""
+
+    @pytest.fixture(autouse=True)
+    def _clear_client_cache(self):
+        """每个测试前清空客户端缓存，避免相互干扰。"""
+        _llm_client_cache.clear()
+        yield
+        _llm_client_cache.clear()
+
+    @patch("src.agents.base_agent.ChatOpenAI")
+    def test_same_config_reuses_client(self, mock_chat_openai):
+        """相同配置返回同一实例，ChatOpenAI 只构建一次。"""
+        c1 = _get_or_create_chat_client("model-a", 0.0, "key-1", "https://test.example.com/v1")
+        c2 = _get_or_create_chat_client("model-a", 0.0, "key-1", "https://test.example.com/v1")
+
+        assert c1 is c2
+        mock_chat_openai.assert_called_once()
+
+    @patch("src.agents.base_agent.ChatOpenAI")
+    def test_different_config_creates_new_client(self, mock_chat_openai):
+        """不同模型（缓存键不同）构建新实例。"""
+        client_a, client_b = MagicMock(name="client_a"), MagicMock(name="client_b")
+        mock_chat_openai.side_effect = [client_a, client_b]
+
+        c1 = _get_or_create_chat_client("model-a", 0.0, "key-1", "https://test.example.com/v1")
+        c2 = _get_or_create_chat_client("model-b", 0.0, "key-1", "https://test.example.com/v1")
+
+        assert c1 is client_a
+        assert c2 is client_b
+        assert mock_chat_openai.call_count == 2
+
+    @patch("src.agents.base_agent.ChatOpenAI")
+    def test_fifo_eviction_at_capacity(self, mock_chat_openai, monkeypatch):
+        """缓存达到上限时按 FIFO 淘汰最早条目。"""
+        import src.agents.base_agent as ba
+
+        monkeypatch.setattr(ba, "_MAX_CACHED_LLM_CLIENTS", 2)
+
+        k1 = ("m1", 0.0, "k", "https://a.example.com")
+        k2 = ("m2", 0.0, "k", "https://a.example.com")
+        k3 = ("m3", 0.0, "k", "https://a.example.com")
+        _get_or_create_chat_client(*k1)
+        _get_or_create_chat_client(*k2)
+        _get_or_create_chat_client(*k3)
+
+        assert len(_llm_client_cache) == 2
+        assert k1 not in _llm_client_cache  # 最早插入的 m1 被淘汰
+        assert k3 in _llm_client_cache
+
+    @patch("src.agents.base_agent._get_all_api_configs")
+    @patch("src.agents.base_agent._get_llm_config")
+    @patch("src.agents.base_agent.ChatOpenAI")
+    def test_call_llm_reuses_client_across_calls(self, mock_chat_openai, mock_get_config, mock_all_configs):
+        """_call_llm 连续两次调用复用同一客户端（连接池跨调用复用）。"""
+        mock_get_config.return_value = ("init-key", "init-url", "init-model")
+        mock_all_configs.return_value = [("key-1", "https://test.example.com/v1", "model-a")]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content="  ok  ")
+        mock_chat_openai.return_value = mock_llm
+
+        agent = BaseAgent("system prompt")
+        # 初始化已构建 1 个客户端（init-key 组合），_call_llm 走 key-1 组合
+        result1 = agent._call_llm("hello")
+        calls_after_first = mock_chat_openai.call_count
+        result2 = agent._call_llm("hello")
+
+        assert result1 == "ok"
+        assert result2 == "ok"
+        assert calls_after_first == mock_chat_openai.call_count  # 第二次调用未新建客户端
+        assert mock_llm.invoke.call_count == 2
