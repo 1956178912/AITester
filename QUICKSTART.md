@@ -3,7 +3,7 @@
 ## 1. 克隆仓库
 
 ```bash
-git clone https://github.com/your-username/AITester.git
+git clone https://github.com/1956178912/AITester.git
 cd AITester
 ```
 
@@ -58,6 +58,19 @@ python3 main.py run examples/calculator.py --func add
 
 # 并发测试多个文件
 python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
+```
+
+## 6. 可选：模型额度探测与省 token 缓存
+
+LLM 调用默认开启文件缓存（`src/cache/`，命中相同 prompt 不再消耗 token）。在「免费额度用完即停」的供应商下可延长可用时长。
+
+```bash
+# 探测各已配置模型哪些还活着、哪些 403 额度用尽（每个仅 1-token，不打印 key）
+python scripts/check_quota.py
+
+# 关闭缓存 / 清缓存
+export AITESTER_LLM_CACHE=0
+rm -rf src/cache
 ```
 
 ## 配置文件说明

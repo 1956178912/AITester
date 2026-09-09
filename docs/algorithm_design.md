@@ -213,7 +213,7 @@ load_dataset(name)
 └── 其他名称                   → InMemoryDataset（graceful degrade，不崩溃）
 ```
 
-每个任务统一为 `BenchmarkTask` 数据结构（定义于 [src/dataset_loader.py](../src/dataset_loader.py)）：
+每个任务统一为 `BenchmarkTask` 数据结构（定义于 [src/datasets/dataset_loader.py](../src/datasets/dataset_loader.py)）：
 
 | 字段 | 类型 | 说明 |
 |-----|------|------|

@@ -352,7 +352,7 @@ snakeviz profile.prof
 
 ```bash
 # ==================== 基础配置 ====================
-MODEL_NAME=agnes-2.5-flash
+MODEL_NAME=agnes-3.0-flash
 TEMPERATURE=0.2
 COVERAGE_THRESHOLD=80.0
 

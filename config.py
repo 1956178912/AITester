@@ -43,7 +43,7 @@ def load_env_local() -> None:
 # 示例（见 config.local.example）：
 #   LLM_1_API_KEY=sk-your-key-here
 #   LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
-#   LLM_1_MODEL_NAME=agnes-2.5-flash
+#   LLM_1_MODEL_NAME=agnes-3.0-flash
 #   LLM_2_API_KEY=sk-another-key
 #   LLM_2_BASE_URL=https://api.deepseek.com
 #   LLM_2_MODEL_NAME=deepseek-chat
