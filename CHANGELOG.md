@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### CI lock 一致性校验 (2026-09-09)
+- **新增 lock 同步校验**：`scripts/check_lock_sync.py`（纯 stdlib），校验 `requirements.txt` 中每项依赖都存在于 `requirements.lock` 且 `==` 锁定版本与 lock 一致；CI 新增 "Check lock sync" 步骤，版本脱节即阻断合并
+- **验证方式**：故意把 langgraph 版本改成 9.9.9，脚本正确报"版本脱节"并退出码 1；恢复后通过
+
 ### 性能优化 (2026-09-09)
 - **ChatOpenAI 客户端复用**：`base_agent._call_llm` 此前每次调用都新建 `ChatOpenAI` 实例（底层 httpx 连接池随之重建，无法复用 TCP/TLS 连接）。新增 `_get_or_create_chat_client`，按 `(model, temperature, api_key, base_url)` 缓存实例（上限 16，FIFO 淘汰），进程内复用连接；客户端线程安全，兼容 `--parallel` 并发
 - **测试隔离**：`tests/test_base_agent_extended.py` 增加 autouse fixture 清理客户端缓存，避免 mock 实例跨测试残留；新增 4 个客户端复用单测（复用/异键/FIFO 淘汰/`_call_llm` 复用）

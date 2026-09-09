@@ -29,6 +29,9 @@ jobs:
           # ruff 为开发工具，不进 requirements（始终用最新版做 lint）
           pip install ruff
 
+      - name: Check lock sync
+        run: python scripts/check_lock_sync.py
+
       - name: Lint with ruff
         run: |
           ruff check .
