@@ -2,6 +2,8 @@
 
 from unittest.mock import mock_open, patch
 
+import pytest
+
 from src.config.config_manager import (
     add_llm_config,
     batch_add_models,
@@ -57,8 +59,16 @@ class TestGetModelNames:
 
     def test_contains_expected_models(self):
         names = get_model_names()
-        # 至少包含配置中的一些模型
-        assert any("qwen" in n or "deepseek" in n or "agnes" in n or "glm" in n for n in names)
+        configs = get_all_llm_configs()
+        # 结构校验（环境无关）：模型名列表应与已配置 LLM 的 model_name 一一对应
+        assert names == [cfg.model_name for cfg in configs]
+        # 厂商名校验面向开发者真实配置（qwen/deepseek/agnes/glm 等）；
+        # CI 使用 mock 配置（LLM_1_MODEL_NAME=test-model），不含任何真实厂商关键词，
+        # 此时该校验不适用——跳过以保持测试在不同环境下行为一致
+        vendor_keywords = ("qwen", "deepseek", "agnes", "glm")
+        if not any(k in n for n in names for k in vendor_keywords):
+            pytest.skip("未检测到真实厂商模型配置（CI/mock 环境），跳过厂商名校验")
+        assert any(k in n for n in names for k in vendor_keywords)
 
 
 class TestGetConfigByModel:
