@@ -221,6 +221,30 @@ class TestAutoFixImports:
         # 应该添加 sys.path 修改
         assert "sys.path" in result or result == code
 
+    def test_third_party_import_not_replaced(self):
+        """第三方库导入（如 numpy）不被改写为被测模块名。
+
+        回归测试：原实现对所有未解析导入无差别替换，
+        会把 "import numpy" 错误改写为 "import calculator"。
+        """
+        code = "from calculator import add\nimport numpy as np\n\ndef test_add():\n    pass"
+        result = ExecutorAgent._auto_fix_imports(code, "examples/calculator.py", "/nonexistent-root")
+        assert "import numpy as np" in result
+        assert "import calculator\n" not in result
+
+    def test_similar_misspelling_replaced(self):
+        """与目标模块名相似的笔误导入（calculater → calculator）被替换。"""
+        code = "from calculater import add\n\ndef test_add():\n    pass"
+        result = ExecutorAgent._auto_fix_imports(code, "examples/calculator.py", "/nonexistent-root")
+        assert "from calculator import add" in result
+
+    def test_build_sys_path_code_single_import(self):
+        """多目录注入时 import sys 只出现一次。"""
+        code = ExecutorAgent._build_sys_path_code({"/dir-a", "/dir-b"})
+        assert code.count("import sys") == 1
+        assert "sys.path.insert(0, '/dir-a')" in code
+        assert "sys.path.insert(0, '/dir-b')" in code
+
 
 class TestResolveModulePaths:
     """测试模块路径解析。"""
