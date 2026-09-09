@@ -11,7 +11,7 @@ import logging
 import random
 from typing import Any
 
-from src.dataset_loader import BaseDatasetLoader, BenchmarkTask
+from src.datasets.dataset_loader import BaseDatasetLoader, BenchmarkTask
 
 logger = logging.getLogger(__name__)
 
@@ -312,10 +312,19 @@ class SyntheticDataset(BaseDatasetLoader):
 
     DATASET_NAME = "synthetic"
 
-    def __init__(self, task_count: int = 100, seed: int = 42) -> None:
+    def __init__(self, task_count: int = 100, seed: int = 42, subset: str | None = None, **kwargs: Any) -> None:
+        """
+        初始化合成数据集生成器。
+
+        Args:
+            task_count: 生成的任务数量。
+            seed: 随机种子（确保可复现）。
+            subset: 数据子集名称（保留接口兼容，实际忽略；本数据集按 task_count 生成）。
+            **kwargs: 兼容 load_dataset 工厂传递的额外参数（本数据集忽略）。
+        """
         self._task_count = task_count
         self._seed = seed
-        super().__init__()
+        super().__init__(subset=subset)
 
     def _load_raw_data(self) -> None:
         """根据模板库生成指定数量的合成缺陷任务。"""

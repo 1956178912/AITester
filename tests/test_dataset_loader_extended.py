@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.dataset_loader import (
+from src.datasets.dataset_loader import (
     BaseDatasetLoader,
     BenchmarkTask,
     Defects4JPYDataset,
@@ -233,7 +233,10 @@ class TestSWEBenchDownload:
         mock_ds = MagicMock()
         mock_ds.__iter__ = lambda self: iter([{"instance_id": "t1"}])
 
-        with patch("src.dataset_loader.load_dataset", return_value=mock_ds):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.return_value = mock_ds
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             output = SWEBenchDataset.download_from_huggingface(
                 cache_dir=str(tmp_path / "cache"), subset="mini"
             )
@@ -250,7 +253,10 @@ class TestSWEBenchDownload:
             {"instance_id": "t2", "repository": "r2"},
         ])
 
-        with patch("src.dataset_loader.load_dataset", return_value=mock_ds):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.return_value = mock_ds
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             SWEBenchDataset.download_from_huggingface(
                 cache_dir=str(tmp_path), subset="full"
             )
@@ -273,7 +279,10 @@ class TestSWEBenchDownload:
             m.__iter__ = lambda self: iter([])
             return m
 
-        with patch("src.dataset_loader.load_dataset", side_effect=fake_load):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.side_effect = fake_load
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             SWEBenchDataset.download_from_huggingface(subset="mini")
             SWEBenchDataset.download_from_huggingface(subset="lite")
             SWEBenchDataset.download_from_huggingface(subset="full")
@@ -287,7 +296,10 @@ class TestSWEBenchDownload:
         mock_ds = MagicMock()
         mock_ds.__iter__ = lambda self: iter([])
 
-        with patch("src.dataset_loader.load_dataset", return_value=mock_ds):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.return_value = mock_ds
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             with caplog.at_level(logging.INFO):
                 SWEBenchDataset.download_from_huggingface(
                     cache_dir=str(tmp_path), subset="mini"
@@ -298,17 +310,17 @@ class TestSWEBenchDownload:
     @pytest.mark.timeout(30)
     def test_download_exception_wrapped_as_runtime_error(self):
         """下载异常包装为 RuntimeError（第 319-320 行）"""
-        with patch(
-            "src.dataset_loader.load_dataset",
-            side_effect=Exception("network timeout"),
-        ):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.side_effect = Exception("network timeout")
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
                 SWEBenchDataset.download_from_huggingface()
 
     @pytest.mark.timeout(30)
     def test_download_no_datasets_library(self):
         """未安装 datasets 库时抛 ImportError"""
-        with patch.dict("sys.modules", {"datasets": None}):
+        with patch("src.datasets.dataset_loader._datasets", None):
             with pytest.raises(ImportError, match="pip install datasets"):
                 SWEBenchDataset.download_from_huggingface()
 

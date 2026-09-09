@@ -2,7 +2,7 @@
 import json
 import os
 
-from src.config_generator import (
+from src.config.config_generator import (
     COMMON_MODELS,
     PROVIDER_TEMPLATES,
     generate_batch_config_script,
@@ -85,7 +85,7 @@ class TestGenerateEnvTemplate:
     def test_template_contains_model_examples(self):
         result = generate_env_template()
         assert "qwen-max" in result
-        assert "agnes-2.5-flash" in result
+        assert "agnes-3.0-flash" in result
         assert "glm-4-flash" in result
 
     def test_generate_template_writes_to_file(self, tmp_path):

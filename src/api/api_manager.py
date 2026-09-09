@@ -8,7 +8,7 @@
 - 限流控制：防止单节点过载
 - 大规模节点池支持（100+ 模型）
 使用示例：
-    from src.api_manager import APIManger
+    from src.api.api_manager import APIManger
     manager = APIManger()
     result = manager.call(messages=[...], model="qwen-max")
 """
@@ -17,16 +17,38 @@ from __future__ import annotations
 
 import logging
 import random
+import sys
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import openai
 
-from config import LLM_CONFIGS, LLMConfig
+
+# 显式加载项目根目录的 config.py（避免循环导入 src.config）
+def _load_project_config():
+    """加载项目根目录的 config.py，返回模块对象。"""
+    _cache_key = "project_config_loader"
+    if _cache_key in sys.modules:
+        return sys.modules[_cache_key]
+    _project_root = Path(__file__).parent.parent.parent
+    _config_path = _project_root / "config.py"
+    if not _config_path.exists():
+        raise FileNotFoundError(f"找不到项目配置文件: {_config_path}")
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(_cache_key, str(_config_path))
+    _module = importlib.util.module_from_spec(_spec)
+    sys.modules[_cache_key] = _module
+    _spec.loader.exec_module(_module)
+    return _module
+
+_project_cfg = _load_project_config()
+LLM_CONFIGS = _project_cfg.LLM_CONFIGS
+LLMConfig = _project_cfg.LLMConfig
 
 logger = logging.getLogger(__name__)
 

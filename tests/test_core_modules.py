@@ -19,7 +19,7 @@ import pytest
 
 from src.agents.executor import ExecutorAgent
 from src.agents.planner import PlannerAgent
-from src.dataset_loader import BenchmarkTask, InMemoryDataset, load_dataset
+from src.datasets.dataset_loader import BenchmarkTask, InMemoryDataset, load_dataset
 
 # ============================================================================
 # BenchmarkTask 测试

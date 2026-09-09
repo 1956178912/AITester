@@ -4,7 +4,7 @@
 提供统一的数据集接口，将不同基准测试的数据加载为 AITester 可消费的 Task 对象。
 
 使用方式：
-    from src.dataset_loader import SWEBenchDataset, Defects4JPYDataset, load_dataset
+    from src.datasets.dataset_loader import SWEBenchDataset, Defects4JPYDataset, load_dataset
     dataset = SWEBenchDataset("full")
     for task in dataset.tasks:
         result = run_single_task(task)
@@ -22,6 +22,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# 数据集下载依赖（HuggingFace datasets 库）。可选导入：
+# 未安装时模块仍可加载，download_from_huggingface 会在调用时抛出 ImportError。
+# 使用模块级引用（_datasets）以便测试通过 patch 替换，避免真实网络下载。
+try:
+    import datasets as _datasets
+except ImportError:
+    _datasets = None
 
 
 # ─── 数据模型 ─────────────────────────────────────────────────────────────────
@@ -302,10 +310,8 @@ class SWEBenchDataset(BaseDatasetLoader):
             ImportError: datasets 库未安装时抛出。
             RuntimeError: 网络下载失败时抛出。
         """
-        try:
-            from datasets import load_dataset
-        except ImportError as e:
-            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets") from e
+        if _datasets is None:
+            raise ImportError("请下载 HuggingFace datasets 库: pip install datasets")
 
         target_dir = cache_dir or cls.DEFAULT_CACHE_DIR
         os.makedirs(target_dir, exist_ok=True)
@@ -315,7 +321,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 
         logger.info("正在从 HuggingFace 下载 SWE-bench [%s] 子集 ...", subset)
         try:
-            dataset = load_dataset("princeton-nlp/SWE-bench", split=split, streaming=False)
+            dataset = _datasets.load_dataset("princeton-nlp/SWE-bench", split=split, streaming=False)
         except Exception as e:
             raise RuntimeError(f"SWE-bench 下载失败: {e}") from e
 
@@ -474,8 +480,15 @@ class InMemoryDataset(BaseDatasetLoader):
 
     DATASET_NAME = "in_memory"
 
-    def __init__(self, subset: str | None = None) -> None:
-        super().__init__()
+    def __init__(self, subset: str | None = None, **kwargs: Any) -> None:
+        """
+        初始化内置示例数据集。
+
+        Args:
+            subset: 数据子集名称（保留接口兼容，实际忽略；本数据集无子集概念）。
+            **kwargs: 兼容 load_dataset 工厂传递的额外参数（本数据集忽略）。
+        """
+        super().__init__(subset=subset)
 
     def _load_raw_data(self) -> None:
         # InMemoryDataset 的数据由 add_sample_tasks() 在 __init__ 中手动填充，
@@ -650,7 +663,7 @@ def load_dataset(
 
     # 懒加载 synthetic 以避免循环导入
     if name_lower in ("synthetic", "synth"):
-        from src.synthetic_dataset import SyntheticDataset
+        from src.datasets.synthetic_dataset import SyntheticDataset
 
         return SyntheticDataset(subset=subset, **kwargs)
 

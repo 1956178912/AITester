@@ -9,9 +9,9 @@ ErrorClassifier 单元测试
 - get_fix_strategy 函数
 """
 
+import os
 import sys
 
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.error_classifier import (

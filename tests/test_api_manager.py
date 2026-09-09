@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, ".")
 
 from config import LLMConfig
-from src.api_manager import (
+from src.api.api_manager import (
     APIHealth,
     APIManagerConfig,
     APIManger,
@@ -170,7 +170,7 @@ class TestAPIMangerNodeManagement:
         """每个测试前重置管理器"""
         reset_manager()
 
-    @patch("src.api_manager.LLM_CONFIGS", [])
+    @patch("src.api.api_manager.LLM_CONFIGS", [])
     def test_init_with_empty_configs(self):
         """测试空配置初始化"""
         mgr = APIManger()
@@ -178,7 +178,7 @@ class TestAPIMangerNodeManagement:
         assert len(mgr.get_all_nodes()) == 0
         assert len(mgr.get_healthy_nodes()) == 0
 
-    @patch("src.api_manager.LLM_CONFIGS", [
+    @patch("src.api.api_manager.LLM_CONFIGS", [
         LLMConfig("key1", "url1", "model1"),
         LLMConfig("key2", "url2", "model2"),
     ])
@@ -261,7 +261,7 @@ class TestAPIMangerRotationStrategies:
     def test_round_robin_cycles(self):
         """测试轮询策略循环"""
         # 创建隔离的管理器，避免 .env.local 中配置的多余模型干扰
-        from src.api_manager import APIManger, RotationStrategy
+        from src.api.api_manager import APIManger, RotationStrategy
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
         mgr.health_nodes = {
@@ -284,7 +284,7 @@ class TestAPIMangerRotationStrategies:
     def test_fastest_first_selects_lowest_time(self):
         """测试最快优先策略：验证 avg_response_time_ms 计算正确"""
         from config import LLMConfig
-        from src.api_manager import APIHealth, APIManger, RotationStrategy
+        from src.api.api_manager import APIHealth, APIManger, RotationStrategy
         mgr = APIManger.__new__(APIManger)
         mgr.config = type('Obj', (), {'rotation_strategy': RotationStrategy.FASTEST_FIRST})()
         mgr.health_nodes = {}
@@ -301,7 +301,7 @@ class TestAPIMangerRotationStrategies:
 
     def test_weighted_random_preferences(self):
         """测试加权随机策略偏好"""
-        from src.api_manager import reset_manager
+        from src.api.api_manager import reset_manager
         reset_manager()
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
@@ -332,7 +332,7 @@ class TestAPIMangerRotationStrategies:
 
     def test_health_based_selects_best_score(self):
         """测试健康感知策略选择综合评分最高的节点"""
-        from src.api_manager import reset_manager
+        from src.api.api_manager import reset_manager
         reset_manager()
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
@@ -377,7 +377,7 @@ class TestAPIMangerHealthCheck:
         assert result is False
         assert node.is_healthy is False
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_success(self, mock_openai_class):
         """测试成功的健康检查（在 patch 内部重新创建 mgr，确保使用 mock client）"""
         mock_client = MagicMock()
@@ -396,7 +396,7 @@ class TestAPIMangerHealthCheck:
         assert node.is_healthy is True
         assert node.total_requests >= 1
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_rate_limit(self, mock_openai_class):
         """测试限流错误的健康检查"""
         import openai
@@ -418,7 +418,7 @@ class TestAPIMangerHealthCheck:
         assert node.consecutive_failures == 1
         assert node.error_count == 1
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_api_error(self, mock_openai_class):
         """测试 API 错误的健康检查"""
         import openai
@@ -434,7 +434,7 @@ class TestAPIMangerHealthCheck:
         result = self.mgr.check_health(node)
         assert result is False
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_empty_response(self, mock_openai_class):
         """测试空响应的健康检查"""
         mock_client = MagicMock()
@@ -477,7 +477,7 @@ class TestAPIMangerCall:
         self.mgr = APIManger()
         self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_success(self, mock_openai_class):
         """测试成功调用"""
         mock_client = MagicMock()
@@ -493,7 +493,7 @@ class TestAPIMangerCall:
         assert result == mock_response
         mock_client.chat.completions.create.assert_called_once()
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_with_specific_model(self, mock_openai_class):
         """测试指定模型调用"""
         mock_client = MagicMock()
@@ -511,7 +511,7 @@ class TestAPIMangerCall:
         )
         assert result == mock_response
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_with_kwargs(self, mock_openai_class):
         """测试传递额外参数"""
         mock_client = MagicMock()
@@ -532,7 +532,7 @@ class TestAPIMangerCall:
         assert call_kwargs.get("temperature") == 0.7
         assert call_kwargs.get("max_tokens") == 100
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_fallback_on_rate_limit(self, mock_openai_class):
         """测试限流时的故障转移"""
         import openai
@@ -560,7 +560,7 @@ class TestAPIMangerCall:
         result = self.mgr.call(messages=[{"role": "user", "content": "hello"}])
         assert result is not None
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_no_fallback_when_disabled(self, mock_openai_class):
         """测试禁用故障转移时的行为：APIError → _handle_api_error → bare raise 无 active exception → RuntimeError"""
         import openai
@@ -582,7 +582,7 @@ class TestAPIMangerCall:
         with pytest.raises(openai.APIError):
             self.mgr.call(messages=[{"role": "user", "content": "hello"}])
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_all_nodes_failed(self, mock_openai_class):
         """测试所有节点都失败时的行为"""
         import openai
@@ -610,7 +610,7 @@ class TestAPIMangerCall:
         with pytest.raises(RuntimeError, match="无可用 API 节点"):
             self.mgr.call(messages=[{"role": "user", "content": "hello"}])
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_unknown_model_raises(self, mock_openai_class):
         """测试指定未知模型时抛出异常"""
         self.mgr._client_cache.clear()
@@ -709,7 +709,7 @@ class TestHealthCheckerThread:
     def test_thread_run_starts_and_stops(self):
         """测试线程启动和停止"""
         # 使用空配置的管理器，避免后台线程因连接真实 API 而卡住
-        from src.api_manager import reset_manager
+        from src.api.api_manager import reset_manager
         reset_manager()
         mgr = APIManger.__new__(APIManger)
         mgr.config = type('Obj', (), {'health_check_interval': 60.0})()
@@ -753,7 +753,7 @@ class TestGlobalFunctions:
         mgr2 = get_manager()
         assert mgr1 is not mgr2
 
-    @patch("src.api_manager.get_manager")
+    @patch("src.api.api_manager.get_manager")
     def test_print_status_table_none_manager(self, mock_get_manager):
         """测试打印状态表格（使用默认管理器）"""
         mock_mgr = MagicMock()

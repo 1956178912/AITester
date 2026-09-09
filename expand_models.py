@@ -21,7 +21,7 @@ from pathlib import Path
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent))
-from src.config_manager import (
+from src.config.config_manager import (
     add_llm_config,
     count_llm_configs,
     get_all_llm_configs,
@@ -166,7 +166,7 @@ def cmd_batch(args):
     print(f"  总计: {count_llm_configs()} 个模型")
 def cmd_remove(args):
     """移除模型"""
-    from src.config_manager import remove_llm_config
+    from src.config.config_manager import remove_llm_config
     success = remove_llm_config(args.model_name)
     if success:
         print(f"✓ 成功移除模型: {args.model_name}")

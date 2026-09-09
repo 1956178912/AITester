@@ -1,5 +1,5 @@
 """测试配置管理"""
-from src.config_manager import (
+from src.config.config_manager import (
     count_llm_configs,
     get_all_llm_configs,
     remove_llm_config,
