@@ -74,6 +74,10 @@ class TestCaseRetriever:
         1
     """
 
+    # 防止 pytest 把本类误识别为测试类（类名以 Test 开头且带 __init__，
+    # 否则 pytest 收集时会产生 PytestCollectionWarning）
+    __test__ = False
+
     def __init__(
         self,
         collection_name: str = "aitester_cases",
