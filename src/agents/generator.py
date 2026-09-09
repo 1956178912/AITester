@@ -132,8 +132,8 @@ class GeneratorAgent(BaseAgent):
                 query += "\n\n以下历史测试用例可作为参考风格：\n" + "\n\n".join(refs_text)
                 logger.info("Generator 使用了 %d 个 RAG 参考案例", len(refs_text))
 
-        # 调用 LLM 生成测试代码
-        raw = self._call_llm(query)
+        # 调用 LLM 生成测试代码，带文件缓存省 token
+        raw = self._call_llm_with_cache(query)
         # 从响应中提取 Python 代码块（去除 markdown 包裹）
         code = self._extract_python_code(raw)
         # Import 验证：修正错误的模块名
@@ -149,7 +149,7 @@ class GeneratorAgent(BaseAgent):
                 "请确保每个用例元组的元素数量与参数名列表完全一致，"
                 "不要混入 case_name 等额外字段。"
             )
-            raw = self._call_llm(retry_query)
+            raw = self._call_llm_with_cache(retry_query)
             code = self._extract_python_code(raw)
             if module_name:
                 code = self._fix_import_module(code, module_name)
