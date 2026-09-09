@@ -1,4 +1,5 @@
 """测试 config_generator 模块"""
+
 import json
 import os
 

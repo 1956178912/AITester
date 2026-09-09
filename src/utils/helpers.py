@@ -143,7 +143,7 @@ def _find_balanced_json(text: str, start: int) -> str | None:
             continue
 
         # 遇到反斜杠，标记下一个字符为转义字符
-        if ch == '\\':
+        if ch == "\\":
             escape = True
             i += 1
             continue
@@ -160,9 +160,9 @@ def _find_balanced_json(text: str, start: int) -> str | None:
             continue
 
         # 处理花括号深度变化
-        if ch == '{':
+        if ch == "{":
             depth += 1
-        elif ch == '}':
+        elif ch == "}":
             depth -= 1
             if depth == 0:
                 return text[start : i + 1]

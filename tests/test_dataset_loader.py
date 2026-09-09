@@ -1,4 +1,5 @@
 """测试 Dataset Loader 核心功能"""
+
 import json
 import os
 from unittest.mock import MagicMock, patch
@@ -48,7 +49,7 @@ class TestBenchmarkTask:
             test_code="test",
             expected_pass_count=2,
             total_test_count=3,
-            metadata={"difficulty": "medium"}
+            metadata={"difficulty": "medium"},
         )
         assert task.metadata["difficulty"] == "medium"
 
@@ -113,6 +114,7 @@ class TestBaseDatasetLoader:
 
     def test_subclass_without_implementation_raises(self):
         """未实现 _load_raw_data 的子类调用 tasks 应抛 NotImplementedError"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "fake"
 
@@ -125,6 +127,7 @@ class TestBaseDatasetLoader:
 
     def test_init_defaults(self):
         """初始化默认值"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "my_ds"
 
@@ -139,6 +142,7 @@ class TestBaseDatasetLoader:
 
     def test_init_with_subset(self):
         """带 subset 参数初始化"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "my_ds"
 
@@ -167,6 +171,7 @@ class TestBaseDatasetLoader:
 
     def test_tasks_triggers_load(self):
         """tasks 属性触发加载"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "trig"
 
@@ -179,6 +184,7 @@ class TestBaseDatasetLoader:
 
     def test_len(self):
         """__len__ 返回 size"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "len"
 
@@ -193,6 +199,7 @@ class TestBaseDatasetLoader:
 
     def test_iter(self):
         """__iter__ 返回迭代器"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "iter"
 
@@ -210,6 +217,7 @@ class TestBaseDatasetLoader:
 
     def test_get_task_by_id_found(self):
         """找到任务时返回对应对象"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "find"
 
@@ -226,6 +234,7 @@ class TestBaseDatasetLoader:
 
     def test_get_task_by_id_not_found(self):
         """未找到任务时返回 None"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "nfound"
 
@@ -237,6 +246,7 @@ class TestBaseDatasetLoader:
 
     def test_filter_by_repo_regex_case_insensitive(self):
         """filter_by_repo 使用正则且忽略大小写"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "filter"
 
@@ -255,6 +265,7 @@ class TestBaseDatasetLoader:
 
     def test_filter_by_repo_no_match(self):
         """无匹配时返回空列表"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "nomatch"
 
@@ -266,6 +277,7 @@ class TestBaseDatasetLoader:
 
     def test_filter_by_repo_full_regex(self):
         """完整正则匹配"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "regex"
 
@@ -372,6 +384,7 @@ class TestSWEBenchDataset:
     def test_load_raw_data_json_decode_error_logged(self, tmp_path, caplog):
         """JSON 解析失败时记录 warning 并跳过该行"""
         import logging
+
         jsonl = tmp_path / "swe_bench_instances.jsonl"
         # 第二行是非法 JSON
         jsonl.write_text('{"instance_id": "t1"}\n{bad json\n')
@@ -410,10 +423,12 @@ class TestSWEBenchDataset:
     def test_download_from_huggingface_success(self, tmp_path):
         """成功下载并写入 JSONL"""
         mock_dataset = MagicMock()
-        mock_dataset.__iter__ = lambda self: iter([
-            {"instance_id": "t1", "repository": "r1"},
-            {"instance_id": "t2", "repository": "r2"},
-        ])
+        mock_dataset.__iter__ = lambda self: iter(
+            [
+                {"instance_id": "t1", "repository": "r1"},
+                {"instance_id": "t2", "repository": "r2"},
+            ]
+        )
 
         mock_datasets = MagicMock()
         mock_datasets.load_dataset.return_value = mock_dataset
@@ -488,11 +503,15 @@ class TestDefects4JPYDataset:
         proj_dir = tmp_path / "projects" / "requests" / "v1"
         proj_dir.mkdir(parents=True)
 
-        (proj_dir / "info.json").write_text(json.dumps({
-            "description": "Request bug",
-            "expected_pass": 3,
-            "bug_type": "logic",
-        }))
+        (proj_dir / "info.json").write_text(
+            json.dumps(
+                {
+                    "description": "Request bug",
+                    "expected_pass": 3,
+                    "bug_type": "logic",
+                }
+            )
+        )
         (proj_dir / "buggy").mkdir()
         (proj_dir / "buggy" / "main.py").write_text("def fetch(): pass\n")
         (proj_dir / "buggy" / "helper.py").write_text("def helper(): pass\n")
@@ -828,6 +847,7 @@ class TestMainBlock:
     def test_main_block_runs_without_error(self, caplog):
         """直接运行模块不抛异常"""
         import logging
+
         with caplog.at_level(logging.INFO):
             # 模拟 __main__ 逻辑
             ds = InMemoryDataset.create_with_samples()

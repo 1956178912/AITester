@@ -178,10 +178,13 @@ class TestAPIMangerNodeManagement:
         assert len(mgr.get_all_nodes()) == 0
         assert len(mgr.get_healthy_nodes()) == 0
 
-    @patch("src.api.api_manager.LLM_CONFIGS", [
-        LLMConfig("key1", "url1", "model1"),
-        LLMConfig("key2", "url2", "model2"),
-    ])
+    @patch(
+        "src.api.api_manager.LLM_CONFIGS",
+        [
+            LLMConfig("key1", "url1", "model1"),
+            LLMConfig("key2", "url2", "model2"),
+        ],
+    )
     def test_init_with_multiple_configs(self):
         """测试多配置初始化"""
         mgr = APIManger()
@@ -262,6 +265,7 @@ class TestAPIMangerRotationStrategies:
         """测试轮询策略循环"""
         # 创建隔离的管理器，避免 .env.local 中配置的多余模型干扰
         from src.api.api_manager import APIManger, RotationStrategy
+
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
         mgr.health_nodes = {
@@ -285,8 +289,9 @@ class TestAPIMangerRotationStrategies:
         """测试最快优先策略：验证 avg_response_time_ms 计算正确"""
         from config import LLMConfig
         from src.api.api_manager import APIHealth, APIManger, RotationStrategy
+
         mgr = APIManger.__new__(APIManger)
-        mgr.config = type('Obj', (), {'rotation_strategy': RotationStrategy.FASTEST_FIRST})()
+        mgr.config = type("Obj", (), {"rotation_strategy": RotationStrategy.FASTEST_FIRST})()
         mgr.health_nodes = {}
         # 直接创建真实 APIHealth 节点以确保 avg_response_time_ms 可用
         for name in ["model1", "model2", "model3"]:
@@ -302,6 +307,7 @@ class TestAPIMangerRotationStrategies:
     def test_weighted_random_preferences(self):
         """测试加权随机策略偏好"""
         from src.api.api_manager import reset_manager
+
         reset_manager()
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
@@ -333,6 +339,7 @@ class TestAPIMangerRotationStrategies:
     def test_health_based_selects_best_score(self):
         """测试健康感知策略选择综合评分最高的节点"""
         from src.api.api_manager import reset_manager
+
         reset_manager()
         mgr = APIManger.__new__(APIManger)
         mgr.config = self.mgr.config
@@ -400,6 +407,7 @@ class TestAPIMangerHealthCheck:
     def test_check_health_rate_limit(self, mock_openai_class):
         """测试限流错误的健康检查"""
         import openai
+
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 429
@@ -422,6 +430,7 @@ class TestAPIMangerHealthCheck:
     def test_check_health_api_error(self, mock_openai_class):
         """测试 API 错误的健康检查"""
         import openai
+
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -536,6 +545,7 @@ class TestAPIMangerCall:
     def test_call_fallback_on_rate_limit(self, mock_openai_class):
         """测试限流时的故障转移"""
         import openai
+
         mock_client1 = MagicMock()
         mock_client2 = MagicMock()
 
@@ -564,6 +574,7 @@ class TestAPIMangerCall:
     def test_call_no_fallback_when_disabled(self, mock_openai_class):
         """测试禁用故障转移时的行为：APIError → _handle_api_error → bare raise 无 active exception → RuntimeError"""
         import openai
+
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -586,6 +597,7 @@ class TestAPIMangerCall:
     def test_call_all_nodes_failed(self, mock_openai_class):
         """测试所有节点都失败时的行为"""
         import openai
+
         mock_client = MagicMock()
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -710,9 +722,10 @@ class TestHealthCheckerThread:
         """测试线程启动和停止"""
         # 使用空配置的管理器，避免后台线程因连接真实 API 而卡住
         from src.api.api_manager import reset_manager
+
         reset_manager()
         mgr = APIManger.__new__(APIManger)
-        mgr.config = type('Obj', (), {'health_check_interval': 60.0})()
+        mgr.config = type("Obj", (), {"health_check_interval": 60.0})()
         mgr.health_nodes = {}
         thread = HealthCheckerThread(mgr, interval=0.1)
         thread.start()
@@ -829,6 +842,7 @@ class TestAPIMangerEdgeCases:
     def test_select_node_with_lock(self):
         """测试线程安全选择"""
         import threading
+
         mgr = APIManger()
         for i in range(5):
             mgr.add_node(LLMConfig(f"key{i}", f"url{i}", f"model{i}"))

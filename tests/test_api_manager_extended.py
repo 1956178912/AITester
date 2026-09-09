@@ -39,6 +39,7 @@ from src.api.api_manager import (
 #  辅助工具
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def _empty_mgr() -> APIManger:
     """创建一个不带任何预置节点的 APIManger（patch LLM_CONFIGS 为空）。"""
     with patch("src.api.api_manager.LLM_CONFIGS", []):
@@ -62,13 +63,12 @@ def _mock_client(return_value=None, side_effect=None):
 #  Section 1: APIHealth 边界场景（现有 test_mark_success_updates_state 只测了一次成功）
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestAPIHealthEdgeCases:
     """测试 APIHealth 的边界行为"""
 
     def setup_method(self):
-        self.config = LLMConfig(
-            api_key="test-key", base_url="https://api.example.com", model_name="test-model"
-        )
+        self.config = LLMConfig(api_key="test-key", base_url="https://api.example.com", model_name="test-model")
         self.health = APIHealth(config=self.config)
 
     def test_mark_success_after_failures_recovers_health(self):
@@ -142,6 +142,7 @@ class TestAPIHealthEdgeCases:
 #  Section 2: _try_call_node — 未覆盖的核心调用方法
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestTryCallNode:
     """测试 _try_call_node 内部方法（现有测试未覆盖）"""
 
@@ -174,6 +175,7 @@ class TestTryCallNode:
     def test_attempt_logging_on_fallback(self, caplog):
         """attempt > 0 时记录故障转移日志"""
         import logging
+
         mgr = _empty_mgr()
         mgr.add_node(LLMConfig("key1", "url1", "model1"))
         mock_client = _mock_client()
@@ -188,6 +190,7 @@ class TestTryCallNode:
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 3: _handle_rate_limit / _handle_api_error / _handle_generic_error
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestErrorHandlers:
     """测试各类错误处理器（现有测试未直接覆盖）"""
@@ -278,6 +281,7 @@ class TestErrorHandlers:
 #  Section 4: _build_node_list — 节点列表构建逻辑
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestBuildNodeList:
     """测试 _build_node_list 方法（现有测试未直接覆盖）"""
 
@@ -328,6 +332,7 @@ class TestBuildNodeList:
 #  Section 5: call() 综合故障转移测试
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestCallFallbackScenarios:
     """测试 call() 在各类故障场景下的行为（现有测试部分覆盖，此处补充）"""
 
@@ -335,6 +340,7 @@ class TestCallFallbackScenarios:
     def test_call_fallback_after_generic_error(self, mock_openai_class, caplog):
         """通用异常触发故障转移到备用节点"""
         import logging
+
         mock_client1 = _mock_client(side_effect=ConnectionError("connection lost"))
         mock_client2 = _mock_client()
         mock_openai_class.side_effect = [mock_client1, mock_client2]
@@ -369,9 +375,7 @@ class TestCallFallbackScenarios:
         会直接抛出原始异常。"""
         # 新版 openai SDK (v2.x): APIError(message, request, *, body=None)，无 status_code
         mock_req = MagicMock()
-        mock_client = _mock_client(
-            side_effect=openai.APIError("error", request=mock_req, body={"code": "test"})
-        )
+        mock_client = _mock_client(side_effect=openai.APIError("error", request=mock_req, body={"code": "test"}))
         mock_openai_class.return_value = mock_client
 
         mgr = _empty_mgr()
@@ -411,9 +415,7 @@ class TestCallFallbackScenarios:
         # 新版 RateLimitError: RateLimitError(message, *, response, body)
         mock_resp = MagicMock()
         mock_resp.status_code = 429
-        mock_client = _mock_client(
-            side_effect=openai.RateLimitError("rate limited", response=mock_resp, body={})
-        )
+        mock_client = _mock_client(side_effect=openai.RateLimitError("rate limited", response=mock_resp, body={}))
         mock_openai_class.return_value = mock_client
 
         mgr = _empty_mgr()
@@ -430,6 +432,7 @@ class TestCallFallbackScenarios:
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 6: 健康检查各类异常分支
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestHealthCheckExceptions:
     """测试 check_health 的各类异常分支（现有测试覆盖了部分，此处补充 ConnectionError/TimeoutError）"""
@@ -483,7 +486,7 @@ class TestHealthCheckExceptions:
     def test_health_check_batch_custom_size(self, mock_sleep):
         """health_check_batch 使用自定义批次大小"""
         for i in range(4):
-            self.mgr.add_node(LLMConfig(f"key{i+1}", f"url{i+1}", f"model{i+1}"))
+            self.mgr.add_node(LLMConfig(f"key{i + 1}", f"url{i + 1}", f"model{i + 1}"))
 
         call_count = [0]
 
@@ -502,6 +505,7 @@ class TestHealthCheckExceptions:
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 7: 状态查询边界场景
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestStatusQueries:
     """测试状态查询方法的边界情况"""
@@ -575,6 +579,7 @@ class TestStatusQueries:
 #  Section 8: add_node / remove_node 后的状态一致性
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestNodeLifecycle:
     """测试节点动态添加/移除后的状态一致性"""
 
@@ -630,6 +635,7 @@ class TestNodeLifecycle:
 #  Section 9: HealthCheckerThread 异常处理
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestHealthCheckerThreadExceptions:
     """测试 HealthCheckerThread 在异常时的行为"""
 
@@ -674,6 +680,7 @@ class TestHealthCheckerThreadExceptions:
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 10: 并发线程安全测试
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestConcurrentAccess:
     """测试多线程并发访问的安全性"""
@@ -759,6 +766,7 @@ class TestConcurrentAccess:
 #  Section 11: get_status 数据类型完整性
 # ════════════════════════════════════════════════════════════════════════════
 
+
 class TestStatusDataIntegrity:
     """测试 get_status 返回数据的类型和完整性"""
 
@@ -774,8 +782,13 @@ class TestStatusDataIntegrity:
         status = self.mgr.get_status()
         node_info = list(status["nodes"].values())[0]
         required_keys = {
-            "model", "base_url", "is_healthy", "success_rate",
-            "total_requests", "consecutive_failures", "avg_response_time_ms",
+            "model",
+            "base_url",
+            "is_healthy",
+            "success_rate",
+            "total_requests",
+            "consecutive_failures",
+            "avg_response_time_ms",
         }
         assert required_keys.issubset(node_info.keys())
 
@@ -784,7 +797,7 @@ class TestStatusDataIntegrity:
         status = self.mgr.get_status()
         node_info = list(status["nodes"].values())[0]
         # 2 成功 1 失败，total_requests=3，success_rate=2/3≈0.667
-        assert node_info["success_rate"] == pytest.approx(2/3, abs=0.01)
+        assert node_info["success_rate"] == pytest.approx(2 / 3, abs=0.01)
         assert node_info["avg_response_time_ms"] == pytest.approx(125.0)
 
     def test_status_healthy_nodes_count_matches_filter(self):
@@ -798,6 +811,7 @@ class TestStatusDataIntegrity:
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 12: print_status_table 输出验证
 # ════════════════════════════════════════════════════════════════════════════
+
 
 class TestPrintStatusTable:
     """测试 print_status_table 输出"""

@@ -40,11 +40,13 @@ def _load_project_config():
     if not _config_path.exists():
         raise FileNotFoundError(f"找不到项目配置文件: {_config_path}")
     import importlib.util
+
     _spec = importlib.util.spec_from_file_location(_cache_key, str(_config_path))
     _module = importlib.util.module_from_spec(_spec)
     sys.modules[_cache_key] = _module
     _spec.loader.exec_module(_module)
     return _module
+
 
 _project_cfg = _load_project_config()
 LLM_CONFIGS = _project_cfg.LLM_CONFIGS
@@ -288,7 +290,7 @@ class APIManger:
             logger.warning("API 限流: %s", node.config.model_name)
             return False
         except openai.APIError as e:
-            status = getattr(e, 'status_code', 'unknown')
+            status = getattr(e, "status_code", "unknown")
             node.mark_failure(f"api_error:{status}")
             logger.warning("API 错误: %s - %s", node.config.model_name, e)
             return False

@@ -92,10 +92,7 @@ def _rank_by_metric(values: list[float], results: dict[str, Any]) -> list[dict[s
     paired = list(zip(values, results.keys(), strict=True))
     paired.sort(reverse=True)
 
-    return [
-        {"rank": i + 1, "baseline": name, "value": round(value, 2)}
-        for i, (value, name) in enumerate(paired)
-    ]
+    return [{"rank": i + 1, "baseline": name, "value": round(value, 2)} for i, (value, name) in enumerate(paired)]
 
 
 def generate_comparison_report(analysis: dict[str, Any], output_path: str | None = None) -> str:
@@ -120,9 +117,7 @@ def generate_comparison_report(analysis: dict[str, Any], output_path: str | None
     ]
 
     for rank_info in analysis["rankings"]["success_rate"]:
-        lines.append(
-            f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |"
-        )
+        lines.append(f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |")
 
     lines += [
         "",
@@ -133,9 +128,7 @@ def generate_comparison_report(analysis: dict[str, Any], output_path: str | None
     ]
 
     for rank_info in analysis["rankings"]["coverage"]:
-        lines.append(
-            f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |"
-        )
+        lines.append(f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |")
 
     lines += [
         "",
@@ -146,9 +139,7 @@ def generate_comparison_report(analysis: dict[str, Any], output_path: str | None
     ]
 
     for name, data in analysis["comparison"].items():
-        lines.append(
-            f"| {name} | {data['success_rate']}% | {data['coverage']}% | {data['iterations']} |"
-        )
+        lines.append(f"| {name} | {data['success_rate']}% | {data['coverage']}% | {data['iterations']} |")
 
     report = "\n".join(lines)
 

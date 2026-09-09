@@ -85,10 +85,10 @@ EXPERIMENTS = [
 
 def run_experiment(exp_config: dict) -> dict:
     """运行单个实验并返回结果。"""
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"🚀 启动实验: {exp_config['name']}")
     print(f"📝 描述: {exp_config['description']}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     # 设置环境变量
     env = os.environ.copy()
@@ -103,11 +103,16 @@ def run_experiment(exp_config: dict) -> dict:
     cmd = [
         sys.executable,
         str(PROJECT_ROOT / "experiments" / "run_benchmark.py"),
-        "--dataset", exp_config["dataset"],
-        "--task-count", str(exp_config["task_count"]),
-        "--baselines", exp_config["baselines"],
-        "--output-dir", str(output_dir),
-        "--seed", str(exp_config["seed"]),
+        "--dataset",
+        exp_config["dataset"],
+        "--task-count",
+        str(exp_config["task_count"]),
+        "--baselines",
+        exp_config["baselines"],
+        "--output-dir",
+        str(output_dir),
+        "--seed",
+        str(exp_config["seed"]),
     ]
 
     print("\n📊 执行命令:")
@@ -164,11 +169,11 @@ def run_experiment(exp_config: dict) -> dict:
 
 def main():
     """主函数：运行所有实验并生成汇总报告。"""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("🎯 AITester 标准化对比实验套件")
     print(f"📅 执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"📂 输出目录: {OUTPUT_BASE}")
-    print("="*80)
+    print("=" * 80)
 
     results = []
     for exp_config in EXPERIMENTS:
@@ -199,10 +204,10 @@ def main():
                 f.write(f"- **错误**: {r['error']}\n")
             f.write("\n")
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("📊 实验套件完成!")
     print(f"📄 汇总报告: {summary_file}")
-    print("="*80)
+    print("=" * 80)
 
     # 检查是否有失败
     failed = [r for r in results if r["status"] != "success"]

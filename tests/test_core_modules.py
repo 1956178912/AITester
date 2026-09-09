@@ -25,6 +25,7 @@ from src.datasets.dataset_loader import BenchmarkTask, InMemoryDataset, load_dat
 # BenchmarkTask 测试
 # ============================================================================
 
+
 class TestBenchmarkTask:
     """测试 BenchmarkTask 数据模型。"""
 
@@ -105,6 +106,7 @@ class TestBenchmarkTask:
 # ============================================================================
 # InMemoryDataset 测试
 # ============================================================================
+
 
 class TestInMemoryDataset:
     """测试 InMemoryDataset 内存数据集。"""
@@ -230,6 +232,7 @@ class TestInMemoryDataset:
 # PlannerAgent 测试
 # ============================================================================
 
+
 class TestPlannerAgent:
     """测试 PlannerAgent 测试规划器。"""
 
@@ -238,8 +241,8 @@ class TestPlannerAgent:
         """验证规划器初始化。"""
         planner = PlannerAgent()
         assert planner is not None
-        assert hasattr(planner, 'plan')
-        assert hasattr(planner, 'truncate_code')
+        assert hasattr(planner, "plan")
+        assert hasattr(planner, "truncate_code")
 
     @pytest.mark.unit
     def test_truncate_code(self):
@@ -262,6 +265,7 @@ class TestPlannerAgent:
 # ExecutorAgent 测试
 # ============================================================================
 
+
 class TestExecutorAgent:
     """测试 ExecutorAgent 代码执行器。"""
 
@@ -270,7 +274,7 @@ class TestExecutorAgent:
         """验证执行器初始化。"""
         executor = ExecutorAgent()
         assert executor is not None
-        assert hasattr(executor, 'execute')
+        assert hasattr(executor, "execute")
 
     @pytest.mark.unit
     def test_execute_method_exists(self):
@@ -283,6 +287,7 @@ class TestExecutorAgent:
 # ============================================================================
 # DatasetLoader 测试
 # ============================================================================
+
 
 class TestDatasetLoader:
     """测试数据集加载器。"""

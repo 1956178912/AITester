@@ -29,11 +29,13 @@ def _load_project_config():
     if not _config_path.exists():
         raise FileNotFoundError(f"找不到项目配置文件: {_config_path}")
     import importlib.util
+
     _spec = importlib.util.spec_from_file_location(_cache_key, str(_config_path))
     _module = importlib.util.module_from_spec(_spec)
     sys.modules[_cache_key] = _module
     _spec.loader.exec_module(_module)
     return _module
+
 
 _project_cfg = _load_project_config()
 LLM_CONFIGS = _project_cfg.LLM_CONFIGS
@@ -134,9 +136,7 @@ def _is_model_config_line(line: str, model_name: str) -> bool:
     Returns:
         如果是目标模型的配置行返回 True
     """
-    return f"LLM_{model_name}" in line or (
-        "MODEL_NAME=" in line and model_name in line
-    )
+    return f"LLM_{model_name}" in line or ("MODEL_NAME=" in line and model_name in line)
 
 
 def _is_model_comment(line: str) -> bool:
@@ -151,9 +151,7 @@ def _is_model_comment(line: str) -> bool:
     return line.startswith("#") and "模型" in line
 
 
-def _find_and_remove_model_block(
-    lines: list[str], model_name: str
-) -> tuple[list[str], bool]:
+def _find_and_remove_model_block(lines: list[str], model_name: str) -> tuple[list[str], bool]:
     """
     从行列表中查找并移除指定模型的配置块。
 

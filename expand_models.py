@@ -13,6 +13,7 @@
     # 方式 5: 查看帮助
     python expand_models.py --help
 """
+
 import argparse
 import csv
 import json
@@ -32,7 +33,7 @@ from src.config.config_manager import (
 
 def load_models_from_json(json_file: str) -> list[dict]:
     """从 JSON 文件加载模型配置"""
-    with open(json_file, encoding='utf-8') as f:
+    with open(json_file, encoding="utf-8") as f:
         data = json.load(f)
     if isinstance(data, list):
         return data
@@ -40,25 +41,31 @@ def load_models_from_json(json_file: str) -> list[dict]:
         return data["models"]
     else:
         raise ValueError("JSON 文件格式不正确，应为模型列表或包含 'models' 键的字典")
+
+
 def load_models_from_csv(csv_file: str) -> list[dict]:
     """从 CSV 文件加载模型配置"""
     models = []
-    with open(csv_file, encoding='utf-8') as f:
+    with open(csv_file, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            models.append({
-                "model_name": row.get("model_name", ""),
-                "base_url": row.get("base_url", ""),
-                "api_key": row.get("api_key", ""),
-            })
+            models.append(
+                {
+                    "model_name": row.get("model_name", ""),
+                    "base_url": row.get("base_url", ""),
+                    "api_key": row.get("api_key", ""),
+                }
+            )
     return models
+
+
 def interactive_add():
     """交互式添加模型"""
     print("\n=== 交互式添加模型 ===\n")
     while True:
         print(f"当前已配置 {count_llm_configs()} 个模型\n")
         model_name = input("模型名称 (输入 'quit' 退出): ").strip()
-        if model_name.lower() == 'quit':
+        if model_name.lower() == "quit":
             break
         if not model_name:
             print("错误：模型名称不能为空")
@@ -77,16 +84,14 @@ def interactive_add():
             print(f"警告：模型 '{model_name}' 已存在，将跳过")
             continue
         # 添加配置
-        success = add_llm_config(
-            api_key=api_key,
-            base_url=base_url,
-            model_name=model_name
-        )
+        success = add_llm_config(api_key=api_key, base_url=base_url, model_name=model_name)
         if success:
             print(f"✓ 成功添加模型: {model_name}")
         else:
             print(f"✗ 添加模型失败: {model_name}")
         print()
+
+
 def cmd_list(args):
     """列出所有模型"""
     print_config_report()
@@ -108,19 +113,19 @@ def cmd_list(args):
         else:
             provider = "未知"
         print(f"{idx:<6} {config.model_name:<25} {provider:<20} ✓ 有效")
+
+
 def cmd_add(args):
     """添加单个模型"""
-    success = add_llm_config(
-        api_key=args.api_key,
-        base_url=args.base_url,
-        model_name=args.model_name
-    )
+    success = add_llm_config(api_key=args.api_key, base_url=args.base_url, model_name=args.model_name)
     if success:
         print(f"✓ 成功添加模型: {args.model_name}")
         print(f"  当前总模型数: {count_llm_configs()}")
     else:
         print(f"✗ 添加模型失败: {args.model_name}")
         sys.exit(1)
+
+
 def cmd_batch(args):
     """批量添加模型"""
     if args.json:
@@ -149,11 +154,7 @@ def cmd_batch(args):
         if model_name in existing_models:
             print(f"[{i}/{len(models)}] ⊘ 跳过已存在: {model_name}")
             continue
-        success = add_llm_config(
-            api_key=api_key,
-            base_url=base_url,
-            model_name=model_name
-        )
+        success = add_llm_config(api_key=api_key, base_url=base_url, model_name=model_name)
         if success:
             print(f"[{i}/{len(models)}] ✓ 添加成功: {model_name}")
             success_count += 1
@@ -164,9 +165,12 @@ def cmd_batch(args):
     print(f"  成功: {success_count}")
     print(f"  失败: {fail_count}")
     print(f"  总计: {count_llm_configs()} 个模型")
+
+
 def cmd_remove(args):
     """移除模型"""
     from src.config.config_manager import remove_llm_config
+
     success = remove_llm_config(args.model_name)
     if success:
         print(f"✓ 成功移除模型: {args.model_name}")
@@ -174,6 +178,8 @@ def cmd_remove(args):
     else:
         print(f"✗ 移除模型失败: {args.model_name}")
         sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="LLM 模型配置管理工具",
@@ -192,7 +198,7 @@ def main():
   python expand_models.py --interactive
   # 移除模型
   python expand_models.py --remove qwen-max
-        """
+        """,
     )
     # 子命令
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
@@ -225,5 +231,7 @@ def main():
         interactive_add()
     else:
         parser.print_help()
+
+
 if __name__ == "__main__":
     main()

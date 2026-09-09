@@ -428,6 +428,7 @@ class BaseAgent:
             完整的 JSON 字符串，未找到匹配时返回 None。
         """
         from src.utils.helpers import _find_balanced_json as _helpers_find_balanced_json
+
         return _helpers_find_balanced_json(text, start)
 
     @staticmethod

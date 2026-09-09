@@ -36,6 +36,7 @@ from src.datasets.dataset_loader import (
 
 class FreshSWEBench(SWEBenchDataset):
     """每次创建时 _loaded=False 的 SWE-bench 子类"""
+
     def __init__(self, data_dir=None):
         super().__init__()
         if data_dir:
@@ -46,6 +47,7 @@ class FreshSWEBench(SWEBenchDataset):
 
 class FreshDefects4J(Defects4JPYDataset):
     """每次创建时 _loaded=False 的 Defects4J 子类"""
+
     def __init__(self, data_dir=None):
         super().__init__()
         if data_dir:
@@ -140,8 +142,7 @@ class TestSWEBenchDatasetCore:
         """缺失 instance_id 时使用行号作为 task_id（第 251 行）"""
         jsonl = tmp_path / "swe_bench_instances.jsonl"
         jsonl.write_text(
-            json.dumps({"instance_id": "t1", "repository": "r1"}) + "\n"
-            + json.dumps({"repository": "r2"}) + "\n"
+            json.dumps({"instance_id": "t1", "repository": "r1"}) + "\n" + json.dumps({"repository": "r2"}) + "\n"
         )
 
         ds = FreshSWEBench(str(tmp_path))
@@ -192,9 +193,11 @@ class TestSWEBenchDatasetCore:
         """混合好坏 JSON 时跳过坏行"""
         jsonl = tmp_path / "swe_bench_instances.jsonl"
         jsonl.write_text(
-            json.dumps({"instance_id": "t1", "repository": "r1"}) + "\n"
+            json.dumps({"instance_id": "t1", "repository": "r1"})
+            + "\n"
             + "{invalid\n"
-            + json.dumps({"instance_id": "t2", "repository": "r2"}) + "\n"
+            + json.dumps({"instance_id": "t2", "repository": "r2"})
+            + "\n"
         )
 
         ds = FreshSWEBench(str(tmp_path))
@@ -237,9 +240,7 @@ class TestSWEBenchDownload:
         mock_datasets.load_dataset.return_value = mock_ds
 
         with patch("src.datasets.dataset_loader._datasets", mock_datasets):
-            output = SWEBenchDataset.download_from_huggingface(
-                cache_dir=str(tmp_path / "cache"), subset="mini"
-            )
+            output = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path / "cache"), subset="mini")
 
         assert (tmp_path / "cache").exists()
         assert output.endswith("swe_bench_instances.jsonl")
@@ -248,18 +249,18 @@ class TestSWEBenchDownload:
     def test_download_writes_jsonl_format(self, tmp_path):
         """下载数据写入 JSONL 格式"""
         mock_ds = MagicMock()
-        mock_ds.__iter__ = lambda self: iter([
-            {"instance_id": "t1", "repository": "r1"},
-            {"instance_id": "t2", "repository": "r2"},
-        ])
+        mock_ds.__iter__ = lambda self: iter(
+            [
+                {"instance_id": "t1", "repository": "r1"},
+                {"instance_id": "t2", "repository": "r2"},
+            ]
+        )
 
         mock_datasets = MagicMock()
         mock_datasets.load_dataset.return_value = mock_ds
 
         with patch("src.datasets.dataset_loader._datasets", mock_datasets):
-            SWEBenchDataset.download_from_huggingface(
-                cache_dir=str(tmp_path), subset="full"
-            )
+            SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="full")
 
         content = (tmp_path / "swe_bench_instances.jsonl").read_text()
         lines = [line for line in content.strip().split("\n") if line]
@@ -301,9 +302,7 @@ class TestSWEBenchDownload:
 
         with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             with caplog.at_level(logging.INFO):
-                SWEBenchDataset.download_from_huggingface(
-                    cache_dir=str(tmp_path), subset="mini"
-                )
+                SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="mini")
 
         assert "下载完成" in caplog.text
 
@@ -449,10 +448,14 @@ def helper(): pass
         """metadata 包含 project 和 version 信息（第 424-429 行）"""
         proj_dir = tmp_path / "projects" / "httpie" / "v3.2"
         proj_dir.mkdir(parents=True)
-        (proj_dir / "info.json").write_text(json.dumps({
-            "description": "HTTP client bug",
-            "bug_type": "logic",
-        }))
+        (proj_dir / "info.json").write_text(
+            json.dumps(
+                {
+                    "description": "HTTP client bug",
+                    "bug_type": "logic",
+                }
+            )
+        )
 
         ds = FreshDefects4J(str(tmp_path))
         ds._load_raw_data()
@@ -737,13 +740,14 @@ class TestEdgeCases:
     def test_pass_rate_exact_values(self):
         """通过率计算精度验证"""
         task = BenchmarkTask("t1", "r", "p", "c", "t", 0, 3, metadata={"passed_count": 1})
-        assert task.pass_rate == pytest.approx(1/3 * 100)
+        assert task.pass_rate == pytest.approx(1 / 3 * 100)
 
         task2 = BenchmarkTask("t2", "r", "p", "c", "t", 0, 7, metadata={"passed_count": 4})
-        assert task2.pass_rate == pytest.approx(4/7 * 100)
+        assert task2.pass_rate == pytest.approx(4 / 7 * 100)
 
     def test_base_loader_len_returns_size(self):
         """__len__ 返回 size（第 141-142 行）"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "fake"
 
@@ -760,6 +764,7 @@ class TestEdgeCases:
 
     def test_base_loader_iter_returns_iterator(self):
         """__iter__ 返回可迭代对象（第 144-146 行）"""
+
         class FakeLoader(BaseDatasetLoader):
             DATASET_NAME = "iter_test"
 

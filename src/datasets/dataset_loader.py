@@ -359,9 +359,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
         "scikit-learn",
     ]
 
-    def _load_project_version(
-        self, version_path: str, project_name: str, version_dir: str
-    ) -> BenchmarkTask | None:
+    def _load_project_version(self, version_path: str, project_name: str, version_dir: str) -> BenchmarkTask | None:
         """
         加载单个项目版本的缺陷数据。
 
@@ -388,9 +386,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
         if os.path.isdir(buggy_dir):
             for fname in os.listdir(buggy_dir):
                 if fname.endswith(".py"):
-                    with open(
-                        os.path.join(buggy_dir, fname), encoding="utf-8"
-                    ) as ff:
+                    with open(os.path.join(buggy_dir, fname), encoding="utf-8") as ff:
                         buggy_code += ff.read() + "\n"
 
         # 加载测试代码
@@ -399,9 +395,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
         if os.path.isdir(tests_dir):
             for fname in sorted(os.listdir(tests_dir)):
                 if fname.startswith("test_") and fname.endswith(".py"):
-                    with open(
-                        os.path.join(tests_dir, fname), encoding="utf-8"
-                    ) as ff:
+                    with open(os.path.join(tests_dir, fname), encoding="utf-8") as ff:
                         test_code += ff.read() + "\n"
 
         # 统计测试函数
@@ -413,9 +407,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
         return BenchmarkTask(
             task_id=task_id,
             repo_name=project_name,
-            problem_statement=info.get(
-                "description", f"Bug in {project_name}"
-            ),
+            problem_statement=info.get("description", f"Bug in {project_name}"),
             instance_code=buggy_code,
             test_code=test_code,
             expected_pass_count=expected_pass,
@@ -458,9 +450,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
                 continue
             for version_dir in os.listdir(project_dir):
                 version_path = os.path.join(project_dir, version_dir)
-                task = self._load_project_version(
-                    version_path, project_name, version_dir
-                )
+                task = self._load_project_version(version_path, project_name, version_dir)
                 if task is not None:
                     self._tasks.append(task)
                     loaded += 1

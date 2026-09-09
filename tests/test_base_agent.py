@@ -52,6 +52,7 @@ class TestRetryWithExponentialBackoff:
 
     def test_raises_after_all_retries(self):
         """所有重试失败时抛出 RuntimeError。"""
+
         def always_fails():
             raise ValueError("persistent error")
 
@@ -60,15 +61,12 @@ class TestRetryWithExponentialBackoff:
 
     def test_non_retryable_exception(self):
         """非 retryable 异常立即抛出，不重试。"""
+
         def raises_type_error():
             raise TypeError("type error")
 
         with pytest.raises(TypeError):
-            _retry_with_exponential_backoff(
-                raises_type_error,
-                max_retries=3,
-                retryable_exceptions=(ValueError,)
-            )
+            _retry_with_exponential_backoff(raises_type_error, max_retries=3, retryable_exceptions=(ValueError,))
 
     def test_retryable_exception_caught(self):
         """retryable 异常会被捕获并重试。"""
@@ -80,10 +78,7 @@ class TestRetryWithExponentialBackoff:
 
         with pytest.raises(RuntimeError):
             _retry_with_exponential_backoff(
-                raises_value_error,
-                max_retries=2,
-                retryable_exceptions=(ValueError,),
-                base_wait=0.01
+                raises_value_error, max_retries=2, retryable_exceptions=(ValueError,), base_wait=0.01
             )
         assert call_count[0] == 3  # 首次 + 2 次重试
 
@@ -115,7 +110,7 @@ class TestIsZaiCompatible:
 class TestGetLlmConfig:
     """测试 LLM 配置获取。"""
 
-    @patch('src.agents.base_agent.LLM_CONFIGS', new=[])
+    @patch("src.agents.base_agent.LLM_CONFIGS", new=[])
     def test_empty_configs(self):
         """无配置时返回空字符串。"""
         api_key, base_url, model_name = _get_llm_config()
@@ -123,7 +118,7 @@ class TestGetLlmConfig:
         assert base_url == ""
         assert model_name == ""
 
-    @patch('src.agents.base_agent.LLM_CONFIGS')
+    @patch("src.agents.base_agent.LLM_CONFIGS")
     def test_returns_first_config(self, mock_configs):
         """返回第一个有效配置。"""
         mock_cfg = MagicMock()
@@ -175,7 +170,7 @@ class TestExtractJson:
     def test_raises_when_invalid_json(self):
         """无效 JSON 时抛出异常。"""
         with pytest.raises(json.JSONDecodeError):
-            BaseAgent._extract_json('{invalid json}')
+            BaseAgent._extract_json("{invalid json}")
 
     def test_extract_json_with_escaped_quotes(self):
         """提取含转义引号的 JSON。"""
@@ -222,31 +217,31 @@ class TestExtractPythonCode:
 
     def test_extract_python_fenced(self):
         """提取 ```python 标记的代码块。"""
-        text = '```python\ndef hello():\n    pass\n```'
+        text = "```python\ndef hello():\n    pass\n```"
         result = BaseAgent._extract_python_code(text)
         assert "def hello():" in result
 
     def test_extract_generic_fenced(self):
         """提取通用 ``` 标记的代码块。"""
-        text = '```\ndef hello():\n    pass\n```'
+        text = "```\ndef hello():\n    pass\n```"
         result = BaseAgent._extract_python_code(text)
         assert "def hello():" in result
 
     def test_extract_python_prefix(self):
         """提取 python: 前缀的代码。"""
-        text = 'python:\ndef hello():\n    pass'
+        text = "python:\ndef hello():\n    pass"
         result = BaseAgent._extract_python_code(text)
         assert "def hello():" in result
 
     def test_extract_plain_code(self):
         """无标记时直接返回代码。"""
-        text = 'def hello():\n    pass'
+        text = "def hello():\n    pass"
         result = BaseAgent._extract_python_code(text)
         assert result == text.strip()
 
     def test_prefer_python_fence(self):
         """优先匹配 python 标记。"""
-        text = '```javascript\nvar x = 1;\n```\n```python\ndef hello(): pass\n```'
+        text = "```javascript\nvar x = 1;\n```\n```python\ndef hello(): pass\n```"
         result = BaseAgent._extract_python_code(text)
         assert "def hello():" in result
 
@@ -277,8 +272,8 @@ class TestTruncateCode:
 class TestBaseAgentInit:
     """测试 BaseAgent 初始化。"""
 
-    @patch('src.agents.base_agent.ChatOpenAI')
-    @patch('src.agents.base_agent._get_llm_config')
+    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.base_agent._get_llm_config")
     def test_init_sets_llm(self, mock_get_config, mock_chat_openai):
         """验证初始化时设置 llm 和 system_prompt。"""
         mock_get_config.return_value = ("key", "url", "model")
