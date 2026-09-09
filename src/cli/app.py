@@ -82,7 +82,7 @@ class UXGroup(click.Group):
 
 
 @click.group(cls=UXGroup)
-@click.version_option(version="0.9.0", prog_name="AITester")
+@click.version_option(version="0.9.1", prog_name="AITester")
 def cli() -> None:
     """AITester - 多智能体自动化测试与自修复系统
 
@@ -104,14 +104,15 @@ def _handle_task_exception(future, future_to_file: dict, func: str | None, resul
         results: 结果列表，异常结果将被追加到此列表。
     """
     file_path = future_to_file[future]
-    logger.error("任务执行异常：file=%s", file_path)
+    task_error = future.exception()  # 只调用一次，避免重复取异常
+    logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
     results.append(
         {
             "success": False,
             "file": file_path,
             "func": func or "all",
             "passed": False,
-            "error": str(future.exception()) if future.exception() else "unknown error",
+            "error": str(task_error) if task_error else "unknown error",
         }
     )
 
@@ -121,6 +122,7 @@ def _run_single_task(
     func: str | None,
     max_iterations: int,
     timeout: int,
+    coverage_threshold: float,
     output_json: bool,
 ) -> dict[str, Any]:
     """
@@ -130,11 +132,12 @@ def _run_single_task(
         target_file: 被测 Python 文件路径。
         func: 指定被测函数名，None 表示测试全部函数。
         max_iterations: 最大修复迭代次数。
-        timeout: 单个任务的执行超时（秒）。
+        timeout: 单个任务的执行超时（秒），经 state 贯通到 Executor。
+        coverage_threshold: 覆盖率达标阈值（%），用于结果判定与摘要输出。
         output_json: 是否输出 JSON 格式结果。
 
     Returns:
-        任务结果字典，包含 success、file、func、passed、coverage、iterations 等字段。
+        任务结果字典，包含 success、file、func、passed、coverage、coverage_ok、iterations 等字段。
     """
     logger.info("开始测试任务：file=%s, func=%s, timeout=%ds", target_file, func, timeout)
 
@@ -143,6 +146,7 @@ def _run_single_task(
         target_code = f.read()
 
     # 初始化工作流状态
+    # execution_timeout / coverage_threshold 经 state 贯通到下游节点（此前两个 CLI 选项均未生效）
     state: AITesterState = {
         "task_uuid": f"{os.path.basename(target_file)}_{func or 'all'}_{int(time.time())}",
         "target_file": target_file,
@@ -161,11 +165,17 @@ def _run_single_task(
         "iteration": 0,
         "max_iterations": max_iterations,
         "repair_history": [],
+        "execution_timeout": timeout,
+        "coverage_threshold": coverage_threshold,
     }
 
     # 构建并运行 LangGraph 工作流
     graph = build_workflow()
     final_state = graph.invoke(state)
+
+    # 覆盖率达标判定：无覆盖率数据时为 None（未知），否则与阈值比较
+    coverage_value = round(final_state.get("coverage_report", 0.0), 1) if final_state.get("coverage_report") else None
+    coverage_ok: bool | None = None if coverage_value is None else coverage_value >= coverage_threshold
 
     # 构建结果字典
     result = {
@@ -173,7 +183,9 @@ def _run_single_task(
         "file": target_file,
         "func": func or "all",
         "passed": final_state.get("test_passed", False),
-        "coverage": round(final_state.get("coverage_report", 0.0), 1) if final_state.get("coverage_report") else None,
+        "coverage": coverage_value,
+        "coverage_threshold": coverage_threshold,
+        "coverage_ok": coverage_ok,
         "iterations": final_state.get("iteration", 0),
         "max_iterations": max_iterations,
         "diagnosis": final_state.get("diagnosis"),
@@ -191,8 +203,9 @@ def _run_single_task(
         if func:
             click.echo(f"  被测函数：{func}")
         click.echo(f"  测试通过：{final_state.get('test_passed', 'N/A')}")
-        if final_state.get("coverage_report"):
-            click.echo(f"  覆盖率：{final_state['coverage_report']:.1f}%")
+        if coverage_value is not None:
+            threshold_mark = "✓ 达标" if coverage_ok else "✗ 未达标"
+            click.echo(f"  覆盖率：{coverage_value:.1f}%（阈值 {coverage_threshold:.1f}% {threshold_mark}）")
         click.echo(f"  修复迭代：{final_state.get('iteration', 0)}/{max_iterations}")
         click.echo(f"{separator}")
 
@@ -325,7 +338,7 @@ def run(
                 task = progress.add_task("运行中...", total=len(expanded_files))
                 with ThreadPoolExecutor(max_workers=parallel) as executor:
                     future_to_file = {
-                        executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, json_output): f
+                        executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
                         for f in expanded_files
                     }
                     for future in as_completed(future_to_file):
@@ -340,7 +353,7 @@ def run(
             # 无 rich 时的简单进度显示
             with ThreadPoolExecutor(max_workers=parallel) as executor:
                 future_to_file = {
-                    executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, json_output): f
+                    executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
                     for f in expanded_files
                 }
                 for future in as_completed(future_to_file):
@@ -353,17 +366,18 @@ def run(
     else:
         # 单线程模式
         for target_file in expanded_files:
-            result = _run_single_task(target_file, func, max_iterations, exec_timeout, json_output)
+            result = _run_single_task(target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output)
             results.append(result)
 
     elapsed_time = time.time() - start_time
 
+    # 汇总统计（单一计算点，供非 JSON 摘要输出与日志复用）
+    total = len(results)
+    passed = sum(1 for r in results if r.get("passed"))
+    failed = total - passed
+
     # 输出汇总信息（非 JSON 模式下）
     if not json_output:
-        total = len(results)
-        passed = sum(1 for r in results if r.get("passed"))
-        failed = total - passed
-
         separator = "=" * 50
         click.echo(f"\n{separator}")
         click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
@@ -389,9 +403,6 @@ def run(
         if failed > 0:
             warning_msg(f"{failed}/{total} 个测试失败")
 
-    total = len(results)
-    passed = sum(1 for r in results if r.get("passed"))
-    failed = total - passed
     logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
 
 

@@ -52,6 +52,7 @@ from config import (
     ENABLE_DEBUGGER,
     ENABLE_PLANNER,
     ENABLE_RAG,
+    EXECUTION_TIMEOUT,
     MAX_ITERATIONS,
 )
 from src.agents.debugger import DebuggerAgent
@@ -378,9 +379,15 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
 
     Returns:
         更新后的状态字典，包含 test_passed, test_output, coverage_report, failed_cases。
+
+    超时优先级：state["execution_timeout"]（CLI --timeout 注入）> config.EXECUTION_TIMEOUT。
+    此前直接读环境变量原始值，绕过了 config 的范围校验（_validate_timeout），
+    导致 CLI --timeout 不生效且非法配置（如 0s）未被兜底。
     """
+    # CLI 通过 state 注入的执行超时优先，未注入时回退到 config 中已校验的值
+    executor_timeout = int(state.get("execution_timeout") or EXECUTION_TIMEOUT)
     agent = ExecutorAgent(
-        timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")),
+        timeout=executor_timeout,
         use_docker=False,
     )
     result = agent.execute(
