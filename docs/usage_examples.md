@@ -327,11 +327,13 @@ python main.py run examples/my_module.py --func my_function
 
 ### Q: 如何调整 LLM 模型？
 
-编辑 `.env` 文件：
+编辑 `.env.local`（LLM 敏感配置所在），修改 `LLM_N_*` 组：
 ```bash
-MODEL_NAME=gpt-4o
+LLM_1_MODEL_NAME=gpt-4o
+LLM_1_BASE_URL=https://api.openai.com/v1
 # 或
-MODEL_NAME=agnes-3.0-flash
+LLM_1_MODEL_NAME=agnes-3.0-flash
+LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
 ```
 
 ---

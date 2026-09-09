@@ -8,15 +8,15 @@
 # 克隆仓库
 git clone <repository-url> && cd AITester
 
-# 创建虚拟环境（Python 3.10+）
+# 创建虚拟环境（Python 3.12+；锁定依赖 scipy 要求 ≥3.12）
 python3 -m venv .venv && source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
 
 # 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY
+cp .env.example .env           # 非敏感项
+cp config.local.example .env.local   # LLM 密钥（LLM_N_*，已 gitignore，勿提交）
 ```
 
 ## 提交规范

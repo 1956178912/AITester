@@ -321,20 +321,19 @@ for task in dataset:
 全局配置管理，从环境变量和配置文件读取。
 
 ```python
-from config import get_config
+from config import LLM_CONFIGS, MODEL_NAME
 
-config = get_config()
-print(config["MODEL_NAME"])  # agnes-3.0-flash
-print(config["MAX_ITERATIONS"])  # 3
+print(len(LLM_CONFIGS))  # 已加载的 LLM Provider 数量
+print(MODEL_NAME)  # 默认模型（LLM_1）名称
 ```
 
 **配置项清单：**
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `LLM_N_API_KEY` | str | - | LLM API 密钥（必填） |
-| `MODEL_NAME` | str | `agnes-3.0-flash` | LLM 模型名称 |
-| `OPENAI_BASE_URL` | str | - | API 基础 URL |
+| `LLM_N_API_KEY` | str | - | 第 N 个 LLM 的 API 密钥（写在 `.env.local`） |
+| `LLM_N_BASE_URL` | str | - | 第 N 个 LLM 的 API 基础 URL |
+| `LLM_N_MODEL_NAME` | str | - | 第 N 个 LLM 的模型名称 |
 | `MAX_ITERATIONS` | int | 3 | 最大修复迭代次数 |
 | `COVERAGE_THRESHOLD` | float | 80.0 | 覆盖率阈值 |
 | `EXECUTION_TIMEOUT` | int | 30 | pytest 执行超时（秒） |
@@ -345,6 +344,7 @@ print(config["MAX_ITERATIONS"])  # 3
 | `ENABLE_RAG` | bool | false | 启用 RAG |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
 | `TEMPERATURE` | float | 0.2 | LLM 采样温度 |
+| `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
 
 ---
 

@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 706 collected |
-| **单元测试** | ✅ 700 passed, 6 skipped |
+| **总测试数** | ✅ 714 collected |
+| **单元测试** | ✅ 708 passed, 6 skipped |
 | **代码覆盖率** | 70%+ (核心模块 85%+) |
-| **已知失败** | ✅ 0（RAG / 数据集下载测试已修复） |
+| **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore） |
-| **最新优化** | ✅ 模块归类到 `src/{api,config,datasets,utils}` 子包；LLM 文件缓存接入 `base_agent`（省 token） |
+| **最新优化** | ✅ 依赖 `==` 锁定 + lock 一致性校验；`main.py` 拆包至 `src/cli/`；LLM 客户端复用（ChatOpenAI / zai，连接池共享） |
 | **核心模块覆盖** | ✅ debugger.py (100%), api_manager.py (97%), retriever.py (93%), generator.py (93%), patch_applier.py (92%) |
 | **代码规范** | ✅ Ruff 检查全部通过 (E501, C901) |
-| **最近改动** | ✅ 架构重构到子包、`base_agent` 接入 LLM 文件缓存、模型目录更新（`agnes-3.0-flash`）、新增 `scripts/check_quota.py` 额度探测 |
+| **最近改动** | ✅ 全量依赖锁定（requirements.lock 129 条）、CI 安全扫描迁移 pip-audit、测试失败诊断注解、LLM 客户端复用 |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -60,10 +60,12 @@ pre-commit run --all-files
 ### CI/CD
 
 项目配置了 GitHub Actions 持续集成，支持：
-- 多 Python 版本测试（3.10, 3.11, 3.12）
+- 多 Python 版本测试（3.12, 3.14；下限由锁定依赖决定：scipy 需 ≥3.12）
 - Ruff lint 检查
 - pytest 测试 + 覆盖率报告
-- 依赖安全扫描
+- 依赖安全扫描（pip-audit；chromadb 1.5.9 的 4 条已知 CVE 因无修复版本而显式豁免，详见 CHANGELOG）
+- requirements 与 requirements.lock 一致性校验（scripts/check_lock_sync.py）
+- 测试失败诊断注解：测试步骤挂掉时自动把 FAILED/ERROR 用例清单写成 GitHub 注解（check-runs annotations API 可读，无需 admin 下载日志）
 
 ### 测试命令
 
@@ -84,7 +86,7 @@ pre-commit run --all-files
 ## 快速开始
 
 ```bash
-# 0. 创建虚拟环境（推荐 Python 3.10+）
+# 0. 创建虚拟环境（推荐 Python 3.12+；锁定依赖 scipy 要求 ≥3.12）
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -152,6 +154,17 @@ python experiments/run_benchmark.py --dataset examples --json
 export AITESTER_LLM_CACHE=0      # 临时关闭缓存（需要"换种思路重生成"时）
 rm -rf src/cache                # 清空缓存，让所有 prompt 重新调用 LLM
 ```
+
+### LLM 客户端复用（连接池共享）
+
+`base_agent` 中的 LLM 客户端现在按配置**复用**，避免每次调用都新建客户端（含底层 HTTP 连接池）：
+
+- **OpenAI 兼容路径**（`ChatOpenAI`）：按 `(model_name, temperature, api_key, base_url)` 缓存，上限 16 个（FIFO 驱逐）。
+- **zai SDK 路径**（`ZhipuAiClient`）：按 `(api_key, base_url)` 缓存，上限 16 个。
+
+**性能收益**：同一配置的多次 LLM 调用共享连接池，省去重复建连开销；多任务并发时连接池状态一致、行为更可预测。
+
+**技术实现**：`src/agents/base_agent.py` 的 `_get_or_create_chat_client()` 与 `_get_or_create_zai_client()`。
 
 ### 模型额度探测（scripts/check_quota.py）
 
@@ -230,7 +243,7 @@ JSON 输出包含完整的结果统计、各基线详细数据和性能指标，
 AITester/
 ├── src/                              # 核心源代码
 │   ├── agents/                       # 多智能体模块
-│   │   ├── base_agent.py             # 智能体基类（LLM 调用 + 文件缓存、JSON 解析）
+│   │   ├── base_agent.py             # 智能体基类（LLM 调用 + 文件缓存 + 客户端复用、JSON 解析）
 │   │   ├── planner.py                # 测试规划师（含逻辑驱动思维链）
 │   │   ├── generator.py              # 测试代码生成器（支持 RAG 增强）
 │   │   ├── executor.py               # 测试执行器（带超时和重试）
@@ -358,7 +371,7 @@ dataset = SyntheticDataset(task_count=50, seed=42)
 ## 实验复现
 
 ### 环境要求
-- Python 3.10+
+- Python 3.12+（锁定依赖 scipy 要求 ≥3.12）
 - MySQL 5.7/8.0（可选，用于持久化实验数据）
 - LLM API Key（如 OpenAI、DeepSeek 等）
 
@@ -440,16 +453,15 @@ AITester 内置了 `SyntheticDataset`，可在不依赖 SWE-bench/Defects4J 的�
 docker build -t aitester:latest .
 
 # 运行 benchmark
+# LLM 密钥随 $(pwd) 的 .env.local 一并挂载进容器，无需 -e 传递（旧 OPENAI_API_KEY 变量已废弃）
 docker run --rm \
   -v $(pwd):/workspace \
-  -e OPENAI_API_KEY=$OPENAI_API_KEY \
   aitester:latest \
   python experiments/run_benchmark.py --dataset examples --task-limit 1
 
 # 运行单个文件测试
 docker run --rm \
   -v $(pwd):/workspace \
-  -e OPENAI_API_KEY=$OPENAI_API_KEY \
   aitester:latest \
   python main.py run examples/calculator.py
 ```
@@ -471,7 +483,7 @@ docker run --rm \
 
 | 测试文件 | 用例数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_base_agent.py` | 23 | JSON 提取、Python 代码块提取 |
+| `test_base_agent.py` | 37 | JSON 提取、Python 代码块提取、ChatOpenAI 客户端复用 |
 | `test_planner.py` | 6 | PlannerAgent 规划逻辑序列化 |
 | `test_generator.py` | 13 | parametrize 校验、import 修正、LLM 调用 |
 | `test_debugger.py` | 5 | 错误诊断、RAG 注入、failed_cases 截断 |
@@ -489,7 +501,7 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 18 | 合成数据集生成与确定性验证 |
 | `test_api_manager.py` | 17 | API 管理器（轮询/加权随机/健康感知策略） |
 | `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
-| `test_base_agent_extended.py` | 22 | 指数退避重试、LLM 缓存 |
+| `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_error_classifier_improvements.py` | 25 | 错误分类器改进测试 |
 | `test_report_generator.py` | 13 | 错误报告生成器 |
 | `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
@@ -682,7 +694,7 @@ python main.py list-examples
 ### Q: LLM 返回非 JSON 格式
 
 **原因**：模型输出不符合预期格式。
-**解决**：检查 `.env` 中的 `MODEL_NAME` 和 `OPENAI_BASE_URL`，确保 API Key 有效。
+**解决**：检查 `.env.local` 中的 `LLM_N_*` 配置（模型名、Base URL），确保 API Key 有效。
 
 ### Q: 覆盖率始终为 0%
 
@@ -745,7 +757,7 @@ python main.py list-examples
 |---------|-------|---------|
 | `test_api_manager.py` | 17 | API 管理器策略测试 |
 | `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
-| `test_base_agent_extended.py` | 22 | 指数退避重试、LLM 缓存 |
+| `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_error_classifier_improvements.py` | 25 | 错误分类器改进 |
 | `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
 | `test_report_generator.py` | 13 | 错误报告生成器 |
