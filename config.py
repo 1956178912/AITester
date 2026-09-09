@@ -47,8 +47,14 @@ def load_env_local() -> None:
 #   LLM_2_API_KEY=sk-another-key
 #   LLM_2_BASE_URL=https://api.deepseek.com
 #   LLM_2_MODEL_NAME=deepseek-chat
+#
+# 注意：编号无需连续（删除中间某个 provider 后剩余编号自动保留），
+# _load_llm_configs 会扫描到固定上限并跳过不完整的编号。
 
 load_env_local()  # 加载 .env.local，覆盖敏感 LLM 配置
+
+# LLM 编号扫描上限：容忍 .env.local 中删除中间 provider 产生的编号空洞
+_LLM_MAX_SCAN_INDEX = 32
 
 
 @dataclass(frozen=True)
@@ -61,7 +67,7 @@ class LLMConfig:
 
 
 def _load_llm_configs() -> list[LLMConfig]:
-    """从环境变量中读取所有 LLM_N_* 配置，返回非空配置列表。
+    """从环境变量中读取所有 LLM_N_* 配置，返回完整配置列表。
 
     环境变量命名规则：
         LLM_1_API_KEY, LLM_1_BASE_URL, LLM_1_MODEL_NAME   → 第 1 个配置
@@ -69,17 +75,17 @@ def _load_llm_configs() -> list[LLMConfig]:
         ...
 
     只有 api_key、base_url、model_name 三项均非空时，该配置才会被加入列表。
+    扫描至 _LLM_MAX_SCAN_INDEX 上限，容忍编号空洞（如删除 LLM_2 后 LLM_3 仍会被加载），
+    不再在第一个不完整编号处中断。
     """
     configs: list[LLMConfig] = []
-    idx = 1
-    while True:
+    for idx in range(1, _LLM_MAX_SCAN_INDEX + 1):
         api_key = os.getenv(f"LLM_{idx}_API_KEY", "").strip()
         base_url = os.getenv(f"LLM_{idx}_BASE_URL", "").strip()
         model_name = os.getenv(f"LLM_{idx}_MODEL_NAME", "").strip()
         if not api_key or not base_url or not model_name:
-            break
+            continue  # 不完整编号跳过，继续扫描后续编号
         configs.append(LLMConfig(api_key=api_key, base_url=base_url, model_name=model_name))
-        idx += 1
     return configs
 
 
