@@ -9,7 +9,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="aitester",
-    version="0.9.0",
+    version="0.9.1",
     packages=find_packages(),
     # 锁定依赖集（requirements.lock）实际要求 Python >= 3.12（scipy 下限）
     python_requires=">=3.12",
