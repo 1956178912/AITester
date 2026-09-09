@@ -76,10 +76,6 @@ except ImportError:
     TestCaseRetriever = None
     logger.info("RAG 模块未就绪（chromadb 未安装），将跳过检索增强")
 
-# 最大修复迭代次数常量（来自 config.py），控制 Debugger 循环的上限
-# 避免 LLM 反复生成相同错误补丁导致无限循环
-_DEFAULT_MAX_ITERATIONS = 3
-
 # ─── RAG 检索器单例 ────────────────────────────────────────────────────────────
 # _rag_retriever 模块级缓存：避免每次节点调用都重新初始化 ChromaDB 客户端
 # ChromaDB 客户端初始化涉及模型加载和向量存储打开，耗时 2-6 秒
@@ -523,8 +519,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             temp_dir = os.path.abspath(tempfile.gettempdir())
             # 允许项目目录内或系统临时目录
-            allowed_prefixes = [project_root, temp_dir]
-            if not any(target_file_path.startswith(prefix) for prefix in allowed_prefixes):
+            allowed_prefixes = (project_root, temp_dir)
+            if not target_file_path.startswith(allowed_prefixes):
                 logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
             else:
                 with open(target_file_path, "w", encoding="utf-8") as f:
@@ -620,7 +616,7 @@ def build_workflow() -> Any:
     return workflow.compile()
 
 
-def get_workflow_stats() -> dict[str, Any]:
+def get_workflow_stats() -> dict:
     """
     获取工作流执行统计信息。
 

@@ -11,7 +11,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import threading
 import time
 from typing import Any
@@ -19,6 +18,7 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 
 from config import LLM_CONFIGS, LLM_TIMEOUT, TEMPERATURE
+from src.utils.helpers import extract_code_block, extract_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,6 @@ _ZAI_RATE_LIMIT_WAIT_BASE_SECONDS = 5
 _ZAI_MAX_TOKENS = 4096
 # 通用 LLM 调用单次最大重试次数（指数退避：1s, 2s, 4s）
 _DEFAULT_LLM_MAX_RETRIES = 3
-# JSON 提取降级正则：匹配最内层无嵌套的 `{...}` 对象
-_JSON_LEAF_PATTERN = r"\{[^{}]*\}"
 # ───────────────────────────────────────────────────────────────────────────
 # Token 优化常量
 # 单条代码输入最大字符数：超长代码截断，避免 token 浪费
@@ -381,16 +379,7 @@ class BaseAgent:
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
         """
-        从 LLM 输出中提取 JSON 对象。
-        LLM 有时会在 JSON 前后添加 markdown 代码块标记（```json ... ```），
-        此方法会先清理这些标记，再用括号平衡法找到完整的 JSON 对象。
-        若解析失败，尝试用正则提取候选 JSON 作为降级方案。
-
-        处理流程：
-        1. 去除 markdown 代码块围栏（``` 或 ```json）
-        2. 定位第一个 '{' 位置
-        3. 使用括号平衡法扫描完整 JSON 对象
-        4. 若平衡法失败，用正则回溯匹配最内层合法 JSON
+        从 LLM 输出中提取 JSON 对象（委托给公共工具函数）。
 
         Args:
             text: LLM 返回的原始文本。
@@ -401,42 +390,12 @@ class BaseAgent:
         Raises:
             json.JSONDecodeError: 无法找到有效 JSON 时抛出。
         """
-        # 移除 markdown 代码块标记（如 ```json\n 或 ```\n）
-        cleaned = re.sub(r"```(?:json)?\s*\n?", "", text)
-        cleaned = re.sub(r"```", "", cleaned)
-        # 找到第一个左花括号的位置，JSON 对象必以 '{' 开始
-        start = cleaned.find("{")
-        if start == -1:
-            # 全文无 '{'，直接抛出明确的 JSONDecodeError
-            raise json.JSONDecodeError("No JSON found in response", text, 0)
-        # 用括号平衡法提取从 start 开始的完整 JSON 对象
-        json_str = BaseAgent._find_balanced_json(cleaned, start)
-        if json_str is not None:
-            try:
-                return json.loads(json_str.strip())
-            except json.JSONDecodeError:
-                # 平衡法提取到的字符串格式仍不合法，进入降级方案
-                pass
-        # 降级方案：用正则匹配最内层无嵌套的 `{...}`，从后往前找第一个合法 JSON
-        # 从后往前是为了优先匹配较大的候选（外层 JSON 通常包含更多字段）
-        for m in reversed(list(re.finditer(_JSON_LEAF_PATTERN, cleaned))):
-            try:
-                return json.loads(m.group())
-            except json.JSONDecodeError:
-                continue
-        # 所有方案均失败，抛出包含原文位置的错误
-        raise json.JSONDecodeError("Could not find complete JSON", text, start)
+        return extract_json_object(text)
 
     @staticmethod
     def _find_balanced_json(text: str, start: int) -> str | None:
         """
-        使用括号平衡法找到从 start 位置开始的第一个完整 JSON 对象。
-
-        算法原理：
-        - 遇到 '{' 深度+1，遇到 '}' 深度-1
-        - 当深度归零时，说明找到了匹配的右花括号，即一个完整 JSON 对象
-        - 字符串字面量内的 '{' 和 '}' 不计入深度（通过 in_string 标志位处理）
-        - 转义字符（\" 和 \\）需要特殊处理，避免误判
+        使用括号平衡法找到从 start 位置开始的第一个完整 JSON 对象（委托给公共工具函数）。
 
         Args:
             text: 待搜索的文本。
@@ -445,57 +404,13 @@ class BaseAgent:
         Returns:
             完整的 JSON 字符串，未找到匹配时返回 None。
         """
-        depth = 0  # 当前括号深度（遇 '{' +1，遇 '}' -1）
-        in_string = False  # 是否处于 JSON 字符串字面量内部
-        escape = False  # 是否处于转义状态（上一个字符是反斜杠）
-        # 边界检查：start 超出文本范围则直接返回 None
-        if start < 0 or start >= len(text):
-            return None
-        i = start
-        while i < len(text):
-            ch = text[i]
-            # 处理转义：若上一个字符是反斜杠，当前字符是转义目标，不改变状态
-            if escape:
-                escape = False
-                i += 1
-                continue
-            # 遇到反斜杠，标记下一个字符为转义字符
-            if ch == chr(92):  # chr(92) = '\\'
-                escape = True
-                i += 1
-                continue
-            # 遇到双引号，切换字符串状态（进入或离开字符串字面量）
-            if ch == chr(34):  # chr(34) = '"'
-                in_string = not in_string
-                i += 1
-                continue
-            # 在字符串内部时，跳过所有字符（包括 '{' '}' '"' 均不计入深度）
-            if in_string:
-                i += 1
-                continue
-            # 在字符串外部时，处理花括号深度变化
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                # 深度归零表示找到匹配的右花括号，返回完整 JSON 切片
-                if depth == 0:
-                    return text[start : i + 1]
-            i += 1
-        # 遍历结束仍未归零（JSON 对象未闭合），返回剩余部分供调用方降级处理
-        return text[start:] if start < len(text) else None
+        from src.utils.helpers import _find_balanced_json as _helpers_find_balanced_json
+        return _helpers_find_balanced_json(text, start)
 
     @staticmethod
     def _extract_python_code(text: str) -> str:
         """
-        从 LLM 输出中提取 Python 代码块。
-        支持三种格式：```python ... ```、``` ... ```、python: ...
-
-        匹配优先级：
-        1. ```python ... ```（最明确，优先匹配）
-        2. ``` ... ```（通用 markdown 代码块）
-        3. python: ... 前缀（某些模型输出不带反引号）
-        4. 以上均无则返回原始文本（strip 空白）
+        从 LLM 输出中提取 Python 代码块（委托给公共工具函数）。
 
         Args:
             text: LLM 返回的包含代码的文本。
@@ -503,23 +418,7 @@ class BaseAgent:
         Returns:
             提取出的 Python 代码字符串（无 markdown 包裹）。
         """
-        # 尝试标准 markdown 格式：```python ... ```
-        # re.DOTALL 使 '.' 匹配换行符，从而跨行提取代码块
-        match = re.search(r"```python\s*\n(.*?)\n\s*```", text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        # 尝试通用 markdown 格式：``` ... ```（不限制语言标记）
-        match = re.search(r"```\s*\n(.*?)\n```", text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        # 尝试 "python" 前缀格式（某些模型输出不带反引号，如 "python:\n..."）
-        stripped = text.strip()
-        if stripped.lower().startswith("python"):
-            # 去除 "python" 前缀及紧随的换行
-            stripped = re.sub(r"^python\s*\n", "", stripped, flags=re.IGNORECASE)
-            return stripped.strip()
-        # 返回原始文本（无标记时直接返回，由调用方决定是否有效）
-        return text.strip()
+        return extract_code_block(text, language="python")
 
     @staticmethod
     def truncate_code(code: str, max_chars: int = _CODE_MAX_CHARS) -> str:

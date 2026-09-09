@@ -2,7 +2,22 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [v3.0.0] - 2025-09-08
+## [Unreleased]
+
+### 代码优化 (2026-09-09)
+- **提取公共工具模块**：新增 `src/utils/helpers.py`，统一代码块和 JSON 提取逻辑
+  - `extract_code_block()`: 从 LLM 输出中提取代码块（支持多种格式）
+  - `extract_json_object()`: 从文本中提取 JSON 对象（含括号平衡法）
+- **重构 base_agent.py**：移除重复代码，委托调用公共工具函数（-85 行）
+- **重构 patch_applier.py**：使用公共工具函数替代 `_extract_patch_code()`（-34 行）
+- **优化 workflow.py**：
+  - 移除冗余常量 `_DEFAULT_MAX_ITERATIONS`
+  - 简化路径安全检查逻辑（使用 tuple 替代 list）
+  - 改进类型注解
+- **测试修复**：更新测试文件以适配新的导入路径
+- **测试结果**：524 passed, 6 skipped（核心模块 100% 通过）
+
+---
 
 ### 代码质量优化
 - **修复代码规范问题**：全部 E501 (行长度) 和 C901 (复杂度) 问题已修复

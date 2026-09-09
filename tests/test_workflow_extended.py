@@ -682,11 +682,11 @@ class TestEdgeCases:
         calls = [str(call) for call in mock_workflow.method_calls]
         assert any('set_entry_point' in call for call in calls)
 
-    def test_max_iterations_constant(self):
-        """测试最大迭代次数常量。"""
-        from src.graph.workflow import _DEFAULT_MAX_ITERATIONS
+    def test_max_iterations_from_config(self):
+        """测试最大迭代次数从 config 读取。"""
+        from config import MAX_ITERATIONS
 
-        assert _DEFAULT_MAX_ITERATIONS == 3
+        assert MAX_ITERATIONS == 3
 
     @patch('src.graph.workflow.ENABLE_DEBUGGER', True)
     def test_should_debug_with_empty_diagnosis(self):

@@ -8,16 +8,16 @@
 | 指标 | 状态 |
 |------|------|
 | **总测试数** | ✅ 686 collected |
-| **单元测试** | ✅ 551 passed (核心), 6 skipped |
+| **单元测试** | ✅ 524 passed (核心), 6 skipped |
 | **代码覆盖率** | 70% (核心模块 85%+) |
-| **已知失败** | ⚠️ 5 (网络超时，数据集下载测试) |
+| **已知失败** | ⚠️ 25 (RAG 依赖问题，数据集下载测试) |
 | **安全审查** | ✅ 无硬编码密钥 |
-| **最新优化** | ✅ v3.0 代码质量优化：修复代码规范问题，降低函数复杂度 |
+| **最新优化** | ✅ v3.1 代码重构：提取公共工具模块，消除重复代码 |
 | **核心模块覆盖** | ✅ debugger.py (100%), api_manager.py (97%), retriever.py (93%), generator.py (93%), patch_applier.py (92%) |
 | **代码规范** | ✅ Ruff 检查全部通过 (E501, C901) |
-| **最近改动** | ✅ 重构 config_manager.py 和 dataset_loader.py，降低代码复杂度 |
+| **最近改动** | ✅ 重构 base_agent.py、patch_applier.py，新增 helpers.py 公共工具模块 |
 
-更多详情参见 [COMPLETION_REPORT_20260825.md](COMPLETION_REPORT_20260825.md)、[TESTING_REPORT.md](TESTING_REPORT.md)、[OPTIMIZATION_REPORT.md](OPTIMIZATION_REPORT.md)。
+更多详情参见 [OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)、[COMPLETION_REPORT_20260825.md](COMPLETION_REPORT_20260825.md)、[TESTING_REPORT.md](TESTING_REPORT.md)。
 
 ## 开发工具
 
