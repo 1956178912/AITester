@@ -10,6 +10,8 @@
 - **chromadb 漏洞例外（记录在案）**：`chromadb==1.5.9` 命中 PYSEC-2026-311（=CVE-2026-45829）、CVE-2026-45830/45831/45833 共 4 条已知漏洞，PyPI 上无修复版本（1.5.9 即最新），CI 以 `--ignore-vuln` 显式忽略并注释说明；**后续动作：chromadb 发布修复版后立即升级并移除忽略**
 - **pytest-timeout 降级 2.5.0→2.4.0**：2.5.0 已被上游 yank（原因 "accidental breaking change (probably)"），此前 lock 误锁了该 yanked 版本。降级为最新未 yank 的 2.4.0（已验证与 pytest 9.1.1 的 `--timeout` 行为正常）；requirements/lock/本地 .venv 三处同步
 - **action 版本升级**：`checkout@v4→v5`、`setup-python@v5→v6`（消除 Node.js 20 弃用告警）
+- **CI 测试步骤失败根因修复**：本地无 `.env.local` 的干净仿真（仅 mock `LLM_1_*`）复现出唯一失败用例 `test_contains_expected_models`——它硬编码断言模型名含 `qwen/deepseek/agnes/glm`，CI 的 mock 名 `test-model` 不匹配（环境依赖型测试缺陷）。重构为结构校验（模型名与已配置 LLM 一一对应）+ 无真实厂商配置时 `pytest.skip`；dev 环境（真实 `.env.local`）行为不变
+- **CI 测试失败诊断注解**：新增 `if: failure()` 诊断步骤，失败时重跑 `pytest -q --tb=no -rf` 提取 FAILED/ERROR 清单并写 `::error` 注解（check-runs annotations API 公开可读，无需 admin 下载日志）；诊断步骤与测试步骤携带同一套 mock env，避免重跑产生假失败
 
 ### CI lock 一致性校验 (2026-09-09)
 - **新增 lock 同步校验**：`scripts/check_lock_sync.py`（纯 stdlib），校验 `requirements.txt` 中每项依赖都存在于 `requirements.lock` 且 `==` 锁定版本与 lock 一致；CI 新增 "Check lock sync" 步骤，版本脱节即阻断合并

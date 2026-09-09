@@ -52,6 +52,11 @@ jobs:
 
       - name: 测试失败诊断（把失败用例清单写成注解，供 API 无权限读取）
         if: failure()
+        env:
+          # 与上一步 Run tests 保持一致的 mock 配置，避免诊断重跑因缺 LLM_1_* 产生假失败
+          LLM_1_API_KEY: test-key
+          LLM_1_BASE_URL: https://test.example.com
+          LLM_1_MODEL_NAME: test-model
         run: |
           # 重跑套件（--tb=no 只要失败清单，30s 内完成）；
           # 注解可被 check-runs annotations API 公开读取，无需 admin 权限
