@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 依赖治理 (2026-09-09)
+- **顶层依赖锁定**：`requirements.txt` 的 18 个顶层依赖由 `>=` 改为 `==`，版本与 `requirements.lock` 同步，保证 CI（Python 3.10-3.12 矩阵）安装可复现
+- **补装 CI 缺失插件**：新增 `pytest-timeout==2.5.0`（`pyproject.toml` addopts 的 `--timeout=1200` 依赖它，此前 CI 安装步骤未包含，pytest 会因无法识别 `--timeout` 参数而失败）
+- **移除未使用依赖**：`radon` 全项目无 import 引用，从 `requirements.txt` 与 `setup.py` 移除（注释记录备查）
+- **修正过期注释**：`requests` 实际被 `scripts/check_quota.py` 使用，原"未直接使用"注释已更正
+
 ### 架构重构与性能优化 (2026-09-09 续)
 - **模块归类到子包**：`dataset_loader`/`synthetic_dataset` → `src/datasets/`，`api_manager` → `src/api/`，`config_manager`/`config_generator` → `src/config/`，`exceptions` → `src/utils/`，更新全部导入引用
 - **LLM 文件缓存接入**：`base_agent._call_llm_with_cache` 正式接入 planner/generator/debugger，相同 prompt 命中缓存省 token；新增开关 `AITESTER_LLM_CACHE` 与目录 `AITESTER_LLM_CACHE_DIR`（默认启用，测试自动隔离）
