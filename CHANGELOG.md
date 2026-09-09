@@ -12,6 +12,7 @@
 ### 测试质量提升
 - **重新启用 LLM 文件缓存 6 个测试**：`test_base_agent_extended.py` 中 6 个以"局部 import os/json 无法 patch"为由 skip 的测试，其 skip 理由在源码重构为模块级 import 后已失效。现通过 `AITESTER_LLM_CACHE`/`AITESTER_LLM_CACHE_DIR` 环境变量实现：缓存未命中、命中、prompt 不匹配、读取损坏 JSON、写入成功、写入异常 6 条路径全覆盖（skip 清零）
 - **API 管理器线程卫生测试**：新增 5 个用例（单例一致性、reset 停止健康检查线程、并发 get_manager 单实例、故障转移迁移日志）
+- **报告生成器测试补全**：新增 `tests/test_report_generator.py`（44 个用例），`src/reports/generator.py` 覆盖率由 **0% 提升至 100%**。覆盖 ErrorReport 四种序列化（dict/text/markdown/json）全部分支、generate() 五大错误分类路径、根本原因/修复建议的 context 分支（`generate()` 内 context 恒为 None，需直接调用私有方法构造 `ErrorContext` 覆盖）、`_parse_failed_cases` 解析（含 name 兜底为 unknown 的边界）、`save_report` 三格式落盘与单例语义
 
 ### 缺陷修复
 - **API 管理器后台线程泄漏**：`reset_manager()` 此前只清全局引用，`APIManger` 初始化的后台健康检查守护线程（每 60s 发起真实 LLM 探测）残留，继续对旧实例消耗 API 配额。现 reset 前调用新增的 `_stop_health_checker()` 显式停止并等待线程退出
@@ -25,9 +26,9 @@
 - **冗余 import 清理**：`generator._validate_parametrize` 移除方法内重复的 `import ast`（模块顶部已导入）
 
 ### 文档与一致性
-- **README 测试状态刷新**：测试数 708→743 passed、0 skipped；"最新优化/最近改动" 行同步本轮内容
+- **README 测试状态刷新**：测试数 708→787 passed、0 skipped；"最新优化/最近改动" 行同步本轮内容
 - **requirements.txt 过时注释修正**：CI Python 矩阵说明 3.10-3.12 → 3.12-3.14；ruff 安装说明改为固定版本
-- **回归**：全量 743 passed, 0 skipped, 1 warning（chromadb 内部 DeprecationWarning，第三方库问题）；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+- **回归**：全量 787 passed, 0 skipped, 1 warning（chromadb 内部 DeprecationWarning，第三方库问题）；`ruff check` / `ruff format --check` / lock 同步校验全部通过
 
 ## [0.9.1] - 2026-09-09
 
