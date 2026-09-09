@@ -348,11 +348,34 @@ snakeviz profile.prof
 
 ---
 
-## 七、附录：配置速查表
+## 七、LLM 客户端复用（连接池共享）
+
+### 7.1 背景
+
+优化前，每次 LLM 调用都新建一个客户端实例（`ChatOpenAI` / `ZhipuAiClient`），意味着反复创建底层 HTTP 连接池。高迭代次数（`MAX_ITERATIONS=3` × 多任务）时，建连开销累积明显。
+
+### 7.2 实现方案
+
+`src/agents/base_agent.py` 提供两个按配置键复用的客户端缓存：
+
+| 路径 | 缓存键 | 上限 | 驱逐策略 |
+|------|--------|------|----------|
+| OpenAI 兼容（`ChatOpenAI`） | `(model_name, temperature, api_key, base_url)` | 16 | FIFO |
+| zai SDK（`ZhipuAiClient`） | `(api_key, base_url)` | 16 | FIFO |
+
+入口函数：`_get_or_create_chat_client()` 与 `_get_or_create_zai_client()`。同一配置下的多次调用共享同一客户端（及其连接池），不同配置互不影响。
+
+### 7.3 注意事项
+
+- 缓存上限 16：常规使用（少数几个模型配置）远不会触及；大量不同 API Key 轮换时按 FIFO 逐个驱逐，行为可预期。
+- 客户端复用不影响 LLM 文件缓存与内存 LRU 缓存（二者作用于响应层，与客户端生命周期正交）。
+
+---
+
+## 八、附录：配置速查表
 
 ```bash
 # ==================== 基础配置 ====================
-MODEL_NAME=agnes-3.0-flash
 TEMPERATURE=0.2
 COVERAGE_THRESHOLD=80.0
 
@@ -383,5 +406,5 @@ LLM_2_MODEL_NAME=model-2
 
 ---
 
-*文档版本：v1.0*  
+*文档版本：v1.1（新增 LLM 客户端复用章节）*  
 *维护者：aitester-maintenance-team*

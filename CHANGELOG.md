@@ -2,7 +2,9 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [0.9.0] - 2026-09-09
+
+> 说明：0.4.0–0.8.0 时期的迭代工作记录在 README「迭代优化记录」章节，CHANGELOG 未逐版记录；本版本为最近一次版本发布。
 
 ### CI 兼容性与安全扫描修复 (2026-09-09)
 - **矩阵与锁定版本对齐**：lock 生成自 Python 3.14 开发环境，`scipy==1.18.0` 要求 `>=3.12`、`pandas/matplotlib` 要求 `>=3.11`，原矩阵 3.10/3.11 装不上锁定版本集。矩阵收窄为 `['3.12', '3.14']`（下限 + 开发环境），Codecov 上传条件同步改为 3.14
@@ -89,8 +91,9 @@
 
 ---
 
-## [Unreleased]
+## [0.3.0] - 2026-08-18
 
+> 说明：本节工作于 2026-08-18 完成，此前一直挂在 [Unreleased] 未随版本发布，2026-09-09 整理时补记为 0.3.0 并随 0.9.0 一并归档。
 
 ### 全量功能验证（2026-08-18）
 - **测试结果**：873 个测试用例收集，860 通过（98.6%），12 失败（已知边界问题），1 跳过
@@ -110,7 +113,7 @@
   - `test_base_agent_zai.py` 2 个（API 配额耗尽）
   - `test_dataset_loader.py` 3 个（HuggingFace mock 配置）
   - `test_concurrent_execution_safety` 1 个（随机性，重跑通过）
-- **详细报告**：[FUNCTIONAL_VALIDATION_REPORT_20260818.md](FUNCTIONAL_VALIDATION_REPORT_20260818.md)
+- **详细报告**：`FUNCTIONAL_VALIDATION_REPORT_20260818.md`（文件已不在仓库中，仅作记录）
 
 ### 新增功能
 - **API 管理器增强**：新增 `src/api_manager.py` 模块，支持多 Provider 轮询和高可用故障转移
@@ -160,8 +163,8 @@
 - **README.md**：更新迭代优化记录，添加 v0.10 和 v0.9 变更记录
 - **README.md**：更新测试状态表格，反映最新测试结果（696+ passed）
 - **CHANGELOG.md**：添加多 LLM 配置支持说明
-- **新增文档**：`docs/performance_optimization_report.md`、`docs/report_generator_guide.md`、`API_MANAGER_EXTENSION_GUIDE.md`
-- **迭代报告**：`ITERATION_REPORT_20260818.md`、`FINAL_ITERATION_SUMMARY.md`、`ITERATION_REPORT_ROUND2.md`
+- **新增文档**：`docs/performance_optimization_report.md`、`docs/report_generator_guide.md`、`API_MANAGER_EXTENSION_GUIDE.md`（该批文件后续已清理出仓库，此处仅作历史记录）
+- **迭代报告**：`ITERATION_REPORT_20260818.md`、`FINAL_ITERATION_SUMMARY.md`、`ITERATION_REPORT_ROUND2.md`（该批文件后续已清理出仓库，此处仅作历史记录）
 - **架构文档**：更新 `docs/algorithm_design.md`，反映 RAG 单例化改动
 
 ## [0.2.0] - 2026-08-17

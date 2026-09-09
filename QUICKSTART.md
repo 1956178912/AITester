@@ -10,7 +10,7 @@ cd AITester
 ## 2. 安装依赖
 
 ```bash
-# 创建虚拟环境
+# 创建虚拟环境（Python 3.12+；锁定依赖 scipy 要求 ≥3.12）
 python3 -m venv .venv
 source .venv/bin/activate
 
@@ -20,23 +20,25 @@ pip install -r requirements.txt
 
 ## 3. 配置环境变量
 
-### 方式一：使用 .env.example（推荐）
+> 两步都要做：步骤一配置非敏感项，步骤二配置 LLM 密钥（可跳过步骤一使用默认值，但密钥必须配）。
+
+### 步骤一：非敏感配置（.env）
 
 ```bash
 # 复制非敏感配置模板
 cp .env.example .env
 
-# 编辑 .env 文件，填入你的配置
+# 按需调整（如 TEMPERATURE）
 vim .env
 ```
 
-### 方式二：使用 config.local.example（敏感配置）
+### 步骤二：LLM 密钥（.env.local，必须）
 
 ```bash
 # 复制敏感配置模板
 cp config.local.example .env.local
 
-# 编辑 .env.local 文件，填入 API Key
+# 编辑 .env.local 文件，填入 LLM_N_API_KEY 等
 vim .env.local
 ```
 
