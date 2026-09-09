@@ -1,6 +1,6 @@
 # ─── 核心依赖 ─────────────────────────────────────────────────────────────────
 # 版本锁定说明：以下顶层依赖使用 == 锁定到本地验证过的版本（与 requirements.lock 同步，2026-09-09）。
-# 锁定目的：CI 跨 Python 3.10-3.12 安装时行为可复现，避免上游发版导致工作流行为漂移。
+# 锁定目的：CI 跨 Python 3.12-3.14 安装时行为可复现，避免上游发版导致工作流行为漂移。
 # 升级依赖时请同步更新 requirements.lock（在 .venv 中 pip freeze）并跑全量测试。
 #
 # langchain: LLM 应用开发框架，提供 Prompt 模板和消息管理
@@ -11,6 +11,9 @@ langchain-openai==1.4.3
 langgraph==1.2.11
 # pymysql: MySQL 数据库驱动，用于实验数据持久化
 pymysql==1.2.0
+# DBUtils: 数据库连接池（PooledDB），src/db/mysql_client.py 使用以提升并发能力
+# （2026-09-09 依赖审计补齐：此前漏声明，全新环境安装本文件后 src.db 模块无法导入）
+DBUtils==3.1.2
 # click: 命令行接口框架，提供 aitester run 等子命令
 click==8.4.2
 
@@ -55,5 +58,6 @@ zai-sdk==0.2.3
 #   若需手动分析被测代码复杂度，临时安装即可：pip install radon
 
 # ─── 开发工具（按需安装，不进 CI）───────────────────────────────────────────
-# ruff: 快速 lint 检查（CI 通过 pip install ruff 单独安装最新版）
-# 用法：pip install ruff && ruff check . && ruff format --check .
+# ruff: 快速 lint 检查。CI 固定安装 ruff==0.16.3（与 requirements.lock 一致，
+# 避免上游发版改变格式化规则导致 format 门禁随机转红）；本地开发工具，不入本文件。
+# 用法：pip install "ruff==0.16.3" && ruff check . && ruff format --check .
