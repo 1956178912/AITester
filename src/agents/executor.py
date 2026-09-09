@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,12 +25,10 @@ logger = logging.getLogger(__name__)
 _RE_FROM_IMPORT = re.compile(r"from\s+([\w.]+)\s+import")
 # 匹配 "import module_name" 语句
 _RE_IMPORT = re.compile(r"^import\s+([\w.]+)")
-# 替换 from old_module import ... 为 from new_module import ...
-_RE_FROM_REPLACE = re.compile(r"from\s+([\w.]+)\s+import")
-# 替换 import old_module 为 import new_module
-_RE_IMPORT_REPLACE = re.compile(r"^import\s+([\w.]+)\s*$", re.MULTILINE)
 # 提取模块名（无扩展名）
 _RE_MODULE_NAME = re.compile(r"([^/\\]+)\.py$")
+# 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比
+_RE_COVERAGE_TOTAL = re.compile(r"TOTAL\s+.+?(\d+)%")
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -445,21 +444,60 @@ class ExecutorAgent:
 
     @staticmethod
     def _build_sys_path_code(module_dirs: set) -> str:
-        """生成 sys.path 修改代码。"""
-        return "\n".join([f"import sys\nsys.path.insert(0, {repr(d)})" for d in sorted(module_dirs)])
+        """生成 sys.path 修改代码（import sys 只出现一次，避免原实现的重复导入）。"""
+        inserts = "\n".join(f"sys.path.insert(0, {repr(d)})" for d in sorted(module_dirs))
+        return f"import sys\n{inserts}"
+
+    @staticmethod
+    def _is_similar_module_name(imported_module: str, actual_module_name: str) -> bool:
+        """判断导入名是否为被测模块名的"笔误"变体（大小写/缩写/近形名）。
+
+        仅对相似名称做替换，避免把 numpy、requests 等第三方库导入
+        错误地改写为被测模块名（原实现对所有未解析导入无差别替换）。
+
+        Args:
+            imported_module: 测试代码中的导入模块名。
+            actual_module_name: 被测文件实际模块名。
+
+        Returns:
+            True 表示应替换为目标模块名。
+        """
+        a = imported_module.lower()
+        b = actual_module_name.lower()
+        if a == b:
+            return True
+        # 相似度阈值 0.6：覆盖常见笔误（如 calc vs calculator），
+        # 同时排除无关名称（如 numpy vs calculator 相似度仅约 0.13）
+        return SequenceMatcher(None, a, b).ratio() >= 0.6
 
     @staticmethod
     def _apply_import_replacements(
         test_code: str, imports: list[str], actual_module_name: str, needs_replacement: bool
     ) -> str:
-        """对测试代码应用导入替换，返回修改后的代码。"""
+        """对测试代码应用导入替换，返回修改后的代码。
+
+        仅替换与被测模块名相似的导入（_is_similar_module_name 门控），
+        并按模块名精确锚定正则，避免原实现"一条正则改写全部 import"
+        导致的第三方库导入被误替换问题。
+        """
         fixed_code = test_code
         if needs_replacement and imports:
+            replaced_any = False
             for imported_module in imports:
-                if imported_module != actual_module_name:
-                    fixed_code = _RE_FROM_REPLACE.sub(rf"from {actual_module_name} import", fixed_code)
-                    fixed_code = _RE_IMPORT_REPLACE.sub(f"import {actual_module_name}", fixed_code)
-            logger.info(f"模块名不匹配，已将导入从 '{imports[0]}' 替换为 '{actual_module_name}'")
+                if imported_module == actual_module_name:
+                    continue
+                if not ExecutorAgent._is_similar_module_name(imported_module, actual_module_name):
+                    # 无关模块（如第三方库）保持原样，不改写
+                    continue
+                # 按模块名锚定，仅替换该模块的导入语句
+                from_pattern = re.compile(rf"^from\s+{re.escape(imported_module)}\s+import", re.MULTILINE)
+                fixed_code = from_pattern.sub(f"from {actual_module_name} import", fixed_code)
+                import_pattern = re.compile(rf"^import\s+{re.escape(imported_module)}\s*$", re.MULTILINE)
+                fixed_code = import_pattern.sub(f"import {actual_module_name}", fixed_code)
+                replaced_any = True
+                logger.info("模块名不匹配，已将导入 '%s' 替换为 '%s'", imported_module, actual_module_name)
+            if not replaced_any:
+                logger.debug("无需替换：未发现与目标模块相似的错误导入名")
         return fixed_code
 
     @staticmethod
@@ -474,9 +512,18 @@ class ExecutorAgent:
         Returns:
             覆盖率百分比（0-100）。未找到覆盖率信息时返回 0.0。
         """
-        for line in output.splitlines():
+        lines = output.splitlines()
+        # 优先只扫描 TOTAL 汇总行（pytest-cov 覆盖率结果的权威来源），
+        # 避免逐行全量正则匹配的性能开销
+        total_lines = [line for line in lines if line.startswith("TOTAL")]
+        # 兼容旧版 pytest-cov 的小写 total 行格式
+        if not total_lines:
+            total_lines = [line for line in lines if line.startswith("total")]
+        if not total_lines:
+            total_lines = lines  # 极端兜底：保持与原行为一致的全文扫描
+        for line in total_lines:
             # 匹配 "TOTAL  xxxxx  85%" 格式，捕获百分比数字
-            m = re.search(r"TOTAL\s+.+?(\d+)%", line)
+            m = _RE_COVERAGE_TOTAL.search(line)
             if m:
                 try:
                     return float(m.group(1))
