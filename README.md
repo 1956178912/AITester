@@ -7,12 +7,12 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 743 collected |
-| **单元测试** | ✅ 743 passed, 0 skipped |
-| **代码覆盖率** | 76% 总覆盖（核心模块：base_agent 99% / api_manager 96% / dataset_loader 97% / workflow 91% / 工具与缓存 100%） |
+| **总测试数** | ✅ 787 collected |
+| **单元测试** | ✅ 787 passed, 0 skipped |
+| **代码覆盖率** | 83% 总覆盖（核心模块：reports/generator 100% / mysql_client 100% / base_agent 99% / api_manager 96% / dataset_loader 97% / workflow 91%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore） |
-| **最新优化** | ✅ CI 固定 ruff 0.16.3（修 format 门禁随机转红）；补齐 DBUtils 依赖声明；LLM 文件缓存 6 个测试重新启用（skip 清零）；API 管理器线程卫生（reset 停止后台健康检查线程、单例加锁、故障转移日志修正） |
+| **最新优化** | ✅ CI 固定 ruff 0.16.3（修 format 门禁随机转红）；补齐 DBUtils 依赖声明；LLM 文件缓存 6 个测试重新启用（skip 清零）；API 管理器线程卫生；reports/generator 补测试（0%→100% 覆盖） |
 | **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), base_agent.py (99%), api_manager.py (96%), dataset_loader.py (97%), workflow.py (91%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
 | **最近改动** | ✅ 版本收敛单一来源（`src/__version__`）、依赖锁定补齐、CI 门禁修复与稳定性加固（详见 [CHANGELOG 0.9.2](CHANGELOG.md)） |
