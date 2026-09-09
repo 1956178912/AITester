@@ -5,7 +5,9 @@
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+    # 与 CI（.github/workflows/ci.yml 固定 ruff==0.16.3）及 requirements.lock 保持一致，
+    # 避免本地 hook 与 CI 使用不同 ruff 版本导致格式化行为漂移
+    rev: v0.16.3
     hooks:
       - id: ruff
         args: [--fix, --show-fixes]
