@@ -346,8 +346,19 @@ class APIManger:
         fallback_candidates = [n for n in all_nodes if n not in nodes_to_try and n.is_healthy]
         return nodes_to_try, fallback_candidates
 
-    def _try_call_node(self, node, messages, kwargs, call_model: str, attempt: int) -> Any:
-        """尝试调用单个节点的 API。"""
+    def _try_call_node(
+        self, node, messages, kwargs, call_model: str, attempt: int, prev_model: str | None = None
+    ) -> Any:
+        """尝试调用单个节点的 API。
+
+        Args:
+            node: 目标节点（APIHealth）。
+            messages: 对话消息列表。
+            kwargs: 传给 chat.completions.create 的额外参数。
+            call_model: 实际请求携带的模型名。
+            attempt: 当前尝试序号（0 起）。
+            prev_model: 上一次尝试的模型名（故障转移成功时用于日志，attem > 0 才有意义）。
+        """
         client = self._client_cache.get(node.config.model_name)
         if not client:
             return None
@@ -358,7 +369,8 @@ class APIManger:
         elapsed_ms = (time.time() - start) * 1000
         node.mark_success(elapsed_ms)
         if attempt > 0:
-            logger.info("故障转移成功: %s -> %s", node.config.model_name, node.config.model_name)
+            # 故障转移成功：记录"上一个节点 -> 当前节点"（此前误把当前节点名打印了两遍）
+            logger.info("故障转移成功: %s -> %s", prev_model or "unknown", node.config.model_name)
         return response
 
     def _handle_rate_limit(self, node, attempt: int, primary_count: int) -> None:
@@ -403,8 +415,9 @@ class APIManger:
 
         for attempt, node in enumerate(all_nodes):
             call_model = model or node.config.model_name
+            prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
             try:
-                response = self._try_call_node(node, messages, kwargs, call_model, attempt)
+                response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
                 if response is not None:
                     return response
             except openai.RateLimitError as e:
@@ -527,23 +540,55 @@ class APIManger:
         self._health_checker.start()
         logger.info("已启动后台健康检查线程，间隔 %.1fs", self.config.health_check_interval)
 
+    def _stop_health_checker(self) -> None:
+        """停止并等待后台健康检查线程退出（释放管理器实例前调用）。
+
+        线程是 daemon=True，进程退出时会被杀掉；但若只是释放实例（如
+        reset_manager）而不停线程，残留线程会继续按间隔对旧实例发起
+        真实 LLM 健康检查请求（消耗 API 配额）。因此此处显式停止并等待。
+        """
+        checker = self._health_checker
+        if checker is None:
+            return
+        checker.stop()
+        checker.join(timeout=_HEALTH_CHECKER_SHUTDOWN_TIMEOUT)
+        if checker.is_alive():
+            # 批量健康检查可能耗时较长（真实 API 探测），等待超时后不阻塞，
+            # 依赖 daemon 特性在进程退出时清理
+            logger.warning("健康检查线程未在 %.1fs 内退出，交由进程退出清理", _HEALTH_CHECKER_SHUTDOWN_TIMEOUT)
+        self._health_checker = None
+
 
 # 全局单例
 _manager: APIManger | None = None
+# 单例锁：保护 get_manager/reset_manager，避免并发时创建多个管理器实例
+_manager_lock = threading.Lock()
+# 等待健康检查线程退出的超时（秒）：批量健康检查可能耗时数秒，
+# 设兜底超时避免 reset_manager 无限阻塞（线程为 daemon，进程退出时会终止）
+_HEALTH_CHECKER_SHUTDOWN_TIMEOUT = 5.0
 
 
 def get_manager() -> APIManger:
-    """获取全局 API 管理器单例"""
+    """获取全局 API 管理器单例（双重检查锁，线程安全）。"""
     global _manager
     if _manager is None:
-        _manager = APIManger()
+        with _manager_lock:
+            if _manager is None:
+                _manager = APIManger()
     return _manager
 
 
 def reset_manager() -> None:
-    """重置全局管理器（用于测试）"""
+    """重置全局管理器（用于测试）。
+
+    清空前停止旧实例的后台健康检查线程，避免残留线程继续发起
+    真实 LLM 健康检查请求（详见 _stop_health_checker 的说明）。
+    """
     global _manager
-    _manager = None
+    with _manager_lock:
+        if _manager is not None:
+            _manager._stop_health_checker()
+        _manager = None
 
 
 def print_status_table(manager: APIManger | None = None) -> None:
