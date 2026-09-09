@@ -18,8 +18,22 @@ from src.agents.base_agent import (
     _call_zai,
     _get_all_api_configs,
     _get_llm_config,
+    _llm_client_cache,
     _thread_local,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_llm_client_cache():
+    """每个测试前后清空 ChatOpenAI 客户端复用缓存。
+
+    各测试独立 patch ChatOpenAI，若缓存残留前一个测试的 mock 实例，
+    _call_llm 会复用旧 mock 导致断言错乱。
+    """
+    _llm_client_cache.clear()
+    yield
+    _llm_client_cache.clear()
+
 
 # ─── TestCallZai ──────────────────────────────────────────────────────────────
 
