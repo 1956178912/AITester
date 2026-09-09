@@ -82,7 +82,7 @@ class UXGroup(click.Group):
 
 
 @click.group(cls=UXGroup)
-@click.version_option(version="0.8.0", prog_name="AITester")
+@click.version_option(version="0.9.0", prog_name="AITester")
 def cli() -> None:
     """AITester - 多智能体自动化测试与自修复系统
 
