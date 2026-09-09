@@ -2,6 +2,23 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.1] - 2026-09-09
+
+### CLI 选项失效修复（state 贯通）
+- **--timeout 生效**：此前 `run --timeout` 值传入 `_run_single_task` 后从未被使用，Executor 直接读 `os.getenv("EXECUTION_TIMEOUT", "30")`，绕过了 config 的范围校验。现经 state 新增 `execution_timeout` 字段贯通到 `_executor_node`（优先级：state 注入 > config.EXECUTION_TIMEOUT）
+- **--coverage-threshold 生效**：此前该选项仅做 0-100 校验后从未参与任何判定。现经 state 新增 `coverage_threshold` 字段贯通，结果字典新增 `coverage_ok`（无覆盖率数据时为 None 不误判）与 `coverage_threshold` 字段，文本摘要展示达标状态
+
+### 缺陷修复
+- **LLM 配置加载遇编号空洞中断**：`config._load_llm_configs` 原实现在首个不完整编号处 `break`，删除中间某个 provider（如 LLM_2）会导致后续编号（LLM_3+）静默失效。改为扫描至上限 32 并跳过不完整编号，结果按原编号顺序保持
+- **指数退避公式错误**：`base_agent._retry_with_exponential_backoff` 等待时间误写为 `base_wait**attempt`——默认 base_wait=1 时退化为固定 1s（非文档宣称的 1s/2s/4s），zai 路径 base=5 时膨胀为 5s/25s/125s。修正为 `base_wait * 2**attempt`（1s/2s/4s；zai 5s/10s/20s）
+- **Executor 导入替换误伤第三方库**：`_apply_import_replacements` 原用未锚定正则对**全部** import 语句做全局替换，测试代码中的 `import numpy` 等第三方库会被错误改写为被测模块名。现按模块名锚定正则，并经相似度门控（SequenceMatcher ≥ 0.6，如 calculater→calculator）仅替换目标模块名的笔误变体；顺带消除未使用的 `_RE_FROM_REPLACE`/`_RE_IMPORT_REPLACE` 模块级正则
+
+### 代码质量
+- **CLI 统计去重**：`run` 命令的 total/passed/failed 此前在 JSON/非 JSON 两个分支各算一次，合并为单一计算点
+- **异常处理去重**：`_handle_task_exception` 的 `future.exception()` 从两次调用降为一次并记入日志
+- **Executor 小优化**：`_build_sys_path_code` 多目录注入不再产生重复 `import sys` 行；`_parse_coverage` 优先只扫描 TOTAL 汇总行（保留全文扫描兜底）
+- **回归**：新增 13 个回归测试（CLI state 贯通 6 + Executor 导入保护 3 + 退避公式 1 + 配置空洞容忍 3），全量 721 passed, 6 skipped；ruff 全绿
+
 ## [0.9.0] - 2026-09-09
 
 > 说明：0.4.0–0.8.0 时期的迭代工作记录在 README「迭代优化记录」章节，CHANGELOG 未逐版记录；本版本为最近一次版本发布。
