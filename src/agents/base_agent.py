@@ -81,6 +81,48 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
     return client
 
 
+# ─── zai SDK 客户端复用缓存（性能优化，与上方 ChatOpenAI 缓存同理）────────────
+# ZhipuAiClient 继承自 OpenAI SDK 基类，底层共享一个线程安全的 httpx.Client
+# （连接池可跨调用复用）；按 (api_key, base_url) 缓存实例，避免每次调用重建。
+# model 是请求参数而非客户端属性，故不进缓存键。
+_MAX_CACHED_ZAI_CLIENTS = 16
+_zai_client_cache: dict[tuple[str, str], Any] = {}
+
+
+def _get_or_create_zai_client(api_key: str, base_url: str) -> Any:
+    """获取（或创建）缓存的 zai SDK 客户端实例。
+
+    以 (api_key, base_url) 为缓存键，相同组合复用同一实例，
+    避免每次 zai 路径 LLM 调用都重建 ZhipuAiClient 与底层 httpx 连接池。
+
+    Args:
+        api_key: API 密钥。
+        base_url: 服务 Base URL。
+
+    Returns:
+        ZhipuAiClient 实例（缓存命中或新建）。
+
+    Raises:
+        ImportError: zai SDK 未安装时抛出（保持原 _call_zai 的延迟导入语义）。
+    """
+    # 延迟导入：避免未安装 zai SDK 时影响主程序启动
+    from zai import ZhipuAiClient
+
+    key = (api_key, base_url)
+    client = _zai_client_cache.get(key)
+    if client is not None:
+        return client
+    client = ZhipuAiClient(
+        api_key=api_key,
+        base_url=base_url,
+    )
+    # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
+    if len(_zai_client_cache) >= _MAX_CACHED_ZAI_CLIENTS:
+        _zai_client_cache.pop(next(iter(_zai_client_cache)))
+    _zai_client_cache[key] = client
+    return client
+
+
 def _retry_with_exponential_backoff(
     func,
     max_retries: int,
@@ -168,14 +210,10 @@ def _call_zai(
         RuntimeError: 所有重试均失败时抛出，携带最后一次异常信息。
     """
     # 延迟导入：避免未安装 zai SDK 时影响主程序启动
-    from zai import ZhipuAiClient
     from zai.core._errors import APIReachLimitError, APIStatusError
 
-    # 初始化智谱 AI 客户端
-    client = ZhipuAiClient(
-        api_key=api_key,
-        base_url=base_url,
-    )
+    # 复用缓存的智谱 AI 客户端（连接池跨调用复用）
+    client = _get_or_create_zai_client(api_key, base_url)
 
     # 定义 zai SDK 特有的可重试异常类型
     _ZAI_RETRYABLE_EXCEPTIONS = (APIReachLimitError, APIStatusError, Exception)

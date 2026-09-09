@@ -18,21 +18,25 @@ from src.agents.base_agent import (
     _call_zai,
     _get_all_api_configs,
     _get_llm_config,
+    _get_or_create_zai_client,
     _llm_client_cache,
     _thread_local,
+    _zai_client_cache,
 )
 
 
 @pytest.fixture(autouse=True)
 def _clear_llm_client_cache():
-    """每个测试前后清空 ChatOpenAI 客户端复用缓存。
+    """每个测试前后清空 LLM 客户端复用缓存（ChatOpenAI 与 zai 两套）。
 
-    各测试独立 patch ChatOpenAI，若缓存残留前一个测试的 mock 实例，
-    _call_llm 会复用旧 mock 导致断言错乱。
+    各测试独立 patch 客户端构造，若缓存残留前一个测试的 mock 实例，
+    _call_llm / _call_zai 会复用旧 mock 导致断言错乱。
     """
     _llm_client_cache.clear()
+    _zai_client_cache.clear()
     yield
     _llm_client_cache.clear()
+    _zai_client_cache.clear()
 
 
 # ─── TestCallZai ──────────────────────────────────────────────────────────────
@@ -83,6 +87,111 @@ class TestCallZai:
         call_kwargs = mock_retry.call_args
         assert call_kwargs.kwargs["base_wait"] == 5
         assert call_kwargs.kwargs["max_retries"] == 2
+
+
+# ─── TestZaiClientReuse ──────────────────────────────────────────────────────
+class TestZaiClientReuse:
+    """测试 zai SDK 客户端复用缓存（_get_or_create_zai_client）。
+
+    zai 是延迟导入（from zai import ZhipuAiClient），测试通过向 sys.modules
+    注入假 zai 模块来追踪构造次数，不依赖真实 zai SDK。
+    """
+
+    @pytest.fixture
+    def fake_zai(self, monkeypatch):
+        """注入假的 zai / zai.core / zai.core._errors 模块，返回 (假模块, 构造记录)。"""
+        import types
+
+        fake_module = types.ModuleType("zai")
+        fake_core = types.ModuleType("zai.core")
+        fake_errors = types.ModuleType("zai.core._errors")
+
+        class APIReachLimitError(Exception):
+            """假 zai 限流异常（用于 _call_zai 导入路径）。"""
+
+        class APIStatusError(Exception):
+            """假 zai 状态异常（用于 _call_zai 导入路径）。"""
+
+        fake_errors.APIReachLimitError = APIReachLimitError
+        fake_errors.APIStatusError = APIStatusError
+        fake_core._errors = fake_errors
+        fake_module.core = fake_core
+
+        constructed: list = []
+
+        # 预配置 LLM 响应：所有 fake 客户端的 create() 直接返回该响应
+        response = MagicMock(name="zai_response")
+        message = MagicMock(name="zai_message")
+        message.content = "zai ok"
+        response.choices = [MagicMock(message=message)]
+
+        def _fake_zhipu_ai_client(api_key=None, base_url=None, **kwargs):
+            mock_client = MagicMock(name=f"zai_client_{api_key}_{base_url}")
+            mock_client.chat.completions.create.return_value = response
+            constructed.append(mock_client)
+            return mock_client
+
+        fake_module.ZhipuAiClient = _fake_zhipu_ai_client
+        monkeypatch.setitem(sys.modules, "zai", fake_module)
+        monkeypatch.setitem(sys.modules, "zai.core", fake_core)
+        monkeypatch.setitem(sys.modules, "zai.core._errors", fake_errors)
+        return fake_module, constructed
+
+    def test_same_config_reuses_client(self, fake_zai):
+        """相同 (api_key, base_url) 返回同一实例，只构造一次。"""
+        _, constructed = fake_zai
+        c1 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
+        c2 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
+
+        assert c1 is c2
+        assert len(constructed) == 1
+
+    def test_different_config_creates_new_client(self, fake_zai):
+        """不同 api_key 构建新实例。"""
+        _, constructed = fake_zai
+        c1 = _get_or_create_zai_client("key-1", "https://open.bigmodel.cn/api/paas/v4/")
+        c2 = _get_or_create_zai_client("key-2", "https://open.bigmodel.cn/api/paas/v4/")
+
+        assert c1 is not c2
+        assert len(constructed) == 2
+
+    def test_fifo_eviction_at_capacity(self, fake_zai, monkeypatch):
+        """缓存达到上限时按 FIFO 淘汰最早条目。"""
+        import src.agents.base_agent as ba
+
+        fake_module, _ = fake_zai
+        monkeypatch.setattr(ba, "_MAX_CACHED_ZAI_CLIENTS", 2)
+
+        _get_or_create_zai_client("k1", "u")
+        _get_or_create_zai_client("k2", "u")
+        _get_or_create_zai_client("k3", "u")
+
+        assert len(_zai_client_cache) == 2
+        assert ("k1", "u") not in _zai_client_cache  # 最早插入的 k1 被淘汰
+        assert ("k3", "u") in _zai_client_cache
+
+    def test_call_zai_reuses_client_across_calls(self, fake_zai):
+        """_call_zai 连续两次调用复用同一客户端。"""
+        fake_module, constructed = fake_zai
+
+        result1 = _call_zai(
+            api_key="key-1",
+            base_url="https://open.bigmodel.cn/api/paas/v4/",
+            model_name="glm-4.7-flash",
+            system_prompt="sys",
+            user_message="hello",
+        )
+        result2 = _call_zai(
+            api_key="key-1",
+            base_url="https://open.bigmodel.cn/api/paas/v4/",
+            model_name="glm-4.7-flash",
+            system_prompt="sys",
+            user_message="hello",
+        )
+
+        assert result1 == "zai ok"
+        assert result2 == "zai ok"
+        assert len(constructed) == 1  # 两次调用只构造 1 个客户端
 
 
 # ─── TestGetLlmConfigThreadLocal ──────────────────────────────────────────────
