@@ -7,17 +7,17 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 686 collected |
-| **单元测试** | ✅ 524 passed (核心), 6 skipped |
-| **代码覆盖率** | 70% (核心模块 85%+) |
-| **已知失败** | ⚠️ 25 (RAG 依赖问题，数据集下载测试) |
-| **安全审查** | ✅ 无硬编码密钥 |
-| **最新优化** | ✅ v3.1 代码重构：提取公共工具模块，消除重复代码 |
+| **总测试数** | ✅ 706 collected |
+| **单元测试** | ✅ 700 passed, 6 skipped |
+| **代码覆盖率** | 70%+ (核心模块 85%+) |
+| **已知失败** | ✅ 0（RAG / 数据集下载测试已修复） |
+| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore） |
+| **最新优化** | ✅ 模块归类到 `src/{api,config,datasets,utils}` 子包；LLM 文件缓存接入 `base_agent`（省 token） |
 | **核心模块覆盖** | ✅ debugger.py (100%), api_manager.py (97%), retriever.py (93%), generator.py (93%), patch_applier.py (92%) |
 | **代码规范** | ✅ Ruff 检查全部通过 (E501, C901) |
-| **最近改动** | ✅ 重构 base_agent.py、patch_applier.py，新增 helpers.py 公共工具模块 |
+| **最近改动** | ✅ 架构重构到子包、`base_agent` 接入 LLM 文件缓存、模型目录更新（`agnes-3.0-flash`）、新增 `scripts/check_quota.py` 额度探测 |
 
-更多详情参见 [OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)、[COMPLETION_REPORT_20260825.md](COMPLETION_REPORT_20260825.md)、[TESTING_REPORT.md](TESTING_REPORT.md)。
+更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
 ## 开发工具
 
@@ -140,6 +140,30 @@ python experiments/run_benchmark.py --dataset examples --json
 
 **技术实现**：`src/graph/workflow.py` 中的 `get_rag_retriever()` 函数。
 
+### LLM 文件缓存（省 token）
+
+`base_agent` 的 LLM 调用已接入**持久化文件缓存**（`src/cache/*.json`，按 `md5(prompt + system_prompt)` 命名）。相同输入第二次起直接命中缓存，不再消耗 token——在「免费额度用完即停」的模型供应商下可显著延长可用时长。
+
+- **默认启用**；设环境变量 `AITESTER_LLM_CACHE=0` 可关闭；缓存目录可用 `AITESTER_LLM_CACHE_DIR` 覆盖。
+- **仅缓存成功响应**：调用失败（如 403 额度用尽）不写缓存。
+- 缓存是本地优化产物，`src/cache/` 已加入 `.gitignore`，不会提交。
+
+```bash
+export AITESTER_LLM_CACHE=0      # 临时关闭缓存（需要"换种思路重生成"时）
+rm -rf src/cache                # 清空缓存，让所有 prompt 重新调用 LLM
+```
+
+### 模型额度探测（scripts/check_quota.py）
+
+探测各已配置模型当前是「存活 / 免费额度用尽(403) / 限流 / key 失效 / 模型不存在」，每个模型仅发 1-token 请求，**不打印任何密钥**：
+
+```bash
+.venv/bin/python scripts/check_quota.py                      # 探测 .env.local 已配置的全部 LLM
+.venv/bin/python scripts/check_quota.py --provider aliyun_bailian   # 扫某 provider 目录全模型
+.venv/bin/python scripts/check_quota.py --models qwen-max,qwen-plus --provider aliyun_bailian
+.venv/bin/python scripts/check_quota.py --dry-run           # 只列出将探测的目标，不发请求
+```
+
 ### LLM 调用超时配置
 
 通过 `LLM_TIMEOUT` 配置项控制单次 LLM 调用的超时时间，防止 API 响应过慢导致任务卡死。
@@ -206,26 +230,39 @@ JSON 输出包含完整的结果统计、各基线详细数据和性能指标，
 AITester/
 ├── src/                              # 核心源代码
 │   ├── agents/                       # 多智能体模块
-│   │   ├── base_agent.py             # 智能体基类（LLM 调用、JSON 解析）
+│   │   ├── base_agent.py             # 智能体基类（LLM 调用 + 文件缓存、JSON 解析）
 │   │   ├── planner.py                # 测试规划师（含逻辑驱动思维链）
 │   │   ├── generator.py              # 测试代码生成器（支持 RAG 增强）
 │   │   ├── executor.py               # 测试执行器（带超时和重试）
 │   │   ├── debugger.py               # 调试修复师（分层错误修复）
 │   │   └── error_classifier.py       # 错误类型分类器（规则匹配）
+│   ├── api/                          # API 配置管理
+│   │   └── api_manager.py            # 多 LLM 配置 CRUD（.env.local / llm_configs.json）
+│   ├── config/                       # 配置管理
+│   │   ├── config_manager.py         # LLM 配置增删查
+│   │   └── config_generator.py       # .env / llm_configs 模板生成
+│   ├── datasets/                     # 数据集加载层
+│   │   ├── dataset_loader.py         # SWE-bench / Defects4J-Python 加载
+│   │   └── synthetic_dataset.py      # 合成数据集生成器（本地生成）
+│   ├── utils/                        # 公共工具
+│   │   ├── exceptions.py             # 统一异常层级
+│   │   ├── helpers.py                # 正则 / JSON / 代码块提取等工具
+│   │   └── logging_utils.py          # 日志工具
 │   ├── tools/                        # 工具函数模块
 │   │   ├── code_analyzer.py          # AST 代码分析（精确替换，避免正则误匹配）
 │   │   └── patch_applier.py          # 补丁应用（支持完整文件和单函数模式）
 │   ├── graph/                        # 工作流编排模块
 │   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关）
-│   │   └── state.py                  # 全局状态定义（TypedDict）
-│   ├── prompts/                      # Prompt 模板模块
-│   │   └── templates.py              # 各智能体的 System Prompt 集中管理
+│   │   ├── state.py                  # 全局状态定义（TypedDict）
+│   │   └── llm_cache.py             # LLM 内存 LRU 缓存（可选，带命中统计）
 │   ├── db/                           # 数据库模块
 │   │   └── mysql_client.py           # MySQL 单例客户端（任务、测试、修复记录）
 │   ├── rag/                          # 检索增强生成模块
 │   │   └── retriever.py              # ChromaDB 向量检索器（测试用例与修复案例）
-│   └── dataset_loader.py             # 数据集加载层（SWE-bench / Defects4J-Python）
-│   └── synthetic_dataset.py          # 合成数据集生成器（本地生成，无需外部下载）
+│   ├── reports/                      # 报告生成
+│   │   └── generator.py             # 实验结果报告
+│   └── experiments/                  # 实验分析
+│       └── analysis.py               # 统计检验与结果分析
 ├── experiments/                      # 实验脚本模块
 │   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验）
 │   └── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
@@ -298,11 +335,11 @@ ENABLE_RAG=false         # 启用 RAG 检索增强（默认 false）
 ```
 
 ### 6. 标准数据集集成（新增）
-通过 `src/dataset_loader.py` 和 `src/synthetic_dataset.py` 支持多种数据集：
+通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
 
 ```python
-from src.dataset_loader import SWEBenchDataset, load_dataset
-from src.synthetic_dataset import SyntheticDataset
+from src.datasets import SWEBenchDataset, load_dataset
+from src.datasets import SyntheticDataset
 
 # 加载内置示例数据集（无需下载，3 个预定义 bug 任务）
 dataset = load_dataset("examples")
@@ -352,7 +389,7 @@ python experiments/visualize_results.py
 ### 运行 SWE-bench 基准（需下载数据）
 ```bash
 # 方式一：从 HuggingFace 下载 lite 子集（约 500 任务）
-python -c "from src.dataset_loader import SWEBenchDataset; SWEBenchDataset.download_from_huggingface(subset='lite')"
+python -c "from src.datasets import SWEBenchDataset; SWEBenchDataset.download_from_huggingface(subset='lite')"
 
 # 方式二：手动下载后放入 ~/.cache/aitester/swe_bench/swe_bench_instances.jsonl
 
@@ -463,8 +500,8 @@ docker run --rm \
 |--------|------|--------|
 | `LLM_N_API_KEY` | LLM API 密钥（支持多配置，见 `config.local.example`）| 必填 |
 | `LLM_N_BASE_URL` | LLM Base URL | - |
-| `LLM_N_MODEL_NAME` | LLM 模型名称 | agnes-2.5-flash |
-| `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | agnes-2.5-flash |
+| `LLM_N_MODEL_NAME` | LLM 模型名称 | agnes-3.0-flash |
+| `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | agnes-3.0-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
@@ -501,7 +538,7 @@ all_configs: list[LLMConfig] = LLM_CONFIGS
 default_config: LLMConfig | None = DEFAULT_LLM_CONFIG
 ```
 
-更多配置详情参见 [API 管理器扩展指南](API_MANAGER_EXTENSION_GUIDE.md) 和 [config.local.example](config.local.example)。
+更多配置详情参见 [docs/api_reference.md](docs/api_reference.md) 和 [config.local.example](config.local.example)。
 
 ---
 

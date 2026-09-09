@@ -286,18 +286,18 @@ result = run_workflow(
 数据集加载基类。
 
 ```python
-from src.dataset_loader import load_dataset
+from src.datasets import load_dataset
 
 # 加载内置示例数据集
 dataset = load_dataset("examples")
 
 # 加载合成数据集
-from src.synthetic_dataset import SyntheticDataset
+from src.datasets import SyntheticDataset
 
 dataset = SyntheticDataset(task_count=50, seed=42)
 
 # 加载 SWE-bench 数据集
-from src.dataset_loader import SWEBenchDataset
+from src.datasets import SWEBenchDataset
 
 dataset = SWEBenchDataset(subset="lite")
 ```
@@ -324,7 +324,7 @@ for task in dataset:
 from config import get_config
 
 config = get_config()
-print(config["MODEL_NAME"])  # agnes-2.5-flash
+print(config["MODEL_NAME"])  # agnes-3.0-flash
 print(config["MAX_ITERATIONS"])  # 3
 ```
 
@@ -333,7 +333,7 @@ print(config["MAX_ITERATIONS"])  # 3
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `LLM_N_API_KEY` | str | - | LLM API 密钥（必填） |
-| `MODEL_NAME` | str | `agnes-2.5-flash` | LLM 模型名称 |
+| `MODEL_NAME` | str | `agnes-3.0-flash` | LLM 模型名称 |
 | `OPENAI_BASE_URL` | str | - | API 基础 URL |
 | `MAX_ITERATIONS` | int | 3 | 最大修复迭代次数 |
 | `COVERAGE_THRESHOLD` | float | 80.0 | 覆盖率阈值 |
@@ -385,15 +385,15 @@ class MyAgent(BaseAgent):
 
 ### 添加新的数据集
 
-1. 实现 `Dataset` 接口
+1. 实现 `BaseDatasetLoader` 抽象基类
 2. 返回 `target_code`, `function_name`, `module_name`
-3. 注册到 `load_dataset()` 工厂函数
+3. 在 `load_dataset()` 工厂函数的 `dataset_map` 中注册
 
 ```python
-from src.dataset_loader import Dataset
+from src.datasets.dataset_loader import BaseDatasetLoader
 
 
-class CustomDataset(Dataset):
+class CustomDataset(BaseDatasetLoader):
     def __init__(self):
         self.tasks = [...]
 

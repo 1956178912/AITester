@@ -112,7 +112,7 @@
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
-    "model_name": "agnes-2.5-flash",
+    "model_name": "agnes-3.0-flash",
     "provider": "agnes_domestic",
     "provider_description": "Agnes AI 国内站",
     "base_url": "https://api.agnes-ai.cn/v1",

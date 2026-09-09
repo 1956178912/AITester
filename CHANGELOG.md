@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### 架构重构与性能优化 (2026-09-09 续)
+- **模块归类到子包**：`dataset_loader`/`synthetic_dataset` → `src/datasets/`，`api_manager` → `src/api/`，`config_manager`/`config_generator` → `src/config/`，`exceptions` → `src/utils/`，更新全部导入引用
+- **LLM 文件缓存接入**：`base_agent._call_llm_with_cache` 正式接入 planner/generator/debugger，相同 prompt 命中缓存省 token；新增开关 `AITESTER_LLM_CACHE` 与目录 `AITESTER_LLM_CACHE_DIR`（默认启用，测试自动隔离）
+- **重写 llm_cache**：`src/graph/llm_cache.py` 由空壳改为可用线程安全 LRU，命中率统计准确（可选内存缓存工具）
+- **新增额度探测脚本**：`scripts/check_quota.py`，逐个模型 1-token 探测存活/403 额度/限流/key 失效，不打印密钥
+- **模型目录更新**：Agnes 国内站 `agnes-2.5-flash` → `agnes-3.0-flash`；默认模型 `LLM_1` 切至 `agnes-3.0-flash`
+- **测试修复**：dataset_loader 接口/环境依赖/下载 mock 修复；全量 700 passed, 6 skipped, 0 failed
+- **文档**：README/QUICKSTART/docs 同步架构、缓存、脚本与模型；`.gitignore` 增加 `src/cache/`、`.env.local.bak`
+
 ### 代码优化 (2026-09-09)
 - **提取公共工具模块**：新增 `src/utils/helpers.py`，统一代码块和 JSON 提取逻辑
   - `extract_code_block()`: 从 LLM 输出中提取代码块（支持多种格式）

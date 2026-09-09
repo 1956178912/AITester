@@ -99,11 +99,11 @@
       "description": "Kimi K2.7 Code（代码专用）"
     },
     {
-      "model_name": "agnes-2.5-flash",
+      "model_name": "agnes-3.0-flash",
       "base_url": "https://api.agnes-ai.cn/v1",
       "api_key": "YOUR_AGNES_API_KEY",
       "provider": "Agnes AI",
-      "description": "Agnes 2.5 Flash"
+      "description": "Agnes 3.0 Flash"
     },
     {
       "model_name": "agnes-2.5-pro",

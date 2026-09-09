@@ -331,7 +331,7 @@ python main.py run examples/my_module.py --func my_function
 ```bash
 MODEL_NAME=gpt-4o
 # 或
-MODEL_NAME=agnes-2.5-flash
+MODEL_NAME=agnes-3.0-flash
 ```
 
 ---

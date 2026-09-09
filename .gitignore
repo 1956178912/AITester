@@ -16,6 +16,7 @@ build/
 venv/
 env/
 ENV/
+venv_old/
 
 # IDE
 .idea/
@@ -26,6 +27,7 @@ ENV/
 # Environment
 .env
 .env.local
+.env.local.bak
 
 # Database
 *.db
@@ -38,6 +40,9 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# LLM 文件缓存（本地优化产物，避免重复提交）
+src/cache/
 
 # macOS
 .DS_Store
@@ -57,4 +62,6 @@ paper.md
 *.bib
 
 # Private data and experiments
+# 实验输出（本地数据，不提交）
 .private/
+experiments/results/
