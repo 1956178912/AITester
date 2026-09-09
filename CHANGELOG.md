@@ -10,8 +10,9 @@
 
 ### 性能优化 (2026-09-09)
 - **ChatOpenAI 客户端复用**：`base_agent._call_llm` 此前每次调用都新建 `ChatOpenAI` 实例（底层 httpx 连接池随之重建，无法复用 TCP/TLS 连接）。新增 `_get_or_create_chat_client`，按 `(model, temperature, api_key, base_url)` 缓存实例（上限 16，FIFO 淘汰），进程内复用连接；客户端线程安全，兼容 `--parallel` 并发
-- **测试隔离**：`tests/test_base_agent_extended.py` 增加 autouse fixture 清理客户端缓存，避免 mock 实例跨测试残留；新增 4 个客户端复用单测（复用/异键/FIFO 淘汰/`_call_llm` 复用）
-- **回归**：704 passed, 6 skipped
+- **zai 路径客户端复用**：`_call_zai` 此前每次调用都新建 `ZhipuAiClient`。经核实 `ZhipuAiClient` 继承自 OpenAI SDK 基类、底层共享线程安全的 `httpx.Client`，故新增 `_get_or_create_zai_client`，按 `(api_key, base_url)` 缓存（model 是请求参数不进键）
+- **测试隔离**：`tests/test_base_agent_extended.py` 增加 autouse fixture 清理两套客户端缓存，避免 mock 实例跨测试残留；新增 8 个客户端复用单测（ChatOpenAI 4 个 + zai 4 个，后者通过向 `sys.modules` 注入假 `zai` 模块追踪构造次数）
+- **回归**：708 passed, 6 skipped
 
 ### CLI 拆包与 CI 修复 (2026-09-09)
 - **main.py 拆包为 src/cli/**：507 行的 main.py 拆为 `src/cli/app.py`（命令定义与任务执行）+ `src/cli/output.py`（ANSI/Rich 输出工具），main.py 保留为薄入口，`python main.py ...` 与 setup.py 控制台脚本行为不变；`list-examples` 路径定位改为按项目根计算（拆分前用 `__file__` 指向根目录）
