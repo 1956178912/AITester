@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### CI 兼容性与安全扫描修复 (2026-09-09)
+- **矩阵与锁定版本对齐**：lock 生成自 Python 3.14 开发环境，`scipy==1.18.0` 要求 `>=3.12`、`pandas/matplotlib` 要求 `>=3.11`，原矩阵 3.10/3.11 装不上锁定版本集。矩阵收窄为 `['3.12', '3.14']`（下限 + 开发环境），Codecov 上传条件同步改为 3.14
+- **安全扫描迁移**：废弃的 `safety` 工具（`check` 子命令 2024-06 起不再支持，CI 上退出码 64）替换为 PyPA 维护的 `pip-audit`
+- **chromadb 漏洞例外（记录在案）**：`chromadb==1.5.9` 命中 PYSEC-2026-311（=CVE-2026-45829）、CVE-2026-45830/45831/45833 共 4 条已知漏洞，PyPI 上无修复版本（1.5.9 即最新），CI 以 `--ignore-vuln` 显式忽略并注释说明；**后续动作：chromadb 发布修复版后立即升级并移除忽略**
+- **action 版本升级**：`checkout@v4→v5`、`setup-python@v5→v6`（消除 Node.js 20 弃用告警）
+
 ### CI lock 一致性校验 (2026-09-09)
 - **新增 lock 同步校验**：`scripts/check_lock_sync.py`（纯 stdlib），校验 `requirements.txt` 中每项依赖都存在于 `requirements.lock` 且 `==` 锁定版本与 lock 一致；CI 新增 "Check lock sync" 步骤，版本脱节即阻断合并
 - **验证方式**：故意把 langgraph 版本改成 9.9.9，脚本正确报"版本脱节"并退出码 1；恢复后通过
