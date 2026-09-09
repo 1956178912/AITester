@@ -20,7 +20,9 @@ pytest==9.1.1
 # pytest-cov: pytest 覆盖率插件，生成行覆盖率报告
 pytest-cov==7.1.0
 # pytest-timeout: pytest 超时控制插件（pyproject addopts 的 --timeout=1200 依赖它，CI 必装）
-pytest-timeout==2.5.0
+# 注：锁定 2.4.0。2.5.0 已被上游 yank（原因 "accidental breaking change (probably)"），
+# 且 lock 曾误锁 2.5.0；2026-09-09 降级为最新未 yank 版本 2.4.0（已验证与 pytest 9.1.1 兼容）
+pytest-timeout==2.4.0
 # python-dotenv: 从 .env 文件加载环境变量
 python-dotenv==1.2.2
 
