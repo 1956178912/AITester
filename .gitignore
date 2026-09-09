@@ -39,6 +39,7 @@ venv_old/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # LLM 文件缓存（本地优化产物，避免重复提交）
