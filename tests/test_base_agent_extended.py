@@ -4,9 +4,11 @@ _get_all_api_configs、_call_llm_with_cache、_call_llm 等未覆盖路径，
 将覆盖率从 62% 提升至 ≥80%。
 """
 
+import hashlib
 import json
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +16,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.base_agent import (
+    _DEFAULT_LLM_MAX_RETRIES,
     BaseAgent,
     _call_zai,
     _get_all_api_configs,
@@ -273,14 +276,19 @@ class TestGetAllApiConfigs:
 
 # ─── TestCallLlmWithCache ─────────────────────────────────────────────────────
 #
-# 关键限制说明：
-# _call_llm_with_cache 内部使用局部 import os / import json，
-# Python 函数内的 __file__ 是编译时常量，无法通过 monkeypatch mod.__file__ 改变。
-# 因此这 6 个测试被标记为 xfail/skip，但通过其他方式覆盖了核心逻辑。
-# 覆盖率已达标（94%），剩余 12 行未覆盖主要是缓存 I/O 边界。
-#
-# 替代方案：以下测试通过 patch _call_llm 验证缓存方法的结构正确性，
-# 并验证缓存路径计算逻辑（通过 inspect 检查）。
+# 背景：本组 6 个测试曾以"局部 import os/json 无法 patch"为由 skip
+# （旧实现的方法内局部 import）。源码重构为模块级 import 后（base_agent
+# 顶部 import os/json/hashlib），缓存开关与目录均可经环境变量 patch：
+# - AITESTER_LLM_CACHE=1 开启缓存（conftest autouse fixture 默认置 0，测试内显式覆盖）
+# - AITESTER_LLM_CACHE_DIR 指向临时目录（conftest 已做测试隔离）
+# 缓存键算法（与 base_agent._call_llm_with_cache 保持一致）：
+#   md5(f"{user_message}:{system_prompt}").hexdigest()[:16] + ".json"
+
+
+def _cache_file_for(user_message: str, system_prompt: str, cache_dir) -> Path:
+    """计算给定消息对应的缓存文件路径（与 base_agent 实现同步，用于测试预置/断言）。"""
+    digest = hashlib.md5(f"{user_message}:{system_prompt}".encode()).hexdigest()[:16]
+    return Path(cache_dir) / f"{digest}.json"
 
 
 class TestCallLlmWithCache:
@@ -297,35 +305,92 @@ class TestCallLlmWithCache:
             mock_cls.return_value = mock_llm
             return BaseAgent("sys prompt")
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_miss_calls_llm(self):
-        """缓存未命中时调用 _call_llm 并返回结果。"""
-        pass
+    @pytest.fixture
+    def cache_env(self, monkeypatch, tmp_path):
+        """开启 LLM 文件缓存并把缓存目录指向临时目录（覆盖 conftest 的默认关闭）。"""
+        cache_dir = tmp_path / "cache_enabled"
+        cache_dir.mkdir()
+        monkeypatch.setenv("AITESTER_LLM_CACHE", "1")
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(cache_dir))
+        return cache_dir
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_hit_returns_cached_response(self, tmp_path):
-        """缓存命中时直接返回缓存的 response，不调用 _call_llm。"""
-        pass
+    def test_cache_miss_calls_llm(self, cache_env):
+        """缓存未命中时调用 _call_llm 并将结果写入缓存文件。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="llm response")
+        result = agent._call_llm_with_cache("hello")
+        assert result == "llm response"
+        agent._call_llm.assert_called_once_with("hello", _DEFAULT_LLM_MAX_RETRIES)
+        # 缓存文件已写入且内容完整
+        cache_file = _cache_file_for("hello", "sys prompt", cache_env)
+        assert cache_file.exists()
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        assert data["prompt"] == "hello"
+        assert data["system"] == "sys prompt"
+        assert data["response"] == "llm response"
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_hit_different_prompt_calls_llm(self, tmp_path):
-        """缓存命中的 prompt 与当前不同时，应调用 _call_llm。"""
-        pass
+    def test_cache_hit_returns_cached_response(self, cache_env):
+        """缓存命中时直接返回缓存的 response，不再发起 LLM 调用。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="live response")
+        first = agent._call_llm_with_cache("hello")
+        assert first == "live response"
+        agent._call_llm.reset_mock()
+        # 相同输入第二次调用：命中缓存，_call_llm 不再被调用
+        second = agent._call_llm_with_cache("hello")
+        assert second == "live response"
+        agent._call_llm.assert_not_called()
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_read_exception_logs_and_continues(self, tmp_path):
-        """缓存读取异常时记录日志并继续调用 LLM。"""
-        pass
+    def test_cache_hit_different_prompt_calls_llm(self, cache_env):
+        """缓存条目的 prompt 与当前请求不一致时（碰撞/脏数据），应落回实时调用。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="live response")
+        # 预置一条 prompt 不匹配的缓存条目（模拟哈希碰撞或历史脏数据）
+        cache_file = _cache_file_for("hello", "sys prompt", cache_env)
+        cache_file.write_text(
+            json.dumps({"prompt": "stale", "system": "sys prompt", "response": "stale response"}),
+            encoding="utf-8",
+        )
+        result = agent._call_llm_with_cache("hello")
+        assert result == "live response"
+        agent._call_llm.assert_called_once()
+        # 旧条目被有效结果覆盖
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        assert data["prompt"] == "hello"
+        assert data["response"] == "live response"
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_write_after_llm_call(self, tmp_path):
-        """LLM 调用成功后写入缓存文件。"""
-        pass
+    def test_cache_read_exception_logs_and_continues(self, cache_env):
+        """缓存文件损坏（非法 JSON）时读取异常被吞掉，仍正常走 LLM 调用。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="live response")
+        cache_file = _cache_file_for("hello", "sys prompt", cache_env)
+        cache_file.write_text("{ not valid json", encoding="utf-8")
+        result = agent._call_llm_with_cache("hello")
+        assert result == "live response"
+        agent._call_llm.assert_called_once()
+        # 损坏文件被有效内容覆盖
+        json.loads(cache_file.read_text(encoding="utf-8"))
 
-    @pytest.mark.skip(reason="局部 import os/json 无法 patch，需重构源码才能完整测试")
-    def test_cache_write_exception_logs_and_returns(self, tmp_path):
-        """缓存写入异常时记录日志并正常返回结果。"""
-        pass
+    def test_cache_write_after_llm_call(self, cache_env):
+        """LLM 调用成功后写入缓存文件（含 timestamp 字段，目录中仅此一个文件）。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="resp A")
+        agent._call_llm_with_cache("msg A")
+        cache_file = _cache_file_for("msg A", "sys prompt", cache_env)
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        assert {"prompt", "system", "response", "timestamp"} <= set(data)
+        assert data["response"] == "resp A"
+        # 缓存目录中恰好一个文件（无冗余写入）
+        assert list(cache_env.iterdir()) == [cache_file]
+
+    def test_cache_write_exception_logs_and_returns(self, cache_env):
+        """缓存写入失败（如只读文件系统）时异常被吞掉，正常返回 LLM 结果。"""
+        agent = self._make_agent()
+        agent._call_llm = MagicMock(return_value="live response")
+        with patch("os.makedirs", side_effect=OSError("read-only filesystem")):
+            result = agent._call_llm_with_cache("hello")
+        assert result == "live response"
+        agent._call_llm.assert_called_once()
 
     def test_cache_method_exists_and_has_correct_signature(self):
         """验证 _call_llm_with_cache 方法存在且具有正确的签名。"""
