@@ -110,8 +110,7 @@ def _scrub(text: str, limit: int = 160) -> str:
     return text[:limit]
 
 
-def probe(base_url: str, model: str, api_key: str | None,
-          max_tokens: int, timeout: float) -> dict:
+def probe(base_url: str, model: str, api_key: str | None, max_tokens: int, timeout: float) -> dict:
     """向单个模型端点发一次最小补全请求，返回 {status, detail}。
 
     - api_key 为 None：不请求，直接标 no_key（省 token、避免无谓 401）。
@@ -170,14 +169,10 @@ def _targets_by_provider(provider: str, key_env: str | None) -> list[dict]:
     if not models:
         models = []  # 目录里没有该 provider
     key = os.getenv(key_env) if key_env else _key_for_base_url(base_url)
-    return [
-        {"model": m, "base_url": base_url, "key": key, "origin": f"catalog:{provider}"}
-        for m in models
-    ]
+    return [{"model": m, "base_url": base_url, "key": key, "origin": f"catalog:{provider}"} for m in models]
 
 
-def _targets_by_models(names: list[str], provider: str | None,
-                       key_env: str | None) -> list[dict]:
+def _targets_by_models(names: list[str], provider: str | None, key_env: str | None) -> list[dict]:
     """探测指定模型名：base_url/key 取自 --provider 或第一个已配置 LLM。"""
     if provider and provider in PROVIDER_BASE_URL:
         base_url = PROVIDER_BASE_URL[provider]
@@ -187,10 +182,7 @@ def _targets_by_models(names: list[str], provider: str | None,
         key = os.getenv(key_env) if key_env else config.LLM_CONFIGS[0].api_key
     else:
         base_url, key = "", None
-    return [
-        {"model": m, "base_url": base_url, "key": key, "origin": "args"}
-        for m in names
-    ]
+    return [{"model": m, "base_url": base_url, "key": key, "origin": "args"} for m in names]
 
 
 def main() -> int:
@@ -217,8 +209,7 @@ def main() -> int:
         print(f"  已配置的 LLM：{len(config.LLM_CONFIGS)} 条（来自 .env.local 的 LLM_N_*）")
         if args.provider:
             print(f"  目录中 provider '{args.provider}' 的模型：0 个")
-        print("  建议：在 .env.local 配置 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL_NAME，"
-              "或用 --models 显式指定。")
+        print("  建议：在 .env.local 配置 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL_NAME，或用 --models 显式指定。")
         return 1
 
     if args.dry_run:

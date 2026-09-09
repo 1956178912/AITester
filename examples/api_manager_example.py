@@ -59,7 +59,9 @@ def example_health_check():
     print("\nTop 5 表现最好的节点:")
     top_nodes = manager.get_top_nodes(n=5, sort_by="success_rate")
     for i, node in enumerate(top_nodes, 1):
-        print(f"  {i}. {node['model']:<25} 成功率: {node['success_rate']:.1%}  延迟: {node['avg_response_time_ms']:.0f}ms")
+        print(
+            f"  {i}. {node['model']:<25} 成功率: {node['success_rate']:.1%}  延迟: {node['avg_response_time_ms']:.0f}ms"
+        )
 
 
 def example_call_with_fallback():
@@ -71,9 +73,7 @@ def example_call_with_fallback():
     try:
         # 调用 API（自动故障转移）
         response = manager.call(
-            messages=[{"role": "user", "content": "Say hello in one word"}],
-            max_tokens=10,
-            temperature=0
+            messages=[{"role": "user", "content": "Say hello in one word"}], max_tokens=10, temperature=0
         )
 
         if response and response.choices:
@@ -82,8 +82,8 @@ def example_call_with_fallback():
 
             # 查看使用了哪个节点
             status = manager.get_status()
-            for name, node in status['nodes'].items():
-                if node['total_requests'] > 0:
+            for name, node in status["nodes"].items():
+                if node["total_requests"] > 0:
                     print(f"  节点 {name} 被调用 {node['total_requests']} 次")
 
     except Exception as e:
@@ -99,11 +99,7 @@ def example_dynamic_management():
     manager = APIManger()
 
     # 添加新节点
-    new_config = LLMConfig(
-        api_key="test-key",
-        base_url="https://test.example.com/v1",
-        model_name="test-model"
-    )
+    new_config = LLMConfig(api_key="test-key", base_url="https://test.example.com/v1", model_name="test-model")
     manager.add_node(new_config)
     print(f"添加节点后总数: {manager.get_status()['total_nodes']}")
 

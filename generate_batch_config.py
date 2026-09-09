@@ -25,7 +25,7 @@ def parse_args():
 
 
 def load_models(models_file: str) -> list[dict[str, Any]]:
-    with open(models_file, encoding='utf-8') as f:
+    with open(models_file, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -67,7 +67,7 @@ def main():
     config_content = generate_config(models, api_keys)
 
     # 写入文件
-    with open(args.output, 'w', encoding='utf-8') as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         f.write(config_content)
 
     print(f"配置已生成: {args.output}")

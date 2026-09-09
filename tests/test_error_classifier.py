@@ -84,7 +84,7 @@ class TestErrorContext:
             column=10,
             module_name="pandas",
             error_message="No module named pandas",
-            subtype=SyntaxSubtype.IMPORT_ERROR
+            subtype=SyntaxSubtype.IMPORT_ERROR,
         )
         assert ctx.filename == "test.py"
         assert ctx.line == 42
@@ -189,7 +189,7 @@ class TestErrorClassifier:
 
     def test_extract_context_syntax_error(self):
         """提取语法错误的上下文。"""
-        output = "File \"test.py\", line 10: SyntaxError"
+        output = 'File "test.py", line 10: SyntaxError'
         context = self.classifier.extract_error_context(output, [])
         assert context.filename == "test.py"
         assert context.line == 10
@@ -269,12 +269,7 @@ class TestGetFixStrategy:
 
     def test_syntax_error_with_location(self):
         """语法错误的修复策略（含位置）。"""
-        context = ErrorContext(
-            filename="test.py",
-            line=10,
-            column=5,
-            subtype=SyntaxSubtype.SYNTAX_ERROR
-        )
+        context = ErrorContext(filename="test.py", line=10, column=5, subtype=SyntaxSubtype.SYNTAX_ERROR)
         strategy = get_fix_strategy(ErrorCategory.SYNTAX, context)
         assert "test.py" in strategy
         assert "10" in strategy

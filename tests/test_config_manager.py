@@ -1,4 +1,5 @@
 """测试 config_manager 模块"""
+
 from unittest.mock import mock_open, patch
 
 from src.config.config_manager import (
@@ -125,11 +126,7 @@ class TestRemoveLLMConfig:
 
     def test_remove_existing_model(self, tmp_path):
         env_content = (
-            "# 模型 1: test-model\n"
-            "LLM_1_API_KEY=key1\n"
-            "LLM_1_BASE_URL=https://ex.com\n"
-            "LLM_1_MODEL_NAME=test-model\n"
-            "\n"
+            "# 模型 1: test-model\nLLM_1_API_KEY=key1\nLLM_1_BASE_URL=https://ex.com\nLLM_1_MODEL_NAME=test-model\n\n"
         )
         with patch("src.config.config_manager.os.path.exists", return_value=True):
             with patch("src.config.config_manager.open", mock_open(read_data=env_content)):

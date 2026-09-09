@@ -1,4 +1,5 @@
 """测试配置管理"""
+
 from src.config.config_manager import (
     count_llm_configs,
     get_all_llm_configs,
@@ -20,9 +21,9 @@ class TestConfigManager:
         configs = get_all_llm_configs()
         assert len(configs) > 0
         # 验证配置结构
-        assert hasattr(configs[0], 'model_name')
-        assert hasattr(configs[0], 'api_key')
-        assert hasattr(configs[0], 'base_url')
+        assert hasattr(configs[0], "model_name")
+        assert hasattr(configs[0], "api_key")
+        assert hasattr(configs[0], "base_url")
 
     def test_validate_configs(self):
         """验证配置"""
@@ -42,5 +43,5 @@ class TestConfigManager:
         if configs:
             config = configs[0]
             assert config.model_name  # 非空
-            assert config.api_key     # 非空
-            assert config.base_url    # 非空
+            assert config.api_key  # 非空
+            assert config.base_url  # 非空

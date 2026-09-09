@@ -23,6 +23,7 @@ from src.rag.retriever import TestCaseRetriever
 #  fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_chromadb():
     """提供 mock 的 chromadb 模块。"""
@@ -62,6 +63,7 @@ def retriever(mock_chromadb, mock_settings):
 #  初始化测试
 # ============================================================================
 
+
 class TestInit:
     """测试 TestCaseRetriever 初始化逻辑。"""
 
@@ -100,6 +102,7 @@ class TestInit:
 # ============================================================================
 #  add_case 测试
 # ============================================================================
+
 
 class TestAddCase:
     """测试 add_case 方法的添加逻辑。"""
@@ -192,6 +195,7 @@ class TestAddCase:
 #  add_repair 测试
 # ============================================================================
 
+
 class TestAddRepair:
     """测试 add_repair 方法的添加逻辑。"""
 
@@ -243,6 +247,7 @@ class TestAddRepair:
 # ============================================================================
 #  retrieve_test_cases 测试
 # ============================================================================
+
 
 class TestRetrieveTestCases:
     """测试 retrieve_test_cases 方法的检索逻辑。"""
@@ -298,6 +303,7 @@ class TestRetrieveTestCases:
 #  retrieve_repairs 测试
 # ============================================================================
 
+
 class TestRetrieveRepairs:
     """测试 retrieve_repairs 方法的检索逻辑。"""
 
@@ -346,6 +352,7 @@ class TestRetrieveRepairs:
 # ============================================================================
 #  cleanup 测试
 # ============================================================================
+
 
 class TestCleanupExpired:
     """测试清理过期条目的逻辑。"""
@@ -398,7 +405,8 @@ class TestCleanupExpiredAndExcess:
         retriever.collection.get.return_value = {
             "ids": [f"id{i}" for i in range(105)],
             "metadatas": [
-                {"_added_at": current_time - i * 10} for i in range(105)  # id0最新，id104最旧
+                {"_added_at": current_time - i * 10}
+                for i in range(105)  # id0最新，id104最旧
             ],
         }
         retriever.max_cases = 100
@@ -429,6 +437,7 @@ class TestCleanupExpiredAndExcess:
 #  clear 测试
 # ============================================================================
 
+
 class TestClear:
     """测试 clear 方法的清空逻辑。"""
 
@@ -445,6 +454,7 @@ class TestClear:
 # ============================================================================
 #  混合检索场景测试
 # ============================================================================
+
 
 class TestMixedRetrieval:
     """测试混合检索场景：先添加后检索。"""
@@ -498,6 +508,7 @@ class TestMixedRetrieval:
 # ============================================================================
 #  边界条件测试
 # ============================================================================
+
 
 class TestEdgeCases:
     """测试边界条件和异常场景。"""

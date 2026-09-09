@@ -379,6 +379,7 @@ class TestCollapseBlankLines:
     def test_collapse_consecutive_blank_lines(self):
         """压缩连续空行。"""
         from src.tools.patch_applier import _collapse_blank_lines
+
         lines = ["def foo():", "", "", "", "    pass"]
         result = _collapse_blank_lines(lines)
         blank_count = sum(1 for line in result if line.strip() == "")

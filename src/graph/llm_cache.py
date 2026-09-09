@@ -161,9 +161,7 @@ def get_cached_response(prompt: str, system_prompt: str, extra: str | None = Non
     return _cache_get(key)
 
 
-def set_cached_response(
-    prompt: str, system_prompt: str, response: str, extra: str | None = None
-) -> None:
+def set_cached_response(prompt: str, system_prompt: str, response: str, extra: str | None = None) -> None:
     """
     手动写入缓存响应（用于绕过装饰器的场景）。
 

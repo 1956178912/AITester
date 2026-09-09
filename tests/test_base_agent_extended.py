@@ -165,8 +165,10 @@ class TestCallLlmWithCache:
 
     def _make_agent(self):
         """创建一个 mock llm 的 BaseAgent 实例。"""
-        with patch("src.agents.base_agent.ChatOpenAI") as mock_cls, \
-             patch("src.agents.base_agent._get_llm_config") as mock_get:
+        with (
+            patch("src.agents.base_agent.ChatOpenAI") as mock_cls,
+            patch("src.agents.base_agent._get_llm_config") as mock_get,
+        ):
             mock_get.return_value = ("k", "u", "m")
             mock_llm = MagicMock()
             mock_cls.return_value = mock_llm
@@ -205,6 +207,7 @@ class TestCallLlmWithCache:
     def test_cache_method_exists_and_has_correct_signature(self):
         """验证 _call_llm_with_cache 方法存在且具有正确的签名。"""
         import inspect
+
         agent = self._make_agent()
         sig = inspect.signature(agent._call_llm_with_cache)
         params = list(sig.parameters.keys())
@@ -222,8 +225,10 @@ class TestCallLlm:
 
     def _make_agent(self):
         """创建 mock llm 的 BaseAgent 实例。"""
-        with patch("src.agents.base_agent.ChatOpenAI") as mock_cls, \
-             patch("src.agents.base_agent._get_llm_config") as mock_get:
+        with (
+            patch("src.agents.base_agent.ChatOpenAI") as mock_cls,
+            patch("src.agents.base_agent._get_llm_config") as mock_get,
+        ):
             mock_get.return_value = ("k", "u", "m")
             mock_llm = MagicMock()
             mock_cls.return_value = mock_llm
@@ -366,7 +371,7 @@ class TestExtractJsonEdgeCases:
 
     def test_json_with_surrounding_text_and_markdown(self):
         """文本中嵌有 markdown 包裹的 JSON。"""
-        text = "Here's the result:\n```json\n{\"answer\": 42}\n```\nHope this helps!"
+        text = 'Here\'s the result:\n```json\n{"answer": 42}\n```\nHope this helps!'
         result = BaseAgent._extract_json(text)
         assert result == {"answer": 42}
 
@@ -411,7 +416,7 @@ class TestFindBalancedJsonEdgeCases:
 
     def test_escaped_brace_in_string(self):
         """字符串内的花括号不计入深度。"""
-        text = '{"key": "value \\\"with braces {in}\\\""}'
+        text = '{"key": "value \\"with braces {in}\\""}'
         result = BaseAgent._find_balanced_json(text, 0)
         assert result == text
 
