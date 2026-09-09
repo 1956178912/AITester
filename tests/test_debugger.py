@@ -9,10 +9,10 @@ DebuggerAgent 单元测试
 """
 
 import json
+import os
 import sys
 from unittest.mock import patch
 
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.debugger import DebuggerAgent

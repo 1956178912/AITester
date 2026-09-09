@@ -11,7 +11,7 @@ API Manager 扩展测试套件
 - 健康检查（check_health 各类异常分支、health_check_all / health_check_batch）
 - 线程安全（concurrent select_node）
 
-注意：所有测试通过 patch("src.api_manager.LLM_CONFIGS", []) 隔离真实配置，
+注意：所有测试通过 patch("src.api.api_manager.LLM_CONFIGS", []) 隔离真实配置，
       确保不连接任何外部 API，不依赖 .env 中的实际 key。
 """
 
@@ -26,7 +26,7 @@ import pytest
 sys.path.insert(0, ".")
 
 from config import LLMConfig
-from src.api_manager import (
+from src.api.api_manager import (
     APIHealth,
     APIManger,
     HealthCheckerThread,
@@ -41,7 +41,7 @@ from src.api_manager import (
 
 def _empty_mgr() -> APIManger:
     """创建一个不带任何预置节点的 APIManger（patch LLM_CONFIGS 为空）。"""
-    with patch("src.api_manager.LLM_CONFIGS", []):
+    with patch("src.api.api_manager.LLM_CONFIGS", []):
         mgr = APIManger()
     return mgr
 
@@ -207,20 +207,20 @@ class TestErrorHandlers:
 
     def test_handle_rate_limit_sleeps_two_when_primary_remaining(self):
         """fallback 启用且还有主节点时 sleep 2 秒"""
-        with patch("src.api_manager.time.sleep") as mock_sleep:
+        with patch("src.api.api_manager.time.sleep") as mock_sleep:
             self.mgr._handle_rate_limit(self.node, attempt=0, primary_count=2)
             mock_sleep.assert_called_once_with(2)
 
     def test_handle_rate_limit_sleeps_five_when_no_primary_remaining(self):
         """fallback 启用但已无主节点时 sleep 5 秒"""
-        with patch("src.api_manager.time.sleep") as mock_sleep:
+        with patch("src.api.api_manager.time.sleep") as mock_sleep:
             self.mgr._handle_rate_limit(self.node, attempt=1, primary_count=2)
             mock_sleep.assert_called_once_with(5)
 
     def test_handle_rate_limit_no_sleep_when_fallback_disabled(self):
         """fallback 禁用时不 sleep"""
         self.mgr.config.fallback_on_failure = False
-        with patch("src.api_manager.time.sleep") as mock_sleep:
+        with patch("src.api.api_manager.time.sleep") as mock_sleep:
             self.mgr._handle_rate_limit(self.node, attempt=0, primary_count=1)
             mock_sleep.assert_not_called()
 
@@ -331,7 +331,7 @@ class TestBuildNodeList:
 class TestCallFallbackScenarios:
     """测试 call() 在各类故障场景下的行为（现有测试部分覆盖，此处补充）"""
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_fallback_after_generic_error(self, mock_openai_class, caplog):
         """通用异常触发故障转移到备用节点"""
         import logging
@@ -350,7 +350,7 @@ class TestCallFallbackScenarios:
         assert result is not None
         mock_client2.chat.completions.create.assert_called_once()
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_generic_error_raises_when_all_fail(self, mock_openai_class):
         """所有节点都抛通用异常时最终抛出 RuntimeError"""
         mock_client = _mock_client(side_effect=ConnectionError("fail"))
@@ -363,7 +363,7 @@ class TestCallFallbackScenarios:
         with pytest.raises(RuntimeError, match="所有 API 节点调用失败"):
             mgr.call(messages=[{"role": "user", "content": "hi"}])
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_fallback_disabled_raises_on_first_error(self, mock_openai_class):
         """禁用 fallback 时首个节点 APIError：修复后 _handle_api_error 不再访问 e.status_code，
         会直接抛出原始异常。"""
@@ -384,7 +384,7 @@ class TestCallFallbackScenarios:
         with pytest.raises(openai.APIError):
             mgr.call(messages=[{"role": "user", "content": "hi"}])
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_with_model_kwarg_override(self, mock_openai_class):
         """指定 model 参数覆盖自动选择并透传 kwargs"""
         mock_client = _mock_client()
@@ -405,7 +405,7 @@ class TestCallFallbackScenarios:
         assert call_kwargs.get("temperature") == 0.5
         assert call_kwargs.get("max_tokens") == 100
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_both_primary_and_fallback_rate_limited(self, mock_openai_class):
         """主节点和备用节点都限流时最终抛出 RuntimeError（新版 SDK 构造方式）"""
         # 新版 RateLimitError: RateLimitError(message, *, response, body)
@@ -438,7 +438,7 @@ class TestHealthCheckExceptions:
         self.mgr = _empty_mgr()
         self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_connection_error_marks_unhealthy(self, mock_openai_class):
         """ConnectionError 时节点 error_count 递增，但不至于标记为不健康（需连续3次）"""
         mock_client = _mock_client(side_effect=ConnectionError("connection lost"))
@@ -455,7 +455,7 @@ class TestHealthCheckExceptions:
         # 连续失败1次不足以标记为不健康
         assert node.is_healthy is True
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_check_health_timeout_error_marks_unhealthy(self, mock_openai_class):
         """TimeoutError 时节点 error_count 递增，但不至于标记为不健康"""
         mock_client = _mock_client(side_effect=TimeoutError("request timeout"))
@@ -479,7 +479,7 @@ class TestHealthCheckExceptions:
         assert result is False
         assert node.is_healthy is False
 
-    @patch("src.api_manager.time.sleep", return_value=None)
+    @patch("src.api.api_manager.time.sleep", return_value=None)
     def test_health_check_batch_custom_size(self, mock_sleep):
         """health_check_batch 使用自定义批次大小"""
         for i in range(4):
@@ -578,7 +578,7 @@ class TestStatusQueries:
 class TestNodeLifecycle:
     """测试节点动态添加/移除后的状态一致性"""
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_add_node_increases_node_count(self, mock_openai_class):
         """add_node 后节点数量增加"""
         mock_openai_class.return_value = MagicMock()
@@ -588,7 +588,7 @@ class TestNodeLifecycle:
         assert len(mgr.health_nodes) == initial_count + 1
         assert "new-model" in mgr.health_nodes
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_add_node_client_cached(self, mock_openai_class):
         """add_node 后客户端存入缓存"""
         mock_client = MagicMock()
@@ -598,7 +598,7 @@ class TestNodeLifecycle:
         assert "model1" in mgr._client_cache
         assert mgr._client_cache["model1"] is mock_client
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_remove_node_decreases_count(self, mock_openai_class):
         """remove_node 后节点数量和缓存同时减少"""
         mock_openai_class.return_value = MagicMock()
@@ -613,7 +613,7 @@ class TestNodeLifecycle:
         assert "model1" not in mgr.health_nodes
         assert "model1" not in mgr._client_cache
 
-    @patch("src.api_manager.openai.OpenAI")
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_add_then_remove_then_add_same_model(self, mock_openai_class):
         """添加→移除→再次添加同一模型"""
         mock_openai_class.return_value = MagicMock()

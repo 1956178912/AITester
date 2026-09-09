@@ -1,7 +1,7 @@
 """测试 config_manager 模块"""
 from unittest.mock import mock_open, patch
 
-from src.config_manager import (
+from src.config.config_manager import (
     add_llm_config,
     batch_add_models,
     count_llm_configs,
@@ -84,9 +84,9 @@ class TestAddLLMConfig:
     """测试 add_llm_config（使用 mock 文件系统）"""
 
     def test_add_valid_config(self, tmp_path):
-        with patch("src.config_manager.os.path.exists", return_value=False):
-            with patch("src.config_manager.open", mock_open()):
-                with patch("src.config_manager.load_dotenv"):
+        with patch("src.config.config_manager.os.path.exists", return_value=False):
+            with patch("src.config.config_manager.open", mock_open()):
+                with patch("src.config.config_manager.load_dotenv"):
                     result = add_llm_config(
                         api_key="test-key",
                         base_url="https://test.example.com",
@@ -97,9 +97,9 @@ class TestAddLLMConfig:
 
     def test_add_duplicate_model_returns_false(self, tmp_path):
         env_content = "LLM_1_MODEL_NAME=test-model\n"
-        with patch("src.config_manager.os.path.exists", return_value=True):
-            with patch("src.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config_manager.load_dotenv"):
+        with patch("src.config.config_manager.os.path.exists", return_value=True):
+            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
+                with patch("src.config.config_manager.load_dotenv"):
                     result = add_llm_config(
                         api_key="test-key",
                         base_url="https://test.example.com",
@@ -109,9 +109,9 @@ class TestAddLLMConfig:
         assert result is False
 
     def test_add_config_auto_index(self, tmp_path):
-        with patch("src.config_manager.os.path.exists", return_value=False):
-            with patch("src.config_manager.open", mock_open()):
-                with patch("src.config_manager.load_dotenv"):
+        with patch("src.config.config_manager.os.path.exists", return_value=False):
+            with patch("src.config.config_manager.open", mock_open()):
+                with patch("src.config.config_manager.load_dotenv"):
                     result = add_llm_config(
                         api_key="k",
                         base_url="https://ex.com",
@@ -131,22 +131,22 @@ class TestRemoveLLMConfig:
             "LLM_1_MODEL_NAME=test-model\n"
             "\n"
         )
-        with patch("src.config_manager.os.path.exists", return_value=True):
-            with patch("src.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config_manager.load_dotenv"):
+        with patch("src.config.config_manager.os.path.exists", return_value=True):
+            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
+                with patch("src.config.config_manager.load_dotenv"):
                     result = remove_llm_config("test-model")
         assert result is True
 
     def test_remove_nonexistent_model(self, tmp_path):
         env_content = "LLM_1_MODEL_NAME=other-model\n"
-        with patch("src.config_manager.os.path.exists", return_value=True):
-            with patch("src.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config_manager.load_dotenv"):
+        with patch("src.config.config_manager.os.path.exists", return_value=True):
+            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
+                with patch("src.config.config_manager.load_dotenv"):
                     result = remove_llm_config("nonexistent")
         assert result is False
 
     def test_remove_file_not_exists(self):
-        with patch("src.config_manager.os.path.exists", return_value=False):
+        with patch("src.config.config_manager.os.path.exists", return_value=False):
             result = remove_llm_config("any-model")
         assert result is False
 
@@ -190,7 +190,7 @@ class TestBatchAddModels:
             {"api_key": "k1", "base_url": "https://a.com", "model_name": "m1"},
             {"api_key": "k2", "base_url": "https://b.com", "model_name": "m2"},
         ]
-        with patch("src.config_manager.add_llm_config", return_value=True) as mock_add:
+        with patch("src.config.config_manager.add_llm_config", return_value=True) as mock_add:
             results = batch_add_models(models)
         assert len(results) == 2
         assert all(r is True for r in results)
@@ -201,7 +201,7 @@ class TestBatchAddModels:
             {"api_key": "k1", "base_url": "https://a.com", "model_name": "m1"},
             {"api_key": "k2", "base_url": "https://b.com", "model_name": "m2"},
         ]
-        with patch("src.config_manager.add_llm_config", side_effect=[True, False]) as mock_add:
+        with patch("src.config.config_manager.add_llm_config", side_effect=[True, False]) as mock_add:
             results = batch_add_models(models)
         assert results == [True, False]
         assert mock_add.call_count == 2

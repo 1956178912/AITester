@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.dataset_loader import (
+from src.datasets.dataset_loader import (
     BaseDatasetLoader,
     BenchmarkTask,
     Defects4JPYDataset,
@@ -309,6 +309,7 @@ class TestSWEBenchDataset:
         ds._loaded = False
         with patch.object(ds, "data_dir", "/nonexistent/path"):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size 访问重新加载真实缓存
         assert ds.size == 0
 
     def test_load_raw_data_valid_file(self, tmp_path):
@@ -339,6 +340,7 @@ class TestSWEBenchDataset:
         ds = SWEBenchDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size/get_task_by_id 访问重新加载真实缓存
 
         assert ds.size == 2
         t1 = ds.get_task_by_id("django__django-12345")
@@ -363,6 +365,7 @@ class TestSWEBenchDataset:
         ds = SWEBenchDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size 访问重新加载真实缓存
 
         assert ds.size == 2
 
@@ -377,6 +380,7 @@ class TestSWEBenchDataset:
         with patch.object(ds, "data_dir", str(tmp_path)):
             with caplog.at_level(logging.WARNING):
                 ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size 访问重新加载真实缓存
 
         assert ds.size == 1  # 只加载第一行
         assert "JSON 解析失败" in caplog.text
@@ -389,6 +393,7 @@ class TestSWEBenchDataset:
         ds = SWEBenchDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size/tasks 访问重新加载真实缓存
 
         assert ds.size == 1
         t = ds.tasks[0]
@@ -398,7 +403,7 @@ class TestSWEBenchDataset:
 
     def test_download_from_huggingface_import_error(self):
         """datasets 库未安装时抛 ImportError"""
-        with patch.dict("sys.modules", {"datasets": None}):
+        with patch("src.datasets.dataset_loader._datasets", None):
             with pytest.raises(ImportError, match="pip install datasets"):
                 SWEBenchDataset.download_from_huggingface()
 
@@ -410,7 +415,10 @@ class TestSWEBenchDataset:
             {"instance_id": "t2", "repository": "r2"},
         ])
 
-        with patch("src.dataset_loader.load_dataset", return_value=mock_dataset):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.return_value = mock_dataset
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             output = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="mini")
 
         assert output == str(tmp_path / "swe_bench_instances.jsonl")
@@ -420,8 +428,10 @@ class TestSWEBenchDataset:
 
     def test_download_from_huggingface_runtime_error(self):
         """下载失败时抛 RuntimeError"""
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.side_effect = Exception("network error")
 
-        with patch("src.dataset_loader.load_dataset", side_effect=Exception("network error")):
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
                 SWEBenchDataset.download_from_huggingface()
 
@@ -436,7 +446,10 @@ class TestSWEBenchDataset:
             m.__iter__ = lambda self: iter([])
             return m
 
-        with patch("src.dataset_loader.load_dataset", side_effect=fake_load):
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.side_effect = fake_load
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             SWEBenchDataset.download_from_huggingface(subset="mini")
             SWEBenchDataset.download_from_huggingface(subset="lite")
             SWEBenchDataset.download_from_huggingface(subset="full")
@@ -491,6 +504,7 @@ class TestDefects4JPYDataset:
         ds = Defects4JPYDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size/tasks 访问重新加载（真实缓存为空）
 
         assert ds.size == 1
         t = ds.tasks[0]
@@ -539,6 +553,7 @@ class TestDefects4JPYDataset:
         ds = Defects4JPYDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size/tasks 访问重新加载（真实缓存为空）
 
         assert ds.size == 2
         ids = {t.task_id for t in ds.tasks}
@@ -566,6 +581,7 @@ class TestDefects4JPYDataset:
         ds = Defects4JPYDataset()
         with patch.object(ds, "data_dir", str(tmp_path)):
             ds._load_raw_data()
+            ds._loaded = True  # 阻止后续 size/tasks 访问重新加载（真实缓存为空）
 
         assert ds.size == 1
         assert ds.tasks[0].total_test_count == 0
@@ -694,8 +710,11 @@ class TestLoadDataset:
         """swe_bench 名称返回 SWEBenchDataset 实例"""
         ds = load_dataset("swe_bench")
         assert isinstance(ds, SWEBenchDataset)
-        # InMemoryDataset 别名也会触发 add_sample_tasks
-        assert ds.size == 0  # 没有真实数据文件
+        # 将 data_dir 指向不存在的目录，确保加载 0 个任务（避免依赖本地缓存，环境无关）
+        with patch.object(ds, "data_dir", "/nonexistent/path"):
+            ds._load_raw_data()
+            ds._loaded = True
+        assert ds.size == 0
 
     def test_swebench_alias(self):
         """swebench（无下划线）别名也返回 SWEBenchDataset"""
@@ -756,7 +775,7 @@ class TestLoadDataset:
 
     def test_synthetic_lazy_load(self):
         """synthetic/synth 名称触发懒加载 SyntheticDataset"""
-        from src.synthetic_dataset import SyntheticDataset
+        from src.datasets.synthetic_dataset import SyntheticDataset
 
         # 验证可以导入（避免循环导入错误）
         ds = load_dataset("synthetic")
@@ -767,7 +786,7 @@ class TestLoadDataset:
 
     def test_synthetic_with_kwargs(self):
         """synthetic 携带 kwargs 也能正确传递"""
-        from src.synthetic_dataset import SyntheticDataset
+        from src.datasets.synthetic_dataset import SyntheticDataset
 
         ds = load_dataset("synthetic", subset="lite", foo="bar")
         assert isinstance(ds, SyntheticDataset)

@@ -1,7 +1,7 @@
 """测试异常类 — 扩展版，覆盖装饰器和工具函数"""
 import pytest
 
-from src.exceptions import (
+from src.utils.exceptions import (
     AITesterError,
     APIError,
     AuthenticationError,

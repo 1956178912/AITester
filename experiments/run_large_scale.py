@@ -21,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import click  # noqa: E402
 
 from experiments.run_benchmark import run_benchmark  # noqa: E402
-from src.synthetic_dataset import SyntheticDataset  # noqa: E402
+from src.datasets.synthetic_dataset import SyntheticDataset  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

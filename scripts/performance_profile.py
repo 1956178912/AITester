@@ -175,7 +175,7 @@ def multiply(a: int, b: int) -> int:
 
 def test_dataset_loader():
     """测试数据集加载器性能"""
-    from src.dataset_loader import InMemoryDataset, load_dataset
+    from src.datasets.dataset_loader import InMemoryDataset, load_dataset
 
     # 测试内置数据集
     dataset = InMemoryDataset.create_with_samples()

@@ -149,26 +149,6 @@ def print_rich_table(results: list[dict[str, Any]]) -> None:
     console.print(table)
 
 
-def print_progress_bar(total: int, desc: str = "处理中") -> None:
-    """创建进度条上下文管理器"""
-    if not _rich_available():
-        return
-
-    console = Console()
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn(f"[bold blue]{desc}[/bold blue]"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-        console=console,
-    )
-
-    with progress:
-        progress.add_task(desc, total=total)
-        yield progress
-
-
 # ─── CLI 分组帮助模板 ─────────────────────────────────────────────────────────
 class UXGroup(click.Group):
     """自定义 CLI 组，支持分组帮助信息"""
@@ -178,9 +158,9 @@ class UXGroup(click.Group):
         # 获取默认 help
         help_text = super().get_help(ctx)
 
-        # 添加示例命令
+        # 添加示例命令（使用 rich 语法）
         examples = """
-{\b 示例命令\b}
+[bold]示例命令[/bold]
   $ python main.py run examples/calculator.py                    # 测试单个文件
   $ python main.py run examples/*.py --parallel=2                # 并发测试所有示例文件
   $ python main.py run examples/calculator.py --func divide      # 测试指定函数
@@ -192,6 +172,29 @@ class UXGroup(click.Group):
 
 
 # ─── CLI 入口 ─────────────────────────────────────────────────────────────────
+def _handle_task_exception(future, future_to_file: dict, func: str | None, results: list) -> None:
+    """
+    统一处理并行任务执行中的异常，记录日志并追加错误结果。
+
+    Args:
+        future: concurrent.futures.Future 对象。
+        future_to_file: future -> 文件路径的映射字典。
+        func: 被测函数名（用于结果字典）。
+        results: 结果列表，异常结果将被追加到此列表。
+    """
+    file_path = future_to_file[future]
+    logger.error("任务执行异常：file=%s", file_path)
+    results.append(
+        {
+            "success": False,
+            "file": file_path,
+            "func": func or "all",
+            "passed": False,
+            "error": str(future.exception()) if future.exception() else "unknown error",
+        }
+    )
+
+
 @click.group(cls=UXGroup)
 @click.version_option(version="0.8.0", prog_name="AITester")
 def cli() -> None:
@@ -418,17 +421,8 @@ def run(
                         try:
                             result = future.result()
                             results.append(result)
-                        except Exception as e:
-                            logger.error("任务执行异常：file=%s, error=%s", future_to_file[future], e)
-                            results.append(
-                                {
-                                    "success": False,
-                                    "file": future_to_file[future],
-                                    "func": func or "all",
-                                    "passed": False,
-                                    "error": str(e),
-                                }
-                            )
+                        except Exception:
+                            _handle_task_exception(future, future_to_file, func, results)
                         finally:
                             progress.update(task, advance=1)
         else:
@@ -443,17 +437,8 @@ def run(
                         result = future.result()
                         results.append(result)
                         click.echo(f"  ✓ 完成：{os.path.basename(future_to_file[future])}")
-                    except Exception as e:
-                        logger.error("任务执行异常：file=%s, error=%s", future_to_file[future], e)
-                        results.append(
-                            {
-                                "success": False,
-                                "file": future_to_file[future],
-                                "func": func or "all",
-                                "passed": False,
-                                "error": str(e),
-                            }
-                        )
+                    except Exception:
+                        _handle_task_exception(future, future_to_file, func, results)
     else:
         # 单线程模式
         for target_file in expanded_files:

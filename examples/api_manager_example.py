@@ -4,7 +4,7 @@ API 管理器使用示例
 展示如何使用智能 API 管理器进行多模型调用、健康检查和故障转移。
 """
 
-from src.api_manager import APIManger, RotationStrategy, print_status_table
+from src.api.api_manager import APIManger, RotationStrategy, print_status_table
 
 
 def example_basic_usage():

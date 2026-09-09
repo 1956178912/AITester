@@ -54,7 +54,7 @@ from config import (  # noqa: E402
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
 )
-from src.dataset_loader import (  # noqa: E402
+from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
     InMemoryDataset,
     load_dataset,
@@ -593,7 +593,7 @@ def run_benchmark(
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
         logger.info("生成合成数据集：%d 个任务", tc)
-        from src.synthetic_dataset import SyntheticDataset
+        from src.datasets.synthetic_dataset import SyntheticDataset
 
         dataset = SyntheticDataset(task_count=tc, seed=42)
         # 确保数据集已加载

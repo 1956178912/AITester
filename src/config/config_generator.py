@@ -41,7 +41,7 @@ COMMON_MODELS = [
     # Kimi 系列
     {"name": "kimi-k2.7-code", "provider": "aliyun_bailian"},
     # Agnes 系列
-    {"name": "agnes-2.5-flash", "provider": "agnes_domestic"},
+    {"name": "agnes-3.0-flash", "provider": "agnes_domestic"},
 ]
 
 
@@ -85,7 +85,7 @@ def generate_env_template(output_file: str = ".env.local.template") -> str:
         "# 示例：添加 Agnes AI 模型",
         "# LLM_2_API_KEY=${AGNES_API_KEY}",
         "# LLM_2_BASE_URL=https://api.agnes-ai.cn/v1",
-        "# LLM_2_MODEL_NAME=agnes-2.5-flash",
+        "# LLM_2_MODEL_NAME=agnes-3.0-flash",
         "",
         "# 示例：添加智谱模型",
         "# LLM_3_API_KEY=${BIGMODEL_API_KEY}",
