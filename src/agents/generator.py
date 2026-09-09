@@ -219,8 +219,6 @@ class GeneratorAgent(BaseAgent):
         Returns:
             True 表示格式正确，False 表示需要重试。
         """
-        import ast
-
         try:
             tree = ast.parse(code)
         except SyntaxError as e:

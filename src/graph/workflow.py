@@ -84,6 +84,8 @@ except ImportError:
 _rag_retriever = None
 # 线程锁：保护单例初始化的双重检查锁定，确保多线程环境下的安全性
 _rag_lock = threading.Lock()
+# 修复历史上限：超过后仅保留最近 N 条，防止长迭代循环占用内存（经验值 5）
+_MAX_REPAIR_HISTORY = 5
 
 
 def get_rag_retriever():
@@ -543,8 +545,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             "patch_applied": applied,
         }
     )
-    # 限制 repair_history 大小，避免无限增长占用内存（最多保留 5 条）
-    _MAX_REPAIR_HISTORY = 5
+    # 限制 repair_history 大小，避免无限增长占用内存（最多保留 _MAX_REPAIR_HISTORY 条）
     if len(history) > _MAX_REPAIR_HISTORY:
         history = history[-_MAX_REPAIR_HISTORY:]
     return {
