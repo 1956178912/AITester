@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### CLI 拆包与 CI 修复 (2026-09-09)
+- **main.py 拆包为 src/cli/**：507 行的 main.py 拆为 `src/cli/app.py`（命令定义与任务执行）+ `src/cli/output.py`（ANSI/Rich 输出工具），main.py 保留为薄入口，`python main.py ...` 与 setup.py 控制台脚本行为不变；`list-examples` 路径定位改为按项目根计算（拆分前用 `__file__` 指向根目录）
+- **修复 CI 格式化门禁**：全仓库 `ruff format` 统一（33 个文件，纯格式变更），此前 `ruff format --check` 步骤必然失败
+- **CI 安装步骤去重**：`pytest-cov` 已在 requirements.txt 中锁定，移除 CI 中的重复安装行
+- **回归**：700 passed, 6 skipped；`python main.py --help` / `list-examples` 冒烟通过
+
 ### 依赖治理 (2026-09-09)
 - **顶层依赖锁定**：`requirements.txt` 的 18 个顶层依赖由 `>=` 改为 `==`，版本与 `requirements.lock` 同步，保证 CI（Python 3.10-3.12 矩阵）安装可复现
 - **补装 CI 缺失插件**：新增 `pytest-timeout==2.5.0`（`pyproject.toml` addopts 的 `--timeout=1200` 依赖它，此前 CI 安装步骤未包含，pytest 会因无法识别 `--timeout` 参数而失败）

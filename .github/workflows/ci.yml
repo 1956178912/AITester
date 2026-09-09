@@ -24,8 +24,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # requirements.txt 已含 pytest-cov/pytest-timeout 等测试依赖（版本锁定）
           pip install -r requirements.txt
-          pip install pytest-cov ruff
+          # ruff 为开发工具，不进 requirements（始终用最新版做 lint）
+          pip install ruff
 
       - name: Lint with ruff
         run: |

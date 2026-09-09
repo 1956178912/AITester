@@ -244,6 +244,9 @@ AITester/
 │   ├── datasets/                     # 数据集加载层
 │   │   ├── dataset_loader.py         # SWE-bench / Defects4J-Python 加载
 │   │   └── synthetic_dataset.py      # 合成数据集生成器（本地生成）
+│   ├── cli/                          # 命令行界面（click 命令组 + rich 输出）
+│   │   ├── app.py                    # CLI 命令定义与任务执行
+│   │   └── output.py                 # ANSI/Rich 终端输出工具
 │   ├── utils/                        # 公共工具
 │   │   ├── exceptions.py             # 统一异常层级
 │   │   ├── helpers.py                # 正则 / JSON / 代码块提取等工具
@@ -278,7 +281,7 @@ AITester/
 │   ├── calculator.py                 # 计算器示例（除零、负数阶乘 bug）
 │   ├── buggy_library.py              # 算法库示例（二分查找、排序合并等）
 │   └── string_utils.py               # 字符串工具示例（回文、Caesar 密码等）
-├── main.py                           # CLI 入口
+├── main.py                           # CLI 入口（薄封装，实现位于 src/cli/）
 ├── config.py                         # 全局配置（含消融实验开关）
 ├── init_db.py                        # 数据库初始化脚本
 ├── setup.py                          # 包管理配置
