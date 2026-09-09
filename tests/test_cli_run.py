@@ -13,9 +13,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def _invoke_single_task(
-    tmp_path, coverage_report: float | None = 85.0, **cli_kwargs
-) -> tuple[dict, dict, MagicMock]:
+def _invoke_single_task(tmp_path, coverage_report: float | None = 85.0, **cli_kwargs) -> tuple[dict, dict, MagicMock]:
     """调用 _run_single_task 并 mock 工作流构建。
 
     Args:

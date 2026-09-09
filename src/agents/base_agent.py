@@ -159,9 +159,7 @@ def _retry_with_exponential_backoff(
                 # 指数退避：base_wait * 2^attempt（默认 1s → 1,2,4；zai base=5 → 5,10,20）
                 # 此前误写为 base_wait**attempt：base_wait=1 时退化为固定 1s，zai 时膨胀为 5,25,125
                 wait_time = base_wait * (2**attempt)
-                logger.warning(
-                    "调用失败 (attempt %d/%d): %s，等待 %.0fs", attempt + 1, max_retries + 1, e, wait_time
-                )
+                logger.warning("调用失败 (attempt %d/%d): %s，等待 %.0fs", attempt + 1, max_retries + 1, e, wait_time)
                 time.sleep(wait_time)
             else:
                 break
