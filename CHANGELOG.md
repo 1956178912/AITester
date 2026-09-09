@@ -2,6 +2,33 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.2] - 2026-09-09
+
+### CI 门禁修复（主分支恢复全绿）
+- **ruff format 门禁转红修复**：主分支 CI 在 "Lint with ruff" 步骤失败（`ruff format --check` 对 `src/agents/base_agent.py`、`src/cli/app.py`、`tests/test_cli_run.py` 三个文件要求重排），全仓库重新执行 `ruff format` 修复
+- **CI 固定 ruff 版本**：此前 CI `pip install ruff` 安装最新版，上游发版改变格式化规则时门禁随机转红（2026-09-09 相邻两次 CI 运行结果不一致即此原因）。现固定 `ruff==0.16.3`（与 `requirements.lock` 一致），升级时同步更新 lock
+- **补齐 DBUtils 依赖声明**：`src/db/mysql_client.py` 使用 `dbutils.pooled_db.PooledDB`，但 `requirements.txt`/`requirements.lock`/`setup.py` 均未声明——全新环境安装后 `src.db` 模块 ImportError。现补齐 `DBUtils==3.1.2` 并新增 `tests/test_mysql_client.py`（11 个用例，mock 连接池覆盖单例、commit/rollback 与三张表 CRUD）
+
+### 测试质量提升
+- **重新启用 LLM 文件缓存 6 个测试**：`test_base_agent_extended.py` 中 6 个以"局部 import os/json 无法 patch"为由 skip 的测试，其 skip 理由在源码重构为模块级 import 后已失效。现通过 `AITESTER_LLM_CACHE`/`AITESTER_LLM_CACHE_DIR` 环境变量实现：缓存未命中、命中、prompt 不匹配、读取损坏 JSON、写入成功、写入异常 6 条路径全覆盖（skip 清零）
+- **API 管理器线程卫生测试**：新增 5 个用例（单例一致性、reset 停止健康检查线程、并发 get_manager 单实例、故障转移迁移日志）
+
+### 缺陷修复
+- **API 管理器后台线程泄漏**：`reset_manager()` 此前只清全局引用，`APIManger` 初始化的后台健康检查守护线程（每 60s 发起真实 LLM 探测）残留，继续对旧实例消耗 API 配额。现 reset 前调用新增的 `_stop_health_checker()` 显式停止并等待线程退出
+- **故障转移日志错误**：`_try_call_node` 的 "故障转移成功" 日志此前把**当前**节点名打印两遍（`%s -> %s` 同值），无法看出迁移路径。现经 `prev_model` 参数记录"上一节点 -> 当前节点"
+- **单例线程安全**：`get_manager()` 增加双重检查锁，多线程并发只创建一个管理器实例
+
+### 代码质量
+- **版本号收敛为单一事实来源**：`src/__init__.py` 新增 `__version__`（0.9.2），`setup.py` 与 CLI `--version` 均从此读取，消除两处硬编码漂移
+- **RAG 类 pytest 收集告警**：`TestCaseRetriever` 类名以 Test 开头触发 `PytestCollectionWarning`，加 `__test__ = False` 消除
+- **魔数提升**：`workflow._patch_applier_node` 内 `_MAX_REPAIR_HISTORY` 提升为模块级常量（附注释）
+- **冗余 import 清理**：`generator._validate_parametrize` 移除方法内重复的 `import ast`（模块顶部已导入）
+
+### 文档与一致性
+- **README 测试状态刷新**：测试数 708→743 passed、0 skipped；"最新优化/最近改动" 行同步本轮内容
+- **requirements.txt 过时注释修正**：CI Python 矩阵说明 3.10-3.12 → 3.12-3.14；ruff 安装说明改为固定版本
+- **回归**：全量 743 passed, 0 skipped, 1 warning（chromadb 内部 DeprecationWarning，第三方库问题）；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.1] - 2026-09-09
 
 ### CLI 选项失效修复（state 贯通）
