@@ -153,8 +153,8 @@ class DebuggerAgent(BaseAgent):
                 query += "\n\n以下历史修复案例可作为参考：\n" + "\n\n".join(refs_text)
                 logger.info("Debugger 使用了 %d 个 RAG 修复参考", len(refs_text))
 
-        # 调用 LLM 获取修复响应
-        raw = self._call_llm(query)
+        # 调用 LLM 获取修复响应，带文件缓存省 token
+        raw = self._call_llm_with_cache(query)
         result = self._extract_json(raw)
 
         # 确保返回格式一致，即使 LLM 未返回某些字段也有默认值

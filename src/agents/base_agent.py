@@ -207,6 +207,23 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
     return [(c.api_key, c.base_url, c.model_name) for c in LLM_CONFIGS]
 
 
+# ─── LLM 文件缓存开关（省 token）────────────────────────────────────────────
+# 默认启用；设环境变量 AITESTER_LLM_CACHE=0 可关闭（测试环境用于隔离，避免 flaky）。
+# 缓存目录默认 src/cache/，可用 AITESTER_LLM_CACHE_DIR 覆盖（便于测试指向临时目录）。
+# 开关与目录均在每次调用时读取，便于测试用 monkeypatch.setenv 动态切换。
+_LLM_CACHE_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "cache"))
+
+
+def _llm_cache_enabled() -> bool:
+    """是否启用 LLM 文件缓存（默认启用，设 AITESTER_LLM_CACHE=0 关闭）。"""
+    return os.environ.get("AITESTER_LLM_CACHE", "1") != "0"
+
+
+def _llm_cache_dir() -> str:
+    """返回 LLM 缓存目录（支持环境变量覆盖，便于测试隔离到临时目录）。"""
+    return os.environ.get("AITESTER_LLM_CACHE_DIR", _LLM_CACHE_DIR_DEFAULT)
+
+
 class BaseAgent:
     """
     所有智能体的公共基类。
@@ -249,25 +266,31 @@ class BaseAgent:
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
-        # 生成缓存键（基于完整 prompt 和 system_prompt）
-        # 使用 hashlib.md5 替代 hash()，确保跨会话缓存命中（hash() 在 Python 3.3+ 默认随机化）
-        cache_key = f"{user_message}:{self.system_prompt}"
+        # 缓存开关关闭时直接透传（测试环境默认关闭，避免缓存文件污染与 flaky）
+        if not _llm_cache_enabled():
+            return self._call_llm(user_message, max_retries)
 
+        # 生成缓存键（基于 user_message + system_prompt）
+        # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
+        # 说明：键不含 model，缓存的是"成功的 LLM 输出文本"；配额故障转移/模型切换后，
+        # 命中旧结果仍有效（都是该 prompt 的合理回答），且不再消耗 token。
+        cache_key = f"{user_message}:{self.system_prompt}"
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
-        cache_file = os.path.join(os.path.dirname(__file__), "..", "cache", f"{cache_hash}.json")
+        cache_file = os.path.join(_llm_cache_dir(), f"{cache_hash}.json")
         cache_file = os.path.normpath(cache_file)
 
+        # 读缓存：校验 prompt 与 system 完全一致才命中（防 md5 前16位碰撞误命中）
         try:
             if os.path.exists(cache_file):
                 with open(cache_file, encoding="utf-8") as f:
                     cached_data = json.load(f)
                     if cached_data.get("prompt") == user_message and cached_data.get("system") == self.system_prompt:
-                        logger.info("LLM 缓存命中: %s", cache_key[:50])
+                        logger.info("LLM 缓存命中 (省 1 次调用): %s", cache_key[:50])
                         return cached_data["response"]
         except Exception as e:
             logger.debug("缓存读取失败: %s", e)
 
-        # 未命中，执行实际调用
+        # 未命中，执行实际调用（仅在成功时写缓存；失败如 403 额度用尽则不缓存）
         response = self._call_llm(user_message, max_retries)
 
         # 写入缓存
@@ -279,12 +302,12 @@ class BaseAgent:
                         "prompt": user_message,
                         "system": self.system_prompt,
                         "response": response,
-                        "timestamp": os.path.getmtime(cache_file) if os.path.exists(cache_file) else 0,
+                        "timestamp": time.time(),
                     },
                     f,
                     ensure_ascii=False,
                 )
-            logger.info("LLM 缓存已更新: %s", cache_key[:50])
+            logger.info("LLM 缓存已写入: %s", cache_key[:50])
         except Exception as e:
             logger.debug("缓存写入失败: %s", e)
 

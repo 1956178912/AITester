@@ -135,8 +135,8 @@ class PlannerAgent(BaseAgent):
             query += f"\n\n**重要：请只针对以下函数生成测试计划，不要分析其他函数：**\n`{target_function}`"
             query += f"\n\n输出的 function_name 字段必须是 `{target_function}`。"
 
-        # 调用 LLM 获取原始响应（内含逻辑分析和测试计划）
-        raw = self._call_llm(query)
+        # 调用 LLM 获取原始响应（内含逻辑分析和测试计划），带文件缓存省 token
+        raw = self._call_llm_with_cache(query)
         # 解析 JSON 响应
         result = self._extract_json(raw)
 
