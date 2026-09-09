@@ -136,7 +136,8 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
 
 # ─── 执行环境配置 ────────────────────────────────────────────────────────────
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
-DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.11-slim")
+# 锁定依赖集（scipy==1.18.0 等）要求 Python >= 3.12，镜像须匹配
+DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.12-slim")
 _EXECUTION_TIMEOUT_RAW = int(os.getenv("EXECUTION_TIMEOUT", "30"))
 EXECUTION_TIMEOUT: int = _validate_timeout(_EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30)
 

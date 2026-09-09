@@ -9,9 +9,10 @@ from setuptools import find_packages, setup
 
 setup(
     name="aitester",
-    version="0.1.0",
+    version="0.9.0",
     packages=find_packages(),
-    python_requires=">=3.10",
+    # 锁定依赖集（requirements.lock）实际要求 Python >= 3.12（scipy 下限）
+    python_requires=">=3.12",
     install_requires=[
         "langchain>=1.0.0",
         "langchain-openai>=1.0.0",
@@ -31,7 +32,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "aitester=main:cli",
+            # 指向 src.cli.app（CLI 实现所在）；根级 main.py 仅本地入口，不被 find_packages 打包
+            "aitester=src.cli.app:cli",
         ],
     },
 )
