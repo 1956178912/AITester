@@ -11,13 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        # 矩阵与 requirements.txt 的锁定版本对齐（lock 生成自 Python 3.14 开发环境）：
+        # - scipy==1.18.0 要求 >=3.12（下限）
+        # - pandas==3.0.5 / matplotlib==3.11.1 要求 >=3.11
+        # 3.10/3.11 无法安装当前锁定版本集（3.10 也即将 EOL），故矩阵收窄为 3.12（下限）+ 3.14（开发环境）
+        python-version: ['3.12', '3.14']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -47,7 +51,7 @@ jobs:
           LLM_1_MODEL_NAME: test-model
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.14'
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
@@ -56,15 +60,25 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
-      - name: Install safety
-        run: pip install safety
+      - name: Install pip-audit
+        run: pip install pip-audit
 
       - name: Check dependencies for vulnerabilities
-        run: safety check -r requirements.txt
+        # 说明：safety 工具已于 2024-06 起弃用 `check` 子命令（CI 上退出码 64），
+        # 改用 PyPA 维护的 pip-audit。
+        # 当前 chromadb==1.5.9 命中 4 条已知漏洞，但 PyPI 上暂无修复版本
+        # （last_affected=1.5.9，为最新版），故显式忽略并在 CHANGELOG/决策日志记录；
+        # 一旦发布修复版本，应升级并移除对应 --ignore-vuln。
+        run: |
+          pip-audit -r requirements.txt --no-deps \
+            --ignore-vuln PYSEC-2026-311 \
+            --ignore-vuln CVE-2026-45830 \
+            --ignore-vuln CVE-2026-45831 \
+            --ignore-vuln CVE-2026-45833
