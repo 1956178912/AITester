@@ -88,6 +88,15 @@ class AITesterState(TypedDict, total=False):
         最大迭代次数（来自 config.MAX_ITERATIONS，默认 3）。
         达到此值后 _should_debug 返回 "done" 结束流程。
 
+    ─── 执行控制（可选，由 CLI 注入）──────────────────────────────
+    execution_timeout (int | None):
+        单次测试执行的超时秒数（CLI --timeout 注入）。
+        未提供时 Executor 回退到 config.EXECUTION_TIMEOUT。
+
+    coverage_threshold (float | None):
+        覆盖率达标阈值百分比（CLI --coverage-threshold 注入）。
+        未提供时 CLI 汇总输出使用 config.COVERAGE_THRESHOLD。
+
     repair_history (List[Dict[str, Any]]):
         每次修复的详情记录，每项含：
         - iteration: 迭代编号
@@ -125,5 +134,8 @@ class AITesterState(TypedDict, total=False):
     iteration: int
     max_iterations: int
     repair_history: list[dict[str, Any]]
+    # 执行控制（可选，由 CLI 注入）
+    execution_timeout: int | None
+    coverage_threshold: float | None
     # RAG 检索结果
     rag_references: list[dict[str, Any]] | None
