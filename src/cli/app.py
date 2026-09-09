@@ -29,6 +29,7 @@ from typing import Any
 import click
 
 from config import COVERAGE_THRESHOLD, EXECUTION_TIMEOUT, MAX_ITERATIONS
+from src import __version__
 from src.cli.output import (
     Colors,
     _rich_available,
@@ -82,7 +83,7 @@ class UXGroup(click.Group):
 
 
 @click.group(cls=UXGroup)
-@click.version_option(version="0.9.1", prog_name="AITester")
+@click.version_option(version=__version__, prog_name="AITester")
 def cli() -> None:
     """AITester - 多智能体自动化测试与自修复系统
 
@@ -338,7 +339,9 @@ def run(
                 task = progress.add_task("运行中...", total=len(expanded_files))
                 with ThreadPoolExecutor(max_workers=parallel) as executor:
                     future_to_file = {
-                        executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
+                        executor.submit(
+                            _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                        ): f
                         for f in expanded_files
                     }
                     for future in as_completed(future_to_file):
@@ -353,7 +356,9 @@ def run(
             # 无 rich 时的简单进度显示
             with ThreadPoolExecutor(max_workers=parallel) as executor:
                 future_to_file = {
-                    executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
+                    executor.submit(
+                        _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                    ): f
                     for f in expanded_files
                 }
                 for future in as_completed(future_to_file):

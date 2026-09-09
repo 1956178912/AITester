@@ -30,8 +30,11 @@ jobs:
           python -m pip install --upgrade pip
           # requirements.txt 已含 pytest-cov/pytest-timeout 等测试依赖（版本锁定）
           pip install -r requirements.txt
-          # ruff 为开发工具，不进 requirements（始终用最新版做 lint）
-          pip install ruff
+          # ruff 固定版本（与 requirements.lock 中的 ruff==0.16.3 一致）：
+          # 此前"始终用最新版"导致上游发版改变格式化规则时，ruff format --check
+          # 门禁随机转红（2026-09-09 两次相邻 CI 运行结果不一致即此原因）。
+          # 升级 ruff 时同步更新 lock 与 requirements.txt 注释即可。
+          pip install "ruff==0.16.3"
 
       - name: Check lock sync
         run: python scripts/check_lock_sync.py
