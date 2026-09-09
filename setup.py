@@ -7,9 +7,20 @@ AITester 包管理配置文件。
 
 from setuptools import find_packages, setup
 
+
+def _load_version() -> str:
+    """从 src/__init__.py 读取版本号（单一事实来源，避免多处硬编码漂移）。"""
+    import re
+    from pathlib import Path
+
+    init_file = Path(__file__).parent / "src" / "__init__.py"
+    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_file.read_text(encoding="utf-8"))
+    return match.group(1) if match else "0.0.0"
+
+
 setup(
     name="aitester",
-    version="0.9.1",
+    version=_load_version(),
     packages=find_packages(),
     # 锁定依赖集（requirements.lock）实际要求 Python >= 3.12（scipy 下限）
     python_requires=">=3.12",
@@ -18,6 +29,8 @@ setup(
         "langchain-openai>=1.0.0",
         "langgraph>=1.0.0",
         "pymysql>=1.0.0",
+        # DBUtils: PooledDB 连接池，src/db/mysql_client.py 使用
+        "DBUtils>=3.0.0",
         "click>=8.0.0",
         "pytest>=8.0.0",
         "pytest-cov>=4.0.0",
