@@ -108,8 +108,9 @@ def setup_logger_safety(logger_name: str | None = None) -> None:
     # 注意：必须用模块 logger 记录，不能调用模块级 logging.info()——
     # Python 3.14 中 root 无 handler 时模块级 logging.info() 会隐式触发
     # basicConfig()（附加裸 StreamHandler），导致后续业务侧 basicConfig
-    # （自定义格式/FileHandler）全部失效
-    logging.getLogger(__name__).info("已为 logger '%s' 添加敏感信息脱敏过滤器", logger_name or "root")
+    # （自定义格式/FileHandler）全部失效。
+    # 用 DEBUG 级别：避免每次 CLI 启动都刷一行提示（--verbose 时可见）
+    logging.getLogger(__name__).debug("已为 logger '%s' 添加敏感信息脱敏过滤器", logger_name or "root")
 
 
 def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
