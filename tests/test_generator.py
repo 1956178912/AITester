@@ -173,15 +173,23 @@ class TestFixImportModule:
         assert "import os" in result
 
     def test_fix_multiple_imports(self):
-        """修正多个导入。"""
+        """修正多个相似的错名导入（笔误变体）。"""
         code = """
-from wrong_module import func1
-from another_wrong import func2
+from calculatr import func1
+from calculator2 import func2
 import pytest
 """
         result = GeneratorAgent._fix_import_module(code, "calculator")
         assert "from calculator import func1" in result
         assert "from calculator import func2" in result
+        assert "import pytest" in result
+
+    def test_skip_unrelated_third_party(self):
+        """与被测模块名不相似的第三方库导入不应被改写（保留 numpy 等）。"""
+        code = "from numpy import array\nfrom calculator import add\n"
+        result = GeneratorAgent._fix_import_module(code, "calculator")
+        assert "from numpy import array" in result
+        assert "from calculator import add" in result
 
 
 class TestGenerate:

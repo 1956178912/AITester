@@ -241,8 +241,14 @@ class GeneratorAgent(BaseAgent):
     def _fix_import_module(code: str, expected_module: str) -> str:
         """
         验证并修正测试代码中的 import 模块名。
-        将错误的模块名替换为期望的模块名，避免 ModuleNotFoundError。
-        跳过已知的外部包（pytest、unittest 等），不修改其 import 语句。
+        将"被测模块名的笔误变体"替换为期望的模块名，避免 ModuleNotFoundError。
+        跳过已知的外部包（pytest、unittest 等）以及与被测模块名不相似的
+        第三方库（如 numpy/requests），不做无差别改写。
+
+        相似度门控（与 executor._is_similar_module_name 同源，阈值 0.6）：
+        仅当导入名与被测模块名足够相似（视为笔误/缩写）时才替换，
+        否则保留原样——避免把被测代码依赖的第三方库导入错误改写为被测模块名
+        （如 `from numpy import array` 被改成 `from calculator import array`）。
 
         正则说明：
         - ``^from\\s+(\\S+)\\s+import`` 匹配行首的 "from X import ..." 语句
@@ -255,6 +261,8 @@ class GeneratorAgent(BaseAgent):
         Returns:
             修正后的代码字符串。
         """
+        from src.agents.executor import ExecutorAgent
+
         # 匹配所有 "from X import ..." 语句（X 为模块名）
         pattern = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
         matches = pattern.findall(code)
@@ -264,6 +272,9 @@ class GeneratorAgent(BaseAgent):
                 continue
             # 跳过已知的外部包（标准库和测试框架）
             if wm in GeneratorAgent._KNOWN_MODULES:
+                continue
+            # 相似度门控：仅替换被测模块名的"笔误"变体，保留不相似的第三方库
+            if not ExecutorAgent._is_similar_module_name(wm, expected_module):
                 continue
             # 将错误的模块名替换为期望模块名
             code = code.replace(f"from {wm} import", f"from {expected_module} import")
