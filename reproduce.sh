@@ -8,7 +8,7 @@
 #   bash reproduce.sh --dataset swe_bench  # 使用 SWE-bench 数据集
 #   bash reproduce.sh --quick --verbose  # 快速模式 + 详细日志
 #
-# 所有命令在 /Users/wangchenyu/workspace/AITester 目录下执行
+# 所有命令在项目根目录（本脚本所在目录）下执行
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # 严格模式：命令失败时立即退出；未定义变量时报错；管道失败时也报错
@@ -57,9 +57,9 @@ info "模式: $MODE  |  数据集: $DATASET  |  基线: $BASELINES"
 # ─── 步骤 1/6：检查运行环境 ─────────────────────────────────────────────────────
 info "Step 1/6: 检查环境..."
 
-# 检查 Python 3.10+ 是否安装
+# 检查 Python 3.12+ 是否安装（锁定依赖 scipy==1.18.0 要求 >=3.12）
 if ! command -v python3 &>/dev/null; then
-    error "未找到 python3，请安装 Python 3.10+"
+    error "未找到 python3，请安装 Python 3.12+"
 fi
 
 PYTHON_BIN="$(command -v python3)"
@@ -75,23 +75,26 @@ fi
 source .venv/bin/activate
 info "虚拟环境: $(which python)"
 
-# 检查 .env 配置文件
+# 检查 .env 基础配置（非敏感项；敏感 LLM Key 在 .env.local，见下方检查）
 if [[ ! -f ".env" ]]; then
     if [[ -f ".env.example" ]]; then
-        warn ".env 不存在，从 .env.example 复制（请手动填入 API Key 后再运行）"
+        warn ".env 不存在，已从 .env.example 复制"
         cp .env.example .env
-    else
-        error "未找到 .env.example，无法继续"
     fi
 fi
 
-# 校验必需环境变量 OPENAI_API_KEY 是否已设置
-for var in OPENAI_API_KEY; do
-    val="${!var:-}"
-    if [[ -z "$val" || "$val" == "<YOUR_API_KEY_HERE>" || "$val" == "<OPENAI_API_KEY>" ]]; then
-        warn "环境变量 $var 未设置，请在 .env 中填入真实值"
+# 检查 .env.local LLM 敏感配置（模板为 config.local.example；
+# 旧变量 OPENAI_API_KEY 已不再被系统读取，现使用 LLM_N_* 编号格式）
+if [[ ! -f ".env.local" ]]; then
+    if [[ -f "config.local.example" ]]; then
+        warn ".env.local 不存在，已从 config.local.example 复制（请填入 LLM_1_API_KEY 后再运行）"
+        cp config.local.example .env.local
+    else
+        warn "未找到 .env.local 与 config.local.example，请在项目根目录创建 .env.local 并配置 LLM_1_API_KEY"
     fi
-done
+elif grep -qE "^\s*#\s*LLM_1_API_KEY" .env.local || grep -qE "^\s*LLM_1_API_KEY\s*=(\s*|<)" .env.local; then
+    warn "LLM_1_API_KEY 未设置或仍为占位值，请在 .env.local 中填入真实 API Key"
+fi
 
 # ─── 步骤 2/6：安装 Python 依赖 ──────────────────────────────────────────────────
 info "Step 2/6: 安装/升级依赖..."
@@ -102,9 +105,12 @@ pip install -q scipy matplotlib pandas
 
 # ─── 步骤 3/6：运行单元测试 ──────────────────────────────────────────────────────
 info "Step 3/6: 运行单元测试..."
+# 先确保日志目录存在（tee 重定向在管道前求值，目录缺失会直接失败）
+mkdir -p experiments/results
 # 运行所有 tests/ 下的 pytest 用例，输出到 log 文件便于排查
-python -m pytest tests/ -v --tb=short 2>&1 | tee experiments/results/test_output.log
-TEST_EXIT=$?
+# pipefail + set -e 下管道失败会直接终止脚本，用 || 捕获退出码改为告警继续
+TEST_EXIT=0
+python -m pytest tests/ -v --tb=short 2>&1 | tee experiments/results/test_output.log || TEST_EXIT=$?
 if [[ $TEST_EXIT -ne 0 ]]; then
     warn "部分单元测试失败，但继续执行（可能依赖 LLM API 可用性）"
 fi
@@ -121,7 +127,7 @@ if [[ "$DATASET" == "swe_bench" ]]; then
     fi
     # 从 HuggingFace 自动下载数据集到 ~/.cache/aitester/swe_bench/
     python -c "
-from src.dataset_loader import SWEBenchDataset
+from src.datasets.dataset_loader import SWEBenchDataset
 path = SWEBenchDataset.download_from_huggingface(subset='$SUBSET')
 print(f'已下载到: {path}')
 "

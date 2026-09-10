@@ -158,6 +158,7 @@ def generate_batch_config_script() -> str:
 import argparse
 import json
 import os
+import sys
 from typing import Any
 def parse_args():
     parser = argparse.ArgumentParser(description="批量生成 LLM 配置")
@@ -188,6 +189,11 @@ def main():
     else:
         # 使用默认模型列表
         models = []
+    # 数据丢失防护：模型列表为空时，"w" 模式写入会用空文件覆盖现有
+    # .env.local，抹掉已配置的 LLM_N_*。此时应报错退出而非生成空配置。
+    if not models:
+        print("错误：模型列表为空。为避免用空文件覆盖现有 .env.local，请通过 --models 指定模型列表 JSON 文件。", file=sys.stderr)
+        sys.exit(1)
     # 加载 API Keys（从环境变量或配置文件）
     api_keys = {
         "ALIYUN_API_KEY": os.getenv("ALIYUN_API_KEY", ""),

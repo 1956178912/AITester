@@ -3,10 +3,10 @@
 
 本模块集中管理被多个子模块重复使用的工具函数，遵循 DRY 原则：
 - extract_code_block(): 从 LLM 输出中提取代码块（支持多种格式）
-- extract_json(): 从文本中提取 JSON 对象（含括号平衡法）
+- extract_json_object(): 从文本中提取 JSON 对象（含括号平衡法）
 
 使用示例：
-    from src.utils.helpers import extract_code_block, extract_json
+    from src.utils.helpers import extract_code_block, extract_json_object
 """
 
 from __future__ import annotations
