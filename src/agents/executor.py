@@ -263,6 +263,11 @@ class ExecutorAgent:
                     break
                 logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
             except subprocess.TimeoutExpired as e:
+                # TimeoutExpired 携带超时前已累积的部分 stdout/stderr（text 模式下为 str，
+                # 未产生时可能为 None）。合并进 last_output，让下游 Debugger 能拿到现场
+                # 快照而非空白文本（此前超时分支丢失了部分输出）。
+                partial_output = (e.output or "") + (e.stderr or "")
+                last_output = partial_output
                 error_msg = f"测试执行超时（>{self.timeout}s）"
                 logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
                 error_info = {
