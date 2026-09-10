@@ -90,10 +90,27 @@ def _load_llm_configs() -> list[LLMConfig]:
 
 
 # 所有已配置的 LLM Provider 列表（按 LLM_1, LLM_2, ... 顺序）
+# 注意：其他模块通过 `from config import LLM_CONFIGS` 持有的是同一个列表对象，
+# 因此 refresh_llm_configs() 采用"原地更新"（LLM_CONFIGS[:] = ...），
+# 使所有持有方都能看到刷新后的值，而不是得到一个隔离的快照。
 LLM_CONFIGS: list[LLMConfig] = _load_llm_configs()
 
 # 默认使用的 LLM 配置（取第一个，即 LLM_1）
 DEFAULT_LLM_CONFIG: LLMConfig | None = LLM_CONFIGS[0] if LLM_CONFIGS else None
+
+
+def refresh_llm_configs() -> list[LLMConfig]:
+    """重新扫描 LLM_N_* 环境变量并原地刷新 LLM_CONFIGS 列表。
+
+    供 config_manager 的 add/remove 操作在写入 .env.local 之后调用，
+    使内存中的配置与文件内容保持一致（否则导入时的快照不会自动更新）。
+
+    Returns:
+        刷新后的 LLM_CONFIGS 列表（与模块级常量是同一个对象）。
+    """
+    LLM_CONFIGS[:] = _load_llm_configs()
+    return LLM_CONFIGS
+
 
 # 向后兼容：保留旧的扁平变量名，指向默认 LLM 配置（供旧代码引用）
 OPENAI_API_KEY: str = DEFAULT_LLM_CONFIG.api_key if DEFAULT_LLM_CONFIG else ""

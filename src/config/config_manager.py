@@ -11,38 +11,27 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
+import re
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 
-
-# 显式加载项目根目录的 config.py（避免循环导入 src.config）
-def _load_project_config():
-    """加载项目根目录的 config.py，返回模块对象。"""
-    _cache_key = "project_config_loader"
-    if _cache_key in sys.modules:
-        return sys.modules[_cache_key]
-    _project_root = Path(__file__).parent.parent.parent
-    _config_path = _project_root / "config.py"
-    if not _config_path.exists():
-        raise FileNotFoundError(f"找不到项目配置文件: {_config_path}")
-    import importlib.util
-
-    _spec = importlib.util.spec_from_file_location(_cache_key, str(_config_path))
-    _module = importlib.util.module_from_spec(_spec)
-    sys.modules[_cache_key] = _module
-    _spec.loader.exec_module(_module)
-    return _module
-
-
-_project_cfg = _load_project_config()
-LLM_CONFIGS = _project_cfg.LLM_CONFIGS
-LLMConfig = _project_cfg.LLMConfig
-load_dotenv()
+from config import LLM_CONFIGS, LLMConfig, refresh_llm_configs
 
 logger = logging.getLogger(__name__)
+
+# .env.local 位于项目根目录（与根目录 config.py 的 load_env_local() 读取路径一致）。
+# 注意：此前误用 __file__ 所在目录（src/config/），导致写入的文件永不被应用读取。
+ENV_FILE: Path = Path(__file__).resolve().parents[2] / ".env.local"
+
+# 匹配 .env.local 中已占用的 LLM_N 编号（仅未注释行），用于自动分配下一个编号
+_LLM_INDEX_PATTERN = re.compile(r"^LLM_(\d+)_", re.MULTILINE)
+
+
+def _scan_llm_indices(content: str) -> set[int]:
+    """扫描 .env.local 内容中已占用的 LLM_N 编号集合（仅统计未注释行）。"""
+    return {int(m) for m in _LLM_INDEX_PATTERN.findall(content)}
 
 
 def get_all_llm_configs() -> list[LLMConfig]:
@@ -80,45 +69,45 @@ def get_config_by_model(model_name: str) -> LLMConfig | None:
 
 def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | None = None) -> bool:
     """
-    添加新的 LLM 配置到环境变量
+    添加新的 LLM 配置到项目根目录的 .env.local
     Args:
         api_key: API 密钥
         base_url: API 基础 URL
         model_name: 模型名称
-        index: 配置索引（None 则自动分配）
+        index: 配置索引（None 则自动分配：扫描文件中已占用的 LLM_N 编号，
+               取最大编号 +1，避免与编号空洞场景（如删除 LLM_2）冲突）
     Returns:
         是否成功添加
     """
+    existing_content = ""
+    if ENV_FILE.exists():
+        existing_content = ENV_FILE.read_text(encoding="utf-8")
+
+    # 检查是否已存在相同模型（任意编号下命中即视为重复，避免跨编号重复配置）
+    if re.search(rf"^LLM_\d+_MODEL_NAME={re.escape(model_name)}\s*$", existing_content, re.MULTILINE):
+        logger.warning("模型 %s 已存在于配置中", model_name)
+        return False
+
     if index is None:
-        # 自动分配下一个索引
-        idx = len(LLM_CONFIGS) + 1
-    else:
-        idx = index
-    # 写入 .env.local 文件
-    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.local")
+        # 自动分配：已占用编号的最大值 + 1（空文件则为 1）
+        used = _scan_llm_indices(existing_content)
+        index = max(used) + 1 if used else 1
+
+    # 追加新配置
+    comment = f"# 模型 {index}: {model_name}\n"
+    new_lines = [
+        comment,
+        f"LLM_{index}_API_KEY={api_key}\n",
+        f"LLM_{index}_BASE_URL={base_url}\n",
+        f"LLM_{index}_MODEL_NAME={model_name}\n",
+        "\n",
+    ]
     try:
-        # 读取现有内容
-        existing_content = ""
-        if os.path.exists(env_file):
-            with open(env_file, encoding="utf-8") as f:
-                existing_content = f.read()
-        # 检查是否已存在相同模型
-        if f"LLM_{idx}_MODEL_NAME={model_name}" in existing_content:
-            logger.warning("模型 %s 已存在于配置中", model_name)
-            return False
-        # 追加新配置
-        comment = f"# 模型 {idx}: {model_name}\n"
-        new_lines = [
-            comment,
-            f"LLM_{idx}_API_KEY={api_key}\n",
-            f"LLM_{idx}_BASE_URL={base_url}\n",
-            f"LLM_{idx}_MODEL_NAME={model_name}\n",
-            "\n",
-        ]
-        with open(env_file, "a", encoding="utf-8") as f:
+        with ENV_FILE.open("a", encoding="utf-8") as f:
             f.writelines(new_lines)
-        # 重新加载配置
-        load_dotenv(env_file, override=True)
+        # 重新加载环境变量并原地刷新 config.LLM_CONFIGS（导入时的快照不会自动更新）
+        load_dotenv(str(ENV_FILE), override=True)
+        refresh_llm_configs()
         logger.info("成功添加模型配置: %s (%s)", model_name, base_url)
         return True
     except Exception as e:
@@ -197,21 +186,20 @@ def _find_and_remove_model_block(lines: list[str], model_name: str) -> tuple[lis
 
 def remove_llm_config(model_name: str) -> bool:
     """
-    从配置中移除指定模型
+    从项目根目录的 .env.local 中移除指定模型
     Args:
         model_name: 要移除的模型名称
     Returns:
         是否成功移除
     """
-    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.local")
     try:
-        if not os.path.exists(env_file):
-            logger.warning("配置文件不存在: %s", env_file)
+        if not ENV_FILE.exists():
+            logger.warning("配置文件不存在: %s", ENV_FILE)
             return False
 
         # 读取现有内容
-        with open(env_file, encoding="utf-8") as f:
-            lines = f.readlines()
+        old_content = ENV_FILE.read_text(encoding="utf-8")
+        lines = old_content.splitlines(keepends=True)
 
         # 找到并移除该模型的配置块
         new_lines, removed = _find_and_remove_model_block(lines, model_name)
@@ -220,12 +208,20 @@ def remove_llm_config(model_name: str) -> bool:
             logger.warning("未找到模型: %s", model_name)
             return False
 
+        new_content = "".join(new_lines)
         # 写回文件
-        with open(env_file, "w", encoding="utf-8") as f:
-            f.writelines(new_lines)
+        ENV_FILE.write_text(new_content, encoding="utf-8")
 
-        # 重新加载配置
-        load_dotenv(env_file, override=True)
+        # 清理 os.environ 中已删除编号的 LLM_N_* 变量：
+        # load_dotenv 只会新增/覆盖，不会删除残留变量，不清理则 refresh 后旧配置仍在
+        gone_indices = _scan_llm_indices(old_content) - _scan_llm_indices(new_content)
+        for idx in gone_indices:
+            for suffix in ("API_KEY", "BASE_URL", "MODEL_NAME"):
+                os.environ.pop(f"LLM_{idx}_{suffix}", None)
+
+        # 重新加载环境变量并原地刷新 config.LLM_CONFIGS（导入时的快照不会自动更新）
+        load_dotenv(str(ENV_FILE), override=True)
+        refresh_llm_configs()
         logger.info("成功移除模型配置: %s", model_name)
         return True
     except Exception as e:
