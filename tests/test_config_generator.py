@@ -165,3 +165,25 @@ class TestGenerateBatchConfigScript:
         # 验证脚本可被 Python 解析
         with open(output, encoding="utf-8") as f:
             compile(f.read(), output, "exec")
+
+    def test_script_empty_models_refuses_to_clobber(self, tmp_path):
+        """数据丢失防护：模型列表为空时脚本应报错退出，不得用空文件覆盖现有 .env.local。"""
+        import subprocess
+        import sys
+
+        script = generate_batch_config_script()
+        script_path = tmp_path / "gen_batch.py"
+        script_path.write_text(script, encoding="utf-8")
+
+        env_file = tmp_path / ".env.local"
+        env_file.write_text("LLM_1_API_KEY=keep-me\n", encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, str(script_path), "--output", str(env_file)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 1
+        # 现有配置必须原样保留
+        assert env_file.read_text(encoding="utf-8") == "LLM_1_API_KEY=keep-me\n"
+        assert "模型列表为空" in result.stderr
