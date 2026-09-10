@@ -2,6 +2,34 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.6] - 2026-09-10
+
+### 工作流正确性修复
+- **regenerate 路由死循环**：`_should_debug` 在达到最大迭代且诊断命中"测试生成错误"关键词时路由回 generator 重新生成，但旧实现不递增计数、不清 `diagnosis`，关键词反复命中使 generator↔executor 无限乒乓，最终撞上 LangGraph `recursion_limit` 崩掉任务并空烧十几轮 LLM。现 `state` 新增 `regeneration_count`，每次再生成 +1 并清空过期 `diagnosis`/`error_category`，达到 `_MAX_REGENERATIONS`（=1）后 `_should_debug` 返回 "done"。补 3 个回归测试
+- **patch_applier 状态/磁盘失步**：安全检查（空/过短/无函数定义/路径不合法）拒绝写盘时，节点仍把 `new_code` 当作 `target_code` 返回并记 `patch_applied=True`，导致下游 Executor 测旧文件、Debugger 分析新代码的"幻象迭代"。现仅写盘成功才更新 `target_code` 并记 `patch_applied=True`，否则保留原代码记 False。补成功/拒绝/过短 3 个用例
+- **路径白名单前缀碰撞**：`startswith((project_root, temp_dir))` 缺 `os.sep`，`AITester_backup/` 兄弟目录会命中绕过白名单；现经 `_is_within_allowed_roots` 带 `os.sep` 比较，并用 `realpath` 归一化（macOS `/var`↔`/private/var` 符号链接失配）
+- **写盘非原子**：`open("w")` 先截断后写，中途崩溃会损坏用户源文件。现 `_write_file_atomic` 写临时文件后 `os.replace` 原子替换
+- **Generator 误改写第三方库 import**：`_fix_import_module` 此前把白名单外的所有 `from X import` 无条件替换为被测模块名（`from numpy import array` 被改坏）。现复用 executor 现成的 `SequenceMatcher` 相似度门控（阈值 0.6，与 `_is_similar_module_name` 同源），仅替换"笔误"级相似名，保留不相似的第三方库
+
+### 安全
+- **新增 `.dockerignore`**：`Dockerfile` 的 `COPY . .` 此前会把本地含真实 LLM 密钥的 `.env`/`.env.local`、`.venv/`、`.git/`、`.private/`、各缓存打进镜像。现排除全部敏感/无关内容
+- **异常堆栈脱敏盲区**：`SensitiveFilter` 只覆盖 `record.getMessage()`，`exc_info` 的 traceback 经 `formatException` 生成后绕过过滤（`safe_execute` 的 `logger.error(..., exc_info=True)` 是触发点），与模块"异常文本已脱敏"的声明不符。新增 `SensitiveFormatter` 在完整格式化结果（含堆栈）上再脱敏，CLI handler 统一挂载；补 2 个用例
+- **JSON error 字段脱敏**：任务异常的 `error` 字段（`str(error)`）经 `click.echo` 走 stdout，脱敏过滤器只覆盖 logging 通道，LLM 异常消息若含 key 会裸奔。现经 `mask_sensitive_info` 脱敏
+
+### 缺陷修复
+- **CLI 失败仍 exit 0**：`run` 命令无论成败都返回 0，CI/脚本无法门控。现有任一任务失败（含崩溃产生的错误结果）时 `raise SystemExit(1)`；全通过 exit 0。补 2 个门控用例
+- **`--json` 输出被污染**：日志 `StreamHandler(stdout)` 与 rich 进度条同走 stdout，`| jq` 解析必失败。现 JSON 模式经 `_quiet_console_logs()` 临时静音 stdout 控制台 handler（仅改 level、不动 stream，测试友好），rich 进度条走 `Console(stderr=True)`，`stdout` 只承载 JSON
+- **Executor 超时丢部分输出**：`TimeoutExpired` 自带部分 stdout/stderr，旧实现返回空串，Debugger 拿不到现场。现合并 `e.output`/`e.stderr` 进 output。补 1 个用例
+- **`reproduce.sh` 默认 quick 不限任务**：默认 `MODE="quick"` 但 `TASK_LIMIT=""`，无参运行实际跑不限量任务，与文档"quick=3"矛盾。现默认 `TASK_LIMIT=3`
+- **`generate_batch_config.py` 字段名失配**：读 `model.get("name")`，但 `llm_configs.json` 字段是 `model_name`，生成的模型名整列是 `unknown`。现 `model_name` 优先、`name` 兜底
+- **ruff `target-version` 漂移**：`pyproject.toml` 写 `py310`，但 `setup.py` `python_requires>=3.12` 且 CI 矩阵下限 3.12。现对齐 `py312`
+
+### 工程化
+- **CI 提速与可靠性**：两个 `setup-python` 加 `cache: pip` + `cache-dependency-path: requirements.txt`（省 3-8 分钟/矩阵）；`test`/`security` job 加 `timeout-minutes`（30/10）防长挂；`pip-audit` 锁版本 `==2.10.1`（与"锁版本防漂移"原则一致）
+
+### 测试
+- 全量 **870 passed**（+10 新增用例：regenerate 上限 ×1、patch_applier 一致性 ×2、generator 再生成 ×2、generator import 门控 ×1、executor 超时部分输出 ×1、脱敏 ×2、CLI 门控 ×2，其中 1 个为既有断言更新），0 skipped；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.5] - 2026-09-10
 
 ### 严重缺陷修复

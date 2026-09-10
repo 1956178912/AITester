@@ -572,8 +572,10 @@ python main.py run <target_file> [OPTIONS]
   --max-iterations    最大修复迭代次数，默认 3
   --coverage-threshold  覆盖率阈值百分比，默认 80.0
   --timeout           pytest 执行超时（秒），覆盖 EXECUTION_TIMEOUT 配置
-  --json              以 JSON 格式输出结果
+  --json              以 JSON 格式输出结果（stdout 仅承载纯 JSON，日志/进度条走 stderr，便于管道给 jq）
 ```
+
+> **退出码**：任一测试任务失败（含任务崩溃）时进程以 `1` 退出，全部通过以 `0` 退出，可在 CI/脚本中当作门控工具使用。
 
 **示例：**
 ```bash
