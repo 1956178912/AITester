@@ -124,7 +124,7 @@ class TestSWEBenchDatasetCore:
         assert t.total_test_count == 5
 
     def test_load_raw_data_instance_code_from_problem(self, tmp_path):
-        """instance_code 默认使用 problem_statement（第 258 行）"""
+        """无显式源码字段（instance_code/base_code）时，instance_code 兜底为 problem_statement"""
         jsonl = tmp_path / "swe_bench_instances.jsonl"
         record = {
             "instance_id": "t1",
@@ -243,7 +243,7 @@ class TestSWEBenchDownload:
             output = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path / "cache"), subset="mini")
 
         assert (tmp_path / "cache").exists()
-        assert output.endswith("swe_bench_instances.jsonl")
+        assert output.endswith("swe_bench_mini_instances.jsonl")
 
     @pytest.mark.timeout(30)
     def test_download_writes_jsonl_format(self, tmp_path):
@@ -262,7 +262,7 @@ class TestSWEBenchDownload:
         with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="full")
 
-        content = (tmp_path / "swe_bench_instances.jsonl").read_text()
+        content = (tmp_path / "swe_bench_full_instances.jsonl").read_text()
         lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 2
         for line in lines:

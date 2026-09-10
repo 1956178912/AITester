@@ -221,72 +221,113 @@ class SWEBenchDataset(BaseDatasetLoader):
         "full": 2294,  # 完整数据集：2294 个任务
     }
 
+    def _resolve_jsonl_paths(self) -> list[str]:
+        """解析本加载器实例应读取的 JSONL 文件路径列表。
+
+        规则（与 download_from_huggingface 的写盘约定一致）：
+        - 指定 subset：读取 swe_bench_<subset>_instances.jsonl（子集专属文件）
+        - 未指定 subset：合并 data_dir 下所有 swe_bench_*_instances.jsonl，
+          并兼容旧版通用文件 swe_bench_instances.jsonl
+
+        Returns:
+            按确定性顺序（sorted）排列的 JSONL 文件路径列表（可能为空）。
+        """
+        if self.subset:
+            path = os.path.join(self.data_dir, f"swe_bench_{self.subset}_instances.jsonl")
+            return [path]
+
+        if not os.path.isdir(self.data_dir):
+            # 目录不存在时仍返回旧版通用路径，供调用方打印明确的缺失提示
+            return [os.path.join(self.data_dir, "swe_bench_instances.jsonl")]
+        paths = [
+            os.path.join(self.data_dir, name)
+            for name in sorted(os.listdir(self.data_dir))
+            if name.startswith("swe_bench_") and name.endswith("_instances.jsonl")
+        ]
+        # 兼容旧版通用文件名（无子集标识）
+        legacy = os.path.join(self.data_dir, "swe_bench_instances.jsonl")
+        if os.path.exists(legacy) and legacy not in paths:
+            paths.append(legacy)
+        return paths
+
     def _load_raw_data(self) -> None:
         """
         从本地缓存加载 SWE-bench 数据。
 
-        优先从 data_dir 读取 JSONL 文件；
+        优先从 data_dir 读取 JSONL 文件（子集专属文件或全部子集，见 _resolve_jsonl_paths）；
         若文件不存在，打印提示并返回空列表（允许 gracefully degrade）。
         """
         # 清空任务列表，避免重复加载时数据累积
         self._tasks.clear()
 
-        jsonl_path = os.path.join(self.data_dir, "swe_bench_instances.jsonl")
+        jsonl_paths = self._resolve_jsonl_paths()
 
-        if not os.path.exists(jsonl_path):
+        if not jsonl_paths or not any(os.path.exists(p) for p in jsonl_paths):
             logger.warning(
                 "SWE-bench 数据未找到: %s\n"
                 "请先下载数据集（参考 README.md 中的复现步骤），"
                 "或从 HuggingFace 下载后放入 %s/",
-                jsonl_path,
+                jsonl_paths,
                 self.data_dir,
             )
             return
 
         loaded = 0
-        with open(jsonl_path, encoding="utf-8") as f:
-            for line_num, line in enumerate(f, start=1):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError as e:
-                    logger.warning("JSON 解析失败（第 %d 行）: %s", line_num, e)
-                    continue
+        seen_ids: set[str] = set()
+        for jsonl_path in jsonl_paths:
+            if not os.path.exists(jsonl_path):
+                continue
+            with open(jsonl_path, encoding="utf-8") as f:
+                for line_num, line in enumerate(f, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
+                        continue
 
-                # 构建 BenchmarkTask
-                task_id = data.get("instance_id", f"swe_{line_num}")
-                repo_name = data.get("repository", "unknown")
-                problem_statement = data.get(
-                    "problem_statement",
-                    f"Fix bug in {repo_name} ({task_id})",
-                )
-                test_code = data.get("test_before_patches", "")
-                instance_code = data.get("problem_statement", "")
+                    # 构建 BenchmarkTask
+                    task_id = data.get("instance_id", f"swe_{line_num}")
+                    # 合并加载多个子集文件时按 instance_id 去重（mini 是 lite 的子集）
+                    if task_id in seen_ids:
+                        continue
+                    seen_ids.add(task_id)
+                    repo_name = data.get("repository", "unknown")
+                    problem_statement = data.get(
+                        "problem_statement",
+                        f"Fix bug in {repo_name} ({task_id})",
+                    )
+                    test_code = data.get("test_before_patches", "")
+                    # instance_code 字段优先级：显式源码字段（自定义 JSONL 可提供
+                    # instance_code/base_code）> problem_statement 兜底。
+                    # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，
+                    # 此类任务在基准中仅验证流程、不产生有效修复对比。
+                    instance_code = data.get("instance_code") or data.get("base_code") or problem_statement
 
-                total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
-                expected_pass = data.get("pass_num_before", 0) or 0
-                total_pass = data.get("pass_num_after", 0) or total_tests
+                    total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
+                    expected_pass = data.get("pass_num_before", 0) or 0
+                    total_pass = data.get("pass_num_after", 0) or total_tests
 
-                task = BenchmarkTask(
-                    task_id=task_id,
-                    repo_name=repo_name,
-                    problem_statement=problem_statement,
-                    instance_code=instance_code,
-                    test_code=test_code,
-                    expected_pass_count=expected_pass,
-                    total_test_count=total_pass if total_pass > 0 else total_tests,
-                    metadata={
-                        "repository": repo_name,
-                        "instance_id": task_id,
-                        "original_pass_num": expected_pass,
-                        "final_pass_num": total_pass,
-                        "source": "swe_bench",
-                    },
-                )
-                self._tasks.append(task)
-                loaded += 1
+                    task = BenchmarkTask(
+                        task_id=task_id,
+                        repo_name=repo_name,
+                        problem_statement=problem_statement,
+                        instance_code=instance_code,
+                        test_code=test_code,
+                        expected_pass_count=expected_pass,
+                        total_test_count=total_pass if total_pass > 0 else total_tests,
+                        metadata={
+                            "repository": repo_name,
+                            "instance_id": task_id,
+                            "original_pass_num": expected_pass,
+                            "final_pass_num": total_pass,
+                            "source": "swe_bench",
+                        },
+                    )
+                    self._tasks.append(task)
+                    loaded += 1
 
         logger.info("SWE-bench 加载完成：%d 个任务", loaded)
 
@@ -300,7 +341,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         从 HuggingFace 下载指定子集的 SWE-bench 数据到本地缓存。
 
         Args:
-            cache_dir: 缓存目录，默认为 ~/.cache/aitester/swe_bench/。
+            cache_dir: 缓存目录，默认为 ~/.cache/aitester/swe_bench/
+                （与加载器的 data_dir 一致；此前误写 ~/.cache/aitester/ 导致下载后加载器找不到）。
             subset: 子集名称（"lite"/"mini"/"full"），默认 "lite"。
 
         Returns:
@@ -313,7 +355,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         if _datasets is None:
             raise ImportError("请下载 HuggingFace datasets 库: pip install datasets")
 
-        target_dir = cache_dir or cls.DEFAULT_CACHE_DIR
+        # 与 SWEBenchDataset.data_dir（DEFAULT_CACHE_DIR/swe_bench/）对齐
+        target_dir = cache_dir or os.path.join(cls.DEFAULT_CACHE_DIR, cls.DATASET_NAME)
         os.makedirs(target_dir, exist_ok=True)
 
         split_map = {"mini": "lite", "lite": "dev", "full": "full"}
@@ -325,7 +368,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         except Exception as e:
             raise RuntimeError(f"SWE-bench 下载失败: {e}") from e
 
-        output_path = os.path.join(target_dir, "swe_bench_instances.jsonl")
+        # 文件名带子集标识，避免不同子集互相覆盖（加载器按子集读取）
+        output_path = os.path.join(target_dir, f"swe_bench_{subset}_instances.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for item in dataset:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
