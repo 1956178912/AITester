@@ -2,6 +2,25 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.4] - 2026-09-13
+
+### 缺陷修复
+- **批量配置生成器环境变量名失配（M20）**：`generate_batch_config.py` 与内嵌模板的 `main()` 硬编码读 `ALIYUN_API_KEY`/`AGNES_API_KEY` 等 4 个环境变量名，但 `generate_config` 按 `{PROVIDER}_API_KEY`（如 `aliyun_bailian → ALIYUN_BAILIAN_API_KEY`）查键，两者永远对不上、只能落占位符。现改为按 models 实际出现的 provider 推导键名（与 `generate_config` 同源），任意 provider 都能取到；根脚本与内嵌模板同步，新增子进程回归测试
+- **`analysis.py` 假 t 检验（M15）**：`significance` 字段此前写死 `"t-test (requires scipy)"` 占位文本（从未执行）。现按 per-task `details` 真实计算：`task_id` 配对走 `ttest_rel`，否则 Welch 双样本；样本不足 / 缺 scipy / 无 details 时如实返回 `insufficient_data` / `unavailable`，不再假装检验过；`generate_comparison_report` 增加 Significance Test 节
+- **`code_analyzer` 三处失真**：`replace_function_code` 只匹配 `ast.FunctionDef`，`async def` 被静默漏配（`AsyncFunctionDef` 非其子类）；圈复杂度漏算三目表达式 `ast.IfExp`；`BoolOp` 注释与 CPython 实际行为矛盾（链式 `and` 折叠为单节点而非二叉树）；`parse_function_nodes` 文档声称 args 不含 self/cls 但代码从不剔除——三处均已修正
+
+### 重构
+- **统计检验双实现收敛**：`experiments/statistical_analysis.py` 与 `run_statistical_test.py` 各有一份近似重复实现，且旧版按位置（min_len 截断）配对——两基线结果顺序不一致时不同任务被错配成一对、t/p 值失真。现统一为按 `task_id` 配对（同一任务在两个基线下各跑一次），规范实现收敛到 `statistical_analysis.py`（论文提交包引用的文件名），`run_statistical_test.py` 退化为薄壳入口；配对逻辑提取为 `_pair_by_task`、效应量改配对差值标准差口径、NaN 分支安全、Markdown 报告 nan 值显示 n/a
+- **chromadb 1.x 现代客户端 API 迁移**：`chromadb.Client(Settings(persist_directory=...))` 已弃用，且 `Settings()` 默认 `persist_directory='./chroma'`——"内存模式"（`persist_path=None`）实际会在 CWD 落出持久目录（与 aiterator.log 同类污染）。现 `persist_path` 给定时用 `PersistentClient`、否则 `EphemeralClient` 纯内存，并关闭 `anonymized_telemetry` 避免后台遥测上报
+
+### 性能
+- **RAG 清理全表扫描加 60s 节流**：旧行为每次 `add_case`/`add_repair` 都做一次 `collection.get(include=[metadatas])` 全表扫描（O(N)），大缓存长跑累积为 O(N²)。现"容量未满 且 已清理过 且 距上次 <60s"时跳过扫描；容量满（需驱逐）与首次清理仍每次执行，驱逐语义不变；TTL 默认 3600s，最坏 60s 清理延迟对实际过期语义可忽略
+
+### 测试与文档
+- 补齐低覆盖模块测试：`planner.py`（42%→，mock `_call_llm_with_cache` 覆盖 `plan()` 四路径 + `LogicAnalysisResult`）、`synthetic_dataset.py`（48%→，触发惰性加载验证结构/seed 可复现/异 seed 差异/取模覆盖）、`code_analyzer.py`（0%→，17 用例）、`analysis.py`（0%→，11 用例）、`cli/app.py`（`list-examples` 正常/缺目录 + `--version`）；`run` 命令为 140 行编排胶水、需重度 mock，本轮未覆盖
+- 修正 `plan()` 文档：非 JSON 实际抛 `JSONDecodeError`（`_extract_json` 委托 `extract_json_object`），此前误标为 `RuntimeError`
+- **回归**：全量 **842 passed**（+44 新增用例），0 skipped，1 warning（chromadb 内部 DeprecationWarning，第三方库）；总覆盖率 88%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.3] - 2026-09-13
 
 ### 配置与实验正确性修复
