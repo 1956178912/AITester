@@ -187,3 +187,33 @@ class TestGenerateBatchConfigScript:
         # 现有配置必须原样保留
         assert env_file.read_text(encoding="utf-8") == "LLM_1_API_KEY=keep-me\n"
         assert "模型列表为空" in result.stderr
+
+    def test_script_env_var_name_matches_provider(self, tmp_path):
+        """M20 回归：环境变量名按 provider 推导（{PROVIDER}_API_KEY），
+        此前硬编码 ALIYUN_API_KEY 与 provider aliyun_bailian 的键名失配导致永远取不到。"""
+        import subprocess
+        import sys
+
+        script = generate_batch_config_script()
+        script_path = tmp_path / "gen_batch.py"
+        script_path.write_text(script, encoding="utf-8")
+
+        models_file = tmp_path / "models.json"
+        models_file.write_text(
+            json.dumps([{"name": "qwen-max", "provider": "aliyun_bailian", "base_url": "https://x/v1"}]),
+            encoding="utf-8",
+        )
+        out_file = tmp_path / ".env.local"
+
+        env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
+        env["ALIYUN_BAILIAN_API_KEY"] = "sk-real-key-123"
+        env.pop("ALIYUN_API_KEY", None)
+
+        result = subprocess.run(
+            [sys.executable, str(script_path), "--output", str(out_file), "--models", str(models_file)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "LLM_1_API_KEY=sk-real-key-123" in out_file.read_text(encoding="utf-8")
