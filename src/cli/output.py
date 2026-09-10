@@ -9,23 +9,15 @@ from typing import Any
 import click
 
 # 尝试导入可选依赖，提供优雅降级
+# 注：进度条组件（rich.progress）由 app.py 在并发分支内自行延迟导入，此处不再转导
 try:
     from rich.console import Console
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn  # noqa: F401
     from rich.table import Table
 
     RICH_AVAILABLE = True
-    # 进度条组件由 app.py 在并发分支内延迟使用；此处顶层探测可用性（保持与拆分前 main.py 行为一致）
 except ImportError:
     RICH_AVAILABLE = False
     Console = None
-
-try:
-    import tqdm  # noqa: F401  # 用于检测是否可用
-
-    TQDM_AVAILABLE = True
-except ImportError:
-    TQDM_AVAILABLE = False
 
 
 # ─── 彩色输出工具 ─────────────────────────────────────────────────────────────
@@ -92,7 +84,9 @@ def print_rich_table(results: list[dict[str, Any]]) -> None:
     for r in results:
         status_icon = "✓" if r.get("passed") else "✗"
         status_style = "green" if r.get("passed") else "red"
-        coverage = f"{r.get('coverage', 'N/A')}%" if r.get("coverage") else "N/A"
+        # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
+        r_cov = r.get("coverage")
+        coverage = f"{r_cov}%" if r_cov is not None else "N/A"
 
         table.add_row(
             status_icon,

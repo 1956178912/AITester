@@ -48,14 +48,19 @@ from src.graph.workflow import build_workflow
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# 文件 handler 在导入期立即打开 aitester.log：CWD 不可写时（只读环境/无权限目录）
+# 不能因此让整个 CLI 崩溃，降级为仅控制台输出
+_log_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+try:
+    _log_handlers.append(logging.FileHandler("aitester.log", encoding="utf-8"))
+except OSError:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format=LOG_FORMAT,
     datefmt=LOG_DATE_FORMAT,
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("aitester.log", encoding="utf-8"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
 
@@ -174,8 +179,10 @@ def _run_single_task(
     graph = build_workflow()
     final_state = graph.invoke(state)
 
-    # 覆盖率达标判定：无覆盖率数据时为 None（未知），否则与阈值比较
-    coverage_value = round(final_state.get("coverage_report", 0.0), 1) if final_state.get("coverage_report") else None
+    # 覆盖率达标判定：无覆盖率数据（None）时为 None（未知），否则与阈值比较
+    # 注意用 is not None 判断——0.0 是合法的"覆盖率数据"，不可被 falsy 误判为缺失
+    raw_coverage = final_state.get("coverage_report")
+    coverage_value = round(raw_coverage, 1) if raw_coverage is not None else None
     coverage_ok: bool | None = None if coverage_value is None else coverage_value >= coverage_threshold
 
     # 构建结果字典
@@ -399,7 +406,9 @@ def run(
         else:
             for r in results:
                 status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
-                coverage = f"{r.get('coverage', 'N/A')}%" if r.get("coverage") else "N/A"
+                # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
+                r_cov = r.get("coverage")
+                coverage = f"{r_cov}%" if r_cov is not None else "N/A"
                 click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
 
         # 显示执行统计
