@@ -77,6 +77,26 @@ class SensitiveFilter(logging.Filter):
         return True
 
 
+class SensitiveFormatter(logging.Formatter):
+    """对格式化后的完整日志行（含 exc_info 异常堆栈）做脱敏的 Formatter。
+
+    SensitiveFilter 只对 record.getMessage()（消息体）脱敏；当记录携带 exc_info 时，
+    异常 traceback 由 Formatter.formatException 单独生成并追加在消息之后，
+    会绕过 filter，导致 API Key 等凭证仍可能落进日志文件（长期留存面）。
+    本 formatter 在 super().format() 得到的完整结果（消息 + 堆栈）上再跑一次
+    mask_sensitive_info，堵住该盲区。挂在 handler 上即可（配合 SensitiveFilter
+    双重防护，脱敏幂等）。
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        formatted = super().format(record)
+        try:
+            return mask_sensitive_info(formatted)
+        except Exception:
+            # 脱敏失败时不阻断日志输出，退回原始文本
+            return formatted
+
+
 def setup_logger_safety(logger_name: str | None = None) -> None:
     """为指定 logger（或根 logger）及其 handler 添加敏感信息脱敏过滤器。
 
