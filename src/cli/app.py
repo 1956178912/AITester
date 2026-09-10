@@ -42,6 +42,7 @@ from src.cli.output import (
 )
 from src.graph.state import AITesterState
 from src.graph.workflow import build_workflow
+from src.utils.logging_utils import setup_logger_safety
 
 # ─── 日志配置 ─────────────────────────────────────────────────────────────────
 # 统一日志格式：[时间] [级别] 模块: 消息
@@ -62,6 +63,13 @@ logging.basicConfig(
     datefmt=LOG_DATE_FORMAT,
     handlers=_log_handlers,
 )
+
+# 接入敏感信息脱敏过滤器（SensitiveFilter）：
+# LLM 调用异常文本可能携带 API Key / JWT 等凭证，过滤后自动替换为占位符，
+# 避免凭证泄露进 aitester.log 与控制台输出。此前该模块未被任何入口引用，
+# 脱敏能力实际从未生效。
+setup_logger_safety()
+
 logger = logging.getLogger(__name__)
 
 

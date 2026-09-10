@@ -43,6 +43,32 @@ class TestCliGroup:
         assert "version" in r.output.lower()
 
 
+class TestSensitiveFilterWiring:
+    """SensitiveFilter 日志脱敏接入验证（此前 logging_utils 模块从未被引用，脱敏不生效）。"""
+
+    def test_root_logger_has_sensitive_filter(self):
+        import logging
+
+        from src.utils.logging_utils import SensitiveFilter
+
+        assert any(
+            isinstance(f, SensitiveFilter) for f in logging.getLogger().filters
+        ), "导入 src.cli.app 后 root logger 应挂有 SensitiveFilter"
+
+    def test_api_key_masked_in_logs(self, caplog):
+        """日志消息中的 API Key 被替换为占位符。"""
+        import logging
+
+        from src.utils.logging_utils import mask_sensitive_info
+
+        with caplog.at_level(logging.INFO):
+            logging.getLogger("aitester.test").info(
+                "调用失败 sk-%s 认证错误", "A" * 32
+            )
+        assert "sk-" + "A" * 32 not in caplog.text
+        assert "<REDACTED_API_KEY>" in mask_sensitive_info("sk-" + "A" * 32)
+
+
 class TestRunSequentialResilience:
     """run 命令顺序（parallel=1）模式：单任务异常不中断整个批次。"""
 
