@@ -53,7 +53,13 @@ from config import (
     ENABLE_PLANNER,
     ENABLE_RAG,
     EXECUTION_TIMEOUT,
+    EXECUTOR_AUTO_INSTALL_DEPS,
+    EXECUTOR_DEP_INSTALL_TIMEOUT,
+    EXECUTOR_USE_VENV,
     MAX_ITERATIONS,
+    RAG_COLLECTION_NAME,
+    RAG_PERSIST_PATH,
+    RAG_TTL_SECONDS,
 )
 from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
@@ -116,12 +122,44 @@ def get_rag_retriever():
         # 第二次检查：防止多线程并发时多次初始化
         if _rag_retriever is None and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
             try:
-                _rag_retriever = TestCaseRetriever()
-                logger.info("RAG 检索器单例已初始化")
+                # P1 优化：此前总是无参构造（内存模式，进程重启数据全丢）。
+                # 现由 config 控制持久化路径（默认项目下 rag_data/）与 TTL，
+                # 保证跨实验运行的历史用例/修复案例可复用；RAG_PERSIST_PATH
+                # 设为空字符串可回退内存模式。
+                _rag_retriever = TestCaseRetriever(
+                    collection_name=RAG_COLLECTION_NAME,
+                    persist_path=RAG_PERSIST_PATH or None,
+                    ttl_seconds=RAG_TTL_SECONDS,
+                )
+                logger.info("RAG 检索器单例已初始化（持久化=%s）", RAG_PERSIST_PATH or "内存模式")
             except Exception as e:
                 logger.warning("RAG 检索器初始化失败，将跳过 RAG 增强: %s", e)
                 _rag_retriever = None  # 标记为不可用，避免重复尝试
     return _rag_retriever
+
+
+def _build_rag_stat(rag_refs: list | None, kind: str) -> dict[str, Any] | None:
+    """构建一次 RAG 检索的质量指标记录（P1：消融实验单独报告检索质量）。
+
+    容错：参考案例元素可能是 dict（正常）或 str（测试 mock），
+    相似度缺失时记 0.0，不中断主流程。
+
+    Args:
+        rag_refs: 一次检索返回的参考案例列表（None 表示未启用 RAG）。
+        kind: 检索类型（"test_cases" 或 "repairs"）。
+
+    Returns:
+        指标字典；未检索（rag_refs 为 None）时返回 None。
+    """
+    if rag_refs is None:
+        return None
+    sim_values = [float(c.get("similarity", 0.0) or 0.0) for c in rag_refs if isinstance(c, dict)]
+    return {
+        "kind": kind,
+        "results": len(rag_refs),
+        "max_similarity": max(sim_values) if sim_values else None,
+        "avg_similarity": (sum(sim_values) / len(sim_values)) if sim_values else None,
+    }
 
 
 def _create_workflow(planner: bool | None = None, debugger: bool | None = None) -> StateGraph:
@@ -370,17 +408,23 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             # RAG 检索失败时记录警告但不中断流程，Generator 仍可使用无 RAG 模式生成
             logger.warning("RAG 检索失败，跳过增强: %s", e)
 
+    # P1：记录本次 RAG 检索的质量指标（命中数/相似度），随状态累计供实验汇总
+    update_rag_stat = _build_rag_stat(rag_refs, kind="test_cases")
+
     # 调用 Generator 生成测试代码
     # 参数说明：
     #   - test_plan: 若启用 Planner 则传入结构化计划，否则为 None（Generator 将自行推断）
     #   - target_code: 被测代码全文，Generator 需要它来理解业务逻辑和生成 import 语句
     #   - module_name: 模块名（不含 .py），用于生成正确的 from X import Y 语句
     #   - rag_references: RAG 检索到的历史案例，用于风格参考（可为 None）
+    #   - focus_function: 目标函数名（P0 大文件优化），超长代码时按该函数
+    #     做 AST 智能截取，保留目标函数及直接依赖，避免 LLM 看不到完整上下文
     generated_test = agent.generate(
         state["test_plan"] if ENABLE_PLANNER else None,
         state["target_code"],
         module_name=state.get("module_name", ""),
         rag_references=rag_refs,
+        focus_function=state.get("target_function"),
     )
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
@@ -388,6 +432,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         "generated_test": generated_test,
         "rag_references": rag_refs,
     }
+    # 累计 RAG 检索指标（本节点读取后携带历史值，避免后续节点覆盖丢失）
+    if update_rag_stat:
+        update["rag_stats"] = list(state.get("rag_stats") or []) + [update_rag_stat]
     # 再生成路径检测：首次生成时 iteration < max_iterations（尚未进入修复循环），
     # 只有 _should_debug 路由 "regenerate"（此时 iteration >= max_iterations）才会带着
     # 高 iteration 回到 generator。据此区分两类进入方式：
@@ -418,9 +465,14 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     # CLI 通过 state 注入的执行超时优先，未注入时回退到 config 中已校验的值
     executor_timeout = int(state.get("execution_timeout") or EXECUTION_TIMEOUT)
+    # 隔离沙箱参数（P1 依赖隔离）：默认关闭，保持与历史实验一致；
+    # 通过环境变量 EXECUTOR_USE_VENV / EXECUTOR_AUTO_INSTALL_DEPS 开启
     agent = ExecutorAgent(
         timeout=executor_timeout,
         use_docker=False,
+        use_venv=EXECUTOR_USE_VENV,
+        auto_install_deps=EXECUTOR_AUTO_INSTALL_DEPS,
+        dep_install_timeout=EXECUTOR_DEP_INSTALL_TIMEOUT,
     )
     result = agent.execute(
         test_code=state["generated_test"],
@@ -494,6 +546,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             test_output=state.get("test_output", ""),
             failed_cases=state.get("failed_cases", []) or [],
             rag_references=rag_refs,
+            focus_function=state.get("target_function"),
+            target_module=state.get("module_name"),
         )
     except (json.JSONDecodeError, RuntimeError) as e:
         logger.warning("Debugger JSON 解析失败，跳过本轮修复: %s", e)
@@ -524,11 +578,16 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         except Exception as e:
             logger.warning("RAG 修复入库失败: %s", e)
 
-    return {
+    update = {
         "diagnosis": result["root_cause"],
         "error_category": result.get("error_category", "unknown"),
         "patch": result["patch"],
     }
+    # 累计 RAG 修复检索指标（P1）
+    repair_stat = _build_rag_stat(rag_refs, kind="repairs")
+    if repair_stat:
+        update["rag_stats"] = list(state.get("rag_stats") or []) + [repair_stat]
+    return update
 
 
 def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:

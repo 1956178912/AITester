@@ -18,22 +18,26 @@ from config import (
     MYSQL_DATABASE,
     MYSQL_HOST,
     MYSQL_PASSWORD,
+    MYSQL_POOL_MAX_CACHED,
+    MYSQL_POOL_MAX_CONNECTIONS,
+    MYSQL_POOL_MIN_CACHED,
+    MYSQL_POOL_TIMEOUT,
     MYSQL_PORT,
     MYSQL_USER,
 )
 
 logger = logging.getLogger(__name__)
 
-# ─── 连接池配置常量 ───────────────────────────────────────────────────────────
-# 初始化时创建的预留空闲连接数
-_POOL_MIN_CACHED = 5
-# 连接池中允许的最大空闲连接数
-_POOL_MAX_CACHED = 10
-# 连接池允许的最大连接总数（含正在使用的）
-_POOL_MAX_CONNECTIONS = 20
-# 从池获取连接的等待超时秒数（连接池满时阻塞等待）
-_POOL_CONNECTION_TIMEOUT = 30
-# 连接空闲超过此秒数后被回收（0 表示不回收）
+# ─── 连接池配置 ──────────────────────────────────────────────────────────────
+# P1 优化：连接池参数此前硬编码在本模块，现统一从 config.py 读取
+# （环境变量 MYSQL_POOL_*，默认值与历史硬编码值一致，未配置时行为不变）。
+# 实验规模增大（如 BENCHMARK_PARALLELISM 提高）时可调大 max_connections。
+_POOL_MIN_CACHED = MYSQL_POOL_MIN_CACHED
+_POOL_MAX_CACHED = MYSQL_POOL_MAX_CACHED
+_POOL_MAX_CONNECTIONS = MYSQL_POOL_MAX_CONNECTIONS
+_POOL_CONNECTION_TIMEOUT = MYSQL_POOL_TIMEOUT
+# 连接空闲超过此秒数后被回收（0 表示不回收）；DBUtils PooledDB 的
+# idle_timeout 参数，保持模块内常量（使用频率低，不单独开放环境变量）
 _POOL_IDLE_TIMEOUT = 600
 
 
