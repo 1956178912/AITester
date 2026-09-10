@@ -194,13 +194,19 @@ def main():
     if not models:
         print("错误：模型列表为空。为避免用空文件覆盖现有 .env.local，请通过 --models 指定模型列表 JSON 文件。", file=sys.stderr)
         sys.exit(1)
-    # 加载 API Keys（从环境变量或配置文件）
-    api_keys = {
-        "ALIYUN_API_KEY": os.getenv("ALIYUN_API_KEY", ""),
-        "AGNES_API_KEY": os.getenv("AGNES_API_KEY", ""),
-        "BIGMODEL_API_KEY": os.getenv("BIGMODEL_API_KEY", ""),
-        "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", ""),
-    }
+    # 加载 API Keys：按 models 中实际出现的 provider 推导环境变量名
+    # （与 generate_config 的命名约定 {PROVIDER}_API_KEY 同源，避免此前
+    # 硬编码 ALIYUN_API_KEY 等与 aliyun_bailian/agnes_domestic 等 provider
+    # 键名失配、导致环境变量永远取不到的问题）
+    api_keys = {}
+    for model in models:
+        provider = model.get("provider", "")
+        if not provider:
+            continue
+        key_var = f"{provider.upper()}_API_KEY"
+        env_val = os.getenv(key_var, "")
+        if env_val:
+            api_keys[key_var] = env_val
     # 生成配置
     config_content = generate_config(models, api_keys)
     # 写入文件
