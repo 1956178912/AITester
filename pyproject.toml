@@ -2,7 +2,8 @@
 # Ruff 配置文件
 # 快速 Python lint 工具，替代 flake8 + pydocstyle + isort
 
-target-version = "py310"
+# 与 setup.py python_requires（>=3.12）及 CI 矩阵下限 3.12 对齐
+target-version = "py312"
 line-length = 120
 
 [tool.ruff.lint]
