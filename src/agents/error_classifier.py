@@ -227,12 +227,14 @@ class ErrorClassifier:
 
         # 尝试从 traceback 中提取文件名
         # 使用 findall 获取所有匹配，取最后一个（最深的调用栈）
+        # 注意：任意 Python traceback（含纯运行时错误）都会命中该模式，
+        # 因此这里不赋 subtype——subtype 仅由 import/语法错误分支设置，
+        # 否则 RUNTIME 类错误会被误标为 syntax_error 子类型
         traceback_matches = _RE_TRACEBACK.findall(combined)
         if traceback_matches:
             # 取最后一个匹配（最深处的文件）
             context.filename = traceback_matches[-1][0]
             context.line = int(traceback_matches[-1][1])
-            context.subtype = SyntaxSubtype.SYNTAX_ERROR
             return context
 
         return context

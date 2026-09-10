@@ -278,9 +278,14 @@ class ReportGenerator:
         """
         self._report_counter += 1
 
-        # 分类错误（传入空列表，由 classify 内部处理）
-        category = self._classifier.classify(error_output, [])
-        context: ErrorContext | None = None
+        # 先解析失败用例（分类需要合并用例错误文本，报告组装也复用同一结果）
+        parsed_cases = failed_cases or self._parse_failed_cases(error_output)
+
+        # 错误分类与上下文提取（一次性完成）：
+        # 旧写法 classify() + context=None 导致 _analyze_root_cause/_generate_fix_suggestion
+        # 的 ImportError 分支（依赖 context.module_name）永不可达、error_subtype 恒为 None
+        category, context = self._classifier.classify_with_context(error_output, parsed_cases)
+        context = context if context else None
 
         # 分析根本原因
         root_cause = self._analyze_root_cause(category, context, error_output)
@@ -288,15 +293,14 @@ class ReportGenerator:
         # 生成修复建议
         suggested_fix = self._generate_fix_suggestion(category, context, error_output)
 
-        # 解析失败用例
-        parsed_cases = failed_cases or self._parse_failed_cases(error_output)
-
         return ErrorReport(
             task_id=task_id,
             target_file=target_file,
             target_function=target_function,
             error_category=category,
-            error_subtype=context.subtype.value if context else None,
+            # 注意：context.subtype 在多数错误类下为 None（仅 import/语法分支赋值），
+            # 必须双重守卫，否则 None.value 抛 AttributeError
+            error_subtype=context.subtype.value if context and context.subtype else None,
             error_message=error_output.strip()[:500],  # 截断过长消息
             error_context=context,
             root_cause=root_cause,
@@ -326,7 +330,8 @@ class ReportGenerator:
             str: 根本原因描述
         """
         if category == ErrorCategory.SYNTAX:
-            if context and context.subtype.name == "IMPORT_ERROR":
+            # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示
+            if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
                 module = context.module_name or "未知模块"
                 return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
             return "代码存在语法错误，请检查冒号、缩进、括号配对等基础语法"
@@ -370,7 +375,8 @@ class ReportGenerator:
         suggestions: list[str] = []
 
         if category == ErrorCategory.SYNTAX:
-            if context and context.subtype.name == "IMPORT_ERROR":
+            # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示
+            if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
                 module = context.module_name or "目标模块"
                 suggestions.append(f"1. 安装缺失模块：`pip install {module}`")
                 suggestions.append("2. 检查导入语句是否正确")
@@ -472,7 +478,9 @@ class ReportGenerator:
         output_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"report_{report.task_id}_{timestamp}"
+        # 消毒 task_id：它将参与文件名拼接，过滤路径分隔符与非法字符（防路径穿越/非法路径）
+        safe_task_id = re.sub(r"[^A-Za-z0-9._-]", "_", report.task_id)[:64]
+        filename = f"report_{safe_task_id}_{timestamp}"
 
         if format == ReportFormat.JSON:
             filepath = output_path / f"{filename}.json"

@@ -9,9 +9,10 @@
 - save_report 三种格式的落盘行为
 - get_report_generator 单例语义
 
-注意：generate() 内部 context 恒为 None（见源码 283 行），因此
-_analyze_root_cause / _generate_fix_suggestion 中依赖 context 的分支
-只能通过直接调用私有方法构造 ErrorContext 来覆盖。
+注意：generate() 已接入 classify_with_context，context 会随分类结果填充
+（此前恒为 None，ImportError 根因分支是死代码）；直接调用私有方法构造
+ErrorContext 的测试保留，用于覆盖 _analyze_root_cause / _generate_fix_suggestion
+的各分支（含非导入类错误的 context 组合）。
 """
 
 import json
@@ -189,7 +190,7 @@ class TestGenerateClassification:
         self.gen = ReportGenerator()
 
     def test_generate_syntax_error(self):
-        """ModuleNotFoundError → SYNTAX 分类（generate() 无 context，根因为通用语法提示）"""
+        """ModuleNotFoundError → SYNTAX 且 context 随分类结果填充（此前 context 恒为 None）"""
         report = self.gen.generate(
             task_id="t",
             target_file="f.py",
@@ -197,7 +198,22 @@ class TestGenerateClassification:
             error_output="ModuleNotFoundError: No module named 'pandas'",
         )
         assert report.error_category == ErrorCategory.SYNTAX
-        assert "代码存在语法错误" in report.root_cause
+        # ImportError 根因分支现已可达：提取缺失模块名
+        assert "缺少依赖模块 'pandas'" in report.root_cause
+        assert report.error_subtype == "import_error"
+        assert report.error_context is not None
+        assert report.error_context.module_name == "pandas"
+
+    def test_generate_plain_syntax_error_subtype(self):
+        """纯语法错误（无 traceback 位置）不赋子类型"""
+        report = self.gen.generate(
+            task_id="t",
+            target_file="f.py",
+            target_function="fn",
+            error_output="SyntaxError: invalid syntax",
+        )
+        assert report.error_category == ErrorCategory.SYNTAX
+        assert report.error_subtype is None
 
     def test_generate_runtime_zero_division(self):
         """ZeroDivisionError → RUNTIME 且根因为除零"""
@@ -413,6 +429,24 @@ class TestSaveReport:
         import re
 
         assert re.match(r"^report_task-999_\d{8}_\d{6}\.txt$", filepath.name)
+
+    def test_task_id_sanitized_in_filename(self, tmp_path):
+        """task_id 中的路径分隔符/非法字符被消毒，防止路径穿越（此前原样拼接进文件名）"""
+        report = _report(task_id="../../etc/passwd")
+        filepath = self.gen.save_report(report, output_dir=str(tmp_path), format=ReportFormat.TEXT)
+        # 关键断言：文件必须落在 output_dir 内部（分隔符已清除，".." 不再是路径组件）
+        assert filepath.parent == tmp_path
+        assert "/" not in filepath.name
+        assert "\\" not in filepath.name
+        # 报告中原始 task_id 保持不变（只消毒文件名）
+        assert report.task_id == "../../etc/passwd"
+
+    def test_task_id_truncated_to_64_chars(self, tmp_path):
+        """超长 task_id 截断到 64 字符，避免文件系统路径长度问题"""
+        report = _report(task_id="x" * 200)
+        filepath = self.gen.save_report(report, output_dir=str(tmp_path), format=ReportFormat.TEXT)
+        # report_(7) + 64 + _(1) + 时间戳8+1+6=15 + .txt(4) = 91
+        assert len(filepath.name) == 7 + 64 + 1 + 15 + 4
 
 
 # ─── 单例 ─────────────────────────────────────────────────────────────────────
