@@ -313,7 +313,7 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 - [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
 ### 2. 分层错误修复机制（Hierarchical Repair Strategy）
-将测试失败分为五类：**语法错误（syntax）、断言失败（assertion）、运行时异常（runtime）、超时（timeout）、未知（unknown）**，每类采用差异化修复策略。
+将测试失败分为八类：**导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出，修复路径更精准）。
 
 **技术实现**：
 - [src/agents/error_classifier.py](src/agents/error_classifier.py) 中的 `ErrorClassifier` 类（规则匹配）
@@ -413,6 +413,29 @@ python -c "from src.datasets import SWEBenchDataset; SWEBenchDataset.download_fr
 python experiments/run_benchmark.py --dataset swe_bench --subset lite --task-limit 10
 ```
 
+### SWE-bench 加载质量校验与源码补充（P0）
+
+官方 SWE-bench JSONL **不含被测源码字段**（只有 issue 文本 + 修复补丁），
+直接跑基准时 LLM 看不到真实代码，结果只能验证流程、不能产生有效修复对比。
+用以下两步排查/补全：
+
+```bash
+# 1. 校验加载质量（逐任务打印 instance_code/test_code 完整性 + 全量质量报告）
+python main.py check-dataset swe_bench --subset lite
+
+# 2. 提供源码补充文件（JSONL，按 instance_id 关联）：
+#    {"instance_id": "r/r-1", "instance_code": "def f(): ...", "test_code": "def test_f(): ..."}
+#    可通过 git checkout <base_commit> 导出目标文件内容生成
+SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10
+```
+
+目标函数定位：加载器会从官方 `patch` 的 hunk 头自动提取目标函数名
+（`metadata["suggested_function"]`，本地缓存 225 任务实测提取率 96%），
+benchmark 用它初始化 `target_function`，驱动 Planner/Generator/Debugger
+的 **AST 聚焦截取**——大源文件不再"头尾各半"硬截断，而是保留
+import + 目标函数 + 其直接调用的辅助函数（见 `src/tools/code_context.py`）。
+
 ### 结果文件说明
 
 基准测试结果保存在 `experiments/results/` 目录下，格式为 JSON：
@@ -441,6 +464,77 @@ AITester 内置了 `SyntheticDataset`，可在不依赖 SWE-bench/Defects4J 的�
 输出文件：
 - `experiments/results/charts/statistical_significance.png`
 - `experiments/results/charts/summary_stats.md`
+
+---
+
+## 执行隔离与依赖管理（P1）
+
+本地执行默认跑在系统 Python：被测代码 import 的第三方库缺失时测试直接失败，
+且无法区分"代码 bug"与"环境缺依赖"，不同任务的依赖还会互相冲突。
+开启 venv 沙箱后，每个任务在临时目录 + 按依赖组合缓存的隔离 venv 中执行，
+`PYTHONPATH` 仅指向沙箱目录：
+
+```bash
+# 隔离 venv 执行（缺失依赖只会被检测记录，测试结果仍正常产出）
+EXECUTOR_USE_VENV=true python experiments/run_benchmark.py --dataset swe_bench --task-limit 10
+
+# 执行前自动 pip install 缺失依赖（只装入 venv，不污染系统环境）
+EXECUTOR_USE_VENV=true EXECUTOR_AUTO_INSTALL_DEPS=true \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10
+```
+
+- venv 按"缺失包组合"做磁盘缓存（`~/.cache/aitester/venvs/`），相同依赖的任务复用；
+- 缺失依赖会写入结果的 `error_info.missing_dependencies`，由错误分类器归为
+  独立的 `import_error` 类别（区别于代码写错语法的 `syntax`）；
+- 依赖安装失败时直接提前返回 `dependency_install_failed`，避免测试结果误导分析。
+
+## RAG 检索增强与质量指标（P1）
+
+RAG 默认关闭（`ENABLE_RAG=false`）。开启后 Generator/Debugger 会检索
+相似历史案例；检索库持久化到 `rag_data/`（`RAG_PERSIST_PATH` 可配），
+**跨实验运行可复用**，TTL 默认 7 天（`RAG_TTL_SECONDS`）：
+
+```bash
+# 显式开启 RAG 跑消融实验（检索库跨次运行累积）
+python experiments/run_benchmark.py --dataset synthetic --enable-rag
+
+# 查看 RAG 检索质量指标（结果 JSON 的 results.<baseline>.rag_metrics：
+# retrievals / hits / hit_rate / avg_max_similarity）
+python experiments/run_benchmark.py --dataset synthetic --enable-rag --json
+```
+
+单独评估检索库质量（Hit Rate@k / MRR，针对已知标注查询）：
+
+```python
+from src.rag.retriever import TestCaseRetriever
+retriever = TestCaseRetriever(persist_path="rag_data")
+metrics = retriever.evaluate_retrieval(
+    [{"query": "def add(a, b): ...", "expected_id": "<入库时的 doc_id>"}],
+    top_k=5,
+)
+# → {"num_queries": 1, "hits": 1, "hit_rate": 1.0, "mrr": 1.0}
+```
+
+## 效率指标与基线对比排查（P0）
+
+每次基准运行自动记录 token 消耗（结果 JSON 的 `results.<baseline>.token_metrics`
+与逐任务 `token_usage`），用于"完整系统 vs Plain LLM 性价比"对比。
+若发现基线反超，用对比工具定位差异环节：
+
+```bash
+# 1. 双基线跑一遍并落盘环节级产物（测试计划/生成代码/诊断/补丁）
+python experiments/run_benchmark.py --dataset synthetic \
+    --baselines aitester,plain_llm --save-state
+
+# 2. 找出"plain_llm 成功但 aitester 失败"的任务，逐环节对比 + 输出 Markdown 报告
+python experiments/compare_failures.py \
+    --results experiments/results/benchmark_synthetic_<ts>.json \
+    --raw-dir experiments/results/raw --max-tasks 5 \
+    --report experiments/results/failure_analysis.md
+```
+
+报告会对每个翻转任务给出"疑似环节"提示（Planner 噪声 / Debugger 未收敛 /
+环境依赖失败），并汇总 token 对比。
 
 ---
 
@@ -479,33 +573,48 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（38 个文件，860+ 个收集用例）：
+**测试覆盖模块**（40 个测试文件，957 个 pytest 收集用例，src 总覆盖率 90%）：
 
-| 测试文件 | 用例数 | 覆盖范围 |
+| 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_base_agent.py` | 37 | JSON 提取、Python 代码块提取、ChatOpenAI 客户端复用 |
-| `test_planner.py` | 6 | PlannerAgent 规划逻辑序列化 |
-| `test_generator.py` | 13 | parametrize 校验、import 修正、LLM 调用 |
-| `test_debugger.py` | 5 | 错误诊断、RAG 注入、failed_cases 截断 |
-| `test_executor.py` | 17 | 覆盖率解析、失败用例解析 |
-| `test_workflow.py` | 77 | _should_debug 路由、工作流图构建 |
-| `test_state.py` | 5 | AITesterState TypedDict 结构完整性 |
-| `test_prompts.py` | 26 | 各智能体 System Prompt 完整性校验 |
-| `test_retriever.py` | 7 | RAG 检索器增删查清功能 |
-| `test_config.py` | 15 | MySQLClient 单例/事务、config.py 默认值 |
-| `test_patch_applier.py` | 29 | 补丁应用（完整文件/单函数模式） |
-| `test_patch_applier_boundary.py` | 10 | 补丁应用边界情况 |
-| `test_code_analyzer.py` | 12 | AST 解析、圈复杂度、代码替换 |
-| `test_error_classifier.py` | 53 | 五类错误分类与修复策略映射 |
-| `test_dataset_loader.py` | 51 | 数据集加载器（InMemory/SWEBench） |
-| `test_synthetic_dataset.py` | 18 | 合成数据集生成与确定性验证 |
-| `test_api_manager.py` | 17 | API 管理器（轮询/加权随机/健康感知策略） |
-| `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
+| `test_api_manager.py` | 57 | API 管理器（轮询/加权随机/健康感知策略） |
+| `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
+| `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_error_classifier_improvements.py` | 25 | 错误分类器改进测试 |
-| `test_report_generator.py` | 13 | 错误报告生成器 |
-| `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
-| `test_executor_integration.py` | 4 | 执行器集成测试 |
+| `test_cli_app.py` | 11 | CLI 命令（list-examples/--version/参数校验） |
+| `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
+| `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
+| `test_code_context.py` | 11 | AST 智能截取（P0 大文件上下文） |
+| `test_complex_logic.py` | 12 | 复杂业务逻辑（邮箱验证等） |
+| `test_config_generator.py` | 26 | LLM 配置生成器模板 |
+| `test_config_manager.py` | 29 | 配置管理器（LLM 配置增删） |
+| `test_config.py` | 14 | config.py 默认值与容错解析 |
+| `test_core_modules.py` | 19 | 核心模块冒烟 |
+| `test_dataset_loader.py` | 76 | 数据集加载器（InMemory/SWEBench） |
+| `test_dataset_loader_extended.py` | 60 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_validation.py` | 14 | SWE-bench 加载质量校验与源码补充（P0） |
+| `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
+| `test_dependency.py` | 27 | 依赖检测与 venv 管理（P1） |
+| `test_error_classifier.py` | 56 | 八类错误分类与修复策略映射（P2 细化） |
+| `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
+| `test_executor.py` | 35 | 覆盖率解析、失败用例解析 |
+| `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
+| `test_experiments_analysis.py` | 11 | 实验结果分析（排名/统计） |
+| `test_generator.py` | 30 | parametrize 校验、import 修正、LLM 调用 |
+| `test_llm_cache.py` | 16 | LLM 内存缓存 |
+| `test_llm_file_cache.py` | 4 | LLM 文件缓存命中/失效 |
+| `test_mysql_client.py` | 11 | MySQL 客户端单例/事务 |
+| `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
+| `test_patch_applier.py` | 36 | 补丁应用（完整文件/单函数模式） |
+| `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
+| `test_rag_metrics.py` | 5 | RAG 检索质量指标 Hit Rate/MRR（P1） |
+| `test_rag_retriever.py` | 29 | RAG 检索器增删查清与持久化 |
+| `test_report_generator.py` | 48 | 错误报告生成器（含八类分类分支） |
+| `test_string_utils.py` | 10 | 字符串工具 |
+| `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
+| `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
+| `test_workflow.py` | 28 | 工作流图构建与路由 |
+| `test_workflow_extended.py` | 33 | 工作流扩展路径（RAG 初始化单例等） |
 
 ## 配置说明
 
@@ -525,6 +634,17 @@ docker run --rm \
 | `ENABLE_PLANNER` | 启用 Planner（消融开关） | true |
 | `ENABLE_DEBUGGER` | 启用 Debugger 修复循环（消融开关） | true |
 | `ENABLE_RAG` | 启用 RAG 检索增强 | false |
+| `RAG_PERSIST_PATH` | RAG 持久化路径（空=内存模式，默认项目根 rag_data/） | rag_data |
+| `RAG_COLLECTION_NAME` | RAG ChromaDB 集合名 | aitester_cases |
+| `RAG_TTL_SECONDS` | RAG 缓存 TTL（秒，持久化场景默认 7 天） | 604800 |
+| `EXECUTOR_USE_VENV` | venv 沙箱隔离执行（依赖隔离，P1） | false |
+| `EXECUTOR_AUTO_INSTALL_DEPS` | 执行前自动 pip install 缺失依赖（P1） | false |
+| `EXECUTOR_DEP_INSTALL_TIMEOUT` | 依赖安装超时（秒） | 120 |
+| `MYSQL_POOL_MIN_CACHED` | 连接池最小预留连接 | 5 |
+| `MYSQL_POOL_MAX_CACHED` | 连接池最大空闲连接 | 10 |
+| `MYSQL_POOL_MAX_CONNECTIONS` | 连接池最大连接总数 | 20 |
+| `MYSQL_POOL_TIMEOUT` | 获取连接等待超时（秒） | 30 |
+| `SWE_BENCH_ENRICHMENT` | SWE-bench 源码补充 JSONL 路径（P0，可选） | 无 |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `TEMPERATURE` | LLM 采样温度 | 0.2 |
 
@@ -605,6 +725,8 @@ python experiments/run_benchmark.py [OPTIONS]
   --parallel, -p      并行任务数（替代 BENCHMARK_PARALLELISM 环境变量）
   --timeout           全局执行超时（秒）
   --json              JSON 格式输出结果
+  --enable-rag        显式开启 RAG 检索增强（P1 消融实验；默认沿用 config.ENABLE_RAG）
+  --save-state        环节级状态落盘到 <output-dir>/raw/（P0 基线对比排查用）
 ```
 
 **示例：**
