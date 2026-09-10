@@ -99,6 +99,26 @@ def cli() -> None:
 
 
 # ─── 任务执行 ─────────────────────────────────────────────────────────────────
+def _make_task_error_result(file_path: str, func: str | None, error: BaseException | None) -> dict[str, Any]:
+    """构建任务异常结果字典（与 _run_single_task 正常结果同构，便于汇总统计）。
+
+    Args:
+        file_path: 被测文件路径。
+        func: 被测函数名（None 时记 "all"）。
+        error: 触发异常的 Exception（None 时 error 字段记 "unknown error"）。
+
+    Returns:
+        标记 success/passed 为 False 的结果字典，含 error 描述。
+    """
+    return {
+        "success": False,
+        "file": file_path,
+        "func": func or "all",
+        "passed": False,
+        "error": str(error) if error else "unknown error",
+    }
+
+
 def _handle_task_exception(future, future_to_file: dict, func: str | None, results: list) -> None:
     """
     统一处理并行任务执行中的异常，记录日志并追加错误结果。
@@ -112,15 +132,7 @@ def _handle_task_exception(future, future_to_file: dict, func: str | None, resul
     file_path = future_to_file[future]
     task_error = future.exception()  # 只调用一次，避免重复取异常
     logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
-    results.append(
-        {
-            "success": False,
-            "file": file_path,
-            "func": func or "all",
-            "passed": False,
-            "error": str(task_error) if task_error else "unknown error",
-        }
-    )
+    results.append(_make_task_error_result(file_path, func, task_error))
 
 
 def _run_single_task(
@@ -288,6 +300,11 @@ def run(
         error_msg(f"--coverage-threshold 必须在 0-100 范围内（当前: {coverage_threshold}%）")
         raise SystemExit(1)
 
+    # 超时参数校验：负数/0 会让 subprocess 立即超时，属于无效输入
+    if timeout is not None and timeout < 1:
+        error_msg(f"--timeout 必须 >= 1 秒（当前: {timeout}）")
+        raise SystemExit(1)
+
     # 设置详细日志级别
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -377,9 +394,17 @@ def run(
                         _handle_task_exception(future, future_to_file, func, results)
     else:
         # 单线程模式
+        # 逐任务容错：单个任务异常（如读取失败、工作流崩溃）不中断整个批次，
+        # 与并发分支的 _handle_task_exception 行为对齐，保证后续文件继续执行
         for target_file in expanded_files:
-            result = _run_single_task(target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output)
-            results.append(result)
+            try:
+                result = _run_single_task(
+                    target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                )
+                results.append(result)
+            except Exception as e:
+                logger.error("任务执行异常：file=%s, error=%s", target_file, e)
+                results.append(_make_task_error_result(target_file, func, e))
 
     elapsed_time = time.time() - start_time
 

@@ -41,3 +41,45 @@ class TestCliGroup:
         r = CliRunner().invoke(cli_app.cli, ["--version"])
         assert r.exit_code == 0
         assert "version" in r.output.lower()
+
+
+class TestRunSequentialResilience:
+    """run 命令顺序（parallel=1）模式：单任务异常不中断整个批次。"""
+
+    def _make_files(self, tmp_path, n: int = 2) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"mod{i}.py"
+            p.write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_first_task_exception_does_not_stop_batch(self, tmp_path, monkeypatch):
+        """首个文件任务抛异常时，后续文件仍被处理（旧实现整批崩溃）。"""
+        files = self._make_files(tmp_path)
+        ok_result = {"success": True, "file": files[1], "func": "all", "passed": True}
+        calls: list[str] = []
+
+        def fake_run_single_task(target_file, *args, **kwargs):
+            calls.append(target_file)
+            if target_file == files[0]:
+                raise RuntimeError("模拟工作流崩溃")
+            return ok_result
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_run_single_task)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--json"])
+        assert r.exit_code == 0, f"顺序模式批次应正常结束: {r.output}"
+        assert calls == files, "两个文件都应被处理"
+
+    def test_timeout_zero_rejected(self, tmp_path):
+        """--timeout 0（或负数）应被参数校验拦截，而不是传到 subprocess。"""
+        files = self._make_files(tmp_path, n=1)
+        r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--timeout=0", "--json"])
+        assert r.exit_code == 1
+        assert "--timeout 必须 >= 1 秒" in r.output
+
+    def test_timeout_negative_rejected(self, tmp_path):
+        files = self._make_files(tmp_path, n=1)
+        r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--timeout=-5", "--json"])
+        assert r.exit_code == 1
+        assert "--timeout 必须 >= 1 秒" in r.output
