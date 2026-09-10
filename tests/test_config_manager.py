@@ -233,8 +233,7 @@ class TestRemoveLLMConfig:
     def test_remove_does_not_match_partial_names(self, env_file):
         """移除 short-model 时不得误删 short-model-x 的配置块（行尾精确匹配）。"""
         env_file.write_text(
-            "LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=short-model\n"
-            "LLM_2_API_KEY=k2\nLLM_2_MODEL_NAME=short-model-x\n",
+            "LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=short-model\nLLM_2_API_KEY=k2\nLLM_2_MODEL_NAME=short-model-x\n",
             encoding="utf-8",
         )
         result = remove_llm_config("short-model")

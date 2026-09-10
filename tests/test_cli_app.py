@@ -51,9 +51,9 @@ class TestSensitiveFilterWiring:
 
         from src.utils.logging_utils import SensitiveFilter
 
-        assert any(
-            isinstance(f, SensitiveFilter) for f in logging.getLogger().filters
-        ), "导入 src.cli.app 后 root logger 应挂有 SensitiveFilter"
+        assert any(isinstance(f, SensitiveFilter) for f in logging.getLogger().filters), (
+            "导入 src.cli.app 后 root logger 应挂有 SensitiveFilter"
+        )
 
     def test_api_key_masked_in_logs(self, caplog):
         """日志消息中的 API Key 被替换为占位符。"""
@@ -62,9 +62,7 @@ class TestSensitiveFilterWiring:
         from src.utils.logging_utils import mask_sensitive_info
 
         with caplog.at_level(logging.INFO):
-            logging.getLogger("aitester.test").info(
-                "调用失败 sk-%s 认证错误", "A" * 32
-            )
+            logging.getLogger("aitester.test").info("调用失败 sk-%s 认证错误", "A" * 32)
         assert "sk-" + "A" * 32 not in caplog.text
         assert "<REDACTED_API_KEY>" in mask_sensitive_info("sk-" + "A" * 32)
 

@@ -247,7 +247,6 @@ class ReportGenerator:
     def __init__(self) -> None:
         """初始化报告生成器。"""
         self._classifier = ErrorClassifier()
-        self._report_counter = 0
 
     def generate(
         self,
@@ -276,8 +275,6 @@ class ReportGenerator:
         Returns:
             ErrorReport: 生成的错误报告对象
         """
-        self._report_counter += 1
-
         # 先解析失败用例（分类需要合并用例错误文本，报告组装也复用同一结果）
         parsed_cases = failed_cases or self._parse_failed_cases(error_output)
 

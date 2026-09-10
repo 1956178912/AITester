@@ -713,6 +713,9 @@ def get_available_datasets() -> list[str]:
     """
     返回当前支持的所有数据集名称列表。
 
+    与 load_dataset 的 dataset_map 保持同步（含别名）：
+    未列出的名称调用 load_dataset 时会降级为 InMemoryDataset。
+
     Returns:
         数据集名称列表。
     """
@@ -723,6 +726,9 @@ def get_available_datasets() -> list[str]:
             "defects4j_python",
             "d4j_py",
             "in_memory",
+            "examples",
+            "synthetic",
+            "synth",
         }
     )
 

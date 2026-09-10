@@ -100,6 +100,15 @@ _RE_TIMEOUT_ERRORS = [
     re.compile(r"TimedOut", re.IGNORECASE),
     re.compile(r"Test ran for longer than", re.IGNORECASE),
 ]
+# 语法错误关键词（模块级常量，避免每次 _is_syntax_error 调用重复构建列表）
+_SYNTAX_ERROR_KEYWORDS = (
+    "SyntaxError",
+    "ImportError",
+    "ModuleNotFoundError",
+    "IndentationError",
+    "TabError",
+    "IncompleteInput",
+)
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -246,15 +255,7 @@ class ErrorClassifier:
         if _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text):
             return True
         # 检查语法错误关键词
-        syntax_keywords = [
-            "SyntaxError",
-            "ImportError",
-            "ModuleNotFoundError",
-            "IndentationError",
-            "TabError",
-            "IncompleteInput",
-        ]
-        if any(kw in text for kw in syntax_keywords):
+        if any(kw in text for kw in _SYNTAX_ERROR_KEYWORDS):
             return True
         # 检查 pytest 冒号格式：file.py:line:col: error
         if _RE_SYNTAX_ERROR_FILE_LINE.search(text):
