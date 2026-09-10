@@ -17,13 +17,11 @@ logger = logging.getLogger(__name__)
 # 延迟导入，避免未安装 chromadb 时整个项目无法启动
 try:
     import chromadb
-    from chromadb.config import Settings
 
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
     chromadb = None
-    Settings = None
 
 
 # 缓存配置常量
@@ -103,10 +101,17 @@ class TestCaseRetriever:
         self.ttl_seconds = ttl_seconds
         self.max_cases = max_cases
 
-        # 配置 ChromaDB 客户端
-        # persist_directory 使数据跨进程持久化，便于实验重复使用
-        settings = Settings(persist_directory=persist_path) if persist_path else Settings()
-        self.client = chromadb.Client(settings)
+        # 配置 ChromaDB 客户端（chromadb 1.x 现代 API）：
+        # - persist_path 给定时用 PersistentClient 持久化到该目录
+        # - 否则用 EphemeralClient 纯内存，进程结束即失
+        # 旧版 chromadb.Client(Settings(persist_directory=...)) 已弃用，且
+        # Settings() 默认 persist_directory='./chroma'，"内存"分支实际会在 CWD
+        # 落出持久目录；anonymized_telemetry 关闭避免后台遥测上报
+        settings = chromadb.Settings(anonymized_telemetry=False)
+        if persist_path:
+            self.client = chromadb.PersistentClient(path=persist_path, settings=settings)
+        else:
+            self.client = chromadb.EphemeralClient(settings=settings)
 
         # 获取或创建集合，使用余弦相似度作为距离度量
         self.collection = self.client.get_or_create_collection(
