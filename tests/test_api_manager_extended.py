@@ -44,7 +44,7 @@ from src.api.api_manager import (
 def _empty_mgr() -> APIManager:
     """创建一个不带任何预置节点的 APIManager（patch LLM_CONFIGS 为空）。"""
     with patch("src.api.api_manager.LLM_CONFIGS", []):
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
     return mgr
 
 
@@ -463,7 +463,7 @@ class TestHealthCheckExceptions:
         mock_openai_class.return_value = mock_client
 
         reset_manager()
-        test_mgr = APIManager()
+        test_mgr = APIManager(enable_health_checker=False)
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         # 修复后：except Exception 分支处理 ConnectionError，不会 raise AttributeError
@@ -480,7 +480,7 @@ class TestHealthCheckExceptions:
         mock_openai_class.return_value = mock_client
 
         reset_manager()
-        test_mgr = APIManager()
+        test_mgr = APIManager(enable_health_checker=False)
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         # 修复后：except Exception 分支处理 TimeoutError，不会 raise AttributeError

@@ -173,7 +173,7 @@ class TestAPIManagerNodeManagement:
     @patch("src.api.api_manager.LLM_CONFIGS", [])
     def test_init_with_empty_configs(self):
         """测试空配置初始化"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         assert len(mgr.health_nodes) == 0
         assert len(mgr.get_all_nodes()) == 0
         assert len(mgr.get_healthy_nodes()) == 0
@@ -187,14 +187,14 @@ class TestAPIManagerNodeManagement:
     )
     def test_init_with_multiple_configs(self):
         """测试多配置初始化"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         assert len(mgr.health_nodes) == 2
         assert "model1" in mgr.health_nodes
         assert "model2" in mgr.health_nodes
 
     def test_add_node(self):
         """测试动态添加节点"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         config = LLMConfig("new-key", "new-url", "new-model")
         mgr.add_node(config)
         assert "new-model" in mgr.health_nodes
@@ -202,7 +202,7 @@ class TestAPIManagerNodeManagement:
 
     def test_remove_node_existing(self):
         """测试移除存在的节点"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         config = LLMConfig("key1", "url1", "model1")
         mgr.add_node(config)
         result = mgr.remove_node("model1")
@@ -211,19 +211,19 @@ class TestAPIManagerNodeManagement:
 
     def test_remove_node_nonexistent(self):
         """测试移除不存在的节点"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         result = mgr.remove_node("nonexistent-model")
         assert result is False
 
     def test_get_all_nodes(self):
         """测试获取所有节点"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         nodes = mgr.get_all_nodes()
         assert isinstance(nodes, list)
 
     def test_get_healthy_nodes_filters(self):
         """测试健康节点过滤"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         # 初始所有节点都健康
         healthy = mgr.get_healthy_nodes()
         assert len(healthy) == len(mgr.get_all_nodes())
@@ -242,7 +242,7 @@ class TestAPIManagerRotationStrategies:
     def setup_method(self):
         """每个测试前重置管理器并准备测试环境"""
         reset_manager()
-        self.mgr = APIManager()
+        self.mgr = APIManager(enable_health_checker=False)
         # 添加三个测试节点
         for i in range(3):
             self.mgr.add_node(LLMConfig(f"key{i}", f"url{i}", f"model{i}"))
@@ -372,7 +372,7 @@ class TestAPIManagerHealthCheck:
     def setup_method(self):
         """每个测试前重置管理器"""
         reset_manager()
-        self.mgr = APIManager()
+        self.mgr = APIManager(enable_health_checker=False)
         self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
     def test_check_health_missing_client(self):
@@ -395,7 +395,7 @@ class TestAPIManagerHealthCheck:
 
         # 在 patch 内部重新创建 mgr，避免真实 API 初始化干扰
         reset_manager()
-        test_mgr = APIManager()
+        test_mgr = APIManager(enable_health_checker=False)
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         result = test_mgr.check_health(node)
@@ -417,7 +417,7 @@ class TestAPIManagerHealthCheck:
         mock_openai_class.return_value = mock_client
 
         reset_manager()
-        test_mgr = APIManager()
+        test_mgr = APIManager(enable_health_checker=False)
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         result = test_mgr.check_health(node)
@@ -483,7 +483,7 @@ class TestAPIManagerCall:
     def setup_method(self):
         """每个测试前重置管理器"""
         reset_manager()
-        self.mgr = APIManager()
+        self.mgr = APIManager(enable_health_checker=False)
         self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
     @patch("src.api.api_manager.openai.OpenAI")
@@ -640,7 +640,7 @@ class TestAPIManagerStatus:
     def setup_method(self):
         """每个测试前重置管理器"""
         reset_manager()
-        self.mgr = APIManager()
+        self.mgr = APIManager(enable_health_checker=False)
         self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
     def test_get_status(self):
@@ -712,7 +712,7 @@ class TestHealthCheckerThread:
 
     def test_thread_creation(self):
         """测试线程创建"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         thread = HealthCheckerThread(mgr, interval=0.1)
         assert thread.daemon is True
         assert thread.name == "APIManager-HealthChecker"
@@ -736,7 +736,7 @@ class TestHealthCheckerThread:
 
     def test_thread_skips_if_already_running(self):
         """测试已运行线程不重复启动"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         thread = HealthCheckerThread(mgr, interval=60.0)
         thread.start()
         # 尝试再次启动（应该跳过）
@@ -744,6 +744,22 @@ class TestHealthCheckerThread:
         time.sleep(0.1)
         thread.stop()
         thread.join(timeout=1.0)
+
+    def test_ctor_flag_false_skips_thread(self):
+        """构造参数 enable_health_checker=False 时不创建后台线程（嵌入式/测试场景防副作用）"""
+        mgr = APIManager(enable_health_checker=False)
+        assert mgr._health_checker is None
+
+    def test_ctor_default_starts_thread(self):
+        """默认（True）保持历史行为：自动启动后台健康检查线程"""
+        mgr = APIManager()  # 默认启用健康检查线程
+        try:
+            assert mgr._health_checker is not None
+            assert mgr._health_checker.is_alive()
+        finally:
+            # 立即停止并等待线程退出（首次健康检查在 60s 间隔后才发生，stop 很快返回）
+            mgr._stop_health_checker()
+        assert mgr._health_checker is None
 
 
 class TestGlobalFunctions:
@@ -810,7 +826,7 @@ class TestAPIManagerEdgeCases:
 
     def test_consecutive_failures_threshold(self):
         """测试连续失败阈值"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = mgr.health_nodes["model1"]
 
@@ -825,7 +841,7 @@ class TestAPIManagerEdgeCases:
 
     def test_response_time_sliding_window(self):
         """测试响应时间滑动窗口"""
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = mgr.health_nodes["model1"]
 
@@ -843,7 +859,7 @@ class TestAPIManagerEdgeCases:
         """测试线程安全选择"""
         import threading
 
-        mgr = APIManager()
+        mgr = APIManager(enable_health_checker=False)
         for i in range(5):
             mgr.add_node(LLMConfig(f"key{i}", f"url{i}", f"model{i}"))
 

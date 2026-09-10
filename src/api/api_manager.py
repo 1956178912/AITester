@@ -150,7 +150,10 @@ class APIManager:
     针对大规模节点池（100+ 模型）优化。
     """
 
-    def __init__(self, config: APIManagerConfig | None = None):
+    def __init__(self, config: APIManagerConfig | None = None, enable_health_checker: bool = True) -> None:
+        # enable_health_checker：是否自动启动后台健康检查守护线程（默认 True，保持历史行为）。
+        # 该线程每 60s 会对所有节点发起真实 LLM 请求（消耗 API 配额）；
+        # 嵌入式使用、单元测试等不想引入后台线程的场景传 False 显式关闭。
         self.config = config or APIManagerConfig()
         self.health_nodes: dict[str, APIHealth] = {}
         self._rr_index: int = 0  # 轮询索引
@@ -160,8 +163,9 @@ class APIManager:
         self._health_checker: HealthCheckerThread | None = None
         # 初始化所有配置的 LLM
         self._init_clients()
-        # 启动后台健康检查线程
-        self._start_health_checker()
+        # 启动后台健康检查线程（可关闭，避免构造副作用：线程会周期性发起真实 API 请求）
+        if enable_health_checker:
+            self._start_health_checker()
 
     def _init_clients(self) -> None:
         """初始化所有 LLM 客户端并注册到健康节点"""
