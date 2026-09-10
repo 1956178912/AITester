@@ -236,7 +236,9 @@ def build_report(
 def main() -> int:
     parser = argparse.ArgumentParser(description="AITester 基线对比失败分析（P0-2 排查工具）")
     parser.add_argument("--results", required=True, help="benchmark 汇总 JSON 路径")
-    parser.add_argument("--raw-dir", default=None, help="环节级产物目录（--save-state 输出，<dir>/<task_id>/<baseline>.json）")
+    parser.add_argument(
+        "--raw-dir", default=None, help="环节级产物目录（--save-state 输出，<dir>/<task_id>/<baseline>.json）"
+    )
     parser.add_argument("--full-baseline", default="aitester", help="完整系统基线名（默认 aitester）")
     parser.add_argument("--base-baseline", default="plain_llm", help="简单基线名（默认 plain_llm）")
     parser.add_argument("--max-tasks", type=int, default=5, help="最多分析多少个翻转任务（默认 5）")

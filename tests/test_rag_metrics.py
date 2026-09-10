@@ -59,9 +59,7 @@ class TestEvaluateRetrieval:
         """期望文档排第 1 → hit_rate=1.0, mrr=1.0。"""
         code, test_code = "def a(): pass", "def test_a(): assert a()"
         with patch.object(retriever, "retrieve_test_cases", return_value=[_case(code, test_code)]):
-            metrics = retriever.evaluate_retrieval(
-                [{"query": code, "expected_id": _doc_id(code, test_code)}]
-            )
+            metrics = retriever.evaluate_retrieval([{"query": code, "expected_id": _doc_id(code, test_code)}])
         assert metrics["hit_rate"] == 1.0
         assert metrics["mrr"] == 1.0
 
@@ -71,9 +69,7 @@ class TestEvaluateRetrieval:
         code_b, test_b = "def b(): pass", "def test_b(): assert b()"
         results = [_case(code_a, test_a), _case(code_b, test_b)]
         with patch.object(retriever, "retrieve_test_cases", return_value=results):
-            metrics = retriever.evaluate_retrieval(
-                [{"query": code_b, "expected_id": _doc_id(code_b, test_b)}]
-            )
+            metrics = retriever.evaluate_retrieval([{"query": code_b, "expected_id": _doc_id(code_b, test_b)}])
         assert metrics["hits"] == 1
         assert metrics["hit_rate"] == 1.0
         assert metrics["mrr"] == 0.5
@@ -83,9 +79,7 @@ class TestEvaluateRetrieval:
         code_a, test_a = "def a(): pass", "def test_a(): pass"
         other_code, other_test = "def c(): pass", "def test_c(): pass"
         with patch.object(retriever, "retrieve_test_cases", return_value=[_case(other_code, other_test)]):
-            metrics = retriever.evaluate_retrieval(
-                [{"query": code_a, "expected_id": _doc_id(code_a, test_a)}]
-            )
+            metrics = retriever.evaluate_retrieval([{"query": code_a, "expected_id": _doc_id(code_a, test_a)}])
         assert metrics["hits"] == 0
         assert metrics["hit_rate"] == 0.0
         assert metrics["mrr"] == 0.0

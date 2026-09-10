@@ -613,7 +613,9 @@ class BaseAgent:
 
         focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars)
         if len(focused) <= max_chars:
-            logger.info("代码已按 AST 智能截取：%d → %d 字符（focus=%s）", len(code), len(focused), focus_function or "*")
+            logger.info(
+                "代码已按 AST 智能截取：%d → %d 字符（focus=%s）", len(code), len(focused), focus_function or "*"
+            )
             return focused
 
         # 第二层：字符级头尾截断兜底（保留 import 头 + 尾部，中间省略）

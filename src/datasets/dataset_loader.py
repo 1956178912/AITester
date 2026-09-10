@@ -431,11 +431,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 
                     # test_code 字段优先级（兼容自定义与官方字段命名）：
                     # 显式测试代码字段 > 官方 test_patch（测试补丁）> test_before_patches
-                    test_code = (
-                        data.get("test_code")
-                        or data.get("test_patch")
-                        or data.get("test_before_patches", "")
-                    )
+                    test_code = data.get("test_code") or data.get("test_patch") or data.get("test_before_patches", "")
                     # instance_code 字段优先级：显式源码字段（自定义 JSONL 或
                     # 补充文件可提供 instance_code/base_code）> problem_statement 兜底。
                     # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，

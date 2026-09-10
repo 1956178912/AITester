@@ -113,15 +113,69 @@ def is_standard_library(module_name: str) -> bool:
         return module_name in stdlib_names
     # 回退：常见标准库白名单（保守，未命中视为第三方交由探测）
     _FALLBACK_STDLIB = {
-        "os", "sys", "re", "math", "json", "datetime", "collections", "itertools",
-        "functools", "pathlib", "typing", "abc", "copy", "unittest", "pytest",
-        "tempfile", "subprocess", "logging", "argparse", "dataclasses", "enum",
-        "io", "string", "textwrap", "struct", "codecs", "unicodedata", "difflib",
-        "pprint", "numbers", "cmath", "decimal", "fractions", "random", "statistics",
-        "array", "bisect", "heapq", "queue", "types", "contextlib", "operator",
-        "pickle", "sqlite3", "zipfile", "gzip", "shutil", "glob", "fnmatch",
-        "threading", "concurrent", "multiprocessing", "asyncio", "socket", "ssl",
-        "urllib", "http", "email", "xml", "html", "base64", "hashlib", "hmac",
+        "os",
+        "sys",
+        "re",
+        "math",
+        "json",
+        "datetime",
+        "collections",
+        "itertools",
+        "functools",
+        "pathlib",
+        "typing",
+        "abc",
+        "copy",
+        "unittest",
+        "pytest",
+        "tempfile",
+        "subprocess",
+        "logging",
+        "argparse",
+        "dataclasses",
+        "enum",
+        "io",
+        "string",
+        "textwrap",
+        "struct",
+        "codecs",
+        "unicodedata",
+        "difflib",
+        "pprint",
+        "numbers",
+        "cmath",
+        "decimal",
+        "fractions",
+        "random",
+        "statistics",
+        "array",
+        "bisect",
+        "heapq",
+        "queue",
+        "types",
+        "contextlib",
+        "operator",
+        "pickle",
+        "sqlite3",
+        "zipfile",
+        "gzip",
+        "shutil",
+        "glob",
+        "fnmatch",
+        "threading",
+        "concurrent",
+        "multiprocessing",
+        "asyncio",
+        "socket",
+        "ssl",
+        "urllib",
+        "http",
+        "email",
+        "xml",
+        "html",
+        "base64",
+        "hashlib",
+        "hmac",
     }
     return module_name in _FALLBACK_STDLIB
 
@@ -194,11 +248,7 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     Returns:
         pip 包名列表（排序去重）。
     """
-    packages = {
-        _MODULE_TO_PACKAGE.get(name, name)
-        for name in module_names
-        if not is_standard_library(name)
-    }
+    packages = {_MODULE_TO_PACKAGE.get(name, name) for name in module_names if not is_standard_library(name)}
     return sorted(packages)
 
 

@@ -189,11 +189,7 @@ class TestErrorClassifier:
     def test_classify_logic_error(self):
         """P2 细化：断言失败且失败栈未触及被测模块 → LOGIC_ERROR。"""
         # target_module=calculator；失败栈只出现在测试文件（test_calc.py）
-        output = (
-            'File "test_calc.py", line 5, in test_add\n'
-            "    assert add(1, 2) == 3\n"
-            "AssertionError: assert 4 == 3"
-        )
+        output = 'File "test_calc.py", line 5, in test_add\n    assert add(1, 2) == 3\nAssertionError: assert 4 == 3'
         result = self.classifier.classify(output, [], target_module="calculator")
         assert result == ErrorCategory.LOGIC_ERROR
 
