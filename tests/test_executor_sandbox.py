@@ -58,7 +58,9 @@ class TestSandboxDependencyDetection:
         """缺失第三方依赖写入 error_info.missing_dependencies。"""
         target = _make_target_file(tmp_path, source="import definitely_not_real_zzz\n\ndef f():\n    return 1\n")
         mock_run.return_value = type(
-            "P", (), {"returncode": 1, "stdout": "ModuleNotFoundError: No module named 'definitely_not_real_zzz'", "stderr": ""}
+            "P",
+            (),
+            {"returncode": 1, "stdout": "ModuleNotFoundError: No module named 'definitely_not_real_zzz'", "stderr": ""},
         )
         agent = ExecutorAgent(timeout=30, use_venv=False, auto_install_deps=False)
         result = agent._execute_sandboxed("def test_f():\n    assert f() == 1\n", target)
@@ -105,14 +107,19 @@ class TestSandboxAutoInstall:
     @patch("src.tools.dependency.create_venv")
     @patch("src.tools.dependency.find_missing_modules")
     @patch("src.tools.dependency.extract_imported_modules")
-    def test_install_success_runs_pytest(self, mock_extract, mock_find_missing, mock_create, mock_install, mock_run_retry, tmp_path):
+    def test_install_success_runs_pytest(
+        self, mock_extract, mock_find_missing, mock_create, mock_install, mock_run_retry, tmp_path
+    ):
         """依赖安装成功后正常执行 pytest。"""
         target = _make_target_file(tmp_path)
         mock_extract.return_value = {"pandas"}
         mock_find_missing.return_value = {"pandas"}
         mock_create.return_value = "/fake/venv/bin/python"
         mock_install.return_value = (True, "installed")
-        mock_run_retry.return_value = ("2 passed", type("P", (), {"returncode": 0, "stdout": "TOTAL 90%", "stderr": ""}))
+        mock_run_retry.return_value = (
+            "2 passed",
+            type("P", (), {"returncode": 0, "stdout": "TOTAL 90%", "stderr": ""}),
+        )
 
         agent = ExecutorAgent(timeout=30, use_venv=True, auto_install_deps=True)
         result = agent._execute_sandboxed("def test_x(): pass", target)

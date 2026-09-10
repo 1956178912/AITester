@@ -196,7 +196,9 @@ def extract_focused_code(
         # 第二层裁剪：焦点函数体超长 → 首尾截断
         focus_node = top_level_funcs[focus_function]
         truncated = _truncate_long_body(source_lines, focus_node)
-        minimal_kept = {name: seg for name, seg in kept.items() if _is_direct_dep(focus_function, name, top_level_funcs)}
+        minimal_kept = {
+            name: seg for name, seg in kept.items() if _is_direct_dep(focus_function, name, top_level_funcs)
+        }
         minimal_kept[focus_function] = SimpleNamespace(_prebuilt_text=truncated)
         result = _assemble(header, minimal_kept, source_lines)
         if len(result) <= max_chars:

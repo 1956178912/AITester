@@ -463,9 +463,9 @@ class TestCaseRetriever:
             for i, case in enumerate(cases):
                 meta = case.get("metadata", {}) or {}
                 # 期望文档 ID 与 add_case 入库时的 doc_id 同构（md5 指纹前 16 位）
-                fingerprint = hashlib.md5(
-                    f"{meta.get('code', '')}|{meta.get('test_code', '')}".encode()
-                ).hexdigest()[:16]
+                fingerprint = hashlib.md5(f"{meta.get('code', '')}|{meta.get('test_code', '')}".encode()).hexdigest()[
+                    :16
+                ]
                 if fingerprint == expected_fingerprint:
                     rank = i + 1
                     break

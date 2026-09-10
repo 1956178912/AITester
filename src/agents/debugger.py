@@ -117,7 +117,9 @@ class DebuggerAgent(BaseAgent):
         # target_module 提供时，断言失败可区分 ASSERTION 与 LOGIC_ERROR（P2 细化）
         error_category = self.classifier.classify(test_output, failed_cases, target_module=target_module)
         # Step 2: 获取对应修复策略描述
-        strategy_text = get_fix_strategy(error_category, context=self.classifier.extract_error_context(test_output, failed_cases))
+        strategy_text = get_fix_strategy(
+            error_category, context=self.classifier.extract_error_context(test_output, failed_cases)
+        )
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 

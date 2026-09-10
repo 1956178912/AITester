@@ -257,7 +257,7 @@ from src.tools.code_context import extract_focused_code
 
 focused = extract_focused_code(
     source_code,
-    focus_function="divide",   # 保留 import + 该函数及其直接依赖的辅助函数
+    focus_function="divide",  # 保留 import + 该函数及其直接依赖的辅助函数
     max_chars=3000,
 )
 ```
@@ -280,7 +280,7 @@ from src.tools.dependency import find_missing_modules, venv_cache_dir, create_ve
 missing = find_missing_modules("import pandas\ndef f(): ...")
 # → {"pandas"}（标准库与非 import 语句会被过滤）
 
-venv_dir = venv_cache_dir(["pandas"])        # 按依赖组合的磁盘缓存目录
+venv_dir = venv_cache_dir(["pandas"])  # 按依赖组合的磁盘缓存目录
 venv_python = create_venv(venv_dir, timeout=120)
 install_packages(venv_python, ["pandas"], timeout=120)
 ```
@@ -307,8 +307,8 @@ from src.graph import token_usage
 
 token_usage.record_usage(1200, 300, model="gpt-4o")
 usage = token_usage.get_usage()
-print(usage.total_tokens)   # 1500
-usage.reset()               # 单线程重置（基线运行前调用）
+print(usage.total_tokens)  # 1500
+usage.reset()  # 单线程重置（基线运行前调用）
 ```
 
 **关键函数：**

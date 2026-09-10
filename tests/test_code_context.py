@@ -56,12 +56,7 @@ class TestExtractFocusedCode:
         """超预算时优先丢弃与焦点无关的函数。"""
         # 构造大量无关函数使整体超出预算
         filler = "".join(f"def filler_{i}():\n    x = '{'x' * 40}'\n" for i in range(30))
-        source = (
-            "import os\n"
-            "def target():\n"
-            "    return 1\n"
-            + filler
-        )
+        source = "import os\ndef target():\n    return 1\n" + filler
         result = extract_focused_code(source, focus_function="target", max_chars=500)
         assert "def target" in result
         assert "def filler_5" not in result
@@ -132,7 +127,9 @@ class TestTruncateCodeIntegration:
         from src.agents.base_agent import BaseAgent
 
         filler = "".join(f"def noise_{i}():\n    return {'x' * 60}\n" for i in range(40))
-        source = "import os\n" + filler + "def divide(a, b):\n    if b == 0:\n        raise ValueError\n    return a / b\n"
+        source = (
+            "import os\n" + filler + "def divide(a, b):\n    if b == 0:\n        raise ValueError\n    return a / b\n"
+        )
         assert len(source) > 3000
         result = BaseAgent.truncate_code(source, focus_function="divide")
         assert len(result) <= 3000
