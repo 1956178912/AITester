@@ -127,8 +127,9 @@ class PlannerAgent(BaseAgent):
             RuntimeError: LLM 调用失败（重试耗尽）时抛出。
             json.JSONDecodeError: LLM 返回非 JSON 格式时抛出（_extract_json 委托 extract_json_object）。
         """
-        # 截断超长代码，节省 token
-        target_code = BaseAgent.truncate_code(target_code)
+        # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取，
+        # 保留 import 与直接依赖，避免 LLM 看不到目标函数）
+        target_code = BaseAgent.truncate_code(target_code, focus_function=target_function)
         # 构建查询：包含代码和可选的函数限定
         query = f"请分析以下代码并制定测试计划：\n\n```\n{target_code}\n```"
         if target_function:
