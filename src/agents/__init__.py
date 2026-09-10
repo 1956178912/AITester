@@ -7,5 +7,6 @@
     - ExecutorAgent: 执行器，运行测试并收集覆盖率与结果
     - DebuggerAgent: 调试器，对失败测试进行根因分析与修复
 
-另有 ErrorClassifier: 错误分类器，将失败原因分为五类以便分层修复。
+另有 ErrorClassifier: 错误分类器，将失败原因分为八类（import_error/syntax/
+type_error/assertion/logic_error/runtime/timeout/unknown）以便分层修复。
 """

@@ -326,6 +326,17 @@ class ReportGenerator:
         Returns:
             str: 根本原因描述
         """
+        # P2 细化：独立类别优先分支
+        if category == ErrorCategory.IMPORT_ERROR:
+            module = context.module_name if context and context.module_name else "未知模块"
+            return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
+
+        if category == ErrorCategory.TYPE_ERROR:
+            return "类型错误：参数类型不匹配，请检查函数调用的参数类型"
+
+        if category == ErrorCategory.LOGIC_ERROR:
+            return "疑似测试逻辑错误：断言失败且失败栈未触及被测模块，预期值可能写错"
+
         if category == ErrorCategory.SYNTAX:
             # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示
             if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
@@ -370,6 +381,26 @@ class ReportGenerator:
             str: 修复建议文本
         """
         suggestions: list[str] = []
+
+        # P2 细化：独立类别的修复建议
+        if category == ErrorCategory.IMPORT_ERROR:
+            module = context.module_name if context and context.module_name else "目标模块"
+            suggestions.append(f"1. 安装缺失模块：`pip install {module}`")
+            suggestions.append("2. 检查导入语句是否正确")
+            suggestions.append("3. 确认模块名大小写是否正确")
+            return "\n".join(suggestions)
+
+        if category == ErrorCategory.TYPE_ERROR:
+            suggestions.append("1. 检查函数调用时的参数类型")
+            suggestions.append("2. 添加类型注解和参数校验")
+            suggestions.append("3. 使用 isinstance() 进行类型检查")
+            return "\n".join(suggestions)
+
+        if category == ErrorCategory.LOGIC_ERROR:
+            suggestions.append("1. 核对函数签名/文档字符串，确认测试预期值是否正确")
+            suggestions.append("2. 修正测试用例的断言预期值（而非盲目修改被测代码）")
+            suggestions.append("3. 仅当被测代码行为确实与问题描述矛盾时才修改被测代码")
+            return "\n".join(suggestions)
 
         if category == ErrorCategory.SYNTAX:
             # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示

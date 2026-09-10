@@ -82,6 +82,8 @@ class DebuggerAgent(BaseAgent):
         test_output: str,
         failed_cases: list[dict[str, str]],
         rag_references: list[dict[str, Any]] | None = None,
+        focus_function: str | None = None,
+        target_module: str | None = None,
     ) -> dict[str, str]:
         """
         分析测试失败并生成修复补丁。
@@ -96,6 +98,10 @@ class DebuggerAgent(BaseAgent):
             test_output: 测试失败输出。
             failed_cases: 失败用例列表，每个元素为 {"name": str, "error": str}。
             rag_references: RAG 检索到的相似修复案例，每项含 patch 字段。
+            focus_function: 焦点函数名（可选）。超长代码时按该函数做 AST
+                智能截取，保留目标函数及直接依赖，提升修复定位精度。
+            target_module: 被测模块名（可选）。提供时断言失败可进一步
+                区分 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）。
 
         Returns:
             包含以下键的字典：
@@ -108,15 +114,16 @@ class DebuggerAgent(BaseAgent):
             RuntimeError: LLM 调用失败时抛出。
         """
         # Step 1: 用规则分类器快速判断错误类型（不消耗 LLM token）
-        error_category = self.classifier.classify(test_output, failed_cases)
+        # target_module 提供时，断言失败可区分 ASSERTION 与 LOGIC_ERROR（P2 细化）
+        error_category = self.classifier.classify(test_output, failed_cases, target_module=target_module)
         # Step 2: 获取对应修复策略描述
-        strategy_text = get_fix_strategy(error_category)
+        strategy_text = get_fix_strategy(error_category, context=self.classifier.extract_error_context(test_output, failed_cases))
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
-        # 截断超长代码，节省 token
-        target_code = BaseAgent.truncate_code(target_code)
-        # 截断超长测试输出，保留关键错误信息
+        # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
+        target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
+        # 截断超长测试输出，保留关键错误信息（测试输出非源码，不做 AST 截取）
         test_output = BaseAgent.truncate_code(test_output, max_chars=1500)
 
         # 构建失败用例摘要（最多展示前 _MAX_FAILED_CASES_SUMMARY 个，避免 prompt 过长）

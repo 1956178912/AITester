@@ -189,20 +189,30 @@ class TestGenerateClassification:
     def setup_method(self):
         self.gen = ReportGenerator()
 
-    def test_generate_syntax_error(self):
-        """ModuleNotFoundError → SYNTAX 且 context 随分类结果填充（此前 context 恒为 None）"""
+    def test_generate_import_error(self):
+        """P2 细化：ModuleNotFoundError → IMPORT_ERROR（独立类别）且 context 随分类结果填充"""
         report = self.gen.generate(
             task_id="t",
             target_file="f.py",
             target_function="fn",
             error_output="ModuleNotFoundError: No module named 'pandas'",
         )
-        assert report.error_category == ErrorCategory.SYNTAX
+        assert report.error_category == ErrorCategory.IMPORT_ERROR
         # ImportError 根因分支现已可达：提取缺失模块名
         assert "缺少依赖模块 'pandas'" in report.root_cause
-        assert report.error_subtype == "import_error"
         assert report.error_context is not None
         assert report.error_context.module_name == "pandas"
+
+    def test_generate_syntax_error(self):
+        """P2 细化：纯语法错误（非 import）仍为 SYNTAX 类别。"""
+        report = self.gen.generate(
+            task_id="t",
+            target_file="f.py",
+            target_function="fn",
+            error_output='File "f.py", line 3: SyntaxError: invalid syntax',
+        )
+        assert report.error_category == ErrorCategory.SYNTAX
+        assert "语法" in report.root_cause
 
     def test_generate_plain_syntax_error_subtype(self):
         """纯语法错误（无 traceback 位置）不赋子类型"""
@@ -221,9 +231,10 @@ class TestGenerateClassification:
         assert report.error_category == ErrorCategory.RUNTIME
         assert "除零" in report.root_cause
 
-    def test_generate_runtime_type_error(self):
+    def test_generate_type_error(self):
+        """P2 细化：TypeError → TYPE_ERROR（独立类别）。"""
         report = self.gen.generate("t", "f.py", "fn", "TypeError: unsupported operand type(s)")
-        assert report.error_category == ErrorCategory.RUNTIME
+        assert report.error_category == ErrorCategory.TYPE_ERROR
         assert "类型错误" in report.root_cause
 
     def test_generate_runtime_index_error(self):
