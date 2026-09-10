@@ -45,6 +45,9 @@ htmlcov/
 # LLM 文件缓存（本地优化产物，避免重复提交）
 src/cache/
 
+# RAG 持久化检索库（实验数据，本地生成，不提交）
+rag_data/
+
 # macOS
 .DS_Store
 

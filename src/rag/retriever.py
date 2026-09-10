@@ -422,6 +422,64 @@ class TestCaseRetriever:
 
         return len(expired_ids)
 
+    def evaluate_retrieval(
+        self,
+        queries: list[dict[str, str]],
+        top_k: int = 5,
+    ) -> dict[str, Any]:
+        """计算检索质量指标（P1：RAG 检索质量评估）。
+
+        针对一批"查询 → 期望命中"的标注对，在检索库上跑 retrieve_test_cases
+        并统计两个常用 IR 指标：
+        - hit_rate: Hit Rate@k，期望文档出现在前 k 个结果中的查询占比；
+        - mrr: Mean Reciprocal Rank，首个命中位置倒数的平均值。
+
+        Args:
+            queries: 标注查询列表，每项为 {"query": 查询文本, "expected_id":
+                期望命中的文档 ID（即 add_case 时的 doc_id，可用
+                md5(f"{code}|{test_code}")[:16] 计算）}。
+            top_k: 评估时取前 k 个结果。
+
+        Returns:
+            {"num_queries": int, "hits": int, "hit_rate": float, "mrr": float}
+            （无查询时 hit_rate/mrr 均为 0.0）。
+        """
+        num_queries = len(queries)
+        if num_queries == 0:
+            return {"num_queries": 0, "hits": 0, "hit_rate": 0.0, "mrr": 0.0}
+
+        hits = 0
+        reciprocal_rank_sum = 0.0
+        for item in queries:
+            expected_id = item.get("expected_id", "")
+            if not expected_id:
+                continue
+            cases = self.retrieve_test_cases(item.get("query", ""), top_k=top_k)
+            # 检索结果不含 doc_id，按 (code, test_code) 组合反查期望文档：
+            # 期望文档的文档 ID 由 md5(code|test_code)[:16] 决定，
+            # 这里直接从命中的 metadata 里比对 original_code/test_code 指纹
+            expected_fingerprint = expected_id
+            rank = None
+            for i, case in enumerate(cases):
+                meta = case.get("metadata", {}) or {}
+                # 期望文档 ID 与 add_case 入库时的 doc_id 同构（md5 指纹前 16 位）
+                fingerprint = hashlib.md5(
+                    f"{meta.get('code', '')}|{meta.get('test_code', '')}".encode()
+                ).hexdigest()[:16]
+                if fingerprint == expected_fingerprint:
+                    rank = i + 1
+                    break
+            if rank is not None:
+                hits += 1
+                reciprocal_rank_sum += 1.0 / rank
+
+        return {
+            "num_queries": num_queries,
+            "hits": hits,
+            "hit_rate": round(hits / num_queries, 4),
+            "mrr": round(reciprocal_rank_sum / num_queries, 4),
+        }
+
     def clear(self) -> None:
         """清空检索库（用于实验重置）。"""
         self.client.delete_collection(self.collection_name)

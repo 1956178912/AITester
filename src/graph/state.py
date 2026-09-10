@@ -116,6 +116,12 @@ class AITesterState(TypedDict, total=False):
     rag_references (List[Dict[str, Any]] | None):
         RAG 检索到的相似历史案例列表。
         Generator 和 Debugger 各自使用不同的检索查询。
+
+    rag_stats (List[Dict[str, Any]] | None):
+        RAG 检索质量指标累计（P1：消融实验单独报告检索质量）。
+        每项为 {"kind": "test_cases"|"repairs", "results": int,
+                "max_similarity": float | None, "avg_similarity": float | None}，
+        由 Generator/Debugger 节点在检索后追加。
     """
 
     # 任务标识
@@ -148,3 +154,5 @@ class AITesterState(TypedDict, total=False):
     coverage_threshold: float | None
     # RAG 检索结果
     rag_references: list[dict[str, Any]] | None
+    # RAG 检索质量指标累计（P1）
+    rag_stats: list[dict[str, Any]] | None
