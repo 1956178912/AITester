@@ -121,18 +121,37 @@ _STANDARD_LIBRARIES = frozenset(
 
 class ExecutorAgent:
     """
-    测试执行器：在本地或 Docker 容器中运行 pytest 测试。
+    测试执行器：在本地或隔离沙箱中运行 pytest 测试。
     注意：use_docker 参数目前保留用于未来扩展，实际执行始终在本地进行。
+
+    隔离执行（P1 依赖隔离优化）：
+    - use_venv=True：在临时沙箱目录 + 缓存 venv 中执行，PYTHONPATH 仅指向
+      沙箱目录，被测代码的 import 不污染系统环境，任务间依赖互不冲突。
+    - auto_install_deps=True：执行前检测缺失的第三方依赖，自动在 venv 内
+      pip install（仅影响 venv，不安装到系统环境）。
 
     属性:
         timeout: 单次测试最大运行时间（秒），可通过 EXECUTION_TIMEOUT 环境变量配置。
         use_docker: 是否使用 Docker 隔离执行（当前未启用，保留接口）。
+        use_venv: 是否使用 venv 沙箱隔离执行（默认 False，保持原有行为）。
+        auto_install_deps: 是否自动安装缺失依赖（需 use_venv 生效）。
+        dep_install_timeout: 依赖安装子进程超时秒数。
     """
 
-    def __init__(self, timeout: int = 30, use_docker: bool = False) -> None:
+    def __init__(
+        self,
+        timeout: int = 30,
+        use_docker: bool = False,
+        use_venv: bool = False,
+        auto_install_deps: bool = False,
+        dep_install_timeout: int = 120,
+    ) -> None:
         # timeout 从参数传入，默认 30 秒
         self.timeout = timeout
         self.use_docker = use_docker
+        self.use_venv = use_venv
+        self.auto_install_deps = auto_install_deps
+        self.dep_install_timeout = dep_install_timeout
 
     def execute(
         self,
@@ -157,6 +176,10 @@ class ExecutorAgent:
             - failed_cases (List[dict]): 失败的用例列表。
             - error_info (dict): 错误详情（可选）。
         """
+        # 隔离沙箱路径：venv + 临时目录执行，避免依赖冲突与环境污染（P1 优化）
+        if self.use_venv:
+            return self._execute_sandboxed(test_code, target_file, target_function)
+
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
@@ -214,6 +237,169 @@ class ExecutorAgent:
             return result_dict
         finally:
             self._cleanup_temp_file(test_file)
+
+    def _execute_sandboxed(
+        self,
+        test_code: str,
+        target_file: str,
+        target_function: str | None = None,
+    ) -> dict[str, Any]:
+        """在隔离沙箱中执行测试：临时目录 + 缓存 venv + 依赖自动安装。
+
+        流程：
+        1. 创建临时沙箱目录，拷入被测模块文件（按 target_file 的模块名）；
+        2. 写入自动修复导入后的测试文件；
+        3. 检测被测代码 + 测试代码缺失的第三方依赖：
+           - auto_install_deps=True → 在 venv 内 pip install（仅影响 venv）；
+           - auto_install_deps=False → 记录缺失清单到 error_info，照常执行
+             （失败将由错误分类器归为 import_error，便于区分代码 bug 与环境问题）；
+        4. 用 venv 解释器（或系统解释器）在沙箱目录运行 pytest，
+           PYTHONPATH 仅指向沙箱目录，实现任务间依赖隔离；
+        5. 清理沙箱目录（venv 保留缓存，相同依赖组合的任务复用）。
+
+        Returns:
+            与 execute() 相同结构的结果字典。
+        """
+        from src.tools.dependency import (
+            create_venv,
+            extract_imported_modules,
+            find_missing_modules,
+            install_packages,
+            suggest_package_names,
+            venv_cache_dir,
+        )
+
+        sandbox_dir = tempfile.mkdtemp(prefix="aitester_sandbox_")
+        # 被测模块名：取 target_file 基名（与 _extract_module_name_from_file 语义一致）
+        module_name = self._extract_module_name_from_file(target_file)
+        module_file = os.path.join(sandbox_dir, f"{module_name}.py")
+        try:
+            with open(target_file, encoding="utf-8") as f:
+                target_source = f.read()
+            with open(module_file, "w", encoding="utf-8") as f:
+                f.write(target_source)
+        except OSError as e:
+            self._cleanup_sandbox(sandbox_dir)
+            return {
+                "passed": False,
+                "output": f"读取被测文件失败: {e}",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": {"type": "file_not_found", "message": str(e), "file_path": target_file},
+            }
+
+        # 测试文件写入沙箱（导入修复以沙箱为搜索根，模块名与文件名天然对齐）
+        fixed_test_code = self._auto_fix_imports(test_code, module_file, sandbox_dir)
+        test_file = os.path.join(sandbox_dir, "test_generated.py")
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(fixed_test_code)
+
+        # ── 依赖检测与安装 ──────────────────────────────────────────────────
+        required_modules = extract_imported_modules(target_source + "\n" + fixed_test_code)
+        missing_modules = find_missing_modules(required_modules, extra_search_files=[module_file])
+        missing_packages = suggest_package_names(missing_modules)
+
+        env = os.environ.copy()
+        # 模块搜索路径仅指向沙箱目录（追加原 PYTHONPATH 保留 pytest 等测试工具）
+        env["PYTHONPATH"] = sandbox_dir + os.pathsep + env.get("PYTHONPATH", "")
+        python_path = sys.executable
+        dep_install_note = ""
+        sandbox_error_info: dict[str, Any] | None = None
+
+        if missing_packages and self.use_venv:
+            # 创建/复用缓存 venv（相同依赖组合共享，省 1-3s 重建开销）
+            venv_dir = venv_cache_dir(missing_packages)
+            try:
+                python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
+                if self.auto_install_deps:
+                    ok, summary = install_packages(
+                        python_path, missing_packages, timeout=self.dep_install_timeout
+                    )
+                    dep_install_note = f"依赖安装{'成功' if ok else '失败'}: {summary}"
+                    if not ok:
+                        sandbox_error_info = {
+                            "type": "dependency_install_failed",
+                            "message": f"缺失依赖安装失败: {missing_packages}",
+                            "detail": summary,
+                        }
+            except RuntimeError as e:
+                sandbox_error_info = {"type": "dependency_install_failed", "message": str(e), "detail": str(e)}
+
+        if missing_packages and not self.use_venv:
+            # 非 venv 模式但检测到缺失依赖：仅记录提示（由分类器区分代码 bug 与环境问题）
+            dep_install_note = f"检测到缺失依赖（未安装，ENV_AUTO_INSTALL 关闭）: {missing_packages}"
+
+        # 依赖安装失败/venv 创建失败：测试结果将不可信（缺失依赖仍在），
+        # 直接提前返回，让 Debugger 拿到准确的 dependency_install_failed 诊断
+        if sandbox_error_info:
+            self._cleanup_sandbox(sandbox_dir)
+            return {
+                "passed": False,
+                "output": dep_install_note or "依赖处理失败",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": sandbox_error_info,
+            }
+
+        try:
+            cmd = [
+                python_path,
+                "-m",
+                "pytest",
+                test_file,
+                "-v",
+                "--tb=short",
+                f"--cov={sandbox_dir}",
+                "--cov-report=term",
+            ]
+            if target_function:
+                cmd.extend(["-k", target_function])
+
+            output, last_result = self._run_pytest_with_retry(cmd, env, sandbox_dir)
+            if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
+                result = {
+                    "passed": False,
+                    "output": output,
+                    "coverage": 0.0,
+                    "failed_cases": [],
+                    "error_info": last_result[1],
+                }
+            else:
+                coverage = self._parse_coverage(output)
+                failed_cases = self._parse_failed_cases(output)
+                passed = last_result is not None and last_result.returncode == 0
+                result = {
+                    "passed": passed,
+                    "output": output,
+                    "coverage": coverage,
+                    "failed_cases": failed_cases,
+                }
+                if last_result is not None and last_result.returncode != 0:
+                    result["error_info"] = self._build_error_info(last_result, output)
+                    result["error_info"]["missing_dependencies"] = sorted(missing_modules)
+
+            # 依赖检测结论写入 error_info / output，供 Debugger 与实验分析使用
+            if dep_install_note:
+                result["dep_note"] = dep_install_note
+            if sandbox_error_info and not result.get("passed"):
+                # 安装失败优先于测试失败报告（测试失败只是安装失败的表象）
+                result["error_info"] = sandbox_error_info
+            return result
+        finally:
+            # 清理临时沙箱（venv 缓存在 ~/.cache/aitester/venvs/，跨任务保留）
+            self._cleanup_sandbox(sandbox_dir)
+
+    @staticmethod
+    def _cleanup_sandbox(sandbox_dir: str) -> None:
+        """清理沙箱临时目录，失败仅记录警告（venv 缓存目录不受影响）。"""
+        try:
+            if os.path.isdir(sandbox_dir):
+                import shutil
+
+                shutil.rmtree(sandbox_dir, ignore_errors=True)
+                logger.debug("已清理沙箱目录: %s", sandbox_dir)
+        except OSError as e:
+            logger.warning("清理沙箱目录失败: %s", e)
 
     @staticmethod
     def _build_error_info(last_result, output: str) -> dict:
