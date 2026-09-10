@@ -1,9 +1,11 @@
 """测试 config_manager 模块"""
 
-from unittest.mock import mock_open, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from src.config import config_manager
 from src.config.config_manager import (
     add_llm_config,
     batch_add_models,
@@ -15,6 +17,14 @@ from src.config.config_manager import (
     remove_llm_config,
     validate_configs,
 )
+
+
+@pytest.fixture
+def env_file(tmp_path, monkeypatch):
+    """将 config_manager.ENV_FILE 指向临时目录，避免测试触碰真实 .env.local。"""
+    path = tmp_path / ".env.local"
+    monkeypatch.setattr(config_manager, "ENV_FILE", path)
+    return path
 
 
 class TestGetAllLLMConfigs:
@@ -92,69 +102,95 @@ class TestGetConfigByModel:
 
 
 class TestAddLLMConfig:
-    """测试 add_llm_config（使用 mock 文件系统）"""
+    """测试 add_llm_config（真实临时文件 + 隔离 load_dotenv/refresh）"""
 
-    def test_add_valid_config(self, tmp_path):
-        with patch("src.config.config_manager.os.path.exists", return_value=False):
-            with patch("src.config.config_manager.open", mock_open()):
-                with patch("src.config.config_manager.load_dotenv"):
-                    result = add_llm_config(
-                        api_key="test-key",
-                        base_url="https://test.example.com",
-                        model_name="test-model",
-                        index=99,
-                    )
+    @pytest.fixture(autouse=True)
+    def _isolate_env_side_effects(self, monkeypatch):
+        """隔离 load_dotenv 与 refresh_llm_configs，避免测试污染进程环境变量与全局 LLM_CONFIGS。"""
+        monkeypatch.setattr(config_manager, "load_dotenv", lambda *a, **k: None)
+        monkeypatch.setattr(config_manager, "refresh_llm_configs", lambda: None)
+
+    def test_add_valid_config(self, env_file):
+        result = add_llm_config(
+            api_key="test-key",
+            base_url="https://test.example.com",
+            model_name="test-model",
+            index=99,
+        )
         assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_99_API_KEY=test-key" in content
+        assert "LLM_99_BASE_URL=https://test.example.com" in content
+        assert "LLM_99_MODEL_NAME=test-model" in content
 
-    def test_add_duplicate_model_returns_false(self, tmp_path):
-        env_content = "LLM_1_MODEL_NAME=test-model\n"
-        with patch("src.config.config_manager.os.path.exists", return_value=True):
-            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config.config_manager.load_dotenv"):
-                    result = add_llm_config(
-                        api_key="test-key",
-                        base_url="https://test.example.com",
-                        model_name="test-model",
-                        index=1,
-                    )
+    def test_add_duplicate_model_returns_false(self, env_file):
+        env_file.write_text("LLM_1_MODEL_NAME=test-model\n", encoding="utf-8")
+        result = add_llm_config(
+            api_key="test-key",
+            base_url="https://test.example.com",
+            model_name="test-model",
+            index=1,
+        )
         assert result is False
 
-    def test_add_config_auto_index(self, tmp_path):
-        with patch("src.config.config_manager.os.path.exists", return_value=False):
-            with patch("src.config.config_manager.open", mock_open()):
-                with patch("src.config.config_manager.load_dotenv"):
-                    result = add_llm_config(
-                        api_key="k",
-                        base_url="https://ex.com",
-                        model_name="m",
-                    )
+    def test_add_duplicate_model_at_other_index_returns_false(self, env_file):
+        """同一模型已存在于其他编号时也应判定为重复（避免跨编号重复配置）。"""
+        env_file.write_text("LLM_1_MODEL_NAME=test-model\n", encoding="utf-8")
+        result = add_llm_config(
+            api_key="other-key",
+            base_url="https://other.example.com",
+            model_name="test-model",
+            index=7,
+        )
+        assert result is False
+
+    def test_add_config_auto_index(self, env_file):
+        """无已有配置时，自动编号为 1。"""
+        result = add_llm_config(api_key="k", base_url="https://ex.com", model_name="m")
         assert result is True
+        assert "LLM_1_MODEL_NAME=m" in env_file.read_text(encoding="utf-8")
+
+    def test_add_config_auto_index_with_holes(self, env_file):
+        """编号空洞（LLM_1、LLM_3）时自动编号取最大值 +1（=4），不与已占编号冲突。"""
+        env_file.write_text(
+            "LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=m1\nLLM_3_API_KEY=k3\nLLM_3_MODEL_NAME=m3\n",
+            encoding="utf-8",
+        )
+        result = add_llm_config(api_key="k4", base_url="https://ex.com", model_name="m4")
+        assert result is True
+        assert "LLM_4_MODEL_NAME=m4" in env_file.read_text(encoding="utf-8")
+
+    def test_env_file_points_to_project_root(self):
+        """回归锁：ENV_FILE 必须指向项目根目录的 .env.local（而非 src/config/ 下）。"""
+        assert config_manager.ENV_FILE == Path("config.py").resolve().parent / ".env.local"
 
 
 class TestRemoveLLMConfig:
-    """测试 remove_llm_config（使用 mock 文件系统）"""
+    """测试 remove_llm_config（真实临时文件 + 隔离 load_dotenv/refresh）"""
 
-    def test_remove_existing_model(self, tmp_path):
-        env_content = (
-            "# 模型 1: test-model\nLLM_1_API_KEY=key1\nLLM_1_BASE_URL=https://ex.com\nLLM_1_MODEL_NAME=test-model\n\n"
+    @pytest.fixture(autouse=True)
+    def _isolate_env_side_effects(self, monkeypatch):
+        """隔离 load_dotenv 与 refresh_llm_configs，避免测试污染进程环境变量与全局 LLM_CONFIGS。"""
+        monkeypatch.setattr(config_manager, "load_dotenv", lambda *a, **k: None)
+        monkeypatch.setattr(config_manager, "refresh_llm_configs", lambda: None)
+
+    def test_remove_existing_model(self, env_file):
+        env_file.write_text(
+            "# 模型 1: test-model\nLLM_1_API_KEY=key1\nLLM_1_BASE_URL=https://ex.com\nLLM_1_MODEL_NAME=test-model\n\n",
+            encoding="utf-8",
         )
-        with patch("src.config.config_manager.os.path.exists", return_value=True):
-            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config.config_manager.load_dotenv"):
-                    result = remove_llm_config("test-model")
+        result = remove_llm_config("test-model")
         assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_1_MODEL_NAME=test-model" not in content
 
-    def test_remove_nonexistent_model(self, tmp_path):
-        env_content = "LLM_1_MODEL_NAME=other-model\n"
-        with patch("src.config.config_manager.os.path.exists", return_value=True):
-            with patch("src.config.config_manager.open", mock_open(read_data=env_content)):
-                with patch("src.config.config_manager.load_dotenv"):
-                    result = remove_llm_config("nonexistent")
+    def test_remove_nonexistent_model(self, env_file):
+        env_file.write_text("LLM_1_MODEL_NAME=other-model\n", encoding="utf-8")
+        result = remove_llm_config("nonexistent")
         assert result is False
 
-    def test_remove_file_not_exists(self):
-        with patch("src.config.config_manager.os.path.exists", return_value=False):
-            result = remove_llm_config("any-model")
+    def test_remove_file_not_exists(self, env_file):
+        result = remove_llm_config("any-model")
         assert result is False
 
 
