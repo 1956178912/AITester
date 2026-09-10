@@ -94,3 +94,38 @@ class TestRootConfigLlmLoading:
         """无任何 LLM 配置时返回空列表。"""
         monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({}))
         assert root_config._load_llm_configs() == []
+
+
+class TestSafeEnvParsing:
+    """测试数值环境变量容错解析（坏值不再让 import 崩溃）。"""
+
+    def _fake_getenv(self, env: dict):
+        def fake_getenv(name, default=""):
+            return env.get(name, default)
+
+        return fake_getenv
+
+    def test_parse_int_env_valid_value(self, monkeypatch):
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"MAX_ITERATIONS": "5"}))
+        assert root_config._parse_int_env("MAX_ITERATIONS", 3, 1, None) == 5
+
+    def test_parse_int_env_bad_value_falls_back(self, monkeypatch):
+        """非数字值回退默认值（旧实现此处 int() 直接抛 ValueError）。"""
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"MAX_ITERATIONS": "abc"}))
+        assert root_config._parse_int_env("MAX_ITERATIONS", 3, 1, None) == 3
+
+    def test_parse_int_env_out_of_range_falls_back(self, monkeypatch):
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"MAX_ITERATIONS": "0"}))
+        assert root_config._parse_int_env("MAX_ITERATIONS", 3, 1, None) == 3
+
+    def test_parse_int_env_unset_returns_default(self, monkeypatch):
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({}))
+        assert root_config._parse_int_env("MAX_ITERATIONS", 3, 1, None) == 3
+
+    def test_parse_float_env_bad_value_falls_back(self, monkeypatch):
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"TEMPERATURE": "high"}))
+        assert root_config._parse_float_env("TEMPERATURE", 0.2, 0.0, 2.0) == 0.2
+
+    def test_parse_float_env_out_of_range_falls_back(self, monkeypatch):
+        monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"TEMPERATURE": "9.9"}))
+        assert root_config._parse_float_env("TEMPERATURE", 0.2, 0.0, 2.0) == 0.2
