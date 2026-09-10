@@ -8,8 +8,8 @@
 - 限流控制：防止单节点过载
 - 大规模节点池支持（100+ 模型）
 使用示例：
-    from src.api.api_manager import APIManger
-    manager = APIManger()
+    from src.api.api_manager import APIManager
+    manager = APIManager()
     result = manager.call(messages=[...], model="qwen-max")
 """
 
@@ -112,13 +112,13 @@ class APIManagerConfig:
 class HealthCheckerThread(threading.Thread):
     """后台健康检查线程：按配置间隔定时执行批量健康检查。
 
-    该线程作为守护线程运行，APIManger 初始化时自动启动，
+    该线程作为守护线程运行，APIManager 初始化时自动启动，
     周期性调用 health_check_batch() 更新节点健康状态，
     实现不健康的 API 节点及时被剔除出路由池。
     """
 
-    def __init__(self, manager: APIManger, interval: float = 60.0) -> None:
-        super().__init__(daemon=True, name="APIManger-HealthChecker")
+    def __init__(self, manager: APIManager, interval: float = 60.0) -> None:
+        super().__init__(daemon=True, name="APIManager-HealthChecker")
         self._manager = manager
         self._interval = interval
         self._stop_event = threading.Event()
@@ -138,7 +138,7 @@ class HealthCheckerThread(threading.Thread):
         self._stop_event.set()
 
 
-class APIManger:
+class APIManager:
     """
     智能 API 管理器
     支持多 LLM Provider 的智能路由、健康检查与故障转移。
@@ -538,7 +538,7 @@ class APIManger:
 
 
 # 全局单例
-_manager: APIManger | None = None
+_manager: APIManager | None = None
 # 单例锁：保护 get_manager/reset_manager，避免并发时创建多个管理器实例
 _manager_lock = threading.Lock()
 # 等待健康检查线程退出的超时（秒）：批量健康检查可能耗时数秒，
@@ -546,13 +546,13 @@ _manager_lock = threading.Lock()
 _HEALTH_CHECKER_SHUTDOWN_TIMEOUT = 5.0
 
 
-def get_manager() -> APIManger:
+def get_manager() -> APIManager:
     """获取全局 API 管理器单例（双重检查锁，线程安全）。"""
     global _manager
     if _manager is None:
         with _manager_lock:
             if _manager is None:
-                _manager = APIManger()
+                _manager = APIManager()
     return _manager
 
 
@@ -569,7 +569,7 @@ def reset_manager() -> None:
         _manager = None
 
 
-def print_status_table(manager: APIManger | None = None) -> None:
+def print_status_table(manager: APIManager | None = None) -> None:
     """
     打印友好的状态表格
     Args:

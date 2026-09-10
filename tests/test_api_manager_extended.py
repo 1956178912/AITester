@@ -28,7 +28,7 @@ sys.path.insert(0, ".")
 from config import LLMConfig
 from src.api.api_manager import (
     APIHealth,
-    APIManger,
+    APIManager,
     HealthCheckerThread,
     RotationStrategy,
     get_manager,
@@ -41,10 +41,10 @@ from src.api.api_manager import (
 # ════════════════════════════════════════════════════════════════════════════
 
 
-def _empty_mgr() -> APIManger:
-    """创建一个不带任何预置节点的 APIManger（patch LLM_CONFIGS 为空）。"""
+def _empty_mgr() -> APIManager:
+    """创建一个不带任何预置节点的 APIManager（patch LLM_CONFIGS 为空）。"""
     with patch("src.api.api_manager.LLM_CONFIGS", []):
-        mgr = APIManger()
+        mgr = APIManager()
     return mgr
 
 
@@ -463,7 +463,7 @@ class TestHealthCheckExceptions:
         mock_openai_class.return_value = mock_client
 
         reset_manager()
-        test_mgr = APIManger()
+        test_mgr = APIManager()
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         # 修复后：except Exception 分支处理 ConnectionError，不会 raise AttributeError
@@ -480,7 +480,7 @@ class TestHealthCheckExceptions:
         mock_openai_class.return_value = mock_client
 
         reset_manager()
-        test_mgr = APIManger()
+        test_mgr = APIManager()
         test_mgr.add_node(LLMConfig("key1", "url1", "model1"))
         node = test_mgr.health_nodes["model1"]
         # 修复后：except Exception 分支处理 TimeoutError，不会 raise AttributeError
@@ -856,7 +856,7 @@ class TestPrintStatusTable:
 class TestSingletonThreadHygiene:
     """测试 get_manager/reset_manager 的线程卫生与单例语义。
 
-    背景：APIManger 初始化会启动后台健康检查守护线程（每 60s 发起真实
+    背景：APIManager 初始化会启动后台健康检查守护线程（每 60s 发起真实
     LLM 探测请求）。reset_manager 此前只清全局引用，残留线程继续对旧
     实例发起健康检查（消耗 API 配额）；现 reset 前显式停止并等待线程退出。
     """
@@ -891,7 +891,7 @@ class TestSingletonThreadHygiene:
         """多线程并发 get_manager 只创建一个实例（双重检查锁）"""
         reset_manager()
         threads: list[threading.Thread] = []
-        seen: list[APIManger] = []
+        seen: list[APIManager] = []
         seen_lock = threading.Lock()
         barrier = threading.Barrier(8)
 
