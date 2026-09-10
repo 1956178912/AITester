@@ -27,6 +27,11 @@ except ImportError:
 # 缓存配置常量
 _DEFAULT_TTL_SECONDS = 3600  # 默认 TTL：1 小时
 _DEFAULT_MAX_CASES = 1000  # 默认最大缓存条目数
+# 自动清理节流间隔（秒）：TTL 默认 3600s，距上次全表扫描不足 60s 时跳过
+# 重复扫描——过期清理最多延迟 60s 生效，对实际过期语义影响可忽略，
+# 但避免每次 add_case/add_repair 都做一次 O(N) 元数据全表扫描（大缓存时
+# 累积为 O(N^2) 成本）。容量满时仍每次扫描，保证驱逐语义不变。
+_CLEANUP_INTERVAL_SECONDS = 60.0
 
 
 class TestCaseRetriever:
@@ -103,7 +108,7 @@ class TestCaseRetriever:
 
         # 配置 ChromaDB 客户端（chromadb 1.x 现代 API）：
         # - persist_path 给定时用 PersistentClient 持久化到该目录
-        # - 否则用 EphemeralClient 纯内存，进程结束即失
+        # - 否则用 EphemeralClient 纯内存，进程结束即失效
         # 旧版 chromadb.Client(Settings(persist_directory=...)) 已弃用，且
         # Settings() 默认 persist_directory='./chroma'，"内存"分支实际会在 CWD
         # 落出持久目录；anonymized_telemetry 关闭避免后台遥测上报
@@ -118,6 +123,8 @@ class TestCaseRetriever:
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
+        # 记录上次全表清理时间（0.0 = 从未清理，保证首次 add 一定执行清理）
+        self._last_cleanup_at = 0.0
         logger.info(
             "RAG 检索器已初始化，集合=%s，持久化路径=%s，TTL=%ds，最大容量=%d",
             collection_name,
@@ -147,11 +154,26 @@ class TestCaseRetriever:
         执行两步清理：
         1. 清理 TTL 过期的条目（当前时间 - 添加时间 > ttl_seconds）
         2. 如果条目数仍超过 max_cases，清理最旧的条目
+
+        节流：未达容量上限时，距上次清理不足 _CLEANUP_INTERVAL_SECONDS
+        （60s）则跳过全表扫描；容量满（需要驱逐）或首次调用时始终执行。
         """
         current_time = time.time()
 
+        # 节流判断：容量未满 且 已清理过 且 距上次清理不足 60s → 跳过全表扫描。
+        # 容量满（count >= max_cases）必须每次清理才能腾出空间；
+        # 首次清理（_last_cleanup_at == 0.0）也始终执行（旧实例可能遗留过期条目）。
+        count = self.collection.count()
+        if (
+            count < self.max_cases
+            and self._last_cleanup_at != 0.0
+            and current_time - self._last_cleanup_at < _CLEANUP_INTERVAL_SECONDS
+        ):
+            return
+
         # 步骤 1：获取所有条目，筛选出未过期的
         all_results = self.collection.get(include=["metadatas"])
+        self._last_cleanup_at = current_time
         if not all_results["ids"]:
             return
 
@@ -384,6 +406,7 @@ class TestCaseRetriever:
         current_time = time.time()
 
         all_results = self.collection.get(include=["metadatas"])
+        self._last_cleanup_at = current_time
         if not all_results["ids"]:
             return 0
 
