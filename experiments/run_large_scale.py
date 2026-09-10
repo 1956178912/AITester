@@ -21,7 +21,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import click  # noqa: E402
 
 from experiments.run_benchmark import run_benchmark  # noqa: E402
-from src.datasets.synthetic_dataset import SyntheticDataset  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +37,12 @@ def cli(task_count: int, baselines: str, seed: int, output_dir: str, parallel: i
     bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
 
     # 生成合成数据集
+    # 注：任务直接由 run_benchmark(seed=...) 内部生成（此前脚本在此处预生成一份
+    # 仅取长度，而 run_benchmark 内部又硬编码 seed=42，导致 --seed 实际被忽略）
     logger.info("生成合成数据集: %d 个任务, seed=%d", task_count, seed)
-    dataset = SyntheticDataset(task_count=task_count, seed=seed)
-    tasks = dataset.tasks
 
     # 运行完整实验
-    logger.info("开始大规模实验: %d 任务 x %d 基线", len(tasks), len(bl_list))
+    logger.info("开始大规模实验: %d 任务 x %d 基线", task_count, len(bl_list))
     start_time = time.time()
 
     summary = run_benchmark(
@@ -55,6 +54,7 @@ def cli(task_count: int, baselines: str, seed: int, output_dir: str, parallel: i
         task_limit=None,
         task_count=task_count,
         parallel=parallel,
+        seed=seed,
     )
 
     elapsed = time.time() - start_time
