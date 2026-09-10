@@ -29,6 +29,29 @@ ENV_FILE: Path = Path(__file__).resolve().parents[2] / ".env.local"
 _LLM_INDEX_PATTERN = re.compile(r"^LLM_(\d+)_", re.MULTILINE)
 
 
+def _find_model_indices(lines: list[str], model_name: str) -> set[int]:
+    """扫描配置行，返回目标模型占用的 LLM_N 编号集合。
+
+    仅匹配 LLM_N_MODEL_NAME=<model> 行（行尾精确匹配，防止 partial 名误命中，
+    与 add_llm_config 的重复检查规则一致），注释行与 API_KEY/BASE_URL 行不参与
+    编号识别——编号只能由 MODEL_NAME 行确定，避免把同名 API Key 片段误判为配置行。
+
+    Args:
+        lines: 配置文件行列表（含行尾换行符）。
+        model_name: 模型名称。
+
+    Returns:
+        该模型占用的编号集合（可能为空）。
+    """
+    pattern = re.compile(r"^LLM_(\d+)_MODEL_NAME=" + re.escape(model_name) + r"\s*$")
+    indices: set[int] = set()
+    for line in lines:
+        m = pattern.match(line.rstrip("\n"))
+        if m:
+            indices.add(int(m.group(1)))
+    return indices
+
+
 def _scan_llm_indices(content: str) -> set[int]:
     """扫描 .env.local 内容中已占用的 LLM_N 编号集合（仅统计未注释行）。"""
     return {int(m) for m in _LLM_INDEX_PATTERN.findall(content)}
@@ -115,34 +138,17 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         return False
 
 
-def _is_model_config_line(line: str, model_name: str) -> bool:
-    """
-    检查行是否属于指定模型的配置。
-
-    Args:
-        line: 要检查的行
-        model_name: 模型名称
-    Returns:
-        如果是目标模型的配置行返回 True
-    """
-    return f"LLM_{model_name}" in line or ("MODEL_NAME=" in line and model_name in line)
-
-
-def _is_model_comment(line: str) -> bool:
-    """
-    检查行是否是模型注释。
-
-    Args:
-        line: 要检查的行
-    Returns:
-        如果是模型注释返回 True
-    """
-    return line.startswith("#") and "模型" in line
-
-
 def _find_and_remove_model_block(lines: list[str], model_name: str) -> tuple[list[str], bool]:
     """
-    从行列表中查找并移除指定模型的配置块。
+    从行列表中查找并移除指定模型的完整配置块。
+
+    按编号识别块边界（编号由 LLM_N_MODEL_NAME=<model> 行确定）：
+    移除该编号下的全部 LLM_N_API_KEY / LLM_N_BASE_URL / LLM_N_MODEL_NAME 行，
+    以及形如 "# 模型 N:" 的块注释行（与 add_llm_config 的写盘格式对齐）。
+
+    旧实现用逐行 skip 模式匹配，只能命中 MODEL_NAME 行本身，遗留同块的
+    注释行/API_KEY/BASE_URL 行（密钥残留在文件中，且编号仍被占用影响
+    自动分配）。新实现整块移除，保证 remove 后文件内不再出现该编号的任何行。
 
     Args:
         lines: 配置文件行列表
@@ -150,38 +156,25 @@ def _find_and_remove_model_block(lines: list[str], model_name: str) -> tuple[lis
     Returns:
         (新行列表，是否成功移除)
     """
-    new_lines = []
-    removed = False
-    skip_mode = False
+    indices = _find_model_indices(lines, model_name)
+    if not indices:
+        return lines, False
 
-    for line in lines:
-        # 检查是否是目标模型的配置行
-        if _is_model_config_line(line, model_name):
-            skip_mode = True
-            removed = True
-            continue
+    config_line = re.compile(r"^LLM_(\d+)_(API_KEY|BASE_URL|MODEL_NAME)=")
+    comment_line = re.compile(r"^#\s*模型\s*(\d+)\s*[:：]")
 
-        # 处理跳过模式
-        if skip_mode:
-            # 继续跳过同一模型的配置行
-            if line.startswith("LLM_") and "_MODEL_NAME=" not in line:
-                continue
-            # 跳过模型注释
-            if _is_model_comment(line):
-                continue
-            # 遇到空行，结束跳过
-            if line.strip() == "":
-                skip_mode = False
-                if not removed:
-                    new_lines.append(line)
-                continue
-            # 遇到其他内容，结束跳过
-            skip_mode = False
-            new_lines.append(line)
-        else:
-            new_lines.append(line)
+    def _belongs_to_block(line: str) -> bool:
+        stripped = line.rstrip("\n")
+        m = config_line.match(stripped)
+        if m and int(m.group(1)) in indices:
+            return True
+        m = comment_line.match(stripped)
+        if m and int(m.group(1)) in indices:
+            return True
+        return False
 
-    return new_lines, removed
+    new_lines = [line for line in lines if not _belongs_to_block(line)]
+    return new_lines, True
 
 
 def remove_llm_config(model_name: str) -> bool:

@@ -184,6 +184,65 @@ class TestRemoveLLMConfig:
         content = env_file.read_text(encoding="utf-8")
         assert "LLM_1_MODEL_NAME=test-model" not in content
 
+    def test_remove_existing_model_entire_block(self, env_file):
+        """回归：整块移除，注释行/API_KEY/BASE_URL 不得残留（旧实现只删 MODEL_NAME 行）。"""
+        env_file.write_text(
+            "# 模型 1: test-model\nLLM_1_API_KEY=key1\nLLM_1_BASE_URL=https://ex.com\nLLM_1_MODEL_NAME=test-model\n\n",
+            encoding="utf-8",
+        )
+        result = remove_llm_config("test-model")
+        assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_1_API_KEY" not in content, "API_KEY 行必须随块移除（密钥不得残留）"
+        assert "LLM_1_BASE_URL" not in content, "BASE_URL 行必须随块移除"
+        assert "模型 1" not in content, "块注释行必须随块移除"
+        # 该编号应不再被占用：自动分配下一个编号应回到 1
+        assert add_llm_config(api_key="k2", base_url="https://ex.com", model_name="m2") is True
+        assert "LLM_1_MODEL_NAME=m2" in env_file.read_text(encoding="utf-8")
+
+    def test_remove_keeps_other_models(self, env_file):
+        """移除其中一个模型时，其他模型的配置块必须原样保留。"""
+        env_file.write_text(
+            "# 模型 1: keep-me\nLLM_1_API_KEY=k1\nLLM_1_BASE_URL=https://a.com\nLLM_1_MODEL_NAME=keep-me\n"
+            "\n# 模型 2: drop-me\nLLM_2_API_KEY=k2\nLLM_2_BASE_URL=https://b.com\nLLM_2_MODEL_NAME=drop-me\n",
+            encoding="utf-8",
+        )
+        result = remove_llm_config("drop-me")
+        assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_1_API_KEY=k1" in content
+        assert "LLM_1_MODEL_NAME=keep-me" in content
+        assert "LLM_2_API_KEY" not in content
+        assert "LLM_2_MODEL_NAME" not in content
+        assert "模型 2" not in content
+
+    def test_remove_model_at_multiple_indices(self, env_file):
+        """同一模型名出现在多个编号下（手工编辑场景）时，所有编号的整块都被移除。"""
+        env_file.write_text(
+            "LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=twin\n"
+            "LLM_3_API_KEY=k3\nLLM_3_BASE_URL=https://c.com\nLLM_3_MODEL_NAME=twin\n",
+            encoding="utf-8",
+        )
+        result = remove_llm_config("twin")
+        assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_1_API_KEY" not in content
+        assert "LLM_3_API_KEY" not in content
+        assert "LLM_3_MODEL_NAME" not in content
+
+    def test_remove_does_not_match_partial_names(self, env_file):
+        """移除 short-model 时不得误删 short-model-x 的配置块（行尾精确匹配）。"""
+        env_file.write_text(
+            "LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=short-model\n"
+            "LLM_2_API_KEY=k2\nLLM_2_MODEL_NAME=short-model-x\n",
+            encoding="utf-8",
+        )
+        result = remove_llm_config("short-model")
+        assert result is True
+        content = env_file.read_text(encoding="utf-8")
+        assert "LLM_1_MODEL_NAME" not in content
+        assert "LLM_2_MODEL_NAME=short-model-x" in content
+
     def test_remove_nonexistent_model(self, env_file):
         env_file.write_text("LLM_1_MODEL_NAME=other-model\n", encoding="utf-8")
         result = remove_llm_config("nonexistent")
