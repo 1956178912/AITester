@@ -32,20 +32,14 @@ def mock_chromadb():
 
 
 @pytest.fixture
-def mock_settings():
-    """提供 mock 的 Settings 类。"""
-    with patch("src.rag.retriever.Settings") as mock:
-        yield mock
-
-
-@pytest.fixture
-def retriever(mock_chromadb, mock_settings):
+def retriever(mock_chromadb):
     """创建一个 mock 的 TestCaseRetriever 实例。"""
-    # 配置 mock client
+    # 配置 mock client（chromadb 1.x 现代 API：Ephemeral/PersistentClient）
     mock_client = MagicMock()
     mock_collection = MagicMock()
     mock_client.get_or_create_collection.return_value = mock_collection
-    mock_chromadb.Client.return_value = mock_client
+    mock_chromadb.EphemeralClient.return_value = mock_client
+    mock_chromadb.PersistentClient.return_value = mock_client
 
     # 创建 retriever
     instance = TestCaseRetriever(
@@ -67,30 +61,33 @@ def retriever(mock_chromadb, mock_settings):
 class TestInit:
     """测试 TestCaseRetriever 初始化逻辑。"""
 
-    def test_init_success(self, mock_chromadb, mock_settings, retriever):
-        """验证正常初始化流程：创建客户端和集合。"""
-        mock_chromadb.Client.assert_called_once()
-        mock_chromadb.Client.return_value.get_or_create_collection.assert_called_once_with(
+    def test_init_success(self, mock_chromadb, retriever):
+        """验证正常初始化流程：EphemeralClient（内存模式）+ 余弦空间集合。"""
+        mock_chromadb.EphemeralClient.assert_called_once()
+        mock_chromadb.EphemeralClient.return_value.get_or_create_collection.assert_called_once_with(
             name="test_collection",
             metadata={"hnsw:space": "cosine"},
         )
+        # 关闭后台遥测（避免上报）
+        mock_chromadb.Settings.assert_called_once_with(anonymized_telemetry=False)
         assert retriever.collection_name == "test_collection"
         assert retriever.ttl_seconds == 3600
         assert retriever.max_cases == 100
 
-    def test_init_with_persist_path(self, mock_chromadb, mock_settings):
-        """验证带持久化路径的初始化。"""
+    def test_init_with_persist_path(self, mock_chromadb):
+        """验证带持久化路径的初始化走 PersistentClient。"""
         mock_client = MagicMock()
         mock_collection = MagicMock()
         mock_client.get_or_create_collection.return_value = mock_collection
-        mock_chromadb.Client.return_value = mock_client
+        mock_chromadb.PersistentClient.return_value = mock_client
 
         instance = TestCaseRetriever(persist_path="./rag_data")
         instance.client = mock_client
         instance.collection = mock_collection
 
-        # 验证 Settings 被调用时传入了 persist_directory
-        mock_settings.assert_called_with(persist_directory="./rag_data")
+        # 验证 PersistentClient 被调用时传入了 path
+        mock_chromadb.PersistentClient.assert_called_once()
+        assert mock_chromadb.PersistentClient.call_args.kwargs["path"] == "./rag_data"
 
     def test_init_without_chromadb_raises(self):
         """验证未安装 chromadb 时抛出 ImportError。"""
