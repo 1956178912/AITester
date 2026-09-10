@@ -33,6 +33,57 @@ def load_env_local() -> None:
         load_dotenv(local_path, override=True)
 
 
+# ─── 数值环境变量容错解析 ─────────────────────────────────────────────────────
+# 所有数值型配置统一经此解析：坏值（如 MAX_ITERATIONS=abc）不再让 import 崩溃，
+# 而是记 WARNING 并回退默认值。默认值与范围约束的来源见各配置项注释。
+logger = logging.getLogger(__name__)
+
+
+def _parse_int_env(name: str, default: int, min_val: int | None = None, max_val: int | None = None) -> int:
+    """容错读取整型环境变量。
+
+    未设置/空值 → 返回 default；非数字 → 警告并返回 default；
+    超出 [min_val, max_val]（None 侧不限制）→ 警告并返回 default。
+
+    Args:
+        name: 环境变量名。
+        default: 缺省值。
+        min_val: 允许的最小值（None 表示不限制）。
+        max_val: 允许的最大值（None 表示不限制）。
+
+    Returns:
+        合法的环境变量值；非法或未设置时返回 default。
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        logger.warning("环境变量 %s=%r 不是合法整数，回退默认值 %d", name, raw, default)
+        return default
+    if (min_val is not None and value < min_val) or (max_val is not None and value > max_val):
+        logger.warning("环境变量 %s=%d 超出范围 [%s, %s]，回退默认值 %d", name, value, min_val, max_val, default)
+        return default
+    return value
+
+
+def _parse_float_env(name: str, default: float, min_val: float | None = None, max_val: float | None = None) -> float:
+    """容错读取浮点环境变量（语义同 _parse_int_env，针对 float）。"""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw.strip())
+    except ValueError:
+        logger.warning("环境变量 %s=%r 不是合法浮点数，回退默认值 %g", name, raw, default)
+        return default
+    if (min_val is not None and value < min_val) or (max_val is not None and value > max_val):
+        logger.warning("环境变量 %s=%g 超出范围 [%s, %s]，回退默认值 %g", name, value, min_val, max_val, default)
+        return default
+    return value
+
+
 # ─── LLM 配置（敏感信息，从 .env.local 读取）────────────────────────────────
 # 每个 LLM provider 一组配置，可自由增删，格式如下：
 #
@@ -117,12 +168,13 @@ OPENAI_API_KEY: str = DEFAULT_LLM_CONFIG.api_key if DEFAULT_LLM_CONFIG else ""
 OPENAI_BASE_URL: str = DEFAULT_LLM_CONFIG.base_url if DEFAULT_LLM_CONFIG else ""
 MODEL_NAME: str = DEFAULT_LLM_CONFIG.model_name if DEFAULT_LLM_CONFIG else ""
 # TEMPERATURE 非敏感配置，可留在 .env 或 .env.local 中
-TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.2"))
+# 范围 [0, 2]：OpenAI 兼容接口的合法采样温度上限（来源：OpenAI API 文档）
+TEMPERATURE: float = _parse_float_env("TEMPERATURE", 0.2, 0.0, 2.0)
 
 
 # ─── 数据库配置 ──────────────────────────────────────────────────────────────
 MYSQL_HOST: str = os.getenv("MYSQL_HOST", "localhost")
-MYSQL_PORT: int = int(os.getenv("MYSQL_PORT", "3306"))
+MYSQL_PORT: int = _parse_int_env("MYSQL_PORT", 3306, 1, 65535)
 MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
@@ -161,12 +213,15 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
 DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
 # 锁定依赖集（scipy==1.18.0 等）要求 Python >= 3.12，镜像须匹配
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.12-slim")
-_EXECUTION_TIMEOUT_RAW = int(os.getenv("EXECUTION_TIMEOUT", "30"))
+# 先容错解析（坏值回退默认 30），再走 _validate_timeout 范围校验（[10, 300]）
+_EXECUTION_TIMEOUT_RAW = _parse_int_env("EXECUTION_TIMEOUT", 30)
 EXECUTION_TIMEOUT: int = _validate_timeout(_EXECUTION_TIMEOUT_RAW, "EXECUTION_TIMEOUT", 10, 300, 30)
 
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
-MAX_ITERATIONS: int = int(os.getenv("MAX_ITERATIONS", "3"))
-COVERAGE_THRESHOLD: float = float(os.getenv("COVERAGE_THRESHOLD", "80.0"))
+# 最小 1：迭代 0 次的工作流无意义（至少执行一次生成/执行循环）
+MAX_ITERATIONS: int = _parse_int_env("MAX_ITERATIONS", 3, 1, None)
+# 范围 [0, 100]：百分比阈值超出区间无意义（来源：覆盖率定义域）
+COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 100.0)
 
 # ─── 消融实验开关 ────────────────────────────────────────────────────────────
 ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
@@ -174,7 +229,10 @@ ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
 ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
-BENCHMARK_PARALLELISM: int = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
-_LLM_TIMEOUT_RAW = int(os.getenv("LLM_TIMEOUT", "60"))
+# 0 = 串行（合法值），最小 0 防止负并行度
+BENCHMARK_PARALLELISM: int = _parse_int_env("BENCHMARK_PARALLELISM", 0, 0, None)
+# 先容错解析（坏值回退默认 60），再走 _validate_timeout 范围校验（[30, 300]）
+_LLM_TIMEOUT_RAW = _parse_int_env("LLM_TIMEOUT", 60)
 LLM_TIMEOUT: int = _validate_timeout(_LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 60)
-LLM_RETRY_WAIT: int = int(os.getenv("LLM_RETRY_WAIT", "30"))
+# 最小 1：等待 0 秒等于不等待，重试退避失去意义
+LLM_RETRY_WAIT: int = _parse_int_env("LLM_RETRY_WAIT", 30, 1, None)
