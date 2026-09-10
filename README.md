@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 860 collected |
-| **单元测试** | ✅ 860 passed, 0 skipped |
-| **代码覆盖率** | 90% 总覆盖（核心模块：reports/generator 100% / mysql_client 100% / base_agent 99% / api_manager 96% / dataset_loader 96% / workflow 91% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 86%） |
+| **总测试数** | ✅ 963 collected |
+| **单元测试** | ✅ 963 passed, 0 skipped |
+| **代码覆盖率** | 90% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 0.9.5 修复批次：`remove_llm_config` 整块移除（密钥行不再残留 `.env.local`）；`src/utils` 补 `__init__.py`（修 pip 漏包）；数值环境变量容错解析（坏值不再让 import 崩溃）；CLI 顺序模式逐任务容错 + `--timeout` 校验；日志脱敏接入并修复两处实现缺陷；Python 3.14 隐式 `basicConfig()` 导致 CLI 日志配置失效的修复（详见 [CHANGELOG 0.9.5](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), base_agent.py (99%), api_manager.py (96%), dataset_loader.py (96%), workflow.py (91%), code_analyzer.py (100%), planner.py (100%), logging_utils.py (86%) |
+| **最新优化** | ✅ 0.9.8 批次：`ruff format` 门禁恢复（15 文件格式漂移修复）；benchmark 结果字典三处去重（`_build_task_result` 单一构造点）；single_agent 基线超时统一走 `config.EXECUTION_TIMEOUT` 校验；APIManager 后台健康检查线程可关（`enable_health_checker`）；executor 失败用例正则预编译（详见 [CHANGELOG 0.9.8](CHANGELOG.md)） |
+| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), logging_utils.py (83%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.5 正确性/健壮性批次：config-manager 整块移除 / utils 打包 / 环境变量容错 / CLI 逐任务容错 / 日志脱敏接入 + P2 清理（死代码、正则预编译、文档漂移）（详见 [CHANGELOG 0.9.5](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.8 工程化批次：格式门禁恢复 / benchmark 去重 / APIManager 构造副作用收敛 / 正则预编译 + README 测试状态表与实测对齐（详见 [CHANGELOG 0.9.8](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -507,6 +507,7 @@ python experiments/run_benchmark.py --dataset synthetic --enable-rag --json
 
 ```python
 from src.rag.retriever import TestCaseRetriever
+
 retriever = TestCaseRetriever(persist_path="rag_data")
 metrics = retriever.evaluate_retrieval(
     [{"query": "def add(a, b): ...", "expected_id": "<入库时的 doc_id>"}],
@@ -563,7 +564,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 860+ 个用例，696+ passed）
+# 运行所有测试（当前 963 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -573,11 +574,11 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（40 个测试文件，957 个 pytest 收集用例，src 总覆盖率 90%）：
+**测试覆盖模块**（41 个测试文件，963 个 pytest 收集用例，src 总覆盖率 90%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 57 | API 管理器（轮询/加权随机/健康感知策略） |
+| `test_api_manager.py` | 59 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关） |
 | `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
@@ -610,6 +611,7 @@ docker run --rm \
 | `test_rag_metrics.py` | 5 | RAG 检索质量指标 Hit Rate/MRR（P1） |
 | `test_rag_retriever.py` | 29 | RAG 检索器增删查清与持久化 |
 | `test_report_generator.py` | 48 | 错误报告生成器（含八类分类分支） |
+| `test_run_benchmark.py` | 4 | benchmark 结果构造与异常路径回归（0.9.8 去重重构） |
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
