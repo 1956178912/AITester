@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import copy
 import json
 import logging
 import os
@@ -288,28 +289,20 @@ def run_plain_llm_baseline(
 
     模拟"无规划、无自修复"的简单 LLM 调用场景。
 
+    实现说明：直接构建 planner=False、debugger=False 的降级工作流。
+    此前用 importlib.reload(wf_module) 改模块全局开关，但 workflow.py 读取的是
+    config 模块的 ENABLE_PLANNER/ENABLE_DEBUGGER（reload 后重新 from config import，
+    值不变），开关实际未生效——"plain_llm" 跑的是完整管线。参数化后彻底移除 reload
+    （并行模式下多线程 reload 共享模块还有竞态风险）。
+
     Args:
         state: 初始工作流状态。
 
     Returns:
         最终状态字典。
     """
-    # 临时关闭 Planner 和 Debugger，重新加载 workflow 模块获取新图
-    import importlib
-
-    import src.graph.workflow as wf_module
-
-    global ENABLE_PLANNER, ENABLE_DEBUGGER
-    old_planner, old_debugger = ENABLE_PLANNER, ENABLE_DEBUGGER
-    try:
-        ENABLE_PLANNER = False
-        ENABLE_DEBUGGER = False
-        importlib.reload(wf_module)
-        graph = wf_module.build_workflow()
-        return graph.invoke(state)
-    finally:
-        ENABLE_PLANNER, ENABLE_DEBUGGER = old_planner, old_debugger
-        importlib.reload(wf_module)  # 恢复模块，避免影响后续测试
+    graph = build_workflow(planner=False, debugger=False)
+    return graph.invoke(state)
 
 
 def run_single_agent_baseline(
@@ -432,9 +425,9 @@ def run_single_task(
         with open(instance_file, "w", encoding="utf-8") as f:
             f.write(task.instance_code)
 
-        # 初始化工作流状态
-        state: AITesterState = {
-            "task_uuid": f"{task.task_id}_{{baseline}}",
+        # 初始化工作流状态（作为所有基线的起点，逐基线 deepcopy 隔离）
+        initial_state: AITesterState = {
+            "task_uuid": task.task_id,
             "target_file": instance_file,
             "target_function": None,
             "module_name": module_name,
@@ -458,6 +451,14 @@ def run_single_task(
         for _baseline_idx, baseline in enumerate(baselines):
             # 根据任务索引和基线索引分配 API
             _set_thread_api(hash(task.task_id) % len(_VALID_APIS) if _VALID_APIS else 0)
+
+            # 基线隔离：deepcopy 初始状态并重置磁盘实例文件为原始代码。
+            # single_agent 基线执行中会把修复后的代码写回 target_file
+            # （open(target_file, "w")），若不重置，后续基线会从"已修复代码 +
+            # 已递增的 iteration"起步，基线对比数据无效
+            state = copy.deepcopy(initial_state)
+            with open(instance_file, "w", encoding="utf-8") as f:
+                f.write(task.instance_code)
 
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
@@ -564,6 +565,7 @@ def run_benchmark(
     task_limit: int | None = None,
     task_count: int | None = None,
     parallel: int | None = None,
+    seed: int = 42,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -577,6 +579,8 @@ def run_benchmark(
         task_limit: 限制运行任务数量。
         task_count: 合成数据集任务数量。
         parallel: 并行任务数。
+        seed: 合成数据集随机种子（此前硬编码为 42，--seed 参数被静默忽略；
+               现透传到 SyntheticDataset，保证实验可复现）。
 
     Returns:
         汇总结果字典。
@@ -588,14 +592,14 @@ def run_benchmark(
     if unknown:
         raise ValueError(f"不支持的基线方法: {unknown}，支持: {list(BASELINE_REGISTRY.keys())}")
 
-    logger.info("加载数据集: %s (subset=%s)", dataset_name, subset)
+    logger.info("加载数据集: %s (subset=%s, seed=%d)", dataset_name, subset, seed)
 
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
-        logger.info("生成合成数据集：%d 个任务", tc)
+        logger.info("生成合成数据集：%d 个任务（seed=%d）", tc, seed)
         from src.datasets.synthetic_dataset import SyntheticDataset
 
-        dataset = SyntheticDataset(task_count=tc, seed=42)
+        dataset = SyntheticDataset(task_count=tc, seed=seed)
         # 确保数据集已加载
         _ = dataset.tasks
     else:
@@ -666,6 +670,7 @@ def run_benchmark(
         "timestamp": datetime.now().isoformat(),
         "dataset": dataset_name,
         "subset": subset,
+        "seed": seed,
         "total_tasks": len(tasks),
         "baselines": baselines,
         "enable_planner": ENABLE_PLANNER,
@@ -740,7 +745,8 @@ if __name__ == "__main__":
     @click.option("--task-count", "-c", default=None, type=int, help="合成数据集任务数量")
     @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量")
     @click.option("--parallel", "-p", default=None, type=int, help="并行任务数")
-    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel):
+    @click.option("--seed", default=42, type=int, help="合成数据集随机种子（默认 42）")
+    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
 
@@ -753,6 +759,7 @@ if __name__ == "__main__":
             task_limit=task_limit,
             task_count=task_count,
             parallel=parallel,
+            seed=seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

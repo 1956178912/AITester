@@ -119,24 +119,34 @@ def get_rag_retriever():
     return _rag_retriever
 
 
-def _create_workflow() -> StateGraph:
+def _create_workflow(planner: bool | None = None, debugger: bool | None = None) -> StateGraph:
     """
     构建多智能体工作流图（有向无环图 + 条件循环）。
 
     核心设计思路：
     - 使用 LangGraph 的 StateGraph 作为图编排引擎，每个节点是一个 Python 函数
-    - 根据 config.py 中的消融开关动态选择启用的节点和边
+    - 根据 config.py 中的消融开关（或本次构建的显式覆盖）动态选择启用的节点和边
     - Debugger + PatchApplier 构成循环结构，通过 _should_debug 条件路由控制是否继续迭代
 
     消融开关说明：
-    - ENABLE_PLANNER=True  → 包含 Planner 节点（逻辑驱动思维链）
-    - ENABLE_DEBUGGER=True → 包含 Debugger + PatchApplier 修复循环
-    - ENABLE_RAG=True      → Generator/Debugger 节点中使用 RAG 检索增强
+    - planner=True（或 config.ENABLE_PLANNER=True）→ 包含 Planner 节点（逻辑驱动思维链）
+    - debugger=True（或 config.ENABLE_DEBUGGER=True）→ 包含 Debugger + PatchApplier 修复循环
+    - ENABLE_RAG=True → Generator/Debugger 节点中使用 RAG 检索增强
+
+    Args:
+        planner: 是否启用 Planner 节点。None（默认）时读取 config.ENABLE_PLANNER。
+                 消融实验可按需显式传 False 构建无规划基线图，无需 reload 模块。
+        debugger: 是否启用 Debugger + PatchApplier 修复循环。None（默认）时读取
+                 config.ENABLE_DEBUGGER。
 
     Returns:
         已注册的 StateGraph 实例（尚未编译，需调用 .compile() 后才能运行）。
         编译后返回 Runnable 对象，可通过 .invoke() 执行完整流程。
     """
+    # 显式覆盖 > 配置文件开关：planner/debugger 为 None 时回落到 config 值
+    enable_planner = ENABLE_PLANNER if planner is None else planner
+    enable_debugger = ENABLE_DEBUGGER if debugger is None else debugger
+
     workflow = StateGraph(AITesterState)
 
     # ── 始终注册的节点（核心必选组件）─────────────────────────────────────────
@@ -150,7 +160,7 @@ def _create_workflow() -> StateGraph:
     workflow.add_edge("generator", "executor")
 
     # ── 条件注册：Planner（消融开关 ENABLE_PLANNER 控制）────────────────────
-    if ENABLE_PLANNER:
+    if enable_planner:
         workflow.add_node("planner", _planner_node)
         # 入口设置：从 planner 开始，确保每个任务都先经过逻辑分析
         # 这样 Generator 拿到的是结构化测试计划而非裸代码，提升生成质量
@@ -162,7 +172,7 @@ def _create_workflow() -> StateGraph:
         workflow.set_entry_point("generator")
 
     # ── 条件注册：Debugger + PatchApplier（消融开关 ENABLE_DEBUGGER 控制）────
-    if ENABLE_DEBUGGER:
+    if enable_debugger:
         # 添加调试节点和补丁应用节点，构成修复循环
         workflow.add_node("debugger", _debugger_node)
         workflow.add_node("patch_applier", _patch_applier_node)
@@ -612,15 +622,20 @@ def _get_default_test_plan(function_name: str | None) -> dict[str, Any]:
 # ─── 工作流编译与缓存 ──────────────────────────────────────────────────────────
 
 
-def build_workflow() -> Any:
+def build_workflow(planner: bool | None = None, debugger: bool | None = None) -> Any:
     """
     编译工作流图并返回可执行的 graph 对象。
     每次调用都创建新的 graph 实例，避免状态污染。
 
+    Args:
+        planner: 是否启用 Planner 节点（None 时读取 config.ENABLE_PLANNER）。
+        debugger: 是否启用 Debugger 修复循环（None 时读取 config.ENABLE_DEBUGGER）。
+        消融实验（如 plain_llm 基线）可显式传 False 构建降级图，无需 reload 模块。
+
     Returns:
         编译后的 LangGraph StateGraph 对象。
     """
-    workflow = _create_workflow()
+    workflow = _create_workflow(planner=planner, debugger=debugger)
     return workflow.compile()
 
 
