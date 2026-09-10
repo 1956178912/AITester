@@ -4,14 +4,14 @@ API 管理器使用示例
 展示如何使用智能 API 管理器进行多模型调用、健康检查和故障转移。
 """
 
-from src.api.api_manager import APIManger, RotationStrategy, print_status_table
+from src.api.api_manager import APIManager, RotationStrategy, print_status_table
 
 
 def example_basic_usage():
     """基础使用示例"""
     print("\n【示例 1：基础使用】")
 
-    manager = APIManger()
+    manager = APIManager()
 
     # 获取状态
     status = manager.get_status()
@@ -26,7 +26,7 @@ def example_rotation_strategies():
     """轮换策略示例"""
     print("\n【示例 2：轮换策略】")
 
-    manager = APIManger()
+    manager = APIManager()
 
     strategies = [
         RotationStrategy.ROUND_ROBIN,
@@ -46,7 +46,7 @@ def example_health_check():
     """健康检查示例"""
     print("\n【示例 3：健康检查】")
 
-    manager = APIManger()
+    manager = APIManager()
 
     # 批量健康检查
     print("开始批量健康检查...")
@@ -68,7 +68,7 @@ def example_call_with_fallback():
     """带故障转移的调用示例"""
     print("\n【示例 4：带故障转移的调用】")
 
-    manager = APIManger()
+    manager = APIManager()
 
     try:
         # 调用 API（自动故障转移）
@@ -96,7 +96,7 @@ def example_dynamic_management():
 
     from config import LLMConfig
 
-    manager = APIManger()
+    manager = APIManager()
 
     # 添加新节点
     new_config = LLMConfig(api_key="test-key", base_url="https://test.example.com/v1", model_name="test-model")
@@ -112,7 +112,7 @@ def example_performance_comparison():
     """性能对比示例"""
     print("\n【示例 6：性能对比】")
 
-    manager = APIManger()
+    manager = APIManager()
 
     # 按不同指标排序
     print("\nTop 5 成功率最高的节点:")
