@@ -179,6 +179,16 @@ MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "aitester")
 
+# MySQL 连接池参数（PooledDB）：此前硬编码在 mysql_client.py，
+# 现统一由环境变量配置，便于按实验规模（如 --parallel 并发）调整。
+# 默认值与历史硬编码值保持一致，保证未配置时行为不变。
+# min_cached 必须 ≤ max_cached ≤ max_connections，越界值由 PooledDB 侧兜底告警。
+MYSQL_POOL_MIN_CACHED: int = _parse_int_env("MYSQL_POOL_MIN_CACHED", 5, 0, None)
+MYSQL_POOL_MAX_CACHED: int = _parse_int_env("MYSQL_POOL_MAX_CACHED", 10, 0, None)
+MYSQL_POOL_MAX_CONNECTIONS: int = _parse_int_env("MYSQL_POOL_MAX_CONNECTIONS", 20, 1, None)
+# 获取连接的等待超时（秒），范围 [1, 600]：0 意味着拿不到连接就失败，无意义
+MYSQL_POOL_TIMEOUT: int = _parse_int_env("MYSQL_POOL_TIMEOUT", 30, 1, 600)
+
 
 # ─── 超时配置验证函数 ────────────────────────────────────────────────────────
 def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default: int) -> int:
@@ -227,6 +237,27 @@ COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 10
 ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
 ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
 ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
+
+# ─── RAG 检索增强配置 ────────────────────────────────────────────────────────
+# 持久化路径：默认项目根下 rag_data/（此前总是内存模式，进程重启数据全丢，
+# 跨实验运行的历史用例无法复用）。设为空字符串则回退内存模式。
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+RAG_PERSIST_PATH: str = os.getenv("RAG_PERSIST_PATH", os.path.join(_PROJECT_ROOT, "rag_data"))
+# 集合名：同一持久化目录下按集合名区分不同数据集/实验
+RAG_COLLECTION_NAME: str = os.getenv("RAG_COLLECTION_NAME", "aitester_cases")
+# TTL：持久化场景下需要跨实验复用，默认放宽到 7 天（内存模式仍可用默认 1 小时）
+RAG_TTL_SECONDS: int = _parse_int_env("RAG_TTL_SECONDS", 7 * 24 * 3600, 60, None)
+
+# ─── 执行隔离配置（依赖检测 / venv 沙箱）─────────────────────────────────────
+# 本地执行默认直接跑在系统 Python 环境：被测代码 import 的第三方库缺失时
+# 测试直接失败，且无法区分"代码 bug"与"环境缺依赖"。
+# 沙箱模式（EXECUTOR_USE_VENV=true）：为任务创建隔离 venv 并用其解释器执行 pytest，
+# 通过 PYTHONPATH 控制模块搜索路径，避免污染系统环境。
+EXECUTOR_USE_VENV: bool = os.getenv("EXECUTOR_USE_VENV", "false").lower() == "true"
+# 是否自动 pip install 缺失的第三方依赖（需配合 venv 沙箱使用）
+EXECUTOR_AUTO_INSTALL_DEPS: bool = os.getenv("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true"
+# 依赖安装等待超时（秒）：防止 pip 网络卡顿拖垮整个实验
+EXECUTOR_DEP_INSTALL_TIMEOUT: int = _parse_int_env("EXECUTOR_DEP_INSTALL_TIMEOUT", 120, 10, None)
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 # 0 = 串行（合法值），最小 0 防止负并行度

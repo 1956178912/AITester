@@ -159,11 +159,66 @@ def _retry_with_exponential_backoff(
                 # 指数退避：base_wait * 2^attempt（默认 1s → 1,2,4；zai base=5 → 5,10,20）
                 # 此前误写为 base_wait**attempt：base_wait=1 时退化为固定 1s，zai 时膨胀为 5,25,125
                 wait_time = base_wait * (2**attempt)
-                logger.warning("调用失败 (attempt %d/%d): %s，等待 %.0fs", attempt + 1, max_retries + 1, e, wait_time)
+                logger.warning(
+                    "调用失败 (attempt %d/%d): %s，等待 %.0fs",
+                    attempt + 1,
+                    max_retries + 1,
+                    _redact_log_text(str(e)),
+                    wait_time,
+                )
                 time.sleep(wait_time)
             else:
                 break
     raise RuntimeError(f"调用失败，已重试 {max_retries} 次: {last_error}") from last_error
+
+
+def _redact_log_text(text: str) -> str:
+    """对 LLM 调用路径的日志文本做敏感信息脱敏（P2-8）。
+
+    SDK 异常消息可能携带请求头（含 Authorization: Bearer <api_key>）或
+    带 key 的 URL 片段；此前这些文本直接拼进日志，handler 级脱敏过滤器
+    只在 CLI 入口挂载，experiments 等非 CLI 入口下不生效。这里在
+    base_agent 的日志调用处直接脱敏，确保任何日志输出路径都不泄露凭证。
+
+    Args:
+        text: 待脱敏的日志文本（通常为异常字符串）。
+
+    Returns:
+        脱敏后的文本；脱敏器不可用时原样返回（不阻断主流程）。
+    """
+    try:
+        from src.utils.logging_utils import mask_sensitive_info
+
+        return mask_sensitive_info(text)
+    except Exception:
+        return text
+
+
+def _record_response_usage(usage: Any, model_name: str) -> None:
+    """将 LLM 响应的 token 使用量记入线程局部统计（容错：缺失字段记 0）。
+
+    兼容两种响应结构：
+    - LangChain usage_metadata 字典：input_tokens / output_tokens
+    - OpenAI/zai usage 对象：prompt_tokens / completion_tokens
+
+    Args:
+        usage: 响应的 usage 字段（dict 或对象），可为 None。
+        model_name: 模型名（用于 by_model 分桶）。
+    """
+    if not usage:
+        return
+    try:
+        from src.graph.token_usage import record_usage
+
+        if isinstance(usage, dict):
+            input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
+            output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+        else:
+            input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+            output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        record_usage(input_tokens, output_tokens, model=model_name)
+    except Exception as e:  # 统计失败不影响主流程
+        logger.debug("token 统计记录失败（忽略）: %s", e)
 
 
 def _is_zai_compatible(base_url: str) -> bool:
@@ -239,6 +294,8 @@ def _call_zai(
         text = (msg.content or msg.reasoning_content or "").strip()
         if not text:
             raise RuntimeError("LLM 返回空响应")
+        # token 消耗统计（zai 路径响应携带 OpenAI 风格的 usage 字段，可能缺失）
+        _record_response_usage(getattr(response, "usage", None), model_name)
         logger.info("zai API 调用成功 (model=%s)", model_name)
         return text
 
@@ -251,8 +308,8 @@ def _call_zai(
             retryable_exceptions=_ZAI_RETRYABLE_EXCEPTIONS,
         )
     except Exception as e:
-        # 重新抛出带有明确上下文的异常
-        raise RuntimeError(f"zai API 调用失败: {e}") from e
+        # 重新抛出带有明确上下文的异常（异常文本可能含请求头凭证，先脱敏）
+        raise RuntimeError(f"zai API 调用失败: {_redact_log_text(str(e))}") from e
 
 
 def _get_llm_config() -> tuple[str, str, str]:
@@ -454,6 +511,8 @@ class BaseAgent:
                         # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
                         if not text:
                             raise RuntimeError("LLM 返回空响应")
+                        # token 消耗统计（LangChain 响应的 usage_metadata，可能缺失）
+                        _record_response_usage(getattr(response, "usage_metadata", None), model_name)
 
                     # 打印成功日志
                     api_id = base_url.split("/")[2] if "/" in base_url else base_url
@@ -462,8 +521,10 @@ class BaseAgent:
 
                 except Exception as e:
                     # 记录当前模型失败原因，继续尝试同 API 的下一个模型
+                    # 异常文本可能携带请求头/URL 中的 API Key（部分 SDK 会把
+                    # Authorization 头打进报错信息），统一走脱敏后再落日志（P2-8）
                     last_error = e
-                    logger.warning("模型 %s 调用失败: %s，尝试同 API 的其他模型", model_name, e)
+                    logger.warning("模型 %s 调用失败: %s，尝试同 API 的其他模型", model_name, _redact_log_text(str(e)))
                     continue
 
             # 当前 API 的所有模型都失败，记录并尝试下一个 API
@@ -472,7 +533,7 @@ class BaseAgent:
             continue
 
         # 所有 API 均失败，抛出包含最后一次异常信息的 RuntimeError
-        raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {last_error}") from last_error
+        raise RuntimeError(f"LLM 调用失败，已尝试所有 API: {_redact_log_text(str(last_error))}") from last_error
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
