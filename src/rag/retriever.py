@@ -299,15 +299,23 @@ class TestCaseRetriever:
         results = self.collection.query(
             query_texts=[target_code],
             n_results=top_k,
-            include=["documents", "metadatas"],
+            include=["documents", "metadatas", "distances"],
         )
 
+        # ChromaDB 余弦空间：similarity = 1 - distance。
+        # distance 不在 metadatas 里（此前 meta.get("distance") 恒为 0.0），
+        # 必须从查询结果的 distances 字段取；缺失时（如 mock 返回值形状不同）
+        # 宽松回退 0.0（相似度记 1.0，不影响排序，仅数值失真）。
+        # 注意：distances 与 documents 同为双层嵌套（外层按 query_texts）
+        distances_raw = results.get("distances")
+        distances = distances_raw[0] if distances_raw else [0.0]
         cases = []
-        for _doc, meta in zip(results["documents"][0], results["metadatas"][0], strict=False):
+        for i, (_doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0], strict=False)):
+            dist = distances[i] if i < len(distances) else 0.0
             cases.append(
                 {
                     "test_code": meta.get("test_code", ""),
-                    "similarity": meta.get("distance", 0.0),
+                    "similarity": round(1.0 - dist, 4),
                     "metadata": meta,
                 }
             )
@@ -339,17 +347,23 @@ class TestCaseRetriever:
         results = self.collection.query(
             query_texts=[query_text],
             n_results=top_k,
-            include=["documents", "metadatas"],
+            include=["documents", "metadatas", "distances"],
             where={"error_category": error_category},  # 过滤同类型错误
         )
 
+        # 同 retrieve_test_cases：similarity 由余弦距离换算（1 - distance），
+        # distance 不在 metadatas 里，需从查询结果的 distances 字段取；
+        # distances 与 documents 同为双层嵌套（外层按 query_texts）
+        distances_raw = results.get("distances")
+        distances = distances_raw[0] if distances_raw else [0.0]
         repairs = []
-        for _doc, meta in zip(results["documents"][0], results["metadatas"][0], strict=False):
+        for i, (_doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0], strict=False)):
+            dist = distances[i] if i < len(distances) else 0.0
             repairs.append(
                 {
                     "patch": meta.get("patch", ""),
                     "original_code": meta.get("original_code", ""),
-                    "similarity": meta.get("distance", 0.0),
+                    "similarity": round(1.0 - dist, 4),
                     "metadata": meta,
                 }
             )
