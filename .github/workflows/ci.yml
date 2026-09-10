@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # 显式超时上限：防止卡在 pip 网络 / 诊断重跑等步骤最长挂到 GitHub 默认 360 分钟
+    timeout-minutes: 30
     strategy:
       matrix:
         # 矩阵与 requirements.txt 的锁定版本对齐（lock 生成自 Python 3.14 开发环境）：
@@ -24,6 +26,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          # 缓存 pip wheel：chromadb/onnxruntime/grpcio/pyarrow 等 130 个包冷装很重，
+          # 命中缓存可省 3-8 分钟/矩阵
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
@@ -80,6 +86,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -87,9 +94,12 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install pip-audit
-        run: pip install pip-audit
+        # 固定版本：与项目"锁版本防漂移"原则一致，避免上游发版改变扫描行为
+        run: pip install "pip-audit==2.10.1"
 
       - name: Check dependencies for vulnerabilities
         # 说明：safety 工具已于 2024-06 起弃用 `check` 子命令（CI 上退出码 64），

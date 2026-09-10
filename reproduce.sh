@@ -35,7 +35,7 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # 默认参数值
 MODE="quick"        # quick | full：控制任务数量
 DATASET="examples"  # examples | swe_bench：数据集选择
-TASK_LIMIT=""       # 由 MODE 决定（quick=3，full=不限）
+TASK_LIMIT=3        # 由 MODE 决定（quick=3，full=不限）；默认 quick 即 3，与文档一致
 BASELINES="aitester,plain_llm,single_agent"  # 基线方法列表
 VERBOSE=""          # 是否输出详细日志
 

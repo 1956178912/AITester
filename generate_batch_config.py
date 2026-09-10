@@ -37,10 +37,12 @@ def generate_config(models: list[dict[str, Any]], api_keys: dict[str, str]) -> s
         api_key_var = f"{provider.upper()}_API_KEY"
         api_key = api_keys.get(api_key_var, f"your-{provider}-api-key-here")
 
-        lines.append(f"# {model.get('name', 'unknown')}")
+        # llm_configs.json 的字段是 model_name（兼容旧 schema 的 name）
+        model_name = model.get("model_name") or model.get("name") or "unknown"
+        lines.append(f"# {model_name}")
         lines.append(f"LLM_{idx}_API_KEY={api_key}")
         lines.append(f"LLM_{idx}_BASE_URL={model.get('base_url', '')}")
-        lines.append(f"LLM_{idx}_MODEL_NAME={model.get('name', 'unknown')}")
+        lines.append(f"LLM_{idx}_MODEL_NAME={model_name}")
         lines.append("")
 
     return "\n".join(lines)
