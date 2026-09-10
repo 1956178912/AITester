@@ -486,15 +486,19 @@ class TestPatchApplierNode:
     """测试 PatchApplier 节点安全检查和迭代逻辑。"""
 
     @patch("src.graph.workflow.apply_patch_to_code")
-    def test_patch_applied_successfully(self, mock_apply_patch):
-        """补丁成功应用。"""
+    def test_patch_applied_successfully(self, mock_apply_patch, tmp_path):
+        """补丁成功写盘：target_code 更新、patch_applied=True、文件被真实修改。"""
         from src.graph.workflow import _patch_applier_node
 
-        mock_apply_patch.return_value = ("new code content", True)
+        # 新代码须含函数定义且不过短，且路径在允许根目录内（tmp_path 在系统 temp 目录下）
+        target = tmp_path / "mod.py"
+        target.write_text("def foo(): pass\n", encoding="utf-8")
+        new_code = "def foo():\n    return 42\n"
+        mock_apply_patch.return_value = (new_code, True)
 
         state = {
             "target_code": "def foo(): pass",
-            "target_file": "/tmp/test.py",
+            "target_file": str(target),
             "patch": "patch content",
             "diagnosis": "测试诊断",
             "error_category": "logic",
@@ -502,21 +506,22 @@ class TestPatchApplierNode:
         }
         result = _patch_applier_node(state)
 
-        assert result["target_code"] == "new code content"
+        assert result["target_code"] == new_code
         assert result["iteration"] == 1
         assert len(result["repair_history"]) == 1
         assert result["repair_history"][0]["patch_applied"] is True
+        assert target.read_text(encoding="utf-8") == new_code
 
     @patch("src.graph.workflow.apply_patch_to_code")
-    def test_patch_not_applied(self, mock_apply_patch):
-        """补丁未成功应用。"""
+    def test_patch_not_applied(self, mock_apply_patch, tmp_path):
+        """补丁未应用（apply 返回 False）：target_code 保留原代码，patch_applied=False。"""
         from src.graph.workflow import _patch_applier_node
 
         mock_apply_patch.return_value = ("same code", False)
 
         state = {
             "target_code": "def foo(): pass",
-            "target_file": "/tmp/test.py",
+            "target_file": str(tmp_path / "mod.py"),
             "patch": "invalid patch",
             "diagnosis": "诊断",
             "error_category": "unknown",
@@ -524,28 +529,29 @@ class TestPatchApplierNode:
         }
         result = _patch_applier_node(state)
 
-        assert result["target_code"] == "same code"
+        # 未应用 → 保留原代码（状态/磁盘一致性）
+        assert result["target_code"] == "def foo(): pass"
         assert result["repair_history"][0]["patch_applied"] is False
 
     @patch("src.graph.workflow.apply_patch_to_code")
-    def test_patch_too_short_rejected(self, mock_apply_patch):
-        """补丁过短时拒绝写入。"""
+    def test_patch_too_short_rejected(self, mock_apply_patch, tmp_path):
+        """补丁过短被安全检查拒绝：target_code 保留原代码，patch_applied=False。"""
         from src.graph.workflow import _patch_applier_node
 
-        # 新代码比原代码短 90%
+        # 新代码比原代码短 90%（触发安全检查 1）
         mock_apply_patch.return_value = ("x", True)
 
         state = {
             "target_code": "def foo(): return 1 + 2 + 3",  # 约 25 字符
-            "target_file": "/tmp/test.py",
+            "target_file": str(tmp_path / "mod.py"),
             "patch": "bad",
             "iteration": 0,
         }
         result = _patch_applier_node(state)
 
-        # 补丁虽然 applied=True，但内容过短被拒绝
-        assert result["target_code"] == "x"  # 但代码已被更新
-        # 安全检查应该阻止文件写入（但由于我们无法 mock open，这里仅验证逻辑）
+        # 虽然 applied=True，但内容过短被拒绝 → 保留原代码，patch_applied=False
+        assert result["target_code"] == "def foo(): return 1 + 2 + 3"
+        assert result["repair_history"][0]["patch_applied"] is False
 
     @patch("src.graph.workflow.apply_patch_to_code")
     def test_patch_no_function_definition_rejected(self, mock_apply_patch):

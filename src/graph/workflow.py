@@ -86,6 +86,11 @@ _rag_retriever = None
 _rag_lock = threading.Lock()
 # 修复历史上限：超过后仅保留最近 N 条，防止长迭代循环占用内存（经验值 5）
 _MAX_REPAIR_HISTORY = 5
+# 重新生成测试代码的上限：达到最大迭代后，诊断指向"测试生成错误"时路由回
+# generator 再生成一次。若无上限，旧的 diagnosis 关键词会反复命中，
+# generator↔executor 无限乒乓，最终撞上 LangGraph recursion_limit 崩掉任务并空烧 token。
+# 取 1：一次再生成已足够验证"换一版测试"是否解决问题，再多只会浪费。
+_MAX_REGENERATIONS = 1
 
 
 def get_rag_retriever():
@@ -264,8 +269,12 @@ def _should_debug(state: AITesterState) -> str:
             "期望的异常类型",
         ]
         if any(kw in diagnosis for kw in test_gen_keywords):
-            logger.info("诊断表明测试生成错误，触发重新生成测试代码")
-            return "regenerate"
+            # 上限保护：已再生成过（旧 diagnosis 关键词反复命中）时不再路由 regenerate，
+            # 避免 generator↔executor 无限乒乓撞上 recursion_limit
+            if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
+                logger.info("诊断表明测试生成错误，触发重新生成测试代码")
+                return "regenerate"
+            logger.info("已达重新生成上限，结束流程")
         return "done"
     return "debug"
 
@@ -375,10 +384,21 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     )
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
-    return {
+    update: dict[str, Any] = {
         "generated_test": generated_test,
         "rag_references": rag_refs,
     }
+    # 再生成路径检测：首次生成时 iteration < max_iterations（尚未进入修复循环），
+    # 只有 _should_debug 路由 "regenerate"（此时 iteration >= max_iterations）才会带着
+    # 高 iteration 回到 generator。据此区分两类进入方式：
+    #   - 首次生成：不改变 regeneration_count，保留原有 diagnosis（尚无修复结论）
+    #   - 再生成：计数 +1（供 _should_debug 上限判断），并清空上一轮诊断，
+    #     避免旧的 diagnosis 关键词在新测试仍失败时再次触发 regenerate（死循环根因）
+    if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
+        update["regeneration_count"] = state.get("regeneration_count", 0) + 1
+        update["diagnosis"] = None
+        update["error_category"] = None
+    return update
 
 
 def _executor_node(state: AITesterState) -> dict[str, Any]:
@@ -511,10 +531,65 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     }
 
 
+def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:
+    """判断文件路径是否位于任一允许根目录之内（含根目录自身）。
+
+    前缀比较必须带上 os.sep，否则 AITester_backup/ 这类兄弟目录会因
+    startswith(project_root) 命中而绕过白名单（前缀碰撞）。
+
+    用 realpath 归一化两侧：macOS 上 /var 是 /private/var 的符号链接，
+    pytest 的 tmp_path 与 tempfile.gettempdir() 一侧带 /private 一侧不带，
+    abspath 会失配；realpath 统一解析符号链接后再比较。
+
+    Args:
+        path: 待校验的文件路径。
+        roots: 允许的根目录元组。
+
+    Returns:
+        True 表示路径位于某根目录内（或即根目录本身）。
+    """
+    abs_path = os.path.realpath(path)
+    for root in roots:
+        root_abs = os.path.realpath(root).rstrip(os.sep)
+        if abs_path == root_abs or abs_path.startswith(root_abs + os.sep):
+            return True
+    return False
+
+
+def _write_file_atomic(path: str, content: str) -> None:
+    """先写临时文件再 os.replace 原子替换目标文件。
+
+    直接 open(path, "w") 会先截断再写，中途崩溃会留下被截断的用户源文件；
+    原子替换保证任何时刻目标文件要么是旧内容、要么是完整新内容。
+
+    Args:
+        path: 目标文件路径。
+        content: 要写入的完整内容。
+    """
+    directory = os.path.dirname(path) or "."
+    fd, tmp_path = tempfile.mkstemp(suffix=".tmp", prefix=".aitester_", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        # 失败时清理临时文件，避免残留；再把异常抛给调用方
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     """
     补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
     应用后更新 iteration 计数器，供下次循环使用。
+
+    状态/磁盘一致性：只有当补丁真正写入磁盘成功时，才把 target_code 更新为
+    新代码并记录 patch_applied=True；任何一道安全检查（空/过短/无函数定义/
+    路径不合法）拒绝写入时，target_code 保持原代码、patch_applied 记 False，
+    避免下游 Executor 测旧文件、Debugger 却分析新代码的"幻象迭代"。
 
     Args:
         state: 当前状态。
@@ -522,29 +597,33 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     Returns:
         更新后的状态字典，包含更新后的 target_code 和修复历史。
     """
-    new_code, applied = apply_patch_to_code(
-        original_code=state["target_code"],
-        patch=state.get("patch", ""),
-    )
+    original_code = state["target_code"]
+    new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
 
-    if applied and new_code != state["target_code"]:
-        # 安全检查：补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）
-        if not new_code or len(new_code) < len(state["target_code"]) * 0.1:
+    # 默认视为"未真正写盘"，任何安全检查失败都保持该值
+    written = False
+    if applied and new_code != original_code:
+        # 安全检查 1：补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）
+        if not new_code or len(new_code) < len(original_code) * 0.1:
             logger.error("补丁内容异常（空或过短），跳过写入: %s", state["target_file"])
+        # 安全检查 2：补丁必须含至少一个函数定义（防止 LLM 返回无意义内容）
         elif not any(line.strip().startswith("def ") for line in new_code.splitlines()):
             logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
         else:
             target_file_path = os.path.abspath(state["target_file"])
             project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             temp_dir = os.path.abspath(tempfile.gettempdir())
-            # 允许项目目录内或系统临时目录
-            allowed_prefixes = (project_root, temp_dir)
-            if not target_file_path.startswith(allowed_prefixes):
+            # 允许项目目录内或系统临时目录（前缀比较带 os.sep，防兄弟目录碰撞）
+            if not _is_within_allowed_roots(target_file_path, (project_root, temp_dir)):
                 logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
             else:
-                with open(target_file_path, "w", encoding="utf-8") as f:
-                    f.write(new_code)
+                # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
+                _write_file_atomic(target_file_path, new_code)
+                written = True
                 logger.info("补丁已应用到文件: %s", target_file_path)
+
+    # 状态/磁盘一致性：仅写盘成功才更新 target_code，否则保留原代码
+    effective_code = new_code if written else original_code
 
     history = state.get("repair_history", []) or []
     history.append(
@@ -552,14 +631,14 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             "iteration": state.get("iteration", 0) + 1,
             "diagnosis": state.get("diagnosis", ""),
             "error_category": state.get("error_category", "unknown"),
-            "patch_applied": applied,
+            "patch_applied": written,
         }
     )
     # 限制 repair_history 大小，避免无限增长占用内存（最多保留 _MAX_REPAIR_HISTORY 条）
     if len(history) > _MAX_REPAIR_HISTORY:
         history = history[-_MAX_REPAIR_HISTORY:]
     return {
-        "target_code": new_code,
+        "target_code": effective_code,
         "repair_history": history,
         "iteration": state.get("iteration", 0) + 1,
     }
