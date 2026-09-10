@@ -2,6 +2,25 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.8] - 2026-09-10
+
+### 工程化：格式门禁恢复与文档漂移修复
+- **`ruff format` 门禁恢复**：0.9.7 之后 15 个文件（13 个 .py + README.md / docs/api_reference.md）的换行/空白与 ruff 0.16.3 格式漂移，`ruff format --check` 在 CI lint 步骤转红；统一重新格式化后门禁恢复（纯空白归一，无逻辑改动）
+- **README 测试状态表漂移**：用例数停留在 860（0.9.5 旧值），"最新优化"行仍指向 0.9.5；现与实测对齐（963 用例 / src 总覆盖率 90%）
+
+### 重构：benchmark 结果构造去重
+- **`run_benchmark` 三处结果字典去重**：`run_single_task` 的成功 / 限流重试 / 异常分支各写一份同构 12 字段结果字典，新增指标（token_metrics 等）需同步改三处、极易漂移；现抽取 `_build_task_result()` 单一构造点（成功路径取 `final_state` 值，失败路径用占位值），并补键集合一致性回归护栏
+- **single_agent 基线超时绕过 config 校验**：`ExecutorAgent(timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")))` 直接读环境变量原始值，坏值（如 "abc"）会立即 `ValueError` 崩溃且绕过 [10, 300] 范围校验；现统一走 `config.EXECUTION_TIMEOUT`（容错解析 + 范围校验，与 workflow executor 节点口径一致）
+
+### APIManager 构造副作用收敛
+- **后台健康检查线程可关闭**：`APIManager.__init__` 此前无条件启动守护线程，每 60s 对全部节点发起真实 LLM 健康检查请求（消耗 API 配额）；嵌入式使用与单元测试场景构造即产生网络副作用。新增 `enable_health_checker` 参数（默认 True，保持历史行为），测试全部改为 `enable_health_checker=False` 构造，套件内不再产生游离线程
+
+### 性能
+- **executor 失败用例解析正则预编译**：`_parse_failed_cases` 每次调用重新 `re.compile`，现移到模块级预编译（与同模块其他正则的"预编译避免重复开销"约定对齐）
+
+### 测试
+- 全量 **963 passed**（+6 新增：benchmark 结果构造 4 + 健康线程开关 2），0 skipped；src 总覆盖率 90%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.7] - 2026-09-10
 
 ### P0：大文件上下文与数据集质量
