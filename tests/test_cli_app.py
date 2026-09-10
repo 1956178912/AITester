@@ -67,6 +67,46 @@ class TestSensitiveFilterWiring:
         assert "<REDACTED_API_KEY>" in mask_sensitive_info("sk-" + "A" * 32)
 
 
+class TestSensitiveFormatter:
+    """SensitiveFormatter：对 exc_info 异常堆栈也脱敏（SensitiveFilter 覆盖不到的盲区）。"""
+
+    def test_exc_info_traceback_masked(self):
+        import io
+        import logging
+
+        from src.utils.logging_utils import SensitiveFormatter
+
+        buf = io.StringIO()
+        handler = logging.StreamHandler(buf)
+        handler.setFormatter(SensitiveFormatter("%(message)s"))
+        logger = logging.getLogger("aitester.sensfmt")
+        logger.setLevel(logging.ERROR)
+        logger.handlers = [handler]
+        logger.propagate = False
+        try:
+            secret = "sk-" + "B" * 32
+            try:
+                raise RuntimeError(f"认证失败 {secret}")
+            except RuntimeError:
+                logger.exception("出错了")
+        finally:
+            logger.handlers = []
+        text = buf.getvalue()
+        # 异常消息与堆栈里的密钥都应被脱敏（堆栈经 SensitiveFormatter 覆盖）
+        assert secret not in text
+        assert "<REDACTED_API_KEY>" in text
+
+    def test_sensitive_formatter_attached_to_cli_handlers(self):
+        """src.cli.app 创建的控制台/文件 handler 应挂 SensitiveFormatter（保证落盘日志也脱敏）。"""
+        from src.cli import app as cli_app
+        from src.utils.logging_utils import SensitiveFormatter
+
+        assert isinstance(cli_app._log_formatter, SensitiveFormatter)
+        assert cli_app._console_handler.formatter is cli_app._log_formatter
+        for handler in cli_app._log_handlers:
+            assert handler.formatter is cli_app._log_formatter
+
+
 class TestRunSequentialResilience:
     """run 命令顺序（parallel=1）模式：单任务异常不中断整个批次。"""
 
@@ -79,7 +119,11 @@ class TestRunSequentialResilience:
         return files
 
     def test_first_task_exception_does_not_stop_batch(self, tmp_path, monkeypatch):
-        """首个文件任务抛异常时，后续文件仍被处理（旧实现整批崩溃）。"""
+        """首个文件任务抛异常时，后续文件仍被处理（旧实现整批崩溃）。
+
+        新增失败门控后：批次里有失败任务 → 进程 exit 1（供 CI 门控），
+        但批次本身不被中断（两个文件都被处理）。
+        """
         files = self._make_files(tmp_path)
         ok_result = {"success": True, "file": files[1], "func": "all", "passed": True}
         calls: list[str] = []
@@ -92,8 +136,19 @@ class TestRunSequentialResilience:
 
         monkeypatch.setattr(cli_app, "_run_single_task", fake_run_single_task)
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--json"])
-        assert r.exit_code == 0, f"顺序模式批次应正常结束: {r.output}"
+        assert r.exit_code == 1, f"存在失败任务应 exit 1（门控），但批次不应中断: {r.output}"
         assert calls == files, "两个文件都应被处理"
+
+    def test_all_passed_exits_zero(self, tmp_path, monkeypatch):
+        """全部任务通过 → exit 0（门控工具成功时不应误报失败）。"""
+        files = self._make_files(tmp_path, n=2)
+
+        def fake_run_single_task(target_file, *args, **kwargs):
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_run_single_task)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--json"])
+        assert r.exit_code == 0, f"全部通过应 exit 0: {r.output}"
 
     def test_timeout_zero_rejected(self, tmp_path):
         """--timeout 0（或负数）应被参数校验拦截，而不是传到 subprocess。"""

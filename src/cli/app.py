@@ -17,6 +17,7 @@ AITester CLI 应用：click 命令组、任务执行与结果输出。
 
 from __future__ import annotations
 
+import contextlib
 import glob as glob_module
 import json
 import logging
@@ -42,25 +43,31 @@ from src.cli.output import (
 )
 from src.graph.state import AITesterState
 from src.graph.workflow import build_workflow
-from src.utils.logging_utils import setup_logger_safety
+from src.utils.logging_utils import SensitiveFormatter, mask_sensitive_info, setup_logger_safety
 
 # ─── 日志配置 ─────────────────────────────────────────────────────────────────
 # 统一日志格式：[时间] [级别] 模块: 消息
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+# 每个 handler 使用 SensitiveFormatter：在格式化后的完整日志行（含 exc_info 异常
+# 堆栈）上再脱敏一次，堵住 SensitiveFilter 只覆盖消息体、异常堆栈绕过的盲区
+_log_formatter = SensitiveFormatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
+
 # 文件 handler 在导入期立即打开 aitester.log：CWD 不可写时（只读环境/无权限目录）
 # 不能因此让整个 CLI 崩溃，降级为仅控制台输出
-_log_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+_console_handler = logging.StreamHandler(sys.stdout)
+_console_handler.setFormatter(_log_formatter)
+_log_handlers: list[logging.Handler] = [_console_handler]
 try:
-    _log_handlers.append(logging.FileHandler("aitester.log", encoding="utf-8"))
+    _file_handler = logging.FileHandler("aitester.log", encoding="utf-8")
+    _file_handler.setFormatter(_log_formatter)
+    _log_handlers.append(_file_handler)
 except OSError:
     pass
 
 logging.basicConfig(
     level=logging.INFO,
-    format=LOG_FORMAT,
-    datefmt=LOG_DATE_FORMAT,
     handlers=_log_handlers,
 )
 
@@ -71,6 +78,30 @@ logging.basicConfig(
 setup_logger_safety()
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _quiet_console_logs():
+    """--json 模式下临时静音 stdout 控制台日志，让 stdout 只承载 JSON（便于管道/jq）。
+
+    实现（避免全局改 handler.stream，保持对测试捕获环境友好）：
+      - 仅把 stdout 控制台 handler 的 level 临时提到 CRITICAL+1（静音），
+        FileHandler（aitester.log）不动，日志仍会落盘；
+      - 块结束自动还原 level。
+    配合 rich Progress 传 Console(stderr=True)，进度条也走 stderr，不污染 stdout。
+    """
+    root = logging.getLogger()
+    muted: list[tuple[logging.Handler, int]] = []
+    for handler in root.handlers:
+        # 只静音写控制台（非文件）的 StreamHandler
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            muted.append((handler, handler.level))
+            handler.setLevel(logging.CRITICAL + 1)
+    try:
+        yield
+    finally:
+        for handler, level in muted:
+            handler.setLevel(level)
 
 
 # ─── CLI 分组帮助模板 ─────────────────────────────────────────────────────────
@@ -116,14 +147,15 @@ def _make_task_error_result(file_path: str, func: str | None, error: BaseExcepti
         error: 触发异常的 Exception（None 时 error 字段记 "unknown error"）。
 
     Returns:
-        标记 success/passed 为 False 的结果字典，含 error 描述。
+        标记 success/passed 为 False 的结果字典，含 error 描述（已脱敏，防 LLM 异常
+        文本携带的 API Key 经 JSON/stdout 外泄——脱敏过滤器只覆盖 logging 通道）。
     """
     return {
         "success": False,
         "file": file_path,
         "func": func or "all",
         "passed": False,
-        "error": str(error) if error else "unknown error",
+        "error": mask_sensitive_info(str(error)) if error else "unknown error",
     }
 
 
@@ -190,6 +222,7 @@ def _run_single_task(
         "patch": None,
         "iteration": 0,
         "max_iterations": max_iterations,
+        "regeneration_count": 0,
         "repair_history": [],
         "execution_timeout": timeout,
         "coverage_threshold": coverage_threshold,
@@ -337,38 +370,61 @@ def run(
         info_msg("提示：使用 'python main.py list-examples' 查看可用示例文件")
         raise SystemExit(1)
 
-    logger.info("开始批量测试任务：files=%s, parallel=%d, timeout=%ds", expanded_files, parallel, exec_timeout)
+    # --json 模式：静音 stdout 控制台日志 + rich 进度条走 stderr，让 stdout 只承载 JSON
+    # （此前 json 输出与日志同走 stdout，`| jq` 解析必失败）
+    _quiet_ctx = _quiet_console_logs() if json_output else contextlib.nullcontext()
 
-    # 显示任务信息
-    if not json_output:
-        click.echo(f"\n{Colors.BOLD}开始执行测试任务{Colors.RESET}")
-        click.echo(f"  目标文件：{len(expanded_files)} 个")
-        click.echo(f"  并发数：{parallel}")
-        click.echo(f"  超时：{exec_timeout}s")
-        click.echo(f"  最大迭代：{max_iterations}")
-        click.echo("")
+    with _quiet_ctx:
+        logger.info("开始批量测试任务：files=%s, parallel=%d, timeout=%ds", expanded_files, parallel, exec_timeout)
 
-    # 并发执行
-    results: list[dict[str, Any]] = []
-    start_time = time.time()
+        # 显示任务信息
+        if not json_output:
+            click.echo(f"\n{Colors.BOLD}开始执行测试任务{Colors.RESET}")
+            click.echo(f"  目标文件：{len(expanded_files)} 个")
+            click.echo(f"  并发数：{parallel}")
+            click.echo(f"  超时：{exec_timeout}s")
+            click.echo(f"  最大迭代：{max_iterations}")
+            click.echo("")
 
-    if parallel > 1 and len(expanded_files) > 1:
-        # 并发模式 - 使用进度条
-        if _rich_available():
-            from rich.console import Console
-            from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+        # 并发执行
+        results: list[dict[str, Any]] = []
+        start_time = time.time()
 
-            console = Console()
-            progress = Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]执行测试任务[/bold blue]"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeRemainingColumn(),
-                console=console,
-            )
-            with progress:
-                task = progress.add_task("运行中...", total=len(expanded_files))
+        if parallel > 1 and len(expanded_files) > 1:
+            # 并发模式 - 使用进度条
+            if _rich_available():
+                from rich.console import Console
+                from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+
+                # --json 时进度条也走 stderr，保持 stdout 纯 JSON
+                console = Console(stderr=json_output)
+                progress = Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold blue]执行测试任务[/bold blue]"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TimeRemainingColumn(),
+                    console=console,
+                )
+                with progress:
+                    task = progress.add_task("运行中...", total=len(expanded_files))
+                    with ThreadPoolExecutor(max_workers=parallel) as executor:
+                        future_to_file = {
+                            executor.submit(
+                                _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                            ): f
+                            for f in expanded_files
+                        }
+                        for future in as_completed(future_to_file):
+                            try:
+                                result = future.result()
+                                results.append(result)
+                            except Exception:
+                                _handle_task_exception(future, future_to_file, func, results)
+                            finally:
+                                progress.update(task, advance=1)
+            else:
+                # 无 rich 时的简单进度显示
                 with ThreadPoolExecutor(max_workers=parallel) as executor:
                     future_to_file = {
                         executor.submit(
@@ -380,77 +436,68 @@ def run(
                         try:
                             result = future.result()
                             results.append(result)
+                            # --json 时不往 stdout 打进度（保持纯 JSON）
+                            if not json_output:
+                                click.echo(f"  ✓ 完成：{os.path.basename(future_to_file[future])}")
                         except Exception:
                             _handle_task_exception(future, future_to_file, func, results)
-                        finally:
-                            progress.update(task, advance=1)
         else:
-            # 无 rich 时的简单进度显示
-            with ThreadPoolExecutor(max_workers=parallel) as executor:
-                future_to_file = {
-                    executor.submit(
-                        _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
-                    ): f
-                    for f in expanded_files
-                }
-                for future in as_completed(future_to_file):
-                    try:
-                        result = future.result()
-                        results.append(result)
-                        click.echo(f"  ✓ 完成：{os.path.basename(future_to_file[future])}")
-                    except Exception:
-                        _handle_task_exception(future, future_to_file, func, results)
-    else:
-        # 单线程模式
-        # 逐任务容错：单个任务异常（如读取失败、工作流崩溃）不中断整个批次，
-        # 与并发分支的 _handle_task_exception 行为对齐，保证后续文件继续执行
-        for target_file in expanded_files:
-            try:
-                result = _run_single_task(
-                    target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output
-                )
-                results.append(result)
-            except Exception as e:
-                logger.error("任务执行异常：file=%s, error=%s", target_file, e)
-                results.append(_make_task_error_result(target_file, func, e))
+            # 单线程模式
+            # 逐任务容错：单个任务异常（如读取失败、工作流崩溃）不中断整个批次，
+            # 与并发分支的 _handle_task_exception 行为对齐，保证后续文件继续执行
+            for target_file in expanded_files:
+                try:
+                    result = _run_single_task(
+                        target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                    )
+                    results.append(result)
+                except Exception as e:
+                    logger.error("任务执行异常：file=%s, error=%s", target_file, e)
+                    results.append(_make_task_error_result(target_file, func, e))
 
-    elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - start_time
 
-    # 汇总统计（单一计算点，供非 JSON 摘要输出与日志复用）
-    total = len(results)
-    passed = sum(1 for r in results if r.get("passed"))
-    failed = total - passed
+        # 汇总统计（单一计算点，供非 JSON 摘要输出与日志复用）
+        total = len(results)
+        passed = sum(1 for r in results if r.get("passed"))
+        failed = total - passed
 
-    # 输出汇总信息（非 JSON 模式下）
-    if not json_output:
-        separator = "=" * 50
-        click.echo(f"\n{separator}")
-        click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
-        click.echo(f"  总计：{total} 个文件")
-        click.echo(f"  通过：{colorize(str(passed), Colors.GREEN)}")
-        if failed > 0:
-            click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
-        click.echo(f"  耗时：{elapsed_time:.2f}s")
-        click.echo(f"{separator}")
+        # 输出汇总信息（非 JSON 模式下）
+        if not json_output:
+            separator = "=" * 50
+            click.echo(f"\n{separator}")
+            click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
+            click.echo(f"  总计：{total} 个文件")
+            click.echo(f"  通过：{colorize(str(passed), Colors.GREEN)}")
+            if failed > 0:
+                click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
+            click.echo(f"  耗时：{elapsed_time:.2f}s")
+            click.echo(f"{separator}")
 
-        # 打印结果表格
-        if _rich_available():
-            print_rich_table(results)
-        else:
-            for r in results:
-                status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
-                # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
-                r_cov = r.get("coverage")
-                coverage = f"{r_cov}%" if r_cov is not None else "N/A"
-                click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
+            # 打印结果表格
+            if _rich_available():
+                print_rich_table(results)
+            else:
+                for r in results:
+                    status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
+                    # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
+                    r_cov = r.get("coverage")
+                    coverage = f"{r_cov}%" if r_cov is not None else "N/A"
+                    click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
 
-        # 显示执行统计
-        if passed > 0:
-            success_msg(f"{passed}/{total} 个测试通过")
-        if failed > 0:
-            warning_msg(f"{failed}/{total} 个测试失败")
+            # 显示执行统计
+            if passed > 0:
+                success_msg(f"{passed}/{total} 个测试通过")
+            if failed > 0:
+                warning_msg(f"{failed}/{total} 个测试失败")
 
-    logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
+        logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
+        exit_code = 1 if failed > 0 else 0
+
+    # 有任一任务失败（含任务崩溃产生的错误结果）时以非零码退出，
+    # 让 CI/脚本能把 AITester 当门控工具用（此前无论成败都 exit 0）
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 @cli.command()
