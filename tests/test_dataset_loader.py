@@ -897,9 +897,18 @@ class TestGetAvailableDatasets:
         assert isinstance(names, list)
 
     def test_contains_expected_names(self):
-        """包含所有已知名称"""
+        """包含所有已知名称（与 load_dataset 的 dataset_map 同步，含别名）"""
         names = get_available_datasets()
-        expected = {"swe_bench", "swebench", "defects4j_python", "d4j_py", "in_memory"}
+        expected = {
+            "swe_bench",
+            "swebench",
+            "defects4j_python",
+            "d4j_py",
+            "in_memory",
+            "examples",
+            "synthetic",
+            "synth",
+        }
         assert set(names) == expected
 
     def test_no_duplicates(self):

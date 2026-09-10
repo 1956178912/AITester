@@ -138,6 +138,11 @@ class HealthCheckerThread(threading.Thread):
         self._stop_event.set()
 
 
+# 健康检查线程关闭的等待上限（秒）：join 超时后记录告警并放弃等待
+# （守护线程随进程退出，不阻塞主流程）
+_HEALTH_CHECKER_SHUTDOWN_TIMEOUT = 5.0
+
+
 class APIManager:
     """
     智能 API 管理器
@@ -541,9 +546,6 @@ class APIManager:
 _manager: APIManager | None = None
 # 单例锁：保护 get_manager/reset_manager，避免并发时创建多个管理器实例
 _manager_lock = threading.Lock()
-# 等待健康检查线程退出的超时（秒）：批量健康检查可能耗时数秒，
-# 设兜底超时避免 reset_manager 无限阻塞（线程为 daemon，进程退出时会终止）
-_HEALTH_CHECKER_SHUTDOWN_TIMEOUT = 5.0
 
 
 def get_manager() -> APIManager:

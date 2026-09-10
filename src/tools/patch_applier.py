@@ -86,13 +86,13 @@ def _find_function_range(lines: list[str], func_name: str, start_idx: int) -> tu
         (start_idx, end_idx) 元组，end_idx 为函数结束后的下一行索引。
     """
     end_idx = len(lines)  # 默认到文件末尾
+    # 预编译边界行匹配模式（避免逐行重复编译正则）
+    boundary_re = re.compile(r"^(def |class |@|#)")
 
     for i in range(start_idx + 1, len(lines)):
         line = lines[i]
         # 结束条件：遇到下一个顶层定义或非空无缩进行
-        if re.match(r"^(def |class |@|#)", line) or (
-            line.strip() and not line.startswith(" ") and not line.startswith("\t")
-        ):
+        if boundary_re.match(line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
             end_idx = i
             break
 
@@ -154,8 +154,10 @@ def apply_patch_to_code(
     start_idx = None
 
     # 遍历原代码行，定位目标函数的起始行
+    # 预编译函数定义匹配正则（避免逐行重复编译）
+    func_def_re = re.compile(rf"^def\s+{re.escape(patch_func_name)}\s*\(")
     for i, line in enumerate(lines):
-        if re.match(rf"^def\s+{re.escape(patch_func_name)}\s*\(", line):
+        if func_def_re.match(line):
             start_idx = i
             break
 
@@ -261,8 +263,10 @@ def _find_function_start_line(code: str, func_name: str) -> int:
     Returns:
         函数起始行号（从0开始），未找到返回 -1
     """
+    # 预编译函数定义匹配正则（避免逐行重复编译）
+    func_def_re = re.compile(rf"^def\s+{re.escape(func_name)}\s*\(")
     for i, line in enumerate(code.split("\n")):
-        if re.match(rf"^def\s+{re.escape(func_name)}\s*\(", line):
+        if func_def_re.match(line):
             return i
     return -1
 

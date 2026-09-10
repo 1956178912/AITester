@@ -19,7 +19,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # 预编译正则表达式（避免重复编译开销）
-# 匹配 ```python ... ``` 或 ``` ... ``` 代码块
+# 匹配 ```python ... ``` 代码块（带语言标记）
+_CODE_BLOCK_PYTHON_PATTERN = re.compile(r"```python\s*\n(.*?)\n\s*```", re.DOTALL)
+# 匹配 ``` ... ``` 通用代码块
 _CODE_BLOCK_PATTERN = re.compile(r"```(?:python)?\s*\n(.*?)\n\s*```", re.DOTALL)
 # 匹配最内层无嵌套的 {...} JSON 对象
 _JSON_LEAF_PATTERN = re.compile(r"\{[^{}]*\}")
@@ -29,7 +31,7 @@ def extract_code_block(text: str, language: str | None = None) -> str:
     """
     从 LLM 输出中提取代码块。
 
-    支持三种格式（按优先级）：
+    支持四种格式（按优先级）：
     1. ```python ... ```（带语言标记的 markdown 代码块）
     2. ``` ... ```（通用 markdown 代码块）
     3. python: ... 前缀格式（某些模型输出不带反引号）
@@ -43,7 +45,7 @@ def extract_code_block(text: str, language: str | None = None) -> str:
         提取出的代码字符串（已去除 markdown 包裹和首尾空白）。
     """
     # 尝试带语言标记的格式：```python ... ```（优先匹配）
-    match = re.search(r"```python\s*\n(.*?)\n\s*```", text, re.DOTALL)
+    match = _CODE_BLOCK_PYTHON_PATTERN.search(text)
     if match:
         return match.group(1).strip()
 

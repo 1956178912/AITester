@@ -466,7 +466,8 @@ def list_examples() -> None:
             for f in files:
                 click.echo(f"  {Colors.CYAN}•{Colors.RESET} {f}")
             click.echo(f"\n{Colors.BOLD}使用示例：{Colors.RESET}")
-            click.echo(f"  python main.py run examples/{files[0] if files else 'example.py'}")
+            # 此处 files 非空（上方 if files 分支保证），直接取首个文件
+            click.echo(f"  python main.py run examples/{files[0]}")
         else:
             warning_msg("examples 目录下没有找到 Python 文件")
     else:
