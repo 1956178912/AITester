@@ -250,12 +250,134 @@ class SWEBenchDataset(BaseDatasetLoader):
             paths.append(legacy)
         return paths
 
+    @staticmethod
+    def _extract_suggested_function(patch_text: str) -> str | None:
+        """从 SWE-bench 官方修复补丁（patch）提取目标函数名。
+
+        解析 git diff 的 hunk 头（@@ -a,b +c,d @@ <上下文行>），
+        上下文行若为函数定义（def/async def），提取函数名。
+        用于 benchmark 的 target_function 定位（P0：target_function 准确性）。
+
+        Args:
+            patch_text: 官方修复补丁文本（git diff 格式），可为空。
+
+        Returns:
+            首个可识别的目标函数名；无法识别时返回 None。
+        """
+        if not patch_text:
+            return None
+        for line in patch_text.splitlines():
+            if not line.startswith("@@"):
+                continue
+            # hunk 头格式：@@ -a,b +c,d @@ <上下文>（上下文可能为空）
+            # 按 "@@" 切分后第 3 段（parts[2]）即上下文文本
+            parts = line.split("@@")
+            if len(parts) < 3:
+                continue
+            context_line = parts[2].strip()
+            m = re.match(r"(?:async\s+)?def\s+(\w+)", context_line)
+            if m:
+                return m.group(1)
+        return None
+
+    @staticmethod
+    def validate_task(task: BenchmarkTask) -> list[str]:
+        """校验单个任务的加载质量（P0：数据集加载正确性排查工具）。
+
+        检查项：
+        1. instance_code 是否非兜底值（官方 SWE-bench JSONL 不含源码字段，
+           兜底为 issue 文本的任务在基准中只能验证流程、不能产生有效修复对比）；
+        2. instance_code 是否为合法 Python（可 compile）；
+        3. test_code 是否非空且包含测试用例（def test_ / assert）；
+        4. total_test_count 是否 > 0（用例数未知的任务无法计算通过率）。
+
+        Args:
+            task: 待校验的 SWE-bench 任务。
+
+        Returns:
+            问题描述列表（空列表 = 加载质量健康）。
+        """
+        issues: list[str] = []
+        if not task.instance_code or task.instance_code == task.problem_statement:
+            issues.append("instance_code 兜底为 issue 文本（JSONL 无源码字段），无法产生有效修复对比")
+        else:
+            try:
+                compile(task.instance_code, f"{task.task_id}_instance", "exec")
+            except SyntaxError as e:
+                issues.append(f"instance_code 不是合法 Python 源码: {e.msg} (line {e.lineno})")
+        if not task.test_code.strip():
+            issues.append("test_code 为空")
+        elif "def test_" not in task.test_code and "assert" not in task.test_code:
+            issues.append("test_code 未包含测试用例（无 def test_ / assert）")
+        if task.total_test_count <= 0:
+            issues.append("total_test_count 为 0，无法计算通过率")
+        return issues
+
+    def quality_report(self) -> dict[str, list[str]]:
+        """生成已加载任务的加载质量报告（task_id → 问题列表，仅列有问题项）。
+
+        用法示例（P0 排查方法：手动检查 2-3 个任务的加载结果）：
+            ds = SWEBenchDataset("lite")
+            report = ds.quality_report()
+            for task_id, issues in list(report.items())[:3]:
+                print(task_id, issues)
+
+        Returns:
+            {task_id: [问题描述, ...]}；全部健康时为空 dict。
+        """
+        report: dict[str, list[str]] = {}
+        for task in self.tasks:
+            issues = self.validate_task(task)
+            if issues:
+                report[task.task_id] = issues
+        if report:
+            logger.info("SWE-bench 质量报告：%d/%d 个任务存在问题", len(report), len(self._tasks))
+        return report
+
+    @staticmethod
+    def _load_enrichment(enrichment_path: str) -> dict[str, dict[str, Any]]:
+        """加载源码补充文件（P0：官方 SWE-bench JSONL 缺被测源码的补全通道）。
+
+        补充文件格式（JSONL，按 instance_id 关联）：
+            {"instance_id": "repo__repo-123", "instance_code": "def f(): ...",
+             "test_code": "def test_f(): ..."}
+        每行至少需含 instance_id；缺失的源码字段会被跳过（仅补全有值的字段）。
+        文件不存在或为空时返回空映射（不影响主加载流程）。
+
+        Args:
+            enrichment_path: 补充文件路径（环境变量 SWE_BENCH_ENRICHMENT 指定）。
+
+        Returns:
+            {instance_id: 补充字段字典}。
+        """
+        if not enrichment_path or not os.path.exists(enrichment_path):
+            return {}
+        enriched: dict[str, dict[str, Any]] = {}
+        with open(enrichment_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.warning("补充文件 JSON 解析失败，跳过该行: %s...", line[:80])
+                    continue
+                row_id = row.get("instance_id")
+                if not row_id:
+                    continue
+                enriched[row_id] = {k: v for k, v in row.items() if v not in (None, "")}
+        if enriched:
+            logger.info("已加载源码补充文件：%d 条记录（%s）", len(enriched), enrichment_path)
+        return enriched
+
     def _load_raw_data(self) -> None:
         """
         从本地缓存加载 SWE-bench 数据。
 
         优先从 data_dir 读取 JSONL 文件（子集专属文件或全部子集，见 _resolve_jsonl_paths）；
         若文件不存在，打印提示并返回空列表（允许 gracefully degrade）。
+        若设置环境变量 SWE_BENCH_ENRICHMENT，会按 instance_id 合并源码补充文件。
         """
         # 清空任务列表，避免重复加载时数据累积
         self._tasks.clear()
@@ -271,6 +393,10 @@ class SWEBenchDataset(BaseDatasetLoader):
                 self.data_dir,
             )
             return
+
+        # 源码补充文件（P0）：官方 SWE-bench JSONL 不含被测源码，
+        # 通过 SWE_BENCH_ENRICHMENT 指定的 JSONL 按 instance_id 补 instance_code/test_code
+        enrichment = self._load_enrichment(os.environ.get("SWE_BENCH_ENRICHMENT", ""))
 
         loaded = 0
         seen_ids: set[str] = set()
@@ -299,12 +425,24 @@ class SWEBenchDataset(BaseDatasetLoader):
                         "problem_statement",
                         f"Fix bug in {repo_name} ({task_id})",
                     )
-                    test_code = data.get("test_before_patches", "")
-                    # instance_code 字段优先级：显式源码字段（自定义 JSONL 可提供
-                    # instance_code/base_code）> problem_statement 兜底。
+                    # 源码补充文件按 instance_id 合并（官方 JSONL 缺源码时的补全通道）
+                    enriched = enrichment.get(task_id, {})
+                    data = {**data, **enriched}
+
+                    # test_code 字段优先级（兼容自定义与官方字段命名）：
+                    # 显式测试代码字段 > 官方 test_patch（测试补丁）> test_before_patches
+                    test_code = (
+                        data.get("test_code")
+                        or data.get("test_patch")
+                        or data.get("test_before_patches", "")
+                    )
+                    # instance_code 字段优先级：显式源码字段（自定义 JSONL 或
+                    # 补充文件可提供 instance_code/base_code）> problem_statement 兜底。
                     # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，
                     # 此类任务在基准中仅验证流程、不产生有效修复对比。
                     instance_code = data.get("instance_code") or data.get("base_code") or problem_statement
+                    # 从官方修复补丁提取目标函数（P0：target_function 定位）
+                    suggested_function = self._extract_suggested_function(data.get("patch", ""))
 
                     total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
                     expected_pass = data.get("pass_num_before", 0) or 0
@@ -324,6 +462,9 @@ class SWEBenchDataset(BaseDatasetLoader):
                             "original_pass_num": expected_pass,
                             "final_pass_num": total_pass,
                             "source": "swe_bench",
+                            # 从官方 patch 的 hunk 头提取的目标函数（可能为 None），
+                            # benchmark 入口用它初始化 target_function 做 AST 聚焦截取
+                            "suggested_function": suggested_function,
                         },
                     )
                     self._tasks.append(task)

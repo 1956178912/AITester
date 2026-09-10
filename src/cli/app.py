@@ -520,3 +520,59 @@ def list_examples() -> None:
     else:
         warning_msg("examples 目录不存在")
         info_msg("提示：请创建 examples 目录并添加被测 Python 文件")
+
+
+@cli.command(name="check-dataset")
+@click.argument("dataset", default="examples")
+@click.option("--subset", "-s", default=None, help="数据子集（如 lite/mini）")
+@click.option("--limit", "-n", default=3, type=int, help="展示前 N 个任务的加载详情（默认 3）")
+def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
+    """校验数据集加载质量（P0：SWE-bench 加载正确性排查入口）。
+
+    加载指定数据集，逐任务检查 instance_code / test_code 完整性，
+    打印前 N 个任务的加载详情与全量质量报告。
+
+    示例：
+        python main.py check-dataset swe_bench --subset lite
+        python main.py check-dataset examples
+    """
+    from src.datasets.dataset_loader import SWEBenchDataset, load_dataset
+
+    try:
+        loader = load_dataset(dataset, subset=subset)
+    except Exception as e:
+        error_msg(f"数据集加载失败: {e}")
+        return
+
+    tasks = loader.tasks
+    info_msg(f"数据集 {dataset}（子集: {subset or '全部'}）共加载 {len(tasks)} 个任务")
+
+    # 逐任务打印加载详情（前 N 个，对应"手动检查 2-3 个任务"的排查方法）
+    for task in tasks[:limit]:
+        info_msg(f"── {task.task_id} ──")
+        info_msg(f"  repo: {task.repo_name}")
+        info_msg(f"  测试用例数: {task.total_test_count}（期望通过 {task.expected_pass_count}）")
+        info_msg(f"  问题描述: {task.problem_statement[:80]}{'…' if len(task.problem_statement) > 80 else ''}")
+        info_msg(f"  instance_code: {len(task.instance_code)} 字符")
+        info_msg(f"  test_code: {len(task.test_code)} 字符")
+        suggested = task.metadata.get("suggested_function")
+        info_msg(f"  目标函数（从官方 patch 提取）: {suggested or '（未识别）'}")
+        issues = SWEBenchDataset.validate_task(task)
+        if issues:
+            for issue in issues:
+                warning_msg(f"  ⚠ {issue}")
+        else:
+            info_msg("  ✓ 加载质量健康")
+
+    # 全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）
+    report = {}
+    if hasattr(loader, "quality_report"):
+        report = loader.quality_report()
+    if report:
+        warning_msg(f"质量报告：{len(report)}/{len(tasks)} 个任务存在加载问题：")
+        for task_id, issues in list(report.items())[:10]:
+            warning_msg(f"  {task_id}: {'; '.join(issues)}")
+        if len(report) > 10:
+            warning_msg(f"  …（其余 {len(report) - 10} 个略）")
+    else:
+        info_msg(f"✓ 全量质量检查通过（{len(tasks)} 个任务无加载问题）")
