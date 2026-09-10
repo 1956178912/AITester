@@ -29,6 +29,10 @@ _RE_IMPORT = re.compile(r"^import\s+([\w.]+)")
 _RE_MODULE_NAME = re.compile(r"([^/\\]+)\.py$")
 # 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比
 _RE_COVERAGE_TOTAL = re.compile(r"TOTAL\s+.+?(\d+)%")
+# 匹配 pytest 输出中 "FAILED test_file.py::test_func" 行（提取失败用例名）
+# 预编译到模块级：_parse_failed_cases 每次执行测试都要调用，
+# 避免每次重新编译正则
+_RE_FAILED_CASE = re.compile(r"FAILED\s+(.+?\.py::\S+)")
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -312,9 +316,7 @@ class ExecutorAgent:
             try:
                 python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
                 if self.auto_install_deps:
-                    ok, summary = install_packages(
-                        python_path, missing_packages, timeout=self.dep_install_timeout
-                    )
+                    ok, summary = install_packages(python_path, missing_packages, timeout=self.dep_install_timeout)
                     dep_install_note = f"依赖安装{'成功' if ok else '失败'}: {summary}"
                     if not ok:
                         sandbox_error_info = {
@@ -741,10 +743,9 @@ class ExecutorAgent:
         """
         failed = []
         lines = output.splitlines()
-        pattern = re.compile(r"FAILED\s+(.+?\.py::\S+)")
-
+        # 使用模块级预编译正则（_RE_FAILED_CASE）
         for i, line in enumerate(lines):
-            m = pattern.search(line)
+            m = _RE_FAILED_CASE.search(line)
             if m:
                 case_name = m.group(1).strip()
                 error_lines = ExecutorAgent._collect_error_lines(lines, i, m.end())
