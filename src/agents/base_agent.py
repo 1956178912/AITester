@@ -194,8 +194,9 @@ def _call_zai(
     """使用 zai SDK 调用 LLM（用于 BigModel 等非 OpenAI 兼容接口）。
 
     实现带指数退避的重试策略：
-    - APIReachLimitError（速率限制）：等待 5 * 2^attempt 秒（较长，因 zai 限速严格）
-    - APIStatusError / 其他异常：等待 2^attempt 秒（1s, 2s, 4s）
+    - 所有可重试异常统一按 base_wait=5s 指数退避：等待 5 * 2^attempt 秒（5s, 10s, 20s ...）。
+      因 _ZAI_RETRYABLE_EXCEPTIONS 含 Exception（兜底捕获全部异常），zai 限流（APIReachLimitError）
+      与普通 API 错误（APIStatusError）不做区分，一律使用 5s 基准（zai 限速严格，取较长基准）。
 
     Args:
         api_key: API Key 凭证字符串。
@@ -310,26 +311,24 @@ class BaseAgent:
     所有智能体的公共基类。
 
     封装了与 LLM 交互的底层逻辑，包括：
-    - 初始化 LangChain ChatOpenAI 客户端
+    - 初始化 LangChain ChatOpenAI 客户端（复用连接池缓存）
     - 带重试的 LLM 调用（指数退避 + API 自动切换，支持 zai SDK）
     - JSON 输出提取（处理 LLM 可能输出的 markdown 包裹）
     - Python 代码块提取
 
     属性:
-        llm: LangChain ChatOpenAI 实例，封装 LLM 调用。
+        llm: LangChain ChatOpenAI 实例（来自模块级缓存，连接池跨实例/跨调用复用）。
         system_prompt: 该智能体的 System Prompt 字符串。
     """
 
     def __init__(self, system_prompt: str) -> None:
         # 从配置获取默认 LLM 参数（api_key / base_url / model_name）
         api_key, base_url, model_name = _get_llm_config()
-        # 初始化 LangChain 客户端，TEMPERATURE 来自 config.py 全局常量
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=TEMPERATURE,
-            openai_api_key=api_key,
-            base_url=base_url,
-        )
+        # 复用缓存的 LangChain 客户端（连接池跨实例复用）：
+        # 此前每个 BaseAgent 实例都新建一个 ChatOpenAI，而生产调用全部走
+        # _call_llm 的缓存客户端，self.llm 实际只是"占位"属性——每个智能体
+        # 实例化都白白多建一个 httpx 连接池；现改为与 _call_llm 共享同一缓存
+        self.llm = _get_or_create_chat_client(model_name, TEMPERATURE, api_key, base_url)
         # 每个智能体携带自己的 System Prompt，定义其角色和行为约束
         self.system_prompt = system_prompt
 
