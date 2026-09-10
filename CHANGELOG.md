@@ -2,6 +2,31 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.5] - 2026-09-10
+
+### 严重缺陷修复
+- **`remove_llm_config` 移除模型后密钥行残留**：旧实现逐行 skip 匹配只能命中 `LLM_N_MODEL_NAME` 行，同块的注释行 / `API_KEY` / `BASE_URL` 行残留在 `.env.local`——密钥长期滞留文件、编号仍被占用导致自动分配偏移、`gone_indices` 环境变量清理永不触发。现由 MODEL_NAME 行（行尾精确匹配）识别编号集合后整块移除，补 4 个回归测试（整块移除 / 保留其他模型 / 多编号同名 / partial 名不误删）
+- **`src/utils` 缺 `__init__.py`，pip 安装包漏包**：`find_packages()` 只收集含 `__init__.py` 的目录，`src.utils` 不在分发包内，安装后 `from src.utils.helpers import ...` 直接 ImportError（本地靠 PEP 420 命名空间包机制掩盖了问题）。补包标记文件，新增 `tests/test_packaging.py`（文件系统断言，不依赖 setuptools，含子包漂移检测）
+- **CLI 日志配置在 Python 3.14 下静默失效**：`logging_utils.setup_logger_safety()` 尾部模块级 `logging.info()` 在 root 无 handler 时触发隐式 `basicConfig()`（附加裸 StreamHandler），使 app.py 后续 `basicConfig`（自定义格式 + FileHandler）整体 no-op——文件日志从未生效。改用模块 logger 记录
+
+### 缺陷修复
+- **数值环境变量容错解析**：`MAX_ITERATIONS` / `COVERAGE_THRESHOLD` / `BENCHMARK_PARALLELISM` / `LLM_RETRY_WAIT` / `MYSQL_PORT` / `TEMPERATURE` / `EXECUTION_TIMEOUT` / `LLM_TIMEOUT` 此前 `int()/float(os.getenv(...))` 裸转换，单个坏值（如 `MAX_ITERATIONS=abc`）在 import 期抛 ValueError 让全程序无法启动。新增 `_parse_int_env` / `_parse_float_env`：坏值 / 越界记 WARNING 并回退默认；`COVERAGE_THRESHOLD` 增加 [0,100]、`TEMPERATURE` 增加 [0,2] 范围约束
+- **CLI 顺序模式单任务异常中断整批**：`--parallel=1` 多文件场景任一任务异常（文件读取失败 / 工作流崩溃）即整批中断，与并发分支逐任务容错行为不一致。现顺序分支逐任务 try/except，复用统一的 `_make_task_error_result` 追加错误结果后继续；`--timeout` 增加 >=1 校验（负数 / 0 会让 subprocess 立即超时）
+- **日志脱敏从未生效 + 实现两处缺陷**：`logging_utils.SensitiveFilter` 此前无入口引用（死模块），脱敏能力实际不存在。现 CLI 入口 `basicConfig` 后调用 `setup_logger_safety()` 挂载过滤器，并修复：(a) logger 级过滤器拦不住子 logger 传播的消息，需同时挂 handler 级；(b) 逐字段 mask 对拆分在 msg 与 args 中的密钥（`logger.info("sk-%s 失效", key)`）无法命中，改为先 `getMessage()` 格式化再整体脱敏
+
+### 重构
+- `api_manager`：`_HEALTH_CHECKER_SHUTDOWN_TIMEOUT` 移至使用它的 `APIManager` 类之前定义（原在文件尾，依赖模块级名称晚绑定）
+- `reports/generator`：移除只写不读的 `_report_counter` 死属性
+- `dataset_loader`：`get_available_datasets` 与 `load_dataset` 的 `dataset_map` 同步（补 `examples` / `synthetic` / `synth` 别名），更新对应测试
+- `patch_applier`：3 处循环内逐行 `re.match` 改为循环前预编译
+- `error_classifier`：`syntax_keywords` 提升为模块级常量 `_SYNTAX_ERROR_KEYWORDS`（原每次调用重建列表）
+- `helpers`：`extract_code_block` 的 ```python 正则预编译；docstring 编号修正
+- `cli/app`：`list_examples` 移除非空分支内的死 `else`
+- `.env.example`：`BENCHMARK_PARALLELISM` 注释去漂移（并行已实现，非"暂未实现"）；补 `LLM_RETRY_WAIT` 说明
+
+### 测试
+- 全量 **860 passed**（+18 新增用例：config_manager 整块移除回归 ×4、packaging ×3、config 容错解析 ×6、CLI 容错 ×3、脱敏接入 ×2），0 skipped；总覆盖率 **90%**（88% → 90%）；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.4] - 2026-09-13
 
 ### 缺陷修复
