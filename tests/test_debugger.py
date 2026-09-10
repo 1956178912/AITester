@@ -162,7 +162,8 @@ def factorial(n):
                 failed_cases=[{"name": "test_process", "error": "ModuleNotFoundError"}],
             )
 
-        assert result["error_category"] == "syntax"
+        # P2 细化：导入错误升级为独立类别 IMPORT_ERROR（不再归 syntax）
+        assert result["error_category"] == "import_error"
         assert "import pandas" in result["patch"]
 
     def test_debug_with_rag_references(self):

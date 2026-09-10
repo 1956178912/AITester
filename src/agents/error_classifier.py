@@ -1,13 +1,24 @@
 """
-错误分类器模块：将测试失败原因归类为五类错误，并支持子类型识别。
+错误分类器模块：将测试失败原因归类为八类错误，并支持子类型识别。
 
-分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
+分类优先级：IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME
+          > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
 使用正则规则匹配而非 LLM，确保分类速度快且结果稳定。
 分类结果用于指导 Debugger 选择合适的修复策略。
+
+细粒度说明（P2 优化）：
+    - IMPORT_ERROR 从原 SYNTAX 中拆出：缺依赖/导入失败与"代码写错语法"
+      的修复路径完全不同（装依赖 vs 重写文件），分开才能精准分诊；
+    - TYPE_ERROR 从原 RUNTIME 中拆出：类型不匹配的修复方向是核对参数
+      与返回类型，区别于除零/越界等其他运行时异常；
+    - LOGIC_ERROR 是 ASSERTION 的子情形：断言失败且失败栈未触及被测
+      模块时，更可能是测试用例自身预期值写错（测试逻辑错误），
+      修复方向是改测试而非改代码（需 target_module 信息判定）。
 """
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -18,15 +29,24 @@ class ErrorCategory(Enum):
     错误类型枚举，用于分层错误修复策略。
 
     属性:
-        SYNTAX: 语法/编译错误，如导入失败、语法错误
-        ASSERTION: 断言失败，期望值与实际返回值不一致
-        RUNTIME: 运行时异常，如除零、类型错误、索引越界
+        IMPORT_ERROR: 模块导入失败（ModuleNotFoundError/ImportError），
+            通常缺第三方依赖或模块路径错误（P2 细化：从 SYNTAX 拆出）
+        SYNTAX: 语法/编译错误，如 SyntaxError、IndentationError
+        TYPE_ERROR: 类型不匹配（TypeError），修复方向是核对参数与
+            返回类型（P2 细化：从 RUNTIME 拆出）
+        ASSERTION: 断言失败，期望值与实际返回值不一致（失败栈触及被测代码）
+        LOGIC_ERROR: 测试逻辑错误（如断言预期值写反），断言失败但失败
+            栈未触及被测模块（P2 细化：从 ASSERTION 拆出）
+        RUNTIME: 其他运行时异常，如除零、索引越界
         TIMEOUT: 执行超时
         UNKNOWN: 无法识别的错误类型
     """
 
+    IMPORT_ERROR = "import_error"
     SYNTAX = "syntax"
+    TYPE_ERROR = "type_error"
     ASSERTION = "assertion"
+    LOGIC_ERROR = "logic_error"
     RUNTIME = "runtime"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
@@ -100,6 +120,8 @@ _RE_TIMEOUT_ERRORS = [
     re.compile(r"TimedOut", re.IGNORECASE),
     re.compile(r"Test ran for longer than", re.IGNORECASE),
 ]
+# Type Error 检测模式（从 RUNTIME 拆出的独立类别：类型不匹配）
+_RE_TYPE_ERROR = re.compile(r"\bTypeError\b", re.IGNORECASE)
 # 语法错误关键词（模块级常量，避免每次 _is_syntax_error 调用重复构建列表）
 _SYNTAX_ERROR_KEYWORDS = (
     "SyntaxError",
@@ -127,11 +149,17 @@ class ErrorClassifier:
     5. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
-    def classify(self, test_output: str, failed_cases: list[dict]) -> ErrorCategory:
+    def classify(
+        self,
+        test_output: str,
+        failed_cases: list[dict],
+        target_module: str | None = None,
+    ) -> ErrorCategory:
         """
         根据测试输出和失败用例分类错误类型。
 
-        分类优先级：SYNTAX > RUNTIME > ASSERTION > TIMEOUT > UNKNOWN
+        分类优先级：IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME
+                   > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
         规则匹配优先于 LLM 兜底分类。
 
         合并策略：将 test_output 和最多前 3 个 failed_cases 的 error 信息拼接后统一匹配，
@@ -140,6 +168,9 @@ class ErrorClassifier:
         Args:
             test_output: pytest 完整输出文本。
             failed_cases: 失败用例列表，每项含 name 和 error 字段。
+            target_module: 被测模块名（不含 .py）。提供时用于区分
+                ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）：
+                断言失败且失败栈未触及被测模块时归类为 LOGIC_ERROR。
 
         Returns:
             最匹配的 ErrorCategory 枚举值。
@@ -148,24 +179,37 @@ class ErrorClassifier:
         # 最多取前 3 个失败用例的错误信息，避免过长
         combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases[:3])
 
-        # 按优先级顺序检查各类错误
-        # 1. 检查 Syntax 错误
+        # 按优先级顺序检查各类错误（细粒度类别先于其粗粒度母类）
+        # 1. 检查 Import 错误（缺依赖/路径错误，修复路径独立于语法错误）
+        if self._is_import_error(combined):
+            return ErrorCategory.IMPORT_ERROR
+        # 2. 检查 Syntax 错误
         if self._is_syntax_error(combined):
             return ErrorCategory.SYNTAX
-        # 2. 检查 Runtime 错误
+        # 3. 检查 Type 错误（类型不匹配，修复方向区别于其他运行时异常）
+        if self._is_type_error(combined):
+            return ErrorCategory.TYPE_ERROR
+        # 4. 检查 Runtime 错误
         if self._is_runtime_error(combined):
             return ErrorCategory.RUNTIME
-        # 3. 检查 Assertion 错误
+        # 5. 检查 Assertion 错误（子情形：测试侧逻辑错误 → LOGIC_ERROR）
         if self._is_assertion_error(combined):
+            if target_module and self._is_test_side_assertion(combined, target_module):
+                return ErrorCategory.LOGIC_ERROR
             return ErrorCategory.ASSERTION
-        # 4. 检查 Timeout 错误
+        # 6. 检查 Timeout 错误
         if self._is_timeout_error(combined):
             return ErrorCategory.TIMEOUT
 
         # 默认返回 UNKNOWN
         return ErrorCategory.UNKNOWN
 
-    def classify_with_context(self, test_output: str, failed_cases: list[dict]) -> tuple:
+    def classify_with_context(
+        self,
+        test_output: str,
+        failed_cases: list[dict],
+        target_module: str | None = None,
+    ) -> tuple:
         """
         分类错误类型并提取错误上下文。
 
@@ -175,12 +219,13 @@ class ErrorClassifier:
         Args:
             test_output: pytest 完整输出文本。
             failed_cases: 失败用例列表，每项含 name 和 error 字段。
+            target_module: 被测模块名（可选，见 classify() 说明）。
 
         Returns:
             (category, context) 元组，category 是 ErrorCategory，
             context 是 ErrorContext 对象。
         """
-        category = self.classify(test_output, failed_cases)
+        category = self.classify(test_output, failed_cases, target_module=target_module)
         context = self.extract_error_context(test_output, failed_cases)
         return category, context
 
@@ -266,6 +311,44 @@ class ErrorClassifier:
         return False
 
     @staticmethod
+    def _is_import_error(text: str) -> bool:
+        """检查是否为 Import 错误（缺模块/缺依赖，从 SYNTAX 拆出的独立类别）。"""
+        if _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text):
+            return True
+        return "ImportError:" in text
+
+    @staticmethod
+    def _is_type_error(text: str) -> bool:
+        """检查是否为 Type 错误（TypeError，从 RUNTIME 拆出的独立类别）。"""
+        return bool(_RE_TYPE_ERROR.search(text))
+
+    @staticmethod
+    def _is_test_side_assertion(text: str, target_module: str) -> bool:
+        """判断断言失败是否发生在测试侧（而非被测代码）——LOGIC_ERROR 判定。
+
+        依据：pytest --tb=short 输出的 traceback 帧（File "..." 行）。
+        若失败栈存在、且没有任何一帧指向被测模块文件，则断言失败源于
+        测试用例自身的逻辑（如预期值写反），而非被测代码 bug。
+        无法提取到帧信息时保守判定为 False（归 ASSERTION，交给 LLM 分诊）。
+
+        Args:
+            text: 合并后的错误文本。
+            target_module: 被测模块名（不含 .py）。
+
+        Returns:
+            True 表示断言失败发生在测试侧（LOGIC_ERROR）。
+        """
+        frames = _RE_TRACEBACK.findall(text)
+        if not frames:
+            return False
+        target_file = f"{target_module}.py"
+        for frame_file, _line in frames:
+            basename = os.path.basename(frame_file)
+            if basename == target_file or basename == target_module or frame_file.endswith(target_file):
+                return False
+        return True
+
+    @staticmethod
     def _is_runtime_error(text: str) -> bool:
         """检查是否为 Runtime 错误。"""
         return any(pattern.search(text) for pattern in _RE_RUNTIME_ERRORS)
@@ -303,6 +386,39 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
     Returns:
         针对该错误类型的修复策略文字描述，供 Debugger prompt 使用。
     """
+    # IMPORT_ERROR：独立类别（P2 细化），策略针对"缺依赖/路径错"而非重写文件
+    if category == ErrorCategory.IMPORT_ERROR:
+        if context and context.module_name:
+            return (
+                f"检测到导入错误：缺少模块 '{context.module_name}'。"
+                f"请优先为该依赖配置安装方案（如在 requirements.txt 或 venv 中安装），"
+                f"其次检查 import 语句的模块名/路径是否正确。"
+                f"若模块应由被测项目提供，请修正导入路径，而不是删除 import。"
+            )
+        return (
+            "检测到导入错误（ImportError/ModuleNotFoundError）。"
+            "请判断缺失模块是第三方依赖还是项目内模块：第三方依赖需安装，"
+            "项目内模块需修正导入路径。不要通过删除 import 语句来'修复'。"
+        )
+
+    # TYPE_ERROR：类型不匹配的专属策略（P2 细化）
+    if category == ErrorCategory.TYPE_ERROR:
+        return (
+            "检测到类型错误（TypeError）。请核对引发异常的参数类型、函数签名与实际传入值："
+            "常见根因是传入了 None/字符串/列表等不符预期的类型，或把对象当容器使用。"
+            "修复时对齐参数与返回类型（必要时做输入校验与类型转换），"
+            "不要用 try/except 吞掉异常来掩盖类型问题。"
+        )
+
+    # LOGIC_ERROR：测试侧逻辑错误（P2 细化）
+    if category == ErrorCategory.LOGIC_ERROR:
+        return (
+            "检测到疑似测试逻辑错误：断言失败且失败栈未触及被测模块，"
+            "更可能是测试用例的预期值写错（如断言方向反了、期望值与文档不符）。"
+            "请先根据函数签名/文档字符串核对测试预期值并修正测试用例；"
+            "只有当被测代码行为确实与问题描述矛盾时才修改被测代码。"
+        )
+
     # SYNTAX 类型根据子类型提供不同策略
     if category == ErrorCategory.SYNTAX:
         if context and context.subtype == SyntaxSubtype.IMPORT_ERROR:

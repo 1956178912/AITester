@@ -46,6 +46,19 @@ class TestErrorCategory:
         """UNKNOWN 类别的值。"""
         assert ErrorCategory.UNKNOWN.value == "unknown"
 
+    # P2 细化新增类别
+    def test_import_error_value(self):
+        """IMPORT_ERROR 类别的值。"""
+        assert ErrorCategory.IMPORT_ERROR.value == "import_error"
+
+    def test_type_error_value(self):
+        """TYPE_ERROR 类别的值。"""
+        assert ErrorCategory.TYPE_ERROR.value == "type_error"
+
+    def test_logic_error_value(self):
+        """LOGIC_ERROR 类别的值。"""
+        assert ErrorCategory.LOGIC_ERROR.value == "logic_error"
+
 
 class TestSyntaxSubtype:
     """测试 SyntaxSubtype 枚举。"""
@@ -100,11 +113,11 @@ class TestErrorClassifier:
 
     # --- classify 方法测试 ---
 
-    def test_classify_syntax_import_error(self):
-        """分类导入错误为 SYNTAX。"""
+    def test_classify_import_error(self):
+        """P2 细化：导入错误独立为 IMPORT_ERROR（不再归 SYNTAX）。"""
         output = "ModuleNotFoundError: No module named 'pandas'"
         result = self.classifier.classify(output, [])
-        assert result == ErrorCategory.SYNTAX
+        assert result == ErrorCategory.IMPORT_ERROR
 
     def test_classify_syntax_error(self):
         """分类语法错误为 SYNTAX。"""
@@ -112,9 +125,15 @@ class TestErrorClassifier:
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.SYNTAX
 
-    def test_classify_runtime_error(self):
-        """分类运行时错误为 RUNTIME。"""
+    def test_classify_type_error(self):
+        """P2 细化：类型错误独立为 TYPE_ERROR（不再归 RUNTIME）。"""
         output = "TypeError: unsupported operand type(s) for +: 'int' and 'str'"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.TYPE_ERROR
+
+    def test_classify_runtime_error(self):
+        """分类非类型的运行时错误为 RUNTIME。"""
+        output = "IndexError: list index out of range"
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.RUNTIME
 
@@ -155,11 +174,45 @@ class TestErrorClassifier:
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.SYNTAX
 
-    def test_classify_priority_runtime_over_assertion(self):
-        """运行时错误优先级高于断言错误。"""
+    def test_classify_priority_type_error_over_assertion(self):
+        """P2 细化：类型错误优先级高于断言错误。"""
         output = "TypeError: error\nAssertionError: failed"
         result = self.classifier.classify(output, [])
-        assert result == ErrorCategory.RUNTIME
+        assert result == ErrorCategory.TYPE_ERROR
+
+    def test_classify_priority_import_over_syntax(self):
+        """P2 细化：导入错误优先于语法错误。"""
+        output = "ModuleNotFoundError: No module named 'x'\nSyntaxError: bad"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.IMPORT_ERROR
+
+    def test_classify_logic_error(self):
+        """P2 细化：断言失败且失败栈未触及被测模块 → LOGIC_ERROR。"""
+        # target_module=calculator；失败栈只出现在测试文件（test_calc.py）
+        output = (
+            'File "test_calc.py", line 5, in test_add\n'
+            "    assert add(1, 2) == 3\n"
+            "AssertionError: assert 4 == 3"
+        )
+        result = self.classifier.classify(output, [], target_module="calculator")
+        assert result == ErrorCategory.LOGIC_ERROR
+
+    def test_classify_assertion_when_target_in_stack(self):
+        """P2 细化：断言失败但失败栈触及被测模块 → 仍为 ASSERTION（代码 bug）。"""
+        output = (
+            'File "calculator.py", line 12, in add\n'
+            "    return a + b\n"
+            'File "test_calc.py", line 5, in test_add\n'
+            "AssertionError: assert 4 == 3"
+        )
+        result = self.classifier.classify(output, [], target_module="calculator")
+        assert result == ErrorCategory.ASSERTION
+
+    def test_classify_assertion_without_module_hint(self):
+        """P2 细化：未提供 target_module 时保守归 ASSERTION。"""
+        output = "AssertionError: expected 2 but got 3"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.ASSERTION
 
     # --- classify_with_context 方法测试 ---
 
@@ -170,11 +223,11 @@ class TestErrorClassifier:
         assert isinstance(category, ErrorCategory)
         assert isinstance(context, ErrorContext)
 
-    def test_classify_with_context_syntax(self):
-        """语法错误的分类上下文。"""
+    def test_classify_with_context_import(self):
+        """P2 细化：导入错误的分类上下文（类别升级为 IMPORT_ERROR）。"""
         output = "ModuleNotFoundError: No module named 'pandas'"
         category, context = self.classifier.classify_with_context(output, [])
-        assert category == ErrorCategory.SYNTAX
+        assert category == ErrorCategory.IMPORT_ERROR
         assert context.subtype == SyntaxSubtype.IMPORT_ERROR
         assert context.module_name == "pandas"
 
@@ -299,3 +352,29 @@ class TestGetFixStrategy:
         """无上下文的语法错误策略。"""
         strategy = get_fix_strategy(ErrorCategory.SYNTAX)
         assert "语法/编译错误" in strategy
+
+    # ── P2 细化新增类别的修复策略 ──
+
+    def test_import_error_strategy_with_module(self):
+        """IMPORT_ERROR 独立策略（含模块名，指向安装依赖）。"""
+        context = ErrorContext(module_name="pandas")
+        strategy = get_fix_strategy(ErrorCategory.IMPORT_ERROR, context)
+        assert "pandas" in strategy
+        assert "安装" in strategy or "pip" in strategy
+
+    def test_import_error_strategy_without_module(self):
+        """IMPORT_ERROR 独立策略（无模块名）。"""
+        strategy = get_fix_strategy(ErrorCategory.IMPORT_ERROR)
+        assert "导入错误" in strategy
+
+    def test_type_error_strategy(self):
+        """TYPE_ERROR 独立策略（类型核对，禁止吞异常）。"""
+        strategy = get_fix_strategy(ErrorCategory.TYPE_ERROR)
+        assert "TypeError" in strategy
+        assert "类型" in strategy
+
+    def test_logic_error_strategy(self):
+        """LOGIC_ERROR 独立策略（优先修测试预期值）。"""
+        strategy = get_fix_strategy(ErrorCategory.LOGIC_ERROR)
+        assert "测试" in strategy
+        assert "预期值" in strategy
