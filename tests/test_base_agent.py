@@ -20,6 +20,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.base_agent import (
+    TEMPERATURE,
     BaseAgent,
     _get_llm_config,
     _get_or_create_chat_client,
@@ -293,19 +294,20 @@ class TestTruncateCode:
 class TestBaseAgentInit:
     """测试 BaseAgent 初始化。"""
 
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.base_agent._get_or_create_chat_client")
     @patch("src.agents.base_agent._get_llm_config")
-    def test_init_sets_llm(self, mock_get_config, mock_chat_openai):
-        """验证初始化时设置 llm 和 system_prompt。"""
+    def test_init_uses_cached_client(self, mock_get_config, mock_client):
+        """验证初始化复用缓存客户端（不再每实例新建 ChatOpenAI）。"""
         mock_get_config.return_value = ("key", "url", "model")
         mock_llm = MagicMock()
-        mock_chat_openai.return_value = mock_llm
+        mock_client.return_value = mock_llm
 
         agent = BaseAgent("test prompt")
 
         assert agent.system_prompt == "test prompt"
-        assert agent.llm == mock_llm
-        mock_chat_openai.assert_called_once()
+        assert agent.llm is mock_llm
+        # 参数透传：model_name / TEMPERATURE / api_key / base_url
+        mock_client.assert_called_once_with("model", TEMPERATURE, "key", "url")
 
 
 class TestChatClientReuse:
