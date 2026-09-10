@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 842 collected |
-| **单元测试** | ✅ 842 passed, 0 skipped |
-| **代码覆盖率** | 88% 总覆盖（核心模块：reports/generator 100% / mysql_client 100% / base_agent 99% / api_manager 96% / dataset_loader 96% / workflow 91% / code_analyzer 100% / planner 100% / analysis 90%） |
+| **总测试数** | ✅ 860 collected |
+| **单元测试** | ✅ 860 passed, 0 skipped |
+| **代码覆盖率** | 90% 总覆盖（核心模块：reports/generator 100% / mysql_client 100% / base_agent 99% / api_manager 96% / dataset_loader 96% / workflow 91% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 86%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
-| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore） |
-| **最新优化** | ✅ 批量配置生成器环境变量名按 provider 推导（修失配）；`analysis.py` 显著性占位符改真实 t 检验；`code_analyzer` 修 async 漏配/复杂度漏算/注释失真；统计检验双实现收敛为按 task_id 配对；chromadb 1.x 现代客户端 API（内存模式不再落 `./chroma`）；RAG 清理全表扫描加 60s 节流（详见 [CHANGELOG 0.9.4](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), base_agent.py (99%), api_manager.py (96%), dataset_loader.py (96%), workflow.py (91%), code_analyzer.py (100%), planner.py (100%) |
+| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
+| **最新优化** | ✅ 0.9.5 修复批次：`remove_llm_config` 整块移除（密钥行不再残留 `.env.local`）；`src/utils` 补 `__init__.py`（修 pip 漏包）；数值环境变量容错解析（坏值不再让 import 崩溃）；CLI 顺序模式逐任务容错 + `--timeout` 校验；日志脱敏接入并修复两处实现缺陷；Python 3.14 隐式 `basicConfig()` 导致 CLI 日志配置失效的修复（详见 [CHANGELOG 0.9.5](CHANGELOG.md)） |
+| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), base_agent.py (99%), api_manager.py (96%), dataset_loader.py (96%), workflow.py (91%), code_analyzer.py (100%), planner.py (100%), logging_utils.py (86%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.4 正确性/性能/测试批次：配置生成器环境变量 / analysis 显著性 / code_analyzer / 统计检验收敛 / chromadb 迁移 / RAG 节流 + 低覆盖模块补测试（详见 [CHANGELOG 0.9.4](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.5 正确性/健壮性批次：config-manager 整块移除 / utils 打包 / 环境变量容错 / CLI 逐任务容错 / 日志脱敏接入 + P2 清理（死代码、正则预编译、文档漂移）（详见 [CHANGELOG 0.9.5](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
