@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 787 collected |
-| **单元测试** | ✅ 787 passed, 0 skipped |
+| **总测试数** | ✅ 798 collected |
+| **单元测试** | ✅ 798 passed, 0 skipped |
 | **代码覆盖率** | 83% 总覆盖（核心模块：reports/generator 100% / mysql_client 100% / base_agent 99% / api_manager 96% / dataset_loader 97% / workflow 91%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore） |
-| **最新优化** | ✅ CI 固定 ruff 0.16.3（修 format 门禁随机转红）；补齐 DBUtils 依赖声明；LLM 文件缓存 6 个测试重新启用（skip 清零）；API 管理器线程卫生；reports/generator 补测试（0%→100% 覆盖） |
+| **最新优化** | ✅ 配置写盘路径与刷新修复（`.env.local` 根目录对齐 + 原地刷新）；基线对比有效性（state 隔离 / 开关生效 / seed 透传）；SWE-bench 下载加载路径对齐；错误报告上下文生效；RAG 相似度修复；CLI 只读目录健壮性（详见 [CHANGELOG 0.9.3](CHANGELOG.md)） |
 | **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), base_agent.py (99%), api_manager.py (96%), dataset_loader.py (97%), workflow.py (91%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 版本收敛单一来源（`src/__version__`）、依赖锁定补齐、CI 门禁修复与稳定性加固（详见 [CHANGELOG 0.9.2](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.3 正确性修复批次：配置刷新 / 实验基线 / 数据集路径 / 报告上下文 / RAG 相似度 / CLI / 命名与文档一致性（详见 [CHANGELOG 0.9.3](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -76,11 +76,11 @@ pre-commit run --all-files
 # 运行测试并显示覆盖率
 .venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
 
-# 仅运行集成测试
-.venv/bin/python -m pytest tests/test_integration.py -v
+# 仅运行工作流集成测试（端到端编排）
+.venv/bin/python -m pytest tests/test_workflow.py tests/test_workflow_extended.py -v
 
-# 仅运行示例测试
-.venv/bin/python -m pytest tests/test_examples.py -v
+# 仅运行数据集加载测试
+.venv/bin/python -m pytest tests/test_dataset_loader.py tests/test_dataset_loader_extended.py -v
 ```
 
 ## 快速开始
@@ -731,7 +731,7 @@ python main.py list-examples
 
 ## 贡献指南
 
-欢迎贡献代码！请阅读 [贡献指南](docs/contributing.md) 了解如何参与项目开发。
+欢迎贡献代码！请阅读 [贡献指南](CONTRIBUTING.md) 了解如何参与项目开发。
 
 ---
 

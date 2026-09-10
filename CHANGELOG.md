@@ -2,6 +2,30 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.3] - 2026-09-13
+
+### 配置与实验正确性修复
+- **`.env.local` 写入路径与刷新失效**：`config_manager` 此前把 LLM 配置写进 `src/config/.env.local`（模块所在目录），而应用只读根目录 `.env.local`，`add_llm_config`/`remove_llm_config` 重启后全部不生效。现统一写根目录；新增 `config.refresh_llm_configs()` 原地刷新 `LLM_CONFIGS`（导入时快照不会自动更新），删除时同步清理 `os.environ` 中残留的 `LLM_N_*` 变量；自动编号改为扫描文件已占编号取 max+1（编号空洞不再冲突）；重复模型检查覆盖任意编号
+- **基线对比有效性**：`build_workflow` 新增 `planner`/`debugger` 参数（None 回落 config 值），`plain_llm` 基线改为直接构建降级图——此前 `importlib.reload` 改的是 `run_benchmark` 命名空间的全局开关，`workflow.py` 重新 `from config import` 后拿到的仍是原值，开关实际未生效（plain_llm 跑的其实是完整管线）；`run_single_task` 每基线 deepcopy 初始 state 并重置磁盘实例文件（single_agent 基线会把修复代码写回 target_file，共享 state 时后续基线从已修复状态起步）；`run_benchmark` 新增 `seed` 参数并透传 `SyntheticDataset`（此前硬编码 42，`--seed` 被静默忽略），结果 JSON 记录 seed
+- **SWE-bench 下载/加载路径对齐**：`download_from_huggingface` 此前写 `~/.cache/aitester/swe_bench_instances.jsonl`，加载器却读 `~/.cache/aitester/swe_bench/`，下载完永远找不到。现默认目录对齐加载器 data_dir，文件名带子集标识（mini/lite/full 不再互相覆盖）；加载器按 subset 读专属文件，未指定时合并全部子集文件并按 instance_id 去重；`instance_code` 优先级 `instance_code > base_code > problem_statement` 兜底
+- **批量配置生成器数据丢失防护**：`generate_batch_config.py` 及内嵌模板在模型列表为空时以 "w" 模式写 `.env.local` 会抹掉现有全部 LLM 配置，现改为报错退出（新增子进程回归测试）
+
+### 缺陷修复
+- **错误报告上下文失效**：`ReportGenerator.generate()` 此前 `classify() + context=None`，ImportError 根因/修复建议分支（依赖 `context.module_name`）是死代码、`error_subtype` 恒为 None。现接 `classify_with_context`，并修复 `context.subtype` 为 None 时的 `.value` 崩溃；`save_report` 对参与文件名拼接的 task_id 做白名单 + 截断消毒（防路径穿越）；分类器 traceback 分支不再给纯运行时错误误标 `SYNTAX_ERROR` 子类型
+- **RAG 相似度恒 0.0**：ChromaDB 余弦空间下 distance 不在 metadatas 中，旧 `meta.get("distance", 0.0)` 永远取默认值。现从查询结果 `distances` 字段换算 `similarity = round(1 - distance, 4)`
+- **CLI 健壮性**：模块导入期的 `FileHandler("aitester.log")` 在只读 CWD 下 PermissionError 崩溃整个 CLI，现捕获 OSError 降级为仅控制台；覆盖率 0.0 是合法数据，三处 falsy 判断误显示 N/A 改为 `is not None`
+- **BaseAgent 客户端复用**：`__init__` 此前每实例新建一个 `ChatOpenAI`（生产调用全走 `_call_llm` 的缓存客户端，`self.llm` 实为占位属性），现改为复用模块级缓存；修正 `_call_zai` docstring（实际所有可重试异常统一 5s 基准退避，旧注释与实现不符）
+
+### 重构
+- **`APIManger` → `APIManager`**：类名拼写错误统一重命名（src/api、`__init__` 导出、测试与示例共 6 文件），后台线程名同步更正；1.0 前无外部用户，不做别名兼容；CHANGELOG 历史记录中的旧拼写保留
+- **加载 hack 简化**：`api_manager`/`config_manager` 中重复的 `importlib + sys.modules` 别名加载 `config.py` 改为常规 `from config import`（无循环导入风险，且消除两份独立模块实例）
+- **CLI 死代码清理**：移除无引用的 `tqdm`/`TQDM_AVAILABLE` 探测块与转导的 `rich.progress` 组件
+
+### 文档与一致性
+- **reproduce.sh**：单测 tee 目录前置创建 + pipefail 容错；SWE-bench import 路径修正（`src.datasets.dataset_loader`）；环境校验从废弃的 `OPENAI_API_KEY` 改为 `LLM_1_API_KEY`；Python 3.10+ → 3.12+（锁定依赖 scipy==1.18.0 要求）
+- **`.env.example`**：`DOCKER_IMAGE` 3.11-slim → 3.12-slim（与锁定依赖/config.py 默认/Dockerfile 对齐）；`DOCKER_ENABLED` 注释如实说明容器隔离尚未实现（`use_docker` 为保留接口）
+- **回归**：全量 **798 passed**（+11 新增用例），0 skipped，1 warning（chromadb 内部 DeprecationWarning，第三方库）；总覆盖率 83%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.2] - 2026-09-09
 
 ### CI 门禁修复（主分支恢复全绿）
