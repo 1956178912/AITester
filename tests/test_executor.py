@@ -300,6 +300,22 @@ class TestRunPytestWithRetry:
         assert result[1]["type"] == "timeout"
 
     @patch("subprocess.run")
+    def test_timeout_captures_partial_output(self, mock_run):
+        """超时携带的部分 stdout/stderr 应合并进 output，供 Debugger 诊断现场。"""
+        import subprocess
+
+        mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd="pytest", timeout=30, output="collected 3 items", stderr="some traceback line"
+        )
+
+        executor = ExecutorAgent(timeout=30)
+        output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
+
+        assert result[0] == "EARLY_RETURN"
+        assert "collected 3 items" in output
+        assert "some traceback line" in output
+
+    @patch("subprocess.run")
     def test_file_not_found_returns_early(self, mock_run):
         """找不到执行文件时返回 EARLY_RETURN。"""
         mock_run.side_effect = FileNotFoundError("pytest not found")
