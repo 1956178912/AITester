@@ -51,6 +51,7 @@ if PROJECT_ROOT not in sys.path:
 from config import (  # noqa: E402
     ENABLE_DEBUGGER,
     ENABLE_PLANNER,
+    EXECUTION_TIMEOUT,
     LLM_CONFIGS,
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
@@ -330,7 +331,10 @@ def run_single_agent_baseline(
     from src.agents.generator import GeneratorAgent
 
     agent = GeneratorAgent()
-    executor = ExecutorAgent(timeout=int(os.getenv("EXECUTION_TIMEOUT", "30")))
+    # 执行超时必须走 config.EXECUTION_TIMEOUT（含容错解析 + [10, 300] 范围校验）；
+    # 此前直接 int(os.getenv("EXECUTION_TIMEOUT", "30"))，坏值（如 "abc"）会让基线
+    # 运行在 import 后立即 ValueError 崩溃，绕过配置层的兜底
+    executor = ExecutorAgent(timeout=EXECUTION_TIMEOUT)
 
     # 单次 LLM 调用：要求直接生成测试并自行判断是否需要修复
     query = (
@@ -435,6 +439,62 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         json.dump(artifact, f, ensure_ascii=False, indent=2)
 
 
+def _build_task_result(
+    task: BenchmarkTask,
+    elapsed: float,
+    final_state: dict[str, Any] | None = None,
+    diagnosis: str = "",
+    error_category: str = "",
+) -> dict[str, Any]:
+    """构建单基线运行的结果字典（单一构造点，供成功/限流重试/异常三分支复用）。
+
+    此前三个分支各写一份同构字典，新增指标字段（如 token_metrics/rag_metrics）
+    需同步改三处，极易漏改导致 JSON 结果结构漂移；统一经此函数构建后，
+    字段口径只有一处。
+
+    Args:
+        task: 基准测试任务。
+        elapsed: 本次基线运行耗时（秒），内部 round(…, 2) 落盘。
+        final_state: 基线运行结束后的工作流状态；None 表示运行失败
+            （无最终状态），此时 passed/coverage/iterations/rag_stats 记占位值，
+            diagnosis/error_category 用传入值。
+        diagnosis: 失败分支的诊断说明（如 "执行异常: …"）。
+        error_category: 失败分支的错误类别（"rate_limit" / "error"）。
+
+    Returns:
+        结果字典（结构见 run_single_task 各分支的原始实现，字段完全一致）。
+    """
+    if final_state is not None:
+        return {
+            "task_id": task.task_id,
+            "repo": task.repo_name,
+            "passed": final_state.get("test_passed", False),
+            "coverage": final_state.get("coverage_report") or 0.0,
+            "iterations": final_state.get("iteration", 0),
+            "diagnosis": final_state.get("diagnosis", ""),
+            "error_category": final_state.get("error_category", ""),
+            "elapsed_seconds": round(elapsed, 2),
+            # P0-2 效率指标：单次基线运行的 token 消耗（性价比对比依据）
+            "token_usage": token_usage.get_usage().as_dict(),
+            # P1 RAG 检索质量：本基线累计的检索指标（未启用 RAG 时为空）
+            "rag_stats": final_state.get("rag_stats"),
+            "task_metadata": task.metadata,
+        }
+    return {
+        "task_id": task.task_id,
+        "repo": task.repo_name,
+        "passed": False,
+        "coverage": 0.0,
+        "iterations": 0,
+        "diagnosis": diagnosis,
+        "error_category": error_category,
+        "elapsed_seconds": round(elapsed, 2),
+        "token_usage": token_usage.get_usage().as_dict(),
+        "rag_stats": None,
+        "task_metadata": task.metadata,
+    }
+
+
 def run_single_task(
     task: BenchmarkTask,
     baselines: list[str],
@@ -519,21 +579,7 @@ def run_single_task(
                 final_state = BASELINE_REGISTRY[baseline](state)
                 elapsed = time.time() - start_time
 
-                results[baseline] = {
-                    "task_id": task.task_id,
-                    "repo": task.repo_name,
-                    "passed": final_state.get("test_passed", False),
-                    "coverage": final_state.get("coverage_report") or 0.0,
-                    "iterations": final_state.get("iteration", 0),
-                    "diagnosis": final_state.get("diagnosis", ""),
-                    "error_category": final_state.get("error_category", ""),
-                    "elapsed_seconds": round(elapsed, 2),
-                    # P0-2 效率指标：单次基线运行的 token 消耗（性价比对比依据）
-                    "token_usage": token_usage.get_usage().as_dict(),
-                    # P1 RAG 检索质量：本基线累计的检索指标（未启用 RAG 时为空）
-                    "rag_stats": final_state.get("rag_stats"),
-                    "task_metadata": task.metadata,
-                }
+                results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
                 if save_state:
                     _dump_state_artifacts(output_dir, task, baseline, final_state)
 
@@ -549,59 +595,26 @@ def run_single_task(
                 )
             except openai.RateLimitError:
                 # 限流：等待后重试（重试共享同一 token 统计窗口，结果含两次调用消耗）
-                elapsed = time.time() - start_time
                 logger.warning("    [%s] %s 触发 API 限流，等待 %ds 后重试...", baseline, task.task_id, LLM_RETRY_WAIT)
                 time.sleep(LLM_RETRY_WAIT)
                 try:
                     final_state = BASELINE_REGISTRY[baseline](state)
                     elapsed = time.time() - start_time
-                    results[baseline] = {
-                        "task_id": task.task_id,
-                        "repo": task.repo_name,
-                        "passed": final_state.get("test_passed", False),
-                        "coverage": final_state.get("coverage_report") or 0.0,
-                        "iterations": final_state.get("iteration", 0),
-                        "diagnosis": final_state.get("diagnosis", ""),
-                        "error_category": final_state.get("error_category", ""),
-                        "elapsed_seconds": round(elapsed, 2),
-                        "token_usage": token_usage.get_usage().as_dict(),
-                        "rag_stats": final_state.get("rag_stats"),
-                        "task_metadata": task.metadata,
-                    }
+                    results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
                     if save_state:
                         _dump_state_artifacts(output_dir, task, baseline, final_state)
                 except Exception as e2:
                     elapsed = time.time() - start_time
                     logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
-                    results[baseline] = {
-                        "task_id": task.task_id,
-                        "repo": task.repo_name,
-                        "passed": False,
-                        "coverage": 0.0,
-                        "iterations": 0,
-                        "diagnosis": f"限流重试失败: {e2}",
-                        "error_category": "rate_limit",
-                        "elapsed_seconds": round(elapsed, 2),
-                        "token_usage": token_usage.get_usage().as_dict(),
-                        "rag_stats": None,
-                        "task_metadata": task.metadata,
-                    }
+                    results[baseline] = _build_task_result(
+                        task, elapsed, diagnosis=f"限流重试失败: {e2}", error_category="rate_limit"
+                    )
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error("    [%s] %s 执行失败: %s", baseline, task.task_id, e)
-                results[baseline] = {
-                    "task_id": task.task_id,
-                    "repo": task.repo_name,
-                    "passed": False,
-                    "coverage": 0.0,
-                    "iterations": 0,
-                    "diagnosis": f"执行异常: {e}",
-                    "error_category": "error",
-                    "elapsed_seconds": round(elapsed, 2),
-                    "token_usage": token_usage.get_usage().as_dict(),
-                    "rag_stats": None,
-                    "task_metadata": task.metadata,
-                }
+                results[baseline] = _build_task_result(
+                    task, elapsed, diagnosis=f"执行异常: {e}", error_category="error"
+                )
 
         return results
 
@@ -879,8 +892,14 @@ if __name__ == "__main__":
     @click.option("--parallel", "-p", default=None, type=int, help="并行任务数")
     @click.option("--seed", default=42, type=int, help="合成数据集随机种子（默认 42）")
     @click.option("--enable-rag", is_flag=True, help="显式开启 RAG 检索增强（P1：RAG 消融实验）")
-    @click.option("--save-state", is_flag=True, help="把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 <output-dir>/raw/（P0-2 排查用）")
-    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed, enable_rag, save_state):
+    @click.option(
+        "--save-state",
+        is_flag=True,
+        help="把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 <output-dir>/raw/（P0-2 排查用）",
+    )
+    def cli(
+        dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed, enable_rag, save_state
+    ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
 
