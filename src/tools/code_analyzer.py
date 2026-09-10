@@ -32,7 +32,8 @@ def parse_function_nodes(source_code: str) -> list[dict[str, Any]]:
         - name (str):      函数名
         - lineno (int):    起始行号（1-based）
         - end_lineno (int): 结束行号（1-based，含函数体最后一行）
-        - args (list):     参数名列表（不含 self/cls）
+        - args (list):     参数名列表（按源码顺序，方法含 self/cls；
+          不额外剔除，因首个参数并不总是 self/cls，由调用方自行判断）
         - docstring (str): 函数文档字符串（无则 None）
     """
     # 将源码编译为 AST 对象，若语法错误则抛出 SyntaxError
@@ -42,7 +43,8 @@ def parse_function_nodes(source_code: str) -> list[dict[str, Any]]:
     for node in ast.walk(tree):
         # 匹配普通函数定义和异步函数定义两种节点类型
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # 提取参数名列表：跳过 self/cls 等接收者参数（索引 0 通常为 self）
+            # 提取参数名列表：按源码顺序包含全部位置参数（方法含 self/cls）
+            # 不在此处剔除首个参数——首个参数并不总是接收者（如回调、生成器函数）
             args = [arg.arg for arg in node.args.args]
             functions.append(
                 {
@@ -100,6 +102,7 @@ def compute_cyclomatic_complexity(source_code: str) -> int:
 
     在本实现中，决策点包括：
         - if / elif / else if:  每个控制流分支增加一条独立路径
+        - 三目表达式 (IfExp):    a if b else c 增加一条路径
         - while / for:          循环结构本身引入一条路径
         - except:               异常处理分支
         - and / or:             布尔运算符增加组合路径
@@ -122,15 +125,17 @@ def compute_cyclomatic_complexity(source_code: str) -> int:
     for node in ast.walk(tree):
         # 每个控制流节点增加一条独立路径
         # ast.If:  if/elif 语句（注意：else 不单独计数，已包含在 if 分支中）
+        # ast.IfExp: 三目表达式 a if b else c
         # ast.While: while 循环
         # ast.For:   for 循环
         # ast.ExceptHandler: try-except 中的 except 分支
-        if isinstance(node, (ast.If, ast.While, ast.For, ast.ExceptHandler)):
+        if isinstance(node, (ast.If, ast.IfExp, ast.While, ast.For, ast.ExceptHandler)):
             complexity += 1
         elif isinstance(node, ast.BoolOp):
             # BoolOp 表示 and/or 运算符
-            # a and b and c 生成 2 个 BoolOp 节点（二叉树结构）
-            # 每个 BoolOp 增加 len(values) - 1 条额外路径
+            # CPython 把同一运算符的链式（a and b and c）折叠为单个
+            # BoolOp 节点（values 长度 = 操作数个数），而非二叉树嵌套，
+            # 因此每个 BoolOp 增加 len(values) - 1 条额外路径
             # 例如 a and b: 2 个值 → 增加 1 条路径（共 2 条：a真b真 / a假）
             complexity += len(node.values) - 1
 
@@ -180,8 +185,9 @@ def replace_function_code(
 
     # 第三步：遍历 AST 节点，查找目标函数定义
     for node in ast.walk(tree):
-        # 匹配 FunctionDef 节点且函数名一致
-        if isinstance(node, ast.FunctionDef) and node.name == function_name:
+        # 匹配普通函数与异步函数定义，且函数名一致
+        # （AsyncFunctionDef 不是 FunctionDef 子类，须显式列出，否则 async def 会被静默漏配）
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
             # 找到目标函数，提取其行范围（转为 0-based 索引）
             # lineno: 函数定义行（def xxx(...):）
             # end_lineno: 函数体最后一行
