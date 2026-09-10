@@ -75,7 +75,7 @@ test_code = agent.generate(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `generate()` | `test_plan: dict`, `target_code: str`, `module_name: str`, `rag_references: list` | `str` | 生成 pytest 测试代码 |
+| `generate()` | `test_plan: dict`, `target_code: str`, `module_name: str`, `rag_references: list`, `focus_function: str` | `str` | 生成 pytest 测试代码（超预算时按 focus_function 做 AST 智能截取） |
 
 **验证方法：**
 
@@ -88,24 +88,28 @@ test_code = agent.generate(
 
 ### ExecutorAgent
 
-测试执行器，在隔离环境中运行 pytest 并捕获结果。
+测试执行器，在本地或隔离沙箱中运行 pytest 并捕获结果。
 
 ```python
 from src.agents.executor import ExecutorAgent
 
-agent = ExecutorAgent()
+agent = ExecutorAgent(timeout=30)  # 默认本地系统环境执行
 result = agent.execute(
     test_code="import pytest\nfrom calculator import divide\n\ndef test_divide():\n    assert divide(1, 2) == 0.5",
+    target_file="examples/calculator.py",
+    target_function="divide",
     coverage=True,
-    timeout=30,
 )
+
+# venv 沙箱隔离执行（P1：不污染系统环境，依赖冲突互不影响）
+sandbox_agent = ExecutorAgent(use_venv=True, auto_install_deps=True)
 ```
 
 **关键方法：**
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `execute()` | `test_code: str`, `coverage: bool`, `timeout: int` | `dict` | 执行测试，返回通过/失败状态、覆盖率、失败用例 |
+| `execute()` | `test_code: str`, `target_file: str`, `target_function: str`, `coverage: bool` | `dict` | 执行测试，返回通过/失败状态、覆盖率、失败用例 |
 
 **返回格式：**
 ```json
@@ -140,7 +144,7 @@ result = agent.debug(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list` | `dict` | 分析失败并生成修复补丁 |
+| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list`, `focus_function: str`, `target_module: str` | `dict` | 分析失败并生成修复补丁（后两项可选：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR） |
 
 **返回格式：**
 ```json
@@ -163,17 +167,24 @@ from src.agents.error_classifier import ErrorClassifier, ErrorCategory
 
 classifier = ErrorClassifier()
 category = classifier.classify(test_output, failed_cases)
+# 提供被测模块名时，断言失败可区分 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）
+category = classifier.classify(test_output, failed_cases, target_module="calculator")
 ```
 
-**错误类别枚举：**
+**错误类别枚举（八类，P2 细化）：**
 
 | 值 | 说明 | 处理策略 |
 |----|------|---------|
-| `syntax` | 语法错误 | 重新生成完整文件 |
-| `runtime` | 运行时异常 | 分析异常栈定位 bug |
-| `assertion` | 断言失败 | 判断是代码逻辑还是测试预期错误 |
+| `import_error` | 模块导入失败（ModuleNotFoundError/ImportError），通常缺第三方依赖或模块路径错误 | 安装缺失依赖 / 修正导入语句（配合 executor `auto_install_deps` 自动装依赖） |
+| `syntax` | 语法/编译错误（SyntaxError、IndentationError） | 重新生成完整文件 |
+| `type_error` | 类型不匹配（TypeError） | 核对参数与返回类型 |
+| `assertion` | 断言失败且失败栈触及被测代码 | 判断是代码逻辑错误 |
+| `logic_error` | 断言失败但失败栈未触及被测模块，疑似测试预期值写错 | 修正测试用例断言（而非盲目改被测代码） |
+| `runtime` | 其他运行时异常（除零、索引越界） | 分析异常栈定位 bug |
 | `timeout` | 执行超时 | 检查死循环 |
-| `unknown` | 未知错误 | 通用分析 |
+| `unknown` | 无法识别的错误 | 通用分析（LLM 兜底） |
+
+分类优先级：`IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。
 
 ---
 
@@ -234,6 +245,79 @@ fixed_code = apply_patch_to_code(
 | 函数 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `apply_patch_to_code()` | `original_code`, `patch`, `mode`, `function_name` | `str` | 应用补丁到代码 |
+
+---
+
+### CodeContext
+
+基于 AST 的智能代码截取工具（P0：大文件场景 LLM 上下文优化）。
+
+```python
+from src.tools.code_context import extract_focused_code
+
+focused = extract_focused_code(
+    source_code,
+    focus_function="divide",   # 保留 import + 该函数及其直接依赖的辅助函数
+    max_chars=3000,
+)
+```
+
+**关键函数：**
+
+| 函数 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `extract_focused_code()` | `code`, `focus_function`, `max_chars` | `str` | AST 截取：保留 import + 焦点函数及直接依赖；无法解析或仍超预算时返回原样/兜底结果 |
+
+---
+
+### Dependency
+
+第三方依赖检测与缓存 venv 管理（P1：执行隔离）。
+
+```python
+from src.tools.dependency import find_missing_modules, venv_cache_dir, create_venv, install_packages
+
+missing = find_missing_modules("import pandas\ndef f(): ...")
+# → {"pandas"}（标准库与非 import 语句会被过滤）
+
+venv_dir = venv_cache_dir(["pandas"])        # 按依赖组合的磁盘缓存目录
+venv_python = create_venv(venv_dir, timeout=120)
+install_packages(venv_python, ["pandas"], timeout=120)
+```
+
+**关键函数：**
+
+| 函数 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `extract_imported_modules()` | `code: str` | `set[str]` | 提取代码中 import 的顶层模块名 |
+| `is_standard_library()` | `module_name: str` | `bool` | 判断是否标准库 |
+| `find_missing_modules()` | `code: str` | `set[str]` | 代码中导入但当前环境不可用的第三方模块 |
+| `suggest_package_names()` | `module_names: set[str]` | `list[str]` | 模块名 → 建议的 pip 包名（处理下划线/别名映射） |
+| `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | 创建 venv 并返回 python 解释器路径（磁盘缓存复用） |
+| `install_packages()` | `venv_python`, `packages`, `timeout` | `bool` | 在 venv 内 pip install（失败返回 False，不抛异常） |
+
+---
+
+### TokenUsage
+
+线程局部 LLM token 用量统计（P0：效率指标）。
+
+```python
+from src.graph import token_usage
+
+token_usage.record_usage(1200, 300, model="gpt-4o")
+usage = token_usage.get_usage()
+print(usage.total_tokens)   # 1500
+usage.reset()               # 单线程重置（基线运行前调用）
+```
+
+**关键函数：**
+
+| 函数 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `record_usage()` | `input_tokens`, `output_tokens`, `model` | `None` | 记入当前线程统计（按模型分桶） |
+| `get_usage()` | - | `TokenUsage` | 当前线程累计（含 total_tokens / by_model，`as_dict()` 可序列化） |
+| `reset()` | - | `TokenUsage` | 重置当前线程统计，返回重置前快照 |
 
 ---
 

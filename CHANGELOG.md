@@ -2,6 +2,29 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.7] - 2026-09-10
+
+### P0：大文件上下文与数据集质量
+- **AST 智能截取（code_context）**：`BaseAgent.truncate_code` 超预算时不再"头尾各半"硬截断，先按焦点函数做 AST 截取（保留 import + 目标函数及其直接依赖的辅助函数，超长函数体首尾截断），仍超预算才回退字符级兜底；Generator/Planner/Debugger 全链路透传 `focus_function`，SWE-bench 任务以官方 patch 提取的 `suggested_function` 初始化 `target_function`
+- **SWE-bench 加载质量校验（check-dataset）**：官方 JSONL 不含被测源码字段，`validate_task()`/`quality_report()` 逐任务检查 instance_code 兜底值、源码合法性、test_code 用例与用例数；`_extract_suggested_function()` 从官方 patch hunk 头提取目标函数（本地 225 任务实测提取率 96%）；`_load_enrichment()` 经 `SWE_BENCH_ENRICHMENT` 指定 JSONL 补全源码字段；CLI 新增 `check-dataset` 命令作为排查入口
+- **LLM token 用量统计（token_usage）**：线程局部累计 input/output token 并按模型分桶；基准运行前 `reset()`、结束后随结果 JSON 输出 `token_metrics`/`token_usage`，支撑完整系统 vs Plain LLM 性价比对比
+
+### P1：执行隔离与 RAG
+- **Executor venv 沙箱**：`EXECUTOR_USE_VENV=true` 时任务在临时沙箱目录 + 按依赖组合磁盘缓存的隔离 venv 中执行 pytest，`PYTHONPATH` 仅指向沙箱目录，任务间依赖互不冲突、不污染系统环境；`EXECUTOR_AUTO_INSTALL_DEPS=true` 自动 pip install 缺失依赖（仅装入 venv）；缺失依赖写入 `error_info.missing_dependencies`，由分类器归为 `import_error`，"环境缺依赖"不再被误判为代码 bug
+- **RAG 持久化 + 检索质量指标**：检索库持久化到 `rag_data/`（`RAG_PERSIST_PATH`/`RAG_COLLECTION_NAME`/`RAG_TTL_SECONDS` 可配，TTL 默认 7 天，空路径回退内存模式），跨实验运行可复用；`TestCaseRetriever.evaluate_retrieval()` 提供 Hit Rate@k / MRR；`AITesterState.rag_stats` 累计两次检索（test_cases/repairs）的命中数与相似度，基准结果 JSON 输出 `rag_metrics`
+
+### P2：错误分类细化
+- **五类 → 八类**：`IMPORT_ERROR`（从 SYNTAX 拆出：缺依赖与语法写错的修复路径完全不同）、`TYPE_ERROR`（从 RUNTIME 拆出：核对参数与返回类型）、`LOGIC_ERROR`（从 ASSERTION 拆出：断言失败但失败栈未触及被测模块，提示改测试而非盲目改代码）；`classify()` 新增 `target_module` 参数支持 LOGIC_ERROR 判定；修复策略与报告生成器同步补三个新类别分支
+
+### 工程化与安全
+- **配置外部化**：MySQL 连接池四参数（`MYSQL_POOL_*`）从 `mysql_client.py` 硬编码迁到 `config.py` 环境变量注入（默认值与历史一致，未配置时行为不变）；执行隔离三参数、RAG 三参数同步入 `.env.example`
+- **日志脱敏加固**：`base_agent` 的 LLM 异常文本统一走 `mask_sensitive_info`（含 zai 路径与最终 raise）；`experiments/run_benchmark.py` 入口显式挂载 `setup_logger_safety()`，补齐 experiments 等非 CLI 入口的脱敏盲区
+- **benchmark 排查工具链**：`--save-state` 把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 `output_dir/raw/`；新增 `compare_failures.py` 逐环节对比"基线 A 失败但基线 B 成功"的任务并输出 Markdown 报告（疑似环节提示 + token 汇总）
+- **文档同步**：`docs/api_reference.md` 更新八类分类表、`focus_function`/`target_module` 参数与新工具模块（CodeContext/Dependency/TokenUsage）；`src/tools/__init__.py` docstring 补全模块清单；README 测试覆盖表与实测用例数对齐（40 文件 / 957 用例）
+
+### 测试
+- 新增 6 个测试文件（code_context 11 / dependency 27 / executor_sandbox 7 / dataset_validation 14 / token_usage 9 / rag_metrics 5），合计 40 个测试文件、957 个收集用例，src 总覆盖率 90%
+
 ## [0.9.6] - 2026-09-10
 
 ### 工作流正确性修复
