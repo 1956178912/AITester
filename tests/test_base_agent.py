@@ -278,8 +278,16 @@ class TestTruncateCode:
         assert result == code
 
     def test_long_code_truncated(self):
-        """长代码被截断。"""
+        """长代码被截断（P0 优化：有函数体时优先 AST 智能截取，整体更短）。"""
         code = "x = " * 2000 + "\ndef hello():\n    pass"
+        result = BaseAgent.truncate_code(code, max_chars=100)
+        assert len(result) <= 100
+        # AST 截取保留了完整函数体 def hello
+        assert "def hello" in result
+
+    def test_long_code_without_functions_char_truncated(self):
+        """长代码且无函数体时回退字符级截断（带截断提示标记）。"""
+        code = "x = 1\n# " * 200
         result = BaseAgent.truncate_code(code, max_chars=100)
         assert len(result) <= 100
         assert "[代码已截断" in result

@@ -520,26 +520,46 @@ class BaseAgent:
         return extract_code_block(text, language="python")
 
     @staticmethod
-    def truncate_code(code: str, max_chars: int = _CODE_MAX_CHARS) -> str:
+    def truncate_code(
+        code: str,
+        max_chars: int = _CODE_MAX_CHARS,
+        focus_function: str | None = None,
+    ) -> str:
         """截断超长代码，避免 LLM token 浪费。
 
-        当代码超过 max_chars 字符时，保留头部和尾部各一半，
-        中间用省略号替换，并添加截断提示。
+        截取策略（P0 优化，解决 SWE-bench 大文件上下文丢失问题）：
+        1. 代码在预算内 → 原样返回；
+        2. 否则先做基于 AST 的智能截取（保留 import + 目标函数及其
+           直接依赖的辅助函数，超长函数体首尾截断），优先于"头尾各半"
+           硬截断——硬截断对数百行源文件会让 LLM 看不到目标函数；
+        3. AST 截取仍超预算（或源码无法解析、无函数体）→ 回退字符级
+           头尾截断兜底。
 
         Args:
             code: 原始代码字符串。
             max_chars: 最大允许字符数，默认 3000。
+            focus_function: 焦点函数名（如 "divide"）。提供时按函数维度
+                截取上下文；None 时保留全部顶层函数再按预算裁剪。
 
         Returns:
             截断后的代码字符串。
         """
         if len(code) <= max_chars:
             return code
-        # 头部和尾部各保留一半
+
+        # 第一层：AST 智能截取（惰性导入，避免 tools 模块的循环依赖）
+        from src.tools.code_context import extract_focused_code
+
+        focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars)
+        if len(focused) <= max_chars:
+            logger.info("代码已按 AST 智能截取：%d → %d 字符（focus=%s）", len(code), len(focused), focus_function or "*")
+            return focused
+
+        # 第二层：字符级头尾截断兜底（保留 import 头 + 尾部，中间省略）
         head_len = max_chars // 2
         tail_len = max_chars - head_len - len(_CODE_TRUNCATED_MSG.format(max=max_chars))
         head = code[:head_len]
         tail = code[-tail_len:] if tail_len > 0 else ""
         truncated = head + _CODE_TRUNCATED_MSG.format(max=max_chars) + tail
-        logger.info("代码已截断：%d → %d 字符", len(code), len(truncated))
+        logger.info("代码已字符级截断：%d → %d 字符", len(code), len(truncated))
         return truncated

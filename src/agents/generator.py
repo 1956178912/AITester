@@ -74,6 +74,7 @@ class GeneratorAgent(BaseAgent):
         target_code: str,
         module_name: str = "",
         rag_references: list[dict[str, Any]] | None = None,
+        focus_function: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -91,6 +92,8 @@ class GeneratorAgent(BaseAgent):
             target_code: 被测代码全文。
             module_name: 模块名（不含 .py），用于生成 import 语句。
             rag_references: RAG 检索到的相似历史案例，每项含 test_code 字段。
+            focus_function: 焦点函数名（可选）。超长代码时按该函数做 AST
+                智能截取，保留其直接依赖的辅助函数（大文件场景关键）。
 
         Returns:
             完整的 pytest 测试代码字符串。
@@ -101,8 +104,12 @@ class GeneratorAgent(BaseAgent):
         # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 
-        # 截断超长代码，节省 token
-        target_code = BaseAgent.truncate_code(target_code)
+        # 焦点函数优先级：显式参数 > 测试计划中的 function_name（Planner 已定位的函数）
+        if focus_function is None and isinstance(test_plan, dict):
+            focus_function = test_plan.get("function_name") or None
+
+        # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
+        target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
 
         # 构建基础查询，包含测试计划和目标代码
         query = (
