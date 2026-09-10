@@ -60,10 +60,16 @@ from src.datasets.dataset_loader import (  # noqa: E402
     InMemoryDataset,
     load_dataset,
 )
+from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState  # noqa: E402
 from src.graph.workflow import build_workflow  # noqa: E402
+from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# P2-8：experiments 入口此前从未接入日志脱敏（脱敏过滤器只在 CLI 入口挂载）。
+# 这里显式挂载，确保 LLM 调用路径的异常日志（可能含凭证）在实验场景下也被脱敏。
+setup_logger_safety()
 
 # 进度条支持
 try:
@@ -395,11 +401,46 @@ BASELINE_REGISTRY: dict[str, callable] = {
 # ─── 单任务运行函数 ────────────────────────────────────────────────────────────
 
 
+def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, final_state: dict[str, Any]) -> None:
+    """把单基线运行的环节级状态落盘（P0-2 排查工具的数据基础）。
+
+    保存 Planner 测试计划 / Generator 测试代码 / Debugger 诊断与补丁等
+    环节级产物，供 compare_failures.py 逐环节对比"AITester 失败但
+    Plain LLM 成功"的任务，定位差异出现在哪个环节。
+
+    Args:
+        output_dir: 结果输出目录（raw 子目录自动创建）。
+        task: 基准测试任务。
+        baseline: 基线方法名。
+        final_state: 基线运行结束后的工作流状态。
+    """
+    artifact = {
+        "task_id": task.task_id,
+        "baseline": baseline,
+        "test_plan": final_state.get("test_plan"),
+        "generated_test": final_state.get("generated_test"),
+        "diagnosis": final_state.get("diagnosis"),
+        "error_category": final_state.get("error_category"),
+        "patch": final_state.get("patch"),
+        "test_passed": final_state.get("test_passed"),
+        "iterations": final_state.get("iteration"),
+        "coverage": final_state.get("coverage_report"),
+        "rag_stats": final_state.get("rag_stats"),
+        "token_usage": token_usage.get_usage().as_dict(),
+    }
+    raw_dir = os.path.join(output_dir, "raw", task.task_id)
+    os.makedirs(raw_dir, exist_ok=True)
+    artifact_file = os.path.join(raw_dir, f"{baseline}.json")
+    with open(artifact_file, "w", encoding="utf-8") as f:
+        json.dump(artifact, f, ensure_ascii=False, indent=2)
+
+
 def run_single_task(
     task: BenchmarkTask,
     baselines: list[str],
     output_dir: str,
     verbose: bool = False,
+    save_state: bool = False,
 ) -> dict[str, Any]:
     """
     对单个 BenchmarkTask 运行所有指定的基线方法，返回汇总结果。
@@ -409,6 +450,8 @@ def run_single_task(
         baselines: 要运行的基线方法列表。
         output_dir: 结果输出目录。
         verbose: 是否输出详细日志。
+        save_state: 是否把环节级状态（测试计划/生成代码/诊断/补丁）
+            落盘到 output_dir/raw/<task_id>/<baseline>.json（P0-2 排查用）。
 
     Returns:
         包含各基线结果的字典。
@@ -426,10 +469,13 @@ def run_single_task(
             f.write(task.instance_code)
 
         # 初始化工作流状态（作为所有基线的起点，逐基线 deepcopy 隔离）
+        # P0：SWE-bench 任务从官方 patch 提取的 suggested_function 初始化
+        # target_function，驱动 Planner/Generator/Debugger 的 AST 聚焦截取
+        suggested_function = task.metadata.get("suggested_function")
         initial_state: AITesterState = {
             "task_uuid": task.task_id,
             "target_file": instance_file,
-            "target_function": None,
+            "target_function": suggested_function,
             "module_name": module_name,
             "target_code": task.instance_code,
             "test_plan": None,
@@ -460,6 +506,9 @@ def run_single_task(
             with open(instance_file, "w", encoding="utf-8") as f:
                 f.write(task.instance_code)
 
+            # P0-2 效率指标：重置本线程 token 统计，基线运行结束后记录消耗
+            # （parallel 模式下每个工作线程独立累计，互不串扰）
+            token_usage.reset()
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
 
@@ -479,20 +528,27 @@ def run_single_task(
                     "diagnosis": final_state.get("diagnosis", ""),
                     "error_category": final_state.get("error_category", ""),
                     "elapsed_seconds": round(elapsed, 2),
+                    # P0-2 效率指标：单次基线运行的 token 消耗（性价比对比依据）
+                    "token_usage": token_usage.get_usage().as_dict(),
+                    # P1 RAG 检索质量：本基线累计的检索指标（未启用 RAG 时为空）
+                    "rag_stats": final_state.get("rag_stats"),
                     "task_metadata": task.metadata,
                 }
+                if save_state:
+                    _dump_state_artifacts(output_dir, task, baseline, final_state)
 
                 status = "PASS" if final_state.get("test_passed") else "FAIL"
                 logger.info(
-                    "    [%s] %s: %s (%.1fs, coverage=%.1f%%)",
+                    "    [%s] %s: %s (%.1fs, coverage=%.1f%%, tokens=%d)",
                     baseline,
                     task.task_id,
                     status,
                     elapsed,
                     final_state.get("coverage_report", 0.0),
+                    token_usage.get_usage().total_tokens,
                 )
             except openai.RateLimitError:
-                # 限流：等待后重试
+                # 限流：等待后重试（重试共享同一 token 统计窗口，结果含两次调用消耗）
                 elapsed = time.time() - start_time
                 logger.warning("    [%s] %s 触发 API 限流，等待 %ds 后重试...", baseline, task.task_id, LLM_RETRY_WAIT)
                 time.sleep(LLM_RETRY_WAIT)
@@ -508,8 +564,12 @@ def run_single_task(
                         "diagnosis": final_state.get("diagnosis", ""),
                         "error_category": final_state.get("error_category", ""),
                         "elapsed_seconds": round(elapsed, 2),
+                        "token_usage": token_usage.get_usage().as_dict(),
+                        "rag_stats": final_state.get("rag_stats"),
                         "task_metadata": task.metadata,
                     }
+                    if save_state:
+                        _dump_state_artifacts(output_dir, task, baseline, final_state)
                 except Exception as e2:
                     elapsed = time.time() - start_time
                     logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
@@ -522,6 +582,8 @@ def run_single_task(
                         "diagnosis": f"限流重试失败: {e2}",
                         "error_category": "rate_limit",
                         "elapsed_seconds": round(elapsed, 2),
+                        "token_usage": token_usage.get_usage().as_dict(),
+                        "rag_stats": None,
                         "task_metadata": task.metadata,
                     }
             except Exception as e:
@@ -536,6 +598,8 @@ def run_single_task(
                     "diagnosis": f"执行异常: {e}",
                     "error_category": "error",
                     "elapsed_seconds": round(elapsed, 2),
+                    "token_usage": token_usage.get_usage().as_dict(),
+                    "rag_stats": None,
                     "task_metadata": task.metadata,
                 }
 
@@ -548,9 +612,31 @@ def run_single_task(
 
 def _run_task_with_progress(args: tuple) -> tuple[BenchmarkTask, dict[str, Any]]:
     """并行执行任务包装器。"""
-    task, baselines, output_dir, verbose = args
-    results = run_single_task(task, baselines, output_dir, verbose)
+    task, baselines, output_dir, verbose, save_state = args
+    results = run_single_task(task, baselines, output_dir, verbose, save_state=save_state)
     return task, results
+
+
+def _apply_rag_setting(enable_rag: bool | None) -> bool:
+    """把 RAG 开关应用到 workflow 模块，返回生效值（P1：RAG 纳入主实验）。
+
+    workflow 节点读取的是模块全局 ENABLE_RAG，直接改写模块属性即可生效
+    （与测试中 patch("src.graph.workflow.ENABLE_RAG") 同机制），
+    无需 reload 模块。
+
+    Args:
+        enable_rag: 显式开关；None 时保持 workflow 当前的 config 值。
+
+    Returns:
+        生效的 RAG 开关（bool）。
+    """
+    import src.graph.workflow as _wf
+
+    enabled = _wf.ENABLE_RAG if enable_rag is None else bool(enable_rag)
+    if _wf.ENABLE_RAG != enabled:
+        logger.info("RAG 开关已切换: %s → %s", _wf.ENABLE_RAG, enabled)
+        _wf.ENABLE_RAG = enabled
+    return enabled
 
 
 # ─── 主基准测试函数 ────────────────────────────────────────────────────────────
@@ -566,6 +652,8 @@ def run_benchmark(
     task_count: int | None = None,
     parallel: int | None = None,
     seed: int = 42,
+    enable_rag: bool | None = None,
+    save_state: bool = False,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -581,10 +669,15 @@ def run_benchmark(
         parallel: 并行任务数。
         seed: 合成数据集随机种子（此前硬编码为 42，--seed 参数被静默忽略；
                现透传到 SyntheticDataset，保证实验可复现）。
+        enable_rag: RAG 开关（P1：此前 RAG 默认关闭且未纳入主实验）。
+            None 时沿用 config.ENABLE_RAG；True/False 显式覆盖。
+        save_state: 是否把环节级状态落盘到 output_dir/raw/（P0-2 排查工具数据基础）。
 
     Returns:
         汇总结果字典。
     """
+    # RAG 开关在数据集加载前生效（检索发生在工作流节点内，切换时机不影响正确性）
+    rag_enabled = _apply_rag_setting(enable_rag)
     if baselines is None:
         baselines = ["aitester"]
 
@@ -633,7 +726,7 @@ def run_benchmark(
             logger.info("启用并行执行，并发度: %d", parallel)
             with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
                 futures = {
-                    executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose)): task
+                    executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose, save_state)): task
                     for task in tasks
                 }
                 for future in concurrent.futures.as_completed(futures):
@@ -654,7 +747,7 @@ def run_benchmark(
         else:
             for task in tasks:
                 logger.info("处理任务: %s", task.task_id)
-                task_results = run_single_task(task, baselines, output_dir, verbose)
+                task_results = run_single_task(task, baselines, output_dir, verbose, save_state=save_state)
 
                 for baseline, result in task_results.items():
                     all_results[baseline].append(result)
@@ -675,11 +768,47 @@ def run_benchmark(
         "baselines": baselines,
         "enable_planner": ENABLE_PLANNER,
         "enable_debugger": ENABLE_DEBUGGER,
-        "enable_rag": False,
+        # P1：此前硬编码 False，现反映本次运行实际生效的 RAG 开关
+        "enable_rag": rag_enabled,
         "parallelism": parallel,
         "valid_apis": len(_VALID_APIS),
         "results": {},
     }
+
+    def _aggregate_rag_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
+        """聚合一个基线的 RAG 检索质量指标（P1：RAG 消融数据）。
+
+        - hit_rate: 检索命中（返回 ≥1 个参考案例）的检索占比；
+        - avg_max_similarity: 各次检索最高相似度的平均值（检索质量代理指标）。
+
+        Returns:
+            {"retrievals": int, "hits": int, "hit_rate": float, "avg_max_similarity": float}
+        """
+        all_stats = [s for r in bl_results for s in (r.get("rag_stats") or [])]
+        if not all_stats:
+            return {"retrievals": 0, "hits": 0, "hit_rate": 0.0, "avg_max_similarity": None}
+        hits = sum(1 for s in all_stats if s.get("results", 0) > 0)
+        sim_values = [s.get("max_similarity") for s in all_stats if s.get("max_similarity") is not None]
+        return {
+            "retrievals": len(all_stats),
+            "hits": hits,
+            "hit_rate": round(hits / len(all_stats), 4),
+            "avg_max_similarity": round(sum(sim_values) / len(sim_values), 4) if sim_values else None,
+        }
+
+    def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
+        """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。"""
+        total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
+        total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
+        total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
+        total = len(bl_results)
+        return {
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_tokens": total_input + total_output,
+            "total_llm_calls": total_calls,
+            "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
+        }
 
     for baseline in baselines:
         bl_results = all_results[baseline]
@@ -698,6 +827,9 @@ def run_benchmark(
             "avg_iterations": round(avg_iterations, 2),
             "avg_elapsed_seconds": round(avg_time, 2),
             "total_time": round(sum(r["elapsed_seconds"] for r in bl_results), 2),
+            # P0-2 效率指标 + P1 RAG 检索质量（未启用 RAG 时指标全为 0/None）
+            "token_metrics": _aggregate_token_metrics(bl_results),
+            "rag_metrics": _aggregate_rag_metrics(bl_results),
             "details": bl_results,
         }
 
@@ -746,7 +878,9 @@ if __name__ == "__main__":
     @click.option("--task-limit", "-n", default=None, type=int, help="限制运行任务数量")
     @click.option("--parallel", "-p", default=None, type=int, help="并行任务数")
     @click.option("--seed", default=42, type=int, help="合成数据集随机种子（默认 42）")
-    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed):
+    @click.option("--enable-rag", is_flag=True, help="显式开启 RAG 检索增强（P1：RAG 消融实验）")
+    @click.option("--save-state", is_flag=True, help="把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 <output-dir>/raw/（P0-2 排查用）")
+    def cli(dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed, enable_rag, save_state):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
 
@@ -760,6 +894,8 @@ if __name__ == "__main__":
             task_count=task_count,
             parallel=parallel,
             seed=seed,
+            enable_rag=enable_rag or None,  # 未指定 --enable-rag 时沿用 config.ENABLE_RAG
+            save_state=save_state,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 
