@@ -421,7 +421,7 @@ class TestSWEBenchDataset:
                 SWEBenchDataset.download_from_huggingface()
 
     def test_download_from_huggingface_success(self, tmp_path):
-        """成功下载并写入 JSONL"""
+        """成功下载并写入子集专属 JSONL（文件名带子集标识，避免互相覆盖）"""
         mock_dataset = MagicMock()
         mock_dataset.__iter__ = lambda self: iter(
             [
@@ -436,8 +436,8 @@ class TestSWEBenchDataset:
         with patch("src.datasets.dataset_loader._datasets", mock_datasets):
             output = SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="mini")
 
-        assert output == str(tmp_path / "swe_bench_instances.jsonl")
-        content = (tmp_path / "swe_bench_instances.jsonl").read_text()
+        assert output == str(tmp_path / "swe_bench_mini_instances.jsonl")
+        content = (tmp_path / "swe_bench_mini_instances.jsonl").read_text()
         lines = [line for line in content.strip().split("\n") if line]
         assert len(lines) == 2
 
@@ -471,6 +471,78 @@ class TestSWEBenchDataset:
             SWEBenchDataset.download_from_huggingface(subset="unknown")
 
         assert captures == ["lite", "dev", "full", "dev"]
+
+    def test_download_default_dir_aligns_with_loader(self, tmp_path, monkeypatch):
+        """回归锁：默认目录必须与加载器 data_dir（DEFAULT_CACHE_DIR/swe_bench/）一致，
+        此前下载写到 ~/.cache/aitester/ 而加载器读 ~/.cache/aitester/swe_bench/，下载完永远找不到"""
+        home_cache = str(tmp_path / "home_cache")
+        monkeypatch.setattr(SWEBenchDataset, "DEFAULT_CACHE_DIR", home_cache)
+        mock_dataset = MagicMock()
+        mock_dataset.__iter__ = lambda self: iter([{"instance_id": "t1"}])
+        mock_datasets = MagicMock()
+        mock_datasets.load_dataset.return_value = mock_dataset
+
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
+            output = SWEBenchDataset.download_from_huggingface(subset="mini")
+
+        assert output == f"{home_cache}/swe_bench/swe_bench_mini_instances.jsonl"
+
+    def test_load_raw_data_subset_reads_subset_file(self, tmp_path):
+        """指定 subset 时读取子集专属文件 swe_bench_<subset>_instances.jsonl"""
+        subset_file = tmp_path / "swe_bench_mini_instances.jsonl"
+        subset_file.write_text(json.dumps({"instance_id": "t_mini", "repository": "r"}) + "\n")
+
+        ds = SWEBenchDataset(subset="mini")
+        ds.data_dir = str(tmp_path)
+        ds._load_raw_data()
+
+        assert ds.size == 1
+        assert ds.tasks[0].task_id == "t_mini"
+
+    def test_load_raw_data_no_subset_merges_and_dedups(self, tmp_path):
+        """未指定 subset 时合并 data_dir 下所有子集文件，按 instance_id 去重"""
+        legacy = tmp_path / "swe_bench_instances.jsonl"
+        legacy.write_text(
+            json.dumps({"instance_id": "t1", "repository": "r"})
+            + "\n"
+            + json.dumps({"instance_id": "t2", "repository": "r"})
+            + "\n"
+        )
+        mini = tmp_path / "swe_bench_mini_instances.jsonl"
+        mini.write_text(
+            json.dumps({"instance_id": "t2", "repository": "r"})
+            + "\n"
+            + json.dumps({"instance_id": "t3", "repository": "r"})
+            + "\n"
+        )
+
+        ds = SWEBenchDataset()
+        ds.data_dir = str(tmp_path)
+        ds._load_raw_data()
+
+        assert ds.size == 3
+        assert [t.task_id for t in ds.tasks] == ["t1", "t2", "t3"]
+
+    def test_instance_code_prefers_explicit_source_fields(self, tmp_path):
+        """instance_code 优先取显式源码字段（instance_code > base_code），兜底才是 problem_statement"""
+        jsonl = tmp_path / "swe_bench_instances.jsonl"
+        jsonl.write_text(
+            json.dumps({"instance_id": "a", "repository": "r", "instance_code": "def f(): pass"})
+            + "\n"
+            + json.dumps({"instance_id": "b", "repository": "r", "base_code": "def g(): pass"})
+            + "\n"
+            + json.dumps({"instance_id": "c", "repository": "r", "problem_statement": "bug text"})
+            + "\n"
+        )
+
+        ds = SWEBenchDataset()
+        ds.data_dir = str(tmp_path)
+        ds._load_raw_data()
+
+        by_id = {t.task_id: t for t in ds.tasks}
+        assert by_id["a"].instance_code == "def f(): pass"
+        assert by_id["b"].instance_code == "def g(): pass"
+        assert by_id["c"].instance_code == "bug text"
 
 
 # =============================================================================
