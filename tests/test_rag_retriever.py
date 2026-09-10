@@ -262,19 +262,20 @@ class TestRetrieveTestCases:
         retriever.collection.query.assert_not_called()
 
     def test_retrieve_with_results(self, retriever):
-        """验证正常检索返回相似案例。"""
+        """验证正常检索返回相似案例，similarity 由余弦距离换算（1 - distance）。"""
         retriever.collection.count.return_value = 5
 
         # ChromaDB query 返回格式：外层 list 对应多个 query_texts，内层 list 对应每个 query 的结果
-        # 代码逻辑：zip(documents[0], metadatas[0]) 按位置配对
+        # distances 与 documents 按位置一一对应；旧代码误从 metadatas 里取 distance（恒 0.0）
         retriever.collection.query.return_value = {
             "documents": [["doc1_content", "doc2_content"]],
             "metadatas": [
                 [
-                    {"test_code": "def test_add(): pass", "distance": 0.95},
-                    {"test_code": "def test_sub(): pass", "distance": 0.87},
+                    {"test_code": "def test_add(): pass"},
+                    {"test_code": "def test_sub(): pass"},
                 ],
             ],
+            "distances": [[0.05, 0.13]],
         }
 
         results = retriever.retrieve_test_cases("def add(a, b): return a + b", top_k=2)
@@ -283,13 +284,19 @@ class TestRetrieveTestCases:
         assert len(results) == 2
         assert results[0]["test_code"] == "def test_add(): pass"
         assert results[0]["similarity"] == 0.95
+        assert results[1]["similarity"] == 0.87
+
+        # 必须请求 distances 字段（否则无法换算相似度）
+        call_args = retriever.collection.query.call_args
+        assert "distances" in call_args.kwargs["include"]
 
     def test_retrieve_top_k_default(self, retriever):
         """验证默认 top_k=3。"""
         retriever.collection.count.return_value = 1
         retriever.collection.query.return_value = {
             "documents": [["doc1"]],
-            "metadatas": [[{"test_code": "test", "distance": 0.9}]],
+            "metadatas": [[{"test_code": "test"}]],
+            "distances": [[0.1]],
         }
 
         retriever.retrieve_test_cases("some code")
@@ -322,7 +329,8 @@ class TestRetrieveRepairs:
 
         retriever.collection.query.return_value = {
             "documents": [["doc1"]],
-            "metadatas": [[{"patch": "fix1", "original_code": "old", "distance": 0.9}]],
+            "metadatas": [[{"patch": "fix1", "original_code": "old"}]],
+            "distances": [[0.1]],
         }
 
         results = retriever.retrieve_repairs("runtime", "def foo(x): return x", top_k=2)
@@ -340,7 +348,8 @@ class TestRetrieveRepairs:
         retriever.collection.count.return_value = 1
         retriever.collection.query.return_value = {
             "documents": [["doc1"]],
-            "metadatas": [[{"patch": "fix1", "distance": 0.9}]],
+            "metadatas": [[{"patch": "fix1"}]],
+            "distances": [[0.1]],
         }
 
         retriever.retrieve_repairs("syntax", "code", top_k=5)
@@ -474,7 +483,8 @@ class TestMixedRetrieval:
         # 模拟检索结果
         retriever.collection.query.return_value = {
             "documents": [["doc1"]],
-            "metadatas": [[{"test_code": "def test_add(): assert add(2, 3) == 5", "distance": 0.95}]],
+            "metadatas": [[{"test_code": "def test_add(): assert add(2, 3) == 5"}]],
+            "distances": [[0.05]],
         }
 
         results = retriever.retrieve_test_cases("def add(a, b): return a + b")
@@ -496,7 +506,8 @@ class TestMixedRetrieval:
         # 模拟检索结果
         retriever.collection.query.return_value = {
             "documents": [["doc1"]],
-            "metadatas": [[{"patch": "def foo(x): return x + 1", "distance": 0.9}]],
+            "metadatas": [[{"patch": "def foo(x): return x + 1"}]],
+            "distances": [[0.1]],
         }
 
         results = retriever.retrieve_repairs("runtime", "def foo(x): return x")
@@ -525,7 +536,8 @@ class TestEdgeCases:
 
         # 应返回空字符串而不是报错
         assert results[0]["test_code"] == ""
-        assert results[0]["similarity"] == 0.0
+        # distances 缺失时宽松回退 0.0，相似度记为 1.0（不影响排序，仅数值失真）
+        assert results[0]["similarity"] == 1.0
 
     def test_add_case_empty_metadata(self, retriever):
         """验证传入空元数据时的处理。"""
