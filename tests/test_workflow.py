@@ -68,6 +68,21 @@ class TestShouldDebug:
         result = _should_debug(state)
         assert result == "done"
 
+    @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
+    def test_regenerate_capped_at_max_regenerations(self):
+        """达到重新生成上限后，即便诊断命中关键词也返回 done（防 generator↔executor 死循环）。"""
+        from src.graph.workflow import _MAX_REGENERATIONS, _should_debug
+
+        state = {
+            "test_passed": False,
+            "iteration": 3,
+            "max_iterations": 3,
+            "diagnosis": "测试生成错误：AttributeError",
+            "regeneration_count": _MAX_REGENERATIONS,
+        }
+        result = _should_debug(state)
+        assert result == "done"
+
 
 class TestShouldSkipDebugger:
     """测试 _should_skip_debugger 函数。"""
@@ -300,3 +315,99 @@ class TestNodeFunctions:
         assert "test_passed" in result
         assert result["test_passed"] is True
         assert result["coverage_report"] == 85.0
+
+
+class TestPatchApplierNode:
+    """_patch_applier_node 状态/磁盘一致性回归测试。"""
+
+    @staticmethod
+    def _state(target_file: str, target_code: str, patch: str) -> dict:
+        return {
+            "target_file": target_file,
+            "target_code": target_code,
+            "patch": patch,
+            "diagnosis": "诊断",
+            "error_category": "runtime",
+            "iteration": 1,
+            "repair_history": [],
+        }
+
+    def test_write_success_updates_state(self, tmp_path):
+        """写盘成功：target_code 更新、patch_applied=True、文件被真实修改。"""
+        from src.graph.workflow import _patch_applier_node
+
+        target = tmp_path / "mod.py"
+        target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        state = self._state(str(target), "def add(a, b):\n    return a + b\n", "def add(a, b):\n    return a + b + 1\n")
+        result = _patch_applier_node(state)
+        assert "+ 1" in result["target_code"]
+        assert result["repair_history"][-1]["patch_applied"] is True
+        assert "+ 1" in target.read_text(encoding="utf-8")
+
+    def test_rejected_path_keeps_original_state(self, tmp_path):
+        """路径不在白名单（项目根/系统临时目录）→ 拒绝写盘，target_code 保留原代码、patch_applied=False。"""
+        from src.graph.workflow import _patch_applier_node
+
+        # 既不在项目根目录下、也不在系统临时目录下的绝对路径
+        target = "/definitely_not_allowed_path/mod.py"
+        state = self._state(target, "def add(a, b):\n    return a + b\n", "def add(a, b):\n    return a + b + 1\n")
+        result = _patch_applier_node(state)
+        assert result["target_code"] == "def add(a, b):\n    return a + b\n"
+        assert result["repair_history"][-1]["patch_applied"] is False
+
+
+class TestGeneratorNodeRegeneration:
+    """_generator_node 再生成路径：递增 regeneration_count 并清空过期 diagnosis。"""
+
+    @staticmethod
+    def _with_rag_disabled():
+        import src.graph.workflow as workflow_module
+
+        orig = (workflow_module.ENABLE_PLANNER, workflow_module.ENABLE_RAG, workflow_module.RAG_MODULE_AVAILABLE)
+        workflow_module.ENABLE_PLANNER = False
+        workflow_module.ENABLE_RAG = False
+        workflow_module.RAG_MODULE_AVAILABLE = False
+        return workflow_module, orig
+
+    @staticmethod
+    def _restore(workflow_module, orig):
+        workflow_module.ENABLE_PLANNER, workflow_module.ENABLE_RAG, workflow_module.RAG_MODULE_AVAILABLE = orig
+
+    @patch("src.graph.workflow.GeneratorAgent")
+    def test_regeneration_increments_counter(self, mock_generator_class):
+        workflow_module, orig = self._with_rag_disabled()
+        try:
+            mock_generator_class.return_value.generate.return_value = "def test_x(): pass"
+            # 再生成路径：iteration >= max_iterations
+            state = {
+                "iteration": 3,
+                "max_iterations": 3,
+                "target_code": "def x(): pass",
+                "module_name": "m",
+                "diagnosis": "测试生成错误",
+            }
+            result = workflow_module._generator_node(state)
+            assert result["regeneration_count"] == 1
+            assert result["diagnosis"] is None
+            assert result["error_category"] is None
+        finally:
+            self._restore(workflow_module, orig)
+
+    @patch("src.graph.workflow.GeneratorAgent")
+    def test_first_generation_does_not_increment(self, mock_generator_class):
+        workflow_module, orig = self._with_rag_disabled()
+        try:
+            mock_generator_class.return_value.generate.return_value = "def test_x(): pass"
+            # 首次生成：iteration < max_iterations
+            state = {
+                "iteration": 0,
+                "max_iterations": 3,
+                "target_code": "def x(): pass",
+                "module_name": "m",
+                "diagnosis": "旧诊断",
+            }
+            result = workflow_module._generator_node(state)
+            assert "regeneration_count" not in result
+            assert "diagnosis" not in result  # 首次生成不清空 diagnosis
+        finally:
+            self._restore(workflow_module, orig)

@@ -88,6 +88,14 @@ class AITesterState(TypedDict, total=False):
         最大迭代次数（来自 config.MAX_ITERATIONS，默认 3）。
         达到此值后 _should_debug 返回 "done" 结束流程。
 
+    regeneration_count (int):
+        触发 "regenerate"（重新生成测试代码）的次数（从 0 开始）。
+        达到最大迭代后，若诊断指向测试生成错误，_should_debug 会路由回
+        generator 重新生成；为避免 generator↔executor 无限乒乓（旧 diagnosis
+        关键词反复命中导致每轮都再生成，最终撞上 LangGraph recursion_limit），
+        该计数在每次再生成时 +1，达到上限（workflow._MAX_REGENERATIONS）后
+        _should_debug 不再路由 regenerate 而是返回 "done"。
+
     ─── 执行控制（可选，由 CLI 注入）──────────────────────────────
     execution_timeout (int | None):
         单次测试执行的超时秒数（CLI --timeout 注入）。
@@ -133,6 +141,7 @@ class AITesterState(TypedDict, total=False):
     # 迭代控制
     iteration: int
     max_iterations: int
+    regeneration_count: int
     repair_history: list[dict[str, Any]]
     # 执行控制（可选，由 CLI 注入）
     execution_timeout: int | None
