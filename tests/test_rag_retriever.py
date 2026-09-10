@@ -415,6 +415,7 @@ class TestCleanupExpiredAndExcess:
                 for i in range(105)  # id0最新，id104最旧
             ],
         }
+        retriever.collection.count.return_value = 105  # 超额 → 节流检查须读到真实数字
         retriever.max_cases = 100
 
         retriever._cleanup_expired_and_excess()
@@ -432,11 +433,46 @@ class TestCleanupExpiredAndExcess:
             "ids": ["id1", "id2"],
             "metadatas": [{"_added_at": time.time()} for _ in range(2)],
         }
+        retriever.collection.count.return_value = 2
         retriever.max_cases = 100
 
         retriever._cleanup_expired_and_excess()
 
         retriever.collection.delete.assert_not_called()
+
+    def test_cleanup_throttled_when_under_capacity(self, retriever):
+        """节流：容量未满时，距上次清理不足 60s 应跳过全表扫描。"""
+        retriever.collection.get.return_value = {
+            "ids": ["id1"],
+            "metadatas": [{"_added_at": time.time()}],
+        }
+        retriever.max_cases = 100
+        retriever.collection.count.return_value = 1  # 未满
+
+        # 首次调用（_last_cleanup_at == 0）必须执行
+        retriever._cleanup_expired_and_excess()
+        assert retriever.collection.get.call_count == 1
+        assert retriever._last_cleanup_at != 0.0
+
+        # 紧接着再调用（同一秒内，容量未满）应跳过
+        retriever._cleanup_expired_and_excess()
+        assert retriever.collection.get.call_count == 1  # 未再扫描
+
+    def test_cleanup_runs_when_at_capacity(self, retriever):
+        """容量满时即使刚清理过也必须再次扫描（驱逐语义）。"""
+        retriever.collection.get.return_value = {
+            "ids": [f"id{i}" for i in range(100)],
+            "metadatas": [{"_added_at": time.time()} for _ in range(100)],
+        }
+        retriever.max_cases = 100
+        retriever.collection.count.return_value = 100  # 已满
+
+        retriever._cleanup_expired_and_excess()
+        assert retriever.collection.get.call_count == 1
+
+        # 容量满 → 立即再调也应重新扫描
+        retriever._cleanup_expired_and_excess()
+        assert retriever.collection.get.call_count == 2
 
 
 # ============================================================================
@@ -467,8 +503,8 @@ class TestMixedRetrieval:
 
     def test_add_and_retrieve_flow(self, retriever):
         """验证完整的添加-检索流程。"""
-        # 模拟 collection count 从 0 变为 1
-        retriever.collection.count.side_effect = [0, 1]
+        # count 调用顺序：_cleanup 节流检查(0) → add_case 容量检查(1) → retrieve 空集检查(1)
+        retriever.collection.count.side_effect = [0, 1, 1]
 
         # 添加一个测试用例
         retriever.add_case(
@@ -491,7 +527,8 @@ class TestMixedRetrieval:
 
     def test_add_repair_and_retrieve_flow(self, retriever):
         """验证修复案例的添加-检索流程。"""
-        retriever.collection.count.side_effect = [0, 1]
+        # count 调用顺序：_cleanup 节流检查(0) → add_repair 容量检查(1) → retrieve 空集检查(1)
+        retriever.collection.count.side_effect = [0, 1, 1]
 
         # 添加修复案例
         retriever.add_repair(
