@@ -162,6 +162,44 @@ class TestGenerateComparisonReport:
         # 非 ok 状态时输出说明而非结果表
         assert "说明" in report
 
+    def test_report_ok_with_skipped_comparison_does_not_crash(self):
+        """status=ok 但对比被 skipped（两组通过率恒定）时，报告不得 KeyError。
+
+        回归：generate_comparison_report 此前对全部对比硬读 t_stat/p_value，
+        skipped 条目无这些键 → 常量组场景（常见于小样本基线）报告生成直接崩。
+        """
+        results = {
+            "aitester": _results_with_details(5, 1.0),
+            "plain_llm": _results_with_details(5, 1.0),
+        }
+        analysis = analyze_experiment_results(results)
+        assert analysis["significance"]["status"] == "ok"
+        assert analysis["significance"]["comparisons"][0]["status"] == "skipped"
+
+        report = generate_comparison_report(analysis)  # 修复前此处 KeyError: 't_stat'
+
+        assert "Significance Test" in report
+        # skipped 对比以说明形式输出，而非进结果表
+        assert "skipped" not in report or "恒定" in report
+        assert "t 统计量" in report  # 表头仍保留
+
+    def test_report_mixed_numeric_and_skipped(self):
+        """数值化对比入表 + skipped 对比单列说明，二者共存时报告完整不崩。"""
+        results = {
+            "aitester": _results_with_details(8, 0.5),
+            "plain_llm": _results_with_details(8, 0.5),  # 恒定 → skipped
+            "baseline_b": _results_with_details(8, 0.2),  # 非恒定 → 数值化
+        }
+        analysis = analyze_experiment_results(results)
+        report = generate_comparison_report(analysis)
+        sig = analysis["significance"]
+        statuses = [c.get("status") for c in sig.get("comparisons", [])]
+        # 既含数值化（non-skipped，无 status 键）又含 skipped
+        assert "skipped" in statuses and None in statuses
+        # skipped 对比以说明形式出现（含 note 关键字），数值化对比进入表格行
+        assert "恒定" in report or "无差异" in report
+        assert "aitester vs baseline_b" in report
+
 
 class TestLoadAndAnalyze:
     """load_and_analyze JSON 加载"""
