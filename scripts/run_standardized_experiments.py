@@ -143,8 +143,11 @@ def run_experiment(exp_config: dict) -> dict:
         print(f"✅ 实验完成: {exp_config['name']}")
         print(f"📄 日志已保存: {log_file}")
 
+        # 三个返回分支都带 description：main() 写汇总报告时无条件读 r['description']，
+        # 缺键会导致每次运行必 KeyError、EXPERIMENT_SUMMARY.md 永远生成不了
         return {
             "name": exp_config["name"],
+            "description": exp_config["description"],
             "status": "success" if result.returncode == 0 else "failed",
             "return_code": result.returncode,
             "log_file": str(log_file),
@@ -155,6 +158,7 @@ def run_experiment(exp_config: dict) -> dict:
         print(f"❌ 实验超时: {exp_config['name']}")
         return {
             "name": exp_config["name"],
+            "description": exp_config["description"],
             "status": "timeout",
             "error": "实验执行超过1小时",
         }
@@ -162,6 +166,7 @@ def run_experiment(exp_config: dict) -> dict:
         print(f"❌ 实验失败: {exp_config['name']} - {e}")
         return {
             "name": exp_config["name"],
+            "description": exp_config["description"],
             "status": "error",
             "error": str(e),
         }
