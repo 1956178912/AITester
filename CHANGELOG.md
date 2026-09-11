@@ -2,6 +2,24 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 错误分类细化 + 熔断冷却 + 结果分析批次）
+
+### 错误分类（1.2 残余）
+- **ErrorCategory 补 2 类**：新增 `LLM_FORMAT_ERROR`（LLM 响应格式异常：JSON 解析失败 / 截断 / 空响应，此前 75% UNKNOWN 的根因之一）与 `INDEX_ERROR`（索引越界，此前落入 RUNTIME/UNKNOWN 致 Debugger 无法针对性修复）；`classify()` 优先级调整为 LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN（LLM_FORMAT 置最前避免 IndexError 文本中可能出现的 assert 误判）
+- `get_fix_strategy()` 补 2 条针对性策略文案（LLM 重生成 / 放宽 JSON 提取；索引越界补边界判断禁吞异常）；`reports/generator.py` 的根因分析与修复建议两处 if/elif 链同步补 2 个分支
+- 测试：`tests/test_error_classifier.py` 新增 10 用例（分类正例 ×4、优先级冲突 ×2、枚举值 ×2、修复策略 ×2）
+
+### 可观测性（4.1 残余）
+- **APIManager 熔断冷却期**：`APIHealth` 新增 `circuit_open_until` / `circuit_cooldown_seconds` 字段与 `in_circuit_open` 属性（monotonic 时钟判定）；`mark_failure` 达阈值时写入冷却截止时间，`mark_success` 复位熔断器；`get_healthy_nodes()` 与 `_build_node_list` 备用候选统一过滤冷却期内节点（即使健康检查线程把 `is_healthy` 翻回 True 也继续跳过，避免流量重新打回死 provider）；`APIManagerConfig.circuit_cooldown_seconds` 默认 60.0s（`circuit_open_remaining_s` 字段暴露于 `get_status()`）
+- 测试：`tests/test_api_manager.py` 新增 9 用例（APIHealth 熔断状态机 ×5、路由层冷却过滤 ×4）
+
+### 实验
+- **结果分析脚本（4.3）**：新增 `experiments/analyze_results.py`——从 benchmark JSON 提取成功率 / 覆盖率 / 迭代次数分布 / Token 效率 / 失败原因分布（1.2 细化类别可单独计数）/ RAG 检索质量，终端打印 Markdown 汇总并写 `analysis_summary.md`；兼容旧 JSON（无 token_metrics/rag_metrics 键时从 details 兜底累加）
+- **公平性对照输出（2.2）**：`run_benchmark.py` 汇总阶段新增 baseline 级 `failure_category_distribution` 字段，并在 logger 与进度输出中打印各基线"平均每任务 Token / LLM 调用次数"，效率-效果二维对照（不只看成功率）
+- 测试：`tests/test_experiments_scripts.py` 新增 6 用例（analyze_results 纯函数 ×5 + 前缀识别 ×1）
+
+全量 **1111 passed / 0 failed**；`ruff check` 全绿
+
 ## [Unreleased] - 待发布（2026-09-13 系统功能增强轮次）
 
 ### 功能
