@@ -22,6 +22,10 @@ setup(
     name="aitester",
     version=_load_version(),
     packages=find_packages(),
+    # 根级 config.py 是全局配置模块（src/ 内 6 个模块 from config import ...），
+    # 它不是含 __init__.py 的包，find_packages() 不会收录；不声明 py_modules
+    # 则正式安装（pip install . 非 editable）后 entry point 触发 ModuleNotFoundError: config
+    py_modules=["config"],
     # 锁定依赖集（requirements.lock）实际要求 Python >= 3.12（scipy 下限）
     python_requires=">=3.12",
     install_requires=[
@@ -41,7 +45,11 @@ setup(
     extras_require={
         "rag": ["chromadb>=0.5.0"],
         "viz": ["matplotlib>=3.7.0", "pandas>=2.0.0"],
-        "dev": ["pytest>=8.0.0", "pytest-cov>=4.0.0"],
+        # 实验统计与 SWE-bench 数据集下载依赖
+        "experiments": ["scipy>=1.10.0", "datasets>=5.0.0"],
+        # CLI 富文本与进度条
+        "ux": ["rich>=13.0.0", "tqdm>=4.65.0"],
+        "dev": ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"],
     },
     entry_points={
         "console_scripts": [
