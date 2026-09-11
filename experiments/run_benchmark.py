@@ -49,6 +49,7 @@ if PROJECT_ROOT not in sys.path:
 
 # 延迟导入，避免 E402
 from config import (  # noqa: E402
+    BENCHMARK_PARALLELISM,
     ENABLE_DEBUGGER,
     ENABLE_PLANNER,
     EXECUTION_TIMEOUT,
@@ -260,7 +261,10 @@ def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 
                 else:
                     continue
                 break
-        except Exception:
+        except Exception as e:
+            # 外层兜底异常（zai 分支重试耗尽 raise、或 zai/openai 客户端构造失败）
+            # 此前静默 continue，某 API 持续故障时全链路无日志线索，无法排查
+            logger.warning("API %s 调用失败（含所有重试）: %s", base_url, e)
             continue
     else:
         raise RuntimeError(f"所有 API 调用失败: {max_retries} 次重试后仍失败")
@@ -723,7 +727,9 @@ def run_benchmark(
     logger.info("可用 API 配置数: %d", len(_VALID_APIS))
 
     if parallel is None:
-        parallel = int(os.getenv("BENCHMARK_PARALLELISM", "0"))
+        # 走 config.BENCHMARK_PARALLELISM（_parse_int_env 容错解析 + 下限校验），
+        # 此前直接 int(os.getenv(...))，坏值（如 "abc"）会在 import 阶段直接 ValueError 崩溃
+        parallel = BENCHMARK_PARALLELISM
 
     use_progress = HAS_TQDM
     logger.info("待运行任务数: %d，基线: %s，并行度: %d", len(tasks), baselines, parallel)
