@@ -2,6 +2,15 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.10] - 2026-09-11
+
+### 源码层：CLI 并发派发 DRY 化
+- **`run` 并发执行两段同构块合并**：`src/cli/app.py` 的 `run` 命令在 `--parallel>1` 多文件场景下，rich 进度条分支与纯文本降级分支各维护一份"future 提交 + `as_completed` 汇总 + 逐任务容错"同构循环（约 30 行重复），结果结构变化需同步改两处、易漂移；现抽取共享派发器 `_dispatch_parallel_tasks()` 作为单一构造点，两种模式仅进度反馈策略不同，经 `on_progress` / `on_success` 回调注入（rich 推进进度条 / 纯文本打印 `✓ 完成`，`--json` 时静默）；行为保持不变
+
+### 测试
+- 新增 `tests/test_cli_parallel.py`（10 个用例）：`_dispatch_parallel_tasks` 全成功 / 单任务异常不中断整批 / `on_success` 仅成功触发且传 basename / `on_progress` 每任务结束触发（含失败）；`_handle_task_exception` 错误结果脱敏与同构键集；`run` 并发分支 rich 可用 / 无 rich / 单文件回退顺序执行 / 失败门控 exit 1 四条端到端路径（mock 工作流）
+- 全量 **987 passed / 0 failed**（+10 新增）；cli/app.py 覆盖率 50% → 61%，src 总覆盖率 90% → 91%；`ruff check` / `ruff format --check` 全部通过
+
 ## [0.9.9] - 2026-09-11
 
 ### 实验/脚本层：误选结果与必崩 KeyError 修复

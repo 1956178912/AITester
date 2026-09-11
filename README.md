@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 977 collected |
-| **单元测试** | ✅ 977 passed, 0 skipped |
-| **代码覆盖率** | 90% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83%） |
+| **总测试数** | ✅ 987 collected |
+| **单元测试** | ✅ 987 passed, 0 skipped |
+| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83% / cli-app 61%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 0.9.9 批次：visualize 结果误选修复（仅识别 `benchmark_*` 前缀）；标准化实验必崩 KeyError 修复（返回分支补 `description` 键）；benchmark 并行度统一走 `config.BENCHMARK_PARALLELISM`；executor 死分支删除；planner 默认计划去重；`_MAX_PARAMETIZE_RETRIES` 死常量删除；MySQL `idle_timeout` 接通；APIManager `max_consecutive_failures` 幽灵配置接线（详见 [CHANGELOG 0.9.9](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), logging_utils.py (83%) |
+| **最新优化** | ✅ 0.9.10 批次：CLI 并发派发 DRY 化（`run` 的 rich 进度条 / 纯文本降级两段同构块合并为共享派发器 `_dispatch_parallel_tasks`，提交/汇总/容错单一构造点）；并发分支补 10 个回归用例（全成功 / 单任务容错 / 回调时机 / rich 与无 rich 双路径端到端 / CI 门控 exit 1）；cli/app.py 覆盖 50%→61%，src 总覆盖 90%→91%（详见 [CHANGELOG 0.9.10](CHANGELOG.md)） |
+| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), cli/app.py (61%), logging_utils.py (83%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.9 批次：实验/脚本层误选与必崩修复 + 源码层死代码/幽灵配置清理（详见 [CHANGELOG 0.9.9](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.10 批次：CLI 并发派发 DRY 化 + 并发分支回归测试补齐（详见 [CHANGELOG 0.9.10](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -564,7 +564,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 977 个用例，全量通过）
+# 运行所有测试（当前 987 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -574,7 +574,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（40 个测试文件，977 个 pytest 收集用例，src 总覆盖率 90%）：
+**测试覆盖模块**（41 个测试文件，987 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -583,6 +583,7 @@ docker run --rm \
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_cli_app.py` | 11 | CLI 命令（list-examples/--version/参数校验） |
+| `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
 | `test_code_context.py` | 11 | AST 智能截取（P0 大文件上下文） |
