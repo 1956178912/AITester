@@ -1,7 +1,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-11
+> 最后更新：2026-09-14
 
 ---
 
@@ -171,20 +171,22 @@ category = classifier.classify(test_output, failed_cases)
 category = classifier.classify(test_output, failed_cases, target_module="calculator")
 ```
 
-**错误类别枚举（八类，P2 细化）：**
+**错误类别枚举（十类，P2 细化 + 1.2 残余）：**
 
 | 值 | 说明 | 处理策略 |
 |----|------|---------|
+| `llm_format_error` | LLM 响应格式异常（JSON 解析失败 / 响应被截断 / 空响应），此前 75% UNKNOWN 的根因之一（1.2 残余细化） | 重新请求 LLM 生成合规响应 / 剥离 markdown 代码块后再解析 / 降低单次输出长度 |
 | `import_error` | 模块导入失败（ModuleNotFoundError/ImportError），通常缺第三方依赖或模块路径错误 | 安装缺失依赖 / 修正导入语句（配合 executor `auto_install_deps` 自动装依赖） |
 | `syntax` | 语法/编译错误（SyntaxError、IndentationError） | 重新生成完整文件 |
 | `type_error` | 类型不匹配（TypeError） | 核对参数与返回类型 |
+| `index_error` | 索引越界（IndexError / index out of range / 下标越界），此前落入 RUNTIME/UNKNOWN 致 Debugger 无法针对性修复（1.2 残余细化） | 补边界判断（空容器先判空再访问），不用 try/except 静默吞掉越界 |
 | `assertion` | 断言失败且失败栈触及被测代码 | 判断是代码逻辑错误 |
 | `logic_error` | 断言失败但失败栈未触及被测模块，疑似测试预期值写错 | 修正测试用例断言（而非盲目改被测代码） |
-| `runtime` | 其他运行时异常（除零、索引越界） | 分析异常栈定位 bug |
+| `runtime` | 其他运行时异常（除零、NameError 等） | 分析异常栈定位 bug |
 | `timeout` | 执行超时 | 检查死循环 |
 | `unknown` | 无法识别的错误 | 通用分析（LLM 兜底） |
 
-分类优先级：`IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。
+分类优先级：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。
 
 ---
 
@@ -492,6 +494,8 @@ class CustomDataset(BaseDatasetLoader):
 
 | 版本 | 日期 | 变更说明 |
 |------|------|---------|
+| 0.9.13 | 2026-09-14 | 错误分类 8→10 类（LLM_FORMAT_ERROR + INDEX_ERROR，1.2 残余）、APIManager 熔断冷却期（4.1 残余，默认 60s）、结果分析脚本 analyze_results.py（4.3）、基线 token 效率汇总（2.2） |
+| 0.9.12 | 2026-09-13 | 多候选补丁（3.1，默认关）、结构化 JSONL 追踪层（4.1，默认关）、成本感知路由（3.4）、RAG 纳入主实验（2.3）、CLI 边界补测（1.5） |
 | 1.0.0 | 2026-08-17 | 初始版本，包含 4 个智能体和完整工作流 |
 | 0.9.11 | 2026-09-11 | import 提取单一实现、故障转移模型路由、MySQL 单例 DCL、RAG 粘性标志、NaN/Inf 序列化修复（详见 CHANGELOG） |
 | 0.9.10 | 2026-09-11 | CLI 并发派发器去重与回归防护（详见 CHANGELOG） |

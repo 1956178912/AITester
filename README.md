@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1085 collected |
-| **单元测试** | ✅ 1085 passed, 0 skipped |
+| **总测试数** | ✅ 1111 collected |
+| **单元测试** | ✅ 1111 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 系统功能增强批次：多候选补丁与验证（3.1，默认关）+ 结构化 JSONL 追踪层（4.1，默认关）+ 成本感知路由（3.4）+ RAG 纳入主实验（2.3）+ CLI 边界补测（1.5，详见 [CHANGELOG](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (98%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (97%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), cli/app.py (64%), logging_utils.py (88%) |
+| **最新优化** | ✅ 2026-09-14 批次：错误分类 8→10 类（1.2 残余：LLM_FORMAT_ERROR + INDEX_ERROR）+ APIManager 熔断冷却期（4.1 残余）+ 结果分析脚本 analyze_results.py（4.3）+ 基线 token 效率汇总（2.2）；详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (95%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 系统功能增强批次：多候选补丁 + 结构化追踪 + 成本感知路由 + RAG 默认开 + CLI 边界补测 46 个新用例（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-14 批次：错误分类 10 类 + 熔断冷却期 + 结果分析脚本 + 公平性 token 输出，新增 26 个测试用例（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -280,8 +280,11 @@ AITester/
 │   └── experiments/                  # 实验分析
 │       └── analysis.py               # 统计检验与结果分析
 ├── experiments/                      # 实验脚本模块
-│   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验）
-│   └── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
+│   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验 + 公平性 token 输出）
+│   ├── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
+│   ├── analyze_results.py            # 结果分析脚本（4.3：Markdown 汇总，旧 JSON 兜底）
+│   ├── compare_failures.py           # 失败翻转任务对比（Planner/Debugger/环境归因）
+│   └── analyze_failures.py           # 失败案例聚类报告（供论文讨论章节使用）
 ├── reproduce.sh                    # 一键实验复现脚本（quick/full 模式）
 ├── tests/                            # 单元测试
 │   ├── test_code_analyzer.py
@@ -313,7 +316,7 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 - [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
 ### 2. 分层错误修复机制（Hierarchical Repair Strategy）
-将测试失败分为八类：**导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出，修复路径更精准）。
+将测试失败分为十类：**LLM 响应格式异常（llm_format_error）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出，修复路径更精准）。
 
 **技术实现**：
 - [src/agents/error_classifier.py](src/agents/error_classifier.py) 中的 `ErrorClassifier` 类（规则匹配）
@@ -372,6 +375,20 @@ JSONL 追加式记录每个任务各智能体节点的输入输出、决策路�
 
 ### 5.4 RAG 纳入主实验（2.3）
 `reproduce.sh` 对合成/内置数据集默认显式 `--enable-rag`（`rag_data/` 持久化跨实验复用），`--no-rag` 可回退 config 默认；`run_benchmark.py` 新增 `--no-rag` 参数与 `--enable-rag` 共同覆盖 `config.ENABLE_RAG`。
+
+### 5.5 结果分析脚本（4.3）
+`experiments/analyze_results.py` 从 benchmark JSON 提取成功率 / 覆盖率 / 迭代次数分布 / Token 效率 / 按基线失败原因分布（1.2 细化类别可单独计数）/ RAG 检索质量，终端打印 Markdown 汇总并写 `analysis_summary.md`；旧 JSON 无 `token_metrics`/`rag_metrics` 键时从 `details` 兜底累加，不崩。
+
+```bash
+# 分析最新一次 benchmark 结果
+python experiments/analyze_results.py --results-dir experiments/results
+
+# 分析指定文件
+python experiments/analyze_results.py --input experiments/results/benchmark_xxx.json
+```
+
+### 5.6 熔断冷却期（4.1 残余）
+`APIManager` 的熔断器在节点连续失败达 `max_consecutive_failures` 后进入冷却期（`APIManagerConfig.circuit_cooldown_seconds`，默认 60s）。冷却期内即使健康检查线程把 `is_healthy` 翻回 True，路由层（`get_healthy_nodes()` 与 `_build_node_list` 备用候选）仍跳过该节点，避免流量重新打回死 provider（浪费时间与 token）；`mark_success` 复位熔断器，`get_status()` 暴露 `circuit_open_remaining_s` 字段供监控。
 
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
@@ -587,7 +604,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1038 个用例，全量通过）
+# 运行所有测试（当前 1111 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -597,15 +614,15 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（44 个测试文件，1038 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（45 个测试文件，1111 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 63 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线） |
+| `test_api_manager.py` | 72 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤） |
 | `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 15 | CLI 命令（list-examples/--version/参数校验） |
+| `test_cli_app.py` | 20 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
@@ -614,35 +631,38 @@ docker run --rm \
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
 | `test_config_manager.py` | 32 | 配置管理器（LLM 配置增删） |
 | `test_config.py` | 14 | config.py 默认值与容错解析 |
-| `test_core_modules.py` | 19 | 核心模块冒烟 |
-| `test_dataset_loader.py` | 76 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 62 | 数据集加载扩展路径（raw 加载/字段校验） |
-| `test_dataset_validation.py` | 14 | SWE-bench 加载质量校验与源码补充（P0） |
+| `test_core_modules.py` | 29 | 核心模块冒烟 |
+| `test_cost_aware_routing.py` | 10 | 成本感知路由与昂贵 provider 成本告警（3.4） |
+| `test_dataset_loader.py` | 83 | 数据集加载器（InMemory/SWEBench） |
+| `test_dataset_loader_extended.py` | 73 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_validation.py` | 18 | SWE-bench 加载质量校验与源码补充（P0） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 35 | 依赖检测与 venv 管理（P1） |
-| `test_error_classifier.py` | 60 | 八类错误分类与修复策略映射（P2 细化） |
+| `test_error_classifier.py` | 72 | 十类错误分类与修复策略映射（P2 细化 + 1.2 残余：LLM_FORMAT_ERROR/INDEX_ERROR） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
-| `test_executor.py` | 39 | 覆盖率解析、失败用例解析 |
-| `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
+| `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
+| `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 10 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9） |
-| `test_generator.py` | 30 | parametrize 校验、import 修正、LLM 调用 |
+| `test_experiments_scripts.py` | 15 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 |
+| `test_generator.py` | 34 | parametrize 校验、import 修正、LLM 调用 |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
-| `test_llm_file_cache.py` | 4 | LLM 文件缓存命中/失效 |
+| `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
 | `test_logging_utils.py` | 14 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.9.11 脱敏扩展回归） |
-| `test_mysql_client.py` | 13 | MySQL 客户端单例/事务/连接池参数 |
+| `test_mysql_client.py` | 15 | MySQL 客户端单例/事务/连接池参数 |
+| `test_multi_candidate.py` | 20 | 多候选补丁生成与静态/执行验证筛选（3.1） |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
 | `test_patch_applier.py` | 38 | 补丁应用（完整文件/单函数模式） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
-| `test_rag_metrics.py` | 5 | RAG 检索质量指标 Hit Rate/MRR（P1） |
-| `test_rag_retriever.py` | 29 | RAG 检索器增删查清与持久化 |
-| `test_report_generator.py` | 48 | 错误报告生成器（含八类分类分支） |
-| `test_run_benchmark.py` | 4 | benchmark 结果构造与异常路径回归（0.9.8 去重重构） |
+| `test_rag_metrics.py` | 13 | RAG 检索质量指标 Hit Rate/MRR（P1） |
+| `test_rag_retriever.py` | 42 | RAG 检索器增删查清与持久化 |
+| `test_report_generator.py` | 48 | 错误报告生成器（含十类分类分支） |
+| `test_run_benchmark.py` | 5 | benchmark 结果构造与异常路径回归（0.9.8 去重重构） |
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
-| `test_workflow.py` | 30 | 工作流图构建与路由 |
-| `test_workflow_extended.py` | 35 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
+| `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
+| `test_workflow.py` | 36 | 工作流图构建与路由 |
+| `test_workflow_extended.py` | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 
 ## 配置说明
 
@@ -672,6 +692,7 @@ docker run --rm \
 | `MYSQL_POOL_MAX_CACHED` | 连接池最大空闲连接 | 10 |
 | `MYSQL_POOL_MAX_CONNECTIONS` | 连接池最大连接总数 | 20 |
 | `MYSQL_POOL_TIMEOUT` | 获取连接等待超时（秒） | 30 |
+| `LLM_N_COST_WEIGHT` | 第 N 个 LLM 的相对成本倍数（3.4 成本感知路由；0.0=未配置，APIManager 回退 1.0 基准） | 1.0 |
 | `SWE_BENCH_ENRICHMENT` | SWE-bench 源码补充 JSONL 路径（P0，可选） | 无 |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `TEMPERATURE` | LLM 采样温度 | 0.2 |
