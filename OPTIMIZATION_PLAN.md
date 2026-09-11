@@ -23,6 +23,40 @@
 | T-06 | 代码 | src/api/api_manager.py | 健康检查线程消耗配额，0.9.11 已加 `enable_health_checker` 开关并让测试用 False | 已修复 | 无 | 保持 | P3（已完成） | 无 | 读 CHANGELOG |
 | D-10 | CI | .github/workflows/ci.yml | CI 已含 lock 同步检查 + ruff 固定版本 + pip-audit + Codecov，结构完整；本地 5 个领先提交未推送 | `git status` ahead 5 | 推送即过 CI（无失败迹象） | 推送前先本地验证 CI 同款命令 | 无 | 无 | 本地 ruff/pytest |
 
+## 0.9.11 后续优化轮次（2026-09-13，文档数据对齐批次 M-01~M-03）
+
+> 新基线：1038 passed / ruff 全绿 / 91% 覆盖（TOTAL 3536/318 miss） / lock 同步（19 vs 130） / sdist+wheel 构建通过 / pip-audit 无未豁免漏洞（venv Python 3.14.6）。
+> 工作区 clean，本地 main 与 origin/main 同步（09-12 轮次的 18 个 commit 已推送完成，无待推存量）。
+> 上轮已完成项（N-01~N-04）不再重复。
+
+### 本轮新优化点清单（检索覆盖：README 测试数据、docs 目录、危险调用、密钥残留、CI、executor 沙箱边界）
+
+| ID | 类别 | 位置 | 问题 | 证据 | 影响 | 建议 | 优先级 | 风险 | 验证方式 |
+|----|------|------|------|------|------|------|--------|------|---------|
+| M-01 | 文档 | README.md:581-621 测试覆盖模块主表 | 13 个文件的"测试函数数"与实测 `def test_` 计数漂移（上上轮新增 27 个回归用例后未同步） | 逐文件正则实测：test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30 | 主表数据与代码不一致（验收标准要求文档与代码一致） | 13 行数值同步为实测值（表头本意为"测试函数数"，按 `def test_` 计数口径） | P2 | 无 | 对照逐文件 grep 实测 |
+| M-02 | 文档 | README.md:577/619 | ① "41 个测试文件" 与 tests/ 实际 44 个 .py 文件不符；② 主表缺 `test_logging_utils.py`（09-11 轮次新增的 14 用例脱敏测试） | `ls tests/*.py | wc -l` = 44（含 `__init__.py` 共 45 项）；主表最后一行为 test_workflow_extended，无 logging_utils 行 | 读者漏掉脱敏测试的存在 | 41→44；在 test_llm_file_cache 行后插入 `test_logging_utils.py` 行（14，日志脱敏正则回归） | P2 | 无 | `ls tests/` 核对 |
+| M-03 | 文档 | CHANGELOG.md | Unreleased（2026-09-13）轮次条目缺失，本轮文档改动无变更记录 | 当前 Unreleased 只到 2026-09-12 | 变更不可追溯 | 补 2026-09-13 轮次条目（M-01/M-02 说明 + 全量测试结论） | P3 | 无 | 读 CHANGELOG |
+
+> 检索结论（无优化点的维度，避免后续轮次重复查）：
+> - 危险调用复核：src/ 无 `eval(`/`exec(`/`os.system` 调用（仅 retriever.py 的 `evaluate_retrieval` 方法名误报）；
+> - executor subprocess 边界复核：`_run_pytest_with_retry` 的 `subprocess.run(cmd, ...)` 命令为受控构造的 pytest 调用（含 timeout/cwd/env 限定），非用户输入拼接，沙箱边界无逃逸调用（深度审计仍列后续）；
+> - 密钥残留复核：`git ls-files` 仅跟踪 .env.example / .env.local.template（占位符），真实密钥仅存在于 gitignored 的本地 .env（sk- 2 条）与 src/.env.local（sk- 5 条），与 09-12 轮次结论一致，建议轮换；
+> - 依赖：130 项与 requirements.lock 同步，pip-audit（同 CI 4 条 PYSEC 豁免）No known vulnerabilities found, 5 ignored；
+> - CI 结构无漂移（矩阵 3.12/3.14、lock 校验、ruff 固定 0.16.3、codecov、pip-audit）；
+> - docs/ 目录与 QUICKSTART 无旧用例数/覆盖率残留；README 版本叙事节（v0.9/v0.10）为历史版本记录，不随基线同步（合理）。
+
+### 本轮实施批次
+
+| 序号 | 目标 | 文件 | 改动方式 | 测试方式 | 回滚方式 | commit 信息 |
+|------|------|------|---------|---------|---------|-------------|
+| B2-1 | M-01 主表 13 行漂移同步 + M-02 文件数 41→44 与补 test_logging_utils 行 | README.md | 13 行数值改实测值、标题行 41→44、插入 1 行 | 逐文件 grep 核对 + ruff 无代码影响 | `git revert` | `docs(readme): 测试覆盖模块主表 13 处用例数漂移同步 + 补 test_logging_utils 行` |
+| B2-2 | M-03 CHANGELOG 2026-09-13 条目 + 计划/报告入库 | CHANGELOG.md / OPTIMIZATION_PLAN.md / OPTIMIZATION_REPORT.md | 追加 Unreleased 轮次条目与本轮记录 | 人工核对 | `git revert` | `docs(optimize): 2026-09-13 轮次计划与报告入库（M-01~M-03 文档数据对齐批次）` |
+
+### 需用户确认的点
+
+1. **M-01/M-02 主表同步**：纯文档改动，零代码风险，建议直接执行。
+2. **阶段 6 推送**：用户已确认"文档批次 + 推送，推送不成功就重试"。本轮新增 2 个 commit，推送 `git push origin main`（若 443 挂起按 09-11/09-12 轮次经验重试或降档 `http.version HTTP/1.1`）；无新增功能分支，main 直推（与历史轮次一致，PR 正文备一份手动链接备用）。
+
 ## 0.9.11 后续优化轮次（2026-09-12）
 
 > 新基线：1038 passed / ruff 全绿 / 91% 覆盖（TOTAL） / lock 同步 / wheel+sdist 构建通过（venv Python 3.14.6）。

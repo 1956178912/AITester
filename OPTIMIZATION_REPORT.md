@@ -4,7 +4,8 @@
 > 详见 `OPTIMIZATION_PLAN.md`；阶段 3-5 已在同一轮内完成，阶段 6 推送与 PR 待用户最终确认。
 >
 > **后续轮次**：2026-09-12 轮次（文档数据对齐批次，N-01~N-04）的完整记录见文末
-> 「附录：2026-09-12 轮次」；优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
+> 「附录：2026-09-12 轮次」；2026-09-13 轮次（文档数据对齐批次，M-01~M-03）的完整记录见
+> 「附录：2026-09-13 轮次」。优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
 
 ## 阶段 0：基线检查
 
@@ -328,3 +329,75 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 - `CHANGELOG.md`：新增 2026-09-12 Unreleased 轮次条目（文档批次 + 全量测试结果）
 - `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`（本附录）：本轮完整记录入库
 - README/QUICKSTART：N-01~N-03 对齐改动随代码 commit 提交
+
+---
+
+## 附录：2026-09-13 轮次（文档数据对齐批次 M-01~M-03）
+
+> 该轮次在 2026-09-12 轮次 4 个 commit（`d1afffc`/`5c7fc80`/`d683741`/`a563d60`）之上执行。
+> 09-12 轮次 18 个待推 commit 已推送完成（工作区 clean、本地与 origin/main 同步），
+> 本轮新增 2 个 commit（`5553c35` + 计划/报告入库提交）。
+> 优化点清单（M-01~M-03）与检索结论见 `OPTIMIZATION_PLAN.md`「0.9.11 后续优化轮次（2026-09-13）」章节。
+
+### 阶段 0：基线检查
+
+- **Git 状态**：`main`，工作区 clean，本地与 `origin/main` 同步（09-12 轮次存量已推完）
+- **新基线**（venv Python 3.14.6）：
+
+| 检查项 | 命令 | 结果 |
+|--------|------|------|
+| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.1s |
+| 覆盖率 | `--cov=src` | ✅ TOTAL 91%（3536/318 miss） |
+| Lint | `ruff check .` | ✅ All checks passed |
+| 格式化 | `ruff format --check .` | ✅ 124 files already formatted |
+| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 |
+| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 |
+| 安全扫描 | `pip-audit`（同 CI 豁免清单） | ✅ No known vulnerabilities found, 5 ignored |
+| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用（与上轮一致） |
+
+### 阶段 1：优化点识别（要点）
+
+- **M-01（P2）**：README「测试覆盖模块」主表 13 个文件的用例数与实测 `def test_` 计数漂移（0.9.11 批次新增 27 回归用例后未同步）：test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30
+- **M-02（P2）**：README "41 个测试文件" 与 tests/ 实际 44 个 .py 不符；主表缺 `test_logging_utils.py`（0.9.11 轮次新增的 14 用例脱敏测试）——更正为 44 并补行
+- **M-03（P3）**：CHANGELOG 补 2026-09-13 Unreleased 轮次条目（本轮纯文档改动需可追溯）
+- 检索结论（无优化点维度）：src 无 eval/exec/os.system 危险调用（复核通过）；executor `_run_pytest_with_retry` 的 subprocess.run 为受控 pytest 命令（timeout/cwd/env 限定，非用户输入拼接），沙箱边界无逃逸调用；真实密钥仅存于 gitignored 的本地 .env（sk- 2 条）与 src/.env.local（sk- 5 条），`git ls-files` 仅跟踪占位符模板，建议轮换；依赖 130 项与 lock 同步，pip-audit 无未豁免漏洞；CI 结构无漂移；docs/ 与 QUICKSTART 无旧数据残留
+
+### 阶段 3：实施记录
+
+| 提交 | 内容 |
+|------|------|
+| `5553c35` docs(readme) | M-01 主表 13 行用例数同步 + M-02 文件数 41→44 与补 test_logging_utils 行 |
+| （计划/报告入库提交） docs(optimize) | M-03 CHANGELOG 条目 + OPTIMIZATION_PLAN/REPORT 09-13 章节 |
+
+（v0.9/v0.10 历史版本叙事表保留原值，按设计不随基线同步；纯文档改动，未触碰源码。）
+
+### 阶段 4：全面测试（全部命令与 CI 对齐，venv Python 3.14.6）
+
+| 检查项 | 命令 | 结果 | 备注 |
+|--------|------|------|------|
+| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings | 纯文档改动，测试集无变化 |
+| Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
+| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
+| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
+| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 | |
+| 安全扫描 | `pip-audit`（CI 同款 4 条 PYSEC 豁免） | ✅ No known vulnerabilities found, 5 ignored | |
+| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91% | 与 README/CHANGELOG 口径一致 |
+| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用 | 保持现状 |
+
+### 阶段 5：文档更新
+
+- `CHANGELOG.md`：新增 2026-09-13 Unreleased 轮次条目（M-01/M-02 说明 + 全量测试结论）
+- `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`（本附录）：本轮完整记录入库
+- `README.md`：主表 13 行 + 文件数 + 补 test_logging_utils 行（随 `5553c35` 提交）
+
+### 阶段 6：上传 GitHub
+
+用户确认"文档批次 + 推送，推送不成功就重试"。执行 `git push origin main`（本轮 2 个 commit；
+09-11/09-12 轮次的 18 个存量已在此前推送完成）。若 443 握手挂起（历史轮次经验），按降档
+`git config http.version HTTP/1.1` 或代理方案重试；仍失败则输出手动命令 + 说明。
+
+### 阶段 7：后续建议
+
+1. 轮换本地 .env / src/.env.local 中的 LLM API Key（零容忍原则，跨轮次保留建议）
+2. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
+3. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815；311 重复两条为其别名条目）

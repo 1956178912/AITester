@@ -2,6 +2,12 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-13 优化轮次）
+
+### 文档
+- README「测试覆盖模块」主表 13 处用例数漂移同步（test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30，0.9.11 批次新增 27 回归用例后未同步）；"41 个测试文件" 更正为 44；补 `test_logging_utils.py`（14 用例脱敏回归）行。v0.9/v0.10 历史版本叙事表保留原值
+- 全量 **1038 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步 / sdist+wheel 构建 / pip-audit（同 CI 豁免）全部通过（纯文档改动，无代码变更，未影响测试集）
+
 ## [Unreleased] - 待发布（2026-09-12 优化轮次）
 
 ### 文档
