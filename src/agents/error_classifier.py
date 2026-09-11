@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -341,10 +340,14 @@ class ErrorClassifier:
         frames = _RE_TRACEBACK.findall(text)
         if not frames:
             return False
+        # 任何一帧落在被测模块文件上即视为被测代码问题（非测试侧逻辑错误）。
+        # 用 endswith 而非 basename 全等：pytest 帧为完整路径；旧版三个子句
+        # （basename==file / basename==module / endswith）中前两个是 endswith
+        # 的子集（帧几乎总带 .py 后缀，无后缀帧在 pytest traceback 中不出现），
+        # 收敛为单一 endswith 判断（"mycalc.py" 误中 "calc.py" 的既有限制保留）
         target_file = f"{target_module}.py"
         for frame_file, _line in frames:
-            basename = os.path.basename(frame_file)
-            if basename == target_file or basename == target_module or frame_file.endswith(target_file):
+            if frame_file.endswith(target_file):
                 return False
         return True
 

@@ -210,6 +210,30 @@ class TestErrorClassifier:
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.ASSERTION
 
+    def test_is_test_side_no_frames_returns_false(self):
+        """提取不到 traceback 帧时保守判定为 False（归 ASSERTION，交 LLM 分诊）。"""
+        assert self.classifier._is_test_side_assertion("AssertionError: x", "calculator") is False
+
+    def test_is_test_side_full_path_frame_hits_target(self):
+        """帧为完整路径（examples/calculator.py）且落在被测模块 → 非测试侧。"""
+        text = 'File "/repo/examples/calculator.py", line 12, in add\nAssertionError'
+        assert self.classifier._is_test_side_assertion(text, "calculator") is False
+
+    def test_is_test_side_frames_avoid_target(self):
+        """帧只落在测试文件（与目标模块无路径后缀关系）→ 测试侧逻辑错误。"""
+        text = 'File "test_foo.py", line 5, in test_add\nAssertionError'
+        assert self.classifier._is_test_side_assertion(text, "calculator") is True
+
+    def test_is_test_side_suffix_collision_retained(self):
+        """既有限制保留："mycalc.py" 帧会 endswith 命中 "calc.py"（误判非测试侧）。
+
+        该限制在 0.9.11 帧匹配收敛为单一 endswith 时有意保留（旧三子句中
+        basename 全等/模块名全等均为 endswith 子集，pytest 帧几乎总带 .py 后缀），
+        本测试锁定现状，防止后续误"修复"时破坏既有分类结果。
+        """
+        text = 'File "mycalc.py", line 3, in f\nAssertionError'
+        assert self.classifier._is_test_side_assertion(text, "calc") is False
+
     # --- classify_with_context 方法测试 ---
 
     def test_classify_with_context_returns_tuple(self):
