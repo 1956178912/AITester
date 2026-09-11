@@ -9,11 +9,11 @@
 |------|------|
 | **总测试数** | ✅ 1038 collected |
 | **单元测试** | ✅ 1038 passed, 0 skipped |
-| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83% / cli-app 61%） |
+| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
 | **最新优化** | ✅ 0.9.11 批次：import 提取单一实现（逗号多模块完整捕获，executor 复用去双份正则）+ 故障转移模型路由语义修正 + MySQL 单例 DCL 线程安全 + RAG 初始化失败粘性标志 + 显著性检验 NaN/Inf 序列化修复（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), cli/app.py (61%), logging_utils.py (83%) |
+| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
 | **最近改动** | ✅ 0.9.11 批次：import 提取单一实现、故障转移模型路由、MySQL 单例 DCL、RAG 粘性标志、NaN/Inf 序列化修复等 14 项 + 27 个回归用例（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
 
