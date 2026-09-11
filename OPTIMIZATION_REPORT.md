@@ -2,6 +2,9 @@
 
 > 本报告为 2026-09-11 优化轮次的完整交付记录。阶段 0 基线与阶段 1 优化点清单
 > 详见 `OPTIMIZATION_PLAN.md`；阶段 3-5 已在同一轮内完成，阶段 6 推送与 PR 待用户最终确认。
+>
+> **后续轮次**：2026-09-12 轮次（文档数据对齐批次，N-01~N-04）的完整记录见文末
+> 「附录：2026-09-12 轮次」；优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
 
 ## 阶段 0：基线检查
 
@@ -263,3 +266,65 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 2. 轮换本地 .env 中的 LLM API Key（已在会话中暴露过一次，零容忍原则下建议更换）
 3. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
 4. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815）
+
+---
+
+## 附录：2026-09-12 轮次（文档数据对齐批次）
+
+> 该轮次在 0.9.11 轮次 18 个待推送 commit 之上执行，新增 4 个 commit
+> （`d1afffc` / `5c7fc80` / `d683741` / `a563d60`）。优化点清单（N-01~N-04）与
+> 检索结论见 `OPTIMIZATION_PLAN.md`「0.9.11 后续优化轮次（2026-09-12）」章节。
+
+### 阶段 0：基线检查
+
+- **Git 状态**：`main`，工作区 clean，本地领先 `origin/main` 18 个 commit
+- **新基线**（venv Python 3.14.6）：
+
+| 检查项 | 命令 | 结果 |
+|--------|------|------|
+| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 27.9s |
+| 覆盖率 | `--cov=src` | ✅ TOTAL 91%（3536/318 miss） |
+| Lint | `ruff check .` | ✅ All checks passed |
+| 格式化 | `ruff format --check .` | ✅ 124 files already formatted |
+| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 |
+| 构建 | `python -m build --sdist --wheel` | ✅ aitester-0.9.11.tar.gz + .whl |
+| 安全扫描 | `pip-audit`（同 CI 豁免清单） | ✅ No known vulnerabilities found, 5 ignored |
+| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用（与上轮一致） |
+
+### 阶段 1：优化点识别（要点）
+
+- **N-01（P2）**：README 测试状态表核心模块覆盖率数据陈旧（logging_utils 83%→88%、cli/app.py 61%→64%），上轮新增 18 用例后未同步
+- **N-02（P2）**：README 安全扫描说明仍写"4 条已知 CVE"，ci.yml 已漂移为 PYSEC 豁免口径
+- **N-03（P3）**：QUICKSTART 第 4 步"验证配置"措辞与实际行为不符（`from config import LLM_CONFIGS` 仅加载校验，无网络调用）
+- **N-04（P2）**：README 引用的测试文件逐一 `ls` 核对，**全部存在**，无需修改（无 commit）
+- 检索结论（无优化点维度）：源码无 eval/exec/os.system 危险调用；源码与测试无真实密钥残留（80e2f05 归一后复核通过）；依赖全量与 lock 同步、pip-audit 无未豁免漏洞；CI 结构完整无漂移；src 无 TODO/FIXME 残留
+
+### 阶段 3：实施记录
+
+| 提交 | 内容 |
+|------|------|
+| `d1afffc` docs(readme) | N-01 覆盖率数据对齐 88%/64% |
+| `5c7fc80` docs(readme) | N-02 安全扫描说明对齐 PYSEC 豁免口径 |
+| `d683741` docs(quickstart) | N-03 配置验证步骤措辞修正 |
+| `a563d60` docs(changelog) | CHANGELOG 补本轮 Unreleased 条目 |
+
+（N-04 核对无漂移，无 commit；纯文档改动，未触碰源码，最小验证为 `ruff check` + 相关测试子集全绿。）
+
+### 阶段 4：全面测试（全部命令与 CI 对齐，venv Python 3.14.6）
+
+| 检查项 | 命令 | 结果 | 备注 |
+|--------|------|------|------|
+| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.6s | 2 warning 为 scipy 数值精度提示，非代码问题 |
+| Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
+| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
+| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
+| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 | |
+| 安全扫描 | `pip-audit -r requirements.txt --no-deps --ignore-vuln ...` | ✅ No known vulnerabilities found, 5 ignored | 豁免清单与 CI 一致 |
+| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91% | 与 README/CHANGELOG 口径一致 |
+| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用 | 项目未引入静态类型检查器，保持现状 |
+
+### 阶段 5：文档更新
+
+- `CHANGELOG.md`：新增 2026-09-12 Unreleased 轮次条目（文档批次 + 全量测试结果）
+- `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`（本附录）：本轮完整记录入库
+- README/QUICKSTART：N-01~N-03 对齐改动随代码 commit 提交

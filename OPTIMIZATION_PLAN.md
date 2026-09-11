@@ -23,6 +23,41 @@
 | T-06 | 代码 | src/api/api_manager.py | 健康检查线程消耗配额，0.9.11 已加 `enable_health_checker` 开关并让测试用 False | 已修复 | 无 | 保持 | P3（已完成） | 无 | 读 CHANGELOG |
 | D-10 | CI | .github/workflows/ci.yml | CI 已含 lock 同步检查 + ruff 固定版本 + pip-audit + Codecov，结构完整；本地 5 个领先提交未推送 | `git status` ahead 5 | 推送即过 CI（无失败迹象） | 推送前先本地验证 CI 同款命令 | 无 | 无 | 本地 ruff/pytest |
 
+## 0.9.11 后续优化轮次（2026-09-12）
+
+> 新基线：1038 passed / ruff 全绿 / 91% 覆盖（TOTAL） / lock 同步 / wheel+sdist 构建通过（venv Python 3.14.6）。
+> 上轮已完成项（D-01~D-09、T-02/T-03/T-05/T-06、B1/B2、setup.py py_modules、CI 豁免同步）不再重复。
+
+### 本轮新优化点清单（检索覆盖：目录结构/重复代码、依赖与安全、错误处理/边界、性能、测试、CI、文档一致性）
+
+| ID | 类别 | 位置 | 问题 | 证据 | 影响 | 建议 | 优先级 | 风险 | 验证方式 |
+|----|------|------|------|------|------|------|--------|------|---------|
+| N-01 | 文档 | README.md:12/16 | 核心模块覆盖率数据陈旧：`logging_utils 83%`、`cli-app 61%`（0.9.11 批次旧值），实际已升至 88% / 64%（上轮新增 18 用例后漂移未同步） | `pytest --cov=src --cov-report=term-missing` 实测 88%/64% | 文档与代码不一致（验收标准要求） | 两行覆盖率列表同步为 88%/64% | P2 | 无 | 对照覆盖率实测输出 |
+| N-02 | 文档 | README.md:66 | CI 安全扫描说明仍写"4 条已知 CVE"，上轮已把豁免 ID 漂移为 PYSEC-2026-311/3813/3814/3815（仍是 4 条豁免但措辞/口径过时） | `grep "4 条已知 CVE" README.md` 命中 1 处；ci.yml 已改 PYSEC 口径 | 读者误以为还是旧 CVE 清单 | 改为"5 条豁免（含 PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815）"与 ci.yml 注释对齐 | P2 | 无 | 读 ci.yml 注释 |
+| N-03 | 文档 | QUICKSTART.md:48 | 第 4 步标题"验证配置"，命令 `python3 -c "from config import LLM_CONFIGS; print(...)"` 只验证配置**加载**，不测试 API 连接（无网络调用） | 该行 docstring 与命令行为不符 | 用户误以为该命令会探测网络 | 标题改"验证配置已加载"，补充说明（真实连接探测用 `python scripts/check_quota.py`，已存在于第 6 步） | P3 | 无 | 读 config.py |
+| N-04 | 代码 | README.md 幽灵检查（新轮） | 上轮删除了 v0.9.10 的 4 行幽灵测试文件，需再核对 README"测试状态"节与 tests/ 实际 45 文件是否仍有漂移 | `ls tests/` vs README 引用 | 低 | 核对后如有再修 | P2 | 无 | `grep -oE "tests/test_[a-z_0-9]+\.py" README.md | sort -u` 逐一 `ls` 核对 |
+
+> 检索结论（无优化点的维度，避免后续轮次重复查）：
+> - 源码无 eval/exec/os.system 调用（`grep` 命中仅 retriever.py:425 的方法名 `evaluate_retrieval`，非危险调用）；
+> - 源码与测试中无真实密钥残留（上轮 80e2f05 已归一，本轮复核通过）；
+> - 依赖 130 项全部与 requirements.lock 同步，pip-audit（同 CI 豁免）No known vulnerabilities found, 5 ignored；
+> - CI 结构完整（矩阵 3.12/3.14、lock 校验、ruff 固定 0.16.3、失败诊断注解、codecov、pip-audit），无新增漂移；
+> - src 无 TODO/FIXME 残留；T-04 executor 沙箱审计（上轮遗留）本轮仅复核 subprocess 边界无逃逸调用，深度审计仍需设计文档，继续列为后续建议。
+
+### 本轮实施批次
+
+| 序号 | 目标 | 文件 | 改动方式 | 测试方式 | 回滚方式 | commit 信息 |
+|------|------|------|---------|---------|---------|-------------|
+| B1-1 | N-01 覆盖率数据对齐 | README.md | 83%→88%、61%→64%（两行） | 对照实测覆盖率 | `git revert` | `docs(readme): 核心模块覆盖率数据对齐 88%/64% 实测值` |
+| B1-2 | N-02 CVE 口径对齐 | README.md | "4 条已知 CVE" 改 PYSEC 豁免口径 | 读 ci.yml 注释 | `git revert` | `docs(readme): 安全扫描说明对齐 PYSEC 豁免清单口径` |
+| B1-3 | N-03 措辞修正 | QUICKSTART.md | 标题"验证配置"→"验证配置已加载" + 补一句说明 | 读 config.py | `git revert` | `docs(quickstart): 配置验证步骤措辞修正（仅加载校验，连接探测见 check_quota）` |
+| B1-4 | N-04 幽灵测试文件复核 | README.md | 如有漂移再改；无漂移则无 commit | grep+ls 核对 | 不适用 | 视核对结果 |
+
+### 需用户确认的点
+
+1. **N-01/N-02 文档对齐**（批次 B1）：纯文档改动，零代码风险，建议直接执行。
+2. **阶段 6 推送**：main 已领先 origin/main 18 个 commit（含上轮全部成果），本轮会再新增 1-3 个 commit。是否推送并创建 PR？（上轮已确认过同一流程，网络曾受阻于 443 长连接挂起；本轮会重试推送，失败则输出手动命令 + PR 正文。）
+
 ## 本次实施范围（按优先级、可回滚、原子提交）
 
 > 原则：只做**低风险、高确定**的修复与文档对齐；不做大重构（T-01 公共 fixture、T-04 沙箱审计列为后续建议）。每个逻辑改动单独 commit。
