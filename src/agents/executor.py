@@ -18,13 +18,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from src.tools.dependency import extract_import_module_names
+
 logger = logging.getLogger(__name__)
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
-# 匹配 "from module_name import ..." 语句
-_RE_FROM_IMPORT = re.compile(r"from\s+([\w.]+)\s+import")
-# 匹配 "import module_name" 语句
-_RE_IMPORT = re.compile(r"^import\s+([\w.]+)")
 # 提取模块名（无扩展名）
 _RE_MODULE_NAME = re.compile(r"([^/\\]+)\.py$")
 # 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比
@@ -184,7 +182,11 @@ class ExecutorAgent:
         if self.use_venv:
             return self._execute_sandboxed(test_code, target_file, target_function)
 
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # 项目根 = 本文件上溯三层（src/agents/executor.py → 仓库根），与 workflow.py
+        # 的 patch 白名单、cli/app.py 的根目录口径一致。此前只上溯两层得到 src/，
+        # 导致 rglob 模块搜索与 pytest cwd 都少了一层：src 外的 examples/ 等目录
+        # 模块搜不到、import 修复链路对非同名 helper 断裂
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
         fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
@@ -197,7 +199,11 @@ class ExecutorAgent:
 
         try:
             env = os.environ.copy()
-            env["PYTHONPATH"] = target_dir + os.pathsep + env.get("PYTHONPATH", "")
+            # 尾随冒号防护：原 PYTHONPATH 未设置时直接拼接会产生 "<dir>:" 尾随空段
+            # （sys.path 中空元素等价 CWD，同名文件可遮蔽第三方库）；空段过滤后 join
+            env["PYTHONPATH"] = os.pathsep.join(
+                [target_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
+            )
 
             python_path = sys.executable
             cmd = [
@@ -304,8 +310,11 @@ class ExecutorAgent:
         missing_packages = suggest_package_names(missing_modules)
 
         env = os.environ.copy()
-        # 模块搜索路径仅指向沙箱目录（追加原 PYTHONPATH 保留 pytest 等测试工具）
-        env["PYTHONPATH"] = sandbox_dir + os.pathsep + env.get("PYTHONPATH", "")
+        # 模块搜索路径以沙箱目录为首（追加原 PYTHONPATH 保留 pytest 等测试工具）；
+        # 空段过滤防尾随冒号（语义同上，空元素等价 CWD 可遮蔽同名文件）
+        env["PYTHONPATH"] = os.pathsep.join(
+            [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
+        )
         python_path = sys.executable
         dep_install_note = ""
         sandbox_error_info: dict[str, Any] | None = None
@@ -326,10 +335,6 @@ class ExecutorAgent:
                         }
             except RuntimeError as e:
                 sandbox_error_info = {"type": "dependency_install_failed", "message": str(e), "detail": str(e)}
-
-        if missing_packages and not self.use_venv:
-            # 非 venv 模式但检测到缺失依赖：仅记录提示（由分类器区分代码 bug 与环境问题）
-            dep_install_note = f"检测到缺失依赖（未安装，ENV_AUTO_INSTALL 关闭）: {missing_packages}"
 
         # 依赖安装失败/venv 创建失败：测试结果将不可信（缺失依赖仍在），
         # 直接提前返回，让 Debugger 拿到准确的 dependency_install_failed 诊断
@@ -601,17 +606,17 @@ class ExecutorAgent:
 
     @staticmethod
     def _extract_imports(test_code: str) -> list[str]:
-        """提取测试代码中的非标准库导入模块名（排除相对导入）。"""
+        """提取测试代码中的非标准库导入模块名（排除相对导入）。
+
+        底层复用 dependency.extract_import_module_names 的单一实现：
+        逗号分隔多模块导入（import numpy, scipy）完整捕获——此前本地复制的
+        正则 ^import\\s+([\\w.]+) 只取首个模块，缺失的后续模块逃过依赖检测。
+        """
         imports = []
-        for line in test_code.split("\n"):
-            line = line.strip()
-            match1 = _RE_FROM_IMPORT.match(line)
-            match2 = _RE_IMPORT.match(line)
-            if match1 or match2:
-                module_name = (match1 or match2).group(1)
-                top_level = module_name.split(".")[0]
-                if not module_name.startswith(".") and top_level not in _STANDARD_LIBRARIES:
-                    imports.append(module_name)
+        for module_name in extract_import_module_names(test_code):
+            top_level = module_name.split(".")[0]
+            if top_level not in _STANDARD_LIBRARIES:
+                imports.append(module_name)
         return imports
 
     @staticmethod

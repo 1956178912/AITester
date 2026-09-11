@@ -98,6 +98,76 @@ class TestExtractImports:
         imports = ExecutorAgent._extract_imports("")
         assert imports == []
 
+    def test_comma_import_all_modules_captured(self):
+        """逗号分隔多模块导入（import numpy, scipy）须完整捕获。
+
+        回归：executor 本地复制的正则只取逗号列表首个模块，
+        后续模块逃过依赖检测/导入修复链路。
+        """
+        code = "import numpy, scipy\n"
+        imports = ExecutorAgent._extract_imports(code)
+        assert "numpy" in imports
+        assert "scipy" in imports
+
+
+class TestExecuteEnv:
+    """execute() 非 venv 路径的环境构造（PYTHONPATH / cwd 深度）。"""
+
+    @patch("src.agents.executor.ExecutorAgent._run_pytest_with_retry")
+    @patch("src.agents.executor.ExecutorAgent._auto_fix_imports")
+    def test_project_root_is_repo_root(self, mock_fix, mock_retry, tmp_path, monkeypatch):
+        """pytest 执行 cwd = 仓库根（executor.py 上溯三层），而非 src/。
+
+        回归：此前上溯两层得到 src/，src 外的 examples/ 等目录模块
+        在 rglob 搜索与 pytest 工作目录中都不可见。
+        """
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+        mock_fix.return_value = "def test_x(): pass"
+        mock_retry.return_value = ("1 passed", MagicMock(returncode=0))
+
+        target = tmp_path / "target.py"
+        target.write_text("def x(): return 1\n", encoding="utf-8")
+
+        ExecutorAgent().execute("def test_x(): pass", str(target))
+
+        _, _, project_root = mock_retry.call_args.args
+        # 测试文件位于 tests/test_executor.py → 上溯两层即仓库根
+        expected_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        assert os.path.realpath(project_root) == os.path.realpath(expected_root)
+
+    @patch("src.agents.executor.ExecutorAgent._run_pytest_with_retry")
+    @patch("src.agents.executor.ExecutorAgent._auto_fix_imports")
+    def test_pythonpath_no_trailing_sep_when_unset(self, mock_fix, mock_retry, tmp_path, monkeypatch):
+        """原 PYTHONPATH 未设置时，注入后不得产生尾随分隔符（空段等价 CWD）。"""
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+        mock_fix.return_value = "def test_x(): pass"
+        mock_retry.return_value = ("1 passed", MagicMock(returncode=0))
+
+        target = tmp_path / "target.py"
+        target.write_text("def x(): return 1\n", encoding="utf-8")
+
+        ExecutorAgent().execute("def test_x(): pass", str(target))
+
+        env = mock_retry.call_args.args[1]
+        assert not env["PYTHONPATH"].endswith(os.pathsep)
+        assert env["PYTHONPATH"] == str(tmp_path)
+
+    @patch("src.agents.executor.ExecutorAgent._run_pytest_with_retry")
+    @patch("src.agents.executor.ExecutorAgent._auto_fix_imports")
+    def test_pythonpath_appends_existing_segments(self, mock_fix, mock_retry, tmp_path, monkeypatch):
+        """原 PYTHONPATH 已设置时，新目录追加在首、原段完整保留（空段仍被过滤）。"""
+        monkeypatch.setenv("PYTHONPATH", "/a::/b")  # 中间空段应被过滤
+        mock_fix.return_value = "def test_x(): pass"
+        mock_retry.return_value = ("1 passed", MagicMock(returncode=0))
+
+        target = tmp_path / "target.py"
+        target.write_text("def x(): return 1\n", encoding="utf-8")
+
+        ExecutorAgent().execute("def test_x(): pass", str(target))
+
+        env = mock_retry.call_args.args[1]
+        assert env["PYTHONPATH"] == os.pathsep.join([str(tmp_path), "/a", "/b"])
+
 
 class TestParseCoverage:
     """测试覆盖率解析。"""
