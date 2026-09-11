@@ -380,12 +380,11 @@ class ExecutorAgent:
                     result["error_info"] = self._build_error_info(last_result, output)
                     result["error_info"]["missing_dependencies"] = sorted(missing_modules)
 
-            # 依赖检测结论写入 error_info / output，供 Debugger 与实验分析使用
+            # 依赖检测结论写入 dep_note，供 Debugger 与实验分析使用。
+            # 注：原"安装失败优先覆盖 error_info"分支不可达（安装失败/venv 创建失败
+            # 在上方依赖检测段已提前 return，此处 sandbox_error_info 必为 None），已删除
             if dep_install_note:
                 result["dep_note"] = dep_install_note
-            if sandbox_error_info and not result.get("passed"):
-                # 安装失败优先于测试失败报告（测试失败只是安装失败的表象）
-                result["error_info"] = sandbox_error_info
             return result
         finally:
             # 清理临时沙箱（venv 缓存在 ~/.cache/aitester/venvs/，跨任务保留）
