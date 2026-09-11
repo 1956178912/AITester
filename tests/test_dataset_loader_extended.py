@@ -393,6 +393,32 @@ class TestDefects4JPYDatasetCore:
         code = ds.tasks[0].test_code
         assert code.index("test_a") < code.index("test_m") < code.index("test_z")
 
+    def test_load_raw_data_buggy_code_sorted(self, tmp_path):
+        """buggy 目录代码按文件名排序读取（此前未 sorted，与 tests 目录不对称，
+        导致两次加载 instance_code 拼接顺序随文件系统漂移、RAG md5 指纹不可复现）。"""
+        proj_dir = tmp_path / "projects" / "calc" / "v1"
+        proj_dir.mkdir(parents=True)
+        (proj_dir / "info.json").write_text("{}")
+        buggy = proj_dir / "buggy"
+        buggy.mkdir()
+        (buggy / "zeta.py").write_text("def zeta(): pass\n")
+        (buggy / "alpha.py").write_text("def alpha(): pass\n")
+        (buggy / "mid.py").write_text("def mid(): pass\n")
+
+        ds = FreshDefects4J(str(tmp_path))
+        ds._load_raw_data()
+
+        code = ds.tasks[0].instance_code
+        assert code.index("alpha") < code.index("mid") < code.index("zeta")
+
+    def test_get_available_datasets_is_sorted(self):
+        """get_available_datasets 返回排序列表（此前 list(set) 受哈希随机化影响顺序不定）。"""
+        from src.datasets.dataset_loader import get_available_datasets
+
+        names = get_available_datasets()
+        assert names == sorted(names)
+        assert "swe_bench" in names and "synth" in names
+
     def test_load_raw_data_non_test_files_skipped(self, tmp_path):
         """不以 test_ 开头的文件被跳过（第 407 行）"""
         proj_dir = tmp_path / "projects" / "proj" / "v1"
