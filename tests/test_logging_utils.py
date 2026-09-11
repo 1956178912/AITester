@@ -25,8 +25,8 @@ class TestMaskSensitiveInfo:
         assert "<REDACTED_API_KEY>" in mask_sensitive_info("called sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123 ok")
 
     def test_sk_with_dots_and_hyphens_redacted(self):
-        """带点号段 / 连字符的 sk- key（如 sk-ws-H.EPIHIXL...）被脱敏。"""
-        key = "sk-ws-H.EPIHIXL.Cq2j.MEYCIQDEoLbIemidFUPx58FBK9WvWVXUYKv0x1vBXLXgNuC3hwIhAM7S0LecBrT9hDRcSkDUkEftU0XSvOplvLdp-Wg7pU-s"
+        """带点号段 / 连字符的 sk- key（形如 sk-ws-xxx.yyy.zzz...）被脱敏。"""
+        key = "sk-ws-AbCdEf.GhIjKlMnOpQrStUvWxYz123AbCdEf.GhIjKlMnOpQrStUvWxYz01234567890-Wg7pU-s"
         result = mask_sensitive_info(f"using {key} now")
         assert key not in result
         assert "<REDACTED_API_KEY>" in result
