@@ -2,6 +2,14 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-12 优化轮次）
+
+### 文档
+- README 核心模块覆盖率数据对齐实测值（logging_utils 83%→88%、cli/app.py 61%→64%，上轮新增 18 用例后漂移未同步）
+- README 安全扫描说明对齐 PYSEC 豁免口径（"4 条已知 CVE"→"5 条豁免：PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815"，与 ci.yml 注释一致）
+- QUICKSTART 配置验证步骤措辞修正：`from config import LLM_CONFIGS` 仅校验配置加载（无网络调用），真实连接探测指向 `python scripts/check_quota.py`
+- 全量 **1038 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步 / sdist+wheel 构建 / pip-audit（同 CI 豁免）全部通过
+
 ## [Unreleased] - 待发布（2026-09-11 优化轮次）
 
 ### 安全
