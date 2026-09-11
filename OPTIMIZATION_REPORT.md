@@ -451,11 +451,48 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 
 ### 阶段 6：上传 GitHub
 
-本批 6 个原子 commit（含 1 个补漏 test 文件提交），与历史轮次一致 `git push origin main` 直推；
-若 443 挂起按历史经验降档 `git config http.version HTTP/1.1` 或代理重试。
+本批 7 个原子 commit（6 个功能/测试 + 1 个文档批次），经代理 `http://127.0.0.1:7891`
+推送到 `origin/main`（443 直连不可达时按历史经验配置 http.proxy）。推送后执行
+`git filter-repo` 重写历史，移除全部论文/隐私相关路径（paper.md、docs/paper/、
+TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净历史到 GitHub。
 
 ### 阶段 7：后续建议
 
 1. **3.2 跨文件修复**与 **3.3 测试用例质量挖掘**：本批未实施（改动面大，涉及 patch_applier 跨文件依赖分析 + 测试自验证过滤），建议单独立项并配设计文档。
 2. **4.2 Docker 实际启用**：仍维持 `use_docker=False` 预留（历史 D-06 决策），接通需确认实验环境有 Docker daemon。
 3. 推送前确认 `main` 领先提交数，一并推送全部（含 09-13 文档批次与系统功能增强批次）。
+
+---
+
+## 附录：2026-09-13 文档同步 + 隐私清理 + GitHub 推送轮次
+
+### 执行范围
+
+1. **全项目文档同步**（`docs: 全项目文档同步...`）：
+   - README / QUICKSTART / OPTIMIZATION_REPORT 补 3.1/3.4/4.1/2.3/1.5 批次
+     新模块说明（多候选补丁、成本感知路由、结构化追踪、RAG 默认开、CLI 边界），
+     测试基线 1038→1085；QUICKSTART 增「7. 可选高级开关」节。
+   - 去除论文/手稿措辞：README「论文与文档」章节删除 `paper.md` 链接与摘要、
+     `docs/algorithm_design.md`「供论文撰写」改为「供技术评审」、
+     `docs/failure_analysis.md` 与 README 实验数据区加「历史数据快照」标注。
+   - 本地删除 `paper.md` 与 `.private/`（论文源码 LaTeX/大纲/实验报告，均已 .gitignore 排除，未进 git 树）。
+2. **隐私与论文内容全量排查**（敏感信息扫描脚本）：
+   - 全部被跟踪的 md/py/json/sh 文件无真实密钥落盘（命中均为测试 fixture 合成占位符）；
+   - 本地真实密钥仅存于 gitignored 的 `.env` / `src/.env.local`（建议轮换，跨轮次保留建议）。
+3. **git 历史清理**（`git filter-repo`）：
+   - 移除 `paper.md` / `docs/paper/`（8 章 LaTeX + 摘要）/ `TASK_SUMMARY.md` /
+     `FINAL_PAPER_STATUS.md` / `PAPER_IMPROVEMENT_PLAN.md` /
+     `algorithm_paper.md` / `docs/paper_outline.md` / `.agent-teams/` /
+     `SUBMISSION_CHECKLIST.md` / `SUBMISSION_PACKAGE.md` /
+     `quality_review_report_20260817.md` 全部历史版本；
+   - 重写 263 个提交，SHA 全部变化（原 `5ca09a7` → 新 `f6ac74d`），
+     `--force` 推送到 `origin/main`。
+
+### 验证
+
+| 检查项 | 结果 |
+|--------|------|
+| 全量测试 | ✅ 1085 passed / 0 failed（推送前最后回归） |
+| 远端与本地一致 | ✅ `git ls-remote origin main` = `f6ac74d` |
+| 远端历史无 paper/隐私残留 | ✅ `git log --all -- paper.md docs/paper TASK_SUMMARY.md` 空 |
+| 工作区 | ✅ clean |
