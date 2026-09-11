@@ -47,6 +47,10 @@ _CODE_TRUNCATED_MSG = "\n\n[代码已截断，仅显示前 {max} 字符]"
 # 缓存上限：配置组合数远小于 16，超出时按 FIFO 淘汰（防止 key 轮换场景膨胀）
 _MAX_CACHED_LLM_CLIENTS = 16
 _llm_client_cache: dict[tuple[str, float, str, str], ChatOpenAI] = {}
+# 缓存锁：get→构造→evict→insert 整段需原子，否则并发同 key miss 会各建一份
+# 客户端（双份 httpx 连接池），且双线程同时触发 FIFO evict 时互相淘汰新插入
+# 的实例（thrashing）。采用双检锁：无锁快路径命中直接返回，miss 时加锁再查
+_llm_client_cache_lock = threading.Lock()
 
 
 def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str, base_url: str) -> ChatOpenAI:
@@ -68,16 +72,21 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
     client = _llm_client_cache.get(key)
     if client is not None:
         return client
-    client = ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        openai_api_key=api_key,
-        base_url=base_url,
-    )
-    # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
-    if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:
-        _llm_client_cache.pop(next(iter(_llm_client_cache)))
-    _llm_client_cache[key] = client
+    with _llm_client_cache_lock:
+        # 加锁后二次检查：并发窗口内其他线程可能已构造完同一 key
+        client = _llm_client_cache.get(key)
+        if client is not None:
+            return client
+        client = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            openai_api_key=api_key,
+            base_url=base_url,
+        )
+        # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
+        if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:
+            _llm_client_cache.pop(next(iter(_llm_client_cache)))
+        _llm_client_cache[key] = client
     return client
 
 
@@ -87,6 +96,8 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
 # model 是请求参数而非客户端属性，故不进缓存键。
 _MAX_CACHED_ZAI_CLIENTS = 16
 _zai_client_cache: dict[tuple[str, str], Any] = {}
+# 线程锁：与上方 ChatOpenAI 缓存同款 DCL，防止并发首调时重复构造客户端
+_zai_client_cache_lock = threading.Lock()
 
 
 def _get_or_create_zai_client(api_key: str, base_url: str) -> Any:
@@ -94,6 +105,7 @@ def _get_or_create_zai_client(api_key: str, base_url: str) -> Any:
 
     以 (api_key, base_url) 为缓存键，相同组合复用同一实例，
     避免每次 zai 路径 LLM 调用都重建 ZhipuAiClient 与底层 httpx 连接池。
+    双重检查锁保护，多线程并发首调时只构造一次。
 
     Args:
         api_key: API 密钥。
@@ -109,17 +121,23 @@ def _get_or_create_zai_client(api_key: str, base_url: str) -> Any:
     from zai import ZhipuAiClient
 
     key = (api_key, base_url)
+    # 第一次检查：无锁快速路径
     client = _zai_client_cache.get(key)
     if client is not None:
         return client
-    client = ZhipuAiClient(
-        api_key=api_key,
-        base_url=base_url,
-    )
-    # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
-    if len(_zai_client_cache) >= _MAX_CACHED_ZAI_CLIENTS:
-        _zai_client_cache.pop(next(iter(_zai_client_cache)))
-    _zai_client_cache[key] = client
+    with _zai_client_cache_lock:
+        # 加锁后二次检查：并发窗口内其他线程可能已构造完同一 key
+        client = _zai_client_cache.get(key)
+        if client is not None:
+            return client
+        client = ZhipuAiClient(
+            api_key=api_key,
+            base_url=base_url,
+        )
+        # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
+        if len(_zai_client_cache) >= _MAX_CACHED_ZAI_CLIENTS:
+            _zai_client_cache.pop(next(iter(_zai_client_cache)))
+        _zai_client_cache[key] = client
     return client
 
 
@@ -323,9 +341,11 @@ def _get_llm_config() -> tuple[str, str, str]:
     """
     # 优先使用线程局部覆盖的配置（由测试或并发场景设置）
     if hasattr(_thread_local, "api_key") and _thread_local.api_key:
-        # 若线程未显式设置 model_name，从全局配置读取默认值
+        # 未显式覆盖的字段对称回退全局配置：只设 api_key 不设 base_url 时
+        # 此前裸取 _thread_local.base_url 会 AttributeError
         model = getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name if LLM_CONFIGS else "")
-        return _thread_local.api_key, _thread_local.base_url, model
+        base_url = getattr(_thread_local, "base_url", "") or (LLM_CONFIGS[0].base_url if LLM_CONFIGS else "")
+        return _thread_local.api_key, base_url, model
     # 回退到全局配置（按优先级取第一个有效配置）
     if LLM_CONFIGS:
         cfg = LLM_CONFIGS[0]
