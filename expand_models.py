@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-模型配置扩展脚本
-用法：
-    # 方式 1: 从 JSON 文件批量添加
-    python expand_models.py --from-json models.json
-    # 方式 2: 从 CSV 文件批量添加
-    python expand_models.py --from-csv models.csv
-    # 方式 3: 交互式添加
-    python expand_models.py --interactive
-    # 方式 4: 查看当前配置
-    python expand_models.py --list
-    # 方式 5: 查看帮助
-    python expand_models.py --help
+模型配置扩展脚本（LLM 模型配置管理工具，基于子命令）
+
+用法（均为子命令，形如 `expand_models.py <command> [options]`）：
+    # 列出所有已配置模型
+    python expand_models.py list
+    # 添加单个模型
+    python expand_models.py add --name qwen-max --url https://api.example.com/v1 --key sk-xxx
+    # 批量添加（JSON 或 CSV）
+    python expand_models.py batch --json models.json
+    python expand_models.py batch --csv models.csv
+    # 交互式添加
+    python expand_models.py interactive
+    # 移除模型
+    python expand_models.py remove qwen-max
+    # 查看帮助
+    python expand_models.py -h
 """
 
 import argparse
@@ -185,19 +189,19 @@ def main():
         description="LLM 模型配置管理工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
+示例（均为子命令）:
   # 列出所有模型
-  python expand_models.py --list
+  python expand_models.py list
   # 添加单个模型
-  python expand_models.py --add --name qwen-max --url https://api.example.com/v1 --key sk-xxx
+  python expand_models.py add --name qwen-max --url https://api.example.com/v1 --key sk-xxx
   # 批量添加（JSON）
-  python expand_models.py --batch --json models.json
+  python expand_models.py batch --json models.json
   # 批量添加（CSV）
-  python expand_models.py --batch --csv models.csv
+  python expand_models.py batch --csv models.csv
   # 交互式添加
-  python expand_models.py --interactive
+  python expand_models.py interactive
   # 移除模型
-  python expand_models.py --remove qwen-max
+  python expand_models.py remove qwen-max
         """,
     )
     # 子命令
