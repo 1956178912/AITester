@@ -65,6 +65,59 @@ class TestVisualizeLoadLatestResult:
             module.load_latest_result(str(tmp_path))
 
 
+class TestVisualizeSummaryMdTable:
+    """write_summary_md 的基线汇总表头与数据列对齐（8 列回归护栏）"""
+
+    @pytest.fixture()
+    def module(self):
+        from experiments import visualize_results
+
+        return visualize_results
+
+    def test_header_single_row_with_8_columns(self, module, tmp_path, monkeypatch):
+        """表头只有一行，且 8 列与 8 个分隔符段一一对应。
+
+        回归：此前表头被拆成 5 列 + 3 列两行，与 8 列的数据行错位。
+        """
+        monkeypatch.setattr(module, "_charts_dir", str(tmp_path))
+        module.write_summary_md({"dataset": "d", "results": {}}, {"n_tasks": 0, "per_baseline": {}, "pairwise": []})
+
+        content = (tmp_path / "summary_stats.md").read_text(encoding="utf-8")
+        lines = content.splitlines()
+        headers = [line for line in lines if line.startswith("| Baseline")]
+        assert len(headers) == 1
+        assert headers[0] == (
+            "| Baseline | Tasks | Passed | Success Rate | Avg Coverage | Avg Iterations | Mean Rate | Std |"
+        )
+        # 表头下一行必须是 8 段分隔符
+        idx = lines.index(headers[0])
+        assert len(lines[idx + 1].strip().split("|")) == 10  # 8 段 + 首尾空段
+        assert lines[idx + 1].count("-") >= 8 * 3
+
+    def test_data_row_column_count_matches_header(self, module, tmp_path, monkeypatch):
+        """有基线数据时，数据行同样是 8 列（与表头对齐）。"""
+        monkeypatch.setattr(module, "_charts_dir", str(tmp_path))
+        summary = {
+            "dataset": "d",
+            "results": {
+                "aitester": {"passed_count": 3, "success_rate": 60.0, "avg_coverage": 70.0, "avg_iterations": 2.0}
+            },
+        }
+        sig_result = {
+            "n_tasks": 5,
+            "per_baseline": {"aitester": {"n": 5, "mean_rate": 0.6, "std_rate": 0.1}},
+            "pairwise": [],
+        }
+        module.write_summary_md(summary, sig_result)
+
+        content = (tmp_path / "summary_stats.md").read_text(encoding="utf-8")
+        data_row = [
+            line for line in content.splitlines() if line.startswith("| aitester")
+        ]  # 数据行以基线名 aitester 开头
+        assert data_row, "数据行 8 列与表头对齐"
+        assert len(data_row[0].strip().split("|")) == 10
+
+
 class TestRunStandardizedExperimentReturnKeys:
     """run_experiment 三个返回分支均携带 description 键（KeyError 回归护栏）"""
 

@@ -19,7 +19,10 @@ def download_swe_bench(subset: str = "lite", output_dir: str | None = None) -> P
         output_dir = Path.home() / ".cache" / "aitester" / "swe_bench"
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / "swe_bench_instances.jsonl"
+    # 文件名带子集标识，与 SWEBenchDataset._resolve_jsonl_paths 的读盘约定一致：
+    # 指定 subset 时 loader 找 swe_bench_<subset>_instances.jsonl，写死通用名会导致
+    # lite 等子集流程找不到文件（未指定 subset 时 loader 会合并所有 swe_bench_* 文件）
+    output_file = output_dir / f"swe_bench_{subset}_instances.jsonl"
     if output_file.exists():
         logger.info("数据集已存在: %s", output_file)
         return output_file

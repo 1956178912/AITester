@@ -322,8 +322,7 @@ def write_summary_md(summary: dict[str, Any], sig_result: dict[str, Any]) -> Non
         "",
         "## 各基线汇总统计",
         "",
-        "| Baseline | Tasks | Passed | Success Rate | Avg Coverage |",
-        "| Avg Iterations | Mean Rate | Std |",
+        "| Baseline | Tasks | Passed | Success Rate | Avg Coverage | Avg Iterations | Mean Rate | Std |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for bl, stats in sig_result.get("per_baseline", {}).items():
