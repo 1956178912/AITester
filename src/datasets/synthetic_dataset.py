@@ -292,7 +292,9 @@ def test_safe_div_zero():
 
 def test_safe_div_zero_neg():
     import math
-    assert math.isneginf(safe_div(-1, 0))""",
+    # CPython 无 math.isneginf（仅有 isinf/isfinite/isnan/isclose/isqrt）；
+    # 原断言恒 AttributeError，使该用例连 fixed 版都无法通过，改为直接判负无穷
+    assert math.isinf(safe_div(-1, 0)) and safe_div(-1, 0) < 0""",
         "bug_type": "runtime",
         "expected_pass": 2,
         "total_tests": 3,
