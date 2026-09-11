@@ -40,7 +40,7 @@ class TestMaskSensitiveInfo:
 
     def test_key_value_pair_redacted(self):
         """key= / token= 等赋值形式被脱敏。"""
-        result = mask_sensitive_info('request with key=abcd123456efgh completed')
+        result = mask_sensitive_info("request with key=abcd123456efgh completed")
         assert "abcd123456efgh" not in result
         assert "key=<REDACTED>" in result
 
@@ -80,9 +80,7 @@ class TestSensitiveFilter:
         filt = SensitiveFilter()
         key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
         # makeRecord(name, level, fn, lno, msg, args, exc_info, stack_info)
-        record = logger.makeRecord(
-            logger.name, logging.INFO, "t.py", 1, "call %s", (key,), None, None
-        )
+        record = logger.makeRecord(logger.name, logging.INFO, "t.py", 1, "call %s", (key,), None, None)
         assert filt.filter(record) is True
         assert key not in record.getMessage()
         assert record.args is None
@@ -90,9 +88,7 @@ class TestSensitiveFilter:
     def test_filter_passes_unmaskable_text(self):
         """普通消息 filter 原样放行。"""
         logger = logging.getLogger("test_filter_plain")
-        record = logger.makeRecord(
-            logger.name, logging.INFO, "t.py", 1, "plain", (), None, None
-        )
+        record = logger.makeRecord(logger.name, logging.INFO, "t.py", 1, "plain", (), None, None)
         assert SensitiveFilter().filter(record) is True
         assert record.getMessage() == "plain"
 
@@ -106,8 +102,13 @@ class TestSensitiveFormatter:
         formatter = SensitiveFormatter("%(message)s")
         key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
         record = logging.LogRecord(
-            name=logger.name, level=logging.ERROR, pathname="t.py", lineno=1,
-            msg="failed with key %s", args=(key,), exc_info=None,
+            name=logger.name,
+            level=logging.ERROR,
+            pathname="t.py",
+            lineno=1,
+            msg="failed with key %s",
+            args=(key,),
+            exc_info=None,
         )
         out = formatter.format(record)
         assert key not in out
