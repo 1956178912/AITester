@@ -12,6 +12,7 @@ PooledDB 连接池全程 mock，不依赖真实 MySQL 实例，覆盖：
 
 import os
 import sys
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -93,6 +94,35 @@ class TestPoolSingleton:
         with patch.object(mysql_client_module, "PooledDB") as mock_pooled_class:
             MySQLClient()
         assert mock_pooled_class.call_args.kwargs["idle_timeout"] == mysql_client_module._POOL_IDLE_TIMEOUT
+
+    def test_concurrent_first_construction_single_pooled_db(self):
+        """多线程并发首次构造：PooledDB 只应构建一次（双重检查锁定回归）。
+
+        回归：此前 __new__/__init__ 为无锁 check-then-set，并发下可产生
+        多个实例与多个连接池（连接数放大）。
+        """
+        n_threads = 16
+        barrier = threading.Barrier(n_threads)
+        results: list[MySQLClient] = []
+        collect_lock = threading.Lock()
+
+        def worker():
+            barrier.wait()
+            client = MySQLClient()
+            with collect_lock:
+                results.append(client)
+
+        with patch.object(mysql_client_module, "PooledDB") as mock_pooled_class:
+            mock_pooled_class.return_value = MagicMock(name="PooledDB-instance")
+            threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+        # 所有线程拿到同一实例，且连接池只构建一次
+        assert len({id(c) for c in results}) == 1
+        assert mock_pooled_class.call_count == 1
 
 
 class TestCursorContextManager:
