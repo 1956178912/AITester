@@ -316,6 +316,77 @@ class TestNodeFunctions:
         assert result["test_passed"] is True
         assert result["coverage_report"] == 85.0
 
+    @patch("src.graph.workflow.GeneratorAgent")
+    def test_generator_node_missing_test_plan_key_no_keyerror(self, mock_generator_class):
+        """Generator 节点：state 缺 test_plan 键时不得 KeyError。
+
+        回归：此前 `state["test_plan"] if ENABLE_PLANNER else None` 在 ENABLE_PLANNER
+        为 True 且 state 无 test_plan 键时直接 KeyError；现改为 state.get() 缺失传 None，
+        由 Generator 自行推断，跟随图结构而非全局开关。
+        """
+        import src.graph.workflow as workflow_module
+        from src.graph.workflow import _generator_node
+
+        original_enable_planner = workflow_module.ENABLE_PLANNER
+        original_enable_rag = workflow_module.ENABLE_RAG
+        original_rag_available = workflow_module.RAG_MODULE_AVAILABLE
+        try:
+            workflow_module.ENABLE_PLANNER = True
+            workflow_module.ENABLE_RAG = False
+            workflow_module.RAG_MODULE_AVAILABLE = False
+
+            mock_agent = MagicMock()
+            mock_agent.generate.return_value = "def test_foo(): pass"
+            mock_generator_class.return_value = mock_agent
+
+            # 注意：state 中故意不含 test_plan 键
+            state = {"target_code": "def foo(): pass", "module_name": "test_module"}
+            result = _generator_node(state)
+
+            assert result["generated_test"] == "def test_foo(): pass"
+            mock_agent.generate.assert_called_once()
+            assert mock_agent.generate.call_args.args[0] is None
+        finally:
+            workflow_module.ENABLE_PLANNER = original_enable_planner
+            workflow_module.ENABLE_RAG = original_enable_rag
+            workflow_module.RAG_MODULE_AVAILABLE = original_rag_available
+
+    def test_rag_init_failure_no_retry(self):
+        """RAG 检索器构造失败后置位标志，后续调用直接返回 None 不再重试构造。
+
+        回归：此前 except 分支把 _rag_retriever 置 None（本就是 None，no-op），
+        每个 generator/executor/debugger 节点都会重复尝试初始化（各付 2-6s）。
+        现置位 _rag_init_failed，快路径直接短路。
+        """
+        import src.graph.workflow as workflow_module
+        from src.graph.workflow import get_rag_retriever
+
+        original_retriever = workflow_module._rag_retriever
+        original_failed = workflow_module._rag_init_failed
+        original_available = workflow_module.RAG_MODULE_AVAILABLE
+        original_cls = workflow_module.TestCaseRetriever
+        try:
+            workflow_module._rag_retriever = None
+            workflow_module._rag_init_failed = False
+            workflow_module.RAG_MODULE_AVAILABLE = True
+
+            failing_cls = MagicMock()
+            failing_cls.side_effect = RuntimeError("持久目录损坏")
+            workflow_module.TestCaseRetriever = failing_cls
+
+            assert get_rag_retriever() is None
+            assert workflow_module._rag_init_failed is True
+            assert failing_cls.call_count == 1
+
+            # 第二次调用：快路径短路，不再尝试构造
+            assert get_rag_retriever() is None
+            assert failing_cls.call_count == 1
+        finally:
+            workflow_module._rag_retriever = original_retriever
+            workflow_module._rag_init_failed = original_failed
+            workflow_module.RAG_MODULE_AVAILABLE = original_available
+            workflow_module.TestCaseRetriever = original_cls
+
 
 class TestPatchApplierNode:
     """_patch_applier_node 状态/磁盘一致性回归测试。"""
