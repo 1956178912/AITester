@@ -2,7 +2,24 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 待发布（2026-09-13 优化轮次）
+## [Unreleased] - 待发布（2026-09-13 系统功能增强轮次）
+
+### 功能
+- **多候选补丁与验证（3.1，默认关闭）**：新增 `src/tools/multi_candidate.py`——Debugger 一轮生成 N 个候选补丁（视角扰动提示，各走不同修复路径），静态筛选（`ast.parse` 语法 + 函数完整性 + 10% 长度安全）淘汰坏候选，可选执行验证（`MULTI_CANDIDATE_EXEC_VALIDATE`）逐候选跑测试选通过率/覆盖率最高者；经 workflow `_patch_applier_node` 接入，`ENABLE_MULTI_CANDIDATE_PATCH` 默认 false 保持历史实验口径，无有效候选自动回退单补丁不引入劣化。新增 `tests/test_multi_candidate.py`（19 用例）
+
+### 可观测性
+- **结构化 JSONL 追踪层（4.1，默认关闭）**：新增 `src/observability/trace.py`——以 JSONL 追加式记录每个任务各智能体节点的输入输出、决策路径（debug/done/regenerate）、token 消耗与墙钟耗时；`AITESTER_TRACE_DIR` 未设时全 no-op 零性能税，已设时按 `<task_uuid>.trace.jsonl` 落盘并过脱敏。workflow 节点（planner/generator/executor/debugger/patch_applier/_should_debug）逐节点记录，benchmark 入口与 CLI `_run_single_task` 在 finally 收尾 task_end。新增 `tests/test_trace_observability.py`（12 用例）
+
+### 性能
+- **成本感知路由（3.4）**：`APIManager` 新增 `COST_AWARE` 策略（按"成功率 50% + 1/成本 50%"综合评分排序，故障转移避免全量切到昂贵 provider）与成本告警（转移到 `cost_weight>=2.0` 的昂贵节点时记 WARNING，`cost_alert_enabled` 可关）；`LLMConfig` 新增 `cost_weight` 字段（`config.py` 经 `LLM_N_COST_WEIGHT` 读取，未配置默认 0.0=无信息、APIManager 回退 1.0 基准），`APIManagerConfig.node_cost_weights` 支持显式映射。新增 `tests/test_cost_aware_routing.py`（10 用例）
+
+### 实验
+- **RAG 纳入主实验（2.3）**：`reproduce.sh` 对合成/内置数据集默认显式 `--enable-rag`（rag_data/ 持久化跨实验复用），`--no-rag` 可回退 config 默认；`run_benchmark.py` 新增 `--no-rag` 参数（与 `--enable-rag` 共同覆盖 `config.ENABLE_RAG`）
+
+### 测试
+- **CLI 边界补测（1.5）**：`tests/test_cli_app.py` 新增 `TestRunParallelJsonBoundaries`（6 用例）——单文件+并发走顺序分支、多文件并发降级路径、glob 通配符被 click `exists=True` 解析层拦截（exit 2）、并发全通过/有失败的退出码语义。全量 **1085 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` 全绿
+
+## [Unreleased] - 待发布（2026-09-13 文档对齐批次 M-01~M-03）
 
 ### 文档
 - README「测试覆盖模块」主表 13 处用例数漂移同步（test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30，0.9.11 批次新增 27 回归用例后未同步）；"41 个测试文件" 更正为 44；补 `test_logging_utils.py`（14 用例脱敏回归）行。v0.9/v0.10 历史版本叙事表保留原值

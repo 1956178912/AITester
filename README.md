@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1038 collected |
-| **单元测试** | ✅ 1038 passed, 0 skipped |
-| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 88% / cli-app 64%） |
+| **总测试数** | ✅ 1085 collected |
+| **单元测试** | ✅ 1085 passed, 0 skipped |
+| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 0.9.11 批次：import 提取单一实现（逗号多模块完整捕获，executor 复用去双份正则）+ 故障转移模型路由语义修正 + MySQL 单例 DCL 线程安全 + RAG 初始化失败粘性标志 + 显著性检验 NaN/Inf 序列化修复（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
-| **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), cli/app.py (64%), logging_utils.py (88%) |
+| **最新优化** | ✅ 系统功能增强批次：多候选补丁与验证（3.1，默认关）+ 结构化 JSONL 追踪层（4.1，默认关）+ 成本感知路由（3.4）+ RAG 纳入主实验（2.3）+ CLI 边界补测（1.5，详见 [CHANGELOG](CHANGELOG.md)） |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (98%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (97%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.11 批次：import 提取单一实现、故障转移模型路由、MySQL 单例 DCL、RAG 粘性标志、NaN/Inf 序列化修复等 14 项 + 27 个回归用例（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
+| **最近改动** | ✅ 系统功能增强批次：多候选补丁 + 结构化追踪 + 成本感知路由 + RAG 默认开 + CLI 边界补测 46 个新用例（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -349,6 +349,29 @@ ENABLE_PLANNER=true      # 启用 Planner（默认 true）
 ENABLE_DEBUGGER=true     # 启用 Debugger 修复循环（默认 true）
 ENABLE_RAG=false         # 启用 RAG 检索增强（默认 false）
 ```
+
+### 5.1 多候选补丁与验证（3.1，默认关闭）
+单补丁"一步走错步步错"的风险：LLM 偶发输出语法残缺/误删函数/改错行时，坏补丁会污染 target_code 并带着错误诊断进入下一轮迭代，白白消耗修复预算。多候选补丁策略在同一轮内生成 N 个候选（视角扰动提示让各候选走不同修复路径：最小改动/根因修复/防御式修复），静态筛选（`ast.parse` 语法 + 函数完整性 + 10% 长度安全）淘汰坏候选，可选执行验证逐候选跑测试选通过率/覆盖率最高者，仅当选中的候选严格优于原代码才提交。
+
+**技术实现**：
+- [src/tools/multi_candidate.py](src/tools/multi_candidate.py) 中的 `generate_candidates()` / `select_best_candidate()` / `static_validate_patch()`
+- 经 [src/graph/workflow.py](src/graph/workflow.py) 的 `_patch_applier_node` 接入，`ENABLE_MULTI_CANDIDATE_PATCH` 默认 false 保持历史实验口径，无有效候选自动回退单补丁
+
+### 5.2 结构化可观测性（4.1，默认关闭）
+JSONL 追加式记录每个任务各智能体节点的输入输出、决策路径（debug/done/regenerate）、token 消耗与墙钟耗时，供实验分析逐智能体重放（日志是给人看的、会被脱敏采样，无法支撑结构化回放）。`AITESTER_TRACE_DIR` 未设时全 no-op 零性能税，已设时按 `<task_uuid>.trace.jsonl` 落盘并过脱敏。
+
+**技术实现**：
+- [src/observability/trace.py](src/observability/trace.py) 中的 `TraceSession` 类
+- workflow 各节点（planner/generator/executor/debugger/patch_applier/_should_debug）逐节点记录，benchmark 入口与 CLI 在 finally 收尾 task_end
+
+### 5.3 成本感知路由（3.4）
+`APIManager` 的 `COST_AWARE` 策略按"成功率 50% + 1/成本 50%"综合评分排序，故障转移时避免把全量流量切到昂贵 provider；转移到 `cost_weight>=2.0` 的昂贵节点时记 WARNING 成本告警（`cost_alert_enabled` 可关）。`LLMConfig.cost_weight` 经 `LLM_N_COST_WEIGHT` 读取，未配置默认 1.0 基准。
+
+**技术实现**：
+- [src/api/api_manager.py](src/api/api_manager.py) 中的 `RotationStrategy.COST_AWARE` / `_select_node_cost_aware()` / 成本告警分支
+
+### 5.4 RAG 纳入主实验（2.3）
+`reproduce.sh` 对合成/内置数据集默认显式 `--enable-rag`（`rag_data/` 持久化跨实验复用），`--no-rag` 可回退 config 默认；`run_benchmark.py` 新增 `--no-rag` 参数与 `--enable-rag` 共同覆盖 `config.ENABLE_RAG`。
 
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：

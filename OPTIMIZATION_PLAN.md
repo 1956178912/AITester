@@ -2,6 +2,40 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 系统功能增强轮次（2026-09-13，批次 3.1 / 3.4 / 4.1 / 2.3 / 1.5）
+
+> 新基线：1085 passed / ruff 全绿 / 91% 覆盖（TOTAL 3536/318 miss 口径不变，新增模块后 src 行增长） / 工作区干净。
+> 用户清单核对：8 项已实现（1.2 错误分类细化 import/type/logic、1.3 依赖隔离 EXECUTOR_USE_VENV、
+> 1.4 连接池配置化 MYSQL_POOL_*、2.1 SWE-bench 校验 validate_task/quality_report、
+> 2.2 Token 效率 token_usage、2.3 RAG evaluate_retrieval/--enable-rag、1.1 日志脱敏 SensitiveFormatter、
+> 4.3 熔断 max_consecutive_failures 阈值接线），本批实现真正缺失的 4 项 + 2.3/1.5 补强。
+
+### 本轮优化点清单
+
+| ID | 类别 | 位置 | 问题 | 实现 | 验证 |
+|----|------|------|------|------|------|
+| 3.1 | 功能 | src/tools/multi_candidate.py | 单补丁"一步走错步步错"，LLM 偶发输出坏补丁污染 target_code 并带错误诊断进入下轮 | 多候选补丁：N 候选（视角扰动提示）+ 静态筛选（ast 语法/函数完整/10% 长度）+ 可选执行验证选最优；经 workflow _patch_applier_node 接入，ENABLE_MULTI_CANDIDATE_PATCH 默认 false，无有效候选回退单补丁 | tests/test_multi_candidate.py（19 用例） |
+| 4.1 | 可观测性 | src/observability/trace.py | 实验分析只能从日志文本反推"某智能体在某任务做了什么决策、花多少 token/耗时"，无结构化回放 | JSONL 追踪层：TraceSession 按 <task_uuid>.trace.jsonl 记录节点输入输出/决策路径/token/耗时；workflow 各节点 + benchmark/CLI 接线；AITESTER_TRACE_DIR 未设全 no-op 零性能税，已设过脱敏 | tests/test_trace_observability.py（12 用例） |
+| 3.4 | 性能 | src/api/api_manager.py | APIManager 故障转移不考虑成本，可能把全量流量切到昂贵 provider | COST_AWARE 策略（成功率 50% + 1/成本 50% 评分）+ 成本告警（cost_weight>=2.0 记 WARNING，可关）；LLMConfig.cost_weight 经 LLM_N_COST_WEIGHT 读取 | tests/test_cost_aware_routing.py（10 用例） |
+| 2.3 | 实验 | reproduce.sh | 合成数据集实验未默认开 RAG，"完整系统 vs Plain LLM"对比缺检索增强 | reproduce.sh 对 synthetic/examples 默认 --enable-rag（rag_data/ 持久化复用），--no-rag 可回退；run_benchmark.py 新增 --no-rag 参数 | 手工跑 reproduce.sh 验证参数传递 |
+| 1.5 | 测试 | tests/test_cli_app.py | CLI parallel/json 边界、参数解析、错误退出路径覆盖偏低 | 新增 TestRunParallelJsonBoundaries（6 用例）：单文件+并发走顺序分支、多文件并发降级、glob 通配被 click 拦截、并发全通过/有失败的退出码 | 全量 pytest |
+
+### 实施批次
+
+| 序号 | 目标 | 文件 | 改动方式 | 测试方式 | 回滚方式 | commit 信息 |
+|------|------|------|---------|---------|---------|-------------|
+| F1 | 4.1 结构化 JSONL 追踪层 | src/observability/{__init__,trace}.py + src/graph/workflow.py + src/cli/app.py + experiments/run_benchmark.py + tests/test_trace_observability.py | 新增 observability 包 + workflow 节点/benchmark/CLI 接线 | pytest test_trace_observability.py | `git revert` | `feat(observability): 新增 4.1 结构化 JSONL 追踪层（节点决策/token/耗时，默认关）` |
+| F2 | 3.4 成本感知路由 | src/api/api_manager.py + config.py + tests/test_cost_aware_routing.py | COST_AWARE 策略 + 成本告警 + LLMConfig.cost_weight | pytest test_cost_aware_routing.py | `git revert` | `feat(api): 3.4 成本感知路由 COST_AWARE + 昂贵 provider 成本告警` |
+| F3 | 3.1 多候选补丁 | src/tools/multi_candidate.py + src/graph/workflow.py + tests/test_multi_candidate.py | 多候选生成 + 静态/执行验证筛选 + workflow 接入 | pytest test_multi_candidate.py | `git revert` | `feat(tools): 3.1 多候选补丁生成与验证筛选（默认关，无候选回退单补丁）` |
+| F4 | 2.3 RAG 默认开 | reproduce.sh + experiments/run_benchmark.py | 合成/内置数据集默认 --enable-rag + --no-rag 参数 | 手工验证 | `git revert` | `feat(experiments): 2.3 reproduce.sh 合成数据集默认开 RAG + --no-rag` |
+| F5 | 1.5 CLI 边界补测 + 文档 | tests/test_cli_app.py + .env.example + CHANGELOG.md + README.md + src/tools/__init__.py | CLI 边界 6 用例 + 新模块文档 | pytest test_cli_app.py + ruff | `git revert` | `test(cli): 1.5 parallel/json 边界补测 + 新模块文档对齐` |
+
+### 需用户确认的点
+
+1. **默认关的安全开关**：3.1/4.1 均以环境变量默认关闭，保持历史实验口径不变；开启是显式行为（`ENABLE_MULTI_CANDIDATE_PATCH=true` / `AITESTER_TRACE_DIR=<dir>`），无隐式行为变化。
+2. **3.4 成本字段来源**：`LLM_N_COST_WEIGHT` 走 `.env.local`（gitignore 不入库），未配置默认 1.0 基准；如需持久化各 provider 成本，在 llm_configs.json 加 cost_weight 字段（本轮先用环境变量口径，避免改 JSON 结构）。
+3. **推送**：本批 5 个 commit，与历史轮次一致 `git push origin main` 直推（main 领先则推全部）。
+
 ## 阶段 1 优化点清单（去重、剔除误报后的最终版）
 
 | ID | 类别 | 位置 | 问题 | 证据 | 影响 | 建议 | 优先级 | 风险 | 验证方式 |
