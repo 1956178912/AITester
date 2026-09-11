@@ -69,8 +69,25 @@ class APIHealth:
     # 故障转移到备用节点时用于避免全量切到昂贵 provider；默认 1.0 表示
     # 未配置成本信息时保持历史行为（成本维度不参与排序）。
     cost_weight: float = 1.0
+    # 熔断冷却期截止时间戳（4.1 熔断器）：连续失败达到 max_consecutive_failures
+    # 后，节点被"熔断"，在冷却期内即使健康检查线程翻回 is_healthy=True 也
+    # 继续被路由层跳过，避免把流量重新打回已知不可用的 provider（浪费
+    # 时间与 token）。使用 monotonic 时钟，不受系统时间回拨影响；
+    # 默认 0.0 表示当前无熔断。
+    circuit_open_until: float = 0.0
+    # 熔断冷却时长（秒）：mark_failure 触发熔断时写入 circuit_open_until，
+    # 默认 60.0 保持经验值（死 provider 通常 1-2 分钟内恢复或彻底失效）。
+    # 经 APIManagerConfig.circuit_cooldown_seconds 在注册节点时注入。
+    circuit_cooldown_seconds: float = 60.0
     # 滑动窗口记录最近 N 次响应时间（用于计算平均值）
     _response_times: deque[float] = field(default_factory=lambda: deque(maxlen=10))
+
+    @property
+    def in_circuit_open(self) -> bool:
+        """当前是否处于熔断冷却期（monotonic 时钟判定）。"""
+        if self.circuit_open_until <= 0.0:
+            return False
+        return time.monotonic() < self.circuit_open_until
 
     @property
     def success_rate(self) -> float:
@@ -87,23 +104,31 @@ class APIHealth:
         return sum(self._response_times) / len(self._response_times)
 
     def mark_success(self, response_time_ms: float) -> None:
-        """标记成功调用"""
+        """标记成功调用（成功即熔断器复位：清零连续失败计数与熔断冷却）"""
         self.is_healthy = True
         self.consecutive_failures = 0
+        self.circuit_open_until = 0.0  # 4.1：成功 = 熔断器闭合
         self.total_requests += 1
         self.success_count += 1
         self._response_times.append(response_time_ms)
         self.rate_limit_remaining = max(0, self.rate_limit_remaining - 1)
 
     def mark_failure(self, error_type: str = "unknown") -> None:
-        """标记失败调用"""
+        """标记失败调用（连续失败达到阈值进入熔断冷却期，4.1）"""
         self.total_requests += 1
         self.error_count += 1
         self.consecutive_failures += 1
         # 连续失败达到阈值（可配置）标记为不健康；原硬编码 3 改为读自身字段
         if self.consecutive_failures >= self.max_consecutive_failures:
             self.is_healthy = False
-            logger.warning("API %s 连续失败 %d 次，标记为不健康", self.config.model_name, self.consecutive_failures)
+            # 4.1 熔断器：达到阈值即打开熔断，冷却期内路由层继续跳过该节点
+            self.circuit_open_until = time.monotonic() + self.circuit_cooldown_seconds
+            logger.warning(
+                "API %s 连续失败 %d 次，触发熔断冷却 %.0fs",
+                self.config.model_name,
+                self.consecutive_failures,
+                self.circuit_cooldown_seconds,
+            )
         # 限流错误特殊处理
         if error_type == "rate_limit":
             self.rate_limit_remaining = 0
@@ -129,6 +154,11 @@ class APIManagerConfig:
     # 成本告警开关（3.4）：故障转移落到 cost_weight >= _COST_ALERT_THRESHOLD 的
     # 昂贵 provider 时记 WARNING。默认 True（告警是纯旁路，不影响路由行为）。
     cost_alert_enabled: bool = True
+    # 熔断冷却时长（秒，4.1）：节点连续失败达到 max_consecutive_failures 后
+    # 进入熔断，冷却期内即使健康检查翻回健康也继续被路由跳过，避免把流量
+    # 重新打回已知不可用的 provider（浪费时间与 token）。经验值 60s：
+    # 死 provider 通常 1-2 分钟内恢复或彻底失效。
+    circuit_cooldown_seconds: float = 60.0
 
 
 class HealthCheckerThread(threading.Thread):
@@ -202,6 +232,8 @@ class APIManager:
                 config=llm_config,
                 max_consecutive_failures=self.config.max_consecutive_failures,
                 cost_weight=cost_weight,
+                # 4.1：把配置里的熔断冷却时长注入节点（mark_failure 触发熔断时写入）
+                circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
             )
             self.health_nodes[llm_config.model_name] = health
             logger.info(
@@ -229,8 +261,9 @@ class APIManager:
         return 1.0
 
     def get_healthy_nodes(self) -> list[APIHealth]:
-        """获取所有健康节点"""
-        return [h for h in self.health_nodes.values() if h.is_healthy]
+        """获取所有健康节点（4.1：熔断冷却期内的节点即使 is_healthy 为
+        True 也继续被跳过，直到冷却到期或 mark_success 复位）"""
+        return [h for h in self.health_nodes.values() if h.is_healthy and not h.in_circuit_open]
 
     def get_all_nodes(self) -> list[APIHealth]:
         """获取所有节点（包括不健康的）"""
@@ -404,7 +437,9 @@ class APIManager:
             else:
                 raise RuntimeError("无可用 API 节点，请检查配置")
         all_nodes = self.get_all_nodes()
-        fallback_candidates = [n for n in all_nodes if n not in nodes_to_try and n.is_healthy]
+        # 4.1：备用节点候选同样排除熔断冷却期内的节点（is_healthy 为 True
+        # 但冷却未到期的节点不可用，否则故障转移会把流量重新打回死 provider）
+        fallback_candidates = [n for n in all_nodes if n not in nodes_to_try and n.is_healthy and not n.in_circuit_open]
         return nodes_to_try, fallback_candidates
 
     def _try_call_node(
@@ -510,9 +545,12 @@ class APIManager:
         raise RuntimeError("所有 API 节点不可用")
 
     def get_status(self) -> dict[str, Any]:
-        """获取所有节点的当前状态"""
+        """获取所有节点的当前状态（4.1：含熔断冷却信息）"""
+        now = time.monotonic()
         nodes_summary = {}
         for name, h in self.health_nodes.items():
+            # 熔断剩余冷却秒数（0 = 未熔断或已到期），便于监控/实验分析
+            circuit_remaining = max(0.0, h.circuit_open_until - now) if h.circuit_open_until > 0 else 0.0
             nodes_summary[name] = {
                 "model": h.config.model_name,
                 "base_url": h.config.base_url,
@@ -521,6 +559,8 @@ class APIManager:
                 "total_requests": h.total_requests,
                 "consecutive_failures": h.consecutive_failures,
                 "avg_response_time_ms": round(h.avg_response_time_ms, 2),
+                # 4.1 熔断器状态：冷却剩余秒数（>0 表示该节点当前处于熔断冷却期）
+                "circuit_open_remaining_s": round(circuit_remaining, 1),
             }
         return {
             "total_nodes": len(self.health_nodes),
@@ -561,7 +601,7 @@ class APIManager:
         return result
 
     def reset_stats(self) -> None:
-        """重置所有统计数据"""
+        """重置所有统计数据（含 4.1 熔断器状态：清零冷却截止时间）"""
         with self._lock:
             for node in self.health_nodes.values():
                 node.total_requests = 0
@@ -569,6 +609,7 @@ class APIManager:
                 node.error_count = 0
                 node.consecutive_failures = 0
                 node.is_healthy = True
+                node.circuit_open_until = 0.0
                 node._response_times.clear()
         logger.info("已重置所有 API 节点统计")
 
@@ -581,7 +622,12 @@ class APIManager:
         with self._lock:
             client = openai.OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=self.config.timeout)
             self._client_cache[config.model_name] = client
-            health = APIHealth(config=config, max_consecutive_failures=self.config.max_consecutive_failures)
+            health = APIHealth(
+                config=config,
+                max_consecutive_failures=self.config.max_consecutive_failures,
+                cost_weight=self._cost_weight_for(config.model_name),
+                circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
+            )
             self.health_nodes[config.model_name] = health
             logger.info("动态添加节点: %s (%s)", config.model_name, config.base_url)
 

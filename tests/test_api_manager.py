@@ -122,6 +122,53 @@ class TestAPIHealth:
         assert 0.0 not in self.health._response_times
         assert 140.0 in self.health._response_times
 
+    # ── 4.1 熔断冷却期测试 ──
+
+    def test_initial_circuit_state(self):
+        """熔断冷却期初始状态：未熔断，冷却时长默认 60s"""
+        assert self.health.circuit_open_until == 0.0
+        assert self.health.circuit_cooldown_seconds == 60.0
+        assert self.health.in_circuit_open is False
+
+    def test_mark_failure_opens_circuit_after_threshold(self):
+        """连续失败达到阈值后打开熔断（circuit_open_until 被写入未来时间点）"""
+        for _ in range(3):
+            self.health.mark_failure("error")
+        assert self.health.is_healthy is False
+        # 冷却期应已开启：circuit_open_until 大于当前 monotonic
+        assert self.health.circuit_open_until > time.monotonic()
+        assert self.health.in_circuit_open is True
+
+    def test_mark_success_resets_circuit(self):
+        """成功调用复位熔断器（清零冷却截止时间与连续失败计数）"""
+        for _ in range(3):
+            self.health.mark_failure("error")
+        assert self.health.in_circuit_open is True
+        # 模拟冷却期内收到一次成功（如健康检查线程探测到恢复）
+        self.health.mark_success(50.0)
+        assert self.health.in_circuit_open is False
+        assert self.health.circuit_open_until == 0.0
+        assert self.health.consecutive_failures == 0
+
+    def test_circuit_expires_after_cooldown(self):
+        """冷却期到期后自动放行（in_circuit_open 翻回 False，无需等 mark_success）"""
+        # 短冷却期便于测试
+        self.health.circuit_cooldown_seconds = 0.05
+        for _ in range(3):
+            self.health.mark_failure("error")
+        assert self.health.in_circuit_open is True
+        time.sleep(0.08)
+        assert self.health.in_circuit_open is False
+
+    def test_circuit_cooldown_config_injection(self):
+        """APIManagerConfig.circuit_cooldown_seconds 可覆盖默认 60s 冷却时长"""
+        health = APIHealth(config=self.config, circuit_cooldown_seconds=5.0)
+        for _ in range(3):
+            health.mark_failure("error")
+        # 冷却截止应在 now+5s 附近（允许 0.5s 误差）
+        delta = health.circuit_open_until - time.monotonic()
+        assert 4.0 <= delta <= 5.5
+
 
 class TestRotationStrategy:
     """测试轮换策略枚举"""
@@ -234,6 +281,69 @@ class TestAPIManagerNodeManagement:
             first_node.is_healthy = False
             healthy = mgr.get_healthy_nodes()
             assert len(healthy) < len(mgr.get_all_nodes())
+
+    def test_get_healthy_nodes_excludes_circuit_open(self):
+        """4.1：熔断冷却期内的节点即使 is_healthy 为 True 也被路由过滤"""
+        reset_manager()
+        mgr = APIManager(enable_health_checker=False)
+        mgr.add_node(LLMConfig("keyX", "urlX", "modelX"))
+        mgr.add_node(LLMConfig("keyY", "urlY", "modelY"))
+        node_x = mgr.health_nodes["modelX"]
+
+        # modelX 触发熔断（连续失败达到阈值）
+        for _ in range(3):
+            node_x.mark_failure("error")
+        # 模拟健康检查线程把 is_healthy 翻回 True，但冷却期仍未到期
+        node_x.is_healthy = True
+        assert node_x.in_circuit_open is True
+
+        # 路由层应排除 modelX（冷却期内不可用）；modelY 仍可被选中
+        healthy = mgr.get_healthy_nodes()
+        healthy_names = [n.config.model_name for n in healthy]
+        assert "modelX" not in healthy_names
+        assert "modelY" in healthy_names
+
+    def test_circuit_open_node_excluded_from_fallback_candidates(self):
+        """4.1：_build_node_list 的备用节点候选同样排除熔断冷却期内的节点"""
+        reset_manager()
+        mgr = APIManager(enable_health_checker=False)
+        mgr.add_node(LLMConfig("keyX", "urlX", "modelX"))
+        mgr.add_node(LLMConfig("keyY", "urlY", "modelY"))
+        node_x = mgr.health_nodes["modelX"]
+        for _ in range(3):
+            node_x.mark_failure("error")
+        node_x.is_healthy = True  # 冷却期内即使健康也被排除
+        # 以 modelY 为指定模型构建节点列表：备用候选不应包含 modelX
+        nodes_to_try, fallback = mgr._build_node_list("modelY")
+        assert [n.config.model_name for n in nodes_to_try] == ["modelY"]
+        fallback_names = [n.config.model_name for n in fallback]
+        assert "modelX" not in fallback_names
+
+    def test_get_status_exposes_circuit_open_remaining(self):
+        """4.1：get_status 输出每节点 circuit_open_remaining_s 字段"""
+        reset_manager()
+        mgr = APIManager(enable_health_checker=False)
+        mgr.add_node(LLMConfig("keyX", "urlX", "modelX"))
+        node_x = mgr.health_nodes["modelX"]
+        status = mgr.get_status()
+        assert status["nodes"]["modelX"]["circuit_open_remaining_s"] == 0.0
+        for _ in range(3):
+            node_x.mark_failure("error")
+        status = mgr.get_status()
+        assert status["nodes"]["modelX"]["circuit_open_remaining_s"] > 0.0
+
+    def test_reset_stats_clears_circuit_state(self):
+        """4.1：reset_stats 清零熔断冷却状态"""
+        reset_manager()
+        mgr = APIManager(enable_health_checker=False)
+        mgr.add_node(LLMConfig("keyX", "urlX", "modelX"))
+        node_x = mgr.health_nodes["modelX"]
+        for _ in range(3):
+            node_x.mark_failure("error")
+        assert node_x.in_circuit_open is True
+        mgr.reset_stats()
+        assert node_x.in_circuit_open is False
+        assert node_x.circuit_open_until == 0.0
 
 
 class TestAPIManagerRotationStrategies:
