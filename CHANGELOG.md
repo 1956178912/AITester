@@ -2,6 +2,24 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.9] - 2026-09-11
+
+### 实验/脚本层：误选结果与必崩 KeyError 修复
+- **visualize 结果误选修复**：`experiments/visualize_results.py` 的 `load_latest_result` 此前对 results 目录全部 JSON 纯文件名倒序取第一，会误选 `swebench_20_summary.json` / `performance_benchmark.json` / `synthetic_plain_llm_*.json`（'s'/'p' 均排在 'b' 之后），出图实际基于非 benchmark 数据；现仅识别 `benchmark_*` 前缀（与 run_benchmark 命名口径一致），无匹配时回退全量并提示
+- **标准化实验必崩 KeyError 修复**：`scripts/run_standardized_experiments.py` 的 `run_experiment` 三个返回分支（success/failed、timeout、error）均无 `description` 键，而 `main()` 写汇总报告时无条件读 `r['description']`，每次运行必 KeyError、EXPERIMENT_SUMMARY.md 永远生成不了；现三个分支都带 description
+- **benchmark 并行度配置绕过修复**：`experiments/run_benchmark.py` 的 parallel 缺省值此前 `int(os.getenv("BENCHMARK_PARALLELISM","0"))` 直读原始环境变量，坏值（如 "abc"）直接 ValueError 崩溃且绕过 config 容错；现统一走 `config.BENCHMARK_PARALLELISM`（`_parse_int_env` 容错 + 下限校验）
+- **benchmark LLM 回退静默吞错补日志**：`_call_llm_with_fallback` 外层 `except` 此前静默 `continue`，zai 分支重试耗尽 raise、或 zai/openai 客户端构造失败时全链路无日志线索；现补 warning 日志（与 openai 分支既有口径对齐）
+
+### 源码层：死代码与幽灵配置清理
+- **executor 死分支删除**：`_execute_sandboxed` 中依赖安装失败/venv 创建失败（`sandbox_error_info` 非 None）已在依赖检测段提前 return，其后"安装失败优先覆盖 error_info"分支恒不可达（变量必为 None），删除死分支、行为不变
+- **planner 默认计划去重**：`_planner_node` 的 except 兜底分支此前内联复制一份与 `_get_default_test_plan` 同构的默认计划字典（校验失败分支早已走 helper），双份维护易漂移；现统一走 helper 单一构造点，其 "or 'unknown'" 兜底比原内联 `.get` 默认值更严格（空串/None 键值也归一）
+- **generator 死常量删除**：`_MAX_PARAMETIZE_RETRIES = 2` 除 docstring 外无任何代码引用，实际实现 parametrize 校验失败仅重试一次；删除常量并把 docstring 对齐实际行为
+- **MySQL 连接池 idle_timeout 接通**：`_POOL_IDLE_TIMEOUT = 600` 定义后从未传入 PooledDB 构造参数（死常量），注释却声称其为 idle_timeout；现接通，空闲连接 600s 回收，防服务端 wait_timeout 断长连接
+- **APIManager 幽灵配置接线**：`APIManagerConfig.max_consecutive_failures`（默认 3）定义却从未被 `mark_failure` 消费（节点阈值硬编码 3）；现 APIHealth 新增同名字段（默认 3 保持历史行为），APIManager 构造/add_node 时从 manager 配置注入，`mark_failure` 读自身字段
+
+### 测试
+- 新增 14 个回归用例（visualize 前缀过滤 3 / standardized 返回键 4 / benchmark 并行度护栏 1 / planner 去重 2 / mysql idle_timeout 1 / api_manager 幽灵配置 3），全量 **977 passed / 0 failed**；src 总覆盖率 90%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
 ## [0.9.8] - 2026-09-10
 
 ### 工程化：格式门禁恢复与文档漂移修复

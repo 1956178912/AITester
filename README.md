@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 963 collected |
-| **单元测试** | ✅ 963 passed, 0 skipped |
+| **总测试数** | ✅ 977 collected |
+| **单元测试** | ✅ 977 passed, 0 skipped |
 | **代码覆盖率** | 90% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 0.9.8 批次：`ruff format` 门禁恢复（15 文件格式漂移修复）；benchmark 结果字典三处去重（`_build_task_result` 单一构造点）；single_agent 基线超时统一走 `config.EXECUTION_TIMEOUT` 校验；APIManager 后台健康检查线程可关（`enable_health_checker`）；executor 失败用例正则预编译（详见 [CHANGELOG 0.9.8](CHANGELOG.md)） |
+| **最新优化** | ✅ 0.9.9 批次：visualize 结果误选修复（仅识别 `benchmark_*` 前缀）；标准化实验必崩 KeyError 修复（返回分支补 `description` 键）；benchmark 并行度统一走 `config.BENCHMARK_PARALLELISM`；executor 死分支删除；planner 默认计划去重；`_MAX_PARAMETIZE_RETRIES` 死常量删除；MySQL `idle_timeout` 接通；APIManager `max_consecutive_failures` 幽灵配置接线（详见 [CHANGELOG 0.9.9](CHANGELOG.md)） |
 | **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), logging_utils.py (83%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.8 工程化批次：格式门禁恢复 / benchmark 去重 / APIManager 构造副作用收敛 / 正则预编译 + README 测试状态表与实测对齐（详见 [CHANGELOG 0.9.8](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.9 批次：实验/脚本层误选与必崩修复 + 源码层死代码/幽灵配置清理（详见 [CHANGELOG 0.9.9](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -564,7 +564,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 963 个用例，全量通过）
+# 运行所有测试（当前 977 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -574,11 +574,11 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（41 个测试文件，963 个 pytest 收集用例，src 总覆盖率 90%）：
+**测试覆盖模块**（40 个测试文件，977 个 pytest 收集用例，src 总覆盖率 90%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 59 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关） |
+| `test_api_manager.py` | 62 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线） |
 | `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
@@ -592,7 +592,7 @@ docker run --rm \
 | `test_config.py` | 14 | config.py 默认值与容错解析 |
 | `test_core_modules.py` | 19 | 核心模块冒烟 |
 | `test_dataset_loader.py` | 76 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 60 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_loader_extended.py` | 57 | 数据集加载扩展路径（raw 加载/字段校验） |
 | `test_dataset_validation.py` | 14 | SWE-bench 加载质量校验与源码补充（P0） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 27 | 依赖检测与 venv 管理（P1） |
@@ -601,10 +601,11 @@ docker run --rm \
 | `test_executor.py` | 35 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
 | `test_experiments_analysis.py` | 11 | 实验结果分析（排名/统计） |
-| `test_generator.py` | 30 | parametrize 校验、import 修正、LLM 调用 |
+| `test_experiments_scripts.py` | 8 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9） |
+| `test_generator.py` | 21 | parametrize 校验、import 修正、LLM 调用 |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 4 | LLM 文件缓存命中/失效 |
-| `test_mysql_client.py` | 11 | MySQL 客户端单例/事务 |
+| `test_mysql_client.py` | 12 | MySQL 客户端单例/事务/连接池参数 |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
 | `test_patch_applier.py` | 36 | 补丁应用（完整文件/单函数模式） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
@@ -616,7 +617,7 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_workflow.py` | 28 | 工作流图构建与路由 |
-| `test_workflow_extended.py` | 33 | 工作流扩展路径（RAG 初始化单例等） |
+| `test_workflow_extended.py` | 35 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 
 ## 配置说明
 

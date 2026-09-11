@@ -1,7 +1,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-08-17
+> 最后更新：2026-09-11
 
 ---
 
@@ -27,7 +27,7 @@ from src.agents.planner import PlannerAgent
 agent = PlannerAgent()
 plan = agent.plan(
     target_code="def divide(a, b): return a / b",
-    function_name="divide",
+    target_function="divide",
 )
 ```
 
@@ -35,7 +35,7 @@ plan = agent.plan(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `plan()` | `target_code: str`, `function_name: str` | `dict` | 生成测试计划，包含 `logic_analysis` 和 `test_cases` |
+| `plan()` | `target_code: str`, `target_function: str \| None = None` | `dict` | 生成测试计划，包含 `logic_analysis` 和 `test_cases`；`target_function` 为 None 时分析全部函数 |
 
 **返回格式：**
 ```json
@@ -328,22 +328,23 @@ usage.reset()  # 单线程重置（基线运行前调用）
 LangGraph 工作流图，协调多智能体协作流程。
 
 ```python
-from src.graph.workflow import build_workflow, run_workflow
+from src.graph.workflow import build_workflow
+from src.graph.state import AITesterState
 
-# 构建工作流图
-graph = build_workflow(
-    enable_planner=True,
-    enable_debugger=True,
-    enable_rag=False,
-)
+# 构建并编译工作流图。planner / debugger 可显式覆盖 config 开关
+# （消融基线如 plain_llm 可传 False）；None（默认）读取 config.ENABLE_PLANNER / ENABLE_DEBUGGER
+graph = build_workflow()
+# 消融示例：纯 LLM 基线（无规划、无修复循环）
+# graph = build_workflow(planner=False, debugger=False)
 
-# 运行工作流
-result = run_workflow(
-    graph=graph,
-    target_code="def divide(a, b): return a - b",
-    function_name="divide",
-    max_iterations=3,
-)
+# 运行工作流：invoke 接收初始状态字典，返回最终状态
+state: AITesterState = {
+    "target_code": "def divide(a, b): return a - b",
+    "target_file": "/path/to/calculator.py",
+    "target_function": "divide",
+    "max_iterations": 3,
+}
+final_state = graph.invoke(state)
 ```
 
 **工作流节点：**
