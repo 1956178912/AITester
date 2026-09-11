@@ -58,7 +58,10 @@ class TokenUsage:
 
 # ─── 线程局部累计器 ─────────────────────────────────────────────────────────────
 _thread_local = threading.local()
-# 跨线程聚合：{thread_id: TokenUsage}，由 _registry_lock 保护
+# 跨线程聚合：{thread_id: TokenUsage}，由 _registry_lock 保护。
+# 已退出线程的条目刻意保留（不清理）：基准运行结束时 global_usage() 需聚合
+# 全部已完成任务（worker 线程已退出）的 token 消耗；条目数受并发线程规模
+# 限制（常驻线程池场景），量级可忽略
 _registry: dict[int, TokenUsage] = {}
 _registry_lock = threading.Lock()
 
@@ -113,9 +116,12 @@ def reset() -> TokenUsage:
 
 
 def global_usage() -> TokenUsage:
-    """聚合所有线程的 token 消耗（快照）。
+    """聚合所有线程的 token 消耗（快照，含已退出线程的条目）。
 
-    跨线程求和，供实验结束时输出全局效率指标。
+    跨线程求和，供实验结束时输出全局效率指标：基准运行结束时聚合需包含
+    全部已完成任务（worker 线程已退出）的消耗，故此处不做死线程清理——
+    僵尸条目在后续 _current_usage/reset（新批次任务开始记录时）被机会性
+    清掉，保证长进程多批次场景下 global_usage 不被历史批次污染。
 
     Returns:
         全进程聚合的 TokenUsage。
