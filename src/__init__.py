@@ -18,6 +18,6 @@ AITester 核心模块包。
 
 # 版本号单一事实来源：setup.py 与 CLI（--version）均从此处读取，
 # 避免多处硬编码导致版本漂移。
-__version__ = "0.9.8"
+__version__ = "0.9.9"
 
 __all__ = ["__version__"]

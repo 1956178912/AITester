@@ -1,7 +1,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-08-17
+> 最后更新：2026-09-11
 
 ---
 
@@ -271,25 +271,23 @@ print(f"覆盖率: {result['coverage']}%")
 ### 示例 16：使用工作流图
 
 ```python
-from src.graph.workflow import build_workflow, run_workflow
+from src.graph.workflow import build_workflow
+from src.graph.state import AITesterState
 
-# 构建工作流
-graph = build_workflow(
-    enable_planner=True,
-    enable_debugger=True,
-    enable_rag=False,
-)
+# 构建工作流（planner/debugger 默认 None，读取 config.ENABLE_PLANNER / ENABLE_DEBUGGER）
+graph = build_workflow()
 
-# 运行工作流
-result = run_workflow(
-    graph=graph,
-    target_code="def add(a, b): return a - b",  # 故意写错
-    function_name="add",
-    max_iterations=3,
-)
+# 运行工作流：invoke 接收初始状态字典，返回最终状态
+state: AITesterState = {
+    "target_code": "def add(a, b): return a - b",  # 故意写错
+    "target_function": "add",
+    "module_name": "calculator",
+    "max_iterations": 3,
+}
+result = graph.invoke(state)
 
-print(f"最终状态: {result['status']}")
-print(f"修复后代码:\n{result['final_code']}")
+print(f"测试是否通过: {result['test_passed']}")
+print(f"修复后代码:\n{result['target_code']}")
 ```
 
 ---
