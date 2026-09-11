@@ -18,6 +18,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -39,6 +41,22 @@ class TestRAGModuleImport:
 
 class TestGetRAGRetriever:
     """测试 RAG 检索器单例获取。"""
+
+    @pytest.fixture(autouse=True)
+    def _reset_rag_singletons(self):
+        """复位模块级单例与失败标志，防止跨测试泄漏。
+
+        0.9.11 起 get_rag_retriever 新增 _rag_init_failed 快路径标志
+        （初始化失败后不再重试）。该标志是进程级粘性状态，若不清位，
+        前一个失败用例会短路后续"已初始化返回缓存"用例。
+        """
+        import src.graph.workflow as workflow_module
+
+        workflow_module._rag_retriever = None
+        workflow_module._rag_init_failed = False
+        yield
+        workflow_module._rag_retriever = None
+        workflow_module._rag_init_failed = False
 
     @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
     @patch("src.graph.workflow.TestCaseRetriever")

@@ -90,6 +90,9 @@ except ImportError:
 _rag_retriever = None
 # 线程锁：保护单例初始化的双重检查锁定，确保多线程环境下的安全性
 _rag_lock = threading.Lock()
+# RAG 初始化失败标志：一旦构造抛异常即置位，后续节点调用直接返回 None 不再重试
+# （ChromaDB 持久目录损坏/模型下载失败属持续性故障，重复初始化只浪费 2-6s/次）
+_rag_init_failed = False
 # 修复历史上限：超过后仅保留最近 N 条，防止长迭代循环占用内存（经验值 5）
 _MAX_REPAIR_HISTORY = 5
 # 重新生成测试代码的上限：达到最大迭代后，诊断指向"测试生成错误"时路由回
@@ -113,7 +116,13 @@ def get_rag_retriever():
     Returns:
         TestCaseRetriever 实例。若 RAG 模块不可用则返回 None。
     """
-    global _rag_retriever
+    global _rag_retriever, _rag_init_failed
+    # 初始化曾失败（持久目录损坏、模型下载失败等持续性故障）：直接返回 None，
+    # 不再每节点调用都重付 2-6s 初始化 + 重复 warning。此前 except 分支把
+    # _rag_retriever 置回 None 是 no-op（变量本就是 None），快路径检查失效，
+    # 每个 generator/executor/debugger 节点都会重复尝试初始化
+    if _rag_init_failed:
+        return None
     # 第一次检查：无锁快速路径，已初始化时直接返回
     if _rag_retriever is not None:
         return _rag_retriever
@@ -134,7 +143,10 @@ def get_rag_retriever():
                 logger.info("RAG 检索器单例已初始化（持久化=%s）", RAG_PERSIST_PATH or "内存模式")
             except Exception as e:
                 logger.warning("RAG 检索器初始化失败，将跳过 RAG 增强: %s", e)
-                _rag_retriever = None  # 标记为不可用，避免重复尝试
+                # 持续性故障标志：后续 get_rag_retriever() 直接返回 None 不再重试。
+                # 此前此处仅把 _rag_retriever 置 None（本就是 None，no-op），
+                # 每个 generator/executor/debugger 节点都会重复尝试初始化
+                _rag_init_failed = True
     return _rag_retriever
 
 
@@ -412,7 +424,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     #   - focus_function: 目标函数名（P0 大文件优化），超长代码时按该函数
     #     做 AST 智能截取，保留目标函数及直接依赖，避免 LLM 看不到完整上下文
     generated_test = agent.generate(
-        state["test_plan"] if ENABLE_PLANNER else None,
+        state.get("test_plan"),  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
         state["target_code"],
         module_name=state.get("module_name", ""),
         rag_references=rag_refs,
