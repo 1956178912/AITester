@@ -172,10 +172,9 @@ ENABLE_PLANNER=true ENABLE_DEBUGGER=false python experiments/run_benchmark.py \
 ### 示例 12：JSON 输出（程序化处理）
 
 ```bash
-# 以 JSON 格式输出结果
+# 结果以 JSON 格式输出（stdout 直接打印，无需开关）
 python experiments/run_benchmark.py \
-    --dataset examples \
-    --json
+    --dataset examples
 ```
 
 **输出示例：**
