@@ -71,6 +71,9 @@ class MySQLClient:
             maxcached=_POOL_MAX_CACHED,
             blocking=True,
             timeout=_POOL_CONNECTION_TIMEOUT,
+            # 空闲连接超过 600s 回收（防 MySQL 服务端 wait_timeout 长连接被断开），
+            # 此前该常量定义后从未传入构造参数（死常量），现接通
+            idle_timeout=_POOL_IDLE_TIMEOUT,
             host=MYSQL_HOST,
             port=MYSQL_PORT,
             user=MYSQL_USER,

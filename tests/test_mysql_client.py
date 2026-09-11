@@ -87,6 +87,13 @@ class TestPoolSingleton:
         assert kwargs["password"] == "secret"
         assert kwargs["database"] == "aitester_db"
 
+    def test_pool_construction_passes_idle_timeout(self):
+        """_POOL_IDLE_TIMEOUT 必须真正传入 PooledDB（此前定义后从未使用，属死常量；
+        0.9.9 批次接通，空闲连接 600s 回收，防服务端 wait_timeout 断长连接）"""
+        with patch.object(mysql_client_module, "PooledDB") as mock_pooled_class:
+            MySQLClient()
+        assert mock_pooled_class.call_args.kwargs["idle_timeout"] == mysql_client_module._POOL_IDLE_TIMEOUT
+
 
 class TestCursorContextManager:
     """cursor() 上下文管理器的提交/回滚语义"""
