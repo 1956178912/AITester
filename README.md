@@ -809,7 +809,9 @@ python main.py list-examples
 
 **汇总**：成功率 **100%**，平均覆盖率 **91.7%**，平均耗时 **30.1s/任务**。
 
-### 合成数据集实验（50个任务，3种基线对比）
+### 合成数据集实验（50个任务，3种基线对比，历史数据快照）
+
+> 某次 50 任务运行（3 种基线对比）的数据快照，用于演示多基线方法论，非当前版本性能承诺。
 
 | 基线方法 | 成功率 (%) | 平均覆盖率 (%) | 平均迭代次数 | 平均耗时 (s) |
 |---------|-----------|---------------|-------------|-------------|
@@ -823,11 +825,11 @@ python main.py list-examples
 - Single Agent 基线表现显著较差（22.0%），验证多智能体架构的必要性
 - 统计检验显示 AITester vs Single Agent 差异显著（p < 0.001, Cohen's d = 0.848）
 
-详细结果参见 [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/)
+详细结果参见 [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/)（本地保留，不入库；仓库内 `experiments/results/` 仅跟踪占位说明，历史产物经 .gitignore 排除）
 
 ### SWE-bench Lite 实验（20个任务）
 
-当前处于实验阶段，受API限流影响，已完成7个任务。详细结果将在API配额恢复后补充。
+该批次实验受 API 限流影响，结果未归档到仓库；后续重跑数据以本地私有目录保存（不入库）。
 
 ### 关键修复记录
 
@@ -863,21 +865,13 @@ python main.py list-examples
 
 ---
 
-## 论文与文档
-
-### 学术论文
-
-完整论文草稿：[paper.md](paper.md)
-
-**摘要**：
-> AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。核心创新包括逻辑驱动思维链（Logic-driven CoT）和分层错误修复协议（Hierarchical Repair）。在合成数据集（50任务）上的实验表明，AITester 达到 68% 成功率，98% 平均覆盖率，相比单智能体基线（22%）具有统计显著性优势（p < 0.001）。
-
-### 技术文档
+## 技术文档
 
 - [算法设计文档](docs/algorithm_design.md)：核心算法形式化描述
-- [失败案例分析](docs/failure_analysis.md)：32% 失败率的根因分析与改进路线图
+- [失败案例分析](docs/failure_analysis.md)：失败率的根因分析与改进路线图
 - [性能调优指南](docs/performance_guide.md)：并发执行、RAG单例化、超时配置
 - [API参考文档](docs/api_reference.md)：模块接口说明
+- [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由（默认全关，按需启用）
 
 ---
 

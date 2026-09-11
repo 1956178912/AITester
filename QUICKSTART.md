@@ -78,6 +78,27 @@ export AITESTER_LLM_CACHE=0
 rm -rf src/cache
 ```
 
+## 7. 可选：高级开关（默认全部关闭，不影响常规使用）
+
+以下开关均默认关闭，按需启用（详见 `.env.example` 注释）：
+
+```bash
+# 结构化 JSONL 追踪（4.1）：每任务落 <task_uuid>.trace.jsonl，
+# 记录各智能体节点决策/token/耗时，供实验分析回放。未设置时全 no-op。
+export AITESTER_TRACE_DIR=./trace_out
+
+# 多候选补丁（3.1）：Debugger 一轮生成 N 个候选补丁，静态+执行验证选最优。
+export ENABLE_MULTI_CANDIDATE_PATCH=true
+export MULTI_CANDIDATE_COUNT=3
+export MULTI_CANDIDATE_EXEC_VALIDATE=true   # 逐候选跑测试筛选（成本更高）
+
+# 成本感知路由（3.4）：COST_AWARE 策略避免故障转移全量切到昂贵 provider。
+# 各 provider 相对成本倍数在 .env.local 以 LLM_N_COST_WEIGHT 配置。
+
+# RAG（检索增强）：合成/内置数据集实验可显式开启
+python experiments/run_benchmark.py --dataset synthetic --enable-rag
+```
+
 ## 配置文件说明
 
 | 文件 | 说明 | Git 状态 |
