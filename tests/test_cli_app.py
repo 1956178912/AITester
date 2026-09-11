@@ -197,4 +197,3 @@ class TestRunParamValidation:
         r = CliRunner().invoke(cli_app.cli, ["run", str(tmp_path / "no_such_file.py"), "--json"])
         assert r.exit_code == 2
         assert "does not exist" in r.output
-
