@@ -149,8 +149,93 @@ AITester/
 
 ## 阶段 6：上传 GitHub
 
-（待执行 —— 用户已确认推送 main 并创建 PR；推送前将列出全部 commit 供最终确认）
+用户已确认「推送 main 并创建 PR」。实际执行结果：**推送受阻于网络**——本机到 `github.com:443` 不可达（curl 8s 超时、git push 两次失败 `Couldn't connect to server`），且本机未运行任何代理（clash/proxyman 均不在进程列表）。工作区与 commit 状态完好，可随时重推。
+
+将推送内容：`origin/main` 落后的全部 **16 个 commit**（`bd4de49`…`1c4897a`，完整清单见 `git log origin/main..main --oneline`）。
+
+手动执行命令（恢复网络/代理后）：
+
+```bash
+cd /Users/wangchenyu/workspace/AITester
+# 1. 推送 main
+git push origin main
+
+# 2. 创建 PR（gh 未安装，可用 GitHub Web 或先安装 gh 执行）
+gh pr create --base main \
+  --title "chore(optimize): 0.9.11 优化轮次——文档对齐、日志脱敏扩展、打包修复与 CI 安全门禁同步" \
+  --body-file /dev/stdin <<'EOF'
+## 背景
+0.9.11 基线（1020 用例 / 91% 覆盖 / ruff 全绿）上的优化轮次：修复 README 陈旧数据与幽灵条目、日志脱敏正则盲区、setup.py 打包缺根级 config、pip-audit 豁免清单漂移。
+
+## 变更内容
+- **fix(utils)**：日志脱敏正则扩展（带点号分段 sk- 型 / 无 sk- 前缀长 hex·base64）+ 测试注释真实密钥形态改合成占位符（敏感信息零容忍）
+- **fix(packaging)**：setup.py `py_modules=["config"]`（正式安装后入口不再 ModuleNotFoundError）+ extras 补全
+- **chore(ci)**：pip-audit 豁免清单同步实测漏洞 ID（CVE-4583x → PYSEC-2026-3813/3814/3815）
+- **fix(datasets / experiments / utils)**：Defects4J O(n²) 消除、显著性 skipped 条目 KeyError、extract_code_block 误吞标识符行
+- **docs(readme / changelog / optimize)**：用例数 1038 对齐、幽灵测试文件行删除、消融开关措辞、OPTIMIZATION_PLAN/REPORT 入库
+
+## 测试结果
+| 检查项 | 命令 | 结果 |
+|--------|------|------|
+| 单元测试 | `pytest tests/ -q` | 1038 passed / 0 failed（27.7s） |
+| Lint | `ruff check .` | All checks passed |
+| 格式化 | `ruff format --check .` | 124 files already formatted |
+| lock 同步 | `python scripts/check_lock_sync.py` | 通过（19 vs 130 项一致） |
+| 构建 | `python -m build --wheel` | aitester-0.9.11-py3-none-any.whl（config.py 已验证入包） |
+| 安全扫描 | `pip-audit`（同 CI 豁免清单） | No known vulnerabilities found, 5 ignored |
+| 覆盖率 | `pytest --cov=src` | 91%（与 README/CHANGELOG 口径一致） |
+
+## 风险与回滚
+- 脱敏正则扩展为纯新增匹配分支，旧用例全部通过（1038 无失败），无误伤回归；回滚单条 `git revert 0558090` 即可
+- setup.py 修复为纯声明补齐，对 editable 安装无行为变化；回滚 `git revert e5252a6`
+- pip-audit 豁免漂移为 CI 配置同步，无运行时影响；回滚 `git revert 3bf75bb`
+- 本 PR 不含敏感信息（真实密钥仅存在于 gitignored 的本地 .env，提交历史已用合成占位符归一，见 80e2f05）
+
+## 检查清单
+- [x] 构建 / 测试 / lint / 格式化 / lock 同步全绿
+- [x] 全量 1038 用例通过，覆盖率 91% 与文档对齐
+- [x] 无敏感信息入库（git ls-files 核实 .env 系未跟踪）
+- [x] 无未说明的破坏性变更（setup.py extras 新增为增量）
+- [x] 文档（README/CHANGELOG/OPTIMIZATION_*）与代码一致
+EOF
+```
+
+> 若 `gh` 不可用：浏览器打开 `https://github.com/1956178912/AITester/compare/main...main`（推送后自动出现 compare 链接）→ Create new pull request，正文用上面 `## 背景` 到 `## 检查清单` 的内容。
 
 ## 阶段 7：最终报告
 
-（待阶段 6 完成后补全）
+### 完成状态
+- 阶段 0-5：**全部完成**，工作区 clean，本地 main 领先 origin/main 16 个 commit
+- 阶段 6：**受阻于网络**（github.com:443 不可达、本机无代理），16 个 commit 已就绪、未推送；手动命令与 PR 正文见上节，恢复网络后 `git push origin main` 即完成
+
+### 优化项清单及结果
+| 项 | 结果 |
+|----|------|
+| D-01 README 幽灵测试文件 4 行 | ✅ 已删（40ef2e7） |
+| D-02/D-08 用例数/覆盖率陈旧 | ✅ 对齐 1038/91%（cd058b4 + 68fb35f） |
+| D-09 消融开关措辞 | ✅ 对齐（4c7e17d） |
+| D-04 本地 .env DOCKER_IMAGE 漂移 | ✅ 本地修正 3.11→3.12-slim（不入库） |
+| D-07 日志脱敏正则盲区 | ✅ 扩展 + 14 个合成占位符用例（0558090） |
+| D-05 本地真实密钥 | ⚠️ 仅提醒，未动代码；`80e2f05` 已将测试/注释中的真实密钥形态归一为占位符；**建议尽快轮换 .env 中的 LLM key** |
+| B2 CLI 参数校验缺口 | ✅ 补 4 用例（e5252a6） |
+| T-01 公共 fixture 下沉 / T-04 executor 沙箱审计 | 📋 列为后续建议（重构面大 / 需设计文档） |
+| 打包缺陷（发现于本轮验证） | ✅ setup.py py_modules 修复（e5252a6） |
+| CI pip-audit 豁免漂移 | ✅ 同步（3bf75bb） |
+
+### 测试结果汇总
+全量 pytest 1038 passed / ruff check·format 全绿 / lock 同步通过 / wheel 构建成功且 config.py 入包 / pip-audit 无未豁免漏洞 / 覆盖率 91%。明细表见「阶段 4」。
+
+### 文档更新汇总
+CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入库；代码注释无冗余新增。
+
+### 风险与回滚
+- 所有改动均可按 commit 粒度 `git revert <hash>` 回滚（单文件为主，无跨文件耦合）
+- 脱敏正则为纯新增匹配分支，1038 用例零失败即回归证据
+- setup.py 为声明补齐，editable 开发流程行为不变
+- 无敏感信息入库；本地 .env 真实密钥建议轮换（与本次代码改动无关）
+
+### 后续建议
+1. 恢复网络后执行阶段 6 手动命令推送 16 个 commit 并开 PR（正文已备好）
+2. 轮换本地 .env 中的 LLM API Key（已在会话中暴露过一次，零容忍原则下建议更换）
+3. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
+4. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815）
