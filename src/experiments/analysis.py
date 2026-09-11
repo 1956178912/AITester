@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -140,15 +141,35 @@ def _compute_significance(results: dict[str, Any]) -> dict[str, Any]:
             method = "welch_t_test"
             t_stat, p_value = scipy_stats.ttest_ind(a, b, equal_var=False)
 
+        # NaN/Inf 守卫：两组成功率恒定（全 1 或全 0）时 scipy 返回非有限统计量
+        # ——配对 t 检验全零差值给 t=nan，Welch 双样本零方差给 t=±inf。
+        # round(float(nan/inf)) 会把非标准 NaN/Infinity token 写进结果 JSON，
+        # 严格解析器（如 JS JSON.parse）报错；统计上该对比也无"显著性"可言，
+        # 记一条 skipped 说明而非数字条目
+        t_stat_f = float(t_stat)
+        p_value_f = float(p_value)
+        if not math.isfinite(t_stat_f) or not math.isfinite(p_value_f):
+            comparisons.append(
+                {
+                    "comparison": f"{baseline} vs {name}",
+                    "method": method,
+                    "n_a": len(a),
+                    "n_b": len(b),
+                    "status": "skipped",
+                    "note": "两组通过率恒定（无差异），t 检验不适用",
+                }
+            )
+            continue
+
         comparisons.append(
             {
                 "comparison": f"{baseline} vs {name}",
                 "method": method,
                 "n_a": len(a),
                 "n_b": len(b),
-                "t_stat": round(float(t_stat), 4),
-                "p_value": round(float(p_value), 4),
-                "significant": bool(p_value < 0.05),
+                "t_stat": round(t_stat_f, 4),
+                "p_value": round(p_value_f, 4),
+                "significant": bool(p_value_f < 0.05),
             }
         )
 

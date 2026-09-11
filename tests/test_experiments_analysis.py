@@ -102,6 +102,40 @@ class TestAnalyzeExperimentResults:
         )["significance"]
         assert sig["status"] == "unavailable"
 
+    def test_significance_constant_groups_marked_skipped(self):
+        """两组通过率恒定（配对全 1 vs 全 1）时 t 检验返回 NaN，记 skipped 而非数字条目。
+
+        回归：此前 NaN 会经 round(float(nan)) 写入结果 JSON——非标准 JSON token，
+        严格解析器（如 JS JSON.parse）报错。
+        """
+        results = {
+            "aitester": _results_with_details(5, 1.0),
+            "plain_llm": _results_with_details(5, 1.0),
+        }
+        analysis = analyze_experiment_results(results)
+        sig = analysis["significance"]
+        assert sig["status"] == "ok"
+        comp = sig["comparisons"][0]
+        assert comp["status"] == "skipped"
+        assert "note" in comp
+        # 整体结果 JSON 严格可解析：不得含非标准 NaN token
+        assert "NaN" not in json.dumps(analysis)
+
+    def test_significance_constant_groups_welch_marked_skipped(self):
+        """无 task_id 退化 Welch 分支：两组全 0 vs 全 1（std 均为 0）同样记 skipped。"""
+        details_a = [{"task_id": None, "passed": False} for _ in range(5)]
+        details_b = [{"task_id": None, "passed": True} for _ in range(5)]
+        results = {
+            "aitester": _results_with_details(5, 0.0) | {"details": details_a},
+            "plain_llm": _results_with_details(5, 1.0) | {"details": details_b},
+        }
+        sig = analyze_experiment_results(results)["significance"]
+        assert sig["status"] == "ok"
+        comp = sig["comparisons"][0]
+        assert comp["method"] == "welch_t_test"
+        assert comp["status"] == "skipped"
+        assert "NaN" not in json.dumps(sig)
+
 
 class TestGenerateComparisonReport:
     """generate_comparison_report 输出"""
