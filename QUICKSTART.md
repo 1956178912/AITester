@@ -42,11 +42,14 @@ cp config.local.example .env.local
 vim .env.local
 ```
 
-## 4. 验证配置
+## 4. 验证配置已加载
 
 ```bash
-# 测试 API 连接
+# 仅校验配置加载（无网络调用）：成功打印加载的 LLM 配置数即可
 python3 -c "from config import LLM_CONFIGS; print(f'已加载 {len(LLM_CONFIGS)} 个 LLM 配置')"
+
+# 如需真实探测各模型 API 连通性与额度（每个仅 1 token），用第 6 步的脚本：
+# python scripts/check_quota.py
 ```
 
 ## 5. 运行测试
