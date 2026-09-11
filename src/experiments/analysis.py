@@ -270,6 +270,11 @@ def generate_comparison_report(analysis: dict[str, Any], output_path: str | None
             "|---|---|---|---|---|---|",
         ]
         for comp in sig.get("comparisons", []):
+            if comp.get("status") == "skipped":
+                # 恒定组（无差异）t 检验不适用，条目不携带 t_stat/p_value 键：
+                # 单列一条说明而非强塞进结果表（此前对全部条目硬读 t_stat → KeyError）
+                lines.append(f"- **{comp['comparison']}**：{comp.get('note', '已跳过')}")
+                continue
             lines.append(
                 f"| {comp['comparison']} | {comp['method']} | {comp['n_a']}/{comp['n_b']} "
                 f"| {comp['t_stat']} | {comp['p_value']} | {'是' if comp['significant'] else '否'} |"
