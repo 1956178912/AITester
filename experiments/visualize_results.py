@@ -36,14 +36,22 @@ _charts_dir = CHARTS_DIR  # 由 main() 动态设置
 
 
 def load_latest_result(results_dir: str = RESULTS_DIR) -> str:
-    """找到最新的 benchmark JSON 结果文件。"""
-    files = sorted(
-        [f for f in os.listdir(results_dir) if f.endswith(".json")],
-        reverse=True,
-    )
-    if not files:
+    """找到最新的 benchmark JSON 结果文件。
+
+    仅识别 benchmark 运行产物（benchmark_* 前缀，与 run_benchmark 的
+    benchmark_YYYYMMDD_HHMMSS.json 命名口径一致）；results 目录下还混有
+    汇总/基线/性能类 JSON（如 swebench_20_summary.json、performance_benchmark.json、
+    synthetic_plain_llm_*.json），纯文件名倒序会误选这些文件（'s'/'p' 均排在 'b' 之后），
+    导致出图基于非 benchmark 数据。无匹配时回退全量倒序并提示。
+    """
+    all_json = [f for f in os.listdir(results_dir) if f.endswith(".json")]
+    benchmark_files = [f for f in all_json if f.startswith("benchmark_")]
+    if not benchmark_files:
+        print(f"⚠️  结果目录 {results_dir} 下无 benchmark_* 前缀文件，回退到全部 JSON（可能选中汇总/基线文件）")
+        benchmark_files = all_json
+    if not benchmark_files:
         raise FileNotFoundError(f"结果目录 {results_dir} 下没有找到 JSON 文件")
-    return os.path.join(results_dir, files[0])
+    return os.path.join(results_dir, sorted(benchmark_files, reverse=True)[0])
 
 
 # ─── 统计检验辅助函数 ────────────────────────────────────────────────────────────
