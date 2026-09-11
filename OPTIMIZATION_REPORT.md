@@ -5,7 +5,8 @@
 >
 > **后续轮次**：2026-09-12 轮次（文档数据对齐批次，N-01~N-04）的完整记录见文末
 > 「附录：2026-09-12 轮次」；2026-09-13 轮次（文档数据对齐批次，M-01~M-03）的完整记录见
-> 「附录：2026-09-13 轮次」。优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
+> 「附录：2026-09-13 轮次」；2026-09-13 系统功能增强轮次（3.1/3.4/4.1/2.3/1.5）的完整记录见
+> 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
 
 ## 阶段 0：基线检查
 
@@ -401,3 +402,60 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 1. 轮换本地 .env / src/.env.local 中的 LLM API Key（零容忍原则，跨轮次保留建议）
 2. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
 3. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815；311 重复两条为其别名条目）
+
+---
+
+## 附录：2026-09-13 系统功能增强轮次（3.1 / 3.4 / 4.1 / 2.3 / 1.5）
+
+### 用户清单核对（先甄别已实现项，避免重复造轮子）
+
+用户提出 20 条优化建议，逐条核对代码现状后确认 **8 条系统已实现**（建议写于代码更新前）：
+
+| 用户条目 | 现状 | 证据位置 |
+|---------|------|---------|
+| 1.2 错误分类细化（import/type/logic） | ✅ 已实现 | `src/agents/error_classifier.py`（P2 细化：IMPORT_ERROR/TYPE_ERROR/LOGIC_ERROR 已从旧五类拆出） |
+| 1.3 依赖隔离 | ✅ 已实现 | `EXECUTOR_USE_VENV` + 沙箱 venv + `PYTHONPATH` 控制 + 依赖自动安装（`src/tools/dependency.py`） |
+| 1.4 连接池配置化 | ✅ 已实现 | `MYSQL_POOL_*` 从 `config.py` 环境变量读取（`src/db/mysql_client.py`） |
+| 2.1 SWE-bench 校验 | ✅ 已实现 | `validate_task` / `quality_report` / `_extract_suggested_function` + 源码补充通道（`dataset_loader.py`） |
+| 2.2 Token 效率对比 | ✅ 已实现 | `src/graph/token_usage.py` + benchmark `token_metrics` 聚合 |
+| 2.3 RAG 检索质量 | ✅ 已实现 | `evaluate_retrieval`（Hit Rate/MRR）+ `--enable-rag` + `RAG_PERSIST_PATH`（默认 `rag_data/`） |
+| 1.1 日志脱敏全链路 | ✅ 已实现 | `SensitiveFormatter` 覆盖异常堆栈 + base_agent 全 LLM 路径接入脱敏 |
+| 4.3 熔断器 | ✅ 已实现 | `APIHealth.max_consecutive_failures` 阈值接线（连续失败 N 次标记不健康、剔出路由） |
+
+### 本批实现（真正缺失的 4 项 + 2 项补强，6 个原子 commit）
+
+| 序号 | 目标 | 文件 | 状态 |
+|------|------|------|------|
+| F1 | 4.1 结构化 JSONL 追踪层（默认关） | `src/observability/{__init__,trace}.py` + workflow 节点 + CLI + benchmark 接线 + `tests/test_trace_observability.py`（12 用例） | ✅ |
+| F2 | 3.4 成本感知路由 + 成本告警 | `src/api/api_manager.py`（COST_AWARE 策略 + 昂贵 provider WARNING）+ `config.py`（LLMConfig.cost_weight）+ `tests/test_cost_aware_routing.py`（10 用例） | ✅ |
+| F3 | 3.1 多候选补丁与验证（默认关，无候选回退单补丁） | `src/tools/multi_candidate.py` + workflow `_patch_applier_node` 接入 + `tests/test_multi_candidate.py`（19 用例） | ✅ |
+| F4 | 2.3 合成数据集默认开 RAG + `--no-rag` | `reproduce.sh`（synthetic/examples 默认 `--enable-rag`）+ `run_benchmark.py`（`--no-rag` 参数） | ✅ |
+| F5 | 1.5 CLI parallel/json 边界补测 + 文档对齐 | `tests/test_cli_app.py`（`TestRunParallelJsonBoundaries` 6 用例）+ `.env.example` / CHANGELOG / README / `QUICKSTART` 同步 | ✅ |
+
+### 全量验证结果
+
+| 检查项 | 命令 | 结果 |
+|--------|------|------|
+| Ruff Lint | `ruff check .` | ✅ All checks passed |
+| Ruff 格式 | `ruff format --check .` | ✅ 130 files already formatted |
+| 全量测试 | `python -m pytest tests/` | ✅ **1085 passed** / 0 failed |
+| 覆盖率 | `--cov=src` | ✅ TOTAL 3813 / 348 miss = 91% |
+| 端到端 smoke | 多候选 generate→select + 追踪落盘 | ✅ 坏候选被静态筛除、好候选选中、JSONL 事件序列正确 |
+| 打包 | `find_packages()` | ✅ `src.observability` / `src.tools` 均收录 |
+
+### 设计决策（默认关闭的开关）
+
+- **3.1 / 4.1 均默认关闭**（`ENABLE_MULTI_CANDIDATE_PATCH=false` / `AITESTER_TRACE_DIR` 未设），保持历史实验口径不变；开启为显式行为，无隐式行为变化。
+- **3.1 无有效候选自动回退单补丁**：多候选策略"只多不少"，保证不会比原路径更差。
+- **3.4 成本字段走 `.env.local`**（`LLM_N_COST_WEIGHT`，gitignore 不入库），未配置默认 1.0 基准；如需持久化可在 `llm_configs.json` 加 cost_weight 字段（本批先用环境变量口径，避免改 JSON 结构）。
+
+### 阶段 6：上传 GitHub
+
+本批 6 个原子 commit（含 1 个补漏 test 文件提交），与历史轮次一致 `git push origin main` 直推；
+若 443 挂起按历史经验降档 `git config http.version HTTP/1.1` 或代理重试。
+
+### 阶段 7：后续建议
+
+1. **3.2 跨文件修复**与 **3.3 测试用例质量挖掘**：本批未实施（改动面大，涉及 patch_applier 跨文件依赖分析 + 测试自验证过滤），建议单独立项并配设计文档。
+2. **4.2 Docker 实际启用**：仍维持 `use_docker=False` 预留（历史 D-06 决策），接通需确认实验环境有 Docker daemon。
+3. 推送前确认 `main` 领先提交数，一并推送全部（含 09-13 文档批次与系统功能增强批次）。
