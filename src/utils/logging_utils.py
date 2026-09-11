@@ -13,8 +13,13 @@ from typing import Any
 
 # 敏感信息模式匹配规则
 _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # API Key 模式（如 sk-xxx, LLM_xxx_API_KEY=xxx）
-    (re.compile(r"(sk-[a-zA-Z0-9]{20,})"), "<REDACTED_API_KEY>"),
+    # API Key 模式：覆盖 sk- 前缀、带点号段、无 sk- 前缀的长十六进制/base64 密钥
+    # （如 sk-ws-H.EPIHIXL...、e2b08862968b41408b272d8acf... 两类此前不在此模式内）
+    (re.compile(r"(sk-[A-Za-z0-9.\-_]{20,})"), "<REDACTED_API_KEY>"),
+    # 长十六进制串（>=32 位，前后无字母数字/下划线粘连）
+    (re.compile(r"(?<![\w-])[A-Fa-f0-9]{32,}(?!\w)"), "<REDACTED_KEY>"),
+    # 长 base64 串（>=40 位，须含大小写字母或 +/_，避免误伤普通长单词）
+    (re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9+/=_-]{40,}={0,2})(?![A-Za-z0-9+/_=])"), "<REDACTED_KEY>"),
     # Base64 编码的密钥
     (re.compile(r'(?:key|token|secret|password)=(.{8,})(?:\s|$|")'), r"key=<REDACTED>"),
     # JWT Token
