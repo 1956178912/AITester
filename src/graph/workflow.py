@@ -356,19 +356,11 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     except (json.JSONDecodeError, RuntimeError) as e:
         # LLM 调用失败或返回非 JSON 格式时，使用默认计划兜底
         # 这确保了即使 LLM 服务异常，工作流仍可以继续执行（降级模式）
+        # 复用 _get_default_test_plan（与上方验证失败分支同一构造点）：
+        # 其 "or 'unknown'" 兜底比原内联 .get(key, "unknown") 更严格
+        # （空串/None 键值也会归一为 "unknown"，语义向成功分支收敛）
         logger.warning("Planner JSON 解析失败，使用默认计划: %s", e)
-        test_plan = {
-            "function_name": state.get("target_function", "unknown"),
-            "description": "自动生成的默认测试计划",
-            "logic_analysis": {
-                "input_domain": "未知",
-                "output_domain": "未知",
-                "preconditions": [],
-                "postconditions": [],
-                "edge_cases": [],
-            },
-            "test_cases": [],
-        }
+        test_plan = _get_default_test_plan(state.get("target_function"))
     return {"test_plan": test_plan}
 
 
