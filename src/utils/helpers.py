@@ -54,11 +54,13 @@ def extract_code_block(text: str, language: str | None = None) -> str:
     if match:
         return match.group(1).strip()
 
-    # 尝试 "python" 前缀格式（某些模型输出不带反引号，如 "python:\n..."）
+    # 尝试 "python" 前缀格式（某些模型输出不带反引号，如 "python:\n..."）。
+    # 关键：仅当 "python" 是独立"标签"（后接 冒号/换行/空白/行尾，而非标识符续
+    # 字符）时才剥离，否则会误吞以 python 开头的合法代码行（如 python_path = 3
+    # 会被剥成 _path = 3）——用 (?!\w) 负向后瞻排除"python 是更长标识符一部分"。
     stripped = text.strip()
     if stripped.lower().startswith("python"):
-        # 去除 "python" 或 "python:" 前缀及紧随的换行
-        stripped = re.sub(r"^python\s*:?\s*\n?", "", stripped, flags=re.IGNORECASE)
+        stripped = re.sub(r"^python(?!\w)\s*:?\s*\n?", "", stripped, flags=re.IGNORECASE)
         return stripped.strip()
 
     # 返回原始文本（strip 空白）

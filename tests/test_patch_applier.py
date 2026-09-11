@@ -175,6 +175,21 @@ class TestExtractPatchCode:
         result = extract_code_block(patch)
         assert "def foo():" in result
 
+    def test_extract_python_label_variants(self):
+        """python 标签的多种形态（冒号/多空白换行/大写）仍正确剥离。"""
+        assert "def foo" in extract_code_block("python:\ndef foo(): pass")
+        assert "def hello" in extract_code_block("python  \n\ndef hello(): pass")
+        assert "def hi" in extract_code_block("PYTHON:\ndef hi(): pass")
+
+    def test_extract_python_identifier_line_preserved(self):
+        """以 python 开头的合法标识符行不得被误剥离。
+
+        回归：此前 startswith('python') + re.sub ^python 会把 python_path = 3
+        剥成 _path = 3，破坏代码；加 (?!\\w) 后仅剥离独立标签。
+        """
+        assert extract_code_block("python_path = 3") == "python_path = 3"
+        assert extract_code_block("python_version = '3.12'") == "python_version = '3.12'"
+
     def test_extract_plain_text(self):
         """无标记时直接返回原文。"""
         patch = "def foo(): pass"
