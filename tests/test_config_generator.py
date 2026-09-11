@@ -77,11 +77,16 @@ class TestGenerateEnvTemplate:
         assert len(result) > 0
 
     def test_template_contains_api_key_placeholders(self):
+        """模板变量名与 generate_batch_config 的 {PROVIDER}_API_KEY 推导同源（全名）。"""
         result = generate_env_template()
-        assert "ALIYUN_API_KEY=your-aliyun-api-key-here" in result
-        assert "AGNES_API_KEY=your-agnes-api-key-here" in result
+        assert "ALIYUN_BAILIAN_API_KEY=your-aliyun-api-key-here" in result
+        assert "AGNES_DOMESTIC_API_KEY=your-agnes-api-key-here" in result
+        assert "AGNES_INTERNATIONAL_API_KEY=your-agnes-international-api-key-here" in result
         assert "BIGMODEL_API_KEY=your-bigmodel-api-key-here" in result
         assert "DEEPSEEK_API_KEY=your-deepseek-api-key-here" in result
+        # 旧短名变量已废弃，不再出现（与批处理脚本的推导名对齐）
+        assert "ALIYUN_API_KEY=your-aliyun" not in result
+        assert "AGNES_API_KEY=your" not in result
 
     def test_template_contains_model_examples(self):
         result = generate_env_template()
@@ -96,7 +101,7 @@ class TestGenerateEnvTemplate:
         with open(output, encoding="utf-8") as f:
             content = f.read()
         assert content == result
-        assert "ALIYUN_API_KEY" in content
+        assert "ALIYUN_BAILIAN_API_KEY" in content
 
 
 class TestGenerateConfigJson:
