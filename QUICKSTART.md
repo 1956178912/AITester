@@ -95,8 +95,20 @@ export MULTI_CANDIDATE_EXEC_VALIDATE=true   # 逐候选跑测试筛选（成本�
 # 成本感知路由（3.4）：COST_AWARE 策略避免故障转移全量切到昂贵 provider。
 # 各 provider 相对成本倍数在 .env.local 以 LLM_N_COST_WEIGHT 配置。
 
+# 熔断冷却期（4.1 残余）：APIManager 节点连续失败达 max_consecutive_failures
+# 阈值后自动进入冷却期（APIManagerConfig.circuit_cooldown_seconds，默认 60s），
+# 冷却期内即使健康检查翻回 is_healthy=True 路由层也继续跳过该节点，
+# 避免流量重新打回已知不可用的 provider（浪费时间与 token）。
+# 默认开启、无需配置；嵌入使用时可显式调整：
+from src.api.api_manager import APIManager, APIManagerConfig
+manager = APIManager(config=APIManagerConfig(circuit_cooldown_seconds=120.0))
+
 # RAG（检索增强）：合成/内置数据集实验可显式开启
 python experiments/run_benchmark.py --dataset synthetic --enable-rag
+
+# 结果分析（4.3）：跑完 benchmark 后生成 Markdown 汇总（成功率/token 效率/
+# 迭代分布/失败原因分布/RAG 质量），旧 JSON 兜底不崩。
+python experiments/analyze_results.py --results-dir experiments/results
 ```
 
 ## 配置文件说明

@@ -187,7 +187,9 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     lines.append("")
 
     # 失败原因分布（按基线输出；1.2 细化后 LLM_FORMAT_ERROR / INDEX_ERROR 可单独计数）
-    fail_rows = [(b, m["failure_category_distribution"]) for b, m in per.items() if m.get("failure_category_distribution")]
+    fail_rows = [
+        (b, m["failure_category_distribution"]) for b, m in per.items() if m.get("failure_category_distribution")
+    ]
     if fail_rows:
         lines.append("## 失败原因分布（按基线）")
         lines.append("")
@@ -201,7 +203,11 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             lines.append("")
 
     # RAG 检索质量（仅当有 rag_metrics 且启用 RAG 时输出）
-    rag_rows = [(b, m["rag_metrics"]) for b, m in per.items() if m.get("rag_metrics") and m["rag_metrics"].get("retrievals", 0) > 0]
+    rag_rows = [
+        (b, m["rag_metrics"])
+        for b, m in per.items()
+        if m.get("rag_metrics") and m["rag_metrics"].get("retrievals", 0) > 0
+    ]
     if rag_rows:
         lines.append("## RAG 检索质量")
         lines.append("")
@@ -221,7 +227,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AITester 实验结果结构化分析（4.3）")
     parser.add_argument("--results-dir", default="experiments/results", help="结果目录（自动找最新 benchmark JSON）")
     parser.add_argument("--input", default=None, help="直接指定单个 benchmark JSON 文件（优先于 --results-dir）")
-    parser.add_argument("--output", default=None, help="Markdown 汇总输出路径（默认 <输入文件同目录>/analysis_summary.md）")
+    parser.add_argument(
+        "--output", default=None, help="Markdown 汇总输出路径（默认 <输入文件同目录>/analysis_summary.md）"
+    )
     args = parser.parse_args()
 
     if args.input:
