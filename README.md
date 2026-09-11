@@ -884,12 +884,8 @@ python main.py list-examples
 | 测试文件 | 用例数 | 覆盖范围 |
 |---------|-------|---------|
 | `test_api_manager.py` | 17 | API 管理器策略测试 |
-| `test_api_manager_large_scale.py` | 14 | 大规模节点池管理 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_error_classifier_improvements.py` | 25 | 错误分类器改进 |
-| `test_patch_applier_improvements.py` | 19 | 补丁应用器改进 |
 | `test_report_generator.py` | 13 | 错误报告生成器 |
-| `test_executor_integration.py` | 4 | 执行器集成测试 |
 
 ### v0.9 (2026-08-18) — 代码质量优化 + 错误报告生成器
 
