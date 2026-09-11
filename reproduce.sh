@@ -34,10 +34,11 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ─── 参数解析 ───────────────────────────────────────────────────────────────────
 # 默认参数值
 MODE="quick"        # quick | full：控制任务数量
-DATASET="examples"  # examples | swe_bench：数据集选择
+DATASET="examples"  # examples | swe_bench | synthetic：数据集选择
 TASK_LIMIT=3        # 由 MODE 决定（quick=3，full=不限）；默认 quick 即 3，与文档一致
 BASELINES="aitester,plain_llm,single_agent"  # 基线方法列表
 VERBOSE=""          # 是否输出详细日志
+ENABLE_RAG=""       # 2.3 RAG 纳入主实验：默认对合成/内置数据集显式开启 RAG
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -46,13 +47,28 @@ while [[ $# -gt 0 ]]; do
         --full)      MODE="full";  TASK_LIMIT="";  shift ;;
         --dataset)   DATASET="$2"; shift 2 ;;
         --baselines) BASELINES="$2"; shift 2 ;;
+        --no-rag)    ENABLE_RAG="--no-rag"; shift ;;
         --verbose|-v) VERBOSE="-v"; shift ;;
         *) error "未知参数: $1" ;;
     esac
 done
 
+# 2.3 RAG 纳入主实验（消融公平性）：合成/内置数据集默认显式开启 RAG，
+# 使"完整系统 vs Plain LLM"的对比包含检索增强效果；rag_data/ 持久化目录
+# 跨实验复用（config.RAG_PERSIST_PATH 默认项目下 rag_data/）。
+# 用户可用 --no-rag 回退到 config.ENABLE_RAG（默认 false）口径。
+if [[ "$DATASET" == "synthetic" || "$DATASET" == "examples" ]]; then
+    if [[ -z "$ENABLE_RAG" ]]; then
+        ENABLE_RAG="--enable-rag"
+        info "数据集 '$DATASET' 默认开启 RAG（检索增强 + rag_data/ 持久化，2.3）"
+    fi
+else
+    ENABLE_RAG=""
+fi
+
 info "模式: $MODE  |  数据集: $DATASET  |  基线: $BASELINES"
 [[ -n "$TASK_LIMIT" ]] && info "任务限制: $TASK_LIMIT"
+[[ -n "$ENABLE_RAG" ]] && info "RAG: 显式开启（--enable-rag）"
 
 # ─── 步骤 1/6：检查运行环境 ─────────────────────────────────────────────────────
 info "Step 1/6: 检查环境..."
@@ -147,10 +163,12 @@ TASK_LIMIT_ARG=""
 [[ -n "$TASK_LIMIT" ]] && TASK_LIMIT_ARG="--task-limit $TASK_LIMIT"
 
 # 运行多基线对比实验（自动保存 JSON 结果到 experiments/results/）
+# 2.3 RAG：$ENABLE_RAG 在合成/内置数据集默认设为 --enable-rag（见参数解析段）
 python experiments/run_benchmark.py \
     --dataset "$DATASET" \
     --baselines "$BASELINES" \
     $TASK_LIMIT_ARG \
+    $ENABLE_RAG \
     --output-dir experiments/results \
     $VERBOSE
 
