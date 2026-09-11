@@ -5,7 +5,7 @@
 ## [Unreleased] - 待发布（2026-09-11 优化轮次）
 
 ### 安全
-- **日志脱敏正则扩展**：`src/utils/logging_utils.py` 的 API Key 脱敏模式此前只覆盖 `sk-` 前缀 + 字母数字 20+ 位的密钥；现补充两类此前会绕过脱敏的真实密钥形态——带点号/连字符分段的 `sk-ws-H.EPIHIXL...` 型与无 `sk-` 前缀的长十六进制（≥32 位）/长 base64（≥40 位）密钥，新增 `tests/test_logging_utils.py`（14 用例）锁定
+- **日志脱敏正则扩展**：`src/utils/logging_utils.py` 的 API Key 脱敏模式此前只覆盖 `sk-` 前缀 + 字母数字 20+ 位的密钥；现补充两类此前会绕过脱敏的真实密钥形态——带点号/连字符分段的长 sk- 型（形如 `sk-ws-xxx.yyy...`）与无 `sk-` 前缀的长十六进制（≥32 位）/长 base64（≥40 位）密钥，新增 `tests/test_logging_utils.py`（14 用例，全部使用合成占位符，不引入任何真实密钥）锁定
 - **CI 安全门禁豁免同步**：`.github/workflows/ci.yml` 的 pip-audit 豁免清单实测已漂移（本地 9-11 复跑 chromadb==1.5.9 报 `PYSEC-2026-311`×2 + `PYSEC-2026-3813/3814/3815`，旧清单仍豁免 `CVE-2026-45830/45831/45833`）；按实测结果同步 4 条豁免并留注释说明漂移原因，恢复 security job 可信度
 
 ### 打包
