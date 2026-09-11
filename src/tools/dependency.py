@@ -32,9 +32,54 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-# ─── 预编译正则：与 executor._extract_imports 同源语义 ───────────────────────
+# ─── 预编译正则：import 语句提取的单一来源（executor._extract_imports 复用）──
+# from 形式：捕获模块路径（可含点，相对导入以 . 开头）
 _RE_FROM_IMPORT = re.compile(r"from\s+([\w.]+)\s+import")
-_RE_IMPORT = re.compile(r"^import\s+([\w.]+)", re.MULTILINE)
+# import 形式：捕获整行模块子句（逗号分隔多模块 + as 别名），
+# 旧的 ^import\s+([\w.]+) 只能捕获首个模块，import numpy, scipy 会漏掉 scipy
+_RE_IMPORT_CLAUSE = re.compile(r"^import\s+(.+)$")
+
+
+def extract_import_module_names(code: str) -> list[str]:
+    """逐行提取 import 语句导入的模块名（保留点号，按出现顺序）。
+
+    覆盖三种形式：
+        import os, sys                → "os", "sys"（逗号分隔多模块）
+        import numpy.random as nr     → "numpy.random"（as 别名 + 点号）
+        from collections import X     → "collections"
+    相对导入（from . import x / from .foo import y）跳过。
+
+    本函数是 import 提取的单一实现（DRY）：executor._extract_imports 直接复用，
+    避免跨模块复制同一份正则导致缺陷同步扩散（此前逗号 import 漏检就因复制
+    了两份实现而双重存在）。
+
+    Args:
+        code: Python 源码字符串。
+
+    Returns:
+        模块名列表（可含重复，保持原顺序，调用方按需去重/取顶层）。
+    """
+    names: list[str] = []
+    if not code:
+        return names
+    for line in code.splitlines():
+        stripped = line.strip()
+        from_match = _RE_FROM_IMPORT.match(stripped)
+        if from_match:
+            module_name = from_match.group(1)
+            if not module_name.startswith("."):
+                names.append(module_name)
+            continue
+        import_match = _RE_IMPORT_CLAUSE.match(stripped)
+        if import_match:
+            # 逗号分隔多项，逐项去掉 "as 别名" 与首尾空白（尾随注释按 # 截断）
+            clause = import_match.group(1).split("#", 1)[0]
+            for part in clause.split(","):
+                module_name = part.strip().split(" as ")[0].strip()
+                if module_name:
+                    names.append(module_name)
+    return names
+
 
 # ─── venv 磁盘缓存目录 ───────────────────────────────────────────────────────
 _VENV_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "aitester", "venvs")
@@ -68,9 +113,11 @@ _importable_cache: dict[str, bool] = {}
 def extract_imported_modules(code: str) -> set[str]:
     """提取 Python 源码中 import 的所有顶层模块名。
 
-    覆盖两种语句：
+    覆盖：
         import os, sys / import numpy as np  → "os" "sys" "numpy"
         from collections import OrderedDict   → "collections"
+
+    底层复用 extract_import_module_names（逗号分隔多模块完整捕获）。
 
     Args:
         code: Python 源码字符串。
@@ -78,29 +125,16 @@ def extract_imported_modules(code: str) -> set[str]:
     Returns:
         顶层模块名集合（不含相对导入 "." 开头项）。
     """
-    modules: set[str] = set()
-    if not code:
-        return modules
-    for line in code.splitlines():
-        stripped = line.strip()
-        match = _RE_FROM_IMPORT.match(stripped) or _RE_IMPORT.match(stripped)
-        if not match:
-            continue
-        module_name = match.group(1)
-        # 相对导入（from . import x）以 . 开头，跳过
-        if module_name.startswith("."):
-            continue
-        top_level = module_name.split(".")[0]
-        if top_level:
-            modules.add(top_level)
-    return modules
+    return {name.split(".")[0] for name in extract_import_module_names(code) if name}
 
 
 def is_standard_library(module_name: str) -> bool:
     """判断模块是否属于 Python 标准库。
 
-    优先使用 sys.stdlib_module_names（3.10+ 的权威清单），
-    缺失时回退保守判断（视为非 stdlib，交给 find_spec 探测）。
+    使用 sys.stdlib_module_names（3.10+ 的权威清单，项目 python_requires>=3.12
+    保证恒存在）。此前另维护一份回退白名单（Python 3.12 下为死代码），且其中
+    误将第三方 pytest 列入标准库——一旦回退生效会把 pytest 当 stdlib 跳过安装；
+    白名单已删除，极端缺失场景返回 False 交由 find_spec 探测实际可用性。
 
     Args:
         module_name: 顶层模块名。
@@ -109,75 +143,10 @@ def is_standard_library(module_name: str) -> bool:
         True 表示标准库模块。
     """
     stdlib_names: set[str] | None = getattr(sys, "stdlib_module_names", None)
-    if stdlib_names is not None:
-        return module_name in stdlib_names
-    # 回退：常见标准库白名单（保守，未命中视为第三方交由探测）
-    _FALLBACK_STDLIB = {
-        "os",
-        "sys",
-        "re",
-        "math",
-        "json",
-        "datetime",
-        "collections",
-        "itertools",
-        "functools",
-        "pathlib",
-        "typing",
-        "abc",
-        "copy",
-        "unittest",
-        "pytest",
-        "tempfile",
-        "subprocess",
-        "logging",
-        "argparse",
-        "dataclasses",
-        "enum",
-        "io",
-        "string",
-        "textwrap",
-        "struct",
-        "codecs",
-        "unicodedata",
-        "difflib",
-        "pprint",
-        "numbers",
-        "cmath",
-        "decimal",
-        "fractions",
-        "random",
-        "statistics",
-        "array",
-        "bisect",
-        "heapq",
-        "queue",
-        "types",
-        "contextlib",
-        "operator",
-        "pickle",
-        "sqlite3",
-        "zipfile",
-        "gzip",
-        "shutil",
-        "glob",
-        "fnmatch",
-        "threading",
-        "concurrent",
-        "multiprocessing",
-        "asyncio",
-        "socket",
-        "ssl",
-        "urllib",
-        "http",
-        "email",
-        "xml",
-        "html",
-        "base64",
-        "hashlib",
-        "hmac",
-    }
-    return module_name in _FALLBACK_STDLIB
+    if stdlib_names is None:
+        # 非标准解释器（缺失权威清单）：视为非 stdlib，交给 find_spec 探测
+        return False
+    return module_name in stdlib_names
 
 
 def find_missing_modules(

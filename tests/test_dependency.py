@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.dependency import (
     create_venv,
+    extract_import_module_names,
     extract_imported_modules,
     find_missing_modules,
     install_packages,
@@ -50,6 +51,42 @@ class TestExtractImportedModules:
     def test_multiline_from_import(self):
         code = "from os import (\n    path,\n    sep,\n)\n"
         assert "os" in extract_imported_modules(code)
+
+    def test_comma_import_all_modules_captured(self):
+        """逗号分隔多模块导入（import numpy, scipy）须完整捕获。
+
+        回归：旧实现的正则 ^import\\s+(\\w+\\.)? 只取首个模块名，
+        scipy 会逃过缺失依赖检测，venv 里少装包导致测试 ImportError。
+        """
+        assert extract_imported_modules("import numpy, scipy\n") == {"numpy", "scipy"}
+        assert extract_imported_modules("import numpy, scipy, os\n") == {"numpy", "scipy", "os"}
+
+
+class TestExtractImportModuleNames:
+    """extract_import_module_names 共享实现（executor 导入修复同源复用）。"""
+
+    def test_plain_single(self):
+        assert extract_import_module_names("import os\n") == ["os"]
+
+    def test_comma_list(self):
+        assert extract_import_module_names("import a, b.c, d\n") == ["a", "b.c", "d"]
+
+    def test_as_alias_dropped(self):
+        assert extract_import_module_names("import numpy as np") == ["numpy"]
+        assert extract_import_module_names("import a.b as x, c\n") == ["a.b", "c"]
+
+    def test_trailing_comment_stripped(self):
+        assert extract_import_module_names("import os, sys  # 注释\n") == ["os", "sys"]
+
+    def test_from_import(self):
+        assert extract_import_module_names("from collections import OrderedDict") == ["collections"]
+
+    def test_relative_imports_skipped(self):
+        assert extract_import_module_names("from . import utils\nfrom ..pkg import x\n") == []
+
+    def test_multiline_paren_from(self):
+        code = "from os import (\n    path,\n    sep,\n)\n"
+        assert "os" in extract_import_module_names(code)
 
 
 class TestIsStandardLibrary:
