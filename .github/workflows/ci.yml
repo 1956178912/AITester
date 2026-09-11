@@ -104,12 +104,14 @@ jobs:
       - name: Check dependencies for vulnerabilities
         # 说明：safety 工具已于 2024-06 起弃用 `check` 子命令（CI 上退出码 64），
         # 改用 PyPA 维护的 pip-audit。
-        # 当前 chromadb==1.5.9 命中 4 条已知漏洞，但 PyPI 上暂无修复版本
-        # （last_affected=1.5.9，为最新版），故显式忽略并在 CHANGELOG/决策日志记录；
+        # 当前 chromadb==1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），
+        # 但 PyPI 上暂无修复版本（1.5.9 为最新版），故显式忽略并在 CHANGELOG/决策日志记录；
         # 一旦发布修复版本，应升级并移除对应 --ignore-vuln。
+        # 注：9-11 审计复跑后漏洞 ID 由旧 CVE-2026-45830/45831/45833 漂移为
+        # PYSEC-2026-3813/3814/3815，本豁免清单与本地 pip-audit 实测结果同步（2026-09-11）。
         run: |
           pip-audit -r requirements.txt --no-deps \
             --ignore-vuln PYSEC-2026-311 \
-            --ignore-vuln CVE-2026-45830 \
-            --ignore-vuln CVE-2026-45831 \
-            --ignore-vuln CVE-2026-45833
+            --ignore-vuln PYSEC-2026-3813 \
+            --ignore-vuln PYSEC-2026-3814 \
+            --ignore-vuln PYSEC-2026-3815
