@@ -2,6 +2,42 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 系统功能增强轮次（2026-09-14，批次 1.2 残余 / 4.1 残余 / 4.3 / 2.2）
+
+> 新基线：1085 passed（09-13 轮次）/ ruff 全绿 / 91% 覆盖 / 工作区干净。
+> 用户清单核对结论（对着 09-12/09-13 轮次记录核实）：8 项已实现（1.2 import/type/logic 拆分、1.3 依赖隔离 EXECUTOR_USE_VENV、1.4 连接池配置化 MYSQL_POOL_*、2.1 SWE-bench 校验 validate_task/quality_report、2.2 Token 效率 token_usage、2.3 RAG evaluate_retrieval/--enable-rag、1.1 日志脱敏 SensitiveFormatter、4.1 熔断 max_consecutive_failures 阈值接线），本批处理真正残余的 4 项：
+>
+> 1. **1.2 残余**：ErrorCategory 仍无 LLM_FORMAT_ERROR / INDEX_ERROR。failure_analysis.md 显示 UNKNOWN 占 75%（JSON 解析失败 + 空响应）且案例 2 的 IndexError 被误归 UNKNOWN，Debugger 无法针对性修复；
+> 2. **4.1 残余**：熔断阈值（max_consecutive_failures=3）已接线，但无冷却期——死 provider 被健康检查线程 60s 内翻回 is_healthy=True，流量重新打回去浪费时间与 token；
+> 3. **4.3**：run_benchmark.py 输出 JSON 后只能手工翻，无汇总分析入口；
+> 4. **2.2 残余**：token_metrics 已记录但未在汇总/进度输出中打印"效率-效果"对照，公平性排查缺数据。
+>
+> 明确不做（本轮排除，单独立项或按需开关）：1.3 venv 复用（executor 生命周期改动大）、2.1 SWE-bench 数据验证（需真实数据）、3.3 跨文件修复（架构级设计）、3.1/3.2 默认开关（跑实验时设 ENABLE_MULTI_CANDIDATE_PATCH / AITESTER_TRACE_DIR 环境变量即可，不动代码）、4.2 Docker（D-06 记录的预留接口，不消费方保持）。
+
+### 本轮优化点清单
+
+| ID | 类别 | 位置 | 问题 | 实现 | 验证 |
+|----|------|------|------|------|------|
+| 1.2r | 错误分类 | src/agents/error_classifier.py | UNKNOWN 占 75% 失败样本，其中 JSON 解析失败/空响应（LLM 响应格式）与 IndexError（越界）两类有明确针对性修复路径，却被归 UNKNOWN 导致 Debugger 走通用兜底策略 | ErrorCategory 补 LLM_FORMAT_ERROR + INDEX_ERROR；classify() 优先级调整（LLM_FORMAT 最前——JSON 解析文本几乎不含 IndexError，反之 IndexError 文本可能含 assert，顺序放反会误判）；新增 _RE_LLM_FORMAT_ERRORS（JSONDecodeError/Expecting value/Could not find complete JSON/empty response/incomplete-truncated）与 _RE_INDEX_ERROR（IndexError/index out of range/下标越界）；get_fix_strategy 补 2 条策略；reports/generator.py 两处 if/elif 链同步 | tests/test_error_classifier.py +10 用例（全量 72） |
+| 4.1r | 可观测性 | src/api/api_manager.py | 熔断只有"标记不健康"没有冷却期：死 provider 被周期健康检查翻回健康后，流量立刻重新打回去，连续失败→翻回→再失败的循环浪费 token | APIHealth 加 circuit_open_until（monotonic）+ circuit_cooldown_seconds 字段与 in_circuit_open 属性；mark_failure 达阈值写入冷却截止，mark_success 复位；get_healthy_nodes() 与 _build_node_list 备用候选统一过滤冷却期内节点；APIManagerConfig.circuit_cooldown_seconds 默认 60.0；get_status() 暴露 circuit_open_remaining_s；add_node/reset_stats 同步接线 | tests/test_api_manager.py +9 用例（全量 72） |
+| 4.3 | 实验 | experiments/analyze_results.py | 结果 JSON 需手工翻字段，汇总工作量随实验规模线性增长 | 新增分析脚本：核心指标对比表 + Token 效率对比表（2.2 公平性）+ 迭代次数分布 + 按基线失败原因分布（1.2 细化类别可单独计数）+ RAG 检索质量（retrievals>0 才输出）；旧 JSON 无 token_metrics/rag_metrics 键时从 details 兜底；终端打印 + 写 analysis_summary.md | tests/test_experiments_scripts.py +6 用例（纯函数，不碰文件系统） |
+| 2.2r | 实验 | experiments/run_benchmark.py | token_metrics 已落盘但汇总/进度输出无效率维度，"完整系统 vs Plain LLM"只看成功率不公平 | 汇总阶段新增 baseline 级 failure_category_distribution 字段；logger + 进度输出打印各基线"平均每任务 Token / LLM 调用次数"（效率-效果二维对照） | 全量 pytest + 手工跑 analyze_results 验证字段 |
+
+### 实施批次
+
+| 序号 | 目标 | 文件 | 改动方式 | 测试方式 | 回滚方式 | commit 信息 |
+|------|------|------|---------|---------|---------|-------------|
+| F1 | 1.2r 错误分类补 2 类 | src/agents/error_classifier.py + src/reports/generator.py + tests/test_error_classifier.py | 枚举 + classify 优先级 + 正则 + 策略文案 + 报告分支 + 10 用例 | pytest test_error_classifier.py | `git revert` | `feat(agents): 错误分类补 LLM_FORMAT_ERROR + INDEX_ERROR（1.2 残余，UNKNOWN 75% 根因单列）` |
+| F2 | 4.1r 熔断冷却期 | src/api/api_manager.py + tests/test_api_manager.py | APIHealth/APIManagerConfig 字段 + 路由过滤 + 9 用例 | pytest test_api_manager.py | `git revert` | `feat(api): 4.1 熔断冷却期（circuit_open_until + 路由层冷却过滤，默认 60s）` |
+| F3 | 4.3 结果分析脚本 | experiments/analyze_results.py + experiments/run_benchmark.py + tests/test_experiments_scripts.py | 新增分析脚本 + baseline 级失败分布字段 + 公平性输出 + 6 用例 | pytest test_experiments_scripts.py + 手工跑脚本 | `git revert` | `feat(experiments): 4.3 结果分析脚本 + 2.2 基线 token 效率汇总输出` |
+| F4 | 文档同步 | CHANGELOG.md + OPTIMIZATION_PLAN.md | 追加 09-14 轮次条目 | 人工核对 | `git revert` | `docs(optimize): 2026-09-14 轮次计划与变更记录` |
+
+### 需用户确认的点
+
+1. **1.2r 优先级调整**：LLM_FORMAT_ERROR 置于 IMPORT_ERROR 之前（最前）。影响面：含 "Expecting value" 等 JSON 特征文本的错误从此走 LLM 格式策略而非导入/语法策略；若某任务同时有导入错误与 LLM 格式问题（极少见），会以 LLM 格式优先处理。
+2. **4.1r 默认 60s 冷却**：历史实验中 provider 故障转移场景本就该跳过死节点，冷却期只是把"跳过"从 is_healthy 维度扩展到 is_healthy 被翻回 True 的窗口；不影响正常故障转移（冷却到期后自动放行）。
+3. **推送**：本批 4 个 commit，与历史轮次一致 `git push origin main` 直推。
+
 ## 系统功能增强轮次（2026-09-13，批次 3.1 / 3.4 / 4.1 / 2.3 / 1.5）
 
 > 新基线：1085 passed / ruff 全绿 / 91% 覆盖（TOTAL 3536/318 miss 口径不变，新增模块后 src 行增长） / 工作区干净。
