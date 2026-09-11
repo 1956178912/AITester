@@ -7,8 +7,8 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1020 collected |
-| **单元测试** | ✅ 1020 passed, 0 skipped |
+| **总测试数** | ✅ 1038 collected |
+| **单元测试** | ✅ 1038 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83% / cli-app 61%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
@@ -564,7 +564,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1020 个用例，全量通过）
+# 运行所有测试（当前 1038 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -574,7 +574,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（41 个测试文件，1020 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（41 个测试文件，1038 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|

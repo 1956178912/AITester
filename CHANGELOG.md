@@ -2,6 +2,22 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-11 优化轮次）
+
+### 安全
+- **日志脱敏正则扩展**：`src/utils/logging_utils.py` 的 API Key 脱敏模式此前只覆盖 `sk-` 前缀 + 字母数字 20+ 位的密钥；现补充两类此前会绕过脱敏的真实密钥形态——带点号/连字符分段的 `sk-ws-H.EPIHIXL...` 型与无 `sk-` 前缀的长十六进制（≥32 位）/长 base64（≥40 位）密钥，新增 `tests/test_logging_utils.py`（14 用例）锁定
+- **CI 安全门禁豁免同步**：`.github/workflows/ci.yml` 的 pip-audit 豁免清单实测已漂移（本地 9-11 复跑 chromadb==1.5.9 报 `PYSEC-2026-311`×2 + `PYSEC-2026-3813/3814/3815`，旧清单仍豁免 `CVE-2026-45830/45831/45833`）；按实测结果同步 4 条豁免并留注释说明漂移原因，恢复 security job 可信度
+
+### 打包
+- **setup.py 补全**：新增 `py_modules=["config"]`（此前 `find_packages()` 不收录根级 `config.py`，正式安装后 `from config import ...` 会 ModuleNotFoundError，核心 CLI/API 入口全部失效）；extras 补 `experiments`（scipy+datasets）与 `ux`（rich+tqdm），dev 补 `pytest-timeout`
+
+### 测试
+- 新增 14 个日志脱敏用例 + 4 个 CLI 参数校验用例（--parallel=0 / --max-iterations=0 / --coverage-threshold 越界 / 不存在文件由 click 拦截），全量 **1038 passed / 0 failed**（0.9.11 的 1014 + 本地后续 fix 新增 6 个回归用例 + 本轮 18 个）；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+
+### 文档
+- README 移除 v0.9.10 章节中 4 个不存在的测试文件（`test_api_manager_large_scale.py` / `test_error_classifier_improvements.py` / `test_executor_integration.py` / `test_patch_applier_improvements.py` 均为幽灵条目）
+- README 用例数/覆盖率数据对齐本轮基线（987/1014 → 1020/1038 分两阶段收敛，最终 1038）；消融实验开关配置位置措辞对齐（config.py 默认值 + `.env` 注入，.env 已 gitignore）
+
 ## [0.9.11] - 2026-09-11
 
 ### 源码层：import 提取与依赖检测收敛
