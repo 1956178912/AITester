@@ -64,7 +64,7 @@ from src.datasets.dataset_loader import (  # noqa: E402
 )
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState  # noqa: E402
-from src.graph.workflow import build_workflow  # noqa: E402
+from src.graph.workflow import build_workflow, end_task_trace, start_task_trace  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -575,6 +575,16 @@ def run_single_task(
             token_usage.reset()
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
+            # 4.1 结构化追踪：本任务（baseline）会话开启（未启用时 no-op），
+            # 节点级事件随工作流执行追加到 <task_uuid>.trace.jsonl
+            start_task_trace(
+                state["task_uuid"],
+                task_meta={
+                    "dataset_task_id": task.task_id,
+                    "baseline": baseline,
+                    "target_function": task.metadata.get("suggested_function"),
+                },
+            )
 
             if verbose:
                 logger.info("  [%s] 运行 %s ...", baseline, task.task_id)
@@ -597,6 +607,8 @@ def run_single_task(
                     final_state.get("coverage_report", 0.0),
                     token_usage.get_usage().total_tokens,
                 )
+                # 4.1 追踪收尾：记录 token 快照与最终结果
+                end_task_trace(final_state.get("test_passed"), token_snapshot=token_usage.get_usage().as_dict())
             except openai.RateLimitError:
                 # 限流：等待后重试（重试共享同一 token 统计窗口，结果含两次调用消耗）
                 logger.warning("    [%s] %s 触发 API 限流，等待 %ds 后重试...", baseline, task.task_id, LLM_RETRY_WAIT)
@@ -607,18 +619,21 @@ def run_single_task(
                     results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
                     if save_state:
                         _dump_state_artifacts(output_dir, task, baseline, final_state)
+                    end_task_trace(final_state.get("test_passed"), token_snapshot=token_usage.get_usage().as_dict())
                 except Exception as e2:
                     elapsed = time.time() - start_time
                     logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
                     results[baseline] = _build_task_result(
                         task, elapsed, diagnosis=f"限流重试失败: {e2}", error_category="rate_limit"
                     )
+                    end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error("    [%s] %s 执行失败: %s", baseline, task.task_id, e)
                 results[baseline] = _build_task_result(
                     task, elapsed, diagnosis=f"执行异常: {e}", error_category="error"
                 )
+                end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
 
         return results
 
@@ -898,16 +913,35 @@ if __name__ == "__main__":
     @click.option("--parallel", "-p", default=None, type=int, help="并行任务数")
     @click.option("--seed", default=42, type=int, help="合成数据集随机种子（默认 42）")
     @click.option("--enable-rag", is_flag=True, help="显式开启 RAG 检索增强（P1：RAG 消融实验）")
+    @click.option("--no-rag", is_flag=True, help="显式关闭 RAG（覆盖 config.ENABLE_RAG，默认即关）")
     @click.option(
         "--save-state",
         is_flag=True,
         help="把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 <output-dir>/raw/（P0-2 排查用）",
     )
     def cli(
-        dataset, subset, baselines, output_dir, verbose, task_limit, task_count, parallel, seed, enable_rag, save_state
+        dataset,
+        subset,
+        baselines,
+        output_dir,
+        verbose,
+        task_limit,
+        task_count,
+        parallel,
+        seed,
+        enable_rag,
+        no_rag,
+        save_state,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
+
+        # --enable-rag / --no-rag 显式覆盖 config.ENABLE_RAG；均未指定时沿用配置默认
+        rag_override = None
+        if no_rag:
+            rag_override = False
+        elif enable_rag:
+            rag_override = True
 
         summary = run_benchmark(
             dataset_name=dataset,
@@ -919,7 +953,7 @@ if __name__ == "__main__":
             task_count=task_count,
             parallel=parallel,
             seed=seed,
-            enable_rag=enable_rag or None,  # 未指定 --enable-rag 时沿用 config.ENABLE_RAG
+            enable_rag=rag_override,
             save_state=save_state,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))

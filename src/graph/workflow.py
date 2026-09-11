@@ -44,6 +44,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -67,10 +68,73 @@ from src.agents.generator import GeneratorAgent
 from src.agents.planner import PlannerAgent
 from src.graph.llm_cache import get_cache_stats
 from src.graph.state import AITesterState
+from src.observability.trace import TraceSession, trace_enabled
+from src.tools.multi_candidate import (
+    generate_candidates,
+    multi_candidate_available,
+    multi_candidate_count,
+    select_best_candidate,
+)
 from src.tools.patch_applier import apply_patch_to_code
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
+
+
+# ─── 结构化追踪（4.1）─────────────────────────────────────────────────────────
+# 追踪器以线程局部方式挂载（--parallel 每个工作线程一条任务线，互不串扰，
+# 与 token_usage 线程局部累计同机制）。未启用（AITESTER_TRACE_DIR 未设）时
+# 全部 no-op，对主流程零侵入。
+_trace_local = threading.local()
+
+
+def start_task_trace(task_id: str, task_meta: dict[str, Any] | None = None) -> None:
+    """为当前线程开启任务级结构化追踪（未启用时 no-op）。
+
+    由工作流入口（benchmark / CLI 任务派发处）在调用 graph.invoke 前调用。
+
+    Args:
+        task_id: 任务标识（JSONL 文件名与记录字段）。
+        task_meta: 任务静态元数据（target_file / func / dataset 等）。
+    """
+    if not trace_enabled():
+        return
+    _trace_local.session = TraceSession(task_id, task_meta=task_meta)
+
+
+def end_task_trace(passed: bool | None, token_snapshot: dict[str, Any] | None = None) -> None:
+    """为当前线程收尾任务追踪（写 task_end 事件后清除）。
+
+    Args:
+        passed: 任务最终是否通过（None 表示中途崩溃）。
+        token_snapshot: token_usage.get_usage().as_dict() 逐任务 token 消耗快照。
+    """
+    session: TraceSession | None = getattr(_trace_local, "session", None)
+    if session is None:
+        return
+    session.record_task_end(passed=passed, token_usage=token_snapshot)
+    _trace_local.session = None
+
+
+def _trace_node(
+    node: str,
+    output_summary: Any = None,
+    decision: str | None = None,
+    duration_ms: float | None = None,
+    iteration: int | None = None,
+) -> None:
+    """记录当前线程任务的一次节点事件（未启用时 no-op）。"""
+    session: TraceSession | None = getattr(_trace_local, "session", None)
+    if session is None:
+        return
+    session.record_node(
+        node=node,
+        output_summary=output_summary,
+        decision=decision,
+        duration_ms=duration_ms,
+        iteration=iteration,
+    )
+
 
 # 可选导入 RAG 检索器（未安装 chromadb 时优雅降级，不影响主流程）
 # 使用延迟导入而非 top-level import，避免 chromadb 未安装时整个项目无法启动
@@ -299,9 +363,11 @@ def _should_debug(state: AITesterState) -> str:
         "debug" 表示进入调试，"done" 表示流程结束，"regenerate" 表示重新生成测试代码。
     """
     if state.get("test_passed") is True:
+        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_passed"})
         return "done"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
     if _should_skip_debugger(state):
+        _trace_node("_should_debug", decision="done", output_summary={"reason": "skip_debugger_repair_invalid"})
         return "done"
 
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
@@ -323,9 +389,12 @@ def _should_debug(state: AITesterState) -> str:
             # 避免 generator↔executor 无限乒乓撞上 recursion_limit
             if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
                 logger.info("诊断表明测试生成错误，触发重新生成测试代码")
+                _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis"})
                 return "regenerate"
             logger.info("已达重新生成上限，结束流程")
+        _trace_node("_should_debug", decision="done", output_summary={"reason": "max_iterations"})
         return "done"
+    _trace_node("_should_debug", decision="debug", output_summary={"iteration": state.get("iteration", 0)})
     return "debug"
 
 
@@ -356,6 +425,7 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         更新后的状态字典，包含 test_plan 字段（PlannerAgent 输出的测试计划）。
     """
     agent = PlannerAgent()
+    t0 = time.time()
     try:
         # 调用 Planner 生成测试计划，传入被测代码和可选的目标函数名
         # 若指定了 target_function，Planner 将只分析该函数，缩小分析范围
@@ -373,6 +443,15 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         # （空串/None 键值也会归一为 "unknown"，语义向成功分支收敛）
         logger.warning("Planner JSON 解析失败，使用默认计划: %s", e)
         test_plan = _get_default_test_plan(state.get("target_function"))
+    _trace_node(
+        "planner",
+        output_summary={
+            "function_name": test_plan.get("function_name"),
+            "test_cases": len(test_plan.get("test_cases", [])),
+        },
+        decision="plan_complete",
+        duration_ms=(time.time() - t0) * 1000,
+    )
     return {"test_plan": test_plan}
 
 
@@ -432,6 +511,13 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     )
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
+    _trace_node(
+        "generator",
+        output_summary={"generated_test_len": len(generated_test)},
+        decision="regenerated"
+        if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS)
+        else "generated",
+    )
     update: dict[str, Any] = {
         "generated_test": generated_test,
         "rag_references": rag_refs,
@@ -469,6 +555,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     # CLI 通过 state 注入的执行超时优先，未注入时回退到 config 中已校验的值
     executor_timeout = int(state.get("execution_timeout") or EXECUTION_TIMEOUT)
+    t0 = time.time()
     # 隔离沙箱参数（P1 依赖隔离）：默认关闭，保持与历史实验一致；
     # 通过环境变量 EXECUTOR_USE_VENV / EXECUTOR_AUTO_INSTALL_DEPS 开启
     agent = ExecutorAgent(
@@ -490,6 +577,17 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         status,
         result["coverage"],
         len(result["failed_cases"]),
+    )
+    _trace_node(
+        "executor",
+        output_summary={
+            "passed": result["passed"],
+            "coverage": result["coverage"],
+            "failed_cases": len(result["failed_cases"]),
+        },
+        decision=status,
+        duration_ms=(time.time() - t0) * 1000,
+        iteration=state.get("iteration", 0),
     )
 
     if result["passed"] and ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
@@ -527,6 +625,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         更新后的状态字典，包含 diagnosis, error_category, patch。
     """
     agent = DebuggerAgent()
+    t0 = time.time()
 
     rag_refs: list | None = None
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None and state.get("failed_cases"):
@@ -566,6 +665,17 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         state.get("iteration", 0) + 1,
         result.get("error_category", "unknown"),
         result.get("root_cause", "")[:80],
+    )
+    _trace_node(
+        "debugger",
+        output_summary={
+            "error_category": result.get("error_category"),
+            "root_cause": result.get("root_cause", "")[:200],
+            "patch_len": len(result.get("patch", "")),
+        },
+        decision=result.get("error_category", "unknown"),
+        duration_ms=(time.time() - t0) * 1000,
+        iteration=state.get("iteration", 0),
     )
 
     if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
@@ -644,6 +754,69 @@ def _write_file_atomic(path: str, content: str) -> None:
         raise
 
 
+def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> tuple[str, bool]:
+    """3.1 多候选补丁：生成 N 候选 + 静态筛选 + 执行验证，返回最优候选。
+
+    无有效候选（全静态拒绝 / 执行全失败）时回退到 state 中的单补丁，
+    保证多候选策略不会比原单补丁路径更差（只多不少）。
+
+    执行验证开关：环境变量 MULTI_CANDIDATE_EXEC_VALIDATE=true 时启用
+    逐候选跑测试（成本更高但筛选更准），默认关闭走纯静态筛选。
+
+    Args:
+        state: 当前工作流状态（含 target_code / generated_test / failed_cases /
+            target_function / module_name 等字段）。
+        original_code: 本轮修复的原始被测代码。
+
+    Returns:
+        (最优候选应用后的代码, 是否成功应用)。回退单补丁时与原
+        apply_patch_to_code 同口径。
+    """
+    import os
+
+    from src.agents.debugger import DebuggerAgent
+    from src.agents.executor import ExecutorAgent
+
+    n = multi_candidate_count()
+    debugger = DebuggerAgent()
+    candidates = generate_candidates(
+        debugger=debugger,
+        target_code=original_code,
+        test_output=state.get("test_output", ""),
+        failed_cases=state.get("failed_cases", []) or [],
+        num_candidates=n,
+        focus_function=state.get("target_function"),
+        target_module=state.get("module_name"),
+    )
+    use_exec = os.getenv("MULTI_CANDIDATE_EXEC_VALIDATE", "false").lower() == "true"
+    executor = ExecutorAgent(timeout=EXECUTION_TIMEOUT, use_venv=EXECUTOR_USE_VENV) if use_exec else None
+    best = select_best_candidate(
+        candidates=candidates,
+        original_code=original_code,
+        test_code=state.get("generated_test"),
+        target_file=state.get("target_file"),
+        target_function=state.get("target_function"),
+        use_execution_validation=use_exec,
+        executor=executor,
+    )
+    _trace_node(
+        "multi_candidate",
+        output_summary={
+            "candidates": len(candidates),
+            "static_passed": sum(1 for c in candidates if c.static_passed),
+            "exec_validated": use_exec,
+            "selected": (best.index if best else None),
+        },
+        decision=f"selected_{best.index + 1}" if best else "fallback_single",
+        iteration=state.get("iteration", 0),
+    )
+    if best is None:
+        # 多候选全部失败 → 回退到单补丁（保持历史行为，不引入劣化）
+        logger.info("多候选无有效补丁，回退到单补丁流程")
+        return apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
+    return apply_patch_to_code(original_code=original_code, patch=best.patch)
+
+
 def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     """
     补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
@@ -661,7 +834,17 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         更新后的状态字典，包含更新后的 target_code 和修复历史。
     """
     original_code = state["target_code"]
-    new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
+
+    # ── 3.1 多候选补丁分支（ENABLE_MULTI_CANDIDATE_PATCH=true 时启用）──
+    # 默认关闭，保持历史单补丁口径。开启时：生成 N 个候选 → 静态筛选 →
+    # （可选）执行验证 → 选最优候选作为本轮补丁。任一环节无有效候选时
+    # 回退到 state 中已有的单补丁（state["patch"]），不引入劣化。
+    new_code: str
+    applied: bool
+    if multi_candidate_available():
+        new_code, applied = _select_multi_candidate_patch(state, original_code)
+    else:
+        new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
 
     # 默认视为"未真正写盘"，任何安全检查失败都保持该值
     written = False
@@ -700,6 +883,12 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # 限制 repair_history 大小，避免无限增长占用内存（最多保留 _MAX_REPAIR_HISTORY 条）
     if len(history) > _MAX_REPAIR_HISTORY:
         history = history[-_MAX_REPAIR_HISTORY:]
+    _trace_node(
+        "patch_applier",
+        output_summary={"patch_applied": written, "new_code_len": len(effective_code)},
+        decision="written" if written else "rejected",
+        iteration=state.get("iteration", 0),
+    )
     return {
         "target_code": effective_code,
         "repair_history": history,

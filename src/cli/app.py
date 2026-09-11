@@ -42,8 +42,9 @@ from src.cli.output import (
     success_msg,
     warning_msg,
 )
+from src.graph import token_usage
 from src.graph.state import AITesterState
-from src.graph.workflow import build_workflow
+from src.graph.workflow import build_workflow, end_task_trace, start_task_trace
 from src.utils.logging_utils import SensitiveFormatter, mask_sensitive_info, setup_logger_safety
 
 # ─── 日志配置 ─────────────────────────────────────────────────────────────────
@@ -280,7 +281,19 @@ def _run_single_task(
 
     # 构建并运行 LangGraph 工作流
     graph = build_workflow()
-    final_state = graph.invoke(state)
+    # 4.1 结构化追踪：任务级 JSONL 会话（AITESTER_TRACE_DIR 未设时全 no-op）
+    start_task_trace(
+        state["task_uuid"],
+        task_meta={"file": target_file, "func": func or "all", "dataset": "cli"},
+    )
+    try:
+        final_state = graph.invoke(state)
+    finally:
+        # 追踪收尾在 finally：工作流崩溃（如 recursion_limit）时仍记录 task_end
+        end_task_trace(
+            final_state.get("test_passed") if "final_state" in locals() else None,
+            token_snapshot=token_usage.get_usage().as_dict(),
+        )
 
     # 覆盖率达标判定：无覆盖率数据（None）时为 None（未知），否则与阈值比较
     # 注意用 is not None 判断——0.0 是合法的"覆盖率数据"，不可被 falsy 误判为缺失
