@@ -1,8 +1,8 @@
 """
-错误分类器模块：将测试失败原因归类为八类错误，并支持子类型识别。
+错误分类器模块：将测试失败原因归类为十类错误，并支持子类型识别。
 
-分类优先级：IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME
-          > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
+分类优先级：LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR
+           > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
 使用正则规则匹配而非 LLM，确保分类速度快且结果稳定。
 分类结果用于指导 Debugger 选择合适的修复策略。
 
@@ -13,7 +13,15 @@
       与返回类型，区别于除零/越界等其他运行时异常；
     - LOGIC_ERROR 是 ASSERTION 的子情形：断言失败且失败栈未触及被测
       模块时，更可能是测试用例自身预期值写错（测试逻辑错误），
-      修复方向是改测试而非改代码（需 target_module 信息判定）。
+      修复方向是改测试而非改代码（需 target_module 信息判定）；
+    - LLM_FORMAT_ERROR（1.2 残余细化）：LLM 响应格式异常（JSON 解析
+      失败 / 响应被截断 / 空响应），此前全部落入 UNKNOWN（占失败样本
+      75%，见 docs/failure_analysis.md）。单列后 Debugger 走"重新生成
+      响应/放宽 JSON 提取"策略而非通用的 LLM 兜底分析；
+    - INDEX_ERROR（1.2 残余细化）：索引越界（IndexError / index out of
+      range）从 RUNTIME 拆出。failure_analysis.md 案例 2 显示此类错误
+      此前被归入 UNKNOWN，导致 Debugger 无法针对性修复（越界的修复
+      方向是补边界判断，而非泛化的运行时异常排查）。
 """
 
 from __future__ import annotations
@@ -28,22 +36,30 @@ class ErrorCategory(Enum):
     错误类型枚举，用于分层错误修复策略。
 
     属性:
+        LLM_FORMAT_ERROR: LLM 响应格式异常（JSON 解析失败、响应被
+            截断、空响应）（1.2 残余细化：此前归入 UNKNOWN，占失败
+            样本 75%，见 docs/failure_analysis.md）
         IMPORT_ERROR: 模块导入失败（ModuleNotFoundError/ImportError），
             通常缺第三方依赖或模块路径错误（P2 细化：从 SYNTAX 拆出）
         SYNTAX: 语法/编译错误，如 SyntaxError、IndentationError
         TYPE_ERROR: 类型不匹配（TypeError），修复方向是核对参数与
             返回类型（P2 细化：从 RUNTIME 拆出）
+        INDEX_ERROR: 索引越界（IndexError / index out of range），
+            修复方向是补边界判断（1.2 残余细化：从 RUNTIME 拆出，
+            此前归入 UNKNOWN 导致 Debugger 无法针对性修复）
         ASSERTION: 断言失败，期望值与实际返回值不一致（失败栈触及被测代码）
         LOGIC_ERROR: 测试逻辑错误（如断言预期值写反），断言失败但失败
             栈未触及被测模块（P2 细化：从 ASSERTION 拆出）
-        RUNTIME: 其他运行时异常，如除零、索引越界
+        RUNTIME: 其他运行时异常，如除零、NameError
         TIMEOUT: 执行超时
         UNKNOWN: 无法识别的错误类型
     """
 
+    LLM_FORMAT_ERROR = "llm_format_error"
     IMPORT_ERROR = "import_error"
     SYNTAX = "syntax"
     TYPE_ERROR = "type_error"
+    INDEX_ERROR = "index_error"
     ASSERTION = "assertion"
     LOGIC_ERROR = "logic_error"
     RUNTIME = "runtime"
@@ -121,6 +137,21 @@ _RE_TIMEOUT_ERRORS = [
 ]
 # Type Error 检测模式（从 RUNTIME 拆出的独立类别：类型不匹配）
 _RE_TYPE_ERROR = re.compile(r"\bTypeError\b", re.IGNORECASE)
+# Index Error 检测模式（从 RUNTIME 拆出的独立类别：索引越界，1.2 残余细化）
+# IndexError / "index out of range" / 中文"下标越界"三类表述
+_RE_INDEX_ERROR = re.compile(r"\bIndexError\b|index out of range|下标越界", re.IGNORECASE)
+# LLM Format Error 检测模式（LLM 响应格式异常，1.2 残余细化）
+# 覆盖 failure_analysis.md 记录的三类特征：JSON 解析失败（Could not find
+# complete JSON / Expecting value / JSONDecodeError）、响应截断（incomplete/
+# truncated）、空响应（empty response）
+_RE_LLM_FORMAT_ERRORS = [
+    re.compile(r"JSONDecodeError", re.IGNORECASE),
+    re.compile(r"Expecting value", re.IGNORECASE),
+    re.compile(r"Could not find complete JSON", re.IGNORECASE),
+    re.compile(r"JSON.*解析失败|解析.*JSON.*失败", re.IGNORECASE),
+    re.compile(r"empty response|响应为空|空响应", re.IGNORECASE),
+    re.compile(r"incomplete response|truncated response|响应被截断|响应截断", re.IGNORECASE),
+]
 # 语法错误关键词（模块级常量，避免每次 _is_syntax_error 调用重复构建列表）
 _SYNTAX_ERROR_KEYWORDS = (
     "SyntaxError",
@@ -141,11 +172,17 @@ class ErrorClassifier:
     使用规则匹配而非 LLM，确保分类速度快且结果稳定。
 
     分类优先级（由高到低）：
-    1. SYNTAX - 语法错误：无需语义分析，直接让 LLM 重写整个文件
-    2. RUNTIME - 运行时异常：需分析异常栈，定位 bug 所在函数
-    3. ASSERTION - 断言失败：判断是代码逻辑错误还是测试预期值错误
-    4. TIMEOUT - 执行超时：通常说明被测函数存在死循环
-    5. UNKNOWN - 无法识别：交由 LLM 自行分析
+    1. LLM_FORMAT_ERROR - LLM 响应格式异常：JSON 解析失败/截断/空响应，
+        单列后 Debugger 走"重新生成响应/放宽 JSON 提取"策略
+    2. IMPORT_ERROR - 导入错误：缺依赖/路径错误
+    3. SYNTAX - 语法错误：无需语义分析，直接让 LLM 重写整个文件
+    4. TYPE_ERROR - 类型不匹配：核对参数与返回类型
+    5. INDEX_ERROR - 索引越界：补边界判断（此前落入 RUNTIME/UNKNOWN）
+    6. RUNTIME - 其他运行时异常：需分析异常栈，定位 bug 所在函数
+    7. ASSERTION/LOGIC_ERROR - 断言失败：判断是代码逻辑错误还是测试
+        预期值错误
+    8. TIMEOUT - 执行超时：通常说明被测函数存在死循环
+    9. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
     def classify(
@@ -157,9 +194,13 @@ class ErrorClassifier:
         """
         根据测试输出和失败用例分类错误类型。
 
-        分类优先级：IMPORT_ERROR > SYNTAX > TYPE_ERROR > RUNTIME
-                   > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
+        分类优先级：LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR
+                    > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR
+                    > TIMEOUT > UNKNOWN
         规则匹配优先于 LLM 兜底分类。
+        LLM_FORMAT_ERROR 置于最高优先级：JSON 解析失败文本中几乎不会
+        出现 IndexError，但 IndexError 文本中可能出现 assert，顺序放反
+        会误判。
 
         合并策略：将 test_output 和最多前 3 个 failed_cases 的 error 信息拼接后统一匹配，
         确保能从失败用例的详细错误信息中识别出错误类型。
@@ -179,24 +220,30 @@ class ErrorClassifier:
         combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases[:3])
 
         # 按优先级顺序检查各类错误（细粒度类别先于其粗粒度母类）
-        # 1. 检查 Import 错误（缺依赖/路径错误，修复路径独立于语法错误）
+        # 1. 检查 LLM 响应格式异常（JSON 解析失败/截断/空响应，1.2 残余细化）
+        if self._is_llm_format_error(combined):
+            return ErrorCategory.LLM_FORMAT_ERROR
+        # 2. 检查 Import 错误（缺依赖/路径错误，修复路径独立于语法错误）
         if self._is_import_error(combined):
             return ErrorCategory.IMPORT_ERROR
-        # 2. 检查 Syntax 错误
+        # 3. 检查 Syntax 错误
         if self._is_syntax_error(combined):
             return ErrorCategory.SYNTAX
-        # 3. 检查 Type 错误（类型不匹配，修复方向区别于其他运行时异常）
+        # 4. 检查 Type 错误（类型不匹配，修复方向区别于其他运行时异常）
         if self._is_type_error(combined):
             return ErrorCategory.TYPE_ERROR
-        # 4. 检查 Runtime 错误
+        # 5. 检查 Index 越界（索引/下标越界，1.2 残余细化：从 RUNTIME 拆出）
+        if self._is_index_error(combined):
+            return ErrorCategory.INDEX_ERROR
+        # 6. 检查 Runtime 错误
         if self._is_runtime_error(combined):
             return ErrorCategory.RUNTIME
-        # 5. 检查 Assertion 错误（子情形：测试侧逻辑错误 → LOGIC_ERROR）
+        # 7. 检查 Assertion 错误（子情形：测试侧逻辑错误 → LOGIC_ERROR）
         if self._is_assertion_error(combined):
             if target_module and self._is_test_side_assertion(combined, target_module):
                 return ErrorCategory.LOGIC_ERROR
             return ErrorCategory.ASSERTION
-        # 6. 检查 Timeout 错误
+        # 8. 检查 Timeout 错误
         if self._is_timeout_error(combined):
             return ErrorCategory.TIMEOUT
 
@@ -322,6 +369,23 @@ class ErrorClassifier:
         return bool(_RE_TYPE_ERROR.search(text))
 
     @staticmethod
+    def _is_index_error(text: str) -> bool:
+        """检查是否为 Index 越界错误（1.2 残余细化：从 RUNTIME 拆出）。
+
+        匹配 IndexError 异常名、"index out of range" 标准报错与中文"下标越界"。
+        """
+        return bool(_RE_INDEX_ERROR.search(text))
+
+    @staticmethod
+    def _is_llm_format_error(text: str) -> bool:
+        """检查是否为 LLM 响应格式异常（1.2 残余细化）。
+
+        匹配 JSON 解析失败（JSONDecodeError/Expecting value/Could not find
+        complete JSON）、空响应、响应截断三类特征（见 _RE_LLM_FORMAT_ERRORS）。
+        """
+        return any(pattern.search(text) for pattern in _RE_LLM_FORMAT_ERRORS)
+
+    @staticmethod
     def _is_test_side_assertion(text: str, target_module: str) -> bool:
         """判断断言失败是否发生在测试侧（而非被测代码）——LOGIC_ERROR 判定。
 
@@ -372,6 +436,8 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
     根据错误类型和上下文返回推荐修复策略描述。
 
     不同错误类型需要不同的修复策略：
+    - LLM_FORMAT_ERROR：响应格式异常，需重新生成或放宽 JSON 提取
+    - INDEX_ERROR：索引越界，需补边界判断
     - SYNTAX：代码无法编译，需重写整个文件
     - RUNTIME：需分析异常栈，定位 bug 所在函数
     - ASSERTION：需判断是代码错还是测试预期值错
@@ -389,6 +455,24 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
     Returns:
         针对该错误类型的修复策略文字描述，供 Debugger prompt 使用。
     """
+    # LLM_FORMAT_ERROR：LLM 响应格式异常（1.2 残余细化），策略针对"重生成/放宽提取"
+    if category == ErrorCategory.LLM_FORMAT_ERROR:
+        return (
+            "检测到 LLM 响应格式异常（JSON 解析失败、响应被截断或空响应）。"
+            "请重新请求 LLM 生成合规响应；若响应内含 JSON 但被 markdown 代码块"
+            "包裹，先剥离代码块标记再解析；若响应被截断，降低单次输出长度或"
+            "分段请求。不要将格式异常误判为代码逻辑 bug。"
+        )
+
+    # INDEX_ERROR：索引越界的专属策略（1.2 残余细化：从 RUNTIME 拆出）
+    if category == ErrorCategory.INDEX_ERROR:
+        return (
+            "检测到索引越界（IndexError / index out of range）。"
+            "请检查引发异常的列表/字符串/数组访问位置，"
+            "在循环边界、切片与默认值处理上补充分支判断；"
+            "对空容器先判空再访问。不要用 try/except 静默吞掉越界。"
+        )
+
     # IMPORT_ERROR：独立类别（P2 细化），策略针对"缺依赖/路径错"而非重写文件
     if category == ErrorCategory.IMPORT_ERROR:
         if context and context.module_name:
