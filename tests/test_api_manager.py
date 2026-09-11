@@ -879,3 +879,40 @@ class TestAPIManagerEdgeCases:
             t.join()
 
         assert len(errors) == 0
+
+
+class TestGhostConfigWiring:
+    """APIManagerConfig.max_consecutive_failures 幽灵配置接线（0.9.9 批次）。
+
+    此前该字段在 APIManagerConfig 中定义却从未被 mark_failure 消费（硬编码 3），
+    现接线为 APIHealth.max_consecutive_failures 字段，由 manager 构造时注入。
+    """
+
+    def _make_config(self):
+        return LLMConfig(api_key="k", base_url="u", model_name="m")
+
+    def test_default_threshold_keeps_history(self):
+        """默认阈值 3：连续失败 2 次仍健康，第 3 次标记不健康（与历史硬编码行为一致）"""
+        health = APIHealth(config=self._make_config())
+        health.mark_failure()
+        health.mark_failure()
+        assert health.is_healthy
+        health.mark_failure()
+        assert not health.is_healthy
+
+    def test_custom_threshold_respected(self):
+        """自定义阈值生效：max_consecutive_failures=1 时首次失败即不健康"""
+        health = APIHealth(config=self._make_config(), max_consecutive_failures=1)
+        health.mark_failure()
+        assert not health.is_healthy
+
+    def test_manager_injects_config_threshold_into_nodes(self):
+        """APIManager 构造/add_node 时把 manager 配置注入节点（此前节点永远用默认 3）"""
+        mgr = APIManager(config=APIManagerConfig(max_consecutive_failures=2), enable_health_checker=False)
+        mgr.add_node(self._make_config())
+        node = mgr.health_nodes["m"]
+        assert node.max_consecutive_failures == 2
+        node.mark_failure()
+        assert node.is_healthy  # 阈值 2：1 次失败仍健康
+        node.mark_failure()
+        assert not node.is_healthy

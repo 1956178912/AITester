@@ -49,6 +49,9 @@ class APIHealth:
     config: LLMConfig
     is_healthy: bool = True
     consecutive_failures: int = 0
+    # 连续失败达到该阈值即标记不健康（原 APIManagerConfig.max_consecutive_failures
+    # 幽灵配置：定义了却从未被 mark_failure 消费，此处接线，默认 3 保持历史行为）
+    max_consecutive_failures: int = 3
     total_requests: int = 0
     success_count: int = 0
     error_count: int = 0
@@ -86,8 +89,8 @@ class APIHealth:
         self.total_requests += 1
         self.error_count += 1
         self.consecutive_failures += 1
-        # 连续失败3次标记为不健康
-        if self.consecutive_failures >= 3:
+        # 连续失败达到阈值（可配置）标记为不健康；原硬编码 3 改为读自身字段
+        if self.consecutive_failures >= self.max_consecutive_failures:
             self.is_healthy = False
             logger.warning("API %s 连续失败 %d 次，标记为不健康", self.config.model_name, self.consecutive_failures)
         # 限流错误特殊处理
@@ -174,7 +177,7 @@ class APIManager:
                 api_key=llm_config.api_key, base_url=llm_config.base_url, timeout=self.config.timeout
             )
             self._client_cache[llm_config.model_name] = client
-            health = APIHealth(config=llm_config)
+            health = APIHealth(config=llm_config, max_consecutive_failures=self.config.max_consecutive_failures)
             self.health_nodes[llm_config.model_name] = health
             logger.info("注册 LLM 节点: %s (%s)", llm_config.model_name, llm_config.base_url)
         logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
@@ -493,7 +496,7 @@ class APIManager:
         with self._lock:
             client = openai.OpenAI(api_key=config.api_key, base_url=config.base_url, timeout=self.config.timeout)
             self._client_cache[config.model_name] = client
-            health = APIHealth(config=config)
+            health = APIHealth(config=config, max_consecutive_failures=self.config.max_consecutive_failures)
             self.health_nodes[config.model_name] = health
             logger.info("动态添加节点: %s (%s)", config.model_name, config.base_url)
 
