@@ -561,23 +561,29 @@ class Defects4JPYDataset(BaseDatasetLoader):
         except json.JSONDecodeError:
             return None
 
-        # 加载有缺陷的代码
-        buggy_code = ""
+        # 加载有缺陷的代码。目录列举一律 sorted：os.listdir 顺序依赖文件系统，
+        # 未排序会让两次加载的拼接顺序不同 → instance_code 内容与下游 RAG md5
+        # 指纹不可复现（此前 tests 目录已 sorted 而 buggy 目录漏了，属不对称遗漏）。
+        # 用 list 累积 + join 替代字符串 +=，避免 CPython 3.12+ 下 += 的 O(n²) 拷贝。
         buggy_dir = os.path.join(version_path, "buggy")
+        buggy_parts: list[str] = []
         if os.path.isdir(buggy_dir):
-            for fname in os.listdir(buggy_dir):
+            for fname in sorted(os.listdir(buggy_dir)):
                 if fname.endswith(".py"):
                     with open(os.path.join(buggy_dir, fname), encoding="utf-8") as ff:
-                        buggy_code += ff.read() + "\n"
+                        buggy_parts.append(ff.read() + "\n")
 
-        # 加载测试代码
-        test_code = ""
+        # 加载测试代码（同样 sorted + list 累积）
         tests_dir = os.path.join(version_path, "tests")
+        test_parts: list[str] = []
         if os.path.isdir(tests_dir):
             for fname in sorted(os.listdir(tests_dir)):
                 if fname.startswith("test_") and fname.endswith(".py"):
                     with open(os.path.join(tests_dir, fname), encoding="utf-8") as ff:
-                        test_code += ff.read() + "\n"
+                        test_parts.append(ff.read() + "\n")
+
+        buggy_code = "".join(buggy_parts)
+        test_code = "".join(test_parts)
 
         # 统计测试函数
         test_funcs = re.findall(r"def test_\w+", test_code)
@@ -625,11 +631,12 @@ class Defects4JPYDataset(BaseDatasetLoader):
             return
 
         loaded = 0
-        for project_name in os.listdir(projects_dir):
+        # sorted：项目/版本两级列举也需确定性，否则任务列表顺序跨文件系统漂移
+        for project_name in sorted(os.listdir(projects_dir)):
             project_dir = os.path.join(projects_dir, project_name)
             if not os.path.isdir(project_dir):
                 continue
-            for version_dir in os.listdir(project_dir):
+            for version_dir in sorted(os.listdir(project_dir)):
                 version_path = os.path.join(project_dir, version_dir)
                 task = self._load_project_version(version_path, project_name, version_dir)
                 if task is not None:
@@ -854,9 +861,9 @@ def get_available_datasets() -> list[str]:
     未列出的名称调用 load_dataset 时会降级为 InMemoryDataset。
 
     Returns:
-        数据集名称列表。
+        数据集名称列表（排序后，跨进程/哈希随机化下顺序稳定）。
     """
-    return list(
+    return sorted(
         {
             "swe_bench",
             "swebench",
