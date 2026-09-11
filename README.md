@@ -343,7 +343,7 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 | `plain_llm` | Planner+Debugger 均禁用 | 纯 LLM 单次调用基线 |
 | `single_agent` | Planner+Debugger 合并为一次调用 | 单智能体对比基线 |
 
-**消融实验开关**（在 [config.py](config.py) 中读取默认值，可通过 `.env` 注入环境变量覆盖）：
+**消融实验开关**（在 [config.py](config.py) 中读取默认值，可通过 `.env` 注入环境变量覆盖；`.env` 已加入 `.gitignore`，不入库）：
 ```bash
 ENABLE_PLANNER=true      # 启用 Planner（默认 true）
 ENABLE_DEBUGGER=true     # 启用 Debugger 修复循环（默认 true）
