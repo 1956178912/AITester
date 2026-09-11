@@ -844,6 +844,18 @@ def run_benchmark(
             "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
         }
 
+    def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str, int]:
+        """聚合一个基线的失败原因分布（2.2 公平性 + 1.2 细化类别可单独计数）。
+
+        仅统计失败任务的 error_category（"rate_limit"/"error" 占位值同样计入，
+        便于区分"API 故障"与"真实错误类别"）；成功任务无 error_category，不计入。
+        """
+        counter: dict[str, int] = {}
+        for r in bl_results:
+            if not r.get("passed") and r.get("error_category"):
+                counter[r["error_category"]] = counter.get(r["error_category"], 0) + 1
+        return dict(sorted(counter.items(), key=lambda kv: kv[1], reverse=True))
+
     for baseline in baselines:
         bl_results = all_results[baseline]
         passed = sum(1 for r in bl_results if r["passed"])
@@ -861,6 +873,9 @@ def run_benchmark(
             "avg_iterations": round(avg_iterations, 2),
             "avg_elapsed_seconds": round(avg_time, 2),
             "total_time": round(sum(r["elapsed_seconds"] for r in bl_results), 2),
+            # 2.2 公平性对照：失败原因分布（1.2 细化后 LLM_FORMAT_ERROR/INDEX_ERROR
+            # 可单独计数；未失败任务不记 error_category，不计入分布）
+            "failure_category_distribution": _aggregate_failure_categories(bl_results),
             # P0-2 效率指标 + P1 RAG 检索质量（未启用 RAG 时指标全为 0/None）
             "token_metrics": _aggregate_token_metrics(bl_results),
             "rag_metrics": _aggregate_rag_metrics(bl_results),
@@ -884,6 +899,17 @@ def run_benchmark(
             bl["avg_coverage"],
             bl["avg_iterations"],
         )
+    # 2.2 公平性对照：Token 效率维度（"完整系统 vs Plain LLM"不能只看成功率，
+    # 多智能体系统 token 消耗通常远高于单模型直答，效率-效果二维对照才有意义）
+    for baseline in baselines:
+        tm = summary["results"][baseline]["token_metrics"]
+        logger.info(
+            "  [%s] Token效率: 总tokens=%d, 平均每任务tokens=%.2f, LLM调用次数=%d",
+            baseline,
+            tm["total_tokens"],
+            tm["avg_tokens_per_task"],
+            tm["total_llm_calls"],
+        )
 
     if use_progress:
         print("\n" + "=" * 60)
@@ -891,7 +917,9 @@ def run_benchmark(
         print("=" * 60)
         for baseline in baselines:
             bl = summary["results"][baseline]
+            tm = bl["token_metrics"]
             print(f"  [{baseline}] 成功率: {bl['success_rate']}%, 平均覆盖率: {bl['avg_coverage']}%")
+            print(f"  [{baseline}] 平均每任务Token: {tm['avg_tokens_per_task']}, LLM调用次数: {tm['total_llm_calls']}")
         print(f"总耗时: {total_time:.1f}s")
         print(f"结果文件: {output_file}")
         print("=" * 60)
