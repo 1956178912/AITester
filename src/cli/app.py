@@ -24,7 +24,8 @@ import logging
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
 import click
@@ -173,6 +174,55 @@ def _handle_task_exception(future, future_to_file: dict, func: str | None, resul
     task_error = future.exception()  # 只调用一次，避免重复取异常
     logger.error("任务执行异常：file=%s, error=%s", file_path, task_error)
     results.append(_make_task_error_result(file_path, func, task_error))
+
+
+def _dispatch_parallel_tasks(
+    expanded_files: list[str],
+    func: str | None,
+    max_iterations: int,
+    exec_timeout: int,
+    coverage_threshold: float,
+    json_output: bool,
+    parallel: int,
+    results: list[dict[str, Any]],
+    on_progress: Callable[[Future], None] | None = None,
+    on_success: Callable[[str], None] | None = None,
+) -> None:
+    """并发派发任务并逐任务追加结果（单任务异常不中断整批）。
+
+    rich 进度条模式与纯文本降级模式的共享派发器：两种模式唯一差异是进度反馈策略，
+    由调用方经 on_progress / on_success 回调注入。任务提交、as_completed 汇总与异常
+    兜底收敛到单一构造点（此前两段同构块各自维护提交+汇总循环，结果结构变化需
+    同步改两处，易漂移）。
+
+    Args:
+        expanded_files: 目标文件路径列表。
+        func: 被测函数名（None 表示全部函数）。
+        max_iterations: 最大修复迭代次数。
+        exec_timeout: 单任务执行超时（秒）。
+        coverage_threshold: 覆盖率阈值（%）。
+        json_output: 是否 JSON 输出模式（影响调用方决定的 on_success 行为）。
+        parallel: 并发 worker 数。
+        results: 结果列表，每个任务的成功/错误结果追加于此。
+        on_progress: 每个任务结束（无论成败）后触发的回调，供 rich 进度条推进。
+        on_success: 任务成功后触发的回调（传入文件 basename），供纯文本进度显示。
+    """
+    with ThreadPoolExecutor(max_workers=parallel) as executor:
+        future_to_file = {
+            executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
+            for f in expanded_files
+        }
+        for future in as_completed(future_to_file):
+            try:
+                result = future.result()
+                results.append(result)
+                if on_success:
+                    on_success(os.path.basename(future_to_file[future]))
+            except Exception:
+                _handle_task_exception(future, future_to_file, func, results)
+            finally:
+                if on_progress:
+                    on_progress(future)
 
 
 def _run_single_task(
@@ -391,7 +441,18 @@ def run(
         start_time = time.time()
 
         if parallel > 1 and len(expanded_files) > 1:
-            # 并发模式 - 使用进度条
+            # 并发模式：rich 进度条与纯文本降级共用同一派发器（_dispatch_parallel_tasks），
+            # 仅进度反馈策略（on_progress / on_success 回调）不同
+            dispatch_kwargs = dict(
+                expanded_files=expanded_files,
+                func=func,
+                max_iterations=max_iterations,
+                exec_timeout=exec_timeout,
+                coverage_threshold=coverage_threshold,
+                json_output=json_output,
+                parallel=parallel,
+                results=results,
+            )
             if _rich_available():
                 from rich.console import Console
                 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
@@ -408,39 +469,16 @@ def run(
                 )
                 with progress:
                     task = progress.add_task("运行中...", total=len(expanded_files))
-                    with ThreadPoolExecutor(max_workers=parallel) as executor:
-                        future_to_file = {
-                            executor.submit(
-                                _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
-                            ): f
-                            for f in expanded_files
-                        }
-                        for future in as_completed(future_to_file):
-                            try:
-                                result = future.result()
-                                results.append(result)
-                            except Exception:
-                                _handle_task_exception(future, future_to_file, func, results)
-                            finally:
-                                progress.update(task, advance=1)
+                    _dispatch_parallel_tasks(
+                        on_progress=lambda _f: progress.update(task, advance=1),
+                        **dispatch_kwargs,
+                    )
             else:
-                # 无 rich 时的简单进度显示
-                with ThreadPoolExecutor(max_workers=parallel) as executor:
-                    future_to_file = {
-                        executor.submit(
-                            _run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output
-                        ): f
-                        for f in expanded_files
-                    }
-                    for future in as_completed(future_to_file):
-                        try:
-                            result = future.result()
-                            results.append(result)
-                            # --json 时不往 stdout 打进度（保持纯 JSON）
-                            if not json_output:
-                                click.echo(f"  ✓ 完成：{os.path.basename(future_to_file[future])}")
-                        except Exception:
-                            _handle_task_exception(future, future_to_file, func, results)
+                # --json 时不往 stdout 打进度（保持纯 JSON）
+                _dispatch_parallel_tasks(
+                    on_success=None if json_output else (lambda name: click.echo(f"  ✓ 完成：{name}")),
+                    **dispatch_kwargs,
+                )
         else:
             # 单线程模式
             # 逐任务容错：单个任务异常（如读取失败、工作流崩溃）不中断整个批次，
