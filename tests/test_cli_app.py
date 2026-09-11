@@ -162,3 +162,39 @@ class TestRunSequentialResilience:
         r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--timeout=-5", "--json"])
         assert r.exit_code == 1
         assert "--timeout 必须 >= 1 秒" in r.output
+
+
+class TestRunParamValidation:
+    """run 命令参数校验分支（此前 61% 覆盖中未触及的非法参数）。"""
+
+    def test_parallel_zero_rejected(self, tmp_path):
+        """--parallel=0 应被拦截（并发数必须 >0）。"""
+        files = [str(tmp_path / "mod.py")]
+        (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=0", "--json"])
+        assert r.exit_code == 1
+        assert "--parallel 必须大于 0" in r.output
+
+    def test_max_iterations_zero_rejected(self, tmp_path):
+        """--max-iterations=0 应被拦截（至少迭代 1 次）。"""
+        files = [str(tmp_path / "mod.py")]
+        (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--max-iterations=0", "--json"])
+        assert r.exit_code == 1
+        assert "--max-iterations 必须大于 0" in r.output
+
+    def test_coverage_threshold_out_of_range_rejected(self, tmp_path):
+        """--coverage-threshold 超出 [0,100] 应被拦截。"""
+        files = [str(tmp_path / "mod.py")]
+        (tmp_path / "mod.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--coverage-threshold=150", "--json"])
+        assert r.exit_code == 1
+        assert "必须在 0-100 范围内" in r.output
+
+    def test_nonexistent_file_intercepted_by_click(self, tmp_path):
+        """目标文件不存在时由 click.Path(exists=True) 在解析层拦截（exit 2），
+        不会进入 app.py 的 expanded_files 空判分支。"""
+        r = CliRunner().invoke(cli_app.cli, ["run", str(tmp_path / "no_such_file.py"), "--json"])
+        assert r.exit_code == 2
+        assert "does not exist" in r.output
+
