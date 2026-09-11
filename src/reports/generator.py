@@ -327,6 +327,12 @@ class ReportGenerator:
             str: 根本原因描述
         """
         # P2 细化：独立类别优先分支
+        if category == ErrorCategory.LLM_FORMAT_ERROR:
+            return "LLM 响应格式异常（JSON 解析失败/截断/空响应），需重新生成合规响应或放宽 JSON 提取逻辑"
+
+        if category == ErrorCategory.INDEX_ERROR:
+            return "索引越界：列表/字符串/数组访问位置超出范围，需要添加边界检查"
+
         if category == ErrorCategory.IMPORT_ERROR:
             module = context.module_name if context and context.module_name else "未知模块"
             return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
@@ -383,6 +389,18 @@ class ReportGenerator:
         suggestions: list[str] = []
 
         # P2 细化：独立类别的修复建议
+        if category == ErrorCategory.LLM_FORMAT_ERROR:
+            suggestions.append("1. 重新请求 LLM 生成合规响应（检查 prompt 是否要求了 JSON 输出）")
+            suggestions.append("2. 剥离 markdown 代码块标记后再做 JSON 解析")
+            suggestions.append("3. 若响应被截断，降低单次输出长度或分段请求")
+            return "\n".join(suggestions)
+
+        if category == ErrorCategory.INDEX_ERROR:
+            suggestions.append("1. 检查列表/字符串/数组的访问位置是否在范围内")
+            suggestions.append("2. 对空容器先判空再访问")
+            suggestions.append("3. 循环边界与切片处补充分支判断，不要用 try/except 静默吞掉越界")
+            return "\n".join(suggestions)
+
         if category == ErrorCategory.IMPORT_ERROR:
             module = context.module_name if context and context.module_name else "目标模块"
             suggestions.append(f"1. 安装缺失模块：`pip install {module}`")

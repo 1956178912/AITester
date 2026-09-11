@@ -59,6 +59,15 @@ class TestErrorCategory:
         """LOGIC_ERROR 类别的值。"""
         assert ErrorCategory.LOGIC_ERROR.value == "logic_error"
 
+    # 1.2 残余细化新增类别
+    def test_llm_format_error_value(self):
+        """LLM_FORMAT_ERROR 类别的值。"""
+        assert ErrorCategory.LLM_FORMAT_ERROR.value == "llm_format_error"
+
+    def test_index_error_value(self):
+        """INDEX_ERROR 类别的值。"""
+        assert ErrorCategory.INDEX_ERROR.value == "index_error"
+
 
 class TestSyntaxSubtype:
     """测试 SyntaxSubtype 枚举。"""
@@ -132,12 +141,60 @@ class TestErrorClassifier:
         assert result == ErrorCategory.TYPE_ERROR
 
     def test_classify_runtime_error(self):
-        """分类非类型的运行时错误为 RUNTIME。"""
-        output = "IndexError: list index out of range"
+        """分类非类型的运行时错误为 RUNTIME（除零）。"""
+        output = "ZeroDivisionError: division by zero"
         result = self.classifier.classify(output, [])
         assert result == ErrorCategory.RUNTIME
 
-    def test_classify_zero_division(self):
+    def test_classify_index_error(self):
+        """1.2 残余细化：索引越界独立为 INDEX_ERROR（不再归 RUNTIME）。"""
+        output = "IndexError: list index out of range"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.INDEX_ERROR
+
+    def test_classify_index_error_from_failed_cases(self):
+        """INDEX_ERROR 可从 failed_cases 的错误信息中识别。"""
+        failed_cases = [{"name": "test_foo", "error": "IndexError: string index out of range"}]
+        result = self.classifier.classify("", failed_cases)
+        assert result == ErrorCategory.INDEX_ERROR
+
+    def test_classify_llm_format_error_json_parse(self):
+        """1.2 残余细化：JSON 解析失败归 LLM_FORMAT_ERROR（不再归 UNKNOWN）。"""
+        output = "JSON 解析失败: Could not find complete JSON: line 1 column 1 (char 0)"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.LLM_FORMAT_ERROR
+
+    def test_classify_llm_format_error_jsondecode(self):
+        """JSONDecodeError 也归 LLM_FORMAT_ERROR。"""
+        output = "json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.LLM_FORMAT_ERROR
+
+    def test_classify_llm_format_error_empty_response(self):
+        """空响应归 LLM_FORMAT_ERROR。"""
+        output = "LLM returned empty response"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.LLM_FORMAT_ERROR
+
+    def test_classify_llm_format_error_truncated(self):
+        """响应截断归 LLM_FORMAT_ERROR。"""
+        output = "Error: incomplete response, generation was truncated"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.LLM_FORMAT_ERROR
+
+    def test_classify_priority_llm_format_over_import(self):
+        """LLM_FORMAT_ERROR 优先级最高：即使文本同时含导入错误特征也优先归 LLM_FORMAT。"""
+        output = "JSON 解析失败: Expecting value\nModuleNotFoundError: No module named 'x'"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.LLM_FORMAT_ERROR
+
+    def test_classify_priority_index_over_runtime(self):
+        """INDEX_ERROR 优先于 RUNTIME：越界文本不再落入 RUNTIME/UNKNOWN。"""
+        output = "IndexError: list index out of range\nZeroDivisionError"
+        result = self.classifier.classify(output, [])
+        assert result == ErrorCategory.INDEX_ERROR
+
+    def test_zero_division(self):
         """分类除零错误为 RUNTIME。"""
         output = "ZeroDivisionError: division by zero"
         result = self.classifier.classify(output, [])
@@ -398,3 +455,17 @@ class TestGetFixStrategy:
         strategy = get_fix_strategy(ErrorCategory.LOGIC_ERROR)
         assert "测试" in strategy
         assert "预期值" in strategy
+
+    # ── 1.2 残余细化新增类别的修复策略 ──
+
+    def test_llm_format_error_strategy(self):
+        """LLM_FORMAT_ERROR 独立策略（重生成/放宽 JSON 提取）。"""
+        strategy = get_fix_strategy(ErrorCategory.LLM_FORMAT_ERROR)
+        assert "重新请求" in strategy or "重新生成" in strategy
+        assert "JSON" in strategy
+
+    def test_index_error_strategy(self):
+        """INDEX_ERROR 独立策略（补边界判断，禁止吞异常）。"""
+        strategy = get_fix_strategy(ErrorCategory.INDEX_ERROR)
+        assert "越界" in strategy
+        assert "边界" in strategy
