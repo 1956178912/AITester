@@ -149,15 +149,24 @@ AITester/
 
 ## 阶段 6：上传 GitHub
 
-用户已确认「推送 main 并创建 PR」。实际执行结果：**推送受阻于网络**——本机到 `github.com:443` 不可达（curl 8s 超时、git push 两次失败 `Couldn't connect to server`），且本机未运行任何代理（clash/proxyman 均不在进程列表）。工作区与 commit 状态完好，可随时重推。
+用户已确认「推送 main 并创建 PR」。实际执行结果：**推送仍受阻于网络**——
+2026-09-11 19:07 复测：`curl https://github.com` 短连接可达（HTTP 200），但 `git push`
+两次（默认 60s / 180s 超时窗口内）均失败：
+`Failed to connect to github.com port 443 after 75003 ms: Couldn't connect to server`。
+特征：HTTP GET 能通、git 的长连接 443 握手挂起（疑似出站链路对 git 协议大包/长连接有限制）。
+工作区 clean，commit 状态完好。
 
-将推送内容：`origin/main` 落后的全部 **16 个 commit**（`bd4de49`…`1c4897a`，完整清单见 `git log origin/main..main --oneline`）。
+将推送内容：`origin/main`（d42bbdd）落后的全部 **17 个 commit**（`bd4de49`…`eaf7931`，
+完整清单见 `git log refs/remotes/origin/main..main --oneline`；较上一版记录多出 1 个
+`eaf7931` docs 收尾提交）。
 
 手动执行命令（恢复网络/代理后）：
 
 ```bash
-cd /Users/wangchenyu/workspace/AITester
-# 1. 推送 main
+cd /Users/wangchenyu/Workspace/AITester
+# 1. 推送 main（若 443 握手再次挂起，可先试降档再推：
+#    git config http.version HTTP/1.1
+#    或设置代理：git config http.proxy http://127.0.0.1:<port>）
 git push origin main
 
 # 2. 创建 PR（gh 未安装，可用 GitHub Web 或先安装 gh 执行）
@@ -197,6 +206,19 @@ gh pr create --base main \
 - [x] 无敏感信息入库（git ls-files 核实 .env 系未跟踪）
 - [x] 无未说明的破坏性变更（setup.py extras 新增为增量）
 - [x] 文档（README/CHANGELOG/OPTIMIZATION_*）与代码一致
+
+## 本轮追加验证（2026-09-11 19:06-19:07）
+
+| 检查项 | 命令 | 结果 | 备注 |
+|--------|------|------|------|
+| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.07s | 2 warning 为 scipy 精度提示 |
+| Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
+| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
+| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
+| 构建 | `python -m build --wheel` | ✅ aitester-0.9.11-py3-none-any.whl | config.py 入包已验证 |
+| 安全扫描 | `pip-audit`（CI 同款豁免） | ✅ No known vulnerabilities found, 5 ignored | 豁免 PYSEC-2026-311/3813/3814/3815 |
+| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91%（3536 行） | 与文档口径一致 |
+| 推送 | `git push origin main` | ❌ 443 握手挂起（75s 超时 ×2） | 17 commit 已就绪，见上节手动命令 |
 EOF
 ```
 
@@ -205,8 +227,10 @@ EOF
 ## 阶段 7：最终报告
 
 ### 完成状态
-- 阶段 0-5：**全部完成**，工作区 clean，本地 main 领先 origin/main 16 个 commit
-- 阶段 6：**受阻于网络**（github.com:443 不可达、本机无代理），16 个 commit 已就绪、未推送；手动命令与 PR 正文见上节，恢复网络后 `git push origin main` 即完成
+- 阶段 0-5：**全部完成**，工作区 clean，本地 main 领先 origin/main 17 个 commit
+- 阶段 6：**受阻于网络**（2026-09-11 19:07 复测：HTTP 短连接可达但 git 443 长连接握手挂起，
+  两次 push 失败；gh 未安装），17 个 commit 已就绪、未推送；手动命令与 PR 正文见上节，
+  恢复网络后 `git push origin main` 即完成
 
 ### 优化项清单及结果
 | 项 | 结果 |
@@ -235,7 +259,7 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 - 无敏感信息入库；本地 .env 真实密钥建议轮换（与本次代码改动无关）
 
 ### 后续建议
-1. 恢复网络后执行阶段 6 手动命令推送 16 个 commit 并开 PR（正文已备好）
+1. 恢复网络后执行阶段 6 手动命令推送 17 个 commit 并开 PR（正文已备好）
 2. 轮换本地 .env 中的 LLM API Key（已在会话中暴露过一次，零容忍原则下建议更换）
 3. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
 4. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815）
