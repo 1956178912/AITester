@@ -708,6 +708,40 @@ class TestGetWorkflowStats:
         assert stats["workflow_config"]["MAX_ITERATIONS"] == 5
 
 
+class TestPlannerNodeDedup:
+    """_planner_node 异常路径与校验失败路径共用 _get_default_test_plan 构造点（0.9.9 去重）。
+
+    此前 except 分支内联复制了一份同构默认计划字典，与 _get_default_test_plan 双份维护；
+    现统一走 helper，本组测试防止两处再次漂移。
+    """
+
+    @patch("src.graph.workflow.PlannerAgent")
+    def test_exception_path_equals_helper_output(self, mock_planner_class):
+        """异常路径产出的默认计划必须与 helper 输出完全一致（同构造点护栏）"""
+        from src.graph.workflow import _get_default_test_plan, _planner_node
+
+        mock_agent = MagicMock()
+        mock_agent.plan.side_effect = RuntimeError("API error")
+        mock_planner_class.return_value = mock_agent
+
+        state = {"target_code": "def foo(): pass"}
+        result = _planner_node(state)
+        assert result["test_plan"] == _get_default_test_plan(None)
+
+    @patch("src.graph.workflow.PlannerAgent")
+    def test_exception_path_empty_function_name_normalized(self, mock_planner_class):
+        """target_function 为空串时归一为 'unknown'（helper 的 or 兜底比原内联 .get 默认值更严格）"""
+        from src.graph.workflow import _planner_node
+
+        mock_agent = MagicMock()
+        mock_agent.plan.side_effect = RuntimeError("API error")
+        mock_planner_class.return_value = mock_agent
+
+        state = {"target_code": "def foo(): pass", "target_function": ""}
+        result = _planner_node(state)
+        assert result["test_plan"]["function_name"] == "unknown"
+
+
 if __name__ == "__main__":
     import pytest
 
