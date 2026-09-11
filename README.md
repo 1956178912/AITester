@@ -574,41 +574,42 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（41 个测试文件，1038 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（44 个测试文件，1038 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 62 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线） |
+| `test_api_manager.py` | 63 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线） |
 | `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 11 | CLI 命令（list-examples/--version/参数校验） |
+| `test_cli_app.py` | 15 | CLI 命令（list-examples/--version/参数校验） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
 | `test_code_context.py` | 11 | AST 智能截取（P0 大文件上下文） |
 | `test_complex_logic.py` | 12 | 复杂业务逻辑（邮箱验证等） |
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
-| `test_config_manager.py` | 29 | 配置管理器（LLM 配置增删） |
+| `test_config_manager.py` | 32 | 配置管理器（LLM 配置增删） |
 | `test_config.py` | 14 | config.py 默认值与容错解析 |
 | `test_core_modules.py` | 19 | 核心模块冒烟 |
 | `test_dataset_loader.py` | 76 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 57 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_loader_extended.py` | 62 | 数据集加载扩展路径（raw 加载/字段校验） |
 | `test_dataset_validation.py` | 14 | SWE-bench 加载质量校验与源码补充（P0） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
-| `test_dependency.py` | 27 | 依赖检测与 venv 管理（P1） |
-| `test_error_classifier.py` | 56 | 八类错误分类与修复策略映射（P2 细化） |
+| `test_dependency.py` | 35 | 依赖检测与 venv 管理（P1） |
+| `test_error_classifier.py` | 60 | 八类错误分类与修复策略映射（P2 细化） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
-| `test_executor.py` | 35 | 覆盖率解析、失败用例解析 |
+| `test_executor.py` | 39 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
-| `test_experiments_analysis.py` | 11 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 8 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9） |
-| `test_generator.py` | 21 | parametrize 校验、import 修正、LLM 调用 |
+| `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
+| `test_experiments_scripts.py` | 10 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9） |
+| `test_generator.py` | 30 | parametrize 校验、import 修正、LLM 调用 |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 4 | LLM 文件缓存命中/失效 |
-| `test_mysql_client.py` | 12 | MySQL 客户端单例/事务/连接池参数 |
+| `test_logging_utils.py` | 14 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.9.11 脱敏扩展回归） |
+| `test_mysql_client.py` | 13 | MySQL 客户端单例/事务/连接池参数 |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
-| `test_patch_applier.py` | 36 | 补丁应用（完整文件/单函数模式） |
+| `test_patch_applier.py` | 38 | 补丁应用（完整文件/单函数模式） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
 | `test_rag_metrics.py` | 5 | RAG 检索质量指标 Hit Rate/MRR（P1） |
 | `test_rag_retriever.py` | 29 | RAG 检索器增删查清与持久化 |
@@ -617,7 +618,7 @@ docker run --rm \
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
-| `test_workflow.py` | 28 | 工作流图构建与路由 |
+| `test_workflow.py` | 30 | 工作流图构建与路由 |
 | `test_workflow_extended.py` | 35 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 
 ## 配置说明
