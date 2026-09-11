@@ -189,3 +189,142 @@ class TestRunBenchmarkParallelismViaConfig:
         source = (REPO_ROOT / "experiments" / "run_benchmark.py").read_text(encoding="utf-8")
         assert 'os.getenv("BENCHMARK_PARALLELISM"' not in source
         assert "from config import" in source and "BENCHMARK_PARALLELISM" in source
+
+
+class TestAnalyzeResultsScript:
+    """4.3 analyze_results.py：benchmark JSON → Markdown 汇总的纯函数测试
+    （build_analysis / render_markdown 不碰文件系统，直接喂 dict 断言）"""
+
+    @pytest.fixture()
+    def module(self):
+        # experiments 为包（有 __init__.py），直接导入
+        from experiments import analyze_results
+
+        return analyze_results
+
+    def _sample_data(self) -> dict:
+        """构造最小合法 benchmark JSON（含 token_metrics/rag_metrics 新字段）"""
+        return {
+            "timestamp": "2026-09-14T10:00:00",
+            "dataset": "synthetic",
+            "total_tasks": 3,
+            "enable_planner": True,
+            "enable_debugger": True,
+            "enable_rag": True,
+            "results": {
+                "aitester": {
+                    "total_functions": 3,
+                    "passed_count": 2,
+                    "success_rate": 66.7,
+                    "avg_coverage": 55.0,
+                    "avg_iterations": 1.0,
+                    "avg_elapsed_seconds": 10.0,
+                    "total_time": 30.0,
+                    "token_metrics": {
+                        "total_input_tokens": 1000,
+                        "total_output_tokens": 500,
+                        "total_tokens": 1500,
+                        "total_llm_calls": 9,
+                        "avg_tokens_per_task": 500.0,
+                    },
+                    "rag_metrics": {
+                        "retrievals": 3,
+                        "hits": 2,
+                        "hit_rate": 0.6667,
+                        "avg_max_similarity": 0.8,
+                    },
+                    "details": [
+                        {"task_id": "t1", "passed": True, "iterations": 0, "coverage": 80.0},
+                        {"task_id": "t2", "passed": True, "iterations": 1, "coverage": 60.0},
+                        {
+                            "task_id": "t3",
+                            "passed": False,
+                            "iterations": 2,
+                            "error_category": "index_error",
+                            "coverage": 0.0,
+                        },
+                    ],
+                },
+                "plain_llm": {
+                    "total_functions": 3,
+                    "passed_count": 1,
+                    "success_rate": 33.3,
+                    "avg_coverage": 20.0,
+                    "avg_iterations": 0.0,
+                    "avg_elapsed_seconds": 5.0,
+                    "total_time": 15.0,
+                    "token_metrics": {
+                        "total_input_tokens": 300,
+                        "total_output_tokens": 100,
+                        "total_tokens": 400,
+                        "total_llm_calls": 3,
+                        "avg_tokens_per_task": 133.33,
+                    },
+                    "rag_metrics": None,
+                    "details": [
+                        {"task_id": "t1", "passed": True, "iterations": 0, "coverage": 80.0},
+                        {"task_id": "t2", "passed": False, "iterations": 0, "error_category": "llm_format_error"},
+                        {"task_id": "t3", "passed": False, "iterations": 0, "error_category": "llm_format_error"},
+                    ],
+                },
+            },
+        }
+
+    def test_build_analysis_core_fields(self, module):
+        """build_analysis 提取核心指标与按基线的失败原因分布（1.2 细化类别可单独计数）"""
+        analysis = module.build_analysis(self._sample_data())
+        assert analysis["meta"]["dataset"] == "synthetic"
+        assert analysis["meta"]["baselines"] == ["aitester", "plain_llm"]
+        assert analysis["per_baseline"]["aitester"]["success_rate"] == 66.7
+        assert analysis["per_baseline"]["aitester"]["failure_category_distribution"] == {"index_error": 1}
+        assert analysis["per_baseline"]["plain_llm"]["failure_category_distribution"] == {"llm_format_error": 2}
+        # 迭代分布：aitester(0,1,2) + plain_llm(0,0,0) → 0×4, 1×1, 2×1, 3×0
+        assert analysis["iteration_distribution"] == {"0": 4, "1": 1, "2": 1, "3": 0}
+
+    def test_build_analysis_legacy_json_without_token_metrics(self, module):
+        """旧 JSON 无 token_metrics/rag_metrics 字段时，从 details 兜底累加 + 容忍缺键"""
+        data = self._sample_data()
+        del data["results"]["aitester"]["token_metrics"]
+        del data["results"]["aitester"]["rag_metrics"]
+        data["results"]["aitester"]["details"][0]["token_usage"] = {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "llm_calls": 3,
+        }
+        analysis = module.build_analysis(data)
+        tm = analysis["per_baseline"]["aitester"]["token_metrics"]
+        assert tm["total_tokens"] == 150
+        assert tm["total_llm_calls"] == 3
+        # 无 failure_category_distribution 键时从 details 兜底统计
+        assert analysis["per_baseline"]["aitester"]["failure_category_distribution"] == {"index_error": 1}
+        # 无 rag_metrics 键时保持 None（旧 JSON 容忍）
+        assert analysis["per_baseline"]["aitester"]["rag_metrics"] is None
+
+    def test_render_markdown_contains_fairness_table(self, module):
+        """2.2 公平性对照：Markdown 必含 Token 效率对比表与按基线的失败原因分布"""
+        analysis = module.build_analysis(self._sample_data())
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "Token 效率对比" in md
+        assert "| aitester | 1500 | 1000 | 500 | 9 | 500.0 |" in md
+        assert "失败原因分布（按基线）" in md
+        assert "### plain_llm" in md
+        assert "| llm_format_error | 2 |" in md
+        # RAG 质量表仅在 retrievals>0 时输出
+        assert "RAG 检索质量" in md
+        assert "| aitester | 3 | 2 | 0.6667 | 0.8 |" in md
+
+    def test_render_markdown_no_rag_section_when_disabled(self, module):
+        """未启用 RAG（rag_metrics 全 None）时不输出 RAG 章节（避免空表误导）"""
+        data = self._sample_data()
+        data["results"]["aitester"]["rag_metrics"] = None
+        analysis = module.build_analysis(data)
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "RAG 检索质量" not in md
+
+    def test_load_latest_benchmark_prefers_benchmark_prefix(self, module, tmp_path):
+        """与 visualize_results 同口径：仅识别 benchmark_* 前缀（避免误选汇总文件）"""
+        (tmp_path / "swebench_20_summary.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "benchmark_a_20260101.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "benchmark_b_20260901.json").write_text("{}", encoding="utf-8")
+        picked = module.load_latest_benchmark(str(tmp_path))
+        assert picked.endswith("benchmark_b_20260901.json")
