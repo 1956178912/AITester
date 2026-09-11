@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 987 collected |
-| **单元测试** | ✅ 987 passed, 0 skipped |
+| **总测试数** | ✅ 1014 collected |
+| **单元测试** | ✅ 1014 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 100% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 94% / code_analyzer 100% / planner 100% / analysis 90% / helpers 100% / logging_utils 83% / cli-app 61%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI 入口（API Key / JWT 自动替换占位符） |
-| **最新优化** | ✅ 0.9.10 批次：CLI 并发派发 DRY 化（`run` 的 rich 进度条 / 纯文本降级两段同构块合并为共享派发器 `_dispatch_parallel_tasks`，提交/汇总/容错单一构造点）；并发分支补 10 个回归用例（全成功 / 单任务容错 / 回调时机 / rich 与无 rich 双路径端到端 / CI 门控 exit 1）；cli/app.py 覆盖 50%→61%，src 总覆盖 90%→91%（详见 [CHANGELOG 0.9.10](CHANGELOG.md)） |
+| **最新优化** | ✅ 0.9.11 批次：import 提取单一实现（逗号多模块完整捕获，executor 复用去双份正则）+ 故障转移模型路由语义修正 + MySQL 单例 DCL 线程安全 + RAG 初始化失败粘性标志 + 显著性检验 NaN/Inf 序列化修复（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
 | **核心模块覆盖** | ✅ mysql_client.py (100%), helpers.py (100%), llm_cache.py (100%), code_analyzer.py (100%), planner.py (100%), base_agent.py (98%), api_manager.py (96%), dataset_loader.py (95%), workflow.py (94%), cli/app.py (61%), logging_utils.py (83%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 0.9.10 批次：CLI 并发派发 DRY 化 + 并发分支回归测试补齐（详见 [CHANGELOG 0.9.10](CHANGELOG.md)） |
+| **最近改动** | ✅ 0.9.11 批次：import 提取单一实现、故障转移模型路由、MySQL 单例 DCL、RAG 粘性标志、NaN/Inf 序列化修复等 14 项 + 27 个回归用例（详见 [CHANGELOG 0.9.11](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -128,8 +128,8 @@ python experiments/run_benchmark.py --dataset examples --parallel 4
 # 12. 使用 --timeout 参数设置全局超时
 python main.py run examples/calculator.py --func divide --timeout 120
 
-# 13. 使用 --json 参数输出 JSON 格式结果
-python experiments/run_benchmark.py --dataset examples --json
+# 13. 基准结果以 JSON 输出（stdout 直接输出结构化 JSON，无需额外参数）
+python experiments/run_benchmark.py --dataset examples
 ```
 
 ## 性能优化说明
@@ -221,16 +221,16 @@ EXECUTION_TIMEOUT=120 python main.py run examples/calculator.py --func divide
 
 超时后测试被强制终止，状态标记为 `timeout`，Debugger 可针对超时场景进行专项修复。
 
-### JSON 输出模式（--json）
+### JSON 输出（基准结果默认行为）
 
-通过 `--json` 参数将实验结果以结构化 JSON 格式输出到控制台，便于程序化处理或管道传输。
+`run_benchmark.py` 结束时始终将汇总结果以结构化 JSON 打印到 stdout（`--output-dir` 下同时落盘 `benchmark_<数据集>_<时间戳>.json`；加 `--save-state` 时各环节状态另存 `raw/<task_id>/`），可直接管道给 `jq` 等工具做程序化处理。注意：该脚本没有 `--json` 开关——JSON 输出是默认且唯一的结果输出形式。
 
 ```bash
-# 输出结构化 JSON 结果
-python experiments/run_benchmark.py --dataset examples --json
+# 结构化 JSON 结果直接输出到 stdout
+python experiments/run_benchmark.py --dataset examples
 
-# 结合 --output-dir 保存 JSON 文件
-python experiments/run_benchmark.py --dataset examples --output-dir ./results --json
+# 结合 --output-dir 在目录下保存结果 JSON
+python experiments/run_benchmark.py --dataset examples --output-dir ./results
 ```
 
 JSON 输出包含完整的结果统计、各基线详细数据和性能指标，可直接用于后续分析脚本。
@@ -499,8 +499,8 @@ RAG 默认关闭（`ENABLE_RAG=false`）。开启后 Generator/Debugger 会检�
 python experiments/run_benchmark.py --dataset synthetic --enable-rag
 
 # 查看 RAG 检索质量指标（结果 JSON 的 results.<baseline>.rag_metrics：
-# retrievals / hits / hit_rate / avg_max_similarity）
-python experiments/run_benchmark.py --dataset synthetic --enable-rag --json
+# retrievals / hits / hit_rate / avg_max_similarity；JSON 为默认输出，无需开关）
+python experiments/run_benchmark.py --dataset synthetic --enable-rag
 ```
 
 单独评估检索库质量（Hit Rate@k / MRR，针对已知标注查询）：
@@ -742,8 +742,8 @@ python experiments/run_benchmark.py --dataset examples --task-limit 2 --baseline
 python experiments/run_benchmark.py --dataset synthetic --task-count 100 \
     --baselines aitester,plain_llm,single_agent --parallel 4
 
-# 仅运行 aitester 完整系统，JSON 输出
-python experiments/run_benchmark.py --dataset examples --baselines aitester --json
+# 仅运行 aitester 完整系统（JSON 为默认输出，无需 --json 开关）
+python experiments/run_benchmark.py --dataset examples --baselines aitester
 ```
 
 ### `python main.py list-examples` — 列出示例文件
