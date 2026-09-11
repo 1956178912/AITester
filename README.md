@@ -63,7 +63,7 @@ pre-commit run --all-files
 - 多 Python 版本测试（3.12, 3.14；下限由锁定依赖决定：scipy 需 ≥3.12）
 - Ruff lint 检查
 - pytest 测试 + 覆盖率报告
-- 依赖安全扫描（pip-audit；chromadb 1.5.9 的 4 条已知 CVE 因无修复版本而显式豁免，详见 CHANGELOG）
+- 依赖安全扫描（pip-audit；chromadb 1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），因 PyPI 暂无修复版本而显式豁免，详见 ci.yml 注释与 CHANGELOG）
 - requirements 与 requirements.lock 一致性校验（scripts/check_lock_sync.py）
 - 测试失败诊断注解：测试步骤挂掉时自动把 FAILED/ERROR 用例清单写成 GitHub 注解（check-runs annotations API 可读，无需 admin 下载日志）
 
