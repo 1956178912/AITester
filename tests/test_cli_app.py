@@ -197,3 +197,87 @@ class TestRunParamValidation:
         r = CliRunner().invoke(cli_app.cli, ["run", str(tmp_path / "no_such_file.py"), "--json"])
         assert r.exit_code == 2
         assert "does not exist" in r.output
+
+
+class TestRunParallelJsonBoundaries:
+    """run 命令 --parallel / --json / glob 展开的边界分支（1.5 覆盖率补强）。"""
+
+    def _make_files(self, tmp_path, n: int = 2) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"m{i}.py"
+            p.write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_single_file_with_parallel_and_json_is_sequential(self, tmp_path, monkeypatch):
+        """--parallel>1 但仅 1 个文件 → 走顺序分支（并发需 len(files)>1），仍产出纯 JSON。"""
+        files = self._make_files(tmp_path, n=1)
+        dispatch_calls: list[str] = []
+        ok = {"success": True, "file": files[0], "func": "all", "passed": True, "coverage": 90.0}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", lambda *a, **k: ok)
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", lambda **kw: dispatch_calls.append("dispatch"))
+
+        r = CliRunner().invoke(cli_app.cli, ["run", files[0], "--parallel=4", "--json"])
+        assert r.exit_code == 0
+        # 仅 1 文件不触发并发派发器（走顺序分支）
+        assert dispatch_calls == []
+
+    def test_parallel_gt1_multi_file_uses_dispatch(self, tmp_path, monkeypatch):
+        """--parallel>1 且多文件 → 走 _dispatch_parallel_tasks（rich 不可用时的降级路径）。"""
+        files = self._make_files(tmp_path, n=3)
+        dispatch_calls: list[dict] = []
+        ok = {"success": True, "file": files[0], "func": "all", "passed": True, "coverage": 90.0}
+
+        def fake_dispatch(**kwargs):
+            dispatch_calls.append(kwargs)
+            kwargs["results"].append(ok)
+
+        monkeypatch.setattr(cli_app, "_run_single_task", lambda *a, **k: ok)
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)  # 强制降级路径
+
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert r.exit_code == 0
+        assert len(dispatch_calls) == 1
+        assert dispatch_calls[0]["parallel"] == 2
+
+    def test_glob_pattern_intercepted_by_click_exists_check(self, tmp_path):
+        """glob 通配字符串被 click.Path(exists=True) 在解析层判为不存在（exit 2）。
+
+        真实行为：click 的 exists 校验作用于字面路径（通配符本身不是真实文件），
+        未进入命令体的 glob_module.glob 展开分支。shell 侧若已展开为具体文件，
+        则字面路径真实存在，正常执行。此用例锁定该解析层拦截语义。
+        """
+        self._make_files(tmp_path, n=2)
+        pattern = str(tmp_path / "m*.py")
+        r = CliRunner().invoke(cli_app.cli, ["run", pattern, "--json"])
+        assert r.exit_code == 2, f"通配符字面路径应被 click 拦截, 实际 exit={r.exit_code}"
+
+    def test_all_passed_parallel_exits_zero(self, tmp_path, monkeypatch):
+        """并发模式全部通过 → exit 0（门控工具成功语义）。"""
+        files = self._make_files(tmp_path, n=2)
+        ok = {"success": True, "file": files[0], "func": "all", "passed": True, "coverage": 90.0}
+
+        def fake_task(target_file, *a, **kw):
+            r = dict(ok)
+            r["file"] = target_file
+            return r
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert r.exit_code == 0
+
+    def test_failed_task_in_parallel_exits_one(self, tmp_path, monkeypatch):
+        """并发模式有失败任务 → exit 1（门控工具失败语义，与顺序分支一致）。"""
+        files = self._make_files(tmp_path, n=2)
+
+        def fake_task(target_file, *a, **kw):
+            return {"success": True, "file": target_file, "func": "all", "passed": False, "coverage": 0.0}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert r.exit_code == 1
