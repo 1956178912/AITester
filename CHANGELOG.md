@@ -2,6 +2,40 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.11] - 2026-09-11
+
+### 源码层：import 提取与依赖检测收敛
+- **import 提取单一实现（DRY）**：`src/tools/dependency.py` 新增共享实现 `extract_import_module_names`（处理逗号分隔多模块、`as` 别名、尾随注释、相对导入跳过、多行括号导入）；`extract_imported_modules` 委托于它，`executor._extract_imports` 也复用（不再维护本地复制的正则）——此前两份复制的正则 `^import\s+([\w.]+)` 只捕获首个模块，`import numpy, scipy` 会漏掉 `scipy`，缺失依赖逃过检测、venv 少装包导致测试 ImportError
+- **标准库判定收紧**：`is_standard_library` 删除死代码 `_FALLBACK_STDLIB` 白名单（Python 3.12+ 下 `sys.stdlib_module_names` 恒存在、该分支不可达，且白名单误将第三方 `pytest` 列为标准库）；权威清单缺失时改为返回 False 交由 `find_spec` 实际探测
+
+### 源码层：执行环境与并发安全
+- **executor 项目根纠偏一层**：`project_root` 由 `src/agents/executor.py` 上溯三层到仓库根（与 workflow.py 的 patch 白名单、cli/app.py 的根目录口径一致）；此前上溯两层止于 `src/`，`rglob` 模块搜索看不到 `examples/` 等 src 外目录，import 修复链路对非同名 helper 断裂
+- **PYTHONPATH 尾随分隔符防护**：原 PYTHONPATH 未设置时直接拼接会产生 `"<dir>:"` 尾随空段（sys.path 空元素等价 CWD，同名文件可遮蔽第三方库）；现空段过滤后 `os.pathsep.join`，非沙箱与沙箱两条路径统一
+- **MySQL 单例双重检查锁定**：`MySQLClient` 类级新增 `_instance_lock` / `_pool_lock`，`__new__` 与 `__init__` 均为"无锁快路径 + 加锁复检"DCL；此前无锁 check-then-set 在并发首次构造下可产生多实例、连接池放大
+- **base_agent 缓存统一 DCL**：chat 客户端缓存与 zai 客户端缓存均加锁 + 复检双检锁定；`_get_llm_config` 的 `base_url` 为空时补对称回退 `LLM_CONFIGS[0].base_url`（修复 AttributeError）
+
+### 源码层：容错与语义修正
+- **故障转移的模型路由语义**：`APIManager.call` 显式指定 model 时仅主尝试用指定模型，转移到备用节点后改用该节点自身模型名——此前指定模型被逐次沿用，备用 provider 无该模型会逐个 APIError 陪葬，故障转移形同虚设
+- **RAG 初始化失败标志粘性化**：`get_rag_retriever` 构造抛异常时置位 `_rag_init_failed`，后续节点调用快路径直接返回 None 不再重试；此前 except 分支把 `_rag_retriever` 置 None（本就是 None，no-op），每个 generator/executor/debugger 节点重复付 2-6s 初始化
+- **generator 节点与全局开关解耦**：test_plan 传参改走 `state.get("test_plan")`（缺键传 None 由 Generator 自行推断）；此前 `state["test_plan"] if ENABLE_PLANNER else None` 在 ENABLE_PLANNER 开而图中无 planner 节点时 KeyError
+- **add_llm_config 的 index 参数严格化**：显式 index 校验 `index >= 1` 且不与已占用 LLM_N 编号冲突（冲突返回 False）；此前不校验，追加会产出同编号双块，读取时后读覆盖先读行为未定义
+- **显著性检验 NaN/Inf 序列化修复**：两组通过率完全恒定（全 1 或全 0）时 scipy 返回 NaN（配对 t 零差值）或 ±Inf（Welch 零方差），`round(float(...))` 会把非标准 token 写进结果 JSON、严格解析器（如 JS JSON.parse）报错；现以 `math.isfinite` 守卫，记一条 `status: "skipped"` 条目而非数字条目（该对比统计上本无"显著性"可言）
+- **帧匹配收敛为单一 endswith**：`error_classifier._is_test_side_assertion` 旧三子句（basename 全等 / 模块名全等 / endswith）对 pytest .py 帧前两者是后者子集，收敛为单一 `endswith(f"{target}.py")`（"mycalc.py 误中 calc.py" 的既有限制保留并以回归测试锁定）；删除仅此处使用的 `import os`
+- **配置模板环境变量全名**：`generate_env_template` 变量名统一为 `{PROVIDER}_API_KEY` 全名约定（ALIYUN_BAILIAN_API_KEY / AGNES_DOMESTIC_API_KEY / AGNES_INTERNATIONAL_API_KEY / BIGMODEL_API_KEY / DEEPSEEK_API_KEY），与 generate_batch_config 推导规则同源；此前硬编码短名（ALIYUN_API_KEY 等）与 provider 键名失配永远取不到；`.env.local.template` 由生成器自身重新生成
+- **死分支与 no-op 清理**：executor 删除不可达的 `if missing_packages and not self.use_venv:` 死分支（`use_venv` 守卫保留供回归测试）；`analyze_failures.py` 删除两个 no-op 列表推导；`.env.example` 删除 DATASET_DEFAULT 幽灵配置块（全仓库零消费者）
+- **visualize 汇总表修复**：`write_summary_md` 基线汇总表头此前 5 列 + 3 列拆两行、与 8 列数据行错位；现单一 8 列表头 + 8 分隔符
+
+### 实验/脚本层
+- **SWE-bench 下载输出命名统一**：`scripts/download_swe_bench.py` 输出改 `swe_bench_{subset}_instances.jsonl`，与 loader `_resolve_jsonl_paths` 约定一致
+
+### 文档
+- README 移除 4 处幽灵 `run_benchmark --json`（benchmark JSON 输出为默认行为、无需该 flag；`main.py run --json` 属 CLI 另一处予以保留）；docs/usage_examples.md 同错修复；docs/api_reference.md 版本表补全 0.9.1-0.9.10
+
+### 测试
+- 新增 27 个回归用例：dependency 逗号 import 提取 8 / executor 项目根与 PYTHONPATH 4 / api_manager 模型路由 1 / mysql 并发构造 1 / config_manager index 校验 3 / 显著性 NaN-Inf 守卫 2 / error_classifier 帧匹配 4 / visualize 表对齐 2 / workflow test_plan 解耦与 RAG 粘性标志 2
+- 全量 **1014 passed / 0 failed**（0.9.10 的 987 + 27 新增）；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步校验全部通过
+- 有意保留：token_usage 死线程聚合（benchmark 运行结束聚合需要，`test_global_aggregates_threads` 锁定）；`rate_limit_remaining` 字段（8 处测试引用）；error_classifier SYNTAX+IMPORT_ERROR 防御分支
+
 ## [0.9.10] - 2026-09-11
 
 ### 源码层：CLI 并发派发 DRY 化
