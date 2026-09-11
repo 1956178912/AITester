@@ -571,6 +571,43 @@ class TestAPIManagerCall:
         assert result is not None
 
     @patch("src.api.api_manager.openai.OpenAI")
+    def test_call_fallback_with_explicit_model_uses_node_model(self, mock_openai_class):
+        """显式指定 model 且主节点失败时，备用节点改用自身模型名。
+
+        回归：此前 call_model = model or node.config.model_name，指定模型时
+        故障转移到备用节点仍沿用指定模型名——备用 provider 没有该模型，
+        逐个 APIError 陪葬，故障转移形同虚设。
+        """
+        import openai
+
+        mock_client1 = MagicMock()
+        mock_client2 = MagicMock()
+
+        # 主节点（model1）服务端错误，备用节点（model2）成功
+        mock_resp500 = MagicMock()
+        mock_resp500.status_code = 500
+        mock_client1.chat.completions.create.side_effect = openai.APIError(
+            "primary down", request=mock_resp500, body={"code": "server_error"}
+        )
+        ok_response = MagicMock()
+        mock_client2.chat.completions.create.return_value = ok_response
+
+        self.mgr.health_nodes.clear()
+        self.mgr._client_cache.clear()
+        self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
+        self.mgr.add_node(LLMConfig("key2", "url2", "model2"))
+        self.mgr._client_cache["model1"] = mock_client1
+        self.mgr._client_cache["model2"] = mock_client2
+
+        result = self.mgr.call(messages=[{"role": "user", "content": "hello"}], model="model1")
+
+        assert result is ok_response
+        # 主节点尝试：用显式指定的 model1
+        assert mock_client1.chat.completions.create.call_args.kwargs["model"] == "model1"
+        # 备用节点尝试：改用节点自身 model2（而非沿用指定模型）
+        assert mock_client2.chat.completions.create.call_args.kwargs["model"] == "model2"
+
+    @patch("src.api.api_manager.openai.OpenAI")
     def test_call_no_fallback_when_disabled(self, mock_openai_class):
         """测试禁用故障转移时的行为：APIError → _handle_api_error → bare raise 无 active exception → RuntimeError"""
         import openai

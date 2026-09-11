@@ -404,7 +404,10 @@ class APIManager:
         all_nodes = nodes_to_try + fallback_candidates
 
         for attempt, node in enumerate(all_nodes):
-            call_model = model or node.config.model_name
+            # 显式指定 model 时：主节点（attempt < len(nodes_to_try)）用指定模型；
+            # 故障转移到备用节点后改用该节点自身模型名——备用 provider 通常没有
+            # 指定模型，沿用会逐个 APIError 陪葬，故障转移形同虚设
+            call_model = model if model and attempt < len(nodes_to_try) else node.config.model_name
             prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
             try:
                 response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
