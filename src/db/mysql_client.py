@@ -8,6 +8,7 @@ output 字段使用 MEDIUMTEXT 类型，不再截断。
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import contextmanager
 from typing import Any
 
@@ -54,40 +55,49 @@ class MySQLClient:
 
     _instance: MySQLClient | None = None
     _pool: PooledDB | None = None
+    # 模块级锁：保护单例/连接池的双重检查锁定。多线程首次并发构造时，
+    # 无锁 check-then-act 会创建两个 PooledDB（其一泄漏）
+    _instance_lock: threading.Lock = threading.Lock()
+    _pool_lock: threading.Lock = threading.Lock()
 
     def __new__(cls) -> MySQLClient:
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self) -> None:
-        # 避免重复初始化连接池
+        # 避免重复初始化连接池（双检锁：__new__ 后 __init__ 每次构造都会执行）
         if MySQLClient._pool is not None:
             return
-        MySQLClient._pool = PooledDB(
-            creator=pymysql,
-            maxconnections=_POOL_MAX_CONNECTIONS,
-            mincached=_POOL_MIN_CACHED,
-            maxcached=_POOL_MAX_CACHED,
-            blocking=True,
-            timeout=_POOL_CONNECTION_TIMEOUT,
-            # 空闲连接超过 600s 回收（防 MySQL 服务端 wait_timeout 长连接被断开），
-            # 此前该常量定义后从未传入构造参数（死常量），现接通
-            idle_timeout=_POOL_IDLE_TIMEOUT,
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            database=MYSQL_DATABASE,
-            charset="utf8mb4",
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-        logger.info(
-            "MySQL 连接池已创建: max=%d, min_cached=%d, max_cached=%d",
-            _POOL_MAX_CONNECTIONS,
-            _POOL_MIN_CACHED,
-            _POOL_MAX_CACHED,
-        )
+        with MySQLClient._pool_lock:
+            if MySQLClient._pool is not None:
+                return
+            MySQLClient._pool = PooledDB(
+                creator=pymysql,
+                maxconnections=_POOL_MAX_CONNECTIONS,
+                mincached=_POOL_MIN_CACHED,
+                maxcached=_POOL_MAX_CACHED,
+                blocking=True,
+                timeout=_POOL_CONNECTION_TIMEOUT,
+                # 空闲连接超过 600s 回收（防 MySQL 服务端 wait_timeout 长连接被断开），
+                # 此前该常量定义后从未传入构造参数（死常量），现接通
+                idle_timeout=_POOL_IDLE_TIMEOUT,
+                host=MYSQL_HOST,
+                port=MYSQL_PORT,
+                user=MYSQL_USER,
+                password=MYSQL_PASSWORD,
+                database=MYSQL_DATABASE,
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+            )
+            logger.info(
+                "MySQL 连接池已创建: max=%d, min_cached=%d, max_cached=%d",
+                _POOL_MAX_CONNECTIONS,
+                _POOL_MIN_CACHED,
+                _POOL_MAX_CACHED,
+            )
 
     @classmethod
     def get_pool(cls) -> PooledDB:
