@@ -19,7 +19,7 @@
 # ── 第 1 个 LLM（必填，推荐使用）───────────────────────────────────────────────
 LLM_1_API_KEY=<YOUR_FIRST_API_KEY_HERE>
 LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
-LLM_1_MODEL_NAME=agnes-2.5-flash
+LLM_1_MODEL_NAME=agnes-3.0-flash
 
 # ── 第 2 个 LLM（可选，备用 / 分摊限流）────────────────────────────────────────
 # LLM_2_API_KEY=<YOUR_SECOND_API_KEY_HERE>

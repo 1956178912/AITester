@@ -98,7 +98,8 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         base_url: API 基础 URL
         model_name: 模型名称
         index: 配置索引（None 则自动分配：扫描文件中已占用的 LLM_N 编号，
-               取最大编号 +1，避免与编号空洞场景（如删除 LLM_2）冲突）
+               取最大编号 +1，避免与编号空洞场景（如删除 LLM_2）冲突；
+               显式指定时校验 >=1 且不与已占用编号冲突，冲突返回 False）
     Returns:
         是否成功添加
     """
@@ -115,6 +116,16 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         # 自动分配：已占用编号的最大值 + 1（空文件则为 1）
         used = _scan_llm_indices(existing_content)
         index = max(used) + 1 if used else 1
+    else:
+        # 显式指定：校验合法性。编号冲突（已有 LLM_N_* 块）时若仍追加，
+        # 会产生同一编号两套配置——_load_llm_configs 按编号扫描时后读覆盖
+        # 先读，行为未定义；且自动分配的空洞管理随之错乱
+        if index < 1:
+            logger.warning("配置索引必须 >= 1，收到 %d", index)
+            return False
+        if index in _scan_llm_indices(existing_content):
+            logger.warning("配置索引 %d 已被占用，追加会产重复编号 LLM_%d_* 块，已拒绝", index, index)
+            return False
 
     # 追加新配置
     comment = f"# 模型 {index}: {model_name}\n"

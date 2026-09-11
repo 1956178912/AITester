@@ -160,6 +160,29 @@ class TestAddLLMConfig:
         assert result is True
         assert "LLM_4_MODEL_NAME=m4" in env_file.read_text(encoding="utf-8")
 
+    def test_add_explicit_index_conflict_returns_false(self, env_file):
+        """显式 index 与已占用编号冲突时拒绝追加（否则同编号两套配置，后读覆盖先读）。
+
+        回归：此前显式 index 不校验占用，直接追加会产出 LLM_1_* 双块。
+        """
+        env_file.write_text("LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=m1\n", encoding="utf-8")
+        result = add_llm_config(api_key="k2", base_url="https://ex.com", model_name="m2", index=1)
+        assert result is False
+        assert "LLM_1_MODEL_NAME=m2" not in env_file.read_text(encoding="utf-8")
+
+    def test_add_explicit_index_below_one_returns_false(self, env_file):
+        """显式 index < 1 非法（LLM 编号从 1 开始），拒绝且不写盘。"""
+        for bad_index in (0, -1):
+            assert add_llm_config(api_key="k", base_url="https://ex.com", model_name="m", index=bad_index) is False
+        assert not env_file.exists()
+
+    def test_add_explicit_unused_index_succeeds(self, env_file):
+        """显式 index 未被占用时正常追加（含跳号，如直接用 index=5）。"""
+        env_file.write_text("LLM_1_API_KEY=k1\nLLM_1_MODEL_NAME=m1\n", encoding="utf-8")
+        result = add_llm_config(api_key="k5", base_url="https://ex.com", model_name="m5", index=5)
+        assert result is True
+        assert "LLM_5_MODEL_NAME=m5" in env_file.read_text(encoding="utf-8")
+
     def test_env_file_points_to_project_root(self):
         """回归锁：ENV_FILE 必须指向项目根目录的 .env.local（而非 src/config/ 下）。"""
         assert config_manager.ENV_FILE == Path("config.py").resolve().parent / ".env.local"
