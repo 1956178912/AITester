@@ -40,6 +40,13 @@ class RotationStrategy(Enum):
     WEIGHTED_RANDOM = "weighted_random"  # 加权随机
     HEALTH_BASED = "health_based"  # 健康感知（优先健康节点）
     FASTEST_FIRST = "fastest_first"  # 响应最快优先（针对大规模节点池优化）
+    COST_AWARE = "cost_aware"  # 成本感知（3.4：故障转移时避免全量切到昂贵 provider）
+
+
+# 成本告警阈值（3.4）：故障转移后若实际流量落在 cost_weight >= 该值的
+# 昂贵 provider 上，记 WARNING（让实验分析/监控能捕获"配额故障把流量全切
+# 到贵模型"的成本风险）。取值来源：经验值 2.0，即比基准贵 2 倍以上即告警。
+_COST_ALERT_THRESHOLD = 2.0
 
 
 @dataclass
@@ -58,6 +65,10 @@ class APIHealth:
     last_response_time_ms: float = 0.0
     last_check_time: float = 0.0
     rate_limit_remaining: int = 0
+    # 成本权重（3.4 成本感知路由）：相对成本倍数（1.0=基准，越大越贵）。
+    # 故障转移到备用节点时用于避免全量切到昂贵 provider；默认 1.0 表示
+    # 未配置成本信息时保持历史行为（成本维度不参与排序）。
+    cost_weight: float = 1.0
     # 滑动窗口记录最近 N 次响应时间（用于计算平均值）
     _response_times: deque[float] = field(default_factory=lambda: deque(maxlen=10))
 
@@ -110,6 +121,14 @@ class APIManagerConfig:
     retry_count: int = 2  # 重试次数
     batch_health_check_size: int = 10  # 批量健康检查的批次大小
     health_check_timeout: float = 5.0  # 单次健康检查超时（秒）
+    # 节点成本权重映射（3.4 成本感知路由）：{model_name: 相对成本倍数}。
+    # 未列出的模型默认 1.0（基准）。COST_AWARE 策略按"成功率/成本"综合排序，
+    # 故障转移时优先选择"够用且便宜"的节点，避免把全量流量切到昂贵 provider。
+    # 来源：llm_configs.json 的 cost_weight 字段（由 config.py 注入），或手动指定。
+    node_cost_weights: dict[str, float] = field(default_factory=dict)
+    # 成本告警开关（3.4）：故障转移落到 cost_weight >= _COST_ALERT_THRESHOLD 的
+    # 昂贵 provider 时记 WARNING。默认 True（告警是纯旁路，不影响路由行为）。
+    cost_alert_enabled: bool = True
 
 
 class HealthCheckerThread(threading.Thread):
@@ -177,10 +196,37 @@ class APIManager:
                 api_key=llm_config.api_key, base_url=llm_config.base_url, timeout=self.config.timeout
             )
             self._client_cache[llm_config.model_name] = client
-            health = APIHealth(config=llm_config, max_consecutive_failures=self.config.max_consecutive_failures)
+            # 3.4 成本感知：从配置读取该模型的成本权重（未配置默认 1.0=基准）
+            cost_weight = self._cost_weight_for(llm_config.model_name)
+            health = APIHealth(
+                config=llm_config,
+                max_consecutive_failures=self.config.max_consecutive_failures,
+                cost_weight=cost_weight,
+            )
             self.health_nodes[llm_config.model_name] = health
-            logger.info("注册 LLM 节点: %s (%s)", llm_config.model_name, llm_config.base_url)
+            logger.info(
+                "注册 LLM 节点: %s (%s, cost_weight=%.2f)", llm_config.model_name, llm_config.base_url, cost_weight
+            )
         logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
+
+    def _cost_weight_for(self, model_name: str) -> float:
+        """取模型的成本权重（3.4）：优先读 APIManagerConfig.node_cost_weights，
+        缺省回退到 LLMConfig.cost_weight 字段（config.py 从 llm_configs.json 注入），
+        再缺省 1.0（基准）。
+
+        Args:
+            model_name: 模型名称。
+
+        Returns:
+            相对成本倍数（>= 0.1，防除零由调用方兜底）。
+        """
+        if model_name in self.config.node_cost_weights:
+            return float(self.config.node_cost_weights[model_name])
+        # 从已注册节点反查 LLMConfig.cost_weight（_init_clients 时已建立映射）
+        node = self.health_nodes.get(model_name)
+        if node is not None and getattr(node.config, "cost_weight", 0.0):
+            return float(node.config.cost_weight)
+        return 1.0
 
     def get_healthy_nodes(self) -> list[APIHealth]:
         """获取所有健康节点"""
@@ -235,6 +281,29 @@ class APIManager:
         healthy.sort(key=lambda n: n.avg_response_time_ms)
         return healthy[0]
 
+    def _select_node_cost_aware(self) -> APIHealth | None:
+        """成本感知策略（3.4）：按"成功率 / 成本权重"综合评分选节点。
+
+        评分 = 成功率 * 0.5 + (1 / cost_weight) * 0.5。
+        - 成本权重越高（越贵），其"性价比项" 1/cost 越低，排序越靠后；
+        - 故障转移到备用节点时，昂贵的 provider 不会被无差别推上主位，
+          避免把全量流量切到成本更高的服务；
+        - 成功率仍占 50% 权重，健康表现差的便宜节点不会被误选。
+
+        未配置成本信息（cost_weight 全为 1.0）时退化为按成功率 + 响应倒数，
+        行为与健康感知接近但更偏"便宜优先"。
+        """
+        healthy = self.get_healthy_nodes()
+        if not healthy:
+            return None
+
+        def score(node: APIHealth) -> float:
+            cost = max(node.cost_weight, 0.1)  # 防除零
+            return node.success_rate * 0.5 + (1.0 / cost) * 0.5
+
+        healthy.sort(key=score, reverse=True)
+        return healthy[0]
+
     def select_node(self) -> APIHealth | None:
         """根据当前策略选择节点"""
         with self._lock:
@@ -244,6 +313,8 @@ class APIManager:
                 return self._select_node_weighted_random()
             elif self.config.rotation_strategy == RotationStrategy.FASTEST_FIRST:
                 return self._select_node_fastest_first()
+            elif self.config.rotation_strategy == RotationStrategy.COST_AWARE:
+                return self._select_node_cost_aware()
             else:  # HEALTH_BASED
                 return self._select_node_health_based()
 
@@ -361,6 +432,17 @@ class APIManager:
         if attempt > 0:
             # 故障转移成功：记录"上一个节点 -> 当前节点"（此前误把当前节点名打印了两遍）
             logger.info("故障转移成功: %s -> %s", prev_model or "unknown", node.config.model_name)
+            # 3.4 成本告警：故障转移落到昂贵 provider（cost_weight >= 阈值）时记 WARNING，
+            # 让监控/实验分析能捕获"配额故障把全量流量切到贵模型"的成本风险。
+            # 告警是纯旁路（不影响路由），cost_alert_enabled=False 可关闭。
+            if self.config.cost_alert_enabled and node.cost_weight >= _COST_ALERT_THRESHOLD:
+                logger.warning(
+                    "成本告警：故障转移到昂贵 provider %s（cost_weight=%.2f >= %.2f），"
+                    "请确认配额故障是否导致全量流量切到高成本模型",
+                    node.config.model_name,
+                    node.cost_weight,
+                    _COST_ALERT_THRESHOLD,
+                )
         return response
 
     def _handle_rate_limit(self, node, attempt: int, primary_count: int) -> None:

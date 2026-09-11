@@ -110,11 +110,20 @@ _LLM_MAX_SCAN_INDEX = 32
 
 @dataclass(frozen=True)
 class LLMConfig:
-    """单个 LLM Provider 的配置，包含 api_key、base_url、model_name。"""
+    """单个 LLM Provider 的配置，包含 api_key、base_url、model_name。
+
+    字段:
+        api_key: API 密钥（敏感，来自 .env.local）。
+        base_url: 服务 Base URL。
+        model_name: 模型名称。
+        cost_weight: 相对成本倍数（3.4 成本感知路由，来源 llm_configs.json 的
+            cost_weight 字段，未配置时 0.0 表示"无成本信息"，APIManager 回退 1.0）。
+    """
 
     api_key: str
     base_url: str
     model_name: str
+    cost_weight: float = 0.0
 
 
 def _load_llm_configs() -> list[LLMConfig]:
@@ -136,7 +145,10 @@ def _load_llm_configs() -> list[LLMConfig]:
         model_name = os.getenv(f"LLM_{idx}_MODEL_NAME", "").strip()
         if not api_key or not base_url or not model_name:
             continue  # 不完整编号跳过，继续扫描后续编号
-        configs.append(LLMConfig(api_key=api_key, base_url=base_url, model_name=model_name))
+        # 3.4 成本感知路由：可选读取 LLM_{idx}_COST_WEIGHT（相对成本倍数），
+        # 未设置时 0.0 表示"无成本信息"（APIManager 回退 1.0 基准）
+        cost_weight = _parse_float_env(f"LLM_{idx}_COST_WEIGHT", 0.0, 0.1, 1000.0)
+        configs.append(LLMConfig(api_key=api_key, base_url=base_url, model_name=model_name, cost_weight=cost_weight))
     return configs
 
 
