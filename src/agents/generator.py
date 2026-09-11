@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 # RAG 参考案例最大数量：避免 prompt 过长导致 token 浪费
 _MAX_RAG_REFERENCES = 3
-# import 修正重试次数上限：防止 LLM 反复生成相同错误
-_MAX_PARAMETIZE_RETRIES = 2
 
 
 class GeneratorAgent(BaseAgent):
@@ -85,7 +83,7 @@ class GeneratorAgent(BaseAgent):
         2. 若有 RAG 参考，取前 _MAX_RAG_REFERENCES 个注入 prompt
         3. 调用 LLM 生成代码
         4. 修正错误的 import 模块名（_fix_import_module）
-        5. 校验 parametrize 格式，失败则最多重试 _MAX_PARAMETIZE_RETRIES 次
+        5. 校验 parametrize 格式，失败则追加修正提示重试一次（仍失败仅告警，避免 LLM 反复生成相同错误）
 
         Args:
             test_plan: 测试计划字典（PlannerAgent 输出）。
