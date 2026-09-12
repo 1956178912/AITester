@@ -8,14 +8,18 @@
 > 本轮逐项对照仓库实际代码状态核对，结论：**多数条目已在此前批次落地**，
 > 真正缺口集中在 4 处，另 2 处为研究性/实验性项目（非纯代码改动）。
 >
-> **实施完成状态（2026-09-14 改进清单批次）**：
+> **实施完成状态（2026-09-14 改进清单批次 + 熔断器半开探测批次）**：
 > - G-01 测试异味检测 ✅（commit ffb77cf）
 > - G-02 修复收敛曲线 ✅（commit ffb77cf，与 G-01 同批）
 > - G-03 依赖缓存监控 ✅（commit 6b0e64d）
 > - G-04 失败根因分类 + 案例知识库 ✅（commit 247fc91）
 > - R-05 断言增强策略 ✅（commit ed4c237，默认关）
 > - 3.5 跨文件修复 ✅（commit 670f368，默认关，设计文档 docs/design/cross_file_repair.md）
-> - 全量基线推进至 **1225 passed / 0 failed**（自 1163 净增 62）；ruff check / format 全绿
+> - 4.2 熔断器半开探测 ✅（commit b69d811，默认开：冷却到期先进入半开窗口，仅承载一次探测请求，
+>   成功闭合 / 失败重开半程冷却期 min(cooldown/2, cap=30s)；`enable_half_open_probe=False`
+>   退回 4.1 行为便于对比实验；TestHalfOpenProbe 12 用例）
+> - 全量基线推进至 **1237 passed / 0 failed**（自 1163 净增 74；4.2 批次自 1225 净增 12）；
+>   ruff check / format 全绿
 
 ### 一、已落地（本轮无需重复实现）
 
@@ -27,7 +31,7 @@
 | 2.3 RAG 自动汇总（RAG vs 禁用对比 + 哪类错误帮助最大） | `analyze_results.py:_rag_by_kind_from_details` + `_rag_hit_by_failure_category` | RAG 启用/禁用 token 对比需各跑一次实验，脚本无内置 |
 | 3.3 多候选补丁默认关 + 可选启用 | `ENABLE_MULTI_CANDIDATE_PATCH` 默认 false；`src/tools/multi_candidate.py` 完整实现（静态筛选 + 执行验证） | 对比实验未跑 |
 | 4.1 结构化追踪层主动启用 | `src/observability/trace.py` + `AITESTER_TRACE_DIR`（默认 no-op） | 追踪层已实现，大规模实验未主动启用 |
-| 4.2 熔断器冷却期 | `api_manager.py:circuit_open_until`（默认 60s，`APIManagerConfig.circuit_cooldown_seconds`） | 半开状态未实现，冷却期结束直接放行 |
+| 4.2 熔断器冷却期 + 半开探测 | `api_manager.py:circuit_open_until`（默认 60s，`APIManagerConfig.circuit_cooldown_seconds`）+ 半开探测（`in_circuit_half_open` / `_probe_circuit_half_open`，`enable_half_open_probe` 默认 True，惩罚 = min(cooldown/2, 30s cap)） | ✅ 4.2 批次已实现：冷却到期进入半开窗口，探测成功闭合 / 失败重开半程冷却，get_status 输出 circuit_state 三态 |
 | 4.3 日志脱敏完整审计 | `docs/redaction_audit.md`（三层防线 + 逐出口走查 + LLM 文件缓存记录为已知风险） | 审计已做 |
 | 4.4 依赖缓存 | `dependency.py:venv_cache_dir`（按依赖组合 md5 缓存）+ `create_venv` 复用 | 缓存命中率统计 / 清理命令 / 多版本 未实现 |
 | 5.1 CLI 模块覆盖率提升 | `tests/test_cli_app.py` 27 用例（批次② 1.4c 补 8：timeout / invalid dataset / single-task 不阻塞 / check-dataset 边界 / glob 并发语义） | cli/app.py 覆盖率仍 64%（最低） |

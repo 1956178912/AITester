@@ -99,13 +99,20 @@ export MULTI_CANDIDATE_EXEC_VALIDATE=true   # 逐候选跑测试筛选（成本�
 from src.api.api_manager import APIManager, APIManagerConfig
 manager = APIManager(config=APIManagerConfig(cost_alert_threshold=3.0))
 
-# 熔断冷却期（4.1 残余）：APIManager 节点连续失败达 max_consecutive_failures
-# 阈值后自动进入冷却期（APIManagerConfig.circuit_cooldown_seconds，默认 60s），
-# 冷却期内即使健康检查翻回 is_healthy=True 路由层也继续跳过该节点，
-# 避免流量重新打回已知不可用的 provider（浪费时间与 token）。
-# 默认开启、无需配置；嵌入使用时可显式调整：
+# 熔断冷却期 + 半开探测（4.1 + 4.2）：APIManager 节点连续失败达
+# max_consecutive_failures 阈值后自动进入冷却期（circuit_cooldown_seconds，默认 60s），
+# 冷却期内即使健康检查翻回 is_healthy=True 路由层也继续跳过该节点。
+# 4.2：冷却到期后节点进入"半开"窗口，仅承载一次探测请求；探测成功闭合
+# 熔断器恢复全量路由，失败重开半程冷却（min(cooldown/2, cap=30s)）。
+# 半开探测默认开启（enable_half_open_probe=True）；对比实验可退回 4.1 直接放行：
 from src.api.api_manager import APIManager, APIManagerConfig
-manager = APIManager(config=APIManagerConfig(circuit_cooldown_seconds=120.0))
+manager = APIManager(config=APIManagerConfig(
+    circuit_cooldown_seconds=120.0,
+    # 可选：关闭半开探测退回 4.1 行为（默认 True）
+    enable_half_open_probe=False,
+    # 可选：半开探测失败惩罚时长上限（默认 30.0s）
+    # half_open_probe_penalty_cap_seconds=60.0,
+))
 
 # RAG（检索增强）：合成/内置数据集实验可显式开启
 python experiments/run_benchmark.py --dataset synthetic --enable-rag
