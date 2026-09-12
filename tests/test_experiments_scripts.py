@@ -527,3 +527,117 @@ class TestAnalyzeResultsScript:
         md = module.render_markdown(analysis, "benchmark_x.json")
         assert "修复收敛效率（1.2）" in md
         assert "| aitester | 2 | 1 | 0.5 | 0.0 | 0.0 | 4.0 |" in md
+
+    def test_repair_convergence_curve_cumulative_pass_rate(self, module):
+        """1.3 修复收敛曲线：按迭代轮次 0/1/2/3+ 统计累计通过率与累计耗时"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "a", "passed": True, "iterations": 0, "elapsed_seconds": 4.0},
+            {"task_id": "b", "passed": True, "iterations": 1, "elapsed_seconds": 8.0},
+            {"task_id": "c", "passed": False, "iterations": 2, "elapsed_seconds": 16.0},
+            {"task_id": "d", "passed": False, "iterations": 3, "elapsed_seconds": 20.0},
+        ]
+        analysis = module.build_analysis(data)
+        curve = analysis["per_baseline"]["aitester"]["repair_convergence_curve"]
+        assert curve["total_tasks"] == 4
+        # 轮次 0：仅 task a 到达，1 通过，累计通过率 0.25
+        assert curve["rounds"]["0"]["reached_tasks"] == 1
+        assert curve["rounds"]["0"]["cumulative_passed"] == 1
+        assert curve["rounds"]["0"]["cumulative_pass_rate"] == 0.25
+        # 轮次 1：a+b 到达，2 通过，累计通过率 0.5
+        assert curve["rounds"]["1"]["cumulative_passed"] == 2
+        assert curve["rounds"]["1"]["cumulative_pass_rate"] == 0.5
+        # 轮次 2：a+b+c，2 通过，累计通过率 0.5（c 失败）
+        assert curve["rounds"]["2"]["cumulative_passed"] == 2
+        # 轮次 3+：a+b+c+d，2 通过，累计通过率 0.5（d 失败）
+        assert curve["rounds"]["3+"]["cumulative_passed"] == 2
+        assert curve["rounds"]["3+"]["cumulative_pass_rate"] == 0.5
+        # 累计耗时单调不减
+        assert curve["rounds"]["0"]["cumulative_elapsed_seconds"] <= curve["rounds"]["1"]["cumulative_elapsed_seconds"]
+
+    def test_repair_convergence_curve_empty_details(self, module):
+        """1.3 空 baseline（无 details）时收敛曲线返回空结构，不产生除零"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = []
+        analysis = module.build_analysis(data)
+        curve = analysis["per_baseline"]["aitester"]["repair_convergence_curve"]
+        assert curve["total_tasks"] == 0
+        assert curve["rounds"] == {}
+
+    def test_repair_convergence_curve_rendered(self, module):
+        """1.3 修复收敛曲线渲染到 Markdown（含 0/1/2/3+ 行与总任务行）"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "a", "passed": True, "iterations": 0, "elapsed_seconds": 4.0},
+            {"task_id": "b", "passed": True, "iterations": 2, "elapsed_seconds": 12.0},
+        ]
+        analysis = module.build_analysis(data)
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "修复收敛曲线（1.3）" in md
+        assert "| aitester | 0 |" in md
+        assert "| aitester | 总任务 | 2 |" in md
+
+    def test_test_smell_detection_trivial_and_roulette(self, module):
+        """1.2 测试异味：识别平凡测试（pass 函数体）与 Assertion Roulette（无断言）"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "t1",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_trivial():\n    pass\n",
+            },
+            {
+                "task_id": "t2",
+                "passed": False,
+                "iterations": 1,
+                "generated_test": "def test_no_assert():\n    result = 1 + 1\n",
+            },
+            {
+                "task_id": "t3",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_good():\n    assert 1 + 1 == 2\n",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        s = analysis["per_baseline"]["aitester"]["test_smell_metrics"]
+        assert s["available"] is True
+        assert s["observed_tasks"] == 3
+        # t1 trivial + t2 assertion_roulette + t3 无异味
+        assert s["smell_counts"]["trivial_test"] == 1
+        assert s["smell_counts"]["assertion_roulette"] == 1
+        assert "t1" in s["tasks_with_smells"]
+        assert "t2" in s["tasks_with_smells"]
+        assert "t3" not in s["tasks_with_smells"]
+
+    def test_test_smell_detection_magic_number(self, module):
+        """1.2 测试异味：多个未命名数字字面量判定为 Magic Number"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "m1",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": (
+                    "def test_magic():\n"
+                    "    assert compute(1) == 2\n"
+                    "    assert compute(2) == 4\n"
+                    "    assert compute(3) == 6\n"
+                    "    assert compute(5) == 10\n"
+                ),
+            }
+        ]
+        analysis = module.build_analysis(data)
+        s = analysis["per_baseline"]["aitester"]["test_smell_metrics"]
+        assert s["smell_counts"]["magic_number"] == 1
+        assert "m1" in s["tasks_with_smells"]
+
+    def test_test_smell_detection_unavailable_when_no_generated_test(self, module):
+        """1.2 旧 JSON 无 generated_test 字段时 available=False（渲染跳过章节）"""
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        s = analysis["per_baseline"]["aitester"]["test_smell_metrics"]
+        assert s["available"] is False
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "测试异味检测（1.2）" not in md

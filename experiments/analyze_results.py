@@ -3,7 +3,7 @@
 
 从 run_benchmark.py 输出的 JSON 结果中提取关键指标
 （成功率、覆盖率、迭代次数分布、Token 消耗、RAG 检索质量、修复收敛效率、
-多维质量代理），生成 Markdown 汇总表格，减少手动分析 JSON 的工作量。
+多维质量代理、测试异味检测），生成 Markdown 汇总表格，减少手动分析 JSON 的工作量。
 
 使用方式：
     python experiments/analyze_results.py --results-dir experiments/results
@@ -124,6 +124,158 @@ def _rag_hit_by_failure_category(details: list[dict[str, Any]]) -> dict[str, Any
         if any(s.get("results", 0) > 0 for s in r.get("rag_stats") or []):
             stat["with_hit"] += 1
     return cross
+
+
+def _repair_convergence_curve(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.3 修复收敛曲线：按迭代轮次累计通过率与累计修复成本。
+
+    指标含义：
+    - rounds: 按迭代轮次 0/1/2/3（3 表示 3+ 合并）分别统计"本轮及之前累计通过的任务数"
+      与"本轮及之前累计消耗的平均耗时"，用于观察"随迭代次数增加，通过率如何变化"。
+    - cumulative_pass_rate: 各轮累计通过率（0.0-1.0）。
+    - cumulative_elapsed_seconds: 各轮累计平均耗时（成功任务的 mean elapsed）。
+    - total_tasks: 任务总数（分母）。
+
+    说明：
+    - 仅统计 details 中已观测的迭代轮次；
+    - 未产生该轮次的任务不计入分子，但计入分母（保守口径，避免高估通过率）；
+    - 无任务时返回空结构，渲染时跳过章节。
+    """
+    total = len(details)
+    if total == 0:
+        return {"total_tasks": 0, "rounds": {}}
+    max_observed = max((int(r.get("iterations", 0) or 0) for r in details), default=-1)
+    rounds: dict[str, dict[str, Any]] = {}
+    for k in range(max(0, min(max_observed, 3)) + 1):
+        label = str(k) if k < 3 else "3+"
+        reached = [r for r in details if int(r.get("iterations", 0) or 0) <= k]
+        passed_in_reached = sum(1 for r in reached if r.get("passed"))
+        elapsed_mean = (
+            round(sum(float(r.get("elapsed_seconds", 0.0) or 0.0) for r in reached) / len(reached), 2)
+            if reached
+            else None
+        )
+        rounds[label] = {
+            "reached_tasks": len(reached),
+            "cumulative_passed": passed_in_reached,
+            "cumulative_pass_rate": round(passed_in_reached / total, 4) if total else 0.0,
+            "cumulative_elapsed_seconds": elapsed_mean,
+        }
+    return {
+        "total_tasks": total,
+        "rounds": rounds,
+    }
+
+
+def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.2 测试异味检测：从 details[].generated_test 识别 LLM 生成测试的常见异味。
+
+    异味清单（保守可复算，仅依赖结果 JSON 已有的 generated_test 字段）：
+    - assertion_roulette: 测试函数内无 assert / pytest.raises / return 之外的断言语句；
+    - magic_number: 出现未命名常量数字字面量（如 == 42 而非 NOMINAL_VALUE）；
+    - assertion_weakening: 任务内 generated_test 较上一轮（repair_history 中）断言数减少；
+    - trivial_test: 测试函数体仅含 pass / 单一 assert True 类恒真断言。
+
+    返回：
+        {"available": bool, "observed_tasks": int,
+         "smell_counts": {"assertion_roulette": n, "magic_number": n,
+                           "assertion_weakening": n, "trivial_test": n},
+         "tasks_with_smells": [task_id...]}
+
+    说明：仅当 details 携带 generated_test 时 available=True；否则返回
+    available=False（渲染时跳过章节）。
+    """
+    observed = 0
+    smell_counts = {
+        "assertion_roulette": 0,
+        "magic_number": 0,
+        "assertion_weakening": 0,
+        "trivial_test": 0,
+    }
+    tasks_with_smells: list[str] = []
+    for row in details:
+        test_code = row.get("generated_test")
+        if not isinstance(test_code, str) or not test_code.strip():
+            continue
+        observed += 1
+        task_id = str(row.get("task_id", f"row_{observed}"))
+        task_has_smell = False
+
+        # 简单启发：测试函数体是否包含有效断言（assert / pytest.raises）
+        stripped = test_code.strip()
+        has_assertion = "assert " in stripped or "pytest.raises" in stripped
+        if not has_assertion:
+            # 区分"无断言但非平凡"（仅 Assignment/Function 调用，无有效断言语句）
+            # 与"平凡测试"（函数体仅含 pass / return None / 单一 assert True）
+            body_lines = [
+                ln for ln in stripped.splitlines()
+                if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
+            ]
+            is_trivial = len(body_lines) <= 2 and any(
+                ln.strip() in ("pass", "return None", "") for ln in body_lines
+            )
+            if is_trivial:
+                smell_counts["trivial_test"] += 1
+                task_has_smell = True
+            else:
+                smell_counts["assertion_roulette"] += 1
+                task_has_smell = True
+
+        # 魔数检测：数字字面量未绑定到命名常量（保守口径：仅统计 "assert X == <int>" 中
+        # 未出现在命名常量赋值语句中的数字；这里简化为：若代码中没有 "const" 类赋值
+        # 但出现 >= 3 个独立整数字面量，则判定为 magic_number）
+        if "==" in stripped:
+            import re
+
+            literals = set(re.findall(r"==\s*(-?\d+)\b", stripped))
+            if len(literals) >= 3 and not any(
+                line.strip().startswith(("CONST", "NOMINAL", "LIMIT", "THRESHOLD"))
+                for line in stripped.splitlines()
+            ):
+                smell_counts["magic_number"] += 1
+                task_has_smell = True
+
+        # 断言弱化：repair_history 中若记录了上一轮断言数且当前断言数减少，则判定
+        history = row.get("repair_history") or []
+        prev_assertions = row.get("prev_assertion_count")
+        cur_assertions = sum(1 for line in stripped.splitlines() if line.strip().startswith("assert "))
+        if prev_assertions is not None and cur_assertions < int(prev_assertions):
+            smell_counts["assertion_weakening"] += 1
+            task_has_smell = True
+        # 顺带把 repair_history 中记录的断言数变化做轻量检测（若字段存在）
+        if history and isinstance(history, list):
+            for h in history:
+                if isinstance(h, dict) and "assertion_count" in h and "prev_assertion_count" in h:
+                    if int(h["assertion_count"]) < int(h["prev_assertion_count"]):
+                        smell_counts["assertion_weakening"] += 1
+                        task_has_smell = True
+                        break
+
+        # 平凡测试：函数体仅含 pass / return None / 单一恒真断言（已计入上方分支）
+        # 此处仅处理"有断言但恒真"的情形（如 assert True / assert 1 == 1）
+        trivial_const_asserts = [
+            ln for ln in stripped.splitlines()
+            if ln.strip().startswith("assert") and ("True" in ln or "1 == 1" in ln or "0 == 0" in ln)
+        ]
+        body_lines = [
+            ln for ln in stripped.splitlines()
+            if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
+        ]
+        if has_assertion and len(body_lines) <= 2 and trivial_const_asserts:
+            smell_counts["trivial_test"] += 1
+            task_has_smell = True
+
+        if task_has_smell:
+            tasks_with_smells.append(task_id)
+
+    if observed == 0:
+        return {"available": False, "observed_tasks": 0, "smell_counts": smell_counts, "tasks_with_smells": []}
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "smell_counts": smell_counts,
+        "tasks_with_smells": tasks_with_smells,
+    }
 
 
 def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -315,6 +467,10 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
             "rag_hit_by_failure_category": _rag_hit_by_failure_category(details),
             # 1.2 修复收敛效率 + 1.1 多维质量代理（从 details 可复算，旧 JSON 容错）
             "repair_convergence_metrics": _repair_convergence_metrics(details),
+            # 1.3 修复收敛曲线（按迭代轮次累计通过率）
+            "repair_convergence_curve": _repair_convergence_curve(details),
+            # 1.2 测试异味检测（LLM 生成测试的可维护性代理）
+            "test_smell_metrics": _test_smell_detection(details),
             "quality_proxy_metrics": _quality_proxy_metrics(details),
         }
         # 迭代次数分布（0 = 一次通过，1/2/3 = 调试轮数，>=3 归入 3+）
@@ -412,6 +568,60 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             )
         lines.append("")
         lines.append("> 解读：首次通过率反映无需修复即通过的任务占比；成功任务平均/中位迭代刻画收敛速度。")
+        lines.append("")
+
+    # 修复收敛曲线（1.3）：按迭代轮次 0/1/2/3+ 统计累计通过率
+    curve_rows = [
+        (b, m["repair_convergence_curve"])
+        for b, m in per.items()
+        if m.get("repair_convergence_curve", {}).get("total_tasks", 0) > 0 and m["repair_convergence_curve"].get("rounds")
+    ]
+    if curve_rows:
+        lines.append("## 修复收敛曲线（1.3）")
+        lines.append("")
+        lines.append("按迭代轮次累计（0=首次生成即通过；1/2/3+=调试轮次）。")
+        lines.append("")
+        lines.append("| 基线 | 轮次 | 到达任务数 | 累计通过 | 累计通过率 | 累计平均耗时(s) |")
+        lines.append("|------|------|-----------|---------|-----------|----------------|")
+        for baseline, curve in curve_rows:
+            total = curve.get("total_tasks", 0)
+            for k in ("0", "1", "2", "3+"):
+                r = curve.get("rounds", {}).get(k)
+                if not r:
+                    continue
+                lines.append(
+                    f"| {baseline} | {k} | {r.get('reached_tasks', 0)} "
+                    f"| {r.get('cumulative_passed', 0)} | {r.get('cumulative_pass_rate', 0.0)} "
+                    f"| {r.get('cumulative_elapsed_seconds')} |"
+                )
+            # 分母（总任务数）在首次出现时标注
+            lines.append(f"| {baseline} | 总任务 | {total} | — | — | — |")
+        lines.append("")
+        lines.append("> 解读：累计通过率随迭代轮次单调不减；若 0 轮即接近 1.0 说明任务简单或系统一次修复能力强。")
+        lines.append("")
+
+    # 测试异味检测（1.2）：LLM 生成测试的可维护性代理
+    smell_rows = [
+        (b, m["test_smell_metrics"])
+        for b, m in per.items()
+        if m.get("test_smell_metrics", {}).get("available")
+    ]
+    if smell_rows:
+        lines.append("## 测试异味检测（1.2）")
+        lines.append("")
+        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | 含异味任务 |")
+        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|")
+        for baseline, s in smell_rows:
+            c = s.get("smell_counts", {})
+            lines.append(
+                f"| {baseline} | {s.get('observed_tasks', 0)} "
+                f"| {c.get('assertion_roulette', 0)} | {c.get('magic_number', 0)} "
+                f"| {c.get('assertion_weakening', 0)} | {c.get('trivial_test', 0)} "
+                f"| {len(s.get('tasks_with_smells', []))} |"
+            )
+        lines.append("")
+        lines.append("> 注：测试异味检测基于 details[].generated_test 字段的保守启发式；")
+        lines.append("仅当结果 JSON 携带该字段时可用，否则章节跳过。")
         lines.append("")
 
     # 多维质量代理（1.1）
