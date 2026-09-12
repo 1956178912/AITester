@@ -743,18 +743,6 @@ docker run --rm \
 | `CROSS_FILE_MAX_MODULES` | 3.5 跨文件依赖分析最大模块数 | 5 |
 | `ASSERTION_AUGMENT_ENABLE` | 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） | false |
 
-## 高级开关（默认全关，按需启用）
-
-以下开关均以环境变量形式提供，默认值保持历史实验口径不变；启用是显式行为。
-
-| 开关 | 默认 | 启用效果 | 关联章节 |
-|------|------|---------|----------|
-| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1） | 5.1 |
-| `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1） | 5.2 |
-| `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |
-| `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
-
-详见 [QUICKSTART.md](QUICKSTART.md) 与 [.env.example](.env.example)。
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
 | `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
 | `LLM_RETRY_WAIT` | LLM 重试等待时间（秒） | 30 |
@@ -775,6 +763,19 @@ docker run --rm \
 | `SWE_BENCH_ENRICHMENT` | SWE-bench 源码补充 JSONL 路径（P0，可选） | 无 |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `TEMPERATURE` | LLM 采样温度 | 0.2 |
+
+## 高级开关（默认全关，按需启用）
+
+以下开关均以环境变量形式提供，默认值保持历史实验口径不变；启用是显式行为。
+
+| 开关 | 默认 | 启用效果 | 关联章节 |
+|------|------|---------|----------|
+| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1） | 5.1 |
+| `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1） | 5.2 |
+| `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |
+| `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
+
+详见 [QUICKSTART.md](QUICKSTART.md) 与 [.env.example](.env.example)。
 
 ### 多 LLM 配置支持
 

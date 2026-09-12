@@ -2,6 +2,18 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-12 完整审查批次）
+
+### 完整项目审查（安全 / 代码质量 / 测试 / 依赖）
+- 安全：git 全历史无敏感文件泄漏——`.env` / `.env.local` / `.env.local.bak` / `.local/private.md` 从未进入任何提交，历史路径仅出现 `.env.example` / `.env.local.template` 两个占位符模板；全代码库无硬编码密钥（正则扫描仅命中 `.venv` 第三方库的示例 token）；本地真实密钥（`.env` + `.env.local` 共 6 条 sk- 前缀）均位于 gitignored 文件、未跟踪、不上传
+- 代码质量：`ruff check` / `ruff format --check` 全绿（ruff 0.16.3，139 文件）；无真实 TODO/FIXME 残留（7 处命中均为注释示例文本）；裸 `pass` 均为合理容错/占位（click group 回调、`except` 吞掉后回退默认值、清理临时文件后 `raise`）
+- 测试：全量 `pytest tests/` **1247 passed / 0 failed**（30.5s，Python 3.14.6）；仅 2 条第三方无害告警（chromadb `asyncio.iscoroutinefunction` 弃用 + scipy 精度损失 RuntimeWarning）
+- 依赖：`scripts/check_lock_sync.py` 通过（requirements.txt 19 项 ↔ requirements.lock 130 项）；`pip-audit` 复跑确认 chromadb==1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 ×2 + PYSEC-2026-3813/3814/3815），PyPI 暂无修复版本，CI security job 已显式豁免（与 ci.yml 注释一致）
+
+### 文档修复（R-01 / R-02）
+- R-01 README「配置说明」表格断裂：`高级开关` 二级标题曾插入「配置说明」表格中间，导致 `EXECUTION_TIMEOUT` 起 20 个配置项失去表头、Markdown 渲染错乱；现将 20 个配置项上移归并回「配置说明」表格，`高级开关` 独立成章
+- R-02 `.env.local.template` 引导误导：头部原写「复制此文件为 .env.local」，但该模板承载的是 `{PROVIDER}_API_KEY` 中间变量（供 `generate_batch_config.py` 读取），`config.py` 运行时只读 `LLM_N_*` 编号格式，照做会读不到任何 LLM 配置；现修正 `src/config/config_generator.py::generate_env_template()` 生成头部与已提交的 `.env.local.template`，明确「中间变量模板」定位并指向 `config.local.example`（占位符内容不变，既有测试断言不受影响）
+
 ## [Unreleased] - 待发布（2026-09-15 测试套件可选依赖降级批次：O-01a）
 
 ### 可选依赖未安装时测试套件误报 ERROR（tests/test_rag_retriever.py + tests/test_experiments_scripts.py）
