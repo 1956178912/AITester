@@ -36,13 +36,13 @@
 
 **验证**：`tests/test_api_manager.py` 全绿（`get_status` 既有断言未涉及 base_url 明文，回归通过）。
 
-### C. LLM 文件缓存（`~/.cache/aitester/llm_cache/*.json`）——记录为"已知可接受风险"
+### C. LLM 文件缓存（`src/cache/*.json`）——记录为"已知可接受风险"
 
-**路径**：`base_agent._call_llm_with_cache` 写缓存文件时落盘原始 `prompt` / `system` / `response` 全文。若被测项目源码或 LLM 响应中含密钥，会随之持久化到 `~/.cache`。
+**路径**：`base_agent._call_llm_with_cache` 写缓存文件时落盘原始 `prompt` / `system` / `response` 全文，默认目录 `src/cache/`（仓库内相对路径，`AITESTER_LLM_CACHE_DIR` 可覆盖；代码 `_LLM_CACHE_DIR_DEFAULT` 相对 `src/agents/` 解析为仓库根下 `src/cache/`）。若被测项目源码或 LLM 响应中含密钥，会随之持久化到该目录。
 
 **为何不改**：缓存读取靠 `cached_data["prompt"] == user_message` 精确匹配命中；对落盘值脱敏会使读侧（未脱敏原值）永远不命中，缓存功能直接失效。脱敏与缓存正确性互斥，须二选一。
 
-**处置**：维持原样，明确为**本地可信域内的已知风险**——`~/.cache/aitester/` 与用户仓库同信任级（均为本地工作产物），且 `llm_cache` 非实验归档物（不进 git、不上传）。新增 `.gitignore` 护栏：确认 `~/.cache/aitester` 不在任何仓库内（它在 HOME，天然不在仓库路径中），无需额外 ignore。
+**处置**：维持原样，明确为**本地可信域内的已知风险**——`src/cache/` 已被 `.gitignore` 排除（不进 git、不上传），且目录名 `src/cache` 易被误认为源码模块（实际是运行时产物），开发者勿将其当源码阅读。
 
 **后续可选**（不在本轮做，避免破坏缓存正确性）：为缓存文件加可选的"脱敏+双字段"方案（明文值存内存、脱敏值落盘），需要缓存读侧改造，单独立项。
 

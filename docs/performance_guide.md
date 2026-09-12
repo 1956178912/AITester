@@ -1,7 +1,7 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-08-16
+> 最后更新：2026-09-14
 
 ---
 
@@ -193,8 +193,9 @@ pip list | grep chromadb
 # 重新安装（如需）
 pip install chromadb
 
-# 清除缓存并重新初始化
-rm -rf .chroma_cache/
+# 清除 RAG 向量库并重新初始化（RAG 检索库持久化在 rag_data/，可用 RAG_PERSIST_PATH 覆盖；
+# chromadb 自身不落 .chroma_cache 目录，旧版命令已废弃）
+rm -rf rag_data/
 ```
 
 ### 4.2 LLM 调用超时
