@@ -469,6 +469,17 @@ def _build_task_result(
         结果字典（结构见 run_single_task 各分支的原始实现，字段完全一致）。
     """
     if final_state is not None:
+        # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类
+        # 专属失败类别（补丁被安全守卫拒绝 / RAG 检索全空），供失败分布
+        # 统计区分"修复失败"与"补丁不安全"、"RAG 失效场景"
+        from src.agents.error_classifier import refine_failure_category
+
+        error_category = refine_failure_category(
+            final_state.get("error_category", "") or "",
+            final_state.get("test_passed", False),
+            repair_history=final_state.get("repair_history"),
+            rag_stats=final_state.get("rag_stats"),
+        )
         return {
             "task_id": task.task_id,
             "repo": task.repo_name,
@@ -476,7 +487,7 @@ def _build_task_result(
             "coverage": final_state.get("coverage_report") or 0.0,
             "iterations": final_state.get("iteration", 0),
             "diagnosis": final_state.get("diagnosis", ""),
-            "error_category": final_state.get("error_category", ""),
+            "error_category": error_category,
             "elapsed_seconds": round(elapsed, 2),
             # P0-2 效率指标：单次基线运行的 token 消耗（性价比对比依据）
             "token_usage": token_usage.get_usage().as_dict(),

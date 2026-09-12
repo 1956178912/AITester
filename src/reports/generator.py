@@ -333,6 +333,13 @@ class ReportGenerator:
         if category == ErrorCategory.INDEX_ERROR:
             return "索引越界：列表/字符串/数组访问位置超出范围，需要添加边界检查"
 
+        # 1.1 状态细化：流程状态类（不走文本正则，由任务收尾信号判定）
+        if category == ErrorCategory.PATCH_VALIDATION_FAILED:
+            return "补丁被安全守卫拒绝（空/过短/丢失函数定义/路径不合法），修复未实际写入"
+
+        if category == ErrorCategory.RAG_RETRIEVAL_EMPTY:
+            return "RAG 检索未命中任何历史案例（检索库冷启动或查询与已入库案例差异过大）"
+
         if category == ErrorCategory.IMPORT_ERROR:
             module = context.module_name if context and context.module_name else "未知模块"
             return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
@@ -399,6 +406,19 @@ class ReportGenerator:
             suggestions.append("1. 检查列表/字符串/数组的访问位置是否在范围内")
             suggestions.append("2. 对空容器先判空再访问")
             suggestions.append("3. 循环边界与切片处补充分支判断，不要用 try/except 静默吞掉越界")
+            return "\n".join(suggestions)
+
+        # 1.1 状态细化：流程状态类的修复建议
+        if category == ErrorCategory.PATCH_VALIDATION_FAILED:
+            suggestions.append("1. 重新生成完整补丁：保留原代码全部函数与 import")
+            suggestions.append("2. 输出完整文件而非片段，避免触发'过短/丢失函数定义'守卫")
+            suggestions.append("3. 确认被测文件路径在项目允许目录内（非非法路径）")
+            return "\n".join(suggestions)
+
+        if category == ErrorCategory.RAG_RETRIEVAL_EMPTY:
+            suggestions.append("1. 本轮未获得 RAG 检索增强，按常规修复策略处理")
+            suggestions.append("2. 若同类任务反复出现，扩充检索库案例（成功用例/修复案例入库）")
+            suggestions.append("3. 必要时降低检索相似度阈值或增大 top_k")
             return "\n".join(suggestions)
 
         if category == ErrorCategory.IMPORT_ERROR:
