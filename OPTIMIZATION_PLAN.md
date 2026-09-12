@@ -2,6 +2,51 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计轮次（2026-09-14 批次②）
+
+> 新基线：1111 passed（批次①：1.2r / 4.1r / 4.3 / 2.2r）/ ruff 全绿 / 91% 覆盖 / 工作区干净。
+> 用户清单核对结论（2026-09-14 改进清单 14 项）：本批消化 7 项纯代码项（1.1 状态细化 / 1.4 CLI 补测 / 1.5 熔断边界补测 / 2.1 源码导出自动化 / 2.3 RAG 指标自动汇总 / 3.2 成本告警阈值可配 / 4.1 脱敏完整审计）；实验流程与研究性项（1.2/1.3 开环境变量跑实验、2.2 补跑 SWE-bench、3.1 跨文件修复、3.3 依赖缓存增强、4.2 Docker 启用、4.3 归档自动化）未动，见文末"明确不做"。
+>
+> 设计取舍：
+> - **1.1 状态细化类不走文本正则**：`classify()` 保持 10 类纯文本分类不变；`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 是流程状态类，由 `refine_failure_category()` 在任务收尾按 `repair_history` / `rag_stats` 信号判定（补丁被拒优先于 RAG 空），benchmark 与 CLI 两个出口口径一致，成功任务原样返回。
+> - **3.2 默认值不变**：`cost_alert_threshold` 默认沿用模块常量 2.0，不改变既有告警行为，调优为显式配置行为。
+> - **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配；缓存在 HOME 下与用户仓库同信任级，记录为已知可接受风险。
+
+### 本轮优化点清单
+
+| ID | 类别 | 位置 | 问题 | 实现 | 验证 |
+|----|------|------|------|------|------|
+| 1.1s | 错误分类 | src/agents/error_classifier.py | 失败分布中"修复失败"与"补丁不安全"混在一起，RAG 失效场景（检索全空）无单独标识 | ErrorCategory 补 PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY（12 类）；新增纯函数 refine_failure_category()（任务收尾按 repair_history/rag_stats 细化，仅失败任务生效）；get_fix_strategy + reports/generator.py 两处 if/elif 同步；run_benchmark._build_task_result + CLI _run_single_task 接线 | tests/test_error_classifier.py +9 用例（全量 81） |
+| 3.2t | 成本路由 | src/api/api_manager.py | 成本告警阈值 2.0 硬编码，按 Provider 成本分布调优需改代码 | APIManagerConfig.cost_alert_threshold（默认 2.0），_try_call_node 告警判断与文案改用配置值 | tests/test_cost_aware_routing.py +4 用例（全量 14） |
+| 1.5b | 测试 | tests/test_api_manager.py | 熔断冷却期只有状态机与路由过滤用例，边界行为未锁定 | 新增 TestCircuitCooldownBoundaries 3 用例（到期自动回归 / 多节点同时冷却降级 / 冷却期内快速失败零调用） | pytest TestCircuitCooldownBoundaries |
+| 1.4c | 测试 | tests/test_cli_app.py | CLI 参数异常路径与并发超时/glob 行为未测（覆盖率 64% 为最低） | 新增 3 组 8 用例（--timeout 贯通 / 无效 dataset 降级 / 单任务超时不阻塞整批 / check-dataset 边界 / glob 并发语义） | pytest TestRunParallelTimeoutAndInterrupt + TestCheckDatasetBoundaries + TestGlobInParallelMode |
+| 2.1e | 实验 | scripts/export_swe_bench_source.py（新） | SWE-bench 源码补充需手动导出（官方 JSONL 无 instance_code 字段），check-dataset 无缺失列表输出 | 新脚本：patch `+++ b/<path>` 提取首个非测试目标文件 + `git show <base_commit>:<path>` 只读导出 + enrichment JSONL 输出 + `--instance-ids`（逗号/@文件）+ `--dry-run`；SWEBenchDataset.tasks_missing_source() + check-dataset 输出缺失 instance_id 列表 | tests/test_swe_bench_source_export.py（新 11 用例）+ tests/test_dataset_validation.py +2 |
+| 2.3r | 实验 | experiments/analyze_results.py | RAG 指标只有基线级汇总，无法分析"哪类检索更有效 / RAG 对哪类错误帮助最大" | RAG 章节新增 2 子聚合：按检索类型分解（test_cases vs repairs）+ RAG 命中 × 失败类别交叉表（1.1s 细化类别单独成组，rag_retrieval_empty 命中占比恒 0 可当自检指标） | tests/test_experiments_scripts.py +4 用例（全量 23） |
+| 4.1a | 安全 | src/api/api_manager.py + docs/redaction_audit.md（新） | 脱敏仅接在 CLI/benchmark 入口 handler 上；APIManager 嵌入式使用（examples/第三方集成）时故障转移日志 str(e) 与 base_url 可能裸奔 | 模块级 _redact() 就地脱敏 7 处日志点（不依赖入口接线）；get_status() 出口 base_url 脱敏（print_status_table 直接打 stdout 绕过 logging handler）；完整审计 docs/redaction_audit.md（三层防线总览 + 逐出口走查 + LLM 文件缓存记录为已知风险） | tests/test_api_manager.py +2 用例（全量 80） |
+
+### 实施批次
+
+| 序号 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
+|------|------|------|---------|---------|-------------|
+| F1 | 1.1s 状态细化 2 类 | error_classifier.py + reports/generator.py + run_benchmark.py + cli/app.py + test_error_classifier.py | 枚举 + refine 纯函数 + 策略文案 + 2 处接线 + 9 用例 | pytest test_error_classifier.py | `feat(agents): 错误分类补 2 状态细化类（1.1：PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY）` |
+| F2 | 3.2t 阈值可配 | api_manager.py + test_cost_aware_routing.py | 配置字段 + 告警判断 + 4 用例 | pytest test_cost_aware_routing.py | `feat(api): 成本告警阈值可配（3.2：cost_alert_threshold，默认 2.0）` |
+| F3 | 1.5b + 1.4c 边界补测 | tests/test_api_manager.py + tests/test_cli_app.py | 冷却期边界 3 用例 + CLI 8 用例 | pytest 两个测试文件 | `test: 熔断冷却期 3 边界 + CLI 参数异常/并发/glob 补测（1.5 + 1.4）` |
+| F4 | 2.1e 源码导出 | scripts/export_swe_bench_source.py（新）+ dataset_loader.py + cli/app.py + 2 个测试文件 | 新脚本 + tasks_missing_source + check-dataset 列表 + 13 用例 | pytest test_swe_bench_source_export.py + test_dataset_validation.py | `feat(datasets): SWE-bench 源码导出自动化（2.1：git show 导出 + 缺失列表）` |
+| F5 | 2.3r + 4.1a | analyze_results.py + api_manager.py + docs/redaction_audit.md（新）+ 3 个测试文件 | RAG 双子聚合 + _redact 7 处 + get_status 脱敏 + 审计报告 + 6 用例 | pytest 3 个测试文件 | `feat(experiments): RAG 指标自动汇总（2.3）+ 脱敏完整审计修复（4.1）` |
+
+### 全量验证
+
+- 全量 **1158 passed / 0 failed**（批次① 1111 + 本批净增 47）；ruff check 全绿。
+- 端到端验证：`experiments/analyze_results.py --input <含 rag_stats 的 JSON>` 输出 RAG 按类型分解 + 交叉表两小节；`scripts/export_swe_bench_source.py --dry-run` 打印导出计划。
+
+### 明确不做（本轮排除）
+
+- **3.1 跨文件修复**：架构级（协调器-提议者 + 跨文件依赖分析 + 多文件补丁拼接），单独立项配设计文档；
+- **3.3 依赖缓存增强**（命中率统计/清理命令/多版本）：venv 生命周期改动，按需开 switch；
+- **4.2 Docker 实际启用**：维持 D-06 预留接口（use_docker=False），需确认实验环境有 Docker daemon；
+- **4.3 归档自动化**（Zenodo 上传/版本对比/摘要卡片）：归档脚本未立项，启用前须统一过脱敏（见 4.1a 审计结论 D 项）；
+- **2.2 补跑 SWE-bench + 难度分层**：需 API 配额缓解，实验流程非代码改动。
+
 ## 系统功能增强轮次（2026-09-14，批次 1.2 残余 / 4.1 残余 / 4.3 / 2.2）
 
 > 新基线：1085 passed（09-13 轮次）/ ruff 全绿 / 91% 覆盖 / 工作区干净。

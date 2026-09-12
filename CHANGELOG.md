@@ -2,6 +2,31 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计批次）
+
+### 错误分类（1.1 状态细化）
+- **ErrorCategory 补 2 个状态细化类**：`PATCH_VALIDATION_FAILED`（补丁被 PatchApplier 安全守卫拒绝，repair_history 中 patch_applied=False）与 `RAG_RETRIEVAL_EMPTY`（RAG 启用但任务内全部检索 results==0，标识 RAG 失效场景）。10 文本类 + 2 状态类 = 12 类。新增纯函数 `refine_failure_category()`（任务收尾按 repair_history/rag_stats 信号细化，补丁被拒优先于 RAG 空；成功任务原样返回）；`get_fix_strategy()` 与 `reports/generator.py` 两处 if/elif 链同步补 2 分支；`run_benchmark._build_task_result` 与 CLI `_run_single_task` 在失败任务收尾调用 refine（benchmark 与 CLI 口径一致）
+- 测试：`tests/test_error_classifier.py` +9 用例（枚举值 ×3 + refine 判定矩阵 ×6），全量 81
+
+### 成本路由（3.2 阈值可配）
+- `APIManagerConfig` 新增 `cost_alert_threshold`（默认沿用模块常量 2.0），`_try_call_node` 告警判断改用配置值——阈值过低导致过多误报时上调（如 3.0/5.0 只告警真正昂贵的 provider），成本敏感度高时下调，无需改代码。告警文案打印配置阈值（避免误导调参）
+- 测试：`tests/test_cost_aware_routing.py` +4 用例（默认值回归 ×1 + 上调抑制中等昂贵 ×1 + 下调告警更便宜节点 ×1 + 文案含配置阈值 ×1）
+
+### 测试补强（1.4 / 1.5）
+- **熔断冷却期边界（1.5）**：`tests/test_api_manager.py` 新增 `TestCircuitCooldownBoundaries`（3 用例）——冷却到期后节点自动回归路由池（无需 mark_success）、多节点同时冷却时路由整体降级（select_node 返回 None + call 快速失败 + get_status 暴露剩余冷却秒数）、冷却期内新请求不打回冷却节点（流量落健康节点，冷却节点零调用）
+- **CLI 参数异常与并发行为（1.4）**：`tests/test_cli_app.py` 新增 3 组 8 用例——`TestRunParallelTimeoutAndInterrupt`（--timeout 贯通到任务、缺省回退 config.EXECUTION_TIMEOUT、单任务超时不阻塞整批且门控 exit 1）、`TestCheckDatasetBoundaries`（无效 dataset 值降级 InMemory 而非崩溃、--limit 负数边界）、`TestGlobInParallelMode`（字面通配符被 click exists 校验拦截的边界语义 + shell 展开后多文件并发按列表全量派发）
+
+### 实验（2.1 / 2.3）
+- **SWE-bench 源码导出自动化（2.1）**：新增 `scripts/export_swe_bench_source.py`——读取已下载 JSONL，按 patch 的 `+++ b/<path>` 提取首个非测试目标文件，`git show <base_commit>:<path>` 只读导出（不污染工作树），输出 `SWE_BENCH_ENRICHMENT` 格式 JSONL；支持 `--instance-ids`（逗号或 @文件，配合 check-dataset 输出的缺失列表批量补）、`--dry-run`、`--limit`。`SWEBenchDataset` 新增 `tasks_missing_source()`（识别 instance_code 兜底为 issue 文本的任务）；`check-dataset` 质量报告输出缺失源码的 instance_id 列表与补全指引
+- **RAG 指标自动汇总（2.3）**：`experiments/analyze_results.py` 的 RAG 章节新增两个子聚合——按检索类型分解（test_cases vs repairs 各自的检索次数/命中率/相似度，分析哪类检索更有效）与 RAG 命中 × 失败类别交叉表（失败任务按 error_category 分组统计 RAG 命中占比，分析 RAG 对哪类错误修复帮助最大；1.1 细化后 rag_retrieval_empty 单独成组，命中占比必为 0）
+- 测试：`tests/test_swe_bench_source_export.py`（新文件 11 用例）、`tests/test_dataset_validation.py` +2、`tests/test_experiments_scripts.py` +4
+
+### 安全（4.1 脱敏审计）
+- **脱敏覆盖完整审计**：新增 `docs/redaction_audit.md`（三层防线总览 + 逐出口走查结论）。修复两个真实盲点——(A) `APIManager` 故障转移/健康检查 7 处日志点（str(e) 与 base_url）新增模块级 `_redact()` 就地脱敏，嵌入式使用（examples/第三方集成/单测）不依赖入口接线也安全；(B) `get_status()` 出口对 base_url 脱敏（内嵌 token 的网关 URL 经 print_status_table 直接打印 stdout，绕过 logging handler）。LLM 文件缓存（prompt/response 全文落盘）经评估为本地可信域已知风险，脱敏会破坏缓存精确匹配命中，记录为已知可接受风险与后续可选方案
+- 测试：`tests/test_api_manager.py` +2 用例（get_status base_url 脱敏回归 + _redact 助手行为）
+
+全量 **1158 passed / 0 failed**（scipy 精度 2 warning 为退化数据告警，非代码问题）
+
 ## [Unreleased] - 待发布（2026-09-14 错误分类细化 + 熔断冷却 + 结果分析批次）
 
 ### 错误分类（1.2 残余）
