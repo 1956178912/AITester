@@ -2,6 +2,36 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 文档收尾轮次（2026-09-14 批次②收尾，文档数据对齐）
+
+> 新基线：1158 passed / ruff 全绿 / 91% 覆盖 / lock 同步 / 工作区 clean / 本地与 origin/main 同步。
+> 本轮为批次②（7 项纯代码项）的文档收尾：用户确认「全部执行 + 推送 main」。
+>
+> ### 本轮优化点清单
+>
+> | ID | 类别 | 位置 | 问题 | 实现 | 验证 |
+> |----|------|------|------|------|------|
+> | O-01 | 文档 | README.md:621-666 测试覆盖模块主表 | 9 行用例数与实测 `def test_` 计数漂移（09-14 批次①/② 新增 41 用例后未同步） | 同步为实测值：test_api_manager 80→77、test_cli_app 30→27、test_cost_aware_routing 14→13、test_dataset_validation 20→22、test_experiments_scripts 23→19、test_swe_bench_source_export 11→13、test_core_modules 29→19、test_executor_sandbox 14→7、test_dataset_loader_extended 73→59（口径沿用主表既有 def test_ 计数法；其余 37 行核对无漂移） | 逐文件 `grep -c 'def test_'` 对照 |
+> | O-02 | 文档 | README.md:607 | 「当前 1111 个用例」陈旧（批次①数据），实测 1158 | 1111→1158（与状态表 1158 collected/passed 一致） | pytest collect-only |
+> | O-03 | 文档 | docs/api_reference.md:174-189 | 错误分类「十类」枚举表缺批次②新增的 2 状态细化类（1.1：PATCH_VALIDATION_FAILED / RAG_RETRIEVAL_EMPTY）；优先级说明未提 refine_failure_category 口径 | 标题 十类→十二类；枚举表补 2 行（判定来源 + 处理策略）；优先级说明补状态类判定口径（不走正则、成功任务原样返回） | 对照 src/agents/error_classifier.py 枚举（12 成员） |
+> | O-04 | 文档 | docs/failure_analysis.md:7 | 状态说明写「扩展为 10 类」，批次②后已 12 类 | 10 类→12 类（注明批次②补 2 状态细化类） | 读 CHANGELOG 批次②条目 |
+> | O-05 | 文档 | QUICKSTART.md:95-96 | 3.2 成本告警阈值可配（批次② APIManagerConfig.cost_alert_threshold）未进「高级开关」节 | 补 3 行（默认 2.0 + 调优方向 + APIManagerConfig 示例） | 读 api_manager.py 3.2 注释 |
+> | O-06 | 文档 | CHANGELOG.md | 批次②收尾的数据对齐改动无变更记录 | 顶部 Unreleased 批次②条目补「文档对齐（批次②收尾）」小节 | 人工核对 |
+>
+> > 检索结论（无优化点的维度）：源码无 eval/exec/os.system 危险调用（复核）；被跟踪文件无真实密钥残留（git ls-files 仅 .env.example / .env.local.template 占位符模板，.env.local 已 gitignore）；CI 矩阵/lock 校验/ruff 0.16.3/pip-audit 豁免（5 条 PYSEC）无漂移；src 无 TODO/FIXME 残留；QUICKSTART `src/cache` 缓存目录描述与历史一致（缓存目录由 base_agent 按需创建，非固定目录，保持）。
+>
+> ### 实施批次
+>
+> | 序号 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
+> |------|------|------|---------|---------|-------------|
+> | W1 | O-01~O-05 文档数据对齐 | README.md + docs/api_reference.md + docs/failure_analysis.md + QUICKSTART.md | 主表 9 行 + 用例数 1 + 枚举表 2 行 + 优先级说明 + 状态说明 1 行 + QUICKSTART 3 行 | ruff check + 受影响模块测试子集（test_error_classifier 81 / test_cost_aware_routing 13） | `docs: 全项目文档同步 2026-09-14 批次②收尾（主表 9 行用例数漂移 + 错误分类 10→12 类 + QUICKSTART 成本阈值）` |
+> | W2 | O-06 CHANGELOG + 计划/报告入库 | CHANGELOG.md + OPTIMIZATION_PLAN.md + OPTIMIZATION_REPORT.md | 批次②收尾文档对齐小节 + 本轮记录 | 人工核对 | `docs(optimize): 2026-09-14 批次②收尾轮次计划与变更记录` |
+>
+> ### 需用户确认的点
+>
+> 1. **O-01 口径**：主表沿用既有 `def test_` 计数法（非 pytest 收集数——参数化用例在两种口径下数值不同，历史轮次 M-01 即此口径），9 行改为实测 def test_ 值；
+> 2. **阶段 6 推送**：用户已确认「全部执行 + 推送 main」（与历史轮次一致直推，非 feature 分支 + PR）；无新增功能分支。
+
 ## 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计轮次（2026-09-14 批次②）
 
 > 新基线：1111 passed（批次①：1.2r / 4.1r / 4.3 / 2.2r）/ ruff 全绿 / 91% 覆盖 / 工作区干净。
