@@ -1154,3 +1154,24 @@ class TestCircuitCooldownBoundaries:
         assert cold_client.chat.completions.create.call_count == 0, "冷却期内节点不应承接任何请求"
 
 
+class TestRedactionWiring:
+    """4.1 脱敏审计回归：APIManager 日志点就地脱敏 + get_status 出口脱敏。"""
+
+    def test_get_status_base_url_redacted(self):
+        """get_status 返回的 base_url 应脱敏（直接 print 出口不经 logging handler）。"""
+        reset_manager()
+        mgr = APIManager(config=APIManagerConfig(), enable_health_checker=False)
+        mgr.health_nodes.clear()
+        # base_url 内嵌一段 >=32 位十六进制（形似内嵌 token）
+        mgr.add_node(LLMConfig("k", "https://gw.example.com/v1/abcd1234ef567890abcd1234ef567890", "m"))
+        status = mgr.get_status()
+        leaked = "abcd1234ef567890abcd1234ef567890"
+        assert leaked not in status["nodes"]["m"]["base_url"], "base_url 凭证未脱敏"
+
+    def test_redact_helper_masks_key(self):
+        """模块级 _redact 助手对 API Key 脱敏（7 处日志点共用的就地脱敏入口）。"""
+        from src.api.api_manager import _redact
+
+        assert "sk-" + "C" * 32 not in _redact("认证失败 sk-" + "C" * 32)
+        assert "<REDACTED_API_KEY>" in _redact("认证失败 sk-" + "C" * 32)
+
