@@ -286,18 +286,20 @@ def apply_multi_file_patch(
     patches: dict[str, str],
     entry_module: str,
 ) -> tuple[dict[str, str], bool]:
-    """对多个文件同时应用补丁（被调用方先改，调用方后改）。
+    """对多个文件同时应用补丁（保守实现：按模块名字典序应用）。
 
     策略：
-        1. 按依赖图拓扑序应用（被调用方 target_module 先改，
-           调用方 source_module 后改）；
+        1. 应用顺序为模块名字典序（确定性、不依赖 LLM 输出顺序）。真正的
+           依赖图拓扑序（被调用方 target_module 先改、调用方 source_module
+           后改）需传入依赖图后实现，当前 apply_multi_file_patch 未接收依赖
+           图，故以字典序为保守口径；
         2. 每个文件调用 patch_applier.apply_patch_to_code（单文件逻辑不变）；
         3. 任一文件应用失败则整体回滚（与单文件 safe_apply_patch 同口径）。
 
     Args:
         original_files: 模块名 → 原始代码的映射。
         patches: 模块名 → 补丁文本的映射（仅包含需要修改的模块）。
-        entry_module: 入口模块名（用于拓扑序排序的根节点）。
+        entry_module: 入口模块名（保留参数，供二期拓扑序排序使用）。
 
     Returns:
         (新文件映射, 是否全部成功)；失败时返回 (original_files, False)。
@@ -305,17 +307,9 @@ def apply_multi_file_patch(
     if not patches:
         return dict(original_files), True
 
-    # 拓扑序：被调用方（target_module）先改，调用方（source_module）后改。
-    # 保守实现：对每个 patch，统计它作为 source 出现的次数（被调用方次数越多越先改）。
-    # 无依赖信息时按模块名字典序应用（确定性，不依赖 LLM 输出顺序）。
-    def topo_key(module: str) -> tuple[int, str]:
-        # source_module 出现在 patches 中作为调用方时，其被调用方应先行
-        # 这里简化：被调用方（在 deps 中 target_module）排前
-        return (0, module)  # 占位：无依赖图时字典序
-
-    # 简化拓扑序：被调用方（target）字典序在前，调用方（source）字典序在后
-    # 由于没有传入依赖图，保守按模块名字典序应用（确定性）
-    ordered_modules = sorted(patches.keys(), key=lambda m: (0, m))
+    # 保守实现：未接入依赖图，按模块名字典序应用（确定性）。
+    # 真正"被调用方先改、调用方后改"的拓扑序留待二期（见 docstring）。
+    ordered_modules = sorted(patches.keys())
 
     new_files: dict[str, str] = dict(original_files)
     for module_name in ordered_modules:

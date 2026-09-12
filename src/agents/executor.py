@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from src.tools.dependency import extract_import_module_names
+from src.tools.dependency import extract_import_module_names, is_standard_library
 
 logger = logging.getLogger(__name__)
 
@@ -34,91 +34,13 @@ _RE_FAILED_CASE = re.compile(r"FAILED\s+(.+?\.py::\S+)")
 # ───────────────────────────────────────────────────────────────────────────
 
 
-# ─── 标准库模块集合（预定义，避免重复创建）────────────────────────────────────
-_STANDARD_LIBRARIES = frozenset(
-    {
-        "os",
-        "sys",
-        "re",
-        "math",
-        "json",
-        "datetime",
-        "collections",
-        "itertools",
-        "functools",
-        "pathlib",
-        "typing",
-        "abc",
-        "copy",
-        "unittest",
-        "pytest",
-        "tempfile",
-        "subprocess",
-        "logging",
-        "argparse",
-        "dataclasses",
-        "enum",
-        "io",
-        "string",
-        "textwrap",
-        "struct",
-        "codecs",
-        "unicodedata",
-        "difflib",
-        "pprint",
-        "reprlib",
-        "numbers",
-        "cmath",
-        "decimal",
-        "fractions",
-        "random",
-        "statistics",
-        "array",
-        "bisect",
-        "heapq",
-        "queue",
-        "types",
-        "contextlib",
-        "operator",
-        "pickle",
-        "shelve",
-        "dbm",
-        "sqlite3",
-        "zipfile",
-        "tarfile",
-        "gzip",
-        "bz2",
-        "lzma",
-        "zipimport",
-        "concurrent",
-        "multiprocessing",
-        "threading",
-        "signal",
-        "mmap",
-        "ctypes",
-        "select",
-        "socket",
-        "ssl",
-        "urllib",
-        "http",
-        "email",
-        "html",
-        "xml",
-        "ipaddress",
-        "webbrowser",
-        "cgi",
-        "cgitb",
-        "wsgiref",
-        "venv",
-        "shutil",
-        "diskcache",
-        "glob",
-        "fnmatch",
-        "stat",
-        "filecmp",
-        "secrets",
-    }
-)
+# ─── 标准库判定 ─────────────────────────────────────────────────────────────
+# 导入路径修复需区分"标准库（无需修复）"与"第三方/本地模块（可能需修复）"。
+# 此前此处维护一份 80+ 项硬编码 frozenset，与 dependency.is_standard_library
+# （基于 sys.stdlib_module_names 权威清单）双源漂移：硬编码版混入第三方
+# diskcache、pytest，且缺 asyncio/importlib 等 stdlib。2026-09-15 收敛轮次
+# 删除硬编码清单，统一复用 dependency.is_standard_library；pytest 作为测试
+# 运行器始终可用，在 _extract_imports 内显式跳过（与历史行为一致）。
 
 
 class ExecutorAgent:
@@ -611,11 +533,15 @@ class ExecutorAgent:
         底层复用 dependency.extract_import_module_names 的单一实现：
         逗号分隔多模块导入（import numpy, scipy）完整捕获——此前本地复制的
         正则 ^import\\s+([\\w.]+) 只取首个模块，缺失的后续模块逃过依赖检测。
+
+        标准库判定复用 dependency.is_standard_library（sys.stdlib_module_names
+        权威清单），并显式跳过 pytest（测试运行器始终可用，无需导入路径修复）。
+        此前硬编码 frozenset 已删除（含误列第三方 diskcache 的清单漂移）。
         """
         imports = []
         for module_name in extract_import_module_names(test_code):
             top_level = module_name.split(".")[0]
-            if top_level not in _STANDARD_LIBRARIES:
+            if not is_standard_library(top_level) and top_level != "pytest":
                 imports.append(module_name)
         return imports
 

@@ -304,14 +304,9 @@ def _run_single_task(
     # 构建结果字典
     # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类专属
     # 失败类别（补丁被安全守卫拒绝 / RAG 检索全空），与 benchmark 口径一致
-    from src.agents.error_classifier import refine_failure_category
+    from src.agents.error_classifier import refine_final_error_category
 
-    error_category = refine_failure_category(
-        final_state.get("error_category") or "",
-        final_state.get("test_passed", False),
-        repair_history=final_state.get("repair_history"),
-        rag_stats=final_state.get("rag_stats"),
-    )
+    error_category = refine_final_error_category(final_state)
     result = {
         "success": True,
         "file": target_file,

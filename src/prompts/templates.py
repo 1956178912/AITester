@@ -1,11 +1,10 @@
 """
 Prompt 模板模块：集中管理所有智能体的 System Prompt。
 
-包含四个智能体的系统提示词：
+包含三个智能体的系统提示词：
     - PLANNER_SYSTEM_PROMPT: 逻辑驱动测试规划，要求 LLM 先进行输入域/输出域/前置-后置条件/边界情况
       的显式分析，再生成结构化测试计划 JSON。
     - GENERATOR_SYSTEM_PROMPT: 测试代码生成，根据测试计划和目标代码生成可运行的 pytest 代码。
-    - EXECUTOR_SYSTEM_PROMPT: 执行器（不使用 LLM，仅占位）。
     - DEBUGGER_SYSTEM_PROMPT: 分层错误修复，根据错误类型（syntax/runtime/assertion/timeout/unknown）
       调用差异化修复策略，输出完整修复后代码文件。
 """
@@ -55,9 +54,6 @@ GENERATOR_SYSTEM_PROMPT = """\
 - 每个测试函数必须有 docstring
 - 不要输出任何解释
 """
-
-# ─── Executor ──────────────────────────────────────────────────────────────────
-EXECUTOR_SYSTEM_PROMPT = "执行器智能体不使用 LLM（仅为占位符）。"
 
 # ─── Debugger（分层错误修复）───────────────────────────────────────────────────
 DEBUGGER_SYSTEM_PROMPT = """\

@@ -152,124 +152,19 @@ def _get_api_for_task(task_index: int) -> dict:
 
 
 def _set_thread_api(task_index: int) -> None:
-    """为当前线程设置 API 配置。"""
+    """为当前线程设置 API 配置。
+
+    需同时设置 model_name：_get_llm_config 在 _thread_local.api_key 非空时
+    经 getattr(_thread_local, "model_name", LLM_CONFIGS[0].model_name) 读取，
+    此前只设 api_key/base_url、丢弃 model，多模型轮询时 model 恒回退首配置，
+    轮询失效。
+    """
     from src.agents.llm_client import _thread_local
 
     api = _get_api_for_task(task_index)
     _thread_local.api_key = api["key"]
     _thread_local.base_url = api["url"]
-
-
-def _is_zai_url(base_url: str) -> bool:
-    """判断是否为 zai SDK 兼容的 API（如 BigModel 智谱）。"""
-    return any(d in base_url for d in ["bigmodel.cn", "zhipuai"])
-
-
-def _call_llm_with_fallback(prompt: str, system_prompt: str, max_retries: int = 3) -> str:
-    """
-    调用 LLM，失败时自动切换到备用 API。
-    支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
-
-    Args:
-        prompt: 用户消息
-        system_prompt: System 提示词
-        max_retries: 每个 API 的最大重试次数
-
-    Returns:
-        LLM 响应文本
-    """
-    from src.agents.base_agent import _get_all_api_configs
-
-    for api_key, base_url, model in _get_all_api_configs():
-        is_zai = _is_zai_url(base_url)
-
-        try:
-            if is_zai:
-                # BigModel 等非 OpenAI 兼容接口：使用 zai SDK
-                from zai import ZhipuAiClient
-                from zai.core._errors import APIReachLimitError, APIStatusError
-
-                client = ZhipuAiClient(api_key=api_key, base_url=base_url)
-                for attempt in range(max_retries):
-                    try:
-                        response = client.chat.completions.create(
-                            model=model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": prompt},
-                            ],
-                            max_tokens=4096,
-                            thinking={"type": "disabled"},
-                        )
-                        msg = response.choices[0].message
-                        text = (msg.content or msg.reasoning_content or "").strip()
-                        if text:
-                            logger.debug("zai API %s 调用成功", base_url.split("/")[2])
-                            return text
-                        raise ValueError("空响应")
-                    except (APIReachLimitError, APIStatusError) as e:
-                        if attempt < max_retries - 1:
-                            wait_time = 2**attempt * 5
-                            logger.warning("zai API 限流 (attempt %d/%d): %s", attempt + 1, max_retries, e)
-                            time.sleep(wait_time)
-                            continue
-                        raise
-                    except Exception as e:
-                        if attempt < max_retries - 1:
-                            wait_time = 2**attempt
-                            logger.warning(
-                                "zai API %s 调用失败 (attempt %d/%d): %s", base_url, attempt + 1, max_retries, e
-                            )
-                            time.sleep(wait_time)
-                            continue
-                        raise
-            else:
-                # OpenAI 兼容接口：使用 openai SDK
-                import openai
-
-                client = openai.OpenAI(api_key=api_key, base_url=base_url)
-                for attempt in range(max_retries):
-                    try:
-                        response = client.chat.completions.create(
-                            model=model,
-                            messages=[
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": prompt},
-                            ],
-                            max_tokens=4096,
-                        )
-                        text = response.choices[0].message.content.strip()
-                        if text:
-                            logger.debug("API %s 调用成功", base_url.split("/")[2])
-                            return text
-                        raise ValueError("空响应")
-                    except Exception as e:
-                        if attempt < max_retries - 1:
-                            wait_time = 2**attempt
-                            logger.warning(
-                                "API %s 调用失败 (attempt %d/%d): %s, 等待 %ds",
-                                base_url,
-                                attempt + 1,
-                                max_retries,
-                                e,
-                                wait_time,
-                            )
-                            time.sleep(wait_time)
-                            continue
-                        logger.warning("API %s 所有重试失败，切换备用 API: %s", base_url, e)
-                        break
-                else:
-                    continue
-                break
-        except Exception as e:
-            # 外层兜底异常（zai 分支重试耗尽 raise、或 zai/openai 客户端构造失败）
-            # 此前静默 continue，某 API 持续故障时全链路无日志线索，无法排查
-            logger.warning("API %s 调用失败（含所有重试）: %s", base_url, e)
-            continue
-    else:
-        raise RuntimeError(f"所有 API 调用失败: {max_retries} 次重试后仍失败")
-
-    raise RuntimeError("LLM 调用失败，已尝试所有 API")
+    _thread_local.model_name = api["model"]
 
 
 # ─── 基线方法实现 ─────────────────────────────────────────────────────────────
@@ -472,14 +367,9 @@ def _build_task_result(
         # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类
         # 专属失败类别（补丁被安全守卫拒绝 / RAG 检索全空），供失败分布
         # 统计区分"修复失败"与"补丁不安全"、"RAG 失效场景"
-        from src.agents.error_classifier import refine_failure_category
+        from src.agents.error_classifier import refine_final_error_category
 
-        error_category = refine_failure_category(
-            final_state.get("error_category", "") or "",
-            final_state.get("test_passed", False),
-            repair_history=final_state.get("repair_history"),
-            rag_stats=final_state.get("rag_stats"),
-        )
+        error_category = refine_final_error_category(final_state)
         return {
             "task_id": task.task_id,
             "repo": task.repo_name,
