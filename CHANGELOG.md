@@ -2,6 +2,18 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-15 CLI 输出层补测批次：O-01）
+
+### O-01 CLI 输出层回归补测（tests/test_cli_output.py，新）
+- 背景：`src/cli/output.py`（100 行，CLI 输出层）覆盖率 58% 为 src/ 内最低之一（`app.py` 70%），`colorize` 的 TTY 双分支、`success_msg`/`error_msg`/`warning_msg`/`info_msg` 的图标前缀与 stdout/stderr 路由、`print_rich_table` 的空列表 / 缺键兜底 / `coverage=0.0` 边界均无回归用例
+- 新增 `tests/test_cli_output.py`（10 用例，3 组）：`TestColorize`（非 TTY 直通 / TTY 包裹 ANSI + RESET）、`TestMessageHelpers`（✓/✗/⚠/ℹ 前缀 + error/warning 走 stderr、success/info 走 stdout）、`TestPrintRichTable`（空列表不产生 N/A、缺键兜底 `func=all` 与 `coverage=N/A`、**0.0 合法覆盖率不被 falsy 误判 N/A**、状态图标与 basename 渲染）
+- 修复锁定一处语义：`print_rich_table` 的 `is not None` 判断（0.0 覆盖率显示 `0.0%` 而非 `N/A`），此前无测试保护，若被误改为 truthy 判断会静默劣化
+- 覆盖率：`src/cli/output.py` 58% → **92%**（4 miss 为 rich 表格渲染细节）
+- 全量：**1247 passed / 0 failed**（自 1237 净增 10）；`ruff check` / `ruff format --check` 全绿
+
+### 文档对齐（O-02）
+- README 测试状态表：总用例 1237→1247、测试文件 48→49、主表 5 处用例数漂移修正（core_modules 19→29 / dataset_loader_extended 59→73 / executor_sandbox 7→14 / experiments_scripts 30→36 / generator 27→43）+ 补 test_cli_output 行 + 核心模块覆盖率数据刷新（workflow 90%→83% 等 8 项）
+
 ## [Unreleased] - 待发布（2026-09-14 熔断器半开探测批次：4.2）
 
 ### 4.2 熔断器半开探测（src/api/api_manager.py）

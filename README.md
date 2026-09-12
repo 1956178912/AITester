@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1237 collected |
-| **单元测试** | ✅ 1237 passed, 0 skipped |
-| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
+| **总测试数** | ✅ 1247 collected |
+| **单元测试** | ✅ 1247 passed, 0 skipped |
+| **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / workflow 83% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
-| **最新优化** | ✅ 2026-09-14 熔断器半开探测批次：4.2 半开探测（冷却到期先进入 half-open 窗口，仅承载一次探测请求；成功闭合 / 失败重开 `min(cooldown/2, cap=30s)` 半程冷却；`enable_half_open_probe` 默认开，`get_status` 输出 `circuit_state` 三态）；全量 1237 passed；详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (95%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (64%), logging_utils.py (88%) |
+| **最新优化** | ✅ 2026-09-14 熔断器半开探测批次 + 2026-09-15 CLI 输出层补测批次：O-01 补 `tests/test_cli_output.py`（colorize TTY 双分支 / 消息 stderr 路由 / rich 表格缺键兜底 + coverage=0.0 不被误判 N/A），CLI 输出层覆盖率 58%→92%；全量 1247 passed；详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (83%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-14 熔断器半开探测批次：4.2 半开探测（熔断三态补齐，`enable_half_open_probe` 默认开、惩罚 `min(cooldown/2, cap=30s)`，`circuit_state` 三态入 `get_status`），TestHalfOpenProbe 12 用例；全量 1237 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-15 CLI 输出层补测批次：O-01 新增 `tests/test_cli_output.py`（10 用例，锁定 colorize / 消息路由 / print_rich_table 边界），`src/cli/output.py` 覆盖率 58%→92%；全量 1247 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -70,7 +70,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（当前 1237 个用例，全量通过）
+# 运行所有单元测试（当前 1247 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -663,7 +663,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1237 个用例，全量通过）
+# 运行所有测试（当前 1247 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -673,7 +673,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（48 个测试文件，1237 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（49 个测试文件，1247 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -682,6 +682,7 @@ docker run --rm \
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_cli_app.py` | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
+| `test_cli_output.py` | 10 | CLI 输出层回归（colorize TTY 双分支、success/error/warning/info 图标与 stdout/stderr 路由、print_rich_table 空列表/缺键兜底/coverage=0.0 不被误判 N/A，O-01 批次） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
@@ -690,20 +691,20 @@ docker run --rm \
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
 | `test_config_manager.py` | 32 | 配置管理器（LLM 配置增删） |
 | `test_config.py` | 14 | config.py 默认值与容错解析 |
-| `test_core_modules.py` | 19 | 核心模块冒烟 |
+| `test_core_modules.py` | 29 | 核心模块冒烟（BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader 多类） |
 | `test_cost_aware_routing.py` | 13 | 成本感知路由与昂贵 provider 成本告警（3.4 + 3.2 阈值可配 4 用例） |
 | `test_dataset_loader.py` | 83 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 59 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_loader_extended.py` | 73 | 数据集加载扩展路径（raw 加载/字段校验） |
 | `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
 | `test_error_classifier.py` | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
-| `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
+| `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 30 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线（6 用例） |
-| `test_generator.py` | 27 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（AST 提取现有 assert，默认关，6 用例） |
+| `test_experiments_scripts.py` | 36 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线（6 用例） |
+| `test_generator.py` | 43 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
 | `test_logging_utils.py` | 14 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.9.11 脱敏扩展回归） |
