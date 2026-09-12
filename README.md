@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1225 collected |
-| **单元测试** | ✅ 1225 passed, 0 skipped |
+| **总测试数** | ✅ 1237 collected |
+| **单元测试** | ✅ 1237 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
-| **最新优化** | ✅ 2026-09-14 改进清单批次：G-01~G-04（1.2 测试异味检测 / 1.3 修复收敛曲线 / 4.4 依赖缓存监控 / 5.3 失败根因分类 + 案例知识库）+ 3.4 断言增强（默认关）+ 3.5 跨文件修复（协调器-提议者架构，默认关）；全量 1225 passed；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-14 熔断器半开探测批次：4.2 半开探测（冷却到期先进入 half-open 窗口，仅承载一次探测请求；成功闭合 / 失败重开 `min(cooldown/2, cap=30s)` 半程冷却；`enable_half_open_probe` 默认开，`get_status` 输出 `circuit_state` 三态）；全量 1237 passed；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (95%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-14 改进清单批次：1.2/1.3/4.4/5.3 分析层 + 工具层增强（测试异味 / 收敛曲线 / 缓存监控 / 根因分类），3.4/3.5 研究性能力落地为可开关默认关（断言增强 + 跨文件修复）；全量 1225 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-14 熔断器半开探测批次：4.2 半开探测（熔断三态补齐，`enable_half_open_probe` 默认开、惩罚 `min(cooldown/2, cap=30s)`，`circuit_state` 三态入 `get_status`），TestHalfOpenProbe 12 用例；全量 1237 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -70,7 +70,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（当前 1225 个用例，全量通过）
+# 运行所有单元测试（当前 1237 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -278,6 +278,8 @@ AITester/
 │   │   └── llm_cache.py             # LLM 内存 LRU 缓存（可选，带命中统计）
 │   ├── observability/                # 结构化可观测性（4.1）
 │   │   └── trace.py                  # JSONL 节点级追踪（默认关，AITESTER_TRACE_DIR 启用）
+│   ├── prompts/                      # 提示词模板
+│   │   └── templates.py              # Planner/Generator/Debugger 系统提示词（PLANNER_SYSTEM_PROMPT 等）
 │   ├── db/                           # 数据库模块
 │   │   └── mysql_client.py           # MySQL 单例客户端（任务、测试、修复记录）
 │   ├── rag/                          # 检索增强生成模块
@@ -661,7 +663,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1225 个用例，全量通过）
+# 运行所有测试（当前 1237 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -671,12 +673,12 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（46 个测试文件，1225 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（48 个测试文件，1237 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
 | `test_api_manager.py` | 77 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
-| `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
+| `test_api_manager_extended.py` | 74 | API 管理器扩展路径（健康恢复、限流标记、4.2 半开探测 TestHalfOpenProbe 12 用例） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_cli_app.py` | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
@@ -695,7 +697,7 @@ docker run --rm \
 | `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
-| `test_error_classifier.py` | 81 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
+| `test_error_classifier.py` | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
@@ -719,7 +721,7 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
-| `test_workflow.py` | 36 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例） |
+| `test_workflow.py` | 38 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例） |
 | `test_workflow_extended.py` | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 | `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
