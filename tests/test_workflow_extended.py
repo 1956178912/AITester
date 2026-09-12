@@ -760,6 +760,181 @@ class TestPlannerNodeDedup:
         assert result["test_plan"]["function_name"] == "unknown"
 
 
+class TestDefaultOffFeatureBranches:
+    """3.1 多候选补丁 / 3.5 跨文件修复（默认关）的节点分支补测。
+
+    这些分支由环境变量默认 false 控制，正常单文件路径永远走不到，但一旦
+    用户开启开关就走全新逻辑——补测锁住"开启后行为正确"与"失败降级"语义。
+    """
+
+    # ── _cross_file_analyzer_node ────────────────────────────────────────────
+
+    def test_cross_file_analyzer_single_file_fallback(self):
+        """普通单文件无 import → deps 空 → cross_file_plan=None（常态路径）。"""
+        from src.graph.nodes import _cross_file_analyzer_node
+
+        state = {
+            "target_file": "examples/calculator.py",
+            "module_name": "calculator",
+            "target_code": "def add(a, b):\n    return a + b\n",
+        }
+        result = _cross_file_analyzer_node(state)
+        assert result["cross_file_deps"] == []
+        assert result["cross_file_plan"] is None
+
+    def test_cross_file_analyzer_self_import_finds_dep(self):
+        """自 import（import calculator 且 module_name=calculator）才产生依赖边。
+
+        保守单入口视角：节点只把 entry_module 塞进 source_files，analyze_cross_file_deps
+        又只认"import 的目标模块在 source_files 里"，故只有自 import 才能出边。
+        """
+        from src.graph.nodes import _cross_file_analyzer_node
+
+        state = {
+            "target_file": "examples/calculator.py",
+            "module_name": "calculator",
+            "target_code": "import calculator\n\ndef f():\n    return calculator.add(1, 2)\n",
+        }
+        result = _cross_file_analyzer_node(state)
+        assert len(result["cross_file_deps"]) == 1
+        assert result["cross_file_plan"] is None  # 当前保守实现仍写 None 占位
+
+    # ── _select_multi_candidate_patch ────────────────────────────────────────
+
+    @staticmethod
+    def _mc_state() -> dict:
+        return {
+            "patch": "def f():\n    return 1\n",
+            "target_code": "def f():\n    return 1\n",
+            "generated_test": "def test_f():\n    pass\n",
+            "target_file": "x.py",
+            "target_function": "f",
+            "module_name": "x",
+            "failed_cases": [],
+            "test_output": "",
+            "iteration": 0,
+        }
+
+    def test_multi_candidate_selects_best(self, monkeypatch):
+        """有有效候选时应用最优候选（选优路径）。"""
+        from src.agents import debugger as dbg
+        from src.agents import executor as exc
+        from src.graph import nodes
+        from src.tools.multi_candidate import CandidateResult
+
+        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
+        best = CandidateResult(
+            index=0,
+            patch="def f():\n    return 2\n",
+            new_code="def f():\n    return 2\n",
+            static_passed=True,
+        )
+        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [best])
+        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: best)
+        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: (patch, True))
+        new_code, applied = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        assert applied is True
+        assert new_code == "def f():\n    return 2\n"
+
+    def test_multi_candidate_fallback_to_single_patch(self, monkeypatch):
+        """无有效候选（select 返回 None）→ 回退单补丁，不引入劣化。"""
+        from src.agents import debugger as dbg
+        from src.agents import executor as exc
+        from src.graph import nodes
+
+        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
+        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [])
+        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: None)
+        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: ("fallback_code", True))
+        new_code, applied = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        assert applied is True
+        assert new_code == "fallback_code"
+
+    def test_multi_candidate_exec_validate_enabled(self, monkeypatch):
+        """MULTI_CANDIDATE_EXEC_VALIDATE=true → 构造 ExecutorAgent 做执行验证。"""
+        from src.agents import debugger as dbg
+        from src.agents import executor as exc
+        from src.graph import nodes
+        from src.tools.multi_candidate import CandidateResult
+
+        monkeypatch.setenv("MULTI_CANDIDATE_EXEC_VALIDATE", "true")
+        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
+        best = CandidateResult(index=0, patch="def f():\n    return 2\n", static_passed=True)
+        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [best])
+        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: best)
+        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: (patch, True))
+        nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        assert exc.ExecutorAgent.called
+
+    # ── _patch_applier_node 跨文件 / 多候选分支 ─────────────────────────────
+
+    @staticmethod
+    def _pf_state(target, original, new):
+        return {
+            "target_file": str(target),
+            "target_code": original,
+            "patch": new,
+            "module_name": "m",
+            "iteration": 0,
+            "repair_history": [],
+        }
+
+    def test_patch_applier_cross_file_success(self, tmp_path, monkeypatch):
+        """cross_file_deps 非空且 CROSS_FILE_ENABLE=true → 走多文件补丁分支。"""
+        from src.graph import nodes
+        from src.tools import cross_file as cf
+
+        monkeypatch.setenv("CROSS_FILE_ENABLE", "true")
+        target = tmp_path / "m.py"
+        original = "def f():\n    return 1\n"
+        new = "def f():\n    return 2\n"
+        target.write_text(original, encoding="utf-8")
+        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em: ({em: new}, True))
+        state = self._pf_state(target, original, new)
+        state["cross_file_deps"] = [{"source_module": "m", "target_module": "n", "symbol": "g", "call_line": 1}]
+        result = nodes._patch_applier_node(state)
+        assert result["target_code"] == new
+        assert result["repair_history"][-1]["patch_applied"] is True
+
+    def test_patch_applier_cross_file_fallback(self, tmp_path, monkeypatch):
+        """多文件补丁失败 → cross_file_fallback_single_file 降级单文件。"""
+        from src.graph import nodes
+        from src.tools import cross_file as cf
+
+        monkeypatch.setenv("CROSS_FILE_ENABLE", "true")
+        target = tmp_path / "m.py"
+        original = "def f():\n    return 1\n"
+        new = "def f():\n    return 2\n"
+        target.write_text(original, encoding="utf-8")
+        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em: (dict(of), False))
+        monkeypatch.setattr(cf, "cross_file_fallback_single_file", lambda of, p, em: ({em: new}, True))
+        state = self._pf_state(target, original, new)
+        state["cross_file_deps"] = [{"source_module": "m", "target_module": "n", "symbol": "g", "call_line": 1}]
+        result = nodes._patch_applier_node(state)
+        assert result["target_code"] == new
+
+    def test_patch_applier_multi_candidate_branch(self, tmp_path, monkeypatch):
+        """无 cross_file_deps + ENABLE_MULTI_CANDIDATE_PATCH=true → 走多候选分支。"""
+        from src.graph import nodes
+
+        monkeypatch.setenv("ENABLE_MULTI_CANDIDATE_PATCH", "true")
+        target = tmp_path / "m.py"
+        original = "def f():\n    return 1\n"
+        new = "def f():\n    return 2\n"
+        target.write_text(original, encoding="utf-8")
+        monkeypatch.setattr(nodes, "_select_multi_candidate_patch", lambda s, oc: (new, True))
+        state = self._pf_state(target, original, new)
+        result = nodes._patch_applier_node(state)
+        assert result["target_code"] == new
+        assert result["repair_history"][-1]["patch_applied"] is True
+
+
 if __name__ == "__main__":
     import pytest
 

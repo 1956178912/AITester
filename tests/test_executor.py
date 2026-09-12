@@ -109,6 +109,21 @@ class TestExtractImports:
         assert "numpy" in imports
         assert "scipy" in imports
 
+    def test_third_party_diskcache_not_treated_as_stdlib(self):
+        """diskcache 是第三方包，不得被误判为标准库过滤掉。
+
+        回归：executor 曾维护硬编码标准库 frozenset，误将 diskcache 列入，
+        且清单缺 asyncio 等 stdlib；现复用 dependency.is_standard_library
+        （sys.stdlib_module_names 权威清单）后须正确区分两类。
+        """
+        imports = ExecutorAgent._extract_imports("import diskcache\n")
+        assert "diskcache" in imports
+
+    def test_asyncio_treated_as_stdlib(self):
+        """asyncio 属标准库，应被过滤（硬编码清单曾遗漏导致误判为第三方）。"""
+        imports = ExecutorAgent._extract_imports("import asyncio\n")
+        assert imports == []
+
 
 class TestExecuteEnv:
     """execute() 非 venv 路径的环境构造（PYTHONPATH / cwd 深度）。"""

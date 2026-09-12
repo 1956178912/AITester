@@ -21,6 +21,7 @@ from src.agents.error_classifier import (
     SyntaxSubtype,
     get_fix_strategy,
     refine_failure_category,
+    refine_final_error_category,
 )
 
 
@@ -560,3 +561,34 @@ class TestRefineFailureCategory:
         """历史条目缺少 patch_applied 键时保守处理（不判定为被拒）。"""
         history = [{"iteration": 1, "diagnosis": "x"}]
         assert refine_failure_category("assertion", False, repair_history=history) == "assertion"
+
+
+class TestRefineFinalErrorCategory:
+    """refine_final_error_category 最终状态接线封装（2.4 收敛，cli/benchmark 共用）。"""
+
+    def test_success_state_unchanged(self):
+        """成功状态原样返回 error_category。"""
+        state = {"error_category": "assertion", "test_passed": True}
+        assert refine_final_error_category(state) == "assertion"
+
+    def test_patch_rejected_from_state(self):
+        """repair_history 含 patch_applied=False → patch_validation_failed。"""
+        state = {
+            "error_category": "assertion",
+            "test_passed": False,
+            "repair_history": [{"iteration": 1, "patch_applied": False}],
+        }
+        assert refine_final_error_category(state) == ErrorCategory.PATCH_VALIDATION_FAILED.value
+
+    def test_missing_keys_safe_defaults(self):
+        """缺失键时用安全默认，不抛 KeyError（与两处原内联接线口径一致）。"""
+        assert refine_final_error_category({}) == ""
+
+    def test_rag_empty_from_state(self):
+        """rag_stats 全空 → rag_retrieval_empty。"""
+        state = {
+            "error_category": "unknown",
+            "test_passed": False,
+            "rag_stats": [{"kind": "test_cases", "results": 0}],
+        }
+        assert refine_final_error_category(state) == ErrorCategory.RAG_RETRIEVAL_EMPTY.value

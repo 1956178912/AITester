@@ -187,6 +187,16 @@ class TestAddLLMConfig:
         """回归锁：ENV_FILE 必须指向项目根目录的 .env.local（而非 src/config/ 下）。"""
         assert config_manager.ENV_FILE == Path("config.py").resolve().parent / ".env.local"
 
+    def test_add_config_write_failure_returns_false(self, monkeypatch, tmp_path):
+        """ENV_FILE 父目录不存在 → open 抛异常 → 返回 False（147-149）。"""
+        monkeypatch.setattr(
+            config_manager,
+            "ENV_FILE",
+            tmp_path / "no_such_dir" / ".env.local",
+        )
+        result = add_llm_config(api_key="k", base_url="https://ex.com", model_name="m")
+        assert result is False
+
 
 class TestRemoveLLMConfig:
     """测试 remove_llm_config（真实临时文件 + 隔离 load_dotenv/refresh）"""
@@ -274,6 +284,16 @@ class TestRemoveLLMConfig:
         result = remove_llm_config("any-model")
         assert result is False
 
+    def test_remove_config_exception_returns_false(self, monkeypatch):
+        """ENV_FILE.exists() 为真但 read_text 抛异常 → 返回 False（231-233）。"""
+        from unittest.mock import MagicMock
+
+        fake = MagicMock()
+        fake.exists.return_value = True
+        fake.read_text.side_effect = OSError("disk error")
+        monkeypatch.setattr(config_manager, "ENV_FILE", fake)
+        assert remove_llm_config("m") is False
+
 
 class TestPrintConfigReport:
     """测试 print_config_report（不应抛出异常）"""
@@ -304,6 +324,23 @@ class TestValidateConfigs:
         # 当前配置应是有效的
         assert result["invalid_configs"] == 0
         assert len(result["issues"]) == 0
+
+    def test_validate_detects_empty_fields(self, monkeypatch):
+        """api_key/base_url/model_name 三种空字段各自计入 invalid + issue（262-269）。"""
+        from types import SimpleNamespace
+
+        fake_configs = [
+            SimpleNamespace(api_key="", base_url="https://x", model_name="m"),  # api_key 空
+            SimpleNamespace(api_key="k", base_url="", model_name="m"),  # base_url 空
+            SimpleNamespace(api_key="k", base_url="https://x", model_name=""),  # model_name 空
+            SimpleNamespace(api_key="k", base_url="https://x", model_name="ok"),  # 合法
+        ]
+        monkeypatch.setattr(config_manager, "LLM_CONFIGS", fake_configs)
+        result = validate_configs()
+        assert result["total_configs"] == 4
+        assert result["invalid_configs"] == 3
+        assert result["valid_configs"] == 1
+        assert len(result["issues"]) == 3
 
 
 class TestBatchAddModels:

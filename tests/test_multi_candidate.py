@@ -219,3 +219,15 @@ class TestEnvSwitches:
         assert mc.multi_candidate_count() == 1
         monkeypatch.setenv("MULTI_CANDIDATE_COUNT", "abc")
         assert mc.multi_candidate_count() == 3
+
+    def test_exec_validate_default_false(self, monkeypatch):
+        monkeypatch.delenv("MULTI_CANDIDATE_EXEC_VALIDATE", raising=False)
+        assert mc.multi_candidate_exec_validate() is False
+
+    def test_exec_validate_true(self, monkeypatch):
+        monkeypatch.setenv("MULTI_CANDIDATE_EXEC_VALIDATE", "true")
+        assert mc.multi_candidate_exec_validate() is True
+
+    def test_exec_validate_invalid_value_falls_back_false(self, monkeypatch):
+        monkeypatch.setenv("MULTI_CANDIDATE_EXEC_VALIDATE", "yes")
+        assert mc.multi_candidate_exec_validate() is False
