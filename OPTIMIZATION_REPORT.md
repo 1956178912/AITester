@@ -496,3 +496,35 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 | 远端与本地一致 | ✅ `git ls-remote origin main` = `f6ac74d` |
 | 远端历史无 paper/隐私残留 | ✅ `git log --all -- paper.md docs/paper TASK_SUMMARY.md` 空 |
 | 工作区 | ✅ clean |
+
+---
+
+## 附录：2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计轮次
+
+### 执行范围
+
+本批次消化 2026-09-14 改进清单中的 7 项纯代码项（1.1 / 1.4 / 1.5 / 2.1 / 2.3 / 3.2 / 4.1）：
+
+| 项 | 内容 | 改动文件 | 状态 |
+|----|------|----------|------|
+| 1.1 | 错误分类补 2 个状态细化类（PATCH_VALIDATION_FAILED / RAG_RETRIEVAL_EMPTY），`refine_failure_category()` 任务收尾判定（补丁被拒优先于 RAG 空） | `src/agents/error_classifier.py` + `src/reports/generator.py` + `experiments/run_benchmark.py` + `src/cli/app.py` + 测试 | ✅ |
+| 3.2 | 成本告警阈值可配（`APIManagerConfig.cost_alert_threshold`，默认 2.0），告警文案打印配置值 | `src/api/api_manager.py` + 测试 | ✅ |
+| 1.5 | 熔断冷却期 3 条边界测试（到期回归 / 多节点同时冷却降级 / 冷却期内快速失败） | `tests/test_api_manager.py`（`TestCircuitCooldownBoundaries` 3 用例） | ✅ |
+| 1.4 | CLI 参数异常路径与并发行为补测（--timeout 贯通 / 无效 dataset 降级 / 并发单任务超时不阻塞整批 / glob 边界语义） | `tests/test_cli_app.py`（3 组 8 用例） | ✅ |
+| 2.1 | SWE-bench 源码导出自动化（`scripts/export_swe_bench_source.py`：patch 提取首个非测试目标文件 + `git show` 只读导出 + enrichment JSONL 输出 + `--instance-ids`/`--dry-run`）；`SWEBenchDataset.tasks_missing_source()` + check-dataset 输出缺失 instance_id 列表 | `scripts/export_swe_bench_source.py`（新）+ `src/datasets/dataset_loader.py` + `src/cli/app.py` + 测试 | ✅ |
+| 2.3 | RAG 指标自动汇总（analyze_results.py 新增按检索类型分解 + RAG 命中 × 失败类别交叉表） | `experiments/analyze_results.py` + 测试 | ✅ |
+| 4.1 | 脱敏完整审计（`docs/redaction_audit.md`）：修复 2 个真实盲点（APIManager 7 处日志点就地 `_redact()` + `get_status()` base_url 出口脱敏），LLM 文件缓存记录为已知可接受风险（脱敏与缓存精确命中互斥） | `src/api/api_manager.py` + `docs/redaction_audit.md`（新）+ 测试 | ✅ |
+
+### 全量验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 全量测试 | ✅ **1158 passed** / 0 failed（2 warning 为 scipy 退化数据精度告警，非代码问题） |
+| 新增用例 | +41（错误分类 9 + 成本路由 4 + APIManager 5 + CLI 8 + 源码导出 11 + 数据集 2 + 实验脚本 4 + 脱敏回归 2，其中 1.5/1.4 与既有套件叠加后净增量以全量数为准） |
+
+### 设计决策
+
+- **1.1 状态细化类不走文本正则**：`classify()` 保持 10 类纯文本分类不变；`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 是流程状态类，由 `refine_failure_category()` 在任务收尾按 `repair_history` / `rag_stats` 信号判定，仅在失败任务上生效（成功任务原样返回），benchmark 与 CLI 两个出口口径一致。
+- **优先级：补丁被拒 > RAG 检索空**：前者是"修复未生效"的更具体根因；RAG 空是"检索未提供帮助"。两者同时成立时归 patch_validation_failed。
+- **3.2 默认值不变**：`cost_alert_threshold` 默认沿用模块常量 2.0，不改变既有告警行为；调优为显式配置行为。
+- **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配（缓存永不命中）。缓存目录（`~/.cache/aitester/llm_cache/`）在 HOME 下、与用户仓库同信任级，记录为已知可接受风险，后续可选"脱敏+双字段"方案单独立项。
