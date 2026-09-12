@@ -637,3 +637,22 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
             warning_msg(f"  …（其余 {len(report) - 10} 个略）")
     else:
         info_msg(f"✓ 全量质量检查通过（{len(tasks)} 个任务无加载问题）")
+
+    # 2.1 源码补充流程：缺失被测源码的任务单独列出 instance_id，
+    # 供 export_swe_bench_source.py 批量导出 / SWE_BENCH_ENRICHMENT 补全
+    if hasattr(loader, "tasks_missing_source"):
+        missing_source = loader.tasks_missing_source()
+        if missing_source:
+            warning_msg(
+                f"⚠ 缺失被测源码任务 {len(missing_source)} 个（instance_code 兜底为 issue 文本）："
+            )
+            for task_id in missing_source[:20]:
+                warning_msg(f"  {task_id}")
+            if len(missing_source) > 20:
+                warning_msg(f"  …（其余 {len(missing_source) - 20} 个略）")
+            warning_msg(
+                "  补充方式：运行 scripts/export_swe_bench_source.py 按 base_commit 自动导出，"
+                "再经 SWE_BENCH_ENRICHMENT 环境变量加载"
+            )
+        else:
+            info_msg(f"✓ 全部 {len(tasks)} 个任务均含被测源码")

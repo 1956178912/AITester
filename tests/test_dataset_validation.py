@@ -188,3 +188,37 @@ class TestQualityReportAndLoading:
         assert "official__2" in report
         assert any("兜底" in i for i in report["official__2"])
         assert any("test_code 为空" in i for i in report["official__2"])
+
+    def test_tasks_missing_source_lists_fallback_tasks(self, tmp_path):
+        """2.1：tasks_missing_source 返回 instance_code 兜底为 issue 文本的任务 id。"""
+        healthy = {
+            "instance_id": "ok__1",
+            "repository": "r/r",
+            "problem_statement": "p",
+            "instance_code": "def f():\n    return 1\n",
+            "test_code": "def test_f():\n    assert f() == 1\n",
+            "n_tests_after": 1,
+        }
+        official_style = {
+            "instance_id": "official__2",
+            "repository": "r/r",
+            "problem_statement": "issue text",
+        }
+        loader = self._loader_with_data(tmp_path, [healthy, official_style])
+        missing = loader.tasks_missing_source()
+        assert missing == ["official__2"]
+
+    def test_tasks_missing_source_empty_when_all_have_source(self, tmp_path):
+        """全部任务含源码时返回空列表。"""
+        rows = [
+            {
+                "instance_id": "ok__1",
+                "repository": "r/r",
+                "problem_statement": "p",
+                "instance_code": "def f():\n    return 1\n",
+                "test_code": "def test_f():\n    assert f() == 1\n",
+                "n_tests_after": 1,
+            }
+        ]
+        loader = self._loader_with_data(tmp_path, rows)
+        assert loader.tasks_missing_source() == []
