@@ -385,9 +385,7 @@ class TestGlobInParallelMode:
         monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
         monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
         # 用 click 直接调用（绕过 shell 展开），pattern 为字面通配符
-        r = CliRunner().invoke(
-            cli_app.cli, ["run", f"{dir_str}/g*.py", "--parallel=2", "--json"]
-        )
+        r = CliRunner().invoke(cli_app.cli, ["run", f"{dir_str}/g*.py", "--parallel=2", "--json"])
         # click.Path(exists=True) 对未展开的字面通配符判"不存在"（解析层拦截），
         # 此用例锁定该边界语义：字面通配符须经 shell 展开后传入
         assert r.exit_code == 2, f"字面通配符被 click exists 校验拦截, 实际 exit={r.exit_code}"

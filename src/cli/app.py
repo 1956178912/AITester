@@ -643,9 +643,7 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
     if hasattr(loader, "tasks_missing_source"):
         missing_source = loader.tasks_missing_source()
         if missing_source:
-            warning_msg(
-                f"⚠ 缺失被测源码任务 {len(missing_source)} 个（instance_code 兜底为 issue 文本）："
-            )
+            warning_msg(f"⚠ 缺失被测源码任务 {len(missing_source)} 个（instance_code 兜底为 issue 文本）：")
             for task_id in missing_source[:20]:
                 warning_msg(f"  {task_id}")
             if len(missing_source) > 20:

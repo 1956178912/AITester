@@ -278,11 +278,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
 
         # 2.3 RAG 指标自动汇总：按检索类型分解（test_cases vs repairs）
         # 分析"哪类检索（参考测试风格 / 参考修复方案）命中更好"
-        by_kind_rows = [
-            (b, m)
-            for b, m in per.items()
-            if m.get("details_rag_by_kind")
-        ]
+        by_kind_rows = [(b, m) for b, m in per.items() if m.get("details_rag_by_kind")]
         if by_kind_rows:
             lines.append("### RAG 检索质量按检索类型分解")
             lines.append("")
@@ -298,9 +294,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
 
         # 2.3 RAG 指标自动汇总：RAG 命中 × 失败类别交叉表
         # 分析"RAG 对哪些错误类型修复帮助最大"（断言 vs 运行时等）
-        cross_rows = [
-            (b, m) for b, m in per.items() if m.get("rag_hit_by_failure_category")
-        ]
+        cross_rows = [(b, m) for b, m in per.items() if m.get("rag_hit_by_failure_category")]
         if cross_rows:
             lines.append("### RAG 命中 × 失败类别交叉表")
             lines.append("")
@@ -312,9 +306,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
                 for cat, cstat in m["rag_hit_by_failure_category"].items():
                     total = cstat.get("total", 0)
                     hit_rate = round(cstat.get("with_hit", 0) / total, 4) if total else 0.0
-                    lines.append(
-                        f"| {baseline} | {cat} | {total} | {cstat.get('with_hit', 0)} | {hit_rate} |"
-                    )
+                    lines.append(f"| {baseline} | {cat} | {total} | {cstat.get('with_hit', 0)} | {hit_rate} |")
             lines.append("")
             lines.append(
                 "> 解读：`rag_retrieval_empty` 类任务（1.1 状态细化）即"
