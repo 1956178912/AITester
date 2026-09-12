@@ -78,16 +78,18 @@
 @dataclass
 class CrossFileDependency:
     """跨文件依赖边：module_a 调用了 module_b 中的 symbol_b。"""
-    source_module: str   # 调用方模块名（不含 .py）
-    target_module: str   # 被调用方模块名
-    symbol: str          # 被调用的函数/类名
-    call_line: int       # 调用方源码行号
-    context: str         # 调用行上下文（供 LLM 理解）
+
+    source_module: str  # 调用方模块名（不含 .py）
+    target_module: str  # 被调用方模块名
+    symbol: str  # 被调用的函数/类名
+    call_line: int  # 调用方源码行号
+    context: str  # 调用行上下文（供 LLM 理解）
 
 
 @dataclass
 class CrossFileRepairPlan:
     """跨文件修复计划。"""
+
     plan_id: str
     target_modules: list[str]  # 需要修改的模块列表
     per_module_patches: dict[str, str]  # 模块名 → 补丁文本
@@ -128,7 +130,7 @@ def build_cross_file_repair_plan(
 ```python
 def apply_multi_file_patch(
     original_files: dict[str, str],  # 模块名 → 原始代码
-    patches: dict[str, str],          # 模块名 → 补丁
+    patches: dict[str, str],  # 模块名 → 补丁
     entry_module: str,
 ) -> tuple[dict[str, str], bool]:
     """对多个文件同时应用补丁。
