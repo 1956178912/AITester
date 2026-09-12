@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +291,11 @@ def _load_cache_stats() -> dict[str, Any]:
         with open(_VENV_CACHE_STATS_FILE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            return {"hits": int(data.get("hits", 0)), "creates": int(data.get("creates", 0)), "last_event_at": data.get("last_event_at")}
+            return {
+                "hits": int(data.get("hits", 0)),
+                "creates": int(data.get("creates", 0)),
+                "last_event_at": data.get("last_event_at"),
+            }
     except (OSError, ValueError, TypeError):
         pass
     return {"hits": 0, "creates": 0, "last_event_at": None}

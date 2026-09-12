@@ -34,31 +34,40 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # ─── 5.3 失败根因分类 ────────────────────────────────────────────────────────
 # 三大根因类别与启发式关键词（保守口径：仅用于分析层归因，不影响修复流程）
 _ROOT_CAUSE_RULES: list[tuple[str, list[str]]] = [
-    ("llm_capability", [
-        "llm_format_error",
-        "index_error",
-        "json",
-        "解析失败",
-        "输出格式",
-        "non-json",
-        "empty response",
-    ]),
-    ("dependency", [
-        "import_error",
-        "module_not_found",
-        "pip",
-        "venv",
-        "依赖",
-        "install",
-    ]),
-    ("framework", [
-        "patch_validation_failed",
-        "rag_retrieval_empty",
-        "timeout",
-        "sandbox",
-        "docker",
-        "executor",
-    ]),
+    (
+        "llm_capability",
+        [
+            "llm_format_error",
+            "index_error",
+            "json",
+            "解析失败",
+            "输出格式",
+            "non-json",
+            "empty response",
+        ],
+    ),
+    (
+        "dependency",
+        [
+            "import_error",
+            "module_not_found",
+            "pip",
+            "venv",
+            "依赖",
+            "install",
+        ],
+    ),
+    (
+        "framework",
+        [
+            "patch_validation_failed",
+            "rag_retrieval_empty",
+            "timeout",
+            "sandbox",
+            "docker",
+            "executor",
+        ],
+    ),
 ]
 _DEFAULT_ROOT_CAUSE = "llm_capability"  # 未命中任何规则时归 LLM 能力边界
 
@@ -98,10 +107,7 @@ def root_cause_classification(details: list[dict[str, Any]]) -> dict[str, Any]:
             representative_cases[assigned].append(task_id)
 
     total_failed = len(failed)
-    distribution = {
-        cause: (count / total_failed if total_failed else 0.0)
-        for cause, count in root_causes.items()
-    }
+    distribution = {cause: (count / total_failed if total_failed else 0.0) for cause, count in root_causes.items()}
     return {
         "root_causes": root_causes,
         "distribution": distribution,
@@ -340,9 +346,7 @@ def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
     lines.append("")
     if kb:
         for i, case in enumerate(kb, start=1):
-            lines.append(
-                f"### 案例 {i}: `{case['task_id']}` [{case['root_cause']} / {case['error_category']}]"
-            )
+            lines.append(f"### 案例 {i}: `{case['task_id']}` [{case['root_cause']} / {case['error_category']}]")
             lines.append(f"- **诊断摘录**: {case['diagnosis_excerpt']}")
             lines.append(f"- **复现步骤**: {case['reproducible_steps']}")
             lines.append(f"- **建议修复**: {case['suggested_fix']['suggestion']}")

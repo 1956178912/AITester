@@ -11,8 +11,6 @@ experiments/analyze_failures.py 单元测试（5.3 失败根因分类 + 案例�
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -55,9 +53,9 @@ class TestRootCauseClassification:
 
     def test_diagnosis_keywords_match_dependency(self):
         """diagnosis 文本含 'pip' / 'venv' 关键词时归 dependency（即使 error_category 为空）。"""
-        rc = root_cause_classification([
-            {"task_id": "p", "passed": False, "error_category": "", "diagnosis": "pip install failed: venv"}
-        ])
+        rc = root_cause_classification(
+            [{"task_id": "p", "passed": False, "error_category": "", "diagnosis": "pip install failed: venv"}]
+        )
         assert rc["root_causes"]["dependency"] == 1
 
 
@@ -81,8 +79,7 @@ class TestFailureKnowledgeBase:
 
     def test_kb_respects_top_n(self):
         details = [
-            {"task_id": f"t{i}", "passed": False, "error_category": f"cat_{i % 3}", "diagnosis": ""}
-            for i in range(20)
+            {"task_id": f"t{i}", "passed": False, "error_category": f"cat_{i % 3}", "diagnosis": ""} for i in range(20)
         ]
         kb = failure_knowledge_base(details, top_n=5)
         assert len(kb) == 5
@@ -107,8 +104,20 @@ class TestGenerateReportNewSections:
 
     def test_report_contains_root_cause_section(self, tmp_path):
         details = [
-            {"task_id": "a", "passed": False, "error_category": "llm_format_error", "diagnosis": "json", "baseline": "aitester"},
-            {"task_id": "b", "passed": False, "error_category": "import_error", "diagnosis": "mod", "baseline": "aitester"},
+            {
+                "task_id": "a",
+                "passed": False,
+                "error_category": "llm_format_error",
+                "diagnosis": "json",
+                "baseline": "aitester",
+            },
+            {
+                "task_id": "b",
+                "passed": False,
+                "error_category": "import_error",
+                "diagnosis": "mod",
+                "baseline": "aitester",
+            },
             {"task_id": "c", "passed": True, "error_category": "", "diagnosis": "", "baseline": "aitester"},
         ]
         out = tmp_path / "report.md"
@@ -120,7 +129,13 @@ class TestGenerateReportNewSections:
 
     def test_report_contains_kb_section(self, tmp_path):
         details = [
-            {"task_id": "k1", "passed": False, "error_category": "llm_format_error", "diagnosis": "x", "baseline": "aitester"},
+            {
+                "task_id": "k1",
+                "passed": False,
+                "error_category": "llm_format_error",
+                "diagnosis": "x",
+                "baseline": "aitester",
+            },
         ]
         out = tmp_path / "report.md"
         generate_report(details, str(out))
@@ -147,9 +162,21 @@ class TestCliKnowledgeBaseOption:
         results_dir.mkdir()
         (results_dir / "benchmark_x.json").write_text(
             json.dumps(
-                {"results": {"aitester": {"details": [
-                    {"task_id": "k", "passed": False, "error_category": "llm_format_error", "diagnosis": "x", "baseline": "aitester"},
-                ]}}}
+                {
+                    "results": {
+                        "aitester": {
+                            "details": [
+                                {
+                                    "task_id": "k",
+                                    "passed": False,
+                                    "error_category": "llm_format_error",
+                                    "diagnosis": "x",
+                                    "baseline": "aitester",
+                                },
+                            ]
+                        }
+                    }
+                }
             ),
             encoding="utf-8",
         )
@@ -162,6 +189,7 @@ class TestCliKnowledgeBaseOption:
 
         # 直接调用 cli（绕过 click 命令解析，用 CliRunner 模拟）
         from click.testing import CliRunner
+
         runner = CliRunner()
         result = runner.invoke(af.cli, ["-r", str(results_dir), "-o", str(tmp_path / "r.md")])
         assert result.exit_code == 0, result.output
@@ -172,16 +200,29 @@ class TestCliKnowledgeBaseOption:
 
     def test_cli_explicit_kb_path(self, tmp_path, monkeypatch):
         """显式 --knowledge-base 时写入指定路径。"""
-        from experiments import analyze_failures as af
         from click.testing import CliRunner
+
+        from experiments import analyze_failures as af
 
         results_dir = tmp_path / "results"
         results_dir.mkdir()
         (results_dir / "benchmark_x.json").write_text(
             json.dumps(
-                {"results": {"aitester": {"details": [
-                    {"task_id": "k", "passed": False, "error_category": "import_error", "diagnosis": "x", "baseline": "aitester"},
-                ]}}}
+                {
+                    "results": {
+                        "aitester": {
+                            "details": [
+                                {
+                                    "task_id": "k",
+                                    "passed": False,
+                                    "error_category": "import_error",
+                                    "diagnosis": "x",
+                                    "baseline": "aitester",
+                                },
+                            ]
+                        }
+                    }
+                }
             ),
             encoding="utf-8",
         )

@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1163 collected |
-| **单元测试** | ✅ 1163 passed, 0 skipped |
+| **总测试数** | ✅ 1225 collected |
+| **单元测试** | ✅ 1225 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
-| **最新优化** | ✅ 2026-09-14 批次③：`analyze_results.py` 新增 1.1/1.2 分析维度（修复收敛效率 + 多维质量代理）+ Markdown 渲染章节 + 5 个回归用例；全量 1163 passed；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-14 改进清单批次：G-01~G-04（1.2 测试异味检测 / 1.3 修复收敛曲线 / 4.4 依赖缓存监控 / 5.3 失败根因分类 + 案例知识库）+ 3.4 断言增强（默认关）+ 3.5 跨文件修复（协调器-提议者架构，默认关）；全量 1225 passed；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (95%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-14 批次③：`experiments/analyze_results.py` 增强为可报告「修复收敛效率」与「多维质量代理」两级新指标，并在 `analysis_summary.md` 中直接输出两节 Markdown 表（含旧 JSON 容错）；全量 1163 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-14 改进清单批次：1.2/1.3/4.4/5.3 分析层 + 工具层增强（测试异味 / 收敛曲线 / 缓存监控 / 根因分类），3.4/3.5 研究性能力落地为可开关默认关（断言增强 + 跨文件修复）；全量 1225 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -70,7 +70,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（当前 1163 个用例，全量通过）
+# 运行所有单元测试（当前 1225 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -268,8 +268,9 @@ AITester/
 │   │   ├── code_analyzer.py          # AST 代码分析（精确替换，避免正则误匹配）
 │   │   ├── patch_applier.py          # 补丁应用（支持完整文件和单函数模式）
 │   │   ├── code_context.py           # AST 智能截取（P0 大文件上下文优化）
-│   │   ├── dependency.py             # 依赖检测与 venv 缓存管理（P1 执行隔离）
-│   │   └── multi_candidate.py        # 多候选补丁生成与验证筛选（3.1，默认关）
+│   │   ├── dependency.py             # 依赖检测与 venv 缓存管理（P1 执行隔离）+ 4.4 命中率统计/清理
+│   │   ├── multi_candidate.py        # 多候选补丁生成与验证筛选（3.1，默认关）
+│   │   └── cross_file.py             # 3.5 跨文件修复（协调器-提议者架构，默认关）
 │   ├── graph/                        # 工作流编排模块
 │   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关）
 │   │   ├── state.py                  # 全局状态定义（TypedDict）
@@ -409,6 +410,40 @@ python scripts/export_swe_bench_source.py --instance-ids @missing_ids.txt
 # 加载 enrichment（自动合并到任务的 instance_code）
 python main.py check-dataset swe_bench
 ```
+
+### 5.8 跨文件修复（3.5，默认关闭）
+真实数据集（SWE-bench / Defects4J）中约 40% 的任务需要多文件修改。协调器-提议者架构：`cross_file_analyzer` 节点（`CROSS_FILE_ENABLE=true` 时启用）在 `executor → debugger` 之间插入，做 AST 跨文件 import 依赖分析（单入口视角），把依赖边写入 `state["cross_file_deps"]`；`_patch_applier_node` 在跨文件分支按拓扑序对多个模块应用补丁（被调用方先改，调用方后改），任一文件应用失败整体回滚（与单文件 `safe_apply_patch` 同口径）。单文件项目自动降级（依赖边为空时 `cross_file_plan=None`，走单文件路径）。
+
+```bash
+# 启用跨文件修复（显式设置环境变量）
+CROSS_FILE_ENABLE=true CROSS_FILE_MAX_MODULES=5 python main.py run examples/calculator.py
+# 默认关闭（历史单文件口径不变）
+```
+
+设计文档：[docs/design/cross_file_repair.md](docs/design/cross_file_repair.md)
+
+### 5.9 断言增强策略（3.4，默认关闭）
+`GeneratorAgent` 在生成前先 AST 提取被测代码中已有 `assert` 语句（去重，最多 10 条），作为"锚点断言"注入 prompt，引导 LLM 避免断言弱化 / 恒真断言 / 魔数未命名等异味。默认 `false` 保持历史生成口径；启用需显式 `ASSERTION_AUGMENT_ENABLE=true`。
+
+### 5.10 依赖缓存监控（4.4）
+`venv` 缓存从"有复用无监控"升级为"命中率可观测 + 可清理"：
+- `get_venv_cache_stats()`：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)`
+- `list_venv_cache()`：列出缓存目录所有 venv（name/path/size_mb/created_at）
+- `clear_venv_cache(max_age_days, max_size_mb)`：按年龄/大小过滤清理，均 None 时清空
+
+### 5.11 测试异味检测与修复收敛曲线（1.2/1.3）
+`experiments/analyze_results.py` 新增两个保守可复算章节：
+- **测试异味检测（1.2）**：AST 扫 `details[].generated_test`，识别 Assertion Roulette / Magic Number / 断言弱化 / 平凡测试 4 类异味
+- **修复收敛曲线（1.3）**：按迭代轮次 0/1/2/3+ 统计累计通过率与平均耗时，观察"随迭代增加通过率如何变化"
+
+旧 JSON 无 `generated_test` 字段时自动降级，不崩溃。
+
+### 5.12 失败根因分类与案例知识库（5.3）
+`experiments/analyze_failures.py` 新增：
+- **失败根因分类**：三大根因（`llm_capability` / `dependency` / `framework`）按 `error_category` + `diagnosis` 关键词保守启发式归类
+- **案例知识库**：按 `error_category` 多样性优先选取典型失败案例，结构化为 `experiments/results/failure_knowledge_base.json`（含 task_id / root_cause / reproducible_steps / suggested_fix）
+
+CLI 新增 `--knowledge-base/-k` 选项控制输出路径。
 
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
@@ -624,7 +659,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1163 个用例，全量通过）
+# 运行所有测试（当前 1225 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -634,7 +669,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（46 个测试文件，1163 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（46 个测试文件，1225 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -657,14 +692,14 @@ docker run --rm \
 | `test_dataset_loader_extended.py` | 59 | 数据集加载扩展路径（raw 加载/字段校验） |
 | `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
-| `test_dependency.py` | 35 | 依赖检测与 venv 管理（P1） |
+| `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
 | `test_error_classifier.py` | 81 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 24 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 |
-| `test_generator.py` | 34 | parametrize 校验、import 修正、LLM 调用 |
+| `test_experiments_scripts.py` | 30 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线（6 用例） |
+| `test_generator.py` | 27 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（AST 提取现有 assert，默认关，6 用例） |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
 | `test_logging_utils.py` | 14 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.9.11 脱敏扩展回归） |
@@ -682,8 +717,10 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
-| `test_workflow.py` | 36 | 工作流图构建与路由 |
+| `test_workflow.py` | 36 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例） |
 | `test_workflow_extended.py` | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
+| `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
+| `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 
 ## 配置说明
 
@@ -697,6 +734,22 @@ docker run --rm \
 | `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | agnes-3.0-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
+| `CROSS_FILE_ENABLE` | 3.5 跨文件修复开关（协调器-提议者架构，默认关） | false |
+| `CROSS_FILE_MAX_MODULES` | 3.5 跨文件依赖分析最大模块数 | 5 |
+| `ASSERTION_AUGMENT_ENABLE` | 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） | false |
+
+## 高级开关（默认全关，按需启用）
+
+以下开关均以环境变量形式提供，默认值保持历史实验口径不变；启用是显式行为。
+
+| 开关 | 默认 | 启用效果 | 关联章节 |
+|------|------|---------|----------|
+| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1） | 5.1 |
+| `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1） | 5.2 |
+| `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |
+| `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
+
+详见 [QUICKSTART.md](QUICKSTART.md) 与 [.env.example](.env.example)。
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
 | `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
 | `LLM_RETRY_WAIT` | LLM 重试等待时间（秒） | 30 |
@@ -943,9 +996,13 @@ python main.py list-examples
 **新增测试模块**:
 | 测试文件 | 用例数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 17 | API 管理器策略测试 |
+| `test_api_manager.py` | 77 | API 管理器策略测试（轮询/加权随机/健康感知、4.1 熔断冷却期 9 用例 + 边界 3 用例 + 脱敏 2 用例、3.4 成本告警阈值可配 4 用例） |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_report_generator.py` | 13 | 错误报告生成器 |
+| `test_report_generator.py` | 48 | 错误报告生成器（含十二类分类分支） |
+| `test_multi_candidate.py` | 20 | 多候选补丁生成与静态/执行验证筛选（3.1） |
+| `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级 / 序列化） |
+| `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
+| `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
 
 ### v0.9 (2026-08-18) — 代码质量优化 + 错误报告生成器
 

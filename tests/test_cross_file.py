@@ -16,8 +16,6 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.cross_file import (
@@ -173,8 +171,11 @@ class TestBuildCrossFileRepairPlan:
             CrossFileDependency("caller", "other", "g", call_line=2),
         ]
         plan = build_cross_file_repair_plan(
-            deps, self._mock_debugger(), target_code="def caller(): pass",
-            test_output="", failed_cases=[],
+            deps,
+            self._mock_debugger(),
+            target_code="def caller(): pass",
+            test_output="",
+            failed_cases=[],
         )
         assert set(plan.target_modules) == {"caller", "lib", "other"}
         assert len(plan.target_modules) == 3
@@ -183,13 +184,14 @@ class TestBuildCrossFileRepairPlan:
 
     def test_plan_respects_max_modules(self):
         """超过 max_modules 时截断到前 N 个（按字典序）。"""
-        deps = [
-            CrossFileDependency("caller", f"m{i}", "f", call_line=i + 1)
-            for i in range(10)
-        ]
+        deps = [CrossFileDependency("caller", f"m{i}", "f", call_line=i + 1) for i in range(10)]
         plan = build_cross_file_repair_plan(
-            deps, self._mock_debugger(), target_code="def caller(): pass",
-            test_output="", failed_cases=[], max_modules=3,
+            deps,
+            self._mock_debugger(),
+            target_code="def caller(): pass",
+            test_output="",
+            failed_cases=[],
+            max_modules=3,
         )
         assert len(plan.target_modules) <= 3
         assert "caller" in plan.target_modules
@@ -202,8 +204,11 @@ class TestBuildCrossFileRepairPlan:
         debugger = MagicMock()
         debugger.debug.side_effect = RuntimeError("LLM 调用失败")
         plan = build_cross_file_repair_plan(
-            deps, debugger, target_code="def caller(): pass",
-            test_output="", failed_cases=[],
+            deps,
+            debugger,
+            target_code="def caller(): pass",
+            test_output="",
+            failed_cases=[],
         )
         # 失败的模块不写入 per_module_patches
         assert "lib" not in plan.per_module_patches
@@ -213,8 +218,11 @@ class TestBuildCrossFileRepairPlan:
         deps = [CrossFileDependency("caller", "lib", "f", call_line=1)]
         patch_text = "x" * 400  # 400 字符 → 预估 100 token
         plan = build_cross_file_repair_plan(
-            deps, self._mock_debugger(patch_text), target_code="def c(): pass",
-            test_output="", failed_cases=[],
+            deps,
+            self._mock_debugger(patch_text),
+            target_code="def c(): pass",
+            test_output="",
+            failed_cases=[],
         )
         assert plan.estimated_token_cost >= 100
 

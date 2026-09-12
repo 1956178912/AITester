@@ -208,12 +208,11 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
             # 区分"无断言但非平凡"（仅 Assignment/Function 调用，无有效断言语句）
             # 与"平凡测试"（函数体仅含 pass / return None / 单一 assert True）
             body_lines = [
-                ln for ln in stripped.splitlines()
+                ln
+                for ln in stripped.splitlines()
                 if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
             ]
-            is_trivial = len(body_lines) <= 2 and any(
-                ln.strip() in ("pass", "return None", "") for ln in body_lines
-            )
+            is_trivial = len(body_lines) <= 2 and any(ln.strip() in ("pass", "return None", "") for ln in body_lines)
             if is_trivial:
                 smell_counts["trivial_test"] += 1
                 task_has_smell = True
@@ -229,8 +228,7 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
 
             literals = set(re.findall(r"==\s*(-?\d+)\b", stripped))
             if len(literals) >= 3 and not any(
-                line.strip().startswith(("CONST", "NOMINAL", "LIMIT", "THRESHOLD"))
-                for line in stripped.splitlines()
+                line.strip().startswith(("CONST", "NOMINAL", "LIMIT", "THRESHOLD")) for line in stripped.splitlines()
             ):
                 smell_counts["magic_number"] += 1
                 task_has_smell = True
@@ -254,11 +252,13 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
         # 平凡测试：函数体仅含 pass / return None / 单一恒真断言（已计入上方分支）
         # 此处仅处理"有断言但恒真"的情形（如 assert True / assert 1 == 1）
         trivial_const_asserts = [
-            ln for ln in stripped.splitlines()
+            ln
+            for ln in stripped.splitlines()
             if ln.strip().startswith("assert") and ("True" in ln or "1 == 1" in ln or "0 == 0" in ln)
         ]
         body_lines = [
-            ln for ln in stripped.splitlines()
+            ln
+            for ln in stripped.splitlines()
             if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
         ]
         if has_assertion and len(body_lines) <= 2 and trivial_const_asserts:
@@ -574,7 +574,8 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     curve_rows = [
         (b, m["repair_convergence_curve"])
         for b, m in per.items()
-        if m.get("repair_convergence_curve", {}).get("total_tasks", 0) > 0 and m["repair_convergence_curve"].get("rounds")
+        if m.get("repair_convergence_curve", {}).get("total_tasks", 0) > 0
+        and m["repair_convergence_curve"].get("rounds")
     ]
     if curve_rows:
         lines.append("## 修复收敛曲线（1.3）")
@@ -602,9 +603,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
 
     # 测试异味检测（1.2）：LLM 生成测试的可维护性代理
     smell_rows = [
-        (b, m["test_smell_metrics"])
-        for b, m in per.items()
-        if m.get("test_smell_metrics", {}).get("available")
+        (b, m["test_smell_metrics"]) for b, m in per.items() if m.get("test_smell_metrics", {}).get("available")
     ]
     if smell_rows:
         lines.append("## 测试异味检测（1.2）")

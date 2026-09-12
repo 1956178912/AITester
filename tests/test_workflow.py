@@ -225,16 +225,13 @@ class TestBuildWorkflow:
         build_workflow()
 
         # 验证 cross_file_analyzer 节点已注册
-        registered_nodes = [
-            call.args[0] for call in mock_workflow.add_node.call_args_list
-        ]
+        registered_nodes = [call.args[0] for call in mock_workflow.add_node.call_args_list]
         assert "cross_file_analyzer" in registered_nodes
         # 验证 executor → cross_file_analyzer 边注册（debug 路由）
         # （LangGraph 的 add_conditional_edges 签名：add_conditional_edges(source, router, mapping)）
         cond_calls = [c for c in mock_workflow.add_conditional_edges.call_args_list]
         found_cf_edge = any(
-            c.args[0] == "executor" and c.args[2].get("debug") == "cross_file_analyzer"
-            for c in cond_calls
+            c.args[0] == "executor" and c.args[2].get("debug") == "cross_file_analyzer" for c in cond_calls
         )
         assert found_cf_edge, f"executor→cross_file_analyzer 边未注册: {cond_calls}"
 
@@ -251,16 +248,11 @@ class TestBuildWorkflow:
 
         build_workflow()
 
-        registered_nodes = [
-            call.args[0] for call in mock_workflow.add_node.call_args_list
-        ]
+        registered_nodes = [call.args[0] for call in mock_workflow.add_node.call_args_list]
         assert "cross_file_analyzer" not in registered_nodes
         # executor 的 debug 路由直接指向 debugger
         cond_calls = [c for c in mock_workflow.add_conditional_edges.call_args_list]
-        found_direct = any(
-            c.args[0] == "executor" and c.args[2].get("debug") == "debugger"
-            for c in cond_calls
-        )
+        found_direct = any(c.args[0] == "executor" and c.args[2].get("debug") == "debugger" for c in cond_calls)
         assert found_direct, f"executor→debugger 直连未注册: {cond_calls}"
 
 

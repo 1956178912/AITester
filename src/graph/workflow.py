@@ -69,6 +69,10 @@ from src.agents.planner import PlannerAgent
 from src.graph.llm_cache import get_cache_stats
 from src.graph.state import AITesterState
 from src.observability.trace import TraceSession, trace_enabled
+from src.tools.cross_file import (
+    analyze_cross_file_deps,
+    cross_file_enabled,
+)
 from src.tools.multi_candidate import (
     generate_candidates,
     multi_candidate_available,
@@ -76,10 +80,6 @@ from src.tools.multi_candidate import (
     select_best_candidate,
 )
 from src.tools.patch_applier import apply_patch_to_code
-from src.tools.cross_file import (
-    analyze_cross_file_deps,
-    cross_file_enabled,
-)
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
