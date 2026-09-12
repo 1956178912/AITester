@@ -4,7 +4,7 @@
 
 本文档对 AITester 在合成数据集实验中的失败案例进行深入分析，识别系统瓶颈和改进方向。
 
-> **状态说明（2026-09-14）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 10 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的"按基线失败原因分布"表为准。
+> **状态说明（2026-09-14）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`，批次②再补状态细化类 `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的"按基线失败原因分布"表为准。
 
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)

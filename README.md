@@ -604,7 +604,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1111 个用例，全量通过）
+# 运行所有测试（当前 1158 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -618,11 +618,11 @@ docker run --rm \
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 80 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
+| `test_api_manager.py` | 77 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
 | `test_api_manager_extended.py` | 62 | API 管理器扩展路径（健康恢复、限流标记） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 30 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
+| `test_cli_app.py` | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
@@ -631,19 +631,19 @@ docker run --rm \
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
 | `test_config_manager.py` | 32 | 配置管理器（LLM 配置增删） |
 | `test_config.py` | 14 | config.py 默认值与容错解析 |
-| `test_core_modules.py` | 29 | 核心模块冒烟 |
-| `test_cost_aware_routing.py` | 14 | 成本感知路由与昂贵 provider 成本告警（3.4 + 3.2 阈值可配 4 用例） |
+| `test_core_modules.py` | 19 | 核心模块冒烟 |
+| `test_cost_aware_routing.py` | 13 | 成本感知路由与昂贵 provider 成本告警（3.4 + 3.2 阈值可配 4 用例） |
 | `test_dataset_loader.py` | 83 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 73 | 数据集加载扩展路径（raw 加载/字段校验） |
-| `test_dataset_validation.py` | 20 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
+| `test_dataset_loader_extended.py` | 59 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 35 | 依赖检测与 venv 管理（P1） |
 | `test_error_classifier.py` | 81 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
-| `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1） |
+| `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 23 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 |
+| `test_experiments_scripts.py` | 19 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 |
 | `test_generator.py` | 34 | parametrize 校验、import 修正、LLM 调用 |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
@@ -657,7 +657,7 @@ docker run --rm \
 | `test_rag_retriever.py` | 42 | RAG 检索器增删查清与持久化 |
 | `test_report_generator.py` | 48 | 错误报告生成器（含十二类分类分支） |
 | `test_run_benchmark.py` | 5 | benchmark 结果构造与异常路径回归（0.9.8 去重重构） |
-| `test_swe_bench_source_export.py` | 11 | SWE-bench 源码导出脚本（patch 目标文件提取 / enrichment 落盘 / dry-run，2.1） |
+| `test_swe_bench_source_export.py` | 13 | SWE-bench 源码导出脚本（patch 目标文件提取 / enrichment 落盘 / dry-run，2.1） |
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |

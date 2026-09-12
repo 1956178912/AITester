@@ -25,6 +25,12 @@
 - **脱敏覆盖完整审计**：新增 `docs/redaction_audit.md`（三层防线总览 + 逐出口走查结论）。修复两个真实盲点——(A) `APIManager` 故障转移/健康检查 7 处日志点（str(e) 与 base_url）新增模块级 `_redact()` 就地脱敏，嵌入式使用（examples/第三方集成/单测）不依赖入口接线也安全；(B) `get_status()` 出口对 base_url 脱敏（内嵌 token 的网关 URL 经 print_status_table 直接打印 stdout，绕过 logging handler）。LLM 文件缓存（prompt/response 全文落盘）经评估为本地可信域已知风险，脱敏会破坏缓存精确匹配命中，记录为已知可接受风险与后续可选方案
 - 测试：`tests/test_api_manager.py` +2 用例（get_status base_url 脱敏回归 + _redact 助手行为）
 
+### 文档对齐（批次②收尾）
+- **README 数据同步**：「测试覆盖模块」主表 9 行用例数与实测 `def test_` 计数漂移同步（test_api_manager 80→77、test_cli_app 30→27、test_cost_aware_routing 14→13、test_dataset_validation 20→22、test_experiments_scripts 23→19、test_swe_bench_source_export 11→13、test_core_modules 29→19、test_executor_sandbox 14→7、test_dataset_loader_extended 73→59，09-14 批次①/② 新增用例后未同步）；"当前 1111 个用例" 更正为 1158（与状态表/全量实测一致）
+- **docs/api_reference.md 错误分类 10→12 类**：枚举表补 `patch_validation_failed` / `rag_retrieval_empty` 两状态细化行（1.1），优先级说明补 `refine_failure_category()` 判定口径（批次②同步遗漏）
+- **docs/failure_analysis.md 状态说明**：「扩展为 10 类」更正为 12 类（注明批次②补 2 状态细化类）
+- **QUICKSTART.md 补 3.2 成本告警阈值可配**（`APIManagerConfig.cost_alert_threshold`，默认 2.0）
+
 全量 **1158 passed / 0 failed**（scipy 精度 2 warning 为退化数据告警，非代码问题）
 
 ## [Unreleased] - 待发布（2026-09-14 错误分类细化 + 熔断冷却 + 结果分析批次）
