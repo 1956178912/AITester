@@ -397,8 +397,10 @@ python experiments/analyze_results.py --results-dir experiments/results
 python experiments/analyze_results.py --input experiments/results/benchmark_xxx.json
 ```
 
-### 5.6 熔断冷却期（4.1 残余）
-`APIManager` 的熔断器在节点连续失败达 `max_consecutive_failures` 后进入冷却期（`APIManagerConfig.circuit_cooldown_seconds`，默认 60s）。冷却期内即使健康检查线程把 `is_healthy` 翻回 True，路由层（`get_healthy_nodes()` 与 `_build_node_list` 备用候选）仍跳过该节点，避免流量重新打回死 provider（浪费时间与 token）；`mark_success` 复位熔断器，`get_status()` 暴露 `circuit_open_remaining_s` 字段供监控。
+### 5.6 熔断冷却期 + 半开探测（4.1 + 4.2）
+`APIManager` 的熔断器在节点连续失败达 `max_consecutive_failures` 后进入冷却期（`APIManagerConfig.circuit_cooldown_seconds`，默认 60s）。冷却期内即使健康检查线程把 `is_healthy` 翻回 True，路由层（`get_healthy_nodes()` 与 `_build_node_list` 备用候选）仍跳过该节点，避免流量重新打回死 provider（浪费时间与 token）；`mark_success` 复位熔断器，`get_status()` 暴露 `circuit_open_remaining_s` 与 `circuit_state`（closed / open / half_open）字段供监控。
+
+4.2 半开探测（默认开，`APIManagerConfig.enable_half_open_probe=True`）：冷却到期后节点不直接恢复全量路由，而是进入"半开"窗口——该节点被纳入路由候选（`in_circuit_half_open`），承载一次探测请求；探测成功闭合熔断器恢复全量路由，失败则重新打开半程冷却期（`min(cooldown/2, half_open_probe_penalty_cap_seconds)`，默认 cap 30s），防止死 provider 被反复打流量。`call()` 与 `check_health()` 的成功 / 各异常分支统一消费探测结果；置 `enable_half_open_probe=False` 退回 4.1 直接放行行为，便于对比实验。
 
 ### 5.7 SWE-bench 源码导出自动化（2.1）
 官方 SWE-bench JSONL 无 `instance_code` 字段（任务只有 patch 文本）。新增 `scripts/export_swe_bench_source.py` 自动补全：读取已下载的 JSONL，按 patch 的 `+++ b/<path>` 提取首个非测试目标文件，经 `git show <base_commit>:<path>` 只读导出（不污染工作树），输出 `SWE_BENCH_ENRICHMENT` 格式的 enrichment JSONL；支持 `--instance-ids`（逗号或 @文件，配合 check-dataset 输出的缺失列表批量补）、`--dry-run`、`--limit`。`SWEBenchDataset` 新增 `tasks_missing_source()`（识别 instance_code 兜底为 issue 文本的任务）；`check-dataset` 质量报告输出缺失源码的 instance_id 列表与补全指引。

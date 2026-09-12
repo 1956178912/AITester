@@ -2,6 +2,24 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 熔断器半开探测批次：4.2）
+
+### 4.2 熔断器半开探测（src/api/api_manager.py）
+- 4.1 熔断器冷却到期后节点直接恢复全量路由，死 provider 会被流量反复打回；本次补齐经典三态（closed / open / half-open）：冷却到期后节点先进入"半开"窗口，仅承载一次探测请求，探测成功才闭合熔断器恢复全量路由，失败则重新打开半程冷却期
+- `APIHealth` 新增 `in_circuit_half_open`（冷却已到期、探测未完成）与 `_probe_circuit_half_open()`（成功闭合 / 失败重开）；半开惩罚时长 = `min(cooldown/2, half_open_probe_penalty_cap_seconds)`，默认 cap 30s，防止彻底宕机 provider 冷却期越缩越短
+- `get_healthy_nodes()` / `_build_node_list()` 将半开窗口节点纳入路由候选（仅开关启用时），承载探测请求；`call()` 与 `check_health()` 的成功 / 各异常分支统一消费探测结果
+- `get_status()` 新增 `circuit_state`（closed / open / half_open）字段，监控与实验分析可直接观测三态
+- `APIManagerConfig` 新增 `enable_half_open_probe`（默认 True）与 `half_open_probe_penalty_cap_seconds`（默认 30.0）；置 False 退回 4.1 旧行为，便于对比实验
+- 文档同步：`docs/api_reference.md` 版本历史 + 4.1 相关说明更新
+- 测试：`tests/test_api_manager_extended.py` 新增 `TestHalfOpenProbe` 12 用例（窗口性质 / 成功闭合 / 失败重开 / 惩罚上限 / no-op 边界 / 开关关闭回退 / call 与 check_health 双路径消费 / get_status 三态）
+
+### 格式归一（docs/design/cross_file_repair.md）
+- 3.5 设计文档中 python 代码块（dataclass 注释对齐）触发 ruff format 门禁漂移，统一归一，无逻辑改动
+
+### 全量验证
+- `pytest tests/` **1237 passed / 0 failed**（自上一批次 1225 净增 12）
+- `ruff check` / `ruff format --check` 全绿
+
 ## [Unreleased] - 待发布（2026-09-14 改进清单 G-01~G-04 + 3.4 + 3.5 落地批次）
 
 ### 1.2 测试异味检测（analyze_results.py）
