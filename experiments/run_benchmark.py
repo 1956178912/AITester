@@ -153,7 +153,7 @@ def _get_api_for_task(task_index: int) -> dict:
 
 def _set_thread_api(task_index: int) -> None:
     """为当前线程设置 API 配置。"""
-    from src.agents.base_agent import _thread_local
+    from src.agents.llm_client import _thread_local
 
     api = _get_api_for_task(task_index)
     _thread_local.api_key = api["key"]

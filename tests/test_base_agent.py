@@ -25,9 +25,8 @@ from src.agents.base_agent import (
     _get_llm_config,
     _get_or_create_chat_client,
     _is_zai_compatible,
-    _llm_client_cache,
-    _retry_with_exponential_backoff,
 )
+from src.agents.llm_client import _llm_client_cache, _retry_with_exponential_backoff
 
 
 class TestRetryWithExponentialBackoff:
@@ -132,7 +131,7 @@ class TestIsZaiCompatible:
 class TestGetLlmConfig:
     """测试 LLM 配置获取。"""
 
-    @patch("src.agents.base_agent.LLM_CONFIGS", new=[])
+    @patch("src.agents.llm_client.LLM_CONFIGS", new=[])
     def test_empty_configs(self):
         """无配置时返回空字符串。"""
         api_key, base_url, model_name = _get_llm_config()
@@ -140,7 +139,7 @@ class TestGetLlmConfig:
         assert base_url == ""
         assert model_name == ""
 
-    @patch("src.agents.base_agent.LLM_CONFIGS")
+    @patch("src.agents.llm_client.LLM_CONFIGS")
     def test_returns_first_config(self, mock_configs):
         """返回第一个有效配置。"""
         mock_cfg = MagicMock()
@@ -328,7 +327,7 @@ class TestChatClientReuse:
         yield
         _llm_client_cache.clear()
 
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     def test_same_config_reuses_client(self, mock_chat_openai):
         """相同配置返回同一实例，ChatOpenAI 只构建一次。"""
         c1 = _get_or_create_chat_client("model-a", 0.0, "key-1", "https://test.example.com/v1")
@@ -337,7 +336,7 @@ class TestChatClientReuse:
         assert c1 is c2
         mock_chat_openai.assert_called_once()
 
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     def test_different_config_creates_new_client(self, mock_chat_openai):
         """不同模型（缓存键不同）构建新实例。"""
         client_a, client_b = MagicMock(name="client_a"), MagicMock(name="client_b")
@@ -350,10 +349,10 @@ class TestChatClientReuse:
         assert c2 is client_b
         assert mock_chat_openai.call_count == 2
 
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     def test_fifo_eviction_at_capacity(self, mock_chat_openai, monkeypatch):
         """缓存达到上限时按 FIFO 淘汰最早条目。"""
-        import src.agents.base_agent as ba
+        import src.agents.llm_client as ba
 
         monkeypatch.setattr(ba, "_MAX_CACHED_LLM_CLIENTS", 2)
 
@@ -370,7 +369,7 @@ class TestChatClientReuse:
 
     @patch("src.agents.base_agent._get_all_api_configs")
     @patch("src.agents.base_agent._get_llm_config")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     def test_call_llm_reuses_client_across_calls(self, mock_chat_openai, mock_get_config, mock_all_configs):
         """_call_llm 连续两次调用复用同一客户端（连接池跨调用复用）。"""
         mock_get_config.return_value = ("init-key", "init-url", "init-model")

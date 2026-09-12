@@ -21,6 +21,8 @@ from src.agents.base_agent import (
     _call_zai,
     _get_all_api_configs,
     _get_llm_config,
+)
+from src.agents.llm_client import (
     _get_or_create_zai_client,
     _llm_client_cache,
     _thread_local,
@@ -48,7 +50,7 @@ def _clear_llm_client_cache():
 class TestCallZai:
     """测试 zai SDK 调用路径 (_call_zai)。"""
 
-    @patch("src.agents.base_agent._retry_with_exponential_backoff")
+    @patch("src.agents.llm_client._retry_with_exponential_backoff")
     def test_call_zai_success(self, mock_retry):
         """zai 调用成功时返回 LLM 文本。"""
         mock_retry.return_value = "zai response text"
@@ -62,7 +64,7 @@ class TestCallZai:
         assert result == "zai response text"
         mock_retry.assert_called_once()
 
-    @patch("src.agents.base_agent._retry_with_exponential_backoff")
+    @patch("src.agents.llm_client._retry_with_exponential_backoff")
     def test_call_zai_raises_on_failure(self, mock_retry):
         """zai 调用全部失败时抛出 RuntimeError。"""
         mock_retry.side_effect = RuntimeError("zai error")
@@ -75,7 +77,7 @@ class TestCallZai:
                 user_message="usr",
             )
 
-    @patch("src.agents.base_agent._retry_with_exponential_backoff")
+    @patch("src.agents.llm_client._retry_with_exponential_backoff")
     def test_call_zai_passes_correct_args(self, mock_retry):
         """验证传递给重试函数的参数正确（包含 base_wait=5）。"""
         mock_retry.return_value = "ok"
@@ -160,7 +162,7 @@ class TestZaiClientReuse:
 
     def test_fifo_eviction_at_capacity(self, fake_zai, monkeypatch):
         """缓存达到上限时按 FIFO 淘汰最早条目。"""
-        import src.agents.base_agent as ba
+        import src.agents.llm_client as ba
 
         fake_module, _ = fake_zai
         monkeypatch.setattr(ba, "_MAX_CACHED_ZAI_CLIENTS", 2)
@@ -209,7 +211,7 @@ class TestGetLlmConfigThreadLocal:
             if hasattr(_thread_local, attr):
                 delattr(_thread_local, attr)
 
-    @patch("src.agents.base_agent.LLM_CONFIGS", new=[])
+    @patch("src.agents.llm_client.LLM_CONFIGS", new=[])
     def test_thread_local_api_key_takes_precedence(self):
         """线程局部 api_key 存在时优先使用它。"""
         _thread_local.api_key = "thread_key"
@@ -219,7 +221,7 @@ class TestGetLlmConfigThreadLocal:
         assert base_url == "https://thread.url"
         assert model_name == ""
 
-    @patch("src.agents.base_agent.LLM_CONFIGS")
+    @patch("src.agents.llm_client.LLM_CONFIGS")
     def test_thread_local_model_fallback_to_config(self, mock_configs):
         """线程局部未设置 model_name 时回退到 LLM_CONFIGS[0]。"""
         mock_cfg = MagicMock()
@@ -233,12 +235,12 @@ class TestGetLlmConfigThreadLocal:
         api_key, base_url, model_name = _get_llm_config()
         assert model_name == "fallback-model"
 
-    @patch("src.agents.base_agent.LLM_CONFIGS", new=[])
+    @patch("src.agents.llm_client.LLM_CONFIGS", new=[])
     def test_thread_local_empty_api_key_falls_through(self):
         """线程局部 api_key 为空时回退到全局配置。"""
         _thread_local.api_key = ""
         _thread_local.base_url = "ignored"
-        with patch("src.agents.base_agent.LLM_CONFIGS", new=[]):
+        with patch("src.agents.llm_client.LLM_CONFIGS", new=[]):
             api_key, base_url, model_name = _get_llm_config()
         assert api_key == ""
 
@@ -249,7 +251,7 @@ class TestGetLlmConfigThreadLocal:
 class TestGetAllApiConfigs:
     """测试 _get_all_api_configs。"""
 
-    @patch("src.agents.base_agent.LLM_CONFIGS")
+    @patch("src.agents.llm_client.LLM_CONFIGS")
     def test_returns_tuple_list(self, mock_configs):
         """返回所有配置的 (api_key, base_url, model_name) 三元组列表。"""
         cfg1 = MagicMock()
@@ -268,7 +270,7 @@ class TestGetAllApiConfigs:
         assert result[0] == ("key1", "https://api1.com", "model1")
         assert result[1] == ("key2", "https://api2.com", "model2")
 
-    @patch("src.agents.base_agent.LLM_CONFIGS", new=[])
+    @patch("src.agents.llm_client.LLM_CONFIGS", new=[])
     def test_empty_configs_returns_empty_list(self):
         """无配置时返回空列表。"""
         assert _get_all_api_configs() == []
@@ -297,7 +299,7 @@ class TestCallLlmWithCache:
     def _make_agent(self):
         """创建一个 mock llm 的 BaseAgent 实例。"""
         with (
-            patch("src.agents.base_agent.ChatOpenAI") as mock_cls,
+            patch("src.agents.llm_client.ChatOpenAI") as mock_cls,
             patch("src.agents.base_agent._get_llm_config") as mock_get,
         ):
             mock_get.return_value = ("k", "u", "m")
@@ -414,7 +416,7 @@ class TestCallLlm:
     def _make_agent(self):
         """创建 mock llm 的 BaseAgent 实例。"""
         with (
-            patch("src.agents.base_agent.ChatOpenAI") as mock_cls,
+            patch("src.agents.llm_client.ChatOpenAI") as mock_cls,
             patch("src.agents.base_agent._get_llm_config") as mock_get,
         ):
             mock_get.return_value = ("k", "u", "m")
@@ -431,7 +433,7 @@ class TestCallLlm:
             agent._call_llm("hello")
 
     @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_success_on_first_api(self, mock_get_configs, mock_chat_openai, mock_is_zai):
         """第一个 API 成功时直接返回文本。"""
@@ -445,7 +447,7 @@ class TestCallLlm:
         assert result == "hello world"
 
     @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_falls_back_to_second_api_on_failure(self, mock_get_configs, mock_chat_openai, mock_is_zai):
         """第一个 API 失败时自动切换到备用 API。"""
@@ -473,7 +475,7 @@ class TestCallLlm:
         assert mock_chat_openai.return_value.invoke.call_count == 2
 
     @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_raises_when_all_apis_fail(self, mock_get_configs, mock_chat_openai, mock_is_zai):
         """所有 API 均失败时抛出 RuntimeError。"""
@@ -491,7 +493,7 @@ class TestCallLlm:
             agent._call_llm("hello")
 
     @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_empty_response_triggers_retry(self, mock_get_configs, mock_chat_openai, mock_is_zai):
         """LLM 返回空响应时视为失败，尝试下一个模型/API。"""
@@ -523,7 +525,7 @@ class TestCallLlm:
         mock_call_zai.assert_called_once()
 
     @patch("src.agents.base_agent._is_zai_compatible")
-    @patch("src.agents.base_agent.ChatOpenAI")
+    @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
     def test_same_api_multiple_models_fallback(self, mock_get_configs, mock_chat_openai, mock_is_zai):
         """同一 API 有多个模型时，失败后尝试同 API 的下一个模型。"""
@@ -696,7 +698,7 @@ class TestTruncateCodeEdgeCases:
 class TestGetLlmConfigIntegration:
     """集成测试：验证 _get_llm_config 在有配置时的完整路径。"""
 
-    @patch("src.agents.base_agent.LLM_CONFIGS")
+    @patch("src.agents.llm_client.LLM_CONFIGS")
     def test_returns_config_values(self, mock_configs):
         """有配置时返回正确的 api_key、base_url、model_name。"""
         mock_cfg = MagicMock()
