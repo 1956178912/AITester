@@ -213,7 +213,7 @@ python experiments/visualize_results.py \
 
 ---
 
-### 示例 13.5：结果结构化分析（4.3 + 1.1/1.2 指标）
+### 示例 13.5：结果结构化分析（4.3 + 1.1/1.2/1.3 指标）
 
 ```bash
 # 分析最新一次 benchmark 结果
@@ -225,10 +225,10 @@ python experiments/analyze_results.py \
 ```
 
 输出：
-- 终端打印 Markdown 汇总（成功率 / Token 效率 / 迭代次数分布 / 失败原因分布 / RAG 质量 / 修复收敛效率 / 多维质量代理）
+- 终端打印 Markdown 汇总（成功率 / Token 效率 / 迭代次数分布 / 失败原因分布 / RAG 质量 / 修复收敛效率 / 多维质量代理 / 测试异味检测 / 修复收敛曲线）
 - `<输入文件同目录>/analysis_summary.md`
 
-**新增指标说明（1.1 多维评估 + 1.2 修复收敛效率）**：
+**新增指标说明（1.1 多维评估 + 1.2 修复收敛效率 + 1.3 修复收敛曲线 + 1.2 测试异味检测）**：
 
 | 指标组 | 字段 | 说明 |
 |--------|------|------|
@@ -239,8 +239,26 @@ python experiments/analyze_results.py \
 | 多维质量代理 | `quality_proxy_metrics.runtime_proxy` | 成功/失败任务耗时的均值与中位数 |
 | 多维质量代理 | `quality_proxy_metrics.assertion_proxy` | 若 `details[].generated_test` 存在，统计每任务 `assert` 行数（代理断言强度） |
 | 多维质量代理 | `quality_proxy_metrics.failure_top_categories` | 失败任务 Top N 错误类别（辅助归因） |
+| 测试异味检测（1.2） | `test_smell_detection` | AST 扫 `details[].generated_test`，检测 4 类 LLM 生成异味：Assertion Roulette（无有效断言）/ Magic Number（≥3 个未命名整数）/ 断言弱化（断言行数较上轮减少）/ 平凡测试（函数体仅 pass / 恒真断言）；旧 JSON 无 `generated_test` 时 `available=False` 跳过章节 |
+| 修复收敛曲线（1.3） | `repair_convergence_curve` | 按迭代轮次 0/1/2/3+ 统计"到达任务数 / 累计通过 / 累计通过率 / 累计平均耗时"，观察随迭代增加通过率如何变化 |
 
-> 注：该章节为保守代理指标（基于现有结果字段可复算），不等同于 AST 圈复杂度、内存占用等精确结构/性能指标；`assertion_proxy` 仅在结果 JSON 的 `details[].generated_test` 提供时可用，旧 JSON 自动降级为 `N/A`。
+> 注：该章节为保守代理指标（基于现有结果字段可复算），不等同于 AST 圈复杂度、内存占用等精确结构/性能指标；`assertion_proxy` / 测试异味检测 / 修复收敛曲线仅在结果 JSON 的 `details[].generated_test` 提供时可用，旧 JSON 自动降级为 `N/A` 或跳过章节。
+
+---
+
+### 示例 13.6：失败根因分析 + 案例知识库（5.3）
+
+```bash
+# 失败案例聚类报告 + 根因三大类（LLM 能力 / 依赖 / 框架）+ 结构化知识库落盘
+python experiments/analyze_failures.py \
+    --results-dir experiments/results \
+    --knowledge-base experiments/results/failure_knowledge_base.json
+```
+
+输出：
+- 失败案例按基线 / 错误类型聚类的 Markdown 报告（`--output` 默认 `experiments/results/failure_analysis.md`）
+- 失败根因三大类（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类，每类最多 3 个代表案例）
+- 结构化案例知识库 `failure_knowledge_base.json`（按 `error_category` 多样性优先选取，含 `task_id` / `root_cause` / `reproducible_steps` / `suggested_fix`）
 
 ---
 

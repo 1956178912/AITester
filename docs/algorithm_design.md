@@ -13,6 +13,7 @@
 | Algorithm 2 | 错误分类（规则匹配） | [src/agents/error_classifier.py](../src/agents/error_classifier.py) | `ErrorClassifier.classify()` |
 | Algorithm 3 | 迭代修复循环 | [src/graph/workflow.py](../src/graph/workflow.py) | `_should_debug()` + 条件路由边 |
 | Patch 应用 | 补丁写入原文件 | [src/tools/patch_applier.py](../src/tools/patch_applier.py) | `apply_patch_to_code()` |
+| 跨文件修复（3.5，默认关） | 跨文件依赖分析 + 多文件补丁 | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` 节点（插在 executor→debugger 之间） | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` |
 | RAG 检索 | 向量相似检索 | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` |
 | 批量实验 | 基准测试执行 | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` |
 
@@ -137,6 +138,8 @@ Output: 修复后的源代码 S'，测试是否通过 bool
 ```
 
 **实现位置**：[src/graph/workflow.py](../src/graph/workflow.py) 中的 `_should_debug()` 控制路由条件。
+
+> **3.5 跨文件扩展路径**（`CROSS_FILE_ENABLE=true` 时启用，默认关）：在 `executor` 与 `debugger` 之间插入 `cross_file_analyzer` 节点（`_cross_file_analyzer_node`），做 AST 跨文件 import 依赖分析并把依赖边写入 `state["cross_file_deps"]`；`_patch_applier_node` 在跨文件分支按拓扑序对多模块应用补丁（被调用方先改、调用方后改），任一文件失败经 `cross_file_fallback_single_file()` 降级为仅入口模块应用（与单文件 `safe_apply_patch` 同口径）。详见 [docs/design/cross_file_repair.md](design/cross_file_repair.md)。
 
 ---
 

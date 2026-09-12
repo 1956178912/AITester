@@ -7,10 +7,13 @@
 > 「附录：2026-09-12 轮次」；2026-09-13 轮次（文档数据对齐批次，M-01~M-03）的完整记录见
 > 「附录：2026-09-13 轮次」；2026-09-13 系统功能增强轮次（3.1/3.4/4.1/2.3/1.5）的完整记录见
 > 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
+> 2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）与 4.2 半开探测批次的完整记录见
+> 「附录：2026-09-14 改进清单批次」与「附录：2026-09-14 4.2 半开探测批次」。
 >
-> **当前最新基线（2026-09-14 批次③）**：评估指标多维化首批（1.1/1.2 分析层增强）已落地，
-> 全量测试推进至 **1163 passed / 0 failed**，`ruff check` / `ruff format --check` 全绿；
-> 下文 1158 相关条目保留为历史轮次记录，不代表当前最新基线。
+> **当前最新基线（2026-09-14 4.2 半开探测批次）**：全量测试推进至
+> **1237 passed / 0 failed**，`ruff check` / `ruff format --check` 全绿；
+> 下文 1163（批次③）/ 1225（改进清单批次）/ 1158（F 批次）相关条目保留为历史轮次记录，
+> 不代表当前最新基线。
 
 ## 阶段 0：基线检查
 
@@ -607,3 +610,81 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 - **F-02 缓存路径**：redaction_audit C 项"已知可接受风险"结论不变（本地可信域、脱敏与缓存命中互斥），仅路径与信任级论述对齐代码实际（`src/cache/` 在仓库内且已 gitignore）；
 - **F-04 默认输出路径**：`analyze_failures.py --output` 默认值改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
 - **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。
+
+---
+
+## 附录：2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）
+
+### 执行范围
+
+用户给出 5 大类 22 条改进清单（1.1~1.3 / 2.1~2.3 / 3.1~3.5 / 4.1~4.4 / 5.1~5.3），逐项核对仓库实际代码状态后确认**多数条目已在此前批次落地**，真正缺口集中在 4 处（G-01~G-04），另 2 处为研究性/实验性项目非纯代码改动（3.4 断言增强、3.5 跨文件修复作为可开关能力一并落地，默认关保持历史口径）。
+
+| 项 | 目标 | 改动文件 | 状态 |
+|----|------|----------|------|
+| G-01 | 1.2 测试异味检测（Assertion Roulette / Magic Number / 断言弱化 / 平凡测试） | `experiments/analyze_results.py`（`_test_smell_detection` 纯函数 + Markdown 渲染）+ `tests/test_experiments_scripts.py` +3 用例 | ✅ commit ffb77cf |
+| G-02 | 1.3 修复收敛曲线（迭代轮次累计通过率 + 修复成本） | `experiments/analyze_results.py`（`_repair_convergence_curve` 纯函数）+ 测试 | ✅ commit ffb77cf（与 G-01 同批） |
+| G-03 | 4.4 依赖缓存监控（命中率统计 / 清理命令 / 多版本列表） | `src/tools/dependency.py`（`get_venv_cache_stats` / `list_venv_cache` / `clear_venv_cache` + `create_venv` 记录 hit/create）+ `tests/test_dependency.py` +8 用例 | ✅ commit 6b0e64d |
+| G-04 | 5.3 失败根因分类 + 案例知识库 | `experiments/analyze_failures.py`（`root_cause_classification` 三大根因 + `failure_knowledge_base` 结构化 JSON）+ `tests/test_analyze_failures.py`（新，13 用例） | ✅ commit 247fc91 |
+| 3.4 | 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） | `src/agents/generator.py`（`_extract_existing_assertions`）+ `config.py`（`ASSERTION_AUGMENT_ENABLE`）+ `tests/test_generator.py` +6 用例 | ✅ commit ed4c237 |
+| 3.5 | 跨文件修复（协调器-提议者架构，默认关） | `src/tools/cross_file.py`（新，AST 依赖分析 + 多文件补丁应用 + 单文件降级）+ `src/graph/workflow.py` cross_file_analyzer 节点 + `tests/test_cross_file.py`（新，27 用例）+ 设计文档 `docs/design/cross_file_repair.md` | ✅ commit 670f368 |
+
+### 全量验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 全量测试 | ✅ **1225 passed / 0 failed**（自 1.1/1.2 首批基线 1163 净增 62） |
+| Lint / 格式化 | ✅ `ruff check` / `ruff format --check` 全绿 |
+| 文档同步 | ✅ CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference 5 文件批次条目（commit 15cffaa / 1205647） |
+
+### 设计决策
+
+- **3.4 / 3.5 默认关**（`ASSERTION_AUGMENT_ENABLE` / `CROSS_FILE_ENABLE` 均默认 false），保持历史实验口径不变；开启为显式行为，无隐式行为变化。
+- **G-01~G-04 仅分析层 / 工具层纯函数**，零运行路径改动，旧 JSON 缺字段时自动降级（跳过章节 / available=False），不崩溃。
+- **G-03 踩坑修复**：`threading.Lock` 非可重入，`_record_venv_cache_event` 与 `_persist_cache_stats` 嵌套自锁会挂起进程——改为单一加锁边界。
+
+---
+
+## 附录：2026-09-14 4.2 半开探测批次
+
+### 优化点
+
+4.1 熔断器冷却到期后节点直接恢复全量路由，死 provider 会被全量流量反复打回。补齐经典熔断器三态（closed / open / half-open）：冷却到期后节点先进入"半开"窗口，仅承载一次探测请求；探测成功闭合熔断器恢复全量路由，失败则重新打开半程冷却期（`min(cooldown/2, half_open_probe_penalty_cap_seconds)`，默认 cap 30s），防止彻底宕机 provider 冷却期越缩越短。
+
+### 改动内容
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 半开窗口判定 + 探测消费 | `src/api/api_manager.py` | `APIHealth.in_circuit_half_open`（冷却已到期、探测未完成）+ `_probe_circuit_half_open()`（成功闭合 / 失败重开半程冷却） |
+| 路由候选纳入半开节点 | `src/api/api_manager.py` | `get_healthy_nodes()` / `_build_node_list()` 将半开窗口节点纳入候选（仅 `enable_half_open_probe=True` 时） |
+| 探测结果统一消费 | `src/api/api_manager.py` | `call()` 与 `check_health()` 的成功 / 各异常分支（RateLimit / APIError / 通用异常）统一调用 `_probe_circuit_half_open` |
+| 三态可观测 | `src/api/api_manager.py` | `get_status()` 新增 `circuit_state` 字段（closed / open / half_open） |
+| 开关 + 惩罚上限可配 | `src/api/api_manager.py` | `APIManagerConfig.enable_half_open_probe`（默认 True，置 False 退回 4.1 直接放行）+ `half_open_probe_penalty_cap_seconds`（默认 30.0） |
+| 半开探测测试 | `tests/test_api_manager_extended.py` | 新增 `TestHalfOpenProbe` 12 用例（窗口性质 / 成功闭合 / 失败重开 / 惩罚上限 / no-op 边界 / 开关关闭回退 / call 与 check_health 双路径消费 / get_status 三态） |
+| 格式归一 | `docs/design/cross_file_repair.md` | 3.5 设计文档 python 代码块注释对齐触发 ruff format 门禁漂移，统一归一（无逻辑改动） |
+
+### 测试前后对比
+
+| 指标 | 批次前 | 批次后 |
+|------|--------|--------|
+| 全量测试 | 1225 passed / 0 failed | **1237 passed / 0 failed**（净增 12，即 TestHalfOpenProbe 12 用例） |
+| Lint / 格式化 | 全绿 | 全绿（`ruff check` / `ruff format --check` 138 files） |
+
+### 提交记录
+
+| commit | 类型 | 说明 |
+|--------|------|------|
+| b0b6352 | style(docs) | ruff format 归一 cross_file_repair.md 的 python 代码块漂移 |
+| b69d811 | feat(api) | 4.2 熔断器半开探测（冷却到期先探测后放行，默认开） |
+| d41887d | docs(optimize) | 4.2 文档同步（CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference） |
+
+### 设计决策
+
+- **默认开（enable_half_open_probe=True）**：半开探测是稳定性改进，默认启用；对比实验可置 False 退回 4.1 口径，无需改代码。
+- **惩罚公式 `min(cooldown/2, cap=30s)`**：冷却时长减半使"彻底死掉"的 provider 冷却期单调收缩，但 cap 防无限缩短（避免对死点无限次探测）。
+- **零运行路径破坏性**：仅新增字段 / 方法 / 配置项，默认值向后兼容；`get_healthy_nodes` 行为在开关关闭时与 4.1 完全一致。
+
+### 后续建议
+
+1. **跑一次 4.2 对比实验**：同一 provider 池分别 `enable_half_open_probe=True/False` 各跑一轮 benchmark，用 `experiments/analyze_results.py` 对比故障恢复轮次与 token 浪费——验证半开探测实际收益（OPTIMIZATION_PLAN 4.2 行"对比实验未跑"备注）。
+2. **executor 沙箱深度审计（T-04 历史遗留）**：补设计文档 + 审计矩阵，单独立项。
+3. **CLI 模块覆盖率**：`cli/app.py` 仍为全项目最低（约 64%），5.1 条目建议下一轮补 10~15 个边界用例。

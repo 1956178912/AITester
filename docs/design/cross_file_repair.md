@@ -1,7 +1,7 @@
 # 3.5 跨文件修复能力设计文档
 
 > 立项日期：2026-09-14
-> 状态：设计阶段（未实施）
+> 状态：**已实施**（commit 670f368，默认关 `CROSS_FILE_ENABLE=false`；下文 §3 与实现存在 3 处偏差，见 §5 偏差说明）
 > 关联清单：改进清单 3.5
 > 前置依赖：3.1 多候选补丁（`multi_candidate.py` 已落地）
 
@@ -107,8 +107,16 @@ def analyze_cross_file_deps(
 def build_cross_file_repair_plan(
     deps: list[CrossFileDependency],
     debugger: "DebuggerAgent",
+    target_code: str,
+    test_output: str,
+    failed_cases: list[dict[str, str]],
+    focus_function: str | None = None,
+    target_module: str | None = None,
+    max_modules: int | None = None,
 ) -> CrossFileRepairPlan:
-    """基于依赖图 + LLM 生成多文件修复计划。"""
+    """基于依赖图 + LLM 生成多文件修复计划（协调器-提议者架构：
+    每模块一个提议者，复用现有 DebuggerAgent 调用路径；实际签名含
+    target_code / test_output / failed_cases 上下文参数，见 §5 偏差说明）。"""
 ```
 
 ### 3.2 工作流集成点
@@ -125,7 +133,7 @@ def build_cross_file_repair_plan(
 
 ### 3.3 多文件补丁应用
 
-`patch_applier.py` 新增：
+`src/tools/cross_file.py` 新增（注意：实现落在 `cross_file.py` 而非设计的 `patch_applier.py`，见 §5 偏差说明）：
 
 ```python
 def apply_multi_file_patch(
@@ -138,6 +146,15 @@ def apply_multi_file_patch(
     策略：按依赖图拓扑序应用（被调用方先改，调用方后改），
     任一文件应用失败则回滚到原始代码（与单文件 safe_apply_patch 同口径）。
     """
+
+
+def cross_file_fallback_single_file(
+    original_files: dict[str, str],
+    patches: dict[str, str],
+    entry_module: str,
+) -> tuple[dict[str, str], bool]:
+    """3.5 单文件降级：跨文件多文件应用失败时，仅对入口模块应用其补丁
+    （与单文件 safe_apply_patch 同口径），保证"跨文件失败不劣于单文件"。"""
 ```
 
 ### 3.4 配置开关
@@ -187,6 +204,17 @@ CROSS_FILE_MAX_MODULES: int = int(os.getenv("CROSS_FILE_MAX_MODULES", "5"))
 ## 6. 二期扩展（不在本次范围）
 
 - 跨文件执行验证（当前只支持单文件候选执行验证）；
+- 与 `multi_candidate.py` 扩展候选筛选（静态校验每个文件的补丁，跨文件执行验证留作二期，本次未实施）；
 - 依赖图可视化（`dot` 输出）；
 - 修复计划缓存（相同依赖图复用 LLM 生成结果）；
 - 与 RAG 集成（跨文件修复案例入库）。
+
+## 7. 实施偏差说明（设计 vs 实现，commit 670f368）
+
+| 设计（§3） | 实现（src/tools/cross_file.py + workflow.py） | 偏差原因 |
+|------------|----------------------------------------------|----------|
+| `build_cross_file_repair_plan(deps, debugger)` | 实际签名多了 `target_code` / `test_output` / `failed_cases` 三个必填上下文参数 + `focus_function` / `target_module` / `max_modules` 可选参数 | 协调器生成修复计划需完整上下文（原始代码 + 测试输出 + 失败用例），设计时未列入 |
+| `apply_multi_file_patch` 落在 `patch_applier.py` | 实际落在 `src/tools/cross_file.py` | 多文件补丁与跨文件依赖分析同属 3.5 能力，集中放 cross_file.py 避免 patch_applier.py 职责扩散；单文件 `safe_apply_patch` 保留在 patch_applier.py 不变 |
+| 未提及单文件降级 | 实现新增 `cross_file_fallback_single_file()`：跨文件多文件应用失败时仅对入口模块应用补丁 | 保证"跨文件失败不劣于单文件"，与 3.5 兼容性口径一致 |
+
+> 数据结构（`CrossFileDependency` / `CrossFileRepairPlan`）与配置开关（`CROSS_FILE_ENABLE` / `CROSS_FILE_MAX_MODULES` 默认值）设计与实现**逐字段 / 逐默认值一致**，无偏差。

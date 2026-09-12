@@ -4,7 +4,7 @@
 
 本文档对 AITester 在合成数据集实验中的失败案例进行深入分析，识别系统瓶颈和改进方向。
 
-> **状态说明（2026-09-14 批次③）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`，批次②再补状态细化类 `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+ **"修复收敛效率（1.2）"**（首次尝试成功率 / 成功任务迭代与耗时统计）+ **"多维质量代理（1.1，保守可复算）"**（覆盖率/耗时/断言行数/失败 Top N 类别）。
+> **状态说明（2026-09-14 批次③）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`，批次②再补状态细化类 `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+ **"修复收敛效率（1.2）"**（首次尝试成功率 / 成功任务迭代与耗时统计）+ **"多维质量代理（1.1，保守可复算）"**（覆盖率/耗时/断言行数/失败 Top N 类别）。另：5.3 批次后 `experiments/analyze_failures.py` 新增**失败根因三大类**（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类）+ **失败案例知识库**（`failure_knowledge_base()` 结构化 JSON，CLI `--knowledge-base/-k` 落盘 `failure_knowledge_base.json`），失败归因口径以该脚本输出为准。
 
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)
@@ -142,10 +142,10 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 **表现**:
 - 当前RAG启用率较低（默认false）
 - 向量检索对相似bug的匹配精度有限
-- 缺少失败案例的知识库
+- ~~缺少失败案例的知识库~~ → 5.3 已实现：`experiments/analyze_failures.py --knowledge-base/-k` 输出结构化失败案例知识库（`failure_knowledge_base.json`，含 task_id / root_cause / reproducible_steps / suggested_fix），按 error_category 多样性优先选取
 
 **解决方案**:
-1. 启用RAG并构建失败案例知识库
+1. ~~启用RAG并构建失败案例知识库~~（5.3 已落地 `failure_knowledge_base`，结构化案例 + 可复现步骤 + 建议修复）
 2. 优化嵌入模型，提升语义匹配精度
 3. 实现混合检索（向量+关键词）
 

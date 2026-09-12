@@ -52,6 +52,15 @@
 
 **判定**：这是实验数据归档面，不是日志/控制台泄漏面。内容是被测代码与 LLM 诊断文本（实验本身的数据），且 `experiments/results/` 已入 `.gitignore`（4.3 约定，不入库、不上 git）。清单 4.3 的归档自动化（Zenodo 上传）若启用，**上传前应对结果 JSON 过一遍 `mask_sensitive_info`**（作为归档脚本的一部分，本轮未做——归档脚本未立项）。
 
+### E. 4.2 半开探测新增日志点（2026-09-14 4.2 批次复核）
+
+4.2 半开探测在 `src/api/api_manager.py` 新增两条 `logger` 文案（`APIHealth._probe_circuit_half_open`）：
+
+- 探测成功：`logger.info("API %s 半开探测成功，熔断器闭合，恢复全量路由", self.config.model_name)`
+- 探测失败：`logger.warning("API %s 半开探测失败，重新进入熔断冷却 %.1fs", self.config.model_name, penalty)`
+
+**判定**：两条文案仅打印 `model_name`（非敏感标识）与冷却秒数（数字），**不含 `base_url` / `str(e)` / API Key 等敏感字段**，无需 `_redact()`。与 A 项"APIManager 日志点就地脱敏"口径一致——本次复核确认 4.2 未引入新的敏感出口。
+
 ## 未覆盖/建议后续
 
 1. **归档脱敏**：4.3 归档脚本（未立项）落 Zenodo 前应统一过 `mask_sensitive_info`（含结果 JSON 与 trace JSONL）；
