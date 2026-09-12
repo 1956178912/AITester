@@ -2,6 +2,35 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-12 代码可维护性拆分批次）
+
+### 代码可维护性：三个超大文件按职责拆分
+- 背景：9 个文件超过 600 行，其中 workflow.py（1089）/ api_manager.py（927）/
+  base_agent.py（648）职责混杂，后续扩展维护成本高
+- base_agent.py（648→308）：11 个 LLM 客户端工具函数（客户端缓存 / 指数退避重试 /
+  日志脱敏 / token 统计 / zai 兼容检测 / 配置获取 / 文件缓存开关）迁至
+  llm_client.py，仅保留 BaseAgent 基类与 re-export
+- api_manager.py（927→721）：RotationStrategy / APIHealth / APIManagerConfig /
+  _COST_ALERT_THRESHOLD 迁至 api_health.py，纯数据模型与路由逻辑分离；顺手修复
+  APIManagerConfig 中 enable_half_open_probe 与 half_open_probe_penalty_cap_seconds
+  字段重复定义（4.2 批次合并遗留，值相同无副作用）
+- workflow.py（1089→292）：节点函数迁至 nodes.py、RAG 检索器单例迁至 rag.py、
+  结构化追踪迁至 tracing.py，保留图构建 / 条件路由 / 公开 API，形成无环依赖分层；
+  通过 re-export 保持历史 `from src.graph.workflow import ...` 路径不变
+- 测试 patch 路径按符号归属精确重定向至新模块，全量 1247 passed 零回归
+
+### 性能分析（scripts/performance_profile.py）
+- 实测 cProfile / tracemalloc 确认：运行时逻辑高效无 CPU 热点（ErrorClassifier
+  单次约 10μs、CodeAnalyzer 正常 AST 遍历）、无内存泄漏
+- 真实瓶颈为第三方库 import 开销（chromadb 0.6s / pandas+datasets 0.53s /
+  openai 0.9s），属核心依赖固有成本；无低垂果实式优化点
+- 修正 profile 脚本模板化结论，详见 docs/performance_profile_report.md
+
+### 依赖审计
+- pip-audit 复跑发现 nltk==3.10.3 命中 CVE-2026-81726（路径遍历，模型加载 API），
+  但 nltk 为漏洞扫描工具 safety 的间接依赖、项目代码零引用、CI 用 `--no-deps`
+  仅扫直接依赖，对运行时零影响且 PyPI 暂无修复版本，记录备查
+
 ## [Unreleased] - 待发布（2026-09-12 完整审查批次）
 
 ### 完整项目审查（安全 / 代码质量 / 测试 / 依赖）
