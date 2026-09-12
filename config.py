@@ -260,6 +260,13 @@ RAG_COLLECTION_NAME: str = os.getenv("RAG_COLLECTION_NAME", "aitester_cases")
 # TTL：持久化场景下需要跨实验复用，默认放宽到 7 天（内存模式仍可用默认 1 小时）
 RAG_TTL_SECONDS: int = _parse_int_env("RAG_TTL_SECONDS", 7 * 24 * 3600, 60, None)
 
+# ─── 数据集配置 ────────────────────────────────────────────────────────────────
+# SWE-bench 源码补充文件路径（P0）：官方 SWE-bench JSONL 不含被测源码字段，
+# 通过该 JSONL 按 instance_id 补全 instance_code/test_code。默认空串 = 不补全。
+# 环境变量名保持不变（scripts/export_swe_bench_source.py 输出的正是此格式，
+# README 复现步骤也以 `SWE_BENCH_ENRICHMENT=<路径>` 引用），仅在此集中声明默认值。
+SWE_BENCH_ENRICHMENT: str = os.getenv("SWE_BENCH_ENRICHMENT", "")
+
 # ─── 执行隔离配置（依赖检测 / venv 沙箱）─────────────────────────────────────
 # 本地执行默认直接跑在系统 Python 环境：被测代码 import 的第三方库缺失时
 # 测试直接失败，且无法区分"代码 bug"与"环境缺依赖"。
@@ -280,16 +287,10 @@ LLM_TIMEOUT: int = _validate_timeout(_LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 6
 # 最小 1：等待 0 秒等于不等待，重试退避失去意义
 LLM_RETRY_WAIT: int = _parse_int_env("LLM_RETRY_WAIT", 30, 1, None)
 
-# ─── 3.5 跨文件修复（协调器-提议者架构，默认关）────────────────────────────
-# 启用后 workflow 在 executor → debugger 之间插入 cross_file_analyzer 节点，
-# 分析被测代码的跨文件依赖并路由多文件补丁应用。默认 false 保持历史单文件
-# 口径；启用需显式 CROSS_FILE_ENABLE=true + CROSS_FILE_MAX_MODULES 限制。
-CROSS_FILE_ENABLE: bool = os.getenv("CROSS_FILE_ENABLE", "false").lower() == "true"
-# 跨文件依赖分析的最大模块数（防止 LLM 上下文爆炸，默认 5）
-CROSS_FILE_MAX_MODULES: int = _parse_int_env("CROSS_FILE_MAX_MODULES", 5, 1, None)
-
-# ─── 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关）────────────
-# 启用后 GeneratorAgent 在生成前先 AST 提取被测代码中已有 assert 语句，
-# 作为"锚点断言"注入 prompt，引导 LLM 避免断言弱化 / 恒真断言 / 魔数异味。
-# 默认 false 保持历史生成口径；启用需显式 ASSERTION_AUGMENT_ENABLE=true。
-ASSERTION_AUGMENT_ENABLE: bool = os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
+# ─── 功能模块自有开关（默认关，不在本文件集中声明）──────────────────────────
+# 说明：CROSS_FILE_ENABLE / CROSS_FILE_MAX_MODULES（3.5 跨文件修复）与
+# ASSERTION_AUGMENT_ENABLE（3.4 断言增强）等"默认关"的实验性功能开关，由各自
+# 功能模块在调用期读取环境变量（cross_file.py / generator.py，与 multi_candidate.py
+# 模式一致），以保留测试的运行期切换能力（patch.dict(os.environ)）。此处在 config.py
+# 再定义一份会造成"双源漂移"，故 2026-09-15 收敛轮次移除重复常量，配置说明见
+# .env.example 对应小节与各功能模块 docstring。

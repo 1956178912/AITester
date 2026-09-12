@@ -37,6 +37,7 @@ from src.tools.multi_candidate import (
     generate_candidates,
     multi_candidate_available,
     multi_candidate_count,
+    multi_candidate_exec_validate,
     select_best_candidate,
 )
 from src.tools.patch_applier import apply_patch_to_code
@@ -476,8 +477,6 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         (最优候选应用后的代码, 是否成功应用)。回退单补丁时与原
         apply_patch_to_code 同口径。
     """
-    import os
-
     from src.agents.debugger import DebuggerAgent
     from src.agents.executor import ExecutorAgent
 
@@ -492,7 +491,7 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         focus_function=state.get("target_function"),
         target_module=state.get("module_name"),
     )
-    use_exec = os.getenv("MULTI_CANDIDATE_EXEC_VALIDATE", "false").lower() == "true"
+    use_exec = multi_candidate_exec_validate()
     executor = ExecutorAgent(timeout=EXECUTION_TIMEOUT, use_venv=EXECUTOR_USE_VENV) if use_exec else None
     best = select_best_candidate(
         candidates=candidates,
@@ -566,7 +565,11 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         if not applied:
             # 多文件失败 → 降级单文件（保守口径，不引入劣化）
             logger.info("3.5 跨文件补丁应用失败，降级单文件模式")
-            new_code, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
+            # 注意：cross_file_fallback_single_file 返回 (新文件映射, 成功)，
+            # 需再取 entry_module 的代码字符串——此前误把整个映射当 new_code，
+            # len(dict) 恒为 1，降级补丁永远卡在"过短"安全检查、永远写不进盘
+            fallback_files, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
+            new_code = fallback_files.get(entry_module, original_code)
     elif multi_candidate_available():
         new_code, applied = _select_multi_candidate_patch(state, original_code)
     else:

@@ -316,3 +316,14 @@ def multi_candidate_count() -> int:
         logger.warning("MULTI_CANDIDATE_COUNT=%r 非整数，回退默认 %d", raw, _DEFAULT_CANDIDATE_COUNT)
         return _DEFAULT_CANDIDATE_COUNT
     return max(1, min(value, _MAX_CANDIDATE_COUNT))
+
+
+def multi_candidate_exec_validate() -> bool:
+    """读取环境变量 MULTI_CANDIDATE_EXEC_VALIDATE（默认 false）。
+
+    开启后 select_best_candidate 会逐候选真实跑测试做执行验证（成本更高、
+    筛选更准）；默认关闭走纯静态筛选。与 multi_candidate_available /
+    multi_candidate_count 并列，集中管理多候选补丁的全部开关，避免各节点
+    裸读 os.getenv 导致配置口径分裂。
+    """
+    return os.getenv("MULTI_CANDIDATE_EXEC_VALIDATE", "false").lower() == "true"

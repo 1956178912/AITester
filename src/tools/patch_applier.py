@@ -302,34 +302,6 @@ def safe_apply_patch(
         return code, False
 
 
-def safe_apply_multi_function_patch(
-    code: str,
-    patches: list[dict],
-) -> tuple[str, bool]:
-    """
-    安全应用多个函数的修改，失败时自动回滚。
-
-    Args:
-        code: 原始代码
-        patches: 补丁列表，每项为 {"function_name": str, "patch": str}
-
-    Returns:
-        Tuple[str, bool]: (修复后的代码, 是否全部成功)
-    """
-    # 尝试应用所有补丁
-    new_code, success = apply_multi_function_patch(code, patches)
-    if not success:
-        return code, False
-
-    # 验证生成的代码语法是否正确
-    try:
-        ast.parse(new_code)
-        return new_code, True
-    except SyntaxError:
-        # 语法错误，回滚到原始代码
-        return code, False
-
-
 def generate_diff(old_code: str, new_code: str) -> str:
     """
     生成 unified diff 格式的补丁。

@@ -11,41 +11,9 @@ import pstats
 import sys
 import time
 import tracemalloc
-from functools import wraps
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-def benchmark(func):
-    """性能测试装饰器"""
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        # 预热
-        func(*args, **kwargs)
-
-        # 正式测试
-        times = []
-        for _ in range(10):
-            start = time.perf_counter()
-            result = func(*args, **kwargs)
-            end = time.perf_counter()
-            times.append(end - start)
-
-        avg_time = sum(times) / len(times)
-        min_time = min(times)
-        max_time = max(times)
-
-        return {
-            "function": func.__name__,
-            "avg_time_ms": avg_time * 1000,
-            "min_time_ms": min_time * 1000,
-            "max_time_ms": max_time * 1000,
-            "result": result,
-        }
-
-    return wrapper
 
 
 def cpu_profile(func, runs=5):

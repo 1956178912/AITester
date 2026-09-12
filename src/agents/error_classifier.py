@@ -645,3 +645,25 @@ def refine_failure_category(
     if stats and all(s.get("results", 0) == 0 for s in stats):
         return ErrorCategory.RAG_RETRIEVAL_EMPTY.value
     return error_category
+
+
+def refine_final_error_category(final_state: dict) -> str:
+    """从工作流最终状态字典提取并细化失败类别（refine_failure_category 的接线封装）。
+
+    cli/app.py 与 run_benchmark.py 各自重复"取 error_category/test_passed/
+    repair_history/rag_stats → refine_failure_category"的同构代码，新增 state
+    字段时两处易漂移。此处收敛为单一接线点，两个调用方只需传 final_state。
+
+    Args:
+        final_state: 工作流最终状态字典（error_category/test_passed/
+            repair_history/rag_stats 键，缺失时用安全默认）。
+
+    Returns:
+        细化后的错误类别字符串（判定规则见 refine_failure_category）。
+    """
+    return refine_failure_category(
+        final_state.get("error_category", "") or "",
+        final_state.get("test_passed", False),
+        repair_history=final_state.get("repair_history"),
+        rag_stats=final_state.get("rag_stats"),
+    )

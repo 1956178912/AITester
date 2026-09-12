@@ -21,6 +21,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from config import SWE_BENCH_ENRICHMENT
+
 logger = logging.getLogger(__name__)
 
 # 数据集下载依赖（HuggingFace datasets 库）。可选导入：
@@ -414,7 +416,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 
         # 源码补充文件（P0）：官方 SWE-bench JSONL 不含被测源码，
         # 通过 SWE_BENCH_ENRICHMENT 指定的 JSONL 按 instance_id 补 instance_code/test_code
-        enrichment = self._load_enrichment(os.environ.get("SWE_BENCH_ENRICHMENT", ""))
+        enrichment = self._load_enrichment(SWE_BENCH_ENRICHMENT)
 
         loaded = 0
         seen_ids: set[str] = set()

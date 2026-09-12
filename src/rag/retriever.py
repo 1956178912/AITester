@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 import time
 from typing import Any
 
@@ -125,6 +126,11 @@ class TestCaseRetriever:
         )
         # 记录上次全表清理时间（0.0 = 从未清理，保证首次 add 一定执行清理）
         self._last_cleanup_at = 0.0
+        # 写锁：TestCaseRetriever 经 get_rag_retriever() 是跨线程共享单例，
+        # --parallel 下多 worker 并发 add_case/add_repair 时，check-then-act
+        # （count 检查后 upsert）与全表清理非原子，可能瞬时超容量或清理/写入竞态；
+        # 写锁把"清理 + 容量检查 + upsert"串行化（普通 Lock 即可，_upsert 内无重入）
+        self._write_lock = threading.Lock()
         logger.info(
             "RAG 检索器已初始化，集合=%s，持久化路径=%s，TTL=%ds，最大容量=%d",
             collection_name,
@@ -181,7 +187,7 @@ class TestCaseRetriever:
         valid_ids = []
         expired_ids = []
         for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
-            added_at = meta.get("_added_at", 0)
+            added_at = (meta or {}).get("_added_at", 0)
             if current_time - added_at <= self.ttl_seconds:
                 valid_ids.append(doc_id)
             else:
@@ -198,7 +204,7 @@ class TestCaseRetriever:
             valid_results = self.collection.get(ids=valid_ids, include=["metadatas"])
             # 按添加时间排序，保留最新的 max_cases 个
             id_time_pairs = [
-                (doc_id, meta.get("_added_at", 0))
+                (doc_id, (meta or {}).get("_added_at", 0))
                 for doc_id, meta in zip(valid_results["ids"], valid_results["metadatas"], strict=False)
             ]
             id_time_pairs.sort(key=lambda x: x[1], reverse=True)  # 按时间降序
@@ -207,6 +213,27 @@ class TestCaseRetriever:
             if remove_ids:
                 self.collection.delete(ids=remove_ids)
                 logger.debug("已清理 %d 个超额缓存条目", len(remove_ids))
+
+    def _upsert(self, doc_id: str, document: str, metadata: dict[str, Any], log_msg: str) -> None:
+        """在写锁内完成「清理 + 容量检查 + upsert」（add_case/add_repair 共用）。
+
+        单一写入点保证容量/清理语义不会在 add_case 与 add_repair 之间漂移；
+        写锁保证 --parallel 多线程共享单例时 check-then-act（count 检查后
+        upsert）与全表清理串行化，避免瞬时超容量与清理/写入竞态。
+
+        Args:
+            doc_id: 唯一文档 ID（调用方用 md5 指纹前 16 位生成）。
+            document: 检索文档文本。
+            metadata: 已含时间戳与业务字段的元数据字典。
+            log_msg: 入库成功后的 debug 日志描述（如「已入库测试用例」）。
+        """
+        with self._write_lock:
+            self._cleanup_expired_and_excess()
+            if self.collection.count() >= self.max_cases:
+                logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
+                return
+            self.collection.upsert(documents=[document], metadatas=[metadata], ids=[doc_id])
+        logger.debug("%s: %s", log_msg, doc_id)
 
     def add_case(
         self,
@@ -229,34 +256,16 @@ class TestCaseRetriever:
         if not passed:
             return  # 只索引成功的测试用例
 
-        # 自动清理过期和超额条目
-        self._cleanup_expired_and_excess()
-
-        # 检查是否已达到容量上限
-        if self.collection.count() >= self.max_cases:
-            logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
-            return
-
         # 生成唯一 ID：使用代码 hash 避免重复入库
-
         doc_id = hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16]
-
         # 构建检索文档：将被测代码和测试代码拼接为检索文本
         document = f"def target_code:\n{code}\n\ndef test_code:\n{test_code}"
-
         # 准备元数据（添加时间戳用于 TTL 机制）
         meta = self._add_timestamp_metadata(metadata or {})
         meta["code"] = code
         meta["test_code"] = test_code
         meta["passed"] = passed
-
-        # 批量上载（ChromaDB 自动调用嵌入模型）
-        self.collection.upsert(
-            documents=[document],
-            metadatas=[meta],
-            ids=[doc_id],
-        )
-        logger.debug("已入库测试用例: %s", doc_id)
+        self._upsert(doc_id, document, meta, "已入库测试用例")
 
     def add_repair(
         self,
@@ -276,33 +285,16 @@ class TestCaseRetriever:
             error_category: 错误类型（syntax/runtime/assertion 等）。
             metadata: 额外元数据。
         """
-        # 自动清理过期和超额条目
-        self._cleanup_expired_and_excess()
-
-        # 检查是否已达到容量上限
-        if self.collection.count() >= self.max_cases:
-            logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
-            return
-
         # 生成唯一 ID：使用代码 hash 避免重复入库
-
         doc_id = hashlib.md5(f"{original_code}|{patch}".encode()).hexdigest()[:16]
-
         # 构建检索文档，包含错误类型和代码
         document = f"error_category: {error_category}\noriginal_code:\n{original_code}\npatch:\n{patch}"
-
         # 准备元数据（添加时间戳用于 TTL 机制）
         meta = self._add_timestamp_metadata(metadata or {})
         meta["error_category"] = error_category
         meta["original_code"] = original_code
         meta["patch"] = patch
-
-        self.collection.upsert(
-            documents=[document],
-            metadatas=[meta],
-            ids=[doc_id],
-        )
-        logger.debug("已入库修复案例: %s (类型=%s)", doc_id, error_category)
+        self._upsert(doc_id, document, meta, f"已入库修复案例 (类型={error_category})")
 
     def retrieve_test_cases(
         self,
@@ -412,7 +404,7 @@ class TestCaseRetriever:
 
         expired_ids = []
         for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
-            added_at = meta.get("_added_at", 0)
+            added_at = (meta or {}).get("_added_at", 0)
             if current_time - added_at > self.ttl_seconds:
                 expired_ids.append(doc_id)
 
