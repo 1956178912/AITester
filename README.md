@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1158 collected |
-| **单元测试** | ✅ 1158 passed, 0 skipped |
+| **总测试数** | ✅ 1163 collected |
+| **单元测试** | ✅ 1163 passed, 0 skipped |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 97% / mysql_client 98% / base_agent 98% / api_manager 96% / dataset_loader 95% / workflow 90% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 64%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
-| **最新优化** | ✅ 2026-09-14 批次②：错误分类 10→12 类（1.1 状态细化：PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY）+ 成本告警阈值可配（3.2）+ 熔断冷却期 3 条边界测试（1.5）+ SWE-bench 源码导出自动化（2.1）+ RAG 指标自动汇总（2.3）+ 脱敏完整审计（4.1）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-14 批次③：`analyze_results.py` 新增 1.1/1.2 分析维度（修复收敛效率 + 多维质量代理）+ Markdown 渲染章节 + 5 个回归用例；全量 1163 passed；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (95%), api_manager.py (96%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (90%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (64%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-14 批次②：错误分类 12 类（含 2 状态细化类）+ 成本告警阈值可配 + 熔断冷却边界测试 + 源码导出脚本 + RAG 自动汇总 + 脱敏审计，新增 41 个测试用例（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-14 批次③：`experiments/analyze_results.py` 增强为可报告「修复收敛效率」与「多维质量代理」两级新指标，并在 `analysis_summary.md` 中直接输出两节 Markdown 表（含旧 JSON 容错）；全量 1163 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -70,7 +70,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试
+# 运行所有单元测试（当前 1163 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -288,7 +288,7 @@ AITester/
 ├── experiments/                      # 实验脚本模块
 │   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验 + 公平性 token 输出）
 │   ├── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
-│   ├── analyze_results.py            # 结果分析脚本（4.3：Markdown 汇总 + RAG 自动汇总，旧 JSON 兜底）
+│   ├── analyze_results.py            # 结果分析脚本（4.3 + 1.1/1.2：Markdown 汇总 + RAG 自动汇总 + 修复收敛/质量代理指标，旧 JSON 兜底）
 │   ├── compare_failures.py           # 失败翻转任务对比（Planner/Debugger/环境归因）
 │   ├── analyze_failures.py           # 失败案例聚类报告（供技术评审使用）
 │   ├── run_large_scale.py            # 大规模实验入口
@@ -385,8 +385,8 @@ JSONL 追加式记录每个任务各智能体节点的输入输出、决策路�
 ### 5.4 RAG 纳入主实验（2.3）
 `reproduce.sh` 对合成/内置数据集默认显式 `--enable-rag`（`rag_data/` 持久化跨实验复用），`--no-rag` 可回退 config 默认；`run_benchmark.py` 新增 `--no-rag` 参数与 `--enable-rag` 共同覆盖 `config.ENABLE_RAG`。
 
-### 5.5 结果分析脚本（4.3）
-`experiments/analyze_results.py` 从 benchmark JSON 提取成功率 / 覆盖率 / 迭代次数分布 / Token 效率 / 按基线失败原因分布（1.2 细化类别可单独计数）/ RAG 检索质量，终端打印 Markdown 汇总并写 `analysis_summary.md`；旧 JSON 无 `token_metrics`/`rag_metrics` 键时从 `details` 兜底累加，不崩。
+### 5.5 结果分析脚本（4.3 + 1.1/1.2 首批指标增强）
+`experiments/analyze_results.py` 从 benchmark JSON 提取成功率 / 覆盖率 / 迭代次数分布 / Token 效率 / 按基线失败原因分布（1.2 细化类别可单独计数）/ RAG 检索质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/ 多维质量代理（覆盖率与耗时代理、可选 `generated_test` 的断言行数代理、失败类别 Top N），终端打印 Markdown 汇总并写 `analysis_summary.md`；旧 JSON 无 `token_metrics`/`rag_metrics`/`generated_test` 键时自动兜底或降级，不崩。
 
 ```bash
 # 分析最新一次 benchmark 结果
@@ -624,7 +624,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1158 个用例，全量通过）
+# 运行所有测试（当前 1163 个用例，全量通过）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -634,7 +634,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（46 个测试文件，1158 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（46 个测试文件，1163 个 pytest 收集用例，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -663,7 +663,7 @@ docker run --rm \
 | `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 19 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 |
+| `test_experiments_scripts.py` | 24 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 |
 | `test_generator.py` | 34 | parametrize 校验、import 修正、LLM 调用 |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |

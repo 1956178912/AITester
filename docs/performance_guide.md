@@ -335,6 +335,15 @@ PYTHONUNBUFFERED=1 python experiments/run_benchmark.py \
 | `coverage_improvement` | 覆盖率提升幅度 | > 10%/轮 |
 | `max_iterations_reached` | 达到最大迭代的任务数 | < 30% |
 
+**实验结果分析侧的派生指标（1.1/1.2，经 `experiments/analyze_results.py` 输出）**：
+
+| 指标 | 含义 | 解读 |
+|------|------|------|
+| `repair_convergence_metrics.first_attempt_success_rate` | 首次尝试（iterations==0）且通过的任务占比 | 高 = 任务对当前模型/策略友好；低 = 需多轮修复， Debugger 压力更大 |
+| `repair_convergence_metrics.success_iteration_stats.avg/median` | 成功任务平均/中位迭代次数 | 收敛速度刻画；中位比均值更稳健（抗长尾） |
+| `quality_proxy_metrics.coverage_proxy` / `runtime_proxy` | 成功/失败任务的覆盖率与耗时代理 | 用于观察"修复后是否引入性能回归"的保守信号 |
+| `quality_proxy_metrics.assertion_proxy` | 若 `details[].generated_test` 存在，统计每任务 `assert` 行数 | 代理断言强度，检测"断言弱化"趋势；旧 JSON 自动 N/A |
+
 ### 6.3 性能分析脚本
 
 ```python

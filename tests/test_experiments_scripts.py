@@ -416,3 +416,114 @@ class TestAnalyzeResultsScript:
         (tmp_path / "benchmark_b_20260901.json").write_text("{}", encoding="utf-8")
         picked = module.load_latest_benchmark(str(tmp_path))
         assert picked.endswith("benchmark_b_20260901.json")
+
+    def test_repair_convergence_metrics_first_attempt_success(self, module):
+        """1.2 修复收敛效率：首次尝试成功率、成功任务迭代/耗时统计可从 details 复算"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "a", "passed": True, "iterations": 0, "coverage": 80.0, "elapsed_seconds": 4.0},
+            {"task_id": "b", "passed": True, "iterations": 2, "coverage": 70.0, "elapsed_seconds": 12.0},
+            {
+                "task_id": "c",
+                "passed": False,
+                "iterations": 3,
+                "coverage": 10.0,
+                "elapsed_seconds": 30.0,
+                "error_category": "assertion",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        conv = analysis["per_baseline"]["aitester"]["repair_convergence_metrics"]
+        assert conv["total_tasks"] == 3
+        assert conv["success_tasks"] == 2
+        assert conv["failed_tasks"] == 1
+        assert conv["first_attempt_success_rate"] == round(1 / 3, 4)
+        assert conv["success_iteration_stats"]["avg"] == 1.0
+        assert conv["success_iteration_stats"]["median"] == 1.0
+        assert conv["success_elapsed_seconds"]["avg"] == 8.0
+        assert conv["success_elapsed_seconds"]["median"] == 8.0
+        assert conv["failed_iteration_stats"]["min"] == 3.0
+
+    def test_repair_convergence_metrics_handles_empty_details(self, module):
+        """空 baseline（无 details）时修复收敛指标返回空结构，不产生除零"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = []
+        analysis = module.build_analysis(data)
+        conv = analysis["per_baseline"]["aitester"]["repair_convergence_metrics"]
+        assert conv["total_tasks"] == 0
+        assert conv["first_attempt_success_rate"] == 0.0
+        assert conv["success_iteration_stats"]["count"] == 0
+
+    def test_quality_proxy_metrics_from_existing_fields_only(self, module):
+        """1.1 多维质量代理：旧 JSON 无 generated_test 时覆盖率/耗时代理仍可用，断言代理标记 N/A"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "a", "passed": True, "iterations": 0, "coverage": 90.0, "elapsed_seconds": 5.0},
+            {
+                "task_id": "b",
+                "passed": False,
+                "iterations": 2,
+                "coverage": 30.0,
+                "elapsed_seconds": 25.0,
+                "error_category": "index_error",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        q = analysis["per_baseline"]["aitester"]["quality_proxy_metrics"]
+        assert q["coverage_proxy"]["success"]["mean"] == 90.0
+        assert q["coverage_proxy"]["failed"]["mean"] == 30.0
+        assert q["runtime_proxy"]["success"]["median"] == 5.0
+        assert q["runtime_proxy"]["failed"]["median"] == 25.0
+        assert q["assertion_proxy"]["available"] is False
+        assert q["failure_top_categories"]["distribution"] == {"index_error": 1}
+
+    def test_quality_proxy_assertion_metrics_when_generated_test_present(self, module):
+        """1.1 断言强度代理：details 携带 generated_test 时统计 assert 行数并渲染到 Markdown"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "a",
+                "passed": True,
+                "iterations": 0,
+                "coverage": 90.0,
+                "elapsed_seconds": 5.0,
+                "generated_test": "def test_ok():\n    assert 1 == 1\n    assert 2 == 2\n",
+            },
+            {
+                "task_id": "b",
+                "passed": False,
+                "iterations": 1,
+                "coverage": 40.0,
+                "elapsed_seconds": 10.0,
+                "error_category": "assertion",
+                "generated_test": "def test_weak():\n    pass\n",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        q = analysis["per_baseline"]["aitester"]["quality_proxy_metrics"]
+        assert q["assertion_proxy"]["available"] is True
+        assert q["assertion_proxy"]["observed_tasks"] == 2
+        assert q["assertion_proxy"]["avg_assertions_per_task"] == 1.0
+        assert q["assertion_proxy"]["tasks_with_zero_assertions"] == 1
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "多维质量代理（1.1，保守可复算）" in md
+        assert "1.0 断言/任务（min=0, max=2）" in md
+
+    def test_render_markdown_includes_convergence_section(self, module):
+        """修复收敛效率章节随 details 出现时渲染到 Markdown 汇总"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "a", "passed": True, "iterations": 0, "coverage": 80.0, "elapsed_seconds": 4.0},
+            {
+                "task_id": "b",
+                "passed": False,
+                "iterations": 2,
+                "coverage": 10.0,
+                "elapsed_seconds": 12.0,
+                "error_category": "assertion",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "修复收敛效率（1.2）" in md
+        assert "| aitester | 2 | 1 | 0.5 | 0.0 | 0.0 | 4.0 |" in md

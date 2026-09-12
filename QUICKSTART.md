@@ -110,8 +110,11 @@ manager = APIManager(config=APIManagerConfig(circuit_cooldown_seconds=120.0))
 # RAG（检索增强）：合成/内置数据集实验可显式开启
 python experiments/run_benchmark.py --dataset synthetic --enable-rag
 
-# 结果分析（4.3）：跑完 benchmark 后生成 Markdown 汇总（成功率/token 效率/
-# 迭代分布/失败原因分布/RAG 质量），旧 JSON 兜底不崩。
+# 结果分析（4.3 + 1.1/1.2 指标增强）：跑完 benchmark 后生成 Markdown 汇总，
+# 含成功率 / token 效率 / 迭代分布 / 失败原因分布 / RAG 质量 /
+# 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
+# 多维质量代理（覆盖率、耗时、可选 generated_test 的断言行数、失败类别 Top N）。
+# 旧 JSON 缺 token_metrics / rag_metrics / generated_test 键时自动兜底或降级，不崩。
 python experiments/analyze_results.py --results-dir experiments/results
 ```
 

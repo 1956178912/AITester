@@ -213,6 +213,37 @@ python experiments/visualize_results.py \
 
 ---
 
+### 示例 13.5：结果结构化分析（4.3 + 1.1/1.2 指标）
+
+```bash
+# 分析最新一次 benchmark 结果
+python experiments/analyze_results.py --results-dir experiments/results
+
+# 分析指定 benchmark JSON
+python experiments/analyze_results.py \
+    --input experiments/results/benchmark_synthetic_<timestamp>.json
+```
+
+输出：
+- 终端打印 Markdown 汇总（成功率 / Token 效率 / 迭代次数分布 / 失败原因分布 / RAG 质量 / 修复收敛效率 / 多维质量代理）
+- `<输入文件同目录>/analysis_summary.md`
+
+**新增指标说明（1.1 多维评估 + 1.2 修复收敛效率）**：
+
+| 指标组 | 字段 | 说明 |
+|--------|------|------|
+| 修复收敛效率 | `repair_convergence_metrics.first_attempt_success_rate` | 首次尝试（iterations==0）且通过的任务占比 |
+| 修复收敛效率 | `repair_convergence_metrics.success_iteration_stats` | 成功任务迭代次数的 min/avg/median/max |
+| 修复收敛效率 | `repair_convergence_metrics.success_elapsed_seconds` | 成功任务耗时的 min/avg/median/max |
+| 多维质量代理 | `quality_proxy_metrics.coverage_proxy` | 成功/失败任务的覆盖率均值与中位数 |
+| 多维质量代理 | `quality_proxy_metrics.runtime_proxy` | 成功/失败任务耗时的均值与中位数 |
+| 多维质量代理 | `quality_proxy_metrics.assertion_proxy` | 若 `details[].generated_test` 存在，统计每任务 `assert` 行数（代理断言强度） |
+| 多维质量代理 | `quality_proxy_metrics.failure_top_categories` | 失败任务 Top N 错误类别（辅助归因） |
+
+> 注：该章节为保守代理指标（基于现有结果字段可复算），不等同于 AST 圈复杂度、内存占用等精确结构/性能指标；`assertion_proxy` 仅在结果 JSON 的 `details[].generated_test` 提供时可用，旧 JSON 自动降级为 `N/A`。
+
+---
+
 ### 示例 14：查看示例列表
 
 ```bash
