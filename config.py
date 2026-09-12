@@ -279,3 +279,17 @@ _LLM_TIMEOUT_RAW = _parse_int_env("LLM_TIMEOUT", 60)
 LLM_TIMEOUT: int = _validate_timeout(_LLM_TIMEOUT_RAW, "LLM_TIMEOUT", 30, 300, 60)
 # 最小 1：等待 0 秒等于不等待，重试退避失去意义
 LLM_RETRY_WAIT: int = _parse_int_env("LLM_RETRY_WAIT", 30, 1, None)
+
+# ─── 3.5 跨文件修复（协调器-提议者架构，默认关）────────────────────────────
+# 启用后 workflow 在 executor → debugger 之间插入 cross_file_analyzer 节点，
+# 分析被测代码的跨文件依赖并路由多文件补丁应用。默认 false 保持历史单文件
+# 口径；启用需显式 CROSS_FILE_ENABLE=true + CROSS_FILE_MAX_MODULES 限制。
+CROSS_FILE_ENABLE: bool = os.getenv("CROSS_FILE_ENABLE", "false").lower() == "true"
+# 跨文件依赖分析的最大模块数（防止 LLM 上下文爆炸，默认 5）
+CROSS_FILE_MAX_MODULES: int = _parse_int_env("CROSS_FILE_MAX_MODULES", 5, 1, None)
+
+# ─── 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关）────────────
+# 启用后 GeneratorAgent 在生成前先 AST 提取被测代码中已有 assert 语句，
+# 作为"锚点断言"注入 prompt，引导 LLM 避免断言弱化 / 恒真断言 / 魔数异味。
+# 默认 false 保持历史生成口径；启用需显式 ASSERTION_AUGMENT_ENABLE=true。
+ASSERTION_AUGMENT_ENABLE: bool = os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
