@@ -1,7 +1,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-09-11
+> 最后更新：2026-09-14
 
 ---
 
@@ -354,4 +354,4 @@ LOG_LEVEL=DEBUG python main.py run examples/calculator.py
 - [API 参考文档](api_reference.md)
 - [性能调优指南](performance_guide.md)
 - [算法设计文档](algorithm_design.md)
-- [贡献指南](contributing.md)
+- [贡献指南](../CONTRIBUTING.md)

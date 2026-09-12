@@ -2,6 +2,19 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 全项目文档同步批次 F-01~F-10）
+
+### 文档
+- **README 项目结构同步**：结构树补齐 4 处缺失（`src/observability/`、`src/graph/token_usage.py`、`src/tools/` 的 code_context/dependency/multi_candidate、experiments/ 的 run_large_scale/run_statistical_test/statistical_analysis/analyze_failures）；"供论文讨论章节"措辞改"供技术评审"；5.3 成本感知路由补 3.2 阈值可配口径；新增 5.7 SWE-bench 源码导出自动化小节
+- **docs/redaction_audit.md C 项缓存路径更正**：LLM 文件缓存实际路径为 `src/cache/`（`_LLM_CACHE_DIR_DEFAULT` 相对 `src/agents/` 解析，`AITESTER_LLM_CACHE_DIR` 可覆盖，已入 `.gitignore`），此前误记为 `~/.cache/aitester/llm_cache/`（"在 HOME 天然不在仓库路径中"的论述不再成立）；"已知可接受风险"结论不变（本地可信域、脱敏与缓存精确命中互斥）
+- **docs/performance_guide.md**：`rm -rf .chroma_cache/` 指向不存在目录（chromadb 1.x 持久化在 `rag_data/`），改为 `rm -rf rag_data/` + `RAG_PERSIST_PATH` 覆盖说明；时间戳 2026-08-16→2026-09-14
+- **experiments/analyze_failures.py**："供论文讨论"措辞改"供技术评审"；`--output` 默认值由 `docs/paper/failure_analysis.md`（目录已不存在）改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）
+- **docs/api_reference.md 版本历史**：顶部补 Unreleased（批次②）行（0.9.13 行保留为历史记录）
+- **docs/usage_examples.md**：小写 `contributing.md` 引用改 `../CONTRIBUTING.md`；时间戳 2026-09-11→2026-09-14
+- **.env.example 3.4 节**：补 3.2 `cost_alert_threshold` 可配说明；`LLM_N_COST_WEIGHT` 数值口径对齐 config.py 实际解析（0.1~1000，未配置默认 0.0=无信息、APIManager 回退 1.0，此前误写 1.0=基准）
+
+全量 **1158 passed / 0 failed**；`ruff check` / `ruff format --check` 全绿；纯文档 + 脚本 docstring 改动，零功能变更
+
 ## [Unreleased] - 待发布（2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计批次）
 
 ### 错误分类（1.1 状态细化）

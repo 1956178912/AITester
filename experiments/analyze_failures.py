@@ -2,10 +2,10 @@
 失败案例深度分析模块。
 
 从实验结果 JSON 中提取失败任务，按错误类型聚类分析，
-生成失败案例报告，供论文讨论章节使用。
+生成失败案例报告，供技术评审与改进方向讨论使用。
 
 使用方式：
-    python experiments/analyze_failures.py --results-dir experiments/results --output docs/paper/failure_analysis.md
+    python experiments/analyze_failures.py --results-dir experiments/results --output experiments/results/failure_analysis.md
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
 
 @click.command()
 @click.option("--results-dir", "-r", default="experiments/results", help="实验结果目录")
-@click.option("--output", "-o", default="docs/paper/failure_analysis.md", help="输出报告路径")
+@click.option("--output", "-o", default="experiments/results/failure_analysis.md", help="输出报告路径")
 def cli(results_dir: str, output: str):
     tasks = load_all_results(results_dir)
     if not tasks:

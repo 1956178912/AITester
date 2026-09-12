@@ -527,7 +527,7 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 - **1.1 状态细化类不走文本正则**：`classify()` 保持 10 类纯文本分类不变；`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 是流程状态类，由 `refine_failure_category()` 在任务收尾按 `repair_history` / `rag_stats` 信号判定，仅在失败任务上生效（成功任务原样返回），benchmark 与 CLI 两个出口口径一致。
 - **优先级：补丁被拒 > RAG 检索空**：前者是"修复未生效"的更具体根因；RAG 空是"检索未提供帮助"。两者同时成立时归 patch_validation_failed。
 - **3.2 默认值不变**：`cost_alert_threshold` 默认沿用模块常量 2.0，不改变既有告警行为；调优为显式配置行为。
-- **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配（缓存永不命中）。缓存目录（`~/.cache/aitester/llm_cache/`）在 HOME 下、与用户仓库同信任级，记录为已知可接受风险，后续可选"脱敏+双字段"方案单独立项。
+- **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配（缓存永不命中）。缓存目录（代码实际为 `src/cache/`，`AITESTER_LLM_CACHE_DIR` 可覆盖；已入 `.gitignore`，不进 git、不上传）记录为本地可信域已知可接受风险，后续可选"脱敏+双字段"方案单独立项。（注：此前本附录与 redaction_audit 误记为 `~/.cache/aitester/llm_cache/`，2026-09-14 F 批次已按代码更正）
 
 ---
 
@@ -561,3 +561,45 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 | （本提交） docs(optimize) | O-06 CHANGELOG 条目 + OPTIMIZATION_PLAN/REPORT 批次②收尾章节 |
 
 （纯文档改动，未触碰源码；最小验证为 ruff check + 受影响模块测试子集（test_error_classifier 85 收集 / test_cost_aware_routing 13）全绿。）
+
+---
+
+## 附录：2026-09-14 全项目文档同步轮次（F 批次）
+
+### 执行范围
+
+用户指令"更新所有文档到最新并上传 GitHub"，在 O 批次（数据对齐）之上再做一轮**全项目**文档与代码现状核对，共 10 项（F-01~F-10）：
+
+| 项 | 内容 | 改动文件 | 状态 |
+|----|------|----------|------|
+| F-01 | README 项目结构树补齐 4 处缺失（src/observability/、src/graph/token_usage.py、src/tools/ 3 个、experiments/ 4 个脚本） | `README.md` | ✅ |
+| F-02 | redaction_audit C 项 LLM 缓存路径更正：`~/.cache/aitester/llm_cache/`（HOME）→ `src/cache/`（仓库内 + gitignore），信任级论述对齐代码实际 | `docs/redaction_audit.md` + `OPTIMIZATION_REPORT.md`（4.1 决策条目同处误记一并更正） | ✅ |
+| F-03 | performance_guide 的 `rm -rf .chroma_cache/` 指向不存在目录（chromadb 1.x 持久化在 rag_data/） | `docs/performance_guide.md` | ✅ |
+| F-04 | "供论文讨论章节"措辞残留 2 处（09-13 隐私清理轮次漏改）：README 结构树 + analyze_failures.py docstring；后者 `--output` 默认值 `docs/paper/` → `experiments/results/`（目录已不存在，无测试引用该脚本） | `README.md` + `experiments/analyze_failures.py` | ✅ |
+| F-05 | README 5.3 成本感知路由补 3.2 阈值可配口径（默认 2.0 + 调优方向 + 0.0=无信息回退 1.0） | `README.md` | ✅ |
+| F-06 | README 新增 5.7 SWE-bench 源码导出自动化小节（脚本用法 + check-dataset 联动） | `README.md` | ✅ |
+| F-07 | api_reference 版本历史补 Unreleased（批次②）行（0.9.13 行保留为历史记录） | `docs/api_reference.md` | ✅ |
+| F-08 | .env.example 3.4 节注释补 3.2 阈值可配 + LLM_N_COST_WEIGHT 数值口径对齐 config.py（0.1~1000，未配置默认 0.0 非 1.0） | `.env.example` | ✅ |
+| F-09 | performance_guide（2026-08-16）/ usage_examples（2026-09-11）时间戳同步 2026-09-14 | 两文件 | ✅ |
+| F-10 | usage_examples 引用小写 `contributing.md`（docs/ 下不存在）→ `../CONTRIBUTING.md` | `docs/usage_examples.md` | ✅ |
+
+### 检索结论（无优化点的维度）
+
+- `.env.example` / `config.local.example` 占位符无真实密钥（模板口径与 config.py 实际解析核对一致）；
+- QUICKSTART 各步骤与 CLI 实际参数核对无漂移；docs/algorithm_design.md 为算法叙事（"供技术评审"口径），与代码无数据漂移；
+- failure_analysis.md 为历史快照且 09-14 状态说明已注明"以 analyze_results.py 输出为准"，按设计保留原文；
+- 全项目 `grep` 漂移复查（缓存路径 / chroma_cache / 十类 / 论文措辞 / 1111 用例 / 小写引用）全部清零。
+
+### 全量验证结果
+
+| 检查项 | 结果 |
+|--------|------|
+| 全量测试 | ✅ **1158 passed / 0 failed**（2 warning 为 scipy 退化数据精度告警，非代码问题） |
+| Lint / 格式化 | ✅ `ruff check` All checks passed + `ruff format --check` 134 files already formatted |
+| 敏感信息 | ✅ 被跟踪文件无真实密钥；.env / .env.local / src/cache/ / dist / build 均 gitignore |
+
+### 设计决策
+
+- **F-02 缓存路径**：redaction_audit C 项"已知可接受风险"结论不变（本地可信域、脱敏与缓存命中互斥），仅路径与信任级论述对齐代码实际（`src/cache/` 在仓库内且已 gitignore）；
+- **F-04 默认输出路径**：`analyze_failures.py --output` 默认值改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
+- **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。

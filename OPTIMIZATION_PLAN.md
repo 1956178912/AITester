@@ -2,6 +2,41 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 全项目文档最新同步轮次（2026-09-14，F 批次）
+
+> 基线：1158 passed / ruff check + ruff format 全绿 / 覆盖率 91%（TOTAL 3911/354 miss） / 本地与 origin/main 同步（`797a406`）。
+> 用户指令：更新所有文档到最新并上传 GitHub。纯文档 + 脚本 docstring 改动，零功能变更。
+>
+> ### 本轮优化点清单
+>
+> | ID | 类别 | 位置 | 问题 | 实现 | 验证 |
+> |----|------|------|------|------|------|
+> | F-01 | 文档 | README.md 项目结构 | 结构树与代码现状 4 处脱节：缺 `src/observability/`、`src/graph/token_usage.py`、`src/tools/` 缺 code_context.py/dependency.py/multi_candidate.py、experiments/ 缺 4 个脚本 | 按实际 `ls` 清单补齐 8 行 + 新增 4 个实验脚本行 | `ls src/ experiments/` 逐行核对 |
+> | F-02 | 安全/文档 | docs/redaction_audit.md C 项 | LLM 文件缓存路径记载为 `~/.cache/aitester/llm_cache/`（"在 HOME 天然不在仓库路径中"），实际代码 `_LLM_CACHE_DIR_DEFAULT` 为 `src/cache/`（仓库内、已 .gitignore） | C 项路径与信任级论述更正为 `src/cache/*.json` + AITESTER_LLM_CACHE_DIR 可覆盖 + 运行时产物说明 | 对照 src/agents/base_agent.py:371-383 |
+> | F-03 | 文档 | docs/performance_guide.md:197 | `rm -rf .chroma_cache/` 指向不存在目录（chromadb 1.x 持久化在 rag_data/，.chroma_cache 无消费方） | 改为 `rm -rf rag_data/` + RAG_PERSIST_PATH 覆盖说明 | 对照 src/rag/retriever.py |
+> | F-04 | 措辞 | README.md + experiments/analyze_failures.py | "供论文讨论章节使用"残留（09-13 隐私清理轮次漏改 2 处） | README 结构树 1 处 + 脚本 docstring/默认输出路径 `docs/paper/` → `experiments/results/` | `grep -rn "供论文" .` 零残留 |
+> | F-05 | 文档 | README.md:5.3 成本感知路由 | 3.2 阈值可配落地后仍写"cost_weight>=2.0"（默认值口径），未提 APIManagerConfig.cost_alert_threshold 可配 | 小节标题 + 说明补 3.2 可配（默认 2.0 + 调优方向 + 0.0=无信息回退 1.0 口径） | 对照 api_manager.py 3.2 注释 |
+> | F-06 | 文档 | README.md 核心方法 | 缺 2.1 SWE-bench 源码导出自动化小节（批次②已落地脚本 + tasks_missing_source，README 无入口） | 新增 5.7 小节（脚本用法 + check-dataset 联动） | 对照 scripts/export_swe_bench_source.py |
+> | F-07 | 文档 | docs/api_reference.md 版本历史 | 版本表止于 0.9.13，批次②（12 类/阈值可配/源码导出/RAG 汇总/脱敏审计）无记录 | 版本历史顶部补 Unreleased（2026-09-14 批次②）行（0.9.13 行保留为历史记录） | 对照 CHANGELOG 批次②条目 |
+> | F-08 | 模板 | .env.example 3.4 节 | 3.2 阈值可配未进模板注释；LLM_N_COST_WEIGHT 口径未对齐（config.py 实际 0.1~1000，未配置默认 0.0 非 1.0） | 注释补 cost_alert_threshold 可配说明 + COST_WEIGHT 数值范围/默认口径对齐代码 | 对照 config.py:150 |
+> | F-09 | 文档 | 文档时间戳 | performance_guide.md "最后更新 2026-08-16"、usage_examples.md "2026-09-11" 陈旧 | 两文件时间戳同步 2026-09-14 | 人工核对 |
+> | F-10 | 链接 | docs/usage_examples.md:357 | 引用小写 `contributing.md`（实际文件为根目录 CONTRIBUTING.md，docs/ 下不存在） | 链接改为 `../CONTRIBUTING.md` | `ls docs/` 核对 |
+>
+> > 检索结论（无优化点的维度）：`.env.example`/`config.local.example` 模板占位符无真实密钥；QUICKSTART 各步骤与 CLI 实际参数核对一致；docs/algorithm_design.md 为算法叙事（含"供技术评审"口径），与代码无数据漂移；failure_analysis.md 为历史快照且 09-14 状态说明已注明"以 analyze_results.py 输出为准"，保留原文不随基线改写（合理）。
+>
+> ### 实施批次
+>
+> | 序号 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
+> |------|------|------|---------|---------|-------------|
+> | F-1 | F-01~F-10 全项目文档同步 | README.md + docs/{redaction_audit,performance_guide,usage_examples,api_reference}.md + .env.example + experiments/analyze_failures.py | 结构树补齐 + 缓存路径更正 + chroma_cache 修正 + 论文措辞 2 处 + 5.3/5.7 + 版本历史行 + 模板口径 + 时间戳 + 链接 | ruff check/format + 全量 pytest + `grep` 漂移复查 | `docs: 全项目文档同步至 2026-09-14 批次② 最新状态` |
+> | F-2 | 计划/报告入库 | OPTIMIZATION_PLAN.md + OPTIMIZATION_REPORT.md | 本批次章节 + 轮次附录 | 人工核对 | `docs(optimize): 2026-09-14 全项目文档同步轮次计划与变更记录` |
+>
+> ### 需用户确认的点
+>
+> 1. **F-02 缓存路径更正**：redaction_audit C 项的"已知可接受风险"结论不变（本地可信域），仅路径与信任级论述对齐代码实际（`src/cache/` 仓库内 + gitignore）；
+> 2. **F-04 analyze_failures.py 默认输出路径**：`--output` 默认值由 `docs/paper/failure_analysis.md`（目录已不存在）改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
+> 3. **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。
+
 ## 文档收尾轮次（2026-09-14 批次②收尾，文档数据对齐）
 
 > 新基线：1158 passed / ruff 全绿 / 91% 覆盖 / lock 同步 / 工作区 clean / 本地与 origin/main 同步。

@@ -496,6 +496,7 @@ class CustomDataset(BaseDatasetLoader):
 
 | 版本 | 日期 | 变更说明 |
 |------|------|---------|
+| Unreleased（2026-09-14 批次②） | 2026-09-14 | 错误分类 10→12 类（PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY 状态细化，`refine_failure_category()` 任务收尾判定）、成本告警阈值可配（`APIManagerConfig.cost_alert_threshold`，默认 2.0）、SWE-bench 源码导出自动化（`scripts/export_swe_bench_source.py` + `tasks_missing_source()`）、RAG 指标自动汇总（按检索类型分解 + RAG 命中 × 失败类别交叉表）、脱敏完整审计（APIManager 7 处日志就地 `_redact()` + `get_status()` base_url 出口脱敏，新增 `docs/redaction_audit.md`）；全量 1158 passed |
 | 0.9.13 | 2026-09-14 | 错误分类 8→10 类（LLM_FORMAT_ERROR + INDEX_ERROR，1.2 残余）、APIManager 熔断冷却期（4.1 残余，默认 60s）、结果分析脚本 analyze_results.py（4.3）、基线 token 效率汇总（2.2） |
 | 0.9.12 | 2026-09-13 | 多候选补丁（3.1，默认关）、结构化 JSONL 追踪层（4.1，默认关）、成本感知路由（3.4）、RAG 纳入主实验（2.3）、CLI 边界补测（1.5） |
 | 1.0.0 | 2026-08-17 | 初始版本，包含 4 个智能体和完整工作流 |

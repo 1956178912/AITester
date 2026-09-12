@@ -266,11 +266,17 @@ AITester/
 │   │   └── logging_utils.py          # 日志工具
 │   ├── tools/                        # 工具函数模块
 │   │   ├── code_analyzer.py          # AST 代码分析（精确替换，避免正则误匹配）
-│   │   └── patch_applier.py          # 补丁应用（支持完整文件和单函数模式）
+│   │   ├── patch_applier.py          # 补丁应用（支持完整文件和单函数模式）
+│   │   ├── code_context.py           # AST 智能截取（P0 大文件上下文优化）
+│   │   ├── dependency.py             # 依赖检测与 venv 缓存管理（P1 执行隔离）
+│   │   └── multi_candidate.py        # 多候选补丁生成与验证筛选（3.1，默认关）
 │   ├── graph/                        # 工作流编排模块
 │   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关）
 │   │   ├── state.py                  # 全局状态定义（TypedDict）
+│   │   ├── token_usage.py            # 线程局部 LLM token 用量统计（P0 效率指标）
 │   │   └── llm_cache.py             # LLM 内存 LRU 缓存（可选，带命中统计）
+│   ├── observability/                # 结构化可观测性（4.1）
+│   │   └── trace.py                  # JSONL 节点级追踪（默认关，AITESTER_TRACE_DIR 启用）
 │   ├── db/                           # 数据库模块
 │   │   └── mysql_client.py           # MySQL 单例客户端（任务、测试、修复记录）
 │   ├── rag/                          # 检索增强生成模块
@@ -282,9 +288,12 @@ AITester/
 ├── experiments/                      # 实验脚本模块
 │   ├── run_benchmark.py              # 批量基准测试（多基线对比 + 消融实验 + 公平性 token 输出）
 │   ├── visualize_results.py          # 结果可视化（柱状图 + 详细表格 + 统计检验）
-│   ├── analyze_results.py            # 结果分析脚本（4.3：Markdown 汇总，旧 JSON 兜底）
+│   ├── analyze_results.py            # 结果分析脚本（4.3：Markdown 汇总 + RAG 自动汇总，旧 JSON 兜底）
 │   ├── compare_failures.py           # 失败翻转任务对比（Planner/Debugger/环境归因）
-│   └── analyze_failures.py           # 失败案例聚类报告（供论文讨论章节使用）
+│   ├── analyze_failures.py           # 失败案例聚类报告（供技术评审使用）
+│   ├── run_large_scale.py            # 大规模实验入口
+│   ├── run_statistical_test.py       # 统计检验入口
+│   └── statistical_analysis.py       # 统计分析工具
 ├── reproduce.sh                    # 一键实验复现脚本（quick/full 模式）
 ├── tests/                            # 单元测试
 │   ├── test_code_analyzer.py
@@ -367,8 +376,8 @@ JSONL 追加式记录每个任务各智能体节点的输入输出、决策路�
 - [src/observability/trace.py](src/observability/trace.py) 中的 `TraceSession` 类
 - workflow 各节点（planner/generator/executor/debugger/patch_applier/_should_debug）逐节点记录，benchmark 入口与 CLI 在 finally 收尾 task_end
 
-### 5.3 成本感知路由（3.4）
-`APIManager` 的 `COST_AWARE` 策略按"成功率 50% + 1/成本 50%"综合评分排序，故障转移时避免把全量流量切到昂贵 provider；转移到 `cost_weight>=2.0` 的昂贵节点时记 WARNING 成本告警（`cost_alert_enabled` 可关）。`LLMConfig.cost_weight` 经 `LLM_N_COST_WEIGHT` 读取，未配置默认 1.0 基准。
+### 5.3 成本感知路由（3.4 + 3.2 阈值可配）
+`APIManager` 的 `COST_AWARE` 策略按"成功率 50% + 1/成本 50%"综合评分排序，故障转移时避免把全量流量切到昂贵 provider；转移到 `cost_weight >= 阈值`（`APIManagerConfig.cost_alert_threshold`，默认 2.0，3.2 可配——阈值过低导致误报多时上调如 3.0/5.0，成本敏感度高时下调，无需改代码）的昂贵节点时记 WARNING 成本告警（`cost_alert_enabled` 可关，告警文案打印配置阈值避免误导调参）。`LLMConfig.cost_weight` 经 `LLM_N_COST_WEIGHT` 读取（0.1~1000，未配置默认 0.0=无信息、APIManager 回退 1.0 基准；`APIManagerConfig.node_cost_weights` 支持显式映射覆盖）。
 
 **技术实现**：
 - [src/api/api_manager.py](src/api/api_manager.py) 中的 `RotationStrategy.COST_AWARE` / `_select_node_cost_aware()` / 成本告警分支
@@ -389,6 +398,17 @@ python experiments/analyze_results.py --input experiments/results/benchmark_xxx.
 
 ### 5.6 熔断冷却期（4.1 残余）
 `APIManager` 的熔断器在节点连续失败达 `max_consecutive_failures` 后进入冷却期（`APIManagerConfig.circuit_cooldown_seconds`，默认 60s）。冷却期内即使健康检查线程把 `is_healthy` 翻回 True，路由层（`get_healthy_nodes()` 与 `_build_node_list` 备用候选）仍跳过该节点，避免流量重新打回死 provider（浪费时间与 token）；`mark_success` 复位熔断器，`get_status()` 暴露 `circuit_open_remaining_s` 字段供监控。
+
+### 5.7 SWE-bench 源码导出自动化（2.1）
+官方 SWE-bench JSONL 无 `instance_code` 字段（任务只有 patch 文本）。新增 `scripts/export_swe_bench_source.py` 自动补全：读取已下载的 JSONL，按 patch 的 `+++ b/<path>` 提取首个非测试目标文件，经 `git show <base_commit>:<path>` 只读导出（不污染工作树），输出 `SWE_BENCH_ENRICHMENT` 格式的 enrichment JSONL；支持 `--instance-ids`（逗号或 @文件，配合 check-dataset 输出的缺失列表批量补）、`--dry-run`、`--limit`。`SWEBenchDataset` 新增 `tasks_missing_source()`（识别 instance_code 兜底为 issue 文本的任务）；`check-dataset` 质量报告输出缺失源码的 instance_id 列表与补全指引。
+
+```bash
+# 补全全部缺失源码（需 SWE-bench 仓库缓存 + git）
+python scripts/export_swe_bench_source.py --dry-run          # 先看导出计划
+python scripts/export_swe_bench_source.py --instance-ids @missing_ids.txt
+# 加载 enrichment（自动合并到任务的 instance_code）
+python main.py check-dataset swe_bench
+```
 
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
