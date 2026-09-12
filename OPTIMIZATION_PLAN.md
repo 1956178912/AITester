@@ -403,3 +403,27 @@
 ## 需要用户确认的点
 1. **批次 B1 脱敏正则扩展**：会改变 `logging_utils.py` 行为（影响所有走该模块的日志脱敏）。请确认是否纳入本次，还是仅文档批次 A 先行。
 2. **阶段 6 推送**：main 领先 origin/main 5 提交，且本次会再新增 3-5 个 commit。是否推送并建 PR？（用户已答复"允许"，但推送为网络/生产类高危，推送前我会再列出将推送的全部 commit 供最终确认。）
+
+---
+
+## 2026-09-15 全项目收敛轮次（实施完成记录）
+
+> 基线：1247 passed / 91% 覆盖率。三路子代理审计 + 人工复核，落地 11 文件 + 23 用例 → 1270 passed / 92% 覆盖率。
+> 详细记录见 OPTIMIZATION_REPORT.md「附录：2026-09-15 全项目收敛轮次」与 CHANGELOG [0.9.14]。
+
+### 落地项
+- 配置集中化：删 config.py 3 个死常量；SWE_BENCH_ENRICHMENT 收敛 config；MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper。
+- 缺陷修复：executor 标准库清单误列 diskcache（复用 is_standard_library）；跨文件降级写不进盘（dict vs str）；
+  _set_thread_api 补 model_name。
+- 死代码清理 4 处 + RAG 检索器写锁/`_upsert` 抽取 + refine 接线收敛 + cross_file docstring 如实化。
+- 补测：nodes.py 默认关分支 + config_manager 空字段/写盘异常 + CLI check-dataset + env 开关，共 23 用例。
+
+### 有意保留（记录不修，留待后续批次）
+- 统计显著性检验第三份残留实现（`src/experiments/analysis.py::_compute_significance` vs
+  `experiments/statistical_analysis.py`）：配对逻辑 + `_MIN_SAMPLES_FOR_TEST=3` 魔数双写，中风险。
+- AITesterState 初始化字典 cli/app.py 与 run_benchmark.py 两处复制（约 18 键），建议抽 `make_initial_state()` 工厂。
+- retriever `retrieve_test_cases` / `retrieve_repairs` 同构（结果字段不同，抽取收益中等）。
+- cli/app.py 覆盖仍 70%（最低），纯展示/`__main__` 演示块占比高，补测性价比低。
+
+### 版本
+- 0.9.11 → 0.9.14；CHANGELOG 14 个 Unreleased 条目收敛为 0.9.12/0.9.13/0.9.14；api_reference/README 同步。

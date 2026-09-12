@@ -688,3 +688,38 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 1. **跑一次 4.2 对比实验**：同一 provider 池分别 `enable_half_open_probe=True/False` 各跑一轮 benchmark，用 `experiments/analyze_results.py` 对比故障恢复轮次与 token 浪费——验证半开探测实际收益（OPTIMIZATION_PLAN 4.2 行"对比实验未跑"备注）。
 2. **executor 沙箱深度审计（T-04 历史遗留）**：补设计文档 + 审计矩阵，单独立项。
 3. **CLI 模块覆盖率**：`cli/app.py` 仍为全项目最低（约 64%），5.1 条目建议下一轮补 10~15 个边界用例。
+
+---
+
+## 附录：2026-09-15 全项目收敛轮次（config 集中化 + 死代码清理 + 默认关功能修复）
+
+> 基线：1247 passed / 0 failed / 91% 覆盖率 / ruff 全绿 / 工作区 clean。
+> 本轮三路子代理并行审计（config/env 直读、死代码/冗余/缺陷、低覆盖模块补测点）+ 人工复核，
+> 落地 11 个文件改动 + 23 个新用例，推进至 **1270 passed / 0 failed / 92% 覆盖率**。
+
+### 缺陷修复（3 处，含 2 处真 bug）
+- 🔴 `executor.py` 硬编码标准库清单误列第三方 `diskcache`、缺 `asyncio`/`importlib`，已删除 80 项
+  frozenset 并复用 `dependency.is_standard_library`（`sys.stdlib_module_names` 权威清单）。
+- 🔴 `_patch_applier_node` 跨文件降级路径把 `cross_file_fallback_single_file` 返回的「文件映射 dict」
+  当「code 字符串」赋给 `new_code`，`len(dict)` 恒 1 → 降级补丁永远卡「过短」安全检查、永远写不进盘；
+  由本轮补测触发，修复为从映射取 entry_module 代码。
+- `_set_thread_api` 丢弃 `api["model"]`，多模型轮询 model 恒回退首配置。
+
+### 配置集中化收敛
+- 删除 config.py 三个无消费方死常量（CROSS_FILE_ENABLE/CROSS_FILE_MAX_MODULES/ASSERTION_AUGMENT_ENABLE）。
+- `SWE_BENCH_ENRICHMENT` 收敛 config（新增「数据集配置」小节）+ .env.example 补条目。
+- `MULTI_CANDIDATE_EXEC_VALIDATE` 收敛为 `multi_candidate_exec_validate()`。
+
+### 死代码清理（4 处）+ DRY/并发
+- 删 EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback（+_is_zai_url）/
+  benchmark 装饰器 / cross_file.topo_key。
+- RAG 检索器抽 `_upsert` 单一写入点 + threading.Lock 串行化；`refine_failure_category` 接线收敛为
+  `refine_final_error_category`；cross_file docstring 如实描述「当前字典序」。
+
+### 覆盖提升
+- `graph/nodes.py` 76%→95%、`config/config_manager.py` 87%→95%、总覆盖 91%→92%。
+- 新增默认关功能分支（cross_file/multi_candidate）、跨文件降级回归、空字段校验、写盘异常、env 开关等 23 用例。
+
+### 版本收敛
+- 版本 0.9.11 → 0.9.14；CHANGELOG 14 个 Unreleased 条目按日期映射 0.9.12/0.9.13/0.9.14；
+  docs/api_reference 版本表同步；README 测试数/覆盖率同步。

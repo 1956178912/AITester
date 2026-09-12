@@ -2,7 +2,51 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 待发布（2026-09-12 代码可维护性拆分批次）
+## [0.9.14] - 2026-09-15 全项目收敛轮次（config 集中化 + 死代码清理 + 默认关功能修复）
+
+### 配置集中化收敛（双源漂移 + env 绕过）
+- 删除 config.py 中 CROSS_FILE_ENABLE / CROSS_FILE_MAX_MODULES /
+  ASSERTION_AUGMENT_ENABLE 三个无消费方的"死常量"（功能模块各自调用期读 env，
+  双源定义易漂移），保留指针注释说明归属
+- dataset_loader.py 的 SWE_BENCH_ENRICHMENT 从裸读 os.environ 收敛为 config
+  常量（新增「数据集配置」小节）；.env.example 补对应条目；test_dataset_validation
+  改用 monkeypatch.setattr 锁定新口径
+- nodes.py 的 MULTI_CANDIDATE_EXEC_VALIDATE 从裸读 os.getenv 收敛为
+  multi_candidate.py 新增的 multi_candidate_exec_validate() helper
+
+### 缺陷修复（3 处）
+- 🔴 executor.py 硬编码标准库清单误列第三方 diskcache、缺 asyncio/importlib，
+  已删除 80 项 frozenset 并复用 dependency.is_standard_library
+  （sys.stdlib_module_names 权威清单），_extract_imports 显式跳过 pytest
+- 🔴 _patch_applier_node 跨文件降级路径把 cross_file_fallback_single_file 返回的
+  "文件映射 dict" 当 "code 字符串" 赋值给 new_code，len(dict) 恒 1 导致降级补丁
+  永远卡在"过短"安全检查、永远写不进盘；修复为从映射取 entry_module 代码
+- _set_thread_api 丢弃 api["model"]，多模型轮询时 model 恒回退首配置；补
+  _thread_local.model_name 赋值
+
+### 死代码清理（4 处）
+- 删除 templates.EXECUTOR_SYSTEM_PROMPT（零引用占位常量）
+- 删除 patch_applier.safe_apply_multi_function_patch（零引用）
+- 删除 run_benchmark._call_llm_with_fallback 与 _is_zai_url（既是死代码又是
+  base_agent._call_llm 故障转移逻辑的过期复制品）
+- 删除 performance_profile.benchmark 装饰器（从未使用）+ cross_file 死函数 topo_key
+
+### 并发与 DRY
+- TestCaseRetriever（跨线程共享单例）add_case/add_repair 抽取私有 _upsert 单一
+  写入点 + threading.Lock 串行化"清理+容量检查+upsert"，消除 --parallel 下
+  check-then-act 竞态；_cleanup 对 meta=None 加 (meta or {}) 防御
+- refine_failure_category 的"取字段→细化"接线收敛为 error_classifier 新增的
+  refine_final_error_category(final_state)，cli/run_benchmark 两处复用
+- cross_file.apply_multi_file_patch 修正 docstring 与注释如实描述"当前为字典序"，
+  移除误导性的拓扑序承诺
+
+### 测试
+- 全量 **1270 passed / 0 failed**（自 1247 净增 23）；ruff check / format 全绿
+- 覆盖提升：src 总覆盖率 91%→92%；graph/nodes.py 76%→95%、
+  config/config_manager.py 87%→95%（新增默认关功能分支、跨文件降级回归、
+  空字段校验、写盘异常、env 开关等 23 用例）
+
+## [0.9.12] - 2026-09-12 代码可维护性拆分批次
 
 ### 代码可维护性：三个超大文件按职责拆分
 - 背景：9 个文件超过 600 行，其中 workflow.py（1089）/ api_manager.py（927）/
@@ -31,7 +75,7 @@
   但 nltk 为漏洞扫描工具 safety 的间接依赖、项目代码零引用、CI 用 `--no-deps`
   仅扫直接依赖，对运行时零影响且 PyPI 暂无修复版本，记录备查
 
-## [Unreleased] - 待发布（2026-09-12 完整审查批次）
+## [0.9.12] - 2026-09-12 完整审查批次
 
 ### 完整项目审查（安全 / 代码质量 / 测试 / 依赖）
 - 安全：git 全历史无敏感文件泄漏——`.env` / `.env.local` / `.env.local.bak` / `.local/private.md` 从未进入任何提交，历史路径仅出现 `.env.example` / `.env.local.template` 两个占位符模板；全代码库无硬编码密钥（正则扫描仅命中 `.venv` 第三方库的示例 token）；本地真实密钥（`.env` + `.env.local` 共 6 条 sk- 前缀）均位于 gitignored 文件、未跟踪、不上传
@@ -43,7 +87,7 @@
 - R-01 README「配置说明」表格断裂：`高级开关` 二级标题曾插入「配置说明」表格中间，导致 `EXECUTION_TIMEOUT` 起 20 个配置项失去表头、Markdown 渲染错乱；现将 20 个配置项上移归并回「配置说明」表格，`高级开关` 独立成章
 - R-02 `.env.local.template` 引导误导：头部原写「复制此文件为 .env.local」，但该模板承载的是 `{PROVIDER}_API_KEY` 中间变量（供 `generate_batch_config.py` 读取），`config.py` 运行时只读 `LLM_N_*` 编号格式，照做会读不到任何 LLM 配置；现修正 `src/config/config_generator.py::generate_env_template()` 生成头部与已提交的 `.env.local.template`，明确「中间变量模板」定位并指向 `config.local.example`（占位符内容不变，既有测试断言不受影响）
 
-## [Unreleased] - 待发布（2026-09-15 测试套件可选依赖降级批次：O-01a）
+## [0.9.14] - 2026-09-15 测试套件可选依赖降级批次：O-01a
 
 ### 可选依赖未安装时测试套件误报 ERROR（tests/test_rag_retriever.py + tests/test_experiments_scripts.py）
 - 背景：`chromadb` / `matplotlib` 属于重型可选依赖，精简环境（未 `pip install -r requirements.txt` 全量）下运行 `pytest tests/` 会产生 32+5=37 条 `ImportError` ERROR（非 skip），掩盖真实测试结论
@@ -51,7 +95,7 @@
 - `tests/test_experiments_scripts.py` 中 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` 两组 fixture 在惰性 `from experiments import visualize_results` 前补 `pytest.importorskip("matplotlib", ...)`：matplotlib 未安装时优雅跳过而非在 setup 阶段报错
 - 全量：**1208 passed / 39 skipped / 0 failed**（缺 chromadb + matplotlib 的精简环境）；全量安装依赖后恢复 1247 passed 口径；`ruff check` 全绿
 
-## [Unreleased] - 待发布（2026-09-15 CLI 输出层补测批次：O-01）
+## [0.9.14] - 2026-09-15 CLI 输出层补测批次：O-01
 
 ### O-01 CLI 输出层回归补测（tests/test_cli_output.py，新）
 - 背景：`src/cli/output.py`（100 行，CLI 输出层）覆盖率 58% 为 src/ 内最低之一（`app.py` 70%），`colorize` 的 TTY 双分支、`success_msg`/`error_msg`/`warning_msg`/`info_msg` 的图标前缀与 stdout/stderr 路由、`print_rich_table` 的空列表 / 缺键兜底 / `coverage=0.0` 边界均无回归用例
@@ -63,7 +107,7 @@
 ### 文档对齐（O-02）
 - README 测试状态表：总用例 1237→1247、测试文件 48→49、主表 5 处用例数漂移修正（core_modules 19→29 / dataset_loader_extended 59→73 / executor_sandbox 7→14 / experiments_scripts 30→36 / generator 27→43）+ 补 test_cli_output 行 + 核心模块覆盖率数据刷新（workflow 90%→83% 等 8 项）
 
-## [Unreleased] - 待发布（2026-09-14 熔断器半开探测批次：4.2）
+## [0.9.13] - 2026-09-14 熔断器半开探测批次：4.2
 
 ### 4.2 熔断器半开探测（src/api/api_manager.py）
 - 4.1 熔断器冷却到期后节点直接恢复全量路由，死 provider 会被流量反复打回；本次补齐经典三态（closed / open / half-open）：冷却到期后节点先进入"半开"窗口，仅承载一次探测请求，探测成功才闭合熔断器恢复全量路由，失败则重新打开半程冷却期
@@ -81,7 +125,7 @@
 - `pytest tests/` **1237 passed / 0 failed**（自上一批次 1225 净增 12）
 - `ruff check` / `ruff format --check` 全绿
 
-## [Unreleased] - 待发布（2026-09-14 改进清单 G-01~G-04 + 3.4 + 3.5 落地批次）
+## [0.9.13] - 2026-09-14 改进清单 G-01~G-04 + 3.4 + 3.5 落地批次
 
 ### 1.2 测试异味检测（analyze_results.py）
 - `experiments/analyze_results.py` 新增 `_test_smell_detection()` 纯函数：AST 扫 `details[].generated_test`，检测 4 类 LLM 生成异味——**Assertion Roulette**（无有效断言但非平凡）、**Magic Number**（≥3 个未命名整数字面量且无常量赋值）、**断言弱化**（断言行数较上轮减少）、**平凡测试**（函数体仅 pass / 恒真断言）；旧 JSON 无 `generated_test` 时 `available=False`，渲染跳过章节，零回归面
@@ -129,7 +173,7 @@
 - `pytest tests/` **1225 passed / 0 failed**（自 1.1/1.2 首批基线 1163 净增 62）
 - `ruff check` / `ruff format --check` 全绿
 
-## [Unreleased] - 待发布（2026-09-14 评估指标多维化首批：1.1/1.2 分析层增强）
+## [0.9.13] - 2026-09-14 评估指标多维化首批：1.1/1.2 分析层增强
 
 ### 实验（1.1 多维评估 + 1.2 修复收敛效率）
 - `experiments/analyze_results.py` 新增两个可回归的聚合章节：`repair_convergence_metrics`（首次尝试成功率、成功/失败任务的迭代 min/avg/median/max、成功任务平均耗时）与 `quality_proxy_metrics`（覆盖率/耗时代理、可选 `generated_test` 的断言行数代理、失败类别 Top N）
@@ -139,7 +183,7 @@
 
 全量相关回归：`tests/test_experiments_scripts.py` + `tests/test_run_benchmark.py` 28 passed；`ruff check` / `ruff format --check` 全绿；全量 `pytest tests/` **1163 passed / 0 failed**
 
-## [Unreleased] - 待发布（2026-09-14 全项目文档同步批次 F-01~F-10）
+## [0.9.13] - 2026-09-14 全项目文档同步批次 F-01~F-10
 
 ### 文档
 - **README 项目结构同步**：结构树补齐 4 处缺失（`src/observability/`、`src/graph/token_usage.py`、`src/tools/` 的 code_context/dependency/multi_candidate、experiments/ 的 run_large_scale/run_statistical_test/statistical_analysis/analyze_failures）；"供论文讨论章节"措辞改"供技术评审"；5.3 成本感知路由补 3.2 阈值可配口径；新增 5.7 SWE-bench 源码导出自动化小节
@@ -152,7 +196,7 @@
 
 全量 **1158 passed / 0 failed**；`ruff check` / `ruff format --check` 全绿；纯文档 + 脚本 docstring 改动，零功能变更
 
-## [Unreleased] - 待发布（2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计批次）
+## [0.9.13] - 2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计批次
 
 ### 错误分类（1.1 状态细化）
 - **ErrorCategory 补 2 个状态细化类**：`PATCH_VALIDATION_FAILED`（补丁被 PatchApplier 安全守卫拒绝，repair_history 中 patch_applied=False）与 `RAG_RETRIEVAL_EMPTY`（RAG 启用但任务内全部检索 results==0，标识 RAG 失效场景）。10 文本类 + 2 状态类 = 12 类。新增纯函数 `refine_failure_category()`（任务收尾按 repair_history/rag_stats 信号细化，补丁被拒优先于 RAG 空；成功任务原样返回）；`get_fix_strategy()` 与 `reports/generator.py` 两处 if/elif 链同步补 2 分支；`run_benchmark._build_task_result` 与 CLI `_run_single_task` 在失败任务收尾调用 refine（benchmark 与 CLI 口径一致）
@@ -183,7 +227,7 @@
 
 全量 **1158 passed / 0 failed**（scipy 精度 2 warning 为退化数据告警，非代码问题）
 
-## [Unreleased] - 待发布（2026-09-14 错误分类细化 + 熔断冷却 + 结果分析批次）
+## [0.9.13] - 2026-09-14 错误分类细化 + 熔断冷却 + 结果分析批次
 
 ### 错误分类（1.2 残余）
 - **ErrorCategory 补 2 类**：新增 `LLM_FORMAT_ERROR`（LLM 响应格式异常：JSON 解析失败 / 截断 / 空响应，此前 75% UNKNOWN 的根因之一）与 `INDEX_ERROR`（索引越界，此前落入 RUNTIME/UNKNOWN 致 Debugger 无法针对性修复）；`classify()` 优先级调整为 LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN（LLM_FORMAT 置最前避免 IndexError 文本中可能出现的 assert 误判）
@@ -201,7 +245,7 @@
 
 全量 **1111 passed / 0 failed**；`ruff check` 全绿
 
-## [Unreleased] - 待发布（2026-09-13 系统功能增强轮次）
+## [0.9.12] - 2026-09-13 系统功能增强轮次
 
 ### 功能
 - **多候选补丁与验证（3.1，默认关闭）**：新增 `src/tools/multi_candidate.py`——Debugger 一轮生成 N 个候选补丁（视角扰动提示，各走不同修复路径），静态筛选（`ast.parse` 语法 + 函数完整性 + 10% 长度安全）淘汰坏候选，可选执行验证（`MULTI_CANDIDATE_EXEC_VALIDATE`）逐候选跑测试选通过率/覆盖率最高者；经 workflow `_patch_applier_node` 接入，`ENABLE_MULTI_CANDIDATE_PATCH` 默认 false 保持历史实验口径，无有效候选自动回退单补丁不引入劣化。新增 `tests/test_multi_candidate.py`（19 用例）
@@ -218,13 +262,13 @@
 ### 测试
 - **CLI 边界补测（1.5）**：`tests/test_cli_app.py` 新增 `TestRunParallelJsonBoundaries`（6 用例）——单文件+并发走顺序分支、多文件并发降级路径、glob 通配符被 click `exists=True` 解析层拦截（exit 2）、并发全通过/有失败的退出码语义。全量 **1085 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` 全绿
 
-## [Unreleased] - 待发布（2026-09-13 文档对齐批次 M-01~M-03）
+## [0.9.12] - 2026-09-13 文档对齐批次 M-01~M-03
 
 ### 文档
 - README「测试覆盖模块」主表 13 处用例数漂移同步（test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30，0.9.11 批次新增 27 回归用例后未同步）；"41 个测试文件" 更正为 44；补 `test_logging_utils.py`（14 用例脱敏回归）行。v0.9/v0.10 历史版本叙事表保留原值
 - 全量 **1038 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步 / sdist+wheel 构建 / pip-audit（同 CI 豁免）全部通过（纯文档改动，无代码变更，未影响测试集）
 
-## [Unreleased] - 待发布（2026-09-12 优化轮次）
+## [0.9.12] - 2026-09-12 优化轮次
 
 ### 文档
 - README 核心模块覆盖率数据对齐实测值（logging_utils 83%→88%、cli/app.py 61%→64%，上轮新增 18 用例后漂移未同步）
@@ -232,7 +276,7 @@
 - QUICKSTART 配置验证步骤措辞修正：`from config import LLM_CONFIGS` 仅校验配置加载（无网络调用），真实连接探测指向 `python scripts/check_quota.py`
 - 全量 **1038 passed / 0 failed**；src 总覆盖率 91%；`ruff check` / `ruff format --check` / lock 同步 / sdist+wheel 构建 / pip-audit（同 CI 豁免）全部通过
 
-## [Unreleased] - 待发布（2026-09-11 优化轮次）
+## [0.9.12] - 2026-09-11 优化轮次
 
 ### 安全
 - **日志脱敏正则扩展**：`src/utils/logging_utils.py` 的 API Key 脱敏模式此前只覆盖 `sk-` 前缀 + 字母数字 20+ 位的密钥；现补充两类此前会绕过脱敏的真实密钥形态——带点号/连字符分段的长 sk- 型（形如 `sk-ws-xxx.yyy...`）与无 `sk-` 前缀的长十六进制（≥32 位）/长 base64（≥40 位）密钥，新增 `tests/test_logging_utils.py`（14 用例，全部使用合成占位符，不引入任何真实密钥）锁定
