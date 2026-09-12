@@ -16,8 +16,8 @@ import logging
 from unittest.mock import MagicMock
 
 from config import LLMConfig
+from src.api.api_health import _COST_ALERT_THRESHOLD
 from src.api.api_manager import (
-    _COST_ALERT_THRESHOLD,
     APIHealth,
     APIManager,
     APIManagerConfig,
