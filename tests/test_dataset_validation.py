@@ -131,7 +131,7 @@ class TestQualityReportAndLoading:
         loader = self._loader_with_data(tmp_path, rows)
         assert loader.tasks[0].metadata["suggested_function"] is None
 
-    def test_enrichment_file_merges_source(self, tmp_path):
+    def test_enrichment_file_merges_source(self, tmp_path, monkeypatch):
         """P0：SWE_BENCH_ENRICHMENT 补充文件按 instance_id 补全源码字段。"""
         rows = [
             {
@@ -153,19 +153,17 @@ class TestQualityReportAndLoading:
             ),
             encoding="utf-8",
         )
-        import os
-
-        os.environ["SWE_BENCH_ENRICHMENT"] = str(enrichment)
-        try:
-            loader2 = SWEBenchDataset(subset=None)
-            loader2.data_dir = str(tmp_path)
-            tasks = loader2.tasks
-            assert tasks[0].instance_code == "def f():\n    return 1\n"
-            assert "def test_f" in tasks[0].test_code
-            # 补全后任务应通过质量校验
-            assert SWEBenchDataset.validate_task(tasks[0]) == []
-        finally:
-            os.environ.pop("SWE_BENCH_ENRICHMENT", None)
+        # SWE_BENCH_ENRICHMENT 已收敛为 config 的 import 期常量（dataset_loader 顶部
+        # `from config import SWE_BENCH_ENRICHMENT`），运行期改 os.environ 不再生效，
+        # 故改为 patch dataset_loader 模块属性（该名字已因 import 成为模块级绑定）。
+        monkeypatch.setattr("src.datasets.dataset_loader.SWE_BENCH_ENRICHMENT", str(enrichment))
+        loader2 = SWEBenchDataset(subset=None)
+        loader2.data_dir = str(tmp_path)
+        tasks = loader2.tasks
+        assert tasks[0].instance_code == "def f():\n    return 1\n"
+        assert "def test_f" in tasks[0].test_code
+        # 补全后任务应通过质量校验
+        assert SWEBenchDataset.validate_task(tasks[0]) == []
 
     def test_quality_report_flags_unhealthy_tasks(self, tmp_path):
         healthy = {

@@ -355,6 +355,47 @@ class TestCheckDatasetBoundaries:
         assert r.exit_code == 0
         assert "共加载" in r.output
 
+    def test_load_dataset_exception_returns_gracefully(self, monkeypatch):
+        """load_dataset 抛异常 → error_msg + 正常返回（599-601）。"""
+        from src.datasets import dataset_loader
+
+        monkeypatch.setattr(
+            dataset_loader,
+            "load_dataset",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        r = CliRunner().invoke(cli_app.cli, ["check-dataset", "swe_bench"])
+        assert r.exit_code == 0
+        assert "数据集加载失败" in r.output
+
+    def test_check_dataset_quality_report_and_missing_source(self, monkeypatch):
+        """validate_task 有 issues + quality_report 非空 + tasks_missing_source 非空（616-648）。"""
+        from unittest.mock import MagicMock
+
+        from src.datasets import dataset_loader
+
+        task = MagicMock()
+        task.task_id = "t1"
+        task.repo_name = "r"
+        task.total_test_count = 1
+        task.expected_pass_count = 1
+        task.problem_statement = "ps"
+        task.instance_code = "def f():\n    return 1\n"
+        task.test_code = "def test_f():\n    pass\n"
+        task.metadata = {}
+
+        loader = MagicMock()
+        loader.tasks = [task]
+        loader.quality_report.return_value = {"t1": ["bad patch"]}
+        loader.tasks_missing_source.return_value = ["t1"]
+
+        monkeypatch.setattr(dataset_loader, "load_dataset", lambda *a, **k: loader)
+        monkeypatch.setattr(dataset_loader.SWEBenchDataset, "validate_task", staticmethod(lambda t: ["结构不完整"]))
+        r = CliRunner().invoke(cli_app.cli, ["check-dataset", "swe_bench", "--limit", "1"])
+        assert r.exit_code == 0
+        assert "质量报告" in r.output
+        assert "缺失被测源码任务" in r.output
+
 
 class TestGlobInParallelMode:
     """1.4 多文件 glob 通配符在并发模式下的行为。

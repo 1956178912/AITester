@@ -129,3 +129,11 @@ class TestSafeEnvParsing:
     def test_parse_float_env_out_of_range_falls_back(self, monkeypatch):
         monkeypatch.setattr(root_config.os, "getenv", self._fake_getenv({"TEMPERATURE": "9.9"}))
         assert root_config._parse_float_env("TEMPERATURE", 0.2, 0.0, 2.0) == 0.2
+
+
+class TestDatasetConfig:
+    """数据集相关配置常量（P0：SWE-bench 源码补全通道）。"""
+
+    def test_swe_bench_enrichment_is_string_constant(self):
+        """SWE_BENCH_ENRICHMENT 已收敛为 config 常量（原 dataset_loader 裸读 env）。"""
+        assert isinstance(root_config.SWE_BENCH_ENRICHMENT, str)
