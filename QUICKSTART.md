@@ -94,6 +94,10 @@ export MULTI_CANDIDATE_EXEC_VALIDATE=true   # 逐候选跑测试筛选（成本�
 
 # 成本感知路由（3.4）：COST_AWARE 策略避免故障转移全量切到昂贵 provider。
 # 各 provider 相对成本倍数在 .env.local 以 LLM_N_COST_WEIGHT 配置。
+# 成本告警阈值可配（3.2）：转移到 cost_weight >= 阈值（默认 2.0）的昂贵节点时记 WARNING，
+# 阈值过低导致误报多时上调（如 3.0/5.0），成本敏感度高时下调，无需改代码：
+from src.api.api_manager import APIManager, APIManagerConfig
+manager = APIManager(config=APIManagerConfig(cost_alert_threshold=3.0))
 
 # 熔断冷却期（4.1 残余）：APIManager 节点连续失败达 max_consecutive_failures
 # 阈值后自动进入冷却期（APIManagerConfig.circuit_cooldown_seconds，默认 60s），
