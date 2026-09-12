@@ -2,8 +2,8 @@
 实验结果结构化分析脚本（4.3）。
 
 从 run_benchmark.py 输出的 JSON 结果中提取关键指标
-（成功率、覆盖率、迭代次数分布、Token 消耗、RAG 检索质量），
-生成 Markdown 汇总表格，减少手动分析 JSON 的工作量。
+（成功率、覆盖率、迭代次数分布、Token 消耗、RAG 检索质量、修复收敛效率、
+多维质量代理），生成 Markdown 汇总表格，减少手动分析 JSON 的工作量。
 
 使用方式：
     python experiments/analyze_results.py --results-dir experiments/results
@@ -22,7 +22,12 @@
       修复成功率 vs 需多轮调试"）；
     - 失败原因分布：从 details[].error_category 统计（配合 1.2 错误分类
       细化，LLM_FORMAT_ERROR / INDEX_ERROR 从此可单独计数）；
-    - RAG 质量：读 baseline 级 rag_metrics（未启用 RAG 时全 0/None，跳过输出）。
+    - RAG 质量：读 baseline 级 rag_metrics（未启用 RAG 时全 0/None，跳过输出）；
+    - 修复收敛效率：首次尝试成功率、成功任务平均/中位迭代数、成功任务平均
+      耗时，均从 details[] 可复算；
+    - 多维质量代理：断言强度代理用 generated_test 中 assert 行数近似
+      （有代码时），结构/运行时质量用覆盖率与耗时变化做保守代理；旧 JSON
+      缺 optional 字段时只输出可计算部分，不崩溃。
 """
 
 from __future__ import annotations
@@ -121,6 +126,145 @@ def _rag_hit_by_failure_category(details: list[dict[str, Any]]) -> dict[str, Any
     return cross
 
 
+def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.2 修复收敛效率：从 details[] 统计成功/失败任务的迭代与耗时结构。
+
+    指标含义：
+    - first_attempt_success_rate: iterations==0 且 passed=True 的任务占比；
+    - success_iteration_stats: 成功任务的 min/avg/median/max iterations；
+    - failed_iteration_stats: 失败任务的 min/avg/median/max iterations；
+    - success_elapsed_seconds: 成功任务的 min/avg/median/max 耗时。
+
+    该函数只在有 detail 时可计算；无任务时返回空结构（渲染时跳过章节）。
+    """
+    success_rows = [r for r in details if r.get("passed")]
+    failed_rows = [r for r in details if not r.get("passed")]
+    total = len(details)
+    first_attempt_passed = sum(1 for r in success_rows if int(r.get("iterations", 0) or 0) == 0)
+
+    def _stats(values: list[float]) -> dict[str, Any]:
+        if not values:
+            return {"count": 0, "min": None, "avg": None, "median": None, "max": None}
+        ordered = sorted(values)
+        n = len(ordered)
+        median = ordered[n // 2] if n % 2 == 1 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+        return {
+            "count": n,
+            "min": round(min(ordered), 2),
+            "avg": round(sum(ordered) / n, 2),
+            "median": round(median, 2),
+            "max": round(max(ordered), 2),
+        }
+
+    return {
+        "total_tasks": total,
+        "success_tasks": len(success_rows),
+        "failed_tasks": len(failed_rows),
+        "first_attempt_success_rate": round(first_attempt_passed / total, 4) if total else 0.0,
+        "first_attempt_success_count": first_attempt_passed,
+        "success_iteration_stats": _stats([float(r.get("iterations", 0) or 0) for r in success_rows]),
+        "failed_iteration_stats": _stats([float(r.get("iterations", 0) or 0) for r in failed_rows]),
+        "success_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+        "failed_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+    }
+
+
+def _assertion_strength_proxy(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.1 断言强度代理：用 generated_test 中 assert 行数量做保守近似。
+
+    说明：benchmark 结果本身不会保存完整断言语义，这里仅统计可选字段
+    generated_test（若未来 --save-state 的 details 扩展带上该字段）中的
+    `assert ` 行数，用于观察"修复/生成是否出现断言弱化"的趋势。旧 JSON
+    无 generated_test 时返回 available=False，渲染时跳过该小节。
+    """
+    observed = 0
+    assertion_counts: list[int] = []
+    for row in details:
+        test_code = row.get("generated_test")
+        if not isinstance(test_code, str) or not test_code.strip():
+            continue
+        observed += 1
+        assertion_counts.append(sum(1 for line in test_code.splitlines() if line.strip().startswith("assert ")))
+
+    if not assertion_counts:
+        return {"available": False, "observed_tasks": 0}
+    avg = sum(assertion_counts) / len(assertion_counts)
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "avg_assertions_per_task": round(avg, 2),
+        "min_assertions": min(assertion_counts),
+        "max_assertions": max(assertion_counts),
+        "tasks_with_zero_assertions": sum(1 for value in assertion_counts if value == 0),
+    }
+
+
+def _quality_proxy_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.1 多维质量代理：基于现有字段给出保守可复算指标。
+
+    当前 benchmark JSON 缺少补丁前后的 AST 圈复杂度、内存占用和原始执行
+    轨迹，因此这里只报告可由结果文件直接验证的代理维度：
+    - coverage_proxy: 成功/失败任务的覆盖率均值与中位数；
+    - runtime_proxy: 成功/失败任务的耗时均值与中位数；
+    - assertion_proxy: 可选 generated_test 的 assert 行数；
+    - failure_proxy: 失败任务错误类别 Top N。
+
+    该输出明确标注为 proxy，避免被误读为精确结构质量或性能回归指标。
+    """
+    success_rows = [r for r in details if r.get("passed")]
+    failed_rows = [r for r in details if not r.get("passed")]
+
+    def _mean(values: list[float]) -> float | None:
+        return round(sum(values) / len(values), 2) if values else None
+
+    def _median(values: list[float]) -> float | None:
+        if not values:
+            return None
+        ordered = sorted(values)
+        n = len(ordered)
+        median = ordered[n // 2] if n % 2 == 1 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+        return round(median, 2)
+
+    return {
+        "coverage_proxy": {
+            "success": {
+                "mean": _mean([float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
+                "median": _median([float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
+            },
+            "failed": {
+                "mean": _mean([float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
+                "median": _median([float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
+            },
+        },
+        "runtime_proxy": {
+            "success": {
+                "mean": _mean([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+                "median": _median([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+            },
+            "failed": {
+                "mean": _mean([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+                "median": _median([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+            },
+        },
+        "assertion_proxy": _assertion_strength_proxy(details),
+        "failure_top_categories": _failure_top_categories(failed_rows),
+    }
+
+
+def _failure_top_categories(details: list[dict[str, Any]], top_n: int = 5) -> dict[str, Any]:
+    """从失败任务中提取 Top N 错误类别，辅助结构/逻辑质量归因。"""
+    counter: Counter = Counter()
+    for row in details:
+        if row.get("passed"):
+            continue
+        counter[row.get("error_category") or "unknown"] += 1
+    items = counter.most_common(top_n)
+    return {
+        "top_n": top_n,
+        "distribution": {category: count for category, count in items},
+    }
+
+
 def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
     """从 benchmark JSON 构建结构化分析结果。
 
@@ -169,6 +313,9 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
             # 2.3 RAG 指标自动汇总（从 details[].rag_stats 计算，旧 JSON 无 rag_stats 时为空）
             "details_rag_by_kind": _rag_by_kind_from_details(details),
             "rag_hit_by_failure_category": _rag_hit_by_failure_category(details),
+            # 1.2 修复收敛效率 + 1.1 多维质量代理（从 details 可复算，旧 JSON 容错）
+            "repair_convergence_metrics": _repair_convergence_metrics(details),
+            "quality_proxy_metrics": _quality_proxy_metrics(details),
         }
         # 迭代次数分布（0 = 一次通过，1/2/3 = 调试轮数，>=3 归入 3+）
         for r in details:
@@ -241,6 +388,61 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     for k in ("0", "1", "2", "3"):
         lines.append(f"| {labels[k]} | {dist.get(k, 0)} |")
     lines.append("")
+
+    # 修复收敛效率（1.2）
+    conv_rows = [
+        (b, m["repair_convergence_metrics"])
+        for b, m in per.items()
+        if m.get("repair_convergence_metrics", {}).get("total_tasks", 0) > 0
+    ]
+    if conv_rows:
+        lines.append("## 修复收敛效率（1.2）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 任务数 | 成功 | 首次通过率 | 成功任务平均迭代 | 成功任务中位迭代 | 成功任务平均耗时(s) |"
+        )
+        lines.append("|------|--------|------|-----------|----------------|----------------|--------------------|")
+        for baseline, c in conv_rows:
+            s = c.get("success_iteration_stats", {})
+            e = c.get("success_elapsed_seconds", {})
+            lines.append(
+                f"| {baseline} | {c.get('total_tasks', 0)} | {c.get('success_tasks', 0)} "
+                f"| {c.get('first_attempt_success_rate', 0.0)} | {s.get('avg')} | {s.get('median')} "
+                f"| {e.get('avg')} |"
+            )
+        lines.append("")
+        lines.append("> 解读：首次通过率反映无需修复即通过的任务占比；成功任务平均/中位迭代刻画收敛速度。")
+        lines.append("")
+
+    # 多维质量代理（1.1）
+    quality_rows = [(b, m["quality_proxy_metrics"]) for b, m in per.items() if m.get("quality_proxy_metrics")]
+    if quality_rows:
+        lines.append("## 多维质量代理（1.1，保守可复算）")
+        lines.append("")
+        lines.append("| 基线 | 成功覆盖率均值 | 失败覆盖率均值 | 成功耗时均值(s) | 失败耗时均值(s) | 断言强度代理 |")
+        lines.append("|------|---------------|---------------|----------------|----------------|--------------|")
+        for baseline, q in quality_rows:
+            cp = q.get("coverage_proxy", {})
+            rp = q.get("runtime_proxy", {})
+            ap = q.get("assertion_proxy", {})
+            if ap.get("available"):
+                assertion_text = f"{ap.get('avg_assertions_per_task')} 断言/任务（min={ap.get('min_assertions')}, max={ap.get('max_assertions')}）"
+            else:
+                assertion_text = "N/A（结果未携带 generated_test）"
+            lines.append(
+                f"| {baseline} "
+                f"| {cp.get('success', {}).get('mean')} "
+                f"| {cp.get('failed', {}).get('mean')} "
+                f"| {rp.get('success', {}).get('mean')} "
+                f"| {rp.get('failed', {}).get('mean')} "
+                f"| {assertion_text} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 注：该章节为保守代理指标（基于现有结果字段），不等同于 AST 圈复杂度、内存占用等精确结构/性能指标；"
+            "断言强度代理仅在结果 JSON 的 details[].generated_test 提供时可用。"
+        )
+        lines.append("")
 
     # 失败原因分布（按基线输出；1.2 细化后 LLM_FORMAT_ERROR / INDEX_ERROR 可单独计数）
     fail_rows = [

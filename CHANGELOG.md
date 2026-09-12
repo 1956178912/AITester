@@ -2,6 +2,16 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 评估指标多维化首批：1.1/1.2 分析层增强）
+
+### 实验（1.1 多维评估 + 1.2 修复收敛效率）
+- `experiments/analyze_results.py` 新增两个可回归的聚合章节：`repair_convergence_metrics`（首次尝试成功率、成功/失败任务的迭代 min/avg/median/max、成功任务平均耗时）与 `quality_proxy_metrics`（覆盖率/耗时代理、可选 `generated_test` 的断言行数代理、失败类别 Top N）
+- `build_analysis` 与 `render_markdown` 同步渲染「修复收敛效率（1.2）」与「多维质量代理（1.1，保守可复算）」两个 Markdown 章节；旧 JSON 无 `generated_test` / 无 details 时自动降级为 N/A 或跳过章节，不崩溃
+- 测试：`tests/test_experiments_scripts.py` +5 用例（收敛指标空/非空、质量代理仅现有字段、断言代理含 `generated_test`、Markdown 渲染回归）
+- 文档同步：`README.md`（测试状态/最近改动/测试覆盖表/项目结构说明/5.5 结果分析章节）、`QUICKSTART.md`（高级开关结果分析说明）、`docs/api_reference.md`（版本历史）、`docs/usage_examples.md`（示例 13.5 结构化分析 + 指标口径表）、`docs/performance_guide.md`（派生指标监控说明）、`docs/failure_analysis.md`（状态说明）
+
+全量相关回归：`tests/test_experiments_scripts.py` + `tests/test_run_benchmark.py` 28 passed；`ruff check` / `ruff format --check` 全绿；全量 `pytest tests/` **1163 passed / 0 failed**
+
 ## [Unreleased] - 待发布（2026-09-14 全项目文档同步批次 F-01~F-10）
 
 ### 文档
