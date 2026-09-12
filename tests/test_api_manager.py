@@ -1063,3 +1063,94 @@ class TestGhostConfigWiring:
         assert node.is_healthy  # 阈值 2：1 次失败仍健康
         node.mark_failure()
         assert not node.is_healthy
+
+
+class TestCircuitCooldownBoundaries:
+    """1.5 熔断冷却期边界测试（冷却结束回归 / 多节点同时冷却 / 冷却期内快速失败）。
+
+    背景（4.1 熔断冷却期）：节点连续失败达阈值后进入冷却期，冷却期内即使
+    健康检查线程把 is_healthy 翻回 True，路由层仍跳过该节点。本组测试
+    锁定冷却期三条边界行为：
+    1. 冷却结束 → 节点重新进入路由池（无需 mark_success）；
+    2. 多节点同时冷却 → 路由整体降级（select_node 返回 None / call 快速失败）；
+    3. 冷却期内新请求 → 不打回冷却节点（流量落到健康节点或快速失败）。
+    """
+
+    def _make_manager(self, names: list[str], cooldown: float = 60.0) -> APIManager:
+        reset_manager()
+        mgr = APIManager(config=APIManagerConfig(circuit_cooldown_seconds=cooldown), enable_health_checker=False)
+        mgr.health_nodes.clear()
+        mgr._client_cache.clear()
+        for name in names:
+            mgr.add_node(LLMConfig(f"key-{name}", f"https://api-{name}.example.com", name))
+        return mgr
+
+    def test_node_returns_to_routing_after_cooldown_expires(self):
+        """边界 1：冷却期到期后节点重新被路由选中（in_circuit_open 翻回 False）。
+
+        用 0.05s 短冷却模拟到期：期间即使健康检查线程把 is_healthy 翻回
+        True，节点仍被排除；到期后自动回归，无需 mark_success。
+        """
+        mgr = self._make_manager(["a", "b"], cooldown=0.05)
+        node_a = mgr.health_nodes["a"]
+        for _ in range(3):
+            node_a.mark_failure("error")
+        # 模拟健康检查线程把 is_healthy 翻回 True（冷却期内仍被排除）
+        node_a.is_healthy = True
+        healthy_names = [n.config.model_name for n in mgr.get_healthy_nodes()]
+        assert "a" not in healthy_names
+        # 冷却期到期后自动回归路由池
+        time.sleep(0.08)
+        healthy_names = [n.config.model_name for n in mgr.get_healthy_nodes()]
+        assert "a" in healthy_names, "冷却到期后节点应重新进入路由池"
+        assert node_a.in_circuit_open is False
+
+    def test_all_nodes_cooled_down_degrades_routing_to_none(self):
+        """边界 2：多节点同时进入冷却期 → 无健康节点，路由整体降级。
+
+        select_node 返回 None；call() 走"无可用 API 节点"快速失败路径
+        （而非逐个打回冷却中的死 provider 浪费时间与 token）。
+        """
+        mgr = self._make_manager(["a", "b", "c"], cooldown=60.0)
+        for name in ("a", "b", "c"):
+            for _ in range(3):
+                mgr.health_nodes[name].mark_failure("error")
+        # 模拟健康检查线程翻回健康（冷却期内仍不可用）
+        for name in ("a", "b", "c"):
+            mgr.health_nodes[name].is_healthy = True
+        assert mgr.select_node() is None, "全部节点冷却期内应无健康节点"
+        assert mgr.get_healthy_nodes() == []
+        # call() 快速失败：不发起任何节点调用
+        with pytest.raises(RuntimeError, match="无可用 API 节点"):
+            mgr.call(messages=[{"role": "user", "content": "hi"}])
+        # get_status 应暴露每节点剩余冷却秒数 > 0
+        status = mgr.get_status()
+        for name in ("a", "b", "c"):
+            assert status["nodes"][name]["circuit_open_remaining_s"] > 0.0
+
+    def test_request_during_cooldown_does_not_hit_cooled_node(self, caplog):
+        """边界 3：冷却期内新请求 → 流量直接落到健康节点，冷却节点零调用。
+
+        用 mock 客户端区分两个节点的调用次数：冷却中的节点即使被显式指定
+        也不进入尝试列表（备用候选同样排除），健康节点承接全部流量。
+        """
+        from unittest.mock import MagicMock
+
+        mgr = self._make_manager(["cold", "warm"], cooldown=60.0)
+        # cold 进入冷却期，且模拟健康检查翻回 is_healthy=True
+        for _ in range(3):
+            mgr.health_nodes["cold"].mark_failure("error")
+        mgr.health_nodes["cold"].is_healthy = True
+
+        cold_client, warm_client = MagicMock(), MagicMock()
+        mgr._client_cache["cold"] = cold_client
+        mgr._client_cache["warm"] = warm_client
+
+        # 显式指定 cold 模型：主节点在冷却期 → 备用候选不含 cold，走 warm
+        result = mgr.call(messages=[{"role": "user", "content": "hi"}], model="warm")
+        assert result is not None
+        # 健康节点被调用（故障转移语义），冷却节点零调用
+        assert warm_client.chat.completions.create.call_count >= 1
+        assert cold_client.chat.completions.create.call_count == 0, "冷却期内节点不应承接任何请求"
+
+

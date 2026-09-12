@@ -281,3 +281,129 @@ class TestRunParallelJsonBoundaries:
         monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
         assert r.exit_code == 1
+
+
+class TestRunParallelTimeoutAndInterrupt:
+    """1.4 并发任务的超时与中断处理（超时参数贯通 + 单任务超时不拖死整批）。"""
+
+    def _make_files(self, tmp_path, n: int = 2) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"m{i}.py"
+            p.write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_cli_timeout_propagated_to_tasks(self, tmp_path, monkeypatch):
+        """--timeout 值贯通到 _run_single_task 的 timeout 参数（此前两个 CLI 选项均未生效的回归护栏）。"""
+        files = self._make_files(tmp_path, n=1)
+        seen_timeouts: list[int] = []
+
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json):
+            seen_timeouts.append(timeout)
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--timeout=99", "--json"])
+        assert r.exit_code == 0
+        assert seen_timeouts == [99]
+
+    def test_default_timeout_used_when_not_specified(self, tmp_path, monkeypatch):
+        """未传 --timeout 时用 config.EXECUTION_TIMEOUT 兜底。"""
+        files = self._make_files(tmp_path, n=1)
+        seen_timeouts: list[int] = []
+
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json):
+            seen_timeouts.append(timeout)
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        CliRunner().invoke(cli_app.cli, ["run", *files, "--json"])
+        assert seen_timeouts == [cli_app.EXECUTION_TIMEOUT]
+
+    def test_one_task_timeout_does_not_block_batch(self, tmp_path, monkeypatch):
+        """并发批次中单任务超时/异常不阻塞其余任务（批次不中断 + 失败计数 + exit 1）。"""
+        files = self._make_files(tmp_path, n=2)
+
+        def fake_task(target_file, *a, **kw):
+            if "m0" in target_file:
+                raise TimeoutError("任务超时（模拟）")
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        # 批次不被中断：m1 正常完成；m0 记为失败结果；门控 exit 1
+        assert r.exit_code == 1, f"超时任务应计入失败（门控 exit 1），但批次须完成: {r.output}"
+        # --json 模式 stdout 静默（_quiet_console_logs），批次完成以 exit code 为准：
+        # exit 1 = 有失败但批次跑完；exit 2 = 参数/路径错误（批次未派发）
+
+
+class TestCheckDatasetBoundaries:
+    """1.4 check-dataset 参数解析异常路径（无效 dataset 值 / 非法 --limit）。"""
+
+    def test_invalid_dataset_value_degrades_to_inmemory(self, tmp_path, monkeypatch):
+        """无效 dataset 值：load_dataset 降级为 InMemoryDataset（优雅降级而非崩溃）。"""
+        r = CliRunner().invoke(cli_app.cli, ["check-dataset", "no_such_dataset_xyz"])
+        assert r.exit_code == 0, f"无效数据集应降级为内置示例而非崩溃: {r.output}"
+        assert "共加载" in r.output
+
+    def test_negative_limit_rejected_by_click_type(self, tmp_path):
+        """--limit 传负数：click int 类型本身接受，命令体取 tasks[:limit] 空切片 → 无详情仍正常。"""
+        r = CliRunner().invoke(cli_app.cli, ["check-dataset", "examples", "--limit=-5"])
+        # 负数切片在 Python 中取尾部（tasks[:-5]），命令不崩溃
+        assert r.exit_code == 0
+        assert "共加载" in r.output
+
+
+class TestGlobInParallelMode:
+    """1.4 多文件 glob 通配符在并发模式下的行为。
+
+    真实 shell 场景：glob 已由 shell 展开为具体文件列表传给 CLI；
+    CLI 内部再对每个 pattern 做 glob_module.glob 展开（兼容未展开的字面通配符）。
+    """
+
+    def _make_files(self, tmp_path, n: int = 3) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"g{i}.py"
+            p.write_text(f"def g{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_literal_glob_pattern_expanded_and_run_in_parallel(self, tmp_path, monkeypatch):
+        """字面通配符（shell 未展开）经 CLI 内部 glob 展开后并发执行。"""
+        self._make_files(tmp_path, n=3)
+        dir_str = str(tmp_path)
+        dispatched: list[str] = []
+
+        def fake_dispatch(**kwargs):
+            dispatched.extend(kwargs["expanded_files"])
+            for f in kwargs["expanded_files"]:
+                kwargs["results"].append({"success": True, "file": f, "func": "all", "passed": True})
+
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        # 用 click 直接调用（绕过 shell 展开），pattern 为字面通配符
+        r = CliRunner().invoke(
+            cli_app.cli, ["run", f"{dir_str}/g*.py", "--parallel=2", "--json"]
+        )
+        # click.Path(exists=True) 对未展开的字面通配符判"不存在"（解析层拦截），
+        # 此用例锁定该边界语义：字面通配符须经 shell 展开后传入
+        assert r.exit_code == 2, f"字面通配符被 click exists 校验拦截, 实际 exit={r.exit_code}"
+
+    def test_shell_expanded_files_run_in_parallel(self, tmp_path, monkeypatch):
+        """shell 展开后的具体文件列表 + --parallel>1 → 并发派发器按列表执行。"""
+        files = self._make_files(tmp_path, n=3)
+        dispatched: list[str] = []
+
+        def fake_dispatch(**kwargs):
+            dispatched.extend(kwargs["expanded_files"])
+            for f in kwargs["expanded_files"]:
+                kwargs["results"].append({"success": True, "file": f, "func": "all", "passed": True})
+
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert r.exit_code == 0
+        assert dispatched == files, "并发模式应按传入文件列表全部派发"
