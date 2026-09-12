@@ -302,6 +302,16 @@ def _run_single_task(
     coverage_ok: bool | None = None if coverage_value is None else coverage_value >= coverage_threshold
 
     # 构建结果字典
+    # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类专属
+    # 失败类别（补丁被安全守卫拒绝 / RAG 检索全空），与 benchmark 口径一致
+    from src.agents.error_classifier import refine_failure_category
+
+    error_category = refine_failure_category(
+        final_state.get("error_category") or "",
+        final_state.get("test_passed", False),
+        repair_history=final_state.get("repair_history"),
+        rag_stats=final_state.get("rag_stats"),
+    )
     result = {
         "success": True,
         "file": target_file,
@@ -313,7 +323,7 @@ def _run_single_task(
         "iterations": final_state.get("iteration", 0),
         "max_iterations": max_iterations,
         "diagnosis": final_state.get("diagnosis"),
-        "error_category": final_state.get("error_category"),
+        "error_category": error_category,
     }
 
     # 输出结果

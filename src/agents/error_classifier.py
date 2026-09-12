@@ -1,8 +1,13 @@
 """
-错误分类器模块：将测试失败原因归类为十类错误，并支持子类型识别。
+错误分类器模块：将测试失败原因归类为十二类错误，并支持子类型识别。
 
-分类优先级：LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR
+文本分类优先级（classify() 路径，基于 pytest 输出正则）：LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR
            > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN
+状态细化类别（refine_failure_category() 路径，基于任务最终状态信号）：
+    - PATCH_VALIDATION_FAILED：补丁被 PatchApplier 安全守卫拒绝
+      （repair_history 中 patch_applied=False）；
+    - RAG_RETRIEVAL_EMPTY：RAG 启用（rag_stats 非空）但任务内全部
+      检索 results==0（检索库冷启动 / 查询与入库案例差异过大）。
 使用正则规则匹配而非 LLM，确保分类速度快且结果稳定。
 分类结果用于指导 Debugger 选择合适的修复策略。
 
@@ -53,6 +58,12 @@ class ErrorCategory(Enum):
         RUNTIME: 其他运行时异常，如除零、NameError
         TIMEOUT: 执行超时
         UNKNOWN: 无法识别的错误类型
+        PATCH_VALIDATION_FAILED: 补丁被安全守卫拒绝（空/过短/无函数
+            定义/路径不合法，repair_history 中 patch_applied=False），
+            区别于"补丁应用了但测试仍失败"（1.1 状态细化）
+        RAG_RETRIEVAL_EMPTY: RAG 启用但任务内全部检索命中为 0
+            （rag_stats 非空且所有 results==0），标识 RAG 失效场景
+            （1.1 状态细化）
     """
 
     LLM_FORMAT_ERROR = "llm_format_error"
@@ -65,6 +76,10 @@ class ErrorCategory(Enum):
     RUNTIME = "runtime"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
+    # 1.1 状态细化：两类"流程状态"类别，不走 classify() 文本正则，
+    # 由 refine_failure_category() 在任务收尾时按状态信号判定
+    PATCH_VALIDATION_FAILED = "patch_validation_failed"
+    RAG_RETRIEVAL_EMPTY = "rag_retrieval_empty"
 
 
 class SyntaxSubtype(Enum):
@@ -570,5 +585,63 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
             "判断是代码逻辑错误、测试用例问题还是环境问题，"
             "然后给出相应的修复方案。"
         ),
+        # 补丁被安全守卫拒绝（1.1 状态细化）：本轮补丁未生效，
+        # 修复方向是重新生成更安全/完整的补丁而非调整测试
+        ErrorCategory.PATCH_VALIDATION_FAILED: (
+            "检测到上一轮补丁被安全守卫拒绝（补丁为空/过短/丢失函数定义"
+            "或文件路径不合法），本轮修复未真正写入。"
+            "请重新生成完整补丁：保留原代码全部函数与 import，"
+            "输出完整文件而非片段，避免被安全守卫再次拒绝。"
+        ),
+        # RAG 检索全空（1.1 状态细化）：检索未提供参考案例，
+        # 生成质量不受检索增强，按常规策略修复并考虑扩充检索库
+        ErrorCategory.RAG_RETRIEVAL_EMPTY: (
+            "检测到 RAG 检索未命中任何历史案例（检索库冷启动或"
+            "当前任务与已入库案例差异过大）。本轮生成未获得检索增强，"
+            "请按常规修复策略处理；若同类任务反复出现，"
+            "考虑扩充检索库案例或降低相似度阈值。"
+        ),
     }
     return strategies.get(category, strategies[ErrorCategory.UNKNOWN])
+
+
+def refine_failure_category(
+    error_category: str,
+    test_passed: bool | None,
+    repair_history: list[dict] | None = None,
+    rag_stats: list[dict] | None = None,
+) -> str:
+    """任务收尾时按最终状态信号细化失败类别（1.1 状态细化）。
+
+    与 classify() 的文本正则分类互补：classify() 在测试输出上工作，
+    本函数在任务最终状态（repair_history / rag_stats）上工作，
+    把"修复失败"与"补丁不安全"、"RAG 失效场景"单独标识出来，
+    供失败分布统计与实验分析使用。
+
+    判定规则（仅对 test_passed 为 False 的任务生效，成功任务原样返回）：
+    1. PATCH_VALIDATION_FAILED：repair_history 中任一轮 patch_applied
+       为 False（补丁被安全守卫拒绝）——比 RAG 检索空更具体的失败原因，
+       优先级更高；
+    2. RAG_RETRIEVAL_EMPTY：rag_stats 非空（RAG 启用过）且全部记录
+       results==0（任务内一次检索都未命中）；
+    3. 其余情况原样返回传入的 error_category。
+
+    Args:
+        error_category: classify() 得出的错误类别字符串（枚举 .value）。
+        test_passed: 任务最终是否通过（None 表示中途崩溃，原样返回）。
+        repair_history: PatchApplier 累计的修复历史（每轮 patch_applied 标志）。
+        rag_stats: 任务内 RAG 检索指标记录（每记录 results 命中数）。
+
+    Returns:
+        细化后的错误类别字符串。
+    """
+    if test_passed is not False:
+        return error_category
+    history = repair_history or []
+    patch_rejected = any(not h.get("patch_applied", True) for h in history if h.get("patch_applied") is False)
+    if patch_rejected:
+        return ErrorCategory.PATCH_VALIDATION_FAILED.value
+    stats = rag_stats or []
+    if stats and all(s.get("results", 0) == 0 for s in stats):
+        return ErrorCategory.RAG_RETRIEVAL_EMPTY.value
+    return error_category

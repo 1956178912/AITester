@@ -20,6 +20,7 @@ from src.agents.error_classifier import (
     ErrorContext,
     SyntaxSubtype,
     get_fix_strategy,
+    refine_failure_category,
 )
 
 
@@ -67,6 +68,19 @@ class TestErrorCategory:
     def test_index_error_value(self):
         """INDEX_ERROR 类别的值。"""
         assert ErrorCategory.INDEX_ERROR.value == "index_error"
+
+    # 1.1 状态细化新增类别
+    def test_patch_validation_failed_value(self):
+        """PATCH_VALIDATION_FAILED 类别的值。"""
+        assert ErrorCategory.PATCH_VALIDATION_FAILED.value == "patch_validation_failed"
+
+    def test_rag_retrieval_empty_value(self):
+        """RAG_RETRIEVAL_EMPTY 类别的值。"""
+        assert ErrorCategory.RAG_RETRIEVAL_EMPTY.value == "rag_retrieval_empty"
+
+    def test_twelve_categories_total(self):
+        """错误分类体系共 12 类（10 文本类 + 2 状态细化类）。"""
+        assert len(ErrorCategory) == 12
 
 
 class TestSyntaxSubtype:
@@ -469,3 +483,83 @@ class TestGetFixStrategy:
         strategy = get_fix_strategy(ErrorCategory.INDEX_ERROR)
         assert "越界" in strategy
         assert "边界" in strategy
+
+    # ── 1.1 状态细化新增类别的修复策略 ──
+
+    def test_patch_validation_failed_strategy(self):
+        """PATCH_VALIDATION_FAILED 独立策略（重新生成完整补丁）。"""
+        strategy = get_fix_strategy(ErrorCategory.PATCH_VALIDATION_FAILED)
+        assert "安全守卫" in strategy
+        assert "完整" in strategy
+
+    def test_rag_retrieval_empty_strategy(self):
+        """RAG_RETRIEVAL_EMPTY 独立策略（按常规策略处理，扩充检索库）。"""
+        strategy = get_fix_strategy(ErrorCategory.RAG_RETRIEVAL_EMPTY)
+        assert "检索" in strategy
+        assert "常规" in strategy
+
+
+class TestRefineFailureCategory:
+    """refine_failure_category 任务收尾状态细化测试（1.1 状态细化）。"""
+
+    def test_success_task_unchanged(self):
+        """成功任务原样返回（不细化）。"""
+        assert refine_failure_category("assertion", True) == "assertion"
+        assert refine_failure_category("assertion", None) == "assertion"
+
+    def test_patch_rejected_detected(self):
+        """repair_history 含 patch_applied=False → patch_validation_failed。"""
+        history = [
+            {"iteration": 1, "patch_applied": True},
+            {"iteration": 2, "patch_applied": False},
+        ]
+        assert (
+            refine_failure_category("assertion", False, repair_history=history)
+            == ErrorCategory.PATCH_VALIDATION_FAILED.value
+        )
+
+    def test_patch_rejected_takes_priority_over_rag_empty(self):
+        """补丁被拒与 RAG 全空同时成立时，更具体的补丁拒绝优先。"""
+        history = [{"iteration": 1, "patch_applied": False}]
+        stats = [{"kind": "test_cases", "results": 0}]
+        assert (
+            refine_failure_category("unknown", False, repair_history=history, rag_stats=stats)
+            == ErrorCategory.PATCH_VALIDATION_FAILED.value
+        )
+
+    def test_rag_retrieval_empty_detected(self):
+        """RAG 启用且全部检索 results==0 → rag_retrieval_empty。"""
+        stats = [
+            {"kind": "test_cases", "results": 0, "max_similarity": None},
+            {"kind": "repairs", "results": 0, "max_similarity": None},
+        ]
+        assert (
+            refine_failure_category("assertion", False, rag_stats=stats)
+            == ErrorCategory.RAG_RETRIEVAL_EMPTY.value
+        )
+
+    def test_rag_with_hit_not_refined(self):
+        """RAG 有命中（results>0）→ 不细化为 RAG_RETRIEVAL_EMPTY。"""
+        stats = [
+            {"kind": "test_cases", "results": 3, "max_similarity": 0.82},
+            {"kind": "repairs", "results": 0},
+        ]
+        assert refine_failure_category("assertion", False, rag_stats=stats) == "assertion"
+
+    def test_rag_disabled_not_refined(self):
+        """未启用 RAG（rag_stats 为 None/空）→ 不细化。"""
+        assert refine_failure_category("assertion", False, rag_stats=None) == "assertion"
+        assert refine_failure_category("assertion", False, rag_stats=[]) == "assertion"
+
+    def test_all_patches_applied_not_refined(self):
+        """repair_history 全部 patch_applied=True → 补丁被拒不成立。"""
+        history = [
+            {"iteration": 1, "patch_applied": True},
+            {"iteration": 2, "patch_applied": True},
+        ]
+        assert refine_failure_category("assertion", False, repair_history=history) == "assertion"
+
+    def test_history_without_flag_treated_as_not_rejected(self):
+        """历史条目缺少 patch_applied 键时保守处理（不判定为被拒）。"""
+        history = [{"iteration": 1, "diagnosis": "x"}]
+        assert refine_failure_category("assertion", False, repair_history=history) == "assertion"
