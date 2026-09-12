@@ -299,6 +299,9 @@ install_packages(venv_python, ["pandas"], timeout=120)
 | `suggest_package_names()` | `module_names: set[str]` | `list[str]` | 模块名 → 建议的 pip 包名（处理下划线/别名映射） |
 | `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | 创建 venv 并返回 python 解释器路径（磁盘缓存复用） |
 | `install_packages()` | `venv_python`, `packages`, `timeout` | `bool` | 在 venv 内 pip install（失败返回 False，不抛异常） |
+| `get_venv_cache_stats()` | 无 | `dict` | 4.4 依赖缓存命中率统计：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)` |
+| `list_venv_cache()` | 无 | `list[dict]` | 4.4 列出缓存目录所有 venv（name / path / size_mb / created_at） |
+| `clear_venv_cache()` | `max_age_days: int \| None`, `max_size_mb: int \| None` | `dict` | 4.4 按年龄 / 大小过滤清理缓存，两者均 None 时清空 |
 
 ---
 
@@ -351,19 +354,19 @@ state: AITesterState = {
 final_state = graph.invoke(state)
 ```
 
-**工作流节点：**
+**工作流节点**（`src/graph/workflow.py` 的 `add_node` ID，节点函数为下划线前缀的 `_<id>_node`）：
 
-| 节点 | 功能 | 是否调用 LLM |
-|------|------|-------------|
-| `planner_node` | 生成测试计划 | ✅ |
-| `generator_node` | 生成测试代码 | ✅ |
-| `executor_node` | 执行测试 | ❌ |
-| `classifier_node` | 分类错误类型 | ❌ |
-| `debugger_node` | 生成修复补丁 | ✅ |
-| `patch_applier_node` | 应用补丁 | ❌ |
+| 节点 ID | 功能 | 是否调用 LLM |
+|---------|------|-------------|
+| `planner` | 生成测试计划 | ✅ |
+| `generator` | 生成测试代码 | ✅ |
+| `executor` | 执行测试 | ❌ |
+| `debugger` | 分层诊断 + 生成修复补丁（错误分类在节点内联调用 `error_classifier.classify`，无独立分类节点） | ✅ |
+| `patch_applier` | 应用补丁（单文件 `safe_apply_patch`；`CROSS_FILE_ENABLE=true` 时走跨文件多文件分支） | ❌ |
+| `cross_file_analyzer` | 3.5 跨文件依赖分析（仅 `CROSS_FILE_ENABLE=true` 时注册，插在 `executor → debugger` 之间） | ❌ |
 
 **条件路由：**
-- `should_debug()`：根据测试结果决定是否进入调试循环
+- `_should_debug()`：根据测试结果与迭代轮次决定是否继续进入调试循环（循环终止逻辑）
 - 最大迭代次数限制：防止无限循环
 
 ---
@@ -423,6 +426,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `LLM_N_API_KEY` | str | - | 第 N 个 LLM 的 API 密钥（写在 `.env.local`） |
 | `LLM_N_BASE_URL` | str | - | 第 N 个 LLM 的 API 基础 URL |
 | `LLM_N_MODEL_NAME` | str | - | 第 N 个 LLM 的模型名称 |
+| `LLM_N_COST_WEIGHT` | float | 0.0（=无信息） | 3.4 成本感知路由的相对成本倍数（0.1~1000，未配置 0.0 时 APIManager 回退 1.0 基准） |
 | `MAX_ITERATIONS` | int | 3 | 最大修复迭代次数 |
 | `COVERAGE_THRESHOLD` | float | 80.0 | 覆盖率阈值 |
 | `EXECUTION_TIMEOUT` | int | 30 | pytest 执行超时（秒） |
@@ -431,9 +435,25 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `ENABLE_PLANNER` | bool | true | 启用 Planner |
 | `ENABLE_DEBUGGER` | bool | true | 启用 Debugger |
 | `ENABLE_RAG` | bool | false | 启用 RAG |
+| `CROSS_FILE_ENABLE` | bool | false | 3.5 跨文件修复：启用 `cross_file_analyzer` 节点（插在 executor→debugger 之间）+ 多文件补丁分支 |
+| `CROSS_FILE_MAX_MODULES` | int | 5 | 3.5 跨文件修复计划最大模块数（防 token 爆炸） |
+| `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 断言增强：AST 提取被测代码现有 assert 注入 prompt |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁） |
+| `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行） |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
 | `TEMPERATURE` | float | 0.2 | LLM 采样温度 |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
+
+**APIManagerConfig 字段**（`src/api/api_manager.py`，编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `circuit_cooldown_seconds` | float | 60.0 | 4.1 熔断冷却时长：节点连续失败达 `max_consecutive_failures` 后进入冷却期 |
+| `enable_half_open_probe` | bool | True | 4.2 半开探测开关：冷却到期后节点先进入 half-open 窗口仅承载一次探测，成功闭合熔断器 / 失败重开半程冷却；置 False 退回 4.1 直接放行行为 |
+| `half_open_probe_penalty_cap_seconds` | float | 30.0 | 4.2 半开探测失败惩罚时长上限：失败重开冷却 = `min(circuit_cooldown_seconds/2, 本字段)` |
+| `cost_alert_threshold` | float | 2.0 | 3.4 成本告警阈值：故障转移到 `cost_weight >= 阈值` 的昂贵节点时记 WARNING |
+
+> 监控：`get_status()` 每节点输出 `circuit_open_remaining_s`（熔断冷却剩余秒）与 `circuit_state`（`closed` / `open` / `half_open` 三态，仅 `enable_half_open_probe=True` 时报告 half_open）。
 
 ---
 

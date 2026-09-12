@@ -335,7 +335,14 @@ PYTHONUNBUFFERED=1 python experiments/run_benchmark.py \
 | `coverage_improvement` | 覆盖率提升幅度 | > 10%/轮 |
 | `max_iterations_reached` | 达到最大迭代的任务数 | < 30% |
 
-**实验结果分析侧的派生指标（1.1/1.2，经 `experiments/analyze_results.py` 输出）**：
+**APIManager 熔断器与成本感知配置项（4.1/4.2/3.4，经 `get_status()` 监控）**：
+
+| 配置项（`APIManagerConfig`） | 默认值 | 监控字段（`get_status().nodes[*]`） | 说明 |
+|------|--------|------|------|
+| `circuit_cooldown_seconds` | 60.0 | `circuit_open_remaining_s` | 4.1 熔断冷却时长：连续失败达 `max_consecutive_failures` 后节点进入冷却期，路由层跳过 |
+| `enable_half_open_probe` | True | `circuit_state`（closed/open/half_open） | 4.2 半开探测：冷却到期后节点先进入 half-open 窗口仅承载一次探测，成功闭合 / 失败重开 `min(cooldown/2, cap)` 半程冷却 |
+| `half_open_probe_penalty_cap_seconds` | 30.0 | （惩罚时长上限，无独立监控字段） | 4.2 半开探测失败惩罚上限，防死 provider 冷却期无限缩短 |
+| `cost_alert_threshold` | 2.0 | （故障转移落昂贵节点时记 WARNING） | 3.4 成本告警：转移到 `cost_weight >= 阈值` 的昂贵 provider 时告警 |
 
 | 指标 | 含义 | 解读 |
 |------|------|------|
