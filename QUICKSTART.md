@@ -110,12 +110,35 @@ manager = APIManager(config=APIManagerConfig(circuit_cooldown_seconds=120.0))
 # RAG（检索增强）：合成/内置数据集实验可显式开启
 python experiments/run_benchmark.py --dataset synthetic --enable-rag
 
-# 结果分析（4.3 + 1.1/1.2 指标增强）：跑完 benchmark 后生成 Markdown 汇总，
+# 3.5 跨文件修复（默认关）：启用后 workflow 在 executor → debugger 之间插入
+# cross_file_analyzer 节点，分析被测代码的跨文件 import 依赖关系，
+# 多文件补丁按拓扑序应用（被调用方先改，调用方后改），失败整体回滚。
+# 单文件项目自动降级（依赖边为空时走单文件路径）。
+export CROSS_FILE_ENABLE=true
+export CROSS_FILE_MAX_MODULES=5
+
+# 3.4 断言增强（默认关）：Generator 在生成前先 AST 提取被测代码中已有
+# assert 语句，作为"锚点断言"注入 prompt，避免断言弱化 / 恒真断言 / 魔数异味。
+export ASSERTION_AUGMENT_ENABLE=true
+
+# 结果分析（4.3 + 1.1/1.2/1.3 指标增强）：跑完 benchmark 后生成 Markdown 汇总，
 # 含成功率 / token 效率 / 迭代分布 / 失败原因分布 / RAG 质量 /
 # 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
+# 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/
+# 测试异味检测（Assertion Roulette / Magic Number / 断言弱化 / 平凡测试）/
 # 多维质量代理（覆盖率、耗时、可选 generated_test 的断言行数、失败类别 Top N）。
 # 旧 JSON 缺 token_metrics / rag_metrics / generated_test 键时自动兜底或降级，不崩。
 python experiments/analyze_results.py --results-dir experiments/results
+
+# 失败根因分类 + 案例知识库（5.3）：按 LLM 能力 / 依赖 / 框架三大根因归因，
+# 结构化案例落盘 failure_knowledge_base.json（含 task_id / root_cause / 复现步骤 / 建议修复）。
+python experiments/analyze_failures.py --results-dir experiments/results
+python experiments/analyze_failures.py -r experiments/results -k experiments/results/failure_knowledge_base.json
+
+# 4.4 依赖缓存监控：venv 缓存命中率统计 + 清理
+from src.tools.dependency import get_venv_cache_stats, clear_venv_cache
+print(get_venv_cache_stats())          # {"hits": N, "creates": M, "hit_rate": ...}
+clear_venv_cache(max_age_days=30)      # 清理 30 天前的 venv 缓存
 ```
 
 ## 配置文件说明
