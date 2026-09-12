@@ -96,15 +96,65 @@ class APIHealth:
     # 默认 60.0 保持经验值（死 provider 通常 1-2 分钟内恢复或彻底失效）。
     # 经 APIManagerConfig.circuit_cooldown_seconds 在注册节点时注入。
     circuit_cooldown_seconds: float = 60.0
+    # 4.2 半开探测失败的惩罚时长上限（秒）：失败时重新打开的冷却 =
+    # min(circuit_cooldown_seconds / 2.0, 本字段)，默认 30s（4.1 默认冷却
+    # 60s 的一半），防止 provider 彻底宕机时冷却期越缩越短。
+    # 经 APIManagerConfig.half_open_probe_penalty_cap_seconds 在注册节点时注入。
+    half_open_probe_penalty_cap_seconds: float = 30.0
     # 滑动窗口记录最近 N 次响应时间（用于计算平均值）
     _response_times: deque[float] = field(default_factory=lambda: deque(maxlen=10))
 
     @property
     def in_circuit_open(self) -> bool:
-        """当前是否处于熔断冷却期（monotonic 时钟判定）。"""
+        """当前是否处于熔断冷却期（monotonic 时钟判定）。
+
+        4.2：冷却已到期但半开探测尚未完成时（circuit_open_until > 0 且
+        monotonic 已越过该时间点）返回 False——路由放行该节点作为"半开"
+        探测请求；探测结果由 _probe_circuit_half_open 消费（成功闭合 /
+        失败重新开半程冷却）。
+        """
         if self.circuit_open_until <= 0.0:
             return False
         return time.monotonic() < self.circuit_open_until
+
+    @property
+    def in_circuit_half_open(self) -> bool:
+        """4.2：当前是否处于半开探测窗口（冷却已到期、探测尚未完成）。
+
+        窗口内该节点仍可被路由选中（in_circuit_open 为 False），但仅
+        承载探测请求；_probe_circuit_half_open 在发起真实请求前调用，
+        根据探测成功与否将状态推回"熔断中"或"闭合"。
+        """
+        if self.circuit_open_until <= 0.0:
+            return False
+        return time.monotonic() >= self.circuit_open_until
+
+    def _probe_circuit_half_open(self, probe_succeeded: bool) -> None:
+        """4.2：消费半开探测结果（在发起/结束真实请求前后调用）。
+
+        Args:
+            probe_succeeded: 本次半开探测请求是否成功。
+
+        行为：
+        - 不在半开窗口（探测未启用 / 未熔断 / 冷却未到）：无操作；
+        - 成功：熔断器闭合（circuit_open_until 清零），节点恢复全量路由；
+        - 失败：重新打开半程冷却期（min(cooldown/2, penalty_cap)），
+          冷却时长减半使"彻底死掉"的 provider 冷却期单调收缩但不越过
+          惩罚上限，避免无限次探测打同一死点。
+        """
+        if not self.in_circuit_half_open:
+            return
+        if probe_succeeded:
+            self.circuit_open_until = 0.0
+            logger.info("API %s 半开探测成功，熔断器闭合，恢复全量路由", self.config.model_name)
+        else:
+            penalty = min(self.circuit_cooldown_seconds / 2.0, self.half_open_probe_penalty_cap_seconds)
+            self.circuit_open_until = time.monotonic() + penalty
+            logger.warning(
+                "API %s 半开探测失败，重新进入熔断冷却 %.1fs",
+                self.config.model_name,
+                penalty,
+            )
 
     @property
     def success_rate(self) -> float:
@@ -163,6 +213,27 @@ class APIManagerConfig:
     retry_count: int = 2  # 重试次数
     batch_health_check_size: int = 10  # 批量健康检查的批次大小
     health_check_timeout: float = 5.0  # 单次健康检查超时（秒）
+    # 4.2 半开探测开关（默认 True）：熔断冷却到期后，节点不直接恢复全量路由，
+    # 而是先处于"半开"状态，仅允许一次探测请求；探测成功才闭合熔断器，
+    # 失败则重新打开半个冷却期（cooldown/2，上限 30s），避免死 provider
+    # 被全量流量反复打。置 False 退回 4.1 旧行为（冷却到期即直接放行）。
+    # 取值来源：经典熔断器三态（closed/open/half-open）标准做法。
+    enable_half_open_probe: bool = True
+    # 半开探测失败的惩罚时长上限（秒）：失败时重新打开的冷却 = min(cooldown/2, 该上限)，
+    # 默认 30s（4.1 默认冷却 60s 的一半），防止 provider 彻底宕机时冷却期越缩越短。
+    half_open_probe_penalty_cap_seconds: float = 30.0
+    # 4.2 半开探测开关（默认 True）：熔断冷却到期后，节点不直接恢复全量路由，
+    # 而是先处于"半开"状态，仅允许一次探测请求；探测成功才闭合熔断器，
+    # 失败则重新打开半程冷却期（cooldown/2，受 half_open_probe_penalty_cap_seconds
+    # 上限约束），避免死 provider 被全量流量反复打。置 False 退回 4.1 旧行为
+    # （冷却到期即直接放行）。取值来源：经典熔断器三态（closed/open/half-open）
+    # 标准做法。
+    enable_half_open_probe: bool = True
+    # 半开探测失败的惩罚时长上限（秒）：失败时重新打开的冷却 =
+    # min(circuit_cooldown_seconds / 2.0, 本字段)，默认 30s（4.1 默认冷却
+    # 60s 的一半），防止 provider 彻底宕机时冷却期越缩越短。
+    # 经注册节点时注入到 APIHealth.half_open_probe_penalty_cap_seconds。
+    half_open_probe_penalty_cap_seconds: float = 30.0
     # 节点成本权重映射（3.4 成本感知路由）：{model_name: 相对成本倍数}。
     # 未列出的模型默认 1.0（基准）。COST_AWARE 策略按"成功率/成本"综合排序，
     # 故障转移时优先选择"够用且便宜"的节点，避免把全量流量切到昂贵 provider。
@@ -256,6 +327,8 @@ class APIManager:
                 cost_weight=cost_weight,
                 # 4.1：把配置里的熔断冷却时长注入节点（mark_failure 触发熔断时写入）
                 circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
+                # 4.2：半开探测失败惩罚时长上限注入节点（_probe_circuit_half_open 消费）
+                half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
             )
             self.health_nodes[llm_config.model_name] = health
             logger.info(
@@ -286,9 +359,24 @@ class APIManager:
         return 1.0
 
     def get_healthy_nodes(self) -> list[APIHealth]:
-        """获取所有健康节点（4.1：熔断冷却期内的节点即使 is_healthy 为
-        True 也继续被跳过，直到冷却到期或 mark_success 复位）"""
-        return [h for h in self.health_nodes.values() if h.is_healthy and not h.in_circuit_open]
+        """获取可承载路由的节点。
+
+        4.1：熔断冷却期（in_circuit_open）内的节点即使 is_healthy 为 True
+        也继续被跳过，直到冷却到期或 mark_success 复位。
+        4.2：冷却到期但未完成半开探测的节点（is_healthy=False 且处于
+        in_circuit_half_open 窗口）纳入候选——它承载探测请求，探测成功
+        才闭合熔断器恢复全量路由；探测失败则重新进入熔断冷却期。
+        仅当 enable_half_open_probe=True 时半开窗口节点才进入候选。
+        """
+        candidates = []
+        for h in self.health_nodes.values():
+            if h.in_circuit_open:
+                continue
+            if h.is_healthy:
+                candidates.append(h)
+            elif self.config.enable_half_open_probe and h.in_circuit_half_open:
+                candidates.append(h)
+        return candidates
 
     def get_all_nodes(self) -> list[APIHealth]:
         """获取所有节点（包括不健康的）"""
@@ -377,10 +465,12 @@ class APIManager:
                 return self._select_node_health_based()
 
     def check_health(self, node: APIHealth) -> bool:
+        """对单个节点进行健康检查。
+
+        4.2：半开探测窗口内的节点，其健康检查同样消费探测结果——
+        成功则闭合熔断器，失败则重开半程冷却期，与 call 路径口径一致。
         """
-        对单个节点进行健康检查
-        发送一个轻量请求测试 API 可用性
-        """
+        is_half_open_probe = self._enter_half_open_probe(node)
         try:
             client = self._client_cache.get(node.config.model_name)
             if not client:
@@ -399,22 +489,32 @@ class APIManager:
             # 检查响应
             if response and response.choices:
                 node.mark_success(elapsed_ms)
+                if is_half_open_probe:
+                    node._probe_circuit_half_open(True)
                 logger.debug("健康检查通过: %s (%.2fms)", node.config.model_name, elapsed_ms)
                 return True
             else:
                 node.mark_failure("empty_response")
+                if is_half_open_probe:
+                    node._probe_circuit_half_open(False)
                 return False
         except openai.RateLimitError:
             node.mark_failure("rate_limit")
+            if is_half_open_probe:
+                node._probe_circuit_half_open(False)
             logger.warning("API 限流: %s", node.config.model_name)
             return False
         except openai.APIError as e:
             status = getattr(e, "status_code", "unknown")
             node.mark_failure(f"api_error:{status}")
+            if is_half_open_probe:
+                node._probe_circuit_half_open(False)
             logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
             return False
         except Exception as e:
             node.mark_failure(f"error:{type(e).__name__}")
+            if is_half_open_probe:
+                node._probe_circuit_half_open(False)
             logger.error("健康检查异常: %s - %s", node.config.model_name, _redact(str(e)))
             return False
 
@@ -462,9 +562,16 @@ class APIManager:
             else:
                 raise RuntimeError("无可用 API 节点，请检查配置")
         all_nodes = self.get_all_nodes()
-        # 4.1：备用节点候选同样排除熔断冷却期内的节点（is_healthy 为 True
-        # 但冷却未到期的节点不可用，否则故障转移会把流量重新打回死 provider）
-        fallback_candidates = [n for n in all_nodes if n not in nodes_to_try and n.is_healthy and not n.in_circuit_open]
+        # 4.1：备用节点候选排除熔断冷却期内的节点（is_healthy 为 True
+        # 但冷却未到期的节点不可用，否则故障转移会把流量重新打回死 provider）；
+        # 4.2：半开探测窗口内的节点纳入候选（承载探测请求，与 get_healthy_nodes 同口径）
+        fallback_candidates = [
+            n
+            for n in all_nodes
+            if n not in nodes_to_try
+            and not n.in_circuit_open
+            and (n.is_healthy or (self.config.enable_half_open_probe and n.in_circuit_half_open))
+        ]
         return nodes_to_try, fallback_candidates
 
     def _try_call_node(
@@ -484,11 +591,19 @@ class APIManager:
         if not client:
             return None
         start = time.time()
+        # 4.2：半开探测请求预检——该节点刚从熔断冷却期放行（冷却到期但探测
+        # 尚未完成）时，本次调用即探测本身：预记录"探测中"，由 _try_call_node
+        # 内的成功 / 各异常分支的探测消费决定熔断器闭合还是重新开半程冷却。
+        is_half_open_probe = self._enter_half_open_probe(node)
         response = client.chat.completions.create(
             model=call_model, messages=messages, timeout=self.config.timeout, **kwargs
         )
         elapsed_ms = (time.time() - start) * 1000
         node.mark_success(elapsed_ms)
+        if is_half_open_probe:
+            # 探测成功：熔断器闭合（mark_success 已清零 circuit_open_until，
+            # 此处显式消费一次以记录"半开→闭合"日志，成功与失败口径一致）
+            node._probe_circuit_half_open(True)
         if attempt > 0:
             # 故障转移成功：记录"上一个节点 -> 当前节点"（此前误把当前节点名打印了两遍）
             logger.info("故障转移成功: %s -> %s", prev_model or "unknown", node.config.model_name)
@@ -506,26 +621,63 @@ class APIManager:
                 )
         return response
 
-    def _handle_rate_limit(self, node, attempt: int, primary_count: int) -> None:
-        """处理限流错误，根据配置决定是否等待重试。"""
+    def _enter_half_open_probe(self, node: APIHealth) -> bool:
+        """4.2：在发起真实请求前，判定该节点是否处于半开探测窗口并返回判定结果。
+
+        Args:
+            node: 目标节点（APIHealth）。
+
+        Returns:
+            True 表示本次调用承载半开探测（调用方需在成功 / 各异常分支
+            消费 node._probe_circuit_half_open）；False 表示常规调用。
+
+        探测开关（enable_half_open_probe）关闭时恒返回 False，节点行为与
+        4.1 完全一致（冷却到期即放行，无探测惩罚），便于对比实验。
+        """
+        if not self.config.enable_half_open_probe:
+            return False
+        return node.in_circuit_half_open
+
+    def _handle_rate_limit(self, node, attempt: int, primary_count: int, is_half_open_probe: bool = False) -> None:
+        """处理限流错误，根据配置决定是否等待重试。
+
+        4.2：is_half_open_probe 为 True 时，本次限流发生在半开探测窗口内——
+        限流说明 provider 虽可达但配额耗尽，探测"成功达到服务"但不可用，
+        消费一次失败探测（重新开半程冷却期）后再走限流等待。
+        """
         node.mark_failure("rate_limit")
+        if is_half_open_probe:
+            node._probe_circuit_half_open(False)
         logger.warning("限流: %s (attempt %d)", node.config.model_name, attempt + 1)
         if self.config.fallback_on_failure and attempt < primary_count - 1:
             time.sleep(2)
         elif self.config.fallback_on_failure:
             time.sleep(5)
 
-    def _handle_api_error(self, e, node) -> None:
-        """处理API错误，根据配置决定是否抛出。"""
+    def _handle_api_error(self, e, node, is_half_open_probe: bool = False) -> None:
+        """处理API错误，根据配置决定是否抛出。
+
+        4.2：is_half_open_probe 为 True 时，API 错误即探测失败，
+        消费一次失败探测（重新开半程冷却期），避免探测通过后又被
+        全量流量打回同一死 provider。
+        """
         node.mark_failure(f"api_error:{getattr(e, 'status_code', 'unknown')}")
+        if is_half_open_probe:
+            node._probe_circuit_half_open(False)
         logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             # fallback 禁用时，记录错误后直接抛出原始异常
             raise
 
-    def _handle_generic_error(self, e, node) -> None:
-        """处理通用异常，根据配置决定是否抛出。"""
+    def _handle_generic_error(self, e, node, is_half_open_probe: bool = False) -> None:
+        """处理通用异常，根据配置决定是否抛出。
+
+        4.2：is_half_open_probe 为 True 时，通用异常即探测失败，
+        消费一次失败探测（重新开半程冷却期）。
+        """
         node.mark_failure(f"error:{type(e).__name__}")
+        if is_half_open_probe:
+            node._probe_circuit_half_open(False)
         logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             raise
@@ -594,6 +746,13 @@ class APIManager:
                 "avg_response_time_ms": round(h.avg_response_time_ms, 2),
                 # 4.1 熔断器状态：冷却剩余秒数（>0 表示该节点当前处于熔断冷却期）
                 "circuit_open_remaining_s": round(circuit_remaining, 1),
+                # 4.2 半开探测状态：冷却已到期但探测尚未完成（"half_open"
+                # 探测窗口内该节点仍可承载请求，但仅一次探测有效）
+                "circuit_state": (
+                    "half_open"
+                    if self.config.enable_half_open_probe and h.in_circuit_half_open
+                    else ("open" if h.in_circuit_open else "closed")
+                ),
             }
         return {
             "total_nodes": len(self.health_nodes),
@@ -660,6 +819,7 @@ class APIManager:
                 max_consecutive_failures=self.config.max_consecutive_failures,
                 cost_weight=self._cost_weight_for(config.model_name),
                 circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
+                half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
             )
             self.health_nodes[config.model_name] = health
             logger.info("动态添加节点: %s (%s)", config.model_name, _redact(config.base_url))
