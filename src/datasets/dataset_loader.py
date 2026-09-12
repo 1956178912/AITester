@@ -334,6 +334,24 @@ class SWEBenchDataset(BaseDatasetLoader):
             logger.info("SWE-bench 质量报告：%d/%d 个任务存在问题", len(report), len(self._tasks))
         return report
 
+    def tasks_missing_source(self) -> list[str]:
+        """2.1 源码补充流程：识别缺失被测源码的任务 instance_id 列表。
+
+        官方 SWE-bench JSONL 不含被测源码字段，未配 SWE_BENCH_ENRICHMENT
+        补充文件时 instance_code 兜底为 issue 文本（validate_task 标记为
+        "兜底为 issue 文本"）。本方法返回这些任务的 instance_id（加载顺序），
+        供 check-dataset 质量报告输出与 scripts/export_swe_bench_source.py
+        的 --instance-ids 批量导出筛选使用。
+
+        Returns:
+            instance_id 列表（空列表 = 全部任务源码完整）。
+        """
+        missing: list[str] = []
+        for task in self.tasks:
+            if not task.instance_code or task.instance_code == task.problem_statement:
+                missing.append(task.task_id)
+        return missing
+
     @staticmethod
     def _load_enrichment(enrichment_path: str) -> dict[str, dict[str, Any]]:
         """加载源码补充文件（P0：官方 SWE-bench JSONL 缺被测源码的补全通道）。
