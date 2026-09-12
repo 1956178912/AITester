@@ -7,15 +7,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1247 collected |
-| **单元测试** | ✅ 1247 passed, 0 skipped |
+| **总测试数** | ✅ 1247 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 39 条，1208 collected） |
+| **单元测试** | ✅ 全量 1247 passed, 0 skipped；精简环境 1208 passed, 39 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 91% 总覆盖（核心模块：reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / workflow 83% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%） |
-| **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿） |
+| **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
-| **最新优化** | ✅ 2026-09-14 熔断器半开探测批次 + 2026-09-15 CLI 输出层补测批次：O-01 补 `tests/test_cli_output.py`（colorize TTY 双分支 / 消息 stderr 路由 / rich 表格缺键兜底 + coverage=0.0 不被误判 N/A），CLI 输出层覆盖率 58%→92%；全量 1247 passed；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-15 测试套件可选依赖降级批次（chromadb/matplotlib 未安装时 RAG/可视化用例 `skipif`/`importorskip` 优雅跳过，精简环境零 ERROR）+ 2026-09-15 CLI 输出层补测批次（O-01 补 `tests/test_cli_output.py`，CLI 输出层覆盖率 58%→92%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), workflow.py (83%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-15 CLI 输出层补测批次：O-01 新增 `tests/test_cli_output.py`（10 用例，锁定 colorize / 消息路由 / print_rich_table 边界），`src/cli/output.py` 覆盖率 58%→92%；全量 1247 用例通过（详见 [CHANGELOG](CHANGELOG.md)） |
+| **最近改动** | ✅ 2026-09-15 测试套件可选依赖降级批次：`tests/test_rag_retriever.py` 模块级 `pytestmark=skipif(not _chroma_available())`、`tests/test_experiments_scripts.py` `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixture 补 `pytest.importorskip("matplotlib")`——精简环境（未全量安装依赖）下 RAG/可视化用例优雅跳过而非 37 条 ImportError ERROR，全量安装依赖后恢复 1247 passed；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -70,7 +70,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（当前 1247 个用例，全量通过）
+# 运行所有单元测试（全量 1247 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1208 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -663,7 +663,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（当前 1247 个用例，全量通过）
+# 运行所有测试（全量 1247 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -673,7 +673,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（49 个测试文件，1247 个 pytest 收集用例，src 总覆盖率 91%）：
+**测试覆盖模块**（50 个测试文件，全量 1247 个 pytest 收集用例；精简环境 1208 收集 / 39 自动跳过，src 总覆盖率 91%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
