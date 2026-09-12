@@ -43,9 +43,11 @@ class RotationStrategy(Enum):
     COST_AWARE = "cost_aware"  # 成本感知（3.4：故障转移时避免全量切到昂贵 provider）
 
 
-# 成本告警阈值（3.4）：故障转移后若实际流量落在 cost_weight >= 该值的
+# 成本告警阈值（3.4，默认 2.0）：故障转移后若实际流量落在 cost_weight >= 该值的
 # 昂贵 provider 上，记 WARNING（让实验分析/监控能捕获"配额故障把流量全切
 # 到贵模型"的成本风险）。取值来源：经验值 2.0，即比基准贵 2 倍以上即告警。
+# 3.2 调优：可按实际实验中的 Provider 成本分布经 APIManagerConfig.cost_alert_threshold
+# 覆盖（阈值过低导致过多误报时上调；成本敏感度高时下调），无需改代码。
 _COST_ALERT_THRESHOLD = 2.0
 
 
@@ -154,6 +156,11 @@ class APIManagerConfig:
     # 成本告警开关（3.4）：故障转移落到 cost_weight >= _COST_ALERT_THRESHOLD 的
     # 昂贵 provider 时记 WARNING。默认 True（告警是纯旁路，不影响路由行为）。
     cost_alert_enabled: bool = True
+    # 成本告警阈值（3.2 调优）：可配覆盖模块默认 _COST_ALERT_THRESHOLD（2.0）。
+    # 根据实验中的 Provider 成本分布调整：阈值过低（如 1.5）会把"贵 1.5 倍"
+    # 的常规切换也告警造成误报，上调到 3.0/5.0 只告警真正昂贵的 provider；
+    # 成本敏感度高（如配额紧张）时反而下调。
+    cost_alert_threshold: float = _COST_ALERT_THRESHOLD
     # 熔断冷却时长（秒，4.1）：节点连续失败达到 max_consecutive_failures 后
     # 进入熔断，冷却期内即使健康检查翻回健康也继续被路由跳过，避免把流量
     # 重新打回已知不可用的 provider（浪费时间与 token）。经验值 60s：
@@ -469,14 +476,15 @@ class APIManager:
             logger.info("故障转移成功: %s -> %s", prev_model or "unknown", node.config.model_name)
             # 3.4 成本告警：故障转移落到昂贵 provider（cost_weight >= 阈值）时记 WARNING，
             # 让监控/实验分析能捕获"配额故障把全量流量切到贵模型"的成本风险。
-            # 告警是纯旁路（不影响路由），cost_alert_enabled=False 可关闭。
-            if self.config.cost_alert_enabled and node.cost_weight >= _COST_ALERT_THRESHOLD:
+            # 告警是纯旁路（不影响路由），cost_alert_enabled=False 可关闭；
+            # 阈值经 3.2 可配覆盖（cost_alert_threshold），默认 2.0。
+            if self.config.cost_alert_enabled and node.cost_weight >= self.config.cost_alert_threshold:
                 logger.warning(
                     "成本告警：故障转移到昂贵 provider %s（cost_weight=%.2f >= %.2f），"
                     "请确认配额故障是否导致全量流量切到高成本模型",
                     node.config.model_name,
                     node.cost_weight,
-                    _COST_ALERT_THRESHOLD,
+                    self.config.cost_alert_threshold,
                 )
         return response
 

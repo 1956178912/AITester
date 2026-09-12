@@ -41,6 +41,8 @@ class TestCostAwareStrategy:
         cfg = APIManagerConfig()
         assert cfg.node_cost_weights == {}
         assert cfg.cost_alert_enabled is True
+        # 3.2 调优：告警阈值默认沿用模块常量 2.0
+        assert cfg.cost_alert_threshold == _COST_ALERT_THRESHOLD
 
     def test_cost_aware_prefers_cheap_when_equal_health(self):
         """两个节点成功率/响应时间相同，成本权重低的应被优先选中。"""
@@ -98,6 +100,47 @@ class TestCostAlert:
         with caplog.at_level(logging.WARNING):
             mgr._try_call_node(node, [], {}, "cheap", attempt=1, prev_model="other")
         assert not any("成本告警" in rec.message for rec in caplog.records)
+
+
+class TestCostAlertThresholdTuning:
+    """3.2 调优：cost_alert_threshold 可配覆盖（阈值过低导致过多误报时上调）。"""
+
+    def _make_node(self, name: str, cost: float) -> APIHealth:
+        return APIHealth(config=LLMConfig("k", "https://x", name), cost_weight=cost)
+
+    def test_higher_threshold_suppresses_moderate_fallback(self, caplog):
+        """阈值上调到 3.0 时，cost_weight=2.0 的中等昂贵节点不再告警（消误报）。"""
+        cfg = APIManagerConfig(rotation_strategy=RotationStrategy.COST_AWARE, cost_alert_threshold=3.0)
+        mgr = APIManager(config=cfg, enable_health_checker=False)
+        node = self._make_node("moderate", 2.0)
+        mgr.health_nodes["moderate"] = node
+        mgr._client_cache["moderate"] = _mock_client()
+        with caplog.at_level(logging.WARNING):
+            mgr._try_call_node(node, [], {}, "moderate", attempt=1, prev_model="cheap")
+        assert not any("成本告警" in rec.message for rec in caplog.records)
+
+    def test_lower_threshold_alerts_cheaper_nodes(self, caplog):
+        """阈值下调到 1.2 时，cost_weight=1.5 的节点也会告警（成本敏感度高场景）。"""
+        cfg = APIManagerConfig(rotation_strategy=RotationStrategy.COST_AWARE, cost_alert_threshold=1.2)
+        mgr = APIManager(config=cfg, enable_health_checker=False)
+        node = self._make_node("somewhat_expensive", 1.5)
+        mgr.health_nodes["somewhat_expensive"] = node
+        mgr._client_cache["somewhat_expensive"] = _mock_client()
+        with caplog.at_level(logging.WARNING):
+            mgr._try_call_node(node, [], {}, "somewhat_expensive", attempt=1, prev_model="cheap")
+        assert any("成本告警" in rec.message for rec in caplog.records), caplog.text
+
+    def test_custom_threshold_included_in_warning_message(self, caplog):
+        """告警文案中的阈值应为配置值（而非模块默认 2.0），避免误导调参。"""
+        cfg = APIManagerConfig(rotation_strategy=RotationStrategy.COST_AWARE, cost_alert_threshold=3.0)
+        mgr = APIManager(config=cfg, enable_health_checker=False)
+        node = self._make_node("expensive", 3.0)
+        mgr.health_nodes["expensive"] = node
+        mgr._client_cache["expensive"] = _mock_client()
+        with caplog.at_level(logging.WARNING):
+            mgr._try_call_node(node, [], {}, "expensive", attempt=1, prev_model="cheap")
+        alert = next(rec for rec in caplog.records if "成本告警" in rec.message)
+        assert ">= 3.00" in alert.getMessage()
 
 
 class TestCostWeightFallback:
