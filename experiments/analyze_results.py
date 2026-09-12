@@ -68,6 +68,59 @@ def _token_metrics_from_details(details: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def _rag_by_kind_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """2.3 RAG 指标自动汇总：按检索类型（test_cases vs repairs）分解检索质量。
+
+    从 details[].rag_stats 逐条累计（每条记录 kind / results / max_similarity），
+    分析"参考测试风格"与"参考修复方案"两类检索各自的命中率与相似度水平。
+
+    Returns:
+        {"test_cases": {retrievals, hits, hit_rate, avg_max_similarity},
+         "repairs": {...}}；无 rag_stats 时返回空 dict。
+    """
+    per_kind: dict[str, dict[str, Any]] = {}
+    for r in details:
+        for s in r.get("rag_stats") or []:
+            kind = s.get("kind", "unknown")
+            stat = per_kind.setdefault(kind, {"retrievals": 0, "hits": 0, "sims": []})
+            stat["retrievals"] += 1
+            if s.get("results", 0) > 0:
+                stat["hits"] += 1
+            if s.get("max_similarity") is not None:
+                stat["sims"].append(s["max_similarity"])
+    result: dict[str, Any] = {}
+    for kind, stat in per_kind.items():
+        sims = stat.pop("sims")
+        stat["hit_rate"] = round(stat["hits"] / stat["retrievals"], 4) if stat["retrievals"] else 0.0
+        stat["avg_max_similarity"] = round(sum(sims) / len(sims), 4) if sims else None
+        result[kind] = stat
+    return result
+
+
+def _rag_hit_by_failure_category(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """2.3 RAG 指标自动汇总：RAG 命中 × 失败类别交叉表。
+
+    仅统计失败任务（passed=False），按 error_category 分组（1.1 细化后
+    rag_retrieval_empty / patch_validation_failed 单独成组），记录组内
+    "至少一次 RAG 检索命中"的任务数，用于分析 RAG 对哪些错误类型修复
+    帮助最大（命中占比高 = 检索增强实际发生）。
+
+    Returns:
+        {error_category: {"total": 任务数, "with_hit": RAG 有命中的任务数}}；
+        无失败任务时返回空 dict。
+    """
+    cross: dict[str, dict[str, int]] = {}
+    for r in details:
+        if r.get("passed"):
+            continue
+        cat = r.get("error_category") or "unknown"
+        stat = cross.setdefault(cat, {"total": 0, "with_hit": 0})
+        stat["total"] += 1
+        if any(s.get("results", 0) > 0 for s in r.get("rag_stats") or []):
+            stat["with_hit"] += 1
+    return cross
+
+
 def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
     """从 benchmark JSON 构建结构化分析结果。
 
@@ -113,6 +166,9 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
             "token_metrics": token_metrics,
             "rag_metrics": rag_metrics,
             "failure_category_distribution": failure_dist,
+            # 2.3 RAG 指标自动汇总（从 details[].rag_stats 计算，旧 JSON 无 rag_stats 时为空）
+            "details_rag_by_kind": _rag_by_kind_from_details(details),
+            "rag_hit_by_failure_category": _rag_hit_by_failure_category(details),
         }
         # 迭代次数分布（0 = 一次通过，1/2/3 = 调试轮数，>=3 归入 3+）
         for r in details:
@@ -219,6 +275,54 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
                 f"| {rag.get('hit_rate', 0.0)} | {rag.get('avg_max_similarity')} |"
             )
         lines.append("")
+
+        # 2.3 RAG 指标自动汇总：按检索类型分解（test_cases vs repairs）
+        # 分析"哪类检索（参考测试风格 / 参考修复方案）命中更好"
+        by_kind_rows = [
+            (b, m)
+            for b, m in per.items()
+            if m.get("details_rag_by_kind")
+        ]
+        if by_kind_rows:
+            lines.append("### RAG 检索质量按检索类型分解")
+            lines.append("")
+            lines.append("| 基线 | 类型 | 检索次数 | 命中次数 | 命中率 | 平均最高相似度 |")
+            lines.append("|------|------|---------|---------|--------|----------------|")
+            for baseline, m in by_kind_rows:
+                for kind, kstat in m["details_rag_by_kind"].items():
+                    lines.append(
+                        f"| {baseline} | {kind} | {kstat.get('retrievals', 0)} | {kstat.get('hits', 0)} "
+                        f"| {kstat.get('hit_rate', 0.0)} | {kstat.get('avg_max_similarity')} |"
+                    )
+            lines.append("")
+
+        # 2.3 RAG 指标自动汇总：RAG 命中 × 失败类别交叉表
+        # 分析"RAG 对哪些错误类型修复帮助最大"（断言 vs 运行时等）
+        cross_rows = [
+            (b, m) for b, m in per.items() if m.get("rag_hit_by_failure_category")
+        ]
+        if cross_rows:
+            lines.append("### RAG 命中 × 失败类别交叉表")
+            lines.append("")
+            lines.append("失败任务按 error_category 分组，统计其 RAG 检索命中情况。")
+            lines.append("")
+            lines.append("| 基线 | 失败类别 | 任务数 | 其中 RAG 有命中 | 命中占比 |")
+            lines.append("|------|---------|--------|----------------|----------|")
+            for baseline, m in cross_rows:
+                for cat, cstat in m["rag_hit_by_failure_category"].items():
+                    total = cstat.get("total", 0)
+                    hit_rate = round(cstat.get("with_hit", 0) / total, 4) if total else 0.0
+                    lines.append(
+                        f"| {baseline} | {cat} | {total} | {cstat.get('with_hit', 0)} | {hit_rate} |"
+                    )
+            lines.append("")
+            lines.append(
+                "> 解读：`rag_retrieval_empty` 类任务（1.1 状态细化）即"
+                "RAG 全部检索未命中的任务，其命中占比必为 0；"
+                "若某具体类别（如 assertion）的命中占比明显高于其他类别，"
+                "说明 RAG 对该类错误修复帮助最大。"
+            )
+            lines.append("")
 
     return "\n".join(lines)
 

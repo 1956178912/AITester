@@ -33,6 +33,21 @@ from config import LLM_CONFIGS, LLMConfig
 logger = logging.getLogger(__name__)
 
 
+def _redact(text: str) -> str:
+    """对单段日志文本脱敏（4.1 审计：APIManager 被嵌入式使用时调用方未必挂脱敏 handler）。
+
+    APIManager 的故障转移/健康检查日志会把 openai 异常的 str(e) 打进日志——
+    部分 SDK/网关的错误体回显请求头或 base_url（其中可能含 API Key）。
+    与 base_agent._redact_log_text 同口径：在日志点就地脱敏，不依赖入口接线。
+    """
+    try:
+        from src.utils.logging_utils import mask_sensitive_info
+
+        return mask_sensitive_info(text)
+    except Exception:
+        return text
+
+
 class RotationStrategy(Enum):
     """轮换策略枚举"""
 
@@ -189,7 +204,7 @@ class HealthCheckerThread(threading.Thread):
             try:
                 self._manager.health_check_batch()
             except Exception as e:
-                logger.error("健康检查后台线程异常: %s", e)
+                logger.error("健康检查后台线程异常: %s", _redact(str(e)))
         logger.info("健康检查后台线程已停止")
 
     def stop(self) -> None:
@@ -244,7 +259,10 @@ class APIManager:
             )
             self.health_nodes[llm_config.model_name] = health
             logger.info(
-                "注册 LLM 节点: %s (%s, cost_weight=%.2f)", llm_config.model_name, llm_config.base_url, cost_weight
+                "注册 LLM 节点: %s (%s, cost_weight=%.2f)",
+                llm_config.model_name,
+                _redact(llm_config.base_url),
+                cost_weight,
             )
         logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
 
@@ -393,11 +411,11 @@ class APIManager:
         except openai.APIError as e:
             status = getattr(e, "status_code", "unknown")
             node.mark_failure(f"api_error:{status}")
-            logger.warning("API 错误: %s - %s", node.config.model_name, e)
+            logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
             return False
         except Exception as e:
             node.mark_failure(f"error:{type(e).__name__}")
-            logger.error("健康检查异常: %s - %s", node.config.model_name, e)
+            logger.error("健康检查异常: %s - %s", node.config.model_name, _redact(str(e)))
             return False
 
     def health_check_all(self) -> dict[str, bool]:
@@ -500,7 +518,7 @@ class APIManager:
     def _handle_api_error(self, e, node) -> None:
         """处理API错误，根据配置决定是否抛出。"""
         node.mark_failure(f"api_error:{getattr(e, 'status_code', 'unknown')}")
-        logger.warning("API 错误: %s - %s", node.config.model_name, e)
+        logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             # fallback 禁用时，记录错误后直接抛出原始异常
             raise
@@ -508,7 +526,7 @@ class APIManager:
     def _handle_generic_error(self, e, node) -> None:
         """处理通用异常，根据配置决定是否抛出。"""
         node.mark_failure(f"error:{type(e).__name__}")
-        logger.error("调用失败: %s - %s", node.config.model_name, e)
+        logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             raise
 
@@ -553,7 +571,14 @@ class APIManager:
         raise RuntimeError("所有 API 节点不可用")
 
     def get_status(self) -> dict[str, Any]:
-        """获取所有节点的当前状态（4.1：含熔断冷却信息）"""
+        """获取所有节点的当前状态（4.1：含熔断冷却信息；4.1 审计：base_url 脱敏）。
+
+        base_url 可能内嵌凭证（部分网关把 token 放在 URL 路径/查询串中），
+        本字典会流经 print_status_table（直接 print 到 stdout，不经 logging
+        handler 脱敏）与监控导出等出口，统一在出口脱敏——与日志脱敏口径一致。
+        """
+        from src.utils.logging_utils import mask_sensitive_info
+
         now = time.monotonic()
         nodes_summary = {}
         for name, h in self.health_nodes.items():
@@ -561,7 +586,7 @@ class APIManager:
             circuit_remaining = max(0.0, h.circuit_open_until - now) if h.circuit_open_until > 0 else 0.0
             nodes_summary[name] = {
                 "model": h.config.model_name,
-                "base_url": h.config.base_url,
+                "base_url": mask_sensitive_info(h.config.base_url),
                 "is_healthy": h.is_healthy,
                 "success_rate": round(h.success_rate, 3),
                 "total_requests": h.total_requests,
@@ -637,7 +662,7 @@ class APIManager:
                 circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
             )
             self.health_nodes[config.model_name] = health
-            logger.info("动态添加节点: %s (%s)", config.model_name, config.base_url)
+            logger.info("动态添加节点: %s (%s)", config.model_name, _redact(config.base_url))
 
     def remove_node(self, model_name: str) -> bool:
         """

@@ -321,6 +321,82 @@ class TestAnalyzeResultsScript:
         md = module.render_markdown(analysis, "benchmark_x.json")
         assert "RAG 检索质量" not in md
 
+    def test_rag_by_kind_breakdown(self, module):
+        """2.3 自动汇总：按检索类型（test_cases/repairs）分解命中率与相似度"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "t1",
+                "passed": True,
+                "iterations": 0,
+                "error_category": "",
+                "rag_stats": [
+                    {"kind": "test_cases", "results": 3, "max_similarity": 0.81},
+                    {"kind": "repairs", "results": 0, "max_similarity": None},
+                ],
+            },
+            {
+                "task_id": "t2",
+                "passed": False,
+                "iterations": 2,
+                "error_category": "assertion",
+                "rag_stats": [
+                    {"kind": "test_cases", "results": 0},
+                    {"kind": "repairs", "results": 1, "max_similarity": 0.42},
+                ],
+            },
+        ]
+        analysis = module.build_analysis(data)
+        by_kind = analysis["per_baseline"]["aitester"]["details_rag_by_kind"]
+        assert by_kind["test_cases"]["retrievals"] == 2
+        assert by_kind["test_cases"]["hits"] == 1
+        assert by_kind["test_cases"]["hit_rate"] == 0.5
+        assert by_kind["test_cases"]["avg_max_similarity"] == 0.81
+        assert by_kind["repairs"]["hits"] == 1
+        assert by_kind["repairs"]["avg_max_similarity"] == 0.42
+
+    def test_rag_by_kind_empty_when_no_stats(self, module):
+        """旧 JSON 无 rag_stats 字段时，按类型分解为空（渲染时跳过小节）"""
+        analysis = module.build_analysis(self._sample_data())
+        assert analysis["per_baseline"]["aitester"]["details_rag_by_kind"] == {}
+
+    def test_rag_hit_by_failure_category_cross(self, module):
+        """2.3 自动汇总：失败类别 × RAG 命中交叉表（1.1 细化类别单独成组）"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "t1",
+                "passed": True,
+                "rag_stats": [{"kind": "test_cases", "results": 3}],
+            },
+            {"task_id": "t2", "passed": False, "error_category": "rag_retrieval_empty",
+             "rag_stats": [{"kind": "test_cases", "results": 0}]},
+            {"task_id": "t3", "passed": False, "error_category": "patch_validation_failed",
+             "rag_stats": [{"kind": "repairs", "results": 1}]},
+            {"task_id": "t4", "passed": False, "error_category": "assertion",
+             "rag_stats": [{"kind": "test_cases", "results": 2}]},
+        ]
+        analysis = module.build_analysis(data)
+        cross = analysis["per_baseline"]["aitester"]["rag_hit_by_failure_category"]
+        assert cross == {
+            "rag_retrieval_empty": {"total": 1, "with_hit": 0},
+            "patch_validation_failed": {"total": 1, "with_hit": 1},
+            "assertion": {"total": 1, "with_hit": 1},
+        }
+        # 渲染含交叉表与解读注记
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "RAG 命中 × 失败类别交叉表" in md
+        assert "| aitester | rag_retrieval_empty | 1 | 0 | 0.0 |" in md
+
+    def test_rag_cross_empty_when_no_failures(self, module):
+        """无失败任务时交叉表为空（成功任务不计入 RAG 命中分析）"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "t1", "passed": True, "rag_stats": [{"kind": "test_cases", "results": 3}]}
+        ]
+        analysis = module.build_analysis(data)
+        assert analysis["per_baseline"]["aitester"]["rag_hit_by_failure_category"] == {}
+
     def test_load_latest_benchmark_prefers_benchmark_prefix(self, module, tmp_path):
         """与 visualize_results 同口径：仅识别 benchmark_* 前缀（避免误选汇总文件）"""
         (tmp_path / "swebench_20_summary.json").write_text("{}", encoding="utf-8")
