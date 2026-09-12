@@ -130,9 +130,7 @@ class TestExportInstanceSources:
         assert results[0].target_file == "r/mod.py"
 
     def test_instance_ids_filter(self, tmp_path):
-        results = mod.export_instance_sources(
-            self._instances(), tmp_path, instance_ids=["r__2"], dry_run=True
-        )
+        results = mod.export_instance_sources(self._instances(), tmp_path, instance_ids=["r__2"], dry_run=True)
         assert [r.instance_id for r in results] == ["r__2"]
 
     def test_repo_present_dry_run_ok(self, tmp_path):

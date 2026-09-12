@@ -240,7 +240,9 @@ def write_enrichment_jsonl(results: list[InstanceSource], output_path: str | Pat
         for r in results:
             if not r.ok:
                 continue
-            f.write(json.dumps({"instance_id": r.instance_id, "instance_code": r.source_code}, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps({"instance_id": r.instance_id, "instance_code": r.source_code}, ensure_ascii=False) + "\n"
+            )
             written += 1
     return written
 
@@ -263,7 +265,14 @@ def load_jsonl_for_subset(subset: str, data_dir: str | Path) -> list[dict]:
 @click.option("--instance-ids", "-i", default=None, help="仅导出指定 instance（逗号分隔或 @文件）")
 @click.option("--output", "-o", default=None, help="输出 enrichment JSONL 路径")
 @click.option("--dry-run", is_flag=True, help="只打印导出计划，不执行 git show")
-def cli(subset: str, data_dir: str | None, repos_dir: str | None, instance_ids: str | None, output: str | None, dry_run: bool) -> None:
+def cli(
+    subset: str,
+    data_dir: str | None,
+    repos_dir: str | None,
+    instance_ids: str | None,
+    output: str | None,
+    dry_run: bool,
+) -> None:
     """导出 SWE-bench 被测源码为 enrichment JSONL（2.1 源码补充流程自动化）。"""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     jsonl_path = load_jsonl_for_subset(subset, data_dir or _DEFAULT_SWE_CACHE_DIR)

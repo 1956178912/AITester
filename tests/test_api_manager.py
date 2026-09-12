@@ -1174,4 +1174,3 @@ class TestRedactionWiring:
 
         assert "sk-" + "C" * 32 not in _redact("认证失败 sk-" + "C" * 32)
         assert "<REDACTED_API_KEY>" in _redact("认证失败 sk-" + "C" * 32)
-

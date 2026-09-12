@@ -533,10 +533,7 @@ class TestRefineFailureCategory:
             {"kind": "test_cases", "results": 0, "max_similarity": None},
             {"kind": "repairs", "results": 0, "max_similarity": None},
         ]
-        assert (
-            refine_failure_category("assertion", False, rag_stats=stats)
-            == ErrorCategory.RAG_RETRIEVAL_EMPTY.value
-        )
+        assert refine_failure_category("assertion", False, rag_stats=stats) == ErrorCategory.RAG_RETRIEVAL_EMPTY.value
 
     def test_rag_with_hit_not_refined(self):
         """RAG 有命中（results>0）→ 不细化为 RAG_RETRIEVAL_EMPTY。"""

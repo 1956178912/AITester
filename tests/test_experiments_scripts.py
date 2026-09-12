@@ -369,12 +369,24 @@ class TestAnalyzeResultsScript:
                 "passed": True,
                 "rag_stats": [{"kind": "test_cases", "results": 3}],
             },
-            {"task_id": "t2", "passed": False, "error_category": "rag_retrieval_empty",
-             "rag_stats": [{"kind": "test_cases", "results": 0}]},
-            {"task_id": "t3", "passed": False, "error_category": "patch_validation_failed",
-             "rag_stats": [{"kind": "repairs", "results": 1}]},
-            {"task_id": "t4", "passed": False, "error_category": "assertion",
-             "rag_stats": [{"kind": "test_cases", "results": 2}]},
+            {
+                "task_id": "t2",
+                "passed": False,
+                "error_category": "rag_retrieval_empty",
+                "rag_stats": [{"kind": "test_cases", "results": 0}],
+            },
+            {
+                "task_id": "t3",
+                "passed": False,
+                "error_category": "patch_validation_failed",
+                "rag_stats": [{"kind": "repairs", "results": 1}],
+            },
+            {
+                "task_id": "t4",
+                "passed": False,
+                "error_category": "assertion",
+                "rag_stats": [{"kind": "test_cases", "results": 2}],
+            },
         ]
         analysis = module.build_analysis(data)
         cross = analysis["per_baseline"]["aitester"]["rag_hit_by_failure_category"]
