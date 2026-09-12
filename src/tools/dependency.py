@@ -24,11 +24,13 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import logging
 import os
 import re
 import subprocess
 import sys
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +251,8 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
     ]
     for interpreter in candidates:
         if os.path.exists(interpreter):
+            # 4.4 缓存命中统计：记录复用事件
+            _record_venv_cache_event("hit")
             logger.debug("复用已有 venv: %s", venv_dir)
             return interpreter
 
@@ -266,8 +270,169 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"venv 创建失败: {proc.stderr.strip()[:300]}")
     interpreter = candidates[0] if os.path.exists(candidates[0]) else candidates[1]
+    # 4.4 缓存命中统计：记录新建事件
+    _record_venv_cache_event("create")
     logger.info("venv 已创建: %s", venv_dir)
     return interpreter
+
+
+# ─── 4.4 venv 缓存监控与清理 ────────────────────────────────────────────────────
+# 命中率统计：进程内累计 hit/create 事件；落盘 JSON 供跨进程聚合
+# （~/.cache/aitester/venvs/cache_stats.json）
+_VENV_CACHE_STATS_FILE = os.path.join(_VENV_CACHE_DIR, "cache_stats.json")
+_venv_cache_stats_lock = __import__("threading").Lock()
+_venv_cache_stats: dict[str, Any] = {"hits": 0, "creates": 0, "last_event_at": None}
+
+
+def _load_cache_stats() -> dict[str, Any]:
+    """读取落盘的缓存统计（不存在或损坏时返回零值）。"""
+    try:
+        with open(_VENV_CACHE_STATS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {"hits": int(data.get("hits", 0)), "creates": int(data.get("creates", 0)), "last_event_at": data.get("last_event_at")}
+    except (OSError, ValueError, TypeError):
+        pass
+    return {"hits": 0, "creates": 0, "last_event_at": None}
+
+
+def _persist_cache_stats() -> None:
+    """把进程内统计合并写回落盘 JSON。
+
+    注意：本函数假设调用方已持有 _venv_cache_stats_lock（_record_venv_cache_event
+    与 get_venv_cache_stats 均在锁内调用），因此不再二次加锁——threading.Lock
+    不可重入，自嵌套会死锁挂起进程（09-14 4.4 批次踩坑）。
+    """
+    disk = _load_cache_stats()
+    merged = {
+        "hits": disk.get("hits", 0) + _venv_cache_stats["hits"],
+        "creates": disk.get("creates", 0) + _venv_cache_stats["creates"],
+        "last_event_at": _venv_cache_stats["last_event_at"],
+    }
+    _venv_cache_stats["hits"] = 0
+    _venv_cache_stats["creates"] = 0
+    try:
+        os.makedirs(os.path.dirname(_VENV_CACHE_STATS_FILE), exist_ok=True)
+        with open(_VENV_CACHE_STATS_FILE, "w", encoding="utf-8") as f:
+            json.dump(merged, f)
+    except OSError as e:
+        logger.debug("venv 缓存统计落盘失败（不影响主流程）: %s", e)
+
+
+def _record_venv_cache_event(kind: str) -> None:
+    """记录一次缓存事件（hit/create）到进程内统计并落盘。"""
+    with _venv_cache_stats_lock:
+        if kind == "hit":
+            _venv_cache_stats["hits"] += 1
+        elif kind == "create":
+            _venv_cache_stats["creates"] += 1
+        _venv_cache_stats["last_event_at"] = time.time()
+        _persist_cache_stats()
+
+
+def get_venv_cache_stats() -> dict[str, Any]:
+    """返回 venv 缓存命中率统计（4.4）。
+
+    Returns:
+        {"hits": int, "creates": int, "total": int,
+         "hit_rate": float（hits/(hits+creates)，0.0 当 total=0）,
+         "last_event_at": float | None}
+    """
+    with _venv_cache_stats_lock:
+        disk = _load_cache_stats()
+        hits = disk.get("hits", 0) + _venv_cache_stats["hits"]
+        creates = disk.get("creates", 0) + _venv_cache_stats["creates"]
+    total = hits + creates
+    return {
+        "hits": hits,
+        "creates": creates,
+        "total": total,
+        "hit_rate": round(hits / total, 4) if total else 0.0,
+        "last_event_at": disk.get("last_event_at"),
+    }
+
+
+def list_venv_cache() -> list[dict[str, Any]]:
+    """列出 venv 缓存目录下所有已创建的 venv（4.4 监控）。
+
+    Returns:
+        每项 {"name": 目录名, "path": 绝对路径, "size_mb": float, "created_at": str}；
+        目录不存在时返回空列表。
+    """
+    if not os.path.isdir(_VENV_CACHE_DIR):
+        return []
+    result: list[dict[str, Any]] = []
+    for entry in sorted(os.listdir(_VENV_CACHE_DIR)):
+        full = os.path.join(_VENV_CACHE_DIR, entry)
+        if not os.path.isdir(full):
+            continue
+        # 统计目录大小（MB，忽略读取失败）
+        size_mb = 0.0
+        for root, _dirs, files in os.walk(full):
+            for fname in files:
+                try:
+                    size_mb += os.path.getsize(os.path.join(root, fname)) / (1024 * 1024)
+                except OSError:
+                    continue
+        try:
+            created_at = str(int(os.path.getctime(full)))
+        except OSError:
+            created_at = "unknown"
+        result.append({"name": entry, "path": full, "size_mb": round(size_mb, 2), "created_at": created_at})
+    return result
+
+
+def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = None) -> dict[str, Any]:
+    """清理 venv 缓存目录（4.4）。
+
+    按 max_age_days（按目录 mtime 判老）与 max_size_mb（按目录大小判超）过滤，
+    任一条件命中即删除；两者均 None 时清空整个缓存目录。
+
+    Args:
+        max_age_days: 超过该天数的 venv 删除（None 表示不按年龄过滤）。
+        max_size_mb: 超过该大小的 venv 删除（None 表示不按大小过滤）。
+
+    Returns:
+        {"removed": [name...], "kept": [name...], "freed_mb": float}
+    """
+    if not os.path.isdir(_VENV_CACHE_DIR):
+        return {"removed": [], "kept": [], "freed_mb": 0.0}
+    now = time.time()
+    removed: list[str] = []
+    kept: list[str] = []
+    freed_mb = 0.0
+    for entry in sorted(os.listdir(_VENV_CACHE_DIR)):
+        full = os.path.join(_VENV_CACHE_DIR, entry)
+        if not os.path.isdir(full):
+            continue
+        # 统计目录大小
+        size_mb = 0.0
+        for root, _dirs, files in os.walk(full):
+            for fname in files:
+                try:
+                    size_mb += os.path.getsize(os.path.join(root, fname)) / (1024 * 1024)
+                except OSError:
+                    continue
+        age_days = (now - os.path.getmtime(full)) / 86400.0
+        should_remove = False
+        if max_age_days is not None and age_days > max_age_days:
+            should_remove = True
+        if max_size_mb is not None and size_mb > max_size_mb:
+            should_remove = True
+        if max_age_days is None and max_size_mb is None:
+            should_remove = True
+        if should_remove:
+            import shutil
+
+            try:
+                shutil.rmtree(full, ignore_errors=True)
+                removed.append(entry)
+                freed_mb += size_mb
+            except OSError:
+                kept.append(entry)
+        else:
+            kept.append(entry)
+    return {"removed": removed, "kept": kept, "freed_mb": round(freed_mb, 2)}
 
 
 def install_packages(

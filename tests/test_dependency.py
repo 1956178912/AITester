@@ -6,11 +6,15 @@ src/tools/dependency.py 单元测试（P1：依赖检测与隔离执行）。
 - find_missing_modules 的 stdlib/已安装/项目内/缺失判定
 - suggest_package_names 的模块名→包名映射
 - create_venv / install_packages / venv_cache_dir（mock subprocess）
+- 4.4 venv 缓存监控（命中率统计 / 列表 / 清理）
 """
 
 import os
 import sys
+import time
 from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -219,3 +223,99 @@ class TestCreateVenv:
         ok, detail = install_packages("/venv/bin/python", ["pandas"], timeout=10)
         assert ok is False
         assert "超时" in detail
+
+
+class TestVenvCacheMonitoring:
+    """4.4 依赖缓存监控：命中率统计 / 列表 / 清理（仅新增函数，不改 create_venv 复用行为）"""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache_dir(self, tmp_path, monkeypatch):
+        """把缓存目录指向 tmp_path，避免污染真实 ~/.cache/aitester/venvs。"""
+        import src.tools.dependency as dep
+
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "venvs"))
+        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(tmp_path / "venvs" / "cache_stats.json"))
+        # 重置进程内统计
+        with dep._venv_cache_stats_lock:
+            dep._venv_cache_stats["hits"] = 0
+            dep._venv_cache_stats["creates"] = 0
+            dep._venv_cache_stats["last_event_at"] = None
+        self.dep = dep
+
+    def _make_venv_dir(self, name: str, size_bytes: int = 1024) -> str:
+        """在缓存目录下创建一个模拟 venv（含 bin/python 文件 + 占位数据）。"""
+        import os
+        import src.tools.dependency as dep
+
+        full = os.path.join(dep._VENV_CACHE_DIR, name)
+        os.makedirs(os.path.join(full, "bin"), exist_ok=True)
+        with open(os.path.join(full, "bin", "python"), "wb") as f:
+            f.write(b"\x7fELF")
+        with open(os.path.join(full, "data.bin"), "wb") as f:
+            f.write(b"0" * size_bytes)
+        return full
+
+    def test_get_venv_cache_stats_initial_zero(self):
+        stats = self.dep.get_venv_cache_stats()
+        assert stats["total"] == 0
+        assert stats["hit_rate"] == 0.0
+
+    def test_get_venv_cache_stats_after_events(self):
+        self.dep._record_venv_cache_event("hit")
+        self.dep._record_venv_cache_event("hit")
+        self.dep._record_venv_cache_event("create")
+        stats = self.dep.get_venv_cache_stats()
+        assert stats["hits"] == 2
+        assert stats["creates"] == 1
+        assert stats["total"] == 3
+        assert stats["hit_rate"] == round(2 / 3, 4)
+
+    def test_list_venv_cache_empty_when_no_dir(self):
+        assert self.dep.list_venv_cache() == []
+
+    def test_list_venv_cache_returns_entries(self):
+        self._make_venv_dir("abc_hash_pkg", size_bytes=100)
+        entries = self.dep.list_venv_cache()
+        assert len(entries) == 1
+        assert entries[0]["name"] == "abc_hash_pkg"
+        assert entries[0]["size_mb"] >= 0.0
+
+    def test_clear_venv_cache_all(self):
+        self._make_venv_dir("old1")
+        self._make_venv_dir("old2")
+        result = self.dep.clear_venv_cache()
+        assert sorted(result["removed"]) == ["old1", "old2"]
+        assert result["kept"] == []
+        assert self.dep.list_venv_cache() == []
+
+    def test_clear_venv_cache_by_age(self):
+        import os
+        import src.tools.dependency as dep
+
+        old = self._make_venv_dir("old")
+        past = dep.time.time() - 10 * 86400
+        os.utime(old, (past, past))
+        self._make_venv_dir("fresh")
+
+        result = self.dep.clear_venv_cache(max_age_days=7)
+        assert "old" in result["removed"]
+        assert "fresh" in result["kept"]
+
+    def test_clear_venv_cache_by_size(self):
+        self._make_venv_dir("big", size_bytes=10 * 1024 * 1024)
+        self._make_venv_dir("small", size_bytes=100)
+        result = self.dep.clear_venv_cache(max_size_mb=1)
+        assert "big" in result["removed"]
+        assert "small" in result["kept"]
+
+    def test_create_venv_records_hit_on_reuse(self):
+        """create_venv 复用已存在 venv 时记录 hit 事件（4.4 命中率统计）。"""
+        import os
+        import src.tools.dependency as dep
+
+        full = self._make_venv_dir("hash_pkg")
+        stats_before = dep.get_venv_cache_stats()["hits"]
+        interpreter = dep.create_venv(full)
+        assert os.path.exists(interpreter)
+        stats_after = dep.get_venv_cache_stats()["hits"]
+        assert stats_after == stats_before + 1
