@@ -518,7 +518,195 @@ class TestHealthCheckExceptions:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  Section 7: 状态查询边界场景
+#  Section 7: 4.2 半开探测（half-open probing）
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class TestHalfOpenProbe:
+    """测试 4.2 半开探测：熔断冷却到期后，节点先"半开"，仅承载一次探测请求；
+    探测成功闭合熔断器，失败重开半程冷却期（cooldown/2，受 penalty_cap 上限约束）。"""
+
+    def setup_method(self):
+        """创建两个节点的管理器（model1 将触发熔断，model2 保持健康）。"""
+        self.mgr = _empty_mgr()
+        self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
+        self.mgr.add_node(LLMConfig("key2", "url2", "model2"))
+        self.node1 = self.mgr.health_nodes["model1"]
+
+    def _open_circuit_and_expire(self, cooldown: float = 0.05) -> None:
+        """让 model1 触发熔断并快进冷却到期，进入半开探测窗口（不真实 sleep）。"""
+        self.node1.circuit_cooldown_seconds = cooldown
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        assert self.node1.in_circuit_open is True
+        # 直接把截止时间拨到 1s 前，等价于冷却已到期（避免真实 sleep 拖慢测试）
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        # 冷却到期：in_circuit_open 翻 False，in_circuit_half_open 翻 True
+        assert self.node1.in_circuit_open is False
+        assert self.node1.in_circuit_half_open is True
+
+    def test_half_open_window_properties(self):
+        """冷却到期后节点进入半开窗口：in_circuit_open=False 且 in_circuit_half_open=True"""
+        self._open_circuit_and_expire(cooldown=0.05)
+        assert self.node1.in_circuit_half_open is True
+        # 半开窗口内的节点仍可被路由选中（作为探测请求目标）
+        healthy = self.mgr.get_healthy_nodes()
+        assert self.node1 in healthy
+
+    def test_probe_success_closes_circuit(self):
+        """半开探测成功：熔断器闭合，circuit_open_until 清零，恢复正常路由"""
+        self._open_circuit_and_expire()
+        self.node1._probe_circuit_half_open(True)
+        assert self.node1.circuit_open_until == 0.0
+        assert self.node1.in_circuit_open is False
+        assert self.node1.in_circuit_half_open is False
+
+    def test_probe_failure_reopens_half_cooldown(self):
+        """半开探测失败：重新打开半程冷却期（cooldown/2），节点再次进入熔断中"""
+        self.node1.circuit_cooldown_seconds = 10.0
+        self._open_circuit_and_expire(cooldown=10.0)
+        self.node1._probe_circuit_half_open(False)
+        # 重新开的冷却 = min(10/2, 30) = 5s：节点重新熔断中
+        assert self.node1.in_circuit_open is True
+        assert self.node1.in_circuit_half_open is False
+        remaining = self.node1.circuit_open_until - time.monotonic()
+        assert 4.0 <= remaining <= 5.5
+
+    def test_probe_failure_penalty_capped(self):
+        """惩罚时长受 penalty_cap 约束：cooldown/2 > cap 时按 cap 重开"""
+        self.node1.circuit_cooldown_seconds = 100.0
+        self.node1.half_open_probe_penalty_cap_seconds = 30.0
+        self._open_circuit_and_expire(cooldown=100.0)
+        self.node1._probe_circuit_half_open(False)
+        remaining = self.node1.circuit_open_until - time.monotonic()
+        # min(100/2, 30) = 30s，不会被 50s 的 cooldown/2 顶破
+        assert 28.0 <= remaining <= 30.5
+
+    def test_probe_noop_outside_half_open_window(self):
+        """不在半开窗口时 _probe_circuit_half_open 无任何状态变化"""
+        # 从未熔断：直接探测消费是 no-op
+        assert self.node1.circuit_open_until == 0.0
+        self.node1._probe_circuit_half_open(True)
+        self.node1._probe_circuit_half_open(False)
+        assert self.node1.circuit_open_until == 0.0
+        # 熔断中（冷却未到期）：也是 no-op，避免把正常熔断期截短
+        self.node1.circuit_cooldown_seconds = 60.0
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        assert self.node1.in_circuit_open is True
+        assert self.node1.in_circuit_half_open is False
+        before = self.node1.circuit_open_until
+        self.node1._probe_circuit_half_open(False)
+        assert self.node1.circuit_open_until == before
+
+    def test_enable_half_open_probe_disabled_keeps_4_1_behavior(self):
+        """enable_half_open_probe=False 时退回 4.1：冷却到期直接放行，无探测惩罚"""
+        self.mgr.config.enable_half_open_probe = False
+        self._open_circuit_and_expire()
+        # 开关关闭：_enter_half_open_probe 恒返回 False，探测消费路径不触发
+        assert self.mgr._enter_half_open_probe(self.node1) is False
+        # 即使手工消费探测，行为等同 4.1（直接闭合，无半程重开）
+        self.node1._probe_circuit_half_open(True)
+        assert self.node1.circuit_open_until == 0.0
+
+    def test_call_path_consumes_probe_on_success(self, monkeypatch):
+        """call 路径：半开探测窗口内发起请求且成功 → 熔断器闭合"""
+        self.node1.circuit_cooldown_seconds = 0.05
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        assert self.node1.in_circuit_half_open is True
+        # 用 mock 客户端替换 model1 客户端，模拟探测成功
+        self.mgr._client_cache["model1"] = _mock_client()
+        response = self.mgr.call(messages=[{"role": "user", "content": "hi"}], model="model1")
+        assert response is not None
+        assert self.node1.circuit_open_until == 0.0
+        assert self.node1.in_circuit_half_open is False
+
+    def test_call_path_consumes_probe_on_failure(self, monkeypatch):
+        """call 路径：半开探测窗口内请求失败 → 重开半程冷却期"""
+        self.node1.circuit_cooldown_seconds = 10.0
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        # 直接快进到冷却到期（免等 10s）：手动把截止时间拨到过去
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        assert self.node1.in_circuit_half_open is True
+        # model1 探测失败（API 错误）；model2 健康，故障转移兜底
+        mock_req = MagicMock()
+        self.mgr._client_cache["model1"] = _mock_client(
+            side_effect=openai.APIError("probe failed", request=mock_req, body={"code": "test"})
+        )
+        self.mgr._client_cache["model2"] = _mock_client()
+        with patch("src.api.api_manager.time.sleep", return_value=None):
+            response = self.mgr.call(messages=[{"role": "user", "content": "hi"}], model="model1")
+        assert response is not None
+        # 探测失败：model1 重新进入熔断中（半程冷却 5s）
+        assert self.node1.in_circuit_open is True
+        assert self.node1.in_circuit_half_open is False
+
+    def test_check_health_consumes_probe(self, monkeypatch):
+        """check_health 路径：半开窗口内的健康检查同样消费探测结果"""
+        self.node1.circuit_cooldown_seconds = 0.05
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        assert self.node1.in_circuit_half_open is True
+        # 健康检查成功 → 探测成功 → 熔断器闭合
+        self.mgr._client_cache["model1"] = _mock_client()
+        assert self.mgr.check_health(self.node1) is True
+        assert self.node1.circuit_open_until == 0.0
+        assert self.node1.in_circuit_half_open is False
+
+    def test_check_health_probe_failure_reopens(self, monkeypatch):
+        """check_health 路径：健康检查失败 → 探测失败 → 重开半程冷却期"""
+        self.node1.circuit_cooldown_seconds = 10.0
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        assert self.node1.in_circuit_half_open is True
+        mock_req = MagicMock()
+        self.mgr._client_cache["model1"] = _mock_client(
+            side_effect=openai.APIError("hc failed", request=mock_req, body={"code": "test"})
+        )
+        assert self.mgr.check_health(self.node1) is False
+        assert self.node1.in_circuit_open is True
+        assert self.node1.in_circuit_half_open is False
+
+    def test_get_status_exposes_circuit_state(self):
+        """get_status 输出 circuit_state（closed/open/half_open 三态）"""
+        # 初始：closed
+        status = self.mgr.get_status()
+        assert status["nodes"]["model1"]["circuit_state"] == "closed"
+        # 熔断中：open
+        self.node1.circuit_cooldown_seconds = 60.0
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        status = self.mgr.get_status()
+        assert status["nodes"]["model1"]["circuit_state"] == "open"
+        # 冷却到期后：half_open
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        status = self.mgr.get_status()
+        assert status["nodes"]["model1"]["circuit_state"] == "half_open"
+        # 探测成功闭合：closed
+        self.node1._probe_circuit_half_open(True)
+        status = self.mgr.get_status()
+        assert status["nodes"]["model1"]["circuit_state"] == "closed"
+
+    def test_get_status_circuit_state_respects_switch_off(self):
+        """enable_half_open_probe=False 时，冷却到期的节点不显示 half_open（退回 4.1 直接放行口径）"""
+        self.mgr.config.enable_half_open_probe = False
+        self.node1.circuit_cooldown_seconds = 60.0
+        for _ in range(self.node1.max_consecutive_failures):
+            self.node1.mark_failure("error")
+        # 模拟冷却到期
+        self.node1.circuit_open_until = time.monotonic() - 1.0
+        status = self.mgr.get_status()
+        # 开关关闭：half_open 态不报告，节点按 4.1 直接放行 → closed
+        assert status["nodes"]["model1"]["circuit_state"] == "closed"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Section 8: 状态查询边界场景
 # ════════════════════════════════════════════════════════════════════════════
 
 
