@@ -528,3 +528,36 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 - **优先级：补丁被拒 > RAG 检索空**：前者是"修复未生效"的更具体根因；RAG 空是"检索未提供帮助"。两者同时成立时归 patch_validation_failed。
 - **3.2 默认值不变**：`cost_alert_threshold` 默认沿用模块常量 2.0，不改变既有告警行为；调优为显式配置行为。
 - **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配（缓存永不命中）。缓存目录（`~/.cache/aitester/llm_cache/`）在 HOME 下、与用户仓库同信任级，记录为已知可接受风险，后续可选"脱敏+双字段"方案单独立项。
+
+---
+
+## 附录：2026-09-14 批次②收尾轮次（文档数据对齐）
+
+### 执行范围
+
+批次②（7 项纯代码项）的文档收尾，用户确认「全部执行 + 推送 main」：
+
+| 项 | 内容 | 改动文件 | 状态 |
+|----|------|----------|------|
+| O-01 | README 测试覆盖模块主表 9 行用例数与实测 `def test_` 计数漂移同步（test_api_manager 80→77、test_cli_app 30→27、test_cost_aware_routing 14→13、test_dataset_validation 20→22、test_experiments_scripts 23→19、test_swe_bench_source_export 11→13、test_core_modules 29→19、test_executor_sandbox 14→7、test_dataset_loader_extended 73→59） | `README.md` | ✅ |
+| O-02 | README「当前 1111 个用例」→ 1158（与状态表/全量实测一致） | `README.md` | ✅ |
+| O-03 | docs/api_reference.md 错误分类「十类」→「十二类」：枚举表补 patch_validation_failed / rag_retrieval_empty 两行（1.1 状态细化）+ 优先级说明补 refine_failure_category 判定口径 | `docs/api_reference.md` | ✅ |
+| O-04 | docs/failure_analysis.md 状态说明「扩展为 10 类」→ 12 类（注明批次②补 2 状态细化类） | `docs/failure_analysis.md` | ✅ |
+| O-05 | QUICKSTART.md「高级开关」节补 3.2 成本告警阈值可配（APIManagerConfig.cost_alert_threshold，默认 2.0） | `QUICKSTART.md` | ✅ |
+| O-06 | CHANGELOG 顶部 Unreleased 批次②条目补「文档对齐（批次②收尾）」小节 | `CHANGELOG.md` | ✅ |
+
+### 检索结论（无优化点的维度）
+
+- 源码无 eval/exec/os.system 危险调用（复核，与历史轮次一致）；
+- 被跟踪文件无真实密钥残留（`git ls-files` 仅 .env.example / .env.local.template 占位符模板，.env.local / .env 已 gitignore；本地 .env 真实密钥建议轮换——跨轮次保留建议）；
+- CI 结构完整（矩阵 3.12/3.14、lock 校验、ruff 固定 0.16.3、pip-audit 5 条 PYSEC 豁免、测试失败诊断注解），无漂移；
+- 全量 1158 passed / 0 failed、ruff check 全绿、覆盖率 TOTAL 91%（3911/354 miss，src 行增长系批次②新增模块所致）。
+
+### 实施记录
+
+| 提交 | 内容 |
+|------|------|
+| `6a423fe` docs | O-01~O-05 文档数据对齐（主表 9 行 + 用例数 + 枚举表 + 优先级说明 + 状态说明 + QUICKSTART） |
+| （本提交） docs(optimize) | O-06 CHANGELOG 条目 + OPTIMIZATION_PLAN/REPORT 批次②收尾章节 |
+
+（纯文档改动，未触碰源码；最小验证为 ruff check + 受影响模块测试子集（test_error_classifier 85 收集 / test_cost_aware_routing 13）全绿。）
