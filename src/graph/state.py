@@ -156,3 +156,6 @@ class AITesterState(TypedDict, total=False):
     rag_references: list[dict[str, Any]] | None
     # RAG 检索质量指标累计（P1）
     rag_stats: list[dict[str, Any]] | None
+    # 3.5 跨文件修复计划（CROSS_FILE_ENABLE=true 时由 cross_file_analyzer 节点写入）
+    cross_file_deps: list[dict[str, Any]] | None
+    cross_file_plan: dict[str, Any] | None

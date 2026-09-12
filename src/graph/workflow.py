@@ -76,6 +76,10 @@ from src.tools.multi_candidate import (
     select_best_candidate,
 )
 from src.tools.patch_applier import apply_patch_to_code
+from src.tools.cross_file import (
+    analyze_cross_file_deps,
+    cross_file_enabled,
+)
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -296,19 +300,33 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
         workflow.add_node("debugger", _debugger_node)
         workflow.add_node("patch_applier", _patch_applier_node)
 
-        # 条件边：Executor 完成后，根据 _should_debug 返回值决定下一步
-        # 返回 "debug"   → 进入 Debugger 进行根因分析和补丁生成
-        # 返回 "done"     → 直接结束工作流（测试通过或达到最大迭代）
-        # 返回 "regenerate" → 回到 Generator 重新生成测试代码
-        workflow.add_conditional_edges(
-            "executor",
-            _should_debug,
-            {
-                "debug": "debugger",  # 需要修复时进入 debugger
-                "done": END,  # 测试通过或达到最大迭代时结束
-                "regenerate": "generator",  # 测试生成错误时重新生成测试代码
-            },
-        )
+        # 3.5 跨文件修复：可选的 cross_file_analyzer 节点（CROSS_FILE_ENABLE=true 时启用）
+        # 位于 executor → debugger 之间，分析跨文件依赖并写入 state["cross_file_deps"]
+        if cross_file_enabled():
+            workflow.add_node("cross_file_analyzer", _cross_file_analyzer_node)
+            # 将 executor → debugger 边拆分为 executor → cross_file_analyzer → debugger
+            workflow.add_conditional_edges(
+                "executor",
+                _should_debug,
+                {
+                    "debug": "cross_file_analyzer",
+                    "done": END,
+                    "regenerate": "generator",
+                },
+            )
+            workflow.add_edge("cross_file_analyzer", "debugger")
+        else:
+            # 默认路径：executor → debugger（保持历史行为）
+            workflow.add_conditional_edges(
+                "executor",
+                _should_debug,
+                {
+                    "debug": "debugger",
+                    "done": END,
+                    "regenerate": "generator",
+                },
+            )
+
         # 顺序边：Debugger 输出补丁 → PatchApplier 应用到代码 → 回到 Executor 验证
         # 这构成一个可多次迭代的修复循环，每次循环后更新 iteration 计数
         workflow.add_edge("debugger", "patch_applier")
@@ -729,6 +747,63 @@ def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:
     return False
 
 
+def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
+    """3.5 跨文件修复：分析被测代码的跨文件依赖关系（CROSS_FILE_ENABLE=true 时启用）。
+
+    流程：
+        1. 从 state["target_code"] 提取源码；
+        2. 调用 analyze_cross_file_deps 做 AST 依赖分析（entry → target 的 import 关系）；
+        3. 把依赖边列表写入 state["cross_file_deps"]（供后续节点 / 报告使用）；
+        4. 若依赖图为空（单文件项目），写入空列表并降级为单文件模式
+           （cross_file_plan 置 None，后续 patch_applier 走单文件路径）。
+
+    设计约束：
+        - 默认关闭（CROSS_FILE_ENABLE=false），启用时需显式设置环境变量；
+        - 单文件项目自动降级（依赖边为空时 cross_file_plan 保持 None）；
+        - 节点不直接生成补丁，仅做"协调器"角色（依赖分析 + 路由决策），
+          补丁生成仍由现有 _debugger_node 完成（提议者角色），保持 LLM 调用路径不变。
+
+    Args:
+        state: 当前工作流状态（含 target_code / target_file / module_name 等字段）。
+
+    Returns:
+        更新后的状态字典，包含 cross_file_deps（依赖边列表，可为空）。
+    """
+    t0 = time.time()
+    entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
+    target_code = state.get("target_code", "")
+
+    # 保守实现：当前仅分析 entry_module 自身的 import 关系（单入口视角），
+    # 不递归展开调用方的 import（避免依赖图爆炸）。完整多入口分析留作二期。
+    source_files: dict[str, str] = {}
+    if entry_module:
+        source_files[entry_module] = target_code
+    # 若有其他模块内容（未来扩展），在此追加到 source_files
+
+    deps = analyze_cross_file_deps(entry_module=entry_module, source_files=source_files)
+    _trace_node(
+        "cross_file_analyzer",
+        output_summary={
+            "entry_module": entry_module,
+            "dep_edges": len(deps),
+        },
+        decision="deps_found" if deps else "single_file_fallback",
+        duration_ms=(time.time() - t0) * 1000,
+        iteration=state.get("iteration", 0),
+    )
+
+    update: dict[str, Any] = {"cross_file_deps": [d.__dict__ for d in deps]}
+    # 单文件项目降级：依赖边为空时不生成跨文件计划（保持单文件路径）
+    if not deps:
+        logger.info("3.5 跨文件修复：依赖图为空（单文件项目），降级为单文件模式")
+        update["cross_file_plan"] = None
+    else:
+        logger.info("3.5 跨文件修复：发现 %d 条跨文件依赖边", len(deps))
+        # 完整修复计划由 _debugger_node 后续生成（协调器-提议者：提议者=debugger）
+        update["cross_file_plan"] = None  # 占位，待二期实现完整计划构建
+    return update
+
+
 def _write_file_atomic(path: str, content: str) -> None:
     """先写临时文件再 os.replace 原子替换目标文件。
 
@@ -839,9 +914,31 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # 默认关闭，保持历史单补丁口径。开启时：生成 N 个候选 → 静态筛选 →
     # （可选）执行验证 → 选最优候选作为本轮补丁。任一环节无有效候选时
     # 回退到 state 中已有的单补丁（state["patch"]），不引入劣化。
+    # ── 3.5 跨文件修复：cross_file_deps 非空时走多文件补丁路径 ─────────────
     new_code: str
     applied: bool
-    if multi_candidate_available():
+    cross_file_deps = state.get("cross_file_deps") or []
+    if cross_file_deps and cross_file_enabled():
+        # 3.5 跨文件修复分支：按依赖图拓扑序对多个模块应用补丁
+        from src.tools.cross_file import apply_multi_file_patch, cross_file_fallback_single_file
+
+        # 从 state 收集所有模块的原始代码（当前仅 target_code 可用；
+        # 二期扩展后从 source_files 字典读取）
+        entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
+        original_files = {entry_module: original_code}
+        # 多文件补丁：entry_module 用 state["patch"]（当前单补丁路径生成），
+        # 其他模块的补丁由 _debugger_node 后续生成（二期）
+        patches: dict[str, str] = {}
+        if state.get("patch"):
+            patches[entry_module] = state["patch"]
+        # 尝试多文件应用；失败时降级为单文件
+        new_files, applied = apply_multi_file_patch(original_files, patches, entry_module)
+        new_code = new_files.get(entry_module, original_code)
+        if not applied:
+            # 多文件失败 → 降级单文件（保守口径，不引入劣化）
+            logger.info("3.5 跨文件补丁应用失败，降级单文件模式")
+            new_code, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
+    elif multi_candidate_available():
         new_code, applied = _select_multi_candidate_patch(state, original_code)
     else:
         new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))

@@ -211,6 +211,58 @@ class TestBuildWorkflow:
         mock_stategraph.assert_called_once()
         mock_workflow.compile.assert_called_once()
 
+    @patch("src.graph.workflow.ENABLE_PLANNER", False)
+    @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
+    @patch("src.graph.workflow.cross_file_enabled", return_value=True)
+    @patch("src.graph.workflow.StateGraph")
+    def test_build_workflow_with_cross_file_enabled(self, mock_stategraph, mock_cf_enabled):
+        """3.5 跨文件修复启用时，executor → cross_file_analyzer → debugger 路径注册。"""
+        from src.graph.workflow import build_workflow
+
+        mock_workflow = MagicMock()
+        mock_stategraph.return_value = mock_workflow
+
+        build_workflow()
+
+        # 验证 cross_file_analyzer 节点已注册
+        registered_nodes = [
+            call.args[0] for call in mock_workflow.add_node.call_args_list
+        ]
+        assert "cross_file_analyzer" in registered_nodes
+        # 验证 executor → cross_file_analyzer 边注册（debug 路由）
+        # （LangGraph 的 add_conditional_edges 签名：add_conditional_edges(source, router, mapping)）
+        cond_calls = [c for c in mock_workflow.add_conditional_edges.call_args_list]
+        found_cf_edge = any(
+            c.args[0] == "executor" and c.args[2].get("debug") == "cross_file_analyzer"
+            for c in cond_calls
+        )
+        assert found_cf_edge, f"executor→cross_file_analyzer 边未注册: {cond_calls}"
+
+    @patch("src.graph.workflow.ENABLE_PLANNER", False)
+    @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
+    @patch("src.graph.workflow.cross_file_enabled", return_value=False)
+    @patch("src.graph.workflow.StateGraph")
+    def test_build_workflow_cross_file_disabled_default(self, mock_stategraph, mock_cf_disabled):
+        """3.5 跨文件修复默认关闭时，executor → debugger 直接连接（历史行为不变）。"""
+        from src.graph.workflow import build_workflow
+
+        mock_workflow = MagicMock()
+        mock_stategraph.return_value = mock_workflow
+
+        build_workflow()
+
+        registered_nodes = [
+            call.args[0] for call in mock_workflow.add_node.call_args_list
+        ]
+        assert "cross_file_analyzer" not in registered_nodes
+        # executor 的 debug 路由直接指向 debugger
+        cond_calls = [c for c in mock_workflow.add_conditional_edges.call_args_list]
+        found_direct = any(
+            c.args[0] == "executor" and c.args[2].get("debug") == "debugger"
+            for c in cond_calls
+        )
+        assert found_direct, f"executor→debugger 直连未注册: {cond_calls}"
+
 
 class TestGetWorkflowStats:
     """测试工作流统计信息。"""
