@@ -11,7 +11,6 @@ src/tools/dependency.py 单元测试（P1：依赖检测与隔离执行）。
 
 import os
 import sys
-import time
 from unittest.mock import patch
 
 import pytest
@@ -245,6 +244,7 @@ class TestVenvCacheMonitoring:
     def _make_venv_dir(self, name: str, size_bytes: int = 1024) -> str:
         """在缓存目录下创建一个模拟 venv（含 bin/python 文件 + 占位数据）。"""
         import os
+
         import src.tools.dependency as dep
 
         full = os.path.join(dep._VENV_CACHE_DIR, name)
@@ -290,6 +290,7 @@ class TestVenvCacheMonitoring:
 
     def test_clear_venv_cache_by_age(self):
         import os
+
         import src.tools.dependency as dep
 
         old = self._make_venv_dir("old")
@@ -311,6 +312,7 @@ class TestVenvCacheMonitoring:
     def test_create_venv_records_hit_on_reuse(self):
         """create_venv 复用已存在 venv 时记录 hit 事件（4.4 命中率统计）。"""
         import os
+
         import src.tools.dependency as dep
 
         full = self._make_venv_dir("hash_pkg")

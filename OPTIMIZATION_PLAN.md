@@ -2,6 +2,100 @@
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
 
+## 改进清单现状核对（2026-09-14，5 大类 22 条）
+
+> 用户给出 5 大类改进清单（1.1~1.3 / 2.1~2.3 / 3.1~3.5 / 4.1~4.4 / 5.1~5.3）。
+> 本轮逐项对照仓库实际代码状态核对，结论：**多数条目已在此前批次落地**，
+> 真正缺口集中在 4 处，另 2 处为研究性/实验性项目（非纯代码改动）。
+>
+> **实施完成状态（2026-09-14 改进清单批次）**：
+> - G-01 测试异味检测 ✅（commit ffb77cf）
+> - G-02 修复收敛曲线 ✅（commit ffb77cf，与 G-01 同批）
+> - G-03 依赖缓存监控 ✅（commit 6b0e64d）
+> - G-04 失败根因分类 + 案例知识库 ✅（commit 247fc91）
+> - R-05 断言增强策略 ✅（commit ed4c237，默认关）
+> - 3.5 跨文件修复 ✅（commit 670f368，默认关，设计文档 docs/design/cross_file_repair.md）
+> - 全量基线推进至 **1225 passed / 0 failed**（自 1163 净增 62）；ruff check / format 全绿
+
+### 一、已落地（本轮无需重复实现）
+
+| 清单条目 | 现状证据 | 备注 |
+|----------|----------|------|
+| 1.1 多维质量代理（覆盖率/运行时/断言强度） | `analyze_results.py:_quality_proxy_metrics`（coverage_proxy / runtime_proxy / assertion_proxy + failure_top_categories） | 以 proxy 标注，不含 AST 圈复杂度精确值；`code_analyzer.compute_cyclomatic_complexity` 已具备能力未接入 |
+| 1.3 首次尝试成功率 / 迭代分布 | `analyze_results.py:_repair_convergence_metrics`（first_attempt_success_rate + success/failed_iteration_stats） | 迭代分布表已有 |
+| 2.1 SWE-bench 20 任务归档 + 源码导出 | `experiments/results/swebench_20_summary.json`（7 完成/10 超时，API 限流记录在案）；`scripts/export_swe_bench_source.py` | 20 任务结果已归档但 pass_rate 0/7（限流所致） |
+| 2.3 RAG 自动汇总（RAG vs 禁用对比 + 哪类错误帮助最大） | `analyze_results.py:_rag_by_kind_from_details` + `_rag_hit_by_failure_category` | RAG 启用/禁用 token 对比需各跑一次实验，脚本无内置 |
+| 3.3 多候选补丁默认关 + 可选启用 | `ENABLE_MULTI_CANDIDATE_PATCH` 默认 false；`src/tools/multi_candidate.py` 完整实现（静态筛选 + 执行验证） | 对比实验未跑 |
+| 4.1 结构化追踪层主动启用 | `src/observability/trace.py` + `AITESTER_TRACE_DIR`（默认 no-op） | 追踪层已实现，大规模实验未主动启用 |
+| 4.2 熔断器冷却期 | `api_manager.py:circuit_open_until`（默认 60s，`APIManagerConfig.circuit_cooldown_seconds`） | 半开状态未实现，冷却期结束直接放行 |
+| 4.3 日志脱敏完整审计 | `docs/redaction_audit.md`（三层防线 + 逐出口走查 + LLM 文件缓存记录为已知风险） | 审计已做 |
+| 4.4 依赖缓存 | `dependency.py:venv_cache_dir`（按依赖组合 md5 缓存）+ `create_venv` 复用 | 缓存命中率统计 / 清理命令 / 多版本 未实现 |
+| 5.1 CLI 模块覆盖率提升 | `tests/test_cli_app.py` 27 用例（批次② 1.4c 补 8：timeout / invalid dataset / single-task 不阻塞 / check-dataset 边界 / glob 并发语义） | cli/app.py 覆盖率仍 64%（最低） |
+| 5.2 错误分类细化 | `error_classifier.py` 12 类（批次② 1.1s：PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY） | 走 `refine_failure_category()` 纯函数，不走文本正则 |
+| 5.3 失败分析深度增强 | `analyze_failures.py`（按基线/错误类型聚类 + 典型案例）；`compare_failures.py`（定位"AITester 失败但 Plain LLM 成功"的翻转任务 + 环节级对比 + 自动判定提示） | 失败根因分类（LLM 能力边界 / 依赖 / 框架）与失败案例知识库 未实现 |
+
+### 二、真正缺口（4 处，需实现）
+
+| 编号 | 清单条目 | 缺口 | 实现要点 | 影响范围 | 测试方式 |
+|------|----------|------|----------|----------|----------|
+| G-01 | 1.2 | **测试异味检测未集成**：`grep -rni "smell" src/ experiments/` 零命中；Assertion Roulette / Magic Number Test 等 LLM 生成异味无检测 | `analyze_results.py` 新增 `test_smell_detection(details)` 纯函数（AST 扫 generated_test，检测：无断言 test / 恒真断言 / 魔数未命名常量 / 断言弱化：断言数从第 0 轮 → 末轮减少）+ Markdown 渲染 | 仅分析层，零运行路径改动 | `tests/test_experiments_scripts.py` +2 用例 |
+| G-02 | 1.3 | **修复收敛曲线缺失**：`analyze_results.py` 无"随迭代次数增加，通过率变化"可视化 | 新增 `repair_convergence_curve(details)` 纯函数（按迭代轮次 0/1/2/3 累计通过率 + 累计修复成本），Markdown 输出表格 | 仅分析层 | +1 用例 |
+| G-03 | 4.4 | **依赖缓存监控与清理**：`venv_cache_dir` 无命中率统计 / 清理命令 / 多版本 | `dependency.py` 新增 `VenvCacheStats`（命中/未命中/创建 计数）+ `clear_venv_cache(max_age_days / max_size_mb)` + `list_venv_cache()`；CLI 或 scripts 命令入口 | 仅新增，不改变 `create_venv` 复用行为 | `tests/test_dependency.py` +3 用例 |
+| G-04 | 5.3 | **失败根因分类 + 案例知识库**：`analyze_failures.py` 无根因归类（LLM 能力 / 依赖 / 框架）与结构化知识库 | 新增 `root_cause_classification(details)`（按 error_category 映射 + diagnosis 文本匹配）+ `experiments/failure_knowledge_base.json`（结构化存储：task_id / root_cause / error_category / 可复现步骤 / 建议修复）+ `analyze_failures.py` 渲染知识库章节 | 仅分析层，零运行路径改动 | +2 用例 |
+
+### 三、研究性 / 实验性项目（非纯代码，需独立立项或手动跑实验）
+
+| 编号 | 清单条目 | 性质 | 说明 |
+|------|----------|------|------|
+| R-01 | 2.1 | 实验性 | SWE-bench Verified / Pro 子集需真实 API 配额 + 数据下载；补跑 20 任务归档需手动跑 `run_benchmark.py --dataset swe_bench` |
+| R-02 | 2.2 | 实验性 + 架构 | 合成 vs 真实失败模式交叉分析（需各跑一次实验 + 对比）；任务难度分层（需 dataset_loader 按复杂度/依赖数分层）；跨语言泛化（Defects4J 仅 Python 子集，需 Java 生态探索） |
+| R-03 | 3.1 | 研究性 | 对抗性推理机制（AdverIntent-Agent）：多智能体架构改动，需设计文档 |
+| R-04 | 3.2 | 研究性 | 执行反馈驱动的强化学习（BoostAPR）：奖励信号设计 + 策略微调，非纯代码改动 |
+| R-05 | 3.4 | 实现可行 | 断言增强策略（Assertion Augmentation）：`generator.py` 新增"利用现有断言"策略（AST 提取被测代码已有 assert + 提示词注入） |
+| R-06 | 3.5 | 架构级 | 跨文件修复：多文件依赖分析 + 补丁拼接，需独立设计文档 |
+
+### 四、实施批次建议
+
+| 批次 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
+|------|------|------|---------|---------|-------------|
+| B-1 | G-01 测试异味检测 | `experiments/analyze_results.py` + `tests/test_experiments_scripts.py` | 纯函数 + Markdown 渲染 + 2 用例 | pytest test_experiments_scripts.py | `feat(experiments): 1.2 测试异味检测集成（analyze_results 新增 test_smell_detection）` |
+| B-2 | G-02 修复收敛曲线 | `experiments/analyze_results.py` + `tests/test_experiments_scripts.py` | 纯函数 + Markdown 渲染 + 1 用例 | pytest test_experiments_scripts.py | `feat(experiments): 1.3 修复收敛曲线（迭代轮次累计通过率 + 修复成本）` |
+| B-3 | G-03 依赖缓存监控 | `src/tools/dependency.py` + `tests/test_dependency.py` | VenvCacheStats + clear/list 命令 + 3 用例 | pytest test_dependency.py | `feat(tools): 4.4 依赖缓存监控（命中率统计 + 清理命令 + 多版本）` |
+| B-4 | G-04 失败根因分类 + 知识库 | `experiments/analyze_failures.py` + `experiments/failure_knowledge_base.json`（新） + `tests/` | root_cause_classification + JSON 知识库 + Markdown 章节 + 2 用例 | pytest 受影响测试 | `feat(experiments): 5.3 失败根因分类 + 案例知识库（LLM/依赖/框架归因 + 结构化存储）` |
+| B-5（可选） | R-05 断言增强 | `src/agents/generator.py` + `src/prompts/templates.py` + `tests/test_generator.py` | AST 提取现有 assert + 提示词注入 + 策略开关（默认关） | pytest test_generator.py | `feat(agents): 3.4 断言增强策略（利用现有 assert 提升生成测试质量，默认关）` |
+| B-6 | 文档同步 | `CHANGELOG.md` + `OPTIMIZATION_PLAN.md` + `OPTIMIZATION_REPORT.md` | 追加本批次记录 | 人工核对 | `docs(optimize): 2026-09-14 改进清单现状核对 + G-01~G-04 实施记录` |
+
+### 需用户确认
+
+1. **实施范围**：本轮实施 G-01~G-04（4 项纯代码 + 测试）+ R-05（断言增强，默认关）+ 3.5（跨文件修复，默认关，含设计文档）；全部完成。
+2. **批次顺序**：B-1→B-2→B-3→B-4→B-5→B-6 串行（每批独立 commit，可单独 revert）。
+3. **R-01~R-04 / R-06** 作为研究性 / 实验性项目记录在案，不纳入本轮代码改动（3.5 已作为 B-6 实施，默认关保持历史口径）。
+4. **推送**：本批 6 个 commit（含 ruff 归一），`git push origin main` 直推（沿用历史轮次 main 直推模式）。
+
+## 改进清单实施变更记录（2026-09-14 改进清单批次）
+
+> 新基线：1225 passed / 0 failed / ruff check + ruff format 全绿 / 工作区 clean / 本地与 origin/main 同步（`ffb77cf` 之上）。
+> 用户清单：G-01~G-04 + R-05 + 3.5 全部落地，默认关的研究性能力（3.4/3.5）不改变历史实验口径。
+>
+> ### 本批 commit 序列
+>
+> | 序号 | commit | 内容 |
+> |------|--------|------|
+> | 1 | ffb77cf | 1.2 测试异味检测 + 1.3 修复收敛曲线（analyze_results 新增可回归章节） |
+> | 2 | 6b0e64d | 4.4 依赖缓存监控（venv 命中率统计 + 清理命令 + 多版本列表） |
+> | 3 | 247fc91 | 5.3 失败根因分类 + 案例知识库（LLM/依赖/框架归因 + 结构化存储） |
+> | 4 | ed4c237 | 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） |
+> | 5 | 670f368 | 3.5 跨文件修复（协调器-提议者架构，默认关） |
+> | 6 | （本批） | ruff 归一 + 文档同步（README / CHANGELOG / .env.example / OPTIMIZATION_PLAN / 决策日志） |
+>
+> ### 设计取舍
+>
+> - **3.4/3.5 默认关**：环境变量 `ASSERTION_AUGMENT_ENABLE` / `CROSS_FILE_ENABLE` 默认 false，保持历史实验口径不变；启用是显式行为。
+> - **3.5 单入口视角**：当前 `analyze_cross_file_deps` 仅分析 entry_module 自身的 import 关系（不递归展开调用方的 import，避免依赖图爆炸）；二期扩展多入口分析。
+> - **跨文件补丁降级**：`apply_multi_file_patch` 失败时 `cross_file_fallback_single_file` 仅对 entry_module 应用补丁，其他模块保持原样（保守口径，不引入劣化）。
+> - **4.4 死锁修复**：`threading.Lock` 非可重入，`_record_venv_cache_event` 调用 `_persist_cache_stats` 时后者二次加锁会挂起进程——改为单一加锁边界（`_persist` 假设调用方已持锁）。
+> - **5.3 保守启发式**：根因分类基于 error_category + diagnosis 关键词匹配（不走 LLM 推理），避免分析层引入 LLM 调用成本；未命中规则兜底 `llm_capability`（最泛兜底）。
+
 ## 全项目文档最新同步轮次（2026-09-14，F 批次）
 
 > 基线：1158 passed / ruff check + ruff format 全绿 / 覆盖率 91%（TOTAL 3911/354 miss） / 本地与 origin/main 同步（`797a406`）。

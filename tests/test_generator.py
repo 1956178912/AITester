@@ -277,13 +277,7 @@ class TestAssertionAugmentation:
         """被测代码含 assert 时，AST 提取返回非空列表（保持顺序、去重）。"""
         from src.agents.generator import _extract_existing_assertions
 
-        code = (
-            "def foo(x):\n"
-            "    assert x > 0\n"
-            "    assert x != 0\n"
-            "    assert x > 0\n"
-            "    return x\n"
-        )
+        code = "def foo(x):\n    assert x > 0\n    assert x != 0\n    assert x > 0\n    return x\n"
         result = _extract_existing_assertions(code)
         # 去重：两条 "assert x > 0" 只保留 1 条 + "assert x != 0"
         assert "assert x > 0" in result
@@ -312,9 +306,7 @@ class TestAssertionAugmentation:
 
         agent = GeneratorAgent()
         code = "def foo(x):\n    assert x > 0\n    return x\n"
-        agent.generate(
-            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
-        )
+        agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
         assert "断言增强" not in prompt
 
@@ -326,9 +318,7 @@ class TestAssertionAugmentation:
 
         agent = GeneratorAgent()
         code = "def foo(x):\n    assert x > 0\n    assert x != 0\n    return x\n"
-        agent.generate(
-            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
-        )
+        agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
         assert "断言增强" in prompt
         assert "assert x > 0" in prompt
@@ -342,9 +332,6 @@ class TestAssertionAugmentation:
 
         agent = GeneratorAgent()
         code = "def foo():\n    return 42\n"
-        agent.generate(
-            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
-        )
+        agent.generate(test_plan={"function_name": "foo"}, target_code=code, module_name="test_module")
         prompt = mock_call_llm.call_args[0][0]
         assert "断言增强" not in prompt
-

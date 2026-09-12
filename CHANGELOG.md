@@ -2,6 +2,54 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-14 改进清单 G-01~G-04 + 3.4 + 3.5 落地批次）
+
+### 1.2 测试异味检测（analyze_results.py）
+- `experiments/analyze_results.py` 新增 `_test_smell_detection()` 纯函数：AST 扫 `details[].generated_test`，检测 4 类 LLM 生成异味——**Assertion Roulette**（无有效断言但非平凡）、**Magic Number**（≥3 个未命名整数字面量且无常量赋值）、**断言弱化**（断言行数较上轮减少）、**平凡测试**（函数体仅 pass / 恒真断言）；旧 JSON 无 `generated_test` 时 `available=False`，渲染跳过章节，零回归面
+- Markdown 渲染「测试异味检测（1.2）」章节：按基线输出异味计数 + 含异味任务清单
+- 测试：`tests/test_experiments_scripts.py` +3 用例（平凡+roulette / magic number / 无 generated_test 时跳过）
+
+### 1.3 修复收敛曲线（analyze_results.py）
+- 新增 `_repair_convergence_curve()` 纯函数：按迭代轮次 0/1/2/3+ 统计"到达任务数 / 累计通过 / 累计通过率 / 累计平均耗时"，观察随迭代增加通过率如何变化；空 baseline 返回 `rounds={}` 不除零
+- Markdown 渲染「修复收敛曲线（1.3）」章节
+- 测试：`tests/test_experiments_scripts.py` +3 用例（累计通过率单调 / 空 details / 渲染回归）
+
+### 4.4 依赖缓存监控（src/tools/dependency.py）
+- 新增 `get_venv_cache_stats()`（命中率统计：进程内累计 hit/create + 落盘 JSON 跨进程聚合，`hit_rate = hits/(hits+creates)`）、`list_venv_cache()`（列出缓存目录所有 venv：name/path/size_mb/created_at）、`clear_venv_cache(max_age_days, max_size_mb)`（按年龄/大小过滤清理，均 None 时清空）
+- `create_venv` 复用/新建路径记录 hit/create 事件（命中率可观测）
+- 踩坑修复：`threading.Lock` 非可重入，`_record_venv_cache_event` 与 `_persist_cache_stats` 嵌套自锁会挂起进程——改为单一加锁边界（`_persist` 假设调用方已持锁）
+- 测试：`tests/test_dependency.py` +8 用例（全量 43）
+
+### 5.3 失败根因分类 + 案例知识库（analyze_failures.py）
+- 新增 `root_cause_classification()`：三大根因（`llm_capability` / `dependency` / `framework`）按 `error_category` + `diagnosis` 关键词保守启发式归类，每类最多 3 个代表案例；未命中规则兜底 `llm_capability`
+- 新增 `failure_knowledge_base()`：按 `error_category` 多样性优先选取（每类前 2），结构化案例含 `task_id / root_cause / reproducible_steps / suggested_fix`；默认输出到 `experiments/results/failure_knowledge_base.json`
+- `generate_report` 新增「5. 失败根因分类」+「6. 失败案例知识库」章节
+- CLI 新增 `--knowledge-base/-k` 选项（默认路径 `<results-dir>/failure_knowledge_base.json`）
+- 测试：`tests/test_analyze_failures.py`（新，13 用例）
+
+### 3.4 断言增强策略（src/agents/generator.py，默认关）
+- 新增 `_extract_existing_assertions()`：AST 提取被测代码中已有 `assert` 语句（去重，最多 10 条），语法错误时保守返回空
+- 新增 `_assertion_augment_enabled()`：环境变量 `ASSERTION_AUGMENT_ENABLE=true` 启用（默认 false，保持历史口径）
+- `generate()` 在 RAG 注入之后追加「断言增强」段落（仅开关启用且有现有 assert 时），引导 LLM 避免断言弱化 / 恒真断言 / 魔数未命名
+- 测试：`tests/test_generator.py` +6 用例（全量 27）
+
+### 3.5 跨文件修复能力（src/tools/cross_file.py + workflow 接线，默认关）
+- 新增 `src/tools/cross_file.py`：`CrossFileDependency` / `CrossFileRepairPlan` 数据结构 + `analyze_cross_file_deps`（AST 跨文件 import 依赖分析）+ `build_cross_file_repair_plan`（协调器-提议者：每模块一个提议者，复用现有 DebuggerAgent 调用路径）+ `apply_multi_file_patch`（多文件补丁应用，失败整体回滚）+ `cross_file_fallback_single_file`（单文件降级）
+- `src/graph/workflow.py`：`CROSS_FILE_ENABLE=true` 时 `executor → cross_file_analyzer → debugger` 路径；`_patch_applier_node` 跨文件分支（多文件应用 + 失败降级单文件）
+- `src/graph/state.py`：新增 `cross_file_deps` / `cross_file_plan` 两个字段
+- `config.py`：新增 `CROSS_FILE_ENABLE`（默认 false）+ `CROSS_FILE_MAX_MODULES`（默认 5）+ `ASSERTION_AUGMENT_ENABLE`（默认 false）
+- 设计文档 `docs/design/cross_file_repair.md`（方案对比：协调器-提议者 vs 纯 LLM 端到端；数据结构；测试策略；回滚计划；二期扩展）
+- 测试：`tests/test_cross_file.py`（新，27 用例）+ `tests/test_workflow.py` +2 用例（workflow 跨文件启用/禁用路径）
+
+### 文档与决策日志
+- `OPTIMIZATION_PLAN.md` 新增「改进清单现状核对」章节（已落地 / 真正缺口 / 研究性项 三类分类）
+- `docs/design/cross_file_repair.md` 设计文档（3.5）
+- 全项目文档同步（README / QUICKSTART / api_reference / usage_examples / .env.example 补 3.4/3.5/4.4 开关说明）
+
+### 全量验证
+- `pytest tests/` **1225 passed / 0 failed**（自 1.1/1.2 首批基线 1163 净增 62）
+- `ruff check` / `ruff format --check` 全绿
+
 ## [Unreleased] - 待发布（2026-09-14 评估指标多维化首批：1.1/1.2 分析层增强）
 
 ### 实验（1.1 多维评估 + 1.2 修复收敛效率）
