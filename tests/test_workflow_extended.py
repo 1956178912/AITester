@@ -28,7 +28,7 @@ class TestRAGModuleImport:
 
     def test_rag_module_import_skipped(self):
         """验证 RAG 模块未安装时的处理方式（已导入状态）。"""
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
 
         # 检查当前模块状态
         # 如果 chromadb 已安装，RAG_MODULE_AVAILABLE 为 True
@@ -50,7 +50,7 @@ class TestGetRAGRetriever:
         （初始化失败后不再重试）。该标志是进程级粘性状态，若不清位，
         前一个失败用例会短路后续"已初始化返回缓存"用例。
         """
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
 
         workflow_module._rag_retriever = None
         workflow_module._rag_init_failed = False
@@ -58,8 +58,8 @@ class TestGetRAGRetriever:
         workflow_module._rag_retriever = None
         workflow_module._rag_init_failed = False
 
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
-    @patch("src.graph.workflow.TestCaseRetriever")
+    @patch("src.graph.rag.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.rag.TestCaseRetriever")
     def test_initialize_once(self, mock_retriever_class):
         """单例模式：只初始化一次。"""
         from src.graph.workflow import get_rag_retriever
@@ -68,7 +68,7 @@ class TestGetRAGRetriever:
         mock_retriever_class.return_value = mock_instance
 
         # 清空模块级单例
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
 
         workflow_module._rag_retriever = None
 
@@ -78,10 +78,10 @@ class TestGetRAGRetriever:
         assert result1 is result2 is mock_instance
         mock_retriever_class.assert_called_once()
 
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", False)
+    @patch("src.graph.rag.RAG_MODULE_AVAILABLE", False)
     def test_returns_none_when_rag_disabled(self):
         """RAG 禁用时返回 None。"""
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
         from src.graph.workflow import get_rag_retriever
 
         workflow_module._rag_retriever = None
@@ -89,15 +89,15 @@ class TestGetRAGRetriever:
         result = get_rag_retriever()
         assert result is None
 
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
-    @patch("src.graph.workflow.TestCaseRetriever")
+    @patch("src.graph.rag.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.rag.TestCaseRetriever")
     def test_initialization_failure(self, mock_retriever_class):
         """初始化失败时标记为 None。"""
         from src.graph.workflow import get_rag_retriever
 
         mock_retriever_class.side_effect = Exception("Init failed")
 
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
 
         workflow_module._rag_retriever = None
 
@@ -105,15 +105,15 @@ class TestGetRAGRetriever:
         assert result is None
         assert workflow_module._rag_retriever is None
 
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
-    @patch("src.graph.workflow.TestCaseRetriever")
+    @patch("src.graph.rag.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.rag.TestCaseRetriever")
     def test_already_initialized_returns_cached(self, mock_retriever_class):
         """已初始化时直接返回缓存实例。"""
         from src.graph.workflow import get_rag_retriever
 
         mock_instance = MagicMock()
 
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
 
         workflow_module._rag_retriever = mock_instance
 
@@ -126,7 +126,7 @@ class TestGetRAGRetriever:
 class TestPlannerNode:
     """测试 Planner 节点更多场景。"""
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_planner_output_validation_failure(self, mock_planner_class):
         """Planner 输出验证失败时使用默认计划。"""
         from src.graph.workflow import _planner_node
@@ -144,7 +144,7 @@ class TestPlannerNode:
         assert result["test_plan"]["function_name"] == "foo"
         assert result["test_plan"]["logic_analysis"]["input_domain"] == "未知"
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_planner_json_decode_error(self, mock_planner_class):
         """Planner 返回无效 JSON 时的异常处理。"""
         from src.graph.workflow import _planner_node
@@ -160,7 +160,7 @@ class TestPlannerNode:
         assert "test_plan" in result
         assert result["test_plan"]["description"] == "自动生成的默认测试计划"
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_planner_with_target_function_none(self, mock_planner_class):
         """目标函数名为 None 时的处理。"""
         from src.graph.workflow import _planner_node
@@ -181,10 +181,10 @@ class TestPlannerNode:
 class TestGeneratorNode:
     """测试 Generator 节点更多场景。"""
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.GeneratorAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.GeneratorAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_generator_with_rag_retrieval(self, mock_generator_class, mock_get_retriever):
         """Generator 启用 RAG 并成功检索。"""
         from src.graph.workflow import _generator_node
@@ -205,10 +205,10 @@ class TestGeneratorNode:
         assert result["rag_references"] == ["case1", "case2"]
         mock_retriever.retrieve_test_cases.assert_called_once()
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.GeneratorAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.GeneratorAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_generator_rag_retrieval_failure(self, mock_generator_class, mock_get_retriever):
         """RAG 检索失败时降级到无 RAG 模式。"""
         import src.graph.workflow as workflow_module
@@ -237,9 +237,9 @@ class TestGeneratorNode:
         finally:
             workflow_module.ENABLE_PLANNER = original_planner
 
-    @patch("src.graph.workflow.GeneratorAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", False)
+    @patch("src.graph.nodes.GeneratorAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", False)
     def test_generator_no_rag_module(self, mock_generator_class):
         """RAG 模块不可用时跳过检索。"""
         import src.graph.workflow as workflow_module
@@ -266,7 +266,7 @@ class TestGeneratorNode:
 class TestExecutorNode:
     """测试 Executor 节点更多场景。"""
 
-    @patch("src.graph.workflow.ExecutorAgent")
+    @patch("src.graph.nodes.ExecutorAgent")
     def test_executor_with_failed_tests(self, mock_executor_class):
         """测试失败时的处理。"""
         from src.graph.workflow import _executor_node
@@ -287,10 +287,10 @@ class TestExecutorNode:
         assert result["coverage_report"] == 45.5
         assert len(result["failed_cases"]) == 1
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.ExecutorAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.ExecutorAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_executor_success_with_rag_ingestion(self, mock_executor_class, mock_get_retriever):
         """测试成功时入库 RAG。"""
         from src.graph.workflow import _executor_node
@@ -314,10 +314,10 @@ class TestExecutorNode:
         assert result["test_passed"] is True
         mock_retriever.add_case.assert_called_once()
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.ExecutorAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.ExecutorAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_executor_rag_ingestion_failure(self, mock_executor_class, mock_get_retriever):
         """RAG 入库失败时不影响主流程。"""
         from src.graph.workflow import _executor_node
@@ -345,7 +345,7 @@ class TestExecutorNode:
 class TestDebuggerNode:
     """测试 Debugger 节点完整流程。"""
 
-    @patch("src.graph.workflow.DebuggerAgent")
+    @patch("src.graph.nodes.DebuggerAgent")
     def test_debugger_success(self, mock_debugger_class):
         """Debugger 成功执行。"""
         from src.graph.workflow import _debugger_node
@@ -373,7 +373,7 @@ class TestDebuggerNode:
         assert result["error_category"] == "logic_error"
         mock_agent.debug.assert_called_once()
 
-    @patch("src.graph.workflow.DebuggerAgent")
+    @patch("src.graph.nodes.DebuggerAgent")
     def test_debugger_json_error_fallback(self, mock_debugger_class):
         """Debugger 返回无效 JSON 时的降级处理。"""
         from src.graph.workflow import _debugger_node
@@ -390,10 +390,10 @@ class TestDebuggerNode:
         assert result["error_category"] == "unknown"
         assert result["patch"] == ""
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.DebuggerAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.DebuggerAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_debugger_with_rag_retrieval(self, mock_debugger_class, mock_get_retriever):
         """Debugger 使用 RAG 检索修复案例。"""
         from src.graph.workflow import _debugger_node
@@ -424,10 +424,10 @@ class TestDebuggerNode:
         debug_call = mock_agent.debug.call_args
         assert debug_call.kwargs.get("rag_references") == ["repair_case_1"]
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.DebuggerAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.DebuggerAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_debugger_rag_retrieval_failure(self, mock_debugger_class, mock_get_retriever):
         """RAG 检索失败时降级到无 RAG 模式。"""
         from src.graph.workflow import _debugger_node
@@ -455,10 +455,10 @@ class TestDebuggerNode:
         _debugger_node(state)
         mock_agent.debug.assert_called_once()
 
-    @patch("src.graph.workflow.get_rag_retriever")
-    @patch("src.graph.workflow.DebuggerAgent")
-    @patch("src.graph.workflow.ENABLE_RAG", True)
-    @patch("src.graph.workflow.RAG_MODULE_AVAILABLE", True)
+    @patch("src.graph.nodes.get_rag_retriever")
+    @patch("src.graph.nodes.DebuggerAgent")
+    @patch("src.graph.nodes.ENABLE_RAG", True)
+    @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_debugger_rag_ingestion(self, mock_debugger_class, mock_get_retriever):
         """Debugger 修复案例入库。"""
         from src.graph.workflow import _debugger_node
@@ -480,7 +480,7 @@ class TestDebuggerNode:
 
         mock_retriever.add_repair.assert_called_once()
 
-    @patch("src.graph.workflow.DebuggerAgent")
+    @patch("src.graph.nodes.DebuggerAgent")
     def test_debugger_without_failed_cases(self, mock_debugger_class):
         """无失败用例时的 Debugger 行为。"""
         from src.graph.workflow import _debugger_node
@@ -503,7 +503,7 @@ class TestDebuggerNode:
 class TestPatchApplierNode:
     """测试 PatchApplier 节点安全检查和迭代逻辑。"""
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_patch_applied_successfully(self, mock_apply_patch, tmp_path):
         """补丁成功写盘：target_code 更新、patch_applied=True、文件被真实修改。"""
         from src.graph.workflow import _patch_applier_node
@@ -530,7 +530,7 @@ class TestPatchApplierNode:
         assert result["repair_history"][0]["patch_applied"] is True
         assert target.read_text(encoding="utf-8") == new_code
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_patch_not_applied(self, mock_apply_patch, tmp_path):
         """补丁未应用（apply 返回 False）：target_code 保留原代码，patch_applied=False。"""
         from src.graph.workflow import _patch_applier_node
@@ -551,7 +551,7 @@ class TestPatchApplierNode:
         assert result["target_code"] == "def foo(): pass"
         assert result["repair_history"][0]["patch_applied"] is False
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_patch_too_short_rejected(self, mock_apply_patch, tmp_path):
         """补丁过短被安全检查拒绝：target_code 保留原代码，patch_applied=False。"""
         from src.graph.workflow import _patch_applier_node
@@ -571,7 +571,7 @@ class TestPatchApplierNode:
         assert result["target_code"] == "def foo(): return 1 + 2 + 3"
         assert result["repair_history"][0]["patch_applied"] is False
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_patch_no_function_definition_rejected(self, mock_apply_patch):
         """补丁不含函数定义时拒绝写入。"""
         from src.graph.workflow import _patch_applier_node
@@ -584,7 +584,7 @@ class TestPatchApplierNode:
         # 历史记录应记录尝试
         assert len(result["repair_history"]) == 1
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_history_truncation(self, mock_apply_patch):
         """修复历史记录大小限制。"""
         from src.graph.workflow import _patch_applier_node
@@ -608,7 +608,7 @@ class TestPatchApplierNode:
         # 历史应被截断为最多 5 条
         assert len(result["repair_history"]) <= 5
 
-    @patch("src.graph.workflow.apply_patch_to_code")
+    @patch("src.graph.nodes.apply_patch_to_code")
     def test_iterative_updates(self, mock_apply_patch):
         """多次迭代后迭代计数器更新。"""
         from src.graph.workflow import _patch_applier_node
@@ -733,7 +733,7 @@ class TestPlannerNodeDedup:
     现统一走 helper，本组测试防止两处再次漂移。
     """
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_exception_path_equals_helper_output(self, mock_planner_class):
         """异常路径产出的默认计划必须与 helper 输出完全一致（同构造点护栏）"""
         from src.graph.workflow import _get_default_test_plan, _planner_node
@@ -746,7 +746,7 @@ class TestPlannerNodeDedup:
         result = _planner_node(state)
         assert result["test_plan"] == _get_default_test_plan(None)
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_exception_path_empty_function_name_normalized(self, mock_planner_class):
         """target_function 为空串时归一为 'unknown'（helper 的 or 兜底比原内联 .get 默认值更严格）"""
         from src.graph.workflow import _planner_node

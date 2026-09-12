@@ -281,7 +281,7 @@ class TestGetWorkflowStats:
 class TestNodeFunctions:
     """测试节点函数。"""
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_planner_node_success(self, mock_planner_class):
         """Planner 节点成功执行。"""
         from src.graph.workflow import _planner_node
@@ -296,7 +296,7 @@ class TestNodeFunctions:
         assert "test_plan" in result
         assert result["test_plan"]["function_name"] == "foo"
 
-    @patch("src.graph.workflow.PlannerAgent")
+    @patch("src.graph.nodes.PlannerAgent")
     def test_planner_node_fallback(self, mock_planner_class):
         """Planner 节点失败时使用默认计划。"""
         from src.graph.workflow import _planner_node
@@ -311,7 +311,7 @@ class TestNodeFunctions:
         assert "test_plan" in result
         assert result["test_plan"]["function_name"] == "foo"
 
-    @patch("src.graph.workflow.GeneratorAgent")
+    @patch("src.graph.nodes.GeneratorAgent")
     def test_generator_node(self, mock_generator_class):
         """Generator 节点执行。"""
         from src.graph.workflow import ENABLE_PLANNER, ENABLE_RAG, RAG_MODULE_AVAILABLE, _generator_node
@@ -344,7 +344,7 @@ class TestNodeFunctions:
             workflow_module.ENABLE_RAG = original_enable_rag
             workflow_module.RAG_MODULE_AVAILABLE = original_rag_available
 
-    @patch("src.graph.workflow.ExecutorAgent")
+    @patch("src.graph.nodes.ExecutorAgent")
     def test_executor_node(self, mock_executor_class):
         """Executor 节点执行。"""
         from src.graph.workflow import _executor_node
@@ -360,7 +360,7 @@ class TestNodeFunctions:
         assert result["test_passed"] is True
         assert result["coverage_report"] == 85.0
 
-    @patch("src.graph.workflow.GeneratorAgent")
+    @patch("src.graph.nodes.GeneratorAgent")
     def test_generator_node_missing_test_plan_key_no_keyerror(self, mock_generator_class):
         """Generator 节点：state 缺 test_plan 键时不得 KeyError。
 
@@ -402,7 +402,7 @@ class TestNodeFunctions:
         每个 generator/executor/debugger 节点都会重复尝试初始化（各付 2-6s）。
         现置位 _rag_init_failed，快路径直接短路。
         """
-        import src.graph.workflow as workflow_module
+        import src.graph.rag as workflow_module
         from src.graph.workflow import get_rag_retriever
 
         original_retriever = workflow_module._rag_retriever
@@ -488,7 +488,7 @@ class TestGeneratorNodeRegeneration:
     def _restore(workflow_module, orig):
         workflow_module.ENABLE_PLANNER, workflow_module.ENABLE_RAG, workflow_module.RAG_MODULE_AVAILABLE = orig
 
-    @patch("src.graph.workflow.GeneratorAgent")
+    @patch("src.graph.nodes.GeneratorAgent")
     def test_regeneration_increments_counter(self, mock_generator_class):
         workflow_module, orig = self._with_rag_disabled()
         try:
@@ -508,7 +508,7 @@ class TestGeneratorNodeRegeneration:
         finally:
             self._restore(workflow_module, orig)
 
-    @patch("src.graph.workflow.GeneratorAgent")
+    @patch("src.graph.nodes.GeneratorAgent")
     def test_first_generation_does_not_increment(self, mock_generator_class):
         workflow_module, orig = self._with_rag_disabled()
         try:
