@@ -2,6 +2,14 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 待发布（2026-09-15 测试套件可选依赖降级批次：O-01a）
+
+### 可选依赖未安装时测试套件误报 ERROR（tests/test_rag_retriever.py + tests/test_experiments_scripts.py）
+- 背景：`chromadb` / `matplotlib` 属于重型可选依赖，精简环境（未 `pip install -r requirements.txt` 全量）下运行 `pytest tests/` 会产生 32+5=37 条 `ImportError` ERROR（非 skip），掩盖真实测试结论
+- `tests/test_rag_retriever.py` 新增模块级 `pytestmark = pytest.mark.skipif(not _chroma_available(), reason="chromadb 未安装")`，与既有 `test_rag_metrics.py` 的 skipif 口径保持一致（同一可选依赖的两套用例在精简环境下行为统一）
+- `tests/test_experiments_scripts.py` 中 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` 两组 fixture 在惰性 `from experiments import visualize_results` 前补 `pytest.importorskip("matplotlib", ...)`：matplotlib 未安装时优雅跳过而非在 setup 阶段报错
+- 全量：**1208 passed / 39 skipped / 0 failed**（缺 chromadb + matplotlib 的精简环境）；全量安装依赖后恢复 1247 passed 口径；`ruff check` 全绿
+
 ## [Unreleased] - 待发布（2026-09-15 CLI 输出层补测批次：O-01）
 
 ### O-01 CLI 输出层回归补测（tests/test_cli_output.py，新）

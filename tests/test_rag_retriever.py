@@ -19,6 +19,23 @@ import pytest
 
 from src.rag.retriever import TestCaseRetriever
 
+
+def _chroma_available() -> bool:
+    try:
+        import chromadb  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+# 与 test_rag_metrics.py 保持一致：未安装 chromadb 时整套用例跳过（skipif），
+# 避免精简环境/CI 因缺可选依赖而误报 32 条 ERROR。
+pytestmark = pytest.mark.skipif(
+    not _chroma_available(),
+    reason="chromadb 未安装",
+)
+
 # ============================================================================
 #  fixtures
 # ============================================================================

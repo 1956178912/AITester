@@ -36,7 +36,8 @@ class TestVisualizeLoadLatestResult:
 
     @pytest.fixture()
     def module(self):
-        # matplotlib/pandas/scipy 重依赖，惰性导入一次即可
+        # matplotlib/pandas/scipy 重依赖，未安装时跳过整套用例（避免精简环境误报 ERROR）
+        pytest.importorskip("matplotlib", reason="matplotlib 未安装（experiments.visualize_results 依赖）")
         from experiments import visualize_results
 
         return visualize_results
@@ -70,6 +71,8 @@ class TestVisualizeSummaryMdTable:
 
     @pytest.fixture()
     def module(self):
+        # matplotlib/pandas/scipy 重依赖，未安装时跳过整套用例（避免精简环境误报 ERROR）
+        pytest.importorskip("matplotlib", reason="matplotlib 未安装（experiments.visualize_results 依赖）")
         from experiments import visualize_results
 
         return visualize_results
