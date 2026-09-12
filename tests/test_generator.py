@@ -268,3 +268,83 @@ class TestGenerate:
 
         assert mock_call_llm.call_count == 2
         assert "def test(x):" in result
+
+
+class TestAssertionAugmentation:
+    """3.4 断言增强策略：AST 提取现有 assert + 注入 prompt（默认关，显式开启时生效）"""
+
+    def test_extract_existing_assertions_basic(self):
+        """被测代码含 assert 时，AST 提取返回非空列表（保持顺序、去重）。"""
+        from src.agents.generator import _extract_existing_assertions
+
+        code = (
+            "def foo(x):\n"
+            "    assert x > 0\n"
+            "    assert x != 0\n"
+            "    assert x > 0\n"
+            "    return x\n"
+        )
+        result = _extract_existing_assertions(code)
+        # 去重：两条 "assert x > 0" 只保留 1 条 + "assert x != 0"
+        assert "assert x > 0" in result
+        assert "assert x != 0" in result
+        assert len(result) == 2
+
+    def test_extract_existing_assertions_empty_when_no_assert(self):
+        """被测代码无 assert 时返回空列表（不阻断主流程）。"""
+        from src.agents.generator import _extract_existing_assertions
+
+        result = _extract_existing_assertions("def foo():\n    return 42\n")
+        assert result == []
+
+    def test_extract_existing_assertions_syntax_error_returns_empty(self):
+        """被测代码语法错误时保守返回空（不抛异常）。"""
+        from src.agents.generator import _extract_existing_assertions
+
+        result = _extract_existing_assertions("def foo(:\n")
+        assert result == []
+
+    @patch("src.agents.generator._assertion_augment_enabled", return_value=False)
+    @patch("src.agents.generator.BaseAgent._call_llm")
+    def test_generate_disabled_by_default(self, mock_call_llm, mock_enabled):
+        """3.4 默认关闭时，prompt 不注入"断言增强"段落。"""
+        mock_call_llm.return_value = "```python\ndef test_foo(): pass\n```"
+
+        agent = GeneratorAgent()
+        code = "def foo(x):\n    assert x > 0\n    return x\n"
+        agent.generate(
+            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
+        )
+        prompt = mock_call_llm.call_args[0][0]
+        assert "断言增强" not in prompt
+
+    @patch("src.agents.generator._assertion_augment_enabled", return_value=True)
+    @patch("src.agents.generator.BaseAgent._call_llm")
+    def test_generate_injects_existing_assertions_when_enabled(self, mock_call_llm, mock_enabled):
+        """3.4 显式开启时，prompt 注入现有断言段落（锚点断言）。"""
+        mock_call_llm.return_value = "```python\ndef test_foo(): pass\n```"
+
+        agent = GeneratorAgent()
+        code = "def foo(x):\n    assert x > 0\n    assert x != 0\n    return x\n"
+        agent.generate(
+            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
+        )
+        prompt = mock_call_llm.call_args[0][0]
+        assert "断言增强" in prompt
+        assert "assert x > 0" in prompt
+        assert "assert x != 0" in prompt
+
+    @patch("src.agents.generator._assertion_augment_enabled", return_value=True)
+    @patch("src.agents.generator.BaseAgent._call_llm")
+    def test_generate_no_inject_when_code_has_no_assert(self, mock_call_llm, mock_enabled):
+        """3.4 开启但被测代码无 assert 时，不注入段落（保守不追加噪声）。"""
+        mock_call_llm.return_value = "```python\ndef test_foo(): pass\n```"
+
+        agent = GeneratorAgent()
+        code = "def foo():\n    return 42\n"
+        agent.generate(
+            test_plan={"function_name": "foo"}, target_code=code, module_name="test_module"
+        )
+        prompt = mock_call_llm.call_args[0][0]
+        assert "断言增强" not in prompt
+

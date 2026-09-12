@@ -3,6 +3,13 @@
 
 支持 RAG 检索增强：在生成前先检索相似历史测试用例作为参考，
 提升生成测试的质量和风格一致性。
+
+3.4 断言增强策略（Assertion Augmentation，默认关）：
+    启用 ASSERTION_AUGMENT_ENABLE=true 时，Generator 在生成前先 AST 提取
+    被测代码中已有的 assert 语句（开发者编写或测试用例中的现有断言），
+    作为"锚点断言"注入 prompt，引导 LLM 生成更高质量的断言（避免断言弱化、
+    恒真断言、魔数未命名等异味）。该策略不改变 LLM 调用主路径，仅在
+    构造 prompt 时多一段"现有断言参考"注入。
 """
 
 from __future__ import annotations
@@ -10,6 +17,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import os
 import re
 from typing import Any
 
@@ -21,6 +29,50 @@ logger = logging.getLogger(__name__)
 
 # RAG 参考案例最大数量：避免 prompt 过长导致 token 浪费
 _MAX_RAG_REFERENCES = 3
+
+# 3.4 断言增强：AST 提取被测代码中已有 assert 语句的最大数量（避免 prompt 过长）
+_MAX_EXISTING_ASSERTIONS = 10
+
+
+def _assertion_augment_enabled() -> bool:
+    """3.4 断言增强开关：环境变量 ASSERTION_AUGMENT_ENABLE=true 时启用（默认 false）。"""
+    return os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
+
+
+def _extract_existing_assertions(target_code: str) -> list[str]:
+    """3.4 断言增强：AST 提取被测代码中已有的 assert 语句（开发者编写的锚点断言）。
+
+    扫描 target_code 中所有 ast.Assert 节点，返回源文本列表（去重，保持顺序）。
+    若被测代码本身无 assert（罕见），返回空列表。
+
+    Args:
+        target_code: 被测代码字符串。
+
+    Returns:
+        assert 语句源文本列表（最多 _MAX_EXISTING_ASSERTIONS 条，截断保留前 N）。
+    """
+    if not target_code:
+        return []
+    try:
+        tree = ast.parse(target_code)
+    except SyntaxError:
+        # 被测代码语法错误时无法 AST 解析，保守返回空（不阻断主流程）
+        return []
+    assertions: list[str] = []
+    seen: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert):
+            # 提取源文本（ast.get_source_segment 需要完整源码 + 行号上下文）
+            try:
+                seg = ast.get_source_segment(target_code, node)
+            except (AttributeError, ValueError):
+                seg = None
+            if seg and seg.strip() and seg not in seen:
+                seen.add(seg)
+                assertions.append(seg)
+            if len(assertions) >= _MAX_EXISTING_ASSERTIONS:
+                break
+    return assertions
 
 
 class GeneratorAgent(BaseAgent):
@@ -136,6 +188,19 @@ class GeneratorAgent(BaseAgent):
             if refs_text:
                 query += "\n\n以下历史测试用例可作为参考风格：\n" + "\n\n".join(refs_text)
                 logger.info("Generator 使用了 %d 个 RAG 参考案例", len(refs_text))
+
+        # 3.4 断言增强（默认关）：提取被测代码中已有 assert 作为"锚点断言"注入 prompt
+        if _assertion_augment_enabled():
+            existing_assertions = _extract_existing_assertions(target_code)
+            if existing_assertions:
+                query += (
+                    "\n\n【断言增强】被测代码中已存在以下断言，请在新测试中复用或扩展这些"
+                    "断言模式，避免生成恒真断言 / 魔数未命名 / 断言弱化等异味：\n"
+                    + "\n".join(f"- {a}" for a in existing_assertions)
+                )
+                logger.info("Generator 断言增强注入了 %d 条现有断言", len(existing_assertions))
+            else:
+                logger.debug("Generator 断言增强启用但被测代码无现有 assert，跳过注入")
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
         raw = self._call_llm_with_cache(query)
