@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from typing import Any
@@ -20,6 +21,8 @@ matplotlib.use("Agg")  # 无 GUI 环境下的后端
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy import stats as scipy_stats
+
+from experiments.statistical_analysis import _pair_by_task, cohens_d, interpret_d, interpret_p
 
 # 中文字体支持
 plt.rcParams["font.sans-serif"] = ["Arial Unicode MS", "PingFang SC", "SimHei", "DejaVu Sans"]
@@ -54,30 +57,10 @@ def load_latest_result(results_dir: str = RESULTS_DIR) -> str:
     return os.path.join(results_dir, sorted(benchmark_files, reverse=True)[0])
 
 
-# ─── 统计检验辅助函数 ────────────────────────────────────────────────────────────
-
-
-def _interpret_p(p: float) -> str:
-    """根据 p 值返回显著性标记。"""
-    if p < 0.001:
-        return "***"
-    if p < 0.01:
-        return "**"
-    if p < 0.05:
-        return "*"
-    return "n.s."
-
-
-def _interpret_d(d: float) -> str:
-    """根据 Cohen's d 返回效应量描述。"""
-    abs_d = abs(d)
-    if abs_d >= 0.8:
-        return "large"
-    if abs_d >= 0.5:
-        return "medium"
-    if abs_d >= 0.2:
-        return "small"
-    return "negligible"
+# ─── 统计检验（收敛至 statistical_analysis.py 单一规范实现）─────────────────────
+# 配对原语 _pair_by_task / Cohen's d / 显著性标记解释统一复用 experiments.statistical_analysis，
+# 本文件仅保留 scipy 原生调用（ttest_rel / mannwhitneyu）——非参数 U 检验是本脚本图表
+# 专用指标，规范模块未覆盖，故保留 scipy 直接调用（口径仍与配对原语一致）。
 
 
 def compute_significance(summary: dict[str, Any]) -> dict[str, Any]:
@@ -124,37 +107,50 @@ def compute_significance(summary: dict[str, Any]) -> dict[str, Any]:
         }
 
     # 两两配对检验：以第一个基线（通常 aitester）为参照，与其他基线逐一比较
+    # 配对原语复用 statistical_analysis._pair_by_task（按 task_id 配对，与规范模块一致）
     pairwise = []
     if len(baselines) >= 2:
         ref = baselines[0]  # 以 aitester 为主基线，对比其他方法的相对提升
-        ref_rates = [rate_by_task[ref].get(tid, 0.0) for tid in all_task_ids]
+        ref_details = details_map[ref]
 
         for bl in baselines[1:]:
-            cmp_rates = [rate_by_task[bl].get(tid, 0.0) for tid in all_task_ids]
-            n_pairs = len(ref_rates)
+            cmp_details = details_map[bl]
 
-            # 配对 t 检验
-            t_stat, p_val = scipy_stats.ttest_rel(ref_rates, cmp_rates, nan_policy="omit")
-            # Mann-Whitney U 检验（非参数）
-            u_stat, mw_p = scipy_stats.mannwhitneyu(ref_rates, cmp_rates, alternative="two-sided")
-            # Cohen's d（配对差值的标准化均值）
-            diffs = [r - c for r, c in zip(ref_rates, cmp_rates, strict=False)]
-            mean_diff = sum(diffs) / n_pairs if n_pairs else 0.0
-            std_diff = (sum((d - mean_diff) ** 2 for d in diffs) / (n_pairs - 1)) ** 0.5 if n_pairs > 1 else 1.0
-            d = mean_diff / std_diff if std_diff > 0 else 0.0
+            # 按 task_id 配对（与 statistical_analysis.paired_t_test 同一原语）
+            paired_a, paired_b, _common = _pair_by_task(ref_details, cmp_details)
+            n_pairs = len(paired_a)
 
-            sig = _interpret_p(p_val)
+            # 配对 t 检验（双尾）
+            t_stat, p_val = scipy_stats.ttest_rel(paired_a, paired_b) if n_pairs >= 3 else (float("nan"), float("nan"))
+            # Mann-Whitney U 检验（非参数，双尾；样本不足时记 NaN 与旧图表占位口径一致）
+            u_stat, mw_p = (
+                scipy_stats.mannwhitneyu(paired_a, paired_b, alternative="two-sided")
+                if n_pairs >= 3
+                else (float("nan"), float("nan"))
+            )
+            # Cohen's d 复用 statistical_analysis.cohens_d（同一配对原语，n<2 返回 NaN）
+            d, _d_n = cohens_d(ref_details, cmp_details)
+
+            # NaN/Inf 守卫（与 src/experiments/analysis.py 同口径）：
+            # 两组通过率完全恒定（全 1 / 全 0 / 配对差值无方差）时 scipy 返回 inf/NaN，
+            # 图表占位与 JSON 序列化（round(float(inf)) 产生 Infinity 非标准 token）均需有限值，
+            # 该对比记 NaN 占位而非崩溃
+            if not (math.isfinite(t_stat) and math.isfinite(p_val) and math.isfinite(d)):
+                t_stat = p_val = u_stat = mw_p = float("nan")
+                d = float("nan")
+
+            sig = interpret_p(p_val)
             pairwise.append(
                 (
                     ref,
                     bl,
-                    round(t_stat, 3),
-                    round(p_val, 4),
-                    round(u_stat, 1),
-                    round(mw_p, 4),
-                    round(d, 3),
+                    round(float(t_stat), 3) if n_pairs >= 3 else float("nan"),
+                    round(float(p_val), 4) if n_pairs >= 3 else float("nan"),
+                    round(float(u_stat), 1) if n_pairs >= 3 else float("nan"),
+                    round(float(mw_p), 4) if n_pairs >= 3 else float("nan"),
+                    round(float(d), 3),
                     sig,
-                    _interpret_d(d),
+                    interpret_d(d),
                 )
             )
 

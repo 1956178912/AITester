@@ -118,6 +118,92 @@ class TestLongBodyTruncation:
         assert "def add" in result
         assert "def sub" not in result
 
+    def test_first_layer_trim_fails_falls_to_second_layer(self):
+        """第一层裁剪（丢弃无关函数）后仍超预算 → 第二层焦点函数体截断。
+
+        构造场景：焦点函数与直接依赖两个函数体均较大，丢弃无关函数后
+        总量仍超预算，触发 _truncate_long_body 对焦点做首尾截断。
+        """
+        helper_body = "\n".join(f"    h{i} = {i}" for i in range(20))
+        focus_body = "\n".join(f"    v{i} = {i}" for i in range(40))
+        source = "def helper():\n" + helper_body + "\ndef focus():\n" + focus_body + "\n    return helper()\n"
+        # 预算逼到焦点 + 依赖刚好超、纯焦点截断可过
+        result = extract_focused_code(source, focus_function="focus", max_chars=600)
+        # 焦点函数体被截断（中间行丢弃，省略标记出现）
+        assert "# ... (truncated)" in result
+        # 直接依赖仍保留
+        assert "def helper" in result
+        assert len(result) <= 600
+
+    def test_extreme_budget_only_import_plus_truncated_focus(self):
+        """极端小预算：依赖也放不下，只剩 import + 截断焦点（last_resort 路径）。"""
+        focus_body = "\n".join(f"    v{i} = {i}" for i in range(60))
+        source = (
+            "import os\n"
+            "def big_helper():\n" + focus_body + "\n"
+            "def focus():\n" + focus_body + "\n"
+            "    return big_helper()\n"
+        )
+        # 预算小到连截断焦点都紧，强制 last_resort（只留焦点）
+        result = extract_focused_code(source, focus_function="focus", max_chars=500)
+        assert "def focus" in result
+        assert "# ... (truncated)" in result
+        # 直接依赖在极端预算下被丢弃（last_resort 路径）
+        assert "def big_helper" not in result
+        assert "import os" in result
+        assert len(result) <= 500
+
+
+class TestPrivateHelpers:
+    """code_context 私有辅助函数边界分支（提升模块覆盖率）。"""
+
+    def test_find_body_indent_skips_comments(self):
+        """_find_body_indent 跳过注释行，定位首个非注释非空行的缩进。"""
+        from src.tools.code_context import _find_body_indent
+
+        # 函数体前两行为注释/空行，第 3 行为实际代码（8 空格缩进，方法场景）
+        lines = ["    # leading comment", "    ", "        x = 1"]
+        assert _find_body_indent(lines) == 8
+
+    def test_find_body_indent_fallback_to_4(self):
+        """全注释/空函数体 → 回退默认 4 空格缩进。"""
+        from src.tools.code_context import _find_body_indent
+
+        assert _find_body_indent(["def f():", "# only comment"]) == 4
+
+    def test_truncate_long_body_short_body_returned_whole(self):
+        """_truncate_long_body：函数体 ≤ 首尾保留行数（16 行）时整体返回不截断。"""
+        import ast
+
+        from src.tools.code_context import _truncate_long_body
+
+        source_lines = ["def f():"] + [f"    x{i} = {i}" for i in range(14)]
+        node = ast.parse("\n".join(source_lines)).body[0]
+        result = _truncate_long_body(source_lines, node)
+        assert "# ... (truncated)" not in result
+        assert result == "\n".join(source_lines)
+
+    def test_render_segment_plain_namespace_returns_empty(self):
+        """_render_segment：无 _prebuilt_text 属性的 SimpleNamespace → 空串。"""
+        from types import SimpleNamespace
+
+        from src.tools.code_context import _render_segment
+
+        assert _render_segment(SimpleNamespace()) == ""
+
+    def test_is_direct_dep_missing_focus_returns_false(self):
+        """_is_direct_dep：焦点函数不在 top_level_funcs 时返回 False。"""
+        import ast
+
+        from src.tools.code_context import _is_direct_dep
+
+        source = "def target():\n    return 1\n"
+        top = {n.name: n for n in ast.parse(source).body}
+        # 焦点 "ghost" 不在集合中 → 恒 False（无论 candidate 是什么）
+        assert _is_direct_dep("ghost", "target", top) is False
+        # 焦点存在时，非直接调用的函数判为 False
+        assert _is_direct_dep("target", "unrelated", top) is False
+
 
 class TestTruncateCodeIntegration:
     """BaseAgent.truncate_code 与 AST 截取的集成。"""
