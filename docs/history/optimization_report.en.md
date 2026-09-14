@@ -1,731 +1,727 @@
 > **Language**: [中文版](optimization_report.md) | English (this document)
 
-> **语言 / Language**：[English](optimization_report.en.md) | 简体中文（本文）
+> **Archive note (2026-09-15)**: This document was originally `OPTIMIZATION_REPORT.md` at the repository root; it is now archived under `docs/history/` (historical round work records, not a currently maintained document). See the CHANGELOG and the global decision log in the user workspace for current-round optimization decisions.
 
-> **Archive Note (2026-09-15)**: This document was originally the root-level `OPTIMIZATION_REPORT.md`, now archived under `docs/history/` (historical round work records, not a currently maintained document). Optimization decisions for current rounds are in the CHANGELOG and the user workspace's global decision log.
+# AITester Project Optimization Report
 
-# AITester 项目优化报告
-
-> 本报告为 2026-09-11 优化轮次的完整交付记录。阶段 0 基线与阶段 1 优化点清单
-> 详见 `optimization_plan.md`；阶段 3-5 已在同一轮内完成，阶段 6 推送与 PR 待用户最终确认。
+> This report is the complete delivery record of the 2026-09-11 optimization round. The Phase 0 baseline and the Phase 1
+> optimization points list are detailed in `optimization_plan.md`; Phases 3-5 were completed within the same round;
+> Phase 6 push and PR await the user's final confirmation.
 >
-> **后续轮次**：2026-09-12 轮次（文档数据对齐批次，N-01~N-04）的完整记录见文末
-> 「附录：2026-09-12 轮次」；2026-09-13 轮次（文档数据对齐批次，M-01~M-03）的完整记录见
-> 「附录：2026-09-13 轮次」；2026-09-13 系统功能增强轮次（3.1/3.4/4.1/2.3/1.5）的完整记录见
-> 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `optimization_plan.md` 同名章节。
-> 2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）与 4.2 半开探测批次的完整记录见
-> 「附录：2026-09-14 改进清单批次」与「附录：2026-09-14 4.2 半开探测批次」。
+> **Subsequent rounds**: for the 2026-09-12 round (documentation data alignment batch, N-01~N-04), see the complete
+> record in the appendix at the end, "Appendix: 2026-09-12 Round"; for the 2026-09-13 round (documentation data alignment batch, M-01~M-03), see
+> "Appendix: 2026-09-13 Round"; for the 2026-09-13 system feature enhancement round (3.1/3.4/4.1/2.3/1.5), see the complete record in
+> "Appendix: 2026-09-13 System Feature Enhancement Round". See the same-named sections in `optimization_plan.md` for the points list and implementation batches.
+> For the 2026-09-14 improvement checklist batch (G-01~G-04 + 3.4 + 3.5) and the 4.2 half-open probe batch, see the complete records in
+> "Appendix: 2026-09-14 Improvement Checklist Batch" and "Appendix: 2026-09-14 4.2 Half-Open Probe Batch".
 >
-> **当前最新基线（2026-09-14 4.2 半开探测批次）**：full测试推进至
-> **1237 passed / 0 failed**，`ruff check` / `ruff format --check` 全绿；
-> 下文 1163（批次③）/ 1225（改进清单批次）/ 1158（F 批次）相关条目保留为历史轮次记录，
-> 不代表当前最新基线。
+> **Current latest baseline (2026-09-14 4.2 half-open probe batch)**: the full-suite tests advanced to
+> **1237 passed / 0 failed**, `ruff check` / `ruff format --check` all green;
+> the 1163 (batch ③) / 1225 (improvement checklist batch) / 1158 (F batch) items below are kept as historical round records and
+> do not represent the current latest baseline.
 
-## 阶段 0：基线检查
+## Phase 0: Baseline Check
 
-### Git 状态（本次执行时的实测快照）
+### Git Status (measured snapshot at the time of this run)
 
-- **分支**：`main`，工作区 clean
-- **本地领先**：`origin/main` 15 个提交（本次会话开始时的 `ahead` 计数；阶段 6 推送后归零）
-- **远程**：`https://github.com/1956178912/AITester.git`
+- **Branch**: `main`, clean working tree
+- **Local ahead of**: `origin/main` by 15 commits (the `ahead` count at session start; zeroed after the Phase 6 push)
+- **Remote**: `https://github.com/1956178912/AITester.git`
 
-### 项目结构
+### Project Structure
 
 ```
 AITester/
-├── src/                    # 核心包（find_packages 会收录）
-│   ├── agents/             # 多智能体（Planner/Generator/Executor/Debugger/ErrorClassifier）
-│   ├── api/                # API 管理与多模型轮换
-│   ├── cli/                # 命令行入口（app.py + output.py）
-│   ├── config/             # 配置生成与管理（config_manager.py + config_generator.py）
-│   ├── datasets/           # SWE-bench/Defects4J 加载与合成数据集
-│   ├── db/                 # MySQL 客户端
-│   ├── experiments/        # 实验分析与报告
-│   ├── graph/              # LangGraph 工作流编排
-│   ├── prompts/            # 提示词模板
-│   ├── rag/                # 检索增强生成
-│   ├── reports/            # 实验报告生成
-│   ├── tools/              # 工具（代码分析、补丁应用、依赖管理）
-│   └── utils/              # 通用工具（辅助函数、异常、日志）
-├── tests/                  # ~38 个测试文件
-├── examples/               # 示例代码
-├── experiments/            # 实验输出与中间数据（部分被 .gitignore 排除）
-├── scripts/                # 辅助脚本
-├── docs/                   # 文档
-├── config.py               # 全局配置（集中管理环境变量）
-├── llm_configs.json        # LLM 配置（按 provider 分组的元数据，不含真实 key）
-├── setup.py                # 包管理
-├── main.py                 # CLI 薄封装（委托给 src/cli/app.py）
-├── requirements.txt        # 依赖锁定（== 版本）
-├── requirements.lock       # full锁文件（pip freeze 产物）
-├── .env.example            # 环境变量示例（模板）
-├── .env.local.template     # LLM 敏感配置模板
-├── .github/workflows/ci.yml  # CI 配置（测试 + 安全扫描）
+├── src/                    # Core package (collected by find_packages)
+│   ├── agents/             # Multi-agent (Planner/Generator/Executor/Debugger/ErrorClassifier)
+│   ├── api/                # API management and multi-model rotation
+│   ├── cli/                # CLI entry (app.py + output.py)
+│   ├── config/             # Configuration generation and management (config_manager.py + config_generator.py)
+│   ├── datasets/           # SWE-bench/Defects4J loading and synthetic datasets
+│   ├── db/                 # MySQL client
+│   ├── experiments/        # Experiment analysis and reporting
+│   ├── graph/              # LangGraph workflow orchestration
+│   ├── prompts/            # Prompt templates
+│   ├── rag/                # Retrieval-augmented generation
+│   ├── reports/            # Experiment report generation
+│   ├── tools/              # Tools (code analysis, patch application, dependency management)
+│   └── utils/              # General utilities (helpers, exceptions, logging)
+├── tests/                  # ~38 test files
+├── examples/               # Sample code
+├── experiments/            # Experiment output and intermediate data (partly excluded by .gitignore)
+├── scripts/                # Helper scripts
+├── docs/                   # Documentation
+├── config.py               # Global configuration (centralized management of environment variables)
+├── llm_configs.json        # LLM configuration (provider-grouped metadata, no real keys)
+├── setup.py                # Package management
+├── main.py                 # Thin CLI wrapper (delegates to src/cli/app.py)
+├── requirements.txt        # Dependency lock (== versions)
+├── requirements.lock       # Full lock file (pip freeze artifact)
+├── .env.example            # Environment variable example (template)
+├── .env.local.template     # LLM sensitive configuration template
+├── .github/workflows/ci.yml  # CI configuration (tests + security scan)
 └── ...
 ```
 
-### 技术栈与包管理器
+### Tech Stack & Package Manager
 
-- **语言**：Python 3.14.6（venv）
-- **框架**：langchain 1.3.15、langchain-openai 1.4.3、langgraph 1.2.11
-- **数据库**：pymysql 1.2.0、DBUtils 3.1.2
-- **测试**：pytest 9.1.1、pytest-cov 7.1.0、pytest-timeout 2.4.0
-- **Lint**：ruff 0.16.3
-- **依赖管理**：pip（requirements.txt == 锁定 + requirements.lock full锁）
-- **入口**：`aitester=src.cli.app:cli`（setup.py console_scripts）
+- **Language**: Python 3.14.6 (venv)
+- **Frameworks**: langchain 1.3.15, langchain-openai 1.4.3, langgraph 1.2.11
+- **Database**: pymysql 1.2.0, DBUtils 3.1.2
+- **Testing**: pytest 9.1.1, pytest-cov 7.1.0, pytest-timeout 2.4.0
+- **Lint**: ruff 0.16.3
+- **Dependency management**: pip (requirements.txt == lock + requirements.lock full lock)
+- **Entry point**: `aitester=src.cli.app:cli` (setup.py console_scripts)
 
-### 命令清单
+### Command Inventory
 
-| 操作 | 命令 |
-|------|------|
-| 安装依赖 | `pip install -r requirements.txt` |
-| 构建/打包 | `pip install .` 或 `python -m build` |
-| 运行测试 | `python -m pytest tests/` |
-| 覆盖率 | `python -m pytest tests/ --cov=src --cov-report=term` |
+| Operation | Command |
+|-----------|---------|
+| Install dependencies | `pip install -r requirements.txt` |
+| Build/package | `pip install .` or `python -m build` |
+| Run tests | `python -m pytest tests/` |
+| Coverage | `python -m pytest tests/ --cov=src --cov-report=term` |
 | Lint | `ruff check .` |
-| 格式化 | `ruff format --check .` |
-| 类型检查 | 无显式 mypy/pyright 配置（项目未启用静态类型检查器） |
-| 安全扫描 | `pip-audit -r requirements.txt`（CI 中执行） |
+| Format | `ruff format --check .` |
+| Type check | No explicit mypy/pyright configuration (the project does not use a static type checker) |
+| Security scan | `pip-audit -r requirements.txt` (run in CI) |
 
-### 基线结果
+### Baseline Results
 
-| 检查项 | 命令 | 结果 | 备注 |
+| Check | Command | Result | Notes |
 |--------|------|------|------|
-| Ruff Lint | `ruff check .` | ✅ 通过 | All checks passed |
-| Ruff 格式 | `ruff format --check .` | ✅ 通过 | 121 files already formatted |
-| 单元测试 | `python -m pytest tests/` | ✅ 通过 | 1020 passed, 2 warnings, 28.4s |
-| 覆盖率 | `--cov=src` | ✅ 91% | TOTAL 3536/326 miss = 91% |
-| 类型检查 | 无 mypy 配置 | ⚠️ 不适用 | 项目未引入静态类型检查器 |
-| 构建 | `pip install .` | ⚠️ 未验证 | 基线未执行，需阶段 4 补充 |
+| Ruff Lint | `ruff check .` | ✅ passed | All checks passed |
+| Ruff format | `ruff format --check .` | ✅ passed | 121 files already formatted |
+| Unit tests | `python -m pytest tests/` | ✅ passed | 1020 passed, 2 warnings, 28.4s |
+| Coverage | `--cov=src` | ✅ 91% | TOTAL 3536/326 miss = 91% |
+| Type check | No mypy config | ⚠️ N/A | The project has not introduced a static type checker |
+| Build | `pip install .` | ⚠️ unverified | Not run at baseline; to be covered in Phase 4 |
 
-### 敏感信息说明
+### Sensitive Information Notes
 
-- `.env`、`.env.local`、`.env.local.bak` 均被 `.gitignore` 排除，未被 Git 跟踪
-- `config.py` 从 `.env.local` 读取 LLM 敏感配置（LLM_N_* 变量），不硬编码密钥
-- `llm_configs.json` 仅记录 provider 元数据，不含真实 API Key
-- ⚠️ 本地 `.env` 文件含真实密钥（OPENAI_API_KEY、OPENAI_API_KEY_2、OPENAI_API_KEY_3），但**未被 Git 跟踪**
+- `.env`, `.env.local`, `.env.local.bak` are all excluded by `.gitignore` and not tracked by Git
+- `config.py` reads LLM sensitive configuration (LLM_N_* variables) from `.env.local`; no hardcoded keys
+- `llm_configs.json` records only provider metadata; no real API Keys
+- ⚠️ The local `.env` file contains real keys (OPENAI_API_KEY, OPENAI_API_KEY_2, OPENAI_API_KEY_3) but is **not tracked by Git**
 
 ---
 
-## 阶段 1：项目检索与优化点识别
+## Phase 1: Project Search & Optimization Point Identification
 
-优化点全表（16 项，含去重后证据、影响、优先级、验证方式）见 `optimization_plan.md`「阶段 1 优化点清单」。
-要点摘要：
+For the full points table (16 items, with evidence after deduplication, impact, priority, verification), see the "Phase 1 Optimization Points List" in `optimization_plan.md`.
+Key points summary:
 
-- **文档陈旧（P2/P3，4 项）**：README 幽灵测试文件 4 行（D-01）、用例数/覆盖率数据陈旧（D-02/D-08）、消融开关措辞与 .env.example 不一致（D-09）
-- **日志脱敏盲区（P2，D-07）**：`logging_utils.py` 旧正则仅覆盖 `sk-` 前缀 + 字母数字 20+ 位，本地真实密钥中「带点号分段的长 sk- 型」「无 sk- 前缀长 hex/base64」两类可绕过脱敏 → 已扩展正则并补 14 个合成占位符用例
-- **沙箱审计（P1 待确认，T-04）**：executor subprocess 边界需专项审计，本轮不做（高风险、需设计文档，列入后续建议）
-- **密钥泄露（P1 提示项，D-05）**：本地 `.env` / `src/.env.local` 含真实 API Key 明文（sk- 前缀 2 条 + 无 sk- 前缀长 key 1 条），均未被 Git 跟踪（`git ls-files` 核实）；**不在本次代码改动范围**，建议用户尽快轮换这些 key
-- **测试可维护性（P3，T-01）**：各测试文件重复构造 LLMConfig/APIManager mock，可下沉公共 fixture —— 重构面大，列为后续建议
-- **CLI 分支覆盖（P2，T-03）**：parallel/json 边界缺用例 → 已补 4 个参数校验用例
-- **本地配置漂移（P3，D-04）**：本地 `.env` 的 `DOCKER_IMAGE=python:3.11-slim` 与模板/默认 3.12-slim 不一致 → 已在本地修正（`.env` 不入库，无 commit）
+- **Stale docs (P2/P3, 4 items)**: README ghost test files 4 rows (D-01), stale case-count/coverage data (D-02/D-08), ablation switch wording inconsistent with .env.example (D-09)
+- **Log redaction blind spot (P2, D-07)**: the old regex in `logging_utils.py` covered only the `sk-` prefix + 20+ alphanumeric characters; two types of local real keys — "long sk- type with dotted segments" and "long hex/base64 without sk- prefix" — could bypass redaction → the regex was extended and 14 synthetic placeholder cases were added
+- **Sandbox audit (P1 to confirm, T-04)**: the executor subprocess boundary needs a dedicated audit; not done this round (high risk, needs a design doc; listed as a follow-up suggestion)
+- **Key leak (P1 notification, D-05)**: local `.env` / `src/.env.local` contain real API keys in plaintext (2 sk- prefixed + 1 long key without sk- prefix), none tracked by Git (verified with `git ls-files`); **out of this round's code change scope**; the user is advised to rotate these keys as soon as possible
+- **Test maintainability (P3, T-01)**: each test file repeatedly constructs LLMConfig/APIManager mocks; a common fixture could be extracted — the refactoring scope is large; listed as a follow-up suggestion
+- **CLI branch coverage (P2, T-03)**: missing parallel/json boundary cases → 4 argument validation cases added
+- **Local config drift (P3, D-04)**: the local `.env`'s `DOCKER_IMAGE=python:3.11-slim` inconsistent with the template/default 3.12-slim → fixed locally (`.env` not in the repo; no commit)
 
-## 阶段 2：优化计划
+## Phase 2: Optimization Plan
 
-计划表（批次 A/B/C + 后续建议 + 需确认项）见 `optimization_plan.md`「本次实施范围」。
-用户已确认：① 批次 B1 脱敏正则扩展纳入本轮；② 本地 .env 顺手改为 3.12-slim；③ 阶段 4 full验证；④ 推送 main 并创建 PR。
+The plan table (batches A/B/C + follow-up suggestions + items to confirm) is in `optimization_plan.md` "Scope of This Implementation".
+The user confirmed: ① batch B1 redaction regex extension included this round; ② local .env changed to 3.12-slim along the way; ③ Phase 4 full verification; ④ push main and create a PR.
 
-## 阶段 3：实施优化
+## Phase 3: Optimization Implementation
 
-全部改动已提交（提交历史见 `git log`），对应关系：
+All changes are committed (commit history in `git log`); the mapping is:
 
-| 提交 | 内容 |
+| Commit | Content |
 |------|------|
-| `40ef2e7` docs(readme) | 移除测试状态表中 4 个不存在的测试文件（A1） |
-| `cd058b4` docs(readme) | 用例数/覆盖率对齐 0.9.11 基线（A2 第一阶段） |
-| `4c7e17d` docs(readme) | 消融实验开关配置位置措辞对齐（A3） |
-| `0558090` fix(utils) | 日志脱敏正则覆盖点号/无 sk- 前缀密钥 + 新增 test_logging_utils.py（B1） |
-| `e5252a6` fix(packaging) | setup.py 声明 py_modules 收录根级 config；CLI 参数校验补测（B2 + 打包修复） |
-| `94433a2` style(tests) | ruff format 归一新增测试文件 |
-| `68fb35f` docs(changelog) | 补充 Unreleased 优化轮次条目 + README 用例数对齐 1038（A2 收敛） |
-| `80e2f05` fix(utils) | 测试与注释中的真实密钥形态改为合成占位符（敏感信息零容忍） |
-| `ab9edb7` chore(changelog) | CHANGELOG 同步脱敏占位符口径 |
+| `40ef2e7` docs(readme) | Removed 4 non-existent test files from the test status table (A1) |
+| `cd058b4` docs(readme) | Case count/coverage aligned to the 0.9.11 baseline (A2, first stage) |
+| `4c7e17d` docs(readme) | Ablation experiment switch configuration location wording aligned (A3) |
+| `0558090` fix(utils) | Log redaction regex covers dots/keys without sk- prefix + new test_logging_utils.py (B1) |
+| `e5252a6` fix(packaging) | setup.py declares py_modules to collect root-level config; CLI argument validation test backfill (B2 + packaging fix) |
+| `94433a2` style(tests) | ruff format normalization of new test files |
+| `68fb35f` docs(changelog) | Added Unreleased optimization round entry + README case count aligned to 1038 (A2 convergence) |
+| `80e2f05` fix(utils) | Real-key shapes in tests and comments replaced with synthetic placeholders (zero tolerance for sensitive info) |
+| `ab9edb7` chore(changelog) | CHANGELOG synced to the redaction placeholder baseline |
 
-本地 .env 的 DOCKER_IMAGE 修正（C1）为工作区外文件，无 commit。
+The local .env DOCKER_IMAGE fix (C1) is an out-of-repo file; no commit.
 
-## 阶段 4：全面测试
+## Phase 4: Full Testing
 
-本次执行实测结果（venv Python 3.14.6，命令与 CI 对齐）：
+Measured results of this run (venv Python 3.14.6, commands aligned with CI):
 
-| 检查项 | 命令 | 结果 | 备注 |
+| Check | Command | Result | Notes |
 |--------|------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 27.7s | 2 个 warning 为 scipy 数值精度提示，非代码问题 |
-| Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3（与 lock 一致） |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ requirements.txt（19 项）与 requirements.lock（130 项）一致 | CI 同款检查 |
-| 构建 | `python -m build --wheel` | ✅ 构建 aitester-0.9.11-py3-none-any.whl（107 文件） | 已验证 config.py 进 wheel（修复点回归） |
-| 安全扫描 | `pip-audit -r requirements.txt --no-deps --ignore-vuln ...` | ✅ No known vulnerabilities found, 5 ignored | 豁免清单与 CI 一致（chromadb 暂无修复版，见 ci.yml 注释） |
-| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用 | 项目未引入静态类型检查器，保持现状 |
-| 覆盖率 | `pytest --cov=src` | ✅ 91% | 与 CHANGELOG/README 口径一致 |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 27.7s | The 2 warnings are scipy numerical precision notes, not a code issue |
+| Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 (consistent with the lock) |
+| Format | `ruff format --check .` | ✅ 124 files already formatted | |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ requirements.txt (19 items) and requirements.lock (130 items) consistent | Same check as CI |
+| Build | `python -m build --wheel` | ✅ built aitester-0.9.11-py3-none-any.whl (107 files) | Verified config.py enters the wheel (regression of the fix point) |
+| Security scan | `pip-audit -r requirements.txt --no-deps --ignore-vuln ...` | ✅ No known vulnerabilities found, 5 ignored | Exemption list consistent with CI (chromadb has no fixed version yet; see ci.yml comments) |
+| Type check | No mypy/pyright config | ⚠️ N/A | The project has not introduced a static type checker; kept as-is |
+| Coverage | `pytest --cov=src` | ✅ 91% | Consistent with the CHANGELOG/README baseline |
 
-## 阶段 5：更新文档
+## Phase 5: Documentation Update
 
-- `CHANGELOG.md`：Unreleased 轮次条目已补齐（安全/打包/测试/文档四节，见 `git log` 中 `68fb35f`、`80e2f05`、`ab9edb7`）
-- `README.md`：用例数 1038 / 覆盖率 91% 已对齐；幽灵测试文件行已删；消融开关措辞已对齐
-- `optimization_plan.md` / `optimization_report.md`：阶段 0-5 的完整记录（本文件 + 计划文件），随本轮一并提交
-- 本地 `.env`：DOCKER_IMAGE → 3.12-slim（不入库，无文档影响）
+- `CHANGELOG.md`: Unreleased round entry completed (security/packaging/testing/documentation sections; see `68fb35f`, `80e2f05`, `ab9edb7` in `git log`)
+- `README.md`: case count 1038 / coverage 91% aligned; ghost test file rows removed; ablation switch wording aligned
+- `optimization_plan.md` / `optimization_report.md`: complete record of Phases 0-5 (this file + the plan file), committed together with this round
+- Local `.env`: DOCKER_IMAGE → 3.12-slim (not in the repo; no doc impact)
 
-## 阶段 6：上传 GitHub
+## Phase 6: Upload to GitHub
 
-用户已确认「推送 main 并创建 PR」。实际执行结果：**推送仍受阻于网络**——
-2026-09-11 19:07 复测：`curl https://github.com` 短连接可达（HTTP 200），但 `git push`
-两次（默认 60s / 180s 超时窗口内）均失败：
-`Failed to connect to github.com port 443 after 75003 ms: Couldn't connect to server`。
-特征：HTTP GET 能通、git 的长连接 443 握手挂起（疑似出站链路对 git 协议大包/长连接有限制）。
-工作区 clean，commit 状态完好。
+The user confirmed "push main and create a PR". Actual execution: **the push is still blocked by the network** —
+retest at 2026-09-11 19:07: `curl https://github.com` short connection reachable (HTTP 200), but `git push`
+failed both times (within the default 60s / 180s timeout windows):
+`Failed to connect to github.com port 443 after 75003 ms: Couldn't connect to server`.
+Signature: HTTP GET passes, but git's long-connection 443 handshake hangs (the outbound link appears to restrict large packets/long connections of the git protocol).
+The working tree is clean; the commit state is intact.
 
-将推送内容：`origin/main`（d42bbdd）落后的全部 **17 个 commit**（`bd4de49`…`eaf7931`，
-完整清单见 `git log refs/remotes/origin/main..main --oneline`；较上一版记录多出 1 个
-`eaf7931` docs 收尾提交）。
+Content to push: all **17 commits** (`bd4de49`…`eaf7931`, one more `eaf7931` docs wrap-up commit than the previous record) that `origin/main` (d42bbdd) is behind (the full list in `git log refs/remotes/origin/main..main --oneline`).
 
-手动执行命令（恢复网络/代理后）：
+Manual commands (after network/proxy recovery):
 
 ```bash
 cd /Users/wangchenyu/Workspace/AITester
-# 1. 推送 main（若 443 握手再次挂起，可先试降档再推：
+# 1. Push main (if the 443 handshake hangs again, try falling back first:
 #    git config http.version HTTP/1.1
-#    或设置代理：git config http.proxy http://127.0.0.1:<port>）
+#    or set a proxy: git config http.proxy http://127.0.0.1:<port>)
 git push origin main
 
-# 2. 创建 PR（gh 未安装，可用 GitHub Web 或先安装 gh 执行）
+# 2. Create the PR (gh is not installed; use the GitHub Web UI or install gh first)
 gh pr create --base main \
-  --title "chore(optimize): 0.9.11 优化轮次——文档对齐、日志脱敏扩展、打包修复与 CI 安全门禁同步" \
+  --title "chore(optimize): 0.9.11 optimization round — doc alignment, log redaction extension, packaging fix, and CI security gate sync" \
   --body-file /dev/stdin <<'EOF'
-## 背景
-0.9.11 基线（1020 用例 / 91% 覆盖 / ruff 全绿）上的优化轮次：修复 README 陈旧数据与幽灵条目、日志脱敏正则盲区、setup.py 打包缺根级 config、pip-audit 豁免清单漂移。
+## Background
+An optimization round on the 0.9.11 baseline (1020 cases / 91% coverage / all ruff green): fixed stale README data and ghost entries, log redaction regex blind spots, setup.py packaging missing the root-level config, and pip-audit exemption list drift.
 
-## 变更内容
-- **fix(utils)**：日志脱敏正则扩展（带点号分段 sk- 型 / 无 sk- 前缀长 hex·base64）+ 测试注释真实密钥形态改合成占位符（敏感信息零容忍）
-- **fix(packaging)**：setup.py `py_modules=["config"]`（正式安装后入口不再 ModuleNotFoundError）+ extras 补全
-- **chore(ci)**：pip-audit 豁免清单同步实测漏洞 ID（CVE-4583x → PYSEC-2026-3813/3814/3815）
-- **fix(datasets / experiments / utils)**：Defects4J O(n²) 消除、显著性 skipped 条目 KeyError、extract_code_block 误吞标识符行
-- **docs(readme / changelog / optimize)**：用例数 1038 对齐、幽灵测试文件行删除、消融开关措辞、OPTIMIZATION_PLAN/REPORT 入库
+## Changes
+- **fix(utils)**: extended the log redaction regex (dotted-segment sk- type / long hex·base64 without sk- prefix) + real-key shapes in test comments replaced with synthetic placeholders (zero tolerance for sensitive info)
+- **fix(packaging)**: setup.py `py_modules=["config"]` (the entry no longer raises ModuleNotFoundError after a proper install) + extras completion
+- **chore(ci)**: pip-audit exemption list synced to the measured vulnerability IDs (CVE-4583x → PYSEC-2026-3813/3814/3815)
+- **fix(datasets / experiments / utils)**: Defects4J O(n²) elimination, significance skipped-entry KeyError, extract_code_block swallowing identifier lines
+- **docs(readme / changelog / optimize)**: case count aligned to 1038, ghost test file rows removed, ablation switch wording, OPTIMIZATION_PLAN/REPORT checked in
 
-## 测试结果
-| 检查项 | 命令 | 结果 |
+## Test Results
+| Check | Command | Result |
 |--------|------|------|
-| 单元测试 | `pytest tests/ -q` | 1038 passed / 0 failed（27.7s） |
+| Unit tests | `pytest tests/ -q` | 1038 passed / 0 failed (27.7s) |
 | Lint | `ruff check .` | All checks passed |
-| 格式化 | `ruff format --check .` | 124 files already formatted |
-| lock 同步 | `python scripts/check_lock_sync.py` | 通过（19 vs 130 项一致） |
-| 构建 | `python -m build --wheel` | aitester-0.9.11-py3-none-any.whl（config.py 已验证入包） |
-| 安全扫描 | `pip-audit`（同 CI 豁免清单） | No known vulnerabilities found, 5 ignored |
-| 覆盖率 | `pytest --cov=src` | 91%（与 README/CHANGELOG 口径一致） |
+| Format | `ruff format --check .` | 124 files already formatted |
+| Lock sync | `python scripts/check_lock_sync.py` | passed (19 vs 130 items consistent) |
+| Build | `python -m build --wheel` | aitester-0.9.11-py3-none-any.whl (config.py verified in the package) |
+| Security scan | `pip-audit` (same exemption list as CI) | No known vulnerabilities found, 5 ignored |
+| Coverage | `pytest --cov=src` | 91% (consistent with the README/CHANGELOG baseline) |
 
-## 风险与回滚
-- 脱敏正则扩展为纯新增匹配分支，旧用例全部通过（1038 无失败），无误伤回归；回滚单条 `git revert 0558090` 即可
-- setup.py 修复为纯声明补齐，对 editable 安装无行为变化；回滚 `git revert e5252a6`
-- pip-audit 豁免漂移为 CI 配置同步，无运行时影响；回滚 `git revert 3bf75bb`
-- 本 PR 不含敏感信息（真实密钥仅存在于 gitignored 的本地 .env，提交历史已用合成占位符归一，见 80e2f05）
+## Risks & Rollback
+- The redaction regex extension is purely additive matching branches; all old cases passed (1038, no failures) — no collateral regression; roll back with a single `git revert 0558090`
+- The setup.py fix is purely a declaration completion; no behavior change for editable installs; roll back with `git revert e5252a6`
+- The pip-audit exemption drift is a CI config sync; no runtime impact; roll back with `git revert 3bf75bb`
+- This PR contains no sensitive information (real keys exist only in the gitignored local .env; the commit history has been normalized to synthetic placeholders, see 80e2f05)
 
-## 检查清单
-- [x] 构建 / 测试 / lint / 格式化 / lock 同步全绿
-- [x] full 1038 用例通过，覆盖率 91% 与文档对齐
-- [x] 无敏感信息入库（git ls-files 核实 .env 系未跟踪）
-- [x] 无未说明的破坏性变更（setup.py extras 新增为增量）
-- [x] 文档（README/CHANGELOG/OPTIMIZATION_*）与代码一致
+## Checklist
+- [x] build / tests / lint / format / lock sync all green
+- [x] full 1038 cases passed; coverage 91% aligned with the docs
+- [x] no sensitive information in the repo (git ls-files confirms the .env family is untracked)
+- [x] no undocumented breaking changes (setup.py extras additions are incremental)
+- [x] docs (README/CHANGELOG/OPTIMIZATION_*) consistent with the code
 
-## 本轮追加验证（2026-09-11 19:06-19:07）
+## Additional Verification This Round (2026-09-11 19:06-19:07)
 
-| 检查项 | 命令 | 结果 | 备注 |
+| Check | Command | Result | Notes |
 |--------|------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.07s | 2 warning 为 scipy 精度提示 |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.07s | 2 warnings are scipy precision notes |
 | Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
-| 构建 | `python -m build --wheel` | ✅ aitester-0.9.11-py3-none-any.whl | config.py 入包已验证 |
-| 安全扫描 | `pip-audit`（CI 同款豁免） | ✅ No known vulnerabilities found, 5 ignored | 豁免 PYSEC-2026-311/3813/3814/3815 |
-| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91%（3536 行） | 与文档口径一致 |
-| 推送 | `git push origin main` | ❌ 443 握手挂起（75s 超时 ×2） | 17 commit 已就绪，见上节手动命令 |
+| Format | `ruff format --check .` | ✅ 124 files already formatted | |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 items consistent | |
+| Build | `python -m build --wheel` | ✅ aitester-0.9.11-py3-none-any.whl | config.py entering the package verified |
+| Security scan | `pip-audit` (same exemptions as CI) | ✅ No known vulnerabilities found, 5 ignored | PYSEC-2026-311/3813/3814/3815 exempted |
+| Coverage | `pytest --cov=src` | ✅ TOTAL 91% (3536 lines) | Consistent with the doc baseline |
+| Push | `git push origin main` | ❌ 443 handshake hung (75s timeout ×2) | 17 commits ready; see the manual commands above |
 EOF
 ```
 
-> 若 `gh` 不可用：浏览器打开 `https://github.com/1956178912/AITester/compare/main...main`（推送后自动出现 compare 链接）→ Create new pull request，正文用上面 `## 背景` 到 `## 检查清单` 的内容。
+> If `gh` is unavailable: open `https://github.com/1956178912/AITester/compare/main...main` in the browser (the compare link appears automatically after the push) → Create new pull request, using the content from `## 背景` (Background) to `## 检查清单` (Checklist) above as the body.
 
-## 阶段 7：最终报告
+## Phase 7: Final Report
 
-### 完成状态
-- 阶段 0-5：**全部完成**，工作区 clean，本地 main 领先 origin/main 17 个 commit
-- 阶段 6：**受阻于网络**（2026-09-11 19:07 复测：HTTP 短连接可达但 git 443 长连接握手挂起，
-  两次 push 失败；gh 未安装），17 个 commit 已就绪、未推送；手动命令与 PR 正文见上节，
-  恢复网络后 `git push origin main` 即完成
+### Completion Status
+- Phases 0-5: **all completed**, working tree clean, local main 17 commits ahead of origin/main
+- Phase 6: **blocked by the network** (retest at 2026-09-11 19:07: HTTP short connection reachable but the git 443 long-connection handshake hangs;
+  two push failures; gh not installed). The 17 commits are ready but unpushed; manual commands and the PR body are in the previous section;
+  after the network recovers, `git push origin main` completes it
 
-### 优化项清单及结果
-| 项 | 结果 |
+### Optimization Items List and Results
+| Item | Result |
 |----|------|
-| D-01 README 幽灵测试文件 4 行 | ✅ 已删（40ef2e7） |
-| D-02/D-08 用例数/覆盖率陈旧 | ✅ 对齐 1038/91%（cd058b4 + 68fb35f） |
-| D-09 消融开关措辞 | ✅ 对齐（4c7e17d） |
-| D-04 本地 .env DOCKER_IMAGE 漂移 | ✅ 本地修正 3.11→3.12-slim（不入库） |
-| D-07 日志脱敏正则盲区 | ✅ 扩展 + 14 个合成占位符用例（0558090） |
-| D-05 本地真实密钥 | ⚠️ 仅提醒，未动代码；`80e2f05` 已将测试/注释中的真实密钥形态归一为占位符；**建议尽快轮换 .env 中的 LLM key** |
-| B2 CLI 参数校验缺口 | ✅ 补 4 用例（e5252a6） |
-| T-01 公共 fixture 下沉 / T-04 executor 沙箱审计 | 📋 列为后续建议（重构面大 / 需设计文档） |
-| 打包缺陷（发现于本轮验证） | ✅ setup.py py_modules 修复（e5252a6） |
-| CI pip-audit 豁免漂移 | ✅ 同步（3bf75bb） |
+| D-01 README ghost test files 4 rows | ✅ removed (40ef2e7) |
+| D-02/D-08 stale case count/coverage | ✅ aligned to 1038/91% (cd058b4 + 68fb35f) |
+| D-09 ablation switch wording | ✅ aligned (4c7e17d) |
+| D-04 local .env DOCKER_IMAGE drift | ✅ fixed locally 3.11→3.12-slim (not in the repo) |
+| D-07 log redaction regex blind spot | ✅ extended + 14 synthetic placeholder cases (0558090) |
+| D-05 local real keys | ⚠️ notification only, no code change; `80e2f05` normalized real-key shapes in tests/comments to placeholders; **recommend rotating the LLM keys in .env as soon as possible** |
+| B2 CLI argument validation gap | ✅ 4 cases added (e5252a6) |
+| T-01 common fixture extraction / T-04 executor sandbox audit | 📋 listed as follow-up suggestions (large refactoring scope / needs a design doc) |
+| Packaging defect (found during this round's verification) | ✅ setup.py py_modules fixed (e5252a6) |
+| CI pip-audit exemption drift | ✅ synced (3bf75bb) |
 
-### 测试结果汇总
-full pytest 1038 passed / ruff check·format 全绿 / lock 同步通过 / wheel 构建成功且 config.py 入包 / pip-audit 无未豁免漏洞 / 覆盖率 91%。明细表见「阶段 4」。
+### Test Results Summary
+Full pytest 1038 passed / ruff check·format all green / lock sync passed / wheel build succeeded with config.py in the package / pip-audit no unexempted vulnerabilities / coverage 91%. The detail table is in "Phase 4".
 
-### 文档更新汇总
-CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入库；代码注释无冗余新增。
+### Documentation Update Summary
+CHANGELOG (Unreleased entry), README, OPTIMIZATION_PLAN/REPORT all checked in; no redundant new code comments.
 
-### 风险与回滚
-- 所有改动均可按 commit 粒度 `git revert <hash>` 回滚（单文件为主，无跨文件耦合）
-- 脱敏正则为纯新增匹配分支，1038 用例零失败即回归证据
-- setup.py 为声明补齐，editable 开发流程行为不变
-- 无敏感信息入库；本地 .env 真实密钥建议轮换（与本次代码改动无关）
+### Risks & Rollback
+- All changes can be rolled back per commit via `git revert <hash>` (mostly single-file, no cross-file coupling)
+- The redaction regex is purely additive matching branches; zero failures out of 1038 cases is the regression evidence
+- setup.py is a declaration completion; the editable dev flow behavior is unchanged
+- No sensitive information in the repo; the real keys in the local .env should be rotated (unrelated to this code change)
 
-### 后续建议
-1. 恢复网络后执行阶段 6 手动命令推送 17 个 commit 并开 PR（正文已备好）
-2. 轮换本地 .env 中的 LLM API Key（已在会话中暴露过一次，零容忍原则下建议更换）
-3. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
-4. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815）
+### Follow-up Suggestions
+1. After the network recovers, run the Phase 6 manual commands to push the 17 commits and open the PR (the body is prepared)
+2. Rotate the LLM API Keys in the local .env (they were exposed once in the session; under the zero-tolerance principle, replacement is recommended)
+3. T-01 common fixture extraction (test maintainability) and T-04 executor sandbox deep audit (needs a design doc) scheduled for the next iteration
+4. After a fixed chromadb version is released, upgrade and remove the corresponding `--ignore-vuln` in ci.yml (PYSEC-2026-3813/3814/3815)
 
 ---
 
-## 附录：2026-09-12 轮次（文档数据对齐批次）
+## Appendix: 2026-09-12 Round (Documentation Data Alignment Batch)
 
-> 该轮次在 0.9.11 轮次 18 个待推送 commit 之上执行，新增 4 个 commit
-> （`d1afffc` / `5c7fc80` / `d683741` / `a563d60`）。优化点清单（N-01~N-04）与
-> 检索结论见 `optimization_plan.md`「0.9.11 后续优化轮次（2026-09-12）」章节。
+> This round ran on top of the 0.9.11 round's 18 commits pending push and added 4 commits
+> (`d1afffc` / `5c7fc80` / `d683741` / `a563d60`). See the "Post-0.9.11 Optimization Round (2026-09-12)" section of `optimization_plan.md` for the points list (N-01~N-04) and
+> the search conclusions.
 
-### 阶段 0：基线检查
+### Phase 0: Baseline Check
 
-- **Git 状态**：`main`，工作区 clean，本地领先 `origin/main` 18 个 commit
-- **新基线**（venv Python 3.14.6）：
+- **Git status**: `main`, clean working tree, local 18 commits ahead of `origin/main`
+- **New baseline** (venv Python 3.14.6):
 
-| 检查项 | 命令 | 结果 |
+| Check | Command | Result |
 |--------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 27.9s |
-| 覆盖率 | `--cov=src` | ✅ TOTAL 91%（3536/318 miss） |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 27.9s |
+| Coverage | `--cov=src` | ✅ TOTAL 91% (3536/318 miss) |
 | Lint | `ruff check .` | ✅ All checks passed |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 |
-| 构建 | `python -m build --sdist --wheel` | ✅ aitester-0.9.11.tar.gz + .whl |
-| 安全扫描 | `pip-audit`（同 CI 豁免清单） | ✅ No known vulnerabilities found, 5 ignored |
-| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用（与上轮一致） |
+| Format | `ruff format --check .` | ✅ 124 files already formatted |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 items consistent |
+| Build | `python -m build --sdist --wheel` | ✅ aitester-0.9.11.tar.gz + .whl |
+| Security scan | `pip-audit` (same exemption list as CI) | ✅ No known vulnerabilities found, 5 ignored |
+| Type check | No mypy/pyright config | ⚠️ N/A (consistent with the previous round) |
 
-### 阶段 1：优化点识别（要点）
+### Phase 1: Optimization Point Identification (Key Points)
 
-- **N-01（P2）**：README 测试状态表核心模块覆盖率数据陈旧（logging_utils 83%→88%、cli/app.py 61%→64%），上轮新增 18 用例后未同步
-- **N-02（P2）**：README 安全扫描说明仍写"4 条已知 CVE"，ci.yml 已漂移为 PYSEC 豁免口径
-- **N-03（P3）**：QUICKSTART 第 4 步"验证配置"措辞与实际行为不符（`from config import LLM_CONFIGS` 仅加载校验，无网络调用）
-- **N-04（P2）**：README 引用的测试文件逐一 `ls` 核对，**全部存在**，无需修改（无 commit）
-- 检索结论（无优化点维度）：源码无 eval/exec/os.system 危险调用；源码与测试无真实密钥残留（80e2f05 归一后复核通过）；依赖full与 lock 同步、pip-audit 无未豁免漏洞；CI 结构完整无漂移；src 无 TODO/FIXME 残留
+- **N-01 (P2)**: stale core-module coverage data in the README test status table (logging_utils 83%→88%, cli/app.py 61%→64%); not synced after 18 cases were added last round
+- **N-02 (P2)**: the README security scan note still says "4 known CVEs"; ci.yml has drifted to the PYSEC exemption baseline
+- **N-03 (P3)**: the wording of QUICKSTART step 4 "Verify configuration" does not match the actual behavior (`from config import LLM_CONFIGS` is a load check only, no network call)
+- **N-04 (P2)**: `ls`-checked the test files referenced by the README one by one — **all exist**, no fix needed (no commit)
+- Search conclusions (dimensions with no points): no eval/exec/os.system dangerous calls in the source; no real key residual in source or tests (re-check passed after the 80e2f05 normalization); all dependencies in sync with the lock, pip-audit no unexempted vulnerabilities; CI structure complete, no drift; no TODO/FIXME residual in src
 
-### 阶段 3：实施记录
+### Phase 3: Implementation Record
 
-| 提交 | 内容 |
+| Commit | Content |
 |------|------|
-| `d1afffc` docs(readme) | N-01 覆盖率数据对齐 88%/64% |
-| `5c7fc80` docs(readme) | N-02 安全扫描说明对齐 PYSEC 豁免口径 |
-| `d683741` docs(quickstart) | N-03 配置验证步骤措辞修正 |
-| `a563d60` docs(changelog) | CHANGELOG 补本轮 Unreleased 条目 |
+| `d1afffc` docs(readme) | N-01 coverage data aligned to 88%/64% |
+| `5c7fc80` docs(readme) | N-02 security scan note aligned to the PYSEC exemption baseline |
+| `d683741` docs(quickstart) | N-03 configuration verification step wording fixed |
+| `a563d60` docs(changelog) | Added this round's Unreleased entry to the CHANGELOG |
 
-（N-04 核对无漂移，无 commit；纯文档改动，未触碰源码，最小验证为 `ruff check` + 相关测试子集全绿。）
+(N-04 check found no drift; no commit; pure documentation changes, source untouched; minimum verification was `ruff check` + the relevant test subset all green.)
 
-### 阶段 4：全面测试（全部命令与 CI 对齐，venv Python 3.14.6）
+### Phase 4: Full Testing (all commands aligned with CI, venv Python 3.14.6)
 
-| 检查项 | 命令 | 结果 | 备注 |
+| Check | Command | Result | Notes |
 |--------|------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.6s | 2 warning 为 scipy 数值精度提示，非代码问题 |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.6s | The 2 warnings are scipy numerical precision notes, not a code issue |
 | Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
-| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 | |
-| 安全扫描 | `pip-audit -r requirements.txt --no-deps --ignore-vuln ...` | ✅ No known vulnerabilities found, 5 ignored | 豁免清单与 CI 一致 |
-| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91% | 与 README/CHANGELOG 口径一致 |
-| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用 | 项目未引入静态类型检查器，保持现状 |
+| Format | `ruff format --check .` | ✅ 124 files already formatted | |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 items consistent | |
+| Build | `python -m build --sdist --wheel` | ✅ tar.gz + whl both succeeded | |
+| Security scan | `pip-audit -r requirements.txt --no-deps --ignore-vuln ...` | ✅ No known vulnerabilities found, 5 ignored | Exemption list consistent with CI |
+| Coverage | `pytest --cov=src` | ✅ TOTAL 91% | Consistent with the README/CHANGELOG baseline |
+| Type check | No mypy/pyright config | ⚠️ N/A | The project has not introduced a static type checker; kept as-is |
 
-### 阶段 5：文档更新
+### Phase 5: Documentation Update
 
-- `CHANGELOG.md`：新增 2026-09-12 Unreleased 轮次条目（文档批次 + full测试结果）
-- `optimization_plan.md` / `optimization_report.md`（本附录）：本轮完整记录入库
-- README/QUICKSTART：N-01~N-03 对齐改动随代码 commit 提交
+- `CHANGELOG.md`: new 2026-09-12 Unreleased round entry (documentation batch + full test results)
+- `optimization_plan.md` / `optimization_report.md` (this appendix): this round's complete record checked in
+- README/QUICKSTART: the N-01~N-03 alignment changes were committed with the code commits
 
 ---
 
-## 附录：2026-09-13 轮次（文档数据对齐批次 M-01~M-03）
+## Appendix: 2026-09-13 Round (Documentation Data Alignment Batch M-01~M-03)
 
-> 该轮次在 2026-09-12 轮次 4 个 commit（`d1afffc`/`5c7fc80`/`d683741`/`a563d60`）之上执行。
-> 09-12 轮次 18 个待推 commit 已推送完成（工作区 clean、本地与 origin/main 同步），
-> 本轮新增 2 个 commit（`5553c35` + 计划/报告入库提交）。
-> 优化点清单（M-01~M-03）与检索结论见 `optimization_plan.md`「0.9.11 后续优化轮次（2026-09-13）」章节。
+> This round ran on top of the 2026-09-12 round's 4 commits (`d1afffc`/`5c7fc80`/`d683741`/`a563d60`).
+> The 09-12 round's 18 commits pending push were completed (clean working tree, local in sync with origin/main);
+> this round adds 2 commits (`5553c35` + the plan/report check-in commit).
+> See the "Post-0.9.11 Optimization Round (2026-09-13)" section of `optimization_plan.md` for the points list (M-01~M-03) and the search conclusions.
 
-### 阶段 0：基线检查
+### Phase 0: Baseline Check
 
-- **Git 状态**：`main`，工作区 clean，本地与 `origin/main` 同步（09-12 轮次存量已推完）
-- **新基线**（venv Python 3.14.6）：
+- **Git status**: `main`, clean working tree, local in sync with `origin/main` (the 09-12 round backlog fully pushed)
+- **New baseline** (venv Python 3.14.6):
 
-| 检查项 | 命令 | 结果 |
+| Check | Command | Result |
 |--------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.1s |
-| 覆盖率 | `--cov=src` | ✅ TOTAL 91%（3536/318 miss） |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings, 28.1s |
+| Coverage | `--cov=src` | ✅ TOTAL 91% (3536/318 miss) |
 | Lint | `ruff check .` | ✅ All checks passed |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 |
-| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 |
-| 安全扫描 | `pip-audit`（同 CI 豁免清单） | ✅ No known vulnerabilities found, 5 ignored |
-| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用（与上轮一致） |
+| Format | `ruff format --check .` | ✅ 124 files already formatted |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 items consistent |
+| Build | `python -m build --sdist --wheel` | ✅ tar.gz + whl both succeeded |
+| Security scan | `pip-audit` (same exemption list as CI) | ✅ No known vulnerabilities found, 5 ignored |
+| Type check | No mypy/pyright config | ⚠️ N/A (consistent with the previous round) |
 
-### 阶段 1：优化点识别（要点）
+### Phase 1: Optimization Point Identification (Key Points)
 
-- **M-01（P2）**：README「测试覆盖模块」主表 13 个文件的用例数与实测 `def test_` 计数漂移（0.9.11 批次新增 27 回归用例后未同步）：test_api_manager 62→63、test_cli_app 11→15、test_config_manager 29→32、test_dataset_loader_extended 57→62、test_dependency 27→35、test_error_classifier 56→60、test_executor 35→39、test_experiments_analysis 11→15、test_experiments_scripts 8→10、test_generator 21→30、test_mysql_client 12→13、test_patch_applier 36→38、test_workflow 28→30
-- **M-02（P2）**：README "41 个测试文件" 与 tests/ 实际 44 个 .py 不符；主表缺 `test_logging_utils.py`（0.9.11 轮次新增的 14 用例脱敏测试）——更正为 44 并补行
-- **M-03（P3）**：CHANGELOG 补 2026-09-13 Unreleased 轮次条目（本轮纯文档改动需可追溯）
-- 检索结论（无优化点维度）：src 无 eval/exec/os.system 危险调用（复核通过）；executor `_run_pytest_with_retry` 的 subprocess.run 为受控 pytest 命令（timeout/cwd/env 限定，非用户输入拼接），沙箱边界无逃逸调用；真实密钥仅存于 gitignored 的本地 .env（sk- 2 条）与 src/.env.local（sk- 5 条），`git ls-files` 仅跟踪占位符模板，建议轮换；依赖 130 项与 lock 同步，pip-audit 无未豁免漏洞；CI 结构无漂移；docs/ 与 QUICKSTART 无旧数据残留
+- **M-01 (P2)**: the 13 files' case counts in the README "test coverage module" main table drifted from the measured `def test_` counts (not synced after the 0.9.11 batch added 27 regression cases): test_api_manager 62→63, test_cli_app 11→15, test_config_manager 29→32, test_dataset_loader_extended 57→62, test_dependency 27→35, test_error_classifier 56→60, test_executor 35→39, test_experiments_analysis 11→15, test_experiments_scripts 8→10, test_generator 21→30, test_mysql_client 12→13, test_patch_applier 36→38, test_workflow 28→30
+- **M-02 (P2)**: README's "41 test files" does not match the actual 44 .py files in tests/; the main table is missing `test_logging_utils.py` (the 14-case redaction test added in the 0.9.11 round) — corrected to 44 and the row added
+- **M-03 (P3)**: the CHANGELOG 2026-09-13 Unreleased round entry added (this round's pure doc changes must be traceable)
+- Search conclusions (dimensions with no points): no eval/exec/os.system dangerous calls in src (re-check passed); the executor's `_run_pytest_with_retry` subprocess.run is a controlled pytest command (timeout/cwd/env constraints, not user-input concatenation), no escape calls at the sandbox boundary; real keys exist only in the gitignored local .env (2 sk-) and src/.env.local (5 sk-); `git ls-files` tracks only placeholder templates; rotation recommended; all 130 dependencies in sync with the lock; pip-audit no unexempted vulnerabilities; no CI structure drift; no stale data residual in docs/ or QUICKSTART
 
-### 阶段 3：实施记录
+### Phase 3: Implementation Record
 
-| 提交 | 内容 |
+| Commit | Content |
 |------|------|
-| `5553c35` docs(readme) | M-01 主表 13 行用例数同步 + M-02 文件数 41→44 与补 test_logging_utils 行 |
-| （计划/报告入库提交） docs(optimize) | M-03 CHANGELOG 条目 + OPTIMIZATION_PLAN/REPORT 09-13 章节 |
+| `5553c35` docs(readme) | M-01 main table 13 rows' case counts synced + M-02 file count 41→44 and the test_logging_utils row added |
+| (plan/report check-in commit) docs(optimize) | M-03 CHANGELOG entry + OPTIMIZATION_PLAN/REPORT 09-13 sections |
 
-（v0.9/v0.10 历史版本叙事表保留原值，按设计不随基线同步；纯文档改动，未触碰源码。）
+(The v0.9/v0.10 historical version narrative tables keep their original values; by design they do not follow the baseline; pure doc changes, source untouched.)
 
-### 阶段 4：全面测试（全部命令与 CI 对齐，venv Python 3.14.6）
+### Phase 4: Full Testing (all commands aligned with CI, venv Python 3.14.6)
 
-| 检查项 | 命令 | 结果 | 备注 |
+| Check | Command | Result | Notes |
 |--------|------|------|------|
-| 单元测试 | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings | 纯文档改动，测试集无变化 |
+| Unit tests | `python -m pytest tests/ -q` | ✅ 1038 passed, 2 warnings | Pure doc changes; the test suite is unchanged |
 | Lint | `ruff check .` | ✅ All checks passed | ruff 0.16.3 |
-| 格式化 | `ruff format --check .` | ✅ 124 files already formatted | |
-| lock 同步 | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 项一致 | |
-| 构建 | `python -m build --sdist --wheel` | ✅ tar.gz + whl 均成功 | |
-| 安全扫描 | `pip-audit`（CI 同款 4 条 PYSEC 豁免） | ✅ No known vulnerabilities found, 5 ignored | |
-| 覆盖率 | `pytest --cov=src` | ✅ TOTAL 91% | 与 README/CHANGELOG 口径一致 |
-| 类型检查 | 无 mypy/pyright 配置 | ⚠️ 不适用 | 保持现状 |
+| Format | `ruff format --check .` | ✅ 124 files already formatted | |
+| Lock sync | `python scripts/check_lock_sync.py` | ✅ 19 vs 130 items consistent | |
+| Build | `python -m build --sdist --wheel` | ✅ tar.gz + whl both succeeded | |
+| Security scan | `pip-audit` (same 4 PYSEC exemptions as CI) | ✅ No known vulnerabilities found, 5 ignored | |
+| Coverage | `pytest --cov=src` | ✅ TOTAL 91% | Consistent with the README/CHANGELOG baseline |
+| Type check | No mypy/pyright config | ⚠️ N/A | Kept as-is |
 
-### 阶段 5：文档更新
+### Phase 5: Documentation Update
 
-- `CHANGELOG.md`：新增 2026-09-13 Unreleased 轮次条目（M-01/M-02 说明 + full测试结论）
-- `optimization_plan.md` / `optimization_report.md`（本附录）：本轮完整记录入库
-- `README.md`：主表 13 行 + 文件数 + 补 test_logging_utils 行（随 `5553c35` 提交）
+- `CHANGELOG.md`: new 2026-09-13 Unreleased round entry (M-01/M-02 notes + full-suite test conclusion)
+- `optimization_plan.md` / `optimization_report.md` (this appendix): this round's complete record checked in
+- `README.md`: main table 13 rows + file count + the test_logging_utils row added (committed with `5553c35`)
 
-### 阶段 6：上传 GitHub
+### Phase 6: Upload to GitHub
 
-用户确认"文档批次 + 推送，推送不成功就重试"。执行 `git push origin main`（本轮 2 个 commit；
-09-11/09-12 轮次的 18 个存量已在此前推送完成）。若 443 握手挂起（历史轮次经验），按降档
-`git config http.version HTTP/1.1` 或代理方案重试；仍失败则输出手动命令 + 说明。
+The user confirmed "documentation batch + push; retry if the push fails". Ran `git push origin main` (2 commits this round;
+the 09-11/09-12 rounds' 18-commit backlog was pushed earlier). If the 443 handshake hangs (per historical round experience), retry with the fallback
+`git config http.version HTTP/1.1` or the proxy approach; if it still fails, output the manual commands + an explanation.
 
-### 阶段 7：后续建议
+### Phase 7: Follow-up Suggestions
 
-1. 轮换本地 .env / src/.env.local 中的 LLM API Key（零容忍原则，跨轮次保留建议）
-2. T-01 公共 fixture 下沉（测试可维护性）与 T-04 executor 沙箱深度审计（需设计文档）排入下一迭代
-3. chromadb 修复版发布后升级并移除 ci.yml 对应 `--ignore-vuln`（PYSEC-2026-3813/3814/3815；311 重复两条为其别名条目）
+1. Rotate the LLM API Keys in the local .env / src/.env.local (zero-tolerance principle; the suggestion is retained across rounds)
+2. T-01 common fixture extraction (test maintainability) and T-04 executor sandbox deep audit (needs a design doc) scheduled for the next iteration
+3. After a fixed chromadb version is released, upgrade and remove the corresponding `--ignore-vuln` in ci.yml (PYSEC-2026-3813/3814/3815; the 2 duplicate 311 entries are its alias entries)
 
 ---
 
-## 附录：2026-09-13 系统功能增强轮次（3.1 / 3.4 / 4.1 / 2.3 / 1.5）
+## Appendix: 2026-09-13 System Feature Enhancement Round (3.1 / 3.4 / 4.1 / 2.3 / 1.5)
 
-### 用户清单核对（先甄别已实现项，避免重复造轮子）
+### User Checklist Verification (first identify already-implemented items to avoid rework)
 
-用户提出 20 条优化建议，逐条核对代码现状后确认 **8 条系统已实现**（建议写于代码更新前）：
+The user proposed 20 optimization suggestions; after checking the current code state one by one, **8 are already implemented** (the suggestions predated the code updates):
 
-| 用户条目 | 现状 | 证据位置 |
+| User Item | Status | Evidence Location |
 |---------|------|---------|
-| 1.2 错误分类细化（import/type/logic） | ✅ 已实现 | `src/agents/error_classifier.py`（P2 细化：IMPORT_ERROR/TYPE_ERROR/LOGIC_ERROR 已从旧五类拆出） |
-| 1.3 依赖隔离 | ✅ 已实现 | `EXECUTOR_USE_VENV` + 沙箱 venv + `PYTHONPATH` 控制 + 依赖自动安装（`src/tools/dependency.py`） |
-| 1.4 连接池配置化 | ✅ 已实现 | `MYSQL_POOL_*` 从 `config.py` 环境变量读取（`src/db/mysql_client.py`） |
-| 2.1 SWE-bench 校验 | ✅ 已实现 | `validate_task` / `quality_report` / `_extract_suggested_function` + 源码补充通道（`dataset_loader.py`） |
-| 2.2 Token 效率对比 | ✅ 已实现 | `src/graph/token_usage.py` + benchmark `token_metrics` 聚合 |
-| 2.3 RAG 检索质量 | ✅ 已实现 | `evaluate_retrieval`（Hit Rate/MRR）+ `--enable-rag` + `RAG_PERSIST_PATH`（默认 `rag_data/`） |
-| 1.1 日志脱敏全链路 | ✅ 已实现 | `SensitiveFormatter` 覆盖异常堆栈 + base_agent 全 LLM 路径接入脱敏 |
-| 4.3 熔断器 | ✅ 已实现 | `APIHealth.max_consecutive_failures` 阈值接线（连续失败 N 次标记不健康、剔出路由） |
+| 1.2 Error classification refinement (import/type/logic) | ✅ implemented | `src/agents/error_classifier.py` (P2 refinement: IMPORT_ERROR/TYPE_ERROR/LOGIC_ERROR split out of the old five categories) |
+| 1.3 Dependency isolation | ✅ implemented | `EXECUTOR_USE_VENV` + sandbox venv + `PYTHONPATH` control + automatic dependency installation (`src/tools/dependency.py`) |
+| 1.4 Connection pool configurability | ✅ implemented | `MYSQL_POOL_*` read from `config.py` environment variables (`src/db/mysql_client.py`) |
+| 2.1 SWE-bench validation | ✅ implemented | `validate_task` / `quality_report` / `_extract_suggested_function` + source supplementation channel (`dataset_loader.py`) |
+| 2.2 Token efficiency comparison | ✅ implemented | `src/graph/token_usage.py` + benchmark `token_metrics` aggregation |
+| 2.3 RAG retrieval quality | ✅ implemented | `evaluate_retrieval` (Hit Rate/MRR) + `--enable-rag` + `RAG_PERSIST_PATH` (default `rag_data/`) |
+| 1.1 Full-chain log redaction | ✅ implemented | `SensitiveFormatter` covers exception stacks + redaction wired into all base_agent LLM paths |
+| 4.3 Circuit breaker | ✅ implemented | `APIHealth.max_consecutive_failures` threshold wiring (N consecutive failures mark unhealthy and remove from routing) |
 
-### 本批实现（真正缺失的 4 项 + 2 项补强，6 个原子 commit）
+### What This Batch Implemented (the 4 items truly missing + 2 strengthening items, 6 atomic commits)
 
-| 序号 | 目标 | 文件 | 状态 |
+| # | Goal | Files | Status |
 |------|------|------|------|
-| F1 | 4.1 结构化 JSONL 追踪层（默认关） | `src/observability/{__init__,trace}.py` + workflow 节点 + CLI + benchmark 接线 + `tests/test_trace_observability.py`（12 用例） | ✅ |
-| F2 | 3.4 成本感知路由 + 成本告警 | `src/api/api_manager.py`（COST_AWARE 策略 + 昂贵 provider WARNING）+ `config.py`（LLMConfig.cost_weight）+ `tests/test_cost_aware_routing.py`（10 用例） | ✅ |
-| F3 | 3.1 多候选补丁与验证（默认关，无候选回退单补丁） | `src/tools/multi_candidate.py` + workflow `_patch_applier_node` 接入 + `tests/test_multi_candidate.py`（19 用例） | ✅ |
-| F4 | 2.3 合成数据集默认开 RAG + `--no-rag` | `reproduce.sh`（synthetic/examples 默认 `--enable-rag`）+ `run_benchmark.py`（`--no-rag` 参数） | ✅ |
-| F5 | 1.5 CLI parallel/json 边界补测 + 文档对齐 | `tests/test_cli_app.py`（`TestRunParallelJsonBoundaries` 6 用例）+ `.env.example` / CHANGELOG / README / `QUICKSTART` 同步 | ✅ |
+| F1 | 4.1 structured JSONL trace layer (off by default) | `src/observability/{__init__,trace}.py` + workflow nodes + CLI + benchmark wiring + `tests/test_trace_observability.py` (12 cases) | ✅ |
+| F2 | 3.4 cost-aware routing + cost alert | `src/api/api_manager.py` (COST_AWARE strategy + expensive provider WARNING) + `config.py` (LLMConfig.cost_weight) + `tests/test_cost_aware_routing.py` (10 cases) | ✅ |
+| F3 | 3.1 multi-candidate patches and verification (off by default; falls back to single patch with no candidate) | `src/tools/multi_candidate.py` + workflow `_patch_applier_node` wiring + `tests/test_multi_candidate.py` (19 cases) | ✅ |
+| F4 | 2.3 synthetic dataset RAG on by default + `--no-rag` | `reproduce.sh` (synthetic/examples default `--enable-rag`) + `run_benchmark.py` (`--no-rag` argument) | ✅ |
+| F5 | 1.5 CLI parallel/json boundary test backfill + doc alignment | `tests/test_cli_app.py` (`TestRunParallelJsonBoundaries` 6 cases) + `.env.example` / CHANGELOG / README / `QUICKSTART` sync | ✅ |
 
-### full验证结果
+### Full Verification Results
 
-| 检查项 | 命令 | 结果 |
+| Check | Command | Result |
 |--------|------|------|
 | Ruff Lint | `ruff check .` | ✅ All checks passed |
-| Ruff 格式 | `ruff format --check .` | ✅ 130 files already formatted |
-| full测试 | `python -m pytest tests/` | ✅ **1085 passed** / 0 failed |
-| 覆盖率 | `--cov=src` | ✅ TOTAL 3813 / 348 miss = 91% |
-| 端到端 smoke | 多候选 generate→select + 追踪落盘 | ✅ 坏候选被静态筛除、好候选选中、JSONL 事件序列正确 |
-| 打包 | `find_packages()` | ✅ `src.observability` / `src.tools` 均收录 |
+| Ruff format | `ruff format --check .` | ✅ 130 files already formatted |
+| Full suite | `python -m pytest tests/` | ✅ **1085 passed** / 0 failed |
+| Coverage | `--cov=src` | ✅ TOTAL 3813 / 348 miss = 91% |
+| End-to-end smoke | multi-candidate generate→select + trace persistence | ✅ bad candidate statically filtered out, good candidate selected, JSONL event sequence correct |
+| Packaging | `find_packages()` | ✅ both `src.observability` / `src.tools` collected |
 
-### 设计决策（默认关闭的开关）
+### Design Decisions (off-by-default switches)
 
-- **3.1 / 4.1 均默认关闭**（`ENABLE_MULTI_CANDIDATE_PATCH=false` / `AITESTER_TRACE_DIR` 未设），保持历史实验口径不变；开启为显式行为，无隐式行为变化。
-- **3.1 无有效候选自动回退单补丁**：多候选策略"只多不少"，保证不会比原路径更差。
-- **3.4 成本字段走 `.env.local`**（`LLM_N_COST_WEIGHT`，gitignore 不入库），未配置默认 1.0 基准；如需持久化可在 `llm_configs.json` 加 cost_weight 字段（本批先用环境变量口径，避免改 JSON 结构）。
+- **3.1 / 4.1 both off by default** (`ENABLE_MULTI_CANDIDATE_PATCH=false` / `AITESTER_TRACE_DIR` unset), keeping the historical experiment baseline unchanged; enabling is an explicit act, with no implicit behavior change.
+- **3.1 automatically falls back to the single patch when no valid candidate exists**: the multi-candidate strategy is "only more, never less", guaranteeing it is never worse than the original path.
+- **3.4 cost fields go through `.env.local`** (`LLM_N_COST_WEIGHT`, gitignored, not in the repo); unconfigured default is the 1.0 baseline; to persist, a cost_weight field can be added to `llm_configs.json` (this batch uses the env-var baseline first to avoid changing the JSON structure).
 
-### 阶段 6：上传 GitHub
+### Phase 6: Upload to GitHub
 
-本批 7 个原子 commit（6 个功能/测试 + 1 个文档批次），经代理 `http://127.0.0.1:7891`
-推送到 `origin/main`（443 直连不可达时按历史经验配置 http.proxy）。推送后执行
-`git filter-repo` 重写历史，移除全部论文/隐私相关路径（paper.md、docs/paper/、
-TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净历史到 GitHub。
+This batch's 7 atomic commits (6 feature/test + 1 documentation batch) were pushed to
+`origin/main` via the proxy `http://127.0.0.1:7891` (when 443 direct is unreachable, http.proxy is configured per historical experience). After the push,
+`git filter-repo` was run to rewrite history and remove all paper/privacy-related paths (paper.md, docs/paper/,
+TASK_SUMMARY.md, .agent-teams/, SUBMISSION_*, etc.), then a `--force` push of the clean history to GitHub.
 
-### 阶段 7：后续建议
+### Phase 7: Follow-up Suggestions
 
-1. **3.2 跨文件修复**与 **3.3 测试用例质量挖掘**：本批未实施（改动面大，涉及 patch_applier 跨文件依赖分析 + 测试自验证过滤），建议单独立项并配设计文档。
-2. **4.2 Docker 实际启用**：仍维持 `use_docker=False` 预留（历史 D-06 决策），接通需确认实验环境有 Docker daemon。
-3. 推送前确认 `main` 领先提交数，一并推送全部（含 09-13 文档批次与系统功能增强批次）。
+1. **3.2 cross-file repair** and **3.3 test case quality mining**: not implemented in this batch (large change scope, involving patch_applier cross-file dependency analysis + test self-verification filtering); recommended as standalone projects with design docs.
+2. **4.2 Docker actual enablement**: still the `use_docker=False` reservation (historical D-06 decision); wiring it up requires confirming a Docker daemon in the experimental environment.
+3. Before pushing, check the number of commits ahead of `main` and push all of them together (including the 09-13 documentation batch and the system feature enhancement batch).
 
 ---
 
-## 附录：2026-09-13 文档同步 + 隐私清理 + GitHub 推送轮次
+## Appendix: 2026-09-13 Documentation Sync + Privacy Cleanup + GitHub Push Round
 
-### 执行范围
+### Execution Scope
 
-1. **全项目文档同步**（`docs: 全项目文档同步...`）：
-   - README / QUICKSTART / OPTIMIZATION_REPORT 补 3.1/3.4/4.1/2.3/1.5 批次
-     新模块说明（多候选补丁、成本感知路由、结构化追踪、RAG 默认开、CLI 边界），
-     测试基线 1038→1085；QUICKSTART 增「7. 可选高级开关」节。
-   - 去除论文/手稿措辞：README「论文与文档」章节删除 `paper.md` 链接与摘要、
-     `docs/algorithm_design.md`「供论文撰写」改为「供技术评审」、
-     `docs/failure_analysis.md` 与 README 实验数据区加「历史数据快照」标注。
-   - 本地删除 `paper.md` 与 `.private/`（论文源码 LaTeX/大纲/实验报告，均已 .gitignore 排除，未进 git 树）。
-2. **隐私与论文内容full排查**（敏感信息扫描脚本）：
-   - 全部被跟踪的 md/py/json/sh 文件无真实密钥落盘（命中均为测试 fixture 合成占位符）；
-   - 本地真实密钥仅存于 gitignored 的 `.env` / `src/.env.local`（建议轮换，跨轮次保留建议）。
-3. **git 历史清理**（`git filter-repo`）：
-   - 移除 `paper.md` / `docs/paper/`（8 章 LaTeX + 摘要）/ `TASK_SUMMARY.md` /
-     `FINAL_PAPER_STATUS.md` / `PAPER_IMPROVEMENT_PLAN.md` /
-     `algorithm_paper.md` / `docs/paper_outline.md` / `.agent-teams/` /
-     `SUBMISSION_CHECKLIST.md` / `SUBMISSION_PACKAGE.md` /
-     `quality_review_report_20260817.md` 全部历史版本；
-   - 重写 263 个提交，SHA 全部变化（原 `5ca09a7` → 新 `f6ac74d`），
-     `--force` 推送到 `origin/main`。
+1. **Full-project documentation sync** (`docs: 全项目文档同步...`):
+    - README / QUICKSTART / OPTIMIZATION_REPORT added 3.1/3.4/4.1/2.3/1.5 batch
+      new module notes (multi-candidate patches, cost-aware routing, structured tracing, RAG on by default, CLI boundaries);
+      test baseline 1038→1085; QUICKSTART added a "7. Optional Advanced Switches" section.
+    - Removed paper/manuscript wording: the README "Paper & Documentation" section removed the `paper.md` link and abstract;
+      `docs/algorithm_design.md` "for paper writing" changed to "for technical review";
+      `docs/failure_analysis.md` and the README experiment data section gained "historical data snapshot" labels.
+    - Locally removed `paper.md` and `.private/` (paper source LaTeX/outline/experiment reports; all .gitignore-excluded, never in the git tree).
+2. **Privacy and paper content full sweep** (sensitive-info scan script):
+    - No tracked md/py/json/sh files contain real keys on disk (all hits are synthetic placeholders in test fixtures);
+    - Real keys exist only in the gitignored local `.env` / `src/.env.local` (rotation recommended; the suggestion is retained across rounds).
+3. **Git history cleanup** (`git filter-repo`):
+    - Removed all historical versions of `paper.md` / `docs/paper/` (8 LaTeX chapters + abstract) / `TASK_SUMMARY.md` /
+      `FINAL_PAPER_STATUS.md` / `PAPER_IMPROVEMENT_PLAN.md` /
+      `algorithm_paper.md` / `docs/paper_outline.md` / `.agent-teams/` /
+      `SUBMISSION_CHECKLIST.md` / `SUBMISSION_PACKAGE.md` /
+      `quality_review_report_20260817.md`;
+    - 263 commits rewritten, all SHAs changed (old `5ca09a7` → new `f6ac74d`),
+      pushed to `origin/main` with `--force`.
 
-### 验证
+### Verification
 
-| 检查项 | 结果 |
+| Check | Result |
 |--------|------|
-| full测试 | ✅ 1085 passed / 0 failed（推送前最后回归） |
-| 远端与本地一致 | ✅ `git ls-remote origin main` = `f6ac74d` |
-| 远端历史无 paper/隐私残留 | ✅ `git log --all -- paper.md docs/paper TASK_SUMMARY.md` 空 |
-| 工作区 | ✅ clean |
+| Full suite | ✅ 1085 passed / 0 failed (final regression before the push) |
+| Remote matches local | ✅ `git ls-remote origin main` = `f6ac74d` |
+| No paper/privacy residual in remote history | ✅ `git log --all -- paper.md docs/paper TASK_SUMMARY.md` empty |
+| Working tree | ✅ clean |
 
 ---
 
-## 附录：2026-09-14 状态细化 + 可配阈值 + 边界补测 + 源码导出 + 脱敏审计轮次
+## Appendix: 2026-09-14 Status Refinement + Configurable Threshold + Boundary Test Backfill + Source Export + Redaction Audit Round
 
-### 执行范围
+### Execution Scope
 
-本批次消化 2026-09-14 改进清单中的 7 项纯代码项（1.1 / 1.4 / 1.5 / 2.1 / 2.3 / 3.2 / 4.1）：
+This batch digested 7 pure code items from the 2026-09-14 improvement checklist (1.1 / 1.4 / 1.5 / 2.1 / 2.3 / 3.2 / 4.1):
 
-| 项 | 内容 | 改动文件 | 状态 |
+| Item | Content | Changed Files | Status |
 |----|------|----------|------|
-| 1.1 | 错误分类补 2 个状态细化类（PATCH_VALIDATION_FAILED / RAG_RETRIEVAL_EMPTY），`refine_failure_category()` 任务收尾判定（补丁被拒优先于 RAG 空） | `src/agents/error_classifier.py` + `src/reports/generator.py` + `experiments/run_benchmark.py` + `src/cli/app.py` + 测试 | ✅ |
-| 3.2 | 成本告警阈值可配（`APIManagerConfig.cost_alert_threshold`，默认 2.0），告警文案打印配置值 | `src/api/api_manager.py` + 测试 | ✅ |
-| 1.5 | 熔断冷却期 3 条边界测试（到期回归 / 多节点同时冷却降级 / 冷却期内快速失败） | `tests/test_api_manager.py`（`TestCircuitCooldownBoundaries` 3 用例） | ✅ |
-| 1.4 | CLI 参数异常路径与并发行为补测（--timeout 贯通 / 无效 dataset 降级 / 并发单任务超时不阻塞整批 / glob 边界语义） | `tests/test_cli_app.py`（3 组 8 用例） | ✅ |
-| 2.1 | SWE-bench 源码导出自动化（`scripts/export_swe_bench_source.py`：patch 提取首个非测试目标文件 + `git show` 只读导出 + enrichment JSONL 输出 + `--instance-ids`/`--dry-run`）；`SWEBenchDataset.tasks_missing_source()` + check-dataset 输出缺失 instance_id 列表 | `scripts/export_swe_bench_source.py`（新）+ `src/datasets/dataset_loader.py` + `src/cli/app.py` + 测试 | ✅ |
-| 2.3 | RAG 指标自动汇总（analyze_results.py 新增按检索类型分解 + RAG 命中 × 失败类别交叉表） | `experiments/analyze_results.py` + 测试 | ✅ |
-| 4.1 | 脱敏完整审计（`docs/redaction_audit.md`）：修复 2 个真实盲点（APIManager 7 处日志点就地 `_redact()` + `get_status()` base_url 出口脱敏），LLM 文件缓存记录为已知可接受风险（脱敏与缓存精确命中互斥） | `src/api/api_manager.py` + `docs/redaction_audit.md`（新）+ 测试 | ✅ |
+| 1.1 | Error classification adds 2 status-refined categories (PATCH_VALIDATION_FAILED / RAG_RETRIEVAL_EMPTY); `refine_failure_category()` verdict at task wrap-up (patch rejected takes priority over RAG empty) | `src/agents/error_classifier.py` + `src/reports/generator.py` + `experiments/run_benchmark.py` + `src/cli/app.py` + tests | ✅ |
+| 3.2 | Cost alert threshold configurable (`APIManagerConfig.cost_alert_threshold`, default 2.0); alert message prints the configured value | `src/api/api_manager.py` + tests | ✅ |
+| 1.5 | 3 circuit breaker cooldown boundary tests (expiry return / multi-node simultaneous cooldown degradation / fast failure during cooldown) | `tests/test_api_manager.py` (`TestCircuitCooldownBoundaries` 3 cases) | ✅ |
+| 1.4 | CLI parameter exception paths and concurrency behavior test backfill (--timeout end-to-end / invalid dataset degradation / concurrent single-task timeout does not block the batch / glob boundary semantics) | `tests/test_cli_app.py` (3 groups, 8 cases) | ✅ |
+| 2.1 | SWE-bench source export automation (`scripts/export_swe_bench_source.py`: patch extracts the first non-test target file + `git show` read-only export + enrichment JSONL output + `--instance-ids`/`--dry-run`); `SWEBenchDataset.tasks_missing_source()` + check-dataset outputs the missing instance_id list | `scripts/export_swe_bench_source.py` (new) + `src/datasets/dataset_loader.py` + `src/cli/app.py` + tests | ✅ |
+| 2.3 | RAG metric auto-summary (analyze_results.py adds the by-retrieval-type breakdown + RAG hit × failure-category cross table) | `experiments/analyze_results.py` + tests | ✅ |
+| 4.1 | Complete redaction audit (`docs/redaction_audit.md`): fixed 2 real blind spots (APIManager 7 log points in-place `_redact()` + `get_status()` base_url exit redaction); LLM file cache recorded as a known acceptable risk (redaction is mutually exclusive with exact cache hits) | `src/api/api_manager.py` + `docs/redaction_audit.md` (new) + tests | ✅ |
 
-### full验证结果
+### Full Verification Results
 
-| 检查项 | 结果 |
+| Check | Result |
 |--------|------|
-| full测试 | ✅ **1158 passed** / 0 failed（2 warning 为 scipy 退化数据精度告警，非代码问题） |
-| 新增用例 | +41（错误分类 9 + 成本路由 4 + APIManager 5 + CLI 8 + 源码导出 11 + 数据集 2 + 实验脚本 4 + 脱敏回归 2，其中 1.5/1.4 与既有套件叠加后net +量以full数为准） |
+| Full suite | ✅ **1158 passed** / 0 failed (2 warnings are scipy degenerate-data precision notes, not a code issue) |
+| New cases | +41 (error classification 9 + cost routing 4 + APIManager 5 + CLI 8 + source export 11 + dataset 2 + experiment scripts 4 + redaction regression 2; the 1.5/1.4 stack on top of the existing suites, and the net increment is judged by the full-suite count) |
 
-### 设计决策
+### Design Decisions
 
-- **1.1 状态细化类不走文本正则**：`classify()` 保持 10 类纯文本分类不变；`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 是流程状态类，由 `refine_failure_category()` 在任务收尾按 `repair_history` / `rag_stats` 信号判定，仅在失败任务上生效（成功任务原样返回），benchmark 与 CLI 两个出口口径一致。
-- **优先级：补丁被拒 > RAG 检索空**：前者是"修复未生效"的更具体根因；RAG 空是"检索未提供帮助"。两者同时成立时归 patch_validation_failed。
-- **3.2 默认值不变**：`cost_alert_threshold` 默认沿用模块常量 2.0，不改变既有告警行为；调优为显式配置行为。
-- **4.1 LLM 缓存不脱敏**：`base_agent` 文件缓存靠 `prompt == user_message` 精确匹配命中，脱敏落盘值会破坏读侧匹配（缓存永不命中）。缓存目录（代码实际为 `src/cache/`，`AITESTER_LLM_CACHE_DIR` 可覆盖；已入 `.gitignore`，不进 git、不上传）记录为本地可信域已知可接受风险，后续可选"脱敏+双字段"方案单独立项。（注：此前本附录与 redaction_audit 误记为 `~/.cache/aitester/llm_cache/`，2026-09-14 F 批次已按代码更正）
+- **1.1 status-refined categories do not use text regex**: `classify()` keeps the 10-category pure-text classification unchanged; `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` are flow-status categories, determined by `refine_failure_category()` at task wrap-up via `repair_history` / `rag_stats` signals, effective only for failed tasks (successful tasks returned as-is); the benchmark and CLI exits share a consistent baseline.
+- **Priority: patch rejected > RAG retrieval empty**: the former is the more specific root cause of "repair not effective"; RAG empty is "retrieval provided no help". When both hold, classify as patch_validation_failed.
+- **3.2 default unchanged**: `cost_alert_threshold` defaults to the module constant 2.0, not changing existing alert behavior; tuning is an explicit configuration act.
+- **4.1 LLM cache not redacted**: the `base_agent` file cache relies on exact `prompt == user_message` match hits; redacted on-disk values would break read-side matching (the cache would never hit). The cache directory (actually `src/cache/` in code, overridable via `AITESTER_LLM_CACHE_DIR`; already in `.gitignore`, not in git, not uploaded) is recorded as a known acceptable risk in the local trusted domain; a future optional "redaction + dual-field" approach could be a standalone project. (Note: this appendix and redaction_audit previously misrecorded it as `~/.cache/aitester/llm_cache/`; the 2026-09-14 F batch corrected it per the code.)
 
 ---
 
-## 附录：2026-09-14 批次②收尾轮次（文档数据对齐）
+## Appendix: 2026-09-14 Batch ② Wrap-up Round (Documentation Data Alignment)
 
-### 执行范围
+### Execution Scope
 
-批次②（7 项纯代码项）的文档收尾，用户确认「全部执行 + 推送 main」：
+Documentation wrap-up for batch ② (7 pure code items); the user confirmed "execute all + push main":
 
-| 项 | 内容 | 改动文件 | 状态 |
+| Item | Content | Changed Files | Status |
 |----|------|----------|------|
-| O-01 | README 测试覆盖模块主表 9 行用例数与实测 `def test_` 计数漂移同步（test_api_manager 80→77、test_cli_app 30→27、test_cost_aware_routing 14→13、test_dataset_validation 20→22、test_experiments_scripts 23→19、test_swe_bench_source_export 11→13、test_core_modules 29→19、test_executor_sandbox 14→7、test_dataset_loader_extended 73→59） | `README.md` | ✅ |
-| O-02 | README「当前 1111 个用例」→ 1158（与状态表/full实测一致） | `README.md` | ✅ |
-| O-03 | docs/api_reference.md 错误分类「十类」→「十二类」：枚举表补 patch_validation_failed / rag_retrieval_empty 两行（1.1 状态细化）+ 优先级说明补 refine_failure_category 判定口径 | `docs/api_reference.md` | ✅ |
-| O-04 | docs/failure_analysis.md 状态说明「扩展为 10 类」→ 12 类（注明批次②补 2 状态细化类） | `docs/failure_analysis.md` | ✅ |
-| O-05 | QUICKSTART.md「高级开关」节补 3.2 成本告警阈值可配（APIManagerConfig.cost_alert_threshold，默认 2.0） | `QUICKSTART.md` | ✅ |
-| O-06 | CHANGELOG 顶部 Unreleased 批次②条目补「文档对齐（批次②收尾）」小节 | `CHANGELOG.md` | ✅ |
+| O-01 | README test coverage main table 9 rows' case counts synced with the measured `def test_` counts (test_api_manager 80→77, test_cli_app 30→27, test_cost_aware_routing 14→13, test_dataset_validation 20→22, test_experiments_scripts 23→19, test_swe_bench_source_export 11→13, test_core_modules 29→19, test_executor_sandbox 14→7, test_dataset_loader_extended 73→59) | `README.md` | ✅ |
+| O-02 | README "currently 1111 cases" → 1158 (consistent with the status table/full-suite measurement) | `README.md` | ✅ |
+| O-03 | docs/api_reference.md error classification "ten categories" → "twelve categories": enumeration table adds the patch_validation_failed / rag_retrieval_empty rows (1.1 status refinement) + the priority note adds the refine_failure_category verdict baseline | `docs/api_reference.md` | ✅ |
+| O-04 | docs/failure_analysis.md status note "expanded to 10 categories" → 12 (noting batch ② added the 2 status-refined categories) | `docs/failure_analysis.md` | ✅ |
+| O-05 | QUICKSTART.md "advanced switches" section adds 3.2 cost alert threshold configurability (APIManagerConfig.cost_alert_threshold, default 2.0) | `QUICKSTART.md` | ✅ |
+| O-06 | Added a "Documentation alignment (batch ② wrap-up)" subsection to the top Unreleased batch ② entry in the CHANGELOG | `CHANGELOG.md` | ✅ |
 
-### 检索结论（无优化点的维度）
+### Search Conclusions (dimensions with no optimization points)
 
-- 源码无 eval/exec/os.system 危险调用（复核，与历史轮次一致）；
-- 被跟踪文件无真实密钥残留（`git ls-files` 仅 .env.example / .env.local.template 占位符模板，.env.local / .env 已 gitignore；本地 .env 真实密钥建议轮换——跨轮次保留建议）；
-- CI 结构完整（矩阵 3.12/3.14、lock 校验、ruff 固定 0.16.3、pip-audit 5 条 PYSEC 豁免、测试失败诊断注解），无漂移；
-- full 1158 passed / 0 failed、ruff check 全绿、覆盖率 TOTAL 91%（3911/354 miss，src 行增长系批次②新增模块所致）。
+- No eval/exec/os.system dangerous calls in the source (re-checked, consistent with historical rounds);
+- No real key residual in tracked files (`git ls-files` shows only the .env.example / .env.local.template placeholder templates; .env.local / .env are gitignored; the real keys in the local .env should be rotated — the suggestion is retained across rounds);
+- CI structure complete (matrix 3.12/3.14, lock check, pinned ruff 0.16.3, 5 pip-audit PYSEC exemptions, test failure diagnostic annotations); no drift;
+- Full suite 1158 passed / 0 failed, ruff check all green, coverage TOTAL 91% (3911/354 miss; the src line growth is due to the modules added in batch ②).
 
-### 实施记录
+### Implementation Record
 
-| 提交 | 内容 |
+| Commit | Content |
 |------|------|
-| `6a423fe` docs | O-01~O-05 文档数据对齐（主表 9 行 + 用例数 + 枚举表 + 优先级说明 + 状态说明 + QUICKSTART） |
-| （本提交） docs(optimize) | O-06 CHANGELOG 条目 + OPTIMIZATION_PLAN/REPORT 批次②收尾章节 |
+| `6a423fe` docs | O-01~O-05 documentation data alignment (main table 9 rows + case count + enumeration table + priority note + status note + QUICKSTART) |
+| (this commit) docs(optimize) | O-06 CHANGELOG entry + OPTIMIZATION_PLAN/REPORT batch ② wrap-up section |
 
-（纯文档改动，未触碰源码；最小验证为 ruff check + 受影响模块测试子集（test_error_classifier 85 收集 / test_cost_aware_routing 13）全绿。）
+(Pure documentation changes, source untouched; minimum verification was ruff check + the affected module test subset (test_error_classifier 85 collected / test_cost_aware_routing 13) all green.)
 
 ---
 
-## 附录：2026-09-14 全项目文档同步轮次（F 批次）
+## Appendix: 2026-09-14 Full-Project Documentation Sync Round (F Batch)
 
-### 执行范围
+### Execution Scope
 
-用户指令"更新所有文档到最新并上传 GitHub"，在 O 批次（数据对齐）之上再做一轮**全项目**文档与代码现状核对，共 10 项（F-01~F-10）：
+The user directive "update all docs to the latest and upload to GitHub"; on top of the O batch (data alignment), another **full-project** documentation-vs-current-code audit, 10 items in total (F-01~F-10):
 
-| 项 | 内容 | 改动文件 | 状态 |
+| Item | Content | Changed Files | Status |
 |----|------|----------|------|
-| F-01 | README 项目结构树补齐 4 处缺失（src/observability/、src/graph/token_usage.py、src/tools/ 3 个、experiments/ 4 个脚本） | `README.md` | ✅ |
-| F-02 | redaction_audit C 项 LLM 缓存路径更正：`~/.cache/aitester/llm_cache/`（HOME）→ `src/cache/`（仓库内 + gitignore），信任级论述对齐代码实际 | `docs/redaction_audit.md` + `optimization_report.md`（4.1 决策条目同处误记一并更正） | ✅ |
-| F-03 | performance_guide 的 `rm -rf .chroma_cache/` 指向不存在目录（chromadb 1.x 持久化在 rag_data/） | `docs/performance_guide.md` | ✅ |
-| F-04 | "供论文讨论章节"措辞残留 2 处（09-13 隐私清理轮次漏改）：README 结构树 + analyze_failures.py docstring；后者 `--output` 默认值 `docs/paper/` → `experiments/results/`（目录已不存在，无测试引用该脚本） | `README.md` + `experiments/analyze_failures.py` | ✅ |
-| F-05 | README 5.3 成本感知路由补 3.2 阈值可配口径（默认 2.0 + 调优方向 + 0.0=无信息回退 1.0） | `README.md` | ✅ |
-| F-06 | README 新增 5.7 SWE-bench 源码导出自动化小节（脚本用法 + check-dataset 联动） | `README.md` | ✅ |
-| F-07 | api_reference 版本历史补 Unreleased（批次②）行（0.9.13 行保留为历史记录） | `docs/api_reference.md` | ✅ |
-| F-08 | .env.example 3.4 节注释补 3.2 阈值可配 + LLM_N_COST_WEIGHT 数值口径对齐 config.py（0.1~1000，未配置默认 0.0 非 1.0） | `.env.example` | ✅ |
-| F-09 | performance_guide（2026-08-16）/ usage_examples（2026-09-11）时间戳同步 2026-09-14 | 两文件 | ✅ |
-| F-10 | usage_examples 引用小写 `contributing.md`（docs/ 下不存在）→ `../CONTRIBUTING.md` | `docs/usage_examples.md` | ✅ |
+| F-01 | README project structure tree filled in at 4 missing places (src/observability/, src/graph/token_usage.py, 3 in src/tools/, 4 scripts in experiments/) | `README.md` | ✅ |
+| F-02 | redaction_audit item C LLM cache path correction: `~/.cache/aitester/llm_cache/` (HOME) → `src/cache/` (inside the repo + gitignored); the trust-level discussion aligned with the actual code | `docs/redaction_audit.md` + `optimization_report.md` (the same misrecord in the 4.1 decision item corrected together) | ✅ |
+| F-03 | performance_guide's `rm -rf .chroma_cache/` points to a non-existent directory (chromadb 1.x persists to rag_data/) | `docs/performance_guide.md` | ✅ |
+| F-04 | 2 residual "for the paper discussion section" wordings (missed in the 09-13 privacy cleanup round): README structure tree + analyze_failures.py docstring; the latter's `--output` default `docs/paper/` → `experiments/results/` (the directory no longer exists; no test references this script) | `README.md` + `experiments/analyze_failures.py` | ✅ |
+| F-05 | README 5.3 cost-aware routing adds the 3.2 threshold configurability baseline (default 2.0 + tuning direction + 0.0=no-information fallback to 1.0) | `README.md` | ✅ |
+| F-06 | README adds a 5.7 SWE-bench source export automation subsection (script usage + check-dataset linkage) | `README.md` | ✅ |
+| F-07 | api_reference version history adds the Unreleased (batch ②) row (the 0.9.13 row kept as a historical record) | `docs/api_reference.md` | ✅ |
+| F-08 | .env.example section 3.4 comment adds 3.2 threshold configurability + LLM_N_COST_WEIGHT numeric baseline aligned to config.py (0.1~1000; unconfigured default 0.0, not 1.0) | `.env.example` | ✅ |
+| F-09 | performance_guide (2026-08-16) / usage_examples (2026-09-11) timestamps synced to 2026-09-14 | both files | ✅ |
+| F-10 | usage_examples referenced lowercase `contributing.md` (does not exist under docs/) → `../CONTRIBUTING.md` | `docs/usage_examples.md` | ✅ |
 
-### 检索结论（无优化点的维度）
+### Search Conclusions (dimensions with no optimization points)
 
-- `.env.example` / `config.local.example` 占位符无真实密钥（模板口径与 config.py 实际解析核对一致）；
-- QUICKSTART 各步骤与 CLI 实际参数核对无漂移；docs/algorithm_design.md 为算法叙事（"供技术评审"口径），与代码无数据漂移；
-- failure_analysis.md 为历史快照且 09-14 状态说明已注明"以 analyze_results.py 输出为准"，按设计保留原文；
-- 全项目 `grep` 漂移复查（缓存路径 / chroma_cache / 十类 / 论文措辞 / 1111 用例 / 小写引用）全部清零。
+- `.env.example` / `config.local.example` placeholders contain no real keys (template baseline cross-checked against config.py's actual parsing);
+- Each QUICKSTART step cross-checked against the actual CLI parameters, no drift; docs/algorithm_design.md is algorithm narrative (the "for technical review" baseline), no data drift against the code;
+- failure_analysis.md is a historical snapshot and its 09-14 status note already says "take analyze_results.py output as authoritative"; the original text is kept by design;
+- The full-project `grep` drift re-check (cache paths / chroma_cache / ten categories / paper wording / 1111 cases / lowercase references) all cleared to zero.
 
-### full验证结果
+### Full Verification Results
 
-| 检查项 | 结果 |
+| Check | Result |
 |--------|------|
-| full测试 | ✅ **1158 passed / 0 failed**（2 warning 为 scipy 退化数据精度告警，非代码问题） |
-| Lint / 格式化 | ✅ `ruff check` All checks passed + `ruff format --check` 134 files already formatted |
-| 敏感信息 | ✅ 被跟踪文件无真实密钥；.env / .env.local / src/cache/ / dist / build 均 gitignore |
+| Full suite | ✅ **1158 passed / 0 failed** (2 warnings are scipy degenerate-data precision notes, not a code issue) |
+| Lint / format | ✅ `ruff check` All checks passed + `ruff format --check` 134 files already formatted |
+| Sensitive info | ✅ No real keys in tracked files; .env / .env.local / src/cache/ / dist / build all gitignored |
 
-### 设计决策
+### Design Decisions
 
-- **F-02 缓存路径**：redaction_audit C 项"已知可接受风险"结论不变（本地可信域、脱敏与缓存命中互斥），仅路径与信任级论述对齐代码实际（`src/cache/` 在仓库内且已 gitignore）；
-- **F-04 默认输出路径**：`analyze_failures.py --output` 默认值改为 `experiments/results/failure_analysis.md`（无测试引用该脚本，零回归面）；
-- **阶段 6 推送**：用户指令"上传 GitHub"，沿用历史轮次 main 直推（无 feature 分支、无 PR）。
+- **F-02 cache path**: the redaction_audit item C "known acceptable risk" conclusion is unchanged (local trusted domain; redaction and cache hits are mutually exclusive); only the path and trust-level discussion are aligned with the actual code (`src/cache/` inside the repo and gitignored);
+- **F-04 default output path**: the `analyze_failures.py --output` default changed to `experiments/results/failure_analysis.md` (no test references this script; zero regression surface);
+- **Phase 6 push**: the user directive "upload to GitHub"; following the historical-rounds main-direct-push (no feature branch, no PR).
 
 ---
 
-## 附录：2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）
+## Appendix: 2026-09-14 Improvement Checklist Batch (G-01~G-04 + 3.4 + 3.5)
 
-### 执行范围
+### Execution Scope
 
-用户给出 5 大类 22 条改进清单（1.1~1.3 / 2.1~2.3 / 3.1~3.5 / 4.1~4.4 / 5.1~5.3），逐项核对仓库实际代码状态后确认**多数条目已在此前批次落地**，真正缺口集中在 4 处（G-01~G-04），另 2 处为研究性/实验性项目非纯代码改动（3.4 断言增强、3.5 跨文件修复作为可开关能力一并落地，默认关保持历史口径）。
+The user provided a 5-category 22-item improvement checklist (1.1~1.3 / 2.1~2.3 / 3.1~3.5 / 4.1~4.4 / 5.1~5.3); after checking the repository's actual code state item by item, **most items were confirmed to have been implemented in earlier batches**; the real gaps concentrate in 4 (G-01~G-04), plus 2 research/experimental items that are not pure code changes (3.4 assertion augmentation and 3.5 cross-file repair were landed together as switchable capabilities, off by default to keep the historical baseline).
 
-| 项 | 目标 | 改动文件 | 状态 |
+| Item | Goal | Changed Files | Status |
 |----|------|----------|------|
-| G-01 | 1.2 测试异味检测（Assertion Roulette / Magic Number / 断言弱化 / 平凡测试） | `experiments/analyze_results.py`（`_test_smell_detection` 纯函数 + Markdown 渲染）+ `tests/test_experiments_scripts.py` +3 用例 | ✅ commit ffb77cf |
-| G-02 | 1.3 修复收敛曲线（迭代轮次累计通过率 + 修复成本） | `experiments/analyze_results.py`（`_repair_convergence_curve` 纯函数）+ 测试 | ✅ commit ffb77cf（与 G-01 同批） |
-| G-03 | 4.4 依赖缓存监控（命中率统计 / 清理命令 / 多版本列表） | `src/tools/dependency.py`（`get_venv_cache_stats` / `list_venv_cache` / `clear_venv_cache` + `create_venv` 记录 hit/create）+ `tests/test_dependency.py` +8 用例 | ✅ commit 6b0e64d |
-| G-04 | 5.3 失败根因分类 + 案例知识库 | `experiments/analyze_failures.py`（`root_cause_classification` 三大根因 + `failure_knowledge_base` 结构化 JSON）+ `tests/test_analyze_failures.py`（新，13 用例） | ✅ commit 247fc91 |
-| 3.4 | 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） | `src/agents/generator.py`（`_extract_existing_assertions`）+ `config.py`（`ASSERTION_AUGMENT_ENABLE`）+ `tests/test_generator.py` +6 用例 | ✅ commit ed4c237 |
-| 3.5 | 跨文件修复（协调器-提议者架构，默认关） | `src/tools/cross_file.py`（新，AST 依赖分析 + 多文件补丁应用 + 单文件降级）+ `src/graph/workflow.py` cross_file_analyzer 节点 + `tests/test_cross_file.py`（新，27 用例）+ 设计文档 `docs/design/cross_file_repair.md` | ✅ commit 670f368 |
+| G-01 | 1.2 test smell detection (Assertion Roulette / Magic Number / assertion weakening / trivial tests) | `experiments/analyze_results.py` (`_test_smell_detection` pure function + Markdown rendering) + `tests/test_experiments_scripts.py` +3 cases | ✅ commit ffb77cf |
+| G-02 | 1.3 repair convergence curve (cumulative pass rate per iteration round + repair cost) | `experiments/analyze_results.py` (`_repair_convergence_curve` pure function) + tests | ✅ commit ffb77cf (same batch as G-01) |
+| G-03 | 4.4 dependency cache monitoring (hit-rate statistics / cleanup command / multi-version list) | `src/tools/dependency.py` (`get_venv_cache_stats` / `list_venv_cache` / `clear_venv_cache` + `create_venv` records hit/create) + `tests/test_dependency.py` +8 cases | ✅ commit 6b0e64d |
+| G-04 | 5.3 failure root-cause classification + case knowledge base | `experiments/analyze_failures.py` (`root_cause_classification` three root causes + `failure_knowledge_base` structured JSON) + `tests/test_analyze_failures.py` (new, 13 cases) | ✅ commit 247fc91 |
+| 3.4 | Assertion augmentation strategy (AST-extract existing assert into prompt, off by default) | `src/agents/generator.py` (`_extract_existing_assertions`) + `config.py` (`ASSERTION_AUGMENT_ENABLE`) + `tests/test_generator.py` +6 cases | ✅ commit ed4c237 |
+| 3.5 | Cross-file repair (coordinator-proposer architecture, off by default) | `src/tools/cross_file.py` (new; AST dependency analysis + multi-file patch application + single-file fallback) + `src/graph/workflow.py` cross_file_analyzer node + `tests/test_cross_file.py` (new, 27 cases) + design doc `docs/design/cross_file_repair.md` | ✅ commit 670f368 |
 
-### full验证结果
+### Full Verification Results
 
-| 检查项 | 结果 |
+| Check | Result |
 |--------|------|
-| full测试 | ✅ **1225 passed / 0 failed**（自 1.1/1.2 首批基线 1163 net + 62） |
-| Lint / 格式化 | ✅ `ruff check` / `ruff format --check` 全绿 |
-| 文档同步 | ✅ CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference 5 文件批次条目（commit 15cffaa / 1205647） |
+| Full suite | ✅ **1225 passed / 0 failed** (net +62 from the 1.1/1.2 first-batch baseline 1163) |
+| Lint / format | ✅ `ruff check` / `ruff format --check` all green |
+| Doc sync | ✅ 5-file batch entries in CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference (commits 15cffaa / 1205647) |
 
-### 设计决策
+### Design Decisions
 
-- **3.4 / 3.5 默认关**（`ASSERTION_AUGMENT_ENABLE` / `CROSS_FILE_ENABLE` 均默认 false），保持历史实验口径不变；开启为显式行为，无隐式行为变化。
-- **G-01~G-04 仅分析层 / 工具层纯函数**，零运行路径改动，旧 JSON 缺字段时自动降级（跳过章节 / available=False），不崩溃。
-- **G-03 踩坑修复**：`threading.Lock` 非可重入，`_record_venv_cache_event` 与 `_persist_cache_stats` 嵌套自锁会挂起进程——改为单一加锁边界。
+- **3.4 / 3.5 off by default** (`ASSERTION_AUGMENT_ENABLE` / `CROSS_FILE_ENABLE` both default false), keeping the historical experiment baseline unchanged; enabling is an explicit act, with no implicit behavior change.
+- **G-01~G-04 are analysis-layer / tool-layer pure functions only**, zero runtime path changes; when old JSONs lack fields they degrade automatically (skip the section / available=False), no crash.
+- **G-03 pitfall fix**: `threading.Lock` is not reentrant; `_record_venv_cache_event` and `_persist_cache_stats` nested self-locking would hang the process — changed to a single lock boundary.
 
 ---
 
-## 附录：2026-09-14 4.2 半开探测批次
+## Appendix: 2026-09-14 4.2 Half-Open Probe Batch
 
-### 优化点
+### Optimization Points
 
-4.1 熔断器冷却到期后节点直接恢复full路由，死 provider 会被full流量反复打回。补齐经典熔断器三态（closed / open / half-open）：冷却到期后节点先进入"半开"窗口，仅承载一次探测请求；探测成功闭合熔断器恢复full路由，失败则重新打开半程冷却期（`min(cooldown/2, half_open_probe_penalty_cap_seconds)`，默认 cap 30s），防止彻底宕机 provider 冷却期越缩越短。
+After the 4.1 circuit breaker cooldown expires, the node directly returns to full routing, so a dead provider is repeatedly hammered by full traffic. This completes the classic circuit breaker three states (closed / open / half-open): after the cooldown expires, the node first enters a "half-open" window carrying only one probe request; on a successful probe the circuit closes and full routing resumes; on failure the circuit reopens with a half cooldown period (`min(cooldown/2, half_open_probe_penalty_cap_seconds)`, default cap 30s), preventing a completely down provider's cooldown from shrinking without bound.
 
-### 改动内容
+### Changes
 
-| 改动 | 文件 | 说明 |
+| Change | File | Description |
 |------|------|------|
-| 半开窗口判定 + 探测消费 | `src/api/api_manager.py` | `APIHealth.in_circuit_half_open`（冷却已到期、探测未完成）+ `_probe_circuit_half_open()`（成功闭合 / 失败重开半程冷却） |
-| 路由候选纳入半开节点 | `src/api/api_manager.py` | `get_healthy_nodes()` / `_build_node_list()` 将半开窗口节点纳入候选（仅 `enable_half_open_probe=True` 时） |
-| 探测结果统一消费 | `src/api/api_manager.py` | `call()` 与 `check_health()` 的成功 / 各异常分支（RateLimit / APIError / 通用异常）统一调用 `_probe_circuit_half_open` |
-| 三态可观测 | `src/api/api_manager.py` | `get_status()` 新增 `circuit_state` 字段（closed / open / half_open） |
-| 开关 + 惩罚上限可配 | `src/api/api_manager.py` | `APIManagerConfig.enable_half_open_probe`（默认 True，置 False 退回 4.1 直接放行）+ `half_open_probe_penalty_cap_seconds`（默认 30.0） |
-| 半开探测测试 | `tests/test_api_manager_extended.py` | 新增 `TestHalfOpenProbe` 12 用例（窗口性质 / 成功闭合 / 失败重开 / 惩罚上限 / no-op 边界 / 开关关闭回退 / call 与 check_health 双路径消费 / get_status 三态） |
-| 格式归一 | `docs/design/cross_file_repair.md` | 3.5 设计文档 python 代码块注释对齐触发 ruff format 门禁漂移，统一归一（无逻辑改动） |
+| Half-open window verdict + probe consumption | `src/api/api_manager.py` | `APIHealth.in_circuit_half_open` (cooldown expired, probe not completed) + `_probe_circuit_half_open()` (on success close / on failure reopen the half cooldown) |
+| Routing candidates include half-open nodes | `src/api/api_manager.py` | `get_healthy_nodes()` / `_build_node_list()` include half-open window nodes as candidates (only when `enable_half_open_probe=True`) |
+| Unified probe result consumption | `src/api/api_manager.py` | `call()` and `check_health()`'s success / each exception branch (RateLimit / APIError / generic exception) uniformly call `_probe_circuit_half_open` |
+| Three-state observability | `src/api/api_manager.py` | `get_status()` adds a `circuit_state` field (closed / open / half_open) |
+| Switch + penalty cap configurable | `src/api/api_manager.py` | `APIManagerConfig.enable_half_open_probe` (default True; set False to fall back to 4.1 pass-through) + `half_open_probe_penalty_cap_seconds` (default 30.0) |
+| Half-open probe tests | `tests/test_api_manager_extended.py` | New `TestHalfOpenProbe` 12 cases (window properties / success close / failure reopen / penalty cap / no-op boundaries / switch-off fallback / call and check_health dual-path consumption / get_status three states) |
+| Format normalization | `docs/design/cross_file_repair.md` | The 3.5 design doc's python code block comment alignment triggered a ruff format gate drift; normalized uniformly (no logic change) |
 
-### 测试前后对比
+### Before/After Test Comparison
 
-| 指标 | 批次前 | 批次后 |
+| Metric | Before Batch | After Batch |
 |------|--------|--------|
-| full测试 | 1225 passed / 0 failed | **1237 passed / 0 failed**（net + 12，即 TestHalfOpenProbe 12 用例） |
-| Lint / 格式化 | 全绿 | 全绿（`ruff check` / `ruff format --check` 138 files） |
+| Full suite | 1225 passed / 0 failed | **1237 passed / 0 failed** (net +12, i.e. the 12 TestHalfOpenProbe cases) |
+| Lint / format | all green | all green (`ruff check` / `ruff format --check` 138 files) |
 
-### 提交记录
+### Commit Record
 
-| commit | 类型 | 说明 |
+| commit | type | description |
 |--------|------|------|
-| b0b6352 | style(docs) | ruff format 归一 cross_file_repair.md 的 python 代码块漂移 |
-| b69d811 | feat(api) | 4.2 熔断器半开探测（冷却到期先探测后放行，默认开） |
-| d41887d | docs(optimize) | 4.2 文档同步（CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference） |
+| b0b6352 | style(docs) | ruff format normalization of the python code block drift in cross_file_repair.md |
+| b69d811 | feat(api) | 4.2 circuit breaker half-open probe (after the cooldown expires, probe first, then pass; on by default) |
+| d41887d | docs(optimize) | 4.2 documentation sync (CHANGELOG / OPTIMIZATION_PLAN / README / QUICKSTART / api_reference) |
 
-### 设计决策
+### Design Decisions
 
-- **默认开（enable_half_open_probe=True）**：半开探测是稳定性改进，默认启用；对比实验可置 False 退回 4.1 口径，无需改代码。
-- **惩罚公式 `min(cooldown/2, cap=30s)`**：冷却时长减半使"彻底死掉"的 provider 冷却期单调收缩，但 cap 防无限缩短（避免对死点无限次探测）。
-- **零运行路径破坏性**：仅新增字段 / 方法 / 配置项，默认值向后兼容；`get_healthy_nodes` 行为在开关关闭时与 4.1 完全一致。
+- **On by default (enable_half_open_probe=True)**: the half-open probe is a stability improvement and is on by default; comparison experiments can set it False to fall back to the 4.1 baseline without code changes.
+- **Penalty formula `min(cooldown/2, cap=30s)`**: halving the cooldown makes a "completely dead" provider's cooldown shrink monotonically, but the cap prevents unbounded shrinking (avoiding infinite probing of a dead endpoint).
+- **Zero runtime-path breakage**: only new fields / methods / config items; defaults are backward compatible; `get_healthy_nodes` behavior with the switch off is fully consistent with 4.1.
 
-### 后续建议
+### Follow-up Suggestions
 
-1. **跑一次 4.2 对比实验**：同一 provider 池分别 `enable_half_open_probe=True/False` 各跑一轮 benchmark，用 `experiments/analyze_results.py` 对比故障恢复轮次与 token 浪费——验证半开探测实际收益（OPTIMIZATION_PLAN 4.2 行"对比实验未跑"备注）。
-2. **executor 沙箱深度审计（T-04 历史遗留）**：补设计文档 + 审计矩阵，单独立项。
-3. **CLI 模块覆盖率**：`cli/app.py` 仍为全项目最低（约 64%），5.1 条目建议下一轮补 10~15 个边界用例。
+1. **Run a 4.2 comparison experiment**: with the same provider pool, run one benchmark round each with `enable_half_open_probe=True/False`, and use `experiments/analyze_results.py` to compare the fault-recovery round and token waste — verifying the actual gain of the half-open probe (the "comparison experiment not run" note in the OPTIMIZATION_PLAN 4.2 row).
+2. **Executor sandbox deep audit (T-04 historical carry-over)**: add the design doc + audit matrix as a standalone project.
+3. **CLI module coverage**: `cli/app.py` is still the lowest across the project (~64%); item 5.1 suggests backfilling 10~15 boundary cases next round.
 
 ---
 
-## 附录：2026-09-15 全项目收敛轮次（config 集中化 + 死代码清理 + 默认关功能修复）
+## Appendix: 2026-09-15 Full-Project Convergence Round (config centralization + dead code cleanup + off-by-default feature fixes)
 
-> 基线：1247 passed / 0 failed / 91% 覆盖率 / ruff 全绿 / 工作区 clean。
-> 本轮三路子代理并行审计（config/env 直读、死代码/冗余/缺陷、低覆盖模块补测点）+ 人工复核，
-> 落地 11 个文件改动 + 23 个新用例，推进至 **1270 passed / 0 failed / 92% 覆盖率**。
+> Baseline: 1247 passed / 0 failed / 91% coverage / ruff all green / clean working tree.
+> This round ran three-way subagent audits in parallel (direct config/env reads, dead code/redundancy/defects, low-coverage module test backfill points) + manual review;
+> landed 11 file changes + 23 new cases, advancing to **1270 passed / 0 failed / 92% coverage**.
 
-### 缺陷修复（3 处，含 2 处真 bug）
-- 🔴 `executor.py` 硬编码标准库清单误列第三方 `diskcache`、缺 `asyncio`/`importlib`，已删除 80 项
-  frozenset 并复用 `dependency.is_standard_library`（`sys.stdlib_module_names` 权威清单）。
-- 🔴 `_patch_applier_node` 跨文件降级路径把 `cross_file_fallback_single_file` 返回的「文件映射 dict」
-  当「code 字符串」赋给 `new_code`，`len(dict)` 恒 1 → 降级补丁永远卡「过短」安全检查、永远写不进盘；
-  由本轮补测触发，修复为从映射取 entry_module 代码。
-- `_set_thread_api` 丢弃 `api["model"]`，多模型轮询 model 恒回退首配置。
+### Defect Fixes (3 places, including 2 real bugs)
+- 🔴 The hardcoded standard-library list in `executor.py` wrongly listed the third-party `diskcache` and was missing `asyncio`/`importlib`; the 80-item
+  frozenset was removed and `dependency.is_standard_library` is reused (the authoritative `sys.stdlib_module_names` list).
+- 🔴 The `_patch_applier_node` cross-file fallback path treated the "file-mapping dict" returned by `cross_file_fallback_single_file` as a "code string" assigned to `new_code`; `len(dict)` is always 1 → the fallback patch was forever stuck at the "too short" safety check and could never be written to disk;
+  triggered by this round's test backfill; fixed to take the entry_module code from the mapping.
+- `_set_thread_api` dropped `api["model"]`; with multi-model rotation the model always fell back to the first config.
 
-### 配置集中化收敛
-- 删除 config.py 三个无消费方死常量（CROSS_FILE_ENABLE/CROSS_FILE_MAX_MODULES/ASSERTION_AUGMENT_ENABLE）。
-- `SWE_BENCH_ENRICHMENT` 收敛 config（新增「数据集配置」小节）+ .env.example 补条目。
-- `MULTI_CANDIDATE_EXEC_VALIDATE` 收敛为 `multi_candidate_exec_validate()`。
+### Config Centralization Convergence
+- Removed 3 dead constants with no consumers from config.py (CROSS_FILE_ENABLE/CROSS_FILE_MAX_MODULES/ASSERTION_AUGMENT_ENABLE).
+- `SWE_BENCH_ENRICHMENT` converged into config (new "dataset configuration" subsection) + entry added to .env.example.
+- `MULTI_CANDIDATE_EXEC_VALIDATE` converged into `multi_candidate_exec_validate()`.
 
-### 死代码清理（4 处）+ DRY/并发
-- 删 EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback（+_is_zai_url）/
-  benchmark 装饰器 / cross_file.topo_key。
-- RAG 检索器抽 `_upsert` 单一写入点 + threading.Lock 串行化；`refine_failure_category` 接线收敛为
-  `refine_final_error_category`；cross_file docstring 如实描述「当前字典序」。
+### Dead Code Cleanup (4 places) + DRY/Concurrency
+- Removed EXECUTOR_SYSTEM_PROMPT / safe_apply_multi_function_patch / _call_llm_with_fallback (+_is_zai_url) /
+  the benchmark decorator / cross_file.topo_key.
+- RAG retriever extracted a single `_upsert` write point + serialized with threading.Lock; `refine_failure_category` wiring converged into
+  `refine_final_error_category`; the cross_file docstring now truthfully describes the "current lexicographic order".
 
-### 覆盖提升
-- `graph/nodes.py` 76%→95%、`config/config_manager.py` 87%→95%、总覆盖 91%→92%。
-- 新增默认关功能分支（cross_file/multi_candidate）、跨文件降级回归、空字段校验、写盘异常、env 开关等 23 用例。
+### Coverage Improvement
+- `graph/nodes.py` 76%→95%, `config/config_manager.py` 87%→95%, total coverage 91%→92%.
+- 23 new cases: off-by-default feature branches (cross_file/multi_candidate), cross-file fallback regression, empty-field validation, write-disk exceptions, env switches, etc.
 
-### 版本收敛
-- 版本 0.9.11 → 0.9.14；CHANGELOG 14 个 Unreleased 条目按日期映射 0.9.12/0.9.13/0.9.14；
-  docs/api_reference 版本表同步；README 测试数/覆盖率同步。
+### Version Convergence
+- Version 0.9.11 → 0.9.14; CHANGELOG's 14 Unreleased entries mapped to 0.9.12/0.9.13/0.9.14 by date;
+  the docs/api_reference version table synced; the README test count/coverage synced.
