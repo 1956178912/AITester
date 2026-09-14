@@ -270,7 +270,7 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
     return workflow.compile()
 
 
-def get_workflow_stats() -> dict:
+def get_workflow_stats() -> dict[str, Any]:
     """
     获取工作流执行统计信息。
 

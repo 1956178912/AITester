@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -105,7 +106,7 @@ class MySQLClient:
         return cls._pool
 
     @contextmanager
-    def cursor(self):
+    def cursor(self) -> Iterator[pymysql.cursors.DictCursor]:
         """
         提供事务安全的游标上下文管理器。
         从连接池获取连接，自动提交成功事务，回滚失败事务，

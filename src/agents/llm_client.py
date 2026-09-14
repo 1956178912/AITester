@@ -18,6 +18,7 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from langchain_openai import ChatOpenAI
@@ -140,10 +141,10 @@ def _get_or_create_zai_client(api_key: str, base_url: str) -> Any:
 
 
 def _retry_with_exponential_backoff(
-    func,
+    func: Callable[..., Any],
     max_retries: int,
     base_wait: int = 1,
-    retryable_exceptions: tuple = (),
+    retryable_exceptions: tuple[type[Exception], ...] = (),
 ) -> Any:
     """带指数退避的重试通用工具函数。
 

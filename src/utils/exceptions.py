@@ -39,7 +39,7 @@ class AITesterError(Exception):
     所有自定义异常都应继承此类，以便统一捕获和处理。
     """
 
-    def __init__(self, message: str, context: dict[str, Any] | None = None):
+    def __init__(self, message: str, context: dict[str, Any] | None = None) -> None:
         """初始化异常。
 
         Args:
@@ -104,7 +104,7 @@ class JSONParseError(ParsingError):
     当 JSON 字符串格式不正确或无法解析时抛出。
     """
 
-    def __init__(self, message: str, json_str: str, pos: int):
+    def __init__(self, message: str, json_str: str, pos: int) -> None:
         """初始化 JSON 解析错误。
 
         Args:
@@ -123,7 +123,7 @@ class SyntaxParseError(ParsingError):
     当 Python 代码语法不正确时抛出。
     """
 
-    def __init__(self, message: str, filename: str = "", lineno: int = 0, offset: int = 0):
+    def __init__(self, message: str, filename: str = "", lineno: int = 0, offset: int = 0) -> None:
         """初始化语法解析错误。
 
         Args:
@@ -157,7 +157,7 @@ class RateLimitError(APIError):
     当 API 返回速率限制响应时抛出。
     """
 
-    def __init__(self, message: str, retry_after: int | None = None):
+    def __init__(self, message: str, retry_after: int | None = None) -> None:
         """初始化速率限制错误。
 
         Args:

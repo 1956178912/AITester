@@ -39,7 +39,7 @@ _rag_lock = threading.Lock()
 _rag_init_failed = False
 
 
-def get_rag_retriever():
+def get_rag_retriever() -> TestCaseRetriever | None:
     """
     获取 RAG 检索器单例实例（线程安全版本）。
 
