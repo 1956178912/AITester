@@ -44,8 +44,7 @@ from src.api.api_manager import (
 def _empty_mgr() -> APIManager:
     """创建一个不带任何预置节点的 APIManager（patch LLM_CONFIGS 为空）。"""
     with patch("src.api.api_manager.LLM_CONFIGS", []):
-        mgr = APIManager(enable_health_checker=False)
-    return mgr
+        return APIManager(enable_health_checker=False)
 
 
 def _mock_client(return_value=None, side_effect=None):
@@ -316,7 +315,7 @@ class TestBuildNodeList:
     def test_build_node_list_unknown_model_raises(self):
         """指定未知模型时，health_nodes 中不存在该 key，select_node 选择第一个健康节点（不抛异常）"""
         # 已知行为：当 model 不在 health_nodes 时回退到 select_node()，而非直接报错
-        nodes_to_try, fallbacks = self.mgr._build_node_list("nonexistent")
+        nodes_to_try, _fallbacks = self.mgr._build_node_list("nonexistent")
         # 应返回 model1 作为默认选择
         assert len(nodes_to_try) == 1
         assert nodes_to_try[0].config.model_name in ("model1", "model2", "model3")
@@ -331,7 +330,7 @@ class TestBuildNodeList:
     def test_build_node_list_excludes_unhealthy_fallbacks(self):
         """fallback 列表不包含不健康节点"""
         self.mgr.health_nodes["model2"].is_healthy = False
-        nodes_to_try, fallbacks = self.mgr._build_node_list(None)
+        _nodes_to_try, fallbacks = self.mgr._build_node_list(None)
         fallback_names = [n.config.model_name for n in fallbacks]
         assert "model2" not in fallback_names
 
@@ -983,7 +982,7 @@ class TestStatusDataIntegrity:
     def test_status_node_has_all_required_fields(self):
         """节点状态包含所有必需字段"""
         status = self.mgr.get_status()
-        node_info = list(status["nodes"].values())[0]
+        node_info = next(iter(status["nodes"].values()))
         required_keys = {
             "model",
             "base_url",
@@ -998,7 +997,7 @@ class TestStatusDataIntegrity:
     def test_status_rounding_precision(self):
         """成功率和小数值四舍五入精度正确"""
         status = self.mgr.get_status()
-        node_info = list(status["nodes"].values())[0]
+        node_info = next(iter(status["nodes"].values()))
         # 2 成功 1 失败，total_requests=3，success_rate=2/3≈0.667
         assert node_info["success_rate"] == pytest.approx(2 / 3, abs=0.01)
         assert node_info["avg_response_time_ms"] == pytest.approx(125.0)

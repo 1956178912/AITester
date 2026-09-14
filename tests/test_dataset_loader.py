@@ -416,9 +416,11 @@ class TestSWEBenchDataset:
 
     def test_download_from_huggingface_import_error(self):
         """datasets 库未安装时抛 ImportError"""
-        with patch("src.datasets.dataset_loader._datasets", None):
-            with pytest.raises(ImportError, match="pip install datasets"):
-                SWEBenchDataset.download_from_huggingface()
+        with (
+            patch("src.datasets.dataset_loader._datasets", None),
+            pytest.raises(ImportError, match="pip install datasets"),
+        ):
+            SWEBenchDataset.download_from_huggingface()
 
     def test_download_from_huggingface_success(self, tmp_path):
         """成功下载并写入子集专属 JSONL（文件名带子集标识，避免互相覆盖）"""
@@ -446,9 +448,11 @@ class TestSWEBenchDataset:
         mock_datasets = MagicMock()
         mock_datasets.load_dataset.side_effect = Exception("network error")
 
-        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
-            with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
-                SWEBenchDataset.download_from_huggingface()
+        with (
+            patch("src.datasets.dataset_loader._datasets", mock_datasets),
+            pytest.raises(RuntimeError, match="SWE-bench 下载失败"),
+        ):
+            SWEBenchDataset.download_from_huggingface()
 
     def test_download_split_mapping(self):
         """split 映射关系正确"""

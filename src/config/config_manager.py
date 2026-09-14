@@ -180,9 +180,7 @@ def _find_and_remove_model_block(lines: list[str], model_name: str) -> tuple[lis
         if m and int(m.group(1)) in indices:
             return True
         m = comment_line.match(stripped)
-        if m and int(m.group(1)) in indices:
-            return True
-        return False
+        return bool(m and int(m.group(1)) in indices)
 
     new_lines = [line for line in lines if not _belongs_to_block(line)]
     return new_lines, True

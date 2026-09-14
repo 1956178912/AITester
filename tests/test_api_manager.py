@@ -277,7 +277,7 @@ class TestAPIManagerNodeManagement:
 
         # 手动标记一个节点不健康
         if mgr.health_nodes:
-            first_node = list(mgr.health_nodes.values())[0]
+            first_node = next(iter(mgr.health_nodes.values()))
             first_node.is_healthy = False
             healthy = mgr.get_healthy_nodes()
             assert len(healthy) < len(mgr.get_all_nodes())
@@ -802,7 +802,7 @@ class TestAPIManagerStatus:
     def test_get_status_node_details(self):
         """测试节点详细信息"""
         status = self.mgr.get_status()
-        for _name, node_info in status["nodes"].items():
+        for node_info in status["nodes"].values():
             assert "model" in node_info
             assert "base_url" in node_info
             assert "is_healthy" in node_info

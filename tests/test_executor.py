@@ -340,14 +340,14 @@ class TestResolveModulePaths:
         test_file = tmp_path / "test_module.py"
         test_file.write_text("def foo(): pass")
 
-        module_dirs, needs_replacement = ExecutorAgent._resolve_module_paths(
+        module_dirs, _needs_replacement = ExecutorAgent._resolve_module_paths(
             ["test_module"], "test_module", str(tmp_path), str(test_file)
         )
         assert len(module_dirs) > 0
 
     def test_module_not_found(self):
         """模块不存在时标记需要替换。"""
-        module_dirs, needs_replacement = ExecutorAgent._resolve_module_paths(
+        _module_dirs, needs_replacement = ExecutorAgent._resolve_module_paths(
             ["nonexistent_module"], "actual_module", "/project", "/project/src/actual_module.py"
         )
         assert needs_replacement is True
@@ -366,7 +366,7 @@ class TestRunPytestWithRetry:
         mock_run.return_value = mock_result
 
         executor = ExecutorAgent(timeout=30)
-        output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
+        _output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
 
         assert result.returncode == 0
         mock_run.assert_called_once()
@@ -379,7 +379,7 @@ class TestRunPytestWithRetry:
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="pytest", timeout=30)
 
         executor = ExecutorAgent(timeout=30)
-        output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
+        _output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
 
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "timeout"
@@ -406,7 +406,7 @@ class TestRunPytestWithRetry:
         mock_run.side_effect = FileNotFoundError("pytest not found")
 
         executor = ExecutorAgent(timeout=30)
-        output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
+        _output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
 
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "file_not_found"
@@ -417,7 +417,7 @@ class TestRunPytestWithRetry:
         mock_run.side_effect = PermissionError("Permission denied")
 
         executor = ExecutorAgent(timeout=30)
-        output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
+        _output, result = executor._run_pytest_with_retry(["pytest"], {}, "/project")
 
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "permission_error"

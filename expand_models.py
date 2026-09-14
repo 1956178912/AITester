@@ -41,26 +41,23 @@ def load_models_from_json(json_file: str) -> list[dict]:
         data = json.load(f)
     if isinstance(data, list):
         return data
-    elif isinstance(data, dict) and "models" in data:
+    if isinstance(data, dict) and "models" in data:
         return data["models"]
-    else:
-        raise ValueError("JSON 文件格式不正确，应为模型列表或包含 'models' 键的字典")
+    raise ValueError("JSON 文件格式不正确，应为模型列表或包含 'models' 键的字典")
 
 
 def load_models_from_csv(csv_file: str) -> list[dict]:
     """从 CSV 文件加载模型配置"""
-    models = []
     with open(csv_file, encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            models.append(
-                {
-                    "model_name": row.get("model_name", ""),
-                    "base_url": row.get("base_url", ""),
-                    "api_key": row.get("api_key", ""),
-                }
-            )
-    return models
+        return [
+            {
+                "model_name": row.get("model_name", ""),
+                "base_url": row.get("base_url", ""),
+                "api_key": row.get("api_key", ""),
+            }
+            for row in reader
+        ]
 
 
 def interactive_add():

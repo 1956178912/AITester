@@ -174,7 +174,7 @@ def plot_baseline_comparison(summary: dict[str, Any]) -> None:
     x = range(len(baselines))
     width = 0.25
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    _fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     # 成功率柱状图
     bars1 = axes[0].bar(x, success_rates, width, color="#4C72B0")

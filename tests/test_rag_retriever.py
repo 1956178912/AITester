@@ -108,9 +108,8 @@ class TestInit:
 
     def test_init_without_chromadb_raises(self):
         """验证未安装 chromadb 时抛出 ImportError。"""
-        with patch("src.rag.retriever.CHROMA_AVAILABLE", False):
-            with pytest.raises(ImportError, match="chromadb 未安装"):
-                TestCaseRetriever()
+        with patch("src.rag.retriever.CHROMA_AVAILABLE", False), pytest.raises(ImportError, match="chromadb 未安装"):
+            TestCaseRetriever()
 
 
 # ============================================================================

@@ -211,9 +211,7 @@ class TestInMemoryDataset:
             )
             dataset.add_task(task)
 
-        collected = []
-        for task in dataset:
-            collected.append(task.task_id)
+        collected = [task.task_id for task in dataset]
 
         assert len(collected) == 3
         assert "test__0" in collected

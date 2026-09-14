@@ -300,9 +300,8 @@ class TestSWEBenchDownload:
         mock_datasets = MagicMock()
         mock_datasets.load_dataset.return_value = mock_ds
 
-        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
-            with caplog.at_level(logging.INFO):
-                SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="mini")
+        with patch("src.datasets.dataset_loader._datasets", mock_datasets), caplog.at_level(logging.INFO):
+            SWEBenchDataset.download_from_huggingface(cache_dir=str(tmp_path), subset="mini")
 
         assert "下载完成" in caplog.text
 
@@ -312,16 +311,20 @@ class TestSWEBenchDownload:
         mock_datasets = MagicMock()
         mock_datasets.load_dataset.side_effect = Exception("network timeout")
 
-        with patch("src.datasets.dataset_loader._datasets", mock_datasets):
-            with pytest.raises(RuntimeError, match="SWE-bench 下载失败"):
-                SWEBenchDataset.download_from_huggingface()
+        with (
+            patch("src.datasets.dataset_loader._datasets", mock_datasets),
+            pytest.raises(RuntimeError, match="SWE-bench 下载失败"),
+        ):
+            SWEBenchDataset.download_from_huggingface()
 
     @pytest.mark.timeout(30)
     def test_download_no_datasets_library(self):
         """未安装 datasets 库时抛 ImportError"""
-        with patch("src.datasets.dataset_loader._datasets", None):
-            with pytest.raises(ImportError, match="pip install datasets"):
-                SWEBenchDataset.download_from_huggingface()
+        with (
+            patch("src.datasets.dataset_loader._datasets", None),
+            pytest.raises(ImportError, match="pip install datasets"),
+        ):
+            SWEBenchDataset.download_from_huggingface()
 
 
 # =============================================================================

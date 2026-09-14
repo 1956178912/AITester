@@ -568,7 +568,7 @@ class ExecutorAgent:
     @staticmethod
     def _build_sys_path_code(module_dirs: set) -> str:
         """生成 sys.path 修改代码（import sys 只出现一次，避免原实现的重复导入）。"""
-        inserts = "\n".join(f"sys.path.insert(0, {repr(d)})" for d in sorted(module_dirs))
+        inserts = "\n".join(f"sys.path.insert(0, {d!r})" for d in sorted(module_dirs))
         return f"import sys\n{inserts}"
 
     @staticmethod

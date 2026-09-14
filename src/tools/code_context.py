@@ -78,10 +78,9 @@ def _truncate_long_body(source_lines: list[str], func_node: ast.AST) -> str:
 
 def _build_header(source_lines: list[str], tree: ast.AST) -> str:
     """收集模块级 import 语句（含 from X import Y），拼接为文件头。"""
-    segments: list[str] = []
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            segments.append(_slice_source(source_lines, node))
+    segments: list[str] = [
+        _slice_source(source_lines, node) for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
     return "\n".join(segments)
 
 
@@ -111,10 +110,7 @@ def _assemble(header: str, kept: dict[str, object], source_lines: list[str]) -> 
     if header:
         parts.append(header)
     for segment in kept.values():
-        if isinstance(segment, ast.AST):
-            text = _slice_source(source_lines, segment)
-        else:
-            text = _render_segment(segment)
+        text = _slice_source(source_lines, segment) if isinstance(segment, ast.AST) else _render_segment(segment)
         if text:
             parts.append(text)
     return "\n\n".join(parts)

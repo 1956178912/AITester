@@ -130,7 +130,7 @@ class TestCursorContextManager:
 
     def test_cursor_commits_on_success(self):
         """正常退出时提交事务并归还连接"""
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, conn, cur = _make_client_and_conn()
         with client.cursor() as c:
             assert c is cur
         conn.commit.assert_called_once()
@@ -140,11 +140,10 @@ class TestCursorContextManager:
 
     def test_cursor_rolls_back_on_error(self):
         """块内异常时回滚事务，异常继续向外传播"""
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, conn, cur = _make_client_and_conn()
         cur.execute.side_effect = RuntimeError("db down")
-        with pytest.raises(RuntimeError, match="db down"):
-            with client.cursor():
-                cur.execute("SELECT 1")
+        with pytest.raises(RuntimeError, match="db down"), client.cursor():
+            cur.execute("SELECT 1")
         conn.rollback.assert_called_once()
         conn.commit.assert_not_called()
         # 即使回滚失败路径，连接与游标仍被关闭（资源不泄漏）
@@ -156,7 +155,7 @@ class TestTaskCrud:
     """tasks 表 CRUD（参数化查询防注入）"""
 
     def test_create_task_returns_lastrowid_as_str(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.lastrowid = 42
         task_id = client.create_task("examples/calculator.py", "divide")
         assert task_id == "42"
@@ -166,15 +165,15 @@ class TestTaskCrud:
         assert params == ("examples/calculator.py", "divide")
 
     def test_create_task_without_function(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.lastrowid = 7
         task_id = client.create_task("examples/calculator.py")
         assert task_id == "7"
-        sql, params = cur.execute.call_args.args
+        _sql, params = cur.execute.call_args.args
         assert params == ("examples/calculator.py", None)
 
     def test_get_task_returns_row(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.fetchone.return_value = {"id": 1, "target_file": "a.py"}
         row = client.get_task("1")
         assert row == {"id": 1, "target_file": "a.py"}
@@ -183,7 +182,7 @@ class TestTaskCrud:
         assert params == ("1",)
 
     def test_get_task_not_found_returns_none(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.fetchone.return_value = None
         assert client.get_task("999") is None
 
@@ -192,7 +191,7 @@ class TestTestRunCrud:
     """test_runs 表 CRUD"""
 
     def test_create_test_run_inserts_all_fields(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.lastrowid = 5
         run_id = client.create_test_run(
             task_id="1",
@@ -212,7 +211,7 @@ class TestRepairHistoryCrud:
     """repair_history 表 CRUD"""
 
     def test_create_repair_history_inserts_all_fields(self):
-        client, pool, conn, cur = _make_client_and_conn()
+        client, _pool, _conn, cur = _make_client_and_conn()
         cur.lastrowid = 9
         record_id = client.create_repair_history(
             task_id="1",

@@ -40,7 +40,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ class TraceSession:
 
     # 按文件路径全局互斥的锁注册表：同一 JSONL 文件的追加串行化
     # （threading.Lock 本身轻量，文件数 = 任务数，可忽略）
-    _file_locks: dict[str, threading.Lock] = {}
+    _file_locks: ClassVar[dict[str, threading.Lock]] = {}
     _file_locks_guard = threading.Lock()
 
     @classmethod
@@ -171,9 +171,8 @@ class TraceSession:
             line = json.dumps(record, ensure_ascii=False, default=str)
         lock = self._lock_for(self._file_path)
         try:
-            with lock:
-                with open(self._file_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
+            with lock, open(self._file_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
         except OSError as e:
             # 追踪是旁路观测层：写盘失败不改变被测系统行为
             logger.warning("追踪记录写盘失败（忽略）: %s", e)

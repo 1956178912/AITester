@@ -116,7 +116,7 @@ def _suspected_stage(full_result: dict[str, Any], base_result: dict[str, Any]) -
     """
     category = (full_result.get("error_category") or "").lower()
     iterations = full_result.get("iterations", 0) or 0
-    if "import" in category or "rate_limit" in category or "error" == category:
+    if "import" in category or "rate_limit" in category or category == "error":
         return "环境/执行失败（缺依赖或 API 异常）——与 Planner/Debugger 逻辑无关"
     if iterations > 0:
         return "Debugger 修复循环未收敛（修复补丁可能破坏正确代码，或迭代次数不足）"

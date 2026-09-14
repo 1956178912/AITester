@@ -234,8 +234,10 @@ def generate_comparison_report(analysis: dict[str, Any], output_path: str | None
         "|---|---|---|",
     ]
 
-    for rank_info in analysis["rankings"]["success_rate"]:
-        lines.append(f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |")
+    lines.extend(
+        f"| {rank_info['rank']} | {rank_info['baseline']} | {rank_info['value']} |"
+        for rank_info in analysis["rankings"]["success_rate"]
+    )
 
     lines += [
         "",

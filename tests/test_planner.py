@@ -96,6 +96,5 @@ class TestPlannerPlan:
         import pytest
 
         p = self._planner()
-        with patch.object(p, "_call_llm_with_cache", return_value="这不是 JSON"):
-            with pytest.raises(json.JSONDecodeError):
-                p.plan(_CODE)
+        with patch.object(p, "_call_llm_with_cache", return_value="这不是 JSON"), pytest.raises(json.JSONDecodeError):
+            p.plan(_CODE)

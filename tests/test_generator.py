@@ -128,7 +128,7 @@ def test_func(x):
                 for decorator in node.decorator_list:
                     result = GeneratorAgent._check_parametrize_decorator(decorator)
                     if result is not None:
-                        param_names, cases_arg = result
+                        param_names, _cases_arg = result
                         assert param_names == ["x"]
                         break
 

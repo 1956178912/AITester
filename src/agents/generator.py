@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import GENERATOR_SYSTEM_PROMPT
@@ -91,7 +91,7 @@ class GeneratorAgent(BaseAgent):
 
     # 已知合法的外部包，不应被替换为被测模块名
     # 这些是 Python 标准库和常用测试框架，import 它们属于正常行为
-    _KNOWN_MODULES = {
+    _KNOWN_MODULES: ClassVar[set[str]] = {
         "pytest",
         "unittest",
         "typing",
@@ -270,14 +270,13 @@ class GeneratorAgent(BaseAgent):
         Returns:
             True 表示匹配，False 表示不匹配。
         """
-        if isinstance(elt, (ast.Tuple, ast.List)):
-            if len(elt.elts) != len(param_names):
-                logger.warning(
-                    "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
-                    len(param_names),
-                    len(elt.elts),
-                )
-                return False
+        if isinstance(elt, (ast.Tuple, ast.List)) and len(elt.elts) != len(param_names):
+            logger.warning(
+                "Parametrize 参数不匹配：声明 %d 个，实际 %d 个 → 需要重试",
+                len(param_names),
+                len(elt.elts),
+            )
+            return False
         return True
 
     @staticmethod
