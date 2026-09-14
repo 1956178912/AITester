@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](cross_file_repair.en.md) | 简体中文（本文）
+
 # 3.5 跨文件修复能力设计文档
 
 > 立项日期：2026-09-14

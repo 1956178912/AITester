@@ -1,12 +1,16 @@
+> **语言 / Language**：[English](optimization_report.en.md) | 简体中文（本文）
+
+> **归档说明（2026-09-15）**：本文档原为根目录 `OPTIMIZATION_REPORT.md`，现归入 `docs/history/`（历史轮次工作记录，非当前维护文档）。当前轮次的优化决策见 CHANGELOG 与用户工作区的全局决策日志。
+
 # AITester 项目优化报告
 
 > 本报告为 2026-09-11 优化轮次的完整交付记录。阶段 0 基线与阶段 1 优化点清单
-> 详见 `OPTIMIZATION_PLAN.md`；阶段 3-5 已在同一轮内完成，阶段 6 推送与 PR 待用户最终确认。
+> 详见 `optimization_plan.md`；阶段 3-5 已在同一轮内完成，阶段 6 推送与 PR 待用户最终确认。
 >
 > **后续轮次**：2026-09-12 轮次（文档数据对齐批次，N-01~N-04）的完整记录见文末
 > 「附录：2026-09-12 轮次」；2026-09-13 轮次（文档数据对齐批次，M-01~M-03）的完整记录见
 > 「附录：2026-09-13 轮次」；2026-09-13 系统功能增强轮次（3.1/3.4/4.1/2.3/1.5）的完整记录见
-> 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `OPTIMIZATION_PLAN.md` 同名章节。
+> 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `optimization_plan.md` 同名章节。
 > 2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）与 4.2 半开探测批次的完整记录见
 > 「附录：2026-09-14 改进清单批次」与「附录：2026-09-14 4.2 半开探测批次」。
 >
@@ -103,7 +107,7 @@ AITester/
 
 ## 阶段 1：项目检索与优化点识别
 
-优化点全表（16 项，含去重后证据、影响、优先级、验证方式）见 `OPTIMIZATION_PLAN.md`「阶段 1 优化点清单」。
+优化点全表（16 项，含去重后证据、影响、优先级、验证方式）见 `optimization_plan.md`「阶段 1 优化点清单」。
 要点摘要：
 
 - **文档陈旧（P2/P3，4 项）**：README 幽灵测试文件 4 行（D-01）、用例数/覆盖率数据陈旧（D-02/D-08）、消融开关措辞与 .env.example 不一致（D-09）
@@ -116,7 +120,7 @@ AITester/
 
 ## 阶段 2：优化计划
 
-计划表（批次 A/B/C + 后续建议 + 需确认项）见 `OPTIMIZATION_PLAN.md`「本次实施范围」。
+计划表（批次 A/B/C + 后续建议 + 需确认项）见 `optimization_plan.md`「本次实施范围」。
 用户已确认：① 批次 B1 脱敏正则扩展纳入本轮；② 本地 .env 顺手改为 3.12-slim；③ 阶段 4 全量验证；④ 推送 main 并创建 PR。
 
 ## 阶段 3：实施优化
@@ -156,7 +160,7 @@ AITester/
 
 - `CHANGELOG.md`：Unreleased 轮次条目已补齐（安全/打包/测试/文档四节，见 `git log` 中 `68fb35f`、`80e2f05`、`ab9edb7`）
 - `README.md`：用例数 1038 / 覆盖率 91% 已对齐；幽灵测试文件行已删；消融开关措辞已对齐
-- `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`：阶段 0-5 的完整记录（本文件 + 计划文件），随本轮一并提交
+- `optimization_plan.md` / `optimization_report.md`：阶段 0-5 的完整记录（本文件 + 计划文件），随本轮一并提交
 - 本地 `.env`：DOCKER_IMAGE → 3.12-slim（不入库，无文档影响）
 
 ## 阶段 6：上传 GitHub
@@ -282,7 +286,7 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 
 > 该轮次在 0.9.11 轮次 18 个待推送 commit 之上执行，新增 4 个 commit
 > （`d1afffc` / `5c7fc80` / `d683741` / `a563d60`）。优化点清单（N-01~N-04）与
-> 检索结论见 `OPTIMIZATION_PLAN.md`「0.9.11 后续优化轮次（2026-09-12）」章节。
+> 检索结论见 `optimization_plan.md`「0.9.11 后续优化轮次（2026-09-12）」章节。
 
 ### 阶段 0：基线检查
 
@@ -335,7 +339,7 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 ### 阶段 5：文档更新
 
 - `CHANGELOG.md`：新增 2026-09-12 Unreleased 轮次条目（文档批次 + 全量测试结果）
-- `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`（本附录）：本轮完整记录入库
+- `optimization_plan.md` / `optimization_report.md`（本附录）：本轮完整记录入库
 - README/QUICKSTART：N-01~N-03 对齐改动随代码 commit 提交
 
 ---
@@ -345,7 +349,7 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 > 该轮次在 2026-09-12 轮次 4 个 commit（`d1afffc`/`5c7fc80`/`d683741`/`a563d60`）之上执行。
 > 09-12 轮次 18 个待推 commit 已推送完成（工作区 clean、本地与 origin/main 同步），
 > 本轮新增 2 个 commit（`5553c35` + 计划/报告入库提交）。
-> 优化点清单（M-01~M-03）与检索结论见 `OPTIMIZATION_PLAN.md`「0.9.11 后续优化轮次（2026-09-13）」章节。
+> 优化点清单（M-01~M-03）与检索结论见 `optimization_plan.md`「0.9.11 后续优化轮次（2026-09-13）」章节。
 
 ### 阶段 0：基线检查
 
@@ -395,7 +399,7 @@ CHANGELOG（Unreleased 条目）、README、OPTIMIZATION_PLAN/REPORT 全部入�
 ### 阶段 5：文档更新
 
 - `CHANGELOG.md`：新增 2026-09-13 Unreleased 轮次条目（M-01/M-02 说明 + 全量测试结论）
-- `OPTIMIZATION_PLAN.md` / `OPTIMIZATION_REPORT.md`（本附录）：本轮完整记录入库
+- `optimization_plan.md` / `optimization_report.md`（本附录）：本轮完整记录入库
 - `README.md`：主表 13 行 + 文件数 + 补 test_logging_utils 行（随 `5553c35` 提交）
 
 ### 阶段 6：上传 GitHub
@@ -580,7 +584,7 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 | 项 | 内容 | 改动文件 | 状态 |
 |----|------|----------|------|
 | F-01 | README 项目结构树补齐 4 处缺失（src/observability/、src/graph/token_usage.py、src/tools/ 3 个、experiments/ 4 个脚本） | `README.md` | ✅ |
-| F-02 | redaction_audit C 项 LLM 缓存路径更正：`~/.cache/aitester/llm_cache/`（HOME）→ `src/cache/`（仓库内 + gitignore），信任级论述对齐代码实际 | `docs/redaction_audit.md` + `OPTIMIZATION_REPORT.md`（4.1 决策条目同处误记一并更正） | ✅ |
+| F-02 | redaction_audit C 项 LLM 缓存路径更正：`~/.cache/aitester/llm_cache/`（HOME）→ `src/cache/`（仓库内 + gitignore），信任级论述对齐代码实际 | `docs/redaction_audit.md` + `optimization_report.md`（4.1 决策条目同处误记一并更正） | ✅ |
 | F-03 | performance_guide 的 `rm -rf .chroma_cache/` 指向不存在目录（chromadb 1.x 持久化在 rag_data/） | `docs/performance_guide.md` | ✅ |
 | F-04 | "供论文讨论章节"措辞残留 2 处（09-13 隐私清理轮次漏改）：README 结构树 + analyze_failures.py docstring；后者 `--output` 默认值 `docs/paper/` → `experiments/results/`（目录已不存在，无测试引用该脚本） | `README.md` + `experiments/analyze_failures.py` | ✅ |
 | F-05 | README 5.3 成本感知路由补 3.2 阈值可配口径（默认 2.0 + 调优方向 + 0.0=无信息回退 1.0） | `README.md` | ✅ |

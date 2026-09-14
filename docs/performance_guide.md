@@ -1,7 +1,9 @@
+> **语言 / Language**：[English](performance_guide.en.md) | 简体中文（本文）
+
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-14
+> 最后更新：2026-09-15
 
 ---
 
@@ -18,7 +20,7 @@ ChromaDB 客户端初始化涉及：
 
 ### 1.2 实现方案
 
-系统在 `src/graph/workflow.py` 中实现了**懒加载单例模式**：
+系统在 `src/graph/rag.py` 中实现了**懒加载单例模式**（`workflow.py` 经 `from src.graph.rag import get_rag_retriever` re-export 保持旧导入路径）：
 
 ```python
 # 模块级缓存
@@ -425,3 +427,35 @@ LLM_2_MODEL_NAME=model-2
 
 *文档版本：v1.1（新增 LLM 客户端复用章节）*  
 *维护者：aitester-maintenance-team*
+
+---
+
+## 九、性能剖析基准（2026-09-12 实测）
+
+> 依据 `scripts/performance_profile.py` 的 cProfile / tracemalloc 实测数据归纳。
+
+### 9.1 运行时逻辑高效，无 CPU 热点
+
+- **ErrorClassifier 分类**：2500 次调用仅 0.025s（单次约 10μs），正则已预编译（`re.Pattern.search` 而非每次 `re.compile`），无"重复编译"开销
+- **CodeAnalyzer AST 分析**：50 次循环 0.132s，`ast.walk` / `iter_child_nodes` 属 AST 遍历正常开销，无优化空间
+- **BaseAgent JSON/代码提取**：解析逻辑近乎零开销，耗时全部来自模块首次 import
+
+### 9.2 主要开销是第三方库 import（固有成本）
+
+| 库 | 耗时 | 触发链 |
+|----|------|--------|
+| chromadb | ~0.6s | import workflow → retriever → chromadb |
+| pandas + datasets | ~0.53s | import dataset_loader → datasets → pandas |
+| openai + pydantic | ~0.9s | import base_agent/llm_client → langchain_openai → openai |
+
+这些库均为项目核心依赖（RAG / 数据集 / LLM 调用），import 成本属固有开销，无法通过代码重构消除。
+
+**可优化点评估**：延迟导入 chromadb / datasets 仅对"未启用 RAG / 不加载数据集"的场景省 0.5-0.6s 启动，但需改动 workflow 多个节点函数的可用性检查，收益有限、风险偏高，当前不实施。
+
+### 9.3 内存
+
+tracemalloc 实测三个被测模块的内存增量均 < 0.01 MB，无异常，无需专项优化。
+
+### 9.4 结论
+
+项目当前**无低垂果实式的性能优化点**，性能方向以保持现状为主；启动耗时瓶颈在第三方库 import 固有成本，运行时无 CPU 热点与内存泄漏。

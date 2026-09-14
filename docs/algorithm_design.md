@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](algorithm_design.en.md) | 简体中文（本文）
+
 # 多智能体协作测试生成与自修复协议（算法设计文档）
 
 > 本文档描述 AITester 的核心算法设计与理论框架，供技术评审与代码审查参考。
