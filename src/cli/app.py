@@ -372,7 +372,7 @@ def _run_single_task(
 @click.option("--json", "json_output", is_flag=True, help="输出 JSON 格式结果（适合管道处理）")
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志输出（DEBUG 级别）")
 def run(
-    target_files: tuple,
+    target_files: tuple[str, ...],
     func: str | None,
     max_iterations: int,
     coverage_threshold: float,
@@ -398,23 +398,7 @@ def run(
         3. 运行多智能体工作流（Planner → Generator → Executor → Debugger → PatchApplier）
         4. 输出执行结果摘要或 JSON
     """
-    # 验证参数
-    if parallel < 1:
-        error_msg("--parallel 必须大于 0")
-        raise SystemExit(1)
-
-    if max_iterations < 1:
-        error_msg("--max-iterations 必须大于 0")
-        raise SystemExit(1)
-
-    if coverage_threshold < 0 or coverage_threshold > 100:
-        error_msg(f"--coverage-threshold 必须在 0-100 范围内（当前: {coverage_threshold}%）")
-        raise SystemExit(1)
-
-    # 超时参数校验：负数/0 会让 subprocess 立即超时，属于无效输入
-    if timeout is not None and timeout < 1:
-        error_msg(f"--timeout 必须 >= 1 秒（当前: {timeout}）")
-        raise SystemExit(1)
+    _validate_run_args(parallel, max_iterations, coverage_threshold, timeout)
 
     # 设置详细日志级别
     if verbose:
@@ -425,15 +409,7 @@ def run(
     exec_timeout = timeout if timeout is not None else EXECUTION_TIMEOUT
 
     # 支持 glob 模式展开（如 examples/*.py）
-    expanded_files: list[str] = []
-    for pattern in target_files:
-        matched = glob_module.glob(pattern)
-        if matched:
-            expanded_files.extend(sorted(matched))
-        elif os.path.exists(pattern):
-            expanded_files.append(pattern)
-        else:
-            warning_msg(f"文件不存在：{pattern}")
+    expanded_files = _expand_target_files(target_files)
 
     if not expanded_files:
         error_msg("没有有效的目标文件，请检查文件路径是否正确")
@@ -522,32 +498,7 @@ def run(
 
         # 输出汇总信息（非 JSON 模式下）
         if not json_output:
-            separator = "=" * 50
-            click.echo(f"\n{separator}")
-            click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
-            click.echo(f"  总计：{total} 个文件")
-            click.echo(f"  通过：{colorize(str(passed), Colors.GREEN)}")
-            if failed > 0:
-                click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
-            click.echo(f"  耗时：{elapsed_time:.2f}s")
-            click.echo(f"{separator}")
-
-            # 打印结果表格
-            if _rich_available():
-                print_rich_table(results)
-            else:
-                for r in results:
-                    status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
-                    # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
-                    r_cov = r.get("coverage")
-                    coverage = f"{r_cov}%" if r_cov is not None else "N/A"
-                    click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
-
-            # 显示执行统计
-            if passed > 0:
-                success_msg(f"{passed}/{total} 个测试通过")
-            if failed > 0:
-                warning_msg(f"{failed}/{total} 个测试失败")
+            _print_run_summary(results, total, passed, failed, elapsed_time)
 
         logger.info("批量测试完成：总计=%d, 通过=%d, 失败=%d, 耗时=%.2fs", total, passed, failed, elapsed_time)
         exit_code = 1 if failed > 0 else 0
@@ -556,6 +507,69 @@ def run(
     # 让 CI/脚本能把 AITester 当门控工具用（此前无论成败都 exit 0）
     if exit_code:
         raise SystemExit(exit_code)
+
+
+def _validate_run_args(parallel: int, max_iterations: int, coverage_threshold: float, timeout: int | None) -> None:
+    """校验 run 命令输入参数，非法时抛 SystemExit(1)。"""
+    if parallel < 1:
+        error_msg("--parallel 必须大于 0")
+        raise SystemExit(1)
+    if max_iterations < 1:
+        error_msg("--max-iterations 必须大于 0")
+        raise SystemExit(1)
+    if coverage_threshold < 0 or coverage_threshold > 100:
+        error_msg(f"--coverage-threshold 必须在 0-100 范围内（当前: {coverage_threshold}%）")
+        raise SystemExit(1)
+    # 超时参数校验：负数/0 会让 subprocess 立即超时，属于无效输入
+    if timeout is not None and timeout < 1:
+        error_msg(f"--timeout 必须 >= 1 秒（当前: {timeout}）")
+        raise SystemExit(1)
+
+
+def _expand_target_files(target_files: tuple[str, ...]) -> list[str]:
+    """展开 glob 模式与普通路径，返回存在的文件列表（glob 匹配项按字典序稳定排序）。"""
+    expanded_files: list[str] = []
+    for pattern in target_files:
+        matched = glob_module.glob(pattern)
+        if matched:
+            expanded_files.extend(sorted(matched))
+        elif os.path.exists(pattern):
+            expanded_files.append(pattern)
+        else:
+            warning_msg(f"文件不存在：{pattern}")
+    return expanded_files
+
+
+def _print_run_summary(
+    results: list[dict[str, Any]], total: int, passed: int, failed: int, elapsed_time: float
+) -> None:
+    """打印批量测试完成摘要（非 JSON 模式，含结果表格与统计）。"""
+    separator = "=" * 50
+    click.echo(f"\n{separator}")
+    click.echo(f"{Colors.BOLD}批量测试完成{Colors.RESET}")
+    click.echo(f"  总计：{total} 个文件")
+    click.echo(f"  通过：{colorize(str(passed), Colors.GREEN)}")
+    if failed > 0:
+        click.echo(f"  失败：{colorize(str(failed), Colors.RED)}")
+    click.echo(f"  耗时：{elapsed_time:.2f}s")
+    click.echo(f"{separator}")
+
+    # 打印结果表格
+    if _rich_available():
+        print_rich_table(results)
+    else:
+        for r in results:
+            status = colorize("✓", Colors.GREEN) if r.get("passed") else colorize("✗", Colors.RED)
+            # 0.0 是合法覆盖率，用 is not None 判断缺失（falsy 会把 0% 误显示为 N/A）
+            r_cov = r.get("coverage")
+            coverage = f"{r_cov}%" if r_cov is not None else "N/A"
+            click.echo(f"  {status} {r['file']} (func={r['func']}, coverage={coverage})")
+
+    # 显示执行统计
+    if passed > 0:
+        success_msg(f"{passed}/{total} 个测试通过")
+    if failed > 0:
+        warning_msg(f"{failed}/{total} 个测试失败")
 
 
 @cli.command()
@@ -594,7 +608,7 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
         python main.py check-dataset swe_bench --subset lite
         python main.py check-dataset examples
     """
-    from src.datasets.dataset_loader import SWEBenchDataset, load_dataset
+    from src.datasets.dataset_loader import load_dataset
 
     try:
         loader = load_dataset(dataset, subset=subset)
@@ -606,6 +620,17 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
     info_msg(f"数据集 {dataset}（子集: {subset or '全部'}）共加载 {len(tasks)} 个任务")
 
     # 逐任务打印加载详情（前 N 个，对应"手动检查 2-3 个任务"的排查方法）
+    _print_task_details(tasks, limit)
+    # 全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）
+    _print_quality_report(loader, tasks)
+    # 2.1 源码补充流程：缺失被测源码的任务单独列出 instance_id
+    _print_missing_source(loader, tasks)
+
+
+def _print_task_details(tasks: list[Any], limit: int) -> None:
+    """逐任务打印加载详情（前 N 个，对应"手动检查 2-3 个任务"的排查方法）。"""
+    from src.datasets.dataset_loader import SWEBenchDataset
+
     for task in tasks[:limit]:
         info_msg(f"── {task.task_id} ──")
         info_msg(f"  repo: {task.repo_name}")
@@ -622,7 +647,9 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
         else:
             info_msg("  ✓ 加载质量健康")
 
-    # 全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）
+
+def _print_quality_report(loader: Any, tasks: list[Any]) -> None:
+    """打印全量质量报告（仅 SWE-bench/Defects4J 等标准数据集有意义）。"""
     report = {}
     if hasattr(loader, "quality_report"):
         report = loader.quality_report()
@@ -635,8 +662,9 @@ def check_dataset(dataset: str, subset: str | None, limit: int) -> None:
     else:
         info_msg(f"✓ 全量质量检查通过（{len(tasks)} 个任务无加载问题）")
 
-    # 2.1 源码补充流程：缺失被测源码的任务单独列出 instance_id，
-    # 供 export_swe_bench_source.py 批量导出 / SWE_BENCH_ENRICHMENT 补全
+
+def _print_missing_source(loader: Any, tasks: list[Any]) -> None:
+    """列出缺失被测源码的任务（供 export_swe_bench_source.py 批量导出补全）。"""
     if hasattr(loader, "tasks_missing_source"):
         missing_source = loader.tasks_missing_source()
         if missing_source:

@@ -442,7 +442,7 @@ class ErrorClassifier:
         return any(pattern.search(text) for pattern in _RE_TIMEOUT_ERRORS)
 
 
-def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> str:
+def get_fix_strategy(category: ErrorCategory, context: ErrorContext | None = None) -> str:
     """
     根据错误类型和上下文返回推荐修复策略描述。
 
@@ -466,137 +466,140 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
     Returns:
         针对该错误类型的修复策略文字描述，供 Debugger prompt 使用。
     """
-    # LLM_FORMAT_ERROR：LLM 响应格式异常（1.2 残余细化），策略针对"重生成/放宽提取"
-    if category == ErrorCategory.LLM_FORMAT_ERROR:
-        return (
-            "检测到 LLM 响应格式异常（JSON 解析失败、响应被截断或空响应）。"
-            "请重新请求 LLM 生成合规响应；若响应内含 JSON 但被 markdown 代码块"
-            "包裹，先剥离代码块标记再解析；若响应被截断，降低单次输出长度或"
-            "分段请求。不要将格式异常误判为代码逻辑 bug。"
-        )
-
-    # INDEX_ERROR：索引越界的专属策略（1.2 残余细化：从 RUNTIME 拆出）
-    if category == ErrorCategory.INDEX_ERROR:
-        return (
-            "检测到索引越界（IndexError / index out of range）。"
-            "请检查引发异常的列表/字符串/数组访问位置，"
-            "在循环边界、切片与默认值处理上补充分支判断；"
-            "对空容器先判空再访问。不要用 try/except 静默吞掉越界。"
-        )
-
-    # IMPORT_ERROR：独立类别（P2 细化），策略针对"缺依赖/路径错"而非重写文件
+    # 带上下文细化的类别单独分支处理，其余走固定策略映射表（定义在下方）
     if category == ErrorCategory.IMPORT_ERROR:
-        if context and context.module_name:
+        return _import_error_strategy(context)
+    if category == ErrorCategory.SYNTAX:
+        return _syntax_strategy(context)
+    return _FIX_STRATEGIES.get(category, _FIX_STRATEGIES[ErrorCategory.UNKNOWN])
+
+
+def _import_error_strategy(context: ErrorContext | None) -> str:
+    """IMPORT_ERROR 的修复策略，按是否携带缺失模块名细化。"""
+    if context and context.module_name:
+        return (
+            f"检测到导入错误：缺少模块 '{context.module_name}'。"
+            f"请优先为该依赖配置安装方案（如在 requirements.txt 或 venv 中安装），"
+            f"其次检查 import 语句的模块名/路径是否正确。"
+            f"若模块应由被测项目提供，请修正导入路径，而不是删除 import。"
+        )
+    return (
+        "检测到导入错误（ImportError/ModuleNotFoundError）。"
+        "请判断缺失模块是第三方依赖还是项目内模块：第三方依赖需安装，"
+        "项目内模块需修正导入路径。不要通过删除 import 语句来'修复'。"
+    )
+
+
+def _syntax_strategy(context: ErrorContext | None) -> str:
+    """SYNTAX 的修复策略，按子类型（导入错误/语法错误）细化。"""
+    if context and context.subtype == SyntaxSubtype.IMPORT_ERROR:
+        if context.module_name:
             return (
                 f"检测到导入错误：缺少模块 '{context.module_name}'。"
-                f"请优先为该依赖配置安装方案（如在 requirements.txt 或 venv 中安装），"
-                f"其次检查 import 语句的模块名/路径是否正确。"
-                f"若模块应由被测项目提供，请修正导入路径，而不是删除 import。"
+                f"请检查是否需要在 requirements.txt 中添加该依赖，"
+                f"或确认模块名称是否正确。如果模块已安装，"
+                f"请检查 Python 环境路径是否包含该模块。"
             )
         return (
             "检测到导入错误（ImportError/ModuleNotFoundError）。"
-            "请判断缺失模块是第三方依赖还是项目内模块：第三方依赖需安装，"
-            "项目内模块需修正导入路径。不要通过删除 import 语句来'修复'。"
+            "请检查是否需要安装缺失的依赖包，"
+            "或确认模块名称是否正确。"
         )
+    if context and context.subtype == SyntaxSubtype.SYNTAX_ERROR:
+        location = ""
+        if context.filename:
+            location = f" 文件 '{context.filename}'"
+        if context.line:
+            location += f" 第 {context.line} 行"
+        if context.column:
+            location += f" 第 {context.column} 列"
+        return (
+            f"检测到语法错误{location}。"
+            f"请检查该位置的语法是否正确，"
+            f"特别关注括号匹配、缩进、逗号和冒号的使用。"
+            f"重新生成完整的修复后代码文件，"
+            f"确保语法符合 Python 规范。"
+        )
+    return (
+        "检测到语法/编译错误（如 ImportError、SyntaxError）。"
+        "请重新生成完整的修复后代码文件，确保所有 import 语句正确、"
+        "缩进和语法符合 Python 规范。不要只修改单个函数，"
+        "而是输出包含所有函数和 import 的完整文件代码。"
+    )
 
+
+# 固定修复策略映射表：无需上下文细化的错误类别直接查表返回。
+# 带上下文细化的 IMPORT_ERROR / SYNTAX 由上方两个辅助函数处理。
+_FIX_STRATEGIES: dict[ErrorCategory, str] = {
+    # LLM_FORMAT_ERROR：LLM 响应格式异常（1.2 残余细化），策略针对"重生成/放宽提取"
+    ErrorCategory.LLM_FORMAT_ERROR: (
+        "检测到 LLM 响应格式异常（JSON 解析失败、响应被截断或空响应）。"
+        "请重新请求 LLM 生成合规响应；若响应内含 JSON 但被 markdown 代码块"
+        "包裹，先剥离代码块标记再解析；若响应被截断，降低单次输出长度或"
+        "分段请求。不要将格式异常误判为代码逻辑 bug。"
+    ),
+    # INDEX_ERROR：索引越界的专属策略（1.2 残余细化：从 RUNTIME 拆出）
+    ErrorCategory.INDEX_ERROR: (
+        "检测到索引越界（IndexError / index out of range）。"
+        "请检查引发异常的列表/字符串/数组访问位置，"
+        "在循环边界、切片与默认值处理上补充分支判断；"
+        "对空容器先判空再访问。不要用 try/except 静默吞掉越界。"
+    ),
     # TYPE_ERROR：类型不匹配的专属策略（P2 细化）
-    if category == ErrorCategory.TYPE_ERROR:
-        return (
-            "检测到类型错误（TypeError）。请核对引发异常的参数类型、函数签名与实际传入值："
-            "常见根因是传入了 None/字符串/列表等不符预期的类型，或把对象当容器使用。"
-            "修复时对齐参数与返回类型（必要时做输入校验与类型转换），"
-            "不要用 try/except 吞掉异常来掩盖类型问题。"
-        )
-
+    ErrorCategory.TYPE_ERROR: (
+        "检测到类型错误（TypeError）。请核对引发异常的参数类型、函数签名与实际传入值："
+        "常见根因是传入了 None/字符串/列表等不符预期的类型，或把对象当容器使用。"
+        "修复时对齐参数与返回类型（必要时做输入校验与类型转换），"
+        "不要用 try/except 吞掉异常来掩盖类型问题。"
+    ),
     # LOGIC_ERROR：测试侧逻辑错误（P2 细化）
-    if category == ErrorCategory.LOGIC_ERROR:
-        return (
-            "检测到疑似测试逻辑错误：断言失败且失败栈未触及被测模块，"
-            "更可能是测试用例的预期值写错（如断言方向反了、期望值与文档不符）。"
-            "请先根据函数签名/文档字符串核对测试预期值并修正测试用例；"
-            "只有当被测代码行为确实与问题描述矛盾时才修改被测代码。"
-        )
-
-    # SYNTAX 类型根据子类型提供不同策略
-    if category == ErrorCategory.SYNTAX:
-        if context and context.subtype == SyntaxSubtype.IMPORT_ERROR:
-            if context.module_name:
-                return (
-                    f"检测到导入错误：缺少模块 '{context.module_name}'。"
-                    f"请检查是否需要在 requirements.txt 中添加该依赖，"
-                    f"或确认模块名称是否正确。如果模块已安装，"
-                    f"请检查 Python 环境路径是否包含该模块。"
-                )
-            return (
-                "检测到导入错误（ImportError/ModuleNotFoundError）。"
-                "请检查是否需要安装缺失的依赖包，"
-                "或确认模块名称是否正确。"
-            )
-        if context and context.subtype == SyntaxSubtype.SYNTAX_ERROR:
-            location = ""
-            if context.filename:
-                location = f" 文件 '{context.filename}'"
-            if context.line:
-                location += f" 第 {context.line} 行"
-            if context.column:
-                location += f" 第 {context.column} 列"
-            return (
-                f"检测到语法错误{location}。"
-                f"请检查该位置的语法是否正确，"
-                f"特别关注括号匹配、缩进、逗号和冒号的使用。"
-                f"重新生成完整的修复后代码文件，"
-                f"确保语法符合 Python 规范。"
-            )
-        return (
-            "检测到语法/编译错误（如 ImportError、SyntaxError）。"
-            "请重新生成完整的修复后代码文件，确保所有 import 语句正确、"
-            "缩进和语法符合 Python 规范。不要只修改单个函数，"
-            "而是输出包含所有函数和 import 的完整文件代码。"
-        )
-
-    strategies = {
-        # 运行时异常：分析异常栈，定位到具体哪行代码引发问题
-        ErrorCategory.RUNTIME: (
-            "检测到运行时异常（如 ZeroDivisionError、TypeError 等）。"
-            "请分析异常发生的具体位置和原因，修复有 bug 的代码函数，"
-            "而不是修改测试用例来绕过问题。重点关注边界条件和异常处理。"
-        ),
-        # 断言失败：期望值计算错误或测试用例设计有问题
-        ErrorCategory.ASSERTION: (
-            "检测到断言失败（期望值与实际返回值不一致）。"
-            "请先判断是代码逻辑错误还是测试用例的预期值错误。"
-            "如果代码实现与函数签名/文档字符串描述不符，修复代码；"
-            "如果测试用例的预期值不符合函数实际行为，修正测试用例的预期值。"
-        ),
-        # 超时：死循环或无限递归
-        ErrorCategory.TIMEOUT: (
-            "检测到执行超时，通常意味着存在死循环或无限递归。"
-            "请检查函数中的循环条件和递归终止条件，添加适当的边界检查和退出条件。"
-        ),
-        # 未知类型：让 LLM 自行分析
-        ErrorCategory.UNKNOWN: (
-            "错误类型未能自动识别。请仔细分析测试输出，"
-            "判断是代码逻辑错误、测试用例问题还是环境问题，"
-            "然后给出相应的修复方案。"
-        ),
-        # 补丁被安全守卫拒绝（1.1 状态细化）：本轮补丁未生效，
-        # 修复方向是重新生成更安全/完整的补丁而非调整测试
-        ErrorCategory.PATCH_VALIDATION_FAILED: (
-            "检测到上一轮补丁被安全守卫拒绝（补丁为空/过短/丢失函数定义"
-            "或文件路径不合法），本轮修复未真正写入。"
-            "请重新生成完整补丁：保留原代码全部函数与 import，"
-            "输出完整文件而非片段，避免被安全守卫再次拒绝。"
-        ),
-        # RAG 检索全空（1.1 状态细化）：检索未提供参考案例，
-        # 生成质量不受检索增强，按常规策略修复并考虑扩充检索库
-        ErrorCategory.RAG_RETRIEVAL_EMPTY: (
-            "检测到 RAG 检索未命中任何历史案例（检索库冷启动或"
-            "当前任务与已入库案例差异过大）。本轮生成未获得检索增强，"
-            "请按常规修复策略处理；若同类任务反复出现，"
-            "考虑扩充检索库案例或降低相似度阈值。"
-        ),
-    }
-    return strategies.get(category, strategies[ErrorCategory.UNKNOWN])
+    ErrorCategory.LOGIC_ERROR: (
+        "检测到疑似测试逻辑错误：断言失败且失败栈未触及被测模块，"
+        "更可能是测试用例的预期值写错（如断言方向反了、期望值与文档不符）。"
+        "请先根据函数签名/文档字符串核对测试预期值并修正测试用例；"
+        "只有当被测代码行为确实与问题描述矛盾时才修改被测代码。"
+    ),
+    # 运行时异常：分析异常栈，定位到具体哪行代码引发问题
+    ErrorCategory.RUNTIME: (
+        "检测到运行时异常（如 ZeroDivisionError、TypeError 等）。"
+        "请分析异常发生的具体位置和原因，修复有 bug 的代码函数，"
+        "而不是修改测试用例来绕过问题。重点关注边界条件和异常处理。"
+    ),
+    # 断言失败：期望值计算错误或测试用例设计有问题
+    ErrorCategory.ASSERTION: (
+        "检测到断言失败（期望值与实际返回值不一致）。"
+        "请先判断是代码逻辑错误还是测试用例的预期值错误。"
+        "如果代码实现与函数签名/文档字符串描述不符，修复代码；"
+        "如果测试用例的预期值不符合函数实际行为，修正测试用例的预期值。"
+    ),
+    # 超时：死循环或无限递归
+    ErrorCategory.TIMEOUT: (
+        "检测到执行超时，通常意味着存在死循环或无限递归。"
+        "请检查函数中的循环条件和递归终止条件，添加适当的边界检查和退出条件。"
+    ),
+    # 未知类型：让 LLM 自行分析
+    ErrorCategory.UNKNOWN: (
+        "错误类型未能自动识别。请仔细分析测试输出，"
+        "判断是代码逻辑错误、测试用例问题还是环境问题，"
+        "然后给出相应的修复方案。"
+    ),
+    # 补丁被安全守卫拒绝（1.1 状态细化）：本轮补丁未生效，
+    # 修复方向是重新生成更安全/完整的补丁而非调整测试
+    ErrorCategory.PATCH_VALIDATION_FAILED: (
+        "检测到上一轮补丁被安全守卫拒绝（补丁为空/过短/丢失函数定义"
+        "或文件路径不合法），本轮修复未真正写入。"
+        "请重新生成完整补丁：保留原代码全部函数与 import，"
+        "输出完整文件而非片段，避免被安全守卫再次拒绝。"
+    ),
+    # RAG 检索全空（1.1 状态细化）：检索未提供参考案例，
+    # 生成质量不受检索增强，按常规策略修复并考虑扩充检索库
+    ErrorCategory.RAG_RETRIEVAL_EMPTY: (
+        "检测到 RAG 检索未命中任何历史案例（检索库冷启动或"
+        "当前任务与已入库案例差异过大）。本轮生成未获得检索增强，"
+        "请按常规修复策略处理；若同类任务反复出现，"
+        "考虑扩充检索库案例或降低相似度阈值。"
+    ),
+}
 
 
 def refine_failure_category(
