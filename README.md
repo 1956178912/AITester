@@ -140,7 +140,7 @@ python experiments/run_benchmark.py --dataset examples
 
 **性能收益**：每个任务节省 2-6 秒初始化时间。
 
-**技术实现**：`src/graph/workflow.py` 中的 `get_rag_retriever()` 函数。
+**技术实现**：`src/graph/rag.py` 中的 `get_rag_retriever()` 函数（经 `workflow.py` re-export 保持旧导入路径）。
 
 ### LLM 文件缓存（省 token）
 
@@ -243,14 +243,16 @@ JSON 输出包含完整的结果统计、各基线详细数据和性能指标，
 AITester/
 ├── src/                              # 核心源代码
 │   ├── agents/                       # 多智能体模块
-│   │   ├── base_agent.py             # 智能体基类（LLM 调用 + 文件缓存 + 客户端复用、JSON 解析）
+│   │   ├── base_agent.py             # 智能体基类（LLM 调用 + 文件缓存 + JSON 解析；客户端工厂已拆至 llm_client.py）
+│   │   ├── llm_client.py             # LLM 客户端工具函数（ChatOpenAI 工厂 + 模块级连接池缓存，0.9.15 拆分）
 │   │   ├── planner.py                # 测试规划师（含逻辑驱动思维链）
 │   │   ├── generator.py              # 测试代码生成器（支持 RAG 增强）
 │   │   ├── executor.py               # 测试执行器（带超时和重试）
 │   │   ├── debugger.py               # 调试修复师（分层错误修复）
 │   │   └── error_classifier.py       # 错误类型分类器（规则匹配）
 │   ├── api/                          # API 配置管理
-│   │   └── api_manager.py            # 多 LLM 配置 CRUD（.env.local / llm_configs.json）
+│   │   ├── api_manager.py            # 多 LLM 配置 CRUD（.env.local / llm_configs.json）+ 熔断/路由
+│   │   └── api_health.py             # API 健康状态与路由策略数据模型（APIHealth/APIManagerConfig/RotationStrategy）
 │   ├── config/                       # 配置管理
 │   │   ├── config_manager.py         # LLM 配置增删查
 │   │   └── config_generator.py       # .env / llm_configs 模板生成
@@ -272,8 +274,11 @@ AITester/
 │   │   ├── multi_candidate.py        # 多候选补丁生成与验证筛选（3.1，默认关）
 │   │   └── cross_file.py             # 3.5 跨文件修复（协调器-提议者架构，默认关）
 │   ├── graph/                        # 工作流编排模块
-│   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关）
-│   │   ├── state.py                  # 全局状态定义（TypedDict）
+│   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关；节点注册与 RAG 接线）
+│   │   ├── nodes.py                  # 节点函数实现（_planner/_generator/_executor/_debugger/_patch_applier/_cross_file_analyzer）
+│   │   ├── rag.py                    # RAG 检索器单例管理（get_rag_retriever，经 workflow.py re-export）
+│   │   ├── tracing.py                # 追踪层接线（任务级 JSONL 会话，经 workflow.py re-export）
+│   │   ├── state.py                  # 全局状态定义（TypedDict）+ create_initial_state 工厂（单一构造点）
 │   │   ├── token_usage.py            # 线程局部 LLM token 用量统计（P0 效率指标）
 │   │   └── llm_cache.py             # LLM 内存 LRU 缓存（可选，带命中统计）
 │   ├── observability/                # 结构化可观测性（4.1）
@@ -663,7 +668,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1270 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1291 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -673,7 +678,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（50 个测试文件，全量 1270 个 pytest 收集用例；精简环境 1231 收集 / 39 自动跳过，src 总覆盖率 92%）：
+**测试覆盖模块**（52 个测试文件，全量 1291 个 pytest 收集用例；精简环境 1231 收集 / 39 自动跳过，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -681,16 +686,16 @@ docker run --rm \
 | `test_api_manager_extended.py` | 74 | API 管理器扩展路径（健康恢复、限流标记、4.2 半开探测 TestHalfOpenProbe 12 用例） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
+| `test_cli_app.py` | 30 | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
 | `test_cli_output.py` | 10 | CLI 输出层回归（colorize TTY 双分支、success/error/warning/info 图标与 stdout/stderr 路由、print_rich_table 空列表/缺键兜底/coverage=0.0 不被误判 N/A，O-01 批次） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
-| `test_code_context.py` | 11 | AST 智能截取（P0 大文件上下文） |
+| `test_code_context.py` | 18 | 11 | AST 智能截取（P0 大文件上下文） |
 | `test_complex_logic.py` | 12 | 复杂业务逻辑（邮箱验证等） |
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
-| `test_config_manager.py` | 32 | 配置管理器（LLM 配置增删） |
-| `test_config.py` | 14 | config.py 默认值与容错解析 |
+| `test_config_manager.py` | 35 | 32 | 配置管理器（LLM 配置增删） |
+| `test_config.py` | 15 | 14 | config.py 默认值与容错解析 |
 | `test_core_modules.py` | 29 | 核心模块冒烟（BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader 多类） |
 | `test_cost_aware_routing.py` | 13 | 成本感知路由与昂贵 provider 成本告警（3.4 + 3.2 阈值可配 4 用例） |
 | `test_dataset_loader.py` | 83 | 数据集加载器（InMemory/SWEBench） |
@@ -698,9 +703,9 @@ docker run --rm \
 | `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
-| `test_error_classifier.py` | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
+| `test_error_classifier.py` | 89 | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
-| `test_executor.py` | 48 | 覆盖率解析、失败用例解析 |
+| `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
 | `test_experiments_scripts.py` | 36 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线（6 用例） |
@@ -709,7 +714,7 @@ docker run --rm \
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
 | `test_logging_utils.py` | 14 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.9.11 脱敏扩展回归） |
 | `test_mysql_client.py` | 15 | MySQL 客户端单例/事务/连接池参数 |
-| `test_multi_candidate.py` | 20 | 多候选补丁生成与静态/执行验证筛选（3.1） |
+| `test_multi_candidate.py` | 23 | 多候选补丁生成与静态/执行验证筛选（3.1） |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
 | `test_patch_applier.py` | 38 | 补丁应用（完整文件/单函数模式） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
@@ -718,12 +723,14 @@ docker run --rm \
 | `test_report_generator.py` | 48 | 错误报告生成器（含十二类分类分支） |
 | `test_run_benchmark.py` | 5 | benchmark 结果构造与异常路径回归（0.9.8 去重重构） |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench 源码导出脚本（patch 目标文件提取 / enrichment 落盘 / dry-run，2.1） |
+| `test_state.py` | 8 | AITesterState 单一构造点工厂（create_initial_state 键集守护 / module_name 推导 / 可变容器隔离，深度重构批次） |
+| `test_viz_significance.py` | 6 | 统计显著性收敛（visualize_results 复用 statistical_analysis 配对原语 / NaN 占位 / 原语引用锁定，深度重构批次） |
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
 | `test_workflow.py` | 38 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例） |
-| `test_workflow_extended.py` | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
+| `test_workflow_extended.py` | 47 | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 | `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 
@@ -1005,7 +1012,7 @@ python main.py list-examples
 | `test_api_manager.py` | 77 | API 管理器策略测试（轮询/加权随机/健康感知、4.1 熔断冷却期 9 用例 + 边界 3 用例 + 脱敏 2 用例、3.4 成本告警阈值可配 4 用例） |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
 | `test_report_generator.py` | 48 | 错误报告生成器（含十二类分类分支） |
-| `test_multi_candidate.py` | 20 | 多候选补丁生成与静态/执行验证筛选（3.1） |
+| `test_multi_candidate.py` | 23 | 多候选补丁生成与静态/执行验证筛选（3.1） |
 | `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级 / 序列化） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |

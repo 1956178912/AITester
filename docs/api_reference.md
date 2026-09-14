@@ -75,7 +75,7 @@ test_code = agent.generate(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `generate()` | `test_plan: dict`, `target_code: str`, `module_name: str`, `rag_references: list`, `focus_function: str` | `str` | 生成 pytest 测试代码（超预算时按 focus_function 做 AST 智能截取） |
+| `generate()` | `test_plan: dict`, `target_code: str`, `module_name: str = ""`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None` | `str` | 生成 pytest 测试代码（超预算时按 focus_function 做 AST 智能截取；后三参数均默认 None/""） |
 
 **验证方法：**
 
@@ -144,7 +144,7 @@ result = agent.debug(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list`, `focus_function: str`, `target_module: str` | `dict` | 分析失败并生成修复补丁（后两项可选：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR） |
+| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None` | `dict` | 分析失败并生成修复补丁（后三项均默认 None：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR） |
 
 **返回格式：**
 ```json
@@ -354,7 +354,7 @@ state: AITesterState = {
 final_state = graph.invoke(state)
 ```
 
-**工作流节点**（`src/graph/workflow.py` 的 `add_node` ID，节点函数为下划线前缀的 `_<id>_node`）：
+**工作流节点**（节点 ID 在 `src/graph/workflow.py` 经 `add_node` 注册，节点函数实现见 `src/graph/nodes.py`，均为下划线前缀的 `_<id>_node`）：
 
 | 节点 ID | 功能 | 是否调用 LLM |
 |---------|------|-------------|
@@ -444,7 +444,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `TEMPERATURE` | float | 0.2 | LLM 采样温度 |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
 
-**APIManagerConfig 字段**（`src/api/api_manager.py`，编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
+**APIManagerConfig 字段**（`src/api/api_health.py` 数据模型，`api_manager.py` 消费；编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -516,6 +516,7 @@ class CustomDataset(BaseDatasetLoader):
 
 | 版本 | 日期 | 变更说明 |
 |------|------|---------|
+| 0.9.16 | 2026-09-15 | 深度重构轮次：AITesterState 初始化双写收敛为 `create_initial_state()` 工厂（CLI + benchmark 单一构造点）、experiments/visualize_results.py 统计检验收敛复用 statistical_analysis.py 配对原语 + NaN/Inf 守卫、code_context.py 补测 9 用例（模块覆盖率 89%→98%）、README 结构树补齐 5 个拆分产物（tracing/rag/nodes、api_health、llm_client）+ 测试状态表 13 处行内数同步 + api_reference 参数默认值标注；全量 1291 passed / ruff 全绿 / 覆盖率 94% |
 | 0.9.14 | 2026-09-15 | 全项目收敛轮次：config 集中化（删除 CROSS_FILE/ASSERTION 死常量、SWE_BENCH_ENRICHMENT 收敛 config、MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper）、修复 executor 标准库清单误列 diskcache、修复跨文件降级路径写不进盘、删除 4 处死代码、RAG 检索器写锁 + _upsert 抽取、refine_final_error_category 收敛；全量 1270 passed / ruff 全绿 |
 | 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` 补模块级 `pytestmark=skipif(not _chroma_available())`（与 `test_rag_metrics.py` 口径一致，缺 chromadb 时 32 条 RAG 检索器用例优雅跳过而非 ImportError ERROR）；`tests/test_experiments_scripts.py` 的 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixture 在惰性导入 `experiments.visualize_results` 前补 `pytest.importorskip("matplotlib")`（缺 matplotlib 时 5 条可视化用例跳过）。精简环境（未全量安装 `requirements.txt`）下全量基线为 **1208 passed / 39 skipped / 0 failed**；全量安装依赖后恢复 **1247 passed / 0 skipped** |
 | 0.9.14 | 2026-09-15 | O-01 新增 `tests/test_cli_output.py`（10 用例：colorize TTY 双分支 / 消息 stderr 路由 / print_rich_table 边界），`src/cli/output.py` 覆盖率 58%→92% |
