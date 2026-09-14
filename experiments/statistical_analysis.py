@@ -10,6 +10,10 @@
 现统一为按 task_id 配对（同一任务在两个基线下各跑一次，这才是"配对"的语义），
 run_statistical_test.py 退化为薄壳入口（逻辑全部收敛到本模块）。
 
+本模块是统计检验的唯一规范实现：_pair_by_task（task_id 配对原语）、cohens_d、
+interpret_p / interpret_d 供本文件的报告流程与 experiments/visualize_results.py
+（图表统计面板）共用，配对逻辑不另起副本。
+
 用法：
     python experiments/statistical_analysis.py
 """

@@ -29,6 +29,11 @@ except ImportError:  # pragma: no cover - 依赖缺失的降级分支
     _SCIPY_AVAILABLE = False
 
 # 显著性检验所需的最小样本数（与 experiments/statistical_analysis.py 保持一致）
+# 本模块与 experiments/statistical_analysis.py 各自独立实现：
+# - 本模块（src 包）服务 src/experiments 目录下的分析流程，保持无 experiments/ 依赖
+# - experiments/statistical_analysis.py 是"统计检验规范实现"（配对原语 + Cohen's d + 显著性标记），
+#   供 experiments/ 目录下的脚本（visualize_results.py / statistical_analysis.py 自身）复用
+# 配对逻辑（按 task_id）保持一致，避免跨包 import 边界模糊
 _MIN_SAMPLES_FOR_TEST = 3
 
 

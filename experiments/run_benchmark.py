@@ -63,7 +63,7 @@ from src.datasets.dataset_loader import (  # noqa: E402
     load_dataset,
 )
 from src.graph import token_usage  # noqa: E402
-from src.graph.state import AITesterState  # noqa: E402
+from src.graph.state import AITesterState, create_initial_state  # noqa: E402
 from src.graph.workflow import build_workflow, end_task_trace, start_task_trace  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
@@ -433,29 +433,19 @@ def run_single_task(
         with open(instance_file, "w", encoding="utf-8") as f:
             f.write(task.instance_code)
 
-        # 初始化工作流状态（作为所有基线的起点，逐基线 deepcopy 隔离）
+        # 初始化工作流状态（唯一构造点：create_initial_state，与 CLI 口径一致）
+        # 作为所有基线的起点，逐基线 deepcopy 隔离
         # P0：SWE-bench 任务从官方 patch 提取的 suggested_function 初始化
         # target_function，驱动 Planner/Generator/Debugger 的 AST 聚焦截取
         suggested_function = task.metadata.get("suggested_function")
-        initial_state: AITesterState = {
-            "task_uuid": task.task_id,
-            "target_file": instance_file,
-            "target_function": suggested_function,
-            "module_name": module_name,
-            "target_code": task.instance_code,
-            "test_plan": None,
-            "generated_test": None,
-            "test_passed": None,
-            "test_output": None,
-            "coverage_report": None,
-            "failed_cases": None,
-            "diagnosis": None,
-            "error_category": None,
-            "patch": None,
-            "iteration": 0,
-            "max_iterations": MAX_ITERATIONS,
-            "repair_history": [],
-        }
+        initial_state = create_initial_state(
+            task_uuid=task.task_id,
+            target_file=instance_file,
+            target_function=suggested_function,
+            module_name=module_name,
+            target_code=task.instance_code,
+            max_iterations=MAX_ITERATIONS,
+        )
 
         # 为每个基线分配不同的 API（轮询）
         results: dict[str, dict[str, Any]] = {}

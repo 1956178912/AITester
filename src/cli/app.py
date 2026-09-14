@@ -43,7 +43,7 @@ from src.cli.output import (
     warning_msg,
 )
 from src.graph import token_usage
-from src.graph.state import AITesterState
+from src.graph.state import create_initial_state
 from src.graph.workflow import build_workflow, end_task_trace, start_task_trace
 from src.utils.logging_utils import SensitiveFormatter, mask_sensitive_info, setup_logger_safety
 
@@ -256,30 +256,17 @@ def _run_single_task(
     with open(target_file, encoding="utf-8") as f:
         target_code = f.read()
 
-    # 初始化工作流状态
+    # 初始化工作流状态（唯一构造点：create_initial_state，与 benchmark 口径一致）
     # execution_timeout / coverage_threshold 经 state 贯通到下游节点（此前两个 CLI 选项均未生效）
-    state: AITesterState = {
-        "task_uuid": f"{os.path.basename(target_file)}_{func or 'all'}_{int(time.time())}",
-        "target_file": target_file,
-        "target_function": func,
-        "module_name": os.path.splitext(os.path.basename(target_file))[0],
-        "target_code": target_code,
-        "test_plan": None,
-        "generated_test": None,
-        "test_passed": None,
-        "test_output": None,
-        "coverage_report": None,
-        "failed_cases": None,
-        "diagnosis": None,
-        "error_category": None,
-        "patch": None,
-        "iteration": 0,
-        "max_iterations": max_iterations,
-        "regeneration_count": 0,
-        "repair_history": [],
-        "execution_timeout": timeout,
-        "coverage_threshold": coverage_threshold,
-    }
+    state = create_initial_state(
+        task_uuid=f"{os.path.basename(target_file)}_{func or 'all'}_{int(time.time())}",
+        target_file=target_file,
+        target_function=func,
+        target_code=target_code,
+        max_iterations=max_iterations,
+        execution_timeout=timeout,
+        coverage_threshold=coverage_threshold,
+    )
 
     # 构建并运行 LangGraph 工作流
     graph = build_workflow()

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, TypedDict
 
 
@@ -159,3 +160,80 @@ class AITesterState(TypedDict, total=False):
     # 3.5 跨文件修复计划（CROSS_FILE_ENABLE=true 时由 cross_file_analyzer 节点写入）
     cross_file_deps: list[dict[str, Any]] | None
     cross_file_plan: dict[str, Any] | None
+
+
+def create_initial_state(
+    task_uuid: str,
+    target_file: str,
+    target_code: str,
+    max_iterations: int,
+    module_name: str | None = None,
+    target_function: str | None = None,
+    execution_timeout: int | None = None,
+    coverage_threshold: float | None = None,
+) -> AITesterState:
+    """
+    创建初始工作流状态的唯一工厂函数。
+
+    此前 CLI（cli/app.py）与 benchmark（experiments/run_benchmark.py）
+    各自手写一份初始化字典，TypedDict 新增字段时两处易漂移
+    （如 3.5 批次的 cross_file_* 字段仅由节点写入，初始字典不补即缺键，
+    后续节点 ``state.get("cross_file_plan")`` 永远 None 而难察觉）。
+    收敛为本单一构造点后，新增字段只改一处。
+
+    Args:
+        task_uuid: 任务标识（CLI 为 "<file>_<func>_<ts>"，benchmark 为 task_id）。
+        target_file: 被测代码文件路径。
+        target_code: 被测代码全文。
+        max_iterations: 最大修复迭代次数。
+        module_name: 模块文件名（不含 .py）；None 时按 target_file 推导
+            （``os.path.splitext(os.path.basename(target_file))[0]``）。
+        target_function: 指定被测函数名；None 表示测试全部函数。
+        execution_timeout: 单次测试执行超时秒数（CLI 注入）；None 时
+            Executor 回退 config.EXECUTION_TIMEOUT。
+        coverage_threshold: 覆盖率达标阈值百分比（CLI 注入）；None 时
+            CLI 汇总回退 config.COVERAGE_THRESHOLD。
+
+    Returns:
+        完整初始化的 AITesterState，所有 TypedDict 字段均显式赋值
+        （未提供的可选项为 None，列表项为初始空值）。
+    """
+    if module_name is None:
+        module_name = os.path.splitext(os.path.basename(target_file))[0]
+
+    return AITesterState(
+        # 任务标识
+        task_uuid=task_uuid,
+        # 输入信息
+        target_file=target_file,
+        target_function=target_function,
+        module_name=module_name,
+        target_code=target_code,
+        # Planner 输出
+        test_plan=None,
+        # Generator 输出
+        generated_test=None,
+        # Executor 输出
+        test_passed=None,
+        test_output=None,
+        coverage_report=None,
+        failed_cases=None,
+        # Debugger 输出
+        diagnosis=None,
+        error_category=None,
+        patch=None,
+        # 迭代控制
+        iteration=0,
+        max_iterations=max_iterations,
+        regeneration_count=0,
+        repair_history=[],
+        # 执行控制（可选，由 CLI 注入）
+        execution_timeout=execution_timeout,
+        coverage_threshold=coverage_threshold,
+        # RAG 检索结果
+        rag_references=None,
+        rag_stats=None,
+        # 3.5 跨文件修复计划
+        cross_file_deps=None,
+        cross_file_plan=None,
+    )
