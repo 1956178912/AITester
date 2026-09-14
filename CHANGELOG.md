@@ -2,6 +2,33 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.15] - 2026-09-15 代码可维护性深化轮次（类型注解 + 圈复杂度 + Ruff 规则增强）
+
+### Ruff 规则集增强
+- `pyproject.toml` select 新增 `SIM`（flake8-simplify）、`PERF`（perflint）、
+  `RET`（flake8-return）、`RUF`（ruff 自有规则）
+- RUF 忽略 RUF001/002/003（中文注释里的全角标点误报，5012 处非真实问题）
+- 修复 63 处命中：SIM 代码简化、PERF 列表推导/values()、RET 返回语句改进、
+  RUF012 可变类属性补 ClassVar 注解、RUF005 可迭代解包、RUF021/022 等
+
+### 类型注解补齐
+- 补齐 5 个完全缺注解函数（_build_error_info、_check_parametrize_decorator、
+  _validate_case_tuple、_retry_with_exponential_backoff、mysql_client.cursor）
+- 收紧 12 处裸 list/dict/tuple/set 为带元素类型的泛型
+- 全项目 337 个函数实现参数 + 返回值完整注解（排除 self/cls 后零缺口）
+
+### 圈复杂度重构（9 个超阈值函数中 7 个重构）
+- get_fix_strategy：156 行 if 链 → 映射表 + 2 上下文辅助函数（14→3）
+- run：拆参数校验 / glob 展开 / 汇总输出三个辅助函数（22→10 以下）
+- check_dataset：拆逐任务打印 / 质量报告 / 缺失源码（13→4）
+- generate：query 构建拆为 _build_query（13→7）
+- _execute_sandboxed：依赖检测安装拆为 _prepare_dependencies（11→8）
+- clear_venv_cache：目录大小统计拆为 _dir_size_mb + 简化过滤判断（12→9）
+- analyze_cross_file_deps：import 收集拆为 _collect_imported_symbols（15→10 以下）
+- _analyze_root_cause / _generate_fix_suggestion：if 链 → 映射表 + 辅助函数（17→4 / 16→5）
+- 有意保留 check_health（11）与 extract_focused_code（13）：复杂度来自合理的
+  异常处理分支与连贯的"按预算逐层降级"裁剪逻辑，强行拆分会降低可读性
+
 ## [0.9.14] - 2026-09-15 全项目收敛轮次（config 集中化 + 死代码清理 + 默认关功能修复）
 
 ### 配置集中化收敛（双源漂移 + env 绕过）
