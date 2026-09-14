@@ -192,15 +192,6 @@ class ExecutorAgent:
         Returns:
             与 execute() 相同结构的结果字典。
         """
-        from src.tools.dependency import (
-            create_venv,
-            extract_imported_modules,
-            find_missing_modules,
-            install_packages,
-            suggest_package_names,
-            venv_cache_dir,
-        )
-
         sandbox_dir = tempfile.mkdtemp(prefix="aitester_sandbox_")
         # 被测模块名：取 target_file 基名（与 _extract_module_name_from_file 语义一致）
         module_name = self._extract_module_name_from_file(target_file)
@@ -227,36 +218,9 @@ class ExecutorAgent:
             f.write(fixed_test_code)
 
         # ── 依赖检测与安装 ──────────────────────────────────────────────────
-        required_modules = extract_imported_modules(target_source + "\n" + fixed_test_code)
-        missing_modules = find_missing_modules(required_modules, extra_search_files=[module_file])
-        missing_packages = suggest_package_names(missing_modules)
-
-        env = os.environ.copy()
-        # 模块搜索路径以沙箱目录为首（追加原 PYTHONPATH 保留 pytest 等测试工具）；
-        # 空段过滤防尾随冒号（语义同上，空元素等价 CWD 可遮蔽同名文件）
-        env["PYTHONPATH"] = os.pathsep.join(
-            [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
+        env, python_path, dep_install_note, sandbox_error_info, missing_modules = self._prepare_dependencies(
+            target_source, fixed_test_code, module_file, sandbox_dir
         )
-        python_path = sys.executable
-        dep_install_note = ""
-        sandbox_error_info: dict[str, Any] | None = None
-
-        if missing_packages and self.use_venv:
-            # 创建/复用缓存 venv（相同依赖组合共享，省 1-3s 重建开销）
-            venv_dir = venv_cache_dir(missing_packages)
-            try:
-                python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
-                if self.auto_install_deps:
-                    ok, summary = install_packages(python_path, missing_packages, timeout=self.dep_install_timeout)
-                    dep_install_note = f"依赖安装{'成功' if ok else '失败'}: {summary}"
-                    if not ok:
-                        sandbox_error_info = {
-                            "type": "dependency_install_failed",
-                            "message": f"缺失依赖安装失败: {missing_packages}",
-                            "detail": summary,
-                        }
-            except RuntimeError as e:
-                sandbox_error_info = {"type": "dependency_install_failed", "message": str(e), "detail": str(e)}
 
         # 依赖安装失败/venv 创建失败：测试结果将不可信（缺失依赖仍在），
         # 直接提前返回，让 Debugger 拿到准确的 dependency_install_failed 诊断
@@ -316,6 +280,63 @@ class ExecutorAgent:
         finally:
             # 清理临时沙箱（venv 缓存在 ~/.cache/aitester/venvs/，跨任务保留）
             self._cleanup_sandbox(sandbox_dir)
+
+    def _prepare_dependencies(
+        self,
+        target_source: str,
+        fixed_test_code: str,
+        module_file: str,
+        sandbox_dir: str,
+    ) -> tuple[dict[str, str], str, str, dict[str, Any] | None, list[str]]:
+        """检测并安装缺失依赖，准备沙箱执行环境。
+
+        Returns:
+            (env, python_path, dep_install_note, sandbox_error_info, missing_modules) 五元组：
+            env 为注入 PYTHONPATH 的环境变量副本，python_path 为执行解释器路径，
+            dep_install_note 为依赖安装结论文本，sandbox_error_info 为安装失败诊断
+            （成功时 None），missing_modules 为缺失模块清单。
+        """
+        from src.tools.dependency import (
+            create_venv,
+            extract_imported_modules,
+            find_missing_modules,
+            install_packages,
+            suggest_package_names,
+            venv_cache_dir,
+        )
+
+        required_modules = extract_imported_modules(target_source + "\n" + fixed_test_code)
+        missing_modules = find_missing_modules(required_modules, extra_search_files=[module_file])
+        missing_packages = suggest_package_names(missing_modules)
+
+        env = os.environ.copy()
+        # 模块搜索路径以沙箱目录为首（追加原 PYTHONPATH 保留 pytest 等测试工具）；
+        # 空段过滤防尾随冒号（语义同上，空元素等价 CWD 可遮蔽同名文件）
+        env["PYTHONPATH"] = os.pathsep.join(
+            [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
+        )
+        python_path = sys.executable
+        dep_install_note = ""
+        sandbox_error_info: dict[str, Any] | None = None
+
+        if missing_packages and self.use_venv:
+            # 创建/复用缓存 venv（相同依赖组合共享，省 1-3s 重建开销）
+            venv_dir = venv_cache_dir(missing_packages)
+            try:
+                python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
+                if self.auto_install_deps:
+                    ok, summary = install_packages(python_path, missing_packages, timeout=self.dep_install_timeout)
+                    dep_install_note = f"依赖安装{'成功' if ok else '失败'}: {summary}"
+                    if not ok:
+                        sandbox_error_info = {
+                            "type": "dependency_install_failed",
+                            "message": f"缺失依赖安装失败: {missing_packages}",
+                            "detail": summary,
+                        }
+            except RuntimeError as e:
+                sandbox_error_info = {"type": "dependency_install_failed", "message": str(e), "detail": str(e)}
+
+        return env, python_path, dep_install_note, sandbox_error_info, missing_modules
 
     @staticmethod
     def _cleanup_sandbox(sandbox_dir: str) -> None:

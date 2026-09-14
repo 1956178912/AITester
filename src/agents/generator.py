@@ -151,15 +151,52 @@ class GeneratorAgent(BaseAgent):
         Raises:
             RuntimeError: LLM 调用失败时抛出。
         """
-        # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
-        plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
-
         # 焦点函数优先级：显式参数 > 测试计划中的 function_name（Planner 已定位的函数）
         if focus_function is None and isinstance(test_plan, dict):
             focus_function = test_plan.get("function_name") or None
 
         # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
+
+        # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强）
+        query = self._build_query(test_plan, target_code, module_name, rag_references)
+
+        # 调用 LLM 生成测试代码，带文件缓存省 token
+        raw = self._call_llm_with_cache(query)
+        # 从响应中提取 Python 代码块（去除 markdown 包裹）
+        code = self._extract_python_code(raw)
+        # Import 验证：修正错误的模块名
+        if module_name:
+            code = self._fix_import_module(code, module_name)
+        # Parametrize 格式校验：LLM 有时会在 parametrize 中混入 case_name 导致参数不匹配
+        if not self._validate_parametrize(code):
+            logger.warning("Generator 检测到 parametrize 格式错误，触发重试")
+            # 重试时追加负面反馈提示，避免 LLM 用相同 query 生成相同错误
+            retry_query = query + (
+                "\n\n【修正要求】上次生成的测试代码中，"
+                "pytest.mark.parametrize 的参数定义与用例元组长度不匹配。"
+                "请确保每个用例元组的元素数量与参数名列表完全一致，"
+                "不要混入 case_name 等额外字段。"
+            )
+            raw = self._call_llm_with_cache(retry_query)
+            code = self._extract_python_code(raw)
+            if module_name:
+                code = self._fix_import_module(code, module_name)
+            # 二次校验：若仍失败则警告但不重试，避免 LLM 反复生成相同错误代码
+            if not self._validate_parametrize(code):
+                logger.warning("二次 parametrize 校验仍失败，继续执行（可能 LLM 无法修正）")
+        return code
+
+    def _build_query(
+        self,
+        test_plan: dict[str, Any],
+        target_code: str,
+        module_name: str,
+        rag_references: list[dict[str, Any]] | None,
+    ) -> str:
+        """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强）。"""
+        # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
+        plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 
         # 构建基础查询，包含测试计划和目标代码
         query = (
@@ -202,31 +239,7 @@ class GeneratorAgent(BaseAgent):
             else:
                 logger.debug("Generator 断言增强启用但被测代码无现有 assert，跳过注入")
 
-        # 调用 LLM 生成测试代码，带文件缓存省 token
-        raw = self._call_llm_with_cache(query)
-        # 从响应中提取 Python 代码块（去除 markdown 包裹）
-        code = self._extract_python_code(raw)
-        # Import 验证：修正错误的模块名
-        if module_name:
-            code = self._fix_import_module(code, module_name)
-        # Parametrize 格式校验：LLM 有时会在 parametrize 中混入 case_name 导致参数不匹配
-        if not self._validate_parametrize(code):
-            logger.warning("Generator 检测到 parametrize 格式错误，触发重试")
-            # 重试时追加负面反馈提示，避免 LLM 用相同 query 生成相同错误
-            retry_query = query + (
-                "\n\n【修正要求】上次生成的测试代码中，"
-                "pytest.mark.parametrize 的参数定义与用例元组长度不匹配。"
-                "请确保每个用例元组的元素数量与参数名列表完全一致，"
-                "不要混入 case_name 等额外字段。"
-            )
-            raw = self._call_llm_with_cache(retry_query)
-            code = self._extract_python_code(raw)
-            if module_name:
-                code = self._fix_import_module(code, module_name)
-            # 二次校验：若仍失败则警告但不重试，避免 LLM 反复生成相同错误代码
-            if not self._validate_parametrize(code):
-                logger.warning("二次 parametrize 校验仍失败，继续执行（可能 LLM 无法修正）")
-        return code
+        return query
 
     @staticmethod
     def _check_parametrize_decorator(decorator: ast.AST) -> tuple[list[str], ast.List] | None:
