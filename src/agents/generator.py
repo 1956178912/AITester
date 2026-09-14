@@ -229,7 +229,7 @@ class GeneratorAgent(BaseAgent):
         return code
 
     @staticmethod
-    def _check_parametrize_decorator(decorator) -> tuple | None:
+    def _check_parametrize_decorator(decorator: ast.AST) -> tuple[list[str], ast.List] | None:
         """
         检查装饰器是否为 @pytest.mark.parametrize，若是则返回参数信息。
 
@@ -259,7 +259,7 @@ class GeneratorAgent(BaseAgent):
         return param_names, cases_arg
 
     @staticmethod
-    def _validate_case_tuple(elt, param_names: list[str]) -> bool:
+    def _validate_case_tuple(elt: ast.expr, param_names: list[str]) -> bool:
         """
         校验单个用例元组的长度是否与参数名数量匹配。
 

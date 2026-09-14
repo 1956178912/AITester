@@ -45,7 +45,7 @@ class TokenUsage:
         for model, tokens in other.by_model.items():
             self.by_model[model] = self.by_model.get(model, 0) + tokens
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, int | dict[str, int]]:
         """转为可 JSON 序列化的字典。"""
         return {
             "input_tokens": self.input_tokens,

@@ -143,7 +143,7 @@ class CandidateResult:
 
 
 def generate_candidates(
-    debugger,
+    debugger: Any,
     target_code: str,
     test_output: str,
     failed_cases: list[dict[str, str]],
@@ -212,7 +212,7 @@ def select_best_candidate(
     target_file: str | None = None,
     target_function: str | None = None,
     use_execution_validation: bool = False,
-    executor=None,
+    executor: Any = None,
 ) -> CandidateResult | None:
     """从候选列表中选出最优补丁（3.1 的验证筛选）。
 

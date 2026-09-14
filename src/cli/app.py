@@ -24,7 +24,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -83,7 +83,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def _quiet_console_logs():
+def _quiet_console_logs() -> Iterator[None]:
     """--json 模式下临时静音 stdout 控制台日志，让 stdout 只承载 JSON（便于管道/jq）。
 
     实现（避免全局改 handler.stream，保持对测试捕获环境友好）：
@@ -161,7 +161,9 @@ def _make_task_error_result(file_path: str, func: str | None, error: BaseExcepti
     }
 
 
-def _handle_task_exception(future, future_to_file: dict, func: str | None, results: list) -> None:
+def _handle_task_exception(
+    future: Future, future_to_file: dict[Future, str], func: str | None, results: list[dict[str, Any]]
+) -> None:
     """
     统一处理并行任务执行中的异常，记录日志并追加错误结果。
 

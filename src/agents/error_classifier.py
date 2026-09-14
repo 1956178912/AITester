@@ -34,6 +34,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class ErrorCategory(Enum):
@@ -268,9 +269,9 @@ class ErrorClassifier:
     def classify_with_context(
         self,
         test_output: str,
-        failed_cases: list[dict],
+        failed_cases: list[dict[str, Any]],
         target_module: str | None = None,
-    ) -> tuple:
+    ) -> tuple[ErrorCategory, ErrorContext]:
         """
         分类错误类型并提取错误上下文。
 

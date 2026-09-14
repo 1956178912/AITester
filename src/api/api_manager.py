@@ -346,7 +346,7 @@ class APIManager:
         logger.info("批量健康检查完成: %d/%d 个节点健康", healthy_count, len(all_results))
         return all_results
 
-    def _build_node_list(self, model: str | None) -> tuple[list, list]:
+    def _build_node_list(self, model: str | None) -> tuple[list[APIHealth], list[APIHealth]]:
         """构建待尝试节点列表和备用节点列表。"""
         if model and model in self.health_nodes:
             nodes_to_try = [self.health_nodes[model]]
@@ -370,7 +370,13 @@ class APIManager:
         return nodes_to_try, fallback_candidates
 
     def _try_call_node(
-        self, node, messages, kwargs, call_model: str, attempt: int, prev_model: str | None = None
+        self,
+        node: APIHealth,
+        messages: list[dict[str, str]],
+        kwargs: dict[str, Any],
+        call_model: str,
+        attempt: int,
+        prev_model: str | None = None,
     ) -> Any:
         """尝试调用单个节点的 API。
 
@@ -433,7 +439,9 @@ class APIManager:
             return False
         return node.in_circuit_half_open
 
-    def _handle_rate_limit(self, node, attempt: int, primary_count: int, is_half_open_probe: bool = False) -> None:
+    def _handle_rate_limit(
+        self, node: APIHealth, attempt: int, primary_count: int, is_half_open_probe: bool = False
+    ) -> None:
         """处理限流错误，根据配置决定是否等待重试。
 
         4.2：is_half_open_probe 为 True 时，本次限流发生在半开探测窗口内——
@@ -449,7 +457,7 @@ class APIManager:
         elif self.config.fallback_on_failure:
             time.sleep(5)
 
-    def _handle_api_error(self, e, node, is_half_open_probe: bool = False) -> None:
+    def _handle_api_error(self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False) -> None:
         """处理API错误，根据配置决定是否抛出。
 
         4.2：is_half_open_probe 为 True 时，API 错误即探测失败，
@@ -464,7 +472,7 @@ class APIManager:
             # fallback 禁用时，记录错误后直接抛出原始异常
             raise
 
-    def _handle_generic_error(self, e, node, is_half_open_probe: bool = False) -> None:
+    def _handle_generic_error(self, e: Exception, node: APIHealth, is_half_open_probe: bool = False) -> None:
         """处理通用异常，根据配置决定是否抛出。
 
         4.2：is_half_open_probe 为 True 时，通用异常即探测失败，

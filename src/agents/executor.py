@@ -330,7 +330,7 @@ class ExecutorAgent:
             logger.warning("清理沙箱目录失败: %s", e)
 
     @staticmethod
-    def _build_error_info(last_result, output: str) -> dict:
+    def _build_error_info(last_result: subprocess.CompletedProcess[str], output: str) -> dict[str, Any]:
         """根据测试结果构建错误信息字典。"""
         return {
             "type": "test_failure",
@@ -443,7 +443,7 @@ class ExecutorAgent:
 
     @staticmethod
     @lru_cache(maxsize=256)
-    def _cached_search_module_path(module_name: str, root_path_str: str, max_depth: int) -> tuple:
+    def _cached_search_module_path(module_name: str, root_path_str: str, max_depth: int) -> tuple[str, ...]:
         """
         缓存版本的模块路径搜索（优化高频调用场景）。
 
