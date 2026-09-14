@@ -326,55 +326,14 @@ class ReportGenerator:
         Returns:
             str: 根本原因描述
         """
-        # P2 细化：独立类别优先分支
-        if category == ErrorCategory.LLM_FORMAT_ERROR:
-            return "LLM 响应格式异常（JSON 解析失败/截断/空响应），需重新生成合规响应或放宽 JSON 提取逻辑"
-
-        if category == ErrorCategory.INDEX_ERROR:
-            return "索引越界：列表/字符串/数组访问位置超出范围，需要添加边界检查"
-
-        # 1.1 状态细化：流程状态类（不走文本正则，由任务收尾信号判定）
-        if category == ErrorCategory.PATCH_VALIDATION_FAILED:
-            return "补丁被安全守卫拒绝（空/过短/丢失函数定义/路径不合法），修复未实际写入"
-
-        if category == ErrorCategory.RAG_RETRIEVAL_EMPTY:
-            return "RAG 检索未命中任何历史案例（检索库冷启动或查询与已入库案例差异过大）"
-
+        # 带上下文/error_output 细化的类别单独分支处理，其余走固定根因映射表
         if category == ErrorCategory.IMPORT_ERROR:
-            module = context.module_name if context and context.module_name else "未知模块"
-            return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
-
-        if category == ErrorCategory.TYPE_ERROR:
-            return "类型错误：参数类型不匹配，请检查函数调用的参数类型"
-
-        if category == ErrorCategory.LOGIC_ERROR:
-            return "疑似测试逻辑错误：断言失败且失败栈未触及被测模块，预期值可能写错"
-
+            return _import_root_cause(context)
         if category == ErrorCategory.SYNTAX:
-            # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示
-            if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
-                module = context.module_name or "未知模块"
-                return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
-            return "代码存在语法错误，请检查冒号、缩进、括号配对等基础语法"
-
+            return _syntax_root_cause(context)
         if category == ErrorCategory.RUNTIME:
-            if "ZeroDivisionError" in error_output:
-                return "除零错误：被除数可能为 0，需要添加边界条件检查"
-            if "TypeError" in error_output:
-                return "类型错误：参数类型不匹配，请检查函数调用的参数类型"
-            if "IndexError" in error_output:
-                return "索引越界：列表/字符串索引超出范围，需要添加边界检查"
-            if "AttributeError" in error_output:
-                return "属性错误：对象没有指定属性，请检查对象类型和方法名"
-            return "运行时异常：请根据具体错误信息检查代码逻辑"
-
-        if category == ErrorCategory.ASSERTION:
-            return "断言失败：测试期望值与实际返回值不一致，可能是逻辑 bug 或测试用例设计问题"
-
-        if category == ErrorCategory.TIMEOUT:
-            return "执行超时：函数可能存在死循环或性能问题，需要优化算法复杂度"
-
-        return "未知错误类型：请检查错误输出并手动分析原因"
+            return _runtime_root_cause(error_output)
+        return _ROOT_CAUSE_MAP.get(category, _ROOT_CAUSE_MAP[ErrorCategory.UNKNOWN])
 
     def _generate_fix_suggestion(
         self,
@@ -393,100 +352,15 @@ class ReportGenerator:
         Returns:
             str: 修复建议文本
         """
-        suggestions: list[str] = []
-
-        # P2 细化：独立类别的修复建议
-        if category == ErrorCategory.LLM_FORMAT_ERROR:
-            suggestions.append("1. 重新请求 LLM 生成合规响应（检查 prompt 是否要求了 JSON 输出）")
-            suggestions.append("2. 剥离 markdown 代码块标记后再做 JSON 解析")
-            suggestions.append("3. 若响应被截断，降低单次输出长度或分段请求")
-            return "\n".join(suggestions)
-
-        if category == ErrorCategory.INDEX_ERROR:
-            suggestions.append("1. 检查列表/字符串/数组的访问位置是否在范围内")
-            suggestions.append("2. 对空容器先判空再访问")
-            suggestions.append("3. 循环边界与切片处补充分支判断，不要用 try/except 静默吞掉越界")
-            return "\n".join(suggestions)
-
-        # 1.1 状态细化：流程状态类的修复建议
-        if category == ErrorCategory.PATCH_VALIDATION_FAILED:
-            suggestions.append("1. 重新生成完整补丁：保留原代码全部函数与 import")
-            suggestions.append("2. 输出完整文件而非片段，避免触发'过短/丢失函数定义'守卫")
-            suggestions.append("3. 确认被测文件路径在项目允许目录内（非非法路径）")
-            return "\n".join(suggestions)
-
-        if category == ErrorCategory.RAG_RETRIEVAL_EMPTY:
-            suggestions.append("1. 本轮未获得 RAG 检索增强，按常规修复策略处理")
-            suggestions.append("2. 若同类任务反复出现，扩充检索库案例（成功用例/修复案例入库）")
-            suggestions.append("3. 必要时降低检索相似度阈值或增大 top_k")
-            return "\n".join(suggestions)
-
+        # 带上下文/error_output 细化的类别单独分支处理，其余走固定建议映射表
         if category == ErrorCategory.IMPORT_ERROR:
-            module = context.module_name if context and context.module_name else "目标模块"
-            suggestions.append(f"1. 安装缺失模块：`pip install {module}`")
-            suggestions.append("2. 检查导入语句是否正确")
-            suggestions.append("3. 确认模块名大小写是否正确")
-            return "\n".join(suggestions)
-
-        if category == ErrorCategory.TYPE_ERROR:
-            suggestions.append("1. 检查函数调用时的参数类型")
-            suggestions.append("2. 添加类型注解和参数校验")
-            suggestions.append("3. 使用 isinstance() 进行类型检查")
-            return "\n".join(suggestions)
-
-        if category == ErrorCategory.LOGIC_ERROR:
-            suggestions.append("1. 核对函数签名/文档字符串，确认测试预期值是否正确")
-            suggestions.append("2. 修正测试用例的断言预期值（而非盲目修改被测代码）")
-            suggestions.append("3. 仅当被测代码行为确实与问题描述矛盾时才修改被测代码")
-            return "\n".join(suggestions)
-
-        if category == ErrorCategory.SYNTAX:
-            # 仅 import 错误子类型才有 module_name；其余子类型（如语法错误）走通用提示
-            if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
-                module = context.module_name or "目标模块"
-                suggestions.append(f"1. 安装缺失模块：`pip install {module}`")
-                suggestions.append("2. 检查导入语句是否正确")
-                suggestions.append("3. 确认模块名大小写是否正确")
-            else:
-                suggestions.append("1. 检查语法错误位置（文件名:行号）")
-                suggestions.append("2. 确认冒号、括号、引号配对")
-                suggestions.append("3. 检查缩进是否一致")
-
+            suggestions = _import_fix_suggestion(context)
+        elif category == ErrorCategory.SYNTAX:
+            suggestions = _syntax_fix_suggestion(context)
         elif category == ErrorCategory.RUNTIME:
-            if "ZeroDivisionError" in error_output:
-                suggestions.append("1. 在被除数使用前添加零值检查")
-                suggestions.append("2. 使用 try-except 捕获除零异常")
-                suggestions.append("3. 添加测试用例覆盖除数为 0 的场景")
-            elif "TypeError" in error_output:
-                suggestions.append("1. 检查函数调用时的参数类型")
-                suggestions.append("2. 添加类型注解和参数校验")
-                suggestions.append("3. 使用 isinstance() 进行类型检查")
-            elif "IndexError" in error_output:
-                suggestions.append("1. 检查列表/字符串索引边界")
-                suggestions.append("2. 使用 len() 或 try-except 防止越界")
-                suggestions.append("3. 添加空列表/字符串的边界测试")
-            else:
-                suggestions.append("1. 查看完整错误堆栈定位问题")
-                suggestions.append("2. 添加调试日志输出中间变量")
-                suggestions.append("3. 逐步排查变量状态变化")
-
-        elif category == ErrorCategory.ASSERTION:
-            suggestions.append("1. 检查被测函数的实际返回值")
-            suggestions.append("2. 确认测试用例的预期值是否正确")
-            suggestions.append("3. 检查是否存在浮点数精度问题")
-            suggestions.append("4. 考虑使用 pytest.approx() 处理浮点比较")
-
-        elif category == ErrorCategory.TIMEOUT:
-            suggestions.append("1. 检查是否存在无限循环")
-            suggestions.append("2. 优化算法复杂度（考虑使用更高效的数据结构）")
-            suggestions.append("3. 添加递归深度限制或使用迭代代替递归")
-            suggestions.append("4. 考虑使用超时装饰器隔离慢函数")
-
+            suggestions = _runtime_fix_suggestion(error_output)
         else:
-            suggestions.append("1. 仔细分析错误输出信息")
-            suggestions.append("2. 检查代码逻辑是否符合预期")
-            suggestions.append("3. 添加更多调试信息辅助定位")
-
+            suggestions = _FIX_SUGGESTION_MAP.get(category, _FIX_SUGGESTION_MAP[ErrorCategory.UNKNOWN])
         return "\n".join(suggestions)
 
     def _parse_failed_cases(self, error_output: str) -> list[dict[str, Any]]:
@@ -556,6 +430,161 @@ class ReportGenerator:
             filepath.write_text(report.to_text(), encoding="utf-8")
 
         return filepath
+
+
+# ─── 根本原因 / 修复建议的固定策略与上下文细化辅助函数 ───────────────────────
+# 模式与 error_classifier.py 的 _FIX_STRATEGIES 一致：固定策略入映射表，
+# 带 context/error_output 细化的类别拆成模块级辅助函数，主函数只保留必要分支。
+
+
+def _import_root_cause(context: ErrorContext | None) -> str:
+    """IMPORT_ERROR 的根因描述，按是否携带缺失模块名细化。"""
+    module = context.module_name if context and context.module_name else "未知模块"
+    return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
+
+
+def _syntax_root_cause(context: ErrorContext | None) -> str:
+    """SYNTAX 的根因描述，按子类型（导入错误/其他）细化。"""
+    if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
+        module = context.module_name or "未知模块"
+        return f"缺少依赖模块 '{module}'，请检查是否已安装或导入路径是否正确"
+    return "代码存在语法错误，请检查冒号、缩进、括号配对等基础语法"
+
+
+def _runtime_root_cause(error_output: str) -> str:
+    """RUNTIME 的根因描述，按具体异常名细化。"""
+    if "ZeroDivisionError" in error_output:
+        return "除零错误：被除数可能为 0，需要添加边界条件检查"
+    if "TypeError" in error_output:
+        return "类型错误：参数类型不匹配，请检查函数调用的参数类型"
+    if "IndexError" in error_output:
+        return "索引越界：列表/字符串索引超出范围，需要添加边界检查"
+    if "AttributeError" in error_output:
+        return "属性错误：对象没有指定属性，请检查对象类型和方法名"
+    return "运行时异常：请根据具体错误信息检查代码逻辑"
+
+
+def _import_fix_suggestion(context: ErrorContext | None) -> list[str]:
+    """IMPORT_ERROR 的修复建议，按是否携带缺失模块名细化。"""
+    module = context.module_name if context and context.module_name else "目标模块"
+    return [
+        f"1. 安装缺失模块：`pip install {module}`",
+        "2. 检查导入语句是否正确",
+        "3. 确认模块名大小写是否正确",
+    ]
+
+
+def _syntax_fix_suggestion(context: ErrorContext | None) -> list[str]:
+    """SYNTAX 的修复建议，按子类型（导入错误/其他）细化。"""
+    if context and context.subtype and context.subtype.name == "IMPORT_ERROR":
+        module = context.module_name or "目标模块"
+        return [
+            f"1. 安装缺失模块：`pip install {module}`",
+            "2. 检查导入语句是否正确",
+            "3. 确认模块名大小写是否正确",
+        ]
+    return [
+        "1. 检查语法错误位置（文件名:行号）",
+        "2. 确认冒号、括号、引号配对",
+        "3. 检查缩进是否一致",
+    ]
+
+
+def _runtime_fix_suggestion(error_output: str) -> list[str]:
+    """RUNTIME 的修复建议，按具体异常名细化。"""
+    if "ZeroDivisionError" in error_output:
+        return [
+            "1. 在被除数使用前添加零值检查",
+            "2. 使用 try-except 捕获除零异常",
+            "3. 添加测试用例覆盖除数为 0 的场景",
+        ]
+    if "TypeError" in error_output:
+        return [
+            "1. 检查函数调用时的参数类型",
+            "2. 添加类型注解和参数校验",
+            "3. 使用 isinstance() 进行类型检查",
+        ]
+    if "IndexError" in error_output:
+        return [
+            "1. 检查列表/字符串索引边界",
+            "2. 使用 len() 或 try-except 防止越界",
+            "3. 添加空列表/字符串的边界测试",
+        ]
+    return [
+        "1. 查看完整错误堆栈定位问题",
+        "2. 添加调试日志输出中间变量",
+        "3. 逐步排查变量状态变化",
+    ]
+
+
+# 固定根因映射表：无需上下文/error_output 细化的类别直接查表返回。
+# IMPORT_ERROR / SYNTAX / RUNTIME 由上方辅助函数处理。
+_ROOT_CAUSE_MAP: dict[ErrorCategory, str] = {
+    ErrorCategory.LLM_FORMAT_ERROR: (
+        "LLM 响应格式异常（JSON 解析失败/截断/空响应），需重新生成合规响应或放宽 JSON 提取逻辑"
+    ),
+    ErrorCategory.INDEX_ERROR: "索引越界：列表/字符串/数组访问位置超出范围，需要添加边界检查",
+    ErrorCategory.PATCH_VALIDATION_FAILED: ("补丁被安全守卫拒绝（空/过短/丢失函数定义/路径不合法），修复未实际写入"),
+    ErrorCategory.RAG_RETRIEVAL_EMPTY: ("RAG 检索未命中任何历史案例（检索库冷启动或查询与已入库案例差异过大）"),
+    ErrorCategory.TYPE_ERROR: "类型错误：参数类型不匹配，请检查函数调用的参数类型",
+    ErrorCategory.LOGIC_ERROR: "疑似测试逻辑错误：断言失败且失败栈未触及被测模块，预期值可能写错",
+    ErrorCategory.ASSERTION: "断言失败：测试期望值与实际返回值不一致，可能是逻辑 bug 或测试用例设计问题",
+    ErrorCategory.TIMEOUT: "执行超时：函数可能存在死循环或性能问题，需要优化算法复杂度",
+    ErrorCategory.UNKNOWN: "未知错误类型：请检查错误输出并手动分析原因",
+}
+
+
+# 固定修复建议映射表：无需上下文/error_output 细化的类别直接查表返回。
+# IMPORT_ERROR / SYNTAX / RUNTIME 由上方辅助函数处理。
+_FIX_SUGGESTION_MAP: dict[ErrorCategory, list[str]] = {
+    ErrorCategory.LLM_FORMAT_ERROR: [
+        "1. 重新请求 LLM 生成合规响应（检查 prompt 是否要求了 JSON 输出）",
+        "2. 剥离 markdown 代码块标记后再做 JSON 解析",
+        "3. 若响应被截断，降低单次输出长度或分段请求",
+    ],
+    ErrorCategory.INDEX_ERROR: [
+        "1. 检查列表/字符串/数组的访问位置是否在范围内",
+        "2. 对空容器先判空再访问",
+        "3. 循环边界与切片处补充分支判断，不要用 try/except 静默吞掉越界",
+    ],
+    ErrorCategory.PATCH_VALIDATION_FAILED: [
+        "1. 重新生成完整补丁：保留原代码全部函数与 import",
+        "2. 输出完整文件而非片段，避免触发'过短/丢失函数定义'守卫",
+        "3. 确认被测文件路径在项目允许目录内（非非法路径）",
+    ],
+    ErrorCategory.RAG_RETRIEVAL_EMPTY: [
+        "1. 本轮未获得 RAG 检索增强，按常规修复策略处理",
+        "2. 若同类任务反复出现，扩充检索库案例（成功用例/修复案例入库）",
+        "3. 必要时降低检索相似度阈值或增大 top_k",
+    ],
+    ErrorCategory.TYPE_ERROR: [
+        "1. 检查函数调用时的参数类型",
+        "2. 添加类型注解和参数校验",
+        "3. 使用 isinstance() 进行类型检查",
+    ],
+    ErrorCategory.LOGIC_ERROR: [
+        "1. 核对函数签名/文档字符串，确认测试预期值是否正确",
+        "2. 修正测试用例的断言预期值（而非盲目修改被测代码）",
+        "3. 仅当被测代码行为确实与问题描述矛盾时才修改被测代码",
+    ],
+    ErrorCategory.ASSERTION: [
+        "1. 检查被测函数的实际返回值",
+        "2. 确认测试用例的预期值是否正确",
+        "3. 检查是否存在浮点数精度问题",
+        "4. 考虑使用 pytest.approx() 处理浮点比较",
+    ],
+    ErrorCategory.TIMEOUT: [
+        "1. 检查是否存在无限循环",
+        "2. 优化算法复杂度（考虑使用更高效的数据结构）",
+        "3. 添加递归深度限制或使用迭代代替递归",
+        "4. 考虑使用超时装饰器隔离慢函数",
+    ],
+    ErrorCategory.UNKNOWN: [
+        "1. 仔细分析错误输出信息",
+        "2. 检查代码逻辑是否符合预期",
+        "3. 添加更多调试信息辅助定位",
+    ],
+}
 
 
 # 模块级单例
