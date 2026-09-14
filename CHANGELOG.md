@@ -2,6 +2,43 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.16] - 2026-09-15 深度重构轮次（单一构造点收敛 + 统计检验收敛 + 文档对齐）
+
+### AITesterState 初始化双写收敛（技术债消化）
+- `src/graph/state.py` 新增 `create_initial_state()` 工厂函数（全 TypedDict 字段显式赋值），
+  CLI（`cli/app.py`）与 benchmark（`experiments/run_benchmark.py`）手写初始化字典已移除
+- 单一构造点消除新增字段时的双写漂移（0.9.14 批次记录的技术债）
+- 新增 `tests/test_state.py`（8 用例）：键集守护 / module_name 推导 / 可变容器隔离 / 可选参数注入
+
+### 统计显著性第三份残留收敛（技术债消化）
+- `experiments/visualize_results.py` 的统计检验复用 `experiments/statistical_analysis.py`
+  的配对原语（`_pair_by_task` / `cohens_d` / `interpret_p` / `interpret_d`），
+  scipy 仅保留 `ttest_rel` + `mannwhitneyu` 原生调用（图表专用指标）
+- 补 NaN/Inf 守卫：恒定组（全 1 vs 全 0）配对 t 检验 t=inf → NaN 占位，
+  与 `src/experiments/analysis.py` 守卫口径一致（避免 round(float(inf)) 产生 Infinity 非标准 token）
+- 废弃旧"全 task_id 0.0 填充"口径，改为按 task_id 配对缺失任务不计入样本
+- 新增 `tests/test_viz_significance.py`（6 用例）：task_id 配对口径 / NaN 占位 / 原语引用锁定
+
+### 代码覆盖率补测
+- `tests/test_code_context.py` 补 9 用例（第二层裁剪 / last_resort 路径 / 私有辅助函数边界 /
+  注释行跳过 / 短函数体 / 非预构建段 / 焦点缺失回退），模块覆盖率 89% → 98%
+
+### 文档同步（对齐 0.9.15 可维护性深化拆分）
+- README 项目结构树补齐 5 个拆分产物：`src/graph/{tracing,rag,nodes}.py`、
+  `src/api/api_health.py`、`src/agents/llm_client.py`
+- README `get_rag_retriever()` 位置说明从 `workflow.py` 更正为 `rag.py`（经 workflow re-export）
+- README 测试状态表 13 处行内数同步（test_cli_app / test_code_context / test_config /
+  test_config_manager / test_error_classifier / test_executor / test_multi_candidate /
+  test_workflow_extended 等），补 `test_state.py` / `test_viz_significance.py` 两行
+- README 测试总数 1270 → 1291、文件数 50 → 52、覆盖率 92% → 94%
+- `docs/api_reference.md`：`generate()` / `debug()` 参数默认值与可空标注补齐
+  （`module_name: str = ""`、`rag_references: list | None = None`、`focus_function/target_module: str | None = None`）；
+  工作流节点实现位置改指 `nodes.py`；APIManagerConfig 字段归属改指 `api_health.py`
+
+### 验证
+- 全量 **1291 passed / 0 failed**（+21 新增），ruff check + format 全绿，
+  src 总覆盖率 **94%**（+1%）
+
 ## [0.9.15] - 2026-09-15 代码可维护性深化轮次（类型注解 + 圈复杂度 + Ruff 规则增强）
 
 ### Ruff 规则集增强
