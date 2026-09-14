@@ -164,7 +164,7 @@ class TestZaiClientReuse:
         """缓存达到上限时按 FIFO 淘汰最早条目。"""
         import src.agents.llm_client as ba
 
-        fake_module, _ = fake_zai
+        _fake_module, _ = fake_zai
         monkeypatch.setattr(ba, "_MAX_CACHED_ZAI_CLIENTS", 2)
 
         _get_or_create_zai_client("k1", "u")
@@ -177,7 +177,7 @@ class TestZaiClientReuse:
 
     def test_call_zai_reuses_client_across_calls(self, fake_zai):
         """_call_zai 连续两次调用复用同一客户端。"""
-        fake_module, constructed = fake_zai
+        _fake_module, constructed = fake_zai
 
         result1 = _call_zai(
             api_key="key-1",
@@ -232,7 +232,7 @@ class TestGetLlmConfigThreadLocal:
 
         _thread_local.api_key = "tk"
         _thread_local.base_url = "turl"
-        api_key, base_url, model_name = _get_llm_config()
+        _api_key, _base_url, model_name = _get_llm_config()
         assert model_name == "fallback-model"
 
     @patch("src.agents.llm_client.LLM_CONFIGS", new=[])
@@ -241,7 +241,7 @@ class TestGetLlmConfigThreadLocal:
         _thread_local.api_key = ""
         _thread_local.base_url = "ignored"
         with patch("src.agents.llm_client.LLM_CONFIGS", new=[]):
-            api_key, base_url, model_name = _get_llm_config()
+            api_key, _base_url, _model_name = _get_llm_config()
         assert api_key == ""
 
 

@@ -367,9 +367,7 @@ class ErrorClassifier:
         if _RE_SYNTAX_ERROR_FILE_LINE.search(text):
             return True
         # 检查 E prefix 格式：E   file.py:line:col
-        if _RE_PYTEST_SYNTAX.search(text):
-            return True
-        return False
+        return bool(_RE_PYTEST_SYNTAX.search(text))
 
     @staticmethod
     def _is_import_error(text: str) -> bool:
@@ -425,10 +423,7 @@ class ErrorClassifier:
         # 的子集（帧几乎总带 .py 后缀，无后缀帧在 pytest traceback 中不出现），
         # 收敛为单一 endswith 判断（"mycalc.py" 误中 "calc.py" 的既有限制保留）
         target_file = f"{target_module}.py"
-        for frame_file, _line in frames:
-            if frame_file.endswith(target_file):
-                return False
-        return True
+        return all(not frame_file.endswith(target_file) for frame_file, _line in frames)
 
     @staticmethod
     def _is_runtime_error(text: str) -> bool:
@@ -531,13 +526,12 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
                     f"或确认模块名称是否正确。如果模块已安装，"
                     f"请检查 Python 环境路径是否包含该模块。"
                 )
-            else:
-                return (
-                    "检测到导入错误（ImportError/ModuleNotFoundError）。"
-                    "请检查是否需要安装缺失的依赖包，"
-                    "或确认模块名称是否正确。"
-                )
-        elif context and context.subtype == SyntaxSubtype.SYNTAX_ERROR:
+            return (
+                "检测到导入错误（ImportError/ModuleNotFoundError）。"
+                "请检查是否需要安装缺失的依赖包，"
+                "或确认模块名称是否正确。"
+            )
+        if context and context.subtype == SyntaxSubtype.SYNTAX_ERROR:
             location = ""
             if context.filename:
                 location = f" 文件 '{context.filename}'"
@@ -552,13 +546,12 @@ def get_fix_strategy(category: ErrorCategory, context: ErrorContext = None) -> s
                 f"重新生成完整的修复后代码文件，"
                 f"确保语法符合 Python 规范。"
             )
-        else:
-            return (
-                "检测到语法/编译错误（如 ImportError、SyntaxError）。"
-                "请重新生成完整的修复后代码文件，确保所有 import 语句正确、"
-                "缩进和语法符合 Python 规范。不要只修改单个函数，"
-                "而是输出包含所有函数和 import 的完整文件代码。"
-            )
+        return (
+            "检测到语法/编译错误（如 ImportError、SyntaxError）。"
+            "请重新生成完整的修复后代码文件，确保所有 import 语句正确、"
+            "缩进和语法符合 Python 规范。不要只修改单个函数，"
+            "而是输出包含所有函数和 import 的完整文件代码。"
+        )
 
     strategies = {
         # 运行时异常：分析异常栈，定位到具体哪行代码引发问题

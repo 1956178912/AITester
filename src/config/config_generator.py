@@ -152,7 +152,7 @@ def generate_batch_config_script() -> str:
     Returns:
         Python 脚本内容
     """
-    script = '''"""
+    return '''"""
 批量配置生成脚本
 用法：
     python generate_batch_config.py --output .env.local
@@ -223,7 +223,6 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-    return script
 
 
 if __name__ == "__main__":

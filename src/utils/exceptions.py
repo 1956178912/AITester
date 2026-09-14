@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import time
@@ -219,7 +220,7 @@ def retry_with_backoff(
                     last_exception = e
                     if attempt < max_retries:
                         wait_time = base_wait * (exponential_base**attempt)
-                        log = logger_name and logging.getLogger(logger_name) or logger
+                        log = (logger_name and logging.getLogger(logger_name)) or logger
                         log.warning(
                             "函数 %s 调用失败 (尝试 %d/%d): %s，等待 %.1f 秒后重试",
                             func.__name__,
@@ -266,10 +267,8 @@ def with_error_context(
                 # 收集上下文信息
                 context: dict[str, Any] = {}
                 if context_getter:
-                    try:
+                    with contextlib.suppress(Exception):
                         context.update(context_getter())
-                    except Exception:
-                        pass
                 # 添加函数参数信息
                 context["function"] = func.__name__
                 context["args_count"] = len(args)

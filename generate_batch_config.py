@@ -51,12 +51,8 @@ def generate_config(models: list[dict[str, Any]], api_keys: dict[str, str]) -> s
 def main():
     args = parse_args()
 
-    # 加载模型列表
-    if args.models:
-        models = load_models(args.models)
-    else:
-        # 使用默认模型列表
-        models = []
+    # 加载模型列表（未指定时使用空默认列表）
+    models = load_models(args.models) if args.models else []
 
     # 数据丢失防护：模型列表为空时，"w" 模式写入会用空文件覆盖现有
     # .env.local，抹掉已配置的 LLM_N_*。此时应报错退出而非生成空配置。

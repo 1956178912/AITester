@@ -19,7 +19,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 from config import SWE_BENCH_ENRICHMENT
 
@@ -217,7 +217,7 @@ class SWEBenchDataset(BaseDatasetLoader):
     DATASET_NAME = "swe_bench"
 
     # 可选子集及其对应的任务数量（用于快速预览）
-    SUBSET_MAP: dict[str, int] = {
+    SUBSET_MAP: ClassVar[dict[str, int]] = {
         "lite": 500,  # Lite 子集：500 个任务，适合快速验证
         "mini": 50,  # Mini 子集：50 个任务，适合开发调试
         "full": 2294,  # 完整数据集：2294 个任务
@@ -348,10 +348,11 @@ class SWEBenchDataset(BaseDatasetLoader):
         Returns:
             instance_id 列表（空列表 = 全部任务源码完整）。
         """
-        missing: list[str] = []
-        for task in self.tasks:
-            if not task.instance_code or task.instance_code == task.problem_statement:
-                missing.append(task.task_id)
+        missing: list[str] = [
+            task.task_id
+            for task in self.tasks
+            if not task.instance_code or task.instance_code == task.problem_statement
+        ]
         return missing
 
     @staticmethod
@@ -550,7 +551,7 @@ class Defects4JPYDataset(BaseDatasetLoader):
 
     DATASET_NAME = "defects4j_python"
 
-    KNOWN_PROJECTS = [
+    KNOWN_PROJECTS: ClassVar[list[str]] = [
         "requests",
         "pytest",
         "httpie",

@@ -171,7 +171,7 @@ def apply_patch_to_code(
     # Step 5: 执行替换 — 将原函数行范围替换为补丁函数代码
     patch_lines = clean_patch.split("\n")
     # 拼接新代码：原代码[起始前] + 空行 + 补丁行 + 空行 + 原代码[结束后的]
-    new_lines = lines[:start_idx] + [""] + patch_lines + [""] + lines[end_idx:]
+    new_lines = [*lines[:start_idx], "", *patch_lines, "", *lines[end_idx:]]
 
     # Step 6: 压缩连续空行，保持代码整洁（PEP 8 要求空行不超过 2 个）
     collapsed = _collapse_blank_lines(new_lines)

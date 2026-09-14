@@ -243,11 +243,15 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
         # 顺带把 repair_history 中记录的断言数变化做轻量检测（若字段存在）
         if history and isinstance(history, list):
             for h in history:
-                if isinstance(h, dict) and "assertion_count" in h and "prev_assertion_count" in h:
-                    if int(h["assertion_count"]) < int(h["prev_assertion_count"]):
-                        smell_counts["assertion_weakening"] += 1
-                        task_has_smell = True
-                        break
+                if (
+                    isinstance(h, dict)
+                    and "assertion_count" in h
+                    and "prev_assertion_count" in h
+                    and int(h["assertion_count"]) < int(h["prev_assertion_count"])
+                ):
+                    smell_counts["assertion_weakening"] += 1
+                    task_has_smell = True
+                    break
 
         # 平凡测试：函数体仅含 pass / return None / 单一恒真断言（已计入上方分支）
         # 此处仅处理"有断言但恒真"的情形（如 assert True / assert 1 == 1）
@@ -541,8 +545,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     lines.append("| 迭代轮数 | 任务数 |")
     lines.append("|---------|--------|")
     labels = {"0": "0（一次通过）", "1": "1", "2": "2", "3": "3+"}
-    for k in ("0", "1", "2", "3"):
-        lines.append(f"| {labels[k]} | {dist.get(k, 0)} |")
+    lines.extend(f"| {labels[k]} | {dist.get(k, 0)} |" for k in ("0", "1", "2", "3"))
     lines.append("")
 
     # 修复收敛效率（1.2）
@@ -739,10 +742,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.input:
-        input_file = args.input
-    else:
-        input_file = load_latest_benchmark(args.results_dir)
+    input_file = args.input or load_latest_benchmark(args.results_dir)
 
     with open(input_file, encoding="utf-8") as f:
         data = json.load(f)

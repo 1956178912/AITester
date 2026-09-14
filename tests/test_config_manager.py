@@ -185,7 +185,7 @@ class TestAddLLMConfig:
 
     def test_env_file_points_to_project_root(self):
         """回归锁：ENV_FILE 必须指向项目根目录的 .env.local（而非 src/config/ 下）。"""
-        assert config_manager.ENV_FILE == Path("config.py").resolve().parent / ".env.local"
+        assert Path("config.py").resolve().parent / ".env.local" == config_manager.ENV_FILE
 
     def test_add_config_write_failure_returns_false(self, monkeypatch, tmp_path):
         """ENV_FILE 父目录不存在 → open 抛异常 → 返回 False（147-149）。"""

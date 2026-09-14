@@ -181,7 +181,7 @@ class TestThreadSafety:
                     key = f"key-{tid}-{i % 10}"
                     set_cached_response(key, "s", f"{tid}-{i % 10}")
                     get_cached_response(key, "s")
-            except BaseException as e:  # noqa: BLE001 测试需捕获所有异常
+            except BaseException as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]

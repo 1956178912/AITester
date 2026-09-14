@@ -592,8 +592,10 @@ class TestDebuggerEdgeCases:
                 "patch": "```python\n# fixed\n```",
             }
         )
-        with patch.object(agent, "_call_llm", return_value=mock_response):
-            with patch("src.agents.debugger.logger") as mock_logger:
-                agent.debug(target_code="def f(): pass", test_output="AssertionError", failed_cases=[])
-                # 验证记录了分类结果
-                mock_logger.info.assert_called()
+        with (
+            patch.object(agent, "_call_llm", return_value=mock_response),
+            patch("src.agents.debugger.logger") as mock_logger,
+        ):
+            agent.debug(target_code="def f(): pass", test_output="AssertionError", failed_cases=[])
+            # 验证记录了分类结果
+            mock_logger.info.assert_called()

@@ -117,10 +117,7 @@ def setup_logger_safety(logger_name: str | None = None) -> None:
     Args:
         logger_name: 目标 logger 名称，None 表示配置根 logger。
     """
-    if logger_name:
-        logger = logging.getLogger(logger_name)
-    else:
-        logger = logging.getLogger()
+    logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
 
     filt = SensitiveFilter()
     # logger 级：拦截直接在该 logger 上记录的消息

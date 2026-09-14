@@ -10,6 +10,7 @@ PatchApplier）及其辅助函数（路径白名单校验、原子写盘、多�
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -172,7 +173,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     }
     # 累计 RAG 检索指标（本节点读取后携带历史值，避免后续节点覆盖丢失）
     if update_rag_stat:
-        update["rag_stats"] = list(state.get("rag_stats") or []) + [update_rag_stat]
+        update["rag_stats"] = [*list(state.get("rag_stats") or []), update_rag_stat]
     # 再生成路径检测：首次生成时 iteration < max_iterations（尚未进入修复循环），
     # 只有 _should_debug 路由 "regenerate"（此时 iteration >= max_iterations）才会带着
     # 高 iteration 回到 generator。据此区分两类进入方式：
@@ -348,7 +349,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
     if repair_stat:
-        update["rag_stats"] = list(state.get("rag_stats") or []) + [repair_stat]
+        update["rag_stats"] = [*list(state.get("rag_stats") or []), repair_stat]
     return update
 
 
@@ -452,10 +453,8 @@ def _write_file_atomic(path: str, content: str) -> None:
         os.replace(tmp_path, path)
     except BaseException:
         # 失败时清理临时文件，避免残留；再把异常抛给调用方
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path)
-        except OSError:
-            pass
         raise
 
 
@@ -647,9 +646,7 @@ def _validate_planner_output(test_plan: dict[str, Any]) -> bool:
             return False
     # logic_analysis 内部结构验证
     la = test_plan.get("logic_analysis", {})
-    if not isinstance(la, dict):
-        return False
-    return True
+    return isinstance(la, dict)
 
 
 def _get_default_test_plan(function_name: str | None) -> dict[str, Any]:

@@ -9,13 +9,17 @@ line-length = 120
 [tool.ruff.lint]
 # 启用的规则集
 select = [
-    "E",   # pycodestyle 错误
-    "W",   # pycodestyle 警告
-    "F",   # pyflakes
-    "I",   # isort 导入排序
-    "C90", # mccabe 复杂度检查
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
+    "E",    # pycodestyle 错误
+    "W",    # pycodestyle 警告
+    "F",    # pyflakes
+    "I",    # isort 导入排序
+    "C90",  # mccabe 复杂度检查
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify 代码简化
+    "PERF", # perflint 性能优化
+    "RET",  # flake8-return 返回语句改进
+    "RUF",  # ruff 自有规则（排除中文全角误报 001/002/003）
 ]
 
 # 忽略的规则（与项目风格冲突的）
@@ -23,6 +27,9 @@ ignore = [
     "E501",  # 行长度由 line-length 控制
     "W191",  # 允许缩进使用空格
     "C901",  # 允许函数复杂度超过阈值（设计决策，非 bug）
+    "RUF001",  # 模糊 unicode 字符（全角逗号/引号等中文标点，注释中大量存在，误报）
+    "RUF002",  # 模糊 unicode 字符（同上，中文注释误报）
+    "RUF003",  # 模糊 unicode 字符（同上，中文注释误报）
 ]
 
 [tool.ruff.lint.isort]

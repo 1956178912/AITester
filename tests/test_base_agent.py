@@ -96,11 +96,10 @@ class TestRetryWithExponentialBackoff:
         def always_fails():
             raise ValueError("persistent error")
 
-        with patch("time.sleep", side_effect=lambda s: waits.append(s)):
-            with pytest.raises(RuntimeError):
-                _retry_with_exponential_backoff(
-                    always_fails, max_retries=3, base_wait=1, retryable_exceptions=(ValueError,)
-                )
+        with patch("time.sleep", side_effect=lambda s: waits.append(s)), pytest.raises(RuntimeError):
+            _retry_with_exponential_backoff(
+                always_fails, max_retries=3, base_wait=1, retryable_exceptions=(ValueError,)
+            )
         assert waits == [1, 2, 4]
 
 

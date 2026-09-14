@@ -283,7 +283,7 @@ def foo(): return 1
         """应用带 python: 前缀的补丁。"""
         original = "def foo(): return 0"
         patch_code = "python:\ndef foo(): return 1"
-        new_code, success = apply_patch_to_code(original, patch_code)
+        _new_code, success = apply_patch_to_code(original, patch_code)
         assert success is True
 
 

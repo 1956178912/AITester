@@ -566,7 +566,7 @@ def _apply_rag_setting(enable_rag: bool | None) -> bool:
     import src.graph.workflow as _wf
 
     enabled = _wf.ENABLE_RAG if enable_rag is None else bool(enable_rag)
-    if _wf.ENABLE_RAG != enabled:
+    if enabled != _wf.ENABLE_RAG:
         logger.info("RAG 开关已切换: %s → %s", _wf.ENABLE_RAG, enabled)
         _wf.ENABLE_RAG = enabled
     return enabled

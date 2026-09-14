@@ -510,10 +510,7 @@ class ReportGenerator:
                     cases.append(current_case)
                 # 提取用例名
                 match = re.search(r"FAILED\s+(\S+)", line)
-                if match:
-                    current_case = {"name": match.group(1)}
-                else:
-                    current_case = {"name": "unknown"}
+                current_case = {"name": match.group(1)} if match else {"name": "unknown"}
             # 匹配错误详情
             elif current_case and ("AssertionError" in line or "Error" in line):
                 current_case["error"] = line.strip()

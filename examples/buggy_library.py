@@ -31,7 +31,7 @@ def binary_search(arr: list, target: int) -> int:
         mid = (left + right) // 2
         if arr[mid] == target:
             return mid
-        elif arr[mid] < target:
+        if arr[mid] < target:
             left = mid + 1
         else:
             right = mid - 1  # 修复：原代码 right = mid 导致区间不收缩，可能无限循环
@@ -107,8 +107,7 @@ def sanitize_input(text: str) -> str:
         return ""
     result = text.strip()
     # 将连续空白字符压缩为单个空格
-    result = re.sub(r"\s+", " ", result)
-    return result
+    return re.sub(r"\s+", " ", result)
 
 
 def lcs_length(s1: str, s2: str) -> int:

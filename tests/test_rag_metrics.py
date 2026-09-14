@@ -34,8 +34,7 @@ def retriever():
         mock.CHROMA_AVAILABLE = True
         from src.rag.retriever import TestCaseRetriever
 
-        instance = TestCaseRetriever()
-    return instance
+        return TestCaseRetriever()
 
 
 def _case(code: str, test_code: str) -> dict:

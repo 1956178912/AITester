@@ -170,9 +170,7 @@ class APIManager:
         for h in self.health_nodes.values():
             if h.in_circuit_open:
                 continue
-            if h.is_healthy:
-                candidates.append(h)
-            elif self.config.enable_half_open_probe and h.in_circuit_half_open:
+            if h.is_healthy or (self.config.enable_half_open_probe and h.in_circuit_half_open):
                 candidates.append(h)
         return candidates
 
@@ -253,14 +251,14 @@ class APIManager:
         with self._lock:
             if self.config.rotation_strategy == RotationStrategy.ROUND_ROBIN:
                 return self._select_node_round_robin()
-            elif self.config.rotation_strategy == RotationStrategy.WEIGHTED_RANDOM:
+            if self.config.rotation_strategy == RotationStrategy.WEIGHTED_RANDOM:
                 return self._select_node_weighted_random()
-            elif self.config.rotation_strategy == RotationStrategy.FASTEST_FIRST:
+            if self.config.rotation_strategy == RotationStrategy.FASTEST_FIRST:
                 return self._select_node_fastest_first()
-            elif self.config.rotation_strategy == RotationStrategy.COST_AWARE:
+            if self.config.rotation_strategy == RotationStrategy.COST_AWARE:
                 return self._select_node_cost_aware()
-            else:  # HEALTH_BASED
-                return self._select_node_health_based()
+            # HEALTH_BASED
+            return self._select_node_health_based()
 
     def check_health(self, node: APIHealth) -> bool:
         """对单个节点进行健康检查。
@@ -291,11 +289,10 @@ class APIManager:
                     node._probe_circuit_half_open(True)
                 logger.debug("健康检查通过: %s (%.2fms)", node.config.model_name, elapsed_ms)
                 return True
-            else:
-                node.mark_failure("empty_response")
-                if is_half_open_probe:
-                    node._probe_circuit_half_open(False)
-                return False
+            node.mark_failure("empty_response")
+            if is_half_open_probe:
+                node._probe_circuit_half_open(False)
+            return False
         except openai.RateLimitError:
             node.mark_failure("rate_limit")
             if is_half_open_probe:
@@ -578,17 +575,15 @@ class APIManager:
             experienced.sort(key=lambda x: x.avg_response_time_ms)
         elif sort_by == "requests":
             experienced.sort(key=lambda x: x.total_requests, reverse=True)
-        result = []
-        for node in experienced[:n]:
-            result.append(
-                {
-                    "model": node.config.model_name,
-                    "success_rate": round(node.success_rate, 3),
-                    "avg_response_time_ms": round(node.avg_response_time_ms, 2),
-                    "total_requests": node.total_requests,
-                }
-            )
-        return result
+        return [
+            {
+                "model": node.config.model_name,
+                "success_rate": round(node.success_rate, 3),
+                "avg_response_time_ms": round(node.avg_response_time_ms, 2),
+                "total_requests": node.total_requests,
+            }
+            for node in experienced[:n]
+        ]
 
     def reset_stats(self) -> None:
         """重置所有统计数据（含 4.1 熔断器状态：清零冷却截止时间）"""
@@ -716,7 +711,7 @@ def print_status_table(manager: APIManager | None = None) -> None:
     print("-" * 80)
     print(f"{'模型名称':<25} {'健康状态':<8} {'成功率':<8} {'请求数':<8} {'平均延迟(ms)':<12}")
     print("-" * 80)
-    for _name, node in status["nodes"].items():
+    for node in status["nodes"].values():
         health_str = "✓ 健康" if node["is_healthy"] else "✗ 不健康"
         print(
             f"{node['model']:<25} {health_str:<8} {node['success_rate']:<8.2%} "
