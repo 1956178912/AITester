@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](QUICKSTART.en.md) | 简体中文（本文）
+
 # AITester 快速开始指南
 
 ## 1. 克隆仓库

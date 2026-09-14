@@ -1,3 +1,7 @@
+> **语言 / Language**：[English](optimization_plan.en.md) | 简体中文（本文）
+
+> **归档说明（2026-09-15）**：本文档原为根目录 `OPTIMIZATION_PLAN.md`，现归入 `docs/history/`（历史轮次工作记录，非当前维护文档）。当前轮次的优化决策见 CHANGELOG 与用户工作区的全局决策日志。
+
 # AITester 项目优化计划
 
 > 依据：阶段 0 基线（1020 测试通过 / ruff 全绿 / 91% 覆盖率 / 工作区干净）+ 阶段 1 两个审计子代理 + 独立验证。
@@ -67,7 +71,7 @@
 | B-3 | G-03 依赖缓存监控 | `src/tools/dependency.py` + `tests/test_dependency.py` | VenvCacheStats + clear/list 命令 + 3 用例 | pytest test_dependency.py | `feat(tools): 4.4 依赖缓存监控（命中率统计 + 清理命令 + 多版本）` |
 | B-4 | G-04 失败根因分类 + 知识库 | `experiments/analyze_failures.py` + `experiments/failure_knowledge_base.json`（新） + `tests/` | root_cause_classification + JSON 知识库 + Markdown 章节 + 2 用例 | pytest 受影响测试 | `feat(experiments): 5.3 失败根因分类 + 案例知识库（LLM/依赖/框架归因 + 结构化存储）` |
 | B-5（可选） | R-05 断言增强 | `src/agents/generator.py` + `src/prompts/templates.py` + `tests/test_generator.py` | AST 提取现有 assert + 提示词注入 + 策略开关（默认关） | pytest test_generator.py | `feat(agents): 3.4 断言增强策略（利用现有 assert 提升生成测试质量，默认关）` |
-| B-6 | 文档同步 | `CHANGELOG.md` + `OPTIMIZATION_PLAN.md` + `OPTIMIZATION_REPORT.md` | 追加本批次记录 | 人工核对 | `docs(optimize): 2026-09-14 改进清单现状核对 + G-01~G-04 实施记录` |
+| B-6 | 文档同步 | `CHANGELOG.md` + `optimization_plan.md` + `optimization_report.md` | 追加本批次记录 | 人工核对 | `docs(optimize): 2026-09-14 改进清单现状核对 + G-01~G-04 实施记录` |
 
 ### 需用户确认
 
@@ -129,7 +133,7 @@
 > | 序号 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
 > |------|------|------|---------|---------|-------------|
 > | F-1 | F-01~F-10 全项目文档同步 | README.md + docs/{redaction_audit,performance_guide,usage_examples,api_reference}.md + .env.example + experiments/analyze_failures.py | 结构树补齐 + 缓存路径更正 + chroma_cache 修正 + 论文措辞 2 处 + 5.3/5.7 + 版本历史行 + 模板口径 + 时间戳 + 链接 | ruff check/format + 全量 pytest + `grep` 漂移复查 | `docs: 全项目文档同步至 2026-09-14 批次② 最新状态` |
-> | F-2 | 计划/报告入库 | OPTIMIZATION_PLAN.md + OPTIMIZATION_REPORT.md | 本批次章节 + 轮次附录 | 人工核对 | `docs(optimize): 2026-09-14 全项目文档同步轮次计划与变更记录` |
+> | F-2 | 计划/报告入库 | optimization_plan.md + optimization_report.md | 本批次章节 + 轮次附录 | 人工核对 | `docs(optimize): 2026-09-14 全项目文档同步轮次计划与变更记录` |
 >
 > ### 需用户确认的点
 >
@@ -162,7 +166,7 @@
 > | 序号 | 目标 | 文件 | 改动方式 | 测试方式 | commit 信息 |
 > |------|------|------|---------|---------|-------------|
 > | W1 | O-01~O-05 文档数据对齐 | README.md + docs/api_reference.md + docs/failure_analysis.md + QUICKSTART.md | 主表 9 行 + 用例数 1 + 枚举表 2 行 + 优先级说明 + 状态说明 1 行 + QUICKSTART 3 行 | ruff check + 受影响模块测试子集（test_error_classifier 81 / test_cost_aware_routing 13） | `docs: 全项目文档同步 2026-09-14 批次②收尾（主表 9 行用例数漂移 + 错误分类 10→12 类 + QUICKSTART 成本阈值）` |
-> | W2 | O-06 CHANGELOG + 计划/报告入库 | CHANGELOG.md + OPTIMIZATION_PLAN.md + OPTIMIZATION_REPORT.md | 批次②收尾文档对齐小节 + 本轮记录 | 人工核对 | `docs(optimize): 2026-09-14 批次②收尾轮次计划与变更记录` |
+> | W2 | O-06 CHANGELOG + 计划/报告入库 | CHANGELOG.md + optimization_plan.md + optimization_report.md | 批次②收尾文档对齐小节 + 本轮记录 | 人工核对 | `docs(optimize): 2026-09-14 批次②收尾轮次计划与变更记录` |
 >
 > ### 需用户确认的点
 >
@@ -242,7 +246,7 @@
 | F1 | 1.2r 错误分类补 2 类 | src/agents/error_classifier.py + src/reports/generator.py + tests/test_error_classifier.py | 枚举 + classify 优先级 + 正则 + 策略文案 + 报告分支 + 10 用例 | pytest test_error_classifier.py | `git revert` | `feat(agents): 错误分类补 LLM_FORMAT_ERROR + INDEX_ERROR（1.2 残余，UNKNOWN 75% 根因单列）` |
 | F2 | 4.1r 熔断冷却期 | src/api/api_manager.py + tests/test_api_manager.py | APIHealth/APIManagerConfig 字段 + 路由过滤 + 9 用例 | pytest test_api_manager.py | `git revert` | `feat(api): 4.1 熔断冷却期（circuit_open_until + 路由层冷却过滤，默认 60s）` |
 | F3 | 4.3 结果分析脚本 | experiments/analyze_results.py + experiments/run_benchmark.py + tests/test_experiments_scripts.py | 新增分析脚本 + baseline 级失败分布字段 + 公平性输出 + 6 用例 | pytest test_experiments_scripts.py + 手工跑脚本 | `git revert` | `feat(experiments): 4.3 结果分析脚本 + 2.2 基线 token 效率汇总输出` |
-| F4 | 文档同步 | CHANGELOG.md + OPTIMIZATION_PLAN.md | 追加 09-14 轮次条目 | 人工核对 | `git revert` | `docs(optimize): 2026-09-14 轮次计划与变更记录` |
+| F4 | 文档同步 | CHANGELOG.md + optimization_plan.md | 追加 09-14 轮次条目 | 人工核对 | `git revert` | `docs(optimize): 2026-09-14 轮次计划与变更记录` |
 
 ### 需用户确认的点
 
@@ -332,7 +336,7 @@
 | 序号 | 目标 | 文件 | 改动方式 | 测试方式 | 回滚方式 | commit 信息 |
 |------|------|------|---------|---------|---------|-------------|
 | B2-1 | M-01 主表 13 行漂移同步 + M-02 文件数 41→44 与补 test_logging_utils 行 | README.md | 13 行数值改实测值、标题行 41→44、插入 1 行 | 逐文件 grep 核对 + ruff 无代码影响 | `git revert` | `docs(readme): 测试覆盖模块主表 13 处用例数漂移同步 + 补 test_logging_utils 行` |
-| B2-2 | M-03 CHANGELOG 2026-09-13 条目 + 计划/报告入库 | CHANGELOG.md / OPTIMIZATION_PLAN.md / OPTIMIZATION_REPORT.md | 追加 Unreleased 轮次条目与本轮记录 | 人工核对 | `git revert` | `docs(optimize): 2026-09-13 轮次计划与报告入库（M-01~M-03 文档数据对齐批次）` |
+| B2-2 | M-03 CHANGELOG 2026-09-13 条目 + 计划/报告入库 | CHANGELOG.md / optimization_plan.md / optimization_report.md | 追加 Unreleased 轮次条目与本轮记录 | 人工核对 | `git revert` | `docs(optimize): 2026-09-13 轮次计划与报告入库（M-01~M-03 文档数据对齐批次）` |
 
 ### 需用户确认的点
 
@@ -409,7 +413,7 @@
 ## 2026-09-15 全项目收敛轮次（实施完成记录）
 
 > 基线：1247 passed / 91% 覆盖率。三路子代理审计 + 人工复核，落地 11 文件 + 23 用例 → 1270 passed / 92% 覆盖率。
-> 详细记录见 OPTIMIZATION_REPORT.md「附录：2026-09-15 全项目收敛轮次」与 CHANGELOG [0.9.14]。
+> 详细记录见 optimization_report.md「附录：2026-09-15 全项目收敛轮次」与 CHANGELOG [0.9.14]。
 
 ### 落地项
 - 配置集中化：删 config.py 3 个死常量；SWE_BENCH_ENRICHMENT 收敛 config；MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper。

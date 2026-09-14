@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](usage_examples.en.md) | 简体中文（本文）
+
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。

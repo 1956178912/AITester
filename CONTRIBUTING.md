@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](CONTRIBUTING.en.md) | 简体中文（本文）
+
 # 贡献指南
 
 感谢你对 AITester 的关注！本文档说明如何参与项目开发。

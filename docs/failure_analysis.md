@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](failure_analysis.en.md) | 简体中文（本文）
+
 # 失败案例分析 (Failure Case Analysis)
 
 ## 概述

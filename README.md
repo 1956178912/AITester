@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](README.en.md) | 简体中文（本文）
+
 # AITester：逻辑驱动的多智能体测试生成与自修复系统
 
 > AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
@@ -11,7 +13,7 @@
 | **单元测试** | ✅ 全量 1270 passed, 0 skipped；精简环境 1231 passed, 39 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 92% 总覆盖（核心模块：reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
-| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏过滤器已接入 CLI/benchmark 入口（API Key / JWT 自动替换占位符）；4.1 完整审计见 [docs/redaction_audit.md](docs/redaction_audit.md)（APIManager 嵌入式日志 + get_status 出口就地脱敏，LLM 文件缓存记录为已知可接受风险） |
+| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
 | **最新优化** | ✅ 2026-09-15 代码可维护性深化轮次（Ruff 规则增强 SIM/PERF/RET/RUF + 337 个函数类型注解零缺口 + 9 个高复杂度函数中 7 个重构降圈复杂度，全量 1270 passed / 覆盖率 92%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), graph/nodes.py (95%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
@@ -309,7 +311,14 @@ AITester/
 │   ├── test_patch_applier.py
 │   └── test_dataset_loader.py        # 数据集加载器测试（新增）
 ├── docs/                             # 文档
-│   └── algorithm_design.md           # 算法设计与理论描述（新增）
+│   ├── algorithm_design.md           # 算法设计与理论描述
+│   ├── api_reference.md              # API 参考
+│   ├── usage_examples.md             # 使用示例
+│   ├── performance_guide.md          # 性能调优指南（含性能剖析基准）
+│   ├── failure_analysis.md           # 失败案例分析（历史快照）
+│   └── history/                      # 归档的历史轮次工作记录
+│       ├── optimization_plan.md
+│       └── optimization_report.md
 ├── examples/                         # 示例被测代码（含已知 bug）
 │   ├── calculator.py                 # 计算器示例（除零、负数阶乘 bug）
 │   ├── buggy_library.py              # 算法库示例（二分查找、排序合并等）
@@ -976,10 +985,12 @@ python main.py list-examples
 ## 技术文档
 
 - [算法设计文档](docs/algorithm_design.md)：核心算法形式化描述
-- [失败案例分析](docs/failure_analysis.md)：失败率的根因分析与改进路线图
-- [性能调优指南](docs/performance_guide.md)：并发执行、RAG单例化、超时配置
-- [API参考文档](docs/api_reference.md)：模块接口说明
+- [失败案例分析](docs/failure_analysis.md)：失败率的根因分析与改进路线图（历史数据快照）
+- [性能调优指南](docs/performance_guide.md)：并发执行、RAG 单例化、超时配置、性能剖析基准
+- [API 参考文档](docs/api_reference.md)：模块接口说明
+- [使用示例](docs/usage_examples.md)：编程接口与 CLI 用法
 - [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由（默认全关，按需启用）
+- [历史优化记录](docs/history/optimization_plan.md)：归档的历史轮次优化计划与报告（`docs/history/`，非当前维护文档）
 
 ---
 
@@ -990,6 +1001,17 @@ python main.py list-examples
 ---
 
 ## 迭代优化记录
+
+### v0.9.16 (2026-09-15) — 深度重构轮次
+
+**核心成果**:
+- AITesterState 初始化双写收敛为 create_initial_state() 单一工厂（CLI + benchmark 双入口）
+- 统计显著性第三份残留收敛复用 statistical_analysis.py 单一规范实现 + NaN/Inf 守卫
+- code_context.py 补测 9 用例（模块覆盖率 89% → 98%）
+- 文档全量对齐（结构树 / 测试状态表 / api_reference 参数标注）
+- 版本 0.9.15 → 0.9.16
+
+**验证**: 全量 1291 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ### v0.10 (2026-08-18) — 第二轮迭代：性能优化与依赖锁定
 

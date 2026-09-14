@@ -1,3 +1,5 @@
+> **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
+
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
@@ -229,7 +231,7 @@
 - 测试：`tests/test_cross_file.py`（新，27 用例）+ `tests/test_workflow.py` +2 用例（workflow 跨文件启用/禁用路径）
 
 ### 文档与决策日志
-- `OPTIMIZATION_PLAN.md` 新增「改进清单现状核对」章节（已落地 / 真正缺口 / 研究性项 三类分类）
+- `docs/history/optimization_plan.md` 新增「改进清单现状核对」章节（已落地 / 真正缺口 / 研究性项 三类分类）
 - `docs/design/cross_file_repair.md` 设计文档（3.5）
 - 全项目文档同步（README / QUICKSTART / api_reference / usage_examples / .env.example 补 3.4/3.5/4.4 开关说明）
 
@@ -355,7 +357,7 @@
 ### 文档
 - README 移除 v0.9.10 章节中 4 个不存在的测试文件（`test_api_manager_large_scale.py` / `test_error_classifier_improvements.py` / `test_executor_integration.py` / `test_patch_applier_improvements.py` 均为幽灵条目）
 - README 用例数/覆盖率数据对齐本轮基线（987/1014 → 1020/1038 分两阶段收敛，最终 1038）；消融实验开关配置位置措辞对齐（config.py 默认值 + `.env` 注入，.env 已 gitignore）
-- **优化记录入库**：`OPTIMIZATION_PLAN.md`（阶段 1 优化点全表 16 项 + 实施范围 + 需确认项）与 `OPTIMIZATION_REPORT.md`（阶段 0-5 完整交付记录 + 阶段 4 全量测试实测结果表）新增并提交，作为 0.9.11 优化轮次的可追溯文档；本地 `.env` 的 DOCKER_IMAGE 漂移修正（3.11-slim → 3.12-slim）仅本地生效（`.env` 已 gitignore，无入库影响）
+- **优化记录入库**：`docs/history/optimization_plan.md`（阶段 1 优化点全表 16 项 + 实施范围 + 需确认项）与 `docs/history/optimization_report.md`（阶段 0-5 完整交付记录 + 阶段 4 全量测试实测结果表）新增并提交，作为 0.9.11 优化轮次的可追溯文档；本地 `.env` 的 DOCKER_IMAGE 漂移修正（3.11-slim → 3.12-slim）仅本地生效（`.env` 已 gitignore，无入库影响）
 
 ## [0.9.11] - 2026-09-11
 
