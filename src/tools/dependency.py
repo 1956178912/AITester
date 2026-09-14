@@ -387,6 +387,18 @@ def list_venv_cache() -> list[dict[str, Any]]:
     return result
 
 
+def _dir_size_mb(path: str) -> float:
+    """递归统计目录总大小（MB），忽略无法访问的文件（如被并发删除）。"""
+    size_bytes = 0
+    for root, _dirs, files in os.walk(path):
+        for fname in files:
+            try:
+                size_bytes += os.path.getsize(os.path.join(root, fname))
+            except OSError:
+                continue
+    return size_bytes / (1024 * 1024)
+
+
 def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = None) -> dict[str, Any]:
     """清理 venv 缓存目录（4.4）。
 
@@ -410,22 +422,15 @@ def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = 
         full = os.path.join(_VENV_CACHE_DIR, entry)
         if not os.path.isdir(full):
             continue
-        # 统计目录大小
-        size_mb = 0.0
-        for root, _dirs, files in os.walk(full):
-            for fname in files:
-                try:
-                    size_mb += os.path.getsize(os.path.join(root, fname)) / (1024 * 1024)
-                except OSError:
-                    continue
+        # 统计目录大小（MB）与年龄（天）
+        size_mb = _dir_size_mb(full)
         age_days = (now - os.path.getmtime(full)) / 86400.0
-        should_remove = False
-        if max_age_days is not None and age_days > max_age_days:
-            should_remove = True
-        if max_size_mb is not None and size_mb > max_size_mb:
-            should_remove = True
-        if max_age_days is None and max_size_mb is None:
-            should_remove = True
+        # 任一过滤条件命中即删除；两者均未指定时清空全部
+        should_remove = (
+            (max_age_days is not None and age_days > max_age_days)
+            or (max_size_mb is not None and size_mb > max_size_mb)
+            or (max_age_days is None and max_size_mb is None)
+        )
         if should_remove:
             import shutil
 

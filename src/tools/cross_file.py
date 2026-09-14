@@ -140,21 +140,8 @@ def analyze_cross_file_deps(
         # 入口模块语法错误时无法 AST 分析，保守返回空
         return []
 
-    # 收集 entry 中所有 import 的模块名（from X import Y / import X）
-    imported_symbols: dict[str, list[str]] = {}  # 模块名 → 导入的符号名
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            # from X import Y, Z → imported_symbols["X"] = ["Y", "Z"]
-            module_name = node.module or ""
-            if module_name and module_name in source_files:
-                names = [alias.name for alias in node.names if alias.name != "*"]
-                if names:
-                    imported_symbols.setdefault(module_name, []).extend(names)
-        elif isinstance(node, ast.Import):
-            # import X → imported_symbols["X"] = ["X"]（模块本身即符号）
-            for alias in node.names:
-                if alias.name in source_files:
-                    imported_symbols.setdefault(alias.name, []).append(alias.name)
+    # 收集 entry 中所有 import 的项目内模块名及其符号（from X import Y / import X）
+    imported_symbols = _collect_imported_symbols(tree, source_files)
 
     # 对每个依赖边，扫描 entry 中调用 X.symbol 的行（上下文截取 ±2 行）
     entry_lines = entry_code.splitlines()
@@ -186,6 +173,25 @@ def analyze_cross_file_deps(
             seen.add(key)
             unique.append(d)
     return unique
+
+
+def _collect_imported_symbols(tree: ast.AST, source_files: dict[str, str]) -> dict[str, list[str]]:
+    """收集 entry 模块中 import 的项目内模块及其符号（模块名 → 符号名列表）。"""
+    imported_symbols: dict[str, list[str]] = {}  # 模块名 → 导入的符号名
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            # from X import Y, Z → imported_symbols["X"] = ["Y", "Z"]
+            module_name = node.module or ""
+            if module_name and module_name in source_files:
+                names = [alias.name for alias in node.names if alias.name != "*"]
+                if names:
+                    imported_symbols.setdefault(module_name, []).extend(names)
+        elif isinstance(node, ast.Import):
+            # import X → imported_symbols["X"] = ["X"]（模块本身即符号）
+            for alias in node.names:
+                if alias.name in source_files:
+                    imported_symbols.setdefault(alias.name, []).append(alias.name)
+    return imported_symbols
 
 
 def _find_call_line(lines: list[str], symbol: str) -> int:
