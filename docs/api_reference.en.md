@@ -3,7 +3,7 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-09-14
+> Last updated: 2026-09-16 (dataset & evaluation deepening round: 2.1 contamination detection / 2.2 difficulty stratification / 4.3 Docker execution mode / 4.4 dependency cache)
 
 ---
 
@@ -90,7 +90,7 @@ test_code = agent.generate(
 
 ### ExecutorAgent
 
-The test executor, running pytest in a local or isolated sandbox and capturing results.
+The test executor, running pytest in a local environment, isolated sandbox, or Docker container and capturing results.
 
 ```python
 from src.agents.executor import ExecutorAgent
@@ -100,29 +100,34 @@ result = agent.execute(
     test_code="import pytest\nfrom calculator import divide\n\ndef test_divide():\n    assert divide(1, 2) == 0.5",
     target_file="examples/calculator.py",
     target_function="divide",
-    coverage=True,
 )
 
 # venv sandbox isolated execution (P1: does not pollute the system environment; dependency conflicts do not affect each other)
 sandbox_agent = ExecutorAgent(use_venv=True, auto_install_deps=True)
+
+# 4.3 Docker isolated execution (runs pytest inside a container via the docker CLI; dependencies baked into the image)
+docker_agent = ExecutorAgent(use_docker=True, docker_image="aitester:latest")
 ```
 
 **Key methods:**
 
 | Method | Parameters | Return Value | Description |
 |------|------|--------|------|
-| `execute()` | `test_code: str`, `target_file: str`, `target_function: str`, `coverage: bool` | `dict` | Executes the tests and returns pass/fail status, coverage, and failed cases |
+| `execute()` | `test_code: str`, `target_file: str`, `target_function: str \| None` | `dict` | Executes the tests and returns pass/fail status, coverage, and failed cases; execution mode priority: Docker > venv sandbox > local |
+| `_execute_docker()` | same as `execute()` | `dict` | 4.3 Docker isolated execution: passes the code under test into the container via `docker run` + volume mount; when docker is unavailable, returns a `docker_unavailable` diagnostic (does not silently fall back to local) |
 
 **Return format:**
 ```json
 {
   "passed": true,
-  "failed": [],
+  "failed_cases": [],
   "coverage": 85.5,
   "output": "...",
-  "status": "success"
+  "docker_image": "aitester:latest"
 }
 ```
+
+> Docker mode additionally carries a `docker_image` field (for experimental analysis to record execution-mode differences); on failure, `error_info.type` may be `docker_unavailable` / `docker_timeout`.
 
 ---
 
@@ -307,6 +312,68 @@ install_packages(venv_python, ["pandas"], timeout=120)
 
 ---
 
+### Data Contamination Detection (2.1)
+
+`experiments/contamination_check.py`: mitigating SWE-bench data contamination risk — compares the token-level Jaccard similarity between the system's generated patch and the dataset's official golden patch, flagging highly overlapping tasks (suspected training-data contamination / verbatim reproduction).
+
+```python
+from experiments.contamination_check import (
+    detect_contamination,
+    patch_overlap_score,
+    render_contamination_section,
+)
+
+# Overlap score for a single patch pair ([0.0, 1.0]; empty patches return 0.0)
+score = patch_overlap_score(generated_patch, golden_patch)
+
+# Batch-scan benchmark result details (details[].patch + a golden_patches mapping, or task_metadata.golden_patch)
+report = detect_contamination(details, golden_patches={"task_1": "..."})
+# → {"checked": n, "high": [...], "medium": [...], "scores": {...}, "contaminated_tasks": [...]}
+
+# Markdown section rendering (returns an empty list when checked=0; the caller skips it)
+lines = render_contamination_section(report, baseline="aitester")
+```
+
+**Criteria:** high ≥ 0.85 (suspected verbatim reproduction) / medium ≥ 0.6 (manual review recommended); tokens are lowercased identifier/numeric splits counting only diff modification lines (diff metadata is discarded). Supporting pieces: `dataset_loader` stores the official patch into `task.metadata["golden_patch"]` (not exposed to the LLM), `run_benchmark` result rows carry a `patch` field, and `load_dataset` supports the `swe_rebench` alias (an anti-contamination benchmark).
+
+---
+
+### Task Difficulty Stratification (2.2)
+
+`experiments/difficulty_stratification.py`: stratifies tasks by code complexity / dependency count / file size to locate "in which difficulty interval does system capability degrade".
+
+```python
+from experiments.difficulty_stratification import stratify_by_dimension, render_stratification_section
+
+# Stratify by the given dimension (code_size / dependency_count / complexity_proxy)
+strat = stratify_by_dimension(details, "code_size", instance_codes={...}, test_codes={...})
+# → {"small": {"tasks": n, "passed": n, "success_rate": f}, "medium": {...}, "large": {...}}
+
+# Markdown section rendering (returns an empty list when there are no details)
+lines = render_stratification_section(details, baseline="aitester")
+```
+
+**Stratification boundaries (conservative, interpretable criteria):** code_size small <2KB / medium 2–10KB / large >10KB; dependency_count low 0 / medium 1–2 / high ≥3; complexity_proxy easy 0 / medium 1 / hard ≥2 (`iterations × (1 - passed)`; successful tasks are always 0).
+
+---
+
+### Structured Tracing Layer (4.1)
+
+`src/observability/trace.py`: an append-only JSONL recorder capturing "task-level" events (node input/output summaries, token consumption, wall-clock latency, routing decisions) for each workflow task, consumed directly by experimental analysis. Disabled by default (a complete no-op with zero performance cost when `AITESTER_TRACE_DIR` is unset); enable it explicitly.
+
+```python
+from src.observability.trace import TraceSession, trace_enabled
+
+if trace_enabled():
+    session = TraceSession(task_id, trace_dir, config_flags)
+    session.record_node("planner", output_summary=..., decision="plan_complete")
+    session.record_task_end(passed=True)
+```
+
+**Key properties:** thread-safe (under `--parallel`, multiple worker threads append to the same JSONL; each single append+flush happens inside the lock); all written text is uniformly passed through `mask_sensitive_info` (the same source as log redaction); a write-to-disk failure never blocks the main flow (it only logs a warning).
+
+---
+
 ### TokenUsage
 
 Thread-local LLM token usage statistics (P0: efficiency metrics).
@@ -394,7 +461,13 @@ dataset = SyntheticDataset(task_count=50, seed=42)
 from src.datasets import SWEBenchDataset
 
 dataset = SWEBenchDataset(subset="lite")
+
+# 2.1 Load the SWE-rebench anti-contamination benchmark (field-compatible with SWE-bench; point data_dir at the rebench data directory)
+dataset = load_dataset("swe_rebench", data_dir="/path/to/rebench_data")
 ```
+
+**Supported dataset names** (the `dataset_map` in `load_dataset`, including aliases):
+`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`. Names not in the list degrade to `InMemoryDataset` (graceful degradation).
 
 **Dataset interface:**
 
@@ -440,11 +513,16 @@ print(MODEL_NAME)  # Name of the default model (LLM_1)
 | `CROSS_FILE_ENABLE` | bool | false | 3.5 Cross-file repair: enables the `cross_file_analyzer` node (inserted between executor→debugger) + the multi-file patch branch |
 | `CROSS_FILE_MAX_MODULES` | int | 5 | 3.5 Maximum module count for a cross-file repair plan (prevents token explosion) |
 | `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 Assertion augmentation: AST-extracts existing asserts in the code under test and injects them into the prompt |
-| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 Multi-candidate patch generation with static/execution validation screening (off by default; when there are no candidates, falls back to a single patch) |
-| `AITESTER_TRACE_DIR` | str | unset (no-op) | 4.1 Output directory for the structured JSONL tracing layer (when unset, the tracing layer is a no-op and does not affect execution) |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 Multi-candidate patch generation with static/execution validation screening (off by default; when there are no candidates, falls back to a single patch); the `reproduce.sh` reproduction flow explicitly enables it by default (can revert to the historical baseline with `--no-multi-candidate`) |
+| `AITESTER_TRACE_DIR` | str | unset (no-op) | 4.1 Output directory for the structured JSONL tracing layer (when unset, the tracing layer is a no-op and does not affect execution); `reproduce.sh` enables it by default (`experiments/results/traces`) |
 | `BENCHMARK_PARALLELISM` | int | 0 | Parallelism level (0 = serial) |
 | `TEMPERATURE` | float | 0.2 | LLM sampling temperature |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | Derived values only (taken from LLM_1, for backward compatibility); **not configuration inputs** |
+| `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker isolated execution (runs pytest inside a container via the docker CLI; requires local docker and a built image; when unavailable, returns a `docker_unavailable` diagnostic without falling back to local) |
+| `EXECUTOR_DOCKER_IMAGE` | str | `aitester:latest` | 4.3 Docker image name used for execution (corresponds to the Dockerfile at the repo root) |
+| `EXECUTOR_USE_VENV` | bool | false | venv sandbox isolated execution (disk cache keyed by dependency combination; does not pollute the system environment) |
+| `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | Automatically pip install missing dependencies before execution |
+| `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 Override the venv cache directory (in container/CI isolation, point at a mounted volume; clean up with the `clean-venv-cache` subcommand) |
 
 **APIManagerConfig fields** (data model in `src/api/api_health.py`, consumed by `api_manager.py`; a programming-interface configuration, not an environment variable; 4.1/4.2 circuit breaker + 3.4 cost awareness):
 
@@ -518,6 +596,7 @@ class CustomDataset(BaseDatasetLoader):
 
 | Version | Date | Changes |
 |------|------|---------|
+| Unreleased | 2026-09-16 | Dataset & evaluation deepening round: 2.1 data contamination detection (`experiments/contamination_check.py`, token-level Jaccard overlap, high ≥ 0.85 / medium ≥ 0.6; `dataset_loader` stores the official patch into `metadata["golden_patch"]`; `load_dataset` supports the `swe_rebench` alias) / 2.2 task difficulty stratification (`experiments/difficulty_stratification.py`, code_size / dependency_count / complexity_proxy) / 4.3 Docker execution mode promotion (`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`; when docker is unavailable, returns a `docker_unavailable` diagnostic without falling back to local; `scripts/compare_executor_modes.py` timing comparison) / 4.4 dependency cache monitoring (CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + hit-rate in analysis) / 4.1 redaction audit (`scripts/audit_log_redaction.py` + subprocess credential stripping) / 3.1 `reproduce.sh` enables multi-candidate patches by default + 3.2 `reproduce.sh` explicitly enables `AITESTER_TRACE_DIR` / 5.1 low-coverage module hardening (logging_utils 90%→100%, analysis.py statistical boundary tests, cli/app.py concurrent interrupt / signal handling tests) |
 | 0.9.16 | 2026-09-15 | Deep refactor round: AITesterState initialization dual-write converged into the `create_initial_state()` factory (single construction point for CLI + benchmark), statistical tests in experiments/visualize_results.py converged to reuse the paired-test primitives in statistical_analysis.py + NaN/Inf guards, code_context.py added 9 test cases (module coverage 89%→98%), README structure tree completed with 5 split artifacts (tracing/rag/nodes, api_health, llm_client) + 13 inline numbers in the test status table synchronized + parameter default values annotated in api_reference; full suite 1291 passed / ruff all green / coverage 94% |
 | 0.9.14 | 2026-09-15 | Whole-project convergence round: config centralization (removed dead CROSS_FILE/ASSERTION constants, converged SWE_BENCH_ENRICHMENT into config, converged MULTI_CANDIDATE_EXEC_VALIDATE into a helper), fixed the executor's standard-library list incorrectly listing diskcache, fixed the cross-file fallback path unable to write to disk, removed 4 dead-code spots, RAG retriever write lock + `_upsert` extraction, `refine_final_error_category` convergence; full suite 1270 passed / ruff all green |
 | 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` added module-level `pytestmark=skipif(not _chroma_available())` (consistent in criteria with `test_rag_metrics.py`; when chromadb is missing, 32 RAG retriever test cases are skipped gracefully instead of raising an ImportError ERROR); the `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixtures in `tests/test_experiments_scripts.py` add `pytest.importorskip("matplotlib")` before the lazy import of `experiments.visualize_results` (when matplotlib is missing, 5 visualization test cases are skipped). In a minimal environment (where `requirements.txt` is not fully installed), the full baseline is **1208 passed / 39 skipped / 0 failed**; after fully installing the dependencies it recovers to **1247 passed / 0 skipped** |

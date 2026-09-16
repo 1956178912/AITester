@@ -3,7 +3,7 @@
 # AITester Performance Tuning Guide
 
 > This document describes AITester's performance optimization mechanisms, configuration methods, and common troubleshooting.
-> Last updated: 2026-09-15
+> Last updated: 2026-09-16 (added sections on 4.3 Docker isolated execution / 4.4 dependency cache)
 
 ---
 
@@ -459,3 +459,73 @@ tracemalloc measurements show memory deltas of all three tested modules are < 0.
 ### 9.4 Conclusion
 
 The project currently has **no low-hanging-fruit performance optimizations**; the performance direction is to keep the status quo. The startup-time bottleneck is the intrinsic cost of third-party library import; at runtime there are no CPU hotspots and no memory leaks.
+
+---
+
+## 10. Docker Isolated Execution and Dependency Cache (4.3 + 4.4)
+
+### 10.1 Background
+
+The venv sandbox (`EXECUTOR_USE_VENV=true`) creates an isolated venv per dependency combination under `~/.cache/aitester/venvs/`. The first run requires `pip install` of missing dependencies (network + install time); subsequent runs with the same combination hit the disk cache (venv creation only, no dependency reinstall). But venv creation still has a fixed cost (`python -m venv` initialization + pip metadata resolution), and the cache hit rate drops when dependency combinations differ widely across tasks.
+
+Docker isolated execution (`EXECUTOR_USE_DOCKER=true`) caches dependency pre-installation in the image build phase (Docker layer cache reuse) and passes the code under test via `docker run --rm -v <sandbox>:/workspace` volume mount at runtime, with zero per-task install cost.
+
+### 10.2 Choosing an Execution Mode
+
+| Mode | Suitable For | First-Time Cost | Steady-State Cost | Dependency Isolation | Credential Isolation |
+|------|-------------|----------------|-------------------|--------------------|--------------------|
+| Local (default) | Quick validation, single task | None | Low | ❌ | ❌ (subprocess already strips LLM API credentials) |
+| venv sandbox | Experiments with third-party deps | High (pip install) | Medium (venv creation) | ✅ | ✅ |
+| Docker | Publication-grade batch experiments | High (one-time image build) | Low (volume mount) | ✅ | ✅ (container-level isolation) |
+
+**Selection criteria**: single task / fast iteration → local; SWE-bench with third-party deps → venv; large-scale parallel runs (`BENCHMARK_PARALLELISM > 1`) with stable dependencies → Docker.
+
+### 10.3 Docker Configuration
+
+```bash
+# Build the image (one-time; dependency pre-installation completed at build time, layer cache reused)
+docker build -t aitester:latest .
+
+# Enable Docker isolated execution
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+
+# Specify a custom image (e.g. a version with specific dependencies pre-installed)
+EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:with-pandas \
+    python main.py run examples/calculator.py
+```
+
+**Diagnostic behavior**: when the docker CLI is unavailable (not installed / daemon not running), the task returns a `docker_unavailable` diagnostic (`error_info.type`) **without silently falling back to local execution** — this avoids mixing experiment baselines (Docker-vs-local environment differences affect failure attribution).
+
+**Execution time comparison**:
+```bash
+# Run the same task under both Docker and venv modes; outputs a Markdown comparison table
+python scripts/compare_executor_modes.py \
+    --tasks examples/calculator.py examples/string_utils.py
+```
+
+### 10.4 Dependency Cache Monitoring (4.4)
+
+Venv cache hit-rate statistics and cleanup are now integrated into the analysis layer:
+
+```bash
+# List existing caches with hit rate (--list-only is read-only)
+python main.py clean-venv-cache --list-only
+
+# Clean up by age (venvs older than 30 days)
+python main.py clean-venv-cache --max-age-days 30
+
+# Clean up by size (venvs larger than 512MB)
+python main.py clean-venv-cache --max-size-mb 512
+
+# Fetch hit rate programmatically (analyze_results.py auto-renders the "Dependency Cache Hit Statistics (4.4)" section)
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+# → {"hits": N, "creates": M, "hit_rate": R}
+```
+
+**Cache directory override**: default `~/.cache/aitester/venvs/`; in container/CI isolation, point `AITESTER_VENV_CACHE_DIR` at a mounted volume (e.g. `/workspace/.venv_cache`) so the cache does not disappear with container teardown.
+
+**Reading the hit rate**: `hit_rate = hits / (hits + creates)`. A low rate on a new experiment (first run of a dependency combination) is expected; it should approach 1.0 when re-running the same combination. A persistently low rate means checking whether `AITESTER_VENV_CACHE_DIR` points at a persistent volume.
+
+### 10.5 Subprocess Environment Credential Stripping (4.1 security hardening)
+
+In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credential variables from the subprocess environment (`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`). This closes the "generated code inherits host environment credentials" leak path — the code under test and the generated test code cannot access LLM keys via `os.environ`.

@@ -3,7 +3,7 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-15
+> 最后更新：2026-09-16（新增 4.3 Docker 隔离执行 / 4.4 依赖缓存章节）
 
 ---
 
@@ -459,3 +459,73 @@ tracemalloc 实测三个被测模块的内存增量均 < 0.01 MB，无异常，�
 ### 9.4 结论
 
 项目当前**无低垂果实式的性能优化点**，性能方向以保持现状为主；启动耗时瓶颈在第三方库 import 固有成本，运行时无 CPU 热点与内存泄漏。
+
+---
+
+## 十、Docker 隔离执行与依赖缓存（4.3 + 4.4）
+
+### 10.1 背景
+
+venv 沙箱（`EXECUTOR_USE_VENV=true`）按依赖组合在 `~/.cache/aitester/venvs/` 创建隔离 venv。首次运行需 `pip install` 缺失依赖（网络 + 安装耗时），后续同依赖组合任务命中磁盘缓存（仅 venv 创建，不重装依赖）。但 venv 创建仍有固定开销（`python -m venv` 初始化 + pip 元数据解析），且不同任务依赖组合差异大时缓存命中率低。
+
+Docker 隔离执行（`EXECUTOR_USE_DOCKER=true`）将依赖预安装缓存在镜像构建期（Docker 层缓存复用），运行时通过 `docker run --rm -v <sandbox>:/workspace` 挂载卷传入被测代码，每任务零安装开销。
+
+### 10.2 执行模式选择
+
+| 模式 | 适用场景 | 首次开销 | 稳态开销 | 依赖隔离 | 凭证隔离 |
+|------|---------|---------|---------|---------|---------|
+| 本地（默认） | 快速验证、单任务 | 无 | 低 | ❌ | ❌（子进程已剔除 LLM API 凭证） |
+| venv 沙箱 | 含第三方依赖的实验 | 高（pip install） | 中（venv 创建） | ✅ | ✅ |
+| Docker | 发表级批量实验 | 高（镜像构建一次） | 低（卷挂载） | ✅ | ✅（容器级隔离） |
+
+**选择依据**：单任务 / 快速迭代用本地；SWE-bench 等含第三方依赖用 venv；大规模并行（`BENCHMARK_PARALLELISM > 1`）且依赖稳定用 Docker。
+
+### 10.3 Docker 配置
+
+```bash
+# 构建镜像（首次；依赖预安装在构建期完成，层缓存复用）
+docker build -t aitester:latest .
+
+# 启用 Docker 隔离执行
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+
+# 指定自定义镜像（如预装特定依赖的版本）
+EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:with-pandas \
+    python main.py run examples/calculator.py
+```
+
+**诊断行为**：docker CLI 不可用（未安装 / daemon 未运行）时任务提前返回 `docker_unavailable` 诊断（`error_info.type`），**不静默降级本地执行**——避免实验口径混淆（Docker 与本地的环境差异会影响失败归因）。
+
+**执行时间对比**：
+```bash
+# 同一任务分别跑 Docker / venv 两种模式，输出 Markdown 对比表
+python scripts/compare_executor_modes.py \
+    --tasks examples/calculator.py examples/string_utils.py
+```
+
+### 10.4 依赖缓存监控（4.4）
+
+venv 缓存的命中率统计与清理已纳入分析层：
+
+```bash
+# 查看现有缓存与命中率（--list-only 只读）
+python main.py clean-venv-cache --list-only
+
+# 按时间清理（30 天前的 venv）
+python main.py clean-venv-cache --max-age-days 30
+
+# 按大小清理（超过 512MB 的 venv）
+python main.py clean-venv-cache --max-size-mb 512
+
+# 编程获取命中率（analyze_results.py 自动渲染"依赖缓存命中统计（4.4）"章节）
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+# → {"hits": N, "creates": M, "hit_rate": R}
+```
+
+**缓存目录覆盖**：默认 `~/.cache/aitester/venvs/`；容器 / CI 隔离场景经 `AITESTER_VENV_CACHE_DIR` 指向挂载卷（如 `/workspace/.venv_cache`），避免缓存随容器销毁丢失。
+
+**命中率解读**：`hit_rate = hits / (hits + creates)`。新实验（首次跑某依赖组合）命中率低属正常；重跑同组合时命中率应趋近 1.0。若长期低命中率，检查 `AITESTER_VENV_CACHE_DIR` 是否指向持久化卷。
+
+### 10.5 子进程环境凭证剔除（4.1 安全加固）
+
+ExecutorAgent 在本地 / venv / Docker 三种模式下，子进程环境均剔除 LLM API 凭证变量（`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`）。这堵住"生成代码继承宿主环境凭证"的泄露面——被测代码 / 生成的测试代码无法通过 `os.environ` 访问 LLM 密钥。

@@ -157,24 +157,26 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 
 ### 短期改进（1-2周）
 
-- [ ] 增强JSON提取逻辑，支持多种响应格式
-- [ ] 扩充错误分类模式库
+- [x] ~~增强JSON提取逻辑，支持多种响应格式~~ → 已实现：JSON 提取已支持多格式（markdown 代码块 / 纯 JSON / 混合内容，见 `extract_json_object`）
+- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 12 类（`LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 等）
 - [ ] 为关键bug模式添加专用修复模板
-- [ ] 启用RAG并优化检索策略
+- [x] ~~启用RAG并优化检索策略~~ → 已实现：`--enable-rag` 纳入主实验（2.3 RAG 消融），检索指标自动汇总（Hit Rate / MRR / 按检索类型分解 / RAG 命中 × 失败类别交叉表）
 
 ### 中期改进（1个月）
 
-- [ ] 实现响应后处理管道
-- [ ] 添加失败案例学习和知识沉淀机制
+- [x] ~~实现响应后处理管道~~ → 已实现：重试 + 故障转移（APIManager 熔断冷却 + 半开探测 + 成本感知路由）
+- [x] ~~添加失败案例学习和知识沉淀机制~~ → 已实现：5.3 失败根因三大类（`llm_capability` / `dependency` / `framework`）+ 结构化失败案例知识库（`failure_knowledge_base.json`）
 - [ ] 优化System Prompt模板
 - [ ] 引入模型选择策略（根据任务复杂度自动选择模型）
+- [x] ~~数据污染风险应对（2.1）~~ → 已实现：SWE-bench 黄金补丁重叠度检测（`experiments/contamination_check.py`，high ≥ 0.85 / medium ≥ 0.6）+ SWE-rebench 抗污染基准支持（`load_dataset("swe_rebench")`），分析报告自动标注疑似污染任务
+- [x] ~~任务难度分层分析（2.2）~~ → 已实现：按 code_size / dependency_count / complexity_proxy 三维度分层（`experiments/difficulty_stratification.py`），定位"系统在什么难度区间能力衰减"
 
 ### 长期改进（3个月）
 
 - [ ] 开发专属微调模型
-- [ ] 构建失败案例知识库
+- [x] ~~构建失败案例知识库~~ → 已实现（5.3，见上）
 - [ ] 实现人机协同修复机制
-- [ ] 扩展到多语言支持
+- [ ] 扩展到多语言支持（跨语言泛化：当前仅 Python，可在 Java 生态的 Defects4J 上做初步适配验证）
 
 ---
 

@@ -130,14 +130,18 @@ export CROSS_FILE_MAX_MODULES=5
 # assert 语句，作为"锚点断言"注入 prompt，避免断言弱化 / 恒真断言 / 魔数异味。
 export ASSERTION_AUGMENT_ENABLE=true
 
-# 结果分析（4.3 + 1.1/1.2/1.3 指标增强）：跑完 benchmark 后生成 Markdown 汇总，
-# 含成功率 / token 效率 / 迭代分布 / 失败原因分布 / RAG 质量 /
-# 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
-# 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/
-# 测试异味检测（Assertion Roulette / Magic Number / 断言弱化 / 平凡测试）/
-# 多维质量代理（覆盖率、耗时、可选 generated_test 的断言行数、失败类别 Top N）。
-# 旧 JSON 缺 token_metrics / rag_metrics / generated_test 键时自动兜底或降级，不崩。
+# 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存）：
+# 跑完 benchmark 后生成 Markdown 汇总，含成功率 / token 效率 / 迭代分布 / 失败原因分布 /
+# RAG 质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
+# 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/ 测试异味检测 / 多维质量代理 /
+# 数据污染检测（2.1，SWE-bench 黄金补丁 token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6）/
+# 任务难度分层（2.2，code_size / dependency_count / complexity_proxy 三维度）/
+# 依赖缓存命中统计（4.4，venv 缓存 hit_rate）。
+# 旧 JSON 缺对应键时自动兜底或降级，不崩。
 python experiments/analyze_results.py --results-dir experiments/results
+# 可选：显式传入黄金补丁映射（{task_id: patch_text}，JSON 对象）覆盖污染检测
+python experiments/analyze_results.py --results-dir experiments/results \
+    --golden-patches /path/to/golden_patches.json
 
 # 失败根因分类 + 案例知识库（5.3）：按 LLM 能力 / 依赖 / 框架三大根因归因，
 # 结构化案例落盘 failure_knowledge_base.json（含 task_id / root_cause / 复现步骤 / 建议修复）。
@@ -145,9 +149,20 @@ python experiments/analyze_failures.py --results-dir experiments/results
 python experiments/analyze_failures.py -r experiments/results -k experiments/results/failure_knowledge_base.json
 
 # 4.4 依赖缓存监控：venv 缓存命中率统计 + 清理
-from src.tools.dependency import get_venv_cache_stats, clear_venv_cache
-print(get_venv_cache_stats())          # {"hits": N, "creates": M, "hit_rate": ...}
-clear_venv_cache(max_age_days=30)      # 清理 30 天前的 venv 缓存
+python main.py clean-venv-cache --list-only           # 查看现有缓存与命中率（--list-only）
+python main.py clean-venv-cache --max-age-days 30     # 删除 30 天前的 venv
+python main.py clean-venv-cache --max-size-mb 512     # 删除超过 512MB 的 venv
+# 命中率亦可直接在分析层取（analyze_results.py 自动渲染"依赖缓存命中统计（4.4）"章节）
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+
+# 4.3 Docker 隔离执行（需本机安装 docker 并构建镜像，依赖预安装缓存在镜像构建期完成）
+docker build -t aitester:latest .
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+# Docker vs venv 执行时间对比（实验环境选择依据，输出 Markdown 表）
+python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+
+# 4.1 日志脱敏完整审计（全仓库 logger 调用点扫描，退出码 0=无可疑点，可挂 CI 门禁）
+python scripts/audit_log_redaction.py
 ```
 
 ## 配置文件说明

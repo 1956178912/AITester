@@ -18,6 +18,10 @@
 | Cross-file repair (3.5, off by default) | Cross-file dependency analysis + multi-file patches | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` node (inserted between executor→debugger) | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` |
 | RAG Retrieval | Vector similarity retrieval | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` |
 | Batch Experiments | Benchmark execution | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` |
+| Data contamination detection (2.1) | Token-level Jaccard overlap of generated vs. golden patches | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` |
+| Task difficulty stratification (2.2) | Stratify by code_size / dependency_count / complexity_proxy | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
+| Docker isolated execution (4.3) | Run pytest inside a container via the docker CLI | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
+| Dependency cache monitoring (4.4) | venv cache hit-rate statistics + cleanup | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
 
 ---
 
@@ -209,11 +213,13 @@ The algorithm guarantees termination after $K$ iterations and will not loop infi
 ## 7. Dataset Loading Architecture
 
 ```
-load_dataset(name)
+load_dataset(name, data_dir=None)
 ├── "examples" / "in_memory"   → InMemoryDataset (3 predefined bug tasks, no download required)
-├── "swe_bench"                → SWEBenchDataset (reads from ~/.cache/aitester/swe_bench/)
-│                               (supports automatic download from HuggingFace: download_from_huggingface())
-├── "defects4j_python"         → Defects4JPYDataset (parsed from a local directory)
+├── "swe_bench" / "swebench"   → SWEBenchDataset (reads from ~/.cache/aitester/swe_bench/,
+│                                 supports automatic download from HuggingFace: download_from_huggingface())
+├── "swe_rebench" / "swebench_rebench" → SWEBenchDataset (2.1 anti-contamination benchmark,
+│                                 data_dir points at the SWE-rebench data directory; fields are isomorphic to SWE-bench)
+├── "defects4j_python" / "d4j_py" → Defects4JPYDataset (parsed from a local directory)
 ├── "synthetic" / "synth"      → SyntheticDataset (generated locally, supports custom scale)
 └── other names                → InMemoryDataset (graceful degradation, no crash)
 ```

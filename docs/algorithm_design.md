@@ -18,6 +18,10 @@
 | 跨文件修复（3.5，默认关） | 跨文件依赖分析 + 多文件补丁 | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` 节点（插在 executor→debugger 之间） | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` |
 | RAG 检索 | 向量相似检索 | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` |
 | 批量实验 | 基准测试执行 | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` |
+| 数据污染检测（2.1） | 生成补丁 vs 黄金补丁 token 级 Jaccard 重叠度 | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` |
+| 任务难度分层（2.2） | 按 code_size / dependency_count / complexity_proxy 分层 | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
+| Docker 隔离执行（4.3） | docker CLI 容器内跑 pytest | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
+| 依赖缓存监控（4.4） | venv 缓存命中率统计 + 清理 | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
 
 ---
 
@@ -209,11 +213,13 @@ task_uuid ─▶ target_file ─▶ target_code
 ## 7. 数据集加载架构
 
 ```
-load_dataset(name)
+load_dataset(name, data_dir=None)
 ├── "examples" / "in_memory"   → InMemoryDataset（3 个预定义 bug 任务，无需下载）
-├── "swe_bench"                → SWEBenchDataset（从 ~/.cache/aitester/swe_bench/ 读取）
-│                               （支持从 HuggingFace 自动下载：download_from_huggingface()）
-├── "defects4j_python"         → Defects4JPYDataset（从本地目录解析）
+├── "swe_bench" / "swebench"   → SWEBenchDataset（从 ~/.cache/aitester/swe_bench/ 读取，
+│                                支持从 HuggingFace 自动下载：download_from_huggingface()）
+├── "swe_rebench" / "swebench_rebench" → SWEBenchDataset（2.1 抗污染基准，
+│                                data_dir 指向 SWE-rebench 数据目录，字段与 SWE-bench 同构）
+├── "defects4j_python" / "d4j_py" → Defects4JPYDataset（从本地目录解析）
 ├── "synthetic" / "synth"      → SyntheticDataset（本地生成，支持自定义规模）
 └── 其他名称                   → InMemoryDataset（graceful degrade，不崩溃）
 ```

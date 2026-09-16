@@ -17,7 +17,7 @@
 | **最新优化** | ✅ 数据集与评估深化轮次（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式 / 4.4 依赖缓存监控 / 5.1 低覆盖模块补强，全量 1351 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-16 可维护性深化 + 热路径性能优化 + 低覆盖模块补强：_patch_applier_node / run / _load_raw_data 高嵌套逻辑提取为独立函数（行为不变）；extract_json_object 正则预编译 + RAG _upsert 复用清理返回值省一次 count()；新增 test_cli_console_output（8 用例）与 test_prompts_templates（14 用例），cli/app.py 覆盖率 77%→93%；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-16 数据集与评估深化轮次（0.9.18）：2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行转正 / 4.4 依赖缓存监控 / 4.1 脱敏审计 / 5.1 低覆盖模块补强；新增 contamination_check.py + difficulty_stratification.py + test_executor_docker.py（4 用例）+ test_contamination_check.py（15 用例），logging_utils.py 覆盖率 90%→100%；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -775,6 +775,7 @@ docker run --rm \
 | `EXECUTOR_USE_VENV` | venv 沙箱隔离执行（依赖隔离，P1） | false |
 | `EXECUTOR_AUTO_INSTALL_DEPS` | 执行前自动 pip install 缺失依赖（P1） | false |
 | `EXECUTOR_DEP_INSTALL_TIMEOUT` | 依赖安装超时（秒） | 120 |
+| `AITESTER_VENV_CACHE_DIR` | 4.4 venv 缓存目录覆盖（默认 `~/.cache/aitester/venvs`；配合 `clean-venv-cache` 清理） | 未设 |
 | `MYSQL_POOL_MIN_CACHED` | 连接池最小预留连接 | 5 |
 | `MYSQL_POOL_MAX_CACHED` | 连接池最大空闲连接 | 10 |
 | `MYSQL_POOL_MAX_CONNECTIONS` | 连接池最大连接总数 | 20 |
@@ -790,8 +791,10 @@ docker run --rm \
 
 | 开关 | 默认 | 启用效果 | 关联章节 |
 |------|------|---------|----------|
-| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1） | 5.1 |
-| `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1） | 5.2 |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1；`reproduce.sh` 复现流程默认显式启用，`--no-multi-candidate` 可回退历史口径） | 5.1 |
+| `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1；`reproduce.sh` 默认启用至 `experiments/results/traces`） | 5.2 |
+| `EXECUTOR_USE_DOCKER` | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖；不可用时返回 `docker_unavailable` 诊断不降级本地） | 5.13 |
+| `EXECUTOR_DOCKER_IMAGE` | aitester:latest | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） | 5.13 |
 | `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |
 | `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
 
@@ -864,7 +867,7 @@ python main.py run examples/string_utils.py --func is_palindrome --json
 python experiments/run_benchmark.py [OPTIONS]
 
 选项：
-  --dataset, -d       数据集名称（examples/synthetic/swe_bench/defects4j_py）
+  --dataset, -d       数据集名称（examples/synthetic/swe_bench/swe_rebench/defects4j_py）
   --subset, -s        数据子集（swe_bench_lite 等）
   --baselines, -b     基线方法列表，逗号分隔（默认：aitester,plain_llm,single_agent）
   --output-dir, -o    结果输出目录（默认：experiments/results）
@@ -878,6 +881,12 @@ python experiments/run_benchmark.py [OPTIONS]
   --save-state        环节级状态落盘到 <output-dir>/raw/（P0 基线对比排查用）
 ```
 
+> **2.1 数据污染检测**：SWE-bench 场景下，结果 JSON 的 `details[].patch`（系统生成补丁）与
+> `details[].task_metadata.golden_patch`（官方黄金补丁）会自动送入污染检测。运行分析时可用
+> `python experiments/analyze_results.py --golden-patches <json>` 显式传入黄金补丁映射（JSON
+> 对象 `{task_id: patch_text}`）；分析报告自动渲染"数据污染检测（2.1）"章节（high/medium 任务
+> 列表 + 重叠度分数 + 抗污染基准建议）。
+
 **示例：**
 ```bash
 # 快速验证（2 个任务，单基线）
@@ -889,6 +898,12 @@ python experiments/run_benchmark.py --dataset synthetic --task-count 100 \
 
 # 仅运行 aitester 完整系统（JSON 为默认输出，无需 --json 开关）
 python experiments/run_benchmark.py --dataset examples --baselines aitester
+
+# 2.1 抗污染基准（SWE-rebench，需经 AITESTER_SWE_REBENCH_DATA 指向数据目录）
+python experiments/run_benchmark.py --dataset swe_rebench --baselines aitester
+
+# 4.3 Docker 隔离执行（需本机 docker + 镜像已构建；容器内零安装开销）
+EXECUTOR_USE_DOCKER=true python experiments/run_benchmark.py --dataset examples --baselines aitester
 ```
 
 ### `python main.py list-examples` — 列出示例文件
@@ -896,6 +911,31 @@ python experiments/run_benchmark.py --dataset examples --baselines aitester
 ```
 python main.py list-examples
 ```
+
+### `python main.py clean-venv-cache` — 清理依赖缓存（4.4）
+
+```
+python main.py clean-venv-cache [OPTIONS]
+
+选项：
+  --max-age-days N    删除 N 天前的 venv（None 表示不按年龄过滤）
+  --max-size-mb N     删除超过 N MB 的 venv（None 表示不按大小过滤）
+  --list-only, -l     仅列出缓存目录内容（含命中率统计），不删除
+```
+
+**示例：**
+```bash
+# 查看现有缓存与命中率
+python main.py clean-venv-cache --list-only
+
+# 删除 30 天前的 venv
+python main.py clean-venv-cache --max-age-days 30
+
+# 删除超过 512MB 的 venv
+python main.py clean-venv-cache --max-size-mb 512
+```
+
+> 缓存目录默认 `~/.cache/aitester/venvs/`，可经 `AITESTER_VENV_CACHE_DIR` 环境变量覆盖（容器/CI 隔离场景指向挂载卷）。
 
 ## 数据集说明
 
@@ -1006,6 +1046,19 @@ python main.py list-examples
 ---
 
 ## 迭代优化记录
+
+### v0.9.18 (2026-09-16) — 数据集与评估深化轮次
+
+**核心成果**:
+- 2.1 数据污染检测（`experiments/contamination_check.py` token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6）
+- 2.2 任务难度分层（`experiments/difficulty_stratification.py`，code_size / dependency_count / complexity_proxy）
+- 4.3 Docker 隔离执行转正（`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`，不可用时返回 `docker_unavailable` 诊断不降级本地）
+- 4.4 依赖缓存监控完善（CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + 命中率入分析）
+- 4.1 脱敏审计（`scripts/audit_log_redaction.py` 全仓库 199 个 logger 调用点扫描 + 子进程环境凭证剔除）
+- 3.1 `reproduce.sh` 默认显式启用多候选补丁 + 3.2 显式启用 `AITESTER_TRACE_DIR`
+- 5.1 低覆盖模块补强（logging_utils 90%→100%，analysis.py 统计检验边界，cli/app.py 并发中断/信号处理）
+
+**验证**: 全量 1351 passed / 0 failed / ruff 全绿 / 覆盖率 95%
 
 ### v0.9.16 (2026-09-15) — 深度重构轮次
 

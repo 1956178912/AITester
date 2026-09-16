@@ -157,24 +157,26 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 
 ### Short-term Improvements (1-2 weeks)
 
-- [ ] Enhance JSON extraction logic to support multiple response formats
-- [ ] Expand the error classification pattern library
+- [x] ~~Enhance JSON extraction logic to support multiple response formats~~ → Implemented: JSON extraction now supports multiple formats (markdown code blocks / raw JSON / mixed content; see `extract_json_object`)
+- [x] ~~Expand the error classification pattern library~~ → Implemented: error classification expanded from 5 to 12 categories (e.g. `LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`)
 - [ ] Add dedicated repair templates for key bug patterns
-- [ ] Enable RAG and optimize the retrieval strategy
+- [x] ~~Enable RAG and optimize the retrieval strategy~~ → Implemented: `--enable-rag` included in the main experiment (2.3 RAG ablation); retrieval metrics auto-summarized (Hit Rate / MRR / breakdown by retrieval type / RAG hit × failure-category cross-tab)
 
 ### Medium-term Improvements (1 month)
 
-- [ ] Implement the response post-processing pipeline
-- [ ] Add a mechanism for learning from failure cases and precipitating knowledge
+- [x] ~~Implement the response post-processing pipeline~~ → Implemented: retry + failover (APIManager circuit breaker cooldown + half-open probe + cost-aware routing)
+- [x] ~~Add a mechanism for learning from failure cases and precipitating knowledge~~ → Implemented: 5.3 three major failure root-cause classes (`llm_capability` / `dependency` / `framework`) + structured failure case knowledge base (`failure_knowledge_base.json`)
 - [ ] Optimize the system prompt templates
 - [ ] Introduce a model selection strategy (automatically select a model based on task complexity)
+- [x] ~~Data contamination risk mitigation (2.1)~~ → Implemented: SWE-bench golden-patch overlap detection (`experiments/contamination_check.py`, high ≥ 0.85 / medium ≥ 0.6) + SWE-rebench anti-contamination benchmark support (`load_dataset("swe_rebench")`); analysis reports auto-flag suspected-contamination tasks
+- [x] ~~Task difficulty stratification analysis (2.2)~~ → Implemented: stratify by code_size / dependency_count / complexity_proxy (`experiments/difficulty_stratification.py`) to locate "in which difficulty interval system capability degrades"
 
 ### Long-term Improvements (3 months)
 
 - [ ] Develop a dedicated fine-tuned model
-- [ ] Build the failure case knowledge base
+- [x] ~~Build the failure case knowledge base~~ → Implemented (5.3, see above)
 - [ ] Implement a human-machine collaborative repair mechanism
-- [ ] Extend to multi-language support
+- [ ] Extend to multi-language support (cross-language generalization: currently Python only; preliminary adaptation validation is possible on the Java ecosystem's Defects4J)
 
 ---
 

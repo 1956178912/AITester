@@ -3,7 +3,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-09-14
+> 最后更新：2026-09-16（新增 2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行 / 4.4 依赖缓存示例）
 
 ---
 
@@ -261,6 +261,91 @@ python experiments/analyze_failures.py \
 - 失败案例按基线 / 错误类型聚类的 Markdown 报告（`--output` 默认 `experiments/results/failure_analysis.md`）
 - 失败根因三大类（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类，每类最多 3 个代表案例）
 - 结构化案例知识库 `failure_knowledge_base.json`（按 `error_category` 多样性优先选取，含 `task_id` / `root_cause` / `reproducible_steps` / `suggested_fix`）
+
+---
+
+### 示例 13.7：数据污染检测（2.1）
+
+```bash
+# SWE-bench 实验后检查生成补丁与官方黄金补丁的重叠度
+# （high ≥ 0.85 疑似逐字复现 / medium ≥ 0.6 建议人工复核）
+python experiments/analyze_results.py \
+    --results-dir experiments/results \
+    --golden-patches /path/to/golden_patches.json
+```
+
+或编程调用：
+```python
+from experiments.contamination_check import detect_contamination, patch_overlap_score
+
+# 单对补丁重叠度（Jaccard，[0.0, 1.0]）
+score = patch_overlap_score(generated_patch, golden_patch)
+
+# 批量扫描 benchmark details
+report = detect_contamination(details, golden_patches={"task_1": "..."})
+print(f"high 重叠任务: {report['contaminated_tasks']}")
+```
+
+> 结果 JSON 的 `details[].patch` 是系统生成的修复补丁，`details[].task_metadata.golden_patch` 是 SWE-bench 官方补丁（由 `dataset_loader` 自动保留，不暴露给 LLM）。
+
+---
+
+### 示例 13.8：任务难度分层（2.2）
+
+```bash
+# 按代码规模 / 依赖数量 / 复杂度代理三个维度分层，定位能力衰减区间
+python experiments/analyze_results.py --results-dir experiments/results
+```
+
+或编程调用：
+```python
+from experiments.difficulty_stratification import stratify_by_dimension
+
+# code_size: small(<2KB) / medium(2-10KB) / large(>10KB)
+strat = stratify_by_dimension(details, "code_size", instance_codes={...}, test_codes={...})
+# dependency_count: low(0) / medium(1-2) / high(≥3)
+# complexity_proxy: easy(0) / medium(1) / hard(≥2)
+```
+
+---
+
+### 示例 13.9：Docker 隔离执行（4.3）
+
+```bash
+# 构建镜像（首次，依赖预安装在构建期完成）
+docker build -t aitester:latest .
+
+# 启用 Docker 隔离执行
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+
+# 指定自定义镜像
+EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:custom \
+    python main.py run examples/calculator.py
+
+# Docker vs venv 执行时间对比（实验环境选择依据）
+python scripts/compare_executor_modes.py \
+    --tasks examples/calculator.py examples/string_utils.py
+```
+
+> docker 不可用时任务返回 `docker_unavailable` 诊断（`error_info.type`），不静默降级本地执行。
+
+---
+
+### 示例 13.10：依赖缓存管理（4.4）
+
+```bash
+# 查看现有 venv 缓存与命中率
+python main.py clean-venv-cache --list-only
+
+# 删除 30 天前的 venv
+python main.py clean-venv-cache --max-age-days 30
+
+# 删除超过 512MB 的 venv
+python main.py clean-venv-cache --max-size-mb 512
+
+# 编程获取命中率统计（analyze_results.py 自动渲染"依赖缓存命中统计"章节）
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+```
 
 ---
 

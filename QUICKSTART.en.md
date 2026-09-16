@@ -132,14 +132,21 @@ export CROSS_FILE_MAX_MODULES=5
 # avoiding assertion weakening / always-true assertions / magic-number smells.
 export ASSERTION_AUGMENT_ENABLE=true
 
-# Result analysis (4.3 + 1.1/1.2/1.3 metric enhancements): after running the benchmark, generate a Markdown summary
-# including success rate / token efficiency / iteration distribution / failure-cause distribution / RAG quality /
-# repair convergence efficiency (first-attempt success rate, iteration and latency statistics for successful and failed tasks) /
-# repair convergence curve (cumulative pass rate and latency per iteration round 0/1/2/3+) /
-# test smell detection (Assertion Roulette / Magic Number / assertion weakening / trivial tests) /
-# multi-dimensional quality proxies (coverage, latency, optional assert-line count of generated_test, Top N failure categories).
-# When the token_metrics / rag_metrics / generated_test keys are missing from an old JSON, it automatically falls back or degrades without crashing.
+# Result analysis (4.3 + 1.1/1.2/1.3 metric enhancements + 2.1 contamination detection
+# + 2.2 difficulty stratification + 4.4 dependency cache): after running the benchmark,
+# generate a Markdown summary including success rate / token efficiency / iteration
+# distribution / failure-cause distribution / RAG quality / repair convergence efficiency /
+# repair convergence curve / test smell detection / multi-dimensional quality proxies /
+# data contamination detection (2.1, token-level Jaccard overlap of SWE-bench golden
+# patches, high >= 0.85 / medium >= 0.6) / task difficulty stratification (2.2,
+# code_size / dependency_count / complexity_proxy) / dependency cache hit statistics (4.4).
+# When corresponding keys are missing from an old JSON, it automatically falls back or
+# degrades without crashing.
 python experiments/analyze_results.py --results-dir experiments/results
+# Optional: explicitly pass a golden-patch mapping ({task_id: patch_text}, JSON object)
+# to override contamination detection
+python experiments/analyze_results.py --results-dir experiments/results \
+    --golden-patches /path/to/golden_patches.json
 
 # Failure root-cause classification + case knowledge base (5.3): attribute causes to the three major root causes
 # (LLM capability / dependencies / frameworks); structured cases are written to failure_knowledge_base.json
@@ -148,9 +155,20 @@ python experiments/analyze_failures.py --results-dir experiments/results
 python experiments/analyze_failures.py -r experiments/results -k experiments/results/failure_knowledge_base.json
 
 # 4.4 Dependency cache monitoring: venv cache hit-rate statistics + cleanup
-from src.tools.dependency import get_venv_cache_stats, clear_venv_cache
-print(get_venv_cache_stats())          # {"hits": N, "creates": M, "hit_rate": ...}
-clear_venv_cache(max_age_days=30)      # Clean up venv caches older than 30 days
+python main.py clean-venv-cache --list-only           # List existing caches with hit rate
+python main.py clean-venv-cache --max-age-days 30     # Remove venvs older than 30 days
+python main.py clean-venv-cache --max-size-mb 512     # Remove venvs larger than 512MB
+# Hit rate is also auto-rendered in the analysis layer ("Dependency Cache Hit Statistics (4.4)" section of analyze_results.py)
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+
+# 4.3 Docker isolated execution (requires local docker + built image; dependency pre-install cache baked into image build)
+docker build -t aitester:latest .
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+# Docker vs venv execution time comparison (Markdown table output, basis for choosing execution environment)
+python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+
+# 4.1 Log redaction audit (scans all logger call sites; exit 0 = no suspicious points, can be wired into CI)
+python scripts/audit_log_redaction.py
 ```
 
 ## Configuration File Description

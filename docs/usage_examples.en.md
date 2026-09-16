@@ -3,7 +3,7 @@
 # AITester Usage Examples
 
 > This document provides detailed usage examples to help developers get started with AITester quickly.
-> Last updated: 2026-09-14
+> Last updated: 2026-09-16 (added 2.1 contamination detection / 2.2 difficulty stratification / 4.3 Docker execution / 4.4 dependency cache examples)
 
 ---
 
@@ -261,6 +261,91 @@ Output:
 - A Markdown report clustering failure cases by baseline / error type (`--output` defaults to `experiments/results/failure_analysis.md`)
 - The three major failure root-cause classes (`llm_capability` / `dependency` / `framework`, conservatively heuristically classified by `root_cause_classification()`, up to 3 representative cases per class)
 - The structured case knowledge base `failure_knowledge_base.json` (selected by `error_category` diversity first, containing `task_id` / `root_cause` / `reproducible_steps` / `suggested_fix`)
+
+---
+
+### Example 13.7: Data Contamination Detection (2.1)
+
+```bash
+# After a SWE-bench experiment, check the overlap between generated patches and official golden patches
+# (high >= 0.85 suspected verbatim reproduction / medium >= 0.6 manual review recommended)
+python experiments/analyze_results.py \
+    --results-dir experiments/results \
+    --golden-patches /path/to/golden_patches.json
+```
+
+Or invoke programmatically:
+```python
+from experiments.contamination_check import detect_contamination, patch_overlap_score
+
+# Overlap score for a single patch pair (Jaccard, [0.0, 1.0])
+score = patch_overlap_score(generated_patch, golden_patch)
+
+# Batch-scan benchmark details
+report = detect_contamination(details, golden_patches={"task_1": "..."})
+print(f"High-overlap tasks: {report['contaminated_tasks']}")
+```
+
+> The `details[].patch` field in the result JSON is the system-generated repair patch, and `details[].task_metadata.golden_patch` is the official SWE-bench patch (automatically preserved by `dataset_loader`, not exposed to the LLM).
+
+---
+
+### Example 13.8: Task Difficulty Stratification (2.2)
+
+```bash
+# Stratify by code size / dependency count / complexity proxy to locate the capability-degradation interval
+python experiments/analyze_results.py --results-dir experiments/results
+```
+
+Or invoke programmatically:
+```python
+from experiments.difficulty_stratification import stratify_by_dimension
+
+# code_size: small(<2KB) / medium(2-10KB) / large(>10KB)
+strat = stratify_by_dimension(details, "code_size", instance_codes={...}, test_codes={...})
+# dependency_count: low(0) / medium(1-2) / high(>=3)
+# complexity_proxy: easy(0) / medium(1) / hard(>=2)
+```
+
+---
+
+### Example 13.9: Docker Isolated Execution (4.3)
+
+```bash
+# Build the image (first time; dependencies are pre-installed at build time)
+docker build -t aitester:latest .
+
+# Enable Docker isolated execution
+EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
+
+# Specify a custom image
+EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:custom \
+    python main.py run examples/calculator.py
+
+# Docker vs venv execution-time comparison (basis for choosing the execution environment)
+python scripts/compare_executor_modes.py \
+    --tasks examples/calculator.py examples/string_utils.py
+```
+
+> When docker is unavailable, the task returns a `docker_unavailable` diagnostic (`error_info.type`); it does not silently fall back to local execution.
+
+---
+
+### Example 13.10: Dependency Cache Management (4.4)
+
+```bash
+# List existing venv caches with hit rates
+python main.py clean-venv-cache --list-only
+
+# Remove venvs older than 30 days
+python main.py clean-venv-cache --max-age-days 30
+
+# Remove venvs larger than 512MB
+python main.py clean-venv-cache --max-size-mb 512
+
+# Programmatically fetch hit-rate statistics (analyze_results.py auto-renders the "Dependency Cache Hit Statistics" section)
+python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+```
 
 ---
 

@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-14
+> 最后更新：2026-09-16（数据集与评估深化轮次：2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行模式 / 4.4 依赖缓存）
 
 ---
 
@@ -90,7 +90,7 @@ test_code = agent.generate(
 
 ### ExecutorAgent
 
-测试执行器，在本地或隔离沙箱中运行 pytest 并捕获结果。
+测试执行器，在本地、隔离沙箱或 Docker 容器中运行 pytest 并捕获结果。
 
 ```python
 from src.agents.executor import ExecutorAgent
@@ -100,29 +100,34 @@ result = agent.execute(
     test_code="import pytest\nfrom calculator import divide\n\ndef test_divide():\n    assert divide(1, 2) == 0.5",
     target_file="examples/calculator.py",
     target_function="divide",
-    coverage=True,
 )
 
 # venv 沙箱隔离执行（P1：不污染系统环境，依赖冲突互不影响）
 sandbox_agent = ExecutorAgent(use_venv=True, auto_install_deps=True)
+
+# 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖）
+docker_agent = ExecutorAgent(use_docker=True, docker_image="aitester:latest")
 ```
 
 **关键方法：**
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `execute()` | `test_code: str`, `target_file: str`, `target_function: str`, `coverage: bool` | `dict` | 执行测试，返回通过/失败状态、覆盖率、失败用例 |
+| `execute()` | `test_code: str`, `target_file: str`, `target_function: str \| None` | `dict` | 执行测试，返回通过/失败状态、覆盖率、失败用例；执行模式优先级 Docker > venv 沙箱 > 本地 |
+| `_execute_docker()` | 同 `execute()` | `dict` | 4.3 Docker 隔离执行：`docker run` 挂载卷传入被测代码，docker 不可用时返回 `docker_unavailable` 诊断（不静默降级本地） |
 
 **返回格式：**
 ```json
 {
   "passed": true,
-  "failed": [],
+  "failed_cases": [],
   "coverage": 85.5,
   "output": "...",
-  "status": "success"
+  "docker_image": "aitester:latest"
 }
 ```
+
+> Docker 模式额外携带 `docker_image` 字段（供实验分析记录执行模式差异）；失败时 `error_info.type` 可能为 `docker_unavailable` / `docker_timeout`。
 
 ---
 
@@ -307,6 +312,68 @@ install_packages(venv_python, ["pandas"], timeout=120)
 
 ---
 
+### 数据污染检测（2.1）
+
+`experiments/contamination_check.py`：SWE-bench 数据污染风险应对——比较系统生成补丁与数据集官方黄金补丁的 token 级 Jaccard 相似度，标记高度重叠任务（疑似训练数据污染 / 逐字复现）。
+
+```python
+from experiments.contamination_check import (
+    detect_contamination,
+    patch_overlap_score,
+    render_contamination_section,
+)
+
+# 单对补丁的重叠度（[0.0, 1.0]，空补丁返回 0.0）
+score = patch_overlap_score(generated_patch, golden_patch)
+
+# 批量扫描 benchmark 结果 details（details[].patch + golden_patches 映射或 task_metadata.golden_patch）
+report = detect_contamination(details, golden_patches={"task_1": "..."})
+# → {"checked": n, "high": [...], "medium": [...], "scores": {...}, "contaminated_tasks": [...]}
+
+# Markdown 章节渲染（checked=0 时返回空列表，调用方跳过）
+lines = render_contamination_section(report, baseline="aitester")
+```
+
+**口径：** high ≥ 0.85（疑似逐字复现）/ medium ≥ 0.6（建议人工复核）；token 为小写化标识符/数字切分，仅统计 diff 修改行（丢弃 diff 元数据）。配套：`dataset_loader` 把官方 patch 存入 `task.metadata["golden_patch"]`（不暴露给 LLM），`run_benchmark` 结果行携带 `patch` 字段，`load_dataset` 支持 `swe_rebench` 别名（抗污染基准）。
+
+---
+
+### 任务难度分层（2.2）
+
+`experiments/difficulty_stratification.py`：按代码复杂度 / 依赖数量 / 文件规模把任务分层，定位"系统在什么难度区间能力衰减"。
+
+```python
+from experiments.difficulty_stratification import stratify_by_dimension, render_stratification_section
+
+# 按指定维度分层（code_size / dependency_count / complexity_proxy）
+strat = stratify_by_dimension(details, "code_size", instance_codes={...}, test_codes={...})
+# → {"small": {"tasks": n, "passed": n, "success_rate": f}, "medium": {...}, "large": {...}}
+
+# Markdown 章节渲染（无 details 时返回空列表）
+lines = render_stratification_section(details, baseline="aitester")
+```
+
+**分层边界（保守可解释口径）：** code_size small <2KB / medium 2–10KB / large >10KB；dependency_count low 0 / medium 1–2 / high ≥3；complexity_proxy easy 0 / medium 1 / hard ≥2（`iterations × (1 - passed)`，成功任务恒 0）。
+
+---
+
+### 结构化追踪层（4.1）
+
+`src/observability/trace.py`：JSONL 追加式记录每个工作流任务的"任务级"事件（节点输入/输出摘要、token 消耗、墙钟耗时、路由决策），供实验分析直接消费。默认关闭（`AITESTER_TRACE_DIR` 未设时全 no-op，零性能税）；显式设置后启用。
+
+```python
+from src.observability.trace import TraceSession, trace_enabled
+
+if trace_enabled():
+    session = TraceSession(task_id, trace_dir, config_flags)
+    session.record_node("planner", output_summary=..., decision="plan_complete")
+    session.record_task_end(passed=True)
+```
+
+**关键特性：** 线程安全（`--parallel` 多工作线程并发追加同一 JSONL，单条 append+flush 在锁内）；所有写入文本统一过 `mask_sensitive_info`（与日志脱敏同源）；写盘失败不阻断主流程（仅 warning）。
+
+---
+
 ### TokenUsage
 
 线程局部 LLM token 用量统计（P0：效率指标）。
@@ -394,7 +461,13 @@ dataset = SyntheticDataset(task_count=50, seed=42)
 from src.datasets import SWEBenchDataset
 
 dataset = SWEBenchDataset(subset="lite")
+
+# 2.1 加载 SWE-rebench 抗污染基准（与 SWE-bench 字段同构，经 data_dir 指向 rebench 数据目录）
+dataset = load_dataset("swe_rebench", data_dir="/path/to/rebench_data")
 ```
+
+**支持的数据集名称**（`load_dataset` 的 `dataset_map`，含别名）：
+`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`。未列出的名称降级为 `InMemoryDataset`（graceful degradation）。
 
 **数据集接口：**
 
@@ -440,11 +513,16 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `CROSS_FILE_ENABLE` | bool | false | 3.5 跨文件修复：启用 `cross_file_analyzer` 节点（插在 executor→debugger 之间）+ 多文件补丁分支 |
 | `CROSS_FILE_MAX_MODULES` | int | 5 | 3.5 跨文件修复计划最大模块数（防 token 爆炸） |
 | `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 断言增强：AST 提取被测代码现有 assert 注入 prompt |
-| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁） |
-| `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行） |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 复现流程默认显式启用（`--no-multi-candidate` 可回退历史口径） |
+| `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`experiments/results/traces`） |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
 | `TEMPERATURE` | float | 0.2 | LLM 采样温度 |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
+| `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest；需本机安装 docker 且镜像已构建，不可用时返回 `docker_unavailable` 诊断不降级本地） |
+| `EXECUTOR_DOCKER_IMAGE` | str | `aitester:latest` | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） |
+| `EXECUTOR_USE_VENV` | bool | false | venv 沙箱隔离执行（按依赖组合磁盘缓存，不污染系统环境） |
+| `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动 pip install 缺失依赖 |
+| `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 venv 缓存目录覆盖（容器/CI 隔离场景指向挂载卷；配合 `clean-venv-cache` 子命令清理） |
 
 **APIManagerConfig 字段**（`src/api/api_health.py` 数据模型，`api_manager.py` 消费；编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
 
@@ -519,6 +597,7 @@ class CustomDataset(BaseDatasetLoader):
 | 版本 | 日期 | 变更说明 |
 |------|------|---------|
 | 0.9.16 | 2026-09-15 | 深度重构轮次：AITesterState 初始化双写收敛为 `create_initial_state()` 工厂（CLI + benchmark 单一构造点）、experiments/visualize_results.py 统计检验收敛复用 statistical_analysis.py 配对原语 + NaN/Inf 守卫、code_context.py 补测 9 用例（模块覆盖率 89%→98%）、README 结构树补齐 5 个拆分产物（tracing/rag/nodes、api_health、llm_client）+ 测试状态表 13 处行内数同步 + api_reference 参数默认值标注；全量 1291 passed / ruff 全绿 / 覆盖率 94% |
+| Unreleased | 2026-09-16 | 数据集与评估深化轮次：2.1 数据污染检测（`experiments/contamination_check.py` token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6；`dataset_loader` 保留官方 patch 至 `metadata["golden_patch"]`；`load_dataset` 支持 `swe_rebench` 别名）/ 2.2 任务难度分层（`experiments/difficulty_stratification.py`，code_size / dependency_count / complexity_proxy 三维度）/ 4.3 Docker 执行模式转正（`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`，docker 不可用返回 `docker_unavailable` 诊断不降级本地；`scripts/compare_executor_modes.py` 时间对比）/ 4.4 依赖缓存监控完善（CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + 命中率入分析）/ 4.1 脱敏审计（`scripts/audit_log_redaction.py` + 子进程环境凭证剔除）/ 3.1 `reproduce.sh` 默认启用多候选补丁 + 3.2 `reproduce.sh` 显式启用 `AITESTER_TRACE_DIR` / 5.1 低覆盖模块补强（logging_utils 90%→100%、analysis.py 统计检验边界、cli/app.py 并发中断/信号处理） |
 | 0.9.15 | 2026-09-15 | 代码可维护性深化轮次：Ruff 规则集增强（SIM/PERF/RET/RUF，修复 63 处命中）+ 337 函数完整类型注解 + 9 个高复杂度函数中 7 个重构（get_fix_strategy/run/check_dataset/generate/_execute_sandboxed/clear_venv_cache/analyze_cross_file_deps）；全量 1270 passed / ruff 全绿 |
 | 0.9.14 | 2026-09-15 | 全项目收敛轮次：config 集中化（删除 CROSS_FILE/ASSERTION 死常量、SWE_BENCH_ENRICHMENT 收敛 config、MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper）、修复 executor 标准库清单误列 diskcache、修复跨文件降级路径写不进盘、删除 4 处死代码、RAG 检索器写锁 + _upsert 抽取、refine_final_error_category 收敛；全量 1270 passed / ruff 全绿 |
 | 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` 补模块级 `pytestmark=skipif(not _chroma_available())`（与 `test_rag_metrics.py` 口径一致，缺 chromadb 时 32 条 RAG 检索器用例优雅跳过而非 ImportError ERROR）；`tests/test_experiments_scripts.py` 的 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixture 在惰性导入 `experiments.visualize_results` 前补 `pytest.importorskip("matplotlib")`（缺 matplotlib 时 5 条可视化用例跳过）。精简环境（未全量安装 `requirements.txt`）下全量基线为 **1208 passed / 39 skipped / 0 failed**；全量安装依赖后恢复 **1247 passed / 0 skipped** |
