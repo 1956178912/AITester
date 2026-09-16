@@ -620,6 +620,46 @@ def list_examples() -> None:
         info_msg("提示：请创建 examples 目录并添加被测 Python 文件")
 
 
+@cli.command(name="clean-venv-cache")
+@click.option("--max-age-days", default=None, type=int, help="超过该天数的 venv 删除（None 表示不按年龄过滤）")
+@click.option("--max-size-mb", default=None, type=int, help="超过该大小（MB）的 venv 删除（None 表示不按大小过滤）")
+@click.option("--list-only", "-l", is_flag=True, help="仅列出缓存目录内容，不删除")
+def clean_venv_cache(max_age_days: int | None, max_size_mb: int | None, list_only: bool) -> None:
+    """清理 ExecutorAgent 的 venv 依赖缓存（4.4：按时间/大小清理 + 命中率统计）。
+
+    缓存目录默认 ~/.cache/aitester/venvs/（可经 AITESTER_VENV_CACHE_DIR 环境变量覆盖）。
+    两个过滤条件均缺省时清空全部缓存；--list-only 只读展示，不产生删除。
+
+    示例：
+        python main.py clean-venv-cache --list-only            # 查看现有缓存
+        python main.py clean-venv-cache --max-age-days 30      # 删除 30 天前的 venv
+        python main.py clean-venv-cache --max-size-mb 512      # 删除超过 512MB 的 venv
+    """
+    from src.tools import dependency
+
+    if list_only:
+        entries = dependency.list_venv_cache()
+        if not entries:
+            info_msg("venv 缓存目录为空（或尚未创建）")
+        else:
+            info_msg(f"venv 缓存共 {len(entries)} 项（总大小 {round(sum(e['size_mb'] for e in entries), 2)} MB）：")
+            for entry in entries:
+                info_msg(f"  {entry['name']}  {entry['size_mb']} MB  创建 {entry['created_at']}")
+        stats = dependency.get_venv_cache_stats()
+        info_msg(f"命中率统计: {stats['hits']}/{stats['total']} 次复用（hit rate {stats['hit_rate']}）")
+        return
+
+    result = dependency.clear_venv_cache(max_age_days=max_age_days, max_size_mb=max_size_mb)
+    if result["removed"]:
+        success_msg(
+            f"已删除 {len(result['removed'])} 个 venv（释放 {result['freed_mb']} MB）：{', '.join(result['removed'])}"
+        )
+    else:
+        info_msg("没有符合条件的 venv 需要删除")
+    if result["kept"]:
+        info_msg(f"保留 {len(result['kept'])} 个 venv：{', '.join(result['kept'])}")
+
+
 @cli.command(name="check-dataset")
 @click.argument("dataset", default="examples")
 @click.option("--subset", "-s", default=None, help="数据子集（如 lite/mini）")

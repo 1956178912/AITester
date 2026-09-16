@@ -9,12 +9,12 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1313 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1273 collected） |
-| **单元测试** | ✅ 全量 1313 passed, 0 skipped；精简环境 1273 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1319 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1279 collected） |
+| **单元测试** | ✅ 全量 1319 passed, 0 skipped；精简环境 1279 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 95% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 90% / cli-app 93% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 2026-09-16 可维护性深化 + 热路径性能优化轮次（_patch_applier_node 安全检查链抽为 _safe_write_patch / cli run 并发派发抽为 _dispatch_concurrent / dataset_loader 行解析抽为 _build_task_from_swe_row + extract_json_object 正则预编译 + RAG _upsert 省一次 count()，全量 1313 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-16 可维护性深化 + 热路径性能优化轮次（_patch_applier_node 安全检查链抽为 _safe_write_patch / cli run 并发派发抽为 _dispatch_concurrent / dataset_loader 行解析抽为 _build_task_from_swe_row + extract_json_object 正则预编译 + RAG _upsert 省一次 count()，全量 1319 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (90%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
 | **最近改动** | ✅ 2026-09-16 可维护性深化 + 热路径性能优化 + 低覆盖模块补强：_patch_applier_node / run / _load_raw_data 高嵌套逻辑提取为独立函数（行为不变）；extract_json_object 正则预编译 + RAG _upsert 复用清理返回值省一次 count()；新增 test_cli_console_output（8 用例）与 test_prompts_templates（14 用例），cli/app.py 覆盖率 77%→93%；详见 [CHANGELOG](CHANGELOG.md) |
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1313 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1273 个收集）
+# 运行所有单元测试（全量 1319 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1279 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -677,7 +677,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1313 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1319 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -687,7 +687,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（54 个测试文件，全量 1313 个 pytest 收集用例；精简环境 1273 收集 / 40 自动跳过，src 总覆盖率 95%）：
+**测试覆盖模块**（54 个测试文件，全量 1319 个 pytest 收集用例；精简环境 1279 收集 / 40 自动跳过，src 总覆盖率 95%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -695,7 +695,7 @@ docker run --rm \
 | `test_api_manager_extended.py` | 74 | API 管理器扩展路径（健康恢复、限流标记、4.2 半开探测 TestHalfOpenProbe 12 用例） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 30 | 27 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 8 用例） |
+| `test_cli_app.py` | 33 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 + 4.4 clean-venv-cache 4 用例） |
 | `test_cli_output.py` | 10 | CLI 输出层回归（colorize TTY 双分支、success/error/warning/info 图标与 stdout/stderr 路由、print_rich_table 空列表/缺键兜底/coverage=0.0 不被误判 N/A，O-01 批次） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.9.10） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
@@ -718,7 +718,7 @@ docker run --rm \
 | `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
 | `test_experiments_analysis.py` | 15 | 实验结果分析（排名/统计） |
-| `test_experiments_scripts.py` | 36 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线（6 用例） |
+| `test_experiments_scripts.py` | 38 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计（2 用例） |
 | `test_generator.py` | 43 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
@@ -1013,7 +1013,7 @@ python main.py list-examples
 - 文档全量对齐（结构树 / 测试状态表 / api_reference 参数标注）
 - 版本 0.9.15 → 0.9.16
 
-**验证**: 全量 1313 passed / 0 failed / ruff 全绿 / 覆盖率 95%
+**验证**: 全量 1319 passed / 0 failed / ruff 全绿 / 覆盖率 95%
 
 ### v0.10 (2026-08-18) — 第二轮迭代：性能优化与依赖锁定
 

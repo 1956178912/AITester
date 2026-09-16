@@ -3,7 +3,8 @@
 
 从 run_benchmark.py 输出的 JSON 结果中提取关键指标
 （成功率、覆盖率、迭代次数分布、Token 消耗、RAG 检索质量、修复收敛效率、
-多维质量代理、测试异味检测），生成 Markdown 汇总表格，减少手动分析 JSON 的工作量。
+多维质量代理、测试异味检测、依赖缓存命中统计），生成 Markdown 汇总表格，
+减少手动分析 JSON 的工作量。
 
 使用方式：
     python experiments/analyze_results.py --results-dir experiments/results
@@ -421,6 +422,23 @@ def _failure_top_categories(details: list[dict[str, Any]], top_n: int = 5) -> di
     }
 
 
+def _venv_cache_stats_snapshot() -> dict[str, Any] | None:
+    """4.4 依赖缓存命中率统计：读取 ExecutorAgent venv 磁盘缓存的命中数据。
+
+    缓存统计由 src/tools/dependency.py 维护（按依赖组合复用 venv），
+    此处仅做只读快照，供分析报告输出缓存复用效率。导入失败或统计
+    为空（尚无缓存事件）时返回 None，渲染时跳过章节，不崩溃。
+    """
+    try:
+        from src.tools.dependency import get_venv_cache_stats
+    except Exception:
+        return None
+    stats = get_venv_cache_stats()
+    if stats.get("total", 0) == 0:
+        return None
+    return stats
+
+
 def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
     """从 benchmark JSON 构建结构化分析结果。
 
@@ -493,6 +511,8 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
         },
         "per_baseline": per_baseline,
         "iteration_distribution": {str(k): iteration_counter.get(k, 0) for k in range(4)},
+        # 4.4 依赖缓存命中统计（无缓存事件时为 None，渲染时跳过章节）
+        "venv_cache_stats": _venv_cache_stats_snapshot(),
     }
 
 
@@ -729,6 +749,24 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
                 "说明 RAG 对该类错误修复帮助最大。"
             )
             lines.append("")
+
+    # 4.4 依赖缓存命中统计（ExecutorAgent venv 磁盘缓存，无缓存事件时跳过）
+    cache_stats = analysis.get("venv_cache_stats")
+    if cache_stats:
+        lines.append("## 依赖缓存命中统计（4.4）")
+        lines.append("")
+        lines.append("| venv 复用次数 | venv 新建次数 | 缓存命中率 |")
+        lines.append("|--------------|--------------|-----------|")
+        lines.append(
+            f"| {cache_stats.get('hits', 0)} | {cache_stats.get('creates', 0)} "
+            f"| {cache_stats.get('hit_rate', 0.0)} |"
+        )
+        lines.append("")
+        lines.append(
+            "> 解读：命中率高说明任务依赖组合重复利用良好（相同依赖组合复用同一 venv，"
+            "省去重建 1-3s/次）；若几乎全为新建，提示任务依赖差异过大或缓存目录被清理。"
+        )
+        lines.append("")
 
     return "\n".join(lines)
 

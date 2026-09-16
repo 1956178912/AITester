@@ -644,3 +644,25 @@ class TestAnalyzeResultsScript:
         assert s["available"] is False
         md = module.render_markdown(analysis, "benchmark_x.json")
         assert "测试异味检测（1.2）" not in md
+
+    def test_venv_cache_stats_rendered_when_events_exist(self, module, monkeypatch):
+        """4.4 依赖缓存命中统计：有缓存事件时 build_analysis 纳入快照并渲染章节。"""
+        stats = {"hits": 12, "creates": 3, "total": 15, "hit_rate": 0.8, "last_event_at": 123.0}
+        monkeypatch.setattr("src.tools.dependency.get_venv_cache_stats", lambda: stats)
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        assert analysis["venv_cache_stats"] == stats
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "依赖缓存命中统计（4.4）" in md
+        assert "0.8" in md
+
+    def test_venv_cache_stats_skipped_when_no_events(self, module, monkeypatch):
+        """4.4 无缓存事件（total=0）时章节跳过，不渲染。"""
+        monkeypatch.setattr(
+            "src.tools.dependency.get_venv_cache_stats",
+            lambda: {"hits": 0, "creates": 0, "total": 0, "hit_rate": 0.0, "last_event_at": None},
+        )
+        analysis = module.build_analysis(self._sample_data())
+        assert analysis["venv_cache_stats"] is None
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "依赖缓存命中统计（4.4）" not in md

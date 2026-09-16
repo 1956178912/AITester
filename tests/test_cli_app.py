@@ -446,3 +446,69 @@ class TestGlobInParallelMode:
         r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
         assert r.exit_code == 0
         assert dispatched == files, "并发模式应按传入文件列表全部派发"
+
+
+class TestCleanVenvCache:
+    """4.4 clean-venv-cache 子命令：仅列出 / 按条件清理 / 空目录边界。
+
+    命令内部才 import src.tools.dependency，测试用 monkeypatch 把模块级函数
+    打桩，避免真实删除 ~/.cache/aitester/venvs 下的缓存。
+    """
+
+    def _run(self, *args: str):
+        return CliRunner().invoke(cli_app.cli, ["clean-venv-cache", *args])
+
+    def test_list_only_does_not_delete(self, monkeypatch):
+        """--list-only：输出缓存清单与命中率，不触发删除。"""
+        monkeypatch.setattr(
+            "src.tools.dependency.list_venv_cache",
+            lambda: [{"name": "abc", "path": "/x/abc", "size_mb": 10.0, "created_at": "123"}],
+        )
+        monkeypatch.setattr(
+            "src.tools.dependency.get_venv_cache_stats",
+            lambda: {"hits": 3, "creates": 1, "total": 4, "hit_rate": 0.75, "last_event_at": None},
+        )
+        removed: list = []
+        monkeypatch.setattr(
+            "src.tools.dependency.clear_venv_cache",
+            lambda **kw: removed.append(kw) or {"removed": [], "kept": [], "freed_mb": 0.0},
+        )
+        r = self._run("--list-only")
+        assert r.exit_code == 0, r.output
+        assert "abc" in r.output and "0.75" in r.output, "清单与命中率应打印"
+        assert not removed, "list-only 模式不得触发删除"
+
+    def test_list_empty_cache_dir(self, monkeypatch):
+        """缓存目录为空时给出提示，不报错。"""
+        monkeypatch.setattr("src.tools.dependency.list_venv_cache", lambda: [])
+        monkeypatch.setattr(
+            "src.tools.dependency.get_venv_cache_stats",
+            lambda: {"hits": 0, "creates": 0, "total": 0, "hit_rate": 0.0, "last_event_at": None},
+        )
+        r = self._run("-l")
+        assert r.exit_code == 0, r.output
+        assert "为空" in r.output
+
+    def test_clear_with_age_filter_passes_args(self, monkeypatch):
+        """--max-age-days 30 → clear_venv_cache(max_age_days=30, max_size_mb=None)。"""
+        captured: dict = {}
+
+        def fake_clear(max_age_days=None, max_size_mb=None):
+            captured.update(max_age_days=max_age_days, max_size_mb=max_size_mb)
+            return {"removed": ["v1"], "kept": ["v2"], "freed_mb": 12.5}
+
+        monkeypatch.setattr("src.tools.dependency.clear_venv_cache", fake_clear)
+        r = self._run("--max-age-days", "30")
+        assert r.exit_code == 0, r.output
+        assert captured == {"max_age_days": 30, "max_size_mb": None}
+        assert "v1" in r.output and "12.5" in r.output, "删除项与释放空间应打印"
+
+    def test_clear_size_filter_and_nothing_removed(self, monkeypatch):
+        """--max-size-mb 过滤无命中时给出提示。"""
+        monkeypatch.setattr(
+            "src.tools.dependency.clear_venv_cache",
+            lambda max_age_days=None, max_size_mb=None: {"removed": [], "kept": ["v1", "v2"], "freed_mb": 0.0},
+        )
+        r = self._run("--max-size-mb", "512")
+        assert r.exit_code == 0, r.output
+        assert "没有符合条件" in r.output and "v1" in r.output, "保留项应列出"

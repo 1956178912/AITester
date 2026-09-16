@@ -85,7 +85,11 @@ def extract_import_module_names(code: str) -> list[str]:
 
 
 # ─── venv 磁盘缓存目录 ───────────────────────────────────────────────────────
-_VENV_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "aitester", "venvs")
+# 4.4：支持 AITESTER_VENV_CACHE_DIR 覆盖（测试/容器隔离场景使用），
+# 未设置时落到用户级默认目录，历史行为不变。
+_VENV_CACHE_DIR = os.environ.get("AITESTER_VENV_CACHE_DIR") or os.path.join(
+    os.path.expanduser("~"), ".cache", "aitester", "venvs"
+)
 
 # ─── 模块名 → pip 包名映射（模块名与包名不一致的常见第三方库）──────────────
 # 来源：各库官方发布的推荐 pip 名（cv2→opencv-python、PIL→Pillow 等）
