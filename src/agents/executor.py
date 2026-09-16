@@ -46,17 +46,19 @@ _RE_FAILED_CASE = re.compile(r"FAILED\s+(.+?\.py::\S+)")
 class ExecutorAgent:
     """
     测试执行器：在本地或隔离沙箱中运行 pytest 测试。
-    注意：use_docker 参数目前保留用于未来扩展，实际执行始终在本地进行。
 
-    隔离执行（P1 依赖隔离优化）：
+    三种执行模式（互斥，优先级 Docker > venv 沙箱 > 本地）：
+    - use_docker=True（4.3）：经 docker CLI 在容器内跑 pytest（镜像内置依赖，
+      容器间完全隔离）。需本机安装 docker 且镜像已构建；docker 不可用时
+      提前返回 dependency_install_failed 诊断，不静默降级到本地（避免
+      "以为隔离了其实没有" 的实验口径混淆）。
     - use_venv=True：在临时沙箱目录 + 缓存 venv 中执行，PYTHONPATH 仅指向
       沙箱目录，被测代码的 import 不污染系统环境，任务间依赖互不冲突。
-    - auto_install_deps=True：执行前检测缺失的第三方依赖，自动在 venv 内
-      pip install（仅影响 venv，不安装到系统环境）。
+    - 默认：本地系统 Python 执行（历史行为）。
 
     属性:
         timeout: 单次测试最大运行时间（秒），可通过 EXECUTION_TIMEOUT 环境变量配置。
-        use_docker: 是否使用 Docker 隔离执行（当前未启用，保留接口）。
+        use_docker: 是否使用 Docker 隔离执行（4.3，默认 False 保持历史口径）。
         use_venv: 是否使用 venv 沙箱隔离执行（默认 False，保持原有行为）。
         auto_install_deps: 是否自动安装缺失依赖（需 use_venv 生效）。
         dep_install_timeout: 依赖安装子进程超时秒数。
@@ -69,6 +71,7 @@ class ExecutorAgent:
         use_venv: bool = False,
         auto_install_deps: bool = False,
         dep_install_timeout: int = 120,
+        docker_image: str = "aitester:latest",
     ) -> None:
         # timeout 从参数传入，默认 30 秒
         self.timeout = timeout
@@ -76,6 +79,7 @@ class ExecutorAgent:
         self.use_venv = use_venv
         self.auto_install_deps = auto_install_deps
         self.dep_install_timeout = dep_install_timeout
+        self.docker_image = docker_image
 
     def execute(
         self,
@@ -100,6 +104,10 @@ class ExecutorAgent:
             - failed_cases (List[dict]): 失败的用例列表。
             - error_info (dict): 错误详情（可选）。
         """
+        # 4.3 Docker 隔离执行（优先级最高：镜像内置依赖 + 容器完全隔离）
+        if self.use_docker:
+            return self._execute_docker(test_code, target_file, target_function)
+
         # 隔离沙箱路径：venv + 临时目录执行，避免依赖冲突与环境污染（P1 优化）
         if self.use_venv:
             return self._execute_sandboxed(test_code, target_file, target_function)
@@ -121,6 +129,18 @@ class ExecutorAgent:
 
         try:
             env = os.environ.copy()
+            # 4.1 脱敏审计：子进程执行的是 LLM 生成的任意测试代码，
+            # LLM 的 API 凭证不得随环境继承进被测沙箱（泄露面 +
+            # 生成代码意外外传向量）。剔除 API Key 类变量后注入。
+            for secret_key in (
+                "OPENAI_API_KEY",
+                "OPENAI_BASE_URL",
+                "ANTHROPIC_API_KEY",
+                "API_KEY",
+                "LLM_API_KEY",
+                "LLM_CONFIG_API_KEY",
+            ):
+                env.pop(secret_key, None)
             # 尾随冒号防护：原 PYTHONPATH 未设置时直接拼接会产生 "<dir>:" 尾随空段
             # （sys.path 中空元素等价 CWD，同名文件可遮蔽第三方库）；空段过滤后 join
             env["PYTHONPATH"] = os.pathsep.join(
@@ -349,6 +369,129 @@ class ExecutorAgent:
                 logger.debug("已清理沙箱目录: %s", sandbox_dir)
         except OSError as e:
             logger.warning("清理沙箱目录失败: %s", e)
+
+    def _execute_docker(
+        self,
+        test_code: str,
+        target_file: str,
+        target_function: str | None = None,
+    ) -> dict[str, Any]:
+        """4.3 Docker 隔离执行：经 docker CLI 在容器内跑 pytest。
+
+        设计口径（保守，避免实验口径混淆）：
+        - 容器镜像（默认 aitester:latest，对应仓库根 Dockerfile）内置全部
+          依赖（构建期 pip install，Docker 层缓存复用），任务代码与测试
+          代码经挂载卷传入，容器间完全隔离；
+        - docker CLI 不存在时提前返回 docker_unavailable 诊断，不静默
+          降级到本地执行（"以为隔离了其实没有" 会污染对比实验口径）；
+        - 相比 venv 模式，镜像构建一次后每任务零安装开销（依赖预安装
+          缓存天然生效），适合需要特定系统依赖的 SWE-bench 任务。
+
+        Returns:
+            与 execute() 相同结构的结果字典（额外携带 docker_image 字段，
+            供实验分析记录执行模式差异）。
+        """
+        import shutil
+
+        if shutil.which("docker") is None:
+            return {
+                "passed": False,
+                "output": "docker CLI 未安装或不在 PATH 中，无法启用 Docker 隔离执行",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": {
+                    "type": "docker_unavailable",
+                    "message": "请安装 docker 并构建镜像：docker build -t aitester:latest .",
+                },
+                "docker_image": self.docker_image,
+            }
+
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        module_name = self._extract_module_name_from_file(target_file)
+        fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
+
+        # 临时目录承载被测模块与测试文件，经挂载卷传入容器（容器根文件系统
+        # 只读语义由镜像 WORKDIR 保证，任务间无残留）
+        sandbox_dir = tempfile.mkdtemp(prefix="aitester_docker_")
+        try:
+            target_source = ""
+            with open(target_file, encoding="utf-8") as tf_src:
+                target_source = tf_src.read()
+            with open(os.path.join(sandbox_dir, f"{module_name}.py"), "w", encoding="utf-8") as mf:
+                mf.write(target_source)
+            with open(os.path.join(sandbox_dir, "test_generated.py"), "w", encoding="utf-8") as tf:
+                tf.write(fixed_test_code)
+
+            cmd = [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{sandbox_dir}:/workspace",
+                "-w",
+                "/workspace",
+                self.docker_image,
+                "python",
+                "-m",
+                "pytest",
+                "test_generated.py",
+                "-v",
+                "--tb=short",
+                "--cov=/workspace",
+                "--cov-report=term",
+            ]
+            if target_function:
+                cmd.extend(["-k", target_function])
+
+            try:
+                # 容器启动开销（镜像拉取/文件系统初始化）远大于本地子进程，
+                # 超时下限放宽到 120s 避免误判
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=max(self.timeout, 120),
+                    env=os.environ,
+                )
+            except subprocess.TimeoutExpired as e:
+                return {
+                    "passed": False,
+                    "output": f"Docker 执行超时（>{max(self.timeout, 120)}s）",
+                    "coverage": 0.0,
+                    "failed_cases": [],
+                    "error_info": {"type": "docker_timeout", "message": str(e)},
+                    "docker_image": self.docker_image,
+                }
+
+            output = result.stdout + result.stderr
+            passed = result.returncode == 0
+            result_dict = {
+                "passed": passed,
+                "output": output,
+                "coverage": self._parse_coverage(output),
+                "failed_cases": self._parse_failed_cases(output),
+                "docker_image": self.docker_image,
+            }
+            if result.returncode != 0:
+                # _build_error_info 依赖 CompletedProcess.returncode，
+                # 用鸭子类型对象适配（字段一致即可）
+                fake_result = type(
+                    "_DockerResult",
+                    (),
+                    {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr},
+                )()
+                result_dict["error_info"] = self._build_error_info(fake_result, output)
+            return result_dict
+        except OSError as e:
+            return {
+                "passed": False,
+                "output": f"读取被测文件失败: {e}",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": {"type": "file_not_found", "message": str(e), "file_path": target_file},
+            }
+        finally:
+            self._cleanup_sandbox(sandbox_dir)
 
     @staticmethod
     def _build_error_info(last_result: subprocess.CompletedProcess[str], output: str) -> dict[str, Any]:

@@ -383,6 +383,8 @@ def _build_task_result(
             "token_usage": token_usage.get_usage().as_dict(),
             # P1 RAG 检索质量：本基线累计的检索指标（未启用 RAG 时为空）
             "rag_stats": final_state.get("rag_stats"),
+            # 2.1 数据污染检测：系统最终生成的补丁（无修复动作时可能为空）
+            "patch": final_state.get("patch"),
             "task_metadata": task.metadata,
         }
     return {
@@ -396,6 +398,8 @@ def _build_task_result(
         "elapsed_seconds": round(elapsed, 2),
         "token_usage": token_usage.get_usage().as_dict(),
         "rag_stats": None,
+        # 2.1 数据污染检测：失败分支无生成补丁，patch 以 None 兜底保持键集合同构
+        "patch": None,
         "task_metadata": task.metadata,
     }
 

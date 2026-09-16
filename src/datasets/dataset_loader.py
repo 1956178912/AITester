@@ -105,15 +105,17 @@ class BaseDatasetLoader(ABC):
     DATASET_NAME: str = "base"
     DEFAULT_CACHE_DIR: str = os.path.join(os.path.expanduser("~"), ".cache", "aitester")
 
-    def __init__(self, subset: str | None = None) -> None:
+    def __init__(self, subset: str | None = None, data_dir: str | None = None) -> None:
         """
         初始化数据集加载器。
 
         Args:
             subset: 数据子集名称。None 表示加载全部数据。
+            data_dir: 显式覆盖数据集根目录（2.1：SWE-rebench 等
+                外部基准经 load_dataset(kwargs) 注入；None 时用默认缓存目录）。
         """
         self.subset = subset
-        self.data_dir = os.path.join(self.DEFAULT_CACHE_DIR, self.DATASET_NAME)
+        self.data_dir = data_dir or os.path.join(self.DEFAULT_CACHE_DIR, self.DATASET_NAME)
         self._tasks: list[BenchmarkTask] = []
         self._loaded = False
 
@@ -512,6 +514,9 @@ class SWEBenchDataset(BaseDatasetLoader):
                 # 从官方 patch 的 hunk 头提取的目标函数（可能为 None），
                 # benchmark 入口用它初始化 target_function 做 AST 聚焦截取
                 "suggested_function": suggested_function,
+                # 2.1 数据污染检测：保留官方黄金补丁文本（供
+                # experiments/contamination_check 计算重叠度，不直接暴露给 LLM）
+                "golden_patch": data.get("patch", ""),
             },
         )
 
@@ -861,6 +866,8 @@ def load_dataset(
 
     支持的名称：
         - "swe_bench" 或 "swebench": SWE-bench 数据集
+        - "swe_rebench" 或 "swebench_rebench": SWE-rebench 抗污染基准
+          （2.1 数据污染风险应对：字段与 SWE-bench 同构，仅数据文件不同）
         - "defects4j_python" 或 "d4j_py": Defects4J-Python 数据集
         - "in_memory": 内置示例数据集
         - 其他名称返回 InMemoryDataset（允许 graceful degradation）
@@ -879,6 +886,11 @@ def load_dataset(
         "examples": InMemoryDataset,
         "swe_bench": SWEBenchDataset,
         "swebench": SWEBenchDataset,
+        # 2.1 SWE-rebench 抗污染基准：与 SWE-bench 共用 SWEBenchDataset 加载器
+        # （字段同构），数据文件经 SWE_BENCH_DATA_DIR / AITESTER_SWE_REBENCH_DIR
+        # 环境变量指向 rebench 数据集目录；未配置时加载失败由调用方兜底。
+        "swe_rebench": SWEBenchDataset,
+        "swebench_rebench": SWEBenchDataset,
         "defects4j_python": Defects4JPYDataset,
         "d4j_py": Defects4JPYDataset,
         "in_memory": InMemoryDataset,
@@ -914,6 +926,8 @@ def get_available_datasets() -> list[str]:
         {
             "swe_bench",
             "swebench",
+            "swe_rebench",
+            "swebench_rebench",
             "defects4j_python",
             "d4j_py",
             "in_memory",

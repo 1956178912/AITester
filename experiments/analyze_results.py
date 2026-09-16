@@ -43,6 +43,10 @@ from typing import Any
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# 2.1 数据污染检测模块（experiments 包内相对导入，sys.path 注入后方可用）
+from experiments.contamination_check import detect_contamination, render_contamination_section  # noqa: E402
+from experiments.difficulty_stratification import render_stratification_section  # noqa: E402
+
 
 def load_latest_benchmark(results_dir: str = "experiments/results") -> str:
     """找到结果目录下最新的 benchmark JSON 文件（文件名倒序）。
@@ -439,15 +443,17 @@ def _venv_cache_stats_snapshot() -> dict[str, Any] | None:
     return stats
 
 
-def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
+def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None = None) -> dict[str, Any]:
     """从 benchmark JSON 构建结构化分析结果。
 
     Args:
         data: run_benchmark.py 输出的完整 JSON（含 results.<baseline>.details）。
+        golden_patches: 2.1 数据污染检测的 task_id → 官方黄金补丁映射
+            （显式传入时覆盖结果自带字段；None 时仅用 details 自带 golden_patch）。
 
     Returns:
         分析字典：meta（数据集/基线/开关）、per_baseline（逐基线指标）、
-        iteration_distribution、failure_category_distribution。
+        iteration_distribution、venv_cache_stats。
     """
     results = data.get("results", {})
     baselines = list(results.keys())
@@ -494,6 +500,10 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
             # 1.2 测试异味检测（LLM 生成测试的可维护性代理）
             "test_smell_metrics": _test_smell_detection(details),
             "quality_proxy_metrics": _quality_proxy_metrics(details),
+            # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
+            "contamination_report": detect_contamination(details, golden_patches),
+            # 2.2 难度分层渲染所需的原始 details（render 消费，不参与 JSON 序列化输出）
+            "_details": details,
         }
         # 迭代次数分布（0 = 一次通过，1/2/3 = 调试轮数，>=3 归入 3+）
         for r in details:
@@ -750,6 +760,21 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             )
             lines.append("")
 
+    # 2.1 数据污染检测章节（details 携带 patch 与 golden_patch 时输出）
+    contam_rows = [
+        (b, m.get("contamination_report"))
+        for b, m in per.items()
+        if m.get("contamination_report", {}).get("checked", 0) > 0
+    ]
+    for baseline, report in contam_rows:
+        lines.extend(render_contamination_section(report, baseline))
+
+    # 2.2 任务难度分层（code_size / dependency_count / complexity_proxy 三维度）
+    for baseline, m in per.items():
+        details = m.get("_details") or []
+        if details:
+            lines.extend(render_stratification_section(details, baseline))
+
     # 4.4 依赖缓存命中统计（ExecutorAgent venv 磁盘缓存，无缓存事件时跳过）
     cache_stats = analysis.get("venv_cache_stats")
     if cache_stats:
@@ -758,8 +783,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append("| venv 复用次数 | venv 新建次数 | 缓存命中率 |")
         lines.append("|--------------|--------------|-----------|")
         lines.append(
-            f"| {cache_stats.get('hits', 0)} | {cache_stats.get('creates', 0)} "
-            f"| {cache_stats.get('hit_rate', 0.0)} |"
+            f"| {cache_stats.get('hits', 0)} | {cache_stats.get('creates', 0)} | {cache_stats.get('hit_rate', 0.0)} |"
         )
         lines.append("")
         lines.append(
@@ -778,6 +802,12 @@ def main() -> None:
     parser.add_argument(
         "--output", default=None, help="Markdown 汇总输出路径（默认 <输入文件同目录>/analysis_summary.md）"
     )
+    parser.add_argument(
+        "--golden-patches",
+        default=None,
+        help="2.1 数据污染检测：task_id → 官方黄金补丁文本 的 JSON 文件路径"
+        "（JSON 对象 {task_id: patch_text}；未指定时仅用结果自带 golden_patch 字段）",
+    )
     args = parser.parse_args()
 
     input_file = args.input or load_latest_benchmark(args.results_dir)
@@ -785,7 +815,12 @@ def main() -> None:
     with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
 
-    analysis = build_analysis(data)
+    golden_patches: dict[str, str] | None = None
+    if args.golden_patches:
+        with open(args.golden_patches, encoding="utf-8") as f:
+            golden_patches = json.load(f)
+
+    analysis = build_analysis(data, golden_patches=golden_patches)
     markdown = render_markdown(analysis, os.path.basename(input_file))
 
     print(markdown)

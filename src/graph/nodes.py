@@ -206,13 +206,18 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     executor_timeout = int(state.get("execution_timeout") or EXECUTION_TIMEOUT)
     t0 = time.time()
     # 隔离沙箱参数（P1 依赖隔离）：默认关闭，保持与历史实验一致；
-    # 通过环境变量 EXECUTOR_USE_VENV / EXECUTOR_AUTO_INSTALL_DEPS 开启
+    # 通过环境变量 EXECUTOR_USE_VENV / EXECUTOR_AUTO_INSTALL_DEPS 开启。
+    # 4.3 Docker 隔离执行：EXECUTOR_USE_DOCKER=true 时经 docker CLI 在容器内
+    # 跑 pytest（镜像 EXECUTOR_DOCKER_IMAGE，默认 aitester:latest）。
+    from config import EXECUTOR_DOCKER_IMAGE, EXECUTOR_USE_DOCKER
+
     agent = ExecutorAgent(
         timeout=executor_timeout,
-        use_docker=False,
+        use_docker=EXECUTOR_USE_DOCKER,
         use_venv=EXECUTOR_USE_VENV,
         auto_install_deps=EXECUTOR_AUTO_INSTALL_DEPS,
         dep_install_timeout=EXECUTOR_DEP_INSTALL_TIMEOUT,
+        docker_image=EXECUTOR_DOCKER_IMAGE,
     )
     result = agent.execute(
         test_code=state["generated_test"],

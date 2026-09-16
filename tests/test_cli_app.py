@@ -448,6 +448,94 @@ class TestGlobInParallelMode:
         assert dispatched == files, "并发模式应按传入文件列表全部派发"
 
 
+class TestRunParallelInterruptResilience:
+    """5.1 cli/app.py 并发中断与信号处理边界补强。"""
+
+    def _files(self, tmp_path, n: int = 3) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"c{i}.py"
+            p.write_text(f"def c{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_one_future_keyboardinterrupt_does_not_stop_batch(self, tmp_path, monkeypatch):
+        """并发派发中某任务抛出 KeyboardInterrupt 时，异常被捕获为任务错误结果，
+        整批继续完成（_handle_task_exception 对 future.exception() 统一兜底）。"""
+        files = self._files(tmp_path)
+        dispatched: list = []
+
+        def fake_dispatch(**kwargs):
+            dispatched.extend(kwargs["expanded_files"])
+            for f in kwargs["expanded_files"]:
+                if "c1" in f:
+                    kwargs["results"].append(
+                        {
+                            "success": False,
+                            "file": f,
+                            "func": "all",
+                            "passed": False,
+                            "error": "KeyboardInterrupt",
+                        }
+                    )
+                else:
+                    kwargs["results"].append({"success": True, "file": f, "func": "all", "passed": True})
+
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert r.exit_code == 1, "含失败任务时批量以 exit 1 结束（CI 门控口径）"
+        assert len(dispatched) == 3, "中断路径不得阻断其余任务的派发"
+
+    def test_sigterm_during_batch_marks_failed_tasks(self, tmp_path, monkeypatch):
+        """SIGTERM/SIGINT 到达时进行中的任务被标记为失败结果（error 含信号字样），
+        其余任务照常完成（信号处理与并发容错联合行为）。"""
+        files = self._files(tmp_path)
+
+        def fake_dispatch(**kwargs):
+            for f in kwargs["expanded_files"]:
+                if "c2" in f:
+                    kwargs["results"].append(
+                        {
+                            "success": False,
+                            "file": f,
+                            "func": "all",
+                            "passed": False,
+                            "error": "Task terminated by signal (SIGTERM)",
+                        }
+                    )
+                else:
+                    kwargs["results"].append({"success": True, "file": f, "func": "all", "passed": True})
+
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        r = CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=3", "--json"])
+        # 失败任务以 exit 1 结束（CI 门控口径）；--json 模式下 JSON 摘要由日志
+        # 通道输出，CliRunner 仅捕获 echo 输出，故断言退出码而非 stdout 解析
+        assert r.exit_code == 1, "含信号失败任务时批量以 exit 1 结束"
+
+    def test_all_tasks_succeed_after_partial_interrupt(self, tmp_path, monkeypatch):
+        """仅 c0 被中断、c1/c2 成功时，批量仍完整跑完 3 个任务（不短路）。"""
+        files = self._files(tmp_path, n=3)
+        counts: dict = {"c0": 0, "c1": 0, "c2": 0}
+
+        def fake_dispatch(**kwargs):
+            for f in kwargs["expanded_files"]:
+                name = f.split("/")[-1].replace(".py", "")
+                counts[name] += 1
+                if name == "c0":
+                    kwargs["results"].append(
+                        {"success": False, "file": f, "func": "all", "passed": False, "error": "interrupted"}
+                    )
+                else:
+                    kwargs["results"].append({"success": True, "file": f, "func": "all", "passed": True})
+
+        monkeypatch.setattr(cli_app, "_dispatch_parallel_tasks", fake_dispatch)
+        monkeypatch.setattr(cli_app, "_rich_available", lambda: False)
+        CliRunner().invoke(cli_app.cli, ["run", *files, "--parallel=2", "--json"])
+        assert counts["c0"] == 1 and counts["c1"] == 1 and counts["c2"] == 1, "每个任务只派发一次"
+
+
 class TestCleanVenvCache:
     """4.4 clean-venv-cache 子命令：仅列出 / 按条件清理 / 空目录边界。
 

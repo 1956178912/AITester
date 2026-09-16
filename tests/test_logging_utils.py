@@ -129,3 +129,95 @@ class TestRedactDict:
         """非字符串值保持原样。"""
         result = redact_dict({"count": 3, "ratio": 0.5, "ok": True})
         assert result == {"count": 3, "ratio": 0.5, "ok": True}
+
+
+class TestSensitiveFilterEdgeCases:
+    """5.1 脱敏边界用例补强：格式化失败 / exc_info 堆栈 / 嵌套结构。"""
+
+    def test_filter_survives_broken_getmessage(self):
+        """getMessage 抛异常（msg 非 str 且 args 不兼容）时 filter 仍放行，不阻断日志。"""
+        record = logging.LogRecord(
+            name="x",
+            level=logging.INFO,
+            pathname="t.py",
+            lineno=1,
+            msg="%s %d",
+            args=("a",),
+            exc_info=None,
+            stack_info=None,
+        )
+        # 手动制造 getMessage 失败：把 msg 置为非格式化协议对象
+        record.msg = 12345  # 数字 msg，format 时不崩但非 str
+        assert SensitiveFilter().filter(record) is True
+
+    def test_formatter_masks_exception_traceback(self):
+        """exc_info 携带的完整堆栈（formatException 追加段）中密钥也被脱敏。"""
+        import sys
+
+        logger = logging.getLogger("test_tb_mask")
+        formatter = SensitiveFormatter("%(message)s")
+        key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
+        try:
+            raise ValueError(f"auth failed {key}")
+        except ValueError:
+            exc_info = sys.exc_info()
+        record = logging.LogRecord(
+            name=logger.name,
+            level=logging.ERROR,
+            pathname="t.py",
+            lineno=1,
+            msg="boom",
+            args=None,
+            exc_info=exc_info,
+        )
+        out = formatter.format(record)
+        assert key not in out
+        assert "<REDACTED_API_KEY>" in out, "堆栈中的密钥必须被脱敏"
+
+    def test_nested_dict_of_values_not_masked_deeply(self):
+        """redact_dict 仅对顶层字符串值脱敏（嵌套 dict 值不递归，口径锁定）。"""
+        key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
+        result = redact_dict({"outer": {"inner_key": key}, "flat": key})
+        # 顶层字符串值脱敏
+        assert key not in result["flat"]
+        # 嵌套 dict 值保持原对象（不递归，避免误伤非字符串容器）
+        assert result["outer"] == {"inner_key": key}
+
+    def test_mask_idempotent_on_redacted_text(self):
+        """对已脱敏文本二次脱敏幂等（filter + formatter 双重防护不重复替换）。"""
+        key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
+        once = mask_sensitive_info(f"key {key}")
+        twice = mask_sensitive_info(once)
+        assert once == twice
+        assert "<REDACTED_API_KEY>" in twice
+
+
+class TestSensitiveFormatterExceptionPath:
+    """5.1 formatter 异常路径补强。"""
+
+    def test_formatter_falls_back_to_raw_on_mask_failure(self):
+        """mask 抛异常（monkeypatch 破坏）时 formatter 退回原始文本，不阻断日志。"""
+        from src.utils import logging_utils
+
+        logger = logging.getLogger("test_formatter_fallback")
+        formatter = SensitiveFormatter("%(message)s")
+        record = logging.LogRecord(
+            name=logger.name,
+            level=logging.INFO,
+            pathname="t.py",
+            lineno=1,
+            msg="plain",
+            args=None,
+            exc_info=None,
+        )
+
+        def _boom(_text):
+            raise RuntimeError("boom")
+
+        original = logging_utils.mask_sensitive_info
+        logging_utils.mask_sensitive_info = _boom
+        try:
+            out = formatter.format(record)
+        finally:
+            logging_utils.mask_sensitive_info = original
+        assert out == "plain", "脱敏失败时退回原始文本，不阻断日志输出"

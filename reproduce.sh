@@ -39,6 +39,9 @@ TASK_LIMIT=3        # 由 MODE 决定（quick=3，full=不限）；默认 quick 
 BASELINES="aitester,plain_llm,single_agent"  # 基线方法列表
 VERBOSE=""          # 是否输出详细日志
 ENABLE_RAG=""       # 2.3 RAG 纳入主实验：默认对合成/内置数据集显式开启 RAG
+# 3.1 多候选补丁：默认在 reproduce 流程中显式启用（A/B 口径说明见下），
+# 用户可用 --no-multi-candidate 回退到历史口径（ENABLE_MULTI_CANDIDATE_PATCH=false）
+MULTI_CANDIDATE=""  # 默认空 = 启用（export 为 true）；--no-multi-candidate 时设为 false
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --dataset)   DATASET="$2"; shift 2 ;;
         --baselines) BASELINES="$2"; shift 2 ;;
         --no-rag)    ENABLE_RAG="--no-rag"; shift ;;
+        --no-multi-candidate) MULTI_CANDIDATE="false"; shift ;;
         --verbose|-v) VERBOSE="-v"; shift ;;
         *) error "未知参数: $1" ;;
     esac
@@ -69,6 +73,13 @@ fi
 info "模式: $MODE  |  数据集: $DATASET  |  基线: $BASELINES"
 [[ -n "$TASK_LIMIT" ]] && info "任务限制: $TASK_LIMIT"
 [[ -n "$ENABLE_RAG" ]] && info "RAG: 显式开启（--enable-rag）"
+
+# 3.1 多候选补丁：reproduce 默认显式启用（多候选 + 静态筛选），
+# 与历史单补丁口径的 A/B 对比经 `bash reproduce.sh --no-multi-candidate` 复现，
+# 两组结果 JSON 分别保留在 experiments/results/（文件名含时间戳，不互相覆盖）。
+export ENABLE_MULTI_CANDIDATE_PATCH="${MULTI_CANDIDATE:-true}"
+export MULTI_CANDIDATE_COUNT="${MULTI_CANDIDATE_COUNT:-3}"
+info "多候选补丁(3.1): ENABLE_MULTI_CANDIDATE_PATCH=$ENABLE_MULTI_CANDIDATE_PATCH MULTI_CANDIDATE_COUNT=$MULTI_CANDIDATE_COUNT"
 
 # ─── 步骤 1/6：检查运行环境 ─────────────────────────────────────────────────────
 info "Step 1/6: 检查环境..."
@@ -162,8 +173,15 @@ mkdir -p experiments/results
 TASK_LIMIT_ARG=""
 [[ -n "$TASK_LIMIT" ]] && TASK_LIMIT_ARG="--task-limit $TASK_LIMIT"
 
+# 3.2 结构化追踪：显式设置 AITESTER_TRACE_DIR 收集逐智能体快照/Token 明细/
+# 墙钟耗时/决策路径（默认 no-op，此处主动启用以支撑论文案例分析）
+export AITESTER_TRACE_DIR="${AITESTER_TRACE_DIR:-experiments/results/traces}"
+info "结构化追踪(3.2): AITESTER_TRACE_DIR=$AITESTER_TRACE_DIR"
+
 # 运行多基线对比实验（自动保存 JSON 结果到 experiments/results/）
 # 2.3 RAG：$ENABLE_RAG 在合成/内置数据集默认设为 --enable-rag（见参数解析段）
+# 3.2 结构化追踪：显式设置 AITESTER_TRACE_DIR 收集逐智能体快照/Token 明细/
+# 墙钟耗时/决策路径（默认 no-op，此处主动启用以支撑论文案例分析）
 python experiments/run_benchmark.py \
     --dataset "$DATASET" \
     --baselines "$BASELINES" \

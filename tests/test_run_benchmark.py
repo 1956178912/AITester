@@ -69,9 +69,12 @@ class TestBuildTaskResult:
     def test_success_and_failure_same_keys(self):
         """字段口径回归护栏：成功/失败两类结果键集合必须完全一致。"""
         task = _make_task()
-        success = _build_task_result(task, 1.0, final_state={})
+        success = _build_task_result(task, 1.0, final_state={"patch": "+x"})
         failure = _build_task_result(task, 1.0)
         assert set(success.keys()) == set(failure.keys())
+        assert "patch" in success, "结果行必须携带 patch 字段（2.1 污染检测输入）"
+        assert success["patch"] == "+x"
+        assert failure["patch"] is None
 
 
 class TestRunSingleTask:

@@ -277,6 +277,12 @@ EXECUTOR_USE_VENV: bool = os.getenv("EXECUTOR_USE_VENV", "false").lower() == "tr
 EXECUTOR_AUTO_INSTALL_DEPS: bool = os.getenv("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true"
 # 依赖安装等待超时（秒）：防止 pip 网络卡顿拖垮整个实验
 EXECUTOR_DEP_INSTALL_TIMEOUT: int = _parse_int_env("EXECUTOR_DEP_INSTALL_TIMEOUT", 120, 10, None)
+# 4.3 Docker 隔离执行（预留接口转正，默认关）：
+# EXECUTOR_USE_DOCKER=true 时 ExecutorAgent 经 docker CLI 在容器内跑 pytest，
+# 需本机安装 docker 且镜像已构建（镜像名可经 EXECUTOR_DOCKER_IMAGE 覆盖，
+# 默认 aitester:latest，对应仓库根 Dockerfile）。
+EXECUTOR_USE_DOCKER: bool = os.getenv("EXECUTOR_USE_DOCKER", "false").lower() == "true"
+EXECUTOR_DOCKER_IMAGE: str = os.getenv("EXECUTOR_DOCKER_IMAGE", "aitester:latest")
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 # 0 = 串行（合法值），最小 0 防止负并行度

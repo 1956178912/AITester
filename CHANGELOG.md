@@ -4,6 +4,55 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 数据集与评估深化（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式）
+
+### 2.1 SWE-bench 数据污染风险应对
+- 新增 `experiments/contamination_check.py`：生成补丁与数据集黄金补丁的
+  token 级 Jaccard 重叠度检测（high ≥ 0.85 / medium ≥ 0.6 分级），
+  分析报告自动标注"疑似受污染影响"任务
+- `dataset_loader.py` 把 SWE-bench 官方 patch 字段存入
+  `task.metadata["golden_patch"]`（不直接暴露给 LLM，仅供污染检测）；
+  `run_benchmark.py` 结果行携带 `patch` 字段
+- `load_dataset` 支持 `swe_rebench` 别名（抗污染基准，与 SWE-bench
+  字段同构，经 `data_dir` 指向 rebench 数据目录）
+- `analyze_results.py --golden-patches <json>` 支持显式传入黄金补丁映射
+
+### 2.2 任务难度分层分析
+- 新增 `experiments/difficulty_stratification.py`：按 code_size /
+  dependency_count / complexity_proxy 三维度分层，统计各层成功率，
+  定位"系统在什么难度区间能力衰减"；渲染为分析报告"任务难度分层"章节
+
+### 3.1 多候选补丁在复现流程中默认启用
+- `reproduce.sh` 显式 export `ENABLE_MULTI_CANDIDATE_PATCH=true`
+  （MULTI_CANDIDATE_COUNT=3），新增 `--no-multi-candidate` 参数回退历史口径；
+  多候选 vs 单补丁 A/B 对比结果分别保留在 experiments/results/（时间戳不互覆盖）
+
+### 3.2 结构化追踪层在复现流程中主动启用
+- `reproduce.sh` export `AITESTER_TRACE_DIR=experiments/results/traces`
+  （默认 no-op，显式启用后收集逐智能体快照 / Token 明细 / 墙钟耗时 / 决策路径）
+
+### 4.1 日志脱敏完整审计
+- 新增 `scripts/audit_log_redaction.py`：全仓库 199 个 logger 调用点
+  自动扫描（敏感字段 + 无脱敏调用 → 可疑点），审计通过
+- `executor.py` 子进程环境剔除 LLM API 凭证（OPENAI_API_KEY /
+  ANTHROPIC_API_KEY / API_KEY 等 6 类变量），堵住"生成代码继承宿主
+  环境凭证"的泄露面（4.1 审计第 3 项：Docker 容器环境变量注入路径）
+
+### 4.3 Docker 执行模式转正
+- `ExecutorAgent._execute_docker`：经 docker CLI 在容器内跑 pytest
+  （镜像默认 aitester:latest，可经 EXECUTOR_DOCKER_IMAGE 覆盖），
+  依赖预安装缓存在镜像构建期完成（层缓存复用，每任务零安装开销）；
+  docker 不可用时提前返回 docker_unavailable 诊断（不静默降级本地）
+- `config.py` 新增 EXECUTOR_USE_DOCKER / EXECUTOR_DOCKER_IMAGE（默认关，
+  保持历史实验口径）；`graph/nodes.py` 执行节点接线
+- 新增 `scripts/compare_executor_modes.py`：Docker vs venv 模式执行
+  时间对比（Markdown 表输出，实验环境选择依据）
+
+### 4.4 依赖缓存监控完善（已随前一批提交）
+- CLI `clean-venv-cache` 子命令（--list-only / --max-age-days / --max-size-mb）
+- `AITESTER_VENV_CACHE_DIR` 环境变量覆盖缓存目录
+- `analyze_results.py` 纳入 venv 缓存命中率章节
+
 ## [0.9.18] - 2026-09-16 可维护性深化 + 热路径性能优化 + 低覆盖模块补强
 
 ### 可维护性重构（3 处高嵌套逻辑提取，行为不变）

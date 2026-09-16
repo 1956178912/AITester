@@ -906,6 +906,8 @@ class TestGetAvailableDatasets:
         expected = {
             "swe_bench",
             "swebench",
+            "swe_rebench",
+            "swebench_rebench",
             "defects4j_python",
             "d4j_py",
             "in_memory",

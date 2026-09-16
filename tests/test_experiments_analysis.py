@@ -215,3 +215,54 @@ class TestLoadAndAnalyze:
     def test_load_missing_file(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             load_and_analyze(str(tmp_path / "nope.json"))
+
+
+class TestSignificanceBoundaryConditions:
+    """5.1 统计检验边界条件补强（样本量 < 3 / 部分配对缺失 / 单基线）。"""
+
+    def test_single_sample_details_insufficient(self):
+        """单基线 details 仅 1 条（< 最小样本 3）→ insufficient_data，不触发除零。"""
+        results = {"a": _results_with_details(1, 0.0)}
+        sig = analyze_experiment_results(results)["significance"]
+        assert sig["status"] in ("insufficient_data", "unavailable")
+        assert "note" in sig
+
+    def test_two_samples_details_insufficient(self):
+        """2 条 details 仍低于最小样本数 3（边界 -1），不崩溃、不产生 t 统计量。"""
+        results = {
+            "a": _results_with_details(2, 0.5),
+            "b": _results_with_details(2, 0.5),
+        }
+        sig = analyze_experiment_results(results)["significance"]
+        # 样本量不足 → 走 insufficient_data 分支（无数字条目）
+        assert sig["status"] == "insufficient_data"
+
+    def test_partial_task_id_overlap_paired(self):
+        """两基线 task_id 仅部分重叠（3/5 公共）时按公共集配对，n 取重叠数。"""
+        details_a = [{"task_id": f"t{i}", "passed": i < 4} for i in range(5)]
+        details_b = [{"task_id": f"t{i}", "passed": i < 1} for i in range(3)]  # 仅 t0-t2
+        results = {
+            "aitester": _results_with_details(5, 0.8) | {"details": details_a},
+            "plain_llm": _results_with_details(3, 0.0) | {"details": details_b},
+        }
+        sig = analyze_experiment_results(results)["significance"]
+        if sig["status"] == "ok":
+            comp = sig["comparisons"][0]
+            assert comp["method"] == "paired_t_test"
+            assert comp["n_a"] == 3 and comp["n_b"] == 3
+
+    def test_single_baseline_no_comparison(self):
+        """单基线（无对比对象）时 comparisons 为空 → insufficient_data。"""
+        results = {"a": _results_with_details(10, 0.5)}
+        sig = analyze_experiment_results(results)["significance"]
+        # a 为 baseline 自身，无其他基线可对比
+        assert sig["status"] in ("insufficient_data", "unavailable")
+
+    def test_details_not_list_degrades(self):
+        """details 字段为非 list（脏数据）时不崩溃，归入 insufficient_data。"""
+        results = {
+            "a": _results_with_details(10, 0.5) | {"details": {"corrupted": True}},
+            "b": _results_with_details(10, 0.5),
+        }
+        sig = analyze_experiment_results(results)["significance"]
+        assert sig["status"] in ("insufficient_data", "unavailable")
