@@ -4,6 +4,50 @@
 
 All notable changes are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/).
 
+## [0.9.18] - 2026-09-16 Maintainability deepening + hot-path performance + low-coverage reinforcement
+
+### Maintainability refactoring (3 high-nesting logic extractions, behavior unchanged)
+- `graph/nodes.py` `_patch_applier_node`: the three-check safety chain
+  (empty/too-short, no function definition, path allowlist) + atomic-write
+  segment extracted into a standalone `_safe_write_patch()`; the main node
+  collapses to a linear "multi-candidate / cross-file / single-patch pick →
+  safe write → state-consistency write-back" flow, nesting depth 5 → 1
+- `cli/app.py` `run`: the rich/text dual-branch concurrent dispatch block
+  extracted into `_dispatch_concurrent()` (rich progress bar first, plain-text
+  fallback); the `run` command body now keeps only the "validate → expand →
+  dispatch → summarize → gate" trunk
+- `datasets/dataset_loader.py` `_load_raw_data`: per-line JSONL parsing +
+  BenchmarkTask construction extracted into `_build_task_from_swe_row()`;
+  the dedup set `_seen_task_ids` promoted to instance-level state (reset on
+  each load, semantics identical to the former local `seen_ids`)
+
+### Hot-path performance
+- `utils/helpers.py` `extract_json_object`: the two `re.sub` patterns changed
+  to module-level pre-compiled regexes
+  (`_JSON_FENCE_STRIP_PATTERN` / `_JSON_BACKTICK_STRIP_PATTERN`), removing
+  per-call regex compile/cache-lookup overhead on every LLM response parse
+- `rag/retriever.py` `_cleanup_expired_and_excess` now returns the post-cleanup
+  entry count; `_upsert` reuses that value, saving one `collection.count()`
+  call on the most common throttled path (previously each
+  add_case/add_repair ran count() twice against the same collection)
+
+### Low-coverage module reinforcement (cli/app.py 77% → 93%, total 94% → 95%)
+- Added `tests/test_cli_console_output.py` (8 cases): _run_single_task
+  non-JSON console summary (success/failure/missing-coverage/diagnosis &
+  suggestions) + _dispatch_concurrent rich branch and plain-text fallback /
+  JSON-silent branches
+- Added `tests/test_prompts_templates.py` (14 cases): structural contract of
+  the three system-prompt constants (key instruction sections, error
+  categories, JSON output format)
+- Full suite **1313 passed / 0 failed**, src total coverage **95%**,
+  ruff check + format all green
+
+### Verification
+- Related regression: test_workflow* (75) / test_cli_app + test_cli_parallel
+  (39) / test_dataset_loader* + test_swe_bench_source_export (148) /
+  test_rag_retriever + test_rag_metrics (34) / test_string_utils +
+  test_complex_logic (22) — all passed
+
 ## [0.9.17] - 2026-09-15 Cyclomatic-complexity wrap-up + directory reorganization + doc number sync
 
 ### Cyclomatic complexity wrap-up (digesting the 2 "intentionally kept" items from 0.9.15)

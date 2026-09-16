@@ -153,7 +153,7 @@ class TestCaseRetriever:
         metadata["_added_at"] = time.time()
         return metadata
 
-    def _cleanup_expired_and_excess(self) -> None:
+    def _cleanup_expired_and_excess(self) -> int:
         """
         清理过期和超额的缓存条目。
 
@@ -163,6 +163,9 @@ class TestCaseRetriever:
 
         节流：未达容量上限时，距上次清理不足 _CLEANUP_INTERVAL_SECONDS
         （60s）则跳过全表扫描；容量满（需要驱逐）或首次调用时始终执行。
+
+        Returns:
+            清理后（或节流跳过时）集合内的条目数，供调用方复用避免重复 count()。
         """
         current_time = time.time()
 
@@ -175,13 +178,13 @@ class TestCaseRetriever:
             and self._last_cleanup_at != 0.0
             and current_time - self._last_cleanup_at < _CLEANUP_INTERVAL_SECONDS
         ):
-            return
+            return count
 
         # 步骤 1：获取所有条目，筛选出未过期的
         all_results = self.collection.get(include=["metadatas"])
         self._last_cleanup_at = current_time
         if not all_results["ids"]:
-            return
+            return 0
 
         # 分离过期和未过期条目
         valid_ids = []
@@ -214,6 +217,8 @@ class TestCaseRetriever:
                 self.collection.delete(ids=remove_ids)
                 logger.debug("已清理 %d 个超额缓存条目", len(remove_ids))
 
+        return self.collection.count()
+
     def _upsert(self, doc_id: str, document: str, metadata: dict[str, Any], log_msg: str) -> None:
         """在写锁内完成「清理 + 容量检查 + upsert」（add_case/add_repair 共用）。
 
@@ -228,8 +233,9 @@ class TestCaseRetriever:
             log_msg: 入库成功后的 debug 日志描述（如「已入库测试用例」）。
         """
         with self._write_lock:
-            self._cleanup_expired_and_excess()
-            if self.collection.count() >= self.max_cases:
+            # 复用清理返回的条目数，避免最常见的节流路径上对同一集合连做两次 count()
+            remaining = self._cleanup_expired_and_excess()
+            if remaining >= self.max_cases:
                 logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
                 return
             self.collection.upsert(documents=[document], metadatas=[metadata], ids=[doc_id])

@@ -4,6 +4,44 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.18] - 2026-09-16 可维护性深化 + 热路径性能优化 + 低覆盖模块补强
+
+### 可维护性重构（3 处高嵌套逻辑提取，行为不变）
+- `graph/nodes.py` `_patch_applier_node`：三道安全检查链（空/过短、无函数定义、
+  路径白名单）+ 原子写盘段抽为独立 `_safe_write_patch()`，主节点收敛为
+  "多候选/跨文件/单补丁三选一 → 安全写盘 → 状态一致性写回" 线性流程，
+  嵌套深度 5 层 → 1 层
+- `cli/app.py` `run`：并发派发块的 rich/纯文本双分支抽为 `_dispatch_concurrent()`
+  （rich 进度条优先、纯文本降级兜底），`run` 命令体只保留
+  "校验 → 展开 → 派发 → 汇总 → 门控" 主干
+- `datasets/dataset_loader.py` `_load_raw_data`：单行 JSONL 解析 + BenchmarkTask
+  构建抽为 `_build_task_from_swe_row()`，去重集合 `_seen_task_ids` 提升为实例
+  级状态（每次加载重置，语义与原先局域 seen_ids 一致）
+
+### 热路径性能优化
+- `utils/helpers.py` `extract_json_object`：两处 `re.sub` 模式改为模块级
+  预编译正则（`_JSON_FENCE_STRIP_PATTERN` / `_JSON_BACKTICK_STRIP_PATTERN`），
+  消除每次 LLM 响应解析时的正则编译/查缓存开销
+- `rag/retriever.py` `_cleanup_expired_and_excess` 返回值由 None 改为
+  清理后条目数，`_upsert` 复用该值，最常见的节流路径上省掉一次
+  `collection.count()` 调用（此前每次 add_case/add_repair 对同一集合
+  连做两次 count）
+
+### 低覆盖模块补强（cli/app.py 77% → 93%，总覆盖 94% → 95%）
+- 新增 `tests/test_cli_console_output.py`（8 用例）：_run_single_task 非 JSON
+  控制台摘要（成功/失败/覆盖率缺失/诊断与建议）+ _dispatch_concurrent
+  rich 分支与纯文本降级/JSON 静默分支
+- 新增 `tests/test_prompts_templates.py`（14 用例）：三个 system prompt
+  常量的结构契约（关键指令段、错误类别、JSON 输出格式）
+- 全量 **1313 passed / 0 failed**，src 总覆盖率 **95%**，
+  ruff check + format 全绿
+
+### 验证
+- 相关回归：test_workflow*（75）/ test_cli_app + test_cli_parallel（39）/
+  test_dataset_loader* + test_swe_bench_source_export（148）/
+  test_rag_retriever + test_rag_metrics（34）/ test_string_utils +
+  test_complex_logic（22）全部通过
+
 ## [0.9.17] - 2026-09-15 圈复杂度收尾 + 目录归位 + 文档数字同步
 
 ### 圈复杂度收尾（消化 0.9.15 遗留的 2 个"有意保留"项）

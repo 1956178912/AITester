@@ -519,6 +519,47 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     return apply_patch_to_code(original_code=original_code, patch=best.patch)
 
 
+def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: AITesterState) -> bool:
+    """
+    安全检查 + 原子写盘：将新代码写入 state["target_file"]。
+
+    三道安全检查（任一不过则拒绝写入，返回 False）：
+    1. 补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）；
+    2. 补丁必须含至少一个函数定义（防止 LLM 返回无意义内容）；
+    3. 目标路径必须在项目根目录或系统临时目录内（防路径穿越）。
+
+    Args:
+        original_code: 应用补丁前的原始代码（用于长度比较安全检查）。
+        new_code: 应用补丁后的新代码。
+        applied: 补丁应用是否成功（静态校验通过）。
+        state: 当前状态，读取 target_file 与写入路径校验。
+
+    Returns:
+        True 表示代码已写盘，False 表示被安全检查拒绝或补丁未生效。
+    """
+    if not applied or new_code == original_code:
+        return False
+    # 安全检查 1：空或过短（长度 < 原代码 10%，防 LLM 返回残缺文件）
+    if not new_code or len(new_code) < len(original_code) * 0.1:
+        logger.error("补丁内容异常（空或过短），跳过写入: %s", state["target_file"])
+        return False
+    # 安全检查 2：必须含至少一个函数定义（防 LLM 返回无意义内容）
+    if not any(line.strip().startswith("def ") for line in new_code.splitlines()):
+        logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
+        return False
+    # 安全检查 3：路径白名单（项目根目录或系统临时目录，前缀比较带 os.sep 防兄弟目录碰撞）
+    target_file_path = os.path.abspath(state["target_file"])
+    project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    temp_dir = os.path.abspath(tempfile.gettempdir())
+    if not _is_within_allowed_roots(target_file_path, (project_root, temp_dir)):
+        logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
+        return False
+    # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
+    _write_file_atomic(target_file_path, new_code)
+    logger.info("补丁已应用到文件: %s", target_file_path)
+    return True
+
+
 def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     """
     补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
@@ -575,26 +616,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
 
     # 默认视为"未真正写盘"，任何安全检查失败都保持该值
-    written = False
-    if applied and new_code != original_code:
-        # 安全检查 1：补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）
-        if not new_code or len(new_code) < len(original_code) * 0.1:
-            logger.error("补丁内容异常（空或过短），跳过写入: %s", state["target_file"])
-        # 安全检查 2：补丁必须含至少一个函数定义（防止 LLM 返回无意义内容）
-        elif not any(line.strip().startswith("def ") for line in new_code.splitlines()):
-            logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
-        else:
-            target_file_path = os.path.abspath(state["target_file"])
-            project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-            temp_dir = os.path.abspath(tempfile.gettempdir())
-            # 允许项目目录内或系统临时目录（前缀比较带 os.sep，防兄弟目录碰撞）
-            if not _is_within_allowed_roots(target_file_path, (project_root, temp_dir)):
-                logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
-            else:
-                # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
-                _write_file_atomic(target_file_path, new_code)
-                written = True
-                logger.info("补丁已应用到文件: %s", target_file_path)
+    written = _safe_write_patch(original_code, new_code, applied, state)
 
     # 状态/磁盘一致性：仅写盘成功才更新 target_code，否则保留原代码
     effective_code = new_code if written else original_code

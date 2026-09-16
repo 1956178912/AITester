@@ -228,6 +228,71 @@ def _dispatch_parallel_tasks(
                     on_progress(future)
 
 
+def _dispatch_concurrent(
+    expanded_files: list[str],
+    func: str | None,
+    max_iterations: int,
+    exec_timeout: int,
+    coverage_threshold: float,
+    json_output: bool,
+    parallel: int,
+    results: list[dict[str, Any]],
+) -> None:
+    """并发执行测试任务（rich 进度条优先，纯文本降级兜底）。
+
+    rich 可用时渲染进度条（--json 时进度条走 stderr，保持 stdout 纯 JSON）；
+    否则降级为纯文本逐任务提示（--json 时静默，避免污染 JSON 输出）。
+    两种模式共享 _dispatch_parallel_tasks 派发器，仅进度反馈策略不同。
+
+    Args:
+        expanded_files: 目标文件路径列表。
+        func: 被测函数名（None 表示全部函数）。
+        max_iterations: 最大修复迭代次数。
+        exec_timeout: 单任务执行超时（秒）。
+        coverage_threshold: 覆盖率阈值（%）。
+        json_output: 是否 JSON 输出模式（影响进度条输出通道与降级提示）。
+        parallel: 并发 worker 数。
+        results: 结果列表，每个任务的成功/错误结果追加于此。
+    """
+    dispatch_kwargs = dict(
+        expanded_files=expanded_files,
+        func=func,
+        max_iterations=max_iterations,
+        exec_timeout=exec_timeout,
+        coverage_threshold=coverage_threshold,
+        json_output=json_output,
+        parallel=parallel,
+        results=results,
+    )
+    if not _rich_available():
+        # 纯文本降级：--json 时不往 stdout 打进度（保持纯 JSON）
+        _dispatch_parallel_tasks(
+            on_success=None if json_output else (lambda name: click.echo(f"  ✓ 完成：{name}")),
+            **dispatch_kwargs,
+        )
+        return
+
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+
+    # --json 时进度条也走 stderr，保持 stdout 纯 JSON
+    console = Console(stderr=json_output)
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]执行测试任务[/bold blue]"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeRemainingColumn(),
+        console=console,
+    )
+    with progress:
+        task = progress.add_task("运行中...", total=len(expanded_files))
+        _dispatch_parallel_tasks(
+            on_progress=lambda _f: progress.update(task, advance=1),
+            **dispatch_kwargs,
+        )
+
+
 def _run_single_task(
     target_file: str,
     func: str | None,
@@ -426,42 +491,16 @@ def run(
         if parallel > 1 and len(expanded_files) > 1:
             # 并发模式：rich 进度条与纯文本降级共用同一派发器（_dispatch_parallel_tasks），
             # 仅进度反馈策略（on_progress / on_success 回调）不同
-            dispatch_kwargs = dict(
-                expanded_files=expanded_files,
-                func=func,
-                max_iterations=max_iterations,
-                exec_timeout=exec_timeout,
-                coverage_threshold=coverage_threshold,
-                json_output=json_output,
-                parallel=parallel,
-                results=results,
+            _dispatch_concurrent(
+                expanded_files,
+                func,
+                max_iterations,
+                exec_timeout,
+                coverage_threshold,
+                json_output,
+                parallel,
+                results,
             )
-            if _rich_available():
-                from rich.console import Console
-                from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
-
-                # --json 时进度条也走 stderr，保持 stdout 纯 JSON
-                console = Console(stderr=json_output)
-                progress = Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]执行测试任务[/bold blue]"),
-                    BarColumn(),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    TimeRemainingColumn(),
-                    console=console,
-                )
-                with progress:
-                    task = progress.add_task("运行中...", total=len(expanded_files))
-                    _dispatch_parallel_tasks(
-                        on_progress=lambda _f: progress.update(task, advance=1),
-                        **dispatch_kwargs,
-                    )
-            else:
-                # --json 时不往 stdout 打进度（保持纯 JSON）
-                _dispatch_parallel_tasks(
-                    on_success=None if json_output else (lambda name: click.echo(f"  ✓ 完成：{name}")),
-                    **dispatch_kwargs,
-                )
         else:
             # 单线程模式
             # 逐任务容错：单个任务异常（如读取失败、工作流崩溃）不中断整个批次，

@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1291 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1251 collected) |
-| **Unit Tests** | ✅ Full: 1291 passed, 0 skipped; reduced environment: 1251 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 94% total coverage (core modules: reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%) |
+| **Total Tests** | ✅ 1313 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1273 collected) |
+| **Unit Tests** | ✅ Full: 1313 passed, 0 skipped; reduced environment: 1273 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 95% total coverage (core modules: reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 90% / cli-app 93% / cli-output 92%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-15 code maintainability deepening round (Ruff rules extended with SIM/PERF/RET/RUF + 337 function type annotations with zero gaps + high-complexity functions refactored including check_health / extract_focused_code, full suite 1291 passed / coverage 94%); see [CHANGELOG](CHANGELOG.md) for details |
-| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), graph/nodes.py (95%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
+| **Latest Optimization** | ✅ 2026-09-16 maintainability deepening + hot-path performance round (check-safety chain in _patch_applier_node extracted to _safe_write_patch / concurrent dispatch in cli run extracted to _dispatch_concurrent / dataset_loader line parsing extracted to _build_task_from_swe_row + pre-compiled regexes in extract_json_object + RAG _upsert saves one count(), full suite 1313 passed / coverage 95%); see [CHANGELOG](CHANGELOG.md) for details |
+| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (90%) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) |
-| **Recent Changes** | ✅ 2026-09-15 maintainability deepening + complexity wrap-up: get_fix_strategy / run / check_dataset / generate / _execute_sandboxed / clear_venv_cache / analyze_cross_file_deps / _analyze_root_cause / _generate_fix_suggestion / check_health / extract_focused_code split or refactored with mapping tables (cyclomatic complexity all below 10, zero `ruff --select C901` hits); root-level loose scripts expand_models.py / generate_batch_config.py relocated to scripts/; see [CHANGELOG](CHANGELOG.md) for details |
+| **Recent Changes** | ✅ 2026-09-16 maintainability deepening + hot-path performance + low-coverage module reinforcement: high-nesting logic in _patch_applier_node / run / _load_raw_data extracted into standalone functions (behavior unchanged); pre-compiled regexes in extract_json_object + RAG _upsert reuses cleanup return value to save one count(); added test_cli_console_output (8 cases) and test_prompts_templates (14 cases), cli/app.py coverage 77%→93%; see [CHANGELOG](CHANGELOG.md) for details |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1291 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1251 collected)
+# Run all unit tests (full 1313 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1273 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -678,7 +678,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1291 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1313 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -688,7 +688,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (52 test files, full 1291 collected pytest cases; reduced environment collects 1251 / auto-skips 40, total src coverage 94%):
+**Tested modules** (54 test files, full 1313 collected pytest cases; reduced environment collects 1273 / auto-skips 40, total src coverage 95%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -700,6 +700,7 @@ docker run --rm \
 | `test_cli_output.py` | 10 | CLI output layer regression (colorize TTY dual branch, success/error/warning/info icons and stdout/stderr routing, print_rich_table empty list/missing key fallback/coverage=0.0 not misjudged as N/A, O-01 batch) |
 | `test_cli_parallel.py` | 10 | Concurrent dispatcher `_dispatch_parallel_tasks` and `run` concurrent branch regression (rich/no-rich dual paths, per-task fault tolerance, CI gate exit 1) (0.9.10) |
 | `test_cli_run.py` | 6 | run command orchestration (timeout/coverage threshold pass-through) |
+| `test_cli_console_output.py` | 8 | run non-JSON console summary (success/failure/diagnosis/suggestions) + _dispatch_concurrent rich/fallback/JSON-silent branches (0.9.18) |
 | `test_code_analyzer.py` | 17 | AST parsing, cyclomatic complexity, code replacement |
 | `test_code_context.py` | 18 | 11 | AST smart extraction (P0 large-file context) |
 | `test_complex_logic.py` | 12 | Complex business logic (email validation, etc.) |
@@ -728,6 +729,7 @@ docker run --rm \
 | `test_packaging.py` | 3 | Packaging integrity (subpackage __init__ all present) |
 | `test_patch_applier.py` | 38 | Patch application (whole-file/single-function modes) |
 | `test_planner.py` | 5 | PlannerAgent planning logic serialization |
+| `test_prompts_templates.py` | 14 | Structural contract of the three system-prompt constants (key instruction sections/error categories/JSON output format, 0.9.18) |
 | `test_rag_metrics.py` | 13 | RAG retrieval quality metrics Hit Rate/MRR (P1) |
 | `test_rag_retriever.py` | 42 | RAG retriever add/remove/query/clear and persistence |
 | `test_report_generator.py` | 48 | Error report generator (including twelve-category classification branches) |
@@ -1012,7 +1014,7 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Full documentation alignment (structure tree / test status table / api_reference parameter annotations)
 - Version 0.9.15 → 0.9.16
 
-**Verification**: full suite 1291 passed / 0 failed / ruff green / coverage 94%
+**Verification**: full suite 1313 passed / 0 failed / ruff green / coverage 95%
 
 ### v0.10 (2026-08-18) — Second iteration round: performance optimization and dependency locking
 

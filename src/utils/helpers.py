@@ -25,6 +25,10 @@ _CODE_BLOCK_PYTHON_PATTERN = re.compile(r"```python\s*\n(.*?)\n\s*```", re.DOTAL
 _CODE_BLOCK_PATTERN = re.compile(r"```(?:python)?\s*\n(.*?)\n\s*```", re.DOTALL)
 # 匹配最内层无嵌套的 {...} JSON 对象
 _JSON_LEAF_PATTERN = re.compile(r"\{[^{}]*\}")
+# 预编译 JSON 清理正则（extract_json_object 热路径：LLM 响应可能很长，
+# 每次调用重复编译 re.sub 模式浪费；re 内部缓存有限，显式编译最稳妥）
+_JSON_FENCE_STRIP_PATTERN = re.compile(r"```(?:json)?\s*\n?")
+_JSON_BACKTICK_STRIP_PATTERN = re.compile(r"```")
 
 
 def extract_code_block(text: str, language: str | None = None) -> str:
@@ -85,9 +89,9 @@ def extract_json_object(text: str) -> dict[str, Any]:
     Raises:
         json.JSONDecodeError: 无法找到有效 JSON 时抛出。
     """
-    # 移除 markdown 代码块标记
-    cleaned = re.sub(r"```(?:json)?\s*\n?", "", text)
-    cleaned = re.sub(r"```", "", cleaned)
+    # 移除 markdown 代码块标记（使用预编译正则，避免每次调用重复编译）
+    cleaned = _JSON_FENCE_STRIP_PATTERN.sub("", text)
+    cleaned = _JSON_BACKTICK_STRIP_PATTERN.sub("", cleaned)
 
     # 找到第一个 '{' 位置
     start = cleaned.find("{")

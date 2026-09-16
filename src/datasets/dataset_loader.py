@@ -402,6 +402,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         """
         # 清空任务列表，避免重复加载时数据累积
         self._tasks.clear()
+        # 跨文件去重集合：加载多子集 JSONL 时按 instance_id 去重（加载开始时重置，避免重复加载残留）
+        self._seen_task_ids: set[str] = set()
 
         jsonl_paths = self._resolve_jsonl_paths()
 
@@ -420,7 +422,6 @@ class SWEBenchDataset(BaseDatasetLoader):
         enrichment = self._load_enrichment(SWE_BENCH_ENRICHMENT)
 
         loaded = 0
-        seen_ids: set[str] = set()
         for jsonl_path in jsonl_paths:
             if not os.path.exists(jsonl_path):
                 continue
@@ -435,59 +436,84 @@ class SWEBenchDataset(BaseDatasetLoader):
                         logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
                         continue
 
-                    # 构建 BenchmarkTask
-                    task_id = data.get("instance_id", f"swe_{line_num}")
-                    # 合并加载多个子集文件时按 instance_id 去重（mini 是 lite 的子集）
-                    if task_id in seen_ids:
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
                         continue
-                    seen_ids.add(task_id)
-                    repo_name = data.get("repository", "unknown")
-                    problem_statement = data.get(
-                        "problem_statement",
-                        f"Fix bug in {repo_name} ({task_id})",
-                    )
-                    # 源码补充文件按 instance_id 合并（官方 JSONL 缺源码时的补全通道）
-                    enriched = enrichment.get(task_id, {})
-                    data = {**data, **enriched}
 
-                    # test_code 字段优先级（兼容自定义与官方字段命名）：
-                    # 显式测试代码字段 > 官方 test_patch（测试补丁）> test_before_patches
-                    test_code = data.get("test_code") or data.get("test_patch") or data.get("test_before_patches", "")
-                    # instance_code 字段优先级：显式源码字段（自定义 JSONL 或
-                    # 补充文件可提供 instance_code/base_code）> problem_statement 兜底。
-                    # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，
-                    # 此类任务在基准中仅验证流程、不产生有效修复对比。
-                    instance_code = data.get("instance_code") or data.get("base_code") or problem_statement
-                    # 从官方修复补丁提取目标函数（P0：target_function 定位）
-                    suggested_function = self._extract_suggested_function(data.get("patch", ""))
-
-                    total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
-                    expected_pass = data.get("pass_num_before", 0) or 0
-                    total_pass = data.get("pass_num_after", 0) or total_tests
-
-                    task = BenchmarkTask(
-                        task_id=task_id,
-                        repo_name=repo_name,
-                        problem_statement=problem_statement,
-                        instance_code=instance_code,
-                        test_code=test_code,
-                        expected_pass_count=expected_pass,
-                        total_test_count=total_pass if total_pass > 0 else total_tests,
-                        metadata={
-                            "repository": repo_name,
-                            "instance_id": task_id,
-                            "original_pass_num": expected_pass,
-                            "final_pass_num": total_pass,
-                            "source": "swe_bench",
-                            # 从官方 patch 的 hunk 头提取的目标函数（可能为 None），
-                            # benchmark 入口用它初始化 target_function 做 AST 聚焦截取
-                            "suggested_function": suggested_function,
-                        },
-                    )
+                    task = self._build_task_from_swe_row(data, enrichment, fallback_task_id=f"swe_{line_num}")
+                    if task is None:
+                        # 重复 instance_id（mini 是 lite 的子集，多文件合并时去重）
+                        continue
                     self._tasks.append(task)
                     loaded += 1
 
         logger.info("SWE-bench 加载完成：%d 个任务", loaded)
+
+    def _build_task_from_swe_row(
+        self, data: dict[str, Any], enrichment: dict[str, dict[str, Any]], fallback_task_id: str
+    ) -> BenchmarkTask | None:
+        """
+        从单条 SWE-bench JSONL 行构建 BenchmarkTask。
+
+        Args:
+            data: 解析后的 JSON 行（已按 instance_id 合并源码补充字段）。
+            enrichment: 源码补充文件按 instance_id 索引的映射（_load_enrichment 产出）。
+            fallback_task_id: 缺少 instance_id 时的兜底任务 ID（带行号便于定位）。
+
+        Returns:
+            构建完成的 BenchmarkTask；instance_id 已存在（重复行）时返回 None。
+        """
+        # 构建 BenchmarkTask
+        task_id = data.get("instance_id", fallback_task_id)
+        # 合并加载多个子集文件时按 instance_id 去重（mini 是 lite 的子集）
+        if task_id in self._seen_task_ids:
+            return None
+        self._seen_task_ids.add(task_id)
+        repo_name = data.get("repository", "unknown")
+        problem_statement = data.get(
+            "problem_statement",
+            f"Fix bug in {repo_name} ({task_id})",
+        )
+        # 源码补充文件按 instance_id 合并（官方 JSONL 缺源码时的补全通道）
+        enriched = enrichment.get(task_id, {})
+        data = {**data, **enriched}
+
+        # test_code 字段优先级（兼容自定义与官方字段命名）：
+        # 显式测试代码字段 > 官方 test_patch（测试补丁）> test_before_patches
+        test_code = data.get("test_code") or data.get("test_patch") or data.get("test_before_patches", "")
+        # instance_code 字段优先级：显式源码字段（自定义 JSONL 或
+        # 补充文件可提供 instance_code/base_code）> problem_statement 兜底。
+        # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，
+        # 此类任务在基准中仅验证流程、不产生有效修复对比。
+        instance_code = data.get("instance_code") or data.get("base_code") or problem_statement
+        # 从官方修复补丁提取目标函数（P0：target_function 定位）
+        suggested_function = self._extract_suggested_function(data.get("patch", ""))
+
+        total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
+        expected_pass = data.get("pass_num_before", 0) or 0
+        total_pass = data.get("pass_num_after", 0) or total_tests
+
+        return BenchmarkTask(
+            task_id=task_id,
+            repo_name=repo_name,
+            problem_statement=problem_statement,
+            instance_code=instance_code,
+            test_code=test_code,
+            expected_pass_count=expected_pass,
+            total_test_count=total_pass if total_pass > 0 else total_tests,
+            metadata={
+                "repository": repo_name,
+                "instance_id": task_id,
+                "original_pass_num": expected_pass,
+                "final_pass_num": total_pass,
+                "source": "swe_bench",
+                # 从官方 patch 的 hunk 头提取的目标函数（可能为 None），
+                # benchmark 入口用它初始化 target_function 做 AST 聚焦截取
+                "suggested_function": suggested_function,
+            },
+        )
 
     @classmethod
     def download_from_huggingface(
