@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1270 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 39 skipped, 1231 collected) |
-| **Unit Tests** | ✅ Full: 1270 passed, 0 skipped; reduced environment: 1231 passed, 39 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 92% total coverage (core modules: reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%) |
+| **Total Tests** | ✅ 1291 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1251 collected) |
+| **Unit Tests** | ✅ Full: 1291 passed, 0 skipped; reduced environment: 1251 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 94% total coverage (core modules: reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-15 code maintainability deepening round (Ruff rules extended with SIM/PERF/RET/RUF + 337 function type annotations with zero gaps + 7 of 9 high-complexity functions refactored to lower cyclomatic complexity, full suite 1270 passed / coverage 92%); see [CHANGELOG](CHANGELOG.md) for details |
+| **Latest Optimization** | ✅ 2026-09-15 code maintainability deepening round (Ruff rules extended with SIM/PERF/RET/RUF + 337 function type annotations with zero gaps + high-complexity functions refactored including check_health / extract_focused_code, full suite 1291 passed / coverage 94%); see [CHANGELOG](CHANGELOG.md) for details |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), graph/nodes.py (95%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) |
-| **Recent Changes** | ✅ 2026-09-15 maintainability deepening: get_fix_strategy / run / check_dataset / generate / _execute_sandboxed / clear_venv_cache / analyze_cross_file_deps / _analyze_root_cause / _generate_fix_suggestion split or refactored with mapping tables (cyclomatic complexity 11~22 → below 10; check_health and extract_focused_code intentionally kept); see [CHANGELOG](CHANGELOG.md) for details |
+| **Recent Changes** | ✅ 2026-09-15 maintainability deepening + complexity wrap-up: get_fix_strategy / run / check_dataset / generate / _execute_sandboxed / clear_venv_cache / analyze_cross_file_deps / _analyze_root_cause / _generate_fix_suggestion / check_health / extract_focused_code split or refactored with mapping tables (cyclomatic complexity all below 10, zero `ruff --select C901` hits); root-level loose scripts expand_models.py / generate_batch_config.py relocated to scripts/; see [CHANGELOG](CHANGELOG.md) for details |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1270 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1231 collected)
+# Run all unit tests (full 1291 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1251 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -688,7 +688,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (52 test files, full 1291 collected pytest cases; reduced environment collects 1231 / auto-skips 39, total src coverage 94%):
+**Tested modules** (52 test files, full 1291 collected pytest cases; reduced environment collects 1251 / auto-skips 40, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|

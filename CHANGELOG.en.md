@@ -4,6 +4,43 @@
 
 All notable changes are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/).
 
+## [0.9.17] - 2026-09-15 Cyclomatic-complexity wrap-up + directory reorganization + doc number sync
+
+### Cyclomatic complexity wrap-up (digesting the 2 "intentionally kept" items from 0.9.15)
+- `check_health` (11→8): success/failure persistence logic extracted into
+  `_record_health_result()` (unified mark_success/mark_failure + half-open probe
+  closure + tiered logging); the duplicated half-open probe consumption across the
+  4 exception branches is consolidated
+- `extract_focused_code` (13→9): the budget-trimming segment extracted into
+  `_apply_focus_budget()` and the kept-set trimming into `_trim_focus_related()`,
+  so the main flow collapses to a linear "assemble → return if under budget →
+  focus trim → fallback" sequence
+- `ruff check --select C901` now reports zero hits project-wide (previously 2 legacy exemptions)
+
+### Root-level loose scripts relocated to scripts/
+- `expand_models.py` and `generate_batch_config.py` moved into `scripts/`;
+  `expand_models.py`'s sys.path anchor changed from `parent` to `parent.parent`
+- `src/config/config_generator.py` synced: the embedded template of
+  `generate_batch_config_script()` now matches the actual scripts/ file
+  (model_name priority + data-loss guard + provider key derivation), and the
+  `__main__` output path is rewritten to `scripts/generate_batch_config.py`
+- `llm_configs.json` stays at the root: `config.py` / `scripts/check_quota.py` /
+  `docs` all treat the root path as the contract
+- Usage commands in `.env.local.template` and the embedded template comments now read `python scripts/generate_batch_config.py ...`
+
+### Doc number-drift fix (1270/1231/92% → 1291/1251/94%)
+- README (zh/en) test status table: total test count 1270→1291, reduced
+  environment 1231→1251 (skips 39→40: the RAG/visualization 3 files currently
+  hold 40 cases, measured collect basis), coverage 92%→94% (measured TOTAL 94%)
+- The "Latest Optimization / Recent Changes" rows realigned with this round of
+  refactoring and directory reorganization
+- Test-command comments (full 1291 / reduced 1251 collected)
+
+### Verification
+- Full suite **1291 passed / 0 failed**, ruff check + format all green,
+  `ruff check --select C901` zero hits, src total coverage **94%**
+- Related regression: test_api_manager* / test_code_context / test_config* — 195 cases passed
+
 ## [0.9.16] - 2026-09-15 Deep refactoring round (single construction-point convergence + statistical-test convergence + doc alignment)
 
 ### AITesterState initialization double-write convergence (tech-debt digestion)

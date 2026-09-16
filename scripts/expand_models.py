@@ -24,8 +24,8 @@ import json
 import sys
 from pathlib import Path
 
-# 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent))
+# 添加项目根目录到路径（脚本位于 scripts/ 子目录，根目录为上一级）
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.config.config_manager import (
     add_llm_config,
     count_llm_configs,

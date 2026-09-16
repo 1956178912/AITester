@@ -260,6 +260,39 @@ class APIManager:
             # HEALTH_BASED
             return self._select_node_health_based()
 
+    def _record_health_result(
+        self,
+        node: APIHealth,
+        ok: bool,
+        elapsed_ms: float | None,
+        error_type: str,
+        is_half_open_probe: bool,
+    ) -> bool:
+        """把单次健康检查的结果落到节点状态上（成功标记 / 失败标记 + 半开探测闭环）。
+
+        4.2：半开探测窗口内的检查同样消费探测结果——成功闭合熔断器，
+        失败重开半程冷却期，与 call 路径口径一致。
+
+        Args:
+            node: 被检查的节点。
+            ok: 检查是否通过。
+            elapsed_ms: 本次请求耗时（毫秒）；失败时为 None。
+            error_type: 失败原因标识（成功时传空串即可）。
+            is_half_open_probe: 本次检查是否发生在半开探测窗口内。
+
+        Returns:
+            与 ok 相同，便于调用方直接 return。
+        """
+        if ok:
+            node.mark_success(elapsed_ms or 0.0)
+            logger.debug("健康检查通过: %s (%.2fms)", node.config.model_name, elapsed_ms or 0.0)
+        else:
+            node.mark_failure(error_type)
+            logger.warning("健康检查失败: %s (%s)", node.config.model_name, error_type)
+        if is_half_open_probe:
+            node._probe_circuit_half_open(ok)
+        return ok
+
     def check_health(self, node: APIHealth) -> bool:
         """对单个节点进行健康检查。
 
@@ -267,13 +300,12 @@ class APIManager:
         成功则闭合熔断器，失败则重开半程冷却期，与 call 路径口径一致。
         """
         is_half_open_probe = self._enter_half_open_probe(node)
+        client = self._client_cache.get(node.config.model_name)
+        if not client:
+            node.is_healthy = False
+            return False
+        start = time.time()
         try:
-            client = self._client_cache.get(node.config.model_name)
-            if not client:
-                node.is_healthy = False
-                return False
-            start = time.time()
-            # 使用最小请求测试
             response = client.chat.completions.create(
                 model=node.config.model_name,
                 messages=[{"role": "user", "content": "hi"}],
@@ -282,34 +314,19 @@ class APIManager:
                 timeout=self.config.health_check_timeout,
             )
             elapsed_ms = (time.time() - start) * 1000
-            # 检查响应
-            if response and response.choices:
-                node.mark_success(elapsed_ms)
-                if is_half_open_probe:
-                    node._probe_circuit_half_open(True)
-                logger.debug("健康检查通过: %s (%.2fms)", node.config.model_name, elapsed_ms)
-                return True
-            node.mark_failure("empty_response")
-            if is_half_open_probe:
-                node._probe_circuit_half_open(False)
-            return False
+            ok = bool(response and response.choices)
+            return self._record_health_result(
+                node, ok, elapsed_ms, "empty_response" if not ok else "", is_half_open_probe
+            )
         except openai.RateLimitError:
-            node.mark_failure("rate_limit")
-            if is_half_open_probe:
-                node._probe_circuit_half_open(False)
-            logger.warning("API 限流: %s", node.config.model_name)
-            return False
+            return self._record_health_result(node, False, None, "rate_limit", is_half_open_probe)
         except openai.APIError as e:
             status = getattr(e, "status_code", "unknown")
-            node.mark_failure(f"api_error:{status}")
-            if is_half_open_probe:
-                node._probe_circuit_half_open(False)
+            self._record_health_result(node, False, None, f"api_error:{status}", is_half_open_probe)
             logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
             return False
         except Exception as e:
-            node.mark_failure(f"error:{type(e).__name__}")
-            if is_half_open_probe:
-                node._probe_circuit_half_open(False)
+            self._record_health_result(node, False, None, f"error:{type(e).__name__}", is_half_open_probe)
             logger.error("健康检查异常: %s - %s", node.config.model_name, _redact(str(e)))
             return False
 

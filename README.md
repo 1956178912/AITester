@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1270 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 39 条，1231 collected） |
-| **单元测试** | ✅ 全量 1270 passed, 0 skipped；精简环境 1231 passed, 39 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 92% 总覆盖（核心模块：reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%） |
+| **总测试数** | ✅ 1291 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1251 collected） |
+| **单元测试** | ✅ 全量 1291 passed, 0 skipped；精简环境 1251 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（核心模块：reports/generator 91% / mysql_client 98% / base_agent 97% / api_manager 95% / dataset_loader 95% / graph/nodes.py 95% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 88% / cli-app 70% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 2026-09-15 代码可维护性深化轮次（Ruff 规则增强 SIM/PERF/RET/RUF + 337 个函数类型注解零缺口 + 9 个高复杂度函数中 7 个重构降圈复杂度，全量 1270 passed / 覆盖率 92%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-15 代码可维护性深化轮次（Ruff 规则增强 SIM/PERF/RET/RUF + 337 个函数类型注解零缺口 + 高复杂度函数重构降圈复杂度含 check_health / extract_focused_code，全量 1291 passed / 覆盖率 94%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (97%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (91%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (95%), graph/nodes.py (95%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (92%), cli/app.py (70%), cli/output.py (92%), logging_utils.py (88%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-15 可维护性深化：get_fix_strategy / run / check_dataset / generate / _execute_sandboxed / clear_venv_cache / analyze_cross_file_deps / _analyze_root_cause / _generate_fix_suggestion 拆分或映射表重构（圈复杂度 11~22 → 10 以下；check_health 与 extract_focused_code 有意保留）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-15 可维护性深化 + 复杂度收尾：get_fix_strategy / run / check_dataset / generate / _execute_sandboxed / clear_venv_cache / analyze_cross_file_deps / _analyze_root_cause / _generate_fix_suggestion / check_health / extract_focused_code 拆分或映射表重构（圈复杂度全部降至 10 以下，`ruff --select C901` 零命中）；根目录散落脚本 expand_models.py / generate_batch_config.py 归位 scripts/；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1270 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1231 个收集）
+# 运行所有单元测试（全量 1291 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1251 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -687,7 +687,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（52 个测试文件，全量 1291 个 pytest 收集用例；精简环境 1231 收集 / 39 自动跳过，src 总覆盖率 94%）：
+**测试覆盖模块**（52 个测试文件，全量 1291 个 pytest 收集用例；精简环境 1251 收集 / 40 自动跳过，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|

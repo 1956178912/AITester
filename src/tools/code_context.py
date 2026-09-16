@@ -124,6 +124,42 @@ def _is_direct_dep(focus: str, candidate: str, top_level_funcs: dict[str, ast.AS
     return candidate in _collect_called_names(focus_node)
 
 
+def _trim_focus_related(
+    kept: dict[str, object],
+    focus: str,
+    top_level_funcs: dict[str, ast.AST],
+) -> dict[str, object]:
+    """裁剪为"焦点 + 一层直接依赖"的最小保留集合。"""
+    return {name: seg for name, seg in kept.items() if name == focus or _is_direct_dep(focus, name, top_level_funcs)}
+
+
+def _apply_focus_budget(
+    header: str,
+    kept: dict[str, object],
+    focus: str,
+    top_level_funcs: dict[str, ast.AST],
+    source_lines: list[str],
+    max_chars: int,
+    result: str,
+) -> str:
+    """焦点函数存在时的逐层预算裁剪：无关函数丢弃 → 函数体首尾截断 → 只留焦点。
+
+    优先级"焦点 > 直接依赖 > 无关函数"，每一层裁完即检查预算，
+    三层都放不下时返回最后一层结果（仍由调用方走字符级兜底）。
+    """
+    if len(kept) > 1:
+        result = _assemble(header, _trim_focus_related(kept, focus, top_level_funcs), source_lines)
+        if len(result) <= max_chars:
+            return result
+    truncated = _truncate_long_body(source_lines, top_level_funcs[focus])
+    minimal_kept = _trim_focus_related(kept, focus, top_level_funcs)
+    minimal_kept[focus] = SimpleNamespace(_prebuilt_text=truncated)
+    result = _assemble(header, minimal_kept, source_lines)
+    if len(result) <= max_chars:
+        return result
+    return _assemble(header, {focus: SimpleNamespace(_prebuilt_text=truncated)}, source_lines)
+
+
 def extract_focused_code(
     source: str,
     focus_function: str | None = None,
@@ -178,33 +214,13 @@ def extract_focused_code(
     if len(result) <= max_chars:
         return result
 
-    if focus_function and focus_function in top_level_funcs:
-        # 第一层裁剪：丢弃与焦点无关的函数（import + 焦点 + 直接依赖）
-        if len(kept) > 1:
-            minimal_kept = {
-                name: seg
-                for name, seg in kept.items()
-                if name == focus_function or _is_direct_dep(focus_function, name, top_level_funcs)
-            }
-            result = _assemble(header, minimal_kept, source_lines)
-            if len(result) <= max_chars:
-                return result
-        # 第二层裁剪：焦点函数体超长 → 首尾截断
-        focus_node = top_level_funcs[focus_function]
-        truncated = _truncate_long_body(source_lines, focus_node)
-        minimal_kept = {
-            name: seg for name, seg in kept.items() if _is_direct_dep(focus_function, name, top_level_funcs)
-        }
-        minimal_kept[focus_function] = SimpleNamespace(_prebuilt_text=truncated)
-        result = _assemble(header, minimal_kept, source_lines)
-        if len(result) <= max_chars:
-            return result
-        # 极端情况：只剩焦点仍超预算 → 只留 import + 截断焦点
-        last_resort = {focus_function: SimpleNamespace(_prebuilt_text=truncated)}
-        result = _assemble(header, last_resort, source_lines)
-        if len(result) <= max_chars:
-            return result
+    focus_in_source = bool(focus_function and focus_function in top_level_funcs)
+    if focus_in_source:
+        result = _apply_focus_budget(
+            header, kept, str(focus_function), top_level_funcs, source_lines, max_chars, result
+        )
 
     # 最终兜底：交给字符级硬截断（truncate_code 会处理超长返回）
-    logger.info("AST 截取仍超预算（%d 字符），回退字符级截断", len(result))
+    if len(result) > max_chars:
+        logger.info("AST 截取仍超预算（%d 字符），回退字符级截断", len(result))
     return result

@@ -4,6 +4,39 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.17] - 2026-09-15 圈复杂度收尾 + 目录归位 + 文档数字同步
+
+### 圈复杂度收尾（消化 0.9.15 遗留的 2 个"有意保留"项）
+- `check_health`（11→8）：成功/失败落盘逻辑抽为 `_record_health_result()`
+  （统一 mark_success/mark_failure + 半开探测闭环 + 日志分级），
+  4 个异常分支的重复半开探测消费代码归一
+- `extract_focused_code`（13→9）：预算裁剪段抽为 `_apply_focus_budget()` +
+  保留集合裁剪抽为 `_trim_focus_related()`，主流程收敛为
+  "组装 → 未超预算返回 → 焦点裁剪 → 兜底" 4 步线性逻辑
+- 全项目 `ruff check --select C901` 零命中（此前 2 处遗留豁免）
+
+### 根目录散落脚本归位 scripts/
+- `expand_models.py`、`generate_batch_config.py` 移入 `scripts/`，
+  `expand_models.py` 的 sys.path 锚点从 `parent` 改为 `parent.parent`
+- `src/config/config_generator.py` 同步：`generate_batch_config_script()` 嵌入模板
+  与 scripts/ 实际文件对齐（model_name 优先 + 数据丢失防护 + provider 键名推导），
+  `__main__` 产物路径改写到 `scripts/generate_batch_config.py`
+- `llm_configs.json` 保留根目录：`config.py` / `scripts/check_quota.py` /
+  `docs` 均以根路径为契约
+- `.env.local.template` 与内嵌模板注释中的用法命令同步为 `python scripts/generate_batch_config.py ...`
+
+### 文档数字漂移修复（1270/1231/92% → 1291/1251/94%）
+- README（中/英）测试状态表：总测试数 1270→1291、精简环境 1231→1251
+  （skip 39→40：RAG/可视化 3 文件当前 40 用例，实测 collect 口径）、
+  覆盖率 92%→94%（实测 TOTAL 94%）
+- "最新优化 / 最近改动" 两行与本次重构、目录归位对齐
+- 测试命令注释（全量 1291 / 精简 1251 收集）
+
+### 验证
+- 全量 **1291 passed / 0 failed**，ruff check + format 全绿，
+  `ruff check --select C901` 零命中，src 总覆盖率 **94%**
+- 相关回归：test_api_manager* / test_code_context / test_config* 共 195 用例通过
+
 ## [0.9.16] - 2026-09-15 深度重构轮次（单一构造点收敛 + 统计检验收敛 + 文档对齐）
 
 ### AITesterState 初始化双写收敛（技术债消化）
