@@ -61,3 +61,9 @@ markers = [
     "integration: 集成测试",
     "unit: 单元测试",
 ]
+filterwarnings = [
+    # scipy ttest_ind 对"近恒定"分组数据（全 0/全 1 配对）计算矩时会出现
+    # catastrophic cancellation（精度损失），属统计检验的已知数值特性，
+    # 结果已按 NaN 占位处理（test_viz_significance 锁定该行为），忽略此告警
+    "ignore:Precision loss occurred in moment calculation:RuntimeWarning",
+]

@@ -7,6 +7,9 @@ ExecutorAgent 沙箱执行路径单元测试（P1：依赖隔离）。
 - 缺失依赖检测写入 error_info.missing_dependencies
 - auto_install_deps 安装失败时 error_info 类型为 dependency_install_failed
 - use_venv=False 时保持原本地执行路径（不创建沙箱）
+
+注：子进程执行逻辑拆分至 src.agents.executor_runtime 后，
+mock 子进程的 patch 目标同步改为 src.agents.executor_runtime.subprocess.run。
 """
 
 import os
@@ -27,7 +30,7 @@ def _make_target_file(tmp_path, source="def add(a, b):\n    return a + b\n"):
 class TestSandboxRouting:
     """use_venv 开关的路由行为。"""
 
-    @patch("src.agents.executor.subprocess.run")
+    @patch("src.agents.executor_runtime.subprocess.run")
     def test_use_venv_routes_to_sandbox(self, mock_run, tmp_path):
         target = _make_target_file(tmp_path)
         mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "2 passed\nTOTAL 100%", "stderr": ""})
@@ -39,7 +42,7 @@ class TestSandboxRouting:
         cwd = kwargs.get("cwd")
         assert cwd is not None and "aitester_sandbox_" in cwd
 
-    @patch("src.agents.executor.subprocess.run")
+    @patch("src.agents.executor_runtime.subprocess.run")
     def test_default_mode_keeps_local_path(self, mock_run, tmp_path):
         target = _make_target_file(tmp_path)
         mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
@@ -53,7 +56,7 @@ class TestSandboxRouting:
 class TestSandboxDependencyDetection:
     """沙箱内的依赖检测与安装。"""
 
-    @patch("src.agents.executor.subprocess.run")
+    @patch("src.agents.executor_runtime.subprocess.run")
     def test_missing_dependency_recorded(self, mock_run, tmp_path):
         """缺失第三方依赖写入 error_info.missing_dependencies。"""
         target = _make_target_file(tmp_path, source="import definitely_not_real_zzz\n\ndef f():\n    return 1\n")

@@ -3,6 +3,11 @@
 
 提供统一的数据集接口，将不同基准测试的数据加载为 AITester 可消费的 Task 对象。
 
+结构说明（优化轮次拆分）：本模块保留数据模型（BenchmarkTask）、抽象基类
+（BaseDatasetLoader）、SWE-bench 加载器（SWEBenchDataset，含模块级 `_datasets`
+全局供测试 patch）与工厂函数；Defects4J-Python 与内置示例数据集已拆分至
+dataset_defects4j.py / dataset_inmemory.py，并经 re-export 维持旧导入路径。
+
 使用方式：
     from src.datasets.dataset_loader import SWEBenchDataset, Defects4JPYDataset, load_dataset
     dataset = SWEBenchDataset("full")
@@ -32,7 +37,6 @@ try:
     import datasets as _datasets
 except ImportError:
     _datasets = None
-
 
 # ─── 数据模型 ─────────────────────────────────────────────────────────────────
 
@@ -438,12 +442,6 @@ class SWEBenchDataset(BaseDatasetLoader):
                         logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
                         continue
 
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError as e:
-                        logger.warning("JSON 解析失败（%s 第 %d 行）: %s", jsonl_path, line_num, e)
-                        continue
-
                     task = self._build_task_from_swe_row(data, enrichment, fallback_task_id=f"swe_{line_num}")
                     if task is None:
                         # 重复 instance_id（mini 是 lite 的子集，多文件合并时去重）
@@ -567,290 +565,13 @@ class SWEBenchDataset(BaseDatasetLoader):
         return output_path
 
 
-# ─── Defects4J-Python 数据集加载器 ────────────────────────────────────────────
-
-
-class Defects4JPYDataset(BaseDatasetLoader):
-    """
-    Defects4J-Python 风格数据集加载器。
-
-    Defects4J 是 Java 生态中最著名的缺陷基准，Defects4J-Python 是其 Python 移植版本，
-    提供真实项目中的历史缺陷修复配对数据。
-
-    本加载器从本地目录解析，若无数据则返回空列表并提示用户。
-    """
-
-    DATASET_NAME = "defects4j_python"
-
-    KNOWN_PROJECTS: ClassVar[list[str]] = [
-        "requests",
-        "pytest",
-        "httpie",
-        "matplotlib",
-        "numpy",
-        "pandas",
-        "scikit-learn",
-    ]
-
-    def _load_project_version(self, version_path: str, project_name: str, version_dir: str) -> BenchmarkTask | None:
-        """
-        加载单个项目版本的缺陷数据。
-
-        Args:
-            version_path: 版本目录路径
-            project_name: 项目名称
-            version_dir: 版本目录名
-        Returns:
-            BenchmarkTask 对象，失败时返回 None
-        """
-        info_path = os.path.join(version_path, "info.json")
-        if not os.path.exists(info_path):
-            return None
-
-        try:
-            with open(info_path, encoding="utf-8") as f:
-                info = json.load(f)
-        except json.JSONDecodeError:
-            return None
-
-        # 加载有缺陷的代码。目录列举一律 sorted：os.listdir 顺序依赖文件系统，
-        # 未排序会让两次加载的拼接顺序不同 → instance_code 内容与下游 RAG md5
-        # 指纹不可复现（此前 tests 目录已 sorted 而 buggy 目录漏了，属不对称遗漏）。
-        # 用 list 累积 + join 替代字符串 +=，避免 CPython 3.12+ 下 += 的 O(n²) 拷贝。
-        buggy_dir = os.path.join(version_path, "buggy")
-        buggy_parts: list[str] = []
-        if os.path.isdir(buggy_dir):
-            for fname in sorted(os.listdir(buggy_dir)):
-                if fname.endswith(".py"):
-                    with open(os.path.join(buggy_dir, fname), encoding="utf-8") as ff:
-                        buggy_parts.append(ff.read() + "\n")
-
-        # 加载测试代码（同样 sorted + list 累积）
-        tests_dir = os.path.join(version_path, "tests")
-        test_parts: list[str] = []
-        if os.path.isdir(tests_dir):
-            for fname in sorted(os.listdir(tests_dir)):
-                if fname.startswith("test_") and fname.endswith(".py"):
-                    with open(os.path.join(tests_dir, fname), encoding="utf-8") as ff:
-                        test_parts.append(ff.read() + "\n")
-
-        buggy_code = "".join(buggy_parts)
-        test_code = "".join(test_parts)
-
-        # 统计测试函数
-        test_funcs = re.findall(r"def test_\w+", test_code)
-        total_tests = len(test_funcs)
-        expected_pass = info.get("expected_pass", total_tests)
-
-        task_id = f"{project_name}__{version_dir}"
-        return BenchmarkTask(
-            task_id=task_id,
-            repo_name=project_name,
-            problem_statement=info.get("description", f"Bug in {project_name}"),
-            instance_code=buggy_code,
-            test_code=test_code,
-            expected_pass_count=expected_pass,
-            total_test_count=total_tests,
-            metadata={
-                "project": project_name,
-                "version": version_dir,
-                "bug_type": info.get("bug_type", "unknown"),
-                "source": "defects4j_python",
-            },
-        )
-
-    def _load_raw_data(self) -> None:
-        """
-        从本地目录加载 Defects4J-Python 数据。
-
-        目录结构:
-            defects4j_python/projects/<project_name>/<version>/
-                buggy/      # 有缺陷的代码
-                fixed/      # 修复后的代码
-                tests/      # 测试套件
-                info.json   # 元数据
-        """
-        # 清空任务列表，避免重复加载时数据累积
-        self._tasks.clear()
-
-        projects_dir = os.path.join(self.data_dir, "projects")
-
-        if not os.path.exists(projects_dir):
-            logger.warning(
-                "Defects4J-Python 数据未找到: %s\n请从 https://github.com/rustcodex/defects4jpython 下载数据",
-                projects_dir,
-            )
-            return
-
-        loaded = 0
-        # sorted：项目/版本两级列举也需确定性，否则任务列表顺序跨文件系统漂移
-        for project_name in sorted(os.listdir(projects_dir)):
-            project_dir = os.path.join(projects_dir, project_name)
-            if not os.path.isdir(project_dir):
-                continue
-            for version_dir in sorted(os.listdir(project_dir)):
-                version_path = os.path.join(project_dir, version_dir)
-                task = self._load_project_version(version_path, project_name, version_dir)
-                if task is not None:
-                    self._tasks.append(task)
-                    loaded += 1
-
-        logger.info("Defects4J-Python 加载完成：%d 个任务", loaded)
-
-
-# ─── 内置示例数据集 ────────────────────────────────────────────────────────────
-
-
-class InMemoryDataset(BaseDatasetLoader):
-    """
-    内置示例数据集：无需外部下载，直接提供用于快速验证的测试任务。
-
-    适用于离线环境和单元测试。
-    """
-
-    DATASET_NAME = "in_memory"
-
-    def __init__(self, subset: str | None = None, **kwargs: Any) -> None:
-        """
-        初始化内置示例数据集。
-
-        Args:
-            subset: 数据子集名称（保留接口兼容，实际忽略；本数据集无子集概念）。
-            **kwargs: 兼容 load_dataset 工厂传递的额外参数（本数据集忽略）。
-        """
-        super().__init__(subset=subset)
-
-    def _load_raw_data(self) -> None:
-        # InMemoryDataset 的数据由 add_sample_tasks() 在 __init__ 中手动填充，
-        # 无需从外部文件读取，因此此处留空。子类覆盖此方法以加载真实数据集。
-        return None
-
-    def add_task(self, task: BenchmarkTask) -> None:
-        """手动添加一个任务到数据集。"""
-        self._tasks.append(task)
-
-    def add_sample_tasks(self) -> None:
-        """添加一组预定义的示例任务（用于快速验证）。"""
-        self.add_task(
-            BenchmarkTask(
-                task_id="examples__calculator_divide",
-                repo_name="examples/calculator",
-                problem_statement="修复 divide 函数的除零 bug",
-                instance_code="""\
-def add(a: float, b: float) -> float:
-    return a + b
-
-def subtract(a: float, b: float) -> float:
-    return a - b
-
-def multiply(a: float, b: float) -> float:
-    return a * b
-
-def divide(a: float, b: float) -> float:
-    # BUG: 除零时未抛出异常
-    return a / b
-
-def factorial(n: int) -> int:
-    # BUG: 负数输入会递归溢出
-    if n == 0:
-        return 1
-    return n * factorial(n - 1)
-""",
-                test_code="""\
-from calculator import divide, factorial
-import pytest
-
-def test_divide_by_zero():
-    with pytest.raises(ValueError):
-        divide(1, 0)
-
-def test_divide_normal():
-    assert divide(10, 2) == 5.0
-
-def test_factorial_negative():
-    with pytest.raises(RecursionError):
-        factorial(-1)
-""",
-                expected_pass_count=0,
-                total_test_count=3,
-                metadata={"source": "examples"},
-            )
-        )
-
-        self.add_task(
-            BenchmarkTask(
-                task_id="examples__binary_search",
-                repo_name="examples/buggy_library",
-                problem_statement="修复二分查找的索引越界 bug",
-                instance_code="""\
-def binary_search(arr: list, target: int) -> int:
-    # BUG: right 初始值应为 len(arr) - 1
-    left, right = 0, len(arr)
-    while left <= right:
-        mid = (left + right) // 2
-        if arr[mid] == target:
-            return mid
-        elif arr[mid] < target:
-            left = mid + 1
-        else:
-            right = mid - 1
-    return -1
-""",
-                test_code="""\
-from buggy_library import binary_search
-
-def test_binary_search_found():
-    assert binary_search([1, 2, 3, 4, 5], 3) == 2
-
-def test_binary_search_not_found():
-    assert binary_search([1, 2, 3], 4) == -1
-
-def test_binary_search_empty():
-    assert binary_search([], 1) == -1
-""",
-                expected_pass_count=0,
-                total_test_count=3,
-                metadata={"source": "examples"},
-            )
-        )
-
-        self.add_task(
-            BenchmarkTask(
-                task_id="examples__is_palindrome",
-                repo_name="examples/string_utils",
-                problem_statement="修复 is_palindrome 未处理大小写和非字母数字字符的 bug",
-                instance_code="""\
-def is_palindrome(s: str) -> bool:
-    # BUG: 未过滤非字母数字字符和统一大小写
-    return s == s[::-1]
-
-def reverse_string(s: str) -> str:
-    return s[::-1]
-""",
-                test_code="""\
-from string_utils import is_palindrome
-
-def test_is_palindrome_simple():
-    assert is_palindrome("aba") is True
-
-def test_is_palindrome_with_punctuation():
-    assert is_palindrome("A man, a plan, a canal: Panama") is True
-
-def test_is_palindrome_mixed_case():
-    assert is_palindrome("Racecar") is True
-""",
-                expected_pass_count=0,
-                total_test_count=3,
-                metadata={"source": "examples"},
-            )
-        )
-
-    @classmethod
-    def create_with_samples(cls) -> InMemoryDataset:
-        """创建并预填充示例任务的数据集实例。"""
-        dataset = cls()
-        dataset.add_sample_tasks()
-        return dataset
+# 拆分出的子类经 re-export 保持旧导入路径（from src.datasets.dataset_loader
+# import Defects4JPYDataset / InMemoryDataset）。放在 SWEBenchDataset 类定义之后：
+# dataset_defects4j / dataset_inmemory 需在本模块类定义完成后反向导入
+# BaseDatasetLoader / BenchmarkTask，顶层导入会触发循环导入。
+# ruff E402/I001：刻意置于模块中部（非顶层），忽略排序告警。
+from src.datasets.dataset_defects4j import Defects4JPYDataset  # noqa: E402, I001
+from src.datasets.dataset_inmemory import InMemoryDataset  # noqa: E402
 
 
 # ─── 便捷工厂函数 ─────────────────────────────────────────────────────────────

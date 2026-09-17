@@ -3,44 +3,41 @@
 
 支持超时配置、重试机制和覆盖率报告解析。
 默认在本地环境执行，Docker 模式需要额外配置。
+
+结构说明（优化轮次拆分）：本模块保留 ExecutorAgent 类主体与本地执行编排
+（execute / _execute_local），其余能力拆分至四个子模块以保持单一职责：
+- executor_imports: 导入路径自动修复（模块名提取 / sys.path 注入 / 相似名替换）
+- executor_output: 执行结果解析（覆盖率 / 失败用例 / 错误信息）
+- executor_modes: venv 沙箱与 Docker 隔离执行模式
+- executor_runtime: 子进程运行、重试与临时资源清理
+拆分后方法以模块函数实现、类属性挂载绑定，外部以
+`ExecutorAgent.<method>` 形式调用的签名与语义保持不变（测试 patch 路径
+`src.agents.executor.ExecutorAgent.<method>` 不受影响）。
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import re
-import subprocess
 import sys
 import tempfile
-from difflib import SequenceMatcher
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-from src.tools.dependency import extract_import_module_names, is_standard_library
+from src.agents.executor_imports import (
+    apply_import_replacements,
+    auto_fix_imports,
+    build_sys_path_code,
+    cached_search_module_path,
+    extract_imports,
+    extract_module_name_from_file,
+    is_similar_module_name,
+    resolve_module_paths,
+)
+from src.agents.executor_modes import execute_docker, execute_sandboxed
+from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
+from src.agents.executor_runtime import cleanup_sandbox, cleanup_temp_file, run_pytest_with_retry
 
 logger = logging.getLogger(__name__)
-
-# ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
-# 提取模块名（无扩展名）
-_RE_MODULE_NAME = re.compile(r"([^/\\]+)\.py$")
-# 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比
-_RE_COVERAGE_TOTAL = re.compile(r"TOTAL\s+.+?(\d+)%")
-# 匹配 pytest 输出中 "FAILED test_file.py::test_func" 行（提取失败用例名）
-# 预编译到模块级：_parse_failed_cases 每次执行测试都要调用，
-# 避免每次重新编译正则
-_RE_FAILED_CASE = re.compile(r"FAILED\s+(.+?\.py::\S+)")
-# ───────────────────────────────────────────────────────────────────────────
-
-
-# ─── 标准库判定 ─────────────────────────────────────────────────────────────
-# 导入路径修复需区分"标准库（无需修复）"与"第三方/本地模块（可能需修复）"。
-# 此前此处维护一份 80+ 项硬编码 frozenset，与 dependency.is_standard_library
-# （基于 sys.stdlib_module_names 权威清单）双源漂移：硬编码版混入第三方
-# diskcache、pytest，且缺 asyncio/importlib 等 stdlib。2026-09-15 收敛轮次
-# 删除硬编码清单，统一复用 dependency.is_standard_library；pytest 作为测试
-# 运行器始终可用，在 _extract_imports 内显式跳过（与历史行为一致）。
 
 
 class ExecutorAgent:
@@ -112,6 +109,15 @@ class ExecutorAgent:
         if self.use_venv:
             return self._execute_sandboxed(test_code, target_file, target_function)
 
+        return self._execute_local(test_code, target_file, target_function)
+
+    def _execute_local(
+        self,
+        test_code: str,
+        target_file: str,
+        target_function: str | None = None,
+    ) -> dict[str, Any]:
+        """本地系统 Python 执行路径（历史行为，保持原 execute 内联逻辑）。"""
         # 项目根 = 本文件上溯三层（src/agents/executor.py → 仓库根），与 workflow.py
         # 的 patch 白名单、cli/app.py 的根目录口径一致。此前只上溯两层得到 src/，
         # 导致 rglob 模块搜索与 pytest cwd 都少了一层：src 外的 examples/ 等目录
@@ -190,680 +196,24 @@ class ExecutorAgent:
         finally:
             self._cleanup_temp_file(test_file)
 
-    def _execute_sandboxed(
-        self,
-        test_code: str,
-        target_file: str,
-        target_function: str | None = None,
-    ) -> dict[str, Any]:
-        """在隔离沙箱中执行测试：临时目录 + 缓存 venv + 依赖自动安装。
 
-        流程：
-        1. 创建临时沙箱目录，拷入被测模块文件（按 target_file 的模块名）；
-        2. 写入自动修复导入后的测试文件；
-        3. 检测被测代码 + 测试代码缺失的第三方依赖：
-           - auto_install_deps=True → 在 venv 内 pip install（仅影响 venv）；
-           - auto_install_deps=False → 记录缺失清单到 error_info，照常执行
-             （失败将由错误分类器归为 import_error，便于区分代码 bug 与环境问题）；
-        4. 用 venv 解释器（或系统解释器）在沙箱目录运行 pytest，
-           PYTHONPATH 仅指向沙箱目录，实现任务间依赖隔离；
-        5. 清理沙箱目录（venv 保留缓存，相同依赖组合的任务复用）。
-
-        Returns:
-            与 execute() 相同结构的结果字典。
-        """
-        sandbox_dir = tempfile.mkdtemp(prefix="aitester_sandbox_")
-        # 被测模块名：取 target_file 基名（与 _extract_module_name_from_file 语义一致）
-        module_name = self._extract_module_name_from_file(target_file)
-        module_file = os.path.join(sandbox_dir, f"{module_name}.py")
-        try:
-            with open(target_file, encoding="utf-8") as f:
-                target_source = f.read()
-            with open(module_file, "w", encoding="utf-8") as f:
-                f.write(target_source)
-        except OSError as e:
-            self._cleanup_sandbox(sandbox_dir)
-            return {
-                "passed": False,
-                "output": f"读取被测文件失败: {e}",
-                "coverage": 0.0,
-                "failed_cases": [],
-                "error_info": {"type": "file_not_found", "message": str(e), "file_path": target_file},
-            }
-
-        # 测试文件写入沙箱（导入修复以沙箱为搜索根，模块名与文件名天然对齐）
-        fixed_test_code = self._auto_fix_imports(test_code, module_file, sandbox_dir)
-        test_file = os.path.join(sandbox_dir, "test_generated.py")
-        with open(test_file, "w", encoding="utf-8") as f:
-            f.write(fixed_test_code)
-
-        # ── 依赖检测与安装 ──────────────────────────────────────────────────
-        env, python_path, dep_install_note, sandbox_error_info, missing_modules = self._prepare_dependencies(
-            target_source, fixed_test_code, module_file, sandbox_dir
-        )
-
-        # 依赖安装失败/venv 创建失败：测试结果将不可信（缺失依赖仍在），
-        # 直接提前返回，让 Debugger 拿到准确的 dependency_install_failed 诊断
-        if sandbox_error_info:
-            self._cleanup_sandbox(sandbox_dir)
-            return {
-                "passed": False,
-                "output": dep_install_note or "依赖处理失败",
-                "coverage": 0.0,
-                "failed_cases": [],
-                "error_info": sandbox_error_info,
-            }
-
-        try:
-            cmd = [
-                python_path,
-                "-m",
-                "pytest",
-                test_file,
-                "-v",
-                "--tb=short",
-                f"--cov={sandbox_dir}",
-                "--cov-report=term",
-            ]
-            if target_function:
-                cmd.extend(["-k", target_function])
-
-            output, last_result = self._run_pytest_with_retry(cmd, env, sandbox_dir)
-            if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
-                result = {
-                    "passed": False,
-                    "output": output,
-                    "coverage": 0.0,
-                    "failed_cases": [],
-                    "error_info": last_result[1],
-                }
-            else:
-                coverage = self._parse_coverage(output)
-                failed_cases = self._parse_failed_cases(output)
-                passed = last_result is not None and last_result.returncode == 0
-                result = {
-                    "passed": passed,
-                    "output": output,
-                    "coverage": coverage,
-                    "failed_cases": failed_cases,
-                }
-                if last_result is not None and last_result.returncode != 0:
-                    result["error_info"] = self._build_error_info(last_result, output)
-                    result["error_info"]["missing_dependencies"] = sorted(missing_modules)
-
-            # 依赖检测结论写入 dep_note，供 Debugger 与实验分析使用。
-            # 注：原"安装失败优先覆盖 error_info"分支不可达（安装失败/venv 创建失败
-            # 在上方依赖检测段已提前 return，此处 sandbox_error_info 必为 None），已删除
-            if dep_install_note:
-                result["dep_note"] = dep_install_note
-            return result
-        finally:
-            # 清理临时沙箱（venv 缓存在 ~/.cache/aitester/venvs/，跨任务保留）
-            self._cleanup_sandbox(sandbox_dir)
-
-    def _prepare_dependencies(
-        self,
-        target_source: str,
-        fixed_test_code: str,
-        module_file: str,
-        sandbox_dir: str,
-    ) -> tuple[dict[str, str], str, str, dict[str, Any] | None, list[str]]:
-        """检测并安装缺失依赖，准备沙箱执行环境。
-
-        Returns:
-            (env, python_path, dep_install_note, sandbox_error_info, missing_modules) 五元组：
-            env 为注入 PYTHONPATH 的环境变量副本，python_path 为执行解释器路径，
-            dep_install_note 为依赖安装结论文本，sandbox_error_info 为安装失败诊断
-            （成功时 None），missing_modules 为缺失模块清单。
-        """
-        from src.tools.dependency import (
-            create_venv,
-            extract_imported_modules,
-            find_missing_modules,
-            install_packages,
-            suggest_package_names,
-            venv_cache_dir,
-        )
-
-        required_modules = extract_imported_modules(target_source + "\n" + fixed_test_code)
-        missing_modules = find_missing_modules(required_modules, extra_search_files=[module_file])
-        missing_packages = suggest_package_names(missing_modules)
-
-        env = os.environ.copy()
-        # 模块搜索路径以沙箱目录为首（追加原 PYTHONPATH 保留 pytest 等测试工具）；
-        # 空段过滤防尾随冒号（语义同上，空元素等价 CWD 可遮蔽同名文件）
-        env["PYTHONPATH"] = os.pathsep.join(
-            [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
-        )
-        python_path = sys.executable
-        dep_install_note = ""
-        sandbox_error_info: dict[str, Any] | None = None
-
-        if missing_packages and self.use_venv:
-            # 创建/复用缓存 venv（相同依赖组合共享，省 1-3s 重建开销）
-            venv_dir = venv_cache_dir(missing_packages)
-            try:
-                python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
-                if self.auto_install_deps:
-                    ok, summary = install_packages(python_path, missing_packages, timeout=self.dep_install_timeout)
-                    dep_install_note = f"依赖安装{'成功' if ok else '失败'}: {summary}"
-                    if not ok:
-                        sandbox_error_info = {
-                            "type": "dependency_install_failed",
-                            "message": f"缺失依赖安装失败: {missing_packages}",
-                            "detail": summary,
-                        }
-            except RuntimeError as e:
-                sandbox_error_info = {"type": "dependency_install_failed", "message": str(e), "detail": str(e)}
-
-        return env, python_path, dep_install_note, sandbox_error_info, missing_modules
-
-    @staticmethod
-    def _cleanup_sandbox(sandbox_dir: str) -> None:
-        """清理沙箱临时目录，失败仅记录警告（venv 缓存目录不受影响）。"""
-        try:
-            if os.path.isdir(sandbox_dir):
-                import shutil
-
-                shutil.rmtree(sandbox_dir, ignore_errors=True)
-                logger.debug("已清理沙箱目录: %s", sandbox_dir)
-        except OSError as e:
-            logger.warning("清理沙箱目录失败: %s", e)
-
-    def _execute_docker(
-        self,
-        test_code: str,
-        target_file: str,
-        target_function: str | None = None,
-    ) -> dict[str, Any]:
-        """4.3 Docker 隔离执行：经 docker CLI 在容器内跑 pytest。
-
-        设计口径（保守，避免实验口径混淆）：
-        - 容器镜像（默认 aitester:latest，对应仓库根 Dockerfile）内置全部
-          依赖（构建期 pip install，Docker 层缓存复用），任务代码与测试
-          代码经挂载卷传入，容器间完全隔离；
-        - docker CLI 不存在时提前返回 docker_unavailable 诊断，不静默
-          降级到本地执行（"以为隔离了其实没有" 会污染对比实验口径）；
-        - 相比 venv 模式，镜像构建一次后每任务零安装开销（依赖预安装
-          缓存天然生效），适合需要特定系统依赖的 SWE-bench 任务。
-
-        Returns:
-            与 execute() 相同结构的结果字典（额外携带 docker_image 字段，
-            供实验分析记录执行模式差异）。
-        """
-        import shutil
-
-        if shutil.which("docker") is None:
-            return {
-                "passed": False,
-                "output": "docker CLI 未安装或不在 PATH 中，无法启用 Docker 隔离执行",
-                "coverage": 0.0,
-                "failed_cases": [],
-                "error_info": {
-                    "type": "docker_unavailable",
-                    "message": "请安装 docker 并构建镜像：docker build -t aitester:latest .",
-                },
-                "docker_image": self.docker_image,
-            }
-
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        module_name = self._extract_module_name_from_file(target_file)
-        fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
-
-        # 临时目录承载被测模块与测试文件，经挂载卷传入容器（容器根文件系统
-        # 只读语义由镜像 WORKDIR 保证，任务间无残留）
-        sandbox_dir = tempfile.mkdtemp(prefix="aitester_docker_")
-        try:
-            target_source = ""
-            with open(target_file, encoding="utf-8") as tf_src:
-                target_source = tf_src.read()
-            with open(os.path.join(sandbox_dir, f"{module_name}.py"), "w", encoding="utf-8") as mf:
-                mf.write(target_source)
-            with open(os.path.join(sandbox_dir, "test_generated.py"), "w", encoding="utf-8") as tf:
-                tf.write(fixed_test_code)
-
-            cmd = [
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{sandbox_dir}:/workspace",
-                "-w",
-                "/workspace",
-                self.docker_image,
-                "python",
-                "-m",
-                "pytest",
-                "test_generated.py",
-                "-v",
-                "--tb=short",
-                "--cov=/workspace",
-                "--cov-report=term",
-            ]
-            if target_function:
-                cmd.extend(["-k", target_function])
-
-            try:
-                # 容器启动开销（镜像拉取/文件系统初始化）远大于本地子进程，
-                # 超时下限放宽到 120s 避免误判
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=max(self.timeout, 120),
-                    env=os.environ,
-                )
-            except subprocess.TimeoutExpired as e:
-                return {
-                    "passed": False,
-                    "output": f"Docker 执行超时（>{max(self.timeout, 120)}s）",
-                    "coverage": 0.0,
-                    "failed_cases": [],
-                    "error_info": {"type": "docker_timeout", "message": str(e)},
-                    "docker_image": self.docker_image,
-                }
-
-            output = result.stdout + result.stderr
-            passed = result.returncode == 0
-            result_dict = {
-                "passed": passed,
-                "output": output,
-                "coverage": self._parse_coverage(output),
-                "failed_cases": self._parse_failed_cases(output),
-                "docker_image": self.docker_image,
-            }
-            if result.returncode != 0:
-                # _build_error_info 依赖 CompletedProcess.returncode，
-                # 用鸭子类型对象适配（字段一致即可）
-                fake_result = type(
-                    "_DockerResult",
-                    (),
-                    {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr},
-                )()
-                result_dict["error_info"] = self._build_error_info(fake_result, output)
-            return result_dict
-        except OSError as e:
-            return {
-                "passed": False,
-                "output": f"读取被测文件失败: {e}",
-                "coverage": 0.0,
-                "failed_cases": [],
-                "error_info": {"type": "file_not_found", "message": str(e), "file_path": target_file},
-            }
-        finally:
-            self._cleanup_sandbox(sandbox_dir)
-
-    @staticmethod
-    def _build_error_info(last_result: subprocess.CompletedProcess[str], output: str) -> dict[str, Any]:
-        """根据测试结果构建错误信息字典。"""
-        return {
-            "type": "test_failure",
-            "returncode": last_result.returncode,
-            "has_syntax_error": "SyntaxError" in output or "ImportError" in output,
-            "has_runtime_error": any(e in output for e in ["TypeError", "ValueError", "ZeroDivisionError"]),
-        }
-
-    @staticmethod
-    def _cleanup_temp_file(test_file: str) -> None:
-        """清理临时测试文件，失败时仅记录警告。"""
-        try:
-            if os.path.exists(test_file):
-                os.unlink(test_file)
-                logger.debug("已清理临时测试文件: %s", test_file)
-        except OSError as e:
-            logger.warning("清理临时文件失败: %s", e)
-
-    def _run_pytest_with_retry(self, cmd: list, env: dict, project_root: str) -> tuple[str, Any]:
-        """
-        带重试的 pytest 执行逻辑，最多尝试 2 次。
-        超时/环境问题直接返回 error 字典，其他异常仅记录日志并返回空结果。
-
-        Returns:
-            (output, last_result) 元组，last_result 为 subprocess.CompletedProcess 或 None。
-        """
-        max_attempts = 2
-        last_output = ""
-        last_result = None
-
-        for attempt in range(max_attempts):
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                    cwd=project_root,
-                    env=env,
-                )
-                last_result = result
-                last_output = result.stdout + result.stderr
-                if result.returncode == 0:
-                    break
-                logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
-            except subprocess.TimeoutExpired as e:
-                # TimeoutExpired 携带超时前已累积的部分 stdout/stderr（text 模式下为 str，
-                # 未产生时可能为 None）。合并进 last_output，让下游 Debugger 能拿到现场
-                # 快照而非空白文本（此前超时分支丢失了部分输出）。
-                partial_output = (e.output or "") + (e.stderr or "")
-                last_output = partial_output
-                error_msg = f"测试执行超时（>{self.timeout}s）"
-                logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
-                error_info = {
-                    "type": "timeout",
-                    "message": error_msg,
-                    "timeout_seconds": self.timeout,
-                    "command": " ".join(cmd[:5]) if len(cmd) > 5 else " ".join(cmd),
-                }
-                # 超时/环境错误需由调用方直接 return，这里用特殊标记
-                return last_output, ("EARLY_RETURN", error_info)
-            except FileNotFoundError as e:
-                error_msg = "执行环境错误（找不到 pytest 或 Python 解释器）"
-                logger.error("执行环境错误（找不到 pytest）: %s", e)
-                return last_output, (
-                    "EARLY_RETURN",
-                    {
-                        "type": "file_not_found",
-                        "message": error_msg,
-                        "detail": str(e),
-                    },
-                )
-            except PermissionError as e:
-                error_msg = "权限不足，无法执行测试文件"
-                logger.error("权限错误: %s", e)
-                return last_output, (
-                    "EARLY_RETURN",
-                    {
-                        "type": "permission_error",
-                        "message": error_msg,
-                        "file_path": str(e.filename) if hasattr(e, "filename") else "",
-                    },
-                )
-            except Exception as e:
-                error_msg = f"测试执行异常: {type(e).__name__}: {e}"
-                logger.error("测试执行异常: %s", e)
-                last_output = error_msg
-                last_result = None
-                break
-
-        return last_output, last_result
-
-    @staticmethod
-    def _extract_module_name_from_file(target_file: str) -> str:
-        """
-        从文件路径提取模块名（不含扩展名）。
-
-        Args:
-            target_file: 被测代码文件路径。
-
-        Returns:
-            模块名称（如 'calculator' 从 'examples/calculator.py'）。
-        """
-        # 使用预编译的正则表达式提取模块名
-        match = _RE_MODULE_NAME.search(target_file)
-        if match:
-            return match.group(1)
-        # 备用方案：使用 os.path.splitext
-        return os.path.splitext(os.path.basename(target_file))[0]
-
-    @staticmethod
-    @lru_cache(maxsize=256)
-    def _cached_search_module_path(module_name: str, root_path_str: str, max_depth: int) -> tuple[str, ...]:
-        """
-        缓存版本的模块路径搜索（优化高频调用场景）。
-
-        使用 LRU 缓存避免重复搜索相同模块，显著提升性能。
-
-        Args:
-            module_name: 模块名称（不含 .py 后缀）。
-            root_path_str: 项目根目录路径（字符串形式，用于缓存键）。
-            max_depth: 最大搜索深度，默认 3 层。
-
-        Returns:
-            匹配的目录路径元组（去重）。
-        """
-        root_path = Path(root_path_str)
-        matched_dirs = set()
-
-        # 策略 1：直接匹配文件名
-        py_file = root_path / f"{module_name}.py"
-        if py_file.exists():
-            matched_dirs.add(str(py_file.parent))
-            return tuple(matched_dirs)
-
-        # 策略 2：检查常见子目录
-        common_dirs = ["src", "lib", "tests", "."]
-        for common_dir in common_dirs:
-            candidate = root_path / common_dir / f"{module_name}.py"
-            if candidate.exists():
-                matched_dirs.add(str(candidate.parent))
-                return tuple(matched_dirs)
-
-        # 策略 3：深度限制的 rglob 搜索
-        for found_file in root_path.rglob(f"{module_name}.py"):
-            rel_parts = found_file.relative_to(root_path).parts
-            if len(rel_parts) <= max_depth:
-                matched_dirs.add(str(found_file.parent))
-                break
-
-        # 策略 4：查找包目录
-        pkg_dir = root_path / module_name
-        if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists():
-            matched_dirs.add(str(pkg_dir))
-
-        return tuple(matched_dirs)
-
-    @staticmethod
-    def _auto_fix_imports(test_code: str, target_file: str, project_root: str) -> str:
-        """
-        自动修复模块导入路径（优化版）
-
-        分析测试代码中的 import 语句，动态添加 sys.path，解决 ModuleNotFoundError。
-        支持两种场景：
-        1. 模块名与文件名匹配：添加对应的目录到 sys.path
-        2. 模块名与文件名不匹配：替换导入语句中的模块名为实际文件名
-
-        Args:
-            test_code: 原始测试代码。
-            target_file: 被测代码文件路径。
-            project_root: 项目根目录。
-
-        Returns:
-            修复后的测试代码（如无需修改则返回原代码）。
-        """
-        imports = ExecutorAgent._extract_imports(test_code)
-        if not imports:
-            return test_code
-
-        actual_module_name = ExecutorAgent._extract_module_name_from_file(target_file)
-        module_dirs, needs_replacement = ExecutorAgent._resolve_module_paths(
-            imports, actual_module_name, project_root, target_file
-        )
-
-        if not module_dirs and not needs_replacement:
-            return test_code
-
-        sys_path_code = ExecutorAgent._build_sys_path_code(module_dirs)
-        fixed_code = ExecutorAgent._apply_import_replacements(test_code, imports, actual_module_name, needs_replacement)
-
-        if sys_path_code:
-            fixed_code = f"{sys_path_code}\n\n{fixed_code}\n"
-
-        return fixed_code
-
-    @staticmethod
-    def _extract_imports(test_code: str) -> list[str]:
-        """提取测试代码中的非标准库导入模块名（排除相对导入）。
-
-        底层复用 dependency.extract_import_module_names 的单一实现：
-        逗号分隔多模块导入（import numpy, scipy）完整捕获——此前本地复制的
-        正则 ^import\\s+([\\w.]+) 只取首个模块，缺失的后续模块逃过依赖检测。
-
-        标准库判定复用 dependency.is_standard_library（sys.stdlib_module_names
-        权威清单），并显式跳过 pytest（测试运行器始终可用，无需导入路径修复）。
-        此前硬编码 frozenset 已删除（含误列第三方 diskcache 的清单漂移）。
-        """
-        imports = []
-        for module_name in extract_import_module_names(test_code):
-            top_level = module_name.split(".")[0]
-            if not is_standard_library(top_level) and top_level != "pytest":
-                imports.append(module_name)
-        return imports
-
-    @staticmethod
-    def _resolve_module_paths(
-        imports: list[str], actual_module_name: str, project_root: str, target_file: str
-    ) -> tuple[set, bool]:
-        """根据导入列表解析模块路径，返回 (module_dirs, needs_replacement)。"""
-        module_dirs = set()
-        needs_replacement = False
-        _MAX_SEARCH_DEPTH = 3
-
-        for module_name in imports:
-            found_dirs = ExecutorAgent._cached_search_module_path(module_name, project_root, _MAX_SEARCH_DEPTH)
-            if found_dirs:
-                module_dirs.update(found_dirs)
-            elif module_name != actual_module_name:
-                needs_replacement = True
-                target_dir = os.path.dirname(os.path.abspath(target_file))
-                module_dirs.add(target_dir)
-
-        return module_dirs, needs_replacement
-
-    @staticmethod
-    def _build_sys_path_code(module_dirs: set) -> str:
-        """生成 sys.path 修改代码（import sys 只出现一次，避免原实现的重复导入）。"""
-        inserts = "\n".join(f"sys.path.insert(0, {d!r})" for d in sorted(module_dirs))
-        return f"import sys\n{inserts}"
-
-    @staticmethod
-    def _is_similar_module_name(imported_module: str, actual_module_name: str) -> bool:
-        """判断导入名是否为被测模块名的"笔误"变体（大小写/缩写/近形名）。
-
-        仅对相似名称做替换，避免把 numpy、requests 等第三方库导入
-        错误地改写为被测模块名（原实现对所有未解析导入无差别替换）。
-
-        Args:
-            imported_module: 测试代码中的导入模块名。
-            actual_module_name: 被测文件实际模块名。
-
-        Returns:
-            True 表示应替换为目标模块名。
-        """
-        a = imported_module.lower()
-        b = actual_module_name.lower()
-        if a == b:
-            return True
-        # 相似度阈值 0.6：覆盖常见笔误（如 calc vs calculator），
-        # 同时排除无关名称（如 numpy vs calculator 相似度仅约 0.13）
-        return SequenceMatcher(None, a, b).ratio() >= 0.6
-
-    @staticmethod
-    def _apply_import_replacements(
-        test_code: str, imports: list[str], actual_module_name: str, needs_replacement: bool
-    ) -> str:
-        """对测试代码应用导入替换，返回修改后的代码。
-
-        仅替换与被测模块名相似的导入（_is_similar_module_name 门控），
-        并按模块名精确锚定正则，避免原实现"一条正则改写全部 import"
-        导致的第三方库导入被误替换问题。
-        """
-        fixed_code = test_code
-        if needs_replacement and imports:
-            replaced_any = False
-            for imported_module in imports:
-                if imported_module == actual_module_name:
-                    continue
-                if not ExecutorAgent._is_similar_module_name(imported_module, actual_module_name):
-                    # 无关模块（如第三方库）保持原样，不改写
-                    continue
-                # 按模块名锚定，仅替换该模块的导入语句
-                from_pattern = re.compile(rf"^from\s+{re.escape(imported_module)}\s+import", re.MULTILINE)
-                fixed_code = from_pattern.sub(f"from {actual_module_name} import", fixed_code)
-                import_pattern = re.compile(rf"^import\s+{re.escape(imported_module)}\s*$", re.MULTILINE)
-                fixed_code = import_pattern.sub(f"import {actual_module_name}", fixed_code)
-                replaced_any = True
-                logger.info("模块名不匹配，已将导入 '%s' 替换为 '%s'", imported_module, actual_module_name)
-            if not replaced_any:
-                logger.debug("无需替换：未发现与目标模块相似的错误导入名")
-        return fixed_code
-
-    @staticmethod
-    def _parse_coverage(output: str) -> float:
-        """
-        从 pytest-cov 输出中解析覆盖率百分比。
-        pytest-cov 会在输出末尾打印类似 "TOTAL  xxxxx  85%" 的行。
-
-        Args:
-            output: pytest 输出文本。
-
-        Returns:
-            覆盖率百分比（0-100）。未找到覆盖率信息时返回 0.0。
-        """
-        lines = output.splitlines()
-        # 优先只扫描 TOTAL 汇总行（pytest-cov 覆盖率结果的权威来源），
-        # 避免逐行全量正则匹配的性能开销
-        total_lines = [line for line in lines if line.startswith("TOTAL")]
-        # 兼容旧版 pytest-cov 的小写 total 行格式
-        if not total_lines:
-            total_lines = [line for line in lines if line.startswith("total")]
-        if not total_lines:
-            total_lines = lines  # 极端兜底：保持与原行为一致的全文扫描
-        for line in total_lines:
-            # 匹配 "TOTAL  xxxxx  85%" 格式，捕获百分比数字
-            m = _RE_COVERAGE_TOTAL.search(line)
-            if m:
-                try:
-                    return float(m.group(1))
-                except ValueError:
-                    continue
-        return 0.0
-
-    @staticmethod
-    def _parse_failed_cases(output: str) -> list[dict[str, str]]:
-        """
-        从 pytest 输出中解析失败的用例列表。
-        pytest 输出格式：FAILED test_file.py::test_func_name
-
-        解析逻辑：
-        1. 扫描每行，找到 "FAILED ... .py::..." 模式的行
-        2. 提取失败用例名称
-        3. 向后收集错误详情，直到遇到下一个 FAILED 行或分隔线（"======" + "short"）
-
-        Args:
-            output: pytest 输出文本。
-
-        Returns:
-            失败用例列表，每个元素为 {"name": str, "error": str}。
-        """
-        failed = []
-        lines = output.splitlines()
-        # 使用模块级预编译正则（_RE_FAILED_CASE）
-        for i, line in enumerate(lines):
-            m = _RE_FAILED_CASE.search(line)
-            if m:
-                case_name = m.group(1).strip()
-                error_lines = ExecutorAgent._collect_error_lines(lines, i, m.end())
-                if error_lines:
-                    failed.append({"name": case_name, "error": "\n".join(error_lines)})
-
-        return failed
-
-    @staticmethod
-    def _collect_error_lines(lines: list[str], start_idx: int, match_end: int) -> list[str]:
-        """从指定位置收集错误行，直到遇到下一个 FAILED 行或分隔线。"""
-        error_lines = []
-        # 先提取 FAILED 行本身的错误信息（如 "- AssertionError: ..."）
-        after_match = lines[start_idx][match_end:].strip()
-        if after_match:
-            error_lines.append(after_match)
-
-        for j in range(start_idx + 1, len(lines)):
-            line_content = lines[j]
-            if "FAILED" in line_content and ".py::" in line_content:
-                break  # 遇到下一个失败用例
-            if "======" in line_content and "short" in line_content:
-                break  # 遇到分隔线
-            if line_content.strip() and not line_content.startswith("WARNING"):
-                error_lines.append(line_content)
-
-        return error_lines
+# ─── 方法绑定：把子模块的纯函数以实例方法/静态方法形式挂回 ExecutorAgent ─────────
+# 外部调用方（tests、graph/nodes、cli）与现有 patch 路径
+# （src.agents.executor.ExecutorAgent.<method>）均以类属性方式访问，
+# 绑定后行为与拆分前完全一致。
+ExecutorAgent._run_pytest_with_retry = run_pytest_with_retry
+ExecutorAgent._cleanup_temp_file = staticmethod(cleanup_temp_file)
+ExecutorAgent._cleanup_sandbox = staticmethod(cleanup_sandbox)
+ExecutorAgent._execute_sandboxed = execute_sandboxed
+ExecutorAgent._execute_docker = execute_docker
+ExecutorAgent._build_error_info = staticmethod(build_error_info)
+ExecutorAgent._parse_coverage = staticmethod(parse_coverage)
+ExecutorAgent._parse_failed_cases = staticmethod(parse_failed_cases)
+ExecutorAgent._extract_module_name_from_file = staticmethod(extract_module_name_from_file)
+ExecutorAgent._cached_search_module_path = staticmethod(cached_search_module_path)
+ExecutorAgent._auto_fix_imports = staticmethod(auto_fix_imports)
+ExecutorAgent._extract_imports = staticmethod(extract_imports)
+ExecutorAgent._resolve_module_paths = staticmethod(resolve_module_paths)
+ExecutorAgent._build_sys_path_code = staticmethod(build_sys_path_code)
+ExecutorAgent._is_similar_module_name = staticmethod(is_similar_module_name)
+ExecutorAgent._apply_import_replacements = staticmethod(apply_import_replacements)

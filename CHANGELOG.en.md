@@ -4,6 +4,69 @@
 
 All notable changes are recorded in this file. The format follows [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/).
 
+## [0.9.20] - 2026-09-17 Structural optimization round (large-file split / test-gap backfill / dead-code removal)
+
+### 1. `executor.py` split into four focused submodules
+- `src/agents/executor_imports.py`: import-path auto-fixing (module-name
+  extraction / LRU-cached module path search / sys.path injection /
+  similar-name replacement / import rewriting)
+- `src/agents/executor_output.py`: result parsing (coverage / failed cases /
+  error info; pre-compiled regexes moved along)
+- `src/agents/executor_modes.py`: the two isolation execution modes
+  (venv sandbox `_execute_sandboxed` / `_prepare_dependencies` and Docker
+  `_execute_docker`)
+- `src/agents/executor_runtime.py`: subprocess running, retrying pytest
+  execution, and temp-file / sandbox-dir cleanup
+- `src/agents/executor.py` keeps the `ExecutorAgent` class body plus local
+  execution orchestration (`execute` / `_execute_local`); sub-module
+  functions are re-bound onto the class, so `ExecutorAgent.<method>`
+  call signatures and test patch targets
+  (`src.agents.executor.ExecutorAgent.<method>`) are unchanged;
+  `_prepare_dependencies` keeps its function-local import of
+  `src.tools.dependency.*` (a top-level import would break the existing
+  `patch("src.tools.dependency.*")` tests)
+
+### 2. `dataset_loader.py` split into two subclass modules
+- `src/datasets/dataset_defects4j.py`: `Defects4JPYDataset` (no module-level
+  state)
+- `src/datasets/dataset_inmemory.py`: `InMemoryDataset` (sample task
+  definitions)
+- Both stay importable via re-export from `dataset_loader.py`;
+  `SWEBenchDataset` remains in the main module because its module-level
+  `_datasets` global is a test patch target, and the re-export is placed
+  after the class definitions to avoid a circular import
+  (`dataset_defects4j` / `dataset_inmemory` import `BaseDatasetLoader` /
+  `BenchmarkTask` back from the main module)
+
+### 3. Test-gap backfill
+- `tests/test_executor_docker.py`: new `TestDockerExecutionFlow`
+  (6 cases) — mock docker CLI + subprocess to cover the in-container
+  success / failure / timeout / missing target file / mount-argument
+  validation paths (the Docker execution path previously had 0 coverage)
+- `tests/test_executor_sandbox.py`: subprocess patch target migrated to
+  `src.agents.executor_runtime.subprocess.run`
+- `tests/test_dependency_edge_cases.py`: 14 new cases —
+  `is_standard_library` fallback when the stdlib list is missing /
+  `_is_importable_cached` cache-hit & find_spec exception / `create_venv`
+  creation timeout & Windows interpreter fallback /
+  `_persist_cache_stats` silent OSError degradation / `list_venv_cache`
+  non-dir skip & getsize/getctime failures / `clear_venv_cache` rmtree
+  failure keeps entry / `_load_cache_stats` corrupt & non-dict JSON
+  fallback (tools/dependency.py coverage 90% → 99%)
+
+### 4. Bug fix & misc
+- Removed duplicated JSON-parsing dead code in
+  `dataset_loader.py::_load_raw_data` (the second `json.loads` block was an
+  exact copy of the first and could never change the outcome)
+- `pyproject.toml`: pytest `filterwarnings` added to suppress the scipy
+  `ttest_ind` "Precision loss occurred in moment calculation" warning for
+  near-constant groups (NaN-placeholder behavior is already locked by
+  tests; known numerical characteristic, not a regression)
+
+### Tests
+- 21 new cases; full suite **1386 passed / 0 failed**, src coverage **95%**
+  (up from 1365 in 0.9.19); ruff check all green
+
 ## [0.9.18] - 2026-09-16 Maintainability deepening + hot-path performance + low-coverage reinforcement
 
 ### Maintainability refactoring (3 high-nesting logic extractions, behavior unchanged)

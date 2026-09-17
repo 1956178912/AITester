@@ -4,6 +4,60 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.9.20] - 2026-09-17 - 结构优化轮次（大文件拆分 / 测试盲区补齐 / 死代码清除）
+
+### 1. `executor.py` 按职责拆分为 4 个子模块
+- `src/agents/executor_imports.py`：导入路径自动修复（模块名提取 / 模块路径
+  LRU 缓存搜索 / sys.path 注入 / 相似名替换 / 导入语句改写）
+- `src/agents/executor_output.py`：执行结果解析（覆盖率 / 失败用例 /
+  错误信息构建，预编译正则随迁）
+- `src/agents/executor_modes.py`：venv 沙箱 + Docker 两种隔离执行模式
+  （`_execute_sandboxed` / `_prepare_dependencies` / `_execute_docker`）
+- `src/agents/executor_runtime.py`：子进程运行、带重试的 pytest 执行、
+  临时文件 / 沙箱目录清理
+- `src/agents/executor.py` 保留 `ExecutorAgent` 类主体 + 本地执行编排
+  （`execute` / `_execute_local`），子模块函数经类属性绑定挂回，
+  `ExecutorAgent.<method>` 调用签名与测试 patch 目标
+  （`src.agents.executor.ExecutorAgent.<method>`）保持不变；
+  `_prepare_dependencies` 保持函数内局部导入 `src.tools.dependency.*`
+  （顶层导入会使现有 `patch("src.tools.dependency.*")` 测试失效）
+
+### 2. `dataset_loader.py` 拆分出 2 个子类模块
+- `src/datasets/dataset_defects4j.py`：`Defects4JPYDataset`（无模块级状态）
+- `src/datasets/dataset_inmemory.py`：`InMemoryDataset`（示例任务定义）
+- 两者经 re-export 保持 `from src.datasets.dataset_loader import ...`
+  旧导入路径；SWE-bench 加载器（`SWEBenchDataset`）留在主模块，
+  因其模块级 `_datasets` 全局是测试 patch 目标，且 re-export 置于类定义
+  之后以避免循环导入（`dataset_defects4j` / `dataset_inmemory` 反向导入
+  `BaseDatasetLoader` / `BenchmarkTask`）
+
+### 3. 测试盲区补齐
+- `tests/test_executor_docker.py` 新增 `TestDockerExecutionFlow`
+  （6 用例）：mock docker CLI + subprocess，覆盖容器内执行的成功 /
+  失败 / 超时 / 被测文件缺失 / 挂载卷参数校验 5 条路径
+  （此前 Docker 执行路径 0 覆盖）
+- `tests/test_executor_sandbox.py` 子进程 patch 目标随拆分迁移至
+  `src.agents.executor_runtime.subprocess.run`
+- `tests/test_dependency_edge_cases.py` 新增 14 用例：
+  `is_standard_library` 缺 stdlib 清单回退 / `_is_importable_cached`
+  缓存命中与 find_spec 异常 / `create_venv` 创建超时与 Windows 解释器
+  回退 / `_persist_cache_stats` 落盘失败静默降级 / `list_venv_cache`
+  非目录项跳过与 getsize/getctime 失败 / `clear_venv_cache` rmtree 失败
+  保留 / `_load_cache_stats` 损坏与非 dict JSON 兜底
+  （`tools/dependency.py` 覆盖率 90% → 99%）
+
+### 4. Bug 修复与杂项
+- 清除 `dataset_loader.py` `_load_raw_data` 中同一段 JSON 解析重复书写
+  两遍的死代码（第二遍 `json.loads` 恒重复第一遍结果）
+- `pyproject.toml` 新增 pytest `filterwarnings`：过滤 scipy `ttest_ind`
+  对近恒定分组数据的 "Precision loss occurred in moment calculation"
+  数值告警（恒定组结果已按 NaN 占位锁定，属已知数值特性）
+
+### 测试
+- 新增 21 个用例（Docker 链路 6 + 沙箱 patch 迁移 0 + dependency 边界 14
+  + 修复 docker 测试 1），全量 1386 passed / 覆盖率 95%
+  （较 0.9.19 的 1365 增加 21）
+
 ## [Unreleased] - 评估指标深化（1.2 收敛失败模式归因 / 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹）
 
 ### 1.2 收敛失败模式归因

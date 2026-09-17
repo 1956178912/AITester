@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1365 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1325 collected） |
-| **单元测试** | ✅ 全量 1365 passed, 0 skipped；精简环境 1325 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1386 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1346 collected） |
+| **单元测试** | ✅ 全量 1386 passed, 0 skipped；精简环境 1346 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 95% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 90% / cli-app 93% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 评估指标深化轮次（1.2 收敛失败模式归因 / 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹，全量 1365 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (100%) |
+| **最新优化** | ✅ 结构优化轮次（executor.py 869→5 模块 / dataset_loader.py 946→3 模块拆分 / Docker 执行路径 + 依赖边界测试补齐 / 重复 JSON 解析死代码清除，全量 1386 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-16 评估指标深化轮次（0.9.19）：1.2 收敛失败模式归因（无法定位根因 vs 无法生成有效补丁）/ 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹（executor 节点每次执行追加 passed / coverage_delta / elapsed / reward_signals 到 state.execution_trace，run_benchmark 结果行带轨迹，analyze_results 自动汇总渲染）；新增 14 个用例（TestExecutionTrace 3 + 边界/变异/收敛模式/执行轨迹 11），全量 1351→1365；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-17 结构优化轮次（0.9.20）：executor.py 按职责拆分 4 个子模块（executor_imports / executor_modes / executor_output / executor_runtime，类方法经绑定挂回，旧导入与 patch 路径不变）；dataset_loader.py 拆分出 dataset_defects4j / dataset_inmemory 子类（re-export 保持旧导入路径）；Docker 执行链路 5 条路径补齐 mock 测试、dependency 边界分支 +14 用例（90%→99%）、清除 dataset_loader 重复 JSON 解析死代码、pytest 过滤 scipy 恒定组 t 检验数值告警；新增 21 个用例，全量 1365→1386；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1365 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1325 个收集）
+# 运行所有单元测试（全量 1386 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1346 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -249,7 +249,11 @@ AITester/
 │   │   ├── llm_client.py             # LLM 客户端工具函数（ChatOpenAI 工厂 + 模块级连接池缓存，0.9.15 拆分）
 │   │   ├── planner.py                # 测试规划师（含逻辑驱动思维链）
 │   │   ├── generator.py              # 测试代码生成器（支持 RAG 增强）
-│   │   ├── executor.py               # 测试执行器（带超时和重试）
+│   │   ├── executor.py               # 测试执行器（类主体 + 本地执行编排；导入修复/结果解析/沙箱与 Docker 模式/子进程基础设施已拆至 executor_* 子模块）
+│   │   ├── executor_imports.py       # 导入路径自动修复（模块名提取 / sys.path 注入 / 相似名替换，0.9.20 拆分）
+│   │   ├── executor_modes.py         # venv 沙箱 + Docker 隔离执行模式（0.9.20 拆分）
+│   │   ├── executor_output.py        # 执行结果解析（覆盖率 / 失败用例 / 错误信息，0.9.20 拆分）
+│   │   ├── executor_runtime.py       # 子进程运行、重试与临时资源清理（0.9.20 拆分）
 │   │   ├── debugger.py               # 调试修复师（分层错误修复）
 │   │   └── error_classifier.py       # 错误类型分类器（规则匹配）
 │   ├── api/                          # API 配置管理
@@ -259,7 +263,9 @@ AITester/
 │   │   ├── config_manager.py         # LLM 配置增删查
 │   │   └── config_generator.py       # .env / llm_configs 模板生成
 │   ├── datasets/                     # 数据集加载层
-│   │   ├── dataset_loader.py         # SWE-bench / Defects4J-Python 加载
+│   │   ├── dataset_loader.py         # SWE-bench 加载器 + 数据模型 / 抽象基类 / 工厂函数（Defects4J 与 InMemory 子类已拆出）
+│   │   ├── dataset_defects4j.py      # Defects4J-Python 加载器（0.9.20 拆分）
+│   │   ├── dataset_inmemory.py       # 内置示例数据集（0.9.20 拆分）
 │   │   └── synthetic_dataset.py      # 合成数据集生成器（本地生成）
 │   ├── cli/                          # 命令行界面（click 命令组 + rich 输出）
 │   │   ├── app.py                    # CLI 命令定义与任务执行
@@ -703,7 +709,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1365 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1386 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -713,7 +719,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（55 个测试文件，全量 1365 个 pytest 收集用例；精简环境 1325 收集 / 40 自动跳过，src 总覆盖率 95%）：
+**测试覆盖模块**（56 个测试文件，全量 1386 个 pytest 收集用例；精简环境 1346 收集 / 40 自动跳过，src 总覆盖率 95%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -740,10 +746,11 @@ docker run --rm \
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_contamination_check.py` | 15 | 2.1 数据污染检测（token 提取/Jaccard 重叠度/分级/detect 扫描/渲染章节） |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
+| `test_dependency_edge_cases.py` | 14 | 依赖检测边界分支（标准库回退/find_spec 异常/venv 创建超时/OSError 静默降级，0.9.20 新增） |
 | `test_error_classifier.py` | 89 | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
-| `test_executor_docker.py` | 4 | 4.3 Docker 执行模式（不可用诊断/模式开关/docker 优先于 venv/子进程环境凭证剔除） |
+| `test_executor_docker.py` | 11 | 4.3 Docker 执行模式（不可用诊断/模式开关/docker 优先于 venv/子进程环境凭证剔除 + TestDockerExecutionFlow 容器内执行链路 6 用例 + 沙箱清理兜底） |
 | `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
 | `test_experiments_analysis.py` | 20 | 实验结果分析（排名/统计）+ 5.1 统计检验边界 5 用例（样本量 <3 / 部分配对缺失 / 单基线 / 脏数据） |
 | `test_experiments_scripts.py` | 54 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计 + 1.2 收敛失败模式归因 / 1.3 边界用例覆盖 / 1.3 变异得分 / 3.2 执行轨迹汇总（14 用例） |
@@ -1073,6 +1080,18 @@ python main.py clean-venv-cache --max-size-mb 512
 
 ## 迭代优化记录
 
+### v0.9.20 (2026-09-17) — 结构优化轮次
+
+**核心成果**:
+- `executor.py` 按职责拆分为 4 个子模块（`executor_imports.py` / `executor_modes.py` / `executor_output.py` / `executor_runtime.py`），类方法经绑定挂回 `ExecutorAgent`，旧导入路径与测试 patch 目标（`src.agents.executor.ExecutorAgent.<method>`）不变
+- `dataset_loader.py` 拆分出 `dataset_defects4j.py` / `dataset_inmemory.py`（两个子类搬出，re-export 保持旧导入路径；SWE-bench 加载器留在主模块因测试需 patch 其模块级 `_datasets`）
+- Docker 执行链路 5 条路径（成功 / 失败 / 超时 / 文件缺失 / 挂载卷）补齐 mock 测试（`TestDockerExecutionFlow`）
+- `dependency.py` 边界分支 +14 用例（90% → 99%）
+- 清除 `dataset_loader.py` 重复 JSON 解析死代码；pytest 过滤 scipy 恒定组 t 检验 "precision loss" 数值告警
+- 新增 21 个测试用例
+
+**验证**: 全量 1386 passed / 0 failed / ruff 全绿 / 覆盖率 95%
+
 ### v0.9.19 (2026-09-16) — 评估指标深化轮次
 **核心成果**:
 - 1.2 收敛失败模式归因（`analyze_results.py:_convergence_failure_modes`，区分"无法定位根因" vs "无法生成有效补丁"）
@@ -1080,7 +1099,7 @@ python main.py clean-venv-cache --max-size-mb 512
 - 3.2 执行反馈轨迹收集（`state.execution_trace` + `nodes._record_execution_trace` + `run_benchmark.py` 结果行带轨迹 + `analyze_results.py` 汇总章节，纯观测层默认常开，为未来 RL 微调备料）
 - 新增 14 个测试用例
 
-**验证**: 全量 1365 passed / 0 failed / ruff 全绿 / 覆盖率 95%
+**验证**: 全量 1386 passed / 0 failed / ruff 全绿 / 覆盖率 95%
 
 ### v0.9.18 (2026-09-16) — 数据集与评估深化轮次
 
