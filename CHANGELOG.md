@@ -4,6 +4,49 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 数据集与评估深化（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式 / 1.2 收敛失败模式归因 / 1.3 边界用例 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹）
+
+### 1.2 收敛失败模式归因
+- `analyze_results.py` 新增 `_convergence_failure_modes`：对达到
+  MAX_ITERATIONS（iterations>=3）仍未修复的任务，区分"无法定位根因"
+  （诊断反复同义且从未写盘成功）与"无法生成有效补丁"（补丁写盘成功
+  但测试仍失败，或被安全守卫反复拒绝）两类失败模式，渲染为分析报告
+  独立章节，辅助定位系统能力瓶颈
+
+### 1.3 边界用例覆盖 / 变异得分 / 断言强度 AST 增强
+- `analyze_results.py` 新增 `_boundary_case_coverage`：对
+  generated_test 做 AST 保守判定，识别是否覆盖 None / 空字符串 /
+  空集合 / 0 / -1 / >= / <= 等边界条件，输出各边界类型命中数与
+  覆盖率，渲染为独立章节
+- 新增 `_mutation_score_metrics`：收集 details[].mutation_score
+  （外部变异测试器产出），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；
+  无该字段时 available=False 跳过章节，不阻断主流程
+- `_assertion_strength_proxy` 增强：在原有 `assert` 行数统计基础上新增
+  AST 口径（`ast.parse` + `ast.Assert` 节点计数），输出
+  `ast_avg_assertions` 与 `ast_parse_failed_tasks` 两个增强字段，
+  旧 JSON 兼容（无 generated_test 时整个 proxy available=False）
+
+### 3.2 执行反馈轨迹收集
+- `state.py` 新增 `execution_trace` 字段（list，默认 []）；
+  `create_initial_state` 初始化空列表
+- `nodes.py` 新增 `_record_execution_trace`：每次 Executor 执行追加
+  一条记录（iteration / passed / coverage / coverage_delta /
+  elapsed_seconds / reward_signals {correctness, efficiency,
+  simplicity}），纯观测层默认常开，不影响修复路由
+- `run_benchmark.py` 结果行新增 `execution_trace` 字段（失败分支
+  None 兜底保持键集合同构）
+- `analyze_results.py` 新增 `_execution_trace_summary`：统计观测任务数 /
+  总执行次数 / 平均轮数 / 首轮即通过率 / 末轮 correctness & efficiency
+  奖励信号均值 / 首末轮覆盖率趋势（delta），渲染为独立章节；
+  旧 JSON 无该字段时 available=False 跳过
+
+### 测试
+- 新增 14 个用例：`tests/test_workflow.py::TestExecutionTrace`
+  （3 个：首轮 / 二轮 delta / 缺键容错）；
+  `tests/test_experiments_scripts.py` 新增 11 个
+  （边界用例覆盖 3 + 变异得分 2 + 收敛失败模式 3 + 执行轨迹 3）
+- 全量测试 1365 passed / 覆盖率 95%（较 0.9.18 的 1351 增加 14）
+
 ## [Unreleased] - 数据集与评估深化（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式）
 
 ### 2.1 SWE-bench 数据污染风险应对

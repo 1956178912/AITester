@@ -62,6 +62,7 @@ from src.graph.nodes import (  # noqa: F401
     _get_default_test_plan,
     _patch_applier_node,
     _planner_node,
+    _record_execution_trace,
     _validate_planner_output,
 )
 from src.graph.rag import RAG_MODULE_AVAILABLE, TestCaseRetriever, get_rag_retriever  # noqa: F401

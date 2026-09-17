@@ -26,14 +26,23 @@
     - RAG 质量：读 baseline 级 rag_metrics（未启用 RAG 时全 0/None，跳过输出）；
     - 修复收敛效率：首次尝试成功率、成功任务平均/中位迭代数、成功任务平均
       耗时，均从 details[] 可复算；
-    - 多维质量代理：断言强度代理用 generated_test 中 assert 行数近似
-      （有代码时），结构/运行时质量用覆盖率与耗时变化做保守代理；旧 JSON
-      缺 optional 字段时只输出可计算部分，不崩溃。
+    - 多维质量代理：断言强度（1.3 增强为 AST 静态分析口径，行数统计保留），
+      结构/运行时质量用覆盖率与耗时变化做保守代理；旧 JSON 缺 optional 字段时
+      只输出可计算部分，不崩溃；
+    - 边界用例覆盖（1.3）：AST 保守判定 generated_test 是否覆盖 None/空集合/
+      0/-1/>=/<= 等边界条件；无 generated_test 时跳过章节；
+    - 变异得分（1.3）：收集 details[].mutation_score（外部变异测试器产出），
+      无该字段时跳过章节；
+    - 收敛失败模式归因（1.2）：区分"无法定位根因"（诊断反复同义）与
+      "无法生成有效补丁"（写盘/守卫反复拒绝）；
+    - 执行反馈轨迹汇总（3.2）：收集 details[].execution_trace（executor 节点
+      默认常开写入），统计总执行次数/首轮即通过率/末轮奖励信号/覆盖率趋势。
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import sys
@@ -331,25 +340,42 @@ def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def _assertion_strength_proxy(details: list[dict[str, Any]]) -> dict[str, Any]:
-    """1.1 断言强度代理：用 generated_test 中 assert 行数量做保守近似。
+    """1.1/1.3 断言强度：AST 静态分析 + 行数统计双口径。
 
-    说明：benchmark 结果本身不会保存完整断言语义，这里仅统计可选字段
-    generated_test（若未来 --save-state 的 details 扩展带上该字段）中的
-    `assert ` 行数，用于观察"修复/生成是否出现断言弱化"的趋势。旧 JSON
-    无 generated_test 时返回 available=False，渲染时跳过该小节。
+    说明：benchmark 结果不会保存完整断言语义，这里基于可选字段
+    generated_test（--save-state 的 details 扩展带上时可用）：
+    - 行数口径（保守近似，旧 JSON 兼容）：统计 `assert ` 行数；
+    - AST 口径（1.3 增强）：对 generated_test 做 ast.parse，统计
+      非测试函数体中的 assert 语句总数（含 assert 后的消息分支），
+      与行数口径一致时交叉验证"是否有 assert 被字符串拼接掩盖"。
+    旧 JSON 无 generated_test 时返回 available=False，渲染时跳过该小节。
     """
     observed = 0
     assertion_counts: list[int] = []
+    ast_assertion_counts: list[int] = []
+    ast_parse_failed: list[str] = []
     for row in details:
         test_code = row.get("generated_test")
         if not isinstance(test_code, str) or not test_code.strip():
             continue
         observed += 1
+        task_id = str(row.get("task_id", f"row_{observed}"))
+        # 行数口径：`assert ` 开头的语句行（保守，与历史口径一致）
         assertion_counts.append(sum(1 for line in test_code.splitlines() if line.strip().startswith("assert ")))
+        # AST 口径：统计所有 Assert 节点（包括嵌套在 if/for 等块内，
+        # 以及带消息字符串的 assert——行数口径同样计入，二者可比对）
+        try:
+            tree = ast.parse(test_code)
+            ast_assertion_counts.append(sum(1 for _ in ast.walk(tree) if isinstance(_, ast.Assert)))
+        except SyntaxError:
+            # generated_test 语法不完整（LLM 生成损坏）时跳过 AST 口径，
+            # 记录 task_id 供异味检测交叉引用
+            ast_parse_failed.append(task_id)
 
     if not assertion_counts:
         return {"available": False, "observed_tasks": 0}
     avg = sum(assertion_counts) / len(assertion_counts)
+    ast_avg = round(sum(ast_assertion_counts) / len(ast_assertion_counts), 2) if ast_assertion_counts else None
     return {
         "available": True,
         "observed_tasks": observed,
@@ -357,6 +383,10 @@ def _assertion_strength_proxy(details: list[dict[str, Any]]) -> dict[str, Any]:
         "min_assertions": min(assertion_counts),
         "max_assertions": max(assertion_counts),
         "tasks_with_zero_assertions": sum(1 for value in assertion_counts if value == 0),
+        # 1.3 AST 口径增强字段（旧 JSON 无 generated_test 时整个 proxy available=False，
+        # 这些键不出现，渲染层不读取即兼容）
+        "ast_avg_assertions": ast_avg,
+        "ast_parse_failed_tasks": ast_parse_failed,
     }
 
 
@@ -443,6 +473,263 @@ def _venv_cache_stats_snapshot() -> dict[str, Any] | None:
     return stats
 
 
+def _boundary_case_coverage(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.3 边界用例覆盖度：检测生成测试是否覆盖边界条件。
+
+    边界条件清单（AST 保守口径，针对 generated_test 代码）：
+    - 空/None 输入（None / 空字符串 / 空集合字面量）
+    - 数值极值（int/float 字面量中出现 0、-1、-0.1、1.0、10**6、maxsize 量级）
+    - 边界比较（测试体含 >=/<= 的数值边界比较语句）
+
+    实现：对 generated_test 做 ast.parse，收集测试体中出现的"边界值"
+    字面量与比较运算符类型，判定每个任务是否覆盖至少 1 类边界条件。
+    旧 JSON 无 generated_test 时 available=False。
+
+    Returns:
+        {"available": bool, "observed_tasks": int,
+         "boundary_types": {type: covered_task_count},
+         "tasks_covering_any_boundary": int, "coverage_rate": float}
+    """
+    import ast as _ast
+
+    observed = 0
+    boundary_types: Counter = Counter()
+    tasks_covering = 0
+    for row in details:
+        test_code = row.get("generated_test")
+        if not isinstance(test_code, str) or not test_code.strip():
+            continue
+        observed += 1
+        try:
+            tree = _ast.parse(test_code)
+        except SyntaxError:
+            continue
+        covered_types: set[str] = set()
+        # 边界数值/字符串/None 字面量
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Constant):
+                v = node.value
+                if v is None:
+                    covered_types.add("none")
+                elif isinstance(v, str) and v == "":
+                    covered_types.add("empty_string")
+                elif (isinstance(v, int) and v in (0, -1, 1, 10**6)) or (isinstance(v, float) and v in (-0.1, 0.0, 1.0)):
+                    covered_types.add("numeric_extreme")
+            if isinstance(node, _ast.List) and not getattr(node, "elts", None):
+                covered_types.add("empty_collection")
+            if isinstance(node, _ast.Set) and not getattr(node, "elts", None):
+                covered_types.add("empty_collection")
+        # 边界比较运算符（>=/<=/==/!=）
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Compare):
+                ops = {type(op).__name__ for op in node.ops}
+                if "GtE" in ops or "LtE" in ops:
+                    covered_types.add("comparison_boundary")
+        for t in covered_types:
+            boundary_types[t] += 1
+        if covered_types:
+            tasks_covering += 1
+
+    if observed == 0:
+        return {
+            "available": False,
+            "observed_tasks": 0,
+            "boundary_types": {},
+            "tasks_covering_any_boundary": 0,
+            "coverage_rate": 0.0,
+        }
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "boundary_types": dict(boundary_types),
+        "tasks_covering_any_boundary": tasks_covering,
+        "coverage_rate": round(tasks_covering / observed, 4),
+    }
+
+
+def _mutation_score_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.3 变异得分：收集 details[].mutation_score（0.0-1.0，由外部变异测试器产出）。
+
+    说明：变异测试需执行大量扰动用例，成本高，不作为默认流水线环节；
+    本函数仅做"已有 mutation_score 字段时的汇总"，无该字段时 available=False
+    跳过章节，不阻断主流程。未来若接入 mutation 执行（如 mutmut），可在此
+    直接消费逐任务的 mutation_score 值。
+
+    Returns:
+        {"available": bool, "observed_tasks": int, "avg_mutation_score": float,
+         "high_score_tasks": int, "low_score_tasks": int}
+    """
+    observed = 0
+    scores: list[float] = []
+    for row in details:
+        ms = row.get("mutation_score")
+        if ms is None:
+            continue
+        try:
+            scores.append(float(ms))
+            observed += 1
+        except (TypeError, ValueError):
+            continue
+    if observed == 0:
+        return {"available": False, "observed_tasks": 0}
+    avg = round(sum(scores) / len(scores), 4)
+    high = sum(1 for s in scores if s >= 0.7)
+    low = sum(1 for s in scores if s < 0.4)
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "avg_mutation_score": avg,
+        "high_score_tasks": high,
+        "low_score_tasks": low,
+    }
+
+
+def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.2 收敛失败模式归因：达到 MAX_ITERATIONS 仍未修复的任务，
+    区分"无法定位根因"（诊断反复同义/空）vs "无法生成有效补丁"
+    （补丁写盘成功但测试仍失败，或被守卫拒绝后反复重写同一补丁）。
+
+    判定逻辑（保守启发，不依赖 LLM）：
+    - 收集未通过任务中 iterations>=3（达到 MAX_ITERATIONS）的任务
+    - 遍历 repair_history（若存在）提取各轮 patch_applied 标志与诊断文本
+    - "无法生成有效补丁"：任一情形命中——
+        情形A：补丁曾写盘成功（patch_applied=True）但测试仍未通过
+               （定位到了根因但补丁本身不能解决问题，属补丁质量问题）
+        情形B：补丁被安全守卫拒绝（patch_applied=False 且有 patch 记录）
+    - "无法定位根因"：诊断文本反复同义（最近 2 轮 diagnosis 相同）且
+        补丁从未写盘成功（说明 Debugger 反复给出相同结论，没有真正
+        识别到问题所在）
+    - 两者皆命中时归"无法生成有效补丁"（更具体，便于定位）
+    """
+    converged_failed = [
+        r for r in details
+        if not r.get("passed") and int(r.get("iterations", 0) or 0) >= 3
+    ]
+    root_cause_stuck = 0
+    patch_stuck = 0
+    tasks_stuck: list[str] = []
+    for row in converged_failed:
+        task_id = str(row.get("task_id", "unknown"))
+        repair_history = row.get("repair_history") or []
+
+        prev_diags: list[str] = []
+        patch_ever_applied = False
+        patch_ever_rejected = False
+        if isinstance(repair_history, list):
+            for h in repair_history:
+                if not isinstance(h, dict):
+                    continue
+                d = str(h.get("diagnosis") or "").strip()
+                if d:
+                    prev_diags.append(d)
+                if h.get("patch_applied"):
+                    patch_ever_applied = True
+                elif "patch" in h and not h.get("patch_applied", False):
+                    patch_ever_rejected = True
+
+        # 无法定位根因：诊断反复同义且从未写盘成功
+        diag_stuck = False
+        if len(prev_diags) >= 2 and prev_diags[-1] == prev_diags[-2]:
+            diag_stuck = True
+        if diag_stuck and not patch_ever_applied and not patch_ever_rejected:
+            diag_stuck = True
+        elif not (patch_ever_applied or patch_ever_rejected) and not prev_diags:
+            # 无 repair_history 且未写盘 → 保守归无法定位根因
+            diag_stuck = True
+
+        # 无法生成有效补丁：写盘成功但未解决 或 被守卫拒绝
+        patch_failed = patch_ever_applied or patch_ever_rejected
+
+        mode = None
+        if patch_failed:
+            mode = "patch_generation_failed"
+            patch_stuck += 1
+        elif diag_stuck:
+            mode = "root_cause_stuck"
+            root_cause_stuck += 1
+
+        if mode is not None:
+            tasks_stuck.append(task_id)
+
+    return {
+        "total_converged_failed": len(converged_failed),
+        "root_cause_stuck": root_cause_stuck,
+        "patch_generation_failed": patch_stuck,
+        "tasks": tasks_stuck,
+        "available": len(converged_failed) > 0,
+    }
+
+
+def _execution_trace_summary(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """3.2 执行轨迹汇总：收集 details[].execution_trace（executor 节点默认常开写入）。
+
+    指标（保守可复算）：
+    - observed_tasks: 携带非空 execution_trace 的任务数
+    - total_executions: 所有任务的 executor 执行次数合计
+    - avg_executions_per_task: 平均每次任务执行轮数（反映修复尝试次数）
+    - pass_on_first_rate: 首轮执行即通过的任务占比
+    - avg_reward_correctness: 各任务末轮 correctness 信号均值
+    - avg_reward_efficiency: 各任务末轮 efficiency 信号均值
+    - coverage_trend: 逐轮平均覆盖率趋势（首轮 vs 末轮，观察收敛方向）
+
+    旧 JSON 无 execution_trace 字段时返回 available=False（渲染时跳过章节）。
+    """
+    observed = 0
+    total_executions = 0
+    pass_on_first = 0
+    last_rew_correctness: list[float] = []
+    last_rew_efficiency: list[float] = []
+    first_covs: list[float] = []
+    last_covs: list[float] = []
+    for row in details:
+        trace = row.get("execution_trace")
+        if not isinstance(trace, list) or not trace:
+            continue
+        observed += 1
+        total_executions += len(trace)
+        # 首轮（iteration=0 或 首条记录）是否通过
+        first_entry = trace[0]
+        if isinstance(first_entry, dict) and first_entry.get("passed"):
+            pass_on_first += 1
+        # 末轮奖励信号
+        last = trace[-1] if isinstance(trace[-1], dict) else {}
+        rewards = last.get("reward_signals") or {}
+        if isinstance(rewards, dict):
+            if "correctness" in rewards:
+                last_rew_correctness.append(float(rewards["correctness"]))
+            if "efficiency" in rewards:
+                last_rew_efficiency.append(float(rewards["efficiency"]))
+        # 首末轮覆盖率
+        if isinstance(first_entry, dict) and first_entry.get("coverage") is not None:
+            first_covs.append(float(first_entry["coverage"]))
+        if "coverage" in last:
+            last_covs.append(float(last["coverage"]))
+    if observed == 0:
+        return {"available": False, "observed_tasks": 0}
+    avg_first_cov = round(sum(first_covs) / len(first_covs), 2) if first_covs else None
+    avg_last_cov = round(sum(last_covs) / len(last_covs), 2) if last_covs else None
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "total_executions": total_executions,
+        "avg_executions_per_task": round(total_executions / observed, 2),
+        "pass_on_first_rate": round(pass_on_first / observed, 4),
+        "avg_last_reward_correctness": (
+            round(sum(last_rew_correctness) / len(last_rew_correctness), 3) if last_rew_correctness else None
+        ),
+        "avg_last_reward_efficiency": (
+            round(sum(last_rew_efficiency) / len(last_rew_efficiency), 3) if last_rew_efficiency else None
+        ),
+        "coverage_trend": {
+            "first_round_avg": avg_first_cov,
+            "last_round_avg": avg_last_cov,
+            "delta": round((avg_last_cov or 0.0) - (avg_first_cov or 0.0), 2)
+            if avg_first_cov is not None and avg_last_cov is not None
+            else None,
+        },
+    }
+
+
 def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None = None) -> dict[str, Any]:
     """从 benchmark JSON 构建结构化分析结果。
 
@@ -502,6 +789,16 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             "quality_proxy_metrics": _quality_proxy_metrics(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
+            # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
+            "boundary_coverage_metrics": _boundary_case_coverage(details),
+            # 1.3 变异得分（保守代理：从 details[].mutation_score 字段收集；
+            # 无该字段时 available=False，渲染时跳过章节）
+            "mutation_score_metrics": _mutation_score_metrics(details),
+            # 1.2 收敛失败模式归因（达到 MAX_ITERATIONS 仍未修复的任务，
+            # 区分"无法定位根因" vs "无法生成有效补丁"）
+            "convergence_failure_modes": _convergence_failure_modes(details),
+            # 3.2 执行轨迹汇总（details[].execution_trace 收集，旧 JSON 无该字段时跳过）
+            "execution_trace_metrics": _execution_trace_summary(details),
             # 2.2 难度分层渲染所需的原始 details（render 消费，不参与 JSON 序列化输出）
             "_details": details,
         }
@@ -774,6 +1071,107 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         details = m.get("_details") or []
         if details:
             lines.extend(render_stratification_section(details, baseline))
+
+    # 1.3 边界用例覆盖（generated_test 携带时输出）
+    boundary_rows = [
+        (b, m.get("boundary_coverage_metrics"))
+        for b, m in per.items()
+        if m.get("boundary_coverage_metrics", {}).get("available")
+    ]
+    if boundary_rows:
+        lines.append("## 边界用例覆盖（1.3，AST 保守口径）")
+        lines.append("")
+        lines.append("| 基线 | 观测任务 | 覆盖任一边界任务 | 覆盖率 | 各边界类型命中 |")
+        lines.append("|------|---------|-----------------|--------|--------------|")
+        for baseline, bstat in boundary_rows:
+            types = bstat.get("boundary_types") or {}
+            type_text = ", ".join(f"{k}={v}" for k, v in sorted(types.items())) if types else "—"
+            lines.append(
+                f"| {baseline} | {bstat.get('observed_tasks', 0)} "
+                f"| {bstat.get('tasks_covering_any_boundary', 0)} | {bstat.get('coverage_rate', 0.0)} "
+                f"| {type_text} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 注：边界类型由 generated_test 的 AST 保守判定（None/空字符串/0/-1/空集合/>=/<= 比较）；"
+            "仅当结果 JSON 携带 details[].generated_test 时可用，否则章节跳过。"
+        )
+        lines.append("")
+
+    # 1.3 变异得分（details 携带 mutation_score 字段时输出）
+    mutation_rows = [
+        (b, m.get("mutation_score_metrics"))
+        for b, m in per.items()
+        if m.get("mutation_score_metrics", {}).get("available")
+    ]
+    if mutation_rows:
+        lines.append("## 变异得分（1.3，外部变异测试器产出）")
+        lines.append("")
+        lines.append("| 基线 | 观测任务 | 平均变异得分 | 高（≥0.7） | 低（<0.4） |")
+        lines.append("|------|---------|-----------|----------|-----------|")
+        for baseline, mstat in mutation_rows:
+            lines.append(
+                f"| {baseline} | {mstat.get('observed_tasks', 0)} "
+                f"| {mstat.get('avg_mutation_score', 0.0)} | {mstat.get('high_score_tasks', 0)} "
+                f"| {mstat.get('low_score_tasks', 0)} |"
+            )
+        lines.append(
+            "> 注：变异得分由外部变异测试器（如 mutmut）产出，非默认流水线环节；"
+            "仅当 details[].mutation_score 字段存在时输出本章节。"
+        )
+        lines.append("")
+
+    # 1.2 收敛失败模式归因
+    mode_rows = [
+        (b, m.get("convergence_failure_modes"))
+        for b, m in per.items()
+        if m.get("convergence_failure_modes", {}).get("available")
+    ]
+    if mode_rows:
+        lines.append("## 收敛失败模式归因（1.2）")
+        lines.append("")
+        lines.append("达到 MAX_ITERATIONS（默认 3）仍未修复的任务，区分\"无法定位根因\"与\"无法生成有效补丁\"。")
+        lines.append("")
+        lines.append("| 基线 | 收敛失败任务 | 无法定位根因 | 无法生成有效补丁 |")
+        lines.append("|------|------------|------------|----------------|")
+        for baseline, fstat in mode_rows:
+            lines.append(
+                f"| {baseline} | {fstat.get('total_converged_failed', 0)} "
+                f"| {fstat.get('root_cause_stuck', 0)} | {fstat.get('patch_generation_failed', 0)} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：无法定位根因 = 诊断文本反复同义且无有效补丁写盘；"
+            "无法生成有效补丁 = 补丁曾写盘但未解决问题，或补丁被安全守卫反复拒绝。"
+        )
+        lines.append("")
+
+    # 3.2 执行轨迹汇总（execution_trace 携带时输出）
+    trace_rows = [
+        (b, m.get("execution_trace_metrics"))
+        for b, m in per.items()
+        if m.get("execution_trace_metrics", {}).get("available")
+    ]
+    if trace_rows:
+        lines.append("## 执行反馈轨迹汇总（3.2）")
+        lines.append("")
+        lines.append("| 基线 | 观测任务 | 总执行次数 | 平均轮数 | 首轮即通过率 | 末轮 correctness | 末轮 efficiency | 首/末轮覆盖率 |")
+        lines.append("|------|---------|----------|--------|------------|----------------|----------------|------------|")
+        for baseline, tstat in trace_rows:
+            ct = tstat.get("coverage_trend") or {}
+            cov_text = f"{ct.get('first_round_avg')} → {ct.get('last_round_avg')}" if ct.get("delta") is not None else "N/A"
+            lines.append(
+                f"| {baseline} | {tstat.get('observed_tasks', 0)} | {tstat.get('total_executions', 0)} "
+                f"| {tstat.get('avg_executions_per_task', 0)} | {tstat.get('pass_on_first_rate', 0.0)} "
+                f"| {tstat.get('avg_last_reward_correctness', 0.0)} | {tstat.get('avg_last_reward_efficiency', 0.0)} "
+                f"| {cov_text} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：本轮次即通过率反映系统\"一次做对\"能力；末轮 correctness 均值即\"收敛到通过\"的成功率；"
+            "末轮 efficiency 反映修复尝试的耗时效率；覆盖率趋势 delta > 0 表示迭代在提升覆盖。"
+        )
+        lines.append("")
 
     # 4.4 依赖缓存命中统计（ExecutorAgent venv 磁盘缓存，无缓存事件时跳过）
     cache_stats = analysis.get("venv_cache_stats")

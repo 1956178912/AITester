@@ -385,6 +385,9 @@ def _build_task_result(
             "rag_stats": final_state.get("rag_stats"),
             # 2.1 数据污染检测：系统最终生成的补丁（无修复动作时可能为空）
             "patch": final_state.get("patch"),
+            # 3.2 执行反馈轨迹：逐轮执行的通过/覆盖率变化/耗时与奖励信号
+            # （executor 节点默认常开写入；旧状态缺失时以 None 兜底保持键集合同构）
+            "execution_trace": final_state.get("execution_trace"),
             "task_metadata": task.metadata,
         }
     return {
@@ -400,6 +403,8 @@ def _build_task_result(
         "rag_stats": None,
         # 2.1 数据污染检测：失败分支无生成补丁，patch 以 None 兜底保持键集合同构
         "patch": None,
+        # 3.2 执行反馈轨迹：失败分支（无 final_state）无轨迹可带，None 兜底
+        "execution_trace": None,
         "task_metadata": task.metadata,
     }
 

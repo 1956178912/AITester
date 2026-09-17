@@ -113,6 +113,17 @@ class AITesterState(TypedDict, total=False):
         - error_category: 错误类型
         - patch_applied: 补丁是否成功应用
 
+    execution_trace (List[Dict[str, Any]]):
+        3.2 执行反馈轨迹：每次 Executor 执行的记录（3.2 默认常开，
+        始终写入；纯观测层，不影响修复流程），每项含：
+        - iteration: 迭代编号
+        - passed: 测试是否通过
+        - coverage_delta: 相对上一轮覆盖率的增减（首轮为 None）
+        - elapsed_seconds: 本节点墙钟耗时
+        - reward_signals: 多维度奖励信号 {correctness / efficiency /
+          simplicity}（保守线性归一，供未来执行反馈 RL 训练备料；
+          仅记录观测，不参与工作流路由）
+
     ── RAG 检索结果 ──────────────────────────────────────────
     rag_references (List[Dict[str, Any]] | None):
         RAG 检索到的相似历史案例列表。
@@ -150,6 +161,8 @@ class AITesterState(TypedDict, total=False):
     max_iterations: int
     regeneration_count: int
     repair_history: list[dict[str, Any]]
+    # 3.2 执行反馈轨迹（默认常开：纯观测层，随 executor 节点追加）
+    execution_trace: list[dict[str, Any]]
     # 执行控制（可选，由 CLI 注入）
     execution_timeout: int | None
     coverage_threshold: float | None
@@ -227,6 +240,8 @@ def create_initial_state(
         max_iterations=max_iterations,
         regeneration_count=0,
         repair_history=[],
+        # 3.2 执行反馈轨迹（随 executor 节点追加，初始空列表）
+        execution_trace=[],
         # 执行控制（可选，由 CLI 注入）
         execution_timeout=execution_timeout,
         coverage_threshold=coverage_threshold,

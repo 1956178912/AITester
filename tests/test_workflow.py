@@ -1,11 +1,11 @@
-"""
-Workflow 单元测试
+"""Workflow 单元测试
 
 测试 workflow.py 中的：
 - build_workflow 函数
 - _should_debug 路由
 - _should_skip_debugger 函数
 - 节点函数 (_planner_node, _generator_node 等)
+- 3.2 执行反馈轨迹（_executor_node 的 execution_trace 写入）
 """
 
 import os
@@ -13,6 +13,105 @@ import sys
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+class TestExecutionTrace:
+    """3.2 执行反馈轨迹：_executor_node 每次执行追加到 state["execution_trace"]。"""
+
+    @patch("src.graph.nodes.ExecutorAgent")
+    def test_first_entry_coverage_delta_none(self, mock_executor_class):
+        """首轮执行：coverage_delta=None（无前一轮），reward_signals 完整。"""
+        from src.graph.workflow import _executor_node
+
+        mock_agent = MagicMock()
+        mock_agent.execute.return_value = {
+            "passed": False,
+            "output": "1 failed",
+            "coverage": 40.0,
+            "failed_cases": [{"name": "test_a"}],
+        }
+        mock_executor_class.return_value = mock_agent
+
+        state = {
+            "generated_test": "def test(): pass",
+            "target_file": "/p.py",
+            "iteration": 0,
+            "execution_trace": [],
+        }
+        result = _executor_node(state)
+
+        assert "execution_trace" in result
+        trace = result["execution_trace"]
+        assert len(trace) == 1
+        entry = trace[0]
+        assert entry["iteration"] == 0
+        assert entry["passed"] is False
+        assert entry["coverage"] == 40.0
+        assert entry["coverage_delta"] is None
+        assert entry["elapsed_seconds"] >= 0.0
+        rewards = entry["reward_signals"]
+        assert rewards["correctness"] == 0.0
+        assert 0.0 <= rewards["efficiency"] <= 1.0
+        assert 0.0 <= rewards["simplicity"] <= 1.0
+
+    @patch("src.graph.nodes.ExecutorAgent")
+    def test_second_entry_coverage_delta_computed(self, mock_executor_class):
+        """第二轮执行：coverage_delta = 当前轮 - 上一轮。"""
+        from src.graph.workflow import _executor_node
+
+        mock_agent = MagicMock()
+        mock_agent.execute.return_value = {
+            "passed": True,
+            "output": "2 passed",
+            "coverage": 90.0,
+            "failed_cases": [],
+        }
+        mock_executor_class.return_value = mock_agent
+
+        prev_entry = {
+            "iteration": 0,
+            "passed": False,
+            "coverage": 50.0,
+            "coverage_delta": None,
+            "elapsed_seconds": 1.2,
+            "reward_signals": {"correctness": 0.0, "efficiency": 0.96, "simplicity": 0.98},
+        }
+        state = {
+            "generated_test": "def test(): pass",
+            "target_file": "/p.py",
+            "iteration": 1,
+            "execution_trace": [prev_entry],
+        }
+        result = _executor_node(state)
+
+        trace = result["execution_trace"]
+        assert len(trace) == 2
+        entry = trace[1]
+        assert entry["iteration"] == 1
+        assert entry["passed"] is True
+        assert entry["coverage_delta"] == 40.0  # 90 - 50
+        assert entry["reward_signals"]["correctness"] == 1.0
+
+    @patch("src.graph.nodes.ExecutorAgent")
+    def test_missing_execution_trace_key_tolerant(self, mock_executor_class):
+        """state 缺 execution_trace 键时不崩（兜底空列表，首条记录写入）。"""
+        from src.graph.workflow import _executor_node
+
+        mock_agent = MagicMock()
+        mock_agent.execute.return_value = {
+            "passed": True,
+            "output": "ok",
+            "coverage": 80.0,
+            "failed_cases": [],
+        }
+        mock_executor_class.return_value = mock_agent
+
+        state = {"generated_test": "def test(): pass", "target_file": "/p.py", "iteration": 0}
+        result = _executor_node(state)
+
+        assert "execution_trace" in result
+        assert len(result["execution_trace"]) == 1
+        assert result["execution_trace"][0]["coverage"] == 80.0
 
 
 class TestShouldDebug:

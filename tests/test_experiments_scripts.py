@@ -508,6 +508,8 @@ class TestAnalyzeResultsScript:
         assert q["assertion_proxy"]["observed_tasks"] == 2
         assert q["assertion_proxy"]["avg_assertions_per_task"] == 1.0
         assert q["assertion_proxy"]["tasks_with_zero_assertions"] == 1
+        # 1.3 AST 口径增强：2 条 assert → AST 节点计数一致
+        assert q["assertion_proxy"]["ast_avg_assertions"] == 1.0
         md = module.render_markdown(analysis, "benchmark_x.json")
         assert "多维质量代理（1.1，保守可复算）" in md
         assert "1.0 断言/任务（min=0, max=2）" in md
@@ -644,6 +646,229 @@ class TestAnalyzeResultsScript:
         assert s["available"] is False
         md = module.render_markdown(analysis, "benchmark_x.json")
         assert "测试异味检测（1.2）" not in md
+
+    def test_boundary_case_coverage_with_generated_test(self, module):
+        """1.3 边界用例覆盖：generated_test 含 None/空集合/0/>= 时识别为边界覆盖。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "b1",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_none():\n    assert f(None) is None\n",
+            },
+            {
+                "task_id": "b2",
+                "passed": False,
+                "iterations": 1,
+                "generated_test": "def test_empty():\n    assert process([]) == []\n",
+            },
+            {
+                "task_id": "b3",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_num():\n    assert calc(0) == 0\n    assert calc(1) >= 0\n",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        bstat = analysis["per_baseline"]["aitester"]["boundary_coverage_metrics"]
+        assert bstat["available"] is True
+        assert bstat["observed_tasks"] == 3
+        assert bstat["tasks_covering_any_boundary"] == 3
+        assert bstat["coverage_rate"] == 1.0
+        # 各类型命中：none=1, empty_collection=1, numeric_extreme=1, comparison_boundary=1
+        assert bstat["boundary_types"].get("none") == 1
+        assert bstat["boundary_types"].get("empty_collection") == 1
+        assert bstat["boundary_types"].get("numeric_extreme") == 1
+        assert bstat["boundary_types"].get("comparison_boundary") == 1
+
+    def test_boundary_case_coverage_no_generated_test(self, module):
+        """1.3 边界用例覆盖：旧 JSON 无 generated_test 时 available=False。"""
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        bstat = analysis["per_baseline"]["aitester"]["boundary_coverage_metrics"]
+        assert bstat["available"] is False
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "边界用例覆盖（1.3" not in md
+
+    def test_boundary_case_coverage_partial_coverage(self, module):
+        """1.3 边界用例覆盖：部分任务覆盖边界条件时 coverage_rate 正确计算。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "c1",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_no_boundary():\n    assert f(5) == 10\n",
+            },
+            {
+                "task_id": "c2",
+                "passed": True,
+                "iterations": 0,
+                "generated_test": "def test_boundary():\n    assert f(-1) == 0\n",
+            },
+        ]
+        analysis = module.build_analysis(data)
+        bstat = analysis["per_baseline"]["aitester"]["boundary_coverage_metrics"]
+        assert bstat["available"] is True
+        assert bstat["observed_tasks"] == 2
+        assert bstat["tasks_covering_any_boundary"] == 1
+        assert bstat["coverage_rate"] == 0.5
+
+    def test_mutation_score_metrics_with_scores(self, module):
+        """1.3 变异得分：details 携带 mutation_score 时汇总平均/高/低分布。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "m1", "passed": True, "iterations": 0, "mutation_score": 0.85},
+            {"task_id": "m2", "passed": True, "iterations": 1, "mutation_score": 0.55},
+            {"task_id": "m3", "passed": False, "iterations": 2, "mutation_score": 0.30},
+        ]
+        analysis = module.build_analysis(data)
+        mstat = analysis["per_baseline"]["aitester"]["mutation_score_metrics"]
+        assert mstat["available"] is True
+        assert mstat["observed_tasks"] == 3
+        assert mstat["avg_mutation_score"] == round((0.85 + 0.55 + 0.30) / 3, 4)
+        assert mstat["high_score_tasks"] == 1  # 0.85
+        assert mstat["low_score_tasks"] == 1  # 0.30
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "变异得分（1.3" in md
+
+    def test_mutation_score_metrics_unavailable_without_scores(self, module):
+        """1.3 变异得分：旧 JSON 无 mutation_score 字段时 available=False，渲染跳过。"""
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        mstat = analysis["per_baseline"]["aitester"]["mutation_score_metrics"]
+        assert mstat["available"] is False
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "变异得分（1.3" not in md
+
+    def test_convergence_failure_modes_root_cause_stuck(self, module):
+        """1.2 收敛失败模式：诊断反复同义 → root_cause_stuck。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "f1",
+                "passed": False,
+                "iterations": 3,
+                "error_category": "assertion",
+                "diagnosis": "断言值错误",
+                "patch": "",
+                "repair_history": [
+                    {"iteration": 1, "diagnosis": "断言值错误", "patch_applied": False},
+                    {"iteration": 2, "diagnosis": "断言值错误", "patch_applied": False},
+                    {"iteration": 3, "diagnosis": "断言值错误", "patch_applied": False},
+                ],
+            },
+        ]
+        analysis = module.build_analysis(data)
+        fstat = analysis["per_baseline"]["aitester"]["convergence_failure_modes"]
+        assert fstat["available"] is True
+        assert fstat["total_converged_failed"] == 1
+        assert fstat["root_cause_stuck"] == 1
+        assert fstat["patch_generation_failed"] == 0
+        assert "f1" in fstat["tasks"]
+
+    def test_convergence_failure_modes_patch_failed(self, module):
+        """1.2 收敛失败模式：补丁曾写盘但未解决问题 → patch_generation_failed。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "f2",
+                "passed": False,
+                "iterations": 3,
+                "error_category": "assertion",
+                "diagnosis": "运行时超时",
+                "patch": "- def add(a, b):\n+ def add(a, b):\n     return a + b",
+                "repair_history": [
+                    {"iteration": 1, "diagnosis": "运行时超时", "patch_applied": True},
+                    {"iteration": 2, "diagnosis": "运行时超时", "patch_applied": True},
+                    {"iteration": 3, "diagnosis": "运行时超时", "patch_applied": True},
+                ],
+            },
+        ]
+        analysis = module.build_analysis(data)
+        fstat = analysis["per_baseline"]["aitester"]["convergence_failure_modes"]
+        assert fstat["patch_generation_failed"] == 1
+        assert fstat["root_cause_stuck"] == 0
+
+    def test_convergence_failure_modes_no_converged_failed(self, module):
+        """1.2 收敛失败模式：无达到 MAX_ITERATIONS 的失败任务时 available=False。"""
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        fstat = analysis["per_baseline"]["aitester"]["convergence_failure_modes"]
+        assert fstat["available"] is False
+        assert fstat["total_converged_failed"] == 0
+
+    def test_execution_trace_summary_with_trace(self, module):
+        """3.2 执行轨迹：details 携带 execution_trace 时汇总各项指标。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {
+                "task_id": "t1",
+                "passed": True,
+                "iterations": 1,
+                "execution_trace": [
+                    {"iteration": 0, "passed": False, "coverage": 30.0, "coverage_delta": None,
+                     "elapsed_seconds": 2.0,
+                     "reward_signals": {"correctness": 0.0, "efficiency": 0.93, "simplicity": 0.97}},
+                    {"iteration": 1, "passed": True, "coverage": 85.0, "coverage_delta": 55.0,
+                     "elapsed_seconds": 3.0,
+                     "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95}},
+                ],
+            },
+            {
+                "task_id": "t2",
+                "passed": True,
+                "iterations": 2,
+                "execution_trace": [
+                    {"iteration": 0, "passed": False, "coverage": 20.0, "coverage_delta": None,
+                     "elapsed_seconds": 5.0,
+                     "reward_signals": {"correctness": 0.0, "efficiency": 0.83, "simplicity": 0.92}},
+                    {"iteration": 1, "passed": False, "coverage": 25.0, "coverage_delta": 5.0,
+                     "elapsed_seconds": 4.0,
+                     "reward_signals": {"correctness": 0.0, "efficiency": 0.87, "simplicity": 0.93}},
+                    {"iteration": 2, "passed": True, "coverage": 30.0, "coverage_delta": 5.0,
+                     "elapsed_seconds": 6.0,
+                     "reward_signals": {"correctness": 1.0, "efficiency": 0.8, "simplicity": 0.9}},
+                ],
+            },
+        ]
+        analysis = module.build_analysis(data)
+        tstat = analysis["per_baseline"]["aitester"]["execution_trace_metrics"]
+        assert tstat["available"] is True
+        assert tstat["observed_tasks"] == 2
+        assert tstat["total_executions"] == 5
+        assert tstat["avg_executions_per_task"] == 2.5
+        # t1 首轮 passed=False、t2 首轮 passed=False → pass_on_first = 0/2 = 0.0
+        assert tstat["pass_on_first_rate"] == 0.0
+        # 末轮 correctness：t1=1.0, t2=1.0（t2 改后末轮通过） → avg=1.0
+        assert tstat["avg_last_reward_correctness"] == 1.0
+        # 覆盖率趋势：t1 首 30.0 / 末 85.0，t2 首 20.0 / 末 30.0
+        # 首轮均值=(30+20)/2=25.0，末轮均值=(85+30)/2=57.5，delta=32.5
+        assert tstat["coverage_trend"]["first_round_avg"] == 25.0
+        assert tstat["coverage_trend"]["last_round_avg"] == 57.5
+        assert tstat["coverage_trend"]["delta"] == 32.5
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "执行反馈轨迹汇总（3.2）" in md
+
+    def test_execution_trace_summary_unavailable_without_trace(self, module):
+        """3.2 执行轨迹：旧 JSON 无 execution_trace 字段时 available=False，渲染跳过。"""
+        data = self._sample_data()
+        analysis = module.build_analysis(data)
+        tstat = analysis["per_baseline"]["aitester"]["execution_trace_metrics"]
+        assert tstat["available"] is False
+        md = module.render_markdown(analysis, "benchmark_x.json")
+        assert "执行反馈轨迹汇总（3.2）" not in md
+
+    def test_execution_trace_summary_empty_trace_list(self, module):
+        """3.2 执行轨迹：execution_trace 为空列表时不计数（视为无轨迹）。"""
+        data = self._sample_data()
+        data["results"]["aitester"]["details"] = [
+            {"task_id": "t1", "passed": True, "iterations": 0, "execution_trace": []},
+        ]
+        analysis = module.build_analysis(data)
+        tstat = analysis["per_baseline"]["aitester"]["execution_trace_metrics"]
+        assert tstat["available"] is False
 
     def test_venv_cache_stats_rendered_when_events_exist(self, module, monkeypatch):
         """4.4 依赖缓存命中统计：有缓存事件时 build_analysis 纳入快照并渲染章节。"""

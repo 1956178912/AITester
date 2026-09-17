@@ -201,6 +201,8 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     超时优先级：state["execution_timeout"]（CLI --timeout 注入）> config.EXECUTION_TIMEOUT。
     此前直接读环境变量原始值，绕过了 config 的范围校验（_validate_timeout），
     导致 CLI --timeout 不生效且非法配置（如 0s）未被兜底。
+    3.2 执行反馈轨迹：每次执行经 _record_execution_trace 追加到
+    state["execution_trace"]（3.2 默认常开，纯观测层，不参与路由）。
     """
     # CLI 通过 state 注入的执行超时优先，未注入时回退到 config 中已校验的值
     executor_timeout = int(state.get("execution_timeout") or EXECUTION_TIMEOUT)
@@ -264,7 +266,61 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         "test_output": result["output"],
         "coverage_report": result["coverage"],
         "failed_cases": result["failed_cases"],
+        "execution_trace": _record_execution_trace(
+            state,
+            passed=result["passed"],
+            coverage=result["coverage"],
+            elapsed_seconds=round(time.time() - t0, 2),
+        ),
     }
+
+
+def _record_execution_trace(
+    state: AITesterState,
+    passed: bool,
+    coverage: float,
+    elapsed_seconds: float,
+) -> list[dict[str, Any]]:
+    """3.2 执行反馈轨迹：把本次 Executor 执行追加到 state["execution_trace"]。
+
+    轨迹为纯观测层（默认常开）：每次执行记录"通过/失败、相对上一轮的
+    覆盖率变化、墙钟耗时"与保守线性归一的多维奖励信号
+    （correctness / efficiency / simplicity），供未来执行反馈驱动的微调
+    备料。轨迹不参与工作流路由决策，写入失败不阻断主流程（观测层
+    失败不应改变被测系统行为，口径与 tracing 一致）。
+
+    Args:
+        state: 当前状态（已含上一轮 execution_trace 前缀）。
+        passed: 本次测试是否通过。
+        coverage: 本次覆盖率百分比（0-100，未测得时 0.0）。
+        elapsed_seconds: 本次 Executor 节点墙钟耗时（秒）。
+
+    Returns:
+        追加本次记录后的完整 execution_trace 列表。
+    """
+    trace = list(state.get("execution_trace") or [])
+    prev_coverage = None
+    if trace:
+        prev_coverage = trace[-1].get("coverage")
+    coverage_delta = round(coverage - prev_coverage, 2) if prev_coverage is not None else None
+
+    # 奖励信号：保守线性归一（0-1），仅记录观测值，不用于任何决策——
+    # 未来微调消费时可按需重新标定（correctness 为最高优先级信号）
+    rewards = {
+        "correctness": 1.0 if passed else 0.0,
+        "efficiency": max(0.0, round(1.0 - elapsed_seconds / EXECUTION_TIMEOUT, 3)),
+        "simplicity": max(0.0, round(1.0 - elapsed_seconds / (EXECUTION_TIMEOUT * 2.0), 3)),
+    }
+    entry = {
+        "iteration": state.get("iteration", 0),
+        "passed": passed,
+        "coverage": coverage,
+        "coverage_delta": coverage_delta,
+        "elapsed_seconds": elapsed_seconds,
+        "reward_signals": rewards,
+    }
+    trace.append(entry)
+    return trace
 
 
 def _debugger_node(state: AITesterState) -> dict[str, Any]:
