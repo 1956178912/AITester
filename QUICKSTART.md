@@ -134,14 +134,24 @@ export ASSERTION_AUGMENT_ENABLE=true
 # 跑完 benchmark 后生成 Markdown 汇总，含成功率 / token 效率 / 迭代分布 / 失败原因分布 /
 # RAG 质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
 # 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/ 测试异味检测 / 多维质量代理 /
+# 收敛失败模式归因（1.2，区分"无法定位根因" vs "无法生成有效补丁"）/
+# 边界用例覆盖（1.3，AST 保守判定 None/空集合/0/-1/>=/<= 等边界条件）/
+# 变异得分（1.3，外部变异测试器产出，无 mutation_score 字段时跳过）/
+# 断言强度 AST 增强（1.3，ast.parse + ast.Assert 节点计数，输出 ast_avg_assertions）/
 # 数据污染检测（2.1，SWE-bench 黄金补丁 token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6）/
 # 任务难度分层（2.2，code_size / dependency_count / complexity_proxy 三维度）/
+# 执行反馈轨迹汇总（3.2，观测任务数 / 总执行次数 / 首轮即通过率 / 末轮奖励信号 / 覆盖率趋势）/
 # 依赖缓存命中统计（4.4，venv 缓存 hit_rate）。
 # 旧 JSON 缺对应键时自动兜底或降级，不崩。
 python experiments/analyze_results.py --results-dir experiments/results
 # 可选：显式传入黄金补丁映射（{task_id: patch_text}，JSON 对象）覆盖污染检测
 python experiments/analyze_results.py --results-dir experiments/results \
     --golden-patches /path/to/golden_patches.json
+
+# 3.2 执行反馈轨迹：executor 节点默认常开，每次执行追加 passed / coverage_delta /
+# elapsed / reward_signals {correctness, efficiency, simplicity} 到 state.execution_trace。
+# 查看某任务的轨迹（结果 JSON 的 details[].execution_trace）：
+python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
 
 # 失败根因分类 + 案例知识库（5.3）：按 LLM 能力 / 依赖 / 框架三大根因归因，
 # 结构化案例落盘 failure_knowledge_base.json（含 task_id / root_cause / 复现步骤 / 建议修复）。

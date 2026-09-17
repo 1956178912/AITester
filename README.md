@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1351 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1311 collected） |
-| **单元测试** | ✅ 全量 1351 passed, 0 skipped；精简环境 1311 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1365 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1325 collected） |
+| **单元测试** | ✅ 全量 1365 passed, 0 skipped；精简环境 1325 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 95% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 90% / cli-app 93% / cli-output 92%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 数据集与评估深化轮次（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式 / 4.4 依赖缓存监控 / 5.1 低覆盖模块补强，全量 1351 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 评估指标深化轮次（1.2 收敛失败模式归因 / 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹，全量 1365 passed / 覆盖率 95%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-16 数据集与评估深化轮次（0.9.18）：2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行转正 / 4.4 依赖缓存监控 / 4.1 脱敏审计 / 5.1 低覆盖模块补强；新增 contamination_check.py + difficulty_stratification.py + test_executor_docker.py（4 用例）+ test_contamination_check.py（15 用例），logging_utils.py 覆盖率 90%→100%；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-16 评估指标深化轮次（0.9.19）：1.2 收敛失败模式归因（无法定位根因 vs 无法生成有效补丁）/ 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹（executor 节点每次执行追加 passed / coverage_delta / elapsed / reward_signals 到 state.execution_trace，run_benchmark 结果行带轨迹，analyze_results 自动汇总渲染）；新增 14 个用例（TestExecutionTrace 3 + 边界/变异/收敛模式/执行轨迹 11），全量 1351→1365；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1351 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1311 个收集）
+# 运行所有单元测试（全量 1365 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1325 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -449,12 +449,16 @@ CROSS_FILE_ENABLE=true CROSS_FILE_MAX_MODULES=5 python main.py run examples/calc
 - `list_venv_cache()`：列出缓存目录所有 venv（name/path/size_mb/created_at）
 - `clear_venv_cache(max_age_days, max_size_mb)`：按年龄/大小过滤清理，均 None 时清空
 
-### 5.11 测试异味检测与修复收敛曲线（1.2/1.3）
-`experiments/analyze_results.py` 新增两个保守可复算章节：
+### 5.11 测试异味检测 / 修复收敛曲线 / 收敛失败模式归因 / 边界用例覆盖 / 变异得分 / 断言强度 AST 增强（1.2/1.3）
+`experiments/analyze_results.py` 新增六个保守可复算章节（全部"字段缺失即跳过"，旧 JSON 不崩）：
 - **测试异味检测（1.2）**：AST 扫 `details[].generated_test`，识别 Assertion Roulette / Magic Number / 断言弱化 / 平凡测试 4 类异味
 - **修复收敛曲线（1.3）**：按迭代轮次 0/1/2/3+ 统计累计通过率与平均耗时，观察"随迭代增加通过率如何变化"
+- **收敛失败模式归因（1.2）**：对达到 MAX_ITERATIONS 仍未修复的任务，区分"无法定位根因"（诊断反复同义且从未写盘成功）与"无法生成有效补丁"（补丁写盘成功但测试仍失败 / 被安全守卫反复拒绝）
+- **边界用例覆盖（1.3）**：AST 保守判定 `generated_test` 是否覆盖 None / 空字符串 / 空集合 / 0 / -1 / >= / <= 等边界条件，输出各边界类型命中数与覆盖率
+- **变异得分（1.3）**：收集 `details[].mutation_score`（外部变异测试器如 mutmut 产出），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；无该字段时跳过章节
+- **断言强度 AST 增强（1.3）**：在原有 `assert` 行数统计基础上新增 AST 口径（`ast.parse` + `ast.Assert` 节点计数），输出 `ast_avg_assertions` 与 `ast_parse_failed_tasks`（解析失败任务清单，可交叉异味检测）
 
-旧 JSON 无 `generated_test` 字段时自动降级，不崩溃。
+旧 JSON 无 `generated_test` / `mutation_score` 字段时自动降级，不崩溃。
 
 ### 5.12 失败根因分类与案例知识库（5.3）
 `experiments/analyze_failures.py` 新增：
@@ -462,6 +466,28 @@ CROSS_FILE_ENABLE=true CROSS_FILE_MAX_MODULES=5 python main.py run examples/calc
 - **案例知识库**：按 `error_category` 多样性优先选取典型失败案例，结构化为 `experiments/results/failure_knowledge_base.json`（含 task_id / root_cause / reproducible_steps / suggested_fix）
 
 CLI 新增 `--knowledge-base/-k` 选项控制输出路径。
+
+### 5.13 执行反馈轨迹收集（3.2）
+`state.py` 新增 `execution_trace` 字段（list，默认 `[]`，`create_initial_state` 同步初始化），`nodes.py` 的 `_executor_node` 每次执行追加一条记录到 `state["execution_trace"]`：
+
+```
+{
+  "iteration": int,
+  "passed": bool,
+  "coverage": float,
+  "coverage_delta": float | None,   # 首轮为 None
+  "elapsed_seconds": float,
+  "reward_signals": {               # 保守线性归一，仅记录观测，不参与路由
+    "correctness": 0.0 | 1.0,
+    "efficiency": 0.0~1.0,          # 1 - elapsed / EXECUTION_TIMEOUT
+    "simplicity": 0.0~1.0           # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
+  }
+}
+```
+
+纯观测层默认常开（不影响修复路由），`run_benchmark.py` 结果行带 `execution_trace`（失败分支 `None` 兜底保持键集合同构）；`analyze_results.py` 新增"执行反馈轨迹汇总（3.2）"章节：统计观测任务数 / 总执行次数 / 平均轮数 / 首轮即通过率 / 末轮 correctness & efficiency 均值 / 首末轮覆盖率趋势（delta）。旧 JSON 无该字段时章节跳过。
+
+> 用途：为未来执行反馈驱动的微调（如 BoostAPR 类方法）备料——每次 benchmark 自动把"通过/失败、覆盖率变化、耗时、多维奖励信号"落进结果 JSON，无需额外执行轨迹采集脚本。
 
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
@@ -677,7 +703,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1351 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1365 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -687,7 +713,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（55 个测试文件，全量 1351 个 pytest 收集用例；精简环境 1311 收集 / 40 自动跳过，src 总覆盖率 95%）：
+**测试覆盖模块**（55 个测试文件，全量 1365 个 pytest 收集用例；精简环境 1325 收集 / 40 自动跳过，src 总覆盖率 95%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -720,7 +746,7 @@ docker run --rm \
 | `test_executor_docker.py` | 4 | 4.3 Docker 执行模式（不可用诊断/模式开关/docker 优先于 venv/子进程环境凭证剔除） |
 | `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
 | `test_experiments_analysis.py` | 20 | 实验结果分析（排名/统计）+ 5.1 统计检验边界 5 用例（样本量 <3 / 部分配对缺失 / 单基线 / 脏数据） |
-| `test_experiments_scripts.py` | 38 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计（2 用例） |
+| `test_experiments_scripts.py` | 54 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.9.9）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计 + 1.2 收敛失败模式归因 / 1.3 边界用例覆盖 / 1.3 变异得分 / 3.2 执行轨迹汇总（14 用例） |
 | `test_generator.py` | 43 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
 | `test_llm_cache.py` | 16 | LLM 内存缓存 |
 | `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
@@ -742,7 +768,7 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
-| `test_workflow.py` | 38 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例） |
+| `test_workflow.py` | 41 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例）+ 3.2 执行反馈轨迹（TestExecutionTrace 3 用例：首轮 / 二轮 delta / 缺键容错） |
 | `test_workflow_extended.py` | 47 | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 | `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
@@ -1046,6 +1072,15 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### v0.9.19 (2026-09-16) — 评估指标深化轮次
+**核心成果**:
+- 1.2 收敛失败模式归因（`analyze_results.py:_convergence_failure_modes`，区分"无法定位根因" vs "无法生成有效补丁"）
+- 1.3 边界用例覆盖 / 变异得分 / 断言强度 AST 增强（`_boundary_case_coverage` / `_mutation_score_metrics` / `_assertion_strength_proxy` AST 口径）
+- 3.2 执行反馈轨迹收集（`state.execution_trace` + `nodes._record_execution_trace` + `run_benchmark.py` 结果行带轨迹 + `analyze_results.py` 汇总章节，纯观测层默认常开，为未来 RL 微调备料）
+- 新增 14 个测试用例
+
+**验证**: 全量 1365 passed / 0 failed / ruff 全绿 / 覆盖率 95%
 
 ### v0.9.18 (2026-09-16) — 数据集与评估深化轮次
 

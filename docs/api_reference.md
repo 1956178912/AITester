@@ -357,6 +357,110 @@ lines = render_stratification_section(details, baseline="aitester")
 
 ---
 
+### 收敛失败模式归因（1.2）
+
+`experiments/analyze_results.py:_convergence_failure_modes(details)`：对达到 MAX_ITERATIONS（iterations>=3）仍未修复的任务，区分两类失败模式：
+- **无法定位根因**：诊断文本反复同义（最近 2 轮 diagnosis 相同）且补丁从未写盘成功——说明 Debugger 反复给出相同结论，没有真正识别到问题所在
+- **无法生成有效补丁**：补丁曾写盘成功（patch_applied=True）但测试仍失败，或被安全守卫反复拒绝（patch_applied=False 且有 patch 记录）
+
+```python
+from experiments.analyze_results import _convergence_failure_modes
+
+report = _convergence_failure_modes(details)
+# → {"total_converged_failed": n, "root_cause_stuck": n, "patch_generation_failed": n,
+#    "tasks": [...], "available": bool}
+# available=False 时无达到 MAX_ITERATIONS 的失败任务，渲染层跳过章节
+```
+
+**保守启发，不依赖 LLM**：仅消费 details[].iterations / diagnosis / repair_history / patch 已有字段。
+
+---
+
+### 边界用例覆盖（1.3）
+
+`experiments/analyze_results.py:_boundary_case_coverage(details)`：对 details[].generated_test 做 AST 保守判定，识别是否覆盖 None / 空字符串 / 空集合 / 0 / -1 / >= / <= 等边界条件。
+
+```python
+from experiments.analyze_results import _boundary_case_coverage
+
+report = _boundary_case_coverage(details)
+# → {"available": bool, "observed_tasks": n, "boundary_types": {"none": n, ...},
+#    "tasks_covering_any_boundary": n, "coverage_rate": f}
+# 旧 JSON 无 generated_test 时 available=False，渲染层跳过章节
+```
+
+---
+
+### 变异得分（1.3）
+
+`experiments/analyze_results.py:_mutation_score_metrics(details)`：收集 details[].mutation_score（外部变异测试器如 mutmut 产出，0.0–1.0），汇总平均 / 高（>=0.7）/ 低（<0.4）分布。无该字段时 available=False，渲染层跳过章节，不阻断主流程。
+
+```python
+from experiments.analyze_results import _mutation_score_metrics
+
+report = _mutation_score_metrics(details)
+# → {"available": bool, "observed_tasks": n, "avg_mutation_score": f,
+#    "high_score_tasks": n, "low_score_tasks": n}
+```
+
+---
+
+### 断言强度 AST 增强（1.3）
+
+`experiments/analyze_results.py:_assertion_strength_proxy(details)`：在原有 `assert` 行数统计基础上新增 AST 口径（`ast.parse` + `ast.Assert` 节点计数），输出 `ast_avg_assertions` 与 `ast_parse_failed_tasks`（解析失败任务清单，可交叉异味检测）。旧 JSON 无 generated_test 时整个 proxy available=False。
+
+```python
+from experiments.analyze_results import _assertion_strength_proxy
+
+report = _assertion_strength_proxy(details)
+# → {"available": bool, "observed_tasks": n, "avg_assertions_per_task": f,
+#    "min_assertions": n, "max_assertions": n, "tasks_with_zero_assertions": n,
+#    "ast_avg_assertions": f | None, "ast_parse_failed_tasks": [...]}
+```
+
+---
+
+### 执行反馈轨迹（3.2）
+
+`state.execution_trace`（list，默认 `[]`）+ `nodes._record_execution_trace`：每次 Executor 执行追加一条记录到 `state["execution_trace"]`，纯观测层默认常开，不影响修复路由。
+
+```python
+from src.graph.state import AITesterState, create_initial_state
+from src.graph.nodes import _record_execution_trace
+
+state = create_initial_state(task_uuid="t1", target_file="/p.py", target_code="def f(): pass",
+                              target_function=None, max_iterations=3)
+# 工作流执行后 state["execution_trace"] 形如：
+[
+  {
+    "iteration": 0,
+    "passed": False,
+    "coverage": 40.0,
+    "coverage_delta": None,       # 首轮无前一轮
+    "elapsed_seconds": 2.0,
+    "reward_signals": {           # 保守线性归一，仅记录观测，不参与路由
+      "correctness": 0.0,         # 1.0 if passed else 0.0
+      "efficiency": 0.93,         # 1 - elapsed / EXECUTION_TIMEOUT
+      "simplicity": 0.97          # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
+    }
+  },
+  {
+    "iteration": 1,
+    "passed": True,
+    "coverage": 85.0,
+    "coverage_delta": 45.0,       # 85 - 40
+    "elapsed_seconds": 3.0,
+    "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95}
+  }
+]
+```
+
+`run_benchmark.py` 结果行带 `execution_trace`（失败分支 `None` 兜底保持键集合同构）；`analyze_results.py` 新增"执行反馈轨迹汇总（3.2）"章节：统计观测任务数 / 总执行次数 / 平均轮数 / 首轮即通过率 / 末轮 correctness & efficiency 均值 / 首末轮覆盖率趋势（delta）。旧 JSON 无该字段时章节跳过。
+
+**用途**：为未来执行反馈驱动的微调（如 BoostAPR 类方法）备料——每次 benchmark 自动把"通过/失败、覆盖率变化、耗时、多维奖励信号"落进结果 JSON，无需额外执行轨迹采集脚本。
+
+---
+
 ### 结构化追踪层（4.1）
 
 `src/observability/trace.py`：JSONL 追加式记录每个工作流任务的"任务级"事件（节点输入/输出摘要、token 消耗、墙钟耗时、路由决策），供实验分析直接消费。默认关闭（`AITESTER_TRACE_DIR` 未设时全 no-op，零性能税）；显式设置后启用。
@@ -597,7 +701,8 @@ class CustomDataset(BaseDatasetLoader):
 | 版本 | 日期 | 变更说明 |
 |------|------|---------|
 | 0.9.16 | 2026-09-15 | 深度重构轮次：AITesterState 初始化双写收敛为 `create_initial_state()` 工厂（CLI + benchmark 单一构造点）、experiments/visualize_results.py 统计检验收敛复用 statistical_analysis.py 配对原语 + NaN/Inf 守卫、code_context.py 补测 9 用例（模块覆盖率 89%→98%）、README 结构树补齐 5 个拆分产物（tracing/rag/nodes、api_health、llm_client）+ 测试状态表 13 处行内数同步 + api_reference 参数默认值标注；全量 1291 passed / ruff 全绿 / 覆盖率 94% |
-| Unreleased | 2026-09-16 | 数据集与评估深化轮次：2.1 数据污染检测（`experiments/contamination_check.py` token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6；`dataset_loader` 保留官方 patch 至 `metadata["golden_patch"]`；`load_dataset` 支持 `swe_rebench` 别名）/ 2.2 任务难度分层（`experiments/difficulty_stratification.py`，code_size / dependency_count / complexity_proxy 三维度）/ 4.3 Docker 执行模式转正（`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`，docker 不可用返回 `docker_unavailable` 诊断不降级本地；`scripts/compare_executor_modes.py` 时间对比）/ 4.4 依赖缓存监控完善（CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + 命中率入分析）/ 4.1 脱敏审计（`scripts/audit_log_redaction.py` + 子进程环境凭证剔除）/ 3.1 `reproduce.sh` 默认启用多候选补丁 + 3.2 `reproduce.sh` 显式启用 `AITESTER_TRACE_DIR` / 5.1 低覆盖模块补强（logging_utils 90%→100%、analysis.py 统计检验边界、cli/app.py 并发中断/信号处理） |
+| Unreleased | 2026-09-16 | 评估指标深化轮次：1.2 收敛失败模式归因（`analyze_results.py:_convergence_failure_modes`，对达到 MAX_ITERATIONS 仍未修复的任务区分"无法定位根因" vs "无法生成有效补丁"）/ 1.3 边界用例覆盖（`_boundary_case_coverage`，AST 保守判定 None/空集合/0/-1/>=/<= 等边界条件）/ 1.3 变异得分（`_mutation_score_metrics`，收集 details[].mutation_score）/ 1.3 断言强度 AST 增强（`_assertion_strength_proxy` 新增 `ast_avg_assertions` + `ast_parse_failed_tasks`）/ 3.2 执行反馈轨迹（`state.execution_trace` + `nodes._record_execution_trace` + `run_benchmark.py` 结果行带轨迹 + `analyze_results.py` 自动汇总渲染，纯观测层默认常开，为 RL 微调备料）；新增 14 个用例，全量 1365 passed / 覆盖率 95% |
+| Unreleased | 2026-09-16 | 数据集与评估深化轮次：2.1 数据污染检测（`experiments/contamination_check.py` token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6；`dataset_loader` 保留官方 patch 至 `metadata["golden_patch"]`；`load_dataset` 支持 `swe_rebench` 别名）/ 2.2 任务难度分层（`experiments/difficulty_stratification.py`，code_size / dependency_count / complexity_proxy 三维度）/ 4.3 Docker 执行模式转正（`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`，docker 不可用返回 `docker_unavailable` 诊断不降级本地；`scripts/compare_executor_modes.py` 时间对比）/ 4.4 依赖缓存监控完善（CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + 命中率入分析）/ 4.1 脱敏审计（`scripts/audit_log_redaction.py` + 子进程环境凭证剔除）/ 3.1 `reproduce.sh` 默认启用多候选补丁 + 3.2t `reproduce.sh` 显式启用 `AITESTER_TRACE_DIR` / 5.1 低覆盖模块补强（logging_utils 90%→100%、analysis.py 统计检验边界、cli/app.py 并发中断/信号处理） |
 | 0.9.15 | 2026-09-15 | 代码可维护性深化轮次：Ruff 规则集增强（SIM/PERF/RET/RUF，修复 63 处命中）+ 337 函数完整类型注解 + 9 个高复杂度函数中 7 个重构（get_fix_strategy/run/check_dataset/generate/_execute_sandboxed/clear_venv_cache/analyze_cross_file_deps）；全量 1270 passed / ruff 全绿 |
 | 0.9.14 | 2026-09-15 | 全项目收敛轮次：config 集中化（删除 CROSS_FILE/ASSERTION 死常量、SWE_BENCH_ENRICHMENT 收敛 config、MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper）、修复 executor 标准库清单误列 diskcache、修复跨文件降级路径写不进盘、删除 4 处死代码、RAG 检索器写锁 + _upsert 抽取、refine_final_error_category 收敛；全量 1270 passed / ruff 全绿 |
 | 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` 补模块级 `pytestmark=skipif(not _chroma_available())`（与 `test_rag_metrics.py` 口径一致，缺 chromadb 时 32 条 RAG 检索器用例优雅跳过而非 ImportError ERROR）；`tests/test_experiments_scripts.py` 的 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixture 在惰性导入 `experiments.visualize_results` 前补 `pytest.importorskip("matplotlib")`（缺 matplotlib 时 5 条可视化用例跳过）。精简环境（未全量安装 `requirements.txt`）下全量基线为 **1208 passed / 39 skipped / 0 failed**；全量安装依赖后恢复 **1247 passed / 0 skipped** |

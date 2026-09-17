@@ -449,12 +449,16 @@ The `venv` cache is upgraded from "reuse without monitoring" to "observable hit 
 - `list_venv_cache()`: lists every venv in the cache directory (name/path/size_mb/created_at)
 - `clear_venv_cache(max_age_days, max_size_mb)`: filters and cleans by age/size; when both are None, clears everything
 
-### 5.11 Test Smell Detection and Repair Convergence Curve (1.2/1.3)
-Two new conservative, re-computable sections in `experiments/analyze_results.py`:
+### 5.11 Test Smell / Convergence Curve / Convergence Failure Mode / Boundary Coverage / Mutation Score / Assertion-Strength AST (1.2/1.3)
+Six new conservative, re-computable sections in `experiments/analyze_results.py` (all "field-missing → skip", legacy JSON never crashes):
 - **Test smell detection (1.2)**: an AST scan over `details[].generated_test` identifying four smell types: Assertion Roulette / Magic Number / assertion weakening / trivial tests
 - **Repair convergence curve (1.3)**: aggregates cumulative pass rate and average time by iteration round 0/1/2/3+, showing "how the pass rate changes as iterations increase"
+- **Convergence failure-mode attribution (1.2)**: for tasks that still fail at MAX_ITERATIONS, distinguishes "cannot pinpoint root cause" (repeated identical diagnosis, patch never written) vs "cannot produce an effective patch" (patch written but still failing, or repeatedly rejected by safety guards)
+- **Boundary case coverage (1.3)**: AST-based conservative check of `generated_test` for coverage of None / empty string / empty collection / 0 / -1 / >= / <= boundary conditions; reports per-type hit counts and coverage rate
+- **Mutation score (1.3)**: collects `details[].mutation_score` (produced by an external mutation tester such as mutmut); aggregates mean / high (>=0.7) / low (<0.4) distribution; skips the section when the field is absent
+- **Assertion-strength AST enhancement (1.3)**: in addition to the original `assert` line-count metric, adds an AST basis (`ast.parse` + `ast.Assert` node counting), outputting `ast_avg_assertions` and `ast_parse_failed_tasks`
 
-When legacy JSON lacks the `generated_test` field, it degrades gracefully without crashing.
+When legacy JSON lacks `generated_test` / `mutation_score` fields, it degrades gracefully without crashing.
 
 ### 5.12 Failure Root-Cause Classification and Case Knowledge Base (5.3)
 Additions in `experiments/analyze_failures.py`:
@@ -462,6 +466,28 @@ Additions in `experiments/analyze_failures.py`:
 - **Case knowledge base**: typical failure cases selected with diversity priority over `error_category`, structured into `experiments/results/failure_knowledge_base.json` (containing task_id / root_cause / reproducible_steps / suggested_fix)
 
 A new CLI option `--knowledge-base/-k` controls the output path.
+
+### 5.13 Execution Feedback Trace Collection (3.2)
+`state.py` adds an `execution_trace` field (list, default `[]`; `create_initial_state` keeps it in sync). `_executor_node` in `nodes.py` appends one record to `state["execution_trace"]` on every execution:
+
+```
+{
+  "iteration": int,
+  "passed": bool,
+  "coverage": float,
+  "coverage_delta": float | None,   # None for the first round
+  "elapsed_seconds": float,
+  "reward_signals": {               # conservative linear normalization, recorded only, never used for routing
+    "correctness": 0.0 | 1.0,
+    "efficiency": 0.0~1.0,          # 1 - elapsed / EXECUTION_TIMEOUT
+    "simplicity": 0.0~1.0           # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
+  }
+}
+```
+
+A pure observability layer, enabled by default (does not affect repair routing). `run_benchmark.py` result rows carry `execution_trace` (failure branch falls back to `None` to keep key-set parity); `analyze_results.py` adds an "Execution Feedback Trace Summary (3.2)" section: observed task count / total executions / average rounds / first-round pass rate / last-round correctness & efficiency means / first-vs-last coverage trend (delta). Legacy JSON without the field skips the section.
+
+> Purpose: preparing data for future execution-feedback-driven fine-tuning (BoostAPR-style methods) — every benchmark automatically writes "pass/fail, coverage change, elapsed time, multi-dimensional reward signals" into the result JSON; no extra trace-collection script needed.
 
 ### 6. Standard Dataset Integration (new)
 Multiple datasets are supported through the `src/datasets/` subpackage (`dataset_loader.py` + `synthetic_dataset.py`):

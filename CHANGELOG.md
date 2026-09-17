@@ -4,7 +4,7 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 数据集与评估深化（2.1 污染检测 / 2.2 难度分层 / 3.1 多候选默认启用 / 4.1 脱敏审计 / 4.3 Docker 执行模式 / 1.2 收敛失败模式归因 / 1.3 边界用例 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹）
+## [Unreleased] - 评估指标深化（1.2 收敛失败模式归因 / 1.3 边界用例覆盖 + 变异得分 + AST 断言强度 / 3.2 执行反馈轨迹）
 
 ### 1.2 收敛失败模式归因
 - `analyze_results.py` 新增 `_convergence_failure_modes`：对达到
@@ -26,7 +26,7 @@
   `ast_avg_assertions` 与 `ast_parse_failed_tasks` 两个增强字段，
   旧 JSON 兼容（无 generated_test 时整个 proxy available=False）
 
-### 3.2 执行反馈轨迹收集
+### 3.2 执行反馈轨迹收集（为 RL 微调备料，纯观测层默认常开）
 - `state.py` 新增 `execution_trace` 字段（list，默认 []）；
   `create_initial_state` 初始化空列表
 - `nodes.py` 新增 `_record_execution_trace`：每次 Executor 执行追加
@@ -70,9 +70,11 @@
   （MULTI_CANDIDATE_COUNT=3），新增 `--no-multi-candidate` 参数回退历史口径；
   多候选 vs 单补丁 A/B 对比结果分别保留在 experiments/results/（时间戳不互覆盖）
 
-### 3.2 结构化追踪层在复现流程中主动启用
+### 3.2t 结构化追踪层在复现流程中主动启用
 - `reproduce.sh` export `AITESTER_TRACE_DIR=experiments/results/traces`
   （默认 no-op，显式启用后收集逐智能体快照 / Token 明细 / 墙钟耗时 / 决策路径）
+  注：本节号 3.2t 沿用历史批次命名（3.2 已被"执行反馈轨迹收集"占用），
+  与"3.2 执行反馈轨迹收集"为不同功能。
 
 ### 4.1 日志脱敏完整审计
 - 新增 `scripts/audit_log_redaction.py`：全仓库 199 个 logger 调用点

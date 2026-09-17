@@ -22,6 +22,10 @@
 | Task difficulty stratification (2.2) | Stratify by code_size / dependency_count / complexity_proxy | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
 | Docker isolated execution (4.3) | Run pytest inside a container via the docker CLI | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
 | Dependency cache monitoring (4.4) | venv cache hit-rate statistics + cleanup | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
+| Convergence failure-mode attribution (1.2) | Distinguishes "cannot pinpoint root cause" vs "cannot produce an effective patch" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` |
+| Boundary case coverage (1.3) | AST conservative check of generated_test for boundary-condition coverage | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` |
+| Mutation score (1.3) | Collects details[].mutation_score (produced by an external mutation tester) | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` |
+| Execution feedback trace (3.2) | Appends passed/coverage_delta/elapsed/reward_signals on every execution | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` |
 
 ---
 

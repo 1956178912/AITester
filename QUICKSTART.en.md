@@ -137,9 +137,18 @@ export ASSERTION_AUGMENT_ENABLE=true
 # generate a Markdown summary including success rate / token efficiency / iteration
 # distribution / failure-cause distribution / RAG quality / repair convergence efficiency /
 # repair convergence curve / test smell detection / multi-dimensional quality proxies /
+# convergence failure-mode attribution (1.2, distinguishing "cannot pinpoint root cause"
+# vs "cannot produce an effective patch") / boundary case coverage (1.3, AST conservative
+# detection of None / empty collection / 0 / -1 / >= / <= boundary conditions) /
+# mutation score (1.3, produced by external mutation testers; skipped when the field is
+# absent) / assertion-strength AST enhancement (1.3, ast.parse + ast.Assert node
+# counting, outputting ast_avg_assertions) /
 # data contamination detection (2.1, token-level Jaccard overlap of SWE-bench golden
 # patches, high >= 0.85 / medium >= 0.6) / task difficulty stratification (2.2,
-# code_size / dependency_count / complexity_proxy) / dependency cache hit statistics (4.4).
+# code_size / dependency_count / complexity_proxy) /
+# execution feedback trace summary (3.2, observed task count / total executions /
+# first-round pass rate / last-round reward signals / coverage trend) /
+# dependency cache hit statistics (4.4).
 # When corresponding keys are missing from an old JSON, it automatically falls back or
 # degrades without crashing.
 python experiments/analyze_results.py --results-dir experiments/results
@@ -147,6 +156,12 @@ python experiments/analyze_results.py --results-dir experiments/results
 # to override contamination detection
 python experiments/analyze_results.py --results-dir experiments/results \
     --golden-patches /path/to/golden_patches.json
+
+# 3.2 Execution feedback trace: the executor node is enabled by default; on every execution
+# it appends passed / coverage_delta / elapsed / reward_signals {correctness, efficiency,
+# simplicity} to state.execution_trace. To inspect a task's trace (details[].execution_trace
+# in the result JSON):
+python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
 
 # Failure root-cause classification + case knowledge base (5.3): attribute causes to the three major root causes
 # (LLM capability / dependencies / frameworks); structured cases are written to failure_knowledge_base.json

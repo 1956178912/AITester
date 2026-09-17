@@ -357,6 +357,110 @@ lines = render_stratification_section(details, baseline="aitester")
 
 ---
 
+### Convergence Failure-Mode Attribution (1.2)
+
+`experiments/analyze_results.py:_convergence_failure_modes(details)`: for tasks still failing at MAX_ITERATIONS (iterations>=3), distinguishes two failure modes:
+- **Cannot pinpoint root cause**: diagnosis text repeatedly identical (the last two rounds of diagnosis are the same) and the patch was never successfully written — the Debugger keeps emitting the same conclusion without actually identifying the problem
+- **Cannot produce an effective patch**: the patch was successfully written (patch_applied=True) but the test still fails, or it was repeatedly rejected by the safety guards (patch_applied=False with a patch record present)
+
+```python
+from experiments.analyze_results import _convergence_failure_modes
+
+report = _convergence_failure_modes(details)
+# → {"total_converged_failed": n, "root_cause_stuck": n, "patch_generation_failed": n,
+#    "tasks": [...], "available": bool}
+# available=False when there are no failures that reached MAX_ITERATIONS; the rendering layer skips the section
+```
+
+**Conservative heuristics, LLM-free**: consumes only the existing details[].iterations / diagnosis / repair_history / patch fields.
+
+---
+
+### Boundary Case Coverage (1.3)
+
+`experiments/analyze_results.py:_boundary_case_coverage(details)`: an AST conservative check of details[].generated_test for coverage of None / empty string / empty collection / 0 / -1 / >= / <= boundary conditions.
+
+```python
+from experiments.analyze_results import _boundary_case_coverage
+
+report = _boundary_case_coverage(details)
+# → {"available": bool, "observed_tasks": n, "boundary_types": {"none": n, ...},
+#    "tasks_covering_any_boundary": n, "coverage_rate": f}
+# available=False when legacy JSON has no generated_test; the rendering layer skips the section
+```
+
+---
+
+### Mutation Score (1.3)
+
+`experiments/analyze_results.py:_mutation_score_metrics(details)`: collects details[].mutation_score (produced by an external mutation tester such as mutmut, 0.0–1.0), aggregating the mean / high (>=0.7) / low (<0.4) distribution. available=False when the field is absent; the section is skipped without blocking the main flow.
+
+```python
+from experiments.analyze_results import _mutation_score_metrics
+
+report = _mutation_score_metrics(details)
+# → {"available": bool, "observed_tasks": n, "avg_mutation_score": f,
+#    "high_score_tasks": n, "low_score_tasks": n}
+```
+
+---
+
+### Assertion-Strength AST Enhancement (1.3)
+
+`experiments/analyze_results.py:_assertion_strength_proxy(details)`: in addition to the original `assert` line-count metric, adds an AST basis (ast.parse + ast.Assert node counting), outputting `ast_avg_assertions` and `ast_parse_failed_tasks` (a list of parse-failure tasks, cross-referenceable with smell detection). When legacy JSON has no generated_test, the whole proxy is available=False.
+
+```python
+from experiments.analyze_results import _assertion_strength_proxy
+
+report = _assertion_strength_proxy(details)
+# → {"available": bool, "observed_tasks": n, "avg_assertions_per_task": f,
+#    "min_assertions": n, "max_assertions": n, "tasks_with_zero_assertions": n,
+#    "ast_avg_assertions": f | None, "ast_parse_failed_tasks": [...]}
+```
+
+---
+
+### Execution Feedback Trace (3.2)
+
+`state.execution_trace` (list, default `[]`) + `nodes._record_execution_trace`: appends one record to `state["execution_trace"]` on every executor execution; a pure observability layer, enabled by default, does not affect repair routing.
+
+```python
+from src.graph.state import AITesterState, create_initial_state
+from src.graph.nodes import _record_execution_trace
+
+state = create_initial_state(task_uuid="t1", target_file="/p.py", target_code="def f(): pass",
+                              target_function=None, max_iterations=3)
+# After workflow execution, state["execution_trace"] looks like:
+[
+  {
+    "iteration": 0,
+    "passed": False,
+    "coverage": 40.0,
+    "coverage_delta": None,       # no previous round
+    "elapsed_seconds": 2.0,
+    "reward_signals": {           # conservative linear normalization, recorded only, never used for routing
+      "correctness": 0.0,         # 1.0 if passed else 0.0
+      "efficiency": 0.93,         # 1 - elapsed / EXECUTION_TIMEOUT
+      "simplicity": 0.97          # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
+    }
+  },
+  {
+    "iteration": 1,
+    "passed": True,
+    "coverage": 85.0,
+    "coverage_delta": 45.0,       # 85 - 40
+    "elapsed_seconds": 3.0,
+    "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95}
+  }
+]
+```
+
+`run_benchmark.py` result rows carry `execution_trace` (failure branch falls back to `None` to keep key-set parity); `analyze_results.py` adds an "Execution Feedback Trace Summary (3.2)" section: observed task count / total executions / average rounds / first-round pass rate / last-round correctness & efficiency means / first-vs-last coverage trend (delta). Legacy JSON without the field skips the section.
+
+**Purpose**: preparing data for future execution-feedback-driven fine-tuning (BoostAPR-style methods) — every benchmark automatically writes "pass/fail, coverage change, elapsed time, multi-dimensional reward signals" into the result JSON; no extra trace-collection script needed.
+
+---
+
 ### Structured Tracing Layer (4.1)
 
 `src/observability/trace.py`: an append-only JSONL recorder capturing "task-level" events (node input/output summaries, token consumption, wall-clock latency, routing decisions) for each workflow task, consumed directly by experimental analysis. Disabled by default (a complete no-op with zero performance cost when `AITESTER_TRACE_DIR` is unset); enable it explicitly.
@@ -596,7 +700,8 @@ class CustomDataset(BaseDatasetLoader):
 
 | Version | Date | Changes |
 |------|------|---------|
-| Unreleased | 2026-09-16 | Dataset & evaluation deepening round: 2.1 data contamination detection (`experiments/contamination_check.py`, token-level Jaccard overlap, high ≥ 0.85 / medium ≥ 0.6; `dataset_loader` stores the official patch into `metadata["golden_patch"]`; `load_dataset` supports the `swe_rebench` alias) / 2.2 task difficulty stratification (`experiments/difficulty_stratification.py`, code_size / dependency_count / complexity_proxy) / 4.3 Docker execution mode promotion (`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`; when docker is unavailable, returns a `docker_unavailable` diagnostic without falling back to local; `scripts/compare_executor_modes.py` timing comparison) / 4.4 dependency cache monitoring (CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + hit-rate in analysis) / 4.1 redaction audit (`scripts/audit_log_redaction.py` + subprocess credential stripping) / 3.1 `reproduce.sh` enables multi-candidate patches by default + 3.2 `reproduce.sh` explicitly enables `AITESTER_TRACE_DIR` / 5.1 low-coverage module hardening (logging_utils 90%→100%, analysis.py statistical boundary tests, cli/app.py concurrent interrupt / signal handling tests) |
+| Unreleased | 2026-09-16 | Evaluation-metrics deepening round: 1.2 convergence failure-mode attribution (`analyze_results.py:_convergence_failure_modes`, distinguishing "cannot pinpoint root cause" vs "cannot produce an effective patch" for tasks still failing at MAX_ITERATIONS) / 1.3 boundary case coverage (`_boundary_case_coverage`, AST conservative detection of None / empty collection / 0 / -1 / >= / <= boundary conditions) / 1.3 mutation score (`_mutation_score_metrics`, collects details[].mutation_score) / 1.3 assertion-strength AST enhancement (`_assertion_strength_proxy` adds `ast_avg_assertions` + `ast_parse_failed_tasks`) / 3.2 execution feedback trace (`state.execution_trace` + `nodes._record_execution_trace` + `run_benchmark.py` result rows carry the trace + `analyze_results.py` auto-summary, a pure observability layer enabled by default, preparing data for RL fine-tuning); 14 new test cases, full suite 1365 passed / 95% coverage |
+| Unreleased | 2026-09-16 | Dataset & evaluation deepening round: 2.1 data contamination detection (`experiments/contamination_check.py`, token-level Jaccard overlap, high ≥ 0.85 / medium ≥ 0.6; `dataset_loader` stores the official patch into `metadata["golden_patch"]`; `load_dataset` supports the `swe_rebench` alias) / 2.2 task difficulty stratification (`experiments/difficulty_stratification.py`, code_size / dependency_count / complexity_proxy) / 4.3 Docker execution mode promotion (`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`; when docker is unavailable, returns a `docker_unavailable` diagnostic without falling back to local; `scripts/compare_executor_modes.py` timing comparison) / 4.4 dependency cache monitoring (CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + hit-rate in analysis) / 4.1 redaction audit (`scripts/audit_log_redaction.py` + subprocess credential stripping) / 3.1 `reproduce.sh` enables multi-candidate patches by default + 3.2t `reproduce.sh` explicitly enables `AITESTER_TRACE_DIR` / 5.1 low-coverage module hardening (logging_utils 90%→100%, analysis.py statistical boundary tests, cli/app.py concurrent interrupt / signal handling tests) |
 | 0.9.16 | 2026-09-15 | Deep refactor round: AITesterState initialization dual-write converged into the `create_initial_state()` factory (single construction point for CLI + benchmark), statistical tests in experiments/visualize_results.py converged to reuse the paired-test primitives in statistical_analysis.py + NaN/Inf guards, code_context.py added 9 test cases (module coverage 89%→98%), README structure tree completed with 5 split artifacts (tracing/rag/nodes, api_health, llm_client) + 13 inline numbers in the test status table synchronized + parameter default values annotated in api_reference; full suite 1291 passed / ruff all green / coverage 94% |
 | 0.9.14 | 2026-09-15 | Whole-project convergence round: config centralization (removed dead CROSS_FILE/ASSERTION constants, converged SWE_BENCH_ENRICHMENT into config, converged MULTI_CANDIDATE_EXEC_VALIDATE into a helper), fixed the executor's standard-library list incorrectly listing diskcache, fixed the cross-file fallback path unable to write to disk, removed 4 dead-code spots, RAG retriever write lock + `_upsert` extraction, `refine_final_error_category` convergence; full suite 1270 passed / ruff all green |
 | 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` added module-level `pytestmark=skipif(not _chroma_available())` (consistent in criteria with `test_rag_metrics.py`; when chromadb is missing, 32 RAG retriever test cases are skipped gracefully instead of raising an ImportError ERROR); the `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixtures in `tests/test_experiments_scripts.py` add `pytest.importorskip("matplotlib")` before the lazy import of `experiments.visualize_results` (when matplotlib is missing, 5 visualization test cases are skipped). In a minimal environment (where `requirements.txt` is not fully installed), the full baseline is **1208 passed / 39 skipped / 0 failed**; after fully installing the dependencies it recovers to **1247 passed / 0 skipped** |

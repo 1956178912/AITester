@@ -22,6 +22,10 @@
 | 任务难度分层（2.2） | 按 code_size / dependency_count / complexity_proxy 分层 | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
 | Docker 隔离执行（4.3） | docker CLI 容器内跑 pytest | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
 | 依赖缓存监控（4.4） | venv 缓存命中率统计 + 清理 | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
+| 收敛失败模式归因（1.2） | 区分"无法定位根因" vs "无法生成有效补丁" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` |
+| 边界用例覆盖（1.3） | AST 保守判定 generated_test 边界条件覆盖 | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` |
+| 变异得分（1.3） | 收集 details[].mutation_score（外部变异测试器产出） | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` |
+| 执行反馈轨迹（3.2） | 每次执行追加 passed/coverage_delta/elapsed/reward_signals | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` |
 
 ---
 
