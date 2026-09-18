@@ -181,6 +181,17 @@ def _repair_convergence_curve(details: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+# ── 测试异味 AST 阈值（保守口径）──────────────────────────────────────────────
+# 单个 test_* 函数内独立断言数 >= 4 且被测目标 >= 2 判为 Eager Test
+# （一个方法验证过多功能，拆分成本高的异味）
+EAGER_TEST_ASSERT_THRESHOLD = 4
+# 单个 test_* 函数内断言涉及的不同被测目标（函数调用名/属性名）>= 2 才判 Eager
+EAGER_TEST_TARGET_THRESHOLD = 2
+# 多 test_* 函数间"目标集合两两不重叠"占比 >= 0.5 判为 Lack of Cohesion
+# （实证研究中最常见的异味 41.2%，阈值取保守 0.5 避免误报）
+LACK_OF_COHESION_THRESHOLD = 0.5
+
+
 def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
     """1.2 测试异味检测：从 details[].generated_test 识别 LLM 生成测试的常见异味。
 
@@ -188,12 +199,19 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
     - assertion_roulette: 测试函数内无 assert / pytest.raises / return 之外的断言语句；
     - magic_number: 出现未命名常量数字字面量（如 == 42 而非 NOMINAL_VALUE）；
     - assertion_weakening: 任务内 generated_test 较上一轮（repair_history 中）断言数减少；
-    - trivial_test: 测试函数体仅含 pass / 单一 assert True 类恒真断言。
+    - trivial_test: 测试函数体仅含 pass / 单一 assert True 类恒真断言；
+    - eager_test: 单个测试方法验证过多功能（AST 口径：一个 test_* 函数内
+      独立断言 >= EAGER_TEST_ASSERT_THRESHOLD 且断言涉及的不同被测目标
+      >= EAGER_TEST_TARGET_THRESHOLD，即"一个方法测多件事"）；
+    - lack_of_cohesion: 测试文件内缺乏内聚性（AST 口径：多个 test_* 函数的
+      被测目标集合两两不重叠占比 >= LACK_OF_COHESION_THRESHOLD，说明各用例
+      各自为战、无共享测试主题）。
 
     返回：
         {"available": bool, "observed_tasks": int,
          "smell_counts": {"assertion_roulette": n, "magic_number": n,
-                           "assertion_weakening": n, "trivial_test": n},
+                           "assertion_weakening": n, "trivial_test": n,
+                           "eager_test": n, "lack_of_cohesion": n},
          "tasks_with_smells": [task_id...]}
 
     说明：仅当 details 携带 generated_test 时 available=True；否则返回
@@ -205,6 +223,8 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
         "magic_number": 0,
         "assertion_weakening": 0,
         "trivial_test": 0,
+        "eager_test": 0,
+        "lack_of_cohesion": 0,
     }
     tasks_with_smells: list[str] = []
     for row in details:
@@ -282,6 +302,59 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
         if has_assertion and len(body_lines) <= 2 and trivial_const_asserts:
             smell_counts["trivial_test"] += 1
             task_has_smell = True
+
+        # ── AST 口径异味：Eager Test + Lack of Cohesion（解析失败时跳过）──
+        import ast as _ast_smell
+
+        try:
+            tree = _ast_smell.parse(stripped)
+        except (SyntaxError, ValueError):
+            tree = None
+
+        if tree is not None:
+            # 收集所有 test_* 函数
+            test_funcs = [
+                node for node in _ast_smell.walk(tree)
+                if isinstance(node, _ast_smell.FunctionDef) and node.name.startswith("test_")
+            ]
+            # Eager Test：单个测试函数内独立断言数 >= 阈值，
+            # 且断言涉及的不同"被测目标"（Call.func 名 / Attribute.attr）>= 2
+            for tf in test_funcs:
+                assert_nodes = [n for n in _ast_smell.walk(tf) if isinstance(n, _ast_smell.Assert)]
+                if len(assert_nodes) < EAGER_TEST_ASSERT_THRESHOLD:
+                    continue
+                targets: set = set()
+                for n in _ast_smell.walk(tf):
+                    if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
+                        targets.add(n.func.id)
+                    elif isinstance(n, _ast_smell.Attribute):
+                        targets.add(n.attr)
+                if len(targets) >= EAGER_TEST_TARGET_THRESHOLD:
+                    smell_counts["eager_test"] += 1
+                    task_has_smell = True
+                    break
+
+            # Lack of Cohesion：多个测试函数的"被测目标集合"两两不重叠占比 >= 阈值
+            if len(test_funcs) >= 2:
+                func_targets: list = []
+                for tf in test_funcs:
+                    t: set = set()
+                    for n in _ast_smell.walk(tf):
+                        if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
+                            t.add(n.func.id)
+                        elif isinstance(n, _ast_smell.Attribute):
+                            t.add(n.attr)
+                    func_targets.append(t)
+                non_overlap_pairs = 0
+                total_pairs = 0
+                for i in range(len(func_targets)):
+                    for j in range(i + 1, len(func_targets)):
+                        total_pairs += 1
+                        if not (func_targets[i] & func_targets[j]):
+                            non_overlap_pairs += 1
+                if total_pairs > 0 and (non_overlap_pairs / total_pairs) >= LACK_OF_COHESION_THRESHOLD:
+                    smell_counts["lack_of_cohesion"] += 1
+                    task_has_smell = True
 
         if task_has_smell:
             tasks_with_smells.append(task_id)
@@ -938,14 +1011,15 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if smell_rows:
         lines.append("## 测试异味检测（1.2）")
         lines.append("")
-        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | 含异味任务 |")
-        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|")
+        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | Eager Test | 缺乏内聚 | 含异味任务 |")
+        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|---------|----------|")
         for baseline, s in smell_rows:
             c = s.get("smell_counts", {})
             lines.append(
                 f"| {baseline} | {s.get('observed_tasks', 0)} "
                 f"| {c.get('assertion_roulette', 0)} | {c.get('magic_number', 0)} "
                 f"| {c.get('assertion_weakening', 0)} | {c.get('trivial_test', 0)} "
+                f"| {c.get('eager_test', 0)} | {c.get('lack_of_cohesion', 0)} "
                 f"| {len(s.get('tasks_with_smells', []))} |"
             )
         lines.append("")

@@ -167,9 +167,14 @@ class DebuggerAgent(BaseAgent):
         result = self._extract_json(raw)
 
         # 确保返回格式一致，即使 LLM 未返回某些字段也有默认值
+        adversarial_check = result.get("adversarial_check")
         return {
             "root_cause": result.get("root_cause", "未知"),
             "error_category": error_category.value,
             "fix_strategy": result.get("fix_strategy", strategy_text),
             "patch": result.get("patch", ""),
+            # 3.2 对抗性推理：LLM 可选输出 adversarial_check，下游消费时须兼容缺省
+            "adversarial_check": adversarial_check
+            if isinstance(adversarial_check, dict)
+            else {"scenarios_checked": 0, "all_passed": False},
         }

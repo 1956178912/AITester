@@ -175,7 +175,9 @@ def _prepare_dependencies(
     sandbox_error_info: dict[str, Any] | None = None
 
     if missing_packages and self.use_venv:
-        # 创建/复用缓存 venv（相同依赖组合共享，省 1-3s 重建开销）
+        # 创建/复用缓存 venv（相同依赖组合 + 当前 Python 版本共享，省 1-3s 重建开销）
+        # 4.4 多版本缓存：venv_cache_dir 默认将 sys.version_info 前两位纳入 key，
+        # 不同 Python 版本的 venv 隔离存放，避免交叉复用导致依赖不兼容
         venv_dir = venv_cache_dir(missing_packages)
         try:
             python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)

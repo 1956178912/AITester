@@ -162,9 +162,18 @@ class TestVenvCacheDir:
         assert venv_cache_dir(["pandas"]) != venv_cache_dir(["numpy"])
 
     def test_label_truncated(self):
-        """目录名标签部分限长 40 字符，避免包名过长撑爆路径。"""
+        """目录名标签部分限长 40 字符，避免包名过长撑爆路径。
+
+        多版本缓存改造后目录名格式为 py{ver}_{hash}_{label}，
+        需跳过 py 前缀与 hash 段再取 label 部分做长度验证。
+        """
         d = venv_cache_dir(["a_very_long_package_name_x" * 5])
-        label = os.path.basename(d).split("_", 1)[1]  # 去掉 hash 前缀
+        basename = os.path.basename(d)
+        # 格式：py3.14_a459917f5ae4_<label>
+        parts = basename.split("_")
+        # 找到 hash 段（12 位十六进制）之后，拼接剩余即为 label
+        idx = next((i for i, p in enumerate(parts) if len(p) == 12 and all(c in "0123456789abcdef" for c in p)), None)
+        label = "_".join(parts[idx + 1:]) if idx is not None and idx + 1 < len(parts) else ""
         assert len(label) <= 40
 
 

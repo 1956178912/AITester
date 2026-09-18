@@ -33,6 +33,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from datetime import datetime
 from typing import Any
 
@@ -233,6 +234,116 @@ def build_report(
     return "\n".join(lines)
 
 
+def cross_batch_comparison(
+    summaries: list[dict[str, Any]],
+    baseline: str,
+) -> dict[str, Any]:
+    """5.3 跨实验批次失败模式对比：追踪不同实验批次中失败模式的变化。
+
+    Args:
+        summaries: 多个 benchmark 汇总 JSON（按时间顺序，第一个为旧批次）。
+        baseline: 目标基线名。
+
+    Returns:
+        {"batches": [{"file": str, "total": int, "failed": int,
+                      "failure_categories": {cat: count},
+                      "top_failures": [cat...]}],
+         "failure_trend": {cat: [count_batch0, count_batch1, ...]},
+         "new_categories": [cat...],  # 仅在最新批次出现的类别
+         "resolved_categories": [cat...],  # 旧批次有、最新批次无的类别
+         "regressed_categories": [cat...]}  # 数量增长的类别
+    """
+    batches = []
+    all_categories: dict[str, list[int]] = {}
+
+    for s in summaries:
+        details = s.get("results", {}).get(baseline, {}).get("details", [])
+        total = len(details)
+        failed = [r for r in details if not r.get("passed")]
+        cat_counter: Counter = Counter()
+        for r in failed:
+            cat = r.get("error_category") or "unknown"
+            cat_counter[cat] += 1
+        top = [c for c, _ in cat_counter.most_common(5)]
+        batches.append(
+            {
+                "file": s.get("_meta_file", s.get("dataset", "unknown")),
+                "total": total,
+                "failed": len(failed),
+                "failure_categories": dict(cat_counter),
+                "top_failures": top,
+            }
+        )
+        for cat, cnt in cat_counter.items():
+            all_categories.setdefault(cat, []).append(cnt)
+        # 补 0 占位
+        for cat in all_categories:
+            if cat not in cat_counter:
+                all_categories[cat].append(0)
+
+    # 重新按批次对齐（上面有 bug：补 0 应该按批次顺序来）
+    # 重做：每个 batch 对应一个 list
+    cat_series: dict[str, list[int]] = {}
+    for i, b in enumerate(batches):
+        for cat, cnt in b["failure_categories"].items():
+            cat_series.setdefault(cat, [0] * i)
+            cat_series[cat].append(cnt)
+        # 补 0
+        for cat in cat_series:
+            if len(cat_series[cat]) < i + 1:
+                cat_series[cat].append(0)
+    # 补 0
+    for cat in cat_series:
+        while len(cat_series[cat]) < len(batches):
+            cat_series[cat].append(0)
+
+    if len(batches) >= 2:
+        oldest_cats = set(batches[0]["failure_categories"])
+        newest_cats = set(batches[-1]["failure_categories"])
+        new_cats = [c for c in newest_cats if c not in oldest_cats]
+        resolved_cats = [c for c in oldest_cats if c not in newest_cats]
+        regressed = [
+            c for c in cat_series
+            if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2]
+        ]
+    else:
+        new_cats = resolved_cats = regressed = []
+
+    return {
+        "batches": batches,
+        "failure_trend": cat_series,
+        "new_categories": new_cats,
+        "resolved_categories": resolved_cats,
+        "regressed_categories": regressed,
+    }
+
+
+def render_cross_batch_section(comparison: dict[str, Any]) -> list[str]:
+    """把 5.3 跨批次失败模式对比渲染为 Markdown 章节。"""
+    if not comparison.get("batches"):
+        return []
+    lines: list[str] = []
+    lines.append("## 跨实验批次失败模式对比（5.3）")
+    lines.append("")
+    lines.append("| 批次 | 总任务 | 失败 | Top 失败类别 |")
+    lines.append("|------|--------|------|-------------|")
+    for b in comparison["batches"]:
+        cats = ", ".join(f"{c}={n}" for c, n in b["failure_categories"].items()) or "—"
+        lines.append(f"| {b['file']} | {b['total']} | {b['failed']} | {cats} |")
+    lines.append("")
+
+    if comparison.get("new_categories"):
+        lines.append(f"- **新增失败类别**（仅最新批次出现）: {', '.join(comparison['new_categories'])}")
+    if comparison.get("resolved_categories"):
+        lines.append(f"- **已解决失败类别**（旧批次有、最新无）: {', '.join(comparison['resolved_categories'])}")
+    if comparison.get("regressed_categories"):
+        lines.append(f"- **恶化失败类别**（数量增长）: {', '.join(comparison['regressed_categories'])}")
+    if not any([comparison.get("new_categories"), comparison.get("resolved_categories"), comparison.get("regressed_categories")]):
+        lines.append("- 失败模式无明显变化（类别与数量趋势稳定）")
+    lines.append("")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="AITester 基线对比失败分析（P0-2 排查工具）")
     parser.add_argument("--results", required=True, help="benchmark 汇总 JSON 路径")
@@ -243,6 +354,17 @@ def main() -> int:
     parser.add_argument("--base-baseline", default="plain_llm", help="简单基线名（默认 plain_llm）")
     parser.add_argument("--max-tasks", type=int, default=5, help="最多分析多少个翻转任务（默认 5）")
     parser.add_argument("--report", default=None, help="Markdown 报告输出路径（默认打印到 stdout）")
+    parser.add_argument(
+        "--cross-batch",
+        nargs="*",
+        default=None,
+        help="5.3 跨批次失败模式对比：额外指定旧批次 benchmark JSON 路径（可多个，按时间顺序）",
+    )
+    parser.add_argument(
+        "--cross-batch-baseline",
+        default="aitester",
+        help="跨批次对比的目标基线名（默认 aitester）",
+    )
     args = parser.parse_args()
 
     summary = load_summary(args.results)
@@ -251,12 +373,34 @@ def main() -> int:
     analyzed = inverted[: args.max_tasks] if args.max_tasks > 0 else inverted
     report = build_report(analyzed, args.full_baseline, args.base_baseline, args.raw_dir)
 
+    # 5.3 跨批次失败模式对比
+    cross_batch_lines: list[str] = []
+    if args.cross_batch:
+        all_summaries: list[dict[str, Any]] = []
+        for path in args.cross_batch:
+            s = load_summary(path)
+            s["_meta_file"] = os.path.basename(path)
+            all_summaries.append(s)
+        current_s = dict(summary)
+        current_s["_meta_file"] = os.path.basename(args.results)
+        all_summaries.append(current_s)
+        comparison = cross_batch_comparison(all_summaries, args.cross_batch_baseline)
+        cross_batch_lines = render_cross_batch_section(comparison)
+        if cross_batch_lines:
+            cross_batch_lines.insert(0, "")
+            cross_batch_lines.insert(0, "---")
+            cross_batch_lines.insert(0, "")
+
+    full_report = report + "\n" + "\n".join(cross_batch_lines) if cross_batch_lines else report
+
     if args.report:
         with open(args.report, "w", encoding="utf-8") as f:
-            f.write(report)
+            f.write(full_report)
         print(f"报告已写入: {args.report}（翻转任务 {len(inverted)} 个，详析 {len(analyzed)} 个）")
+        if cross_batch_lines:
+            print(f"跨批次对比: {len(all_summaries)} 个批次")
     else:
-        print(report)
+        print(full_report)
     return 0
 
 

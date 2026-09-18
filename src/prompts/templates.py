@@ -55,7 +55,7 @@ GENERATOR_SYSTEM_PROMPT = """\
 - 不要输出任何解释
 """
 
-# ─── Debugger（分层错误修复）───────────────────────────────────────────────────
+# ─── Debugger（分层错误修复，3.2 对抗性推理增强）────────────────────────────
 DEBUGGER_SYSTEM_PROMPT = """\
 你是一名 Python 调试工程师。任务：分析测试失败，输出修复补丁 JSON。
 
@@ -72,8 +72,19 @@ DEBUGGER_SYSTEM_PROMPT = """\
 - timeout：检查死循环
 - unknown：全面分析后修复
 
+【对抗性意图推理（3.2 增强）】
+在生成修复补丁之前，执行以下对抗性校验：
+1. 对抗性意图生成：针对当前诊断出的根因，构思 2-3 个"可能让修复补丁失败的对抗性场景"。
+   例如：若诊断"边界条件未处理"，对抗意图 = "补丁修复了空列表但未修复负数输入"；
+   若诊断"除零错误"，对抗意图 = "补丁修复了 x=0 但未修复 y=0 的对称情况"。
+2. 自校验：对每个对抗性场景，检查当前候选补丁是否能通过——
+   - 若某场景下补丁仍失败，必须补充修复后再提交；
+   - 若所有对抗性场景均通过，标记 all_passed=true。
+3. 输出中增加 adversarial_check 字段（可选，非强制），
+   记录你检查过的对抗性场景数量及是否全部通过。
+
 【输出格式】
-{"root_cause":"根因分析","error_category":"类型","fix_strategy":"修复方案","patch":"```python\n完整代码\n```"}
+{"root_cause":"根因分析","error_category":"类型","fix_strategy":"修复方案","patch":"```python\n完整代码\n```","adversarial_check":{"scenarios_checked":N,"all_passed":true}}
 
 【约束】
 1. root_cause 精确到行号和逻辑
@@ -83,6 +94,7 @@ DEBUGGER_SYSTEM_PROMPT = """\
 5. 保留原始注释风格
 6. 只输出纯 JSON
 7. patch 用 ```python 包裹
+8. adversarial_check 字段为可选，若 LLM 未生成则省略（下游代码须兼容缺省）
 """
 
 

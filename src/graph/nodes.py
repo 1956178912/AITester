@@ -382,6 +382,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             "error_category": result.get("error_category"),
             "root_cause": result.get("root_cause", "")[:200],
             "patch_len": len(result.get("patch", "")),
+            # 3.2 对抗性推理校验结果
+            "adversarial_check": result.get("adversarial_check", {}),
         },
         decision=result.get("error_category", "unknown"),
         duration_ms=(time.time() - t0) * 1000,
@@ -406,6 +408,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         "diagnosis": result["root_cause"],
         "error_category": result.get("error_category", "unknown"),
         "patch": result["patch"],
+        # 3.2 对抗性推理：记录 LLM 输出的对抗性校验结果（缺省时为零值）
+        "adversarial_check": result.get("adversarial_check", {"scenarios_checked": 0, "all_passed": False}),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")

@@ -228,11 +228,29 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     return sorted(packages)
 
 
-def venv_cache_dir(required_packages: list[str]) -> str:
-    """按依赖组合计算 venv 缓存目录路径（相同组合复用同一 venv）。"""
-    digest = hashlib.md5("|".join(sorted(required_packages)).encode()).hexdigest()[:12]
-    label = "_".join(sorted(required_packages))[:40] or "bare"
-    return os.path.join(_VENV_CACHE_DIR, f"{digest}_{label}")
+def venv_cache_dir(
+    required_packages: list[str],
+    python_version: str | None = None,
+) -> str:
+    """按依赖组合 + Python 版本计算 venv 缓存目录路径（4.4 多版本支持）。
+
+    相同组合 + 相同 Python 版本复用同一 venv。
+    python_version 为 None 时用当前 sys.version_info 前两位（默认行为不变）。
+
+    Args:
+        required_packages: 所需 pip 包名列表。
+        python_version: 目标 Python 版本字符串（如 "3.12"），None 表示用当前解释器版本。
+
+    Returns:
+        缓存目录绝对路径。
+    """
+    if python_version is None:
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    digest = hashlib.md5(
+        (f"{python_version}|" + "|".join(sorted(required_packages))).encode()
+    ).hexdigest()[:12]
+    label = ("_".join(sorted(required_packages))[:40] or "bare")
+    return os.path.join(_VENV_CACHE_DIR, f"py{python_version}_{digest}_{label}")
 
 
 def create_venv(venv_dir: str, timeout: int = 120) -> str:
