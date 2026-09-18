@@ -181,6 +181,24 @@ docker build -t aitester:latest .
 EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
 # Docker vs venv execution time comparison (Markdown table output, basis for choosing execution environment)
 python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+# 1.2 Built-in mutation generator: AST-level three mutant classes
+# (boundary-value replacement / operator flip / boolean negation),
+# up to 20 per task, no mutmut dependency required
+python -c "
+from experiments.mutation_testing import MutationGenerator
+gen = MutationGenerator()
+mutants = gen.generate('def check(x): return x > 5 and not x')
+print(f'{len(mutants)} mutants: {[(m.mutant_type, m.line_no) for m in mutants]}')
+"
+
+# 5.3 Cross-batch failure-mode comparison: track new / resolved / regressed
+# failure-category trends across multiple benchmark JSON batches
+python experiments/compare_failures.py     --results experiments/results/benchmark_synthetic_new.json     --cross-batch experiments/results/benchmark_synthetic_old.json     --cross-batch-baseline aitester
+
+# 4.4 Multi-version venv cache: venv_cache_dir includes the Python version
+# prefix in the cache key by default, isolating venvs of different versions
+python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir(['pandas'], python_version='3.10'))"
+
 
 # 4.1 Log redaction audit (scans all logger call sites; exit 0 = no suspicious points, can be wired into CI)
 python scripts/audit_log_redaction.py

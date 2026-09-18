@@ -1029,7 +1029,7 @@ class TestAPIManagerEdgeCases:
 
 
 class TestGhostConfigWiring:
-    """APIManagerConfig.max_consecutive_failures 幽灵配置接线（0.9.9 批次）。
+    """APIManagerConfig.max_consecutive_failures 幽灵配置接线（0.1 批次）。
 
     此前该字段在 APIManagerConfig 中定义却从未被 mark_failure 消费（硬编码 3），
     现接线为 APIHealth.max_consecutive_failures 字段，由 manager 构造时注入。

@@ -3,7 +3,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-09-16（新增 2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行 / 4.4 依赖缓存示例）
+> 最后更新：2026-09-18（新增 1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比 / 4.4 多版本缓存示例）
 
 ---
 
@@ -345,6 +345,79 @@ python main.py clean-venv-cache --max-size-mb 512
 
 # 编程获取命中率统计（analyze_results.py 自动渲染"依赖缓存命中统计"章节）
 python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+
+# 多版本 venv 缓存（4.4）：按 Python 版本隔离存放，避免交叉复用导致依赖不兼容
+python -c "
+from src.tools.dependency import venv_cache_dir
+print(venv_cache_dir(['pandas'], python_version='3.10'))  # ~/.cache/aitester/venvs/py3.10_<hash>_pandas
+print(venv_cache_dir(['pandas'], python_version='3.12'))  # ~/.cache/aitester/venvs/py3.12_<hash>_pandas
+print(venv_cache_dir(['pandas']))  # 默认取当前 Python 版本（sys.version_info 前两位）
+"
+```
+
+---
+
+### 示例 13.11：内置变异测试生成器（1.2）
+
+```python
+from experiments.mutation_testing import MutationGenerator, mutation_score_from_details
+
+# 对目标代码生成变异体（AST 级，三类变异：边界值替换 / 运算符翻转 / 布尔取反）
+gen = MutationGenerator()
+mutants = gen.generate(target_code)  # 每任务 ≤20 个，语法错误返回空列表
+print(f"共 {len(mutants)} 个变异体")
+
+# 每个变异体可单独跑测试套件，统计被杀死比例 → mutation_score
+# mutation_score_from_details 收集 details[].mutation_score，汇总平均 / 高 / 低分布
+summary = mutation_score_from_details([
+    {"task_id": "t1", "mutation_score": 0.8},
+    {"task_id": "t2", "mutation_score": 0.5},
+])
+# → {"available": True, "observed_tasks": 2, "avg_mutation_score": 0.65,
+#    "high_score_tasks": 1, "low_score_tasks": 0}
+
+# 可选：若系统安装了 mutmut，优先使用其完整变异测试结果（无需额外配置）
+```
+
+> **说明**：内置生成器为保守口径（仅处理纯 Python 函数体，误报率低）；无变异体可生成时 `available=False`，不阻断主流程。`analyze_results.py` 的"变异得分（1.3）"章节自动消费 `details[].mutation_score` 字段。
+
+---
+
+### 示例 13.12：跨批次失败模式对比（5.3）
+
+```bash
+# 对比 3 个批次（按时间顺序，旧批次在前）：追踪失败模式 new / resolved / regressed 趋势
+python experiments/compare_failures.py \
+    --results experiments/results/benchmark_synthetic_20260918.json \
+    --cross-batch \
+        experiments/results/benchmark_synthetic_20260901.json \
+        experiments/results/benchmark_synthetic_20260907.json \
+    --cross-batch-baseline aitester
+```
+
+**输出示例**（Markdown 章节）：
+```markdown
+## 跨实验批次失败模式对比（5.3）
+
+| 批次 | 文件 | 任务数 | 失败数 | 主要失败类别 |
+|------|------|--------|--------|-------------|
+| 1    | benchmark_synthetic_20260901.json | 50 | 16 | assertion(8), import(4), ... |
+| 2    | benchmark_synthetic_20260907.json | 50 | 10 | assertion(3), runtime(4), ... |
+| 3    | benchmark_synthetic_20260918.json | 50 |  6 | assertion(1), timeout(2), ... |
+
+- **新出现失败类别**: timeout
+- **已消失失败类别**: import
+- **恶化失败类别（数量增长）**: assertion
+```
+
+```python
+# 编程调用
+from experiments.compare_failures import cross_batch_comparison, render_cross_batch_section
+
+comparison = cross_batch_comparison(all_summaries, "aitester")
+# → {"batches": [...], "new_categories": ["timeout"],
+#    "resolved_categories": ["import"], "regressed_categories": ["assertion"]}
+lines = render_cross_batch_section(comparison)  # Markdown 行列表
 ```
 
 ---

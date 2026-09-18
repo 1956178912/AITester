@@ -1,4 +1,4 @@
-"""experiments/ 与 scripts/ 修复回归（0.9.9 批次）。
+"""experiments/ 与 scripts/ 修复回归（0.1 批次）。
 
 覆盖：
 - visualize_results.load_latest_result 仅识别 benchmark_* 前缀

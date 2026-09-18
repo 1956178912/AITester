@@ -121,11 +121,11 @@ def detect_contamination(
     medium: list[str] = []
     for row in details:
         task_id = str(row.get("task_id", ""))
-        # 生成补丁：结果行 patch 字段（run_benchmark 0.9.19 起输出），
+        # 生成补丁：结果行 patch 字段（run_benchmark 0.1 起输出），
         # 旧结果兜底读 task_metadata.generated_patch
         generated = row.get("patch") or (row.get("task_metadata") or {}).get("generated_patch")
         # 黄金补丁：显式映射 > details 自带 golden_patch > task_metadata.golden_patch
-        # （dataset_loader 0.9.19 起将 SWE-bench patch 字段存入 metadata）
+        # （dataset_loader 0.1 起将 SWE-bench patch 字段存入 metadata）
         golden = (
             (golden_patches or {}).get(task_id)
             or row.get("golden_patch")

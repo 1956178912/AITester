@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-16（数据集与评估深化轮次：2.1 污染检测 / 2.2 难度分层 / 4.3 Docker 执行模式 / 4.4 依赖缓存）
+> 最后更新：2026-09-18（全面优化轮次：1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比 / 4.4 多版本缓存 / 3.4 Defects4J 冒烟）
 
 ---
 
@@ -291,7 +291,8 @@ from src.tools.dependency import find_missing_modules, venv_cache_dir, create_ve
 missing = find_missing_modules("import pandas\ndef f(): ...")
 # → {"pandas"}（标准库与非 import 语句会被过滤）
 
-venv_dir = venv_cache_dir(["pandas"])  # 按依赖组合的磁盘缓存目录
+venv_dir = venv_cache_dir(["pandas"])  # 按依赖组合 + 当前 Python 版本的磁盘缓存目录（4.4 多版本支持）
+venv_dir_310 = venv_cache_dir(["pandas"], python_version="3.10")  # 指定 Python 版本（py3.10 前缀隔离）
 venv_python = create_venv(venv_dir, timeout=120)
 install_packages(venv_python, ["pandas"], timeout=120)
 ```
@@ -304,6 +305,7 @@ install_packages(venv_python, ["pandas"], timeout=120)
 | `is_standard_library()` | `module_name: str` | `bool` | 判断是否标准库 |
 | `find_missing_modules()` | `code: str` | `set[str]` | 代码中导入但当前环境不可用的第三方模块 |
 | `suggest_package_names()` | `module_names: set[str]` | `list[str]` | 模块名 → 建议的 pip 包名（处理下划线/别名映射） |
+| `venv_cache_dir()` | `required_packages: list[str]`, `python_version: str \| None = None` | `str` | 4.4 多版本缓存：按依赖组合 + Python 版本计算缓存目录（`python_version` 为 None 时取 `sys.version_info` 前两位；不同版本目录隔离存放，避免交叉复用） |
 | `create_venv()` | `venv_dir: str`, `timeout: int` | `str` | 创建 venv 并返回 python 解释器路径（磁盘缓存复用） |
 | `install_packages()` | `venv_python`, `packages`, `timeout` | `bool` | 在 venv 内 pip install（失败返回 False，不抛异常） |
 | `get_venv_cache_stats()` | 无 | `dict` | 4.4 依赖缓存命中率统计：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)` |
@@ -697,33 +699,5 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| 0.1 | 2026-09-18 | 首个正式版本：四智能体协作架构（Planner/Generator/Executor/Debugger）+ 十二类错误分层修复 + 逻辑驱动 CoT；多基线对比（aitester/plain_llm/single_agent）+ SWE-bench/Defects4J-Python/合成数据集支持；SWE-bench 源码导出自动化 + 数据污染检测；统计检验（t 检验/Mann-Whitney U/Cohen's d）；结果分析层（修复收敛/边界覆盖/变异得分/断言强度/执行反馈轨迹）；内置变异测试生成器 + 测试异味检测；结构化 JSONL 追踪层；多候选补丁；成本感知路由 + 熔断冷却期 + 半开探测；跨文件修复；断言增强；Docker 隔离执行；依赖缓存监控 + clean-venv-cache CLI；Ruff + pre-commit + GitHub Actions CI；全量 1459 测试用例 / 覆盖率 96% |
 
-| 版本 | 日期 | 变更说明 |
-|------|------|---------|
-| 0.9.16 | 2026-09-15 | 深度重构轮次：AITesterState 初始化双写收敛为 `create_initial_state()` 工厂（CLI + benchmark 单一构造点）、experiments/visualize_results.py 统计检验收敛复用 statistical_analysis.py 配对原语 + NaN/Inf 守卫、code_context.py 补测 9 用例（模块覆盖率 89%→98%）、README 结构树补齐 5 个拆分产物（tracing/rag/nodes、api_health、llm_client）+ 测试状态表 13 处行内数同步 + api_reference 参数默认值标注；全量 1291 passed / ruff 全绿 / 覆盖率 94% |
-| 0.9.20 | 2026-09-17 | 结构优化轮次：`executor.py` 按职责拆分为 4 个子模块（`executor_imports.py` / `executor_modes.py` / `executor_output.py` / `executor_runtime.py`，类方法经绑定挂回 `ExecutorAgent`，旧导入路径与测试 patch 目标不变）；`dataset_loader.py` 拆分出 `dataset_defects4j.py` / `dataset_inmemory.py`（re-export 保持旧导入路径，SWE-bench 加载器因模块级 `_datasets` 测试 patch 目标留在主模块）；Docker 执行链路 5 条路径补齐 mock 测试（`TestDockerExecutionFlow`，此前 0 覆盖）、dependency 边界分支 +14 用例（`tools/dependency.py` 90%→99%）、清除 `dataset_loader.py` 重复 JSON 解析死代码、pytest 过滤 scipy 恒定组 t 检验 "precision loss" 数值告警；新增 21 个用例，全量 1386 passed / 覆盖率 95% |
-| Unreleased | 2026-09-16 | 评估指标深化轮次：1.2 收敛失败模式归因（`analyze_results.py:_convergence_failure_modes`，对达到 MAX_ITERATIONS 仍未修复的任务区分"无法定位根因" vs "无法生成有效补丁"）/ 1.3 边界用例覆盖（`_boundary_case_coverage`，AST 保守判定 None/空集合/0/-1/>=/<= 等边界条件）/ 1.3 变异得分（`_mutation_score_metrics`，收集 details[].mutation_score）/ 1.3 断言强度 AST 增强（`_assertion_strength_proxy` 新增 `ast_avg_assertions` + `ast_parse_failed_tasks`）/ 3.2 执行反馈轨迹（`state.execution_trace` + `nodes._record_execution_trace` + `run_benchmark.py` 结果行带轨迹 + `analyze_results.py` 自动汇总渲染，纯观测层默认常开，为 RL 微调备料）；新增 14 个用例，全量 1365 passed / 覆盖率 95% |
-| Unreleased | 2026-09-16 | 数据集与评估深化轮次：2.1 数据污染检测（`experiments/contamination_check.py` token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6；`dataset_loader` 保留官方 patch 至 `metadata["golden_patch"]`；`load_dataset` 支持 `swe_rebench` 别名）/ 2.2 任务难度分层（`experiments/difficulty_stratification.py`，code_size / dependency_count / complexity_proxy 三维度）/ 4.3 Docker 执行模式转正（`ExecutorAgent._execute_docker` + `EXECUTOR_USE_DOCKER` / `EXECUTOR_DOCKER_IMAGE`，docker 不可用返回 `docker_unavailable` 诊断不降级本地；`scripts/compare_executor_modes.py` 时间对比）/ 4.4 依赖缓存监控完善（CLI `clean-venv-cache` + `AITESTER_VENV_CACHE_DIR` + 命中率入分析）/ 4.1 脱敏审计（`scripts/audit_log_redaction.py` + 子进程环境凭证剔除）/ 3.1 `reproduce.sh` 默认启用多候选补丁 + 3.2t `reproduce.sh` 显式启用 `AITESTER_TRACE_DIR` / 5.1 低覆盖模块补强（logging_utils 90%→100%、analysis.py 统计检验边界、cli/app.py 并发中断/信号处理） |
-| 0.9.15 | 2026-09-15 | 代码可维护性深化轮次：Ruff 规则集增强（SIM/PERF/RET/RUF，修复 63 处命中）+ 337 函数完整类型注解 + 9 个高复杂度函数中 7 个重构（get_fix_strategy/run/check_dataset/generate/_execute_sandboxed/clear_venv_cache/analyze_cross_file_deps）；全量 1270 passed / ruff 全绿 |
-| 0.9.14 | 2026-09-15 | 全项目收敛轮次：config 集中化（删除 CROSS_FILE/ASSERTION 死常量、SWE_BENCH_ENRICHMENT 收敛 config、MULTI_CANDIDATE_EXEC_VALIDATE 收敛 helper）、修复 executor 标准库清单误列 diskcache、修复跨文件降级路径写不进盘、删除 4 处死代码、RAG 检索器写锁 + _upsert 抽取、refine_final_error_category 收敛；全量 1270 passed / ruff 全绿 |
-| 0.9.14 | 2026-09-15 | `tests/test_rag_retriever.py` 补模块级 `pytestmark=skipif(not _chroma_available())`（与 `test_rag_metrics.py` 口径一致，缺 chromadb 时 32 条 RAG 检索器用例优雅跳过而非 ImportError ERROR）；`tests/test_experiments_scripts.py` 的 `TestVisualizeLoadLatestResult` / `TestVisualizeSummaryMdTable` fixture 在惰性导入 `experiments.visualize_results` 前补 `pytest.importorskip("matplotlib")`（缺 matplotlib 时 5 条可视化用例跳过）。精简环境（未全量安装 `requirements.txt`）下全量基线为 **1208 passed / 39 skipped / 0 failed**；全量安装依赖后恢复 **1247 passed / 0 skipped** |
-| 0.9.14 | 2026-09-15 | O-01 新增 `tests/test_cli_output.py`（10 用例：colorize TTY 双分支 / 消息 stderr 路由 / print_rich_table 边界），`src/cli/output.py` 覆盖率 58%→92% |
-| 0.9.13 | 2026-09-14 | 4.2 熔断器半开探测：`APIHealth` 新增 `in_circuit_half_open` 与 `_probe_circuit_half_open()`（成功闭合 / 失败重开半程冷却 `min(cooldown/2, cap)`），`get_healthy_nodes()` / `_build_node_list()` 将半开窗口节点纳入路由候选，`call()` / `check_health()` 统一消费探测结果，`get_status()` 新增 `circuit_state`（closed / open / half_open）；`APIManagerConfig` 新增 `enable_half_open_probe`（默认 True，置 False 退回 4.1 直接放行行为）与 `half_open_probe_penalty_cap_seconds`（默认 30.0）；`docs/design/cross_file_repair.md` python 代码块格式归一；全量 1237 passed / ruff 全绿 |
-| 0.9.13 | 2026-09-14 | 1.2 测试异味检测 + 1.3 修复收敛曲线（`analyze_results.py` 新增 `test_smell_detection` / `repair_convergence_curve` 纯函数 + Markdown 章节）、4.4 依赖缓存监控（`dependency.py` 新增 `get_venv_cache_stats` / `list_venv_cache` / `clear_venv_cache` + `create_venv` 记录 hit/create 事件，修复 `threading.Lock` 不可重入死锁）、5.3 失败根因分类 + 案例知识库（`analyze_failures.py` 新增 `root_cause_classification` / `failure_knowledge_base` + CLI `--knowledge-base`）、3.4 断言增强策略（`generator.py` 新增 `_extract_existing_assertions` + `ASSERTION_AUGMENT_ENABLE` 开关，默认关）、3.5 跨文件修复（新增 `src/tools/cross_file.py` 协调器-提议者架构 + `workflow.py` cross_file_analyzer 节点 + `CROSS_FILE_ENABLE` / `CROSS_FILE_MAX_MODULES` 开关，默认关）；新增设计文档 `docs/design/cross_file_repair.md`；全量 1225 passed / ruff 全绿 |
-| 0.9.13 | 2026-09-14 | 结果分析层 1.1/1.2 指标增强：`experiments/analyze_results.py` 新增 `repair_convergence_metrics`（首次尝试成功率、成功/失败任务的迭代 min/avg/median/max、成功任务平均耗时）与 `quality_proxy_metrics`（覆盖率/耗时代理、可选 `generated_test` 的断言行数代理、失败类别 Top N）；`build_analysis` 与 `render_markdown` 渲染「修复收敛效率（1.2）」与「多维质量代理（1.1，保守可复算）」两节 Markdown；旧 JSON 无 `generated_test` / 无 details 时自动降级为 N/A 或跳过章节，不崩溃。全量 1163 passed |
-| 0.9.13 | 2026-09-14 | 错误分类 10→12 类（PATCH_VALIDATION_FAILED + RAG_RETRIEVAL_EMPTY 状态细化，`refine_failure_category()` 任务收尾判定）、成本告警阈值可配（`APIManagerConfig.cost_alert_threshold`，默认 2.0）、SWE-bench 源码导出自动化（`scripts/export_swe_bench_source.py` + `tasks_missing_source()`）、RAG 指标自动汇总（按检索类型分解 + RAG 命中 × 失败类别交叉表）、脱敏完整审计（APIManager 7 处日志就地 `_redact()` + `get_status()` base_url 出口脱敏；脱敏审计原 `docs/redaction_audit.md` 已并入 README 安全章节，性能剖析原 `docs/performance_profile_report.md` 已并入 `docs/performance_guide.md` 第九章）；全量 1158 passed |
-| 0.9.13 | 2026-09-14 | 错误分类 8→10 类（LLM_FORMAT_ERROR + INDEX_ERROR，1.2 残余）、APIManager 熔断冷却期（4.1 残余，默认 60s）、结果分析脚本 analyze_results.py（4.3）、基线 token 效率汇总（2.2） |
-| 0.9.12 | 2026-09-13 | 多候选补丁（3.1，默认关）、结构化 JSONL 追踪层（4.1，默认关）、成本感知路由（3.4）、RAG 纳入主实验（2.3）、CLI 边界补测（1.5） |
-| 1.0.0 | 2026-08-17 | 初始版本，包含 4 个智能体和完整工作流 |
-| 0.9.11 | 2026-09-11 | import 提取单一实现、故障转移模型路由、MySQL 单例 DCL、RAG 粘性标志、NaN/Inf 序列化修复（详见 CHANGELOG） |
-| 0.9.10 | 2026-09-11 | CLI 并发派发器去重与回归防护（详见 CHANGELOG） |
-| 0.9.9 | 2026-09-11 | 死分支清理、visualize 结果误选与标准化实验 KeyError 修复（详见 CHANGELOG） |
-| 0.9.8 | 2026-09-10 | 格式门禁恢复、benchmark 结果构造去重、后台健康线程可关闭（详见 CHANGELOG） |
-| 0.9.7 | 2026-09-10 | AST 智能截取、SWE-bench 质量校验、token 统计、venv 沙箱、RAG 持久化、错误分类 5→8 类（详见 CHANGELOG） |
-| 0.9.6 | 2026-09-10 | regenerate 死循环、patch 写盘原子化、脱敏加固、CLI 失败门控等 14 项修复（详见 CHANGELOG） |
-| 0.9.5 | 2026-09-10 | 配置整块移除、打包修复、数值环境变量容错解析、日志脱敏接入（详见 CHANGELOG） |
-| 0.9.4 | 2026-09-13 | 环境变量名推导、真实 t 检验、统计双实现收敛、chromadb 现代 API（详见 CHANGELOG） |
-| 0.9.3 | 2026-09-13 | 配置写盘路径修正与运行时刷新（详见 CHANGELOG） |
-| 0.9.2 | 2026-09-09 | CI 门禁修复、单例线程安全、后台线程泄漏修复、版本号单一来源（详见 CHANGELOG） |
-| 0.9.1 | 2026-09-09 | CLI 选项 state 贯通、退避公式修正、import 替换相似度门控（详见 CHANGELOG） |
-| 0.9.0 | 2026-08-16 | 添加 RAG 支持和性能优化 |

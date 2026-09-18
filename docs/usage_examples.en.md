@@ -3,7 +3,7 @@
 # AITester Usage Examples
 
 > This document provides detailed usage examples to help developers get started with AITester quickly.
-> Last updated: 2026-09-16 (added 2.1 contamination detection / 2.2 difficulty stratification / 4.3 Docker execution / 4.4 dependency cache examples)
+> Last updated: 2026-09-18 (added 1.1 smell-detection enhancement / 1.2 built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache examples)
 
 ---
 
@@ -345,6 +345,80 @@ python main.py clean-venv-cache --max-size-mb 512
 
 # Programmatically fetch hit-rate statistics (analyze_results.py auto-renders the "Dependency Cache Hit Statistics" section)
 python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv_cache_stats())"
+
+# Multi-version venv cache (4.4): isolated by Python version to avoid cross-reuse causing dependency incompatibility
+python -c "
+from src.tools.dependency import venv_cache_dir
+print(venv_cache_dir(['pandas'], python_version='3.10'))  # ~/.cache/aitester/venvs/py3.10_<hash>_pandas
+print(venv_cache_dir(['pandas'], python_version='3.12'))  # ~/.cache/aitester/venvs/py3.12_<hash>_pandas
+print(venv_cache_dir(['pandas']))  # defaults to the current Python version (first two digits of sys.version_info)
+"
+```
+
+---
+
+### Example 13.11: Built-in Mutation Generator (1.2)
+
+```python
+from experiments.mutation_testing import MutationGenerator, mutation_score_from_details
+
+# Generate mutants for the target code (AST-level; three mutant classes:
+# boundary-value replacement / operator flip / boolean negation)
+gen = MutationGenerator()
+mutants = gen.generate(target_code)  # ≤ 20 per task; syntax errors return an empty list
+print(f"{len(mutants)} mutants generated")
+
+# Each mutant can be run against the test suite individually; the kill ratio → mutation_score
+# mutation_score_from_details collects details[].mutation_score and aggregates average / high / low distribution
+summary = mutation_score_from_details([
+    {"task_id": "t1", "mutation_score": 0.8},
+    {"task_id": "t2", "mutation_score": 0.5},
+])
+# → {"available": True, "observed_tasks": 2, "avg_mutation_score": 0.65,
+#    "high_score_tasks": 1, "low_score_tasks": 0}
+
+# Optional: if mutmut is installed system-wide, its full mutation results are preferred (no extra config)
+```
+
+> **Note**: the built-in generator is conservative (pure Python function bodies only, low false-positive rate); when no mutants can be generated, `available=False` and the main flow is not blocked. The "Mutation Score (1.3)" section in `analyze_results.py` auto-consumes the `details[].mutation_score` field.
+
+---
+
+### Example 13.12: Cross-Batch Failure-Mode Comparison (5.3)
+
+```bash
+# Compare 3 batches (chronological order, oldest first): track new / resolved / regressed failure-mode trends
+python experiments/compare_failures.py \
+    --results experiments/results/benchmark_synthetic_20260918.json \
+    --cross-batch \
+        experiments/results/benchmark_synthetic_20260901.json \
+        experiments/results/benchmark_synthetic_20260907.json \
+    --cross-batch-baseline aitester
+```
+
+**Sample output** (Markdown section):
+```markdown
+## Cross-Batch Failure-Mode Comparison (5.3)
+
+| Batch | File | Tasks | Failures | Top failure categories |
+|-------|------|-------|----------|------------------------|
+| 1     | benchmark_synthetic_20260901.json | 50 | 16 | assertion(8), import(4), ... |
+| 2     | benchmark_synthetic_20260907.json | 50 | 10 | assertion(3), runtime(4), ... |
+| 3     | benchmark_synthetic_20260918.json | 50 |  6 | assertion(1), timeout(2), ... |
+
+- **Newly appeared failure categories**: timeout
+- **Resolved failure categories**: import
+- **Regressed failure categories (growing count)**: assertion
+```
+
+```python
+# Programmatic usage
+from experiments.compare_failures import cross_batch_comparison, render_cross_batch_section
+
+comparison = cross_batch_comparison(all_summaries, "aitester")
+# → {"batches": [...], "new_categories": ["timeout"],
+#    "resolved_categories": ["import"], "regressed_categories": ["assertion"]}
+lines = render_cross_batch_section(comparison)  # list of Markdown lines
 ```
 
 ---

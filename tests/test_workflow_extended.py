@@ -46,7 +46,7 @@ class TestGetRAGRetriever:
     def _reset_rag_singletons(self):
         """复位模块级单例与失败标志，防止跨测试泄漏。
 
-        0.9.11 起 get_rag_retriever 新增 _rag_init_failed 快路径标志
+        0.1 起 get_rag_retriever 新增 _rag_init_failed 快路径标志
         （初始化失败后不再重试）。该标志是进程级粘性状态，若不清位，
         前一个失败用例会短路后续"已初始化返回缓存"用例。
         """
@@ -727,7 +727,7 @@ class TestGetWorkflowStats:
 
 
 class TestPlannerNodeDedup:
-    """_planner_node 异常路径与校验失败路径共用 _get_default_test_plan 构造点（0.9.9 去重）。
+    """_planner_node 异常路径与校验失败路径共用 _get_default_test_plan 构造点（0.1 去重）。
 
     此前 except 分支内联复制了一份同构默认计划字典，与 _get_default_test_plan 双份维护；
     现统一走 helper，本组测试防止两处再次漂移。

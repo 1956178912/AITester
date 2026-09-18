@@ -130,7 +130,13 @@ export CROSS_FILE_MAX_MODULES=5
 # assert 语句，作为"锚点断言"注入 prompt，避免断言弱化 / 恒真断言 / 魔数异味。
 export ASSERTION_AUGMENT_ENABLE=true
 
-# 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存）：
+# 3.2 对抗性推理（默认关）：Debugger 生成修复补丁前构思 2-3 个"可能让补丁
+# 失败的对抗性场景"（如边界条件对称、除零对称情况），自校验候选补丁是否
+# 通过每个场景；输出可选字段 adversarial_check（scenarios_checked / all_passed），
+# 缺省兜底为 {"scenarios_checked": 0, "all_passed": False}。
+# 无需额外开关，随 DEBUGGER_SYSTEM_PROMPT 默认生效（启用 DEBUGGER 即可）。
+
+# 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存 + 5.3 跨批次对比）：
 # 跑完 benchmark 后生成 Markdown 汇总，含成功率 / token 效率 / 迭代分布 / 失败原因分布 /
 # RAG 质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/
 # 修复收敛曲线（按迭代轮次 0/1/2/3+ 累计通过率与耗时）/ 测试异味检测 / 多维质量代理 /
@@ -170,6 +176,25 @@ docker build -t aitester:latest .
 EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
 # Docker vs venv 执行时间对比（实验环境选择依据，输出 Markdown 表）
 python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+
+# 1.2 内置变异测试生成器：AST 级三类变异体（边界值替换 / 运算符翻转 / 布尔取反），
+# 每任务 ≤20 个，无 mutmut 依赖；mutation_score_from_details 汇总 details[].mutation_score。
+python -c "
+from experiments.mutation_testing import MutationGenerator, mutation_score_from_details
+gen = MutationGenerator()
+mutants = gen.generate('def check(x): return x > 5 and not x')
+print(f'{len(mutants)} 个变异体: {[(m.mutant_type, m.line_no) for m in mutants]}')
+"
+
+# 5.3 跨批次失败模式对比：追踪多个 benchmark JSON 批次间失败模式 new / resolved / regressed 趋势
+python experiments/compare_failures.py \
+    --results experiments/results/benchmark_synthetic_new.json \
+    --cross-batch experiments/results/benchmark_synthetic_old.json \
+    --cross-batch-baseline aitester
+
+# 4.4 多版本 venv 缓存：venv_cache_dir 默认将 Python 版本前缀纳入缓存 key，
+# 不同版本 venv 隔离存放（py3.10 / py3.12），避免交叉复用导致依赖不兼容
+python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir(['pandas'], python_version='3.10'))"
 
 # 4.1 日志脱敏完整审计（全仓库 logger 调用点扫描，退出码 0=无可疑点，可挂 CI 门禁）
 python scripts/audit_log_redaction.py

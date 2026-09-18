@@ -3,7 +3,7 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-16（新增 4.3 Docker 隔离执行 / 4.4 依赖缓存章节）
+> 最后更新：2026-09-18（新增 4.4 多版本 venv 缓存章节；1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比）
 
 ---
 
@@ -525,6 +525,28 @@ python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv
 **缓存目录覆盖**：默认 `~/.cache/aitester/venvs/`；容器 / CI 隔离场景经 `AITESTER_VENV_CACHE_DIR` 指向挂载卷（如 `/workspace/.venv_cache`），避免缓存随容器销毁丢失。
 
 **命中率解读**：`hit_rate = hits / (hits + creates)`。新实验（首次跑某依赖组合）命中率低属正常；重跑同组合时命中率应趋近 1.0。若长期低命中率，检查 `AITESTER_VENV_CACHE_DIR` 是否指向持久化卷。
+
+### 10.4b 多版本 venv 缓存（4.4）
+
+不同 Python 版本的依赖包二进制不兼容（如 `numpy` / `pandas` 的 C 扩展）。`venv_cache_dir` 默认将 `sys.version_info` 前两位纳入缓存 key，不同版本的 venv 隔离存放（`py3.10` / `py3.12` 前缀），避免交叉复用导致 `ImportError` / 段错误：
+
+```python
+from src.tools.dependency import venv_cache_dir
+
+# 默认：取当前解释器版本（如 3.14 → py3.14 前缀）
+d = venv_cache_dir(["pandas"])
+# → ~/.cache/aitester/venvs/py3.14_<digest>_pandas
+
+# 显式指定 Python 版本（容器 / 多版本共存场景）
+d_310 = venv_cache_dir(["pandas"], python_version="3.10")
+d_312 = venv_cache_dir(["pandas"], python_version="3.12")
+# 三者互不相同，venv 隔离存放
+```
+
+**行为说明**：
+- 相同依赖组合 + 相同 Python 版本 → 复用同一 venv（命中缓存）
+- 不同 Python 版本 → 不同目录，零交叉
+- `create_venv` 创建 venv 时若目录已存在且 `python_version` 匹配，直接复用（不重建）
 
 ### 10.5 子进程环境凭证剔除（4.1 安全加固）
 

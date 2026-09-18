@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1386 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1346 collected) |
-| **Unit Tests** | ✅ Full: 1386 passed, 0 skipped; reduced environment: 1346 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 95% total coverage (core modules: reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 90% / cli-app 93% / cli-output 92%) |
+| **Total Tests** | ✅ 1459 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1419 collected) |
+| **Unit Tests** | ✅ Full: 1459 passed, 0 skipped; reduced environment: 1419 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 96% total coverage (core modules: reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 100% / cli-app 93% / cli-output 94% / executor_imports 92% / executor_modes 96% / executor_output 96% / executor_runtime 96% / dependency 99% / multi_candidate 92% / cross_file 100% / mutation_testing covered via test_smell_detection_v2) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-17 structural optimization round (executor.py split into 4 focused submodules / dataset_loader.py split into 3 / Docker execution path + dependency edge-case tests backfilled / duplicated JSON-parsing dead code removed, full suite 1386 passed / coverage 95%); see [CHANGELOG.en](CHANGELOG.en.md) for details |
-| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (92%), error_classifier.py (93%), cli/app.py (93%), cli/output.py (92%), logging_utils.py (90%), tools/dependency.py (99%), executor_modes.py (96%) |
+| **Latest Optimization** | ✅ 2026-09-18 full optimization round (smell-detection enhancement / built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache / 3.4 Defects4J smoke; 6 new test files + 1 new module file, full suite 1459 passed / coverage 96%); see [CHANGELOG.en](CHANGELOG.en.md) for details |
+| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%), mutation_testing.py (via test_smell_detection_v2) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) |
-| **Recent Changes** | ✅ 2026-09-17 structural optimization round (0.9.20): executor.py split into executor_imports / executor_modes / executor_output / executor_runtime (class methods re-bound, old import & patch paths unchanged); dataset_loader.py split out dataset_defects4j / dataset_inmemory (re-export keeps old import path); Docker execution 5-path mock tests backfilled, dependency edge cases +14 cases (90%→99%), duplicated JSON-parsing dead code in dataset_loader removed, pytest filter for scipy constant-group t-test numerical warning; 21 new cases, full suite 1365→1386; see [CHANGELOG.en](CHANGELOG.en.md) for details |
+| **Recent Changes** | ✅ 2026-09-18 full optimization round (0.1): smell-detection enhancement (Eager Test + Lack of Cohesion AST-metric smells, two new columns in the `analyze_results.py` test-smell section); built-in mutation generator (`experiments/mutation_testing.py`, three AST mutant classes — boundary-value replacement / operator flip / boolean negation, ≤20 per task, no mutmut dependency); 3.2 adversarial-reasoning enhancement (`DEBUGGER_SYSTEM_PROMPT` gains the adversarial-intent paragraph + optional `adversarial_check` field, `debugger.py` defaults to a zero-value fallback); 5.3 cross-batch failure-mode comparison (`compare_failures.py` gains `cross_batch_comparison` / `render_cross_batch_section` + the `--cross-batch` CLI flag); 4.4 multi-version venv cache (`venv_cache_dir` gains a `python_version` parameter, cache key carries the Python-version prefix); 3.4 Defects4J smoke test (`test_defects4j_smoke.py`, 155 lines); 5.1 low-coverage reinforcement in 3 rounds (`test_weak_coverage_modules*.py`, 39 cases); full suite 1386→1459; see [CHANGELOG.en](CHANGELOG.en.md) for details |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1386 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1346 collected)
+# Run all unit tests (full 1459 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1419 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -246,14 +246,14 @@ AITester/
 ├── src/                              # Core source code
 │   ├── agents/                       # Multi-agent modules
 │   │   ├── base_agent.py             # Agent base class (LLM calls + file cache + JSON parsing; client factory split out to llm_client.py)
-│   │   ├── llm_client.py             # LLM client utility functions (ChatOpenAI factory + module-level connection pool cache, split in 0.9.15)
+│   │   ├── llm_client.py             # LLM client utility functions (ChatOpenAI factory + module-level connection pool cache, split in 0.1)
 │   │   ├── planner.py                # Test planner (includes logic-driven chain of thought)
 │   │   ├── generator.py              # Test code generator (with RAG augmentation support)
 │   │   ├── executor.py               # Test executor (class body + local execution orchestration; import fix / result parsing / sandbox & Docker modes / subprocess runtime split out into executor_* submodules)
-│   │   ├── executor_imports.py       # Import-path auto-fixing (module-name extraction / sys.path injection / similar-name replacement, split in 0.9.20)
-│   │   ├── executor_modes.py         # venv sandbox + Docker isolation execution modes (split in 0.9.20)
-│   │   ├── executor_output.py        # Result parsing (coverage / failed cases / error info, split in 0.9.20)
-│   │   ├── executor_runtime.py       # Subprocess running, retry & temp resource cleanup (split in 0.9.20)
+│   │   ├── executor_imports.py       # Import-path auto-fixing (module-name extraction / sys.path injection / similar-name replacement, split in 0.1)
+│   │   ├── executor_modes.py         # venv sandbox + Docker isolation execution modes (split in 0.1)
+│   │   ├── executor_output.py        # Result parsing (coverage / failed cases / error info, split in 0.1)
+│   │   ├── executor_runtime.py       # Subprocess running, retry & temp resource cleanup (split in 0.1)
 │   │   ├── debugger.py               # Debugging repair agent (hierarchical error repair)
 │   │   └── error_classifier.py       # Error type classifier (rule-based matching)
 │   ├── api/                          # API configuration management
@@ -264,8 +264,8 @@ AITester/
 │   │   └── config_generator.py       # .env / llm_configs template generation
 │   ├── datasets/                     # Dataset loading layer
 │   │   ├── dataset_loader.py         # SWE-bench loader + data model / abstract base / factory (Defects4J & InMemory subclasses split out)
-│   │   ├── dataset_defects4j.py      # Defects4J-Python loader (split in 0.9.20)
-│   │   ├── dataset_inmemory.py       # Built-in sample dataset (split in 0.9.20)
+│   │   ├── dataset_defects4j.py      # Defects4J-Python loader (split in 0.1)
+│   │   ├── dataset_inmemory.py       # Built-in sample dataset (split in 0.1)
 │   │   └── synthetic_dataset.py      # Synthetic dataset generator (local generation)
 │   ├── cli/                          # Command-line interface (click command groups + rich output)
 │   │   ├── app.py                    # CLI command definitions and task execution
@@ -304,9 +304,12 @@ AITester/
 ├── experiments/                      # Experiment script modules
 │   ├── run_benchmark.py              # Batch benchmark (multi-baseline comparison + ablation experiments + fairness token output)
 │   ├── visualize_results.py          # Result visualization (bar charts + detailed tables + statistical tests)
-│   ├── analyze_results.py            # Result analysis script (4.3 + 1.1/1.2: Markdown summary + RAG auto-summary + repair convergence/quality proxy metrics, legacy JSON fallback)
-│   ├── compare_failures.py           # Failure-flip task comparison (Planner/Debugger/environment attribution)
+│   ├── analyze_results.py            # Result analysis script (4.3 + 1.1/1.2/1.3/3.2/4.4: Markdown summary + RAG auto-summary + repair convergence/quality proxy + smell detection + mutation score + boundary coverage + execution trace + cache hit rate, legacy JSON fallback)
+│   ├── compare_failures.py           # Failure-flip task comparison (Planner/Debugger/environment attribution + 5.3 cross-batch failure-mode comparison)
 │   ├── analyze_failures.py           # Failure case clustering report (for technical review)
+│   ├── mutation_testing.py           # 1.2 built-in mutation generator (AST-level three mutant classes + mutation_score_from_details aggregation)
+│   ├── contamination_check.py        # 2.1 SWE-bench data contamination check (token-level Jaccard overlap)
+│   ├── difficulty_stratification.py # 2.2 task difficulty stratification analysis
 │   ├── run_large_scale.py            # Large-scale experiment entry point
 │   ├── run_statistical_test.py       # Statistical test entry point
 │   └── statistical_analysis.py       # Statistical analysis utilities
@@ -710,7 +713,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1386 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1459 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -720,7 +723,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (56 test files, full 1386 collected pytest cases; reduced environment collects 1346 / auto-skips 40, total src coverage 95%):
+**Tested modules** (62 test files, full 1459 collected pytest cases; reduced environment collects 1419 / auto-skips 40, total src coverage 96%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -730,9 +733,9 @@ docker run --rm \
 | `test_base_agent_extended.py` | 46 | Exponential backoff retry, LLM cache, zai client reuse |
 | `test_cli_app.py` | 30 | 27 | CLI commands (list-examples/--version/argument validation/parallel/json edge cases + 1.4 timeout pass-through/concurrency fault tolerance/check-dataset edge cases/glob concurrency 8 cases) |
 | `test_cli_output.py` | 10 | CLI output layer regression (colorize TTY dual branch, success/error/warning/info icons and stdout/stderr routing, print_rich_table empty list/missing key fallback/coverage=0.0 not misjudged as N/A, O-01 batch) |
-| `test_cli_parallel.py` | 10 | Concurrent dispatcher `_dispatch_parallel_tasks` and `run` concurrent branch regression (rich/no-rich dual paths, per-task fault tolerance, CI gate exit 1) (0.9.10) |
+| `test_cli_parallel.py` | 10 | Concurrent dispatcher `_dispatch_parallel_tasks` and `run` concurrent branch regression (rich/no-rich dual paths, per-task fault tolerance, CI gate exit 1) (0.1) |
 | `test_cli_run.py` | 6 | run command orchestration (timeout/coverage threshold pass-through) |
-| `test_cli_console_output.py` | 8 | run non-JSON console summary (success/failure/diagnosis/suggestions) + _dispatch_concurrent rich/fallback/JSON-silent branches (0.9.18) |
+| `test_cli_console_output.py` | 8 | run non-JSON console summary (success/failure/diagnosis/suggestions) + _dispatch_concurrent rich/fallback/JSON-silent branches (0.1) |
 | `test_code_analyzer.py` | 17 | AST parsing, cyclomatic complexity, code replacement |
 | `test_code_context.py` | 18 | 11 | AST smart extraction (P0 large-file context) |
 | `test_complex_logic.py` | 12 | Complex business logic (email validation, etc.) |
@@ -746,28 +749,28 @@ docker run --rm \
 | `test_dataset_validation.py` | 22 | SWE-bench loading quality validation and source enrichment (P0) + tasks_missing_source (2.1) |
 | `test_debugger.py` | 29 | Error diagnosis, RAG injection, classification pass-through |
 | `test_dependency.py` | 43 | Dependency detection and venv management (P1) + 4.4 cache monitoring (hit-rate stats/listing/cleanup, 8 cases) |
-| `test_dependency_edge_cases.py` | 14 | Dependency edge branches (stdlib fallback / find_spec exception / venv creation timeout / OSError silent degradation, new in 0.9.20) |
+| `test_dependency_edge_cases.py` | 14 | Dependency edge branches (stdlib fallback / find_spec exception / venv creation timeout / OSError silent degradation, new in 0.1) |
 | `test_error_classifier.py` | 89 | 85 | Twelve-category error classification and repair strategy mapping (P2 refinement + 1.2 residual + 1.1 status refinement: refine_failure_category) |
 | `test_exceptions.py` | 33 | Custom exception classes and decorators |
 | `test_executor.py` | 50 | 48 | Coverage parsing, failed case parsing |
 | `test_executor_docker.py` | 11 | 4.3 Docker execution mode (unavailable diagnostics / mode flag / docker precedence over venv / subprocess env credential stripping + TestDockerExecutionFlow in-container execution 6 cases + sandbox cleanup fallback) |
 | `test_executor_sandbox.py` | 14 | Sandbox execution path and dependency installation (P1, including install failure short-circuit / target file missing edge case; subprocess patch target migrated to executor_runtime) |
 | `test_experiments_analysis.py` | 15 | Experiment result analysis (ranking/statistics) |
-| `test_experiments_scripts.py` | 36 | visualize result selection / normalized experiment return keys / benchmark parallelism regression (0.9.9) + 4.3 analyze_results pure functions + 2.3 RAG auto-summary + 1.1/1.2 repair convergence and quality proxy metrics + 1.2 test smell detection + 1.3 repair convergence curve (6 cases) |
+| `test_experiments_scripts.py` | 36 | visualize result selection / normalized experiment return keys / benchmark parallelism regression (0.1) + 4.3 analyze_results pure functions + 2.3 RAG auto-summary + 1.1/1.2 repair convergence and quality proxy metrics + 1.2 test smell detection + 1.3 repair convergence curve (6 cases) |
 | `test_generator.py` | 43 | parametrize validation, import fixing, LLM calls + 3.4 assertion augmentation (TestAssertionAugmentation: AST extraction of existing assert, off by default, 9 cases) |
 | `test_llm_cache.py` | 16 | LLM in-memory cache |
 | `test_llm_file_cache.py` | 5 | LLM file cache hit/miss |
-| `test_logging_utils.py` | 14 | Log redaction regexes (sk- prefix / dotted-segment / prefix-less long hex·base64, three forms; 0.9.11 redaction extension regression) |
+| `test_logging_utils.py` | 14 | Log redaction regexes (sk- prefix / dotted-segment / prefix-less long hex·base64, three forms; 0.1 redaction extension regression) |
 | `test_mysql_client.py` | 15 | MySQL client singleton/transaction/connection pool parameters |
 | `test_multi_candidate.py` | 23 | Multi-candidate patch generation and static/execution validation filtering (3.1) |
 | `test_packaging.py` | 3 | Packaging integrity (subpackage __init__ all present) |
 | `test_patch_applier.py` | 38 | Patch application (whole-file/single-function modes) |
 | `test_planner.py` | 5 | PlannerAgent planning logic serialization |
-| `test_prompts_templates.py` | 14 | Structural contract of the three system-prompt constants (key instruction sections/error categories/JSON output format, 0.9.18) |
+| `test_prompts_templates.py` | 14 | Structural contract of the three system-prompt constants (key instruction sections/error categories/JSON output format, 0.1) |
 | `test_rag_metrics.py` | 13 | RAG retrieval quality metrics Hit Rate/MRR (P1) |
 | `test_rag_retriever.py` | 42 | RAG retriever add/remove/query/clear and persistence |
 | `test_report_generator.py` | 48 | Error report generator (including twelve-category classification branches) |
-| `test_run_benchmark.py` | 5 | Benchmark result construction and exception path regression (0.9.8 deduplication refactor) |
+| `test_run_benchmark.py` | 5 | Benchmark result construction and exception path regression (0.1 deduplication refactor) |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench source export script (patch target file extraction / enrichment persistence / dry-run, 2.1) |
 | `test_state.py` | 8 | AITesterState single-construction-point factory (create_initial_state key-set guard / module_name derivation / mutable container isolation, deep-refactor batch) |
 | `test_viz_significance.py` | 6 | Statistical significance convergence (visualize_results reuses statistical_analysis paired primitives / NaN placeholder / primitive reference lock, deep-refactor batch) |
@@ -1037,83 +1040,33 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 
 ---
 
-## Iteration Optimization Log
+## Iteration records
 
-### v0.9.20 (2026-09-17) — Structural optimization round
+### v0.1 (2026-09-18) — First official release
 
-**Key outcomes**:
-- `executor.py` split into four focused submodules: `executor_imports.py` / `executor_modes.py` / `executor_output.py` / `executor_runtime.py`; class methods re-bound onto `ExecutorAgent`, so old import paths and test patch targets (`src.agents.executor.ExecutorAgent.<method>`) are unchanged
-- `dataset_loader.py` split into `dataset_defects4j.py` / `dataset_inmemory.py` (subclasses moved out, re-export keeps old import path; `SWEBenchDataset` stays in the main module since its module-level `_datasets` global is a test patch target)
-- Docker execution 5-path mock tests backfilled (`TestDockerExecutionFlow`); dependency edge cases +14 (`tools/dependency.py` 90% → 99%)
-- Removed duplicated JSON-parsing dead code in `dataset_loader.py`; pytest `filterwarnings` added to suppress scipy constant-group t-test "precision loss" warning
-- 21 new test cases; version 0.9.19 → 0.9.20
+**Key features**:
+- Four-agent architecture (Planner / Generator / Executor / Debugger) + hierarchical error repair (12 error categories)
+- Logic-driven Chain-of-Thought (Logic-driven CoT): Planner explicitly analyzes input/output domains, pre/post conditions, and boundary cases
+- RAG retrieval enhancement (ChromaDB, off by default; enable with `ENABLE_RAG=true`)
+- Multi-baseline comparison and ablation (aitester / plain_llm / single_agent)
+- Multi-candidate patch generation and verification (3.1, off by default)
+- Structured observability: JSONL node-level tracing (4.1, off by default; enable with `AITESTER_TRACE_DIR`)
+- Cost-aware routing + circuit-breaker cooldown + half-open probe (3.4 + 4.1 + 4.2)
+- SWE-bench source export automation (2.1) + data contamination detection (token-level Jaccard)
+- Cross-file repair (coordinator-proposer architecture, 3.5, off by default)
+- Assertion augmentation (AST-based existing-assert extraction, 3.4, off by default)
+- Dependency cache monitoring (venv hit-rate observability + `clean-venv-cache` CLI)
+- Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
+- Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 3 mutation types)
+- Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
+- 1459 test cases / 96% coverage / Ruff all green
 
-**Verification**: full suite 1386 passed / 0 failed / ruff green / coverage 95%
+**Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
+- AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
+- Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
+- Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-### v0.9.16 (2026-09-15) — Deep refactor round
-
-**Key outcomes**:
-- AITesterState initialization double-write converged to create_initial_state() single factory (CLI + benchmark dual entry)
-- Third statistical-significance residual converged to reuse statistical_analysis.py canonical primitives + NaN/Inf guards
-- code_context.py: 9 new test cases (module coverage 89% → 98%)
-- Full documentation alignment (structure tree / test status table / api_reference parameter annotations)
-- Version 0.9.15 → 0.9.16
-
-**Verification**: full suite 1386 passed / 0 failed / ruff green / coverage 95%
-
-### v0.10 (2026-08-18) — Second iteration round: performance optimization and dependency locking
-
-**Core outcomes**:
-- **Test expansion**: 653+ → 696+ cases (40+ new)
-- **Performance optimization report**: identified 3 high-priority bottlenecks (cache, health check, connection pool)
-- **API manager enhancement**: multi-provider rotation and high-availability failover support
-- **Dependency locking**: generated requirements.lock to ensure reproducible builds
-
-**Performance optimization implementation**:
-- ✅ RAG retriever singleton (saves 2-6 seconds of per-task initialization time)
-- ✅ LLM call timeout configuration (prevents API response hangs)
-- ✅ Parallel execution support (BENCHMARK_PARALLELISM environment variable)
-- 🔲 LLM cache key fix (use MD5 instead of hash())
-- 🔲 Database connection pool (pending)
-
-**New test modules**:
-| Test File | Case Count | Coverage Scope |
-|---------|-------|---------|
-| `test_api_manager.py` | 77 | API manager strategy tests (rotation/weighted-random/health-aware, 4.1 circuit breaker cooldown 9 cases + boundary 3 cases + redaction 2 cases, 3.4 cost alert threshold configurable 4 cases) |
-| `test_base_agent_extended.py` | 46 | Exponential backoff retry, LLM cache, zai client reuse |
-| `test_report_generator.py` | 48 | Error report generator (including twelve-category classification branches) |
-| `test_multi_candidate.py` | 23 | Multi-candidate patch generation and static/execution validation filtering (3.1) |
-| `test_cross_file.py` | 27 | 3.5 cross-file repair (AST dependency analysis / coordinator-proposer / multi-file patch application / fallback / serialization) |
-| `test_analyze_failures.py` | 13 | 5.3 failure root-cause classification (three root causes: LLM/dependency/framework) + case knowledge base + CLI --knowledge-base |
-| `test_trace_observability.py` | 12 | Structured JSONL tracing layer (4.1) |
-
-### v0.9 (2026-08-18) — Code quality optimization + error report generator
-
-**Core outcomes**:
-- **Ruff issues fixed**: 791 → 61 (92% fix rate)
-- **Test expansion**: 147 → 653+ cases
-- **New module**: `src/reports/` error report generator
-- **Multi-LLM configuration**: `LLM_CONFIGS` supports API Key rotation
-
-**Change details**:
-- Added an error report generator supporting text/JSON/Markdown formats
-- Fixed unused variables and outdated type annotations
-- Optimized LLM token consumption (prompt compression and code truncation)
-- Improved exponential backoff retry logic and path safety checks
-
-### v0.2.0 (2026-08-17) — Engineering improvements
-
-- Ruff Lint configuration, Pre-commit Hooks, GitHub Actions CI
-- Parallel execution support (`BENCHMARK_PARALLELISM`)
-- RAG retriever singleton optimization
-
-### v0.1.0 (2026-08-14) — Initial release
-
-- Four-agent collaboration architecture
-- Supports examples/synthetic/swe_bench datasets
-- Docker one-click reproduction
-
----
+**Verification**: 1459 tests passed / 0 failed / Ruff all green / 96% coverage
 
 ## License
 

@@ -526,6 +526,28 @@ python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv
 
 **Reading the hit rate**: `hit_rate = hits / (hits + creates)`. A low rate on a new experiment (first run of a dependency combination) is expected; it should approach 1.0 when re-running the same combination. A persistently low rate means checking whether `AITESTER_VENV_CACHE_DIR` points at a persistent volume.
 
+### 10.4b Multi-Version venv Cache (4.4)
+
+Binary packages for different Python versions are incompatible (e.g. numpy / pandas C extensions). venv_cache_dir includes the first two digits of sys.version_info in the cache key by default, isolating venvs of different versions (py3.10 / py3.12 prefixes) to avoid cross-reuse causing ImportError / segfaults:
+
+```python
+from src.tools.dependency import venv_cache_dir
+
+# Default: uses the current interpreter version (e.g. 3.14 -> py3.14 prefix)
+d = venv_cache_dir(['pandas'])
+# -> ~/.cache/aitester/venvs/py3.14_<digest>_pandas
+
+# Explicitly specify Python version (container / multi-version coexistence)
+d_310 = venv_cache_dir(['pandas'], python_version='3.10')
+d_312 = venv_cache_dir(['pandas'], python_version='3.12')
+# All three are different; venvs are stored in isolated directories
+```
+
+**Behavior**:
+- Same dependency combo + same Python version: reuse the same venv (cache hit)
+- Different Python versions: different directories, zero cross-contamination
+- create_venv reuses an existing venv directory if the python_version matches (no rebuild)
+
 ### 10.5 Subprocess Environment Credential Stripping (4.1 security hardening)
 
 In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credential variables from the subprocess environment (`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`). This closes the "generated code inherits host environment credentials" leak path — the code under test and the generated test code cannot access LLM keys via `os.environ`.

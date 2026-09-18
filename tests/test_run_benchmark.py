@@ -1,6 +1,6 @@
 """experiments/run_benchmark.py 回归测试。
 
-覆盖 0.9.8 去重重构：
+覆盖 0.1 去重重构：
 - _build_task_result：成功/失败两类结果字典结构一致（单一构造点，防字段漂移）；
 - run_single_task：基线成功/异常路径统一经 _build_task_result 汇总（重构回归）。
 """

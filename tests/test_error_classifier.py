@@ -299,7 +299,7 @@ class TestErrorClassifier:
     def test_is_test_side_suffix_collision_retained(self):
         """既有限制保留："mycalc.py" 帧会 endswith 命中 "calc.py"（误判非测试侧）。
 
-        该限制在 0.9.11 帧匹配收敛为单一 endswith 时有意保留（旧三子句中
+        该限制在 0.1 帧匹配收敛为单一 endswith 时有意保留（旧三子句中
         basename 全等/模块名全等均为 endswith 子集，pytest 帧几乎总带 .py 后缀），
         本测试锁定现状，防止后续误"修复"时破坏既有分类结果。
         """

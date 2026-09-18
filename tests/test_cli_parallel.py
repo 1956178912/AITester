@@ -1,7 +1,7 @@
 """
 CLI 并发派发回归测试：锁定 _dispatch_parallel_tasks 与 run 并发分支行为。
 
-回归背景（0.9.10 批次）：
+回归背景（0.1 批次）：
 - 此前 rich 进度条模式与纯文本降级模式各维护一份"future 提交 + as_completed 汇总"
   同构代码块（约 30 行重复），合并为共享派发器 _dispatch_parallel_tasks 后，
   本文件补齐并发路径的回归护栏：
@@ -252,7 +252,7 @@ class TestRunParallelBranches:
         assert result.exit_code == 0, result.output
 
     def test_run_parallel_failure_exits_nonzero(self, tmp_path):
-        """并发分支下任一任务未通过 → exit 1（CI 门控语义，0.9.6 引入，并发路径回归护栏）。"""
+        """并发分支下任一任务未通过 → exit 1（CI 门控语义，0.1 引入，并发路径回归护栏）。"""
         files = _make_files(tmp_path, 2)
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = {
