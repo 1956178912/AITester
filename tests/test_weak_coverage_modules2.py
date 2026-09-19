@@ -13,8 +13,6 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -29,7 +27,7 @@ class TestConfigGeneratorMain:
         import src.config.config_generator as gen
 
         # mock 输出路径到 tmp_path
-        with monkeypatch.context() as mp:
+        with monkeypatch.context():
             # 直接调用各生成函数，验证不崩溃
             template = gen.generate_env_template()
             assert isinstance(template, str)
@@ -55,9 +53,9 @@ class TestPromptTemplates:
 
     def test_all_prompts_non_empty(self):
         from src.prompts.templates import (
-            PLANNER_SYSTEM_PROMPT,
-            GENERATOR_SYSTEM_PROMPT,
             DEBUGGER_SYSTEM_PROMPT,
+            GENERATOR_SYSTEM_PROMPT,
+            PLANNER_SYSTEM_PROMPT,
         )
 
         assert len(PLANNER_SYSTEM_PROMPT) > 50
@@ -119,8 +117,9 @@ class TestSyntheticDatasetEdge:
 
         ds1 = SyntheticDataset(seed=1)
         ds2 = SyntheticDataset(seed=999)
-        tasks1 = [t.task_id for t in ds1][:10]
-        tasks2 = [t.task_id for t in ds2][:10]
         # 不同 seed → 任务参数值不同（task_id 结构相同但参数值不同）
-        # 验证任务总数一致但具体内容有差异
+        # 验证任务总数一致但实例代码内容有差异（seed 影响 instance_code 参数）
         assert len(list(ds1)) == len(list(ds2)), "同种子类型任务数应一致"
+        t1 = next(iter(ds1))
+        t2 = next(iter(ds2))
+        assert t1.instance_code != t2.instance_code, "不同 seed 应产生不同 instance_code"

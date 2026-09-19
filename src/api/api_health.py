@@ -184,6 +184,10 @@ class APIManagerConfig:
     timeout: int = 60  # 单次请求超时（秒）
     retry_count: int = 2  # 重试次数
     batch_health_check_size: int = 10  # 批量健康检查的批次大小
+    # 批量健康检查节点间间隔（秒）：串行探测时避免瞬时流量过大触发限流。
+    # 默认 0.1 保持历史行为；大节点池（100+）场景可调 0（纯串行排队）或
+    # 配合并发探测方案上调。
+    batch_health_check_interval: float = 0.1
     health_check_timeout: float = 5.0  # 单次健康检查超时（秒）
     # 4.2 半开探测开关（默认 True）：熔断冷却到期后，节点不直接恢复全量路由，
     # 而是先处于"半开"状态，仅允许一次探测请求；探测成功才闭合熔断器，

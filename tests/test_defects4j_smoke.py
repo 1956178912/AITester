@@ -37,7 +37,7 @@ class TestDefects4JPYDatasetSmoke:
 
     def test_load_with_valid_project_structure(self, tmp_path: pytest.TempPathFactory):
         """构造完整目录结构，验证加载器正确解析。"""
-        from src.datasets.dataset_loader import load_dataset, BenchmarkTask
+        from src.datasets.dataset_loader import load_dataset
 
         # 构造 projects/requests/1.0/ 目录
         project_dir = tmp_path / "projects" / "requests" / "1.0"

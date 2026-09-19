@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from typing import Any
 
 from config import RAG_COLLECTION_NAME, RAG_PERSIST_PATH, RAG_TTL_SECONDS
@@ -109,3 +110,46 @@ def _build_rag_stat(rag_refs: list | None, kind: str) -> dict[str, Any] | None:
         "max_similarity": max(sim_values) if sim_values else None,
         "avg_similarity": (sum(sim_values) / len(sim_values)) if sim_values else None,
     }
+
+
+def rag_guarded(
+    op_name: str,
+    action: Callable[[Any], None],
+    *,
+    enabled: bool,
+    module_available: bool,
+    retriever_cls: Any,
+    get_retriever: Callable[[], Any],
+) -> bool:
+    """RAG 降级守卫：前置条件满足且检索器可用时执行 action(retriever)（P1 重构）。
+
+    依赖注入式设计（关键点）：调用方把「RAG 是否启用 / 模块是否可用 / 检索器
+    类 / 取实例函数」作为参数传入，而非在 rag.py 内部直接读模块全局。
+    这样历史 patch 路径（`src.graph.nodes.ENABLE_RAG`、`src.graph.nodes.
+    get_rag_retriever`、`src.graph.nodes.RAG_MODULE_AVAILABLE` 等）继续有效，
+    测试 mock 行为不漂移。
+
+    统一 nodes.py 中 4 处同构的「条件判断 + get_rag_retriever + try/except 降级」
+    模板。未来调整 RAG 降级策略（失败计数、熔断等）只改本函数。
+
+    Args:
+        op_name: 操作标识（如 "retrieve_test_cases"），用于日志定位。
+        action: 无返回值的回调，接收已就绪的检索器实例。
+        enabled: RAG 开关（来自 config.ENABLE_RAG）。
+        module_available: RAG 模块是否可用（来自 rag.RAG_MODULE_AVAILABLE）。
+        retriever_cls: 检索器类（None 表示不可用，来自 rag.TestCaseRetriever）。
+        get_retriever: 取检索器单例的函数（来自 rag.get_rag_retriever）。
+
+    Returns:
+        True 表示 action 已被执行（含 action 自身正常返回）；False 表示被跳过。
+    """
+    if not (enabled and module_available and retriever_cls is not None):
+        return False
+    retriever = get_retriever()
+    if retriever is None:
+        return False
+    try:
+        action(retriever)
+    except Exception as e:
+        logger.warning("RAG %s 失败，跳过: %s", op_name, e)
+    return True

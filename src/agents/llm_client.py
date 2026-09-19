@@ -197,6 +197,10 @@ def _redact_log_text(text: str) -> str:
     只在 CLI 入口挂载，experiments 等非 CLI 入口下不生效。这里在
     LLM 调用的日志调用处直接脱敏，确保任何日志输出路径都不泄露凭证。
 
+    实现统一委托给 logging_utils.mask_sensitive_info（单一脱敏实现，
+    与 api_manager._redact 同口径）：logging_utils 是纯标准库模块
+    （re 正则替换），顶层导入无循环依赖。
+
     Args:
         text: 待脱敏的日志文本（通常为异常字符串）。
 
@@ -208,6 +212,7 @@ def _redact_log_text(text: str) -> str:
 
         return mask_sensitive_info(text)
     except Exception:
+        # 脱敏器不可用（理论上不会发生：纯标准库模块）时原样返回，不阻断主流程
         return text
 
 

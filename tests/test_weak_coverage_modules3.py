@@ -16,8 +16,6 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -95,6 +93,7 @@ class TestTraceWriteFailure:
     def test_disabled_session_noop(self):
         """未启用时所有方法 no-op，不创建文件。"""
         import os
+
         from src.observability.trace import TraceSession
 
         old_env = os.environ.pop("AITESTER_TRACE_DIR", None)
@@ -157,7 +156,7 @@ class TestAnalysisStatisticalBoundaries:
 class TestErrorClassifierContextExtraction:
     """5.1 error_classifier extract_error_context 各分支覆盖。"""
 
-    def _extract(self, test_output: str, failed_cases: list[dict] = None):
+    def _extract(self, test_output: str, failed_cases: list[dict] | None = None):
         from src.agents.error_classifier import ErrorClassifier
 
         clf = ErrorClassifier()
@@ -219,9 +218,6 @@ class TestCliOutputNoRich:
         ]
         # 不应抛异常
         out.print_rich_table(results)
-        captured = capsys.readouterr()
-        # 降级路径仍应有某种输出（纯文本或空）
-        assert True  # 不崩溃即通过
 
 
 # ─── prompts/templates: __main__ 自诊断块 ──────────────────────────────
@@ -231,11 +227,10 @@ class TestPromptTemplatesMain:
 
     def test_main_block_prints_prompt_lengths(self, capsys):
         """以 __main__ 方式执行 templates.py：打印各 prompt 字符数。"""
-        import importlib
-        import sys
 
         # 直接以 __main__ 模块身份执行
-        code = open(os.path.join(PROJECT_ROOT, "src/prompts/templates.py")).read()
+        with open(os.path.join(PROJECT_ROOT, "src/prompts/templates.py"), encoding="utf-8") as f:
+            code = f.read()
         module_globals = {"__name__": "__main__"}
         exec(compile(code, "templates.py", "exec"), module_globals)
         # 执行后 locals() 中的 UPPERCASE 字符串项会被 logger.info 打印

@@ -234,7 +234,12 @@ def apply_multi_function_patch(
         return code, True
 
     # 按起始行号从高到低排序（从后往前应用，避免行号偏移）
-    sorted_patches = sorted(patches, key=lambda p: _find_function_start_line(code, p["function_name"]), reverse=True)
+    # P13：预切分代码行一次，排序 key 复用（_find_function_start_line 内部对每个 patch
+    # 都 split 一遍，m 个 patch 即 O(n·m)；改为传预切分行 → O(n+m)）
+    code_lines = code.split("\n")
+    sorted_patches = sorted(
+        patches, key=lambda p: _find_function_start_line_in_lines(code_lines, p["function_name"]), reverse=True
+    )
 
     current_code = code
     all_success = True
@@ -263,9 +268,23 @@ def _find_function_start_line(code: str, func_name: str) -> int:
     Returns:
         函数起始行号（从0开始），未找到返回 -1
     """
+    return _find_function_start_line_in_lines(code.split("\n"), func_name)
+
+
+def _find_function_start_line_in_lines(code_lines: list[str], func_name: str) -> int:
+    """按预切分的行查找函数起始行号（P13 性能优化：供批量排序 key 复用，避免每个
+    patch 都重新 split 一遍代码）。
+
+    Args:
+        code_lines: 代码行列表（code.split("\\n") 的结果）。
+        func_name: 函数名。
+
+    Returns:
+        函数起始行号（从0开始），未找到返回 -1。
+    """
     # 预编译函数定义匹配正则（避免逐行重复编译）
     func_def_re = re.compile(rf"^def\s+{re.escape(func_name)}\s*\(")
-    for i, line in enumerate(code.split("\n")):
+    for i, line in enumerate(code_lines):
         if func_def_re.match(line):
             return i
     return -1

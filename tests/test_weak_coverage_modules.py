@@ -10,8 +10,6 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -35,8 +33,8 @@ class TestCliOutputBoundary:
 
         print_rich_table([{"status": "PASS", "file": "test_a.py", "function": "test_x"}])
         captured = capsys.readouterr()
-        # rich 渲染到 stdout 或 stderr
-        assert "test_a.py" in captured.out or "test_a.py" in captured.err or True
+        # rich 渲染到 stdout 或 stderr；"test_a.py" 必须出现在其中之一（此前 or True 恒真，断言形同虚设）
+        assert "test_a.py" in captured.out or "test_a.py" in captured.err
 
     def test_print_rich_table_missing_fields(self, capsys):
         """字段缺失：容错处理，不崩溃。"""
@@ -182,9 +180,8 @@ class TestExecutorRuntimeCleanup:
 
         import subprocess as sp
         perm_exc = PermissionError("permission denied")
-        with monkeypatch.context() as mp:
-            mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(perm_exc))
-            output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
+        monkeypatch.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(perm_exc))
+        _output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "permission_error"
 

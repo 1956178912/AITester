@@ -42,7 +42,8 @@ def _redact(text: str) -> str:
 
     APIManager 的故障转移/健康检查日志会把 openai 异常的 str(e) 打进日志——
     部分 SDK/网关的错误体回显请求头或 base_url（其中可能含 API Key）。
-    与 base_agent._redact_log_text 同口径：在日志点就地脱敏，不依赖入口接线。
+    与 llm_client._redact_log_text 同口径：委托给 logging_utils.mask_sensitive_info
+    （单一脱敏实现，两处模块的 _redact 别名收敛到同一函数，避免逻辑漂移）。
     """
     try:
         from src.utils.logging_utils import mask_sensitive_info
@@ -358,7 +359,10 @@ class APIManager:
             logger.info("正在检查第 %d-%d 个节点...", i + 1, min(i + batch_size, len(nodes)))
             for name, node in batch:
                 all_results[name] = self.check_health(node)
-                time.sleep(0.1)  # 短暂间隔，避免瞬时流量过大
+                # 节点间短暂间隔避免瞬时流量过大（间隔可经
+                # APIManagerConfig.batch_health_check_interval 配置，默认 0.1s 保持历史行为）
+                if self.config.batch_health_check_interval > 0:
+                    time.sleep(self.config.batch_health_check_interval)
         healthy_count = sum(1 for v in all_results.values() if v)
         logger.info("批量健康检查完成: %d/%d 个节点健康", healthy_count, len(all_results))
         return all_results
@@ -574,10 +578,12 @@ class APIManager:
                     else ("open" if h.in_circuit_open else "closed")
                 ),
             }
+        # get_healthy_nodes 全节点池遍历一次，结果复用（此前连调两次）
+        healthy = self.get_healthy_nodes()
         return {
             "total_nodes": len(self.health_nodes),
-            "healthy_nodes": len(self.get_healthy_nodes()),
-            "unhealthy_nodes": len(self.get_all_nodes()) - len(self.get_healthy_nodes()),
+            "healthy_nodes": len(healthy),
+            "unhealthy_nodes": len(self.health_nodes) - len(healthy),
             "rotation_strategy": self.config.rotation_strategy.value,
             "nodes": nodes_summary,
         }

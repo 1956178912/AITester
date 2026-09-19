@@ -30,7 +30,13 @@ from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.generator import GeneratorAgent
 from src.agents.planner import PlannerAgent
-from src.graph.rag import RAG_MODULE_AVAILABLE, TestCaseRetriever, _build_rag_stat, get_rag_retriever
+from src.graph.rag import (
+    RAG_MODULE_AVAILABLE,
+    TestCaseRetriever,
+    _build_rag_stat,
+    get_rag_retriever,
+    rag_guarded,
+)
 from src.graph.state import AITesterState
 from src.graph.tracing import _trace_node
 from src.tools.cross_file import analyze_cross_file_deps, cross_file_enabled
@@ -126,19 +132,25 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     agent = GeneratorAgent()
 
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
-    rag_refs: list | None = None
-    # 仅当 RAG 开关开启、模块可用、且存在失败用例时才进行检索
-    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
-        try:
-            # 使用单例检索器，避免重复初始化 ChromaDB 客户端
-            retriever = get_rag_retriever()
-            if retriever is not None:
-                # top_k=3 是经验值：太多会增加 prompt 长度，太少可能缺乏代表性
-                rag_refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
-                logger.info("RAG 检索到 %d 个相似测试用例", len(rag_refs) if rag_refs else 0)
-        except Exception as e:
-            # RAG 检索失败时记录警告但不中断流程，Generator 仍可使用无 RAG 模式生成
-            logger.warning("RAG 检索失败，跳过增强: %s", e)
+    # 仅当 RAG 开关开启、模块可用时才进行检索（统一走 rag_guarded 降级守卫，P1 重构）
+    # 闭包写回需要外层可变容器（list 包装：Python 闭包内无法 rebinding 外层局部名）
+    rag_refs_box: list = [None]
+
+    def _on_retrieve(retriever) -> None:
+        # top_k=3 是经验值：太多会增加 prompt 长度，太少可能缺乏代表性
+        refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
+        logger.info("RAG 检索到 %d 个相似测试用例", len(refs) if refs else 0)
+        rag_refs_box[0] = refs
+
+    rag_guarded(
+        "retrieve_test_cases",
+        _on_retrieve,
+        enabled=ENABLE_RAG,
+        module_available=RAG_MODULE_AVAILABLE,
+        retriever_cls=TestCaseRetriever,
+        get_retriever=get_rag_retriever,
+    )
+    rag_refs: list | None = rag_refs_box[0]
 
     # P1：记录本次 RAG 检索的质量指标（命中数/相似度），随状态累计供实验汇总
     update_rag_stat = _build_rag_stat(rag_refs, kind="test_cases")
@@ -246,20 +258,21 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         iteration=state.get("iteration", 0),
     )
 
-    if result["passed"] and ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
-        try:
-            # 使用单例检索器入库成功测试用例
-            retriever = get_rag_retriever()
-            if retriever is not None:
-                retriever.add_case(
-                    code=state["target_code"],
-                    test_code=state["generated_test"],
-                    passed=True,
-                    metadata={"function": state.get("target_function"), "coverage": result["coverage"]},
-                )
-                logger.debug("成功测试用例已入库 RAG")
-        except Exception as e:
-            logger.warning("RAG 入库失败: %s", e)
+    # 统一走 rag_guarded 降级守卫（P1 重构）：测试通过时入库成功用例
+    if result["passed"]:
+        rag_guarded(
+            "add_case",
+            lambda r: r.add_case(
+                code=state["target_code"],
+                test_code=state["generated_test"],
+                passed=True,
+                metadata={"function": state.get("target_function"), "coverage": result["coverage"]},
+            ),
+            enabled=ENABLE_RAG,
+            module_available=RAG_MODULE_AVAILABLE,
+            retriever_cls=TestCaseRetriever,
+            get_retriever=get_rag_retriever,
+        )
 
     return {
         "test_passed": result["passed"],
@@ -337,21 +350,27 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     agent = DebuggerAgent()
     t0 = time.time()
 
-    rag_refs: list | None = None
-    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None and state.get("failed_cases"):
-        try:
-            error_cat = state.get("error_category", "unknown")
-            # 使用单例检索器
-            retriever = get_rag_retriever()
-            if retriever is not None:
-                rag_refs = retriever.retrieve_repairs(
-                    error_category=error_cat,
-                    target_code=state["target_code"],
-                    top_k=2,
-                )
-                logger.info("RAG 检索到 %d 个相似修复案例", len(rag_refs) if rag_refs else 0)
-        except Exception as e:
-            logger.warning("RAG 检索失败，跳过增强: %s", e)
+    # 统一走 rag_guarded 降级守卫（P1 重构）：有失败用例时检索相似修复案例
+    rag_refs_box: list = [None]
+    if state.get("failed_cases"):
+        def _on_retrieve_repairs(retriever) -> None:
+            refs = retriever.retrieve_repairs(
+                error_category=state.get("error_category", "unknown"),
+                target_code=state["target_code"],
+                top_k=2,
+            )
+            logger.info("RAG 检索到 %d 个相似修复案例", len(refs) if refs else 0)
+            rag_refs_box[0] = refs
+
+        rag_guarded(
+            "retrieve_repairs",
+            _on_retrieve_repairs,
+            enabled=ENABLE_RAG,
+            module_available=RAG_MODULE_AVAILABLE,
+            retriever_cls=TestCaseRetriever,
+            get_retriever=get_rag_retriever,
+        )
+    rag_refs: list | None = rag_refs_box[0]
 
     try:
         result = agent.debug(
@@ -390,19 +409,19 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         iteration=state.get("iteration", 0),
     )
 
-    if ENABLE_RAG and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
-        try:
-            # 使用单例检索器入库修复案例
-            retriever = get_rag_retriever()
-            if retriever is not None:
-                retriever.add_repair(
-                    original_code=state["target_code"],
-                    patch=result.get("patch", ""),
-                    error_category=result.get("error_category", "unknown"),
-                )
-                logger.debug("修复案例已入库 RAG")
-        except Exception as e:
-            logger.warning("RAG 修复入库失败: %s", e)
+    # 统一走 rag_guarded 降级守卫（P1 重构）：入库修复案例
+    rag_guarded(
+        "add_repair",
+        lambda r: r.add_repair(
+            original_code=state["target_code"],
+            patch=result.get("patch", ""),
+            error_category=result.get("error_category", "unknown"),
+        ),
+        enabled=ENABLE_RAG,
+        module_available=RAG_MODULE_AVAILABLE,
+        retriever_cls=TestCaseRetriever,
+        get_retriever=get_rag_retriever,
+    )
 
     update = {
         "diagnosis": result["root_cause"],
@@ -516,8 +535,10 @@ def _write_file_atomic(path: str, content: str) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
         os.replace(tmp_path, path)
-    except BaseException:
-        # 失败时清理临时文件，避免残留；再把异常抛给调用方
+    except Exception:
+        # 失败时清理临时文件，避免残留；再把异常抛给调用方。
+        # 用 Exception 而非 BaseException（PEP 8）：KeyboardInterrupt/SystemExit
+        # 不应插入清理路径，临时文件由进程退出兜底回收
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)
         raise
@@ -541,9 +562,6 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         (最优候选应用后的代码, 是否成功应用)。回退单补丁时与原
         apply_patch_to_code 同口径。
     """
-    from src.agents.debugger import DebuggerAgent
-    from src.agents.executor import ExecutorAgent
-
     n = multi_candidate_count()
     debugger = DebuggerAgent()
     candidates = generate_candidates(
