@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1459 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1419 collected） |
-| **单元测试** | ✅ 全量 1459 passed, 0 skipped；精简环境 1419 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1460 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1420 collected） |
+| **单元测试** | ✅ 全量 1460 passed, 0 skipped；精简环境 1420 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 96% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 100% / cli-app 93% / cli-output 94% / executor_imports 92% / executor_modes 96% / executor_output 96% / executor_runtime 96% / dependency 99% / multi_candidate 92% / cross_file 100% / mutation_testing 通过 test_smell_detection_v2 覆盖） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 全面优化轮次（异味检测补强 / 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比 / 4.4 多版本缓存 / 3.4 Defects4J 冒烟，新增 6 个测试文件 + 1 个模块文件，全量 1459 passed / 覆盖率 96%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 0.2 代码质量优化轮次（RAG 降级守卫抽取 / 多函数补丁排序 O(n·m)→O(n+m) / 实验排名绑定修复 / 库名白名单 / 懒导入消除 / 脱敏双实现收敛 / 批量健康检查间隔可配，全量 1460 passed / 覆盖率 96%）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%), mutation_testing.py (via test_smell_detection_v2) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-18 首个正式版本（0.1）：异味检测补强（Eager Test + Lack of Cohesion 两类 AST 口径异味，`analyze_results.py` 测试异味章节新增两列）；内置变异测试生成器（`experiments/mutation_testing.py`，AST 级边界值替换/运算符翻转/布尔取反三类变异体，每任务 ≤20 个，无 mutmut 依赖）；3.2 对抗性推理增强（`DEBUGGER_SYSTEM_PROMPT` 新增对抗性意图推理段落 + `adversarial_check` 可选字段，`debugger.py` 缺省兜底）；5.3 跨批次失败模式对比（`compare_failures.py` 新增 `cross_batch_comparison` / `render_cross_batch_section` + CLI `--cross-batch` 参数）；4.4 多版本 venv 缓存（`venv_cache_dir` 新增 `python_version` 参数，缓存 key 含 Python 版本前缀）；3.4 Defects4J 冒烟测试（`test_defects4j_smoke.py` 155 行）；5.1 弱覆盖模块补强 3 轮（`test_weak_coverage_modules*.py` 共 39 用例）；全量 1386→1459；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-19 代码质量与可靠性优化轮次（0.2）：RAG 降级守卫抽取（`graph/rag.py` 新增依赖注入式 `rag_guarded`，统一 `nodes.py` 4 处同构模板，历史 patch 路径不变）；多函数补丁排序 O(n·m)→O(n+m)（`patch_applier.py` 预切分行复用）；实验排名绑定修复（`analysis.py` 按 name/value 绑定排序 + 新增乱序插入回归测试，全量 1459→1460）；数据库库名白名单（`init_db.py`，堵环境变量注入 SQL 向量）；懒导入消除（`base_agent.py`）；脱敏双实现收敛（`llm_client._redact_log_text` / `api_manager._redact`）；批量健康检查间隔提为可配置项 `APIManagerConfig.batch_health_check_interval`；tests/ 存量 Ruff 告警 24 条清理 + 1 处恒真断言修复；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1459 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1419 个收集）
+# 运行所有单元测试（全量 1460 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1420 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -742,7 +742,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1459 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1460 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -752,7 +752,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（62 个测试文件，全量 1459 个 pytest 收集用例；精简环境 1419 收集 / 40 自动跳过，src 总覆盖率 96%）：
+**测试覆盖模块**（62 个测试文件，全量 1460 个 pytest 收集用例；精简环境 1420 收集 / 40 自动跳过，src 总覆盖率 96%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1136,14 +1136,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1459 个测试用例 / 覆盖率 96% / Ruff 全绿
+- 全量 1460 个测试用例 / 覆盖率 96% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1459 passed / 0 failed / ruff 全绿 / 覆盖率 96%
+**验证**: 全量 1460 passed / 0 failed / ruff 全绿 / 覆盖率 96%
 
 ---
 

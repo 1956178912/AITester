@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1459 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1419 collected) |
-| **Unit Tests** | ✅ Full: 1459 passed, 0 skipped; reduced environment: 1419 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Total Tests** | ✅ 1460 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 40 skipped, 1420 collected) |
+| **Unit Tests** | ✅ Full: 1460 passed, 0 skipped; reduced environment: 1420 passed, 40 skipped (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
 | **Code Coverage** | 96% total coverage (core modules: reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 100% / cli-app 93% / cli-output 94% / executor_imports 92% / executor_modes 96% / executor_output 96% / executor_runtime 96% / dependency 99% / multi_candidate 92% / cross_file 100% / mutation_testing covered via test_smell_detection_v2) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-18 full optimization round (smell-detection enhancement / built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache / 3.4 Defects4J smoke; 6 new test files + 1 new module file, full suite 1459 passed / coverage 96%); see [CHANGELOG.en](CHANGELOG.en.md) for details |
+| **Latest Optimization** | ✅ 0.2 code-quality optimization round (RAG guard extraction / multi-function patch sort O(n·m)→O(n+m) / experiment ranking-binding fix / DB-name whitelist / lazy-import elimination / redaction dual-implementation convergence / configurable batch health-check interval; full suite 1460 passed / coverage 96%); see [CHANGELOG.en](CHANGELOG.en.md) for details |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%), mutation_testing.py (via test_smell_detection_v2) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) |
-| **Recent Changes** | ✅ 2026-09-18 full optimization round (0.1): smell-detection enhancement (Eager Test + Lack of Cohesion AST-metric smells, two new columns in the `analyze_results.py` test-smell section); built-in mutation generator (`experiments/mutation_testing.py`, three AST mutant classes — boundary-value replacement / operator flip / boolean negation, ≤20 per task, no mutmut dependency); 3.2 adversarial-reasoning enhancement (`DEBUGGER_SYSTEM_PROMPT` gains the adversarial-intent paragraph + optional `adversarial_check` field, `debugger.py` defaults to a zero-value fallback); 5.3 cross-batch failure-mode comparison (`compare_failures.py` gains `cross_batch_comparison` / `render_cross_batch_section` + the `--cross-batch` CLI flag); 4.4 multi-version venv cache (`venv_cache_dir` gains a `python_version` parameter, cache key carries the Python-version prefix); 3.4 Defects4J smoke test (`test_defects4j_smoke.py`, 155 lines); 5.1 low-coverage reinforcement in 3 rounds (`test_weak_coverage_modules*.py`, 39 cases); full suite 1386→1459; see [CHANGELOG.en](CHANGELOG.en.md) for details |
+| **Recent Changes** | ✅ 2026-09-19 code-quality & reliability round (0.2): RAG degradation guard extraction (`graph/rag.py` adds a dependency-injection `rag_guarded`, unifying 4 isomorphic templates in `nodes.py`, historical patch paths unchanged); multi-function patch sort O(n·m)→O(n+m) (`patch_applier.py` reuses pre-split lines); experiment ranking-binding fix (`analysis.py` sorts by name/value binding + new out-of-order-insertion regression test, full suite 1459→1460); DB-name whitelist (`init_db.py`, closes the env-variable SQL-injection vector); lazy-import elimination (`base_agent.py`); redaction dual-implementation convergence (`llm_client._redact_log_text` / `api_manager._redact`); batch health-check interval exposed as configurable `APIManagerConfig.batch_health_check_interval`; 24 pre-existing Ruff warnings in tests/ cleaned + 1 tautological assertion fixed; see [CHANGELOG.en](CHANGELOG.en.md) for details |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1459 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1419 collected)
+# Run all unit tests (full 1460 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1420 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -713,7 +713,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1459 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1460 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -723,7 +723,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (62 test files, full 1459 collected pytest cases; reduced environment collects 1419 / auto-skips 40, total src coverage 96%):
+**Tested modules** (62 test files, full 1460 collected pytest cases; reduced environment collects 1420 / auto-skips 40, total src coverage 96%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1059,14 +1059,14 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
 - Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 3 mutation types)
 - Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
-- 1459 test cases / 96% coverage / Ruff all green
+- 1460 test cases / 96% coverage / Ruff all green
 
 **Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
 - AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
 - Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
 - Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-**Verification**: 1459 tests passed / 0 failed / Ruff all green / 96% coverage
+**Verification**: 1460 tests passed / 0 failed / Ruff all green / 96% coverage
 
 ## License
 

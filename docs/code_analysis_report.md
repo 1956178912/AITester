@@ -298,3 +298,35 @@ D 规则总告警数：4945 条
 2. **抽象 LLM 客户端缓存双实现**（`llm_client.py:55/102`）：OpenAI 与 zai SDK 缓存键与淘汰策略存在本质差异（zai 按 `(api_key, base_url)`，OpenAI 按四元组），强行统一会引入不必要的泛型复杂度。
 3. **大规模 docstring 补齐**：4945 条告警中 99.5% 为格式类（可自动修），且 pyproject 未启用 D 规则集、不构成 CI 阻断；剩余 469 条内容缺失需逐条补充，工作量大收益低。
 4. **删除低引用内部辅助函数**（如 `_is_within_allowed_roots`、`_safe_unlink`）：逐一核实均有实际调用点，属正常封装设计，删除风险高于收益。
+
+---
+
+## 十、实施状态（2026-09-19 优化轮次 0.2 后更新）
+
+> 本节为 2026-09-19 代码质量优化轮次（提交 `9f83197` + `d5f21f6`，全量 1460 passed / ruff 全绿）
+> 对本报告建议项的落地情况记录。
+
+### 已落地
+
+| 建议项 | 落地方式 | 提交 |
+|--------|---------|------|
+| 修 `test_weak_coverage_modules.py:39` 恒真断言 | 删除 `or True`，断言真实生效 | `d5f21f6` |
+| 统一 `_redact` / `_redact_log_text` 双实现 | 两处收敛为委托 `mask_sensitive_info` 的同一套入口，注释标明单一实现防漂移 | `d5f21f6` |
+| `api_manager.py` 批量健康检查 sleep 间隔 | 提为可配置项 `APIManagerConfig.batch_health_check_interval`（默认 0.1s 保持历史行为） | `d5f21f6` |
+| `get_status` 中 `get_healthy_nodes()` 连调两次 | 结果复用，全节点池遍历减半 | `d5f21f6` |
+| `tests/` ruff 告警清理 | `ruff check tests/ --fix` 自动修 17 条 + 手动修 7 条（未用变量 / 隐式 Optional / 裸 open 等），共 24 条 | `d5f21f6` |
+| `nodes.py` 4 处 RAG 降级模板 | 抽 `rag_guarded`（依赖注入式设计，历史 patch 路径不变） | `d5f21f6` |
+| `patch_applier.py` 多函数补丁排序 O(n·m) | 预切分行复用，O(n+m) | `d5f21f6` |
+| `nodes.py:519` `except BaseException` | 改 `except Exception`（PEP 8，中断路径不插入清理） | `d5f21f6` |
+
+### 未落地（维持"不建议做"结论）
+
+1. **`base_agent.py` 延迟导入提升顶层**：刻意设计（避免循环导入），保持现状。
+2. **抽象 LLM 客户端缓存双实现**：OpenAI 与 zai SDK 缓存键与淘汰策略本质不同。
+3. **大规模 docstring 补齐**：4945 条中 99.5% 格式类且 D 规则未启用（非 CI 阻断），收益低。
+4. **删除低引用内部辅助函数**：均有实际调用点，属正常封装设计。
+
+### 后续轮次建议（已记录，未本轮实施）
+
+- `experiments/analysis.py` O(n²) 两两配对：当前 baseline 数 ≤5，无实际收益，留作已知边界。
+- `api_manager.py` 限流重试固定 sleep（2s/5s）改指数退避：中风险，需配合测试，留待下一轮。

@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-18（全面优化轮次：1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比 / 4.4 多版本缓存 / 3.4 Defects4J 冒烟）
+> 最后更新：2026-09-19（0.2 代码质量优化轮次：RAG 降级守卫抽取 / 多函数补丁排序 O(n·m)→O(n+m) / 实验排名绑定修复 / 库名白名单 / 批量健康检查间隔可配 / 脱敏双实现收敛；全量 1460 测试用例 / 覆盖率 96%）
 
 ---
 
@@ -256,6 +256,8 @@ fixed_code = apply_patch_to_code(
 | 函数 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `apply_patch_to_code()` | `original_code`, `patch`, `mode`, `function_name` | `str` | 应用补丁到代码 |
+| `apply_multi_function_patch()` | `code: str`, `patches: list[dict]` | `tuple[str, bool]` | 多函数同时修复：每项 patch 为 `{"function_name": str, "patch": str}`；按函数起始行号从高到低应用（避免行号偏移）。0.2 性能优化：排序 key 复用预切分行（O(n+m)，此前每个 patch 各自 split 一遍代码 O(n·m)） |
+| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | 应用补丁后做语法校验，失败自动回滚到原始代码 |
 
 ---
 
@@ -544,6 +546,8 @@ final_state = graph.invoke(state)
 - `_should_debug()`：根据测试结果与迭代轮次决定是否继续进入调试循环（循环终止逻辑）
 - 最大迭代次数限制：防止无限循环
 
+**RAG 降级守卫（0.2 新增）**：`src/graph/rag.py` 的 `rag_guarded` 统一了 `nodes.py` 中 4 处同构的「ENABLE_RAG 前置判断 + 取检索器单例 + try/except 降级」模板（generator 检索 / executor 入库 / debugger 检索 / debugger 入库）。采用依赖注入式设计（`enabled` / `module_available` / `retriever_cls` / `get_retriever` 作为参数传入，而非模块内直读全局），保持历史 patch 路径（`src.graph.nodes.ENABLE_RAG` / `get_rag_retriever` 等）继续有效。未来调整 RAG 降级策略（失败计数、熔断等）只改 `rag_guarded` 一处，4 个调用点不动。
+
 ---
 
 ## 数据集加载
@@ -638,6 +642,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `enable_half_open_probe` | bool | True | 4.2 半开探测开关：冷却到期后节点先进入 half-open 窗口仅承载一次探测，成功闭合熔断器 / 失败重开半程冷却；置 False 退回 4.1 直接放行行为 |
 | `half_open_probe_penalty_cap_seconds` | float | 30.0 | 4.2 半开探测失败惩罚时长上限：失败重开冷却 = `min(circuit_cooldown_seconds/2, 本字段)` |
 | `cost_alert_threshold` | float | 2.0 | 3.4 成本告警阈值：故障转移到 `cost_weight >= 阈值` 的昂贵节点时记 WARNING |
+| `batch_health_check_interval` | float | 0.1 | 批量健康检查节点间隔（秒）：串行探测时避免瞬时流量触发限流；0 表示纯串行排队（大节点池场景）；0.1 保持历史默认行为 |
 
 > 监控：`get_status()` 每节点输出 `circuit_open_remaining_s`（熔断冷却剩余秒）与 `circuit_state`（`closed` / `open` / `half_open` 三态，仅 `enable_half_open_probe=True` 时报告 half_open）。
 
@@ -699,5 +704,6 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| 0.2 | 2026-09-19 | 代码质量与可靠性优化轮次（无新功能，零功能破坏）：RAG 降级守卫抽取（`graph/rag.py` 新增依赖注入式 `rag_guarded`，统一 `nodes.py` 4 处同构模板，历史 patch 路径不变）；多函数补丁排序 O(n·m)→O(n+m)（`patch_applier.py` 新增 `_find_function_start_line_in_lines` 预切分行复用）；实验排名绑定修复（`experiments/analysis.py` 按 name/value 绑定排序 + 新增乱序插入回归测试，全量 1459→1460）；数据库库名白名单（`init_db.py`，堵环境变量注入 SQL 向量）；懒导入消除（`base_agent.py`）；脱敏双实现收敛（`llm_client._redact_log_text` / `api_manager._redact`）；批量健康检查间隔提为可配置项 `APIManagerConfig.batch_health_check_interval`；tests/ 存量 Ruff 告警 24 条清理 + 1 处恒真断言修复；`ruff check src/ tests/` 全绿 |
 | 0.1 | 2026-09-18 | 首个正式版本：四智能体协作架构（Planner/Generator/Executor/Debugger）+ 十二类错误分层修复 + 逻辑驱动 CoT；多基线对比（aitester/plain_llm/single_agent）+ SWE-bench/Defects4J-Python/合成数据集支持；SWE-bench 源码导出自动化 + 数据污染检测；统计检验（t 检验/Mann-Whitney U/Cohen's d）；结果分析层（修复收敛/边界覆盖/变异得分/断言强度/执行反馈轨迹）；内置变异测试生成器 + 测试异味检测；结构化 JSONL 追踪层；多候选补丁；成本感知路由 + 熔断冷却期 + 半开探测；跨文件修复；断言增强；Docker 隔离执行；依赖缓存监控 + clean-venv-cache CLI；Ruff + pre-commit + GitHub Actions CI；全量 1459 测试用例 / 覆盖率 96% |
 

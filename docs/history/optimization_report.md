@@ -13,11 +13,13 @@
 > 「附录：2026-09-13 系统功能增强轮次」。优化点清单与实施批次详见 `optimization_plan.md` 同名章节。
 > 2026-09-14 改进清单批次（G-01~G-04 + 3.4 + 3.5）与 4.2 半开探测批次的完整记录见
 > 「附录：2026-09-14 改进清单批次」与「附录：2026-09-14 4.2 半开探测批次」。
+> 2026-09-18 ~ 09-19 代码质量与可靠性优化轮次（0.1 → 0.2，两个原子提交 `9f83197` + `d5f21f6`）
+> 的完整记录见「附录：2026-09-18 ~ 09-19 代码质量与可靠性优化轮次」。
 >
-> **当前最新基线（2026-09-14 4.2 半开探测批次）**：全量测试推进至
-> **1237 passed / 0 failed**，`ruff check` / `ruff format --check` 全绿；
-> 下文 1163（批次③）/ 1225（改进清单批次）/ 1158（F 批次）相关条目保留为历史轮次记录，
-> 不代表当前最新基线。
+> **当前最新基线（2026-09-19 优化轮次 0.2）**：全量测试推进至
+> **1460 passed / 0 failed / 覆盖率 96%**，`ruff check` / `ruff format --check` 全绿；
+> 下文 1163（批次③）/ 1225（改进清单批次）/ 1158（F 批次）/ 1237（4.2 半开探测批次）/
+> 1247 / 1270（09-15 收敛轮次）相关条目保留为历史轮次记录，不代表当前最新基线。
 
 ## 阶段 0：基线检查
 
@@ -727,3 +729,74 @@ TASK_SUMMARY.md、.agent-teams/、SUBMISSION_* 等），`--force` 推送干净�
 ### 版本收敛
 - 版本 0.9.11 → 0.9.14；CHANGELOG 14 个 Unreleased 条目按日期映射 0.9.12/0.9.13/0.9.14；
   docs/api_reference 版本表同步；README 测试数/覆盖率同步。
+
+---
+
+## 附录：2026-09-18 ~ 09-19 代码质量与可靠性优化轮次（0.1 → 0.2）
+
+> 基线（0.1 发布，2026-09-18）：全量 1459 passed / 0 failed / 覆盖率 96% / ruff 全绿 / 工作区 clean。
+> 本轮为纯代码质量优化（无新功能），两个原子提交：`9f83197`（结构优化轮次）+ `d5f21f6`（全面优化轮次 2），
+> 落地后推进至 **1460 passed / 0 failed / 覆盖率 96% / ruff 全绿**（净增 1 条回归测试用例）。
+> 完整静态分析报告见 `docs/code_analysis_report.md`（30 条发现 + 「值得做 / 不建议做」清单 + 实施状态章节）。
+
+### 提交 1：`9f83197` 结构优化轮次
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| 懒导入消除 | `src/agents/base_agent.py` | `_find_balanced_json` 与 `extract_focused_code` 的函数内惰性导入提到模块顶层（两模块均无循环依赖），消除每次调用的 import 机制开销与别名噪音 |
+| 实验排名绑定修复 | `src/experiments/analysis.py` | `_rank_by_metric` 改为 (name, value) 元组绑定排序，消除按 `zip` 位置错配排名的结构隐患 |
+| 排名绑定回归测试 | `tests/test_experiments_analysis.py` | 新增乱序插入用例（全量 1459→1460） |
+| 数据库库名白名单 | `init_db.py` | `MYSQL_DATABASE` 拼入 `CREATE DATABASE` 前做 `[A-Za-z0-9_]+` 白名单校验，堵环境变量注入多语句 SQL 向量；import 顺序合规化 |
+
+### 提交 2：`d5f21f6` 全面优化轮次 2（13 文件 +479/-97）
+
+#### 重构
+- **RAG 降级守卫抽取**（`graph/rag.py` 新增 `rag_guarded`）：统一 `graph/nodes.py` 中 4 处同构的
+  「ENABLE_RAG 前置判断 + 取检索器单例 + try/except 降级」模板（generator 检索 / executor 入库 /
+  debugger 检索 / debugger 入库）。采用**依赖注入式设计**（`enabled` / `module_available` /
+  `retriever_cls` / `get_retriever` 作为参数传入，而非模块内直读全局），历史 patch 路径
+  （`src.graph.nodes.ENABLE_RAG` / `get_rag_retriever` 等 8 个测试用例）继续有效，测试 mock 行为不漂移。
+  未来调整 RAG 降级策略（失败计数、熔断等）只改 `rag_guarded` 一处。
+- **多函数补丁排序性能优化**（`tools/patch_applier.py`）：`apply_multi_function_patch` 排序 key 由
+  「每个 patch 各自 split 一遍代码行」（O(n·m)）改为「预切分行复用」（`_find_function_start_line_in_lines`，
+  O(n+m)），多文件大补丁场景直接受益。
+- **脱敏双实现收敛**（`agents/llm_client.py` + `api/api_manager.py`）：`_redact` / `_redact_log_text`
+  两套近似实现收敛为委托 `logging_utils.mask_sensitive_info` 的同一套逻辑，注释标明单一实现入口防漂移。
+
+#### 修复
+- **原子写盘异常收窄**（`graph/nodes.py`）：临时文件清理的 `except BaseException` 改 `except Exception`
+  （PEP 8：KeyboardInterrupt/SystemExit 不应插入清理路径，临时文件由进程退出兜底回收）。
+
+#### API 管理器性能与可配置性
+- `get_status` 中 `get_healthy_nodes()` 由连调两次改为结果复用（全节点池遍历减半）。
+- 批量健康检查节点间隔由硬编码 0.1s 提为可配置项 `APIManagerConfig.batch_health_check_interval`
+  （默认 0.1s 保持历史行为；100+ 节点池场景可设 0 或配合并发探测上调）。
+
+#### 测试清理
+- 修复 1 处恒真断言（`tests/test_weak_coverage_modules.py` 的 `assert ... or True`，此前该用例永远通过、形同虚设）。
+- Ruff 自动 + 手动清理 tests/ 存量告警 24 条（未用变量 / 未用导入 / 隐式 Optional / 裸 open / 冗余 monkeypatch 别名等）。
+
+### 验证
+
+| 指标 | 轮次前 | 轮次后 |
+|------|--------|--------|
+| 全量测试 | 1459 passed / 0 failed | **1460 passed / 0 failed**（净增 1，即排名绑定回归用例） |
+| Ruff | 全绿 | 全绿（`ruff check src/ tests/`，顺带清理 tests/ 存量 24 条告警） |
+| 覆盖率 | 96% | 96%（本轮无新增功能路径） |
+| 性能基准 | `_auto_fix_imports_complex` 2.64ms/op | 无回退（复跑 `scripts/performance_benchmark.py` 确认） |
+
+### 设计决策
+
+- **`rag_guarded` 采用依赖注入而非模块内直读全局**：测试通过 `@patch("src.graph.nodes.ENABLE_RAG")`
+  等历史路径 mock 行为，若 `rag_guarded` 内部直读 `rag.py` 的模块全局，patch 路径断裂、
+  8 个测试用例全挂。依赖注入设计保持 patch 路径不变，是本轮重构的关键约束。
+- **批量健康检查间隔仅提为可配置项、不引入并发**：串行设计是刻意的"避免瞬时流量触发限流"，
+  并发化影响限流策略、中风险，本轮只做"间隔可配"的低风险改动，并发方案留待下一轮评估。
+- **脱敏双实现保留模块级别名而非删除**：`tests/test_api_manager.py` 通过
+  `from src.api.api_manager import _redact` 直接引用，删别名会破坏测试路径；收敛的是"逻辑"，
+  不是"命名"。
+
+### 版本收敛
+- 版本 0.1 → 0.2；CHANGELOG（中英）新增 0.2 完整条目；README（中英）测试数 1459→1460、
+  「最新优化 / 最近改动」行同步为本轮内容；`docs/code_analysis_report.md` 新增「实施状态」章节
+  标注 8 条已落地 + 4 条维持"不建议做" + 2 条后续建议。

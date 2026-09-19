@@ -14,10 +14,13 @@
 > "Appendix: 2026-09-13 System Feature Enhancement Round". See the same-named sections in `optimization_plan.md` for the points list and implementation batches.
 > For the 2026-09-14 improvement checklist batch (G-01~G-04 + 3.4 + 3.5) and the 4.2 half-open probe batch, see the complete records in
 > "Appendix: 2026-09-14 Improvement Checklist Batch" and "Appendix: 2026-09-14 4.2 Half-Open Probe Batch".
+> For the 2026-09-18 ~ 09-19 code-quality & reliability round (0.1 → 0.2, two atomic commits `9f83197` + `d5f21f6`),
+> see "Appendix: 2026-09-18 ~ 09-19 Code-Quality & Reliability Round".
 >
-> **Current latest baseline (2026-09-14 4.2 half-open probe batch)**: the full-suite tests advanced to
-> **1237 passed / 0 failed**, `ruff check` / `ruff format --check` all green;
-> the 1163 (batch ③) / 1225 (improvement checklist batch) / 1158 (F batch) items below are kept as historical round records and
+> **Current latest baseline (2026-09-19 round 0.2)**: the full-suite tests advanced to
+> **1460 passed / 0 failed / 96% coverage**, `ruff check` / `ruff format --check` all green;
+> the 1163 (batch ③) / 1225 (improvement checklist batch) / 1158 (F batch) / 1237 (4.2 half-open probe batch) /
+> 1247 / 1270 (09-15 convergence round) items below are kept as historical round records and
 > do not represent the current latest baseline.
 
 ## Phase 0: Baseline Check
@@ -725,3 +728,87 @@ After the 4.1 circuit breaker cooldown expires, the node directly returns to ful
 ### Version Convergence
 - Version 0.9.11 → 0.9.14; CHANGELOG's 14 Unreleased entries mapped to 0.9.12/0.9.13/0.9.14 by date;
   the docs/api_reference version table synced; the README test count/coverage synced.
+
+---
+
+## Appendix: 2026-09-18 ~ 09-19 Code-Quality & Reliability Round (0.1 → 0.2)
+
+> Baseline (0.1 release, 2026-09-18): full suite 1459 passed / 0 failed / 96% coverage / Ruff all green / clean working tree.
+> This round is a pure code-quality pass (no new features), delivered in two atomic commits:
+> `9f83197` (structural optimization) + `d5f21f6` (full optimization round 2).
+> Post-round state: **1460 passed / 0 failed / 96% coverage / Ruff all green** (+1 regression test case net).
+> The complete static-analysis report is at `docs/code_analysis_report.md`
+> (30 findings + a "worth doing / not recommended" list + an implementation-status section).
+
+### Commit 1: `9f83197` structural optimization round
+
+| Change | File | Notes |
+|------|------|------|
+| Lazy-import elimination | `src/agents/base_agent.py` | The in-function lazy imports of `_find_balanced_json` and `extract_focused_code` moved to module top level (neither module has a circular dependency), removing per-call import-mechanism overhead and alias noise |
+| Experiment ranking-binding fix | `src/experiments/analysis.py` | `_rank_by_metric` now sorts (name, value) tuples, eliminating the structural risk of position-based zip mis-pairing |
+| Ranking-binding regression test | `tests/test_experiments_analysis.py` | New out-of-order-insertion case (full suite 1459→1460) |
+| Database name whitelist | `init_db.py` | `MYSQL_DATABASE` is validated against `[A-Za-z0-9_]+` before being interpolated into `CREATE DATABASE`, closing an environment-variable multi-statement SQL injection vector; import ordering normalized |
+
+### Commit 2: `d5f21f6` full optimization round 2 (13 files, +479/-97)
+
+#### Refactors
+- **RAG guarded helper extraction** (`graph/rag.py` adds `rag_guarded`): unifies the 4 structurally
+  identical "ENABLE_RAG precondition + retriever singleton fetch + try/except degradation" blocks in
+  `graph/nodes.py` (generator retrieval / executor ingestion / debugger retrieval / debugger ingestion).
+  **Dependency-injection design** (`enabled` / `module_available` / `retriever_cls` / `get_retriever`
+  passed as parameters rather than read from module globals), so the historical patch paths
+  (`src.graph.nodes.ENABLE_RAG` / `get_rag_retriever`, used by 8 test cases) stay valid and test
+  mock behavior does not drift. Future RAG degradation-policy changes (failure counting, circuit
+  breakers, etc.) only touch `rag_guarded` in one place.
+- **Multi-function patch sort performance** (`tools/patch_applier.py`): the `apply_multi_function_patch`
+  sort key changed from "each patch splits the code lines itself" (O(n·m)) to "pre-split lines reused"
+  (`_find_function_start_line_in_lines`, O(n+m)); large multi-file patch scenarios benefit directly.
+- **Redaction dual-implementation convergence** (`agents/llm_client.py` + `api/api_manager.py`): the
+  near-duplicate `_redact` / `_redact_log_text` implementations converge on the same delegation to
+  `logging_utils.mask_sensitive_info`, with a comment marking the single implementation entry to prevent drift.
+
+#### Fixes
+- **Atomic-write exception narrowing** (`graph/nodes.py`): temp-file cleanup changed from
+  `except BaseException` to `except Exception` (PEP 8: KeyboardInterrupt/SystemExit must not enter the
+  cleanup path; stray temp files are reaped at process exit).
+
+#### API manager performance & configurability
+- `get_status` now reuses one `get_healthy_nodes()` call instead of two full node-pool traversals.
+- The hardcoded 0.1s inter-node interval in batch health checks is exposed as
+  `APIManagerConfig.batch_health_check_interval` (default 0.1s keeps historical behavior;
+  100+ node pools can set 0 or raise it alongside a concurrent probe scheme).
+
+#### Test cleanup
+- Fixed 1 tautological assertion (`tests/test_weak_coverage_modules.py` `assert ... or True` — the case
+  always passed and was effectively a no-op).
+- Ruff auto + manual cleanup of 24 pre-existing test-suite warnings (unused variables / unused imports /
+  implicit Optional / bare `open` / redundant monkeypatch aliases, etc.).
+
+### Verification
+
+| Metric | Before round | After round |
+|------|--------|--------|
+| Full suite | 1459 passed / 0 failed | **1460 passed / 0 failed** (+1, the ranking-binding regression case) |
+| Ruff | all green | all green (`ruff check src/ tests/`; 24 pre-existing tests/ warnings cleaned as a side effect) |
+| Coverage | 96% | 96% (no new feature paths this round) |
+| Performance baseline | `_auto_fix_imports_complex` 2.64ms/op | no regression (re-ran `scripts/performance_benchmark.py` to confirm) |
+
+### Design decisions
+
+- **`rag_guarded` uses dependency injection rather than reading module globals internally**: tests mock
+  behavior via `@patch("src.graph.nodes.ENABLE_RAG")` etc. If `rag_guarded` read `rag.py`'s module
+  globals directly, those patch paths would break and all 8 affected test cases would fail. The
+  dependency-injection design keeps the patch paths intact — the key constraint of this round's refactor.
+- **The batch health-check interval was only made configurable, not concurrent**: the serial design is
+  intentional ("avoid instant traffic that trips rate limits"); concurrency affects the rate-limiting
+  policy (medium risk), so this round only does the low-risk "make the interval configurable" change and
+  defers the concurrent scheme to the next round.
+- **The redaction dual implementation keeps its module-level aliases rather than deleting them**:
+  `tests/test_api_manager.py` imports `from src.api.api_manager import _redact` directly; deleting the
+  alias would break the test path. What was converged is the "logic", not the "naming".
+
+### Version convergence
+- Version 0.1 → 0.2; CHANGELOG (zh + en) gains the full 0.2 entry; the README (zh + en) test count
+  1459→1460 with the "Latest Optimization / Recent Changes" rows synced to this round;
+  `docs/code_analysis_report.md` gains an "Implementation Status" section marking 8 items landed,
+  4 items still "not recommended", and 2 items deferred to a future round.

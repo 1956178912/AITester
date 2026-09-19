@@ -3,7 +3,7 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-09-18 (full optimization round: 1.1 smell-detection enhancement / 1.2 built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache / 3.4 Defects4J smoke)
+> Last updated: 2026-09-19 (0.2 code-quality optimization round: RAG guard extraction / multi-function patch sort O(n·m)→O(n+m) / experiment ranking-binding fix / DB-name whitelist / configurable batch health-check interval / redaction dual-implementation convergence; 1460 test cases / 96% coverage)
 
 ---
 
@@ -256,6 +256,8 @@ fixed_code = apply_patch_to_code(
 | Function | Parameters | Return Value | Description |
 |------|------|--------|------|
 | `apply_patch_to_code()` | `original_code`, `patch`, `mode`, `function_name` | `str` | Apply a patch to code |
+| `apply_multi_function_patch()` | `code: str`, `patches: list[dict]` | `tuple[str, bool]` | Repair multiple functions simultaneously: each patch entry is `{"function_name": str, "patch": str}`; applied in descending order of function start line (to avoid line-number offset). 0.2 performance optimization: the sort key reuses the pre-split lines (O(n+m); previously each patch split the code itself, O(n·m)) |
+| `safe_apply_patch()` | `code`, `patch` | `tuple[str, bool]` | Apply the patch, then run a syntax check; on failure automatically roll back to the original code |
 
 ---
 
@@ -544,6 +546,8 @@ final_state = graph.invoke(state)
 - `_should_debug()`: decides whether to continue into the debug loop based on test results and iteration count (loop termination logic)
 - Maximum iteration count limit: prevents infinite loops
 
+**RAG degradation guard (new in 0.2)**: `rag_guarded` in `src/graph/rag.py` unifies the 4 structurally identical "ENABLE_RAG precondition + retriever singleton fetch + try/except degradation" blocks in `nodes.py` (generator retrieval / executor ingestion / debugger retrieval / debugger ingestion). It uses a **dependency-injection design** (`enabled` / `module_available` / `retriever_cls` / `get_retriever` passed as parameters rather than read from module globals), keeping the historical patch paths (`src.graph.nodes.ENABLE_RAG` / `get_rag_retriever`, etc.) valid. Future RAG degradation-policy changes (failure counting, circuit breakers, etc.) only touch `rag_guarded` in one place; the 4 call sites stay unchanged.
+
 ---
 
 ## Dataset Loading
@@ -638,6 +642,7 @@ print(MODEL_NAME)  # Name of the default model (LLM_1)
 | `enable_half_open_probe` | bool | True | 4.2 Half-open probe switch: after the cooldown expires, the node first enters a half-open window that carries only one probe; a success closes the circuit breaker / a failure re-opens a half cooldown; set to False to fall back to 4.1 direct-pass behavior |
 | `half_open_probe_penalty_cap_seconds` | float | 30.0 | 4.2 Upper bound on the half-open probe failure penalty duration: failed re-open cooldown = `min(circuit_cooldown_seconds/2, this field)` |
 | `cost_alert_threshold` | float | 2.0 | 3.4 Cost alert threshold: logs a WARNING when failover transfers to an expensive node with `cost_weight >= threshold` |
+| `batch_health_check_interval` | float | 0.1 | Interval (seconds) between nodes in a batch health check: avoids triggering rate limits with a burst of traffic during serial probing; 0 = pure serial queuing (large node-pool scenarios); 0.1 keeps the historical default behavior |
 
 > Monitoring: `get_status()` outputs `circuit_open_remaining_s` (remaining seconds of circuit breaker cooldown) and `circuit_state` (three-state `closed` / `open` / `half_open`; half_open is reported only when `enable_half_open_probe=True`) per node.
 
@@ -699,5 +704,6 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## Version History
+| 0.2 | 2026-09-19 | Code-quality & reliability optimization round (no new features, zero functional breakage): RAG degradation guard extraction (`graph/rag.py` adds a dependency-injection `rag_guarded`, unifying 4 isomorphic templates in `nodes.py`, historical patch paths unchanged); multi-function patch sort O(n·m)→O(n+m) (`patch_applier.py` adds `_find_function_start_line_in_lines` reusing pre-split lines); experiment ranking-binding fix (`experiments/analysis.py` sorts by name/value binding + new out-of-order-insertion regression test, full suite 1459→1460); database name whitelist (`init_db.py`, closes the env-variable SQL-injection vector); lazy-import elimination (`base_agent.py`); redaction dual-implementation convergence (`llm_client._redact_log_text` / `api_manager._redact`); batch health-check interval exposed as configurable `APIManagerConfig.batch_health_check_interval`; 24 pre-existing Ruff warnings in tests/ cleaned + 1 tautological assertion fixed; `ruff check src/ tests/` all green |
 | 0.1 | 2026-09-18 | First official release: four-agent architecture (Planner/Generator/Executor/Debugger) + 12-category hierarchical error repair + Logic-driven CoT; multi-baseline comparison (aitester/plain_llm/single_agent) + SWE-bench/Defects4J-Python/synthetic dataset support; SWE-bench source export automation + data contamination detection; statistical tests (t-test/Mann-Whitney U/Cohen's d); results analysis layer (repair convergence/boundary coverage/mutation score/assertion strength/execution feedback traces); built-in mutation test generator + test smell detection; structured JSONL tracing layer; multi-candidate patches; cost-aware routing + circuit-breaker cooldown + half-open probe; cross-file repair; assertion augmentation; Docker isolated execution; dependency cache monitoring + clean-venv-cache CLI; Ruff + pre-commit + GitHub Actions CI; 1459 test cases / 96% coverage |
 
