@@ -12,19 +12,20 @@ test_runs.output 和 repair_history.patch 使用 MEDIUMTEXT，可存储完整的
 from __future__ import annotations
 
 import logging
+import re
 
-# 模块级日志记录器，用于替代 print 输出
-logger = logging.getLogger(__name__)
+import pymysql
 
-import pymysql  # noqa: E402
-
-from config import (  # noqa: E402
+from config import (
     MYSQL_DATABASE,
     MYSQL_HOST,
     MYSQL_PASSWORD,
     MYSQL_PORT,
     MYSQL_USER,
 )
+
+# 模块级日志记录器，用于替代 print 输出
+logger = logging.getLogger(__name__)
 
 
 def init_database() -> None:
@@ -45,7 +46,11 @@ def init_database() -> None:
     )
     cursor = conn.cursor()
 
-    # 创建数据库（若不存在），使用 utf8mb4 字符集支持 Unicode
+    # 创建数据库（若不存在），使用 utf8mb4 字符集支持 Unicode。
+    # 库名来自 .env（运维者控制），白名单校验后再拼入 SQL，防止环境变量被恶意注入
+    # 多语句（CREATE DATABASE IF NOT EXISTS `x``; DROP TABLE ...`）。
+    if not re.fullmatch(r"[A-Za-z0-9_]+", MYSQL_DATABASE):
+        raise ValueError(f"非法数据库名（仅允许字母/数字/下划线）: {MYSQL_DATABASE!r}")
     cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{MYSQL_DATABASE}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     cursor.execute(f"USE `{MYSQL_DATABASE}`")
 

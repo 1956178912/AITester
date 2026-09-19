@@ -32,7 +32,8 @@ from src.agents.llm_client import (
     _record_response_usage,
     _redact_log_text,
 )
-from src.utils.helpers import extract_code_block, extract_json_object
+from src.tools.code_context import extract_focused_code
+from src.utils.helpers import _find_balanced_json, extract_code_block, extract_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -243,9 +244,7 @@ class BaseAgent:
         Returns:
             完整的 JSON 字符串，未找到匹配时返回 None。
         """
-        from src.utils.helpers import _find_balanced_json as _helpers_find_balanced_json
-
-        return _helpers_find_balanced_json(text, start)
+        return _find_balanced_json(text, start)
 
     @staticmethod
     def _extract_python_code(text: str) -> str:
@@ -288,9 +287,7 @@ class BaseAgent:
         if len(code) <= max_chars:
             return code
 
-        # 第一层：AST 智能截取（惰性导入，避免 tools 模块的循环依赖）
-        from src.tools.code_context import extract_focused_code
-
+        # 第一层：AST 智能截取（code_context 模块无对外部依赖，顶层导入安全）
         focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars)
         if len(focused) <= max_chars:
             logger.info(

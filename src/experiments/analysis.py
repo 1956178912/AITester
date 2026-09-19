@@ -68,14 +68,14 @@ def analyze_experiment_results(results: dict[str, Any]) -> dict[str, Any]:
     }
 
     # 计算各基线统计
-    success_rates = []
-    coverages = []
+    success_rates: list[tuple[str, float]] = []
+    coverages: list[tuple[str, float]] = []
 
     for name, data in results.items():
         rate = data.get("success_rate", 0)
         coverage = data.get("avg_coverage", 0)
-        success_rates.append(rate)
-        coverages.append(coverage)
+        success_rates.append((name, rate))
+        coverages.append((name, coverage))
 
         analysis["comparison"][name] = {
             "success_rate": round(rate, 2),
@@ -83,10 +83,10 @@ def analyze_experiment_results(results: dict[str, Any]) -> dict[str, Any]:
             "iterations": round(data.get("avg_iterations", 0), 2),
         }
 
-    # 生成排名
+    # 生成排名（name/value 在收集时就绑定，避免按 zip 位置错配）
     analysis["rankings"] = {
-        "success_rate": _rank_by_metric(success_rates, results),
-        "coverage": _rank_by_metric(coverages, results),
+        "success_rate": _rank_by_metric(success_rates),
+        "coverage": _rank_by_metric(coverages),
     }
 
     # 显著性检验：此前写死 "t-test (requires scipy)" 占位文本（从未真正执行），
@@ -202,20 +202,18 @@ def _pair_passed_by_task(
     return [map_a[t] for t in common], [map_b[t] for t in common]
 
 
-def _rank_by_metric(values: list[float], results: dict[str, Any]) -> list[dict[str, Any]]:
+def _rank_by_metric(paired: list[tuple[str, float]]) -> list[dict[str, Any]]:
     """按指标值排序并返回排名列表。
 
     Args:
-        values: 指标值列表。
-        results: 原始实验结果字典。
+        paired: (基线名, 指标值) 元组列表，name 与 value 天然绑定。
 
     Returns:
         按值降序排列的排名列表。
     """
-    paired = list(zip(values, results.keys(), strict=True))
-    paired.sort(reverse=True)
+    sorted_pairs = sorted(paired, key=lambda item: item[1], reverse=True)
 
-    return [{"rank": i + 1, "baseline": name, "value": round(value, 2)} for i, (value, name) in enumerate(paired)]
+    return [{"rank": i + 1, "baseline": name, "value": round(value, 2)} for i, (name, value) in enumerate(sorted_pairs)]
 
 
 def generate_comparison_report(analysis: dict[str, Any], output_path: str | None = None) -> str:

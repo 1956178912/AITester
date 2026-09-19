@@ -52,6 +52,18 @@ class TestAnalyzeExperimentResults:
         assert ranks[0]["rank"] == 1
         assert ranks[1]["baseline"] == "a"
 
+    def test_rankings_value_name_binding(self):
+        """排名基于 (name, value) 绑定，而非按 zip 位置错配：
+        值 0.1 归 a，值 0.9 归 b，即使插入顺序不同结果也应一致。"""
+        results_low_first = {
+            "a": _results_with_details(10, 0.1),
+            "b": _results_with_details(10, 0.9),
+        }
+        ranks = analyze_experiment_results(results_low_first)["rankings"]["success_rate"]
+        assert [r["baseline"] for r in ranks] == ["b", "a"]
+        assert ranks[0]["value"] == 90.0
+        assert ranks[1]["value"] == 10.0
+
     def test_comparison_fields(self):
         analysis = analyze_experiment_results({"a": _results_with_details(10, 0.5)})
         assert analysis["baselines"] == ["a"]
