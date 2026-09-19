@@ -249,6 +249,16 @@ COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 10
 ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
 ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
 ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
+# 1.2 变异得分评估：benchmark 运行后对每个任务的"生成测试 vs 被测源码"
+# 计算 mutation_score（内置轻量变异生成器，experiments/mutation_testing.py）。
+# 默认关闭——变异测试需对每任务跑 N 个变异体 × pytest 子进程（约 1-3s/变异体，
+# 20 变异体 ≈ 30-60s/任务），对全量实验是显著的时间税；显式开启（True）
+# 才在 run_benchmark 流水线末尾逐任务计算并写入 details[].mutation_score。
+# 与 ENABLE_RAG 同口径：消融实验开关，不影响核心修复管线，仅影响评估产出。
+ENABLE_MUTATION_SCORING: bool = os.getenv("ENABLE_MUTATION_SCORING", "false").lower() == "true"
+# 每任务最多评估的变异体数量（来源：mutation_testing.MutationGenerator._MAX_MUTANTS_PER_TASK
+# 的上限口径，默认 10 控制单任务变异评估耗时；设为 0/负数时回退 10）
+MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 10, 1, None)
 
 # ─── RAG 检索增强配置 ────────────────────────────────────────────────────────
 # 持久化路径：默认项目根下 rag_data/（此前总是内存模式，进程重启数据全丢，

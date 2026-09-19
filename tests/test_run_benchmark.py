@@ -1,8 +1,10 @@
 """experiments/run_benchmark.py 回归测试。
 
-覆盖 0.1 去重重构：
+覆盖 0.1 去重重构 + 1.2 变异得分接线：
 - _build_task_result：成功/失败两类结果字典结构一致（单一构造点，防字段漂移）；
-- run_single_task：基线成功/异常路径统一经 _build_task_result 汇总（重构回归）。
+- run_single_task：基线成功/异常路径统一经 _build_task_result 汇总（重构回归）；
+- _compute_mutation_scores_for_baseline：1.2 变异得分逐任务写回 details[].mutation_score
+  （开关启用时计算，generated_test/instance_code 缺失时写 None 保持键集合同构）。
 """
 
 from typing import Any
@@ -39,6 +41,7 @@ class TestBuildTaskResult:
             "diagnosis": "ok",
             "error_category": "",
             "rag_stats": [{"kind": "test_cases", "results": 3}],
+            "generated_test": "def test_f():\n    assert f() == 1\n",
         }
         result = _build_task_result(task, 1.234, final_state=state)
         assert result["task_id"] == "repo__repo-1"
@@ -51,6 +54,8 @@ class TestBuildTaskResult:
         assert result["rag_stats"] == state["rag_stats"]
         assert result["elapsed_seconds"] == 1.23
         assert result["task_metadata"] == task.metadata
+        # 1.2 变异得分：generated_test 写进结果行（成功分支），供 compute_mutation_score 消费
+        assert result["generated_test"] == state["generated_test"]
         # token_usage 为线程局部统计（测试中默认 0），键必须存在
         assert "token_usage" in result
 
@@ -69,12 +74,15 @@ class TestBuildTaskResult:
     def test_success_and_failure_same_keys(self):
         """字段口径回归护栏：成功/失败两类结果键集合必须完全一致。"""
         task = _make_task()
-        success = _build_task_result(task, 1.0, final_state={"patch": "+x"})
+        success = _build_task_result(task, 1.0, final_state={"patch": "+x", "generated_test": "def t(): pass"})
         failure = _build_task_result(task, 1.0)
         assert set(success.keys()) == set(failure.keys())
         assert "patch" in success, "结果行必须携带 patch 字段（2.1 污染检测输入）"
         assert success["patch"] == "+x"
         assert failure["patch"] is None
+        # 1.2 变异得分：generated_test 成功分支取 final_state 值，失败分支 None 兜底
+        assert success["generated_test"] == "def t(): pass"
+        assert failure["generated_test"] is None
 
 
 class TestRunSingleTask:
@@ -114,3 +122,86 @@ class TestRunSingleTask:
         assert "执行异常: boom" in boom["diagnosis"]
         # 成功基线被调用一次，异常基线调用后抛出（无重试）
         assert len(calls) == 1
+
+
+class TestComputeMutationScoresForBaseline:
+    """1.2 变异得分接线：_compute_mutation_scores_for_baseline 逐任务写回 mutation_score。"""
+
+    def _make_task(self, instance_code: str = "def f():\n    return 1\n") -> BenchmarkTask:
+        return BenchmarkTask(
+            task_id="repo__repo-1",
+            repo_name="repo/repo",
+            problem_statement="fix a bug",
+            instance_code=instance_code,
+            test_code="def test_f():\n    assert f() == 1\n",
+            expected_pass_count=0,
+            total_test_count=1,
+            metadata={"source": "test"},
+        )
+
+    def test_missing_generated_test_writes_none(self, monkeypatch):
+        """generated_test 缺失（旧 JSON 兼容 / 失败分支）→ mutation_score=None，不崩溃。"""
+        task = self._make_task()
+        task_map = {task.task_id: task}
+        bl_results = [
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": True,
+             "generated_test": None},
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": False,
+             "generated_test": None},
+        ]
+        # mock compute_mutation_score 确认"未被调用"（缺失即跳过）
+        from experiments import mutation_testing
+        calls: list[dict] = []
+        monkeypatch.setattr(
+            mutation_testing,
+            "compute_mutation_score",
+            lambda **kw: calls.append(kw) or {"available": True, "mutation_score": 0.5},
+        )
+        rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)
+        assert all(r["mutation_score"] is None for r in bl_results), "缺失 generated_test 应写 None"
+        assert calls == [], "缺失 generated_test 不应调用 compute_mutation_score"
+
+    def test_with_generated_test_calls_compute(self, monkeypatch):
+        """generated_test 存在 → 调用 compute_mutation_score，写回 mutation_score。"""
+        task = self._make_task(instance_code="def check(x):\n    if x == 5:\n        return True\n    return False\n")
+        task_map = {task.task_id: task}
+        bl_results = [
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": True,
+             "generated_test": "def test_check():\n    assert check(5) is True\n"},
+        ]
+        captured: list[dict] = []
+
+        def fake_compute(**kw):
+            captured.append(kw)
+            return {"available": True, "mutation_score": 0.75, "mutants_killed": 3, "mutants_total": 4, "elapsed_seconds": 1.2}
+
+        from experiments import mutation_testing
+        monkeypatch.setattr(mutation_testing, "compute_mutation_score", fake_compute)
+        rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)
+        assert bl_results[0]["mutation_score"] == 0.75, "应写回 compute 产出的 mutation_score"
+        assert len(captured) == 1, "应调用一次 compute_mutation_score"
+        assert captured[0]["max_mutants"] == 5
+        assert captured[0]["source_code"] == task.instance_code
+        assert captured[0]["test_code"] == bl_results[0]["generated_test"]
+
+    def test_unknown_task_id_writes_none(self, monkeypatch):
+        """task_id 不在 dataset_tasks 映射中（task 缺失）→ mutation_score=None。"""
+        bl_results = [{"task_id": "ghost__task", "repo": "x/y", "passed": True, "generated_test": "def t(): pass"}]
+        rb._compute_mutation_scores_for_baseline(bl_results, {}, max_mutants=5)
+        assert bl_results[0]["mutation_score"] is None
+
+    def test_empty_instance_code_writes_none(self, monkeypatch):
+        """task.instance_code 为空 → mutation_score=None（无源码可变异）。"""
+        task = self._make_task(instance_code="")
+        task_map = {task.task_id: task}
+        bl_results = [{"task_id": task.task_id, "repo": task.repo_name, "passed": True,
+                      "generated_test": "def t(): pass"}]
+        from experiments import mutation_testing
+        calls: list[dict] = []
+        monkeypatch.setattr(
+            mutation_testing, "compute_mutation_score",
+            lambda **kw: calls.append(kw) or {"available": True, "mutation_score": 0.5},
+        )
+        rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)
+        assert bl_results[0]["mutation_score"] is None
+        assert calls == [], "空 instance_code 不应调用 compute_mutation_score"

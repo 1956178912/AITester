@@ -51,11 +51,13 @@ if PROJECT_ROOT not in sys.path:
 from config import (  # noqa: E402
     BENCHMARK_PARALLELISM,
     ENABLE_DEBUGGER,
+    ENABLE_MUTATION_SCORING,
     ENABLE_PLANNER,
     EXECUTION_TIMEOUT,
     LLM_CONFIGS,
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
+    MUTATION_MAX_MUTANTS,
 )
 from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
@@ -385,6 +387,11 @@ def _build_task_result(
             "rag_stats": final_state.get("rag_stats"),
             # 2.1 数据污染检测：系统最终生成的补丁（无修复动作时可能为空）
             "patch": final_state.get("patch"),
+            # 1.2 变异得分：保留生成测试代码，供 compute_mutation_score 复用
+            # （此前 generated_test 仅经 --save-state 落盘 raw/，标准结果 JSON
+            # 不携带；1.2 接线后需把字段写进 details[]，让 mutation_score 计算
+            # 与 analyze_results._mutation_score_metrics 都能直接消费）
+            "generated_test": final_state.get("generated_test"),
             # 3.2 执行反馈轨迹：逐轮执行的通过/覆盖率变化/耗时与奖励信号
             # （executor 节点默认常开写入；旧状态缺失时以 None 兜底保持键集合同构）
             "execution_trace": final_state.get("execution_trace"),
@@ -403,6 +410,8 @@ def _build_task_result(
         "rag_stats": None,
         # 2.1 数据污染检测：失败分支无生成补丁，patch 以 None 兜底保持键集合同构
         "patch": None,
+        # 1.2 变异得分：失败分支无生成测试，generated_test 以 None 兜底
+        "generated_test": None,
         # 3.2 执行反馈轨迹：失败分支（无 final_state）无轨迹可带，None 兜底
         "execution_trace": None,
         "task_metadata": task.metadata,
@@ -574,6 +583,66 @@ def _apply_rag_setting(enable_rag: bool | None) -> bool:
 # ─── 主基准测试函数 ────────────────────────────────────────────────────────────
 
 
+def _compute_mutation_scores_for_baseline(
+    bl_results: list[dict[str, Any]],
+    dataset_tasks: dict[str, BenchmarkTask],
+    max_mutants: int,
+) -> None:
+    """1.2 变异得分：对每个任务的"生成测试 vs 被测源码"计算 mutation_score。
+
+    就地写回 bl_results[].mutation_score（float 0.0-1.0）；任务无
+    generated_test / 无变异体可生成时写 None（保持键集合同构，
+    汇总层 mutation_score_metrics 会跳过 None）。
+
+    实现口径：复用 experiments/mutation_testing.compute_mutation_score
+    （内置 AST 级轻量变异生成器，每任务 ≤ max_mutants 个变异体，
+    每个变异体跑一次 pytest 子进程判杀死/存活）。失败测试（passed=False
+    且无 generated_test）直接跳过，避免对空测试做无效变异。
+
+    Args:
+        bl_results: 该基线的逐任务结果列表（就地修改）。
+        dataset_tasks: task_id → BenchmarkTask 映射（提供 instance_code）。
+        max_mutants: 每任务最多评估的变异体数量。
+    """
+    from experiments.mutation_testing import compute_mutation_score
+
+    for r in bl_results:
+        task_id = r.get("task_id")
+        task = dataset_tasks.get(task_id)
+        if task is None or not task.instance_code:
+            r["mutation_score"] = None
+            continue
+        # 1.2 接线：generated_test 已写进 results 行（_build_task_result 成功分支）；
+        # 旧 JSON（无该键）或失败分支（None）时跳过——变异得分依赖
+        # "生成测试 + 被测源码"两者，缺一即 None 兜底
+        test_code = r.get("generated_test")
+        if not test_code:
+            r["mutation_score"] = None
+            continue
+        # 被测模块文件路径：用任务临时文件占位（compute_mutation_score 内部
+        # 会自建 tempdir 并写变异体，module_file 参数仅作文档性引用，
+        # 实际执行时变异体代码写入 tempdir/mutated_module.py）
+        import tempfile
+
+        placeholder_module_file = os.path.join(tempfile.gettempdir(), "placeholder_module.py")
+        result = compute_mutation_score(
+            source_code=task.instance_code,
+            test_code=test_code,
+            module_file=placeholder_module_file,
+            max_mutants=max_mutants,
+        )
+        r["mutation_score"] = result.get("mutation_score")
+        logger.info(
+            "    [%s] %s 变异得分: %s（%d/%d 杀死，耗时 %.1fs）",
+            task_id,
+            r.get("repo", ""),
+            result.get("mutation_score"),
+            result.get("mutants_killed", 0),
+            result.get("mutants_total", 0),
+            result.get("elapsed_seconds", 0.0),
+        )
+
+
 def run_benchmark(
     dataset_name: str = "examples",
     subset: str | None = None,
@@ -586,6 +655,7 @@ def run_benchmark(
     seed: int = 42,
     enable_rag: bool | None = None,
     save_state: bool = False,
+    enable_mutation_scoring: bool | None = None,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -604,6 +674,10 @@ def run_benchmark(
         enable_rag: RAG 开关（P1：此前 RAG 默认关闭且未纳入主实验）。
             None 时沿用 config.ENABLE_RAG；True/False 显式覆盖。
         save_state: 是否把环节级状态落盘到 output_dir/raw/（P0-2 排查工具数据基础）。
+        enable_mutation_scoring: 1.2 变异得分评估开关。None 时沿用
+            config.ENABLE_MUTATION_SCORING（默认 False）；True 时在基线
+            结果构建后逐任务调用 compute_mutation_score，把 mutation_score
+            写回 details[]（缺失 generated_test / 无变异体可生成时写 None）。
 
     Returns:
         汇总结果字典。
@@ -764,6 +838,19 @@ def run_benchmark(
         avg_iterations = sum(r["iterations"] for r in bl_results) / total if total > 0 else 0
         avg_time = sum(r["elapsed_seconds"] for r in bl_results) / total if total > 0 else 0
 
+        # 1.2 变异得分：在汇总统计前逐任务计算（仅当开关启用），
+        # 把 mutation_score 写回 bl_results[].mutation_score，
+        # 后续 summary["details"] 直接携带该字段，供
+        # analyze_results._mutation_score_metrics 汇总
+        mutation_enabled = (
+            ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
+        )
+        if mutation_enabled:
+            # task_id → BenchmarkTask 映射（同一任务跨基线复用 instance_code）
+            task_map = {t.task_id: t for t in tasks}
+            logger.info("启用变异得分评估（1.2）：每任务 ≤ %d 变异体", MUTATION_MAX_MUTANTS)
+            _compute_mutation_scores_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS)
+
         summary["results"][baseline] = {
             "total_functions": total,
             "passed_count": passed,
@@ -847,6 +934,18 @@ if __name__ == "__main__":
         is_flag=True,
         help="把环节级状态（测试计划/生成代码/诊断/补丁）落盘到 <output-dir>/raw/（P0-2 排查用）",
     )
+    @click.option(
+        "--enable-mutation",
+        "enable_mutation",
+        is_flag=True,
+        help="1.2 变异得分评估：对每任务的生成测试 vs 被测源码计算 mutation_score（默认关闭；开启后每任务 ≤ MUTATION_MAX_MUTANTS 变异体，耗时显著增加）",
+    )
+    @click.option(
+        "--no-mutation",
+        "no_mutation",
+        is_flag=True,
+        help="显式关闭变异得分评估（覆盖 config.ENABLE_MUTATION_SCORING）",
+    )
     def cli(
         dataset,
         subset,
@@ -860,6 +959,8 @@ if __name__ == "__main__":
         enable_rag,
         no_rag,
         save_state,
+        enable_mutation,
+        no_mutation,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
@@ -870,6 +971,14 @@ if __name__ == "__main__":
             rag_override = False
         elif enable_rag:
             rag_override = True
+
+        # --enable-mutation / --no-mutation 显式覆盖 config.ENABLE_MUTATION_SCORING；
+        # 均未指定时沿用配置默认（默认 False，保持历史实验口径不变）
+        mutation_override = None
+        if no_mutation:
+            mutation_override = False
+        elif enable_mutation:
+            mutation_override = True
 
         summary = run_benchmark(
             dataset_name=dataset,
@@ -883,6 +992,7 @@ if __name__ == "__main__":
             seed=seed,
             enable_rag=rag_override,
             save_state=save_state,
+            enable_mutation_scoring=mutation_override,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

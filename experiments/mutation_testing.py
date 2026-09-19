@@ -29,7 +29,7 @@ import ast
 import copy
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -47,19 +47,6 @@ class Mutant:
     line_no: int = 0
 
 
-# ─── 变异类型常量（保守口径）────────────────────────────────────────────────
-_BOUNDARY_REPLACEMENTS: dict[str, list[str]] = {
-    # 比较运算符的边界值变异：== → !=, < → <=, > → >=, <= → <, >= → >
-    "==": "!=",
-    "<": "<=",
-    ">": ">=",
-    "<=": "<",
-    ">=": ">",
-    "!=": "==",
-}
-
-_OPERATORS_TO_FLIP: tuple[str, ...] = ("==", "!=", "<", ">", "<=", ">=")
-
 
 def _find_mutable_comparison_nodes(tree: ast.Module) -> list[ast.Compare]:
     """收集所有 Compare 节点（可变异为边界值变体）。"""
@@ -71,16 +58,92 @@ def _find_boolean_nodes(tree: ast.Module) -> list[ast.UnaryOp]:
     return [node for node in ast.walk(tree) if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not)]
 
 
-def _find_mutable_numeric_constants(tree: ast.Module) -> list[ast.Constant]:
-    """收集非边界值数字常量（0/1/-1 不纳入，边界值变异已由比较翻转覆盖）。"""
-    skip = {0, 1, -1, 0.0, 1.0, -0.1}
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and isinstance(node.value, (int, float))
-        and node.value not in skip
-    ]
+class _RemoveNotTransformer(ast.NodeTransformer):
+    """按行号定位并改写 AST 中指定位置的 `not X` 为 `X`。
+
+    设计说明：
+        AST 节点不携带 parent 链接（Python 3.12/3.14 均如此），无法用
+        "walk + parent 改写"的方式做精确替换。这里继承 NodeTransformer，
+        在 visit_Expr / visit_BoolOp / visit_Compare 等常见槽位识别
+        UnaryOp(Not) 节点，按行号匹配后直接返回其 operand，让 NodeTransformer
+        自动把父槽位的字段改写为 operand（语义等价于 not X → X）。
+    """
+
+    def __init__(self, target_lineno: int) -> None:
+        """初始化（target_lineno 为要改写的 Not 节点行号）。"""
+        self._target_lineno = target_lineno
+        self._replaced = False
+
+    def _replace(self, node: ast.UnaryOp) -> ast.expr:
+        """当 node 是目标行号的 UnaryOp(Not) 时返回其 operand，否则原样返回。"""
+        if (
+            isinstance(node, ast.UnaryOp)
+            and isinstance(node.op, ast.Not)
+            and node.lineno == self._target_lineno
+            and not self._replaced
+        ):
+            self._replaced = True
+            return node.operand
+        return node
+
+    def visit_Expr(self, node: ast.Expr) -> ast.AST:
+        """改写语句级表达式槽位（如独立语句 `not x()`）。"""
+        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.value = node.value.operand
+            return node
+        return self.generic_visit(node)
+
+    def visit_Compare(self, node: ast.Compare) -> ast.AST:
+        """改写比较左右值槽位（如 `x == not y`，罕见但保守覆盖）。"""
+        if isinstance(node.left, ast.UnaryOp) and isinstance(node.left.op, ast.Not) and node.left.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.left = node.left.operand
+        for i, comp in enumerate(node.comparators):
+            if isinstance(comp, ast.UnaryOp) and isinstance(comp.op, ast.Not) and comp.lineno == self._target_lineno and not self._replaced:
+                self._replaced = True
+                node.comparators[i] = comp.operand
+        return self.generic_visit(node)
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> ast.AST:
+        """改写 BoolOp 子值槽位（如 `a and not b` → `a and b`）。"""
+        for i, val in enumerate(node.values):
+            if isinstance(val, ast.UnaryOp) and isinstance(val.op, ast.Not) and val.lineno == self._target_lineno and not self._replaced:
+                self._replaced = True
+                node.values[i] = val.operand
+        return self.generic_visit(node)
+
+    def visit_If(self, node: ast.If) -> ast.AST:
+        """改写 If/While 等控制流的测试表达式槽位（最常见的 not X 位置）。"""
+        if isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not) and node.test.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.test = node.test.operand
+        return self.generic_visit(node)
+
+    def visit_While(self, node: ast.While) -> ast.AST:
+        """改写 While 循环条件槽位（`while not cond` → `while cond`）。"""
+        if isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not) and node.test.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.test = node.test.operand
+        return self.generic_visit(node)
+
+    def visit_Return(self, node: ast.Return) -> ast.AST:
+        """改写 return 语句槽位（`return not x` → `return x`）。"""
+        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.value = node.value.operand
+        return self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign) -> ast.AST:
+        """改写赋值右值槽位（`x = not y` → `x = y`）。"""
+        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+            self._replaced = True
+            node.value = node.value.operand
+        return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        """改写函数体（让 generic_visit 继续下钻，捕获嵌套 If/While/Return 等）。"""
+        return self.generic_visit(node)
 
 
 class MutationGenerator:
@@ -135,7 +198,7 @@ class MutationGenerator:
         """比较运算符翻转变异。"""
         mutants: list[Mutant] = []
         for cmp_node in _find_mutable_comparison_nodes(tree):
-            for i, op in enumerate(cmp_node.ops):
+            for op in cmp_node.ops:
                 op_name = type(op).__name__
                 if op_name not in ("Eq", "NotEq", "Lt", "Gt", "LtE", "GtE"):
                     continue
@@ -170,20 +233,32 @@ class MutationGenerator:
                 and node.lineno == original_node.lineno
             ):
                 op_class = getattr(ast, new_op_name)
-                node.ops = [op_class()] + node.ops[1:]
+                node.ops = [op_class(), *node.ops[1:]]
                 return
 
     def _generate_boolean_negations(
         self, tree: ast.Module, source_code: str
     ) -> list[Mutant]:
-        """布尔取反变异：not X → X（移除 Not 节点）。"""
+        """布尔取反变异：not X → X（移除 Not 节点）。
+
+        实现：对每个 Not 节点，deepcopy 后用 _RemoveNotTransformer 改写
+        该行的 not X 为 X，再 ast.unparse。Transformer 对 If/While/
+        Return/Assign/BoolOp/Compare/Expr 等常见槽位做保守覆盖，
+        未命中时 unparse 后的代码与原代码相同（该变异体无效，下游
+        沙箱执行会"全通过"等价于存活，保守口径下不计入杀死数）。
+        """
         mutants: list[Mutant] = []
         for not_node in _find_boolean_nodes(tree):
             new_tree = copy.deepcopy(tree)
-            self._remove_not_op(new_tree, not_node)
+            transformer = _RemoveNotTransformer(not_node.lineno)
+            transformer.visit(new_tree)
+            # Transformer 原地改写 new_tree 的字段；若未命中（_replaced 为 False），
+            # unparse 出的代码与原代码相同，该变异体是"无效变异"——保守口径
+            # 下过滤掉（不进入变异体列表），避免虚增变异体数量。
+            if not transformer._replaced:
+                continue
             try:
                 new_code = ast.unparse(new_tree)
-                # 语法检查：unparse 成功即合法
                 mutants.append(
                     Mutant(
                         code=new_code,
@@ -198,18 +273,13 @@ class MutationGenerator:
 
     @staticmethod
     def _remove_not_op(tree: ast.Module, original_node: ast.UnaryOp) -> None:
-        """在 deepcopy 后的 tree 中移除指定 Not 节点（将 not X 替换为 X）。"""
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.UnaryOp)
-                and isinstance(node.op, ast.Not)
-                and node.lineno == original_node.lineno
-            ):
-                # 用 not 内的 operand 替换整个 not 表达式
-                # 注意：ast.walk 不能直接修改，需用 ast.Replace 类工具
-                # 简化处理：用 ast 的 parent 链接（Python 3.12+ 不保证，尽力匹配）
-                # 降级：无法精确替换时跳过该变异体（保守口径）
-                break
+        """在 tree 中移除指定行号的 Not 节点（将 not X 替换为 X）。
+
+        保留为独立入口便于未来复用；内部委托给 _RemoveNotTransformer。
+        原地改写 tree（Transformer.visit 副作用）；未命中时 tree 不变。
+        """
+        transformer = _RemoveNotTransformer(original_node.lineno)
+        transformer.visit(tree)
 
     def _generate_numeric_offset(
         self, tree: ast.Module, source_code: str
@@ -220,7 +290,7 @@ class MutationGenerator:
         for cmp_node in ast.walk(tree):
             if not isinstance(cmp_node, ast.Compare):
                 continue
-            targets: list[ast.expr] = [cmp_node.left] + cmp_node.comparators
+            targets: list[ast.expr] = [cmp_node.left, *cmp_node.comparators]
             for i, target in enumerate(targets):
                 if not isinstance(target, ast.Constant):
                     continue
@@ -252,7 +322,7 @@ class MutationGenerator:
                 break
         if new_cmp is None:
             return
-        targets: list[ast.expr] = [new_cmp.left] + new_cmp.comparators
+        targets: list[ast.expr] = [new_cmp.left, *new_cmp.comparators]
         if target_index < len(targets):
             target = targets[target_index]
             if isinstance(target, ast.Constant) and isinstance(target.value, (int, float)):

@@ -127,6 +127,71 @@ class TestMutationGenerator:
         types = [m.mutant_type for m in mutants]
         assert "boolean_negation" in types, f"应含布尔取反变异，实际: {types}"
 
+    def test_boolean_negation_actually_mutates_code(self):
+        """回归：boolean_negation 变异体的代码必须与原代码不同（not X → X 真正生效）。
+
+        历史 bug：_remove_not_op 早期实现是死代码（仅 break），导致
+        boolean_negation 变异体代码与原代码完全相同，下游沙箱执行时
+        "全部通过"被误判为杀死，mutation_score 虚高。此用例确保
+        变异体代码确实去除了 not 运算符。
+        """
+        from experiments.mutation_testing import MutationGenerator
+
+        scenarios = [
+            # (源码, 期望变异体中出现的特征, 期望变异体中不出现的特征)
+            ("def f(x):\n    if not x:\n        return 1\n    return 0\n", "if x:", "if not x:"),
+            ("def g(a):\n    n = 0\n    while not a:\n        n += 1\n    return n\n", "while a:", "while not a:"),
+            ("def h(x):\n    return not x\n", "return x", "return not"),
+            ("def i(a, b):\n    return a and not b\n", "and b", "and not"),
+            ("def j(x):\n    y = not x\n    return y\n", "y = x", "= not"),
+            ("def k(x):\n    not x()\n", "x()", "not x()"),
+        ]
+        gen = MutationGenerator()
+        for source, expect_present, expect_absent in scenarios:
+            mutants = gen.generate(source)
+            bn = [m for m in mutants if m.mutant_type == "boolean_negation"]
+            assert bn, f"场景 '{source[:40]}' 未生成 boolean_negation 变异体"
+            for m in bn:
+                # 变异体代码必须与原代码不同（not 被真正去除）
+                assert m.code != source, f"变异体代码未变化（死代码回归）: {m.code!r}"
+                # 行号匹配：同一行号可能生成多个变异体（多个 not 同处一行），
+                # 这里按"存在至少一个变异体满足特征"断言
+                codes = [m.code for m in bn]
+                assert any(expect_present in c for c in codes), (
+                    f"场景 '{source[:40]}' 变异体中未出现期望特征 {expect_present!r}, 实际: {codes}"
+                )
+                assert not any(expect_absent in c for c in codes), (
+                    f"场景 '{source[:40]}' 变异体中仍残留 {expect_absent!r}, 实际: {codes}"
+                )
+
+    def test_boolean_negation_nested_function(self):
+        """嵌套函数体内的 not 也能被识别改写。"""
+        from experiments.mutation_testing import MutationGenerator
+
+        source = (
+            "def outer(x):\n"
+            "    def inner():\n"
+            "        if not x:\n"
+            "            return True\n"
+            "    return inner()\n"
+        )
+        gen = MutationGenerator()
+        mutants = gen.generate(source)
+        bn = [m for m in mutants if m.mutant_type == "boolean_negation"]
+        assert bn, "嵌套函数内 not 未生成 boolean_negation 变异体"
+        assert any("if x:" in m.code for m in bn), f"嵌套 not 未被去除: {[m.code for m in bn]}"
+        assert all("if not x:" not in m.code for m in bn)
+
+    def test_boolean_negation_no_false_positive_on_absent_not(self):
+        """无 not 运算符的源码不应生成 boolean_negation 变异体。"""
+        from experiments.mutation_testing import MutationGenerator
+
+        source = "def f(x):\n    if x == 5:\n        return True\n    return False\n"
+        gen = MutationGenerator()
+        mutants = gen.generate(source)
+        bn = [m for m in mutants if m.mutant_type == "boolean_negation"]
+        assert bn == [], f"无 not 的源码不应生成 boolean_negation 变异体，实际: {bn}"
+
     def test_empty_source_returns_empty(self):
         from experiments.mutation_testing import MutationGenerator
 
@@ -158,6 +223,53 @@ class TestMutationGenerator:
 
         result = mutation_score_from_details([{"task_id": "t1"}])
         assert result["available"] is False
+
+    def test_compute_mutation_score_end_to_end(self, tmp_path):
+        """端到端：compute_mutation_score 对弱测试套件应产出低得分，对强测试套件产出高得分。
+
+        场景 A（弱测试）：被测代码 `def check(x): return x > 3`，测试只断言
+        check(5)==True（未覆盖 x<=3 分支与边界 3/4）。生成变异体后，
+        运算符翻转 x > 3 → x >= 3 不会被测试杀死（5 仍 > 3），
+        布尔/数字偏移变异多数也存活 → 得分应偏低。
+        场景 B（强测试）：测试同时断言 check(4)==True, check(3)==False,
+        check(0)==False → 几乎每个变异体都会失败 → 得分应偏高。
+
+        断言口径：available=True、score 在 [0,1]、场景 B 得分 >= 场景 A 得分
+        （强测试杀死能力不弱于弱测试），且两个场景的 mutation_score 不相等
+        或至少 B 严格大于 0（避免"全存活"的退化口径）。
+        注：该用例会真实调用 pytest 子进程（_run_mutant_tests），单用例耗时
+        约 2-6s，属可接受的集成级测试。
+        """
+        from experiments.mutation_testing import compute_mutation_score
+
+        source = "def check(x):\n    return x > 3\n"
+        weak_test = "from module import check\n\n\ndef test_basic():\n    assert check(5) == True\n"
+        strong_test = (
+            "from module import check\n\n"
+            "def test_above():\n    assert check(4) == True\n\n"
+            "def test_boundary_eq():\n    assert check(3) == False\n\n"
+            "def test_below():\n    assert check(0) == False\n"
+        )
+        module_file = str(tmp_path / "module.py")
+        (tmp_path / "module.py").write_text(source, encoding="utf-8")
+
+        result_weak = compute_mutation_score(source, weak_test, module_file, max_mutants=6, timeout_seconds=15)
+        result_strong = compute_mutation_score(source, strong_test, module_file, max_mutants=6, timeout_seconds=15)
+
+        assert result_weak["available"] is True, f"弱测试场景应可用: {result_weak}"
+        assert result_strong["available"] is True, f"强测试场景应可用: {result_strong}"
+        # 得分合法区间
+        assert 0.0 <= result_weak["mutation_score"] <= 1.0
+        assert 0.0 <= result_strong["mutation_score"] <= 1.0
+        # 强测试的杀死数应不低于弱测试（更多断言 = 更易杀死变异体）
+        assert result_strong["mutants_killed"] >= result_weak["mutants_killed"], (
+            f"强测试杀死数({result_strong['mutants_killed']})"
+            f" 应 >= 弱测试({result_weak['mutants_killed']})"
+        )
+        # 强测试应至少杀死 1 个变异体（避免"全存活"退化）
+        assert result_strong["mutants_killed"] >= 1, f"强测试至少应杀死 1 个变异体: {result_strong}"
+        # 变异体数量一致（同一 source，max_mutants 相同）
+        assert result_weak["mutants_total"] == result_strong["mutants_total"]
 
 
 # ─── 跨批次失败模式对比 ──────────────────────────────────────────────────────

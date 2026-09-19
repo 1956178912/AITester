@@ -178,6 +178,18 @@ TASK_LIMIT_ARG=""
 export AITESTER_TRACE_DIR="${AITESTER_TRACE_DIR:-experiments/results/traces}"
 info "结构化追踪(3.2): AITESTER_TRACE_DIR=$AITESTER_TRACE_DIR"
 
+# 1.2 变异得分评估（可选）：默认关闭——每任务需跑 ≤ MUTATION_MAX_MUTANTS 个
+# 变异体 × pytest 子进程（约 30-60s/任务），对全量实验是显著时间税。
+# 需要变异得分指标时显式设置 ENABLE_MUTATION_SCORING=true 后再运行，
+# run_benchmark 会把 mutation_score 写进 details[]，analyze_results 自动汇总。
+# 本复现流程默认不启用，保持历史实验口径与耗时预算不变。
+if [[ -n "${ENABLE_MUTATION_SCORING:-}" ]]; then
+    export ENABLE_MUTATION_SCORING
+    info "变异得分(1.2): ENABLE_MUTATION_SCORING=$ENABLE_MUTATION_SCORING（耗时显著增加，确认已知晓）"
+else
+    info "变异得分(1.2): 默认关闭（启用请设 ENABLE_MUTATION_SCORING=true）"
+fi
+
 # 运行多基线对比实验（自动保存 JSON 结果到 experiments/results/）
 # 2.3 RAG：$ENABLE_RAG 在合成/内置数据集默认设为 --enable-rag（见参数解析段）
 # 3.2 结构化追踪：显式设置 AITESTER_TRACE_DIR 收集逐智能体快照/Token 明细/
