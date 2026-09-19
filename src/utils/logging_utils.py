@@ -26,6 +26,36 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"), "<REDACTED_JWT>"),
 ]
 
+# 4.2 审计 R-1：降级兜底模式（仅"长随机串"类凭证，不依赖 mask_sensitive_info
+# 的完整模式集，用于脱敏器异常时拦截最常见的 sk-/hex/base64 凭证形态）。
+# 与 _SENSITIVE_PATTERNS 前 3 条同口径，独立成列表供 fallback_mask_sensitive_info
+# 消费，避免降级路径调用 mask_sensitive_info 本身（会递归触发异常）。
+_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = _SENSITIVE_PATTERNS[:3]
+
+
+def fallback_mask_sensitive_info(text: str) -> str:
+    """脱敏模块异常时的纯正则兜底（4.2 审计 R-1）。
+
+    当 mask_sensitive_info 因任何原因不可用（循环导入 / 模块损坏）时，
+    调用方委托本函数做"长随机串"兜底脱敏，避免敏感文本原样落日志。
+
+    覆盖前 3 类最高频凭证形态（sk- 前缀 / 32+ hex / 40+ base64）；
+    JWT 与 key=xxx 形态在降级路径不拦截（降级本身是异常态，且正常
+    路径的 SensitiveFilter/SensitiveFormatter 仍会兜住二次脱敏）。
+
+    Args:
+        text: 原始文本。
+
+    Returns:
+        长随机串类凭证被替换为占位符后的文本；text 为空时原样返回。
+    """
+    if not text:
+        return text or ""
+    result = text
+    for pattern, replacement in _FALLBACK_PATTERNS:
+        result = pattern.sub(replacement, result)
+    return result
+
 
 def mask_sensitive_info(text: str) -> str:
     """对文本中的敏感信息进行脱敏处理。

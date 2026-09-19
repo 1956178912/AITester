@@ -501,10 +501,16 @@ CLI 新增 `--knowledge-base/-k` 选项控制输出路径。
 ### 5.14 内置变异测试生成器（1.2）
 `experiments/mutation_testing.py` 提供 AST 级轻量变异生成器，无需 mutmut 依赖即可产出 mutation_score：
 
-- **三类变异体**：边界值替换（`_BOUNDARY_REPLACEMENTS`，比较运算符 `==`→`!=`、`<`→`<=` 等）/ 运算符翻转（`_OPERATORS_TO_FLIP`）/ 布尔取反（`ast.Not` 节点去除）
+- **三类变异体**：运算符翻转（`_OPERATOR_FLIP_MAP`，比较运算符 `Eq`→`NotEq`、`Lt`→`LtE` 等 AST 类名映射）/ 布尔取反（`_RemoveNotTransformer` 改写 `If/While/Return/Assign/BoolOp/Compare/Expr` 槽位的 `not X → X`，仅当真正替换成功才计入变异体，避免死代码）/ 数字常量偏移（比较中常量 `value → value+1`）
 - **保守口径**：每任务 ≤ 20 个变异体（`_MAX_MUTANTS_PER_TASK`），仅处理纯 Python 函数体；语法错误返回空列表不阻断
 - **`mutation_score_from_details`**：收集 `details[].mutation_score`（0.0-1.0），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；无该字段时 `available=False` 跳过
 - **可选 mutmut 兜底**：系统已安装 mutmut 时优先使用其完整结果，否则回退内置生成器
+- **`run_benchmark` 流水线接线**（`ENABLE_MUTATION_SCORING`，默认关闭）：开关启用时
+  `experiments/run_benchmark.py` 在基线结果构建后逐任务调用
+  `compute_mutation_score`，把 `mutation_score` 写回 `details[]`，
+  `analyze_results._mutation_score_metrics` 即可汇总；`generated_test`
+  字段经 `_build_task_result` 写进标准结果 JSON（此前仅经 `--save-state`
+  落盘 raw/）。CLI `--enable-mutation` / `--no-mutation` 显式覆盖配置默认。
 
 ```python
 from experiments.mutation_testing import MutationGenerator, mutation_score_from_details
@@ -513,6 +519,14 @@ gen = MutationGenerator()
 mutants = gen.generate(target_code)  # 每个 Mutant 可单独跑测试套件
 # 统计被杀死比例 → details[].mutation_score
 score = mutation_score_from_details(details)  # → {"available": True, "avg_mutation_score": 0.65, ...}
+```
+
+```bash
+# 启用变异得分的 benchmark（每任务 ≤ MUTATION_MAX_MUTANTS 变异体，耗时显著增加）
+ENABLE_MUTATION_SCORING=true MUTATION_MAX_MUTANTS=10 \
+    python experiments/run_benchmark.py --dataset examples --baselines aitester
+# 或显式 CLI 开关
+python experiments/run_benchmark.py --dataset examples --baselines aitester --enable-mutation
 ```
 
 ### 5.15 跨批次失败模式对比（5.3）
@@ -865,6 +879,8 @@ docker run --rm \
 |------|------|---------|----------|
 | `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1；`reproduce.sh` 复现流程默认显式启用，`--no-multi-candidate` 可回退历史口径） | 5.1 |
 | `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1；`reproduce.sh` 默认启用至 `experiments/results/traces`） | 5.2 |
+| `ENABLE_MUTATION_SCORING` | false | 1.2 变异得分评估：benchmark 运行后对每任务"生成测试 vs 被测源码"计算 mutation_score（内置轻量变异生成器，每任务 ≤ `MUTATION_MAX_MUTANTS` 个变异体）；耗时显著增加，默认关闭保持历史口径 | 5.14 |
+| `MUTATION_MAX_MUTANTS` | 10 | 1.2 每任务最多评估的变异体数量（需配合 `ENABLE_MUTATION_SCORING=true` 生效） | 5.14 |
 | `EXECUTOR_USE_DOCKER` | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖；不可用时返回 `docker_unavailable` 诊断不降级本地） | 5.13 |
 | `EXECUTOR_DOCKER_IMAGE` | aitester:latest | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） | 5.13 |
 | `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |

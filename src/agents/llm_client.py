@@ -201,19 +201,28 @@ def _redact_log_text(text: str) -> str:
     与 api_manager._redact 同口径）：logging_utils 是纯标准库模块
     （re 正则替换），顶层导入无循环依赖。
 
+    4.2 审计 R-1：降级路径委托 fallback_mask_sensitive_info（纯正则兜底），
+    不再原样返回——mask_sensitive_info 不可用时仍拦截长随机串类凭证。
+
     Args:
         text: 待脱敏的日志文本（通常为异常字符串）。
 
     Returns:
-        脱敏后的文本；脱敏器不可用时原样返回（不阻断主流程）。
+        脱敏后的文本；脱敏器与兜底器均不可用时原样返回（不阻断主流程）。
     """
     try:
         from src.utils.logging_utils import mask_sensitive_info
 
         return mask_sensitive_info(text)
     except Exception:
-        # 脱敏器不可用（理论上不会发生：纯标准库模块）时原样返回，不阻断主流程
-        return text
+        try:
+            from src.utils.logging_utils import fallback_mask_sensitive_info
+
+            return fallback_mask_sensitive_info(text)
+        except Exception:
+            # 脱敏模块彻底不可用（理论上不会发生：纯标准库模块）时原样返回，
+            # 不阻断主流程——脱敏失败不应让 LLM 调用本身崩溃
+            return text
 
 
 def _record_response_usage(usage: Any, model_name: str) -> None:

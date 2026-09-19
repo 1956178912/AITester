@@ -4,6 +4,63 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.3] - 2026-09-19 评估指标深化 + 变异生成器修复 + 脱敏审计轮次
+
+### 功能
+- **变异生成器修复**（`experiments/mutation_testing.py`）：`_remove_not_op`
+  原实现是死代码（仅 `break`，未真正替换 AST 节点），导致 `boolean_negation`
+  变异体代码与原代码完全相同，下游沙箱"全部通过"被误判为杀死，
+  `mutation_score` 虚高。新增 `_RemoveNotTransformer`（AST NodeTransformer）
+  按行号定位 Not 节点并改写其父槽位（`If/While/Return/Assign/BoolOp/Compare/Expr`
+  等），替换生效后才计入变异体；未命中时过滤掉，避免死代码回归。
+  删除死代码（`_find_mutable_numeric_constants` / `_BOUNDARY_REPLACEMENTS` /
+  `_OPERATORS_TO_FLIP` 三个从未被 `generate()` 引用的标识符）。
+- **变异得分接入 run_benchmark 流水线**（`experiments/run_benchmark.py` +
+  `config.py`）：新增 `ENABLE_MUTATION_SCORING`（默认 False，保持历史实验
+  口径与耗时预算）+ `MUTATION_MAX_MUTANTS`（默认 10）。开关启用时
+  `run_benchmark` 在基线结果构建后逐任务调用
+  `experiments.mutation_testing.compute_mutation_score`，把
+  `mutation_score` 写回 `details[]`，`analyze_results._mutation_score_metrics`
+  即可汇总。`_build_task_result` 成功分支新增 `generated_test` 字段
+  （此前仅经 `--save-state` 落盘 raw/，标准结果 JSON 不携带；变异得分
+  依赖"生成测试 + 被测源码"两者，需写进 details[]）。CLI 新增
+  `--enable-mutation` / `--no-mutation` 参数。`reproduce.sh` 补充
+  `ENABLE_MUTATION_SCORING` 透传说明（默认关闭，显式启用方生效）。
+- **4.2 日志脱敏完整审计**（`docs/log_redaction_audit.md` + 修复 R-1）：
+  四层核查——① api_manager 故障转移日志 base_url 已脱敏（`get_status` +
+  `_redact(config.base_url)` + 故障转移只打 model_name）；② trace.py JSONL
+  落盘经 `mask_sensitive_info` 统一脱敏；③ Docker 容器 `execute_docker`
+  不注入环境变量 + `.dockerignore` 排除 `.env.*`（密钥不进镜像）；④
+  唯一 `exc_info=True` 打印点（`exceptions.py:321`）经 CLI 入口的
+  `SensitiveFormatter` 覆盖（脱消息体 + 脱整行含堆栈双保险）。
+  **发现 R-1**：`api_manager._redact` 与 `llm_client._redact_log_text`
+  在 `mask_sensitive_info` 不可用时降级为"原样返回"，敏感文本会泄漏
+  进日志。修复：`logging_utils` 新增 `fallback_mask_sensitive_info`
+  （取 `_SENSITIVE_PATTERNS` 前 3 条"长随机串"类模式的纯正则兜底），
+  两处 `_redact` 降级路径委托该函数，脱敏模块彻底不可用时仍拦截
+  32+ hex / 40+ base64 / sk- 前缀凭证。
+- **3.2 多候选补丁 A/B 对比实验**：synthetic 数据集 50 任务 × 3 基线，
+  两组（多候选 ON vs OFF，seed=42）完整跑完，差异数据见
+  `experiments/results/multi_candidate_ab_summary.md`。
+
+### 测试
+- `tests/test_smell_detection_v2.py` 新增 4 用例：boolean_negation 真替换
+  回归（6 种槽位场景）/ 嵌套函数 not / 无 not 不生成 / 端到端
+  `compute_mutation_score`（强测试杀死数 ≥ 弱测试）。
+- `tests/test_run_benchmark.py` 新增 4 用例：`_compute_mutation_scores_for_baseline`
+  缺失/存在/未知 task/空 instance_code 四类分支 + `_build_task_result`
+  成功/失败键集合一致性（含新 `generated_test` 字段）。
+- `tests/test_logging_utils.py` 新增 7 用例：`fallback_mask_sensitive_info`
+  的 sk-/hex/base64/JWT/正常文本/空值行为。
+
+### 工程化基线
+- 全量测试 **1474 passed / 0 failed**（上轮 1460 + 本轮净增 14）；
+  `ruff check src/ tests/ experiments/` 全绿
+- 脱敏审计完整报告归档于 `docs/log_redaction_audit.md`（四层核查 +
+  R-1 修复）
+- 多候选 A/B 对比数据归档于 `experiments/results/multi_candidate_ab_summary.md`
+  （含 plain_llm 基线 LLM 缓存命中导致 token 数据失效的限制说明）
+
 ## [0.2] - 2026-09-19 代码质量与可靠性优化轮次
 
 两个原子提交（`9f83197` + `d5f21f6`），零功能破坏，全量测试 1459→1460（净增 1 用例），Ruff 全绿。

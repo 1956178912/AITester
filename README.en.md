@@ -828,6 +828,8 @@ The following switches are all provided as environment variables; defaults prese
 |------|------|---------|----------|
 | `ENABLE_MULTI_CANDIDATE_PATCH` | false | Multi-candidate patch generation and validation filtering (3.1) | 5.1 |
 | `AITESTER_TRACE_DIR` | unset (no-op) | Structured JSONL tracing layer (4.1) | 5.2 |
+| `ENABLE_MUTATION_SCORING` | false | 1.2 mutation-score evaluation: after the benchmark run, computes `mutation_score` per task from "generated test vs source under test" (built-in lightweight mutation generator, ≤ `MUTATION_MAX_MUTANTS` mutants per task). Significantly longer runtime; off by default to preserve the historical baseline. | 5.14 |
+| `MUTATION_MAX_MUTANTS` | 10 | 1.2 cap on mutants evaluated per task (takes effect together with `ENABLE_MUTATION_SCORING=true`) | 5.14 |
 | `CROSS_FILE_ENABLE` | false | Cross-file repair (coordinator-proposer architecture, 3.5) | 5.8 |
 | `ASSERTION_AUGMENT_ENABLE` | false | Assertion augmentation strategy (AST extraction of existing assert, 3.4) | 5.9 |
 

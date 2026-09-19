@@ -44,13 +44,23 @@ def _redact(text: str) -> str:
     部分 SDK/网关的错误体回显请求头或 base_url（其中可能含 API Key）。
     与 llm_client._redact_log_text 同口径：委托给 logging_utils.mask_sensitive_info
     （单一脱敏实现，两处模块的 _redact 别名收敛到同一函数，避免逻辑漂移）。
+
+    4.2 审计 R-1：降级路径委托 fallback_mask_sensitive_info（纯正则兜底，
+    拦截长随机串类凭证），不再原样返回——脱敏模块不可用时仍不泄漏凭证。
     """
     try:
         from src.utils.logging_utils import mask_sensitive_info
 
         return mask_sensitive_info(text)
     except Exception:
-        return text
+        try:
+            from src.utils.logging_utils import fallback_mask_sensitive_info
+
+            return fallback_mask_sensitive_info(text)
+        except Exception:
+            # 脱敏模块彻底不可用（理论上不会发生：纯标准库模块）时原样返回，
+            # 不阻断主流程——脱敏失败不应让 API 调用本身崩溃
+            return text
 
 
 class HealthCheckerThread(threading.Thread):
