@@ -15,6 +15,7 @@ import json
 import pytest
 
 from experiments.analyze_failures import (
+    extract_minimal_repro,
     failure_knowledge_base,
     generate_report,
     root_cause_classification,
@@ -238,3 +239,101 @@ class TestCliKnowledgeBaseOption:
         assert explicit_kb.exists()
         cases = json.loads(explicit_kb.read_text(encoding="utf-8"))
         assert len(cases) == 1
+
+
+class TestExtractMinimalRepro:
+    """5.3 改进：最小复现代码片段自动提取（规则 1-3 逐级降级）。"""
+
+    def test_rule1_traceback_tail(self):
+        """规则 1：diagnosis 含 traceback 时，截取最后一个 File 行起的尾部。"""
+        row = {
+            "task_id": "t1",
+            "passed": False,
+            "diagnosis": (
+                "Traceback (most recent call last):\n"
+                '  File "/app/module.py", line 10, in foo\n'
+                "    result = compute(x)\n"
+                "ValueError: invalid literal for int()\n"
+            ),
+        }
+        snippet = extract_minimal_repro(row)
+        assert snippet is not None
+        assert "File" in snippet
+        assert "ValueError" in snippet
+
+    def test_rule2_error_keywords_no_traceback(self):
+        """规则 2：无 traceback 但含错误关键词时按行过滤。"""
+        row = {
+            "task_id": "t2",
+            "passed": False,
+            "diagnosis": (
+                "Test failed with unexpected output.\n"
+                "AssertionError: assert 1 == 2\n"
+                "Retrying with same input."
+            ),
+        }
+        snippet = extract_minimal_repro(row)
+        assert snippet is not None
+        assert "AssertionError" in snippet
+        # 非错误行应被过滤掉
+        assert "Retrying" not in snippet
+
+    def test_rule3_problem_statement_code_block(self):
+        """规则 3：diagnosis 无错误关键词时退到 problem_statement 的 ``` 代码块。"""
+        row = {
+            "task_id": "t3",
+            "passed": False,
+            "diagnosis": "Some generic failure message without obvious error keyword.",
+            "task_metadata": {
+                "problem_statement": (
+                    "Bug report: see below.\n"
+                    "```python\n"
+                    "def broken():\n"
+                    "    return 1 + 1\n"
+                    "```\n"
+                    "Expected: 1"
+                )
+            },
+        }
+        snippet = extract_minimal_repro(row)
+        assert snippet is not None
+        assert "def broken" in snippet
+
+    def test_no_source_returns_none(self):
+        """diagnosis 空且无 problem_statement 代码块时返回 None。"""
+        row = {"task_id": "t4", "passed": False, "diagnosis": ""}
+        assert extract_minimal_repro(row) is None
+
+    def test_max_lines_truncation(self):
+        """超过 max_lines 时按规则 1 取尾部（保留异常消息在最后）。"""
+        row = {
+            "task_id": "t5",
+            "passed": False,
+            "diagnosis": (
+                "Traceback (most recent call last):\n"
+                "\n".join(f'  File "/app/m{i}.py", line {i}, in f{i}\n    x = {i}' for i in range(20))
+                + "\n"
+                "RuntimeError: exploded\n"
+            ),
+        }
+        snippet = extract_minimal_repro(row, max_lines=5)
+        assert snippet is not None
+        lines = snippet.splitlines()
+        assert len(lines) <= 5
+        assert "RuntimeError" in snippet
+
+    def test_kb_case_contains_minimal_repro_field(self):
+        """failure_knowledge_base 案例含 minimal_repro_code 字段（可空）。"""
+        details = [
+            {
+                "task_id": "t1",
+                "passed": False,
+                "error_category": "assertion",
+                "diagnosis": "AssertionError: assert 1 == 2\n",
+            }
+        ]
+        cases = failure_knowledge_base(details, top_n=5)
+        assert len(cases) == 1
+        assert "minimal_repro_code" in cases[0]
+        assert cases[0]["minimal_repro_code"] is not None
+        assert "AssertionError" in cases[0]["minimal_repro_code"]

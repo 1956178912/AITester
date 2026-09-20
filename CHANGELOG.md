@@ -4,6 +4,47 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.5] - 2026-09-20 分析层深化（跨基线收敛对比 + 跨文件失败案例 + 最小复现代码自动提取）
+
+### 功能
+- **1.3 跨基线收敛对比**（`experiments/analyze_results.py`）：
+  新增 `_cross_baseline_convergence_comparison`，把 `per_baseline` 中
+  aitester 与各 plain_llm 变体的修复收敛曲线按轮次（0/1/2/3+）对齐
+  叠加，输出两个关键对比指标：`first_attempt_delta`（首轮即通过率的
+  协作 vs 基线差值，正值 = 多智能体协作"一次做对"能力领先）与
+  `cumulative_pass_rate_at_1_delta`（第 1 轮累计通过率的基线间差异，
+  用于判断协作机制的增益来自"一次做对"而非"多轮调试追平"）。
+  基线数 <2 或协作/基线组缺失时差值为 None，渲染层只输出叠加表不
+  强行计算差值。
+- **2.2 跨文件修复失败案例分析**（`experiments/analyze_results.py`）：
+  新增 `_cross_file_failure_analysis`，收集各基线失败任务的
+  `error_category` 分布与诊断文本含 import/module/模块 关键词的
+  失败任务数（跨文件修复失败的典型表征），整体 `import_related_rate`
+  作为"模块路径/导入关系未正确处理"的代理指标。渲染层在
+  `import_related_rate ≥ 30%` 时额外输出排查建议（检查
+  `CROSS_FILE_BIDIRECTIONAL=true` 是否启用被调用方视角）。
+- **5.3 最小复现代码片段自动提取**（`experiments/analyze_failures.py`）：
+  新增 `extract_minimal_repro`，从失败任务的 diagnosis 中逐级降级提取
+  "最小复现代码片段"（规则 1：traceback 尾部定位取最后 File 行起
+  的 3 行核心；规则 2：按错误关键词过滤行；规则 3：退到
+  task_metadata.problem_statement 的 ``` 代码块），零 LLM 调用、
+  纯文本处理、可复算。`failure_knowledge_base` 每条案例新增
+  `minimal_repro_code` 字段（无法提取时为 None），`generate_report`
+  渲染层在知识库章节输出该片段或标注"需人工补充"。
+
+### 测试
+- **新增 13 个测试**：
+  `tests/test_experiments_analysis.py` 新增
+  `TestCrossBaselineConvergenceBoundary`（单基线不可用 / 协作 vs 基线
+  delta 计算 / 无 plain 基线时 delta 为 None / 缺轮数据时对齐表跳过）
+  与 `TestCrossFileFailureAnalysisBoundary`（全通过不可用 /
+  import 关键词计数 / 空 _details 不崩溃）共 7 个用例；
+  `tests/test_analyze_failures.py` 新增
+  `TestExtractMinimalRepro`（规则 1 traceback 尾部 / 规则 2 关键词
+  过滤 / 规则 3 代码块 / 全空返回 None / max_lines 截断保留异常
+  消息 / 知识库案例含 minimal_repro_code 字段）共 6 个用例。
+- 全部 1606 个测试通过（较 0.4 轮次新增 13 个，零回归）。
+
 ## [0.4] - 2026-09-20 五大章节系统能力增强（评估/数据/系统/可观测性/测试）
 
 ### 功能

@@ -467,3 +467,142 @@ class TestAnalyzeResultsNewMetricsBoundary:
         assert result["by_risk_level"]["high"]["success_rate"] == 1.0
         assert result["by_risk_level"]["low"]["success_rate"] == 0.0
         assert result["high_vs_low_success_delta"] == 1.0
+
+
+class TestCrossBaselineConvergenceBoundary:
+    """1.3 跨基线收敛对比的边界条件（基线数 <2 / 协作组缺失等退化输入）。"""
+
+    def test_single_baseline_not_available(self):
+        """仅 1 个基线时 available=False（无对比对象）。"""
+        from experiments.analyze_results import _cross_baseline_convergence_comparison
+
+        per = {
+            "aitester": {
+                "repair_convergence_curve": {
+                    "total_tasks": 10,
+                    "rounds": {
+                        "0": {"cumulative_pass_rate": 0.8},
+                        "1": {"cumulative_pass_rate": 0.9},
+                    },
+                }
+            }
+        }
+        result = _cross_baseline_convergence_comparison(per)
+        assert result["available"] is False
+        assert result["baselines"] == ["aitester"]
+
+    def test_two_baselines_no_delta(self):
+        """协作组与基线组各 1 个时 delta 为两组合值之差（保守口径）。"""
+        from experiments.analyze_results import _cross_baseline_convergence_comparison
+
+        per = {
+            "aitester": {
+                "repair_convergence_curve": {
+                    "total_tasks": 10,
+                    "rounds": {
+                        "0": {"cumulative_pass_rate": 0.8},
+                        "1": {"cumulative_pass_rate": 0.9},
+                    },
+                }
+            },
+            "plain_llm": {
+                "repair_convergence_curve": {
+                    "total_tasks": 10,
+                    "rounds": {
+                        "0": {"cumulative_pass_rate": 0.6},
+                        "1": {"cumulative_pass_rate": 0.75},
+                    },
+                }
+            },
+        }
+        result = _cross_baseline_convergence_comparison(per)
+        assert result["available"] is True
+        assert result["first_attempt_delta"] == 0.2  # 0.8 - 0.6
+        assert result["cumulative_pass_rate_at_1_delta"] == 0.15  # 0.9 - 0.75
+        assert result["collab_group"] == ["aitester"]
+        assert result["plain_group"] == ["plain_llm"]
+
+    def test_no_plain_baseline_delta_none(self):
+        """两个基线均不含 'plain' 时两组均空，delta 为 None。"""
+        from experiments.analyze_results import _cross_baseline_convergence_comparison
+
+        per = {
+            "aitester": {
+                "repair_convergence_curve": {
+                    "rounds": {"0": {"cumulative_pass_rate": 0.8}}
+                }
+            },
+            "another_agent": {
+                "repair_convergence_curve": {
+                    "rounds": {"0": {"cumulative_pass_rate": 0.7}}
+                }
+            },
+        }
+        result = _cross_baseline_convergence_comparison(per)
+        assert result["available"] is True
+        assert result["first_attempt_delta"] is None
+        assert result["cumulative_pass_rate_at_1_delta"] is None
+
+    def test_missing_rounds_skipped(self):
+        """某基线缺某轮数据时对齐表跳过该格（不崩溃）。"""
+        from experiments.analyze_results import _cross_baseline_convergence_comparison
+
+        per = {
+            "aitester": {
+                "repair_convergence_curve": {
+                    "rounds": {"0": {"cumulative_pass_rate": 0.8}, "1": {"cumulative_pass_rate": 0.9}}
+                }
+            },
+            "plain_llm": {
+                "repair_convergence_curve": {
+                    "rounds": {"0": {"cumulative_pass_rate": 0.6}}
+                }
+            },
+        }
+        result = _cross_baseline_convergence_comparison(per)
+        assert result["aligned_rounds"]["0"]["plain_llm"] == 0.6
+        assert "plain_llm" not in result["aligned_rounds"].get("1", {})
+        # at_1 delta 因 plain_llm 缺 1 轮数据而为 None
+        assert result["cumulative_pass_rate_at_1_delta"] is None
+
+
+class TestCrossFileFailureAnalysisBoundary:
+    """2.2 跨文件修复失败案例分析的边界条件（无失败 / import 关键词统计）。"""
+
+    def test_no_failed_tasks_not_available(self):
+        """全部任务通过时 available=False。"""
+        from experiments.analyze_results import _cross_file_failure_analysis
+
+        per = {
+            "aitester": {"_details": [{"task_id": "t1", "passed": True}]}
+        }
+        result = _cross_file_failure_analysis(per)
+        assert result["available"] is False
+
+    def test_failed_tasks_import_related_count(self):
+        """诊断含 import/module/模块 关键词的失败任务计数。"""
+        from experiments.analyze_results import _cross_file_failure_analysis
+
+        per = {
+            "aitester": {
+                "_details": [
+                    {"task_id": "t1", "passed": False, "error_category": "import_error",
+                     "diagnosis": "ModuleNotFoundError: No module named 'foo'"},
+                    {"task_id": "t2", "passed": False, "error_category": "assertion",
+                     "diagnosis": "AssertionError: expected 1 == 2"},
+                ]
+            }
+        }
+        result = _cross_file_failure_analysis(per)
+        assert result["available"] is True
+        assert result["by_baseline"]["aitester"]["failed"] == 2
+        assert result["by_baseline"]["aitester"]["import_related_failed"] == 1
+        assert result["import_related_rate"] == 0.5
+
+    def test_no_details_empty(self):
+        """_details 为空时跳过该基线（不崩溃）。"""
+        from experiments.analyze_results import _cross_file_failure_analysis
+
+        per = {"aitester": {}}
+        result = _cross_file_failure_analysis(per)
+        assert result["available"] is False

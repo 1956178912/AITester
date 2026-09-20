@@ -562,6 +562,150 @@ def _difficulty_stratified_iterations(
     return {"available": True, "bands": stratified}
 
 
+def _cross_baseline_convergence_comparison(
+    per_baseline: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """1.3 跨基线收敛对比：把 aitester 与各 plain_llm 变体的收敛曲线叠加。
+
+    1.3 改进：单基线收敛曲线无法直接回答"多智能体协作在收敛速度上是否
+    优于单智能体基线"。本函数收集 per_baseline 中各基线的
+    repair_convergence_curve，按轮次对齐后输出叠加视图，并计算两个关键
+    对比指标：
+    - first_attempt_delta: 各基线"首轮即通过"任务占比的差异
+      （aitester - plain_llm，正值 = 多智能体协作首轮成功率更高）；
+    - cumulative_pass_rate_at_1: 第 1 轮（k=1）累计通过率的基线间差异
+      （若 aitester 在该轮领先，说明协作机制的增益来自"一次做对"而非
+      "多轮调试追平"）。
+
+    对齐规则：
+    - 仅纳入 per_baseline 中同时携带 repair_convergence_curve 的基线；
+    - 基线数 < 2 时 available=False（无对比对象），渲染层跳过章节；
+    - 各基线任务数可能不同，对比使用"通过率"（分母各自独立）而非任务数。
+
+    Args:
+        per_baseline: build_analysis 产出的 per_baseline 字典
+            （{baseline: {repair_convergence_curve: {...}, ...}}）。
+
+    Returns:
+        {"available": bool,
+         "baselines": [baseline...],
+         "aligned_rounds": {"0": {baseline: cumulative_pass_rate}, "1": {...}, ...},
+         "first_attempt_delta": float | None,
+         "cumulative_pass_rate_at_1_delta": float | None}
+        first_attempt_delta / cumulative_pass_rate_at_1_delta 取
+        "含 'aitester' 且不含 'plain' 的基线" 与 "含 'plain' 的基线"
+        两组的均值差；任一组为空时为 None。
+    """
+    baselines_with_curve = [
+        bl for bl, m in per_baseline.items()
+        if m.get("repair_convergence_curve", {}).get("rounds")
+    ]
+    if len(baselines_with_curve) < 2:
+        return {"available": False, "baselines": baselines_with_curve}
+
+    # 按轮次对齐累计通过率（各基线独立分母，保守口径）
+    aligned: dict[str, dict[str, float]] = {}
+    for bl in baselines_with_curve:
+        rounds = per_baseline[bl]["repair_convergence_curve"]["rounds"]
+        for k in ("0", "1", "2", "3+"):
+            r = rounds.get(k)
+            if not r:
+                continue
+            aligned.setdefault(k, {})[bl] = r.get("cumulative_pass_rate", 0.0)
+
+    # 分组：协作组（含 aitester 且不含 plain）vs 基线组（含 plain）
+    collab_group = [bl for bl in baselines_with_curve if "aitester" in bl and "plain" not in bl]
+    plain_group = [bl for bl in baselines_with_curve if "plain" in bl]
+
+    def _mean_rate(group: list[str], key: str) -> float | None:
+        values = [aligned.get(key, {}).get(bl) for bl in group]
+        values = [v for v in values if v is not None]
+        return round(sum(values) / len(values), 4) if values else None
+
+    first_attempt_delta: float | None = None
+    at1_delta: float | None = None
+    if collab_group and plain_group:
+        collab_first = _mean_rate(collab_group, "0")
+        plain_first = _mean_rate(plain_group, "0")
+        if collab_first is not None and plain_first is not None:
+            first_attempt_delta = round(collab_first - plain_first, 4)
+        collab_at1 = _mean_rate(collab_group, "1")
+        plain_at1 = _mean_rate(plain_group, "1")
+        if collab_at1 is not None and plain_at1 is not None:
+            at1_delta = round(collab_at1 - plain_at1, 4)
+
+    return {
+        "available": True,
+        "baselines": baselines_with_curve,
+        "aligned_rounds": aligned,
+        "first_attempt_delta": first_attempt_delta,
+        "cumulative_pass_rate_at_1_delta": at1_delta,
+        "collab_group": collab_group,
+        "plain_group": plain_group,
+    }
+
+
+def _cross_file_failure_analysis(
+    per_baseline: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """2.2 跨文件修复失败案例分析：统计启用跨文件修复的基线中失败任务的
+    错误类别分布与跨文件相关信号。
+
+    2.2 改进：跨文件修复（CROSS_FILE_ENABLE=true）在真实数据集约 40%
+    任务需要多文件修改的场景下启用后，失败模式与单文件修复可能不同
+    （如"依赖边分析为空但任务实际跨文件"）。本函数收集：
+    - 各基线中"含 cross_file 相关信号"（details[].cross_file_deps 非空
+      或 error_category 命中跨文件相关类别）的任务占比；
+    - 失败任务的 error_category 分布（识别跨文件场景下的高频失败类别）；
+    - 失败任务中 diagnosis 含"import" / "module" 关键词的比例
+      （跨文件修复失败的典型表征：模块路径/导入关系未正确处理）。
+
+    Args:
+        per_baseline: build_analysis 产出的 per_baseline 字典。
+
+    Returns:
+        {"available": bool,
+         "by_baseline": {baseline: {"total", "failed", "failed_categories": {...},
+                                    "import_related_failed": int}},
+         "import_related_rate": float | None}
+        无失败任务时 available=False（渲染层跳过章节）。
+    """
+    by_baseline: dict[str, dict[str, Any]] = {}
+    total_failed = 0
+    import_related_failed = 0
+    for bl, m in per_baseline.items():
+        details = m.get("_details") or []
+        if not details:
+            continue
+        failed_rows = [r for r in details if not r.get("passed")]
+        if not failed_rows:
+            continue
+        cat_counter: Counter = Counter()
+        import_related = 0
+        for row in failed_rows:
+            cat = str(row.get("error_category") or "unknown")
+            cat_counter[cat] += 1
+            diag = str(row.get("diagnosis") or "").lower()
+            # 跨文件失败典型信号：诊断文本含 import/module/模块 关键词
+            if any(kw in diag for kw in ("import", "module", "模块")):
+                import_related += 1
+        by_baseline[bl] = {
+            "total": len(details),
+            "failed": len(failed_rows),
+            "failed_categories": dict(cat_counter.most_common()),
+            "import_related_failed": import_related,
+        }
+        total_failed += len(failed_rows)
+        import_related_failed += import_related
+    if total_failed == 0:
+        return {"available": False, "by_baseline": {}}
+    return {
+        "available": True,
+        "by_baseline": by_baseline,
+        "import_related_rate": round(import_related_failed / total_failed, 4),
+    }
+
+
 def _assertion_strength_proxy(details: list[dict[str, Any]]) -> dict[str, Any]:
     """1.1/1.3 断言强度：AST 静态分析 + 行数统计双口径。
 
@@ -1287,6 +1431,8 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
         for r in details:
             iteration_counter[min(r.get("iterations", 0), 3)] += 1
 
+    cross_baseline = _cross_baseline_convergence_comparison(per_baseline)
+    cross_file_failure = _cross_file_failure_analysis(per_baseline)
     return {
         "meta": {
             "dataset": data.get("dataset"),
@@ -1301,6 +1447,10 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
         "iteration_distribution": {str(k): iteration_counter.get(k, 0) for k in range(4)},
         # 4.4 依赖缓存命中统计（无缓存事件时为 None，渲染时跳过章节）
         "venv_cache_stats": _venv_cache_stats_snapshot(),
+        # 1.3 跨基线收敛对比（叠加 aitester 与各 plain_llm 基线的收敛曲线）
+        "cross_baseline_convergence": cross_baseline,
+        # 2.2 跨文件修复失败案例分析（失败类别分布 + import 相关信号占比）
+        "cross_file_failure_analysis": cross_file_failure,
     }
 
 
@@ -1916,6 +2066,80 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             lines.append("")
         lines.append("")
 
+    # 1.3 跨基线收敛对比：把 aitester 与各 plain_llm 变体的收敛曲线叠加，
+    # 直观呈现多智能体协作在收敛速度上的优势
+    xb = analysis.get("cross_baseline_convergence") or {}
+    if xb.get("available"):
+        lines.append("## 跨基线收敛对比（1.3）")
+        lines.append("")
+        lines.append("各基线修复收敛曲线叠加（按迭代轮次 0/1/2/3+ 对齐累计通过率）：")
+        lines.append("")
+        lines.append("| 基线 | 首轮即通过 | 第1轮累计 | 第2轮累计 | 第3+轮累计 |")
+        lines.append("|------|-----------|----------|----------|----------|")
+        aligned = xb.get("aligned_rounds", {})
+        for baseline in xb.get("baselines", []):
+            r0 = aligned.get("0", {}).get(baseline)
+            r1 = aligned.get("1", {}).get(baseline)
+            r2 = aligned.get("2", {}).get(baseline)
+            r3 = aligned.get("3+", {}).get(baseline)
+            lines.append(
+                f"| {baseline} "
+                f"| {r0 if r0 is not None else '—'} "
+                f"| {r1 if r1 is not None else '—'} "
+                f"| {r2 if r2 is not None else '—'} "
+                f"| {r3 if r3 is not None else '—'} |"
+            )
+        lines.append("")
+        first_delta = xb.get("first_attempt_delta")
+        at1_delta = xb.get("cumulative_pass_rate_at_1_delta")
+        if first_delta is not None or at1_delta is not None:
+            lines.append("### 协作 vs 基线关键差异")
+            lines.append("")
+            lines.append("| 指标 | 差值（aitester - plain_llm） | 解读 |")
+            lines.append("|------|------------------------------|------|")
+            if first_delta is not None:
+                lines.append(
+                    f"| 首轮即通过率差 | {first_delta:+.4f} "
+                    f"| 正值 = 多智能体协作首轮成功率更高（一次做对能力领先） |"
+                )
+            if at1_delta is not None:
+                lines.append(
+                    f"| 第1轮累计通过率差 | {at1_delta:+.4f} "
+                    f"| 正值 = 协作机制的增益来自'一次做对'而非'多轮调试追平' |"
+                )
+            lines.append("")
+        lines.append(
+            "> 注：各基线任务数可能不同，对比使用'通过率'（分母各自独立）；"
+            "若 plain_llm 基线未参与本次运行，差值为 None，渲染层仅输出叠加表。"
+        )
+        lines.append("")
+
+    # 2.2 跨文件修复失败案例分析（启用跨文件修复的基线中失败任务的
+    # 错误类别分布 + import 相关信号占比）
+    xf = analysis.get("cross_file_failure_analysis") or {}
+    if xf.get("available"):
+        lines.append("## 跨文件修复失败案例分析（2.2）")
+        lines.append("")
+        for baseline, stat in xf.get("by_baseline", {}).items():
+            lines.append(f"### {baseline}")
+            lines.append("")
+            lines.append(f"- 总任务: {stat.get('total', 0)}，失败: {stat.get('failed', 0)}")
+            cats = stat.get("failed_categories", {})
+            if cats:
+                lines.append(f"- 失败类别分布: {', '.join(f'{k}={v}' for k, v in cats.items())}")
+            lines.append(f"- 诊断含 import/module/模块 关键词的失败任务: {stat.get('import_related_failed', 0)}")
+            lines.append("")
+        ir_rate = xf.get("import_related_rate")
+        if ir_rate is not None:
+            lines.append(f"> 整体 import 相关失败占比: {ir_rate:.2%}（跨文件修复失败典型表征）")
+            lines.append("")
+            if ir_rate >= 0.3:
+                lines.append(
+                    "> 解读：import 相关失败占比 ≥30%，提示跨文件场景下模块路径/导入关系"
+                    "未正确处理是主要失败模式；建议检查 cross_file_analyzer 的依赖边"
+                    "分析是否覆盖了被调用方视角（CROSS_FILE_BIDIRECTIONAL=true）。"
+                )
+                lines.append("")
     return "\n".join(lines)
 
 

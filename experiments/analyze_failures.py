@@ -15,6 +15,19 @@
   experiments/results/failure_knowledge_base.json，含 task_id / root_cause /
   error_category / 可复现步骤 / 建议修复，供后续优化参考；
 - analyze_failures CLI 新增 --knowledge-base 选项（默认输出到 results 目录）。
+
+5.3 改进（最小复现代码片段自动提取）：
+- extract_minimal_repro(details, row)：从失败任务的 diagnosis +
+  error_category + 可选 execution_trace 中自动提取"最小复现代码片段"，
+  补充到 failure_knowledge_base 的 minimal_repro_code 字段；
+- 提取规则（保守口径，纯文本处理不依赖 LLM）：
+  1. 从 diagnosis 中定位 traceback 段（若存在），截取最后一条
+     "File ... line ..." + 异常类名 + 异常消息（3 行以内）；
+  2. 无 traceback 时，从 diagnosis 取含 error_category 关键词的
+     核心错误行（如 "assert" / "ImportError" / "AttributeError"）；
+  3. 若 task_metadata 携带 problem_statement（SWE-bench issue 文本），
+     截取其中与失败直接相关的代码块（``` 包裹段落，首段为限）；
+  4. 全部失败时 minimal_repro_code 为 None（渲染层标注"无法自动提取"）。
 """
 
 from __future__ import annotations
@@ -166,6 +179,9 @@ def failure_knowledge_base(details: list[dict[str, Any]], top_n: int = 10) -> li
                         f"--task-limit 1 复现任务 {task_id}；"
                         f"失败类别 {cat}；根因 {suggested['root_cause']}"
                     ),
+                    # 5.3 改进：自动提取最小复现代码片段（无法提取时为 None，
+                    # 渲染层标注"需人工补充"）
+                    "minimal_repro_code": extract_minimal_repro(row),
                     "suggested_fix": suggested,
                 }
             )
@@ -179,6 +195,97 @@ def _assign_root_cause(row: dict[str, Any], cat: str) -> str:
         if cat in keywords or any(kw in diag for kw in keywords):
             return cause
     return _DEFAULT_ROOT_CAUSE
+
+
+def extract_minimal_repro(row: dict[str, Any], max_lines: int = 12) -> str | None:
+    """5.3 改进：从失败任务自动提取"最小复现代码片段"。
+
+    提取规则（保守口径，纯文本处理不依赖 LLM，逐级降级）：
+    1. diagnosis 含 traceback 段时：定位最后一个 "File " 行，截取该行及
+       后续行直到遇到异常类名行（"SomeError: message" 形态），整体裁剪
+       到 max_lines 行以内（取尾部，异常消息在最后）；
+    2. 无 traceback 时：从 diagnosis 逐行扫描，保留含错误关键词
+       （assert / Error / ImportError / AttributeError / TypeError /
+       KeyError / "failed" / "traceback"）的行，最多取 max_lines 行；
+    3. 以上皆空且 task_metadata.problem_statement 含 ``` 代码块时：
+       截取第一个代码块（``` 到 ``` 之间），裁剪到 max_lines 行；
+    4. 全部失败时返回 None（渲染层标注"无法自动提取，需人工补充"）。
+
+    设计说明：
+    - 最小复现片段的目标是让读者"看一眼就知道失败在哪里"，因此只保留
+      定位错误现场所需的行（文件行号 + 异常消息），不保留完整 traceback
+      堆栈（堆栈对复现无直接帮助且冗长）；
+    - 不依赖 LLM 保证可复算、零成本，适合知识库批量生成。
+
+    Args:
+        row: benchmark details 行（diagnosis / error_category /
+            task_metadata / execution_trace 等）。
+        max_lines: 片段最大行数（默认 12，超过则取尾部，保留异常消息）。
+
+    Returns:
+        最小复现代码片段字符串（含缩进与换行）；无法提取时返回 None。
+    """
+    diag = str(row.get("diagnosis") or "")
+    if not diag.strip():
+        return _repro_from_problem_statement(row, max_lines)
+
+    lines = diag.splitlines()
+
+    # 规则 1：traceback 尾部定位（最后一个 "File " 行起，截到异常消息行）
+    trace_start = -1
+    for i, ln in enumerate(lines):
+        stripped = ln.strip()
+        if stripped.startswith("File ") or stripped.startswith('  File '):
+            trace_start = i
+    if trace_start >= 0:
+        snippet_lines = lines[trace_start:]
+        # 裁剪到 max_lines（取尾部，异常消息在最后）
+        if len(snippet_lines) > max_lines:
+            snippet_lines = snippet_lines[-max_lines:]
+        return "\n".join(snippet_lines).rstrip()
+
+    # 规则 2：无 traceback 时按错误关键词过滤
+    _ERR_KEYWORDS = ("assert", "Error", "ImportError", "AttributeError",
+                     "TypeError", "KeyError", "IndexError", "ValueError",
+                     "failed", "traceback", "FAILED", "ModuleNotFound")
+    matched = [ln for ln in lines if any(kw in ln for kw in _ERR_KEYWORDS)]
+    if matched:
+        if len(matched) > max_lines:
+            matched = matched[-max_lines:]
+        return "\n".join(matched).rstrip()
+
+    # 规则 3：diagnosis 无错误关键词时，退到 problem_statement 代码块
+    return _repro_from_problem_statement(row, max_lines)
+
+
+def _repro_from_problem_statement(row: dict[str, Any], max_lines: int) -> str | None:
+    """从 task_metadata.problem_statement 中提取首个 ``` 代码块（规则 3）。
+
+    SWE-bench 等数据集的 issue 文本中常含 ``` 包裹的失败示例代码，
+    截取首块作为最小复现片段。无代码块时返回 None。
+    """
+    meta = row.get("task_metadata") or {}
+    stmt = str(meta.get("problem_statement") or "")
+    if not stmt:
+        return None
+    start = stmt.find("```")
+    if start < 0:
+        return None
+    block_start = start + 3
+    # 跳过代码块标记行后的语言标识（如 ```python）
+    next_nl = stmt.find("\n", block_start)
+    if next_nl < 0:
+        return None
+    block_end = stmt.find("```", next_nl)
+    if block_end < 0:
+        return None
+    code = stmt[next_nl + 1 : block_end].strip()
+    if not code:
+        return None
+    code_lines = code.splitlines()
+    if len(code_lines) > max_lines:
+        code_lines = code_lines[:max_lines]
+    return "\n".join(code_lines)
 
 
 def _suggest_fix_for_root_cause(row: dict[str, Any], cat: str) -> dict[str, str]:
@@ -349,6 +456,19 @@ def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
             lines.append(f"### 案例 {i}: `{case['task_id']}` [{case['root_cause']} / {case['error_category']}]")
             lines.append(f"- **诊断摘录**: {case['diagnosis_excerpt']}")
             lines.append(f"- **复现步骤**: {case['reproducible_steps']}")
+            # 5.3 改进：最小复现代码片段（自动提取；无法提取时标注需人工补充）
+            repro_code = case.get("minimal_repro_code")
+            if repro_code:
+                lines.append(f"- **最小复现代码片段**:")
+                lines.append("")
+                lines.append("  ```")
+                for rl in repro_code.splitlines():
+                    lines.append(f"  {rl}")
+                lines.append("  ```")
+                lines.append("")
+            else:
+                lines.append("- **最小复现代码片段**: 无法自动提取（diagnosis 无 traceback 且无错误关键词），需人工补充")
+                lines.append("")
             lines.append(f"- **建议修复**: {case['suggested_fix']['suggestion']}")
             lines.append("")
         lines.append(
