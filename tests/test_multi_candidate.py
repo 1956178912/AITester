@@ -46,18 +46,19 @@ class TestStaticValidatePatch:
     """静态筛选各分支。"""
 
     def test_empty_patch_rejected(self):
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, "")
+        ok, reason, applied = mc.static_validate_patch(_GOOD_ORIGINAL, "")
         assert not ok
         assert "空" in reason
+        assert applied == ""
 
     def test_whitespace_only_patch_rejected(self):
-        ok, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "   \n  ")
+        ok, _, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "   \n  ")
         assert not ok
 
     def test_no_change_rejected(self):
         # 补丁与原代码完全相同（apply 单函数替换但内容不变）→ "未产生实际改动"
         patch = _GOOD_ORIGINAL
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, patch)
+        ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, patch)
         assert not ok
         assert "未产生实际改动" in reason
 
@@ -67,7 +68,7 @@ def add(a, b):
     return a +
 """
         # 单函数模式替换 add 为残缺实现 → 语法错误
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + bad + "\n```")
+        ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + bad + "\n```")
         assert not ok
         assert "语法错误" in reason
 
@@ -81,7 +82,7 @@ def add(a, b):
 def mul(a, b):
     return a * b
 """
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + full.strip() + "\n```")
+        ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + full.strip() + "\n```")
         # 该补丁与原代码等价（无实际改动），应被"未产生实际改动"拒绝
         assert not ok
         assert "未产生实际改动" in reason
@@ -91,21 +92,32 @@ def mul(a, b):
         # 此行为证明"函数定义数量减少"分支是针对"误删"的防御网，正常整文件补丁
         # 仍能通过（保留原代码全部函数），而非被误拒。
         full_no_mul = "import math\n\n\ndef add(a, b):\n    return a + b\n"
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + full_no_mul + "\n```")
+        ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + full_no_mul + "\n```")
         assert ok, f"正常整文件补丁应通过，实际被拒: {reason}"
 
     def test_too_short_rejected(self):
         # 大原代码 + 很短的整文件补丁触发 10% 规则被拒；
         # 但单函数补丁保留其余函数时不会"过短"，验证不会误拒大文件单函数修复
         big_original = "\n".join(f"def f{i}(x):\n    return x + {i}\n" for i in range(50))
-        ok, reason = mc.static_validate_patch(big_original, "```python\ndef f0(x):\n    return x\n```")
+        ok, reason, _ = mc.static_validate_patch(big_original, "```python\ndef f0(x):\n    return x\n```")
         # 单函数补丁保留其余 49 个函数 → 不短，仍通过
         assert ok, f"大文件单函数修复不应被'过短'误拒: {reason}"
 
     def test_single_function_patch_passes(self):
         # 正常单函数修复（把 add 的 + 改成 - 再修回）应通过静态筛选
-        ok, reason = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\ndef add(a, b):\n    return a + b\n```")
+        ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\ndef add(a, b):\n    return a + b\n```")
         assert ok, f"正常单函数补丁应通过: {reason}"
+
+    def test_applied_code_returned_on_pass(self):
+        # 3-tuple 契约：通过时第三项为 apply_patch_to_code 产物（可复用于 new_code），
+        # 拒绝时第三项为空串
+        ok, _, applied = mc.static_validate_patch(
+            _GOOD_ORIGINAL, "```python\ndef mul(a, b):\n    return a * b + 1\n```"
+        )
+        assert ok
+        assert "a * b + 1" in applied
+        _, _, rejected = mc.static_validate_patch(_GOOD_ORIGINAL, "")
+        assert rejected == ""
 
 
 class TestGenerateCandidates:

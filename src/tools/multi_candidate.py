@@ -72,7 +72,7 @@ def candidate_variant_prompt(index: int, num_candidates: int) -> str:
     return f"【多候选修复 {index + 1}/{num_candidates}】{variant}"
 
 
-def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str]:
+def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, str]:
     """对候选补丁做静态筛选（3.1 的 cheap gate，不消耗 LLM 与执行成本）。
 
     校验项：
@@ -86,37 +86,39 @@ def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str]:
         patch: 候选补丁文本（可含 ```python 包裹）。
 
     Returns:
-        (是否通过静态筛选, 拒绝原因)。通过时原因为空字符串。
+        (是否通过静态筛选, 拒绝原因, 应用后的完整代码)。
+        通过时原因为空字符串、应用后代码为 apply_patch_to_code 的产物
+        （供调用方直接复用，无需二次应用补丁）；拒绝时应用后代码为空串。
     """
     if not patch or not patch.strip():
-        return False, "空补丁"
+        return False, "空补丁", ""
 
     new_code, applied = apply_patch_to_code(original_code, patch)
     if not applied:
-        return False, "补丁无法应用到原代码（函数定位/完整性校验失败）"
+        return False, "补丁无法应用到原代码（函数定位/完整性校验失败）", ""
 
     if new_code == original_code:
-        return False, "补丁未产生实际改动"
+        return False, "补丁未产生实际改动", ""
 
     # 安全检查 1：过短（与 workflow._patch_applier_node 同口径，防 LLM 返回空壳）
     if len(new_code) < len(original_code) * 0.1:
-        return False, f"应用后代码过短（{len(new_code)} < 原 {len(original_code)} 的 10%）"
+        return False, f"应用后代码过短（{len(new_code)} < 原 {len(original_code)} 的 10%）", ""
 
     # 安全检查 2：必须保留至少一个函数定义
     if _count_function_defs(new_code) == 0 and _count_function_defs(original_code) > 0:
-        return False, "应用后代码丢失了全部函数定义"
+        return False, "应用后代码丢失了全部函数定义", ""
 
     # 安全检查 3：语法完整（ast.parse 可编译）
     try:
         ast.parse(new_code)
     except SyntaxError as e:
-        return False, f"语法错误（line {e.lineno}）: {e.msg}"
+        return False, f"语法错误（line {e.lineno}）: {e.msg}", ""
 
     # 安全检查 4：函数定义数量不减少（防止误删其他函数）
     if _count_function_defs(new_code) < _count_function_defs(original_code):
-        return False, "函数定义数量减少（可能误删其他函数）"
+        return False, "函数定义数量减少（可能误删其他函数）", ""
 
-    return True, ""
+    return True, "", new_code
 
 
 @dataclass
@@ -196,10 +198,11 @@ def generate_candidates(
             candidates.append(CandidateResult(index=i, patch="", static_passed=False, static_reason=f"生成失败: {e}"))
             continue
 
-        ok, reason = static_validate_patch(target_code, patch)
+        ok, reason, applied_code = static_validate_patch(target_code, patch)
         if ok:
-            applied, _ = apply_patch_to_code(target_code, patch)
-            candidates.append(CandidateResult(index=i, patch=patch, new_code=applied, static_passed=True))
+            # static_validate_patch 内部已调用 apply_patch_to_code，直接复用
+            # 其产物（此前再调一次是同候选双次应用补丁的纯冗余）
+            candidates.append(CandidateResult(index=i, patch=patch, new_code=applied_code, static_passed=True))
         else:
             candidates.append(CandidateResult(index=i, patch=patch, static_passed=False, static_reason=reason))
             logger.info("候选 %d/%d 静态筛选未通过: %s", i + 1, n, reason)
