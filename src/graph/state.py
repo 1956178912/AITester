@@ -173,6 +173,17 @@ class AITesterState(TypedDict, total=False):
     # 3.5 跨文件修复计划（CROSS_FILE_ENABLE=true 时由 cross_file_analyzer 节点写入）
     cross_file_deps: list[dict[str, Any]] | None
     cross_file_plan: dict[str, Any] | None
+    # 1.2 变异反馈闭环（MutGen 式）：上一轮变异测试的存活变异体信息
+    # {survived_mutants: list[str], mutation_score: float}
+    # 由 run_benchmark 变异评估后写入，Generator 再生成时消费；None 表示无反馈
+    mutation_feedback: dict[str, Any] | None
+    # 5.2 多候选补丁统计（ENABLE_MULTI_CANDIDATE_PATCH=true 时由 patch_applier 写入）：
+    # {"candidates": N, "static_passed": M, "exec_validated": bool, "selected": int | None}
+    multi_candidate_stats: dict[str, Any] | None
+    # 3.2 改进：执行反馈驱动的动态迭代策略建议（由 executor 节点写入，
+    # 纯观测层：基于前几轮覆盖率趋势建议"降低温度/切换修复视角"，
+    # 供未来 Debugger 消费；当前仅记录不改变路由）
+    iteration_strategy_suggestion: str | None
 
 
 def create_initial_state(
@@ -251,4 +262,10 @@ def create_initial_state(
         # 3.5 跨文件修复计划
         cross_file_deps=None,
         cross_file_plan=None,
+        # 1.2 变异反馈闭环（默认 None，由 run_benchmark 变异评估后注入）
+        mutation_feedback=None,
+        # 5.2 多候选补丁统计（默认 None，启用多候选时由 patch_applier 节点写入）
+        multi_candidate_stats=None,
+        # 3.2 改进：迭代策略建议（默认 None，executor 节点写入观测层建议）
+        iteration_strategy_suggestion=None,
     )

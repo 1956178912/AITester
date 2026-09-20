@@ -169,6 +169,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         module_name=state.get("module_name", ""),
         rag_references=rag_refs,
         focus_function=state.get("target_function"),
+        # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
+        # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
+        mutation_feedback=state.get("mutation_feedback"),
     )
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
@@ -274,17 +277,27 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
             get_retriever=get_rag_retriever,
         )
 
+    # 3.2 执行反馈轨迹：追加本次执行记录（纯观测层，默认常开）
+    new_trace = _record_execution_trace(
+        state,
+        passed=result["passed"],
+        coverage=result["coverage"],
+        elapsed_seconds=round(time.time() - t0, 2),
+    )
+    # 3.2 改进：基于历史轨迹（含本次）的动态迭代策略建议（观测层，不参与路由）
+    prev_coverage = None
+    if state.get("execution_trace"):
+        prev_coverage = state["execution_trace"][-1].get("coverage")
+    coverage_delta = round(result["coverage"] - prev_coverage, 2) if prev_coverage is not None else None
+    strategy_suggestion = _suggest_iteration_strategy(new_trace, coverage_delta)
+
     return {
         "test_passed": result["passed"],
         "test_output": result["output"],
         "coverage_report": result["coverage"],
         "failed_cases": result["failed_cases"],
-        "execution_trace": _record_execution_trace(
-            state,
-            passed=result["passed"],
-            coverage=result["coverage"],
-            elapsed_seconds=round(time.time() - t0, 2),
-        ),
+        "execution_trace": new_trace,
+        "iteration_strategy_suggestion": strategy_suggestion,
     }
 
 
@@ -317,23 +330,103 @@ def _record_execution_trace(
         prev_coverage = trace[-1].get("coverage")
     coverage_delta = round(coverage - prev_coverage, 2) if prev_coverage is not None else None
 
-    # 奖励信号：保守线性归一（0-1），仅记录观测值，不用于任何决策——
-    # 未来微调消费时可按需重新标定（correctness 为最高优先级信号）
-    rewards = {
-        "correctness": 1.0 if passed else 0.0,
-        "efficiency": max(0.0, round(1.0 - elapsed_seconds / EXECUTION_TIMEOUT, 3)),
-        "simplicity": max(0.0, round(1.0 - elapsed_seconds / (EXECUTION_TIMEOUT * 2.0), 3)),
-    }
-    entry = {
-        "iteration": state.get("iteration", 0),
-        "passed": passed,
-        "coverage": coverage,
-        "coverage_delta": coverage_delta,
-        "elapsed_seconds": elapsed_seconds,
-        "reward_signals": rewards,
-    }
-    trace.append(entry)
+    # 3.2 改进：基于历史轨迹的动态迭代策略调整——根据前几轮的
+    # 覆盖率变化趋势，动态建议后续迭代的 temperature 或提示策略。
+    # 保守口径：仅输出"建议"到 state["iteration_strategy_suggestion"]，
+    # 不直接改变 LLM 调用参数（温度调整需经 BaseAgent 消费，此处只做观测层建议）。
+    # 若前 2 轮覆盖率持续下降（delta < 0 两次），建议"降低 temperature
+    # + 收紧提示"（当前路径过于发散）；若覆盖率停滞（delta ≈ 0 两次），
+    # 建议"切换修复视角"（如从最小改动切到根因修复）
+    # 注意：本函数只负责"追加轨迹"，保持返回轨迹列表的历史口径；
+    # 策略建议由调用方（_executor_node）单独经 _suggest_iteration_strategy 计算
+    # 并写入 state["iteration_strategy_suggestion"]（观测层，不参与路由）
+    trace = _append_trace_record(
+        state,
+        trace,
+        passed=passed,
+        coverage=coverage,
+        coverage_delta=coverage_delta,
+        elapsed_seconds=elapsed_seconds,
+    )
     return trace
+
+
+def _append_trace_record(
+    state: AITesterState,
+    trace: list[dict[str, Any]],
+    passed: bool,
+    coverage: float,
+    coverage_delta: float | None,
+    elapsed_seconds: float,
+) -> list[dict[str, Any]]:
+    """把本次执行记录追加到轨迹列表（3.2 观测层，写入失败不阻断主流程）。"""
+    reward_signals = _compute_reward_signals(passed, coverage_delta, elapsed_seconds)
+    trace.append(
+        {
+            "iteration": state.get("iteration", 0),
+            "passed": passed,
+            "coverage": coverage,
+            "coverage_delta": coverage_delta,
+            "elapsed_seconds": elapsed_seconds,
+            "reward_signals": reward_signals,
+        }
+    )
+    return trace
+
+
+def _compute_reward_signals(
+    passed: bool, coverage_delta: float | None, elapsed_seconds: float
+) -> dict[str, float]:
+    """计算多维度奖励信号（3.2 保守线性归一，供执行反馈 RL 备料）。
+
+    Args:
+        passed: 测试是否通过。
+        coverage_delta: 相对上一轮覆盖率变化（首轮为 None）。
+        elapsed_seconds: 本次执行耗时（秒）。
+
+    Returns:
+        {"correctness": 0.0-1.0, "efficiency": 0.0-1.0,
+         "simplicity": 0.0-1.0} 的保守归一奖励信号。
+    """
+    correctness = 1.0 if passed else 0.0
+    # efficiency/simplicity 沿用历史口径（基于 EXECUTION_TIMEOUT 的线性归一），
+    # 不改变奖励信号定义（避免影响历史实验数据可比性）
+    efficiency = max(0.0, round(1.0 - elapsed_seconds / EXECUTION_TIMEOUT, 3))
+    simplicity = max(0.0, round(1.0 - elapsed_seconds / (EXECUTION_TIMEOUT * 2.0), 3))
+    return {
+        "correctness": round(correctness, 4),
+        "efficiency": efficiency,
+        "simplicity": simplicity,
+    }
+
+
+def _suggest_iteration_strategy(
+    trace: list[dict[str, Any]], coverage_delta: float | None
+) -> str | None:
+    """3.2 改进：基于历史轨迹动态调整后续迭代策略（纯观测层建议）。
+
+    Args:
+        trace: 完整执行轨迹（含本次，已追加）。
+        coverage_delta: 本次覆盖率变化。
+
+    Returns:
+        策略建议字符串（None 表示无需调整，保持默认）：
+        - "lower_temperature": 前 2 轮覆盖率持续下降，建议降低温度收紧提示；
+        - "switch_repair_view": 覆盖率停滞 2 轮，建议切换修复视角；
+        - "keep": 无需调整。
+    """
+    if len(trace) < 2:
+        return None  # 首轮无历史，不调整
+    recent_deltas = [t.get("coverage_delta") for t in trace[-3:-1] if t.get("coverage_delta") is not None]
+    if not recent_deltas:
+        return None
+    declining = all(d < 0 for d in recent_deltas[-2:]) if len(recent_deltas) >= 2 else False
+    stagnant = all(abs(d) < 0.5 for d in recent_deltas[-2:]) if len(recent_deltas) >= 2 else False
+    if declining:
+        return "lower_temperature"
+    if stagnant:
+        return "switch_repair_view"
+    return None
 
 
 def _debugger_node(state: AITesterState) -> dict[str, Any]:
@@ -550,6 +643,10 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     无有效候选（全静态拒绝 / 执行全失败）时回退到 state 中的单补丁，
     保证多候选策略不会比原单补丁路径更差（只多不少）。
 
+    5.2 持续细化：把多候选统计写入 state["multi_candidate_stats"]
+    （candidates / static_passed / exec_validated / selected），供
+    refine_failure_category 识别 MULTI_CANDIDATE_ALL_REJECTED 类别。
+
     执行验证开关：环境变量 MULTI_CANDIDATE_EXEC_VALIDATE=true 时启用
     逐候选跑测试（成本更高但筛选更准），默认关闭走纯静态筛选。
 
@@ -584,17 +681,26 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         use_execution_validation=use_exec,
         executor=executor,
     )
+    static_passed_count = sum(1 for c in candidates if c.static_passed)
     _trace_node(
         "multi_candidate",
         output_summary={
             "candidates": len(candidates),
-            "static_passed": sum(1 for c in candidates if c.static_passed),
+            "static_passed": static_passed_count,
             "exec_validated": use_exec,
             "selected": (best.index if best else None),
         },
         decision=f"selected_{best.index + 1}" if best else "fallback_single",
         iteration=state.get("iteration", 0),
     )
+    # 5.2 持续细化：记录多候选统计（供 refine_failure_category 识别
+    # MULTI_CANDIDATE_ALL_REJECTED：candidates>0 且 static_passed==0）
+    state["multi_candidate_stats"] = {
+        "candidates": len(candidates),
+        "static_passed": static_passed_count,
+        "exec_validated": use_exec,
+        "selected": best.index if best else None,
+    }
     if best is None:
         # 多候选全部失败 → 回退到单补丁（保持历史行为，不引入劣化）
         logger.info("多候选无有效补丁，回退到单补丁流程")
