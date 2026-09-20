@@ -242,7 +242,8 @@ class TestVenvCacheMonitoring:
         import src.tools.dependency as dep
 
         monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "venvs"))
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(tmp_path / "venvs" / "cache_stats.json"))
+        # 4.4 改进：_VENV_CACHE_STATS_FILE 改为动态函数（跟随 _VENV_CACHE_DIR），
+        # 无需再单独 monkeypatch
         # 重置进程内统计
         with dep._venv_cache_stats_lock:
             dep._venv_cache_stats["hits"] = 0

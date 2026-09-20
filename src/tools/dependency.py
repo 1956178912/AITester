@@ -302,15 +302,22 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
 # ─── 4.4 venv 缓存监控与清理 ────────────────────────────────────────────────────
 # 命中率统计：进程内累计 hit/create 事件；落盘 JSON 供跨进程聚合
 # （~/.cache/aitester/venvs/cache_stats.json）
-_VENV_CACHE_STATS_FILE = os.path.join(_VENV_CACHE_DIR, "cache_stats.json")
+# 4.4 改进：_VENV_CACHE_STATS_FILE 改为函数内动态计算（基于当前 _VENV_CACHE_DIR），
+# 而非模块级常量——此前模块级常量在 import 时固化，导致 monkeypatch 测试隔离
+# 缓存目录时落盘路径仍指向真实 ~/.cache/aitester，污染生产统计文件。
 _venv_cache_stats_lock = __import__("threading").Lock()
 _venv_cache_stats: dict[str, Any] = {"hits": 0, "creates": 0, "last_event_at": None}
+
+
+def _venv_cache_stats_file() -> str:
+    """动态返回缓存统计文件路径（跟随 _VENV_CACHE_DIR，便于测试隔离）。"""
+    return os.path.join(_VENV_CACHE_DIR, "cache_stats.json")
 
 
 def _load_cache_stats() -> dict[str, Any]:
     """读取落盘的缓存统计（不存在或损坏时返回零值）。"""
     try:
-        with open(_VENV_CACHE_STATS_FILE, encoding="utf-8") as f:
+        with open(_venv_cache_stats_file(), encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
             return {
@@ -338,9 +345,10 @@ def _persist_cache_stats() -> None:
     }
     _venv_cache_stats["hits"] = 0
     _venv_cache_stats["creates"] = 0
+    stats_file = _venv_cache_stats_file()
     try:
-        os.makedirs(os.path.dirname(_VENV_CACHE_STATS_FILE), exist_ok=True)
-        with open(_VENV_CACHE_STATS_FILE, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(stats_file), exist_ok=True)
+        with open(stats_file, "w", encoding="utf-8") as f:
             json.dump(merged, f)
     except OSError as e:
         logger.debug("venv 缓存统计落盘失败（不影响主流程）: %s", e)
@@ -465,6 +473,55 @@ def clear_venv_cache(max_age_days: int | None = None, max_size_mb: int | None = 
         else:
             kept.append(entry)
     return {"removed": removed, "kept": kept, "freed_mb": round(freed_mb, 2)}
+
+
+# ─── 4.4 缓存容量监控与告警 ─────────────────────────────────────────────────────
+# 缓存总容量告警阈值（MB，4.4 改进）：当 venv 缓存目录总大小超过该值时
+# 输出 WARNING（提示用户执行 clear_venv_cache 清理，避免占满磁盘）。
+# 默认 5120 MB（5GB，来源：用户经验值"超过 5GB 就该清理"）。
+_VENV_CACHE_SIZE_WARN_MB = 5120
+
+
+def get_venv_cache_size_mb() -> float:
+    """统计 venv 缓存目录总大小（MB，4.4 容量监控）。
+
+    Returns:
+        缓存目录总大小（MB）；目录不存在时返回 0.0。
+    """
+    if not os.path.isdir(_VENV_CACHE_DIR):
+        return 0.0
+    return _dir_size_mb(_VENV_CACHE_DIR)
+
+
+def check_venv_cache_size() -> dict[str, Any]:
+    """检查 venv 缓存容量，超过阈值时输出 WARNING 告警（4.4 改进）。
+
+    设计口径：本函数是"监控"而非"动作"——只告警不自动清理，
+    避免在实验运行中意外删除正在使用的 venv。调用方（如 CI 定时任务、
+    analyze_results 汇总输出）定期调用本函数即可在容量超限时收到提示。
+
+    Returns:
+        {"size_mb": 当前总大小, "threshold_mb": 告警阈值, "exceeded": 是否超限,
+         "recommendation": 超限时的清理建议字符串（未超限时为空串）}
+    """
+    size_mb = get_venv_cache_size_mb()
+    exceeded = size_mb > _VENV_CACHE_SIZE_WARN_MB
+    if exceeded:
+        logger.warning(
+            "venv 缓存目录总大小 %.0f MB 超过告警阈值 %d MB，"
+            "建议执行 clear_venv_cache(max_age_days=7) 清理过期缓存",
+            size_mb,
+            _VENV_CACHE_SIZE_WARN_MB,
+        )
+        recommendation = f"venv 缓存 {size_mb:.0f}MB > 阈值 {_VENV_CACHE_SIZE_WARN_MB}MB，建议 clear_venv_cache(max_age_days=7)"
+    else:
+        recommendation = ""
+    return {
+        "size_mb": round(size_mb, 2),
+        "threshold_mb": _VENV_CACHE_SIZE_WARN_MB,
+        "exceeded": exceeded,
+        "recommendation": recommendation,
+    }
 
 
 def install_packages(

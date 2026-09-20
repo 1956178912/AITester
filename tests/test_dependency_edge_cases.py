@@ -96,14 +96,12 @@ class TestPersistCacheStatsOSError:
 
     def test_persist_oserror_swallowed(self, tmp_path, monkeypatch):
         monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "venvs"))
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(tmp_path / "venvs" / "cache_stats.json"))
         # 统计文件路径指向只读目录（POSIX）→ open 抛 PermissionError(OSError)
         ro_dir = tmp_path / "ro"
         ro_dir.mkdir()
         os.chmod(ro_dir, 0o555)
         try:
-            monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(ro_dir / "cache_stats.json"))
-            monkeypatch.setattr(dep, "_VENV_CACHE_STATS_DIR", str(ro_dir), raising=False)
+            monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(ro_dir))
             dep._venv_cache_stats["hits"] = 1
             # 不应抛出
             dep._persist_cache_stats()
@@ -117,7 +115,6 @@ class TestListVenvCacheEdgeCases:
     @pytest.fixture
     def cache_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "venvs"))
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(tmp_path / "venvs" / "cache_stats.json"))
         return tmp_path / "venvs"
 
     def test_non_dir_entries_skipped(self, cache_dir):
@@ -165,7 +162,6 @@ class TestClearVenvCacheEdgeCases:
     @pytest.fixture
     def cache_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "venvs"))
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(tmp_path / "venvs" / "cache_stats.json"))
         return tmp_path / "venvs"
 
     def test_missing_cache_dir_returns_empty(self, cache_dir):
@@ -200,11 +196,13 @@ class TestLoadCacheStatsCorrupted:
     def test_corrupted_json_returns_zero(self, tmp_path, monkeypatch):
         stats_file = tmp_path / "stats.json"
         stats_file.write_text("{not valid json")
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(stats_file))
+        # 4.4 改进：_venv_cache_stats_file 动态读 _VENV_CACHE_DIR，
+        # 设缓存目录为 stats_file 的父目录使路径一致
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path))
         assert dep._load_cache_stats() == {"hits": 0, "creates": 0, "last_event_at": None}
 
     def test_non_dict_json_returns_zero(self, tmp_path, monkeypatch):
         stats_file = tmp_path / "stats.json"
         stats_file.write_text("[1, 2, 3]")
-        monkeypatch.setattr(dep, "_VENV_CACHE_STATS_FILE", str(stats_file))
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path))
         assert dep._load_cache_stats() == {"hits": 0, "creates": 0, "last_event_at": None}
