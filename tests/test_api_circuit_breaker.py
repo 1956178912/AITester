@@ -69,6 +69,64 @@ class TestExponentialBackoff:
         assert health.circuit_open_count == 0
         assert health.in_circuit_open is False
 
+    def test_circuit_backoff_disabled_uses_fixed_cooldown(self, monkeypatch):
+        """0.6 幽灵开关实装：API_CIRCUIT_BACKOFF=false 时冷却期恒为固定基础值。"""
+        import time as _time
+
+        import config
+        import src.api.api_health as ah
+
+        monkeypatch.setattr(config, "API_CIRCUIT_BACKOFF", False)
+        monkeypatch.setattr(ah, "API_CIRCUIT_BACKOFF", False)
+
+        health = _make_health(max_consecutive_failures=1, circuit_cooldown_seconds=10.0)
+        t0 = _time.monotonic()
+        health.mark_failure()
+        assert health.circuit_open_count == 1
+        first_cooldown = health.circuit_open_until - t0
+        # 固定冷却 ≈ 基础值 10s（不随 open_count 指数增长）
+        assert first_cooldown < 12.0, f"首次冷却应≈基础值 10s，实际 {first_cooldown:.1f}s"
+
+        # 模拟半开探测失败（第二次熔断，open_count=1）
+        health.circuit_open_until = _time.monotonic() - 1.0
+        t1 = _time.monotonic()
+        health._probe_circuit_half_open(False)
+        assert health.circuit_open_count == 2
+        second_cooldown = health.circuit_open_until - t1
+        # 开关关：第二次仍≈固定基础值（不膨胀到 20s）
+        assert second_cooldown < 12.0, f"固定冷却模式下第二次冷却仍应≈10s，实际 {second_cooldown:.1f}s"
+
+    def test_circuit_backoff_enabled_grows_exponentially(self, monkeypatch):
+        """0.6：API_CIRCUIT_BACKOFF=true（默认）时半开探测失败冷却期指数增长。"""
+        import time as _time
+
+        import config
+        import src.api.api_health as ah
+
+        monkeypatch.setattr(config, "API_CIRCUIT_BACKOFF", True)
+        monkeypatch.setattr(ah, "API_CIRCUIT_BACKOFF", True)
+
+        health = _make_health(
+            max_consecutive_failures=1,
+            circuit_cooldown_seconds=10.0,
+            half_open_probe_penalty_cap_seconds=1000.0,  # 放大上限，避免被封顶
+        )
+        health.mark_failure()
+        assert health.circuit_open_count == 1
+        # 半开探测失败（open_count=1 → 冷却 10*2^1=20s）
+        health.circuit_open_until = _time.monotonic() - 1.0
+        t0 = _time.monotonic()
+        health._probe_circuit_half_open(False)
+        assert health.circuit_open_count == 2
+        cooldown_2 = health.circuit_open_until - t0
+        # 再失败（open_count=2 → 冷却 10*2^2=40s）
+        health.circuit_open_until = _time.monotonic() - 1.0
+        t1 = _time.monotonic()
+        health._probe_circuit_half_open(False)
+        cooldown_3 = health.circuit_open_until - t1
+        # 指数增长：第 2 次（≈20s）< 第 3 次（≈40s）
+        assert cooldown_2 < cooldown_3, f"应指数增长：{cooldown_2:.1f}s ≥ {cooldown_3:.1f}s"
+
 
 class TestHalfOpenProbe:
     """半开探测行为测试。"""
@@ -126,11 +184,21 @@ class TestHalfOpenProbe:
 
 
 class TestPrometheusExport:
-    """Prometheus 指标文本导出格式测试。"""
+    """Prometheus 指标文本导出格式测试。
 
-    def test_export_contains_seven_metric_lines_per_node(self):
+    0.6 幽灵开关实装：to_prometheus_text 读取 config.API_PROMETHEUS_EXPORT
+    （默认 false → 空串），测试用 monkeypatch 打开开关覆盖行为。
+    """
+
+    def _enable_export(self, monkeypatch) -> None:
+        import config
+
+        monkeypatch.setattr(config, "API_PROMETHEUS_EXPORT", True)
+
+    def test_export_contains_seven_metric_lines_per_node(self, monkeypatch):
         from src.api.api_manager import APIManager
 
+        self._enable_export(monkeypatch)
         manager = APIManager(enable_health_checker=False)
         if not manager.health_nodes:
             import pytest
@@ -158,9 +226,10 @@ class TestPrometheusExport:
         # 节点 model 标签出现
         assert f'model="{first_name}"' in text
 
-    def test_export_help_and_type_lines(self):
+    def test_export_help_and_type_lines(self, monkeypatch):
         from src.api.api_manager import APIManager
 
+        self._enable_export(monkeypatch)
         manager = APIManager(enable_health_checker=False)
         text = manager.to_prometheus_text()
         assert "# HELP" in text
@@ -169,9 +238,10 @@ class TestPrometheusExport:
         assert text.count("# HELP") == 7
         assert text.count("# TYPE") == 7
 
-    def test_export_empty_when_no_nodes(self):
+    def test_export_empty_when_no_nodes(self, monkeypatch):
         from src.api.api_manager import APIManager
 
+        self._enable_export(monkeypatch)
         manager = APIManager(enable_health_checker=False)
         # 清空节点
         manager.health_nodes.clear()
@@ -179,6 +249,15 @@ class TestPrometheusExport:
         # 无节点时仍输出 HELP/TYPE 头（7 指标），但无数据行
         data_lines = [line for line in text.splitlines() if line and not line.startswith("#")]
         assert data_lines == []
+
+    def test_export_disabled_returns_empty(self, monkeypatch):
+        """0.6：API_PROMETHEUS_EXPORT=false（默认）时 to_prometheus_text 返回空串。"""
+        import config
+        from src.api.api_manager import APIManager
+
+        monkeypatch.setattr(config, "API_PROMETHEUS_EXPORT", False)
+        manager = APIManager(enable_health_checker=False)
+        assert manager.to_prometheus_text() == ""
 
 
 class TestGetStatusNewFields:

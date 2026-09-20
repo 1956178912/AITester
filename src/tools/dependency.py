@@ -304,6 +304,11 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
 # 而非模块级常量——此前模块级常量在 import 时固化，导致 monkeypatch 测试隔离
 # 缓存目录时落盘路径仍指向真实 ~/.cache/aitester，污染生产统计文件。
 _venv_cache_stats_lock = __import__("threading").Lock()
+# 0.6 P0-2：独立的落盘锁。计数锁（_venv_cache_stats_lock）只做内存累计（ns 级临界区，
+# venv 命中热路径不排队）；落盘锁（_venv_cache_persist_lock）保护
+# "读磁盘 → 快照内存 → 清零内存 → 写磁盘"整段（lost-update 安全）——
+# 两个锁分开，磁盘 IO 不再阻塞并发 worker 的计数，计数与落盘各自原子。
+_venv_cache_persist_lock = __import__("threading").Lock()
 _venv_cache_stats: dict[str, Any] = {"hits": 0, "creates": 0, "last_event_at": None}
 
 
@@ -329,20 +334,39 @@ def _load_cache_stats() -> dict[str, Any]:
 
 
 def _persist_cache_stats() -> None:
-    """把进程内统计合并写回落盘 JSON。
+    """把进程内统计合并写回落盘 JSON（0.6 P0-2：独立落盘锁，锁外执行）。
 
-    注意：本函数假设调用方已持有 _venv_cache_stats_lock（_record_venv_cache_event
-    与 get_venv_cache_stats 均在锁内调用），因此不再二次加锁——threading.Lock
-    不可重入，自嵌套会死锁挂起进程（09-14 4.4 批次踩坑）。
+    0.6 轮次性能审计修复 + 正确性护栏：此前本函数在 _venv_cache_stats_lock
+    内被调用，锁持有期间做 json.load + os.makedirs + json.dump 磁盘 IO
+    （~2-5ms/事件），--parallel 下所有 worker 线程在 venv 命中热路径上争
+    这把全局锁，临界区排队放大。现改为两把锁分离：
+    - 计数锁（_venv_cache_stats_lock）：只做内存累计（ns 级临界区）；
+    - 落盘锁（_venv_cache_persist_lock）：保护"读磁盘 → 快照内存 → 清零
+      内存 → 写磁盘"整段，lost-update 安全（此前简单移到计数锁外会让
+      两个并发 persist 各自读旧磁盘值、各自清零内存，50+50 事件被合并
+      成 50，并发压测下大量丢失）。
+
+    本函数不加计数锁（调用方在锁外调用）；快照内存清零一步本身仍持
+    计数锁做（保证清零与快照原子，防止清零后被其他线程累加的计数被
+    下一次 persist 重复计入或丢失）。
     """
+    with _venv_cache_stats_lock:
+        # 原子地"快照 + 清零"（防止快照后被其他线程累加的计数既不被本次
+        # 写入、又被下次 persist 重复计入）
+        mem_hits = _venv_cache_stats["hits"]
+        mem_creates = _venv_cache_stats["creates"]
+        last_event_at = _venv_cache_stats["last_event_at"]
+        _venv_cache_stats["hits"] = 0
+        _venv_cache_stats["creates"] = 0
+        _venv_cache_stats["last_event_at"] = last_event_at
+    if mem_hits == 0 and mem_creates == 0:
+        return
     disk = _load_cache_stats()
     merged = {
-        "hits": disk.get("hits", 0) + _venv_cache_stats["hits"],
-        "creates": disk.get("creates", 0) + _venv_cache_stats["creates"],
-        "last_event_at": _venv_cache_stats["last_event_at"],
+        "hits": disk.get("hits", 0) + mem_hits,
+        "creates": disk.get("creates", 0) + mem_creates,
+        "last_event_at": last_event_at,
     }
-    _venv_cache_stats["hits"] = 0
-    _venv_cache_stats["creates"] = 0
     stats_file = _venv_cache_stats_file()
     try:
         os.makedirs(os.path.dirname(stats_file), exist_ok=True)
@@ -353,35 +377,51 @@ def _persist_cache_stats() -> None:
 
 
 def _record_venv_cache_event(kind: str) -> None:
-    """记录一次缓存事件（hit/create）到进程内统计并落盘。"""
+    """记录一次缓存事件（hit/create）到进程内统计并落盘（0.6 P0-2：双锁分离）。
+
+    计数锁临界区只做内存累计（ns 级，venv 命中热路径不排队）；
+    落盘走独立 _venv_cache_persist_lock（保护读磁盘/快照/写磁盘整段，
+    磁盘 IO 不阻塞计数控）。最坏情形：落盘锁竞争时事件暂存内存，
+    由后续任一 persist 合并写入（计数不丢失）。
+    """
     with _venv_cache_stats_lock:
         if kind == "hit":
             _venv_cache_stats["hits"] += 1
         elif kind == "create":
             _venv_cache_stats["creates"] += 1
         _venv_cache_stats["last_event_at"] = time.time()
+    # 落盘在计数锁外执行；独立落盘锁保证 lost-update 安全
+    with _venv_cache_persist_lock:
         _persist_cache_stats()
 
 
 def get_venv_cache_stats() -> dict[str, Any]:
-    """返回 venv 缓存命中率统计（4.4）。
+    """返回 venv 缓存命中率统计（4.4；0.6 P0-2：锁外落盘读 + 双锁合并）。
+
+    读磁盘（_load_cache_stats）不在任何锁内（纯只读，无竞争）；
+    快照内存持计数锁（原子读，防读到清零中途）；两者相加得总值。
+    与 _persist_cache_stats 的"快照+清零"用同一把计数锁互斥，
+    保证读值稳定（不会出现"读到清零前/后"的撕裂值）。
 
     Returns:
         {"hits": int, "creates": int, "total": int,
          "hit_rate": float（hits/(hits+creates)，0.0 当 total=0）,
          "last_event_at": float | None}
     """
+    disk = _load_cache_stats()
     with _venv_cache_stats_lock:
-        disk = _load_cache_stats()
-        hits = disk.get("hits", 0) + _venv_cache_stats["hits"]
-        creates = disk.get("creates", 0) + _venv_cache_stats["creates"]
+        mem_hits = _venv_cache_stats["hits"]
+        mem_creates = _venv_cache_stats["creates"]
+        last_event_at = _venv_cache_stats["last_event_at"]
+    hits = disk.get("hits", 0) + mem_hits
+    creates = disk.get("creates", 0) + mem_creates
     total = hits + creates
     return {
         "hits": hits,
         "creates": creates,
         "total": total,
         "hit_rate": round(hits / total, 4) if total else 0.0,
-        "last_event_at": disk.get("last_event_at"),
+        "last_event_at": last_event_at or disk.get("last_event_at"),
     }
 
 

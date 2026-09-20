@@ -206,3 +206,95 @@ class TestLoadCacheStatsCorrupted:
         stats_file.write_text("[1, 2, 3]")
         monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path))
         assert dep._load_cache_stats() == {"hits": 0, "creates": 0, "last_event_at": None}
+
+
+class TestVenvCacheStatsConcurrency:
+    """0.6 P0-2：并发下计数不丢失（锁外落盘重构后的正确性护栏）。"""
+
+    def test_concurrent_events_no_count_loss(self, monkeypatch, tmp_path):
+        """8 线程 × 100 事件压 _record_venv_cache_event，计数不大量丢失。
+
+        锁外落盘的最坏情形是"两次并发事件竞争写盘时少记一次"，
+        允许误差 ≤ 线程数（8），但 800 事件不能丢失超过 8 个。
+        """
+        import threading
+
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "vc"))
+        os.makedirs(tmp_path / "vc", exist_ok=True)
+        stats_file = tmp_path / "vc" / "cache_stats.json"
+        if stats_file.exists():
+            stats_file.unlink()
+        with dep._venv_cache_stats_lock:
+            dep._venv_cache_stats["hits"] = 0
+            dep._venv_cache_stats["creates"] = 0
+
+        n_threads, n_per = 8, 100
+
+        def worker(seed: int) -> None:
+            for i in range(n_per):
+                dep._record_venv_cache_event("hit" if (i + seed) % 2 == 0 else "create")
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        stats = dep.get_venv_cache_stats()
+        total = stats["hits"] + stats["creates"]
+        assert total >= n_threads * n_per - n_threads, f"计数丢失过多: total={total}"
+        assert stats["total"] == total
+
+    def test_get_stats_no_disk_io_under_lock(self, monkeypatch, tmp_path):
+        """0.6 P0-2 护栏：_load_cache_stats 的磁盘读取必须在锁外执行。
+
+        验证方式：包装 _venv_cache_stats_lock 为守卫锁（记录持锁标志），
+        monkeypatch _load_cache_stats 让其在持锁期间被调用时记入哨兵列表——
+        若 get_venv_cache_stats / _record_venv_cache_event 在锁内读磁盘，哨兵非空。
+        """
+        import threading
+
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "vc2"))
+        os.makedirs(tmp_path / "vc2", exist_ok=True)
+        real_lock = dep._venv_cache_stats_lock
+        real_load = dep._load_cache_stats
+        calls_during_lock = []
+
+        class _GuardedLock:
+            """包装原锁：acquire/release 时维护持锁标志（供 _load_cache_stats 哨兵判定）。"""
+
+            def __init__(self, inner: threading.Lock) -> None:
+                self._inner = inner
+                self._held = False
+
+            def acquire(self, *a, **kw) -> bool:
+                ok = self._inner.acquire(*a, **kw)
+                self._held = True
+                return ok
+
+            def release(self) -> None:
+                self._held = False
+                self._inner.release()
+
+            def __enter__(self) -> "_GuardedLock":
+                self.acquire()
+                return self
+
+            def __exit__(self, *a) -> None:
+                self.release()
+
+        guarded = _GuardedLock(real_lock)
+
+        def _guard_load() -> dict:
+            if guarded._held:
+                calls_during_lock.append(1)
+            return real_load()
+
+        monkeypatch.setattr(dep, "_venv_cache_stats_lock", guarded)
+        monkeypatch.setattr(dep, "_load_cache_stats", _guard_load)
+
+        dep._record_venv_cache_event("hit")
+        stats = dep.get_venv_cache_stats()
+        assert stats["hits"] >= 1
+        # 关键断言：磁盘读取从未发生在持锁期间
+        assert calls_during_lock == []

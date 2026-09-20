@@ -608,7 +608,15 @@ class APIManager:
         }
 
     def to_prometheus_text(self) -> str:
-        """4.4 改进：把当前 API 节点状态导出为 Prometheus 文本格式。
+        """4.4 改进 + 0.6 接 API_PROMETHEUS_EXPORT 开关：导出 Prometheus 文本格式。
+
+        0.6 幽灵开关实装：此前 .env.example / QUICKSTART / api_reference /
+        reproduce.sh / README / CHANGELOG 六处文档描述 API_PROMETHEUS_EXPORT
+        为"启用后导出指标"的开关，但全仓无代码读取点（to_prometheus_text
+        无条件输出）。现经 config 集中声明后由本方法读取：
+        - 开关关（默认 false，保持历史行为）：返回空字符串（端点可用但
+          无指标输出，纯旁路不影响路由）；
+        - 开关开（true）：导出 7 类指标供监控抓取。
 
         导出指标（纯旁路，不影响路由行为）：
         - aitester_api_health{model="..."}: 1=健康, 0=不健康
@@ -619,9 +627,14 @@ class APIManager:
         - aitester_api_success_rate{model="..."}: 节点成功率
         - aitester_api_avg_response_time_ms{model="..."}: 平均响应时间
 
-        用法：HTTP 端点 /metrics 定期调用本方法，或在 CI 监控脚本中
-        导出到 Prometheus textfile collector。无节点时返回空字符串。
+        用法：HTTP 端点 /metrics 定期调用本方法（需先设
+        API_PROMETHEUS_EXPORT=true），或在 CI 监控脚本中导出到 Prometheus
+        textfile collector。无节点或开关关闭时返回空字符串。
         """
+        from config import API_PROMETHEUS_EXPORT
+
+        if not API_PROMETHEUS_EXPORT:
+            return ""
         status = self.get_status()
         lines: list[str] = []
         # 帮助文本（供 Prometheus 识别指标语义）

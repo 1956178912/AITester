@@ -31,6 +31,7 @@ from src.agents.llm_client import (
     _llm_cache_enabled,
     _record_response_usage,
     _redact_log_text,
+    _retry_with_exponential_backoff,
 )
 from src.tools.code_context import extract_focused_code
 from src.utils.helpers import _find_balanced_json, extract_code_block, extract_json_object
@@ -135,7 +136,9 @@ class BaseAgent:
         """
         调用 LLM 并返回文本响应。
         失败时进行最多 max_retries 次重试，采用指数退避策略（1s, 2s, 4s）。
-        若所有重试均失败，自动切换到备用 API 继续尝试。
+        OpenAI 兼容路径与 zai SDK 路径均套 _retry_with_exponential_backoff
+        （0.6 轮次 P0-1 修复：此前 OpenAI 路径单次调用零重试，网络抖动即触发
+        跨模型/跨 API 故障转移）；重试耗尽后自动切换到备用 API 继续尝试。
         支持 OpenAI 兼容接口和 zai SDK（BigModel）两种调用路径。
 
         Args:
@@ -180,20 +183,36 @@ class BaseAgent:
                         text = _call_zai(api_key, base_url, model_name, self.system_prompt, user_message, max_retries)
                     else:
                         # OpenAI 兼容接口：复用缓存的 ChatOpenAI 客户端（连接池跨调用复用）
+                        # P0-1 修复（0.6 轮次性能审计）：此前 llm.invoke 单次调用零重试——
+                        # 一次网络抖动/429 即跨模型切换或任务级失败。现套通用指数退避
+                        # （_retry_with_exponential_backoff，base_wait=1s：1s/2s/4s），
+                        # 语义与 zai 路径对齐；重试耗尽才进入故障转移。
                         llm = _get_or_create_chat_client(model_name, TEMPERATURE, api_key, base_url)
-                        response = llm.invoke(
-                            [
-                                SystemMessage(content=self.system_prompt),
-                                HumanMessage(content=user_message),
-                            ],
-                            timeout=LLM_TIMEOUT,
+
+                        def _invoke_openai(
+                            client: Any = llm,
+                            model: str = model_name,
+                        ) -> str:
+                            response = client.invoke(
+                                [
+                                    SystemMessage(content=self.system_prompt),
+                                    HumanMessage(content=user_message),
+                                ],
+                                timeout=LLM_TIMEOUT,
+                            )
+                            text_ = response.content.strip()
+                            # 空响应视为失败，触发重试（而非直接跨模型切换）
+                            if not text_:
+                                raise RuntimeError("LLM 返回空响应")
+                            # token 消耗统计（LangChain 响应的 usage_metadata，可能缺失）
+                            _record_response_usage(getattr(response, "usage_metadata", None), model)
+                            return text_
+
+                        text = _retry_with_exponential_backoff(
+                            _invoke_openai,
+                            max_retries,
+                            base_wait=1,
                         )
-                        text = response.content.strip()
-                        # 空响应视为失败，触发当前 API 的异常捕获并尝试下一个 API
-                        if not text:
-                            raise RuntimeError("LLM 返回空响应")
-                        # token 消耗统计（LangChain 响应的 usage_metadata，可能缺失）
-                        _record_response_usage(getattr(response, "usage_metadata", None), model_name)
 
                     # 打印成功日志
                     api_id = base_url.split("/")[2] if "/" in base_url else base_url

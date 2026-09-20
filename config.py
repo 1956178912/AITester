@@ -260,6 +260,21 @@ ENABLE_MUTATION_SCORING: bool = os.getenv("ENABLE_MUTATION_SCORING", "false").lo
 # 的上限口径，默认 10 控制单任务变异评估耗时；设为 0/负数时回退 10）
 MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 10, 1, None)
 
+# ─── 4.4 API 观测层开关（0.6 轮次幽灵开关实装）──────────────────────────────
+# 0.6 轮次性能/文档审计发现：.env.example / QUICKSTART / api_reference /
+# reproduce.sh / CHANGELOG / README 六处文档描述以下两个开关为"对比实验"
+# 能力（false 时回退 4.2 固定冷却期 / Prometheus 导出关闭），但全仓无任何
+# 代码读取点——用户设 false 不会发生任何事（幽灵开关）。现经 config 集中
+# 声明后由 api_health / api_manager 读取，文档承诺落地。
+# API_CIRCUIT_BACKOFF：熔断器指数退避开关（4.4）。默认 true（保持 4.4 行为，
+# 开启指数退避）；设 false 时熔断器使用固定冷却期（_CIRCUIT_COOLDOWN_S）
+# 作为 4.2 历史对照口径。
+API_CIRCUIT_BACKOFF: bool = os.getenv("API_CIRCUIT_BACKOFF", "true").lower() == "true"
+# API_PROMETHEUS_EXPORT：Prometheus 指标导出开关（4.4）。默认 false（保持
+# 历史行为：to_prometheus_text() 默认不输出指标，纯旁路不影响路由）；
+# 设 true 时 APIManager.to_prometheus_text() 导出 7 类指标供监控抓取。
+API_PROMETHEUS_EXPORT: bool = os.getenv("API_PROMETHEUS_EXPORT", "false").lower() == "true"
+
 # ─── RAG 检索增强配置 ────────────────────────────────────────────────────────
 # 持久化路径：默认项目根下 rag_data/（此前总是内存模式，进程重启数据全丢，
 # 跨实验运行的历史用例无法复用）。设为空字符串则回退内存模式。
