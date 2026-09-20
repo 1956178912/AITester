@@ -222,3 +222,40 @@ Construct 3 synthetic tasks in `experiments/results/`:
 | Single-file fallback not mentioned | The implementation adds `cross_file_fallback_single_file()`: when the cross-file multi-file application fails, only the patch for the entry module is applied | Guarantees "a cross-file failure is no worse than single-file", consistent with the 3.5 compatibility criteria |
 
 > The data structures (`CrossFileDependency` / `CrossFileRepairPlan`) and the configuration switches (default values of `CROSS_FILE_ENABLE` / `CROSS_FILE_MAX_MODULES`) are **field-by-field / default-value-by-default-value consistent** between design and implementation, with no deviations.
+
+## 8. 2.2 Improvement: Bidirectional Dependency Graph (`CROSS_FILE_BIDIRECTIONAL`, default false)
+
+> Kickoff date: 2026-09-20
+> Status: **Implemented** (this section, off by default `CROSS_FILE_BIDIRECTIONAL=false`)
+> Related list: Improvement list 2.2 (bidirectional dependency graph)
+
+### 8.1 Motivation
+
+`analyze_cross_file_deps` in §3 previously only collected one-way "entry → callee" dependency edges (caller perspective). In cross-file repair scenarios, if only the callee (entry) is patched, callers (other modules) may still fail after the interface changes — especially the "patch must synchronously update N callers" case (problem types 2/3 listed in §1.2). The bidirectional dependency graph additionally collects reverse "other module → entry" edges (callee perspective) so that the repair plan can synchronously update callers.
+
+### 8.2 Implementation
+
+- `analyze_cross_file_deps(entry_module, source_files, bidirectional=False)`: new `bidirectional` parameter (default False preserves the historical "single-entry perspective" baseline); when enabled, `_collect_reverse_deps` additionally collects reverse dependency edges "other modules import entry-module symbols" (`source_module=other module, target_module=entry module`), deduplicated and merged with the forward edges;
+- `_find_symbol_def_line(module_name, source_files, symbol)`: locates the symbol's definition line in module source code (matches `def symbol(` / `class symbol:` / `symbol =` — three patterns, 1-based, returns 0 if not found), for extracting call context on reverse edges;
+- `cross_file_bidirectional()`: environment variable switch `CROSS_FILE_BIDIRECTIONAL=true` enables it (default false, same conservative baseline as `cross_file_enabled()`);
+- Conservative baseline: only bidirectional analysis on modules directly related to entry (no recursive expansion of other modules' imports, to avoid dependency graph explosion); when entry is not in `source_files`, bidirectional analysis degrades to one-way (only entry's import edges).
+
+### 8.3 Topological Order Patch Application (Bidirectional Baseline)
+
+`apply_multi_file_patch` applies patches in topological order of the dependency graph (callee entry first, callers second) — already implemented in §3.3. In bidirectional mode, "caller" information is obtained directly from reverse edges (no LLM inference required); when `CROSS_FILE_BIDIRECTIONAL=false`, the conservative order from §3.3 applies (entry first, rest in lexicographic order by module name).
+
+### 8.4 Configuration Switch
+
+```python
+# 2.2 Improvement: cross-file bidirectional dependency graph switch
+# (default false, preserves the historical single-entry perspective baseline)
+CROSS_FILE_BIDIRECTIONAL: bool = os.getenv("CROSS_FILE_BIDIRECTIONAL", "false").lower() == "true"
+```
+
+`reproduce.sh` provides explicit `--cross-file` / `--no-cross-file` control of `CROSS_FILE_ENABLE` (default false preserves the historical single-file baseline); when `--cross-file` enables cross-file, `CROSS_FILE_BIDIRECTIONAL` still defaults to false (user must explicitly `export CROSS_FILE_BIDIRECTIONAL=true`), guaranteeing the two-level conservative switch "cross-file enabled ≠ bidirectional enabled".
+
+### 8.5 Compatibility Impact
+
+- `CROSS_FILE_BIDIRECTIONAL=false` (default): all path behavior unchanged;
+- `CROSS_FILE_BIDIRECTIONAL=true`: `analyze_cross_file_deps` additionally returns reverse dependency edges; `build_cross_file_repair_plan`'s repair plan covers caller modules (reverse edge source_module added to `target_modules`);
+- Tests: `tests/test_cross_file_bidirectional.py` (16 cases) covers one-way / bidirectional / dedup / env switch / symbol definition line.

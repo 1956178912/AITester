@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1460 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 40 条，1420 collected） |
-| **单元测试** | ✅ 全量 1460 passed, 0 skipped；精简环境 1420 passed, 40 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1548 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 45 条，1503 collected） |
+| **单元测试** | ✅ 全量 1548 passed, 45 skipped；精简环境 1503 passed, 45 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 96% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 100% / cli-app 93% / cli-output 94% / executor_imports 92% / executor_modes 96% / executor_output 96% / executor_runtime 96% / dependency 99% / multi_candidate 92% / cross_file 100% / mutation_testing 通过 test_smell_detection_v2 覆盖） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 0.2 代码质量优化轮次（RAG 降级守卫抽取 / 多函数补丁排序 O(n·m)→O(n+m) / 实验排名绑定修复 / 库名白名单 / 懒导入消除 / 脱敏双实现收敛 / 批量健康检查间隔可配，全量 1460 passed / 覆盖率 96%）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 0.4 五大章节系统能力增强轮次（评估指标深化 / 多维污染检测 / 跨文件双向依赖图 / 对抗性推理 / 熔断器指数退避 + Prometheus / venv 容量监控 / 递归脱敏 / 错误分类 14 类，全量 1548 passed / 零回归）；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%), mutation_testing.py (via test_smell_detection_v2) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-19 代码质量与可靠性优化轮次（0.2）：RAG 降级守卫抽取（`graph/rag.py` 新增依赖注入式 `rag_guarded`，统一 `nodes.py` 4 处同构模板，历史 patch 路径不变）；多函数补丁排序 O(n·m)→O(n+m)（`patch_applier.py` 预切分行复用）；实验排名绑定修复（`analysis.py` 按 name/value 绑定排序 + 新增乱序插入回归测试，全量 1459→1460）；数据库库名白名单（`init_db.py`，堵环境变量注入 SQL 向量）；懒导入消除（`base_agent.py`）；脱敏双实现收敛（`llm_client._redact_log_text` / `api_manager._redact`）；批量健康检查间隔提为可配置项 `APIManagerConfig.batch_health_check_interval`；tests/ 存量 Ruff 告警 24 条清理 + 1 处恒真断言修复；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-20 五大章节系统能力增强轮次（0.4）：1.1 评估指标深化（异味 EagerTest/LackOfCohesion + 收敛 token 效率 + 难度分层迭代 + 变异-断言交叉 + RAG token/相似度 + 根因趋势 + 污染交叉）；1.2 变异反馈闭环（boundary_shift/return_void + prompt 注入 + run_single_task 开关修复）；2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦 + 抗污染基准注册表）；2.2 跨文件双向依赖图（反向依赖边 + 符号定义行定位）；3.1 对抗性推理（AdverIntent + 批评者评估 + 补丁重生成）；3.2 执行反馈动态迭代策略 + 多候选行级信用分配（BOOSTAPR 式）；4.4 熔断器指数退避 + Prometheus 导出 + venv 缓存容量监控（5GB 阈值）；4.2 redact_dict 递归脱敏 + 降级路径补 JWT 拦截 + 注入回归 CI 用例；5.2 错误分类体系 12→14 类（EXECUTION_TRACE_MISSING + MULTI_CANDIDATE_ALL_REJECTED）；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -542,6 +542,61 @@ python experiments/compare_failures.py \
     --cross-batch-baseline aitester
 ```
 
+### 5.16 对抗性推理 + 双向依赖图 + 多维污染检测（3.1 / 2.2 / 2.1，默认关闭）
+本轮新增的三项能力，均以环境变量开关默认关闭保持历史实验口径，启用为显式行为：
+
+- **对抗性推理（3.1，`ADVERSARIAL_DEBUGGING_ENABLE`）**：Debugger 在生成补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设（AdverIntent-Agent 式），生成针对性测试；生成后独立"批评者"LLM 调用尝试构造击穿用例；被击穿则把负面反馈注入 prompt 重新生成一次补丁（仍失败保留当前并记录风险）。纯观测层，启用会增加 2-4 次 LLM 调用/修复轮。
+
+```bash
+# 启用对抗性推理（显式设置环境变量）
+ADVERSARIAL_DEBUGGING_ENABLE=true python main.py run examples/calculator.py
+```
+
+- **双向依赖图（2.2，`CROSS_FILE_BIDIRECTIONAL`）**：在 3.5 跨文件修复（§5.8）基础上额外收集"其他模块→entry"反向依赖边（被调用方视角），使修复计划能同步更新调用方模块。需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证"跨文件启用 ≠ 双向启用"两级保守。
+
+```bash
+# 启用跨文件 + 双向依赖图（两级开关）
+CROSS_FILE_ENABLE=true CROSS_FILE_BIDIRECTIONAL=true python main.py run examples/calculator.py
+```
+
+- **多维污染检测（2.1）**：在 token Jaccard 之外新增结构级（AST 语句骨架 LCS 比率）与语义级（token 词袋余弦，`_embed_code` 钩子可接 CodeBERT）两个维度，`patch_semantic_similarity` 输出三维相似度；`detect_contamination` 每任务输出 `risk_level`（取最严重维度）+ `contamination_summary`（污染 vs 无污染的各自成功率与 delta）；`render_resistant_benchmark_section` 注册 SWE-rebench 抗污染基准（交叉验证建议）。
+
+```bash
+# 多维污染检测（experiments/contamination_check.py）
+python experiments/contamination_check.py \
+    --gold-patches experiments/results/benchmark_xxx.json \
+    --output experiments/results/contamination_report.json
+```
+
+### 5.17 熔断器指数退避 + Prometheus 导出（4.4，默认开）
+`APIHealth` 的熔断器冷却期改按 `base * 2^open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`）：彻底死掉的 provider 冷却期单调增长（第 1 次 60s → 第 2 次 120s → 第 3 次 240s → …），避免反复短冷却打同一死点；`mark_success` 重置 `circuit_open_count`。`APIManager` 新增 `to_prometheus_text()` 导出 7 类 Prometheus 指标（health / circuit_state / open_remaining_s / open_count / probe_success_rate / success_rate / avg_response_ms）供监控抓取，纯旁路不影响既有路由行为。
+
+```bash
+# 启用 Prometheus 导出（显式设置环境变量）
+API_PROMETHEUS_EXPORT=true python main.py run examples/calculator.py
+# 回退 4.2 固定冷却期口径（便于对比实验）
+API_CIRCUIT_BACKOFF=false python main.py run examples/calculator.py
+```
+
+### 5.18 多维评估指标深化 + 变异反馈闭环（1.1 / 1.2）
+- **多维评估指标**（1.1，`experiments/analyze_results.py`）：测试异味检测扩展 Eager Test + Lack of Cohesion 两类 AST 口径，异味统计按策略分组，新增 `smell_density`（有异味任务占比）；新增收敛 token 效率（逐轮 token/边际收益）、难度分层迭代分布、变异-断言强度交叉一致性校验、RAG vs 无 RAG token/迭代对比 + 相似度直方图、三类失败根因占比与时间趋势、高/低污染风险成功率 delta。
+- **变异反馈闭环**（1.2，`experiments/mutation_testing.py` + `src/agents/generator.py`）：新增 `boundary_shift`（Gt↔GtE 边界语义变异）与 `return_void`（return X → return None）两类变异体；`build_mutation_feedback()` 把"存活变异体"打包成可注入 Generator prompt 的反馈字典（MutGen 式"变异引导测试增强"闭环）；`run_benchmark` 的 `--enable-mutation` 开关启用时把反馈写回结果行。
+
+```bash
+# 启用变异反馈闭环的 benchmark
+ENABLE_MUTATION_SCORING=true MUTATION_MAX_MUTANTS=10 \
+    python experiments/run_benchmark.py --dataset examples --baselines aitester --enable-mutation
+```
+
+### 5.19 错误分类体系扩展（5.2，14 类）
+`ErrorCategory` 由 12 类扩至 14 类，新增 `EXECUTION_TRACE_MISSING`（任务失败但 `execution_trace` 为空 = 执行器异常路径）与 `MULTI_CANDIDATE_ALL_REJECTED`（多候选全被静态筛选拒绝）；`refine_failure_category` 新增 `execution_trace` / `multi_candidate_stats` 参数，判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；`refine_final_error_category` 接线新字段；`get_fix_strategy` 补两类修复策略描述。
+
+```python
+from src.agents.error_classifier import refine_final_error_category
+
+category = refine_final_error_category(final_state)  # → 14 类之一
+```
+
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
 
@@ -847,6 +902,8 @@ docker run --rm \
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `CROSS_FILE_ENABLE` | 3.5 跨文件修复开关（协调器-提议者架构，默认关） | false |
 | `CROSS_FILE_MAX_MODULES` | 3.5 跨文件依赖分析最大模块数 | 5 |
+| `CROSS_FILE_BIDIRECTIONAL` | 2.2 跨文件双向依赖图开关（默认 false 保持单入口视角；启用时额外收集"其他模块→entry"反向依赖边，使修复计划能同步更新调用方模块；需配合 CROSS_FILE_ENABLE=true 生效） | false |
+| `ADVERSARIAL_DEBUGGING_ENABLE` | 3.1 对抗性推理开关（默认关；启用后 Debugger 生成补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设 + 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次补丁；观测层，不影响主修复路径） | false |
 | `ASSERTION_AUGMENT_ENABLE` | 3.4 断言增强策略（AST 提取现有 assert 注入 prompt，默认关） | false |
 
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
@@ -883,7 +940,11 @@ docker run --rm \
 | `MUTATION_MAX_MUTANTS` | 10 | 1.2 每任务最多评估的变异体数量（需配合 `ENABLE_MUTATION_SCORING=true` 生效） | 5.14 |
 | `EXECUTOR_USE_DOCKER` | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖；不可用时返回 `docker_unavailable` 诊断不降级本地） | 5.13 |
 | `EXECUTOR_DOCKER_IMAGE` | aitester:latest | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） | 5.13 |
-| `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5） | 5.8 |
+| `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5；`reproduce.sh --cross-file` 显式启用） | 5.8 |
+| `CROSS_FILE_BIDIRECTIONAL` | false | 2.2 跨文件双向依赖图（额外收集"其他模块→entry"反向依赖边，修复计划同步更新调用方；需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证"跨文件启用 ≠ 双向启用"两级保守） | 5.8 |
+| `ADVERSARIAL_DEBUGGING_ENABLE` | false | 3.1 对抗性推理（AdverIntent 式：生成补丁前注入 2-3 个对抗性意图假设 + 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次；纯观测层，默认关保持历史口径） | 5.16 |
+| `API_CIRCUIT_BACKOFF` | true | 4.4 API 熔断器指数退避开关（冷却期改按 `base * 2^open_count` 指数增长，彻底死掉的 provider 冷却期单调增长；`reproduce.sh` 显式透传，设 false 回退 4.2 固定冷却期口径便于对比实验） | 5.17 |
+| `API_PROMETHEUS_EXPORT` | false | 4.4 Prometheus 指标导出开关（启用后 `APIManager.to_prometheus_text()` 输出 7 类指标供 Prometheus 抓取；纯旁路，不影响既有路由行为；`reproduce.sh` 显式透传） | 5.17 |
 | `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
 
 详见 [QUICKSTART.md](QUICKSTART.md) 与 [.env.example](.env.example)。

@@ -126,15 +126,30 @@ python experiments/run_benchmark.py --dataset synthetic --enable-rag
 export CROSS_FILE_ENABLE=true
 export CROSS_FILE_MAX_MODULES=5
 
+# 2.2 跨文件双向依赖图（默认关，需配合 CROSS_FILE_ENABLE=true）：
+# 额外收集"其他模块→entry"反向依赖边（被调用方视角），使修复计划能同步
+# 更新调用方模块。两级保守开关：跨文件启用 ≠ 双向启用。
+export CROSS_FILE_BIDIRECTIONAL=true
+
 # 3.4 断言增强（默认关）：Generator 在生成前先 AST 提取被测代码中已有
 # assert 语句，作为"锚点断言"注入 prompt，避免断言弱化 / 恒真断言 / 魔数异味。
 export ASSERTION_AUGMENT_ENABLE=true
 
-# 3.2 对抗性推理（默认关）：Debugger 生成修复补丁前构思 2-3 个"可能让补丁
-# 失败的对抗性场景"（如边界条件对称、除零对称情况），自校验候选补丁是否
-# 通过每个场景；输出可选字段 adversarial_check（scenarios_checked / all_passed），
-# 缺省兜底为 {"scenarios_checked": 0, "all_passed": False}。
-# 无需额外开关，随 DEBUGGER_SYSTEM_PROMPT 默认生效（启用 DEBUGGER 即可）。
+# 3.1 对抗性推理（默认关，ADVERSARIAL_DEBUGGING_ENABLE）：Debugger 在生成
+# 补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设（AdverIntent-Agent 式），
+# 生成针对性测试；生成后独立"批评者"LLM 调用尝试构造击穿用例；被击穿则
+# 把负面反馈注入 prompt 重新生成一次补丁（仍失败保留当前并记录风险）。
+# 纯观测层，启用会增加 2-4 次 LLM 调用/修复轮。
+export ADVERSARIAL_DEBUGGING_ENABLE=true
+
+# 4.4 API 熔断器指数退避（默认开，API_CIRCUIT_BACKOFF）：冷却期改按
+# base*2^open_count 指数退避（彻底死掉的 provider 冷却期单调增长），
+# 设 false 回退 4.2 固定冷却期口径（便于对比实验）。
+export API_CIRCUIT_BACKOFF=false
+
+# 4.4 Prometheus 指标导出（默认关，API_PROMETHEUS_EXPORT）：启用后
+# APIManager.to_prometheus_text() 输出 7 类指标供 Prometheus 抓取。
+export API_PROMETHEUS_EXPORT=true
 
 # 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存 + 5.3 跨批次对比）：
 # 跑完 benchmark 后生成 Markdown 汇总，含成功率 / token 效率 / 迭代分布 / 失败原因分布 /

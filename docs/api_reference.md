@@ -313,6 +313,8 @@ install_packages(venv_python, ["pandas"], timeout=120)
 | `get_venv_cache_stats()` | 无 | `dict` | 4.4 依赖缓存命中率统计：进程内累计 hit/create 事件 + 落盘 JSON 跨进程聚合，返回 `hit_rate = hits/(hits+creates)` |
 | `list_venv_cache()` | 无 | `list[dict]` | 4.4 列出缓存目录所有 venv（name / path / size_mb / created_at） |
 | `clear_venv_cache()` | `max_age_days: int \| None`, `max_size_mb: int \| None` | `dict` | 4.4 按年龄 / 大小过滤清理缓存，两者均 None 时清空 |
+| `get_venv_cache_size_mb()` | 无 | `float` | 4.4 改进：统计 venv 缓存目录总大小（MB，保留 2 位小数，目录不存在返回 0.0） |
+| `check_venv_cache_size()` | 无 | `dict` | 4.4 改进：缓存容量监控，返回 `{size_mb, threshold_mb(5120), exceeded, recommendation}`；超过 5GB 阈值时 `exceeded=True` 并给出清理建议（只监控不自动清理） |
 
 ---
 
@@ -622,6 +624,10 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `ENABLE_RAG` | bool | false | 启用 RAG |
 | `CROSS_FILE_ENABLE` | bool | false | 3.5 跨文件修复：启用 `cross_file_analyzer` 节点（插在 executor→debugger 之间）+ 多文件补丁分支 |
 | `CROSS_FILE_MAX_MODULES` | int | 5 | 3.5 跨文件修复计划最大模块数（防 token 爆炸） |
+| `CROSS_FILE_BIDIRECTIONAL` | bool | false | 2.2 跨文件双向依赖图：`CROSS_FILE_ENABLE=true` 基础上额外收集"其他模块→entry"反向依赖边（被调用方视角），使修复计划同步更新调用方模块；需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证两级保守 |
+| `ADVERSARIAL_DEBUGGING_ENABLE` | bool | false | 3.1 对抗性推理：Debugger 生成补丁前注入 2-3 个"击穿当前实现"的对抗性意图假设（AdverIntent-Agent 式）+ 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次补丁；纯观测层，启用会增加 2-4 次 LLM 调用/修复轮 |
+| `API_CIRCUIT_BACKOFF` | bool | true | 4.4 API 熔断器指数退避开关：`mark_failure` 冷却期改按 `base * 2^open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的 provider 冷却期单调增长；设 false 回退 4.2 固定冷却期口径（便于对比实验） |
+| `API_PROMETHEUS_EXPORT` | bool | false | 4.4 Prometheus 指标导出开关：启用后 `APIManager.to_prometheus_text()` 输出 7 类指标（health / circuit_state / open_remaining_s / open_count / probe_success_rate / success_rate / avg_response_ms）供监控抓取；纯旁路不影响既有路由行为 |
 | `ASSERTION_AUGMENT_ENABLE` | bool | false | 3.4 断言增强：AST 提取被测代码现有 assert 注入 prompt |
 | `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 复现流程默认显式启用（`--no-multi-candidate` 可回退历史口径） |
 | `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`experiments/results/traces`） |
@@ -645,6 +651,8 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `batch_health_check_interval` | float | 0.1 | 批量健康检查节点间隔（秒）：串行探测时避免瞬时流量触发限流；0 表示纯串行排队（大节点池场景）；0.1 保持历史默认行为 |
 
 > 监控：`get_status()` 每节点输出 `circuit_open_remaining_s`（熔断冷却剩余秒）与 `circuit_state`（`closed` / `open` / `half_open` 三态，仅 `enable_half_open_probe=True` 时报告 half_open）。
+>
+> **4.4 指数退避 + Prometheus 导出**：`API_CIRCUIT_BACKOFF=true`（默认）时，`mark_failure` 冷却期改按 `base * 2^circuit_open_count` 指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的 provider 冷却期单调增长（60s → 120s → 240s → …），避免反复短冷却打同一死点；`mark_success` 重置 `circuit_open_count`。`get_status()` 额外暴露 `circuit_open_count` / `half_open_success` / `half_open_failure` / `half_open_probe_success_rate`。`API_PROMETHEUS_EXPORT=true`（默认 false）时，`APIManager.to_prometheus_text()` 导出 7 类 Prometheus 指标（`aitester_api_health` / `aitester_api_circuit_state` / `aitester_api_circuit_open_remaining_s` / `aitester_api_circuit_open_count` / `aitester_api_half_open_probe_success_rate` / `aitester_api_success_rate` / `aitester_api_avg_response_ms`）供监控抓取，纯旁路不影响既有路由行为。
 
 ---
 
@@ -704,6 +712,7 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| 0.4 | 2026-09-20 | 五大章节系统能力增强：1.1 评估指标深化（异味 EagerTest/LackOfCohesion + 收敛 token 效率 + 难度分层迭代 + 变异-断言交叉 + RAG token/相似度 + 根因趋势 + 污染交叉）；1.2 变异反馈闭环（boundary_shift/return_void 变异体 + prompt 注入 + run_single_task 开关修复）；2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦 + 抗污染基准注册表）；2.2 跨文件双向依赖图（反向依赖边 + 符号定义行定位，`CROSS_FILE_BIDIRECTIONAL` 默认 false）；3.1 对抗性推理（AdverIntent + 批评者评估 + 补丁重生成，`ADVERSARIAL_DEBUGGING_ENABLE` 默认 false）；3.2 执行反馈动态迭代策略 + 多候选行级信用分配（BOOSTAPR 式）；4.4 熔断器指数退避 + Prometheus 导出（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false）+ venv 缓存容量监控（5GB 阈值，只监控不自动清理）；4.2 redact_dict 递归脱敏 + 降级路径补 JWT 拦截 + 注入回归 CI 用例；5.2 错误分类体系 12→14 类（EXECUTION_TRACE_MISSING + MULTI_CANDIDATE_ALL_REJECTED）；全量 1548 测试通过 / 零回归 |
 | 0.2 | 2026-09-19 | 代码质量与可靠性优化轮次（无新功能，零功能破坏）：RAG 降级守卫抽取（`graph/rag.py` 新增依赖注入式 `rag_guarded`，统一 `nodes.py` 4 处同构模板，历史 patch 路径不变）；多函数补丁排序 O(n·m)→O(n+m)（`patch_applier.py` 新增 `_find_function_start_line_in_lines` 预切分行复用）；实验排名绑定修复（`experiments/analysis.py` 按 name/value 绑定排序 + 新增乱序插入回归测试，全量 1459→1460）；数据库库名白名单（`init_db.py`，堵环境变量注入 SQL 向量）；懒导入消除（`base_agent.py`）；脱敏双实现收敛（`llm_client._redact_log_text` / `api_manager._redact`）；批量健康检查间隔提为可配置项 `APIManagerConfig.batch_health_check_interval`；tests/ 存量 Ruff 告警 24 条清理 + 1 处恒真断言修复；`ruff check src/ tests/` 全绿 |
 | 0.1 | 2026-09-18 | 首个正式版本：四智能体协作架构（Planner/Generator/Executor/Debugger）+ 十二类错误分层修复 + 逻辑驱动 CoT；多基线对比（aitester/plain_llm/single_agent）+ SWE-bench/Defects4J-Python/合成数据集支持；SWE-bench 源码导出自动化 + 数据污染检测；统计检验（t 检验/Mann-Whitney U/Cohen's d）；结果分析层（修复收敛/边界覆盖/变异得分/断言强度/执行反馈轨迹）；内置变异测试生成器 + 测试异味检测；结构化 JSONL 追踪层；多候选补丁；成本感知路由 + 熔断冷却期 + 半开探测；跨文件修复；断言增强；Docker 隔离执行；依赖缓存监控 + clean-venv-cache CLI；Ruff + pre-commit + GitHub Actions CI；全量 1459 测试用例 / 覆盖率 96% |
 
