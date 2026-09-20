@@ -50,6 +50,17 @@ def cross_file_enabled() -> bool:
     return os.getenv(_CROSS_FILE_ENV_VAR, "false").lower() == "true"
 
 
+def cross_file_bidirectional() -> bool:
+    """2.2 改进：双向依赖图开关（CROSS_FILE_BIDIRECTIONAL=true 时启用，默认 false）。
+
+    启用后 analyze_cross_file_deps 额外收集"其他模块 → entry_module"的
+    反向依赖边（被调用方视角），形成双向依赖图，跨文件修复时能同步更新
+    调用方（双向拓扑序应用补丁：被调用方 entry 先改，调用方后改）。
+    默认关闭保持历史"单入口视角"口径。
+    """
+    return os.getenv("CROSS_FILE_BIDIRECTIONAL", "false").lower() == "true"
+
+
 def cross_file_max_modules() -> int:
     """跨文件依赖分析的最大模块数（CROSS_FILE_MAX_MODULES，默认 5）。"""
     raw = os.getenv(_CROSS_FILE_MAX_MODULES_ENV_VAR, "")
@@ -112,6 +123,7 @@ class CrossFileRepairPlan:
 def analyze_cross_file_deps(
     entry_module: str,
     source_files: dict[str, str],
+    bidirectional: bool = False,
 ) -> list[CrossFileDependency]:
     """AST 分析入口模块与其他模块的依赖关系。
 
@@ -122,9 +134,22 @@ def analyze_cross_file_deps(
         3. 进一步扫描 entry 中调用 X.symbol 的函数体，记录调用行上下文；
         4. 返回所有依赖边（按 source_module 排序，去重）。
 
+    2.2 改进（双向依赖图）：
+        当 bidirectional=True 时，除了 entry → 被调用方（调用方视角）的边，
+        还扫描 source_files 中其他模块 → entry（被调用方视角）的边：
+        即哪些其他模块 import 了 entry_module 的符号。这样依赖图包含
+        "谁调用了入口模块"，跨文件修复时能同步更新调用方（双向拓扑序
+        应用补丁：被调用方 entry 先改，调用方后改）。
+
+        保守口径：仅对 entry 直接相关的模块做双向分析（不递归展开
+        其他模块的 import，避免依赖图爆炸）；entry 不在 source_files
+        时双向分析退化为单向（仅 entry 的 import 边）。
+
     Args:
         entry_module: 入口模块名（不含 .py，如 "calculator"）。
         source_files: 模块名 → 源码字符串的映射（项目内所有相关模块）。
+        bidirectional: 是否启用双向依赖分析（2.2 改进，默认 False 保持
+            历史单入口视角口径；True 时额外收集"其他模块 → entry"的边）。
 
     Returns:
         跨文件依赖边列表；entry_module 不在 source_files 时返回空列表。
@@ -164,6 +189,12 @@ def analyze_cross_file_deps(
                 )
             )
 
+    # 2.2 改进：双向依赖分析——扫描其他模块 import entry_module 的符号
+    # （"谁调用了入口模块"视角，跨文件修复时调用方需同步更新）
+    if bidirectional:
+        reverse_deps = _collect_reverse_deps(entry_module, source_files)
+        deps.extend(reverse_deps)
+
     # 去重（同一 source/target/symbol 只保留一条）
     seen: set[tuple[str, str, str]] = set()
     unique: list[CrossFileDependency] = []
@@ -173,6 +204,100 @@ def analyze_cross_file_deps(
             seen.add(key)
             unique.append(d)
     return unique
+
+
+def _collect_reverse_deps(
+    entry_module: str,
+    source_files: dict[str, str],
+) -> list[CrossFileDependency]:
+    """2.2 改进：收集"其他模块 → entry_module"的反向依赖边（被调用方视角）。
+
+    扫描 source_files 中每个模块（排除 entry 自身）的 import 语句，
+    若某模块导入了 entry_module 中的符号，则记录一条
+    source_module=该模块, target_module=entry_module 的依赖边。
+    用于跨文件修复时同步更新"调用方"（双向拓扑序应用补丁）。
+
+    Args:
+        entry_module: 入口模块名（不含 .py）。
+        source_files: 模块名 → 源码字符串的映射。
+
+    Returns:
+        反向依赖边列表（source_module=其他模块, target_module=entry_module）；
+        无反向依赖时返回空列表。
+    """
+    reverse: list[CrossFileDependency] = []
+    for module_name, code in source_files.items():
+        if module_name == entry_module:
+            continue
+        if not code:
+            continue
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            continue
+        # 收集该模块 import 的 entry_module 符号
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module_name_imported = node.module or ""
+                if module_name_imported != entry_module:
+                    continue
+                for alias in node.names:
+                    if alias.name == "*":
+                        continue
+                    # 找到 entry_module 源码中该符号的定义行（保守：行号 0 占位）
+                    call_line = _find_symbol_def_line(entry_module, source_files, alias.name)
+                    context = ""
+                    if call_line > 0:
+                        entry_lines = source_files.get(entry_module, "").splitlines()
+                        lo = max(0, call_line - 2)
+                        hi = min(len(entry_lines), call_line + 1)
+                        context = "\n".join(entry_lines[lo:hi])
+                    reverse.append(
+                        CrossFileDependency(
+                            source_module=module_name,
+                            target_module=entry_module,
+                            symbol=alias.name,
+                            call_line=call_line,
+                            context=context,
+                        )
+                    )
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name != entry_module:
+                        continue
+                    # import entry_module（模块级导入）
+                    reverse.append(
+                        CrossFileDependency(
+                            source_module=module_name,
+                            target_module=entry_module,
+                            symbol=entry_module,
+                            call_line=0,
+                            context="",
+                        )
+                    )
+    return reverse
+
+
+def _find_symbol_def_line(
+    module_name: str, source_files: dict[str, str], symbol: str
+) -> int:
+    """在模块源码中查找符号定义行（1-based，未找到返回 0）。
+
+    保守口径：匹配 `def symbol(` / `class symbol:` / `symbol =` 三类定义形式。
+    """
+    code = source_files.get(module_name, "")
+    if not code:
+        return 0
+    patterns = [
+        re.compile(rf"^\s*def\s+{re.escape(symbol)}\s*\("),
+        re.compile(rf"^\s*class\s+{re.escape(symbol)}\s*[:(:]"),
+        re.compile(rf"^\s*{re.escape(symbol)}\s*="),
+    ]
+    for i, line in enumerate(code.splitlines(), start=1):
+        for p in patterns:
+            if p.search(line):
+                return i
+    return 0
 
 
 def _collect_imported_symbols(tree: ast.AST, source_files: dict[str, str]) -> dict[str, list[str]]:

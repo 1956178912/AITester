@@ -220,3 +220,62 @@ CROSS_FILE_MAX_MODULES: int = int(os.getenv("CROSS_FILE_MAX_MODULES", "5"))
 | 未提及单文件降级 | 实现新增 `cross_file_fallback_single_file()`：跨文件多文件应用失败时仅对入口模块应用补丁 | 保证"跨文件失败不劣于单文件"，与 3.5 兼容性口径一致 |
 
 > 数据结构（`CrossFileDependency` / `CrossFileRepairPlan`）与配置开关（`CROSS_FILE_ENABLE` / `CROSS_FILE_MAX_MODULES` 默认值）设计与实现**逐字段 / 逐默认值一致**，无偏差。
+
+## 8. 2.2 改进：双向依赖图（CROSS_FILE_BIDIRECTIONAL，默认 false）
+
+> 立项日期：2026-09-20
+> 状态：**已实施**（本节，默认关 `CROSS_FILE_BIDIRECTIONAL=false`）
+> 关联清单：改进清单 2.2（双向依赖图）
+
+### 8.1 动机
+
+§3 的 `analyze_cross_file_deps` 此前只收集"entry → 被调用方"的单向依赖边
+（调用方视角）。跨文件修复时若只改被调用方（entry），调用方（其他模块）
+仍可能因接口变更而失败——尤其是"修复需同步更新 N 个调用方"的场景
+（§1.2 列出的问题类型 2 / 3）。双向依赖图额外收集"其他模块 → entry"的
+反向边（被调用方视角），使修复计划能同步更新调用方。
+
+### 8.2 实现
+
+- `analyze_cross_file_deps(entry_module, source_files, bidirectional=False)`：
+  新增 `bidirectional` 参数（默认 False 保持历史"单入口视角"口径）；
+  启用时经 `_collect_reverse_deps` 额外收集"其他模块 import entry_module
+  符号"的反向依赖边（`source_module=其他模块, target_module=entry_module`），
+  去重后与正向边合并返回；
+- `_find_symbol_def_line(module_name, source_files, symbol)`：定位模块源码中
+  符号的定义行（匹配 `def symbol(` / `class symbol:` / `symbol =` 三类，
+  1-based，未找到返回 0），供反向边截取调用上下文；
+- `cross_file_bidirectional()`：环境变量开关 `CROSS_FILE_BIDIRECTIONAL=true`
+  时启用（默认 false，`cross_file_enabled()` 的同款保守口径）；
+- 保守口径：仅对 entry 直接相关的模块做双向分析（不递归展开其他模块的
+  import，避免依赖图爆炸）；entry 不在 `source_files` 时双向分析退化为
+  单向（仅 entry 的 import 边）。
+
+### 8.3 拓扑序应用补丁（双向口径）
+
+`apply_multi_file_patch` 按依赖图拓扑序应用（被调用方 entry 先改，调用方
+后改）——§3.3 已实现。双向模式下"调用方"信息从反向边直接获得，无需
+LLM 推断；`CROSS_FILE_BIDIRECTIONAL=false` 时仍按 §3.3 的保守顺序
+（entry 优先，其余按模块名字典序）。
+
+### 8.4 配置开关
+
+```python
+# 2.2 改进：跨文件双向依赖图开关（默认 false，保持历史单入口视角口径）
+CROSS_FILE_BIDIRECTIONAL: bool = os.getenv("CROSS_FILE_BIDIRECTIONAL", "false").lower() == "true"
+```
+
+`reproduce.sh` 提供 `--cross-file` / `--no-cross-file` 显式控制
+`CROSS_FILE_ENABLE`（默认 false 保持历史单文件口径）；`--cross-file`
+启用跨文件时，`CROSS_FILE_BIDIRECTIONAL` 仍默认 false（需用户显式
+`export CROSS_FILE_BIDIRECTIONAL=true`），保证"跨文件启用 ≠ 双向启用"
+的两级保守开关。
+
+### 8.5 兼容性影响
+
+- `CROSS_FILE_BIDIRECTIONAL=false`（默认）：所有路径行为不变；
+- `CROSS_FILE_BIDIRECTIONAL=true`：`analyze_cross_file_deps` 额外返回
+  反向依赖边，`build_cross_file_repair_plan` 的修复计划覆盖调用方模块
+  （`target_modules` 增加反向边的 source_module）；
+- 测试：`tests/test_cross_file_bidirectional.py`（16 用例）覆盖
+  单向 / 双向 / 去重 / 环境变量开关 / 符号定义行定位。
