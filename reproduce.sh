@@ -42,6 +42,8 @@ ENABLE_RAG=""       # 2.3 RAG 纳入主实验：默认对合成/内置数据集�
 # 3.1 多候选补丁：默认在 reproduce 流程中显式启用（A/B 口径说明见下），
 # 用户可用 --no-multi-candidate 回退到历史口径（ENABLE_MULTI_CANDIDATE_PATCH=false）
 MULTI_CANDIDATE=""  # 默认空 = 启用（export 为 true）；--no-multi-candidate 时设为 false
+# 3.5 跨文件修复：默认关闭（保持历史单文件口径），--cross-file 显式启用
+CROSS_FILE=""       # 默认空 = 关闭；--cross-file 时设为 true
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -52,6 +54,8 @@ while [[ $# -gt 0 ]]; do
         --baselines) BASELINES="$2"; shift 2 ;;
         --no-rag)    ENABLE_RAG="--no-rag"; shift ;;
         --no-multi-candidate) MULTI_CANDIDATE="false"; shift ;;
+        --cross-file) CROSS_FILE="true"; shift ;;
+        --no-cross-file) CROSS_FILE="false"; shift ;;
         --verbose|-v) VERBOSE="-v"; shift ;;
         *) error "未知参数: $1" ;;
     esac
@@ -80,6 +84,18 @@ info "模式: $MODE  |  数据集: $DATASET  |  基线: $BASELINES"
 export ENABLE_MULTI_CANDIDATE_PATCH="${MULTI_CANDIDATE:-true}"
 export MULTI_CANDIDATE_COUNT="${MULTI_CANDIDATE_COUNT:-3}"
 info "多候选补丁(3.1): ENABLE_MULTI_CANDIDATE_PATCH=$ENABLE_MULTI_CANDIDATE_PATCH MULTI_CANDIDATE_COUNT=$MULTI_CANDIDATE_COUNT"
+
+# 3.5 跨文件修复（协调器-提议者架构）：默认关闭保持历史单文件口径，
+# 用户可用 --cross-file 显式启用（CROSS_FILE_ENABLE=true）。
+# 真实数据集（SWE-bench / Defects4J）约 40% 任务需多文件修改，
+# 启用后 cross_file_analyzer 节点分析跨文件依赖，patch_applier 走多文件补丁路径。
+export CROSS_FILE_ENABLE="${CROSS_FILE:-false}"
+info "跨文件修复(3.5): CROSS_FILE_ENABLE=$CROSS_FILE_ENABLE"
+
+# 4.4 熔断器指数退避 + Prometheus 指标导出：默认启用（纯旁路，不影响路由行为）
+export API_CIRCUIT_BACKOFF="${API_CIRCUIT_BACKOFF:-true}"
+export API_PROMETHEUS_EXPORT="${API_PROMETHEUS_EXPORT:-false}"
+info "熔断器(4.4): 指数退避=$API_CIRCUIT_BACKOFF Prometheus导出=$API_PROMETHEUS_EXPORT"
 
 # ─── 步骤 1/6：检查运行环境 ─────────────────────────────────────────────────────
 info "Step 1/6: 检查环境..."

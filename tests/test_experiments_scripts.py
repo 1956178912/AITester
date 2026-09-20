@@ -882,12 +882,24 @@ class TestAnalyzeResultsScript:
         assert "0.8" in md
 
     def test_venv_cache_stats_skipped_when_no_events(self, module, monkeypatch):
-        """4.4 无缓存事件（total=0）时章节跳过，不渲染。"""
+        """4.4 无缓存事件（total=0）时：仍提供容量监控快照，但不渲染命中统计章节。
+
+        4.4 改进：_venv_cache_stats_snapshot 在 total=0 时不再返回 None，
+        而是附带 check_venv_cache_size 的容量信息（目录可能存在历史 venv，
+        容量监控仍有用）。命中统计章节在 total=0 时跳过渲染。
+        """
         monkeypatch.setattr(
             "src.tools.dependency.get_venv_cache_stats",
             lambda: {"hits": 0, "creates": 0, "total": 0, "hit_rate": 0.0, "last_event_at": None},
         )
+        monkeypatch.setattr(
+            "src.tools.dependency.check_venv_cache_size",
+            lambda: {"size_mb": 0.0, "threshold_mb": 5120, "exceeded": False, "recommendation": ""},
+        )
         analysis = module.build_analysis(self._sample_data())
-        assert analysis["venv_cache_stats"] is None
+        # 4.4 改进：total=0 时快照含容量字段（非 None），命中统计章节仍跳过
+        assert analysis["venv_cache_stats"] is not None
+        assert analysis["venv_cache_stats"]["total"] == 0
         md = module.render_markdown(analysis, "benchmark_x.json")
+        # 命中统计章节因 total=0 跳过，容量告警因未超限不渲染
         assert "依赖缓存命中统计（4.4）" not in md

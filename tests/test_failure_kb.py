@@ -177,3 +177,45 @@ class TestCrossBatch:
         ])
         comparison = cross_batch_comparison([old, new], "aitester")
         assert "assertion" in comparison["regressed_categories"]
+
+    def test_all_passed_batch_no_failure_categories(self):
+        """全通过批次（0 失败）时 failure_categories 为空，趋势对齐不崩溃。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        old = self._make_batch("batch1", [
+            {"task_id": "t1", "passed": True},
+        ])
+        new = self._make_batch("batch2", [
+            {"task_id": "t1", "passed": True},
+            {"task_id": "t2", "passed": True},
+        ])
+        comparison = cross_batch_comparison([old, new], "aitester")
+        assert comparison["batches"][0]["failed"] == 0
+        assert comparison["batches"][1]["failed"] == 0
+        assert comparison["failure_trend"] == {}
+        assert comparison["regressed_categories"] == []
+
+    def test_empty_batch_mixed_with_failed(self):
+        """空 details 批次（总任务 0）混入失败批次时，趋势补 0 对齐不崩溃。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        empty = self._make_batch("batch_empty", [])
+        failed = self._make_batch("batch_fail", [
+            {"task_id": "t1", "passed": False, "error_category": "timeout"},
+        ])
+        comparison = cross_batch_comparison([empty, failed], "aitester")
+        # 空批次 failure_categories 为空，失败批次有 timeout
+        assert comparison["failure_trend"]["timeout"] == [0, 1]
+        assert "timeout" in comparison["new_categories"]
+
+    def test_regressed_requires_two_batches(self):
+        """regressed 判定需 >= 2 批次；单批次时即便有失败也不判 regressed。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        batch = self._make_batch("only", [
+            {"task_id": "t1", "passed": False, "error_category": "assertion"},
+        ])
+        comparison = cross_batch_comparison([batch], "aitester")
+        assert comparison["regressed_categories"] == []
+        # 单批次下 failure_trend 仍有该类别计数（序列长度 1）
+        assert comparison["failure_trend"]["assertion"] == [1]
