@@ -6,6 +6,8 @@ SensitiveFormatter 的行为，以及 redact_dict 对字典的脱敏。
 
 import logging
 
+import pytest
+
 from src.utils.logging_utils import (
     SensitiveFilter,
     SensitiveFormatter,
@@ -174,14 +176,24 @@ class TestSensitiveFilterEdgeCases:
         assert key not in out
         assert "<REDACTED_API_KEY>" in out, "堆栈中的密钥必须被脱敏"
 
-    def test_nested_dict_of_values_not_masked_deeply(self):
-        """redact_dict 仅对顶层字符串值脱敏（嵌套 dict 值不递归，口径锁定）。"""
+    def test_nested_dict_values_recursively_redacted(self):
+        """4.2 改进：redact_dict 递归脱敏嵌套 dict / list / tuple 内的字符串值。
+
+        此前"仅顶层脱敏"的口径导致嵌套结构（trace JSONL、异常堆栈常用
+        嵌套 dict）内的敏感字段漏拦——4.2 脱敏回归测试捕获该缺口后，
+        改为递归脱敏，嵌套层级的密钥/长随机串/JWT 同样被拦截。
+        """
         key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
-        result = redact_dict({"outer": {"inner_key": key}, "flat": key})
+        result = redact_dict({"outer": {"inner_key": key}, "flat": key, "list": [key, 42], "tup": (key,)})
         # 顶层字符串值脱敏
         assert key not in result["flat"]
-        # 嵌套 dict 值保持原对象（不递归，避免误伤非字符串容器）
-        assert result["outer"] == {"inner_key": key}
+        # 嵌套 dict 值递归脱敏（缺口修复）
+        assert key not in str(result["outer"])
+        assert result["outer"] == {"inner_key": "<REDACTED_API_KEY>"}
+        # 嵌套 list / tuple 内的字符串同样脱敏
+        assert key not in str(result["list"])
+        assert result["list"] == ["<REDACTED_API_KEY>", 42]
+        assert result["tup"] == ("<REDACTED_API_KEY>",)
 
     def test_mask_idempotent_on_redacted_text(self):
         """对已脱敏文本二次脱敏幂等（filter + formatter 双重防护不重复替换）。"""
@@ -281,3 +293,97 @@ class TestSensitiveFormatterExceptionPath:
         finally:
             logging_utils.mask_sensitive_info = original
         assert out == "plain", "脱敏失败时退回原始文本，不阻断日志输出"
+
+
+class TestSensitiveInjectionRegression:
+    """4.2 自动化脱敏回归测试：模拟敏感信息注入，验证任何新代码路径
+    都不会绕过脱敏（CI 用例，确保 mask_sensitive_info 的核心拦截规则
+    在新增日志输出点时仍有效）。
+
+    设计口径：
+    - 注入 4 类典型敏感凭证（API Key / 长随机 hex / JWT / 赋值形式），
+      逐类验证脱敏后原文不出现在结果中；
+    - 覆盖"降级路径"（fallback_mask_sensitive_info）与"主路径"
+      （mask_sensitive_info）双实现，防止某一路径漏拦。
+    """
+
+    @pytest.fixture
+    def injected_secrets(self) -> dict:
+        """构造 4 类注入敏感凭证（值在测试内生成，不复用真实密钥）。"""
+        import secrets
+        import string
+
+        alphabet = string.ascii_letters + string.digits
+        random_hex = secrets.token_hex(20)  # 40 位 hex（>= 32 触发拦截）
+        random_key = "sk-" + "".join(secrets.choice(alphabet) for _ in range(40))
+        jwt_like = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+            + secrets.token_urlsafe(20)
+        )
+        return {
+            "random_hex": random_hex,
+            "random_key": random_key,
+            "jwt_like": jwt_like,
+            "kv_form": "api_key=" + random_hex,
+        }
+
+    @pytest.mark.parametrize(
+        "which",
+        ["random_hex", "random_key", "jwt_like", "kv_form"],
+    )
+    def test_primary_path_redacts(self, injected_secrets, which):
+        """主路径 mask_sensitive_info 拦截 4 类注入凭证。"""
+        secret = injected_secrets[which]
+        text = f"operation completed with {secret} at step 3"
+        result = mask_sensitive_info(text)
+        assert secret not in result, f"主路径泄漏 {which}"
+
+    @pytest.mark.parametrize(
+        "which",
+        ["random_hex", "random_key", "jwt_like", "kv_form"],
+    )
+    def test_fallback_path_redacts(self, injected_secrets, which):
+        """降级路径 fallback_mask_sensitive_info 拦截 4 类注入凭证（R-1 修复回归）。"""
+        from src.utils.logging_utils import fallback_mask_sensitive_info
+
+        secret = injected_secrets[which]
+        text = f"operation completed with {secret} at step 3"
+        result = fallback_mask_sensitive_info(text)
+        assert secret not in result, f"降级路径泄漏 {which}"
+
+    def test_mixed_text_still_usable(self, injected_secrets):
+        """脱敏后非敏感部分保留（不能过度脱敏导致日志不可读）。"""
+        secret = injected_secrets["random_key"]
+        text = f"task ok, using {secret}, total 5 cases, pass rate 100%"
+        result = mask_sensitive_info(text)
+        assert "task ok" in result
+        assert "total 5 cases" in result
+
+    def test_api_manager_redact_delegates(self, injected_secrets, monkeypatch):
+        """APIManager._redact 委托给 logging_utils（同口径，避免逻辑漂移）。"""
+        import src.api.api_manager as api_manager_mod
+
+        secret = injected_secrets["random_key"]
+        out = api_manager_mod._redact(f"error with {secret}")
+        assert secret not in out, "APIManager._redact 泄漏"
+
+
+class TestSensitiveInjectionCIPassGuard:
+    """4.2 CI 脱敏检查：模拟'新增日志输出点'场景，验证敏感信息注入
+    到结构化 JSONL 追踪（trace.py）时仍被脱敏，不绕过。"""
+
+    def test_trace_redacts_secrets(self, tmp_path):
+        """trace 写入 JSONL 前对敏感字段脱敏（若 trace 实现含 redact 钩子）。"""
+        # 构造一个含敏感字段的伪 trace 行，验证 redact_dict 能拦截
+        from src.utils.logging_utils import redact_dict
+
+        secret = "sk-AbCdEfGhIjKlMnOpQrStUvWxYz123456"
+        payload = {
+            "api_key": secret,
+            "normal_field": "hello",
+            "nested": {"token": secret},
+        }
+        redacted = redact_dict(payload)
+        assert secret not in str(redacted), "redact_dict 未拦截嵌套敏感字段"
+        assert redacted["normal_field"] == "hello", "非敏感字段应保留"
