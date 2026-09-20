@@ -125,6 +125,7 @@ class GeneratorAgent(BaseAgent):
         module_name: str = "",
         rag_references: list[dict[str, Any]] | None = None,
         focus_function: str | None = None,
+        mutation_feedback: dict[str, Any] | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -137,6 +138,13 @@ class GeneratorAgent(BaseAgent):
         4. 修正错误的 import 模块名（_fix_import_module）
         5. 校验 parametrize 格式，失败则追加修正提示重试一次（仍失败仅告警，避免 LLM 反复生成相同错误）
 
+        1.2 改进（MutGen 式变异反馈闭环）：
+        若提供 mutation_feedback（dict，来自上一轮变异测试的"存活变异体"
+        信息），注入 prompt 引导 LLM 针对"当前未被检测到的故障"生成更强
+        断言（如补充返回值断言、边界值比较、布尔语义校验）。
+        典型用法：run_benchmark 变异得分评估后，把存活变异体清单写回
+        state["mutation_feedback"]，Generator 再生成时消费。
+
         Args:
             test_plan: 测试计划字典（PlannerAgent 输出）。
             target_code: 被测代码全文。
@@ -144,6 +152,9 @@ class GeneratorAgent(BaseAgent):
             rag_references: RAG 检索到的相似历史案例，每项含 test_code 字段。
             focus_function: 焦点函数名（可选）。超长代码时按该函数做 AST
                 智能截取，保留其直接依赖的辅助函数（大文件场景关键）。
+            mutation_feedback: 变异反馈字典（可选，1.2 改进），含
+                survived_mutants（list[str]，存活变异体描述）、
+                mutation_score（float，当前变异得分）字段；None 时不注入。
 
         Returns:
             完整的 pytest 测试代码字符串。
@@ -158,8 +169,8 @@ class GeneratorAgent(BaseAgent):
         # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
 
-        # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强）
-        query = self._build_query(test_plan, target_code, module_name, rag_references)
+        # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）
+        query = self._build_query(test_plan, target_code, module_name, rag_references, mutation_feedback)
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
         raw = self._call_llm_with_cache(query)
@@ -193,8 +204,9 @@ class GeneratorAgent(BaseAgent):
         target_code: str,
         module_name: str,
         rag_references: list[dict[str, Any]] | None,
+        mutation_feedback: dict[str, Any] | None = None,
     ) -> str:
-        """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强）。"""
+        """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）。"""
         # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 
@@ -238,6 +250,39 @@ class GeneratorAgent(BaseAgent):
                 logger.info("Generator 断言增强注入了 %d 条现有断言", len(existing_assertions))
             else:
                 logger.debug("Generator 断言增强启用但被测代码无现有 assert，跳过注入")
+
+        # 1.2 改进（MutGen 式变异反馈闭环）：把上一轮变异测试的"存活变异体"
+        # 注入 prompt，引导 LLM 针对"当前测试未捕获的故障"补强断言。
+        # 典型场景：变异得分 0.4（低）→ 存活变异体多为 return_void / boundary_shift
+        # → 提示 LLM 补充返回值断言与边界值比较，形成"变异引导的测试增强"闭环。
+        if mutation_feedback:
+            survived = mutation_feedback.get("survived_mutants") or []
+            score = mutation_feedback.get("mutation_score")
+            feedback_lines: list[str] = []
+            if survived:
+                # 最多展示 5 个存活变异体（避免 prompt 过长）
+                feedback_lines.append(
+                    "【变异反馈（MutGen 式闭环）】上一轮变异测试发现以下变异体"
+                    "未被当前测试捕获（存活变异体），说明现有断言未能覆盖这些故障模式："
+                )
+                for desc in survived[:5]:
+                    feedback_lines.append(f"- {desc}")
+                feedback_lines.append(
+                    "请针对上述未捕获的故障模式补强测试：补充返回值断言、边界值比较"
+                    "（如 >=/<= 边界）、布尔语义校验，使新测试能杀死这些变异体。"
+                )
+            if score is not None:
+                feedback_lines.append(
+                    f"当前变异得分 {score}（越高说明测试越强）；请在新测试中"
+                    "显著提升变异检测能力。"
+                )
+            if feedback_lines:
+                query += "\n\n" + "\n".join(feedback_lines)
+                logger.info(
+                    "Generator 变异反馈注入：%d 个存活变异体，score=%s",
+                    len(survived),
+                    score,
+                )
 
         return query
 

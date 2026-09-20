@@ -188,6 +188,14 @@ class MutationGenerator:
         mutants.extend(self._generate_boolean_negations(tree, source_code))
         # 变异类型 3：数字常量偏移（+1 / -1 / 0）
         mutants.extend(self._generate_numeric_offset(tree, source_code))
+        # 变异类型 4（1.2 改进）：条件边界变异（> → >=、< → <=、<= → <、>= → >）
+        # 与比较运算符翻转的区别：翻转是"等值对"互换（== ↔ !=），边界变异专攻
+        # 严格/非严格比较的边界语义（边界 off-by-one 类 bug 的经典变异方向）
+        mutants.extend(self._generate_boundary_shifts(tree, source_code))
+        # 变异类型 5（1.2 改进）：返回值变异（return X → return None）
+        # 检测"测试是否真正校验了返回语义"：若测试断言了具体返回值，该变异体
+        # 应被杀死；存活说明测试只跑了执行路径、未校验返回值
+        mutants.extend(self._generate_return_voids(tree, source_code))
 
         # 截断到上限
         return mutants[: self._MAX_MUTANTS_PER_TASK]
@@ -328,6 +336,127 @@ class MutationGenerator:
             if isinstance(target, ast.Constant) and isinstance(target.value, (int, float)):
                 target.value = target.value + offset
 
+    def _generate_boundary_shifts(
+        self, tree: ast.Module, source_code: str
+    ) -> list[Mutant]:
+        """1.2 改进：条件边界变异（严格/非严格比较互转：> ↔ >=、< ↔ <=）。
+
+        针对 off-by-one 类边界 bug 的经典变异方向：
+        - Gt → GtE（> 改 >=）
+        - GtE → Gt（>= 改 >）
+        - Lt → LtE（< 改 <=）
+        - LtE → Lt（<= 改 <）
+        保守口径：仅处理严格/非严格比较（不含 ==/!=，那是运算符翻转变异
+        的覆盖范围）；同一比较节点每对边界只产一个变异体（避免 GtE→Gt 与
+        Gt→GtE 对偶重复计入）。
+        """
+        mutants: list[Mutant] = []
+        boundary_pairs = {"Gt": "GtE", "GtE": "Gt", "Lt": "LtE", "LtE": "Lt"}
+        seen_pairs: set[tuple[int, int]] = set()
+        for cmp_node in _find_mutable_comparison_nodes(tree):
+            for op in cmp_node.ops:
+                op_name = type(op).__name__
+                target = boundary_pairs.get(op_name)
+                if target is None:
+                    continue
+                # 去重：同一行的 Gt→GtE 与 GtE→Gt 不重复（比较链中相邻对偶）
+                key = (cmp_node.lineno, op_name)
+                if key in seen_pairs:
+                    continue
+                seen_pairs.add(key)
+                new_tree = copy.deepcopy(tree)
+                self._shift_boundary_op(new_tree, cmp_node, target)
+                try:
+                    new_code = ast.unparse(new_tree)
+                    if new_code == source_code:
+                        continue  # 无效变异（AST 未变），保守过滤
+                    mutants.append(
+                        Mutant(
+                            code=new_code,
+                            mutant_type="boundary_shift",
+                            description=f"line {cmp_node.lineno}: {op_name} → {target}（边界变异）",
+                            line_no=cmp_node.lineno,
+                        )
+                    )
+                except (ValueError, TypeError):
+                    continue
+        return mutants
+
+    @staticmethod
+    def _shift_boundary_op(tree: ast.Module, original_node: ast.Compare, new_op_name: str) -> None:
+        """在 deepcopy 后的 tree 中把指定行 Compare 的运算符替换为边界对偶。"""
+        op_class = getattr(ast, new_op_name)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare) and node.lineno == original_node.lineno:
+                node.ops = [op_class(), *node.ops[1:]]
+                return
+
+    def _generate_return_voids(
+        self, tree: ast.Module, source_code: str
+    ) -> list[Mutant]:
+        """1.2 改进：返回值变异（return X → return None）。
+
+        对每个"带非空返回值的 return 语句"（return 后跟表达式，且表达式
+        不是 None 字面量）生成"改为 return None"的变异体。用途：检测测试
+        是否真正校验了返回语义——若测试仅断言执行不报错而未检查返回值，
+        该变异体会存活，提示测试缺"返回值断言"。
+
+        保守口径：
+        - 跳过 `return`（无值）与 `return None`（已是 None，无可变异）；
+        - 每个函数体最多产 3 个返回值变异（避免大型函数变异体爆炸）；
+        - unparse 失败或代码不变时跳过。
+        """
+        mutants: list[Mutant] = []
+        per_function: dict[str, int] = {}
+        for func in [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            for ret in [n for n in ast.walk(func) if isinstance(n, ast.Return)]:
+                if ret.value is None:
+                    continue  # 无值 return
+                if isinstance(ret.value, ast.Constant) and ret.value.value is None:
+                    continue  # 已是 return None
+                if per_function.get(func.name, 0) >= 3:
+                    continue  # 单函数上限 3 个
+                new_tree = copy.deepcopy(tree)
+                _ReturnVoidTransformer(ret.lineno, func.name).visit(new_tree)
+                try:
+                    new_code = ast.unparse(new_tree)
+                    if new_code == source_code:
+                        continue
+                    mutants.append(
+                        Mutant(
+                            code=new_code,
+                            mutant_type="return_void",
+                            description=f"line {ret.lineno}: return {ast.unparse(ret.value)} → return None",
+                            line_no=ret.lineno,
+                        )
+                    )
+                    per_function[func.name] = per_function.get(func.name, 0) + 1
+                except (ValueError, TypeError):
+                    continue
+        return mutants
+
+
+class _ReturnVoidTransformer(ast.NodeTransformer):
+    """按行号把指定 return 语句的返回值改写为 None（1.2 返回值变异用）。"""
+
+    def __init__(self, target_lineno: int, func_name: str) -> None:
+        """初始化（target_lineno 为目标 return 行号，func_name 仅供日志）。"""
+        self._target_lineno = target_lineno
+        self._func_name = func_name
+        self._replaced = False
+
+    def visit_Return(self, node: ast.Return) -> ast.AST:
+        """命中目标行号的 return 时，把 value 替换为 None 常量。"""
+        if (
+            not self._replaced
+            and node.lineno == self._target_lineno
+            and node.value is not None
+            and not (isinstance(node.value, ast.Constant) and node.value.value is None)
+        ):
+            self._replaced = True
+            node.value = ast.Constant(value=None)
+        return self.generic_visit(node)
+
 
 # 比较运算符 AST 类名 → 翻转目标映射
 _OPERATOR_FLIP_MAP: dict[str, str] = {
@@ -461,6 +590,68 @@ def compute_mutation_score(
 
 
 # ─── 汇总层（与 analyze_results._mutation_score_metrics 同口径）────────────
+
+
+def build_mutation_feedback(
+    source_code: str,
+    test_code: str,
+    max_mutants: int = 10,
+    timeout_seconds: int = 30,
+) -> dict[str, Any]:
+    """1.2 改进（MutGen 式变异反馈闭环）：生成变异反馈字典。
+
+    对"生成测试 vs 被测代码"跑一遍变异测试，把"存活变异体"信息打包成
+    可注入 Generator prompt 的反馈字典。闭环流程（在 run_benchmark 中消费）：
+    1. 首轮生成测试 → 变异评估 → 得到存活变异体（未被测试捕获的故障模式）；
+    2. 把存活变异体写回 state["mutation_feedback"]；
+    3. Generator 再生成时消费该反馈，针对"未捕获的故障"补强断言；
+    4. 再次变异评估，若得分提升说明闭环有效（形成"变异引导的测试增强"）。
+
+    Args:
+        source_code: 被测代码。
+        test_code: 当前生成的测试代码。
+        max_mutants: 最多评估的变异体数量（默认 10）。
+        timeout_seconds: 单变异体超时。
+
+    Returns:
+        {"available": bool, "survived_mutants": [描述...],
+         "killed_mutants": int, "mutants_total": int,
+         "mutation_score": float | None}
+        无变异体时 available=False，survived_mutants 为空。
+    """
+    generator = MutationGenerator()
+    all_mutants = generator.generate(source_code)
+    if not all_mutants:
+        return {
+            "available": False,
+            "survived_mutants": [],
+            "killed_mutants": 0,
+            "mutants_total": 0,
+            "mutation_score": None,
+        }
+    selected = all_mutants[:max_mutants]
+    survived: list[str] = []
+    killed = 0
+    for mutant in selected:
+        if _run_mutant_tests(mutant, test_code, module_file="", timeout_seconds=timeout_seconds):
+            killed += 1
+        else:
+            # 存活变异体：记录其描述（变异类型 + 位置），供 prompt 注入
+            survived.append(f"{mutant.description}（{mutant.mutant_type}）")
+    score = round(killed / len(selected), 4) if selected else 0.0
+    logger.info(
+        "变异反馈闭环: 存活 %d / 总 %d，score=%.4f",
+        len(survived),
+        len(selected),
+        score,
+    )
+    return {
+        "available": True,
+        "survived_mutants": survived,
+        "killed_mutants": killed,
+        "mutants_total": len(selected),
+        "mutation_score": score,
+    }
 
 
 def mutation_score_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:

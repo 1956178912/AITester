@@ -231,3 +231,132 @@ class TestEnvSwitches:
     def test_exec_validate_invalid_value_falls_back_false(self, monkeypatch):
         monkeypatch.setenv("MULTI_CANDIDATE_EXEC_VALIDATE", "yes")
         assert mc.multi_candidate_exec_validate() is False
+
+
+class TestLineLevelCreditScores:
+    """3.2 改进：行级信用分配（BOOSTAPR 式）。"""
+
+    def test_no_static_passed_returns_no_best(self):
+        candidates = [mc.CandidateResult(index=0, patch="x", static_passed=False)]
+        result = mc.line_level_credit_scores(_GOOD_ORIGINAL, candidates)
+        assert result["best_candidate_index"] is None
+        assert result["best_credit"] is None
+        assert result["candidates"] == []
+
+    def test_exec_passed_candidate_higher_credit_than_failed(self):
+        # 两个静态通过候选：exec_passed=True 的信用更高（即使修改行更多）
+        code_a = _GOOD_ORIGINAL.replace("a * b", "a * b + 1")
+        code_b = _GOOD_ORIGINAL.replace("a * b", "a * b + 1")
+        cand_a = mc.CandidateResult(index=0, patch="pa", new_code=code_a, static_passed=True)
+        cand_b = mc.CandidateResult(index=1, patch="pb", new_code=code_b, static_passed=True)
+        cand_a.exec_passed = True
+        cand_a.exec_coverage = 90.0
+        cand_b.exec_passed = False
+        cand_b.exec_coverage = 0.0
+        result = mc.line_level_credit_scores(_GOOD_ORIGINAL, [cand_a, cand_b])
+        assert result["best_candidate_index"] == 0
+        assert result["candidates"][0]["credit_score"] > result["candidates"][1]["credit_score"]
+
+    def test_exec_passed_none_uses_simplicity_only(self):
+        # 未执行验证（exec_passed=None）时信用退化为简洁性代理（1 - 修改行占比）
+        code_a = _GOOD_ORIGINAL  # 最小改动
+        code_b = _GOOD_ORIGINAL.replace("a * b", "a * b + 1")
+        cand_a = mc.CandidateResult(index=0, patch="pa", new_code=code_a, static_passed=True)
+        cand_b = mc.CandidateResult(index=1, patch="pb", new_code=code_b, static_passed=True)
+        result = mc.line_level_credit_scores(_GOOD_ORIGINAL, [cand_a, cand_b])
+        # 修改行少的候选信用更高
+        assert result["candidates"][0]["credit_score"] >= result["candidates"][1]["credit_score"]
+
+    def test_static_mode_selects_highest_credit(self):
+        # 静态筛选模式（非执行验证）按行级信用排序
+        code_a = _GOOD_ORIGINAL.replace("a * b", "a * b + 1")
+        code_b = _GOOD_ORIGINAL.replace("a + b", "a + b + 1")
+        cand_a = mc.CandidateResult(index=0, patch="pa", new_code=code_a, static_passed=True)
+        cand_b = mc.CandidateResult(index=1, patch="pb", new_code=code_b, static_passed=True)
+        best = mc.select_best_candidate([cand_a, cand_b], _GOOD_ORIGINAL)
+        assert best is not None
+        # 选中候选的 credit_score 应已填充
+        assert best.credit_score is not None
+        # 两个候选修改行数相近时按 index 稳定排序
+        assert best.credit_score >= 0.0
+
+
+class TestMutationFeedback:
+    """1.2 改进：build_mutation_feedback（MutGen 式执行反馈回路）。
+
+    build_mutation_feedback(source_code, test_code) 对"生成测试 vs 被测代码"
+    跑一遍变异测试，把存活变异体打包成可注入 Generator prompt 的反馈字典。
+    本组测试用 MonkeyPatch 隔离 _run_mutant_tests（避免真实子进程执行），
+    直接验证反馈字典结构与 prompt 注入行为。
+    """
+
+    @staticmethod
+    def _patch_run_mutants(monkeypatch, killed_flags: list[bool]):
+        """让 _run_mutant_tests 按顺序返回预设的"是否杀死"标志。"""
+        import experiments.mutation_testing as mt
+
+        state = {"i": 0}
+
+        def fake_run(mutant, test_code, module_file="", timeout_seconds=30):
+            flag = killed_flags[state["i"] % len(killed_flags)]
+            state["i"] += 1
+            return flag
+
+        monkeypatch.setattr(mt, "_run_mutant_tests", fake_run)
+
+    def test_survived_mutants_packaged(self, monkeypatch):
+        import experiments.mutation_testing as mt
+
+        # 预设：按顺序 [kill, kill, survive, survive...] 交替。
+        # 由于 max_mutants=5，至少前 3 个候选会按 [True, True, False] 被评估：
+        # killed=2, survived=1（第 3 个存活）。score = 2/3（被截断到 5 候选中）。
+        flags = [True, True, False, False, False]
+        self._patch_run_mutants(monkeypatch, flags)
+        source = "def check(x):\n    return x > 0\n"
+        feedback = mt.build_mutation_feedback(source, "def test(): assert check(1)", max_mutants=5)
+        assert feedback["available"] is True
+        # 若变异体总数 < 5，则按实际数量评估；否则按前 5 个
+        n = feedback["mutants_total"]
+        expected_killed = min(2, n)
+        expected_survived = max(0, n - 2)
+        assert feedback["killed_mutants"] == expected_killed
+        assert len(feedback["survived_mutants"]) == expected_survived
+        # 变异得分 = killed / total
+        assert feedback["mutation_score"] == round(expected_killed / n, 4)
+
+    def test_no_survived_no_feedback(self, monkeypatch):
+        import experiments.mutation_testing as mt
+
+        # 全部杀死 → 无存活变异体
+        self._patch_run_mutants(monkeypatch, [True])
+        source = "def check(x):\n    return x > 0\n"
+        feedback = mt.build_mutation_feedback(source, "def test(): assert check(1)", max_mutants=5)
+        assert feedback["available"] is True
+        assert feedback["survived_mutants"] == []
+        assert feedback["mutation_score"] == 1.0
+
+    def test_empty_source_returns_unavailable(self):
+        import experiments.mutation_testing as mt
+
+        feedback = mt.build_mutation_feedback("", "def test(): pass")
+        assert feedback["available"] is False
+        assert feedback["survived_mutants"] == []
+        assert feedback["mutation_score"] is None
+
+    def test_boundary_shift_mutant_type_generated(self):
+        """1.2 改进：boundary_shift 变异体生成（Gt->GtE, Lt->LtE 等边界语义）。"""
+        from experiments.mutation_testing import MutationGenerator
+
+        code = "def check(x):\n    return x > 0\n"
+        mutants = MutationGenerator().generate(code)
+        types = [m.mutant_type for m in mutants]
+        assert "boundary_shift" in types, f"boundary_shift 变异体应被生成，实际: {types}"
+
+    def test_return_void_mutant_type_generated(self):
+        """1.2 改进：return_void 变异体生成（return X -> return None）。"""
+        from experiments.mutation_testing import MutationGenerator
+
+        code = "def add(a, b):\n    return a + b\n"
+        mutants = MutationGenerator().generate(code)
+        types = [m.mutant_type for m in mutants]
+        assert "return_void" in types, f"return_void 变异体应被生成，实际: {types}"

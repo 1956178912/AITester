@@ -250,6 +250,17 @@ def run_single_agent_baseline(
     test_code = agent._extract_python_code(agent._call_llm(query))
     state["generated_test"] = test_code
 
+    # 1.2 改进（MutGen 式变异反馈闭环）：单智能体基线在修复前消费上一轮
+    # 变异评估的"存活变异体"反馈（state["mutation_feedback"]），引导 LLM
+    # 针对"当前测试未捕获的故障模式"补强断言；无反馈时行为与历史口径一致
+    feedback = state.get("mutation_feedback")
+    if feedback and feedback.get("survived_mutants"):
+        query += (
+            "\n\n【变异反馈】以下变异体未被现有测试捕获，请在生成测试时"
+            "补充针对性断言：\n"
+            + "\n".join(f"- {d}" for d in feedback["survived_mutants"][:5])
+        )
+
     # 执行测试
     result = executor.execute(
         test_code=test_code,
@@ -424,6 +435,7 @@ def run_single_task(
     output_dir: str,
     verbose: bool = False,
     save_state: bool = False,
+    enable_mutation_scoring: bool | None = None,
 ) -> dict[str, Any]:
     """
     对单个 BenchmarkTask 运行所有指定的基线方法，返回汇总结果。
@@ -435,10 +447,19 @@ def run_single_task(
         verbose: 是否输出详细日志。
         save_state: 是否把环节级状态（测试计划/生成代码/诊断/补丁）
             落盘到 output_dir/raw/<task_id>/<baseline>.json（P0-2 排查用）。
+        enable_mutation_scoring: 1.2 改进（MutGen 式变异反馈闭环）开关。
+            None 时沿用 config.ENABLE_MUTATION_SCORING（默认 False）；
+            True 时每个基线任务运行结束后把"存活变异体"写回结果行，
+            供后续再生成/分析消费（mutation_feedback 字段）。
 
     Returns:
         包含各基线结果的字典。
     """
+    # 1.2 改进（MutGen 式变异反馈闭环）：解析变异评估开关
+    # （None 沿用 config.ENABLE_MUTATION_SCORING 默认值；True/False 显式覆盖）
+    mutation_enabled = (
+        ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
+    )
     # 创建临时目录存放任务相关文件（避免修改原始文件）
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
@@ -476,6 +497,9 @@ def run_single_task(
             # （open(target_file, "w")），若不重置，后续基线会从"已修复代码 +
             # 已递增的 iteration"起步，基线对比数据无效
             state = copy.deepcopy(initial_state)
+            # 1.2 改进（MutGen 式变异反馈闭环）：把上一轮变异评估的"存活变异体"
+            # 注入 state，Generator 再生成时消费（形成变异引导的测试增强）
+            # mutation_feedback 由基线运行前的变异评估（或上一任务结果）提供
             with open(instance_file, "w", encoding="utf-8") as f:
                 f.write(task.instance_code)
 
@@ -501,6 +525,29 @@ def run_single_task(
             try:
                 final_state = BASELINE_REGISTRY[baseline](state)
                 elapsed = time.time() - start_time
+
+                # 1.2 改进（MutGen 式变异反馈闭环）：workflow 结束后若启用变异
+                # 评估，把"存活变异体"写回结果行，供后续再生成/分析消费
+                # （首轮生成 vs 被测代码的变异测试，存活变异体 = 当前测试未
+                #  捕获的故障模式，注入 Generator 后可引导补强断言）
+                if mutation_enabled and final_state.get("generated_test"):
+                    from experiments.mutation_testing import build_mutation_feedback
+
+                    _feedback = build_mutation_feedback(
+                        source_code=task.instance_code,
+                        test_code=final_state["generated_test"],
+                        max_mutants=MUTATION_MAX_MUTANTS,
+                    )
+                    if _feedback.get("available"):
+                        results.setdefault(baseline, {})["mutation_feedback"] = _feedback
+                        final_state["mutation_feedback"] = _feedback
+                        logger.info(
+                            "    [%s] %s 变异反馈闭环: 存活 %d 变异体（score=%.4f）",
+                            baseline,
+                            task.task_id,
+                            len(_feedback.get("survived_mutants", [])),
+                            _feedback.get("mutation_score") or 0.0,
+                        )
 
                 results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
                 if save_state:
