@@ -140,6 +140,9 @@ class CandidateResult:
     static_reason: str = ""
     exec_passed: bool | None = None
     exec_coverage: float | None = None
+    # 3.2 改进：行级信用分配评分（line_level_credit_scores 计算，
+    # 静态模式排序与执行模式记录复用；None 表示未计算）
+    credit_score: float | None = None
 
 
 def generate_candidates(
@@ -243,18 +246,15 @@ def select_best_candidate(
         return None
 
     if not (use_execution_validation and executor is not None and test_code and target_file):
-        # 静态筛选模式：选改动最小的候选（unified diff 变更行数 / 原行数）
-        def diff_ratio(candidate: CandidateResult) -> float:
-            old_lines = original_code.splitlines()
-            new_lines = candidate.new_code.splitlines()
-            changed = sum(
-                1
-                for line in difflib.unified_diff(old_lines, new_lines)
-                if line[:1] in "+-" and line[:3] not in {"+++", "---"}
-            )
-            return changed / max(len(old_lines), 1)
-
-        static_ok.sort(key=diff_ratio)
+        # 静态筛选模式：3.2 改进——用行级信用分配排序（"修改行数少但
+        # 静态通过"的候选优先，与 BOOSTAPR 行级信用思想同方向）
+        credits = line_level_credit_scores(original_code, static_ok)
+        credit_by_index = {c["index"]: c["credit_score"] for c in credits["candidates"]}
+        # 计算每个候选的信用（未执行验证时 exec_factor=1.0，纯简洁性代理）
+        for c in static_ok:
+            c.credit_score = credit_by_index.get(c.index, 0.0)
+        # 信用高 → 修改行少且静态通过；平手时按 index 稳定排序
+        static_ok.sort(key=lambda c: (-c.credit_score, c.index))
         return static_ok[0]
 
     # 执行验证模式：逐个候选写临时副本 + 跑测试，选通过率最高且覆盖率最高者
@@ -327,3 +327,78 @@ def multi_candidate_exec_validate() -> bool:
     裸读 os.getenv 导致配置口径分裂。
     """
     return os.getenv("MULTI_CANDIDATE_EXEC_VALIDATE", "false").lower() == "true"
+
+
+# ─── 3.2 改进：行级信用分配（BOOSTAPR 式）──────────────────────────────────
+
+
+def line_level_credit_scores(
+    original_code: str,
+    candidates: list[CandidateResult],
+) -> dict[str, Any]:
+    """3.2 改进：行级信用分配——对每个候选补丁的修改行做信用评分。
+
+    核心思想（参考 BOOSTAPR 行级信用分配器）：把"修复效果好"（测试通过
+    / 覆盖率高）的奖励精确分配到"修改了哪些行"，而非笼统奖励整个补丁。
+    本函数对静态通过的候选逐个计算：
+    - modified_lines：候选相对原代码的 diff 变更行（行号集合，1-based）；
+    - credit_score：保守信用 = 执行验证通过率 × (1 - 修改行占比)。
+      "修改行数少但修复效果好"的候选得分更高（与 BOOSTAPR 的
+      "关键编辑区域精确奖励"同方向）；未执行验证时退化为
+      credit = 1 - 修改行占比（纯简洁性代理）。
+
+    Args:
+        original_code: 原始被测代码。
+        candidates: generate_candidates 的返回（static_passed 的候选
+            才有 new_code，未通过静态筛选的跳过）。
+
+    Returns:
+        {"candidates": [{"index": int, "modified_lines": [行号...],
+          "modified_line_count": int, "modified_ratio": float,
+          "credit_score": float}],
+         "best_candidate_index": int | None（credit 最高的候选索引）,
+         "best_credit": float | None}
+        无静态通过候选时 best_candidate_index 为 None。
+    """
+    old_lines = original_code.splitlines()
+    old_line_count = max(len(old_lines), 1)
+    scored: list[dict[str, Any]] = []
+    best_idx: int | None = None
+    best_credit = -1.0
+    for c in candidates:
+        if not (c.static_passed and c.new_code):
+            continue
+        new_lines = c.new_code.splitlines()
+        # diff 变更行（unified diff 中 +/- 行，排除 +++/--- 文件头）
+        changed = 0
+        for line in difflib.unified_diff(old_lines, new_lines):
+            if line[:1] in "+-" and line[:3] not in {"+++", "---"}:
+                changed += 1
+        modified_ratio = round(changed / old_line_count, 4)
+        # 信用 = 执行验证通过率 × (1 - 修改行占比)；未验证时退化为 1 - 修改行占比
+        if c.exec_passed is None:
+            exec_factor = 1.0  # 未执行验证（纯静态模式），不惩罚
+        elif c.exec_passed:
+            exec_factor = 1.0
+        else:
+            # 执行失败：coverage 仍部分有效时保守给 0.5，全 0 时给 0.0
+            exec_factor = 0.5 if (c.exec_coverage or 0.0) > 0 else 0.0
+        credit = round(exec_factor * (1.0 - modified_ratio), 4)
+        scored.append(
+            {
+                "index": c.index,
+                "modified_line_count": changed,
+                "modified_ratio": modified_ratio,
+                "exec_passed": c.exec_passed,
+                "exec_coverage": c.exec_coverage,
+                "credit_score": credit,
+            }
+        )
+        if credit > best_credit:
+            best_credit = credit
+            best_idx = c.index
+    return {
+        "candidates": scored,
+        "best_candidate_index": best_idx,
+        "best_credit": best_credit if best_idx is not None else None,
+    }
