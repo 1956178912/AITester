@@ -65,6 +65,13 @@ class ErrorCategory(Enum):
         RAG_RETRIEVAL_EMPTY: RAG 启用但任务内全部检索命中为 0
             （rag_stats 非空且所有 results==0），标识 RAG 失效场景
             （1.1 状态细化）
+        EXECUTION_TRACE_MISSING: 任务失败但 execution_trace 为空
+            （执行器异常路径：executor 节点未正常写入轨迹，或被
+            上游崩溃截断），标识"执行轨迹丢失"，便于排查执行器异常
+            （5.2 持续细化）
+        MULTI_CANDIDATE_ALL_REJECTED: 多候选补丁全部被静态筛选拒绝
+            （ENABLE_MULTI_CANDIDATE_PATCH=true 但 N 个候选均未通过
+            static_validate_patch），标识多候选策略失效场景（5.2 持续细化）
     """
 
     LLM_FORMAT_ERROR = "llm_format_error"
@@ -81,6 +88,9 @@ class ErrorCategory(Enum):
     # 由 refine_failure_category() 在任务收尾时按状态信号判定
     PATCH_VALIDATION_FAILED = "patch_validation_failed"
     RAG_RETRIEVAL_EMPTY = "rag_retrieval_empty"
+    # 5.2 持续细化：两类"多候选/轨迹"流程类别（refine_failure_category 判定）
+    EXECUTION_TRACE_MISSING = "execution_trace_missing"
+    MULTI_CANDIDATE_ALL_REJECTED = "multi_candidate_all_rejected"
 
 
 class SyntaxSubtype(Enum):
@@ -599,6 +609,25 @@ _FIX_STRATEGIES: dict[ErrorCategory, str] = {
         "请按常规修复策略处理；若同类任务反复出现，"
         "考虑扩充检索库案例或降低相似度阈值。"
     ),
+    # 执行轨迹丢失（5.2 持续细化）：任务失败但 execution_trace 为空，
+    # 说明执行器异常路径（executor 节点未正常写入轨迹，或被上游崩溃截断）。
+    # 修复方向是排查执行器/沙箱基础设施而非代码本身——轨迹缺失意味着
+    # 无法定位"哪一轮执行失败"，需先恢复执行链路
+    ErrorCategory.EXECUTION_TRACE_MISSING: (
+        "检测到执行轨迹丢失：任务失败但 execution_trace 为空，"
+        "执行器未正常记录执行结果（沙箱崩溃/超时/基础设施异常）。"
+        "本轮修复无法基于逐轮执行反馈定位根因，请检查执行链路"
+        "（venv/沙箱/超时配置）后重试；代码层面按常规策略谨慎修复。"
+    ),
+    # 多候选全拒绝（5.2 持续细化）：多候选补丁全部被静态筛选拒绝，
+    # 说明 LLM 生成的 N 个候选均未通过语法/完整性/函数数检查。
+    # 修复方向是回退到单补丁路径（更宽松的生成约束），而非继续扰动多候选
+    ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: (
+        "检测到多候选补丁策略失效：本轮生成的 N 个候选补丁全部被"
+        "静态筛选拒绝（语法错误/函数定义丢失/代码过短），多候选策略"
+        "未产出可用补丁。请回退到单补丁流程，并降低对 LLM 输出的"
+        "扰动幅度（候选视角差异过大时 LLM 易输出残缺代码）。"
+    ),
 }
 
 
@@ -607,13 +636,15 @@ def refine_failure_category(
     test_passed: bool | None,
     repair_history: list[dict] | None = None,
     rag_stats: list[dict] | None = None,
+    execution_trace: list[dict] | None = None,
+    multi_candidate_stats: dict | None = None,
 ) -> str:
-    """任务收尾时按最终状态信号细化失败类别（1.1 状态细化）。
+    """任务收尾时按最终状态信号细化失败类别（1.1 状态细化 + 5.2 持续细化）。
 
     与 classify() 的文本正则分类互补：classify() 在测试输出上工作，
-    本函数在任务最终状态（repair_history / rag_stats）上工作，
-    把"修复失败"与"补丁不安全"、"RAG 失效场景"单独标识出来，
-    供失败分布统计与实验分析使用。
+    本函数在任务最终状态（repair_history / rag_stats / execution_trace /
+    multi_candidate_stats）上工作，把"修复失败"与"补丁不安全"、"RAG 失效"、
+    "执行轨迹丢失"、"多候选全拒绝"单独标识出来，供失败分布统计与实验分析使用。
 
     判定规则（仅对 test_passed 为 False 的任务生效，成功任务原样返回）：
     1. PATCH_VALIDATION_FAILED：repair_history 中任一轮 patch_applied
@@ -621,13 +652,22 @@ def refine_failure_category(
        优先级更高；
     2. RAG_RETRIEVAL_EMPTY：rag_stats 非空（RAG 启用过）且全部记录
        results==0（任务内一次检索都未命中）；
-    3. 其余情况原样返回传入的 error_category。
+    3. EXECUTION_TRACE_MISSING（5.2）：任务失败但 execution_trace 为空
+       （执行器异常路径：executor 节点未正常写入轨迹，或被上游崩溃截断，
+       无法基于逐轮执行反馈定位根因）；
+    4. MULTI_CANDIDATE_ALL_REJECTED（5.2）：multi_candidate_stats 记录
+       N 个候选全部被静态筛选拒绝（static_passed==0 且 candidates>0），
+       标识多候选策略失效场景；
+    5. 其余情况原样返回传入的 error_category。
 
     Args:
         error_category: classify() 得出的错误类别字符串（枚举 .value）。
         test_passed: 任务最终是否通过（None 表示中途崩溃，原样返回）。
         repair_history: PatchApplier 累计的修复历史（每轮 patch_applied 标志）。
         rag_stats: 任务内 RAG 检索指标记录（每记录 results 命中数）。
+        execution_trace: 任务内 executor 执行轨迹（3.2 默认常开写入）。
+        multi_candidate_stats: 多候选补丁统计 {"candidates": N, "static_passed": M}
+            （可选；None 表示未启用多候选）。
 
     Returns:
         细化后的错误类别字符串。
@@ -641,6 +681,17 @@ def refine_failure_category(
     stats = rag_stats or []
     if stats and all(s.get("results", 0) == 0 for s in stats):
         return ErrorCategory.RAG_RETRIEVAL_EMPTY.value
+    # 5.2 持续细化：执行轨迹丢失（任务失败但 execution_trace 为空）
+    # 注意：execution_trace 为 None/空列表都视为"丢失"（3.2 默认常开，
+    # 正常路径必写入至少 1 条；空值 = 执行器异常路径）
+    if not execution_trace:
+        return ErrorCategory.EXECUTION_TRACE_MISSING.value
+    # 5.2 持续细化：多候选全拒绝（N 个候选均未通过静态筛选）
+    if multi_candidate_stats:
+        candidates = multi_candidate_stats.get("candidates", 0)
+        static_passed = multi_candidate_stats.get("static_passed", 0)
+        if candidates > 0 and static_passed == 0:
+            return ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED.value
     return error_category
 
 
@@ -648,12 +699,14 @@ def refine_final_error_category(final_state: dict) -> str:
     """从工作流最终状态字典提取并细化失败类别（refine_failure_category 的接线封装）。
 
     cli/app.py 与 run_benchmark.py 各自重复"取 error_category/test_passed/
-    repair_history/rag_stats → refine_failure_category"的同构代码，新增 state
-    字段时两处易漂移。此处收敛为单一接线点，两个调用方只需传 final_state。
+    repair_history/rag_stats/execution_trace/multi_candidate_stats →
+    refine_failure_category"的同构代码，新增 state 字段时两处易漂移。
+    此处收敛为单一接线点，两个调用方只需传 final_state。
 
     Args:
         final_state: 工作流最终状态字典（error_category/test_passed/
-            repair_history/rag_stats 键，缺失时用安全默认）。
+            repair_history/rag_stats/execution_trace/multi_candidate_stats 键，
+            缺失时用安全默认）。
 
     Returns:
         细化后的错误类别字符串（判定规则见 refine_failure_category）。
@@ -663,4 +716,6 @@ def refine_final_error_category(final_state: dict) -> str:
         final_state.get("test_passed", False),
         repair_history=final_state.get("repair_history"),
         rag_stats=final_state.get("rag_stats"),
+        execution_trace=final_state.get("execution_trace"),
+        multi_candidate_stats=final_state.get("multi_candidate_stats"),
     )

@@ -79,9 +79,10 @@ class TestErrorCategory:
         """RAG_RETRIEVAL_EMPTY 类别的值。"""
         assert ErrorCategory.RAG_RETRIEVAL_EMPTY.value == "rag_retrieval_empty"
 
-    def test_twelve_categories_total(self):
-        """错误分类体系共 12 类（10 文本类 + 2 状态细化类）。"""
-        assert len(ErrorCategory) == 12
+    def test_fourteen_categories_total(self):
+        """错误分类体系共 14 类（10 文本类 + 2 状态细化类 + 2.2 新增
+        EXECUTION_TRACE_MISSING / MULTI_CANDIDATE_ALL_REJECTED）。"""
+        assert len(ErrorCategory) == 14
 
 
 class TestSyntaxSubtype:
@@ -542,12 +543,15 @@ class TestRefineFailureCategory:
             {"kind": "test_cases", "results": 3, "max_similarity": 0.82},
             {"kind": "repairs", "results": 0},
         ]
-        assert refine_failure_category("assertion", False, rag_stats=stats) == "assertion"
+        # 传非空 execution_trace 避开 5.2 trace_missing 判定
+        trace = [{"iteration": 0, "passed": False}]
+        assert refine_failure_category("assertion", False, rag_stats=stats, execution_trace=trace) == "assertion"
 
     def test_rag_disabled_not_refined(self):
         """未启用 RAG（rag_stats 为 None/空）→ 不细化。"""
-        assert refine_failure_category("assertion", False, rag_stats=None) == "assertion"
-        assert refine_failure_category("assertion", False, rag_stats=[]) == "assertion"
+        trace = [{"iteration": 0, "passed": False}]
+        assert refine_failure_category("assertion", False, rag_stats=None, execution_trace=trace) == "assertion"
+        assert refine_failure_category("assertion", False, rag_stats=[], execution_trace=trace) == "assertion"
 
     def test_all_patches_applied_not_refined(self):
         """repair_history 全部 patch_applied=True → 补丁被拒不成立。"""
@@ -555,12 +559,14 @@ class TestRefineFailureCategory:
             {"iteration": 1, "patch_applied": True},
             {"iteration": 2, "patch_applied": True},
         ]
-        assert refine_failure_category("assertion", False, repair_history=history) == "assertion"
+        trace = [{"iteration": 0, "passed": False}]
+        assert refine_failure_category("assertion", False, repair_history=history, execution_trace=trace) == "assertion"
 
     def test_history_without_flag_treated_as_not_rejected(self):
         """历史条目缺少 patch_applied 键时保守处理（不判定为被拒）。"""
         history = [{"iteration": 1, "diagnosis": "x"}]
-        assert refine_failure_category("assertion", False, repair_history=history) == "assertion"
+        trace = [{"iteration": 0, "passed": False}]
+        assert refine_failure_category("assertion", False, repair_history=history, execution_trace=trace) == "assertion"
 
 
 class TestRefineFinalErrorCategory:
@@ -581,8 +587,17 @@ class TestRefineFinalErrorCategory:
         assert refine_final_error_category(state) == ErrorCategory.PATCH_VALIDATION_FAILED.value
 
     def test_missing_keys_safe_defaults(self):
-        """缺失键时用安全默认，不抛 KeyError（与两处原内联接线口径一致）。"""
-        assert refine_final_error_category({}) == ""
+        """缺失键时用安全默认，不抛 KeyError（与两处原内联接线口径一致）。
+
+        注意：5.2 起 execution_trace 为空会被细化为 EXECUTION_TRACE_MISSING，
+        因此空状态（test_passed 缺省 False + execution_trace 缺省 None）
+        现在返回 execution_trace_missing 而非 ""——这是 5.2 的预期行为
+        （空轨迹视为执行器异常路径，需单独标识）。
+        """
+        # 空状态（含 test_passed 缺省）：细化为 execution_trace_missing
+        assert refine_final_error_category({}) == ErrorCategory.EXECUTION_TRACE_MISSING.value
+        # 显式成功状态（test_passed=True）：原样返回（不做细化）
+        assert refine_final_error_category({"test_passed": True}) == ""
 
     def test_rag_empty_from_state(self):
         """rag_stats 全空 → rag_retrieval_empty。"""

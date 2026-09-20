@@ -82,7 +82,11 @@ class TestErrorClassifierNewCategories:
         assert result == "assertion"
 
     def test_neither_triggered_returns_original(self):
-        """补丁通过 + RAG 有命中 → 原样返回传入类别。"""
+        """补丁通过 + RAG 有命中 → 原样返回传入类别。
+
+        注意：5.2 起需传非空 execution_trace，否则会被细化为
+        EXECUTION_TRACE_MISSING（空轨迹 = 执行器异常路径标识）。
+        """
         from src.agents.error_classifier import refine_failure_category
 
         result = refine_failure_category(
@@ -90,6 +94,7 @@ class TestErrorClassifierNewCategories:
             False,
             repair_history=[{"patch_applied": True}],
             rag_stats=[{"results": 3, "max_similarity": 0.8}],
+            execution_trace=[{"iteration": 0, "passed": False}],
         )
         assert result == "index"
 
@@ -107,11 +112,16 @@ class TestErrorClassifierNewCategories:
         assert result == "patch_validation_failed", f"实际: {result}"
 
     def test_refine_final_empty_state(self):
-        """空状态 dict：安全返回空串。"""
+        """空状态 dict：安全默认，不抛 KeyError。
+
+        5.2 起空状态（test_passed 缺省 False + execution_trace 缺省 None）
+        被细化为 EXECUTION_TRACE_MISSING（而非旧版的空串）——这是 5.2 的
+        预期行为（空轨迹视为执行器异常路径，需单独标识）。
+        """
         from src.agents.error_classifier import refine_final_error_category
 
         result = refine_final_error_category({})
-        assert result == ""
+        assert result == "execution_trace_missing", f"实际: {result}"
 
 
 # ─── executor_runtime: 清理路径与重试异常分支 ────────────────────────────
