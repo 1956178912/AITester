@@ -561,24 +561,34 @@ class TestHalfOpenProbe:
         assert self.node1.in_circuit_half_open is False
 
     def test_probe_failure_reopens_half_cooldown(self):
-        """半开探测失败：重新打开半程冷却期（cooldown/2），节点再次进入熔断中"""
+        """半开探测失败：4.4 起按指数退避重开冷却期（base * 2^open_count），节点再次熔断中。
+
+        4.4 改进：重开冷却从 4.2 的"半程（cooldown/2）"改为"指数退避
+        （cooldown * 2^open_count，受 penalty_cap * max(1, open_count) 约束）"，
+        彻底死掉的 provider 冷却期单调增长。本用例 cooldown=10、首次熔断后
+        open_count=1，探测失败 → 重开冷却 = min(10*2^1, 30*max(1,1)) = 20s。
+        """
         self.node1.circuit_cooldown_seconds = 10.0
         self._open_circuit_and_expire(cooldown=10.0)
         self.node1._probe_circuit_half_open(False)
-        # 重新开的冷却 = min(10/2, 30) = 5s：节点重新熔断中
+        # 4.4 指数退避：重开冷却 = min(10*2^1, 30*1) = 20s
         assert self.node1.in_circuit_open is True
         assert self.node1.in_circuit_half_open is False
         remaining = self.node1.circuit_open_until - time.monotonic()
-        assert 4.0 <= remaining <= 5.5
+        assert 19.0 <= remaining <= 20.5
 
     def test_probe_failure_penalty_capped(self):
-        """惩罚时长受 penalty_cap 约束：cooldown/2 > cap 时按 cap 重开"""
+        """惩罚时长受 penalty_cap 约束：指数退避 backoff > cap*open_count 时按 cap 重开（4.4）。
+
+        4.4 口径：重开冷却 = min(cooldown * 2^open_count, cap * max(1, open_count))。
+        本用例 cooldown=100、cap=30、open_count=1 → min(100*2, 30*1) = 30s。
+        """
         self.node1.circuit_cooldown_seconds = 100.0
         self.node1.half_open_probe_penalty_cap_seconds = 30.0
         self._open_circuit_and_expire(cooldown=100.0)
         self.node1._probe_circuit_half_open(False)
         remaining = self.node1.circuit_open_until - time.monotonic()
-        # min(100/2, 30) = 30s，不会被 50s 的 cooldown/2 顶破
+        # min(100*2^1, 30*max(1,1)) = 30s，指数退避被 cap 顶住
         assert 28.0 <= remaining <= 30.5
 
     def test_probe_noop_outside_half_open_window(self):

@@ -73,6 +73,16 @@ class APIHealth:
     # 60s 的一半），防止 provider 彻底宕机时冷却期越缩越短。
     # 经 APIManagerConfig.half_open_probe_penalty_cap_seconds 在注册节点时注入。
     half_open_probe_penalty_cap_seconds: float = 30.0
+    # 4.4 改进：熔断冷却次数（指数退避用）：每次半开探测失败后重新熔断，
+    # 冷却期按 2^open_count 指数退避（首次 60s，第二次 120s，第三次 240s……），
+    # 彻底死掉的 provider 冷却期单调增长，避免反复短冷却打同一死点。
+    # 成功闭合（mark_success / 探测成功）时清零，provider 恢复后回到短冷却。
+    circuit_open_count: int = 0
+    # 4.4 改进：半开探测成功/失败计数（供路由权重调整依据）：
+    # 半开探测成功率 = half_open_success / (half_open_success + half_open_failure)，
+    # 持续失败的节点即使探测成功也不宜立即恢复全量路由（调用方据此降权）。
+    half_open_success: int = 0
+    half_open_failure: int = 0
     # 滑动窗口记录最近 N 次响应时间（用于计算平均值）
     _response_times: deque[float] = field(default_factory=lambda: deque(maxlen=10))
 
@@ -109,24 +119,52 @@ class APIHealth:
 
         行为：
         - 不在半开窗口（探测未启用 / 未熔断 / 冷却未到）：无操作；
-        - 成功：熔断器闭合（circuit_open_until 清零），节点恢复全量路由；
-        - 失败：重新打开半程冷却期（min(cooldown/2, penalty_cap)），
-          冷却时长减半使"彻底死掉"的 provider 冷却期单调收缩但不越过
-          惩罚上限，避免无限次探测打同一死点。
+        - 成功：熔断器闭合（circuit_open_until 清零 + 冷却次数清零），
+          节点恢复全量路由；半开成功计数 +1（供路由权重调整）；
+        - 失败（4.4 改进）：指数退避——按 circuit_open_count 递增计算
+          冷却期 base * 2^(open_count)，受惩罚上限约束（彻底死掉的
+          provider 冷却期单调增长，避免反复短冷却打同一死点）；
+          半开失败计数 +1。
         """
         if not self.in_circuit_half_open:
             return
         if probe_succeeded:
             self.circuit_open_until = 0.0
-            logger.info("API %s 半开探测成功，熔断器闭合，恢复全量路由", self.config.model_name)
+            self.circuit_open_count = 0  # 4.4：恢复后回到基础冷却
+            self.half_open_success += 1
+            logger.info(
+                "API %s 半开探测成功，熔断器闭合，恢复全量路由（累计成功 %d / 失败 %d）",
+                self.config.model_name,
+                self.half_open_success,
+                self.half_open_failure,
+            )
         else:
-            penalty = min(self.circuit_cooldown_seconds / 2.0, self.half_open_probe_penalty_cap_seconds)
+            self.half_open_failure += 1
+            # 4.4 指数退避：基础冷却 * 2^open_count（首次失败 60*1=60s，
+            # 第二次 60*2=120s，第三次 60*4=240s……），受惩罚上限约束
+            backoff = self.circuit_cooldown_seconds * (2 ** self.circuit_open_count)
+            penalty = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
+            self.circuit_open_count += 1
             self.circuit_open_until = time.monotonic() + penalty
             logger.warning(
-                "API %s 半开探测失败，重新进入熔断冷却 %.1fs",
+                "API %s 半开探测失败（第 %d 次），指数退避重新熔断冷却 %.1fs（累计成功 %d / 失败 %d）",
                 self.config.model_name,
+                self.circuit_open_count,
                 penalty,
+                self.half_open_success,
+                self.half_open_failure,
             )
+
+    @property
+    def half_open_probe_success_rate(self) -> float | None:
+        """4.4 改进：半开探测成功率（供路由权重调整依据）。
+
+        无探测记录时返回 None（调用方按"未知"处理，不做降权）。
+        """
+        total = self.half_open_success + self.half_open_failure
+        if total == 0:
+            return None
+        return round(self.half_open_success / total, 4)
 
     @property
     def success_rate(self) -> float:
@@ -147,13 +185,18 @@ class APIHealth:
         self.is_healthy = True
         self.consecutive_failures = 0
         self.circuit_open_until = 0.0  # 4.1：成功 = 熔断器闭合
+        self.circuit_open_count = 0  # 4.4：恢复后回到基础冷却（指数退避清零）
         self.total_requests += 1
         self.success_count += 1
         self._response_times.append(response_time_ms)
         self.rate_limit_remaining = max(0, self.rate_limit_remaining - 1)
 
     def mark_failure(self, error_type: str = "unknown") -> None:
-        """标记失败调用（连续失败达到阈值进入熔断冷却期，4.1）"""
+        """标记失败调用（连续失败达到阈值进入熔断冷却期，4.1）。
+
+        4.4 改进：首次熔断触发时 circuit_open_count 保持 0（基础冷却），
+        后续熔断（半开探测失败后重开）由 _probe_circuit_half_open 递增。
+        """
         self.total_requests += 1
         self.error_count += 1
         self.consecutive_failures += 1
@@ -161,12 +204,17 @@ class APIHealth:
         if self.consecutive_failures >= self.max_consecutive_failures:
             self.is_healthy = False
             # 4.1 熔断器：达到阈值即打开熔断，冷却期内路由层继续跳过该节点
-            self.circuit_open_until = time.monotonic() + self.circuit_cooldown_seconds
+            # 4.4：冷却期 = base * 2^open_count（指数退避，受惩罚上限约束）
+            backoff = self.circuit_cooldown_seconds * (2 ** self.circuit_open_count)
+            cooldown = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
+            self.circuit_open_until = time.monotonic() + cooldown
+            self.circuit_open_count += 1
             logger.warning(
-                "API %s 连续失败 %d 次，触发熔断冷却 %.0fs",
+                "API %s 连续失败 %d 次，触发熔断冷却 %.1fs（指数退避第 %d 次）",
                 self.config.model_name,
                 self.consecutive_failures,
-                self.circuit_cooldown_seconds,
+                cooldown,
+                self.circuit_open_count,
             )
         # 限流错误特殊处理
         if error_type == "rate_limit":

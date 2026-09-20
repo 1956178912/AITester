@@ -557,11 +557,15 @@ class APIManager:
         raise RuntimeError("所有 API 节点不可用")
 
     def get_status(self) -> dict[str, Any]:
-        """获取所有节点的当前状态（4.1：含熔断冷却信息；4.1 审计：base_url 脱敏）。
+        """获取所有节点的当前状态（4.1：含熔断冷却信息；4.4：含指数退避/半开探测成功率）。
 
         base_url 可能内嵌凭证（部分网关把 token 放在 URL 路径/查询串中），
         本字典会流经 print_status_table（直接 print 到 stdout，不经 logging
         handler 脱敏）与监控导出等出口，统一在出口脱敏——与日志脱敏口径一致。
+
+        4.4 改进：每个节点额外输出 circuit_open_count（指数退避次数）与
+        half_open_probe_success_rate（半开探测成功率，供路由权重调整依据），
+        便于在监控系统中观测熔断器行为。
         """
         from src.utils.logging_utils import mask_sensitive_info
 
@@ -587,6 +591,11 @@ class APIManager:
                     if self.config.enable_half_open_probe and h.in_circuit_half_open
                     else ("open" if h.in_circuit_open else "closed")
                 ),
+                # 4.4 改进：指数退避次数 + 半开探测成功率（路由权重调整依据）
+                "circuit_open_count": h.circuit_open_count,
+                "half_open_success": h.half_open_success,
+                "half_open_failure": h.half_open_failure,
+                "half_open_probe_success_rate": h.half_open_probe_success_rate,
             }
         # get_healthy_nodes 全节点池遍历一次，结果复用（此前连调两次）
         healthy = self.get_healthy_nodes()
@@ -597,6 +606,54 @@ class APIManager:
             "rotation_strategy": self.config.rotation_strategy.value,
             "nodes": nodes_summary,
         }
+
+    def to_prometheus_text(self) -> str:
+        """4.4 改进：把当前 API 节点状态导出为 Prometheus 文本格式。
+
+        导出指标（纯旁路，不影响路由行为）：
+        - aitester_api_health{model="..."}: 1=健康, 0=不健康
+        - aitester_api_circuit_state{model="..."}: 0=closed, 1=open, 2=half_open
+        - aitester_api_circuit_open_remaining_seconds{model="..."}: 熔断冷却剩余秒
+        - aitester_api_circuit_open_count{model="..."}: 指数退避次数
+        - aitester_api_half_open_probe_success_rate{model="..."}: 半开探测成功率
+        - aitester_api_success_rate{model="..."}: 节点成功率
+        - aitester_api_avg_response_time_ms{model="..."}: 平均响应时间
+
+        用法：HTTP 端点 /metrics 定期调用本方法，或在 CI 监控脚本中
+        导出到 Prometheus textfile collector。无节点时返回空字符串。
+        """
+        status = self.get_status()
+        now = time.monotonic()
+        lines: list[str] = []
+        # 帮助文本（供 Prometheus 识别指标语义）
+        lines.append("# HELP aitester_api_health API 节点健康状态（1=健康, 0=不健康）")
+        lines.append("# TYPE aitester_api_health gauge")
+        lines.append("# HELP aitester_api_circuit_state 熔断器状态（0=closed, 1=open, 2=half_open）")
+        lines.append("# TYPE aitester_api_circuit_state gauge")
+        lines.append("# HELP aitester_api_circuit_open_remaining_seconds 熔断冷却剩余秒数")
+        lines.append("# TYPE aitester_api_circuit_open_remaining_seconds gauge")
+        lines.append("# HELP aitester_api_circuit_open_count 指数退避次数（4.4）")
+        lines.append("# TYPE aitester_api_circuit_open_count gauge")
+        lines.append("# HELP aitester_api_half_open_probe_success_rate 半开探测成功率（4.4）")
+        lines.append("# TYPE aitester_api_half_open_probe_success_rate gauge")
+        lines.append("# HELP aitester_api_success_rate API 节点成功率")
+        lines.append("# TYPE aitester_api_success_rate gauge")
+        lines.append("# HELP aitester_api_avg_response_time_ms API 节点平均响应时间（毫秒）")
+        lines.append("# TYPE aitester_api_avg_response_time_ms gauge")
+        state_map = {"closed": 0, "open": 1, "half_open": 2}
+        for name, node in status.get("nodes", {}).items():
+            labels = f'model="{node["model"]}"'
+            lines.append(f'aitester_api_health{{{labels}}} {1 if node["is_healthy"] else 0}')
+            lines.append(f'aitester_api_circuit_state{{{labels}}} {state_map.get(node.get("circuit_state"), 0)}')
+            lines.append(
+                f'aitester_api_circuit_open_remaining_seconds{{{labels}}} {node.get("circuit_open_remaining_s", 0.0)}'
+            )
+            lines.append(f'aitester_api_circuit_open_count{{{labels}}} {node.get("circuit_open_count", 0)}')
+            rate = node.get("half_open_probe_success_rate")
+            lines.append(f'aitester_api_half_open_probe_success_rate{{{labels}}} {rate if rate is not None else 0}')
+            lines.append(f'aitester_api_success_rate{{{labels}}} {node.get("success_rate", 1.0)}')
+            lines.append(f'aitester_api_avg_response_time_ms{{{labels}}} {node.get("avg_response_time_ms", 0.0)}')
+        return "\n".join(lines)
 
     def get_top_nodes(self, n: int = 10, sort_by: str = "success_rate") -> list[dict[str, Any]]:
         """
@@ -627,7 +684,7 @@ class APIManager:
         ]
 
     def reset_stats(self) -> None:
-        """重置所有统计数据（含 4.1 熔断器状态：清零冷却截止时间）"""
+        """重置所有统计数据（含 4.1 熔断器状态 + 4.4 指数退避/半开探测计数）"""
         with self._lock:
             for node in self.health_nodes.values():
                 node.total_requests = 0
@@ -636,6 +693,9 @@ class APIManager:
                 node.consecutive_failures = 0
                 node.is_healthy = True
                 node.circuit_open_until = 0.0
+                node.circuit_open_count = 0  # 4.4 指数退避清零
+                node.half_open_success = 0  # 4.4 半开探测统计清零
+                node.half_open_failure = 0
                 node._response_times.clear()
         logger.info("已重置所有 API 节点统计")
 
