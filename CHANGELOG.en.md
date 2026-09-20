@@ -4,6 +4,148 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4] - 2026-09-20 Five-chapter capability enhancement (evaluation / data / system / observability / testing)
+
+### Features
+- **1.1 Multi-dimensional evaluation metrics** (`experiments/analyze_results.py`):
+  extended test-smell detection with Eager Test + Lack of Cohesion AST
+  heuristics, strategy-grouped smell counts, and `smell_density`;
+  added `_convergence_token_efficiency`, `_difficulty_stratified_iterations`,
+  mutation-score × assertion-strength cross-check, `_rag_token_efficiency`,
+  `_rag_similarity_distribution`, `_failure_root_cause_trend`
+  (llm_capability / dependency / framework split with time-series), and
+  `_contamination_cross_analysis` (high vs low contamination risk success-rate
+  delta).
+- **1.2 Mutation feedback loop** (`experiments/mutation_testing.py` +
+  `src/agents/generator.py` + `src/graph/state.py`): new `boundary_shift`
+  (Gt↔GtE) and `return_void` (return X → return None) mutant types;
+  `build_mutation_feedback()` packages survived mutants for prompt injection
+  (MutGen-style test-hardening loop). `run_single_task` gained an
+  `enable_mutation_scoring` argument (fixing a `NameError` on the
+  previously undefined `mutation_enabled`).
+- **2.1 Multi-dimensional contamination detection**
+  (`experiments/contamination_check.py`): alongside token-Jaccard, added
+  structural (AST statement-skeleton LCS ratio) and semantic (token-bag
+  cosine, with an `_embed_code` hook for CodeBERT) dimensions;
+  `patch_semantic_similarity` returns three scores;
+  `_combined_risk_level` takes the most-severe dimension;
+  `detect_contamination` now emits per-task `risk_level` +
+  `contamination_summary` (contaminated vs clean success rates + delta);
+  added `render_resistant_benchmark_section` (SWE-rebench registry).
+- **2.2 Cross-file bidirectional dependency graph**
+  (`src/tools/cross_file.py`): `analyze_cross_file_deps` gained a
+  `bidirectional` flag (default False preserves the historical single-entry
+  view); when enabled, `_collect_reverse_deps` collects
+  "other-module → entry-module" edges (callee view) so cross-file repair can
+  update callers too; `_find_symbol_def_line` locates a symbol's definition
+  line (def / class / assignment). `CROSS_FILE_BIDIRECTIONAL` env toggles
+  it (default false).
+- **3.1 Adversarial reasoning** (`src/agents/debugger.py`): Debugger gained
+  AdverIntent-style adversarial intent hypotheses + critic evaluation;
+  enabling `ADVERSARIAL_DEBUGGING_ENABLE=true` makes it emit 2–3 "break
+  this implementation" hypotheses, generate targeted tests, run an
+  independent critic attempt, and re-generate the patch once if the critic
+  finds a breakthrough case. Off by default to preserve the historical
+  experiment baseline.
+- **3.2 Execution-feedback dynamic iteration strategy**
+  (`src/graph/nodes.py` + `src/graph/state.py`): after each Executor run,
+  `_suggest_iteration_strategy` emits an observation-only suggestion
+  ("lower temperature" / "switch repair view") from the coverage-delta trend
+  of prior rounds, written to
+  `state["iteration_strategy_suggestion"]` (no routing decision).
+  Reward signals keep the historical `EXECUTION_TIMEOUT` linear normalization
+  (no change to the historical data baseline).
+- **3.2 Line-level credit assignment** (`src/tools/multi_candidate.py`):
+  new `line_level_credit_scores` (BOOSTAPR-style, "exec-pass rate ×
+  (1 − modified-line ratio)" per static-passing candidate);
+  `select_best_candidate`'s static mode now ranks by line-level credit;
+  `CandidateResult` gained `credit_score`.
+- **4.4 Circuit-breaker exponential backoff + Prometheus export**
+  (`src/api/api_health.py` + `src/api/api_manager.py`): `APIHealth` gained
+  `circuit_open_count`, `half_open_success`, `half_open_failure`;
+  `mark_failure` now cools down for `base * 2^open_count` (capped by
+  `half_open_probe_penalty_cap_seconds`), so a dead provider's cooldown
+  grows monotonically; `mark_success` resets the counter;
+  `_probe_circuit_half_open`'s failure path uses the same backoff;
+  `half_open_probe_success_rate` property feeds routing weights.
+  `APIManager.get_status` exposes the new fields;
+  `to_prometheus_text()` exports 7 metrics (health / circuit_state /
+  open_remaining_s / open_count / probe_success_rate / success_rate /
+  avg_response_ms); `reset_stats` clears the new counters. Pure side-band,
+  no change to existing routing behavior.
+- **4.4 venv cache capacity monitoring** (`src/tools/dependency.py`):
+  new `get_venv_cache_size_mb` / `check_venv_cache_size` (5 GB threshold,
+  WARNING only, no auto-cleanup); `_VENV_CACHE_STATS_FILE` is now a
+  dynamic function following `_VENV_CACHE_DIR` (fixing a test-isolation
+  hazard where the module-level constant still pointed at the real
+  `~/.cache/aitester`).
+- **4.2 Redaction recursion + regression tests**
+  (`src/utils/logging_utils.py` + `tests/test_logging_utils.py`):
+  `redact_dict` now recurses into nested dict / list / tuple
+  (previously top-level only — nested structs could leak);
+  `fallback_mask_sensitive_info` now also catches JWTs (patterns 0/1/2/4,
+  skipping `key=xxx` to avoid over-redaction in degraded mode). Added
+  `TestSensitiveInjectionRegression` +
+  `TestSensitiveInjectionCIPassGuard` (CI cases that inject 4 kinds of
+  credentials and verify both primary and fallback paths, plus nested
+  `redact_dict` interception).
+- **5.2 Error-classification taxonomy extension**
+  (`src/agents/error_classifier.py`): `ErrorCategory` gained
+  `EXECUTION_TRACE_MISSING` (task failed but `execution_trace` is empty —
+  executor exception path) and `MULTI_CANDIDATE_ALL_REJECTED` (all
+  candidates rejected by static filtering) (12 → 14 categories);
+  `refine_failure_category` accepts `execution_trace` /
+  `multi_candidate_stats`, with priority
+  patch_rejected > rag_empty > trace_missing > multi_rejected;
+  `refine_final_error_category` wires the new fields;
+  `get_fix_strategy` documents the two new fix strategies.
+- **reproduce.sh defaults** (`reproduce.sh`):
+  `ENABLE_MULTI_CANDIDATE_PATCH` defaults to true
+  (`--no-multi-candidate` to fall back); new `--cross-file` /
+  `--no-cross-file` (default false preserves the historical single-file
+  baseline); new `API_CIRCUIT_BACKOFF` (default true) and
+  `API_PROMETHEUS_EXPORT` (default false) env passthrough.
+
+### Tests
+- **5 new test files** (covering the 4.4 / 2.1 / 2.2 / 3.2 / 5.2
+  mechanisms): `test_api_circuit_breaker.py` (13 cases),
+  `test_contamination_multidim.py` (25),
+  `test_cross_file_bidirectional.py` (16),
+  `test_error_classifier_new_categories.py` (16),
+  `test_venv_cache_monitoring.py` (11).
+- **Boundary hardening** in `test_experiments_analysis.py` /
+  `test_failure_kb.py` / `test_logging_utils.py` /
+  `test_multi_candidate.py` (degenerate inputs: 1 sample / all-pass /
+  no-token-data; full-pass + empty batches; redaction-injection CI cases;
+  line-level credit + mutation feedback + new mutant types).
+- **Baseline updates** for the 4.4 / 5.2 behavior changes:
+  `test_error_classifier.py` (12 → 14 categories; refine calls pass a
+  non-empty `execution_trace` to avoid false hits on the new 5.2
+  categories), `test_weak_coverage_modules.py` (empty state now refines to
+  `execution_trace_missing`), `test_api_manager_extended.py`
+  (probe-failure re-open now uses 4.4 exponential backoff),
+  `test_experiments_scripts.py` (venv cache snapshot at total=0 still
+  carries the capacity fields; the hit-stats section is skipped).
+
+### Engineering baseline
+- Fixed the `NameError` on the previously undefined `mutation_enabled` in
+  `experiments/run_benchmark.py`'s `run_single_task` (it was only defined
+  inside the `run_benchmark` loop's scope).
+- Fixed `experiments/contamination_check.py`'s
+  `_extract_statement_skeleton` misusing
+  `tokenize.generate_tokens(io.StringIO(pseudo))` (StringIO is not
+  callable; pass its `.readline` method instead).
+- Fixed `src/tools/dependency.py`'s module-level `_VENV_CACHE_STATS_FILE`
+  constant leaking the real `~/.cache/aitester` path during monkeypatch
+  test isolation (now a dynamic function following `_VENV_CACHE_DIR`).
+- Restored `_record_execution_trace` in `src/graph/nodes.py` to its
+  historical "returns the trace list" signature (the strategy suggestion is
+  now computed separately by `_executor_node` and written to
+  `iteration_strategy_suggestion`, without changing the trace-write
+  behavior).
+- No public API signature changed (all new fields have safe defaults);
+  full suite of 1548 tests passes with zero regressions.
+
 ## [0.2] - 2026-09-19 Code quality & reliability optimization round
 
 Two atomic commits (`9f83197` + `d5f21f6`), zero functional breakage, full test suite 1459→1460 (+1 case), Ruff all green.

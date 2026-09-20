@@ -4,6 +4,144 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.4] - 2026-09-20 五大章节系统能力增强（评估/数据/系统/可观测性/测试）
+
+### 功能
+- **1.1 多维度评估指标深化**（`experiments/analyze_results.py`）：
+  测试异味检测扩展 Eager Test（单函数过度断言）+ Lack of Cohesion
+  （单函数跨多主题）两类 AST 口径，异味统计按策略分组，新增
+  `smell_density`（有异味任务占比）；新增 `_convergence_token_efficiency`
+  （逐轮 token/边际收益收敛分析）、`_difficulty_stratified_iterations`
+  （按难度档分层迭代分布）、`_mutation_score_metrics` 与断言强度交叉
+  一致性校验、`_rag_token_efficiency`（RAG vs 无 RAG token/迭代对比）、
+  `_rag_similarity_distribution`（相似度直方图）、`_failure_root_cause_trend`
+  （llm_capability/dependency/framework 三类根因占比 + 时间趋势）、
+  `_contamination_cross_analysis`（高/低污染风险成功率 delta）。
+- **1.2 变异反馈闭环**（`experiments/mutation_testing.py` +
+  `src/agents/generator.py` + `src/graph/state.py`）：
+  新增 `boundary_shift`（Gt↔GtE 边界语义变异）与 `return_void`
+  （return X → return None）两类变异体；`build_mutation_feedback()`
+  把"存活变异体"打包成可注入 Generator prompt 的反馈字典，形成
+  MutGen 式"变异引导测试增强"闭环。`run_single_task` 新增
+  `enable_mutation_scoring` 参数（修复此前 `mutation_enabled` 未定义
+  的 NameError）。
+- **2.1 多维度污染检测**（`experiments/contamination_check.py`）：
+  在 token Jaccard 之外新增结构级（AST 语句骨架 LCS 比率）与语义级
+  （token 词袋余弦，`_embed_code` 钩子可接 CodeBERT）两个维度，
+  `patch_semantic_similarity` 输出三维相似度；`_combined_risk_level`
+  取最严重维度；`detect_contamination` 每任务输出 `risk_level` +
+  `contamination_summary`（含污染 vs 无污染的各自成功率与 delta）；
+  新增 `render_resistant_benchmark_section`（SWE-rebench 抗污染基准
+  注册表，交叉验证建议）。
+- **2.2 跨文件双向依赖图**（`src/tools/cross_file.py`）：
+  `analyze_cross_file_deps` 新增 `bidirectional` 参数（默认 False 保持
+  历史单入口口径），启用时经 `_collect_reverse_deps` 收集"其他模块 →
+  入口模块"反向依赖边（被调用方视角），形成双向依赖图；`_find_symbol_def_line`
+  定位符号定义行（def/class/赋值）。环境变量 `CROSS_FILE_BIDIRECTIONAL`
+  控制开关（默认 false）。
+- **3.1 对抗性推理机制**（`src/agents/debugger.py`）：
+  Debugger 新增 AdverIntent-Agent 式对抗性意图假设 + 批评者评估：
+  启用 `ADVERSARIAL_DEBUGGING_ENABLE=true` 后，生成补丁前让 LLM 输出
+  2-3 个"击穿当前实现"的对抗性意图假设并生成针对性测试，生成后独立
+  "批评者"调用尝试构造击穿用例；被击穿则重新生成一次补丁（仍失败
+  保留当前并记录风险）。默认关闭，保持历史实验口径。
+- **3.2 执行反馈动态迭代策略**（`src/graph/nodes.py` +
+  `src/graph/state.py`）：executor 节点每次执行后基于历史轨迹
+  覆盖率趋势经 `_suggest_iteration_strategy` 输出"降低温度 /
+  切换修复视角"的观测层建议（写入 `state["iteration_strategy_suggestion"]`，
+  不参与路由决策，供未来 Debugger 消费）；奖励信号沿用历史
+  `EXECUTION_TIMEOUT` 线性归一（保守，不改变历史数据口径）。
+- **3.2 行级信用分配**（`src/tools/multi_candidate.py`）：
+  新增 `line_level_credit_scores`（BOOSTAPR 式，对每个静态通过候选
+  按"执行验证通过率 × (1 - 修改行占比)"精确计算信用），
+  `select_best_candidate` 静态模式改按行级信用排序（修改行少且
+  静态通过的候选优先），`CandidateResult` 新增 `credit_score` 字段。
+- **4.4 熔断器指数退避 + Prometheus 导出**（`src/api/api_health.py`
+  + `src/api/api_manager.py`）：`APIHealth` 新增 `circuit_open_count`
+  （指数退避次数）、`half_open_success` / `half_open_failure`
+  （半开探测计数）；`mark_failure` 冷却期改按 `base * 2^open_count`
+  指数退避（封顶 `half_open_probe_penalty_cap_seconds`），彻底死掉的
+  provider 冷却期单调增长，避免反复短冷却打同一死点；
+  `mark_success` 重置 `circuit_open_count`；`_probe_circuit_half_open`
+  失败路径同样走指数退避；`half_open_probe_success_rate` 属性
+  供路由权重调整。`APIManager.get_status` 暴露新字段，
+  `to_prometheus_text()` 导出 7 类 Prometheus 指标
+  （health / circuit_state / open_remaining_s / open_count /
+  probe_success_rate / success_rate / avg_response_ms）；
+  `reset_stats` 清空新计数。纯旁路，不影响既有路由行为。
+- **4.4 venv 缓存容量监控**（`src/tools/dependency.py`）：
+  新增 `get_venv_cache_size_mb` / `check_venv_cache_size`
+  （5GB 阈值 WARNING 告警，只监控不自动清理）；`_VENV_CACHE_STATS_FILE`
+  改动态函数 `_venv_cache_stats_file()`（跟随 `_VENV_CACHE_DIR`，
+  修复测试隔离时落盘路径污染真实 `~/.cache` 的隐患）。
+- **4.2 脱敏递归化 + 回归测试**（`src/utils/logging_utils.py` +
+  `tests/test_logging_utils.py`）：`redact_dict` 改递归处理嵌套
+  dict/list/tuple（此前仅顶层字符串脱敏，嵌套结构敏感字段漏拦——
+  trace JSONL、异常堆栈常用嵌套 dict）；`fallback_mask_sensitive_info`
+  补 JWT 拦截（取 `_SENSITIVE_PATTERNS` 第 0/1/2/4 条，覆盖 sk-/hex/
+  base64/JWT 四类高频凭证，跳过 key=xxx 避免降级态误伤）。
+  新增 `TestSensitiveInjectionRegression` +
+  `TestSensitiveInjectionCIPassGuard` 两组 CI 用例（模拟 4 类敏感
+  凭证注入，主/降级双路径 + redact_dict 嵌套拦截验证）。
+- **5.2 错误分类体系扩展**（`src/agents/error_classifier.py`）：
+  `ErrorCategory` 新增 `EXECUTION_TRACE_MISSING`（任务失败但
+  execution_trace 为空 = 执行器异常路径）与
+  `MULTI_CANDIDATE_ALL_REJECTED`（多候选全被静态筛选拒绝）两类
+  （体系由 12 类扩至 14 类）；`refine_failure_category` 新增
+  `execution_trace` / `multi_candidate_stats` 参数，判定优先级
+  patch_rejected > rag_empty > trace_missing > multi_rejected；
+  `refine_final_error_category` 接线新字段；`get_fix_strategy`
+  补两类修复策略描述。
+- **reproduce.sh 多候选 + 跨文件 + 熔断器默认口径**：
+  `ENABLE_MULTI_CANDIDATE_PATCH` 默认 true（`--no-multi-candidate` 回退）；
+  新增 `--cross-file` / `--no-cross-file`（默认 false 保持历史单文件
+  口径）；新增 `API_CIRCUIT_BACKOFF`（默认 true）与
+  `API_PROMETHEUS_EXPORT`（默认 false）显式透传。
+
+### 测试
+- **新增 5 个测试文件**（覆盖 4.4/2.1/2.2/3.2/5.2 新机制）：
+  `test_api_circuit_breaker.py`（13 用例：指数退避 / 半开探测 /
+  Prometheus 导出 / get_status 新字段 / reset_stats）；
+  `test_contamination_multidim.py`（25 用例：三维相似度 / 综合风险等级 /
+  detect_contamination 全流程 / 抗污染基准注册表）；
+  `test_cross_file_bidirectional.py`（16 用例：单向 / 双向 / 环境变量
+  开关 / 符号定义行定位）；
+  `test_error_classifier_new_categories.py`（16 用例：两个新类别的
+  判定 / 优先级 / 修复策略描述 / 从 final_state 接线）；
+  `test_venv_cache_monitoring.py`（11 用例：容量统计 / 告警阈值 /
+  命中率 / 清理）。
+- **边界补强**（`test_experiments_analysis.py` /
+  `test_failure_kb.py` / `test_logging_utils.py` /
+  `test_multi_candidate.py`）：新增 `TestAnalyzeResultsNewMetricsBoundary`
+  （样本量=1 / 全通过 / 无 Token 数据等退化输入不崩溃）、
+  `TestCrossBatch` 全通过批次 / 空批次混入边界、
+  `TestSensitiveInjectionRegression` + `TestSensitiveInjectionCIPassGuard`
+  （脱敏注入回归 CI 用例）、`TestLineLevelCreditScores` +
+  `TestMutationFeedback`（行级信用 / 变异反馈 / 新变异体类型）。
+- **口径更新**（随 4.4/5.2 行为变化）：
+  `test_error_classifier.py`（12 类 → 14 类；细化判定传非空
+  execution_trace 避免误命中 5.2 新类别）、
+  `test_weak_coverage_modules.py`（空状态细化为 execution_trace_missing）、
+  `test_api_manager_extended.py`（半开探测失败重开冷却改按 4.4 指数
+  退避口径）、`test_experiments_scripts.py`（venv 缓存 total=0 时
+  快照仍含容量字段，命中统计章节跳过渲染）。
+
+### 工程化基线
+- 修复 `experiments/run_benchmark.py` `run_single_task` 中
+  `mutation_enabled` 未定义的 NameError（此前仅在 `run_benchmark`
+  循环内定义，`run_single_task` 作用域不可见）；
+- 修复 `experiments/contamination_check.py` `_extract_statement_skeleton`
+  中 `tokenize.generate_tokens(io.StringIO(pseudo))` 误用
+  （StringIO 非 callable，应传入 `.readline` 方法）；
+- 修复 `src/tools/dependency.py` `_VENV_CACHE_STATS_FILE` 模块级常量
+  在 monkeypatch 测试隔离缓存目录时仍指向真实 `~/.cache/aitester` 的
+  隐患（改动态函数）；
+- `src/graph/nodes.py` `_record_execution_trace` 恢复返回轨迹列表的
+  历史口径（策略建议改由 `_executor_node` 单独计算并写入
+  `iteration_strategy_suggestion`，不改变轨迹写入行为）；
+- 全部改动不破坏既有 API 签名（新字段均带安全默认），1548 个测试
+  全过，零回归。
+
 ## [0.3] - 2026-09-19 评估指标深化 + 变异生成器修复 + 脱敏审计轮次
 
 ### 功能
