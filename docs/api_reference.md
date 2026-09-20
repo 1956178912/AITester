@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-19（0.2 代码质量优化轮次：RAG 降级守卫抽取 / 多函数补丁排序 O(n·m)→O(n+m) / 实验排名绑定修复 / 库名白名单 / 批量健康检查间隔可配 / 脱敏双实现收敛；全量 1460 测试用例 / 覆盖率 96%）
+> 最后更新：2026-09-20（0.6 P0 修复批：LLM OpenAI 路径零重试→指数退避 / venv 统计双锁分离 / 幽灵开关实装（API_CIRCUIT_BACKOFF + API_PROMETHEUS_EXPORT 经 config 接入 api_health + api_manager）/ multi_candidate 双次补丁应用消除 / ruff 15 告警清零；全量 1612 测试用例 / 覆盖率 94%）
 
 ---
 

@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1548 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过 45 条，1503 collected） |
-| **单元测试** | ✅ 全量 1548 passed, 45 skipped；精简环境 1503 passed, 45 skipped（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 96% 总覆盖（核心模块：reports/generator 99% / mysql_client 98% / base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / config/config_manager.py 95% / code_analyzer 100% / planner 100% / analysis 91% / helpers 100% / logging_utils 100% / cli-app 93% / cli-output 94% / executor_imports 92% / executor_modes 96% / executor_output 96% / executor_runtime 96% / dependency 99% / multi_candidate 92% / cross_file 100% / mutation_testing 通过 test_smell_detection_v2 覆盖） |
+| **总测试数** | ✅ 1612 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，1567 collected） |
+| **单元测试** | ✅ 全量 1612 passed, 0 failed；精简环境 1567 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/ 4632 stmts；0.6 轮次 P0 修复新增 6 个回归用例后 1612 全绿；核心模块：base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 92% / cross_file 100%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 0.4 五大章节系统能力增强轮次（评估指标深化 / 多维污染检测 / 跨文件双向依赖图 / 对抗性推理 / 熔断器指数退避 + Prometheus / venv 容量监控 / 递归脱敏 / 错误分类 14 类，全量 1548 passed / 零回归）；详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), analysis.py (91%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%), mutation_testing.py (via test_smell_detection_v2) |
-| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3） |
-| **最近改动** | ✅ 2026-09-20 五大章节系统能力增强轮次（0.4）：1.1 评估指标深化（异味 EagerTest/LackOfCohesion + 收敛 token 效率 + 难度分层迭代 + 变异-断言交叉 + RAG token/相似度 + 根因趋势 + 污染交叉）；1.2 变异反馈闭环（boundary_shift/return_void + prompt 注入 + run_single_task 开关修复）；2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦 + 抗污染基准注册表）；2.2 跨文件双向依赖图（反向依赖边 + 符号定义行定位）；3.1 对抗性推理（AdverIntent + 批评者评估 + 补丁重生成）；3.2 执行反馈动态迭代策略 + 多候选行级信用分配（BOOSTAPR 式）；4.4 熔断器指数退避 + Prometheus 导出 + venv 缓存容量监控（5GB 阈值）；4.2 redact_dict 递归脱敏 + 降级路径补 JWT 拦截 + 注入回归 CI 用例；5.2 错误分类体系 12→14 类（EXECUTION_TRACE_MISSING + MULTI_CANDIDATE_ALL_REJECTED）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 0.6 P0 修复批（LLM OpenAI 路径零重试→指数退避故障转移 / venv 统计双锁分离（锁外落盘，--parallel 热路径不排队）/ 幽灵开关实装（`API_CIRCUIT_BACKOFF` + `API_PROMETHEUS_EXPORT` 六处文档承诺落地）/ multi_candidate 双次补丁应用消除，全量 1612 passed / 零回归）；详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%) |
+| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 ruff 15 告警清零 + 33 文件 format 归一） |
+| **最近改动** | ✅ 2026-09-20 0.6 P0 修复批：P0-1 LLM OpenAI 路径零重试→套 `_retry_with_exponential_backoff`（1s/2s/4s 退避，与 zai 路径对齐，网络抖动不再一次 429 即任务级失败）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保 lost-update 安全，--parallel 热路径不再排队磁盘 IO）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 config 集中声明，api_health 熔断器 + api_manager Prometheus 导出接入，六处文档承诺落地）；multi_candidate 双次补丁应用消除（static_validate_patch 签名 2-tuple→3-tuple 复用 apply 结果）；ruff 15 告警清零 + 33 文件 format 归一；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1460 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1420 个收集）
+# 运行所有单元测试（全量 1612 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1567 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -811,7 +811,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1460 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1612 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -821,7 +821,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（62 个测试文件，全量 1460 个 pytest 收集用例；精简环境 1420 收集 / 40 自动跳过，src 总覆盖率 96%）：
+**测试覆盖模块**（67 个测试文件，全量 1612 个 pytest 收集用例；精简环境约 1567 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1213,14 +1213,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1460 个测试用例 / 覆盖率 96% / Ruff 全绿
+- 全量 1612 个测试用例 / 覆盖率 94% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1460 passed / 0 failed / ruff 全绿 / 覆盖率 96%
+**验证**: 全量 1612 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ---
 

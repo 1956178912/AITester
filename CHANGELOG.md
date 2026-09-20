@@ -4,6 +4,52 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.6] - 2026-09-20 P0 修复批（LLM OpenAI 路径零重试 + venv 统计双锁 + 幽灵开关实装 + 代码质量收尾）
+
+### 修复（性能审计三路并行：死代码/技术债 + 性能热点 + 文档漂移，人工复核确认）
+- **P0-1 LLM OpenAI 路径零重试→指数退避故障转移**（`src/agents/base_agent.py`）：
+  `llm.invoke` 此前单次调用即跨模型/跨 API 切换，网络抖动一次 429/超时 =
+  整个任务级失败（benchmark 100 任务 × 3 基线场景下 10% 抖动率 → 90-180 次
+  调用直接失败）。现把 `_retry_with_exponential_backoff`（1s/2s/4s 退避）套到
+  OpenAI 路径，空响应也触发重试；重试耗尽才进入故障转移（与 zai 路径语义对齐）。
+- **P0-2 venv 统计双锁分离**（`src/tools/dependency.py`）：
+  `_record_venv_cache_event` 此前持 `_venv_cache_stats_lock` 做
+  `json.load + os.makedirs + json.dump`（~2-5ms/事件），`--parallel` 下所有
+  worker 在 venv 命中检查热路径上争全局锁。现双锁分离：
+  计数锁（ns 级临界区，只做内存累计）+ 独立落盘锁（保护"读磁盘/快照/写磁盘"
+  整段，lost-update 安全）。简单移到计数锁外会触发 lost-update（两个并发
+  persist 各自读旧磁盘值、各自清零内存，50+50 事件被合并成 50，并发压测实证），
+  双锁分离后 8 线程 × 100 事件 0 丢失（新增 2 个护栏测试）。
+- **P0-3 幽灵开关实装**（`config.py` + `src/api/api_health.py` + `src/api/api_manager.py`）：
+  `.env.example` / `QUICKSTART` / `api_reference` / `reproduce.sh` / `README` /
+  `CHANGELOG` 六处文档承诺 `API_CIRCUIT_BACKOFF`（默认 true）与
+  `API_PROMETHEUS_EXPORT`（默认 false）为"对比实验"开关，但全仓无代码读取点——
+  指数退避与 Prometheus 导出此前无条件执行。现经 config 集中声明后：
+  `api_health.mark_failure` + `_probe_circuit_half_open` 接入退避开关
+  （false 走固定冷却 4.2 历史口径）；`api_manager.to_prometheus_text` 接入
+  导出开关（false 返回空串，默认行为不变）。
+- **multi_candidate 双次补丁应用消除**（`src/tools/multi_candidate.py`）：
+  `static_validate_patch` 内部已调用 `apply_patch_to_code`，`generate_candidates`
+  此前对通过静态筛选的候选又调一次——同候选双次完整应用补丁（含正则+行范围
+  定位+空行压缩），纯冗余。现签名 2-tuple → 3-tuple（ok, reason, applied_code），
+  `generate_candidates` 直接复用第三项（候选 3 个时白跑 3 次 → 0 次）。
+
+### 代码质量
+- **ruff 15 告警清零**（F401/F841/PERF401/PERF102/E741/RET504/B007/E402/I001）：
+  删除 5 处未使用导入与死变量；4 处 for-append 循环改 `list.extend` / `dict.values()`；
+  `contamination_check` 歧义变量 `l` → `line`；`nodes._append_execution_trace` 直返
+  `_append_trace_record` 结果；`api_manager` Prometheus 导出循环变量 `name` → `values()`。
+- **33 文件 format 归一**（`ruff format`，纯空白，无逻辑改动）。
+
+### 测试
+- 新增 6 个回归用例：
+  `tests/test_multi_candidate.py`（1：static_validate_patch 3-tuple 契约锁定）；
+  `tests/test_dependency_edge_cases.py`（2：并发计数不丢失 + 锁外落盘护栏）；
+  `tests/test_api_circuit_breaker.py`（3：API_CIRCUIT_BACKOFF 开/关双路径 +
+  API_PROMETHEUS_EXPORT 默认空串）。
+- 全量 **1612 passed / 0 failed**（较 0.5 的 1606 +6），ruff check + format 全绿，
+  src 总覆盖率 94%。
+
 ## [0.5] - 2026-09-20 分析层深化（跨基线收敛对比 + 跨文件失败案例 + 最小复现代码自动提取）
 
 ### 功能
