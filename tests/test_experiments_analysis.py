@@ -319,7 +319,12 @@ class TestAnalyzeResultsNewMetricsBoundary:
 
         details = [
             {"task_id": "t1", "passed": True, "generated_test": "def test_a():\n    pass\n", "strategy": "planner"},
-            {"task_id": "t2", "passed": True, "generated_test": "def test_b():\n    assert 1 == 1\n", "strategy": "plain"},
+            {
+                "task_id": "t2",
+                "passed": True,
+                "generated_test": "def test_b():\n    assert 1 == 1\n",
+                "strategy": "plain",
+            },
         ]
         result = _test_smell_detection(details)
         assert "smell_counts_by_strategy" in result
@@ -410,8 +415,20 @@ class TestAnalyzeResultsNewMetricsBoundary:
         from experiments.analyze_results import _rag_token_efficiency
 
         details = [
-            {"task_id": "t1", "passed": True, "rag_stats": [{"results": 1}], "token_usage": {"total_tokens": 200}, "iterations": 2},
-            {"task_id": "t2", "passed": False, "rag_stats": None, "token_usage": {"total_tokens": 100}, "iterations": 1},
+            {
+                "task_id": "t1",
+                "passed": True,
+                "rag_stats": [{"results": 1}],
+                "token_usage": {"total_tokens": 200},
+                "iterations": 2,
+            },
+            {
+                "task_id": "t2",
+                "passed": False,
+                "rag_stats": None,
+                "token_usage": {"total_tokens": 100},
+                "iterations": 1,
+            },
         ]
         result = _rag_token_efficiency(details)
         assert result["available"] is True
@@ -527,16 +544,8 @@ class TestCrossBaselineConvergenceBoundary:
         from experiments.analyze_results import _cross_baseline_convergence_comparison
 
         per = {
-            "aitester": {
-                "repair_convergence_curve": {
-                    "rounds": {"0": {"cumulative_pass_rate": 0.8}}
-                }
-            },
-            "another_agent": {
-                "repair_convergence_curve": {
-                    "rounds": {"0": {"cumulative_pass_rate": 0.7}}
-                }
-            },
+            "aitester": {"repair_convergence_curve": {"rounds": {"0": {"cumulative_pass_rate": 0.8}}}},
+            "another_agent": {"repair_convergence_curve": {"rounds": {"0": {"cumulative_pass_rate": 0.7}}}},
         }
         result = _cross_baseline_convergence_comparison(per)
         assert result["available"] is True
@@ -553,11 +562,7 @@ class TestCrossBaselineConvergenceBoundary:
                     "rounds": {"0": {"cumulative_pass_rate": 0.8}, "1": {"cumulative_pass_rate": 0.9}}
                 }
             },
-            "plain_llm": {
-                "repair_convergence_curve": {
-                    "rounds": {"0": {"cumulative_pass_rate": 0.6}}
-                }
-            },
+            "plain_llm": {"repair_convergence_curve": {"rounds": {"0": {"cumulative_pass_rate": 0.6}}}},
         }
         result = _cross_baseline_convergence_comparison(per)
         assert result["aligned_rounds"]["0"]["plain_llm"] == 0.6
@@ -573,9 +578,7 @@ class TestCrossFileFailureAnalysisBoundary:
         """全部任务通过时 available=False。"""
         from experiments.analyze_results import _cross_file_failure_analysis
 
-        per = {
-            "aitester": {"_details": [{"task_id": "t1", "passed": True}]}
-        }
+        per = {"aitester": {"_details": [{"task_id": "t1", "passed": True}]}}
         result = _cross_file_failure_analysis(per)
         assert result["available"] is False
 
@@ -586,10 +589,18 @@ class TestCrossFileFailureAnalysisBoundary:
         per = {
             "aitester": {
                 "_details": [
-                    {"task_id": "t1", "passed": False, "error_category": "import_error",
-                     "diagnosis": "ModuleNotFoundError: No module named 'foo'"},
-                    {"task_id": "t2", "passed": False, "error_category": "assertion",
-                     "diagnosis": "AssertionError: expected 1 == 2"},
+                    {
+                        "task_id": "t1",
+                        "passed": False,
+                        "error_category": "import_error",
+                        "diagnosis": "ModuleNotFoundError: No module named 'foo'",
+                    },
+                    {
+                        "task_id": "t2",
+                        "passed": False,
+                        "error_category": "assertion",
+                        "diagnosis": "AssertionError: expected 1 == 2",
+                    },
                 ]
             }
         }

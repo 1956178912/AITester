@@ -147,7 +147,7 @@ def _extract_statement_skeleton(patch_text: str) -> list[str]:
     import io
     import tokenize
 
-    changed = [l for l in _extract_changed_line_tokens(patch_text)]
+    changed = [line for line in _extract_changed_line_tokens(patch_text)]
     # 把 token 拼回近似代码（丢失缩进，但 ast.parse 只需序列类型）
     pseudo = " ".join(" ".join(toks) for toks in changed)
     try:
@@ -159,7 +159,13 @@ def _extract_statement_skeleton(patch_text: str) -> list[str]:
             sub = []
             for child in ast.walk(node):
                 if child is not node and type(child).__name__ in (
-                    "Compare", "BoolOp", "BinOp", "Call", "If", "For", "While",
+                    "Compare",
+                    "BoolOp",
+                    "BinOp",
+                    "Call",
+                    "If",
+                    "For",
+                    "While",
                 ):
                     sub.append(type(child).__name__)
                     if len(sub) >= 2:
@@ -370,7 +376,9 @@ def detect_contamination(
     clean_n = len(low)
     contaminated_rate = round(contaminated_success / contaminated_n, 4) if contaminated_n else None
     clean_rate = round(clean_success / clean_n, 4) if clean_n else None
-    delta = round(contaminated_rate - clean_rate, 4) if (contaminated_rate is not None and clean_rate is not None) else None
+    delta = (
+        round(contaminated_rate - clean_rate, 4) if (contaminated_rate is not None and clean_rate is not None) else None
+    )
     return {
         "checked": len(scores),
         "high": high,
@@ -423,13 +431,9 @@ def render_contamination_section(report: dict[str, Any], baseline: str) -> list[
         lines.append("| 分组 | 任务数 | 成功率 |")
         lines.append("|------|--------|--------|")
         lines.append(
-            f"| 含污染（high/medium） | {summary.get('contaminated', 0)} "
-            f"| {summary.get('contaminated_success_rate')} |"
+            f"| 含污染（high/medium） | {summary.get('contaminated', 0)} | {summary.get('contaminated_success_rate')} |"
         )
-        lines.append(
-            f"| 不含污染（low/未检测） | {summary.get('clean', 0)} "
-            f"| {summary.get('clean_success_rate')} |"
-        )
+        lines.append(f"| 不含污染（low/未检测） | {summary.get('clean', 0)} | {summary.get('clean_success_rate')} |")
         lines.append("")
         delta = summary.get("delta")
         if delta is not None:
@@ -437,7 +441,7 @@ def render_contamination_section(report: dict[str, Any], baseline: str) -> list[
                 lines.append(
                     f"> 解读：含污染组成功率比不含污染组高 {delta:.2f}（≥0.2），"
                     "提示本批次结果可能受训练数据污染影响——高重叠任务疑似"
-                    "\"背出\"黄金补丁而非真正定位根因。论文中应把含污染样本"
+                    '"背出"黄金补丁而非真正定位根因。论文中应把含污染样本'
                     "单独标注，并建议补充 SWE-rebench（抗污染基准）交叉验证。"
                 )
             else:
@@ -470,7 +474,7 @@ CONTAMINATION_RESISTANT_BENCHMARKS: dict[str, dict[str, Any]] = {
         "resistance_mechanism": (
             "任务在 LLM 训练数据公开截止之后构建，从源头降低训练污染风险；"
             "建议与主基准（如 SWE-bench Verified）成对报告，取抗污染基准的"
-            "结果作为\"无污染\"口径，主基准结果作\"含污染风险\"口径。"
+            '结果作为"无污染"口径，主基准结果作"含污染风险"口径。'
         ),
         "recommended_pairing": "swe-bench-verified",
     },
@@ -478,7 +482,7 @@ CONTAMINATION_RESISTANT_BENCHMARKS: dict[str, dict[str, Any]] = {
         "display_name": "SWE-bench Live",
         "resistance_mechanism": (
             "持续新增 issue（滚动更新），任何已发布模型的训练截止都早于最新任务，"
-            "天然抗污染；适合作为\"最新能力\"口径补充。"
+            '天然抗污染；适合作为"最新能力"口径补充。'
         ),
         "recommended_pairing": "swe-bench",
     },
@@ -492,15 +496,14 @@ def render_resistant_benchmark_section() -> list[str]:
     lines = ["## 抗污染基准交叉验证建议（2.1）", ""]
     lines.append("| 基准 | 抗污染机制 | 建议配对基准 |")
     lines.append("|------|-----------|-------------|")
-    for _key, meta in CONTAMINATION_RESISTANT_BENCHMARKS.items():
-        lines.append(
-            f"| {meta['display_name']} | {meta['resistance_mechanism']} "
-            f"| {meta.get('recommended_pairing', '—')} |"
-        )
+    lines.extend(
+        f"| {meta['display_name']} | {meta['resistance_mechanism']} | {meta.get('recommended_pairing', '—')} |"
+        for meta in CONTAMINATION_RESISTANT_BENCHMARKS.values()
+    )
     lines.append("")
     lines.append(
-        "> 用法：在实验报告中成对展示\"主基准 + 抗污染基准\"的成功率，"
-        "并标注主基准结果中\"含污染样本\"占比（见上方 contamination_summary）。"
+        '> 用法：在实验报告中成对展示"主基准 + 抗污染基准"的成功率，'
+        '并标注主基准结果中"含污染样本"占比（见上方 contamination_summary）。'
     )
     lines.append("")
     return lines

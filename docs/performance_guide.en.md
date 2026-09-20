@@ -534,12 +534,12 @@ Binary packages for different Python versions are incompatible (e.g. numpy / pan
 from src.tools.dependency import venv_cache_dir
 
 # Default: uses the current interpreter version (e.g. 3.14 -> py3.14 prefix)
-d = venv_cache_dir(['pandas'])
+d = venv_cache_dir(["pandas"])
 # -> ~/.cache/aitester/venvs/py3.14_<digest>_pandas
 
 # Explicitly specify Python version (container / multi-version coexistence)
-d_310 = venv_cache_dir(['pandas'], python_version='3.10')
-d_312 = venv_cache_dir(['pandas'], python_version='3.12')
+d_310 = venv_cache_dir(["pandas"], python_version="3.10")
+d_312 = venv_cache_dir(["pandas"], python_version="3.12")
 # All three are different; venvs are stored in isolated directories
 ```
 

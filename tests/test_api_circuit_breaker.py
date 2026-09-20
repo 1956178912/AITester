@@ -91,6 +91,7 @@ class TestHalfOpenProbe:
         # 将 circuit_open_until 设为 10s 前的时间点，使 in_circuit_half_open=True
         # （冷却已到期、探测尚未完成 → 进入半开窗口）
         import time as _time
+
         health.circuit_open_until = _time.monotonic() - 1.0
         assert health.in_circuit_half_open is True
         health._probe_circuit_half_open(False)
@@ -133,6 +134,7 @@ class TestPrometheusExport:
         manager = APIManager(enable_health_checker=False)
         if not manager.health_nodes:
             import pytest
+
             pytest.skip("无 LLM 配置节点，跳过 Prometheus 导出测试")
         # 触发一次失败 + 成功让指标非零
         first_name = next(iter(manager.health_nodes))
@@ -175,9 +177,7 @@ class TestPrometheusExport:
         manager.health_nodes.clear()
         text = manager.to_prometheus_text()
         # 无节点时仍输出 HELP/TYPE 头（7 指标），但无数据行
-        data_lines = [
-            line for line in text.splitlines() if line and not line.startswith("#")
-        ]
+        data_lines = [line for line in text.splitlines() if line and not line.startswith("#")]
         assert data_lines == []
 
 
@@ -190,6 +190,7 @@ class TestGetStatusNewFields:
         manager = APIManager(enable_health_checker=False)
         if not manager.health_nodes:
             import pytest
+
             pytest.skip("无 LLM 配置节点，跳过")
         status = manager.get_status()
         node_data = next(iter(status["nodes"].values()))
@@ -206,6 +207,7 @@ class TestGetStatusNewFields:
         manager = APIManager(enable_health_checker=False)
         if not manager.health_nodes:
             import pytest
+
             pytest.skip("无 LLM 配置节点，跳过")
         node = next(iter(manager.health_nodes.values()))
         node.circuit_open_count = 5

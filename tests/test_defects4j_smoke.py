@@ -48,9 +48,7 @@ class TestDefects4JPYDatasetSmoke:
             d.mkdir(parents=True)
 
         # 写入 buggy 代码
-        (buggy_dir / "utils.py").write_text(
-            "def add(a, b):\n    return a - b\n", encoding="utf-8"
-        )
+        (buggy_dir / "utils.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
 
         # 写入测试
         (tests_dir / "test_utils.py").write_text(
@@ -104,9 +102,7 @@ class TestDefects4JPYDatasetSmoke:
                 pdir = tmp_path / "projects" / proj / ver
                 (pdir / "buggy").mkdir(parents=True)
                 (pdir / "tests").mkdir(parents=True)
-                (pdir / "buggy" / "mod.py").write_text(
-                    f"def {proj}_{ver}():\n    return 1\n", encoding="utf-8"
-                )
+                (pdir / "buggy" / "mod.py").write_text(f"def {proj}_{ver}():\n    return 1\n", encoding="utf-8")
                 (pdir / "tests" / "test_mod.py").write_text(
                     f"def test_{proj}_{ver}():\n    assert {proj}_{ver}() == 1\n",
                     encoding="utf-8",
@@ -134,9 +130,7 @@ class TestDefects4JPYDatasetSmoke:
         pdir = tmp_path / "projects" / "check" / "1.0"
         (pdir / "buggy").mkdir(parents=True)
         (pdir / "tests").mkdir(parents=True)
-        (pdir / "buggy" / "mod.py").write_text(
-            "def compute(x):\n    return x * 2\n", encoding="utf-8"
-        )
+        (pdir / "buggy" / "mod.py").write_text("def compute(x):\n    return x * 2\n", encoding="utf-8")
         (pdir / "tests" / "test_mod.py").write_text(
             "def test_compute():\n    assert compute(5) == 10\n", encoding="utf-8"
         )

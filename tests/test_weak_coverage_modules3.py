@@ -22,6 +22,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ─── trace.py: 写盘失败降级 ────────────────────────────────────────────
 
+
 class TestTraceWriteFailure:
     """4.3/5.1 trace.py 弱覆盖补强：JSONL 写盘失败降级路径。"""
 
@@ -110,25 +111,20 @@ class TestTraceWriteFailure:
 
 # ─── analysis.py: 统计检验边界 ─────────────────────────────────────────
 
+
 class TestAnalysisStatisticalBoundaries:
     """5.1 analysis.py 统计检验边界条件测试。"""
 
     def _make_benchmark(self, details_by_baseline: dict[str, list[dict]]) -> dict:
         """构造 benchmark JSON 结构。"""
-        return {
-            "results": {
-                name: {"details": details} for name, details in details_by_baseline.items()
-            }
-        }
+        return {"results": {name: {"details": details} for name, details in details_by_baseline.items()}}
 
     def test_paired_t_test_constant_pass_rate_skipped(self):
         """两组通过率全 1（恒定）时：t 检验返回 NaN，应记 skipped 而非数字。"""
         from src.experiments.analysis import analyze_experiment_results
 
         all_pass = [{"task_id": f"t{i}", "passed": True} for i in range(5)]
-        data = {
-            "results": {"aitester": {"details": all_pass}, "plain_llm": {"details": all_pass}}
-        }
+        data = {"results": {"aitester": {"details": all_pass}, "plain_llm": {"details": all_pass}}}
         report = analyze_experiment_results(data)
         # 应返回结构化 dict，不崩溃
         assert isinstance(report, dict)
@@ -153,6 +149,7 @@ class TestAnalysisStatisticalBoundaries:
 
 # ─── error_classifier: extract_error_context 分支 ──────────────────────
 
+
 class TestErrorClassifierContextExtraction:
     """5.1 error_classifier extract_error_context 各分支覆盖。"""
 
@@ -165,26 +162,20 @@ class TestErrorClassifierContextExtraction:
     def test_module_not_found_extracts_module_name(self):
         """ModuleNotFoundError 分支：提取 module_name。"""
         ctx = self._extract(
-            "ModuleNotFoundError: No module named 'requests'\n"
-            "  File \"/tmp/test_x.py\", line 1, in <module>"
+            "ModuleNotFoundError: No module named 'requests'\n  File \"/tmp/test_x.py\", line 1, in <module>"
         )
         assert ctx.module_name == "requests"
 
     def test_import_error_extracts_module_name(self):
         """ImportError 分支：提取 module_name（正则捕获的是缺失的名称 foo）。"""
-        ctx = self._extract(
-            "ImportError: cannot import name 'foo' from 'bar_lib'\n"
-        )
+        ctx = self._extract("ImportError: cannot import name 'foo' from 'bar_lib'\n")
         # 正则 _RE_IMPORT_ERROR 捕获 group(1) = 'foo'（缺失的名称）
         assert ctx.module_name == "foo"
 
     def test_syntax_error_file_line(self):
         """SyntaxError 文件行号列号分支。"""
         ctx = self._extract(
-            "  File \"/tmp/bad.py\", line 3, in <module>\n"
-            "    def broken(:\n"
-            "    ^\n"
-            "SyntaxError: invalid syntax"
+            '  File "/tmp/bad.py", line 3, in <module>\n    def broken(:\n    ^\nSyntaxError: invalid syntax'
         )
         assert ctx.filename == "/tmp/bad.py"
         assert ctx.line == 3
@@ -204,6 +195,7 @@ class TestErrorClassifierContextExtraction:
 
 # ─── cli/output.py: 非 rich 降级 ───────────────────────────────────────
 
+
 class TestCliOutputNoRich:
     """5.1 cli/output.py 弱覆盖补强：rich 不可用时的降级路径。"""
 
@@ -221,6 +213,7 @@ class TestCliOutputNoRich:
 
 
 # ─── prompts/templates: __main__ 自诊断块 ──────────────────────────────
+
 
 class TestPromptTemplatesMain:
     """5.1 prompts/templates.py 弱覆盖补强：__main__ 自诊断入口。"""

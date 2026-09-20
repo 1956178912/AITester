@@ -235,7 +235,7 @@ def extract_minimal_repro(row: dict[str, Any], max_lines: int = 12) -> str | Non
     trace_start = -1
     for i, ln in enumerate(lines):
         stripped = ln.strip()
-        if stripped.startswith("File ") or stripped.startswith('  File '):
+        if stripped.startswith("File ") or stripped.startswith("  File "):
             trace_start = i
     if trace_start >= 0:
         snippet_lines = lines[trace_start:]
@@ -245,9 +245,20 @@ def extract_minimal_repro(row: dict[str, Any], max_lines: int = 12) -> str | Non
         return "\n".join(snippet_lines).rstrip()
 
     # 规则 2：无 traceback 时按错误关键词过滤
-    _ERR_KEYWORDS = ("assert", "Error", "ImportError", "AttributeError",
-                     "TypeError", "KeyError", "IndexError", "ValueError",
-                     "failed", "traceback", "FAILED", "ModuleNotFound")
+    _ERR_KEYWORDS = (
+        "assert",
+        "Error",
+        "ImportError",
+        "AttributeError",
+        "TypeError",
+        "KeyError",
+        "IndexError",
+        "ValueError",
+        "failed",
+        "traceback",
+        "FAILED",
+        "ModuleNotFound",
+    )
     matched = [ln for ln in lines if any(kw in ln for kw in _ERR_KEYWORDS)]
     if matched:
         if len(matched) > max_lines:
@@ -459,15 +470,16 @@ def generate_report(tasks: list[dict[str, Any]], output_path: str) -> None:
             # 5.3 改进：最小复现代码片段（自动提取；无法提取时标注需人工补充）
             repro_code = case.get("minimal_repro_code")
             if repro_code:
-                lines.append(f"- **最小复现代码片段**:")
+                lines.append("- **最小复现代码片段**:")
                 lines.append("")
                 lines.append("  ```")
-                for rl in repro_code.splitlines():
-                    lines.append(f"  {rl}")
+                lines.extend(f"  {rl}" for rl in repro_code.splitlines())
                 lines.append("  ```")
                 lines.append("")
             else:
-                lines.append("- **最小复现代码片段**: 无法自动提取（diagnosis 无 traceback 且无错误关键词），需人工补充")
+                lines.append(
+                    "- **最小复现代码片段**: 无法自动提取（diagnosis 无 traceback 且无错误关键词），需人工补充"
+                )
                 lines.append("")
             lines.append(f"- **建议修复**: {case['suggested_fix']['suggestion']}")
             lines.append("")

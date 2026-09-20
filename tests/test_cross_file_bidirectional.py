@@ -13,7 +13,6 @@ from __future__ import annotations
 from src.tools.cross_file import (
     analyze_cross_file_deps,
     cross_file_bidirectional,
-    cross_file_enabled,
 )
 
 # 被测：entry 模块导入 utils 的 helper，并调用它

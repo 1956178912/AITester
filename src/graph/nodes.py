@@ -340,7 +340,7 @@ def _record_execution_trace(
     # 注意：本函数只负责"追加轨迹"，保持返回轨迹列表的历史口径；
     # 策略建议由调用方（_executor_node）单独经 _suggest_iteration_strategy 计算
     # 并写入 state["iteration_strategy_suggestion"]（观测层，不参与路由）
-    trace = _append_trace_record(
+    return _append_trace_record(
         state,
         trace,
         passed=passed,
@@ -348,7 +348,6 @@ def _record_execution_trace(
         coverage_delta=coverage_delta,
         elapsed_seconds=elapsed_seconds,
     )
-    return trace
 
 
 def _append_trace_record(
@@ -374,9 +373,7 @@ def _append_trace_record(
     return trace
 
 
-def _compute_reward_signals(
-    passed: bool, coverage_delta: float | None, elapsed_seconds: float
-) -> dict[str, float]:
+def _compute_reward_signals(passed: bool, coverage_delta: float | None, elapsed_seconds: float) -> dict[str, float]:
     """计算多维度奖励信号（3.2 保守线性归一，供执行反馈 RL 备料）。
 
     Args:
@@ -400,9 +397,7 @@ def _compute_reward_signals(
     }
 
 
-def _suggest_iteration_strategy(
-    trace: list[dict[str, Any]], coverage_delta: float | None
-) -> str | None:
+def _suggest_iteration_strategy(trace: list[dict[str, Any]], coverage_delta: float | None) -> str | None:
     """3.2 改进：基于历史轨迹动态调整后续迭代策略（纯观测层建议）。
 
     Args:
@@ -446,6 +441,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     # 统一走 rag_guarded 降级守卫（P1 重构）：有失败用例时检索相似修复案例
     rag_refs_box: list = [None]
     if state.get("failed_cases"):
+
         def _on_retrieve_repairs(retriever) -> None:
             refs = retriever.retrieve_repairs(
                 error_category=state.get("error_category", "unknown"),

@@ -24,7 +24,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any
@@ -207,9 +206,7 @@ class DebuggerAgent(BaseAgent):
         adversarial_check: dict[str, Any] = {"scenarios_checked": 0, "all_passed": False}
         adversarial_hypotheses: list[str] = []
         if _adversarial_debugging_enabled():
-            adversarial_hypotheses = self._generate_adversarial_intents(
-                target_code, error_category.value
-            )
+            adversarial_hypotheses = self._generate_adversarial_intents(target_code, error_category.value)
             if adversarial_hypotheses:
                 query += self._build_adversarial_prompt_section(adversarial_hypotheses)
                 logger.info(
@@ -257,9 +254,7 @@ class DebuggerAgent(BaseAgent):
 
     # ─── 3.1 对抗性推理辅助方法（AdverIntent-Agent 式）────────────────────
 
-    def _generate_adversarial_intents(
-        self, target_code: str, error_category: str
-    ) -> list[str]:
+    def _generate_adversarial_intents(self, target_code: str, error_category: str) -> list[str]:
         """生成 2-3 个对抗性程序意图假设（攻击者/缺陷视角）。
 
         让 LLM 从"想让代码出 bug"的角度思考：哪些输入/调用场景会击穿
@@ -296,20 +291,14 @@ class DebuggerAgent(BaseAgent):
     def _build_adversarial_prompt_section(self, hypotheses: list[str]) -> str:
         """把对抗性意图假设 + 针对性测试用例要求注入 prompt。"""
         lines = [
-            "\n\n【对抗性推理（3.1）】以下是可能击穿当前实现的缺陷场景假设，"
-            "请在生成补丁时确保这些场景被正确处理：",
+            "\n\n【对抗性推理（3.1）】以下是可能击穿当前实现的缺陷场景假设，请在生成补丁时确保这些场景被正确处理：",
         ]
         for i, h in enumerate(hypotheses, start=1):
             lines.append(f"  假设 {i}：{h}")
-        lines.append(
-            "请为每个假设生成一个针对性测试用例（验证补丁覆盖该场景），"
-            "并在 patch 的修复中处理这些对抗场景。"
-        )
+        lines.append("请为每个假设生成一个针对性测试用例（验证补丁覆盖该场景），并在 patch 的修复中处理这些对抗场景。")
         return "\n".join(lines)
 
-    def _run_critic_eval(
-        self, patch: str, target_code: str, hypotheses: list[str]
-    ) -> dict[str, Any]:
+    def _run_critic_eval(self, patch: str, target_code: str, hypotheses: list[str]) -> dict[str, Any]:
         """批评者评估：独立 LLM 调用尝试构造击穿补丁的对抗性测试。
 
         Args:
@@ -330,7 +319,7 @@ class DebuggerAgent(BaseAgent):
             f"原始代码：\n```\n{target_code}\n```\n\n"
             f"补丁：\n```\n{patch[:2000]}\n```\n\n"
             f"已知对抗场景假设：\n" + "\n".join(f"- {h}" for h in hypotheses) + "\n\n"
-            "请输出 JSON：{\"break_cases\": [测试用例描述...], \"all_passed\": bool}"
+            '请输出 JSON：{"break_cases": [测试用例描述...], "all_passed": bool}'
         )
         try:
             raw = self._call_llm_with_cache(query)
@@ -353,10 +342,6 @@ class DebuggerAgent(BaseAgent):
 
     def _build_critic_feedback(self, critic_result: dict[str, Any]) -> str:
         """把批评者发现的击穿用例作为负面反馈注入重新生成 prompt。"""
-        lines = [
-            "\n\n【批评者反馈（3.1）】以下对抗性测试用例会击穿当前补丁，"
-            "请在重新生成时确保这些场景被正确处理："
-        ]
-        for c in critic_result.get("break_cases", []):
-            lines.append(f"- {c[:_ADVERSARIAL_CASE_TRUNCATE_LEN]}")
+        lines = ["\n\n【批评者反馈（3.1）】以下对抗性测试用例会击穿当前补丁，请在重新生成时确保这些场景被正确处理："]
+        lines.extend(f"- {c[:_ADVERSARIAL_CASE_TRUNCATE_LEN]}" for c in critic_result.get("break_cases", []))
         return "\n".join(lines)

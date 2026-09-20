@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 
 import pytest
 
@@ -117,6 +116,7 @@ class TestClearVenvCache:
         new.mkdir()
         # 把 old 的 mtime 调到 10 天前
         import time as _time
+
         ten_days_ago = _time.time() - 10 * 86400
         os.utime(old, (ten_days_ago, ten_days_ago))
         result = dep.clear_venv_cache(max_age_days=7)

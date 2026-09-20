@@ -53,7 +53,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 # 2.1 数据污染检测模块（experiments 包内相对导入，sys.path 注入后方可用）
-from experiments.contamination_check import (
+from experiments.contamination_check import (  # noqa: E402
     detect_contamination,
     render_contamination_section,
     render_resistant_benchmark_section,
@@ -289,7 +289,8 @@ def _smell_task_has_smell(row: dict[str, Any], test_code: str) -> set[str]:
     if tree is not None:
         # 收集所有 test_* 函数
         test_funcs = [
-            node for node in _ast_smell.walk(tree)
+            node
+            for node in _ast_smell.walk(tree)
             if isinstance(node, _ast_smell.FunctionDef) and node.name.startswith("test_")
         ]
         # Eager Test：单个测试函数内独立断言数 >= 阈值，
@@ -404,7 +405,9 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
     smell_density = round(len(tasks_with_smells) / observed, 4)
     # 按策略分组的异味密度（有异味任务 / 该策略观测任务）
     for stat in by_strategy.values():
-        stat["smell_density"] = round(stat["tasks_with_smells"] / stat["observed_tasks"], 4) if stat["observed_tasks"] else 0.0
+        stat["smell_density"] = (
+            round(stat["tasks_with_smells"] / stat["observed_tasks"], 4) if stat["observed_tasks"] else 0.0
+        )
     result: dict[str, Any] = {
         "available": True,
         "observed_tasks": observed,
@@ -596,10 +599,7 @@ def _cross_baseline_convergence_comparison(
         "含 'aitester' 且不含 'plain' 的基线" 与 "含 'plain' 的基线"
         两组的均值差；任一组为空时为 None。
     """
-    baselines_with_curve = [
-        bl for bl, m in per_baseline.items()
-        if m.get("repair_convergence_curve", {}).get("rounds")
-    ]
+    baselines_with_curve = [bl for bl, m in per_baseline.items() if m.get("repair_convergence_curve", {}).get("rounds")]
     if len(baselines_with_curve) < 2:
         return {"available": False, "baselines": baselines_with_curve}
 
@@ -872,8 +872,8 @@ def _failure_root_cause_trend(details: list[dict[str, Any]]) -> dict[str, Any]:
     third = max(1, total_failed // 3)
     segments = {
         "first_third": failed_rows[:third],
-        "second_third": failed_rows[third:2 * third],
-        "third_third": failed_rows[2 * third:],
+        "second_third": failed_rows[third : 2 * third],
+        "third_third": failed_rows[2 * third :],
     }
     trend: dict[str, dict[str, float]] = {}
     for seg_name, seg_rows in segments.items():
@@ -962,14 +962,20 @@ def _rag_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
 
     def _group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         n = len(rows)
-        avg_tokens = round(sum(float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2) if n else 0.0
+        avg_tokens = (
+            round(sum(float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2)
+            if n
+            else 0.0
+        )
         avg_iterations = round(sum(int(r.get("iterations", 0) or 0) for r in rows) / n, 2) if n else 0.0
         success_rate = round(sum(1 for r in rows if r.get("passed")) / n, 4) if n else 0.0
         return {"tasks": n, "avg_tokens": avg_tokens, "avg_iterations": avg_iterations, "success_rate": success_rate}
 
     rag_stat = _group_stats(rag_rows)
     no_rag_stat = _group_stats(no_rag_rows)
-    token_delta_ratio = round(rag_stat["avg_tokens"] / no_rag_stat["avg_tokens"], 4) if no_rag_stat["avg_tokens"] else None
+    token_delta_ratio = (
+        round(rag_stat["avg_tokens"] / no_rag_stat["avg_tokens"], 4) if no_rag_stat["avg_tokens"] else None
+    )
     iteration_delta = round(rag_stat["avg_iterations"] - no_rag_stat["avg_iterations"], 2)
     return {
         "available": True,
@@ -1085,7 +1091,9 @@ def _boundary_case_coverage(details: list[dict[str, Any]]) -> dict[str, Any]:
                     covered_types.add("none")
                 elif isinstance(v, str) and v == "":
                     covered_types.add("empty_string")
-                elif (isinstance(v, int) and v in (0, -1, 1, 10**6)) or (isinstance(v, float) and v in (-0.1, 0.0, 1.0)):
+                elif (isinstance(v, int) and v in (0, -1, 1, 10**6)) or (
+                    isinstance(v, float) and v in (-0.1, 0.0, 1.0)
+                ):
                     covered_types.add("numeric_extreme")
             if isinstance(node, _ast.List) and not getattr(node, "elts", None):
                 covered_types.add("empty_collection")
@@ -1162,16 +1170,13 @@ def _mutation_score_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
         if row.get("mutation_score") is not None
     ]
     if cross_tasks:
-        high_ms = [
-            asserts for ms, asserts in cross_tasks if ms >= 0.7 and asserts is not None
-        ]
+        high_ms = [asserts for ms, asserts in cross_tasks if ms >= 0.7 and asserts is not None]
         low_ms = [asserts for ms, asserts in cross_tasks if ms < 0.4 and asserts is not None]
         result["mutation_assertion_cross"] = {
             "high_score_avg_assertions": round(sum(high_ms) / len(high_ms), 2) if high_ms else None,
             "low_score_avg_assertions": round(sum(low_ms) / len(low_ms), 2) if low_ms else None,
             "consistent": (
-                (high_ms and low_ms)
-                and round(sum(high_ms) / len(high_ms), 2) > round(sum(low_ms) / len(low_ms), 2)
+                (high_ms and low_ms) and round(sum(high_ms) / len(high_ms), 2) > round(sum(low_ms) / len(low_ms), 2)
             )
             if (high_ms or low_ms)
             else None,
@@ -1212,10 +1217,7 @@ def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
         识别到问题所在）
     - 两者皆命中时归"无法生成有效补丁"（更具体，便于定位）
     """
-    converged_failed = [
-        r for r in details
-        if not r.get("passed") and int(r.get("iterations", 0) or 0) >= 3
-    ]
+    converged_failed = [r for r in details if not r.get("passed") and int(r.get("iterations", 0) or 0) >= 3]
     root_cause_stuck = 0
     patch_stuck = 0
     tasks_stuck: list[str] = []
@@ -1591,8 +1593,8 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append("")
         lines.append(
             "> 解读：边际收益 = 该轮增量通过任务数 / 该轮增量 Token 消耗；"
-            "best_marginal_round 标记\"第几轮修复最划算\"（边际收益最高的轮次），"
-            "用于回答\"第几轮修复的边际收益最高\"。"
+            'best_marginal_round 标记"第几轮修复最划算"（边际收益最高的轮次），'
+            '用于回答"第几轮修复的边际收益最高"。'
         )
         lines.append("")
 
@@ -1628,8 +1630,12 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if smell_rows:
         lines.append("## 测试异味检测（1.2）")
         lines.append("")
-        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | Eager Test | 缺乏内聚 | 异味密度 | 含异味任务 |")
-        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|---------|--------|----------|")
+        lines.append(
+            "| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | Eager Test | 缺乏内聚 | 异味密度 | 含异味任务 |"
+        )
+        lines.append(
+            "|------|---------|-------------------|--------------|---------|---------|----------|---------|--------|----------|"
+        )
         for baseline, s in smell_rows:
             c = s.get("smell_counts", {})
             lines.append(
@@ -1641,11 +1647,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             )
         lines.append("")
         # 按策略分组的异味分布对比（1.1 改进：异味模式受提示策略显著影响）
-        strategy_rows = [
-            (b, s)
-            for b, s in smell_rows
-            if s.get("smell_counts_by_strategy")
-        ]
+        strategy_rows = [(b, s) for b, s in smell_rows if s.get("smell_counts_by_strategy")]
         if strategy_rows:
             lines.append("### 异味分布按生成策略分组")
             lines.append("")
@@ -1788,15 +1790,17 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
 
     # 2.3 RAG Token 效率增益 + 相似度分布（启用/禁用 RAG 对比）
     rag_token_rows = [
-        (b, m["rag_token_efficiency"])
-        for b, m in per.items()
-        if m.get("rag_token_efficiency", {}).get("available")
+        (b, m["rag_token_efficiency"]) for b, m in per.items() if m.get("rag_token_efficiency", {}).get("available")
     ]
     if rag_token_rows:
         lines.append("## RAG Token 效率增益（2.3）")
         lines.append("")
-        lines.append("| 基线 | RAG组(任务数) | RAG组平均Token | RAG组成功率 | 无RAG组(任务数) | 无RAG组平均Token | 无RAG组成功率 | Token比率 | 迭代差 |")
-        lines.append("|------|--------------|---------------|-----------|----------------|-----------------|-------------|----------|--------|")
+        lines.append(
+            "| 基线 | RAG组(任务数) | RAG组平均Token | RAG组成功率 | 无RAG组(任务数) | 无RAG组平均Token | 无RAG组成功率 | Token比率 | 迭代差 |"
+        )
+        lines.append(
+            "|------|--------------|---------------|-----------|----------------|-----------------|-------------|----------|--------|"
+        )
         for baseline, rt in rag_token_rows:
             g = rt.get("rag_group", {})
             ng = rt.get("no_rag_group", {})
@@ -1810,7 +1814,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append("")
         lines.append(
             "> 解读：Token 比率 > 1 表示启用 RAG 的任务消耗更多 Token（检索 + 提示注入开销）；"
-            "结合成功率差异判断 RAG 的\"性价比\"——若成功率提升足以抵消 Token 开销则值得，"
+            '结合成功率差异判断 RAG 的"性价比"——若成功率提升足以抵消 Token 开销则值得，'
             "否则应考虑降低 top_k 或检索阈值。"
         )
         lines.append("")
@@ -1829,8 +1833,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             hist = rs.get("histogram", {})
             hist_text = ", ".join(f"{k}:{v}" for k, v in sorted(hist.items())) if hist else "—"
             lines.append(
-                f"| {baseline} | {rs.get('total_retrievals', 0)} "
-                f"| {rs.get('avg_max_similarity')} | {hist_text} |"
+                f"| {baseline} | {rs.get('total_retrievals', 0)} | {rs.get('avg_max_similarity')} | {hist_text} |"
             )
         lines.append("")
         lines.append(
@@ -1912,7 +1915,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
                 )
             lines.append("")
             lines.append(
-                "> 解读：若\"一致\"为真，说明断言强度越高的测试杀死的变异体越多"
+                '> 解读：若"一致"为真，说明断言强度越高的测试杀死的变异体越多'
                 "（符合变异测试理论）；若为假，提示部分高变异得分任务的断言可能"
                 "覆盖到测试本身而非被测代码。"
             )
@@ -1927,7 +1930,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if mode_rows:
         lines.append("## 收敛失败模式归因（1.2）")
         lines.append("")
-        lines.append("达到 MAX_ITERATIONS（默认 3）仍未修复的任务，区分\"无法定位根因\"与\"无法生成有效补丁\"。")
+        lines.append('达到 MAX_ITERATIONS（默认 3）仍未修复的任务，区分"无法定位根因"与"无法生成有效补丁"。')
         lines.append("")
         lines.append("| 基线 | 收敛失败任务 | 无法定位根因 | 无法生成有效补丁 |")
         lines.append("|------|------------|------------|----------------|")
@@ -1952,11 +1955,17 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if trace_rows:
         lines.append("## 执行反馈轨迹汇总（3.2）")
         lines.append("")
-        lines.append("| 基线 | 观测任务 | 总执行次数 | 平均轮数 | 首轮即通过率 | 末轮 correctness | 末轮 efficiency | 首/末轮覆盖率 |")
-        lines.append("|------|---------|----------|--------|------------|----------------|----------------|------------|")
+        lines.append(
+            "| 基线 | 观测任务 | 总执行次数 | 平均轮数 | 首轮即通过率 | 末轮 correctness | 末轮 efficiency | 首/末轮覆盖率 |"
+        )
+        lines.append(
+            "|------|---------|----------|--------|------------|----------------|----------------|------------|"
+        )
         for baseline, tstat in trace_rows:
             ct = tstat.get("coverage_trend") or {}
-            cov_text = f"{ct.get('first_round_avg')} → {ct.get('last_round_avg')}" if ct.get("delta") is not None else "N/A"
+            cov_text = (
+                f"{ct.get('first_round_avg')} → {ct.get('last_round_avg')}" if ct.get("delta") is not None else "N/A"
+            )
             lines.append(
                 f"| {baseline} | {tstat.get('observed_tasks', 0)} | {tstat.get('total_executions', 0)} "
                 f"| {tstat.get('avg_executions_per_task', 0)} | {tstat.get('pass_on_first_rate', 0.0)} "
@@ -1965,7 +1974,7 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             )
         lines.append("")
         lines.append(
-            "> 解读：本轮次即通过率反映系统\"一次做对\"能力；末轮 correctness 均值即\"收敛到通过\"的成功率；"
+            '> 解读：本轮次即通过率反映系统"一次做对"能力；末轮 correctness 均值即"收敛到通过"的成功率；'
             "末轮 efficiency 反映修复尝试的耗时效率；覆盖率趋势 delta > 0 表示迭代在提升覆盖。"
         )
         lines.append("")
@@ -1979,7 +1988,9 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if trend_rows:
         lines.append("## 失败根因时间趋势（5.3）")
         lines.append("")
-        lines.append("| 基线 | 失败任务 | LLM能力 | 依赖/环境 | 框架/基础设施 | 第一段LLM能力 | 第二段LLM能力 | 第三段LLM能力 |")
+        lines.append(
+            "| 基线 | 失败任务 | LLM能力 | 依赖/环境 | 框架/基础设施 | 第一段LLM能力 | 第二段LLM能力 | 第三段LLM能力 |"
+        )
         lines.append("|------|---------|--------|----------|--------------|-------------|-------------|-------------|")
         for baseline, tr in trend_rows:
             dist = tr.get("root_cause_distribution", {})
@@ -2027,8 +2038,8 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             )
         lines.append("")
         lines.append(
-            "> 解读：若\"成功率差（高-低）\"为显著正值（≥0.2），提示高污染风险任务"
-            "成功率异常偏高——系统可能在\"背出\"黄金补丁而非真正修复，论文中应"
+            '> 解读：若"成功率差（高-低）"为显著正值（≥0.2），提示高污染风险任务'
+            '成功率异常偏高——系统可能在"背出"黄金补丁而非真正修复，论文中应'
             "单独标注含污染样本并补充 SWE-rebench 交叉验证；若差异 ≤0.2，"
             "说明污染效应不显著，结果可信度较高。"
         )
@@ -2099,13 +2110,11 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             lines.append("|------|------------------------------|------|")
             if first_delta is not None:
                 lines.append(
-                    f"| 首轮即通过率差 | {first_delta:+.4f} "
-                    f"| 正值 = 多智能体协作首轮成功率更高（一次做对能力领先） |"
+                    f"| 首轮即通过率差 | {first_delta:+.4f} | 正值 = 多智能体协作首轮成功率更高（一次做对能力领先） |"
                 )
             if at1_delta is not None:
                 lines.append(
-                    f"| 第1轮累计通过率差 | {at1_delta:+.4f} "
-                    f"| 正值 = 协作机制的增益来自'一次做对'而非'多轮调试追平' |"
+                    f"| 第1轮累计通过率差 | {at1_delta:+.4f} | 正值 = 协作机制的增益来自'一次做对'而非'多轮调试追平' |"
                 )
             lines.append("")
         lines.append(

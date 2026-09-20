@@ -434,30 +434,31 @@ report = _assertion_strength_proxy(details)
 from src.graph.state import AITesterState, create_initial_state
 from src.graph.nodes import _record_execution_trace
 
-state = create_initial_state(task_uuid="t1", target_file="/p.py", target_code="def f(): pass",
-                              target_function=None, max_iterations=3)
+state = create_initial_state(
+    task_uuid="t1", target_file="/p.py", target_code="def f(): pass", target_function=None, max_iterations=3
+)
 # 工作流执行后 state["execution_trace"] 形如：
 [
-  {
-    "iteration": 0,
-    "passed": False,
-    "coverage": 40.0,
-    "coverage_delta": None,       # 首轮无前一轮
-    "elapsed_seconds": 2.0,
-    "reward_signals": {           # 保守线性归一，仅记录观测，不参与路由
-      "correctness": 0.0,         # 1.0 if passed else 0.0
-      "efficiency": 0.93,         # 1 - elapsed / EXECUTION_TIMEOUT
-      "simplicity": 0.97          # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
-    }
-  },
-  {
-    "iteration": 1,
-    "passed": True,
-    "coverage": 85.0,
-    "coverage_delta": 45.0,       # 85 - 40
-    "elapsed_seconds": 3.0,
-    "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95}
-  }
+    {
+        "iteration": 0,
+        "passed": False,
+        "coverage": 40.0,
+        "coverage_delta": None,  # 首轮无前一轮
+        "elapsed_seconds": 2.0,
+        "reward_signals": {  # 保守线性归一，仅记录观测，不参与路由
+            "correctness": 0.0,  # 1.0 if passed else 0.0
+            "efficiency": 0.93,  # 1 - elapsed / EXECUTION_TIMEOUT
+            "simplicity": 0.97,  # 1 - elapsed / (EXECUTION_TIMEOUT * 2)
+        },
+    },
+    {
+        "iteration": 1,
+        "passed": True,
+        "coverage": 85.0,
+        "coverage_delta": 45.0,  # 85 - 40
+        "elapsed_seconds": 3.0,
+        "reward_signals": {"correctness": 1.0, "efficiency": 0.9, "simplicity": 0.95},
+    },
 ]
 ```
 

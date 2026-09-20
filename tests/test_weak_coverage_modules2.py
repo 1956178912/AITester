@@ -19,6 +19,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ─── config_generator: main 入口 ────────────────────────────────────────
 
+
 class TestConfigGeneratorMain:
     """5.1 config_generator 弱覆盖补强：__main__ 入口路径。"""
 
@@ -47,6 +48,7 @@ class TestConfigGeneratorMain:
 
 
 # ─── prompts/templates: 常量验证 ────────────────────────────────────────
+
 
 class TestPromptTemplates:
     """5.1 prompts/templates 弱覆盖补强：常量非空 + 关键段落存在。"""
@@ -91,6 +93,7 @@ class TestPromptTemplates:
 
 
 # ─── synthetic_dataset: 边界用例生成 ─────────────────────────────────────
+
 
 class TestSyntheticDatasetEdge:
     """5.1 synthetic_dataset 弱覆盖补强：边界生成路径。"""

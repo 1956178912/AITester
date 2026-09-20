@@ -255,10 +255,8 @@ def run_single_agent_baseline(
     # 针对"当前测试未捕获的故障模式"补强断言；无反馈时行为与历史口径一致
     feedback = state.get("mutation_feedback")
     if feedback and feedback.get("survived_mutants"):
-        query += (
-            "\n\n【变异反馈】以下变异体未被现有测试捕获，请在生成测试时"
-            "补充针对性断言：\n"
-            + "\n".join(f"- {d}" for d in feedback["survived_mutants"][:5])
+        query += "\n\n【变异反馈】以下变异体未被现有测试捕获，请在生成测试时补充针对性断言：\n" + "\n".join(
+            f"- {d}" for d in feedback["survived_mutants"][:5]
         )
 
     # 执行测试
@@ -457,9 +455,7 @@ def run_single_task(
     """
     # 1.2 改进（MutGen 式变异反馈闭环）：解析变异评估开关
     # （None 沿用 config.ENABLE_MUTATION_SCORING 默认值；True/False 显式覆盖）
-    mutation_enabled = (
-        ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
-    )
+    mutation_enabled = ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
     # 创建临时目录存放任务相关文件（避免修改原始文件）
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
@@ -889,9 +885,7 @@ def run_benchmark(
         # 把 mutation_score 写回 bl_results[].mutation_score，
         # 后续 summary["details"] 直接携带该字段，供
         # analyze_results._mutation_score_metrics 汇总
-        mutation_enabled = (
-            ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
-        )
+        mutation_enabled = ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
         if mutation_enabled:
             # task_id → BenchmarkTask 映射（同一任务跨基线复用 instance_code）
             task_map = {t.task_id: t for t in tasks}

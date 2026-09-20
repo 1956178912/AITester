@@ -316,11 +316,7 @@ class TestSensitiveInjectionRegression:
         alphabet = string.ascii_letters + string.digits
         random_hex = secrets.token_hex(20)  # 40 位 hex（>= 32 触发拦截）
         random_key = "sk-" + "".join(secrets.choice(alphabet) for _ in range(40))
-        jwt_like = (
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-            "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
-            + secrets.token_urlsafe(20)
-        )
+        jwt_like = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0." + secrets.token_urlsafe(20)
         return {
             "random_hex": random_hex,
             "random_key": random_key,

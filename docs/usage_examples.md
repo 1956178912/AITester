@@ -369,10 +369,12 @@ print(f"共 {len(mutants)} 个变异体")
 
 # 每个变异体可单独跑测试套件，统计被杀死比例 → mutation_score
 # mutation_score_from_details 收集 details[].mutation_score，汇总平均 / 高 / 低分布
-summary = mutation_score_from_details([
-    {"task_id": "t1", "mutation_score": 0.8},
-    {"task_id": "t2", "mutation_score": 0.5},
-])
+summary = mutation_score_from_details(
+    [
+        {"task_id": "t1", "mutation_score": 0.8},
+        {"task_id": "t2", "mutation_score": 0.5},
+    ]
+)
 # → {"available": True, "observed_tasks": 2, "avg_mutation_score": 0.65,
 #    "high_score_tasks": 1, "low_score_tasks": 0}
 

@@ -246,10 +246,8 @@ def venv_cache_dir(
     """
     if python_version is None:
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    digest = hashlib.md5(
-        (f"{python_version}|" + "|".join(sorted(required_packages))).encode()
-    ).hexdigest()[:12]
-    label = ("_".join(sorted(required_packages))[:40] or "bare")
+    digest = hashlib.md5((f"{python_version}|" + "|".join(sorted(required_packages))).encode()).hexdigest()[:12]
+    label = "_".join(sorted(required_packages))[:40] or "bare"
     return os.path.join(_VENV_CACHE_DIR, f"py{python_version}_{digest}_{label}")
 
 
@@ -508,12 +506,13 @@ def check_venv_cache_size() -> dict[str, Any]:
     exceeded = size_mb > _VENV_CACHE_SIZE_WARN_MB
     if exceeded:
         logger.warning(
-            "venv 缓存目录总大小 %.0f MB 超过告警阈值 %d MB，"
-            "建议执行 clear_venv_cache(max_age_days=7) 清理过期缓存",
+            "venv 缓存目录总大小 %.0f MB 超过告警阈值 %d MB，建议执行 clear_venv_cache(max_age_days=7) 清理过期缓存",
             size_mb,
             _VENV_CACHE_SIZE_WARN_MB,
         )
-        recommendation = f"venv 缓存 {size_mb:.0f}MB > 阈值 {_VENV_CACHE_SIZE_WARN_MB}MB，建议 clear_venv_cache(max_age_days=7)"
+        recommendation = (
+            f"venv 缓存 {size_mb:.0f}MB > 阈值 {_VENV_CACHE_SIZE_WARN_MB}MB，建议 clear_venv_cache(max_age_days=7)"
+        )
     else:
         recommendation = ""
     return {

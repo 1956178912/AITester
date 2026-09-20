@@ -173,7 +173,7 @@ class TestVenvCacheDir:
         parts = basename.split("_")
         # 找到 hash 段（12 位十六进制）之后，拼接剩余即为 label
         idx = next((i for i, p in enumerate(parts) if len(p) == 12 and all(c in "0123456789abcdef" for c in p)), None)
-        label = "_".join(parts[idx + 1:]) if idx is not None and idx + 1 < len(parts) else ""
+        label = "_".join(parts[idx + 1 :]) if idx is not None and idx + 1 < len(parts) else ""
         assert len(label) <= 40
 
 

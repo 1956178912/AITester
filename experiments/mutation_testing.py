@@ -47,7 +47,6 @@ class Mutant:
     line_no: int = 0
 
 
-
 def _find_mutable_comparison_nodes(tree: ast.Module) -> list[ast.Compare]:
     """收集所有 Compare 节点（可变异为边界值变体）。"""
     return [node for node in ast.walk(tree) if isinstance(node, ast.Compare)]
@@ -88,7 +87,12 @@ class _RemoveNotTransformer(ast.NodeTransformer):
 
     def visit_Expr(self, node: ast.Expr) -> ast.AST:
         """改写语句级表达式槽位（如独立语句 `not x()`）。"""
-        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.value, ast.UnaryOp)
+            and isinstance(node.value.op, ast.Not)
+            and node.value.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.value = node.value.operand
             return node
@@ -96,11 +100,21 @@ class _RemoveNotTransformer(ast.NodeTransformer):
 
     def visit_Compare(self, node: ast.Compare) -> ast.AST:
         """改写比较左右值槽位（如 `x == not y`，罕见但保守覆盖）。"""
-        if isinstance(node.left, ast.UnaryOp) and isinstance(node.left.op, ast.Not) and node.left.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.left, ast.UnaryOp)
+            and isinstance(node.left.op, ast.Not)
+            and node.left.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.left = node.left.operand
         for i, comp in enumerate(node.comparators):
-            if isinstance(comp, ast.UnaryOp) and isinstance(comp.op, ast.Not) and comp.lineno == self._target_lineno and not self._replaced:
+            if (
+                isinstance(comp, ast.UnaryOp)
+                and isinstance(comp.op, ast.Not)
+                and comp.lineno == self._target_lineno
+                and not self._replaced
+            ):
                 self._replaced = True
                 node.comparators[i] = comp.operand
         return self.generic_visit(node)
@@ -108,35 +122,60 @@ class _RemoveNotTransformer(ast.NodeTransformer):
     def visit_BoolOp(self, node: ast.BoolOp) -> ast.AST:
         """改写 BoolOp 子值槽位（如 `a and not b` → `a and b`）。"""
         for i, val in enumerate(node.values):
-            if isinstance(val, ast.UnaryOp) and isinstance(val.op, ast.Not) and val.lineno == self._target_lineno and not self._replaced:
+            if (
+                isinstance(val, ast.UnaryOp)
+                and isinstance(val.op, ast.Not)
+                and val.lineno == self._target_lineno
+                and not self._replaced
+            ):
                 self._replaced = True
                 node.values[i] = val.operand
         return self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> ast.AST:
         """改写 If/While 等控制流的测试表达式槽位（最常见的 not X 位置）。"""
-        if isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not) and node.test.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.test, ast.UnaryOp)
+            and isinstance(node.test.op, ast.Not)
+            and node.test.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.test = node.test.operand
         return self.generic_visit(node)
 
     def visit_While(self, node: ast.While) -> ast.AST:
         """改写 While 循环条件槽位（`while not cond` → `while cond`）。"""
-        if isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not) and node.test.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.test, ast.UnaryOp)
+            and isinstance(node.test.op, ast.Not)
+            and node.test.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.test = node.test.operand
         return self.generic_visit(node)
 
     def visit_Return(self, node: ast.Return) -> ast.AST:
         """改写 return 语句槽位（`return not x` → `return x`）。"""
-        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.value, ast.UnaryOp)
+            and isinstance(node.value.op, ast.Not)
+            and node.value.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.value = node.value.operand
         return self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         """改写赋值右值槽位（`x = not y` → `x = y`）。"""
-        if isinstance(node.value, ast.UnaryOp) and isinstance(node.value.op, ast.Not) and node.value.lineno == self._target_lineno and not self._replaced:
+        if (
+            isinstance(node.value, ast.UnaryOp)
+            and isinstance(node.value.op, ast.Not)
+            and node.value.lineno == self._target_lineno
+            and not self._replaced
+        ):
             self._replaced = True
             node.value = node.value.operand
         return self.generic_visit(node)
@@ -200,9 +239,7 @@ class MutationGenerator:
         # 截断到上限
         return mutants[: self._MAX_MUTANTS_PER_TASK]
 
-    def _generate_comparison_flips(
-        self, tree: ast.Module, source_code: str
-    ) -> list[Mutant]:
+    def _generate_comparison_flips(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """比较运算符翻转变异。"""
         mutants: list[Mutant] = []
         for cmp_node in _find_mutable_comparison_nodes(tree):
@@ -230,23 +267,16 @@ class MutationGenerator:
         return mutants
 
     @staticmethod
-    def _flip_comparison_op(
-        tree: ast.Module, original_node: ast.Compare, new_op_name: str
-    ) -> None:
+    def _flip_comparison_op(tree: ast.Module, original_node: ast.Compare, new_op_name: str) -> None:
         """在 deepcopy 后的 tree 中翻转指定 Compare 节点的操作符（尽力匹配，失败忽略）。"""
         # 尽力匹配：按行号找第一个同类型 Compare
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Compare)
-                and node.lineno == original_node.lineno
-            ):
+            if isinstance(node, ast.Compare) and node.lineno == original_node.lineno:
                 op_class = getattr(ast, new_op_name)
                 node.ops = [op_class(), *node.ops[1:]]
                 return
 
-    def _generate_boolean_negations(
-        self, tree: ast.Module, source_code: str
-    ) -> list[Mutant]:
+    def _generate_boolean_negations(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """布尔取反变异：not X → X（移除 Not 节点）。
 
         实现：对每个 Not 节点，deepcopy 后用 _RemoveNotTransformer 改写
@@ -289,9 +319,7 @@ class MutationGenerator:
         transformer = _RemoveNotTransformer(original_node.lineno)
         transformer.visit(tree)
 
-    def _generate_numeric_offset(
-        self, tree: ast.Module, source_code: str
-    ) -> list[Mutant]:
+    def _generate_numeric_offset(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """数字常量偏移变异：value → value+1（仅在数值出现在比较或赋值中时）。"""
         mutants: list[Mutant] = []
         # 收集比较中的数字常量（左值或右值）
@@ -319,9 +347,7 @@ class MutationGenerator:
         return mutants
 
     @staticmethod
-    def _offset_numeric(
-        tree: ast.Module, cmp_node: ast.Compare, target_index: int, offset: int
-    ) -> None:
+    def _offset_numeric(tree: ast.Module, cmp_node: ast.Compare, target_index: int, offset: int) -> None:
         """在 deepcopy 后的 tree 中偏移 Compare 中指定位置的数字常量。"""
         new_cmp: ast.Compare | None = None
         for node in ast.walk(tree):
@@ -336,9 +362,7 @@ class MutationGenerator:
             if isinstance(target, ast.Constant) and isinstance(target.value, (int, float)):
                 target.value = target.value + offset
 
-    def _generate_boundary_shifts(
-        self, tree: ast.Module, source_code: str
-    ) -> list[Mutant]:
+    def _generate_boundary_shifts(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """1.2 改进：条件边界变异（严格/非严格比较互转：> ↔ >=、< ↔ <=）。
 
         针对 off-by-one 类边界 bug 的经典变异方向：
@@ -391,9 +415,7 @@ class MutationGenerator:
                 node.ops = [op_class(), *node.ops[1:]]
                 return
 
-    def _generate_return_voids(
-        self, tree: ast.Module, source_code: str
-    ) -> list[Mutant]:
+    def _generate_return_voids(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """1.2 改进：返回值变异（return X → return None）。
 
         对每个"带非空返回值的 return 语句"（return 后跟表达式，且表达式

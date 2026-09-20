@@ -302,10 +302,7 @@ def cross_batch_comparison(
         newest_cats = set(batches[-1]["failure_categories"])
         new_cats = [c for c in newest_cats if c not in oldest_cats]
         resolved_cats = [c for c in oldest_cats if c not in newest_cats]
-        regressed = [
-            c for c in cat_series
-            if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2]
-        ]
+        regressed = [c for c in cat_series if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2]]
     else:
         new_cats = resolved_cats = regressed = []
 
@@ -338,7 +335,13 @@ def render_cross_batch_section(comparison: dict[str, Any]) -> list[str]:
         lines.append(f"- **已解决失败类别**（旧批次有、最新无）: {', '.join(comparison['resolved_categories'])}")
     if comparison.get("regressed_categories"):
         lines.append(f"- **恶化失败类别**（数量增长）: {', '.join(comparison['regressed_categories'])}")
-    if not any([comparison.get("new_categories"), comparison.get("resolved_categories"), comparison.get("regressed_categories")]):
+    if not any(
+        [
+            comparison.get("new_categories"),
+            comparison.get("resolved_categories"),
+            comparison.get("regressed_categories"),
+        ]
+    ):
         lines.append("- 失败模式无明显变化（类别与数量趋势稳定）")
     lines.append("")
     return lines

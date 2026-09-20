@@ -370,10 +370,12 @@ print(f"{len(mutants)} mutants generated")
 
 # Each mutant can be run against the test suite individually; the kill ratio → mutation_score
 # mutation_score_from_details collects details[].mutation_score and aggregates average / high / low distribution
-summary = mutation_score_from_details([
-    {"task_id": "t1", "mutation_score": 0.8},
-    {"task_id": "t2", "mutation_score": 0.5},
-])
+summary = mutation_score_from_details(
+    [
+        {"task_id": "t1", "mutation_score": 0.8},
+        {"task_id": "t2", "mutation_score": 0.5},
+    ]
+)
 # → {"available": True, "observed_tasks": 2, "avg_mutation_score": 0.65,
 #    "high_score_tasks": 1, "low_score_tasks": 0}
 

@@ -16,6 +16,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ─── Eager Test / Lack of Cohesion 异味检测 ──────────────────────────────────
 
+
 class TestSmellDetectionV2:
     """1.1 补强异味检测：Eager Test + Lack of Cohesion。"""
 
@@ -106,6 +107,7 @@ def test_divide():
 
 # ─── 内置变异生成器 ──────────────────────────────────────────────────────────
 
+
 class TestMutationGenerator:
     """1.2 内置变异生成器单元测试。"""
 
@@ -168,13 +170,7 @@ class TestMutationGenerator:
         """嵌套函数体内的 not 也能被识别改写。"""
         from experiments.mutation_testing import MutationGenerator
 
-        source = (
-            "def outer(x):\n"
-            "    def inner():\n"
-            "        if not x:\n"
-            "            return True\n"
-            "    return inner()\n"
-        )
+        source = "def outer(x):\n    def inner():\n        if not x:\n            return True\n    return inner()\n"
         gen = MutationGenerator()
         mutants = gen.generate(source)
         bn = [m for m in mutants if m.mutant_type == "boolean_negation"]
@@ -263,8 +259,7 @@ class TestMutationGenerator:
         assert 0.0 <= result_strong["mutation_score"] <= 1.0
         # 强测试的杀死数应不低于弱测试（更多断言 = 更易杀死变异体）
         assert result_strong["mutants_killed"] >= result_weak["mutants_killed"], (
-            f"强测试杀死数({result_strong['mutants_killed']})"
-            f" 应 >= 弱测试({result_weak['mutants_killed']})"
+            f"强测试杀死数({result_strong['mutants_killed']}) 应 >= 弱测试({result_weak['mutants_killed']})"
         )
         # 强测试应至少杀死 1 个变异体（避免"全存活"退化）
         assert result_strong["mutants_killed"] >= 1, f"强测试至少应杀死 1 个变异体: {result_strong}"
@@ -273,6 +268,7 @@ class TestMutationGenerator:
 
 
 # ─── 跨批次失败模式对比 ──────────────────────────────────────────────────────
+
 
 class TestCrossBatchComparison:
     """5.3 跨批次失败模式对比。"""
@@ -286,14 +282,20 @@ class TestCrossBatchComparison:
     def test_new_category_detection(self):
         from experiments.compare_failures import cross_batch_comparison
 
-        old_batch = self._make_summary("batch_old", [
-            {"task_id": "t1", "passed": False, "error_category": "assertion"},
-            {"task_id": "t2", "passed": True},
-        ])
-        new_batch = self._make_summary("batch_new", [
-            {"task_id": "t1", "passed": False, "error_category": "patch_validation_failed"},
-            {"task_id": "t2", "passed": True},
-        ])
+        old_batch = self._make_summary(
+            "batch_old",
+            [
+                {"task_id": "t1", "passed": False, "error_category": "assertion"},
+                {"task_id": "t2", "passed": True},
+            ],
+        )
+        new_batch = self._make_summary(
+            "batch_new",
+            [
+                {"task_id": "t1", "passed": False, "error_category": "patch_validation_failed"},
+                {"task_id": "t2", "passed": True},
+            ],
+        )
         comparison = cross_batch_comparison([old_batch, new_batch], "aitester")
         assert "patch_validation_failed" in comparison["new_categories"]
         assert "assertion" in comparison["resolved_categories"]
@@ -301,9 +303,12 @@ class TestCrossBatchComparison:
     def test_single_batch_no_trend(self):
         from experiments.compare_failures import cross_batch_comparison
 
-        batch = self._make_summary("batch1", [
-            {"task_id": "t1", "passed": False, "error_category": "assertion"},
-        ])
+        batch = self._make_summary(
+            "batch1",
+            [
+                {"task_id": "t1", "passed": False, "error_category": "assertion"},
+            ],
+        )
         comparison = cross_batch_comparison([batch], "aitester")
         assert comparison["new_categories"] == []
         assert comparison["regressed_categories"] == []
@@ -311,14 +316,20 @@ class TestCrossBatchComparison:
     def test_regressed_category(self):
         from experiments.compare_failures import cross_batch_comparison
 
-        old_batch = self._make_summary("batch_old", [
-            {"task_id": "t1", "passed": False, "error_category": "assertion"},
-            {"task_id": "t2", "passed": True},
-        ])
-        new_batch = self._make_summary("batch_new", [
-            {"task_id": "t1", "passed": False, "error_category": "assertion"},
-            {"task_id": "t2", "passed": False, "error_category": "assertion"},
-        ])
+        old_batch = self._make_summary(
+            "batch_old",
+            [
+                {"task_id": "t1", "passed": False, "error_category": "assertion"},
+                {"task_id": "t2", "passed": True},
+            ],
+        )
+        new_batch = self._make_summary(
+            "batch_new",
+            [
+                {"task_id": "t1", "passed": False, "error_category": "assertion"},
+                {"task_id": "t2", "passed": False, "error_category": "assertion"},
+            ],
+        )
         comparison = cross_batch_comparison([old_batch, new_batch], "aitester")
         assert "assertion" in comparison["regressed_categories"]
 
@@ -327,8 +338,20 @@ class TestCrossBatchComparison:
 
         comparison = {
             "batches": [
-                {"file": "old.json", "total": 10, "failed": 3, "failure_categories": {"assertion": 3}, "top_failures": ["assertion"]},
-                {"file": "new.json", "total": 10, "failed": 1, "failure_categories": {"patch_validation_failed": 1}, "top_failures": ["patch_validation_failed"]},
+                {
+                    "file": "old.json",
+                    "total": 10,
+                    "failed": 3,
+                    "failure_categories": {"assertion": 3},
+                    "top_failures": ["assertion"],
+                },
+                {
+                    "file": "new.json",
+                    "total": 10,
+                    "failed": 1,
+                    "failure_categories": {"patch_validation_failed": 1},
+                    "top_failures": ["patch_validation_failed"],
+                },
             ],
             "failure_trend": {},
             "new_categories": ["patch_validation_failed"],
@@ -343,6 +366,7 @@ class TestCrossBatchComparison:
 
 
 # ─── 多版本 venv 缓存 ────────────────────────────────────────────────────────
+
 
 class TestMultiVersionVenvCache:
     """4.4 多版本依赖缓存。"""

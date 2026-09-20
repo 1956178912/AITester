@@ -278,9 +278,7 @@ def _collect_reverse_deps(
     return reverse
 
 
-def _find_symbol_def_line(
-    module_name: str, source_files: dict[str, str], symbol: str
-) -> int:
+def _find_symbol_def_line(module_name: str, source_files: dict[str, str], symbol: str) -> int:
     """在模块源码中查找符号定义行（1-based，未找到返回 0）。
 
     保守口径：匹配 `def symbol(` / `class symbol:` / `symbol =` 三类定义形式。

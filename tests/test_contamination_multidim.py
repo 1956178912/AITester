@@ -12,13 +12,13 @@
 from __future__ import annotations
 
 from experiments.contamination_check import (
+    _combined_risk_level,
     classify_overlap,
     detect_contamination,
     extract_patch_tokens,
     patch_overlap_score,
     patch_semantic_similarity,
     render_resistant_benchmark_section,
-    _combined_risk_level,
 )
 
 # 两个相似补丁（同一修复逻辑，仅变量名不同）

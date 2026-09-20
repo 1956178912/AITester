@@ -16,6 +16,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # ─── cli_output: print_rich_table 边界 ────────────────────────────────────
 
+
 class TestCliOutputBoundary:
     """5.1 cli_output 弱覆盖补强：print_rich_table 边界用例。"""
 
@@ -47,6 +48,7 @@ class TestCliOutputBoundary:
 
 
 # ─── error_classifier: 新分类路径 ────────────────────────────────────────
+
 
 class TestErrorClassifierNewCategories:
     """5.1 error_classifier 弱覆盖补强：PATCH_VALIDATION_FAILED / RAG_RETRIEVAL_EMPTY。"""
@@ -126,6 +128,7 @@ class TestErrorClassifierNewCategories:
 
 # ─── executor_runtime: 清理路径与重试异常分支 ────────────────────────────
 
+
 class TestExecutorRuntimeCleanup:
     """5.1 executor_runtime 弱覆盖补强：cleanup 路径与异常分支。"""
 
@@ -171,9 +174,8 @@ class TestExecutorRuntimeCleanup:
 
         # mock subprocess.run 抛出 TimeoutExpired
         import subprocess as sp
-        timeout_exc = sp.TimeoutExpired(
-            cmd="pytest", output="partial", stderr="err", timeout=1
-        )
+
+        timeout_exc = sp.TimeoutExpired(cmd="pytest", output="partial", stderr="err", timeout=1)
         with monkeypatch.context() as mp:
             mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(timeout_exc))
             output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
@@ -189,6 +191,7 @@ class TestExecutorRuntimeCleanup:
             timeout = 1
 
         import subprocess as sp
+
         perm_exc = PermissionError("permission denied")
         monkeypatch.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(perm_exc))
         _output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
@@ -203,11 +206,10 @@ class TestExecutorRuntimeCleanup:
             timeout = 1
 
         import subprocess as sp
+
         with monkeypatch.context() as mp:
             mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
             output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
         # 通用异常：break 后 last_result=None，output 为错误消息
         assert result is None
         assert "boom" in output
-
-

@@ -34,9 +34,7 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
 # 注：_SENSITIVE_PATTERNS[0]=sk- 前缀、[1]=32+ hex、[2]=40+ base64、
 # [3]=key=xxx 赋值、[4]=JWT；fallback 取 [0,1,2,4]（sk/hex/base64/JWT），
 # 跳过 [3]（key=xxx 依赖上下文匹配，降级态保守起见不纳入，避免误伤）。
-_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(
-    _SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4)
-)
+_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(_SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4))
 
 
 def fallback_mask_sensitive_info(text: str) -> str:

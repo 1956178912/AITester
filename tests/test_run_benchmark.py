@@ -144,13 +144,12 @@ class TestComputeMutationScoresForBaseline:
         task = self._make_task()
         task_map = {task.task_id: task}
         bl_results = [
-            {"task_id": task.task_id, "repo": task.repo_name, "passed": True,
-             "generated_test": None},
-            {"task_id": task.task_id, "repo": task.repo_name, "passed": False,
-             "generated_test": None},
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": True, "generated_test": None},
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": False, "generated_test": None},
         ]
         # mock compute_mutation_score 确认"未被调用"（缺失即跳过）
         from experiments import mutation_testing
+
         calls: list[dict] = []
         monkeypatch.setattr(
             mutation_testing,
@@ -166,16 +165,27 @@ class TestComputeMutationScoresForBaseline:
         task = self._make_task(instance_code="def check(x):\n    if x == 5:\n        return True\n    return False\n")
         task_map = {task.task_id: task}
         bl_results = [
-            {"task_id": task.task_id, "repo": task.repo_name, "passed": True,
-             "generated_test": "def test_check():\n    assert check(5) is True\n"},
+            {
+                "task_id": task.task_id,
+                "repo": task.repo_name,
+                "passed": True,
+                "generated_test": "def test_check():\n    assert check(5) is True\n",
+            },
         ]
         captured: list[dict] = []
 
         def fake_compute(**kw):
             captured.append(kw)
-            return {"available": True, "mutation_score": 0.75, "mutants_killed": 3, "mutants_total": 4, "elapsed_seconds": 1.2}
+            return {
+                "available": True,
+                "mutation_score": 0.75,
+                "mutants_killed": 3,
+                "mutants_total": 4,
+                "elapsed_seconds": 1.2,
+            }
 
         from experiments import mutation_testing
+
         monkeypatch.setattr(mutation_testing, "compute_mutation_score", fake_compute)
         rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)
         assert bl_results[0]["mutation_score"] == 0.75, "应写回 compute 产出的 mutation_score"
@@ -194,12 +204,15 @@ class TestComputeMutationScoresForBaseline:
         """task.instance_code 为空 → mutation_score=None（无源码可变异）。"""
         task = self._make_task(instance_code="")
         task_map = {task.task_id: task}
-        bl_results = [{"task_id": task.task_id, "repo": task.repo_name, "passed": True,
-                      "generated_test": "def t(): pass"}]
+        bl_results = [
+            {"task_id": task.task_id, "repo": task.repo_name, "passed": True, "generated_test": "def t(): pass"}
+        ]
         from experiments import mutation_testing
+
         calls: list[dict] = []
         monkeypatch.setattr(
-            mutation_testing, "compute_mutation_score",
+            mutation_testing,
+            "compute_mutation_score",
             lambda **kw: calls.append(kw) or {"available": True, "mutation_score": 0.5},
         )
         rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)

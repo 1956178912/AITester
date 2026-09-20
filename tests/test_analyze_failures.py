@@ -267,9 +267,7 @@ class TestExtractMinimalRepro:
             "task_id": "t2",
             "passed": False,
             "diagnosis": (
-                "Test failed with unexpected output.\n"
-                "AssertionError: assert 1 == 2\n"
-                "Retrying with same input."
+                "Test failed with unexpected output.\nAssertionError: assert 1 == 2\nRetrying with same input."
             ),
         }
         snippet = extract_minimal_repro(row)
@@ -286,12 +284,7 @@ class TestExtractMinimalRepro:
             "diagnosis": "Some generic failure message without obvious error keyword.",
             "task_metadata": {
                 "problem_statement": (
-                    "Bug report: see below.\n"
-                    "```python\n"
-                    "def broken():\n"
-                    "    return 1 + 1\n"
-                    "```\n"
-                    "Expected: 1"
+                    "Bug report: see below.\n```python\ndef broken():\n    return 1 + 1\n```\nExpected: 1"
                 )
             },
         }
@@ -310,8 +303,9 @@ class TestExtractMinimalRepro:
             "task_id": "t5",
             "passed": False,
             "diagnosis": (
-                "Traceback (most recent call last):\n"
-                "\n".join(f'  File "/app/m{i}.py", line {i}, in f{i}\n    x = {i}' for i in range(20))
+                "Traceback (most recent call last):\n\n".join(
+                    f'  File "/app/m{i}.py", line {i}, in f{i}\n    x = {i}' for i in range(20)
+                )
                 + "\n"
                 "RuntimeError: exploded\n"
             ),

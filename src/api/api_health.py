@@ -142,7 +142,7 @@ class APIHealth:
             self.half_open_failure += 1
             # 4.4 指数退避：基础冷却 * 2^open_count（首次失败 60*1=60s，
             # 第二次 60*2=120s，第三次 60*4=240s……），受惩罚上限约束
-            backoff = self.circuit_cooldown_seconds * (2 ** self.circuit_open_count)
+            backoff = self.circuit_cooldown_seconds * (2**self.circuit_open_count)
             penalty = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
             self.circuit_open_count += 1
             self.circuit_open_until = time.monotonic() + penalty
@@ -205,7 +205,7 @@ class APIHealth:
             self.is_healthy = False
             # 4.1 熔断器：达到阈值即打开熔断，冷却期内路由层继续跳过该节点
             # 4.4：冷却期 = base * 2^open_count（指数退避，受惩罚上限约束）
-            backoff = self.circuit_cooldown_seconds * (2 ** self.circuit_open_count)
+            backoff = self.circuit_cooldown_seconds * (2**self.circuit_open_count)
             cooldown = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
             self.circuit_open_until = time.monotonic() + cooldown
             self.circuit_open_count += 1

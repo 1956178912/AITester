@@ -265,17 +265,13 @@ class GeneratorAgent(BaseAgent):
                     "【变异反馈（MutGen 式闭环）】上一轮变异测试发现以下变异体"
                     "未被当前测试捕获（存活变异体），说明现有断言未能覆盖这些故障模式："
                 )
-                for desc in survived[:5]:
-                    feedback_lines.append(f"- {desc}")
+                feedback_lines.extend(f"- {desc}" for desc in survived[:5])
                 feedback_lines.append(
                     "请针对上述未捕获的故障模式补强测试：补充返回值断言、边界值比较"
                     "（如 >=/<= 边界）、布尔语义校验，使新测试能杀死这些变异体。"
                 )
             if score is not None:
-                feedback_lines.append(
-                    f"当前变异得分 {score}（越高说明测试越强）；请在新测试中"
-                    "显著提升变异检测能力。"
-                )
+                feedback_lines.append(f"当前变异得分 {score}（越高说明测试越强）；请在新测试中显著提升变异检测能力。")
             if feedback_lines:
                 query += "\n\n" + "\n".join(feedback_lines)
                 logger.info(

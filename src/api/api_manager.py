@@ -623,7 +623,6 @@ class APIManager:
         导出到 Prometheus textfile collector。无节点时返回空字符串。
         """
         status = self.get_status()
-        now = time.monotonic()
         lines: list[str] = []
         # 帮助文本（供 Prometheus 识别指标语义）
         lines.append("# HELP aitester_api_health API 节点健康状态（1=健康, 0=不健康）")
@@ -641,18 +640,18 @@ class APIManager:
         lines.append("# HELP aitester_api_avg_response_time_ms API 节点平均响应时间（毫秒）")
         lines.append("# TYPE aitester_api_avg_response_time_ms gauge")
         state_map = {"closed": 0, "open": 1, "half_open": 2}
-        for name, node in status.get("nodes", {}).items():
+        for node in status.get("nodes", {}).values():
             labels = f'model="{node["model"]}"'
-            lines.append(f'aitester_api_health{{{labels}}} {1 if node["is_healthy"] else 0}')
-            lines.append(f'aitester_api_circuit_state{{{labels}}} {state_map.get(node.get("circuit_state"), 0)}')
+            lines.append(f"aitester_api_health{{{labels}}} {1 if node['is_healthy'] else 0}")
+            lines.append(f"aitester_api_circuit_state{{{labels}}} {state_map.get(node.get('circuit_state'), 0)}")
             lines.append(
-                f'aitester_api_circuit_open_remaining_seconds{{{labels}}} {node.get("circuit_open_remaining_s", 0.0)}'
+                f"aitester_api_circuit_open_remaining_seconds{{{labels}}} {node.get('circuit_open_remaining_s', 0.0)}"
             )
-            lines.append(f'aitester_api_circuit_open_count{{{labels}}} {node.get("circuit_open_count", 0)}')
+            lines.append(f"aitester_api_circuit_open_count{{{labels}}} {node.get('circuit_open_count', 0)}")
             rate = node.get("half_open_probe_success_rate")
-            lines.append(f'aitester_api_half_open_probe_success_rate{{{labels}}} {rate if rate is not None else 0}')
-            lines.append(f'aitester_api_success_rate{{{labels}}} {node.get("success_rate", 1.0)}')
-            lines.append(f'aitester_api_avg_response_time_ms{{{labels}}} {node.get("avg_response_time_ms", 0.0)}')
+            lines.append(f"aitester_api_half_open_probe_success_rate{{{labels}}} {rate if rate is not None else 0}")
+            lines.append(f"aitester_api_success_rate{{{labels}}} {node.get('success_rate', 1.0)}")
+            lines.append(f"aitester_api_avg_response_time_ms{{{labels}}} {node.get('avg_response_time_ms', 0.0)}")
         return "\n".join(lines)
 
     def get_top_nodes(self, n: int = 10, sort_by: str = "success_rate") -> list[dict[str, Any]]:
