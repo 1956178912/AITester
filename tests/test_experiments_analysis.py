@@ -278,3 +278,192 @@ class TestSignificanceBoundaryConditions:
         }
         sig = analyze_experiment_results(results)["significance"]
         assert sig["status"] in ("insufficient_data", "unavailable")
+
+
+class TestAnalyzeResultsNewMetricsBoundary:
+    """5.1 边界补强：analyze_results 新增指标的边界条件（样本量=1、
+    全部通过/失败、无 Token 数据等退化输入不得崩溃）。
+
+    覆盖目标（此前 91% 的 analysis.py + 新增 analyze_results 指标）：
+    - _test_smell_detection: 无 generated_test / 单任务 / 多策略分组
+    - _convergence_token_efficiency: 无 Token 数据 / 单任务
+    - _difficulty_stratified_iterations: 全部任务 0 迭代 / 单难度档
+    - _mutation_score_metrics: 单任务 / 无断言（交叉分析退化）
+    - _rag_token_efficiency: 仅 RAG 组 / 仅无 RAG 组（无法对比）
+    - _failure_root_cause_trend: 无失败任务（全通过）
+    """
+
+    def test_smell_detection_no_generated_test(self):
+        """details 无 generated_test 时异味检测返回 available=False（不崩溃）。"""
+        from experiments.analyze_results import _test_smell_detection
+
+        details = [{"task_id": "t1", "passed": True}]
+        result = _test_smell_detection(details)
+        assert result["available"] is False
+        assert result["observed_tasks"] == 0
+
+    def test_smell_detection_single_task_with_smell(self):
+        """单任务有异味（无断言）时 smell_density=1.0（边界：1/1）。"""
+        from experiments.analyze_results import _test_smell_detection
+
+        details = [{"task_id": "t1", "passed": True, "generated_test": "def test_x():\n    pass\n"}]
+        result = _test_smell_detection(details)
+        assert result["available"] is True
+        assert result["observed_tasks"] == 1
+        assert result["smell_density"] == 1.0
+        assert len(result["tasks_with_smells"]) == 1
+
+    def test_smell_detection_strategy_grouping(self):
+        """多策略分组：strategy 字段非空时输出 smell_counts_by_strategy。"""
+        from experiments.analyze_results import _test_smell_detection
+
+        details = [
+            {"task_id": "t1", "passed": True, "generated_test": "def test_a():\n    pass\n", "strategy": "planner"},
+            {"task_id": "t2", "passed": True, "generated_test": "def test_b():\n    assert 1 == 1\n", "strategy": "plain"},
+        ]
+        result = _test_smell_detection(details)
+        assert "smell_counts_by_strategy" in result
+        assert result["smell_counts_by_strategy"]["planner"]["observed_tasks"] == 1
+        assert result["smell_counts_by_strategy"]["plain"]["observed_tasks"] == 1
+
+    def test_convergence_token_efficiency_no_token_data(self):
+        """无 Token 数据时按均摊保守口径仍可用（rounds 非空，best_marginal_round 可能 None）。"""
+        from experiments.analyze_results import _convergence_token_efficiency
+
+        details = [
+            {"task_id": "t1", "passed": True, "iterations": 1},
+            {"task_id": "t2", "passed": False, "iterations": 2},
+        ]
+        result = _convergence_token_efficiency(details)
+        assert result["available"] is True
+        assert result["rounds"]["0"]["reached_tasks"] >= 0
+        # 无 Token 数据时 marginal 为 None（增量 Token=0 不除零）
+        assert result["rounds"]["0"]["marginal_pass_per_token"] is None or isinstance(
+            result["rounds"]["0"]["marginal_pass_per_token"], (int, float)
+        )
+
+    def test_convergence_token_efficiency_empty(self):
+        """空 details 返回 available=False。"""
+        from experiments.analyze_results import _convergence_token_efficiency
+
+        result = _convergence_token_efficiency([])
+        assert result["available"] is False
+
+    def test_difficulty_stratified_all_zero_iterations(self):
+        """全部任务 0 迭代时分布仅 0 档（无 1/2/3+ 键）。"""
+        from experiments.analyze_results import _difficulty_stratified_iterations
+
+        details = [
+            {"task_id": "t1", "passed": True, "iterations": 0},
+            {"task_id": "t2", "passed": True, "iterations": 0},
+        ]
+        result = _difficulty_stratified_iterations(details, {"t1": "easy", "t2": "hard"})
+        assert result["available"] is True
+        assert result["bands"]["easy"]["iterations"]["0"] == 1
+        assert result["bands"]["hard"]["iterations"]["0"] == 1
+        assert "3+" not in result["bands"]["easy"]["iterations"]
+
+    def test_difficulty_stratified_no_bands(self):
+        """无 difficulty_bands 时全部归入 unstratified 档。"""
+        from experiments.analyze_results import _difficulty_stratified_iterations
+
+        details = [{"task_id": "t1", "passed": False, "iterations": 3}]
+        result = _difficulty_stratified_iterations(details, None)
+        assert result["available"] is True
+        assert result["bands"]["unstratified"]["iterations"]["3+"] == 1
+
+    def test_mutation_score_single_task_no_assertions(self):
+        """单任务无 generated_test 时变异-断言交叉分析退化为 None（不崩溃）。"""
+        from experiments.analyze_results import _mutation_score_metrics
+
+        details = [
+            {"task_id": "t1", "passed": True, "mutation_score": 0.8, "generated_test": "def test_x():\n    pass\n"},
+        ]
+        result = _mutation_score_metrics(details)
+        assert result["available"] is True
+        cross = result.get("mutation_assertion_cross")
+        # 无有效断言（pass 体）时 high/low 组 avg 为 None（数据不足）
+        assert cross is None or (
+            cross.get("high_score_avg_assertions") is None or cross.get("low_score_avg_assertions") is None
+        )
+
+    def test_mutation_score_no_scores(self):
+        """无 mutation_score 字段时返回 available=False。"""
+        from experiments.analyze_results import _mutation_score_metrics
+
+        details = [{"task_id": "t1", "passed": True}]
+        result = _mutation_score_metrics(details)
+        assert result["available"] is False
+
+    def test_rag_token_efficiency_single_group(self):
+        """仅 RAG 组（无 RAG 组）时 available=False（无法对比）。"""
+        from experiments.analyze_results import _rag_token_efficiency
+
+        details = [
+            {"task_id": "t1", "passed": True, "rag_stats": [{"results": 1}], "token_usage": {"total_tokens": 100}},
+        ]
+        result = _rag_token_efficiency(details)
+        assert result["available"] is False
+
+    def test_rag_token_efficiency_both_groups(self):
+        """两组都有任务时正常对比（Token 比率 / 迭代差计算）。"""
+        from experiments.analyze_results import _rag_token_efficiency
+
+        details = [
+            {"task_id": "t1", "passed": True, "rag_stats": [{"results": 1}], "token_usage": {"total_tokens": 200}, "iterations": 2},
+            {"task_id": "t2", "passed": False, "rag_stats": None, "token_usage": {"total_tokens": 100}, "iterations": 1},
+        ]
+        result = _rag_token_efficiency(details)
+        assert result["available"] is True
+        assert result["rag_group"]["avg_tokens"] == 200.0
+        assert result["no_rag_group"]["avg_tokens"] == 100.0
+        assert result["token_delta_ratio"] == 2.0
+        assert result["iteration_delta"] == 1.0
+
+    def test_failure_root_cause_trend_all_passed(self):
+        """全部任务通过（无失败）时返回 total_failed=0、分布为空。"""
+        from experiments.analyze_results import _failure_root_cause_trend
+
+        details = [
+            {"task_id": "t1", "passed": True},
+            {"task_id": "t2", "passed": True},
+        ]
+        result = _failure_root_cause_trend(details)
+        assert result["total_failed"] == 0
+        assert result["root_cause_distribution"] == {}
+
+    def test_failure_root_cause_trend_all_failed_dependency(self):
+        """全部失败且 import_error 时 dependency 占比 1.0。"""
+        from experiments.analyze_results import _failure_root_cause_trend
+
+        details = [
+            {"task_id": "t1", "passed": False, "error_category": "import_error"},
+            {"task_id": "t2", "passed": False, "error_category": "import_error"},
+        ]
+        result = _failure_root_cause_trend(details)
+        assert result["total_failed"] == 2
+        assert result["root_cause_rates"]["dependency"] == 1.0
+        assert result["root_cause_rates"]["llm_capability"] == 0.0
+
+    def test_contamination_cross_no_risk_level(self):
+        """无 contamination_risk_level 字段时 available=False。"""
+        from experiments.analyze_results import _contamination_cross_analysis
+
+        details = [{"task_id": "t1", "passed": True}]
+        result = _contamination_cross_analysis(details)
+        assert result["available"] is False
+
+    def test_contamination_cross_high_vs_low(self):
+        """高/低污染任务成功率对比（delta 计算）。"""
+        from experiments.analyze_results import _contamination_cross_analysis
+
+        details = [
+            {"task_id": "t1", "passed": True, "contamination_risk_level": "high"},
+            {"task_id": "t2", "passed": True, "contamination_risk_level": "high"},
+            {"task_id": "t3", "passed": False, "contamination_risk_level": "low"},
+        ]
+        result = _contamination_cross_analysis(details)
+        assert result["available"] is True
+        assert result["by_risk_level"]["high"]["success_rate"] == 1.0
+        assert result["by_risk_level"]["low"]["success_rate"] == 0.0
+        assert result["high_vs_low_success_delta"] == 1.0

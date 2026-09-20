@@ -53,7 +53,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 # 2.1 数据污染检测模块（experiments 包内相对导入，sys.path 注入后方可用）
-from experiments.contamination_check import detect_contamination, render_contamination_section  # noqa: E402
+from experiments.contamination_check import (
+    detect_contamination,
+    render_contamination_section,
+    render_resistant_benchmark_section,
+)
 from experiments.difficulty_stratification import render_stratification_section  # noqa: E402
 
 
@@ -190,6 +194,142 @@ EAGER_TEST_TARGET_THRESHOLD = 2
 # 多 test_* 函数间"目标集合两两不重叠"占比 >= 0.5 判为 Lack of Cohesion
 # （实证研究中最常见的异味 41.2%，阈值取保守 0.5 避免误报）
 LACK_OF_COHESION_THRESHOLD = 0.5
+# 异味密度 = 单任务异味种类数 / 6（任务无异味记 0），用于质量代理的独立维度
+# （1.1 改进：异味密度作为与断言行数并列的保守可复算质量信号）
+SMELL_TYPE_COUNT = 6
+
+
+def _smell_task_has_smell(row: dict[str, Any], test_code: str) -> set[str]:
+    """计算单任务（generated_test 非空）命中的测试异味种类集合（保守启发）。
+
+    与 _test_smell_detection 原逐行计数逻辑同口径（判定规则只实现一次，
+    供异味计数与异味密度/策略分组复用，DRY）：
+    - assertion_roulette / trivial_test: 无有效断言或函数体仅恒真断言；
+    - magic_number: >= 3 个独立整数字面量且无命名常量赋值；
+    - assertion_weakening: 与上一轮（repair_history / prev_assertion_count）
+      相比断言数减少；
+    - eager_test / lack_of_cohesion: AST 口径（见模块级阈值常量）。
+
+    Args:
+        row: benchmark details 行（repair_history / prev_assertion_count 等）。
+        test_code: generated_test 源码（非空）。
+
+    Returns:
+        命中的异味种类集合（无异味时为空集）。
+    """
+    smells: set[str] = set()
+    stripped = test_code.strip()
+    has_assertion = "assert " in stripped or "pytest.raises" in stripped
+
+    # 简单启发：测试函数体是否包含有效断言（assert / pytest.raises）
+    if not has_assertion:
+        # 区分"无断言但非平凡"（仅 Assignment/Function 调用，无有效断言语句）
+        # 与"平凡测试"（函数体仅含 pass / return None / 单一 assert True）
+        body_lines = [
+            ln
+            for ln in stripped.splitlines()
+            if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
+        ]
+        is_trivial = len(body_lines) <= 2 and any(ln.strip() in ("pass", "return None", "") for ln in body_lines)
+        smells.add("trivial_test" if is_trivial else "assertion_roulette")
+
+    # 魔数检测：数字字面量未绑定到命名常量（保守口径：仅统计 "assert X == <int>" 中
+    # 未出现在命名常量赋值语句中的数字；这里简化为：若代码中没有 "const" 类赋值
+    # 但出现 >= 3 个独立整数字面量，则判定为 magic_number）
+    if "==" in stripped:
+        import re
+
+        literals = set(re.findall(r"==\s*(-?\d+)\b", stripped))
+        if len(literals) >= 3 and not any(
+            line.strip().startswith(("CONST", "NOMINAL", "LIMIT", "THRESHOLD")) for line in stripped.splitlines()
+        ):
+            smells.add("magic_number")
+
+    # 断言弱化：repair_history 中若记录了上一轮断言数且当前断言数减少，则判定
+    history = row.get("repair_history") or []
+    prev_assertions = row.get("prev_assertion_count")
+    cur_assertions = sum(1 for line in stripped.splitlines() if line.strip().startswith("assert "))
+    if prev_assertions is not None and cur_assertions < int(prev_assertions):
+        smells.add("assertion_weakening")
+    # 顺带把 repair_history 中记录的断言数变化做轻量检测（若字段存在）
+    if history and isinstance(history, list):
+        for h in history:
+            if (
+                isinstance(h, dict)
+                and "assertion_count" in h
+                and "prev_assertion_count" in h
+                and int(h["assertion_count"]) < int(h["prev_assertion_count"])
+            ):
+                smells.add("assertion_weakening")
+                break
+
+    # 平凡测试：函数体仅含 pass / return None / 单一恒真断言（已计入上方分支）
+    # 此处仅处理"有断言但恒真"的情形（如 assert True / assert 1 == 1）
+    trivial_const_asserts = [
+        ln
+        for ln in stripped.splitlines()
+        if ln.strip().startswith("assert") and ("True" in ln or "1 == 1" in ln or "0 == 0" in ln)
+    ]
+    body_lines = [
+        ln
+        for ln in stripped.splitlines()
+        if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
+    ]
+    if has_assertion and len(body_lines) <= 2 and trivial_const_asserts:
+        smells.add("trivial_test")
+
+    # ── AST 口径异味：Eager Test + Lack of Cohesion（解析失败时跳过）──
+    import ast as _ast_smell
+
+    try:
+        tree = _ast_smell.parse(stripped)
+    except (SyntaxError, ValueError):
+        tree = None
+
+    if tree is not None:
+        # 收集所有 test_* 函数
+        test_funcs = [
+            node for node in _ast_smell.walk(tree)
+            if isinstance(node, _ast_smell.FunctionDef) and node.name.startswith("test_")
+        ]
+        # Eager Test：单个测试函数内独立断言数 >= 阈值，
+        # 且断言涉及的不同"被测目标"（Call.func 名 / Attribute.attr）>= 2
+        for tf in test_funcs:
+            assert_nodes = [n for n in _ast_smell.walk(tf) if isinstance(n, _ast_smell.Assert)]
+            if len(assert_nodes) < EAGER_TEST_ASSERT_THRESHOLD:
+                continue
+            targets: set = set()
+            for n in _ast_smell.walk(tf):
+                if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
+                    targets.add(n.func.id)
+                elif isinstance(n, _ast_smell.Attribute):
+                    targets.add(n.attr)
+            if len(targets) >= EAGER_TEST_TARGET_THRESHOLD:
+                smells.add("eager_test")
+                break
+
+        # Lack of Cohesion：多个测试函数的"被测目标集合"两两不重叠占比 >= 阈值
+        if len(test_funcs) >= 2:
+            func_targets: list = []
+            for tf in test_funcs:
+                t: set = set()
+                for n in _ast_smell.walk(tf):
+                    if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
+                        t.add(n.func.id)
+                    elif isinstance(n, _ast_smell.Attribute):
+                        t.add(n.attr)
+                func_targets.append(t)
+            non_overlap_pairs = 0
+            total_pairs = 0
+            for i in range(len(func_targets)):
+                for j in range(i + 1, len(func_targets)):
+                    total_pairs += 1
+                    if not (func_targets[i] & func_targets[j]):
+                        non_overlap_pairs += 1
+            if total_pairs > 0 and (non_overlap_pairs / total_pairs) >= LACK_OF_COHESION_THRESHOLD:
+                smells.add("lack_of_cohesion")
+
+    return smells
 
 
 def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -214,8 +354,10 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
                            "eager_test": n, "lack_of_cohesion": n},
          "tasks_with_smells": [task_id...]}
 
-    说明：仅当 details 携带 generated_test 时 available=True；否则返回
-    available=False（渲染时跳过章节）。
+    辅助函数 _smell_task_has_smell(row) 计算单任务异味集合，本函数汇总；
+    异味密度（smell_density）= 有异味任务数 / 观测任务数（保守口径，
+    每任务最多 1，避免单任务多异味虚增密度）；按 strategy 分组的
+    smell_counts_by_strategy 支持"异味分布 × 生成策略"交叉分析。
     """
     observed = 0
     smell_counts = {
@@ -226,6 +368,8 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
         "eager_test": 0,
         "lack_of_cohesion": 0,
     }
+    # 按策略分组的异味计数（details[].strategy 非空时收集）
+    by_strategy: dict[str, dict[str, Any]] = {}
     tasks_with_smells: list[str] = []
     for row in details:
         test_code = row.get("generated_test")
@@ -233,140 +377,44 @@ def _test_smell_detection(details: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         observed += 1
         task_id = str(row.get("task_id", f"row_{observed}"))
-        task_has_smell = False
-
-        # 简单启发：测试函数体是否包含有效断言（assert / pytest.raises）
-        stripped = test_code.strip()
-        has_assertion = "assert " in stripped or "pytest.raises" in stripped
-        if not has_assertion:
-            # 区分"无断言但非平凡"（仅 Assignment/Function 调用，无有效断言语句）
-            # 与"平凡测试"（函数体仅含 pass / return None / 单一 assert True）
-            body_lines = [
-                ln
-                for ln in stripped.splitlines()
-                if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
-            ]
-            is_trivial = len(body_lines) <= 2 and any(ln.strip() in ("pass", "return None", "") for ln in body_lines)
-            if is_trivial:
-                smell_counts["trivial_test"] += 1
-                task_has_smell = True
-            else:
-                smell_counts["assertion_roulette"] += 1
-                task_has_smell = True
-
-        # 魔数检测：数字字面量未绑定到命名常量（保守口径：仅统计 "assert X == <int>" 中
-        # 未出现在命名常量赋值语句中的数字；这里简化为：若代码中没有 "const" 类赋值
-        # 但出现 >= 3 个独立整数字面量，则判定为 magic_number）
-        if "==" in stripped:
-            import re
-
-            literals = set(re.findall(r"==\s*(-?\d+)\b", stripped))
-            if len(literals) >= 3 and not any(
-                line.strip().startswith(("CONST", "NOMINAL", "LIMIT", "THRESHOLD")) for line in stripped.splitlines()
-            ):
-                smell_counts["magic_number"] += 1
-                task_has_smell = True
-
-        # 断言弱化：repair_history 中若记录了上一轮断言数且当前断言数减少，则判定
-        history = row.get("repair_history") or []
-        prev_assertions = row.get("prev_assertion_count")
-        cur_assertions = sum(1 for line in stripped.splitlines() if line.strip().startswith("assert "))
-        if prev_assertions is not None and cur_assertions < int(prev_assertions):
-            smell_counts["assertion_weakening"] += 1
-            task_has_smell = True
-        # 顺带把 repair_history 中记录的断言数变化做轻量检测（若字段存在）
-        if history and isinstance(history, list):
-            for h in history:
-                if (
-                    isinstance(h, dict)
-                    and "assertion_count" in h
-                    and "prev_assertion_count" in h
-                    and int(h["assertion_count"]) < int(h["prev_assertion_count"])
-                ):
-                    smell_counts["assertion_weakening"] += 1
-                    task_has_smell = True
-                    break
-
-        # 平凡测试：函数体仅含 pass / return None / 单一恒真断言（已计入上方分支）
-        # 此处仅处理"有断言但恒真"的情形（如 assert True / assert 1 == 1）
-        trivial_const_asserts = [
-            ln
-            for ln in stripped.splitlines()
-            if ln.strip().startswith("assert") and ("True" in ln or "1 == 1" in ln or "0 == 0" in ln)
-        ]
-        body_lines = [
-            ln
-            for ln in stripped.splitlines()
-            if ln.strip() and not ln.strip().startswith(("def ", "#", "import ", "from "))
-        ]
-        if has_assertion and len(body_lines) <= 2 and trivial_const_asserts:
-            smell_counts["trivial_test"] += 1
-            task_has_smell = True
-
-        # ── AST 口径异味：Eager Test + Lack of Cohesion（解析失败时跳过）──
-        import ast as _ast_smell
-
-        try:
-            tree = _ast_smell.parse(stripped)
-        except (SyntaxError, ValueError):
-            tree = None
-
-        if tree is not None:
-            # 收集所有 test_* 函数
-            test_funcs = [
-                node for node in _ast_smell.walk(tree)
-                if isinstance(node, _ast_smell.FunctionDef) and node.name.startswith("test_")
-            ]
-            # Eager Test：单个测试函数内独立断言数 >= 阈值，
-            # 且断言涉及的不同"被测目标"（Call.func 名 / Attribute.attr）>= 2
-            for tf in test_funcs:
-                assert_nodes = [n for n in _ast_smell.walk(tf) if isinstance(n, _ast_smell.Assert)]
-                if len(assert_nodes) < EAGER_TEST_ASSERT_THRESHOLD:
-                    continue
-                targets: set = set()
-                for n in _ast_smell.walk(tf):
-                    if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
-                        targets.add(n.func.id)
-                    elif isinstance(n, _ast_smell.Attribute):
-                        targets.add(n.attr)
-                if len(targets) >= EAGER_TEST_TARGET_THRESHOLD:
-                    smell_counts["eager_test"] += 1
-                    task_has_smell = True
-                    break
-
-            # Lack of Cohesion：多个测试函数的"被测目标集合"两两不重叠占比 >= 阈值
-            if len(test_funcs) >= 2:
-                func_targets: list = []
-                for tf in test_funcs:
-                    t: set = set()
-                    for n in _ast_smell.walk(tf):
-                        if isinstance(n, _ast_smell.Call) and isinstance(n.func, _ast_smell.Name):
-                            t.add(n.func.id)
-                        elif isinstance(n, _ast_smell.Attribute):
-                            t.add(n.attr)
-                    func_targets.append(t)
-                non_overlap_pairs = 0
-                total_pairs = 0
-                for i in range(len(func_targets)):
-                    for j in range(i + 1, len(func_targets)):
-                        total_pairs += 1
-                        if not (func_targets[i] & func_targets[j]):
-                            non_overlap_pairs += 1
-                if total_pairs > 0 and (non_overlap_pairs / total_pairs) >= LACK_OF_COHESION_THRESHOLD:
-                    smell_counts["lack_of_cohesion"] += 1
-                    task_has_smell = True
-
+        smells = _smell_task_has_smell(row, test_code)
+        task_has_smell = bool(smells)
+        strategy = str(row.get("strategy") or "").strip()
+        if strategy:
+            stat = by_strategy.setdefault(
+                strategy,
+                {
+                    "observed_tasks": 0,
+                    "tasks_with_smells": 0,
+                    "smell_counts": dict.fromkeys(smell_counts, 0),
+                },
+            )
+            stat["observed_tasks"] += 1
+            if smells:
+                stat["tasks_with_smells"] += 1
+            for name in smells:
+                stat["smell_counts"][name] += 1
+        for name in smells:
+            smell_counts[name] += 1
         if task_has_smell:
             tasks_with_smells.append(task_id)
 
     if observed == 0:
         return {"available": False, "observed_tasks": 0, "smell_counts": smell_counts, "tasks_with_smells": []}
-    return {
+    smell_density = round(len(tasks_with_smells) / observed, 4)
+    # 按策略分组的异味密度（有异味任务 / 该策略观测任务）
+    for stat in by_strategy.values():
+        stat["smell_density"] = round(stat["tasks_with_smells"] / stat["observed_tasks"], 4) if stat["observed_tasks"] else 0.0
+    result: dict[str, Any] = {
         "available": True,
         "observed_tasks": observed,
         "smell_counts": smell_counts,
+        "smell_density": smell_density,
         "tasks_with_smells": tasks_with_smells,
     }
+    if by_strategy:
+        result["smell_counts_by_strategy"] = by_strategy
+    return result
 
 
 def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -410,6 +458,108 @@ def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]
         "success_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
         "failed_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
     }
+
+
+def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """1.3 修复收敛的 Token 效率曲线：把逐轮 Token 消耗与迭代轮次结合。
+
+    1.3 改进："第几轮修复的边际收益最高"——按迭代轮次（0/1/2/3+）分别统计：
+    - 该轮"增量"Token（该轮消耗的 Token，从 details[].token_usage.iterations 逐轮累加；
+      旧 JSON 无逐轮字段时回退为"整任务均摊到其经历的各轮"，保守口径）；
+    - 该轮的"增量通过率"（累计通过 - 上轮累计通过）与"增量 Token 成本"，
+      二者相除得到"每 Token 换来多少新通过任务"的边际收益代理；
+    - 边际收益最高的轮次标签（用于回答"第几轮修复最划算"）。
+
+    说明：
+    - Token 消耗字段：details[].token_usage.total_tokens（旧 JSON 兜底累加）；
+      逐轮 Token 明细（iterations[].tokens）若存在则精确到轮次，否则按
+      "总 Token / 任务经历的轮次数"均摊（保守口径，避免高估单轮成本）；
+    - 无 Token 数据时 available=False，渲染跳过章节。
+    """
+    total = len(details)
+    if total == 0:
+        return {"available": False, "total_tasks": 0, "rounds": {}}
+    max_observed = max((int(r.get("iterations", 0) or 0) for r in details), default=-1)
+    # 逐轮累计：到达任务数 / 累计通过 / 累计 Token（含本轮增量）
+    rounds: dict[str, dict[str, Any]] = {}
+    prev_cumulative_passed = 0
+    prev_cumulative_tokens = 0.0
+    for k in range(max(0, min(max_observed, 3)) + 1):
+        label = str(k) if k < 3 else "3+"
+        reached = [r for r in details if int(r.get("iterations", 0) or 0) <= k]
+        cumulative_passed = sum(1 for r in reached if r.get("passed"))
+        # 逐轮 Token：优先读 token_usage.iterations[k].tokens（精确口径），
+        # 缺失时按"总 Token / 该任务经历的轮次数(=k+1)"均摊（保守口径）
+        round_tokens = 0.0
+        for r in reached:
+            usage = r.get("token_usage") or {}
+            per_round = usage.get("iterations")
+            if isinstance(per_round, list) and k < len(per_round) and isinstance(per_round[k], dict):
+                round_tokens += float(per_round[k].get("tokens", 0) or 0)
+            else:
+                round_tokens += float(usage.get("total_tokens", 0) or 0) / (k + 1)
+        incremental_passed = max(0, cumulative_passed - prev_cumulative_passed)
+        incremental_tokens = round_tokens - prev_cumulative_tokens
+        marginal = round(incremental_passed / incremental_tokens, 6) if incremental_tokens > 0 else None
+        rounds[label] = {
+            "reached_tasks": len(reached),
+            "cumulative_passed": cumulative_passed,
+            "cumulative_tokens": round(prev_cumulative_tokens + incremental_tokens, 2),
+            "incremental_passed": incremental_passed,
+            "incremental_tokens": round(incremental_tokens, 2),
+            "marginal_pass_per_token": marginal,
+        }
+        prev_cumulative_passed = cumulative_passed
+        prev_cumulative_tokens += incremental_tokens
+    # 边际收益最高的轮次（None 值跳过；全部 None 时为 None）
+    best_round = None
+    best_marginal = 0.0
+    for label in ("0", "1", "2", "3+"):
+        marginal = rounds.get(label, {}).get("marginal_pass_per_token")
+        if marginal is not None and marginal > best_marginal:
+            best_marginal = marginal
+            best_round = label
+    return {
+        "available": True,
+        "total_tasks": total,
+        "rounds": rounds,
+        "best_marginal_round": best_round,
+    }
+
+
+def _difficulty_stratified_iterations(
+    details: list[dict[str, Any]],
+    difficulty_bands: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """1.3 修复迭代分布的分层统计：按任务难度分层看迭代次数分布。
+
+    1.3 改进：聚合迭代分布掩盖"不同难度任务收敛行为差异"。本函数把
+    任务按难度分档（difficulty_bands: task_id → 难度档，外部可由
+    difficulty_stratification 的 code_size/dependency_count/complexity_proxy
+    分档结果传入），统计各难度档下 0/1/2/3+ 迭代的任务数分布。
+
+    Args:
+        details: benchmark details 列表。
+        difficulty_bands: task_id → 难度档（如 "easy"/"medium"/"hard"）的映射；
+            None 或空时全部任务归入 "unstratified" 档。
+
+    Returns:
+        {band: {"total": n, "iterations": {"0": n0, "1": n1, "2": n2, "3+": np}}}；
+        无任务时返回 {"available": False, "bands": {}}。
+    """
+    bands = difficulty_bands or {}
+    stratified: dict[str, dict[str, int]] = {}
+    for row in details:
+        task_id = str(row.get("task_id", ""))
+        band = str(bands.get(task_id) or "unstratified")
+        iters = min(int(row.get("iterations", 0) or 0), 3)
+        label = str(iters) if iters < 3 else "3+"
+        stat = stratified.setdefault(band, {"total": 0, "iterations": {}})
+        stat["total"] += 1
+        stat["iterations"][label] = stat["iterations"].get(label, 0) + 1
+    if not stratified:
+        return {"available": False, "bands": {}}
+    return {"available": True, "bands": stratified}
 
 
 def _assertion_strength_proxy(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -529,20 +679,225 @@ def _failure_top_categories(details: list[dict[str, Any]], top_n: int = 5) -> di
     }
 
 
+def _failure_root_cause_trend(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """5.3 失败根因时间趋势：追踪三类根因（llm_capability / dependency /
+    framework）在任务序列中的占比变化。
+
+    根因归属（保守启发，不依赖 LLM）：
+    - llm_capability: LLM 能力类失败（ASSERTION/LOGIC/UNKNOWN 等，补丁应用
+      成功但测试仍失败，或 LLM 格式/超时类失败）；
+    - dependency: 依赖/环境类失败（IMPORT_ERROR，缺第三方依赖或模块路径
+      错误，修复方向是装依赖而非改代码）；
+    - framework: 框架/基础设施类失败（EXECUTION_TRACE_MISSING /
+      MULTI_CANDIDATE_ALL_REJECTED / PATCH_VALIDATION_FAILED，执行器、
+      多候选策略或安全守卫异常）。
+
+    Args:
+        details: benchmark details 列表（按任务顺序）。
+
+    Returns:
+        {"total_failed": 失败任务数,
+         "root_cause_distribution": {llm_capability: n, dependency: n, framework: n},
+         "root_cause_rates": {llm_capability: float, dependency: float, framework: float},
+         "trend_by_first_third": {"first_third": {...}, "second_third": {...}, "third_third": {...}}}
+        trend_by_first_third 把失败任务按顺序分三段，各段统计三类根因占比，
+        用于判断"系统优化是否有效"（若 framework/dependency 占比随批次下降，
+        说明基础设施与依赖处理在改善）。
+    """
+    failed_rows = [r for r in details if not r.get("passed")]
+    total_failed = len(failed_rows)
+    if total_failed == 0:
+        return {"total_failed": 0, "root_cause_distribution": {}, "root_cause_rates": {}, "trend_by_first_third": {}}
+
+    def _root_cause(row: dict[str, Any]) -> str:
+        cat = str(row.get("error_category") or "unknown").lower()
+        if cat in ("import_error",):
+            return "dependency"
+        if cat in ("execution_trace_missing", "multi_candidate_all_rejected", "patch_validation_failed"):
+            return "framework"
+        # 其余失败（assertion/logic/unknown/runtime/type/index/timeout 等）
+        # 归为 LLM 能力类（系统修复逻辑未覆盖到，需 LLM 理解代码）
+        return "llm_capability"
+
+    dist: Counter = Counter()
+    for row in failed_rows:
+        dist[_root_cause(row)] += 1
+    # 三类根因均给出（缺省 0），便于渲染层直接读 rates（避免 KeyError）
+    rates = {k: round(dist.get(k, 0) / total_failed, 4) for k in ("llm_capability", "dependency", "framework")}
+    # 时间趋势：把失败任务按顺序三等分（不足 3 段时按实际分段）
+    third = max(1, total_failed // 3)
+    segments = {
+        "first_third": failed_rows[:third],
+        "second_third": failed_rows[third:2 * third],
+        "third_third": failed_rows[2 * third:],
+    }
+    trend: dict[str, dict[str, float]] = {}
+    for seg_name, seg_rows in segments.items():
+        if not seg_rows:
+            continue
+        seg_dist: Counter = Counter(_root_cause(r) for r in seg_rows)
+        trend[seg_name] = {
+            k: round(seg_dist.get(k, 0) / len(seg_rows), 4) for k in ("llm_capability", "dependency", "framework")
+        }
+    return {
+        "total_failed": total_failed,
+        "root_cause_distribution": {k: dist.get(k, 0) for k in ("llm_capability", "dependency", "framework")},
+        "root_cause_rates": rates,
+        "trend_by_first_third": trend,
+    }
+
+
+def _contamination_cross_analysis(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """5.3 失败分析 × 污染检测交叉：高污染风险任务是否具有更高修复成功率。
+
+    2.1 改进联动：details[].contamination_risk_level（high/medium/low，由
+    contamination_check.detect_contamination 产出）与 passed 交叉，验证
+    "污染效应"是否真实存在——若 high 风险任务成功率显著高于 low 风险任务，
+    提示系统确实在"背出"黄金补丁而非真正定位根因。
+
+    Returns:
+        {"available": bool,
+         "by_risk_level": {"high": {tasks, passed, success_rate},
+                            "medium": {...}, "low": {...}},
+         "high_vs_low_success_delta": float | None}
+        无 contamination_risk_level 字段时 available=False。
+    """
+    observed = 0
+    by_level: dict[str, dict[str, Any]] = {}
+    for row in details:
+        level = row.get("contamination_risk_level")
+        if not level:
+            continue
+        observed += 1
+        stat = by_level.setdefault(str(level), {"tasks": 0, "passed": 0})
+        stat["tasks"] += 1
+        if row.get("passed"):
+            stat["passed"] += 1
+    if observed == 0:
+        return {"available": False, "by_risk_level": {}}
+    result: dict[str, Any] = {"available": True, "by_risk_level": {}}
+    for level, stat in by_level.items():
+        total = stat["tasks"]
+        result["by_risk_level"][level] = {
+            "tasks": total,
+            "passed": stat["passed"],
+            "success_rate": round(stat["passed"] / total, 4) if total else 0.0,
+        }
+    high_rate = result["by_risk_level"].get("high", {}).get("success_rate")
+    low_rate = result["by_risk_level"].get("low", {}).get("success_rate")
+    if high_rate is not None and low_rate is not None:
+        result["high_vs_low_success_delta"] = round(high_rate - low_rate, 4)
+    return result
+
+
+def _rag_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """2.3 RAG Token 效率增益：对比启用/禁用 RAG 任务的 Token 消耗与迭代次数。
+
+    2.3 改进：当前仅报告 Hit Rate/MRR，本函数从 details[].rag_enabled
+    （或 rag_stats 非空推断）把任务分为"启用 RAG"与"未启用 RAG"两组，
+    对比两组的平均 Token / 平均迭代 / 成功率，回答"RAG 检索是否值得其
+    检索 + 提示注入的 Token 开销"。
+
+    分组口径：
+    - rag_stats 非空（任务内发生过检索）= 启用 RAG 组；
+    - 其余 = 未启用 RAG 组（含 RAG 关闭时的历史任务）。
+    - 两组任一为空时 available=False（无法对比）。
+
+    Returns:
+        {"available": bool, "rag_group": {tasks, avg_tokens, avg_iterations, success_rate},
+         "no_rag_group": {...}, "token_delta_ratio": float,
+         "iteration_delta": int}
+    """
+    rag_rows: list[dict[str, Any]] = []
+    no_rag_rows: list[dict[str, Any]] = []
+    for row in details:
+        is_rag = bool(row.get("rag_stats")) or row.get("rag_enabled")
+        (rag_rows if is_rag else no_rag_rows).append(row)
+    if not rag_rows or not no_rag_rows:
+        return {"available": False, "observed_rag_tasks": len(rag_rows), "observed_no_rag_tasks": len(no_rag_rows)}
+
+    def _group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        n = len(rows)
+        avg_tokens = round(sum(float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2) if n else 0.0
+        avg_iterations = round(sum(int(r.get("iterations", 0) or 0) for r in rows) / n, 2) if n else 0.0
+        success_rate = round(sum(1 for r in rows if r.get("passed")) / n, 4) if n else 0.0
+        return {"tasks": n, "avg_tokens": avg_tokens, "avg_iterations": avg_iterations, "success_rate": success_rate}
+
+    rag_stat = _group_stats(rag_rows)
+    no_rag_stat = _group_stats(no_rag_rows)
+    token_delta_ratio = round(rag_stat["avg_tokens"] / no_rag_stat["avg_tokens"], 4) if no_rag_stat["avg_tokens"] else None
+    iteration_delta = round(rag_stat["avg_iterations"] - no_rag_stat["avg_iterations"], 2)
+    return {
+        "available": True,
+        "rag_group": rag_stat,
+        "no_rag_group": no_rag_stat,
+        "token_delta_ratio": token_delta_ratio,
+        "iteration_delta": iteration_delta,
+    }
+
+
+def _rag_similarity_distribution(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """2.3 RAG 检索结果相关性分布：avg_max_similarity 的直方图分桶。
+
+    2.3 改进：当前仅报告 Hit Rate 和 MRR，本函数把各检索记录的最高相似度
+    按 0.1 步长分桶（0.0-0.1 ... 0.9-1.0），输出分布直方图，用于观察
+    "检索结果是普遍低相关还是集中在高相关"，辅助判断检索库质量。
+
+    Returns:
+        {"available": bool, "histogram": {"0.0-0.1": n, ...},
+         "total_retrievals": int, "avg_max_similarity": float | None}
+    """
+    bins = {f"{i * 0.1:.1f}-{(i + 1) * 0.1:.1f}": 0 for i in range(10)}
+    total = 0
+    sims: list[float] = []
+    for row in details:
+        for s in row.get("rag_stats") or []:
+            ms = s.get("max_similarity")
+            if ms is None:
+                continue
+            total += 1
+            val = float(ms)
+            sims.append(val)
+            # 归一化到 0.0-1.0（相似度可能 >1，保守截断到 1.0）
+            idx = min(int(val * 10), 9)
+            bins[f"{idx * 0.1:.1f}-{(idx + 1) * 0.1:.1f}"] += 1
+    if total == 0:
+        return {"available": False, "histogram": {}, "total_retrievals": 0}
+    return {
+        "available": True,
+        "histogram": {k: v for k, v in bins.items() if v > 0},
+        "total_retrievals": total,
+        "avg_max_similarity": round(sum(sims) / len(sims), 4) if sims else None,
+    }
+
+
 def _venv_cache_stats_snapshot() -> dict[str, Any] | None:
     """4.4 依赖缓存命中率统计：读取 ExecutorAgent venv 磁盘缓存的命中数据。
 
     缓存统计由 src/tools/dependency.py 维护（按依赖组合复用 venv），
     此处仅做只读快照，供分析报告输出缓存复用效率。导入失败或统计
     为空（尚无缓存事件）时返回 None，渲染时跳过章节，不崩溃。
+
+    4.4 改进：额外附带缓存容量信息（总大小 + 是否超告警阈值），
+    超限时输出清理建议（只监控不自动清理）。
     """
     try:
-        from src.tools.dependency import get_venv_cache_stats
+        from src.tools.dependency import check_venv_cache_size, get_venv_cache_stats
     except Exception:
         return None
     stats = get_venv_cache_stats()
     if stats.get("total", 0) == 0:
-        return None
+        # 尚无缓存事件时仍可提供容量监控（目录可能存在历史 venv）
+        try:
+            size = check_venv_cache_size()
+            return {**size, "hits": 0, "creates": 0, "total": 0, "hit_rate": 0.0}
+        except Exception:
+            return None
+    try:
+        size = check_venv_cache_size()
+        stats.update(size)
+    except Exception:
+        pass
     return stats
 
 
@@ -648,13 +1003,52 @@ def _mutation_score_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
     avg = round(sum(scores) / len(scores), 4)
     high = sum(1 for s in scores if s >= 0.7)
     low = sum(1 for s in scores if s < 0.4)
-    return {
+    result = {
         "available": True,
         "observed_tasks": observed,
         "avg_mutation_score": avg,
         "high_score_tasks": high,
         "low_score_tasks": low,
     }
+    # 1.2 改进：变异得分 × 断言强度交叉分析——验证"高变异得分任务是否同时
+    # 具有较高 AST 断言强度"（两者应一致：断言越强，变异体越容易被杀死）
+    cross_tasks = [
+        (float(row.get("mutation_score")), _assertion_counts_from_row(row))
+        for row in details
+        if row.get("mutation_score") is not None
+    ]
+    if cross_tasks:
+        high_ms = [
+            asserts for ms, asserts in cross_tasks if ms >= 0.7 and asserts is not None
+        ]
+        low_ms = [asserts for ms, asserts in cross_tasks if ms < 0.4 and asserts is not None]
+        result["mutation_assertion_cross"] = {
+            "high_score_avg_assertions": round(sum(high_ms) / len(high_ms), 2) if high_ms else None,
+            "low_score_avg_assertions": round(sum(low_ms) / len(low_ms), 2) if low_ms else None,
+            "consistent": (
+                (high_ms and low_ms)
+                and round(sum(high_ms) / len(high_ms), 2) > round(sum(low_ms) / len(low_ms), 2)
+            )
+            if (high_ms or low_ms)
+            else None,
+        }
+    return result
+
+
+def _assertion_counts_from_row(row: dict[str, Any]) -> int | None:
+    """单任务断言强度（AST 口径，generated_test 缺失/解析失败时返回 None）。
+
+    供变异得分 × 断言强度交叉分析使用；与 _assertion_strength_proxy 同口径
+    （AST 统计 Assert 节点数），但返回单任务值（None 表示无数据）。
+    """
+    test_code = row.get("generated_test")
+    if not isinstance(test_code, str) or not test_code.strip():
+        return None
+    try:
+        tree = ast.parse(test_code)
+    except (SyntaxError, ValueError):
+        return None
+    return sum(1 for _ in ast.walk(tree) if isinstance(_, ast.Assert))
 
 
 def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -857,9 +1251,23 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             "repair_convergence_metrics": _repair_convergence_metrics(details),
             # 1.3 修复收敛曲线（按迭代轮次累计通过率）
             "repair_convergence_curve": _repair_convergence_curve(details),
-            # 1.2 测试异味检测（LLM 生成测试的可维护性代理）
+            # 1.2 测试异味检测（LLM 生成测试的可维护性代理；含异味密度与按策略分组）
             "test_smell_metrics": _test_smell_detection(details),
             "quality_proxy_metrics": _quality_proxy_metrics(details),
+            # 1.3 修复收敛的 Token 效率曲线（逐轮增量 Token 与增量通过率，回答
+            # "第几轮修复边际收益最高"）
+            "convergence_token_efficiency": _convergence_token_efficiency(details),
+            # 1.3 修复迭代分布的难度分层统计（按 task_id 难度档分组的迭代分布）
+            "difficulty_stratified_iterations": _difficulty_stratified_iterations(details),
+            # 2.3 RAG Token 效率增益 + 相似度分布（启用/禁用 RAG 的 Token/迭代对比
+            # 与检索相关性的直方图分桶）
+            "rag_token_efficiency": _rag_token_efficiency(details),
+            "rag_similarity_distribution": _rag_similarity_distribution(details),
+            # 5.3 失败根因时间趋势（llm_capability / dependency / framework 三类
+            # 在任务序列中的占比变化，判断系统优化是否有效）
+            "failure_root_cause_trend": _failure_root_cause_trend(details),
+            # 5.3 失败分析 × 污染检测交叉（验证"高污染风险任务是否成功率更高"）
+            "contamination_cross_analysis": _contamination_cross_analysis(details),
             # 2.1 数据污染检测（details 携带 patch + task_metadata.golden_patch 时计算重叠度）
             "contamination_report": detect_contamination(details, golden_patches),
             # 1.3 边界用例覆盖（generated_test 含边界值时统计，旧 JSON 无该字段时全 0）
@@ -1004,6 +1412,65 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append("> 解读：累计通过率随迭代轮次单调不减；若 0 轮即接近 1.0 说明任务简单或系统一次修复能力强。")
         lines.append("")
 
+    # 修复收敛 Token 效率曲线（1.3）：逐轮增量 Token 与增量通过率的边际收益
+    conv_token_rows = [
+        (b, m["convergence_token_efficiency"])
+        for b, m in per.items()
+        if m.get("convergence_token_efficiency", {}).get("available")
+    ]
+    if conv_token_rows:
+        lines.append("## 修复收敛 Token 效率曲线（1.3）")
+        lines.append("")
+        lines.append("| 基线 | 轮次 | 到达任务 | 增量通过 | 增量Token | 边际收益(通过/Token) | 最佳边际轮次 |")
+        lines.append("|------|------|---------|---------|----------|--------------------|------------|")
+        for baseline, ct in conv_token_rows:
+            total = ct.get("total_tasks", 0)
+            best = ct.get("best_marginal_round")
+            for k in ("0", "1", "2", "3+"):
+                r = ct.get("rounds", {}).get(k)
+                if not r:
+                    continue
+                marginal = r.get("marginal_pass_per_token")
+                marginal_text = f"{marginal:.4f}" if marginal is not None else "N/A"
+                lines.append(
+                    f"| {baseline} | {k} | {r.get('reached_tasks', 0)} "
+                    f"| {r.get('incremental_passed', 0)} | {r.get('incremental_tokens', 0)} "
+                    f"| {marginal_text} | {best if k == '3+' else '—'} |"
+                )
+            lines.append(f"| {baseline} | 总任务 | {total} | — | — | — | — |")
+        lines.append("")
+        lines.append(
+            "> 解读：边际收益 = 该轮增量通过任务数 / 该轮增量 Token 消耗；"
+            "best_marginal_round 标记\"第几轮修复最划算\"（边际收益最高的轮次），"
+            "用于回答\"第几轮修复的边际收益最高\"。"
+        )
+        lines.append("")
+
+    # 修复迭代分布的难度分层统计（1.3）
+    diff_iter_rows = [
+        (b, m["difficulty_stratified_iterations"])
+        for b, m in per.items()
+        if m.get("difficulty_stratified_iterations", {}).get("available")
+    ]
+    if diff_iter_rows:
+        lines.append("## 修复迭代分布（按难度分层，1.3）")
+        lines.append("")
+        lines.append("| 基线 | 难度档 | 任务数 | 0迭代 | 1迭代 | 2迭代 | 3+迭代 |")
+        lines.append("|------|--------|--------|-------|-------|-------|--------|")
+        for baseline, di in diff_iter_rows:
+            for band, stat in di["bands"].items():
+                it = stat.get("iterations", {})
+                lines.append(
+                    f"| {baseline} | {band} | {stat.get('total', 0)} "
+                    f"| {it.get('0', 0)} | {it.get('1', 0)} | {it.get('2', 0)} | {it.get('3+', 0)} |"
+                )
+        lines.append("")
+        lines.append(
+            "> 注：难度档由 task_id 外部映射（difficulty_bands）提供；未提供时全部任务"
+            "归入 unstratified 档。用于对比不同难度下修复迭代次数的分布差异。"
+        )
+        lines.append("")
+
     # 测试异味检测（1.2）：LLM 生成测试的可维护性代理
     smell_rows = [
         (b, m["test_smell_metrics"]) for b, m in per.items() if m.get("test_smell_metrics", {}).get("available")
@@ -1011,8 +1478,8 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     if smell_rows:
         lines.append("## 测试异味检测（1.2）")
         lines.append("")
-        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | Eager Test | 缺乏内聚 | 含异味任务 |")
-        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|---------|----------|")
+        lines.append("| 基线 | 观测任务 | Assertion Roulette | Magic Number | 断言弱化 | 平凡测试 | Eager Test | 缺乏内聚 | 异味密度 | 含异味任务 |")
+        lines.append("|------|---------|-------------------|--------------|---------|---------|----------|---------|--------|----------|")
         for baseline, s in smell_rows:
             c = s.get("smell_counts", {})
             lines.append(
@@ -1020,9 +1487,35 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
                 f"| {c.get('assertion_roulette', 0)} | {c.get('magic_number', 0)} "
                 f"| {c.get('assertion_weakening', 0)} | {c.get('trivial_test', 0)} "
                 f"| {c.get('eager_test', 0)} | {c.get('lack_of_cohesion', 0)} "
-                f"| {len(s.get('tasks_with_smells', []))} |"
+                f"| {s.get('smell_density', 0.0)} | {len(s.get('tasks_with_smells', []))} |"
             )
         lines.append("")
+        # 按策略分组的异味分布对比（1.1 改进：异味模式受提示策略显著影响）
+        strategy_rows = [
+            (b, s)
+            for b, s in smell_rows
+            if s.get("smell_counts_by_strategy")
+        ]
+        if strategy_rows:
+            lines.append("### 异味分布按生成策略分组")
+            lines.append("")
+            lines.append("| 基线 | 策略 | 观测任务 | 异味密度 | Eager Test | 缺乏内聚 | Magic Number |")
+            lines.append("|------|------|---------|--------|----------|---------|-------------|")
+            for baseline, s in strategy_rows:
+                for strategy, stat in s["smell_counts_by_strategy"].items():
+                    sc = stat.get("smell_counts", {})
+                    lines.append(
+                        f"| {baseline} | {strategy} | {stat.get('observed_tasks', 0)} "
+                        f"| {stat.get('smell_density', 0.0)} | {sc.get('eager_test', 0)} "
+                        f"| {sc.get('lack_of_cohesion', 0)} | {sc.get('magic_number', 0)} |"
+                    )
+            lines.append("")
+            lines.append(
+                "> 解读：对比不同生成策略（如 planner/generator/debugger 消融）的异味密度，"
+                "可定位哪类提示策略产出异味更多；若某策略的 Eager Test 显著偏高，"
+                "提示该策略倾向让单个测试方法验证过多功能。"
+            )
+            lines.append("")
         lines.append("> 注：测试异味检测基于 details[].generated_test 字段的保守启发式；")
         lines.append("仅当结果 JSON 携带该字段时可用，否则章节跳过。")
         lines.append("")
@@ -1139,6 +1632,62 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     ]
     for baseline, report in contam_rows:
         lines.extend(render_contamination_section(report, baseline))
+    if contam_rows:
+        # 2.1 改进：抗污染基准交叉验证建议（成对报告 SWE-rebench 等）
+        lines.extend(render_resistant_benchmark_section())
+
+    # 2.3 RAG Token 效率增益 + 相似度分布（启用/禁用 RAG 对比）
+    rag_token_rows = [
+        (b, m["rag_token_efficiency"])
+        for b, m in per.items()
+        if m.get("rag_token_efficiency", {}).get("available")
+    ]
+    if rag_token_rows:
+        lines.append("## RAG Token 效率增益（2.3）")
+        lines.append("")
+        lines.append("| 基线 | RAG组(任务数) | RAG组平均Token | RAG组成功率 | 无RAG组(任务数) | 无RAG组平均Token | 无RAG组成功率 | Token比率 | 迭代差 |")
+        lines.append("|------|--------------|---------------|-----------|----------------|-----------------|-------------|----------|--------|")
+        for baseline, rt in rag_token_rows:
+            g = rt.get("rag_group", {})
+            ng = rt.get("no_rag_group", {})
+            ratio = rt.get("token_delta_ratio")
+            ratio_text = f"{ratio:.2f}" if ratio is not None else "N/A"
+            lines.append(
+                f"| {baseline} | {g.get('tasks', 0)} | {g.get('avg_tokens', 0)} "
+                f"| {g.get('success_rate', 0.0)} | {ng.get('tasks', 0)} | {ng.get('avg_tokens', 0)} "
+                f"| {ng.get('success_rate', 0.0)} | {ratio_text} | {rt.get('iteration_delta', 0.0)} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：Token 比率 > 1 表示启用 RAG 的任务消耗更多 Token（检索 + 提示注入开销）；"
+            "结合成功率差异判断 RAG 的\"性价比\"——若成功率提升足以抵消 Token 开销则值得，"
+            "否则应考虑降低 top_k 或检索阈值。"
+        )
+        lines.append("")
+
+    rag_sim_rows = [
+        (b, m["rag_similarity_distribution"])
+        for b, m in per.items()
+        if m.get("rag_similarity_distribution", {}).get("available")
+    ]
+    if rag_sim_rows:
+        lines.append("## RAG 检索相似度分布（2.3）")
+        lines.append("")
+        lines.append("| 基线 | 总检索数 | 平均最高相似度 | 分布（相似度分桶） |")
+        lines.append("|------|---------|---------------|------------------|")
+        for baseline, rs in rag_sim_rows:
+            hist = rs.get("histogram", {})
+            hist_text = ", ".join(f"{k}:{v}" for k, v in sorted(hist.items())) if hist else "—"
+            lines.append(
+                f"| {baseline} | {rs.get('total_retrievals', 0)} "
+                f"| {rs.get('avg_max_similarity')} | {hist_text} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：若检索相似度集中在 0.0-0.3 低相关区间，说明检索库与当前任务差异过大"
+            "（冷启动或领域不匹配）；若集中在 0.7+ 高相关区间则检索质量良好。"
+        )
+        lines.append("")
 
     # 2.2 任务难度分层（code_size / dependency_count / complexity_proxy 三维度）
     for baseline, m in per.items():
@@ -1194,6 +1743,30 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
             "仅当 details[].mutation_score 字段存在时输出本章节。"
         )
         lines.append("")
+        # 1.2 改进：变异得分 × 断言强度交叉分析（验证两者一致性）
+        cross_rows = [
+            (b, m) for b, m in mutation_rows if m.get("mutation_score_metrics", {}).get("mutation_assertion_cross")
+        ]
+        if cross_rows:
+            lines.append("### 变异得分 × 断言强度交叉分析")
+            lines.append("")
+            lines.append("| 基线 | 高变异得分(≥0.7)平均断言数 | 低变异得分(<0.4)平均断言数 | 是否一致 |")
+            lines.append("|------|--------------------------|---------------------------|---------|")
+            for baseline, m in cross_rows:
+                cross = m["mutation_score_metrics"]["mutation_assertion_cross"]
+                consistent = cross.get("consistent")
+                consistent_text = "一致" if consistent is True else ("不一致" if consistent is False else "数据不足")
+                lines.append(
+                    f"| {baseline} | {cross.get('high_score_avg_assertions')} "
+                    f"| {cross.get('low_score_avg_assertions')} | {consistent_text} |"
+                )
+            lines.append("")
+            lines.append(
+                "> 解读：若\"一致\"为真，说明断言强度越高的测试杀死的变异体越多"
+                "（符合变异测试理论）；若为假，提示部分高变异得分任务的断言可能"
+                "覆盖到测试本身而非被测代码。"
+            )
+            lines.append("")
 
     # 1.2 收敛失败模式归因
     mode_rows = [
@@ -1247,21 +1820,100 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         )
         lines.append("")
 
+    # 5.3 失败根因时间趋势（三类根因占比变化，判断系统优化是否有效）
+    trend_rows = [
+        (b, m["failure_root_cause_trend"])
+        for b, m in per.items()
+        if m.get("failure_root_cause_trend", {}).get("total_failed", 0) > 0
+    ]
+    if trend_rows:
+        lines.append("## 失败根因时间趋势（5.3）")
+        lines.append("")
+        lines.append("| 基线 | 失败任务 | LLM能力 | 依赖/环境 | 框架/基础设施 | 第一段LLM能力 | 第二段LLM能力 | 第三段LLM能力 |")
+        lines.append("|------|---------|--------|----------|--------------|-------------|-------------|-------------|")
+        for baseline, tr in trend_rows:
+            dist = tr.get("root_cause_distribution", {})
+            rates = tr.get("root_cause_rates", {})
+            trend = tr.get("trend_by_first_third", {})
+            first = trend.get("first_third", {}).get("llm_capability", "—")
+            second = trend.get("second_third", {}).get("llm_capability", "—")
+            third = trend.get("third_third", {}).get("llm_capability", "—")
+            lines.append(
+                f"| {baseline} | {tr.get('total_failed', 0)} "
+                f"| {dist.get('llm_capability', 0)} ({rates.get('llm_capability', 0.0)}) "
+                f"| {dist.get('dependency', 0)} ({rates.get('dependency', 0.0)}) "
+                f"| {dist.get('framework', 0)} ({rates.get('framework', 0.0)}) "
+                f"| {first} | {second} | {third} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：若 LLM 能力类占比随批次下降（first→second→third 递减），"
+            "说明系统修复逻辑在改善；若 framework 类占比上升，提示执行器/多候选"
+            "等基础设施需排查。dependency 类占比高说明任务依赖缺失普遍，"
+            "建议完善 venv 自动安装。"
+        )
+        lines.append("")
+
+    # 5.3 失败分析 × 污染检测交叉（验证污染效应）
+    contam_cross_rows = [
+        (b, m["contamination_cross_analysis"])
+        for b, m in per.items()
+        if m.get("contamination_cross_analysis", {}).get("available")
+    ]
+    if contam_cross_rows:
+        lines.append("## 失败分析 × 污染检测交叉（5.3）")
+        lines.append("")
+        lines.append("| 基线 | 高污染任务 | 高污染成功率 | 低污染任务 | 低污染成功率 | 成功率差（高-低） |")
+        lines.append("|------|----------|------------|----------|------------|----------------|")
+        for baseline, cc in contam_cross_rows:
+            by_level = cc.get("by_risk_level", {})
+            high = by_level.get("high", {})
+            low = by_level.get("low", {})
+            delta = cc.get("high_vs_low_success_delta")
+            delta_text = f"{delta:.4f}" if delta is not None else "N/A"
+            lines.append(
+                f"| {baseline} | {high.get('tasks', 0)} | {high.get('success_rate', 0.0)} "
+                f"| {low.get('tasks', 0)} | {low.get('success_rate', 0.0)} | {delta_text} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 解读：若\"成功率差（高-低）\"为显著正值（≥0.2），提示高污染风险任务"
+            "成功率异常偏高——系统可能在\"背出\"黄金补丁而非真正修复，论文中应"
+            "单独标注含污染样本并补充 SWE-rebench 交叉验证；若差异 ≤0.2，"
+            "说明污染效应不显著，结果可信度较高。"
+        )
+        lines.append("")
+
     # 4.4 依赖缓存命中统计（ExecutorAgent venv 磁盘缓存，无缓存事件时跳过）
+    # 4.4 改进：total=0 时快照仍含容量信息（_venv_cache_stats_snapshot 不再返回 None），
+    # 命中统计章节只在 total>0 时渲染；容量告警在 exceeded=True 时额外渲染
     cache_stats = analysis.get("venv_cache_stats")
-    if cache_stats:
+    if cache_stats and cache_stats.get("total", 0) > 0:
         lines.append("## 依赖缓存命中统计（4.4）")
         lines.append("")
-        lines.append("| venv 复用次数 | venv 新建次数 | 缓存命中率 |")
-        lines.append("|--------------|--------------|-----------|")
+        lines.append("| venv 复用次数 | venv 新建次数 | 缓存命中率 | 缓存总大小(MB) | 超阈值 |")
+        lines.append("|--------------|--------------|-----------|---------------|--------|")
+        size_mb = cache_stats.get("size_mb")
+        exceeded = cache_stats.get("exceeded")
+        size_text = f"{size_mb}" if size_mb is not None else "—"
+        exceed_text = "是" if exceeded is True else ("否" if exceeded is False else "—")
         lines.append(
-            f"| {cache_stats.get('hits', 0)} | {cache_stats.get('creates', 0)} | {cache_stats.get('hit_rate', 0.0)} |"
+            f"| {cache_stats.get('hits', 0)} | {cache_stats.get('creates', 0)} "
+            f"| {cache_stats.get('hit_rate', 0.0)} | {size_text} | {exceed_text} |"
         )
         lines.append("")
         lines.append(
             "> 解读：命中率高说明任务依赖组合重复利用良好（相同依赖组合复用同一 venv，"
             "省去重建 1-3s/次）；若几乎全为新建，提示任务依赖差异过大或缓存目录被清理。"
         )
+        if cache_stats.get("exceeded"):
+            lines.append("")
+            lines.append(
+                f"⚠️ **缓存容量告警**：venv 缓存目录总大小 {size_mb} MB 超过阈值 "
+                f"{cache_stats.get('threshold_mb')} MB，建议执行 "
+                f"`clear_venv_cache(max_age_days=7)` 清理过期缓存。"
+            )
+            lines.append("")
         lines.append("")
 
     return "\n".join(lines)
