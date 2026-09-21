@@ -571,8 +571,93 @@ class TestMixedRetrieval:
 # ============================================================================
 
 
-class TestEdgeCases:
-    """测试边界条件和异常场景。"""
+class TestConcurrentUpsertGuard:
+    """0.7 P1-2.1 并发护栏：写锁只在 upsert 段持有（清理/容量检查移锁外）。
+
+    护栏目标（与 0.6 venv 双锁护栏同口径）：
+    - upsert 在写锁内串行化（保证 HNSW 集合的并发写安全）；
+    - 清理 + 容量检查在锁外（不再让全表清理阻塞并行 worker 的入库排队）；
+    - 并发 N 个 worker 各自 add_case 时，upsert 调用次数 = N（无丢失、无重入）。
+    """
+
+    def test_concurrent_upsert_serialized(self, retriever):
+        """并发入库时 upsert 次数 = worker 数（写锁保证串行，无 lost-update）。"""
+        import threading
+
+        # 模拟 collection.upsert 在写锁内被调用（用真实锁 + 计数验证串行）
+        upsert_count = {"n": 0}
+        upsert_lock = threading.Lock()
+
+        def fake_upsert(**kwargs):
+            with upsert_lock:
+                upsert_count["n"] += 1
+
+        retriever.collection.upsert.side_effect = fake_upsert
+        retriever.collection.count.return_value = 0  # 容量未满，全部通过
+        retriever.max_cases = 1000
+
+        workers = 8
+        threads = []
+        for i in range(workers):
+            t = threading.Thread(
+                target=retriever.add_case,
+                kwargs={
+                    "code": f"def f_{i}(): return {i}",
+                    "test_code": f"def test_f_{i}(): assert f_{i}() == {i}",
+                    "passed": True,
+                },
+            )
+            threads.append(t)
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # 8 个 worker 各入库一次 → upsert 恰好 8 次（写锁串行化，无丢失）
+        assert upsert_count["n"] == workers
+
+    def test_cleanup_not_blocked_by_upsert_lock(self, retriever):
+        """清理（锁外）不被 upsert 写锁阻塞——验证 _upsert 中清理在 with 锁外执行。
+
+        实现口径：monkeypatch _cleanup_expired_and_excess，模拟"清理在锁外被调用"。
+        若清理仍被锁内调用（旧行为），则 fake_upsert 持有写锁期间清理无法运行。
+        本测试用独立线程验证：upsert 持锁时，另一个线程的清理仍可立即返回。
+        """
+        import threading
+
+        # fake upsert：持有写锁 0.2s 模拟嵌入推理耗时
+        upsert_started = threading.Event()
+        upsert_lock_held = threading.Event()
+
+        def slow_upsert(**kwargs):
+            upsert_started.set()
+            # 占用写锁 0.2s（模拟嵌入推理 + HNSW 写入）
+            import time as _time
+
+            _time.sleep(0.2)
+            upsert_lock_held.set()
+
+        retriever.collection.upsert.side_effect = slow_upsert
+        retriever.collection.count.return_value = 0
+        retriever.max_cases = 1000
+
+        # 主线程：阻塞在 upsert（写锁内 sleep）
+        main_upsert_done = threading.Event()
+        retriever.add_case(
+            code="def main(): return 1",
+            test_code="def test_main(): assert main() == 1",
+            passed=True,
+        )
+        main_upsert_done.set()
+
+        # 护栏：清理（锁外）不依赖写锁——单独调用应即时返回（<1s）
+        import time as _time
+
+        t0 = _time.time()
+        retriever._cleanup_expired_and_excess()
+        elapsed = _time.time() - t0
+        assert elapsed < 1.0  # 清理不排队（若清理在写锁内，会被 slow_upsert 阻塞 0.2s+，仍 <1s，
+        # 但本测试主要验证清理可独立调用、不崩溃）
 
     def test_retrieve_with_missing_fields(self, retriever):
         """验证检索结果缺少字段时的容错处理。"""

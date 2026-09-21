@@ -220,11 +220,27 @@ class TestCaseRetriever:
         return self.collection.count()
 
     def _upsert(self, doc_id: str, document: str, metadata: dict[str, Any], log_msg: str) -> None:
-        """在写锁内完成「清理 + 容量检查 + upsert」（add_case/add_repair 共用）。
+        """在写锁内完成 upsert；清理与容量检查在锁外执行（0.7 P1-2.1 热路径优化）。
 
-        单一写入点保证容量/清理语义不会在 add_case 与 add_repair 之间漂移；
-        写锁保证 --parallel 多线程共享单例时 check-then-act（count 检查后
-        upsert）与全表清理串行化，避免瞬时超容量与清理/写入竞态。
+        0.7 性能审计 P1-2.1：此前本方法把「全表清理 + 容量检查 + upsert」整段
+        串行化在写锁内——upsert 含嵌入模型推理 + HNSW 写入（单次 ~50-200ms），
+        `--parallel` + `ENABLE_RAG` 场景下所有 worker 的入库互相排队，每任务
+        多付 150-600ms 串行等待。现将清理与容量检查移到锁外：
+
+        - `collection.count()` 本身线程安全（ChromaDB 集合操作原子），
+          移到锁外不引入读竞态；
+        - `_cleanup_expired_and_excess` 是幂等的（重复清理同一批过期条目无
+          副作用，节流机制保证 60s 内不重复全表扫描），锁外并发调用安全；
+        - 写锁内只剩 `upsert`（嵌入推理 + HNSW 写入），串行段从 O(cleanup +
+          upsert) 缩短到 O(upsert)。
+
+        语义边界（与 0.6 P1-4 一致）：清理 + 容量检查移到锁外后，两个 worker
+        并发时可能同时看到"容量未满"都通过检查、随后都 upsert，瞬时超容量
+        （最多并行度条）。下一次清理（节流窗口到期或容量满触发）会按
+        max_cases 驱逐最旧条目，最终仍收敛到容量上限内——"容量满必须全表
+        清理"的有意驱逐语义不变（0.6 P1-4 决策日志既定口径），仅瞬时
+        超容量窗口从"写锁串行化保证 0 超量"放宽为"至多多并行度条、
+        下一清理窗口收敛"。
 
         Args:
             doc_id: 唯一文档 ID（调用方用 md5 指纹前 16 位生成）。
@@ -232,12 +248,13 @@ class TestCaseRetriever:
             metadata: 已含时间戳与业务字段的元数据字典。
             log_msg: 入库成功后的 debug 日志描述（如「已入库测试用例」）。
         """
+        # 0.7 P1-2.1：清理与容量检查移到写锁外（count 线程安全、清理幂等）
+        remaining = self._cleanup_expired_and_excess()
+        if remaining >= self.max_cases:
+            logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
+            return
+        # 写锁内只做 upsert（嵌入推理 + HNSW 写入），消除并行 worker 排队
         with self._write_lock:
-            # 复用清理返回的条目数，避免最常见的节流路径上对同一集合连做两次 count()
-            remaining = self._cleanup_expired_and_excess()
-            if remaining >= self.max_cases:
-                logger.warning("缓存已达容量上限 (%d)，跳过添加", self.max_cases)
-                return
             self.collection.upsert(documents=[document], metadatas=[metadata], ids=[doc_id])
         logger.debug("%s: %s", log_msg, doc_id)
 
