@@ -11,11 +11,11 @@
 |------|------|
 | **总测试数** | ✅ 1612 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，1567 collected） |
 | **单元测试** | ✅ 全量 1612 passed, 0 failed；精简环境 1567 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/ 4632 stmts；0.6 轮次 P0 修复新增 6 个回归用例后 1612 全绿；核心模块：base_agent 100% / api_manager 95% / dataset_loader 94% / graph/nodes.py 96% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 92% / cross_file 100%） |
+| **代码覆盖率** | 94% 总覆盖（src/ 4653 stmts；0.6 轮次 P0 修复新增 6 个回归用例后 1612 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 94% / cross_file 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
 | **最新优化** | ✅ 0.6 P0 修复批（LLM OpenAI 路径零重试→指数退避故障转移 / venv 统计双锁分离（锁外落盘，--parallel 热路径不排队）/ 幽灵开关实装（`API_CIRCUIT_BACKOFF` + `API_PROMETHEUS_EXPORT` 六处文档承诺落地）/ multi_candidate 双次补丁应用消除，全量 1612 passed / 零回归）；详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (95%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (96%), config/config_manager.py (95%), multi_candidate.py (92%), observability/trace.py (98%), error_classifier.py (94%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (100%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (100%) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (95%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 ruff 15 告警清零 + 33 文件 format 归一） |
 | **最近改动** | ✅ 2026-09-20 0.6 P0 修复批：P0-1 LLM OpenAI 路径零重试→套 `_retry_with_exponential_backoff`（1s/2s/4s 退避，与 zai 路径对齐，网络抖动不再一次 429 即任务级失败）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保 lost-update 安全，--parallel 热路径不再排队磁盘 IO）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 config 集中声明，api_health 熔断器 + api_manager Prometheus 导出接入，六处文档承诺落地）；multi_candidate 双次补丁应用消除（static_validate_patch 签名 2-tuple→3-tuple 复用 apply 结果）；ruff 15 告警清零 + 33 文件 format 归一；详见 [CHANGELOG](CHANGELOG.md) |
 
@@ -826,6 +826,7 @@ docker run --rm \
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
 | `test_api_manager.py` | 77 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
+| `test_api_circuit_breaker.py` | 16 | 4.4/0.6 熔断器指数退避（`API_CIRCUIT_BACKOFF` 开/关双路径）+ Prometheus 导出（`API_PROMETHEUS_EXPORT` 默认空串） |
 | `test_api_manager_extended.py` | 74 | API 管理器扩展路径（健康恢复、限流标记、4.2 半开探测 TestHalfOpenProbe 12 用例） |
 | `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
@@ -847,9 +848,11 @@ docker run --rm \
 | `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
 | `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
 | `test_contamination_check.py` | 15 | 2.1 数据污染检测（token 提取/Jaccard 重叠度/分级/detect 扫描/渲染章节） |
+| `test_contamination_multidim.py` | 25 | 2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦三维相似度 / 综合风险等级 / detect 全流程 / 抗污染基准注册表） |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
 | `test_dependency_edge_cases.py` | 14 | 依赖检测边界分支（标准库回退/find_spec 异常/venv 创建超时/OSError 静默降级，0.1 新增） |
 | `test_error_classifier.py` | 89 | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
+| `test_error_classifier_new_categories.py` | 16 | 5.2 新增两错误类别判定（`EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`，判定优先级 / 修复策略描述 / 从 final_state 接线） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
 | `test_executor_docker.py` | 11 | 4.3 Docker 执行模式（不可用诊断/模式开关/docker 优先于 venv/子进程环境凭证剔除 + TestDockerExecutionFlow 容器内执行链路 6 用例 + 沙箱清理兜底） |
@@ -877,9 +880,11 @@ docker run --rm \
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
+| `test_venv_cache_monitoring.py` | 11 | 4.4 venv 缓存容量监控（`get_venv_cache_size_mb` / `check_venv_cache_size` 5GB 阈值告警 / 统计文件路径动态化 / 命中率 / 清理） |
 | `test_workflow.py` | 41 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例）+ 3.2 执行反馈轨迹（TestExecutionTrace 3 用例：首轮 / 二轮 delta / 缺键容错） |
 | `test_workflow_extended.py` | 47 | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
 | `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
+| `test_cross_file_bidirectional.py` | 16 | 2.2 跨文件双向依赖图（单向/双向口径 / `CROSS_FILE_BIDIRECTIONAL` 环境变量开关 / 符号定义行定位） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 | `test_weak_coverage_modules.py` | 16 | 5.1 弱覆盖模块补强（cli_output print_rich_table 边界 / error_classifier 新分类路径 / executor_runtime 清理与重试异常分支） |
 | `test_weak_coverage_modules2.py` | 10 | 5.1 弱覆盖模块补强第二轮（config_generator main 入口 / prompts_templates 常量结构 / synthetic_dataset 边界生成） |

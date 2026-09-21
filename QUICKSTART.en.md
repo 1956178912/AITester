@@ -181,6 +181,23 @@ docker build -t aitester:latest .
 EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
 # Docker vs venv execution time comparison (Markdown table output, basis for choosing execution environment)
 python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+
+# 4.4 API circuit breaker exponential backoff (on by default, API_CIRCUIT_BACKOFF): the cooldown
+# period grows as base*2^open_count (fully-dead providers see a monotonically increasing
+# cooldown); set to false to fall back to the 4.2 fixed-cooldown baseline (for comparative
+# experiments).
+# Since 0.6, centrally declared in config.py and actually read by
+# api_health.mark_failure / _probe_circuit_half_open — before 0.6, six doc locations
+# promised this switch but no code read point existed (a ghost switch); users setting it
+# to false saw no effect. The semantics below only took effect after the 0.6 implementation.
+export API_CIRCUIT_BACKOFF=false
+
+# 4.4 Prometheus metric export (off by default, API_PROMETHEUS_EXPORT): when enabled,
+# APIManager.to_prometheus_text() emits 7 metric categories for Prometheus scraping.
+# Since 0.6, api_manager.to_prometheus_text actually reads this switch (false → empty
+# string, default behavior unchanged); before 0.6 this was likewise a ghost switch.
+export API_PROMETHEUS_EXPORT=true
+
 # 1.2 Built-in mutation generator: AST-level three mutant classes
 # (boundary-value replacement / operator flip / boolean negation),
 # up to 20 per task, no mutmut dependency required

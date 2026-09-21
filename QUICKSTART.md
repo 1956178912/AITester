@@ -145,10 +145,15 @@ export ADVERSARIAL_DEBUGGING_ENABLE=true
 # 4.4 API 熔断器指数退避（默认开，API_CIRCUIT_BACKOFF）：冷却期改按
 # base*2^open_count 指数退避（彻底死掉的 provider 冷却期单调增长），
 # 设 false 回退 4.2 固定冷却期口径（便于对比实验）。
+# 0.6 起经 config.py 集中声明，api_health.mark_failure / _probe_circuit_half_open
+# 实际读取该开关——此前六处文档承诺的开关全仓无代码读取点（幽灵开关），
+# 用户设 false 不会发生任何事；0.6 实装后下方语义才真正生效。
 export API_CIRCUIT_BACKOFF=false
 
 # 4.4 Prometheus 指标导出（默认关，API_PROMETHEUS_EXPORT）：启用后
 # APIManager.to_prometheus_text() 输出 7 类指标供 Prometheus 抓取。
+# 0.6 起 api_manager.to_prometheus_text 实际读取该开关（false 时返回空串，
+# 默认行为不变）；此前文档承诺的开关同样无代码读取点。
 export API_PROMETHEUS_EXPORT=true
 
 # 结果分析（4.3 + 1.1/1.2/1.3 指标增强 + 2.1 污染检测 + 2.2 难度分层 + 4.4 依赖缓存 + 5.3 跨批次对比）：
