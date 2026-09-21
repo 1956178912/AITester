@@ -4,6 +4,70 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.7] - 2026-09-21 Cross-file repair phase 2 + data-integrity fix + research kickoff (A/B/C directions)
+
+### Features (Direction A: code-quality deepening, default behavior unchanged)
+- **3.5 cross-file repair phase 2** (`src/tools/cross_file.py` + `src/graph/nodes.py`, design doc §9):
+  - **Multi-entry dependency analysis** `analyze_multi_entry_deps(entry_modules, source_files, max_depth=1)`:
+    first-level import expansion over multiple entry modules (conservative, no recursion —
+    avoids dependency-graph explosion), dedupes edges across entries (same
+    `(source, target, symbol)` keeps the smallest `call_line`). The phase-1 single-entry
+    `analyze_cross_file_deps` keeps its original signature; multi-entry is additive.
+  - **Topological-order patch application** `apply_multi_file_patch(..., deps=...)`:
+    when dependency edges are passed, applies patches in dependency-topological order
+    (callee before caller, Kahn's algorithm, cycles broken lexicographically, entry
+    forced first); when `deps` is omitted, falls back to lexicographic order (phase-1
+    behaviour) for historical-comparison stability. `_patch_applier_node` now restores
+    the serialized dependency edges back to objects and passes them in.
+  - **Repair-plan cache** `build_cross_file_repair_plan_cached(...)`:
+    caches plans keyed by a dependency-graph fingerprint (entries + edges + max_modules,
+    SHA1) in the LLM cache directory (reuses `AITESTER_LLM_CACHE`/`AITESTER_LLM_CACHE_DIR`
+    semantics), zero LLM calls on hit; degrades to no-cache when `use_cache=False` or
+    the cache switch is off.
+- **4.4 dependency-cache consistency fix** (`src/tools/dependency.py`):
+  `list_venv_cache` used `os.path.getctime` (creation time on macOS but inode-change
+  time on Linux, inconsistent across platforms) → switched to `getmtime`, aligning with
+  `clear_venv_cache`'s age semantics (venv directories rarely change after creation,
+  mtime is more reliable).
+
+### Fixes (Direction B/C: data integrity + research kickoff)
+- **run_benchmark silent-fallback misleading archive fix** (`experiments/run_benchmark.py`):
+  when the requested dataset (e.g. `swe_bench lite`) has an empty subset file, the
+  loader silently fell back to the built-in examples synthetic dataset while the result
+  archive's `"dataset"` field still claimed the original request (`swe_bench`) — the R-01
+  probe's first run showed `task_id` prefix `examples__` contradicting the archived
+  `dataset: swe_bench`. Now on fallback the `dataset_name` is reset to `examples`,
+  `subset` to None, and the warning log explicitly marks "silent fallback, not the
+  originally requested dataset".
+- **R-01 SWE-bench backfill probe kickoff** (`docs/design/swe_bench_probe.md`):
+  the probe's first run revealed the real blocker is "dataset has no usable source code"
+  (lite subset JSONL is empty; only the generic file has 225 entries, and those lack
+  `instance_code`), not "insufficient quota". Option (c) chosen: logged as pending
+  dataset preparation; probe command in §3.1 ready to run once sources are filled
+  (via `download_swe_bench.py` / `export_swe_bench_source.py`).
+- **R-03 adversarial reasoning status clarification**: AdverIntent-style adversarial
+  reasoning is already implemented in `src/agents/debugger.py`
+  (`ADVERSARIAL_DEBUGGING_ENABLE` off by default + critic-evaluation loop, shipped in
+  the 0.5 batch) — no re-kickoff needed this round. `run_benchmark.py` has no
+  `--adversarial` CLI flag; R-03 is enabled only via the environment variable
+  (comparison runs in an expanded batch would need
+  `export ADVERSARIAL_DEBUGGING_ENABLE=true`).
+
+### Tests
+- `tests/test_cross_file.py` adds 12 cases (multi-entry 5 / topological-order 4 /
+  repair-plan cache 3 → 4 test classes, 12 cases total), test count 27 → 39;
+- `tests/test_rag_retriever.py` adds 2 concurrency-guard cases
+  (`TestConcurrentUpsertGuard`: 8-thread concurrent upsert serialized without
+  loss + cleanup not blocked by the write lock, same guardrail style as the 0.6
+  venv dual-lock guards);
+- `tests/test_dependency_edge_cases.py` updates 1 boundary case (`getctime` mock
+  path → `getmtime` mock path, aligned with the 4.4 consistency fix);
+- `tests/test_workflow_extended.py` adds `deps=None` to 2 mock lambdas
+  (backward-compatible signature of `apply_multi_file_patch`).
+- Full-suite baseline advanced to **1627 passed / 0 failed** (+15 over 0.6's 1612:
+  cross-file phase 2 ×12 + RAG concurrency guards ×2 + venv cache edge-case update ×1),
+  `ruff check` clean across the whole repo (0 warnings).
+
 ## [0.6] - 2026-09-20 P0 fix batch (LLM OpenAI path zero-retry + venv stats dual-lock + ghost-switch implementation + code-quality cleanup)
 
 ### Fixes (three-track performance audit: dead code / technical debt + hot paths + doc drift, manually reviewed)

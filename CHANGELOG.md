@@ -4,6 +4,57 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.7] - 2026-09-21 跨文件修复二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）
+
+### 功能（A 方向：代码质量深化，默认行为不变）
+- **3.5 跨文件修复二期**（`src/tools/cross_file.py` + `src/graph/nodes.py`，设计文档 §9）：
+  - **多入口依赖分析** `analyze_multi_entry_deps(entry_modules, source_files, max_depth=1)`：
+    对多个入口模块做一级 import 展开（保守口径，不递归——防依赖图爆炸），
+    去重合并各入口依赖边（同 `(source, target, symbol)` 保留 `call_line` 最小者）。
+    一期单入口 `analyze_cross_file_deps` 保持原签名，多入口是叠加能力。
+  - **拓扑序补丁应用** `apply_multi_file_patch(..., deps=...)`：
+    传入依赖边时按依赖图拓扑序应用（被调用方先改、调用方后改，Kahn 算法 + 环按
+    字典序打破，entry 强制首位）；不传 `deps` 时退回模块名字典序（一期口径），
+    保持历史实验可比性。`_patch_applier_node` 已把序列化依赖边还原为对象传入。
+  - **修复计划缓存** `build_cross_file_repair_plan_cached(...)`：
+    相同依赖图指纹（入口 + 依赖边 + max_modules 的 SHA1）落盘 LLM 缓存目录
+    （复用 `AITESTER_LLM_CACHE`/`AITESTER_LLM_CACHE_DIR` 口径），命中零 LLM 调用；
+    `use_cache=False` 或缓存关闭时退化为不缓存。
+- **4.4 依赖缓存一致性修正**（`src/tools/dependency.py`）：
+  `list_venv_cache` 用 `os.path.getctime`（macOS 上是创建时间、Linux 上是 inode
+  变更时间，跨平台语义不一致）→ 改 `getmtime`，与 `clear_venv_cache` 的年龄
+  判断口径对齐（venv 目录创建后内容很少变动，mtime 更可靠）。
+
+### 修复（B/C 方向：数据完整性 + 研究立项）
+- **run_benchmark 静默降级误导归档修正**（`experiments/run_benchmark.py`）：
+  指定数据集（如 `swe_bench lite`）子集文件为空时，加载器静默回退到内置
+  examples 合成数据集，但结果归档 `"dataset"` 字段仍标原始请求名（`swe_bench`）
+  ——首跑 R-01 探路时 `task_id` 前缀 `examples__` 与归档 `dataset: swe_bench`
+  矛盾，具误导性。现降级时把 `dataset_name` 改回 `examples`、`subset` 置 None，
+  并在 warning 日志中明确标注"静默降级 + 非原始请求数据集"。
+- **R-01 SWE-bench 补跑探路立项**（`docs/design/swe_bench_probe.md`）：
+  探路首跑发现 lite 子集 JSONL 为空（全仓仅通用文件 225 条，且缺
+  `instance_code` 字段）——R-01 真实阻塞项是"数据集无可用源码"而非"配额
+  不够"。立项选择 (c) 记录在案，源码补齐（`download_swe_bench.py` /
+  `export_swe_bench_source.py`）后再执行探路命令（§3.1 已给出）。
+- **R-03 对抗性推理现状澄清**：AdverIntent-Agent 式对抗性推理已实装于
+  `src/agents/debugger.py`（`ADVERSARIAL_DEBUGGING_ENABLE` 默认关 + 批评者
+  评估闭环，0.5 批次落地），无需本轮重复立项；`run_benchmark.py` 无
+  `--adversarial` CLI flag，R-03 仅经环境变量启用（扩大批次对照需
+  `export ADVERSARIAL_DEBUGGING_ENABLE=true`）。
+
+### 测试
+- `tests/test_cross_file.py` 新增 12 个用例（多入口 5 / 拓扑序 4 / 修复计划缓存 3
+  → 实际 4 个测试类 12 用例），测试数 27 → 39；
+- `tests/test_rag_retriever.py` 新增 2 个并发护栏用例（`TestConcurrentUpsertGuard`：
+  8 线程并发入库 upsert 串行不丢失 + 清理不被写锁阻塞，与 0.6 venv 双锁护栏同口径）；
+- `tests/test_dependency_edge_cases.py` 更新 1 个边界用例（`getctime` mock 路径
+  → `getmtime` mock 路径，与 4.4 一致性修正对齐）；
+- `tests/test_workflow_extended.py` 2 个 mock lambda 补 `deps=None` 参数
+  （`apply_multi_file_patch` 签名向后兼容期口径）。
+- 全量基线推进至 **1627 passed / 0 failed**（较 0.6 的 1612 净增 15；
+  跨文件二期 12 + RAG 并发护栏 2 + 依赖缓存口径修正 1），ruff check 全仓 0 告警。
+
 ## [0.6] - 2026-09-20 P0 修复批（LLM OpenAI 路径零重试 + venv 统计双锁 + 幽灵开关实装 + 代码质量收尾）
 
 ### 修复（性能审计三路并行：死代码/技术债 + 性能热点 + 文档漂移，人工复核确认）

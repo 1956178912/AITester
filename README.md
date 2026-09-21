@@ -9,12 +9,12 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1612 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，1567 collected） |
-| **单元测试** | ✅ 全量 1612 passed, 0 failed；精简环境 1567 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/ 4653 stmts；0.6 轮次 P0 修复新增 6 个回归用例后 1612 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 94% / cross_file 95%） |
+| **总测试数** | ✅ 1627 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，1567 collected） |
+| **单元测试** | ✅ 全量 1627 passed, 0 failed；精简环境 1567 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/；0.7 轮次跨文件二期 + RAG 写锁热路径优化新增 15 个回归用例后 1627 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 0.6 P0 修复批（LLM OpenAI 路径零重试→指数退避故障转移 / venv 统计双锁分离（锁外落盘，--parallel 热路径不排队）/ 幽灵开关实装（`API_CIRCUIT_BACKOFF` + `API_PROMETHEUS_EXPORT` 六处文档承诺落地）/ multi_candidate 双次补丁应用消除，全量 1612 passed / 零回归）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 0.7 跨文件二期（多入口依赖分析 + 拓扑序补丁应用 + 修复计划缓存，`src/tools/cross_file.py`）+ RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，`--parallel` 入库不再排队）+ run_benchmark 静默降级误导归档修正 + R-01 SWE-bench 补跑探路立项（`docs/design/swe_bench_probe.md`），全量 1627 passed / 零回归；详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (95%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 ruff 15 告警清零 + 33 文件 format 归一） |
 | **最近改动** | ✅ 2026-09-20 0.6 P0 修复批：P0-1 LLM OpenAI 路径零重试→套 `_retry_with_exponential_backoff`（1s/2s/4s 退避，与 zai 路径对齐，网络抖动不再一次 429 即任务级失败）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保 lost-update 安全，--parallel 热路径不再排队磁盘 IO）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 config 集中声明，api_health 熔断器 + api_manager Prometheus 导出接入，六处文档承诺落地）；multi_candidate 双次补丁应用消除（static_validate_patch 签名 2-tuple→3-tuple 复用 apply 结果）；ruff 15 告警清零 + 33 文件 format 归一；详见 [CHANGELOG](CHANGELOG.md) |
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1612 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1567 个收集）
+# 运行所有单元测试（全量 1627 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1567 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -439,7 +439,12 @@ python main.py check-dataset swe_bench
 ```
 
 ### 5.8 跨文件修复（3.5，默认关闭）
-真实数据集（SWE-bench / Defects4J）中约 40% 的任务需要多文件修改。协调器-提议者架构：`cross_file_analyzer` 节点（`CROSS_FILE_ENABLE=true` 时启用）在 `executor → debugger` 之间插入，做 AST 跨文件 import 依赖分析（单入口视角），把依赖边写入 `state["cross_file_deps"]`；`_patch_applier_node` 在跨文件分支按拓扑序对多个模块应用补丁（被调用方先改，调用方后改），任一文件应用失败整体回滚（与单文件 `safe_apply_patch` 同口径）。单文件项目自动降级（依赖边为空时 `cross_file_plan=None`，走单文件路径）。
+真实数据集（SWE-bench / Defects4J）中约 40% 的任务需要多文件修改。协调器-提议者架构：`cross_file_analyzer` 节点（`CROSS_FILE_ENABLE=true` 时启用）在 `executor → debugger` 之间插入，做 AST 跨文件 import 依赖分析，把依赖边写入 `state["cross_file_deps"]`；`_patch_applier_node` 在跨文件分支按拓扑序对多个模块应用补丁（被调用方先改，调用方后改），任一文件应用失败整体回滚（与单文件 `safe_apply_patch` 同口径）。单文件项目自动降级（依赖边为空时 `cross_file_plan=None`，走单文件路径）。
+
+**0.7 二期增强**（`src/tools/cross_file.py`，默认行为不变，以下为新增能力）：
+- **多入口依赖分析** `analyze_multi_entry_deps(entry_modules, source_files, max_depth=1)`：对多个入口模块做一级 import 展开（保守口径，不递归——防依赖图爆炸），去重合并各入口的依赖边（同 `(source, target, symbol)` 保留 `call_line` 最小者）。一期单入口 `analyze_cross_file_deps` 保持原签名不变（多入口是叠加能力）。
+- **拓扑序补丁应用** `apply_multi_file_patch(..., deps=...)`：传入依赖边时按依赖图拓扑序应用（被调用方先改、调用方后改，Kahn 算法 + 环按字典序打破）；不传 `deps`（None）时退回模块名字典序（一期口径），保持历史实验可比性。
+- **修复计划缓存** `build_cross_file_repair_plan_cached(...)`：相同依赖图指纹（入口 + 依赖边 + max_modules 的 SHA1）落盘 LLM 缓存目录（复用 `AITESTER_LLM_CACHE` / `AITESTER_LLM_CACHE_DIR` 口径），命中时零 LLM 调用；`use_cache=False` 或缓存开关关闭时退化为不缓存。
 
 ```bash
 # 启用跨文件修复（显式设置环境变量）
@@ -811,7 +816,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1612 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1627 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -821,7 +826,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（67 个测试文件，全量 1612 个 pytest 收集用例；精简环境约 1567 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（67 个测试文件，全量 1627 个 pytest 收集用例；精简环境约 1567 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -883,7 +888,7 @@ docker run --rm \
 | `test_venv_cache_monitoring.py` | 11 | 4.4 venv 缓存容量监控（`get_venv_cache_size_mb` / `check_venv_cache_size` 5GB 阈值告警 / 统计文件路径动态化 / 命中率 / 清理） |
 | `test_workflow.py` | 41 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例）+ 3.2 执行反馈轨迹（TestExecutionTrace 3 用例：首轮 / 二轮 delta / 缺键容错） |
 | `test_workflow_extended.py` | 47 | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
-| `test_cross_file.py` | 27 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化） |
+| `test_cross_file.py` | 39 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化 / 二期多入口依赖 / 拓扑序应用 / 修复计划缓存） |
 | `test_cross_file_bidirectional.py` | 16 | 2.2 跨文件双向依赖图（单向/双向口径 / `CROSS_FILE_BIDIRECTIONAL` 环境变量开关 / 符号定义行定位） |
 | `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 | `test_weak_coverage_modules.py` | 16 | 5.1 弱覆盖模块补强（cli_output print_rich_table 边界 / error_classifier 新分类路径 / executor_runtime 清理与重试异常分支） |
@@ -1218,14 +1223,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1612 个测试用例 / 覆盖率 94% / Ruff 全绿
+- 全量 1627 个测试用例 / 覆盖率 94% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1612 passed / 0 failed / ruff 全绿 / 覆盖率 94%
+**验证**: 全量 1627 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ---
 
