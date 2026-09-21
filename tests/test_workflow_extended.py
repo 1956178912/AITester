@@ -895,7 +895,7 @@ class TestDefaultOffFeatureBranches:
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
         target.write_text(original, encoding="utf-8")
-        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em: ({em: new}, True))
+        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em, deps=None: ({em: new}, True))
         state = self._pf_state(target, original, new)
         state["cross_file_deps"] = [{"source_module": "m", "target_module": "n", "symbol": "g", "call_line": 1}]
         result = nodes._patch_applier_node(state)
@@ -912,7 +912,7 @@ class TestDefaultOffFeatureBranches:
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
         target.write_text(original, encoding="utf-8")
-        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em: (dict(of), False))
+        monkeypatch.setattr(cf, "apply_multi_file_patch", lambda of, p, em, deps=None: (dict(of), False))
         monkeypatch.setattr(cf, "cross_file_fallback_single_file", lambda of, p, em: ({em: new}, True))
         state = self._pf_state(target, original, new)
         state["cross_file_deps"] = [{"source_module": "m", "target_module": "n", "symbol": "g", "call_line": 1}]

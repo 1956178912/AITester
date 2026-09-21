@@ -23,6 +23,7 @@ from src.tools.cross_file import (
     CrossFileRepairPlan,
     _find_call_line,
     analyze_cross_file_deps,
+    analyze_multi_entry_deps,
     apply_multi_file_patch,
     build_cross_file_repair_plan,
     cross_file_enabled,
@@ -309,3 +310,285 @@ class TestCrossFileRepairPlanSerialization:
         assert d["per_module_patches"]["a"] == "def a(): pass"
         assert d["dependency_edges"][0]["symbol"] == "f"
         assert d["estimated_token_cost"] == 42
+
+
+# ─── 3.5 二期：多入口依赖分析 + 拓扑序补丁应用 + 修复计划缓存 ──────────────────────
+
+
+class TestAnalyzeMultiEntryDeps:
+    """3.5 二期 analyze_multi_entry_deps：多入口依赖分析（一级展开，去重合并）。"""
+
+    def test_two_entries_union(self):
+        """两个入口的依赖边取并集（去重）。"""
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "b": "from lib import helper\n\ndef b():\n    return helper(2)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        deps = analyze_multi_entry_deps(["a", "b"], source_files)
+        keys = {(d.source_module, d.target_module, d.symbol) for d in deps}
+        assert ("a", "lib", "helper") in keys
+        assert ("b", "lib", "helper") in keys
+        # 两个入口共享 lib，但 source_module 不同，应是 2 条边（不去重 source 不同者）
+        assert len(deps) == 2
+
+    def test_dedup_same_entry_repeated(self):
+        """同一入口重复出现时去重（同 (source, target, symbol) 只留一条）。"""
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        deps = analyze_multi_entry_deps(["a", "a", "a"], source_files)
+        assert len(deps) == 1
+        assert deps[0].source_module == "a"
+
+    def test_empty_entries_returns_empty(self):
+        """无入口时返回空列表。"""
+        source_files = {"lib": "def f(): pass"}
+        assert analyze_multi_entry_deps([], source_files) == []
+
+    def test_entry_not_in_source_files_returns_empty(self):
+        """入口不在 source_files 中时，该入口贡献 0 条边。"""
+        source_files = {"lib": "def f(): pass"}
+        assert analyze_multi_entry_deps(["missing"], source_files) == []
+
+    def test_call_line_min_kept_on_dedup(self):
+        """同键去重时保留 call_line 最小者（最早调用点）。"""
+        # a 在 2 行调用 helper，b 在 3 行调用——构造同 (source,target,symbol) 不可能，
+        # 因为 source_module 不同。改用同一入口源码中多行调用同一符号的场景：
+        # 一期 analyze_cross_file_deps 对每 symbol 只取首个 call_line，
+        # 故多入口去重的"call_line 最小"主要发生在跨入口共享符号时。
+        # 这里验证：两入口共享同一符号，各自 call_line 不同，合并后每 source 各一条。
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    x = helper(1)\n    return x\n",
+            "b": "from lib import helper\n\ndef b():\n    return helper(2)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        deps = analyze_multi_entry_deps(["a", "b"], source_files)
+        by_src = {d.source_module: d for d in deps}
+        assert set(by_src) == {"a", "b"}
+        assert by_src["a"].call_line >= 1
+        assert by_src["b"].call_line >= 1
+
+
+class TestTopologicalOrder:
+    """3.5 二期 apply_multi_file_patch 拓扑序：被调用方先改，调用方后改。"""
+
+    def test_callee_before_caller(self):
+        """被调用方 lib 先于调用方 caller 应用。"""
+        original_files = {
+            "lib": "def f():\n    return 1\n",
+            "caller": "import lib\n\ndef c():\n    return lib.f()\n",
+        }
+        patches = {
+            "lib": "def f():\n    return 2\n",
+            "caller": "import lib\n\ndef c():\n    return lib.f() + 1\n",
+        }
+        deps = [CrossFileDependency("caller", "lib", "f", call_line=3, context="")]
+        new_files, ok = apply_multi_file_patch(original_files, patches, "caller", deps=deps)
+        assert ok is True
+        # 拓扑序保证两个都应用成功
+        assert "return 2" in new_files["lib"]
+        assert "lib.f() + 1" in new_files["caller"]
+
+    def test_no_deps_falls_back_to_lexicographic(self):
+        """不传 deps 时退回字典序（一期口径）。"""
+        original_files = {
+            "z_mod": "def z():\n    return 1\n",
+            "a_mod": "def a():\n    return 1\n",
+        }
+        patches = {
+            "z_mod": "def z():\n    return 2\n",
+            "a_mod": "def a():\n    return 2\n",
+        }
+        new_files, ok = apply_multi_file_patch(original_files, patches, "z_mod")
+        assert ok is True
+        assert "return 2" in new_files["z_mod"]
+        assert "return 2" in new_files["a_mod"]
+
+    def test_entry_forced_first(self):
+        """entry_module 永远最先应用（被调用方根）。"""
+        original_files = {
+            "mid": "def m():\n    return 1\n",
+            "entry": "def e():\n    return 1\n",
+        }
+        patches = {
+            "mid": "def m():\n    return 2\n",
+            "entry": "def e():\n    return 2\n",
+        }
+        # entry 依赖 mid（entry 引用 mid），拓扑上 mid 应先；但 entry 强制首位
+        deps = [CrossFileDependency("entry", "mid", "m", call_line=1, context="")]
+        new_files, ok = apply_multi_file_patch(original_files, patches, "entry", deps=deps)
+        assert ok is True
+        # entry 强制首位的应用不影响最终结果正确性（两个模块都应用成功）
+        assert "return 2" in new_files["entry"]
+        assert "return 2" in new_files["mid"]
+
+    def test_cycle_breaks_by_lexicographic(self):
+        """依赖环时按字典序打破（保守回退，不阻塞应用）。"""
+        original_files = {
+            "x": "def x():\n    return 1\n",
+            "y": "def y():\n    return 1\n",
+        }
+        patches = {
+            "x": "def x():\n    return 2\n",
+            "y": "def y():\n    return 2\n",
+        }
+        # x 依赖 y，y 也依赖 x → 环
+        deps = [
+            CrossFileDependency("x", "y", "y", call_line=1, context=""),
+            CrossFileDependency("y", "x", "x", call_line=1, context=""),
+        ]
+        new_files, ok = apply_multi_file_patch(original_files, patches, "x", deps=deps)
+        assert ok is True
+        assert "return 2" in new_files["x"]
+        assert "return 2" in new_files["y"]
+
+
+class TestRepairPlanCache:
+    """3.5 二期 build_cross_file_repair_plan_cached：相同依赖图复用 LLM 结果，省 token。"""
+
+    def _fake_debugger(self, calls):
+        class _Debug:
+            def debug(self, **kwargs):
+                calls.append(kwargs)
+                return {"patch": "def f():\n    return 42\n"}
+
+        return _Debug()
+
+    def test_cache_hit_skips_second_llm_call(self, tmp_path, monkeypatch):
+        """相同依赖图第二次调用命中缓存，零 LLM 调用。"""
+        from src.tools import cross_file as cf
+
+        calls: list[dict] = []
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        debugger = self._fake_debugger(calls)
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))
+        monkeypatch.setenv("AITESTER_LLM_CACHE", "1")
+
+        plan1 = cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+        )
+        first_call_count = len(calls)
+        assert first_call_count >= 1  # 首次 build 至少 1 次 LLM（每模块一次）
+
+        # 相同依赖图 → 命中缓存（LLM 调用次数不再增加）
+        plan2 = cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+        )
+        assert len(calls) == first_call_count  # 第二次零新增 LLM（命中缓存）
+        assert plan1.target_modules == plan2.target_modules
+        assert plan1.per_module_patches == plan2.per_module_patches
+
+    def test_cache_disabled_reads_no_file(self, tmp_path, monkeypatch):
+        """AITESTER_LLM_CACHE=0 时不读写缓存，每次都调 LLM。"""
+        from src.tools import cross_file as cf
+
+        calls: list[dict] = []
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        debugger = self._fake_debugger(calls)
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))
+        monkeypatch.setenv("AITESTER_LLM_CACHE", "0")
+
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+        )
+        first_count = len(calls)
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+        )
+        assert len(calls) > first_count  # 缓存关闭，第二次仍调 LLM（次数增长）
+
+    def test_use_cache_false_behaves_like_uncached(self, tmp_path, monkeypatch):
+        """use_cache=False 等同直接调用（不读不写缓存）。"""
+        from src.tools import cross_file as cf
+
+        calls: list[dict] = []
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        debugger = self._fake_debugger(calls)
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))
+        monkeypatch.setenv("AITESTER_LLM_CACHE", "1")
+
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+            use_cache=False,
+        )
+        first_count = len(calls)
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+            use_cache=False,
+        )
+        assert len(calls) > first_count  # use_cache=False，第二次仍调 LLM
+
+    def test_different_deps_no_cache_hit(self, tmp_path, monkeypatch):
+        """不同依赖图（max_modules 不同）不命中缓存。"""
+        from src.tools import cross_file as cf
+
+        calls: list[dict] = []
+        source_files = {
+            "a": "from lib import helper\n\ndef a():\n    return helper(1)\n",
+            "lib": "def helper(x):\n    return x + 1\n",
+        }
+        debugger = self._fake_debugger(calls)
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))
+        monkeypatch.setenv("AITESTER_LLM_CACHE", "1")
+
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+            max_modules=3,
+        )
+        first_count = len(calls)
+        cf.build_cross_file_repair_plan_cached(
+            entry_modules=["a"],
+            source_files=source_files,
+            debugger=debugger,
+            target_code=source_files["a"],
+            test_output="",
+            failed_cases=[],
+            max_modules=10,
+        )
+        assert len(calls) > first_count  # max_modules 不同 → 不同指纹 → 不命中

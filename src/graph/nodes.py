@@ -39,7 +39,7 @@ from src.graph.rag import (
 )
 from src.graph.state import AITesterState
 from src.graph.tracing import _trace_node
-from src.tools.cross_file import analyze_cross_file_deps, cross_file_enabled
+from src.tools.cross_file import analyze_multi_entry_deps, cross_file_enabled
 from src.tools.multi_candidate import (
     generate_candidates,
     multi_candidate_available,
@@ -577,14 +577,17 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
     entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
     target_code = state.get("target_code", "")
 
-    # 保守实现：当前仅分析 entry_module 自身的 import 关系（单入口视角），
-    # 不递归展开调用方的 import（避免依赖图爆炸）。完整多入口分析留作二期。
+    # 3.5 二期：多入口依赖分析（保守口径：一级展开，不递归——防依赖图爆炸）。
+    # 当前 state 中仅 target_code 可用（单入口视角），entry_modules 传 [entry]；
+    # 未来扩展多入口时，把其他模块名追加进 entry_modules 即可，节点无需改动。
     source_files: dict[str, str] = {}
+    entry_modules: list[str] = []
     if entry_module:
         source_files[entry_module] = target_code
-    # 若有其他模块内容（未来扩展），在此追加到 source_files
+        entry_modules.append(entry_module)
+    # 若有其他模块内容（未来扩展），在此追加到 source_files 与 entry_modules
 
-    deps = analyze_cross_file_deps(entry_module=entry_module, source_files=source_files)
+    deps = analyze_multi_entry_deps(entry_modules, source_files)
     _trace_node(
         "cross_file_analyzer",
         output_summary={
@@ -773,8 +776,20 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     cross_file_deps = state.get("cross_file_deps") or []
     if cross_file_deps and cross_file_enabled():
         # 3.5 跨文件修复分支：按依赖图拓扑序对多个模块应用补丁
-        from src.tools.cross_file import apply_multi_file_patch, cross_file_fallback_single_file
+        from src.tools.cross_file import CrossFileDependency, apply_multi_file_patch, cross_file_fallback_single_file
 
+        # 把 state 中序列化的依赖边还原为 CrossFileDependency 对象
+        # （拓扑序补丁应用需要结构化边信息，被调用方先改、调用方后改）
+        dep_objects = [
+            CrossFileDependency(
+                source_module=d.get("source_module", ""),
+                target_module=d.get("target_module", ""),
+                symbol=d.get("symbol", ""),
+                call_line=int(d.get("call_line", 0)),
+                context=d.get("context", ""),
+            )
+            for d in cross_file_deps
+        ]
         # 从 state 收集所有模块的原始代码（当前仅 target_code 可用；
         # 二期扩展后从 source_files 字典读取）
         entry_module = state.get("module_name") or os.path.basename(state.get("target_file", ""))
@@ -784,8 +799,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         patches: dict[str, str] = {}
         if state.get("patch"):
             patches[entry_module] = state["patch"]
-        # 尝试多文件应用；失败时降级为单文件
-        new_files, applied = apply_multi_file_patch(original_files, patches, entry_module)
+        # 尝试多文件应用（传依赖边 → 拓扑序）；失败时降级为单文件
+        new_files, applied = apply_multi_file_patch(original_files, patches, entry_module, deps=dep_objects)
         new_code = new_files.get(entry_module, original_code)
         if not applied:
             # 多文件失败 → 降级单文件（保守口径，不引入劣化）

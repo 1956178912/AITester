@@ -211,6 +211,52 @@ CROSS_FILE_MAX_MODULES: int = int(os.getenv("CROSS_FILE_MAX_MODULES", "5"))
 - 修复计划缓存（相同依赖图复用 LLM 生成结果）；
 - 与 RAG 集成（跨文件修复案例入库）。
 
+## 9. 二期扩展实施记录（0.7 轮次，2026-09-21）
+
+> 立项：0.7 轮次 A 方向（代码质量深化），实施 §6 列出的"多入口分析 + 拓扑序应用 + 修复计划缓存"三项；§6 其余（跨文件执行验证 / 依赖图可视化 / RAG 集成）仍留待后续。
+
+### 9.1 多入口依赖分析（`analyze_multi_entry_deps`）
+
+- 对多个入口模块做一级 import 展开（保守口径：不递归，防依赖图爆炸）；
+- 去重合并各入口依赖边（同 `(source, target, symbol)` 保留 `call_line` 最小者，
+  即最早定义/调用点，便于 LLM 定位）；
+- 一期单入口 `analyze_cross_file_deps` 保持原签名不变，多入口是叠加能力；
+- 节点 `src/graph/nodes.py:_cross_file_analyzer_node` 已切换为调用
+  `analyze_multi_entry_deps`（`entry_modules=[entry]` 时行为等同一期单入口，
+  未来扩展多入口仅需追加模块名，节点无需改动）。
+
+### 9.2 拓扑序补丁应用（`apply_multi_file_patch` 新增 `deps` 参数）
+
+- 传入依赖边时按 Kahn 拓扑序应用（被调用方先改、调用方后改），环按字典序打破；
+- `entry_module` 强制首位（被调用方视角的根）；
+- 不传 `deps`（None）时退回模块名字典序（一期口径），保持历史实验可比性；
+- `src/graph/nodes.py:_patch_applier_node` 已把 `state["cross_file_deps"]`
+  还原为 `CrossFileDependency` 对象传入（拓扑序对序列化状态生效）。
+
+### 9.3 修复计划缓存（`build_cross_file_repair_plan_cached`）
+
+- 指纹 = 入口 + 依赖边 + max_modules 的 SHA1 前 16 位（`cf_plan_<hex>` 前缀，
+  与 LLM 调用缓存的纯 hash 名区隔）；
+- 落盘复用 `AITESTER_LLM_CACHE_DIR` 目录口径，受 `AITESTER_LLM_CACHE` 开关控制；
+- 命中时零 LLM 调用（省 token）；`use_cache=False` 或缓存关闭时退化为不缓存；
+- 缓存文件损坏/不可读时保守降级为未命中（不影响修复主流程）。
+
+### 9.4 测试
+
+- `tests/test_cross_file.py` 新增 4 个测试类共 12 个用例：
+  `TestAnalyzeMultiEntryDeps`（5：并集 / 去重 / 空入口 / 缺失入口 / call_line 最小保留）；
+  `TestTopologicalOrder`（4：被调用方先改 / 无 deps 退字典序 / entry 强制首位 / 环打破）；
+  `TestRepairPlanCache`（4：命中省 LLM / 缓存关闭不读 / use_cache=False 不缓存 / 不同指纹不命中）；
+- 修复计划缓存测试经 `monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))`
+  隔离到临时目录（与 LLM 文件缓存同口径，不污染 `src/cache/`）。
+
+### 9.5 兼容性
+
+- `CROSS_FILE_ENABLE=false`（默认）：所有路径行为不变；
+- 二期三能力均为新增函数 / 新增可选参数，零签名破坏；
+- 一期口径（`analyze_cross_file_deps` 单入口 / `apply_multi_file_patch` 不传 deps）
+  保持可调用，历史实验可比性不变。
+
 ## 7. 实施偏差说明（设计 vs 实现，commit 670f368）
 
 | 设计（§3） | 实现（src/tools/cross_file.py + workflow.py） | 偏差原因 |

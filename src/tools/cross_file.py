@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import logging
 import os
@@ -298,6 +299,54 @@ def _find_symbol_def_line(module_name: str, source_files: dict[str, str], symbol
     return 0
 
 
+def analyze_multi_entry_deps(
+    entry_modules: list[str],
+    source_files: dict[str, str],
+    max_depth: int = 1,
+) -> list[CrossFileDependency]:
+    """多入口跨文件依赖分析（3.5 二期，设计文档 §6 "多入口分析" 缺口补全）。
+
+    背景：
+        一期 analyze_cross_file_deps 仅分析单一 entry_module 的"一级 import"
+        （调用方视角 + 可选反向边）。真实项目中"修复需同步更新 N 个调用方"
+        场景下，入口不止一个（如公共库 lib.py 被 A/B/C 三个模块 import），
+        仅分析其中一个入口会漏掉其他入口的依赖边。
+
+    实现（保守口径，防依赖图爆炸）：
+        1. 对每个 entry_module 调用 analyze_cross_file_deps（bidirectional=False，
+           保持一期"调用方视角"口径，反向边由 analyze_cross_file_deps 的
+           bidirectional=True 单独承担，不在此处叠加）；
+        2. 对 max_depth=1（默认）：仅展开各 entry 的一级 import（即 entry →
+           直接依赖），不递归展开"依赖的依赖"（依赖图爆炸风险）；
+        3. 合并所有 entry 的边并去重（同 (source, target, symbol) 只保留一条，
+           保留 call_line 较小的那条——更接近"最早定义/调用点"，便于 LLM 定位）。
+
+    Args:
+        entry_modules: 入口模块名列表（不含 .py，如 ["lib", "main"]）。
+        source_files: 模块名 → 源码字符串的映射。
+        max_depth: 展开深度（默认 1 = 一级 import；2 = 依赖的依赖，未实现
+            递归展开，传 >1 时保守退化为 1，避免依赖图爆炸）。
+
+    Returns:
+        去重合并后的跨文件依赖边列表；所有 entry 都不在 source_files 时返回空列表。
+    """
+    if max_depth > 1:
+        # 保守口径：未实现递归展开，退化为一级（避免依赖图爆炸）
+        logger.debug("多入口依赖分析：max_depth=%d 退化为 1（保守口径）", max_depth)
+    all_deps: list[CrossFileDependency] = []
+    for entry in entry_modules:
+        all_deps.extend(analyze_cross_file_deps(entry, source_files, bidirectional=False))
+
+    # 去重：同 (source, target, symbol) 保留 call_line 最小（最早定义/调用点）
+    best: dict[tuple[str, str, str], CrossFileDependency] = {}
+    for d in all_deps:
+        key = (d.source_module, d.target_module, d.symbol)
+        existing = best.get(key)
+        if existing is None or d.call_line < existing.call_line:
+            best[key] = d
+    return sorted(best.values(), key=lambda x: (x.source_module, x.target_module, x.symbol))
+
+
 def _collect_imported_symbols(tree: ast.AST, source_files: dict[str, str]) -> dict[str, list[str]]:
     """收集 entry 模块中 import 的项目内模块及其符号（模块名 → 符号名列表）。"""
     imported_symbols: dict[str, list[str]] = {}  # 模块名 → 导入的符号名
@@ -414,21 +463,27 @@ def apply_multi_file_patch(
     original_files: dict[str, str],
     patches: dict[str, str],
     entry_module: str,
+    deps: list[CrossFileDependency] | None = None,
 ) -> tuple[dict[str, str], bool]:
-    """对多个文件同时应用补丁（保守实现：按模块名字典序应用）。
+    """对多个文件同时应用补丁。
+
+    应用顺序（二期改进，设计文档 §6）：
+        1. 传入 deps（跨文件依赖边列表）时：按依赖图拓扑序应用——
+           被调用方（target_module）先改，调用方（source_module）后改。
+           这样调用方引用的函数签名变更在调用方应用前已生效，
+           避免"调用方先改"时引用到旧签名导致的中间态不一致。
+        2. 未传 deps（None，保持 0.5 一期口径）：按模块名字典序应用
+           （确定性、不依赖 LLM 输出顺序）。
 
     策略：
-        1. 应用顺序为模块名字典序（确定性、不依赖 LLM 输出顺序）。真正的
-           依赖图拓扑序（被调用方 target_module 先改、调用方 source_module
-           后改）需传入依赖图后实现，当前 apply_multi_file_patch 未接收依赖
-           图，故以字典序为保守口径；
-        2. 每个文件调用 patch_applier.apply_patch_to_code（单文件逻辑不变）；
-        3. 任一文件应用失败则整体回滚（与单文件 safe_apply_patch 同口径）。
+        - 每个文件调用 patch_applier.apply_patch_to_code（单文件逻辑不变）；
+        - 任一文件应用失败则整体回滚（与单文件 safe_apply_patch 同口径）。
 
     Args:
         original_files: 模块名 → 原始代码的映射。
         patches: 模块名 → 补丁文本的映射（仅包含需要修改的模块）。
-        entry_module: 入口模块名（保留参数，供二期拓扑序排序使用）。
+        entry_module: 入口模块名（拓扑序排序时用于确定"被调用方"优先级）。
+        deps: 跨文件依赖边列表（可选；传入时按拓扑序应用，None 时退回字典序）。
 
     Returns:
         (新文件映射, 是否全部成功)；失败时返回 (original_files, False)。
@@ -436,9 +491,8 @@ def apply_multi_file_patch(
     if not patches:
         return dict(original_files), True
 
-    # 保守实现：未接入依赖图，按模块名字典序应用（确定性）。
-    # 真正"被调用方先改、调用方后改"的拓扑序留待二期（见 docstring）。
-    ordered_modules = sorted(patches.keys())
+    # 二期：传依赖边时按拓扑序（被调用方先改）；None 时退回字典序（一期口径）
+    ordered_modules = _topological_order(patches, deps, entry_module) if deps is not None else sorted(patches.keys())
 
     new_files: dict[str, str] = dict(original_files)
     for module_name in ordered_modules:
@@ -457,6 +511,217 @@ def apply_multi_file_patch(
         new_files[module_name] = new_code
 
     return new_files, True
+
+
+def _topological_order(
+    patches: dict[str, str],
+    deps: list[CrossFileDependency],
+    entry_module: str,
+) -> list[str]:
+    """按依赖图拓扑序排列补丁应用顺序（被调用方先改，调用方后改）。
+
+    算法：
+        1. 构建模块间依赖（边：source_module 引用 target_module，
+           即 source 依赖 target，target 应先应用）；
+        2. Kahn 拓扑排序：入度为 0 的模块（不依赖其他待改模块的
+           被调用方）优先应用；
+        3. 有环时按字典序打破（保守回退，不阻塞应用）；
+        4. entry_module 永远最先应用（被调用方视角的根）。
+
+    Args:
+        patches: 模块名 → 补丁文本（仅这些模块参与排序）。
+        deps: 跨文件依赖边列表。
+        entry_module: 入口模块名。
+
+    Returns:
+        拓扑序排列的模块名列表（仅含 patches 中的模块）。
+    """
+    modules = set(patches.keys())
+    # 入度：module 的入度 = 它引用了哪些其他待改模块（需等这些模块先改）
+    in_degree: dict[str, int] = {m: 0 for m in modules}
+    for d in deps:
+        if d.source_module in modules and d.target_module in modules and d.source_module != d.target_module:
+            # source 引用 target → source 入度 +1（需等 target 先改）
+            in_degree[d.source_module] += 1
+
+    order: list[str] = []
+    remaining = set(modules)
+    if entry_module in modules:
+        # entry 强制首位（被调用方根）
+        order.append(entry_module)
+        remaining.discard(entry_module)
+    queue = sorted(m for m in remaining if in_degree.get(m, 0) == 0)
+    while queue:
+        m = queue.pop(0)
+        if m not in remaining:
+            continue
+        order.append(m)
+        remaining.discard(m)
+        # m 应用后，引用 m 的 caller 入度 -1
+        for d in deps:
+            if d.target_module == m and d.source_module in remaining:
+                in_degree[d.source_module] -= 1
+                if in_degree[d.source_module] == 0:
+                    queue.append(d.source_module)
+        queue.sort()
+    # 剩余有环模块按字典序追加（保守回退）
+    order.extend(sorted(remaining))
+    return order
+
+
+def _repair_plan_cache_key(
+    entry_modules: list[str],
+    deps: list[CrossFileDependency],
+    max_modules: int,
+) -> str:
+    """修复计划缓存指纹（3.5 二期：相同依赖图复用 LLM 生成结果，省 token）。
+
+    指纹 = entry_modules + 依赖边(source/target/symbol 集合) + max_modules 的
+    SHA1 前 16 位。故意排除 LLM 输出（patch 文本），只按"输入依赖图"做 key——
+    相同依赖图 → 相同修复计划（保守口径：修复计划由依赖图 + 代码上下文决定，
+    依赖图不变则复用，避免重复 LLM 调用）。
+
+    Args:
+        entry_modules: 入口模块名列表。
+        deps: 跨文件依赖边列表。
+        max_modules: 最大模块数（影响计划裁剪，纳入指纹）。
+
+    Returns:
+        缓存 key 字符串（"cf_plan_" 前缀 + 16 位 hex，避免与 LLM 调用缓存
+        （纯 hash 名）混存冲突）。
+    """
+    fingerprint = json.dumps(
+        {
+            "entries": sorted(set(entry_modules)),
+            "edges": sorted({(d.source_module, d.target_module, d.symbol) for d in deps}),
+            "max_modules": max_modules,
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:16]
+    return f"cf_plan_{digest}"
+
+
+def _load_repair_plan_cache(key: str) -> CrossFileRepairPlan | None:
+    """从缓存读取跨文件修复计划（命中返回 plan，未命中/损坏返回 None）。
+
+    缓存文件落在 LLM 缓存目录（复用 AITESTER_LLM_CACHE_DIR 口径），
+    缓存关闭（AITESTER_LLM_CACHE=0）时直接返回 None（不读盘）。
+    """
+    from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
+
+    if not _llm_cache_enabled():
+        return None
+    cache_file = os.path.join(_llm_cache_dir(), f"{key}.json")
+    if not os.path.isfile(cache_file):
+        return None
+    try:
+        with open(cache_file, encoding="utf-8") as f:
+            data = json.load(f)
+        return CrossFileRepairPlan(
+            plan_id=data.get("plan_id", key),
+            target_modules=data.get("target_modules", []),
+            per_module_patches=data.get("per_module_patches", {}),
+            dependency_edges=[
+                CrossFileDependency(
+                    source_module=e.get("source_module", ""),
+                    target_module=e.get("target_module", ""),
+                    symbol=e.get("symbol", ""),
+                    call_line=int(e.get("call_line", 0)),
+                    context=e.get("context", ""),
+                )
+                for e in data.get("dependency_edges", [])
+            ],
+            estimated_token_cost=int(data.get("estimated_token_cost", 0)),
+        )
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as e:
+        # 缓存损坏/不可读时保守降级为未命中（不影响修复流程）
+        logger.debug("跨文件修复计划缓存读取失败 %s: %s", key, e)
+        return None
+
+
+def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
+    """把跨文件修复计划写入缓存（失败仅 debug 日志，不影响主流程）。"""
+    from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
+
+    if not _llm_cache_enabled():
+        return
+    try:
+        cache_dir = _llm_cache_dir()
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(os.path.join(cache_dir, f"{key}.json"), "w", encoding="utf-8") as f:
+            json.dump(plan.to_dict(), f, ensure_ascii=False)
+    except OSError as e:
+        logger.debug("跨文件修复计划缓存写入失败 %s: %s", key, e)
+
+
+def build_cross_file_repair_plan_cached(
+    entry_modules: list[str],
+    source_files: dict[str, str],
+    debugger: Any,
+    target_code: str,
+    test_output: str,
+    failed_cases: list[dict[str, str]],
+    focus_function: str | None = None,
+    target_module: str | None = None,
+    max_modules: int | None = None,
+    use_cache: bool = True,
+) -> CrossFileRepairPlan:
+    """带缓存的跨文件修复计划构建（3.5 二期：相同依赖图复用 LLM 结果，省 token）。
+
+    流程：
+        1. 调 analyze_multi_entry_deps 收集多入口依赖边（一级展开，保守口径）；
+        2. 计算依赖图指纹（_repair_plan_cache_key）；
+        3. use_cache=True 时先查缓存，命中直接返回（零 LLM 调用）；
+        4. 未命中调 build_cross_file_repair_plan（协调器-提议者 LLM 生成），
+           生成后写缓存（供后续相同依赖图复用）。
+
+    兼容性：
+        - use_cache=False 时行为等同直接调 build_cross_file_repair_plan
+          （经 analyze_multi_entry_deps 收集多入口依赖），不读写缓存；
+        - 缓存开关关闭（AITESTER_LLM_CACHE=0）时自动退化为不缓存。
+
+    Args:
+        entry_modules: 入口模块名列表（多入口分析，一期单入口传 [entry]）。
+        source_files: 模块名 → 源码字符串的映射。
+        debugger: DebuggerAgent 实例（提供 .debug 方法）。
+        target_code: 入口模块的原始代码。
+        test_output: pytest 输出文本。
+        failed_cases: 失败用例列表。
+        focus_function: 焦点函数名（可选）。
+        target_module: 被测模块名（可选）。
+        max_modules: 最大模块数（None 时读 cross_file_max_modules()）。
+        use_cache: 是否启用缓存（默认 True；False 时行为等同 build_cross_file_repair_plan）。
+
+    Returns:
+        CrossFileRepairPlan 实例（命中缓存时 returned_from_cache=True 语义
+        由调用方按需判断——本函数返回值与 build_cross_file_repair_plan 同构，
+        缓存命中/未命中均返回同一结构）。
+    """
+    if max_modules is None:
+        max_modules = cross_file_max_modules()
+    deps = analyze_multi_entry_deps(entry_modules, source_files)
+
+    key = _repair_plan_cache_key(entry_modules, deps, max_modules)
+    if use_cache:
+        cached = _load_repair_plan_cache(key)
+        if cached is not None:
+            logger.info("跨文件修复计划缓存命中 %s（节省 LLM 调用）", key)
+            return cached
+
+    plan = build_cross_file_repair_plan(
+        deps=deps,
+        debugger=debugger,
+        target_code=target_code,
+        test_output=test_output,
+        failed_cases=failed_cases,
+        focus_function=focus_function,
+        target_module=target_module,
+        max_modules=max_modules,
+    )
+    if use_cache:
+        _save_repair_plan_cache(key, plan)
+    return plan
 
 
 def cross_file_fallback_single_file(
