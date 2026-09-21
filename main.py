@@ -6,7 +6,7 @@ AITester CLI 入口模块（薄封装）。
     python main.py run examples/calculator.py --func divide
     python main.py run examples/*.py --parallel=2
     python main.py list-examples
-    setup.py 控制台脚本 aite
+    setup.py 控制台脚本 aitester
 """
 
 from src.cli.app import cli
