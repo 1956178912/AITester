@@ -448,7 +448,10 @@ def list_venv_cache() -> list[dict[str, Any]]:
                 except OSError:
                     continue
         try:
-            created_at = str(int(os.path.getctime(full)))
+            # 0.7 一致性修正：用 getmtime 替代 getctime（macOS 上 ctime 是创建
+            # 时间、Linux 上是 inode 变更时间，跨平台语义不一致；venv 目录创建
+            # 后内容很少变动，mtime 更可靠，与 clear_venv_cache 的年龄判断口径一致）
+            created_at = str(int(os.path.getmtime(full)))
         except OSError:
             created_at = "unknown"
         result.append({"name": entry, "path": full, "size_mb": round(size_mb, 2), "created_at": created_at})

@@ -37,7 +37,7 @@ def _WrapPath(**overrides) -> types.ModuleType:
     for name in dir(real):
         setattr(wrapper, name, getattr(real, name))
     for key, value in overrides.items():
-        if key not in ("real_getctime",):
+        if key not in ("real_getctime", "real_getmtime"):
             setattr(wrapper, key, value)
     return wrapper
 
@@ -141,17 +141,18 @@ class TestListVenvCacheEdgeCases:
         assert len(entries) == 1
         assert entries[0]["size_mb"] == 0.0
 
-    def test_getctime_failure_returns_unknown(self, cache_dir, monkeypatch):
-        """os.path.getctime 抛 OSError 时 created_at 记 "unknown"。"""
+    def test_getmtime_failure_returns_unknown(self, cache_dir, monkeypatch):
+        """os.path.getmtime 抛 OSError 时 created_at 记 "unknown"（0.7 一致性修正：
+        list_venv_cache 用 getmtime 替代 getctime，跨平台语义一致，与 clear_venv_cache 口径对齐）。"""
         cache_dir.mkdir()
         venv = cache_dir / "abc_hash_pkg"
         (venv / "bin").mkdir(parents=True)
-        real_getctime = os.path.getctime
+        real_getmtime = os.path.getmtime
 
-        def fake_getctime(path, *args, **kwargs):
+        def fake_getmtime(path, *args, **kwargs):
             raise OSError("stat failed")
 
-        monkeypatch.setattr(os, "path", _WrapPath(getctime=fake_getctime, real_getctime=real_getctime))
+        monkeypatch.setattr(os, "path", _WrapPath(getmtime=fake_getmtime, real_getmtime=real_getmtime))
         entries = dep.list_venv_cache()
         assert entries[0]["created_at"] == "unknown"
 
