@@ -752,7 +752,19 @@ def run_benchmark(
             raise
 
     if dataset.size == 0:
-        logger.warning("数据集为空，尝试使用内置示例数据集")
+        # 0.7 P0 数据完整性修正：此前降级到内置示例数据集后，结果归档的
+        # "dataset" 字段仍标原始请求名（如 "swe_bench"），但实际跑的是合成
+        # 任务（task_id 前缀 examples__）——误导性归档（R-01 探路首跑暴露）。
+        # 现降级时把 dataset_name 改回实际数据集名（examples），并明确标注。
+        logger.warning(
+            "数据集 %s（subset=%s）为空，静默降级到内置示例数据集 examples——"
+            "结果归档将标 dataset=examples，非原始请求的 %s",
+            dataset_name,
+            subset,
+            dataset_name,
+        )
+        dataset_name = "examples"
+        subset = None
         dataset = InMemoryDataset.create_with_samples()
 
     tasks = dataset.tasks[:task_limit] if task_limit else dataset.tasks

@@ -1,6 +1,16 @@
 """
 LLM 调用缓存模块：减少重复 LLM 调用，提升执行效率。
 
+⚠️ 0.7 审计认知标注（P1-1.3 双套缓存漂移消除）：
+    生产 LLM 调用路径（BaseAgent._call_llm_with_cache，src/agents/base_agent.py）
+    走的是**文件缓存**（src/cache/*.json，_llm_cache_dir / AITESTER_LLM_CACHE 口径，
+    见 src/agents/llm_client.py），LLM 调用**不经过**本模块。
+    本模块（进程内 LRU）目前仅由：
+      - tests/test_llm_cache.py（单测覆盖）；
+      - src/graph/workflow.get_workflow_stats()（读其统计打报告）；
+    引用。两套缓存互不相通，属历史债——本模块保留接口供嵌入式场景使用，
+    生产路径如需统一口径应改用文件缓存。
+
 缓存策略：
 - 基于 (prompt, system_prompt, extra) 计算 SHA-256 缓存键，LRU 淘汰（maxsize=1024）
 - 线程安全：单一锁保护缓存与统计读写
