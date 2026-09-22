@@ -219,6 +219,7 @@ def select_best_candidate(
     target_function: str | None = None,
     use_execution_validation: bool = False,
     executor: Any = None,
+    execution_trace: list[dict[str, Any]] | None = None,
 ) -> CandidateResult | None:
     """从候选列表中选出最优补丁（3.1 的验证筛选）。
 
@@ -256,8 +257,17 @@ def select_best_candidate(
         # 计算每个候选的信用（未执行验证时 exec_factor=1.0，纯简洁性代理）
         for c in static_ok:
             c.credit_score = credit_by_index.get(c.index, 0.0)
-        # 信用高 → 修改行少且静态通过；平手时按 index 稳定排序
-        static_ok.sort(key=lambda c: (-c.credit_score, c.index))
+        # 3.3 改进：轻量奖励预测器（REWARD_PREDICTOR_ENABLE=true 且提供历史
+        # execution_trace 时）按预测奖励重排：覆盖率连降→偏最小改动，
+        # 覆盖率停滞→偏更大改动（换根因视角）；否则保持基础信用排序。
+        if reward_predictor_enabled() and execution_trace:
+            pred = predict_candidate_rewards(original_code, static_ok, execution_trace)
+            reward_by_index = {c["index"]: c["predicted_reward"] for c in pred["candidates"]}
+            static_ok.sort(key=lambda c: (-reward_by_index.get(c.index, 0.0), c.index))
+            logger.info("奖励预测器（3.3）重排候选：trend=%s", pred.get("trend"))
+        else:
+            # 信用高 → 修改行少且静态通过；平手时按 index 稳定排序
+            static_ok.sort(key=lambda c: (-c.credit_score, c.index))
         return static_ok[0]
 
     # 执行验证模式：逐个候选写临时副本 + 跑测试，选通过率最高且覆盖率最高者
@@ -404,4 +414,102 @@ def line_level_credit_scores(
         "candidates": scored,
         "best_candidate_index": best_idx,
         "best_credit": best_credit if best_idx is not None else None,
+    }
+
+
+# ─── 3.3 改进：轻量奖励预测器（BOOSTAPR 行级信用思想的规则式落地）──────────
+
+
+def reward_predictor_enabled() -> bool:
+    """3.3 改进：轻量奖励预测器开关（REWARD_PREDICTOR_ENABLE=true 时启用，默认 false）。
+
+    启用后 select_best_candidate 在静态筛选模式下，用历史 execution_trace
+    的覆盖率趋势调节候选排序（覆盖率连降偏最小改动、停滞偏更大改动）。
+    """
+    return os.getenv("REWARD_PREDICTOR_ENABLE", "false").lower() == "true"
+
+
+def _coverage_trend(execution_trace: list[dict[str, Any]] | None) -> str:
+    """3.3 改进：从历史执行轨迹推断覆盖率趋势（declining/stagnant/improving/unknown）。
+
+    Args:
+        execution_trace: 3.2 执行反馈轨迹列表（每项含 coverage_delta）。
+
+    Returns:
+        趋势标签：declining（连降）/ stagnant（停滞）/ improving（连升）/
+        unknown（轨迹不足或无 delta 数据）。
+    """
+    if not execution_trace:
+        return "unknown"
+    deltas = [t.get("coverage_delta") for t in execution_trace if t.get("coverage_delta") is not None]
+    if len(deltas) < 2:
+        return "unknown"
+    recent = deltas[-2:]
+    if all(d < 0 for d in recent):
+        return "declining"
+    if all(abs(d) < 0.5 for d in recent):
+        return "stagnant"
+    if all(d > 0 for d in recent):
+        return "improving"
+    return "unknown"
+
+
+def predict_candidate_rewards(
+    original_code: str,
+    candidates: list[CandidateResult],
+    execution_trace: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """3.3 改进：轻量奖励预测器——基于历史 execution_trace 与候选静态信用，
+    预测每个候选的"预期修复奖励"，用于候选重排序。
+
+    核心思想（BOOSTAPR 行级信用分配器的规则式轻量落地，无需训练、纯标准库）：
+    1. 基础信用 = line_level_credit_scores 的 credit_score
+       （静态模式下 credit = 1 - 修改行占比，越小改动信用越高）；
+    2. 趋势调节（_coverage_trend）：
+       - declining（覆盖率连降）：当前路径发散 → 奖励最小改动候选（predicted = base）；
+       - stagnant（覆盖率停滞）：当前视角失效 → 奖励更大改动候选
+         （predicted = 1 - base，抬升"大改/根因重写"候选）；
+       - improving / unknown：保持基础信用（predicted = base）。
+
+    Args:
+        original_code: 原始被测代码。
+        candidates: generate_candidates 的返回（static_passed 的候选参与评分）。
+        execution_trace: 3.2 执行反馈轨迹（可 None，无轨迹时退化为基础信用）。
+
+    Returns:
+        {"candidates": [{"index": int, "credit_score": float,
+          "modified_ratio": float, "predicted_reward": float}],
+         "best_candidate_index": int | None（预测奖励最高者）,
+         "trend": str}
+    """
+    credits = line_level_credit_scores(original_code, candidates)
+    trend = _coverage_trend(execution_trace)
+    credit_by_index = {c["index"]: c for c in credits["candidates"]}
+    scored: list[dict[str, Any]] = []
+    best_idx: int | None = None
+    best_reward = -1.0
+    for c in candidates:
+        if not (c.static_passed and c.new_code):
+            continue
+        info = credit_by_index.get(c.index, {})
+        base = float(info.get("credit_score", 0.0))
+        modified_ratio = float(info.get("modified_ratio", 0.0))
+        # 趋势调节：停滞 → 反转信用抬升"更大改动"候选（换根因视角）；
+        # 其余（declining / improving / unknown）→ 保持基础信用（偏最小改动）。
+        predicted = round(1.0 - base, 4) if trend == "stagnant" else base
+        scored.append(
+            {
+                "index": c.index,
+                "credit_score": base,
+                "modified_ratio": modified_ratio,
+                "predicted_reward": predicted,
+            }
+        )
+        if predicted > best_reward:
+            best_reward = predicted
+            best_idx = c.index
+    return {
+        "candidates": scored,
+        "best_candidate_index": best_idx,
+        "trend": trend,
     }

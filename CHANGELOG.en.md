@@ -4,6 +4,33 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - Remaining roadmap gaps landed (2.3 / 3.1 / 3.3)
+
+### Features (default behavior unchanged; each opt-in via env var)
+- **2.3 Reproduction-test generation** (`src/agents/generator.py` + `src/graph/nodes.py`):
+  - `GeneratorAgent.generate_repro_test()`: generates a "fail-then-pass" reproduction
+    test that precisely covers a defect's trigger path (TDFlow-style); cross-file
+    scenarios inject `cross_file_modules` so the LLM covers the cross-module call chain.
+    Gated by `REPRO_TEST_ENABLE` (default false).
+  - `_generator_node` invokes it when a defect description (diagnosis / review_reason)
+    exists and writes the result to `state["repro_test"]`.
+- **3.1 Bidirectional code-test diagnosis** (`src/agents/debugger.py` +
+  `src/graph/nodes.py` + `src/graph/workflow.py` + `src/graph/state.py`):
+  - `DebuggerAgent._run_review_diagnosis()`: an independent Review Agent decides whether
+    the root cause is an implementation defect (fix code) or a test defect (regenerate test).
+    Gated by `BIDIRECTIONAL_DIAGNOSIS_ENABLE` (default false).
+  - `_should_debug` adds a branch: `defect_type == "test_defect"` routes back to the
+    generator (regeneration_count cap prevents infinite ping-pong) — BiVCoder-style
+    branch repair.
+- **3.3 Lightweight reward predictor + dynamic temperature wiring**
+  (`src/tools/multi_candidate.py` + `src/agents/base_agent.py` + `src/graph/nodes.py`):
+  - `predict_candidate_rewards()`: re-ranks candidates using the historical execution_trace
+    coverage trend (declining → prefer minimal change, stagnant → prefer larger change)
+    combined with line-level credit assignment. Gated by `REWARD_PREDICTOR_ENABLE` (default false).
+  - `_dynamic_temperature_from_suggestion()`: maps the executor's iteration-strategy
+    suggestion (lower_temperature) to an actual sampling temperature, forwarded through
+    `BaseAgent._call_llm_with_cache`'s `temperature` parameter (previously observation-only).
+
 ## [0.7] - 2026-09-21 Cross-file repair phase 2 + data-integrity fix + research kickoff (A/B/C directions)
 
 ### Features (Direction A: code-quality deepening, default behavior unchanged)

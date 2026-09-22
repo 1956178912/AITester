@@ -71,7 +71,12 @@ class BaseAgent:
         # 每个智能体携带自己的 System Prompt，定义其角色和行为约束
         self.system_prompt = system_prompt
 
-    def _call_llm_with_cache(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
+    def _call_llm_with_cache(
+        self,
+        user_message: str,
+        max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+        temperature: float | None = None,
+    ) -> str:
         """
         带缓存的 LLM 调用方法。
 
@@ -81,19 +86,27 @@ class BaseAgent:
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数。
+            temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
+                config.TEMPERATURE。非 None 时温度参与缓存键，避免不同温度
+                命中同一缓存导致结果串味。
 
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
         # 缓存开关关闭时直接透传（测试环境默认关闭，避免缓存文件污染与 flaky）
         if not _llm_cache_enabled():
+            if temperature is not None:
+                return self._call_llm(user_message, max_retries, temperature=temperature)
             return self._call_llm(user_message, max_retries)
 
         # 生成缓存键（基于 user_message + system_prompt）
         # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
         # 说明：键不含 model，缓存的是"成功的 LLM 输出文本"；配额故障转移/模型切换后，
         # 命中旧结果仍有效（都是该 prompt 的合理回答），且不再消耗 token。
+        # 3.3 动态策略：非默认温度纳入键，防止降温和默认温度互相误命中。
         cache_key = f"{user_message}:{self.system_prompt}"
+        if temperature is not None:
+            cache_key += f":t{temperature}"
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
         cache_file = os.path.join(_llm_cache_dir(), f"{cache_hash}.json")
         cache_file = os.path.normpath(cache_file)
@@ -110,7 +123,10 @@ class BaseAgent:
             logger.debug("缓存读取失败: %s", e)
 
         # 未命中，执行实际调用（仅在成功时写缓存；失败如 403 额度用尽则不缓存）
-        response = self._call_llm(user_message, max_retries)
+        if temperature is not None:
+            response = self._call_llm(user_message, max_retries, temperature=temperature)
+        else:
+            response = self._call_llm(user_message, max_retries)
 
         # 写入缓存
         try:
@@ -132,7 +148,12 @@ class BaseAgent:
 
         return response
 
-    def _call_llm(self, user_message: str, max_retries: int = _DEFAULT_LLM_MAX_RETRIES) -> str:
+    def _call_llm(
+        self,
+        user_message: str,
+        max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
+        temperature: float | None = None,
+    ) -> str:
         """
         调用 LLM 并返回文本响应。
         失败时进行最多 max_retries 次重试，采用指数退避策略（1s, 2s, 4s）。
@@ -144,6 +165,9 @@ class BaseAgent:
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数，默认 3 次。
+            temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
+                config.TEMPERATURE。注意 zai SDK 路径当前不支持温度参数，
+                该覆盖仅对 OpenAI 兼容路径生效（保守口径）。
 
         Returns:
             LLM 返回的文本字符串。
@@ -151,6 +175,8 @@ class BaseAgent:
         Raises:
             RuntimeError: 所有 API 和重试均失败时抛出。
         """
+        # 3.3 动态策略：非 None 时覆盖默认温度（否则用 config.TEMPERATURE）
+        eff_temperature = temperature if temperature is not None else TEMPERATURE
         # 延迟导入：避免循环导入（base_agent 被 planner/generator/debugger 导入）
         from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -187,7 +213,7 @@ class BaseAgent:
                         # 一次网络抖动/429 即跨模型切换或任务级失败。现套通用指数退避
                         # （_retry_with_exponential_backoff，base_wait=1s：1s/2s/4s），
                         # 语义与 zai 路径对齐；重试耗尽才进入故障转移。
-                        llm = _get_or_create_chat_client(model_name, TEMPERATURE, api_key, base_url)
+                        llm = _get_or_create_chat_client(model_name, eff_temperature, api_key, base_url)
 
                         def _invoke_openai(
                             client: Any = llm,

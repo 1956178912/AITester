@@ -184,6 +184,14 @@ class AITesterState(TypedDict, total=False):
     # 纯观测层：基于前几轮覆盖率趋势建议"降低温度/切换修复视角"，
     # 供未来 Debugger 消费；当前仅记录不改变路由）
     iteration_strategy_suggestion: str | None
+    # 3.1 双向代码-测试诊断结果（BIDIRECTIONAL_DIAGNOSIS_ENABLE=true 时由
+    # debugger 节点写入）：implementation_defect（实现缺陷）/ test_defect（测试缺陷）
+    defect_type: str | None
+    # 3.1 Review Agent 判定依据文本（defect_type 的补充说明）
+    review_reason: str | None
+    # 2.3 复现测试专项生成结果（REPRO_TEST_ENABLE=true 时由 generator 节点写入）：
+    # 覆盖缺陷触发路径的复现测试代码（先失败后通过）
+    repro_test: str | None
 
 
 def create_initial_state(
@@ -268,4 +276,9 @@ def create_initial_state(
         multi_candidate_stats=None,
         # 3.2 改进：迭代策略建议（默认 None，executor 节点写入观测层建议）
         iteration_strategy_suggestion=None,
+        # 3.1 双向诊断结果（默认 None，启用双向诊断时由 debugger 节点写入）
+        defect_type=None,
+        review_reason=None,
+        # 2.3 复现测试生成结果（默认 None，启用复现测试生成时由 generator 节点写入）
+        repro_test=None,
     )

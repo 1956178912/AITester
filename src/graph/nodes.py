@@ -25,10 +25,11 @@ from config import (
     EXECUTOR_DEP_INSTALL_TIMEOUT,
     EXECUTOR_USE_VENV,
     MAX_ITERATIONS,
+    TEMPERATURE,
 )
 from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
-from src.agents.generator import GeneratorAgent
+from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent
 from src.graph.rag import (
     RAG_MODULE_AVAILABLE,
@@ -172,7 +173,25 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
         # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
         mutation_feedback=state.get("mutation_feedback"),
+        # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+        temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
     )
+
+    # 2.3 改进：复现测试专项生成（REPRO_TEST_ENABLE=true 且已有缺陷描述时）。
+    # 缺陷描述优先取 diagnosis（上一轮 Debugger 根因分析），跨文件修复场景下
+    # 该描述含缺陷触发路径信息；生成覆盖触发路径的复现测试写入 state["repro_test"]。
+    repro_test: str | None = None
+    defect_description = state.get("diagnosis") or state.get("review_reason") or ""
+    if _repro_test_enabled() and defect_description:
+        cross_modules = [d.get("target_module") for d in (state.get("cross_file_deps") or []) if d.get("target_module")]
+        repro_test = agent.generate_repro_test(
+            defect_description=defect_description,
+            target_code=state["target_code"],
+            module_name=state.get("module_name", ""),
+            cross_file_modules=cross_modules or None,
+            temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+        )
+        logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test))
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
     _trace_node(
@@ -186,19 +205,30 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         "generated_test": generated_test,
         "rag_references": rag_refs,
     }
+    # 2.3 改进：复现测试生成结果（未启用 / 无缺陷描述时保持 None）
+    if repro_test:
+        update["repro_test"] = repro_test
     # 累计 RAG 检索指标（本节点读取后携带历史值，避免后续节点覆盖丢失）
     if update_rag_stat:
         update["rag_stats"] = [*list(state.get("rag_stats") or []), update_rag_stat]
-    # 再生成路径检测：首次生成时 iteration < max_iterations（尚未进入修复循环），
-    # 只有 _should_debug 路由 "regenerate"（此时 iteration >= max_iterations）才会带着
-    # 高 iteration 回到 generator。据此区分两类进入方式：
+    # 再生成路径检测：两类进入方式都需 +1 计数并清空上一轮诊断：
+    #   1. _should_debug 路由 "regenerate"（iteration >= max_iterations，诊断指向测试生成错误）；
+    #   2. 3.1 双向诊断路由 "regenerate"（defect_type == "test_defect"，Review Agent
+    #      判定为测试缺陷，可在任意 iteration 触发）。
     #   - 首次生成：不改变 regeneration_count，保留原有 diagnosis（尚无修复结论）
     #   - 再生成：计数 +1（供 _should_debug 上限判断），并清空上一轮诊断，
     #     避免旧的 diagnosis 关键词在新测试仍失败时再次触发 regenerate（死循环根因）
-    if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
+    if (
+        state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS)
+        or state.get("defect_type") == "test_defect"
+    ):
         update["regeneration_count"] = state.get("regeneration_count", 0) + 1
         update["diagnosis"] = None
         update["error_category"] = None
+        # 3.1 双向诊断：重新生成测试后清空旧判定，避免"test_defect"信号
+        # 在下一轮仍触发 regenerate（与 regeneration_count 上限共同防死循环）
+        update["defect_type"] = None
+        update["review_reason"] = None
     return update
 
 
@@ -424,6 +454,29 @@ def _suggest_iteration_strategy(trace: list[dict[str, Any]], coverage_delta: flo
     return None
 
 
+def _dynamic_temperature_from_suggestion(suggestion: str | None) -> float | None:
+    """3.3 改进：把迭代策略建议映射为动态 temperature（真正接线，非观测层）。
+
+    此前 iteration_strategy_suggestion 仅记录不改变路由（观测层）。本函数
+    把建议映射为实际采样温度，供 Generator / Debugger 节点在 LLM 调用时
+    透传覆盖（_call_llm_with_cache 的 temperature 参数）：
+
+    - "lower_temperature"：覆盖率连降 → 温度减半（下限 0.0），收紧采样发散；
+    - 其他建议 / None：不覆盖（返回 None，沿用 config.TEMPERATURE）。
+
+    Args:
+        suggestion: executor 节点写入的迭代策略建议字符串。
+
+    Returns:
+        覆盖后的温度（None 表示不覆盖，沿用默认）。
+    """
+    if suggestion == "lower_temperature":
+        lowered = round(max(0.0, TEMPERATURE * 0.5), 3)
+        logger.info("动态策略（3.3）：覆盖率连降，temperature %.2f → %.2f", TEMPERATURE, lowered)
+        return lowered
+    return None
+
+
 def _debugger_node(state: AITesterState) -> dict[str, Any]:
     """
     DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
@@ -469,6 +522,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             rag_references=rag_refs,
             focus_function=state.get("target_function"),
             target_module=state.get("module_name"),
+            # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+            temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
         )
     except (json.JSONDecodeError, RuntimeError) as e:
         logger.warning("Debugger JSON 解析失败，跳过本轮修复: %s", e)
@@ -492,6 +547,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             "patch_len": len(result.get("patch", "")),
             # 3.2 对抗性推理校验结果
             "adversarial_check": result.get("adversarial_check", {}),
+            # 3.1 双向诊断结果
+            "defect_type": result.get("defect_type"),
         },
         decision=result.get("error_category", "unknown"),
         duration_ms=(time.time() - t0) * 1000,
@@ -518,6 +575,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         "patch": result["patch"],
         # 3.2 对抗性推理：记录 LLM 输出的对抗性校验结果（缺省时为零值）
         "adversarial_check": result.get("adversarial_check", {"scenarios_checked": 0, "all_passed": False}),
+        # 3.1 双向诊断结果（未启用时 debug() 恒返回 implementation_defect）
+        "defect_type": result.get("defect_type", "implementation_defect"),
+        "review_reason": result.get("review_reason", ""),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
@@ -679,6 +739,8 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         target_function=state.get("target_function"),
         use_execution_validation=use_exec,
         executor=executor,
+        # 3.3 改进：把历史执行反馈轨迹传入，供轻量奖励预测器调节候选排序
+        execution_trace=state.get("execution_trace"),
     )
     static_passed_count = sum(1 for c in candidates if c.static_passed)
     _trace_node(

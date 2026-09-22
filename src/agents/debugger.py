@@ -20,6 +20,15 @@
        补丁需重新生成（迭代 1 次，仍失败则保留当前补丁并记录风险）。
     该机制默认关闭（ADVERSARIAL_DEBUGGING_ENABLE=true 启用），
     保持历史实验口径不变。
+
+3.1 双向代码-测试诊断机制（BiVCoder 式 Review Agent，默认关）：
+    在执行测试失败时，先由独立"审查智能体"判断根因是"实现缺陷"还是
+    "测试缺陷"（参考 BiVCoder 的双向诊断）：
+    1. implementation_defect（实现缺陷）：被测代码逻辑错误 → Debugger 修复代码；
+    2. test_defect（测试缺陷）：测试自身设计错误（预期值写错 / 断言了错误行为）→
+       返回 defect_type="test_defect"，由上层路由回 Generator 重新生成测试。
+    该机制默认关闭（BIDIRECTIONAL_DIAGNOSIS_ENABLE=true 启用），
+    未启用时 defect_type 恒为 "implementation_defect"（保持历史口径）。
 """
 
 from __future__ import annotations
@@ -63,6 +72,16 @@ def _adversarial_debugging_enabled() -> bool:
     若批评者成功（all_passed=False），触发一次补丁重新生成（仍失败则保留当前补丁）。
     """
     return os.getenv("ADVERSARIAL_DEBUGGING_ENABLE", "false").lower() == "true"
+
+
+def _bidirectional_diagnosis_enabled() -> bool:
+    """3.1 双向代码-测试诊断开关（BIDIRECTIONAL_DIAGNOSIS_ENABLE=true 时启用，默认 false）。
+
+    启用后 Debugger.debug 在生成补丁前先由 Review Agent 判断根因是
+    "实现缺陷"（修复代码）还是"测试缺陷"（重新生成测试），实现 BiVCoder
+    式的双向诊断与分支修复。默认关闭保持历史实验口径不变。
+    """
+    return os.getenv("BIDIRECTIONAL_DIAGNOSIS_ENABLE", "false").lower() == "true"
 
 
 class DebuggerAgent(BaseAgent):
@@ -115,6 +134,7 @@ class DebuggerAgent(BaseAgent):
         rag_references: list[dict[str, Any]] | None = None,
         focus_function: str | None = None,
         target_module: str | None = None,
+        temperature: float | None = None,
     ) -> dict[str, str]:
         """
         分析测试失败并生成修复补丁。
@@ -123,7 +143,9 @@ class DebuggerAgent(BaseAgent):
         1. 先用规则分类器确定错误类型（快速，不消耗 LLM token）
         2. 将错误类型及对应修复策略注入 prompt，引导 LLM 按类修复
         3. 若提供 RAG 参考，注入历史修复案例增强生成质量
-        4. 3.1 改进（对抗性推理，默认关）：若启用，在补丁生成前注入
+        4. 3.1 双向诊断（默认关）：若启用，先由 Review Agent 判断根因是
+           实现缺陷还是测试缺陷；测试缺陷时直接返回不生成补丁
+        5. 3.1 改进（对抗性推理，默认关）：若启用，在补丁生成前注入
            对抗性意图假设 + 针对性测试用例，生成后再经"批评者"评估，
            若被击穿则重新生成一次补丁
 
@@ -136,6 +158,8 @@ class DebuggerAgent(BaseAgent):
                 智能截取，保留目标函数及直接依赖，提升修复定位精度。
             target_module: 被测模块名（可选）。提供时断言失败可进一步
                 区分 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）。
+            temperature: 采样温度覆盖（可选，3.3 动态策略接线用）；None 时
+                沿用 config.TEMPERATURE。
 
         Returns:
             包含以下键的字典：
@@ -146,6 +170,9 @@ class DebuggerAgent(BaseAgent):
             - adversarial_check (dict): 3.1 对抗性推理结果（启用时含
               intent_hypotheses / critic_break_cases / all_passed；
               未启用时 scenarios_checked=0, all_passed=False）。
+            - defect_type (str): 3.1 双向诊断结果（implementation_defect /
+              test_defect；未启用时恒为 implementation_defect）。
+            - review_reason (str): Review Agent 判定依据（未启用时为空串）。
 
         Raises:
             RuntimeError: LLM 调用失败时抛出。
@@ -173,6 +200,29 @@ class DebuggerAgent(BaseAgent):
                 for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]
             ]
         )
+
+        # ── 3.1 双向代码-测试诊断（BiVCoder 式 Review Agent，默认关）──────
+        # 在执行测试失败时，先由独立"审查智能体"判断根因是"实现缺陷"还是
+        # "测试缺陷"：实现缺陷 → 继续生成代码补丁；测试缺陷 → 不生成补丁，
+        # 返回 defect_type="test_defect" 由上层路由回 Generator 重新生成测试。
+        defect_type = "implementation_defect"
+        review_reason = ""
+        if _bidirectional_diagnosis_enabled():
+            review = self._run_review_diagnosis(target_code, test_output, failed_cases, error_category.value)
+            defect_type = review.get("defect_type", "implementation_defect")
+            review_reason = review.get("reason", "")
+            logger.info("双向诊断（3.1）Review Agent 判定：%s（%s）", defect_type, review_reason[:80])
+            if defect_type == "test_defect":
+                # 分支修复：测试缺陷 → 不修代码，返回信号让上层重新生成测试
+                return {
+                    "root_cause": review_reason or "测试本身存在缺陷（Review Agent 判定）",
+                    "error_category": error_category.value,
+                    "fix_strategy": "重新生成测试（测试缺陷，非实现缺陷）",
+                    "patch": "",
+                    "adversarial_check": {"scenarios_checked": 0, "all_passed": False},
+                    "defect_type": defect_type,
+                    "review_reason": review_reason,
+                }
 
         # 在 prompt 中显式注入错误类型和修复策略，引导 LLM 分层处理
         query = (
@@ -215,7 +265,7 @@ class DebuggerAgent(BaseAgent):
                 )
 
         # 调用 LLM 获取修复响应，带文件缓存省 token
-        raw = self._call_llm_with_cache(query)
+        raw = self._call_llm_with_cache(query, temperature=temperature)
         result = self._extract_json(raw)
         patch = result.get("patch", "")
 
@@ -232,7 +282,7 @@ class DebuggerAgent(BaseAgent):
                 )
                 # 把击穿用例注入 prompt 重新生成一次（带负面反馈）
                 requery = query + self._build_critic_feedback(critic_result)
-                raw2 = self._call_llm_with_cache(requery)
+                raw2 = self._call_llm_with_cache(requery, temperature=temperature)
                 result2 = self._extract_json(raw2)
                 patch2 = result2.get("patch", patch)
                 if patch2 and patch2 != patch:
@@ -250,6 +300,10 @@ class DebuggerAgent(BaseAgent):
             # 3.1 改进：对抗性推理结果（未启用时为零值，启用时含
             # intent_hypotheses / critic_break_cases / all_passed）
             "adversarial_check": adversarial_check,
+            # 3.1 双向诊断结果：implementation_defect | test_defect
+            # （未启用时恒为 implementation_defect，保持历史口径）
+            "defect_type": defect_type,
+            "review_reason": review_reason,
         }
 
     # ─── 3.1 对抗性推理辅助方法（AdverIntent-Agent 式）────────────────────
@@ -345,3 +399,59 @@ class DebuggerAgent(BaseAgent):
         lines = ["\n\n【批评者反馈（3.1）】以下对抗性测试用例会击穿当前补丁，请在重新生成时确保这些场景被正确处理："]
         lines.extend(f"- {c[:_ADVERSARIAL_CASE_TRUNCATE_LEN]}" for c in critic_result.get("break_cases", []))
         return "\n".join(lines)
+
+    # ─── 3.1 双向代码-测试诊断辅助方法（BiVCoder 式）──────────────────────
+
+    def _run_review_diagnosis(
+        self,
+        target_code: str,
+        test_output: str,
+        failed_cases: list[dict[str, str]],
+        error_category: str,
+    ) -> dict[str, str]:
+        """3.1 双向诊断：Review Agent 判断失败根因是"实现缺陷"还是"测试缺陷"。
+
+        参考 BiVCoder 的双向代码-测试诊断机制：独立 LLM 调用扮演"审查智能体"
+        区分两类缺陷并触发针对性修复：
+        - implementation_defect：被测代码逻辑错误 → Debugger 修复代码；
+        - test_defect：测试自身设计错误（预期值写错 / 断言了错误行为 /
+          复现测试覆盖了错误路径）→ Generator 重新生成测试。
+
+        Args:
+            target_code: 被测代码（已截断）。
+            test_output: 测试失败输出（已截断）。
+            failed_cases: 失败用例列表。
+            error_category: 错误类别（供判断参考，如 ASSERTION 更可能是测试预期值错误）。
+
+        Returns:
+            {"defect_type": "implementation_defect" | "test_defect",
+             "reason": str}。LLM 调用失败或输出非法时保守判定为实现缺陷
+            （保持"修复代码"的历史默认行为，不因诊断失败而阻断修复）。
+        """
+        cases_summary = "\n".join(
+            f"- {case['name']}: {case['error'][:_FAILED_CASE_ERROR_TRUNCATE_LEN]}"
+            for case in failed_cases[:_MAX_FAILED_CASES_SUMMARY]
+        )
+        query = (
+            "你是独立的代码审查智能体（Review Agent）。以下是测试失败信息，"
+            "请判断失败根因是【实现缺陷】还是【测试缺陷】：\n"
+            "- 实现缺陷：被测代码逻辑错误（返回值错误、边界处理缺失、异常未处理）；\n"
+            "- 测试缺陷：测试自身设计错误（预期值写错、断言了错误行为、复现测试覆盖了错误路径）。\n\n"
+            f"错误类别：{error_category}\n\n"
+            f"被测代码：\n```\n{target_code}\n```\n\n"
+            f"测试输出：\n```\n{test_output}\n```\n\n"
+            f"失败用例：\n{cases_summary}\n\n"
+            '请输出 JSON：{"defect_type": "implementation_defect" 或 "test_defect", '
+            '"reason": "一句话判断依据"}'
+        )
+        try:
+            raw = self._call_llm_with_cache(query)
+            result = self._extract_json(raw)
+            defect_type = str(result.get("defect_type", "implementation_defect"))
+            if defect_type not in ("implementation_defect", "test_defect"):
+                # 非法值保守归为实现缺陷（保持历史默认行为）
+                defect_type = "implementation_defect"
+            return {"defect_type": defect_type, "reason": str(result.get("reason", ""))}
+        except Exception as e:
+            logger.warning("双向诊断 Review Agent 调用失败（保守判定为实现缺陷，3.1）: %s", e)
+            return {"defect_type": "implementation_defect", "reason": ""}

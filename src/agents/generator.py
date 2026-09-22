@@ -39,6 +39,15 @@ def _assertion_augment_enabled() -> bool:
     return os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
 
 
+def _repro_test_enabled() -> bool:
+    """2.3 改进：复现测试专项生成开关（REPRO_TEST_ENABLE=true 时启用，默认 false）。
+
+    启用后 GeneratorAgent.generate_repro_test() 可用，跨文件修复场景下
+    可生成覆盖缺陷触发路径的复现测试（先失败后通过）。
+    """
+    return os.getenv("REPRO_TEST_ENABLE", "false").lower() == "true"
+
+
 def _extract_existing_assertions(target_code: str) -> list[str]:
     """3.4 断言增强：AST 提取被测代码中已有的 assert 语句（开发者编写的锚点断言）。
 
@@ -126,6 +135,7 @@ class GeneratorAgent(BaseAgent):
         rag_references: list[dict[str, Any]] | None = None,
         focus_function: str | None = None,
         mutation_feedback: dict[str, Any] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -173,7 +183,7 @@ class GeneratorAgent(BaseAgent):
         query = self._build_query(test_plan, target_code, module_name, rag_references, mutation_feedback)
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
-        raw = self._call_llm_with_cache(query)
+        raw = self._call_llm_with_cache(query, temperature=temperature)
         # 从响应中提取 Python 代码块（去除 markdown 包裹）
         code = self._extract_python_code(raw)
         # Import 验证：修正错误的模块名
@@ -189,7 +199,7 @@ class GeneratorAgent(BaseAgent):
                 "请确保每个用例元组的元素数量与参数名列表完全一致，"
                 "不要混入 case_name 等额外字段。"
             )
-            raw = self._call_llm_with_cache(retry_query)
+            raw = self._call_llm_with_cache(retry_query, temperature=temperature)
             code = self._extract_python_code(raw)
             if module_name:
                 code = self._fix_import_module(code, module_name)
@@ -197,6 +207,82 @@ class GeneratorAgent(BaseAgent):
             if not self._validate_parametrize(code):
                 logger.warning("二次 parametrize 校验仍失败，继续执行（可能 LLM 无法修正）")
         return code
+
+    # ─── 2.3 改进：复现测试专项生成（TDFlow 式）────────────────────────────
+
+    def generate_repro_test(
+        self,
+        defect_description: str,
+        target_code: str,
+        module_name: str = "",
+        cross_file_modules: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> str:
+        """2.3 改进：复现测试（reproduction test）专项生成。
+
+        针对已知缺陷生成一个"先失败后通过"的复现测试：精确覆盖缺陷触发
+        路径，用于修复前锁定缺陷、修复后回归验证。TDFlow 研究表明"编写
+        成功的复现测试"是软件工程性能的主要障碍，本方法把该能力内建进
+        Generator（特别是跨文件修复场景下，覆盖跨模块的触发路径）。
+
+        与 generate() 的区别：generate() 依据测试计划生成"验证正确行为"
+        的正向测试；generate_repro_test() 依据缺陷描述生成"复现缺陷"的
+        反向测试（未修复时应失败、修复后应通过）。
+
+        Args:
+            defect_description: 缺陷描述（来自 diagnosis / 跨文件修复计划 /
+                issue 文本），说明缺陷现象与触发条件。
+            target_code: 被测代码全文。
+            module_name: 模块名（不含 .py），用于生成 import 语句。
+            cross_file_modules: 跨文件修复涉及的关联模块名列表（可选），
+                非空时提示 LLM 覆盖跨模块触发路径。
+            temperature: 采样温度覆盖（可选，3.3 动态策略接线用）。
+
+        Returns:
+            完整的 pytest 复现测试代码字符串。
+        """
+        # 截断超长代码，避免 token 浪费（与 generate 同口径）
+        target_code = BaseAgent.truncate_code(target_code)
+        query = self._build_repro_prompt(defect_description, target_code, module_name, cross_file_modules)
+        raw = self._call_llm_with_cache(query, temperature=temperature)
+        code = self._extract_python_code(raw)
+        # Import 验证：修正错误的模块名（与 generate 同口径）
+        if module_name:
+            code = self._fix_import_module(code, module_name)
+        return code
+
+    def _build_repro_prompt(
+        self,
+        defect_description: str,
+        target_code: str,
+        module_name: str,
+        cross_file_modules: list[str] | None,
+    ) -> str:
+        """2.3 改进：构建复现测试生成的完整查询。"""
+        query = (
+            "【复现测试生成（2.3）】以下是已知缺陷，请生成一个能稳定复现该缺陷的 pytest 测试：\n\n"
+            f"缺陷描述：\n{defect_description}\n\n"
+            f"被测代码：\n```\n{target_code}\n```"
+        )
+        if module_name:
+            query += (
+                f"\n\n被测模块名：{module_name}"
+                f"\n\n【重要约束】import 语句必须使用模块名 `{module_name}`，"
+                f"即 `from {module_name} import ...`"
+            )
+        if cross_file_modules:
+            mods = ", ".join(cross_file_modules)
+            query += (
+                f"\n\n【跨文件上下文】该缺陷可能涉及以下关联模块：{mods}。"
+                "复现测试应覆盖跨模块的缺陷触发路径（从入口调用到缺陷模块的完整调用链）。"
+            )
+        query += (
+            "\n\n要求："
+            "\n1. 测试在缺陷未修复时应失败（assert 触发缺陷的预期 vs 实际不一致）；"
+            "\n2. 测试在缺陷修复后应通过（assert 正确的行为）；"
+            "\n3. 精确覆盖缺陷触发路径（输入构造、跨模块调用顺序、边界条件）。"
+        )
+        return query
 
     def _build_query(
         self,

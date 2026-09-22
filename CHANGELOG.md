@@ -4,6 +4,31 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] - 路线图剩余缺口落地（2.3 / 3.1 / 3.3）
+
+### 功能（默认行为不变，均经环境变量显式开启）
+- **2.3 复现测试专项生成**（`src/agents/generator.py` + `src/graph/nodes.py`）：
+  - `GeneratorAgent.generate_repro_test()`：针对已知缺陷生成"先失败后通过"的复现测试，
+    精确覆盖缺陷触发路径（TDFlow 式）；跨文件场景下经 `cross_file_modules` 提示
+    LLM 覆盖跨模块调用链。开关 `REPRO_TEST_ENABLE`（默认 false）。
+  - `_generator_node` 在已有缺陷描述（diagnosis / review_reason）时调用，
+    结果写入 `state["repro_test"]`。
+- **3.1 双向代码-测试诊断**（`src/agents/debugger.py` + `src/graph/nodes.py` +
+  `src/graph/workflow.py` + `src/graph/state.py`）：
+  - `DebuggerAgent._run_review_diagnosis()`：独立 Review Agent 判断根因是
+    "实现缺陷"（implementation_defect，修复代码）还是"测试缺陷"（test_defect，
+    重新生成测试）。开关 `BIDIRECTIONAL_DIAGNOSIS_ENABLE`（默认 false）。
+  - `_should_debug` 新增分支：`defect_type == "test_defect"` 时路由回 generator
+    重新生成测试（regeneration_count 上限防无限乒乓），实现 BiVCoder 式分支修复。
+- **3.3 轻量奖励预测器 + 动态 temperature 接线**（`src/tools/multi_candidate.py` +
+  `src/agents/base_agent.py` + `src/graph/nodes.py`）：
+  - `predict_candidate_rewards()`：基于历史 execution_trace 覆盖率趋势
+    （连降偏最小改动、停滞偏更大改动）与行级信用分配预测候选奖励并重排。
+    开关 `REWARD_PREDICTOR_ENABLE`（默认 false）。
+  - `_dynamic_temperature_from_suggestion()`：把 executor 的迭代策略建议
+    （lower_temperature）真正映射为采样温度，经 `BaseAgent._call_llm_with_cache`
+    的 `temperature` 参数透传（此前仅观测层建议、不改变 LLM 调用参数）。
+
 ## [0.7] - 2026-09-21 跨文件修复二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）
 
 ### 功能（A 方向：代码质量深化，默认行为不变）

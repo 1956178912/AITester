@@ -226,6 +226,20 @@ def _should_debug(state: AITesterState) -> str:
         _trace_node("_should_debug", decision="done", output_summary={"reason": "skip_debugger_repair_invalid"})
         return "done"
 
+    # 3.1 双向诊断：Review Agent 判定为"测试缺陷"时，直接路由回 generator
+    # 重新生成测试（分支修复），不进入 debugger 修代码；regeneration_count
+    # 上限防止 generator↔executor 无限乒乓（与 diagnosis 关键词路径同口径）。
+    # 上限已满且仍判定为测试缺陷：继续修代码无意义（Review Agent 认为代码无
+    # 缺陷），直接结束，避免空耗剩余迭代。
+    if state.get("defect_type") == "test_defect":
+        if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
+            logger.info("双向诊断（3.1）：测试缺陷，路由回 generator 重新生成测试")
+            _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "review_test_defect"})
+            return "regenerate"
+        logger.info("双向诊断（3.1）：已达重新生成上限，结束流程")
+        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
+        return "done"
+
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
