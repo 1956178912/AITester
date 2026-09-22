@@ -299,3 +299,53 @@ class TestVenvCacheStatsConcurrency:
         assert stats["hits"] >= 1
         # 关键断言：磁盘读取从未发生在持锁期间
         assert calls_during_lock == []
+
+    def test_persist_throttle_and_get_fallback(self, monkeypatch, tmp_path):
+        """0.7 债务项 2.4：节流窗口内只累计内存、跳过落盘，get 兜底读内存。"""
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "vc"))
+        os.makedirs(tmp_path / "vc", exist_ok=True)
+        stats_file = tmp_path / "vc" / "cache_stats.json"
+        if stats_file.exists():
+            stats_file.unlink()
+        with dep._venv_cache_stats_lock:
+            dep._venv_cache_stats["hits"] = 0
+            dep._venv_cache_stats["creates"] = 0
+            dep._venv_cache_stats["last_event_at"] = None
+        monkeypatch.setattr(dep, "_venv_cache_last_persist_at", None)
+
+        # 首个事件：last_persist_at=None → 落盘
+        dep._record_venv_cache_event("hit")
+        assert dep._load_cache_stats()["hits"] == 1
+
+        # 节流窗口内（上次落盘刚发生 <5s）：跳过落盘，只累计内存
+        dep._record_venv_cache_event("create")
+        assert dep._load_cache_stats()["creates"] == 0  # 磁盘未写 create
+
+        # get_venv_cache_stats 兜底：读磁盘 + 内存相加，未落盘事件不丢
+        stats = dep.get_venv_cache_stats()
+        assert stats["hits"] == 1
+        assert stats["creates"] == 1
+        assert stats["total"] == 2
+
+    def test_persist_throttle_window_expired_flushes(self, monkeypatch, tmp_path):
+        """0.7 债务项 2.4：距上次落盘超间隔后恢复落盘。"""
+        import time
+
+        monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(tmp_path / "vc2"))
+        os.makedirs(tmp_path / "vc2", exist_ok=True)
+        stats_file = tmp_path / "vc2" / "cache_stats.json"
+        if stats_file.exists():
+            stats_file.unlink()
+        with dep._venv_cache_stats_lock:
+            dep._venv_cache_stats["hits"] = 0
+            dep._venv_cache_stats["creates"] = 0
+            dep._venv_cache_stats["last_event_at"] = None
+        monkeypatch.setattr(dep, "_venv_cache_last_persist_at", None)
+
+        dep._record_venv_cache_event("hit")  # 落盘，last_persist_at = 当前
+        # 模拟节流窗口已过：把 last_persist_at 回拨 10 秒
+        monkeypatch.setattr(dep, "_venv_cache_last_persist_at", time.time() - 10)
+        dep._record_venv_cache_event("create")  # 窗口外 → 落盘
+        disk = dep._load_cache_stats()
+        assert disk["hits"] == 1
+        assert disk["creates"] == 1

@@ -307,6 +307,20 @@ class TestDynamicTemperature:
         # 温度作为关键字透传（None 时也透传 None，保持签名稳定）
         assert mock_call.call_args.kwargs.get("temperature") == 0.1
 
+    def test_call_llm_with_cache_temperature_in_key(self, monkeypatch, tmp_path):
+        """缓存开启时非默认温度纳入缓存键，避免与默认温度互相误命中。"""
+        from src.agents import base_agent as ba
+
+        agent = ba.BaseAgent.__new__(ba.BaseAgent)
+        agent.system_prompt = "sys"
+        # 强制开启文件缓存（测试环境默认关闭），覆盖缓存键含温度 + 透传两条分支
+        monkeypatch.setattr(ba, "_llm_cache_enabled", lambda: True)
+        monkeypatch.setattr(ba, "_llm_cache_dir", lambda: str(tmp_path))
+        with patch.object(agent, "_call_llm", return_value="ok") as mock_call:
+            result = agent._call_llm_with_cache("hello", temperature=0.1)
+        assert result == "ok"
+        assert mock_call.call_args.kwargs.get("temperature") == 0.1
+
 
 # ─── 3.1 双向诊断工作流路由（防死循环）──────────────────────────────────────
 

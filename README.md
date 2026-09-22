@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1627 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，1567 collected） |
-| **单元测试** | ✅ 全量 1627 passed, 0 failed；精简环境 1567 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/；0.7 轮次跨文件二期 + RAG 写锁热路径优化新增 15 个回归用例后 1627 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
+| **总测试数** | ✅ 1659 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1599 collected） |
+| **单元测试** | ✅ 全量 1659 passed, 0 failed；精简环境约 1599 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/；0.7 债务项 P2×8 落地新增 7 个回归用例后 1659 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 0.7 跨文件二期（多入口依赖分析 + 拓扑序补丁应用 + 修复计划缓存，`src/tools/cross_file.py`）+ RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，`--parallel` 入库不再排队）+ run_benchmark 静默降级误导归档修正 + R-01 SWE-bench 补跑探路立项（`docs/design/swe_bench_probe.md`），全量 1627 passed / 零回归；详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (95%) |
+| **最新优化** | ✅ 0.7 债务项 P2×8 落地（LLM 全局墙钟预算 `LLM_CALL_BUDGET_SECONDS` / analyze_failures 字段投影 / venv 落盘节流 / 并行提交滑窗 / 死委托清理 / 文档与密钥命名收敛）+ 路线图缺口 2.3/3.1/3.3 落地（复现测试 / 双向诊断 / 动态温度与奖励预测，均默认关）；此前 0.7 跨文件二期 + RAG 写锁热路径优化 + run_benchmark 静默降级归档修正 + R-01 SWE-bench 探路立项，全量 1659 passed / 零回归；详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 ruff 15 告警清零 + 33 文件 format 归一） |
-| **最近改动** | ✅ 2026-09-20 0.6 P0 修复批：P0-1 LLM OpenAI 路径零重试→套 `_retry_with_exponential_backoff`（1s/2s/4s 退避，与 zai 路径对齐，网络抖动不再一次 429 即任务级失败）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保 lost-update 安全，--parallel 热路径不再排队磁盘 IO）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 config 集中声明，api_health 熔断器 + api_manager Prometheus 导出接入，六处文档承诺落地）；multi_candidate 双次补丁应用消除（static_validate_patch 签名 2-tuple→3-tuple 复用 apply 结果）；ruff 15 告警清零 + 33 文件 format 归一；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-21 0.7 债务项 P2×8 落地（LLM 全局墙钟预算 / analyze_failures 字段投影 / venv 落盘节流 / 并行滑窗 / 死委托清理 / 文档与命名收敛）+ 路线图缺口 2.3/3.1/3.3 落地（复现测试 / 双向诊断 / 动态温度与奖励预测，默认关）；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 

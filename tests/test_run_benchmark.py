@@ -218,3 +218,67 @@ class TestComputeMutationScoresForBaseline:
         rb._compute_mutation_scores_for_baseline(bl_results, task_map, max_mutants=5)
         assert bl_results[0]["mutation_score"] is None
         assert calls == [], "空 instance_code 不应调用 compute_mutation_score"
+
+
+class TestSlidingWindow:
+    """0.7 债务项 2.5：滑窗提交，保持在途 future ≤ max_inflight。"""
+
+    def _make_tasks(self, n: int) -> list[BenchmarkTask]:
+        """构造 n 个 task_id 互不相同的任务。"""
+        tasks = []
+        for i in range(n):
+            task = _make_task()
+            task.task_id = f"repo__repo-{i}"
+            tasks.append(task)
+        return tasks
+
+    def test_all_tasks_processed(self, tmp_path, monkeypatch):
+        """滑窗派发：所有任务都被处理且结果经回调收集，不丢任务。"""
+        import concurrent.futures
+
+        tasks = self._make_tasks(20)
+        collected: list[str] = []
+
+        def fake_run_task(args):
+            task, *_ = args
+            return task, {"ok": {"passed": True, "elapsed_seconds": 0.001}}
+
+        monkeypatch.setattr(rb, "_run_task_with_progress", fake_run_task)
+
+        def on_task_done(task, task_results):
+            collected.append(task.task_id)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            rb._run_tasks_sliding_window(
+                executor, tasks, ["ok"], str(tmp_path), False, False, max_inflight=4, on_task_done=on_task_done
+            )
+
+        assert len(collected) == 20
+        assert set(collected) == {t.task_id for t in tasks}
+
+    def test_exception_task_isolated(self, tmp_path, monkeypatch):
+        """滑窗派发：任务异常时回调收到空结果，其余任务不受影响。"""
+        import concurrent.futures
+
+        tasks = self._make_tasks(5)
+        collected: dict[str, dict] = {}
+
+        def fake_run_task(args):
+            task, *_ = args
+            if task.task_id == "repo__repo-3":
+                raise RuntimeError("boom")
+            return task, {"ok": {"passed": True, "elapsed_seconds": 0.001}}
+
+        monkeypatch.setattr(rb, "_run_task_with_progress", fake_run_task)
+
+        def on_task_done(task, task_results):
+            collected[task.task_id] = task_results
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            rb._run_tasks_sliding_window(
+                executor, tasks, ["ok"], str(tmp_path), False, False, max_inflight=3, on_task_done=on_task_done
+            )
+
+        assert len(collected) == 5  # 所有任务（含异常）都回调
+        assert collected["repo__repo-3"] == {}  # 异常任务收到空结果
+        assert collected["repo__repo-1"] != {}  # 正常任务结果保留

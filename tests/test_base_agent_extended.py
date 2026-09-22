@@ -28,6 +28,7 @@ from src.agents.llm_client import (
     _thread_local,
     _zai_client_cache,
 )
+from src.utils.helpers import _find_balanced_json
 
 
 @pytest.fixture(autouse=True)
@@ -594,31 +595,35 @@ class TestExtractJsonEdgeCases:
 
 
 class TestFindBalancedJsonEdgeCases:
-    """测试 _find_balanced_json 的边缘情况。"""
+    """测试 _find_balanced_json 的边缘情况（直接测 helpers 底层实现）。
+
+    0.7 债务项 1.4：BaseAgent._find_balanced_json 死委托已删除，测试改为
+    直接覆盖底层函数，断言语义不变。
+    """
 
     def test_start_at_negative(self):
         """start 为负数时返回 None。"""
-        assert BaseAgent._find_balanced_json("{}", -1) is None
+        assert _find_balanced_json("{}", -1) is None
 
     def test_start_at_exact_length(self):
         """start 等于文本长度时返回 None。"""
-        assert BaseAgent._find_balanced_json("{}", 2) is None
+        assert _find_balanced_json("{}", 2) is None
 
     def test_escaped_brace_in_string(self):
         """字符串内的花括号不计入深度。"""
         text = '{"key": "value \\"with braces {in}\\""}'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == text
 
     def test_multiple_json_objects_returns_first(self):
         """文本中有多个 JSON 对象时返回第一个完整的。"""
         text = '{"a": 1} some text {"b": 2}'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == '{"a": 1}'
 
     def test_empty_text(self):
         """空文本返回 None。"""
-        assert BaseAgent._find_balanced_json("", 0) is None
+        assert _find_balanced_json("", 0) is None
 
 
 # ─── TestExtractPythonCodeEdgeCases ───────────────────────────────────────────

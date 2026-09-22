@@ -331,3 +331,57 @@ class TestExtractMinimalRepro:
         assert "minimal_repro_code" in cases[0]
         assert cases[0]["minimal_repro_code"] is not None
         assert "AssertionError" in cases[0]["minimal_repro_code"]
+
+
+class TestLoadAllResultsProjection:
+    """0.7 债务项 2.3：load_all_results 字段投影，剔除大字段。"""
+
+    def test_projection_strips_large_fields(self, tmp_path):
+        """只保留分析层字段，剔除 generated_test / test_output / execution_trace / patch。"""
+        import experiments.analyze_failures as af
+
+        results_dir = tmp_path / "results"
+        results_dir.mkdir()
+        (results_dir / "benchmark_x.json").write_text(
+            json.dumps(
+                {
+                    "results": {
+                        "aitester": {
+                            "details": [
+                                {
+                                    "task_id": "t1",
+                                    "passed": False,
+                                    "error_category": "import_error",
+                                    "diagnosis": "ModuleNotFoundError: No module named 'foo'",
+                                    "dataset": "synthetic",
+                                    "generated_test": "def test(): pass\n" * 100,  # 大字段
+                                    "test_output": "x" * 5000,  # 大字段
+                                    "execution_trace": [{"a": 1}] * 1000,  # 大字段
+                                    "patch": "diff " * 100,  # 大字段
+                                    "task_metadata": {"problem_statement": "```\ncode\n```"},
+                                }
+                            ]
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        tasks = af.load_all_results(str(results_dir))
+        assert len(tasks) == 1
+        row = tasks[0]
+        # 分析层字段保留
+        assert row["task_id"] == "t1"
+        assert row["passed"] is False
+        assert row["error_category"] == "import_error"
+        assert row["diagnosis"].startswith("ModuleNotFoundError")
+        assert row["dataset"] == "synthetic"
+        assert row["task_metadata"]["problem_statement"] == "```\ncode\n```"
+        assert row["baseline"] == "aitester"
+        assert row["experiment_file"] == "benchmark_x.json"
+        # 大字段被投影掉
+        assert "generated_test" not in row
+        assert "test_output" not in row
+        assert "execution_trace" not in row
+        assert "patch" not in row

@@ -3,7 +3,7 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-18（新增 4.4 多版本 venv 缓存章节；1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比）
+> 最后更新：2026-09-21（修正 2.4 重试策略伪代码至 0.6 后 `base_wait * 2^attempt` 口径；新增 4.4 多版本 venv 缓存章节；1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比）
 
 ---
 
@@ -92,27 +92,28 @@ MAX_ITERATIONS=3
 
 ### 2.4 重试策略
 
-系统采用**指数退避 + API 自动切换**策略：
+系统采用**指数退避 + API 自动切换**策略（0.6 轮次 P0-1 起统一走
+`_retry_with_exponential_backoff`）：
 
 ```python
-# base_agent.py 中的重试逻辑
-for attempt in range(max_retries):
+# llm_client.py 中的统一重试逻辑（OpenAI 兼容路径与 zai SDK 路径共用）
+for attempt in range(max_retries + 1):
     try:
         response = llm.invoke(messages, timeout=LLM_TIMEOUT)
         return response
-    except APIReachLimitError:
-        wait_time = 2**attempt * LLM_RETRY_WAIT
+    except Exception:
+        wait_time = base_wait * (2**attempt)  # 指数退避：1s→1/2/4s（zai 路径 5s→5/10/20s）
         time.sleep(wait_time)
         continue
-    except Exception:
-        # 切换备用 API
-        continue
+# 重试耗尽 → 自动切换到同 API 下一模型 / 备用 API
 ```
 
 **特点**：
-- 限流错误：等待时间按 `2^attempt * base_wait` 增长
-- 状态错误：指数退避重试
-- 所有 API 失败：自动切换到下一个配置
+- 退避等待按 `base_wait * 2^attempt` 增长：OpenAI 兼容路径 `base_wait=1s`
+  （1s/2s/4s），zai SDK 路径 `base_wait=5s`（5s/10s/20s，限流更严格取更长基准）
+- 所有重试失败：自动切换到同 API 下一模型 / 备用 API（故障转移）
+- 注意：`LLM_RETRY_WAIT` 现仅用于 `run_benchmark` 的任务间限流等待，**不再驱动重试退避**
+  （退避基准由 `base_wait` 参数控制）
 
 ---
 

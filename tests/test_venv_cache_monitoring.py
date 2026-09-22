@@ -25,6 +25,9 @@ def _isolated_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(cache_dir))
     # 同步重置进程内统计（避免跨测试污染）
     monkeypatch.setattr(dep, "_venv_cache_stats", {"hits": 0, "creates": 0, "last_event_at": None})
+    # 0.7 债务项 2.4：重置落盘节流状态，确保每个测试的首个事件必落盘
+    # （否则节流窗口会跨测试残留，导致落盘断言被跳过）
+    monkeypatch.setattr(dep, "_venv_cache_last_persist_at", None)
     # 重置落盘统计文件
     stats_file = os.path.join(str(cache_dir), "cache_stats.json")
     if os.path.exists(stats_file):

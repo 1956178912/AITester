@@ -9,13 +9,13 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1627 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 1567 collected) |
-| **Unit Tests** | ✅ Full: 1627 passed, 0 failed; reduced environment: 1567 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 94% total coverage (src/; 0.7 iteration cross-file phase 2 + RAG write-lock hot-path optimization added 15 regression cases, full suite 1627 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 99% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
+| **Total Tests** | ✅ 1659 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 1599 collected) |
+| **Unit Tests** | ✅ Full: 1659 passed, 0 failed; reduced environment: 1599 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 94% total coverage (src/; 0.7 debt items P2×8 landed with 7 regression cases, full suite 1659 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 0.7 cross-file phase 2 (multi-entry dependency analysis + topological-order patch application + repair-plan cache, `src/tools/cross_file.py`) + RAG write-lock hot-path optimization (`_upsert` cleanup/capacity-check moved out of the lock, `--parallel` ingestion no longer queues) + run_benchmark silent-degradation misleading-archive fix + R-01 SWE-bench re-run probe kickoff (`docs/design/swe_bench_probe.md`); full suite 1627 passed / zero regressions; see [CHANGELOG](CHANGELOG.md) for details |
-| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (99%), executor_modes.py (96%), cross_file.py (95%) |
+| **Latest Optimization** | ✅ 0.7 debt items P2×8 landed (LLM global wall-clock budget `LLM_CALL_BUDGET_SECONDS` / analyze_failures field projection / venv persist throttling / sliding-window parallel submission / dead-delegate cleanup / docs & key-naming convergence) + roadmap gaps 2.3/3.1/3.3 landed (repro test / bidirectional diagnosis / dynamic temperature & reward predictor, all default-off); earlier 0.7 cross-file phase 2 + RAG write-lock hot-path optimization + run_benchmark silent-degradation fix + R-01 SWE-bench probe kickoff; full suite 1659 passed / zero regressions; see [CHANGELOG](CHANGELOG.md) for details |
+| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6) |
 | **Recent Changes** | ✅ 2026-09-20 0.6 P0 fix batch: P0-1 LLM OpenAI path zero-retry → wired into `_retry_with_exponential_backoff` (1s/2s/4s backoff, aligned with the zai path; network jitter no longer turns one 429 into a task-level failure); P0-2 venv stats dual-lock separation (ns-level counting lock + independent persist lock for lost-update safety; the `--parallel` hot path no longer queues on disk IO); P0-3 ghost-switch implementation (`API_CIRCUIT_BACKOFF` default true / `API_PROMETHEUS_EXPORT` default false, centrally declared in config, wired into the api_health circuit breaker + api_manager Prometheus export — six doc promises finally have code read points); multi_candidate double-patch-apply elimination (`static_validate_patch` signature 2-tuple → 3-tuple, reusing the apply result); 15 ruff warnings cleared + 33-file format normalization; see [CHANGELOG](CHANGELOG.md) for details |
 
@@ -723,7 +723,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (67 test files, full 1627 collected pytest cases; reduced environment collects 1567 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (67 test files, full 1659 collected pytest cases; reduced environment collects 1599 / auto-skips RAG and visualization cases, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1073,14 +1073,14 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
 - Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 3 mutation types)
 - Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
-- 1627 test cases / 94% coverage / Ruff all green (0.7 iteration; see iteration records below)
+- 1659 test cases / 94% coverage / Ruff all green (0.7 iteration; see iteration records below)
 
 **Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
 - AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
 - Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
 - Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-**Verification**: 1627 tests passed / 0 failed / Ruff all green / 94% coverage
+**Verification**: 1659 tests passed / 0 failed / Ruff all green / 94% coverage
 
 ## License
 

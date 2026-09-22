@@ -5,6 +5,12 @@
 #   cp config.local.example .env.local
 #   然后填入真实值，或删除不需要的配置项。
 #
+# 命名约定（单一事实来源）：本文件的 LLM_N_* 编号格式是 config.py 运行时
+# 唯一读取的密钥命名。.env.local.template 与 llm_configs.json 的
+# required_api_key 字段使用 {PROVIDER}_API_KEY 格式，仅供批量生成脚本
+# （scripts/generate_batch_config.py）作中间变量，config.py 不读取它们。
+# 手动配置一律用本文件的 LLM_N_* 格式。
+#
 # ⚠️  此文件绝对不要提交到 Git！已在 .gitignore 中排除。
 # ═══════════════════════════════════════════════════════════════════════════════
 

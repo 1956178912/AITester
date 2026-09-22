@@ -6,7 +6,8 @@ BaseAgent 单元测试
 - _is_zai_compatible
 - _get_llm_config
 - _get_or_create_chat_client（客户端复用缓存）
-- BaseAgent 静态方法 (_extract_json, _find_balanced_json, _extract_python_code, truncate_code)
+- BaseAgent 静态方法 (_extract_json, _extract_python_code, truncate_code)
+- helpers._find_balanced_json（0.7 债务项 1.4 后直接测底层函数）
 """
 
 import json
@@ -27,6 +28,7 @@ from src.agents.base_agent import (
     _is_zai_compatible,
 )
 from src.agents.llm_client import _llm_client_cache, _retry_with_exponential_backoff
+from src.utils.helpers import _find_balanced_json
 
 
 class TestRetryWithExponentialBackoff:
@@ -200,35 +202,40 @@ class TestExtractJson:
 
 
 class TestFindBalancedJson:
-    """测试括号平衡法提取 JSON。"""
+    """测试括号平衡法提取 JSON（直接测 helpers._find_balanced_json 底层实现）。
+
+    0.7 债务项 1.4：BaseAgent._find_balanced_json 是纯转发死委托（0.6 拆分时
+    保留的历史命名空间转发，无调用方），已删除；测试改为直接覆盖底层函数，
+    断言语义不变。
+    """
 
     def test_balanced_json(self):
         """正常匹配的 JSON。"""
         text = '{"a": 1, "b": 2}'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == text
 
     def test_unbalanced_json(self):
         """未闭合的 JSON 返回剩余部分。"""
         text = '{"a": 1,'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == text
 
     def test_nested_json(self):
         """嵌套 JSON。"""
         text = '{"a": {"b": {"c": 1}}}'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == text
 
     def test_json_with_strings(self):
         """含字符串的 JSON。"""
         text = '{"msg": "hello {world}"}'
-        result = BaseAgent._find_balanced_json(text, 0)
+        result = _find_balanced_json(text, 0)
         assert result == text
 
     def test_out_of_bounds_start(self):
         """起始位置越界返回 None。"""
-        result = BaseAgent._find_balanced_json("{}", 5)
+        result = _find_balanced_json("{}", 5)
         assert result is None
 
 
@@ -387,3 +394,25 @@ class TestChatClientReuse:
         assert result2 == "ok"
         assert calls_after_first == mock_chat_openai.call_count  # 第二次调用未新建客户端
         assert mock_llm.invoke.call_count == 2
+
+
+class TestLlmCallBudget:
+    """0.7 债务项 2.2：LLM 调用全局墙钟总预算。"""
+
+    def test_budget_exceeded_fast_fails(self, monkeypatch):
+        """预算耗尽时快速失败，不再空耗剩余故障转移组合。"""
+        import src.agents.base_agent as ba
+
+        # 伪造时间：第一次 time.time() 返回 0（deadline = 0 + budget），
+        # 后续返回超大值，使内层循环检查立即越过预算触发快速失败。
+        times = iter([0.0, float(10**9)])
+        monkeypatch.setattr(ba.time, "time", lambda: next(times))
+        monkeypatch.setattr(ba, "LLM_CALL_BUDGET_SECONDS", 10)
+        monkeypatch.setattr(ba, "_get_all_api_configs", lambda: [("k", "https://t.example.com/v1", "m")])
+
+        # 绕过 __init__ 的 LLM 客户端依赖，只测 _call_llm 预算分支
+        agent = ba.BaseAgent.__new__(ba.BaseAgent)
+        agent.system_prompt = "sys"
+
+        with pytest.raises(RuntimeError, match="全局预算"):
+            agent._call_llm("hello")

@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import importlib.util
 import json
@@ -310,6 +311,13 @@ _venv_cache_stats_lock = __import__("threading").Lock()
 # 两个锁分开，磁盘 IO 不再阻塞并发 worker 的计数，计数与落盘各自原子。
 _venv_cache_persist_lock = __import__("threading").Lock()
 _venv_cache_stats: dict[str, Any] = {"hits": 0, "creates": 0, "last_event_at": None}
+# 0.7 债务项 2.4：落盘节流间隔（秒）。距上次落盘不足该间隔时只累计内存、
+# 跳过磁盘 IO；未落盘事件由 get_venv_cache_stats（读磁盘 + 内存相加）与
+# 进程退出 atexit 兜底合并，跨进程最终统计完整。每次 hit/create 事件都落盘
+# 会在 N 任务串行跑时产生 N 次小文件随机写（300 事件累计 0.6-1.5s 纯 IO）。
+_VENV_CACHE_PERSIST_INTERVAL_SECONDS = 5.0
+# 上次落盘时间戳（节流用，None 表示尚未落盘，首个事件必落盘）
+_venv_cache_last_persist_at: float | None = None
 
 
 def _venv_cache_stats_file() -> str:
@@ -376,23 +384,62 @@ def _persist_cache_stats() -> None:
         logger.debug("venv 缓存统计落盘失败（不影响主流程）: %s", e)
 
 
+def _flush_venv_cache_stats() -> None:
+    """进程退出时兜底落盘（0.7 债务项 2.4 节流后，最后 <5s 窗口事件不丢）。
+
+    经 atexit 注册，在主线程退出时执行一次强制落盘，把仍在内存的未落盘
+    事件合并写回磁盘，保证跨进程的 cache_stats.json 统计完整。atexit 回调
+    执行时 worker 线程可能仍在跑，最坏情形落盘不完整（仅丢 <5s 窗口），
+    且任何异常都被吞掉——统计兜底失败绝不影响主流程。
+    """
+    try:
+        with _venv_cache_persist_lock:
+            _persist_cache_stats()
+    except Exception:
+        pass
+
+
+atexit.register(_flush_venv_cache_stats)
+
+
 def _record_venv_cache_event(kind: str) -> None:
-    """记录一次缓存事件（hit/create）到进程内统计并落盘（0.6 P0-2：双锁分离）。
+    """记录一次缓存事件（hit/create）到进程内统计并落盘（0.6 P0-2 双锁分离 + 0.7 节流）。
 
     计数锁临界区只做内存累计（ns 级，venv 命中热路径不排队）；
     落盘走独立 _venv_cache_persist_lock（保护读磁盘/快照/写磁盘整段，
-    磁盘 IO 不阻塞计数控）。最坏情形：落盘锁竞争时事件暂存内存，
+    磁盘 IO 不阻塞计数）。最坏情形：落盘锁竞争时事件暂存内存，
     由后续任一 persist 合并写入（计数不丢失）。
+
+    0.7 债务项 2.4 节流：距上次落盘不足 _VENV_CACHE_PERSIST_INTERVAL_SECONDS
+    时只累计内存、跳过落盘（每次事件都落盘会在 N 任务串行跑时产生 N 次
+    小文件随机写，300 事件累计 0.6-1.5s 纯 IO）。未落盘事件由
+    get_venv_cache_stats 读接口与 atexit 退出钩子兜底合并，计数不丢失。
     """
+    global _venv_cache_last_persist_at
     with _venv_cache_stats_lock:
         if kind == "hit":
             _venv_cache_stats["hits"] += 1
         elif kind == "create":
             _venv_cache_stats["creates"] += 1
         _venv_cache_stats["last_event_at"] = time.time()
+    # 节流双重检查：锁外快速判断（CPython 下 float 读写原子），避免不落盘
+    # 时也排队抢落盘锁；锁内二次确认，防并发下多线程同时越过锁外判断。
+    now = time.time()
+    if (
+        _venv_cache_last_persist_at is not None
+        and (now - _venv_cache_last_persist_at) < _VENV_CACHE_PERSIST_INTERVAL_SECONDS
+    ):
+        return
     # 落盘在计数锁外执行；独立落盘锁保证 lost-update 安全
     with _venv_cache_persist_lock:
+        now = time.time()
+        if (
+            _venv_cache_last_persist_at is not None
+            and (now - _venv_cache_last_persist_at) < _VENV_CACHE_PERSIST_INTERVAL_SECONDS
+        ):
+            return
         _persist_cache_stats()
+        _venv_cache_last_persist_at = time.time()
 
 
 def get_venv_cache_stats() -> dict[str, Any]:

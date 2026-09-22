@@ -29,6 +29,35 @@
     （lower_temperature）真正映射为采样温度，经 `BaseAgent._call_llm_with_cache`
     的 `temperature` 参数透传（此前仅观测层建议、不改变 LLM 调用参数）。
 
+### 性能优化与技术债清理（0.7 债务项 P2×8 落地，默认行为不变）
+- **2.2 LLM 调用全局墙钟总预算**（`config.py` + `src/agents/base_agent.py`）：
+  新增 `LLM_CALL_BUDGET_SECONDS`（默认 600s），`_call_llm` 故障转移循环每次尝试
+  新模型前检查预算，超出即快速失败，避免"组数 × 模型数 × 重试"极端组合下
+  单任务卡死数十分钟。
+- **2.3 analyze_failures 字段投影**（`experiments/analyze_failures.py`）：
+  `load_all_results` 只保留分析层字段（task_id/passed/error_category/diagnosis/
+  dataset/task_metadata），剔除 generated_test/test_output/execution_trace 等
+  大字段，多批次累积时内存下降一个量级。
+- **2.4 venv 统计落盘节流**（`src/tools/dependency.py`）：
+  `_record_venv_cache_event` 距上次落盘 <5s 时只累计内存、跳过磁盘 IO；未落盘
+  事件由 `get_venv_cache_stats` 读接口与 atexit 退出钩子兜底合并，计数不丢失
+  （双锁 lost-update 语义不变）。
+- **2.5 并行提交滑窗**（`experiments/run_benchmark.py`）：抽出
+  `_run_tasks_sliding_window`，保持在途 future ≤ 2×parallel，避免 100+ 任务
+  一次性 submit 导致大对象常驻内存。
+- **1.4 死委托清理**（`src/agents/base_agent.py`）：删除
+  `BaseAgent._find_balanced_json` 纯转发 staticmethod（0.6 拆分的死委托），
+  测试改直接覆盖 `helpers._find_balanced_json`。
+- **3.4 文档补齐**（`.env.example`）：补 `AITESTER_LLM_CACHE` /
+  `AITESTER_LLM_CACHE_DIR` 两变量说明。
+- **3.5 文档修正**（`docs/performance_guide.md`）：2.4 重试策略伪代码改为
+  `base_wait * 2^attempt` 口径，标注 `LLM_RETRY_WAIT` 不再驱动退避。
+- **3.6 密钥命名收敛**（`config.local.example`）：头部声明 `LLM_N_*` 单一事实
+  来源，`.env.local.template` / `llm_configs.json` 的 `{PROVIDER}_API_KEY` 仅供
+  批量脚本中间变量。
+- **3.7 clone 地址核验**：`git ls-remote` 确认 `https://github.com/1956178912/AITester.git`
+  可达且与文档一致，无需修改。
+
 ## [0.7] - 2026-09-21 跨文件修复二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）
 
 ### 功能（A 方向：代码质量深化，默认行为不变）

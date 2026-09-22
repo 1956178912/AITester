@@ -37,6 +37,7 @@ import shutil
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -601,6 +602,64 @@ def _run_task_with_progress(args: tuple) -> tuple[BenchmarkTask, dict[str, Any]]
     return task, results
 
 
+def _run_tasks_sliding_window(
+    executor: concurrent.futures.ThreadPoolExecutor,
+    tasks: list[BenchmarkTask],
+    baselines: list[str],
+    output_dir: str,
+    verbose: bool,
+    save_state: bool,
+    max_inflight: int,
+    on_task_done: Callable[[BenchmarkTask, dict[str, Any]], None],
+) -> None:
+    """0.7 债务项 2.5：滑窗提交任务，保持在途 future ≤ max_inflight。
+
+    此前一次性 submit 全部任务（100+ 任务时 future 列表 100+ 个，每个持有
+    task/baselines 等完整引用常驻内存），大对象常驻 + 长任务场景下内存峰值
+    偏高；滑窗保持 ≤max_inflight 个在途即可。完成一个补一个（FIRST_COMPLETED），
+    每个任务的结果经 on_task_done 回调收集（回调负责汇总结果 / 进度条 / 累计
+    耗时），任务异常时回调收到空结果（不影响其余任务继续执行）。
+
+    Args:
+        executor: 线程池执行器（max_workers 已设）。
+        tasks: 待执行的任务列表。
+        baselines: 基线列表。
+        output_dir: 输出目录。
+        verbose: 是否详细输出。
+        save_state: 是否保存中间状态。
+        max_inflight: 在途 future 上限（通常 2×max_workers）。
+        on_task_done: 每个任务完成后的回调，参数为 (task, task_results)。
+    """
+    task_iter = iter(tasks)
+    pending: dict[concurrent.futures.Future, Any] = {}
+
+    def _submit_next() -> None:
+        """从任务迭代器取下一个任务提交（耗尽时 no-op）。"""
+        try:
+            task = next(task_iter)
+        except StopIteration:
+            return
+        fut = executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose, save_state))
+        pending[fut] = task
+
+    # 填满初始滑窗
+    for _ in range(max_inflight):
+        _submit_next()
+
+    while pending:
+        done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+        for future in done:
+            task = pending.pop(future)
+            try:
+                _, task_results = future.result()
+            except Exception as e:
+                logger.error("任务 %s 执行失败: %s", task.task_id, e)
+                task_results = {}
+            on_task_done(task, task_results)
+            # 完成一个补一个，保持在途 ≤ max_inflight
+            _submit_next()
+
+
 def _apply_rag_setting(enable_rag: bool | None) -> bool:
     """把 RAG 开关应用到 workflow 模块，返回生效值（P1：RAG 纳入主实验）。
 
@@ -788,25 +847,29 @@ def run_benchmark(
         if parallel > 1:
             logger.info("启用并行执行，并发度: %d", parallel)
             with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
-                futures = {
-                    executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose, save_state)): task
-                    for task in tasks
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    task = futures[future]
-                    try:
-                        _, task_results = future.result()
-                    except Exception as e:
-                        logger.error("任务 %s 执行失败: %s", task.task_id, e)
-                        task_results = {}
 
+                def _on_task_done(task: BenchmarkTask, task_results: dict[str, Any]) -> None:
+                    """单个任务完成回调：汇总结果 + 进度条 + 累计耗时。"""
+                    nonlocal total_time
                     for baseline, result in task_results.items():
                         all_results[baseline].append(result)
-
                     elapsed_this = sum(r["elapsed_seconds"] for r in task_results.values())
                     total_time += elapsed_this
                     pbar.update(1)
                     pbar.set_description(f"{desc} - 耗时: {total_time:.1f}s")
+
+                # 0.7 债务项 2.5：滑窗提交，保持在途 future ≤ 2×parallel，
+                # 避免一次性 submit 全部任务导致大对象常驻内存
+                _run_tasks_sliding_window(
+                    executor,
+                    tasks,
+                    baselines,
+                    output_dir,
+                    verbose,
+                    save_state,
+                    max(2 * parallel, 1),
+                    _on_task_done,
+                )
         else:
             for task in tasks:
                 logger.info("处理任务: %s", task.task_id)

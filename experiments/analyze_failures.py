@@ -331,8 +331,29 @@ def _suggest_fix_for_root_cause(row: dict[str, Any], cat: str) -> dict[str, str]
     return suggestions.get(cause, suggestions["llm_capability"])
 
 
+# ─── 0.7 债务项 2.3：字段投影白名单 ──────────────────────────────────────────
+# 分析层实际消费的字段。benchmark details 行携带 generated_test / test_output /
+# execution_trace 等大字段（每个可达数 KB），多批次累积后 all_tasks 常驻数百 MB；
+# 而分析函数（root_cause_classification / failure_knowledge_base / 渲染层）只用
+# 下列字段，投影后内存下降一个量级且分析结果不变。
+_KEEP_FIELDS = (
+    "task_id",
+    "passed",
+    "error_category",
+    "error",
+    "diagnosis",
+    "dataset",
+    "task_metadata",  # 含 problem_statement（extract_minimal_repro 规则 3 消费）
+)
+
+
+def _project_fields(d: dict[str, Any]) -> dict[str, Any]:
+    """字段投影：只保留分析层消费的字段，剔除大字段（0.7 债务项 2.3）。"""
+    return {k: d[k] for k in _KEEP_FIELDS if k in d}
+
+
 def load_all_results(results_dir: str) -> list[dict[str, Any]]:
-    """加载所有实验结果文件，展平为任务级列表。"""
+    """加载所有实验结果文件，展平为任务级列表（字段投影，剔除大字段）。"""
     all_tasks = []
     results_path = Path(results_dir)
     for f in sorted(results_path.glob("benchmark_*.json")):
@@ -343,9 +364,12 @@ def load_all_results(results_dir: str) -> list[dict[str, Any]]:
                 for baseline, bl_data in data["results"].items():
                     if "details" in bl_data:
                         for d in bl_data["details"]:
-                            d["baseline"] = baseline
-                            d["experiment_file"] = f.name
-                            all_tasks.append(d)
+                            # 0.7 债务项 2.3：字段投影后只保留分析层消费字段，
+                            # 再注入 baseline / experiment_file（渲染用）
+                            projected = _project_fields(d)
+                            projected["baseline"] = baseline
+                            projected["experiment_file"] = f.name
+                            all_tasks.append(projected)
         except Exception as e:
             print(f"警告: 跳过文件 {f.name}: {e}")
     return all_tasks

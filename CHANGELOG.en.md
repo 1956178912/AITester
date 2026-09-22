@@ -31,6 +31,33 @@ All notable changes to this project will be documented in this file. Format foll
     suggestion (lower_temperature) to an actual sampling temperature, forwarded through
     `BaseAgent._call_llm_with_cache`'s `temperature` parameter (previously observation-only).
 
+### Performance & tech-debt cleanup (0.7 debt items P2×8 landed, default behavior unchanged)
+- **2.2 Global wall-clock budget for LLM calls** (`config.py` + `src/agents/base_agent.py`):
+  new `LLM_CALL_BUDGET_SECONDS` (default 600s); `_call_llm` checks the budget before each
+  failover attempt and fast-fails when exceeded, avoiding tens of minutes of stall in
+  extreme "groups × models × retries" combinations.
+- **2.3 analyze_failures field projection** (`experiments/analyze_failures.py`):
+  `load_all_results` keeps only analysis-layer fields and drops large fields
+  (generated_test / test_output / execution_trace), cutting memory by an order of
+  magnitude when accumulating multiple batches.
+- **2.4 venv stats persist throttling** (`src/tools/dependency.py`):
+  `_record_venv_cache_event` skips disk IO when the last persist was <5s ago; unpersisted
+  events are merged back via `get_venv_cache_stats` and an atexit flush hook (no count loss,
+  double-lock lost-update semantics unchanged).
+- **2.5 Sliding-window parallel submission** (`experiments/run_benchmark.py`): extracted
+  `_run_tasks_sliding_window`, keeping in-flight futures ≤ 2×parallel instead of submitting
+  all 100+ tasks at once.
+- **1.4 Dead-delegate cleanup** (`src/agents/base_agent.py`): removed the pure-forwarding
+  `BaseAgent._find_balanced_json` staticmethod; tests now cover `helpers._find_balanced_json`
+  directly.
+- **3.4 Docs** (`.env.example`): document `AITESTER_LLM_CACHE` / `AITESTER_LLM_CACHE_DIR`.
+- **3.5 Docs** (`docs/performance_guide.md`): 2.4 retry pseudocode now uses
+  `base_wait * 2^attempt` and notes `LLM_RETRY_WAIT` no longer drives backoff.
+- **3.6 Key-naming convergence** (`config.local.example`): header declares `LLM_N_*` the
+  single source of truth; other templates are batch-script intermediate variables.
+- **3.7 Clone-URL verification**: `git ls-remote` confirms
+  `https://github.com/1956178912/AITester.git` is reachable and matches docs — no change needed.
+
 ## [0.7] - 2026-09-21 Cross-file repair phase 2 + data-integrity fix + research kickoff (A/B/C directions)
 
 ### Features (Direction A: code-quality deepening, default behavior unchanged)

@@ -19,7 +19,7 @@ import os
 import time
 from typing import Any
 
-from config import LLM_TIMEOUT, TEMPERATURE
+from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
 from src.agents.llm_client import (
     _DEFAULT_LLM_MAX_RETRIES,
     _call_zai,
@@ -34,7 +34,7 @@ from src.agents.llm_client import (
     _retry_with_exponential_backoff,
 )
 from src.tools.code_context import extract_focused_code
-from src.utils.helpers import _find_balanced_json, extract_code_block, extract_json_object
+from src.utils.helpers import extract_code_block, extract_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,10 @@ class BaseAgent:
         # 记录最后一次异常，用于最终报错信息
         last_error: Exception | None = None
 
+        # 0.7 债务项 2.2：单次调用的全局墙钟总预算。故障转移 × 模型 × 重试的
+        # 最坏组合可达数十分钟，超出预算即快速失败，避免单任务卡死整个基准跑批。
+        deadline = time.time() + LLM_CALL_BUDGET_SECONDS
+
         # 按 base_url 分组配置，支持同一 API 内切换模型
         # 结构：{base_url: [(api_key, model_name), ...]}
         api_groups: dict[str, list[tuple[str, str]]] = {}
@@ -203,6 +207,9 @@ class BaseAgent:
             is_zai = _is_zai_compatible(base_url)
 
             for api_key, model_name in models:
+                # 每次尝试新模型前先查预算，超出即快速失败（不再空耗剩余组合）
+                if time.time() > deadline:
+                    raise RuntimeError(f"LLM 调用超过全局预算 {LLM_CALL_BUDGET_SECONDS}s，快速失败")
                 try:
                     if is_zai:
                         # BigModel 等非 OpenAI 兼容接口：使用 zai SDK 专属调用
@@ -276,20 +283,6 @@ class BaseAgent:
             json.JSONDecodeError: 无法找到有效 JSON 时抛出。
         """
         return extract_json_object(text)
-
-    @staticmethod
-    def _find_balanced_json(text: str, start: int) -> str | None:
-        """
-        使用括号平衡法找到从 start 位置开始的第一个完整 JSON 对象（委托给公共工具函数）。
-
-        Args:
-            text: 待搜索的文本。
-            start: 起始搜索位置（应为 '{' 的位置）。
-
-        Returns:
-            完整的 JSON 字符串，未找到匹配时返回 None。
-        """
-        return _find_balanced_json(text, start)
 
     @staticmethod
     def _extract_python_code(text: str) -> str:
