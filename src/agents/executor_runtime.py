@@ -17,7 +17,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def run_pytest_with_retry(self, cmd: list, env: dict, project_root: str) -> tuple[str, Any]:
+def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_root: str) -> tuple[str, Any]:
     """
     带重试的 pytest 执行逻辑，最多尝试 2 次。
     超时/环境问题直接返回 EARLY_RETURN 标记，其他异常仅记录日志并返回空结果。
@@ -48,10 +48,19 @@ def run_pytest_with_retry(self, cmd: list, env: dict, project_root: str) -> tupl
                 break
             logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
         except subprocess.TimeoutExpired as e:
-            # TimeoutExpired 携带超时前已累积的部分 stdout/stderr（text 模式下为 str，
-            # 未产生时可能为 None）。合并进 last_output，让下游 Debugger 能拿到现场
-            # 快照而非空白文本（此前超时分支丢失了部分输出）。
-            partial_output = (e.output or "") + (e.stderr or "")
+            # TimeoutExpired 携带超时前已累积的部分 stdout/stderr。
+            # 本调用点恒传 text=True，运行期 output/stderr 为 str 或 None；
+            # mypy 按类型联合（str | bytes | None）报 "+" 运算，显式转 str 收窄
+            # （bytes 分支仅静态可达性兜底，运行期不会触发）。合并进 last_output，
+            # 让下游 Debugger 能拿到现场快照而非空白文本（此前超时分支丢失了部分输出）。
+            def _to_str(value: str | bytes | None) -> str:
+                if value is None:
+                    return ""
+                if isinstance(value, bytes):
+                    return value.decode("utf-8", errors="replace")
+                return value
+
+            partial_output = _to_str(e.output) + _to_str(e.stderr)
             last_output = partial_output
             error_msg = f"测试执行超时（>{self.timeout}s）"
             logger.error("测试执行超时（>%ds）: %s", self.timeout, e)

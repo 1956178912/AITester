@@ -61,7 +61,9 @@ def analyze_experiment_results(results: dict[str, Any]) -> dict[str, Any]:
     if not results:
         raise ValueError("实验结果不能为空")
 
-    analysis = {
+    # 显式标注 dict[str, Any]：字典值混含 list / dict，mypy 按字面量
+    # 推断为 dict[str, list[str]] 导致后续 analysis["comparison"] 赋值报错
+    analysis: dict[str, Any] = {
         "baselines": list(results.keys()),
         "comparison": {},
         "rankings": {},

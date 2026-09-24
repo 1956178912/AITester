@@ -281,8 +281,8 @@ class ReportGenerator:
         # 错误分类与上下文提取（一次性完成）：
         # 旧写法 classify() + context=None 导致 _analyze_root_cause/_generate_fix_suggestion
         # 的 ImportError 分支（依赖 context.module_name）永不可达、error_subtype 恒为 None
-        category, context = self._classifier.classify_with_context(error_output, parsed_cases)
-        context = context if context else None
+        category, context_raw = self._classifier.classify_with_context(error_output, parsed_cases)
+        context: ErrorContext | None = context_raw if context_raw else None
 
         # 分析根本原因
         root_cause = self._analyze_root_cause(category, context, error_output)

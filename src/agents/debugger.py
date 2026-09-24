@@ -135,7 +135,7 @@ class DebuggerAgent(BaseAgent):
         focus_function: str | None = None,
         target_module: str | None = None,
         temperature: float | None = None,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
 

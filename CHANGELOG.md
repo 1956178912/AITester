@@ -4,7 +4,159 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 路线图剩余缺口落地（2.3 / 3.1 / 3.3）
+## [Unreleased] - 代码质量轮次（mypy 真实语义错误清零 + analyze_results 主题拆分 + 0.7 债务项 1.6 落地）
+
+> 本轮为纯代码质量优化：mypy 真实语义错误从 26 个清零至 0、`experiments/analyze_results.py`
+> 2192 行按主题拆分为 4 个子模块；**不改变任何运行期行为与实验口径**。
+> 全量基线保持 **1659 passed / 0 failed**，ruff check / ruff format 全绿，
+> mypy `src/ --ignore-missing-imports` 0 错误（58 源文件），src 覆盖率 94%
+> （experiments/analyze_results.py 移出 src/ 统计范围，src/ 内语句数由 5216 降至 4911）。
+>
+> **mypy 真实语义错误修复（26 → 0，非 stub 缺失类）**：
+> - `src/graph/nodes.py`（10 处）：`state.get("test_plan")` 经
+>   `cast("dict[str, Any]", ...)` 收窄（documented behavior：缺席传 None，
+>   Generator 内 `isinstance(test_plan, dict)` 守卫覆盖，测试回归口径不变）；
+>   `cross_file_modules` 列表推导按 `str(d["target_module"])` 归一；
+>   `test_code` / `test_output` / `patch` 的 `str | None` → 调用点补 `or ""`
+>   归一（运行期等价：原代码 `.get(key, "")` 对 TypedDict 仍返回 `str | None`，
+>   `or ""` 只把 None 也归到空串，语义不变）；`coverage_delta` 列表按
+>   `float()` 归一；`patches[entry_module] = state["patch"]` 经
+>   `assert isinstance(patch_val, str)` 收窄（真值守卫后必为 str）。
+> - `src/tools/multi_candidate.py`（4 处）：`credit_score` 赋值与排序 key
+>   按 `float(credit_by_index.get(c.index, 0.0))` 归一（原 `dict.get` 返回
+>   `float | None`，mypy 在 lambda 内不做属性窄化）；`_coverage_trend` 的
+>   `deltas` 列表按 `float(t["coverage_delta"])` 归一。
+> - `src/rag/retriever.py`（8 处）：模块级 `chromadb` 改"预声明
+>   `chromadb: Any = None` 后 try-import"模式（与 `src/graph/rag.py` 同口径），
+>   消除 `None` 赋值到 Module 类型的报错；`collection.get/query` 返回的
+>   `metadatas` / `documents` 字段按 `.get("metadatas") or []` 与
+>   `results.get("documents") or [[]]` 收窄（chromadb stub 标 `list[...] | None`，
+>   运行期实际恒非 None，`or []` 兜底语义不变）。
+> - `src/observability/trace.py`（2 处）：`directory` 变量从 `str | None`
+>   收窄——`self._enabled = directory is not None` + `if self._enabled and
+>   directory is not None` 双重守卫，`os.makedirs(directory, ...)` 与
+>   `os.path.join(directory, ...)` 不再报 `str | None` 参数错。
+> - `src/reports/generator.py`（1 处）：`classify_with_context` 返回值改名
+>   `context_raw`，`context: ErrorContext | None = context_raw if context_raw
+>   else None` 显式标注（原 `context = context if context else None`
+>   自赋值导致 mypy 按窄类型 `ErrorContext` 拒绝 `| None` 赋值）。
+> - `src/cli/output.py`（1 处）：`Console` 模块属性改"预声明
+>   `Console: Any = None` 后 try-import 赋值"模式（原 `Console = None`
+>   在 `from rich.console import Console` 成功后，mypy 按运行期把
+>   `None` 赋给 `type[Console]` 报 Incompatible types；预声明 `Any` 消除
+>   该报错，rich 缺失时 `Console is None` 的降级路径不变）。
+>
+> **experiments/analyze_results.py 主题拆分（0.7 债务项 1.6 落地）**：
+> - 原单文件 2192 行、26 个私有统计函数堆叠，各函数间耦合低（都只消费
+>   `details[]`），按 0.7 审计清单建议拆为 3 个主题子模块 + 1 个 `__init__`：
+>   - `experiments/analysis_parts/rag_analysis.py`（164 行）：RAG 检索质量
+>     与 Token 效率主题（`_token_metrics_from_details` / `_rag_by_kind_from_details`
+>     / `_rag_hit_by_failure_category` / `_rag_token_efficiency` /
+>     `_rag_similarity_distribution`，5 函数，无组内耦合）；
+>   - `experiments/analysis_parts/convergence_analysis.py`（1050 行）：修复收敛 /
+>     质量代理 / 测试异味 / 跨基线对比主题（`_repair_convergence_curve` /
+>     `_smell_task_has_smell` / `_test_smell_detection` / `_repair_convergence_metrics`
+>     / `_convergence_token_efficiency` / `_difficulty_stratified_iterations` /
+>     `_cross_baseline_convergence_comparison` / `_cross_file_failure_analysis` /
+>     `_assertion_strength_proxy` / `_quality_proxy_metrics` / `_failure_top_categories`
+>     / `_failure_root_cause_trend` / `_mutation_score_metrics` /
+>     `_assertion_counts_from_row` / `_convergence_failure_modes` /
+>     `_boundary_case_coverage` / `_execution_trace_summary`，17 函数，
+>     组内共享 `_assertion_strength_proxy` / `_assertion_counts_from_row` /
+>     `_smell_task_has_smell` 三辅助，依赖 `ast` + `Counter`）；
+>   - `experiments/analysis_parts/cross_analysis.py`（87 行）：跨主题交叉分析
+>     （`_contamination_cross_analysis` / `_venv_cache_stats_snapshot`，2 函数，
+>     消费 `details[].contamination_risk_level`，不直接 import
+>     `detect_contamination`，避免死导入）；
+>   - `experiments/analysis_parts/__init__.py`：子包说明 + 主题导引。
+> - `experiments/analyze_results.py`（2192 → 959 行）保留公开入口
+>   `load_latest_benchmark` / `build_analysis` / `render_markdown` / `main`，
+>   从 3 个子模块 re-export 全部 24 个私有函数（`# noqa: E402,F401` 标注，
+>   历史 import 路径 `experiments.analyze_results._xxx` 不变），
+>   外部测试（`tests/test_smell_detection_v2.py` / `tests/test_experiments_scripts.py`）
+>   与同包脚本（`contamination_check` / `mutation_testing` / `run_benchmark`）
+>   的 import 均无需修改。
+> - 拆分原则：纯函数搬移，签名 / 返回值 / docstring / 默认参数零变化；
+>   组内共享辅助（如 `_assertion_strength_proxy` 被 `_quality_proxy_metrics` /
+>   `_assertion_counts_from_row` 消费）保持同文件归属，不跨文件 import，
+>   避免引入新的循环依赖。
+>
+> **验证**：ruff check / ruff format 全绿（189 + 4 文件）/ 全量 1659 passed
+> / 0 failed / mypy `src/ --ignore-missing-imports` 0 错误（58 源文件）/
+> src 覆盖率 94%（语句数 4911，较 0.7 基线 5216 减少 305 条——
+> `analyze_results.py` 移出 src/ 统计范围，非覆盖下降）/
+> 冒烟验证：`experiments.analyze_results.build_analysis` 空数据不崩、
+> 28 个 re-export 符号完整。
+>
+> 注：本轮 mypy 清零范围是 `src/`（CI 无 mypy 门禁，本机非门禁承诺）。
+> `experiments/` / `config.py` / `main.py` 等脚本无 mypy 历史门禁，不在
+> 本轮清零范围；`--ignore-missing-imports` 用于消除 scipy / datasets /
+> dbutils / chromadb 等无 stub 第三方库的 import-untyped 噪音。
+
+## [静态类型清零 + 代码质量清理] - 2026-09-23（mypy 全仓 0 错误，默认行为不变）
+
+> 本轮为纯代码质量优化：mypy 类型检查从 30+ 错误清零至 0、死代码与冗余
+> 清理、测试加速；**不改变任何运行期行为与实验口径**。
+> 全量基线推进至 **1659 passed / 0 failed**（较 0.7 的 1627 净增 32；
+> 本轮未增减用例，净增来自 0.7 之后已提交但 CHANGELOG 未单独成节的
+> 回归用例），ruff check / ruff format 全绿 / mypy 全仓 0 错误 /
+> src 覆盖率 94%。
+>
+> **静态类型修复（mypy 全仓清零）**：
+> - `src/utils/exceptions.py` / `src/config/config_manager.py` /
+>   `src/experiments/analysis.py` / `src/graph/nodes.py`：字典值混含
+>   str / int / dict / list 时补显式 `dict[str, Any]` 标注，消除 mypy
+>   按字面量窄化后的误报；
+> - `src/tools/code_context.py`：`_build_header` / `_collect_top_level_funcs`
+>   参数从 `ast.AST` 收窄为 `ast.Module`（`.body` 属性仅在 Module 上有）；
+> - `src/agents/executor_runtime.py`：`run_pytest_with_retry` 参数精确标注
+>   （`list[str]` / `dict[str, str]`），超时分支的 TimeoutExpired
+>   stdout/stderr 合并加 `_to_str` 归一（bytes 静态兜底 + text=True 运行期口径）；
+> - `src/agents/executor.py`：模块期属性挂载（15 处）与内部方法调用
+>   补 `# type: ignore[attr-defined]`（类属性绑定为运行期机制，测试
+>   patch 路径依赖，行为不变）；
+> - `src/agents/generator.py`：`_fix_import_module` 改为直接导入
+>   `is_similar_module_name` 纯函数（原经 `ExecutorAgent` 类属性挂载访问，
+>   消除运行期对类属性的依赖 + mypy attr-defined 误报）；
+> - `src/agents/llm_client.py`：`ChatOpenAI(openai_api_key=...)` 补
+>   `# type: ignore[call-arg]`（langchain-openai 接受该参数但 mypy 按
+>   严格 OpenAI SDK 签名校验报 arg-type）；
+> - `src/api/api_manager.py`：`cost_weight` 取值加 `float()` 归一
+>   （旧配置对象无该字段时 getattr 默认值 0.0 保真）；`messages` 参数
+>   补 `# type: ignore[arg-type]`（list[dict[str, str]] 与 openai SDK
+>   严格 ChatCompletionMessageParam 联合运行期兼容）；
+> - `src/db/mysql_client.py`：`cursor()` 加 `_pool` 非空 assert
+>   （双检锁初始化后 _pool 必非 None，assert 收窄类型供 mypy 检查）；
+>   安装 `types-PyMySQL` 消除 stub 缺失报错；
+> - `src/graph/rag.py`：可选导入改为"预声明 `TestCaseRetriever: Any`
+>   后 try-import"模式，消除 mypy "Cannot assign to a type"（chromadb
+>   缺失场景下模块属性置 None 的合法降级路径）；
+> - `src/rag/retriever.py`：chromadb 元数据值按 `float` 归一（3 处
+>   `_added_at` 读取），修正 `find_missing_modules` 返回 `set[str]`
+>   与 `executor_modes` 五元组标注；
+> - `src/agents/debugger.py`：`debug()` 返回值从 `dict[str, str]` 修正为
+>   `dict[str, Any]`（实际含 `adversarial_check` 嵌套 dict）；
+> - `src/cli/app.py` / `src/cli/output.py`：kwargs 字典显式标注
+>   `dict[str, object]` + `**` 展开补 ignore；rich 可选导入改
+>   "预声明 + try-import"模式（Table 延迟到调用期导入）。
+>
+> **代码质量清理**：
+> - `src/agents/llm_client.py` `_call_zai`：重试元组
+>   `(APIReachLimitError, APIStatusError, Exception)` → `(Exception,)`
+>   （两个具体子类被基类 Exception 覆盖，列举属死代码；zai 路径
+>   限流与普通错误不做区分，统一指数退避口径不变）；
+> - `src/utils/logging_utils.py` `setup_logger_safety`：加幂等短路
+>   （logger 与全部 handler 均已挂 SensitiveFilter 时直接返回，多入口
+>   重复调用时不再无谓累积过滤器实例；脱敏幂等语义不变）。
+>
+> **测试加速（不改变覆盖范围）**：
+> - `tests/test_api_manager.py` / `tests/test_api_manager_extended.py` /
+>   `tests/test_base_agent_extended.py`：限流/重试故障转移路径的
+>   `time.sleep` mock 化（原 3 组用例真实等待 5s/10s/14s/7s，
+>   mock 后套件耗时从 ~30s 降至 ~22s；mock 目标为 `time.sleep`，
+>   真实指数退避逻辑不被旁路，仅跳过等待）。
+
+## [0.7 路线图缺口落地] - 2026-09-22 路线图剩余缺口（2.3 / 3.1 / 3.3）
 
 ### 功能（默认行为不变，均经环境变量显式开启）
 - **2.3 复现测试专项生成**（`src/agents/generator.py` + `src/graph/nodes.py`）：

@@ -424,8 +424,13 @@ class TestCallFallbackScenarios:
         assert call_kwargs.get("max_tokens") == 100
 
     @patch("src.api.api_manager.openai.OpenAI")
-    def test_call_both_primary_and_fallback_rate_limited(self, mock_openai_class):
-        """主节点和备用节点都限流时最终抛出 RuntimeError（新版 SDK 构造方式）"""
+    @patch("src.api.api_manager.time.sleep")
+    def test_call_both_primary_and_fallback_rate_limited(self, mock_openai_class, mock_sleep):
+        """主节点和备用节点都限流时最终抛出 RuntimeError（新版 SDK 构造方式）
+
+        mock 掉 api_manager 内的 time.sleep：双节点限流各真实等待
+        （sleep 2s / 5s 合计 10s），不 mock 时本用例真实耗时 10s。
+        """
         # 新版 RateLimitError: RateLimitError(message, *, response, body)
         mock_resp = MagicMock()
         mock_resp.status_code = 429

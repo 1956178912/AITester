@@ -155,9 +155,21 @@ def setup_logger_safety(logger_name: str | None = None) -> None:
     """
     logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
 
+    # 幂等短路：logger 与全部 handler 均已挂脱敏过滤器时直接返回。
+    # setup_logger_safety 被多个模块/入口重复调用（logging_utils 模块加载、
+    # cli/app.py 导入期、嵌入式调用方）时，避免过滤器实例无谓膨胀。
+    # 注意：logger.handlers 为空时 all(...) 恒真，需联合 logger.filters 判断
+    # （logger 级无过滤器则仍需挂，handler 循环自然 no-op）。
+    logger_has_filter = any(isinstance(f, SensitiveFilter) for f in logger.filters)
+    handlers_have_filters = all(
+        all(isinstance(f, SensitiveFilter) for f in handler.filters) for handler in logger.handlers
+    )
+    if logger_has_filter and handlers_have_filters:
+        return
+
     filt = SensitiveFilter()
     # logger 级：拦截直接在该 logger 上记录的消息
-    if not any(isinstance(f, SensitiveFilter) for f in logger.filters):
+    if not logger_has_filter:
         logger.addFilter(filt)
     # handler 级：拦截经传播到达的消息（同一实例复用，脱敏幂等）
     for handler in logger.handlers:

@@ -253,7 +253,14 @@ def validate_configs() -> dict[str, Any]:
     Returns:
         验证结果字典
     """
-    results = {"total_configs": len(LLM_CONFIGS), "valid_configs": 0, "invalid_configs": 0, "issues": []}
+    # 显式标注字典值类型（list + int 混合），mypy 窄化 dict[str, Any] 后
+    # append / += 才能通过检查
+    results: dict[str, Any] = {
+        "total_configs": len(LLM_CONFIGS),
+        "valid_configs": 0,
+        "invalid_configs": 0,
+        "issues": [],
+    }
     for idx, config in enumerate(LLM_CONFIGS, start=1):
         # 检查必填字段
         if not config.api_key:

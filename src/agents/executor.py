@@ -103,11 +103,13 @@ class ExecutorAgent:
         """
         # 4.3 Docker 隔离执行（优先级最高：镜像内置依赖 + 容器完全隔离）
         if self.use_docker:
-            return self._execute_docker(test_code, target_file, target_function)
+            # 类属性运行期绑定（见文件底部 ExecutorAgent._execute_docker = execute_docker），
+            # mypy 按类签名校验报 attr-defined，显式忽略
+            return self._execute_docker(test_code, target_file, target_function)  # type: ignore[attr-defined]
 
         # 隔离沙箱路径：venv + 临时目录执行，避免依赖冲突与环境污染（P1 优化）
         if self.use_venv:
-            return self._execute_sandboxed(test_code, target_file, target_function)
+            return self._execute_sandboxed(test_code, target_file, target_function)  # type: ignore[attr-defined]
 
         return self._execute_local(test_code, target_file, target_function)
 
@@ -125,7 +127,7 @@ class ExecutorAgent:
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         target_dir = os.path.dirname(os.path.abspath(target_file))
 
-        fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)
+        fixed_test_code = self._auto_fix_imports(test_code, target_file, project_root)  # type: ignore[attr-defined]
         if fixed_test_code != test_code:
             logger.info("已自动修复模块导入路径")
 
@@ -167,7 +169,7 @@ class ExecutorAgent:
             if target_function:
                 cmd.extend(["-k", target_function])
 
-            output, last_result = self._run_pytest_with_retry(cmd, env, project_root)
+            output, last_result = self._run_pytest_with_retry(cmd, env, project_root)  # type: ignore[attr-defined]
             # 检查是否需要立即返回（超时/环境问题）
             if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
                 return {
@@ -178,8 +180,8 @@ class ExecutorAgent:
                     "error_info": last_result[1],
                 }
 
-            coverage = self._parse_coverage(output)
-            failed_cases = self._parse_failed_cases(output)
+            coverage = self._parse_coverage(output)  # type: ignore[attr-defined]
+            failed_cases = self._parse_failed_cases(output)  # type: ignore[attr-defined]
             passed = last_result is not None and last_result.returncode == 0
 
             result_dict = {
@@ -190,30 +192,32 @@ class ExecutorAgent:
             }
 
             if last_result and last_result.returncode != 0:
-                result_dict["error_info"] = self._build_error_info(last_result, output)
+                result_dict["error_info"] = self._build_error_info(last_result, output)  # type: ignore[attr-defined]
 
             return result_dict
         finally:
-            self._cleanup_temp_file(test_file)
+            self._cleanup_temp_file(test_file)  # type: ignore[attr-defined]
 
 
 # ─── 方法绑定：把子模块的纯函数以实例方法/静态方法形式挂回 ExecutorAgent ─────────
 # 外部调用方（tests、graph/nodes、cli）与现有 patch 路径
 # （src.agents.executor.ExecutorAgent.<method>）均以类属性方式访问，
 # 绑定后行为与拆分前完全一致。
-ExecutorAgent._run_pytest_with_retry = run_pytest_with_retry
-ExecutorAgent._cleanup_temp_file = staticmethod(cleanup_temp_file)
-ExecutorAgent._cleanup_sandbox = staticmethod(cleanup_sandbox)
-ExecutorAgent._execute_sandboxed = execute_sandboxed
-ExecutorAgent._execute_docker = execute_docker
-ExecutorAgent._build_error_info = staticmethod(build_error_info)
-ExecutorAgent._parse_coverage = staticmethod(parse_coverage)
-ExecutorAgent._parse_failed_cases = staticmethod(parse_failed_cases)
-ExecutorAgent._extract_module_name_from_file = staticmethod(extract_module_name_from_file)
-ExecutorAgent._cached_search_module_path = staticmethod(cached_search_module_path)
-ExecutorAgent._auto_fix_imports = staticmethod(auto_fix_imports)
-ExecutorAgent._extract_imports = staticmethod(extract_imports)
-ExecutorAgent._resolve_module_paths = staticmethod(resolve_module_paths)
-ExecutorAgent._build_sys_path_code = staticmethod(build_sys_path_code)
-ExecutorAgent._is_similar_module_name = staticmethod(is_similar_module_name)
-ExecutorAgent._apply_import_replacements = staticmethod(apply_import_replacements)
+# 类型说明：模块期属性赋值不改变类签名，mypy 会报 attr-defined；
+# 逐行 # type: ignore[attr-defined] 声明这是有意的运行期绑定（测试 patch 路径依赖）。
+ExecutorAgent._run_pytest_with_retry = run_pytest_with_retry  # type: ignore[attr-defined]
+ExecutorAgent._cleanup_temp_file = staticmethod(cleanup_temp_file)  # type: ignore[attr-defined]
+ExecutorAgent._cleanup_sandbox = staticmethod(cleanup_sandbox)  # type: ignore[attr-defined]
+ExecutorAgent._execute_sandboxed = execute_sandboxed  # type: ignore[attr-defined]
+ExecutorAgent._execute_docker = execute_docker  # type: ignore[attr-defined]
+ExecutorAgent._build_error_info = staticmethod(build_error_info)  # type: ignore[attr-defined]
+ExecutorAgent._parse_coverage = staticmethod(parse_coverage)  # type: ignore[attr-defined]
+ExecutorAgent._parse_failed_cases = staticmethod(parse_failed_cases)  # type: ignore[attr-defined]
+ExecutorAgent._extract_module_name_from_file = staticmethod(extract_module_name_from_file)  # type: ignore[attr-defined]
+ExecutorAgent._cached_search_module_path = staticmethod(cached_search_module_path)  # type: ignore[attr-defined]
+ExecutorAgent._auto_fix_imports = staticmethod(auto_fix_imports)  # type: ignore[attr-defined]
+ExecutorAgent._extract_imports = staticmethod(extract_imports)  # type: ignore[attr-defined]
+ExecutorAgent._resolve_module_paths = staticmethod(resolve_module_paths)  # type: ignore[attr-defined]
+ExecutorAgent._build_sys_path_code = staticmethod(build_sys_path_code)  # type: ignore[attr-defined]
+ExecutorAgent._is_similar_module_name = staticmethod(is_similar_module_name)  # type: ignore[attr-defined]
+ExecutorAgent._apply_import_replacements = staticmethod(apply_import_replacements)  # type: ignore[attr-defined]

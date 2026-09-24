@@ -254,21 +254,27 @@ def _dispatch_concurrent(
         parallel: 并发 worker 数。
         results: 结果列表，每个任务的成功/错误结果追加于此。
     """
-    dispatch_kwargs = dict(
-        expanded_files=expanded_files,
-        func=func,
-        max_iterations=max_iterations,
-        exec_timeout=exec_timeout,
-        coverage_threshold=coverage_threshold,
-        json_output=json_output,
-        parallel=parallel,
-        results=results,
-    )
+    # 两种进度反馈模式（纯文本 / rich 进度条）共享 7 个公共位置参数，
+    # 唯一差异是 on_progress（rich 推进度条）/ on_success（纯文本逐任务提示）
+    # 回调，避免重复展开 8 个位置参数两次（此前两段同构块易漂移）。
+    # 值类型与各参数签名一一对应（list[str] / str | None / int / float /
+    # bool / int / list[dict[str, Any]]）；标注 dict[str, object] 仅为 mypy
+    # 对 **kwargs 展开的静态校验放行（运行时值均为各参数期望类型）
+    shared_kwargs: dict[str, object] = {
+        "expanded_files": expanded_files,
+        "func": func,
+        "max_iterations": max_iterations,
+        "exec_timeout": exec_timeout,
+        "coverage_threshold": coverage_threshold,
+        "json_output": json_output,
+        "parallel": parallel,
+        "results": results,
+    }
     if not _rich_available():
         # 纯文本降级：--json 时不往 stdout 打进度（保持纯 JSON）
         _dispatch_parallel_tasks(
             on_success=None if json_output else (lambda name: click.echo(f"  ✓ 完成：{name}")),
-            **dispatch_kwargs,
+            **shared_kwargs,  # type: ignore[arg-type]
         )
         return
 
@@ -289,7 +295,7 @@ def _dispatch_concurrent(
         task = progress.add_task("运行中...", total=len(expanded_files))
         _dispatch_parallel_tasks(
             on_progress=lambda _f: progress.update(task, advance=1),
-            **dispatch_kwargs,
+            **shared_kwargs,  # type: ignore[arg-type]
         )
 
 

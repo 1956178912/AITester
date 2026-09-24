@@ -132,7 +132,7 @@ class SyntaxParseError(ParsingError):
             lineno: 行号（可选）。
             offset: 列偏移（可选）。
         """
-        context = {}
+        context: dict[str, Any] = {}
         if filename:
             context["filename"] = filename
         if lineno:

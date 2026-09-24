@@ -140,14 +140,14 @@ def _prepare_dependencies(
     fixed_test_code: str,
     module_file: str,
     sandbox_dir: str,
-) -> tuple[dict[str, str], str, str, dict[str, Any] | None, list[str]]:
+) -> tuple[dict[str, str], str, str, dict[str, Any] | None, set[str]]:
     """检测并安装缺失依赖，准备沙箱执行环境。
 
     Returns:
         (env, python_path, dep_install_note, sandbox_error_info, missing_modules) 五元组：
         env 为注入 PYTHONPATH 的环境变量副本，python_path 为执行解释器路径，
         dep_install_note 为依赖安装结论文本，sandbox_error_info 为安装失败诊断
-        （成功时 None），missing_modules 为缺失模块清单。
+        （成功时 None），missing_modules 为缺失模块集合。
     """
     # 函数内局部导入：保留测试 patch src.tools.dependency.* 的生效性
     # （模块顶层导入会在绑定后使 patch 失效，原实现即用局部导入）

@@ -652,8 +652,13 @@ class TestAPIManagerCall:
         assert call_kwargs.get("max_tokens") == 100
 
     @patch("src.api.api_manager.openai.OpenAI")
-    def test_call_fallback_on_rate_limit(self, mock_openai_class):
-        """测试限流时的故障转移"""
+    @patch("src.api.api_manager.time.sleep")
+    def test_call_fallback_on_rate_limit(self, mock_openai_class, mock_sleep):
+        """测试限流时的故障转移。
+
+        mock 掉 api_manager 内的 time.sleep：限流分支真实等待
+        （sleep 2s / 5s），不 mock 时本用例真实耗时 5s。
+        """
         import openai
 
         mock_client1 = MagicMock()

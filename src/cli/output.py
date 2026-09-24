@@ -10,14 +10,19 @@ import click
 
 # 尝试导入可选依赖，提供优雅降级
 # 注：进度条组件（rich.progress）由 app.py 在并发分支内自行延迟导入，此处不再转导
+# 运行期符号统一为 _console（Any 类型），mypy 不报 Cannot assign to a type
+# （与 src/graph/rag.py 的可选导入模式一致）
+Console: Any = None
 try:
-    from rich.console import Console
-    from rich.table import Table
+    from rich.console import Console as _Console
 
+    Console = _Console
+    _console: Any = _Console
     RICH_AVAILABLE = True
 except ImportError:
+    # rich 未安装：保持预声明的 None（mypy 按运行期值处理），调用方先查 RICH_AVAILABLE
+    _console = None
     RICH_AVAILABLE = False
-    Console = None
 
 
 # ─── 彩色输出工具 ─────────────────────────────────────────────────────────────
@@ -72,7 +77,10 @@ def print_rich_table(results: list[dict[str, Any]]) -> None:
     if not _rich_available():
         return
 
-    console = Console()
+    # Table 仅在 RICH_AVAILABLE=True 时导入（见模块顶部分支），此处延迟使用
+    from rich.table import Table
+
+    console = _console()
     table = Table(title="测试执行结果", show_header=True, header_style="bold magenta")
 
     table.add_column("状态", style="bold", width=8)

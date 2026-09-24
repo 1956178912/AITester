@@ -4,7 +4,199 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] - Remaining roadmap gaps landed (2.3 / 3.1 / 3.3)
+## [Unreleased] - Code-quality round (mypy real-semantic errors zeroed + analyze_results theme split + 0.7 debt item 1.6 landed)
+
+> This round is a pure code-quality pass: 26 real mypy semantic errors
+> (not missing-stub) zeroed to 0, and `experiments/analyze_results.py`
+> (2192 lines) split into 4 theme submodules.
+> **No runtime behavior or experiment semantics changed.**
+> Full baseline holds at **1659 passed / 0 failed**, ruff check / ruff
+> format all green, mypy `src/ --ignore-missing-imports` 0 errors
+> (58 source files), src coverage 94% (statement count dropped 5216 →
+> 4911 because `experiments/analyze_results.py` left the src/ tree;
+> not a real coverage regression).
+>
+> **mypy real-semantic fixes (26 → 0, non-stub-missing class)**:
+> - `src/graph/nodes.py` (10 sites): `state.get("test_plan")` narrowed
+>   via `cast("dict[str, Any]", ...)` (documented behavior: absent → None,
+>   Generator's `isinstance(test_plan, dict)` guard covers it, test
+>   regression semantics unchanged); `cross_file_modules` list
+>   comprehension normalized to `str(d["target_module"])`; `test_code` /
+>   `test_output` / `patch` `str | None` call sites get `or ""`
+>   normalization (runtime-equivalent: the original `.get(key, "")`
+>   already returns `str | None` for TypedDict, `or ""` just also maps
+>   None to empty string, semantics unchanged); `coverage_delta` list
+>   normalized to `float()`; `patches[entry_module] = state["patch"]`
+>   narrowed via `assert isinstance(patch_val, str)` (truthy guard
+>   guarantees str).
+> - `src/tools/multi_candidate.py` (4 sites): `credit_score` assignment
+>   and sort key normalized to `float(credit_by_index.get(c.index, 0.0))`
+>   (original `dict.get` returned `float | None`, mypy does not narrow
+>   attributes inside lambdas); `_coverage_trend`'s `deltas` list
+>   normalized to `float(t["coverage_delta"])`.
+> - `src/rag/retriever.py` (8 sites): module-level `chromadb` switched
+>   to the "pre-declare `chromadb: Any = None` then try-import" pattern
+>   (same idiom as `src/graph/rag.py`), eliminating `None`-assigned-to-
+>   Module error; `collection.get/query`'s `metadatas` / `documents`
+>   fields narrowed via `.get("metadatas") or []` and
+>   `results.get("documents") or [[]]` (chromadb stubs type these
+>   `list[...] | None`; runtime they are actually always non-None,
+>   `or []` fallback semantics unchanged).
+> - `src/observability/trace.py` (2 sites): `directory` variable narrowed
+>   from `str | None` — `self._enabled = directory is not None` plus
+>   `if self._enabled and directory is not None` double guard, so
+>   `os.makedirs(directory, ...)` and `os.path.join(directory, ...)`
+>   no longer report `str | None` argument errors.
+> - `src/reports/generator.py` (1 site): `classify_with_context` return
+>   renamed to `context_raw`, `context: ErrorContext | None =
+>   context_raw if context_raw else None` explicit annotation (the
+>   original self-assignment `context = context if context else None`
+>   made mypy reject the `| None` assignment to the narrowed
+>   `ErrorContext` type).
+> - `src/cli/output.py` (1 site): `Console` module attribute switched
+>   to the "pre-declare `Console: Any = None` then try-import" pattern
+>   (the original `Console = None` after a successful
+>   `from rich.console import Console` made mypy report
+>   Incompatible-types when assigning `None` to `type[Console]`;
+>   pre-declaring as `Any` eliminates the error; the rich-missing
+>   `Console is None` fallback path is unchanged).
+>
+> **experiments/analyze_results.py theme split (0.7 debt item 1.6)**:
+> - Original single file 2192 lines with 26 private stat functions
+>   stacked; each function is loosely coupled (all consume `details[]`).
+>   Split per the 0.7 audit finding into 3 theme submodules + 1
+>   `__init__`:
+>   - `experiments/analysis_parts/rag_analysis.py` (164 lines): RAG
+>     retrieval quality & token-efficiency theme (`_token_metrics_from_details`
+>     / `_rag_by_kind_from_details` / `_rag_hit_by_failure_category` /
+>     `_rag_token_efficiency` / `_rag_similarity_distribution`, 5
+>     functions, no intra-group coupling);
+>   - `experiments/analysis_parts/convergence_analysis.py` (1050 lines):
+>     repair-convergence / quality-proxy / test-smell / cross-baseline
+>     theme (`_repair_convergence_curve` / `_smell_task_has_smell` /
+>     `_test_smell_detection` / `_repair_convergence_metrics` /
+>     `_convergence_token_efficiency` / `_difficulty_stratified_iterations`
+>     / `_cross_baseline_convergence_comparison` /
+>     `_cross_file_failure_analysis` / `_assertion_strength_proxy` /
+>     `_quality_proxy_metrics` / `_failure_top_categories` /
+>     `_failure_root_cause_trend` / `_mutation_score_metrics` /
+>     `_assertion_counts_from_row` / `_convergence_failure_modes` /
+>     `_boundary_case_coverage` / `_execution_trace_summary`, 17
+>     functions, sharing intra-group helpers `_assertion_strength_proxy`
+>     / `_assertion_counts_from_row` / `_smell_task_has_smell`, depends
+>     on `ast` + `Counter`);
+>   - `experiments/analysis_parts/cross_analysis.py` (87 lines):
+>     cross-theme analysis (`_contamination_cross_analysis` /
+>     `_venv_cache_stats_snapshot`, 2 functions, consumes
+>     `details[].contamination_risk_level`, does not import
+>     `detect_contamination` to avoid a dead import);
+>   - `experiments/analysis_parts/__init__.py`: package doc + theme
+>     index.
+> - `experiments/analyze_results.py` (2192 → 959 lines) keeps the
+>   public entry points `load_latest_benchmark` / `build_analysis` /
+>   `render_markdown` / `main`, and re-exports all 24 private functions
+>   from the 3 submodules (`# noqa: E402,F401`), so the historical
+>   import path `experiments.analyze_results._xxx` is unchanged;
+>   external tests (`tests/test_smell_detection_v2.py` /
+>   `tests/test_experiments_scripts.py`) and same-package scripts
+>   (`contamination_check` / `mutation_testing` / `run_benchmark`) need
+>   no import changes.
+> - Split principle: pure function relocation, signature / return /
+>   docstring / default-arg zero change; intra-group shared helpers
+>   (e.g. `_assertion_strength_proxy` consumed by
+>   `_quality_proxy_metrics` / `_assertion_counts_from_row`) stay in
+>   the same file, no cross-file imports, avoiding new circular deps.
+>
+> **Verification**: ruff check / ruff format all green (189 + 4 files)
+> / full suite 1659 passed / 0 failed / mypy `src/ --ignore-missing-
+> imports` 0 errors (58 source files) / src coverage 94% (4911
+> statements, down from 0.7's 5216 because `analyze_results.py` left
+> the src/ tree — not a real coverage drop) / smoke test:
+> `experiments.analyze_results.build_analysis` on empty input does not
+> crash, all 28 re-export symbols present.
+>
+> Note: this round's mypy zeroing scope is `src/` (CI has no mypy
+> gate; this is a local non-gate commitment). `experiments/` /
+> `config.py` / `main.py` and other scripts have no mypy historical
+> gate and are out of scope; `--ignore-missing-imports` silences the
+> import-untyped noise from stub-less third-party libs (scipy /
+> datasets / dbutils / chromadb).
+
+## [Static-type zeroing + code-quality cleanup] - 2026-09-23 (mypy clean across the repo; default behavior unchanged)
+
+> This round is a pure code-quality pass: mypy went from 30+ errors to 0,
+> plus dead-code / redundancy cleanup and test-suite speedup.
+> **No runtime behavior or experiment semantics changed.**
+> Full baseline advanced to **1659 passed / 0 failed** (net +32 over 0.7's
+> 1627; this round added no tests, the delta is regression cases committed
+> since 0.7 that had no dedicated CHANGELOG section), ruff check / ruff
+> format all green / mypy 0 errors / src coverage 94%.
+>
+> **Static-type fixes (mypy zeroed across 19 files)**:
+> - Explicit `dict[str, Any]` annotations where dict values mix str / int /
+>   dict / list (`src/utils/exceptions.py` / `src/config/config_manager.py` /
+>   `src/experiments/analysis.py` / `src/graph/nodes.py`) — silences mypy's
+>   literal-narrowing false positives;
+> - `src/tools/code_context.py`: `_build_header` / `_collect_top_level_funcs`
+>   parameters narrowed from `ast.AST` to `ast.Module` (`.body` exists only
+>   on Module);
+> - `src/agents/executor_runtime.py`: `run_pytest_with_retry` parameters
+>   precisely annotated (`list[str]` / `dict[str, str]`); the timeout branch's
+>   TimeoutExpired stdout/stderr merge gains a `_to_str` normalizer (bytes
+>   static fallback + text=True runtime semantics);
+> - `src/agents/executor.py`: module-time attribute binding (15 sites) and
+>   internal method calls annotated with `# type: ignore[attr-defined]`
+>   (class-attribute binding is a runtime mechanism the test patch paths
+>   depend on — behavior unchanged);
+> - `src/agents/generator.py`: `_fix_import_module` now imports the
+>   `is_similar_module_name` pure function directly (previously reached via
+>   `ExecutorAgent` class-attribute binding — removes the runtime dependency
+>   on the class attribute and the mypy attr-defined false positive);
+> - `src/agents/llm_client.py`: `ChatOpenAI(openai_api_key=...)` annotated
+>   `# type: ignore[call-arg]` (langchain-openai accepts the kwarg but mypy
+>   validates against the strict OpenAI SDK signature);
+> - `src/api/api_manager.py`: `cost_weight` reads normalized via `float()`
+>   (getattr default 0.0 preserved for legacy config objects without the
+>   field); `messages` parameter annotated `# type: ignore[arg-type]`
+>   (`list[dict[str, str]]` is runtime-compatible with openai's strict
+>   `ChatCompletionMessageParam` union);
+> - `src/db/mysql_client.py`: `cursor()` gains a non-None assert on `_pool`
+>   (after double-checked-lock init `_pool` is always non-None; the assert
+>   narrows the type for mypy); `types-PyMySQL` installed to clear the
+>   missing-stub error;
+> - `src/graph/rag.py`: optional import rewritten to "pre-declare
+>   `TestCaseRetriever: Any` then try-import" — clears mypy's
+>   "Cannot assign to a type" (the chromadb-missing degradation path that
+>   sets the module attribute to None is a legitimate one);
+> - `src/rag/retriever.py`: chromadb metadata values normalized via
+>   `float` (3 `_added_at` reads); `find_missing_modules` return type and
+>   `executor_modes` 5-tuple annotations corrected;
+> - `src/agents/debugger.py`: `debug()` return annotation corrected from
+>   `dict[str, str]` to `dict[str, Any]` (the result carries the nested
+>   `adversarial_check` dict);
+> - `src/cli/app.py` / `src/cli/output.py`: kwargs dicts explicitly annotated
+>   `dict[str, object]` + `**`-unpack ignores; rich optional import rewritten
+>   to "pre-declare + try-import" (Table deferred to call time).
+>
+> **Code-quality cleanup (behavior unchanged)**:
+> - `src/agents/llm_client.py` `_call_zai`: retry tuple
+>   `(APIReachLimitError, APIStatusError, Exception)` → `(Exception,)`
+>   (both concrete subclasses are subsumed by the base `Exception` — listing
+>   them was dead code; the zai path treats rate-limit and ordinary errors
+>   identically, so the unified exponential-backoff semantics are unchanged);
+> - `src/utils/logging_utils.py` `setup_logger_safety`: idempotent short-circuit
+>   added (returns immediately when the logger and all handlers already carry
+>   a SensitiveFilter — repeated calls from multiple entry points no longer
+>   accumulate redundant filter instances; redaction idempotency unchanged).
+>
+> **Test-suite speedup (coverage unchanged; wall time ~30s → ~22s)**:
+> - `tests/test_api_manager.py` / `tests/test_api_manager_extended.py` /
+>   `tests/test_base_agent_extended.py`: rate-limit / failover-retry paths
+>   had their `time.sleep` calls mocked (the original three case-groups
+>   genuinely waited 5s/10s/14s/7s; the mock targets `time.sleep` so the
+>   real exponential-backoff logic is not bypassed — only the wait is skipped).
+
+## [0.7 roadmap gaps landed] - 2026-09-22 Remaining roadmap gaps (2.3 / 3.1 / 3.3)
 
 ### Features (default behavior unchanged; each opt-in via env var)
 - **2.3 Reproduction-test generation** (`src/agents/generator.py` + `src/graph/nodes.py`):

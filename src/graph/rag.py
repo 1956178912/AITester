@@ -18,21 +18,28 @@ from config import RAG_COLLECTION_NAME, RAG_PERSIST_PATH, RAG_TTL_SECONDS
 logger = logging.getLogger(__name__)
 
 # 可选导入 RAG 检索器（未安装 chromadb 时优雅降级，不影响主流程）
-# 使用延迟导入而非 top-level import，避免 chromadb 未安装时整个项目无法启动
+# 使用 try-import 而非 top-level import，避免 chromadb 未安装时整个项目无法启动；
+# 保持原"导入失败即置 None 同名模块属性"的模式，测试 patch 路径
+# （src.graph.rag.TestCaseRetriever / workflow_module.TestCaseRetriever）不变；
+# 预先声明为 Any 变量，mypy 按运行期值处理（不报 Cannot assign to a type），
+# 类型注解用字符串前向引用（TestCaseRetriever，惰性求值）
+TestCaseRetriever: Any = None
 try:
-    from src.rag.retriever import TestCaseRetriever
+    from src.rag.retriever import TestCaseRetriever as _TestCaseRetriever
 
+    TestCaseRetriever = _TestCaseRetriever
     RAG_MODULE_AVAILABLE = True
 except ImportError:
     RAG_MODULE_AVAILABLE = False
-    TestCaseRetriever = None
     logger.info("RAG 模块未就绪（chromadb 未安装），将跳过检索增强")
 
 # ─── RAG 检索器单例 ────────────────────────────────────────────────────────────
 # _rag_retriever 模块级缓存：避免每次节点调用都重新初始化 ChromaDB 客户端
 # ChromaDB 客户端初始化涉及模型加载和向量存储打开，耗时 2-6 秒
 # 单例化后整个工作流执行期间只初始化一次
-_rag_retriever = None
+# （from __future__ import annotations 下注解惰性求值，chromadb 缺失时
+#  模块期不会触发 TestCaseRetriever 解析；运行时经 TestCaseRetriever 取值）
+_rag_retriever: Any = None
 # 线程锁：保护单例初始化的双重检查锁定，确保多线程环境下的安全性
 _rag_lock = threading.Lock()
 # RAG 初始化失败标志：一旦构造抛异常即置位，后续节点调用直接返回 None 不再重试
@@ -40,7 +47,7 @@ _rag_lock = threading.Lock()
 _rag_init_failed = False
 
 
-def get_rag_retriever() -> TestCaseRetriever | None:
+def get_rag_retriever() -> Any:
     """
     获取 RAG 检索器单例实例（线程安全版本）。
 
@@ -67,6 +74,7 @@ def get_rag_retriever() -> TestCaseRetriever | None:
     # 加锁进行二次检查和初始化
     with _rag_lock:
         # 第二次检查：防止多线程并发时多次初始化
+        # 经 TestCaseRetriever 实例化（测试 patch 该属性即可注入 mock 构造器）
         if _rag_retriever is None and RAG_MODULE_AVAILABLE and TestCaseRetriever is not None:
             try:
                 # P1 优化：此前总是无参构造（内存模式，进程重启数据全丢）。

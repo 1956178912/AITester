@@ -76,7 +76,7 @@ def _truncate_long_body(source_lines: list[str], func_node: ast.AST) -> str:
     return "\n".join(head) + f"\n{indent}{_OMISSION_MARKER}\n" + "\n".join(tail)
 
 
-def _build_header(source_lines: list[str], tree: ast.AST) -> str:
+def _build_header(source_lines: list[str], tree: ast.Module) -> str:
     """收集模块级 import 语句（含 from X import Y），拼接为文件头。"""
     segments: list[str] = [
         _slice_source(source_lines, node) for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
@@ -84,7 +84,7 @@ def _build_header(source_lines: list[str], tree: ast.AST) -> str:
     return "\n".join(segments)
 
 
-def _collect_top_level_funcs(tree: ast.AST) -> dict[str, ast.AST]:
+def _collect_top_level_funcs(tree: ast.Module) -> dict[str, ast.AST]:
     """收集顶层函数，以及类体内的方法（方法名本身作为 key）。"""
     funcs: dict[str, ast.AST] = {}
     for node in tree.body:

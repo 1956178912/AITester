@@ -144,9 +144,9 @@ def extract_imports(test_code: str) -> list[str]:
 
 def resolve_module_paths(
     imports: list[str], actual_module_name: str, project_root: str, target_file: str
-) -> tuple[set, bool]:
+) -> tuple[set[str], bool]:
     """根据导入列表解析模块路径，返回 (module_dirs, needs_replacement)。"""
-    module_dirs = set()
+    module_dirs: set[str] = set()
     needs_replacement = False
     _MAX_SEARCH_DEPTH = 3
 

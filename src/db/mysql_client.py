@@ -112,6 +112,9 @@ class MySQLClient:
         从连接池获取连接，自动提交成功事务，回滚失败事务，
         并在 finally 中归还连接到池。
         """
+        # _pool 由 __init__ 双检锁初始化；mypy 沿实例路径看到 PooledDB | None
+        # （类属性默认 None），此处 assert 收窄为 PooledDB
+        assert self._pool is not None, "MySQLClient 连接池未初始化"
         conn = self._pool.connection()
         cur = conn.cursor()
         try:

@@ -16,7 +16,7 @@ import logging
 import os
 import tempfile
 import time
-from typing import Any
+from typing import Any, cast
 
 from config import (
     ENABLE_RAG,
@@ -164,8 +164,13 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     #   - rag_references: RAG 检索到的历史案例，用于风格参考（可为 None）
     #   - focus_function: 目标函数名（P0 大文件优化），超长代码时按该函数
     #     做 AST 智能截取，保留目标函数及直接依赖，避免 LLM 看不到完整上下文
+    # Planner 缺席时 test_plan 为 None（documented behavior：Generator 基于裸代码自行推断，
+    # 见 tests/test_workflow.py::test_generator_node_missing_test_plan_key_no_keyerror 回归口径）。
+    # mypy 按 TypedDict 报 dict|None → dict，显式 cast 收窄（运行期传 None，Generator 内
+    # isinstance(test_plan, dict) 守卫已覆盖 None 路径，行为不变）
+    test_plan = cast("dict[str, Any]", state.get("test_plan"))
     generated_test = agent.generate(
-        state.get("test_plan"),  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
+        test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
         state["target_code"],
         module_name=state.get("module_name", ""),
         rag_references=rag_refs,
@@ -183,7 +188,10 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     repro_test: str | None = None
     defect_description = state.get("diagnosis") or state.get("review_reason") or ""
     if _repro_test_enabled() and defect_description:
-        cross_modules = [d.get("target_module") for d in (state.get("cross_file_deps") or []) if d.get("target_module")]
+        # target_module 缺失/空串时跳过（falsy 过滤保持原语义），非空则纳入跨文件提示
+        cross_modules = [
+            str(d["target_module"]) for d in (state.get("cross_file_deps") or []) if d.get("target_module")
+        ]
         repro_test = agent.generate_repro_test(
             defect_description=defect_description,
             target_code=state["target_code"],
@@ -267,7 +275,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         docker_image=EXECUTOR_DOCKER_IMAGE,
     )
     result = agent.execute(
-        test_code=state["generated_test"],
+        test_code=state["generated_test"] or "",
         target_file=state["target_file"],
         target_function=state.get("target_function"),
     )
@@ -442,7 +450,8 @@ def _suggest_iteration_strategy(trace: list[dict[str, Any]], coverage_delta: flo
     """
     if len(trace) < 2:
         return None  # 首轮无历史，不调整
-    recent_deltas = [t.get("coverage_delta") for t in trace[-3:-1] if t.get("coverage_delta") is not None]
+    # 覆盖率 delta 过滤 None 后按 float 归一（trace 中 coverage_delta 可能缺失/非数值）
+    recent_deltas = [float(t["coverage_delta"]) for t in trace[-3:-1] if t.get("coverage_delta") is not None]
     if not recent_deltas:
         return None
     declining = all(d < 0 for d in recent_deltas[-2:]) if len(recent_deltas) >= 2 else False
@@ -517,8 +526,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     try:
         result = agent.debug(
             target_code=state["target_code"],
-            test_output=state.get("test_output", ""),
-            failed_cases=state.get("failed_cases", []) or [],
+            test_output=state.get("test_output") or "",
+            failed_cases=state.get("failed_cases") or [],
             rag_references=rag_refs,
             focus_function=state.get("target_function"),
             target_module=state.get("module_name"),
@@ -569,7 +578,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         get_retriever=get_rag_retriever,
     )
 
-    update = {
+    # 显式标注 dict[str, Any]：值类型混含 str / dict（adversarial_check），
+    # mypy 按字面量推断为 dict[str, str | dict[str, int]] 导致后续
+    # update["rag_stats"] = list[...] 赋值报错
+    update: dict[str, Any] = {
         "diagnosis": result["root_cause"],
         "error_category": result.get("error_category", "unknown"),
         "patch": result["patch"],
@@ -723,8 +735,8 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     candidates = generate_candidates(
         debugger=debugger,
         target_code=original_code,
-        test_output=state.get("test_output", ""),
-        failed_cases=state.get("failed_cases", []) or [],
+        test_output=state.get("test_output") or "",
+        failed_cases=state.get("failed_cases") or [],
         num_candidates=n,
         focus_function=state.get("target_function"),
         target_module=state.get("module_name"),
@@ -734,7 +746,7 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     best = select_best_candidate(
         candidates=candidates,
         original_code=original_code,
-        test_code=state.get("generated_test"),
+        test_code=state.get("generated_test") or "",
         target_file=state.get("target_file"),
         target_function=state.get("target_function"),
         use_execution_validation=use_exec,
@@ -765,7 +777,7 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     if best is None:
         # 多候选全部失败 → 回退到单补丁（保持历史行为，不引入劣化）
         logger.info("多候选无有效补丁，回退到单补丁流程")
-        return apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
+        return apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
     return apply_patch_to_code(original_code=original_code, patch=best.patch)
 
 
@@ -860,7 +872,9 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         # 其他模块的补丁由 _debugger_node 后续生成（二期）
         patches: dict[str, str] = {}
         if state.get("patch"):
-            patches[entry_module] = state["patch"]
+            patch_val = state["patch"]
+            assert isinstance(patch_val, str)  # TypedDict 标 str | None，真值守卫后必为 str
+            patches[entry_module] = patch_val
         # 尝试多文件应用（传依赖边 → 拓扑序）；失败时降级为单文件
         new_files, applied = apply_multi_file_patch(original_files, patches, entry_module, deps=dep_objects)
         new_code = new_files.get(entry_module, original_code)
@@ -875,7 +889,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     elif multi_candidate_available():
         new_code, applied = _select_multi_candidate_patch(state, original_code)
     else:
-        new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch", ""))
+        new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
 
     # 默认视为"未真正写盘"，任何安全检查失败都保持该值
     written = _safe_write_patch(original_code, new_code, applied, state)

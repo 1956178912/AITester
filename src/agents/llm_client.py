@@ -76,7 +76,9 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
         client = _llm_client_cache.get(key)
         if client is not None:
             return client
-        client = ChatOpenAI(
+        # langchain-openai 的 ChatOpenAI 接受 openai_api_key（与 OpenAI SDK 的
+        # api_key 等价）；mypy 按严格 API 签名校验会报 call-arg，显式忽略
+        client = ChatOpenAI(  # type: ignore[call-arg]
             model=model_name,
             temperature=temperature,
             openai_api_key=api_key,
@@ -299,13 +301,18 @@ def _call_zai(
         RuntimeError: 所有重试均失败时抛出，携带最后一次异常信息。
     """
     # 延迟导入：避免未安装 zai SDK 时影响主程序启动
-    from zai.core._errors import APIReachLimitError, APIStatusError
+    # （APIReachLimitError / APIStatusError 均为 Exception 子类，
+    #  重试元组直接以 Exception 兜底，无需逐个列举——子类在 except 中
+    #  被基类覆盖，列举属死代码）
+    from zai.core._errors import APIReachLimitError, APIStatusError  # noqa: F401
 
     # 复用缓存的智谱 AI 客户端（连接池跨调用复用）
     client = _get_or_create_zai_client(api_key, base_url)
 
-    # 定义 zai SDK 特有的可重试异常类型
-    _ZAI_RETRYABLE_EXCEPTIONS = (APIReachLimitError, APIStatusError, Exception)
+    # 定义 zai SDK 特有的可重试异常类型：限流（APIReachLimitError）/
+    # 服务端错误（APIStatusError）均按 Exception 兜底捕获，不做区分，
+    # 统一走指数退避（zai 限速严格，取较长基准 5s）
+    _ZAI_RETRYABLE_EXCEPTIONS = (Exception,)
 
     def _do_zai_call() -> str:
         """执行单次 zai API 调用（内部辅助函数）。"""

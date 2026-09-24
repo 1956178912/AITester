@@ -17,8 +17,15 @@
 > **1627 passed / 0 failed**（较 0.6 的 1612 净增 15 个用例），`ruff check .`
 > 全仓 0 告警（RUF059 残留已清零）。
 >
-> 下方各节内容仅作历史参考；最新静态检查结论与测试基线请以 CHANGELOG 0.7 节
-> 及 `ruff check .` / `pytest` 实时输出为准。
+> ⚠️ **2026-09-23 轮次（静态类型清零 + 代码质量清理）基线更新**：mypy 全仓
+> 0 错误（19 文件类型修复）、zai 重试元组去死子类、`setup_logger_safety`
+> 幂等短路、3 测试文件 sleep mock 化（套件 ~30s→~22s）完成后，测试基线推进至
+> **1659 passed / 0 failed**（较 0.7 的 1627 净增 32 个回归用例），
+> `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误 / src 覆盖率 94%。
+>
+> 下方各节内容仅作历史参考；最新静态检查结论与测试基线请以 CHANGELOG
+> "静态类型清零 + 代码质量清理"节及 `ruff check .` / `mypy src/ config.py` /
+> `pytest` 实时输出为准。
 
 ---
 

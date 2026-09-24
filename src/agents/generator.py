@@ -470,7 +470,10 @@ class GeneratorAgent(BaseAgent):
         Returns:
             修正后的代码字符串。
         """
-        from src.agents.executor import ExecutorAgent
+        # 直接导入底层纯函数（is_similar_module_name 实现于 executor_imports，
+        # 经 ExecutorAgent 类属性绑定仅为兼容历史 patch 路径）；避免运行期
+        # 依赖类属性挂载，同时消除 mypy attr-defined 误报
+        from src.agents.executor_imports import is_similar_module_name
 
         # 匹配所有 "from X import ..." 语句（X 为模块名）
         pattern = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
@@ -483,7 +486,7 @@ class GeneratorAgent(BaseAgent):
             if wm in GeneratorAgent._KNOWN_MODULES:
                 continue
             # 相似度门控：仅替换被测模块名的"笔误"变体，保留不相似的第三方库
-            if not ExecutorAgent._is_similar_module_name(wm, expected_module):
+            if not is_similar_module_name(wm, expected_module):
                 continue
             # 将错误的模块名替换为期望模块名
             code = code.replace(f"from {wm} import", f"from {expected_module} import")

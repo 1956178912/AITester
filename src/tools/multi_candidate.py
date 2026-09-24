@@ -254,9 +254,10 @@ def select_best_candidate(
         # 静态通过"的候选优先，与 BOOSTAPR 行级信用思想同方向）
         credits = line_level_credit_scores(original_code, static_ok)
         credit_by_index = {c["index"]: c["credit_score"] for c in credits["candidates"]}
-        # 计算每个候选的信用（未执行验证时 exec_factor=1.0，纯简洁性代理）
+        # 计算每个候选的信用（未执行验证时 exec_factor=1.0，纯简洁性代理）；
+        # 按 float 归一（line_level_credit_scores 的 credit_score 可能为 None）
         for c in static_ok:
-            c.credit_score = credit_by_index.get(c.index, 0.0)
+            c.credit_score = float(credit_by_index.get(c.index, 0.0))
         # 3.3 改进：轻量奖励预测器（REWARD_PREDICTOR_ENABLE=true 且提供历史
         # execution_trace 时）按预测奖励重排：覆盖率连降→偏最小改动，
         # 覆盖率停滞→偏更大改动（换根因视角）；否则保持基础信用排序。
@@ -267,7 +268,8 @@ def select_best_candidate(
             logger.info("奖励预测器（3.3）重排候选：trend=%s", pred.get("trend"))
         else:
             # 信用高 → 修改行少且静态通过；平手时按 index 稳定排序
-            static_ok.sort(key=lambda c: (-c.credit_score, c.index))
+            # （lambda 中 credit_score 按 float 归一，None 视为 0.0）
+            static_ok.sort(key=lambda c: (-(float(c.credit_score) if c.credit_score is not None else 0.0), c.index))
         return static_ok[0]
 
     # 执行验证模式：逐个候选写临时副本 + 跑测试，选通过率最高且覆盖率最高者
@@ -441,7 +443,8 @@ def _coverage_trend(execution_trace: list[dict[str, Any]] | None) -> str:
     """
     if not execution_trace:
         return "unknown"
-    deltas = [t.get("coverage_delta") for t in execution_trace if t.get("coverage_delta") is not None]
+    # 覆盖率 delta 过滤 None 后按 float 归一（trace 中 coverage_delta 可能缺失/非数值）
+    deltas = [float(t["coverage_delta"]) for t in execution_trace if t.get("coverage_delta") is not None]
     if len(deltas) < 2:
         return "unknown"
     recent = deltas[-2:]

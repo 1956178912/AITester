@@ -163,7 +163,8 @@ class APIManager:
             return float(self.config.node_cost_weights[model_name])
         # 从已注册节点反查 LLMConfig.cost_weight（_init_clients 时已建立映射）
         node = self.health_nodes.get(model_name)
-        if node is not None and getattr(node.config, "cost_weight", 0.0):
+        # cost_weight 缺失（旧配置对象）或 0.0（未配置）时回退 1.0 基准
+        if node is not None and float(getattr(node.config, "cost_weight", 0.0) or 0.0):
             return float(node.config.cost_weight)
         return 1.0
 
@@ -427,8 +428,14 @@ class APIManager:
         # 尚未完成）时，本次调用即探测本身：预记录"探测中"，由 _try_call_node
         # 内的成功 / 各异常分支的探测消费决定熔断器闭合还是重新开半程冷却。
         is_half_open_probe = self._enter_half_open_probe(node)
+        # openai SDK 消息参数严格类型是 ChatCompletionMessageParam 联合；
+        # 本模块统一用 list[dict[str, str]]（role/content 字面量），运行时
+        # 结构兼容。mypy 按字面量联合报 arg-type——对单行调用整体忽略
         response = client.chat.completions.create(
-            model=call_model, messages=messages, timeout=self.config.timeout, **kwargs
+            model=call_model,
+            messages=messages,  # type: ignore[arg-type]
+            timeout=self.config.timeout,
+            **kwargs,
         )
         elapsed_ms = (time.time() - start) * 1000
         node.mark_success(elapsed_ms)

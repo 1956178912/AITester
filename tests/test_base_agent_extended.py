@@ -478,8 +478,13 @@ class TestCallLlm:
     @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_raises_when_all_apis_fail(self, mock_get_configs, mock_chat_openai, mock_is_zai):
-        """所有 API 均失败时抛出 RuntimeError。"""
+    @patch("src.agents.llm_client.time.sleep")
+    def test_raises_when_all_apis_fail(self, mock_get_configs, mock_chat_openai, mock_is_zai, mock_sleep):
+        """所有 API 均失败时抛出 RuntimeError。
+
+        mock 掉 llm_client 内的 time.sleep：全失败路径会走指数退避
+        （每组 1s+2s+4s），不 mock 时本用例真实耗时 14s。
+        """
         mock_get_configs.return_value = [
             ("key1", "https://api1.com/v1", "m1"),
             ("key2", "https://api2.com/v1", "m2"),
@@ -496,8 +501,13 @@ class TestCallLlm:
     @patch("src.agents.base_agent._is_zai_compatible")
     @patch("src.agents.llm_client.ChatOpenAI")
     @patch("src.agents.base_agent._get_all_api_configs")
-    def test_empty_response_triggers_retry(self, mock_get_configs, mock_chat_openai, mock_is_zai):
-        """LLM 返回空响应时视为失败，尝试下一个模型/API。"""
+    @patch("src.agents.llm_client.time.sleep")
+    def test_empty_response_triggers_retry(self, mock_get_configs, mock_chat_openai, mock_is_zai, mock_sleep):
+        """LLM 返回空响应时视为失败，尝试下一个模型/API。
+
+        mock 掉 llm_client 内的 time.sleep：重试退避不真实等待
+        （不 mock 时本用例真实耗时 7s）。
+        """
         mock_get_configs.return_value = [
             ("key1", "https://api1.com/v1", "m1"),
         ]

@@ -16,13 +16,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # 延迟导入，避免未安装 chromadb 时整个项目无法启动
+# 预声明 chromadb 为 Any 变量（mypy 按运行期值处理，不报 Cannot assign to a type）
+chromadb: Any = None
 try:
-    import chromadb
+    import chromadb as _chromadb
 
+    chromadb = _chromadb
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
-    chromadb = None
 
 
 # 缓存配置常量
@@ -187,10 +189,19 @@ class TestCaseRetriever:
             return 0
 
         # 分离过期和未过期条目
-        valid_ids = []
-        expired_ids = []
-        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
-            added_at = (meta or {}).get("_added_at", 0)
+        # chromadb 元数据 value 类型宽松（str/int/float/bool 等），
+        # 显式按 float 归一，避免 mypy 报 "float - str" 运算
+        valid_ids: list[str] = []
+        expired_ids: list[str] = []
+        for doc_id, meta in zip(all_results["ids"], all_results.get("metadatas") or [], strict=False):
+            raw_added = (meta or {}).get("_added_at", 0)
+            try:
+                # chromadb 元数据 value 类型宽松（str/int/float/bool 等），
+                # 按 float 归一；非数值（如 SparseVector / list）回退 0.0
+                added_at: float = float(raw_added)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                # 元数据异常（非数值）：保守视为"未过期"（valid），由容量裁剪兜底
+                added_at = 0.0
             if current_time - added_at <= self.ttl_seconds:
                 valid_ids.append(doc_id)
             else:
@@ -206,10 +217,15 @@ class TestCaseRetriever:
             # 获取所有有效条目的时间戳
             valid_results = self.collection.get(ids=valid_ids, include=["metadatas"])
             # 按添加时间排序，保留最新的 max_cases 个
-            id_time_pairs = [
-                (doc_id, (meta or {}).get("_added_at", 0))
-                for doc_id, meta in zip(valid_results["ids"], valid_results["metadatas"], strict=False)
-            ]
+            # 元数据 value 按 float 归一（同上方，兼容非数值元数据键）
+            id_time_pairs: list[tuple[str, float]] = []
+            for doc_id, meta in zip(valid_results["ids"], valid_results.get("metadatas") or [], strict=False):
+                raw_added = (meta or {}).get("_added_at", 0)
+                try:
+                    ts: float = float(raw_added)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    ts = 0.0
+                id_time_pairs.append((doc_id, ts))
             id_time_pairs.sort(key=lambda x: x[1], reverse=True)  # 按时间降序
             remove_ids = [id for id, _ in id_time_pairs[self.max_cases :]]
 
@@ -351,8 +367,12 @@ class TestCaseRetriever:
         # 注意：distances 与 documents 同为双层嵌套（外层按 query_texts）
         distances_raw = results.get("distances")
         distances = distances_raw[0] if distances_raw else [0.0]
+        # chromadb query 结果中 documents / metadatas 可能为 None（空集 / mock 形状差异），
+        # 显式 or [] 收窄类型，运行期语义不变（zip 对空列表返回空迭代器）
+        documents = results.get("documents") or [[]]
+        metadatas = results.get("metadatas") or [[]]
         cases = []
-        for i, (_doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0], strict=False)):
+        for i, (_doc, meta) in enumerate(zip(documents[0], metadatas[0], strict=False)):
             dist = distances[i] if i < len(distances) else 0.0
             cases.append(
                 {
@@ -398,8 +418,12 @@ class TestCaseRetriever:
         # distances 与 documents 同为双层嵌套（外层按 query_texts）
         distances_raw = results.get("distances")
         distances = distances_raw[0] if distances_raw else [0.0]
+        # chromadb query 结果中 documents / metadatas 可能为 None（空集 / mock 形状差异），
+        # 显式 or [] 收窄类型，运行期语义不变（zip 对空列表返回空迭代器）
+        documents = results.get("documents") or [[]]
+        metadatas = results.get("metadatas") or [[]]
         repairs = []
-        for i, (_doc, meta) in enumerate(zip(results["documents"][0], results["metadatas"][0], strict=False)):
+        for i, (_doc, meta) in enumerate(zip(documents[0], metadatas[0], strict=False)):
             dist = distances[i] if i < len(distances) else 0.0
             repairs.append(
                 {
@@ -425,9 +449,14 @@ class TestCaseRetriever:
         if not all_results["ids"]:
             return 0
 
-        expired_ids = []
-        for doc_id, meta in zip(all_results["ids"], all_results["metadatas"], strict=False):
-            added_at = (meta or {}).get("_added_at", 0)
+        expired_ids: list[str] = []
+        for doc_id, meta in zip(all_results["ids"], all_results.get("metadatas") or [], strict=False):
+            raw_added = (meta or {}).get("_added_at", 0)
+            try:
+                added_at: float = float(raw_added)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                # 元数据异常（非数值）：保守视为"未过期"（valid）
+                added_at = 0.0
             if current_time - added_at > self.ttl_seconds:
                 expired_ids.append(doc_id)
 

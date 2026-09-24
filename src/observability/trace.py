@@ -141,10 +141,10 @@ class TraceSession:
         """
         directory = trace_directory if trace_directory is not None else trace_dir()
         self.task_id = task_id
-        self._enabled = bool(directory)
+        self._enabled = directory is not None
         self._file_path: str | None = None
         self._started_at: float | None = None
-        if self._enabled:
+        if self._enabled and directory is not None:
             os.makedirs(directory, exist_ok=True)
             safe_task = "".join(c if c.isalnum() or c in "-_." else "_" for c in task_id) or "task"
             self._file_path = os.path.join(directory, f"{safe_task}.trace.jsonl")

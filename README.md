@@ -14,10 +14,10 @@
 | **代码覆盖率** | 94% 总覆盖（src/；0.7 债务项 P2×8 落地新增 7 个回归用例后 1659 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.private` 已 gitignore）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 0.7 债务项 P2×8 落地（LLM 全局墙钟预算 `LLM_CALL_BUDGET_SECONDS` / analyze_failures 字段投影 / venv 落盘节流 / 并行提交滑窗 / 死委托清理 / 文档与密钥命名收敛）+ 路线图缺口 2.3/3.1/3.3 落地（复现测试 / 双向诊断 / 动态温度与奖励预测，均默认关）；此前 0.7 跨文件二期 + RAG 写锁热路径优化 + run_benchmark 静默降级归档修正 + R-01 SWE-bench 探路立项，全量 1659 passed / 零回归；详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-24 代码质量轮次（mypy 26 个真实语义错误清零 + `experiments/analyze_results.py` 按主题拆为 4 个子模块，0.7 债务项 1.6 落地，默认行为不变；全量 1659 passed / 零回归 / ruff 全绿）；此前 2026-09-23 静态类型清零 + 0.7 债务项 P2×8 + 路线图缺口 2.3/3.1/3.3 落地（均默认关），详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 ruff 15 告警清零 + 33 文件 format 归一） |
-| **最近改动** | ✅ 2026-09-21 0.7 债务项 P2×8 落地（LLM 全局墙钟预算 / analyze_failures 字段投影 / venv 落盘节流 / 并行滑窗 / 死委托清理 / 文档与命名收敛）+ 路线图缺口 2.3/3.1/3.3 落地（复现测试 / 双向诊断 / 动态温度与奖励预测，默认关）；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-24 代码质量轮次：mypy 真实语义错误 26→0（6 文件 18 处，纯类型标注，行为不变）+ `experiments/analyze_results.py` 2192 行按主题拆为 `analysis_parts/{rag,convergence,cross}_analysis.py`（4 文件，24 个私有函数 re-export 保持 import 路径不变）；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1627 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1567 个收集）
+# 运行所有单元测试（全量 1659 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1599 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -816,7 +816,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1627 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1659 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -826,7 +826,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（67 个测试文件，全量 1627 个 pytest 收集用例；精简环境约 1567 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（68 个测试文件，全量 1659 个 pytest 收集用例；精简环境约 1599 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1223,14 +1223,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1627 个测试用例 / 覆盖率 94% / Ruff 全绿
+- 全量 1659 个测试用例 / 覆盖率 94% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1627 passed / 0 failed / ruff 全绿 / 覆盖率 94%
+**验证**: 全量 1659 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ---
 
