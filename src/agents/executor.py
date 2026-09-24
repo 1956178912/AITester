@@ -36,6 +36,7 @@ from src.agents.executor_imports import (
 from src.agents.executor_modes import execute_docker, execute_sandboxed
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
 from src.agents.executor_runtime import cleanup_sandbox, cleanup_temp_file, run_pytest_with_retry
+from src.utils.credential_scrub import scrub_os_environ
 
 logger = logging.getLogger(__name__)
 
@@ -136,19 +137,11 @@ class ExecutorAgent:
             test_file = f.name
 
         try:
-            env = os.environ.copy()
             # 4.1 脱敏审计：子进程执行的是 LLM 生成的任意测试代码，
             # LLM 的 API 凭证不得随环境继承进被测沙箱（泄露面 +
-            # 生成代码意外外传向量）。剔除 API Key 类变量后注入。
-            for secret_key in (
-                "OPENAI_API_KEY",
-                "OPENAI_BASE_URL",
-                "ANTHROPIC_API_KEY",
-                "API_KEY",
-                "LLM_API_KEY",
-                "LLM_CONFIG_API_KEY",
-            ):
-                env.pop(secret_key, None)
+            # 生成代码意外外传向量）。按动态模式剔除 LLM_N_API_KEY 等
+            # （credential_scrub，三条执行链路共用，避免固定名单漂移）。
+            env = scrub_os_environ()
             # 尾随冒号防护：原 PYTHONPATH 未设置时直接拼接会产生 "<dir>:" 尾随空段
             # （sys.path 中空元素等价 CWD，同名文件可遮蔽第三方库）；空段过滤后 join
             env["PYTHONPATH"] = os.pathsep.join(

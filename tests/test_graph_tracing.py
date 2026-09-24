@@ -61,6 +61,7 @@ class TestGraphTracingThreadLocal:
         # 且 JSONL 写入了 task_start + task_end 两条
         import json
 
-        lines = [json.loads(l) for l in open(tmp_path / "t_local.trace.jsonl", encoding="utf-8")]
+        with open(tmp_path / "t_local.trace.jsonl", encoding="utf-8") as f:
+            lines = [json.loads(line) for line in f]
         assert [r["event"] for r in lines] == ["task_start", "task_end"]
         assert lines[1]["token_usage"]["total_tokens"] == 3

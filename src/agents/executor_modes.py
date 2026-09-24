@@ -18,6 +18,7 @@ from typing import Any
 from src.agents.executor_imports import auto_fix_imports, extract_module_name_from_file
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
 from src.agents.executor_runtime import cleanup_sandbox
+from src.utils.credential_scrub import scrub_os_environ
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +165,11 @@ def _prepare_dependencies(
     missing_modules = find_missing_modules(required_modules, extra_search_files=[module_file])
     missing_packages = suggest_package_names(missing_modules)
 
-    env = os.environ.copy()
+    env = scrub_os_environ()
     # 模块搜索路径以沙箱目录为首（追加原 PYTHONPATH 保留 pytest 等测试工具）；
     # 空段过滤防尾随冒号（语义同上，空元素等价 CWD 可遮蔽同名文件）
+    # 4.1 脱敏：env 经 scrub_os_environ 已剔除 LLM_N_API_KEY 等凭证，
+    # LLM 生成的测试代码在沙箱内读不到调用方的 API 凭证
     env["PYTHONPATH"] = os.pathsep.join(
         [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
     )
@@ -274,12 +277,14 @@ def execute_docker(
         try:
             # 容器启动开销（镜像拉取/文件系统初始化）远大于本地子进程，
             # 超时下限放宽到 120s 避免误判
+            # 4.1 脱敏：容器继承宿主环境（docker run 未加 --env 隔离），
+            # 经 scrub_os_environ 剔除 LLM_N_API_KEY 等凭证后再传入
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=max(self.timeout, 120),
-                env=os.environ,
+                env=scrub_os_environ(),
             )
         except subprocess.TimeoutExpired as e:
             return {

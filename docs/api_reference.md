@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-23（静态类型清零 + 代码质量清理轮：mypy 全仓 0 错误（19 文件类型修复）、zai 重试元组去死子类、`setup_logger_safety` 幂等短路、3 测试文件 sleep mock 化；默认行为不变；全量 1659 测试用例 / ruff 全仓 0 告警 / mypy 0 错误 / 覆盖率 94%）
+> 最后更新：2026-09-24（全面审查修复轮：凭证脱敏动态模式化 `credential_scrub.py` 三条执行链路统一（覆盖 `LLM_N_API_KEY` 全部编号）、CLI `finally` 块脆弱代码消除、多候选节点无副作用化、补丁函数定位正则→AST、`requirements.txt` 显式声明 `openai`；全量 1672 测试用例 / ruff 全仓 0 告警 / mypy 0 错误 / 覆盖率 94%）
 
 ---
 
@@ -713,6 +713,7 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| Unreleased（2026-09-24） | 2026-09-24 | 全面审查修复轮（安全 + 正确性 + 可维护性）：凭证脱敏动态模式化——新增 `src/utils/credential_scrub.py`（`scrub_os_environ()` 按 `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` 动态模式 + 通用 SDK 凭证剔除），本地 / venv / Docker 三条执行链路统一接入（此前本地只剔 7 项固定变量、venv/Docker 原样继承宿主环境，`LLM_N_API_KEY` 系列凭证可被生成代码读到）；CLI `finally` 块脆弱代码消除（`final_state` 显式 `None` 初始化 + `is not None` 判断，替代 `locals()` 检查）；多候选节点无副作用化（`_select_multi_candidate_patch` 统计改经 update dict 传递，不再原地写共享 TypedDict）；补丁函数定位正则→AST（`_find_function_range_ast` 读 `FunctionDef.lineno/end_lineno`，装饰函数 / 含注释函数体不再被过早截断，原代码无法解析时自动回退正则兜底）；`requirements.txt` 显式声明 `openai==2.54.0`（`api_manager.py` 顶层 import，此前靠传递依赖隐式安装）；删除 `.env.local.bak`（含真实密钥的备份文件）；修 5 处 tests/ ruff 瑕疵（I001/F401/RUF100/E741/SIM115）；全量 1672 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
 | Unreleased（2026-09-23） | 2026-09-23 | 静态类型清零 + 代码质量清理轮（默认行为不变）：mypy 全仓 0 错误（19 文件类型修复——字典值混含时补 `dict[str, Any]` 标注、`ast.Module` 参数收窄、TimeoutExpired 合并 `_to_str` 归一、模块期属性挂载补 ignore、zai 重试元组去死子类、`setup_logger_safety` 幂等短路、chromadb 元数据按 `float` 归一）；3 测试文件 sleep mock 化（套件 ~30s→~22s）；全量 1659 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
 | 0.7 | 2026-09-21 | 跨文件二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）：3.5 跨文件修复二期——多入口依赖分析（`analyze_multi_entry_deps`，一级展开 + 去重合并）+ 拓扑序补丁应用（`apply_multi_file_patch(deps=...)`，Kahn 算法被调用方先改，环按字典序打破，不传 deps 退字典序保一期口径）+ 修复计划缓存（`build_cross_file_repair_plan_cached`，依赖图指纹落盘 LLM 缓存目录，命中零 LLM 调用）；4.4 依赖缓存一致性修正（`list_venv_cache` getctime→getmtime，跨平台口径对齐 `clear_venv_cache`）；RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，写锁内只做 upsert，`--parallel` + RAG 场景入库不再排队，瞬时超容量放宽为"至多多并行度条、下一清理窗口收敛"，0.6 P1-4 驱逐语义不变）；run_benchmark 静默降级误导归档修正（指定数据集子集为空时回退 examples，归档 dataset 字段同步改回 + warning 明确标注"非原始请求数据集"，R-01 探路首跑暴露）；R-01 SWE-bench 补跑探路立项（`docs/design/swe_bench_probe.md`，发现 lite 子集 JSONL 为空 + 通用文件缺 `instance_code`——真实阻塞项是"数据集无可用源码"而非配额，选择 (c) 记录在案）；`llm_cache.py` docstring 标注"生产路径已改用文件缓存，本模块仅保留接口"（消除双套缓存认知漂移）；全量 1627 测试通过 / ruff 全仓 0 告警 / src 覆盖率 94% |
 | 0.6 | 2026-09-20 | P0 修复批（性能审计三路并行：死代码/技术债 + 性能热点 + 文档漂移，人工复核确认 3 项 P0）：P0-1 LLM OpenAI 路径零重试→指数退避故障转移（`_retry_with_exponential_backoff`（1s/2s/4s 退避）套到 OpenAI 路径，空响应也触发重试，重试耗尽才进入故障转移，与 zai 路径语义对齐）；P0-2 venv 统计双锁分离（计数锁 ns 级临界区 + 独立落盘锁保护"读磁盘/快照/写磁盘"整段，防 lost-update；简单移到计数锁外会触发 50+50 事件被合并成 50 的并发缺陷，已实证）；P0-3 幽灵开关实装（`API_CIRCUIT_BACKOFF` 默认 true / `API_PROMETHEUS_EXPORT` 默认 false 经 `config.py` 集中声明，`api_health.mark_failure` + `_probe_circuit_half_open` 接入退避开关、`api_manager.to_prometheus_text` 接入导出开关——六处文档承诺的开关首次拥有代码读取点）；multi_candidate 双次补丁应用消除（`static_validate_patch` 签名 2-tuple→3-tuple 复用 `apply` 结果）；ruff 15 告警清零 + 33 文件 format 归一；全量 1612 测试通过 / 零回归 / src 覆盖率 94% |

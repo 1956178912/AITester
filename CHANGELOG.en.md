@@ -4,7 +4,7 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] - Code-quality round (mypy real-semantic errors zeroed + analyze_results theme split + 0.7 debt item 1.6 landed)
+## [Unreleased] - Full-audit fixes + code-quality round (credential scrubbing factored into dynamic-pattern module + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + mypy real-semantic errors zeroed + analyze_results theme split)
 
 > This round is a pure code-quality pass: 26 real mypy semantic errors
 > (not missing-stub) zeroed to 0, and `experiments/analyze_results.py`
@@ -121,6 +121,50 @@ All notable changes to this project will be documented in this file. Format foll
 > gate and are out of scope; `--ignore-missing-imports` silences the
 > import-untyped noise from stub-less third-party libs (scipy /
 > datasets / dbutils / chromadb).
+
+> **Full-audit fixes (2026-09-24, security + correctness + maintainability)**:
+> Based on a full-repo audit, 5 issue fixes landed (test suite 1672 → all
+> green, mypy 0 errors):
+> - **Credential scrubbing factored into a function
+>   (`src/utils/credential_scrub.py` new)**: the local / venv / Docker
+>   execution paths all funnel through `scrub_os_environ()` to strip LLM
+>   credentials. Previously `executor.py` only popped 7 hard-coded vars
+>   (missing the `LLM_1_API_KEY` family) and the venv/Docker paths
+>   inherited the host `os.environ` as-is — LLM-generated test code could
+>   read the host's API keys. Now scrubbed via the dynamic pattern
+>   `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` (aligned with config's
+>   1-32 scan range) plus common SDK credentials; all three paths share
+>   one implementation, preventing list drift.
+> - **CLI `finally`-block fragile code (`src/cli/app.py`)**: the
+>   `end_task_trace` teardown relied on `"final_state" in locals()`
+>   (the name is unbound when `invoke` raises) — obscure semantics that
+>   a refactor could silently break. Replaced with `final_state:
+>   dict | None = None` + `is not None` check + `assert` narrowing
+>   (clears the mypy union errors).
+> - **Node purity (`src/graph/nodes.py`)**:
+>   `_select_multi_candidate_patch` previously wrote
+>   `state["multi_candidate_stats"]` in place (shared TypedDict, would
+>   cross-talk under `--parallel` threads). Now returns a 3-tuple
+>   `(code, applied, stats_update)`, folded into `_patch_applier_node`'s
+>   own update dict.
+> - **Patch function-location regex→AST
+>   (`src/tools/patch_applier.py`)**: the old `_find_function_range`
+>   treated `^#` comments / `^@` decorators / class methods as
+>   "boundaries", truncating decorated functions or function bodies with
+>   comments too early and producing mangled replacements. New
+>   `_find_function_range_ast` reads `FunctionDef.lineno/end_lineno` for
+>   exact positioning; falls back to the regex path automatically when
+>   the source can't parse (conservative, behavior unchanged).
+> - **Low-risk corrections**: deleted `.env.local.bak` (a backup file
+>   holding real keys); `llm_configs.json` — 3 deepseek entries had
+>   `provider_description` corrected from "通义千问 (Qwen)" to "DeepSeek
+>   hosted"; `requirements.txt` now declares `openai==2.54.0`
+>   explicitly (`api_manager.py` does a top-level `import openai`,
+>   previously satisfied only by a transitive dep); 5 ruff nits fixed
+>   (I001/F401/RUF100/E741/SIM115 under tests/).
+>
+> **Verification**: full suite 1672 passed / 0 failed, mypy `src/` 0
+> errors (59 source files), ruff check all green.
 
 ## [Static-type zeroing + code-quality cleanup] - 2026-09-23 (mypy clean across the repo; default behavior unchanged)
 

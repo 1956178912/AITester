@@ -10,8 +10,6 @@ InMemoryDataset（内置示例数据集）单元测试。
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestInMemoryDataset:
     def test_create_with_samples_returns_3_tasks(self) -> None:
@@ -54,7 +52,7 @@ class TestInMemoryDataset:
 
         ds = load_dataset("in_memory")
         before = len(list(ds))
-        ds._load_raw_data()  # noqa: SLF001 - 白盒测试内部方法
+        ds._load_raw_data()  # 白盒测试内部方法（SLF 规则未在启用规则集内，无需 noqa）
         assert len(list(ds)) == before  # 无副作用：方法既不清空也不追加
 
     def test_inmemory_dataset_field_completeness(self) -> None:

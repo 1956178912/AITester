@@ -5,6 +5,7 @@
     - helpers: 代码块/JSON 对象提取等文本处理工具
     - exceptions: 统一异常层次结构与重试/上下文装饰器
     - logging_utils: 日志敏感信息脱敏（SensitiveFilter）
+    - credential_scrub: 执行环境凭证剔除（本地/venv/Docker 三条执行链路共用）
 
 注意：本文件是包标记文件（package marker），必须存在——
 setuptools 的 find_packages() 只收集含 __init__.py 的目录，

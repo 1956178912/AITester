@@ -549,6 +549,10 @@ d_312 = venv_cache_dir(["pandas"], python_version="3.12")
 - 不同 Python 版本 → 不同目录，零交叉
 - `create_venv` 创建 venv 时若目录已存在且 `python_version` 匹配，直接复用（不重建）
 
-### 10.5 子进程环境凭证剔除（4.1 安全加固）
+### 10.5 子进程环境凭证剔除（4.1 安全加固，2026-09-24 动态模式化）
 
-ExecutorAgent 在本地 / venv / Docker 三种模式下，子进程环境均剔除 LLM API 凭证变量（`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`）。这堵住"生成代码继承宿主环境凭证"的泄露面——被测代码 / 生成的测试代码无法通过 `os.environ` 访问 LLM 密钥。
+ExecutorAgent 在本地 / venv / Docker 三种模式下，子进程环境均剔除 LLM API 凭证。这堵住"生成代码继承宿主环境凭证"的泄露面——被测代码 / 生成的测试代码无法通过 `os.environ` 访问 LLM 密钥。
+
+三条链路统一走 `src/utils/credential_scrub.py` 的 `scrub_os_environ()`（单一实现，避免名单漂移）：
+- **动态模式**：`LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL`（N 为 1-32，对齐 `config.py` 的 LLM provider 扫描口径）——覆盖 `LLM_1_API_KEY` 等全部编号，此前 venv/Docker 链路原样继承宿主 `os.environ`、本地链路只剔 7 个固定变量（覆盖不了 `LLM_N_*` 系列），现统一动态剔除；
+- **通用 SDK 凭证固定名单**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`（保留历史口径）。

@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1659 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: 1599 collected) |
-| **Unit Tests** | ✅ Full: 1659 passed, 0 failed; reduced environment: 1599 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 94% total coverage (src/; 0.7 debt items P2×8 landed with 7 regression cases, full suite 1659 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
+| **Total Tests** | ✅ 1672 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1612 collected) |
+| **Unit Tests** | ✅ Full: 1672 passed, 0 failed; reduced environment: ~1612 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 94% total coverage (src/; 0.7 debt items P2×8 landed with 7 regression cases + full-audit round added 13 cases, full suite 1672 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
-| **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.private` are gitignored); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-24 code-quality round: mypy 26 real-semantic errors zeroed to 0 (6 files, 18 sites, pure type annotations, behavior unchanged) + `experiments/analyze_results.py` (2192 lines) split by theme into 4 submodules (0.7 debt item 1.6 landed, default behavior unchanged; full suite 1659 passed / zero regression / ruff all green). Prior to that: 2026-09-23 static-type zeroing + 0.7 debt P2×8 + roadmap gaps 2.3/3.1/3.3 (all default-off). See [CHANGELOG.en.md](CHANGELOG.en.md). |
-| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6) |
-| **Recent Changes** | ✅ 2026-09-24 code-quality round: mypy real-semantic errors 26→0 (6 files, 18 sites, pure type annotations, behavior unchanged) + `experiments/analyze_results.py` (2192 lines) split by theme into `analysis_parts/{rag,convergence,cross}_analysis.py` (4 files; 24 private functions re-exported so import paths are unchanged); default behavior unchanged; see [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
+| **Latest Optimization** | ✅ 2026-09-24 full-audit fixes: credential scrubbing factored into dynamic-pattern `credential_scrub.py` shared by all three execution paths + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + 5 ruff nits cleared; full suite 1672 passed / zero regression / mypy 0 errors / ruff all green. Prior to that: 2026-09-24 code-quality round + 2026-09-23 static-type zeroing + 0.7 debt items landed. See [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round) |
+| **Recent Changes** | ✅ 2026-09-24 full-audit fixes: credential scrubbing factored into `src/utils/credential_scrub.py` (dynamic `LLM_N_API_KEY` pattern, shared by local/venv/Docker paths) + CLI `finally`-block fragile code eliminated (explicit `final_state` init) + multi-candidate node side-effect-free (stats passed via update dict) + patch function-location regex→AST (decorated/commented functions no longer truncated early) + `requirements.txt` now explicitly declares `openai==2.54.0`; see [CHANGELOG.en.md](CHANGELOG.en.md). |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1460 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1420 collected)
+# Run all unit tests (full 1672 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1612 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -713,7 +713,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1460 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1672 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -723,7 +723,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (68 test files, full 1659 collected pytest cases; reduced environment collects 1599 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (68 test files, full 1672 collected pytest cases; reduced environment collects ~1612 / auto-skips RAG and visualization cases, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1073,14 +1073,14 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
 - Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 3 mutation types)
 - Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
-- 1659 test cases / 94% coverage / Ruff all green (0.7 iteration; see iteration records below)
+- 1672 test cases / 94% coverage / Ruff all green (0.7 iteration; see iteration records below)
 
 **Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
 - AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
 - Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
 - Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-**Verification**: 1659 tests passed / 0 failed / Ruff all green / 94% coverage
+**Verification**: 1672 tests passed / 0 failed / Ruff all green / 94% coverage
 
 ## License
 

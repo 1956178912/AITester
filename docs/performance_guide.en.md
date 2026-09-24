@@ -548,6 +548,10 @@ d_312 = venv_cache_dir(["pandas"], python_version="3.12")
 - Different Python versions: different directories, zero cross-contamination
 - create_venv reuses an existing venv directory if the python_version matches (no rebuild)
 
-### 10.5 Subprocess Environment Credential Stripping (4.1 security hardening)
+### 10.5 Subprocess Environment Credential Stripping (4.1 security hardening, 2026-09-24 dynamic-pattern)
 
-In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credential variables from the subprocess environment (`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`). This closes the "generated code inherits host environment credentials" leak path — the code under test and the generated test code cannot access LLM keys via `os.environ`.
+In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credentials from the subprocess environment. This closes the "generated code inherits host environment credentials" leak path — the code under test and the generated test code cannot access LLM keys via `os.environ`.
+
+All three paths funnel through `scrub_os_environ()` in `src/utils/credential_scrub.py` (single implementation, no list drift):
+- **Dynamic pattern**: `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` (N = 1-32, aligned with the LLM-provider scan range in `config.py`) — covers every numbered provider such as `LLM_1_API_KEY`. Previously the venv/Docker paths inherited the host `os.environ` verbatim and the local path popped only 7 hard-coded vars (missing the `LLM_N_*` family); now scrubbed dynamically across all three.
+- **Common SDK credentials (fixed list, historical)**: `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`.

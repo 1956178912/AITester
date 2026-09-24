@@ -4,7 +4,7 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 代码质量轮次（mypy 真实语义错误清零 + analyze_results 主题拆分 + 0.7 债务项 1.6 落地）
+## [Unreleased] - 全面审查修复 + 代码质量轮次（凭证脱敏动态模式化 + CLI `finally` 脆弱代码消除 + 多候选节点无副作用化 + 补丁定位正则→AST + mypy 语义错误清零 + analyze_results 主题拆分）
 
 > 本轮为纯代码质量优化：mypy 真实语义错误从 26 个清零至 0、`experiments/analyze_results.py`
 > 2192 行按主题拆分为 4 个子模块；**不改变任何运行期行为与实验口径**。
@@ -92,6 +92,38 @@
 > `experiments/` / `config.py` / `main.py` 等脚本无 mypy 历史门禁，不在
 > 本轮清零范围；`--ignore-missing-imports` 用于消除 scipy / datasets /
 > dbutils / chromadb 等无 stub 第三方库的 import-untyped 噪音。
+
+> **全面审查修复（2026-09-24 安全 + 正确性 + 可维护性）**：
+> 基于全仓审查，落地 5 项问题修复（测试 1672 → 全绿，mypy 0 错误）：
+> - **凭证脱敏函数化（`src/utils/credential_scrub.py` 新增）**：
+>   本地 / venv / Docker 三条执行链路统一走 `scrub_os_environ()` 剔除 LLM
+>   凭证。原 `executor.py` 仅剔除 7 个固定变量（覆盖不了 `LLM_1_API_KEY`
+>   系列），venv/Docker 链路则原样继承宿主 `os.environ`——LLM 生成的测试
+>   代码可读到宿主 API 凭证。现按动态模式 `LLM_\d+_API_KEY` /
+>   `LLM_\d+_BASE_URL`（对齐 config 扫描口径 1-32）+ 通用 SDK 凭证剔除，
+>   三条链路共用单一实现，避免名单漂移。
+> - **CLI `finally` 块脆弱代码（`src/cli/app.py`）**：`end_task_trace` 收尾
+>   原依赖 `"final_state" in locals()` 检查（invoke 抛异常时该名字未绑定），
+>   语义晦涩且易被重构破坏。改 `final_state: dict | None = None` 初始化 +
+>   `is not None` 判断 + `assert` 收窄（mypy union 报错消除）。
+> - **节点无副作用（`src/graph/nodes.py`）**：`_select_multi_candidate_patch`
+>   原原地写 `state["multi_candidate_stats"]`（共享 TypedDict，`--parallel`
+>   线程下会串扰），改返回 3 元组 `(code, applied, stats_update)`，由
+>   `_patch_applier_node` 并入自身 update dict。
+> - **补丁函数定位正则→AST（`src/tools/patch_applier.py`）**：原
+>   `_find_function_range` 把 `^#` 注释 / `^@` 装饰器 / 类方法误当"边界"，
+>   被装饰函数或含注释函数体被过早截断、替换出残缺代码。新增
+>   `_find_function_range_ast` 读 `FunctionDef.lineno/end_lineno` 精确定位；
+>   原代码无法解析时自动回退正则兜底（保守，行为不变）。
+> - **低风险修正**：删除 `.env.local.bak`（含真实密钥的备份文件）；
+>   `llm_configs.json` 3 条 deepseek 条目 `provider_description` 由
+>   "通义千问"改为"DeepSeek 托管"；`requirements.txt` 显式声明
+>   `openai==2.54.0`（`api_manager.py` 顶层 `import openai`，此前靠
+>   传递依赖隐式安装）；修 5 处 ruff 瑕疵（tests/ 下 I001/F401/RUF100/
+>   E741/SIM115）。
+>
+> **验证**：全量 1672 passed / 0 failed，mypy `src/` 0 错误（59 源文件），
+> ruff check 全绿。
 
 ## [静态类型清零 + 代码质量清理] - 2026-09-23（mypy 全仓 0 错误，默认行为不变）
 

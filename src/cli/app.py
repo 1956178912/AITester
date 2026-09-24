@@ -346,14 +346,24 @@ def _run_single_task(
         state["task_uuid"],
         task_meta={"file": target_file, "func": func or "all", "dataset": "cli"},
     )
+    # 初始化 final_state 为 None：graph.invoke 抛异常（recursion_limit 等）时，
+    # finally 收尾分支走 None 路径而非依赖 locals() 检查——后者语义晦涩且
+    # 任何在 invoke 前给 final_state 赋值的重构都会让该分支恒为 None 而无人察觉
+    final_state: dict[str, Any] | None = None
     try:
         final_state = graph.invoke(state)
     finally:
         # 追踪收尾在 finally：工作流崩溃（如 recursion_limit）时仍记录 task_end
         end_task_trace(
-            final_state.get("test_passed") if "final_state" in locals() else None,
+            final_state.get("test_passed") if final_state is not None else None,
             token_snapshot=token_usage.get_usage().as_dict(),
         )
+
+    # graph.invoke 是 LangGraph 同步调用，正常返回必为非 None dict；为 None 说明
+    # invoke 内部状态异常（非预期），按失败结果处理而非 NPE。mypy 沿"已赋值"
+    # 路径仍判 dict|None（invoke 返回 Any 但 try/finally 语义下不做收窄），显式 assert
+    # 收窄，运行期异常路径已由上层 _run_single_task 的调用方捕获
+    assert final_state is not None, "graph.invoke 未返回状态（非预期）"
 
     # 覆盖率达标判定：无覆盖率数据（None）时为 None（未知），否则与阈值比较
     # 注意用 is not None 判断——0.0 是合法的"覆盖率数据"，不可被 falsy 误判为缺失

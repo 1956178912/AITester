@@ -23,6 +23,14 @@
 > **1659 passed / 0 failed**（较 0.7 的 1627 净增 32 个回归用例），
 > `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误 / src 覆盖率 94%。
 >
+> ⚠️ **2026-09-24 轮次（全面审查修复）基线更新**：凭证脱敏动态模式化
+> （`src/utils/credential_scrub.py` 新增，本地/venv/Docker 三条执行链路统一，
+> 覆盖 `LLM_N_API_KEY` 全部编号）、CLI `finally` 块脆弱代码消除、多候选节点
+> 无副作用化、补丁函数定位正则→AST、`requirements.txt` 显式声明 `openai`、
+> 5 处 tests/ ruff 瑕疵清零完成后，测试基线推进至
+> **1672 passed / 0 failed**（较 09-23 的 1659 净增 13 个用例），
+> `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误 / src 覆盖率 94%。
+>
 > 下方各节内容仅作历史参考；最新静态检查结论与测试基线请以 CHANGELOG
 > "静态类型清零 + 代码质量清理"节及 `ruff check .` / `mypy src/ config.py` /
 > `pytest` 实时输出为准。

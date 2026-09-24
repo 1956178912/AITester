@@ -708,15 +708,17 @@ def _write_file_atomic(path: str, content: str) -> None:
         raise
 
 
-def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> tuple[str, bool]:
+def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> tuple[str, bool, dict[str, Any]]:
     """3.1 多候选补丁：生成 N 候选 + 静态筛选 + 执行验证，返回最优候选。
 
     无有效候选（全静态拒绝 / 执行全失败）时回退到 state 中的单补丁，
     保证多候选策略不会比原单补丁路径更差（只多不少）。
 
-    5.2 持续细化：把多候选统计写入 state["multi_candidate_stats"]
+    5.2 持续细化：把多候选统计放入返回的 update dict
     （candidates / static_passed / exec_validated / selected），供
     refine_failure_category 识别 MULTI_CANDIDATE_ALL_REJECTED 类别。
+    经 update dict 传递而非原地写 state（节点函数保持无副作用约定，
+    避免 --parallel 线程下共享 TypedDict 串扰）。
 
     执行验证开关：环境变量 MULTI_CANDIDATE_EXEC_VALIDATE=true 时启用
     逐候选跑测试（成本更高但筛选更准），默认关闭走纯静态筛选。
@@ -727,8 +729,8 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
         original_code: 本轮修复的原始被测代码。
 
     Returns:
-        (最优候选应用后的代码, 是否成功应用)。回退单补丁时与原
-        apply_patch_to_code 同口径。
+        (最优候选应用后的代码, 是否成功应用, update dict 含 multi_candidate_stats)。
+        回退单补丁时与原 apply_patch_to_code 同口径。
     """
     n = multi_candidate_count()
     debugger = DebuggerAgent()
@@ -768,17 +770,23 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     )
     # 5.2 持续细化：记录多候选统计（供 refine_failure_category 识别
     # MULTI_CANDIDATE_ALL_REJECTED：candidates>0 且 static_passed==0）
-    state["multi_candidate_stats"] = {
-        "candidates": len(candidates),
-        "static_passed": static_passed_count,
-        "exec_validated": use_exec,
-        "selected": best.index if best else None,
+    # 走 update dict 而非原地写 state（节点函数应保持无副作用；state 是
+    # LangGraph 共享 TypedDict，原地写入在 --parallel 线程下会串扰）
+    stats_update: dict[str, Any] = {
+        "multi_candidate_stats": {
+            "candidates": len(candidates),
+            "static_passed": static_passed_count,
+            "exec_validated": use_exec,
+            "selected": best.index if best else None,
+        },
     }
     if best is None:
         # 多候选全部失败 → 回退到单补丁（保持历史行为，不引入劣化）
         logger.info("多候选无有效补丁，回退到单补丁流程")
-        return apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
-    return apply_patch_to_code(original_code=original_code, patch=best.patch)
+        code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
+        return code, applied, stats_update
+    code, applied = apply_patch_to_code(original_code=original_code, patch=best.patch)
+    return code, applied, stats_update
 
 
 def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: AITesterState) -> bool:
@@ -845,6 +853,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # （可选）执行验证 → 选最优候选作为本轮补丁。任一环节无有效候选时
     # 回退到 state 中已有的单补丁（state["patch"]），不引入劣化。
     # ── 3.5 跨文件修复：cross_file_deps 非空时走多文件补丁路径 ─────────────
+    # 多候选分支的额外状态更新（multi_candidate_stats，经 update dict 传递）
+    multi_candidate_update: dict[str, Any] = {}
     new_code: str
     applied: bool
     cross_file_deps = state.get("cross_file_deps") or []
@@ -887,7 +897,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             fallback_files, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
             new_code = fallback_files.get(entry_module, original_code)
     elif multi_candidate_available():
-        new_code, applied = _select_multi_candidate_patch(state, original_code)
+        new_code, applied, multi_candidate_update = _select_multi_candidate_patch(state, original_code)
     else:
         new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
 
@@ -919,6 +929,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         "target_code": effective_code,
         "repair_history": history,
         "iteration": state.get("iteration", 0) + 1,
+        **multi_candidate_update,
     }
 
 

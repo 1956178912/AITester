@@ -73,9 +73,41 @@ def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
     return has_docstring or has_import or (patch_func_count >= 2 and original_func_count >= 2)
 
 
+def _find_function_range_ast(original_code: str, func_name: str) -> tuple[int, int] | None:
+    """
+    用 AST 查找顶层函数在代码中的起止行范围（1-based 行号，ast 口径）。
+
+    AST 精确定位比正则边界启发式更可靠：
+    - 正则版（原 _find_function_range）把 `^#` 注释、`^@` 装饰器、类方法都当
+      "边界"，遇到被装饰函数或含注释的函数体时过早截断，替换出残缺代码；
+    - AST 直接读 ast.FunctionDef.lineno / end_lineno，嵌套定义/装饰器/注释
+      都不干扰。
+
+    Args:
+        original_code: 原始代码全文。
+        func_name: 目标函数名（顶层 def，非嵌套）。
+
+    Returns:
+        (start_lineno, end_lineno) 1-based 闭区间（ast 行号）；
+        未找到顶层同名函数或代码无法解析时返回 None（调用方回退正则路径）。
+    """
+    try:
+        tree = ast.parse(original_code)
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            # end_lineno 在 Python 3.8+ 恒有；兜底取 body 末行。
+            # getattr 回退取 int（运行期 3.8+ 必有该属性，mypy 按 stub 的
+            # Optional[int] 报 None 分支，显式 `or node.lineno` 收窄为 int）
+            end = getattr(node, "end_lineno", None) or node.lineno
+            return node.lineno, end
+    return None
+
+
 def _find_function_range(lines: list[str], func_name: str, start_idx: int) -> tuple[int, int]:
     """
-    查找函数在代码中的起止行范围。
+    查找函数在代码中的起止行范围（正则启发式，AST 不可用时的兜底）。
 
     Args:
         lines: 代码行列表。
@@ -149,25 +181,39 @@ def apply_patch_to_code(
         return original_code, False
 
     patch_func_name = func_match.group(1)
-    # 将原代码按行分割，便于按行号定位和替换
+
+    # AST 优先定位目标函数行范围；AST 不可用时（原代码无法解析）
+    # 回退正则启发式（历史行为，保守）。
+    # ast.FunctionDef.lineno 指向 `def` 行（不含装饰器），与正则路径
+    # 定位口径一致；end_lineno 为函数体末行（1-based 闭区间）。
+    # 统一转 0-based 切片索引：start_idx = lineno - 1（`def` 行）；
+    # end_idx = end_lineno（末行下一行），替换 lines[:start] + lines[end:]
+    # 恰好替换"def 行到函数体末行"，保留装饰器（与正则路径同口径）。
+    ast_range = _find_function_range_ast(original_code, patch_func_name)
+    if ast_range is not None:
+        start_idx = ast_range[0] - 1  # 0-based `def` 行
+        end_idx = ast_range[1]        # 0-based 末行下一行
+    else:
+        # 将原代码按行分割，便于按行号定位和替换
+        lines = original_code.split("\n")
+        start_idx = None
+
+        # 遍历原代码行，定位目标函数的起始行
+        # 预编译函数定义匹配正则（避免逐行重复编译）
+        func_def_re = re.compile(rf"^def\s+{re.escape(patch_func_name)}\s*\(")
+        for i, line in enumerate(lines):
+            if func_def_re.match(line):
+                start_idx = i
+                break
+
+        # 未找到目标函数，返回原代码
+        if start_idx is None:
+            return original_code, False
+
+        # 查找函数结束位置（正则兜底路径）
+        _, end_idx = _find_function_range(lines, patch_func_name, start_idx)
+
     lines = original_code.split("\n")
-    start_idx = None
-
-    # 遍历原代码行，定位目标函数的起始行
-    # 预编译函数定义匹配正则（避免逐行重复编译）
-    func_def_re = re.compile(rf"^def\s+{re.escape(patch_func_name)}\s*\(")
-    for i, line in enumerate(lines):
-        if func_def_re.match(line):
-            start_idx = i
-            break
-
-    # 未找到目标函数，返回原代码
-    if start_idx is None:
-        return original_code, False
-
-    # 查找函数结束位置
-    _, end_idx = _find_function_range(lines, patch_func_name, start_idx)
-
     # Step 5: 执行替换 — 将原函数行范围替换为补丁函数代码
     patch_lines = clean_patch.split("\n")
     # 拼接新代码：原代码[起始前] + 空行 + 补丁行 + 空行 + 原代码[结束后的]

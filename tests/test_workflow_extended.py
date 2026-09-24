@@ -834,9 +834,13 @@ class TestDefaultOffFeatureBranches:
         monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [best])
         monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: best)
         monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: (patch, True))
-        new_code, applied = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        new_code, applied, stats = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
         assert applied is True
         assert new_code == "def f():\n    return 2\n"
+        # 5.2：多候选统计经 update dict 传递（不再原地写 state）
+        assert stats["multi_candidate_stats"]["candidates"] == 1
+        assert stats["multi_candidate_stats"]["static_passed"] == 1
+        assert stats["multi_candidate_stats"]["selected"] == 0
 
     def test_multi_candidate_fallback_to_single_patch(self, monkeypatch):
         """无有效候选（select 返回 None）→ 回退单补丁，不引入劣化。"""
@@ -850,9 +854,11 @@ class TestDefaultOffFeatureBranches:
         monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [])
         monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: None)
         monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: ("fallback_code", True))
-        new_code, applied = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        new_code, applied, stats = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
         assert applied is True
         assert new_code == "fallback_code"
+        # 回退路径也需返回 update dict（含统计，candidates=0）
+        assert stats["multi_candidate_stats"]["candidates"] == 0
 
     def test_multi_candidate_exec_validate_enabled(self, monkeypatch):
         """MULTI_CANDIDATE_EXEC_VALIDATE=true → 构造 ExecutorAgent 做执行验证。"""
@@ -928,7 +934,7 @@ class TestDefaultOffFeatureBranches:
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
         target.write_text(original, encoding="utf-8")
-        monkeypatch.setattr(nodes, "_select_multi_candidate_patch", lambda s, oc: (new, True))
+        monkeypatch.setattr(nodes, "_select_multi_candidate_patch", lambda s, oc: (new, True, {}))
         state = self._pf_state(target, original, new)
         result = nodes._patch_applier_node(state)
         assert result["target_code"] == new
