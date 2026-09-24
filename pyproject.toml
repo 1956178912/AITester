@@ -48,6 +48,16 @@ max-complexity = 10
 "tests/**" = ["PLR2004"]  # 允许测试中的魔数
 "examples/**" = ["E501"]  # 示例代码允许长行
 
+[tool.mypy]
+# 第三方库缺少 py.typed/stubs 时跳过其分析（不影响本仓代码类型检查）
+[[tool.mypy.overrides]]
+module = [
+    "scipy.*",
+    "datasets",
+    "dbutils.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 # pytest 配置
 testpaths = ["tests"]
