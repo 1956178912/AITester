@@ -4,6 +4,88 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - Improvement-direction batch: 5 items landed (3.3 position-aware iterative repair + 5.2 error-classifier 14-category doc sync + 5.1 single-batch boundary tests + 4.2 redaction auto-check hook + 2.1 real-embedding hook)
+
+> Corresponds to the "real remaining work" list in
+> `docs/assessment_2026-09-25_improvement_directions.md` (after verifying 16
+> improvement sub-directions item by item, 10 were already implemented and 6
+> had remaining work; this batch lands 5 of them. The remaining item #5 —
+> multi-candidate A/B experiment data — is an experiment-run task and is not
+> part of this code batch).
+
+### Feature (default behavior unchanged, enabled via env var)
+- **3.3 position-aware iterative repair (LoopRepair-style locate-then-patch)**
+  (`src/agents/debugger.py` + `src/graph/state.py` + `src/graph/nodes.py`):
+  - New `POSITION_AWARE_REPAIR_ENABLE` switch (default false, preserves the
+    historical experiment baseline).
+  - `DebuggerAgent._locate_repair_focus()`: takes the exception location
+    already extracted by `error_classifier` (traceback line / syntax-error
+    line:col), uses AST to locate the "shortest enclosing function" around the
+    anomalous line, and injects a position-aware repair hint into the patch
+    prompt so the LLM fixes the located spot instead of blindly searching the
+    whole file. Purely static, costs no LLM tokens; degrades to the normal
+    whole-file repair when it cannot locate (no line number / broken AST /
+    cross-file protection).
+  - `debug()` return dict gains a `position_aware_focus` key (focused /
+    function_name / line / hint); the debugger node writes it into
+    `state["position_aware_focus"]`.
+  - `tests/test_debugger.py` gains `TestPositionAwareRepair` (9 cases).
+
+### Observability & engineering
+- **4.2 log-redaction auto-check hook** (`.pre-commit-config.yaml` +
+  `.github/workflows/ci.yml`):
+  - pre-commit gains a local hook `audit-log-redaction` (when touching
+    `src/**/*.py` / `experiments/**/*.py` it runs
+    `scripts/audit_log_redaction.py`; if it finds "a log call whose args contain
+    a sensitive field name without redaction" it exits 1 and blocks the commit).
+    CI gains an "Audit log redaction (4.2)" step using the same script, so
+    local and remote share one code path.
+  - New "simulated sensitive-info injection" regression test
+    `tests/test_audit_log_redaction.py` (6 cases: repo baseline zero findings,
+    unredacted injection must be flagged, redacted not flagged, Bearer/sk-
+    credential flagged, exc_info tracebacks not a finding, tests/ dir skipped).
+
+### Evaluation metric (optional dependency, zero external deps by default)
+- **2.1 real semantic-embedding hook** (`src/utils/embedding_utils.py` +
+  `experiments/contamination_check.py`):
+  - New `src/utils/embedding_utils.py` (no new hard dependencies): `embed_text()`
+    picks an embedding backend via the `EMBEDDING_BACKEND` env var (auto:
+    sentence-transformers > chromadb DefaultEmbeddingFunction > None; none:
+    force None to keep the token-bag conservative baseline, enabling a
+    "real-embedding vs token-bag" A/B control); `cosine_similarity()` uses
+    numpy (already a project dep), with a pure-Python fallback, non-negative
+    clamping so it is comparable to the token-bag cosine; `backend_name()`
+    reports the semantic-level source for the report.
+  - `experiments/contamination_check.py` wiring: `_embed_code` delegates to
+    `embedding_utils.embed_text` (loaded lazily at call time, keeping the
+    experiments package free of default external hard deps);
+    `patch_semantic_similarity` gains a `semantic_source` field
+    ("embedding"/"token_bag"); the contamination report renderer labels the
+    semantic-level source.
+  - Test `tests/test_embedding_utils.py` (12 cases).
+
+### Docs & tests
+- **5.2 error-classifier 12 → 14 category doc sync**: `README.md` /
+  `README.en.md` / `docs/api_reference.md` / `docs/api_reference.en.md` /
+  `docs/failure_analysis.md` "twelve/12 categories" wording synced to fourteen,
+  adding the `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` enum
+  rows and decision-priority note
+  (`patch_rejected > rag_empty > trace_missing > multi_rejected`);
+  `docs/history/*` historical snapshots intentionally keep the 12-category
+  wording.
+- **5.1 cross_batch_comparison single-batch boundary test hardening**
+  (`tests/test_smell_detection_v2.py` + `tests/test_failure_kb.py`): hardened
+  `test_single_batch_no_trend` (added `resolved_categories` / `failure_trend`
+  assertions) and added `test_single_batch_all_passed_empty_trend` (failure_trend
+  is an empty dict when all tasks pass) and `test_empty_summaries_list`
+  (empty batch list does not crash).
+
+> Verification: full regression `pytest tests/ -q` passes; the affected
+> subsets (test_debugger 38 / test_smell_detection_v2 / test_failure_kb /
+> test_audit_log_redaction 6 / test_contamination_check+multidim 40 /
+> test_embedding_utils 12) all pass; `ruff check` on changed files is clean.
+> See `docs/implementation_2026-09-25_improvement_directions.md`.
+
 ## [Unreleased] - 0.10 deep-audit fixes on 0.9 batch (LLM-cache negative-cache TTL correctness regression + write-root normalization + trace-layer redundant summarization + stats de-glob + 2 regression tests)
 
 > Baseline: 0.9 batch (uncommitted worktree) 1665 passed / ruff 0 / mypy 0 (58 source files).

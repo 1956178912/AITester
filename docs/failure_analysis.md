@@ -158,7 +158,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 ### 短期改进（1-2周）
 
 - [x] ~~增强JSON提取逻辑，支持多种响应格式~~ → 已实现：JSON 提取已支持多格式（markdown 代码块 / 纯 JSON / 混合内容，见 `extract_json_object`）
-- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 12 类（`LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` 等）
+- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 14 类（`LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` 等）
 - [ ] 为关键bug模式添加专用修复模板
 - [x] ~~启用RAG并优化检索策略~~ → 已实现：`--enable-rag` 纳入主实验（2.3 RAG 消融），检索指标自动汇总（Hit Rate / MRR / 按检索类型分解 / RAG 命中 × 失败类别交叉表）
 

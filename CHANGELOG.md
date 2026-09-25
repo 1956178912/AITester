@@ -4,6 +4,69 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 改进方向批次：5 项落地（3.3 位置感知迭代修复 + 5.2 错误分类 14 类文档同步 + 5.1 单批次边界测试 + 4.2 脱敏自动检查钩子 + 2.1 真实嵌入钩子）
+
+> 对应 `docs/assessment_2026-09-25_improvement_directions.md` 的"真实剩余工作"清单
+> （16 个改进子方向逐项核实后，其中 10 项已实现、6 项有剩余工作；本批次落地其中 5 项，
+> 剩 #5 多候选 A/B 实验数据属实验执行工作，不在代码批次内）。
+
+### 功能（默认行为不变，经环境变量显式开启）
+- **3.3 位置感知迭代修复（LoopRepair 式先定位再补丁）**（`src/agents/debugger.py` +
+  `src/graph/state.py` + `src/graph/nodes.py`）：
+  - 新增 `POSITION_AWARE_REPAIR_ENABLE` 开关（默认 false，保持历史实验口径）。
+  - `DebuggerAgent._locate_repair_focus()`：把 `error_classifier` 已提取的异常位置
+    （traceback 行号 / 语法错误行列）经 AST 定位到"包围异常行的最短区间函数"，
+    生成位置感知修复指引注入补丁 prompt，让 LLM 优先修定位到的位置而非全文件盲搜；
+    纯静态不耗 LLM token，无法定位（无行号 / AST 损坏 / 跨文件保护）时自动降级为
+    常规全文件修复。
+  - `debug()` 返回 dict 新增 `position_aware_focus` 键（focused / function_name /
+    line / hint）；debugger 节点写入 `state["position_aware_focus"]`。
+  - 测试 `tests/test_debugger.py` 新增 `TestPositionAwareRepair`（9 用例）。
+
+### 可观测性与工程化
+- **4.2 日志脱敏自动检查钩子**（`.pre-commit-config.yaml` + `.github/workflows/ci.yml`）：
+  - pre-commit 新增 local hook `audit-log-redaction`（命中 `src/**/*.py` /
+    `experiments/**/*.py` 时跑 `scripts/audit_log_redaction.py`，发现"参数含敏感字段
+    名且未脱敏"的日志点退出码 1 阻断提交）；CI 新增 "Audit log redaction (4.2)" 步骤，
+    与 pre-commit 同一脚本，本地/远端口径一致。
+  - 新增"模拟敏感信息注入"回归测试 `tests/test_audit_log_redaction.py`（6 用例：
+    仓库基线零可疑点、未脱敏注入必检出、脱敏后不检出、Bearer/sk- 凭证检出、
+    exc_info 堆栈不报 finding、tests/ 目录跳过）。
+
+### 评估指标（可选依赖，默认零外部依赖保守口径）
+- **2.1 真实语义嵌入钩子**（`src/utils/embedding_utils.py` +
+  `experiments/contamination_check.py`）：
+  - 新增 `src/utils/embedding_utils.py`（零新增硬依赖）：`embed_text()` 按
+    `EMBEDDING_BACKEND` 环境变量选择嵌入后端（auto：sentence-transformers >
+    chromadb DefaultEmbeddingFunction > None；none：强制 None 保持词袋保守口径，
+    便于"真实嵌入 vs 词袋代理"A/B 对照）；`cosine_similarity()` 用 numpy（项目已
+    依赖）计算，缺失时纯 Python 回退，非负夹取与词袋余弦口径可比；`backend_name()`
+    供报告标注语义级来源。
+  - `experiments/contamination_check.py` 接线：`_embed_code` 委托
+    `embedding_utils.embed_text`（调用期惰性加载，experiments 包保持零默认外部硬
+    依赖）；`patch_semantic_similarity` 新增 `semantic_source` 字段
+    （"embedding"/"token_bag"）；污染检测报告渲染层标注语义级来源。
+  - 测试 `tests/test_embedding_utils.py`（12 用例）。
+
+### 文档与测试
+- **5.2 错误分类 12 类 → 14 类文档同步**：`README.md` / `README.en.md` /
+  `docs/api_reference.md` / `docs/api_reference.en.md` / `docs/failure_analysis.md`
+  中"十二类/12 类"表述同步为十四类，补 `EXECUTION_TRACE_MISSING` /
+  `MULTI_CANDIDATE_ALL_REJECTED` 两类的枚举表行与判定优先级说明
+  （`patch_rejected > rag_empty > trace_missing > multi_rejected`）；
+  `docs/history/*` 为历史快照有意保留 12 类表述不改。
+- **5.1 cross_batch_comparison 单批次边界测试补强**（`tests/test_smell_detection_v2.py`
+  + `tests/test_failure_kb.py`）：补强 `test_single_batch_no_trend`（加
+  `resolved_categories` / `failure_trend` 断言），新增
+  `test_single_batch_all_passed_empty_trend`（全通过时 failure_trend 为空字典）与
+  `test_empty_summaries_list`（批次列表为空不崩溃）。
+
+> 验证：全量回归 `pytest tests/ -q` 通过；受影响子集（test_debugger 38 /
+> test_smell_detection_v2 / test_failure_kb / test_audit_log_redaction 6 /
+> test_contamination_check+multidim 40 / test_embedding_utils 12）全部通过；
+> `ruff check` 改动文件 0 告警。详见
+> `docs/implementation_2026-09-25_improvement_directions.md`。
+
 ## [Unreleased] — 0.10 轮次 0.9 批次深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫 + 2 条回归用例）
 
 > 基线：0.9 批次（未提交工作区）1665 passed / ruff 全仓 0 告警 / mypy 0 错误（58 源文件）。

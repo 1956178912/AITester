@@ -350,7 +350,7 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 - [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
 ### 2. 分层错误修复机制（Hierarchical Repair Strategy）
-将测试失败分为十二类：**LLM 响应格式异常（llm_format_error）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）、补丁被安全守卫拒绝（patch_validation_failed）、RAG 检索全空（rag_retrieval_empty）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出；1.1 状态细化：PATCH_VALIDATION_FAILED 与 RAG_RETRIEVAL_EMPTY 为流程状态类，由 `refine_failure_category()` 在任务收尾按 repair_history/rag_stats 信号判定——前 10 类走 `classify()` 文本正则，后 2 类不走正则，成功任务原样返回）。
+将测试失败分为十四类：**LLM 响应格式异常（llm_format_error）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）、补丁被安全守卫拒绝（patch_validation_failed）、RAG 检索全空（rag_retrieval_empty）、执行轨迹丢失（execution_trace_missing）、多候选全被静态筛选拒绝（multi_candidate_all_rejected）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出；1.1 状态细化：PATCH_VALIDATION_FAILED 与 RAG_RETRIEVAL_EMPTY 为流程状态类；5.2 持续细化：EXECUTION_TRACE_MISSING 与 MULTI_CANDIDATE_ALL_REJECTED 为多候选/轨迹流程类，后 4 类由 `refine_failure_category()` 在任务收尾按 repair_history/rag_stats/execution_trace/multi_candidate_stats 信号判定，不走 `classify()` 文本正则，成功任务原样返回）。
 
 **技术实现**：
 - [src/agents/error_classifier.py](src/agents/error_classifier.py) 中的 `ErrorClassifier` 类（规则匹配）
@@ -855,7 +855,7 @@ docker run --rm \
 | `test_contamination_multidim.py` | 25 | 2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦三维相似度 / 综合风险等级 / detect 全流程 / 抗污染基准注册表） |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
 | `test_dependency_edge_cases.py` | 14 | 依赖检测边界分支（标准库回退/find_spec 异常/venv 创建超时/OSError 静默降级，0.1 新增） |
-| `test_error_classifier.py` | 89 | 85 | 十二类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化：refine_failure_category） |
+| `test_error_classifier.py` | 89 | 85 | 十四类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化：refine_failure_category） |
 | `test_error_classifier_new_categories.py` | 16 | 5.2 新增两错误类别判定（`EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`，判定优先级 / 修复策略描述 / 从 final_state 接线） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
 | `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
@@ -874,7 +874,7 @@ docker run --rm \
 | `test_prompts_templates.py` | 14 | 三个 system prompt 常量结构契约（关键指令段/错误类别/JSON 输出格式，0.1） |
 | `test_rag_metrics.py` | 13 | RAG 检索质量指标 Hit Rate/MRR（P1） |
 | `test_rag_retriever.py` | 42 | RAG 检索器增删查清与持久化 |
-| `test_report_generator.py` | 48 | 错误报告生成器（含十二类分类分支） |
+| `test_report_generator.py` | 48 | 错误报告生成器（含十四类分类分支） |
 | `test_run_benchmark.py` | 5 | benchmark 结果构造与异常路径回归（0.1 去重重构 + 2.1 patch 字段键集合同构护栏） |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench 源码导出脚本（patch 目标文件提取 / enrichment 落盘 / dry-run，2.1） |
 | `test_state.py` | 8 | AITesterState 单一构造点工厂（create_initial_state 键集守护 / module_name 推导 / 可变容器隔离，深度重构批次） |
@@ -1207,7 +1207,7 @@ python main.py clean-venv-cache --max-size-mb 512
 ### v0.1 (2026-09-18) — 首个正式版本
 
 **核心成果**:
-- 四智能体协作架构（Planner / Generator / Executor / Debugger）+ 分层错误修复机制（12 类错误分类）
+- 四智能体协作架构（Planner / Generator / Executor / Debugger）+ 分层错误修复机制（14 类错误分类）
 - 逻辑驱动思维链（Logic-driven CoT）：Planner 显式分析输入域/输出域/前置条件/后置条件/边界
 - RAG 检索增强（ChromaDB，默认关闭；`ENABLE_RAG=true` 启用）
 - 多基线对比与消融实验（aitester / plain_llm / single_agent）

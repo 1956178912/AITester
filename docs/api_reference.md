@@ -178,7 +178,7 @@ category = classifier.classify(test_output, failed_cases)
 category = classifier.classify(test_output, failed_cases, target_module="calculator")
 ```
 
-**错误类别枚举（十二类，P2 细化 + 1.2 残余 + 1.1 状态细化）：**
+**错误类别枚举（十四类，P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化）：**
 
 | 值 | 说明 | 处理策略 |
 |----|------|---------|
@@ -194,8 +194,10 @@ category = classifier.classify(test_output, failed_cases, target_module="calcula
 | `unknown` | 无法识别的错误 | 通用分析（LLM 兜底） |
 | `patch_validation_failed` | 补丁被 PatchApplier 安全守卫拒绝（空/过短/无函数定义/路径不合法，repair_history 中 patch_applied=False），1.1 状态细化——由 `refine_failure_category()` 按 repair_history 信号判定，不走 `classify()` 文本正则 | 重新生成完整修复补丁（先补函数定义与最小长度再走验证），区分"补丁未生效"与"补丁应用后仍失败" |
 | `rag_retrieval_empty` | RAG 启用但任务内全部检索命中为 0（rag_stats 非空且所有 results==0），标识 RAG 失效场景（1.1 状态细化）——由 `refine_failure_category()` 按 rag_stats 信号判定，不走 `classify()` 文本正则 | 检查 RAG 检索库是否已填充 / 降低 top_k / 改启用混合检索；本类命中占比恒 0，可当 RAG 自检指标 |
+| `execution_trace_missing` | 任务失败但 `execution_trace` 为空（执行器异常路径：executor 节点未正常写入轨迹，或被上游崩溃截断），标识"执行轨迹丢失"（5.2 持续细化）——由 `refine_failure_category()` 按 execution_trace 信号判定，不走 `classify()` 文本正则 | 排查执行链路（venv/沙箱/超时配置）后重试；代码层面按常规策略谨慎修复 |
+| `multi_candidate_all_rejected` | 多候选补丁策略失效：N 个候选全部被静态筛选拒绝（`ENABLE_MULTI_CANDIDATE_PATCH=true` 但均未通过 static_validate_patch）（5.2 持续细化）——由 `refine_failure_category()` 按 multi_candidate_stats 信号判定，不走 `classify()` 文本正则 | 回退到单补丁流程，降低候选视角扰动幅度 |
 
-分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 2 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）为 1.1 状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）信号判定——补丁被拒优先于 RAG 检索空；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。
+分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 4 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。
 
 ---
 

@@ -351,7 +351,7 @@ Before outputting the test plan, the Planner performs explicit analysis of the f
 - The `PLANNER_SYSTEM_PROMPT` in [src/prompts/templates.py](src/prompts/templates.py)
 
 ### 2. Hierarchical Error Repair Strategy
-Test failures are classified into twelve categories: **LLM response format anomaly (llm_format_error), import failure (import_error), syntax error (syntax), type mismatch (type_error), index out of range (index_error), assertion failure (assertion), test logic error (logic_error), runtime exception (runtime), timeout (timeout), unknown (unknown), patch rejected by safety guard (patch_validation_failed), and all-empty RAG retrieval (rag_retrieval_empty)**. Each category uses a differentiated repair strategy (P2 refinement: the import/type/logic categories were split out from the older five-category set; 1.2 residual: LLM_FORMAT_ERROR and INDEX_ERROR split out of UNKNOWN; 1.1 status refinement: PATCH_VALIDATION_FAILED and RAG_RETRIEVAL_EMPTY are flow-status categories, determined by `refine_failure_category()` at task wrap-up based on repair_history/rag_stats signals — the first 10 go through `classify()` text regex, the last 2 do not go through regex; successful tasks are returned as-is).
+Test failures are classified into fourteen categories: **LLM response format anomaly (llm_format_error), import failure (import_error), syntax error (syntax), type mismatch (type_error), index out of range (index_error), assertion failure (assertion), test logic error (logic_error), runtime exception (runtime), timeout (timeout), unknown (unknown), patch rejected by safety guard (patch_validation_failed), all-empty RAG retrieval (rag_retrieval_empty), missing execution trace (execution_trace_missing), and all multi-candidate patches rejected by static screening (multi_candidate_all_rejected)**. Each category uses a differentiated repair strategy (P2 refinement: the import/type/logic categories were split out from the older five-category set; 1.2 residual: LLM_FORMAT_ERROR and INDEX_ERROR split out of UNKNOWN; 1.1 status refinement: PATCH_VALIDATION_FAILED and RAG_RETRIEVAL_EMPTY are flow-status categories; 5.2 ongoing refinement: EXECUTION_TRACE_MISSING and MULTI_CANDIDATE_ALL_REJECTED are multi-candidate/trace flow categories — the last 4 are determined by `refine_failure_category()` at task wrap-up based on repair_history/rag_stats/execution_trace/multi_candidate_stats signals and do not go through `classify()` text regex; successful tasks are returned as-is).
 
 **Technical implementation**:
 - The `ErrorClassifier` class in [src/agents/error_classifier.py](src/agents/error_classifier.py) (rule-based matching)
@@ -754,7 +754,7 @@ docker run --rm \
 | `test_defects4j_smoke.py` | 9 | 3.4 Defects4J-Python loader smoke test (graceful degradation without data directory / full-directory parsing / field integrity) |
 | `test_dependency.py` | 43 | Dependency detection and venv management (P1) + 4.4 cache monitoring (hit-rate stats/listing/cleanup, 8 cases) |
 | `test_dependency_edge_cases.py` | 14 | Dependency edge branches (stdlib fallback / find_spec exception / venv creation timeout / OSError silent degradation, new in 0.1) |
-| `test_error_classifier.py` | 89 | 85 | Twelve-category error classification and repair strategy mapping (P2 refinement + 1.2 residual + 1.1 status refinement: refine_failure_category) |
+| `test_error_classifier.py` | 89 | 85 | Fourteen-category error classification and repair strategy mapping (P2 refinement + 1.2 residual + 1.1 status refinement + 5.2 ongoing refinement: refine_failure_category) |
 | `test_error_classifier_new_categories.py` | 16 | 5.2 two new error-category determinations (`EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`, priority / fix-strategy description / final_state wiring) |
 | `test_exceptions.py` | 33 | Custom exception classes and decorators |
 | `test_executor.py` | 50 | 48 | Coverage parsing, failed case parsing |
@@ -775,7 +775,7 @@ docker run --rm \
 | `test_prompts_templates.py` | 14 | Structural contract of the three system-prompt constants (key instruction sections/error categories/JSON output format, 0.1) |
 | `test_rag_metrics.py` | 13 | RAG retrieval quality metrics Hit Rate/MRR (P1) |
 | `test_rag_retriever.py` | 42 | RAG retriever add/remove/query/clear and persistence |
-| `test_report_generator.py` | 48 | Error report generator (including twelve-category classification branches) |
+| `test_report_generator.py` | 48 | Error report generator (including fourteen-category classification branches) |
 | `test_run_benchmark.py` | 5 | Benchmark result construction and exception path regression (0.1 deduplication refactor) |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench source export script (patch target file extraction / enrichment persistence / dry-run, 2.1) |
 | `test_smell_detection_v2.py` | 6 | 1.1 smell-detection hardening (Eager Test / Lack of Cohesion trigger and no-trigger cases + syntax-error fallback) |
@@ -1059,7 +1059,7 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 ### v0.1 (2026-09-18) — First official release
 
 **Key features**:
-- Four-agent architecture (Planner / Generator / Executor / Debugger) + hierarchical error repair (12 error categories)
+- Four-agent architecture (Planner / Generator / Executor / Debugger) + hierarchical error repair (14 error categories)
 - Logic-driven Chain-of-Thought (Logic-driven CoT): Planner explicitly analyzes input/output domains, pre/post conditions, and boundary cases
 - RAG retrieval enhancement (ChromaDB, off by default; enable with `ENABLE_RAG=true`)
 - Multi-baseline comparison and ablation (aitester / plain_llm / single_agent)
