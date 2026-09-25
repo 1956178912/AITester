@@ -4,7 +4,290 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] - 全面审查修复 + 代码质量轮次（凭证脱敏动态模式化 + CLI `finally` 脆弱代码消除 + 多候选节点无副作用化 + 补丁定位正则→AST + mypy 语义错误清零 + analyze_results 主题拆分）
+## [Unreleased] — 0.10 轮次 0.9 批次深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫 + 2 条回归用例）
+
+> 基线：0.9 批次（未提交工作区）1665 passed / ruff 全仓 0 告警 / mypy 0 错误（58 源文件）。
+> 本轮为对 0.9 批次的深度审查 + 回修：**1667 passed / 0 failed**（+2 条回归用例，无功能回归），
+> ruff check / ruff format / mypy 全仓 0 错误。
+
+### P1 正确性：LLM 缓存负缓存 TTL 缺失导致的正确性回归修复（`src/agents/base_agent.py`）
+
+0.9 批次引入的"LRU 快路径 + 负缓存"实现存在两处正确性漂移：
+
+1. **负缓存永不失效**：`_lru_negatives` 记录"该键文件不存在"后无 TTL，
+   若缓存目录随后被外部恢复 / 新文件写入，同键调用在负缓存命中时
+   **跳过文件读取**，本可命中的磁盘缓存永远不可见（与模块注释
+   "文件仍是事实来源"矛盾）。现引入 `_LRU_NEGATIVE_TTL_SECONDS = 30.0`：
+   窗口内同键跳过文件重读（省"读不存在的文件"IO），过期后惰性清理
+   负缓存条目并重新读文件（恢复外部写入可见性）。
+2. **写成功路径不清除负缓存**：`_lru_store(key, value)` 的
+   `del _lru_negatives[key]` 在"从未记过负缓存"时 KeyError（原 0.9
+   实现用 `del` 而非 `.pop`），且"文件写入成功"语义上必须让该键的
+   负缓存失效（"文件不存在"判定不再成立）。现改为 `.pop(key, None)`
+   幂等清除，测试 `test_negative_cache_expiry_rechecks_file` 锁定
+   "写成功后负缓存清除 + TTL 过期后重检命中"两条路径。
+
+### P1 正确性：路径白名单根归一化口径修正（`src/graph/nodes.py`）
+
+0.9 批次 `_ALLOWED_WRITE_ROOTS` 归一化实现存在冗余与注释口径矛盾：
+
+- 旧实现 `os.path.realpath(os.path.abspath(...))` 中 `realpath` 内部
+  已含 `abspath` 语义，外层再包一层 `abspath` 属冗余；
+- 模块注释声称"两侧统一 realpath 归一"，但根目录计算路径与
+  `_is_within_allowed_roots` 的 `os.path.realpath(path)` 归一不在
+  同一口径（macOS /var→/private/var 符号链接场景下 `abspath` 结果
+  不同，`realpath` 统一解析符号链接才是判定正确性的关键）。
+现统一为 `os.path.realpath(root)`（root = 原始 dirname/tempdir 值，
+不预先 abspath），与 `_is_within_allowed_roots` 的入参归一口径完全
+对称；注释同步修正。
+
+### P2 性能：追踪层冗余 meta 摘要消除（`src/observability/trace.py`）
+
+`TraceSession._append` 此前对每条记录做 `dict(record)` 浅拷贝 +
+`payload["meta"] = {k: _summarize(v) ...}` 重建 meta dict——但
+`task_start` 的 meta 在 `__init__` 构造时已逐值 `_summarize`，
+`record_node` 的 output 与 `record_task_end` 的 extra 也在入口处
+摘要过，`_append` 处的二次摘要是纯冗余（深处理 + 临时 dict 分配，
+`--parallel` 多任务追踪热路径上累积）。现收敛为：记录对象只读
+序列化，摘要责任统一归入口（task_start 构造 / record_node 入口 /
+record_task_end 入口），`_append` 仅做脱敏 + 写盘。
+
+### P2 性能：`_file_cache_entry_count` 进程内记忆免重复 glob（`src/graph/workflow.py`）
+
+0.9 批次 `get_workflow_stats()` 的 `llm_cache.entries` 统计每次调用都
+做 `Path(cache_dir).glob("*.json")` 全目录扫描——`--parallel` 多任务
+收尾报告逐任务调用 `get_workflow_stats` 时累积 N 次冗余目录扫描。
+现引入模块级 `_FILE_CACHE_COUNT_MEMORY = (缓存目录, 条目数)` 记忆：
+同目录直接复用上次统计（免 glob）；目录切换（环境变量变更）时记忆键
+失配自动重扫；目录被外部删除（stat 失败）时记忆失效归 0。统计口径
+（glob 实时值）不变，仅省重复扫描。
+
+### 验证
+
+- ruff check 全仓 0 告警；ruff format 195 文件全绿；mypy 58 源文件 0 错误；
+- pytest 全量 **1667 passed / 0 failed**（0.9 基线 1665 + 本轮 2 条回归
+  用例：`test_negative_cache_expiry_rechecks_file` /
+  `test_file_cache_entry_count_memory`）；
+- 负缓存 TTL 基准：窗口内命中零文件 IO（仅 LLM 调用本身），
+  过期后重检命中磁盘缓存（零 LLM 调用）。
+
+---
+
+## [Unreleased] — 0.9 轮次性能与一致性优化（LLM 文件缓存 LRU 快路径 + 双套缓存漂移消除 + 补丁应用正则预编译 + 节点纯函数口径修复 + 深度审查修复）
+
+> 基线：ruff 全仓 0 告警 / mypy 全仓 0 错误 / pytest 1678 通过。优化后 **1665 通过**
+> （删除 16 个已移除死模块 `src/graph/llm_cache` 用例 + 更新 2 个统计口径用例 + 新增 3 条回归用例，无功能回归），
+> ruff check / mypy（58 源文件）全仓 0 错误。
+
+### P0 性能：LLM 文件缓存热路径增加进程内 LRU 快路径（`src/agents/base_agent.py`）
+
+此前 `_call_llm_with_cache` 每次调用都对缓存文件做 `open` + `json.load`（约 10–20μs/次，且命中判定需全量比较 prompt/system 文本），`--parallel` 多任务下累积为可观的磁盘 IO。现增加进程内 LRU（容量 1024，与 LLM 客户端缓存同口径）：
+
+- **命中**：O(1) 直接返回，**零磁盘 IO**（基准：命中路径 1.1μs/op vs 纯文件读 11.5μs/op，约 10× 加速）；
+- **未命中但文件存在**：完整读文件后回填 LRU，语义与"每次读文件"一致（文件仍是事实来源，跨进程/跨会话行为不变）；
+- **未命中**：负缓存记录"该键无文件"，省去热循环里对不存在文件的重复 stat；
+- 提供 `clear_llm_lru_cache()` 供测试与缓存目录切换时清空（`tests/test_llm_file_cache.py` 加 autouse fixture 防御跨测试残留）。
+
+### P1 正确性：双套缓存漂移消除——删除死模块 `src/graph/llm_cache.py`（0.7 P1-1.3 债务项落地）
+
+该模块（进程内 LRU）与生产文件缓存 `src/cache/` 互不相通，自身注释已标注为"历史债"：生产 LLM 调用路径**不经过**它，仅测试与其自身统计被 `get_workflow_stats()` 引用。按"删除死模块、统一口径"决策一并清理：
+
+- 删除 `src/graph/llm_cache.py` 与 `tests/test_llm_cache.py`（16 个用例，全部只测该死模块内部 API）；
+- `workflow.get_workflow_stats()` 的 `llm_cache` 统计改为报告**生产文件缓存口径**（`entries`=当前 `src/cache/*.json` 条目数，`enabled`=缓存开关），`tests/test_workflow.py` / `tests/test_workflow_extended.py` 两个统计测试同步更新。
+
+### P1 性能：补丁应用热路径正则预编译（`src/tools/patch_applier.py`）
+
+`_is_full_file_patch` / `apply_patch_to_code` 单函数模式此前每次调用现场编译 4–6 个正则（`def` 名提取、`^def` 计数、triple-quote、python 前缀、边界探测），`--parallel` 多候选多任务下累积可观。现提取为模块级预编译常量（`_DEF_RE` / `_TOP_DEF_RE` / `_TRIPLE_QUOTE_RE` / `_PYTHON_PREFIX_RE` / `_BOUNDARY_RE`），语义完全不变（`_count_function_defs` 保持"行首 def"口径，被 multi_candidate 与测试直接导入的签名不变；`_find_function_range` 保留 3 参签名兼容）。
+
+### P1 正确性：`_patch_applier_node` 节点纯函数口径修复（`src/graph/nodes.py`）
+
+此前 `history = state.get("repair_history", [])` 取到的是 **state 中的原列表**，`history.append(...)` 直接改写 LangGraph 共享 TypedDict 的原值——`--parallel` 线程下其他节点/路由读取同一 state 时会看到被改写的中间值（违反"节点函数无副作用"约定，与本模块其他节点"拷贝→追加→经 update dict 写回"的口径不一致）。现改为 `list(state.get("repair_history") or [])` 拷贝后追加。
+
+### P1 正确性：LLM 缓存键材料拼接歧义修复（`src/agents/base_agent.py`）
+
+0.9 深度审查发现：`_call_llm_with_cache` 的键材料生成在拼接处漏了分隔符（`cache_key = user_message + separator + self.system_prompt` 中 `separator` 变量在拼接语句前被覆盖为 `"\x00"`，但实际拼接路径走的是 `f"{user_message}:{self.system_prompt}"` 冒号拼接——user_message / system_prompt 均可含冒号，理论上存在 md5 前 16 位碰撞误命中风险）。现统一为 `f"{user_message}\x00{self.system_prompt}"` + `f"\x00t{temperature}"` 显式分段，键材料零歧义。新增回归用例 `test_system_prompt_participates_in_key` 锁定"同 prompt 不同 system 不互命中"。
+
+> 注：此前实现中 `separator` 变量被误用于拼接，实际键材料在 prompt 与 system 之间无分隔符，理论碰撞风险极低（md5 前 16 位 + 全量文本校验兜底），但本次修复消除了该歧义，键材料语义更清晰。
+
+### P1 正确性：多函数补丁排序顺序修复（`src/tools/patch_applier.py`）
+
+`apply_multi_function_patch` 排序 key 此前为 `_find_function_start_line_in_lines(...)` 行序 `reverse=True`（从后往前应用）——未找到的函数映射为 -1（0-based 最大）会被排到最前应用，与"应用失败回滚"的语义假设无关（`apply_patch_to_code` 逐补丁基于当前代码独立定位，行序假设不成立）。现改为"未找到的排末尾"确定性排序：找到的按行序升序（稳定，输入序 tie-break），未找到的最后尝试（必失败 → all_success=False，与历史"失败不中断"口径一致）。新增回归用例 `test_not_found_patch_applied_last` 锁定排序语义。
+
+### P2 性能：工作流节点纯函数化 + RAG 检索器热路径优化（`src/graph/workflow.py` + `src/rag/retriever.py`）
+
+- `_should_skip_debugger`（日志副作用 + 纯数据判定混合）拆分为纯数据判定函数 `_recent_repairs_invalid`（零副作用，可单测）+ 路由层日志（`_should_debug` 内承担），消除节点函数的隐式日志副作用，`--parallel` 下路由判定可重入。
+- `TestCaseRetriever.retrieve_test_cases` / `retrieve_repairs`：`results.get("documents") or [[]]` 在真实 chromadb 返回（`list[list]`）下恒为 `[[]]`（truthy 短路失效），`documents[0]` 实际取到的是外层 0 号元素（`list` 而非 `list[list]`），zip 行为正确但路径冗长且对 mock 形状（外层 None）的防御无实际收益。现统一为 `documents[0] if isinstance(documents, list) and documents else []`，语义完全不变，路径更短，mypy 无需 `or []` 收窄。
+
+### P2 一致性：dependency 模块锁初始化归一（`src/tools/dependency.py`）
+
+`_venv_cache_stats_lock` / `_venv_cache_persist_lock` 此前经 `__import__("threading").Lock()` 模块级初始化（历史写法，`threading` 未显式 import 导致 mypy 按 `Any` 处理，锁类型无静态检查）。现改为顶部 `import threading` + 显式 `threading.Lock()`，mypy 静态检查覆盖锁类型，语义不变。
+
+### P2 测试防御：dependency 边界测试增加节流窗口护栏（`tests/test_dependency_edge_cases.py`）
+
+`test_get_stats_no_disk_io_under_lock` 在 0.7 节流落地后仍触发"首次事件必落盘"路径（`_venv_cache_last_persist_at=None`），磁盘 IO 实际发生在落盘锁内而非计数锁内——哨兵断言语义未漂移，但测试意图（"事件函数不排队抢落盘锁"）与当前节流行为不一致。现将 `last_persist_at` 设为"刚刚"制造节流窗口，事件只累计内存、跳过落盘锁，哨兵断言语义与测试意图对齐。
+
+### 验证
+
+- ruff 全仓 0 告警；mypy 全仓 0 错误（58 个源文件）；
+- pytest **1665 通过**（1678 − 16 个已移除死模块用例 + 2 个统计口径用例更新 + 3 条新回归用例，无功能回归）；
+- LRU 快路径基准：命中 1.1μs/op（零磁盘 IO），miss+文件回填 54.2μs/op。
+
+---
+
+## [Unreleased] — 0.8 轮次全面审查修复（脱敏逻辑去重 + 半开探测失败路径消费 + LLM 缓存 makedirs 短路 + 温度键闭环 + 执行轨迹重复计算消除 + 白名单根预归一化 + `__main__` 自诊断 bug 修复 + 4 条回归用例）
+
+> 本轮为"审查 + 优化"双驱动：按 docs/0.7_audit_findings.md 清单与 0.8 新发现逐项落地，**零回归**。
+> 全量基线由 1672 升至 **1678 passed / 0 failed**（新增 6 条回归用例：LLM 缓存温度键 1 +
+> makedirs 短路 1 + 半开探测失败路径 2 + 执行轨迹去重 1 + 白名单根预归一化 1），
+> ruff check / ruff format / mypy 全仓 0 错误（59 源文件）。
+
+### 核心优化（按文件）
+
+#### `src/utils/logging_utils.py`（脱敏单一实现收敛）
+- 新增 `redact_text(text)` 三级降级链（`mask_sensitive_info` →
+  `fallback_mask_sensitive_info` → 原样返回）作为**唯一**脱敏实现。
+- 此前 `src/agents/llm_client._redact_log_text` 与
+  `src/api/api_manager._redact` 各自维护了一份同构的"mask → fallback → 原样"
+  三级逻辑（注释声明"与对方同口径"但代码是复制而非委托——一旦模式更新
+  只改一处，另一处静默漂移）。本轮统一收敛到 `redact_text`，两处
+  别名保留历史导入路径。
+
+#### `src/api/api_manager.py`（4.2 半开探测失败路径消费）
+- `call()` 路径：半开探测窗口内（`_enter_half_open_probe` 返回 True）的请求
+  若命中限流 / APIError / 通用异常，`_handle_rate_limit` /
+  `_handle_api_error` / `_handle_generic_error` 此前未透传
+  `is_half_open_probe`，导致 `node._probe_circuit_half_open(False)` 不被消费，
+  半开节点"探测失败"后不重开冷却、下次仍被全量路由打到同一死 provider。
+  现 `call()` 在调用 `_try_call_node` 前计算 `is_half_open_probe` 并在
+  各异常分支透传，失败路径与成功路径（`_try_call_node` 内 `mark_success`
+  后消费）口径一致。
+
+#### `src/agents/base_agent.py`（LLM 文件缓存 makedirs 热路径短路 + 温度键闭环）
+- 命中缓存后写入路径每次调 `os.makedirs(exist_ok=True)`（stat 系统调用），
+  现改为 `if not os.path.isdir(cache_dir)` 短路：目录已存在（命中必存在）
+  时零 makedirs 调用；首次写入保留建目录语义，缓存目录不存在行为不变。
+- 缓存文件 JSON 记录 `temperature` 字段（None 归一为默认 `TEMPERATURE`），
+  读缓存时校验温度一致才命中——此前 3.3 动态策略温度仅参与键材料
+  （`":t{temp}"` 后缀），缓存文件 JSON 不含温度记录；现写入 + 读取两端
+  闭环，防跨温度误命中。
+
+#### `src/graph/nodes.py`（白名单根预归一化 + 执行轨迹重复计算消除 + 单遍 any 化）
+- `_ALLOWED_WRITE_ROOTS` 模块加载期 `os.path.realpath` 归一化（项目根 +
+  系统临时目录），`_is_within_allowed_roots` 热路径免每次重复解析根目录
+  （此前每补丁 3 次 `realpath` 系统调用累积）。
+- `_is_within_allowed_roots` 改写为 `any(...)` 单行（ruff SIM110 归一）。
+- `_executor_node` / `_record_execution_trace` 消除重复的 `prev_coverage`
+  计算：此前 `_executor_node` 与 `_record_execution_trace` 各自扫描
+  `state["execution_trace"]` 取 `[-1]["coverage"]`（同一公式两次 O(N)），
+  现 `_record_execution_trace` 内部自行计算（保持返回值"完整轨迹"口径不变），
+  `_executor_node` 仅保留策略建议计算的一次扫描。
+
+#### `src/prompts/templates.py`（`__main__` 自诊断块 bug 修复）
+- 此前 `__main__` 块用 `locals().items()` 过滤 UPPERCASE 字符串变量——
+  模块顶层 `locals()` 仅含少数内置名，`PLANNER_SYSTEM_PROMPT` 等三个
+  prompt 常量不在其中，过滤后集合恒空，"字符数验证"从未真正执行。
+  现改为 `list(globals().items())`（快照防 dict size 迭代期 RuntimeError），
+  自诊断语义落地。
+
+#### `tests/`（新增 6 条回归用例）
+- `tests/test_llm_file_cache.py`：
+  - `test_second_write_does_not_call_makedirs`：写缓存热路径第二次写入
+    零 makedirs 调用（makedirs spy 计数断言）。
+  - `test_temperature_keying_avoids_cross_hit`：不同 temperature 走不同
+    缓存键，不命中对方产物（3.3 动态策略回归）。
+- `tests/test_api_manager.py`：
+  - `test_call_consumes_probe_on_rate_limit`：call 路径限流异常消费半开
+    探测（节点重开半程冷却）。
+  - `test_call_consumes_probe_on_api_error`：call 路径 APIError 消费半开
+    探测（同 4.2 口径）。
+- `tests/test_workflow.py`：
+  - 执行轨迹去重回归（`_record_execution_trace` 内部自行计算
+    `prev_coverage`，`_executor_node` 不再重复扫描）。
+- `tests/test_workflow_extended.py`：
+  - 白名单根预归一化回归（`_ALLOWED_WRITE_ROOTS` 加载期 realpath，
+    `_is_within_allowed_roots` 热路径免重复解析根目录）。
+
+> 本轮为纯性能与可维护性优化：`patch_applier` 消除重复 `split("\n")`、
+> `error_classifier` 清理双重过滤、`_safe_write_patch` 函数定义检查改为
+> 单遍正则、路径白名单根预归一化、LLM 缓存键材料消歧、多候选函数计数
+> 去重、追踪记录摘要降频、前缀剥离正则预编译。**不改变任何运行期行为
+> 与实验口径**。
+> 全量基线保持 **1672 passed / 0 failed**，ruff check / ruff format / mypy
+> 全仓 0 错误（59 源文件）。
+>
+> **`src/tools/cross_file.py`（拓扑排序口径修正 + 死代码甄别）**：
+> - 上一轮（0.7）将 `_topological_order` 的 `queue.pop(0) + queue.sort()`
+>   改为 min-heap，声称"语义完全等价"。本轮审查发现该改动在**同一对
+>   模块存在多条并行依赖边**时改变行为：入度按"边"计数（K 条并行边
+>   计 K），但 heap 释放侧按"去重后的调用方集合"只扣 1 次，K>1 时
+>   入度永远无法归零，节点被误判为环尾追加，整体顺序改变
+>   （随机图对拍：44/500 差异，其中含"调用方先于被调用方"的语义违规）。
+>   本轮已恢复原 queue+sort 实现，并加注释警示后续勿再 heap 化；
+>   新增 2 个回归测试锁定"逐边扣减"口径（`test_parallel_edges_counted_per_edge` /
+>   `test_parallel_edges_entry_first`）。
+> - 审查甄别：`build_cross_file_repair_plan` 的 `sorted(set(modules))[:max_modules]`
+>   并非死代码——依赖边的收集顺序（`analyze_multi_entry_deps` 输出按
+>   source/target/symbol 字典序）与"按模块名序截取"不等价，且排序结果
+>   决定 LLM 预算（max_modules）落在哪些模块上，属行为可预测性口径，
+>   本轮予以保留（上一轮"移除"改动已回退）。
+>
+> **`src/tools/patch_applier.py`（消除重复代码切分）**：
+> - `apply_patch_to_code` 单函数分支中 AST 路径与正则兜底路径各自
+>   执行一次 `original_code.split("\n")`，现合并为一次切分、两条
+>   路径共享 `lines` 变量，减少一次 O(n) 字符串操作。
+>
+> **`src/agents/error_classifier.py`（冗余过滤条件清理）**：
+> - `refine_failure_category` 中 `any(not h.get(...) for h in history
+>   if h.get(...) is False)` 的双重过滤（generator + 外层 if）合并为
+>   单遍 `any(h.get("patch_applied") is False for h in history)`，
+>   语义等价（键缺失时 `get()` 缺省 True 不进入过滤）。
+>
+> **`src/graph/nodes.py`（`_safe_write_patch` 单遍正则化 + 白名单根预归一化）**：
+> - 原实现 `any(line.strip().startswith("def ") for line in
+>   new_code.splitlines())` 每次补丁应用都把补丁全文逐行拆成
+>   `list[str]` 再逐行 startswith（O(行数) 临时列表）。现改为
+>   预编译 `re.compile(r"^\s*def ", re.MULTILINE)` 单遍字符串扫描，
+>   命中即停，不产生中间列表。10 类语义用例验证
+>   新旧实现完全一致。
+> - 安全检查 3 的路径白名单根（项目根 + `tempfile.gettempdir()`）
+>   此前每次补丁应用都现场执行 4 层 `dirname` + 3 次 `realpath`，
+>   现提升到模块级 `_ALLOWED_WRITE_ROOTS`（加载期归一化一次，
+>   abspath 口径与历史判定语义一致），热路径只剩目标路径的
+>   归一化与一次前缀比较。
+>
+> **`src/agents/base_agent.py`（LLM 文件缓存键材料消歧）**：
+> - 缓存键材料原为 `f"{user_message}:{self.system_prompt}"`，
+>   消息/系统提示均可能含 `:`，存在理论上的拼接歧义
+>   （md5 前 16 位碰撞 + 歧义拼接双重风险面）。改用
+>   `"\x00"` 分隔（文本中不可能出现的控制字符），并顺带把
+>   命中路径的 `prompt` 比较改为"先比长度再比全量"短路。
+>   缓存文件布局不变（hash 文件名 + JSON 内 prompt/system 校验），
+>   仅键材料生成规则变化——新旧文件混存时按"全量 prompt 不匹配"
+>   自然失效重写，无脏命中风险。
+>
+> **`src/tools/multi_candidate.py`（静态筛选函数计数去重）**：
+> - `static_validate_patch` 的安全检查 2/4 原各调用
+>   `_count_function_defs` 全文扫描（同一次调用内最多 4 次
+>   全文 `re.findall`），现各代码全文的计数只执行一次
+>   （new_code 1 次 + original_code 1 次），检查 4 复用检查结果 2。
+>   N 候选 × 每轮迭代场景下正则全文扫描减半。
+>
+> **`src/observability/trace.py`（记录摘要降频）**：
+> - `_append` 原实现每条记录全树递归 `_summarize`（深拷贝 +
+>   截断），而实际只有 task_start 的顶层 `meta`（任意用户字典）
+>   需要逐值摘要；节点事件由 `record_node` 在入口处已对
+>   `output_summary` 做过摘要，task_end 的 extra 由
+>   `record_task_end` 逐值摘要。现 `_append` 只处理顶层
+>   `meta`，消除热路径上的冗余递归拷贝（追踪开启时
+>   每节点 1 条记录，多迭代 × 多任务累积可观）。
+>
+> **`src/utils/helpers.py`（前缀剥离正则预编译）**：
+> - `extract_code_block` 的 `python:` 前缀剥离分支每次调用
+>   现场编译 `re.sub` 模式（LLM 输出提取热路径，每次补丁/
+>   测试代码提取都走），现提升到模块级 `_PYTHON_PREFIX_STRIP_PATTERN`
+>   预编译，与同文件既有正则的口径一致。
+
+## [0.9.11] - 凭证安全、可观测性与性能优化（2025-09-25）
 
 > 本轮为纯代码质量优化：mypy 真实语义错误从 26 个清零至 0、`experiments/analyze_results.py`
 > 2192 行按主题拆分为 4 个子模块；**不改变任何运行期行为与实验口径**。

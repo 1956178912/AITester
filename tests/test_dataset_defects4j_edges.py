@@ -131,9 +131,7 @@ class TestDefects4JPYEdges:
         # 这里手动补一个 README.md 验证过滤逻辑）
         from pathlib import Path
 
-        (Path(data_dir) / "projects" / "mixed" / "1.0" / "buggy" / "README.md").write_text(
-            "# doc\n", encoding="utf-8"
-        )
+        (Path(data_dir) / "projects" / "mixed" / "1.0" / "buggy" / "README.md").write_text("# doc\n", encoding="utf-8")
         loader = load_dataset("defects4j_python", data_dir=data_dir)
         task = next(iter(loader))
         assert "def k()" in task.instance_code

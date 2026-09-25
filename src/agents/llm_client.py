@@ -185,6 +185,8 @@ def _retry_with_exponential_backoff(
                     _redact_log_text(str(e)),
                     wait_time,
                 )
+                # 0.7 债务项 2.2 配套：重试等待计入全局墙钟预算由调用方
+                # （_call_llm）判定；本函数保持无状态，仅负责退避语义
                 time.sleep(wait_time)
             else:
                 break
@@ -199,12 +201,9 @@ def _redact_log_text(text: str) -> str:
     只在 CLI 入口挂载，experiments 等非 CLI 入口下不生效。这里在
     LLM 调用的日志调用处直接脱敏，确保任何日志输出路径都不泄露凭证。
 
-    实现统一委托给 logging_utils.mask_sensitive_info（单一脱敏实现，
-    与 api_manager._redact 同口径）：logging_utils 是纯标准库模块
-    （re 正则替换），顶层导入无循环依赖。
-
-    4.2 审计 R-1：降级路径委托 fallback_mask_sensitive_info（纯正则兜底），
-    不再原样返回——mask_sensitive_info 不可用时仍拦截长随机串类凭证。
+    实现统一委托给 logging_utils.redact_text（单一脱敏实现，
+    与 api_manager._redact 同源，消除双套复制漂移风险）：
+    logging_utils 是纯标准库模块（re 正则替换），顶层导入无循环依赖。
 
     Args:
         text: 待脱敏的日志文本（通常为异常字符串）。
@@ -212,19 +211,9 @@ def _redact_log_text(text: str) -> str:
     Returns:
         脱敏后的文本；脱敏器与兜底器均不可用时原样返回（不阻断主流程）。
     """
-    try:
-        from src.utils.logging_utils import mask_sensitive_info
+    from src.utils.logging_utils import redact_text
 
-        return mask_sensitive_info(text)
-    except Exception:
-        try:
-            from src.utils.logging_utils import fallback_mask_sensitive_info
-
-            return fallback_mask_sensitive_info(text)
-        except Exception:
-            # 脱敏模块彻底不可用（理论上不会发生：纯标准库模块）时原样返回，
-            # 不阻断主流程——脱敏失败不应让 LLM 调用本身崩溃
-            return text
+    return redact_text(text)
 
 
 def _record_response_usage(usage: Any, model_name: str) -> None:

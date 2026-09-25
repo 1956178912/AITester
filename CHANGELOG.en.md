@@ -4,6 +4,71 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 0.10 deep-audit fixes on 0.9 batch (LLM-cache negative-cache TTL correctness regression + write-root normalization + trace-layer redundant summarization + stats de-glob + 2 regression tests)
+
+> Baseline: 0.9 batch (uncommitted worktree) 1665 passed / ruff 0 / mypy 0 (58 source files).
+> This round is a deep-audit + backport of the 0.9 batch: **1667 passed / 0 failed**
+> (+2 regression tests, no functional regression), ruff check / ruff format / mypy all green.
+
+### P1 correctness: LLM-cache negative-cache TTL (src/agents/base_agent.py)
+
+The 0.9 batch's "LRU fast-path + negative cache" design had two correctness drifts:
+1. **Negative cache never expires**: `_lru_negatives` records "file absent for this key"
+   with no TTL; if the cache dir is later restored or new files are written, same-key
+   calls in the negative-hit window **skip the file read** and a cache entry that
+   could have hit stays invisible forever (contradicting the module's own comment
+   "the file remains the source of truth"). Fixed with `_LRU_NEGATIVE_TTL_SECONDS = 30.0`:
+   within the window the same-key call skips the file re-read (saves the "read a
+   nonexistent file" IO); after expiry the negative entry is lazily dropped and the
+   file is re-read (restores external-write visibility).
+2. **Write-success path did not clear the negative cache**: `_lru_store` used
+   `del _lru_negatives[key]` (KeyError when no negative entry was ever recorded)
+   and, semantically, "file now exists" must invalidate the key's negative cache.
+   Fixed to `_lru_negatives.pop(key, None)` (idempotent). Regression test
+   `test_negative_cache_expiry_rechecks_file` locks in "write-success clears the
+   negative cache + post-TTL recheck hits the on-disk entry".
+
+### P1 correctness: write-root normalization symmetry (src/graph/nodes.py)
+
+0.9's `_ALLOWED_WRITE_ROOTS` normalization was redundant and its comment drifted
+from the implementation: `os.path.realpath(os.path.abspath(...))` — `realpath`
+already includes `abspath` semantics, so the outer `abspath` is dead code; and the
+comment claimed "both sides unified via realpath" while the root computation did
+not sit on the same normalization path as `_is_within_allowed_roots` (on macOS the
+/var→/private/var symlink makes `abspath` and `realpath` diverge; `realpath`
+resolution is what makes the whitelist decision correct). Now unified to
+`os.path.realpath(root)` over the raw dirname/tempdir values, exactly symmetric
+with `_is_within_allowed_roots`'s input normalization; comment corrected.
+
+### P2 performance: trace-layer redundant meta summarization removed (src/observability/trace.py)
+
+`TraceSession._append` previously did `dict(record)` shallow-copy +
+`payload["meta"] = {k: _summarize(v) ...}` rebuild — but `task_start`'s meta is
+already summarized in `__init__`, and `record_node`'s output / `record_task_end`'s
+extra are summarized at the call site; the second summarization in `_append` is
+pure redundancy (deep processing + temp dict allocation, accumulating on the
+`--parallel` multi-task tracing hot path). Now: record objects are read-only
+serialized; summarization is unified at the entry points; `_append` only does
+redaction + write.
+
+### P2 performance: `_file_cache_entry_count` in-process memory (src/graph/workflow.py)
+
+0.9's `get_workflow_stats()` `llm_cache.entries` stat did a full
+`Path(cache_dir).glob("*.json")` directory scan on every call — under `--parallel`
+multi-task end-of-run reporting this accumulates N redundant scans. Now a
+module-level `_FILE_CACHE_COUNT_MEMORY = (cache_dir, entries)` memo: same dir
+reuses the last count (no glob); dir switch (env var change) invalidates the key
+and re-scans; external dir deletion (stat failure) resets to 0. Counting
+semantics (glob real-time value) unchanged; only repeated scans are saved.
+
+### Verification
+
+- ruff check 0 across the repo; ruff format 195 files all green; mypy 58 source files 0 errors;
+- full suite **1667 passed / 0 failed** (0.9 baseline 1665 + 2 new regression tests:
+  `test_negative_cache_expiry_rechecks_file` / `test_file_cache_entry_count_memory`);
+- negative-cache TTL benchmark: in-window hit = zero file IO (only the LLM call
+  itself remains), post-expiry recheck = disk-cache hit with zero LLM calls.
+
 ## [Unreleased] - Full-audit fixes + code-quality round (credential scrubbing factored into dynamic-pattern module + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + mypy real-semantic errors zeroed + analyze_results theme split)
 
 > This round is a pure code-quality pass: 26 real mypy semantic errors

@@ -3,12 +3,13 @@
 测试 workflow.py 中的：
 - build_workflow 函数
 - _should_debug 路由
-- _should_skip_debugger 函数
+- _recent_repairs_invalid 纯数据判定函数（旧 _should_skip_debugger 拆分后的判定部分）
 - 节点函数 (_planner_node, _generator_node 等)
 - 3.2 执行反馈轨迹（_executor_node 的 execution_trace 写入）
 """
 
 import os
+import shutil
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -155,7 +156,7 @@ class TestShouldDebug:
 
     @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
     def test_consecutive_failed_repairs_skips_debugger(self):
-        """连续多次修复失败时跳过 Debugger。"""
+        """连续多次修复失败时跳过 Debugger（0.9 拆分后路由层记录日志，判定纯函数化）。"""
         from src.graph.workflow import _should_debug
 
         state = {
@@ -166,6 +167,31 @@ class TestShouldDebug:
         }
         result = _should_debug(state)
         assert result == "done"
+
+    @patch("src.graph.workflow._trace_node")
+    @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
+    def test_consecutive_failed_repairs_records_skip_reason(self, mock_trace):
+        """0.9 回归：跳过 Debugger 时路由层记录 reason=skip_debugger_repair_invalid
+        （拆分后日志/追踪副作用由 _should_debug 承担，判定函数保持零副作用）。"""
+        from src.graph.workflow import _should_debug
+
+        state = {
+            "test_passed": False,
+            "iteration": 1,
+            "max_iterations": 3,
+            "repair_history": [{"patch_applied": False}, {"patch_applied": False}],
+        }
+        result = _should_debug(state)
+        assert result == "done"
+        # _trace_node("_should_debug", decision="done", output_summary={...})
+        # 第 1 参位置传入 node 名，第 2/3 参为关键字 decision/output_summary
+        matched = any(
+            c.args[0] == "_should_debug"
+            and c.kwargs.get("decision") == "done"
+            and c.kwargs.get("output_summary") == {"reason": "skip_debugger_repair_invalid"}
+            for c in mock_trace.call_args_list
+        )
+        assert matched
 
     @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
     def test_regenerate_capped_at_max_regenerations(self):
@@ -183,39 +209,41 @@ class TestShouldDebug:
         assert result == "done"
 
 
-class TestShouldSkipDebugger:
-    """测试 _should_skip_debugger 函数。"""
+class TestRecentRepairsInvalid:
+    """测试 _recent_repairs_invalid 纯数据判定函数（0.9 轮次由
+    _should_skip_debugger 拆分而来，日志副作用已留在 _should_debug 路由层；
+    旧 _should_skip_debugger 已删除，路由行为由 TestShouldDebug 各用例锁定）。"""
 
     def test_test_passed_not_skipped(self):
         """测试通过时不跳过。"""
-        from src.graph.workflow import _should_skip_debugger
+        from src.graph.workflow import _recent_repairs_invalid
 
         state = {"test_passed": True}
-        result = _should_skip_debugger(state)
+        result = _recent_repairs_invalid(state)
         assert result is False
 
     def test_no_repair_history(self):
         """无修复历史时不跳过。"""
-        from src.graph.workflow import _should_skip_debugger
+        from src.graph.workflow import _recent_repairs_invalid
 
         state = {"test_passed": False, "repair_history": []}
-        result = _should_skip_debugger(state)
+        result = _recent_repairs_invalid(state)
         assert result is False
 
     def test_successful_repair_not_skipped(self):
         """有成功修复时不跳过。"""
-        from src.graph.workflow import _should_skip_debugger
+        from src.graph.workflow import _recent_repairs_invalid
 
         state = {"test_passed": False, "repair_history": [{"patch_applied": True}, {"patch_applied": False}]}
-        result = _should_skip_debugger(state)
+        result = _recent_repairs_invalid(state)
         assert result is False
 
     def test_consecutive_failures_skips(self):
         """连续修复失败时跳过。"""
-        from src.graph.workflow import _should_skip_debugger
+        from src.graph.workflow import _recent_repairs_invalid
 
         state = {"test_passed": False, "repair_history": [{"patch_applied": False}, {"patch_applied": False}]}
-        result = _should_skip_debugger(state)
+        result = _recent_repairs_invalid(state)
         assert result is True
 
 
@@ -358,23 +386,52 @@ class TestBuildWorkflow:
 class TestGetWorkflowStats:
     """测试工作流统计信息。"""
 
-    @patch("src.graph.workflow.get_cache_stats")
+    @patch("src.graph.workflow._file_cache_entry_count", lambda: 42)
+    @patch("src.graph.workflow._llm_cache_enabled", lambda: True)
     @patch("src.graph.workflow.ENABLE_PLANNER", True)
     @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
     @patch("src.graph.workflow.ENABLE_RAG", False)
     @patch("src.graph.workflow.MAX_ITERATIONS", 3)
-    def test_get_workflow_stats(self, mock_get_cache):
-        """获取工作流统计。"""
+    def test_get_workflow_stats(self):
+        """获取工作流统计（0.7 P1-1.3：双套缓存漂移消除后统一报告生产文件缓存口径）。"""
         from src.graph.workflow import get_workflow_stats
-
-        mock_get_cache.return_value = {"hits": 10, "misses": 5}
 
         stats = get_workflow_stats()
 
         assert "llm_cache" in stats
+        # llm_cache 反映生产文件缓存（条目数 + 开关状态），不再引用已删除的进程内 LRU 统计
+        assert stats["llm_cache"] == {"entries": 42, "enabled": True}
         assert "workflow_config" in stats
         assert stats["workflow_config"]["ENABLE_PLANNER"] is True
         assert stats["workflow_config"]["MAX_ITERATIONS"] == 3
+
+    def test_file_cache_entry_count_memory(self, monkeypatch, tmp_path):
+        """0.10 回归：_file_cache_entry_count 进程内记忆——同目录复用上次统计
+        （免 glob）；目录切换时记忆键失配重新统计。"""
+        import src.graph.workflow as wf
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(cache_dir))
+        monkeypatch.setattr(wf, "_FILE_CACHE_COUNT_MEMORY", None)
+
+        # 首次：目录空 → 0，记忆建立
+        assert wf._file_cache_entry_count() == 0
+        assert (str(cache_dir), 0) == wf._FILE_CACHE_COUNT_MEMORY
+        # 同目录新增文件后仍复用记忆（0.10 口径：本进程只增不删，观测层失真可接受）
+        (cache_dir / "a.json").write_text("{}", encoding="utf-8")
+        assert wf._file_cache_entry_count() == 0
+        # 目录切换（换缓存目录环境变量）→ 记忆键失配，重新统计
+        other_dir = tmp_path / "cache2"
+        other_dir.mkdir()
+        (other_dir / "b.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(other_dir))
+        assert wf._file_cache_entry_count() == 1
+        assert (str(other_dir), 1) == wf._FILE_CACHE_COUNT_MEMORY
+        # 目录被外部删除 → 重扫归 0 并记忆（stat 失败自动失效）
+        shutil.rmtree(other_dir)
+        assert wf._file_cache_entry_count() == 0
+        assert (str(other_dir), 0) == wf._FILE_CACHE_COUNT_MEMORY
 
 
 class TestNodeFunctions:

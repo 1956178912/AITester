@@ -44,12 +44,14 @@ LangGraph 工作流编排模块：定义多智能体协作的工作流图和执�
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from langgraph.graph import END, StateGraph
 
 from config import ENABLE_DEBUGGER, ENABLE_PLANNER, ENABLE_RAG, MAX_ITERATIONS
-from src.graph.llm_cache import get_cache_stats
+from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
 
 # 纯 re-export：保持历史 `from src.graph.workflow import ...` 导入路径不变。
 # 这些符号的实现已拆分到 nodes/rag/tracing 模块，workflow 自身不直接使用，
@@ -177,9 +179,8 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
     return workflow
 
 
-def _should_skip_debugger(state: AITesterState) -> bool:
-    """
-    智能判断是否可以跳过 Debugger 节点。
+def _recent_repairs_invalid(state: AITesterState) -> bool:
+    """判断最近 2 次修复是否均未成功应用（纯数据判定，无日志副作用）。
 
     优化策略：
     - 若连续多次修复后测试仍失败，说明问题可能无法通过补丁解决
@@ -189,17 +190,15 @@ def _should_skip_debugger(state: AITesterState) -> bool:
         state: 当前工作流状态。
 
     Returns:
-        True 表示应跳过 Debugger，False 表示应继续修复。
+        True 表示最近 2 次修复均未成功应用（且 test_passed 为假）。
     """
-    if not state.get("test_passed") and ENABLE_DEBUGGER:
-        repair_history = state.get("repair_history", []) or []
-        # 若最近 2 次修复均未成功应用或无效，考虑跳过
-        if len(repair_history) >= 2:
-            recent = repair_history[-2:]
-            if all(not h.get("patch_applied", False) for h in recent):
-                logger.info("连续多次修复无效，跳过 Debugger")
-                return True
-    return False
+    if state.get("test_passed"):
+        return False
+    repair_history = state.get("repair_history", []) or []
+    if len(repair_history) < 2:
+        return False
+    recent = repair_history[-2:]
+    return all(not h.get("patch_applied", False) for h in recent)
 
 
 def _should_debug(state: AITesterState) -> str:
@@ -222,7 +221,9 @@ def _should_debug(state: AITesterState) -> str:
         _trace_node("_should_debug", decision="done", output_summary={"reason": "test_passed"})
         return "done"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
-    if _should_skip_debugger(state):
+    # （纯数据判定，日志副作用留在路由层；_recent_repairs_invalid 保持零副作用）
+    if _recent_repairs_invalid(state):
+        logger.info("连续多次修复无效，跳过 Debugger")
         _trace_node("_should_debug", decision="done", output_summary={"reason": "skip_debugger_repair_invalid"})
         return "done"
 
@@ -285,19 +286,63 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
     return workflow.compile()
 
 
+# 缓存条目数统计的进程内记忆（0.10 轮次）：生产 LLM 文件缓存在本进程内
+# 只增不删（文件缓存 LRU 淘汰的是进程内响应值，磁盘文件保留；本进程无
+# 删除缓存文件的代码路径，测试环境经 AITESTER_LLM_CACHE_DIR 指向独立临时
+# 目录天然隔离记忆键）。条目数在本进程视角单调不减。记忆键 = (缓存目录,
+# 条目数)，跨 get_workflow_stats 调用复用（--parallel 多任务收尾报告逐任务
+# 调用时省 N-1 次 glob 目录扫描）；目录切换（缓存目录环境变量变更）时
+# 记忆键失配自动重扫，统计口径不变。外部进程删除缓存文件的小概率场景
+# 接受"读到偏大记忆值"的观测层失真（统计仅供报告展示，不参与路由）。
+_FILE_CACHE_COUNT_MEMORY: tuple[str, int] | None = None
+
+
+def _file_cache_entry_count() -> int:
+    """统计生产 LLM 文件缓存（src/cache/*.json）当前条目数。
+
+    缓存目录不存在或为空时返回 0（只读操作，不改变缓存内容）。
+    0.10 性能：带进程内单调不减记忆（见上方 _FILE_CACHE_COUNT_MEMORY 说明）
+    ——同目录直接复用上次统计，免重复 glob；目录切换 / 目录消失（OSError）
+    时自动重扫。
+    """
+    global _FILE_CACHE_COUNT_MEMORY
+    cache_dir = _llm_cache_dir()
+    remembered = _FILE_CACHE_COUNT_MEMORY
+    if remembered is not None and remembered[0] == cache_dir:
+        # 记忆复用前做廉价 stat（O(1) 系统调用，比 glob 全目录扫描便宜）：
+        # 目录仍在则信记忆免重扫；目录被外部删除（OSError）时自动失效归 0。
+        try:
+            os.stat(cache_dir)
+        except OSError:
+            _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0)
+            return 0
+        return remembered[1]
+    try:
+        entries = len(list(Path(cache_dir).glob("*.json")))
+    except OSError:
+        # 目录不存在（首次/被外部删除）：归 0 并记忆
+        _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0)
+        return 0
+    _FILE_CACHE_COUNT_MEMORY = (cache_dir, entries)
+    return entries
+
+
 def get_workflow_stats() -> dict[str, Any]:
     """
     获取工作流执行统计信息。
 
     包含：
-    - llm_cache: LLM 调用缓存统计
+    - llm_cache: 生产 LLM 文件缓存统计（entries=当前缓存条目数，
+      enabled=缓存开关状态；0.7 P1-1.3 双套缓存漂移消除后，
+      进程内 LRU 统计（src/graph/llm_cache，仅测试/嵌入式引用）已随该
+      死模块一并删除，统一以文件缓存口径报告）
     - workflow_config: 当前启用的功能开关
 
     Returns:
         统计信息字典。
     """
     return {
-        "llm_cache": get_cache_stats(),
+        "llm_cache": {"entries": _file_cache_entry_count(), "enabled": _llm_cache_enabled()},
         "workflow_config": {
             "ENABLE_PLANNER": ENABLE_PLANNER,
             "ENABLE_DEBUGGER": ENABLE_DEBUGGER,

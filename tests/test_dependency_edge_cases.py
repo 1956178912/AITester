@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import types
 from unittest.mock import MagicMock, patch
 
@@ -293,6 +294,8 @@ class TestVenvCacheStatsConcurrency:
 
         monkeypatch.setattr(dep, "_venv_cache_stats_lock", guarded)
         monkeypatch.setattr(dep, "_load_cache_stats", _guard_load)
+        # 造节流窗口：last_persist_at 设为"刚刚"，事件只累计内存、跳过落盘锁
+        dep._venv_cache_last_persist_at = time.time()
 
         dep._record_venv_cache_event("hit")
         stats = dep.get_venv_cache_stats()

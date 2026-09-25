@@ -45,9 +45,9 @@ def execute_sandboxed(
     Returns:
         与 execute() 相同结构的结果字典。
     """
-    sandbox_dir = tempfile.mkdtemp(prefix="aitester_sandbox_")
     # 被测模块名：取 target_file 基名（与 extract_module_name_from_file 语义一致）
     module_name = extract_module_name_from_file(target_file)
+    sandbox_dir = tempfile.mkdtemp(prefix="aitester_sandbox_")
     module_file = os.path.join(sandbox_dir, f"{module_name}.py")
     try:
         with open(target_file, encoding="utf-8") as f:

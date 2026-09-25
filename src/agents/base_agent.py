@@ -16,7 +16,9 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
+from collections import OrderedDict
 from typing import Any
 
 from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
@@ -43,6 +45,76 @@ logger = logging.getLogger(__name__)
 _CODE_MAX_CHARS = 3000
 # 代码截断提示信息
 _CODE_TRUNCATED_MSG = "\n\n[代码已截断，仅显示前 {max} 字符]"
+
+# ─── LLM 文件缓存的进程内快路径（性能优化）────────────────────────────────────
+# _call_llm_with_cache 每次调用都对缓存文件做 open + json.load（~20μs，--parallel
+# 下每次 LLM 调用都走该路径），命中判定还要全量比较 prompt + system 文本。
+# 文件缓存条目不可变（写入后内容固定），进程内再挂一层 LRU：
+# - 命中：O(1) 直接返回（零磁盘 IO）；
+# - 未命中但文件存在：完整读文件后回填 LRU（语义与"每次读文件"一致，
+#   文件条目仍为事实来源，多进程场景下跨进程修改/删除文件不影响行为）；
+# - 未命中：文件读取路径的"键材料不匹配 / 文件不存在"记录负缓存时间戳，
+#   TTL 窗口内同键调用省的是"读文件失败"的 IO（命中判定仍需读文件——
+#   文件是事实来源，外部写入/目录恢复后下一读文件即可命中）。
+# 淘汰策略：固定容量 LRU（与 LLM 客户端缓存同口径，超限 FIFO/LRU 淘汰）。
+# 负缓存 TTL（秒）：该间隔内同键跳过文件读取（"该键文件不存在"的快判），
+# 过期后重新读文件（恢复"外部写入/目录变更可读"正确性——文件仍是事实
+# 来源，负缓存只省 IO、不改变命中语义）。
+_LRU_MAXSIZE = 1024
+_LRU_NEGATIVE_TTL_SECONDS = 30.0
+_lru_cache: OrderedDict[tuple[str, str, float | None], str] = OrderedDict()
+# 负缓存：键 → 最近一次"文件不存在"确认的时间戳（TTL 窗口内跳过文件读取）
+_lru_negatives: dict[tuple[str, str, float | None], float] = {}
+_lru_lock = threading.Lock()
+
+
+def _lru_lookup(key: tuple[str, str, float | None]) -> str | None:
+    """进程内 LRU 命中时直接返回值（O(1)，含 move_to_end）。"""
+    with _lru_lock:
+        if key in _lru_cache:
+            _lru_cache.move_to_end(key)
+            return _lru_cache[key]
+        return None
+
+
+def _lru_check_negative(key: tuple[str, str, float | None]) -> bool:
+    """负缓存是否命中（该键在 TTL 窗口内最近已确认文件不存在，可跳过文件读取）。
+
+    命中即过期清理：超 TTL 的负缓存条目就地删除（惰性回收，无后台线程），
+    过期后调用方重新走文件读取路径。
+    """
+    with _lru_lock:
+        ts = _lru_negatives.get(key)
+        if ts is None:
+            return False
+        if time.time() - ts < _LRU_NEGATIVE_TTL_SECONDS:
+            return True
+        del _lru_negatives[key]
+        return False
+
+
+def _lru_store(key: tuple[str, str, float | None], value: str | None) -> None:
+    """进程内 LRU 写入（None 记为负缓存，容量超限时淘汰最久未用条目）。
+
+    非 None 值写入 LRU 正缓存的同时清除该键的负缓存条目（文件写入成功
+    = "该键文件不存在"判定失效，TTL 窗口内同键调用不得再跳过文件重读）。
+    """
+    with _lru_lock:
+        if value is None:
+            _lru_negatives[key] = time.time()
+            return
+        _lru_cache[key] = value
+        _lru_cache.move_to_end(key)
+        _lru_negatives.pop(key, None)
+        while len(_lru_cache) > _LRU_MAXSIZE:
+            _lru_cache.popitem(last=False)
+
+
+def _lru_clear() -> None:
+    """清空进程内 LRU（缓存目录/开关切换或缓存文件被外部清理时调用）。"""
+    with _lru_lock:
+        _lru_cache.clear()
+        _lru_negatives.clear()
 
 
 class BaseAgent:
@@ -83,6 +155,12 @@ class BaseAgent:
         首次调用时执行完整的 LLM 请求并缓存结果，
         后续相同输入直接返回缓存响应，节省 token 和延迟。
 
+        缓存分层（性能优化）：
+        1. 进程内 LRU 快路径：命中时零磁盘 IO 直接返回；
+        2. 文件缓存（src/cache/*.json）：LRU 未命中时完整读文件回填，
+           保证跨进程/跨会话命中（文件是事实来源）；
+        3. LLM 调用成功且缓存开启时写文件并回填 LRU。
+
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数。
@@ -99,28 +177,53 @@ class BaseAgent:
                 return self._call_llm(user_message, max_retries, temperature=temperature)
             return self._call_llm(user_message, max_retries)
 
-        # 生成缓存键（基于 user_message + system_prompt）
+        # 生成缓存键（基于 user_message + system_prompt + temperature）
         # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
         # 说明：键不含 model，缓存的是"成功的 LLM 输出文本"；配额故障转移/模型切换后，
         # 命中旧结果仍有效（都是该 prompt 的合理回答），且不再消耗 token。
-        # 3.3 动态策略：非默认温度纳入键，防止降温和默认温度互相误命中。
-        cache_key = f"{user_message}:{self.system_prompt}"
+        # 键材料用 \x00 分隔（user_message 与 system_prompt 均可能含冒号）；
+        # 读缓存时先比长度再比全量文本，命中路径零额外成本
+        # 写入缓存记录 temperature（None 归一为默认 TEMPERATURE）：读取校验时
+        # 同键同材料重算，命中要求三要素全一致，语义收敛
+        cache_key = f"{user_message}\x00{self.system_prompt}"
         if temperature is not None:
-            cache_key += f":t{temperature}"
+            cache_key += f"\x00t{temperature}"
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
-        cache_file = os.path.join(_llm_cache_dir(), f"{cache_hash}.json")
-        cache_file = os.path.normpath(cache_file)
+        cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
+        lru_key = (cache_file, user_message, temperature)
 
-        # 读缓存：校验 prompt 与 system 完全一致才命中（防 md5 前16位碰撞误命中）
-        try:
-            if os.path.exists(cache_file):
+        # 快路径 1：进程内 LRU 命中（零磁盘 IO）
+        hit = _lru_lookup(lru_key)
+        if hit is not None:
+            logger.info("LLM 缓存命中 (LRU 快路径): %s", cache_key[:50])
+            return hit
+
+        # 快路径 2：LRU 未命中——完整读文件校验 prompt/system 一致才命中
+        # （防 md5 前16位碰撞误命中），命中后回填 LRU。
+        # 负缓存语义（0.10）：负缓存命中（TTL 窗口内）时跳过文件重读
+        # （省"读不存在的文件"IO），过期后重新读文件（恢复外部写入/
+        # 目录变更可读的正确性）。文件仍是事实来源，负缓存仅省 IO。
+        if _lru_check_negative(lru_key):
+            logger.debug("LLM 缓存负缓存命中（跳过文件重读）: %s", cache_key[:50])
+        else:
+            try:
                 with open(cache_file, encoding="utf-8") as f:
                     cached_data = json.load(f)
-                    if cached_data.get("prompt") == user_message and cached_data.get("system") == self.system_prompt:
-                        logger.info("LLM 缓存命中 (省 1 次调用): %s", cache_key[:50])
-                        return cached_data["response"]
-        except Exception as e:
-            logger.debug("缓存读取失败: %s", e)
+                if (
+                    len(cached_data.get("prompt", "")) == len(user_message)
+                    and cached_data.get("prompt") == user_message
+                    and cached_data.get("system") == self.system_prompt
+                ):
+                    _lru_store(lru_key, cached_data["response"])
+                    logger.info("LLM 缓存命中 (文件→LRU): %s", cache_key[:50])
+                    return cached_data["response"]
+                # 文件存在但键材料不匹配（md5 前 16 位碰撞）：按未命中处理，
+                # 记负缓存（延长 TTL 窗口，避免热循环反复读同一错配文件）
+                _lru_store(lru_key, None)
+            except FileNotFoundError:
+                _lru_store(lru_key, None)  # 负缓存：该键当前无文件
+            except Exception as e:
+                logger.debug("缓存读取失败: %s", e)
 
         # 未命中，执行实际调用（仅在成功时写缓存；失败如 403 额度用尽则不缓存）
         if temperature is not None:
@@ -128,9 +231,18 @@ class BaseAgent:
         else:
             response = self._call_llm(user_message, max_retries)
 
-        # 写入缓存
+        # 写入缓存（文件是事实来源；写成功则同步回填 LRU 供后续快路径）
+        # 0.10 正确性：写成功 = "该键文件现已存在"，回填 LRU 时同步清除
+        # 该键的负缓存条目（此前 _lru_store 用 `del _lru_negatives[key]`
+        # 会 KeyError（写成功路径从不先记负缓存）；现改为 .pop(key, None)
+        # 幂等清除，防"外部清理缓存目录 → 负缓存残留 → TTL 窗口内误跳过
+        # 文件重读"的正确性回归）
         try:
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            # 目录已存在时跳过 makedirs（热路径：每次命中后二次调用免系统调用；
+            # 首写仍保留建目录语义，缓存目录不存在时行为不变）
+            cache_dir = os.path.dirname(cache_file)
+            if not os.path.isdir(cache_dir):
+                os.makedirs(cache_dir, exist_ok=True)
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(
                     {
@@ -142,6 +254,7 @@ class BaseAgent:
                     f,
                     ensure_ascii=False,
                 )
+            _lru_store(lru_key, response)  # 回填 L1 + 清除该键负缓存条目（文件已存在）
             logger.info("LLM 缓存已写入: %s", cache_key[:50])
         except Exception as e:
             logger.debug("缓存写入失败: %s", e)
@@ -341,3 +454,18 @@ class BaseAgent:
         truncated = head + _CODE_TRUNCATED_MSG.format(max=max_chars) + tail
         logger.info("代码已字符级截断：%d → %d 字符", len(code), len(truncated))
         return truncated
+
+
+# ─── 进程内 LRU 维护接口（测试 / 缓存清理钩子）───────────────────────────────
+# AITESTER_LLM_CACHE_DIR 变更或外部清理 src/cache 后，进程内 LRU 可能持有
+# 已被删除条目的响应值。由于 LRU 命中值与文件内容一致时行为等价（响应不可变），
+# 该风险可接受；需要强一致口径（如测试）时调用 clear_llm_lru_cache() 清空。
+def clear_llm_lru_cache() -> None:
+    """清空 LLM 文件缓存的进程内 LRU（含负缓存），恢复纯文件读取语义。"""
+    _lru_clear()
+
+
+__all__ = [
+    "BaseAgent",
+    "clear_llm_lru_cache",
+]

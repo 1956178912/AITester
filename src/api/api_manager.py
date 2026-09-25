@@ -29,8 +29,6 @@ from typing import Any
 
 import openai
 
-# 项目根目录的 config.py 仅依赖标准库与 python-dotenv，无循环导入风险，直接导入即可
-# （此前用 importlib + sys.modules 别名加载同一文件，导致两份独立模块实例，已简化）
 from config import LLM_CONFIGS, LLMConfig
 from src.api.api_health import APIHealth, APIManagerConfig, RotationStrategy
 
@@ -42,25 +40,13 @@ def _redact(text: str) -> str:
 
     APIManager 的故障转移/健康检查日志会把 openai 异常的 str(e) 打进日志——
     部分 SDK/网关的错误体回显请求头或 base_url（其中可能含 API Key）。
-    与 llm_client._redact_log_text 同口径：委托给 logging_utils.mask_sensitive_info
-    （单一脱敏实现，两处模块的 _redact 别名收敛到同一函数，避免逻辑漂移）。
-
-    4.2 审计 R-1：降级路径委托 fallback_mask_sensitive_info（纯正则兜底，
-    拦截长随机串类凭证），不再原样返回——脱敏模块不可用时仍不泄漏凭证。
+    与 llm_client._redact_log_text 同源：统一委托给
+    logging_utils.redact_text（单一脱敏实现，两处 _redact 别名收敛到
+    同一函数，消除双套复制导致的逻辑漂移风险）。
     """
-    try:
-        from src.utils.logging_utils import mask_sensitive_info
+    from src.utils.logging_utils import redact_text
 
-        return mask_sensitive_info(text)
-    except Exception:
-        try:
-            from src.utils.logging_utils import fallback_mask_sensitive_info
-
-            return fallback_mask_sensitive_info(text)
-        except Exception:
-            # 脱敏模块彻底不可用（理论上不会发生：纯标准库模块）时原样返回，
-            # 不阻断主流程——脱敏失败不应让 API 调用本身崩溃
-            return text
+    return redact_text(text)
 
 
 class HealthCheckerThread(threading.Thread):
@@ -545,18 +531,22 @@ class APIManager:
             # 指定模型，沿用会逐个 APIError 陪葬，故障转移形同虚设
             call_model = model if model and attempt < len(nodes_to_try) else node.config.model_name
             prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
+            # 4.2：本次调用是否承载半开探测（_try_call_node 内预检写入；失败路径
+            # 的限流 / API 错误 / 通用异常处理需消费该探测，成功路径已在
+            # _try_call_node 内闭合）。常规调用恒为 False。
+            is_half_open_probe = self._enter_half_open_probe(node)
             try:
                 response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
                 if response is not None:
                     return response
             except openai.RateLimitError as e:
-                self._handle_rate_limit(node, attempt, len(nodes_to_try))
+                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe)
                 last_error = e
             except openai.APIError as e:
-                self._handle_api_error(e, node)
+                self._handle_api_error(e, node, is_half_open_probe)
                 last_error = e
             except Exception as e:
-                self._handle_generic_error(e, node)
+                self._handle_generic_error(e, node, is_half_open_probe)
                 last_error = e
 
         if last_error:

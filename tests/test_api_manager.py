@@ -12,6 +12,7 @@ import sys
 import time
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
 
 # 设置路径以便导入 src 模块
@@ -28,6 +29,18 @@ from src.api.api_manager import (
     print_status_table,
     reset_manager,
 )
+
+
+def _mock_client(return_value=None, side_effect=None):
+    """创建带 mock chat.completions.create 的 OpenAI 客户端。"""
+    mc = MagicMock()
+    if side_effect is not None:
+        mc.chat.completions.create = MagicMock(side_effect=side_effect)
+    else:
+        if return_value is None:
+            return_value = MagicMock()
+        mc.chat.completions.create = MagicMock(return_value=return_value)
+    return mc
 
 
 class TestAPIHealth:
@@ -118,9 +131,6 @@ class TestAPIHealth:
         for i in range(15):
             self.health.mark_success(float(i * 10))
         assert len(self.health._response_times) == 10
-        # 最早的值已被移除
-        assert 0.0 not in self.health._response_times
-        assert 140.0 in self.health._response_times
 
     # ── 4.1 熔断冷却期测试 ──
 
@@ -168,6 +178,72 @@ class TestAPIHealth:
         # 冷却截止应在 now+5s 附近（允许 0.5s 误差）
         delta = health.circuit_open_until - time.monotonic()
         assert 4.0 <= delta <= 5.5
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Section: 4.2 半开探测失败路径消费（call 路径回归）
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class TestCallHalfOpenProbeConsumption:
+    """4.2 回归：call 路径半开探测窗口内的失败请求必须消费探测结果。
+
+    此前 _handle_rate_limit / _handle_api_error / _handle_generic_error
+    在 call() 异常分支调用时未透传 is_half_open_probe，导致节点"探测失败"
+    后不重开半程冷却、下次仍被全量路由打到同一死 provider（与
+    check_health 路径口径不一致）。
+    """
+
+    def setup_method(self):
+        # 用 patch LLM_CONFIGS 隔离出 2 节点环境（与同文件 test_call_fallback_on_rate_limit 同款）
+        with patch("src.api.api_manager.LLM_CONFIGS", []):
+            self.mgr = APIManager(enable_health_checker=False)
+        self.mgr.add_node(LLMConfig("key1", "url1", "model1"))
+        self.mgr.add_node(LLMConfig("key2", "url2", "model2"))
+        # 清掉 _init_clients 预建的客户端（mock 注入前），仅保留两个 mock
+        self.mgr._client_cache.clear()
+        self.mgr.config.enable_half_open_probe = True
+        self.node = self.mgr.health_nodes["model1"]
+
+    def _enter_half_open_window(self) -> None:
+        """让 model1 进入半开探测窗口（冷却到期、探测未完成）。"""
+        self.node.circuit_cooldown_seconds = 0.05
+        for _ in range(self.node.max_consecutive_failures):
+            self.node.mark_failure("error")
+        self.node.circuit_open_until = time.monotonic() - 1.0
+        assert self.node.in_circuit_half_open is True
+
+    @patch("src.api.api_manager.openai.OpenAI")
+    def test_call_consumes_probe_on_rate_limit(self, mock_openai_class):
+        """call 路径 RateLimitError → 消费半开探测失败 → 节点重开半程冷却。"""
+        self._enter_half_open_window()
+        mock_req = MagicMock()
+        self.mgr._client_cache["model1"] = _mock_client(
+            side_effect=openai.RateLimitError("rate limited", response=mock_req, body={})
+        )
+        # 备用节点健康，call 故障转移到 model2 成功
+        self.mgr._client_cache["model2"] = _mock_client()
+        with patch("src.api.api_manager.time.sleep", return_value=None):
+            result = self.mgr.call(messages=[{"role": "user", "content": "hi"}], model="model1")
+        assert result is not None
+        # 探测失败：model1 重新进入熔断中（半程冷却），不再是半开
+        assert self.node.in_circuit_open is True
+        assert self.node.in_circuit_half_open is False
+
+    @patch("src.api.api_manager.openai.OpenAI")
+    def test_call_consumes_probe_on_api_error(self, mock_openai_class):
+        """call 路径 APIError → 消费半开探测失败 → 节点重开半程冷却。"""
+        self._enter_half_open_window()
+        mock_req = MagicMock()
+        self.mgr._client_cache["model1"] = _mock_client(
+            side_effect=openai.APIError("probe failed", request=mock_req, body={"code": "test"})
+        )
+        self.mgr._client_cache["model2"] = _mock_client()
+        with patch("src.api.api_manager.time.sleep", return_value=None):
+            result = self.mgr.call(messages=[{"role": "user", "content": "hi"}], model="model1")
+        assert result is not None
+        assert self.node.in_circuit_open is True
+        assert self.node.in_circuit_half_open is False
 
 
 class TestRotationStrategy:

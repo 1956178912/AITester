@@ -416,7 +416,8 @@ def build_cross_file_repair_plan(
     if max_modules is None:
         max_modules = cross_file_max_modules()
 
-    # 收集需要修改的模块（去重，保留 entry 自身 + 所有 target_module）
+    # 收集需要修改的模块（去重，保留 entry 自身 + 所有 target_module；
+    # 按字典序排序后截断 max_modules，保证 LLM 预算的消耗对象可预测）
     modules: list[str] = []
     for d in deps:
         if d.target_module not in modules:
@@ -537,7 +538,9 @@ def _topological_order(
         拓扑序排列的模块名列表（仅含 patches 中的模块）。
     """
     modules = set(patches.keys())
-    # 入度：module 的入度 = 它引用了哪些其他待改模块（需等这些模块先改）
+    # 入度：module 的入度 = 它引用了哪些其他待改模块（需等这些模块先改）。
+    # 按"边"计数（同一对模块的 K 条并行依赖边计 K，释放时逐边 -1，
+    # 统计口径对称——见下方队列循环注释）
     in_degree: dict[str, int] = {m: 0 for m in modules}
     for d in deps:
         if d.source_module in modules and d.target_module in modules and d.source_module != d.target_module:
@@ -546,10 +549,16 @@ def _topological_order(
 
     order: list[str] = []
     remaining = set(modules)
+    # entry 强制首位（被调用方根）：不进入队列，直接先排
     if entry_module in modules:
-        # entry 强制首位（被调用方根）
         order.append(entry_module)
         remaining.discard(entry_module)
+    # 入度 0 的模块按字典序入队；每轮弹出队首（字典序最小者）后，
+    # 重新全量排序队列——确定性口径："入度 0 节点中字典序最小者优先"。
+    # 注意：不能用 min-heap 替代（上一轮 0.7 优化误判语义等价）：
+    # 入度按"边"计数（同一对模块的 K 条并行边计 K），释放时逐边 -1，
+    # heap 按"去重后的调用方集合"释放一次仅 -1，并行边 >1 时入度
+    # 永远无法归零，节点会被误判为环尾追加，整体顺序改变。
     queue = sorted(m for m in remaining if in_degree.get(m, 0) == 0)
     while queue:
         m = queue.pop(0)
@@ -557,7 +566,7 @@ def _topological_order(
             continue
         order.append(m)
         remaining.discard(m)
-        # m 应用后，引用 m 的 caller 入度 -1
+        # m 应用后，引用 m 的 caller 入度 -1（逐边扣减，与入度按边累加对称）
         for d in deps:
             if d.target_module == m and d.source_module in remaining:
                 in_degree[d.source_module] -= 1

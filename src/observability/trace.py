@@ -163,6 +163,10 @@ class TraceSession:
         if not self._enabled or self._file_path is None:
             return
         # 敏感信息脱敏（与日志口径一致）：追踪文件同样不得落凭证
+        # 摘要口径收敛（0.10）：task_start 的 meta 已在构造时逐值 _summarize，
+        # record_node 的 output 与 task_end 的 extra 亦在入口处摘要——
+        # 此处不再二次摘要 meta（旧版浅拷贝 + 重建 meta dict 是冗余深处理），
+        # 记录对象本身只读序列化，无副作用。
         try:
             from src.utils.logging_utils import mask_sensitive_info
 

@@ -364,15 +364,18 @@ class TestCaseRetriever:
         # distance 不在 metadatas 里（此前 meta.get("distance") 恒为 0.0），
         # 必须从查询结果的 distances 字段取；缺失时（如 mock 返回值形状不同）
         # 宽松回退 0.0（相似度记 1.0，不影响排序，仅数值失真）。
-        # 注意：distances 与 documents 同为双层嵌套（外层按 query_texts）
+        # 注意：distances 与 documents 同为双层嵌套（外层按 query_texts）。
+        # chromadb 真实返回中 documents/metadatas 恒为 list[list]（单 query 时
+        # 外层长度 1，空集为 []）；"or [[]]" 回退为历史 mock 形状（外层 None）
+        # 保留的防御——取 0 号层时按 list 归一，运行期语义与 [] 一致
         distances_raw = results.get("distances")
         distances = distances_raw[0] if distances_raw else [0.0]
-        # chromadb query 结果中 documents / metadatas 可能为 None（空集 / mock 形状差异），
-        # 显式 or [] 收窄类型，运行期语义不变（zip 对空列表返回空迭代器）
         documents = results.get("documents") or [[]]
         metadatas = results.get("metadatas") or [[]]
+        doc_rows = documents[0] if isinstance(documents, list) and documents else []
+        meta_rows = metadatas[0] if isinstance(metadatas, list) and metadatas else []
         cases = []
-        for i, (_doc, meta) in enumerate(zip(documents[0], metadatas[0], strict=False)):
+        for i, (_doc, meta) in enumerate(zip(doc_rows, meta_rows, strict=False)):
             dist = distances[i] if i < len(distances) else 0.0
             cases.append(
                 {
@@ -415,15 +418,17 @@ class TestCaseRetriever:
 
         # 同 retrieve_test_cases：similarity 由余弦距离换算（1 - distance），
         # distance 不在 metadatas 里，需从查询结果的 distances 字段取；
-        # distances 与 documents 同为双层嵌套（外层按 query_texts）
+        # distances 与 documents 同为双层嵌套（外层按 query_texts）。
+        # documents/metadatas 取 0 号层时按 list 归一（chromadb 真实返回恒为
+        # list[list]，"or [[]]" 回退仅防御历史 mock 形状），运行期语义不变
         distances_raw = results.get("distances")
         distances = distances_raw[0] if distances_raw else [0.0]
-        # chromadb query 结果中 documents / metadatas 可能为 None（空集 / mock 形状差异），
-        # 显式 or [] 收窄类型，运行期语义不变（zip 对空列表返回空迭代器）
         documents = results.get("documents") or [[]]
         metadatas = results.get("metadatas") or [[]]
+        doc_rows = documents[0] if isinstance(documents, list) and documents else []
+        meta_rows = metadatas[0] if isinstance(metadatas, list) and metadatas else []
         repairs = []
-        for i, (_doc, meta) in enumerate(zip(documents[0], metadatas[0], strict=False)):
+        for i, (_doc, meta) in enumerate(zip(doc_rows, meta_rows, strict=False)):
             dist = distances[i] if i < len(distances) else 0.0
             repairs.append(
                 {

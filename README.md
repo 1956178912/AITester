@@ -9,13 +9,13 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1672 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1612 collected） |
-| **单元测试** | ✅ 全量 1672 passed, 0 failed；精简环境约 1612 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/；0.7 债务项 P2×8 落地新增 7 个回归用例 + 全面审查轮次新增 13 个用例后 1672 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
+| **总测试数** | ✅ 1667 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1607 collected） |
+| **单元测试** | ✅ 全量 1667 passed, 0 failed；精简环境约 1607 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后 1667 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 2026-09-24 全面审查修复（凭证脱敏动态模式化 `credential_scrub.py` 三条链路统一 + CLI `finally` 块脆弱代码消除 + 多候选节点无副作用化 + 补丁函数定位正则→AST + 5 处 ruff 瑕疵清零；全量 1672 passed / 零回归 / mypy 0 错误 / ruff 全绿）；此前 2026-09-24 代码质量轮次 + 2026-09-23 静态类型清零 + 0.7 债务项落地，详见 [CHANGELOG](CHANGELOG.md) |
-| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
+| **最新优化** | ✅ 2026-09-25 0.10 深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 路径白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫；全量 1667 passed / 零回归 / mypy 0 错误 / ruff 全绿）；此前 0.9 轮次 LRU 快路径 + 双套缓存漂移消除 + 0.8 全面审查修复，详见 [CHANGELOG](CHANGELOG.md) |
+| **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零） |
 | **最近改动** | ✅ 2026-09-24 全面审查修复：凭证脱敏动态模式化（新增 `src/utils/credential_scrub.py`，本地/venv/Docker 三条链路统一，覆盖 `LLM_N_API_KEY` 全部编号）+ CLI `finally` 块脆弱代码消除（`final_state` 显式初始化）+ 多候选节点无副作用化（统计改经 update dict 传递）+ 补丁函数定位正则→AST（装饰函数/含注释函数体不再被过早截断）+ `requirements.txt` 显式声明 `openai==2.54.0`；详见 [CHANGELOG](CHANGELOG.md) |
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1672 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1612 个收集）
+# 运行所有单元测试（全量 1667 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1607 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -287,8 +287,7 @@ AITester/
 │   │   ├── rag.py                    # RAG 检索器单例管理（get_rag_retriever，经 workflow.py re-export）
 │   │   ├── tracing.py                # 追踪层接线（任务级 JSONL 会话，经 workflow.py re-export）
 │   │   ├── state.py                  # 全局状态定义（TypedDict）+ create_initial_state 工厂（单一构造点）
-│   │   ├── token_usage.py            # 线程局部 LLM token 用量统计（P0 效率指标）
-│   │   └── llm_cache.py             # LLM 内存 LRU 缓存（可选，带命中统计）
+│   │   └── token_usage.py            # 线程局部 LLM token 用量统计（P0 效率指标）
 │   ├── observability/                # 结构化可观测性（4.1）
 │   │   └── trace.py                  # JSONL 节点级追踪（默认关，AITESTER_TRACE_DIR 启用）
 │   ├── prompts/                      # 提示词模板
@@ -816,7 +815,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1672 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1667 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -826,7 +825,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（68 个测试文件，全量 1672 个 pytest 收集用例；精简环境约 1612 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（68 个测试文件，全量 1667 个 pytest 收集用例；精简环境约 1607 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -865,13 +864,12 @@ docker run --rm \
 | `test_experiments_analysis.py` | 20 | 实验结果分析（排名/统计）+ 5.1 统计检验边界 5 用例（样本量 <3 / 部分配对缺失 / 单基线 / 脏数据） |
 | `test_experiments_scripts.py` | 54 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.1）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计 + 1.2 收敛失败模式归因 / 1.3 边界用例覆盖 / 1.3 变异得分 / 3.2 执行轨迹汇总（14 用例） |
 | `test_generator.py` | 43 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
-| `test_llm_cache.py` | 16 | LLM 内存缓存 |
-| `test_llm_file_cache.py` | 5 | LLM 文件缓存命中/失效 |
+| `test_llm_file_cache.py` | 7 | LLM 文件缓存命中/失效 + 温度键不互命中 + system_prompt 参与缓存键（0.9 深度审查回归） |
 | `test_logging_utils.py` | 19 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.1 脱敏扩展回归）+ 5.1 脱敏边界 5 用例（格式化失败/exc_info 堆栈脱敏/嵌套 dict 口径锁定/幂等/mask 异常回退） |
 | `test_mysql_client.py` | 15 | MySQL 客户端单例/事务/连接池参数 |
 | `test_multi_candidate.py` | 23 | 多候选补丁生成与静态/执行验证筛选（3.1） |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
-| `test_patch_applier.py` | 38 | 补丁应用（完整文件/单函数模式） |
+| `test_patch_applier.py` | 39 | 补丁应用（完整文件/单函数模式）+ 多函数补丁排序顺序（0.9 回归） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
 | `test_prompts_templates.py` | 14 | 三个 system prompt 常量结构契约（关键指令段/错误类别/JSON 输出格式，0.1） |
 | `test_rag_metrics.py` | 13 | RAG 检索质量指标 Hit Rate/MRR（P1） |
@@ -1223,14 +1221,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1672 个测试用例 / 覆盖率 94% / Ruff 全绿
+- 全量 1667 个测试用例 / 覆盖率 94% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1672 passed / 0 failed / ruff 全绿 / 覆盖率 94%
+**验证**: 全量 1667 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ---
 

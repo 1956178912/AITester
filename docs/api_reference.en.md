@@ -3,7 +3,7 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-09-24 (full-audit fix round: credential scrubbing factored into dynamic-pattern `credential_scrub.py` shared by the three execution paths (covers the entire `LLM_N_API_KEY` family), CLI `finally`-block fragile code eliminated, multi-candidate node made side-effect-free, patch function-location regex→AST, `requirements.txt` now explicitly declares `openai`; full 1672 test cases / ruff 0 warnings / mypy 0 errors / 94% coverage)
+> Last updated: 2026-09-25 (0.10 deep-audit round: LLM-cache negative-cache TTL correctness regression + write-root normalization fix + trace-layer redundant summarization removed + stats de-glob; full 1667 test cases / ruff 0 warnings / mypy 0 errors (58 source files) / 94% coverage)
 
 ---
 

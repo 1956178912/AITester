@@ -387,7 +387,7 @@ Entry functions: `_get_or_create_chat_client()` and `_get_or_create_zai_client()
 ### 7.3 Notes
 
 - Cache limit of 16: normal usage (a small number of model configurations) will never reach it; when many different API Keys are rotated, eviction happens one by one in FIFO order — predictable behavior.
-- Client reuse does not affect the LLM file cache or the in-memory LRU cache (they operate at the response level, orthogonal to client lifetime).
+- Client reuse does not affect the LLM file cache or the in-process LRU fast path (the 0.9 round removed the standalone `src/graph/llm_cache.py` module; the in-process LRU fast path for the LLM file cache now lives inside `base_agent._call_llm_with_cache` — both operate at the response level, orthogonal to client lifetime).
 
 ---
 

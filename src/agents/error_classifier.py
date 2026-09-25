@@ -675,7 +675,9 @@ def refine_failure_category(
     if test_passed is not False:
         return error_category
     history = repair_history or []
-    patch_rejected = any(not h.get("patch_applied", True) for h in history if h.get("patch_applied") is False)
+    # 补丁被安全守卫拒绝（显式 patch_applied=False 才命中；键缺失时
+    # get() 缺省 True 不进入过滤，与原实现口径一致）
+    patch_rejected = any(h.get("patch_applied") is False for h in history)
     if patch_rejected:
         return ErrorCategory.PATCH_VALIDATION_FAILED.value
     stats = rag_stats or []

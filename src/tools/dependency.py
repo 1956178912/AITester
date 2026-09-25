@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from typing import Any
 
@@ -304,12 +305,12 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
 # 4.4 改进：_VENV_CACHE_STATS_FILE 改为函数内动态计算（基于当前 _VENV_CACHE_DIR），
 # 而非模块级常量——此前模块级常量在 import 时固化，导致 monkeypatch 测试隔离
 # 缓存目录时落盘路径仍指向真实 ~/.cache/aitester，污染生产统计文件。
-_venv_cache_stats_lock = __import__("threading").Lock()
+_venv_cache_stats_lock = threading.Lock()
 # 0.6 P0-2：独立的落盘锁。计数锁（_venv_cache_stats_lock）只做内存累计（ns 级临界区，
 # venv 命中热路径不排队）；落盘锁（_venv_cache_persist_lock）保护
 # "读磁盘 → 快照内存 → 清零内存 → 写磁盘"整段（lost-update 安全）——
 # 两个锁分开，磁盘 IO 不再阻塞并发 worker 的计数，计数与落盘各自原子。
-_venv_cache_persist_lock = __import__("threading").Lock()
+_venv_cache_persist_lock = threading.Lock()
 _venv_cache_stats: dict[str, Any] = {"hits": 0, "creates": 0, "last_event_at": None}
 # 0.7 债务项 2.4：落盘节流间隔（秒）。距上次落盘不足该间隔时只累计内存、
 # 跳过磁盘 IO；未落盘事件由 get_venv_cache_stats（读磁盘 + 内存相加）与

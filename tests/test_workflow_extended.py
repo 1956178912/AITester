@@ -707,19 +707,19 @@ class TestEdgeCases:
 class TestGetWorkflowStats:
     """测试工作流统计的更多场景。"""
 
-    @patch("src.graph.workflow.get_cache_stats")
+    @patch("src.graph.workflow._file_cache_entry_count", lambda: 0)
+    @patch("src.graph.workflow._llm_cache_enabled", lambda: False)
     @patch("src.graph.workflow.ENABLE_PLANNER", False)
     @patch("src.graph.workflow.ENABLE_DEBUGGER", False)
     @patch("src.graph.workflow.ENABLE_RAG", True)
     @patch("src.graph.workflow.MAX_ITERATIONS", 5)
-    def test_get_workflow_stats_disabled_features(self, mock_get_cache):
-        """所有功能禁用时的统计信息。"""
+    def test_get_workflow_stats_disabled_features(self):
+        """所有功能禁用时的统计信息（0.7 P1-1.3：llm_cache 统一为文件缓存口径）。"""
         from src.graph.workflow import get_workflow_stats
-
-        mock_get_cache.return_value = {"hits": 0, "misses": 0}
 
         stats = get_workflow_stats()
 
+        assert stats["llm_cache"] == {"entries": 0, "enabled": False}
         assert stats["workflow_config"]["ENABLE_PLANNER"] is False
         assert stats["workflow_config"]["ENABLE_DEBUGGER"] is False
         assert stats["workflow_config"]["ENABLE_RAG"] is True

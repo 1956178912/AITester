@@ -84,6 +84,37 @@ def mask_sensitive_info(text: str) -> str:
     return result
 
 
+def redact_text(text: str) -> str:
+    """对任意日志文本做脱敏的单一实现（4.1 审计：消除双套 _redact 复制）。
+
+    历史上 `src/api/api_manager._redact` 与 `src/agents/llm_client._redact_log_text`
+    各自实现了一份同构的"mask → fallback → 原样返回"三级降级逻辑（注释均声明
+    "与对方同口径，委托同一实现"，但代码实际是复制而非委托——一旦模式更新
+    只改一处，另一处静默漂移）。本函数是该降级链的单一实现：
+    1. 首选 mask_sensitive_info（完整 5 模式）；
+    2. 首选路径异常时降级 fallback_mask_sensitive_info（纯正则兜底）；
+    3. 两者均不可用时原样返回（脱敏失败不应阻断主流程）。
+
+    各调用方保留本模块内的 `_redact` 别名（历史 patch 路径 / 日志口径
+    不变），实现统一收敛到本函数。
+
+    Args:
+        text: 待脱敏的日志文本（异常字符串 / base_url 等）。
+
+    Returns:
+        脱敏后的文本。
+    """
+    try:
+        return mask_sensitive_info(text)
+    except Exception:
+        try:
+            return fallback_mask_sensitive_info(text)
+        except Exception:
+            # 脱敏模块彻底不可用（理论上不会发生：纯标准库模块）时原样返回，
+            # 不阻断主流程——脱敏失败不应让 LLM/API 调用本身崩溃
+            return text
+
+
 class SensitiveFilter(logging.Filter):
     """日志过滤器，对格式化后的最终日志文本自动脱敏。
 

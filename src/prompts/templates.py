@@ -103,8 +103,11 @@ if __name__ == "__main__":
     import logging
 
     logging.basicConfig(level=logging.INFO)
+    # 用 globals() 的快照遍历本模块的全局变量（此前误用 locals()——在模块顶层
+    # 上下文中 locals() 仅含少数内置名，三个 prompt 常量不在其中，
+    # 过滤后集合恒空，"字符数验证"从未真正执行）。取 list(...) 快照
+    # 防 dict size 迭代期被 logging.basicConfig 等改动的 RuntimeError。
     logger = logging.getLogger(__name__)
-    items = list(locals().items())
-    for name, value in items:
+    for name, value in list(globals().items()):
         if isinstance(value, str) and name.isupper():
             logger.info("%s: %d 字符", name, len(value))

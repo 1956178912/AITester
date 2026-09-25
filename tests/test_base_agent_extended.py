@@ -285,12 +285,13 @@ class TestGetAllApiConfigs:
 # - AITESTER_LLM_CACHE=1 开启缓存（conftest autouse fixture 默认置 0，测试内显式覆盖）
 # - AITESTER_LLM_CACHE_DIR 指向临时目录（conftest 已做测试隔离）
 # 缓存键算法（与 base_agent._call_llm_with_cache 保持一致）：
-#   md5(f"{user_message}:{system_prompt}").hexdigest()[:16] + ".json"
+#   md5(user_message + "\x00" + system_prompt).hexdigest()[:16] + ".json"
+# （分隔符用 \x00：user_message/system_prompt 可能含冒号，避免拼接歧义）
 
 
 def _cache_file_for(user_message: str, system_prompt: str, cache_dir) -> Path:
     """计算给定消息对应的缓存文件路径（与 base_agent 实现同步，用于测试预置/断言）。"""
-    digest = hashlib.md5(f"{user_message}:{system_prompt}".encode()).hexdigest()[:16]
+    digest = hashlib.md5(f"{user_message}\x00{system_prompt}".encode()).hexdigest()[:16]
     return Path(cache_dir) / f"{digest}.json"
 
 

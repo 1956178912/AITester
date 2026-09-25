@@ -319,6 +319,27 @@ def bar(): return 0
         assert success is False
         assert "return 1" in new_code
 
+    def test_not_found_patch_applied_last(self):
+        """0.9 回归：未找到的补丁（定位 -1）排在最后应用，不因 reverse=True
+        被误当"行序最大"而最先应用（应用本身逐补丁独立定位，行序假设不成立；
+        未找到的必失败 → all_success=False，失败时保留的进度与输入序无关）。"""
+        original = """
+def zeta(): return 0
+def alpha(): return 0
+"""
+        # alpha 行序靠后、zeta 行序靠前；加上一个定位不到的补丁
+        patches = [
+            {"function_name": "alpha", "patch": "def alpha(): return 1"},
+            {"function_name": "zeta", "patch": "def zeta(): return 2"},
+            {"function_name": "ghost", "patch": "def ghost(): return 3"},
+        ]
+        new_code, success = apply_multi_function_patch(original, patches)
+        assert success is False
+        # 两个找到的补丁均成功应用；ghost 排最后、必失败
+        assert "return 1" in new_code
+        assert "return 2" in new_code
+        assert "ghost" not in new_code
+
     def test_apply_empty_patches(self):
         """空补丁列表返回原代码。"""
         original = "def foo(): return 0"

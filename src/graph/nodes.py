@@ -14,6 +14,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 from typing import Any, cast
@@ -55,6 +56,27 @@ logger = logging.getLogger(__name__)
 
 # 修复历史上限：超过后仅保留最近 N 条，防止长迭代循环占用内存（经验值 5）
 _MAX_REPAIR_HISTORY = 5
+
+# 安全检查 2 用：函数定义探测正则（re 编译缓存命中，热路径零编译开销）。
+# 锚定行首（含缩进行）后的 `def `，与旧的"逐行 startswith('def ')"语义等价
+# （行内首 token 非 def 的注释/docstring 不命中，避免误判）。
+_HAS_FUNC_DEF_RE = re.compile(r"^\s*def ", re.MULTILINE)
+
+# 安全检查 3 用：路径白名单根（项目根目录 + 系统临时目录），模块加载期
+# 归一化一次。此前每次补丁应用都现场算 4 层 dirname + 3 次 realpath，
+# --parallel 多任务累积为重复的 stat/lstat 系统调用。
+# 两侧统一 realpath 归一（realpath 内部已含 abspath 语义，旧实现外层再包一层
+# abspath 属冗余已去除）；macOS /var→/private/var 符号链接场景下 realpath
+# 归一是白名单判定正确性的关键（见 _is_within_allowed_roots 说明）。
+# realpath 结果进程内稳定（符号链接不变），加载期归一化一次，
+# 热路径 _is_within_allowed_roots 免每次重复解析根目录。
+_ALLOWED_WRITE_ROOTS: tuple[str, ...] = tuple(
+    os.path.realpath(root)
+    for root in (
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        tempfile.gettempdir(),
+    )
+)
 
 
 def _planner_node(state: AITesterState) -> dict[str, Any]:
@@ -315,7 +337,9 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
             get_retriever=get_rag_retriever,
         )
 
-    # 3.2 执行反馈轨迹：追加本次执行记录（纯观测层，默认常开）
+    # 3.2 执行反馈轨迹：追加本次执行记录（纯观测层，默认常开）。
+    # 上一轮覆盖率从入参轨迹前缀直接读（_record_execution_trace 内部再
+    # 复制一份轨迹，故此处不预先计算 prev_coverage，避免重复扫描）
     new_trace = _record_execution_trace(
         state,
         passed=result["passed"],
@@ -362,10 +386,11 @@ def _record_execution_trace(
     Returns:
         追加本次记录后的完整 execution_trace 列表。
     """
+    # 上一轮覆盖率从入参轨迹前缀读取（首轮为 None，与调用方口径一致）；
+    # 调用方 _executor_node 已用同一公式计算过覆盖变化，此处仅服务
+    # 追加的轨迹记录，避免重复全轨迹扫描
     trace = list(state.get("execution_trace") or [])
-    prev_coverage = None
-    if trace:
-        prev_coverage = trace[-1].get("coverage")
+    prev_coverage = trace[-1].get("coverage") if trace else None
     coverage_delta = round(coverage - prev_coverage, 2) if prev_coverage is not None else None
 
     # 3.2 改进：基于历史轨迹的动态迭代策略调整——根据前几轮的
@@ -607,20 +632,18 @@ def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:
     用 realpath 归一化两侧：macOS 上 /var 是 /private/var 的符号链接，
     pytest 的 tmp_path 与 tempfile.gettempdir() 一侧带 /private 一侧不带，
     abspath 会失配；realpath 统一解析符号链接后再比较。
+    _ALLOWED_WRITE_ROOTS 已在模块加载期 realpath 归一化（进程内稳定），
+    本函数仅对入参做 realpath，避免热路径重复解析根目录。
 
     Args:
         path: 待校验的文件路径。
-        roots: 允许的根目录元组。
+        roots: 允许的根目录元组（已 realpath 归一化）。
 
     Returns:
         True 表示路径位于某根目录内（或即根目录本身）。
     """
     abs_path = os.path.realpath(path)
-    for root in roots:
-        root_abs = os.path.realpath(root).rstrip(os.sep)
-        if abs_path == root_abs or abs_path.startswith(root_abs + os.sep):
-            return True
-    return False
+    return any(abs_path == root or abs_path.startswith(root.rstrip(os.sep) + os.sep) for root in roots)
 
 
 def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
@@ -813,20 +836,24 @@ def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: A
     if not new_code or len(new_code) < len(original_code) * 0.1:
         logger.error("补丁内容异常（空或过短），跳过写入: %s", state["target_file"])
         return False
-    # 安全检查 2：必须含至少一个函数定义（防 LLM 返回无意义内容）
-    if not any(line.strip().startswith("def ") for line in new_code.splitlines()):
+    # 安全检查 2：必须含至少一个函数定义（防 LLM 返回无意义内容）。
+    # 单遍字符串扫描（re.search 命中即停，不再把补丁全文逐行拆成
+    # list[str] 再逐行 startswith——补丁普遍数百行，每次应用都产生
+    # O(行数) 临时列表，--parallel 场景下累积可观）
+    if not _HAS_FUNC_DEF_RE.search(new_code):
         logger.error("补丁不含任何函数定义，跳过写入: %s", state["target_file"])
         return False
     # 安全检查 3：路径白名单（项目根目录或系统临时目录，前缀比较带 os.sep 防兄弟目录碰撞）
+    # 白名单根在模块加载期归一化（_ALLOWED_WRITE_ROOTS，abspath 与历史判定语义一致）
     target_file_path = os.path.abspath(state["target_file"])
-    project_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    temp_dir = os.path.abspath(tempfile.gettempdir())
-    if not _is_within_allowed_roots(target_file_path, (project_root, temp_dir)):
+    if not _is_within_allowed_roots(target_file_path, _ALLOWED_WRITE_ROOTS):
         logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
         return False
     # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
-    _write_file_atomic(target_file_path, new_code)
-    logger.info("补丁已应用到文件: %s", target_file_path)
+    # 写目标用 abspath（无符号链接归一化）：白名单判定走 realpath 语义，
+    # 写盘路径保持调用方视角的原始路径（行为与历史一致）
+    _write_file_atomic(os.path.abspath(state["target_file"]), new_code)
+    logger.info("补丁已应用到文件: %s", state["target_file"])
     return True
 
 
@@ -907,7 +934,11 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # 状态/磁盘一致性：仅写盘成功才更新 target_code，否则保留原代码
     effective_code = new_code if written else original_code
 
-    history = state.get("repair_history", []) or []
+    # 0.8 一致性口径：节点函数保持"纯函数更新字典"（--parallel 线程下
+    # LangGraph 共享 TypedDict 不允许原地写）——此前 history.append 直接
+    # 改写 state["repair_history"] 原列表（其他节点/路由对同一 state 的读取
+    # 会看到被改写的中间值）；现改为拷贝后追加、经 update dict 写回
+    history = list(state.get("repair_history") or [])
     history.append(
         {
             "iteration": state.get("iteration", 0) + 1,

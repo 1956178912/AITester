@@ -105,7 +105,12 @@ def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, st
         return False, f"应用后代码过短（{len(new_code)} < 原 {len(original_code)} 的 10%）", ""
 
     # 安全检查 2：必须保留至少一个函数定义
-    if _count_function_defs(new_code) == 0 and _count_function_defs(original_code) > 0:
+    # 各代码全文的函数定义数只算一次（此前同一函数内对 same_code /
+    # original_code 各调 2~3 次 re.findall，全文扫描在 --parallel 多候选
+    # 场景下累积可观）；检查 4 直接复用上述计数
+    new_defs = _count_function_defs(new_code)
+    orig_defs = _count_function_defs(original_code)
+    if new_defs == 0 and orig_defs > 0:
         return False, "应用后代码丢失了全部函数定义", ""
 
     # 安全检查 3：语法完整（ast.parse 可编译）
@@ -115,7 +120,7 @@ def static_validate_patch(original_code: str, patch: str) -> tuple[bool, str, st
         return False, f"语法错误（line {e.lineno}）: {e.msg}", ""
 
     # 安全检查 4：函数定义数量不减少（防止误删其他函数）
-    if _count_function_defs(new_code) < _count_function_defs(original_code):
+    if new_defs < orig_defs:
         return False, "函数定义数量减少（可能误删其他函数）", ""
 
     return True, "", new_code

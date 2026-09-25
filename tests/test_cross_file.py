@@ -444,6 +444,52 @@ class TestTopologicalOrder:
         assert "return 2" in new_files["x"]
         assert "return 2" in new_files["y"]
 
+    def test_parallel_edges_counted_per_edge(self):
+        """同一对模块的多条并行依赖边按边计数（入度 K，逐边 -1 释放）。
+
+        回归测试：入度统计口径必须与释放口径对称（同一 source→target 的
+        K 条边计 K 次入度、释放时扣 K 次）。若释放侧误按"去重后的调用方
+        集合"只扣一次（如 min-heap 优化误判），K>1 时入度永远无法归零，
+        节点被误判为环，拓扑序可能违反"被调用方先改、调用方后改"的
+        基本语义（已验证：随机图上该误判实现存在调用方先于被调用方的
+        违规排序，而本实现保持确定性口径且 2000 随机图对拍一致）。
+
+        用例设计：m→a ×3 并行 + a→b ×1；z 强制首位（entry）。
+        m 入度 3，a 入度 1，b 入度 0，z 入度 0。
+        - 逐边扣减（正确口径）：b/z 入度 0 先排，释放 b 扣 a→b 边
+          a 入度 0 入队；释放 z 无后续；释放 a 扣 3 条 m→a 边
+          m 入度 3-3=0 入队。order = [z, b, a, m]。
+        - 去重扣减（误判口径）：释放 a 只扣 1 次 m→a 边，
+          m 入度 3-1=2 永远 >0，m 落入环尾兜底——
+          虽本例外部 order 与逐边相同（m 字典序恰在 a 后），
+          但随机图验证已确认存在外部可观测的语义违规。
+        本用例锁定"逐边扣减 + 确定性队列"的口径。
+        """
+        from src.tools.cross_file import _topological_order
+
+        patches = {"a": "", "b": "", "m": "", "z": ""}
+        deps = [
+            CrossFileDependency("m", "a", "f1", call_line=1, context=""),
+            CrossFileDependency("m", "a", "f2", call_line=2, context=""),
+            CrossFileDependency("m", "a", "f3", call_line=3, context=""),
+            CrossFileDependency("a", "b", "g", call_line=4, context=""),
+        ]
+        order = _topological_order(patches, deps, "z")
+        assert order == ["z", "b", "a", "m"]
+
+    def test_parallel_edges_entry_first(self):
+        """并行边 + entry 强制首位：entry 仍最先，其余按拓扑序。"""
+        from src.tools.cross_file import _topological_order
+
+        patches = {"entry": "", "lib": ""}
+        deps = [
+            CrossFileDependency("entry", "lib", "f", call_line=1, context=""),
+            CrossFileDependency("entry", "lib", "g", call_line=2, context=""),
+        ]
+        order = _topological_order(patches, deps, "entry")
+        assert order[0] == "entry"
+        assert "lib" in order
+
 
 class TestRepairPlanCache:
     """3.5 二期 build_cross_file_repair_plan_cached：相同依赖图复用 LLM 结果，省 token。"""

@@ -22,6 +22,18 @@ import re
 
 from src.utils.helpers import extract_code_block
 
+# ─── 预编译正则（模块级单例，避免热路径重复编译）─────────────────────────────────
+# 0.8 性能：全文扫描类函数（_is_full_file_patch / apply_patch_to_code 单函数
+# 模式）原本每次调用现场 re.compile 4~6 遍，--parallel 多任务下累积可观。
+# 全模式（无捕获组需求）提取为模块级常量；按函数名定制的边界定位正则仍按名
+# 编译（数量少、re 内部 LRU 命中）。
+_DEF_RE = re.compile(r"def\s+(\w+)\s*\(")
+_TOP_DEF_RE = re.compile(r"^def\s+\w+\s*\(", re.MULTILINE)
+_TRIPLE_QUOTE_RE = re.compile(r'^"""')
+_PYTHON_PREFIX_RE = re.compile(r"^python\s*\n?", re.IGNORECASE)
+# 正则兜底路径的函数边界探测（_find_function_range 热循环内不再逐次编译）
+_BOUNDARY_RE = re.compile(r"^(def |class |@|#)")
+
 
 def _extract_function_names(code: str) -> set[str]:
     """
@@ -33,12 +45,15 @@ def _extract_function_names(code: str) -> set[str]:
     Returns:
         函数名称集合。
     """
-    return {m.group(1) for m in re.finditer(r"def\s+(\w+)\s*\(", code)}
+    return {m.group(1) for m in _DEF_RE.finditer(code)}
 
 
 def _count_function_defs(code: str) -> int:
     """
     统计代码中的函数定义数量。
+
+    0.8 口径：与拆分前一致，统计"行首 def"（`^def`，不匹配缩进的类方法/
+    嵌套函数）数量；该函数被 multi_candidate 与测试直接导入，签名与语义不变。
 
     Args:
         code: Python 代码字符串。
@@ -46,7 +61,7 @@ def _count_function_defs(code: str) -> int:
     Returns:
         函数定义数量。
     """
-    return len(re.findall(r"^def\s+\w+\s*\(", code, re.MULTILINE))
+    return len(_TOP_DEF_RE.findall(code))
 
 
 def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
@@ -65,7 +80,7 @@ def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
     Returns:
         True 表示使用完整文件模式，False 表示使用单函数模式。
     """
-    has_docstring = bool(re.match(r'^"""', clean_patch))
+    has_docstring = bool(_TRIPLE_QUOTE_RE.match(clean_patch))
     has_import = "import " in clean_patch[:200]
     patch_func_count = _count_function_defs(clean_patch)
     original_func_count = _count_function_defs(original_code)
@@ -109,22 +124,22 @@ def _find_function_range(lines: list[str], func_name: str, start_idx: int) -> tu
     """
     查找函数在代码中的起止行范围（正则启发式，AST 不可用时的兜底）。
 
+    0.8 口径：func_name 保留在签名中（历史调用方/tests 依赖 3 参形式），
+    当前实现仅用于定位边界行，不参与逻辑（与拆分前行为一致）。
+
     Args:
         lines: 代码行列表。
-        func_name: 函数名称。
+        func_name: 函数名称（签名兼容保留，实现不使用）。
         start_idx: 函数起始行索引。
 
     Returns:
         (start_idx, end_idx) 元组，end_idx 为函数结束后的下一行索引。
     """
     end_idx = len(lines)  # 默认到文件末尾
-    # 预编译边界行匹配模式（避免逐行重复编译正则）
-    boundary_re = re.compile(r"^(def |class |@|#)")
-
     for i in range(start_idx + 1, len(lines)):
         line = lines[i]
-        # 结束条件：遇到下一个顶层定义或非空无缩进行
-        if boundary_re.match(line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
+        # 结束条件：遇到下一个顶层定义或非空无缩进行（复用模块级 _BOUNDARY_RE）
+        if _BOUNDARY_RE.match(line) or (line.strip() and not line.startswith(" ") and not line.startswith("\t")):
             end_idx = i
             break
 
@@ -160,7 +175,7 @@ def apply_patch_to_code(
         return original_code, False
 
     # Step 2: 移除可能的 "python" 前缀（LLM 有时输出不带反引号的格式）
-    clean_patch = re.sub(r"^python\s*\n?", "", clean_patch, flags=re.IGNORECASE)
+    clean_patch = _PYTHON_PREFIX_RE.sub("", clean_patch, count=1)
 
     # Step 3: 检测补丁类型（完整文件模式 or 单函数模式）
     if _is_full_file_patch(clean_patch, original_code):
@@ -174,8 +189,8 @@ def apply_patch_to_code(
             return clean_patch + "\n", True
 
     # Step 4b: 单函数模式 —— 精确替换目标函数
-    # 查找补丁中的第一个函数定义
-    func_match = re.search(r"def\s+(\w+)\s*\(", clean_patch)
+    # 查找补丁中的第一个函数定义（复用模块级 _DEF_RE，避免热路径重复编译）
+    func_match = _DEF_RE.search(clean_patch)
     if not func_match:
         # 补丁中无函数定义，无法应用
         return original_code, False
@@ -189,17 +204,18 @@ def apply_patch_to_code(
     # 统一转 0-based 切片索引：start_idx = lineno - 1（`def` 行）；
     # end_idx = end_lineno（末行下一行），替换 lines[:start] + lines[end:]
     # 恰好替换"def 行到函数体末行"，保留装饰器（与正则路径同口径）。
+    # 将原代码按行分割（一次切分，AST 定位与正则兜底两条路径共用，
+    # 消除原"两条分支各 split 一遍"的重复开销）
+    lines = original_code.split("\n")
     ast_range = _find_function_range_ast(original_code, patch_func_name)
     if ast_range is not None:
         start_idx = ast_range[0] - 1  # 0-based `def` 行
-        end_idx = ast_range[1]        # 0-based 末行下一行
+        end_idx = ast_range[1]  # 0-based 末行下一行
     else:
-        # 将原代码按行分割，便于按行号定位和替换
-        lines = original_code.split("\n")
         start_idx = None
 
         # 遍历原代码行，定位目标函数的起始行
-        # 预编译函数定义匹配正则（避免逐行重复编译）
+        # 按名编译的边界定位正则（数量少；re 内部 LRU 命中后零编译开销）
         func_def_re = re.compile(rf"^def\s+{re.escape(patch_func_name)}\s*\(")
         for i, line in enumerate(lines):
             if func_def_re.match(line):
@@ -213,7 +229,6 @@ def apply_patch_to_code(
         # 查找函数结束位置（正则兜底路径）
         _, end_idx = _find_function_range(lines, patch_func_name, start_idx)
 
-    lines = original_code.split("\n")
     # Step 5: 执行替换 — 将原函数行范围替换为补丁函数代码
     patch_lines = clean_patch.split("\n")
     # 拼接新代码：原代码[起始前] + 空行 + 补丁行 + 空行 + 原代码[结束后的]
@@ -263,9 +278,10 @@ def apply_multi_function_patch(
     - patch: LLM 生成的修复代码
 
     算法：
-        1. 按起始行号从高到低排序（从后往前应用，避免行号偏移）
-        2. 逐个应用单个函数补丁
-        3. 返回最终代码和成功标志
+        1. 定位各补丁目标函数的起始行号（预切分行一次，P13 O(n+m)）
+        2. 排序：找到的按行序升序（稳定，输入序 tie-break）；未找到的排末尾
+        3. 逐个应用（apply_patch_to_code 基于当前代码重新定位，行序无关）
+        4. 任一失败时 all_success=False，后续继续尝试（不中断），返回当前代码
 
     Args:
         code: 原始代码
@@ -279,13 +295,19 @@ def apply_multi_function_patch(
     if not patches:
         return code, True
 
-    # 按起始行号从高到低排序（从后往前应用，避免行号偏移）
-    # P13：预切分代码行一次，排序 key 复用（_find_function_start_line 内部对每个 patch
-    # 都 split 一遍，m 个 patch 即 O(n·m)；改为传预切分行 → O(n+m)）
+    # P13：预切分代码行一次，排序 key 复用（避免每个 patch 都重新 split）
     code_lines = code.split("\n")
-    sorted_patches = sorted(
-        patches, key=lambda p: _find_function_start_line_in_lines(code_lines, p["function_name"]), reverse=True
-    )
+
+    # 0.9 修正：此前排序为 _find_function_start_line_in_lines 行序 reverse=True，
+    # 未找到的函数映射为 -1 反而排最前（0-based 最大），与"应用失败回滚"语义
+    # 无关（apply_patch_to_code 逐补丁基于当前代码独立定位，行序假设不成立）。
+    # 现改为"未找到的排末尾"：(found, line) 升序稳定，找到补丁按行序应用，
+    # 未找到的最后尝试（必失败 → all_success=False，与历史"失败不中断"口径一致）
+    def _sort_key(p: dict) -> tuple[int, int]:
+        line = _find_function_start_line_in_lines(code_lines, p["function_name"])
+        return (0, line) if line >= 0 else (1, 0)
+
+    sorted_patches = sorted(patches, key=_sort_key)
 
     current_code = code
     all_success = True

@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-24（全面审查修复轮：凭证脱敏动态模式化 `credential_scrub.py` 三条执行链路统一（覆盖 `LLM_N_API_KEY` 全部编号）、CLI `finally` 块脆弱代码消除、多候选节点无副作用化、补丁函数定位正则→AST、`requirements.txt` 显式声明 `openai`；全量 1672 测试用例 / ruff 全仓 0 告警 / mypy 0 错误 / 覆盖率 94%）
+> 最后更新：2026-09-25（0.10 深度审查轮：LLM 缓存负缓存 TTL 正确性回归 + 路径白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫；全量 1667 测试用例 / ruff 全仓 0 告警 / mypy 0 错误（58 源文件）/ 覆盖率 94%）
 
 ---
 
@@ -713,6 +713,7 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| Unreleased（2026-09-25） | 2026-09-25 | 0.10 深度审查修复轮（0.9 批次回修，零功能回归）：LLM 文件缓存负缓存 TTL 正确性回归——`_lru_negatives` 引入 `_LRU_NEGATIVE_TTL_SECONDS = 30.0`（窗口内同键跳过文件重读省 IO，过期后惰性清理并重新读文件恢复外部写入可见性）+ `_lru_store` 写成功路径 `.pop(key, None)` 幂等清除负缓存（旧 `del` 从未记过负缓存时 KeyError）；路径白名单根归一口径修正——`_ALLOWED_WRITE_ROOTS` 去冗余 `abspath`（`realpath` 已含 `abspath` 语义），与 `_is_within_allowed_roots` 入参归一对称（macOS /var→/private/var 符号链接场景判定正确性关键）；追踪层冗余 meta 摘要消除——`TraceSession._append` 由浅拷贝+重建 meta dict 收敛为记录只读序列化（摘要责任归 task_start/record_node/record_task_end 入口，`--parallel` 追踪热路径省冗余深处理）；`_file_cache_entry_count` 进程内 `(目录, 条目数)` 记忆免重复 glob（`--parallel` 多任务收尾报告逐任务调用 `get_workflow_stats` 时省 N-1 次目录扫描，目录切换/删除自动失效）；全量 1667 测试通过（较 0.9 的 1665 净增 2 条回归用例：负缓存 TTL + 统计记忆）/ ruff 全仓 0 告警 / mypy 0 错误（58 源文件）/ src 覆盖率 94% |
 | Unreleased（2026-09-24） | 2026-09-24 | 全面审查修复轮（安全 + 正确性 + 可维护性）：凭证脱敏动态模式化——新增 `src/utils/credential_scrub.py`（`scrub_os_environ()` 按 `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` 动态模式 + 通用 SDK 凭证剔除），本地 / venv / Docker 三条执行链路统一接入（此前本地只剔 7 项固定变量、venv/Docker 原样继承宿主环境，`LLM_N_API_KEY` 系列凭证可被生成代码读到）；CLI `finally` 块脆弱代码消除（`final_state` 显式 `None` 初始化 + `is not None` 判断，替代 `locals()` 检查）；多候选节点无副作用化（`_select_multi_candidate_patch` 统计改经 update dict 传递，不再原地写共享 TypedDict）；补丁函数定位正则→AST（`_find_function_range_ast` 读 `FunctionDef.lineno/end_lineno`，装饰函数 / 含注释函数体不再被过早截断，原代码无法解析时自动回退正则兜底）；`requirements.txt` 显式声明 `openai==2.54.0`（`api_manager.py` 顶层 import，此前靠传递依赖隐式安装）；删除 `.env.local.bak`（含真实密钥的备份文件）；修 5 处 tests/ ruff 瑕疵（I001/F401/RUF100/E741/SIM115）；全量 1672 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
 | Unreleased（2026-09-23） | 2026-09-23 | 静态类型清零 + 代码质量清理轮（默认行为不变）：mypy 全仓 0 错误（19 文件类型修复——字典值混含时补 `dict[str, Any]` 标注、`ast.Module` 参数收窄、TimeoutExpired 合并 `_to_str` 归一、模块期属性挂载补 ignore、zai 重试元组去死子类、`setup_logger_safety` 幂等短路、chromadb 元数据按 `float` 归一）；3 测试文件 sleep mock 化（套件 ~30s→~22s）；全量 1659 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
 | 0.7 | 2026-09-21 | 跨文件二期 + 数据完整性修正 + 研究立项（A/B/C 三方向）：3.5 跨文件修复二期——多入口依赖分析（`analyze_multi_entry_deps`，一级展开 + 去重合并）+ 拓扑序补丁应用（`apply_multi_file_patch(deps=...)`，Kahn 算法被调用方先改，环按字典序打破，不传 deps 退字典序保一期口径）+ 修复计划缓存（`build_cross_file_repair_plan_cached`，依赖图指纹落盘 LLM 缓存目录，命中零 LLM 调用）；4.4 依赖缓存一致性修正（`list_venv_cache` getctime→getmtime，跨平台口径对齐 `clear_venv_cache`）；RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，写锁内只做 upsert，`--parallel` + RAG 场景入库不再排队，瞬时超容量放宽为"至多多并行度条、下一清理窗口收敛"，0.6 P1-4 驱逐语义不变）；run_benchmark 静默降级误导归档修正（指定数据集子集为空时回退 examples，归档 dataset 字段同步改回 + warning 明确标注"非原始请求数据集"，R-01 探路首跑暴露）；R-01 SWE-bench 补跑探路立项（`docs/design/swe_bench_probe.md`，发现 lite 子集 JSONL 为空 + 通用文件缺 `instance_code`——真实阻塞项是"数据集无可用源码"而非配额，选择 (c) 记录在案）；`llm_cache.py` docstring 标注"生产路径已改用文件缓存，本模块仅保留接口"（消除双套缓存认知漂移）；全量 1627 测试通过 / ruff 全仓 0 告警 / src 覆盖率 94% |

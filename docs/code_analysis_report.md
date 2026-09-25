@@ -31,6 +31,23 @@
 > **1672 passed / 0 failed**（较 09-23 的 1659 净增 13 个用例），
 > `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误 / src 覆盖率 94%。
 >
+> ⚠️ **2026-09-25 轮次（0.9 深度审查 + 性能优化）基线更新**：LLM 文件缓存
+> LRU 快路径、双套缓存漂移消除（删除死模块 `src/graph/llm_cache.py`）、
+> 补丁应用正则预编译、节点纯函数口径修复、LLM 缓存键材料拼接歧义修复、
+> 多函数补丁排序顺序修正、节点纯函数化、RAG 检索器热路径优化、dependency
+> 锁初始化归一完成后，测试基线推进至
+> **1665 passed / 0 failed**（较 0.8 的 1672 净减 7：删除 16 个已移除死模块
+> 用例 + 更新 2 个统计口径用例 + 新增 3 条回归用例），
+> `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误（58 源文件）/ src 覆盖率 94%。
+>
+> ⚠️ **2026-09-25 轮次（0.10 深度审查修复）基线更新**：LLM 缓存负缓存 TTL
+> 正确性回归修复（`_LRU_NEGATIVE_TTL_SECONDS` + 写成功幂等清除负缓存）、
+> 路径白名单根归一口径修正（`_ALLOWED_WRITE_ROOTS` 去冗余 abspath）、
+> 追踪层冗余 meta 摘要消除（`_append` 只读序列化）、`_file_cache_entry_count`
+> 进程内记忆免重复 glob 完成后，测试基线推进至
+> **1667 passed / 0 failed**（较 0.9 的 1665 净增 2 条回归用例），
+> `ruff check .` / `ruff format --check` 全绿 / mypy 0 错误（58 源文件）/ src 覆盖率 94%。
+>
 > 下方各节内容仅作历史参考；最新静态检查结论与测试基线请以 CHANGELOG
 > "静态类型清零 + 代码质量清理"节及 `ruff check .` / `mypy src/ config.py` /
 > `pytest` 实时输出为准。

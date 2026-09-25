@@ -29,6 +29,9 @@ _JSON_LEAF_PATTERN = re.compile(r"\{[^{}]*\}")
 # 每次调用重复编译 re.sub 模式浪费；re 内部缓存有限，显式编译最稳妥）
 _JSON_FENCE_STRIP_PATTERN = re.compile(r"```(?:json)?\s*\n?")
 _JSON_BACKTICK_STRIP_PATTERN = re.compile(r"```")
+# "python:" 前缀剥离（extract_code_block 热路径：LLM 每次输出的代码提取都会走，
+# 显式预编译避免每次调用重复编译）
+_PYTHON_PREFIX_STRIP_PATTERN = re.compile(r"^python(?!\w)\s*:?\s*\n?", re.IGNORECASE)
 
 
 def extract_code_block(text: str, language: str | None = None) -> str:
@@ -62,9 +65,11 @@ def extract_code_block(text: str, language: str | None = None) -> str:
     # 关键：仅当 "python" 是独立"标签"（后接 冒号/换行/空白/行尾，而非标识符续
     # 字符）时才剥离，否则会误吞以 python 开头的合法代码行（如 python_path = 3
     # 会被剥成 _path = 3）——用 (?!\w) 负向后瞻排除"python 是更长标识符一部分"。
+    # （0.7 债务项 0.1：仅剥离首个前缀；LLM 输出中多重 python: 包裹为
+    # 既有限制，本次不做扩展以保持行为口径不变）
     stripped = text.strip()
     if stripped.lower().startswith("python"):
-        stripped = re.sub(r"^python(?!\w)\s*:?\s*\n?", "", stripped, flags=re.IGNORECASE)
+        stripped = _PYTHON_PREFIX_STRIP_PATTERN.sub("", stripped)
         return stripped.strip()
 
     # 返回原始文本（strip 空白）
