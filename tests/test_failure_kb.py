@@ -171,6 +171,18 @@ class TestCrossBatch:
         )
         comparison = cross_batch_comparison([batch], "aitester")
         assert comparison["new_categories"] == []
+        assert comparison["resolved_categories"] == []
+        assert comparison["regressed_categories"] == []
+
+    def test_empty_summaries_list(self):
+        """5.1 边界：批次列表为空时不崩溃，全部趋势字段为空。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        comparison = cross_batch_comparison([], "aitester")
+        assert comparison["batches"] == []
+        assert comparison["failure_trend"] == {}
+        assert comparison["new_categories"] == []
+        assert comparison["resolved_categories"] == []
         assert comparison["regressed_categories"] == []
 
     def test_regressed_category(self):

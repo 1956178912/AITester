@@ -311,6 +311,36 @@ class TestCrossBatchComparison:
         )
         comparison = cross_batch_comparison([batch], "aitester")
         assert comparison["new_categories"] == []
+        assert comparison["resolved_categories"] == []
+        assert comparison["regressed_categories"] == []
+        # 单批次 failure_trend 仍记录该批次的类别计数（长度 1 的序列）
+        assert comparison["failure_trend"]["assertion"] == [1]
+
+    def test_single_batch_all_passed_empty_trend(self):
+        """5.1 边界：单批次且全部任务通过时，failure_trend 为空字典。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        batch = self._make_summary(
+            "batch1",
+            [
+                {"task_id": "t1", "passed": True},
+                {"task_id": "t2", "passed": True},
+            ],
+        )
+        comparison = cross_batch_comparison([batch], "aitester")
+        assert comparison["failure_trend"] == {}
+        assert comparison["batches"][0]["failed"] == 0
+        assert comparison["batches"][0]["failure_categories"] == {}
+
+    def test_empty_summaries_list(self):
+        """5.1 边界：批次列表为空时不崩溃，全部趋势字段为空。"""
+        from experiments.compare_failures import cross_batch_comparison
+
+        comparison = cross_batch_comparison([], "aitester")
+        assert comparison["batches"] == []
+        assert comparison["failure_trend"] == {}
+        assert comparison["new_categories"] == []
+        assert comparison["resolved_categories"] == []
         assert comparison["regressed_categories"] == []
 
     def test_regressed_category(self):

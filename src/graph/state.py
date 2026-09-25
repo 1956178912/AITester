@@ -189,6 +189,10 @@ class AITesterState(TypedDict, total=False):
     defect_type: str | None
     # 3.1 Review Agent 判定依据文本（defect_type 的补充说明）
     review_reason: str | None
+    # 3.3 位置感知迭代修复定位结果（POSITION_AWARE_REPAIR_ENABLE=true 时由
+    # debugger 节点写入）：{"focused": bool, "function_name": str | None,
+    # "line": int | None, "hint": str}；未启用/无法定位时 focused=False, hint=""
+    position_aware_focus: dict[str, Any] | None
     # 2.3 复现测试专项生成结果（REPRO_TEST_ENABLE=true 时由 generator 节点写入）：
     # 覆盖缺陷触发路径的复现测试代码（先失败后通过）
     repro_test: str | None
@@ -281,4 +285,6 @@ def create_initial_state(
         review_reason=None,
         # 2.3 复现测试生成结果（默认 None，启用复现测试生成时由 generator 节点写入）
         repro_test=None,
+        # 3.3 位置感知修复定位结果（默认 None，启用时由 debugger 节点写入）
+        position_aware_focus=None,
     )

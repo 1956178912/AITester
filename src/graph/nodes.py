@@ -615,6 +615,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 3.1 双向诊断结果（未启用时 debug() 恒返回 implementation_defect）
         "defect_type": result.get("defect_type", "implementation_defect"),
         "review_reason": result.get("review_reason", ""),
+        # 3.3 位置感知修复定位结果（未启用/无法定位时 focused=False, hint=""）
+        "position_aware_focus": result.get(
+            "position_aware_focus",
+            {"focused": False, "function_name": None, "line": None, "hint": ""},
+        ),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")

@@ -30,3 +30,16 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=500']
       - id: check-merge-conflict
+
+  # 4.2 日志脱敏自动检查：新增/修改 .py 文件时扫描 logger 调用点，
+  # 参数含敏感字段名（api_key/secret/password/Bearer/sk- 等）且未经
+  # _redact / mask_sensitive_info 脱敏 → 报可疑点并失败（exit 1）。
+  # 与 CI（ci.yml "Audit log redaction" 步骤）共用同一脚本，保证本地与远端口径一致。
+  - repo: local
+    hooks:
+      - id: audit-log-redaction
+        name: audit-log-redaction (4.2)
+        entry: python scripts/audit_log_redaction.py
+        language: system
+        files: '^src/.*\.py$|^experiments/.*\.py$'
+        pass_filenames: false

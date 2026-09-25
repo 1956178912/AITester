@@ -74,6 +74,19 @@ def _adversarial_debugging_enabled() -> bool:
     return os.getenv("ADVERSARIAL_DEBUGGING_ENABLE", "false").lower() == "true"
 
 
+def _position_aware_repair_enabled() -> bool:
+    """3.3 改进：位置感知迭代修复开关（POSITION_AWARE_REPAIR_ENABLE=true 时启用，默认 false）。
+
+    参考 LoopRepair（位置感知 + 轨迹引导迭代修复）：在生成补丁前先做
+    "修复位置定位"阶段——把 error_classifier 已提取的异常位置（traceback
+    文件/行号、语法错误行列）经 AST 定位到所属函数/方法，生成"位置感知
+    修复指引"注入补丁 prompt，让 LLM 优先修定位到的位置而非全文件盲搜。
+    该定位是纯静态（不消耗 LLM token）；LLM 调用失败或无法定位时降级为
+    常规全文件修复（保持历史口径，不因定位失败阻断修复）。
+    """
+    return os.getenv("POSITION_AWARE_REPAIR_ENABLE", "false").lower() == "true"
+
+
 def _bidirectional_diagnosis_enabled() -> bool:
     """3.1 双向代码-测试诊断开关（BIDIRECTIONAL_DIAGNOSIS_ENABLE=true 时启用，默认 false）。
 
@@ -149,6 +162,11 @@ class DebuggerAgent(BaseAgent):
            对抗性意图假设 + 针对性测试用例，生成后再经"批评者"评估，
            若被击穿则重新生成一次补丁
 
+            9. 3.3 改进（位置感知迭代修复，默认关）：若启用，在补丁生成前
+               把异常位置（traceback 行号/语法错误行列）经 AST 定位到所属
+               函数，生成"位置感知修复指引"注入 prompt，让 LLM 优先修定位
+               到的位置（LoopRepair 式先定位再补丁）；无法定位时降级常规修复
+
         Args:
             target_code: 被测代码全文。
             test_output: 测试失败输出。
@@ -173,6 +191,9 @@ class DebuggerAgent(BaseAgent):
             - defect_type (str): 3.1 双向诊断结果（implementation_defect /
               test_defect；未启用时恒为 implementation_defect）。
             - review_reason (str): Review Agent 判定依据（未启用时为空串）。
+            - position_aware_focus (dict): 3.3 位置感知修复定位结果（启用时
+              focused=True 且 hint 非空，function_name/line 为定位到的函数与行号；
+              未启用或无法定位时 focused=False, hint=""）。
 
         Raises:
             RuntimeError: LLM 调用失败时抛出。
@@ -180,10 +201,10 @@ class DebuggerAgent(BaseAgent):
         # Step 1: 用规则分类器快速判断错误类型（不消耗 LLM token）
         # target_module 提供时，断言失败可区分 ASSERTION 与 LOGIC_ERROR（P2 细化）
         error_category = self.classifier.classify(test_output, failed_cases, target_module=target_module)
-        # Step 2: 获取对应修复策略描述
-        strategy_text = get_fix_strategy(
-            error_category, context=self.classifier.extract_error_context(test_output, failed_cases)
-        )
+        # Step 2: 提取错误上下文（含 traceback 行号/语法错误行列，3.3 位置感知复用）
+        context = self.classifier.extract_error_context(test_output, failed_cases)
+        # Step 2b: 获取对应修复策略描述
+        strategy_text = get_fix_strategy(error_category, context=context)
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
@@ -264,6 +285,28 @@ class DebuggerAgent(BaseAgent):
                     len(adversarial_hypotheses),
                 )
 
+        # ── 3.3 改进（位置感知迭代修复，默认关）──────────────────────────
+        # LoopRepair 式"先定位再补丁"：若启用，把 error_classifier 已提取的
+        # 异常位置（traceback 行号/语法错误行列）经 AST 定位到所属函数，
+        # 生成"位置感知修复指引"注入 prompt，让 LLM 优先修定位到的位置。
+        # 定位是纯静态（不消耗 LLM token）；无法定位时降级为常规全文件修复。
+        position_aware_section = ""
+        focus_result: dict[str, Any] = {"focused": False, "function_name": None, "line": None, "hint": ""}
+        if _position_aware_repair_enabled():
+            # 复用已提取的 context（Step 2 的 get_fix_strategy 已调用
+            # extract_error_context；此处再取一次保证含 line/column 字段）
+            focus_result = self._locate_repair_focus(target_code, context, target_module)
+            position_aware_section = self._build_position_aware_prompt_section(focus_result)
+            if focus_result.get("focused"):
+                logger.info(
+                    "位置感知修复（3.3）：定位到 %s() 第 %s 行，注入修复指引",
+                    focus_result.get("function_name"),
+                    focus_result.get("line"),
+                )
+            else:
+                logger.debug("位置感知修复（3.3）：无法定位，降级为常规全文件修复")
+            query += position_aware_section
+
         # 调用 LLM 获取修复响应，带文件缓存省 token
         raw = self._call_llm_with_cache(query, temperature=temperature)
         result = self._extract_json(raw)
@@ -304,7 +347,95 @@ class DebuggerAgent(BaseAgent):
             # （未启用时恒为 implementation_defect，保持历史口径）
             "defect_type": defect_type,
             "review_reason": review_reason,
+            # 3.3 改进：位置感知修复定位结果（未启用时 focused=False，hint=""）
+            # 启用时 focused=True 且 hint 非空（已注入 prompt），function_name/line 供实验消费
+            "position_aware_focus": focus_result,
         }
+
+    # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────
+
+    def _locate_repair_focus(
+        self,
+        target_code: str,
+        context: Any,
+        target_module: str | None,
+    ) -> dict[str, Any]:
+        """3.3 改进：位置感知修复定位（纯静态，不消耗 LLM token）。
+
+        参考 LoopRepair 的"位置感知迭代修复"：在生成补丁前，先基于
+        error_classifier 已提取的异常位置（traceback 文件/行号、语法错误
+        行列）做 AST 定位，找出异常行所属的函数/方法，生成"位置感知修复
+        指引"。LLM 据此优先修定位到的位置，而非全文件盲搜。
+
+        定位口径（保守、可复算）：
+        - 仅当 context.line 可解析为正整数且 target_code 可 ast.parse 时定位；
+        - 取"包围异常行"的最内层函数/方法（FunctionDef/AsyncFunctionDef）；
+        - 跨文件异常（traceback 文件名与 target_module 不符）时不定位到
+          本文件，返回 focused=False（避免误导 LLM 修错文件）；
+        - 无法定位（无行号 / AST 解析失败 / 行号越界 / 无包围函数）时
+          focused=False，主流程降级为常规全文件修复（保持历史口径）。
+
+        Args:
+            target_code: 被测代码全文（未截断版由调用方传入，便于行号对齐）。
+            context: ErrorContext（含 filename / line / column / module_name）。
+            target_module: 被测模块名（可选，用于跨文件判断）。
+
+        Returns:
+            {"focused": bool, "function_name": str | None, "line": int | None,
+             "hint": str}
+            focused=True 时 hint 非空（供 prompt 注入）；False 时 hint 为空串。
+        """
+        import ast
+
+        line = getattr(context, "line", None)
+        if not isinstance(line, int) or line <= 0:
+            return {"focused": False, "function_name": None, "line": None, "hint": ""}
+
+        # 跨文件保护：traceback 文件名与 target_module 不符时，异常发生在
+        # 其他文件，本文件定位无意义（避免误导 LLM 修错文件）
+        if target_module and getattr(context, "filename", None):
+            file_base = str(context.filename).rsplit("/", 1)[-1]
+            if (
+                file_base
+                and target_module
+                and not (file_base.startswith(target_module) or file_base == f"{target_module}.py")
+            ):
+                return {"focused": False, "function_name": None, "line": line, "hint": ""}
+
+        try:
+            tree = ast.parse(target_code)
+        except (SyntaxError, ValueError):
+            # 代码本身语法损坏（SYNTAX 类）：AST 定位不可用，降级全文件重写
+            return {"focused": False, "function_name": None, "line": line, "hint": ""}
+
+        # 找包围异常行的最内层函数/方法（行号落在 [lineno, end_lineno] 区间）
+        enclosing = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.lineno <= line <= (node.end_lineno or node.lineno)
+        ]
+        if not enclosing:
+            return {"focused": False, "function_name": None, "line": line, "hint": ""}
+
+        # 最内层（嵌套最浅的包围节点；取子节点最多的最内层，保守取最后一个
+        # 匹配且无更深嵌套的）：优先选"包围区间最短"的函数作为焦点
+        focus = min(enclosing, key=lambda n: (n.end_lineno or n.lineno) - n.lineno)
+        focus_name = focus.name
+        col = getattr(context, "column", None)
+        hint = (
+            f"位置感知修复指引（3.3）：异常定位在 `{focus_name}()`"
+            f"（第 {line} 行"
+            + (f"、第 {col} 列" if isinstance(col, int) and col and col > 0 else "")
+            + "）。请优先检查并修复该函数内的逻辑，避免改动无关代码。"
+        )
+        return {"focused": True, "function_name": focus_name, "line": line, "hint": hint}
+
+    def _build_position_aware_prompt_section(self, focus: dict[str, Any]) -> str:
+        """把位置感知修复指引注入 prompt（focus["focused"] 为 False 时返回空串）。"""
+        if not focus.get("focused"):
+            return ""
+        return f"\n\n{focus.get('hint', '')}"
 
     # ─── 3.1 对抗性推理辅助方法（AdverIntent-Agent 式）────────────────────
 

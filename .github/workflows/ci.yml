@@ -59,6 +59,14 @@ jobs:
           LLM_1_BASE_URL: https://test.example.com
           LLM_1_MODEL_NAME: test-model
 
+      - name: Audit log redaction (4.2)
+        # 4.2 日志脱敏门禁：扫描全仓 .py 日志调用点，参数含敏感字段名
+        # （api_key/secret/password/Bearer/sk- 等）且未经 _redact /
+        # mask_sensitive_info 脱敏 → 退出码 1 阻断合并。
+        # 与 .pre-commit-config.yaml 的 audit-log-redaction 钩子同一脚本，
+        # 本地提交与远端 CI 口径一致。
+        run: python scripts/audit_log_redaction.py
+
       - name: 测试失败诊断（把失败用例清单写成注解，供 API 无权限读取）
         if: failure()
         env:

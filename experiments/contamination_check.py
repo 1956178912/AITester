@@ -230,41 +230,51 @@ def _token_bag_cosine(tokens_a: list[str], tokens_b: list[str]) -> float:
 
 
 def _embed_code(code: str) -> list[float] | None:
-    """可选钩子：返回代码的语义嵌入向量（如 CodeBERT）。
+    """可选钩子：返回代码的语义嵌入向量（真实嵌入，未接入时 None）。
 
-    默认实现返回 None（表示未接入嵌入模型），此时 _detect_semantic_cosine
-    退回 token 词袋余弦。若系统装有 sentence-transformers / 本地 CodeBERT，
-    可替换本函数返回真实嵌入向量，与黄金补丁嵌入做余弦。
+    2.1 改进：委托 src.utils.embedding_utils.embed_text（可装
+    sentence-transformers / chromadb 时自动升级为真实嵌入余弦，
+    环境变量 EMBEDDING_BACKEND=none 强制回退）。默认（无嵌入库）返回
+    None，_detect_semantic_cosine 退回 token 词袋余弦保守代理，行为与
+    未接入时完全一致（零默认外部依赖、可复算）。
 
-    设计说明：本钩子刻意不 import 任何嵌入库（保持 experiments 包零外部
-    依赖、可复算）；接入方在自己的 site-packages 里 monkeypatch 本函数
-    或提供 embedding_utils 模块即可，未接入时全程走词袋余弦保守代理。
+    设计说明：本钩子刻意不在模块导入期加载任何嵌入库（保持 experiments
+    包零外部硬依赖）；embedding_utils 在调用期惰性加载后端，接入方亦可
+    monkeypatch 本函数或 embedding_utils.embed_text 提供自定义 CodeBERT。
     """
-    # 默认未接入嵌入模型（保持零外部依赖、可复算）
-    return None
+    try:
+        from src.utils.embedding_utils import embed_text
+
+        return embed_text(code)
+    except Exception:
+        # embedding_utils 缺失/后端异常时保守回退 None（词袋余弦）
+        return None
 
 
-def patch_semantic_similarity(generated_patch: str, golden_patch: str) -> dict[str, float | None]:
+def patch_semantic_similarity(generated_patch: str, golden_patch: str) -> dict[str, str | float | None]:
     """多维度相似度信号（2.1 改进）。
 
     Returns:
         {"jaccard": float, "structural": float | None,
-         "semantic": float | None}
-        structural = AST 骨架 LCS 比率；semantic = 嵌入余弦（接入时）
+         "semantic": float | None, "semantic_source": str}
+        structural = AST 骨架 LCS 比率；
+        semantic = 嵌入余弦（接入了 embedding_utils 真实嵌入时）
         或 token 词袋余弦（未接入时的保守代理）；任一计算失败对应键为 None。
+        semantic_source = "embedding"（真实嵌入余弦，EMBEDDING_BACKEND 生效）
+        或 "token_bag"（词袋余弦保守代理），供污染检测报告标注语义级来源。
     """
     jaccard = patch_overlap_score(generated_patch, golden_patch)
     # 结构级：AST 语句骨架 LCS
     skel_a = _extract_statement_skeleton(generated_patch)
     skel_b = _extract_statement_skeleton(golden_patch)
     structural = _lcs_ratio(skel_a, skel_b) if skel_a and skel_b else None
-    # 语义级：嵌入余弦（接入时）或 token 词袋余弦（默认保守代理）
+    # 语义级：嵌入余弦（接入 embedding_utils 真实嵌入时）或 token 词袋余弦（默认保守代理）
     toks_a = [t for line_toks in _extract_changed_line_tokens(generated_patch) for t in line_toks]
     toks_b = [t for line_toks in _extract_changed_line_tokens(golden_patch) for t in line_toks]
     emb_a = _embed_code(" ".join(toks_a))
     emb_b = _embed_code(" ".join(toks_b))
     if emb_a is not None and emb_b is not None:
-        # 接入嵌入模型时：向量余弦（embedding_utils 由接入方提供，缺失时退回词袋）
+        # 接入嵌入模型时：向量余弦（embedding_utils.cosine_similarity），缺失时退回词袋
         semantic = None
         try:
             from src.utils.embedding_utils import cosine_similarity
@@ -272,11 +282,15 @@ def patch_semantic_similarity(generated_patch: str, golden_patch: str) -> dict[s
             semantic = round(float(cosine_similarity(list(emb_a), list(emb_b))), 4)
         except Exception:
             semantic = None
-        if semantic is None:
+        if semantic is not None:
+            semantic_source = "embedding"
+        else:
             semantic = _token_bag_cosine(toks_a, toks_b)
+            semantic_source = "token_bag"
     else:
         semantic = _token_bag_cosine(toks_a, toks_b)
-    return {"jaccard": jaccard, "structural": structural, "semantic": semantic}
+        semantic_source = "token_bag"
+    return {"jaccard": jaccard, "structural": structural, "semantic": semantic, "semantic_source": semantic_source}
 
 
 def _combined_risk_level(similarities: dict[str, float | None]) -> str:
@@ -285,7 +299,8 @@ def _combined_risk_level(similarities: dict[str, float | None]) -> str:
     规则：任一维度（jaccard/structural/semantic，非 None）>= HIGH 阈值 → high；
     否则任一 >= MEDIUM → medium；其余 low。
     """
-    values = [v for v in similarities.values() if v is not None]
+    # 仅取数值维度（semantic_source 为字符串标注，不参与阈值比较）
+    values = [v for v in similarities.values() if isinstance(v, (int, float))]
     if not values:
         return "low"
     if any(v >= HIGH_OVERLAP_THRESHOLD for v in values):
@@ -408,7 +423,20 @@ def render_contamination_section(report: dict[str, Any], baseline: str) -> list[
     if report.get("checked", 0) == 0:
         return []
     lines = [f"## 数据污染检测（2.1，基线 {baseline}）", ""]
-    lines.append("生成补丁与数据集黄金补丁的多维度重叠度分级（token Jaccard + 结构骨架 LCS + 语义词袋余弦）：")
+    # 2.1 改进：标注语义级相似度来源（真实嵌入 vs 词袋代理，来自 scores 样本）
+    semantic_sources: set[str] = set()
+    for s in (report.get("scores") or {}).values():
+        src = (s.get("similarities") or {}).get("semantic_source")
+        if src:
+            semantic_sources.add(src)
+    source_note = (
+        "；".join("嵌入余弦" if s == "embedding" else "词袋余弦（保守代理）" for s in sorted(semantic_sources))
+        or "词袋余弦（保守代理）"
+    )
+    lines.append(
+        f"生成补丁与数据集黄金补丁的多维度重叠度分级（token Jaccard + 结构骨架 LCS + 语义级，"
+        f"语义级来源：{source_note}）："
+    )
     lines.append("")
     lines.append("| 级别 | 任务数 | 任务列表 |")
     lines.append("|------|--------|---------|")

@@ -599,3 +599,139 @@ class TestDebuggerEdgeCases:
             agent.debug(target_code="def f(): pass", test_output="AssertionError", failed_cases=[])
             # 验证记录了分类结果
             mock_logger.info.assert_called()
+
+
+# ─── 3.3 位置感知迭代修复（LoopRepair 式先定位再补丁）─────────────────────────
+
+
+def _make_context(line=None, column=None, filename=None, module_name=None, message=""):
+    """构造 ErrorContext 供 _locate_repair_focus 测试（绕过 LLM）。"""
+    from src.agents.error_classifier import ErrorContext
+
+    return ErrorContext(
+        line=line,
+        column=column,
+        filename=filename,
+        module_name=module_name,
+        error_message=message,
+    )
+
+
+_CODE_WITH_FN = """\
+def outer():
+    def inner(x):
+        return x * 2
+    return inner(1)
+
+def other():
+    return 42
+"""
+
+
+class TestPositionAwareRepair:
+    """3.3 位置感知迭代修复：_locate_repair_focus 纯静态定位 + debug() 接线。"""
+
+    def setup_method(self):
+        self.agent = DebuggerAgent()
+
+    def test_default_switch_off(self, monkeypatch):
+        """未设置环境变量时默认关闭（保持历史口径）。"""
+        import src.agents.debugger as d
+
+        monkeypatch.delenv("POSITION_AWARE_REPAIR_ENABLE", raising=False)
+        assert d._position_aware_repair_enabled() is False
+
+    def test_switch_on(self, monkeypatch):
+        import src.agents.debugger as d
+
+        monkeypatch.setenv("POSITION_AWARE_REPAIR_ENABLE", "true")
+        assert d._position_aware_repair_enabled() is True
+
+    def test_locate_enclosing_function(self):
+        """异常行落在函数内 → 定位到最内层包围函数。"""
+        ctx = _make_context(line=3, filename="m.py")
+        res = self.agent._locate_repair_focus(_CODE_WITH_FN, ctx, "m")
+        assert res["focused"] is True
+        assert res["function_name"] == "inner"  # 第 3 行在 inner 内（最内层）
+        assert "位置感知修复指引" in res["hint"]
+
+    def test_locate_line_in_module_level_no_function(self):
+        """行号无包围函数（模块级语句）→ focused=False 降级。"""
+        ctx = _make_context(line=1, filename="m.py")
+        # 第 1 行 "def outer():" 本身是函数定义行，属于 outer
+        res = self.agent._locate_repair_focus(_CODE_WITH_FN, ctx, "m")
+        # def 行属于该函数区间，应定位到 outer
+        assert res["focused"] is True
+        assert res["function_name"] == "outer"
+
+    def test_locate_none_line_degrades(self):
+        """无行号 → 无法定位，降级（focused=False, hint 空）。"""
+        ctx = _make_context(line=None)
+        res = self.agent._locate_repair_focus(_CODE_WITH_FN, ctx, None)
+        assert res["focused"] is False
+        assert res["hint"] == ""
+
+    def test_locate_cross_file_degrades(self):
+        """traceback 文件名与 target_module 不符 → 跨文件保护，不定位。"""
+        ctx = _make_context(line=3, filename="other.py")
+        res = self.agent._locate_repair_focus(_CODE_WITH_FN, ctx, "m")
+        assert res["focused"] is False
+        assert res["hint"] == ""
+
+    def test_locate_syntax_broken_code_degrades(self):
+        """被测代码语法损坏（AST 解析失败）→ 降级全文件重写。"""
+        ctx = _make_context(line=1)
+        res = self.agent._locate_repair_focus("def broken(:\n", ctx, None)
+        assert res["focused"] is False
+
+    def test_debug_returns_position_aware_focus_key(self, monkeypatch):
+        """debug() 返回 dict 始终含 position_aware_focus 键（默认关闭为零值）。"""
+        monkeypatch.delenv("POSITION_AWARE_REPAIR_ENABLE", raising=False)
+        mock_response = json.dumps(
+            {
+                "root_cause": "r",
+                "error_category": "assertion",
+                "fix_strategy": "s",
+                "patch": "```python\nx\n```",
+            }
+        )
+        with patch.object(self.agent, "_call_llm", return_value=mock_response):
+            result = self.agent.debug(
+                target_code="def add(a, b): return a - b",
+                test_output="AssertionError: 1+1",
+                failed_cases=[{"name": "t", "error": "e"}],
+            )
+        assert "position_aware_focus" in result
+        assert result["position_aware_focus"]["focused"] is False
+        assert result["position_aware_focus"]["hint"] == ""
+
+    def test_debug_with_switch_on_injects_focus(self, monkeypatch):
+        """开关开启且可定位时，prompt 含位置指引，返回 focused=True。"""
+        monkeypatch.setenv("POSITION_AWARE_REPAIR_ENABLE", "true")
+        captured: dict = {}
+
+        def fake_call(query, temperature=None):
+            captured["query"] = query
+            return json.dumps(
+                {
+                    "root_cause": "r",
+                    "error_category": "assertion",
+                    "fix_strategy": "s",
+                    "patch": "```python\nx\n```",
+                }
+            )
+
+        # 构造 target_code 使 traceback 行号落在 add 函数内
+        code = "def add(a, b):\n    return a - b\n"
+        with patch.object(self.agent, "_call_llm", side_effect=fake_call):
+            result = self.agent.debug(
+                target_code=code,
+                test_output='File "calc.py", line 2\nAssertionError: 1+1',
+                failed_cases=[{"name": "t", "error": "e"}],
+                target_module="calc",
+            )
+        focus = result["position_aware_focus"]
+        assert focus["focused"] is True
+        assert focus["function_name"] == "add"
+        assert "位置感知修复指引" in captured["query"]
+        assert "add()" in captured["query"]
