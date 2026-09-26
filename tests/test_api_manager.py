@@ -62,7 +62,6 @@ class TestAPIHealth:
         assert self.health.total_requests == 0
         assert self.health.success_count == 0
         assert self.health.error_count == 0
-        assert self.health.last_response_time_ms == 0.0
         assert self.health.rate_limit_remaining == 0
         assert len(self.health._response_times) == 0
 
@@ -89,10 +88,11 @@ class TestAPIHealth:
         self.health._response_times.extend([100.0, 200.0, 300.0])
         assert self.health.avg_response_time_ms == pytest.approx(200.0)
 
-    def test_avg_response_time_fallback(self):
-        """测试滑动窗口为空时使用 last_response_time_ms"""
-        self.health.last_response_time_ms = 150.0
-        assert self.health.avg_response_time_ms == 150.0
+    def test_avg_response_time_empty_window(self):
+        """测试滑动窗口为空时无数据口径（返回 0.0，2026-09-26 round8：
+        last_response_time_ms 死字段删除后 avg_response_time_ms 窗口为空
+        返回 0.0）"""
+        assert self.health.avg_response_time_ms == 0.0
 
     def test_mark_success_updates_state(self):
         """测试 mark_success 更新状态"""
@@ -268,7 +268,6 @@ class TestAPIManagerConfig:
         assert config.fallback_on_failure is True
         assert config.max_consecutive_failures == 3
         assert config.timeout == 60
-        assert config.retry_count == 2
         assert config.batch_health_check_size == 10
         assert config.health_check_timeout == 5.0
 
@@ -460,7 +459,6 @@ class TestAPIManagerRotationStrategies:
             "model2": self.mgr.health_nodes["model2"],
         }
         mgr._rr_index = 0
-        mgr._last_health_check = {}
         mgr._lock = self.mgr._lock
         mgr._health_checker = None
         mgr.config.rotation_strategy = RotationStrategy.ROUND_ROBIN
@@ -504,7 +502,6 @@ class TestAPIManagerRotationStrategies:
         }
         mgr._client_cache = {k: self.mgr._client_cache[k] for k in mgr.health_nodes}
         mgr._rr_index = 0
-        mgr._last_health_check = {}
         mgr._lock = self.mgr._lock
         mgr._health_checker = None
         mgr.config.rotation_strategy = RotationStrategy.WEIGHTED_RANDOM
@@ -536,7 +533,6 @@ class TestAPIManagerRotationStrategies:
         }
         mgr._client_cache = {k: self.mgr._client_cache[k] for k in mgr.health_nodes}
         mgr._rr_index = 0
-        mgr._last_health_check = {}
         mgr._lock = self.mgr._lock
         mgr._health_checker = None
         mgr.config.rotation_strategy = RotationStrategy.HEALTH_BASED

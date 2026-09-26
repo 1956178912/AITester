@@ -102,7 +102,11 @@ class APIManager:
         self.config = config or APIManagerConfig()
         self.health_nodes: dict[str, APIHealth] = {}
         self._rr_index: int = 0  # 轮询索引
-        self._last_health_check: dict[str, float] = {}
+        # 2026-09-26 round8 死代码清理：删除 _last_health_check dict（round7
+        # 核实为死代码——生产代码只在此处初始化，无任何读/写点；旧实现用于
+        # 健康检查限流（每节点 60s 间隔），已被 APIHealth.last_check_time
+        # 字段 + health_check_batch 的节点级判定取代）。3 处测试初始化同步
+        # 清理（tests/test_api_manager.py L463/507/539）。
         self._client_cache: dict[str, openai.OpenAI] = {}
         self._lock = threading.Lock()  # 线程安全锁
         self._health_checker: HealthCheckerThread | None = None
@@ -120,7 +124,10 @@ class APIManager:
             )
             self._client_cache[llm_config.model_name] = client
             # 3.4 成本感知：从配置读取该模型的成本权重（未配置默认 1.0=基准）
-            cost_weight = self._cost_weight_for(llm_config.model_name)
+            # 2026-09-26 round8：传入在手的 llm_config（注册时序修复）——此时节点
+            # 尚未入池（health_nodes[name] 在下一行才赋值），不传入会让 _cost_weight_for
+            # 的反查恒 None，LLM_N_COST_WEIGHT 静默失效
+            cost_weight = self._cost_weight_for(llm_config.model_name, llm_config)
             health = APIHealth(
                 config=llm_config,
                 max_consecutive_failures=self.config.max_consecutive_failures,
@@ -139,20 +146,38 @@ class APIManager:
             )
         logger.info("已完成 %d 个 LLM 节点初始化", len(self.health_nodes))
 
-    def _cost_weight_for(self, model_name: str) -> float:
+    def _cost_weight_for(self, model_name: str, llm_config: LLMConfig | None = None) -> float:
         """取模型的成本权重（3.4）：优先读 APIManagerConfig.node_cost_weights，
         缺省回退到 LLMConfig.cost_weight 字段（config.py 从 llm_configs.json 注入），
         再缺省 1.0（基准）。
 
+        2026-09-26 round8 修复注册时序缺陷（round7 遗留 P1）：旧实现在注册路径上
+        （_init_clients / add_node）总是先于节点入池调用本方法，
+        `self.health_nodes.get(model_name)` 此时恒为 None，导致 LLMConfig.cost_weight
+        回退分支永远不生效——LLM_N_COST_WEIGHT / llm_configs.json 的 cost_weight
+        字段在默认注册路径上静默失效，全节点恒 1.0。现增加可选 llm_config 参数：
+        调用方（_init_clients / add_node）传入手上配置对象，优先读其 cost_weight；
+        llm_config 为 None 时（外部调用 / 旧用例）保持原回退链：node_cost_weights
+        → 已入池节点反查 → 1.0。默认行为不变（未设成本信息时 LLMConfig.cost_weight
+        为 0.0，仍回退 1.0 基准）。
+
         Args:
             model_name: 模型名称。
+            llm_config: 在手 LLMConfig 对象（注册路径传入）；None 时走已入池节点
+                反查回退链（兼容外部调用与 0.10 既有测试口径）。
 
         Returns:
             相对成本倍数（>= 0.1，防除零由调用方兜底）。
         """
         if model_name in self.config.node_cost_weights:
             return float(self.config.node_cost_weights[model_name])
-        # 从已注册节点反查 LLMConfig.cost_weight（_init_clients 时已建立映射）
+        # 优先：调用方传入的在手配置对象（注册路径——此时节点尚未入池，
+        # 走 health_nodes 反查会恒 None，正是 round7 核实出的注册时序缺陷）
+        if llm_config is not None:
+            cw = float(getattr(llm_config, "cost_weight", 0.0) or 0.0)
+            if cw > 0.0:
+                return cw
+        # 回退：从已注册节点反查 LLMConfig.cost_weight（外部调用 / 节点已入池场景）
         node = self.health_nodes.get(model_name)
         # cost_weight 缺失（旧配置对象）或 0.0（未配置）时回退 1.0 基准
         if node is not None and float(getattr(node.config, "cost_weight", 0.0) or 0.0):
@@ -397,21 +422,25 @@ class APIManager:
             node = self._select_node_by_complexity(complexity_class)
             if node:
                 nodes_to_try = [node]
-            else:
-                # 复杂度路由未命中（全部熔断中）→ 回落历史策略
-                return self._fallback_default_nodes(model)
-        else:
+                # 2026-09-26 修复：复杂度路由命中时补充全池备用候选（与
+                # _fallback_default_nodes 同口径）——此前该分支返回空
+                # fallback_candidates，主节点熔断/限流时 call() 无故障转移
+                # 出口（仅剩 3 次重试后直接 RuntimeError），与"复杂度路由
+                # 是档位选择而非放弃故障转移"的设计意图不符；默认路径
+                # （model 显式指定 / 无 complexity_class）走
+                # _fallback_default_nodes，行为不变。
+                all_nodes = self.get_all_nodes()
+                fallback_candidates = [
+                    n
+                    for n in all_nodes
+                    if n not in nodes_to_try
+                    and not n.in_circuit_open
+                    and (n.is_healthy or (self.config.enable_half_open_probe and n.in_circuit_half_open))
+                ]
+                return nodes_to_try, fallback_candidates
+            # 复杂度路由未命中（全部熔断中）→ 回落历史策略
             return self._fallback_default_nodes(model)
-        # 仅复杂度路由命中时到达：主节点 + 全池备用候选
-        all_nodes = self.get_all_nodes()
-        fallback_candidates = [
-            n
-            for n in all_nodes
-            if n not in nodes_to_try
-            and not n.in_circuit_open
-            and (n.is_healthy or (self.config.enable_half_open_probe and n.in_circuit_half_open))
-        ]
-        return nodes_to_try, fallback_candidates
+        return self._fallback_default_nodes(model)
 
     def _fallback_default_nodes(self, model: str | None) -> tuple[list[APIHealth], list[APIHealth]]:
         """历史口径的节点列表构建（无复杂度路由时走此路径）。"""
@@ -436,9 +465,15 @@ class APIManager:
     def _select_node_by_complexity(self, complexity_class: str) -> APIHealth | None:
         """P0 1.2：按复杂度档位选择 LLM 实例。
 
-        策略：在同模型名（agnel-3.0-flash）的多个 APIHealth 节点中，
-        按 cost_weight 排序——complex 档位选 cost_weight 最高（最贵/最强），
-        simple 档位选 cost_weight 最低（最省钱）。仅一个节点时直接返回。
+        策略：在全部非熔断节点池（get_all_nodes()）中按 cost_weight 排序
+        ——complex 档位选 cost_weight 最高（最贵/最强），simple 档位选
+        cost_weight 最低（最省钱）。仅一个节点时直接返回。
+
+        2026-09-26 全面审查（P2 注释修正）：候选池为全节点池（不限模型名），
+        当前配置下各节点通常注册同模型多 provider 端点，"全池"≈"同模型池"，
+        故语义等价；若未来混入不同模型名的节点，complexity 路由会在全模型
+        集合内按 cost_weight 排序，超出"同模型多端点按档位选择"的设计意图。
+        届时需按模型名过滤候选池或引入"模型优先、档位排序"两级策略。
 
         Returns:
             选中节点；无匹配节点时返回 None（调用方走历史策略）。
@@ -492,22 +527,26 @@ class APIManager:
             # 指定模型，沿用会逐个 APIError 陪葬，故障转移形同虚设
             call_model = model if model and attempt < len(nodes_to_try) else node.config.model_name
             prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
-            # 4.2：本次调用是否承载半开探测（_try_call_node 内预检写入；失败路径
-            # 的限流 / API 错误 / 通用异常处理需消费该探测，成功路径已在
-            # _try_call_node 内闭合）。常规调用恒为 False。
+            # 4.2 半开探测口径修复：预检上移到 call() 循环（发起真实请求前的
+            # 唯一判定点），本次调用的探测判定结果显式透传给 _try_call_node
+            # 与下方各异常 handler——handler 不再各自重判 node.in_circuit_half_open
+            # （重判时节点窗口状态可能已变，与预检口径矛盾，导致限流路径的
+            # 探测失败计数丢失 / 成功路径多计一次）。常规调用恒为 False。
             is_half_open_probe = self._enter_half_open_probe(node)
             try:
-                response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
+                response = self._try_call_node(
+                    node, messages, kwargs, call_model, attempt, prev_model, is_half_open_probe
+                )
                 if response is not None:
                     return response
             except openai.RateLimitError as e:
-                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe)
+                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe=is_half_open_probe)
                 last_error = e
             except openai.APIError as e:
-                self._handle_api_error(e, node, is_half_open_probe)
+                self._handle_api_error(e, node, is_half_open_probe=is_half_open_probe)
                 last_error = e
             except Exception as e:
-                self._handle_generic_error(e, node, is_half_open_probe)
+                self._handle_generic_error(e, node, is_half_open_probe=is_half_open_probe)
                 last_error = e
 
         if last_error:
@@ -525,6 +564,7 @@ class APIManager:
         call_model: str,
         attempt: int,
         prev_model: str | None = None,
+        is_half_open_probe: bool | None = None,
     ) -> Any:
         """尝试调用单个节点的 API。
 
@@ -534,16 +574,21 @@ class APIManager:
             kwargs: 传给 chat.completions.create 的额外参数。
             call_model: 实际请求携带的模型名。
             attempt: 当前尝试序号（0 起）。
-            prev_model: 上一次尝试的模型名（故障转移成功时用于日志，attem > 0 才有意义）。
+            prev_model: 上一次尝试的模型名（故障转移成功时用于日志，attempt > 0 才有意义）。
+            is_half_open_probe: 本次调用是否承载半开探测（call() 循环发起前预检
+                结果显式透传，与下方各异常 handler 消费同一判定点，口径唯一）。
+                None 时本函数内部预检（保持旧签名调用方兼容，口径与 call() 一致）。
         """
         client = self._client_cache.get(node.config.model_name)
         if not client:
             return None
         start = time.time()
         # 4.2：半开探测请求预检——该节点刚从熔断冷却期放行（冷却到期但探测
-        # 尚未完成）时，本次调用即探测本身：预记录"探测中"，由 _try_call_node
-        # 内的成功 / 各异常分支的探测消费决定熔断器闭合还是重新开半程冷却。
-        is_half_open_probe = self._enter_half_open_probe(node)
+        # 尚未完成）时，本次调用即探测本身，由成功 / 各异常分支的探测消费
+        # 决定熔断器闭合还是重新开半程冷却。未透传预检结果时（旧调用方）
+        # 内部预检，口径与 call() 循环发起前预检一致。
+        if is_half_open_probe is None:
+            is_half_open_probe = self._enter_half_open_probe(node)
         # openai SDK 消息参数严格类型是 ChatCompletionMessageParam 联合；
         # 本模块统一用 list[dict[str, str]]（role/content 字面量），运行时
         # 结构兼容。mypy 按字面量联合报 arg-type——对单行调用整体忽略
@@ -598,12 +643,19 @@ class APIManager:
     ) -> None:
         """处理限流错误，根据配置决定是否等待重试。
 
-        4.2：is_half_open_probe 为 True 时，本次限流发生在半开探测窗口内——
-        限流说明 provider 虽可达但配额耗尽，探测"成功达到服务"但不可用，
-        消费一次失败探测（重新开半程冷却期）后再走限流等待。
+        4.2：半开探测窗口内的限流——provider 可达但配额耗尽，探测"成功达到
+        服务"但不可用，消费一次失败探测（重新开半程冷却期）后再走限流等待。
+
+        2026-09-26 口径修复：is_half_open_probe 恒为布尔（不再自动重判）。
+        各 handler 只消费调用方显式透传的预检结果（call() 循环发起请求前的
+        唯一判定点）——handler 内自动重判 node.in_circuit_half_open 时，
+        窗口状态可能已被前序 handler 改变（限流路径 mark_failure 后重判恒
+        False → 探测失败计数丢失；api_error 路径 mark_failure 后窗口仍在时
+        重判恒 True → 探测成功口径多计一次），与预检矛盾。
         """
+        probe = is_half_open_probe
         node.mark_failure("rate_limit")
-        if is_half_open_probe:
+        if probe:
             node._probe_circuit_half_open(False)
         logger.warning("限流: %s (attempt %d)", node.config.model_name, attempt + 1)
         if self.config.fallback_on_failure and attempt < primary_count - 1:
@@ -611,29 +663,36 @@ class APIManager:
         elif self.config.fallback_on_failure:
             time.sleep(5)
 
-    def _handle_api_error(self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False) -> None:
+    def _handle_api_error(
+        self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False
+    ) -> None:
         """处理API错误，根据配置决定是否抛出。
 
-        4.2：is_half_open_probe 为 True 时，API 错误即探测失败，
-        消费一次失败探测（重新开半程冷却期），避免探测通过后又被
-        全量流量打回同一死 provider。
+        4.2：半开探测窗口内的 API 错误即探测失败，消费一次失败探测（重新开
+        半程冷却期），避免探测通过后又被全量流量打回同一死 provider。
+        is_half_open_probe 语义同 _handle_rate_limit（2026-09-26 口径修复）。
         """
+        probe = is_half_open_probe
         node.mark_failure(f"api_error:{getattr(e, 'status_code', 'unknown')}")
-        if is_half_open_probe:
+        if probe:
             node._probe_circuit_half_open(False)
         logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             # fallback 禁用时，记录错误后直接抛出原始异常
             raise
 
-    def _handle_generic_error(self, e: Exception, node: APIHealth, is_half_open_probe: bool = False) -> None:
+    def _handle_generic_error(
+        self, e: Exception, node: APIHealth, is_half_open_probe: bool = False
+    ) -> None:
         """处理通用异常，根据配置决定是否抛出。
 
-        4.2：is_half_open_probe 为 True 时，通用异常即探测失败，
-        消费一次失败探测（重新开半程冷却期）。
+        4.2：半开探测窗口内的通用异常即探测失败，消费一次失败探测（重新开
+        半程冷却期），避免探测通过后又被全量流量打回同一死 provider。
+        is_half_open_probe 语义同 _handle_rate_limit（2026-09-26 口径修复）。
         """
+        probe = is_half_open_probe
         node.mark_failure(f"error:{type(e).__name__}")
-        if is_half_open_probe:
+        if probe:
             node._probe_circuit_half_open(False)
         logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
@@ -806,7 +865,7 @@ class APIManager:
             health = APIHealth(
                 config=config,
                 max_consecutive_failures=self.config.max_consecutive_failures,
-                cost_weight=self._cost_weight_for(config.model_name),
+                cost_weight=self._cost_weight_for(config.model_name, config),
                 circuit_cooldown_seconds=self.config.circuit_cooldown_seconds,
                 half_open_probe_penalty_cap_seconds=self.config.half_open_probe_penalty_cap_seconds,
             )

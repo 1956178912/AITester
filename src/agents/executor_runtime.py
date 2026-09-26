@@ -17,6 +17,22 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _to_str(value: str | bytes | None) -> str:
+    """将 subprocess.TimeoutExpired 的 output/stderr 字段安全转为字符串。
+
+    2026-09-26 优化：从 run_pytest_with_retry 内部闭包提升为模块级函数
+    （此前每次 TimeoutExpired 都重新创建闭包对象，热路径上无谓分配）。
+    本调用点恒传 text=True，运行期 output/stderr 为 str 或 None；mypy 按
+    类型联合（str | bytes | None）报 "+" 运算，显式转 str 收窄
+    （bytes 分支仅静态可达性兜底，运行期不会触发）。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_root: str) -> tuple[str, Any]:
     """
     带重试的 pytest 执行逻辑，最多尝试 2 次。
@@ -48,18 +64,9 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
                 break
             logger.warning("第 %d 次执行失败，尝试重试...", attempt + 1)
         except subprocess.TimeoutExpired as e:
-            # TimeoutExpired 携带超时前已累积的部分 stdout/stderr。
             # 本调用点恒传 text=True，运行期 output/stderr 为 str 或 None；
-            # mypy 按类型联合（str | bytes | None）报 "+" 运算，显式转 str 收窄
-            # （bytes 分支仅静态可达性兜底，运行期不会触发）。合并进 last_output，
-            # 让下游 Debugger 能拿到现场快照而非空白文本（此前超时分支丢失了部分输出）。
-            def _to_str(value: str | bytes | None) -> str:
-                if value is None:
-                    return ""
-                if isinstance(value, bytes):
-                    return value.decode("utf-8", errors="replace")
-                return value
-
+            # _to_str 收窄类型联合（bytes 分支仅静态可达性兜底）。
+            # 合并进 last_output，让下游 Debugger 能拿到现场快照而非空白文本。
             partial_output = _to_str(e.output) + _to_str(e.stderr)
             last_output = partial_output
             error_msg = f"测试执行超时（>{self.timeout}s）"

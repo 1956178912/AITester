@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,7 @@ from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
 from src.graph.nodes import (  # noqa: F401
     _cross_file_analyzer_node,
     _debugger_node,
+    _diagnosis_node,
     _executor_node,
     _generator_node,
     _get_default_test_plan,
@@ -86,7 +88,7 @@ _MAX_REGENERATIONS = 1
 # 2026-09-26 全面审查：从 _should_debug 函数体内提取为模块级常量——
 # 此前每次路由调用（每轮迭代）都重建 list 字面量；提取后口径单一来源，
 # 后续调整触发词只改一处（与 _MAX_REGENERATIONS 同文件同注释区）。
-_TEST_GEN_DIAGNOSIS_KEYWORDS = [
+_TEST_GEN_DIAGNOSIS_KEYWORDS: tuple[str, ...] = (
     "测试生成错误",
     "测试设计存在错误",
     "test code",
@@ -95,7 +97,83 @@ _TEST_GEN_DIAGNOSIS_KEYWORDS = [
     "SyntaxError",
     "测试用例",
     "期望的异常类型",
-]
+)
+
+
+# 延迟初始化哨兵（避免模块加载时 import re 的额外开销）。
+# 2026-09-26 全面审查（P2 初始化顺序）：此前该哨兵定义在本函数之后
+# （下方 `_diagnosis_node_enabled` 之前）——模块加载后立即调用本函数
+# （早于模块体执行到哨兵赋值）时 `global` 重绑定会创建"从未被赋值"的
+# 模块属性，首读抛 NameError，被函数吞掉懒初始化后每次都重建正则（优化
+# 彻底失效且语义上"None 才编译"的契约被破坏）。现上移至函数定义之前。
+_DIAGNOSIS_KEYWORD_RE: re.Pattern[str] | None = None
+
+
+def _diagnosis_hits_test_gen_keywords(diagnosis: str) -> bool:
+    """2026-09-26 性能优化：诊断文本是否命中"测试生成错误"关键词。
+
+    预编译为单个 alternation 正则（`kw1|kw2|...`），一次 O(n) 扫描替代
+    9 次 `any(kw in text)` 的 O(9n) 子串搜索。_TEST_GEN_DIAGNOSIS_KEYWORDS
+    提取为常量后此处只编译一次，后续调用零开销。
+    """
+    global _DIAGNOSIS_KEYWORD_RE
+    if _DIAGNOSIS_KEYWORD_RE is None:
+        _DIAGNOSIS_KEYWORD_RE = re.compile("|".join(re.escape(kw) for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS))
+    assert _DIAGNOSIS_KEYWORD_RE is not None  # 上方 if 分支已赋值
+    return bool(_DIAGNOSIS_KEYWORD_RE.search(diagnosis))
+
+
+def _diagnosis_node_enabled() -> bool:
+    """三、双向诊断节点开关（DIAGNOSIS_NODE_ENABLE=true 时启用，默认 false）。
+
+    启用后工作流在 executor → debugger 之间插入显式 DiagnosisNode
+    （_diagnosis_node）：先诊断"代码缺陷 vs 测试缺陷"，再按判定路由
+    （测试缺陷 → generator 重新生成；代码缺陷 → debugger 生成补丁）。
+    默认关闭保持历史实验口径（历史路径由 _debugger_node 内部
+    BIDIRECTIONAL_DIAGNOSIS_ENABLE 完成内联诊断，二者可叠加但默认都关）。
+    """
+    return os.getenv("DIAGNOSIS_NODE_ENABLE", "false").lower() == "true"
+
+
+def _route_after_diagnosis(state: AITesterState) -> str:
+    """DiagnosisNode 之后的条件路由（三、双向诊断）。
+
+    按 defect_type 判定路由：
+    - test_defect 且再生成未达上限 → "regenerate"（路由回 generator 重新生成测试）；
+    - test_defect 且再生成已达上限 → "done"（与 _should_debug 同口径收敛，
+      防 generator↔executor 无上限乒乓撞 recursion_limit）；
+    - 其余（implementation_defect / 缺省）→ "debug"（路由到 debugger 生成补丁）。
+
+    Args:
+        state: 当前工作流状态（含 defect_type / regeneration_count 等字段）。
+
+    Returns:
+        "regenerate" / "done" / "debug"。
+    """
+    defect_type = state.get("defect_type")
+    if defect_type == "test_defect":
+        # 测试缺陷 → 重新生成测试（regeneration_count 上限保护在 _should_debug
+        # 与 _generator_node 再生成判定中已有；此处直接路由，上限由 generator
+        # 侧的再生成判定统一兜底，避免 generator↔executor 无限乒乓）。
+        # 2026-09-26 全面审查（P2 一致性）：本路径是 DIAGNOSIS_NODE_ENABLE=true
+        # 时 executor → diagnosis → generator 的路由，此前**无条件** regenerate
+        # 不检查 regeneration_count——Review Agent 反复判 test_defect 时
+        # （_generator_node 再生成判定仅在 defect_type 写入态才 +1，下一轮
+        # diagnosis 节点可重新写入 test_defect），generator↔executor 无上限
+        # 乒乓，最终撞 LangGraph recursion_limit 崩任务并空烧 token；而
+        # _should_debug 的 test_defect 上限收敛分支（reason=test_defect_
+        # regeneration_cap）在同一条件下收敛 done。
+        # 现补同口径上限门控：regeneration_count 达 _MAX_REGENERATIONS 时
+        # 直接 done，与 _should_debug 行为对齐（仅影响双开关默认关的
+        # DIAGNOSIS_NODE_ENABLE 路径，默认行为不变）。
+        if state.get("regeneration_count", 0) >= _MAX_REGENERATIONS:
+            logger.info("双向诊断（三）：已达重新生成上限，结束流程")
+            _trace_node("_route_after_diagnosis", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
+            return "done"
+        _trace_node("_route_after_diagnosis", decision="regenerate", output_summary={"reason": "diagnosis_test_defect"})
+        return "regenerate"
+    _trace_node("_route_after_diagnosis", decision="debug", output_summary={"defect_type": defect_type})
+    return "debug"
 
 
 def _create_workflow(planner: bool | None = None, debugger: bool | None = None) -> StateGraph:
@@ -156,32 +234,71 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
         workflow.add_node("debugger", _debugger_node)
         workflow.add_node("patch_applier", _patch_applier_node)
 
+        # 三、双向诊断节点（DIAGNOSIS_NODE_ENABLE=true 时启用，默认关）：
+        # 在 executor → debugger 之间插入显式 DiagnosisNode（先诊断"代码缺陷
+        # vs 测试缺陷"，再按判定路由：测试缺陷 → generator 重新生成测试；
+        # 代码缺陷 → debugger 生成补丁）。默认关闭保持历史口径。
+        use_diagnosis_node = _diagnosis_node_enabled()
+        if use_diagnosis_node:
+            workflow.add_node("diagnosis", _diagnosis_node)
+
         # 3.5 跨文件修复：可选的 cross_file_analyzer 节点（CROSS_FILE_ENABLE=true 时启用）
         # 位于 executor → debugger 之间，分析跨文件依赖并写入 state["cross_file_deps"]
         if cross_file_enabled():
             workflow.add_node("cross_file_analyzer", _cross_file_analyzer_node)
-            # 将 executor → debugger 边拆分为 executor → cross_file_analyzer → debugger
-            workflow.add_conditional_edges(
-                "executor",
-                _should_debug,
-                {
-                    "debug": "cross_file_analyzer",
-                    "done": END,
-                    "regenerate": "generator",
-                },
-            )
-            workflow.add_edge("cross_file_analyzer", "debugger")
+            if use_diagnosis_node:
+                # 诊断节点开启时：executor → diagnosis → (generator | cross_file_analyzer → debugger)
+                workflow.add_edge("executor", "diagnosis")
+                workflow.add_conditional_edges(
+                    "diagnosis",
+                    _route_after_diagnosis,
+                    {
+                        "regenerate": "generator",
+                        "debug": "cross_file_analyzer",
+                        # P2 一致性（2026-09-26）：test_defect 达再生成上限时
+                        # 路由 done（与 _should_debug 同口径收敛）
+                        "done": END,
+                    },
+                )
+                workflow.add_edge("cross_file_analyzer", "debugger")
+            else:
+                # 仅跨文件（无诊断节点）：executor → _should_debug → cross_file_analyzer → debugger
+                workflow.add_conditional_edges(
+                    "executor",
+                    _should_debug,
+                    {
+                        "debug": "cross_file_analyzer",
+                        "done": END,
+                        "regenerate": "generator",
+                    },
+                )
+                workflow.add_edge("cross_file_analyzer", "debugger")
         else:
-            # 默认路径：executor → debugger（保持历史行为）
-            workflow.add_conditional_edges(
-                "executor",
-                _should_debug,
-                {
-                    "debug": "debugger",
-                    "done": END,
-                    "regenerate": "generator",
-                },
-            )
+            if use_diagnosis_node:
+                # 诊断节点开启：executor → diagnosis → (generator | debugger)
+                workflow.add_edge("executor", "diagnosis")
+                workflow.add_conditional_edges(
+                    "diagnosis",
+                    _route_after_diagnosis,
+                    {
+                        "regenerate": "generator",
+                        "debug": "debugger",
+                        # P2 一致性（2026-09-26）：test_defect 达再生成上限时
+                        # 路由 done（与 _should_debug 同口径收敛）
+                        "done": END,
+                    },
+                )
+            else:
+                # 默认路径：executor → _should_debug → (debugger | END | generator)
+                workflow.add_conditional_edges(
+                    "executor",
+                    _should_debug,
+                    {
+                        "debug": "debugger",
+                        "done": END,
+                        "regenerate": "generator",
+                    },
+                )
 
         # 顺序边：Debugger 输出补丁 → PatchApplier 应用到代码 → 回到 Executor 验证
         # 这构成一个可多次迭代的修复循环，每次循环后更新 iteration 计数
@@ -234,7 +351,7 @@ def _should_debug(state: AITesterState) -> str:
         "debug" 表示进入调试，"done" 表示流程结束，"regenerate" 表示重新生成测试代码。
     """
     # 2026-09-26 全面审查（P1 一致性）：此前用 `is True` 严格恒等判定，
-    # 与 _recent_repairs_invalid（L210）的 truthiness 口径不一致——若 executor
+    # 与 _recent_repairs_invalid 的 truthiness 口径不一致——若 executor
     # 某路径写入非 bool 的真值（如 numpy.bool_），`is True` 为假 → 误路由 debug。
     # 现统一为 truthiness（与 _recent_repairs_invalid / _executor_node 写入口径
     # 一致：test_passed 由 executor 的 test_result["passed"] 赋值，语义即"测试全过"）。
@@ -242,8 +359,20 @@ def _should_debug(state: AITesterState) -> str:
         _trace_node("_should_debug", decision="done", output_summary={"reason": "test_passed"})
         return "done"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
-    # （纯数据判定，日志副作用留在路由层；_recent_repairs_invalid 保持零副作用）
-    if _recent_repairs_invalid(state):
+    # （纯数据判定，日志副作用留在路由层；_recent_repairs_invalid 保持零副作用）。
+    # 2026-09-26 全面审查（P1 分支顺序）：本判定限定在"迭代未达上限"时执行——
+    # 此前无条件下前置（见上方 test_passed 判定块），最后一轮（iteration >=
+    # max_iterations）若最近 2 次修复均 patch_applied=False（"补丁反复失败"
+    # 典型场景），本分支先于迭代上限分支执行并直接 done，永远遮蔽上限分支内
+    # 的关键词 regenerate 与 test_defect 上限收敛分支——test_passed 判定块
+    # 注释承诺的"达上限+关键词命中仍给 generator 一次 regenerate 机会"
+    # 被静默打破（终止 reason 还被误标为 skip_debugger_repair_invalid，
+    # 掩盖真实终止原因；现测试均用空 repair_history 锁定 regenerate 语义，
+    # 该遮蔽无回归覆盖）。
+    # 达上限时由下方上限分支统一决策（关键词命中 → 一次 regenerate 机会，
+    # 否则 done）；repair_invalid 的"连续修复无效快速终止"语义仅在早期迭代
+    # 生效（此时继续修代码确无意义，省 token 口径不变）。
+    if state.get("iteration", 0) < state.get("max_iterations", MAX_ITERATIONS) and _recent_repairs_invalid(state):
         logger.info("连续多次修复无效，跳过 Debugger")
         _trace_node("_should_debug", decision="done", output_summary={"reason": "skip_debugger_repair_invalid"})
         return "done"
@@ -253,20 +382,17 @@ def _should_debug(state: AITesterState) -> str:
     # 上限防止 generator↔executor 无限乒乓（与 diagnosis 关键词路径同口径）。
     # 上限已满且仍判定为测试缺陷：继续修代码无意义（Review Agent 认为代码无
     # 缺陷），直接结束，避免空耗剩余迭代。
-    if state.get("defect_type") == "test_defect":
-        if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
-            logger.info("双向诊断（3.1）：测试缺陷，路由回 generator 重新生成测试")
-            _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "review_test_defect"})
-            return "regenerate"
-        logger.info("双向诊断（3.1）：已达重新生成上限，结束流程")
-        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
-        return "done"
-
+    # 注意（2026-09-26 全面审查 P1 分支顺序）：本分支置于迭代上限检查之后——
+    # 达上限且再生成上限已满时由下方 test_defect 上限收敛分支（reason=
+    # test_defect_regeneration_cap）统一判定（与 2026-09-25 原始语义一致），
+    # 避免"关键词 regenerate 绕过 3.1 上限保护"的口径矛盾；
+    # 达上限 + 关键词命中场景仍由上方上限分支给 generator 一次 regenerate
+    # 机会（上限保护不变）。
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
         # 重新生成测试代码而不是放弃
-        if any(kw in diagnosis for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS):
+        if _diagnosis_hits_test_gen_keywords(diagnosis):
             # 上限保护：已再生成过（旧 diagnosis 关键词反复命中）时不再路由 regenerate，
             # 避免 generator↔executor 无限乒乓撞上 recursion_limit
             if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
@@ -277,6 +403,15 @@ def _should_debug(state: AITesterState) -> str:
         _trace_node("_should_debug", decision="done", output_summary={"reason": "max_iterations"})
         return "done"
 
+    if state.get("defect_type") == "test_defect":
+        if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
+            logger.info("双向诊断（3.1）：测试缺陷，路由回 generator 重新生成测试")
+            _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "review_test_defect"})
+            return "regenerate"
+        logger.info("双向诊断（3.1）：已达重新生成上限，结束流程")
+        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
+        return "done"
+
     # 2026-09-26 全面审查（P1 路由语义澄清）：诊断指向"测试生成错误"时，
     # 此前**只有**达迭代上限（iteration >= max_iterations）才路由 regenerate，
     # 早期迭代（iteration < max）命中关键词仍走 debugger 修代码——与
@@ -285,10 +420,7 @@ def _should_debug(state: AITesterState) -> str:
     # 任意 iteration 命中即 regenerate（仍受 regeneration_count 上限保护）；
     # 上限已满时落到下方常规 debug（保守口径：上限保护不变）。
     diagnosis = state.get("diagnosis", "") or ""
-    if (
-        any(kw in diagnosis for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS)
-        and state.get("regeneration_count", 0) < _MAX_REGENERATIONS
-    ):
+    if _diagnosis_hits_test_gen_keywords(diagnosis) and state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
         logger.info("诊断表明测试生成错误（iteration < max），触发重新生成测试代码")
         _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis_early"})
         return "regenerate"

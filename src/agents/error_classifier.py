@@ -221,11 +221,15 @@ class ErrorClassifier:
     9. UNKNOWN - 无法识别：交由 LLM 自行分析
     """
 
+    # 2026-09-26 优化：classify_with_context() 内部调用 classify() 时共享
+    # 已构建的合并文本，避免对同一 test_output + failed_cases 做两次 O(n) 拼接。
+
     def classify(
         self,
         test_output: str,
         failed_cases: list[dict],
         target_module: str | None = None,
+        _combined: str | None = None,
     ) -> ErrorCategory:
         """
         根据测试输出和失败用例分类错误类型。
@@ -247,14 +251,29 @@ class ErrorClassifier:
             target_module: 被测模块名（不含 .py）。提供时用于区分
                 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）：
                 断言失败且失败栈未触及被测模块时归类为 LOGIC_ERROR。
+            _combined: 内部参数——已合并文本（classify_with_context 传入，
+                避免重复拼接）。外部调用者无需传此参数。
 
         Returns:
             最匹配的 ErrorCategory 枚举值。
         """
         # 合并 test_output 和 failed_cases 的 error 信息用于分类
         # 最多取前 3 个失败用例的错误信息，避免过长
-        combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases[:3])
+        if _combined is not None:
+            combined = _combined
+        else:
+            combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases[:3])
 
+        # 委托给纯数据判定路径（与 classify_with_context 共享同一实现）
+        return self._classify_combined(combined, target_module)
+
+    def _classify_combined(self, combined: str, target_module: str | None) -> ErrorCategory:
+        """对已合并文本按优先级顺序做类别判定（纯数据路径，零正则重复）。
+
+        2026-09-26 优化：classify() 与 classify_with_context() 共享此方法，
+        避免对同一合并文本做两套独立判定逻辑（正则已预编译，判定本身为
+        O(1) 查表 + 正则搜索，无重复编译开销）。
+        """
         # 按优先级顺序检查各类错误（细粒度类别先于其粗粒度母类）
         # 1. 检查 LLM 响应格式异常（JSON 解析失败/截断/空响应，1.2 残余细化）
         if self._is_llm_format_error(combined):
@@ -282,8 +301,6 @@ class ErrorClassifier:
         # 8. 检查 Timeout 错误
         if self._is_timeout_error(combined):
             return ErrorCategory.TIMEOUT
-
-        # 默认返回 UNKNOWN
         return ErrorCategory.UNKNOWN
 
     def classify_with_context(
@@ -307,8 +324,20 @@ class ErrorClassifier:
             (category, context) 元组，category 是 ErrorCategory，
             context 是 ErrorContext 对象。
         """
-        category = self.classify(test_output, failed_cases, target_module=target_module)
-        context = self.extract_error_context(test_output, failed_cases)
+        # 2026-09-26 性能优化：一次构建合并文本供 classify() 与
+        # extract_error_context() 共享（此前各自独立构建，对同一
+        # test_output + failed_cases 做了两次 O(n) 拼接）。
+        # 注意：classify() 默认路径只取前 3 个 failed_cases（避免过长文本），
+        # 但 extract_error_context() 取全部 failed_cases（取最后的 traceback 帧）。
+        # 此处统一取全部 failed_cases 构建 combined（与 extract 口径一致），
+        # classify() 收到 _combined 后直接使用（不再截前 3），
+        # 保证 classify_with_context() 的分类结果与 extract_error_context() 所用
+        # 文本范围一致（否则 4+ 用例时分类与提取基于不同文本范围，
+        # 导致同一任务在 reports/generator 与 debugger 中分类结果不一致）。
+        # 默认路径 classify()（_combined=None）仍截前 3，历史口径不变。
+        combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases)
+        category = self.classify(test_output, failed_cases, target_module=target_module, _combined=combined)
+        context = self._extract_error_context_from_combined(combined)
         return category, context
 
     def extract_error_context(self, test_output: str, failed_cases: list[dict]) -> ErrorContext:
@@ -326,7 +355,14 @@ class ErrorClassifier:
         """
         # 合并所有错误信息
         combined = test_output + "\n" + "\n".join(case.get("error", "") for case in failed_cases)
+        return self._extract_error_context_from_combined(combined)
 
+    def _extract_error_context_from_combined(self, combined: str) -> ErrorContext:
+        """从已合并文本提取错误上下文（纯数据路径，零拼接开销）。
+
+        2026-09-26 优化：extract_error_context() 与 classify_with_context()
+        共享此方法，对同一合并文本只做一次 O(n) 正则扫描。
+        """
         # 清理错误消息：去除首尾空白，避免空消息包含换行符
         cleaned_message = combined.strip()[:500]
         context = ErrorContext(error_message=cleaned_message)

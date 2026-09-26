@@ -52,7 +52,12 @@ class APIHealth:
     total_requests: int = 0
     success_count: int = 0
     error_count: int = 0
-    last_response_time_ms: float = 0.0
+    # 2026-09-26 round8 死代码清理：删除 last_response_time_ms 字段（round7
+    # 核实为死字段——生产代码无写入点，仅 avg_response_time_ms 在滑动窗口
+    # 为空时回退读取，与默认值 0.0 等价，无实际影响）。4 处测试同步清理：
+    # tests/test_api_manager.py L65/92-95 + tests/test_api_manager_extended.py
+    # L135-138。avg_response_time_ms 窗口为空时返回 0.0（无任何成功调用，
+    # "无数据"口径，与删除前"回退到从未更新的死字段"口径等价）。
     last_check_time: float = 0.0
     rate_limit_remaining: int = 0
     # 成本权重（3.4 成本感知路由）：相对成本倍数（1.0=基准，越大越贵）。
@@ -198,9 +203,14 @@ class APIHealth:
 
     @property
     def avg_response_time_ms(self) -> float:
-        """平均响应时间（毫秒，基于滑动窗口）"""
+        """平均响应时间（毫秒，基于滑动窗口）
+
+        窗口为空（无任何成功调用记录）时返回 0.0——"无数据"口径
+        （2026-09-26 round8：删除 last_response_time_ms 死字段后，
+        此前"回退到死字段"的口径等价于回退到默认值 0.0）。
+        """
         if not self._response_times:
-            return self.last_response_time_ms
+            return 0.0
         return sum(self._response_times) / len(self._response_times)
 
     def mark_success(self, response_time_ms: float) -> None:
@@ -272,7 +282,10 @@ class APIManagerConfig:
     fallback_on_failure: bool = True  # 失败时是否自动降级
     max_consecutive_failures: int = 3  # 连续失败次数阈值
     timeout: int = 60  # 单次请求超时（秒）
-    retry_count: int = 2  # 重试次数
+    # 2026-09-26 round8 幽灵配置清理：删除 retry_count 字段（round7 核实为
+    # 幽灵配置——生产代码从未读取，重试逻辑由 APIManager.call 循环的
+    # node_fail_count 独立实现，与此字段无关联）。1 处测试断言同步删除：
+    # tests/test_api_manager.py L271（assert config.retry_count == 2）。
     batch_health_check_size: int = 10  # 批量健康检查的批次大小
     # 批量健康检查节点间间隔（秒）：串行探测时避免瞬时流量过大触发限流。
     # 默认 0.1 保持历史行为；大节点池（100+）场景可调 0（纯串行排队）或

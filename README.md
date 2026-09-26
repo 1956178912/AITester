@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1728 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1654 collected） |
-| **单元测试** | ✅ 全量 1728 passed, 0 failed（2026-09-26 审查轮实测 28.7s）；精简环境约 1654 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **总测试数** | ✅ 1785 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1711 collected） |
+| **单元测试** | ✅ 全量 1785 passed, 0 failed（2026-09-26 第八轮收尾审计后实测 ~29s）；精简环境约 1711 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
 | **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后 1714 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-26 全面审查与保守优化轮（六轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底；全量 1728 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-26 全面审查与保守优化轮（八轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底 + 第七轮性能热路径深扫（AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则）+ 第八轮收尾审计（lint/format 清零 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则；全量 1785 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 本轮 11 文件格式归一 + mypy 全仓 0 错误） |
-| **最近改动** | ✅ 2026-09-26 全面审查与保守优化轮（六轮）：静态检查全绿（mypy 4 错清零 + ruff lint 5 处清零 + 11 文件格式归一）+ `src/api/api_manager.py` 死代码/线程卫生修复 + `.gitignore` 补全 + 凭证剔除补强 + 并发竞态修复（APIHealth 节点锁 / 健康检查持锁快照 / LLM 缓存与跨文件计划缓存原子写）+ CF-3 跨文件修复"各模块共用入口代码"逻辑缺陷修复 + 第五轮 P0（变异测试判定 / API 轮询可复现 / 写盘安全检查）+ 第六轮节点层路由语义与鲁棒性（_should_debug 早期迭代 regenerate / test_passed 一致性 / generator LLM 失败降级 / planner/debugger 兜底扩 OSError / 缓存统计线程卫生）；详见 [CHANGELOG](CHANGELOG.md) |
+| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ mypy 全仓 0 错误） |
+| **最近改动** | ✅ 2026-09-26 全面审查与保守优化轮（八轮）：静态检查全绿 + `src/api/api_manager.py` 死代码/线程卫生修复 + `.gitignore` 补全 + 凭证剔除补强 + 并发竞态修复 + CF-3 跨文件修复缺陷修复 + 第五轮 P0（变异测试判定 / API 轮询可复现 / 写盘安全检查）+ 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫（code_context AST 复用 / run_benchmark 双解析合一 / dataset_loader O(1) 索引 / error_classifier 合并文本共享 / 诊断关键词预编译正则 / 半开探测双窗口消除 / helpers O(1) 叶子回退 / 写盘前缀预计算 / zai 域名常量）+ 第八轮收尾审计（ruff lint/format 全仓清零 + 示例文件修复 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则 + 9 条新增回归守卫）；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1728 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1654 个收集）
+# 运行所有单元测试（全量 1785 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1711 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -986,7 +986,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1728 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1785 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -996,7 +996,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（74 个测试文件，全量 1728 个 pytest 收集用例；精简环境约 1654 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（74+ 个测试文件，全量 1785 个 pytest 收集用例；精简环境约 1711 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|

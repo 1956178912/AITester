@@ -46,11 +46,12 @@ def factorial(n: int) -> int:
     # 负数输入保护：数学上阶乘仅定义在非负整数域
     if n < 0:
         raise ValueError("阶乘不支持负数输入")
-    # 递归基线：0! = 1
-    if n == 0:
-        return 1
-    # 递归递推：n! = n * (n-1)!
-    return n * factorial(n - 1)
+
+    # 优化：使用迭代代替递归，避免大数时递归深度超限或性能开销
+    result = 1
+    for i in range(1, n + 1):
+        result *= i
+    return result
 
 
 def add(a: float, b: float) -> float:
@@ -131,4 +132,5 @@ def count_vowels(text: str) -> int:
         元音字母的个数。
     """
     vowels = set("aeiouAEIOU")
+    # 修正循环变量名 'c'，避免与模块顶层不存在的变量混淆，并使其明确为迭代局部变量
     return sum(1 for char in text if char in vowels)

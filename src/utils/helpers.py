@@ -112,11 +112,45 @@ def extract_json_object(text: str) -> dict[str, Any]:
             pass  # 降级到正则方案
 
     # 降级方案：用正则匹配最内层无嵌套的 {...}
-    for match in reversed(list(_JSON_LEAF_PATTERN.finditer(cleaned))):
+    # 2026-09-26 优化：O(1) 记忆扫描"最后出现的叶子 JSON"（避免
+    # list(finditer) 物化全部匹配的 O(n) 内存分配）——语义等价：原
+    # reversed(list(...)) 逐个尝试叶子，最内层（最后出现）的嵌套对象
+    # 是 LLM 真实输出，首个可解析者即为提取目标。扫描时记录候选，
+    # 仅最后候选解析失败时回退前一个（覆盖"外层 wrapper 失败 → 内层
+    # 成功"的常见两层嵌套场景，罕见三层嵌套仍由括号平衡法兜底）。
+    # 2026-09-26 审查修正（P1 语义回归）：O(1) 双候选只试"最后两个"叶子，
+    # 当"可解析叶子"排在更早位置时（损坏响应中夹带 ≥3 个片段、仅第 1 个
+    # 合法）会被静默跳过直接 raise——而括号平衡法恰在此场景失败（最外层
+    # 残缺 → 返回 None），叶子降级方案是该路径唯一兜底，回归即主链 LLM 解析
+    # 失败误判。现补"双候选均失败 → 反向全量扫描"的罕见降级尾路径
+    # （只在平衡法失败 + 最后两个叶子都不可解析时执行，频率极低，
+    # O(n) 可接受；正常路径仍为 O(1) 双候选快路径，行为不变）。
+    last_match: re.Match[str] | None = None
+    prev_match: re.Match[str] | None = None
+    for m in _JSON_LEAF_PATTERN.finditer(cleaned):
+        prev_match = last_match
+        last_match = m
+    if last_match is not None:
         try:
-            return json.loads(match.group())
+            return json.loads(last_match.group())
         except json.JSONDecodeError:
-            continue
+            pass
+    if prev_match is not None:
+        try:
+            return json.loads(prev_match.group())
+        except json.JSONDecodeError:
+            pass
+    # 双候选均不可解析：反向全量扫描（旧 reversed(list(finditer)) 语义）——
+    # 跳过最后两个叶子（上两档已试过），从倒数第三个起逐个尝试，
+    # 首个可解析者即返回（覆盖"可解析叶子排在更早位置"的损坏响应场景）；
+    # 叶子总数 ≤ 2 时零迭代，直接落到下方 raise
+    tail_matches = list(_JSON_LEAF_PATTERN.finditer(cleaned))
+    if len(tail_matches) > 2:
+        for m in reversed(tail_matches[:-2]):
+            try:
+                return json.loads(m.group())
+            except json.JSONDecodeError:
+                continue
 
     # 所有方案均失败
     raise json.JSONDecodeError("Could not find complete JSON", text, start)

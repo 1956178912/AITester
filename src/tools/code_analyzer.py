@@ -10,6 +10,7 @@
     - compute_cyclomatic_complexity: 计算圈复杂度（McCabe 度量）
     - replace_function_code:      使用 AST 安全替换指定函数实现
     - extract_function_context:   按调用链 depth 提取最小上下文（P0 1.1 分层代码压缩）
+    - preserve_patch_ingredients: 截断前显式保留补丁成分（P0 1.2 补丁配方保留）
 """
 
 from __future__ import annotations
@@ -268,3 +269,260 @@ def extract_function_context(
     if not focus_resolved:
         return None
     return focused
+
+
+# ─── P0 1.2 补丁配方保留（Patch Ingredient Retention）────────────────────────
+# 参考 SWEZZE 的 Oracle-guided Code Distillation：压缩过程不得破坏语义完整性
+# （定义-使用关系、类型约束）。本步骤在截断前显式识别"最小充分成分"——
+# 目标函数完整 AST 节点、其调用函数的签名、模块级导出符号（__all__、注册
+# 装饰器、插件入口点）及全部相关 import 语句——并返回"成分保留片段"，
+# 供上游（BaseAgent.truncate_code / 各 Agent 的 prompt 构建）与 AST 截取结果
+# 合并注入，确保 LLM 看到"最小充分子序列"而非字符级硬截断的残片。
+
+
+def _decorator_name(dec: ast.expr) -> str | None:
+    """提取装饰器名称（@register_plugin / @sphinx.application ...）。"""
+    if isinstance(dec, ast.Name):
+        return dec.id
+    if isinstance(dec, ast.Attribute):
+        return dec.attr
+    if isinstance(dec, ast.Call):
+        inner = _decorator_name(dec.func)
+        if inner:
+            return inner
+    return None
+
+
+# 常见"注册 / 插件入口 / 导出"装饰器名（命中即视为模块级契约符号）
+_REGISTER_DECORATOR_NAMES: frozenset[str] = frozenset(
+    {
+        "register",
+        "register_plugin",
+        "plugin",
+        "entry_point",
+        "component",
+        "register_action",
+        "app",
+        "blueprint",
+        "hook",
+        "hookimpl",
+        "hookwrapper",
+        "fixture",
+        "pytest",
+    }
+)
+
+
+def _decorator_is_register_like(dec: ast.expr) -> bool:
+    """装饰器名（或其调用形式）是否命中注册/插件入口模式。"""
+    name = _decorator_name(dec)
+    if not name:
+        return False
+    low = name.lower()
+    return low in _REGISTER_DECORATOR_NAMES or any(p in low for p in ("register", "plugin", "entry", "hook"))
+
+
+def _collect_ingredient_segments(
+    source_code: str,
+    target_func: str | None,
+    _ast: ast.Module | None = None,
+) -> dict[str, Any]:
+    """识别补丁最小充分成分（P0 1.2）。
+
+    遍历源码 AST，收集：
+    - imports：全部模块级 import / from-import 语句（import 链完整性的前提）；
+    - exports：__all__ 列表字面量内容（若存在）；
+    - register_symbols：顶层带注册/插件入口装饰器（@register*、@plugin、
+      @entry_point、@hook... 等）的函数/类名；
+    - target_ast：目标函数的完整 AST 节点（未截断源码文本，供"定义-使用"
+      关系保留）；
+    - called_signatures：目标函数体内直接调用的同模块函数的签名行（仅
+      def 行 + 装饰器，不展开函数体，控制 token 成本）；
+    - module_constants：顶层赋值常量名（`NAME = ...` / `NAME: T = ...`）。
+
+    解析失败或源码为空时返回各字段空值（不阻断调用方降级路径）。
+
+    2026-09-26 性能优化：_ast 可选参数——调用方（code_context 的
+    extract_focused_code_detail）已对同一 source 做过 ast.parse，可传入
+    既有 tree 复用，消除 200ms 级重复解析；独立调用（无 _ast）时行为不变。
+    """
+    ingredients: dict[str, Any] = {
+        "imports": "",
+        "exports": [],
+        "register_symbols": [],
+        "target_ast": "",
+        "called_signatures": [],
+        "module_constants": [],
+        "parsed": False,
+        # 2026-09-26：暴露解析成功的 AST tree（供调用方复用做二次分析，
+        # 避免重复 ast.parse；独立调用方未消费此键时不影响既有字段口径）
+        "ast_tree": None,
+    }
+    if not source_code or not source_code.strip():
+        return ingredients
+    if _ast is not None:
+        tree: ast.Module = _ast
+    else:
+        try:
+            tree = ast.parse(source_code)
+        except (SyntaxError, ValueError):
+            return ingredients
+    ingredients["parsed"] = True
+    ingredients["ast_tree"] = tree
+
+    lines = source_code.splitlines()
+
+    # 1. import 语句（模块级）
+    import_segments: list[str] = []
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            start = getattr(node, "lineno", 1) or 1
+            end = getattr(node, "end_lineno", start) or start
+            import_segments.append("\n".join(lines[start - 1 : end]))
+    ingredients["imports"] = "\n".join(import_segments)
+
+    # 2. 顶层函数 / 类 / 常量 / 装饰器识别
+    top_funcs: dict[str, ast.AST] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            top_funcs[node.name] = node
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    if target.id == "__all__":
+                        # __all__ 字面量提取
+                        value = node.value
+                        if isinstance(value, (ast.List, ast.Tuple)):
+                            for elt in value.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    ingredients["exports"].append(elt.value)
+                    elif not target.id.startswith("__"):
+                        ingredients["module_constants"].append(target.id)
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and not node.target.id.startswith("__")
+        ):
+            ingredients["module_constants"].append(node.target.id)
+
+    # 3. 注册 / 插件入口装饰器
+    for name, top_node in top_funcs.items():
+        for dec in getattr(top_node, "decorator_list", []) or []:
+            if _decorator_is_register_like(dec):
+                ingredients["register_symbols"].append(name)
+                break
+
+    # 4. 目标函数完整 AST + 调用签名
+    if target_func and target_func in top_funcs:
+        target_node = top_funcs[target_func]
+        start = getattr(target_node, "lineno", 1) or 1
+        end = getattr(target_node, "end_lineno", start) or start
+        ingredients["target_ast"] = "\n".join(lines[start - 1 : end])
+        # 目标函数体内直接调用的同模块函数 → 仅签名（def 行 + 装饰器）
+        called_names: set[str] = set()
+        for sub in ast.walk(target_node):
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name):
+                called_names.add(sub.func.id)
+        for called in sorted(called_names):
+            if called in top_funcs and called != target_func:
+                callee = top_funcs[called]
+                callee_start = getattr(callee, "lineno", 1) or 1
+                # 仅取装饰器行 + def 行本身，不展开函数体：
+                # callee_start 为 1-based def 行号；0-based 切片
+                # lines[dec_start-1 : callee_start] 的右端 callee_start 恰好切到
+                # def 行结束（不含函数体首行）。无装饰器时 dec_start==callee_start，
+                # 切片为单行 def；有装饰器时含全部装饰器行 + def 行。
+                # （2026-09-26 round8 tools 审查核实：切片正确，与 docstring
+                # "仅 def 行 + 装饰器"口径一致，无缺陷。）
+                dec_start = callee_start
+                for dec in getattr(callee, "decorator_list", []) or []:
+                    dec_start = min(dec_start, getattr(dec, "lineno", dec_start) or dec_start)
+                ingredients["called_signatures"].append(
+                    "\n".join(lines[dec_start - 1 : callee_start])
+                )
+
+    return ingredients
+
+
+def preserve_patch_ingredients(
+    source_code: str, target_func: str | None = None, _ast: ast.Module | None = None
+) -> dict[str, Any]:
+    """P0 1.2 补丁配方保留：截断前显式保留最小充分成分（SWEZZE 式）。
+
+    在代码上下文压缩（P0 1.1 分层截取）之前调用，返回"成分保留片段"——
+    目标函数完整 AST 节点文本、其直接调用函数的签名、模块级导出符号
+    （__all__ / 注册装饰器 / 插件入口点 / 模块级常量）与全部 import 语句。
+
+    上游可将返回值中的各片段拼接到 LLM prompt，与 AST 截取结果合并，
+    使 LLM 即便在字符级截断的残片场景下仍能看到"补丁必须保留的契约成分"，
+    避免压缩破坏定义-使用关系与命名契约（sqlfluff 插件 5/7 失败根因）。
+
+    Args:
+        source_code: 原始 Python 源码（可多文件拼接，按拼接文本 AST 解析）。
+        target_func: 目标函数名（可选）。提供时提取其完整 AST + 调用签名；
+            None 时仅保留模块级契约成分（import / 导出 / 注册符号 / 常量）。
+        _ast: 内部参数——调用方已解析的 AST tree（复用，避免重复解析）；
+            外部调用者无需传此参数。
+
+    Returns:
+        成分字典，键：
+        - imports (str): 全部模块级 import 语句（换行拼接）。
+        - exports (list[str]): __all__ 列出的符号。
+        - register_symbols (list[str]): 带注册/插件入口装饰器的顶层符号。
+        - target_ast (str): 目标函数完整源码文本（None/未提供/未找到时 ""）。
+        - called_signatures (list[str]): 目标函数直接调用的同模块函数签名
+          （仅 def 行 + 装饰器，不含函数体）。
+        - module_constants (list[str]): 顶层赋值常量名。
+        - parsed (bool): 源码是否成功 AST 解析（失败时各字段为空，
+          调用方降级为全文件 + 字符级截断兜底）。
+
+    设计约束（与 contamination_check / embedding_utils 同口径）：
+    - 纯标准库 ast，零外部依赖，可复算；
+    - 解析失败保守返回空值，不抛出、不阻断主流程；
+    - 调用签名仅取 def 行（token 成本 O(1)/函数），函数体由 P0 1.1 的
+      调用链闭包（extract_function_context）按 depth 预算控制，两者正交。
+    """
+    return _collect_ingredient_segments(source_code, target_func, _ast=_ast)
+
+
+def render_patch_ingredient_context(ingredients: dict[str, Any]) -> str:
+    """把 preserve_patch_ingredients 的成分字典渲染为可注入 prompt 的文本块。
+
+    输出格式（各段双换行分隔，空段跳过）：
+    [PATCH_INGREDIENTS]
+    imports:
+    <import 语句>
+    exports: __all__ = [...]
+    register_symbols: register_plugin, ...
+    target_ast:
+    <目标函数完整源码>
+    called_signatures:
+    def helper_a(...)
+    module_constants: NAME1, NAME2
+
+    无任何成分（parsed=False 或全空）时返回空串（调用方不注入）。
+    """
+    if not ingredients:
+        return ""
+    parts: list[str] = []
+    imports = ingredients.get("imports") or ""
+    if imports:
+        parts.append(f"imports:\n{imports}")
+    exports = ingredients.get("exports") or []
+    if exports:
+        parts.append(f"exports: {', '.join(exports)}")
+    reg = ingredients.get("register_symbols") or []
+    if reg:
+        parts.append(f"register_symbols: {', '.join(reg)}")
+    target_ast = ingredients.get("target_ast") or ""
+    if target_ast:
+        parts.append(f"target_ast:\n{target_ast}")
+    sigs = ingredients.get("called_signatures") or []
+    if sigs:
+        parts.append("called_signatures:\n" + "\n".join(sigs))
+    consts = ingredients.get("module_constants") or []
+    if consts:
+        parts.append(f"module_constants: {', '.join(consts)}")
+    if not parts:
+        return ""
+    return "[PATCH_INGREDIENTS]\n" + "\n\n".join(parts)

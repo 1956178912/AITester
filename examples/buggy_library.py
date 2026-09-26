@@ -25,17 +25,20 @@ def binary_search(arr: list, target: int) -> int:
 
     Returns:
         目标值的索引，未找到时返回 -1。
+        注：若存在重复元素，返回最右侧的匹配索引。
     """
     left, right = 0, len(arr) - 1
+    result = -1
     while left <= right:
         mid = (left + right) // 2
         if arr[mid] == target:
-            return mid
-        if arr[mid] < target:
+            result = mid
+            left = mid + 1  # 继续向右搜索，寻找更右的匹配
+        elif arr[mid] < target:
             left = mid + 1
         else:
-            right = mid - 1  # 修复：原代码 right = mid 导致区间不收缩，可能无限循环
-    return -1
+            right = mid - 1
+    return result
 
 
 def merge_sorted_lists(list1: list, list2: list) -> list:

@@ -72,7 +72,14 @@ CODE_FOCUS_DEPTH: int = int(os.getenv("CODE_FOCUS_DEPTH", "1"))
 # 安全检查 2 用：函数定义探测正则（re 编译缓存命中，热路径零编译开销）。
 # 锚定行首（含缩进行）后的 `def `，与旧的"逐行 startswith('def ')"语义等价
 # （行内首 token 非 def 的注释/docstring 不命中，避免误判）。
-_HAS_FUNC_DEF_RE = re.compile(r"^\s*def ", re.MULTILINE)
+# 2026-09-26 round8 修正（graph 子代理 P1）：补 `(?:async\s+)?` 前缀，与
+# patch_applier._TOP_DEF_RE / _find_function_range_ast / 单函数模式按名正则
+# （round7 P2-2/P2-3/P2-4 已统一含 async）同口径——此前 async-only 被测
+# 模块（目标代码与 LLM 补丁片段仅含 async def）会被安全检查 2 误判"无
+# 函数定义"拒写盘 → target_code 永不更新 → 修复循环空烧 token 不收敛。
+# 默认行为不变：同步 def 为主的默认数据集命中口径不变，仅 async-only 边界
+# 场景由"误拒"变"正确接受"。
+_HAS_FUNC_DEF_RE = re.compile(r"^\s*(?:async\s+)?def ", re.MULTILINE)
 
 # 安全检查 3 用：路径白名单根（项目根目录 + 系统临时目录），模块加载期
 # 归一化一次。此前每次补丁应用都现场算 4 层 dirname + 3 次 realpath，
@@ -88,6 +95,12 @@ _ALLOWED_WRITE_ROOTS: tuple[str, ...] = tuple(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         tempfile.gettempdir(),
     )
+)
+# 2026-09-26 性能优化：预计算前缀对（root, prefix），避免热路径每次
+# 对每个 root 重算 root.rstrip(os.sep) + os.sep。语义不变：
+# prefix = root 去末尾 sep 后再加 sep（防 AITester_backup/ 兄弟目录碰撞）。
+_ALLOWED_WRITE_ROOT_PREFIXES: tuple[tuple[str, str], ...] = tuple(
+    (root, root.rstrip(os.sep) + os.sep) for root in _ALLOWED_WRITE_ROOTS
 )
 
 
@@ -544,6 +557,67 @@ def _dynamic_temperature_from_suggestion(suggestion: str | None) -> float | None
     return None
 
 
+def _diagnosis_node(state: AITesterState) -> dict[str, Any]:
+    """三、双向代码-测试诊断节点（BiVCode 式 DiagnosisNode，默认关）。
+
+    在 _debugger_node 之前执行：分析测试失败的根本原因，判断是"代码缺陷"
+    还是"测试缺陷"，并把判定结果写入 state 供 _should_debug 路由消费：
+    - 代码缺陷（implementation_defect）→ 路由到 _debugger_node 生成补丁；
+    - 测试缺陷（test_defect）→ 路由回 generator 重新生成测试。
+
+    复用 DebuggerAgent._run_review_diagnosis（BiVCoder 式 Review Agent），
+    不重复 LLM prompt 工程；本节点仅做"路由前诊断 + 状态写入 + 观测追踪"。
+
+    开关：DIAGNOSIS_NODE_ENABLE=true 时启用（默认 false，保持历史实验口径——
+    历史路径由 _debugger_node 内部 BIDIRECTIONAL_DIAGNOSIS_ENABLE 完成诊断，
+    本节点为工作流级的显式诊断点，二者可叠加但默认都关）。
+
+    观测口径：纯诊断层，不修改 target_code / generated_test；LLM 调用失败时
+    保守判定为 implementation_defect（与 _run_review_diagnosis 同口径），
+    不因诊断失败阻断修复主流程。
+
+    Args:
+        state: 当前工作流状态（含 target_code / test_output / failed_cases /
+            error_category 等字段）。
+
+    Returns:
+        更新后的状态字典，含 defect_type / review_reason / diagnosis_source。
+    """
+    agent = DebuggerAgent()
+    t0 = time.time()
+    # 截断超长代码与测试输出（诊断 prompt 的 token 预算与 _debugger_node 同口径）
+    from src.agents.base_agent import BaseAgent
+
+    truncated_code = BaseAgent.truncate_code(
+        state.get("target_code") or "", focus_function=state.get("target_function")
+    )
+    truncated_output = BaseAgent.truncate_code(state.get("test_output") or "", max_chars=1500)
+    failed_cases = state.get("failed_cases") or []
+    error_category = str(state.get("error_category") or "unknown")
+
+    review = agent._run_review_diagnosis(truncated_code, truncated_output, failed_cases, error_category)
+    defect_type = review.get("defect_type", "implementation_defect")
+    review_reason = review.get("reason", "")
+    logger.info("三、双向诊断（DiagnosisNode）判定：%s（%s）", defect_type, review_reason[:80])
+    _trace_node(
+        "diagnosis",
+        output_summary={
+            "defect_type": defect_type,
+            "review_reason": review_reason[:200],
+            "error_category": error_category,
+        },
+        decision=defect_type,
+        duration_ms=(time.time() - t0) * 1000,
+        iteration=state.get("iteration", 0),
+    )
+    return {
+        "defect_type": defect_type,
+        "review_reason": review_reason,
+        # 诊断来源标记（区分工作流级 DiagnosisNode 与 _debugger_node 内联诊断）
+        "diagnosis_source": "diagnosis_node",
+    }
+
+
 def _debugger_node(state: AITesterState) -> dict[str, Any]:
     """
     DebuggerAgent 节点：分析失败原因并生成分层修复补丁。
@@ -660,6 +734,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             "position_aware_focus",
             {"focused": False, "function_name": None, "line": None, "hint": ""},
         ),
+        # 2.1 类型修复层疑点（空列表 = 无疑点；LLM 层修订成功时 patch 已替换，
+        # 疑点仍保留供实验分析消费。2026-09-26 补传播：此前 debug() 返回值
+        # 已含该键但节点未写入 state（schema 有键却无值，消费侧恒 None））
+        "type_repair_findings": result.get("type_repair_findings", []),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
@@ -668,7 +746,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     return update
 
 
-def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:
+def _is_within_allowed_roots(path: str, roots: tuple[str, ...] | None = None) -> bool:
     """判断文件路径是否位于任一允许根目录之内（含根目录自身）。
 
     前缀比较必须带上 os.sep，否则 AITester_backup/ 这类兄弟目录会因
@@ -682,12 +760,15 @@ def _is_within_allowed_roots(path: str, roots: tuple[str, ...]) -> bool:
 
     Args:
         path: 待校验的文件路径。
-        roots: 允许的根目录元组（已 realpath 归一化）。
+        roots: 允许的根目录元组（已 realpath 归一化）。None 时使用
+            模块级 _ALLOWED_WRITE_ROOT_PREFIXES（热路径，零重算开销）。
 
     Returns:
         True 表示路径位于某根目录内（或即根目录本身）。
     """
     abs_path = os.path.realpath(path)
+    if roots is None:
+        return any(abs_path == root or abs_path.startswith(prefix) for root, prefix in _ALLOWED_WRITE_ROOT_PREFIXES)
     return any(abs_path == root or abs_path.startswith(root.rstrip(os.sep) + os.sep) for root in roots)
 
 
@@ -959,7 +1040,7 @@ def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: A
     # 安全检查 3：路径白名单（项目根目录或系统临时目录，前缀比较带 os.sep 防兄弟目录碰撞）
     # 白名单根在模块加载期归一化（_ALLOWED_WRITE_ROOTS，abspath 与历史判定语义一致）
     target_file_path = os.path.abspath(state["target_file"])
-    if not _is_within_allowed_roots(target_file_path, _ALLOWED_WRITE_ROOTS):
+    if not _is_within_allowed_roots(target_file_path):
         logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
         return False
     # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件

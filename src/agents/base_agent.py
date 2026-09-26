@@ -36,7 +36,6 @@ from src.agents.llm_client import (
     _redact_log_text,
     _retry_with_exponential_backoff,
 )
-from src.tools.code_context import extract_focused_code
 from src.utils.helpers import extract_code_block, extract_json_object
 
 logger = logging.getLogger(__name__)
@@ -378,11 +377,11 @@ class BaseAgent:
         Raises:
             RuntimeError: 所有 API 和重试均失败时抛出。
         """
-        # P0 1.2：复杂度感知路由——complexity_class 非 None 时注入 APIManager，
-        # 按档位选择 LLM 实例（simple → 低成本端点，complex → 高成本端点）
-        llm_call_kwargs: dict[str, Any] = {}
-        if complexity_class is not None:
-            llm_call_kwargs["complexity_class"] = complexity_class
+        # P0 1.2：复杂度感知路由——complexity_class 非 None 时经下方
+        # _reorder_api_groups_by_complexity 按档位重排 api_groups（simple → 低成本
+        # 端点在前，complex → 高成本端点在前）；路由不依赖 APIManager kwargs
+        # 注入，故无需额外构造调用参数字典（2026-09-26 死代码清理：此前构建的
+        # 死变量从未被任何调用点引用，已删）。
         # 延迟导入：避免循环导入（base_agent 被 planner/generator/debugger 导入）
         from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -525,11 +524,14 @@ class BaseAgent:
         截取策略（P0 优化，解决 SWE-bench 大文件上下文丢失问题）：
         1. 代码在预算内 → 原样返回；
         2. 否则先做基于 AST 的智能截取（保留 import + 目标函数及其
-           调用链 focus_depth 层依赖的辅助函数，超长函数体首尾截断），
+           调用链 focus_depth 层依赖的辅助函数，超长函数体首尾截断；
+           P0 1.2 焦点存在时追加 [PATCH_INGREDIENTS] 契约块），
            优先于"头尾各半"硬截断——硬截断对数百行源文件会让 LLM 看不到
            目标函数；
-        3. AST 截取仍超预算（或源码无法解析、无函数体）→ 回退字符级
-           头尾截断兜底。
+        3. AST 截取仍超预算时：焦点函数解析成功（focus_resolved=True，
+           已含契约块）→ 保留聚焦结果不硬截断（契约块位于尾部，头尾截断
+           会破坏 P0 1.2 语义）；解析失败/无焦点（focus_resolved=False）
+           → 回退字符级头尾截断兜底（历史口径）。
 
         Args:
             code: 原始代码字符串。
@@ -548,10 +550,30 @@ class BaseAgent:
 
         depth = CODE_FOCUS_DEPTH if focus_depth is None else max(1, focus_depth)
         # 第一层：AST 智能截取（code_context 模块无对外部依赖，顶层导入安全）
-        focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars, depth=depth)
+        # P0 1.2：焦点函数存在时截取结果已追加 [PATCH_INGREDIENTS] 契约块，
+        # 用 extract_focused_code_detail 拿 (code, focus_resolved) 二元组，
+        # focus_resolved=False（源码无法解析/无函数体/焦点不在源码中）时
+        # 契约块未追加，需回退字符级头尾截断兜底（历史口径）。
+        from src.tools.code_context import extract_focused_code_detail
+
+        focused, focus_resolved = extract_focused_code_detail(
+            code, focus_function=focus_function, max_chars=max_chars, depth=depth
+        )
         if len(focused) <= max_chars:
             logger.info(
                 "代码已按 AST 智能截取：%d → %d 字符（focus=%s）", len(code), len(focused), focus_function or "*"
+            )
+            return focused
+
+        # AST 截取超预算：焦点已解析成功（契约块已追加，focus_resolved=True）
+        # 时保留聚焦结果不再硬截断——头尾截断会破坏尾部 [PATCH_INGREDIENTS]
+        # 契约块的语义（P0 1.2）；解析失败/无焦点时走字符级兜底。
+        if focus_resolved:
+            logger.info(
+                "P0 1.2 AST 聚焦结果超预算（%d → %d 字符，focus=%s），保留聚焦+契约块不硬截断",
+                len(code),
+                len(focused),
+                focus_function or "*",
             )
             return focused
 

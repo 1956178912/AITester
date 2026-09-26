@@ -87,13 +87,16 @@ def mul(a, b):
         assert not ok
         assert "未产生实际改动" in reason
 
-    def test_full_file_patch_preserves_original_functions(self):
-        # 整文件模式（含 import 头）：patch_applier 与原子代码合并，不会丢函数。
-        # 此行为证明"函数定义数量减少"分支是针对"误删"的防御网，正常整文件补丁
-        # 仍能通过（保留原代码全部函数），而非被误拒。
+    def test_full_file_patch_missing_function_rejected(self):
+        # 2026-09-26 第二轮全面审查（P1 修复）：完整文件模式 subset 校验失败
+        # （补丁带 import 前缀但漏掉原代码某函数）保守拒绝——此前静默回退单
+        # 函数路径产出含重复 import/重复 def 的损坏代码（ast.parse 通过、
+        # safe_apply_patch 语法守卫与下方"函数定义数量不减少"检查均拦不住，
+        # 损坏代码直接写盘）。现与防御网口径对齐：宁拒绝不可损坏。
         full_no_mul = "import math\n\n\ndef add(a, b):\n    return a + b\n"
         ok, reason, _ = mc.static_validate_patch(_GOOD_ORIGINAL, "```python\n" + full_no_mul + "\n```")
-        assert ok, f"正常整文件补丁应通过，实际被拒: {reason}"
+        assert not ok, f"完整文件补丁漏掉原代码函数 mul，应保守拒绝: {reason}"
+        assert "无法应用" in reason
 
     def test_too_short_rejected(self):
         # 大原代码 + 很短的整文件补丁触发 10% 规则被拒；

@@ -217,6 +217,15 @@ class AITesterState(TypedDict, total=False):
     # 2026-09-26 全面审查：此前由 benchmark 在 invoke 后 set 到 final_state 但
     # 未声明于 TypedDict（守护测试 test_state_schema_guard 会漏报），现显式声明
     repo_verification: dict[str, Any] | None
+    # 三、双向诊断节点（DIAGNOSIS_NODE_ENABLE=true 时由 _diagnosis_node 写入）：
+    # 标记 defect_type 的判定来源（"diagnosis_node" = 工作流级 DiagnosisNode；
+    # 缺省/None = 历史口径，由 _debugger_node 内联 BIDIRECTIONAL_DIAGNOSIS_ENABLE
+    # 完成诊断），供实验区分"工作流级显式诊断"与"debugger 内联诊断"两条路径
+    diagnosis_source: str | None
+    # 2.1 PAGENT 风格类型修复层：_debugger_node 写入的静态类型疑点列表
+    # （每项 {file, line, message, kind}；LLM 层修订成功时 patch 已被替换，
+    # 疑点仍保留供实验分析消费）
+    type_repair_findings: list[dict[str, Any]] | None
 
 
 def create_initial_state(
@@ -318,4 +327,9 @@ def create_initial_state(
         # P0 仓库级验证结果（默认 None，REPO_LEVEL_EXECUTION=true 时由
         # run_benchmark 在 invoke 后写入；2026-09-26 全面审查补声明）
         repo_verification=None,
+        # 三、双向诊断节点来源标记（默认 None，DIAGNOSIS_NODE_ENABLE=true 时
+        # 由 _diagnosis_node 写入 "diagnosis_node"）
+        diagnosis_source=None,
+        # 2.1 PAGENT 风格类型修复层疑点（默认 None，_debugger_node 写入）
+        type_repair_findings=None,
     )

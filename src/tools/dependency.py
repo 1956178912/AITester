@@ -117,6 +117,13 @@ _MODULE_TO_PACKAGE: dict[str, str] = {
 # 键：顶层模块名；值：bool（可 import）。find_spec 结果在进程生命周期内稳定
 # （venv 安装发生在子进程，不影响宿主进程的解释器环境）
 _importable_cache: dict[str, bool] = {}
+# 2026-09-26 round8 线程安全（round7 遗留债务项落地）：--parallel 下多个
+# 路由/工作线程并发探测同一批模块时，_importable_cache.get 与写回之间
+# 存在竞态窗口（check-then-act 非原子），多线程同键并发 find_spec 产生
+# 重复探测。加进程级锁原子化读改写——find_spec 幂等且开销 <1ms，持锁
+# 时间微秒级，不改变任何判定语义，仅消除 --parallel 场景的重复探测。
+# 锁为普通 Lock（非 RLock）：_is_importable_cached 内部无递归调用。
+_importable_cache_lock = threading.Lock()
 
 
 def extract_imported_modules(code: str) -> set[str]:
@@ -199,10 +206,19 @@ def find_missing_modules(
 
 
 def _is_importable_cached(module_name: str) -> bool:
-    """带进程级缓存的模块可导入探测（find_spec 开销较大）。"""
-    cached = _importable_cache.get(module_name)
-    if cached is not None:
-        return cached
+    """带进程级缓存的模块可导入探测（find_spec 开销较大）。
+
+    线程安全（2026-09-26 round8）：读改写在 _importable_cache_lock 内
+    原子化（--parallel 多线程并发探测同键时消除 check-then-act 竞态，
+    避免重复 find_spec）；锁内 find_spec 幂等、纯本地文件系统扫描，
+    不改变判定语义。
+    """
+    with _importable_cache_lock:
+        cached = _importable_cache.get(module_name)
+        if cached is not None:
+            return cached
+    # 锁外执行 find_spec（开销 <1ms 但避免持锁时间膨胀；并发同键时
+    # 极少数线程可能重复探测——find_spec 幂等，结果一致，无正确性问题）
     try:
         spec = importlib.util.find_spec(module_name)
         result = spec is not None
@@ -210,7 +226,8 @@ def _is_importable_cached(module_name: str) -> bool:
         # find_spec 对某些命名空间包会抛异常，按缺失处理
         logger.debug("find_spec(%s) 异常: %s", module_name, e)
         result = False
-    _importable_cache[module_name] = result
+    with _importable_cache_lock:
+        _importable_cache[module_name] = result
     return result
 
 
@@ -433,6 +450,16 @@ def _record_venv_cache_event(kind: str) -> None:
         return
     # 落盘在计数锁外执行；独立落盘锁保证 lost-update 安全
     with _venv_cache_persist_lock:
+        # 2026-09-26 全面审查（P1 竞态）：_venv_cache_last_persist_at 的
+        # 读-写必须整体在落盘锁保护范围内——此前锁内二次确认仍读无锁的
+        # 模块全局（TOCTOU）：--parallel 下 N 线程同批越过锁外判断时
+        # （都读到 None / 上一窗口时间戳），先入锁者 A 落盘并写新时间戳，
+        # 后入锁者 B 二次确认读到 A 刚写的"刚刚落盘"→ 直接 return，
+        # B 的事件停留内存直到下一窗口（节流实际效果是"窗口内仅首个
+        # 事件落盘，其余全部延迟到窗口外"，与注释"未落盘事件由后续任一
+        # persist 合并写入"口径不符）。计数统计最终值不受影响（atexit
+        # 兜底 + 后续合并），但落盘时效偏差；现把读-写都放入锁内，
+        # 窗口内后入锁者读到的是"窗口外"时间戳 → 正常落盘。
         now = time.time()
         if (
             _venv_cache_last_persist_at is not None

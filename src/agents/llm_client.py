@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -243,6 +244,15 @@ def _record_response_usage(usage: Any, model_name: str) -> None:
         logger.debug("token 统计记录失败（忽略）: %s", e)
 
 
+# 智谱系域名判定（bigmodel.cn / zhipuai）
+# 2026-09-26 优化：模块级预编译 alternation 正则（此前每次 _is_zai_compatible
+# 调用都重建 list + `any` 子串扫描；--parallel 多任务热路径上 LLM 路由决策
+# 每次调用 2 次）。一次 O(n) 扫描，模块加载期预编译一次，调用零分配。
+# bigmodel.cn 为真实域名：. 必须字面匹配（转义为 \.），否则 bigmodelXcn
+# 等 URL 会误命中；zhipuai 为纯子串特征（无元字符，保持原扫描口径）。
+_ZAI_DOMAIN_RE = re.compile(r"bigmodel\.cn|zhipuai")
+
+
 def _is_zai_compatible(base_url: str) -> bool:
     """判断是否为 zai SDK 兼容的 API（如 BigModel 智谱）。
 
@@ -255,9 +265,10 @@ def _is_zai_compatible(base_url: str) -> bool:
     Returns:
         True 表示需使用 zai SDK 路径；False 使用标准 LangChain ChatOpenAI。
     """
-    # 智谱系域名关键字列表（bigmodel.cn 和 zhipuai.cn 均覆盖）
-    zai_domains = ["bigmodel.cn", "zhipuai"]
-    return any(d in base_url for d in zai_domains)
+    # 预编译 alternation 正则（模块加载期编译一次）；子串命中口径与历史
+    # `any(d in base_url for d in ("bigmodel.cn", "zhipuai"))` 等价
+    # （"bigmodel.cn" 中 "." 字面匹配，与 in 子串扫描一致）
+    return bool(_ZAI_DOMAIN_RE.search(base_url))
 
 
 def _call_zai(

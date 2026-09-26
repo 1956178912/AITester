@@ -64,6 +64,19 @@ _thread_local = threading.local()
 # 限制（常驻线程池场景），量级可忽略
 _registry: dict[int, TokenUsage] = {}
 _registry_lock = threading.Lock()
+# 进程级累计锁（2026-09-26 round8，round7 遗留债务项落地）：
+# TokenUsage 各字段为普通 int/dict，record_usage 的 "get→+1→set" 非原子。
+# --parallel 下 LangChain 线程池 worker 复用 + 同任务多 agent 线程可能
+# 并发累加同一 ThreadLocal 的 TokenUsage，存在丢更新窗口（理论竞态，
+# 实测影响极小）。加进程级单锁原子化读改写：纯内存操作（微秒级，无 I/O），
+# 不改变任何累计语义，仅消除丢更新。
+# 设计取舍：用单锁而非"per-instance 锁字典"——ThreadLocal 的 TokenUsage
+# 在 reset() 时被新实例替换（旧实例仅存于已退出线程的 registry），
+# 按 id(实例) 建锁字典会让键随实例替换/线程退出而漂移（同 id 复用
+# 风险 + 字典无界增长），无实际收益。进程级单锁持锁时间为单次
+# record_usage 的字段读改写（微秒级，无 I/O），不会成为 --parallel
+# 瓶颈；跨线程一致性由 _registry_lock 在 global_usage 聚合点保证。
+_usage_lock = threading.Lock()
 
 
 def _current_usage() -> TokenUsage:
@@ -84,14 +97,19 @@ def record_usage(input_tokens: int, output_tokens: int, model: str = "") -> None
         input_tokens: 本次调用的输入 token 数。
         output_tokens: 本次调用的输出 token 数。
         model: 产生本次消耗的模型名（用于 by_model 分桶，可为空）。
+
+    线程安全（2026-09-26 round8）：各字段读改写在进程级 _usage_lock 内
+    原子化（--parallel 下并发累加同一累计器时消除丢更新窗口）；纯内存
+    操作（微秒级，无 I/O），不改变累计语义。
     """
     usage = _current_usage()
-    usage.input_tokens += input_tokens
-    usage.output_tokens += output_tokens
-    usage.total_tokens += input_tokens + output_tokens
-    usage.llm_calls += 1
-    if model:
-        usage.by_model[model] = usage.by_model.get(model, 0) + input_tokens + output_tokens
+    with _usage_lock:
+        usage.input_tokens += input_tokens
+        usage.output_tokens += output_tokens
+        usage.total_tokens += input_tokens + output_tokens
+        usage.llm_calls += 1
+        if model:
+            usage.by_model[model] = usage.by_model.get(model, 0) + input_tokens + output_tokens
 
 
 def get_usage() -> TokenUsage:

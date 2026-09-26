@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1728 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1654 collected) |
-| **Unit Tests** | ✅ Full: 1728 passed, 0 failed (28.17s measured in the 2026-09-26 review round); reduced environment: ~1654 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 94% total coverage (src/; 0.10 deep-audit round fixed 4 sites + 2 new regression cases, full suite 1728 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
+| **Total Tests** | ✅ 1785 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1711 collected) |
+| **Unit Tests** | ✅ Full: 1785 passed, 0 failed (~29s measured after the 2026-09-26 eighth-batch closing audit); reduced environment: ~1711 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 94% total coverage (src/; 0.10 deep-audit round fixed 4 sites + 2 new regression cases, full suite 1785 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-09-26 full-audit & conservative-optimization round (six batches: static checks zeroed (mypy 4 + ruff lint 5 + 11 files format-normalized) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene); full 1728-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Latest Optimization** | ✅ 2026-09-26 full-audit & conservative-optimization round (eight batches: static checks zeroed (mypy 4 + ruff lint 5 + 11 files format-normalized) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene) + seventh-batch hot-path deep scan (AST-parse reuse / O(1) task index / shared combined text / precompiled keyword regex) + eighth-batch closing audit (lint / format zeroing + type-repair contract-reference caliber + `type_repair_findings` state propagation + precompiled zai-domain regex; full 1785-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round + 11 files format-normalized in this round + mypy 0 errors across the repo) |
-| **Recent Changes** | ✅ 2026-09-26 full-audit & conservative-optimization round (six batches): static checks all green (4 mypy errors + 5 ruff lint + 11 files format-normalized) + `src/api/api_manager.py` dead-code / thread hygiene fixes + `.gitignore` extended + P0 credential-scrub hardening + concurrency race fixes (APIHealth node lock / health-check lock-held snapshots / atomic cache writes) + CF-3 cross-file repair "all modules share entry code" logic-defect fix + fifth-batch P0 (mutation-test judging / API rotation reproducibility / write-disk safety) + sixth-batch node-layer routing semantics & robustness; see [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round + 11 files format-normalized in batch 7 + 5 working-tree lint nits cleared in batch 8 (duplicate import / trailing whitespace / no-placeholder f-string / PERF401 / exception narrowing) + mypy 0 errors across the repo) |
+| **Recent Changes** | ✅ 2026-09-26 full-audit & conservative-optimization round (eight batches): static checks all green + `src/api/api_manager.py` dead-code / thread hygiene fixes + `.gitignore` extended + P0 credential-scrub hardening + concurrency race fixes (APIHealth node lock / health-check lock-held snapshots / atomic cache writes) + CF-3 cross-file repair "all modules share entry code" logic-defect fix + fifth-batch P0 (mutation-test judging / API rotation reproducibility / write-disk safety) + sixth-batch node-layer routing semantics & robustness + seventh-batch hot-path deep scan (code_context AST reuse / run_benchmark double-parse unification / dataset_loader O(1) index / error_classifier shared combined text / precompiled diagnosis-keyword regex / half-open probe double-window elimination / helpers O(1) leaf fallback / precomputed write-disk prefixes / zai-domain constant) + eighth-batch closing audit (repo-wide ruff lint / format zeroing + example-file fixes + type_repair contract-reference caliber + `type_repair_findings` state propagation + precompiled zai-domain regex + 9 new regression guards); see [CHANGELOG.en.md](CHANGELOG.en.md). |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1728 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1654 collected)
+# Run all unit tests (full 1785 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1711 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -794,7 +794,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1728 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1785 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -804,7 +804,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (74 test files, full 1728 collected pytest cases; reduced environment collects ~1654 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (74+ test files, full 1785 collected pytest cases; reduced environment collects ~1711 / auto-skips RAG and visualization cases, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1186,14 +1186,14 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
 - Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 7 mutation types; kill judging per official pytest exit codes, 2026-09-26)
 - Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
-- 1728 test cases / 94% coverage / Ruff all green (see iteration records below)
+- 1785 test cases / 94% coverage / Ruff all green (see iteration records below)
 
 **Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
 - AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
 - Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
 - Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-**Verification**: 1728 tests passed / 0 failed / Ruff all green / 94% coverage
+**Verification**: 1785 tests passed / 0 failed / Ruff all green / 94% coverage
 
 ## License
 

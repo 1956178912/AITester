@@ -99,14 +99,20 @@ def routing_enabled() -> bool:
     return routing_strategy() == "complexity_aware"
 
 
-def count_imports(source_code: str) -> int:
-    """统计模块级 import 数量（Import + ImportFrom，含 from X import Y）。"""
-    try:
-        tree = ast.parse(source_code)
-    except (SyntaxError, ValueError):
-        return 0
+def count_imports(source_code: str, _tree: ast.Module | None = None) -> int:
+    """统计模块级 import 数量（Import + ImportFrom，含 from X import Y）。
+
+    2026-09-26 优化：_tree 可选参数——调用方（run_benchmark 的复杂度路由）
+    已对同一 source 做过 ast.parse（供圈复杂度分析），可传入既有 tree
+    复用，消除每任务一次重复解析；独立调用（无 _tree）时行为不变。
+    """
+    if _tree is None:
+        try:
+            _tree = ast.parse(source_code)
+        except (SyntaxError, ValueError):
+            return 0
     count = 0
-    for node in tree.body:
+    for node in _tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             count += 1
     return count
@@ -184,18 +190,25 @@ def complexity_class_to_routing_hints(complexity_class: str) -> dict[str, object
 
     simple  → 单候选、低迭代、小上下文（省 token）
     medium  → 单候选、默认迭代、默认上下文
-    complex → 多候选（3-5）、高迭代（+1）、大上下文预算（CODE_MAX_CHARS 上调）
+    complex → 多候选（3-5）、高迭代（+1）、大上下文预算（3000/6000 固定档）
 
     Returns:
         {"complexity_class": str, "max_candidates": int, "extra_iteration": int,
          "context_budget": int, "hint_text": str}
+
+    2026-09-26 口径说明（幽灵开关清理）：context_budget 为按档位硬编码的
+    固定提示值（simple/medium 3000 / complex 6000），当前无代码读取点
+    （APIManager 仅消费 max_candidates / extra_iteration），仅作"未来
+    路由可消费"的契约字段；旧版注释称"CODE_MAX_CHARS 可调"与该环境变量
+    脱钩（全仓无读取点），已更正。未来若接入 LLM 上下文预算消费点，
+    可在此处读取 CODE_MAX_CHARS 实现档位化，当前保持固定值。
     """
     if complexity_class == "complex":
         return {
             "complexity_class": complexity_class,
             "max_candidates": 3,
             "extra_iteration": 1,
-            "context_budget": 6000,  # 大上下文预算（CODE_MAX_CHARS 可调）
+            "context_budget": 6000,  # 大上下文预算（按档位硬编码，见 docstring）
             "hint_text": "复杂任务：启用多候选 + 大上下文预算 + 额外迭代轮",
         }
     if complexity_class == "medium":

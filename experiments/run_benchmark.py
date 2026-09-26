@@ -520,16 +520,17 @@ def run_single_task(
             # 写入这两个键 → 永远走默认值（num_deps=0 / cc=1），评分退化为
             # "仅按行数分档"。现按需从 instance_code 直接计算（AST 口径，
             # 与 complexity_router.count_imports / code_analyzer 一致）。
-            try:
-                from src.api.complexity_router import count_imports
-
-                num_deps = count_imports(task.instance_code)
-            except Exception:
-                num_deps = int(task.metadata.get("num_imports", 0))
+            # 2026-09-26 优化：单次 ast.parse 复用——此前 count_imports 内部
+            # 再 parse 一次（本函数第二次解析），--parallel 多任务热路径上
+            # 每任务 2 次 200ms 级解析。现统一 parse 一次，count_imports
+            # 经 _tree 参数复用（独立调用方不传 _tree 时行为不变）。
+            num_deps = 0
+            cc = int(task.metadata.get("cyclomatic_complexity", 1))
             try:
                 import ast as _ast
 
                 _tree = _ast.parse(task.instance_code)
+                _funcs = [n for n in _ast.walk(_tree) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
 
                 def _count_cc(node: _ast.AST) -> int:
                     """圈复杂度（函数级）：1 + if/for/while/except/and/or/assert 计数。"""
@@ -542,10 +543,18 @@ def run_single_task(
                                 cc += 1
                     return cc
 
-                _funcs = [n for n in _ast.walk(_tree) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
                 cc = max((_count_cc(f) for f in _funcs), default=1)
-            except (SyntaxError, ValueError, Exception):
+            except (SyntaxError, ValueError):
+                # 解析失败（含 MemoryError 等 ValueError 子类保守口径）：
+                # cc 回退 metadata（历史口径），count_imports 走独立 parse 路径
                 cc = int(task.metadata.get("cyclomatic_complexity", 1))
+                _tree = None
+            try:
+                from src.api.complexity_router import count_imports
+
+                num_deps = count_imports(task.instance_code, _tree=_tree)
+            except Exception:
+                num_deps = int(task.metadata.get("num_imports", 0))
             score_obj = compute_complexity_score(
                 lines=num_lines,
                 num_files=num_files,

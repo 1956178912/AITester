@@ -166,13 +166,21 @@ class BaseDatasetLoader(ABC):
 
     @property
     def task_ids(self) -> list[str]:
-        """返回所有任务 ID 列表。"""
-        return [t.task_id for t in self.tasks]
+        """返回所有任务 ID 列表（惰性加载，O(n) 单次遍历）。
+
+        2026-09-26 全面优化：此前每次调用都触发 `self.tasks`（含
+        `_ensure_loaded` + 列表拷贝），benchmark 热循环中反复调用为
+        O(n) 冗余。改为直接访问 `self._tasks`（加载状态由
+        `_ensure_loaded` 在 `__iter__`/`tasks` 首次调用时已保证）。
+        """
+        self._ensure_loaded()
+        return [t.task_id for t in self._tasks]
 
     @property
     def size(self) -> int:
         """数据集规模（任务总数）。"""
-        return len(self.tasks)
+        self._ensure_loaded()
+        return len(self._tasks)
 
     @abstractmethod
     def _load_raw_data(self) -> None:
@@ -361,8 +369,9 @@ class SWEBenchDataset(BaseDatasetLoader):
         Returns:
             {task_id: [问题描述, ...]}；全部健康时为空 dict。
         """
+        self._ensure_loaded()
         report: dict[str, list[str]] = {}
-        for task in self.tasks:
+        for task in self._tasks:
             issues = self.validate_task(task)
             if issues:
                 report[task.task_id] = issues
@@ -382,9 +391,10 @@ class SWEBenchDataset(BaseDatasetLoader):
         Returns:
             instance_id 列表（空列表 = 全部任务源码完整）。
         """
+        self._ensure_loaded()
         missing: list[str] = [
             task.task_id
-            for task in self.tasks
+            for task in self._tasks
             if not task.instance_code or task.instance_code == task.problem_statement
         ]
         return missing
@@ -547,6 +557,18 @@ class SWEBenchDataset(BaseDatasetLoader):
         total_tests = data.get("n_tests_before", 0) or data.get("n_tests_after", 0)
         expected_pass = data.get("pass_num_before", 0) or 0
         total_pass = data.get("pass_num_after", 0) or total_tests
+
+        # total_test_count 兜底口径（SWE-bench 官方 JSONL 无 n_tests_before /
+        # pass_num_after 字段，上述读取恒为 0）：FAIL_TO_PASS 是"修复前失败
+        # 但修复后必须通过"的测试节点列表，天然给出该任务的测试用例总数
+        # 下界（官方口径：通过判定 = FAIL_TO_PASS 全绿 + PASS_TO_PASS 不
+        # 回归）。官方字段缺失时用 len(FAIL_TO_PASS) 兜底，使 SWE-bench
+        # 任务能计算通过率（0/0 → 无法判定"是否修复"的根因）。
+        # 官方字段存在（自定义 JSONL）时仍以官方值为准，口径不变。
+        fail_to_pass_list = self._parse_swe_test_list(data.get("FAIL_TO_PASS", ""))
+        if total_tests <= 0 and fail_to_pass_list:
+            total_tests = len(fail_to_pass_list)
+            total_pass = total_pass if total_pass > 0 else len(fail_to_pass_list)
 
         return BenchmarkTask(
             task_id=task_id,

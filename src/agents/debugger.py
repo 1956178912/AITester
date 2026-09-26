@@ -40,6 +40,7 @@ from typing import Any
 from src.agents.base_agent import BaseAgent
 from src.agents.error_classifier import ErrorCategory, ErrorClassifier, get_fix_strategy
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
+from src.tools.type_repair import type_repair_layer
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -215,6 +216,11 @@ class DebuggerAgent(BaseAgent):
 
         # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取，
         # P0 1.1 调用链展开层数由 CODE_FOCUS_DEPTH 控制，默认 1 = 历史行为）
+        # 2026-09-26 全面审查（P1 正确性）：先保留原始全文副本——3.3 位置
+        # 感知修复（_locate_repair_focus）依赖 context.line（pytest traceback
+        # 的原始行号）在**原始**源码中定位，截断版（头尾保留中间省略）会
+        # 使行号偏移或目标函数被整体丢弃 → focused=False 降级全文件修复。
+        original_target_code = target_code
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
         # 截断超长测试输出，保留关键错误信息（测试输出非源码，不做 AST 截取）
         test_output = BaseAgent.truncate_code(test_output, max_chars=1500)
@@ -333,7 +339,11 @@ class DebuggerAgent(BaseAgent):
         if _position_aware_repair_enabled():
             # 复用已提取的 context（Step 2 的 get_fix_strategy 已调用
             # extract_error_context；此处再取一次保证含 line/column 字段）
-            focus_result = self._locate_repair_focus(target_code, context, target_module)
+            # 2026-09-26 全面审查（P1 正确性）：定位必须用**原始**全文
+            # （original_target_code）——context.line 是原始源文件行号，
+            # 传入截断版会使行号偏移/目标函数被丢弃（focused=False 降级
+            # 全文件修复或定位到错误函数）；prompt 用截断版省 token 不变。
+            focus_result = self._locate_repair_focus(original_target_code, context, target_module)
             position_aware_section = self._build_position_aware_prompt_section(focus_result)
             if focus_result.get("focused"):
                 logger.info(
@@ -408,6 +418,28 @@ class DebuggerAgent(BaseAgent):
                     logger.warning("对抗性重新生成未产出有效补丁，保留原补丁（3.1）")
 
         # 确保返回格式一致，即使 LLM 未返回某些字段也有默认值
+        # ── 2.1 PAGENT 风格类型修复层（后处理）────────────────────────────
+        # 补丁生成后对"原代码 vs 补丁后代码"做静态类型疑点识别 + 可选 LLM
+        # 修复 + 命名契约回环验证（PAGENT 混合架构，默认 LLM 层关闭）。
+        # 疑点非空且 TYPE_REPAIR_LLM_ENABLE=true 时自动修订；未启用时仅记录
+        # 疑点观测层（type_repair_findings），不影响历史实验口径。
+        type_repair_findings: list[dict[str, Any]] = []
+        if patch:
+            # 先用 patch_applier 把补丁应用到原代码得到"补丁后代码"，再喂给
+            # type_repair_layer（静态层需要两侧代码做对比识别）
+            from src.tools.patch_applier import apply_patch_to_code
+
+            _patched, _applied = apply_patch_to_code(target_code, patch)
+            _type_repair = type_repair_layer(target_code, _patched if _applied else target_code)
+            type_repair_findings = _type_repair.get("findings", [])
+            if _type_repair.get("repaired"):
+                # LLM 层修订成功且通过契约回环 → 用修订代码替换 patch
+                _repaired = _type_repair.get("repaired_code") or _patched
+                patch = f"```python\n{_repaired}\n```"
+                logger.info("2.1 类型修复层修订了补丁（静态疑点 %d 处）", len(type_repair_findings))
+            elif type_repair_findings:
+                logger.debug("2.1 类型疑点 %d 处（静态层记录，LLM 层未修订）", len(type_repair_findings))
+
         return {
             "root_cause": result.get("root_cause", "未知"),
             "error_category": error_category.value,
@@ -423,6 +455,9 @@ class DebuggerAgent(BaseAgent):
             # 3.3 改进：位置感知修复定位结果（未启用时 focused=False，hint=""）
             # 启用时 focused=True 且 hint 非空（已注入 prompt），function_name/line 供实验消费
             "position_aware_focus": focus_result,
+            # 2.1 PAGENT 风格类型修复层：静态识别的类型疑点（LLM 层未启用时
+            # 仍记录，供实验分析消费；修订成功时 patch 已被替换）
+            "type_repair_findings": type_repair_findings,
         }
 
     # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────

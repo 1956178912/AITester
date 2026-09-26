@@ -38,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from typing import Any
 
 from src.utils.credential_scrub import scrub_os_environ
@@ -55,15 +56,44 @@ def _repo_envs_root() -> str:
 
 
 def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """统一子进程执行：超时/异常不抛出，由调用方按 returncode 判断。"""
-    return subprocess.run(
-        cmd,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=env if env is not None else scrub_os_environ(),
-    )
+    """统一子进程执行：超时/异常不抛出，由调用方按 returncode 判断。
+
+    超时经 returncode=124（Linux timeout 命令口径）返回而非抛出
+    subprocess.TimeoutExpired——SWE-bench 仓库中单节点 pytest 跑满 timeout
+    很常见，此前该异常穿透 verify() 的 try/finally 使整个验证任务崩溃
+    而非记录该 node 失败；统一在此收敛后，所有调用方按 returncode 判断
+    即可（124 一律视为失败，调用方无需感知区别）。
+    """
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env if env is not None else scrub_os_environ(),
+        )
+    except subprocess.TimeoutExpired as e:
+        # 超时：构造哨兵结果（stdout/stderr 取已捕获部分，None 兜底空串；
+        # text=True 模式下已捕获部分为 str，mypy 按 bytes|str 联合类型报
+        # arg-type，归一为 str；stderr 同口径归一后截尾），退出码 124
+        # （GNU timeout 超时常量）
+        stdout_part = (
+            e.stdout
+            if isinstance(e.stdout, str)
+            else ((e.stdout or b"").decode("utf-8", "replace"))
+        )
+        stderr_part = (
+            e.stderr
+            if isinstance(e.stderr, str)
+            else ((e.stderr or b"").decode("utf-8", "replace"))
+        )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=124,
+            stdout=stdout_part,
+            stderr=f"命令执行超时（>{timeout}s）\n{stderr_part[:300]}",
+        )
 
 
 class RepoExecutor:
@@ -175,7 +205,15 @@ class RepoExecutor:
                         if env_error:
                             logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
                         else:
-                            with open(os.path.join(env_dir, ".pip_installed"), "w", encoding="utf-8") as f:
+                            # 2026-09-26 全面审查（P1 缓存一致性）：venv 创建失败
+                            # 回退到全局 pip install 后，缓存检查标记须与 use_venv
+                            # 模式对齐——use_venv=True 时 setup() 入口读
+                            # .venv_pip_installed（L148），此处若写 .pip_installed
+                            # 则下次 setup() 永远缓存 miss，每次重新 git clone +
+                            # pip install（SWE-bench 批量任务 10-20 个 commit 的
+                            # 同一仓库重复 clone）。现按 use_venv 写对应标记。
+                            _marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
+                            with open(os.path.join(env_dir, _marker), "w", encoding="utf-8") as f:
                                 f.write(base_commit)
                     else:
                         # 检测依赖指纹：同一指纹复用已有 venv（不重新 pip install -e）
@@ -350,7 +388,7 @@ class RepoExecutor:
             return "git 不可用，无法准备仓库环境"
         clone = _run(
             ["git", "clone", "--no-checkout", "--filter=blob:none", repo_url, repo_dir],
-            (repo_dir and os.path.dirname(repo_dir)) or ".",
+            os.path.dirname(repo_dir) or ".",
             self.setup_timeout,
         )
         if clone.returncode != 0:
@@ -594,6 +632,13 @@ class RepoExecutor:
             elif res.returncode == 5:
                 # 无测试收集（仓库该 commit 下无 pytest 测试）：按失败记录
                 failed_cases.append({"name": node, "error": "无测试可收集 (exit 5)"})
+            elif res.returncode == 124:
+                # 节点执行超时（_run 收敛后的哨兵退出码，GNU timeout 口径）：
+                # 按失败记录并继续下一节点（此前 TimeoutExpired 穿透 verify()
+                # 使整个验证任务崩溃，2026-09-26 全面审查 P1 鲁棒性修复）
+                failed_cases.append(
+                    {"name": node, "error": f"节点执行超时（>{self.timeout}s）: {res.stderr.strip()[:200]}"}
+                )
             else:
                 failed_cases.append({"name": node, "error": (res.stdout + res.stderr).strip()[-400:]})
         return {"expected": len(test_nodes), "passed": passed_count, "failed_cases": failed_cases}
@@ -622,7 +667,15 @@ class RepoExecutor:
             # 无法直接应用 → 保守 False（FAIL_TO_PASS 实测裁决，不误判）
             logger.info("LLM 补丁为非 unified diff 形态（完整文件代码），仓库级无法映射路径，按无补丁实测")
             return False
-        patch_file = os.path.join(tempfile.gettempdir(), "aitester_llm_unified.patch")
+        # 临时补丁文件按 (pid, thread) 隔离——2026-09-26 全面审查 P1 并发安全：
+        # --parallel 下多线程共享同一进程（同 pid、同 tempfile.gettempdir()），
+        # 固定文件名（或仅 pid 后缀）会让一个线程的 finally: os.remove 删掉
+        # 另一个线程正在 git apply 的补丁文件。pid+thread ident 双键在
+        # ThreadPoolExecutor 场景下保证每线程独立文件，跨进程由 pid 隔离。
+        patch_file = os.path.join(
+            tempfile.gettempdir(),
+            f"aitester_llm_unified_{os.getpid()}_{threading.get_ident()}.patch",
+        )
         with open(patch_file, "w", encoding="utf-8") as f:
             f.write(llm_patch)
         try:

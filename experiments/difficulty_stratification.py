@@ -11,7 +11,15 @@
     - dependency_count: 结果行 import 提取的第三方模块数（经
       src/tools/dependency.extract_imported_modules 提取，缺字段时 0）分三档；
     - complexity_proxy: 结果行 iterations × (1 - passed) 的"修复难度代理"
-      （迭代越多且最终失败 = 越难收敛），分三档。
+      （迭代越多且最终失败 = 越难收敛），分三档；
+    - difficulty_level（4.3）：任务显式难度等级标签（来自合成任务生成器的
+      level 字段 / 结果行 task_metadata.difficulty_level），分 Level 1-4 档。
+      未标注难度的任务归入 "unlabeled" 档。
+
+4.3 改进：新增 difficulty_level 维度，消费 experiments/synthetic_difficulty.py
+生成的多层难度任务标签（Level 1 单函数简单缺陷 / Level 2 多函数交互 /
+Level 3 跨文件依赖 / Level 4 边界异常隐蔽缺陷），使"跨文件修复的 A/B 对比"
+有明确的难度分层口径（只有构造了 Level 3 任务，跨文件修复的对比才有意义）。
 
 分层边界（保守可解释口径）：
     code_size:        small < 2KB / medium 2-10KB / large > 10KB
@@ -64,6 +72,38 @@ def _complexity_bucket(row: dict[str, Any]) -> str:
     return "hard"
 
 
+def _difficulty_level_bucket(row: dict[str, Any]) -> str:
+    """4.3 按任务显式难度等级分档（Level 1-4，未标注归 "unlabeled"）。
+
+    等级来源（优先级）：
+    1. 结果行 task_metadata.difficulty_level（合成任务生成器写入）；
+    2. 结果行 difficulty_level（benchmark 顶层字段）；
+    3. 均未标注 → "unlabeled"。
+    """
+    level = (row.get("task_metadata") or {}).get("difficulty_level")
+    if level is None:
+        level = row.get("difficulty_level")
+    # 2026-09-26 修复：JSON 反序列化 / 数值计算后 level 可能不是 int 形态
+    # （纯数字 str "3"、整数值 float 3.0），直接 `in (1, 2, 3, 4)` 落不到
+    # 任何档 → 该维度全部分层退化为 "unlabeled"（4.3 难度分层指标失真）。
+    # 保守归一：仅「数值语义明确」的形态转 int——int 直通；纯数字 str
+    # （允许正负号）转 int；整数值 float（3.0）转 int。其余形态（非数字
+    # str、带小数 float 如 3.5、bool——bool 虽为 int 子类但难度等级语义
+    # 上不接受 True/False、复合类型）保持 "unlabeled"（难度等级语义上
+    # 必须是整数档位）。
+    if isinstance(level, bool):
+        level = None
+    elif isinstance(level, str):
+        s = level.strip()
+        # 纯数字（含正负号前缀）归一为 int；其余保持 "unlabeled"
+        level = int(s) if s.isdigit() or (s[:1] in "+-" and s[1:].isdigit()) else None
+    elif isinstance(level, float):
+        level = int(level) if level.is_integer() else None
+    if level in (1, 2, 3, 4):
+        return f"level_{level}"
+    return "unlabeled"
+
+
 def stratify_by_dimension(
     details: list[dict[str, Any]],
     dimension: str,
@@ -103,8 +143,13 @@ def stratify_by_dimension(
     elif dimension == "complexity_proxy":
         key_fn = _complexity_bucket
         order = ["easy", "medium", "hard"]
+    elif dimension == "difficulty_level":
+        key_fn = _difficulty_level_bucket
+        order = ["level_1", "level_2", "level_3", "level_4", "unlabeled"]
     else:
-        raise ValueError(f"未知分层维度: {dimension}（支持 code_size/dependency_count/complexity_proxy）")
+        raise ValueError(
+            f"未知分层维度: {dimension}（支持 code_size/dependency_count/complexity_proxy/difficulty_level）"
+        )
 
     for row in details:
         bucket = key_fn(row)
@@ -154,7 +199,7 @@ def render_stratification_section(
     lines = [f"## 任务难度分层（2.2，基线 {baseline}）", ""]
     lines.append("| 维度 | 分层 | 任务数 | 成功数 | 成功率 |")
     lines.append("|------|------|--------|--------|--------|")
-    for dimension in ("code_size", "dependency_count", "complexity_proxy"):
+    for dimension in ("code_size", "dependency_count", "complexity_proxy", "difficulty_level"):
         strat = stratify_by_dimension(details, dimension, instance_codes, test_codes)
         if not strat:
             continue
@@ -164,6 +209,8 @@ def render_stratification_section(
     lines.append(
         "> 解读：若某难度层成功率显著低于其他层（如 large 档 < 30%），说明系统"
         "在该难度区间能力衰减；complexity_proxy hard 档成功率反映'修复不收敛'任务的占比。"
+        "4.3 difficulty_level 维度：Level 3（跨文件依赖）成功率与 Level 1（单函数）"
+        "对比，才有意义的跨文件修复 A/B 口径；unlabeled 档为未标注难度的历史任务。"
     )
     lines.append("")
     return lines

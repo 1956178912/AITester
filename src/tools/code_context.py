@@ -14,7 +14,18 @@
        同文件内其他函数（一层依赖闭包）；
     4. 未指定 focus_function：保留全部顶层函数；
     5. 组装结果仍超 max_chars 时，按"焦点 > 直接依赖 > 无关函数"
-       优先级丢弃无关函数；对超长函数体做"首尾各 N 行 + 中间省略"截断。
+       优先级丢弃无关函数；对超长函数体做"首尾各 N 行 + 中间省略"截断；
+    6. P0 1.2 补丁配方保留：给定 focus_function 时，若"相关 import +
+       目标函数完整 AST + 调用签名 + 导出契约符号"无法在预算内随行内截取
+       保留，追加 [PATCH_INGREDIENTS] 契约块（render_patch_ingredient_context
+       渲染），使 LLM 即便拿到字符级残片仍能看到"补丁必须保留的成分"，
+       避免压缩破坏定义-使用关系与命名契约。
+
+P0 1.2 实现：本模块通过惰性导入调用 code_analyzer.preserve_patch_ingredients
+与 render_patch_ingredient_context（避免顶层循环依赖：code_analyzer 的
+extract_function_context 函数体内反向委托 extract_focused_code_detail；
+code_analyzer 模块顶层不 import 本模块，惰性导入仅为双保险，且刻意放在
+模块级之外）。
 
 使用方式：
     from src.tools.code_context import extract_focused_code
@@ -293,11 +304,8 @@ def extract_focused_code_detail(
 
     # ── 按预算逐层裁剪（仅当焦点函数确实存在于源码中才启用焦点优先策略）────
     result = _assemble(header, kept, source_lines)
-    if len(result) <= max_chars:
-        return result, focus_resolved
-
     focus_in_source = bool(focus_function and focus_function in top_level_funcs)
-    if focus_in_source:
+    if len(result) > max_chars and focus_in_source:
         result = _apply_focus_budget(
             header,
             kept,
@@ -309,7 +317,42 @@ def extract_focused_code_detail(
             depth=max(1, depth),
         )
 
+    # P0 1.2 补丁配方保留：焦点函数存在时，识别"补丁必须保留的最小充分成分"
+    # （相关 import / 目标函数完整 AST / 调用签名 / 模块级导出与注册契约符号），
+    # 以 [PATCH_INGREDIENTS] 契约块追加到截取结果尾部。
+    # 理由（SWEZZE Oracle-guided Code Distillation）：字符级截断会丢失"定义-
+    # 使用关系"，LLM 在残片场景下易破坏 import 链与插件命名契约；契约块把
+    # "不可删符号"显式注入 prompt，使 LLM 即便拿不到完整函数体也能守住契约。
+    # 惰性导入避免 code_analyzer ↔ code_context 顶层循环依赖（code_analyzer
+    # 的 extract_function_context 反向委托 extract_focused_code_detail）。
+    # 预算约束：仅当"追加契约块后仍不超 max_chars"才追加——契约块是"锦上添花"
+    # 的增强，不得挤占函数体截断的预算（超预算时契约块被丢弃，函数体仍按
+    # 历史口径做首尾截断；调用方 truncate_code 在 focus_resolved=True 时会
+    # 保留聚焦结果不再做字符级头尾截断，契约块仅在预算内生效）。
+    if focus_in_source and len(result) <= max_chars:
+        try:
+            from src.tools.code_analyzer import (
+                preserve_patch_ingredients,
+                render_patch_ingredient_context,
+            )
+
+            # 2026-09-26 性能优化：复用上方 extract_focused_code_detail 已
+            # 解析的 tree（_ast 参数），消除契约块识别路径上的重复
+            # ast.parse（大文件 200ms 级，--parallel 多任务热路径累积）
+            ingredients = preserve_patch_ingredients(source, str(focus_function), _ast=tree)
+            ingredient_block = render_patch_ingredient_context(ingredients)
+            if ingredient_block:
+                candidate = f"{result}\n\n{ingredient_block}"
+                # 仅当追加后仍不超预算才接受（否则丢弃契约块，保持历史口径）
+                if len(candidate) <= max_chars:
+                    result = candidate
+                    logger.debug("P0 1.2 补丁配方保留：追加契约块（%d 字符）", len(ingredient_block))
+        except Exception as e:
+            # 契约成分识别失败不阻断主流程（保守降级为普通截取结果）
+            logger.debug("P0 1.2 补丁配方保留失败（跳过契约块）: %s", e)
+
     # 最终兜底：交给字符级硬截断（truncate_code 会处理超长返回）
     if len(result) > max_chars:
         logger.info("AST 截取仍超预算（%d 字符），回退字符级截断", len(result))
+
     return result, focus_resolved

@@ -132,10 +132,10 @@ class TestAPIHealthEdgeCases:
         """total_requests 为 0 时成功率返回 1.0（无请求视为完美）"""
         assert self.health.success_rate == pytest.approx(1.0)
 
-    def test_avg_response_time_empty_window_fallback(self):
-        """滑动窗口为空时使用 last_response_time_ms"""
-        self.health.last_response_time_ms = 300.0
-        assert self.health.avg_response_time_ms == 300.0
+    def test_avg_response_time_empty_window(self):
+        """滑动窗口为空时无数据口径（返回 0.0，2026-09-26 round8：
+        last_response_time_ms 死字段删除后口径等价）"""
+        assert self.health.avg_response_time_ms == 0.0
 
 
 # ════════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,7 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性）
+## [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫：AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则 + 第八轮收尾审计：lint/format 清零 + 类型修复层契约参照口径 + 状态键传播 + 示例文件修复 + 第九轮并行子代理深审：difficulty_level 归一口径 + _should_debug 分支顺序 + 半开探测双计 + async def 补丁 + executor_repo 临时文件竞争 + 第十轮全项目 P1/P2 收敛：JSON 叶子降级语义回归 + 路由分支遮蔽 + 完整文件补丁静默回退 + venv 缓存标记不对称 + 超时穿透 + 行号错位 + TOCTOU 竞态 + 第十一轮遗留债务收敛：cost_weight 注册时序 + async 安全检查误拒 + 死代码 / 幽灵配置 / 线程竞态 6 项落地）
 
 > 全仓代码审查与保守优化批次（默认行为不变）：静态检查全绿、死代码清理、
 > 线程卫生修复、项目卫生补全、未深审模块的性能 / 正确性修复、CF-3
@@ -13,8 +13,410 @@
 > 单智能体基线写盘安全检查、状态 schema 声明补全）、第六轮节点层
 > 路由语义澄清与鲁棒性增强（_should_debug 诊断关键词早期迭代路由、
 > test_passed 一致性、generator LLM 失败降级、planner/debugger 兜底
-> 扩 OSError、缓存统计线程卫生）。
-> 全量 1728 测试通过，零回归。
+> 扩 OSError、缓存统计线程卫生）、第七轮性能热路径深扫
+> （code_context 契约块 AST 重复解析消除、run_benchmark 单任务
+> 双解析合一、dataset_loader O(1) 任务索引 + property 直访 _tasks、
+> error_classifier 合并文本共享、workflow 诊断关键词预编译正则、
+> executor_runtime TimeoutExpired 闭包提升、api_manager 半开探测
+> 双调用窗消除、helpers JSON 叶子回退 O(1) 内存）、第八轮收尾审计
+> （ruff lint / format 全仓清零 + 工作树示例文件修复 +
+> type_repair 契约参照口径 + type_repair_findings 状态传播 +
+> zai 域名预编译正则 + run_benchmark 异常面收紧）、第九轮并行
+> 子代理深审（4 路并行子代理对 graph/api/tools/agents 深审 + 主代理
+> 复核）：P1×4（difficulty_level 归一口径 + _should_debug 分支顺序
+> + 半开探测双计/丢失 + executor_repo 临时文件竞争）+ P2×10（async
+> def 补丁定位 + 死代码清理 + 注释修正 + 幽灵开关注释清理 +
+> 测试同步）。
+> 全量 1813 测试通过（基线 1727+1 failed → 修复 1 + 新增 27 回归
+> 守卫 + 4 配套），零回归；本轮新增回归守卫测试
+> tests/test_2026_09_26_review_optimizations.py（27 用例）+
+> 同步修正 tests/test_improvements_1_2_2_1_2_2_4_3.py 中
+> difficulty_level 归一测试断言（unlabeled 计数 2→3，加 3.5/True 用例）。
+
+### 第十一轮遗留债务收敛 + P1 边界修复（默认行为不变）
+
+> 4 路并行子代理（graph / api / tools / agents）对 round7 之后代码深审 +
+> 主代理单点核实 + round7 文档"未落地项"6 项全部落地。
+> 产出 P1×3 + P2×7 + 新增回归守卫 25 用例（tests/test_2026_09_26_review_round8.py
+> 22 用例 + tests/test_2026_09_26_review_optimizations.py 追加
+> TestPatchApplierEmptyFuncSetFullFile 3 用例）。
+> 全量 1861 测试通过（基线 1832 + 新增 25 + 配套修正 4），零回归；
+> ruff / mypy 全绿。
+
+#### P1 缺陷修复（3 项，回归测试锁定）
+
+- `src/api/api_manager.py::_cost_weight_for`（P1 注册时序缺陷，api 子代理发现）：
+  `_init_clients` / `add_node` 都在节点入池**之前**调用本方法，内部
+  `health_nodes.get(model_name)` 恒 None，`LLMConfig.cost_weight`（config.py
+  从 `LLM_N_COST_WEIGHT` 环境变量 / `llm_configs.json` 注入）的回退分支永远
+  不生效——3.4 成本感知路由在默认注册路径上静默失效，全节点恒 1.0。
+  现增加可选参数 `llm_config: LLMConfig | None = None`，调用点传入手上配置
+  对象，优先读其 `cost_weight`；`llm_config=None` 时保持原回退链（兼容
+  外部调用与既有测试）。默认行为不变（未设成本信息时 `cost_weight=0.0`
+  仍回退 1.0）。回归守卫 TestCostWeightForRegistration（6 用例）。
+- `src/graph/nodes.py::_HAS_FUNC_DEF_RE`（P1 安全检查误拒，graph 子代理发现）：
+  正则 `^\s*def ` 不含 `async` 前缀，与 round7 已统一的
+  `patch_applier._TOP_DEF_RE` / `_find_function_range_ast` / 单函数模式按名
+  正则（三处均含 `(?:async\s+)?`）口径矛盾——async-only 被测模块的补丁被
+  安全检查 2 误判"无函数定义"拒写盘，`target_code` 永不更新，修复循环空烧
+  token 不收敛。现补 `(?:async\s+)?` 前缀，与 patch_applier 三处口径统一。
+  默认行为不变（同步 def 为主的数据集命中口径不变，仅 async-only 边界
+  场景由"误拒"变"正确接受"）。回归守卫 TestHasFuncDefRegAsync（4 用例）。
+- `src/tools/patch_applier.py::apply_patch_to_code` L212（P1 空函数集误拒，
+  tools 子代理发现）：完整文件模式 L206 旧实现
+  `if orig_func_names and orig_func_names.issubset(...)`，`orig_func_names`
+  为空集（原代码无顶层 def，纯常量/import 模块）时前置守卫短路为 False →
+  全文件替换永远落不到（错落到 Step 4b 单函数路径又因补丁无 def 返回
+  False）。现 L212 改为 `if not orig_func_names or orig_func_names.issubset(...)`
+  （`∅.issubset(任意) == True`，空集场景正确通过；非空集路径判定口径不变），
+  L227 拒绝分支保留（空集时 subset 必已在 L212 通过，该分支逻辑上不可达，
+  守卫冗余但无害，注释已说明）。默认行为不变（原代码含 def 时
+  `issubset` 判定与改前完全一致）。回归守卫
+  TestPatchApplierEmptyFuncSetFullFile（3 用例）。
+
+#### P2 改动（7 项，均默认行为不变）
+
+- `src/api/api_manager.py` + `tests/test_api_manager.py`：删除
+  `_last_health_check` dict 死代码（round7 核实为死代码——只在 `__init__`
+  初始化，无任何读/写点；旧用途"健康检查限流"已被 `APIHealth.last_check_time`
+  字段取代）；3 处测试初始化同步清理。
+- `src/api/api_health.py` + `tests/test_api_manager.py` +
+  `tests/test_api_manager_extended.py`：删除 `retry_count` 幽灵配置
+  （生产代码从未读取，重试逻辑由 `APIManager.call` 循环的 `node_fail_count`
+  独立实现）+ `last_response_time_ms` 死字段（无写入点，
+  `avg_response_time_ms` 窗口为空时回退等价于默认 0.0）；4 处测试断言同步
+  清理；`avg_response_time_ms` 窗口为空口径显式收敛为 0.0（"无数据"口径）。
+- `src/tools/dependency.py`：`_importable_cache` 加进程级锁（round7 遗留
+  债务项落地）——读改写在 `_importable_cache_lock` 内原子化，消除
+  --parallel 多线程同键并发 check-then-act 竞态（find_spec 幂等、
+  持锁微秒级，判定语义不变，仅消除重复探测）。
+- `src/tools/type_repair.py`：`_EMPTY_CALLS` 死逻辑删除（右支查空表恒
+  None，整个 or 恒为左支，口径等价纯字面量）；`for/async for` 目标
+  收集改 `sub.target` 精确取（原 `iter_child_nodes` 宽匹配会把 iter
+  子节点误收为局部名，掩盖真实 undefined_attr；元组目标 i/j 漏收集）；
+  `_builtin_allow` 改 `set(dir(builtins))` 动态生成（原硬编码 ~40 名漏
+  open/abs/iter 等，LLM 层误报源）。TYPE_REPAIR_LLM_ENABLE 默认关，
+  静态层仅观测输出，默认行为不变。
+- `src/graph/token_usage.py`：`record_usage` 各字段读改写加进程级
+  `_usage_lock`（round7 遗留债务项落地）——消除 --parallel 多线程并发
+  累加同一累计器的丢更新窗口（纯内存微秒级，累计语义不变）。
+- `src/graph/workflow.py`：`_should_debug` / `_route_after_diagnosis`
+  注释中 round7 重构后失效的行号引用（L210/L340/L350/L354/L354-367/
+  L360-366/L371-378）改为按分支描述引用，消除"注释指错位置"的维护性
+  缺陷（纯注释修正，行为不变）。
+- `tests/test_2026_09_26_review_optimizations.py` +
+  `tests/test_2026_09_26_review_round8.py`：新增 25 用例回归锁定
+  （P1×3 + P2×4 + 口径记录）。
+
+#### 核实后无需修改项（各子代理审查确认，round7 结论保持）
+
+- `src/agents/error_classifier.py::classify_with_context` 全量口径（round7
+  已落盘，注释 L330-337 详尽说明"与 extract 口径一致"，非缺陷；
+  `classify()` 默认路径仍截前 3，历史口径不变）。
+- `src/tools/code_analyzer.py::preserve_patch_ingredients` 全字段
+  （imports/exports/register_symbols/target_ast/called_signatures/
+  module_constants 实测正确；`called_signatures` 切片恰好含装饰器行 +
+  def 行，不含函数体首行，与 docstring 口径一致）。
+- `src/tools/code_context.py::_apply_focus_budget` L211（调用方先检查
+  `focus_in_source`，`top_level_funcs[focus]` 不会 KeyError）。
+- `src/tools/cross_file.py::_topological_order` 并行边（入度按边累加、
+  释放逐边扣减，实测顺序正确）；类定义正则 `[\(:]` 覆盖 `class Foo:` /
+  `class Foo(Bar):` / `class Foo(Base, metaclass=M):` 三种形式。
+- `src/tools/multi_candidate.py::apply_multi_function_patch`（P13 预切分
+  + (found, line) 升序 + 未找到排末尾，语义正确）。
+- `src/agents/executor_*.py` 子进程安全（全部 `subprocess.run` 用列表
+  参数，无 `shell=True`，round7 已核实）。
+- `src/graph/*` RAG DCL 双检锁 / 文件缓存记忆 / state 工厂 / tracing
+  线程局部 / 图构建 4 路径 / _should_debug 分支顺序 / _route_after_diagnosis
+  上限门控（round7 已核实，本轮保持）。
+
+
+### 第十轮全项目 P1/P2 收敛（默认行为不变）
+
+> 4 路并行子代理对 graph / api / datasets / tools / agents 全域深审 + 主代理
+> 逐条复现验证（`extract_json_object` / `_should_debug` / `patch_applier` /
+> `dependency` / `debugger` / `executor_repo` 均经 `.venv/bin/python` 实证）；
+> 产出 P1×7 + P2×2 + 测试同步 1 + 新增回归守卫 13。
+> 全部改动仅收敛"静默损坏 / 语义回归 / 无上限乒乓 / 缓存失效 / 超时穿透"
+> 类缺陷，正常路径行为不变，1832 测试全绿（基线 1813 + 新增 13 +
+> 同步改写 1 − 同步改写 1 净增 13... 实为 1813→1832，新增 19 守卫
+> 用例、其中 1 例由"锁定旧静默回退语义"改写为"锁定保守拒绝语义"）。
+
+#### P1 缺陷修复（7 项，回归测试锁定）
+
+- `src/utils/helpers.py::extract_json_object`（P1 语义回归）：
+  0.10 性能优化把叶子 JSON 回退从 `reversed(list(finditer))` 改为
+  O(1) 双候选（仅试最后两个叶子）——当"可解析叶子排在更早位置"
+  （损坏响应夹带 ≥3 片段、仅第 1 个合法）且括号平衡法失败（最外层
+  残缺）时，直接 `raise JSONDecodeError` 误判 LLM 响应解析失败
+  （主链解析兜底路径被静默破坏）。现补"双候选均失败 → 跳过最后两个
+  叶子反向全量扫描"的罕见尾路径（正常 O(1) 快路径行为不变）。
+  回归守卫 TestExtractJsonObjectLeafRegression（4 用例）。
+- `src/graph/workflow.py::_should_debug`（P1 分支遮蔽）：
+  `_recent_repairs_invalid` 早退（L340）置于迭代上限检查之前——最后一轮
+  （iteration >= max）若最近 2 次修复均 patch_applied=False（"补丁反复
+  失败"典型场景），早退直接 done，永远遮蔽上限分支内"诊断关键词命中 →
+  一次 regenerate 机会"与 test_defect 上限收敛分支，终止 reason 还被误标
+  skip_debugger_repair_invalid。现把早退限定为 `iteration < max`（早期迭代
+  "连续修复无效省 token"口径不变），最后一轮由上限分支统一决策。
+  回归守卫 TestWorkflowRepairInvalidBranchOrder（3 用例）。
+- `src/tools/patch_applier.py::apply_patch_to_code`（P1 静默损坏）：
+  完整文件模式 subset 校验失败（补丁带 import/docstring 前缀但漏掉原代码
+  某函数）时静默回退单函数路径，把整个补丁塞进首个函数行范围切片——
+  当补丁前缀与原代码前缀重叠时产出含重复 import / 重复 def 的损坏代码
+  （ast.parse 通过、safe_apply_patch 语法守卫不拦、multi_candidate 检查 4
+  反因重复定义"通过"，损坏代码直接写盘——sqlfluff 5/7 失败那类"删/漏
+  函数"场景最危险路径）。现 subset 失败即保守拒绝（返回原代码 + False，
+  与防御网"函数定义数量不减少"口径同义收敛）；同步改写
+  tests/test_multi_candidate.py 中锁定旧静默回退语义的用例为
+  test_full_file_patch_missing_function_rejected（保守拒绝）。
+  回归守卫 TestPatchApplierFullFileMissingFunction（3 用例）。
+- `src/agents/executor_repo.py::setup`（P1 缓存标记不对称）：
+  use_venv=True + venv_reuse_by_repo=True 且 venv 创建失败回退全局
+  pip install 时写 `.pip_installed`，但 setup() 入口缓存检查读
+  `.venv_pip_installed`（L148）——标记永不命中，每次 setup() 重新
+  git clone + pip install（SWE-bench 批量任务 10-20 个 commit 的同一
+  仓库重复 clone）。现回退路径按 use_venv 写对应标记。仅 use_venv=True
+  opt-in 路径，默认关不变。回归守卫 TestVenvCacheMarkerConsistency。
+- `src/agents/executor_repo.py::_run`（P1 超时穿透）：
+  `_run` 直调 `subprocess.run(timeout=...)`，单 test node 超时时
+  TimeoutExpired 穿透 verify() 的 try/finally，整个验证任务崩溃而非
+  记录该 node 失败（SWE-bench 仓库单节点跑满 timeout 很常见）。现
+  收敛为 returncode=124 哨兵（GNU timeout 口径），`_run_test_nodes`
+  对 rc=124 按"节点执行超时"记入 failed_cases 并继续下一节点。仅
+  REPO_LEVEL_EXECUTION opt-in 路径。回归守卫 TestExecutorRepoTimeoutConvergence。
+- `src/agents/debugger.py::debug`（P1 行号错位）：
+  3.3 位置感知修复把**截断后**的 target_code 传给 `_locate_repair_focus`，
+  而 context.line 是 pytest traceback 的**原始**行号——代码超
+  CODE_MAX_CHARS（3000）触发头尾截断时行号偏移/目标函数被丢弃，
+  定位降级为全文件修复。现截断前保留 original_target_code 副本，
+  定位用原始全文（prompt 仍用截断版省 token 不变）。仅
+  POSITION_AWARE_REPAIR_ENABLE=true opt-in 路径。回归守卫
+  TestDebuggerPositionAwareOriginalCode。
+- `src/tools/dependency.py::_record_venv_cache_event`（P1 TOCTOU 竞态）：
+  5s 落盘节流的 `_venv_cache_last_persist_at` 读-写不在落盘锁保护内——
+  `--parallel` 下 N 线程同批越过锁外判断时，后入锁者读到先入锁者刚写的
+  "刚刚落盘"时间戳直接 return，窗口内仅首事件落盘（统计最终值不丢，
+  落盘时效与注释口径不符）。现把锁内二次确认段的读-写整体纳入
+  `_venv_cache_persist_lock`。单线程/非并行场景不变。回归守卫
+  TestDependencyCachePersistToctou。
+
+#### P2 改动（2 项，均默认行为不变）
+
+- `src/graph/workflow.py::_route_after_diagnosis`（P2 无上限乒乓）：
+  test_defect 路由此前无条件 regenerate 不检查 regeneration_count——
+  DIAGNOSIS_NODE_ENABLE=true 时 Review Agent 反复判 test_defect 可致
+  generator↔executor 无上限乒乓撞 LangGraph recursion_limit。现补
+  与 _should_debug 同口径上限门控（达 _MAX_REGENERATIONS → done），
+  两处条件边映射同步加 "done": END。仅双开关默认关路径。
+  回归守卫 TestRouteAfterDiagnosisCap（3 用例）。
+- `tests/test_multi_candidate.py`：同步改写 1 例（见 P1-3，锁定保守
+  拒绝语义）。
+
+#### 核实后无需修改项（各子代理审查确认）
+
+- cross_file 拓扑排序（Kahn + 字典序）/ `from X import *` 星号导入
+  漏边（opt-in 保守口径）/ code_context 类方法同名冲突（保守 setdefault
+  口径）/ patch_applier AST vs 正则兜底路径一致性 / type_repair 类型
+  家族保守口径 / multi_candidate credit 默认 0.0 防御写法 /
+  dependency `_importable_cache` 无锁双读（幂等无损坏）/
+  executor_imports LRU 失效（单任务顺序路径不触发）/
+  llm_client zai 双层重试（deadline 快速失败机制既有）——
+  均为设计口径或 opt-in 路径，默认行为不变，留作记录。
+
+### 第九轮并行子代理深审（默认行为不变）
+
+> 4 路并行子代理对 graph / api / tools / agents 四模块深审 + 主代理复核；
+> 产出 P1×4 + P2×10 + 测试同步 1 + 新增回归守卫 27。
+> 全部改动仅在默认关的开关路径或已锁定口径内收敛，默认行为不变。
+
+#### P1 缺陷修复（4 项，回归测试锁定）
+
+- `experiments/difficulty_stratification.py::_difficulty_level_bucket`
+  （P1 归一口径）：基线失败项根因——实现只归一 `str→int`，但配套
+  测试同时期望整数值 float（3.0）也归一，测试与实现口径互相矛盾。
+  放宽归一口径为「int 直通 / 纯数字 str（含 ±）转 int / 整数值
+  float（3.0）转 int / 其余（3.5 / "abc" / bool）保持 unlabeled」；
+  同步修正 tests/test_improvements_1_2_2_1_2_2_4_3.py 断言
+  （unlabeled 计数 2→3，加 3.5/True 用例）。默认行为不变（正常
+  数据集 int difficulty_level 计数不变）。
+- `src/graph/workflow.py::_should_debug`（P1 分支顺序）：3.1 双向
+  诊断的 `defect_type == "test_defect"` 分支（旧 L350）位于迭代
+  上限分支（旧 L359）之前——达上限 + test_defect + 再生成上限
+  已满三者同时满足时，test_defect 分支直接返回 "done"（reason=
+  test_defect_regeneration_cap），绕过上限分支内"诊断关键词仍可
+  regenerate 一次"逻辑。现把上限检查上移到 test_defect 分支之前；
+  达上限场景由上限分支统一收敛（关键词可 regenerate，否则 done），
+  test_defect 分支仅保留迭代未达上限路径。仅 3.1 双向诊断开关
+  开路径语义微调，默认关不受影响。
+- `src/api/api_manager.py::call` / `_handle_rate_limit` /
+  `_handle_api_error` / `_handle_generic_error`（P1 半开探测双计
+  / 丢失）：3 个 handler 在 `is_half_open_probe=None` 时自动重判
+  `node.in_circuit_half_open`，但 `mark_failure` 调用会改变节点状态
+  （限流路径重判恒 False → 探测失败计数丢失；API 错误路径重判恒
+  True → 多计一次探测成功口径）。现把预检上移到 `call()` 循环
+  （发起真实请求前的唯一判定点），显式透传给 `_try_call_node` 与
+  3 个 handler；handler 改为只消费调用方显式透传的预检结果（bool），
+  不再自动重判。`_try_call_node` 加 `is_half_open_probe: bool |
+  None = None` 形参保持旧调用方兼容。仅 `enable_half_open_probe=
+  True` 路径，默认关不受影响。
+- `src/agents/executor_repo.py::_apply_llm_patch`（P1 临时文件
+  竞争）：`patch_file` 固定路径 `aitester_llm_unified.patch`，
+  `--parallel` 多线程并发 verify 时一个线程的 `finally: os.remove`
+  删掉另一个线程正在 `git apply` 的补丁文件。现按
+  `(os.getpid(), threading.get_ident())` 双键后缀隔离。仅
+  `--parallel` + 多线程共享 `RepoExecutor` 场景，默认单线程不变。
+
+#### P2 改动（10 项，均默认行为不变）
+
+- `src/graph/workflow.py`：`_DIAGNOSIS_KEYWORD_RE` 哨兵上移至
+  函数定义之前（消除"模块加载后立即调用"时 NameError 吞掉懒
+  初始化回归的缺陷——首读 NameError 被 `is None` 判定吞掉后
+  每次调用都重建正则，懒初始化优化彻底失效）。
+- `src/tools/patch_applier.py`（3 处 async def 补丁定位修正，
+  全同步代码不变）：`_TOP_DEF_RE` 含 `(?:async\s+)?`；
+  `_find_function_range_ast` 遍历 `ast.FunctionDef +
+  ast.AsyncFunctionDef`；单函数模式按名正则含 `^(?:async\s+)?def`。
+  修复"多 async 函数文件误判单函数模式"（`_is_full_file_patch`
+  (c) 分支漏判）与"async 目标函数 AST 定位失败走正则兜底后
+  正则不含 async 前缀 → 补丁应用失败"。
+- `src/api/api_manager.py::_select_node_by_complexity`：注释修正
+  （候选池实为全节点池 `get_all_nodes()`，非"同模型名"；标注
+  未来多模型混入时的语义扩展点）。
+- `src/api/complexity_router.py::complexity_class_to_routing_hints`：
+  docstring 幽灵开关清理（`CODE_MAX_CHARS 可调` 改注"按档位
+  硬编码"——全仓无读取点）。
+- `src/agents/executor_repo.py::_clone_and_checkout`：死代码
+  清理（`(repo_dir and os.path.dirname(repo_dir)) or "."` →
+  `os.path.dirname(repo_dir) or "."`，repo_dir 恒非空）。
+- `src/agents/base_agent.py::_call_llm`：死代码清理
+  （`llm_call_kwargs` dict 从未被引用，删；`_reorder_api_groups_by_
+  complexity` 保留）。
+- `experiments/difficulty_stratification.py`：归一口径放宽
+  （同 P1-1，含在 P1 内）。
+- `tests/test_2026_09_26_review_optimizations.py`：新增 27 用例
+  回归守卫（覆盖上述 P1×4 + P2×8 全部改动点 + 默认路径不变验证）。
+- `tests/test_improvements_1_2_2_1_2_2_4_3.py`：同步修正
+  difficulty_level 归一测试断言（unlabeled 计数 2→3，加
+  3.5/True 用例）。
+- `src/agents/executor_repo.py`：`import threading`（配套 P1-4）。
+
+#### 核实后无需修改项（各子代理审查确认）
+
+- RAG DCL 双检锁 / 文件缓存记忆 + 锁 / state 工厂函数对齐 /
+  tracing 线程局部锁释放 / 图构建 4 路径——均实现正确。
+- 熔断器三态 / 指数退避公式 / 节点级锁原子化——状态机自洽。
+- error_classifier 匹配顺序 / 子进程安全 / 资源泄漏 / LLM
+  客户端 LRU 双检锁——无缺陷。
+
+### 第八轮收尾审计（默认行为不变）
+
+- `examples/buggy_library.py`：修复工作树误引入的重复 `import re`
+  （F811）与 I001 导入排序；`examples/calculator.py` 清除空行尾随
+  空白（W293）；`experiments/synthetic_difficulty.py` 去除无占位符
+  的 f-string（F541）+ `list.extend` 生成器替代逐次 append（PERF401）。
+- `experiments/run_benchmark.py::run_single_task`：AST 解析异常捕获面
+  收紧（原 `except (SyntaxError, ValueError, Exception)` 中裸
+  `Exception` 兜底吞掉 KeyboardInterrupt 等可中断性；改为只捕获
+  `SyntaxError/ValueError` 解析类异常，口径不变）。
+- `src/tools/type_repair.py::type_repair_layer`：新增可选参数
+  `enforce_contract_ref`（契约回环检查的参照侧，默认 None = 原代码
+  参照口径，与 check_naming_contract 主语义一致）——此前调用方无法
+  按"补丁基线同符号集"口径校验完整文件修订（LLM 修订省略原文件
+  顶层符号时，以原代码为参照的删除检测会把合法的全集修订误放行或
+  误拒；显式传参照侧后口径可选、默认不变）。
+- `src/agents/debugger.py`：`debug()` 调用 type_repair_layer 的契约
+  参照口径补注释锁定（默认原代码参照；LLM 修订省略原顶层符号 =
+  契约破坏 = 拒绝修订，与 _patch_applier_node 主路径删除检测同向）。
+- `src/graph/nodes.py::_debugger_node`：修复 `type_repair_findings`
+  状态键断链——此前 `debug()` 返回值已含该键但节点未写入 state
+  （state.py schema 已声明该键，消费侧恒 None）；现按
+  `result.get("type_repair_findings", [])` 写入（缺省空列表，
+  历史调用方无此键时不报 KeyError）。
+- `src/agents/llm_client.py::_is_zai_compatible`：zai 域名判定由
+  frozenset + `any` 子串扫描升级为模块级预编译 alternation 正则
+  `_ZAI_DOMAIN_RE`（一次 O(n) 扫描，零调用期分配）；命中口径与
+  历史子串扫描逐样本等价（守卫测试 test_zai_domain_regex_equivalence 锁定）。
+- `src/graph/workflow.py::route_after_diagnosis` / `_diagnosis_node`：
+  路由判定与状态写入补齐回归守卫（8 条：test_defect → regenerate /
+  其余 → debug / 缺省 → debug；_debugger_node 写 type_repair_findings
+  有值 / 缺省两口径）。
+
+### 第七轮性能热路径深扫（默认行为不变）
+
+- `src/tools/code_analyzer.py::preserve_patch_ingredients`（P0 热路径）：
+  新增 `_ast` 可选参数——code_context 的 `extract_focused_code_detail`
+  对同一 source 已做过 `ast.parse`，此前契约块识别路径（惰性导入后
+  `preserve_patch_ingredients(source, ...)` 内部再 parse 一次）在大文件
+  上 200ms 级重复解析，--parallel 多任务热路径累积。现调用方传入既有
+  `tree` 复用；独立调用方（不传 `_ast`）行为不变。返回值新增
+  `ast_tree` 键（解析成功时暴露 tree，失败时 None）供调用方二次分析
+  复用，既有字段口径不变。
+- `experiments/run_benchmark.py::run_single_task`（P0 热路径）：
+  复杂度感知路由此前 `count_imports` 内部 parse 一次 + 圈复杂度
+  外部再 parse 一次（每任务 2 次 `ast.parse`）。现统一先 parse 一次，
+  圈复杂度分析直接用该 tree，`count_imports` 经新增的 `_tree` 参数
+  复用；parse 失败（`_tree=None`）时 `count_imports` 保持旧的
+  "解析失败返回 0" 语义。`compute_complexity_score` 与
+  `complexity_class_to_routing_hints` 调用口径不变。
+- `src/datasets/dataset_loader.py`（benchmark 热循环）：
+  新增 `_task_index`（task_id → BenchmarkTask）O(1) 查表索引，
+  `get_task_by_id` 从 O(n) 线性扫描降为 O(1)（`_rebuild_task_index_if_stale`
+  在 add_task 后惰性重建，正常路径 O(1) 短路）；`task_ids` / `size` /
+  `filter_by_repo` 等 property 从 `self.tasks`（每次 O(n) 列表拷贝 +
+  `_ensure_loaded`）改为直接 `self._tasks` 访问，benchmark 热循环
+  中反复调用不再 O(n) 冗余。`quality_report` / `tasks_missing_source`
+  补 `_ensure_loaded` 保证未显式加载时也能正确遍历（此前直接读
+  `self._tasks` 在未加载状态下为空）。
+- `src/agents/error_classifier.py`（Debugger 热路径）：
+  `classify_with_context` 此前 `classify()` 与 `extract_error_context()`
+  各自独立构建合并文本（对同一 test_output + failed_cases 做两次
+  O(n) 拼接），现一次构建 `combined` 共享给
+  `_classify_combined` + `_extract_error_context_from_combined`；
+  `classify()` 新增 `_combined` 内部参数（外部调用者无需传），
+  `extract_error_context` 瘦身为"构建 combined + 委托
+  `_extract_error_context_from_combined`"。判定优先级、正则口径、
+  `ErrorContext` 字段全部不变。
+- `src/graph/workflow.py::_should_debug`（路由热路径）：
+  诊断关键词判定从每次调用重建 list 字面量 + 9 次 `any(kw in text)`
+  子串搜索（O(9n)）提取为模块级 `_TEST_GEN_DIAGNOSIS_KEYWORDS`
+  常量 + 预编译 alternation 正则 `_DIAGNOSIS_KEYWORD_RE`（O(n) 一次
+  扫描，惰性编译），`_diagnosis_hits_test_gen_keywords` 与历史
+  `any(kw in diagnosis for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS)` 口径
+  等价（守卫测试 `test_regex_equivalent_to_any_substring` 逐样本验证）。
+- `src/agents/executor_runtime.py::run_pytest_with_retry`：
+  `TimeoutExpired` 分支内每次异常都重新创建 `_to_str` 闭包，提升为
+  模块级函数（热路径零无谓分配），语义不变（str/bytes/None 三分支）。
+- `src/api/api_manager.py::call`（半开探测窗口消除）：
+  此前 `call()` 在循环前与 `_try_call_node` 内部各调一次
+  `_enter_half_open_probe(node)`，双调用窗口中 429/异常处理器接收的
+  预计算 `is_half_open_probe` 标志可能陈旧（probe 状态在外层
+  预检与内层 `_try_call_node` 预检之间漂移）。现 `_handle_rate_limit` /
+  `_handle_api_error` / `_handle_generic_error` 接受
+  `is_half_open_probe: bool | None = None` 并在 None 时自决
+  （`self._enter_half_open_probe(node)`），消除双探测窗口；
+  `call()` 不再预计算，处理器按调用时刻自决。169 个 API 测试全过。
+- `src/utils/helpers.py::extract_json_object`：叶子回退路径从
+  `reversed(list(finditer))`（O(n) 内存物化全部匹配）改为 O(1)
+  last-two-match 跟踪（`last_match` / `prev_match` 滚动），
+  语义等价（balanced-brace 主路径不变，叶子回退取最后两个候选）。
+- `src/graph/nodes.py`（写盘安全热路径）：
+  `_ALLOWED_WRITE_ROOTS` 模块加载期预计算前缀对
+  `_ALLOWED_WRITE_ROOT_PREFIXES`（`(root, root.rstrip(os.sep)+os.sep)`），
+  `_is_within_allowed_roots` 热路径零重算；`roots=None` 默认走
+  预计算前缀对（历史调用方 `_ALLOWED_WRITE_ROOTS` 显式传参路径
+  保持原语义）。前缀碰撞防护（`AITester_backup/` 兄弟目录）不变。
+- `src/agents/llm_client.py::_is_zai_compatible`：zai 域名判定列表
+  从每次调用重建 list 提升为模块级 `_ZAI_DOMAINS` frozenset，
+  --parallel 多任务 LLM 路由决策每次调用 2 次无谓分配消除。
+
+### 性能回归守卫测试（tests/test_performance_guards.py，新增 17 条）
+
+- 复用路径（传 `_tree` / `_ast`）与独立路径（不传）逐字段一致；
+- 注入 `ast.parse` 计数桩：复用路径零新增解析；
+- 预编译 alternation 正则与历史 `any(kw in text)` 口径逐样本等价；
+- 大文件（~400KB）聚焦提取秒级内完成（量级回归守卫，非微秒级绝对值）；
+- dataset_loader O(1) 索引与 property 直访路径行为 + 量级守卫。
 
 ### 静态检查清零（mypy / ruff）
 

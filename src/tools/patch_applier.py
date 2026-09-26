@@ -26,6 +26,7 @@ import difflib
 import logging
 import os
 import re
+from typing import Any
 
 from src.utils.helpers import extract_code_block
 
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 # 全模式（无捕获组需求）提取为模块级常量；按函数名定制的边界定位正则仍按名
 # 编译（数量少、re 内部 LRU 命中）。
 _DEF_RE = re.compile(r"def\s+(\w+)\s*\(")
-_TOP_DEF_RE = re.compile(r"^def\s+\w+\s*\(", re.MULTILINE)
+_TOP_DEF_RE = re.compile(r"^(?:async\s+)?def\s+\w+\s*\(", re.MULTILINE)
 _TRIPLE_QUOTE_RE = re.compile(r'^"""')
 _PYTHON_PREFIX_RE = re.compile(r"^python\s*\n?", re.IGNORECASE)
 # 正则兜底路径的函数边界探测（_find_function_range 热循环内不再逐次编译）
@@ -109,7 +110,7 @@ def _find_function_range_ast(original_code: str, func_name: str) -> tuple[int, i
 
     Args:
         original_code: 原始代码全文。
-        func_name: 目标函数名（顶层 def，非嵌套）。
+        func_name: 目标函数名（顶层 def，含 async def；非嵌套）。
 
     Returns:
         (start_lineno, end_lineno) 1-based 闭区间（ast 行号）；
@@ -120,10 +121,19 @@ def _find_function_range_ast(original_code: str, func_name: str) -> tuple[int, i
     except SyntaxError:
         return None
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == func_name:
-            # end_lineno 在 Python 3.8+ 恒有；兜底取 body 末行。
-            # getattr 回退取 int（运行期 3.8+ 必有该属性，mypy 按 stub 的
-            # Optional[int] 报 None 分支，显式 `or node.lineno` 收窄为 int）
+        # 2026-09-26 全面审查（P2 一致性）：含 ast.AsyncFunctionDef——
+        # async def 在 AST 中是独立节点类型，仅遍历 ast.FunctionDef 漏检
+        # async 目标函数（返回 None 走正则兜底路径，但正则不含 async
+        # 前缀时 start_idx 恒 None，补丁应用失败）。与 _TOP_DEF_RE /
+        # 下方正则定位口径一致。
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == func_name
+        ):
+            # end_lineno 在 Python 3.8+ 恒有（普通 def 与 async def 均在
+            # CPython 3.8+ 填充，已用真实 AST 核实；运行期 >=3.12 必然存在，
+            # 下方 getattr 回退仅为 mypy 按 stub 的 Optional[int] 签名保留的
+            # 空操作分支）
             end = getattr(node, "end_lineno", None) or node.lineno
             return node.lineno, end
     return None
@@ -192,10 +202,37 @@ def apply_patch_to_code(
         patch_func_names = _extract_function_names(clean_patch)
         orig_func_names = _extract_function_names(original_code)
 
-        # 验证补丁包含原代码的全部函数（防止部分替换导致函数丢失）
-        if orig_func_names and orig_func_names.issubset(patch_func_names):
+        # 验证补丁包含原代码的全部函数（防止部分替换导致函数丢失）。
+        # 注意：orig_func_names 为空集（原代码无顶层函数）时 subset 恒成立
+        # （∅ ⊆ 任意集合），全文件替换合法——"无函数可丢"；
+        # 不得用 `orig_func_names and ...` 做前置守卫——原 `and` 短路把空集
+        # 场景错落到下方 Step 4b，而 Step 4b 因补丁无 def 也返回 False，
+        # 导致全文件替换永远落不到（2026-09-26 round8 tools 审查 P1 修复：
+        # 改为显式 `not orig_func_names or ...`，不改变非空集路径的判定口径）。
+        if not orig_func_names or orig_func_names.issubset(patch_func_names):
             # 追加换行符确保代码以换行结尾（PEP 8 风格）
             return clean_patch + "\n", True
+
+        # 2026-09-26 全面审查（P1 正确性）：完整文件模式 subset 校验失败
+        # （补丁有 import/docstring 前缀但漏掉原代码某函数）——保守拒绝返回
+        # 原代码，不再静默回退 Step 4b 单函数路径。此前静默回退把整个
+        # "看似完整文件"补丁塞进首个函数的行范围切片（new_lines = 头 + 补丁
+        # 全量 + 尾），当补丁前缀（import）与原代码前缀重叠时产出含重复
+        # import、重复函数定义的损坏代码——ast.parse 通过、safe_apply_patch
+        # 语法守卫不拦、multi_candidate 安全检查 4（函数定义数量不减少）反因
+        # 重复定义"通过"，损坏代码直接写盘（sqlfluff 5/7 失败那类"删/漏
+        # 函数"场景最危险的静默损坏路径）。
+        # 与 multi_candidate 防御网设计（检查 4：函数定义数量不减少）同口径
+        # 保守拒绝（宁拒绝不可损坏）。
+        # 注：orig_func_names 非空但 subset 校验失败才走到此处（orig_func_names
+        # 为空集时上方 L212 已提前返回成功，"无函数可丢"，本拒绝分支不可达）。
+        # 补丁只含新函数（不含原函数）时 subset 校验也已在 L212 通过并返回
+        # （新增函数不构成"误删"，历史口径保留；Step 4b 仅处理"非全文件
+        # 模式"的补丁——有 def 的补丁若被判为全文件模式且 subset 通过，
+        # 不会落到 Step 4b）。
+        logger.warning("完整文件补丁漏掉原代码函数 %s，保守拒绝应用",
+                       sorted(orig_func_names - patch_func_names))
+        return original_code, False
 
     # Step 4b: 单函数模式 —— 精确替换目标函数
     # 查找补丁中的第一个函数定义（复用模块级 _DEF_RE，避免热路径重复编译）
@@ -224,8 +261,13 @@ def apply_patch_to_code(
         start_idx = None
 
         # 遍历原代码行，定位目标函数的起始行
-        # 按名编译的边界定位正则（数量少；re 内部 LRU 命中后零编译开销）
-        func_def_re = re.compile(rf"^def\s+{re.escape(patch_func_name)}\s*\(")
+        # 按名编译的边界定位正则（数量少；re 内部 LRU 命中后零编译开销）。
+        # 2026-09-26 全面审查（P2 一致性）：含 async def 前缀——async def
+        # 在 AST 中是独立节点类型（ast.AsyncFunctionDef），_find_function_range_ast
+        # 仅遍历 ast.FunctionDef 漏检 async 目标函数（返回 None 走本正则兜底路径），
+        # 正则不匹配 async def 前缀时 start_idx 恒 None，补丁应用失败（单函数
+        # 模式 async 函数永远落不到）。本处同步修复，与 _TOP_DEF_RE 口径一致。
+        func_def_re = re.compile(rf"^(?:async\s+)?def\s+{re.escape(patch_func_name)}\s*\(")
         for i, line in enumerate(lines):
             if func_def_re.match(line):
                 start_idx = i
@@ -561,3 +603,120 @@ def generate_diff(old_code: str, new_code: str) -> str:
     )
 
     return "".join(diff)
+
+
+# ─── 2.2 补丁后处理重采样策略（AST 解析验证 + 一次重采样）────────────────────
+# 参考已有研究：对代码编辑任务，替换后的代码需通过语法检查（AST 解析）。
+# 补丁应用后立即做 AST 解析验证，解析失败则触发一次重采样（带负面反馈），
+# 确保 LLM 产出的补丁是语法合法的 Python。
+
+
+def _patch_ast_valid(code: str) -> bool:
+    """AST 解析验证：代码是否为语法合法的 Python。"""
+    if not code or not code.strip():
+        return False
+    try:
+        ast.parse(code)
+        return True
+    except (SyntaxError, ValueError):
+        return False
+
+
+def apply_patch_with_resample(
+    original_code: str,
+    patch: str,
+    resample_fn: Any = None,
+    max_resamples: int = 1,
+) -> tuple[str, bool, dict[str, Any]]:
+    """2.2 补丁后处理重采样策略：应用补丁 + AST 解析验证 + 失败重采样。
+
+    流程：
+    1. 应用补丁（apply_patch_to_code）；
+    2. 应用后立即对结果做 AST 解析验证（语法合法性）；
+    3. 解析失败 → 调用 resample_fn（LLM 重采样回调）重新生成一次补丁，
+       再次应用 + 再次 AST 验证；
+    4. 重采样后仍失败 → 返回原代码 + 失败标记（保守不引入半应用状态）。
+
+    设计约束（与 safe_apply_patch 同口径）：
+    - 任何失败路径都返回原代码，不引入半应用状态；
+    - resample_fn 为 None 时跳过重采样（仅做 AST 验证），保持历史行为；
+    - 最多 max_resamples 次重采样（默认 1，避免 LLM 反复生成相同错误）。
+
+    Args:
+        original_code: 原始代码。
+        patch: LLM 生成的补丁代码。
+        resample_fn: 可选 LLM 重采样回调 (query: str, original_code: str,
+            patch: str, ast_error: str) → str（返回修订后的新补丁）。
+            调用方注入（如 DebuggerAgent 的 _call_llm_with_cache + 负面反馈），
+            避免本模块直接依赖 LLM 客户端（保持零硬依赖、可测试）。
+        max_resamples: 最大重采样次数（默认 1）。
+
+    Returns:
+        (应用后的代码, 是否成功, 后处理统计 dict)。
+        统计 dict 键：
+        - ast_valid: bool（首次应用后 AST 是否合法）
+        - resampled: bool（是否触发了重采样）
+        - resample_count: int（实际重采样次数）
+        - success: bool（最终是否成功应用且 AST 合法）
+    """
+    stats: dict[str, Any] = {"ast_valid": False, "resampled": False, "resample_count": 0, "success": False}
+
+    # Step 1: 首次应用
+    new_code, applied = apply_patch_to_code(original_code, patch)
+    stats["ast_valid"] = _patch_ast_valid(new_code)
+    if applied and stats["ast_valid"]:
+        stats["success"] = True
+        return new_code, True, stats
+
+    # Step 2: 首次失败（未应用 或 AST 不合法）→ 尝试重采样
+    if not resample_fn:
+        # 未注入重采样回调：保守返回原代码（保持历史行为）
+        return original_code, applied and stats["ast_valid"], stats
+
+    # 构造负面反馈（把 AST 错误信息注入 prompt，引导 LLM 修正）
+    # getattr(e, "msg", e)：SyntaxError 有 .msg，ValueError 无 → 回退到 str(e)
+    ast_err = ""
+    if applied:
+        try:
+            ast.parse(new_code)
+        except (SyntaxError, ValueError) as e:
+            ast_err = f"补丁应用后的代码语法错误：{getattr(e, 'msg', e)}（行 {getattr(e, 'lineno', 0)}）"
+    else:
+        ast_err = "补丁未能成功应用到原始代码（无法定位目标函数或函数名不匹配）"
+
+    for i in range(max_resamples):
+        try:
+            new_patch = resample_fn(
+                f"【补丁重采样（第 {i + 1} 次）】以下补丁存在 {ast_err}，"
+                f"请重新生成一个语法合法且能成功应用的修复补丁。"
+                f"只输出代码块，不要其他文本。\n当前补丁：\n```\n{patch[:1500]}\n```",
+                original_code,
+                patch,
+                ast_err,
+            )
+        except Exception as e:
+            logger.warning("2.2 重采样回调异常（停止重采样）: %s", e)
+            break
+        if not new_patch:
+            break
+        stats["resampled"] = True
+        stats["resample_count"] = i + 1
+        patch = new_patch
+        # 重新应用 + AST 验证
+        new_code, applied = apply_patch_to_code(original_code, patch)
+        stats["ast_valid"] = _patch_ast_valid(new_code)
+        if applied and stats["ast_valid"]:
+            stats["success"] = True
+            logger.info("2.2 重采样第 %d 次成功，补丁已修订并通过 AST 验证", i + 1)
+            return new_code, True, stats
+        # 仍失败：更新错误信息供下一次重采样
+        try:
+            ast.parse(new_code)
+        except (SyntaxError, ValueError) as e:
+            ast_err = f"重采样后的补丁仍有语法错误：{getattr(e, 'msg', e)}（行 {getattr(e, 'lineno', 0)}）"
+        else:
+            ast_err = "重采样后的补丁仍未能成功应用"
+
+    # 所有重采样都失败：保守返回原代码（不引入半应用状态）
+    logger.warning("2.2 重采样 %d 次后仍失败，保留原代码", stats["resample_count"])
+    return original_code, False, stats
