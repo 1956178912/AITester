@@ -38,10 +38,6 @@ class InMemoryDataset(BaseDatasetLoader):
         # 无需从外部文件读取，因此此处留空。子类覆盖此方法以加载真实数据集。
         return None
 
-    def add_task(self, task: BenchmarkTask) -> None:
-        """手动添加一个任务到数据集。"""
-        self._tasks.append(task)
-
     def add_sample_tasks(self) -> None:
         """添加一组预定义的示例任务（用于快速验证）。"""
         self.add_task(

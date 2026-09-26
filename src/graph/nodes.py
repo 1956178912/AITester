@@ -17,6 +17,7 @@ import os
 import re
 import tempfile
 import time
+from dataclasses import asdict
 from typing import Any, cast
 
 from config import (
@@ -24,6 +25,8 @@ from config import (
     EXECUTION_TIMEOUT,
     EXECUTOR_AUTO_INSTALL_DEPS,
     EXECUTOR_DEP_INSTALL_TIMEOUT,
+    EXECUTOR_DOCKER_IMAGE,
+    EXECUTOR_USE_DOCKER,
     EXECUTOR_USE_VENV,
     MAX_ITERATIONS,
     TEMPERATURE,
@@ -56,6 +59,15 @@ logger = logging.getLogger(__name__)
 
 # 修复历史上限：超过后仅保留最近 N 条，防止长迭代循环占用内存（经验值 5）
 _MAX_REPAIR_HISTORY = 5
+
+# P0 3.2 多候选自适应触发的"困难错误类别"（断言/运行时/逻辑/下标错误才值得
+# 多候选；简单任务保持单候选省 token）。模块级 frozenset（此前在函数内每次
+# 调用重建 set，--parallel 多任务热路径累积无谓分配）
+_HARD_ERROR_CATEGORIES = frozenset({"assertion", "runtime", "logic_error", "index_error"})
+
+# P0 1.1 分层代码压缩：调用链展开层数（与 BaseAgent.truncate_code 同口径，
+# CODE_FOCUS_DEPTH 环境变量，默认 1；跨文件任务建议 2）
+CODE_FOCUS_DEPTH: int = int(os.getenv("CODE_FOCUS_DEPTH", "1"))
 
 # 安全检查 2 用：函数定义探测正则（re 编译缓存命中，热路径零编译开销）。
 # 锚定行首（含缩进行）后的 `def `，与旧的"逐行 startswith('def ')"语义等价
@@ -113,9 +125,12 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
             logger.warning("Planner 输出结构不完整，使用默认计划")
             test_plan = _get_default_test_plan(state.get("target_function"))
         logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
-    except (json.JSONDecodeError, RuntimeError) as e:
+    except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # LLM 调用失败或返回非 JSON 格式时，使用默认计划兜底
         # 这确保了即使 LLM 服务异常，工作流仍可以继续执行（降级模式）
+        # 2026-09-26 全面审查：扩捕获 OSError——agent.plan 内部 LLM 文件缓存
+        # 读写（_call_llm_with_cache）在缓存目录被外部删除/磁盘满等场景抛
+        # OSError，此前未捕获会让整图崩溃（与 debugger 节点同口径兜底）。
         # 复用 _get_default_test_plan（与上方验证失败分支同一构造点）：
         # 其 "or 'unknown'" 兜底比原内联 .get(key, "unknown") 更严格
         # （空串/None 键值也会归一为 "unknown"，语义向成功分支收敛）
@@ -191,18 +206,31 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # mypy 按 TypedDict 报 dict|None → dict，显式 cast 收窄（运行期传 None，Generator 内
     # isinstance(test_plan, dict) 守卫已覆盖 None 路径，行为不变）
     test_plan = cast("dict[str, Any]", state.get("test_plan"))
-    generated_test = agent.generate(
-        test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
-        state["target_code"],
-        module_name=state.get("module_name", ""),
-        rag_references=rag_refs,
-        focus_function=state.get("target_function"),
-        # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
-        # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
-        mutation_feedback=state.get("mutation_feedback"),
-        # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
-        temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
-    )
+
+    # 2026-09-26 全面审查（P1 降级兜底）：此前 agent.generate 无 try-except，
+    # LLM 调用失败（RuntimeError，含跨 API 故障转移耗尽）/ 缓存 OSError 会
+    # 直接让整图崩溃——与 planner/debugger 节点"降级兜底"口径不一致（二者
+    # 均有默认计划 / 空 patch 兜底），且 workflow.py 文档声称"使用 try-except
+    # 捕获 LLM 调用异常，确保工作流不因单点故障而崩溃"。现补降级：LLM 失败时
+    # 生成空测试 + 记诊断，executor 拿到空测试自然失败 → 路由到 debugger
+    # （修代码）或 done，不再崩溃整图。历史行为是崩溃，新行为是优雅降级——
+    # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
+    try:
+        generated_test = agent.generate(
+            test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
+            state["target_code"],
+            module_name=state.get("module_name", ""),
+            rag_references=rag_refs,
+            focus_function=state.get("target_function"),
+            # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
+            # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
+            mutation_feedback=state.get("mutation_feedback"),
+            # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+            temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+        )
+    except (RuntimeError, OSError, json.JSONDecodeError) as e:
+        logger.warning("Generator LLM 调用失败，降级为空测试: %s", e)
+        generated_test = ""
 
     # 2.3 改进：复现测试专项生成（REPRO_TEST_ENABLE=true 且已有缺陷描述时）。
     # 缺陷描述优先取 diagnosis（上一轮 Debugger 根因分析），跨文件修复场景下
@@ -286,8 +314,8 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 通过环境变量 EXECUTOR_USE_VENV / EXECUTOR_AUTO_INSTALL_DEPS 开启。
     # 4.3 Docker 隔离执行：EXECUTOR_USE_DOCKER=true 时经 docker CLI 在容器内
     # 跑 pytest（镜像 EXECUTOR_DOCKER_IMAGE，默认 aitester:latest）。
-    from config import EXECUTOR_DOCKER_IMAGE, EXECUTOR_USE_DOCKER
-
+    # （2026-09-26 全面审查：EXECUTOR_DOCKER_IMAGE / EXECUTOR_USE_DOCKER 移入
+    # 文件头导入，与同文件其他 config 符号风格一致）
     agent = ExecutorAgent(
         timeout=executor_timeout,
         use_docker=EXECUTOR_USE_DOCKER,
@@ -505,6 +533,11 @@ def _dynamic_temperature_from_suggestion(suggestion: str | None) -> float | None
         覆盖后的温度（None 表示不覆盖，沿用默认）。
     """
     if suggestion == "lower_temperature":
+        # TEMPERATURE=0 时减半仍为 0（无收紧空间）→ 返回 None 沿用默认，
+        # 避免"覆盖为 0.0"的无意义透传（2026-09-26 全面审查修复）
+        if TEMPERATURE <= 0.0:
+            logger.info("动态策略（3.3）：TEMPERATURE 已为 0，无可收紧空间，不覆盖")
+            return None
         lowered = round(max(0.0, TEMPERATURE * 0.5), 3)
         logger.info("动态策略（3.3）：覆盖率连降，temperature %.2f → %.2f", TEMPERATURE, lowered)
         return lowered
@@ -556,10 +589,17 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             rag_references=rag_refs,
             focus_function=state.get("target_function"),
             target_module=state.get("module_name"),
+            # P0 1.1 分层代码压缩：跨文件任务时，把 cross_file_analyzer 构建的
+            # 各模块"目标函数 + CODE_FOCUS_DEPTH 层调用链"聚焦上下文注入 prompt，
+            # 替代"整模块全文 → 截断后靠猜"的旧口径（纯静态文本，零 LLM token）
+            cross_file_contexts=state.get("cross_file_contexts") or None,
             # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
             temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
         )
-    except (json.JSONDecodeError, RuntimeError) as e:
+    except (json.JSONDecodeError, RuntimeError, OSError) as e:
+        # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
+        # 读写（_call_llm_with_cache）在缓存目录被外部删除/磁盘满等场景抛
+        # OSError，此前未捕获会让整图崩溃（与 planner 节点同口径兜底）。
         logger.warning("Debugger JSON 解析失败，跳过本轮修复: %s", e)
         result = {
             "root_cause": f"JSON 解析失败: {e}",
@@ -699,7 +739,36 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
         iteration=state.get("iteration", 0),
     )
 
-    update: dict[str, Any] = {"cross_file_deps": [d.__dict__ for d in deps]}
+    # 显式 asdict（而非 d.__dict__）：dataclass 未来加内部字段会无声改变
+    # state["cross_file_deps"] 的 schema，下游节点按固定 key 取值的契约
+    # （_patch_applier_node :985）保持稳定——2026-09-26 全面审查修复
+    update: dict[str, Any] = {"cross_file_deps": [asdict(d) for d in deps]}
+
+    # ── P0 1.1 分层代码压缩（跨文件调用链上下文）────────────────────────
+    # 跨文件任务时，为每个依赖边的 target_module 构建"目标函数 → 被调函数
+    # （CODE_FOCUS_DEPTH 层）"的调用链上下文（纯静态、不消耗 LLM token），
+    # 写入 state["cross_file_contexts"]：{module_name: focused_code}。
+    # 后续 _debugger_node 生成跨文件补丁时把相关模块的聚焦上下文一并注入
+    # prompt，替代"整模块全文 → 截断猜"的旧口径。
+    if deps:
+        from src.tools.code_analyzer import extract_function_context
+
+        focused_contexts: dict[str, str] = {}
+        for dep in deps:
+            module_src = source_files.get(dep.target_module, "")
+            if not module_src:
+                continue
+            focused = extract_function_context(module_src, dep.symbol, depth=CODE_FOCUS_DEPTH)
+            if focused:
+                focused_contexts.setdefault(dep.target_module, focused)
+        if focused_contexts:
+            update["cross_file_contexts"] = focused_contexts
+            logger.info(
+                "P0 1.1 跨文件调用链上下文：构建 %d 个模块的聚焦上下文（depth=%d）",
+                len(focused_contexts),
+                CODE_FOCUS_DEPTH,
+            )
+
     # 单文件项目降级：依赖边为空时不生成跨文件计划（保持单文件路径）
     if not deps:
         logger.info("3.5 跨文件修复：依赖图为空（单文件项目），降级为单文件模式")
@@ -736,7 +805,11 @@ def _write_file_atomic(path: str, content: str) -> None:
         raise
 
 
-def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> tuple[str, bool, dict[str, Any]]:
+def _select_multi_candidate_patch(
+    state: AITesterState,
+    original_code: str,
+    iteration: int = 0,
+) -> tuple[str, bool, dict[str, Any]]:
     """3.1 多候选补丁：生成 N 候选 + 静态筛选 + 执行验证，返回最优候选。
 
     无有效候选（全静态拒绝 / 执行全失败）时回退到 state 中的单补丁，
@@ -751,15 +824,50 @@ def _select_multi_candidate_patch(state: AITesterState, original_code: str) -> t
     执行验证开关：环境变量 MULTI_CANDIDATE_EXEC_VALIDATE=true 时启用
     逐候选跑测试（成本更高但筛选更准），默认关闭走纯静态筛选。
 
+    P0 3.2 多候选自适应触发（MULTI_CANDIDATE_TRIGGER_STRATEGY）：
+    - adaptive（默认）：仅当 iteration >= 1（首次修复已失败）且
+      error_category ∈ {assertion, runtime, logic_error, index_error}
+      时启用多候选；简单任务 / 早期迭代保持单候选，省 Token。
+    - always：历史口径，每次失败都启用多候选。
+
     Args:
         state: 当前工作流状态（含 target_code / generated_test / failed_cases /
             target_function / module_name 等字段）。
         original_code: 本轮修复的原始被测代码。
+        iteration: 当前迭代轮次（从 0 开始），供自适应触发判断。
 
     Returns:
         (最优候选应用后的代码, 是否成功应用, update dict 含 multi_candidate_stats)。
         回退单补丁时与原 apply_patch_to_code 同口径。
     """
+    # P0 3.2 多候选自适应触发（MULTI_CANDIDATE_TRIGGER_STRATEGY=adaptive 时，
+    # 仅当"首次修复已失败（iteration >= 1）且错误类型 ∈ 困难类别"才启用；
+    # 否则回退单候选，避免简单任务 +79% Token 的无收益成本）
+    strategy = os.getenv("MULTI_CANDIDATE_TRIGGER_STRATEGY", "adaptive").strip().lower()
+    if strategy == "adaptive":
+        error_category = state.get("error_category") or "unknown"
+        if iteration < 1 or error_category not in _HARD_ERROR_CATEGORIES:
+            logger.info(
+                "P0 3.2 多候选自适应触发：iteration=%d error_category=%s 不满足启用条件"
+                "（iteration>=1 且 category∈%s），回退单候选",
+                iteration,
+                error_category,
+                _HARD_ERROR_CATEGORIES,
+            )
+            # 回退单候选路径（与 else 分支同口径）
+            new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
+            update: dict[str, Any] = {
+                "multi_candidate_stats": {
+                    "candidates": 1,
+                    "static_passed": 1 if applied else 0,
+                    "exec_validated": False,
+                    "selected": 0 if applied else None,
+                    "adaptive_skipped": True,
+                    "skip_reason": f"iteration={iteration},category={error_category}",
+                }
+            }
+            return new_code, applied, update
+
     n = multi_candidate_count()
     debugger = DebuggerAgent()
     candidates = generate_candidates(
@@ -929,9 +1037,23 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             fallback_files, applied = cross_file_fallback_single_file(original_files, patches, entry_module)
             new_code = fallback_files.get(entry_module, original_code)
     elif multi_candidate_available():
-        new_code, applied, multi_candidate_update = _select_multi_candidate_patch(state, original_code)
+        new_code, applied, multi_candidate_update = _select_multi_candidate_patch(
+            state, original_code, iteration=state.get("iteration", 0)
+        )
     else:
         new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
+
+    # P0 1.3 命名契约检查：补丁应用前对比修改前后的模块级符号集合
+    # （函数/类/__all__/注册装饰器/插件入口点），缺失任何原符号则拒绝应用。
+    # 开关 PATCH_CONTRACT_CHECK（默认 true）；设 false 回退历史口径。
+    if applied and new_code != original_code:
+        from src.tools.patch_applier import check_naming_contract
+
+        ok, missing = check_naming_contract(original_code, new_code)
+        if not ok:
+            logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
+            applied = False
+            new_code = original_code
 
     # 默认视为"未真正写盘"，任何安全检查失败都保持该值
     written = _safe_write_patch(original_code, new_code, applied, state)

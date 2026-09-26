@@ -162,17 +162,28 @@ class TraceSession:
         """向 JSONL 追加一条记录（锁内追加，失败仅 warning 不抛出）。"""
         if not self._enabled or self._file_path is None:
             return
-        # 敏感信息脱敏（与日志口径一致）：追踪文件同样不得落凭证
+        # 敏感信息脱敏（与日志口径一致）：追踪文件同样不得落凭证。
         # 摘要口径收敛（0.10）：task_start 的 meta 已在构造时逐值 _summarize，
         # record_node 的 output 与 task_end 的 extra 亦在入口处摘要——
         # 此处不再二次摘要 meta（旧版浅拷贝 + 重建 meta dict 是冗余深处理），
         # 记录对象本身只读序列化，无副作用。
+        # 异常路径拆分（此前 except 同时吞 json.dumps 失败与脱敏 import 失败，
+        # 记录静默丢弃且无任何告警——观测层失败应可察觉）：序列化失败即丢弃
+        # 本条（记 warning），脱敏 import 失败则降级原样写入（不阻断主流程）。
+        try:
+            line = json.dumps(record, ensure_ascii=False, default=str)
+        except Exception as e:
+            # 自定义对象 __str__ 抛异常等场景：记录无法序列化，记 warning 后放弃
+            logger.warning("追踪记录序列化失败（丢弃本条）: %s", e)
+            return
         try:
             from src.utils.logging_utils import mask_sensitive_info
 
-            line = mask_sensitive_info(json.dumps(record, ensure_ascii=False, default=str))
+            line = mask_sensitive_info(line)
         except Exception:
-            line = json.dumps(record, ensure_ascii=False, default=str)
+            # 脱敏不可用（理论上不会：纯标准库模块）时原样写入，
+            # 不阻断观测层主流程（与 logging_utils 三级降级末档同口径）
+            pass
         lock = self._lock_for(self._file_path)
         try:
             with lock, open(self._file_path, "a", encoding="utf-8") as f:

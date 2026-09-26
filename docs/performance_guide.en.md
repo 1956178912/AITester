@@ -3,7 +3,7 @@
 # AITester Performance Tuning Guide
 
 > This document describes AITester's performance optimization mechanisms, configuration methods, and common troubleshooting.
-> Last updated: 2026-09-16 (added sections on 4.3 Docker isolated execution / 4.4 dependency cache)
+> Last updated: 2026-09-26 (full-review & conservative-optimization round: §10.5 credential-stripping P0 hardening — numbered-variant wildcards + provider intermediate vars, coupled with `config_generator` `PROVIDER_TEMPLATES` keys; the 2026-09-25 0.10 deep-review round (negative-cache TTL / path-whitelist root normalization / trace summary elimination / stat no-rescan) and 0.9 LRU fast-path are in §7.3)
 
 ---
 
@@ -555,3 +555,92 @@ In all three modes (local / venv / Docker), ExecutorAgent strips LLM API credent
 All three paths funnel through `scrub_os_environ()` in `src/utils/credential_scrub.py` (single implementation, no list drift):
 - **Dynamic pattern**: `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` (N = 1-32, aligned with the LLM-provider scan range in `config.py`) — covers every numbered provider such as `LLM_1_API_KEY`. Previously the venv/Docker paths inherited the host `os.environ` verbatim and the local path popped only 7 hard-coded vars (missing the `LLM_N_*` family); now scrubbed dynamically across all three.
 - **Common SDK credentials (fixed list, historical)**: `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`.
+- **P0 hardening (2026-09-26 review round)**: the fixed names anchored to the full string (`^OPENAI_API_KEY$`) missed the multi-endpoint numbered naming actually present in `.env` (`OPENAI_API_KEY_2/3`, `OPENAI_BASE_URL_2/3`), so those credentials reached the code-under-test subprocess verbatim (an execution vector + leak surface). Now widened with numbered-variant wildcards `OPENAI_(API_KEY|BASE_URL)_\d+` plus provider intermediate vars (`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`, keys coupled with `PROVIDER_TEMPLATES` in `config_generator.py` to prevent list drift), covering the batch-script derivation surface.
+
+## 11. SWE-bench repo-level verification venv isolation (P1, 2026-09-25)
+
+### 11.1 Background: cross-commit global-python pollution
+
+RepoExecutor (`src/agents/executor_repo.py`) caches repo environments by
+`(repo, commit12)`. All repo_envs share the global `sys.executable` by
+default; after `pip install -e .`, the global site-packages editable install
+(`.pth` / `__editable__.sqlfluff-0.9.1.pth`) points at the "most recently
+installed" commit's source. When running pytest on a cross-commit task,
+`import <repo_pkg>` resolves to the wrong version:
+
+- Measured with sqlfluff: the `BaseSegment._log_apply_fixes_check_issue`
+  method exists at commit `8e724ef` but not at commit `38cff664`
+  (renamed/removed). When global python points at `38cff664`, running
+  conftest on the `8e724ef` env that references the old method →
+  `AttributeError`, unrelated to the LLM patch.
+- Same class: `ImportError while loading conftest` (an old commit's
+  conftest fails to import under a newer commit's dependencies).
+
+**This is one of the environment-layer root causes behind the 184622-round
+SWE-bench 0/20 being misdiagnosed as "LLM engine cannot produce
+applicable patches"** (the other layer is the difflib corrupt diff, see
+§11.3).
+
+### 11.2 venv isolation approach (`SWE_REPO_VENV_ISOLATION=true`, default off)
+
+Build an independent venv beside each commit environment:
+
+- `RepoExecutor._create_venv(env_dir)`: `python -m venv` inside
+  `<env_dir>/venv/`; cache-hit detection via the `.venv_pip_installed`
+  marker (distinct from global-mode `.pip_installed`).
+- `RepoExecutor._venv_pip_install(repo_dir, env_dir)`:
+  `<venv>/bin/python -m pip install -e .` (deps into the venv, no global
+  pollution).
+- `_run_test_nodes`: pytest runs with `<venv>/bin/python`; in venv mode
+  **no host PYTHONPATH injection** (measured: injecting it actually
+  produces ImportError — the editable install's `.pth` already puts this
+  commit's src into the venv site-packages, and the host PYTHONPATH
+  mixes other-commit paths into the search order, breaking isolation);
+  `PATH` prepends `<venv>/bin` (so subprocess-internal python/pip calls
+  point at the venv rather than falling back to the host).
+- Global mode (`SWE_REPO_VENV_ISOLATION=false`, default): all repo_envs
+  share the global python; `PYTHONPATH` puts `<repo>/src` first (so the
+  current commit's source takes precedence over the global editable
+  install), preserving compatibility with cached repo_envs (the
+  `.pip_installed` marker).
+
+```bash
+# Repo-level SWE-bench verification + venv isolation (P1 calibration)
+REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
+  SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10 --baselines aiterster
+```
+
+### 11.3 Patch-pipeline fix (difflib corrupt diff → git diff --no-index)
+
+The other layer of root cause behind 184622's all-False `llm_applied`:
+`_diff_codes` originally hand-joined with `difflib.unified_diff`; in the
+"LLM whole-file rewrite" scenario (where old and new line counts differ
+widely), the produced diff's line counts disagree with git's parser, and
+`git apply --check` reports `corrupt patch` — 5/5 non-empty LLM patches
+were rejected.
+
+Fix: `_diff_codes` now uses `git diff --no-index` (comparing two
+worktree files `original` and `modified` inside a minimal git repo),
+producing a unified diff with strictly correct line-count / trailing-newline
+semantics; the `--- / +++` headers are rewritten to the gold target file's
+repo path (`_extract_gold_target_relpath` takes the first non-test source
+file's b/ side path from the official gold patch). After the fix, 5/5
+non-empty LLM patches pass `git apply` cleanly.
+
+### 11.4 Impact on experiment performance
+
+- **Increased first-setup cost**: each commit env adds one
+  `python -m venv` (~2-5s) + an in-venv `pip install -e .` (~30-90s,
+  including dependency installation). Same-repo multi-task setups happen
+  only once (cache reuse), so the per-task increment after amortization is
+  negligible.
+- **Verification-stage speedup**: venv isolation eliminates the false
+  failures from cross-commit pollution (conftest ImportError);
+  FAIL_TO_PASS runs straight to the functional-assertion layer without
+  re-running to rule out environment pollution, and single-task verify
+  time is stable (measured sqlfluff single-node FAIL_TO_PASS ~1-3s).
+- **Disk cost**: ~200-500MB per commit venv (deps installed into the
+  venv's site-packages), 20 commits ~4-10GB. Point `SWE_REPO_ENVS_DIR`
+  at a larger disk; clean up with
+  `rm -rf <SWE_REPO_ENVS_DIR>/sqlfluff/<commit>`.

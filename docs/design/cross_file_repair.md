@@ -7,6 +7,33 @@
 > 关联清单：改进清单 3.5
 > 前置依赖：3.1 多候选补丁（`multi_candidate.py` 已落地）
 
+## 0. P1 跨文件真实数据验证可行性判断（2026-09-25）
+
+SWE-bench 仓库级验证（P0/P1，`RepoExecutor`）落地后，跨文件任务
+（13/20 lite 任务为多源文件）的 A/B 收益验证前置条件已明确：
+
+- **管道与环境已修通**：`_diff_codes` 改用 `git diff --no-index` 生成可应用
+  unified diff；RepoExecutor venv 隔离（`SWE_REPO_VENV_ISOLATION=true`）
+  解决跨 commit 全局 python 环境污染。LLM 补丁可正确 `git apply` 进真实
+  仓库路径。
+- **引擎能力边界（未突破）**：P1 单源任务诊断（7 个单源任务 0/7）显示
+  免费档小模型对真实仓库级代码的修复质量不足——5/7 LLM 重写破坏
+  sqlfluff 插件命名契约（`Rule_L*` 类名改坏 → 整个 import 链崩溃），
+  2/7 LLM 空补丁。跨文件任务的 gold patch 跨多源文件（如
+  `commands.py` + `click_deprecated_option.py`），单模块 `instance_code`
+  视角根本无法覆盖；跨文件分析器（`cross_file_analyzer`）做 AST 依赖
+  分析也需仓库全量源码上下文，而非 enrichment 注入的单文件 `instance_code`。
+- **可行性判断**：跨文件 A/B（ON vs OFF）在引擎能力突破前**无正向信息量**
+  （ON/OFF 都会 0/N）。跨文件收益验证需在 **更强模型 + 仓库全量源码上下文**
+  下重做（enrichment 注入仓库全量源码而非单文件 + 跨文件分析器接入仓库
+  全量 import 依赖图 + 协调器-提议者对真实多文件 gold patch 产出修复计划）。
+- **当前定位**：跨文件架构（协调器-提议者、多文件补丁应用、拓扑序、
+  修复计划缓存）已实现并经单元测试验证（`test_cross_file.py` 39 用例）；
+  真实数据收益作为"已识别的架构 + 引擎能力边界"如实陈述，不强行跑
+  0/N 的无信息量 A/B。
+
+详见 [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7.4。
+
 ## 1. 背景与目标
 
 ### 1.1 现状

@@ -45,6 +45,13 @@ class ErrorCategory(Enum):
         LLM_FORMAT_ERROR: LLM 响应格式异常（JSON 解析失败、响应被
             截断、空响应）（1.2 残余细化：此前归入 UNKNOWN，占失败
             样本 75%，见 docs/failure_analysis.md）
+        LLM_EMPTY_RESPONSE: P0 4.1 子类——LLM 返回空响应（空字符串 /
+            纯空白），修复策略：用更严格 prompt 重新请求（响应格式
+            重试），而非通用 LLM 兜底
+        LLM_JSON_PARSE_FAILED: P0 4.1 子类——LLM 响应非空但 JSON
+            解析失败（markdown 包裹 / 截断 / 格式错乱），修复策略：
+            记录原始响应片段到 failure_knowledge_base.json，Debugger
+            用更严格的 JSON 输出约束重新请求
         IMPORT_ERROR: 模块导入失败（ModuleNotFoundError/ImportError），
             通常缺第三方依赖或模块路径错误（P2 细化：从 SYNTAX 拆出）
         SYNTAX: 语法/编译错误，如 SyntaxError、IndentationError
@@ -75,6 +82,9 @@ class ErrorCategory(Enum):
     """
 
     LLM_FORMAT_ERROR = "llm_format_error"
+    # P0 4.1 子类（LLM_FORMAT_ERROR 的两个精确子类）
+    LLM_EMPTY_RESPONSE = "llm_empty_response"
+    LLM_JSON_PARSE_FAILED = "llm_json_parse_failed"
     IMPORT_ERROR = "import_error"
     SYNTAX = "syntax"
     TYPE_ERROR = "type_error"
@@ -400,6 +410,52 @@ class ErrorClassifier:
         """
         return bool(_RE_INDEX_ERROR.search(text))
 
+    # P0 4.1 子类拆分：LLM_FORMAT_ERROR 进一步细分为空响应 / JSON 解析失败
+    _RE_LLM_EMPTY_RESPONSE = re.compile(
+        r"empty response|响应为空|空响应|response.*empty|empty.*response", re.IGNORECASE
+    )
+    _RE_LLM_JSON_PARSE_FAILED = re.compile(
+        r"JSONDecodeError|Expecting value|Could not find complete JSON|JSON.*解析失败|解析.*JSON.*失败|JSON.*parse.*fail",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def classify_llm_response(cls, raw_response: str) -> ErrorCategory:
+        """P0 4.1：将 LLM 原始响应直接分类为空响应 / JSON 解析失败 / 格式正常。
+
+        与 classify()（基于 pytest 文本）不同，本方法在 Debugger 收到
+        LLM 响应后、JSON 解析前调用，把"LLM 响应格式异常"从 UNKNOWN 拆
+        为两个精确子类（占失败样本 75% 的 UNKNOWN 根因之一）：
+        - 空响应（strip 后为空 / 纯空白）→ LLM_EMPTY_RESPONSE
+        - 非空但 JSON 提取失败（_try_extract_json 抛异常）→ LLM_JSON_PARSE_FAILED
+        - 正常解析成功 → LLM_FORMAT_ERROR（保留语义：格式异常大类）
+
+        Args:
+            raw_response: LLM 原始响应文本。
+
+        Returns:
+            对应的 ErrorCategory 枚举值。
+        """
+        # 空响应检测（P0 4.1 LLM_EMPTY_RESPONSE 子类）
+        if not raw_response or not raw_response.strip():
+            return ErrorCategory.LLM_EMPTY_RESPONSE
+        # 非空响应：尝试 JSON 提取
+        try:
+            # 提取 JSON 对象（含 markdown 包裹 / 前后自然语言容忍）
+            from src.utils.helpers import extract_json_object
+
+            extracted = extract_json_object(raw_response)
+            if extracted is None:
+                # 非空但无法提取 JSON → JSON 解析失败
+                return ErrorCategory.LLM_JSON_PARSE_FAILED
+            # 提取成功但内容异常（空 dict）仍视为格式问题
+            if isinstance(extracted, dict) and not extracted:
+                return ErrorCategory.LLM_JSON_PARSE_FAILED
+        except Exception:
+            return ErrorCategory.LLM_JSON_PARSE_FAILED
+        # 正常响应
+        return ErrorCategory.LLM_FORMAT_ERROR
+
     @staticmethod
     def _is_llm_format_error(text: str) -> bool:
         """检查是否为 LLM 响应格式异常（1.2 残余细化）。
@@ -547,6 +603,22 @@ _FIX_STRATEGIES: dict[ErrorCategory, str] = {
         "请重新请求 LLM 生成合规响应；若响应内含 JSON 但被 markdown 代码块"
         "包裹，先剥离代码块标记再解析；若响应被截断，降低单次输出长度或"
         "分段请求。不要将格式异常误判为代码逻辑 bug。"
+    ),
+    # P0 4.1 子类：LLM 空响应（占 UNKNOWN 75% 的根因之一）
+    ErrorCategory.LLM_EMPTY_RESPONSE: (
+        "检测到 LLM 空响应（返回内容为空字符串或纯空白）。"
+        "可能原因：API 端点故障、prompt 超长被截断为空白、或模型拒绝响应。"
+        "修复策略：用更严格的 prompt 重新请求（明确 JSON 输出格式约束），"
+        "降低上下文长度，或在响应为空时自动重试一次。"
+        "不要将空响应误判为代码逻辑 bug。"
+    ),
+    # P0 4.1 子类：LLM JSON 解析失败（占 UNKNOWN 75% 的根因之一）
+    ErrorCategory.LLM_JSON_PARSE_FAILED: (
+        "检测到 LLM 响应非空但 JSON 解析失败（markdown 包裹 / 截断 / 格式错乱）。"
+        "修复策略：记录原始响应片段到 failure_knowledge_base.json，"
+        "用更严格的 JSON 输出约束重新请求（'只输出 JSON，不要输出任何其他文本'），"
+        "放宽 JSON 提取容忍度（剥离 markdown 代码块、截取首个 { 到最后一个 }）。"
+        "不要将格式异常误判为代码逻辑 bug。"
     ),
     # INDEX_ERROR：索引越界的专属策略（1.2 残余细化：从 RUNTIME 拆出）
     ErrorCategory.INDEX_ERROR: (

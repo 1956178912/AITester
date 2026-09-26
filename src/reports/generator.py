@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+import threading
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -68,6 +69,9 @@ class ErrorReport:
 
     def to_dict(self) -> dict[str, Any]:
         """将报告转换为字典格式。"""
+        # ErrorContext 经 asdict 显式序列化（2026-09-26 全面审查：原
+        # error_context.__dict__ 直接内省——dataclass 未来加内部字段/
+        # __slots__ 会无声改变 schema，与 nodes.py cross_file_deps 同型问题）
         return {
             "task_id": self.task_id,
             "target_file": self.target_file,
@@ -75,7 +79,7 @@ class ErrorReport:
             "error_category": self.error_category.value,
             "error_subtype": self.error_subtype,
             "error_message": self.error_message,
-            "error_context": self.error_context.__dict__ if self.error_context else None,
+            "error_context": asdict(self.error_context) if self.error_context else None,
             "root_cause": self.root_cause,
             "suggested_fix": self.suggested_fix,
             "failed_cases": self.failed_cases,
@@ -376,18 +380,38 @@ class ReportGenerator:
         cases: list[dict[str, Any]] = []
         lines = error_output.split("\n")
 
+        # 2026-09-26 全面审查（P2 正确性）：此前匹配条件 `"FAILED" in line
+        # and "[" in line` 漏掉现代 pytest 的短输出格式（无方括号的
+        # `FAILED test_x.py::test_y - AssertionError`）；`"Error" in line`
+        # 过宽（任何含 "Error" 的行都覆盖 error 字段）。现改为按 pytest
+        # 实际输出模式匹配，兼容以下三种主流格式：
+        #   - 带后缀：`FAILED tests/a.py::test_one [E]` / `[F]`（用例名取
+        #     FAILED 行内首个 token）
+        #   - 短格式（-q/--tb=no）：`FAILED tests/x.py::test_y - AssertionError`
+        #     （用例名 + 行内错误后缀一次提取）
+        #   - 裸 FAILED 行（无用例名）：name 兜底 "unknown"（历史行为保持）
+        _FAILED_TOKEN_RE = re.compile(r"FAILED\s+([^\s\[\]@]+)")
+        _ERROR_SUFFIX_RE = re.compile(r"\s+-\s+(.*Error.*)$")
+        _ERROR_LINE_RE = re.compile(r"^\s*(E\s+)?\w*(Error|Exception)\b")
+
         current_case: dict[str, str] = {}
         for line in lines:
-            # 匹配 FAILED 测试用例
-            if "FAILED" in line and "[" in line:
+            if "FAILED" in line:
                 if current_case:
                     cases.append(current_case)
-                # 提取用例名
-                match = re.search(r"FAILED\s+(\S+)", line)
-                current_case = {"name": match.group(1)} if match else {"name": "unknown"}
-            # 匹配错误详情
-            elif current_case and ("AssertionError" in line or "Error" in line):
-                current_case["error"] = line.strip()
+                token_m = _FAILED_TOKEN_RE.search(line)
+                # 行内错误后缀（短格式 ` - AssertionError: ...`），先剥离再
+                # 取用例名（防后缀 token 混入 name）
+                suffix_m = _ERROR_SUFFIX_RE.search(line)
+                error_suffix = suffix_m.group(1).strip() if suffix_m else ""
+                current_case = {"name": token_m.group(1)} if token_m else {"name": "unknown"}
+                if error_suffix:
+                    current_case["error"] = error_suffix
+            elif current_case and "error" not in current_case:
+                # 详细格式：FAILED 行后的第一行异常（E AssertionError: ... /
+                # AssertionError: ...）作为错误详情
+                if _ERROR_LINE_RE.match(line):
+                    current_case["error"] = line.strip()
 
         if current_case:
             cases.append(current_case)
@@ -589,16 +613,22 @@ _FIX_SUGGESTION_MAP: dict[ErrorCategory, list[str]] = {
 
 # 模块级单例
 _report_generator: ReportGenerator | None = None
+# 单例双检锁（2026-09-26 全面审查）：--parallel 下路由线程首次并发调用
+# get_report_generator 时，无锁 check-then-act 会各建一个 ReportGenerator
+# （每个各建一个 ErrorClassifier 实例）。纯内存构造，持锁微秒级。
+_singleton_lock = threading.Lock()
 
 
 def get_report_generator() -> ReportGenerator:
     """
-    获取报告生成器单例。
+    获取报告生成器单例（线程安全，双检锁）。
 
     Returns:
         ReportGenerator: 报告生成器实例
     """
     global _report_generator
     if _report_generator is None:
-        _report_generator = ReportGenerator()
+        with _singleton_lock:
+            if _report_generator is None:
+                _report_generator = ReportGenerator()
     return _report_generator

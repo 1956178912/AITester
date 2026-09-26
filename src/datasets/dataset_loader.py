@@ -122,12 +122,41 @@ class BaseDatasetLoader(ABC):
         self.data_dir = data_dir or os.path.join(self.DEFAULT_CACHE_DIR, self.DATASET_NAME)
         self._tasks: list[BenchmarkTask] = []
         self._loaded = False
+        # task_id 索引（2026-09-26 全面审查：get_task_by_id 由 O(n) 线性扫描
+        # 降为 O(1) 查表——SWE-bench full 2294 任务 × benchmark 循环逐查
+        # 原为 O(n²)）。懒建：_ensure_loaded 加载完成后构建一次；任务列表
+        # 运行时新增（InMemoryDataset.add_task）时由调用方自行重建（见下）。
+        self._task_index: dict[str, BenchmarkTask] = {}
+        self._index_size = 0  # 索引对应的 _tasks 长度（惰性失效判断，O(1)）
 
     def _ensure_loaded(self) -> None:
         """确保数据已加载（惰性加载模式）。"""
         if not self._loaded:
             self._load_raw_data()
             self._loaded = True
+            # 加载完成后重建 task_id 索引（全量一次，O(n)）
+            self._rebuild_task_index()
+
+    def _rebuild_task_index(self) -> None:
+        """全量重建 task_id 索引（_load_raw_data 完成后 / 索引失效时调用）。"""
+        self._task_index = {t.task_id: t for t in self._tasks}
+        self._index_size = len(self._tasks)
+
+    def _rebuild_task_index_if_stale(self) -> None:
+        """按需重建索引：_tasks 长度与索引记录不一致（外部直接
+        _load_raw_data + _loaded=True 绕过、或 add_task 追加）时重建
+        （O(n) 一次，后续 O(1)；正常 _ensure_loaded 路径长度一致，O(1) 短路）。"""
+        if len(self._tasks) != self._index_size:
+            self._rebuild_task_index()
+
+    def add_task(self, task: BenchmarkTask) -> None:
+        """向数据集追加任务（InMemoryDataset / 外部动态扩展）。
+
+        2026-09-26 全面审查：原 InMemoryDataset.add_task 直接 append
+        （无索引维护），现统一在基类实现——追加后 _tasks 长度变化，
+        下次 get_task_by_id 时经 _rebuild_task_index_if_stale 惰性重建索引。
+        """
+        self._tasks.append(task)
 
     @property
     def tasks(self) -> list[BenchmarkTask]:
@@ -163,7 +192,8 @@ class BaseDatasetLoader(ABC):
 
     def get_task_by_id(self, task_id: str) -> BenchmarkTask | None:
         """
-        按 task_id 查找任务。
+        按 task_id 查找任务（O(1) 查表，2026-09-26 全面审查：原 O(n) 线性扫描
+        在 SWE-bench full 2294 任务 × benchmark 循环逐查场景下为 O(n²)）。
 
         Args:
             task_id: 任务唯一标识。
@@ -172,10 +202,8 @@ class BaseDatasetLoader(ABC):
             匹配的任务对象，未找到时返回 None。
         """
         self._ensure_loaded()
-        for task in self._tasks:
-            if task.task_id == task_id:
-                return task
-        return None
+        self._rebuild_task_index_if_stale()
+        return self._task_index.get(task_id)
 
     def filter_by_repo(self, repo_pattern: str) -> list[BenchmarkTask]:
         """
@@ -451,6 +479,31 @@ class SWEBenchDataset(BaseDatasetLoader):
 
         logger.info("SWE-bench 加载完成：%d 个任务", loaded)
 
+    @staticmethod
+    def _parse_swe_test_list(value: Any) -> list[str]:
+        """解析 SWE-bench 官方 JSONL 的测试节点列表字段。
+
+        官方格式：JSON 编码的字符串（'["test_a.py::t1", "test_b.py::t2"]'）；
+        兼容已是 list 的自定义 JSONL。解析失败/类型不符 → 空 list（路由
+        条件永不命中，历史口径零变化）。
+
+        Args:
+            value: FAIL_TO_PASS / PASS_TO_PASS 字段原始值。
+
+        Returns:
+            测试节点字符串列表（可能为空）。
+        """
+        if isinstance(value, list):
+            return [str(item) for item in value if item]
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed if item]
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("测试节点列表解析失败（按空处理）: %s...", value[:80])
+        return []
+
     def _build_task_from_swe_row(
         self, data: dict[str, Any], enrichment: dict[str, dict[str, Any]], fallback_task_id: str
     ) -> BenchmarkTask | None:
@@ -515,6 +568,20 @@ class SWEBenchDataset(BaseDatasetLoader):
                 # 2.1 数据污染检测：保留官方黄金补丁文本（供
                 # experiments/contamination_check 计算重叠度，不直接暴露给 LLM）
                 "golden_patch": data.get("patch", ""),
+                # P0 仓库级验证（REPO_LEVEL_EXECUTION=true 时经 run_benchmark
+                # 路由到 RepoExecutor）：gold 验证口径所需元数据。
+                # repo_url 由 repo 路径（org/name）构造 GitHub URL；
+                # fail_to_pass / pass_to_pass 为官方 JSONL 的测试节点列表
+                # （"test_x.py::test_y"）；base_commit 为官方基础 commit。
+                # 字段缺失（旧数据）时为空，路由条件永不命中，口径零变化。
+                "repo_url": f"https://github.com/{repo_name}.git" if repo_name != "unknown" else "",
+                "base_commit": data.get("base_commit", ""),
+                # 官方 JSONL 的 FAIL_TO_PASS / PASS_TO_PASS 是 JSON 编码的
+                # 字符串列表（'["a::b", "c::d"]'），解析为 list；解析失败
+                # （非 list）时兜底空 list（路由条件永不命中，口径零变化）。
+                "fail_to_pass": self._parse_swe_test_list(data.get("FAIL_TO_PASS", "")),
+                "pass_to_pass": self._parse_swe_test_list(data.get("PASS_TO_PASS", "")),
+                "test_patch": data.get("test_patch", "") or "",
             },
         )
 

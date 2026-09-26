@@ -173,6 +173,22 @@ class AITesterState(TypedDict, total=False):
     # 3.5 跨文件修复计划（CROSS_FILE_ENABLE=true 时由 cross_file_analyzer 节点写入）
     cross_file_deps: list[dict[str, Any]] | None
     cross_file_plan: dict[str, Any] | None
+    # P0 1.1 分层代码压缩（跨文件调用链上下文）：CROSS_FILE_ENABLE=true 且
+    # 存在依赖边时由 cross_file_analyzer 节点写入：{module_name: focused_code}
+    # （extract_function_context 按 CODE_FOCUS_DEPTH 层调用链截取，替代整模块
+    # 全文注入 prompt）；None = 单文件任务 / 未启用跨文件
+    cross_file_contexts: dict[str, str] | None
+    # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
+    # run_benchmark 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，
+    # 写入 state 供 LLM 调用路径选择对应档位 LLM 实例。
+    # complexity_class: "simple" | "medium" | "complex"（routing_enabled() 时）
+    # complexity_score: [0, 1] 综合分数
+    # complexity_breakdown: 各维度归一化分量
+    # routing_hints: {"max_candidates", "extra_iteration", "context_budget", "hint_text"}
+    complexity_class: str | None
+    complexity_score: float | None
+    complexity_breakdown: dict[str, Any] | None
+    routing_hints: dict[str, Any] | None
     # 1.2 变异反馈闭环（MutGen 式）：上一轮变异测试的存活变异体信息
     # {survived_mutants: list[str], mutation_score: float}
     # 由 run_benchmark 变异评估后写入，Generator 再生成时消费；None 表示无反馈
@@ -196,6 +212,11 @@ class AITesterState(TypedDict, total=False):
     # 2.3 复现测试专项生成结果（REPRO_TEST_ENABLE=true 时由 generator 节点写入）：
     # 覆盖缺陷触发路径的复现测试代码（先失败后通过）
     repro_test: str | None
+    # P0 仓库级验证结果（REPO_LEVEL_EXECUTION=true 时由 run_benchmark 写入）：
+    # 仓库环境内 gold 测试实测的 {passed, fail_to_pass, pass_to_pass, ...} 汇总；
+    # 2026-09-26 全面审查：此前由 benchmark 在 invoke 后 set 到 final_state 但
+    # 未声明于 TypedDict（守护测试 test_state_schema_guard 会漏报），现显式声明
+    repo_verification: dict[str, Any] | None
 
 
 def create_initial_state(
@@ -274,6 +295,13 @@ def create_initial_state(
         # 3.5 跨文件修复计划
         cross_file_deps=None,
         cross_file_plan=None,
+        # P0 1.1 跨文件调用链上下文（由 cross_file_analyzer 节点按需写入）
+        cross_file_contexts=None,
+        # P0 1.2 复杂度感知路由（routing_enabled() 时由 run_benchmark 写入）
+        complexity_class=None,
+        complexity_score=None,
+        complexity_breakdown=None,
+        routing_hints=None,
         # 1.2 变异反馈闭环（默认 None，由 run_benchmark 变异评估后注入）
         mutation_feedback=None,
         # 5.2 多候选补丁统计（默认 None，启用多候选时由 patch_applier 节点写入）
@@ -287,4 +315,7 @@ def create_initial_state(
         repro_test=None,
         # 3.3 位置感知修复定位结果（默认 None，启用时由 debugger 节点写入）
         position_aware_focus=None,
+        # P0 仓库级验证结果（默认 None，REPO_LEVEL_EXECUTION=true 时由
+        # run_benchmark 在 invoke 后写入；2026-09-26 全面审查补声明）
+        repo_verification=None,
     )

@@ -37,6 +37,7 @@ import shutil
 import sys
 import tempfile
 import time
+import zlib
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -59,6 +60,13 @@ from config import (  # noqa: E402
     LLM_RETRY_WAIT,
     MAX_ITERATIONS,
     MUTATION_MAX_MUTANTS,
+    REPO_LEVEL_EXECUTION,
+    SWE_REPO_SETUP_TIMEOUT,
+)
+from src.api.complexity_router import (  # noqa: E402
+    complexity_class_to_routing_hints,
+    compute_complexity_score,
+    routing_enabled,
 )
 from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
@@ -287,20 +295,35 @@ def run_single_agent_baseline(
 
             new_code, applied = apply_patch_to_code(state["target_code"], fix_code)
             if applied:
-                state["target_code"] = new_code
-                # 写回文件并重试
-                with open(state["target_file"], "w", encoding="utf-8") as f:
-                    f.write(new_code)
-                retry_result = executor.execute(
-                    test_code=test_code,
-                    target_file=state["target_file"],
-                    target_function=state.get("target_function"),
-                )
-                state["test_passed"] = retry_result["passed"]
-                state["test_output"] = retry_result["output"]
-                state["coverage_report"] = retry_result["coverage"]
-                state["failed_cases"] = retry_result["failed_cases"]
-                state["iteration"] = 1
+                # 2026-09-26 全面审查（P0 数据完整性）：single_agent 基线
+                # 此前直接 open("w") 写 LLM 输出的 new_code，绕过
+                # _patch_applier_node 的安全检查——LLM 返回空壳/过短代码时
+                # 会把被测实例文件清空，后续基线/重试拿到空代码。
+                # 现补最小守卫：非空（≥ 原代码 10%）+ 函数定义数不减少
+                # （与工作流 _patch_applier_node 安全检查口径一致）。
+                import re
+
+                _n_orig_defs = len(re.findall(r"^\s*def \w+", state["target_code"], re.M))
+                _n_new_defs = len(re.findall(r"^\s*def \w+", new_code, re.M))
+                if len(new_code) >= max(1, len(state["target_code"]) // 10) and _n_new_defs >= _n_orig_defs:
+                    state["target_code"] = new_code
+                    # 安全检查通过，写回文件并重试
+                    with open(state["target_file"], "w", encoding="utf-8") as f:
+                        f.write(new_code)
+                    retry_result = executor.execute(
+                        test_code=test_code,
+                        target_file=state["target_file"],
+                        target_function=state.get("target_function"),
+                    )
+                    state["test_passed"] = retry_result["passed"]
+                    state["test_output"] = retry_result["output"]
+                    state["coverage_report"] = retry_result["coverage"]
+                    state["failed_cases"] = retry_result["failed_cases"]
+                    state["iteration"] = 1
+                else:
+                    # 不安全：放弃写盘，保持原代码（与 patch_applier 拒写口径一致）
+                    logger.warning("single_agent 基线：修复代码未通过安全检查（过短/丢失函数定义），保留原代码")
+                    state["iteration"] = 1
 
     return state
 
@@ -342,6 +365,8 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         "coverage": final_state.get("coverage_report"),
         "rag_stats": final_state.get("rag_stats"),
         "token_usage": token_usage.get_usage().as_dict(),
+        # P0 仓库级验证诊断（仅 REPO_LEVEL_EXECUTION=true 且 SWE-bench 任务有）
+        "repo_verification": final_state.get("repo_verification"),
     }
     raw_dir = os.path.join(output_dir, "raw", task.task_id)
     os.makedirs(raw_dir, exist_ok=True)
@@ -483,11 +508,78 @@ def run_single_task(
             max_iterations=MAX_ITERATIONS,
         )
 
+        # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
+        # 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，写入
+        # state["complexity_class"]（"simple" | "medium" | "complex"），
+        # 供 LLM 调用路径选择对应档位的 LLM 实例。策略=fixed 时恒为 "medium"。
+        if routing_enabled():
+            num_lines = len(task.instance_code.splitlines())
+            num_files = int(task.metadata.get("num_files", 1))
+            # P0 审查修正：num_deps / cyclomatic_complexity 此前仅从
+            # task.metadata 读取，而合成数据集 / SWE-bench 官方任务从未
+            # 写入这两个键 → 永远走默认值（num_deps=0 / cc=1），评分退化为
+            # "仅按行数分档"。现按需从 instance_code 直接计算（AST 口径，
+            # 与 complexity_router.count_imports / code_analyzer 一致）。
+            try:
+                from src.api.complexity_router import count_imports
+
+                num_deps = count_imports(task.instance_code)
+            except Exception:
+                num_deps = int(task.metadata.get("num_imports", 0))
+            try:
+                import ast as _ast
+
+                _tree = _ast.parse(task.instance_code)
+
+                def _count_cc(node: _ast.AST) -> int:
+                    """圈复杂度（函数级）：1 + if/for/while/except/and/or/assert 计数。"""
+                    cc = 1
+                    for n in _ast.walk(node):
+                        if isinstance(n, (_ast.If, _ast.For, _ast.While, _ast.ExceptHandler, _ast.BoolOp, _ast.Assert)):
+                            if isinstance(n, _ast.BoolOp):
+                                cc += len(n.values) - 1
+                            else:
+                                cc += 1
+                    return cc
+
+                _funcs = [n for n in _ast.walk(_tree) if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
+                cc = max((_count_cc(f) for f in _funcs), default=1)
+            except (SyntaxError, ValueError, Exception):
+                cc = int(task.metadata.get("cyclomatic_complexity", 1))
+            score_obj = compute_complexity_score(
+                lines=num_lines,
+                num_files=num_files,
+                num_deps=num_deps,
+                cyclomatic_complexity=cc,
+            )
+            routing_hints = complexity_class_to_routing_hints(score_obj.complexity_class)
+            initial_state["complexity_class"] = score_obj.complexity_class
+            initial_state["complexity_score"] = score_obj.score
+            initial_state["complexity_breakdown"] = score_obj.breakdown
+            initial_state["routing_hints"] = routing_hints
+            logger.debug(
+                "P0 1.2 任务 %s 复杂度评分：score=%.3f class=%s (%s)",
+                task.task_id,
+                score_obj.score,
+                score_obj.complexity_class,
+                routing_hints.get("hint_text", ""),
+            )
+        else:
+            initial_state["complexity_class"] = "medium"  # 历史口径
+
         # 为每个基线分配不同的 API（轮询）
         results: dict[str, dict[str, Any]] = {}
         for _baseline_idx, baseline in enumerate(baselines):
             # 根据任务索引和基线索引分配 API
-            _set_thread_api(hash(task.task_id) % len(_VALID_APIS) if _VALID_APIS else 0)
+            # 2026-09-26 全面审查（P0 可复现性修复）：此前用内建 hash(task_id)
+            # 做轮询索引——Python 3 的 str hash 受 PYTHONHASHSEED 随机化，
+            # 同一任务在不同进程/启动间映射的 API 索引不一致，破坏
+            # "任务→API 稳定轮询"的文档承诺（基线对比不可复现）。
+            # 改用 zlib.crc32（跨进程确定性）+ 基线索引混合（保持任务内
+            # 多基线轮错开的历史行为）：(crc32(task_id) + baseline_idx) % n
+            _set_thread_api(
+                (zlib.crc32(task.task_id.encode()) + _baseline_idx) % len(_VALID_APIS) if _VALID_APIS else 0
+            )
 
             # 基线隔离：deepcopy 初始状态并重置磁盘实例文件为原始代码。
             # single_agent 基线执行中会把修复后的代码写回 target_file
@@ -522,6 +614,67 @@ def run_single_task(
             try:
                 final_state = BASELINE_REGISTRY[baseline](state)
                 elapsed = time.time() - start_time
+
+                # P0 仓库级验证路由（REPO_LEVEL_EXECUTION=true，opt-in，默认关）：
+                # SWE-bench 官方验证口径——gold test_patch 前后对比 + FAIL_TO_PASS /
+                # PASS_TO_PASS 实测。仅当任务携带 source/repo_url/base_commit/fail_to_pass
+                # 且开关打开且基线为 aitester 时启用；合成集 / examples 任务无这些
+                # 字段，永不命中，历史实验口径零变化。
+                # LLM 修复循环（工作流）照常运行产生补丁，验证从"LLM 生成测试跑
+                # pytest"切换为"仓库环境内 gold 测试实测"（官方口径优先）。
+                if (
+                    REPO_LEVEL_EXECUTION
+                    and baseline == "aitester"
+                    and task.metadata.get("source") == "swe_bench"
+                    and task.metadata.get("fail_to_pass")
+                    and task.metadata.get("repo_url")
+                    and task.metadata.get("base_commit")
+                ):
+                    import config as _cfg
+                    from src.agents.executor_repo import RepoExecutor
+
+                    executor_repo = RepoExecutor(
+                        timeout=EXECUTION_TIMEOUT,
+                        setup_timeout=SWE_REPO_SETUP_TIMEOUT,
+                        use_venv=getattr(_cfg, "SWE_REPO_VENV_ISOLATION", False),
+                    )
+                    # gold patch 首个非测试源文件路径（git diff 的 a/b 头）
+                    gold_target_rel = _extract_gold_target_relpath(task.metadata.get("golden_patch") or "")
+                    # LLM 修复补丁：工作流已把修复写回 target_file（state 的
+                    # target_code）。LLM 可能输出"完整文件重写"形态（python 包裹
+                    # 而非 diff）——_normalize_llm_patch 提取出纯代码正文后，
+                    # 按 gold 目标文件路径生成 unified diff，使
+                    # _apply_patch_robust → git apply 能映射进真实仓库。
+                    # instance_code 与 raw_patch 完全一致（LLM 未改动）→
+                    # 空补丁，FAIL_TO_PASS 按无补丁实测裁决。
+                    raw_patch = _normalize_llm_patch(final_state.get("patch") or "")
+                    llm_patch_text = ""
+                    if raw_patch and task.instance_code:
+                        llm_patch_text = _diff_codes(
+                            task.instance_code,
+                            raw_patch,
+                            fromfile=gold_target_rel,
+                            tofile=gold_target_rel,
+                        )
+                    repo_result = executor_repo.verify(
+                        repo_url=task.metadata["repo_url"],
+                        base_commit=task.metadata["base_commit"],
+                        test_patch=task.metadata.get("test_patch") or "",
+                        llm_patch=llm_patch_text,
+                        fail_to_pass=list(task.metadata["fail_to_pass"]),
+                        pass_to_pass=list(task.metadata.get("pass_to_pass") or []),
+                    )
+                    # 仓库级验证结果覆盖 LLM 生成测试的判定（官方口径优先）
+                    final_state["test_passed"] = repo_result["passed"]
+                    final_state["repo_verification"] = repo_result
+                    logger.info(
+                        "    [%s] %s 仓库级验证: passed=%s f2p=%s p2p=%s",
+                        baseline,
+                        task.task_id,
+                        repo_result["passed"],
+                        repo_result.get("fail_to_pass"),
+                        repo_result.get("pass_to_pass"),
+                    )
 
                 # 1.2 改进（MutGen 式变异反馈闭环）：workflow 结束后若启用变异
                 # 评估，把"存活变异体"写回结果行，供后续再生成/分析消费
@@ -593,6 +746,136 @@ def run_single_task(
     finally:
         # 清理临时目录
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _diff_codes(original: str, fixed: str, fromfile: str, tofile: str) -> str:
+    """生成 original → fixed 的 unified diff（RepoExecutor LLM 补丁输入）。
+
+    fromfile/tofile 为 git apply 用的目标路径名（git diff 的 a/ b/ 头），
+    LLM 补丁经 _apply_patch_robust → git apply 应用进仓库工作区；路径
+    对不上（fromfile ≠ 仓库真实文件路径）时 git apply 拒绝，RepoExecutor
+    记 llm_patch_applied=False，FAIL_TO_PASS 实测裁决（不误判通过）。
+
+    实现：`git diff --no-index` 在两个临时文件（git 仓库内）上运行，
+    产出的 unified diff 行计数 / 尾部换行语义严格正确（difflib
+    手工拼接在"整文件替换"场景会产生行计数与 git 解析器不符的损坏
+    补丁，已实测），且 `--- / +++` 头被替换为真实仓库路径；git 不可用
+    或仓库缺失时退回 difflib。两串相同（LLM 未修复或修复为空）时
+    返回空串，RepoExecutor 按"无补丁"处理（FAIL_TO_PASS 实测基线，
+    不通过即如实判定）。
+    """
+    if original == fixed:
+        return ""
+    import difflib
+    import subprocess as _sp
+    import tempfile as _tf
+
+    # 在一个最小 git 仓库内跑 git diff --no-index（无仓库时 git 可能
+    # 拒绝 --no-index，或产出相对路径头；git 头在下方被显式重写为
+    # 真实仓库路径，产物不受仓库内相对路径影响）
+    _tmp = _tf.mkdtemp(prefix="aitester_diff_")
+    try:
+        _repo = os.path.join(_tmp, "repo")
+        os.makedirs(_repo, exist_ok=True)
+        _orig = os.path.join(_repo, "original")
+        _new = os.path.join(_repo, "modified")
+        with open(_orig, "w", encoding="utf-8") as _f:
+            _f.write(original)
+        with open(_new, "w", encoding="utf-8") as _f:
+            _f.write(fixed)
+
+        def _git(_args: list[str]) -> _sp.CompletedProcess[str]:
+            return _sp.run(["git", "-C", _repo, *_args], capture_output=True, text=True)
+
+        _git(["init", "-q"])
+        _git(["add", "original"])
+        _git(["commit", "-q", "--no-verify", "-m", "init", "--author", "aitester <aitester@local>"])
+        # original 已提交、modified 留在工作区 → --no-index 对比两文件
+        _r = _git(["diff", "--no-index", "--", "original", "modified"])
+        # 退出码 1 = 有差异（正常）；0/2 才是异常
+        if _r.returncode in (0, 1) and _r.stdout:
+            _lines = _r.stdout.splitlines()
+            # _lines[0] = 'diff --git a/original b/modified'（git 头，丢弃）
+            # _lines[1] = 'index ...'（git 元数据，丢弃）
+            # _lines[2:] = '--- a/...' '+++ b/...' '@@ ... @@' 及 hunk 正文
+            if len(_lines) >= 4 and _lines[2].startswith("--- ") and _lines[3].startswith("+++ "):
+                _hdr = f"diff --git a/{fromfile} b/{tofile}\n"
+                _body = "\n".join(_lines[2:])
+                # 关键：重写 --- / +++ 行中的文件名（git --no-index 产出
+                # a/original b/modified 相对名，必须换成真实仓库路径，
+                # git apply 才能定位到仓库内的实际文件）
+                _body_lines = _body.split("\n")
+                _body_lines[0] = f"--- a/{fromfile}"
+                _body_lines[1] = f"+++ b/{tofile}"
+                return _hdr + "\n".join(_body_lines) + ("\n" if _body_lines[-1] else "")
+            logger.warning(
+                "git diff --no-index 输出结构异常（首行: %s），退回 difflib",
+                _lines[0][:80] if _lines else "(空)",
+            )
+        else:
+            logger.warning(
+                "git diff --no-index 失败（rc=%s），退回 difflib: %s",
+                _r.returncode,
+                _r.stderr.strip()[:120],
+            )
+    except Exception as _e:
+        logger.warning("git diff 异常，退回 difflib: %s", _e)
+    finally:
+        import shutil as _sh
+
+        _sh.rmtree(_tmp, ignore_errors=True)
+
+    old_lines = original.splitlines(keepends=True)
+    new_lines = fixed.splitlines(keepends=True)
+    return "".join(difflib.unified_diff(old_lines, new_lines, fromfile=fromfile, tofile=tofile, n=3))
+
+
+def _normalize_llm_patch(raw: str) -> str:
+    """把 LLM 的"完整文件重写"形态提取为纯代码正文。
+
+    工作流 patch_applier 产出的补丁常带 ```python 围栏 / 'python' 行首标记，
+    直接喂给 difflib 会把围栏当代码行。剥离这些包裹，还原 LLM 想写的
+    目标文件完整代码。无法还原（空 / 无围栏但非代码）时返回原文。
+    """
+    if not raw or not raw.strip():
+        return ""
+    s = raw.strip()
+    # 去 ```python ... ``` 围栏
+    if s.startswith("```"):
+        lines = s.splitlines()
+        # 找围栏头（```python / ```）与围栏尾（```）
+        if lines[0].startswith("```"):
+            body_lines = lines[1:]
+            if body_lines and body_lines[-1].strip() == "```":
+                return "\n".join(body_lines[:-1])
+        # 只有头无尾：返回头之后的全部内容
+        return "\n".join(lines[1:])
+    # 首行恰为 'python'（patch_applier 的裸标记形态）→ 剥离
+    lines = s.splitlines()
+    if lines and lines[0].strip() == "python":
+        return "\n".join(lines[1:])
+    return s
+
+
+def _extract_gold_target_relpath(golden_patch: str) -> str:
+    """从官方 gold patch 提取首个非测试源文件的仓库相对路径（b/ 侧）。
+
+    SWE-bench 任务的 LLM 补丁（_diff_codes 产物）需映射进真实仓库路径
+    才能 git apply；从 gold patch 的 `diff --git a/<p> b/<p>` 头取首个
+    非 test/ / tests/ / test_ 开头的文件。gold patch 缺失或全为测试文件
+    时返回空串（_diff_codes 退化为裸路径，git apply 拒绝，FAIL_TO_PASS
+    实测裁决）。
+    """
+    import re
+
+    if not golden_patch:
+        return ""
+    for m in re.finditer(r"diff --git a/(\S+) b/(\S+)", golden_patch):
+        rel = m.group(2)
+        base = rel.split("/")[-1]
+        if not (rel.startswith("test/") or rel.startswith("tests/") or base.startswith("test_")):
+            return rel
+    return ""
 
 
 def _run_task_with_progress(args: tuple) -> tuple[BenchmarkTask, dict[str, Any]]:
@@ -758,6 +1041,7 @@ def run_benchmark(
     enable_rag: bool | None = None,
     save_state: bool = False,
     enable_mutation_scoring: bool | None = None,
+    difficulty: str = "mixed",
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -780,10 +1064,34 @@ def run_benchmark(
             config.ENABLE_MUTATION_SCORING（默认 False）；True 时在基线
             结果构建后逐任务调用 compute_mutation_score，把 mutation_score
             写回 details[]（缺失 generated_test / 无变异体可生成时写 None）。
+        difficulty: P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）。
+            可选值："mixed"（默认，历史口径）/ "level1" / "level2" /
+            "level3"（跨文件）/ "level4"（边界+异常隐蔽缺陷）。
 
     Returns:
         汇总结果字典。
     """
+    # P0 4.2 追踪层主动启用：默认 AITESTER_TRACE_DIR=results/traces/（可被
+    # 环境变量覆盖；设置 AITESTER_TRACE_DIR= 为空串可显式关闭追踪）。
+    # 节点级 JSONL 记录（输入长度、输出长度、token、耗时、路由决策）随
+    # 工作流执行自动追加到 <task_uuid>.trace.jsonl，供 SWE-bench 失败
+    # 根因分析直接消费（此前追踪默认关闭 → 无节点级数据 → 无法做
+    # "哪个节点消耗了最多 token / 哪次路由决策导致了空响应" 的结构化回放）。
+    import os as _os
+
+    _trace_dir = _os.environ.get("AITESTER_TRACE_DIR", "").strip()
+    if not _trace_dir:
+        import pathlib as _pathlib
+
+        _trace_dir = str(_pathlib.Path(output_dir) / "traces") if output_dir else "results/traces"
+        _os.environ["AITESTER_TRACE_DIR"] = _trace_dir
+        logger.info(
+            "P0 4.2 追踪层默认启用：AITESTER_TRACE_DIR=%s（节点级 JSONL 记录）",
+            _trace_dir,
+        )
+    else:
+        logger.info("追踪层已配置：AITESTER_TRACE_DIR=%s", _trace_dir)
+
     # RAG 开关在数据集加载前生效（检索发生在工作流节点内，切换时机不影响正确性）
     rag_enabled = _apply_rag_setting(enable_rag)
     if baselines is None:
@@ -797,10 +1105,10 @@ def run_benchmark(
 
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
-        logger.info("生成合成数据集：%d 个任务（seed=%d）", tc, seed)
+        logger.info("生成合成数据集：%d 个任务（seed=%d, difficulty=%s）", tc, seed, difficulty)
         from src.datasets.synthetic_dataset import SyntheticDataset
 
-        dataset = SyntheticDataset(task_count=tc, seed=seed)
+        dataset = SyntheticDataset(task_count=tc, seed=seed, difficulty=difficulty)
         # 确保数据集已加载
         _ = dataset.tasks
     else:
@@ -826,7 +1134,15 @@ def run_benchmark(
         subset = None
         dataset = InMemoryDataset.create_with_samples()
 
-    tasks = dataset.tasks[:task_limit] if task_limit else dataset.tasks
+    tasks = dataset.tasks
+    # 2026-09-26 全面审查（P2 正确性）：task_limit 边界归一——负数原语义
+    # 为 slice 静默截断（tasks[:-1] 丢最后一个任务），0 走 else 当全量；
+    # 现统一 <1 视为不限制（全量），仅正数生效，消除负数静默改任务数。
+    if task_limit is not None and task_limit < 1:
+        logger.warning("task_limit=%r 无效（需正整数），按全量任务处理", task_limit)
+        task_limit = None
+    if task_limit:
+        tasks = tasks[:task_limit]
     logger.info("可用 API 配置数: %d", len(_VALID_APIS))
 
     if parallel is None:
@@ -1062,6 +1378,12 @@ if __name__ == "__main__":
         is_flag=True,
         help="显式关闭变异得分评估（覆盖 config.ENABLE_MUTATION_SCORING）",
     )
+    @click.option(
+        "--difficulty",
+        default="mixed",
+        type=click.Choice(["mixed", "level1", "level2", "level3", "level4"]),
+        help="P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）：mixed（默认，历史口径）/ level1 / level2 / level3（跨文件）/ level4（边界+异常隐蔽缺陷）",
+    )
     def cli(
         dataset,
         subset,
@@ -1077,6 +1399,7 @@ if __name__ == "__main__":
         save_state,
         enable_mutation,
         no_mutation,
+        difficulty,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
@@ -1109,6 +1432,7 @@ if __name__ == "__main__":
             enable_rag=rag_override,
             save_state=save_state,
             enable_mutation_scoring=mutation_override,
+            difficulty=difficulty,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

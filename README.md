@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1667 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1607 collected） |
-| **单元测试** | ✅ 全量 1667 passed, 0 failed；精简环境约 1607 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后 1667 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
+| **总测试数** | ✅ 1728 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1654 collected） |
+| **单元测试** | ✅ 全量 1728 passed, 0 failed（2026-09-26 审查轮实测 28.7s）；精简环境约 1654 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后 1714 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
-| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git） |
-| **最新优化** | ✅ 2026-09-25 0.10 深度审查修复（LLM 缓存负缓存 TTL 正确性回归 + 路径白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫；全量 1667 passed / 零回归 / mypy 0 错误 / ruff 全绿）；此前 0.9 轮次 LRU 快路径 + 双套缓存漂移消除 + 0.8 全面审查修复，详见 [CHANGELOG](CHANGELOG.md) |
+| **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
+| **最新优化** | ✅ 2026-09-26 全面审查与保守优化轮（六轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底；全量 1728 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零） |
-| **最近改动** | ✅ 2026-09-24 全面审查修复：凭证脱敏动态模式化（新增 `src/utils/credential_scrub.py`，本地/venv/Docker 三条链路统一，覆盖 `LLM_N_API_KEY` 全部编号）+ CLI `finally` 块脆弱代码消除（`final_state` 显式初始化）+ 多候选节点无副作用化（统计改经 update dict 传递）+ 补丁函数定位正则→AST（装饰函数/含注释函数体不再被过早截断）+ `requirements.txt` 显式声明 `openai==2.54.0`；详见 [CHANGELOG](CHANGELOG.md) |
+| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 本轮 11 文件格式归一 + mypy 全仓 0 错误） |
+| **最近改动** | ✅ 2026-09-26 全面审查与保守优化轮（六轮）：静态检查全绿（mypy 4 错清零 + ruff lint 5 处清零 + 11 文件格式归一）+ `src/api/api_manager.py` 死代码/线程卫生修复 + `.gitignore` 补全 + 凭证剔除补强 + 并发竞态修复（APIHealth 节点锁 / 健康检查持锁快照 / LLM 缓存与跨文件计划缓存原子写）+ CF-3 跨文件修复"各模块共用入口代码"逻辑缺陷修复 + 第五轮 P0（变异测试判定 / API 轮询可复现 / 写盘安全检查）+ 第六轮节点层路由语义与鲁棒性（_should_debug 早期迭代 regenerate / test_passed 一致性 / generator LLM 失败降级 / planner/debugger 兜底扩 OSError / 缓存统计线程卫生）；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1667 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1607 个收集）
+# 运行所有单元测试（全量 1728 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1654 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -252,6 +252,7 @@ AITester/
 │   │   ├── executor.py               # 测试执行器（类主体 + 本地执行编排；导入修复/结果解析/沙箱与 Docker 模式/子进程基础设施已拆至 executor_* 子模块）
 │   │   ├── executor_imports.py       # 导入路径自动修复（模块名提取 / sys.path 注入 / 相似名替换，0.1 拆分）
 │   │   ├── executor_modes.py         # venv 沙箱 + Docker 隔离执行模式（0.1 拆分）
+│   │   ├── executor_repo.py          # P0 仓库级执行器 RepoExecutor（SWE-bench 官方口径：clone+checkout+pip install -e 环境缓存 + venv 隔离 + gold test_patch 前后 FAIL_TO_PASS/PASS_TO_PASS 实测，默认关）
 │   │   ├── executor_output.py        # 执行结果解析（覆盖率 / 失败用例 / 错误信息，0.1 拆分）
 │   │   ├── executor_runtime.py       # 子进程运行、重试与临时资源清理（0.1 拆分）
 │   │   ├── debugger.py               # 调试修复师（分层错误修复）
@@ -306,7 +307,7 @@ AITester/
 │   ├── analyze_results.py            # 结果分析脚本（4.3 + 1.1/1.2/1.3/3.2/4.4：Markdown 汇总 + RAG 自动汇总 + 修复收敛/质量代理指标 + 异味检测 + 变异得分 + 边界覆盖 + 执行轨迹 + 缓存命中率，旧 JSON 兜底）
 │   ├── compare_failures.py           # 失败翻转任务对比（Planner/Debugger/环境归因 + 5.3 跨批次失败模式对比）
 │   ├── analyze_failures.py           # 失败案例聚类报告（供技术评审使用）
-│   ├── mutation_testing.py           # 1.2 内置变异测试生成器（AST 级三类变异体 + mutation_score_from_details 汇总）
+│   ├── mutation_testing.py           # 1.2 内置变异测试生成器（AST 级七类变异体 + mutation_score_from_details 汇总；杀死判定按 pytest 官方退出码精确化，2026-09-26）
 │   ├── contamination_check.py        # 2.1 SWE-bench 数据污染检测（token 级 Jaccard 重叠度）
 │   ├── difficulty_stratification.py  # 2.2 任务难度分层分析
 │   ├── run_large_scale.py            # 大规模实验入口
@@ -350,7 +351,7 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 - [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
 ### 2. 分层错误修复机制（Hierarchical Repair Strategy）
-将测试失败分为十四类：**LLM 响应格式异常（llm_format_error）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）、补丁被安全守卫拒绝（patch_validation_failed）、RAG 检索全空（rag_retrieval_empty）、执行轨迹丢失（execution_trace_missing）、多候选全被静态筛选拒绝（multi_candidate_all_rejected）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出；1.1 状态细化：PATCH_VALIDATION_FAILED 与 RAG_RETRIEVAL_EMPTY 为流程状态类；5.2 持续细化：EXECUTION_TRACE_MISSING 与 MULTI_CANDIDATE_ALL_REJECTED 为多候选/轨迹流程类，后 4 类由 `refine_failure_category()` 在任务收尾按 repair_history/rag_stats/execution_trace/multi_candidate_stats 信号判定，不走 `classify()` 文本正则，成功任务原样返回）。
+将测试失败分为十六类：**LLM 响应格式异常（llm_format_error）、LLM 空响应（llm_empty_response，P0 4.1 子类）、LLM JSON 解析失败（llm_json_parse_failed，P0 4.1 子类）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）、补丁被安全守卫拒绝（patch_validation_failed）、RAG 检索全空（rag_retrieval_empty）、执行轨迹丢失（execution_trace_missing）、多候选全被静态筛选拒绝（multi_candidate_all_rejected）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出；1.1 状态细化：PATCH_VALIDATION_FAILED 与 RAG_RETRIEVAL_EMPTY 为流程状态类；5.2 持续细化：EXECUTION_TRACE_MISSING 与 MULTI_CANDIDATE_ALL_REJECTED 为多候选/轨迹流程类；P0 4.1 子类：LLM_EMPTY_RESPONSE 与 LLM_JSON_PARSE_FAILED 为 LLM_FORMAT_ERROR 的两个精确子类，由 `ErrorClassifier.classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类，命中时用更严格 prompt 重试一次并记录原始响应片段，不走 `classify()` 文本正则，成功任务原样返回）。
 
 **技术实现**：
 - [src/agents/error_classifier.py](src/agents/error_classifier.py) 中的 `ErrorClassifier` 类（规则匹配）
@@ -502,13 +503,15 @@ CLI 新增 `--knowledge-base/-k` 选项控制输出路径。
 
 > 用途：为未来执行反馈驱动的微调（如 BoostAPR 类方法）备料——每次 benchmark 自动把"通过/失败、覆盖率变化、耗时、多维奖励信号"落进结果 JSON，无需额外执行轨迹采集脚本。
 
-### 5.14 内置变异测试生成器（1.2）
+### 5.14 内置变异测试生成器（1.2，2026-09-26 判定口径精确化）
 `experiments/mutation_testing.py` 提供 AST 级轻量变异生成器，无需 mutmut 依赖即可产出 mutation_score：
 
-- **三类变异体**：运算符翻转（`_OPERATOR_FLIP_MAP`，比较运算符 `Eq`→`NotEq`、`Lt`→`LtE` 等 AST 类名映射）/ 布尔取反（`_RemoveNotTransformer` 改写 `If/While/Return/Assign/BoolOp/Compare/Expr` 槽位的 `not X → X`，仅当真正替换成功才计入变异体，避免死代码）/ 数字常量偏移（比较中常量 `value → value+1`）
-- **保守口径**：每任务 ≤ 20 个变异体（`_MAX_MUTANTS_PER_TASK`），仅处理纯 Python 函数体；语法错误返回空列表不阻断
-- **`mutation_score_from_details`**：收集 `details[].mutation_score`（0.0-1.0），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；无该字段时 `available=False` 跳过
-- **可选 mutmut 兜底**：系统已安装 mutmut 时优先使用其完整结果，否则回退内置生成器
+- **七类变异体**：运算符翻转（`_OPERATOR_FLIP_MAP` 仅保留等值对 `Eq`↔`NotEq`，边界语义变异专属 `boundary_shift` 互不重叠）/ 布尔取反（`_RemoveNotTransformer` 改写 `If/While/Return/Assign/BoolOp/Compare/Expr` 槽位的 `not X → X`，仅当真正替换成功才计入变异体，避免死代码）/ 数字常量偏移（比较中常量 `value → value+1`）/ 边界移位（`Gt`↔`GtE`）/ 空返回（`return X → return None`）/ 空容器返回（`return X → return 空容器`）/ 异常路径（`_RemoveRaiseTransformer` 删除 raise + 异常类型替换 `exception_type_swap`）
+- **变异体定位精确化（P1，2026-09-26）**：`_flip_comparison_op` / `_offset_numeric` / `_shift_boundary_op` 在 deepcopy 后按 **(lineno, col_offset) 双键**定位目标比较表达式（此前按行号取第一个同类型 `Compare`，同行多比较 `a < b and c < d` 时只改第一个且 description 记录原节点操作符，产生描述与改动不一致 + 重复变异体）；
+- **取样策略（P1，2026-09-26）**：`generate()` 按 `mutant.code` **去重**（消除重复变异体）+ **类型轮转均匀取样**（7 类分桶 round-robin 填满上限，保证每类都有代表——此前按注册顺序 `mutants[:20]` 截断会把第 5-7 类整体挤掉）；保守口径：每任务 ≤ 20 个变异体（`_MAX_MUTANTS_PER_TASK`），仅处理纯 Python 函数体；语法错误返回空列表不阻断；
+- **杀死判定按 pytest 官方退出码（P0，2026-09-26）**：`_run_mutant_tests` 精确判定 `rc == 1`（有测试失败）= 杀死；`rc == 0` = 存活；其他（2=收集错误 / ModuleNotFoundError / 语法错误 / 5 / 超时 / 异常）= **存活**（保守口径，与文档声明"执行失败视为存活"一致——此前把所有非零退出码一律当"杀死"，实测 e2e 下 import 名错配时每个变异体 rc=2 全误判"杀死"，mutation_score 恒 1.0，弱测试与强测试得分无法区分，指标失效）；
+- **`mutation_score_from_details`**：收集 `details[].mutation_score`（0.0-1.0），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；无该字段时 `available=False` 跳过；
+- **可选 mutmut 兜底**：系统已安装 mutmut 时优先使用其完整结果，否则回退内置生成器；
 - **`run_benchmark` 流水线接线**（`ENABLE_MUTATION_SCORING`，默认关闭）：开关启用时
   `experiments/run_benchmark.py` 在基线结果构建后逐任务调用
   `compute_mutation_score`，把 `mutation_score` 写回 `details[]`，
@@ -592,13 +595,181 @@ ENABLE_MUTATION_SCORING=true MUTATION_MAX_MUTANTS=10 \
     python experiments/run_benchmark.py --dataset examples --baselines aitester --enable-mutation
 ```
 
-### 5.19 错误分类体系扩展（5.2，14 类）
-`ErrorCategory` 由 12 类扩至 14 类，新增 `EXECUTION_TRACE_MISSING`（任务失败但 `execution_trace` 为空 = 执行器异常路径）与 `MULTI_CANDIDATE_ALL_REJECTED`（多候选全被静态筛选拒绝）；`refine_failure_category` 新增 `execution_trace` / `multi_candidate_stats` 参数，判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；`refine_final_error_category` 接线新字段；`get_fix_strategy` 补两类修复策略描述。
+### 5.19 错误分类体系扩展（5.2 + P0 4.1 子类，16 类）
+`ErrorCategory` 由 12 类扩至 16 类：5.2 批次新增 `EXECUTION_TRACE_MISSING`（任务失败但 `execution_trace` 为空 = 执行器异常路径）与 `MULTI_CANDIDATE_ALL_REJECTED`（多候选全被静态筛选拒绝）；P0 4.1 批次（2026-09-25 续）再从 `LLM_FORMAT_ERROR` 拆出两个精确子类 `LLM_EMPTY_RESPONSE`（LLM 空响应）与 `LLM_JSON_PARSE_FAILED`（非空但 JSON 提取失败），由 `classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类（占失败样本 75% 的 UNKNOWN 根因之一）；`refine_failure_category` 新增 `execution_trace` / `multi_candidate_stats` 参数，判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；`refine_final_error_category` 接线新字段；`get_fix_strategy` 补两类修复策略描述。
 
 ```python
 from src.agents.error_classifier import refine_final_error_category
 
-category = refine_final_error_category(final_state)  # → 14 类之一
+category = refine_final_error_category(final_state)  # → 16 类之一
+```
+
+### 5.20 SWE-bench 仓库级验证（P0/P1，默认关闭）
+SWE-bench 官方验证口径是"把 gold `test_patch` 应用到 `base_commit` 检出后跑
+`FAIL_TO_PASS`（修复前失败、修复后须全过）+ `PASS_TO_PASS`（不得回归）"。
+单临时文件 executor 装不下仓库级代码（模块名断裂 / 依赖未装 / 多源文件
+补丁），故独立 `src/agents/executor_repo.py` 承载仓库级执行（默认关，
+合成集 / examples 口径零变化）：
+
+- **环境 setup**：`git clone --no-checkout --filter=blob:none` +
+  `checkout <base_commit>` + `pip install -e .`（仅仓库 pyproject 依赖），
+  按 `(repo, commit12)` 缓存于 `~/.cache/aitester/repo_envs/`
+  （`SWE_REPO_ENVS_DIR` 可覆盖），同仓库多任务只 clone/pip 一次。
+- **venv 隔离**（`SWE_REPO_VENV_ISOLATION=true`，默认关）：每 commit 环境
+  旁建独立 venv，`pip install -e` 装入 venv、pytest 用 venv 的 python 运行，
+  与全局 `sys.executable` 解耦。各 repo_env 共享全局 python 时，全局
+  site-packages 的 editable 安装指向"最近一次 pip install -e"的 commit 源码，
+  跨 commit 任务 `import <repo_pkg>` 会解析到错误版本（实测 sqlfluff
+  `BaseSegment` 方法在相邻 commit 存在/缺失不一致 → AttributeError，与
+  LLM 补丁无关）。venv 模式下不注入宿主 PYTHONPATH（实测带注入反而
+  ImportError），PATH 前置 venv/bin。
+- **LLM 补丁映射**：`_normalize_llm_patch` 剥离 LLM 输出的 python 围栏
+  （``` 包裹或行首 'python' 标记）还原纯代码正文；`_diff_codes` 经 `git diff
+  --no-index` 生成严格 unified diff（difflib 手工拼接在"整文件替换"场景
+  产出行计数与 git 解析器不符的 corrupt patch，已修复），`---`/`+++` 头
+  重写为 gold 目标文件仓库路径（`_extract_gold_target_relpath` 取官方
+  gold patch 首个非测试源文件 b/ 侧路径）→ 映射进真实仓库；两串相同
+  （LLM 未改动）返回空串，`FAIL_TO_PASS` 按无补丁实测裁决，不误判通过。
+- **Apple Git 2.54 new-file bug 兜底**：本机 `git apply` 对 new-file 补丁
+  报 clean 但产出空文件，`_apply_patch_robust` 解析 new-file section
+  手动回填，测试文件内容完整。
+- **路由**：`REPO_LEVEL_EXECUTION=true` + `task.metadata.source=="swe_bench"`
+  + `fail_to_pass/repo_url/base_commit` 齐备 → 仅 aiterster 基线走
+  `RepoExecutor.verify`，结果覆盖 `test_passed` 并写 `repo_verification`
+  诊断；plain_llm / single_agent 保持原 LLM 生成测试口径（无仓库环境依赖）。
+- **单元测试**：`tests/test_executor_repo.py` 17 用例（setup 缓存 /
+  verify pass / verify fail / base_not_failing / test_patch_apply_failed /
+  基线恢复 / venv 隔离 / LLM 补丁助手 / git diff 可应用性）。
+
+```bash
+# 仓库级 SWE-bench 验证（opt-in，默认关）
+REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
+  SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10 --baselines aiterster
+```
+
+### 5.21 P0 改进批次（2026-09-25 续：13 项落地）
+基于 `docs/assessment_2026-09-25_improvement_directions.md` 与实验数据缺口（SWE-bench 0/20、
+合成集统计已覆盖但真实集 A/B 缺失），本批次落地 13 项 P0 改进，全部默认行为兼容
+（默认参数回退历史口径，显式开启才启用新能力）：
+
+#### 5.21.1 分层代码压缩（1.1）
+函数级切片替代整文件截断：`extract_function_context(source, func_name, depth=2)`
+（`src/tools/code_analyzer.py`）经 `extract_focused_code()` 的 BFS 调用链闭包
+（`_closure_names()`，`src/tools/code_context.py`）保留目标函数 + 直接调用
+辅助函数（depth=1）或两层调用链（depth=2）。`BaseAgent.truncate_code()`
+新增 `focus_depth` 参数（读 `CODE_FOCUS_DEPTH` 环境变量，默认 1），
+`CODE_MAX_CHARS` 可配（默认 3000）。跨文件场景下 `debugger.py` 的
+`cross_file_contexts` 经 `extract_function_context(depth=CODE_FOCUS_DEPTH)`
+生成 per-module 2000 字符预算 + 总 4000 字符预算，注入 Debugger prompt。
+
+#### 5.21.2 复杂度感知路由（1.2，固定 Agnes 3.0-flash 多 provider 端点）
+`src/api/complexity_router.py`（新增）：`compute_complexity_score(lines, num_files, num_deps,
+cyclomatic_complexity)` 输出 [0,1] 归一化复杂度评分（阈值 `<0.35 → simple` /
+`<0.70 → medium` / `>=0.70 → complex`，各维度权重由 `ROUTING_COMPLEXITY_LINES_NORM`
+等环境变量可配）；`complexity_class_to_routing_hints(class)` 返回路由提示
+（`max_candidates` / `context_budget` / `hint_text`）。`APIManager` 的
+`_select_node_by_complexity(complexity_class)` 按 cost_weight 排序 APIHealth 节点
+（complex → 高 cost_weight 端点在前，simple → 低 cost_weight 端点在前），
+`run_benchmark.py` 在 `create_initial_state` 后计算复杂度评分并写入
+`state["complexity_class"]` / `state["complexity_score"]` / `state["complexity_breakdown"]` /
+`state["routing_hints"]`。约束：仅路由 Agnes 3.0-flash 的多 provider 端点，
+不引入其他模型家族。`MODEL_ROUTING_STRATEGY=fixed` 回退历史策略。
+
+#### 5.21.3 补丁命名契约验证（1.3，默认开启）
+`src/tools/patch_applier.py` 新增 `check_naming_contract(original_code, patched_code)`：
+对比前后模块级符号（函数 / 类 / `__all__` / 注册装饰器 / 模块级常量），
+缺失任何原符号则拒绝补丁应用。`_patch_applier_node` 在 `PATCH_CONTRACT_CHECK=true`
+（默认 true）时调用；Debugger prompt 注入 `_CONTRACT_CONSTRAINT` 约束
+（"不得修改或删除以下符号……"），从生成侧降低违约概率。
+
+#### 5.21.4 合成数据集分层难度（2.1 + 2.2）
+`src/datasets/synthetic_dataset.py` 新增 `difficulty` 参数
+（`mixed` / `level1` / `level2` / `level3` / `level4`）：
+- **Level 1**（历史口径）：单函数简单缺陷
+- **Level 2**：多函数交互缺陷（`BUG_PATTERNS_LEVEL2`，需修改 2-3 个函数）
+- **Level 3**（跨文件）：双模块构造（`CROSS_FILE_PATTERNS`，module_a 入口 +
+  module_b 被调方含缺陷，`metadata.is_cross_file=True` + `module_a_code` +
+  `target_module` 供跨文件修复架构消费）
+- **Level 4**：边界条件 + 异常路径隐蔽缺陷（`BUG_PATTERNS_LEVEL4`）
+
+`experiments/run_benchmark.py` CLI 新增 `--difficulty` 选项（仅对 synthetic 数据集生效）。
+
+#### 5.21.5 SWE-bench 源码导出质量验证（2.3）
+`scripts/verify_swe_bench_export.py`（新增）：对 `SWE_BENCH_ENRICHMENT` JSONL 做
+5 维度验证（非空 / 行数 >= 阈值 / Python 语法合法 / 目标函数存在 / 目标文件路径
+匹配），输出结构化质量报告（`pass_rate` / `by_label` / `failed_instances` /
+`avg_line_count`），CLI `--output` 写 JSON，`--instances` 可选传官方 JSONL 做交叉验证。
+
+```bash
+python scripts/verify_swe_bench_export.py \
+    --enrichment data/swe_bench_lite_enriched.jsonl \
+    --output experiments/results/enrichment_quality_report.json
+```
+
+#### 5.21.6 RAG A/B 对比实验脚本（3.1）
+`experiments/rag_ab_experiment.py`（新增）：自动执行 RAG ON / RAG OFF 两次
+benchmark，配对分析 token / 成功率 / 迭代轮次 / 耗时，Welch t-test +
+Mann-Whitney U + Cohen's d 统计检验（与 0.7 报告同口径），按错误类型分组
+分析 RAG 收益（哪类错误在 RAG ON 下显著减少），输出
+`rag_ab_report.json`。支持 `--analyze-only` 模式（读已有结果 JSON 直接统计，
+跳过实验运行）。
+
+```bash
+python experiments/rag_ab_experiment.py \
+    --dataset synthetic --task-count 20 --seed 42 \
+    --output-dir experiments/results/rag_ab_$(date +%Y%m%d)
+```
+
+#### 5.21.7 多候选自适应触发（3.2，默认 adaptive）
+`src/graph/nodes.py` 的 `_select_multi_candidate_patch` 新增
+`MULTI_CANDIDATE_TRIGGER_STRATEGY`（默认 `adaptive`）：仅当
+`iteration >= 1`（首次修复已失败）且 `error_category ∈ {assertion, runtime,
+logic_error, index_error}`（困难类别）时才启用多候选；简单任务 / 早期迭代
+保持单候选，省 token（避免简单任务 +79% token 的无收益成本）。
+设 `MULTI_CANDIDATE_TRIGGER_STRATEGY=always` 回退历史口径。
+
+#### 5.21.8 变异体难度升级（3.3）
+`experiments/mutation_testing.py` 新增 3 类变异 transformer：
+`_ReturnEmptyTransformer`（return X → return 空容器，7 种变异体类型之一）、
+`_RemoveRaiseTransformer`（删除 raise 语句 → 异常路径变异）、
+`_ExceptionTypeTransformer`（异常类型替换 → exception_type_swap）。
+总变异体类型从 5 扩至 7（operator_flip / boolean_negation / numeric_offset /
+boundary_shift / return_void / return_empty + 新增 exception_remove +
+exception_type_swap），提升变异得分对"边界 + 异常路径"类缺陷的覆盖度。
+
+#### 5.21.9 错误分类子类 + 响应格式重试（4.1）
+`src/agents/error_classifier.py` 新增 `LLM_EMPTY_RESPONSE` 与
+`LLM_JSON_PARSE_FAILED` 两个精确子类（从 `LLM_FORMAT_ERROR` 拆出，占 UNKNOWN
+75% 的根因之一）：`classify_llm_response(raw_response)` 在 Debugger 收到
+LLM 响应后、JSON 解析前直接分类（空响应 → `LLM_EMPTY_RESPONSE`；非空但
+JSON 提取失败 → `LLM_JSON_PARSE_FAILED`）；两个子类各配独立修复策略
+（更严格 prompt 重试 / 记录原始响应片段到 `failure_knowledge_base.json`）。
+`debugger.py` 的 `debug()` 在检测到格式异常时用更严格 prompt 自动重试一次，
+仍失败则降级到宽松 JSON 提取。`ErrorCategory` 由 14 类扩至 16 类。
+
+#### 5.21.10 追踪层默认启用（4.2）
+`experiments/run_benchmark.py` 在入口处设置 `AITESTER_TRACE_DIR` 默认值
+（`<output_dir>/traces/`，若未显式设置）：节点级 JSONL 记录（输入长度、
+输出长度、token、耗时、路由决策）随工作流执行自动追加到
+`<task_uuid>.trace.jsonl`，供 SWE-bench 失败根因分析直接消费。
+设 `AITESTER_TRACE_DIR=`（空串）显式关闭。
+
+#### 5.21.11 venv 按仓库复用（4.3）
+`src/agents/executor_repo.py` 的 `RepoExecutor` 新增 `venv_reuse_by_repo=True`
+参数：同一仓库的多个 commit 共享一个仓库级 venv
+（`<env_root>/<repo>/_shared_venv/`），仅当依赖指纹（requirements / pyproject /
+setup.py 的 SHA256）变更时重新 `pip install -e`；源码切换（commit 变化）
+不触发重装（editable install 的 `.pth` 文件自动跟随 checkout）。
+大幅减少 SWE-bench 同一 repo 多 commit 场景的 venv 重建开销（10-20 倍）。
+`_dep_fingerprint(repo_dir)` 计算依赖指纹；`_repo_venv_dir(repo_url, repo_dir)`
+解析共享 venv 路径。`venv_reuse_by_repo=False`（默认）保持 per-commit 独立 venv。
+
+```bash
+# 启用 venv 按仓库复用（需配合 REPO_LEVEL_EXECUTION + SWE_REPO_VENV_ISOLATION）
+REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
+SWE_REPO_VENV_REUSE_BY_REPO=true \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 20 --baselines aitester
 ```
 
 ### 6. 标准数据集集成（新增）
@@ -815,7 +986,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1667 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1728 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -825,76 +996,78 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（68 个测试文件，全量 1667 个 pytest 收集用例；精简环境约 1607 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（74 个测试文件，全量 1728 个 pytest 收集用例；精简环境约 1654 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
-| `test_api_manager.py` | 77 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
+| `test_api_manager.py` | 79 | API 管理器（轮询/加权随机/健康感知策略、健康线程开关、失败阈值配置接线、4.1 熔断冷却期状态机与路由过滤、1.5 冷却期边界 3 用例、4.1 脱敏接线 2 用例） |
 | `test_api_circuit_breaker.py` | 16 | 4.4/0.6 熔断器指数退避（`API_CIRCUIT_BACKOFF` 开/关双路径）+ Prometheus 导出（`API_PROMETHEUS_EXPORT` 默认空串） |
 | `test_api_manager_extended.py` | 74 | API 管理器扩展路径（健康恢复、限流标记、4.2 半开探测 TestHalfOpenProbe 12 用例） |
-| `test_base_agent.py` | 39 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
+| `test_base_agent.py` | 40 | JSON 提取、代码块提取、客户端复用、AST 智能截取 |
 | `test_base_agent_extended.py` | 46 | 指数退避重试、LLM 缓存、zai 客户端复用 |
-| `test_cli_app.py` | 40 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 + 4.4 clean-venv-cache 4 用例 + 5.1 并发中断/信号处理 3 用例） |
+| `test_cli_app.py` | 36 | CLI 命令（list-examples/--version/参数校验/parallel/json 边界 + 1.4 超时贯通/并发容错/check-dataset 边界/glob 并发 + 4.4 clean-venv-cache 4 用例 + 5.1 并发中断/信号处理 3 用例） |
 | `test_cli_output.py` | 10 | CLI 输出层回归（colorize TTY 双分支、success/error/warning/info 图标与 stdout/stderr 路由、print_rich_table 空列表/缺键兜底/coverage=0.0 不被误判 N/A，O-01 批次） |
 | `test_cli_parallel.py` | 10 | 并发派发器 `_dispatch_parallel_tasks` 与 `run` 并发分支回归（rich/无 rich 双路径、逐任务容错、CI 门控 exit 1）（0.1） |
 | `test_cli_run.py` | 6 | run 命令编排（超时/覆盖率阈值透传） |
 | `test_cli_console_output.py` | 8 | run 非 JSON 控制台摘要（成功/失败/诊断/建议）+ _dispatch_concurrent rich/降级/JSON 静默分支（0.1） |
 | `test_code_analyzer.py` | 17 | AST 解析、圈复杂度、代码替换 |
-| `test_code_context.py` | 18 | 11 | AST 智能截取（P0 大文件上下文） |
+| `test_code_context.py` | 18 | AST 智能截取（P0 大文件上下文） |
 | `test_complex_logic.py` | 12 | 复杂业务逻辑（邮箱验证等） |
 | `test_config_generator.py` | 26 | LLM 配置生成器模板 |
-| `test_config_manager.py` | 35 | 32 | 配置管理器（LLM 配置增删） |
-| `test_config.py` | 15 | 14 | config.py 默认值与容错解析 |
-| `test_core_modules.py` | 29 | 核心模块冒烟（BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader 多类） |
+| `test_config_manager.py` | 35 | 配置管理器（LLM 配置增删，含 P0 写盘前校验：拒含换行/`#` 的变量值注入，5 用例） |
+| `test_config.py` | 15 | config.py 默认值与容错解析 |
+| `test_core_modules.py` | 19 | 核心模块冒烟（BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader 多类） |
 | `test_cost_aware_routing.py` | 13 | 成本感知路由与昂贵 provider 成本告警（3.4 + 3.2 阈值可配 4 用例） |
-| `test_dataset_loader.py` | 83 | 数据集加载器（InMemory/SWEBench） |
-| `test_dataset_loader_extended.py` | 73 | 数据集加载扩展路径（raw 加载/字段校验） |
-| `test_dataset_validation.py` | 22 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
-| `test_debugger.py` | 29 | 错误诊断、RAG 注入、分类透传 |
+| `test_credential_scrub.py` | 5 | 2026-09-26 新增：凭证剔除 P0 补强回归（编号变体 `OPENAI_(API_KEY|BASE_URL)_\d+` / provider 中间变量 / 高编号边界 / 入参不可变 5 用例） |
+| `test_dataset_loader.py` | 76 | 数据集加载器（InMemory/SWEBench，O(1) `get_task_by_id` 索引） |
+| `test_dataset_loader_extended.py` | 59 | 数据集加载扩展路径（raw 加载/字段校验） |
+| `test_dataset_validation.py` | 16 | SWE-bench 加载质量校验与源码补充（P0）+ tasks_missing_source（2.1） |
+| `test_debugger.py` | 38 | 错误诊断、RAG 注入、分类透传 |
 | `test_contamination_check.py` | 15 | 2.1 数据污染检测（token 提取/Jaccard 重叠度/分级/detect 扫描/渲染章节） |
 | `test_contamination_multidim.py` | 25 | 2.1 多维污染检测（结构级 AST 骨架 LCS + 语义级词袋余弦三维相似度 / 综合风险等级 / detect 全流程 / 抗污染基准注册表） |
 | `test_dependency.py` | 43 | 依赖检测与 venv 管理（P1）+ 4.4 缓存监控（命中率统计/列表/清理，8 用例） |
-| `test_dependency_edge_cases.py` | 14 | 依赖检测边界分支（标准库回退/find_spec 异常/venv 创建超时/OSError 静默降级，0.1 新增） |
-| `test_error_classifier.py` | 89 | 85 | 十四类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化：refine_failure_category） |
+| `test_dependency_edge_cases.py` | 18 | 依赖检测边界分支（标准库回退/find_spec 异常/venv 创建超时/OSError 静默降级，0.1 新增） |
+| `test_error_classifier.py` | 89 | 十六类错误分类与修复策略映射（P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化 + P0 4.1 子类：refine_failure_category / test_sixteen_categories_total 1 用例） |
 | `test_error_classifier_new_categories.py` | 16 | 5.2 新增两错误类别判定（`EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`，判定优先级 / 修复策略描述 / 从 final_state 接线） |
 | `test_exceptions.py` | 33 | 自定义异常类与装饰器 |
-| `test_executor.py` | 50 | 48 | 覆盖率解析、失败用例解析 |
+| `test_executor.py` | 41 | 覆盖率解析、失败用例解析 |
 | `test_executor_docker.py` | 11 | 4.3 Docker 执行模式（不可用诊断/模式开关/docker 优先于 venv/子进程环境凭证剔除 + TestDockerExecutionFlow 容器内执行链路 6 用例 + 沙箱清理兜底） |
-| `test_executor_sandbox.py` | 14 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
-| `test_experiments_analysis.py` | 20 | 实验结果分析（排名/统计）+ 5.1 统计检验边界 5 用例（样本量 <3 / 部分配对缺失 / 单基线 / 脏数据） |
-| `test_experiments_scripts.py` | 54 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.1）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计 + 1.2 收敛失败模式归因 / 1.3 边界用例覆盖 / 1.3 变异得分 / 3.2 执行轨迹汇总（14 用例） |
-| `test_generator.py` | 43 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
-| `test_llm_file_cache.py` | 7 | LLM 文件缓存命中/失效 + 温度键不互命中 + system_prompt 参与缓存键（0.9 深度审查回归） |
-| `test_logging_utils.py` | 19 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.1 脱敏扩展回归）+ 5.1 脱敏边界 5 用例（格式化失败/exc_info 堆栈脱敏/嵌套 dict 口径锁定/幂等/mask 异常回退） |
-| `test_mysql_client.py` | 15 | MySQL 客户端单例/事务/连接池参数 |
-| `test_multi_candidate.py` | 23 | 多候选补丁生成与静态/执行验证筛选（3.1） |
+| `test_executor_sandbox.py` | 7 | 沙箱执行路径与依赖安装（P1，含 install 失败短路 / 目标文件缺失边界） |
+| `test_executor_repo.py` | 17 | P0 仓库级执行器 RepoExecutor（setup 缓存 / verify pass/fail / base_not_failing / test_patch_apply_failed / 基线恢复 / venv 隔离 / LLM 补丁助手 / git diff 可应用性） |
+| `test_experiments_analysis.py` | 43 | 实验结果分析（排名/统计）+ 5.1 统计检验边界 5 用例（样本量 <3 / 部分配对缺失 / 单基线 / 脏数据） |
+| `test_experiments_scripts.py` | 43 | visualize 结果选择 / 标准化实验返回键 / benchmark 并行度回归（0.1）+ 4.3 analyze_results 纯函数 + 2.3 RAG 自动汇总 + 1.1/1.2 修复收敛与质量代理指标 + 1.2 测试异味检测 + 1.3 修复收敛曲线 + 4.4 依赖缓存命中统计 + 1.2 收敛失败模式归因 / 1.3 边界用例覆盖 / 1.3 变异得分 / 3.2 执行轨迹汇总（14 用例） |
+| `test_generator.py` | 27 | parametrize 校验、import 修正、LLM 调用 + 3.4 断言增强（TestAssertionAugmentation：AST 提取现有 assert，默认关，9 用例） |
+| `test_llm_file_cache.py` | 8 | LLM 文件缓存命中/失效 + 温度键不互命中 + system_prompt 参与缓存键（0.9 深度审查回归） |
+| `test_logging_utils.py` | 38 | 日志脱敏正则（sk- 前缀/带点号分段/无前缀长 hex·base64 三类形态，0.1 脱敏扩展回归）+ 5.1 脱敏边界 5 用例（格式化失败/exc_info 堆栈脱敏/嵌套 dict 口径锁定/幂等/mask 异常回退）+ 2026-09-26 redact_dict 字符串入参 2 用例（str 入参脱敏后包 `{"value":...}` 契约 + 其他标量回空 dict） |
+| `test_mysql_client.py` | 13 | MySQL 客户端单例/事务/连接池参数 |
+| `test_multi_candidate.py` | 33 | 多候选补丁生成与静态/执行验证筛选（3.1，boundary_shift 用例随 2026-09-26 变异体定位键升级同步更新） |
 | `test_packaging.py` | 3 | 打包完整性（子包 __init__ 齐全） |
 | `test_patch_applier.py` | 39 | 补丁应用（完整文件/单函数模式）+ 多函数补丁排序顺序（0.9 回归） |
 | `test_planner.py` | 5 | PlannerAgent 规划逻辑序列化 |
 | `test_prompts_templates.py` | 14 | 三个 system prompt 常量结构契约（关键指令段/错误类别/JSON 输出格式，0.1） |
-| `test_rag_metrics.py` | 13 | RAG 检索质量指标 Hit Rate/MRR（P1） |
-| `test_rag_retriever.py` | 42 | RAG 检索器增删查清与持久化 |
-| `test_report_generator.py` | 48 | 错误报告生成器（含十四类分类分支） |
-| `test_run_benchmark.py` | 5 | benchmark 结果构造与异常路径回归（0.1 去重重构 + 2.1 patch 字段键集合同构护栏） |
+| `test_rag_metrics.py` | 5 | RAG 检索质量指标 Hit Rate/MRR（P1） |
+| `test_rag_retriever.py` | 31 | RAG 检索器增删查清与持久化 |
+| `test_report_generator.py` | 50 | 错误报告生成器（含十六类分类分支；2026-09-26 `_parse_failed_cases` pytest 短输出模式匹配 2 用例：短格式行内错误后缀 + 详细格式异常类名行） |
+| `test_run_benchmark.py` | 10 | benchmark 结果构造与异常路径回归（0.1 去重重构 + 2.1 patch 字段键集合同构护栏） |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench 源码导出脚本（patch 目标文件提取 / enrichment 落盘 / dry-run，2.1） |
-| `test_state.py` | 8 | AITesterState 单一构造点工厂（create_initial_state 键集守护 / module_name 推导 / 可变容器隔离，深度重构批次） |
+| `test_state.py` | 8 | AITesterState 单一构造点工厂（create_initial_state 键集守护 / module_name 推导 / 可变容器隔离，深度重构批次；2026-09-26 补 `repo_verification` 字段声明） |
 | `test_viz_significance.py` | 6 | 统计显著性收敛（visualize_results 复用 statistical_analysis 配对原语 / NaN 占位 / 原语引用锁定，深度重构批次） |
 | `test_string_utils.py` | 10 | 字符串工具 |
 | `test_synthetic_dataset.py` | 5 | 合成数据集生成与确定性验证 |
 | `test_token_usage.py` | 9 | token 消耗统计（P0 效率指标） |
 | `test_trace_observability.py` | 12 | 结构化 JSONL 追踪层（4.1） |
 | `test_venv_cache_monitoring.py` | 11 | 4.4 venv 缓存容量监控（`get_venv_cache_size_mb` / `check_venv_cache_size` 5GB 阈值告警 / 统计文件路径动态化 / 命中率 / 清理） |
-| `test_workflow.py` | 41 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例）+ 3.2 执行反馈轨迹（TestExecutionTrace 3 用例：首轮 / 二轮 delta / 缺键容错） |
-| `test_workflow_extended.py` | 47 | 38 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等） |
-| `test_cross_file.py` | 39 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化 / 二期多入口依赖 / 拓扑序应用 / 修复计划缓存） |
+| `test_workflow.py` | 38 | 工作流图构建与路由 + 3.5 跨文件修复（CROSS_FILE_ENABLE 启用/禁用路径，2 用例）+ 3.2 执行反馈轨迹（TestExecutionTrace 3 用例：首轮 / 二轮 delta / 缺键容错）+ 2026-09-26 generator LLM 失败降级回归 1 用例 |
+| `test_workflow_extended.py` | 44 | 工作流扩展路径（RAG 初始化单例、planner 默认计划去重等）+ 2026-09-26 早期迭代诊断关键词路由 regenerate 回归 1 用例 |
+| `test_cross_file.py` | 45 | 3.5 跨文件修复（AST 依赖分析 / 协调器-提议者 / 多文件补丁应用 / 降级单文件 / 序列化 / 二期多入口依赖 / 拓扑序应用 / 修复计划缓存；2026-09-26 CF-3 修复新增 source_files 每模块自有源码 3 用例：per-module / fallback / legacy None 行为） |
 | `test_cross_file_bidirectional.py` | 16 | 2.2 跨文件双向依赖图（单向/双向口径 / `CROSS_FILE_BIDIRECTIONAL` 环境变量开关 / 符号定义行定位） |
-| `test_analyze_failures.py` | 13 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
+| `test_analyze_failures.py` | 20 | 5.3 失败根因分类（LLM/依赖/框架三大根因）+ 案例知识库 + CLI --knowledge-base |
 | `test_weak_coverage_modules.py` | 16 | 5.1 弱覆盖模块补强（cli_output print_rich_table 边界 / error_classifier 新分类路径 / executor_runtime 清理与重试异常分支） |
 | `test_weak_coverage_modules2.py` | 10 | 5.1 弱覆盖模块补强第二轮（config_generator main 入口 / prompts_templates 常量结构 / synthetic_dataset 边界生成） |
 | `test_weak_coverage_modules3.py` | 13 | 5.1 弱覆盖模块补强第三轮（trace 写盘失败降级 / analysis 统计检验边界 / error_classifier 分支 / cli_output 非 rich 降级 / prompts __main__） |
-| `test_smell_detection_v2.py` | 6 | 1.1 异味检测补强（Eager Test / Lack of Cohesion 触发与不触发 + 语法错误兜底） |
-| `test_failure_kb.py` | 181 | 5.3 失败案例知识库 + 跨批次失败模式对比（failure_knowledge_base 结构化 JSON / cross_batch_comparison 批次趋势 / 三大失败根因） |
-| `test_defects4j_smoke.py` | 155 | 3.4 Defects4J-Python 加载器冒烟验证（无数据目录优雅降级 / 完整目录解析 / 字段完整性） |
+| `test_smell_detection_v2.py` | 25 | 1.1 异味检测补强（Eager Test / Lack of Cohesion 触发与不触发 + 语法错误兜底）+ 1.2 变异测试生成器（TestMutationGenerator 9 用例，e2e 杀死判定口径 2026-09-26 精确化后 import 名修复）+ 1.3 变异得分（mutation_score_from_details） |
+| `test_failure_kb.py` | 14 | 5.3 失败案例知识库 + 跨批次失败模式对比（failure_knowledge_base 结构化 JSON / cross_batch_comparison 批次趋势 / 三大失败根因） |
+| `test_defects4j_smoke.py` | 5 | 3.4 Defects4J-Python 加载器冒烟验证（无数据目录优雅降级 / 完整目录解析 / 字段完整性） |
 
 ## 配置说明
 
@@ -933,6 +1106,10 @@ docker run --rm \
 | `MYSQL_POOL_TIMEOUT` | 获取连接等待超时（秒） | 30 |
 | `LLM_N_COST_WEIGHT` | 第 N 个 LLM 的相对成本倍数（3.4 成本感知路由；0.0=未配置，APIManager 回退 1.0 基准） | 1.0 |
 | `SWE_BENCH_ENRICHMENT` | SWE-bench 源码补充 JSONL 路径（P0，可选） | 无 |
+| `REPO_LEVEL_EXECUTION` | P0 仓库级验证：SWE-bench 任务路由到 RepoExecutor（clone + checkout + pip install -e 环境缓存 + gold test_patch 前后 FAIL_TO_PASS/PASS_TO_PASS 实测），默认关 | false |
+| `SWE_REPO_SETUP_TIMEOUT` | 仓库级环境 setup 子进程超时（秒，clone + checkout + pip install -e） | 600 |
+| `SWE_REPO_ENVS_DIR` | 仓库环境缓存根目录（(repo, commit) 分目录复用，默认 `~/.cache/aitester/repo_envs`） | 未设 |
+| `SWE_REPO_VENV_ISOLATION` | P1 仓库级 venv 隔离（每 commit 旁建独立 venv，pip install -e 装入 venv，pytest 用 venv python；默认关保持已缓存 repo_envs 兼容） | false |
 | `BENCHMARK_PARALLELISM` | 批量测试并行度（0=串行） | 0 |
 | `TEMPERATURE` | LLM 采样温度 | 0.2 |
 
@@ -949,6 +1126,8 @@ docker run --rm \
 | `EXECUTOR_USE_DOCKER` | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest，镜像内置依赖；不可用时返回 `docker_unavailable` 诊断不降级本地） | 5.13 |
 | `EXECUTOR_DOCKER_IMAGE` | aitester:latest | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） | 5.13 |
 | `CROSS_FILE_ENABLE` | false | 跨文件修复（协调器-提议者架构，3.5；`reproduce.sh --cross-file` 显式启用） | 5.8 |
+| `REPO_LEVEL_EXECUTION` | false | P0 SWE-bench 仓库级验证：SWE-bench 任务路由到 RepoExecutor（clone + checkout + pip install -e 环境缓存 + gold test_patch 前后 FAIL_TO_PASS/PASS_TO_PASS 实测），默认关保持合成集/examples 口径不变 | 5.20 |
+| `SWE_REPO_VENV_ISOLATION` | false | P1 仓库级 venv 隔离：每 commit 环境旁建独立 venv（pip install -e 装入 venv，pytest 用 venv python），解决跨 commit 全局 python 环境污染（实测 sqlfluff BaseSegment 方法在相邻 commit 不一致 → AttributeError，与 LLM 补丁无关） | 5.20 |
 | `CROSS_FILE_BIDIRECTIONAL` | false | 2.2 跨文件双向依赖图（额外收集"其他模块→entry"反向依赖边，修复计划同步更新调用方；需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证"跨文件启用 ≠ 双向启用"两级保守） | 5.8 |
 | `ADVERSARIAL_DEBUGGING_ENABLE` | false | 3.1 对抗性推理（AdverIntent 式：生成补丁前注入 2-3 个对抗性意图假设 + 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次；纯观测层，默认关保持历史口径） | 5.16 |
 | `API_CIRCUIT_BACKOFF` | true | 4.4 API 熔断器指数退避开关（冷却期改按 `base * 2^open_count` 指数增长，彻底死掉的 provider 冷却期单调增长；`reproduce.sh` 显式透传，设 false 回退 4.2 固定冷却期口径便于对比实验） | 5.17 |
@@ -1150,6 +1329,24 @@ python main.py clean-venv-cache --max-size-mb 512
 
 该批次实验受 API 限流影响，结果未归档到仓库；后续重跑数据以本地私有目录保存（不入库）。
 
+**仓库级验证（P0/P1，2026-09-25）**：用 `RepoExecutor`（`REPO_LEVEL_EXECUTION=true`）
+按 SWE-bench 官方口径（gold `test_patch` 前后 FAIL_TO_PASS/PASS_TO_PASS 实测）
+验证 lite-20，结果见 [experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7：
+
+- 数据管道修复（`SWE_BENCH_ENRICHMENT` 注入真实源码）+ 执行环境修复
+  （RepoExecutor 仓库级 clone + pip install -e + venv 隔离）+ 补丁管道修复
+  （`git diff --no-index` 生成可应用 unified diff）后，SWE-bench 仍 0/20。
+- P1 诊断（venv 隔离 + 修复管道后，单源任务 0/7）失败分类：
+  5/7 `LLM_BREAKS_IMPORT`（LLM 重写目标文件破坏 sqlfluff 插件命名契约，
+  如 `Rule_L027` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`
+  （LLM 未产出修复）。**管道与环境已全部修通，0/N 是 LLM 引擎修复质量
+  边界**（免费档小模型对真实仓库级代码），非管道 / 非环境。
+- 跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会
+  0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文重做。
+
+论文定位：SWE-bench 0/N 写入"局限性讨论"章节（引擎修复质量边界），
+主实验仍用合成数据集（88% vs 60% vs 8%，p=0.002 显著）。
+
 ### 关键修复记录
 
 - `_validate_parametrize` 由 regex 改为 ast 解析，解决嵌套列表导致参数误判问题
@@ -1207,7 +1404,7 @@ python main.py clean-venv-cache --max-size-mb 512
 ### v0.1 (2026-09-18) — 首个正式版本
 
 **核心成果**:
-- 四智能体协作架构（Planner / Generator / Executor / Debugger）+ 分层错误修复机制（14 类错误分类）
+- 四智能体协作架构（Planner / Generator / Executor / Debugger）+ 分层错误修复机制（16 类错误分类）
 - 逻辑驱动思维链（Logic-driven CoT）：Planner 显式分析输入域/输出域/前置条件/后置条件/边界
 - RAG 检索增强（ChromaDB，默认关闭；`ENABLE_RAG=true` 启用）
 - 多基线对比与消融实验（aitester / plain_llm / single_agent）
@@ -1215,20 +1412,21 @@ python main.py clean-venv-cache --max-size-mb 512
 - 结构化可观测性：JSONL 节点级追踪（4.1，默认关；`AITESTER_TRACE_DIR` 启用）
 - 成本感知路由 + 熔断冷却期 + 半开探测（3.4 + 4.1 + 4.2）
 - SWE-bench 源码导出自动化（2.1）+ 数据污染检测（token 级 Jaccard）
+- SWE-bench 仓库级验证（P0/P1，RepoExecutor：clone + checkout + pip install -e 环境缓存 + venv 隔离 + gold test_patch 前后 FAIL_TO_PASS/PASS_TO_PASS 实测，默认关）
 - 跨文件修复（协调器-提议者架构，3.5，默认关）
 - 断言增强策略（AST 提取现有 assert，3.4，默认关）
 - 依赖缓存监控（venv 命中率可观测 + clean-venv-cache CLI）
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
-- 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级三类变异体）
+- 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级七类变异体；杀死判定按 pytest 官方退出码精确化，2026-09-26）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1667 个测试用例 / 覆盖率 94% / Ruff 全绿
+- 全量 1714 个测试用例 / 覆盖率 94% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1667 passed / 0 failed / ruff 全绿 / 覆盖率 94%
+**验证**: 全量 1714 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ---
 

@@ -4,6 +4,471 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性）
+
+> 全仓代码审查与保守优化批次（默认行为不变）：静态检查全绿、死代码清理、
+> 线程卫生修复、项目卫生补全、未深审模块的性能 / 正确性修复、CF-3
+> 跨文件修复"各模块共用入口代码"逻辑缺陷修复、第五轮端到端接线层
+> P0 修复（变异测试杀死判定、并行 API 轮询可复现性、LLM 缓存原子写、
+> 单智能体基线写盘安全检查、状态 schema 声明补全）、第六轮节点层
+> 路由语义澄清与鲁棒性增强（_should_debug 诊断关键词早期迭代路由、
+> test_passed 一致性、generator LLM 失败降级、planner/debugger 兜底
+> 扩 OSError、缓存统计线程卫生）。
+> 全量 1728 测试通过，零回归。
+
+### 静态检查清零（mypy / ruff）
+
+- `src/agents/executor_repo.py::_dep_fingerprint`：依赖指纹内容片段列表注解
+  `list[str]` → `list[bytes]`（以 `"rb"` 读入二进制片段，原注解与运行期类型
+  不符，`hashlib.update` 报 4 处 mypy arg-type）；
+- `src/datasets/synthetic_dataset.py`：难度分布统计 `dist` 补
+  `dict[str, int]` 注解（消除 mypy var-annotated）；
+- `tests/test_executor_repo.py`：移除未使用导入（`json` / `sys` /
+  `textwrap` / `shutil` 别名）、文件读取改 `with open(...)` 上下文管理
+  （SIM115）；
+- `ruff format --check` 归一 11 个未格式化文件（experiments / scripts /
+  src / tests 的格式偏差，CI 固定 ruff 0.16.3 口径）。
+
+### 死代码与线程卫生
+
+- `src/api/api_manager.py::_build_node_list`：`if/else` 两分支均已 `return`
+  后残留的全池备用候选构建代码块不可达，移除并在复杂度路由命中路径保留
+  语义等价的全池 fallback 构建（行为不变）；
+- `src/api/api_manager.py::reset_manager`：`_stop_health_checker()` 移出
+  全局单例锁临界区（先换出旧实例、清引用，再在锁外停止其后台健康检查
+  线程），避免 shutdown 的 5s join 阻塞并发 `get_manager()` 创建新管理器。
+
+### 项目卫生
+
+- `.gitignore` 补充 `.mypy_cache/`、`.ruff_cache/`（工具缓存）与
+  `data/`、`results/`（本地实验数据目录，与 `experiments/results/` 口径
+  一致，防误提交）；
+
+### 安全（凭证脱敏补强，均有实证）
+
+- `src/utils/credential_scrub.py`（P0）：固定凭证名单匹配不到 `.env` 实测
+  存在的多端点编号命名（`OPENAI_API_KEY_2/3`、`OPENAI_BASE_URL_2/3`）——
+  旧模式锚定全名 `^OPENAI_API_KEY$` 漏掉编号变体，凭证原样进被测代码子进程
+  （执行向量 + 泄露面）。补编号变体通配 `OPENAI_(API_KEY|BASE_URL)_\d+`
+  与 provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY`
+  / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的
+  PROVIDER_TEMPLATES 键联动，消名单漂移）；
+- `src/api/api_manager.py::call`（P0）：全节点失败路径 `RuntimeError` 携带
+  未脱敏的原始 openai 异常体（网关错误体可能回显带 token 的 base_url），
+  异常传播链此前是脱敏盲区——出口统一 `_redact`，与日志路径口径对齐；
+- `src/config/config_manager.py::add_llm_config`（P0）：api_key / base_url /
+  model_name 原样写入 `.env.local` 无校验——含 `\n` 的值可注入任意变量行
+  （劫持后续配置），含 `#` 被 dotenv 解析截断。写盘前拒含换行/`#` 的输入；
+  成功日志 base_url 出口统一脱敏（URL 内嵌 token 场景）；
+- `src/utils/exceptions.py::retry_with_backoff`：重试警告日志直接打异常对象
+  （可能含请求体/凭证回显）且不脱敏——改惰性委托 `logging_utils.redact_text`
+  （与 api_manager `_redact` 同口径，惰性导入避免模块加载期循环依赖）；
+- `src/utils/logging_utils.py::SensitiveFormatter`：脱敏主路径失败时退回
+  **未脱敏**完整行（含堆栈）——改先走 `fallback_mask_sensitive_info`
+  纯正则兜底，彻底不可用才回退原文；
+- 回归测试：`tests/test_credential_scrub.py` 新增（编号变体 / provider 变量
+  / 高编号边界 / 入参不可变 5 用例）+ `tests/test_logging_utils.py` 补
+  `redact_dict` 字符串入参 2 用例。
+
+### 正确性
+
+- `src/utils/logging_utils.py::redact_dict`（P1）：字符串入参此前静默返回
+  `{}`（整个脱敏值被丢弃，trace / 异常序列化场景脱敏形同虚设）——改 str
+  入参脱敏后包成 `{"value": ...}`，保持返回 dict 的签名契约；删除冗余的
+  `_redact_scalars_dict` 别名；
+- `src/observability/trace.py::_append`（P1）：`except` 同时吞 `json.dumps`
+  失败与 import 失败，记录无法序列化时**静默丢弃且无告警**——拆两分支：
+  序列化失败记 warning 后放弃本条；脱敏不可用时原样写入（与 logging_utils
+  三级降级末档同口径）；
+- `src/graph/workflow.py::_file_cache_entry_count`（P1）：条目数记忆键
+  升级为 `(目录, 条目数, 统计时目录 mtime)`——旧口径外部删除缓存文件后
+  记忆值偏大直至目录整体消失才归 0；mtime 变化自动重扫，消除观测层失真
+  （同目录 mtime 未变仍复用记忆免 glob，性能口径不变）；
+- `src/graph/nodes.py`（P1）：`_HARD_ERROR_CATEGORIES` 从函数内每次调用
+  重建的 set 提升为模块级 `frozenset`（--parallel 热路径省无谓分配）；
+  `_cross_file_analyzer_node` 的 `cross_file_deps` 序列化改显式 `asdict`
+  （`d.__dict__` 含 dataclass 内部属性，未来加字段会无声改变 state schema，
+  下游 `_patch_applier_node` 按固定 key 取值的契约不稳）；
+- `src/graph/nodes.py::_dynamic_temperature_from_suggestion`（P1）：
+  `TEMPERATURE=0` 时"温度减半"仍透传 0.0（无意义覆盖）——改返回 None
+  沿用默认；
+- `src/agents/executor_repo.py::verify`（P1）：仓库级验证的 test_patch 临时
+  文件按 `base_commit[:8]` 命名，--parallel 下多线程同仓库并发验证存在
+  写/读竞争——文件名加 `os.getpid()` 后缀；
+- `src/agents/debugger.py::debug`（P1）：函数内局部导入
+  `from src.agents.error_classifier import ErrorCategory, ErrorClassifier`
+  与文件头同模块导入重复（历史残留）——并入文件头导入；
+- `src/agents/base_agent.py`（P1）：文件头已 `import os` 后又
+  `import os as _os`（重构残留，可读性差）——删除别名导入；
+- `src/utils/helpers.py::_find_balanced_json`（P1）：JSON 未闭合时返回
+  `text[start:]` 残余文本（`json.loads` 必失败还多付一遍 O(n) 解析）——
+  统一返回 None，由调用方走正则降级方案（回归用例同步更新）。
+
+### 并发（--parallel + 后台线程竞态）
+
+- `src/api/api_health.py::APIHealth`（P1）：`mark_success` / `mark_failure` /
+  `_probe_circuit_half_open` 在路由线程与后台健康检查线程间并发 mutate
+  同一节点（计数器 / 熔断状态 / 响应时间 deque 全非原子）——补节点级
+  `threading.Lock`（纯内存读改写，持锁微秒级，不改变判定语义仅原子化）；
+- `src/api/api_manager.py`（P1）：`health_check_all` / `health_check_batch`
+  直接遍历活 `health_nodes` dict，与并发 `remove_node` / `add_node` 可致
+  `RuntimeError: dictionary changed size during iteration`——改持锁快照后
+  遍历；`health_check_batch` 批次间检查停止事件（`HealthCheckerThread`
+  新增 `stop_event` property），`_stop_health_checker` join 超时后保留
+  引用不再置 None（残留线程下一批次边界自然退出，不空耗配额）；
+- `src/utils/logging_utils.py::setup_logger_safety`（P1）："检查-追加"
+  段无锁，并发调用各加一个过滤器实例（handler.filters 膨胀）——补
+  模块级锁串行化幂等短路；
+
+### 可维护性
+
+- `src/graph/workflow.py::_should_debug`（P2）：诊断关键词列表散落在路由
+  函数体内每次调用重建——提取为模块级常量 `_TEST_GEN_DIAGNOSIS_KEYWORDS`
+  （口径单一来源，后续调触发词只改一处）；
+- `src/graph/nodes.py`（P2）：`_executor_node` 函数内局部导入
+  `EXECUTOR_DOCKER_IMAGE` / `EXECUTOR_USE_DOCKER` 与文件头 9 个 config
+  符号风格漂移——并入文件头导入；
+
+### 性能（未深审模块补强，2026-09-26 第三轮）
+
+- `src/datasets/dataset_loader.py`（P1）：`get_task_by_id` 由 O(n) 线性扫描
+  降为 O(1) 查表——SWE-bench full 2294 任务 × benchmark 循环逐查原为
+  O(n²)。实现：`__init__` 建 `_task_index: dict[str, BenchmarkTask]` +
+  `_index_size` 长度标记（O(1) 失效判断）；`_ensure_loaded` 加载完成后
+  全量重建一次；`add_task` 追加后长度变化触发惰性重建（O(n) 一次，
+  后续 O(1)）。基类新增 `add_task`（原 InMemoryDataset 直接 append
+  无索引维护），子类删该覆写；
+- `src/tools/code_analyzer.py` + `src/tools/code_context.py`（P1，C-1）：
+  `extract_function_context` 在 `extract_focused_code` 原样返回时
+  **再做一次 `ast.parse + ast.walk`** 确认函数是否存在——大文件
+  ~200ms 翻倍。新增 `extract_focused_code_detail` 返回
+  `(code, focus_resolved)` 二元组，`extract_function_context` 直接消费
+  `focus_resolved`，零重复解析。`extract_focused_code`（原签名）委托
+  新函数保持兼容，3 处调用方无需改动；
+
+### 正确性（未深审模块补强，2026-09-26 第三轮）
+
+- `experiments/rag_ab_experiment.py`（P0）：`_parse_task_record` 读取的
+  字段名（`tokens_total` / `total_tests` / `passed_count` / `duration_s` /
+  `failure_category`）与 `run_benchmark._build_task_result` 实际产出的键
+  （`token_usage{total_tokens}` / `elapsed_seconds` / `iterations` /
+  `passed` / `error_category`）零交集——全部 `.get` 落到默认值，RAG A/B
+  报告的 token 收益 / 耗时 / 错误分布三大结论恒为假数据。现按真实键读取；
+- `experiments/rag_ab_experiment.py`（P1）：`_run_benchmark_once` 新增
+  `sub_run_dir` 参数——RAG ON / OFF 两次运行各自写入独立子目录
+  （`<output_dir>/rag_on`、`<output_dir>/rag_off`），避免共用 output_dir
+  时同一秒内写出导致 mtime 碰撞互相污染（`benchmark_*.json` 时间戳
+  精度仅秒级）；
+- `experiments/run_benchmark.py`（P2）：`task_limit` 边界归一——负数原
+  语义为 slice 静默截断（`tasks[:-1]` 丢最后一个任务），0 走 else 当全量；
+  现统一 `<1` 视为不限制（全量），仅正数生效，消除负数静默改任务数，
+  并记 warning；
+- `scripts/compare_executor_modes.py`（P1）：`main.py run --json` 多文件时
+  stdout 为多个 JSON 对象逐段拼接（每任务一段，非单个数组）——原
+  `json.loads(proc.stdout)` 对多段拼接必失败 → `tasks_passed` 恒 0。
+  新增 `_parse_json_stream` 用 `JSONDecoder.raw_decode` 逐个消费
+  （兼容单对象 / 数组 / 多段拼接三种形态）；
+- `src/reports/generator.py`（P1）：`get_report_generator()` 无锁
+  check-then-act，`--parallel` 首次并发构造竞态各建一个
+  `ReportGenerator`（每个各建一个 `ErrorClassifier`）——补模块级
+  `threading.Lock` 双检锁；
+- `src/reports/generator.py`（P2）：`ErrorReport.to_dict` 的
+  `error_context.__dict__` 直接内省序列化（dataclass 未来加内部字段
+  会无声改变 schema）——改 `asdict` 显式序列化（与 nodes.py
+  cross_file_deps 同型修复）；
+- `src/tools/cross_file.py`（P1）：`build_cross_file_repair_plan` 对每个
+  模块生成补丁时仅 catch `(json.JSONDecodeError, RuntimeError)`，LLM 超时
+  等异常传播出去中断整个跨文件计划构建——放宽为 catch 全 `Exception`
+  （单模块失败仅跳过、不毁全计划，与 multi_candidate.generate_candidates
+  同口径）；
+- `src/datasets/dataset_defects4j.py`（P2）：`info.json` 解析失败原静默
+  返回 None（损坏版本无声跳过）——记 `logger.warning` 便于定位数据问题；
+
+### 并发（未深审模块补强，2026-09-26 第三轮）
+
+- `src/tools/cross_file.py`（P1）：`_save_repair_plan_cache` 直接
+  `open("w") + json.dump` 非原子——`--parallel` 双 worker 同依赖图并发写
+  会交错损坏 JSON → 读侧降级 None → 重调 LLM，放大成本。改"先写临时
+  文件再 `os.replace` 原子替换"（与 nodes.py `_write_file_atomic` 同模式），
+  失败时清理临时文件；
+- `scripts/check_lock_sync.py`（P2）：新增规则 4（WARNING 不影响退出码）：
+  lock 中存在但 requirements.txt 未声明的"多余项"提示——如 radon 已从
+  requirements 移除但 lock 仍残留（radon==6.0.1），提示重新生成 lock
+  （lock 含传递依赖，仅 WARNING 不阻断）；
+
+### 跨文件修复逻辑缺陷（CF-3，2026-09-26 第四轮）
+
+- `src/tools/cross_file.py::build_cross_file_repair_plan`（P0）：协调器-提议者
+  架构本意是"每个模块由一个提议者看自己模块的代码生成补丁"，但此前对每个
+  模块调用 `debugger.debug(target_code=target_code, ...)` 时**都传入口模块的
+  `target_code`**——模块 B 的补丁实际是基于模块 A 的代码生成的，多文件场景下
+  补丁错位。现新增可选 `source_files: dict[str, str] | None` 参数：提供时每模块
+  用自己模块的源码（`source_files.get(module_name)`），未含该模块时回退
+  `target_code`（保守口径，不阻断该模块补丁生成）；`source_files=None` 保持
+  历史行为（全模块共用 `target_code`，向后兼容）；`target_module` 参数从调用方
+  传入的固定值改为按模块名 `module_name` 传入（协调器-提议者本意：LLM prompt
+  约束的是"当前提议者负责的模块"）；
+- `src/tools/cross_file.py::build_cross_file_repair_plan_cached`：缓存包装层天然
+  持有 `source_files`（用于依赖分析），此前未透传给底层 `build_cross_file_repair_plan`
+  → 即使调用方有源码，底层仍全模块共用 `target_code`。现透传 `source_files`，
+  缓存命中路径与 LLM 生成路径口径一致；
+- 回归测试：`tests/test_cross_file.py` 新增 3 用例（`test_source_files_per_module_code`
+  验证每模块拿到自有源码 + 模块名；`test_source_files_fallback_to_target_code`
+  验证 source_files 未含某模块时回退入口代码；`test_source_files_none_keeps_legacy_behavior`
+  验证 source_files=None 时全模块共用 target_code 历史行为）；
+
+### 变异测试判定与变异体生成（P0/P1，2026-09-26 第五轮）
+
+- `experiments/mutation_testing.py::_run_mutant_tests`（P0）：此前
+  `return proc.returncode != 0` 把 pytest 的**所有**非零退出码（含
+  2=收集错误 / ModuleNotFoundError / 语法错误）一律当作"杀死"，与文档
+  声明的保守口径（"执行失败（如 import 错误）视为存活"）正好相反——
+  实测 e2e 路径下测试 import 的模块名与写盘的 `mutated_module.py` 对不上时，
+  每个变异体子进程都以收集错误退出（rc=2）→ 全部误判为"杀死" →
+  mutation_score 恒 1.0，弱测试与强测试得分无法区分（指标失效）。
+  现按 pytest 官方退出码精确判定：rc==1（有测试失败）= 杀死；rc==0 = 存活；
+  其他（2/5/超时/异常）= 存活（保守口径，不夸大变异得分）；
+- `experiments/mutation_testing.py`（P1）：变异体"按行号尽力定位"缺陷——
+  `_flip_comparison_op` / `_offset_numeric` / `_shift_boundary_op` 在
+  deepcopy 后按"行号取第一个同类型 Compare"定位，同行多比较
+  （`a < b and c < d`）时只改第一个且 description 记录原节点操作符，
+  产生描述与改动不一致 + 重复变异体。定位键升级为
+  **(lineno, col_offset) 双键**，精确到具体比较表达式；
+- `experiments/mutation_testing.py::generate`（P1）：此前按注册顺序
+  `mutants[:20]` 截断且不去重——前 4 类（比较/布尔/数字/边界）在富比较
+  代码上易爆炸，把 P0 3.3 新增的第 5-7 类（return_void / return_empty /
+  exception_*）整体挤掉，"7 类全启用"的设计意图落空；无效变异体
+  （未改到目标 → 代码不变 → 判存活）被下游消费导致 mutation_score
+  假性偏高。现按 `mutant.code` **去重**（消除重复变异体）+ **类型轮转
+  均匀取样**（7 类分桶 round-robin 填满上限，保证每类都有代表）；
+- `experiments/mutation_testing.py`（P1 配套）：`_OPERATOR_FLIP_MAP` 此前
+  含 `Lt↔LtE / Gt↔GtE`，与 `boundary_shift` 类型生成**同一份变异代码**，
+  代码级去重会把 boundary_shift 整类消除。现 operator_flip 仅保留等值对
+  （Eq↔NotEq，boundary_shift 不覆盖），严格比较边界变异专属于
+  boundary_shift，两类互不重叠、各有独立变异体；
+- `experiments/mutation_testing.py`（P2）：`_run_mutant_tests` 内
+  `__import__("subprocess")` 反模式改常规局部 `import subprocess`
+  （同函数已局部 import os/sys/tempfile）；
+- 回归测试：`tests/test_smell_detection_v2.py` e2e 用例修复 import 名
+  错配（`from module import check` → `from mutated_module import check`，
+  使"弱测试低分 / 强测试高分"断言真正生效）；`tests/test_multi_candidate.py`
+  boundary_shift 用例更新源码为严格比较以匹配修复后的类型分布。
+
+### 并行 API 轮询可复现性（P0，2026-09-26 第五轮）
+
+- `experiments/run_benchmark.py::run_single_task`（P0）：此前
+  `hash(task.task_id) % len(_VALID_APIS)` 做任务→API 轮询索引——
+  Python 3 的 `str` 内建 `hash()` 受 `PYTHONHASHSEED` 随机化，同一任务
+  在不同进程/启动间映射的 API 索引不一致，破坏"任务→API 稳定轮询"的
+  文档承诺（基线对比不可复现）。现改用 `zlib.crc32(task_id)`
+  （跨进程确定性）+ 基线索引混合：
+  `(crc32(task_id) + baseline_idx) % n`，保持任务内多基线轮错开历史行为；
+- `experiments/run_benchmark.py::run_single_agent_baseline`（P0）：
+  single_agent 基线此前直接 `open(state["target_file"], "w")` 写 LLM
+  输出的 `new_code`，绕过 `_patch_applier_node` 的安全检查——LLM 返回
+  空壳/过短代码时清空被测实例文件，后续基线/重试拿到空代码。
+  现补最小守卫：非空（≥ 原代码 10%）+ 函数定义数不减少（与工作流
+  写盘口径一致）；不通过时放弃写盘、保持原代码（记 warning）。
+
+### LLM 缓存原子写（P1，2026-09-26 第五轮）
+
+- `src/agents/base_agent.py::_call_llm_with_cache`（P1）：此前直接
+  `open(cache_file, "w") + json.dump` 非原子——`--parallel` 下两 worker
+  同键（同 prompt 材料 → 同 md5 → 同 cache_file）并发写时，另一方读侧
+  可能观察到半截 JSON → `json.load` 抛错 → 静默降级重调 LLM
+  （浪费 token + 延迟）。缓存文件键即内容 md5，并发写入的是逐字节相同
+  的 JSON。现改"写线程唯一临时文件（`.tmp.<thread_id>`）→ `os.replace`
+  原子替换"（与 cross_file CF-8 / nodes._write_file_atomic 同模式），
+  替换失败时清理临时文件。
+
+### 状态 schema 与写盘安全检查（P2，2026-09-26 第五轮）
+
+- `src/graph/state.py`（P2）：`repo_verification` 字段此前由
+  `run_benchmark` 在 invoke 后 set 到 final_state 但**未声明于
+  AITesterState TypedDict**（守护测试 test_state.py 会漏报）。
+  现显式声明 `repo_verification: dict[str, Any] | None` 并在
+  `create_initial_state` 工厂初始化为 None（键集与 __annotations__ 对齐）；
+- `src/reports/generator.py::_parse_failed_cases`（P2）：兜底解析器此前
+  `"FAILED" in line and "[" in line` 硬条件漏掉现代 pytest 短输出
+  （`FAILED test_x.py::test_y - AssertionError`，无 `[`）；
+  `"Error" in line` 过宽（任何含 "Error" 的行都覆盖 error 字段）。
+  现按 pytest 实际输出模式匹配：用例名取 FAILED 行内首个 token（`[E]/[F]`
+  后缀/短格式后缀均兼容）；短格式行内错误后缀直接提取；详细格式取
+  FAILED 行后首个异常类名行；无 name 时兜底 "unknown"（历史行为保持）；
+- `scripts/verify_swe_bench_export.py::_extract_suggested_func_from_patch`
+  （P2）：`line.startswith("@@") or line.startswith("@")` 与下方正则
+  `re.search("@@...")` 语义矛盾——`startswith("@")` 会命中 diff 删除行
+  里的装饰器（`-@decorator` 行以 `@` 开头但非 hunk 头）。现收紧为仅
+  hunk 头 `@@` 行，用 `split("@@", 2)[2]` 提取尾部上下文
+  （与 dataset_loader._extract_suggested_function 同口径）。
+
+### 节点层路由语义与鲁棒性（P1/P2，2026-09-26 第六轮）
+
+- `src/graph/workflow.py::_should_debug`（P1 路由语义澄清）：诊断关键词
+  判定此前嵌套在"达迭代上限"块内——早期迭代（iteration < max）命中
+  "测试生成错误"关键词时仍走 debugger 修代码，而非回 generator 重新
+  生成，与 `_generator_node` 再生成判定（含 `defect_type == test_defect`
+  任意迭代可触发）及 3.1 双向诊断路径口径不一致。现把诊断关键词判定
+  提升为独立分支（任意 iteration 命中即 regenerate，仍受
+  `regeneration_count` 上限保护；上限已满时落常规 debug）；
+- `src/graph/workflow.py::_should_debug`（P1 一致性）：`test_passed` 此前
+  用 `is True` 严格恒等判定，与 `_recent_repairs_invalid` 的 truthiness
+  口径不一致（非 bool 真值如 `numpy.bool_` 会被 `is True` 误判为未通过
+  → 误路由 debug）。现统一为 truthiness；
+- `src/graph/nodes.py::_generator_node`（P1 降级兜底）：此前
+  `agent.generate` 无 try-except，LLM 调用失败（RuntimeError，含跨 API
+  故障转移耗尽）/ 缓存 OSError 会让整图崩溃——与 planner/debugger 节点
+  "降级兜底"口径不一致（二者均有默认计划 / 空 patch 兜底），且
+  workflow.py 模块文档声称"使用 try-except 捕获 LLM 调用异常，确保
+  工作流不因单点故障而崩溃"。现补降级：LLM 失败时生成空测试并记
+  warning，executor 拿到空测试自然失败 → 路由到 debugger/done，不再
+  崩溃整图（对"LLM 完全不可用"场景：崩溃=零产出，降级=仍有修复机会）；
+- `src/graph/nodes.py::_planner_node` / `_debugger_node`（P2 兜底扩宽）：
+  except 子句此前仅捕获 `(json.JSONDecodeError, RuntimeError)`，未覆盖
+  LLM 文件缓存读写抛的 `OSError`（缓存目录被外部删除/磁盘满等场景）。
+  现扩为 `(json.JSONDecodeError, RuntimeError, OSError)`，与"节点降级
+  兜底"设计口径一致（缓存 IO 异常不再让整图崩溃）；
+- `src/graph/workflow.py`（P2 线程卫生）：`_FILE_CACHE_COUNT_MEMORY` 的
+  读-改-写无锁保护，`--parallel` 多任务收尾报告并发调用
+  `get_workflow_stats → _file_cache_entry_count` 时可能读到半更新元组
+  （另一线程 stat/glob 中途）。现加模块级 `threading.Lock` 把"记忆读 +
+  stat/glob + 记忆写"整段串行化（临界区内均为只读系统调用，普通 Lock
+  足够；记忆键语义不变）；
+- `src/tools/cross_file.py`（P2 导入卫生）：`_save_repair_plan_cache`
+  的 except 分支内局部 `import contextlib` 提升到模块顶层导入
+  （消除函数体内 import，与其他模块级导入口径一致）。
+
+回归测试：`tests/test_workflow.py` 新增
+`test_generator_node_llm_failure_degrades_to_empty`（generator LLM 失败
+降级为空测试）；`tests/test_workflow_extended.py` 新增
+`test_should_debug_regenerate_at_early_iteration`（早期迭代诊断关键词
+路由 regenerate + 再生成上限保护）。
+
+### 验证
+
+- `ruff check` / `ruff format --check` / `mypy src/` 全绿；
+- 全量 1728 测试通过（28.7s），零回归（第六轮新增 2 条回归用例：
+  generator LLM 失败降级 + 早期迭代诊断关键词路由；第五轮修复既有
+  变异测试 e2e 用例的 import 名错配使其断言真正生效，新增 2 条
+  报告解析回归用例）。
+
+## [Unreleased] — P0 改进批次：13 项落地（分层代码压缩 / 复杂度感知路由 / 命名契约验证 / 合成数据集分层难度 / 跨文件合成任务 / SWE-bench 导出质量验证 / RAG A/B 实验脚本 / 多候选自适应触发 / 变异体难度升级 / 错误分类子类+响应重试 / 追踪层默认启用 / venv 按仓库复用）
+
+> 对应实验数据缺口（SWE-bench 0/20、合成集统计已覆盖但真实集 A/B 缺失）与
+> `docs/assessment_2026-09-25_improvement_directions.md` 的改进路线。
+> 全部默认行为兼容（默认参数回退历史口径，显式开启才启用新能力）。
+> 详见 `docs/implementation_2026-09-25_p0_batch.md`。
+
+### 功能（默认行为不变，经环境变量显式开启）
+
+- **1.1 分层代码压缩（函数级切片 + 调用链深度）**（`src/tools/code_context.py` +
+  `src/tools/code_analyzer.py` + `src/agents/base_agent.py`）：
+  - `extract_function_context(source, func_name, depth=2, max_chars=3000)` 委托
+    `extract_focused_code()` 的 BFS 调用链闭包（`_closure_names`），
+    depth=1 保留直接依赖（历史行为），depth=2 再展开一层被调函数自身依赖；
+  - `BaseAgent.truncate_code()` 新增 `focus_depth` 参数（读 `CODE_FOCUS_DEPTH`，默认 1）；
+    `_CODE_MAX_CHARS` 改读 `CODE_MAX_CHARS` 环境变量（默认 3000）；
+  - `debugger.py` 的 `cross_file_contexts` 经 `extract_function_context`
+    生成 per-module 2000 字符预算 + 总 4000 字符预算，注入 Debugger prompt。
+
+- **1.2 复杂度感知路由（固定 Agnes 3.0-flash 多 provider 端点）**（`src/api/complexity_router.py`
+  新增 + `src/api/api_manager.py` + `src/graph/state.py` + `experiments/run_benchmark.py`）：
+  - `compute_complexity_score(lines, num_files, num_deps, cyclomatic_complexity)` 输出
+    [0,1] 归一化评分（阈值 `<0.35 → simple / <0.70 → medium / >=0.70 → complex`，
+    各维度权重由 `ROUTING_COMPLEXITY_*_NORM` 环境变量可配）；
+  - `APIManager._select_node_by_complexity(complexity_class)` 按 cost_weight 排序
+    APIHealth 节点（complex → 高 cost_weight 端点在前，simple → 低成本端点在前）；
+  - `state["complexity_class"]` / `state["complexity_score"]` / `state["complexity_breakdown"]`
+    / `state["routing_hints"]` 由 `run_benchmark.py` 在 `create_initial_state` 后计算写入；
+  - 约束：仅路由 Agnes 3.0-flash 的多 provider 端点，不引入其他模型家族；
+  - `MODEL_ROUTING_STRATEGY=fixed` 回退历史策略。
+
+- **1.3 补丁命名契约验证（默认开启）**（`src/tools/patch_applier.py` + `src/graph/nodes.py`）：
+  - `check_naming_contract(original_code, patched_code) -> (bool, list[str])`：
+    AST 对比前后模块级符号（函数/类/`__all__`/注册装饰器/模块级常量），
+    缺失任何原符号则拒绝补丁；
+  - `PATCH_CONTRACT_CHECK=true`（默认）时在 `_patch_applier_node` 写盘前调用；
+  - Debugger prompt 注入 `_CONTRACT_CONSTRAINT`（"不得修改或删除以下符号……"）。
+
+- **2.1 合成数据集分层难度（difficulty 参数）**（`src/datasets/synthetic_dataset.py` +
+  `experiments/run_benchmark.py`）：
+  - `SyntheticDataset(task_count, seed, subset, difficulty="mixed", **kwargs)`：
+    支持 `mixed` / `level1` / `level2` / `level3` / `level4` 五个难度梯度；
+  - Level 1（历史口径）/ Level 2（多函数交互缺陷）/ Level 3（跨文件双模块构造）/
+    Level 4（边界+异常隐蔽缺陷）；
+  - CLI `--difficulty` 选项仅对 synthetic 数据集生效。
+
+- **2.2 跨文件合成任务构造（Level 3 双模块）**（`src/datasets/synthetic_dataset.py`）：
+  - `CROSS_FILE_PATTERNS` 双模块模板（module_a 入口 + module_b 被调方含缺陷）；
+  - `instance_code=module_b_code`，`metadata.module_a_code` / `target_module` /
+    `fixed_module_b_code` / `num_files=2` 供跨文件修复架构消费；
+  - 修复需改 module_b 接口 → 验证跨文件修复架构（协调器-提议者）。
+
+- **3.2 多候选自适应触发（默认 adaptive）**（`src/graph/nodes.py`）：
+  - `MULTI_CANDIDATE_TRIGGER_STRATEGY=adaptive`（默认）：仅当
+    `iteration >= 1` 且 `error_category ∈ {assertion, runtime, logic_error, index_error}`
+    时才启用多候选；简单任务 / 早期迭代保持单候选省 token；
+  - `MULTI_CANDIDATE_TRIGGER_STRATEGY=always` 回退历史口径。
+
+- **3.3 变异体难度升级（7 种变异类型）**（`experiments/mutation_testing.py`）：
+  - 新增 `_ReturnEmptyTransformer` / `_RemoveRaiseTransformer` /
+    `_ExceptionTypeTransformer` 三类 transformer；
+  - 变异体类型从 5 扩至 7（operator_flip / boolean_negation / numeric_offset /
+    boundary_shift / return_void / return_empty + exception_remove +
+    exception_type_swap），提升对"边界 + 异常路径"类缺陷的覆盖度。
+
+- **4.1 错误分类子类 + 响应格式重试**（`src/agents/error_classifier.py` +
+  `src/agents/debugger.py`）：
+  - `ErrorCategory` 新增 `LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`
+    （从 `LLM_FORMAT_ERROR` 拆出的两个精确子类，14 类 → 16 类）；
+  - `ErrorClassifier.classify_llm_response(raw_response)` 直接分析 LLM 原始响应：
+    空 → LLM_EMPTY_RESPONSE；非空但 JSON 提取失败 → LLM_JSON_PARSE_FAILED；
+  - `debugger.py::debug()` 检测到格式异常时用更严格 prompt 自动重试一次，
+    仍失败则降级到宽松 JSON 提取。
+
+- **4.3 venv 按仓库复用（SWE-bench 多 commit 场景）**（`src/agents/executor_repo.py`）：
+  - `RepoExecutor(venv_reuse_by_repo=True)`：同一仓库多 commit 共享一个仓库级 venv
+    （`<repo>/_shared_venv/`），仅当依赖指纹（SHA256 of requirements/pyproject/setup）
+    变更时重建；源码切换不触发重装（editable install 的 `.pth` 自动跟随 checkout）；
+  - 大幅减少 SWE-bench 同一 repo 多 commit 场景的 venv 重建开销（10-20 倍）；
+  - `SWE_REPO_VENV_REUSE_BY_REPO=true` 启用（需配合 REPO_LEVEL_EXECUTION + SWE_REPO_VENV_ISOLATION）。
+
+### 可观测性与实验脚本
+- **2.3 SWE-bench 源码导出质量验证**（`scripts/verify_swe_bench_export.py` 新增）：
+  - 5 维度验证（非空 / 行数 / Python 语法 / 目标函数存在 / 目标文件路径匹配），
+    输出结构化质量报告（`pass_rate` / `by_label` / `failed_instances` / `avg_line_count`）；
+  - CLI：`--enrichment` / `--instances` / `--output` / `--min-lines`。
+- **3.1 RAG A/B 对比实验脚本**（`experiments/rag_ab_experiment.py` 新增）：
+  - 自动执行 RAG ON / RAG OFF 两次 benchmark，配对分析 token / 成功率 / 迭代 / 耗时，
+    Welch t-test + Mann-Whitney U + Cohen's d 统计检验（与 0.7 报告同口径）；
+  - 按错误类型分组分析 RAG 收益（哪类错误在 RAG ON 下显著减少）；
+  - `--analyze-only` 模式（读已有结果 JSON 直接统计，跳过实验运行）。
+- **4.2 追踪层默认启用**（`experiments/run_benchmark.py`）：
+  - 入口处若 `AITESTER_TRACE_DIR` 未设（或为空），自动设为 `<output_dir>/traces/`；
+  - 节点级 JSONL 记录（输入长度 / 输出长度 / token / 耗时 / 路由决策）随工作流自动追加；
+  - 设 `AITESTER_TRACE_DIR=`（空串）显式关闭。
+
+### 文档与测试
+- **文档同步**：
+  - `README.md`：错误分类 14→16 类 + 新增 §5.21 P0 改进批次（13 项）+
+    更新"最新优化"/"最近改动"行；
+  - `.env.example`：新增 P0 批次环境变量（CODE_FOCUS_DEPTH / CODE_MAX_CHARS /
+    MODEL_ROUTING_STRATEGY / ROUTING_COMPLEXITY_*_NORM / PATCH_CONTRACT_CHECK /
+    MULTI_CANDIDATE_TRIGGER_STRATEGY / SWE_REPO_VENV_REUSE_BY_REPO）；
+  - `docs/implementation_2026-09-25_p0_batch.md`（新增）：P0 批次完整实施清单。
+- **测试更新**：
+  - `tests/test_error_classifier.py`：枚举 14→16 类断言 + P0 4.1 子类存在性校验；
+  - `tests/test_synthetic_dataset.py`：difficulty 分层测试 + 跨文件 Level 3 结构校验；
+  - `tests/test_workflow_extended.py`：多候选自适应策略环境变量 +
+    `_select_multi_candidate_patch` 签名（`iteration` 参数）；
+  - `tests/test_executor_repo.py`：`_run_test_nodes` mock 签名（`repo_url` 参数）。
+
+### 验证
+- 全量回归：`python3 -m pytest tests/ -q` → **1667 passed, 47 skipped**（同基线，零回归）
+- 受影响子集：test_base_agent（40）/ test_code_context（18）/ test_error_classifier（77）/
+  test_debugger（38）/ test_workflow_extended（37）/ test_executor_repo（17）/
+  test_synthetic_dataset（5）/ test_api_manager + extended（152）/ test_code_analyzer（17）
+
 ## [Unreleased] — 改进方向批次：5 项落地（3.3 位置感知迭代修复 + 5.2 错误分类 14 类文档同步 + 5.1 单批次边界测试 + 4.2 脱敏自动检查钩子 + 2.1 真实嵌入钩子）
 
 > 对应 `docs/assessment_2026-09-25_improvement_directions.md` 的"真实剩余工作"清单

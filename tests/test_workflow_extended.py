@@ -703,6 +703,35 @@ class TestEdgeCases:
 
         assert result == "done"
 
+    def test_should_debug_regenerate_at_early_iteration(self):
+        """2026-09-26 全面审查（P1 路由语义澄清回归）：诊断关键词命中时，
+        即使 iteration < max_iterations 也应路由 regenerate（而非先走 debugger
+        修代码）。此前关键词判定嵌套在 "达迭代上限" 块内，早期迭代命中
+        关键词会被误路由 debug。现提升为独立判定（仍受 regeneration_count
+        上限保护）。"""
+        from src.graph.workflow import _should_debug
+
+        # 早期迭代（iteration < max），诊断命中测试生成错误关键词
+        state = {
+            "test_passed": False,
+            "iteration": 0,
+            "max_iterations": 3,
+            "diagnosis": "测试生成错误：测试代码本身有问题",
+            "regeneration_count": 0,
+        }
+        assert _should_debug(state) == "regenerate"
+
+        # 但 regeneration_count 已达上限时，即使早期迭代也不再 regenerate
+        state_capped = {
+            "test_passed": False,
+            "iteration": 0,
+            "max_iterations": 3,
+            "diagnosis": "测试生成错误：测试代码本身有问题",
+            "regeneration_count": 1,  # _MAX_REGENERATIONS = 1
+        }
+        # 达上限：落到下方常规 debug（早期迭代未达 max）
+        assert _should_debug(state_capped) == "debug"
+
 
 class TestGetWorkflowStats:
     """测试工作流统计的更多场景。"""
@@ -812,7 +841,8 @@ class TestDefaultOffFeatureBranches:
             "module_name": "x",
             "failed_cases": [],
             "test_output": "",
-            "iteration": 0,
+            "iteration": 1,  # P0 3.2 自适应触发：iteration >= 1 才启用多候选
+            "error_category": "assertion",  # P0 3.2 困难类别，满足自适应触发条件
         }
 
     def test_multi_candidate_selects_best(self, monkeypatch):
@@ -822,6 +852,9 @@ class TestDefaultOffFeatureBranches:
         from src.graph import nodes
         from src.tools.multi_candidate import CandidateResult
 
+        # P0 3.2：默认 adaptive 策略下 iteration>=1 + 困难类别才启用多候选；
+        # 历史口径 always 策略（显式设置）保留每次失败都启用多候选
+        monkeypatch.setenv("MULTI_CANDIDATE_TRIGGER_STRATEGY", "always")
         monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
         monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
         best = CandidateResult(
@@ -848,6 +881,7 @@ class TestDefaultOffFeatureBranches:
         from src.agents import executor as exc
         from src.graph import nodes
 
+        monkeypatch.setenv("MULTI_CANDIDATE_TRIGGER_STRATEGY", "always")
         monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
         monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
         monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
@@ -934,7 +968,7 @@ class TestDefaultOffFeatureBranches:
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
         target.write_text(original, encoding="utf-8")
-        monkeypatch.setattr(nodes, "_select_multi_candidate_patch", lambda s, oc: (new, True, {}))
+        monkeypatch.setattr(nodes, "_select_multi_candidate_patch", lambda s, oc, iteration=0: (new, True, {}))
         state = self._pf_state(target, original, new)
         result = nodes._patch_applier_node(state)
         assert result["target_code"] == new

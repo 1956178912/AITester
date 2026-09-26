@@ -239,9 +239,15 @@ class TestMutationGenerator:
         from experiments.mutation_testing import compute_mutation_score
 
         source = "def check(x):\n    return x > 3\n"
-        weak_test = "from module import check\n\n\ndef test_basic():\n    assert check(5) == True\n"
+        # 2026-09-26 全面审查（P0 修复配套）：测试文件必须 import 沙箱内
+        # 实际写盘的模块名 `mutated_module`（_run_mutant_tests 固定把变异体
+        # 写入 <tmpdir>/mutated_module.py 并设 PYTHONPATH=<tmpdir>）；此前误写
+        # 为 `from module import check` → 每个变异体子进程都以收集错误退出
+        # （ModuleNotFoundError）→ 被旧逻辑（rc != 0）误判为"全部杀死"，
+        # 得分恒 1.0 且弱/强测试无法区分（该指标实测从未生效）。
+        weak_test = "from mutated_module import check\n\n\ndef test_basic():\n    assert check(5) == True\n"
         strong_test = (
-            "from module import check\n\n"
+            "from mutated_module import check\n\n"
             "def test_above():\n    assert check(4) == True\n\n"
             "def test_boundary_eq():\n    assert check(3) == False\n\n"
             "def test_below():\n    assert check(0) == False\n"

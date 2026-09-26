@@ -7,6 +7,42 @@
 > Related list: Improvement list 3.5
 > Prerequisite dependency: 3.1 Multi-candidate patches (`multi_candidate.py` already landed)
 
+## 0. P1 cross-file real-data validation feasibility judgment (2026-09-25)
+
+After SWE-bench repo-level verification (P0/P1, `RepoExecutor`) landed,
+the preconditions for cross-file task (13/20 lite tasks are multi-source)
+A/B gain validation are now explicit:
+
+- **Pipeline and environment are fixed**: `_diff_codes` now uses
+  `git diff --no-index` to produce an applicable unified diff; RepoExecutor
+  venv isolation (`SWE_REPO_VENV_ISOLATION=true`) fixes cross-commit
+  global-python pollution. LLM patches can be `git apply`-ed cleanly into
+  the real repo path.
+- **Engine capability boundary (not yet broken through)**: P1 single-source
+  task diagnosis (7 single-source tasks 0/7) shows the free-tier small model
+  lacks fix-quality on real repo-level code — 5/7 LLM rewrites broke
+  sqlfluff's plugin naming contract (mis-named `Rule_L*` class → entire
+  import chain crashed), 2/7 empty LLM patches. Cross-file task gold
+  patches span multiple source files (e.g. `commands.py` +
+  `click_deprecated_option.py`); the single-module `instance_code` view
+  cannot cover them; the cross-file analyzer (`cross_file_analyzer`) doing
+  AST dependency analysis also needs the full-repo source context, not the
+  single-file `instance_code` injected by enrichment.
+- **Feasibility judgment**: the cross-file A/B (ON vs OFF) has **no
+  positive signal** before the engine-capability breakthrough (ON/OFF both
+  0/N). Cross-file gain validation must be redone under a **stronger model
+  + full-repo source context** (enrichment injects the whole-repo source,
+  not a single file + the cross-file analyzer plugs into the full-repo
+  import dependency graph + the coordinator-proposer emits a repair plan
+  for the real multi-file gold patch).
+- **Current positioning**: the cross-file architecture (coordinator-proposer,
+  multi-file patch application, topological ordering, repair-plan caching)
+  is implemented and unit-tested (`test_cross_file.py` 39 cases); the
+  real-data gain is stated honestly as "implemented architecture + engine
+  capability boundary" — no forced 0/N no-signal A/B.
+
+See [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7.4.
+
 ## 1. Background and Goals
 
 ### 1.1 Current State

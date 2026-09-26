@@ -3,7 +3,7 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-25（0.10 深度审查轮：LLM 缓存负缓存 TTL 正确性回归 + 路径白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫；7.3 节 LRU 描述同步 0.9 批次 `llm_cache.py` 删除后的内嵌快路径口径）
+> 最后更新：2026-09-26（全面审查与保守优化轮：11.5 凭证剔除 P0 补强（编号变体通配 + provider 中间变量，与 `config_generator` `PROVIDER_TEMPLATES` 键联动）；此前 2026-09-25 0.10 深度审查轮（LLM 缓存负缓存 TTL + 路径白名单根归一 + 追踪层冗余摘要消除 + 统计接口免重扫）与 0.9 LRU 快路径同步见 §7.3）
 
 ---
 
@@ -555,4 +555,76 @@ ExecutorAgent 在本地 / venv / Docker 三种模式下，子进程环境均剔�
 
 三条链路统一走 `src/utils/credential_scrub.py` 的 `scrub_os_environ()`（单一实现，避免名单漂移）：
 - **动态模式**：`LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL`（N 为 1-32，对齐 `config.py` 的 LLM provider 扫描口径）——覆盖 `LLM_1_API_KEY` 等全部编号，此前 venv/Docker 链路原样继承宿主 `os.environ`、本地链路只剔 7 个固定变量（覆盖不了 `LLM_N_*` 系列），现统一动态剔除；
-- **通用 SDK 凭证固定名单**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`（保留历史口径）。
+- **通用 SDK 凭证固定名单**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `ANTHROPIC_API_KEY` / `API_KEY` / `LLM_API_KEY` / `LLM_CONFIG_API_KEY`（保留历史口径）；
+- **P0 补强（2026-09-26 审查轮）**：固定名单锚定全名（`^OPENAI_API_KEY$`）漏掉 `.env` 实测存在的多端点编号命名（`OPENAI_API_KEY_2/3`、`OPENAI_BASE_URL_2/3`），凭证原样进被测代码子进程（执行向量 + 泄露面）——补编号变体通配 `OPENAI_(API_KEY|BASE_URL)_\d+` 与 provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 `config_generator.py` 的 `PROVIDER_TEMPLATES` 键联动消名单漂移），覆盖批量脚本推导口径。
+
+## 十一、SWE-bench 仓库级验证的 venv 隔离（P1，2026-09-25）
+
+### 11.1 背景：跨 commit 全局 python 环境污染
+
+RepoExecutor（`src/agents/executor_repo.py`）按 `(repo, commit12)` 缓存仓库
+环境。各 repo_env 默认共享全局 `sys.executable`，`pip install -e .` 后全局
+site-packages 的 editable 安装（`.pth` / `__editable__.sqlfluff-0.9.1.pth`）
+指向"最近一次安装"的 commit 源码。跨 commit 任务运行 pytest 时
+`import <repo_pkg>` 解析到错误版本：
+
+- 实测 sqlfluff：`BaseSegment._log_apply_fixes_check_issue` 方法在
+  commit `8e724ef` 存在、在 commit `38cff664` 缺失（被重命名/删除）。
+  全局 python 指向 `38cff664` 时，在 `8e724ef` 环境跑 conftest 引用
+  旧方法 → `AttributeError`，与 LLM 补丁无关。
+- 同类：`ImportError while loading conftest`（旧 commit 的 conftest 在
+  新 commit 的依赖下导入失败）。
+
+**这是 184622 轮 SWE-bench 0/20 被误诊为"LLM 引擎无法产出可应用补丁"
+的环境层根因之一**（另一层是 difflib corrupt diff，见 §11.3）。
+
+### 11.2 venv 隔离方案（`SWE_REPO_VENV_ISOLATION=true`，默认关）
+
+每 commit 环境旁建独立 venv：
+
+- `RepoExecutor._create_venv(env_dir)`：`<env_dir>/venv/` 内 `python -m venv`，
+  按 `.venv_pip_installed` 标记判缓存命中（区别于全局模式的 `.pip_installed`）。
+- `RepoExecutor._venv_pip_install(repo_dir, env_dir)`：`<venv>/bin/python -m
+  pip install -e .`（依赖装入 venv，不污染全局）。
+- `_run_test_nodes`：pytest 用 `<venv>/bin/python` 运行；**venv 模式下
+  不注入宿主 PYTHONPATH**（实测带注入反而 ImportError——editable 安装的
+  `.pth` 已把本 commit 的 src 装进 venv site-packages，宿主 PYTHONPATH
+  会把其它 commit 路径混入搜索序破坏隔离）；`PATH` 前置 `<venv>/bin`
+  （子进程内再调 python/pip 时指向 venv，避免落回宿主）。
+- 全局模式（`SWE_REPO_VENV_ISOLATION=false`，默认）：各 repo_env 共享
+  全局 python，`PYTHONPATH` 把 `<repo>/src` 排在最前（让当前 commit 源码
+  优先于全局 editable 安装），保持与已缓存 repo_envs（`.pip_installed`
+  标记）的兼容。
+
+```bash
+# 仓库级 SWE-bench 验证 + venv 隔离（P1 口径）
+REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
+  SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10 --baselines aiterster
+```
+
+### 11.3 补丁管道修复（difflib corrupt diff → git diff --no-index）
+
+184622 轮 `llm_applied` 全 False 的另一层根因：`_diff_codes` 原用
+`difflib.unified_diff` 手工拼接，在"LLM 整文件重写"场景（old 与 new 行数
+差异大）产出的 diff 行计数与 git 解析器不符，`git apply --check` 报
+`corrupt patch`，5/5 非空 LLM 补丁全被拒。
+
+修复：`_diff_codes` 改用 `git diff --no-index`（在最小 git 仓库内对比
+`original` 与 `modified` 两个工作区文件），产出的 unified diff 行计数 /
+尾部换行语义严格正确；`--- / +++` 头重写为 gold 目标文件仓库路径
+（`_extract_gold_target_relpath` 取官方 gold patch 首个非测试源文件 b/
+侧路径）。修复后 5/5 非空 LLM 补丁全部 `git apply` 通过。
+
+### 11.4 对实验性能的影响
+
+- **首次 setup 成本增加**：每 commit 环境多一次 `python -m venv`（~2-5s）
+  + venv 内 `pip install -e .`（~30-90s，含依赖安装）。同仓库多任务
+  只 setup 一次（缓存复用），摊薄后单任务增量可忽略。
+- **验证阶段加速**：venv 隔离消除了跨 commit 污染导致的 conftest
+  ImportError（假失败），FAIL_TO_PASS 直接跑到功能断言层，无需重跑
+  排除环境污染，单任务 verify 时间稳定（实测 sqlfluff 单任务
+  FAIL_TO_PASS 1 节点 ~1-3s）。
+- **磁盘成本**：每 commit venv ~200-500MB（依赖装入 venv 的
+  site-packages），20 commit ~4-10GB。`SWE_REPO_ENVS_DIR` 可指向
+  大容量磁盘；清理用 `rm -rf <SWE_REPO_ENVS_DIR>/sqlfluff/<commit>`。

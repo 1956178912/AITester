@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from typing import Any
 
 # 敏感信息模式匹配规则
@@ -35,6 +36,9 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
 # [3]=key=xxx 赋值、[4]=JWT；fallback 取 [0,1,2,4]（sk/hex/base64/JWT），
 # 跳过 [3]（key=xxx 依赖上下文匹配，降级态保守起见不纳入，避免误伤）。
 _FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(_SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4))
+
+# setup_logger_safety 的"检查-追加"段锁（2026-09-26 全面审查：并发调用幂等化）
+_logger_safety_lock = threading.Lock()
 
 
 def fallback_mask_sensitive_info(text: str) -> str:
@@ -165,8 +169,12 @@ class SensitiveFormatter(logging.Formatter):
         try:
             return mask_sensitive_info(formatted)
         except Exception:
-            # 脱敏失败时不阻断日志输出，退回原始文本
-            return formatted
+            # 脱敏主路径失败：先走纯正则兜底（4.2 口径），彻底不可用时才退回
+            # 原始文本——此前直接返回未脱敏的完整行（含堆栈），是脱敏盲区
+            try:
+                return fallback_mask_sensitive_info(formatted)
+            except Exception:
+                return formatted
 
 
 def setup_logger_safety(logger_name: str | None = None) -> None:
@@ -181,37 +189,42 @@ def setup_logger_safety(logger_name: str | None = None) -> None:
         - logging.info(...) 直接记录到目标 logger 的消息
         - 各模块 logger 传播到目标 logger 的消息（经 handler 过滤）
 
+    线程安全（2026-09-26 全面审查）："检查-追加"段持锁执行——此前并发
+    调用（惰性 import 路径 / 多线程入口）各自追加一个过滤器实例，
+    handler.filters 无谓膨胀；锁内幂等短路，单线程行为不变。
+
     Args:
         logger_name: 目标 logger 名称，None 表示配置根 logger。
     """
-    logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
+    with _logger_safety_lock:
+        logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
 
-    # 幂等短路：logger 与全部 handler 均已挂脱敏过滤器时直接返回。
-    # setup_logger_safety 被多个模块/入口重复调用（logging_utils 模块加载、
-    # cli/app.py 导入期、嵌入式调用方）时，避免过滤器实例无谓膨胀。
-    # 注意：logger.handlers 为空时 all(...) 恒真，需联合 logger.filters 判断
-    # （logger 级无过滤器则仍需挂，handler 循环自然 no-op）。
-    logger_has_filter = any(isinstance(f, SensitiveFilter) for f in logger.filters)
-    handlers_have_filters = all(
-        all(isinstance(f, SensitiveFilter) for f in handler.filters) for handler in logger.handlers
-    )
-    if logger_has_filter and handlers_have_filters:
-        return
+        # 幂等短路：logger 与全部 handler 均已挂脱敏过滤器时直接返回。
+        # setup_logger_safety 被多个模块/入口重复调用（logging_utils 模块加载、
+        # cli/app.py 导入期、嵌入式调用方）时，避免过滤器实例无谓膨胀。
+        # 注意：logger.handlers 为空时 all(...) 恒真，需联合 logger.filters 判断
+        # （logger 级无过滤器则仍需挂，handler 循环自然 no-op）。
+        logger_has_filter = any(isinstance(f, SensitiveFilter) for f in logger.filters)
+        handlers_have_filters = all(
+            all(isinstance(f, SensitiveFilter) for f in handler.filters) for handler in logger.handlers
+        )
+        if logger_has_filter and handlers_have_filters:
+            return
 
-    filt = SensitiveFilter()
-    # logger 级：拦截直接在该 logger 上记录的消息
-    if not logger_has_filter:
-        logger.addFilter(filt)
-    # handler 级：拦截经传播到达的消息（同一实例复用，脱敏幂等）
-    for handler in logger.handlers:
-        if not any(isinstance(f, SensitiveFilter) for f in handler.filters):
-            handler.addFilter(filt)
-    # 注意：必须用模块 logger 记录，不能调用模块级 logging.info()——
-    # Python 3.14 中 root 无 handler 时模块级 logging.info() 会隐式触发
-    # basicConfig()（附加裸 StreamHandler），导致后续业务侧 basicConfig
-    # （自定义格式/FileHandler）全部失效。
-    # 用 DEBUG 级别：避免每次 CLI 启动都刷一行提示（--verbose 时可见）
-    logging.getLogger(__name__).debug("已为 logger '%s' 添加敏感信息脱敏过滤器", logger_name or "root")
+        filt = SensitiveFilter()
+        # logger 级：拦截直接在该 logger 上记录的消息
+        if not logger_has_filter:
+            logger.addFilter(filt)
+        # handler 级：拦截经传播到达的消息（同一实例复用，脱敏幂等）
+        for handler in logger.handlers:
+            if not any(isinstance(f, SensitiveFilter) for f in handler.filters):
+                handler.addFilter(filt)
+        # 注意：必须用模块 logger 记录，不能调用模块级 logging.info()——
+        # Python 3.14 中 root 无 handler 时模块级 logging.info() 会隐式触发
+        # basicConfig()（附加裸 StreamHandler），导致后续业务侧 basicConfig
+        # （自定义格式/FileHandler）全部失效。
+        # 用 DEBUG 级别：避免每次 CLI 启动都刷一行提示（--verbose 时可见）
+        logging.getLogger(__name__).debug("已为 logger '%s' 添加敏感信息脱敏过滤器", logger_name or "root")
 
 
 def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
@@ -222,13 +235,22 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
     漏拦即泄漏。本实现递归遍历 dict/list/tuple，对其中所有字符串值脱敏，
     非字符串值（数字/布尔/None）保持原样，返回新结构（不修改入参）。
 
+    2026-09-26 全面审查：字符串入参不再静默返回 {}（旧 _redact_scalars_dict
+    兜底把整个值丢弃——脱敏形同虚设）：str 入参直接脱敏后包成 {"value": ...}
+    保持"返回 dict"的签名契约，调用方取 ["value"] 消费。
+
     Args:
         data: 原始字典（值可含嵌套 dict / list / tuple / 标量）。
 
     Returns:
         脱敏后的新字典（嵌套结构同样被递归脱敏）。
     """
-    return _redact_value(data) if isinstance(data, dict) else _redact_scalars_dict(data)
+    if isinstance(data, dict):
+        return {k: _redact_value(v) for k, v in data.items()}
+    if isinstance(data, str):
+        # 字符串入参：脱敏后包成单键 dict（保持签名 dict 契约，值不丢弃）
+        return {"value": mask_sensitive_info(data)}
+    return {}
 
 
 def _redact_value(value: Any) -> Any:
@@ -241,13 +263,6 @@ def _redact_value(value: Any) -> Any:
     if isinstance(value, str):
         return mask_sensitive_info(value)
     return value
-
-
-def _redact_scalars_dict(data: Any) -> dict[str, Any]:
-    """非 dict 入参的兜底（保持历史"顶层字符串脱敏"行为，不抛异常）。"""
-    if not isinstance(data, dict):
-        return {}
-    return {k: _redact_value(v) for k, v in data.items()}
 
 
 # 模块加载时自动配置根 logger

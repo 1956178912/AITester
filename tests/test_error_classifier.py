@@ -79,10 +79,14 @@ class TestErrorCategory:
         """RAG_RETRIEVAL_EMPTY 类别的值。"""
         assert ErrorCategory.RAG_RETRIEVAL_EMPTY.value == "rag_retrieval_empty"
 
-    def test_fourteen_categories_total(self):
-        """错误分类体系共 14 类（10 文本类 + 2 状态细化类 + 2.2 新增
-        EXECUTION_TRACE_MISSING / MULTI_CANDIDATE_ALL_REJECTED）。"""
-        assert len(ErrorCategory) == 14
+    def test_sixteen_categories_total(self):
+        """错误分类体系共 16 类（10 文本类 + 2 状态细化类 + 2 多候选/轨迹类
+        + P0 4.1 两个 LLM_FORMAT_ERROR 精确子类 LLM_EMPTY_RESPONSE /
+        LLM_JSON_PARSE_FAILED）。"""
+        assert len(ErrorCategory) == 16
+        # P0 4.1 子类存在性校验
+        assert ErrorCategory.LLM_EMPTY_RESPONSE.value == "llm_empty_response"
+        assert ErrorCategory.LLM_JSON_PARSE_FAILED.value == "llm_json_parse_failed"
 
 
 class TestSyntaxSubtype:

@@ -19,6 +19,7 @@ import os
 import threading
 import time
 from collections import OrderedDict
+from contextlib import suppress
 from typing import Any
 
 from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
@@ -42,7 +43,22 @@ logger = logging.getLogger(__name__)
 
 # ─── Token 优化常量 ─────────────────────────────────────────────────────────
 # 单条代码输入最大字符数：超长代码截断，避免 token 浪费
-_CODE_MAX_CHARS = 3000
+# P0 1.1 分层代码压缩：预算可经 CODE_MAX_CHARS 环境变量上调（大文件仓库级
+# 任务 3000 字符装不下"目标函数 + 2 层调用链"），默认保持历史 3000。
+# （os 已在文件头导入，2026-09-26 全面审查移除此处冗余的 `import os as _os`）
+
+_code_max_chars_env = os.getenv("CODE_MAX_CHARS", "").strip()
+try:
+    _CODE_MAX_CHARS = int(_code_max_chars_env) if _code_max_chars_env else 3000
+except ValueError:
+    _CODE_MAX_CHARS = 3000
+# P0 1.1：调用链展开层数（depth=1 历史行为；2 = 目标函数 → 被调函数 → 其被调，
+# 跨文件任务经 CODE_FOCUS_DEPTH=2 构建"目标函数 → 被调用函数（1-2层）"上下文）
+_code_focus_depth_env = os.getenv("CODE_FOCUS_DEPTH", "").strip()
+try:
+    CODE_FOCUS_DEPTH = int(_code_focus_depth_env) if _code_focus_depth_env else 1
+except ValueError:
+    CODE_FOCUS_DEPTH = 1
 # 代码截断提示信息
 _CODE_TRUNCATED_MSG = "\n\n[代码已截断，仅显示前 {max} 字符]"
 
@@ -115,6 +131,64 @@ def _lru_clear() -> None:
     with _lru_lock:
         _lru_cache.clear()
         _lru_negatives.clear()
+
+
+def _reorder_api_groups_by_complexity(
+    api_groups: dict[str, list[tuple[str, str]]],
+    all_configs: list[tuple[str, str, str]],
+    complexity_class: str,
+) -> dict[str, list[tuple[str, str]]]:
+    """P0 1.2 复杂度感知路由：按档位重排 api_groups。
+
+    对同一模型（agnel-3.0-flash）的多个 LLM 实例（不同 provider 端点 /
+    cost_weight），按复杂度档位重新排列尝试顺序：
+    - "complex" → 高 cost_weight 端点在前（更强 / 更贵）
+    - "simple"  → 低 cost_weight 端点在前（省钱）
+    - "medium"  → 按 cost_weight 接近 1.0 排序
+
+    cost_weight 从 LLM_CONFIGS（config 模块）读取（LLMConfig.cost_weight 字段，
+    未配置为 0.0 = 1.0 基准），与 APIManager._cost_weight_for 同口径。
+    单实例或无多实例差异时排序无效果（历史行为不变）。
+
+    Args:
+        api_groups: 原 api_groups 字典（{base_url: [(api_key, model_name), ...]}）。
+        all_configs: 全部 LLM 配置（_get_all_api_configs 返回的三元组列表）。
+        complexity_class: 复杂度档位（"simple"/"medium"/"complex"）。
+
+    Returns:
+        重排后的 api_groups（新字典，原字典不变）。
+    """
+    # 构建 cost_weight 查找表（model_name → cost_weight，0.0 视为 1.0）
+    cost_weights: dict[str, float] = {}
+    try:
+        from config import LLM_CONFIGS
+
+        for cfg in LLM_CONFIGS:
+            cost_weights[cfg.model_name] = float(cfg.cost_weight) if cfg.cost_weight else 1.0
+    except Exception:
+        cost_weights = {}
+
+    # 按 cost_weight 排序 base_url 键
+    def _bw(key: str) -> float:
+        """取该 base_url 下所有模型的 max cost_weight（最贵端点代表该组）。"""
+        group = api_groups.get(key, [])
+        if not group:
+            return 1.0
+        return max(cost_weights.get(m, 1.0) for _, m in group)
+
+    if complexity_class == "complex":
+        ordered_keys = sorted(api_groups.keys(), key=_bw, reverse=True)
+    elif complexity_class == "simple":
+        ordered_keys = sorted(api_groups.keys(), key=_bw)
+    else:  # medium 或未知
+        ordered_keys = sorted(api_groups.keys(), key=lambda k: abs(_bw(k) - 1.0))
+
+    # 重新构建有序字典（Python 3.7+ dict 保序）
+    reordered: dict[str, list[tuple[str, str]]] = {}
+    for key in ordered_keys:
+        if key in api_groups:
+            reordered[key] = api_groups[key]
+    return reordered
 
 
 class BaseAgent:
@@ -243,17 +317,29 @@ class BaseAgent:
             cache_dir = os.path.dirname(cache_file)
             if not os.path.isdir(cache_dir):
                 os.makedirs(cache_dir, exist_ok=True)
-            with open(cache_file, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "prompt": user_message,
-                        "system": self.system_prompt,
-                        "response": response,
-                        "timestamp": time.time(),
-                    },
-                    f,
-                    ensure_ascii=False,
-                )
+            # 2026-09-26 全面审查（原子写，与 cross_file CF-8 / nodes._write_file_atomic
+            # 同模式）：此前直接 open("w") + json.dump 非原子——--parallel 下两
+            # worker 同键（同 prompt 材料 → 同 md5 → 同 cache_file）并发写时，
+            # 另一方读侧可能观察到半截 JSON → json.load 抛错 → 静默降级重调
+            # LLM（浪费 token + 延迟）。缓存文件键即内容 md5，并发写入的是
+            # 逐字节相同的 JSON，原子替换可彻底消除半截读。
+            payload = {
+                "prompt": user_message,
+                "system": self.system_prompt,
+                "response": response,
+                "timestamp": time.time(),
+            }
+            tmp_file = f"{cache_file}.tmp.{threading.get_ident()}"
+            try:
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                os.replace(tmp_file, cache_file)
+                tmp_file = ""  # 替换成功，无需清理
+            finally:
+                if tmp_file:
+                    # 替换失败（OSError）时清理临时文件，避免残留堆积
+                    with suppress(OSError):
+                        os.unlink(tmp_file)
             _lru_store(lru_key, response)  # 回填 L1 + 清除该键负缓存条目（文件已存在）
             logger.info("LLM 缓存已写入: %s", cache_key[:50])
         except Exception as e:
@@ -266,6 +352,7 @@ class BaseAgent:
         user_message: str,
         max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
         temperature: float | None = None,
+        complexity_class: str | None = None,
     ) -> str:
         """
         调用 LLM 并返回文本响应。
@@ -281,6 +368,9 @@ class BaseAgent:
             temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
                 config.TEMPERATURE。注意 zai SDK 路径当前不支持温度参数，
                 该覆盖仅对 OpenAI 兼容路径生效（保守口径）。
+            complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
+                提供时传递给 APIManager 按档位选择 LLM 实例（同模型多 provider
+                端点场景下路由到对应复杂度档位）；None 走历史策略。
 
         Returns:
             LLM 返回的文本字符串。
@@ -288,8 +378,11 @@ class BaseAgent:
         Raises:
             RuntimeError: 所有 API 和重试均失败时抛出。
         """
-        # 3.3 动态策略：非 None 时覆盖默认温度（否则用 config.TEMPERATURE）
-        eff_temperature = temperature if temperature is not None else TEMPERATURE
+        # P0 1.2：复杂度感知路由——complexity_class 非 None 时注入 APIManager，
+        # 按档位选择 LLM 实例（simple → 低成本端点，complex → 高成本端点）
+        llm_call_kwargs: dict[str, Any] = {}
+        if complexity_class is not None:
+            llm_call_kwargs["complexity_class"] = complexity_class
         # 延迟导入：避免循环导入（base_agent 被 planner/generator/debugger 导入）
         from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -313,8 +406,18 @@ class BaseAgent:
                 api_groups[base_url] = []
             api_groups[base_url].append((api_key, model_name))
 
+        # P0 1.2 复杂度感知路由：complexity_class 非 None 且配置了多 LLM 实例时，
+        # 按档位重排 api_groups（complex → 高 cost_weight 端点在前，simple → 低
+        # cost_weight 端点在前），使同一模型的多 provider 端点按复杂度分级路由。
+        # 单实例时排序无效果（历史行为不变）。
+        if complexity_class is not None and len(all_configs) > 1:
+            api_groups = _reorder_api_groups_by_complexity(api_groups, all_configs, complexity_class)
+
         # 依次尝试每个 API 组（自动故障转移：主 API 失败 → 备用 API）
         # 同一 API 内也尝试不同模型（额度用完时自动切换）
+        # P0 1.2 修复：eff_temperature = 调用方覆盖值 or config 默认值
+        eff_temperature = temperature if temperature is not None else TEMPERATURE
+
         for base_url, models in api_groups.items():
             # 判断当前 API 是否为 zai SDK 兼容接口，分流至不同调用路径
             is_zai = _is_zai_compatible(base_url)
@@ -415,22 +518,27 @@ class BaseAgent:
         code: str,
         max_chars: int = _CODE_MAX_CHARS,
         focus_function: str | None = None,
+        focus_depth: int | None = None,
     ) -> str:
         """截断超长代码，避免 LLM token 浪费。
 
         截取策略（P0 优化，解决 SWE-bench 大文件上下文丢失问题）：
         1. 代码在预算内 → 原样返回；
         2. 否则先做基于 AST 的智能截取（保留 import + 目标函数及其
-           直接依赖的辅助函数，超长函数体首尾截断），优先于"头尾各半"
-           硬截断——硬截断对数百行源文件会让 LLM 看不到目标函数；
+           调用链 focus_depth 层依赖的辅助函数，超长函数体首尾截断），
+           优先于"头尾各半"硬截断——硬截断对数百行源文件会让 LLM 看不到
+           目标函数；
         3. AST 截取仍超预算（或源码无法解析、无函数体）→ 回退字符级
            头尾截断兜底。
 
         Args:
             code: 原始代码字符串。
-            max_chars: 最大允许字符数，默认 3000。
+            max_chars: 最大允许字符数，默认 3000（CODE_MAX_CHARS 可上调）。
             focus_function: 焦点函数名（如 "divide"）。提供时按函数维度
                 截取上下文；None 时保留全部顶层函数再按预算裁剪。
+            focus_depth: 调用链展开层数（P0 1.1 分层代码压缩）。None 时
+                读 CODE_FOCUS_DEPTH 环境变量（默认 1 = 历史行为）；
+                仅当 focus_function 提供且存在于源码时生效。
 
         Returns:
             截断后的代码字符串。
@@ -438,8 +546,9 @@ class BaseAgent:
         if len(code) <= max_chars:
             return code
 
+        depth = CODE_FOCUS_DEPTH if focus_depth is None else max(1, focus_depth)
         # 第一层：AST 智能截取（code_context 模块无对外部依赖，顶层导入安全）
-        focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars)
+        focused = extract_focused_code(code, focus_function=focus_function, max_chars=max_chars, depth=depth)
         if len(focused) <= max_chars:
             logger.info(
                 "代码已按 AST 智能截取：%d → %d 字符（focus=%s）", len(code), len(focused), focus_function or "*"

@@ -227,6 +227,99 @@ class TestBuildCrossFileRepairPlan:
         )
         assert plan.estimated_token_cost >= 100
 
+    def test_source_files_per_module_code(self):
+        """2026-09-26 全面审查（CF-3 修复）：提供 source_files 时每个模块
+        用自己模块的源码生成补丁，且 target_module 参数为该模块名（协调器-
+        提议者本意：提议者看到的是自己模块的代码 + 自己模块的 prompt 约束）。
+        """
+        from unittest.mock import MagicMock
+
+        deps = [
+            CrossFileDependency("caller", "lib", "f", call_line=1),
+            CrossFileDependency("caller", "other", "g", call_line=2),
+        ]
+        source_files = {
+            "caller": "def caller(): pass",
+            "lib": "def f(): return 1",
+            "other": "def g(): return 2",
+        }
+        debugger = MagicMock()
+        debugger.debug.return_value = {"patch": "def x(): pass"}
+        plan = build_cross_file_repair_plan(
+            deps,
+            debugger,
+            target_code="ENTRY_CODE",
+            test_output="",
+            failed_cases=[],
+            source_files=source_files,
+        )
+        # 每模块都用自己模块的源码（非入口 target_code）
+        calls = debugger.debug.call_args_list
+        target_codes_seen = [c.kwargs.get("target_code") or c.args[0] for c in calls]
+        target_modules_seen = [c.kwargs.get("target_module") for c in calls]
+        assert target_codes_seen == [
+            source_files["caller"],
+            source_files["lib"],
+            source_files["other"],
+        ]
+        assert target_modules_seen == ["caller", "lib", "other"]
+        assert len(plan.per_module_patches) == 3
+
+    def test_source_files_fallback_to_target_code(self):
+        """CF-3 兼容口径：source_files 未含某模块（或传 None）时回退
+        入口 target_code（历史行为，不阻断该模块补丁生成）。"""
+        from unittest.mock import MagicMock
+
+        deps = [
+            CrossFileDependency("caller", "lib", "f", call_line=1),
+            CrossFileDependency("caller", "other", "g", call_line=2),
+        ]
+        # source_files 只含 caller，不含 lib/other → lib/other 回退 target_code
+        source_files = {"caller": "def caller(): pass"}
+        debugger = MagicMock()
+        debugger.debug.return_value = {"patch": "def x(): pass"}
+        build_cross_file_repair_plan(
+            deps,
+            debugger,
+            target_code="ENTRY",
+            test_output="",
+            failed_cases=[],
+            source_files=source_files,
+        )
+        calls = debugger.debug.call_args_list
+        target_codes = [c.kwargs.get("target_code") or c.args[0] for c in calls]
+        assert target_codes[0] == "def caller(): pass"  # caller 用自有源码
+        assert target_codes[1] == "ENTRY"  # lib 回退入口代码
+        assert target_codes[2] == "ENTRY"  # other 回退入口代码
+
+    def test_source_files_none_keeps_legacy_behavior(self):
+        """CF-3 兼容口径：source_files=None（未传）时全模块共用 target_code
+        （历史单参数语义，向后兼容）。"""
+        from unittest.mock import MagicMock
+
+        deps = [
+            CrossFileDependency("caller", "lib", "f", call_line=1),
+            CrossFileDependency("caller", "other", "g", call_line=2),
+        ]
+        debugger = MagicMock()
+        debugger.debug.return_value = {"patch": "def x(): pass"}
+        build_cross_file_repair_plan(
+            deps,
+            debugger,
+            target_code="ENTRY",
+            test_output="",
+            failed_cases=[],
+        )
+        calls = debugger.debug.call_args_list
+        target_codes = [c.kwargs.get("target_code") or c.args[0] for c in calls]
+        assert all(tc == "ENTRY" for tc in target_codes)
+        # CF-3 修复后：CF-3 前 target_module 恒为调用方传入的 target_module
+        # （默认 None），现在改为按模块名（module_name）传入——协调器-提议者
+        # 本意：LLM prompt 约束的是"当前提议者负责的模块"。测试不再锁定
+        # 调用方的 target_module，改为验证每个模块拿到的是自己的模块名
+        target_modules_seen = [c.kwargs.get("target_module") for c in calls]
+        assert target_modules_seen == ["caller", "lib", "other"]
+
 
 class TestApplyMultiFilePatch:
     """3.5 多文件补丁应用。"""

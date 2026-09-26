@@ -91,6 +91,18 @@ def main() -> int:
                 # 规则 3：非 == 锁定形式（如 >=1.0.0），仅警告
                 warnings.append(f"{name}: 使用 {constraint}（建议改为 == 锁定，版本将随上游漂移）")
 
+    # 规则 4（2026-09-26 全面审查新增，WARNING 不影响退出码）：lock 中存在
+    # 但 requirements.txt 未声明的"多余项"提示——如某依赖已从 requirements
+    # 移除但 lock 未重新生成（radon 案例：requirements 注释已声明移除，
+    # lock 仍残留 radon==6.0.1），提示重新生成 lock。
+    # 注：lock 含传递依赖（pip freeze 全量），requirements.txt 仅顶层直接
+    # 依赖，故"多余项"通常为传递依赖，仅 WARNING 提示、不阻断。
+    extras = [n for n in lock if n not in requirements]
+    warnings.extend(
+        f"{n}: lock 中存在但 requirements.txt 未声明（可能为传递依赖；请确认后必要时重新生成 lock）"
+        for n in sorted(extras)
+    )
+
     # 汇总
     print(f"lock 同步校验：requirements.txt（{len(requirements)} 项） vs requirements.lock（{len(lock)} 项）")
     for w in warnings:

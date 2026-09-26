@@ -1,9 +1,42 @@
 # R-01 SWE-bench 补跑探路立项（5 任务小范围验证）
 
 > 立项日期：2026-09-21（0.7 轮次 C 方向）
-> 状态：**立项完成，待用户确认配额后执行**
+> 状态：**已完成（P0/P1 仓库级验证取代原探路方案，2026-09-25）**
 > 关联清单：历史缺口清单 R-01（2.1 SWE-bench 子集补跑）
 > 前置依赖：SWE-bench lite 子集已下载至 `~/.cache/aitester/swe_bench/swe_bench_lite_instances.jsonl`（225 可用）
+
+## 0. 状态更新（2026-09-25，P0/P1 仓库级验证落地）
+
+原探路方案（§3.1 的 5 任务 LLM 调用探路）已被 **P0/P1 仓库级验证**取代：
+
+- **数据管道已修复**：`SWE_BENCH_ENRICHMENT`（`scripts/export_swe_bench_source.py`
+  生成）注入真实 `instance_code`，解决了 §5.1 发现的"数据集无可用源码"阻塞；
+- **执行环境已修复**：`RepoExecutor`（`src/agents/executor_repo.py`，
+  `REPO_LEVEL_EXECUTION=true`）按 SWE-bench 官方口径验证——
+  clone + checkout + pip install -e 环境缓存（`(repo, commit12)` 分目录复用）+
+  venv 隔离（`SWE_REPO_VENV_ISOLATION=true`，每 commit 旁建独立 venv，
+  解决跨 commit 全局 python 环境污染）+ gold `test_patch` 前后
+  `FAIL_TO_PASS`/`PASS_TO_PASS` 实测；
+- **补丁管道已修复**：`_diff_codes` 改用 `git diff --no-index` 生成可应用
+  的 unified diff（difflib 手工拼接在"整文件替换"场景产出 corrupt patch，
+  导致 `git apply` 全拒，被误诊为"LLM 引擎无法产出可应用补丁"，已修正）。
+
+**结果**（lite-20，`benchmark_swe_bench_20260925_184622.json` + P1 单源诊断）：
+
+| 口径 | aiterster | 根因 |
+|------|-----------|------|
+| 数据管道修复前 | 0/20 | `instance_code` 缺失（兜底 issue 文本） |
+| 数据管道修复 + 单文件 executor | 0/20 | 模块命名断裂 + 依赖未装 + test_patch 当测试代码 |
+| 仓库级验证（管道未修复） | 0/20 | difflib corrupt diff + 全局 python 环境污染（**非 LLM 引擎**） |
+| **管道修复 + venv 隔离（P1）** | **单源 0/7** | **LLM 引擎修复质量边界**（5/7 重写破坏 sqlfluff 插件命名契约 + 2/7 空补丁） |
+
+**结论修正**：SWE-bench 0/20 的根因已从"LLM 引擎无法产出可应用补丁"
+修正为"**数据管道✅修复 + 执行环境✅修复 + 补丁管道✅修复 + LLM 引擎
+修复质量边界（未突破）**"。跨文件任务（13/20 多源）在引擎能力突破前
+无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量
+源码上下文重做。详见 [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7。
+
+原探路方案（§1–§5.1）作为历史记录保留，下方原文不变。
 
 ## 1. 背景与目标
 

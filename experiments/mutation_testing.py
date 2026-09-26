@@ -30,7 +30,7 @@ import copy
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +197,15 @@ class MutationGenerator:
     - 变异体数量有限（不超过 _MAX_MUTANTS_PER_TASK），避免执行时间爆炸；
     - 仅对函数体内的语句变异（模块级赋值不纳入，保守口径）；
     - 返回空列表表示无可变异语句（如空函数 / 纯文档字符串）。
+
+    变异类型（P0 3.3 难度升级，共 7 类）：
+        1. operator_flip   比较运算符翻转（== ↔ !=、< ↔ > 等）
+        2. boolean_negation 布尔取反（not X → X）
+        3. numeric_offset  数字常量偏移（+1 / -1 / 0）
+        4. boundary_shift  条件边界变异（> ↔ >=、< ↔ <=，off-by-one 方向）
+        5. return_void     返回值变异（return X → return None）
+        6. return_empty    返回值变异（return X → return [] / return ""）
+        7. exception_remove 异常路径变异（移除 raise 语句 / 修改异常类型）
     """
 
     # 每任务最大变异体数量（来源：执行时间预算，每个变异体跑一遍测试 ~1-3s）
@@ -235,9 +244,60 @@ class MutationGenerator:
         # 检测"测试是否真正校验了返回语义"：若测试断言了具体返回值，该变异体
         # 应被杀死；存活说明测试只跑了执行路径、未校验返回值
         mutants.extend(self._generate_return_voids(tree, source_code))
+        # 变异类型 6（P0 3.3）：返回值变异增强（return X → return [] / return ""）
+        # 检测"测试是否校验了返回类型"：若测试断言了具体列表/字符串，该变异体
+        # 应被杀死；存活说明测试只校验了"能跑"未校验返回类型
+        mutants.extend(self._generate_return_empty(tree, source_code))
+        # 变异类型 7（P0 3.3）：异常路径变异（移除 raise 语句 / 修改异常类型）
+        # 检测"测试是否校验了异常抛出"：若测试用 pytest.raises 校验了特定异常，
+        # 移除 raise 后测试应失败；存活说明测试未覆盖异常路径
+        mutants.extend(self._generate_exception_removals(tree, source_code))
 
-        # 截断到上限
-        return mutants[: self._MAX_MUTANTS_PER_TASK]
+        # 2026-09-26 全面审查（P1 正确性）：按 mutant.code 去重——此前同行
+        # 多个比较产生"描述与改动不一致 + 重复变异体"（同一份代码文本被登记
+        # 两次，下游按 mutants_total 计分时分母虚增、杀死比例失真）。
+        seen_code: set[str] = set()
+        deduped: list[Mutant] = []
+        for m in mutants:
+            if m.code in seen_code:
+                continue
+            seen_code.add(m.code)
+            deduped.append(m)
+        mutants = deduped
+
+        # 截断到上限。2026-09-26 全面审查（P1 正确性）：此前按注册顺序
+        # （类型 1-7 依次 extend）取前 20——前 4 类（比较翻转/布尔取反/
+        # 数字偏移/边界）在富比较代码上易爆炸，把 P0 3.3 新增的第 5-7 类
+        # （return_void / return_empty / exception_remove）整体挤掉，
+        # "7 类全启用"的设计意图落空。改为**类型轮转均匀取样**：把 7 类
+        # 按类分桶，桶间轮转各取 1 直至填满上限，保证每类都有代表、
+        # 上限耗尽时各类比例均衡（口径对"变异体类型覆盖"更可预测）。
+        if len(mutants) > self._MAX_MUTANTS_PER_TASK:
+            # 按类型分桶（保持每类内部原顺序）
+            type_order: list[str] = []
+            buckets: dict[str, list[Mutant]] = {}
+            for m in mutants:
+                if m.mutant_type not in buckets:
+                    buckets[m.mutant_type] = []
+                    type_order.append(m.mutant_type)
+                buckets[m.mutant_type].append(m)
+            # 轮转取样：round-robin 逐桶取 1
+            selected: list[Mutant] = []
+            per_bucket_idx: dict[str, int] = {t: 0 for t in type_order}
+            while len(selected) < self._MAX_MUTANTS_PER_TASK:
+                progressed = False
+                for t in type_order:
+                    if len(selected) >= self._MAX_MUTANTS_PER_TASK:
+                        break
+                    idx = per_bucket_idx[t]
+                    if idx < len(buckets[t]):
+                        selected.append(buckets[t][idx])
+                        per_bucket_idx[t] = idx + 1
+                        progressed = True
+                if not progressed:
+                    break
+            return selected
+        return mutants
 
     def _generate_comparison_flips(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """比较运算符翻转变异。"""
@@ -268,11 +328,20 @@ class MutationGenerator:
 
     @staticmethod
     def _flip_comparison_op(tree: ast.Module, original_node: ast.Compare, new_op_name: str) -> None:
-        """在 deepcopy 后的 tree 中翻转指定 Compare 节点的操作符（尽力匹配，失败忽略）。"""
-        # 尽力匹配：按行号找第一个同类型 Compare
+        """在 deepcopy 后的 tree 中翻转指定 Compare 节点的操作符（尽力匹配，失败忽略）。
+
+        2026-09-26 全面审查（P1 正确性）：定位键从"行号取第一个同类型
+        Compare"升级为 (lineno, col_offset) 双键——此前同一行多个比较
+        （如 `a < b and c < d`）时只改到第一个，description 记录的是
+        原节点操作符，产生描述与改动不一致 + 重复变异体。
+        """
+        op_class = getattr(ast, new_op_name)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Compare) and node.lineno == original_node.lineno:
-                op_class = getattr(ast, new_op_name)
+            if (
+                isinstance(node, ast.Compare)
+                and node.lineno == original_node.lineno
+                and getattr(node, "col_offset", 0) == getattr(original_node, "col_offset", 0)
+            ):
                 node.ops = [op_class(), *node.ops[1:]]
                 return
 
@@ -348,10 +417,19 @@ class MutationGenerator:
 
     @staticmethod
     def _offset_numeric(tree: ast.Module, cmp_node: ast.Compare, target_index: int, offset: int) -> None:
-        """在 deepcopy 后的 tree 中偏移 Compare 中指定位置的数字常量。"""
+        """在 deepcopy 后的 tree 中偏移 Compare 中指定位置的数字常量。
+
+        2026-09-26 全面审查（P1 正确性）：定位键同 _flip_comparison_op，
+        升级为 (lineno, col_offset) 双键（此前行号取第一个，同行多比较
+        时改错位置）。
+        """
         new_cmp: ast.Compare | None = None
         for node in ast.walk(tree):
-            if isinstance(node, ast.Compare) and node.lineno == cmp_node.lineno:
+            if (
+                isinstance(node, ast.Compare)
+                and node.lineno == cmp_node.lineno
+                and getattr(node, "col_offset", 0) == getattr(cmp_node, "col_offset", 0)
+            ):
                 new_cmp = node
                 break
         if new_cmp is None:
@@ -408,12 +486,162 @@ class MutationGenerator:
 
     @staticmethod
     def _shift_boundary_op(tree: ast.Module, original_node: ast.Compare, new_op_name: str) -> None:
-        """在 deepcopy 后的 tree 中把指定行 Compare 的运算符替换为边界对偶。"""
+        """在 deepcopy 后的 tree 中把指定行 Compare 的运算符替换为边界对偶。
+
+        2026-09-26 全面审查（P1 正确性）：定位键升级为 (lineno, col_offset) 双键。
+        """
         op_class = getattr(ast, new_op_name)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Compare) and node.lineno == original_node.lineno:
+            if (
+                isinstance(node, ast.Compare)
+                and node.lineno == original_node.lineno
+                and getattr(node, "col_offset", 0) == getattr(original_node, "col_offset", 0)
+            ):
                 node.ops = [op_class(), *node.ops[1:]]
                 return
+
+    def _generate_exception_removals(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """P0 3.3 异常路径变异：移除 raise 语句 / 修改异常类型。
+
+        检测"测试是否校验了异常路径"：
+        - 移除 raise：若测试用 pytest.raises 校验了特定异常，移除后测试应失败；
+          存活说明测试未覆盖异常路径（只测了正常路径）。
+        - 修改异常类型（ValueError ↔ TypeError 等）：若测试校验了特定异常类型，
+          改坏后测试应失败；存活说明测试只校验"有异常"未校验"哪种异常"。
+
+        保守口径：
+        - 仅处理函数体内的 raise 语句（模块级 raise 不纳入）；
+        - 每类变异每函数最多 3 个（避免变异体爆炸）；
+        - unparse 失败或代码不变时跳过。
+        """
+        mutants: list[Mutant] = []
+        for func in [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            raises = [n for n in ast.walk(func) if isinstance(n, ast.Raise)]
+            per_func_removal = 0
+            per_func_type_change = 0
+            for raise_node in raises:
+                # 变异 7a：移除 raise（替换为 pass）
+                if per_func_removal >= 3:
+                    break
+                if raise_node.exc is None:
+                    continue  # 裸 raise（无异常对象）无法移除（会破坏 try/except 结构）
+                # 保守口径：仅移除"独立 raise 语句"（非 try 块内最后一条），
+                # 避免移除后 try 块体为空 / except 结构破坏
+                new_tree = copy.deepcopy(tree)
+                transformer = _RemoveRaiseTransformer(raise_node.lineno, func.name)
+                transformer.visit(new_tree)
+                if not transformer._removed:
+                    continue
+                try:
+                    new_code = ast.unparse(new_tree)
+                    # unparse 成功但需验证语法合法（pass 替换 raise 后
+                    # 若原 raise 是某 if/else 唯一分支体，可能产生空语句块）
+                    ast.parse(new_code)
+                    if new_code == source_code:
+                        continue
+                    mutants.append(
+                        Mutant(
+                            code=new_code,
+                            mutant_type="exception_remove",
+                            description=f"line {raise_node.lineno}: 移除 raise {ast.unparse(raise_node.exc)}（异常路径变异）",
+                            line_no=raise_node.lineno,
+                        )
+                    )
+                    per_func_removal += 1
+                except (ValueError, TypeError, SyntaxError):
+                    continue
+
+            # 变异 7b：修改异常类型（ValueError ↔ TypeError 等）
+            per_func_type_change = 0
+            for raise_node in raises:
+                if per_func_type_change >= 3:
+                    break
+                # 仅处理 `raise X(...)` 形式（异常类型是 Name 节点）
+                if raise_node.exc is None:
+                    continue
+                exc = raise_node.exc
+                exc_name = None
+                if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name):
+                    exc_name = exc.func.id
+                elif isinstance(exc, ast.Name):
+                    exc_name = exc.id
+                if exc_name is None:
+                    continue
+                new_exc_name = _ExceptionTypeTransformer._get_swap_pairs().get(exc_name, "")
+                if not new_exc_name:
+                    continue
+                new_tree = copy.deepcopy(tree)
+                transformer = _ExceptionTypeTransformer(raise_node.lineno, func.name, exc_name)
+                transformer.visit(new_tree)
+                if not transformer._replaced:
+                    continue
+                try:
+                    new_code = ast.unparse(new_tree)
+                    if new_code == source_code:
+                        continue
+                    mutants.append(
+                        Mutant(
+                            code=new_code,
+                            mutant_type="exception_type_swap",
+                            description=f"line {raise_node.lineno}: raise {exc_name} → raise {new_exc_name}（异常类型变异）",
+                            line_no=raise_node.lineno,
+                        )
+                    )
+                    per_func_type_change += 1
+                except (ValueError, TypeError, SyntaxError):
+                    continue
+        return mutants
+
+    def _generate_return_empty(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """P0 3.3 返回值变异增强（return X → return [] / return ""）。
+
+        检测"测试是否校验了返回类型"：
+        - return [1,2,3] → return []（空列表）：若测试断言了非空列表，该变异体应被杀死；
+          存活说明测试只校验"能跑"未校验返回内容。
+        - return "hello" → return ""（空字符串）：若测试断言了非空字符串，该变异体应被杀死。
+
+        保守口径：
+        - 仅处理"非空字面量"return（return [] / return "" / return None 已是空值，跳过）；
+        - 每个函数体最多产 3 个返回值变异（与 return_voids 同口径，避免变异体爆炸）；
+        - unparse 失败或代码不变时跳过。
+        """
+        mutants: list[Mutant] = []
+        per_function: dict[str, int] = {}
+        for func in [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            for ret in [n for n in ast.walk(func) if isinstance(n, ast.Return)]:
+                if ret.value is None:
+                    continue  # 无值 return
+                # 跳过已是空值的情况（None / [] / "" / {} / set()）
+                if isinstance(ret.value, ast.Constant):
+                    val = ret.value.value
+                    if val is None or val == [] or val == "" or val == {} or val == set():
+                        continue
+                if isinstance(ret.value, (ast.List, ast.Set, ast.Dict)) and not ret.value.elts:
+                    continue  # 已是空容器
+                if per_function.get(func.name, 0) >= 3:
+                    continue  # 单函数上限 3 个
+                new_tree = copy.deepcopy(tree)
+                transformer = _ReturnEmptyTransformer(ret.lineno, ret.value)
+                transformer.visit(new_tree)
+                if not transformer._replaced:
+                    continue
+                try:
+                    new_code = ast.unparse(new_tree)
+                    if new_code == source_code:
+                        continue
+                    orig_repr = ast.unparse(ret.value)[:40]
+                    mutants.append(
+                        Mutant(
+                            code=new_code,
+                            mutant_type="return_empty",
+                            description=f"line {ret.lineno}: return {orig_repr} → return 空容器（P0 3.3 返回类型变异）",
+                            line_no=ret.lineno,
+                        )
+                    )
+                    per_function[func.name] = per_function.get(func.name, 0) + 1
+                except (ValueError, TypeError):
+                    continue
+        return mutants
 
     def _generate_return_voids(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """1.2 改进：返回值变异（return X → return None）。
@@ -480,14 +708,159 @@ class _ReturnVoidTransformer(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
+class _ReturnEmptyTransformer(ast.NodeTransformer):
+    """P0 3.3：按行号把指定 return 语句的返回值改写为空容器。
+
+    检测"测试是否校验了返回类型"——return X 改为 return []（X 是 list）
+    或 return ""（X 是 str），若测试断言了非空列表/字符串应被杀死。
+    """
+
+    def __init__(self, target_lineno: int, return_value_node: ast.AST) -> None:
+        """初始化。
+
+        Args:
+            target_lineno: 目标 return 语句的行号。
+            return_value_node: 原 return 值节点（用于判断返回类型，
+                决定改写为空列表 / 空字符串 / 空 dict）。
+        """
+        self._target_lineno = target_lineno
+        self._return_value_node = return_value_node
+        self._replaced = False
+
+    def _empty_replacement(self) -> ast.AST:
+        """根据原返回值的类型选择空容器替换。
+
+        - list/dict/set/Call(to list) → ast.List([])
+        - str / f-string / JoinedStr → ast.Constant("")
+        - 其他 → ast.Constant(None)（保守：无法判断类型时退回 None）
+        """
+        node = self._return_value_node
+        if isinstance(node, ast.List) or (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("list", "dict", "set")
+        ):
+            # 原返回值为列表字面量或 list()/dict() 调用 → 空容器
+            if isinstance(node, ast.Dict):
+                return ast.Dict(keys=[], values=[])
+            if isinstance(node, ast.Set):
+                return ast.Set(elts=[])
+            # 保守用 List（list() 和 list 字面量都返回 list，dict 单独处理）
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "dict":
+                    return ast.Dict(keys=[], values=[])
+                if node.func.id == "set":
+                    return ast.Set(elts=[])
+            return ast.List(elts=[])
+        if isinstance(node, (ast.Constant, ast.JoinedStr)):
+            # 字符串字面量 / f-string → 空字符串
+            return ast.Constant(value="")
+        # 无法判断类型 → 保守退回 None
+        return ast.Constant(value=None)
+
+    def visit_Return(self, node: ast.Return) -> ast.AST:
+        if (
+            not self._replaced
+            and node.lineno == self._target_lineno
+            and node.value is not None
+            and not (isinstance(node.value, ast.Constant) and node.value.value is None)
+        ):
+            self._replaced = True
+            node.value = self._empty_replacement()
+        return self.generic_visit(node)
+
+
+class _RemoveRaiseTransformer(ast.NodeTransformer):
+    """P0 3.3：按行号移除指定 raise 语句（异常路径变异用）。
+
+    检测"测试是否校验了异常抛出"——移除 raise 后若测试用
+    pytest.raises 校验了特定异常，测试应失败；存活说明测试未覆盖异常路径。
+
+    保守口径：
+    - 仅移除函数体内的 raise 语句（模块级 raise 不处理）；
+    - 移除后在原地插入 `pass`（保持语法合法性，不产生空语句块）；
+    - 每函数最多移除 3 个 raise（避免变异体爆炸）。
+    """
+
+    def __init__(self, target_lineno: int, func_name: str) -> None:
+        """初始化（target_lineno 为目标 raise 行号，func_name 仅供日志）。"""
+        self._target_lineno = target_lineno
+        self._func_name = func_name
+        self._removed = False
+
+    def visit_Raise(self, node: ast.Raise) -> ast.AST:
+        if not self._removed and node.lineno == self._target_lineno:
+            self._removed = True
+            # 替换为 pass（保持语法合法性）
+            return ast.Pass()
+        return self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        """改写函数体（让 generic_visit 继续下钻，捕获嵌套 raise 等）。"""
+        return self.generic_visit(node)
+
+
+class _ExceptionTypeTransformer(ast.NodeTransformer):
+    """P0 3.3：修改异常类型（raise ValueError → raise TypeError，交替互换）。
+
+    检测"测试是否校验了特定异常类型"——若测试用
+    pytest.raises(ValueError) 校验了特定异常，把异常类型改坏后测试应失败；
+    存活说明测试只校验"有异常"未校验"哪种异常"。
+
+    保守口径：
+    - 仅对 `raise X(...)` 形式（异常类型是 Name 节点）生效；
+    - 仅处理常见内置异常互换对（ValueError ↔ TypeError、
+      KeyError ↔ IndexError、RuntimeError ↔ ValueError）；
+    - 每函数最多改 3 个（避免变异体爆炸）。
+    """
+
+    # 异常类型互换对（按 Name 节点）
+    # RUF012：dict 类属性默认值改为 ClassVar 标注（惰性填充），避免告警
+    _swap_pairs_cache: ClassVar[dict[str, str] | None] = None
+
+    @classmethod
+    def _get_swap_pairs(cls) -> dict[str, str]:
+        if cls._swap_pairs_cache is None:
+            cls._swap_pairs_cache = {
+                "ValueError": "TypeError",
+                "TypeError": "ValueError",
+                "KeyError": "IndexError",
+                "IndexError": "KeyError",
+                "RuntimeError": "ValueError",
+            }
+        return cls._swap_pairs_cache
+
+    def __init__(self, target_lineno: int, func_name: str, original_exc: str) -> None:
+        """初始化。
+
+        Args:
+            target_lineno: 目标 raise 行号。
+            func_name: 所属函数名（日志用）。
+            original_exc: 原异常类型名（用于查互换对）。
+        """
+        self._target_lineno = target_lineno
+        self._func_name = func_name
+        self._original_exc = original_exc
+        self._replaced = False
+
+    def visit_Raise(self, node: ast.Raise) -> ast.AST:
+        if not self._replaced and node.lineno == self._target_lineno and isinstance(node.exc, ast.Call):
+            exc_name_node = node.exc.func
+            if isinstance(exc_name_node, ast.Name):
+                new_exc_name = self._get_swap_pairs().get(exc_name_node.id, "")
+                if new_exc_name:
+                    self._replaced = True
+                    node.exc.func = ast.Name(id=new_exc_name, ctx=ast.Load())
+        return self.generic_visit(node)
+
+
 # 比较运算符 AST 类名 → 翻转目标映射
 _OPERATOR_FLIP_MAP: dict[str, str] = {
     "Eq": "NotEq",
     "NotEq": "Eq",
-    "Lt": "LtE",
-    "Gt": "GtE",
-    "LtE": "Lt",
-    "GtE": "Gt",
+    # 2026-09-26 全面审查（P1 修复配套）：严格/非严格比较（Lt/Gt 及 GtE/LtE）
+    # 的对偶翻转与 boundary_shift 类型完全重叠（Lt→LtE 两者都生成同一份代码），
+    # generate() 的代码级去重会把其中一类全部消除。为此 operator_flip 仅保留
+    # 等值对（Eq↔NotEq，boundary_shift 不覆盖），严格比较的边界语义变异
+    # 专属于 boundary_shift，两类互不重叠、各有独立变异体。
 }
 
 
@@ -502,6 +875,19 @@ def _run_mutant_tests(
     变异体被杀死 = 测试套件在变异代码上至少一个用例失败（说明测试捕获了该变异）。
     变异体存活 = 测试套件全部通过（说明测试未能检测出该变异）。
 
+    2026-09-26 全面审查（P0 正确性修复）：此前 `return proc.returncode != 0`
+    把 pytest 的**所有**非零退出码（含 2=收集错误 / ModuleNotFoundError /
+    语法错误）一律当作"杀死"，与文档声明的保守口径（"执行失败（如 import
+    错误）视为存活"）正好相反——实测 e2e 路径下测试文件 import 的模块名
+    （如 `from module import check`）与写盘的 `mutated_module.py` 对不上时，
+    每个变异体子进程都以收集错误退出（rc=2）→ 全部误判为"杀死" →
+    mutation_score 恒 1.0，弱测试与强测试得分无法区分（指标失效）。
+    现改为按 pytest 官方退出码精确判定：
+    - rc == 1（有测试失败）→ 杀死（测试跑起来了且捕获了变异）；
+    - rc == 0（全部通过）→ 存活（测试未能捕获）；
+    - 其他（2/5/超时/异常）→ 存活（套件根本没成功运行，保守口径：
+      不夸大变异得分）。
+
     Args:
         mutant: 变异体。
         test_code: 测试代码字符串。
@@ -512,6 +898,7 @@ def _run_mutant_tests(
         True = 杀死，False = 存活。执行失败（如 import 错误）视为存活（保守口径）。
     """
     import os
+    import subprocess
     import sys
     import tempfile
 
@@ -527,8 +914,9 @@ def _run_mutant_tests(
             with open(test_file, "w", encoding="utf-8") as f:
                 f.write(test_code)
 
-            # 执行测试：pytest 单文件
-            proc = __import__("subprocess").run(
+            # 执行测试：pytest 单文件（2026-09-26 全面审查：subprocess 改常规
+            # 局部 import，与此处 os/sys/tempfile 口径一致，消除 __import__ 反模式）
+            proc = subprocess.run(
                 [
                     sys.executable,
                     "-m",
@@ -543,7 +931,10 @@ def _run_mutant_tests(
                 cwd=tmpdir,
                 env={**os.environ, "PYTHONPATH": tmpdir},
             )
-            return proc.returncode != 0  # 非 0 退出 = 有失败 = 杀死
+            # 2026-09-26 全面审查：仅 rc==1（有测试失败）才算"杀死"。
+            # rc==0（全通过）= 存活；rc==2/5（收集错误/无测试）或超时 =
+            # 套件未成功运行，按保守口径视为存活（不误杀、不夸大得分）。
+            return proc.returncode == 1
     except Exception:
         # 执行失败视为存活（保守：不夸大变异得分）
         return False

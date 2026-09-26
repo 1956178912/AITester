@@ -38,7 +38,7 @@ import os
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
-from src.agents.error_classifier import ErrorClassifier, get_fix_strategy
+from src.agents.error_classifier import ErrorCategory, ErrorClassifier, get_fix_strategy
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 
 # 模块级日志记录器
@@ -148,6 +148,7 @@ class DebuggerAgent(BaseAgent):
         focus_function: str | None = None,
         target_module: str | None = None,
         temperature: float | None = None,
+        cross_file_contexts: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -178,6 +179,10 @@ class DebuggerAgent(BaseAgent):
                 区分 ASSERTION（代码 bug）与 LOGIC_ERROR（测试预期值写错）。
             temperature: 采样温度覆盖（可选，3.3 动态策略接线用）；None 时
                 沿用 config.TEMPERATURE。
+            cross_file_contexts: P0 1.1 分层代码压缩——跨文件任务的各模块
+                聚焦上下文 {module_name: focused_code}（由 cross_file_analyzer
+                按 CODE_FOCUS_DEPTH 层调用链构建，纯静态）。非 None 时注入
+                prompt，供 LLM 跨文件修复时理解被调模块接口；None 为历史口径。
 
         Returns:
             包含以下键的字典：
@@ -208,7 +213,8 @@ class DebuggerAgent(BaseAgent):
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
-        # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
+        # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取，
+        # P0 1.1 调用链展开层数由 CODE_FOCUS_DEPTH 控制，默认 1 = 历史行为）
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
         # 截断超长测试输出，保留关键错误信息（测试输出非源码，不做 AST 截取）
         test_output = BaseAgent.truncate_code(test_output, max_chars=1500)
@@ -246,13 +252,45 @@ class DebuggerAgent(BaseAgent):
                 }
 
         # 在 prompt 中显式注入错误类型和修复策略，引导 LLM 分层处理
+        # P0 1.3 契约验证：在 prompt 中加入命名契约约束，防止 LLM 重写
+        # 时删除/重命名模块级符号（sqlfluff 插件命名契约 / 注册装饰器 /
+        # __all__ 导出 / 模块级常量）导致 import 链崩溃。
+        _CONTRACT_CONSTRAINT = (
+            "\n【命名契约约束】不得修改或删除以下符号（函数名、类名、模块级导出符号、"
+            "注册装饰器、插件入口点、__all__ 条目）。"
+            "修复时只能修改函数/方法体的内部逻辑，保持所有公共接口名称不变。"
+            "若必须删除某个符号，请在补丁注释中明确说明理由。"
+        )
         query = (
             f"【错误类型】{error_category.value}\n"
-            f"【修复策略】{strategy_text}\n\n"
+            f"【修复策略】{strategy_text}\n"
+            f"{_CONTRACT_CONSTRAINT}\n"
             f"被测代码：\n```\n{target_code}\n```\n\n"
             f"测试输出：\n```\n{test_output}\n```\n\n"
             f"失败用例：\n{cases_summary}"
         )
+
+        # P0 1.1 分层代码压缩：跨文件任务时注入"被调模块的聚焦上下文"
+        # （extract_function_context 按调用链截取，非整模块全文），让 LLM
+        # 修复跨文件缺陷时理解被调模块的接口契约；每模块 2000 字符预算，
+        # 总预算 4000 字符（_CROSS_FILE_CONTEXT_MAX_CHARS）。
+        if cross_file_contexts:
+            _CROSS_FILE_CONTEXT_MAX_CHARS = 4000
+            _CROSS_FILE_MODULE_MAX_CHARS = 2000
+            module_sections = []
+            total_chars = 0
+            for module_name, focused_code in cross_file_contexts.items():
+                snippet = (focused_code or "")[:_CROSS_FILE_MODULE_MAX_CHARS]
+                if total_chars + len(snippet) > _CROSS_FILE_CONTEXT_MAX_CHARS:
+                    break
+                total_chars += len(snippet)
+                module_sections.append(f"【依赖模块 {module_name}（调用链聚焦视图）】\n```python\n{snippet}\n```")
+            if module_sections:
+                query += (
+                    "\n\n以下是被测代码依赖的其他模块的调用链聚焦视图（目标函数及其 1-2 层被调函数），"
+                    "修改跨文件缺陷时须保持这些模块的接口契约：\n" + "\n\n".join(module_sections)
+                )
+                logger.info("跨文件聚焦上下文注入 %d 个模块（P0 1.1）", len(module_sections))
 
         # RAG 增强：若检索到相似修复案例，注入参考补丁
         # 最多取前 _MAX_RAG_REPAIR_REFS 个案例
@@ -309,6 +347,41 @@ class DebuggerAgent(BaseAgent):
 
         # 调用 LLM 获取修复响应，带文件缓存省 token
         raw = self._call_llm_with_cache(query, temperature=temperature)
+
+        # P0 4.1 响应格式重试：JSON 解析失败 / 空响应时用更严格 prompt 重新请求一次
+        # ErrorCategory 在文件头已导入（与 ErrorClassifier 同模块），删除函数内
+        # 冗余的局部导入（同一模块重复 import 是历史残留，无运行期差异）
+        _response_format = ErrorClassifier.classify_llm_response(raw)
+        if _response_format in (
+            ErrorCategory.LLM_EMPTY_RESPONSE,
+            ErrorCategory.LLM_JSON_PARSE_FAILED,
+        ):
+            # 记录原始响应片段（截断到 500 字符）到 failure knowledge base
+            _snippet = (raw or "")[:500]
+            logger.warning(
+                "P0 4.1 LLM 响应格式异常（%s），用更严格 prompt 重新请求一次。原始片段: %s...",
+                _response_format.value,
+                _snippet[:80],
+            )
+            _strict_retry_query = (
+                query + "\n\n【格式要求】只输出一个 JSON 对象，不要输出任何其他文本、注释或 markdown 代码块。"
+                'JSON 结构：{"root_cause": str, "error_category": str, "fix_strategy": str, "patch": str}'
+            )
+            raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=temperature)
+            _strict_response_format = ErrorClassifier.classify_llm_response(raw2_strict)
+            if _strict_response_format not in (
+                ErrorCategory.LLM_EMPTY_RESPONSE,
+                ErrorCategory.LLM_JSON_PARSE_FAILED,
+            ):
+                raw = raw2_strict
+                logger.info("P0 4.1 严格 prompt 重试成功，响应格式正常")
+            else:
+                logger.warning(
+                    "P0 4.1 严格 prompt 重试仍失败（%s），降级到宽松 JSON 提取",
+                    _strict_response_format.value,
+                )
+
+        # 宽松 JSON 提取（容忍 markdown 包裹 / 前后自然语言）
         result = self._extract_json(raw)
         patch = result.get("patch", "")
 

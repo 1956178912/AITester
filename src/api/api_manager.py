@@ -77,6 +77,11 @@ class HealthCheckerThread(threading.Thread):
         """发送停止信号，等待线程自然退出。"""
         self._stop_event.set()
 
+    @property
+    def stop_event(self) -> threading.Event:
+        """停止事件（health_check_batch 内层循环检查，stop 后尽快结束）。"""
+        return self._stop_event
+
 
 # 健康检查线程关闭的等待上限（秒）：join 超时后记录告警并放弃等待
 # （守护线程随进程退出，不阻塞主流程）
@@ -335,7 +340,12 @@ class APIManager:
             字典 {model_name: is_healthy}
         """
         results = {}
-        for name, node in self.health_nodes.items():
+        # 快照节点池（与 health_check_batch 同口径）：后台线程/其他线程并发
+        # remove_node/add_node 时直接遍历活 dict 会 RuntimeError（dict 变更），
+        # 快照后检查基于检查开始时的节点集合，语义不变
+        with self._lock:
+            nodes = list(self.health_nodes.items())
+        for name, node in nodes:
             results[name] = self.check_health(node)
         return results
 
@@ -350,9 +360,17 @@ class APIManager:
         if batch_size is None:
             batch_size = self.config.batch_health_check_size
         all_results = {}
-        nodes = list(self.health_nodes.items())
+        # 快照节点池（持锁 list()）：后台线程/其他线程并发 remove_node/add_node
+        # 时直接遍历活 dict 会 RuntimeError（dict 变更）；快照后分批语义不变
+        with self._lock:
+            nodes = list(self.health_nodes.items())
         for i in range(0, len(nodes), batch_size):
             batch = nodes[i : i + batch_size]
+            # 停止信号检查：stop() 后尽快结束本轮，避免 join 超时后线程仍存活
+            # 继续对旧实例发起真实 LLM 探测（消耗配额，_stop_health_checker 依赖）
+            checker_stop = self._health_checker.stop_event if self._health_checker else None
+            if checker_stop is not None and checker_stop.is_set():
+                break
             logger.info("正在检查第 %d-%d 个节点...", i + 1, min(i + batch_size, len(nodes)))
             for name, node in batch:
                 all_results[name] = self.check_health(node)
@@ -364,8 +382,39 @@ class APIManager:
         logger.info("批量健康检查完成: %d/%d 个节点健康", healthy_count, len(all_results))
         return all_results
 
-    def _build_node_list(self, model: str | None) -> tuple[list[APIHealth], list[APIHealth]]:
-        """构建待尝试节点列表和备用节点列表。"""
+    def _build_node_list(
+        self, model: str | None, complexity_class: str | None = None
+    ) -> tuple[list[APIHealth], list[APIHealth]]:
+        """构建待尝试节点列表和备用节点列表。
+
+        P0 1.2 复杂度感知路由：complexity_class 非 None 时，在 health_nodes 中
+        优先选择与复杂度档位匹配的 LLM 实例（同名模型多 provider 端点场景下，
+        高档位任务优先选 cost_weight 高的实例 = 更强 / 更贵端点；低档位优先
+        选 cost_weight 低的实例 = 省钱端点）。模型名不变（仍为 agnes-3.0-flash），
+        变的是实例档位。未配置多实例时降级为默认策略（历史行为）。
+        """
+        if complexity_class is not None and not model:
+            node = self._select_node_by_complexity(complexity_class)
+            if node:
+                nodes_to_try = [node]
+            else:
+                # 复杂度路由未命中（全部熔断中）→ 回落历史策略
+                return self._fallback_default_nodes(model)
+        else:
+            return self._fallback_default_nodes(model)
+        # 仅复杂度路由命中时到达：主节点 + 全池备用候选
+        all_nodes = self.get_all_nodes()
+        fallback_candidates = [
+            n
+            for n in all_nodes
+            if n not in nodes_to_try
+            and not n.in_circuit_open
+            and (n.is_healthy or (self.config.enable_half_open_probe and n.in_circuit_half_open))
+        ]
+        return nodes_to_try, fallback_candidates
+
+    def _fallback_default_nodes(self, model: str | None) -> tuple[list[APIHealth], list[APIHealth]]:
+        """历史口径的节点列表构建（无复杂度路由时走此路径）。"""
         if model and model in self.health_nodes:
             nodes_to_try = [self.health_nodes[model]]
         else:
@@ -375,9 +424,6 @@ class APIManager:
             else:
                 raise RuntimeError("无可用 API 节点，请检查配置")
         all_nodes = self.get_all_nodes()
-        # 4.1：备用节点候选排除熔断冷却期内的节点（is_healthy 为 True
-        # 但冷却未到期的节点不可用，否则故障转移会把流量重新打回死 provider）；
-        # 4.2：半开探测窗口内的节点纳入候选（承载探测请求，与 get_healthy_nodes 同口径）
         fallback_candidates = [
             n
             for n in all_nodes
@@ -386,6 +432,90 @@ class APIManager:
             and (n.is_healthy or (self.config.enable_half_open_probe and n.in_circuit_half_open))
         ]
         return nodes_to_try, fallback_candidates
+
+    def _select_node_by_complexity(self, complexity_class: str) -> APIHealth | None:
+        """P0 1.2：按复杂度档位选择 LLM 实例。
+
+        策略：在同模型名（agnel-3.0-flash）的多个 APIHealth 节点中，
+        按 cost_weight 排序——complex 档位选 cost_weight 最高（最贵/最强），
+        simple 档位选 cost_weight 最低（最省钱）。仅一个节点时直接返回。
+
+        Returns:
+            选中节点；无匹配节点时返回 None（调用方走历史策略）。
+        """
+        candidates = [n for n in self.get_all_nodes() if not n.in_circuit_open]
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+        # 按 cost_weight 排序（None / 0 视为 1.0 基准，与 _cost_weight_for 同口径）
+        weighted = [(self._cost_weight_for(n.config.model_name), n) for n in candidates]
+        if complexity_class == "complex":
+            weighted.sort(key=lambda x: x[0], reverse=True)  # 最贵/最强在前
+        elif complexity_class == "simple":
+            weighted.sort(key=lambda x: x[0])  # 最省钱在前
+        else:  # medium 或未知 → 取中间档
+            weighted.sort(key=lambda x: abs(x[0] - 1.0))
+        best = weighted[0][1]
+        logger.debug(
+            "P0 1.2 复杂度路由：%s → %s（cost_weight=%.2f，候选 %d 个）",
+            complexity_class,
+            best.config.model_name,
+            weighted[0][0],
+            len(candidates),
+        )
+        return best
+
+    def call(self, messages: list[dict[str, str]], model: str | None = None, **kwargs: Any) -> Any:
+        """
+        调用 LLM API（带自动故障转移）
+        Args:
+            messages: 对话消息列表
+            model: 指定模型（None 则按策略自动选择）
+            **kwargs: 其他参数（temperature, max_tokens 等；
+                支持 complexity_class 关键字（P0 1.2 复杂度感知路由））
+        Returns:
+            OpenAI 的 ChatCompletion 对象
+        Raises:
+            RuntimeError: 所有节点均不可用时抛出
+        """
+        # P0 1.2：从 kwargs 提取 complexity_class（调用方可显式传入；
+        # 未传入时 complexity_class=None，走历史路由策略）
+        complexity_class = kwargs.pop("complexity_class", None)
+        nodes_to_try, fallback_candidates = self._build_node_list(model, complexity_class=complexity_class)
+        last_error: Exception | None = None
+        all_nodes = nodes_to_try + fallback_candidates
+
+        for attempt, node in enumerate(all_nodes):
+            # 显式指定 model 时：主节点（attempt < len(nodes_to_try)）用指定模型；
+            # 故障转移到备用节点后改用该节点自身模型名——备用 provider 通常没有
+            # 指定模型，沿用会逐个 APIError 陪葬，故障转移形同虚设
+            call_model = model if model and attempt < len(nodes_to_try) else node.config.model_name
+            prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
+            # 4.2：本次调用是否承载半开探测（_try_call_node 内预检写入；失败路径
+            # 的限流 / API 错误 / 通用异常处理需消费该探测，成功路径已在
+            # _try_call_node 内闭合）。常规调用恒为 False。
+            is_half_open_probe = self._enter_half_open_probe(node)
+            try:
+                response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
+                if response is not None:
+                    return response
+            except openai.RateLimitError as e:
+                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe)
+                last_error = e
+            except openai.APIError as e:
+                self._handle_api_error(e, node, is_half_open_probe)
+                last_error = e
+            except Exception as e:
+                self._handle_generic_error(e, node, is_half_open_probe)
+                last_error = e
+
+        if last_error:
+            # 异常文本可能回显带 token 的 base_url / 网关体，出口统一脱敏（4.1 口径），
+            # 与日志路径 _redact 对齐——此前该异常传播路径未脱敏，凭证可沿
+            # RuntimeError 链流入上游打印/记录
+            raise RuntimeError(f"所有 API 节点调用失败: {_redact(str(last_error))}") from last_error
+        raise RuntimeError("所有 API 节点不可用")
 
     def _try_call_node(
         self,
@@ -508,50 +638,6 @@ class APIManager:
         logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             raise
-
-    def call(self, messages: list[dict[str, str]], model: str | None = None, **kwargs: Any) -> Any:
-        """
-        调用 LLM API（带自动故障转移）
-        Args:
-            messages: 对话消息列表
-            model: 指定模型（None 则按策略自动选择）
-            **kwargs: 其他参数（temperature, max_tokens 等）
-        Returns:
-            OpenAI 的 ChatCompletion 对象
-        Raises:
-            RuntimeError: 所有节点均不可用时抛出
-        """
-        nodes_to_try, fallback_candidates = self._build_node_list(model)
-        last_error: Exception | None = None
-        all_nodes = nodes_to_try + fallback_candidates
-
-        for attempt, node in enumerate(all_nodes):
-            # 显式指定 model 时：主节点（attempt < len(nodes_to_try)）用指定模型；
-            # 故障转移到备用节点后改用该节点自身模型名——备用 provider 通常没有
-            # 指定模型，沿用会逐个 APIError 陪葬，故障转移形同虚设
-            call_model = model if model and attempt < len(nodes_to_try) else node.config.model_name
-            prev_model = all_nodes[attempt - 1].config.model_name if attempt > 0 else model
-            # 4.2：本次调用是否承载半开探测（_try_call_node 内预检写入；失败路径
-            # 的限流 / API 错误 / 通用异常处理需消费该探测，成功路径已在
-            # _try_call_node 内闭合）。常规调用恒为 False。
-            is_half_open_probe = self._enter_half_open_probe(node)
-            try:
-                response = self._try_call_node(node, messages, kwargs, call_model, attempt, prev_model)
-                if response is not None:
-                    return response
-            except openai.RateLimitError as e:
-                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe)
-                last_error = e
-            except openai.APIError as e:
-                self._handle_api_error(e, node, is_half_open_probe)
-                last_error = e
-            except Exception as e:
-                self._handle_generic_error(e, node, is_half_open_probe)
-                last_error = e
-
-        if last_error:
-            raise RuntimeError(f"所有 API 节点调用失败: {last_error}")
-        raise RuntimeError("所有 API 节点不可用")
 
     def get_status(self) -> dict[str, Any]:
         """获取所有节点的当前状态（4.1：含熔断冷却信息；4.4：含指数退避/半开探测成功率）。
@@ -763,6 +849,9 @@ class APIManager:
         线程是 daemon=True，进程退出时会被杀掉；但若只是释放实例（如
         reset_manager）而不停线程，残留线程会继续按间隔对旧实例发起
         真实 LLM 健康检查请求（消耗 API 配额）。因此此处显式停止并等待。
+        2026-09-26 全面审查：join 超时后不再清空引用——health_check_batch
+        的内层批次循环已检查停止事件（stop_event），残留线程会在下一批次
+        边界自然退出；清空引用会让后续调用方误判"已停止"（口径保守化）。
         """
         checker = self._health_checker
         if checker is None:
@@ -773,7 +862,8 @@ class APIManager:
             # 批量健康检查可能耗时较长（真实 API 探测），等待超时后不阻塞，
             # 依赖 daemon 特性在进程退出时清理
             logger.warning("健康检查线程未在 %.1fs 内退出，交由进程退出清理", _HEALTH_CHECKER_SHUTDOWN_TIMEOUT)
-        self._health_checker = None
+        else:
+            self._health_checker = None
 
 
 # 全局单例
@@ -800,9 +890,10 @@ def reset_manager() -> None:
     """
     global _manager
     with _manager_lock:
-        if _manager is not None:
-            _manager._stop_health_checker()
+        old = _manager
         _manager = None
+    if old is not None:
+        old._stop_health_checker()
 
 
 def print_status_table(manager: APIManager | None = None) -> None:

@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
 import json
 import logging
@@ -390,6 +391,7 @@ def build_cross_file_repair_plan(
     focus_function: str | None = None,
     target_module: str | None = None,
     max_modules: int | None = None,
+    source_files: dict[str, str] | None = None,
 ) -> CrossFileRepairPlan:
     """基于依赖图 + LLM 生成多文件修复计划（协调器-提议者架构）。
 
@@ -408,6 +410,11 @@ def build_cross_file_repair_plan(
         focus_function: 焦点函数名（可选）。
         target_module: 被测模块名（可选，用于 LLM prompt 约束）。
         max_modules: 最大模块数（None 时读 cross_file_max_modules()）。
+        source_files: 模块名 → 源码字符串的映射（2026-09-26 全面审查
+            CF-3 修复）：提供时每个模块用自己模块的源码生成补丁
+            （协调器-提议者架构本意——提议者看到的是自己模块的代码）；
+            None 时所有模块共用 target_code（入口代码，历史行为，
+            向后兼容）。
 
     Returns:
         CrossFileRepairPlan 实例（per_module_patches 仅含成功生成的补丁，
@@ -436,20 +443,34 @@ def build_cross_file_repair_plan(
 
     # 对每个模块生成补丁（协调器-提议者：每个模块一个提议者）
     for module_name in modules:
+        # 2026-09-26 全面审查（CF-3 修复）：提供 source_files 时每个模块
+        # 用自己模块的源码生成补丁（提议者看到的是自己模块的代码）；
+        # 模块无源码（source_files 未含或空）时回退入口 target_code
+        # （保守口径：不阻断该模块的补丁生成，与历史行为一致）
+        module_code = target_code
+        if source_files:
+            own_code = source_files.get(module_name, "")
+            if own_code:
+                module_code = own_code
         try:
             result = debugger.debug(
-                target_code=target_code,
+                target_code=module_code,
                 test_output=test_output,
                 failed_cases=failed_cases,
                 focus_function=focus_function,
-                target_module=target_module,
+                target_module=module_name,
             )
             patch_text = result.get("patch", "")
             if patch_text:
                 plan.per_module_patches[module_name] = patch_text
                 # 保守估算：字符数 / 4（英文 token 经验值）
                 plan.estimated_token_cost += max(len(patch_text), 1) // 4
-        except (json.JSONDecodeError, RuntimeError) as e:
+        except Exception as e:  # 单模块失败不中断全计划（BLE001 已豁免）
+            # 2026-09-26 全面审查：原仅 catch (json.JSONDecodeError,
+            # RuntimeError)，LLM 超时（TimeoutError / openai.APITimeoutError）
+            # 等异常会传播出去中断整个跨文件计划构建。对比
+            # multi_candidate.generate_candidates（catch 全 Exception）口径，
+            # 单模块失败仅跳过、不毁全计划（该模块保持原代码不变）。
             logger.warning("跨文件修复：模块 %s 补丁生成失败，跳过: %s", module_name, e)
             # 失败模块不写入 per_module_patches（保持原代码不变）
             continue
@@ -650,7 +671,13 @@ def _load_repair_plan_cache(key: str) -> CrossFileRepairPlan | None:
 
 
 def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
-    """把跨文件修复计划写入缓存（失败仅 debug 日志，不影响主流程）。"""
+    """把跨文件修复计划写入缓存（失败仅 debug 日志，不影响主流程）。
+
+    2026-09-26 全面审查：写盘改为"先写临时文件再 os.replace 原子替换"
+    （与 nodes.py _write_file_atomic 同模式）——原直接 open("w") +
+    json.dump 非原子，--parallel 下双 worker 同依赖图并发写会交错
+    损坏 JSON → 读侧降级 None → 重调 LLM，放大成本。
+    """
     from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
 
     if not _llm_cache_enabled():
@@ -658,9 +685,16 @@ def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
     try:
         cache_dir = _llm_cache_dir()
         os.makedirs(cache_dir, exist_ok=True)
-        with open(os.path.join(cache_dir, f"{key}.json"), "w", encoding="utf-8") as f:
+        target = os.path.join(cache_dir, f"{key}.json")
+        # 写同目录临时文件后 os.replace 原子替换（同分区保证原子性）
+        tmp = target + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(plan.to_dict(), f, ensure_ascii=False)
+        os.replace(tmp, target)
     except OSError as e:
+        # 原子替换失败时清理临时文件，避免残留
+        with contextlib.suppress(OSError):
+            os.unlink(target + ".tmp")
         logger.debug("跨文件修复计划缓存写入失败 %s: %s", key, e)
 
 
@@ -727,6 +761,9 @@ def build_cross_file_repair_plan_cached(
         focus_function=focus_function,
         target_module=target_module,
         max_modules=max_modules,
+        # 2026-09-26 全面审查（CF-3 修复）：缓存包装层天然持有 source_files，
+        # 透传给底层让每个模块用自己模块的源码生成补丁
+        source_files=source_files,
     )
     if use_cache:
         _save_repair_plan_cache(key, plan)

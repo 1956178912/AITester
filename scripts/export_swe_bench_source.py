@@ -247,15 +247,15 @@ def write_enrichment_jsonl(results: list[InstanceSource], output_path: str | Pat
     return written
 
 
-def load_jsonl_for_subset(subset: str, data_dir: str | Path) -> list[dict]:
-    """按子集名定位已下载 JSONL（与下载脚本的写盘约定一致）。"""
+def load_jsonl_for_subset(subset: str, data_dir: str | Path) -> Path:
+    """按子集名定位已下载 JSONL 文件路径（与下载脚本的写盘约定一致）。"""
     root = Path(data_dir).expanduser()
     path = root / f"swe_bench_{subset}_instances.jsonl"
     if not path.exists():
         path = root / "swe_bench_instances.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"SWE-bench JSONL 未找到: {path}（请先运行 scripts/download_swe_bench.py）")
-    return read_jsonl_instances(path)
+    return path
 
 
 @click.command()

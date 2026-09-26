@@ -4,6 +4,581 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - Full-audit & conservative-optimization round (2026-09-26: static-check zeroing + dead-code removal + thread hygiene + project hygiene + perf / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0: mutation-test judging / API-poll reproducibility / atomic cache writes / single-agent baseline write guard + state schema + sixth-batch node-layer routing semantics & robustness)
+
+> Repo-wide code audit and conservative optimization batch (default behavior unchanged):
+> static checks all green, dead-code removal, thread-hygiene fix, project-hygiene
+> completion, perf / correctness fixes in un-deep-reviewed modules, the CF-3
+> cross-file repair "all modules share entry code" logic-defect fix, the fifth
+> end-to-end wiring-batch P0 fixes (mutation-test kill judging, parallel API
+> rotation reproducibility, LLM cache atomic writes, single-agent baseline write
+> safety, state schema completion), and the sixth-batch node-layer routing
+> semantics & robustness (diagnosis-keyword early-iteration routing in
+> `_should_debug`, `test_passed` consistency, generator LLM-failure
+> degradation, planner/debugger fallback widened to OSError, cache-stat
+> thread hygiene). Full 1728-test suite passes, zero regressions.
+
+### Static-check zeroing (mypy / ruff)
+
+- `src/agents/executor_repo.py::_dep_fingerprint`: dependency-fingerprint content-part list annotation
+  `list[str]` -> `list[bytes]` (binary fragments read in `"rb"` mode; the old annotation did not match the
+  runtime type and caused 4 mypy arg-type errors at `hashlib.update`);
+- `src/datasets/synthetic_dataset.py`: difficulty-distribution stat `dist` annotated as `dict[str, int]`
+  (resolves mypy var-annotated);
+- `tests/test_executor_repo.py`: unused imports removed (`json` / `sys` / `textwrap` / `shutil` alias),
+  file read switched to `with open(...)` context management (SIM115);
+- `ruff format --check` normalized 11 unformatted files (experiments / scripts / src / tests formatting drift,
+  CI pinned to ruff 0.16.3).
+
+### Dead code & thread hygiene
+
+- `src/api/api_manager.py::_build_node_list`: the full-pool fallback-candidate construction block after the
+  `if/else` (both branches already `return`) was unreachable; removed, with the semantically equivalent
+  full-pool fallback construction retained on the complexity-routing hit path (behavior unchanged);
+- `src/api/api_manager.py::reset_manager`: `_stop_health_checker()` moved outside the global singleton-lock
+  critical section (swap out the old instance and clear the reference first, then stop its background
+  health-checker thread outside the lock), so the shutdown 5s join no longer blocks concurrent
+  `get_manager()` calls creating a new manager.
+
+### Project hygiene
+
+- `.gitignore`: added `.mypy_cache/`, `.ruff_cache/` (tool caches) and `data/`, `results/` (local
+  experiment-data directories, consistent with the `experiments/results/` scope, preventing accidental
+  commits);
+- Verification: `ruff check` / `ruff format --check` / `mypy src/` all green;
+  full 1714-test suite passes (31.5s), zero regressions.
+
+### Security (credential-scrub hardening, P0, with empirical proof)
+
+- `src/utils/credential_scrub.py` (P0): the fixed credential list missed the
+  numbered multi-endpoint naming actually present in `.env`
+  (`OPENAI_API_KEY_2/3`, `OPENAI_BASE_URL_2/3`) — the old `^OPENAI_API_KEY$`
+  anchor didn't match numbered variants, so credentials reached the
+  code-under-test subprocess verbatim (execution vector + leak surface). Now
+  widened with numbered-variant wildcards `OPENAI_(API_KEY|BASE_URL)_\d+`
+  and provider intermediate vars (`ALIYUN_BAILIAN_API_KEY` /
+  `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` /
+  `DEEPSEEK_API_KEY`, coupled with `config_generator`'s
+  `PROVIDER_TEMPLATES` keys to prevent list drift);
+- `src/api/api_manager.py::call` (P0): the all-nodes-failed path raised a
+  `RuntimeError` carrying the raw, un-redacted openai exception body
+  (gateway errors may echo the token-bearing base_url) — the exception
+  propagation chain was a redaction blind spot; the exit is now uniformly
+  `_redact`-ed, aligned with the log path;
+- `src/config/config_manager.py::add_llm_config` (P0): api_key / base_url /
+  model_name were written to `.env.local` verbatim without validation —
+  values containing `\n` could inject arbitrary variable lines
+  (hijacking subsequent config); values containing `#` were truncated by
+  dotenv parsing. Inputs containing newline / `#` are now rejected before
+  writing; the success log redacts base_url at the exit (URL-embedded
+  token case);
+- `src/utils/exceptions.py::retry_with_backoff`: retry-warning logs printed
+  the raw exception object (which may echo request bodies / credentials)
+  without redaction — now delegates lazily to `logging_utils.redact_text`
+  (same criteria as `api_manager._redact`; lazy import avoids a module-load
+  circular dependency);
+- `src/utils/logging_utils.py::SensitiveFormatter`: when the primary redaction
+  path failed, it fell back to the **un-redacted** full line (including
+  stack) — now runs `fallback_mask_sensitive_info`'s pure-regex fallback
+  first, and only returns the raw line when that is truly unavailable;
+- Regression tests: `tests/test_credential_scrub.py` new (numbered variants /
+  provider vars / high-number boundary / input immutability, 5 cases) +
+  `tests/test_logging_utils.py` gains 2 `redact_dict` string-input cases.
+
+### Correctness
+
+- `src/utils/logging_utils.py::redact_dict` (P1): string inputs previously
+  silently returned `{}` (the whole redacted value was dropped, making
+  redaction a no-op in trace / exception serialization) — str inputs are
+  now redacted and wrapped as `{"value": ...}`, preserving the dict-returning
+  signature contract; the redundant `_redact_scalars_dict` alias removed;
+- `src/observability/trace.py::_append` (P1): the `except` swallowed both
+  `json.dumps` failures and import failures, silently dropping
+  un-serializable records with no warning — split into two branches:
+  serialization failure logs a warning and drops this record; redaction
+  unavailability writes the raw text (same last-resort criteria as
+  logging_utils' three-level fallback);
+- `src/graph/workflow.py::_file_cache_entry_count` (P1): the entry-count
+  memory key upgraded to `(dir, count, dir-mtime-at-stat)` — the old
+  criteria kept a stale high count after external deletion of cached files
+  until the directory vanished; mtime changes auto-rescan, eliminating the
+  observability-layer distortion (same-dir-unchanged-mtime still reuses the
+  memory to skip the glob; perf criteria unchanged);
+- `src/graph/nodes.py` (P1): `_HARD_ERROR_CATEGORIES` promoted from a
+  per-call function-local set rebuild to a module-level `frozenset`
+  (saves needless allocations on the `--parallel` hot path);
+  `_cross_file_analyzer_node`'s `cross_file_deps` serialization switched to
+  explicit `asdict` (`d.__dict__` includes dataclass internal fields —
+  future field additions would silently change the state schema; the
+  downstream `_patch_applier_node`'s fixed-key read contract was unstable);
+- `src/graph/nodes.py::_dynamic_temperature_from_suggestion` (P1): with
+  `TEMPERATURE=0`, "halve the temperature" still passed 0.0 through
+  (a meaningless override) — now returns None to keep the default;
+- `src/agents/executor_repo.py::verify` (P1): the repo-level verification
+  test_patch temp files are named by `base_commit[:8]`; under `--parallel`
+  same-repo concurrent verification raced on write/read — the file name now
+  carries an `os.getpid()` suffix;
+- `src/agents/debugger.py::debug` (P1): an in-function local import of
+  `ErrorCategory` / `ErrorClassifier` duplicated the file-header import
+  (historical residue) — merged into the header imports;
+- `src/agents/base_agent.py` (P1): file-header `import os` was followed by
+  a second `import os as _os` (refactor residue, readability) — alias
+  import removed;
+- `src/utils/helpers.py::_find_balanced_json` (P1): on unclosed JSON it
+  returned the residual `text[start:]` (which `json.loads` always rejects,
+  paying another O(n) parse for nothing) — now uniformly returns None,
+  letting callers take the regex-fallback path (regression cases updated).
+
+### Concurrency (`--parallel` + background-thread races)
+
+- `src/api/api_health.py::APIHealth` (P1): `mark_success` / `mark_failure` /
+  `_probe_circuit_half_open` mutated the same node concurrently between the
+  routing thread and the background health-checker thread (counters /
+  circuit state / response-time deque all non-atomic) — now guarded by a
+  node-level `threading.Lock` (pure in-memory read-modify-write, held for
+  microseconds; judgment semantics unchanged, only atomized);
+- `src/api/api_manager.py` (P1): `health_check_all` / `health_check_batch`
+  iterated the live `health_nodes` dict directly, which could `RuntimeError:
+  dictionary changed size during iteration` against concurrent
+  `remove_node` / `add_node` — now iterate a lock-held snapshot;
+  `health_check_batch` checks the stop event between batches
+  (`HealthCheckerThread` gains a `stop_event` property);
+  `_stop_health_checker` keeps the reference after the join timeout instead
+  of setting None (the residual thread exits at the next batch boundary,
+  no wasted quota);
+- `src/utils/logging_utils.py::setup_logger_safety` (P1): the check-then-
+  append section was lock-free; concurrent calls each appended a filter
+  instance (handler.filters bloat) — a module-level lock now serializes the
+  idempotent short-circuit;
+
+### Maintainability
+
+- `src/graph/workflow.py::_should_debug` (P2): the diagnosis-keyword list
+  was rebuilt inside the routing function on every call — extracted to a
+  module-level constant `_TEST_GEN_DIAGNOSIS_KEYWORDS` (single source of
+  truth; tuning trigger words now touches one place);
+- `src/graph/nodes.py` (P2): `_executor_node`'s in-function local imports of
+  `EXECUTOR_DOCKER_IMAGE` / `EXECUTOR_USE_DOCKER` drifted from the 9
+  file-header config symbols — merged into the header imports;
+
+### Performance (un-deep-reviewed module hardening, 2026-09-26 round 3)
+
+- `src/datasets/dataset_loader.py` (P1): `get_task_by_id` demoted from O(n)
+  linear scan to O(1) lookup — SWE-bench full (2294 tasks) × the benchmark
+  loop was O(n²). Implementation: `__init__` builds
+  `_task_index: dict[str, BenchmarkTask]` + an `_index_size` length marker
+  (O(1) invalidation check); `_ensure_loaded` rebuilds it once after load;
+  `add_task` appends and triggers a lazy rebuild on length change (O(n)
+  once, O(1) thereafter). The base class gains `add_task` (the former
+  `InMemoryDataset` appended directly with no index maintenance); the
+  subclass override was removed;
+- `src/tools/code_analyzer.py` + `src/tools/code_context.py` (P1, C-1):
+  `extract_function_context` did a **second** `ast.parse + ast.walk` when
+  `extract_focused_code` returned the source verbatim to confirm the
+  function existed — doubling the ~200ms cost on large files. New
+  `extract_focused_code_detail` returns a `(code, focus_resolved)` pair;
+  `extract_function_context` consumes `focus_resolved` directly with zero
+  re-parsing. `extract_focused_code` (original signature) delegates to the
+  new function for compatibility; the 3 call sites needed no changes;
+
+### Correctness (un-deep-reviewed module hardening, 2026-09-26 round 3)
+
+- `experiments/rag_ab_experiment.py` (P0): `_parse_task_record` read field
+  names (`tokens_total` / `total_tests` / `passed_count` / `duration_s` /
+  `failure_category`) with zero overlap with the keys
+  `run_benchmark._build_task_result` actually produces
+  (`token_usage{total_tokens}` / `elapsed_seconds` / `iterations` /
+  `passed` / `error_category`) — every `.get` fell to its default, so the
+  RAG A/B report's token-gain / elapsed-time / error-distribution
+  conclusions were always false data. Now read with the real keys;
+- `experiments/rag_ab_experiment.py` (P1): `_run_benchmark_once` gains a
+  `sub_run_dir` parameter — the RAG ON / OFF runs now write to separate
+  subdirectories (`<output_dir>/rag_on`, `<output_dir>/rag_off`), avoiding
+  same-second mtime collisions when sharing one output_dir (the
+  `benchmark_*.json` timestamp precision is seconds);
+- `experiments/run_benchmark.py` (P2): `task_limit` boundary normalization —
+  a negative value silently truncated the slice (`tasks[:-1]` dropped the
+  last task), 0 fell into the else branch as full. Now `<1` uniformly means
+  "no limit" (full), only positive values apply, and a warning is logged;
+- `scripts/compare_executor_modes.py` (P1): `main.py run --json` on multiple
+  files emits stdout as concatenated JSON objects (one segment per task, not
+  a single array) — the old `json.loads(proc.stdout)` always failed on the
+  concatenation → `tasks_passed` was always 0. New `_parse_json_stream`
+  consumes objects one by one with `JSONDecoder.raw_decode` (compatible
+  with single object / array / concatenated forms);
+- `src/reports/generator.py` (P1): `get_report_generator()` was a lock-free
+  check-then-act; the first `--parallel` concurrent construction race
+  created one `ReportGenerator` per thread (each with its own
+  `ErrorClassifier`) — now guarded by a module-level `threading.Lock`
+  double-checked lock;
+- `src/reports/generator.py` (P2): `ErrorReport.to_dict`'s
+  `error_context.__dict__` direct-introspection serialization would
+  silently change the schema when a dataclass field is added — switched to
+  explicit `asdict` (same-class fix as nodes.py' cross_file_deps);
+- `src/tools/cross_file.py` (P1): `build_cross_file_repair_plan` caught
+  only `(json.JSONDecodeError, RuntimeError)` when generating each module's
+  patch; LLM timeouts propagated and aborted the whole plan — now catches
+  all `Exception` (a failed module is skipped without killing the plan,
+  same criteria as multi_candidate.generate_candidates);
+- `src/datasets/dataset_defects4j.py` (P2): `info.json` parse failures
+  silently returned None (a corrupted version was skipped without trace) —
+  now logs a `logger.warning` for data-problem localization;
+
+### Concurrency (un-deep-reviewed module hardening, 2026-09-26 round 3)
+
+- `src/tools/cross_file.py` (P1): `_save_repair_plan_cache` used a plain
+  `open("w") + json.dump` (non-atomic) — two `--parallel` workers writing
+  the same dependency graph interleaved and corrupted the JSON → the reader
+  degraded to None → an extra LLM call (cost amplification). Now writes a
+  temp file then `os.replace` atomic-swap (same pattern as nodes.py
+  `_write_file_atomic`); the temp file is cleaned up on failure;
+- `scripts/check_lock_sync.py` (P2): new rule 4 (WARNING, does not affect
+  the exit code): "extra" lock entries not declared in requirements.txt
+  (e.g. radon==6.0.1 remains in the lock after removal from requirements)
+  now prompts a lock regeneration (the lock includes transitive deps;
+  WARNING only, non-blocking);
+
+### Cross-file repair logic defect (CF-3, 2026-09-26 round 4)
+
+- `src/tools/cross_file.py::build_cross_file_repair_plan` (P0): the
+  coordinator-proposer architecture's intent is "each module's proposer
+  generates its patch from that module's own code", but the old code passed
+  the **entry module's `target_code`** to `debugger.debug()` for every
+  module — module B's patch was actually generated from module A's code,
+  misaligning multi-file patches. New optional `source_files:
+  dict[str, str] | None` parameter: when provided, each module uses its own
+  source (`source_files.get(module_name)`); a missing module falls back to
+  `target_code` (conservative, does not block that module's patch).
+  `source_files=None` preserves historical behavior (all modules share
+  `target_code`, backward-compatible); `target_module` is now passed per
+  module name (`module_name`) rather than the caller's fixed value — the
+  LLM prompt constrains "the module the current proposer is responsible
+  for";
+- `src/tools/cross_file.py::build_cross_file_repair_plan_cached`: the cache
+  wrapper naturally holds `source_files` (used for dependency analysis) but
+  previously didn't pass it through to the underlying
+  `build_cross_file_repair_plan` → even with sources available, the
+  underlying layer shared `target_code` across all modules. Now passed
+  through; the cache-hit and LLM-generation paths share one criteria;
+- Regression tests: `tests/test_cross_file.py` gains 3 cases
+  (`test_source_files_per_module_code` verifies each module receives its own
+  source + module name; `test_source_files_fallback_to_target_code`
+  verifies the entry-code fallback when a module is absent;
+  `test_source_files_none_keeps_legacy_behavior` verifies the all-share
+  `target_code` historical behavior when `source_files=None`);
+
+### Mutation-test judging & mutant generation (P0/P1, 2026-09-26 round 5)
+
+- `experiments/mutation_testing.py::_run_mutant_tests` (P0): the old
+  `return proc.returncode != 0` treated **every** non-zero pytest exit
+  code (including 2 = collection error / ModuleNotFoundError / syntax
+  error) as "killed" — the exact opposite of the documented conservative
+  criteria ("execution failures such as import errors count as alive"). In
+  the measured e2e path where the test's imported module name didn't match
+  the written `mutated_module.py`, every mutant subprocess exited rc=2 →
+  all misjudged "killed" → mutation_score was always 1.0, weak and strong
+  tests were indistinguishable (the metric was broken). Now judged by the
+  official pytest exit codes: rc==1 (test failures) = killed; rc==0 =
+  alive; others (2/5/timeout/exception) = alive (conservative, no
+  score inflation);
+- `experiments/mutation_testing.py` (P1): mutant "best-effort location by
+  line number" defect — `_flip_comparison_op` / `_offset_numeric` /
+  `_shift_boundary_op` located "the first same-type Compare on that line"
+  after deepcopy; with multiple comparisons on one line
+  (`a < b and c < d`) only the first was mutated while the description
+  recorded the original operator — inconsistent descriptions + duplicate
+  mutants. The location key is now the **(lineno, col_offset) pair**,
+  precise to the specific comparison expression;
+- `experiments/mutation_testing.py::generate` (P1): the old
+  registration-order `mutants[:20]` truncation without deduplication — on
+  comparison-rich code the first 4 classes (comparison / boolean / numeric
+  / boundary) exploded and squeezed out the P0 3.3 classes 5-7
+  (return_void / return_empty / exception_*) entirely, defeating the
+  "all 7 classes enabled" design; invalid mutants (target unchanged → code
+  unchanged → judged alive) inflated the downstream mutation_score. Now
+  deduplicated by `mutant.code` (eliminating duplicate mutants) +
+  round-robin type-balanced sampling (the 7 classes fill the cap in
+  round-robin, guaranteeing every class has representation);
+- `experiments/mutation_testing.py` (P1 companion): `_OPERATOR_FLIP_MAP`
+  previously included `Lt↔LtE / Gt↔GtE`, which generated the **same
+  mutant code** as the `boundary_shift` class — code-level dedup would
+  eliminate boundary_shift entirely. operator_flip now keeps only
+  equality pairs (Eq↔NotEq, not covered by boundary_shift); strict-
+  comparison boundary mutation is exclusively boundary_shift — the two
+  classes no longer overlap and each has its own mutants;
+- `experiments/mutation_testing.py` (P2): `_run_mutant_tests`'
+  `__import__("subprocess")` anti-pattern replaced with a regular local
+  `import subprocess` (the function already locally imports os/sys/
+  tempfile);
+- Regression tests: `tests/test_smell_detection_v2.py` e2e case's import
+  name mismatch fixed (`from module import check` → `from mutated_module
+  import check`, making the "weak-test low score / strong-test high score"
+  assertion actually work); `tests/test_multi_candidate.py`'s
+  boundary_shift case source updated to strict comparison to match the
+  post-fix type distribution.
+
+### Parallel API-poll reproducibility (P0, 2026-09-26 round 5)
+
+- `experiments/run_benchmark.py::run_single_task` (P0): the task→API
+  rotation index used `hash(task.task_id) % len(_VALID_APIS)` — Python 3's
+  built-in `str` hash is randomized by `PYTHONHASHSEED`, so the same task
+  mapped to different API indices across processes/starts, breaking the
+  documented "stable task→API rotation" promise (baseline comparisons not
+  reproducible). Now `zlib.crc32(task_id)` (cross-process deterministic) +
+  baseline-index mixing: `(crc32(task_id) + baseline_idx) % n`, preserving
+  the historical within-task multi-baseline offset behavior;
+- `experiments/run_benchmark.py::run_single_agent_baseline` (P0): the
+  single_agent baseline wrote the LLM's `new_code` via a plain
+  `open(state["target_file"], "w")`, bypassing `_patch_applier_node`'s
+  safety checks — an empty/too-short LLM shell would wipe the target file,
+  and subsequent baselines/retries would see empty code. Now guarded:
+  non-empty (≥ 10% of original) + function-definition count not decreased
+  (aligned with the workflow write-disk criteria); on failure the write is
+  skipped and the original code is kept (warning logged).
+
+### LLM cache atomic writes (P1, 2026-09-26 round 5)
+
+- `src/agents/base_agent.py::_call_llm_with_cache` (P1): the old plain
+  `open(cache_file, "w") + json.dump` was non-atomic — two `--parallel`
+  workers on the same key (same prompt material → same md5 → same
+  cache_file) could race; the other reader might observe a half-written
+  JSON → `json.load` failed → silent LLM re-call (wasted tokens + latency).
+  The cache key is the content md5, so concurrent writers produce
+  byte-identical JSON. Now "write a thread-unique temp file
+  (`.tmp.<thread_id>`) → `os.replace` atomic swap" (same pattern as
+  cross_file CF-8 / nodes._write_file_atomic); the temp file is cleaned up
+  on replace failure.
+
+### State schema & write-disk safety checks (P2, 2026-09-26 round 5)
+
+- `src/graph/state.py` (P2): the `repo_verification` field was set by
+  `run_benchmark` after invoke but **not declared on the AITesterState
+  TypedDict** (the guard test test_state.py missed it). Now explicitly
+  declared as `repo_verification: dict[str, Any] | None` and initialized
+  to None by `create_initial_state` (key set aligned with `__annotations__`);
+- `src/reports/generator.py::_parse_failed_cases` (P2): the fallback
+  parser's hard conditions `"FAILED" in line and "[" in line` missed
+  modern pytest short output (`FAILED test_x.py::test_y - AssertionError`,
+  no `[`); `"Error" in line` was too broad (any line containing "Error"
+  overwrote the error field). Now matches pytest's actual output patterns:
+  the case name takes the first token on the FAILED line (compatible with
+  `[E]`/`[F]` suffix / short-format suffix); the short-format inline error
+  suffix is extracted directly; the detailed format takes the first
+  exception-class line after the FAILED line; name-missing falls back to
+  "unknown" (historical behavior preserved);
+- `scripts/verify_swe_bench_export.py::_extract_suggested_func_from_patch`
+  (P2): `line.startswith("@@") or line.startswith("@")` was semantically
+  contradictory with the regex below — `startswith("@")` also hit diff
+  deletion lines containing decorators (`-@decorator` starts with `@` but
+  is not a hunk header). Now tightened to hunk headers `@@` only, with
+  `split("@@", 2)[2]` extracting the trailing context (same criteria as
+  dataset_loader._extract_suggested_function).
+
+### Node-layer routing semantics & robustness (P1/P2, 2026-09-26 round 6)
+
+- `src/graph/workflow.py::_should_debug` (P1 routing-semantics
+  clarification): the diagnosis-keyword check was previously nested inside
+  the "max iterations reached" block — early iterations (iteration < max)
+  hitting "test generation error" keywords still went to the debugger to
+  fix code rather than back to the generator for regeneration,
+  inconsistent with `_generator_node`'s regeneration decision
+  (`defect_type == test_defect` triggerable at any iteration) and the 3.1
+  bidirectional diagnosis path. Now promoted to an independent branch
+  (any-iteration keyword hit regenerates, still protected by the
+  `regeneration_count` cap; when the cap is filled, falls back to normal
+  debug);
+- `src/graph/workflow.py::_should_debug` (P1 consistency): `test_passed`
+  used strict `is True` identity while `_recent_repairs_invalid` used
+  truthiness (non-bool truthy values such as `numpy.bool_` were
+  misjudged as failed by `is True` → misrouted to debug). Now unified to
+  truthiness;
+- `src/graph/nodes.py::_generator_node` (P1 degradation fallback): the old
+  code had no try-except around `agent.generate` — an LLM failure
+  (RuntimeError, including cross-API failover exhaustion) or cache OSError
+  crashed the entire graph, inconsistent with the planner/debugger nodes'
+  "degrade on failure" criteria (both have default-plan / empty-patch
+  fallbacks), and the workflow.py module docstring claims "LLM-call
+  exceptions are caught so the workflow never crashes on a single point of
+  failure". Now degraded: on LLM failure an empty test is generated with a
+  warning, and the executor naturally fails → routes to debugger/done
+  instead of crashing (for a "totally unavailable LLM": crash = zero
+  output, degrade = still a repair chance);
+- `src/graph/nodes.py::_planner_node` / `_debugger_node` (P2 fallback
+  widening): the except clause caught only `(json.JSONDecodeError,
+  RuntimeError)`, missing `OSError` from LLM file-cache IO (cache dir
+  deleted externally / disk full) — now widened to
+  `(json.JSONDecodeError, RuntimeError, OSError)`, consistent with the
+  "node degradation fallback" design (cache IO exceptions no longer crash
+  the graph);
+- `src/graph/workflow.py` (P2 thread hygiene): `_FILE_CACHE_COUNT_MEMORY`
+  read-modify-write was lock-free; concurrent `--parallel` task-end
+  reports calling `get_workflow_stats → _file_cache_entry_count` could
+  observe a half-updated tuple (another thread mid stat/glob). Now a
+  module-level `threading.Lock` serializes the memory read + stat/glob +
+  memory write (the critical section is all read-only syscalls; a plain
+  Lock suffices; memory-key semantics unchanged);
+- `src/tools/cross_file.py` (P2 import hygiene): `_save_repair_plan_cache`
+  except-branch local `import contextlib` promoted to a module-top import
+  (no more in-function imports, aligned with other module-level import
+  criteria).
+
+Regression tests: `tests/test_workflow.py` gains
+`test_generator_node_llm_failure_degrades_to_empty` (generator LLM-failure
+degradation to empty test); `tests/test_workflow_extended.py` gains
+`test_should_debug_regenerate_at_early_iteration` (early-iteration
+diagnosis-keyword routing to regenerate + regeneration-cap protection).
+
+### Verification
+
+- `ruff check` / `ruff format --check` / `mypy src/` all green;
+- Full 1728-test suite passes (28.7s), zero regressions (round-6 adds 2
+  regression cases: generator LLM-failure degradation + early-iteration
+  diagnosis-keyword routing; round-5 fixed the existing mutation-test e2e
+  case's import-name mismatch so its assertion actually works, and added 2
+  report-parsing regression cases).
+
+## [Unreleased] - P0 improvement batch: 13 items landed (layered code compression / complexity-aware routing / naming-contract validation / stratified synthetic difficulty / cross-file synthetic tasks / SWE-bench export quality verification / RAG A/B experiment script / adaptive multi-candidate trigger / mutation difficulty upgrade / error sub-classes + response retry / default trace layer / per-repo venv reuse)
+
+> Corresponds to the experiment data gaps (SWE-bench 0/20, synthetic stats covered but real-dataset A/B missing)
+> and the improvement roadmap in `docs/assessment_2026-09-25_improvement_directions.md`.
+> All default behaviors remain compatible (default parameters fall back to historical baselines; new capabilities require explicit opt-in).
+> See `docs/implementation_2026-09-25_p0_batch.md` for full details.
+
+### Features (default behavior unchanged, enabled via environment variables)
+
+- **1.1 Layered code compression (function-level slicing + call-chain depth)**
+  (`src/tools/code_context.py` + `src/tools/code_analyzer.py` + `src/agents/base_agent.py`):
+  - `extract_function_context(source, func_name, depth=2, max_chars=3000)` delegates to
+    `extract_focused_code()` BFS call-chain closure (`_closure_names`); depth=1 keeps direct
+    dependencies (historical behavior), depth=2 expands one more level of callee dependencies;
+  - `BaseAgent.truncate_code()` gains a `focus_depth` parameter (reads `CODE_FOCUS_DEPTH`,
+    default 1); `_CODE_MAX_CHARS` now reads the `CODE_MAX_CHARS` env var (default 3000);
+  - `debugger.py` `cross_file_contexts` generated via `extract_function_context`
+    (per-module 2000-char budget + 4000-char total budget), injected into the Debugger prompt.
+
+- **1.2 Complexity-aware routing (fixed Agnes 3.0-flash multi-provider endpoints)**
+  (`src/api/complexity_router.py` new + `src/api/api_manager.py` + `src/graph/state.py` +
+  `experiments/run_benchmark.py`):
+  - `compute_complexity_score(lines, num_files, num_deps, cyclomatic_complexity)` outputs a
+    [0,1] normalized score (`<0.35 → simple / <0.70 → medium / >=0.70 → complex`, per-dimension
+    weights configurable via `ROUTING_COMPLEXITY_*_NORM` env vars);
+  - `APIManager._select_node_by_complexity(complexity_class)` sorts APIHealth nodes by
+    cost_weight (complex → high-cost-weight endpoints first, simple → low-cost-weight first);
+  - `state["complexity_class"]` / `state["complexity_score"]` / `state["complexity_breakdown"]`
+    / `state["routing_hints"]` computed and written by `run_benchmark.py` after
+    `create_initial_state`;
+  - Constraint: routes only among Agnes 3.0-flash multi-provider endpoints; no external model
+    family introduced; `MODEL_ROUTING_STRATEGY=fixed` falls back to the historical strategy.
+
+- **1.3 Patch naming-contract validation (on by default)**
+  (`src/tools/patch_applier.py` + `src/graph/nodes.py`):
+  - `check_naming_contract(original_code, patched_code) -> (bool, list[str])`: AST-compares
+    module-level symbols (functions / classes / `__all__` / registration decorators /
+    module-level constants) before and after; rejects the patch if any original symbol is
+    missing;
+  - `PATCH_CONTRACT_CHECK=true` (default) invokes the check before writing the patch in
+    `_patch_applier_node`;
+  - The Debugger prompt is injected with `_CONTRACT_CONSTRAINT` ("must not modify or delete
+    the following symbols...").
+
+- **2.1 Stratified synthetic difficulty (difficulty parameter)**
+  (`src/datasets/synthetic_dataset.py` + `experiments/run_benchmark.py`):
+  - `SyntheticDataset(task_count, seed, subset, difficulty="mixed", **kwargs)` supports five
+    difficulty tiers: `mixed` / `level1` / `level2` / `level3` / `level4`;
+  - Level 1 (historical baseline) / Level 2 (multi-function interaction defects) /
+    Level 3 (cross-file dual-module construction) / Level 4 (subtle boundary + exception
+    defects);
+  - The CLI `--difficulty` option applies only to the synthetic dataset.
+
+- **2.2 Cross-file synthetic task construction (Level 3 dual-module)**
+  (`src/datasets/synthetic_dataset.py`):
+  - `CROSS_FILE_PATTERNS` dual-module templates (module_a entry + module_b defective callee);
+  - `instance_code=module_b_code`, `metadata.module_a_code` / `target_module` /
+    `fixed_module_b_code` / `num_files=2` for the cross-file repair architecture;
+  - Repair requires modifying the module_b interface → exercises the coordinator-proposer
+    cross-file repair architecture.
+
+- **3.2 Adaptive multi-candidate trigger (default adaptive)**
+  (`src/graph/nodes.py`):
+  - `MULTI_CANDIDATE_TRIGGER_STRATEGY=adaptive` (default): multi-candidate is enabled only
+    when `iteration >= 1` AND `error_category ∈ {assertion, runtime, logic_error,
+    index_error}`; simple tasks / early iterations keep the single candidate to save tokens;
+  - `MULTI_CANDIDATE_TRIGGER_STRATEGY=always` falls back to the historical baseline.
+
+- **3.3 Mutation difficulty upgrade (7 mutation types)**
+  (`experiments/mutation_testing.py`):
+  - New `_ReturnEmptyTransformer` / `_RemoveRaiseTransformer` /
+    `_ExceptionTypeTransformer` transformers;
+  - Mutation types extended from 5 to 7 (operator_flip / boolean_negation / numeric_offset /
+    boundary_shift / return_void / return_empty + exception_remove + exception_type_swap),
+    improving coverage of "boundary + exception-path" defect classes.
+
+- **4.1 Error sub-classes + response-format retry**
+  (`src/agents/error_classifier.py` + `src/agents/debugger.py`):
+  - `ErrorCategory` gains `LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED` (precise sub-classes
+    split out of `LLM_FORMAT_ERROR`; 14 → 16 categories);
+  - `ErrorClassifier.classify_llm_response(raw_response)` directly inspects the raw LLM
+    response (empty → LLM_EMPTY_RESPONSE; non-empty but JSON extraction failed →
+    LLM_JSON_PARSE_FAILED);
+  - `debugger.py::debug()` automatically retries once with a stricter prompt when a format
+    anomaly is detected, falling back to lenient JSON extraction if still failing.
+
+- **4.3 Per-repo venv reuse (SWE-bench multi-commit scenarios)**
+  (`src/agents/executor_repo.py`):
+  - `RepoExecutor(venv_reuse_by_repo=True)`: multiple commits of the same repo share one
+    repo-level venv (`<repo>/_shared_venv/`), rebuilt only when the dependency fingerprint
+    (SHA256 of requirements/pyproject/setup) changes; source-code switches do not trigger a
+    reinstall (the editable install's `.pth` automatically follows the checkout);
+  - Greatly reduces venv rebuild overhead for SWE-bench multi-commit scenarios (10-20x);
+  - Enabled via `SWE_REPO_VENV_REUSE_BY_REPO=true` (requires REPO_LEVEL_EXECUTION +
+    SWE_REPO_VENV_ISOLATION).
+
+### Observability & experiment scripts
+- **2.3 SWE-bench source export quality verification**
+  (`scripts/verify_swe_bench_export.py` new):
+  - 5-dimension verification (non-empty / line count / Python syntax / target function
+    presence / target file path match), outputting a structured quality report
+    (`pass_rate` / `by_label` / `failed_instances` / `avg_line_count`);
+  - CLI: `--enrichment` / `--instances` / `--output` / `--min-lines`.
+- **3.1 RAG A/B comparison experiment script** (`experiments/rag_ab_experiment.py` new):
+  - Automatically runs two benchmarks (RAG ON / RAG OFF), paired analysis of token /
+    success rate / iterations / elapsed time, Welch t-test + Mann-Whitney U + Cohen's d
+    (same methodology as the 0.7 report);
+  - Per-error-type grouped analysis of RAG benefit (which error categories are significantly
+    reduced with RAG ON);
+  - `--analyze-only` mode (reads existing result JSONs and computes statistics directly,
+    skipping the experiment run).
+- **4.2 Default-enabled trace layer** (`experiments/run_benchmark.py`):
+  - On entry, if `AITESTER_TRACE_DIR` is unset (or empty), it is automatically set to
+    `<output_dir>/traces/`;
+  - Node-level JSONL records (input length / output length / tokens / elapsed time / routing
+    decisions) are automatically appended during workflow execution;
+  - Set `AITESTER_TRACE_DIR=` (empty string) to explicitly disable.
+
+### Docs & tests
+- **Doc sync**:
+  - `README.md` / `README.en.md`: error categories 14 → 16 + new §5.21 P0 improvement batch
+    (13 items) + updated "latest optimization" / "recent changes" rows;
+  - `.env.example`: P0 batch env vars (CODE_FOCUS_DEPTH / CODE_MAX_CHARS /
+    MODEL_ROUTING_STRATEGY / ROUTING_COMPLEXITY_*_NORM / PATCH_CONTRACT_CHECK /
+    MULTI_CANDIDATE_TRIGGER_STRATEGY / SWE_REPO_VENV_REUSE_BY_REPO);
+  - `docs/implementation_2026-09-25_p0_batch.md` (new): full P0 batch implementation list.
+- **Test updates**:
+  - `tests/test_error_classifier.py`: 14 → 16 category assertion + P0 4.1 sub-class existence
+    check;
+  - `tests/test_synthetic_dataset.py`: difficulty stratification tests + cross-file Level 3
+    structure validation;
+  - `tests/test_workflow_extended.py`: adaptive multi-candidate strategy env var +
+    `_select_multi_candidate_patch` signature (`iteration` parameter);
+  - `tests/test_executor_repo.py`: `_run_test_nodes` mock signature (`repo_url` parameter).
+
+### Verification
+- Full regression: `python3 -m pytest tests/ -q` → **1667 passed, 47 skipped**
+  (same as baseline, zero regressions)
+- Affected subset: test_base_agent (40) / test_code_context (18) / test_error_classifier (77) /
+  test_debugger (38) / test_workflow_extended (37) / test_executor_repo (17) /
+  test_synthetic_dataset (5) / test_api_manager + extended (152) / test_code_analyzer (17)
+
 ## [Unreleased] - Improvement-direction batch: 5 items landed (3.3 position-aware iterative repair + 5.2 error-classifier 14-category doc sync + 5.1 single-batch boundary tests + 4.2 redaction auto-check hook + 2.1 real-embedding hook)
 
 > Corresponds to the "real remaining work" list in

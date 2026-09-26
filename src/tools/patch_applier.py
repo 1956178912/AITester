@@ -12,15 +12,24 @@
     - 否则 → 单函数模式（精确替换目标函数）
 
 使用 ast 模块进行精确匹配，避免正则表达式在嵌套函数或同名函数场景下的误匹配问题。
+
+P0 1.3 契约验证（命名契约检查）：
+    补丁应用前对比修改前后模块级符号集合（函数/类/__all__/注册装饰器/
+    插件入口点），缺失任何原符号则拒绝应用（防止 LLM 重写破坏 sqlfluff
+    插件命名契约导致 import 链崩溃）。
 """
 
 from __future__ import annotations
 
 import ast
 import difflib
+import logging
+import os
 import re
 
 from src.utils.helpers import extract_code_block
+
+logger = logging.getLogger(__name__)
 
 # ─── 预编译正则（模块级单例，避免热路径重复编译）─────────────────────────────────
 # 0.8 性能：全文扫描类函数（_is_full_file_patch / apply_patch_to_code 单函数
@@ -387,6 +396,144 @@ def safe_apply_patch(
     except SyntaxError:
         # 语法错误，回滚到原始代码
         return code, False
+
+
+# ─── P0 1.3 契约验证：命名契约检查 ─────────────────────────────────────────
+
+
+def _collect_module_level_symbols(source_code: str) -> set[str]:
+    """收集模块级符号集合（P0 1.3 命名契约检查）。
+
+    包含：
+    - 所有顶层函数名（FunctionDef / AsyncFunctionDef）
+    - 所有顶层类名（ClassDef）
+    - __all__ 中列出的符号（若存在）
+    - 带注册装饰器的函数/类名（@register, @plugin, @entry_point 等常见模式）
+    - 模块级赋值常量名（`NAME = ...` 形式的顶层 Assign，Name target）
+
+    这些符号构成"命名契约"：LLM 重写时不得删除/重命名这些符号，
+    否则 import 链 / 插件注册 / 外部调用方会崩溃（sqlfluff 实测 5/7 失败根因）。
+
+    Args:
+        source_code: 原始 Python 源码。
+
+    Returns:
+        符号名集合。源码无法解析时返回空集（不阻断应用，由调用方决定策略）。
+    """
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return set()
+
+    symbols: set[str] = set()
+
+    # 顶层函数 / 类
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+
+    # __all__ 列表
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__all__":
+                    # 尝试提取字面量列表
+                    value = node.value
+                    if isinstance(value, (ast.List, ast.Tuple)):
+                        for elt in value.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                symbols.add(elt.value)
+                    break
+
+    # 模块级常量赋值（顶层 `X = ...`，X 为 Name 且非 dunder）
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and not target.id.startswith("__"):
+                    symbols.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target = node.target
+            if not target.id.startswith("__"):
+                symbols.add(target.id)
+
+    return symbols
+
+
+def check_naming_contract(
+    original_code: str,
+    patched_code: str,
+) -> tuple[bool, list[str]]:
+    """P0 1.3 命名契约检查：补丁不得删除原代码中的模块级符号。
+
+    对比修改前后的模块级符号集合（_collect_module_level_symbols 口径），
+    若任何原符号在补丁后代码中缺失，返回 (False, [缺失符号列表])。
+    新增符号不报错（允许 LLM 增加辅助函数），仅删除/重命名报错。
+
+    开关：PATCH_CONTRACT_CHECK 环境变量（默认 true）。设 false 时本函数
+    恒返回 (True, [])，由调用方（_patch_applier_node）直接跳过契约检查，
+    保持历史单补丁口径（历史对照 / 合成集无契约场景）。
+
+    Args:
+        original_code: 原始代码。
+        patched_code: 应用补丁后的代码。
+
+    Returns:
+        (通过?, 缺失符号列表)。解析失败或开关关闭时通过（不阻断，保守降级）。
+    """
+    if os.getenv("PATCH_CONTRACT_CHECK", "true").lower() != "true":
+        return True, []
+    if not original_code or not patched_code:
+        return True, []
+    original_symbols = _collect_module_level_symbols(original_code)
+    patched_symbols = _collect_module_level_symbols(patched_code)
+    if not original_symbols:
+        return True, []
+    missing = sorted(original_symbols - patched_symbols)
+    if missing:
+        logger.warning(
+            "命名契约检查失败：补丁删除了 %d 个模块级符号 %s（P0 1.3）",
+            len(missing),
+            missing,
+        )
+        return False, missing
+    return True, []
+
+
+def safe_apply_patch_contract(
+    code: str,
+    patch: str,
+    enforce_contract: bool | None = None,
+) -> tuple[str, bool, list[str]]:
+    """P0 1.3 契约验证补丁应用：safe_apply_patch + 命名契约检查。
+
+    在 safe_apply_patch 的语法验证之上，增加模块级符号删除检查。
+    契约检查失败时回滚原代码（与语法失败同口径），不引入半应用状态。
+
+    Args:
+        code: 原始代码。
+        patch: LLM 生成的补丁代码。
+        enforce_contract: 是否强制执行契约检查。None 时读环境变量
+            PATCH_CONTRACT_CHECK（默认 true，保持 P0 1.3 行为）；
+            显式传 False 跳过（历史对照 / 合成集无契约场景）。
+
+    Returns:
+        (应用后的代码, 是否成功, 缺失符号列表)。契约通过时缺失列表为空。
+    """
+    new_code, success = safe_apply_patch(code, patch)
+    if not success:
+        return code, False, []
+
+    if enforce_contract is None:
+        enforce_contract = os.getenv("PATCH_CONTRACT_CHECK", "true").lower() == "true"
+    if not enforce_contract:
+        return new_code, True, []
+
+    ok, missing = check_naming_contract(code, new_code)
+    if not ok:
+        # 契约破坏 → 回滚（与语法失败同口径，保守不引入半应用状态）
+        logger.info("命名契约破坏，回滚补丁（P0 1.3）：缺失 %s", missing)
+        return code, False, missing
+    return new_code, True, []
 
 
 def generate_diff(old_code: str, new_code: str) -> str:

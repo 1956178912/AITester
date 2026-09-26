@@ -309,6 +309,32 @@ EXECUTOR_DEP_INSTALL_TIMEOUT: int = _parse_int_env("EXECUTOR_DEP_INSTALL_TIMEOUT
 EXECUTOR_USE_DOCKER: bool = os.getenv("EXECUTOR_USE_DOCKER", "false").lower() == "true"
 EXECUTOR_DOCKER_IMAGE: str = os.getenv("EXECUTOR_DOCKER_IMAGE", "aitester:latest")
 
+# ─── P0 仓库级验证（SWE-bench 官方口径，默认关）─────────────────────────────
+# REPO_LEVEL_EXECUTION=true 时，experiments/run_benchmark.py 对携带
+# source/repo_url/base_commit/fail_to_pass 元数据的任务（仅 SWE-bench 数据集
+# 经加载器产出）启用 RepoExecutor 仓库级验证：clone + checkout + pip install -e
+# 的环境缓存内，把 LLM 补丁与 gold test_patch 应用进真实仓库工作区，跑
+# FAIL_TO_PASS（修复前失败、修复后须全过）与 PASS_TO_PASS（不得回归）实测。
+# 合成数据集 / examples 任务无这些元数据字段，永不命中，历史口径零变化。
+# 环境缓存根目录 SWE_REPO_ENVS_DIR 默认 ~/.cache/aitester/repo_envs/
+# （(repo, commit) 分目录复用，同仓库多任务只 clone/pip 一次）。
+REPO_LEVEL_EXECUTION: bool = os.getenv("REPO_LEVEL_EXECUTION", "false").lower() == "true"
+# 仓库级环境 setup 子进程超时（秒）：clone + checkout + pip install -e 远慢于
+# 单任务测试执行，默认 600s；缓存命中后不再触发。
+SWE_REPO_SETUP_TIMEOUT: int = _parse_int_env("SWE_REPO_SETUP_TIMEOUT", 600, 60, None)
+# P1 仓库级 venv 隔离（默认关，opt-in）：SWE_REPO_VENV_ISOLATION=true 时
+# RepoExecutor 在每个 (repo, commit) 环境旁建独立 venv，pip install -e 装入
+# venv（而非全局 sys.executable），pytest 用 venv 的 python 运行。
+# 各 repo_env 共享全局 python 时，全局 site-packages 的 editable 安装指向
+# "最近一次 pip install -e"的 commit 源码 → 跨 commit 任务 `import <repo_pkg>`
+# 解析到错误版本（实测 sqlfluff BaseSegment._log_apply_fixes_check_issue
+# 在 8e724ef 存在、38cff664 不存在 → AttributeError，与 LLM 补丁无关）。
+# 默认关保持与已缓存 repo_envs（全局 .pip_installed 标记）的兼容；
+# 开启时 RepoExecutor 按 .venv_pip_installed 标记判缓存命中（新建 venv）。
+# venv 模式下不注入宿主 PYTHONPATH（实测带注入反而 ImportError），
+# PATH 前置 venv/bin（子进程内再调 python/pip 时指向 venv）。
+SWE_REPO_VENV_ISOLATION: bool = os.getenv("SWE_REPO_VENV_ISOLATION", "false").lower() == "true"
+
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 # 0 = 串行（合法值），最小 0 防止负并行度
 BENCHMARK_PARALLELISM: int = _parse_int_env("BENCHMARK_PARALLELISM", 0, 0, None)

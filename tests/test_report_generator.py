@@ -72,7 +72,8 @@ class TestErrorReportSerialization:
         assert data["error_category"] == "runtime"
 
     def test_to_dict_with_context(self):
-        """有 error_context 时序列化为 context 的 __dict__"""
+        """有 error_context 时序列化为 context 的 asdict（2026-09-26 全面审查：
+        原 __dict__ 直接内省，改 asdict 显式序列化，dataclass 加字段时 schema 稳定）"""
         report = _report(error_context=ErrorContext(filename="a.py", line=3, column=1))
         data = report.to_dict()
         assert data["error_context"]["filename"] == "a.py"
@@ -392,6 +393,24 @@ class TestParseFailedCases:
         # "FAILED" 后无空白+非空白字符（\S+ 匹配失败），走 else 分支
         cases = self.gen._parse_failed_cases("[collected] FAILED")
         assert cases == [{"name": "unknown"}]
+
+    def test_parse_short_format_with_inline_error_suffix(self):
+        """2026-09-26 全面审查（P2 修复回归）：现代 pytest 短格式
+        （-q/--tb=no）`FAILED tests/x.py::test_y - AssertionError: msg`
+        单行自带错误后缀——此前 `"[" in line` 硬条件漏掉该格式，
+        现用例名与行内错误后缀均可提取。"""
+        text = "FAILED tests/x.py::test_y - AssertionError: expected 5, got 4"
+        cases = self.gen._parse_failed_cases(text)
+        assert cases == [{"name": "tests/x.py::test_y", "error": "AssertionError: expected 5, got 4"}]
+
+    def test_parse_detailed_format_error_line(self):
+        """2026-09-26 全面审查（P2 修复回归）：详细格式——FAILED 行后的
+        `AssertionError: ...` / `E   ValueError: ...` 异常行作为 error 详情
+        （此前 "Error" in line 过宽，任何含 Error 的行都会覆盖；现收紧为
+        异常类名行且只取首个未填充 error 的用例）。"""
+        text = "FAILED tests/m.py::test_a [F]\nassert 1 == 2\nAssertionError: values differ\n"
+        cases = self.gen._parse_failed_cases(text)
+        assert cases == [{"name": "tests/m.py::test_a", "error": "AssertionError: values differ"}]
 
 
 # ─── save_report ──────────────────────────────────────────────────────────────

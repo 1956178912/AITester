@@ -9,6 +9,7 @@
     - extract_function_code:      按名称提取单个函数的完整代码块
     - compute_cyclomatic_complexity: 计算圈复杂度（McCabe 度量）
     - replace_function_code:      使用 AST 安全替换指定函数实现
+    - extract_function_context:   按调用链 depth 提取最小上下文（P0 1.1 分层代码压缩）
 """
 
 from __future__ import annotations
@@ -220,3 +221,50 @@ def replace_function_code(
 
     # 第六步：未找到目标函数，返回原代码
     return source_code, False
+
+
+def extract_function_context(
+    source_code: str,
+    func_name: str,
+    depth: int = 2,
+    max_chars: int = 3000,
+) -> str | None:
+    """按调用链 depth 提取目标函数的最小代码上下文（P0 1.1 分层代码压缩）。
+
+    口径（用户需求 1.1）：只将"目标函数 + 其直接调用的辅助函数（depth 层）
+    + 相关 import"注入 LLM prompt，而非整个文件。跨文件任务由调用方把多个
+    模块的源码拼接成一段多段源码后调用，模块间的调用链由顶层 import 表达
+    （被调函数若在同段源码中存在则随闭包保留）。
+
+    实现委托给 src.tools.code_context.extract_focused_code_detail（AST 闭包，
+    depth=1 等价于一层直接依赖，depth=2 再展开一层被调函数的依赖）。
+
+    Args:
+        source_code: Python 源码（可多文件拼接）。
+        func_name: 目标函数名。
+        depth: 调用链展开层数（1 = 直接调用的辅助函数；2 = 再展开一层）。
+        max_chars: 输出字符预算（超出仍由 extract_focused_code_detail 逐层裁剪）。
+
+    Returns:
+        最小上下文字符串；源码无法解析或函数不存在时返回 None
+        （调用方降级为全文件 + 字符级截断兜底）。
+    """
+    if not source_code or not source_code.strip():
+        return None
+    from src.tools.code_context import extract_focused_code_detail
+
+    # 2026-09-26 全面审查（C-1 性能修复）：改用 extract_focused_code_detail
+    # 拿 (code, focus_resolved) 二元组——旧版靠 "result == source_code" 反推
+    # 原样返回场景后**再做一次 ast.parse + ast.walk** 确认函数是否存在
+    # （extract_focused_code 内部已 parse 过，大文件 ~200ms 翻倍）。
+    # 新口径：focus_resolved=False 即"AST 解析失败 / 无顶层函数 / 焦点不在
+    # 源码中"，直接返回 None，零重复解析。
+    focused, focus_resolved = extract_focused_code_detail(
+        source_code,
+        focus_function=func_name,
+        max_chars=max_chars,
+        depth=depth,
+    )
+    if not focus_resolved:
+        return None
+    return focused

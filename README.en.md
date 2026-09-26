@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1672 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1612 collected) |
-| **Unit Tests** | ✅ Full: 1672 passed, 0 failed; reduced environment: ~1612 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
-| **Code Coverage** | 94% total coverage (src/; 0.7 debt items P2×8 landed with 7 regression cases + full-audit round added 13 cases, full suite 1672 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
+| **Total Tests** | ✅ 1728 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1654 collected) |
+| **Unit Tests** | ✅ Full: 1728 passed, 0 failed (28.17s measured in the 2026-09-26 review round); reduced environment: ~1654 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Code Coverage** | 94% total coverage (src/; 0.10 deep-audit round fixed 4 sites + 2 new regression cases, full suite 1728 green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
-| **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git) |
-| **Latest Optimization** | ✅ 2026-09-24 full-audit fixes: credential scrubbing factored into dynamic-pattern `credential_scrub.py` shared by all three execution paths + CLI `finally`-block fragile code eliminated + multi-candidate node made side-effect-free + patch function-location regex→AST + 5 ruff nits cleared; full suite 1672 passed / zero regression / mypy 0 errors / ruff all green. Prior to that: 2026-09-24 code-quality round + 2026-09-23 static-type zeroing + 0.7 debt items landed. See [CHANGELOG.en.md](CHANGELOG.en.md). |
-| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), llm_cache.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round) |
-| **Recent Changes** | ✅ 2026-09-24 full-audit fixes: credential scrubbing factored into `src/utils/credential_scrub.py` (dynamic `LLM_N_API_KEY` pattern, shared by local/venv/Docker paths) + CLI `finally`-block fragile code eliminated (explicit `final_state` init) + multi-candidate node side-effect-free (stats passed via update dict) + patch function-location regex→AST (decorated/commented functions no longer truncated early) + `requirements.txt` now explicitly declares `openai==2.54.0`; see [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
+| **Latest Optimization** | ✅ 2026-09-26 full-audit & conservative-optimization round (six batches: static checks zeroed (mypy 4 + ruff lint 5 + 11 files format-normalized) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene); full 1728-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round + 11 files format-normalized in this round + mypy 0 errors across the repo) |
+| **Recent Changes** | ✅ 2026-09-26 full-audit & conservative-optimization round (six batches): static checks all green (4 mypy errors + 5 ruff lint + 11 files format-normalized) + `src/api/api_manager.py` dead-code / thread hygiene fixes + `.gitignore` extended + P0 credential-scrub hardening + concurrency race fixes (APIHealth node lock / health-check lock-held snapshots / atomic cache writes) + CF-3 cross-file repair "all modules share entry code" logic-defect fix + fifth-batch P0 (mutation-test judging / API rotation reproducibility / write-disk safety) + sixth-batch node-layer routing semantics & robustness; see [CHANGELOG.en.md](CHANGELOG.en.md). |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1672 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1612 collected)
+# Run all unit tests (full 1728 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1654 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -252,6 +252,7 @@ AITester/
 │   │   ├── executor.py               # Test executor (class body + local execution orchestration; import fix / result parsing / sandbox & Docker modes / subprocess runtime split out into executor_* submodules)
 │   │   ├── executor_imports.py       # Import-path auto-fixing (module-name extraction / sys.path injection / similar-name replacement, split in 0.1)
 │   │   ├── executor_modes.py         # venv sandbox + Docker isolation execution modes (split in 0.1)
+│   │   ├── executor_repo.py          # P0 repo-level executor RepoExecutor (SWE-bench official criterion: clone+checkout+pip install -e env cache + venv isolation + gold test_patch before/after FAIL_TO_PASS/PASS_TO_PASS measurement, off by default)
 │   │   ├── executor_output.py        # Result parsing (coverage / failed cases / error info, split in 0.1)
 │   │   ├── executor_runtime.py       # Subprocess running, retry & temp resource cleanup (split in 0.1)
 │   │   ├── debugger.py               # Debugging repair agent (hierarchical error repair)
@@ -307,7 +308,7 @@ AITester/
 │   ├── analyze_results.py            # Result analysis script (4.3 + 1.1/1.2/1.3/3.2/4.4: Markdown summary + RAG auto-summary + repair convergence/quality proxy + smell detection + mutation score + boundary coverage + execution trace + cache hit rate, legacy JSON fallback)
 │   ├── compare_failures.py           # Failure-flip task comparison (Planner/Debugger/environment attribution + 5.3 cross-batch failure-mode comparison)
 │   ├── analyze_failures.py           # Failure case clustering report (for technical review)
-│   ├── mutation_testing.py           # 1.2 built-in mutation generator (AST-level three mutant classes + mutation_score_from_details aggregation)
+│   ├── mutation_testing.py           # 1.2 built-in mutation generator (AST-level 7 mutant classes + mutation_score_from_details aggregation; kill judging per official pytest exit codes, 2026-09-26)
 │   ├── contamination_check.py        # 2.1 SWE-bench data contamination check (token-level Jaccard overlap)
 │   ├── difficulty_stratification.py # 2.2 task difficulty stratification analysis
 │   ├── run_large_scale.py            # Large-scale experiment entry point
@@ -351,7 +352,7 @@ Before outputting the test plan, the Planner performs explicit analysis of the f
 - The `PLANNER_SYSTEM_PROMPT` in [src/prompts/templates.py](src/prompts/templates.py)
 
 ### 2. Hierarchical Error Repair Strategy
-Test failures are classified into fourteen categories: **LLM response format anomaly (llm_format_error), import failure (import_error), syntax error (syntax), type mismatch (type_error), index out of range (index_error), assertion failure (assertion), test logic error (logic_error), runtime exception (runtime), timeout (timeout), unknown (unknown), patch rejected by safety guard (patch_validation_failed), all-empty RAG retrieval (rag_retrieval_empty), missing execution trace (execution_trace_missing), and all multi-candidate patches rejected by static screening (multi_candidate_all_rejected)**. Each category uses a differentiated repair strategy (P2 refinement: the import/type/logic categories were split out from the older five-category set; 1.2 residual: LLM_FORMAT_ERROR and INDEX_ERROR split out of UNKNOWN; 1.1 status refinement: PATCH_VALIDATION_FAILED and RAG_RETRIEVAL_EMPTY are flow-status categories; 5.2 ongoing refinement: EXECUTION_TRACE_MISSING and MULTI_CANDIDATE_ALL_REJECTED are multi-candidate/trace flow categories — the last 4 are determined by `refine_failure_category()` at task wrap-up based on repair_history/rag_stats/execution_trace/multi_candidate_stats signals and do not go through `classify()` text regex; successful tasks are returned as-is).
+Test failures are classified into sixteen categories: **LLM response format anomaly (llm_format_error), LLM empty response (llm_empty_response, P0 4.1 sub-class), LLM JSON parse failure (llm_json_parse_failed, P0 4.1 sub-class), import failure (import_error), syntax error (syntax), type mismatch (type_error), index out of range (index_error), assertion failure (assertion), test logic error (logic_error), runtime exception (runtime), timeout (timeout), unknown (unknown), patch rejected by safety guard (patch_validation_failed), all-empty RAG retrieval (rag_retrieval_empty), missing execution trace (execution_trace_missing), and all multi-candidate patches rejected by static screening (multi_candidate_all_rejected)**. Each category uses a differentiated repair strategy (P2 refinement: the import/type/logic categories were split out from the older five-category set; 1.2 residual: LLM_FORMAT_ERROR and INDEX_ERROR split out of UNKNOWN; 1.1 status refinement: PATCH_VALIDATION_FAILED and RAG_RETRIEVAL_EMPTY are flow-status categories; 5.2 ongoing refinement: EXECUTION_TRACE_MISSING and MULTI_CANDIDATE_ALL_REJECTED are multi-candidate/trace flow categories; P0 4.1 sub-class split: LLM_EMPTY_RESPONSE and LLM_JSON_PARSE_FAILED are precise sub-classes of LLM_FORMAT_ERROR, classified by `ErrorClassifier.classify_llm_response()` after the LLM response arrives and before JSON parsing — a strict-prompt retry is triggered on hit and the raw response snippet is recorded, without going through `classify()` text regex; successful tasks are returned as-is).
 
 **Technical implementation**:
 - The `ErrorClassifier` class in [src/agents/error_classifier.py](src/agents/error_classifier.py) (rule-based matching)
@@ -498,6 +499,61 @@ A pure observability layer, enabled by default (does not affect repair routing).
 
 > Purpose: preparing data for future execution-feedback-driven fine-tuning (BoostAPR-style methods) — every benchmark automatically writes "pass/fail, coverage change, elapsed time, multi-dimensional reward signals" into the result JSON; no extra trace-collection script needed.
 
+### 5.20 SWE-bench Repo-Level Verification (P0/P1, default off)
+The official SWE-bench verification criterion is "apply the gold `test_patch` to
+the `base_commit` checkout, then run `FAIL_TO_PASS` (fails pre-fix, must all
+pass post-fix) + `PASS_TO_PASS` (no regression)". A single temporary-file
+executor cannot hold repo-level code (broken module names / missing deps /
+multi-source-file patches), so `src/agents/executor_repo.py` carries repo-level
+execution independently (default off; zero change to synthetic/examples
+calibration):
+
+- **Env setup**: `git clone --no-checkout --filter=blob:none` +
+  `checkout <base_commit>` + `pip install -e .` (repo pyproject deps only),
+  cached by `(repo, commit12)` under `~/.cache/aitester/repo_envs/`
+  (overridable via `SWE_REPO_ENVS_DIR`); same-repo multi-task clones/pips only
+  once.
+- **venv isolation** (`SWE_REPO_VENV_ISOLATION=true`, default off): each
+  commit env builds an independent venv beside it; `pip install -e` goes into
+  the venv and pytest runs with the venv's python, decoupled from global
+  `sys.executable`. When repo_envs share the global python, the global
+  site-packages editable install points at the "last pip install -e" commit's
+  source → cross-commit tasks `import <repo_pkg>` resolve to the wrong version
+  (measured sqlfluff `BaseSegment` methods inconsistent across adjacent
+  commits → AttributeError, unrelated to LLM patches). In venv mode no host
+  PYTHONPATH is injected (measured: injecting it actually causes ImportError);
+  PATH prepends venv/bin.
+- **LLM patch mapping**: `_normalize_llm_patch` strips LLM output fences
+  (triple-backtick wrap or a leading 'python' marker) back to the pure code
+  body; `_diff_codes` generates a strict unified diff via `git diff --no-index`
+  (difflib hand-join produced corrupt patches in the "whole-file rewrite"
+  scenario due to line-count mismatch with git's parser — fixed); `---`/`+++`
+  headers rewritten to the gold target file's repo path
+  (`_extract_gold_target_relpath` takes the first non-test source file's b/
+  side path from the official gold patch) → mapped into the real repo;
+  identical strings (LLM made no change) return empty, and `FAIL_TO_PASS`
+  is adjudicated as a no-patch measurement — no false pass.
+- **Apple Git 2.54 new-file bug fallback**: local `git apply` reports clean
+  on a new-file patch but produces an empty file; `_apply_patch_robust`
+  manually backfills the new-file section so test files are complete.
+- **Routing**: `REPO_LEVEL_EXECUTION=true` +
+  `task.metadata.source=="swe_bench"` + `fail_to_pass/repo_url/base_commit`
+  present → only the aiterster baseline routes to `RepoExecutor.verify`,
+  overwriting `test_passed` and writing a `repo_verification` diagnostic;
+  plain_llm / single_agent keep the original LLM-generated-test calibration
+  (no repo env dependency).
+- **Unit tests**: `tests/test_executor_repo.py` 17 cases (setup cache /
+  verify pass / verify fail / base_not_failing / test_patch_apply_failed /
+  baseline restore / venv isolation / LLM patch helpers / git diff
+  applicability).
+
+```bash
+# Repo-level SWE-bench verification (opt-in, default off)
+REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
+  SWE_BENCH_ENRICHMENT=./swe_bench_enrichment.jsonl \
+  python experiments/run_benchmark.py --dataset swe_bench --task-limit 10 --baselines aiterster
+```
+
 ### 6. Standard Dataset Integration (new)
 Multiple datasets are supported through the `src/datasets/` subpackage (`dataset_loader.py` + `synthetic_dataset.py`):
 
@@ -560,6 +616,31 @@ python -c "from src.datasets import SWEBenchDataset; SWEBenchDataset.download_fr
 # Run the benchmark
 python experiments/run_benchmark.py --dataset swe_bench --subset lite --task-limit 10
 ```
+
+### SWE-bench Repo-Level Verification Results (P0/P1, 2026-09-25)
+With `RepoExecutor` (`REPO_LEVEL_EXECUTION=true`), the lite-20 run was
+verified on the official SWE-bench criterion (gold `test_patch` before/after
+FAIL_TO_PASS/PASS_TO_PASS measurement); results in
+[experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7:
+
+- After the data pipeline fix (`SWE_BENCH_ENRICHMENT` injecting real source) +
+  execution environment fix (RepoExecutor repo-level clone + pip install -e +
+  venv isolation) + patch pipeline fix (applicable unified diff via
+  `git diff --no-index`), SWE-bench is still 0/20.
+- P1 diagnosis (single-source tasks 0/7, after venv isolation + fixed
+  pipeline) failure categorization: 5/7 `LLM_BREAKS_IMPORT` (LLM rewrite of
+  the target file broke sqlfluff's plugin naming contract, e.g. renaming the
+  `Rule_L027` class → entire import chain crashed) + 2/7 `EMPTY_LLM_PATCH`
+  (LLM produced no fix). **Pipeline and environment are fully fixed; 0/N is
+  the LLM engine's fix-quality boundary** (free-tier small model on real
+  repo-level code), not a pipeline or environment issue.
+- Multi-file tasks (13/20 multi-source) have no positive signal before the
+  engine-capability breakthrough (ON/OFF both 0/N); cross-file gain
+  validation requires a stronger model + full-repo source context.
+
+Paper positioning: SWE-bench 0/N is written into the "Limitations" section
+(engine fix-quality boundary); the main experiments still use the synthetic
+dataset (88% vs 60% vs 8%, p=0.002 significant).
 
 ### SWE-bench Loading Quality Validation and Source Enrichment (P0)
 
@@ -713,7 +794,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1672 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1728 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -723,77 +804,78 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (68 test files, full 1672 collected pytest cases; reduced environment collects ~1612 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (74 test files, full 1728 collected pytest cases; reduced environment collects ~1654 / auto-skips RAG and visualization cases, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
-| `test_api_manager.py` | 77 | API manager (rotation/weighted-random/health-aware strategies, health thread switch, failure threshold config wiring, 4.1 circuit breaker cooldown state machine and routing filter, 1.5 cooldown boundary 3 cases, 4.1 redaction wiring 2 cases) |
+| `test_api_manager.py` | 79 | API manager (rotation/weighted-random/health-aware strategies, health thread switch, failure threshold config wiring, 4.1 circuit breaker cooldown state machine and routing filter, 1.5 cooldown boundary 3 cases, 4.1 redaction wiring 2 cases) |
 | `test_api_circuit_breaker.py` | 16 | 4.4/0.6 circuit-breaker exponential backoff (`API_CIRCUIT_BACKOFF` on/off dual paths) + Prometheus export (`API_PROMETHEUS_EXPORT` default empty string) |
 | `test_api_manager_extended.py` | 74 | API manager extended paths (health recovery, rate-limit marking, 4.2 half-open probe TestHalfOpenProbe 12 cases) |
-| `test_base_agent.py` | 39 | JSON extraction, code block extraction, client reuse, AST smart extraction |
+| `test_base_agent.py` | 40 | JSON extraction, code block extraction, client reuse, AST smart extraction |
 | `test_base_agent_extended.py` | 46 | Exponential backoff retry, LLM cache, zai client reuse |
-| `test_cli_app.py` | 30 | 27 | CLI commands (list-examples/--version/argument validation/parallel/json edge cases + 1.4 timeout pass-through/concurrency fault tolerance/check-dataset edge cases/glob concurrency 8 cases) |
+| `test_cli_app.py` | 36 | CLI commands (list-examples/--version/argument validation/parallel/json edge cases + 1.4 timeout pass-through/concurrency fault tolerance/check-dataset edge cases/glob concurrency + 4.4 clean-venv-cache 4 cases + 5.1 concurrent interrupt/signal handling 3 cases) |
 | `test_cli_output.py` | 10 | CLI output layer regression (colorize TTY dual branch, success/error/warning/info icons and stdout/stderr routing, print_rich_table empty list/missing key fallback/coverage=0.0 not misjudged as N/A, O-01 batch) |
 | `test_cli_parallel.py` | 10 | Concurrent dispatcher `_dispatch_parallel_tasks` and `run` concurrent branch regression (rich/no-rich dual paths, per-task fault tolerance, CI gate exit 1) (0.1) |
 | `test_cli_run.py` | 6 | run command orchestration (timeout/coverage threshold pass-through) |
 | `test_cli_console_output.py` | 8 | run non-JSON console summary (success/failure/diagnosis/suggestions) + _dispatch_concurrent rich/fallback/JSON-silent branches (0.1) |
 | `test_code_analyzer.py` | 17 | AST parsing, cyclomatic complexity, code replacement |
-| `test_code_context.py` | 18 | 11 | AST smart extraction (P0 large-file context) |
+| `test_code_context.py` | 18 | AST smart extraction (P0 large-file context) |
 | `test_complex_logic.py` | 12 | Complex business logic (email validation, etc.) |
 | `test_config_generator.py` | 26 | LLM config generator templates |
-| `test_config_manager.py` | 35 | 32 | Config manager (LLM config add/remove) |
-| `test_config.py` | 15 | 14 | config.py defaults and tolerant parsing |
-| `test_core_modules.py` | 29 | Core module smoke tests (multiple classes of BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader) |
+| `test_config_manager.py` | 35 | Config manager (LLM config add/remove, incl. P0 write-disk validation: reject newline/`#` var-value injection, 5 cases) |
+| `test_config.py` | 15 | config.py defaults and tolerant parsing |
+| `test_core_modules.py` | 19 | Core module smoke tests (multiple classes of BenchmarkTask / InMemoryDataset / Planner / Executor / DatasetLoader) |
+| `test_cost_aware_routing.py` | 13 | Cost-aware routing and expensive-provider cost alerts (3.4 + 3.2 configurable threshold 4 cases) |
+| `test_credential_scrub.py` | 5 | New in 2026-09-26: P0 credential-scrub hardening regression (numbered variants `OPENAI_(API_KEY\|BASE_URL)_\d+` / provider intermediate vars / high-number boundary / input immutability, 5 cases) |
+| `test_dataset_loader.py` | 76 | Dataset loader (InMemory/SWEBench, O(1) `get_task_by_id` index) |
+| `test_dataset_loader_extended.py` | 59 | Dataset loader extended paths (raw loading/field validation) |
+| `test_dataset_validation.py` | 16 | SWE-bench loading quality validation and source enrichment (P0) + tasks_missing_source (2.1) |
+| `test_debugger.py` | 38 | Error diagnosis, RAG injection, classification pass-through |
 | `test_contamination_check.py` | 15 | 2.1 data contamination detection (token extraction / Jaccard overlap / grading / detect scan / rendered section) |
 | `test_contamination_multidim.py` | 25 | 2.1 multi-dimensional contamination detection (structural AST-skeleton LCS + semantic token-bag cosine, three-dimensional similarity / combined risk level / full detect flow / resistant-benchmark registry) |
-| `test_cost_aware_routing.py` | 13 | Cost-aware routing and expensive-provider cost alerts (3.4 + 3.2 configurable threshold 4 cases) |
-| `test_dataset_loader.py` | 83 | Dataset loader (InMemory/SWEBench) |
-| `test_dataset_loader_extended.py` | 73 | Dataset loader extended paths (raw loading/field validation) |
-| `test_dataset_validation.py` | 22 | SWE-bench loading quality validation and source enrichment (P0) + tasks_missing_source (2.1) |
-| `test_debugger.py` | 29 | Error diagnosis, RAG injection, classification pass-through |
-| `test_defects4j_smoke.py` | 9 | 3.4 Defects4J-Python loader smoke test (graceful degradation without data directory / full-directory parsing / field integrity) |
 | `test_dependency.py` | 43 | Dependency detection and venv management (P1) + 4.4 cache monitoring (hit-rate stats/listing/cleanup, 8 cases) |
-| `test_dependency_edge_cases.py` | 14 | Dependency edge branches (stdlib fallback / find_spec exception / venv creation timeout / OSError silent degradation, new in 0.1) |
-| `test_error_classifier.py` | 89 | 85 | Fourteen-category error classification and repair strategy mapping (P2 refinement + 1.2 residual + 1.1 status refinement + 5.2 ongoing refinement: refine_failure_category) |
+| `test_dependency_edge_cases.py` | 18 | Dependency edge branches (stdlib fallback / find_spec exception / venv creation timeout / OSError silent degradation, new in 0.1) |
+| `test_error_classifier.py` | 89 | Sixteen-category error classification and repair strategy mapping (P2 refinement + 1.2 residual + 1.1 status refinement + 5.2 ongoing refinement + P0 4.1 sub-classes: refine_failure_category / test_sixteen_categories_total 1 case) |
 | `test_error_classifier_new_categories.py` | 16 | 5.2 two new error-category determinations (`EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`, priority / fix-strategy description / final_state wiring) |
 | `test_exceptions.py` | 33 | Custom exception classes and decorators |
-| `test_executor.py` | 50 | 48 | Coverage parsing, failed case parsing |
+| `test_executor.py` | 41 | Coverage parsing, failed case parsing |
 | `test_executor_docker.py` | 11 | 4.3 Docker execution mode (unavailable diagnostics / mode flag / docker precedence over venv / subprocess env credential stripping + TestDockerExecutionFlow in-container execution 6 cases + sandbox cleanup fallback) |
-| `test_executor_sandbox.py` | 14 | Sandbox execution path and dependency installation (P1, including install failure short-circuit / target file missing edge case; subprocess patch target migrated to executor_runtime) |
-| `test_experiments_analysis.py` | 15 | Experiment result analysis (ranking/statistics) |
-| `test_experiments_scripts.py` | 36 | visualize result selection / normalized experiment return keys / benchmark parallelism regression (0.1) + 4.3 analyze_results pure functions + 2.3 RAG auto-summary + 1.1/1.2 repair convergence and quality proxy metrics + 1.2 test smell detection + 1.3 repair convergence curve (6 cases) |
-| `test_failure_kb.py` | 181 | 5.3 failure case knowledge base + cross-batch failure pattern comparison (failure_knowledge_base structured JSON / cross_batch_comparison batch trends / three major failure root causes) |
-| `test_generator.py` | 43 | parametrize validation, import fixing, LLM calls + 3.4 assertion augmentation (TestAssertionAugmentation: AST extraction of existing assert, off by default, 9 cases) |
-| `test_llm_cache.py` | 16 | LLM in-memory cache |
-| `test_llm_file_cache.py` | 5 | LLM file cache hit/miss |
-| `test_logging_utils.py` | 14 | Log redaction regexes (sk- prefix / dotted-segment / prefix-less long hex·base64, three forms; 0.1 redaction extension regression) |
-| `test_mysql_client.py` | 15 | MySQL client singleton/transaction/connection pool parameters |
-| `test_multi_candidate.py` | 23 | Multi-candidate patch generation and static/execution validation filtering (3.1) |
+| `test_executor_sandbox.py` | 7 | Sandbox execution path and dependency installation (P1, including install failure short-circuit / target file missing edge case) |
+| `test_executor_repo.py` | 17 | P0 repo-level executor RepoExecutor (setup cache / verify pass/fail / base_not_failing / test_patch_apply_failed / baseline restore / venv isolation / LLM patch helpers / git diff applicability) |
+| `test_experiments_analysis.py` | 43 | Experiment result analysis (ranking/statistics) + 5.1 statistical-test boundary 5 cases (sample <3 / partial pairing missing / single baseline / dirty data) |
+| `test_experiments_scripts.py` | 43 | visualize result selection / normalized experiment return keys / benchmark parallelism regression (0.1) + 4.3 analyze_results pure functions + 2.3 RAG auto-summary + 1.1/1.2 repair convergence and quality proxy metrics + 1.2 test smell detection + 1.3 repair convergence curve + 4.4 dependency cache hit stats + 1.2 convergence failure mode attribution / 1.3 boundary case coverage / 1.3 mutation score / 3.2 execution trace summary (14 cases) |
+| `test_generator.py` | 27 | parametrize validation, import fixing, LLM calls + 3.4 assertion augmentation (TestAssertionAugmentation: AST extraction of existing assert, off by default, 9 cases) |
+| `test_llm_file_cache.py` | 8 | LLM file cache hit/miss + temperature key non-interhit + system_prompt in cache key (0.9 deep-audit regression) |
+| `test_logging_utils.py` | 38 | Log redaction regexes (sk- prefix / dotted-segment / prefix-less long hex·base64, three forms; 0.1 redaction extension regression) + 5.1 redaction boundary 5 cases (format failure / exc_info stack redaction / nested dict criteria lock / idempotence / mask exception fallback) + 2026-09-26 redact_dict string-input 2 cases (str input redacted then wrapped `{"value":...}` contract + other scalar fallback to empty dict) |
+| `test_mysql_client.py` | 13 | MySQL client singleton/transaction/connection pool parameters |
+| `test_multi_candidate.py` | 33 | Multi-candidate patch generation and static/execution validation filtering (3.1; boundary_shift case synced to the 2026-09-26 mutant-location key upgrade) |
 | `test_packaging.py` | 3 | Packaging integrity (subpackage __init__ all present) |
-| `test_patch_applier.py` | 38 | Patch application (whole-file/single-function modes) |
+| `test_patch_applier.py` | 39 | Patch application (whole-file/single-function modes) + multi-function patch ordering (0.9 regression) |
 | `test_planner.py` | 5 | PlannerAgent planning logic serialization |
 | `test_prompts_templates.py` | 14 | Structural contract of the three system-prompt constants (key instruction sections/error categories/JSON output format, 0.1) |
-| `test_rag_metrics.py` | 13 | RAG retrieval quality metrics Hit Rate/MRR (P1) |
-| `test_rag_retriever.py` | 42 | RAG retriever add/remove/query/clear and persistence |
-| `test_report_generator.py` | 48 | Error report generator (including fourteen-category classification branches) |
-| `test_run_benchmark.py` | 5 | Benchmark result construction and exception path regression (0.1 deduplication refactor) |
+| `test_rag_metrics.py` | 5 | RAG retrieval quality metrics Hit Rate/MRR (P1) |
+| `test_rag_retriever.py` | 31 | RAG retriever add/remove/query/clear and persistence |
+| `test_report_generator.py` | 50 | Error report generator (incl. sixteen-category branches; 2026-09-26 `_parse_failed_cases` pytest short-output pattern matching 2 cases: short-format inline error suffix + detailed-format exception class line) |
+| `test_run_benchmark.py` | 10 | Benchmark result construction and exception path regression (0.1 deduplication refactor + 2.1 patch field key-set isomorphism guard) |
 | `test_swe_bench_source_export.py` | 13 | SWE-bench source export script (patch target file extraction / enrichment persistence / dry-run, 2.1) |
-| `test_smell_detection_v2.py` | 6 | 1.1 smell-detection hardening (Eager Test / Lack of Cohesion trigger and no-trigger cases + syntax-error fallback) |
-| `test_state.py` | 8 | AITesterState single-construction-point factory (create_initial_state key-set guard / module_name derivation / mutable container isolation, deep-refactor batch) |
+| `test_state.py` | 8 | AITesterState single-construction-point factory (create_initial_state key-set guard / module_name derivation / mutable container isolation, deep-refactor batch; 2026-09-26 adds `repo_verification` field declaration) |
 | `test_viz_significance.py` | 6 | Statistical significance convergence (visualize_results reuses statistical_analysis paired primitives / NaN placeholder / primitive reference lock, deep-refactor batch) |
 | `test_string_utils.py` | 10 | String utilities |
 | `test_synthetic_dataset.py` | 5 | Synthetic dataset generation and determinism verification |
 | `test_token_usage.py` | 9 | Token consumption stats (P0 efficiency metric) |
 | `test_trace_observability.py` | 12 | Structured JSONL tracing layer (4.1) |
 | `test_venv_cache_monitoring.py` | 11 | 4.4 venv cache capacity monitoring (`get_venv_cache_size_mb` / `check_venv_cache_size` 5GB threshold alert / stats file path dynamic-ization / hit-rate / cleanup) |
-| `test_workflow.py` | 38 | Workflow graph construction and routing + 3.5 cross-file repair (CROSS_FILE_ENABLE enabled/disabled paths, 2 cases) |
-| `test_workflow_extended.py` | 47 | 38 | Workflow extended paths (RAG initialization singleton, planner default plan deduplication, etc.) |
-| `test_cross_file.py` | 27 | 3.5 cross-file repair (AST dependency analysis / coordinator-proposer / multi-file patch application / single-file fallback / serialization) |
+| `test_workflow.py` | 38 | Workflow graph construction and routing + 3.5 cross-file repair (CROSS_FILE_ENABLE enabled/disabled paths, 2 cases) + 3.2 execution feedback trace (TestExecutionTrace 3 cases: first round / second round delta / missing key tolerance) + 2026-09-26 generator LLM-failure degradation regression 1 case |
+| `test_workflow_extended.py` | 44 | Workflow extended paths (RAG initialization singleton, planner default plan deduplication, etc.) + 2026-09-26 early-iteration diagnosis-keyword routing regenerate regression 1 case |
+| `test_cross_file.py` | 45 | 3.5 cross-file repair (AST dependency analysis / coordinator-proposer / multi-file patch application / single-file fallback / serialization / phase-2 multi-entry deps / topological application / repair plan cache; 2026-09-26 CF-3 fix adds source_files per-module own-source 3 cases: per-module / fallback / legacy None behavior) |
 | `test_cross_file_bidirectional.py` | 16 | 2.2 cross-file bidirectional dependency graph (single-direction / bidirectional baselines / `CROSS_FILE_BIDIRECTIONAL` env-var switch / symbol definition-line localization) |
-| `test_analyze_failures.py` | 13 | 5.3 failure root-cause classification (three root causes: LLM/dependency/framework) + case knowledge base + CLI --knowledge-base |
+| `test_analyze_failures.py` | 20 | 5.3 failure root-cause classification (three root causes: LLM/dependency/framework) + case knowledge base + CLI --knowledge-base |
 | `test_weak_coverage_modules.py` | 16 | 5.1 weak-coverage module hardening round 1 (cli_output print_rich_table edge cases / error_classifier new classification paths / executor_runtime cleanup and retry exception branches) |
 | `test_weak_coverage_modules2.py` | 10 | 5.1 weak-coverage module hardening round 2 (config_generator main entry / prompts_templates constant structure / synthetic_dataset edge generation) |
 | `test_weak_coverage_modules3.py` | 13 | 5.1 weak-coverage module hardening round 3 (trace disk-write failure degradation / analysis statistical-test edge cases / error_classifier branches / cli_output non-rich degradation / prompts __main__) |
+| `test_smell_detection_v2.py` | 25 | 1.1 smell-detection hardening (Eager Test / Lack of Cohesion trigger and no-trigger cases + syntax-error fallback) + 1.2 mutation test generator (TestMutationGenerator 9 cases; 2026-09-26 kill-judging criteria tightened, import name fixed) + 1.3 mutation score (mutation_score_from_details) |
+| `test_failure_kb.py` | 14 | 5.3 failure case knowledge base + cross-batch failure pattern comparison (failure_knowledge_base structured JSON / cross_batch_comparison batch trends / three major failure root causes) |
+| `test_defects4j_smoke.py` | 5 | 3.4 Defects4J-Python loader smoke test (graceful degradation without data directory / full-directory parsing / field integrity) |
 
 ## Configuration
 
@@ -829,6 +911,10 @@ All configuration items are managed uniformly in [config.py](config.py) and inje
 | `MYSQL_POOL_TIMEOUT` | Connection acquisition wait timeout (seconds) | 30 |
 | `LLM_N_COST_WEIGHT` | Relative cost multiplier of the Nth LLM (3.4 cost-aware routing; 0.0 = unset, APIManager falls back to the 1.0 baseline) | 1.0 |
 | `SWE_BENCH_ENRICHMENT` | SWE-bench source enrichment JSONL path (P0, optional) | none |
+| `REPO_LEVEL_EXECUTION` | P0 repo-level verification: SWE-bench tasks routed to RepoExecutor (clone + checkout + pip install -e env cache + gold test_patch before/after FAIL_TO_PASS/PASS_TO_PASS measurement); default off | false |
+| `SWE_REPO_SETUP_TIMEOUT` | Repo-level env setup subprocess timeout (seconds, clone + checkout + pip install -e) | 600 |
+| `SWE_REPO_ENVS_DIR` | Repo env cache root (per (repo, commit) dir reuse; default `~/.cache/aitester/repo_envs`) | unset |
+| `SWE_REPO_VENV_ISOLATION` | P1 repo-level venv isolation (each commit env builds its own venv; pip install -e into the venv; pytest with the venv's python; default off to keep cached repo_envs compatible) | false |
 | `BENCHMARK_PARALLELISM` | Batch test parallelism (0 = serial) | 0 |
 | `TEMPERATURE` | LLM sampling temperature | 0.2 |
 
@@ -843,6 +929,8 @@ The following switches are all provided as environment variables; defaults prese
 | `ENABLE_MUTATION_SCORING` | false | 1.2 mutation-score evaluation: after the benchmark run, computes `mutation_score` per task from "generated test vs source under test" (built-in lightweight mutation generator, ≤ `MUTATION_MAX_MUTANTS` mutants per task). Significantly longer runtime; off by default to preserve the historical baseline. | 5.14 |
 | `MUTATION_MAX_MUTANTS` | 10 | 1.2 cap on mutants evaluated per task (takes effect together with `ENABLE_MUTATION_SCORING=true`) | 5.14 |
 | `CROSS_FILE_ENABLE` | false | Cross-file repair (coordinator-proposer architecture, 3.5) | 5.8 |
+| `REPO_LEVEL_EXECUTION` | false | P0 SWE-bench repo-level verification: SWE-bench tasks routed to RepoExecutor (clone + checkout + pip install -e env cache + gold test_patch before/after FAIL_TO_PASS/PASS_TO_PASS measurement); default off keeps synthetic/examples calibration unchanged | 5.20 |
+| `SWE_REPO_VENV_ISOLATION` | false | P1 repo-level venv isolation: each commit env builds its own venv (pip install -e into the venv, pytest with the venv's python), fixing cross-commit global-python pollution (measured sqlfluff BaseSegment methods inconsistent across adjacent commits → AttributeError, unrelated to LLM patches) | 5.20 |
 | `ASSERTION_AUGMENT_ENABLE` | false | Assertion augmentation strategy (AST extraction of existing assert, 3.4) | 5.9 |
 
 See [QUICKSTART.md](QUICKSTART.md) and [.env.example](.env.example) for details.
@@ -1002,6 +1090,30 @@ See [experiments/results/synthetic_50_final/charts/](experiments/results/synthet
 
 This batch of experiments was affected by API rate limits, and results were not archived to the repository; subsequent re-run data is kept in a local private directory (not committed).
 
+**Repo-level verification (P0/P1, 2026-09-25)**: With `RepoExecutor`
+(`REPO_LEVEL_EXECUTION=true`) on the official SWE-bench criterion (gold
+`test_patch` before/after FAIL_TO_PASS/PASS_TO_PASS measurement), lite-20
+results are in [experiments/results/experiment_report_20260925.md](experiments/results/experiment_report_20260925.md) §7:
+
+- After data pipeline fix (`SWE_BENCH_ENRICHMENT` injecting real source) +
+  execution environment fix (RepoExecutor repo-level clone + pip install -e +
+  venv isolation) + patch pipeline fix (applicable unified diff via
+  `git diff --no-index`), SWE-bench is still 0/20.
+- P1 diagnosis (single-source tasks 0/7, after venv isolation + fixed
+  pipeline) failure categorization: 5/7 `LLM_BREAKS_IMPORT` (LLM rewrite of
+  the target file broke sqlfluff's plugin naming contract, e.g. renaming the
+  `Rule_L027` class → entire import chain crashed) + 2/7 `EMPTY_LLM_PATCH`
+  (LLM produced no fix). **Pipeline and environment are fully fixed; 0/N is
+  the LLM engine's fix-quality boundary** (free-tier small model on real
+  repo-level code), not a pipeline or environment issue.
+- Multi-file tasks (13/20 multi-source) have no positive signal before the
+  engine-capability breakthrough (ON/OFF both 0/N); cross-file gain
+  validation requires a stronger model + full-repo source context.
+
+Paper positioning: SWE-bench 0/N is written into the "Limitations" section
+(engine fix-quality boundary); the main experiments still use the synthetic
+dataset (88% vs 60% vs 8%, p=0.002 significant).
+
 ### Key Repair Records
 
 - `_validate_parametrize` switched from regex to ast parsing, resolving the parameter misjudgment problem caused by nested lists
@@ -1067,20 +1179,21 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 - Structured observability: JSONL node-level tracing (4.1, off by default; enable with `AITESTER_TRACE_DIR`)
 - Cost-aware routing + circuit-breaker cooldown + half-open probe (3.4 + 4.1 + 4.2)
 - SWE-bench source export automation (2.1) + data contamination detection (token-level Jaccard)
+- SWE-bench repo-level verification (P0/P1, RepoExecutor: clone + checkout + pip install -e env cache + venv isolation + gold test_patch before/after FAIL_TO_PASS/PASS_TO_PASS measurement, off by default)
 - Cross-file repair (coordinator-proposer architecture, 3.5, off by default)
 - Assertion augmentation (AST-based existing-assert extraction, 3.4, off by default)
 - Dependency cache monitoring (venv hit-rate observability + `clean-venv-cache` CLI)
 - Test smell detection / repair convergence curves / boundary case coverage / mutation score / execution feedback traces (1.2/1.3/3.2)
-- Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 3 mutation types)
+- Built-in mutation test generator (`experiments/mutation_testing.py`, AST-level 7 mutation types; kill judging per official pytest exit codes, 2026-09-26)
 - Docker isolated execution (`EXECUTOR_USE_DOCKER`, 4.3)
-- 1672 test cases / 94% coverage / Ruff all green (0.7 iteration; see iteration records below)
+- 1728 test cases / 94% coverage / Ruff all green (see iteration records below)
 
 **Benchmarks** (synthetic dataset, 50 tasks, 3 baselines):
 - AITester: 88.0% success rate, 97.8% avg. coverage, 45.33s avg. elapsed
 - Plain LLM: 68.0% success rate, 98.0% avg. coverage, 16.6s avg. elapsed
 - Single Agent: 4.0% success rate, 0.0% avg. coverage, 26.85s avg. elapsed
 
-**Verification**: 1672 tests passed / 0 failed / Ruff all green / 94% coverage
+**Verification**: 1728 tests passed / 0 failed / Ruff all green / 94% coverage
 
 ## License
 

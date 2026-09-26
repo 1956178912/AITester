@@ -132,6 +132,18 @@ class TestRedactDict:
         result = redact_dict({"count": 3, "ratio": 0.5, "ok": True})
         assert result == {"count": 3, "ratio": 0.5, "ok": True}
 
+    def test_string_input_redacted_not_dropped(self):
+        """字符串入参脱敏后包成 {"value": ...}（不再静默丢弃整个值）。"""
+        key = "sk-aBcDeFgHiJkLmNoPqRsTuVwXyZ123"
+        result = redact_dict(key)
+        assert result["value"] != key
+        assert key not in result["value"]
+
+    def test_other_scalar_input_returns_empty_dict(self):
+        """非 dict / 非 str 标量入参返回空 dict（保持签名契约，不抛异常）。"""
+        assert redact_dict(42) == {}
+        assert redact_dict(None) == {}
+
 
 class TestSensitiveFilterEdgeCases:
     """5.1 脱敏边界用例补强：格式化失败 / exc_info 堆栈 / 嵌套结构。"""

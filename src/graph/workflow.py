@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,21 @@ logger = logging.getLogger(__name__)
 # generator↔executor 无限乒乓，最终撞上 LangGraph recursion_limit 崩掉任务并空烧 token。
 # 取 1：一次再生成已足够验证"换一版测试"是否解决问题，再多只会浪费。
 _MAX_REGENERATIONS = 1
+
+# 诊断关键词 → "测试生成错误"判定（路由回 generator 的触发词）。
+# 2026-09-26 全面审查：从 _should_debug 函数体内提取为模块级常量——
+# 此前每次路由调用（每轮迭代）都重建 list 字面量；提取后口径单一来源，
+# 后续调整触发词只改一处（与 _MAX_REGENERATIONS 同文件同注释区）。
+_TEST_GEN_DIAGNOSIS_KEYWORDS = [
+    "测试生成错误",
+    "测试设计存在错误",
+    "test code",
+    "AttributeError",
+    "NameError",
+    "SyntaxError",
+    "测试用例",
+    "期望的异常类型",
+]
 
 
 def _create_workflow(planner: bool | None = None, debugger: bool | None = None) -> StateGraph:
@@ -217,7 +233,12 @@ def _should_debug(state: AITesterState) -> str:
     Returns:
         "debug" 表示进入调试，"done" 表示流程结束，"regenerate" 表示重新生成测试代码。
     """
-    if state.get("test_passed") is True:
+    # 2026-09-26 全面审查（P1 一致性）：此前用 `is True` 严格恒等判定，
+    # 与 _recent_repairs_invalid（L210）的 truthiness 口径不一致——若 executor
+    # 某路径写入非 bool 的真值（如 numpy.bool_），`is True` 为假 → 误路由 debug。
+    # 现统一为 truthiness（与 _recent_repairs_invalid / _executor_node 写入口径
+    # 一致：test_passed 由 executor 的 test_result["passed"] 赋值，语义即"测试全过"）。
+    if state.get("test_passed"):
         _trace_node("_should_debug", decision="done", output_summary={"reason": "test_passed"})
         return "done"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
@@ -245,17 +266,7 @@ def _should_debug(state: AITesterState) -> str:
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
         # 重新生成测试代码而不是放弃
-        test_gen_keywords = [
-            "测试生成错误",
-            "测试设计存在错误",
-            "test code",
-            "AttributeError",
-            "NameError",
-            "SyntaxError",
-            "测试用例",
-            "期望的异常类型",
-        ]
-        if any(kw in diagnosis for kw in test_gen_keywords):
+        if any(kw in diagnosis for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS):
             # 上限保护：已再生成过（旧 diagnosis 关键词反复命中）时不再路由 regenerate，
             # 避免 generator↔executor 无限乒乓撞上 recursion_limit
             if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
@@ -265,6 +276,24 @@ def _should_debug(state: AITesterState) -> str:
             logger.info("已达重新生成上限，结束流程")
         _trace_node("_should_debug", decision="done", output_summary={"reason": "max_iterations"})
         return "done"
+
+    # 2026-09-26 全面审查（P1 路由语义澄清）：诊断指向"测试生成错误"时，
+    # 此前**只有**达迭代上限（iteration >= max_iterations）才路由 regenerate，
+    # 早期迭代（iteration < max）命中关键词仍走 debugger 修代码——与
+    # _generator_node 再生成判定（含 defect_type == test_defect 任意迭代可触发）
+    # 及 3.1 双向诊断路径口径不一致。现把诊断关键词判定提升为独立分支：
+    # 任意 iteration 命中即 regenerate（仍受 regeneration_count 上限保护）；
+    # 上限已满时落到下方常规 debug（保守口径：上限保护不变）。
+    diagnosis = state.get("diagnosis", "") or ""
+    if (
+        any(kw in diagnosis for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS)
+        and state.get("regeneration_count", 0) < _MAX_REGENERATIONS
+    ):
+        logger.info("诊断表明测试生成错误（iteration < max），触发重新生成测试代码")
+        _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis_early"})
+        return "regenerate"
+    # 早期迭代但（关键词未命中或再生成上限已满）：落到下方常规 debug
+
     _trace_node("_should_debug", decision="debug", output_summary={"iteration": state.get("iteration", 0)})
     return "debug"
 
@@ -290,41 +319,59 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
 # 只增不删（文件缓存 LRU 淘汰的是进程内响应值，磁盘文件保留；本进程无
 # 删除缓存文件的代码路径，测试环境经 AITESTER_LLM_CACHE_DIR 指向独立临时
 # 目录天然隔离记忆键）。条目数在本进程视角单调不减。记忆键 = (缓存目录,
-# 条目数)，跨 get_workflow_stats 调用复用（--parallel 多任务收尾报告逐任务
-# 调用时省 N-1 次 glob 目录扫描）；目录切换（缓存目录环境变量变更）时
-# 记忆键失配自动重扫，统计口径不变。外部进程删除缓存文件的小概率场景
-# 接受"读到偏大记忆值"的观测层失真（统计仅供报告展示，不参与路由）。
-_FILE_CACHE_COUNT_MEMORY: tuple[str, int] | None = None
+# 条目数, 统计时目录 mtime)，跨 get_workflow_stats 调用复用（--parallel
+# 多任务收尾报告逐任务调用时省 N-1 次 glob 目录扫描）；目录切换 / 目录
+# mtime 变化（外部进程删除/新增缓存文件）时自动重扫，消除"外部清理后
+# 记忆值偏大"的观测层失真（2026-09-26 全面审查：旧口径仅信 os.stat 成功
+# 即复用记忆，外部删除文件后统计偏高直至目录整体消失才归 0）。
+_FILE_CACHE_COUNT_MEMORY: tuple[str, int, float] | None = None
+# 2026-09-26 全面审查（P2 线程卫生）：--parallel 多任务收尾报告并发调用
+# get_workflow_stats → _file_cache_entry_count 时，_FILE_CACHE_COUNT_MEMORY 的
+# 读-改-写无锁保护，可能读到半更新的记忆元组（另一线程 stat/glob 中途）。
+# 加模块级 Lock 把"记忆读 + stat/glob + 记忆写"整段串行化（普通 Lock 即可，
+# 临界区内无重入）；记忆键本身仍是 (目录, 条目数, mtime)，语义不变。
+_FILE_CACHE_COUNT_MEMORY_LOCK = threading.Lock()
 
 
 def _file_cache_entry_count() -> int:
     """统计生产 LLM 文件缓存（src/cache/*.json）当前条目数。
 
     缓存目录不存在或为空时返回 0（只读操作，不改变缓存内容）。
-    0.10 性能：带进程内单调不减记忆（见上方 _FILE_CACHE_COUNT_MEMORY 说明）
-    ——同目录直接复用上次统计，免重复 glob；目录切换 / 目录消失（OSError）
-    时自动重扫。
+    0.10 性能：带进程内记忆（见上方 _FILE_CACHE_COUNT_MEMORY 说明）——
+    同目录且 mtime 未变直接复用上次统计，免重复 glob；目录切换 / 目录
+    消失（OSError）/ mtime 变化（外部删除或新增缓存文件）时自动重扫。
     """
     global _FILE_CACHE_COUNT_MEMORY
     cache_dir = _llm_cache_dir()
-    remembered = _FILE_CACHE_COUNT_MEMORY
-    if remembered is not None and remembered[0] == cache_dir:
-        # 记忆复用前做廉价 stat（O(1) 系统调用，比 glob 全目录扫描便宜）：
-        # 目录仍在则信记忆免重扫；目录被外部删除（OSError）时自动失效归 0。
+    # 2026-09-26 全面审查（P2 线程卫生）：记忆读-改-写整段加锁，--parallel
+    # 多任务收尾并发调用时防读到半更新元组（临界区内 stat/glob 均为只读
+    # 系统调用，无重入，普通 Lock 足够）
+    with _FILE_CACHE_COUNT_MEMORY_LOCK:
+        remembered = _FILE_CACHE_COUNT_MEMORY
+        if remembered is not None and remembered[0] == cache_dir:
+            # 记忆复用前做廉价 stat（O(1) 系统调用，比 glob 全目录扫描便宜）：
+            # 目录仍在且 mtime 与统计时一致则信记忆免重扫；目录被外部删除
+            # （OSError）或 mtime 变化（文件被外部增删）时自动重扫。
+            try:
+                st = os.stat(cache_dir)
+            except OSError:
+                _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0, 0.0)
+                return 0
+            if st.st_mtime == remembered[2]:
+                return remembered[1]
         try:
-            os.stat(cache_dir)
+            entries = len(list(Path(cache_dir).glob("*.json")))
+            # 统计成功同步记录目录 mtime（供下次调用免重扫判断）
+            try:
+                mtime = os.stat(cache_dir).st_mtime
+            except OSError:
+                mtime = 0.0
         except OSError:
-            _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0)
+            # 目录不存在（首次/被外部删除）：归 0 并记忆
+            _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0, 0.0)
             return 0
-        return remembered[1]
-    try:
-        entries = len(list(Path(cache_dir).glob("*.json")))
-    except OSError:
-        # 目录不存在（首次/被外部删除）：归 0 并记忆
-        _FILE_CACHE_COUNT_MEMORY = (cache_dir, 0)
-        return 0
-    _FILE_CACHE_COUNT_MEMORY = (cache_dir, entries)
-    return entries
+        _FILE_CACHE_COUNT_MEMORY = (cache_dir, entries, mtime)
+        return entries
 
 
 def get_workflow_stats() -> dict[str, Any]:

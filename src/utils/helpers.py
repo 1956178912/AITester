@@ -182,5 +182,7 @@ def _find_balanced_json(text: str, start: int) -> str | None:
 
         i += 1
 
-    # JSON 对象未闭合，返回剩余部分供调用方降级处理
-    return text[start:] if start < len(text) else None
+    # JSON 对象未闭合（全文无匹配右括号）：返回 None，由调用方走正则降级方案。
+    # 此前返回 text[start:]（未闭合的残余文本），json.loads 必失败还要再付
+    # 一遍 O(n) 解析——直接 None 省掉该次无谓解析
+    return None

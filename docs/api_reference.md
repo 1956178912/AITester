@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-25（0.10 深度审查轮：LLM 缓存负缓存 TTL 正确性回归 + 路径白名单根归一口径修正 + 追踪层冗余摘要消除 + 统计接口免重扫；全量 1667 测试用例 / ruff 全仓 0 告警 / mypy 0 错误（58 源文件）/ 覆盖率 94%）
+> 最后更新：2026-09-26（全面审查与保守优化轮：错误分类 14→16 类（P0 4.1 批次 LLM_EMPTY_RESPONSE / LLM_JSON_PARSE_FAILED 子类）；`DatasetLoader.get_task_by_id` O(n)→O(1) 索引查表；`extract_focused_code_detail` 消除重复 AST 解析；`redact_dict` 字符串入参契约修复；全量 1728 测试用例 / ruff 全仓 0 告警 / mypy 0 错误 / 覆盖率 94%）
 
 ---
 
@@ -178,11 +178,13 @@ category = classifier.classify(test_output, failed_cases)
 category = classifier.classify(test_output, failed_cases, target_module="calculator")
 ```
 
-**错误类别枚举（十四类，P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化）：**
+**错误类别枚举（十六类，P2 细化 + 1.2 残余 + 1.1 状态细化 + 5.2 持续细化 + P0 4.1 子类）：**
 
 | 值 | 说明 | 处理策略 |
 |----|------|---------|
-| `llm_format_error` | LLM 响应格式异常（JSON 解析失败 / 响应被截断 / 空响应），此前 75% UNKNOWN 的根因之一（1.2 残余细化） | 重新请求 LLM 生成合规响应 / 剥离 markdown 代码块后再解析 / 降低单次输出长度 |
+| `llm_format_error` | LLM 响应格式异常（JSON 解析失败 / 响应被截断），此前 75% UNKNOWN 的根因之一（1.2 残余细化） | 重新请求 LLM 生成合规响应 / 剥离 markdown 代码块后再解析 / 降低单次输出长度 |
+| `llm_empty_response` | LLM 空响应（响应体为空串 / 空白），`LLM_FORMAT_ERROR` 的精确子类（P0 4.1 批次）——由 `ErrorClassifier.classify_llm_response(raw_response)` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类，不走 `classify()` 文本正则 | Debugger 用更严格 prompt 自动重试一次，仍失败降级到宽松 JSON 提取；记录原始响应片段到 `failure_knowledge_base.json` |
+| `llm_json_parse_failed` | LLM 响应非空但 JSON 提取失败（`extract_json_object` 未找到完整 JSON），`LLM_FORMAT_ERROR` 的精确子类（P0 4.1 批次）——判定口径同上 | 记录原始响应片段 + 降低单次输出长度重试一次；仍失败降级宽松提取 |
 | `import_error` | 模块导入失败（ModuleNotFoundError/ImportError），通常缺第三方依赖或模块路径错误 | 安装缺失依赖 / 修正导入语句（配合 executor `auto_install_deps` 自动装依赖） |
 | `syntax` | 语法/编译错误（SyntaxError、IndentationError） | 重新生成完整文件 |
 | `type_error` | 类型不匹配（TypeError） | 核对参数与返回类型 |
@@ -197,7 +199,7 @@ category = classifier.classify(test_output, failed_cases, target_module="calcula
 | `execution_trace_missing` | 任务失败但 `execution_trace` 为空（执行器异常路径：executor 节点未正常写入轨迹，或被上游崩溃截断），标识"执行轨迹丢失"（5.2 持续细化）——由 `refine_failure_category()` 按 execution_trace 信号判定，不走 `classify()` 文本正则 | 排查执行链路（venv/沙箱/超时配置）后重试；代码层面按常规策略谨慎修复 |
 | `multi_candidate_all_rejected` | 多候选补丁策略失效：N 个候选全部被静态筛选拒绝（`ENABLE_MULTI_CANDIDATE_PATCH=true` 但均未通过 static_validate_patch）（5.2 持续细化）——由 `refine_failure_category()` 按 multi_candidate_stats 信号判定，不走 `classify()` 文本正则 | 回退到单补丁流程，降低候选视角扰动幅度 |
 
-分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 4 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。
+分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 4 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。P0 4.1 批次的两个子类（`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`）由 `classify_llm_response()` 直接分析 LLM 原始响应（空 → `LLM_EMPTY_RESPONSE`；非空但 JSON 提取失败 → `LLM_JSON_PARSE_FAILED`），在 Debugger 收到响应后、JSON 解析前判定，命中时用更严格 prompt 重试一次，不走 `classify()` 文本正则。
 
 ---
 
@@ -592,7 +594,20 @@ for task in dataset:
     target_code = task["target_code"]
     function_name = task["function_name"]
     # ...
+
+# 按 task_id 查找（O(1) 查表，2026-09-26 全面审查：原 O(n) 线性扫描在
+# SWE-bench full 2294 任务 × benchmark 循环逐查场景下为 O(n²)，现经
+# _task_index 索引 + 长度标记惰性失效判断降为 O(1)；add_task 追加后
+# 下次 get_task_by_id 自动重建索引）
+task = dataset.get_task_by_id("sqlfluff__sqlfluff-1234")
 ```
+
+**基类能力（2026-09-26 全面审查补强）：**
+
+| 方法 | 说明 |
+|------|------|
+| `add_task(task)` | 向数据集追加任务（基类实现，原 `InMemoryDataset` 覆写已并入）；追加后 `_tasks` 长度变化触发 `get_task_by_id` 惰性重建索引（O(n) 一次，后续 O(1)） |
+| `get_task_by_id(task_id)` | O(1) 查表（`_task_index` 字典 + `_index_size` 长度标记失效判断）；加载完成 / `add_task` 追加后自动重建 |
 
 ---
 
@@ -715,6 +730,7 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| Unreleased（2026-09-26） | 2026-09-26 | 全面审查与保守优化轮（默认行为不变，六批次）：静态检查清零（mypy 4 错 + ruff lint 5 处 + 11 文件格式归一）；死代码清理（`_build_node_list` 不可达块）+ 线程卫生（`reset_manager` 健康检查线程 stop 移出全局锁临界区）；项目卫生（`.gitignore` 补工具缓存/实验数据目录）；凭证脱敏 P0 补强（`credential_scrub` 编号变体 `OPENAI_(API_KEY|BASE_URL)_\d+` + provider 中间变量，与 `PROVIDER_TEMPLATES` 键联动；`APIManager.call` 全节点失败异常出口统一 `_redact`；`config_manager.add_llm_config` 拒含换行/`#` 的变量值；`retry_with_backoff` 日志惰性脱敏；`SensitiveFormatter` 降级路径先走纯正则兜底）；并发竞态修复（`APIHealth` 节点级 `threading.Lock` 原子化、`health_check_all/batch` 持锁快照遍历 + 批次间检查停止事件、LLM 缓存与跨文件计划缓存改"临时文件 + `os.replace`"原子写、`ReportGenerator` 双检锁）；CF-3 跨文件修复缺陷修复（`build_cross_file_repair_plan` 新增 `source_files` 参数，每模块用自有源码生成补丁，此前全模块共用入口代码致多文件场景补丁错位；缓存包装层同步透传）；第五轮 P0 批次（变异测试 `_run_mutant_tests` 改按 pytest 官方退出码精确判定（rc==1 杀死 / 其他非零保守存活，修复指标恒 1.0 的误判）+ 变异体定位键升级 (lineno, col_offset) + 类型轮转均匀取样去重、`run_benchmark` 并行 API 轮询改 `zlib.crc32` 跨进程可复现（原 `hash()` 受 `PYTHONHASHSEED` 随机化）、`single_agent` 基线写盘补最小安全检查、`repo_verification` 状态 schema 显式声明、`_parse_failed_cases` pytest 短输出模式匹配）；第六轮节点层路由语义与鲁棒性（`_should_debug` 诊断关键词判定提升为独立分支——早期迭代命中"测试生成错误"即回 generator 重新生成、`test_passed` 统一 truthiness 口径、`_generator_node` LLM 失败降级空测试不再崩溃整图、planner/debugger 兜底扩 `OSError`、`_FILE_CACHE_COUNT_MEMORY` 读改写加锁、`extract_focused_code_detail` 消除重复 AST 解析、`DatasetLoader.get_task_by_id` O(n)→O(1) 索引查表、`redact_dict` 字符串入参契约修复）；全量 1728 测试通过（28.7s）/ 零回归 / ruff + mypy 全绿 |
 | Unreleased（2026-09-25） | 2026-09-25 | 0.10 深度审查修复轮（0.9 批次回修，零功能回归）：LLM 文件缓存负缓存 TTL 正确性回归——`_lru_negatives` 引入 `_LRU_NEGATIVE_TTL_SECONDS = 30.0`（窗口内同键跳过文件重读省 IO，过期后惰性清理并重新读文件恢复外部写入可见性）+ `_lru_store` 写成功路径 `.pop(key, None)` 幂等清除负缓存（旧 `del` 从未记过负缓存时 KeyError）；路径白名单根归一口径修正——`_ALLOWED_WRITE_ROOTS` 去冗余 `abspath`（`realpath` 已含 `abspath` 语义），与 `_is_within_allowed_roots` 入参归一对称（macOS /var→/private/var 符号链接场景判定正确性关键）；追踪层冗余 meta 摘要消除——`TraceSession._append` 由浅拷贝+重建 meta dict 收敛为记录只读序列化（摘要责任归 task_start/record_node/record_task_end 入口，`--parallel` 追踪热路径省冗余深处理）；`_file_cache_entry_count` 进程内 `(目录, 条目数)` 记忆免重复 glob（`--parallel` 多任务收尾报告逐任务调用 `get_workflow_stats` 时省 N-1 次目录扫描，目录切换/删除自动失效）；全量 1667 测试通过（较 0.9 的 1665 净增 2 条回归用例：负缓存 TTL + 统计记忆）/ ruff 全仓 0 告警 / mypy 0 错误（58 源文件）/ src 覆盖率 94% |
 | Unreleased（2026-09-24） | 2026-09-24 | 全面审查修复轮（安全 + 正确性 + 可维护性）：凭证脱敏动态模式化——新增 `src/utils/credential_scrub.py`（`scrub_os_environ()` 按 `LLM_\d+_API_KEY` / `LLM_\d+_BASE_URL` 动态模式 + 通用 SDK 凭证剔除），本地 / venv / Docker 三条执行链路统一接入（此前本地只剔 7 项固定变量、venv/Docker 原样继承宿主环境，`LLM_N_API_KEY` 系列凭证可被生成代码读到）；CLI `finally` 块脆弱代码消除（`final_state` 显式 `None` 初始化 + `is not None` 判断，替代 `locals()` 检查）；多候选节点无副作用化（`_select_multi_candidate_patch` 统计改经 update dict 传递，不再原地写共享 TypedDict）；补丁函数定位正则→AST（`_find_function_range_ast` 读 `FunctionDef.lineno/end_lineno`，装饰函数 / 含注释函数体不再被过早截断，原代码无法解析时自动回退正则兜底）；`requirements.txt` 显式声明 `openai==2.54.0`（`api_manager.py` 顶层 import，此前靠传递依赖隐式安装）；删除 `.env.local.bak`（含真实密钥的备份文件）；修 5 处 tests/ ruff 瑕疵（I001/F401/RUF100/E741/SIM115）；全量 1672 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |
 | Unreleased（2026-09-23） | 2026-09-23 | 静态类型清零 + 代码质量清理轮（默认行为不变）：mypy 全仓 0 错误（19 文件类型修复——字典值混含时补 `dict[str, Any]` 标注、`ast.Module` 参数收窄、TimeoutExpired 合并 `_to_str` 归一、模块期属性挂载补 ignore、zai 重试元组去死子类、`setup_logger_safety` 幂等短路、chromadb 元数据按 `float` 归一）；3 测试文件 sleep mock 化（套件 ~30s→~22s）；全量 1659 测试通过 / ruff 全仓 0 告警 / mypy 0 错误 / src 覆盖率 94% |

@@ -407,7 +407,12 @@ class TestGetWorkflowStats:
 
     def test_file_cache_entry_count_memory(self, monkeypatch, tmp_path):
         """0.10 回归：_file_cache_entry_count 进程内记忆——同目录复用上次统计
-        （免 glob）；目录切换时记忆键失配重新统计。"""
+        （免 glob）；目录切换时记忆键失配重新统计。
+
+        2026-09-26 全面审查：记忆键升级为 (目录, 条目数, 统计时目录 mtime)——
+        外部进程删除/新增缓存文件（mtime 变化）时自动重扫，消除旧口径
+        "外部清理后记忆值偏大"的观测层失真（本进程只增不删的前提下行为
+        与旧口径一致：同目录 mtime 未变 → 复用记忆免 glob）。"""
         import src.graph.workflow as wf
 
         cache_dir = tmp_path / "cache"
@@ -415,23 +420,27 @@ class TestGetWorkflowStats:
         monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(cache_dir))
         monkeypatch.setattr(wf, "_FILE_CACHE_COUNT_MEMORY", None)
 
-        # 首次：目录空 → 0，记忆建立
+        # 首次：目录空 → 0，记忆建立（三元组含 mtime）
         assert wf._file_cache_entry_count() == 0
-        assert (str(cache_dir), 0) == wf._FILE_CACHE_COUNT_MEMORY
-        # 同目录新增文件后仍复用记忆（0.10 口径：本进程只增不删，观测层失真可接受）
+        assert wf._FILE_CACHE_COUNT_MEMORY[0] == str(cache_dir)
+        assert wf._FILE_CACHE_COUNT_MEMORY[1] == 0
+        assert isinstance(wf._FILE_CACHE_COUNT_MEMORY[2], float)
+        # 同目录新增文件且目录 mtime 变化 → 自动重扫（新口径），返回 1
         (cache_dir / "a.json").write_text("{}", encoding="utf-8")
-        assert wf._file_cache_entry_count() == 0
+        assert wf._file_cache_entry_count() == 1
         # 目录切换（换缓存目录环境变量）→ 记忆键失配，重新统计
         other_dir = tmp_path / "cache2"
         other_dir.mkdir()
         (other_dir / "b.json").write_text("{}", encoding="utf-8")
         monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(other_dir))
         assert wf._file_cache_entry_count() == 1
-        assert (str(other_dir), 1) == wf._FILE_CACHE_COUNT_MEMORY
+        assert wf._FILE_CACHE_COUNT_MEMORY[0] == str(other_dir)
+        assert wf._FILE_CACHE_COUNT_MEMORY[1] == 1
         # 目录被外部删除 → 重扫归 0 并记忆（stat 失败自动失效）
         shutil.rmtree(other_dir)
         assert wf._file_cache_entry_count() == 0
-        assert (str(other_dir), 0) == wf._FILE_CACHE_COUNT_MEMORY
+        assert wf._FILE_CACHE_COUNT_MEMORY[0] == str(other_dir)
+        assert wf._FILE_CACHE_COUNT_MEMORY[1] == 0
 
 
 class TestNodeFunctions:
@@ -680,5 +689,25 @@ class TestGeneratorNodeRegeneration:
             result = workflow_module._generator_node(state)
             assert "regeneration_count" not in result
             assert "diagnosis" not in result  # 首次生成不清空 diagnosis
+        finally:
+            self._restore(workflow_module, orig)
+
+    @patch("src.graph.nodes.GeneratorAgent")
+    def test_generator_node_llm_failure_degrades_to_empty(self, mock_generator_class):
+        """2026-09-26 全面审查（P1 降级兜底回归）：agent.generate 抛
+        RuntimeError（LLM 跨 API 故障转移耗尽）时，_generator_node 不再让
+        整图崩溃，降级为空测试并返回 generated_test=""（executor 拿到空
+        测试自然失败 → 路由到 debugger/done）。"""
+        workflow_module, orig = self._with_rag_disabled()
+        try:
+            mock_generator_class.return_value.generate.side_effect = RuntimeError("all APIs exhausted")
+            state = {
+                "iteration": 0,
+                "max_iterations": 3,
+                "target_code": "def x(): pass",
+                "module_name": "m",
+            }
+            result = workflow_module._generator_node(state)
+            assert result["generated_test"] == ""
         finally:
             self._restore(workflow_module, orig)

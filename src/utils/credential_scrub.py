@@ -22,11 +22,24 @@ import re
 # 凭证类环境变量剔除模式（按前缀匹配，N 为数字）
 # LLM_N_API_KEY / LLM_N_BASE_URL：LLM 配置（config.py _load_llm_configs 扫描口径 1-32）
 # LLM_N_MODEL_NAME 非凭证（模型名非敏感），不剔除。
+# 通用 SDK 凭证：历史固定名单 + 编号变体通配（.env 实测存在 OPENAI_API_KEY_2/3、
+# OPENAI_BASE_URL_2/3 等多端点命名；此前锚定全名 `^OPENAI_API_KEY$` 匹配不到
+# 编号变体，凭证原样进被测代码子进程——正是本模块要封堵的"执行向量"）。
+# provider 中间变量（ALIYUN_BAILIAN / AGNES_* / BIGMODEL / DEEPSEEK）与
+# config_generator.py 的 PROVIDER_TEMPLATES 键联动，覆盖批量脚本推导口径。
 _CREDENTIAL_PATTERNS = (
     re.compile(r"^LLM_\d+_API_KEY$"),
     re.compile(r"^LLM_\d+_BASE_URL$"),
     # 通用 SDK 凭证（固定名单，与历史本地执行路径口径一致）
-    re.compile(r"^(OPENAI_API_KEY|OPENAI_BASE_URL|ANTHROPIC_API_KEY|API_KEY|LLM_API_KEY|LLM_CONFIG_API_KEY)$"),
+    re.compile(r"^(OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY|LLM_API_KEY|LLM_CONFIG_API_KEY)$"),
+    # 编号变体通配（OPENAI_API_KEY_2、OPENAI_BASE_URL_3 等多端点命名）
+    re.compile(r"^OPENAI_API_KEY(_\d+)?$"),
+    re.compile(r"^OPENAI_BASE_URL(_\d+)?$"),
+    # provider 中间变量（config_generator / 批量脚本推导的 API Key 变量）
+    re.compile(
+        r"^(ALIYUN_BAILIAN_API_KEY|AGNES_(DOMESTIC|INTERNATIONAL)_API_KEY|BIGMODEL_API_KEY|DEEPSEEK_API_KEY)"
+        r"(_\d+)?$"
+    ),
 )
 
 

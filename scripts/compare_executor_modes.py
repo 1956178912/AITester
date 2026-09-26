@@ -25,6 +25,37 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 
+def _parse_json_stream(text: str) -> list[dict]:
+    """解析 main.py run --json 的 stdout（2026-09-26 全面审查新增）。
+
+    多文件时 stdout 为多个 JSON 对象逐行/逐段拼接（每任务一段）；单文件为
+    单个对象；--save-state 等场景可能输出数组。统一用 raw_decode 逐个消费
+    （跳过段间空白/换行），兼容全部三种形态：
+
+    - 单对象：'{"task": "a", "passed": true}'
+    - 数组：  '[{"task": "a"}, {"task": "b"}]'
+    - 多段拼接：'{"task": "a"}\n{"task": "b"}\n'
+
+    解析失败（非 JSON 输出，如 --json 未生效时的日志文本）抛出
+    JSONDecodeError，由调用方 except 兜底为空列表。
+    """
+    decoder = json.JSONDecoder()
+    idx = 0
+    out: list[dict] = []
+    n = len(text)
+    while idx < n:
+        while idx < n and text[idx].isspace():
+            idx += 1
+        if idx >= n:
+            break
+        obj, idx = decoder.raw_decode(text, idx)
+        if isinstance(obj, list):
+            out.extend(x for x in obj if isinstance(x, dict))
+        elif isinstance(obj, dict):
+            out.append(obj)
+    return out
+
+
 def _measure_one_mode(mode_env: dict[str, str], task_files: list[str], timeout: int) -> dict:
     """以指定环境变量跑一遍任务，返回 {mode, 耗时, 任务通过数, 明细}。
 
@@ -43,10 +74,13 @@ def _measure_one_mode(mode_env: dict[str, str], task_files: list[str], timeout: 
         env=merged_env,
     )
     elapsed = time.time() - start
+    # 2026-09-26 全面审查（P1 正确性修复）：main.py run --json 多文件时
+    # stdout 是多个 JSON 对象逐行拼接（每任务一段，非单个数组）——原
+    # json.loads(proc.stdout) 对多段拼接必失败 → except 兜底 results=[]、
+    # passed=0，多文件对比场景 tasks_passed 恒 0。现用 JSONDecoder.raw_decode
+    # 逐个解析拼接段（兼容单对象 / 数组 / 多对象拼接三种形态）。
     try:
-        results = json.loads(proc.stdout) if proc.stdout.strip().startswith(("[", "{")) else []
-        if isinstance(results, dict):
-            results = [results]
+        results = _parse_json_stream(proc.stdout)
         passed = sum(1 for r in results if r.get("passed"))
     except json.JSONDecodeError:
         results, passed = [], 0

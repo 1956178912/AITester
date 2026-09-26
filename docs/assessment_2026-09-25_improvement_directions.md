@@ -62,6 +62,8 @@
 
 说明：默认关闭是**有意设计**（保持历史单文件实验口径），提案要求的"显式启用 + 对比"通过 `--cross-file` 可完成，非代码缺口。
 
+**P1 真实数据验证可行性更新（2026-09-25）**：SWE-bench 仓库级验证（P0/P1，`RepoExecutor`）落地后，跨文件真实数据 A/B 的前置条件已明确——数据管道（`SWE_BENCH_ENRICHMENT` 注入真实源码）+ 执行环境（RepoExecutor 仓库级 clone + pip install -e + venv 隔离）+ 补丁管道（`_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）已全部修通，LLM 补丁可正确 `git apply` 进真实仓库路径。但 P1 单源任务诊断（7 个单源任务 0/7）显示免费档小模型对真实仓库级代码的修复质量不足（5/7 LLM 重写破坏 sqlfluff 插件命名契约 + 2/7 LLM 空补丁），跨文件任务的 gold patch 跨多源文件（单模块 `instance_code` 视角无法覆盖，跨文件分析器需仓库全量源码上下文），因此**跨文件 A/B（ON vs OFF）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N）**，跨文件收益验证需更强模型 + 仓库全量源码上下文重做。当前跨文件架构已实现并经单元测试验证（`test_cross_file.py` 39 用例），真实数据收益作为"已识别的架构 + 引擎能力边界"如实陈述，不强行跑 0/N 的无信息量 A/B。详见 [experiments/results/experiment_report_20260925.md](../../experiments/results/experiment_report_20260925.md) §7.4 与 [docs/design/cross_file_repair.md](design/cross_file_repair.md) §0。
+
 ### 2.3 回归测试生成能力的专项增强 —— **已实现（默认关闭的专项能力）**
 
 - `src/agents/generator.py:211-277`：`generate_repro_test()` TDFlow 式复现测试生成（"先失败后通过"，支持跨模块缺陷触发路径，L277）。
@@ -171,7 +173,7 @@
 | 1.2 变异 | 已实现 | 无 |
 | 1.3 收敛 | 已实现 | 无 |
 | 2.1 污染 | 已实现 | （可选）接入真实 CodeBERT 嵌入钩子 |
-| 2.2 跨文件 | 已实现 | 无（`--cross-file` 启用即可） |
+| 2.2 跨文件 | 已实现 | 无（`--cross-file` 启用即可）；P1 真实数据 A/B 在引擎能力突破前无信息量（见 §2.2 P1 更新） |
 | 2.3 回归测试 | 已实现 | 无 |
 | 3.1 双向诊断 | 已实现 | 无 |
 | 3.2 对抗推理 | 已实现 | 无 |

@@ -54,6 +54,48 @@ def _collect_called_names(func: ast.AST) -> set[str]:
     return names
 
 
+def _closure_names(
+    focus: str,
+    top_level_funcs: dict[str, ast.AST],
+    depth: int,
+) -> dict[str, list[str]]:
+    """BFS 构建焦点函数的调用链闭包（P0 1.1 分层代码压缩）。
+
+    depth=1：焦点直接调用的同文件函数（历史行为）；
+    depth>=2：继续展开每一层被调函数自身的直接调用（最多到 depth 层）。
+
+    Returns:
+        {函数名: [直接调用的顶层函数名...]}，key 集即"保留哪些函数"的
+        完整集合（含 focus 自身及其调用链所有层）。
+    """
+    if focus not in top_level_funcs:
+        return {}
+    closure: dict[str, list[str]] = {}
+    # BFS 分层展开；visited 防止环路；max_depth 控制展开层数
+    visited: set[str] = set()
+    frontier: list[str] = [focus]
+    for _level in range(max(0, depth)):
+        next_frontier: list[str] = []
+        for name in frontier:
+            if name in visited:
+                continue
+            visited.add(name)
+            node = top_level_funcs.get(name)
+            if node is None:
+                continue
+            called = sorted(n for n in _collect_called_names(node) if n in top_level_funcs and n != name)
+            closure[name] = called
+            next_frontier.extend(c for c in called if c not in visited)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+    # 把前沿中尚未展开的函数也加入闭包 keys（depth 截止点）
+    for name in frontier:
+        if name not in closure:
+            closure[name] = []
+    return closure
+
+
 def _find_body_indent(body_lines: list[str]) -> int:
     """找到函数体的首个非注释行缩进深度（省略标记的缩进参考）。"""
     for line in body_lines[1:]:
@@ -128,9 +170,13 @@ def _trim_focus_related(
     kept: dict[str, object],
     focus: str,
     top_level_funcs: dict[str, ast.AST],
+    depth: int = 1,
 ) -> dict[str, object]:
-    """裁剪为"焦点 + 一层直接依赖"的最小保留集合。"""
-    return {name: seg for name, seg in kept.items() if name == focus or _is_direct_dep(focus, name, top_level_funcs)}
+    """裁剪为"焦点 + 调用链 depth 层依赖"的最小保留集合。"""
+    allowed = {focus}
+    for name in _closure_names(focus, top_level_funcs, depth):
+        allowed.add(name)
+    return {name: seg for name, seg in kept.items() if name in allowed}
 
 
 def _apply_focus_budget(
@@ -141,22 +187,25 @@ def _apply_focus_budget(
     source_lines: list[str],
     max_chars: int,
     result: str,
+    depth: int = 1,
 ) -> str:
     """焦点函数存在时的逐层预算裁剪：无关函数丢弃 → 函数体首尾截断 → 只留焦点。
 
-    优先级"焦点 > 直接依赖 > 无关函数"，每一层裁完即检查预算，
+    优先级"焦点 > 调用链 depth 层依赖 > 无关函数"，每一层裁完即检查预算，
     三层都放不下时返回最后一层结果（仍由调用方走字符级兜底）。
     """
     if len(kept) > 1:
-        result = _assemble(header, _trim_focus_related(kept, focus, top_level_funcs), source_lines)
+        result = _assemble(header, _trim_focus_related(kept, focus, top_level_funcs, depth), source_lines)
         if len(result) <= max_chars:
             return result
+    # 第二层：焦点 + 调用链依赖，焦点函数体截断为"首尾各 N 行"
     truncated = _truncate_long_body(source_lines, top_level_funcs[focus])
-    minimal_kept = _trim_focus_related(kept, focus, top_level_funcs)
+    minimal_kept = _trim_focus_related(kept, focus, top_level_funcs, depth)
     minimal_kept[focus] = SimpleNamespace(_prebuilt_text=truncated)
     result = _assemble(header, minimal_kept, source_lines)
     if len(result) <= max_chars:
         return result
+    # 第三层：极端预算，只留截断焦点
     return _assemble(header, {focus: SimpleNamespace(_prebuilt_text=truncated)}, source_lines)
 
 
@@ -164,30 +213,60 @@ def extract_focused_code(
     source: str,
     focus_function: str | None = None,
     max_chars: int = 3000,
+    depth: int = 1,
 ) -> str:
     """基于 AST 提取与目标函数相关的最小代码上下文。
 
-    保留 import、目标函数及其直接依赖的辅助函数；组装结果超过
-    max_chars 时按"焦点 > 直接依赖 > 无关函数"优先级丢弃，
+    保留 import、目标函数及其调用链 depth 层依赖的辅助函数；组装结果
+    超过 max_chars 时按"焦点 > depth 层依赖 > 无关函数"优先级丢弃，
     并允许对超长函数体做首尾截断。
 
     Args:
         source: 原始 Python 源码全文。
         focus_function: 焦点函数/方法名（如 "divide"）；None 时保留全部顶层函数。
         max_chars: 输出最大字符预算（默认 3000，与 truncate_code 一致）。
+        depth: 调用链展开层数（P0 1.1 分层代码压缩）：1 = 焦点直接调用的
+            辅助函数（历史行为）；2 = 再展开一层被调函数的依赖（跨文件
+            任务的"目标函数 → 被调用函数（1-2 层）→ 相关类定义"口径）。
+            仅当 focus_function 在源码中存在时生效。
 
     Returns:
         截取后的代码片段。源码为空或无法解析时原样返回，
         由调用方（truncate_code）继续做字符级硬截断兜底。
     """
+    result, _focus_resolved = extract_focused_code_detail(
+        source,
+        focus_function=focus_function,
+        max_chars=max_chars,
+        depth=depth,
+    )
+    return result
+
+
+def extract_focused_code_detail(
+    source: str,
+    focus_function: str | None = None,
+    max_chars: int = 3000,
+    depth: int = 1,
+) -> tuple[str, bool]:
+    """带解析结果的 extract_focused_code（2026-09-26 全面审查 C-1 新增）。
+
+    返回 (code, focus_resolved)：focus_resolved 为 True 表示焦点函数在源码
+    中存在且 AST 截取成功；False 表示原样返回（AST 解析失败 / 无顶层函数 /
+    焦点函数不在源码中），调用方可据此决定降级路径（如 extract_function_context
+    返回 None 让上游走全文件兜底）。
+
+    目的：消除 extract_function_context 此前"靠 result == source_code 反推 +
+    再做一次 ast.parse"的重复解析（大文件 ~200ms 翻倍）。
+    """
     if not source or not source.strip():
-        return source
+        return source, False
 
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
         logger.debug("AST 解析失败，extract_focused_code 原样返回，交由字符级截断兜底")
-        return source
+        return source, False
 
     source_lines = source.splitlines()
     header = _build_header(source_lines, tree)
@@ -195,15 +274,18 @@ def extract_focused_code(
 
     if not top_level_funcs:
         # 纯模块（无函数）：只有 import 头 + 常量等，交给字符级截断控制长度
-        return source
+        return source, False
 
     # ── 确定保留集合 ───────────────────────────────────────────────────────
     kept: dict[str, object] = {}
+    focus_resolved = False
     if focus_function and focus_function in top_level_funcs:
         kept[focus_function] = top_level_funcs[focus_function]
-        # 一层依赖：焦点函数直接调用的同文件内函数
-        for called in _collect_called_names(top_level_funcs[focus_function]):
-            if called in top_level_funcs and called != focus_function:
+        focus_resolved = True
+        # 调用链闭包：焦点函数 depth 层内直接调用的同文件函数
+        closure = _closure_names(focus_function, top_level_funcs, max(1, depth))
+        for called in closure:
+            if called != focus_function and called in top_level_funcs:
                 kept[called] = top_level_funcs[called]
     else:
         # 无焦点（或焦点名不在源码中）：保留全部顶层函数，按预算裁剪
@@ -212,15 +294,22 @@ def extract_focused_code(
     # ── 按预算逐层裁剪（仅当焦点函数确实存在于源码中才启用焦点优先策略）────
     result = _assemble(header, kept, source_lines)
     if len(result) <= max_chars:
-        return result
+        return result, focus_resolved
 
     focus_in_source = bool(focus_function and focus_function in top_level_funcs)
     if focus_in_source:
         result = _apply_focus_budget(
-            header, kept, str(focus_function), top_level_funcs, source_lines, max_chars, result
+            header,
+            kept,
+            str(focus_function),
+            top_level_funcs,
+            source_lines,
+            max_chars,
+            result,
+            depth=max(1, depth),
         )
 
     # 最终兜底：交给字符级硬截断（truncate_code 会处理超长返回）
     if len(result) > max_chars:
         logger.info("AST 截取仍超预算（%d 字符），回退字符级截断", len(result))
-    return result
+    return result, focus_resolved

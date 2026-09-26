@@ -356,10 +356,17 @@ class TestMutationFeedback:
         assert feedback["mutation_score"] is None
 
     def test_boundary_shift_mutant_type_generated(self):
-        """1.2 改进：boundary_shift 变异体生成（Gt->GtE, Lt->LtE 等边界语义）。"""
+        """1.2 改进：boundary_shift 变异体生成（Gt->GtE, Lt->LtE 等边界语义）。
+
+        2026-09-26 全面审查（P1 修复配套）：此前 operator_flip 与
+        boundary_shift 在严格比较（>、<、>=、<=）上生成同一份变异代码，
+        代码级去重会把 boundary_shift 整类消除。现 operator_flip 仅保留
+        等值对（Eq↔NotEq），严格比较边界变异专属于 boundary_shift，
+        测试源码需含严格比较以触发。
+        """
         from experiments.mutation_testing import MutationGenerator
 
-        code = "def check(x):\n    return x > 0\n"
+        code = "def check(x):\n    if x > 0:\n        return True\n    return False\n"
         mutants = MutationGenerator().generate(code)
         types = [m.mutant_type for m in mutants]
         assert "boundary_shift" in types, f"boundary_shift 变异体应被生成，实际: {types}"

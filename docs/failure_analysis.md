@@ -8,6 +8,8 @@
 
 > **状态说明（2026-09-14 批次③）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`，批次②再补状态细化类 `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+ **"修复收敛效率（1.2）"**（首次尝试成功率 / 成功任务迭代与耗时统计）+ **"多维质量代理（1.1，保守可复算）"**（覆盖率/耗时/断言行数/失败 Top N 类别）。另：5.3 批次后 `experiments/analyze_failures.py` 新增**失败根因三大类**（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类）+ **失败案例知识库**（`failure_knowledge_base()` 结构化 JSON，CLI `--knowledge-base/-k` 落盘 `failure_knowledge_base.json`），失败归因口径以该脚本输出为准。
 
+> **状态说明（2026-09-25，SWE-bench 仓库级验证 P0/P1）**：SWE-bench lite-20 仓库级验证（`RepoExecutor`，`REPO_LEVEL_EXECUTION=true`）首轮 0/20 曾被误诊为"LLM 引擎无法产出可应用补丁"（`repo_verification.llm_applied` 全 False）。**根因已修正**——0/20 是数据管道（`instance_code` 缺失）+ 执行环境（单临时文件 executor 装不下仓库级代码 + 全局 python 跨 commit editable 安装污染）+ 补丁管道（`_diff_codes` 用 difflib 手工拼接在"整文件替换"场景产出 corrupt unified diff，`git apply` 全拒）三层缺陷叠加，**非 LLM 引擎能力**。修复（`SWE_BENCH_ENRICHMENT` 注入真实源码 + `RepoExecutor` 仓库级 clone + pip install -e + venv 隔离 + `_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）后，P1 单源任务 0/7 的失败分类为：5/7 `LLM_BREAKS_IMPORT`（LLM 重写破坏 sqlfluff 插件命名契约，`Rule_L*` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`（LLM 未产出修复）——**这才是 LLM 引擎修复质量边界的真实测量**（免费档小模型对真实仓库级代码）。跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文。详见 [experiments/results/experiment_report_20260925.md](../experiments/results/experiment_report_20260925.md) §7 与 [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0。
+
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)
 - 基线：AITester (完整系统)
@@ -158,7 +160,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 ### 短期改进（1-2周）
 
 - [x] ~~增强JSON提取逻辑，支持多种响应格式~~ → 已实现：JSON 提取已支持多格式（markdown 代码块 / 纯 JSON / 混合内容，见 `extract_json_object`）
-- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 14 类（`LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` 等）
+- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 16 类（`LLM_FORMAT_ERROR` / `LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` 等；P0 4.1 批次新增 `LLM_EMPTY_RESPONSE` 与 `LLM_JSON_PARSE_FAILED` 两个精确子类，由 `ErrorClassifier.classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类）
 - [ ] 为关键bug模式添加专用修复模板
 - [x] ~~启用RAG并优化检索策略~~ → 已实现：`--enable-rag` 纳入主实验（2.3 RAG 消融），检索指标自动汇总（Hit Rate / MRR / 按检索类型分解 / RAG 命中 × 失败类别交叉表）
 

@@ -179,6 +179,20 @@ class AuthenticationError(APIError):
     pass
 
 
+def _redact_exception_text(exc: BaseException) -> str:
+    """异常文本脱敏（4.1 口径）：网关错误体可能回显带 token 的 URL。
+
+    惰性导入避免模块级循环依赖（logging_utils 在模块加载期执行
+    setup_logger_safety，与 exceptions 相互 import 不安全）。
+    """
+    try:
+        from src.utils.logging_utils import redact_text
+
+        return redact_text(str(exc))
+    except Exception:
+        return str(exc)
+
+
 def retry_with_backoff(
     max_retries: int = 3,
     base_wait: float = 1.0,
@@ -197,6 +211,10 @@ def retry_with_backoff(
             # API 调用逻辑
             pass
         ```
+
+    2026-09-26 全面审查：默认 `catch_exceptions=(Exception,)` 保持历史
+    签名不变（测试锁定该口径），但重试日志已对异常文本脱敏（网关错误体
+    可能回显带 token 的 base_url，与 api_manager._redact 同口径）。
 
     Args:
         max_retries: 最大重试次数（不含首次尝试）。
@@ -221,12 +239,14 @@ def retry_with_backoff(
                     if attempt < max_retries:
                         wait_time = base_wait * (exponential_base**attempt)
                         log = (logger_name and logging.getLogger(logger_name)) or logger
+                        # 异常文本可能回显请求体/带 token 的 base_url（网关错误体），
+                        # 日志出口统一脱敏（与 api_manager._redact 同口径）
                         log.warning(
                             "函数 %s 调用失败 (尝试 %d/%d): %s，等待 %.1f 秒后重试",
                             func.__name__,
                             attempt + 1,
                             max_retries + 1,
-                            e,
+                            _redact_exception_text(e),
                             wait_time,
                         )
                         time.sleep(wait_time)

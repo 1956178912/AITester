@@ -216,10 +216,12 @@ class TestFindBalancedJson:
         assert result == text
 
     def test_unbalanced_json(self):
-        """未闭合的 JSON 返回剩余部分。"""
+        """未闭合的 JSON 返回 None（2026-09-26 全面审查：旧口径返回
+        text[start:] 残余文本，json.loads 必失败还多付一遍 O(n) 解析；
+        现统一返回 None，由调用方 extract_json_object 走正则降级方案）。"""
         text = '{"a": 1,'
         result = _find_balanced_json(text, 0)
-        assert result == text
+        assert result is None
 
     def test_nested_json(self):
         """嵌套 JSON。"""

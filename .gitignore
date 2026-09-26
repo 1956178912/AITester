@@ -38,6 +38,8 @@ venv_old/
 
 # Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 coverage.xml
 htmlcov/
@@ -69,3 +71,5 @@ paper.md
 # 实验输出（本地数据，不提交）
 .private/
 experiments/results/
+data/
+results/

@@ -66,7 +66,10 @@ class Defects4JPYDataset(BaseDatasetLoader):
         try:
             with open(info_path, encoding="utf-8") as f:
                 info = json.load(f)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            # 2026-09-26 全面审查：损坏的 info.json 原静默跳过（无感知），
+            # 现记 warning 便于定位数据问题
+            logger.warning("Defects4J-Python info.json 解析失败（跳过该版本）: %s: %s", info_path, e)
             return None
 
         # 加载有缺陷的代码。目录列举一律 sorted：os.listdir 顺序依赖文件系统，

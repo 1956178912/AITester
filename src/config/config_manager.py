@@ -127,6 +127,17 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
             logger.warning("配置索引 %d 已被占用，追加会产重复编号 LLM_%d_* 块，已拒绝", index, index)
             return False
 
+    # 4.2 写盘前校验：api_key / base_url / model_name 不得含换行或注释符——
+    # 含 \n 的值会向 .env.local 注入任意变量行（劫持后续配置），含 # 会被
+    # dotenv 解析截断。值均为单行 dotenv KEY=VALUE 语义，拒绝含非法字符的输入
+    for field_name, value in (("api_key", api_key), ("base_url", base_url), ("model_name", model_name)):
+        if not value:
+            logger.warning("%s 不能为空，拒绝写入", field_name)
+            return False
+        if any(c in value for c in "\n\r#"):
+            logger.warning("%s 含非法字符（换行/# 会破坏 dotenv 语义或注入变量行），拒绝写入", field_name)
+            return False
+
     # 追加新配置
     comment = f"# 模型 {index}: {model_name}\n"
     new_lines = [
@@ -142,7 +153,10 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         # 重新加载环境变量并原地刷新 config.LLM_CONFIGS（导入时的快照不会自动更新）
         load_dotenv(str(ENV_FILE), override=True)
         refresh_llm_configs()
-        logger.info("成功添加模型配置: %s (%s)", model_name, base_url)
+        # base_url 可能内嵌凭证（网关 token 放 URL 场景），日志出口统一脱敏（4.1 口径）
+        from src.utils.logging_utils import mask_sensitive_info
+
+        logger.info("成功添加模型配置: %s (%s)", model_name, mask_sensitive_info(base_url))
         return True
     except Exception as e:
         logger.error("添加模型配置失败: %s", e)
