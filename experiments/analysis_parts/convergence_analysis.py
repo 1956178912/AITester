@@ -345,6 +345,15 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
       逐轮 Token 明细（iterations[].tokens）若存在则精确到轮次，否则按
       "总 Token / 任务经历的轮次数"均摊（保守口径，避免高估单轮成本）；
     - 无 Token 数据时 available=False，渲染跳过章节。
+
+    2026-09-26 round9（P2 口径修复）：无逐轮明细的旧 JSON 回退路径改为
+    "仅当任务恰好到达当轮（iterations == k，k≥3 时 iterations >= 3）时按
+    total_tokens / (任务自身轮数+1) 计入当轮"（该任务的 total 归入其最终
+    到达轮一次，不再逐轮重复计入）。此前回退按 total/(k+1) 逐轮累加，
+    同一任务在 k=0/1/2 各轮被重复计入且分摊值随 k 递减 → 实测产生负增量
+    Token（k=2 轮 incremental_tokens=-63.33，"第几轮最划算"结论失真）。
+    新口径下轮次累计 Token 单调不减，负增量不再可能出现；若某轮增量仍
+    为负（理论不应出现，保险 clamp），clamp 为 0 并记 None 边际收益。
     """
     total = len(details)
     if total == 0:
@@ -359,7 +368,14 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
         reached = [r for r in details if int(r.get("iterations", 0) or 0) <= k]
         cumulative_passed = sum(1 for r in reached if r.get("passed"))
         # 逐轮 Token：优先读 token_usage.iterations[k].tokens（精确口径），
-        # 缺失时按"总 Token / 该任务经历的轮次数(=k+1)"均摊（保守口径）
+        # 缺失时按"总 Token / 任务自身轮数"均摊到当轮。
+        # 2026-09-26 round9（P2 口径修复）：旧 JSON（无逐轮明细）按 (k+1) 均摊
+        # 且同一任务在 k=0/1/2/3+ 各轮被重复计入，分摊值随 k 递减 →
+        # 实测产生负增量 Token（k=2 轮 incremental_tokens=-63.33，"第几轮
+        # 最划算"结论失真）。现改为仅对"该任务恰好到达当轮（iterations==k，
+        # k≥3 时 iterations>=3）且无逐轮明细"的任务按"total_tokens / 任务
+        # 自身轮数"计入当轮——每个任务的 total_tokens 仅计入一次（其最终
+        # 到达轮），轮次累计单调不减，负增量不再可能出现。
         round_tokens = 0.0
         for r in reached:
             usage = r.get("token_usage") or {}
@@ -367,9 +383,28 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
             if isinstance(per_round, list) and k < len(per_round) and isinstance(per_round[k], dict):
                 round_tokens += float(per_round[k].get("tokens", 0) or 0)
             else:
-                round_tokens += float(usage.get("total_tokens", 0) or 0) / (k + 1)
+                # 无逐轮明细：仅当任务恰好到达当轮（最终轮）时计入
+                r_iters = int(r.get("iterations", 0) or 0)
+                if k >= 3:
+                    # 3+ 轮：计入 iterations>=3 的任务（最终轮=3+）
+                    if r_iters >= 3:
+                        round_tokens += float(usage.get("total_tokens", 0) or 0) / (r_iters + 1)
+                else:
+                    # 0/1/2 轮：计入 iterations==k 的任务（最终轮=k）
+                    if r_iters == k:
+                        round_tokens += float(usage.get("total_tokens", 0) or 0) / (k + 1)
         incremental_passed = max(0, cumulative_passed - prev_cumulative_passed)
-        incremental_tokens = round_tokens - prev_cumulative_tokens
+        # 2026-09-26 round9（P2 口径修复）：增量 Token = 当轮 round_tokens
+        # （本轮"恰好到达最终轮"的任务的 total/(轮数+1) 分摊值）。旧实现按
+        # round_tokens - prev_cumulative_tokens 计算增量，但新口径下每个
+        # 任务的 total 只计入其最终到达轮一次，当轮 round_tokens 即该轮的
+        # 全部新增 Token 成本（前几轮的 round_tokens 已计入 prev_cumulative，
+        # 不应从当轮扣除）。负增量保险 clamp（理论不应出现，轮次累计单调
+        # 不减）；clamp 为 0 时边际收益记 None（不虚高也不虚低），
+        # cumulative_tokens 按原始累加不丢失。
+        incremental_tokens = round_tokens
+        if incremental_tokens < 0:
+            incremental_tokens = 0.0
         marginal = round(incremental_passed / incremental_tokens, 6) if incremental_tokens > 0 else None
         rounds[label] = {
             "reached_tasks": len(reached),
@@ -380,7 +415,7 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
             "marginal_pass_per_token": marginal,
         }
         prev_cumulative_passed = cumulative_passed
-        prev_cumulative_tokens += incremental_tokens
+        prev_cumulative_tokens += round_tokens
     # 边际收益最高的轮次（None 值跳过；全部 None 时为 None）
     best_round = None
     best_marginal = 0.0
@@ -795,11 +830,19 @@ def _mutation_score_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
     }
     # 1.2 改进：变异得分 × 断言强度交叉分析——验证"高变异得分任务是否同时
     # 具有较高 AST 断言强度"（两者应一致：断言越强，变异体越容易被杀死）
-    cross_tasks = [
-        (float(row.get("mutation_score")), _assertion_counts_from_row(row))
-        for row in details
-        if row.get("mutation_score") is not None
-    ]
+    # 2026-09-26 round9（P2 健壮性）：float(mutation_score) 对畸形值（如
+    # "n/a" 字符串）会抛 ValueError 使整份 build_analysis 崩溃，与上方
+    # 汇总循环的 try/except 过滤口径对齐。
+    cross_tasks = []
+    for row in details:
+        ms_val = row.get("mutation_score")
+        if ms_val is None:
+            continue
+        try:
+            ms_float = float(ms_val)
+        except (TypeError, ValueError):
+            continue
+        cross_tasks.append((ms_float, _assertion_counts_from_row(row)))
     if cross_tasks:
         high_ms = [asserts for ms, asserts in cross_tasks if ms >= 0.7 and asserts is not None]
         low_ms = [asserts for ms, asserts in cross_tasks if ms < 0.4 and asserts is not None]

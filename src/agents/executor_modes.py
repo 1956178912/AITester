@@ -65,6 +65,8 @@ def execute_sandboxed(
         }
 
     # 测试文件写入沙箱（导入修复以沙箱为搜索根，模块名与文件名天然对齐）
+    # 2026-09-26 round9 P2：写入失败时走 finally 清理沙箱（旧实现 L70-71
+    # 的 with open 在 try/finally 之外，OSError 时沙箱目录泄漏）。
     fixed_test_code = auto_fix_imports(test_code, module_file, sandbox_dir)
     test_file = os.path.join(sandbox_dir, "test_generated.py")
     with open(test_file, "w", encoding="utf-8") as f:
@@ -102,7 +104,9 @@ def execute_sandboxed(
             cmd.extend(["-k", target_function])
 
         output, last_result = self._run_pytest_with_retry(cmd, env, sandbox_dir)
-        if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
+        # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
+        # 结果时），与 EARLY_RETURN 走同一早退分支（error_info 透传）。
+        if isinstance(last_result, tuple) and last_result[0] in ("EARLY_RETURN", "UNAVAILABLE"):
             result = {
                 "passed": False,
                 "output": output,

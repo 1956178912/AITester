@@ -36,17 +36,24 @@ def _to_str(value: str | bytes | None) -> str:
 def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_root: str) -> tuple[str, Any]:
     """
     带重试的 pytest 执行逻辑，最多尝试 2 次。
-    超时/环境问题直接返回 EARLY_RETURN 标记，其他异常仅记录日志并返回空结果。
+    超时/环境问题直接返回 EARLY_RETURN 标记，其他异常仅记录日志并保留最近一次有效结果。
 
     由 ExecutorAgent 实例调用（self.timeout 为单次超时秒数）。
 
     Returns:
         (output, last_result) 元组：last_result 为 subprocess.CompletedProcess、
-        ("EARLY_RETURN", error_info) 标记元组或 None。
+        ("EARLY_RETURN", error_info) / ("UNAVAILABLE", error_info) 标记元组或 None。
+        2026-09-26 round9 P2：通用异常不再把 last_result 置 None（保留最近一次
+        有效结果，仅追加异常现场文本）；无任何有效结果时返回 ("UNAVAILABLE", …)
+        标记，下游按 EARLY_RETURN 分支处理（isinstance(last_result, tuple) 统一）。
     """
     max_attempts = 2
     last_output = ""
-    last_result = None
+    # 2026-09-26 round9 P2：last_result 类型为 CompletedProcess | tuple | None——
+    # ("EARLY_RETURN"/"UNAVAILABLE", error_info) 标记元组与 None（未运行）
+    # 三种形态之一；mypy 需显式 Any 联合（历史调用方按 .returncode 属性访问
+    # CompletedProcess，标记元组由 isinstance(last_result, tuple) 守卫分流）。
+    last_result: Any = None
 
     for attempt in range(max_attempts):
         try:
@@ -104,8 +111,17 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
         except Exception as e:
             error_msg = f"测试执行异常: {type(e).__name__}: {e}"
             logger.error("测试执行异常: %s", e)
-            last_output = error_msg
-            last_result = None
+            # 2026-09-26 round9 P2：通用异常不销毁 last_result（保留最近一次
+            # 有效结果），仅追加异常现场文本。旧实现在第 2 次重试抛通用异常
+            # 时把第 1 次失败的 last_result 置 None → 下游判"未运行"，丢失
+            # 第 1 次的真实测试输出（passed/failed_cases 全空）。保守修复：
+            # 有 last_result 时仅追加文本，无时标记 "UNAVAILABLE"（与 EARLY_RETURN
+            # 同走 EARLY_RETURN 分支下游不会误读 .returncode）。
+            if last_result is None:
+                last_result = ("UNAVAILABLE", {"type": "execution_exception", "message": error_msg})
+                last_output = error_msg
+            else:
+                last_output = f"{last_output or ''}\n[retry {attempt + 1} exception] {error_msg}"
             break
 
     return last_output, last_result

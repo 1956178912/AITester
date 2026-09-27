@@ -378,16 +378,6 @@ class MutationGenerator:
                 continue
         return mutants
 
-    @staticmethod
-    def _remove_not_op(tree: ast.Module, original_node: ast.UnaryOp) -> None:
-        """在 tree 中移除指定行号的 Not 节点（将 not X 替换为 X）。
-
-        保留为独立入口便于未来复用；内部委托给 _RemoveNotTransformer。
-        原地改写 tree（Transformer.visit 副作用）；未命中时 tree 不变。
-        """
-        transformer = _RemoveNotTransformer(original_node.lineno)
-        transformer.visit(tree)
-
     def _generate_numeric_offset(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """数字常量偏移变异：value → value+1（仅在数值出现在比较或赋值中时）。"""
         mutants: list[Mutant] = []
@@ -864,10 +854,51 @@ _OPERATOR_FLIP_MAP: dict[str, str] = {
 }
 
 
+def _infer_imported_module_name(test_code: str) -> str:
+    """从测试代码解析被测模块名（import 语句的被导入模块，取首个命中）。
+
+    2026-09-26 round9（P1 配套）：_run_mutant_tests 的沙箱模块文件名须与
+    测试代码的 import 名对齐，否则 pytest 收集失败（rc=2）全部判存活。
+    解析规则（保守，仅匹配源码顶层的 from/import 语句）：
+        - `from <mod> import ...`（含相对导入 . 前缀排除）；
+        - `import <mod>`（多模块逗号分隔取首个）。
+    排除标准库/测试框架常用名（os/sys/json/pytest/typing/re 等）——
+    这些导入指向沙箱外的真实模块，被测模块名不会命中。
+
+    Args:
+        test_code: 测试代码字符串。
+
+    Returns:
+        首个被测模块名（模块名本身，不含点号子路径）；无法解析时返回
+        历史固定名 "mutated_module"（既有回归用例锁定的兜底行为）。
+    """
+    import re
+
+    _STD_OR_TEST_MODULES = frozenset(
+        {"os", "sys", "json", "re", "typing", "math", "time", "unittest", "pytest", "copy", "itertools"}
+    )
+    if not test_code:
+        return "mutated_module"
+    for line in test_code.splitlines():
+        stripped = line.strip()
+        m = re.match(r"from\s+([\w.]+)\s+import", stripped)
+        if m:
+            mod = m.group(1).split(".")[0]
+            if mod and mod not in _STD_OR_TEST_MODULES:
+                return mod
+            continue
+        m = re.match(r"import\s+([\w.]+)", stripped)
+        if m:
+            mod = m.group(1).split(".")[0]
+            if mod and mod not in _STD_OR_TEST_MODULES:
+                return mod
+    return "mutated_module"
+
+
 def _run_mutant_tests(
     mutant: Mutant,
     test_code: str,
-    module_file: str,
+    module_name: str = "",
     timeout_seconds: int = 30,
 ) -> bool:
     """在沙箱中执行单个变异体 + 测试套件，返回变异体是否被"杀死"。
@@ -888,23 +919,28 @@ def _run_mutant_tests(
     - 其他（2/5/超时/异常）→ 存活（套件根本没成功运行，保守口径：
       不夸大变异得分）。
 
-    Args:
-        mutant: 变异体。
-        test_code: 测试代码字符串。
-        module_file: 被测模块文件路径。
-        timeout_seconds: 单个变异体执行超时。
-
-    Returns:
-        True = 杀死，False = 存活。执行失败（如 import 错误）视为存活（保守口径）。
+    沙箱内写入 <tmpdir>/<module_name>.py（module_name 缺省时回退历史
+    固定名 mutated_module），test_mutant.py 与 PYTHONPATH 随之对齐。
+    默认行为不变：此前 2026-09-26 P0 修复已将 rc≠0 统一判为"存活"
+    （保守口径），模块名不匹配只会让得分退化为 0（不夸大）；本修复
+    使强/弱测试的得分在真实 generated_test（import 名 ≠ mutated_module）
+    下恢复区分度，同时修复 e2e 回归用例锁定的"import 名对齐"口径。
     """
     import os
     import subprocess
     import sys
     import tempfile
 
+    # 2026-09-26 round9（P1）：module_name 缺省/与测试 import 名不一致时
+    # （此前恒为 "mutated_module"），测试的 from <原模块名> import 在
+    # PYTHONPATH=<tmpdir> 下 import 失败 → rc=2 全判存活 → 真实流水线
+    # mutation_score 结构性退化为 0。缺省时从测试代码 import 语句解析
+    # 被测模块名（与 run_benchmark 生成的测试文件 `from <模块名> import *`
+    # 口径对齐）；无法解析时保持历史固定名（既有回归用例锁定）。
+    sandbox_module_name = module_name or _infer_imported_module_name(test_code)
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            mutant_file = os.path.join(tmpdir, "mutated_module.py")
+            mutant_file = os.path.join(tmpdir, f"{sandbox_module_name}.py")
             test_file = os.path.join(tmpdir, "test_mutant.py")
 
             # 写变异体代码（需要处理 import 路径）
@@ -957,7 +993,9 @@ def compute_mutation_score(
     Args:
         source_code: 被测代码。
         test_code: 测试代码。
-        module_file: 被测模块路径。
+        module_file: 被测模块路径（2026-09-26 round9 起仅作文档性引用：
+            沙箱模块名由 _infer_imported_module_name(test_code) 解析，
+            与测试 import 名对齐；保留参数以保持历史调用签名不变）。
         max_mutants: 最多评估的变异体数量（默认 10，控制执行时间）。
         timeout_seconds: 单变异体超时。
 
@@ -982,7 +1020,7 @@ def compute_mutation_score(
     t0 = time.time()
     killed = 0
     for mutant in selected:
-        if _run_mutant_tests(mutant, test_code, module_file, timeout_seconds):
+        if _run_mutant_tests(mutant, test_code, timeout_seconds=timeout_seconds):
             killed += 1
     elapsed = round(time.time() - t0, 2)
     score = round(killed / len(selected), 4) if selected else 0.0
@@ -1046,7 +1084,7 @@ def build_mutation_feedback(
     survived: list[str] = []
     killed = 0
     for mutant in selected:
-        if _run_mutant_tests(mutant, test_code, module_file="", timeout_seconds=timeout_seconds):
+        if _run_mutant_tests(mutant, test_code, timeout_seconds=timeout_seconds):
             killed += 1
         else:
             # 存活变异体：记录其描述（变异类型 + 位置），供 prompt 注入

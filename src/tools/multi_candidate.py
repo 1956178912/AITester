@@ -307,6 +307,15 @@ def select_best_candidate(
             logger.warning("候选 %d 执行验证异常: %s", candidate.index + 1, e)
         finally:
             _safe_unlink(tmp_path)
+    # 2026-09-26 round9 P1：全部候选 exec_passed=False 时不返回"最不差"候选。
+    # 旧实现 best_score 初始 (False, -1.0)，元组比较使 (False, 0.3) > (False, -1.0)
+    # 恒成立，全部失败时仍返回覆盖最高的候选 → 调用方直接写盘劣化代码，
+    # 与模块 docstring "仅当选中的候选严格优于原代码时才提交"矛盾（静态模式
+    # L100 有 new_code == original_code → reject 等价守卫，执行模式此前缺失）。
+    # 现加守卫：全部候选未通过测试时返回 None，调用方回退单补丁路径。
+    if best is not None and not best.exec_passed:
+        logger.info("多候选执行验证：全部候选测试未通过，不提交（回退单补丁路径）")
+        return None
     return best
 
 
@@ -448,8 +457,18 @@ def _coverage_trend(execution_trace: list[dict[str, Any]] | None) -> str:
     """
     if not execution_trace:
         return "unknown"
-    # 覆盖率 delta 过滤 None 后按 float 归一（trace 中 coverage_delta 可能缺失/非数值）
-    deltas = [float(t["coverage_delta"]) for t in execution_trace if t.get("coverage_delta") is not None]
+    # 2026-09-26 round9 P2：coverage_delta 非数值（如 "n/a" 字符串）时
+    # float() 抛 ValueError 且调用链不捕获 → 多候选节点崩溃。
+    # 包 try/except 跳过非数值 delta，与 L460 注释"可能缺失/非数值"口径对齐。
+    deltas: list[float] = []
+    for t in execution_trace:
+        d = t.get("coverage_delta")
+        if d is None:
+            continue
+        try:
+            deltas.append(float(d))
+        except (TypeError, ValueError):
+            continue
     if len(deltas) < 2:
         return "unknown"
     recent = deltas[-2:]

@@ -1013,9 +1013,10 @@ def _compute_mutation_scores_for_baseline(
         if not test_code:
             r["mutation_score"] = None
             continue
-        # 被测模块文件路径：用任务临时文件占位（compute_mutation_score 内部
-        # 会自建 tempdir 并写变异体，module_file 参数仅作文档性引用，
-        # 实际执行时变异体代码写入 tempdir/mutated_module.py）
+        # 被测模块文件路径：占位即可——2026-09-26 round9（P1 模块名对齐
+        # 修复）后 _run_mutant_tests 的沙箱模块名由
+        # _infer_imported_module_name(test_code) 解析（取测试代码 import 语句
+        # 的被导入模块名），module_file 参数仅作文档性引用。
         import tempfile
 
         placeholder_module_file = os.path.join(tempfile.gettempdir(), "placeholder_module.py")

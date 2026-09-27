@@ -57,6 +57,12 @@ def load_experiment_results(results_dir: str) -> dict[str, list[dict]]:
             with open(json_file, encoding="utf-8") as f:
                 data = json.load(f)
                 dataset = data.get("dataset", "")
+                # 2026-09-26 round9（P2 口径文档化）：仅纳入 dataset 为
+                # "synthetic" 的批次——配对 t 检验要求两基线跑同一批任务，
+                # 真实数据集（SWE-bench 等）跨批次 task_id 不重叠时配对数
+                # 为 0，检验无意义；且混合不同数据集会把口径差异误判为系统
+                # 差异。真实数据集批次请单独指定 results_dir 运行（每目录
+                # 单数据集）。
                 if dataset != "synthetic":
                     continue
 
@@ -148,7 +154,17 @@ def cohens_d(
     mean_diff = float(np.mean(differences))
     std_diff = float(np.std(differences, ddof=1))
 
+    # 2026-09-26 round9（P2 统计口径修复）：零方差差值（全部任务同向，
+    # 如 AITester 全赢 → 差值恒为 1）时旧实现返回 0.0，interpret_d 渲染
+    # "negligible" 与全赢事实矛盾。现按差值符号返回 ±inf（"恒定方向、
+    # 效应量无穷大"）；diff 全 0 时（两组逐任务全同）返回 0.0 保持历史
+    # "无差异 = negligible" 口径。interpret_d 对 inf 返回 "large"，对 nan
+    # 返回 "unknown"。
     if std_diff == 0:
+        if mean_diff > 0:
+            return float("inf"), n_pairs
+        if mean_diff < 0:
+            return float("-inf"), n_pairs
         return 0.0, n_pairs
 
     return mean_diff / std_diff, n_pairs
@@ -168,7 +184,18 @@ def interpret_p(p: float) -> str:
 
 
 def interpret_d(d: float) -> str:
-    """根据 Cohen's d 返回效应量描述。"""
+    """根据 Cohen's d 返回效应量描述。
+
+    2026-09-26 round9：inf（零方差差值、方向恒定的配对）→ "large"；
+    nan（无法计算）→ "unknown"（此前 nan 的 abs() 比较全为 False 落入
+    "negligible"，与"无法计算"语义矛盾）。
+    """
+    import math
+
+    if math.isnan(d):
+        return "unknown"
+    if math.isinf(d):
+        return "large"
     abs_d = abs(d)
     if abs_d >= 0.8:
         return "large"
@@ -236,9 +263,19 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
             }
         )
 
-        # nan 值（共同任务 < 3）无法格式化，单独处理
-        if t_stat != t_stat:
+        # nan 值（共同任务 < 3）与 inf 值（退化配对：差值恒定非零 →
+        # t=inf/p=0，2026-09-26 round9 补 isfinite 守卫）无法按常规格式化，
+        # 单独处理
+        import math
+
+        if math.isnan(t_stat):
             print(f"\nAITester vs {baseline}: 共同任务数 {n_pairs} < 3，无法计算配对 t 检验")
+            continue
+        if not math.isfinite(t_stat):
+            print(
+                f"\nAITester vs {baseline}: 配对差值恒定（n_pairs={n_pairs}），t 检验退化为 "
+                f"t=inf/p=0（全同向配对），按显著处理；效应量 {interpret_d(d)}"
+            )
             continue
 
         print(f"\nAITester vs {baseline}:")
@@ -271,9 +308,20 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
         ]
 
         for comp in comparisons:
-            t_disp = "n/a" if comp["t_stat"] != comp["t_stat"] else f"{comp['t_stat']:.4f}"
-            p_disp = "n/a" if comp["p_value"] != comp["p_value"] else f"{comp['p_value']:.4f}"
-            d_disp = "n/a" if comp["cohens_d"] != comp["cohens_d"] else f"{comp['cohens_d']:.4f}"
+            import math as _math
+
+            def _fmt_num(value: float, fmt: str = "{:.4f}") -> str:
+                # 2026-09-26 round9：inf t/d 渲染为 "+inf"/"-inf"（此前 f"{inf:.4f}"
+                # 也输出 "inf" 但 p=0 被格式化为 "0.0000 (***)" 误显显著）
+                if _math.isnan(value):
+                    return "n/a"
+                if _math.isinf(value):
+                    return "+inf" if value > 0 else "-inf"
+                return fmt.format(value)
+
+            t_disp = _fmt_num(comp["t_stat"])
+            p_disp = _fmt_num(comp["p_value"])
+            d_disp = _fmt_num(comp["cohens_d"])
             report_lines.append(
                 f"| {comp['comparison']} | {comp['n_pairs']} | {t_disp} | {p_disp} | "
                 f"{comp['sig']} | {d_disp} | {comp['effect']} |"

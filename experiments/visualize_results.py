@@ -253,13 +253,17 @@ def plot_statistical_significance(sig_result: dict[str, Any]) -> None:
     ax1.set_yticklabels(baselines)
     for i in range(len(baselines)):
         for j in range(len(baselines)):
+            # 2026-09-26 round9（P2 健壮性）：对角线/无对比对象格为 None
+            # （i==j 或该基线对未做检验），ax1.text 传 None 会被 matplotlib
+            # 静默渲染为 "None" 文本，改为 "—" 占位（无对比数据语义）
+            cell = p_values[i][j]
             ax1.text(
                 j,
                 i,
-                p_values[i][j],
+                "—" if cell is None else cell,
                 ha="center",
                 va="center",
-                color="white" if p_values[i][j] in ("***", "**", "*") else "black",
+                color="white" if cell in ("***", "**", "*") else "black",
                 fontsize=11,
             )
     ax1.set_title("配对 t 检验 p 值（*** p<0.001, ** p<0.01, * p<0.05）", fontsize=11)

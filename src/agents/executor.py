@@ -163,8 +163,10 @@ class ExecutorAgent:
                 cmd.extend(["-k", target_function])
 
             output, last_result = self._run_pytest_with_retry(cmd, env, project_root)  # type: ignore[attr-defined]
-            # 检查是否需要立即返回（超时/环境问题）
-            if isinstance(last_result, tuple) and last_result[0] == "EARLY_RETURN":
+            # 检查是否需要立即返回（超时/环境问题/通用异常无有效结果）
+            # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
+            # 结果时），与 EARLY_RETURN 走同一早退分支（error_info 透传）。
+            if isinstance(last_result, tuple) and last_result[0] in ("EARLY_RETURN", "UNAVAILABLE"):
                 return {
                     "passed": False,
                     "output": output,

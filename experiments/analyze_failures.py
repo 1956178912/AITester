@@ -129,7 +129,11 @@ def root_cause_classification(details: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def failure_knowledge_base(details: list[dict[str, Any]], top_n: int = 10) -> list[dict[str, Any]]:
+def failure_knowledge_base(
+    details: list[dict[str, Any]],
+    top_n: int = 10,
+    dataset: str | None = None,
+) -> list[dict[str, Any]]:
     """5.3 失败案例知识库：把典型失败案例结构化为可复用记录。
 
     每条记录含：
@@ -140,6 +144,12 @@ def failure_knowledge_base(details: list[dict[str, Any]], top_n: int = 10) -> li
     Args:
         details: benchmark 结果 JSON 的 details[] 列表。
         top_n: 最多收录的案例数（默认 10，按失败类别多样性选取）。
+        dataset: 数据集名（供 reproducible_steps 的 --dataset 参数使用）。
+            2026-09-26 round9（P2 口径修复）：旧实现恒默认 "synthetic"
+            ——details 行（_build_task_result）无顶层 dataset 字段
+            （dataset 在 benchmark 汇总层），SWE-bench 任务的复现命令也
+            会误写 `--dataset synthetic` 误导复现。现由调用方显式传入；
+            未传时仅当行内确有 dataset 字段才写入（不再硬编码兜底）。
 
     Returns:
         结构化案例列表（可直接 JSON 落盘为 experiments/results/failure_knowledge_base.json）。
@@ -167,6 +177,10 @@ def failure_knowledge_base(details: list[dict[str, Any]], top_n: int = 10) -> li
             task_id = str(row.get("task_id", "unknown"))
             diagnosis = str(row.get("diagnosis") or "")[:300]
             suggested = _suggest_fix_for_root_cause(row, cat)
+            # 2026-09-26 round9：--dataset 参数取"传入 dataset 或行内字段"，
+            # 两者皆无时省略（不再默认 synthetic 误导复现）
+            dataset_arg = dataset or row.get("dataset")
+            dataset_clause = f"--dataset {dataset_arg} " if dataset_arg else ""
             cases.append(
                 {
                     "task_id": task_id,
@@ -174,8 +188,7 @@ def failure_knowledge_base(details: list[dict[str, Any]], top_n: int = 10) -> li
                     "root_cause": _assign_root_cause(row, cat),
                     "diagnosis_excerpt": diagnosis,
                     "reproducible_steps": (
-                        f"运行 experiments/run_benchmark.py --dataset "
-                        f"{row.get('dataset', 'synthetic')} "
+                        f"运行 experiments/run_benchmark.py {dataset_clause}"
                         f"--task-limit 1 复现任务 {task_id}；"
                         f"失败类别 {cat}；根因 {suggested['root_cause']}"
                     ),
@@ -361,6 +374,13 @@ def load_all_results(results_dir: str) -> list[dict[str, Any]]:
             with open(f, encoding="utf-8") as fp:
                 data = json.load(fp)
             if isinstance(data, dict) and "results" in data:
+                # 2026-09-26 round9：details 行无 dataset 字段（dataset 在
+                # benchmark JSON 顶层 data["dataset"]，run_benchmark L1215），
+                # 旧行级 row.get('dataset','synthetic') 恒命中默认值 →
+                # 知识库复现命令误写 `--dataset synthetic`。现从顶层注入
+                # （_project_fields 的 _KEEP_FIELDS 已含 "dataset" 键，
+                # 注入后随投影保留）。
+                dataset_name = data.get("dataset")
                 for baseline, bl_data in data["results"].items():
                     if "details" in bl_data:
                         for d in bl_data["details"]:
@@ -369,6 +389,8 @@ def load_all_results(results_dir: str) -> list[dict[str, Any]]:
                             projected = _project_fields(d)
                             projected["baseline"] = baseline
                             projected["experiment_file"] = f.name
+                            if dataset_name:
+                                projected["dataset"] = dataset_name
                             all_tasks.append(projected)
         except Exception as e:
             print(f"警告: 跳过文件 {f.name}: {e}")

@@ -49,6 +49,26 @@ logger = logging.getLogger(__name__)
 # 按 repo_name/commit[:12] 分目录，(repo, commit) 相同的环境跨任务/跨运行复用。
 _DEFAULT_REPO_ENVS_DIR = os.path.join(os.path.expanduser("~"), ".cache", "aitester", "repo_envs")
 
+# 2026-09-26 round9 P1：共享 venv 创建/重指向目录锁注册表。
+# setup() 中 _create_venv / _venv_pip_install（editable 重指向）操作的是
+# 仓库级共享目录（<repo>/_shared_venv），--parallel 下多任务同仓库并发
+# setup 时 pip 写 venv 内 site-packages / .pth 文件互相踩（半成品 venv）。
+# 锁粒度为 (repo_name, commit[:12]) 维度——与 setup 的 env_dir 路径一致，
+# 不同仓库/不同 commit 互不阻塞，同仓库同 commit 的并发 setup 串行化。
+_repo_setup_locks: dict[str, threading.Lock] = {}
+_repo_setup_locks_guard = threading.Lock()
+
+
+def _get_repo_setup_lock(env_dir: str) -> threading.Lock:
+    """获取指定仓库环境目录的 setup 锁（per-env_dir，不同目录互不阻塞）。"""
+    key = os.path.normpath(env_dir)
+    with _repo_setup_locks_guard:
+        lock = _repo_setup_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _repo_setup_locks[key] = lock
+        return lock
+
 
 def _repo_envs_root() -> str:
     """仓库环境缓存根目录（SWE_REPO_ENVS_DIR 可覆盖，测试指向临时目录）。"""
@@ -185,106 +205,125 @@ class RepoExecutor:
                 logger.warning("仓库环境缓存 checkout 漂移，重新准备: %s", env_dir)
 
         if not cached:
-            os.makedirs(env_dir, exist_ok=True)
-            # 清掉旧 repo 目录（部分失败残留）
-            if os.path.isdir(repo_dir):
-                shutil.rmtree(repo_dir, ignore_errors=True)
+            # 2026-09-26 round9 P1：per-env_dir 锁保护 clone/checkout/venv/pip 序列。
+            # 旧实现无锁，--parallel 下多任务同 (repo, commit) 并发 setup 时：
+            # - 同时 shutil.rmtree(repo_dir) 互相删除对方刚 clone 的仓库；
+            # - 并发 python -m venv --clear 写同一 venv 目录（半成品）；
+            # - pip install -e 写 site-packages / .pth 互相踩。
+            # 锁粒度为 env_dir（= <repo>/<commit[:12]>），不同仓库/不同
+            # commit 互不阻塞。持锁时间 = clone + venv + pip（分钟级），
+            # 但仅同 (repo, commit) 的并发 setup 会被串行化（与单任务
+            # 串行等价）；SWE-bench 同仓库多 commit 场景下锁粒度到
+            # commit 级，不损失跨 commit 的并行度。
+            lock = _get_repo_setup_lock(env_dir)
+            with lock:
+                # 锁内重检缓存：持锁前可能已被其他线程完成 setup
+                if os.path.isfile(os.path.join(env_dir, _pip_marker)) and os.path.isdir(repo_dir):
+                    head = _run(["git", "rev-parse", "HEAD"], repo_dir, 30)
+                    if head.returncode == 0 and head.stdout.strip().startswith(base_commit[:12]):
+                        cached = True
+                        logger.info("仓库环境命中缓存（锁内复检）: %s", env_dir)
+                if not cached:
+                    os.makedirs(env_dir, exist_ok=True)
+                    # 清掉旧 repo 目录（部分失败残留）
+                    if os.path.isdir(repo_dir):
+                        shutil.rmtree(repo_dir, ignore_errors=True)
 
-            env_error = self._clone_and_checkout(repo_url, base_commit, repo_dir)
-            if env_error:
-                return {"workdir": repo_dir, "cached": False, "error": env_error}
-
-            if self.use_venv:
-                if self.venv_reuse_by_repo:
-                    # P0 4.3：按仓库复用 venv（依赖指纹键），跨 commit 共享
-                    venv_dir = self._repo_venv_dir(repo_url, repo_dir)
-                    env_error = self._create_venv(venv_dir)
+                    env_error = self._clone_and_checkout(repo_url, base_commit, repo_dir)
                     if env_error:
-                        logger.warning("venv 创建失败，退回全局 python: %s", env_error)
-                        env_error = self._pip_install_editable(repo_dir)
-                        if env_error:
-                            logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
-                        else:
-                            # 2026-09-26 全面审查（P1 缓存一致性）：venv 创建失败
-                            # 回退到全局 pip install 后，缓存检查标记须与 use_venv
-                            # 模式对齐——use_venv=True 时 setup() 入口读
-                            # .venv_pip_installed（L148），此处若写 .pip_installed
-                            # 则下次 setup() 永远缓存 miss，每次重新 git clone +
-                            # pip install（SWE-bench 批量任务 10-20 个 commit 的
-                            # 同一仓库重复 clone）。现按 use_venv 写对应标记。
-                            _marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
-                            with open(os.path.join(env_dir, _marker), "w", encoding="utf-8") as f:
-                                f.write(base_commit)
-                    else:
-                        # 检测依赖指纹：同一指纹复用已有 venv（不重新 pip install -e）
-                        dep_fingerprint = self._dep_fingerprint(repo_dir)
-                        marker = os.path.join(venv_dir, ".venv_dep_fingerprint")
-                        need_install = True
-                        if os.path.isfile(marker):
-                            with open(marker, encoding="utf-8") as f:
-                                existing_fp = f.read().strip()
-                            if existing_fp == dep_fingerprint:
-                                # 依赖未变 → 复用 venv，不重新 pip install。
-                                # 但必须刷新 editable 源码指向：pip install -e
-                                # 写入的是绝对路径（.pth / __editable__ finder），
-                                # 跨 commit 时旧 venv 的 editable 安装仍指向上一个
-                                # commit 的 repo 目录——与本 commit 不一致时会让
-                                # `import <repo_pkg>` 解析到错误版本（正是 4.3 要
-                                # 消除的跨 commit 污染）。因此指纹命中时重跑一次
-                                # 轻量 `pip install -e .`（依赖已装、仅重指向
-                                # 源码，秒级），不装依赖本身。
-                                logger.info(
-                                    "P0 4.3 venv 复用命中（依赖指纹未变，仅重指向 editable 源码）: %s（commit %s）",
-                                    venv_dir,
-                                    base_commit[:12],
-                                )
-                                _repoint_err = self._venv_pip_install(repo_dir, venv_dir)
-                                if _repoint_err:
-                                    # 重指向失败（pip 网络异常等）：editable 仍指旧
-                                    # commit 源码，测试会在旧版本上裁决——保留诊断
-                                    # 但不清除环境标记（venv 本身可用，走保守路径），
-                                    # 由 verify 阶段的 base_not_failing 等信号兜底。
-                                    logger.warning(
-                                        "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s", _repoint_err
-                                    )
-                        else:
-                            need_install = True
-                        if need_install:
-                            env_error = self._venv_pip_install(repo_dir, venv_dir)
+                        return {"workdir": repo_dir, "cached": False, "error": env_error}
+
+                    if self.use_venv:
+                        if self.venv_reuse_by_repo:
+                            # P0 4.3：按仓库复用 venv（依赖指纹键），跨 commit 共享
+                            venv_dir = self._repo_venv_dir(repo_url, repo_dir)
+                            env_error = self._create_venv(venv_dir)
                             if env_error:
-                                logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
+                                logger.warning("venv 创建失败，退回全局 python: %s", env_error)
+                                env_error = self._pip_install_editable(repo_dir)
+                                if env_error:
+                                    logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
+                                else:
+                                    # 2026-09-26 全面审查（P1 缓存一致性）：venv 创建失败
+                                    # 回退到全局 pip install 后，缓存检查标记须与 use_venv
+                                    # 模式对齐——use_venv=True 时 setup() 入口读
+                                    # .venv_pip_installed（L148），此处若写 .pip_installed
+                                    # 则下次 setup() 永远缓存 miss，每次重新 git clone +
+                                    # pip install（SWE-bench 批量任务 10-20 个 commit 的
+                                    # 同一仓库重复 clone）。现按 use_venv 写对应标记。
+                                    _marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
+                                    with open(os.path.join(env_dir, _marker), "w", encoding="utf-8") as f:
+                                        f.write(base_commit)
                             else:
-                                with open(marker, "w", encoding="utf-8") as f:
-                                    f.write(dep_fingerprint)
-                        # 写环境标记（venv 模式下，即使复用也标记该 commit 已就绪）
-                        with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
-                            f.write(base_commit)
-                else:
-                    # 传统模式：每个 (repo, commit) 独立 venv
-                    # venv 隔离：建独立 venv，pip install -e 装入 venv
-                    env_error = self._create_venv(env_dir)
-                    if env_error:
-                        logger.warning("venv 创建失败，退回全局 python: %s", env_error)
+                                # 检测依赖指纹：同一指纹复用已有 venv（不重新 pip install -e）
+                                dep_fingerprint = self._dep_fingerprint(repo_dir)
+                                marker = os.path.join(venv_dir, ".venv_dep_fingerprint")
+                                need_install = True
+                                if os.path.isfile(marker):
+                                    with open(marker, encoding="utf-8") as f:
+                                        existing_fp = f.read().strip()
+                                    if existing_fp == dep_fingerprint:
+                                        # 依赖未变 → 复用 venv，不重新 pip install。
+                                        # 但必须刷新 editable 源码指向：pip install -e
+                                        # 写入的是绝对路径（.pth / __editable__ finder），
+                                        # 跨 commit 时旧 venv 的 editable 安装仍指向上一个
+                                        # commit 的 repo 目录——与本 commit 不一致时会让
+                                        # `import <repo_pkg>` 解析到错误版本（正是 4.3 要
+                                        # 消除的跨 commit 污染）。因此指纹命中时重跑一次
+                                        # 轻量 `pip install -e .`（依赖已装、仅重指向
+                                        # 源码，秒级），不装依赖本身。
+                                        logger.info(
+                                            "P0 4.3 venv 复用命中（依赖指纹未变，仅重指向 editable 源码）: %s（commit %s）",
+                                            venv_dir,
+                                            base_commit[:12],
+                                        )
+                                        _repoint_err = self._venv_pip_install(repo_dir, venv_dir)
+                                        if _repoint_err:
+                                            # 重指向失败（pip 网络异常等）：editable 仍指旧
+                                            # commit 源码，测试会在旧版本上裁决——保留诊断
+                                            # 但不清除环境标记（venv 本身可用，走保守路径），
+                                            # 由 verify 阶段的 base_not_failing 等信号兜底。
+                                            logger.warning(
+                                                "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s", _repoint_err
+                                            )
+                                else:
+                                    need_install = True
+                                if need_install:
+                                    env_error = self._venv_pip_install(repo_dir, venv_dir)
+                                    if env_error:
+                                        logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
+                                    else:
+                                        with open(marker, "w", encoding="utf-8") as f:
+                                            f.write(dep_fingerprint)
+                                # 写环境标记（venv 模式下，即使复用也标记该 commit 已就绪）
+                                with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
+                                    f.write(base_commit)
+                        else:
+                            # 传统模式：每个 (repo, commit) 独立 venv
+                            # venv 隔离：建独立 venv，pip install -e 装入 venv
+                            env_error = self._create_venv(env_dir)
+                            if env_error:
+                                logger.warning("venv 创建失败，退回全局 python: %s", env_error)
+                                env_error = self._pip_install_editable(repo_dir)
+                                if env_error:
+                                    logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
+                                else:
+                                    with open(os.path.join(env_dir, ".pip_installed"), "w", encoding="utf-8") as f:
+                                        f.write(base_commit)
+                            else:
+                                env_error = self._venv_pip_install(repo_dir, env_dir)
+                                if env_error:
+                                    logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
+                                else:
+                                    with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
+                                        f.write(base_commit)
+                    else:
                         env_error = self._pip_install_editable(repo_dir)
                         if env_error:
                             logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
                         else:
                             with open(os.path.join(env_dir, ".pip_installed"), "w", encoding="utf-8") as f:
                                 f.write(base_commit)
-                    else:
-                        env_error = self._venv_pip_install(repo_dir, env_dir)
-                        if env_error:
-                            logger.warning("venv pip install -e 失败（记录但不阻断验证）: %s", env_error)
-                        else:
-                            with open(os.path.join(env_dir, ".venv_pip_installed"), "w", encoding="utf-8") as f:
-                                f.write(base_commit)
-            else:
-                env_error = self._pip_install_editable(repo_dir)
-                if env_error:
-                    logger.warning("仓库 pip install -e 失败（记录但不阻断验证）: %s", env_error)
-                else:
-                    with open(os.path.join(env_dir, ".pip_installed"), "w", encoding="utf-8") as f:
-                        f.write(base_commit)
 
         return {"workdir": repo_dir, "cached": cached, "error": env_error}
 
@@ -470,10 +509,16 @@ class RepoExecutor:
             base_result["repo_env"] = env
             return base_result
 
-        # 临时文件名加进程/随机后缀（--parallel 下多线程同仓库 verify 并发时，
-        # 仅按 commit[:8] 命名会在同前缀 commit 间产生写/读竞争——2026-09-26
-        # 全面审查修复；tmp_path 全程由调用方清理，命名不影响复用）
-        test_file = os.path.join(tempfile.gettempdir(), f"aitester_repo_test_{base_commit[:8]}_{os.getpid()}.patch")
+        # 临时文件名按 (pid, thread) 双键隔离——2026-09-26 全面审查 P1 并发安全：
+        # 此前仅 os.getpid()，--parallel 下多线程同仓库 verify 并发时同一 pid
+        # 的多个线程命中同一临时文件（一个线程正在 git apply 的补丁文件被
+        # 另一个线程覆盖/删除 → 半成品读入）。pid+thread ident 双键在
+        # ThreadPoolExecutor 复用线程场景下仍唯一（ident 在 thread.join() 前
+        # 不复用，且 os.getpid() 恒为当前进程，组合键进程内唯一）。
+        test_file = os.path.join(
+            tempfile.gettempdir(),
+            f"aitester_repo_test_{base_commit[:8]}_{os.getpid()}_{threading.get_ident()}.patch",
+        )
         with open(test_file, "w", encoding="utf-8") as f:
             f.write(test_patch)
 

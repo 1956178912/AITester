@@ -351,8 +351,15 @@ def detect_contamination(
     contaminated_total = 0
     clean_success = 0
     clean_total = 0
+    _seen_task_ids: set[str] = set()
     for row in details:
         task_id = str(row.get("task_id", ""))
+        # 2026-09-26 round9（P2 健壮性）：details 若含同 task_id 多行
+        # （历史多次运行累积）会双重计数各风险列表与成功率分母，
+        # 按 task_id 去重（首行优先）
+        if task_id in _seen_task_ids:
+            continue
+        _seen_task_ids.add(task_id)
         # 生成补丁：结果行 patch 字段（run_benchmark 0.1 起输出），
         # 旧结果兜底读 task_metadata.generated_patch
         generated = row.get("patch") or (row.get("task_metadata") or {}).get("generated_patch")

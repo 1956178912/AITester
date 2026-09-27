@@ -197,8 +197,12 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             "_details": details,
         }
         # 迭代次数分布（0 = 一次通过，1/2/3 = 调试轮数，>=3 归入 3+）
+        # 2026-09-26 round9（P2 健壮性）：旧 JSON / 失败行 iterations 可能为
+        # null（JSON None），min(None, 3) 抛 TypeError 使整份 build_analysis
+        # 崩溃。归一为 int or 0，与 convergence_analysis L359 的
+        # int(r.get("iterations", 0) or 0) 同口径。
         for r in details:
-            iteration_counter[min(r.get("iterations", 0), 3)] += 1
+            iteration_counter[min(int(r.get("iterations") or 0), 3)] += 1
 
     cross_baseline = _cross_baseline_convergence_comparison(per_baseline)
     cross_file_failure = _cross_file_failure_analysis(per_baseline)
@@ -613,7 +617,34 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
     for baseline, m in per.items():
         details = m.get("_details") or []
         if details:
-            lines.extend(render_stratification_section(details, baseline))
+            # 2026-09-26 round9（P2 口径修复）：details 行不再携带 instance_code
+            # （run_benchmark L359 只写 generated_test，无 instance_code 字段），
+            # 旧调用仅传 details → code_size 全部落 "small"、dependency_count
+            # 全部落 "low"（退化单档，分层失去区分度）。现从 details 自带字段
+            # 构造 instance_codes/test_codes 映射：
+            #   - instance_codes: 用 task_metadata.instance_code（若有）兜底，
+            #     否则该行 code_size 退化 small（与旧行为一致，不引入新崩溃）；
+            #   - test_codes: 直接读 details[].generated_test（code_size 的兜底源）。
+            # 两个映射均为 task_id → 源码字符串，供 stratify_by_dimension 消费。
+            instance_codes_map: dict[str, str] = {}
+            test_codes_map: dict[str, str] = {}
+            for r in details:
+                tid = str(r.get("task_id", ""))
+                task_meta = r.get("task_metadata") or {}
+                ic = task_meta.get("instance_code")
+                if isinstance(ic, str) and ic:
+                    instance_codes_map[tid] = ic
+                gt = r.get("generated_test")
+                if isinstance(gt, str) and gt:
+                    test_codes_map[tid] = gt
+            lines.extend(
+                render_stratification_section(
+                    details,
+                    baseline,
+                    instance_codes=instance_codes_map or None,
+                    test_codes=test_codes_map or None,
+                )
+            )
 
     # 1.3 边界用例覆盖（generated_test 携带时输出）
     boundary_rows = [

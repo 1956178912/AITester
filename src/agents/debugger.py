@@ -33,6 +33,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -392,7 +393,16 @@ class DebuggerAgent(BaseAgent):
                 )
 
         # 宽松 JSON 提取（容忍 markdown 包裹 / 前后自然语言）
-        result = self._extract_json(raw)
+        # 2026-09-26 round9 P2：_extract_json 在两次坏 JSON 时必抛
+        # json.JSONDecodeError（严格 prompt 重试已在上文降级，raw 仍为
+        # 宽松提取对象），不捕获则整个 Debugger 节点崩溃。包 try/except
+        # 降级为空 patch（保守：无有效补丁时走下游"无补丁"分支，不阻断
+        # 实验循环），并记 warning 诊断。
+        try:
+            result = self._extract_json(raw)
+        except json.JSONDecodeError as e:
+            logger.warning("P2 JSON 提取失败（降级空 patch）: %s；原始片段: %s", e, (raw or "")[:200])
+            result = {}
         patch = result.get("patch", "")
 
         # 3.1 改进：批评者评估——若启用对抗性推理，独立 LLM 调用尝试构造
@@ -409,8 +419,15 @@ class DebuggerAgent(BaseAgent):
                 # 把击穿用例注入 prompt 重新生成一次（带负面反馈）
                 requery = query + self._build_critic_feedback(critic_result)
                 raw2 = self._call_llm_with_cache(requery, temperature=temperature)
-                result2 = self._extract_json(raw2)
-                patch2 = result2.get("patch", patch)
+                # 2026-09-26 round9 P2：critic requery 的 JSON 提取同样可能
+                # 失败（LLM 二次输出仍为坏 JSON），不捕获则对抗性分支
+                # 崩溃使整个 Debugger 节点失败。降级为保留原 patch。
+                try:
+                    result2 = self._extract_json(raw2)
+                    patch2 = result2.get("patch", patch)
+                except json.JSONDecodeError as e:
+                    logger.warning("P2 对抗性重新生成 JSON 提取失败（保留原 patch）: %s", e)
+                    patch2 = patch
                 if patch2 and patch2 != patch:
                     patch = patch2
                     logger.info("对抗性重新生成成功，补丁已更新（3.1）")

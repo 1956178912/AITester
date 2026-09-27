@@ -43,6 +43,11 @@ _TRIPLE_QUOTE_RE = re.compile(r'^"""')
 _PYTHON_PREFIX_RE = re.compile(r"^python\s*\n?", re.IGNORECASE)
 # 正则兜底路径的函数边界探测（_find_function_range 热循环内不再逐次编译）
 _BOUNDARY_RE = re.compile(r"^(def |class |@|#)")
+# 2026-09-26 round9 P1：顶层 import 探测（行首 ^import / ^from，与 _TOP_DEF_RE
+# 同口径用 MULTILINE）。旧实现 `"import " in clean_patch[:200]` 用子串匹配，
+# 函数体内局部 import（`def g(): import os`）落在前 200 字符内时被误判为
+# 完整文件模式 → 原文件顶层 import 被静默丢弃（round9 P1 发现，已复现）。
+_TOP_IMPORT_RE = re.compile(r"^(?:import |from )", re.MULTILINE)
 
 
 def _extract_function_names(code: str) -> set[str]:
@@ -80,7 +85,12 @@ def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
 
     完整文件模式的判断条件（满足任一即可）：
         (a) 补丁以 triple-quote 开头 → 含 docstring，通常是完整模块文件
-        (b) 前 200 字符含 import 语句 → 含导入，说明是完整文件而非单函数补丁
+        (b) 补丁**行首**含顶层 import 语句 → 含导入，说明是完整文件而非
+            单函数补丁（2026-09-26 round9 P1 修复：旧实现用子串
+            `"import " in clean_patch[:200]`，函数体内局部 import
+            （`def g(): import os`）落在前 200 字符内时被误判为完整文件
+            模式 → 原文件顶层 import 被静默丢弃，与 _TOP_DEF_RE 同口径
+            用 MULTILINE 行首探测，排除函数体内局部 import 的误判路径）
         (c) 补丁含 >=2 个函数定义 且 原代码也含 >=2 个函数 → 多函数补丁
 
     Args:
@@ -91,7 +101,10 @@ def _is_full_file_patch(clean_patch: str, original_code: str) -> bool:
         True 表示使用完整文件模式，False 表示使用单函数模式。
     """
     has_docstring = bool(_TRIPLE_QUOTE_RE.match(clean_patch))
-    has_import = "import " in clean_patch[:200]
+    # 2026-09-26 round9 P1：仅探测**行首**顶层 import（^import / ^from），
+    # 函数体内缩进的局部 import（`    import os`）不命中行首锚定，
+    # 不再误判单函数补丁为完整文件模式。
+    has_import = bool(_TOP_IMPORT_RE.search(clean_patch[:200]))
     patch_func_count = _count_function_defs(clean_patch)
     original_func_count = _count_function_defs(original_code)
 
@@ -394,6 +407,10 @@ def _find_function_start_line_in_lines(code_lines: list[str], func_name: str) ->
     """按预切分的行查找函数起始行号（P13 性能优化：供批量排序 key 复用，避免每个
     patch 都重新 split 一遍代码）。
 
+    2026-09-26 round9 P2：正则补 async 前缀（与 L270 单函数模式正则兜底
+    同口径，_TOP_DEF_RE 含 async 可选前缀），async 目标函数不再误判为
+    "未找到"排到末尾。
+
     Args:
         code_lines: 代码行列表（code.split("\\n") 的结果）。
         func_name: 函数名。
@@ -402,7 +419,8 @@ def _find_function_start_line_in_lines(code_lines: list[str], func_name: str) ->
         函数起始行号（从0开始），未找到返回 -1。
     """
     # 预编译函数定义匹配正则（避免逐行重复编译）
-    func_def_re = re.compile(rf"^def\s+{re.escape(func_name)}\s*\(")
+    # 2026-09-26 round9 P2：含 async 前缀（与 _TOP_DEF_RE 同口径）
+    func_def_re = re.compile(rf"^(?:async\s+)?def\s+{re.escape(func_name)}\s*\(")
     for i, line in enumerate(code_lines):
         if func_def_re.match(line):
             return i

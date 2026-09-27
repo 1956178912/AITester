@@ -44,6 +44,25 @@ _RE_FROM_IMPORT = re.compile(r"from\s+([\w.]+)\s+import")
 # 旧的 ^import\s+([\w.]+) 只能捕获首个模块，import numpy, scipy 会漏掉 scipy
 _RE_IMPORT_CLAUSE = re.compile(r"^import\s+(.+)$")
 
+# 2026-09-26 round9 P1：create_venv 目录锁注册表。
+# 此前 create_venv 的"磁盘缓存判断 + 创建"序列无锁，--parallel 下多个任务
+# 命中同一缓存目录时可能同时判定缓存缺失、并发 `python -m venv` 写同一目录
+# （cp 文件互相踩 / 解释器半成品时命中检查误判）。与 venv 缓存统计同层加锁，
+# 用 WeakValueDictionary 避免锁对象随进程累积。
+_venv_dir_locks: dict[str, threading.Lock] = {}
+_venv_dir_locks_guard = threading.Lock()
+
+
+def _get_venv_dir_lock(venv_dir: str) -> threading.Lock:
+    """获取指定 venv 目录的创建锁（per-dir，不同目录互不阻塞）。"""
+    key = os.path.normpath(venv_dir)
+    with _venv_dir_locks_guard:
+        lock = _venv_dir_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _venv_dir_locks[key] = lock
+        return lock
+
 
 def extract_import_module_names(code: str) -> list[str]:
     """逐行提取 import 语句导入的模块名（保留点号，按出现顺序）。
@@ -275,6 +294,12 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
 
     带磁盘缓存：目标目录下已有 python 解释器时直接复用（约省 1-3s）。
 
+    2026-09-26 round9 P1：per-dir 锁保护"缓存命中检查 + 创建"序列。
+    旧实现无锁，--parallel 下多任务命中同一缓存目录时可能并发 `python -m venv`
+    写同一目录（半成品时命中检查误判为缓存已有 → 解释器未就绪）。
+    锁粒度为 venv_dir 维度（不同目录互不阻塞），锁内只做一次命中检查 +
+    子进程调用（持锁时间 = 创建耗时，与单任务串行等价；不阻塞其他目录）。
+
     Args:
         venv_dir: venv 目录路径（绝对路径）。
         timeout: 创建子进程超时秒数。
@@ -285,35 +310,37 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
     Raises:
         RuntimeError: venv 创建失败时抛出。
     """
-    candidates = [
-        os.path.join(venv_dir, "bin", "python"),
-        os.path.join(venv_dir, "Scripts", "python.exe"),
-    ]
-    for interpreter in candidates:
-        if os.path.exists(interpreter):
-            # 4.4 缓存命中统计：记录复用事件
-            _record_venv_cache_event("hit")
-            logger.debug("复用已有 venv: %s", venv_dir)
-            return interpreter
+    lock = _get_venv_dir_lock(venv_dir)
+    with lock:
+        candidates = [
+            os.path.join(venv_dir, "bin", "python"),
+            os.path.join(venv_dir, "Scripts", "python.exe"),
+        ]
+        for interpreter in candidates:
+            if os.path.exists(interpreter):
+                # 4.4 缓存命中统计：记录复用事件
+                _record_venv_cache_event("hit")
+                logger.debug("复用已有 venv: %s", venv_dir)
+                return interpreter
 
-    os.makedirs(venv_dir, exist_ok=True)
-    cmd = [sys.executable, "-m", "venv", "--system-site-packages", venv_dir]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"venv 创建超时（>{timeout}s）: {venv_dir}") from e
-    if proc.returncode != 0:
-        raise RuntimeError(f"venv 创建失败: {proc.stderr.strip()[:300]}")
-    interpreter = candidates[0] if os.path.exists(candidates[0]) else candidates[1]
-    # 4.4 缓存命中统计：记录新建事件
-    _record_venv_cache_event("create")
-    logger.info("venv 已创建: %s", venv_dir)
-    return interpreter
+        os.makedirs(venv_dir, exist_ok=True)
+        cmd = [sys.executable, "-m", "venv", "--system-site-packages", venv_dir]
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"venv 创建超时（>{timeout}s）: {venv_dir}") from e
+        if proc.returncode != 0:
+            raise RuntimeError(f"venv 创建失败: {proc.stderr.strip()[:300]}")
+        interpreter = candidates[0] if os.path.exists(candidates[0]) else candidates[1]
+        # 4.4 缓存命中统计：记录新建事件
+        _record_venv_cache_event("create")
+        logger.info("venv 已创建: %s", venv_dir)
+        return interpreter
 
 
 # ─── 4.4 venv 缓存监控与清理 ────────────────────────────────────────────────────

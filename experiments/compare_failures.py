@@ -254,7 +254,6 @@ def cross_batch_comparison(
          "regressed_categories": [cat...]}  # 数量增长的类别
     """
     batches = []
-    all_categories: dict[str, list[int]] = {}
 
     for s in summaries:
         details = s.get("results", {}).get(baseline, {}).get("details", [])
@@ -274,15 +273,11 @@ def cross_batch_comparison(
                 "top_failures": top,
             }
         )
-        for cat, cnt in cat_counter.items():
-            all_categories.setdefault(cat, []).append(cnt)
-        # 补 0 占位
-        for cat in all_categories:
-            if cat not in cat_counter:
-                all_categories[cat].append(0)
 
-    # 重新按批次对齐（上面有 bug：补 0 应该按批次顺序来）
-    # 重做：每个 batch 对应一个 list
+    # 2026-09-26 round9 死代码清理：旧实现在此循环内构建 all_categories
+    # （含循环内"补 0 占位"），其产物从未被消费（下方 cat_series 按批次
+    # 顺序重建，注释自认"上面有 bug，重做"）——删除。
+    # 按批次对齐的类别序列（每个类别一个 list，长度 = 批次数，缺批次补 0）：
     cat_series: dict[str, list[int]] = {}
     for i, b in enumerate(batches):
         for cat, cnt in b["failure_categories"].items():

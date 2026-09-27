@@ -199,7 +199,12 @@ class TestExecutorRuntimeCleanup:
         assert result[1]["type"] == "permission_error"
 
     def test_run_pytest_with_retry_generic_exception_breaks_loop(self, tmp_path, monkeypatch):
-        """通用 Exception 分支：记录后 break，返回 (error_msg, None)。"""
+        """通用 Exception 分支：记录后 break，返回 ("UNAVAILABLE", error_info)。
+
+        2026-09-26 round9 P2：通用异常不再把 last_result 置 None（保留最近一次
+        有效结果），无任何有效结果时返回 ("UNAVAILABLE", …) 标记，与 EARLY_RETURN
+        走同一早退分支。
+        """
         from src.agents.executor_runtime import run_pytest_with_retry
 
         class FakeSelf:
@@ -210,6 +215,7 @@ class TestExecutorRuntimeCleanup:
         with monkeypatch.context() as mp:
             mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
             output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
-        # 通用异常：break 后 last_result=None，output 为错误消息
-        assert result is None
+        # 2026-09-26 round9：通用异常且无有效结果 → ("UNAVAILABLE", error_info) 标记
+        assert isinstance(result, tuple) and result[0] == "UNAVAILABLE"
+        assert result[1]["type"] == "execution_exception"
         assert "boom" in output

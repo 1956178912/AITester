@@ -33,6 +33,10 @@ _MAX_RAG_REFERENCES = 3
 # 3.4 断言增强：AST 提取被测代码中已有 assert 语句的最大数量（避免 prompt 过长）
 _MAX_EXISTING_ASSERTIONS = 10
 
+# 2026-09-26 round9 P2：预编译 import 提取正则（--parallel 热路径，避免每次
+# 调用现场 re.compile）
+_FROM_IMPORT_RE = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
+
 
 def _assertion_augment_enabled() -> bool:
     """3.4 断言增强开关：环境变量 ASSERTION_AUGMENT_ENABLE=true 时启用（默认 false）。"""
@@ -475,9 +479,9 @@ class GeneratorAgent(BaseAgent):
         # 依赖类属性挂载，同时消除 mypy attr-defined 误报
         from src.agents.executor_imports import is_similar_module_name
 
-        # 匹配所有 "from X import ..." 语句（X 为模块名）
-        pattern = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
-        matches = pattern.findall(code)
+        # 2026-09-26 round9 P2：正则预编译为模块级常量（避免每次调用现场
+        # re.compile，--parallel 热路径）。
+        matches = _FROM_IMPORT_RE.findall(code)
         for wm in matches:
             # 若已是期望模块名，无需修改
             if wm == expected_module:

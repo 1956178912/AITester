@@ -570,16 +570,18 @@ class TestDebuggerEdgeCases:
         assert result is not None
 
     def test_debug_with_malformed_llm_response(self):
-        """测试 LLM 返回畸形响应的处理。"""
+        """测试 LLM 返回畸形响应的处理。
+
+        2026-09-26 round9 P2：_extract_json 失败时降级为空 patch（不再抛
+        JSONDecodeError 使整个 Debugger 节点崩溃），保守走下游"无补丁"分支。
+        """
         agent = DebuggerAgent()
-        # 返回不是 JSON 的内容
+        # 返回不是 JSON 的内容（两次坏 JSON：主调用 + 严格 prompt 重试）
         bad_response = "This is not JSON at all"
         with patch.object(agent, "_call_llm", return_value=bad_response):
-            try:
-                agent.debug(target_code="def f(): pass", test_output="Error", failed_cases=[])
-                raise AssertionError("应该抛出异常")
-            except json.JSONDecodeError:
-                pass  # 期望抛出 JSONDecodeError
+            result = agent.debug(target_code="def f(): pass", test_output="Error", failed_cases=[])
+            # 降级成功：patch 为空串（不抛异常）
+            assert result.get("patch", "") == ""
 
     def test_debug_logger_info_called(self):
         """测试日志记录功能。"""

@@ -193,16 +193,26 @@ def render_stratification_section(
     instance_codes: dict[str, str] | None = None,
     test_codes: dict[str, str] | None = None,
 ) -> list[str]:
-    """渲染难度分层 Markdown 章节（无数据时返回空列表）。"""
+    """渲染难度分层 Markdown 章节（无数据时返回空列表）。
+
+    2026-09-26 round9（P2 口径修复）：instance_codes / test_codes 均未提供
+    （或全部缺失）时，code_size / dependency_count 维度退化为单档
+    （全部 small / 全部 low），在章节末尾追加退化标注，避免读者误读
+    "所有任务都是小代码 / 零依赖"。
+    """
     if not details:
         return []
     lines = [f"## 任务难度分层（2.2，基线 {baseline}）", ""]
     lines.append("| 维度 | 分层 | 任务数 | 成功数 | 成功率 |")
     lines.append("|------|------|--------|--------|--------|")
+    _degraded: list[str] = []
     for dimension in ("code_size", "dependency_count", "complexity_proxy", "difficulty_level"):
         strat = stratify_by_dimension(details, dimension, instance_codes, test_codes)
         if not strat:
             continue
+        # 退化判定：该维度仅有单一分档 → 数据缺失（缺 instance_code / 依赖源）
+        if len(strat) == 1:
+            _degraded.append(dimension)
         for bucket, stat in strat.items():
             lines.append(f"| {dimension} | {bucket} | {stat['tasks']} | {stat['passed']} | {stat['success_rate']} |")
     lines.append("")
@@ -212,5 +222,15 @@ def render_stratification_section(
         "4.3 difficulty_level 维度：Level 3（跨文件依赖）成功率与 Level 1（单函数）"
         "对比，才有意义的跨文件修复 A/B 口径；unlabeled 档为未标注难度的历史任务。"
     )
+    # 2026-09-26 round9：退化维度标注（缺 instance_code 源时 code_size /
+    # dependency_count 全部落 small/low 单档，无分层区分度，需明确告知）
+    if _degraded:
+        lines.append("")
+        lines.append(
+            f"> ⚠️ 退化标注：维度 {', '.join(_degraded)} 因结果行缺少 instance_code / "
+            "被测源码来源，全部任务落入单一分档（"
+            + " / ".join(f"{d}=单档" for d in _degraded)
+            + "），分层成功率无区分度，请补充 instance_code 源后重跑。"
+        )
     lines.append("")
     return lines
