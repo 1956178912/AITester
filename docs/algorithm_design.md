@@ -4,6 +4,17 @@
 
 > 本文档描述 AITester 的核心算法设计与理论框架，供技术评审与代码审查参考。
 > 附录提供算法到源码的精确映射表，便于快速定位实现细节。
+>
+> **基线数字**：本文档中引用的测试基线数字以 `CHANGELOG.md` 最新条目为准。
+> 截至 2026-09-27 第十一轮功能批次后，全量 1937 passed / ruff 0 告警 /
+> mypy 0 错误（64 源文件）/ 覆盖率 94%。
+>
+> **位置感知迭代修复（3.3）实现口径说明**：`POSITION_AWARE_REPAIR_ENABLE`
+> （默认 false）启用后，定位阶段由 `error_classifier` 提取 traceback 行号，
+> 经 `_locate_repair_focus()` AST 定位"包围异常行的最短区间函数"，
+> 再经 `_build_position_aware_prompt_section()` 注入位置感知修复指引；
+> 无法定位时自动降级为常规全文件修复。该阶段为纯静态定位，不消耗 LLM token，
+> 与 LoopRepair 式"先定位后补丁"口径一致，映射表附录已列出。
 
 ---
 

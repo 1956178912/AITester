@@ -4,8 +4,18 @@
 
 > This document provides detailed usage examples to help developers get started with AITester quickly.
 > Last updated: 2026-09-18 (added 1.1 smell-detection enhancement / 1.2 built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache examples)
-> Baseline (post-0.10 deep-audit round, 2026-09-25): full 1667 passed / 0 failed / ruff 0 warnings / mypy 0 errors (58 source files) / 94% coverage (this document's example code unchanged; baseline numbers follow CHANGELOG)
-> Current baseline (post-tenth-batch, 2026-09-27): full 1920 passed / 0 failed / ruff 0 warnings / mypy 0 errors (62 source files) / 94% coverage
+> **Current baseline (post-eleventh-batch, 2026-09-27)**: full 1937 passed / 0 failed / ruff 0 warnings / mypy 0 errors (64 source files) / 94% coverage
+>
+> Baseline progression across batches:
+> | Batch | Tests | Notes |
+> |-------|-------|-------|
+> | 0.10 (2026-09-25) | 1667 | Deep-audit fix round |
+> | Full audit 6 batches (2026-09-26) | 1785 | Default behavior unchanged |
+> | Tenth batch (2026-09-27) | 1920 | P1/P2 convergence |
+> | Roadmap gap-closure (2026-09-27) | 1909 | SWE-bench Pro / CodeBERT / pyright |
+> | **Eleventh batch (2026-09-27, latest)** | **1937** | Error classification 17 categories + patch resample + downgrade-chain propagation + contamination detection + mypy static layer |
+>
+> Baseline numbers follow the latest entry in `CHANGELOG.md`.
 
 ---
 
