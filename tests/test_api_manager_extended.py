@@ -520,6 +520,49 @@ class TestHealthCheckExceptions:
         assert call_count[0] == 4
         assert len(results) == 4
 
+    @patch("src.api.api_manager.time.sleep", return_value=None)
+    def test_health_check_batch_concurrency_mode(self, mock_sleep):
+        """2026-09-28：并发模式（concurrency>1）——批级 sleep 而非逐节点 sleep"""
+        for i in range(4):
+            self.mgr.add_node(LLMConfig(f"key{i + 1}", f"url{i + 1}", f"model{i + 1}"))
+
+        call_count = [0]
+
+        def fake_check(node):
+            call_count[0] += 1
+            return True
+
+        with (
+            patch.object(self.mgr, "check_health", side_effect=fake_check),
+            patch.object(self.mgr.config, "batch_health_check_concurrency", 2),
+        ):
+            results = self.mgr.health_check_batch(batch_size=4)
+
+        assert call_count[0] == 4
+        assert len(results) == 4
+        # 并发模式：每批 sleep 一次（4 节点 1 批 → 1 次），而非串行 4 次逐节点 sleep
+        assert mock_sleep.call_count == 1
+
+    @patch("src.api.api_manager.time.sleep", return_value=None)
+    def test_health_check_batch_serial_default(self, mock_sleep):
+        """默认 concurrency=1 保持串行逐节点 sleep（历史行为回归）"""
+        for i in range(4):
+            self.mgr.add_node(LLMConfig(f"key{i + 1}", f"url{i + 1}", f"model{i + 1}"))
+
+        call_count = [0]
+
+        def fake_check(node):
+            call_count[0] += 1
+            return True
+
+        with patch.object(self.mgr, "check_health", side_effect=fake_check):
+            results = self.mgr.health_check_batch(batch_size=4)
+
+        assert call_count[0] == 4
+        # 串行模式：逐节点 sleep 4 次
+        assert mock_sleep.call_count == 4
+        assert len(results) == 4
+
 
 # ════════════════════════════════════════════════════════════════════════════
 #  Section 7: 4.2 半开探测（half-open probing）

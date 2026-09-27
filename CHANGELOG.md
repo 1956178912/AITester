@@ -4,6 +4,85 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-28 改进清单落地批次（健康检查并发 / CI 3.13 / 文档口径对齐 / 多进程缓存说明 / D 规则分阶段路线，默认行为不变）
+
+> 本批次基于改进清单（核心算法 / 工程实践 / 评估与实验 / 文档协作 / 基础设施）
+> 逐项核实并落地可实施项，**默认行为不变**：
+>
+> - **六、健康检查并发探测（工程项 6）**：`APIManager.health_check_batch`
+>   新增 `batch_health_check_concurrency`（默认 1 = 纯串行逐节点 + 逐节点
+>   sleep，历史行为）；设为 4-8 时批次内有界线程池并发探测，大节点池
+>   （100+）单轮耗时从 O(N×(探测+sleep)) 降为 O(N/并发×探测)，批间保留
+>   一次批级 sleep。线程安全依据：`check_health` 内节点状态写入走
+>   `APIHealth` 节点级锁（`_enter_half_open_probe` / `_record_health_result`
+>   / `_probe_circuit_half_open` 均原子化）。新增 2 回归用例
+>   （并发模式批级 sleep 口径 + 串行默认回归）。
+> - **七、CI Python 3.13 覆盖（工程项 19）**：`.github/workflows/ci.yml`
+>   矩阵由 `['3.12', '3.14']` 扩为 `['3.12', '3.13', '3.14']`，并补注释
+>   说明 3.13 处于 scipy/pandas 锁定版本支持区间（此前跳过未说明原因）。
+> - **八、文档口径对齐（工程项 15）**：`README.md` "最新优化" 行补
+>   2026-09-28 P0/P1 改进批次（与 `docs/api_reference.md` 最后更新日期
+>   一致，消除双文档"最新"口径混淆）。
+> - **九、快速开始推荐开启项（评估项 13）**：`QUICKSTART.md` 新增
+>   "推荐开启项（默认关闭但建议按需启用）" 小节，逐项说明
+>   `SEMANTIC_CACHE_ENABLE` / `COST_BUDGET_ENABLE` / `POSITION_AWARE_REPAIR_ENABLE`
+>   / `ADVERSARIAL_DEBUGGING_ENABLE` 的预期收益与成本，并注明
+>   `CROSS_FILE_ENABLE` 当前不建议默认开启的原因（无正向实证）。
+> - **十、失败分析快照更新约定（评估项 10 / 11）**：
+>   `docs/failure_analysis.md` 新增"快照更新约定"段落——重大版本后
+>   重跑 50 任务合成实验，新数据落 `experiments/results/` 并在本文档
+>   追加链接（不就地修改历史快照）；更强模型（GPT-4 级别）仓库级验证
+>   数据单独落 `experiment_report_<date>_repo_level.md`，区分"架构能力"
+>   与"模型能力"边界。
+> - **十一、跨批次对比工具落地记录约定（评估项 12）**：`README.md`
+>   §5.15 新增约定——跨批次对比的实际发现应记入 CHANGELOG 或
+>   `docs/failure_analysis.md` 链接区，避免工具长期只有示例无实证。
+> - **十二、文档归档策略（协作项 16）**：`CONTRIBUTING.md` 新增
+>   "文档组织约定" 小节，明确 `docs/history/` 为历史归档（非当前维护
+>   文档，不随版本更新，仅作内部参考），与核心维护文档 / 审查报告
+>   的维护边界。
+> - **十三、新贡献者入门引导（协作项 17）**：`CONTRIBUTING.md` 新增
+>   "适合新贡献者的入门任务" 小节，列出 4 类低门槛任务类型。
+> - **十四、Docker 依赖版本锁定说明（部署项 18）**：`Dockerfile`
+>   补注释——requirements.txt 顶层依赖 == 锁定与 requirements.lock
+>   同步（CI `check_lock_sync.py` 守卫），镜像构建期预安装使用同一
+>   锁定版本，升级依赖需同步改 lock + 重建镜像。
+> - **十五、多进程 LLM 缓存一致性说明（工程项 20）**：
+>   `docs/api_reference.md` 新增"LLM 文件缓存的多进程 / 多线程一致性"
+>   小节——写侧"临时文件 + `os.replace` 原子替换"（临时文件名带
+>   thread ident 后缀，跨线程/跨进程不撞名）+ 读侧损坏时静默降级
+>   重调 LLM（不阻断）+ L1 负缓存进程级可见性（多进程场景 ≤30s TTL
+>   内少量重复 LLM 调用，保守退化可接受）+ 最大化跨进程命中建议
+>   （使用 `--parallel` 多线程模式而非多进程模式）。
+> - **十六、docstring D 规则分阶段处理路线（工程项 9）**：
+>   `docs/code_analysis_report.md` 新增"分阶段处理建议"——阶段 1
+>   先 `ruff check --select D212,D400,D415,D413,D205,D209,D200,D202 --fix`
+>   清除格式类；阶段 2 在 pyproject select 追加 "D"（先可见不阻断）；
+>   阶段 3 按优先级分批补充内容缺失类，逐步清零后全量进 CI 阻断。
+> - **十七、双语文档豁免清单维护约定（协作项 14）**：
+>   `scripts/check_bilingual_docs.py` 的 `_EXEMPT_NO_EN` 补注释——
+>   每季度或重大版本后人工复核豁免清单，升级为核心参考文档的补
+>   英文版配对并移除豁免，过期文档移入 `docs/history/` 归档。
+> - **十八、算法演进路线（算法项 1-4，文档形式）**：
+>   `docs/algorithm_design.md` §3.1 新增"已知局限与演进方向"小节，
+>   给出 4 条建议（均标注默认开关 / 独立开关，保持历史行为不变）：
+>   ① 规则未命中时的轻量语义分类兜底层（复用 5.1 嵌入后端，建议
+>   独立开关 `SEMANTIC_CLASSIFY_ENABLE` 默认 false）；② 位置感知
+>   迭代修复（`POSITION_AWARE_REPAIR_ENABLE`）在 50 任务合成集上
+>   开启对比实验后再评估默认启用；③ 跨文件修复按 import 依赖深度
+>   分层验证（配合更强模型 + 仓库全量源码上下文）；④ 对抗性推理
+>   × 变异测试闭环（`mutation_score_from_details` 得分作为对抗性
+>   推理输入信号，建议独立开关 `MUTATION_FEEDBACK_ENABLE` 默认
+>   false）。
+> - **核实结果（工程项 5 / 7，无需改动）**：脱敏双实现（`api_manager._redact`
+>   / `llm_client._redact_log_text`）已在 0.2 轮次统一委托
+>   `logging_utils.redact_text` 单一实现；`get_status()` 中
+>   `get_healthy_nodes()` 重复调用已在同批次结果复用，当前代码
+>   已无冗余。异常处理模板三处重复（工程项 8）维持低优先级
+>   记录在案（`code_analysis_report.md`），暂不抽取公共函数。
+>
+> 全量测试通过（新增 2 用例）/ ruff 0 告警 / mypy 0 错误。
+
 ## [Unreleased] — 2026-09-28 改进批次扩展（CFG 控制流分析 / 事件总线 / trace 可视化 / ADR / 双语同步检查 / CLI 增强，默认行为不变）
 
 > 本批次推进 P2/P3 改进项，**默认行为不变**：

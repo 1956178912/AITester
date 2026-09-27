@@ -230,6 +230,23 @@ python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir
 python scripts/audit_log_redaction.py
 ```
 
+### 推荐开启项（默认关闭但建议按需启用的能力）
+
+以下开关默认关闭（保证默认行为不变），但对大多数常规使用场景预期收益
+大于成本，建议在正式实验 / 规模化跑基准时评估开启：
+
+| 开关 | 预期收益 | 成本 / 注意事项 |
+|------|---------|----------------|
+| `SEMANTIC_CACHE_ENABLE=true`（5.1 语义级 LLM 缓存） | 相似 prompt（表述不同但语义等价）命中缓存，省 LLM 调用 token | 引入嵌入计算开销；阈值 `SEMANTIC_CACHE_THRESHOLD` 默认 0.92（保守，宁可漏命中） |
+| `COST_BUDGET_ENABLE=true`（5.4 任务级预算硬上限） | 消耗超限时自动停调用，避免免费额度跑飞 | 需同时设置 `COST_BUDGET_LIMIT` 预算值；超限后的调用已发生不可撤销 |
+| `POSITION_AWARE_REPAIR_ENABLE=true`（位置感知迭代修复） | MAX_ITERATIONS 收敛失败中"无法定位根因"类更精准地锁定修复位置 | 开启前建议先在 50 任务合成集上验证修复率增益 |
+| `ADVERSARIAL_DEBUGGING_ENABLE=true`（对抗性推理） | 生成器主动构造易错输入，提升修复方案鲁棒性 | 每任务额外 LLM 调用，成本更高；建议配合变异测试得分作输入信号 |
+
+> **跨文件修复（`CROSS_FILE_ENABLE`）与对抗性推理的说明**：跨文件任务在引擎能力
+> 突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码
+> 上下文，当前不建议默认开启；详见 `docs/failure_analysis.md` 的 SWE-bench 仓库级
+> 验证说明。
+
 ## 配置文件说明
 
 | 文件 | 说明 | Git 状态 |

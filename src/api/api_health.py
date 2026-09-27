@@ -291,6 +291,12 @@ class APIManagerConfig:
     # 默认 0.1 保持历史行为；大节点池（100+）场景可调 0（纯串行排队）或
     # 配合并发探测方案上调。
     batch_health_check_interval: float = 0.1
+    # 批量健康检查并发度（2026-09-28）：批次内节点并发探测的线程数上限。
+    # 默认 1 = 纯串行（逐节点 + 逐节点 sleep，历史行为）；大节点池（100+）
+    # 场景建议调至 4-8，单轮耗时从 O(N × (探测 + sleep)) 降为
+    # O(N / 并发 × 探测)（批间仍保留一次批级 sleep）。并发探测的线程安全
+    # 由 APIHealth 节点级锁保证（check_health 内写入全部原子化）。
+    batch_health_check_concurrency: int = 1
     health_check_timeout: float = 5.0  # 单次健康检查超时（秒）
     # 4.2 半开探测开关（默认 True）：熔断冷却到期后，节点不直接恢复全量路由，
     # 而是先处于"半开"状态，仅允许一次探测请求；探测成功才闭合熔断器，

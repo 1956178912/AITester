@@ -17,6 +17,8 @@
 
 > **状态说明（2026-09-25，SWE-bench 仓库级验证 P0/P1）**：SWE-bench lite-20 仓库级验证（`RepoExecutor`，`REPO_LEVEL_EXECUTION=true`）首轮 0/20 曾被误诊为"LLM 引擎无法产出可应用补丁"（`repo_verification.llm_applied` 全 False）。**根因已修正**——0/20 是数据管道（`instance_code` 缺失）+ 执行环境（单临时文件 executor 装不下仓库级代码 + 全局 python 跨 commit editable 安装污染）+ 补丁管道（`_diff_codes` 用 difflib 手工拼接在"整文件替换"场景产出 corrupt unified diff，`git apply` 全拒）三层缺陷叠加，**非 LLM 引擎能力**。修复（`SWE_BENCH_ENRICHMENT` 注入真实源码 + `RepoExecutor` 仓库级 clone + pip install -e + venv 隔离 + `_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）后，P1 单源任务 0/7 的失败分类为：5/7 `LLM_BREAKS_IMPORT`（LLM 重写破坏 sqlfluff 插件命名契约，`Rule_L*` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`（LLM 未产出修复）——**这才是 LLM 引擎修复质量边界的真实测量**（免费档小模型对真实仓库级代码）。跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文。详见 [experiments/results/experiment_report_20260925.md](../experiments/results/experiment_report_20260925.md) §7 与 [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0。
 
+> **快照更新约定（2026-09-28 新增）**：本文档为历史数据快照，数据不随版本迭代自动刷新。每次重大版本（新错误分类 / 修复策略批次）发布后，应通过 `experiments/analyze_results.py` 在最新 50 任务合成实验上重跑，并将以下三类结果写入 `experiments/results/` 作为新快照（`failure_knowledge_base.json` + 按基线失败原因分布章节 + SWE-bench P1 单源任务最新实测），随后在本节末尾追加一条"状态说明"链接到新快照文件——本文档本身保持为历史基线记录，不就地修改已标注日期的数据。更强模型（GPT-4 级别）的仓库级验证数据（区分"架构能力"与"模型能力"边界）建议单独落 `experiments/results/experiment_report_<date>_repo_level.md`，并在本节追加链接，避免污染免费档小模型基线。
+
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)
 - 基线：AITester (完整系统)

@@ -381,26 +381,51 @@ class APIManager:
             batch_size: 每批检查的节点数，默认使用配置值
         Returns:
             字典 {model_name: is_healthy}
+
+        并发探测（2026-09-28）：batch_health_check_concurrency > 1 时，
+        批次内节点用有界线程池并发探测（上限 = min(并发数, 批大小)），
+        消除 100+ 节点池下逐节点串行排队（每节点 sleep 0.1s → 单轮 10s+）；
+        节点间 sleep 间隔改为"批级"语义（批与批之间 sleep，不再逐节点 sleep），
+        瞬时流量控制由并发数 + 批级间隔共同承担。并发数 = 1（默认）时
+        退回纯串行逐节点 + 逐节点 sleep 的历史行为。
+        线程安全依据：check_health 内的节点状态写入走 APIHealth 节点级锁
+        （_enter_half_open_probe / _record_health_result / _probe_circuit_half_open
+        均为原子化操作），多 worker 并发探测不同节点互不干扰。
         """
         if batch_size is None:
             batch_size = self.config.batch_health_check_size
-        all_results = {}
+        concurrency = max(1, int(getattr(self.config, "batch_health_check_concurrency", 1)))
+        all_results: dict[str, bool] = {}
         # 快照节点池（持锁 list()）：后台线程/其他线程并发 remove_node/add_node
         # 时直接遍历活 dict 会 RuntimeError（dict 变更）；快照后分批语义不变
         with self._lock:
             nodes = list(self.health_nodes.items())
+        checker_stop = self._health_checker.stop_event if self._health_checker else None
         for i in range(0, len(nodes), batch_size):
             batch = nodes[i : i + batch_size]
             # 停止信号检查：stop() 后尽快结束本轮，避免 join 超时后线程仍存活
             # 继续对旧实例发起真实 LLM 探测（消耗配额，_stop_health_checker 依赖）
-            checker_stop = self._health_checker.stop_event if self._health_checker else None
             if checker_stop is not None and checker_stop.is_set():
                 break
             logger.info("正在检查第 %d-%d 个节点...", i + 1, min(i + batch_size, len(nodes)))
-            for name, node in batch:
-                all_results[name] = self.check_health(node)
-                # 节点间短暂间隔避免瞬时流量过大（间隔可经
-                # APIManagerConfig.batch_health_check_interval 配置，默认 0.1s 保持历史行为）
+            if concurrency <= 1:
+                # 串行历史行为：逐节点探测 + 节点间 sleep
+                for name, node in batch:
+                    all_results[name] = self.check_health(node)
+                    if self.config.batch_health_check_interval > 0:
+                        time.sleep(self.config.batch_health_check_interval)
+            else:
+                # 并发模式：有界线程池探测本批节点（check_health 内 sleep 无语义，
+                # 节点间间隔由批级 sleep 承担）
+                from concurrent.futures import ThreadPoolExecutor
+
+                with ThreadPoolExecutor(max_workers=min(concurrency, len(batch))) as pool:
+                    futures = [pool.submit(self.check_health, node) for _, node in batch]
+                    for (name, _node), fut in zip(batch, futures, strict=True):
+                        # futures[i] 与 batch[i] 顺序对齐
+                        all_results[name] = fut.result()
+                # 批级间隔：批间 sleep（替代串行路径的逐节点 sleep），
+                # 瞬时流量由并发数 + 批间隔共同限流
                 if self.config.batch_health_check_interval > 0:
                     time.sleep(self.config.batch_health_check_interval)
         healthy_count = sum(1 for v in all_results.values() if v)

@@ -273,6 +273,31 @@ stats = get_semantic_cache_stats()  # {entries, hits, misses, embed_failures, en
 | `SEMANTIC_CACHE_THRESHOLD` | 0.92 | 余弦相似度阈值（保守：宁可漏命中） |
 | `SEMANTIC_CACHE_MAX_ENTRIES` | 256 | 索引扫描的缓存文件数上限 |
 
+### LLM 文件缓存的多进程 / 多线程一致性（--parallel 与多 worker）
+
+`src/agents/base_agent.py` 的 LLM 文件缓存分两级：进程内 L1（`_lru_store` /
+`_lru_negatives`，内存 dict，仅当前进程可见）+ 文件层（md5 键命名的 JSON
+文件，进程间共享）。**多进程（多个 worker 进程共用同一 `src/cache/` 目录）
+一致性策略（2026-09-28 补充说明）**：
+
+- **写侧**：采用"临时文件 + `os.replace` 原子替换"（与 `cross_file` /
+  `graph.nodes` 的原子写同模式）——并发写入的是逐字节相同的 JSON（缓存键
+  即 prompt 材料 md5，内容确定），原子替换消除"读到半截 JSON"的竞态；
+  临时文件名带 `threading.get_ident()` 后缀，跨线程/跨进程不撞名。
+- **读侧**：若读到损坏 / 半写中的文件（极端时序下另一进程 `os.replace`
+  尚未完成的瞬间），`json.load` 抛错被 `except` 兜住，静默降级为重新调用
+  LLM（不阻断主流程），下一轮读到完整文件后恢复命中。
+- **L1 负缓存**：`_lru_negatives` 记录"该键当前无文件"的时间戳（TTL
+  30s），多进程场景下仅本进程可见——其他进程刚写入的缓存对本进程
+  L1 不可见，本进程可能短期内（≤30s TTL）重复发起 LLM 调用而非立即读
+  到他人写入的新文件。这是**可接受的保守退化**（最坏情况是少量重复
+  token 消耗，不影响正确性），无需跨进程共享 L1（引入共享内存 / IPC
+  的复杂度收益比不划算）。
+- **建议**：大规模 `--parallel`（多进程模式）跑基准时，可预期每个
+  worker 进程前 30s 内的 L1 负缓存命中率偏低；如需最大化跨进程命中，
+  让所有 worker 共享同一进程（即 `--parallel` 的多线程模式）即可，
+  L1 为进程级共享 dict。
+
 ### CodeAnalyzer
 
 AST 代码分析工具，提供精确的代码替换能力。

@@ -41,24 +41,32 @@ _CHECK_FILES = [
 # 核心参考文档（api_reference / failure_analysis / algorithm_design /
 # performance_guide / usage_examples / roadmap / CHANGELOG / QUICKSTART）
 # 必须有英文版配对，否则 fail。
-_EXEMPT_NO_EN = frozenset({
-    "docs/0.7_audit_findings.md",
-    "docs/assessment_2026-09-25_improvement_directions.md",
-    "docs/code_analysis_report.md",
-    "docs/implementation_2026-09-25_improvement_directions.md",
-    "docs/implementation_2026-09-25_p0_batch.md",
-    "docs/log_redaction_audit.md",
-    "docs/review_2026-09-26_round7.md",
-    "docs/review_2026-09-26_round8.md",
-    "docs/review_2026-09-27_round10.md",
-    "docs/review_2026-09-27_round11.md",
-    "docs/review_2026-09-27_round9.md",
-})
+#
+# 维护约定（2026-09-28）：本清单为"非核心文档"判定的一次性快照，随时间
+# 推移清单中的文档可能已演变为被其他文档引用 / 被新贡献者依赖的核心参考。
+# 建议每季度（或每次重大版本发布后）人工复核一次：对清单内每个文件确认
+# "是否仍属于非核心（审查/审计/历史实施记录）"——若已升级为核心参考文档，
+# 补齐英文版配对并从本清单移除；若确认已过期（对应轮次已过、无后续引用），
+# 移入 docs/history/ 归档并从本清单删除（归档后本脚本不再扫描，无需保留
+# 豁免条目）。
+_EXEMPT_NO_EN = frozenset(
+    {
+        "docs/0.7_audit_findings.md",
+        "docs/assessment_2026-09-25_improvement_directions.md",
+        "docs/code_analysis_report.md",
+        "docs/implementation_2026-09-25_improvement_directions.md",
+        "docs/implementation_2026-09-25_p0_batch.md",
+        "docs/log_redaction_audit.md",
+        "docs/review_2026-09-26_round7.md",
+        "docs/review_2026-09-26_round8.md",
+        "docs/review_2026-09-27_round10.md",
+        "docs/review_2026-09-27_round11.md",
+        "docs/review_2026-09-27_round9.md",
+    }
+)
 
 # 日期行匹配（中英文）
-_DATE_RE = re.compile(
-    r"(最后更新|Last\s+updated)[:：]?\s*(\d{4}-\d{2}-\d{2})"
-)
+_DATE_RE = re.compile(r"(最后更新|Last\s+updated)[:：]?\s*(\d{4}-\d{2}-\d{2})")
 
 
 def _find_en_pair(md_path: Path) -> Path | None:

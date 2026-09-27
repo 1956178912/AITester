@@ -132,6 +132,41 @@ Output: 错误类别 e ∈ E
 - `ASSERTION_PATTERNS`：AssertionError、assert 语句、Expected...but got 等
 - `TIMEOUT_PATTERNS`：timeout、TimedOut、Test ran for longer than 等
 
+**已知局限与演进方向（2026-09-28 补充）**：当前分类器为纯规则匹配，
+$O(1)$ 且零 LLM token 消耗，但难以覆盖复杂错误模式（正则未命中的新
+异常组合会落入 `UNKNOWN`，见 `docs/failure_analysis.md` 历史快照：
+UNKNOWN 曾占失败样本 75%）。演进路径建议（按成本递增）：
+
+1. **轻量语义分类兜底层**：在 `refine_failure_category` 判定为
+   `UNKNOWN` 时，调用一个轻量嵌入模型（复用 5.1 `semantic_cache`
+   的嵌入后端，如 CodeBERT / sentence-transformers，均已在依赖中）
+   对拼接文本做语义相似度匹配到 17 类已知类别中相似度最高的
+   类别，相似度 ≥ 阈值（建议 0.6，低于 5.1 缓存的 0.92 保守口径）
+   才采纳，否则仍返回 `UNKNOWN`。该层仅对规则未命中的少量样本
+   生效，额外 LLM/嵌入调用量可控；可通过独立环境变量
+   `SEMANTIC_CLASSIFY_ENABLE`（默认 false，保持历史行为）开关。
+2. **根因定位精度提升**：`POSITION_AWARE_REPAIR_ENABLE`（3.3
+   位置感知迭代修复）当前默认关闭。针对 MAX_ITERATIONS 收敛失败
+   中"无法定位根因"子类（`docs/failure_analysis.md` 记录），
+   建议在 50 任务合成集上开启对比实验验证修复率增益后再评估
+   默认启用；"无法生成有效补丁"子类（补丁语法反复损坏，
+   对应 `PATCH_SYNTAX_INVALID`）建议叠加 2.2 重采样（
+   `PATCH_RESAMPLE_ENABLE`）已验证的收敛路径。
+3. **跨文件修复价值边界验证**（3.5 `CROSS_FILE_ENABLE`）：
+   当前默认关闭且缺乏正向实证（ON/OFF 均 0/N，见
+   `docs/failure_analysis.md`）。建议设计细粒度验证实验：
+   以"跨文件 import 依赖深度"为分层维度（depth=1 直接调用 /
+   depth≥2 传递调用），配合更强模型（GPT-4 级别）+ 仓库全量
+   源码上下文，测量各深度档位的 ON/OFF 修复率差，确认
+   能力边界后再决定默认值。
+4. **对抗性推理 × 变异测试闭环**（3.1 `ADVERSARIAL_DEBUGGING_ENABLE`
+   + 1.2 内置变异测试生成器）：当前两者独立默认关闭。建议将
+   `mutation_score_from_details` 产出的变异得分作为对抗性推理
+   的输入信号——低得分（测试薄弱）时提高对抗性假设强度与
+   采样数量，高得分时缩减额外 LLM 调用，形成"变异 → 发现
+   薄弱点 → 对抗性生成 → 验证"闭环；可通过独立开关
+   `MUTATION_FEEDBACK_ENABLE`（默认 false）实现，避免默认行为变化。
+
 ### 3.2 分层修复策略
 
 每种错误类型 $e \in \mathcal{E}$ 对应唯一的差异化修复策略 $Strat(e)$：
