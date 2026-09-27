@@ -4,6 +4,65 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-27 路线图剩余缺口落地（SWE-bench Pro / CodeBERT / pyright，默认行为不变）
+
+> 本批次补齐 2026-09-27 前十一轮之后路线图核对出的 3 个剩余缺口，
+> **默认行为不变**（新后端 / 新数据集均有独立环境变量开关或同构复用，
+> 缺失依赖时透明保守降级）：
+>
+> - **五、SWE-bench Pro 支持**：`experiments/contamination_check` 抗污染
+>   基准注册表新增 `swe-bench-pro`（强 copyleft 设计，GPT-5 Pass@1 仅
+>   ~23.3%，与 SWE-bench Verified 成对报告）；`src/datasets/dataset_loader`
+>   注册 `swe_bench_pro` / `swebench_pro`（复用 `SWEBenchDataset`，
+>   数据目录经 `data_dir` 注入，与 `swe_rebench` 同构口径）。
+> - **五、CodeBERT 嵌入后端**：`src/utils/embedding_utils` 新增
+>   `codebert` 后端（`transformers.AutoModel` 加载
+>   `Salesforce/codebert-base`，可经 `EMBEDDING_CODEBERT_MODEL` 覆盖；
+>   `auto` 优先级调整为 codebert → sentence_transformers → chromadb；
+>   缺 `transformers`/`torch` 时保守回退，不引入硬依赖）。
+> - **二、pyright 静态类型后端**：`src/tools/type_repair` 新增
+>   `_run_pyright_findings` + `TYPE_CHECK_BACKEND`（默认 `mypy` 口径不变；
+>   `pyright` 时走 pyright CLI / pyright-python，输出疑点 schema 与 mypy
+>   层一致，kind 前缀 `pyright_`；不可用时保守降级为 ast 静态层）。
+>
+> 新增 `tests/test_roadmap_gaps_g1_g2_g3.py`（20 用例：Pro 注册表 /
+> Pro 加载器路由 / CodeBERT 后端降级 / pyright 后端开关与解析）；
+> 修正 `tests/test_dataset_loader.py` 数据集名单同步 + `tests/test_embedding_utils.py`
+> 后端优先级断言。全量 1909 测试通过，ruff / mypy 全绿。
+>
+> 配套核查文档：`docs/roadmap_2026-09-27_gap_audit.md`（路线图 7 节逐项
+> grep/read 核实，证据标注 文件:行号；判定 6 节已落地、第 ⑤ 节 3 个子项
+> 缺口即本批次补齐对象；含英文版 `.en.md`），并在
+> `docs/assessment_2026-09-25_improvement_directions.md` 头部加后续批次
+> 指引。
+
+### 五、SWE-bench Pro 支持
+
+- `experiments/contamination_check.py`：`CONTAMINATION_RESISTANT_BENCHMARKS`
+  注册表新增 `swe-bench-pro` 条目（`display_name` / `resistance_mechanism`
+  含 copyleft 抗污染说明 / `recommended_pairing` = `swe-bench-verified`），
+  `render_resistant_benchmark_section` 自动纳入 Pro 行。
+- `src/datasets/dataset_loader.py`：`load_dataset` 注册 `swe_bench_pro` /
+  `swebench_pro` → `SWEBenchDataset`（字段同构，数据目录经 `data_dir` 注入）；
+  `get_available_datasets` 同步补两个新名字。
+
+### 五、CodeBERT 嵌入后端
+
+- `src/utils/embedding_utils.py`：`_load_backend` 新增 `codebert` 分支
+  （`transformers.AutoModel` + `AutoTokenizer`，`[CLS]` 隐藏状态 L2
+  归一化为语义嵌入，512-token 截断保守约束）；`EMBEDDING_BACKEND=codebert`
+  显式生效，`auto` 优先级 codebert 置顶；`EMBEDDING_CODEBERT_MODEL` 可覆盖
+  默认模型名；缺 `transformers` / `torch` 时透明回退（保持词袋余弦保守口径）。
+
+### 二、pyright 静态类型后端
+
+- `src/tools/type_repair.py`：新增 `_run_pyright_findings`（探测 `pyright`
+  CLI / `pyright-python`，`--outputjson` 解析 + 文本逐行兜底，高置信度规则
+  白名单，kind 前缀 `pyright_`）+ `_static_type_check_backend`（
+  `TYPE_CHECK_BACKEND`，默认 `mypy`）；`type_repair_layer` 按后端选择
+  mypy / pyright 层，pyright 不可用时保守回退 mypy 口径，全失败路径降级
+  为 ast 静态层（不阻断修复主流程）。
+
 ## [Unreleased] — 2026-09-27 第十一轮：错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层（默认行为不变）
 
 > 本批次为 2026-09-27 第十轮全项目审查（commit `a1a06ec`）之后的功能

@@ -97,21 +97,30 @@ class TestEmbedText:
         assert eu.embed_text("   ") is None
 
     def test_backend_name_reflects_available_backend(self, monkeypatch):
-        """chromadb 已安装时 backend_name 应报告 chromadb（真实嵌入可用）。"""
+        """有嵌入库时 backend_name 按优先级报告（codebert > chromadb，真实嵌入可用）。"""
         import src.utils.embedding_utils as eu
 
         eu._backend_initialized = False
         eu._backend_cache = {"instance": None, "name": None}
         monkeypatch.delenv("EMBEDDING_BACKEND", raising=False)
-        try:
-            import chromadb  # noqa: F401
 
-            has_chromadb = True
-        except ImportError:
-            has_chromadb = False
+        def _has(mod: str) -> bool:
+            try:
+                __import__(mod)
+                return True
+            except ImportError:
+                return False
+
+        has_codebert = _has("transformers")
+        has_chromadb = _has("chromadb")
+        has_st = _has("sentence_transformers")
         name = eu.backend_name()
-        if has_chromadb:
+        if has_codebert:
+            assert name == "codebert"
+        elif has_chromadb:
             assert name == "chromadb"
+        elif has_st:
+            assert name == "sentence_transformers"
         else:
             assert name is None
 

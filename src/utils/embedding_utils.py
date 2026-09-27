@@ -9,11 +9,13 @@
 
 设计约束（与 contamination_check 一致：零默认外部依赖、可复算）：
     - 默认行为：embed_text() 按优先级尝试已安装的嵌入后端
-      （sentence-transformers → chromadb DefaultEmbeddingFunction），
-      全部缺失时返回 None；调用方（contamination_check）收到 None 时
-      自动回退 token 词袋余弦，行为与未接入时完全一致。
+      （CodeBERT/transformers → sentence-transformers → chromadb
+      DefaultEmbeddingFunction），全部缺失时返回 None；调用方
+      （contamination_check）收到 None 时自动回退 token 词袋余弦，
+      行为与未接入时完全一致。
     - 显式指定：环境变量 EMBEDDING_BACKEND 可强制选择后端
-      （"sentence_transformers" / "chromadb" / "none"），便于实验对照。
+      （"codebert" / "sentence_transformers" / "chromadb" / "none"），
+      便于实验对照。
     - cosine_similarity() 用 numpy 实现（项目已依赖 numpy），缺失时
       纯 Python 回退，不引入新硬依赖。
 """
@@ -27,12 +29,17 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # 嵌入后端选择（环境变量 EMBEDDING_BACKEND，默认 auto）：
-# - "auto"（默认）：按优先级尝试 sentence-transformers → chromadb，
+# - "auto"（默认）：按优先级尝试 codebert → sentence-transformers → chromadb，
 #   首个可用即采用；都不可用返回 None（调用方回退词袋余弦）。
-# - "sentence_transformers" / "chromadb"：强制指定后端（缺失时报错并回退 None）。
+# - "codebert" / "sentence_transformers" / "chromadb"：强制指定后端（缺失时报错
+#   并回退 None）。
 # - "none"：禁用真实嵌入，强制返回 None（保持词袋余弦保守口径，
 #   用于实验 A/B 对照"真实嵌入 vs 词袋代理"）。
 _EMBEDDING_BACKEND_ENV = "EMBEDDING_BACKEND"
+# CodeBERT 模型名（环境变量 EMBEDDING_CODEBERT_MODEL 可覆盖，默认
+# Salesforce/codebert-base）：2.1 改进要求的"CodeBERT 嵌入余弦"接入点。
+_CODEBERT_MODEL_ENV = "EMBEDDING_CODEBERT_MODEL"
+_CODEBERT_MODEL_DEFAULT = "Salesforce/codebert-base"
 
 # 模块级嵌入后端缓存（避免每次调用重复加载重型模型）
 _backend_cache: dict[str, Any] = {"instance": None, "name": None}
@@ -49,7 +56,7 @@ def _load_backend() -> tuple[str | None, Any]:
 
     Returns:
         (backend_name, embed_fn)；不可用时 (None, None)。
-        backend_name ∈ {"sentence_transformers", "chromadb"}。
+        backend_name ∈ {"codebert", "sentence_transformers", "chromadb"}。
     """
     global _backend_cache, _backend_initialized
     if _backend_initialized:
@@ -59,7 +66,35 @@ def _load_backend() -> tuple[str | None, Any]:
     instance: Any = None
     name: str | None = None
 
-    if choice in ("auto", "sentence_transformers"):
+    # CodeBERT（transformers）：2.1 改进要求的"CodeBERT 嵌入余弦"接入点。
+    # 放在优先级首位（auto 时最先尝试）——CodeBERT 是专为代码建模训练的
+    # 嵌入模型，对污染检测的"语义级相似度"口径最贴合；未装 transformers
+    # 时透明回退到下方通用文本后端（保守降级，不阻断主流程）。
+    if choice in ("auto", "codebert"):
+        try:
+            from transformers import AutoModel, AutoTokenizer  # type: ignore
+
+            _model_name = os.getenv(_CODEBERT_MODEL_ENV, "").strip() or _CODEBERT_MODEL_DEFAULT
+            _tokenizer = AutoTokenizer.from_pretrained(_model_name)
+            _model = AutoModel.from_pretrained(_model_name)
+            _model.eval()
+            instance = {
+                "tokenizer": _tokenizer,
+                "model": _model,
+                "model_name": _model_name,
+            }
+            name = "codebert"
+            logger.info("嵌入后端已加载: codebert(%s)", _model_name)
+        except ImportError:
+            if choice == "codebert":
+                logger.warning("EMBEDDING_BACKEND=codebert 但未安装 transformers，回退 None")
+            instance, name = None, None
+        except Exception as e:
+            if choice == "codebert":
+                logger.warning("CodeBERT 模型加载失败（回退 None）: %s", e)
+            instance, name = None, None
+
+    if instance is None and choice in ("auto", "sentence_transformers"):
         try:
             from sentence_transformers import SentenceTransformer  # type: ignore
 
@@ -97,6 +132,24 @@ def _embed_with_backend(instance: Any, text: str) -> list[float] | None:
         return None
     backend = _backend_cache.get("name")
     try:
+        if backend == "codebert":
+            # CodeBERT（transformers AutoModel）：取 [CLS] 隐藏状态做 L2
+            # 归一化作为代码语义嵌入（与"CodeBERT 嵌入余弦"口径一致）。
+            # 保守约束：输入截断到模型 512 token 上限（长补丁只取前段，
+            # 避免 transformers 抛长输入异常）；推理不启用梯度。
+            _tok = instance["tokenizer"]
+            _mdl = instance["model"]
+            _trunc = _tok(text, truncation=True, max_length=512)
+            try:
+                import torch  # type: ignore
+            except ImportError:
+                # transformers 已装但 torch 运行时缺失（保守降级）
+                return None
+            with torch.no_grad():
+                _out = _mdl(**_trunc)
+            _vec = _out.last_hidden_state[0, 0]  # [CLS] 隐藏状态
+            _vec = _vec / (_vec.norm() + 1e-12)
+            return [float(x) for x in _vec.tolist()]
         if backend == "sentence_transformers":
             vec = instance.encode(text, normalize_embeddings=True)
             return [float(x) for x in vec]
@@ -115,7 +168,7 @@ def embed_text(text: str) -> list[float] | None:
     """返回单条文本/代码的语义嵌入向量（真实嵌入，未接入时 None）。
 
     后端优先级（EMBEDDING_BACKEND=auto 时）：
-        sentence-transformers > chromadb DefaultEmbeddingFunction > None。
+        codebert (transformers) > sentence-transformers > chromadb DefaultEmbeddingFunction > None。
     EMBEDDING_BACKEND=none 时强制返回 None（保持词袋余弦保守口径）。
 
     接入方亦可 monkeypatch 本函数（contamination_check._embed_code 委托到
@@ -142,7 +195,7 @@ def embed_text(text: str) -> list[float] | None:
 
 
 def backend_name() -> str | None:
-    """当前生效的嵌入后端名（sentence_transformers / chromadb）；未接入时 None。
+    """当前生效的嵌入后端名（codebert / sentence_transformers / chromadb）；未接入时 None。
 
     供污染检测报告标注"语义级相似度来源"（真实嵌入 vs 词袋代理）。
     """

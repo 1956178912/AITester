@@ -4,6 +4,77 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-27 Roadmap gap-closing batch (SWE-bench Pro / CodeBERT / pyright, default behavior unchanged)
+
+> This batch closes the 3 remaining roadmap gaps identified after the
+> 2026-09-27 Round 11 audit, **default behavior unchanged** (new
+> backends / datasets each have dedicated env-var switches or reuse an
+> isomorphic loader; missing optional dependencies degrade gracefully):
+>
+> - **V. SWE-bench Pro support**:
+>   `experiments/contamination_check` resistant-benchmark registry gains
+>   `swe-bench-pro` (strong copyleft design, GPT-5 Pass@1 ~23.3%;
+>   report paired with SWE-bench Verified);
+>   `src/datasets/dataset_loader` registers `swe_bench_pro` /
+>   `swebench_pro` (reuses `SWEBenchDataset`, data dir injected via
+>   `data_dir`, same isomorphic convention as `swe_rebench`).
+> - **V. CodeBERT embedding backend**:
+>   `src/utils/embedding_utils` gains a `codebert` backend
+>   (`transformers.AutoModel` loading `Salesforce/codebert-base`,
+>   overridable via `EMBEDDING_CODEBERT_MODEL`; `auto` priority is now
+>   codebert → sentence_transformers → chromadb; conservatively falls
+>   back when `transformers`/`torch` are missing, no new hard deps).
+> - **II. pyright static-type backend**:
+>   `src/tools/type_repair` gains `_run_pyright_findings` +
+>   `TYPE_CHECK_BACKEND` (default `mypy` unchanged; `pyright` probes
+>   the pyright CLI / pyright-python, findings share the mypy schema
+>   with `pyright_` kind prefix; unavailable → conservative fallback
+>   to the ast static layer).
+>
+> New `tests/test_roadmap_gaps_g1_g2_g3.py` (20 cases);
+> synced `tests/test_dataset_loader.py` dataset-name list and
+> `tests/test_embedding_utils.py` backend-priority assertions.
+> Full suite 1909 tests pass, ruff / mypy clean.
+>
+> Companion audit doc: `docs/roadmap_2026-09-27_gap_audit.md`
+> (per-section grep/read verification of the 7-section roadmap,
+> evidence cited as file:line; verdict: 6 sections landed, ⑤ had 3
+> sub-item gaps = this batch's closing targets; English version
+> `.en.md`), plus a follow-up pointer added to the header of
+> `docs/assessment_2026-09-25_improvement_directions.md`.
+
+### V. SWE-bench Pro support
+
+- `experiments/contamination_check.py`: `CONTAMINATION_RESISTANT_BENCHMARKS`
+  registry gains the `swe-bench-pro` entry (`display_name` /
+  `resistance_mechanism` with the copyleft anti-contamination note /
+  `recommended_pairing` = `swe-bench-verified`);
+  `render_resistant_benchmark_section` picks it up automatically.
+- `src/datasets/dataset_loader.py`: `load_dataset` registers
+  `swe_bench_pro` / `swebench_pro` → `SWEBenchDataset` (isomorphic
+  fields, data dir via `data_dir`); `get_available_datasets` updated.
+
+### V. CodeBERT embedding backend
+
+- `src/utils/embedding_utils.py`: `_load_backend` gains a `codebert`
+  branch (`transformers.AutoModel` + `AutoTokenizer`, L2-normalized
+  `[CLS]` hidden state as the semantic embedding, conservative
+  512-token truncation); `EMBEDDING_BACKEND=codebert` now effective,
+  `auto` prioritizes codebert; `EMBEDDING_CODEBERT_MODEL` overrides
+  the default model name; falls back transparently when
+  `transformers` / `torch` are missing.
+
+### II. pyright static-type backend
+
+- `src/tools/type_repair.py`: new `_run_pyright_findings` (probes the
+  `pyright` CLI / `pyright-python`, `--outputjson` parsing with a
+  per-line text fallback, high-confidence rule whitelist, `pyright_`
+  kind prefix) + `_static_type_check_backend`
+  (`TYPE_CHECK_BACKEND`, default `mypy`); `type_repair_layer` picks
+  the mypy / pyright layer per backend, falls back to the mypy
+  convention when pyright is unavailable, and degrades to the ast
+  static layer on all failure paths.
+
 ## [Unreleased] - 2026-09-27 Round 11: Error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer (default behavior unchanged)
 
 > This batch follows the 2026-09-27 Round 10 full-project audit

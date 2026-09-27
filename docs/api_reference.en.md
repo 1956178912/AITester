@@ -582,10 +582,13 @@ dataset = SWEBenchDataset(subset="lite")
 
 # 2.1 Load the SWE-rebench anti-contamination benchmark (field-compatible with SWE-bench; point data_dir at the rebench data directory)
 dataset = load_dataset("swe_rebench", data_dir="/path/to/rebench_data")
+
+# 2.1 Load the SWE-bench Pro anti-contamination benchmark (strong copyleft design, field-compatible; point data_dir at the Pro data directory)
+dataset = load_dataset("swe_bench_pro", data_dir="/path/to/pro_data")
 ```
 
 **Supported dataset names** (the `dataset_map` in `load_dataset`, including aliases):
-`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`. Names not in the list degrade to `InMemoryDataset` (graceful degradation).
+`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `swe_bench_pro` / `swebench_pro` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`. Names not in the list degrade to `InMemoryDataset` (graceful degradation).
 
 **Dataset interface:**
 

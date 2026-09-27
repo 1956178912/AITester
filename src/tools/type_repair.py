@@ -31,6 +31,7 @@ import ast
 import contextlib
 import logging
 import os
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -51,16 +52,31 @@ def _static_type_check_enabled() -> bool:
     """2.1 静态类型检查开关（TYPE_CHECK_ENABLE=true 时启用，默认 false）。
 
     启用后在静态 ast 层（_static_type_findings）之外，额外运行
-    mypy 做"仓库级静态类型分析"——识别 PAGENT 研究中的"类型/数据结构
+    "仓库级静态类型分析"——识别 PAGENT 研究中的"类型/数据结构
     管理错误"（占失败补丁 27.19%）。默认关闭保持历史保守口径；
-    未装 mypy 时透明降级为仅 ast 静态层（不阻断修复主流程）。
+    后端不可用（mypy/pyright 均未装）时透明降级为仅 ast 静态层
+    （不阻断修复主流程）。
 
+    后端选择（TYPE_CHECK_BACKEND 环境变量，默认 "mypy"）：
+    - "mypy"：用 mypy.api 跑仓库级静态类型分析（默认口径）；
+    - "pyright"：用 pyright CLI / pyright-python 做等价分析
+      （mypy 未安装而 pyright 可用时的替代后端；输出疑点 schema
+      与 mypy 层一致，kind 前缀 "pyright_"）。
     与 TYPE_REPAIR_LLM_ENABLE 的关系：TYPE_CHECK_ENABLE 是"静态层"
     （零 LLM token），TYPE_REPAIR_LLM_ENABLE 是"LLM 层"（把疑点交给
-    LLM 推断与修复）。两者可独立开关，也可同时启用（mypy 产出更多
-    疑点，LLM 层修复面更广）。
+    LLM 推断与修复）。两者可独立开关，也可同时启用。
     """
     return os.getenv("TYPE_CHECK_ENABLE", "false").lower() == "true"
+
+
+def _static_type_check_backend() -> str:
+    """2.1 静态类型检查后端选择（TYPE_CHECK_BACKEND，默认 "mypy"）。
+
+    "pyright" 时走 _run_pyright_findings（pyright CLI 探测 + 输出解析，
+    与 mypy 层同 schema，kind 前缀 "pyright_"）；其余取值（含缺省）
+    走 mypy 层（_run_mypy_findings，保持历史口径）。
+    """
+    return os.getenv("TYPE_CHECK_BACKEND", "mypy").strip().lower()
 
 
 def _run_mypy_findings(
@@ -130,7 +146,7 @@ def _run_mypy_findings(
             # 2 = 命令/文件错误（语法不合法等），均保守处理
             _exit_code, _out, _err = mypy.api.run([_tmp_path, "--no-error-summary"])
             # 解析 mypy 输出（格式：path:line:col: error: message [category]）
-            _MYPY_LINE_RE = __import__("re").compile(
+            _MYPY_LINE_RE = re.compile(
                 r"^.+?:?(\d+):\d+: (warning|error): (.+?) \[([a-z-]+)\]$"
             )
             findings: list[dict[str, Any]] = []
@@ -164,7 +180,165 @@ def _run_mypy_findings(
         return []
 
 
-# 静态疑点：每个疑点为 {file, line, message, kind} 的字典。
+# ─── 2.1 pyright 静态类型后端（TYPE_CHECK_BACKEND=pyright 时启用）──────────
+# PAGENT 混合架构的"仓库级静态分析"后端之二：pyright（microsoft 官方
+# 类型检查器，npm 包 / pyright CLI / pyright-python 包均可用）。mypy 未
+# 安装而 pyright 可用时作为替代后端；输出疑点 schema 与 mypy 层一致
+# （{file, line, message, kind}，kind 前缀 "pyright_"），type_repair_layer
+# 的去重/合并口径零变化。
+
+
+def _run_pyright_findings(
+    original_code: str,
+    patched_code: str,
+    file_path: str = "patched_code.py",
+) -> list[dict[str, Any]]:
+    """2.1 pyright 静态类型检查（TYPE_CHECK_ENABLE=true 且
+    TYPE_CHECK_BACKEND=pyright 时启用）。
+
+    探测顺序（保守降级，任一可用即止）：
+    1. `pyright` CLI（PATH 上）；
+    2. `pyright-python` 包（pip 安装的 Python 绑定）。
+    均不可用时返回空列表（保持 ast 静态层口径，不阻断修复主流程）。
+
+    设计约束（与 _run_mypy_findings 同口径）：
+    - 对"补丁后代码"写临时 .py 文件做仓库级静态类型分析；
+    - 仅消费高置信度规则类别（reportMissingModuleSource /
+      reportGeneralTypeIssues / reportArgumentType / reportReturnType /
+      reportAssignmentType / reportInvalidTypeForm 等 error 级规则）；
+    - 每个 finding 的 line 取报告行号（1-based），file 取 "patched"；
+    - 执行异常/超时（60s 上限）时返回空列表（保守）。
+
+    Args:
+        original_code: 原始代码（签名保留，与 mypy 层接口对齐；pyright
+            单文件分析仅消费 patched_code，本参数供未来"两侧对比"扩展）。
+        patched_code: 应用补丁后的代码。
+        file_path: 虚拟文件路径（仅日志用途；实际用临时文件路径）。
+
+    Returns:
+        疑点列表（与 _static_type_findings / _run_mypy_findings 同 schema，
+        kind 前缀 "pyright_"）。
+    """
+    if not _static_type_check_enabled():
+        return []
+    if _static_type_check_backend() != "pyright":
+        return []
+    if not patched_code or not patched_code.strip():
+        return []
+
+    # 高置信度规则白名单（过滤 pyright 的 suggest/information 级低置信度输出）
+    _HIGH_CONFIDENCE_RULES = frozenset(
+        {
+            "reportArgumentType",
+            "reportReturnType",
+            "reportAssignmentType",
+            "reportInvalidTypeForm",
+            "reportGeneralTypeIssues",
+            "reportMissingModuleSource",
+            "reportUnboundVariable",
+            "reportUndefinedVariable",
+            "reportOperatorIssue",
+        }
+    )
+    # pyright 文本输出行格式示例：
+    #   path:line:col - error: message [rule]
+    _re_pyright_line = re.compile(r"^.*?:(\d+):\d+ - (error): (.+?)(?: \[([a-zA-Z-]+)\])?$")
+
+    tmp_path: str | None = None
+    try:
+        import shutil
+        import subprocess
+        import tempfile
+
+        backend_cmd: list[str] | None = None
+        pyright_bin = shutil.which("pyright")
+        if pyright_bin:
+            backend_cmd = [pyright_bin]
+        else:
+            try:
+                import pyright as _pyright_pkg  # type: ignore  # pyright-python
+
+                _pkg_bin = getattr(_pyright_pkg, "pyright", None)
+                if _pkg_bin:
+                    backend_cmd = [str(_pkg_bin)]
+            except ImportError:
+                backend_cmd = None
+        if backend_cmd is None:
+            logger.debug("pyright 不可用（CLI 与 pyright-python 均未装），跳过静态类型检查")
+            return []
+
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as _f:
+            _f.write(patched_code or "")
+            tmp_path = _f.name
+
+        proc = subprocess.run(
+            [
+                *backend_cmd,
+                "--outputjson",
+                "--pythonversion",
+                "3.12",
+                "--",
+                tmp_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        # 解析 JSON 输出：{"version":..., "generalDiagnostics": [...]}
+        import json as _json
+
+        findings: list[dict[str, Any]] = []
+        try:
+            report = _json.loads(proc.stdout or "{}")
+        except _json.JSONDecodeError:
+            # JSON 解析失败 → 退回文本输出逐行解析（--outputjson 缺失时）
+            report = {}
+        diagnostics = report.get("generalDiagnostics") or []
+        if not diagnostics:
+            # 兜底：从 stdout 文本逐行匹配（--outputjson 缺失时）
+            for _line in (proc.stdout or "").splitlines():
+                _m = _re_pyright_line.match(_line)
+                if not _m:
+                    continue
+                findings.append(
+                    {
+                        "file": "patched",
+                        "line": int(_m.group(1)),
+                        "message": f"pyright: {_m.group(3).strip()}",
+                        "kind": "pyright_error",
+                    }
+                )
+        for d in diagnostics:
+            if d.get("severity") != "error":
+                continue
+            rule = str(d.get("rule", ""))
+            if rule and rule not in _HIGH_CONFIDENCE_RULES:
+                continue
+            _rng = d.get("range") or {}
+            _start = _rng.get("start") or {}
+            _line_no = int(_start.get("line", 0)) + 1  # 0-based → 1-based
+            _msg = str(d.get("message", "")).strip()
+            findings.append(
+                {
+                    "file": "patched",
+                    "line": _line_no,
+                    "message": f"pyright[{rule or 'error'}]: {_msg}",
+                    "kind": f"pyright_{rule.replace('-', '_')}" if rule else "pyright_error",
+                }
+            )
+        return findings
+    except Exception as e:
+        logger.debug("pyright 静态检查异常（保守降级为 ast 层）: %s", e)
+        return []
+    finally:
+        if tmp_path:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+
+
+# ─── 静态疑点：每个疑点为 {file, line, message, kind} 的字典。
 # kind 取值（与 PAGENT 类型故障分类对齐的保守子集）：
 #   - type_mismatch:  变量在同一作用域被重新赋值为明显不同类型
 #   - container_mixed: 同一变量先被初始化为 list/dict/set 又被赋为标量
@@ -515,18 +689,29 @@ def type_repair_layer(
          "repaired": bool, "contract_ok": bool, "missing_symbols": [缺失符号]}
         任何失败路径都不抛异常，保守降级为"未修订 + 疑点记录"。
 
-    静态层来源（2.1 改进，TYPE_CHECK_ENABLE=true 时启用 mypy）：
+    静态层来源（2.1 改进，TYPE_CHECK_ENABLE=true 时启用仓库级静态类型分析）：
     - ast 层：_static_type_findings（保守启发式，零外部依赖）；
-    - mypy 层：_run_mypy_findings（仓库级静态类型分析，识别 PAGENT
-      研究中的"类型/数据结构管理错误"占失败补丁 27.19%）；
-    两层产出合并（去重：同 file+line+kind 保留一条），mypy 层未启用
-    或未安装时仅保留 ast 层（保持历史保守口径不变）。
+    - 静态类型分析层：_run_mypy_findings（TYPE_CHECK_BACKEND=mypy，默认口径）
+      或 _run_pyright_findings（TYPE_CHECK_BACKEND=pyright，mypy 未装时的
+      替代后端）；两层产出识别 PAGENT 研究中的"类型/数据结构管理错误"
+      （占失败补丁 27.19%），与 ast 层合并（去重：同 file+line+kind 保留
+      一条）；后端未启用或不可用时仅保留 ast 层（保持历史保守口径不变）。
     """
     findings = _static_type_findings(original_code, patched_code)
-    # 2.1 mypy 静态层（TYPE_CHECK_ENABLE=true 且 mypy 已安装时生效）
-    _mypy_findings = _run_mypy_findings(original_code, patched_code)
+    # 2.1 静态类型分析层（TYPE_CHECK_ENABLE=true 时生效；后端由
+    # TYPE_CHECK_BACKEND 选择：pyright 优先探测，不可用/未指定时回退 mypy 口径）
+    _checker_findings: list[dict[str, Any]] = []
+    if _static_type_check_backend() == "pyright":
+        _checker_findings = _run_pyright_findings(original_code, patched_code)
+        if not _checker_findings:
+            # pyright 不可用（CLI/包均未装）时保守回退 mypy 口径，
+            # 保持 TYPE_CHECK_ENABLE=true 的"仓库级静态分析"语义不丢失
+            _checker_findings = _run_mypy_findings(original_code, patched_code)
+    else:
+        _checker_findings = _run_mypy_findings(original_code, patched_code)
+    _mypy_findings = _checker_findings  # 保留历史变量名（结果 dict 的 mypy_findings_count 键口径不变）
     if _mypy_findings:
-        # 去重：同 file+line+kind 只保留一条（ast 层优先，mypy 层补充）
+        # 去重：同 file+line+kind 只保留一条（ast 层优先，mypy/pyright 层补充）
         _existing_keys = {(f.get("file"), f.get("line", 0), f.get("kind")) for f in findings}
         _new_findings = [
             f for f in _mypy_findings
@@ -534,7 +719,8 @@ def type_repair_layer(
         ]
         findings.extend(_new_findings)
         logger.debug(
-            "2.1 mypy 静态层补充 %d 条类型疑点（总 %d 条）",
+            "2.1 静态类型层（%s 后端）补充 %d 条类型疑点（总 %d 条）",
+            "pyright" if _static_type_check_backend() == "pyright" else "mypy",
             len(_new_findings),
             len(findings),
         )

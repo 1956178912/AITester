@@ -170,7 +170,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 - [x] ~~添加失败案例学习和知识沉淀机制~~ → 已实现：5.3 失败根因三大类（`llm_capability` / `dependency` / `framework`）+ 结构化失败案例知识库（`failure_knowledge_base.json`）
 - [ ] 优化System Prompt模板
 - [ ] 引入模型选择策略（根据任务复杂度自动选择模型）
-- [x] ~~数据污染风险应对（2.1）~~ → 已实现：SWE-bench 黄金补丁重叠度检测（`experiments/contamination_check.py`，high ≥ 0.85 / medium ≥ 0.6）+ SWE-rebench 抗污染基准支持（`load_dataset("swe_rebench")`），分析报告自动标注疑似污染任务
+- [x] ~~数据污染风险应对（2.1）~~ → 已实现：SWE-bench 黄金补丁重叠度检测（`experiments/contamination_check.py`，high ≥ 0.85 / medium ≥ 0.6）+ SWE-rebench 抗污染基准支持（`load_dataset("swe_rebench")`）+ SWE-bench Pro 抗污染基准支持（`load_dataset("swe_bench_pro")`，强 copyleft 设计），分析报告自动标注疑似污染任务
 - [x] ~~任务难度分层分析（2.2）~~ → 已实现：按 code_size / dependency_count / complexity_proxy 三维度分层（`experiments/difficulty_stratification.py`），定位"系统在什么难度区间能力衰减"
 - [x] ~~收敛失败模式归因（1.2）~~ → 已实现：`analyze_results.py:_convergence_failure_modes` 对达到 MAX_ITERATIONS 仍未修复的任务，区分"无法定位根因"（诊断反复同义且从未写盘成功）与"无法生成有效补丁"（补丁写盘成功但测试仍失败 / 被安全守卫反复拒绝）
 - [x] ~~边界用例覆盖检测（1.3）~~ → 已实现：`analyze_results.py:_boundary_case_coverage` 对 generated_test 做 AST 保守判定，识别 None / 空字符串 / 空集合 / 0 / -1 / >= / <= 等边界条件，输出各边界类型命中数与覆盖率

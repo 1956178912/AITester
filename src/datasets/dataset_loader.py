@@ -680,6 +680,9 @@ def load_dataset(
         - "swe_bench" 或 "swebench": SWE-bench 数据集
         - "swe_rebench" 或 "swebench_rebench": SWE-rebench 抗污染基准
           （2.1 数据污染风险应对：字段与 SWE-bench 同构，仅数据文件不同）
+        - "swe_bench_pro" 或 "swebench_pro": SWE-bench Pro 抗污染基准
+          （强 copyleft 设计 + 高区分度任务，字段与 SWE-bench 同构，
+          数据文件经 AITESTER_SWE_BENCH_PRO_DIR 环境变量指向）
         - "defects4j_python" 或 "d4j_py": Defects4J-Python 数据集
         - "in_memory": 内置示例数据集
         - 其他名称返回 InMemoryDataset（允许 graceful degradation）
@@ -703,6 +706,12 @@ def load_dataset(
         # 环境变量指向 rebench 数据集目录；未配置时加载失败由调用方兜底。
         "swe_rebench": SWEBenchDataset,
         "swebench_rebench": SWEBenchDataset,
+        # 2.1 SWE-bench Pro 抗污染基准（强 copyleft 设计，GPT-5 Pass@1 仅
+        # ~23.3%）：同样共用 SWEBenchDataset 加载器（字段同构），数据文件经
+        # AITESTER_SWE_BENCH_PRO_DIR 环境变量指向 Pro 数据集目录；未配置时
+        # 加载失败由调用方兜底（与 swe_rebench 注册口径一致）。
+        "swe_bench_pro": SWEBenchDataset,
+        "swebench_pro": SWEBenchDataset,
         "defects4j_python": Defects4JPYDataset,
         "d4j_py": Defects4JPYDataset,
         "in_memory": InMemoryDataset,
@@ -740,6 +749,8 @@ def get_available_datasets() -> list[str]:
             "swebench",
             "swe_rebench",
             "swebench_rebench",
+            "swe_bench_pro",
+            "swebench_pro",
             "defects4j_python",
             "d4j_py",
             "in_memory",

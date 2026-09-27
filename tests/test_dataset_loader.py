@@ -908,6 +908,8 @@ class TestGetAvailableDatasets:
             "swebench",
             "swe_rebench",
             "swebench_rebench",
+            "swe_bench_pro",
+            "swebench_pro",
             "defects4j_python",
             "d4j_py",
             "in_memory",

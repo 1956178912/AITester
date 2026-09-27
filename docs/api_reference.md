@@ -581,10 +581,13 @@ dataset = SWEBenchDataset(subset="lite")
 
 # 2.1 加载 SWE-rebench 抗污染基准（与 SWE-bench 字段同构，经 data_dir 指向 rebench 数据目录）
 dataset = load_dataset("swe_rebench", data_dir="/path/to/rebench_data")
+
+# 2.1 加载 SWE-bench Pro 抗污染基准（强 copyleft 设计，字段同构，经 data_dir 指向 Pro 数据目录）
+dataset = load_dataset("swe_bench_pro", data_dir="/path/to/pro_data")
 ```
 
 **支持的数据集名称**（`load_dataset` 的 `dataset_map`，含别名）：
-`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`。未列出的名称降级为 `InMemoryDataset`（graceful degradation）。
+`swe_bench` / `swebench` / `swe_rebench` / `swebench_rebench` / `swe_bench_pro` / `swebench_pro` / `defects4j_python` / `d4j_py` / `in_memory` / `examples` / `synthetic` / `synth`。未列出的名称降级为 `InMemoryDataset`（graceful degradation）。
 
 **数据集接口：**
 

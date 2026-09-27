@@ -521,6 +521,16 @@ CONTAMINATION_RESISTANT_BENCHMARKS: dict[str, dict[str, Any]] = {
         ),
         "recommended_pairing": "swe-bench",
     },
+    "swe-bench-pro": {
+        "display_name": "SWE-bench Pro",
+        "resistance_mechanism": (
+            "通过强 copyleft 许可证与任务筛选设计从源头抵抗数据污染"
+            "（训练语料难以合法覆盖其任务分布），对前沿模型区分度显著更高"
+            "（GPT-5 在其上 Pass@1 仅约 23.3%）；适合作为高难度、抗污染的"
+            "主基准口径，与 SWE-bench Verified（高污染风险）成对报告。"
+        ),
+        "recommended_pairing": "swe-bench-verified",
+    },
 }
 
 
