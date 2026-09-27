@@ -431,14 +431,15 @@ class TestExecutorRepoTempFileIsolation:
         def fake_remove(p: str) -> None:
             captured_paths.append(p)
 
-        with patch("src.agents.executor_repo._run", return_value=_R()), patch(
-            "src.agents.executor_repo.os.remove", side_effect=fake_remove
+        with (
+            patch("src.agents.executor_repo._run", return_value=_R()),
+            patch("src.agents.executor_repo.os.remove", side_effect=fake_remove),
         ):
             ex._apply_llm_patch("/tmp/aitester_test_repo", unified_patch)
         assert len(captured_paths) == 1
-        assert os.path.basename(captured_paths[0]).endswith(
-            f"_{os.getpid()}_{threading.get_ident()}.patch"
-        ), f"patch 文件路径应按 (pid, thread) 隔离: {captured_paths[0]}"
+        assert os.path.basename(captured_paths[0]).endswith(f"_{os.getpid()}_{threading.get_ident()}.patch"), (
+            f"patch 文件路径应按 (pid, thread) 隔离: {captured_paths[0]}"
+        )
 
 
 # ─── 7. base_agent 死代码清理（src/agents/base_agent.py） ───
@@ -524,7 +525,7 @@ class TestNoRegression:
 
 
 class TestWorkflowRepairInvalidBranchOrder:
-    """"_should_debug：_recent_repairs_invalid 早退仅早期迭代生效，
+    """ "_should_debug：_recent_repairs_invalid 早退仅早期迭代生效，
     最后一轮（iteration >= max）由迭代上限分支统一决策——连续修复无效的
     典型场景不再遮蔽"关键词命中 → 一次 regenerate 机会"。"""
 
@@ -581,28 +582,20 @@ class TestRouteAfterDiagnosisCap:
     def test_test_defect_within_cap_regenerate(self) -> None:
         import src.graph.workflow as w
 
-        assert (
-            w._route_after_diagnosis({"defect_type": "test_defect", "regeneration_count": 0})
-            == "regenerate"
-        )  # type: ignore[arg-type]
+        assert w._route_after_diagnosis({"defect_type": "test_defect", "regeneration_count": 0}) == "regenerate"  # type: ignore[arg-type]
 
     def test_test_defect_at_cap_done(self) -> None:
         import src.graph.workflow as w
 
         assert (
-            w._route_after_diagnosis(
-                {"defect_type": "test_defect", "regeneration_count": w._MAX_REGENERATIONS}
-            )
+            w._route_after_diagnosis({"defect_type": "test_defect", "regeneration_count": w._MAX_REGENERATIONS})
             == "done"
         )  # type: ignore[arg-type]
 
     def test_implementation_defect_still_debug(self) -> None:
         import src.graph.workflow as w
 
-        assert (
-            w._route_after_diagnosis({"defect_type": "implementation_defect", "regeneration_count": 99})
-            == "debug"
-        )  # type: ignore[arg-type]
+        assert w._route_after_diagnosis({"defect_type": "implementation_defect", "regeneration_count": 99}) == "debug"  # type: ignore[arg-type]
 
 
 class TestExtractJsonObjectLeafRegression:
@@ -783,8 +776,7 @@ class TestDependencyCachePersistToctou:
         # 锁内二次确认段含读操作（防 TOCTOU 的关键：读在锁内）
         read_in_lock = lock_body.count("_venv_cache_last_persist_at")
         assert read_in_lock >= 2, (
-            f"锁内段应含 _venv_cache_last_persist_at 读+写（实际 {read_in_lock} 次），"
-            "读操作须在锁保护范围内"
+            f"锁内段应含 _venv_cache_last_persist_at 读+写（实际 {read_in_lock} 次），读操作须在锁保护范围内"
         )
 
 

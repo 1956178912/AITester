@@ -156,10 +156,12 @@ class TestExecutorRuntimeTimeoutKeepsPriorOutput:
         def fake_run(*args, **kwargs):
             calls["n"] += 1
             if calls["n"] == 1:
+
                 class R:
                     stdout = "first-fail-output"
                     stderr = ""
                     returncode = 1
+
                 return R()
             raise subprocess.TimeoutExpired(cmd=["pytest"], timeout=1, output="partial")
 
@@ -403,7 +405,12 @@ class TestConvergenceSafeNumeric:
             {
                 "task_id": "t1",
                 "execution_trace": [
-                    {"round": 0, "passed": False, "coverage": "bad", "reward_signals": {"correctness": "x", "efficiency": 0.5}},
+                    {
+                        "round": 0,
+                        "passed": False,
+                        "coverage": "bad",
+                        "reward_signals": {"correctness": "x", "efficiency": 0.5},
+                    },
                     {"round": 1, "passed": True, "coverage": 0.8, "reward_signals": {"correctness": {"bad": 1}}},
                 ],
             }
@@ -424,7 +431,10 @@ class TestRagAnalysisNonDictElements:
         from experiments.analysis_parts.rag_analysis import _rag_by_kind_from_details
 
         details = [
-            {"task_id": "t1", "rag_stats": [{"kind": "test_cases", "results": 1, "max_similarity": 0.5}, "str-element", 42]},
+            {
+                "task_id": "t1",
+                "rag_stats": [{"kind": "test_cases", "results": 1, "max_similarity": 0.5}, "str-element", 42],
+            },
         ]
         r = _rag_by_kind_from_details(details)
         assert r.get("test_cases", {}).get("retrievals") == 1
@@ -451,7 +461,13 @@ class TestRagAnalysisNonDictElements:
         from experiments.analysis_parts.rag_analysis import _rag_token_efficiency
 
         details = [
-            {"task_id": "t1", "passed": False, "rag_stats": [{"results": 1}], "iterations": "abc", "token_usage": {"total_tokens": "x"}},
+            {
+                "task_id": "t1",
+                "passed": False,
+                "rag_stats": [{"results": 1}],
+                "iterations": "abc",
+                "token_usage": {"total_tokens": "x"},
+            },
             {"task_id": "t2", "passed": False, "iterations": None, "token_usage": None},
         ]
         r = _rag_token_efficiency(details)

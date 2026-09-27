@@ -35,13 +35,7 @@ class TestMutationModuleNameAlignment:
     def test_infer_skips_stdlib_first(self):
         from experiments.mutation_testing import _infer_imported_module_name
 
-        test_code = (
-            "import os\n"
-            "from mymodule import calc\n"
-            "\n"
-            "def test_x():\n"
-            "    assert calc() == 1\n"
-        )
+        test_code = "import os\nfrom mymodule import calc\n\ndef test_x():\n    assert calc() == 1\n"
         assert _infer_imported_module_name(test_code) == "mymodule"
 
     def test_infer_fallback_when_no_import(self):

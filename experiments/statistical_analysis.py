@@ -125,8 +125,7 @@ def _pair_by_task(
     dup_b = sum(1 for r in results_b if r.get("task_id") and r.get("task_id") in pass_b) - n_b
     if dup_a > 0 or dup_b > 0:
         _logger.warning(
-            "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 首见优先），"
-            "建议检查是否存在跨批次重复运行",
+            "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 首见优先），建议检查是否存在跨批次重复运行",
             dup_a,
             dup_b,
         )

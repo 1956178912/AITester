@@ -301,7 +301,8 @@ def cross_batch_comparison(
         # 形态的"末批出现"被 cat_series[-1] > cat_series[-2] 判为"恶化"，
         # 与新类别章节重复列示同一类别 → 渲染层"恶化"与"新增"混淆）
         regressed = [
-            c for c in cat_series
+            c
+            for c in cat_series
             if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2] and c not in new_cats
         ]
     else:

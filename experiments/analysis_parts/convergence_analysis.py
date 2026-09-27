@@ -927,9 +927,7 @@ def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
         识别到问题所在）
     - 两者皆命中时归"无法生成有效补丁"（更具体，便于定位）
     """
-    converged_failed = [
-        r for r in details if not r.get("passed") and _safe_int(r.get("iterations", 0) or 0) >= 3
-    ]
+    converged_failed = [r for r in details if not r.get("passed") and _safe_int(r.get("iterations", 0) or 0) >= 3]
     root_cause_stuck = 0
     patch_stuck = 0
     tasks_stuck: list[str] = []

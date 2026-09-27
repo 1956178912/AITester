@@ -437,9 +437,7 @@ def _collect_ingredient_segments(
                 dec_start = callee_start
                 for dec in getattr(callee, "decorator_list", []) or []:
                     dec_start = min(dec_start, getattr(dec, "lineno", dec_start) or dec_start)
-                ingredients["called_signatures"].append(
-                    "\n".join(lines[dec_start - 1 : callee_start])
-                )
+                ingredients["called_signatures"].append("\n".join(lines[dec_start - 1 : callee_start]))
 
     return ingredients
 

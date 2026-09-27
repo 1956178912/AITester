@@ -663,9 +663,7 @@ class APIManager:
         elif self.config.fallback_on_failure:
             time.sleep(5)
 
-    def _handle_api_error(
-        self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False
-    ) -> None:
+    def _handle_api_error(self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False) -> None:
         """处理API错误，根据配置决定是否抛出。
 
         4.2：半开探测窗口内的 API 错误即探测失败，消费一次失败探测（重新开
@@ -681,9 +679,7 @@ class APIManager:
             # fallback 禁用时，记录错误后直接抛出原始异常
             raise
 
-    def _handle_generic_error(
-        self, e: Exception, node: APIHealth, is_half_open_probe: bool = False
-    ) -> None:
+    def _handle_generic_error(self, e: Exception, node: APIHealth, is_half_open_probe: bool = False) -> None:
         """处理通用异常，根据配置决定是否抛出。
 
         4.2：半开探测窗口内的通用异常即探测失败，消费一次失败探测（重新开

@@ -168,7 +168,9 @@ def _route_after_diagnosis(state: AITesterState) -> str:
         # DIAGNOSIS_NODE_ENABLE 路径，默认行为不变）。
         if state.get("regeneration_count", 0) >= _MAX_REGENERATIONS:
             logger.info("双向诊断（三）：已达重新生成上限，结束流程")
-            _trace_node("_route_after_diagnosis", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
+            _trace_node(
+                "_route_after_diagnosis", decision="done", output_summary={"reason": "test_defect_regeneration_cap"}
+            )
             return "done"
         _trace_node("_route_after_diagnosis", decision="regenerate", output_summary={"reason": "diagnosis_test_defect"})
         return "regenerate"

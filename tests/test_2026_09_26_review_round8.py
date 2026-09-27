@@ -50,9 +50,7 @@ class TestLastHealthCheckRemoved:
         # __init__ 源码中不应出现"赋值语句"形态（注释里提及该名字是
         # 文档化的，属预期；只锁定"不再初始化"口径）
         src = inspect.getsource(APIManager.__init__)
-        assert "self._last_health_check" not in src, (
-            "APIManager.__init__ 不应再初始化 self._last_health_check"
-        )
+        assert "self._last_health_check" not in src, "APIManager.__init__ 不应再初始化 self._last_health_check"
 
     def test_test_isolation_no_longer_sets_it(self) -> None:
         # 3 处旧测试初始化（tests/test_api_manager.py L463/507/539）已清理
@@ -214,9 +212,7 @@ class TestDependencyImportableCacheThreadSafety:
                 errors.append(e)
 
         threads = [threading.Thread(target=_probe, args=("os",)) for _ in range(8)]
-        threads += [
-            threading.Thread(target=_probe, args=("definitely_missing_mod_xyz",)) for _ in range(8)
-        ]
+        threads += [threading.Thread(target=_probe, args=("definitely_missing_mod_xyz",)) for _ in range(8)]
         for t in threads:
             t.start()
         for t in threads:
@@ -241,14 +237,9 @@ class TestTypeRepairEmptyCallsRemoved:
 
         from src.tools.type_repair import _collect_assign_types
 
-        func = ast.parse(
-            "def f(x):\n"
-            "    a = 1\n"
-            '    b = "s"\n'
-            "    c = [1, 2]\n"
-            "    d = some_call()\n"
-            "    return a\n"
-        ).body[0]
+        func = ast.parse('def f(x):\n    a = 1\n    b = "s"\n    c = [1, 2]\n    d = some_call()\n    return a\n').body[
+            0
+        ]
         var_hist, _container_hist = _collect_assign_types(func)
         # 字面量口径：int / str / list 命中；调用返回（非常量）不命中
         assert [t for _, t in var_hist.get("a", [])] == ["int"]

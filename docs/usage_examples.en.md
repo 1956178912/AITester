@@ -5,6 +5,7 @@
 > This document provides detailed usage examples to help developers get started with AITester quickly.
 > Last updated: 2026-09-18 (added 1.1 smell-detection enhancement / 1.2 built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache examples)
 > Baseline (post-0.10 deep-audit round, 2026-09-25): full 1667 passed / 0 failed / ruff 0 warnings / mypy 0 errors (58 source files) / 94% coverage (this document's example code unchanged; baseline numbers follow CHANGELOG)
+> Current baseline (post-tenth-batch, 2026-09-27): full 1920 passed / 0 failed / ruff 0 warnings / mypy 0 errors (62 source files) / 94% coverage
 
 ---
 

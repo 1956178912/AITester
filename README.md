@@ -9,15 +9,15 @@
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 1785 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1711 collected） |
-| **单元测试** | ✅ 全量 1785 passed, 0 failed（2026-09-26 第八轮收尾审计后实测 ~29s）；精简环境约 1711 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后 1714 全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
+| **总测试数** | ✅ 1920 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1846 collected） |
+| **单元测试** | ✅ 全量 1920 passed, 0 failed（2026-09-27 第十轮审查后实测 ~31s）；精简环境约 1846 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
+| **代码覆盖率** | 94% 总覆盖（src/；0.10 深度审查修复 4 处 + 新增 2 条回归用例后全绿；核心模块：base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%） |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-26 全面审查与保守优化轮（八轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底 + 第七轮性能热路径深扫（AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则）+ 第八轮收尾审计（lint/format 清零 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则；全量 1785 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-27 全面审查与保守优化轮（十轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底 + 第七轮性能热路径深扫（AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则）+ 第八轮收尾审计（lint/format 清零 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则）+ 第九轮并行子代理深审（P1×4：单函数 import 前缀误判完整文件 / 全候选失败仍写盘劣化 / venv 缓存竞态 / 线程锁 per-dir + P2×10：debugger 坏 JSON 降级 / 异常分支保留最近有效结果 / async def 补丁定位 / 预编译 / convergence 重复计入修正）+ 第十轮全项目 P1/P2 收敛（P1×6：非数值 coverage_delta 崩溃 / 负缓存无上限 / rag 相似度 bins KeyError / 非数值 reward_signals 崩溃 / 跨批次重复 task_id 静默丢弃 / 汇总 None 崩溃 + P2×10：注释/docstring 措辞修正 + TimeoutExpired 快照追加 + 带点模块名 import 修复 + CLI flag 冲突提示 + total_test_count 兜底口径 + 报告 None 渲染 + closure depth 口径 + convergence 安全归一 + regressed 排除 new_categories + 死写删除 + nan 成因区分；全量 1920 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ mypy 全仓 0 错误） |
-| **最近改动** | ✅ 2026-09-26 全面审查与保守优化轮（八轮）：静态检查全绿 + `src/api/api_manager.py` 死代码/线程卫生修复 + `.gitignore` 补全 + 凭证剔除补强 + 并发竞态修复 + CF-3 跨文件修复缺陷修复 + 第五轮 P0（变异测试判定 / API 轮询可复现 / 写盘安全检查）+ 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫（code_context AST 复用 / run_benchmark 双解析合一 / dataset_loader O(1) 索引 / error_classifier 合并文本共享 / 诊断关键词预编译正则 / 半开探测双窗口消除 / helpers O(1) 叶子回退 / 写盘前缀预计算 / zai 域名常量）+ 第八轮收尾审计（ruff lint/format 全仓清零 + 示例文件修复 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则 + 9 条新增回归守卫）；详见 [CHANGELOG](CHANGELOG.md) |
+| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
+| **最近改动** | ✅ 2026-09-27 全面审查与保守优化轮（十轮）：静态检查全绿 + P1 正确性修复（非数值输入崩溃防护 / 负缓存容量上限 / 汇总 None 防护 / 跨批次去重 / import 修复 / CLI 冲突提示）+ P2 健壮性 / 口径 / 注释修正（TimeoutExpired 快照追加 + convergence 安全归一 + regressed 排除 new_categories + 死写删除 + nan 成因区分 + 多模块注释措辞）+ 全仓 format 归一；详见 [CHANGELOG](CHANGELOG.md) |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -72,7 +72,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1785 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1711 个收集）
+# 运行所有单元测试（全量 1920 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1846 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -986,7 +986,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1785 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 1920 个用例；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -996,7 +996,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（74+ 个测试文件，全量 1785 个 pytest 收集用例；精简环境约 1711 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（83 个测试文件，全量 1920 个 pytest 收集用例；精简环境约 1846 收集，src 总覆盖率 94%）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1388,6 +1388,7 @@ python main.py clean-venv-cache --max-size-mb 512
 - [性能调优指南](docs/performance_guide.md)：并发执行、RAG 单例化、超时配置、性能剖析基准
 - [API 参考文档](docs/api_reference.md)：模块接口说明
 - [使用示例](docs/usage_examples.md)：编程接口与 CLI 用法
+- [审查轮次记录](docs/review_2026-09-26_round7.md)：第八至第十一轮审查与保守优化（P1/P2 缺陷修复 + 回归守卫）
 - [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由（默认全关，按需启用）
 - [历史优化记录](docs/history/optimization_plan.md)：归档的历史轮次优化计划与报告（`docs/history/`，非当前维护文档）
 
@@ -1400,6 +1401,53 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### 2026-09-27 第十轮全面审查与保守优化轮
+
+**核心成果**:
+- P1 正确性 / 崩溃修复（6 项）：
+  - `graph/nodes._suggest_iteration_strategy`：非数值 `coverage_delta`（"n/a"/dict 等历史落盘异常值）裸 `float()` 崩溃 → try/except 跳过该条目
+  - `agents/base_agent._lru_store`：负缓存 `_lru_negatives` 无容量上限 → 与正缓存同 `_LRU_MAXSIZE` 上限 FIFO 淘汰
+  - `experiments/analysis_parts/rag_analysis._rag_similarity_distribution`：负 `max_similarity` 致 `bins` 键 KeyError → 下界钳位到 0 + 非数值 `float()` try/except 跳过
+  - `experiments/analysis_parts/convergence_analysis._execution_trace_summary`：非数值 `reward_signals` / `coverage` 裸 `float()` 崩溃 → `contextlib.suppress` 跳过
+  - `experiments/statistical_analysis._pair_by_task`：跨批次重复 `task_id` 旧 dict 推导"末者胜"静默丢弃 → 首见优先去重 + warning 日志
+  - `experiments/run_benchmark` 汇总：裸 `r["iterations"]` / `r["elapsed_seconds"]` 在键存在但值为 None 时崩溃 → `r.get(...) or 0` 防护
+- P2 健壮性 / 口径 / 文档（10 项）：注释措辞修正 + TimeoutExpired 快照追加 + 带点模块名 import 修复 + CLI flag 冲突提示 + total_test_count 兜底口径 + 报告 None 渲染 + closure depth 口径 + convergence 安全归一 + regressed 排除 new_categories + 死写删除 + nan 成因区分 + `cohen_d` docstring 修正
+- 全量 1920 测试通过 / ruff 全仓 0 告警 / mypy 62 源文件 0 错误 / 覆盖率 94%
+
+**验证**: 全量 1920 passed / 0 failed / ruff 全绿 / mypy 全绿 / 覆盖率 94%
+
+### 2026-09-27 第九轮全面审查与保守优化轮
+
+**核心成果**:
+- P1 正确性修复（4 项）：`patch_applier` 单函数 import 前缀误判完整文件 + `multi_candidate` 全候选失败仍写盘 + `dependency` venv 缓存竞态 + `executor_repo` 线程锁 per-dir
+- P2 健壮性修复（10 项）：debugger 坏 JSON 降级 + executor_runtime 异常分支保留最近有效结果 + async def 补丁定位 + generator 预编译 + convergence total_tokens 重复计入修正等
+- 全量 1887 测试通过 / ruff 全仓 0 告警 / mypy 62 源文件 0 错误 / 覆盖率 94%
+
+**验证**: 全量 1887 passed / 0 failed / ruff 全绿 / mypy 全绿 / 覆盖率 94%
+
+### 2026-09-26 全面审查与保守优化轮（八轮）
+
+**核心成果**:
+- 静态检查清零（mypy 4 错 + ruff lint 5 处 + 11 文件格式归一）
+- 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复
+- 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / LLM 缓存原子写 / 单智能体基线写盘安全检查 / 状态 schema 补全
+- 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫 + 第八轮收尾审计
+- 全量 1861 测试通过 / ruff 全仓 0 告警 / mypy 全仓 0 错误 / 覆盖率 94%
+
+**验证**: 全量 1861 passed / 0 failed / ruff 全绿 / mypy 全绿 / 覆盖率 94%
+
+### v0.7 (2026-09-21) — 跨文件二期 + 数据完整性修正
+
+**核心成果**:
+- 3.5 跨文件修复二期：多入口依赖分析（`analyze_multi_entry_deps`，一级展开 + 去重合并）+ 拓扑序补丁应用（`apply_multi_file_patch(deps=...)`，Kahn 算法被调用方先改）+ 修复计划缓存（`build_cross_file_repair_plan_cached`，依赖图指纹落盘）
+- 4.4 依赖缓存一致性修正（`list_venv_cache` getctime→getmtime，跨平台口径对齐）
+- RAG 写锁热路径优化（`_upsert` 清理/容量检查移锁外，写锁内只做 upsert）
+- run_benchmark 静默降级误导归档修正
+- R-01 SWE-bench 补跑探路立项
+- 全量 1627 测试通过 / ruff 全仓 0 告警 / src 覆盖率 94%
+
+**验证**: 全量 1627 passed / 0 failed / ruff 全绿 / 覆盖率 94%
 
 ### v0.1 (2026-09-18) — 首个正式版本
 
@@ -1419,14 +1467,14 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级七类变异体；杀死判定按 pytest 官方退出码精确化，2026-09-26）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1714 个测试用例 / 覆盖率 94% / Ruff 全绿
+- 全量 1459 个测试用例 / 覆盖率 96% / Ruff 全绿
 
 **基准测试**（合成数据集 50 任务，3 基线对比）：
 - AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
 - Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
 - Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
 
-**验证**: 全量 1714 passed / 0 failed / ruff 全绿 / 覆盖率 94%
+**验证**: 全量 1459 passed / 0 failed / ruff 全绿 / 覆盖率 96%
 
 ---
 

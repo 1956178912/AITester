@@ -80,7 +80,11 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
             # 下游丢失第 1 次的真实 pytest 输出（修复线索）——对齐 round9 通用
             # 异常分支的追加口径。单次超时场景 last_output 原为空串，结果不变。
             partial_output = _to_str(e.output) + _to_str(e.stderr)
-            last_output = f"{last_output or ''}\n[timeout attempt {attempt + 1}] {partial_output}" if last_output else partial_output
+            last_output = (
+                f"{last_output or ''}\n[timeout attempt {attempt + 1}] {partial_output}"
+                if last_output
+                else partial_output
+            )
             error_msg = f"测试执行超时（>{self.timeout}s）"
             logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
             error_info = {

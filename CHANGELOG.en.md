@@ -4,7 +4,123 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] - Full-audit & conservative-optimization round (2026-09-26: static-check zeroing + dead-code removal + thread hygiene + project hygiene + perf / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0: mutation-test judging / API-poll reproducibility / atomic cache writes / single-agent baseline write guard + state schema + sixth-batch node-layer routing semantics & robustness + seventh-batch hot-path deep scan: AST-parse reuse / O(1) task index / shared combined text / precompiled keyword regex + eighth-batch closing audit: lint/format zeroing + type-repair contract-reference caliber + state-key propagation + example-file fixes + ninth-batch parallel subagent deep audit: difficulty_level normalization + _should_debug branch order + half-open probe double-count + async def patches + executor_repo temp-file race + tenth-batch repo-wide P1/P2 convergence: JSON leaf-fallback semantic regression + routing branch masking + full-file patch silent fallback + venv cache marker asymmetry + timeout leak + line-number offset + TOCTOU race + eleventh-batch legacy-debt convergence: cost_weight registration ordering + async safety-check rejection + 6 dead-code / ghost-config / thread-race items landed)
+## [Unreleased] - 2026-09-27 Ninth-batch parallel subagent deep-audit + Tenth-batch full-project P1/P2 convergence (default behavior unchanged)
+
+> This round follows the 2026-09-26 six-batch full audit (commit `9526fd0`),
+> consolidating a conservative-optimization batch driven by 4 parallel subagents
+> (agents / tools / cli+reports+config+utils+db / experiments).
+> Default behavior unchanged throughout.
+> Full 1920 tests pass (baseline 1861 + 26 new round-9 regression guards +
+> 33 new round-10 regression guards + companion fixes), zero regressions;
+> ruff / mypy all green (62 source files).
+
+### Ninth-batch parallel subagent deep-audit (default behavior unchanged)
+
+> 4 parallel subagents audited post-round-8 code + main-agent one-by-one
+> reproduction; yielded P1×4 + P2×10 + 26 new regression guards
+> (tests/test_2026_09_26_review_round9.py).
+> Full 1887 tests pass (baseline 1861 + 26 new + 4 companion fixes),
+> zero regressions; ruff / mypy all green.
+
+#### P1 defect fixes (4, regression-guarded)
+
+- `src/tools/patch_applier.py` (P1: single-function import prefix misclassified as full-file mode):
+  A single-function patch with a local import inside the function body, where that local-import line lands within the first 200 characters of the patch text, was misclassified as full-file mode (the first-200-chars check saw an import line). Top-level imports were silently dropped, producing corrupted code with duplicate or missing imports.
+  Now uses `MULTILINE` line-start `^import|^from` probing (`_TOP_IMPORT_RE`), same caliber as `_TOP_DEF_RE` — only true top-level imports (at column 0) trigger the full-file-mode decision; in-body local imports no longer mis-trigger.
+  Default behavior unchanged (normal synchronous-def dataset scenarios unaffected; the misclassified path changes from "silently drop imports" to "correctly identified as single-function patch"). 3 regression guards.
+- `src/tools/multi_candidate.py` (P1: all-candidates-failed still writes degraded code):
+  Under execution-validation mode (`MULTI_CANDIDATE_EXEC_VALIDATE=true`), when all candidate patches have `exec_passed=False` (none passes test validation), the old implementation still returned the "least-bad" candidate and wrote degraded code to the target file — worse than the original code.
+  Now guarded: all-candidates-failed returns `None`, and the caller (`_select_multi_candidate_patch` node) falls back to the single-patch path (no write or write-back original code).
+  Default behavior unchanged (execution-validation mode off by default; normal scenarios unchanged; all-failed scenario changes from "write degraded code" to "conservative rejection"). 3 regression guards.
+- `src/tools/dependency.py` (P1: venv cache race):
+  `create_venv` cache-hit-check + creation sequence (`os.makedirs` + `venv.create` + `pip install`) had no lock. Under `--parallel`, multiple threads creating the same cache directory simultaneously could both determine "cache does not exist" and duplicate creation, or one thread's `pip install` could interleave with another thread's `os.makedirs`, causing race damage.
+  Now uses a per-directory lock (`_get_venv_dir_lock(cache_dir)`); different directories do not block each other; the same directory serializes the cache-check + creation sequence.
+  Default behavior unchanged (single-thread unchanged; concurrent scenario eliminates cache-directory race). 2 regression guards.
+- `src/agents/executor_repo.py` (P1: temp-file contention + setup race):
+  A. `verify()` temp test file name was keyed only on `(commit, pid)`. Under `--parallel` multi-threading with the same pid (multiple threads in one Python process), one thread's `os.remove` could delete another thread's `git apply` in progress on the temp test file.
+  Now adds thread-ident as a third key: `(commit, pid, thread_ident)`, isolating multi-thread.
+  B. `setup()` clone/venv/pip sequence had no lock; `--parallel` concurrent same `env_dir` could duplicate clone + duplicate pip install.
+  Now adds per-env_dir lock (`_get_repo_setup_lock(env_dir)`), re-checking cache inside the lock to avoid duplicate operations.
+  Default behavior unchanged (single-thread unchanged; concurrent scenario eliminates temp-file overwrite + setup duplication). 4 regression guards.
+
+#### P2 changes (10, all default-behavior-unchanged)
+
+- `src/agents/debugger.py`: Two consecutive malformed-JSON responses made `_extract_json` always raise `JSONDecodeError`, crashing the entire Debugger node. Now try/except degrades to empty patch + critic requery same guard.
+- `src/agents/executor_runtime.py`: Generic-exception branch nullified the first-attempt `last_result` (losing the real test output). Now keeps the most-recent valid result; when no valid result exists, returns `(UNAVAILABLE, error_info)` marker, caller handles it via the same branch as EARLY_RETURN.
+- `src/tools/patch_applier.py`: `_find_function_start_line_in_lines` regex lacked the async prefix (async target functions misjudged as not-found). Now adds `(?:async\s+)?` same caliber as `_TOP_DEF_RE`.
+- `src/tools/multi_candidate.py`: `_coverage_trend` crashed on non-numeric `coverage_delta` (e.g. "n/a"). Now try/except skips non-numeric deltas.
+- `src/agents/generator.py`: Per-call `re.compile` replaced with module-level precompiled `_FROM_IMPORT_RE` (pure performance optimization).
+- `experiments/analysis_parts/convergence_analysis.py`: Without per-round details, `total_tokens` was double-counted in each round causing negative deltas. Now each task's total is counted once at its final-reached round; increment taken directly from the current round_tokens (no longer `round_tokens - prev_cumulative` subtraction); `cumulative` accumulates raw `round_tokens`.
+- Experiment files hardening (11 files): `experiments/analyze_failures.py` / `analyze_results.py` / `compare_failures.py` / `contamination_check.py` / `difficulty_stratification.py` / `mutation_testing.py` / `run_benchmark.py` / `statistical_analysis.py` / `visualize_results.py` — non-numeric reward_signals / coverage / difficulty_level fields in various experiment-analysis modules had bare `float()` / `int()` crash points; now unified try/except guards, non-numeric values skipped and not counted into means.
+- `tests/test_debugger.py`: Updated malformed-JSON test case (degradation instead of exception).
+- `tests/test_weak_coverage_modules.py`: Updated generic-exception assertion (UNAVAILABLE marker).
+- `tests/test_2026_09_26_review_round9.py`: 26 new regression-guard cases (covering P1×4 + P2×10 all change points + default-path-unchanged verification).
+
+### Tenth-batch full-project P1/P2 convergence (default behavior unchanged)
+
+> 4 parallel subagents (graph / api / datasets / tools / agents full-domain deep-audit) + main-agent one-by-one reproduction; yielded P1×6 + P2×13 + 33 new regression guards.
+> All changes only converge "silent corruption / semantic regression / unbounded ping-pong / cache invalidation / timeout leak" class defects; normal-path behavior unchanged. Full 1920 tests pass (baseline 1887 + 33 new regression guards), zero regressions; ruff / mypy all green (62 source files).
+
+#### P1 defect fixes (6, regression-guarded)
+
+- `src/graph/nodes.py::_suggest_iteration_strategy` (P1: non-numeric coverage_delta crash):
+  Read `state.get("coverage_delta")` then bare `float(delta)` for iteration-strategy decision. Historical archived results may have `coverage_delta` as "n/a" (string), dict, or other non-numeric anomaly values; bare `float()` crashed the executor node, interrupting the entire workflow.
+  Now try/except skips that entry (caliber: non-numeric delta treated as no-signal, same semantics as None); normal numeric path unchanged. 3 regression guards.
+- `src/agents/base_agent.py::_lru_store` (P1: unbounded negative cache):
+  `_lru_negatives` dict had no capacity cap; long-running benchmarks accumulated negative-cache entries without bound, causing unbounded memory growth.
+  Now capped at the same `_LRU_MAXSIZE` as the positive cache, with FIFO eviction of the oldest negative-cache entries. 3 regression guards.
+- `experiments/analysis_parts/rag_analysis.py::_rag_similarity_distribution` (P1: bins KeyError):
+  When computing bins, `max_similarity` was a negative value (historical archive anomaly); the `bins` dict key calculation overflowed causing KeyError, crashing the entire `build_analysis`.
+  Now lower-bound clamped to 0 (`max(0.0, max_similarity)`) + non-numeric `float()` try/except skip. 3 regression guards.
+- `experiments/analysis_parts/convergence_analysis.py::_execution_trace_summary` (P1: non-numeric crash):
+  Bare `float()` on `reward_signals` / `coverage` fields; "high" / "80%" / dict and other historical anomaly values crashed.
+  Now `contextlib.suppress` skips non-numeric entries (caliber: non-numeric not counted into the mean). 3 regression guards.
+- `experiments/statistical_analysis.py::_pair_by_task` (P1: cross-batch silent drop):
+  Dict-derivation pairing; cross-batch duplicate `task_id` used "last-wins" in the old implementation, silently dropping early-batch entries (sample size truncated and indeterminate), making statistical-analysis results unreliable.
+  Now first-seen dedup + warning log, ensuring sample size is traceable. 3 regression guards.
+- `experiments/run_benchmark.py` summary (P1: None-value crash):
+  Summary phase bare `r["iterations"]` / `r["elapsed_seconds"]` caused KeyError/TypeError crash when keys exist but values are None (historical archives had some tasks not recording these fields).
+  Now `r.get("iterations", 0) or 0` / `r.get("elapsed_seconds", 0) or 0` guard (default semantics: that task was not recorded, contributes 0); `total_time` synchronized. 3 regression guards.
+
+#### P2 changes (13, all default-behavior-unchanged)
+
+- `src/agents/executor_repo.py`: `verify()` flow comment and docstring "git stash" wording changed to the actual implementation "git checkout -- . / clean -fd" (grep confirmed no stash in verify body).
+- `src/agents/executor_runtime.py`: `TimeoutExpired` branch — second timeout no longer overwrites the first valid pytest output; instead appends a `[timeout attempt N]` snapshot (aligned with round-9 generic exception append caliber; single-timeout scenario `last_output` was originally an empty string, result unchanged).
+- `src/agents/generator.py::_fix_import_module`: Dotted-path (pkg.mod) bare substring `code.replace` also mis-edited package-form `from pkg import mod` (leaving corrupted imports). Now uses a module-name-anchored regex (same caliber as `executor_imports`), only replacing the exact `from {wm} import` line start.
+- `src/cli/app.py`: `--verbose + --json` combination: `--json` silences stdout making DEBUG log output impossible; the old implementation silently swallowed the flag conflict. Now explicitly notices that verbose is ineffective in `--json` mode.
+- `src/datasets/dataset_loader.py`: `total_test_count` fallback caliber: old `len(FAIL_TO_PASS)` denominator missed P2P (pass-rate underestimated). Now `len(F2P) + len(P2P)` (SWE-bench official "total = F2P + P2P" semantics); when the official field exists, the official value takes precedence.
+- `src/reports/generator.py`: `error_context` None fields rendered "None" (semantically unclear); now renders "unknown" / "—" (both `to_text` and `to_markdown` formats aligned).
+- `src/tools/code_context.py::_closure_names`: depth=N caliber documented (N levels of called functions; focus itself is level 0; boundary level N+1 function names enter key but are not expanded).
+- `experiments/analysis_parts/convergence_analysis.py`: Module-level `_safe_int` / `_safe_float` helpers + all bare `int()` / `float()` conversion sites (`_repair_convergence_curve` / `_metrics`, `_convergence_token_efficiency` including per-round-detail fallback, `_difficulty_stratified_iterations`, `_quality_proxy_metrics` mean/median, `_convergence_failure_modes`) unified safe normalization (non-numeric falls back to 0).
+- `experiments/analysis_parts/rag_analysis.py`: `_iter_rag_stats` generator skips non-dict elements (historical archive / manual-edit JSON mixed in); 3 call sites updated. `_rag_token_efficiency` `iterations` / `total_tokens` normalized via `_safe_int` / `_safe_float`. `_rag_similarity_distribution` mean over the truncated [0,1] range (consistent with binning).
+- `experiments/compare_failures.py`: `cross_batch_comparison`: `regressed` now excludes `new_categories` (brand-new categories [0,0,1] were simultaneously listed as "regressed" and "new", causing rendering-layer confusion).
+- `experiments/run_benchmark.py`: L701 `results[baseline]["mutation_feedback"]` dead write (L711 `_build_task_result` replaced the entire dict, key disappeared). Dead write removed; only `final_state["mutation_feedback"]` retained (correctly consumed by the next-round Generator in the workflow).
+- `experiments/statistical_analysis.py`: `run_all_statistics` distinguishes two NaN causes (n_pairs < 3 insufficient sample vs all-zero paired differences → zero variance); old text uniformly reported "n<3" causing misdiagnosis. `cohens_d` docstring corrected (n_pairs < 2 actually returns `(nan, n_pairs)` where n_pairs is 0 or 1; old doc claimed it always returns 0).
+- `tests/test_2026_09_27_review_round10.py`: 33 new regression-guard cases (covering P1×6 + P2×13 all change points + default-path-unchanged verification).
+
+#### Verified no-change-needed items (subagent-confirmed)
+
+- `cross_file` topological sort (Kahn + lexicographic) / `from X import *` star-import edge omission (opt-in conservative caliber) / `code_context` same-name class-method conflict (conservative setdefault caliber) / `patch_applier` AST vs regex fallback path consistency / `type_repair` type-family conservative caliber / `multi_candidate` credit default 0.0 defensive writing / `dependency` `_importable_cache` lock-free double-read (idempotent, no damage) / `executor_imports` LRU invalidation (single-task sequential path not triggered) / `llm_client` zai dual-layer retry (deadline fast-fail mechanism pre-existing) — all are design-caliber or opt-in paths, default behavior unchanged, recorded for reference.
+
+#### Deferred items (next round or needs decision)
+
+- `is_similar_module_name` 0.6 threshold misfires on real third-party packages (needs find_spec guard vs raise threshold; decision needed)
+- `patch_applier._TOP_DEF_RE` async prefix inconsistent with "line-start def" docstring (documentation)
+- `credential_scrub` missing multi-vendor API key variants (needs vendor list completion)
+- `config_manager._scan_llm_indices` comment-line interference (pure comment fix, low priority)
+- `embedding_utils` cache DCL race (needs lock, low priority)
+- RAG `_cleanup` capacity-floor double full-table get (performance optimization, low priority)
+- `_RemoveNotTransformer` mainstream slot coverage (edge case, low priority)
+- `analyze_failures` L508 vs L566 input inconsistency (needs caliber verification)
+
+### Repo-wide ruff format normalization (14 files)
+
+> Batch `ruff format` normalization of round-9 / round-10 changed files, covering `experiments/analysis_parts/convergence_analysis.py` / `experiments/compare_failures.py` / `experiments/statistical_analysis.py` / `src/agents/executor_repo.py` / `src/agents/executor_runtime.py` / `src/api/api_manager.py` / `src/graph/workflow.py` / `src/tools/code_analyzer.py` / `src/tools/patch_applier.py` / `src/tools/type_repair.py` / `tests/test_2026_09_26_review_optimizations.py` / `tests/test_2026_09_26_review_round8.py` / `tests/test_2026_09_26_review_round9.py` / `tests/test_2026_09_27_review_round10.py`.
+> Pure format normalization, zero logic changes; full 1920 tests pass / ruff 0 warnings across the repo / mypy 62 source files 0 errors / 94% coverage.
+
+---
+
+## [Unreleased] - Full-audit & conservative-optimization round (2026-09-26: static-check zeroing + dead-code removal + thread hygiene + project hygiene + perf / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0: mutation-test judging / API-poll reproducibility / atomic cache writes / single-agent baseline write guard + state schema + sixth-batch node-layer routing semantics & robustness + seventh-batch hot-path deep scan: AST-parse reuse / O(1) task index + shared combined text + precompiled keyword regex + eighth-batch closing audit: lint/format zeroing + type-repair contract-reference caliber + state-key propagation + example-file fixes + ninth-batch parallel subagent deep audit: difficulty_level normalization + _should_debug branch order + half-open probe double-count + async def patches + executor_repo temp-file race + tenth-batch repo-wide P1/P2 convergence: JSON leaf-fallback semantic regression + routing branch masking + full-file patch silent fallback + venv cache marker asymmetry + timeout leak + line-number offset + TOCTOU race + eleventh-batch legacy-debt convergence: cost_weight registration ordering + async safety-check rejection + 6 dead-code / ghost-config / thread-race items landed)
 
 > Repo-wide code audit and conservative optimization batch (default behavior
 > unchanged): static checks all green, dead-code removal, thread-hygiene fix,

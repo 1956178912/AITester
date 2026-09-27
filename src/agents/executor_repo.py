@@ -98,16 +98,8 @@ def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = No
         # text=True 模式下已捕获部分为 str，mypy 按 bytes|str 联合类型报
         # arg-type，归一为 str；stderr 同口径归一后截尾），退出码 124
         # （GNU timeout 超时常量）
-        stdout_part = (
-            e.stdout
-            if isinstance(e.stdout, str)
-            else ((e.stdout or b"").decode("utf-8", "replace"))
-        )
-        stderr_part = (
-            e.stderr
-            if isinstance(e.stderr, str)
-            else ((e.stderr or b"").decode("utf-8", "replace"))
-        )
+        stdout_part = e.stdout if isinstance(e.stdout, str) else ((e.stdout or b"").decode("utf-8", "replace"))
+        stderr_part = e.stderr if isinstance(e.stderr, str) else ((e.stderr or b"").decode("utf-8", "replace"))
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=124,
@@ -284,7 +276,8 @@ class RepoExecutor:
                                             # 但不清除环境标记（venv 本身可用，走保守路径），
                                             # 由 verify 阶段的 base_not_failing 等信号兜底。
                                             logger.warning(
-                                                "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s", _repoint_err
+                                                "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s",
+                                                _repoint_err,
                                             )
                                 else:
                                     need_install = True

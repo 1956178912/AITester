@@ -4,6 +4,231 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-27 第九轮并行子代理深审 + 第十轮全项目 P1/P2 收敛（默认行为不变）
+
+> 本轮为 2026-09-26 六批次全面审查（commit `9526fd0`）之后，基于 4 路并行子代理
+> （agents / tools / cli+reports+config+utils+db / experiments）深度审查报告
+> 整合的保守优化批次，默认行为不变。
+> 全量 1920 测试通过（基线 1861 + round9 新增 26 回归守卫 + round10 新增 33
+> 回归守卫 + 配套修正），零回归；ruff / mypy 全绿（62 源文件）。
+
+### 第九轮并行子代理深审（默认行为不变）
+
+> 4 路并行子代理对 round8 之后代码深审 + 主代理逐条复现验证；
+> 产出 P1×4 + P2×10 + 新增回归守卫 26 用例（tests/test_2026_09_26_review_round9.py）。
+> 全量 1887 测试通过（基线 1861 + 26 新增 + 4 配套修正），零回归；ruff / mypy 全绿。
+
+#### P1 缺陷修复（4 项，回归测试锁定）
+
+- `src/tools/patch_applier.py`（P1 单函数 import 前缀误判完整文件模式）：
+  单函数补丁若函数体内有局部 import，且该局部 import 行落在补丁文本前 200
+  字符内，旧实现误判为完整文件模式（因前 200 字符包含 import 行），顶层
+  import 被静默丢弃，产出含重复 import 或丢失 import 的损坏代码。
+  现改用 `MULTILINE` 行首 `^import|^from` 探测（`_TOP_IMPORT_RE`），
+  与 `_TOP_DEF_RE` 同口径——仅顶层 import（行首匹配）触发完整文件模式判定，
+  函数体内局部 import 不再误触发。
+  默认行为不变（正常同步 def 数据集场景不受影响；误判路径由"静默丢 import"
+  变"正确识别为单函数补丁"）。回归守卫 3 例。
+- `src/tools/multi_candidate.py`（P1 全候选失败仍写盘劣化）：
+  执行验证模式（`MULTI_CANDIDATE_EXEC_VALIDATE=true`）下，若全部候选补丁的
+  `exec_passed=False`（均无法通过测试验证），旧实现仍返回"最不差"候选写盘——
+  劣化代码被直接写入目标文件，比原始代码更差。
+  现加守卫——全候选失败时返回 `None`，调用方（`_select_multi_candidate_patch`
+  节点）检测到 `None` 后回退单补丁路径（不写盘或写回原代码）。
+  默认行为不变（执行验证模式默认关；正常场景不变；全失败场景由"写盘劣化
+  代码"变"保守拒绝"）。回归守卫 3 例。
+- `src/tools/dependency.py`（P1 venv 缓存竞态）：
+  `create_venv` 的缓存命中检查 + 创建序列（`os.makedirs` + `venv.create` +
+  `pip install`）无锁保护。`--parallel` 下多线程并发创建同一缓存目录时，
+  可能同时判定"缓存不存在"并重复创建，甚至一个线程的 `pip install` 与
+  另一个线程的 `os.makedirs` 交叉导致竞态损坏。
+  现引入 per-dir 锁（`_get_venv_dir_lock(cache_dir)`），不同目录互不阻塞，
+  同一目录串行化缓存检查+创建序列。
+  默认行为不变（单线程不变；并发场景消除缓存目录竞态）。回归守卫 2 例。
+- `src/agents/executor_repo.py`（P1 临时文件竞争 + setup 竞态）：
+  A. `verify()` 临时测试文件名仅按 `(commit, pid)` 键。`--parallel` 多线程
+  同 pid（同一 Python 进程内多线程）并发时，一个线程的 `os.remove` 可能
+  删掉另一个线程正在 `git apply` 的临时测试文件。
+  现加 thread ident 第三键：`(commit, pid, thread_ident)`，隔离多线程。
+  B. `setup()` 的 clone/venv/pip 序列无锁，`--parallel` 并发同 `env_dir`
+  时可能重复 clone + 重复 pip install。
+  现加 per-env_dir 锁（`_get_repo_setup_lock(env_dir)`），锁内重检缓存，
+  避免重复操作。
+  默认行为不变（单线程不变；并发场景消除临时文件覆盖 + setup 重复操作）。
+  回归守卫 4 例。
+
+#### P2 改动（10 项，均默认行为不变）
+
+- `src/agents/debugger.py`：两次坏 JSON 时 `_extract_json` 必抛
+  `JSONDecodeError` 使整个 Debugger 节点崩溃。
+  现 try/except 降级空 patch + critic requery 同守卫。
+- `src/agents/executor_runtime.py`：通用异常分支把第 1 次失败的
+  `last_result` 置 None（丢失真实测试输出）。
+  现保留最近有效结果；无有效结果时返回 `(UNAVAILABLE, error_info)`
+  标记，调用方按 EARLY_RETURN 同分支处理。
+- `src/tools/patch_applier.py`：`_find_function_start_line_in_lines` 正则缺
+  async 前缀（async 目标函数误判未找到）。
+  现补 `(?:async\s+)?` 与 `_TOP_DEF_RE` 同口径。
+- `src/tools/multi_candidate.py`：`_coverage_trend` 对 `coverage_delta`
+  非数值（n/a 等）`float()` 崩溃。现 try/except 跳过非数值 delta。
+- `src/agents/generator.py`：每次调用现场 `re.compile`。
+  现预编译为模块级 `_FROM_IMPORT_RE`，纯性能优化。
+- `experiments/analysis_parts/convergence_analysis.py`：无逐轮明细时
+  `total_tokens` 重复计入各轮导致负增量。
+  现每个任务 total 仅计入其最终到达轮一次；增量按当轮 `round_tokens`
+  直接取值（不再做 `round_tokens - prev_cumulative` 减法），
+  `cumulative` 按原始 `round_tokens` 累加。
+- 实验文件健壮性补强（11 个文件）：`experiments/analyze_failures.py` /
+  `analyze_results.py` / `compare_failures.py` / `contamination_check.py` /
+  `difficulty_stratification.py` / `mutation_testing.py` / `run_benchmark.py` /
+  `statistical_analysis.py` / `visualize_results.py` 各实验分析模块对非数值
+  reward_signals / coverage / difficulty_level 等字段的裸 `float()` / `int()`
+  崩溃点统一加 try/except 防护，非数值值跳过不计入均值。
+- `tests/test_debugger.py`：更新 malformed JSON 用例（降级而非抛异常）。
+- `tests/test_weak_coverage_modules.py`：更新通用异常断言（UNAVAILABLE 标记）。
+- `tests/test_2026_09_26_review_round9.py`：新增 26 用例回归守卫
+  （覆盖 P1×4 + P2×10 全部改动点 + 默认路径不变验证）。
+
+### 第十轮全项目 P1/P2 收敛（默认行为不变）
+
+> 4 路并行子代理（graph / api / datasets / tools / agents 全域深审）+ 主代理
+> 逐条复现验证；产出 P1×6 + P2×13 + 新增回归守卫 33。
+> 全部改动仅收敛"静默损坏 / 语义回归 / 无上限乒乓 / 缓存失效 / 超时穿透"
+> 类缺陷，正常路径行为不变，1920 测试全绿（基线 1887 + 新增 33 回归守卫），
+> 零回归；ruff / mypy 全绿（62 源文件）。
+
+#### P1 缺陷修复（6 项，回归测试锁定）
+
+- `src/graph/nodes.py::_suggest_iteration_strategy`（P1 非数值
+  coverage_delta 崩溃）：
+  读取 `state.get("coverage_delta")` 后裸 `float(delta)` 做迭代策略判定。
+  历史落盘结果中 `coverage_delta` 可能为 "n/a"（字符串）、dict 等非数值
+  异常值，裸 `float()` 崩溃 executor 节点，整条工作流中断。
+  现 try/except 跳过该条目（口径：非数值 delta 视为无信号，与 None 同语义），
+  正常数值路径零变化。回归守卫 3 例。
+- `src/agents/base_agent.py::_lru_store`（P1 负缓存无上限）：
+  `_lru_negatives` dict 无容量上限，长程 benchmark 运行中负缓存条目只增
+  不减，内存无界增长。
+  现与正缓存同 `_LRU_MAXSIZE` 上限，FIFO 淘汰最早插入的负缓存条目。
+  回归守卫 3 例。
+- `experiments/analysis_parts/rag_analysis.py::_rag_similarity_distribution`
+  （P1 bins KeyError）：
+  计算分桶时 `max_similarity` 为负值（历史落盘异常），`bins` 字典键计算
+  越界致 KeyError，崩溃整份 `build_analysis`。
+  现下界钳位到 0（`max(0.0, max_similarity)`）+ 非数值 `float()`
+  try/except 跳过。回归守卫 3 例。
+- `experiments/analysis_parts/convergence_analysis.py::_execution_trace_summary`
+  （P1 非数值崩溃）：
+  对 `reward_signals` / `coverage` 字段裸 `float()` 转换，
+  "high"/"80%"/dict 等历史异常值崩溃。
+  现 `contextlib.suppress` 跳过非数值条目（口径：非数值不计入均值）。
+  回归守卫 3 例。
+- `experiments/statistical_analysis.py::_pair_by_task`（P1 跨批次静默丢弃）：
+  用 dict 推导配对，跨批次重复 `task_id` 时旧实现"末者胜"，
+  早期批次被静默丢弃（样本量被截断且不确定），统计分析结果不可信。
+  现首见优先去重 + warning 日志，确保样本量可追溯。回归守卫 3 例。
+- `experiments/run_benchmark.py` 汇总（P1 None 值崩溃）：
+  汇总阶段裸 `r["iterations"]` / `r["elapsed_seconds"]`，在键存在但值为
+  None 时 KeyError/TypeError 崩溃（历史落盘部分任务未记录这些字段）。
+  现 `r.get("iterations", 0) or 0` / `r.get("elapsed_seconds", 0) or 0`
+  防护（缺省语义：该任务未记录，贡献 0），`total_time` 同步。
+  回归守卫 3 例。
+
+#### P2 改动（13 项，均默认行为不变）
+
+- `src/agents/executor_repo.py`：`verify()` 流程注释与 docstring
+  "git stash" 措辞改为实际实现 "git checkout -- . / clean -fd"
+  （grep 确认 verify 体无 stash）。
+- `src/agents/executor_runtime.py`：`TimeoutExpired` 分支第 2 次超时
+  不再覆盖第 1 次有效 pytest 输出，改为追加 `[timeout attempt N]`
+  快照（对齐 round9 通用异常追加口径；单次超时场景 `last_output`
+  原为空串，结果不变）。
+- `src/agents/generator.py::_fix_import_module`：带点路径（pkg.mod）
+  裸子串 `code.replace` 会把包形式 `from pkg import mod` 也误改
+  （残留损坏导入）。改为按模块名锚定的正则（与 `executor_imports`
+  同口径），仅替换精确匹配的 `from {wm} import` 行首。
+- `src/cli/app.py`：`--verbose + --json` 组合：`--json` 静音 stdout 使
+  DEBUG 日志无法输出，旧实现静默吞掉 flag 冲突。
+  现显式提示 verbose 在 `--json` 模式下不生效。
+- `src/datasets/dataset_loader.py`：`total_test_count` 兜底口径：
+  旧 `len(FAIL_TO_PASS)` 分母漏计 P2P（通过率先被低估）。
+  改为 `len(F2P) + len(P2P)`（SWE-bench 官方 "total = F2P + P2P"
+  语义），官方字段存在时仍以官方值为准。
+- `src/reports/generator.py`：`error_context` None 字段渲染 "None"
+  语义不清，改为渲染 "未知"/"—"（`to_text` 与 `to_markdown`
+  双格式同口径）。
+- `src/tools/code_context.py::_closure_names`：depth=N 口径文档澄清
+  （N 层被调，焦点自身 0 层；边界层 N+1 函数名进 key 但不展开）。
+- `experiments/analysis_parts/convergence_analysis.py`：模块级
+  `_safe_int` / `_safe_float` 辅助 + 所有裸 `int()` / `float()`
+  转换点（`_repair_convergence_curve` / `_metrics`、
+  `_convergence_token_efficiency` 含逐轮明细 fallback、
+  `_difficulty_stratified_iterations`、`_quality_proxy_metrics`
+  均值/中位数、`_convergence_failure_modes`）统一安全归一
+  （非数字回退 0）。
+- `experiments/analysis_parts/rag_analysis.py`：`_iter_rag_stats`
+  生成器跳过非 dict 元素（历史落盘/手动编辑 JSON 混入），
+  3 个调用点更新；`_rag_token_efficiency` `iterations` /
+  `total_tokens` 经 `_safe_int` / `_safe_float` 归一；
+  `_rag_similarity_distribution` 均值按截断后 [0,1] 口径
+  （与分桶一致）。
+- `experiments/compare_failures.py`：`cross_batch_comparison`：
+  `regressed` 排除 `new_categories`（品牌新类别 [0,0,1] 同时被列
+  "恶化"与"新增"导致渲染层混淆）。
+- `experiments/run_benchmark.py`：L701
+  `results[baseline]["mutation_feedback"]` 死写（L711
+  `_build_task_result` 整体替换新 dict，键消失）。
+  删除死写，仅保留 `final_state["mutation_feedback"]`
+  （workflow 下轮 Generator 消费，正确）。
+- `experiments/statistical_analysis.py`：`run_all_statistics` 区分
+  两种 nan 成因（n_pairs < 3 样本量不足 vs 配对差值全 0 零方差），
+  旧文案统一报 "n<3" 误诊。`cohens_d` docstring 修正
+  （n_pairs < 2 实际返回 `(nan, n_pairs)`，旧 doc 声称恒返回 0）。
+- `tests/test_2026_09_27_review_round10.py`：新增 33 用例回归守卫
+  （覆盖 P1×6 + P2×13 全部改动点 + 默认路径不变验证）。
+
+#### 核实后无需修改项（各子代理审查确认）
+
+- `cross_file` 拓扑排序（Kahn + 字典序）/ `from X import *` 星号导入
+  漏边（opt-in 保守口径）/ `code_context` 类方法同名冲突（保守
+  setdefault 口径）/ `patch_applier` AST vs 正则兜底路径一致性 /
+  `type_repair` 类型家族保守口径 / `multi_candidate` credit 默认
+  0.0 防御写法 / `dependency` `_importable_cache` 无锁双读（幂等
+  无损坏）/ `executor_imports` LRU 失效（单任务顺序路径不触发）/
+  `llm_client` zai 双层重试（deadline 快速失败机制既有）——均为
+  设计口径或 opt-in 路径，默认行为不变，留作记录。
+
+#### 延期项（下轮处理或需决策）
+
+- `is_similar_module_name` 0.6 阈值误伤真实第三方包（需 find_spec
+  守卫 vs 提高阈值，需决策）
+- `patch_applier._TOP_DEF_RE` async 前缀与"行首 def" docstring
+  不符（文档化）
+- `credential_scrub` 缺失多厂商 API key 变体（需补全厂商清单）
+- `config_manager._scan_llm_indices` 注释行干扰（纯注释修正，低优）
+- `embedding_utils` 缓存 DCL 竞态（需补锁，低优）
+- RAG `_cleanup` 容量触底双全表 get（性能优化，低优）
+- `_RemoveNotTransformer` 主流 slot 覆盖（边界场景，低优）
+- `analyze_failures` L508 vs L566 输入不一致（需核实口径）
+
+### 全仓 ruff format 归一（14 文件）
+
+> round9 / round10 改动文件批量 `ruff format` 归一，覆盖
+> `experiments/analysis_parts/convergence_analysis.py` /
+> `experiments/compare_failures.py` / `experiments/statistical_analysis.py` /
+> `src/agents/executor_repo.py` / `src/agents/executor_runtime.py` /
+> `src/api/api_manager.py` / `src/graph/workflow.py` /
+> `src/tools/code_analyzer.py` / `src/tools/patch_applier.py` /
+> `src/tools/type_repair.py` /
+> `tests/test_2026_09_26_review_optimizations.py` /
+> `tests/test_2026_09_26_review_round8.py` /
+> `tests/test_2026_09_26_review_round9.py` /
+> `tests/test_2026_09_27_review_round10.py`。
+> 纯格式归一，逻辑零变化；全量 1920 测试通过 / ruff 全仓 0 告警 /
+> mypy 62 源文件 0 错误 / 覆盖率 94%。
+
+---
+
 ## [Unreleased] — 全面审查与保守优化轮（2026-09-26：静态检查清零 + 死代码清理 + 线程卫生 + 项目卫生 + 性能 / 正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试判定 / API 轮询可复现 / 缓存原子写 / 写盘安全检查 / 状态 schema + 第六轮节点层路由语义与鲁棒性 + 第七轮性能热路径深扫：AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则 + 第八轮收尾审计：lint/format 清零 + 类型修复层契约参照口径 + 状态键传播 + 示例文件修复 + 第九轮并行子代理深审：difficulty_level 归一口径 + _should_debug 分支顺序 + 半开探测双计 + async def 补丁 + executor_repo 临时文件竞争 + 第十轮全项目 P1/P2 收敛：JSON 叶子降级语义回归 + 路由分支遮蔽 + 完整文件补丁静默回退 + venv 缓存标记不对称 + 超时穿透 + 行号错位 + TOCTOU 竞态 + 第十一轮遗留债务收敛：cost_weight 注册时序 + async 安全检查误拒 + 死代码 / 幽灵配置 / 线程竞态 6 项落地）
 
 > 全仓代码审查与保守优化批次（默认行为不变）：静态检查全绿、死代码清理、

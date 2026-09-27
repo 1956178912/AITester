@@ -298,6 +298,7 @@ def _static_type_findings(original_code: str, patched_code: str) -> list[dict[st
     # 仅报告"补丁新增"且原代码中不存在、不在局部可见、且不在常见内置名中的引用
     # 使用 builtins 目录 + 少量常用名，避免硬编码子集漏掉 open/abs/iter 等常见内置
     import builtins
+
     _builtin_allow = set(dir(builtins)) | {
         "assert",  # 关键字，非 builtins 成员
         "pytest",  # 测试框架常用入口（非内置，保守放行避免误报）

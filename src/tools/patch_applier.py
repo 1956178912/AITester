@@ -139,10 +139,7 @@ def _find_function_range_ast(original_code: str, func_name: str) -> tuple[int, i
         # async 目标函数（返回 None 走正则兜底路径，但正则不含 async
         # 前缀时 start_idx 恒 None，补丁应用失败）。与 _TOP_DEF_RE /
         # 下方正则定位口径一致。
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == func_name
-        ):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
             # end_lineno 在 Python 3.8+ 恒有（普通 def 与 async def 均在
             # CPython 3.8+ 填充，已用真实 AST 核实；运行期 >=3.12 必然存在，
             # 下方 getattr 回退仅为 mypy 按 stub 的 Optional[int] 签名保留的
@@ -243,8 +240,7 @@ def apply_patch_to_code(
         # （新增函数不构成"误删"，历史口径保留；Step 4b 仅处理"非全文件
         # 模式"的补丁——有 def 的补丁若被判为全文件模式且 subset 通过，
         # 不会落到 Step 4b）。
-        logger.warning("完整文件补丁漏掉原代码函数 %s，保守拒绝应用",
-                       sorted(orig_func_names - patch_func_names))
+        logger.warning("完整文件补丁漏掉原代码函数 %s，保守拒绝应用", sorted(orig_func_names - patch_func_names))
         return original_code, False
 
     # Step 4b: 单函数模式 —— 精确替换目标函数
