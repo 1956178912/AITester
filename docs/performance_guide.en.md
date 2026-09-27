@@ -3,7 +3,12 @@
 # AITester Performance Tuning Guide
 
 > This document describes AITester's performance optimization mechanisms, configuration methods, and common troubleshooting.
-> Last updated: 2026-09-26 (full-review & conservative-optimization round: §10.5 credential-stripping P0 hardening — numbered-variant wildcards + provider intermediate vars, coupled with `config_generator` `PROVIDER_TEMPLATES` keys; the 2026-09-25 0.10 deep-review round (negative-cache TTL / path-whitelist root normalization / trace summary elimination / stat no-rescan) and 0.9 LRU fast-path are in §7.3)
+> Last updated: 2026-09-28 (added "Concurrency & multi-process cache semantics" section: LLM file-cache / semantic-cache consistency
+> strategy and hit-rate boundaries under `--parallel` multi-threaded vs multi-process execution; authoritative details in
+> [api_reference.md](api_reference.md) "LLM file-cache multiprocess / multithread consistency" section; previously the 2026-09-26
+> full-review & conservative-optimization round: §10.5 credential-stripping P0 hardening — numbered-variant wildcards + provider
+> intermediate vars, coupled with `config_generator` `PROVIDER_TEMPLATES` keys; the 2026-09-25 0.10 deep-review round
+> (negative-cache TTL / path-whitelist root normalization / trace summary elimination / stat no-rescan) and 0.9 LRU fast-path are in §7.3)
 
 ---
 
@@ -173,6 +178,58 @@ LLM_2_MODEL_NAME=model-2
 | 100 | ~5000s | ~1300s | 3.8x |
 
 > Actual speedup depends on CPU core count, memory bandwidth, and API rate-limiting conditions.
+
+### 3.5 Concurrency & Multi-Process Cache Semantics (added 2026-09-28)
+
+Consistency strategy for the LLM file cache (`src/cache/`, on by default) and the
+semantic cache (`SEMANTIC_CACHE_ENABLE`) under `--parallel` / `BENCHMARK_PARALLELISM`,
+by execution mode:
+
+**Multi-threaded mode (N threads inside one process — default semantics of `BENCHMARK_PARALLELISM=N`)**
+
+- File cache (md5-keyed JSON files): the write side uses "temp file + `os.replace`
+  atomic replacement" (temp filename suffixed with `threading.get_ident()`, so
+  threads never collide); concurrent writers write byte-identical JSON (the cache
+  key *is* the md5 of the prompt material), so there is no race damage;
+- The in-process L1 positive/negative caches (`_lru_store` / `_lru_negatives`,
+  in-memory dicts) are shared across threads (dict read-modify-write under lock);
+  each thread sees L1 entries others just wrote — cross-thread hits are
+  maximized;
+- Semantic cache: the embedding index is a process-level singleton (lazy DCL
+  double-checked lock); all threads share one index. Hit decisions are cosine
+  similarity (threshold `SEMANTIC_CACHE_THRESHOLD`, default 0.92, conservative);
+  the hit boundary is unchanged across workers (same process, same index).
+
+**Multi-process mode (each worker process maintains its own cache instance)**
+
+- The file layer is shared across processes (the same `src/cache/` directory);
+  atomic replacement on the write side rules out cross-process half-written JSON
+  races; if the read side observes a half-written file in an extreme timing
+  window, the `json.load` error is caught and silently degrades to re-calling
+  the LLM (never blocks the main flow);
+- The in-process L1 negative cache is only visible to its own process: a file
+  cache entry another process just wrote is invisible to this process's L1, so
+  this process may re-issue LLM calls (instead of hitting immediately) for ≤30s
+  TTL — a **conservative degradation to "a small amount of duplicate token
+  spend"; correctness is unaffected** (worst case: hit-rate is low for the
+  first 30s in each worker process; see the full caliber in the
+  [api_reference.md](api_reference.md) "LLM file-cache multiprocess / multithread
+  consistency" section);
+- The semantic-cache index is a process-level singleton: in multi-process mode
+  each worker loads its own embedding index (memory ×N), and hit decisions are
+  independent per process — **no cross-process semantic sharing**. Semantic-level
+  hit gains do not stack across workers; estimate cost with the conservative
+  "single-process hit" caliber.
+
+**Cost-estimation impact**
+
+- In parallel benchmarks the LLM cost accumulator (`token_usage`) is a
+  process-local, thread-local counter (per-task caliber under `--parallel`);
+  in multi-process mode merge the `token_usage` snapshots (`get_usage().as_dict()`)
+  of each worker manually;
+- To maximize cross-process cache hits and reduce duplicate token spend, prefer
+  the multi-threaded mode (`BENCHMARK_PARALLELISM=N` threads inside one process),
+  where L1 is a process-level shared dict.
 
 ---
 

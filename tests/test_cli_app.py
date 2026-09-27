@@ -299,7 +299,7 @@ class TestRunParallelTimeoutAndInterrupt:
         files = self._make_files(tmp_path, n=1)
         seen_timeouts: list[int] = []
 
-        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json):
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, **kwargs):
             seen_timeouts.append(timeout)
             return {"success": True, "file": target_file, "func": "all", "passed": True}
 
@@ -313,7 +313,7 @@ class TestRunParallelTimeoutAndInterrupt:
         files = self._make_files(tmp_path, n=1)
         seen_timeouts: list[int] = []
 
-        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json):
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, **kwargs):
             seen_timeouts.append(timeout)
             return {"success": True, "file": target_file, "func": "all", "passed": True}
 
@@ -337,6 +337,141 @@ class TestRunParallelTimeoutAndInterrupt:
         assert r.exit_code == 1, f"超时任务应计入失败（门控 exit 1），但批次须完成: {r.output}"
         # --json 模式 stdout 静默（_quiet_console_logs），批次完成以 exit code 为准：
         # exit 1 = 有失败但批次跑完；exit 2 = 参数/路径错误（批次未派发）
+
+
+class TestRunDumpTraceOnFailure:
+    """--dump-trace-on-failure 失败诊断出口（默认关零 I/O，开启后失败才写盘）。"""
+
+    def _make_files(self, tmp_path, n: int = 1) -> list[str]:
+        files = []
+        for i in range(n):
+            p = tmp_path / f"m{i}.py"
+            p.write_text(f"def f{i}():\n    return {i}\n", encoding="utf-8")
+            files.append(str(p))
+        return files
+
+    def test_dump_flag_passed_to_run_single_task(self, tmp_path, monkeypatch):
+        """--dump-trace-on-failure 贯通到 _run_single_task 的 dump_trace_on_failure 参数。"""
+        files = self._make_files(tmp_path)
+        seen: dict = {}
+
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, dump_trace_on_failure=False, **kw):
+            seen["dump_trace_on_failure"] = dump_trace_on_failure
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        CliRunner().invoke(cli_app.cli, ["run", *files, "--dump-trace-on-failure", "--json"])
+        assert seen["dump_trace_on_failure"] is True
+
+    def test_default_no_dump(self, tmp_path, monkeypatch):
+        """默认不开 --dump-trace-on-failure → dump_trace_on_failure=False（零 I/O 历史行为）。"""
+        files = self._make_files(tmp_path)
+        seen: dict = {}
+
+        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, dump_trace_on_failure=False, **kw):
+            seen["dump_trace_on_failure"] = dump_trace_on_failure
+            return {"success": True, "file": target_file, "func": "all", "passed": True}
+
+        monkeypatch.setattr(cli_app, "_run_single_task", fake_task)
+        CliRunner().invoke(cli_app.cli, ["run", *files, "--json"])
+        assert seen["dump_trace_on_failure"] is False
+
+    def test_failed_task_with_dump_flag_writes_trace(self, tmp_path, monkeypatch):
+        """开启 --dump-trace-on-failure 且任务失败 → 结果 dict 含 trace_dump_path 字段（写盘成功）。
+
+        直接验证 _run_single_task 的失败分支逻辑（dump_trace_on_failure=True +
+        passed=False → 调 dump_recent_to + 写 trace_dump_path 进 result dict）。
+        """
+        import os as _os
+
+        from src.observability.trace import memory_buffer_snapshot, reset_memory_buffer
+
+        target_file = tmp_path / "mod.py"
+        target_file.write_text("def f():\n    return 1\n", encoding="utf-8")
+        # 注入一条内存快照（模拟任务运行时 end_task_trace 累积）
+        monkeypatch.setenv("TRACE_MEMORY_BUFFER_ENABLE", "true")
+        reset_memory_buffer()
+        memory_buffer_snapshot("test_task", [{"event": "node", "node": "planner", "task": "test_task"}])
+
+        # 桩掉 build_workflow，让工作流返回 test_passed=False
+        fake_graph = _make_fake_workflow_result(test_passed=False)
+        monkeypatch.setattr(cli_app, "build_workflow", lambda: fake_graph)
+
+        result = cli_app._run_single_task(
+            target_file=str(target_file),
+            func=None,
+            max_iterations=1,
+            timeout=30,
+            coverage_threshold=80.0,
+            output_json=True,
+            dump_trace_on_failure=True,
+        )
+        assert result["passed"] is False
+        assert "trace_dump_path" in result, f"失败 + dump 开启应写 trace_dump_path: {result.keys()}"
+        assert "tmp_trace" in result["trace_dump_path"]
+        # 写盘文件确实存在
+        assert _os.path.exists(result["trace_dump_path"])
+
+    def test_passed_task_no_dump_even_with_flag(self, tmp_path, monkeypatch):
+        """任务通过 → 即使开 --dump-trace-on-failure 也不写 trace_dump_path（成功任务无需诊断）。"""
+        from src.observability.trace import memory_buffer_snapshot, reset_memory_buffer
+
+        target_file = tmp_path / "mod.py"
+        target_file.write_text("def f():\n    return 1\n", encoding="utf-8")
+        monkeypatch.setenv("TRACE_MEMORY_BUFFER_ENABLE", "true")
+        reset_memory_buffer()
+        memory_buffer_snapshot("test_task", [{"event": "node", "node": "planner", "task": "test_task"}])
+
+        fake_graph = _make_fake_workflow_result(test_passed=True)
+        monkeypatch.setattr(cli_app, "build_workflow", lambda: fake_graph)
+
+        result = cli_app._run_single_task(
+            target_file=str(target_file),
+            func=None,
+            max_iterations=1,
+            timeout=30,
+            coverage_threshold=80.0,
+            output_json=True,
+            dump_trace_on_failure=True,
+        )
+        assert result["passed"] is True
+        assert "trace_dump_path" not in result, "成功任务不应触发诊断 dump"
+
+    def test_dump_flag_off_failed_task_no_dump(self, tmp_path, monkeypatch):
+        """默认不开 --dump-trace-on-failure → 失败任务也不写 trace_dump_path（零 I/O 历史行为）。"""
+        from src.observability.trace import reset_memory_buffer
+
+        target_file = tmp_path / "mod.py"
+        target_file.write_text("def f():\n    return 1\n", encoding="utf-8")
+        fake_graph = _make_fake_workflow_result(test_passed=False)
+        monkeypatch.setattr(cli_app, "build_workflow", lambda: fake_graph)
+        reset_memory_buffer()
+
+        result = cli_app._run_single_task(
+            target_file=str(target_file),
+            func=None,
+            max_iterations=1,
+            timeout=30,
+            coverage_threshold=80.0,
+            output_json=True,
+            dump_trace_on_failure=False,  # 默认关
+        )
+        assert result["passed"] is False
+        assert "trace_dump_path" not in result, "dump 关闭时失败也不应写 trace_dump_path"
+
+
+def _make_fake_workflow_result(test_passed: bool):
+    """构造一个桩 LangGraph 工作流：invoke 返回 test_passed 控制的 final_state。"""
+
+    class _FakeGraph:
+        def invoke(self, state):
+            # 工作流收尾：把 test_passed 写进 state
+            state["test_passed"] = test_passed
+            state["iteration"] = 1
+            state["diagnosis"] = None
+            return state
+
+    return _FakeGraph()
 
 
 class TestCheckDatasetBoundaries:

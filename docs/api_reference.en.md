@@ -490,6 +490,8 @@ if trace_enabled():
 
 **Key properties:** thread-safe (under `--parallel`, multiple worker threads append to the same JSONL; each single append+flush happens inside the lock); all written text is uniformly passed through `mask_sensitive_info` (the same source as log redaction); a write-to-disk failure never blocks the main flow (it only logs a warning).
 
+**In-memory snapshot buffer (enabled by default, never written to disk):** even when `AITESTER_TRACE_DIR` is unset (file tracing fully no-op), `TraceSession` still accumulates a "minimal node snapshot" (node decisions / tokens / latency) for each task into a process-level ring buffer (capacity 64; disable entirely with `TRACE_MEMORY_BUFFER_ENABLE=false`), so the CLI `--dump-trace-on-failure` flag can write the most recent task snapshots to a temporary JSONL (`./tmp_trace/<ts>_failed_trace.jsonl`) on task failure for diagnostics; when no snapshot is available or the write fails it silently skips (a diagnostics exit, never blocking the main flow). Default behavior is unchanged (no disk I/O, zero cost).
+
 ---
 
 ### TokenUsage
@@ -689,6 +691,37 @@ print(MODEL_NAME)  # Name of the default model (LLM_1)
 | `ModuleNotFoundError` | Imported module does not exist | Check the `module_name` configuration |
 | `SyntaxError` | Generated code has a syntax error | The Debugger will regenerate it |
 | `TimeoutError` | Test execution timeout | Increase `EXECUTION_TIMEOUT` |
+
+---
+
+## Redaction Boundaries & Known Blind Spots
+
+> 4.1 audit scope: redaction is a **bypass observation layer** that never blocks the main flow; this section registers the **capability boundaries** and **known blind spots** of redaction, for users evaluating "is it safe to share logs / traces".
+
+### Covered channels (where redaction applies)
+
+| Channel | Redaction function | Credential replacement | Degradation strategy |
+|------|---------|---------|---------|
+| Console logs (stdout/stderr) | `logging_utils.mask_sensitive_info` + `redact_text` | `<REDACTED_API_KEY>` / `<REDACTED_BEARER>` | Three-tier degradation: ① regex replacement ② on import failure, output raw + warning ③ if the redaction function itself crashes, silently skip |
+| Trace JSONL (`AITESTER_TRACE_DIR`) | same `mask_sensitive_info` (same source; uniformly passed in `TraceSession._append`) | same | serialization failure drops the record + warning; redaction import failure degrades to raw write (never blocks the observation layer) |
+| In-memory snapshot (before `--dump-trace-on-failure` writes to disk) | snapshot records already passed through redaction when entering `TraceSession._append` | same | write failure returns None + warning (diagnostics exit, never blocks the main flow) |
+| `os.environ` process-level credentials | `credential_scrub.scrub_os_environ` | set to empty / placeholder | called before 3 exec paths; import failure silently skips (main flow does not depend on it) |
+| LLM call exception logs | `api_manager._redact` → `redact_text` | same | when exception body echoes request headers / base_url (containing API Key), uniformly redacted |
+
+### Known blind spots (paths redaction does NOT cover)
+
+| Blind spot | Explanation | Mitigation |
+|------|------|------|
+| LLM gateway 401/5xx error body echoing request headers | some openai-compatible SDKs' `str(e)` put `Authorization` or `base_url` (API Key in query-param form) into the exception message; `_redact` already covers the SDK path, but **third-party gateway custom error bodies** (exceptions not raised by the standard openai SDK) may bypass it | when deploying with non-standard gateways, recommend passing the error response body through `redact_text` as well; or use `credential_scrub` to clear `os.environ` before subprocess exec |
+| Custom credentials in `os.environ` with prefixes other than `LLM_N_*` / `GITHUB_*` | the 3 exec paths of `scrub_os_environ` match by prefix (`LLM_N_API_KEY` / `LLM_N_BASE_URL` / `GITHUB_TOKEN` / `GITHUB_REPOSITORY`); user-defined prefixes (e.g. `MY_PROVIDER_API_KEY`) are NOT auto-cleared | manually `del os.environ[...]` for custom prefixes before the exec call; or add to the prefix table in `scrub_os_environ` |
+| Credentials in nested non-str values inside trace meta fields | `TraceSession._append`'s redaction acts on the JSON-serialized full-line text; if `task_meta` nested dict contains an `api_key` key, the serialized form is matched by line-wide regex (covered), but **plaintext appearing in non-key form** (e.g. a meta value that is a whole string containing the Key) depends on regex hit, with possible misses | avoid putting whole credential-bearing text as meta values when constructing `task_meta`; credentials go through `os.environ` (already cleared by `scrub_os_environ`) |
+| Degraded raw output when write fails / redaction import fails | `TraceSession._append`'s redaction import failure "degrades to raw write" (never blocks the observation layer); in extreme scenarios (e.g. `logging_utils` monkeypatched out), credentials may be written to disk raw | degradation path logs a warning; production environments should not monkeypatch `logging_utils` |
+
+### Verification
+
+- `tests/test_trace_observability.py::TestRedaction`: `sk-ws-`-prefixed credentials are replaced with `<REDACTED_API_KEY>` in the trace JSONL.
+- `tests/test_redaction_audit.py` (if present): full-project redaction audit (0.7 audit scope).
+- Manual check: set `AITESTER_TRACE_DIR=/tmp/tr`, run `python main.py run examples/calculator.py --json`, then `grep -r 'sk-ws-' /tmp/tr` should yield 0 hits.
 
 ---
 

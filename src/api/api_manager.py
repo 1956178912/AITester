@@ -110,6 +110,10 @@ class APIManager:
         self._client_cache: dict[str, openai.OpenAI] = {}
         self._lock = threading.Lock()  # 线程安全锁
         self._health_checker: HealthCheckerThread | None = None
+        # 自适应健康检查并发（默认关）：记录最近一轮批量检查的失败率与规模，
+        # 供下轮 _adaptive_concurrency 决策（失败率上升 → 降回串行）
+        self._last_health_batch_failure_rate: float | None = None
+        self._last_health_batch_size: int = 0
         # 初始化所有配置的 LLM
         self._init_clients()
         # 启动后台健康检查线程（可关闭，避免构造副作用：线程会周期性发起真实 API 请求）
@@ -391,10 +395,23 @@ class APIManager:
         线程安全依据：check_health 内的节点状态写入走 APIHealth 节点级锁
         （_enter_half_open_probe / _record_health_result / _probe_circuit_half_open
         均为原子化操作），多 worker 并发探测不同节点互不干扰。
+
+        自适应并发（2026-09-28，adaptive_health_check_concurrency 默认关）：
+        开启时按节点池规模与历史探测延迟动态决定并发度——节点数 >
+        adaptive_health_node_threshold（默认 50）且最近一轮健康检查失败率
+        < adaptive_health_failure_rate_downshift（默认 0.3）时，提升到
+        min(adaptive_health_concurrency_max, 批大小)（默认 8）；失败率
+        上升（≥ 阈值）或节点池偏小则降回串行（并发 = 1）。关闭时并发度
+        恒为静态 batch_health_check_concurrency（历史行为不变）。
         """
         if batch_size is None:
             batch_size = self.config.batch_health_check_size
-        concurrency = max(1, int(getattr(self.config, "batch_health_check_concurrency", 1)))
+        # 自适应并发（默认关）：开时按节点池规模 + 历史失败率动态调整；
+        # 关时退回静态 batch_health_check_concurrency（历史行为不变）
+        if getattr(self.config, "adaptive_health_check_concurrency", False):
+            concurrency = self._adaptive_concurrency(len(self.health_nodes))
+        else:
+            concurrency = max(1, int(getattr(self.config, "batch_health_check_concurrency", 1)))
         all_results: dict[str, bool] = {}
         # 快照节点池（持锁 list()）：后台线程/其他线程并发 remove_node/add_node
         # 时直接遍历活 dict 会 RuntimeError（dict 变更）；快照后分批语义不变
@@ -408,7 +425,8 @@ class APIManager:
             if checker_stop is not None and checker_stop.is_set():
                 break
             logger.info("正在检查第 %d-%d 个节点...", i + 1, min(i + batch_size, len(nodes)))
-            if concurrency <= 1:
+            effective_concurrency = min(concurrency, len(batch))
+            if effective_concurrency <= 1:
                 # 串行历史行为：逐节点探测 + 节点间 sleep
                 for name, node in batch:
                     all_results[name] = self.check_health(node)
@@ -419,7 +437,7 @@ class APIManager:
                 # 节点间间隔由批级 sleep 承担）
                 from concurrent.futures import ThreadPoolExecutor
 
-                with ThreadPoolExecutor(max_workers=min(concurrency, len(batch))) as pool:
+                with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
                     futures = [pool.submit(self.check_health, node) for _, node in batch]
                     for (name, _node), fut in zip(batch, futures, strict=True):
                         # futures[i] 与 batch[i] 顺序对齐
@@ -429,8 +447,46 @@ class APIManager:
                 if self.config.batch_health_check_interval > 0:
                     time.sleep(self.config.batch_health_check_interval)
         healthy_count = sum(1 for v in all_results.values() if v)
-        logger.info("批量健康检查完成: %d/%d 个节点健康", healthy_count, len(all_results))
+        logger.info("批量健康检查完成: %d/%d 个节点健康（并发=%d）", healthy_count, len(all_results), concurrency)
+        # 自适应并发（默认关）：记录本轮失败率供下轮 _adaptive_concurrency 决策；
+        # 失败率上升时降回串行（默认安全 + 按需加速）
+        if getattr(self.config, "adaptive_health_check_concurrency", False) and all_results:
+            failure_rate = (len(all_results) - healthy_count) / len(all_results)
+            with self._lock:
+                self._last_health_batch_failure_rate = failure_rate
+                self._last_health_batch_size = len(all_results)
         return all_results
+
+    def _adaptive_concurrency(self, node_count: int) -> int:
+        """按节点池规模 + 历史失败率计算自适应并发度（默认安全串行，按需加速）。
+
+        策略（保守，默认关不改变历史行为）：
+        - 节点池 < adaptive_health_node_threshold（默认 50）→ 串行（并发 1，
+          小池子串行排队可接受，不值得并发开销）；
+        - 节点池 ≥ 阈值且历史失败率 < adaptive_health_failure_rate_downshift
+          （默认 0.3）→ 并发 = min(adaptive_health_concurrency_max, 节点池)，
+          即保守上界（默认 8）；
+        - 历史失败率 ≥ 阈值（连续超时 / 半开探测失败率上升）→ 降回串行
+          （并发 1），避免把流量反复打回已知不可用 provider；
+        - 无历史数据（首轮）→ 串行（保守起步，下轮再按实测加速）。
+        """
+        cfg = self.config
+        node_threshold = int(getattr(cfg, "adaptive_health_node_threshold", 50))
+        max_concurrency = int(getattr(cfg, "adaptive_health_concurrency_max", 8))
+        failure_downshift = float(getattr(cfg, "adaptive_health_failure_rate_downshift", 0.3))
+        if node_count < node_threshold:
+            return 1
+        # 历史失败率（本实例最近一轮批量检查的失败占比，_lock 保护读写）
+        with self._lock:
+            last_rate = getattr(self, "_last_health_batch_failure_rate", None)
+        if last_rate is None:
+            # 首轮无历史数据：保守起步串行（下轮按实测再加速）
+            return 1
+        if last_rate >= failure_downshift:
+            # 失败率上升（连续超时 / 半开探测失败）：降回串行（默认安全）
+            return 1
+        # 大节点池 + 低失败率：提升到保守上界
+        return max(1, min(max_concurrency, node_count))
 
     def _build_node_list(
         self, model: str | None, complexity_class: str | None = None

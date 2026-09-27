@@ -1029,6 +1029,117 @@ class TestGlobalFunctions:
         print_status_table()
 
 
+def _make_manager(**config_kwargs) -> APIManager:
+    """构造带指定 config 覆盖的 APIManager（禁用后台健康检查线程）。"""
+    from src.api.api_health import APIManagerConfig
+
+    return APIManager(
+        config=APIManagerConfig(**config_kwargs),
+        enable_health_checker=False,
+    )
+
+
+class TestAdaptiveHealthConcurrency:
+    """自适应健康检查并发（2026-09-28，默认关不改变历史行为）。"""
+
+    def test_default_off_uses_static_concurrency(self):
+        """adaptive_health_check_concurrency 默认 False：并发度恒为静态值。"""
+        mgr = _make_manager()
+        assert mgr.config.adaptive_health_check_concurrency is False
+        # 静态口径：_adaptive_concurrency 不被调用，并发 = batch_health_check_concurrency
+        assert mgr.config.batch_health_check_concurrency == 1
+
+    def test_small_pool_serial(self):
+        """节点池 < 阈值（默认 50）时即使开自适应也返回串行（并发 1）。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        assert mgr._adaptive_concurrency(10) == 1
+        assert mgr._adaptive_concurrency(49) == 1
+        assert mgr._adaptive_concurrency(0) == 1
+
+    def test_large_pool_first_round_serial(self):
+        """大节点池 + 无历史数据（首轮）：保守起步串行。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        mgr._last_health_batch_failure_rate = None
+        assert mgr._adaptive_concurrency(100) == 1
+
+    def test_large_pool_low_failure_accentuates(self):
+        """大节点池 + 历史失败率低：提升到保守上界（默认 8）。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        mgr._last_health_batch_failure_rate = 0.05
+        assert mgr._adaptive_concurrency(100) == 8
+        # 并发度受 min(max, 池规模) 约束：池 55 > max 8 仍取 max 8
+        assert mgr._adaptive_concurrency(55) == 8
+        # 池 7 < 阈值 50 → 串行
+        assert mgr._adaptive_concurrency(7) == 1
+        # 自定义 max：max=4 且池 50 ≥ 阈值 → 4
+        mgr2 = _make_manager(
+            adaptive_health_check_concurrency=True,
+            adaptive_health_concurrency_max=4,
+        )
+        mgr2._last_health_batch_failure_rate = 0.05
+        assert mgr2._adaptive_concurrency(50) == 4
+
+    def test_high_failure_downshifts_to_serial(self):
+        """失败率 ≥ downshift 阈值（默认 0.3）时降回串行。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        mgr._last_health_batch_failure_rate = 0.3
+        assert mgr._adaptive_concurrency(200) == 1
+        mgr._last_health_batch_failure_rate = 0.5
+        assert mgr._adaptive_concurrency(200) == 1
+
+    def test_boundary_failure_rate(self):
+        """失败率恰为阈值 - epsilon 时仍加速（边界行为）。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        mgr._last_health_batch_failure_rate = 0.29
+        assert mgr._adaptive_concurrency(200) == 8
+
+    def test_custom_thresholds_respected(self):
+        """自定义阈值：node_threshold / max / downshift 均生效。"""
+        mgr = _make_manager(
+            adaptive_health_check_concurrency=True,
+            adaptive_health_node_threshold=10,
+            adaptive_health_concurrency_max=4,
+            adaptive_health_failure_rate_downshift=0.1,
+        )
+        assert mgr._adaptive_concurrency(10) == 1  # 池 10 < 阈值 10（严格小于）
+        mgr._last_health_batch_failure_rate = 0.05
+        assert mgr._adaptive_concurrency(15) == 4  # 池 15 ≥ 阈值，max=4
+        mgr._last_health_batch_failure_rate = 0.1
+        assert mgr._adaptive_concurrency(15) == 1  # 失败率 0.1 ≥ downshift 0.1
+
+    def test_health_check_batch_records_failure_rate(self, monkeypatch):
+        """adaptive 开启时 health_check_batch 把本轮失败率记入 _last_health_batch_failure_rate。"""
+        mgr = _make_manager(adaptive_health_check_concurrency=True)
+        # 桩掉 check_health：全部健康 → 失败率 0.0
+        monkeypatch.setattr(mgr, "check_health", lambda node: True)
+        # 清空 _init_clients 注册的默认节点池（CI mock LLM_CONFIGS 通常 3 项，
+        # 测试里只保留自己注入的 3 项，保证 batch 语义可控）
+        with mgr._lock:
+            mgr.health_nodes.clear()
+            for i in range(3):
+                mgr.health_nodes[f"m{i}"] = APIHealth(config=LLMConfig(
+                    api_key="k", base_url="u", model_name=f"m{i}",
+                ))
+        results = mgr.health_check_batch(batch_size=10)
+        assert mgr._last_health_batch_failure_rate == 0.0
+        assert mgr._last_health_batch_size == 3
+        assert len(results) == 3
+
+    def test_health_check_batch_off_no_recording(self, monkeypatch):
+        """adaptive 关闭时 health_check_batch 不记录失败率（历史行为不变）。"""
+        mgr = _make_manager()  # adaptive 默认关
+        monkeypatch.setattr(mgr, "check_health", lambda node: True)
+        with mgr._lock:
+            mgr.health_nodes.clear()
+            for i in range(3):
+                mgr.health_nodes[f"m{i}"] = APIHealth(config=LLMConfig(
+                    api_key="k", base_url="u", model_name=f"m{i}",
+                ))
+        mgr.health_check_batch(batch_size=10)
+        # 关闭时 _last_health_batch_failure_rate 保持 None（不写）
+        assert mgr._last_health_batch_failure_rate is None
+
+
 class TestAPIManagerEdgeCases:
     """测试边界情况和异常处理"""
 

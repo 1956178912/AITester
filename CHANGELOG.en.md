@@ -4,6 +4,113 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-28 Improvement checklist batch (doc consistency / infra / eval / observability / security, default behavior unchanged)
+
+> This batch implements the user-submitted improvement checklist
+> (doc consistency / infra / core algorithm / UX / eval / security /
+> observability), **default behavior unchanged**:
+>
+> - **I. Single source of truth for baselines**: new `BASELINE.yaml`
+>   (machine-readable: full pytest count / line coverage / static checks /
+>   CI matrix / 17 error categories); all "current baseline" numbers in
+>   core docs (README / QUICKSTART / api_reference / algorithm_design /
+>   usage_examples) now reference this file, eliminating multi-doc
+>   drift; version-history tables (CHANGELOG / api_reference) record
+>   snapshots at their time and are NOT refreshed by this file.
+> - **II. CONTRIBUTING hard rules + dependency-change checklist**:
+>   `CONTRIBUTING.md` / `.en.md` gain "BASELINE.yaml single source" and
+>   "dependency change checklist" subsections; new
+>   `.github/PULL_REQUEST_TEMPLATE.md` (with dependency-change checklist).
+> - **III. Stale inline baseline numbers stripped**:
+>   `docs/usage_examples.md` / `docs/algorithm_design.md` /
+>   `docs/code_analysis_report.md` / `docs/failure_analysis.md` (+ `.en`)
+>   replace hardcoded numbers with references to `BASELINE.yaml` /
+>   CHANGELOG / `docs/history/`.
+> - **IV. Concurrency & multi-process cache semantics doc**:
+>   `docs/performance_guide.md` / `.en.md` gain a "3.5 Concurrency &
+>   Multi-Process Cache Semantics" section (L1 negative cache
+>   process-level visibility ≤30s TTL; `--parallel` multi-thread mode
+>   maximizes cross-process cache hits).
+> - **V. Cross-file repair graduation criteria**:
+>   `docs/design/cross_file_repair.md` / `.en.md` gain "4.5 Graduation
+>   Criteria" — T1 ≥+15pp vs single-file, T2 token ≤1.5x, T3 2 model
+>   tiers, T4 no regression; all four must pass before default enable
+>   (`CROSS_FILE_ENABLE` stays default off).
+> - **VI. Error-classifier evolution directions**:
+>   `docs/adr/0002-error-classifier-rules.md` gains "Known limits &
+>   evolution" — hierarchical (17-class coarse → subclass refinement),
+>   probabilistic top-2 + confidence, UNKNOWN ≤15% SLA; current rule-
+>   based classifier unchanged.
+> - **VII. Failure-KB closed-loop design doc**: new
+>   `docs/design/failure_knowledge_feedback.md` (offline → online KB
+>   closed loop, design only, no code).
+> - **VIII. Model-capability-gradient experiment orchestrator**: new
+>   `experiments/model_gradient.py` (task-count 5-10, 2-3 tiers, runs
+>   `run_benchmark` per tier, records `llm_applied` / first-attempt
+>   success / avg iterations, writes
+>   `experiments/results/model_gradient.md`) + result-table template.
+> - **IX. New-contributor bootstrap script**: new
+>   `scripts/bootstrap_dev.sh` (venv + install + env copy + config
+>   validation; `--check-only` / `--no-install`); one-line pointer
+>   added to `QUICKSTART.md` / `.en.md`.
+> - **X. Runnable capability demos**: new
+>   `examples/semantic_cache_demo/` / `examples/cost_budget_demo/` /
+>   `examples/rag_ab_demo/` (all offline, no real LLM endpoint) +
+>   `examples/README.md` index.
+> - **XI. CI branch coverage**: `.github/workflows/ci.yml` test step
+>   gains `--cov-branch` (previously line-only); `BASELINE.yaml`
+>   `branch_total_pct` to be backfilled after first CI measurement.
+> - **XII. Trace in-memory snapshot + failure-diagnostics CLI**:
+>   `src/observability/trace.py` gains a process-level ring buffer
+>   (capacity 64; `TRACE_MEMORY_BUFFER_ENABLE` default true but **never
+>   writes to disk, zero I/O**; when off, fully no-op as before) — even
+>   when `AITESTER_TRACE_DIR` is unset (file tracing fully no-op), each
+>   task's "minimal node snapshot" accumulates in memory, available to
+>   `dump_recent_to(target_dir)` for writing a temporary JSONL
+>   (`./tmp_trace/<ts>_failed_trace.jsonl`) on failure. `src/cli/app.py`
+>   gains `--dump-trace-on-failure` CLI flag (default false, zero I/O;
+>   when enabled, writes only on task failure and adds a
+>   `trace_dump_path` field to the `--json` result). `src/graph/
+>   tracing.py` `end_task_trace` feeds the buffer; `start_task_trace`
+>   preserves the historical "no session in thread-local when file
+>   tracing disabled" convention (no TraceSession instance allocated).
+> - **XIII. APIManager adaptive health-check concurrency**:
+>   `APIManagerConfig` gains `adaptive_health_check_concurrency`
+>   (default **false** — static `batch_health_check_concurrency`
+>   historical behavior unchanged) + 3 helper thresholds
+>   (`adaptive_health_node_threshold` default 50 /
+>   `adaptive_health_concurrency_max` default 8 /
+>   `adaptive_health_failure_rate_downshift` default 0.3); when enabled,
+>   concurrency is dynamic — large pool + low failure rate → 8,
+>   rising failure rate (≥ 0.3) → downshift to serial, first round
+>   with no history → conservative serial start. `health_check_batch`
+>   records this round's failure rate into
+>   `_last_health_batch_failure_rate` (only when adaptive is on).
+> - **XIV. Redaction boundary documentation**:
+>   `docs/api_reference.md` / `.en.md` gain a "Redaction Boundaries &
+>   Known Blind Spots" section — 5 covered channels (console logs /
+>   trace JSONL / in-memory snapshot / `os.environ` process-level
+>   credentials / LLM exception logs) + 4 known blind spots
+>   (third-party gateway custom error bodies / custom credential
+>   prefixes / plaintext in non-str nested meta values / redaction
+>   import-failure degraded raw write) + manual verification steps.
+> - **XV. Baseline number correction**: `BASELINE.yaml` records the
+>   measured 2065 passed (slim ~1863) / 89% line coverage / ruff 0 /
+>   mypy 0 (70 files) / error_categories 17; `CHANGELOG.md`'s 0.9
+>   version table "1937 passed / 94% coverage" was a historical
+>   snapshot inconsistent with the current measurement — this batch
+>   unifies `BASELINE.yaml` as the single source of truth for
+>   current numbers.
+>
+> New regression tests: `tests/test_api_manager.py::TestAdaptive
+> HealthConcurrency` (9 cases) /
+> `tests/test_trace_observability.py::TestMemoryBuffer` (5 cases) /
+> `tests/test_cli_app.py::TestRunDumpTraceOnFailure` (5 cases);
+> 2 existing cases in `tests/test_cli_app.py::TestRunParallelTimeoutAnd
+> Interrupt` updated for the new `dump_trace_on_failure` parameter
+> (`**kwargs` passthrough) on `_run_single_task`. Full test suite
+> passing / ruff 0 / mypy 0.
+
 ## [Unreleased] - 2026-09-27 Roadmap gap-closing batch (SWE-bench Pro / CodeBERT / pyright, default behavior unchanged)
 
 > This batch closes the 3 remaining roadmap gaps identified after the

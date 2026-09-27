@@ -6,18 +6,31 @@
 
 本文档对 AITester 在合成数据集实验中的失败案例进行深入分析，识别系统瓶颈和改进方向。
 
-> **⚠️ 重要说明（2026-09-27）**：下文中 SWE-bench 0/7 的失败归因基于
-> **当前使用的免费档小模型（agnes-3.0-flash）** 的实测结果，反映的是
-> **该模型对真实仓库级代码的修复质量边界**，而非 AITester 架构本身的局限。
-> 使用更强模型（如 GPT-4 级别）时，P1 单源任务的失败分类与数量预计
-> 会有显著变化。跨文件任务的正向收益验证亦需更强模型 + 仓库全量源码上下文。
-> 本节数据仅作为"免费档小模型 + 当前架构"组合下的真实基线记录。
-
-> **状态说明（2026-09-14 批次③）**：本文档为历史数据快照（50 任务合成实验）。下文中 UNKNOWN 占 75%（JSON 解析失败、空响应）与 RUNTIME 中的索引越界两类根因，已在 2026-09-14 批次通过 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` / `INDEX_ERROR`，批次②再补状态细化类 `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`）解决——这两类错误现在会被分类器单独识别，Debugger 走针对性策略而非通用 LLM 兜底。**注意：此处"12 类"为 2026-09-14 批次的历史快照，当前 `ErrorCategory` 已扩展至 17 类（`docs/api_reference.md` 为准），历史表述仅记录当时的分类器状态，不代表当前分类器能力。** 重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py` 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+ **"修复收敛效率（1.2）"**（首次尝试成功率 / 成功任务迭代与耗时统计）+ **"多维质量代理（1.1，保守可复算）"**（覆盖率/耗时/断言行数/失败 Top N 类别）。另：5.3 批次后 `experiments/analyze_failures.py` 新增**失败根因三大类**（`llm_capability` / `dependency` / `framework`，`root_cause_classification()` 保守启发式归类）+ **失败案例知识库**（`failure_knowledge_base()` 结构化 JSON，CLI `--knowledge-base/-k` 落盘 `failure_knowledge_base.json`），失败归因口径以该脚本输出为准。
+> **⚠️ 历史快照声明（归档规则见 CONTRIBUTING.md"文档组织约定"）**：本文档为
+> 历史数据快照（50 任务合成实验 + SWE-bench 仓库级验证 P0/P1，免费档小模型
+> 实测），数据不随版本迭代自动刷新。下文中"UNKNOWN 占 75%"等分布为 2026-09-14
+> 批次的历史口径，对应 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` /
+> `INDEX_ERROR` 等）后已被分类器单独识别——**历史表述仅记录当时分类器状态，
+> 不代表当前能力**；当前 `ErrorCategory` 类别数与失败归因口径以
+> [BASELINE.yaml](../BASELINE.yaml)（类别数）与 `docs/api_reference.md` 为准。
+>
+> 重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py`
+> 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+
+> **"修复收敛效率（1.2）"**（首次尝试成功率 / 成功任务迭代与耗时统计）+
+> **"多维质量代理（1.1，保守可复算）"**（覆盖率/耗时/断言行数/失败 Top N 类别）。
+> 另：5.3 批次后 `experiments/analyze_failures.py` 新增**失败根因三大类**
+> （`llm_capability` / `dependency` / `framework`）+ **失败案例知识库**
+> （`failure_knowledge_base()` 结构化 JSON，CLI `--knowledge-base/-k` 落盘），
+> 失败归因口径以该脚本输出为准；失败知识库→修复策略的闭环设计见
+> [docs/design/failure_knowledge_feedback.md](design/failure_knowledge_feedback.md)。
+>
+> **SWE-bench 0/7 失败归因边界说明**：基于**免费档小模型（agnes-3.0-flash）**
+> 的实测结果，反映的是该模型对真实仓库级代码的修复质量边界，而非 AITester
+> 架构本身的局限。使用更强模型（GPT-4 级别）时失败分类与数量预计显著变化；
+> 更强模型仓库级验证数据单独落 `experiments/results/experiment_report_<date>_repo_level.md`，
+> 不在本文件就地追加（避免污染免费档基线快照）。
 
 > **状态说明（2026-09-25，SWE-bench 仓库级验证 P0/P1）**：SWE-bench lite-20 仓库级验证（`RepoExecutor`，`REPO_LEVEL_EXECUTION=true`）首轮 0/20 曾被误诊为"LLM 引擎无法产出可应用补丁"（`repo_verification.llm_applied` 全 False）。**根因已修正**——0/20 是数据管道（`instance_code` 缺失）+ 执行环境（单临时文件 executor 装不下仓库级代码 + 全局 python 跨 commit editable 安装污染）+ 补丁管道（`_diff_codes` 用 difflib 手工拼接在"整文件替换"场景产出 corrupt unified diff，`git apply` 全拒）三层缺陷叠加，**非 LLM 引擎能力**。修复（`SWE_BENCH_ENRICHMENT` 注入真实源码 + `RepoExecutor` 仓库级 clone + pip install -e + venv 隔离 + `_diff_codes` 改用 `git diff --no-index` 生成可应用 unified diff）后，P1 单源任务 0/7 的失败分类为：5/7 `LLM_BREAKS_IMPORT`（LLM 重写破坏 sqlfluff 插件命名契约，`Rule_L*` 类名改坏 → 整个 import 链崩溃）+ 2/7 `EMPTY_LLM_PATCH`（LLM 未产出修复）——**这才是 LLM 引擎修复质量边界的真实测量**（免费档小模型对真实仓库级代码）。跨文件任务（13/20 多源）在引擎能力突破前无正向信息量（ON/OFF 都会 0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文。详见 [experiments/results/experiment_report_20260925.md](../experiments/results/experiment_report_20260925.md) §7 与 [docs/design/swe_bench_probe.md](design/swe_bench_probe.md) §0。
-
-> **快照更新约定（2026-09-28 新增）**：本文档为历史数据快照，数据不随版本迭代自动刷新。每次重大版本（新错误分类 / 修复策略批次）发布后，应通过 `experiments/analyze_results.py` 在最新 50 任务合成实验上重跑，并将以下三类结果写入 `experiments/results/` 作为新快照（`failure_knowledge_base.json` + 按基线失败原因分布章节 + SWE-bench P1 单源任务最新实测），随后在本节末尾追加一条"状态说明"链接到新快照文件——本文档本身保持为历史基线记录，不就地修改已标注日期的数据。更强模型（GPT-4 级别）的仓库级验证数据（区分"架构能力"与"模型能力"边界）建议单独落 `experiments/results/experiment_report_<date>_repo_level.md`，并在本节追加链接，避免污染免费档小模型基线。
 
 **实验设置**（历史数据快照，非当前版本性能承诺）：
 - 数据集：Synthetic Dataset (50 tasks)

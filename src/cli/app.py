@@ -196,6 +196,7 @@ def _dispatch_parallel_tasks(
     results: list[dict[str, Any]],
     on_progress: Callable[[Future], None] | None = None,
     on_success: Callable[[str], None] | None = None,
+    dump_trace_on_failure: bool = False,
 ) -> None:
     """并发派发任务并逐任务追加结果（单任务异常不中断整批）。
 
@@ -215,10 +216,20 @@ def _dispatch_parallel_tasks(
         results: 结果列表，每个任务的成功/错误结果追加于此。
         on_progress: 每个任务结束（无论成败）后触发的回调，供 rich 进度条推进。
         on_success: 任务成功后触发的回调（传入文件 basename），供纯文本进度显示。
+        dump_trace_on_failure: 任务失败时写内存追踪快照到 ./tmp_trace/（默认 False 零 I/O）。
     """
     with ThreadPoolExecutor(max_workers=parallel) as executor:
         future_to_file = {
-            executor.submit(_run_single_task, f, func, max_iterations, exec_timeout, coverage_threshold, json_output): f
+            executor.submit(
+                _run_single_task,
+                f,
+                func,
+                max_iterations,
+                exec_timeout,
+                coverage_threshold,
+                json_output,
+                dump_trace_on_failure,
+            ): f
             for f in expanded_files
         }
         for future in as_completed(future_to_file):
@@ -243,6 +254,7 @@ def _dispatch_concurrent(
     json_output: bool,
     parallel: int,
     results: list[dict[str, Any]],
+    dump_trace_on_failure: bool = False,
 ) -> None:
     """并发执行测试任务（rich 进度条优先，纯文本降级兜底）。
 
@@ -259,6 +271,7 @@ def _dispatch_concurrent(
         json_output: 是否 JSON 输出模式（影响进度条输出通道与降级提示）。
         parallel: 并发 worker 数。
         results: 结果列表，每个任务的成功/错误结果追加于此。
+        dump_trace_on_failure: 任务失败时写内存追踪快照到 ./tmp_trace/（默认 False 零 I/O）。
     """
     # 两种进度反馈模式（纯文本 / rich 进度条）共享 7 个公共位置参数，
     # 唯一差异是 on_progress（rich 推进度条）/ on_success（纯文本逐任务提示）
@@ -275,6 +288,7 @@ def _dispatch_concurrent(
         "json_output": json_output,
         "parallel": parallel,
         "results": results,
+        "dump_trace_on_failure": dump_trace_on_failure,
     }
     if not _rich_available():
         # 纯文本降级：--json 时不往 stdout 打进度（保持纯 JSON）
@@ -305,6 +319,30 @@ def _dispatch_concurrent(
         )
 
 
+def _dump_trace_on_failure(output_json: bool) -> str | None:
+    """任务失败时把内存追踪快照写成临时 JSONL 供诊断（--dump-trace-on-failure）。
+
+    仅当 CLI 显式开启 --dump-trace-on-failure 且本任务失败时触发；
+    把进程级内存快照（TraceSession 累积的最近任务节点记录，默认启用、不落盘）
+    经 `dump_recent_to` 写入 `./tmp_trace/<ts>_failed_trace.jsonl` 并提示路径。
+    无快照可写 / 写盘失败时静默跳过（诊断出口，不影响主流程）。
+
+    Returns:
+        写盘成功时返回路径字符串（供调用方把 `trace_dump_path` 字段写进结果 dict），
+        无快照可写 / 写盘失败时返回 None。
+    """
+    from src.observability.trace import dump_recent_to
+
+    target_dir = os.path.join(os.getcwd(), "tmp_trace")
+    path = dump_recent_to(target_dir)
+    if path is None:
+        return None
+    logger.info("失败追踪快照已写盘: %s", path)
+    if not output_json:
+        click.echo(f"\n  诊断追踪：{path}（--dump-trace-on-failure）")
+    return path
+
+
 def _run_single_task(
     target_file: str,
     func: str | None,
@@ -312,6 +350,7 @@ def _run_single_task(
     timeout: int,
     coverage_threshold: float,
     output_json: bool,
+    dump_trace_on_failure: bool | None = None,
 ) -> dict[str, Any]:
     """
     运行单个测试任务的内部函数。
@@ -323,6 +362,8 @@ def _run_single_task(
         timeout: 单个任务的执行超时（秒），经 state 贯通到 Executor。
         coverage_threshold: 覆盖率达标阈值（%），用于结果判定与摘要输出。
         output_json: 是否输出 JSON 格式结果。
+        dump_trace_on_failure: 任务失败时把内存追踪快照（--dump-trace-on-failure）
+            写成临时 JSONL 供诊断；None/False 时不触发（默认行为不变，零 I/O）。
 
     Returns:
         任务结果字典，包含 success、file、func、passed、coverage、coverage_ok、iterations 等字段。
@@ -416,6 +457,14 @@ def _run_single_task(
         "semantic_cache": get_semantic_cache_stats(),
     }
 
+    # 可观测性批次：--dump-trace-on-failure 且本任务失败 → 把内存追踪快照
+    # （TraceSession 累积的最近任务节点记录，默认启用不落盘）写成临时 JSONL
+    # 供诊断；写盘成功时把路径写进 result（JSON 模式可消费），失败静默跳过。
+    if dump_trace_on_failure and not result["passed"]:
+        _dump_path = _dump_trace_on_failure(output_json)
+        if _dump_path is not None:
+            result["trace_dump_path"] = _dump_path
+
     # 输出结果
     if output_json:
         click.echo(json.dumps(result, ensure_ascii=False, indent=2))
@@ -464,6 +513,14 @@ def _run_single_task(
 @click.option("--timeout", "-t", default=None, type=int, help=f"单个任务执行超时秒数（默认 {EXECUTION_TIMEOUT}s）")
 @click.option("--json", "json_output", is_flag=True, help="输出 JSON 格式结果（适合管道处理）")
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志输出（DEBUG 级别）")
+@click.option(
+    "--dump-trace-on-failure",
+    "dump_trace_on_failure",
+    is_flag=True,
+    default=False,
+    help="任务失败时把内存追踪快照（最近任务节点记录，默认启用不落盘）写成 "
+    "./tmp_trace/<ts>_failed_trace.jsonl 供诊断；默认关，不设置时无 I/O",
+)
 def run(
     target_files: tuple[str, ...],
     func: str | None,
@@ -473,6 +530,7 @@ def run(
     timeout: int | None,
     json_output: bool,
     verbose: bool,
+    dump_trace_on_failure: bool,
 ) -> None:
     """运行测试任务（支持单文件或多个文件）
 
@@ -547,6 +605,7 @@ def run(
                 json_output,
                 parallel,
                 results,
+                dump_trace_on_failure=dump_trace_on_failure,
             )
         else:
             # 单线程模式
@@ -555,7 +614,13 @@ def run(
             for target_file in expanded_files:
                 try:
                     result = _run_single_task(
-                        target_file, func, max_iterations, exec_timeout, coverage_threshold, json_output
+                        target_file,
+                        func,
+                        max_iterations,
+                        exec_timeout,
+                        coverage_threshold,
+                        json_output,
+                        dump_trace_on_failure=dump_trace_on_failure,
                     )
                     results.append(result)
                 except Exception as e:

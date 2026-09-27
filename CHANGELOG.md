@@ -4,6 +4,94 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-28 改进清单落地批次（文档一致 / 基础设施 / 评估实验 / 可观测性 / 安全，默认行为不变）
+
+> 本批次基于用户提交的改进清单（文档一致性 / 基础设施 / 核心算法 / 用户体验 /
+> 评估实验 / 安全 / 可观测性）逐项核实并落地，**默认行为不变**：
+>
+> - **一、文档基线单一事实来源**：新增 `BASELINE.yaml`（机器可读，
+>   记录全量测试 / 覆盖率 / 静态检查 / CI 矩阵 / 错误分类 17 类），
+>   README / QUICKSTART / api_reference / algorithm_design /
+>   usage_examples 等核心文档的"当前基线"数字统一引用本文件，
+>   避免多文档各自硬编码造成漂移；历史版本表（CHANGELOG /
+>   api_reference 版本演进节）记录当时快照，不随本文件刷新。
+> - **二、CONTRIBUTING 硬性规则 + 依赖变更清单**：`CONTRIBUTING.md`
+>   / `CONTRIBUTING.en.md` 新增"硬性规则 BASELINE.yaml 单一来源"
+>   与"依赖变更清单"小节；新增 `.github/PULL_REQUEST_TEMPLATE.md`
+>   （含依赖变更 checklist）。
+> - **三、过期基线数字清理**：`docs/usage_examples.md` /
+>   `docs/algorithm_design.md` / `docs/code_analysis_report.md` /
+>   `docs/failure_analysis.md` 及 .en 对偶中内联的过期基线数字
+>   一律改为指向 `BASELINE.yaml` / CHANGELOG / docs/history/，
+>   不再就地维护。
+> - **四、并发与多进程缓存语义文档**：`docs/performance_guide.md` /
+>   `.en.md` 新增"3.5 并发与多进程缓存语义"小节（L1 负缓存进程级
+>   可见性 ≤30s TTL 少量重复 LLM 调用保守退化；--parallel 多线程
+>   模式最大化跨进程命中建议）。
+> - **五、跨文件修复转正标准**：`docs/design/cross_file_repair.md` /
+>   `.en.md` 新增"4.5 转正标准 / Graduation Criteria"——T1 ≥+15pp
+>   vs 单文件、T2 token ≤1.5x、T3 2 模型档位、T4 无回归，全达标
+>   才进默认启用（当前 `CROSS_FILE_ENABLE` 默认 false 保持不动）。
+> - **六、错误分类器演进方向**：`docs/adr/0002-error-classifier-rules.md`
+>   新增"已知局限与演进方向"——层次化（先 17 类粗分后子类细分）、
+>   概率化 top-2 + 置信度、UNKNOWN ≤15% SLA；当前纯规则保持。
+> - **七、失败知识库闭环设计**：新增 `docs/design/failure_knowledge_feedback.md`
+>   （离线→在线知识库闭环，设计文档，未落地代码）。
+> - **八、模型能力梯度实验编排器**：新增 `experiments/model_gradient.py`
+>   （按 task-count 5-10、2-3 档位跑 run_benchmark，记录 llm_applied /
+>   first-attempt success / avg iterations，落 `experiments/results/model_gradient.md`）
+>   + `experiments/results/model_gradient.md` 结果表模板。
+> - **九、新贡献者引导脚本**：新增 `scripts/bootstrap_dev.sh`
+>   （venv + install + env 复制 + 配置校验，`--check-only` / `--no-install`）；
+>   `QUICKSTART.md` / `.en.md` 补一行 bootstrap 指向。
+> - **十、可运行能力示例**：新增 `examples/semantic_cache_demo/` /
+>   `examples/cost_budget_demo/` / `examples/rag_ab_demo/` 三个离线
+>   可跑的最小示例 + `examples/README.md` 索引（均无需真实 LLM 端点）。
+> - **十一、CI 分支覆盖**：`.github/workflows/ci.yml` 测试步骤新增
+>   `--cov-branch`（此前仅行覆盖）；`BASELINE.yaml` `branch_total_pct`
+>   首测后回填。
+> - **十二、Trace 内存快照 + 失败诊断 CLI**：`src/observability/trace.py`
+>   新增进程级内存环形缓冲（容量 64，`TRACE_MEMORY_BUFFER_ENABLE` 默认
+>   true 但**不落盘、零 I/O**；关闭时全 no-op 历史口径）——即便未设
+>   `AITESTER_TRACE_DIR`（文件追踪全 no-op），每次任务的"最小化节点快照"
+>   仍累积进内存，供 `dump_recent_to(target_dir)` 在失败时写成临时
+>   JSONL（`./tmp_trace/<ts>_failed_trace.jsonl`）。`src/cli/app.py`
+>   新增 `--dump-trace-on-failure` CLI flag（默认 false 零 I/O；
+>   开启后仅任务失败时触发写盘，写盘成功把 `trace_dump_path` 字段
+>   写进 `--json` 结果）。`src/graph/tracing.py` `end_task_trace`
+>   把 session.records 入缓冲；`start_task_trace` 历史"未启用时
+>   线程局部无 session"口径保持不变（文件追踪未启用时不创建
+>   TraceSession 实例，零内存分配开销）。
+> - **十三、APIManager 自适应健康检查并发**：`APIManagerConfig`
+>   新增 `adaptive_health_check_concurrency`（默认 **false**，静态
+>   `batch_health_check_concurrency` 历史行为不变）+ 三个辅助阈值
+>   （`adaptive_health_node_threshold` 默认 50 /
+>   `adaptive_health_concurrency_max` 默认 8 /
+>   `adaptive_health_failure_rate_downshift` 默认 0.3）；开启时按
+>   节点池规模 + 历史失败率动态决定并发度——大池 + 低失败率 → 8，
+>   失败率上升（≥ 0.3）→ 降回串行，首轮无历史 → 保守串行起步。
+>   `health_check_batch` 收尾时把本轮失败率记入
+>   `_last_health_batch_failure_rate`（仅 adaptive 开启时写）。
+> - **十四、脱敏边界文档**：`docs/api_reference.md` / `.en.md`
+>   新增"脱敏边界与已知盲区 / Redaction Boundaries & Known Blind
+>   Spots"一节——登记 5 条已脱敏通道（控制台日志 / 追踪 JSONL /
+>   内存快照 / os.environ 进程级凭证 / LLM 异常日志）+ 4 条已知
+>   盲区（第三方网关自定义错误体 / 自定义凭证前缀 / meta 嵌套非
+>   str 值里的明文 / 脱敏 import 失败降级原样输出）+ 手动验证
+>   方式。
+> - **十五、基线数字修正**：`BASELINE.yaml` 记录实测 2065 passed
+>   （slim ~1863）/ 89% 行覆盖 / ruff 0 / mypy 0（70 文件）/
+>   error_categories 17；`CHANGELOG.md` 此前 0.9 版本表"1937 passed
+>   / 94% 覆盖率"与实测不一致（0.9 表为历史快照），本批次统一
+>   以 `BASELINE.yaml` 为当前数字单一事实来源。
+>
+> 新增回归测试：`tests/test_api_manager.py::TestAdaptiveHealthConcurrency`
+> （9 用例）/ `tests/test_trace_observability.py::TestMemoryBuffer`
+> （5 用例）/ `tests/test_cli_app.py::TestRunDumpTraceOnFailure`
+> （5 用例）；受影响既有测试 `tests/test_cli_app.py::TestRunParallelTimeoutAndInterrupt`
+> 2 用例因 `_run_single_task` 签名加 `dump_trace_on_failure` 参数
+> （**kwargs 透传）同步更新。全量测试通过 / ruff 0 告警 / mypy 0 错误。
+
 ## [Unreleased] — 2026-09-28 改进清单落地批次（健康检查并发 / CI 3.13 / 文档口径对齐 / 多进程缓存说明 / D 规则分阶段路线，默认行为不变）
 
 > 本批次基于改进清单（核心算法 / 工程实践 / 评估与实验 / 文档协作 / 基础设施）

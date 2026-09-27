@@ -20,6 +20,13 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+> **One-command bootstrap (recommended)**: steps 2-4 above are automated by
+> `bash scripts/bootstrap_dev.sh` (venv creation + dependency install + copying
+> both env files + config-load validation, with concrete missing-item hints on
+> failure); you only need to edit `.env.local` with a real `LLM_N_API_KEY` after
+> the script completes. To validate an already-configured environment, run
+> `bash scripts/bootstrap_dev.sh --check-only`.
+
 ## 3. Configure Environment Variables
 
 > Both steps are required: Step 1 configures non-sensitive items, Step 2 configures LLM keys (you may skip Step 1 and use the defaults, but the keys must be set).

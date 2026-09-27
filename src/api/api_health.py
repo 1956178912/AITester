@@ -297,6 +297,15 @@ class APIManagerConfig:
     # O(N / 并发 × 探测)（批间仍保留一次批级 sleep）。并发探测的线程安全
     # 由 APIHealth 节点级锁保证（check_health 内写入全部原子化）。
     batch_health_check_concurrency: int = 1
+    # 批量健康检查自适应并发（2026-09-28，默认关保持静态口径）：开启时，
+    # 节点池规模与历史探测延迟满足条件时自动提升并发度至保守上界
+    # adaptive_health_concurrency_max（默认 8），失败率上升时降回串行；
+    # 关闭时 batch_health_check_concurrency 为静态值（历史行为不变）。
+    adaptive_health_check_concurrency: bool = False
+    adaptive_health_concurrency_max: int = 8
+    adaptive_health_node_threshold: int = 50  # 节点池规模阈值（超过才启用加速）
+    adaptive_health_p95_threshold_s: float = 2.0  # 历史探测 P95 延迟阈值（低于才加速）
+    adaptive_health_failure_rate_downshift: float = 0.3  # 失败率超过此值降回串行
     health_check_timeout: float = 5.0  # 单次健康检查超时（秒）
     # 4.2 半开探测开关（默认 True）：熔断冷却到期后，节点不直接恢复全量路由，
     # 而是先处于"半开"状态，仅允许一次探测请求；探测成功才闭合熔断器，

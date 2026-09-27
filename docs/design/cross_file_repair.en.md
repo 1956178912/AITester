@@ -241,6 +241,56 @@ Construct 3 synthetic tasks in `experiments/results/`:
 - Off by default (`CROSS_FILE_ENABLE=false`); without enabling it, there is zero behavior change;
 - If the repair success rate drops after enabling, just `git revert` the cross-file node wiring (the node code is kept; with the switch off it simply does not run).
 
+## 4.5 Graduation Criteria (Quantified Conditions for the Default-Off State, added 2026-09-28)
+
+The cross-file capability (`CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL`) is
+architecturally implemented and unit-tested (`test_cross_file.py` 39 cases +
+`test_cross_file_bidirectional.py` 16 cases), but its real-data gain is not yet
+proven (§0 engine-capability boundary: under the free-tier small model,
+cross-file tasks are 0/N both ON and OFF — no positive signal). **Until all of
+the following conditions are met, `CROSS_FILE_ENABLE` stays default-off and is
+not listed as a recommended switch**; once met, switch the default value to
+true and refresh BASELINE.yaml:
+
+| # | Condition | Threshold | Verification Method |
+|---|-----------|-----------|---------------------|
+| T1 | Cross-file repair success rate on the synthetic cross-file subset (Level 3 two-module, `--difficulty level3`) vs. the single-file fallback strategy (`CROSS_FILE_ENABLE=false` baseline) | **≥ +15 percentage points (absolute)** | Run ON/OFF pairs of `experiments/run_benchmark.py --dataset synthetic --difficulty level3 --task-count 50` and compare the `passed` rate |
+| T2 | Extra token cost | **Mean per-task `total_tokens` of the cross-file batch ≤ 1.5× the single-file fallback baseline** (≤ 50% increase) | Compare the mean of `token_usage` across the two result JSONs; if exceeded, record as "cost-unacceptable" and do not graduate |
+| T3 | Model-tier validation | T1/T2 conclusions **agree in direction** (both positive) on **≥ 2 model tiers** (e.g. the agnes-3.0-flash free tier + a stronger-model tier) | Reuse the tier matrix of `experiments/model_gradient.py`; cross-file ON/OFF paired per tier |
+| T4 | No regression | On single-file tasks (Level 1/2), success rate does not drop when `CROSS_FILE_ENABLE=true` is on (the automatic-degradation path is stable) | Single-file subset ON/OFF pairing; a drop > 5pp counts as a degradation-path defect |
+
+**Experiment commands (minimal runnable caliber)**:
+
+```bash
+# Baseline (OFF)
+BENCHMARK_PARALLELISM=2 python experiments/run_benchmark.py \
+    --dataset synthetic --difficulty level3 --task-count 50 \
+    --baselines aitester --output-dir experiments/results/cross_file_off
+
+# Cross-file (ON)
+CROSS_FILE_ENABLE=true CROSS_FILE_MAX_MODULES=5 \
+BENCHMARK_PARALLELISM=2 python experiments/run_benchmark.py \
+    --dataset synthetic --difficulty level3 --task-count 50 \
+    --baselines aitester --output-dir experiments/results/cross_file_on
+
+# Paired comparison (reuse the 5.3 cross-batch tool + statistical tests)
+python experiments/compare_failures.py \
+    --results experiments/results/cross_file_on \
+    --cross-batch experiments/results/cross_file_off \
+    --cross-batch-baseline aitester
+python experiments/rag_ab_experiment.py --analyze-only \
+    --on-dir experiments/results/cross_file_on \
+    --off-dir experiments/results/cross_file_off
+```
+
+> Result archiving: when T1–T4 are all met, append a "graduation record"
+> section to this document (date / per-tier data / cost caliber) and flip
+> the `CROSS_FILE_ENABLE` default to true (changing the default is a separate
+> batch with its own ADR record — do not sneak the default flip into a
+> cross-file batch); when any condition fails, keep the status quo and append
+> a link to the latest measured data under the "snapshot update convention"
+> of `docs/failure_analysis.md`.
+
 ## 6. Phase Two Extensions (Out of Scope This Time)
 
 - Cross-file execution validation (currently only single-file candidate execution validation is supported);

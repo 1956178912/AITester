@@ -4,6 +4,11 @@
 
 > This document describes the core algorithm design and theoretical framework of AITester, for technical review and code review reference.
 > The appendix provides a precise mapping table from algorithms to source code, to help locate implementation details quickly.
+>
+> **Baseline numbers**: treat the repo-root [BASELINE.yaml](../BASELINE.yaml) as the single
+> source of truth (refreshed after each batch lands); this document no longer embeds
+> baseline numbers, avoiding stale snapshots. Historical trajectory: see `CHANGELOG.md`
+> entries and `docs/history/`.
 
 ---
 

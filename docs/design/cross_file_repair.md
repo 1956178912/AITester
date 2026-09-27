@@ -230,6 +230,50 @@ CROSS_FILE_MAX_MODULES: int = int(os.getenv("CROSS_FILE_MAX_MODULES", "5"))
 - 默认关（`CROSS_FILE_ENABLE=false`），不启用则零行为变化；
 - 启用后若修复成功率下降，`git revert` 撤销跨文件节点接线即可（节点代码保留，开关关闭即不执行）。
 
+## 4.5 转正标准（默认关闭状态下的量化转正条件，2026-09-28 新增）
+
+跨文件能力（`CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL`）架构已实现并经单元
+测试验证（`test_cross_file.py` 39 用例 + `test_cross_file_bidirectional.py` 16 用例），
+但真实数据收益尚未证明（§0 引擎能力边界：免费档小模型下跨文件任务 ON/OFF 均
+0/N，无正向信息量）。**在满足以下全部条件前，`CROSS_FILE_ENABLE` 保持默认
+false，不作为推荐开启项**；条件满足后建议开启默认值并更新 BASELINE.yaml：
+
+| # | 条件 | 阈值 | 验证方法 |
+|---|------|------|----------|
+| T1 | 合成数据集跨文件任务（Level 3 双模块，`--difficulty level3`）跨文件修复成功率相对单文件回退策略（`CROSS_FILE_ENABLE=false` 基线） | **≥ +15 个百分点（绝对值）** | `experiments/run_benchmark.py --dataset synthetic --difficulty level3 --task-count 50` 分别跑 ON/OFF 两批，配对比较 `passed` 比例 |
+| T2 | 额外 token 成本 | **跨文件批次平均单任务 `total_tokens` ≤ 单文件回退基线 × 1.5**（即 50% 以内增幅） | 两批结果 JSON 的 `token_usage` 均值对比；超出则记录为"成本不可接受"，不转正 |
+| T3 | 模型档位验证 | 在 **≥ 2 个模型档位**（如 agnes-3.0-flash 免费档 + 更强模型档）上 T1/T2 结论**方向一致**（都为正向） | 复用 `experiments/model_gradient.py` 的档位矩阵，跨文件 ON/OFF 各档位成对 |
+| T4 | 无回归 | 单文件任务（Level 1/2）开启 `CROSS_FILE_ENABLE=true` 后成功率不下降（自动降级路径稳定） | 单文件子集 ON/OFF 配对，下降 > 5pp 视为降级路径缺陷 |
+
+**实验命令（最小可运行口径）**：
+
+```bash
+# 基线（OFF）
+BENCHMARK_PARALLELISM=2 python experiments/run_benchmark.py \
+    --dataset synthetic --difficulty level3 --task-count 50 \
+    --baselines aitester --output-dir experiments/results/cross_file_off
+
+# 跨文件（ON）
+CROSS_FILE_ENABLE=true CROSS_FILE_MAX_MODULES=5 \
+BENCHMARK_PARALLELISM=2 python experiments/run_benchmark.py \
+    --dataset synthetic --difficulty level3 --task-count 50 \
+    --baselines aitester --output-dir experiments/results/cross_file_on
+
+# 配对比较（复用 5.3 跨批次对比工具 + 统计检验）
+python experiments/compare_failures.py \
+    --results experiments/results/cross_file_on \
+    --cross-batch experiments/results/cross_file_off \
+    --cross-batch-baseline aitester
+python experiments/rag_ab_experiment.py --analyze-only \
+    --on-dir experiments/results/cross_file_on \
+    --off-dir experiments/results/cross_file_off
+```
+
+> 结论沉淀：T1-T4 全部满足时，在本文档追加"转正记录"节（日期 / 各档位数据 /
+> 成本口径），并将 `CROSS_FILE_ENABLE` 默认值改为 true（独立批次、默认行为变更
+> 需单独 ADR 记录，不在跨文件批次内偷改默认值）；任一条件不满足则维持现状
+> 并在 `docs/failure_analysis.md` 快照更新约定处追加链接到最新实测数据。
+
 ## 6. 二期扩展（不在本次范围）
 
 - 跨文件执行验证（当前只支持单文件候选执行验证）；

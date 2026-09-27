@@ -141,6 +141,7 @@ class TraceSession:
         """
         directory = trace_directory if trace_directory is not None else trace_dir()
         self.task_id = task_id
+        self.records: list[dict[str, Any]] = []  # 内存视角：供失败诊断快照（不落盘）
         self._enabled = directory is not None
         self._file_path: str | None = None
         self._started_at: float | None = None
@@ -159,7 +160,13 @@ class TraceSession:
             )
 
     def _append(self, record: dict[str, Any]) -> None:
-        """向 JSONL 追加一条记录（锁内追加，失败仅 warning 不抛出）。"""
+        """向 JSONL 追加一条记录（锁内追加，失败仅 warning 不抛出）。
+
+        同时把记录存进内存视角 self.records（供失败诊断快照消费；
+        纯内存累积，不产生 I/O；未启用文件追踪时 _append 仍累积 records，
+        使"最小化节点快照"在常规使用下也可复盘）。
+        """
+        self.records.append(record)
         if not self._enabled or self._file_path is None:
             return
         # 敏感信息脱敏（与日志口径一致）：追踪文件同样不得落凭证。
@@ -261,3 +268,93 @@ def reset_trace_file_locks() -> None:
     """清空文件锁注册表（仅供测试隔离，避免跨用例锁泄漏）。"""
     with TraceSession._file_locks_guard:
         TraceSession._file_locks.clear()
+
+
+# ─── 内存快照缓冲（默认启用、不落盘）──────────────────────────────────────
+# 结构化追踪"全 no-op 默认关闭"限制了常规使用下非预期失败的复盘能力：
+# 未设 AITESTER_TRACE_DIR 时用户缺少节点决策 / token / 耗时数据。
+# 本缓冲在**追踪未启用**时，进程级保留最近 N 次任务的关键节点快照
+# （纯内存、不落盘、零 I/O），失败时经 dump_recent_to 写成临时 JSONL 供诊断。
+# 设计约束：默认行为不变（不落盘、不影响性能）；--dump-trace-on-failure
+# 仅在任务失败时把内存快照写入临时文件（诊断出口）。
+
+_MEMORY_BUFFER_CAPACITY = 64  # 进程级保留的最近任务快照数（环形覆盖）
+_memory_ring: list[dict[str, Any]] = []
+_memory_ring_lock = threading.Lock()
+
+
+def _memory_buffer_enabled() -> bool:
+    """内存快照缓冲开关（TRACE_MEMORY_BUFFER_ENABLE，默认 true 保守启用）。
+
+    未设 AITESTER_TRACE_DIR 时缓冲生效；已启用文件追踪时缓冲仍运行
+    （快照口径独立于落盘追踪，供失败诊断复用）。设 false 完全关闭
+    缓冲（零内存开销，回退历史"全 no-op"口径）。
+    """
+    return os.getenv("TRACE_MEMORY_BUFFER_ENABLE", "true").strip().lower() in ("true", "1", "on")
+
+
+def memory_buffer_snapshot(task_id: str, records: list[dict[str, Any]]) -> None:
+    """把一次任务的追踪记录快照入进程级环形缓冲（不落盘，默认启用）。
+
+    Args:
+        task_id: 任务标识（快照字典的 "task" 字段）。
+        records: 该任务的追踪记录列表（task_start / node / task_end 事件 dict，
+            通常为 TraceSession 已序列化的记录；空列表表示无记录可快照）。
+    """
+    if not _memory_buffer_enabled():
+        return
+    with _memory_ring_lock:
+        snapshot = {"task": task_id, "ts": time.time(), "records": list(records)}
+        _memory_ring.append(snapshot)
+        overflow = len(_memory_ring) - _MEMORY_BUFFER_CAPACITY
+        if overflow > 0:
+            del _memory_ring[:overflow]
+
+
+def reset_memory_buffer() -> None:
+    """清空进程级内存快照缓冲（仅供测试隔离）。"""
+    with _memory_ring_lock:
+        _memory_ring.clear()
+
+
+def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
+    """把进程级内存快照写入目标目录（失败诊断出口，需显式调用才落盘）。
+
+    非默认行为：仅当 CLI --dump-trace-on-failure 在任务失败时调用，
+    快照写 <target_dir>/<ts>_failed_trace.jsonl。
+
+    Args:
+        target_dir: 输出目录（自动创建，创建失败返回 None）。
+        limit: 写入的最近任务快照数（None = 全部保留，默认全部）。
+
+    Returns:
+        写盘的 JSONL 文件完整路径；无快照可写或写盘失败时返回 None。
+    """
+    with _memory_ring_lock:
+        if not _memory_ring:
+            return None
+        recent = list(_memory_ring)
+    if limit is not None:
+        recent = recent[-limit:]
+    os.makedirs(target_dir, exist_ok=True)
+    import time as _time
+
+    filename = f"{int(_time.time())}_failed_trace.jsonl"
+    path = os.path.join(target_dir, filename)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            for snap in recent:
+                for record in snap.get("records", []):
+                    f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+                # 快照级收尾标记（非 TraceSession 事件，供诊断区分任务边界）
+                f.write(
+                    json.dumps(
+                        {"event": "snapshot_task", "task": snap.get("task"), "ts": snap.get("ts")},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+    except OSError as e:
+        logger.warning("内存快照写盘失败（忽略）: %s", e)
+        return None
+    return path

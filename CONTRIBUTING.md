@@ -80,6 +80,35 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 - **历史归档文档**（`docs/history/`，含 `optimization_plan.md` / `optimization_report.md` 等）：记录历史轮次的工作决策与实验记录，**非当前维护文档**，仅作开发内部参考，无需随版本迭代更新；每篇文档头部有归档说明，当前决策以 CHANGELOG 为准。
 - **审查 / 审计报告**（`docs/review_*.md` / `docs/*_audit_findings.md`）：对应轮次的审查快照，完成后归入历史快照，不要求长期同步。
 
+### 硬性规则：当前基线数字单一来源（BASELINE.yaml）
+
+- **任何核心维护文档不得内嵌已被后续轮次覆盖的数字**（如"1937 passed / 94% 覆盖率 / ruff 0 告警"这类会随批次推进过期的快照）——当前基线数字（测试数 / 覆盖率 / ruff / mypy / CI 矩阵）统一以仓库根 [`BASELINE.yaml`](BASELINE.yaml) 为**机器可读单一事实来源**，核心文档仅保留"指向 BASELINE.yaml 的链接 + 一句话摘要"，不各自硬编码。
+- **过期内容必须整节归档而非就地标注**：已被后续轮次覆盖的历史分析 / 基线轨迹，整节移入 `docs/history/`（或 CHANGELOG 对应条目），不得在核心文档内以 ⚠️ / "历史快照"标注方式堆叠在原文中；历史文档头部的归档说明是唯一允许的历史标注位置。
+- **维护约定**：任何功能批次落地后，必须先跑全量 `pytest tests/` / `ruff check .` / `mypy` 实测，再同步刷新 `BASELINE.yaml` 的 `last_verified` 与对应数字；未刷新前不得在核心文档引用该批次数字。
+- **版本演进历史**（CHANGELOG / api_reference 的版本表）记录的是当时快照，属历史叙事，不随 BASELINE.yaml 刷新——二者边界为"当前基线" vs "历史版本记录"。
+
+## 依赖变更清单（修改 requirements / lock 必做步骤）
+
+`requirements.txt`（顶层依赖 + `==` 锁定）与 `requirements.lock`（含传递依赖的完整锁定）
+是**双轨制**：CI 由 `scripts/check_lock_sync.py` 守卫二者同步（顶层依赖必须出现在 lock
+中且版本一致）。修改任何依赖时**必须**按以下清单执行，否则容易出现"requirements 加了包
+但 lock 没更新 → CI 通过但生产 / Docker 环境行为不一致"的漂移：
+
+1. **改 `requirements.txt`**：顶层依赖用 `==` 显式锁版本（与 CI 固定工具版本同原则，
+   避免上游发版导致门禁漂移）；
+2. **更新 `requirements.lock`**：在目标 Python 版本（CI 矩阵 3.12 / 3.13 / 3.14）下
+   重新生成 lock（pip-compile 或 `pip freeze` 口径，与 lock 现有格式对齐——含传递依赖）；
+3. **本地校验**：`python scripts/check_lock_sync.py` 退出码 0（规则 1/2 阻断；规则 4
+   的"lock 多余项"仅 WARNING 不阻断，但提示重新生成 lock）；
+4. **Docker 镜像**：依赖变更需重建镜像（`docker build -t aitester:latest .`，构建期
+   预安装使用同一锁定版本，见 `Dockerfile` 注释）；
+5. **CI 矩阵验证**：推 PR 后确认 3.12 / 3.13 / 3.14 三版本矩阵全绿
+   （3.13 处于 scipy/pandas 锁定版本支持区间，2026-09-28 批次补入矩阵）。
+
+> PR 提交前请在 PR 模板勾选"依赖变更清单"（见 `.github/PULL_REQUEST_TEMPLATE.md`）。
+> 失败恢复：`check_lock_sync.py` 退出码 1 时，按"规则 1 缺失项 / 规则 2 版本脱节"
+> 提示定位是 requirements 漏声明还是 lock 版本漂移，重新生成 lock 后再校验。
+
 ## 适合新贡献者的入门任务
 
 首次参与推荐从以下类型的问题入手（无需理解全量架构即可上手）：

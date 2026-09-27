@@ -580,6 +580,8 @@ if trace_enabled():
 
 **关键特性：** 线程安全（`--parallel` 多工作线程并发追加同一 JSONL，单条 append+flush 在锁内）；所有写入文本统一过 `mask_sensitive_info`（与日志脱敏同源）；写盘失败不阻断主流程（仅 warning）。
 
+**内存快照缓冲（默认启用、不落盘）：** 即便未设 `AITESTER_TRACE_DIR`（文件追踪全 no-op），`TraceSession` 仍把每次任务的"最小化节点快照"（node 决策 / token / 耗时）累积进进程级环形缓冲（容量 64，`TRACE_MEMORY_BUFFER_ENABLE=false` 可完全关闭），供 CLI `--dump-trace-on-failure` 在任务失败时经 `dump_recent_to(target_dir)` 写成临时 JSONL（`./tmp_trace/<ts>_failed_trace.jsonl`）供诊断；无快照可写 / 写盘失败时静默跳过（诊断出口，不影响主流程）。默认行为不变（不落盘、零 I/O）。
+
 ---
 
 ### TokenUsage
@@ -780,6 +782,37 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `ModuleNotFoundError` | import 模块不存在 | 检查 `module_name` 配置 |
 | `SyntaxError` | 生成的代码有语法错误 | Debugger 会重新生成 |
 | `TimeoutError` | 测试执行超时 | 增加 `EXECUTION_TIMEOUT` |
+
+---
+
+## 脱敏边界与已知盲区（Redaction Boundaries & Known Blind Spots）
+
+> 4.1 审计口径：脱敏是**旁路观测层**，不阻断主流程；本节登记脱敏的**能力边界**与**已知盲区**，供使用者在评估"日志/追踪是否可安全共享"时参考。
+
+### 覆盖范围（已脱敏的通道）
+
+| 通道 | 脱敏函数 | 凭证替换 | 降级策略 |
+|------|---------|---------|---------|
+| 控制台日志（stdout/stderr） | `logging_utils.mask_sensitive_info` + `redact_text` | `<REDACTED_API_KEY>` / `<REDACTED_BEARER>` | 三级降级：① 正则替换 ② import 失败时原样输出 + warning ③ 脱敏函数本身崩溃时静默跳过 |
+| 追踪 JSONL（`AITESTER_TRACE_DIR`） | 同一 `mask_sensitive_info`（同源，`TraceSession._append` 内统一过） | 同上 | 序列化失败丢弃本条 + warning；脱敏 import 失败降级原样写入（不阻断观测层） |
+| 内存快照（`--dump-trace-on-failure` 写盘前） | 快照记录经 `TraceSession._append` 时已过脱敏 | 同上 | 写盘失败返回 None + warning（诊断出口，不阻断主流程） |
+| `os.environ` 进程级凭证 | `credential_scrub.scrub_os_environ` | 置空 / 替换占位 | 3 条 exec 路径前调用；import 失败静默跳过（主流程不依赖） |
+| LLM 调用异常日志 | `api_manager._redact` → `redact_text` | 同上 | 异常体回显请求头/base_url（含 API Key）时统一脱敏 |
+
+### 已知盲区（脱敏覆盖不到的路径）
+
+| 盲区 | 说明 | 缓解 |
+|------|------|------|
+| LLM 网关 401/5xx 错误体回显请求头 | 部分 openai 兼容 SDK 的 `str(e)` 把 `Authorization` 或 `base_url`（含 query 参数形式的 API Key）打进异常消息；`_redact` 已覆盖 SDK 路径，但**第三方网关自定义错误体**（非标准 openai SDK 抛出的异常）可能绕过 | 部署时如使用非标准网关，建议把错误响应体也过 `redact_text`；或用 `credential_scrub` 在子进程 exec 前清除 `os.environ` |
+| `os.environ` 中非 `LLM_N_*` / `GITHUB_*` 前缀的自定义凭证 | `scrub_os_environ` 的 3 条 exec 路径按前缀匹配（`LLM_N_API_KEY` / `LLM_N_BASE_URL` / `GITHUB_TOKEN` / `GITHUB_REPOSITORY`）；用户自定义前缀（如 `MY_PROVIDER_API_KEY`）不会被自动清除 | 自定义前缀需在 exec 调用前手动 `del os.environ[...]`；或写入 `scrub_os_environ` 的前缀表 |
+| 追踪 meta 字段嵌套非 str 值里的凭证 | `TraceSession._append` 的脱敏作用于 JSON 序列化后的整行文本；`task_meta` 嵌套 dict 中若含 `api_key` 键，序列化后会被整行正则匹配到（覆盖），但**以非键名形式出现的明文**（如 meta 值 = 整段含 Key 的字符串）依赖正则命中，存在漏检可能 | `task_meta` 构造时避免把含凭证的整段文本作为 meta 值；凭证走 `os.environ`（已被 `scrub_os_environ` 清除） |
+| 写盘失败 / 脱敏 import 失败时的降级原样输出 | `TraceSession._append` 的脱敏 import 失败时"降级原样写入"（不阻断观测层）；极端场景（`logging_utils` 被 monkeypatch 掉）下凭证可能原样落盘 | 降级路径记 warning 日志；生产环境不应 monkeypatch `logging_utils` |
+
+### 验证方式
+
+- `tests/test_trace_observability.py::TestRedaction`：`sk-ws-` 前缀凭证在追踪 JSONL 中被替换为 `<REDACTED_API_KEY>`。
+- `tests/test_redaction_audit.py`（如存在）：全项目脱敏审计（0.7 审计口径）。
+- 手动验证：设 `AITESTER_TRACE_DIR=/tmp/tr`，跑一次 `python main.py run examples/calculator.py --json`，`grep -r 'sk-ws-' /tmp/tr` 应为 0 命中。
 
 ---
 

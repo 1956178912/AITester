@@ -1,0 +1,46 @@
+# AITester 当前基线（机器可读单一事实来源）
+#
+# 用途：核心维护文档（README / QUICKSTART / api_reference / algorithm_design /
+#       usage_examples）的"当前基线"数字统一引用本文件，避免多文档各自硬编码
+#       造成漂移。历史版本表（CHANGELOG / api_reference 的版本演进节）记录
+#       的是当时快照，不随本文件刷新——本文件只维护"当前"。
+#
+# 维护约定（见 CONTRIBUTING.md "文档组织约定"）：
+#   - 任何功能批次落地后，必须同步更新本文件的 last_verified 与对应数字；
+#   - 数字以全量 pytest / ruff / mypy 实测输出为准（CI 3.14 矩阵）；
+#   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
+
+version: "1"
+last_verified: "2026-09-28"   # 全量回归实测日期（2026-09-28 改进批次扩展后）
+
+tests:
+  total_passed: 2065          # 全量 pytest tests/（2026-09-28 改进清单批次 +19 用例后）
+  total_failed: 0
+  slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
+  suite_seconds: 32          # 全量耗时量级（~32s）
+
+coverage:
+  line_total_pct: 89         # --cov=src 总行覆盖（868/7552 miss，0.10 轮次基线）
+  line_core_modules:
+    base_agent: 100
+    api_manager: 94
+    dataset_loader: 94
+    graph_nodes: 95
+    code_analyzer: 100
+    planner: 100
+    dependency: 96
+    multi_candidate: 94
+    cross_file: 95
+    rag_retriever: 95
+  branch_total_pct: null     # 2026-09-28 起 CI 报告分支覆盖（--cov-branch），首测后回填；
+                             # 本批次未单独跑 --cov-branch 全量，首次 CI 跑通后更新
+
+static_checks:
+  ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
+  ruff_warnings: 0
+  mypy_errors: 0
+  mypy_source_files: 70      # 2026-09-28 批次扩展后
+
+python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
+
+error_categories: 17         # ErrorCategory 当前类别数（17 类，2026-09-27 批次⑪）

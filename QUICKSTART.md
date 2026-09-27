@@ -20,6 +20,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+> **一键引导（推荐）**：上面第 2-4 步可由 `bash scripts/bootstrap_dev.sh`
+> 自动完成（venv 创建 + 依赖安装 + 两个 env 文件复制 + 配置加载校验，失败时
+> 给出具体缺失项提示）；只需在脚本完成后编辑 `.env.local` 填入真实
+> `LLM_N_API_KEY`。校验已配置的环境可用 `bash scripts/bootstrap_dev.sh --check-only`。
+
 ## 3. 配置环境变量
 
 > 两步都要做：步骤一配置非敏感项，步骤二配置 LLM 密钥（可跳过步骤一使用默认值，但密钥必须配）。
