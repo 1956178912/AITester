@@ -57,7 +57,7 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 .venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
-覆盖率要求：核心模块 ≥ 90%，整体 ≥ 80%。
+覆盖率要求：核心模块 ≥ 92%，整体 ≥ 90%。
 
 ## Pull Request 流程
 

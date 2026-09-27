@@ -12,6 +12,17 @@
 > 状态——其中 6 节全部改进点已落地、第 ⑤ 节残留 3 个子项缺口
 > （SWE-bench Pro / CodeBERT 嵌入后端 / pyright 备选后端）并于同日批次补齐。
 > 完整核查证据见 `docs/roadmap_2026-09-27_gap_audit.md`（含英文版）。
+>
+> **3.3 位置感知迭代修复（LoopRepair 式先定位后补丁）——真实缺口已落地
+> （2026-09-25 批次）**：新增 `POSITION_AWARE_REPAIR_ENABLE` 开关（默认 false，
+> 保持历史实验口径），`src/agents/debugger.py` 实现 `_locate_repair_focus()`
+> （traceback 行号 + AST 定位"包围异常行的最短区间函数"）+
+> `_build_position_aware_prompt_section()`（位置感知修复指引注入 prompt），
+> 无法定位时自动降级为常规全文件修复。state/nodes 接线：
+> `src/graph/state.py` 新增 `position_aware_focus` 字段，
+> `src/graph/nodes.py` debugger 节点写入。
+> 测试：`tests/test_debugger.py` 新增 `TestPositionAwareRepair`（9 用例）。
+> 详细实施记录见 `docs/implementation_2026-09-25_improvement_directions.md`。
 
 ---
 
@@ -94,12 +105,12 @@
 - 批评者评估：`src/agents/debugger.py:355-405`（`_run_critic_eval` 独立 LLM 调用构造击穿补丁的对抗用例；被击穿触发一次补丁重新生成，L293-311 主流程）。
 - 覆盖提案两要点：对抗性意图推理 + 独立批评者构造击穿测试。
 
-### 3.3 执行反馈驱动的修复策略 —— **已实现（三项全落地）**
+### 3.3 执行反馈驱动的修复策略 —— **已实现（三项全落地，位置感知修复于 2026-09-25 批次补齐）**
 
 | 提案改进点 | 现状 | 证据 |
 |---|---|---|
 | execution_trace 用于提示优化（轻量奖励预测器筛选候选） | ✅ 已实现 | `src/tools/multi_candidate.py:430-494`（`REWARD_PREDICTOR_ENABLE` 开关；`predict_candidate_rewards` 基于历史 trace 覆盖率趋势 + 静态信用筛选候选）；`_coverage_trend` L439-462 |
-| 位置感知迭代修复（先定"优先修复哪里"） | ⚠️ **部分实现** | 有 `focus_function` AST 智能截取（`debugger.py:160-166` 截断定位到焦点函数）与错误定位（`error_classifier.py` 行号提取），但**无独立的"修复位置定位"阶段**（LoopRepair 式的先定位后补丁）。现有定位由错误分类器+焦点函数承担，非显式"位置感知迭代修复" |
+| 位置感知迭代修复（先定"优先修复哪里"） | ✅ **已实现（2026-09-25 批次）** | `src/agents/debugger.py`：`_position_aware_repair_enabled()`（`POSITION_AWARE_REPAIR_ENABLE` 开关，默认 false）/ `_locate_repair_focus()`（traceback 行号 + AST 定位"包围异常行的最短区间函数"，纯静态不耗 LLM token）/ `_build_position_aware_prompt_section()`（位置感知修复指引注入 prompt）；无法定位时自动降级为常规全文件修复。`src/graph/state.py` 新增 `position_aware_focus` 字段，`src/graph/nodes.py` debugger 节点写入。测试：`tests/test_debugger.py` 新增 `TestPositionAwareRepair`（9 用例） |
 | 按前几轮 trace 动态调整 temperature/提示策略 | ✅ 已实现 | `src/graph/nodes.py:491-509`（`_dynamic_temperature_from_suggestion`：覆盖率连降时 temperature 减半，真正接线非观测层）；`src/graph/state.py:183`（`iteration_strategy_suggestion`）；`nodes.py:559-560` |
 
 ### 3.4 多候选补丁的默认启用与效果验证 —— **已在 reproduce.sh 默认启用；A/B 与适用边界分析为实验工作**
@@ -184,25 +195,24 @@
 | 2.3 回归测试 | 已实现 | 无 |
 | 3.1 双向诊断 | 已实现 | 无 |
 | 3.2 对抗推理 | 已实现 | 无 |
-| 3.3 执行反馈 | 基本已实现 | **位置感知迭代修复（LoopRepair 式先定位后补丁）为真实缺口** |
+| 3.3 执行反馈 | 已实现（3.3 位置感知迭代修复于 2026-09-25 批次落地，`POSITION_AWARE_REPAIR_ENABLE` 开关默认 false；详见表头"后续批次"说明） | 无（代码层就绪，A/B 数据为实验工作） |
 | 3.4 多候选 | 已实现（默认已开） | 跑 A/B 对比 + 适用边界分析（实验/论文工作） |
 | 3.5 熔断 | 已实现 | 无（退避起点 60s 而非 30s，可微调） |
 | 4.1 追踪 | 已实现 | 无 |
 | 4.2 脱敏 | 基本已实现 | **新增日志点自动脱敏检查（pre-commit/CI hook）为可选增强** |
 | 4.3 缓存 | 已实现 | 无 |
-| 5.1 覆盖率 | 基本已实现 | 确认 `compare_failures.cross_batch_comparison` 单批次边界测试 |
-| 5.2 错误分类 | 已实现（14 类） | 文档"12 类"表述滞后，需同步 |
+| 5.1 覆盖率 | 基本已实现 | ~~确认 `compare_failures.cross_batch_comparison` 单批次边界测试~~（已确认：`tests/test_smell_detection_v2.py` `test_single_batch_no_trend` / `test_single_batch_all_passed_empty_trend` / `test_empty_summaries_list` + `tests/test_failure_kb.py` 同步补强，2026-09-25 批次落地） |
+| 5.2 错误分类 | 已实现（当前 17 类，`docs/` 已同步） | 无（文档"12 类"表述已于 2026-09-25 批次同步；2026-09-27 批次再新增 `PATCH_SYNTAX_INVALID` 至 17 类，`docs/api_reference.md` 同步更新） |
 | 5.3 失败分析 | 已实现 | 无 |
 
 ### 真实剩余工作（按价值排序）
 
-1. **3.3 位置感知迭代修复**（真实功能缺口）：在 DebuggerAgent 中增加"先定位应优先修复的位置、再生成补丁"的独立阶段（LoopRepair 思路），而非仅靠错误分类器+焦点函数。
-2. **4.2 新增日志点自动脱敏检查**（可选增强）：pre-commit/CI 钩子，扫描新增日志调用是否经 `mask_sensitive_info`，防止新代码路径绕过三层防线。
-3. **5.2 文档同步**：`error_classifier.py` 实际 14 类，文档/提案"12 类"表述滞后，需更新 `docs/` 与提案描述。
-4. **5.1 边界测试确认**：确认 `compare_failures.cross_batch_comparison` 在 `--cross-batch` 仅 1 个文件时的行为有测试覆盖，缺失则补。
+1. ~~**3.3 位置感知迭代修复**~~（已实现，2026-09-25 批次）：`POSITION_AWARE_REPAIR_ENABLE` 开关 + `_locate_repair_focus()` + `_build_position_aware_prompt_section()` 已落地，9 条回归测试。A/B 实验数据为后续工作。
+2. ~~**4.2 新增日志点自动脱敏检查**~~（已实现，2026-09-25 批次）：`.pre-commit-config.yaml` 新增 `audit-log-redaction` local hook + `.github/workflows/ci.yml` 同步步骤 + `tests/test_audit_log_redaction.py`（6 用例）。
+3. ~~**5.2 文档同步**~~（已实现，2026-09-25 批次）：`README.md` / `README.en.md` / `docs/api_reference.md` / `docs/api_reference.en.md` / `docs/failure_analysis.md` 中"12 类"表述已同步为最新数字。
+4. ~~**5.1 边界测试确认**~~（已实现，2026-09-25 批次）：`tests/test_smell_detection_v2.py` 补强 `test_single_batch_no_trend` + 新增 `test_single_batch_all_passed_empty_trend` 与 `test_empty_summaries_list`；`tests/test_failure_kb.py` 同步补强。
 5. **3.4 实验工作**：跑多候选 A/B 对比 + 适用边界（断言/运行时/导入哪类收益最大）分析，产出数据入论文（代码已就绪）。
-6. **（可选）2.1 真实嵌入钩子**：实现 `_embed_code` 的 CodeBERT/sentence-transformers 接入（当前为零依赖词袋近似）。
+6. **（可选）2.1 真实嵌入钩子**：~~实现 `_embed_code` 的 CodeBERT/sentence-transformers 接入~~（已实现，2026-09-25 批次：`src/utils/embedding_utils.py` 新增，`EMBEDDING_BACKEND` 环境变量选择后端，缺依赖时保守回退词袋；CodeBERT 后端于 2026-09-27 路线图剩余缺口批次补齐）。
 
-> 说明：除上述 6 项外，提案描述的所有改进点在仓库中均已实现并有对应测试。
-> 建议优先级：先做 #1（真实功能缺口）、#3（文档准确性）、#4（测试补强），
-> #2/#5/#6 视资源与论文进度安排。
+> 说明：原 6 项真实剩余工作中 #1/#2/#3/#4/#6 均已于 2026-09-25 及 2026-09-27 批次落地。
+> 当前唯一剩余工作为 #5（多候选 A/B 对比实验数据），属实验执行 + 论文撰写层面。
