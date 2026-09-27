@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 
 from src.agents.base_agent import BaseAgent
 from src.agents.error_classifier import ErrorCategory, ErrorClassifier, get_fix_strategy
@@ -99,6 +99,68 @@ def _bidirectional_diagnosis_enabled() -> bool:
     return os.getenv("BIDIRECTIONAL_DIAGNOSIS_ENABLE", "false").lower() == "true"
 
 
+# ─── 1.3 分层压缩降级链（符号守卫拒绝后的收紧生成）────────────────────────────
+# 与 patch_applier 的三级上下文档位（full_context / patch_ingredients /
+# minimal）配套的 prompt 侧实现：_patch_applier_node 的符号守卫拒绝补丁时
+# 调 advance_context_tier() 推进档位，并把 (档位名, 缺失符号) 作为
+# contract_reject_feedback 经 _debugger_node 透传回本模块；本模块据此：
+#   1. _build_downgrade_context：按档位构建"更高约束"的代码上下文
+#      （patch_ingredients = 补丁配方保留片段；minimal = 签名+import 极简），
+#      替代"全文件截断"——被拒轮次的 prompt 不再携带已破坏契约的大段代码；
+#   2. _downgrade_tier_temperature：档位 → 温度映射（降级层更低温度，
+#      减少"创造性改写"再破坏命名契约）；
+#   3. 把缺失符号列表注入 prompt 负面反馈（"上轮补丁删除了这些符号，
+#      必须保留"）。
+# 默认（feedback 为 None）零行为变化，历史实验口径不变。
+
+
+def _downgrade_tier_temperature(tier_name: str) -> float | None:
+    """1.3 降级链：档位名 → LLM 温度映射（patch_applier 档位表同口径）。"""
+    from src.tools.patch_applier import _CONTEXT_TIER_TEMPERATURES
+
+    return _CONTEXT_TIER_TEMPERATURES.get(tier_name)
+
+
+def _build_downgrade_context(
+    original_code: str,
+    focus_function: str | None,
+    feedback: dict[str, Any],
+) -> str:
+    """1.3 降级链：按被拒档位构建收紧的代码上下文（纯静态，零 LLM token）。
+
+    Args:
+        original_code: 原始被测代码全文。
+        focus_function: 焦点函数名（None 时各层退化为无焦点口径）。
+        feedback: _patch_applier_node 透传的拒绝反馈，含
+            {"tier": "patch_ingredients"|"minimal",
+             "missing_symbols": [被守卫判定的缺失模块级符号]}。
+
+    Returns:
+        收紧后的上下文文本（"档位上下文 + 契约缺失符号负面反馈"）；
+        该档位上下文构建失败（AST 解析失败等）时返回空串，调用方回退
+        历史截断口径（保守降级，不阻断修复主流程）。
+    """
+    tier = str(feedback.get("tier", "minimal"))
+    try:
+        from src.tools.patch_applier import build_tiered_context
+
+        tier_idx = 2 if tier == "minimal" else 1
+        ctx = build_tiered_context(original_code, focus_function, tier=tier_idx)
+    except Exception as e:  # 构建失败必须保守降级（空串）
+        logger.warning("1.3 降级链上下文构建失败（回退历史截断口径）: %s", e)
+        return ""
+    if not ctx:
+        return ""
+    missing = feedback.get("missing_symbols") or []
+    if missing:
+        ctx += (
+            f"\n\n【契约守卫负面反馈】上一轮补丁删除了以下必须保留的模块级符号：{', '.join(sorted(missing)[:10])}。"
+            "本轮修复必须原样保留这些符号（名称/定义均不得删除或重命名），"
+            "只允许修改函数/方法体内部逻辑。"
+        )
+    return ctx
+
+
 class DebuggerAgent(BaseAgent):
     """
     调试修复师：分析测试失败，输出根因诊断、错误分类和代码补丁。
@@ -151,6 +213,7 @@ class DebuggerAgent(BaseAgent):
         target_module: str | None = None,
         temperature: float | None = None,
         cross_file_contexts: dict[str, str] | None = None,
+        contract_reject_feedback: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -222,7 +285,26 @@ class DebuggerAgent(BaseAgent):
         # 的原始行号）在**原始**源码中定位，截断版（头尾保留中间省略）会
         # 使行号偏移或目标函数被整体丢弃 → focused=False 降级全文件修复。
         original_target_code = target_code
-        target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
+        # 1.3 分层压缩降级链：上一轮补丁被命名契约符号守卫拒绝时
+        # （contract_reject_feedback 非空，由 _patch_applier_node 经
+        # _debugger_node 透传），按被拒档位构建"更高约束"的代码上下文
+        # （补丁配方保留 / 签名+import 极简）并注入契约缺失符号负面反馈；
+        # 未触发时截断口径与历史完全一致（零回归）。
+        tiered_ctx_text = ""
+        if contract_reject_feedback:
+            tiered_ctx_text = _build_downgrade_context(original_target_code, focus_function, contract_reject_feedback)
+        if tiered_ctx_text:
+            target_code = tiered_ctx_text
+            # mypy：收窄到此处保证非 None（上方 if contract_reject_feedback 后不再为 None）
+            _feedback = cast("dict[str, Any] | None", contract_reject_feedback)
+            logger.info(
+                "1.3 降级链：上一轮补丁被符号守卫拒绝（%s），本轮上下文降级为%s档（%d 字符）",
+                ",".join((_feedback or {}).get("missing_symbols", [])[:5]) or "未知缺失",
+                (_feedback or {}).get("tier", "minimal"),
+                len(tiered_ctx_text),
+            )
+        else:
+            target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
         # 截断超长测试输出，保留关键错误信息（测试输出非源码，不做 AST 截取）
         test_output = BaseAgent.truncate_code(test_output, max_chars=1500)
 
@@ -356,8 +438,21 @@ class DebuggerAgent(BaseAgent):
                 logger.debug("位置感知修复（3.3）：无法定位，降级为常规全文件修复")
             query += position_aware_section
 
+        # 1.3 改进：分层压缩降级链——上一轮补丁被命名契约符号守卫拒绝时
+        # （contract_reject_feedback 非空，由 _patch_applier_node 经
+        # _debugger_node 透传），在更严格的温度下重新生成（降级层温度映射
+        # patch_applier._CONTEXT_TIER_TEMPERATURES；patch 层拒绝 = 更高约束）。
+        # 未触发时（feedback 为 None）温度口径与历史完全一致。
+        eff_temperature: float | None = temperature
+        if contract_reject_feedback:
+            tier_name = str(contract_reject_feedback.get("tier", "minimal"))
+            tier_temperature = _downgrade_tier_temperature(tier_name)
+            if tier_temperature is not None:
+                eff_temperature = tier_temperature
+                logger.info("1.3 降级链：上下文档位 %s，本轮 LLM 温度收紧为 %.2f", tier_name, tier_temperature)
+
         # 调用 LLM 获取修复响应，带文件缓存省 token
-        raw = self._call_llm_with_cache(query, temperature=temperature)
+        raw = self._call_llm_with_cache(query, temperature=eff_temperature)
 
         # P0 4.1 响应格式重试：JSON 解析失败 / 空响应时用更严格 prompt 重新请求一次
         # ErrorCategory 在文件头已导入（与 ErrorClassifier 同模块），删除函数内
@@ -378,7 +473,7 @@ class DebuggerAgent(BaseAgent):
                 query + "\n\n【格式要求】只输出一个 JSON 对象，不要输出任何其他文本、注释或 markdown 代码块。"
                 'JSON 结构：{"root_cause": str, "error_category": str, "fix_strategy": str, "patch": str}'
             )
-            raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=temperature)
+            raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=eff_temperature)
             _strict_response_format = ErrorClassifier.classify_llm_response(raw2_strict)
             if _strict_response_format not in (
                 ErrorCategory.LLM_EMPTY_RESPONSE,
@@ -441,21 +536,28 @@ class DebuggerAgent(BaseAgent):
         # 疑点非空且 TYPE_REPAIR_LLM_ENABLE=true 时自动修订；未启用时仅记录
         # 疑点观测层（type_repair_findings），不影响历史实验口径。
         type_repair_findings: list[dict[str, Any]] = []
+        mypy_findings_count: int = 0
         if patch:
             # 先用 patch_applier 把补丁应用到原代码得到"补丁后代码"，再喂给
-            # type_repair_layer（静态层需要两侧代码做对比识别）
+            # type_repair_layer（静态层需要两侧代码做对比识别；
+            # TYPE_CHECK_ENABLE=true 时内部还会跑 mypy 仓库级静态类型分析）
             from src.tools.patch_applier import apply_patch_to_code
 
             _patched, _applied = apply_patch_to_code(target_code, patch)
             _type_repair = type_repair_layer(target_code, _patched if _applied else target_code)
             type_repair_findings = _type_repair.get("findings", [])
+            mypy_findings_count = int(_type_repair.get("mypy_findings_count", 0))
             if _type_repair.get("repaired"):
                 # LLM 层修订成功且通过契约回环 → 用修订代码替换 patch
                 _repaired = _type_repair.get("repaired_code") or _patched
                 patch = f"```python\n{_repaired}\n```"
                 logger.info("2.1 类型修复层修订了补丁（静态疑点 %d 处）", len(type_repair_findings))
             elif type_repair_findings:
-                logger.debug("2.1 类型疑点 %d 处（静态层记录，LLM 层未修订）", len(type_repair_findings))
+                logger.debug(
+                    "2.1 类型疑点 %d 处（静态层记录，LLM 层未修订；mypy 层 %d 条）",
+                    len(type_repair_findings),
+                    mypy_findings_count,
+                )
 
         return {
             "root_cause": result.get("root_cause", "未知"),
@@ -475,6 +577,14 @@ class DebuggerAgent(BaseAgent):
             # 2.1 PAGENT 风格类型修复层：静态识别的类型疑点（LLM 层未启用时
             # 仍记录，供实验分析消费；修订成功时 patch 已被替换）
             "type_repair_findings": type_repair_findings,
+            # 2.1 mypy 静态层观测：mypy 补充的类型疑点数（未启用/未安装时 0）
+            "mypy_findings_count": mypy_findings_count,
+            # 1.3 分层压缩降级链：本轮是否因契约拒绝反馈而收紧了上下文
+            # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
+            "downgrade_triggered": bool(contract_reject_feedback),
+            "downgrade_tier": (
+                str(contract_reject_feedback.get("tier")) if contract_reject_feedback else None
+            ),
         }
 
     # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────

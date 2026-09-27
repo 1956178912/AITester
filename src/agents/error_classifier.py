@@ -79,6 +79,10 @@ class ErrorCategory(Enum):
         MULTI_CANDIDATE_ALL_REJECTED: 多候选补丁全部被静态筛选拒绝
             （ENABLE_MULTI_CANDIDATE_PATCH=true 但 N 个候选均未通过
             static_validate_patch），标识多候选策略失效场景（5.2 持续细化）
+        PATCH_SYNTAX_INVALID: 补丁经 2.2 重采样（最多 2 次）后仍语法不合法
+            （AST 解析失败），已记录到失败知识库（failure_knowledge_base.json
+            同口径，由 _patch_applier_node 的重采样统计产出），标识"补丁语法
+            反复损坏"场景（2.2 改进，重采样耗尽标记）
     """
 
     LLM_FORMAT_ERROR = "llm_format_error"
@@ -101,6 +105,8 @@ class ErrorCategory(Enum):
     # 5.2 持续细化：两类"多候选/轨迹"流程类别（refine_failure_category 判定）
     EXECUTION_TRACE_MISSING = "execution_trace_missing"
     MULTI_CANDIDATE_ALL_REJECTED = "multi_candidate_all_rejected"
+    # 2.2 改进：重采样耗尽标记（patch_applier.apply_patch_with_resample 统计）
+    PATCH_SYNTAX_INVALID = "patch_syntax_invalid"
 
 
 class SyntaxSubtype(Enum):
@@ -746,6 +752,7 @@ def refine_failure_category(
     rag_stats: list[dict] | None = None,
     execution_trace: list[dict] | None = None,
     multi_candidate_stats: dict | None = None,
+    patch_syntax_invalid: bool | None = None,
 ) -> str:
     """任务收尾时按最终状态信号细化失败类别（1.1 状态细化 + 5.2 持续细化）。
 
@@ -802,6 +809,10 @@ def refine_failure_category(
         static_passed = multi_candidate_stats.get("static_passed", 0)
         if candidates > 0 and static_passed == 0:
             return ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED.value
+    # 2.2 改进：重采样耗尽标记（patch_applier.apply_patch_with_resample 统计
+    # 经 _patch_applier_node 写入 state["error_category"]="patch_syntax_invalid"）
+    if patch_syntax_invalid or error_category == ErrorCategory.PATCH_SYNTAX_INVALID.value:
+        return ErrorCategory.PATCH_SYNTAX_INVALID.value
     return error_category
 
 
@@ -828,4 +839,5 @@ def refine_final_error_category(final_state: dict) -> str:
         rag_stats=final_state.get("rag_stats"),
         execution_trace=final_state.get("execution_trace"),
         multi_candidate_stats=final_state.get("multi_candidate_stats"),
+        patch_syntax_invalid=bool(final_state.get("patch_syntax_invalid_flag", False)),
     )

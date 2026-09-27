@@ -4,6 +4,99 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-27 第十一轮：错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层（默认行为不变）
+
+> 本批次为 2026-09-27 第十轮全项目审查（commit `a1a06ec`）之后的功能
+> 批次，包含 6 个方向的功能增强与类型/lint 修复，**默认行为不变**
+> （所有新能力均有独立环境变量开关，默认关闭；修复项仅修正
+> `on_resample` 关键参数等隐藏缺陷）：
+>
+> - **5.2 错误分类 16 → 17 类**：新增 `PATCH_SYNTAX_INVALID`（2.2 重采样
+>   耗尽标记）；`refine_failure_category` / `refine_final_error_category`
+>   新增 `patch_syntax_invalid` 参数；测试同步更新。
+> - **2.2 补丁后处理重采样**：`PATCH_RESAMPLE_ENABLE=true` 时
+>   `_patch_applier_node` 应用失败触发 `apply_patch_with_resample`
+>   （最多 `PATCH_RESAMPLE_MAX` 次），仍失败标记 `patch_syntax_invalid`。
+> - **1.3 分层压缩降级链透传**：`contract_reject_feedback` 经
+>   `_debugger_node` 跨轮透传，`debug()` 新增该参数 + `_build_downgrade_context`
+>   + 档位温度映射；`AITesterState` 声明 `contract_reject_feedback`
+>   / `contract_missing_symbols` / `patch_resample_stats` /
+>   `patch_syntax_invalid_flag` 四个键。
+> - **五、多维度污染检测**：`run_benchmark._build_task_result` 新增
+>   `contamination_risk_level` 字段（high/medium/low）；
+>   `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`。
+> - **2.1 mypy 静态层**：`TYPE_CHECK_ENABLE=true` 时
+>   `type_repair._run_mypy_findings` 补充分层类型疑点；
+>   修复 `contextlib` 导入与 SIM105 lint。
+> - **修复 + 类型清零**：`on_resample` → `resample_fn` 关键参数名修复
+>   （2.2 重采样此前静默失效）；`build_tiered_context` tier-0 返回
+>   `str | None` → `str`（`... or ""`）；全仓 mypy 0 错误、ruff 全绿。
+>
+> 全量 1937 测试通过（基线 1920 + 17 新增），零回归；
+> ruff / mypy 全绿（64 源文件）；CI 全绿。
+
+### 5.2 错误分类 16 → 17 类（新增 `PATCH_SYNTAX_INVALID`）
+
+- `src/agents/error_classifier.py`：`ErrorCategory` 枚举新增
+  `PATCH_SYNTAX_INVALID`（重采样耗尽标记，标识"补丁语法反复损坏"场景）；
+  `refine_failure_category` / `refine_final_error_category` 新增
+  `patch_syntax_invalid` 参数；判定优先级
+  `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`。
+- `tests/test_error_classifier.py`：`test_seventeen_categories_total` 锁定
+  17 类总数 + `PATCH_SYNTAX_INVALID` 值。
+
+### 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）
+
+- `src/graph/nodes.py`：`_patch_applier_node` 应用失败时触发
+  `apply_patch_with_resample`（最多 `PATCH_RESAMPLE_MAX` 次，默认 2）；
+  仍失败时标记 `patch_syntax_invalid`（`refine_failure_category` 消费）。
+- `src/tools/patch_applier.py`：`apply_patch_with_resample` 关键参数
+  `resample_fn` 修复（此前调用方误传 `on_resample` 导致 2.2 重采样
+  静默失效，默认关闭不受影响）；`apply_patch_with_resample` 支持
+  `resample_fn` 回调注入（LLM 负面反馈重采样）。
+- `tests/test_improvements_1_2_2_1_2_2_4_3.py`：回归守卫锁定重采样路径。
+
+### 1.3 分层压缩降级链透传（`CONTEXT_TIER_DOWNGRADE_ENABLE`）
+
+- `src/graph/state.py`：`AITesterState` 声明 `contract_reject_feedback` /
+  `contract_missing_symbols` / `patch_resample_stats` /
+  `patch_syntax_invalid_flag` 四个键（`create_initial_state` 同步补默认值）。
+- `src/graph/nodes.py`：`_debugger_node` 透传 `contract_reject_feedback`
+  给 `debug()`；`_patch_applier_node` 符号守卫拒绝时写入档位反馈 +
+  缺失符号列表；`on_resample` 关键参数修复。
+- `src/agents/debugger.py`：`debug()` 新增 `contract_reject_feedback`
+  参数 + `_build_downgrade_context` + 档位温度映射；`_downgrade_tier_temperature`
+  读 `patch_applier._CONTEXT_TIER_TEMPERATURES`；观测字段
+  `mypy_findings_count` / `downgrade_triggered` / `downgrade_tier`。
+- `tests/test_roadmap_13_22_21_mypy_5.py`（新增）：tier 推进 /
+  重采样接线 / mypy 静态层 / 降级链透传回归守卫。
+
+### 五、多维度污染检测 + Token 效率
+
+- `experiments/run_benchmark.py`：`_build_task_result` 新增
+  `contamination_risk_level` 字段（high/medium/low，无 golden patch
+  时保守 "low"）；`_compute_contamination_risk_level` 调
+  `patch_semantic_similarity` 多维度检测；失败分支各键 None 兜底
+  （键集合同构）。
+- `experiments/rag_ab_experiment.py`：`compare_ab` 新增
+  `token_saving.delta_pct`（RAG ON vs OFF token 消耗降低百分比）。
+
+### 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）
+
+- `src/tools/type_repair.py`：`_run_mypy_findings` 补充分层类型疑点
+  （mypy 未安装时透明降级为空列表，不阻断 ast 静态层）；
+  修复 `contextlib` 导入与 SIM105 lint（`try/except OSError: pass` →
+  `contextlib.suppress(OSError)`）。
+
+### 修复 + 类型清零
+
+- `src/tools/patch_applier.py`：`build_tiered_context` tier-0 分支
+  返回 `str | None` → `str`（`extract_function_context(...) or ""`，
+  保守降级口径，行为等价）。
+- `src/agents/debugger.py` / `src/graph/nodes.py`：`cast` 收窄
+  `dict[str, Any] | None` union-attr（mypy 全绿，零行为变化）。
+- 全仓 ruff 8 个 lint 问题清零 + mypy 12 个类型错误清零（64 源文件）。
+
 ## [Unreleased] — 2026-09-27 第九轮并行子代理深审 + 第十轮全项目 P1/P2 收敛（默认行为不变）
 
 > 本轮为 2026-09-26 六批次全面审查（commit `9526fd0`）之后，基于 4 路并行子代理

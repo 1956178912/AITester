@@ -9,15 +9,15 @@
 
 | Metric | Status |
 |------|------|
-| **Total Tests** | ✅ 1920 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1846 collected) |
-| **Unit Tests** | ✅ Full: 1920 passed, 0 failed (~31s measured after the 2026-09-27 tenth-batch full-project P1/P2 convergence); reduced environment: ~1846 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
+| **Total Tests** | ✅ 1937 collected (full dependencies) / reduced environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped: ~1863 collected) |
+| **Unit Tests** | ✅ Full: 1937 passed, 0 failed (~31s measured after the 2026-09-27 round-11 feature batch); reduced environment: ~1863 passed (`skipif`/`importorskip` graceful degradation, not false-positive ERROR) |
 | **Code Coverage** | 94% total coverage (src/; 0.10 deep-audit round fixed 4 sites + 2 new regression cases, full suite green; core modules: base_agent 100% / api_manager 94% / dataset_loader 94% / graph/nodes.py 95% / code_analyzer 100% / planner 100% / dependency 96% / multi_candidate 94% / cross_file 95% / rag/retriever 95%) |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-09-27 full-audit & conservative-optimization round (ten batches: static checks zeroed (mypy/ruff) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene) + seventh-batch hot-path deep scan (AST-parse reuse / O(1) task index / shared combined text / precompiled keyword regex) + eighth-batch closing audit (lint / format zeroing + type-repair contract-reference caliber + `type_repair_findings` state propagation + precompiled zai-domain regex) + ninth-batch parallel subagent deep-audit (P1×4: single-function import prefix misclassified as full-file / all-candidates-failed still writes degraded code / venv cache race / per-dir thread locks + P2×10: debugger malformed-JSON degradation / exception branch keeps last valid result / async def patch locating / precompiled regex / convergence double-counting fix) + tenth-batch full-project P1/P2 convergence (P1×6: non-numeric coverage_delta crash / unbounded negative cache / rag similarity bins KeyError / non-numeric reward_signals crash / cross-batch duplicate task_id silent drop / summary None crash + P2×10: comment / docstring wording fixes + TimeoutExpired snapshot append + dotted module-name import fix + CLI flag conflict notice + total_test_count fallback caliber + report None rendering + closure depth caliber + convergence safe normalization + regressed excludes new_categories + dead-write removal + NaN cause disambiguation; full 1920-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Latest Optimization** | ✅ 2026-09-27 round-11 feature batch (error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer, default behavior unchanged; full 1937-test suite passes, zero regressions); prior: 2026-09-27 full-audit & conservative-optimization round (ten batches: static checks zeroed (mypy/ruff) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene) + seventh-batch hot-path deep scan (AST-parse reuse / O(1) task index / shared combined text / precompiled keyword regex) + eighth-batch closing audit (lint / format zeroing + type-repair contract-reference caliber + `type_repair_findings` state propagation + precompiled zai-domain regex) + ninth-batch parallel subagent deep-audit (P1×4: single-function import prefix misclassified as full-file / all-candidates-failed still writes degraded code / venv cache race / per-dir thread locks + P2×10: debugger malformed-JSON degradation / exception branch keeps last valid result / async def patch locating / precompiled regex / convergence double-counting fix) + tenth-batch full-project P1/P2 convergence (P1×6: non-numeric coverage_delta crash / unbounded negative cache / rag similarity bins KeyError / non-numeric reward_signals crash / cross-batch duplicate task_id silent drop / summary None crash + P2×10: comment / docstring wording fixes + TimeoutExpired snapshot append + dotted module-name import fix + CLI flag conflict notice + total_test_count fallback caliber + report None rendering + closure depth caliber + convergence safe normalization + regressed excludes new_categories + dead-write removal + NaN cause disambiguation; full 1920-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round + 11 files format-normalized in batch 7 + 5 working-tree lint nits cleared in batch 8 (duplicate import / trailing whitespace / no-placeholder f-string / PERF401 / exception narrowing) + 14 files format-normalized in batches 9/10 + mypy 0 errors across the repo (62 source files)) |
-| **Recent Changes** | ✅ 2026-09-27 full-audit & conservative-optimization round (ten batches): static checks all green + P1 correctness fixes (non-numeric input crash guards / unbounded negative cache limit / summary None guards / cross-batch dedup / import fix / CLI conflict notice) + P2 robustness / caliber / comment fixes (TimeoutExpired snapshot append + convergence safe normalization + regressed excludes new_categories + dead-write removal + NaN cause disambiguation + multi-module docstring wording) + repo-wide format normalization; see [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Recent Changes** | ✅ 2026-09-27 round-11 feature batch (default behavior unchanged): 5.2 error classification 16→17 (new `PATCH_SYNTAX_INVALID` resample-exhausted marker) + 2.2 patch post-processing resampling (`PATCH_RESAMPLE_ENABLE`, default off) + 1.3 layered-compression downgrade-chain propagation (`contract_reject_feedback` cross-round via `_debugger_node`, `CONTEXT_TIER_DOWNGRADE_ENABLE` default off) + V multi-dimensional contamination detection (`run_benchmark._build_task_result` new `contamination_risk_level` field) + 2.1 mypy static layer (`TYPE_CHECK_ENABLE`, default off) + fixed `on_resample` → `resample_fn` key argument name (2.2 resampling was silently disabled) + `build_tiered_context` tier-0 `str|None` → `str` + `AITesterState` declared 4 new keys + whole-repo ruff 8 lint + mypy 12 type errors zeroed; full 1937-test suite passes, zero regressions; see [CHANGELOG.en.md](CHANGELOG.en.md). |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +72,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1920 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1846 collected)
+# Run all unit tests (full 1937 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1863 collected)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -499,6 +499,42 @@ A pure observability layer, enabled by default (does not affect repair routing).
 
 > Purpose: preparing data for future execution-feedback-driven fine-tuning (BoostAPR-style methods) — every benchmark automatically writes "pass/fail, coverage change, elapsed time, multi-dimensional reward signals" into the result JSON; no extra trace-collection script needed.
 
+### 5.19 Error Classification System Extension (5.2 + P0 4.1 + 2.2 subcategories, 17 categories)
+`ErrorCategory` expanded from 12 to 17 categories: the 5.2 batch added `EXECUTION_TRACE_MISSING` (task failed but `execution_trace` empty = executor exception path) and `MULTI_CANDIDATE_ALL_REJECTED` (all multi-candidates rejected by static screening); the P0 4.1 batch (2026-09-25 follow-up) split two precise subcategories out of `LLM_FORMAT_ERROR` — `LLM_EMPTY_RESPONSE` (LLM empty response) and `LLM_JSON_PARSE_FAILED` (non-empty but JSON extraction failed) — classified directly by `classify_llm_response()` after the Debugger receives the LLM response and before JSON parsing (one of the roots of the 75% UNKNOWN failure sample); the 2.2 batch (2026-09-27 round 11) added `PATCH_SYNTAX_INVALID` (a patch that remains syntactically invalid / fails AST parsing after 2.2 resampling up to 2 times, written to `state["error_category"]` by `apply_patch_with_resample` stats via `_patch_applier_node`), identifying the "patch syntax repeatedly corrupted" scenario; `refine_failure_category` gains `execution_trace` / `multi_candidate_stats` / `patch_syntax_invalid` parameters, precedence `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`; `refine_final_error_category` wires the new fields; `get_fix_strategy` documents fix strategies per category.
+
+```python
+from src.agents.error_classifier import refine_final_error_category
+
+category = refine_final_error_category(final_state)  # → one of 17 categories
+```
+
+#### 5.19.1 Patch post-processing resampling (2.2, `PATCH_RESAMPLE_ENABLE`, default off)
+When the application fails (target function not located / AST parse fails), `_patch_applier_node` in `src/graph/nodes.py` triggers `apply_patch_with_resample` (in `src/tools/patch_applier.py`) if `PATCH_RESAMPLE_ENABLE=true`: feeds "negative feedback" (AST error info + 1.3 downgrade-chain tier temperature) back to the Debugger to regenerate the patch, up to `PATCH_RESAMPLE_MAX` (default 2) times; if still failing, marks `patch_syntax_invalid` (consumed by `refine_failure_category`, normalized to `PATCH_SYNTAX_INVALID`) and keeps the original code. Default-off produces no extra LLM calls (zero regression to the historical single-patch path).
+
+```bash
+# Enable patch post-processing resampling (default off, explicit enable)
+PATCH_RESAMPLE_ENABLE=true PATCH_RESAMPLE_MAX=2 python main.py run examples/calculator.py
+```
+
+#### 5.19.2 Layered-compression downgrade-chain propagation (1.3, `CONTEXT_TIER_DOWNGRADE_ENABLE`, default off)
+When the naming-contract symbol guard (`check_naming_contract`) in `_patch_applier_node` rejects a patch, if `CONTEXT_TIER_DOWNGRADE_ENABLE=true` then `advance_context_tier()` advances the context tier (`full_context` → `patch_ingredients` → `minimal`) and writes `(tier_name, missing_symbols)` as `contract_reject_feedback` into `state` (a new `AITesterState` key), propagated via the LangGraph channel to the next-round `_debugger_node` — which regenerates at a "higher-constraint" context tier + lower temperature (`_build_downgrade_context` + `_downgrade_tier_temperature`), reducing the probability of "creative rewrites" re-breaking the naming contract. Default-off only records the missing symbols (`state["contract_missing_symbols"]`), does not advance the tier (historical single-patch path).
+
+```bash
+# Enable the 1.3 layered-compression downgrade chain (default off, explicit enable)
+CONTEXT_TIER_DOWNGRADE_ENABLE=true python main.py run examples/calculator.py
+```
+
+#### 5.19.3 Multi-dimensional contamination detection (V, `run_benchmark._build_task_result`)
+`experiments/run_benchmark.py`'s `_build_task_result` adds a `contamination_risk_level` field (high/medium/low): per task it calls `patch_semantic_similarity` (in `experiments/contamination_check.py`) for multi-dimensional detection (token Jaccard + AST statement-skeleton LCS + embedding-cosine / bag-of-words-cosine conservative proxy; with `EMBEDDING_BACKEND` wired to a real embedding library it auto-upgrades to CodeBERT-style semantic cosine), combining into a risk_level (taking the most severe dimension); without a golden patch it conservatively returns "low" (no overlap evidence, not "identical"). Consumed by `analyze_results`'s `_contamination_cross_analysis` (separates "contaminated-sample" vs "uncontaminated-sample" results). `rag_ab_experiment.compare_ab` adds `token_saving.delta_pct` (RAG ON vs OFF token-consumption reduction percentage, denominator `max(_mean(off_tokens), 1)` against division by zero).
+
+#### 5.19.4 mypy static type-check layer (2.1, `TYPE_CHECK_ENABLE`, default off)
+`src/tools/type_repair.py` adds `_run_mypy_findings`: when `TYPE_CHECK_ENABLE=true`, runs mypy repo-level static type analysis on the "patched code" (the "repo-level static analysis" part of PAGENT's hybrid architecture), identifying "undefined names / argument-type mismatches / return-value type inconsistent with declaration / container-type misuse" — the PAGENT "type / data-structure management errors" (27.19% of failing patches); transparently degrades to an empty list when mypy is not installed (does not block the ast static layer); consumes only high-confidence error categories (`[name-defined, arg-type, return-value, dict-item, list-item, assignment, operator, index, has-type]`), filtering out "inference-failed / incomplete-type" low-confidence warnings. `debugger.py`'s `debug()` adds the observation field `mypy_findings_count` (0 when not enabled / not installed). Independent switch from `TYPE_REPAIR_LLM_ENABLE` (the LLM layer); can be enabled together (mypy yields more findings, wider LLM-layer repair surface).
+
+```bash
+# Enable the mypy static type-check layer (default off, explicit enable)
+TYPE_CHECK_ENABLE=true python main.py run examples/calculator.py
+```
+
 ### 5.20 SWE-bench Repo-Level Verification (P0/P1, default off)
 The official SWE-bench verification criterion is "apply the gold `test_patch` to
 the `base_commit` checkout, then run `FAIL_TO_PASS` (fails pre-fix, must all
@@ -794,7 +830,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1920 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (full 1937 cases; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -804,7 +840,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (74+ test files, full 1920 collected pytest cases; reduced environment collects ~1846 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (75+ test files, full 1937 collected pytest cases; reduced environment collects ~1863 / auto-skips RAG and visualization cases, total src coverage 94%):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1169,6 +1205,20 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 
 ## Iteration records
 
+### 2026-09-27 Round-11 feature batch (error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer, default behavior unchanged)
+
+**Key results**:
+- 5.2 error classification 16 → 17 categories: added `PATCH_SYNTAX_INVALID` (resample-exhausted marker); `refine_failure_category` / `refine_final_error_category` gain a `patch_syntax_invalid` parameter
+- 2.2 patch post-processing resampling (`PATCH_RESAMPLE_ENABLE`, default off): `_patch_applier_node` triggers `apply_patch_with_resample` on application failure (up to `PATCH_RESAMPLE_MAX` times); still failing marks `patch_syntax_invalid`
+- 1.3 layered-compression downgrade-chain propagation (`CONTEXT_TIER_DOWNGRADE_ENABLE`, default off): `contract_reject_feedback` cross-round via `_debugger_node`; `AITesterState` declares `contract_reject_feedback` / `contract_missing_symbols` / `patch_resample_stats` / `patch_syntax_invalid_flag`
+- V, multi-dimensional contamination detection: `run_benchmark._build_task_result` adds `contamination_risk_level` field (high/medium/low); `rag_ab_experiment.compare_ab` adds `token_saving.delta_pct`
+- 2.1 mypy static layer (`TYPE_CHECK_ENABLE`, default off): `type_repair._run_mypy_findings` adds layered type findings (transparently degrades when mypy not installed)
+- Fixes: `on_resample` → `resample_fn` key argument name fix (2.2 resampling was silently disabled); `build_tiered_context` tier-0 `str|None` → `str`; `AITesterState` gained 4 key declarations
+- Whole-repo ruff 8 lint + mypy 12 type errors zeroed (64 source files)
+- Full 1937 tests passed / ruff repo-wide 0 warnings / mypy 64 source files 0 errors / 94% coverage
+
+**Verification**: Full 1937 passed / 0 failed / ruff all green / mypy all green / 94% coverage
+
 ### 2026-09-27 Tenth-batch full-project P1/P2 convergence round
 
 **Key results**:
@@ -1180,9 +1230,9 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
   - `experiments/statistical_analysis._pair_by_task`: cross-batch duplicate `task_id` "last-wins" dict derivation silently drops early batches → first-seen-wins dedup + warning log
   - `experiments/run_benchmark` summary: bare `r["iterations"]` / `r["elapsed_seconds"]` crash when key present but value None → `r.get(...) or 0` guard
 - P2 robustness / caliber / doc fixes (10 items): comment / docstring wording + TimeoutExpired snapshot append + dotted module-name import fix + CLI flag conflict notice + total_test_count fallback + report None rendering + closure depth + convergence safe normalization + regressed excludes new_categories + dead-write removal + NaN cause disambiguation + `cohen_d` docstring
-- Full 1920 tests passed / ruff repo-wide 0 warnings / mypy 62 source files 0 errors / 94% coverage
+- Full 1920 tests passed / ruff repo-wide 0 warnings / mypy 62 source files 0 errors / 94% coverage (tenth-batch baseline; after round-11: 1937 tests / 64 source files)
 
-**Verification**: Full 1920 passed / 0 failed / ruff all green / mypy all green / 94% coverage
+**Verification**: Full 1920 passed / 0 failed / ruff all green / mypy all green / 94% coverage (tenth-batch baseline; after round-11: 1937 passed / 0 failed / 64 source files)
 
 ### 2026-09-27 Ninth-batch parallel subagent deep-audit round
 
@@ -1219,7 +1269,7 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 ### v0.1 (2026-09-18) — First official release
 
 **Key features**:
-- Four-agent architecture (Planner / Generator / Executor / Debugger) + hierarchical error repair (14 error categories)
+- Four-agent architecture (Planner / Generator / Executor / Debugger) + hierarchical error repair (17 error categories)
 - Logic-driven Chain-of-Thought (Logic-driven CoT): Planner explicitly analyzes input/output domains, pre/post conditions, and boundary cases
 - RAG retrieval enhancement (ChromaDB, off by default; enable with `ENABLE_RAG=true`)
 - Multi-baseline comparison and ablation (aitester / plain_llm / single_agent)

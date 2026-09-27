@@ -83,6 +83,16 @@ class TestBuildTaskResult:
         # 1.2 变异得分：generated_test 成功分支取 final_state 值，失败分支 None 兜底
         assert success["generated_test"] == "def t(): pass"
         assert failure["generated_test"] is None
+        # 1.3 命名契约符号守卫 / 2.2 重采样：成功分支取 final_state 值，
+        # 失败分支 None 兜底（键集合同构）
+        assert success["contract_missing_symbols"] is None
+        assert failure["contract_missing_symbols"] is None
+        assert success["patch_resample_stats"] is None
+        assert failure["patch_resample_stats"] is None
+        # 五、多维度污染检测：contamination_risk_level 字段必须存在；
+        # 无 golden_patches 时保守返回 "low"
+        assert success["contamination_risk_level"] == "low"
+        assert failure["contamination_risk_level"] == "low"
 
 
 class TestRunSingleTask:

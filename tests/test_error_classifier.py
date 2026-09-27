@@ -79,14 +79,17 @@ class TestErrorCategory:
         """RAG_RETRIEVAL_EMPTY 类别的值。"""
         assert ErrorCategory.RAG_RETRIEVAL_EMPTY.value == "rag_retrieval_empty"
 
-    def test_sixteen_categories_total(self):
-        """错误分类体系共 16 类（10 文本类 + 2 状态细化类 + 2 多候选/轨迹类
+    def test_seventeen_categories_total(self):
+        """错误分类体系共 17 类（10 文本类 + 2 状态细化类 + 2 多候选/轨迹类
         + P0 4.1 两个 LLM_FORMAT_ERROR 精确子类 LLM_EMPTY_RESPONSE /
-        LLM_JSON_PARSE_FAILED）。"""
-        assert len(ErrorCategory) == 16
+        LLM_JSON_PARSE_FAILED + 2.2 重采样耗尽标记 PATCH_SYNTAX_INVALID）。"""
+        assert len(ErrorCategory) == 17
         # P0 4.1 子类存在性校验
         assert ErrorCategory.LLM_EMPTY_RESPONSE.value == "llm_empty_response"
         assert ErrorCategory.LLM_JSON_PARSE_FAILED.value == "llm_json_parse_failed"
+        # 2.2 重采样耗尽标记（patch_applier.apply_patch_with_resample 统计
+        # 经 _patch_applier_node 写入 state["error_category"] 的消费口径）
+        assert ErrorCategory.PATCH_SYNTAX_INVALID.value == "patch_syntax_invalid"
 
 
 class TestSyntaxSubtype:

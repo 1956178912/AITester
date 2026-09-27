@@ -111,6 +111,9 @@ class TestDebuggerNodeTypeRepairFindingsPropagation:
             "review_reason": "",
             "position_aware_focus": {"focused": False, "function_name": None, "line": None, "hint": ""},
             "type_repair_findings": [{"file": "patched", "line": 3, "message": "m", "kind": "type_mismatch"}],
+            "mypy_findings_count": 0,
+            "downgrade_triggered": False,
+            "downgrade_tier": None,
         }
         monkeypatch.setattr(nodes.DebuggerAgent, "debug", lambda self, **kw: fake_debug_result)
 
@@ -126,6 +129,11 @@ class TestDebuggerNodeTypeRepairFindingsPropagation:
         assert update["type_repair_findings"] == [
             {"file": "patched", "line": 3, "message": "m", "kind": "type_mismatch"}
         ]
+        # 2.1 mypy 静态层观测字段（未启用时 0）
+        assert update["mypy_findings_count"] == 0
+        # 1.3 降级链观测字段（未触发时 False/None）
+        assert update["downgrade_triggered"] is False
+        assert update["downgrade_tier"] is None
 
     def test_debugger_node_default_empty_findings(self, monkeypatch):
         """debug() 无该键（历史调用方）时，节点写入空列表而非 None。"""

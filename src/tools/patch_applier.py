@@ -26,6 +26,7 @@ import difflib
 import logging
 import os
 import re
+import threading
 from typing import Any
 
 from src.utils.helpers import extract_code_block
@@ -590,6 +591,164 @@ def safe_apply_patch_contract(
         logger.info("命名契约破坏，回滚补丁（P0 1.3）：缺失 %s", missing)
         return code, False, missing
     return new_code, True, []
+
+
+# ─── 1.3 改进：分层压缩降级链（符号守卫拒绝时逐级收紧上下文再生成）──────
+# 三级降级链（与路线图 1.3 口径）：
+#   L1 full_context      完整函数上下文（depth=CODE_FOCUS_DEPTH，AST 聚焦）
+#   L2 patch_ingredients 补丁配方保留（目标函数完整 AST + 调用签名 + 导出
+#                        契约符号 + 模块常量，即"最小充分子序列"）
+#   L3 minimal          签名 + import 的极简上下文（仅契约符号与 import）
+# L1 生成的补丁被命名契约守卫拒绝时自动降级 L2，L2 再被拒绝降级 L3——
+# 每级在更高约束（契约符号显式注入 + 更低温度）下重新生成，
+# 破坏命名契约的概率逐级降低。各层预算/温度：
+
+_CONTEXT_TIER_BUDGETS: dict[str, int] = {
+    "full_context": 3000,
+    "patch_ingredients": 2500,
+    "minimal": 1200,
+}
+# 降级链顺序（下标即降级方向；0 = 最宽上下文，2 = 最严格约束）
+_CONTEXT_TIER_ORDER: tuple[str, ...] = ("full_context", "patch_ingredients", "minimal")
+# 各层 LLM 温度（降级层用更严格的采样，减少"创造性改写"破坏契约）
+_CONTEXT_TIER_TEMPERATURES: dict[str, float] = {
+    "full_context": 0.2,
+    "patch_ingredients": 0.1,
+    "minimal": 0.0,
+}
+
+
+def _contract_context_tier_index() -> int:
+    """1.3 降级链：读当前上下文档位（CONTEXT_TIER 环境变量）。
+
+    取值 "0"/"1"/"2"（对应 _CONTEXT_TIER_ORDER 下标），非法/缺省为 0
+    （默认 full_context，与历史单补丁口径一致——降级链仅在"被符号守卫
+    拒绝"后由调用方经 advance_context_tier 推进）。
+    """
+    raw = os.getenv("CONTEXT_TIER", "0").strip()
+    try:
+        idx = int(raw)
+    except ValueError:
+        return 0
+    if idx not in (0, 1, 2):
+        return 0
+    return idx
+
+
+def advance_context_tier() -> int:
+    """1.3 降级链：推进到下一层上下文档位，返回新档位下标。
+
+    在符号守卫（check_naming_contract）拒绝当前补丁后调用：当前层
+    （_CONTEXT_TIER_INDEX 进程内状态）+1，封顶 2（minimal 层不再降级，
+    返回 2 表示"已到最严格层，重新生成仍被拒则放弃本轮"）。
+    同时同步 CONTEXT_TIER 环境变量（跨进程口径，与 LLM 温度透传路径
+    一致：同进程内 LLM 调用方读取 _current_context_tier() 获得新档位）。
+
+    线程安全：--parallel 多任务共享进程时，用 _TIER_LOCK 保护
+    "读-改-写"临界区（min(idx+1, 2) + os.environ 赋值），避免两任务
+    并发推进时丢失一次 +1（最坏情形：降级链推进到错误档位，仍比
+    "不推进"更保守——降级到更严格层不会破坏命名契约）。
+    """
+    global _CONTEXT_TIER_INDEX
+    with _TIER_LOCK:
+        _CONTEXT_TIER_INDEX = min(_CONTEXT_TIER_INDEX + 1, 2)
+        os.environ["CONTEXT_TIER"] = str(_CONTEXT_TIER_INDEX)
+        idx_now = _CONTEXT_TIER_INDEX
+    logger.info("1.3 分层压缩降级链：上下文降级至第 %d 层（%s）", idx_now + 1, _CONTEXT_TIER_ORDER[idx_now])
+    return idx_now
+
+
+def _current_context_tier() -> tuple[str, int, float]:
+    """返回 (档位名, 下标, 温度) 三元组（调用方构建 prompt 上下文时消费）。
+
+    读路径同样加锁（与 advance_context_tier 的写路径配对，避免 GIL 之外的
+    读-写交错导致读到中间值——虽然 CPython 下 int 读是原子的，但锁口径
+    与写路径一致，便于未来扩展到"档位名+温度"原子读取）。
+    """
+    with _TIER_LOCK:
+        idx = _CONTEXT_TIER_INDEX
+    name = _CONTEXT_TIER_ORDER[idx]
+    return name, idx, _CONTEXT_TIER_TEMPERATURES[name]
+
+
+_CONTEXT_TIER_INDEX = _contract_context_tier_index()
+# 降级链档位的进程级临界区锁（--parallel 多任务共享进程时，advance 的
+# 读-改-写 + os.environ 同步需原子；读路径同锁口径，避免中间值）
+_TIER_LOCK = threading.Lock()
+
+
+def build_tiered_context(
+    original_code: str,
+    target_function: str | None,
+    tier: int | None = None,
+) -> str:
+    """1.3 分层压缩降级链：按档位构建注入 prompt 的代码上下文。
+
+    档位（下标 → 内容）：
+    - 0 full_context：完整函数上下文（extract_function_context，depth 取
+      CODE_FOCUS_DEPTH 层调用链展开）；
+    - 1 patch_ingredients：补丁配方保留片段（render_patch_ingredient_context，
+      目标函数完整 AST + 调用签名 + 导出契约符号 + import + 模块常量）；
+    - 2 minimal：极简上下文（仅 import 语句 + 契约符号名单 + 目标函数
+      签名行——"最小充分"底线，约束最强、token 成本最低）。
+
+    档位语义由 advance_context_tier 的显式推进决定：指定 L2 就构建 L2，
+    不逐级 fallback（避免"调用方指定 L2"被静默替换成 L3 的语义漂移）。
+    该档位构建失败（AST 解析失败等）时返回空串，调用方回退"全文件 +
+    字符级截断"历史口径（保守降级，不阻断修复主流程）。
+
+    Args:
+        original_code: 原始被测代码。
+        target_function: 目标函数名（None 时各层退化为"无焦点"口径）。
+        tier: 档位下标（None 时读 _current_context_tier()）。
+
+    Returns:
+        该档位的上下文字符串（可能为空）。
+    """
+    idx = tier if tier is not None else _current_context_tier()[1]
+    idx = max(0, min(2, idx))
+    if not original_code:
+        return ""
+    # 1.3 关键正确性：各层必须按"指定档位"构建，**不逐级 fallback**。
+    # 若 L2 构建失败（AST 解析失败等）逐级落到 L3 会让"调用方指定 L2"的
+    # 语义被静默替换——降级链档位语义由 advance_context_tier 的显式推进
+    # 决定，build 失败时返回空串让调用方回退"全文件 + 字符级截断"历史口径
+    # （保守降级，不引入跨档位行为漂移）。
+    if idx == 0:
+        from src.tools.code_analyzer import extract_function_context
+
+        # 保守降级：上下文无法解析（函数不存在/AST 解析失败）时返回空串，
+        # 调用方回退"全文件 + 字符级截断"历史口径（见函数 docstring）
+        return extract_function_context(original_code, target_function or "") or ""
+    if idx == 1:
+        from src.tools.code_analyzer import preserve_patch_ingredients, render_patch_ingredient_context
+
+        ingredients = preserve_patch_ingredients(original_code, target_function or None)
+        return render_patch_ingredient_context(ingredients)
+    # L3 minimal：仅 import + 契约符号名单 + 目标函数签名行
+    from src.tools.code_analyzer import preserve_patch_ingredients
+
+    ingredients = preserve_patch_ingredients(original_code, target_function or None)
+    parts: list[str] = []
+    imports = ingredients.get("imports") or ""
+    if imports:
+        parts.append(f"imports:\n{imports}")
+    symbols: list[str] = []
+    symbols.extend(ingredients.get("exports") or [])
+    symbols.extend(ingredients.get("register_symbols") or [])
+    if symbols:
+        parts.append(f"must_keep_symbols: {', '.join(sorted(set(symbols)))}")
+    sigs = ingredients.get("called_signatures") or []
+    target_ast = ingredients.get("target_ast") or ""
+    # 目标函数仅保留 def 行（首行）+ 调用签名（已含 def 行）
+    if target_ast:
+        first_line = target_ast.splitlines()[0]
+        parts.append(f"target_signature:\n{first_line}")
+    if sigs:
+        parts.append("called_signatures:\n" + "\n".join(sigs))
+    if not parts:
+        return ""
+    return "[MINIMAL_CONTEXT]\n" + "\n\n".join(parts)
 
 
 def generate_diff(old_code: str, new_code: str) -> str:

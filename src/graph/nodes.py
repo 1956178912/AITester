@@ -69,6 +69,61 @@ _HARD_ERROR_CATEGORIES = frozenset({"assertion", "runtime", "logic_error", "inde
 # CODE_FOCUS_DEPTH 环境变量，默认 1；跨文件任务建议 2）
 CODE_FOCUS_DEPTH: int = int(os.getenv("CODE_FOCUS_DEPTH", "1"))
 
+
+def _patch_resample_enabled() -> bool:
+    """2.2 改进：补丁后处理重采样开关（PATCH_RESAMPLE_ENABLE=true 时启用，默认 false）。
+
+    启用后 _patch_applier_node 在应用失败时触发 apply_patch_with_resample
+    （AST 验证 + 负面反馈重采样，最多 PATCH_RESAMPLE_MAX 次），仍失败则
+    把该轮标记为 patch_syntax_invalid（refine_failure_category 消费）。
+    默认关闭保持历史单补丁口径（不产生额外 LLM 调用）。
+    """
+    return os.getenv("PATCH_RESAMPLE_ENABLE", "false").lower() == "true"
+
+
+def _patch_resample_max() -> int:
+    """2.2 改进：重采样上限（PATCH_RESAMPLE_MAX，默认 2，与 2.2 口径一致）。
+
+    上限 0/负数视为 0（单次应用即放弃，等价历史口径）；上限过高时钳到 5
+    （防止 LLM token 空烧，--parallel 场景累积）。
+    """
+    try:
+        n = int(os.getenv("PATCH_RESAMPLE_MAX", "2"))
+    except ValueError:
+        n = 2
+    return max(0, min(n, 5))
+
+
+def _patch_resample_temperature() -> float | None:
+    """2.2 改进：重采样 LLM 温度（1.3 降级链档位温度优先；未读到时 None →
+    沿用 config.TEMPERATURE 默认口径）。
+
+    读 patch_applier._current_context_tier() 的档位温度——被符号守卫拒绝
+    后自动降级到的档位（0.2/0.1/0.0），越严档位温度越低，重采样也按该
+    温度走（与"降级层用更严格采样"的 1.3 口径一致）。
+    """
+    try:
+        from src.tools.patch_applier import _current_context_tier
+
+        _name, _idx, temp = _current_context_tier()
+        return temp
+    except Exception:
+        return None
+
+
+def _context_tier_downgrade_enabled() -> bool:
+    """1.3 改进：分层压缩降级链开关（CONTEXT_TIER_DOWNGRADE_ENABLE=true 时
+    启用，默认 false）。
+
+    启用后 _patch_applier_node 的命名契约守卫拒绝补丁时，调
+    advance_context_tier() 推进档位并把 (档位名, 缺失符号) 写入
+    state["_1_3_contract_feedback"]——下一轮 _debugger_node 读到该反馈
+    后按"更高约束"的上下文（补丁配方保留 / 签名+import 极简）+ 更低温度
+    重新生成。默认关闭时仅记录缺失符号（state["_1_3_contract_missing"]），
+    不动档位（保持历史单补丁口径）。
+    """
+    return os.getenv("CONTEXT_TIER_DOWNGRADE_ENABLE", "false").lower() == "true"
+
 # 安全检查 2 用：函数定义探测正则（re 编译缓存命中，热路径零编译开销）。
 # 锚定行首（含缩进行）后的 `def `，与旧的"逐行 startswith('def ')"语义等价
 # （行内首 token 非 def 的注释/docstring 不命中，避免误判）。
@@ -680,6 +735,14 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             cross_file_contexts=state.get("cross_file_contexts") or None,
             # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
             temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+            # 1.3 分层压缩降级链：上一轮补丁被命名契约符号守卫拒绝时
+            # （_patch_applier_node 写入 state["contract_reject_feedback"] =
+            # {"tier", "missing_symbols"}），本轮按"更高约束"的上下文档位
+            # （补丁配方保留 / 签名+import 极简）+ 更低温度重新生成；
+            # 未触发时 None（行为与历史完全一致）
+            # mypy：AITesterState.get 对 TypedDict 返回 Any/Optional 视
+            # 键是否已声明而定，显式 cast 收窄到 debug 期望类型
+            contract_reject_feedback=cast("dict[str, Any] | None", state.get("contract_reject_feedback")),
         )
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
@@ -749,6 +812,12 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 疑点仍保留供实验分析消费。2026-09-26 补传播：此前 debug() 返回值
         # 已含该键但节点未写入 state（schema 有键却无值，消费侧恒 None））
         "type_repair_findings": result.get("type_repair_findings", []),
+        # 2.1 mypy 静态层观测（TYPE_CHECK_ENABLE=true 时非 0，未启用/未安装时 0）
+        "mypy_findings_count": result.get("mypy_findings_count", 0),
+        # 1.3 分层压缩降级链：本轮是否因契约拒绝反馈而收紧了上下文
+        # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
+        "downgrade_triggered": result.get("downgrade_triggered", False),
+        "downgrade_tier": result.get("downgrade_tier"),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
@@ -1067,6 +1136,19 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     补丁应用节点：将 Debugger 生成的补丁应用到被测代码，并写回文件。
     应用后更新 iteration 计数器，供下次循环使用。
 
+    2.2 补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）：应用失败
+    （定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传 Debugger
+    重新生成一次（严格 prompt + 1.3 降级链档位收紧温度），最多
+    PATCH_RESAMPLE_MAX（默认 2）次；仍失败则把该轮标记为
+    patch_syntax_invalid（refine_failure_category 消费）并保留原代码。
+
+    1.3 分层压缩降级链（CONTEXT_TIER_DOWNGRADE_ENABLE=true，默认关）：
+    符号守卫（check_naming_contract）拒绝补丁时，调 advance_context_tier()
+    推进上下文档位，并把 (档位, 缺失符号) 作为 contract_reject_feedback
+    写入 state——下一轮 _debugger_node 读到该反馈后按"更高约束"的
+    上下文（补丁配方保留 / 签名+import 极简）+ 更低温度重新生成。
+    未启用时（默认）行为与历史完全一致（仅拒绝本轮、不动档位）。
+
     状态/磁盘一致性：只有当补丁真正写入磁盘成功时，才把 target_code 更新为
     新代码并记录 patch_applied=True；任何一道安全检查（空/过短/无函数定义/
     路径不合法）拒绝写入时，target_code 保持原代码、patch_applied 记 False，
@@ -1138,6 +1220,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # P0 1.3 命名契约检查：补丁应用前对比修改前后的模块级符号集合
     # （函数/类/__all__/注册装饰器/插件入口点），缺失任何原符号则拒绝应用。
     # 开关 PATCH_CONTRACT_CHECK（默认 true）；设 false 回退历史口径。
+    contract_missing: list[str] = []
     if applied and new_code != original_code:
         from src.tools.patch_applier import check_naming_contract
 
@@ -1146,6 +1229,112 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
             applied = False
             new_code = original_code
+            contract_missing = list(missing)
+            # 1.3 分层压缩降级链：守卫拒绝时推进上下文档位（进程内状态），
+            # 并把 (档位名, 缺失符号) 经 state 透传给下一轮 _debugger_node。
+            # 开关 CONTEXT_TIER_DOWNGRADE_ENABLE（默认 false，保持历史口径；
+            # true 时降级链全链路生效）。
+            if _context_tier_downgrade_enabled():
+                from src.tools.patch_applier import _current_context_tier, advance_context_tier
+
+                advance_context_tier()
+                tier_name, _idx, _temp = _current_context_tier()
+                # 临时键：本节点函数内先写入、末尾经 state.pop 取出合并进返回
+                # dict（键本身不进入 LangGraph 通道——通道键为
+                # contract_reject_feedback，见 1.3 降级链注释）。mypy 无法
+                # 对 TypedDict 的临时动态键收窄，故对 state 做窄化 cast。
+                _state = cast("dict[str, Any]", state)
+                _state["_1_3_contract_feedback"] = {
+                    "tier": tier_name,
+                    "missing_symbols": contract_missing,
+                }
+            # mypy：同上，cast 收窄（临时键不入 TypedDict 声明）
+            cast("dict[str, Any]", state)["_1_3_contract_missing"] = contract_missing
+
+    # ── 2.2 改进：补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）──
+    # 应用失败（定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传
+    # Debugger 重新生成（严格 prompt + 1.3 降级链档位收紧温度），最多
+    # PATCH_RESAMPLE_MAX（默认 2）次；仍失败则把该轮标记为
+    # patch_syntax_invalid（refine_failure_category 消费）并保留原代码。
+    # 未启用时（默认）行为与历史完全一致，不产生额外 LLM 调用。
+    resample_stats: dict[str, Any] | None = None
+    if not applied and _patch_resample_enabled():
+        from src.agents.debugger import DebuggerAgent
+        from src.tools.patch_applier import apply_patch_with_resample
+
+        resampler = DebuggerAgent()
+
+        def _on_resample(query: str, original_code: str, patch: str, ast_error: str) -> str | None:
+            """2.2 重采样回调：严格 prompt + 1.3 降级链档位温度重新生成补丁。
+
+            注入"被拒补丁 + AST 错误 + 原始代码片段 + 档位温度"，让 LLM 在
+            更高约束下修订。返回的修订补丁已通过静态验证（AST 合法 + 不破坏
+            命名契约 + 能成功应用）才返回，否则 None（保守保留原代码）。
+            """
+            if not patch and not ast_error:
+                return None
+            # 提取被拒补丁里的 python 代码块（LLM 输出可能带 markdown 包裹）
+            from src.utils.helpers import extract_code_block
+
+            _rejected = extract_code_block(patch or "", language="python") or (patch or "")[:1000]
+            # 注入 1.3 降级链档位（被符号守卫拒绝后自动降级到的档位）
+            from src.tools.patch_applier import _current_context_tier
+
+            _tier_name, _idx, _temp = _current_context_tier()
+            strict_prompt = (
+                "【补丁语法校验失败反馈】上一轮补丁应用后 AST 解析失败或未能定位到目标函数，"
+                f"具体错误：\n{ast_error[:500]}\n\n"
+                "请基于同样的错误上下文，重新生成一个语法合法的补丁。"
+                "必须保留原文件中所有模块级符号（函数名/类名/__all__/注册装饰器/插件入口点），"
+                "只允许修改函数/方法体内部逻辑。用 ```python ... ``` 包裹输出。"
+                f"\n\n【当前档位：{_tier_name}（温度 {_temp}）】"
+                f"\n【被拒补丁片段】\n```\n{_rejected}\n```\n"
+                f"\n【原始代码片段】\n```\n{(original_code or '')[:2000]}\n```"
+            )
+            try:
+                _result = resampler._call_llm_with_cache(strict_prompt, temperature=_patch_resample_temperature())
+                _extracted = extract_code_block(_result or "", language="python")
+                if not _extracted:
+                    return None
+                # 二次静态验证：必须能 ast.parse 且不破坏命名契约
+                from src.tools.patch_applier import check_naming_contract, safe_apply_patch
+
+                _try_code, _try_ok = safe_apply_patch(original_code, _extracted)
+                if not _try_ok:
+                    return None
+                _contract_ok, _missing = check_naming_contract(original_code, _try_code)
+                if not _contract_ok:
+                    return None
+                return _extracted
+            except Exception:
+                logger.debug("2.2 重采样 LLM 调用失败（保守返回 None，不阻断主流程）", exc_info=True)
+                return None
+
+        new_code, applied, resample_stats = apply_patch_with_resample(
+            original_code,
+            state.get("patch") or "",
+            resample_fn=_on_resample,
+            max_resamples=_patch_resample_max(),
+        )
+        if resample_stats.get("resampled"):
+            logger.info(
+                "2.2 补丁后处理重采样 %d 次，成功=%s",
+                resample_stats.get("resample_count", 0),
+                resample_stats.get("success", False),
+            )
+            # 重采样成功后重新走契约检查与写盘路径
+            if applied and new_code != original_code:
+                from src.tools.patch_applier import check_naming_contract as _ck
+                _ok2, _missing2 = _ck(original_code, new_code)
+                if not _ok2:
+                    logger.warning("2.2 重采样后命名契约仍被破坏（%s），拒绝写盘", _missing2[:5])
+                    applied = False
+                    new_code = original_code
+                    contract_missing = list(_missing2)
+            if resample_stats.get("success") is False and resample_stats.get("resampled"):
+                # 2.2 标记：重采样耗尽仍失败 → patch_syntax_invalid
+                # （refine_failure_category 在任务收尾时消费）
+                cast("dict[str, Any]", state)["_2_2_patch_syntax_invalid"] = True
 
     # 默认视为"未真正写盘"，任何安全检查失败都保持该值
     written = _safe_write_patch(original_code, new_code, applied, state)
@@ -1175,11 +1364,44 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         decision="written" if written else "rejected",
         iteration=state.get("iteration", 0),
     )
+    # 1.3 改进：把本轮契约缺失符号（可能来自 2.2 重采样路径）写回 state，
+    # 供 refine_failure_category / 实验分析消费（"5/7 任务破坏 sqlfluff
+    # 插件命名契约"场景的直接可观测信号）
+    contract_update: dict[str, Any] = {}
+    # mypy：_1_3_contract_missing 为本节点函数内写入的临时键（不进入
+    # AITesterState TypedDict 声明——通道键为 contract_missing_symbols，
+    # 见上方 1.3 注释），对 state 做窄化 cast 消除 typeddict-unknown-key
+    _state_pop = cast("dict[str, Any]", state)
+    _missing_now = _state_pop.pop("_1_3_contract_missing", None) or []
+    if _missing_now:
+        contract_update["contract_missing_symbols"] = list(_missing_now)
+    # 1.3 降级链档位反馈：透传给 _debugger_node（下一轮 debug 按档位收紧上下文）
+    feedback_update: dict[str, Any] = {}
+    _feedback_now = _state_pop.pop("_1_3_contract_feedback", None)
+    if _feedback_now:
+        feedback_update["contract_reject_feedback"] = _feedback_now
+    # 2.2 重采样统计 + patch_syntax_invalid 标记（refine 消费）
+    resample_update: dict[str, Any] = {}
+    if resample_stats is not None:
+        resample_stats_out = dict(resample_stats)
+        from src.tools.patch_applier import _current_context_tier as _tier_fn
+
+        _tier_name_now, _idx_now, _temp_now = _tier_fn()
+        resample_stats_out["tiered_context"] = _tier_name_now
+        resample_update["patch_resample_stats"] = resample_stats_out
+    _syntax_invalid_flag = _state_pop.pop("_2_2_patch_syntax_invalid", False)
+    if _syntax_invalid_flag:
+        # patch_syntax_invalid 标记写入 error_category（refine_failure_category
+        # 会在任务收尾时把 "patch_syntax_invalid" 归一到 PATCH_SYNTAX_INVALID）
+        resample_update["error_category"] = "patch_syntax_invalid"
     return {
         "target_code": effective_code,
         "repair_history": history,
         "iteration": state.get("iteration", 0) + 1,
         **multi_candidate_update,
+        **contract_update,
+        **feedback_update,
+        **resample_update,
     }
 
 

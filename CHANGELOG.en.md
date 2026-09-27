@@ -4,6 +4,118 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-27 Round 11: Error classification 16→17 + 2.2 patch resample + 1.3 downgrade-chain propagation + V contamination detection + 2.1 mypy static layer (default behavior unchanged)
+
+> This batch follows the 2026-09-27 Round 10 full-project audit
+> (commit `a1a06ec`). It contains 6 directions of feature enhancements
+> and type/lint fixes, **default behavior unchanged** (all new features
+> have dedicated environment-variable switches, off by default; fixes
+> only correct hidden defects such as the `on_resample` key argument):
+>
+> - **5.2 Error classification 16 → 17 categories**: added
+>   `PATCH_SYNTAX_INVALID` (resample-exhausted marker);
+>   `refine_failure_category` / `refine_final_error_category` gain a
+>   `patch_syntax_invalid` parameter; tests updated accordingly.
+> - **2.2 Patch post-processing resampling**: when
+>   `PATCH_RESAMPLE_ENABLE=true`, `_patch_applier_node` triggers
+>   `apply_patch_with_resample` (up to `PATCH_RESAMPLE_MAX` times) on
+>   application failure, then marks `patch_syntax_invalid` if still
+>   failing.
+> - **1.3 Layered-compression downgrade-chain propagation**:
+>   `contract_reject_feedback` is propagated cross-round through
+>   `_debugger_node`; `debug()` gains the parameter +
+>   `_build_downgrade_context` + tier temperature mapping;
+>   `AITesterState` declares `contract_reject_feedback` /
+>   `contract_missing_symbols` / `patch_resample_stats` /
+>   `patch_syntax_invalid_flag`.
+> - **V, Multi-dimensional contamination detection**:
+>   `run_benchmark._build_task_result` gains a
+>   `contamination_risk_level` field (high/medium/low);
+>   `rag_ab_experiment.compare_ab` gains `token_saving.delta_pct`.
+> - **2.1 mypy static layer**: when `TYPE_CHECK_ENABLE=true`,
+>   `type_repair._run_mypy_findings` adds layered type findings;
+>   fixed `contextlib` import and SIM105 lint.
+> - **Fixes + type zero-out**: `on_resample` → `resample_fn` key
+>   argument fix (2.2 resampling was silently disabled);
+>   `build_tiered_context` tier-0 returns `str | None` → `str`
+>   (`... or ""`); whole-repo mypy 0 errors, ruff all green.
+>
+> Full 1937 tests pass (baseline 1920 + 17 new), zero regressions;
+> ruff / mypy all green (64 source files); CI green.
+
+### 5.2 Error classification 16 → 17 categories (add `PATCH_SYNTAX_INVALID`)
+
+- `src/agents/error_classifier.py`: `ErrorCategory` enum adds
+  `PATCH_SYNTAX_INVALID` (resample-exhausted marker, identifies the
+  "patch syntax repeatedly corrupted" scenario);
+  `refine_failure_category` / `refine_final_error_category` gain a
+  `patch_syntax_invalid` parameter; precedence
+  `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`.
+- `tests/test_error_classifier.py`: `test_seventeen_categories_total`
+  locks the 17-category total + `PATCH_SYNTAX_INVALID` value.
+
+### 2.2 Patch post-processing resampling (`PATCH_RESAMPLE_ENABLE`)
+
+- `src/graph/nodes.py`: `_patch_applier_node` triggers
+  `apply_patch_with_resample` on application failure (up to
+  `PATCH_RESAMPLE_MAX` times, default 2); marks `patch_syntax_invalid`
+  if still failing (consumed by `refine_failure_category`).
+- `src/tools/patch_applier.py`: fixed `apply_patch_with_resample` key
+  parameter `resample_fn` (callers previously passed `on_resample`
+  causing 2.2 resampling to silently fail; default-off unaffected);
+  `apply_patch_with_resample` supports `resample_fn` callback
+  injection (LLM negative-feedback resampling).
+- `tests/test_improvements_1_2_2_1_2_2_4_3.py`: regression guards lock
+  the resampling path.
+
+### 1.3 Layered-compression downgrade-chain propagation (`CONTEXT_TIER_DOWNGRADE_ENABLE`)
+
+- `src/graph/state.py`: `AITesterState` declares `contract_reject_feedback` /
+  `contract_missing_symbols` / `patch_resample_stats` /
+  `patch_syntax_invalid_flag` (with `create_initial_state` default values).
+- `src/graph/nodes.py`: `_debugger_node` propagates
+  `contract_reject_feedback` to `debug()`; `_patch_applier_node` writes
+  tier feedback + missing-symbol list when the symbol guard rejects;
+  `on_resample` key argument fix.
+- `src/agents/debugger.py`: `debug()` gains `contract_reject_feedback`
+  parameter + `_build_downgrade_context` + tier temperature mapping;
+  `_downgrade_tier_temperature` reads
+  `patch_applier._CONTEXT_TIER_TEMPERATURES`; observation fields
+  `mypy_findings_count` / `downgrade_triggered` / `downgrade_tier`.
+- `tests/test_roadmap_13_22_21_mypy_5.py` (new): tier advance /
+  resample wiring / mypy static layer / downgrade-chain propagation
+  regression guards.
+
+### V, Multi-dimensional contamination detection + Token efficiency
+
+- `experiments/run_benchmark.py`: `_build_task_result` adds
+  `contamination_risk_level` field (high/medium/low, conservative
+  "low" without golden patch); `_compute_contamination_risk_level`
+  calls `patch_semantic_similarity` multi-dimensional detection;
+  failure branch uses None fallbacks (key-set isomorphism).
+- `experiments/rag_ab_experiment.py`: `compare_ab` adds
+  `token_saving.delta_pct` (RAG ON vs OFF token consumption reduction
+  percentage).
+
+### 2.1 mypy static layer (`TYPE_CHECK_ENABLE`)
+
+- `src/tools/type_repair.py`: `_run_mypy_findings` adds layered type
+  findings (transparently degrades to empty list when mypy not
+  installed, does not block the ast static layer); fixed `contextlib`
+  import and SIM105 lint (`try/except OSError: pass` →
+  `contextlib.suppress(OSError)`).
+
+### Fixes + type zero-out
+
+- `src/tools/patch_applier.py`: `build_tiered_context` tier-0 branch
+  returns `str | None` → `str` (`extract_function_context(...) or ""`,
+  conservative degradation, behavior-equivalent).
+- `src/agents/debugger.py` / `src/graph/nodes.py`: `cast` narrowing for
+  `dict[str, Any] | None` union-attr (mypy green, zero behavior
+  change).
+- Whole-repo ruff 8 lint issues + mypy 12 type errors zeroed (64
+  source files).
+
 ## [Unreleased] - 2026-09-27 Ninth-batch parallel subagent deep-audit + Tenth-batch full-project P1/P2 convergence (default behavior unchanged)
 
 > This round follows the 2026-09-26 six-batch full audit (commit `9526fd0`),

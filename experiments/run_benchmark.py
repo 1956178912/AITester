@@ -375,12 +375,64 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         json.dump(artifact, f, ensure_ascii=False, indent=2)
 
 
+def _compute_contamination_risk_level(
+    task_result: dict[str, Any],
+    golden_patches: dict[str, str] | None,
+) -> str:
+    """五、多维度污染检测：对单个任务计算污染风险等级（high/medium/low）。
+
+    口径（与 experiments.contamination_check 一致）：
+    - 取 task_result["patch"]（系统生成的补丁）与 golden_patches 中对应
+      任务的黄金补丁（run_benchmark 顶层 golden_patches 字典，task_id →
+      补丁文本；缺失时跳过 → 返回 "low"）；
+    - 调 patch_semantic_similarity 的多维度检测（token Jaccard + AST 语句
+      骨架 LCS + 嵌入余弦/词袋余弦保守代理；EMBEDDING_BACKEND 接入真实
+      嵌入库时自动升级为 CodeBERT 类语义余弦），综合得出 risk_level；
+    - 返回 "high" / "medium" / "low" 三档之一，写入 details[] 的
+      contamination_risk_level 字段（供 analyze_results 的
+      _contamination_cross_analysis 消费，区分"含污染样本"与"不含
+      污染样本"的结果）。
+
+    设计约束（保守、可复算）：
+    - 无黄金补丁（纯合成数据集 / 无 ground truth 场景）→ "low"（无重叠
+      证据，非"完全相同"）；
+    - 检测器抛异常（补丁格式异常等）→ "low"（保守不阻断实验主流程）；
+    - 仅读 task_result["patch"]（LLM 修订后的最终补丁），不读中间态。
+    """
+    task_id = task_result.get("task_id", "")
+    generated_patch = task_result.get("patch", "") or ""
+    if not golden_patches or not task_id or task_id not in golden_patches:
+        return "low"
+    golden_patch = golden_patches.get(task_id, "") or ""
+    if not generated_patch or not golden_patch:
+        return "low"
+    try:
+        from experiments.contamination_check import _combined_risk_level, patch_semantic_similarity
+
+        similarities = patch_semantic_similarity(generated_patch, golden_patch)
+        _level = _combined_risk_level(similarities)
+        logger.debug(
+            "五、污染检测 task=%s: jaccard=%s structural=%s semantic=%s source=%s → %s",
+            task_id,
+            similarities.get("jaccard"),
+            similarities.get("structural"),
+            similarities.get("semantic"),
+            similarities.get("semantic_source"),
+            _level,
+        )
+        return _level
+    except Exception:
+        logger.debug("污染风险等级计算失败（保守标记 low）: task=%s", task_id, exc_info=True)
+        return "low"
+
+
 def _build_task_result(
     task: BenchmarkTask,
     elapsed: float,
     final_state: dict[str, Any] | None = None,
     diagnosis: str = "",
     error_category: str = "",
+    golden_patches: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """构建单基线运行的结果字典（单一构造点，供成功/限流重试/异常三分支复用）。
 
@@ -430,6 +482,17 @@ def _build_task_result(
             # 3.2 执行反馈轨迹：逐轮执行的通过/覆盖率变化/耗时与奖励信号
             # （executor 节点默认常开写入；旧状态缺失时以 None 兜底保持键集合同构）
             "execution_trace": final_state.get("execution_trace"),
+            # 1.3 命名契约符号守卫（守卫拒绝时 _patch_applier_node 写入）
+            "contract_missing_symbols": final_state.get("contract_missing_symbols"),
+            # 2.2 补丁后处理重采样统计（PATCH_RESAMPLE_ENABLE=true 时写入）
+            "patch_resample_stats": final_state.get("patch_resample_stats"),
+            # 五、多维度污染检测：对单任务计算 risk_level（high/medium/low）
+            # （供 analyze_results 的 _contamination_cross_analysis 消费；
+            # 无 golden_patches 时 _compute_contamination_risk_level 保守返回 "low"）
+            "contamination_risk_level": _compute_contamination_risk_level(
+                {"task_id": task.task_id, "patch": final_state.get("patch") or ""},
+                golden_patches,
+            ),
             "task_metadata": task.metadata,
         }
     return {
@@ -449,6 +512,13 @@ def _build_task_result(
         "generated_test": None,
         # 3.2 执行反馈轨迹：失败分支（无 final_state）无轨迹可带，None 兜底
         "execution_trace": None,
+        # 1.3 命名契约符号守卫 / 2.2 重采样：失败分支无 final_state，
+        # 各以 None 兜底保持键集合同构
+        "contract_missing_symbols": None,
+        "patch_resample_stats": None,
+        # 五、多维度污染检测：失败分支无生成补丁（patch=None），
+        # contamination_risk_level 保守标记 "low"（无重叠证据，非"完全相同"）
+        "contamination_risk_level": "low",
         "task_metadata": task.metadata,
     }
 
@@ -482,6 +552,12 @@ def run_single_task(
     # 1.2 改进（MutGen 式变异反馈闭环）：解析变异评估开关
     # （None 沿用 config.ENABLE_MUTATION_SCORING 默认值；True/False 显式覆盖）
     mutation_enabled = ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
+    # 五、多维度污染检测：从任务 metadata 收集黄金补丁（SWE-bench 数据集
+    # 携带 metadata["golden_patch"]，合成数据集无 golden patch → 全 "low"）
+    golden_patches: dict[str, str] = {}
+    _gp = (task.metadata or {}).get("golden_patch")
+    if _gp:
+        golden_patches[task.task_id] = _gp
     # 创建临时目录存放任务相关文件（避免修改原始文件）
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
@@ -713,7 +789,9 @@ def run_single_task(
                             _feedback.get("mutation_score") or 0.0,
                         )
 
-                results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
+                results[baseline] = _build_task_result(
+                    task, elapsed, final_state=final_state, golden_patches=golden_patches
+                )
                 if save_state:
                     _dump_state_artifacts(output_dir, task, baseline, final_state)
 
@@ -736,7 +814,9 @@ def run_single_task(
                 try:
                     final_state = BASELINE_REGISTRY[baseline](state)
                     elapsed = time.time() - start_time
-                    results[baseline] = _build_task_result(task, elapsed, final_state=final_state)
+                    results[baseline] = _build_task_result(
+                        task, elapsed, final_state=final_state, golden_patches=golden_patches
+                    )
                     if save_state:
                         _dump_state_artifacts(output_dir, task, baseline, final_state)
                     end_task_trace(final_state.get("test_passed"), token_snapshot=token_usage.get_usage().as_dict())
@@ -744,14 +824,22 @@ def run_single_task(
                     elapsed = time.time() - start_time
                     logger.error("    [%s] %s 重试后仍失败: %s", baseline, task.task_id, e2)
                     results[baseline] = _build_task_result(
-                        task, elapsed, diagnosis=f"限流重试失败: {e2}", error_category="rate_limit"
+                        task,
+                        elapsed,
+                        diagnosis=f"限流重试失败: {e2}",
+                        error_category="rate_limit",
+                        golden_patches=golden_patches,
                     )
                     end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
             except Exception as e:
                 elapsed = time.time() - start_time
                 logger.error("    [%s] %s 执行失败: %s", baseline, task.task_id, e)
                 results[baseline] = _build_task_result(
-                    task, elapsed, diagnosis=f"执行异常: {e}", error_category="error"
+                    task,
+                    elapsed,
+                    diagnosis=f"执行异常: {e}",
+                    error_category="error",
+                    golden_patches=golden_patches,
                 )
                 end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
 

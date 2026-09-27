@@ -303,6 +303,12 @@ def compare_ab(
         },
         "token_saving": {
             "delta_avg": round(_mean(off_tokens) - _mean(on_tokens), 1),
+            # 六、Token 效率验证：RAG ON vs OFF 的 token 消耗降低百分比
+            # （ICSE 2025 知识增强修复工作基线：17.49%-34.24%；
+            # ContextSniper 进一步优化：-51.5%）。delta_pct > 0 表示 RAG ON
+            # 比 OFF 省 token（论文可直接引用的效率指标）；< 0 表示 RAG 负向。
+            # 分母用 max(_mean(off_tokens), 1) 防除零（OFF 全任务 0 token 时
+            # 返回 0 而非 inf）。
             "delta_pct": round(((_mean(off_tokens) - _mean(on_tokens)) / max(_mean(off_tokens), 1)) * 100, 2),
             "t_stat": round(t_tok, 4),
             "p_value_welch": round(p_tok, 6),

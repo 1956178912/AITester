@@ -226,6 +226,27 @@ class AITesterState(TypedDict, total=False):
     # （每项 {file, line, message, kind}；LLM 层修订成功时 patch 已被替换，
     # 疑点仍保留供实验分析消费）
     type_repair_findings: list[dict[str, Any]] | None
+    # 1.3 改进（命名契约 AST 符号守卫）：_patch_applier_node 被契约检查拒绝时
+    # 写入本轮缺失的模块级符号列表（check_naming_contract 口径）；None = 本轮
+    # 无契约拒绝。供 1.3 分层降级链（advance_context_tier）与实验分析消费
+    # （"5/7 任务破坏 sqlfluff 插件命名契约"场景的直接可观测信号）
+    contract_missing_symbols: list[str] | None
+    # 2.2 改进（补丁后处理重采样）：_patch_applier_node 的
+    # apply_patch_with_resample 统计 {ast_valid, resampled, resample_count,
+    # success, tiered_context: 1.3 降级链档位名}；None = 未启用重采样
+    # （历史单补丁口径）
+    patch_resample_stats: dict[str, Any] | None
+    # 2.2 改进（patch_syntax_invalid 标记）：重采样耗尽仍失败时 _patch_applier_node
+    # 写入的 True 标志；refine_failure_category 把该轮 error_category 归一为
+    # PATCH_SYNTAX_INVALID（"补丁语法反复损坏"场景的失败知识库口径）
+    patch_syntax_invalid_flag: bool | None
+    # 1.3 分层压缩降级链（_patch_applier_node → _debugger_node 跨轮透传）：
+    # 上一轮补丁被命名契约符号守卫拒绝后写入的档位反馈
+    # {"tier": 档位名, "missing_symbols": 缺失符号列表}；_debugger_node 读取后
+    # 按"更高约束"档位重建上下文。None = 未触发（行为与历史完全一致）。
+    # 该键由 _patch_applier_node 写入并经 LangGraph 通道传递给下一轮
+    # _debugger_node（节点纯函数更新字典，不在原地改写共享状态）
+    contract_reject_feedback: dict[str, Any] | None
 
 
 def create_initial_state(
@@ -332,4 +353,13 @@ def create_initial_state(
         diagnosis_source=None,
         # 2.1 PAGENT 风格类型修复层疑点（默认 None，_debugger_node 写入）
         type_repair_findings=None,
+        # 1.3 命名契约符号守卫（默认 None，_patch_applier_node 契约拒绝时写入）
+        contract_missing_symbols=None,
+        # 2.2 补丁后处理重采样统计（默认 None，未启用重采样时为 None）
+        patch_resample_stats=None,
+        # 2.2 patch_syntax_invalid 标记（默认 None，重采样耗尽时置 True）
+        patch_syntax_invalid_flag=None,
+        # 1.3 分层压缩降级链档位反馈（默认 None，_patch_applier_node 契约拒绝
+        # 且 CONTEXT_TIER_DOWNGRADE_ENABLE=true 时写入，透传给 _debugger_node）
+        contract_reject_feedback=None,
     )

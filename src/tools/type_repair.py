@@ -28,6 +28,7 @@ PAGENT 风格类型修复层（2.1 补丁类型错误后处理）。
 from __future__ import annotations
 
 import ast
+import contextlib
 import logging
 import os
 from typing import Any
@@ -44,6 +45,123 @@ def _type_repair_llm_enabled() -> bool:
     保持历史实验口径；启用后 LLM 推断 + 修订 + 契约回环验证生效。
     """
     return os.getenv("TYPE_REPAIR_LLM_ENABLE", "false").lower() == "true"
+
+
+def _static_type_check_enabled() -> bool:
+    """2.1 静态类型检查开关（TYPE_CHECK_ENABLE=true 时启用，默认 false）。
+
+    启用后在静态 ast 层（_static_type_findings）之外，额外运行
+    mypy 做"仓库级静态类型分析"——识别 PAGENT 研究中的"类型/数据结构
+    管理错误"（占失败补丁 27.19%）。默认关闭保持历史保守口径；
+    未装 mypy 时透明降级为仅 ast 静态层（不阻断修复主流程）。
+
+    与 TYPE_REPAIR_LLM_ENABLE 的关系：TYPE_CHECK_ENABLE 是"静态层"
+    （零 LLM token），TYPE_REPAIR_LLM_ENABLE 是"LLM 层"（把疑点交给
+    LLM 推断与修复）。两者可独立开关，也可同时启用（mypy 产出更多
+    疑点，LLM 层修复面更广）。
+    """
+    return os.getenv("TYPE_CHECK_ENABLE", "false").lower() == "true"
+
+
+def _run_mypy_findings(
+    original_code: str,
+    patched_code: str,
+    file_path: str = "patched_code.py",
+) -> list[dict[str, Any]]:
+    """2.1 mypy 静态类型检查（TYPE_CHECK_ENABLE=true 时启用）。
+
+    用 mypy 对"补丁后代码"做仓库级静态类型分析（PAGENT 的混合架构中
+    "仓库级静态分析"部分），识别常见类型错误：
+    - 未定义名称（NameError 类）
+    - 参数类型不匹配
+    - 返回值类型与声明不一致
+    - 容器类型混用（list/dict/set 误用）
+
+    设计约束（零外部硬依赖、保守降级）：
+    - mypy 未安装时返回空列表（不阻断主流程，仅保持 ast 静态层）；
+    - mypy 解析失败（如补丁含非法语法）时返回空列表（保守）；
+    - 仅消费 mypy 的"高置信度"错误类别（[name-defined, arg-type,
+      return-value, dict-item, list-item, assignment, operator]），
+      过滤 mypy 的"推断失败 / 类型不完整"类低置信度告警（保守口径）；
+    - 每个 finding 的 line 取 mypy 报的行号（1-based），file 取 file_path。
+
+    Args:
+        original_code: 原始代码（供 mypy 推断原接口类型注解）。
+        patched_code: 应用补丁后的代码。
+        file_path: 虚拟文件路径（mypy 按 .py 文件解析；默认 patched_code.py）。
+
+    Returns:
+        疑点列表（与 _static_type_findings 同 schema，kind 前缀 "mypy_"）。
+    """
+    if not _static_type_check_enabled():
+        return []
+    if not patched_code or not patched_code.strip():
+        return []
+    try:
+        import mypy.api  # type: ignore
+    except ImportError:
+        logger.debug("mypy 未安装，跳过静态类型检查（保持 ast 层口径）")
+        return []
+    # 仅消费高置信度错误类别（过滤 mypy 的"推断失败"类低置信度告警）
+    _HIGH_CONFIDENCE_KINDS = frozenset(
+        {
+            "name-defined",
+            "arg-type",
+            "return",
+            "return-value",
+            "dict-item",
+            "list-item",
+            "assignment",
+            "operator",
+            "index",
+            "has-type",
+        }
+    )
+    try:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".py", delete=False, encoding="utf-8"
+        ) as _f:
+            _f.write(patched_code or "")
+            _tmp_path = _f.name
+        try:
+            # mypy.api.run 返回 (exit_code, out, err)；exit_code 1 = 有错误
+            # 2 = 命令/文件错误（语法不合法等），均保守处理
+            _exit_code, _out, _err = mypy.api.run([_tmp_path, "--no-error-summary"])
+            # 解析 mypy 输出（格式：path:line:col: error: message [category]）
+            _MYPY_LINE_RE = __import__("re").compile(
+                r"^.+?:?(\d+):\d+: (warning|error): (.+?) \[([a-z-]+)\]$"
+            )
+            findings: list[dict[str, Any]] = []
+            for _line in (_out or "").splitlines():
+                _m = _MYPY_LINE_RE.match(_line)
+                if not _m:
+                    continue
+                _lineno = int(_m.group(1))
+                _severity = _m.group(2)
+                _msg = _m.group(3).strip()
+                _cat = _m.group(4)
+                if _severity != "error":
+                    continue
+                if _cat not in _HIGH_CONFIDENCE_KINDS:
+                    continue
+                findings.append(
+                    {
+                        "file": "patched",
+                        "line": _lineno,
+                        "message": f"mypy[{_cat}]: {_msg}",
+                        "kind": f"mypy_{_cat.replace('-', '_')}",
+                    }
+                )
+            return findings
+        finally:
+            # 清理临时文件（保守：失败也不阻断主流程）
+            with contextlib.suppress(OSError):
+                os.unlink(_tmp_path)
+    except Exception as e:
+        logger.debug("mypy 静态检查异常（保守降级为 ast 层）: %s", e)
+        return []
 
 
 # 静态疑点：每个疑点为 {file, line, message, kind} 的字典。
@@ -396,14 +514,38 @@ def type_repair_layer(
         {"findings": 疑点列表, "repaired_code": 修订后代码（无修订时 = patched_code）,
          "repaired": bool, "contract_ok": bool, "missing_symbols": [缺失符号]}
         任何失败路径都不抛异常，保守降级为"未修订 + 疑点记录"。
+
+    静态层来源（2.1 改进，TYPE_CHECK_ENABLE=true 时启用 mypy）：
+    - ast 层：_static_type_findings（保守启发式，零外部依赖）；
+    - mypy 层：_run_mypy_findings（仓库级静态类型分析，识别 PAGENT
+      研究中的"类型/数据结构管理错误"占失败补丁 27.19%）；
+    两层产出合并（去重：同 file+line+kind 保留一条），mypy 层未启用
+    或未安装时仅保留 ast 层（保持历史保守口径不变）。
     """
     findings = _static_type_findings(original_code, patched_code)
+    # 2.1 mypy 静态层（TYPE_CHECK_ENABLE=true 且 mypy 已安装时生效）
+    _mypy_findings = _run_mypy_findings(original_code, patched_code)
+    if _mypy_findings:
+        # 去重：同 file+line+kind 只保留一条（ast 层优先，mypy 层补充）
+        _existing_keys = {(f.get("file"), f.get("line", 0), f.get("kind")) for f in findings}
+        _new_findings = [
+            f for f in _mypy_findings
+            if (f.get("file"), f.get("line", 0), f.get("kind")) not in _existing_keys
+        ]
+        findings.extend(_new_findings)
+        logger.debug(
+            "2.1 mypy 静态层补充 %d 条类型疑点（总 %d 条）",
+            len(_new_findings),
+            len(findings),
+        )
     result: dict[str, Any] = {
         "findings": findings,
         "repaired_code": patched_code,
         "repaired": False,
         "contract_ok": True,
         "missing_symbols": [],
+        # 2.1 mypy 层观测（未启用时全 0，保持历史口径）
+        "mypy_findings_count": len(_mypy_findings),
     }
     if not findings:
         return result
