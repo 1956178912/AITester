@@ -109,12 +109,19 @@ class ErrorReport:
         ]
 
         if self.error_context:
+            # 2026-09-27 round10 P2：error_context 的 filename/line/column
+            # 可能为 None（ErrorClassifier 提取失败），f-string 渲染
+            # "None" 语义不清——统一渲染为 "未知"/"—"（渲染层防护，
+            # 默认数值路径零变化）
+            _fn = self.error_context.filename
+            _ln = self.error_context.line
+            _col = self.error_context.column
             lines.extend(
                 [
                     "--- 错误位置 ---",
-                    f"文件: {self.error_context.filename}",
-                    f"行号: {self.error_context.line}",
-                    f"列号: {self.error_context.column}",
+                    f"文件: {_fn if _fn is not None else '未知'}",
+                    f"行号: {_ln if _ln is not None else '—'}",
+                    f"列号: {_col if _col is not None else '—'}",
                     "",
                 ]
             )
@@ -192,13 +199,17 @@ class ErrorReport:
         ]
 
         if self.error_context:
+            # 2026-09-27 round10 P2：None 渲染为 "未知"/"—"（与 to_text 同口径）
+            _fn = self.error_context.filename
+            _ln = self.error_context.line
+            _col = self.error_context.column
             lines.extend(
                 [
                     "## 错误位置",
                     "",
-                    f"- **文件**: `{self.error_context.filename}`",
-                    f"- **行号**: {self.error_context.line}",
-                    f"- **列号**: {self.error_context.column}",
+                    f"- **文件**: `{_fn if _fn is not None else '未知'}`",
+                    f"- **行号**: {_ln if _ln is not None else '—'}",
+                    f"- **列号**: {_col if _col is not None else '—'}",
                     "",
                 ]
             )

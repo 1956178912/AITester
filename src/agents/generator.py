@@ -492,7 +492,18 @@ class GeneratorAgent(BaseAgent):
             # 相似度门控：仅替换被测模块名的"笔误"变体，保留不相似的第三方库
             if not is_similar_module_name(wm, expected_module):
                 continue
-            # 将错误的模块名替换为期望模块名
-            code = code.replace(f"from {wm} import", f"from {expected_module} import")
-            logger.warning("Generator 修正了错误模块名：%s → %s", wm, expected_module)
+            # 2026-09-26 round10 P2：wm 为带点路径（pkg.mod）且代码里
+            # 同时存在包形式 `from pkg import mod` 时，裸子串
+            # code.replace("from pkg import", ...) 会把包形式行也误改
+            # （`from pkg import mod` → `from targetmod import mod`，残留
+            # 损坏的 `mod` 导入）。改用按模块名锚定的正则（与
+            # executor_imports.apply_import_replacements 同口径），
+            # 仅替换精确匹配的 `from {wm} import` 行首。
+            # （re.escape 处理带点/带特殊字符的模块名；逐模块现场编译，
+            # 数量少且 re 内部 LRU 命中，开销可忽略）
+            pattern = re.compile(rf"^from\s+{re.escape(wm)}\s+import\b", re.MULTILINE)
+            new_code, n = pattern.subn(f"from {expected_module} import", code)
+            if n > 0:
+                code = new_code
+                logger.warning("Generator 修正了错误模块名：%s → %s", wm, expected_module)
         return code

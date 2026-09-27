@@ -87,6 +87,12 @@ def _pair_by_task(
     保证两次运行配对顺序一致）。位置配对（min_len 截断）在两个基线结果
     顺序不一致时会错配任务，故废弃。
 
+    2026-09-27 round10 P1：跨批次重复 task_id（load_experiment_results
+    递归加载多份 benchmark_*.json 且不去重，synthetic 固定 task_id 前缀
+    反复运行时天然重复）旧 dict 推导"末者胜"静默丢弃早期批次数据——
+    配对样本量被截断且哪条数据胜出取决于文件 glob 顺序（不确定）。
+    现改为**首见优先**去重并打 warning，口径可预期、可追溯。
+
     Args:
         results_a: 基线 A（通常为 AITester）结果列表。
         results_b: 基线 B 结果列表。
@@ -94,8 +100,36 @@ def _pair_by_task(
     Returns:
         (pass_a, pass_b, common_task_ids)
     """
-    pass_a = {r.get("task_id"): (1 if r.get("passed") else 0) for r in results_a if r.get("task_id")}
-    pass_b = {r.get("task_id"): (1 if r.get("passed") else 0) for r in results_b if r.get("task_id")}
+    import logging
+
+    _logger = logging.getLogger(__name__)
+
+    def _dedup(rows: list[dict], label: str) -> dict[str, int]:
+        seen: dict[str, int] = {}
+        for r in rows:
+            tid = r.get("task_id")
+            if not tid:
+                continue
+            if tid in seen:
+                # 首见优先：早期批次的数据胜出，重复行跳过
+                _logger.debug("%s task_id=%r 重复行跳过（首见优先去重）", label, tid)
+                continue
+            seen[tid] = 1 if r.get("passed") else 0
+        return seen
+
+    pass_a = _dedup(results_a, "基线A")
+    pass_b = _dedup(results_b, "基线B")
+
+    n_a, n_b = len(pass_a), len(pass_b)
+    dup_a = sum(1 for r in results_a if r.get("task_id") and r.get("task_id") in pass_a) - n_a
+    dup_b = sum(1 for r in results_b if r.get("task_id") and r.get("task_id") in pass_b) - n_b
+    if dup_a > 0 or dup_b > 0:
+        _logger.warning(
+            "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 首见优先），"
+            "建议检查是否存在跨批次重复运行",
+            dup_a,
+            dup_b,
+        )
 
     common_tasks = sorted(set(pass_a) & set(pass_b))
     paired_a = [pass_a[t] for t in common_tasks]
@@ -142,7 +176,9 @@ def cohens_d(
         baseline_results: 基线结果列表
 
     Returns:
-        (d, n_pairs)；共同任务数 < 2 时返回 (nan, 0)
+        (d, n_pairs)；共同任务数 < 2 时返回 (nan, n_pairs)（n_pairs 恒为 0 或
+        1，round10 P2 文档修正：旧注释误写 "返回 (nan, 0)"，实际返回当前
+        n_pairs 值，便于调用方区分"无共同任务"与"仅 1 对"）
     """
     paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results)
     n_pairs = len(common_tasks)
@@ -269,7 +305,17 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
         import math
 
         if math.isnan(t_stat):
-            print(f"\nAITester vs {baseline}: 共同任务数 {n_pairs} < 3，无法计算配对 t 检验")
+            # 2026-09-27 round10 P2：区分两种 nan 成因——n_pairs < 3（样本量
+            # 不足）与 n_pairs >= 3 但配对差值全 0（scipy ttest_rel 零方差
+            # 返回 nan）。旧文案统一报"n < 3 无法计算"，全同场景误诊为
+            # 样本量不足
+            if n_pairs < 3:
+                print(f"\nAITester vs {baseline}: 共同任务数 {n_pairs} < 3，无法计算配对 t 检验")
+            else:
+                print(
+                    f"\nAITester vs {baseline}: 配对差值全 0（n_pairs={n_pairs}，"
+                    f"两组逐任务结果完全一致），t 检验退化为 NaN，无显著性差异"
+                )
             continue
         if not math.isfinite(t_stat):
             print(

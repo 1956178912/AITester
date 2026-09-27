@@ -517,7 +517,18 @@ def _suggest_iteration_strategy(trace: list[dict[str, Any]], coverage_delta: flo
     if len(trace) < 2:
         return None  # 首轮无历史，不调整
     # 覆盖率 delta 过滤 None 后按 float 归一（trace 中 coverage_delta 可能缺失/非数值）
-    recent_deltas = [float(t["coverage_delta"]) for t in trace[-3:-1] if t.get("coverage_delta") is not None]
+    # 2026-09-26 round10 P1：非数值 delta（"n/a"/dict 等历史落盘异常值）float()
+    # 抛 ValueError 使 executor 节点崩溃 → try/except 跳过该条目（口径：非数值
+    # delta 视为无信号，与 None 同语义），默认数值路径零变化
+    recent_deltas: list[float] = []
+    for t in trace[-3:-1]:
+        val = t.get("coverage_delta")
+        if val is None:
+            continue
+        try:
+            recent_deltas.append(float(val))
+        except (TypeError, ValueError):
+            continue
     if not recent_deltas:
         return None
     declining = all(d < 0 for d in recent_deltas[-2:]) if len(recent_deltas) >= 2 else False

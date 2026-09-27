@@ -14,8 +14,8 @@ gold test_patch 验证口径（FAIL_TO_PASS / PASS_TO_PASS）。
       按 task.metadata 路由，REPO_LEVEL_EXECUTION=true 时启用）；
     - 环境 setup（clone + checkout + pip install -e）按 (repo, commit) 缓存，
       同仓库多任务复用（SWE-bench lite 500 任务多为 6-8 个仓库）；
-    - 验证流程内 LLM 补丁写入经 git stash 保存/恢复，无论验证成功与否，
-      验证结束后仓库环境恢复为"仅应用 test_patch"的干净基线。
+    - 验证流程内 LLM 补丁写入经 git checkout -- . / git clean 恢复，无论验证
+      成功与否，验证结束后仓库环境恢复为"仅应用 test_patch"的干净基线。
 
 Returns:
     与 ExecutorAgent.execute 同构的结果字典，额外携带：
@@ -477,12 +477,14 @@ class RepoExecutor:
         """SWE-bench 官方口径验证：test_patch 前后对比 + LLM 补丁修复判定。
 
         流程（在 setup 的仓库环境中）：
-        1. 恢复干净工作区（git checkout -- . / clean -fd），保留 test_patch 未应用状态；
+        1. 恢复干净工作区（git checkout -- . / clean -fd），丢弃上一轮 llm_patch 残留；
         2. 应用 test_patch（git apply）→ 跑 FAIL_TO_PASS 基线（应失败，记录失败数）；
-        3. 工作区 stash 保存"已应用 test_patch"状态 → 再应用 llm_patch
-           （git apply，失败时降级为逐文件写入）→ 重跑 FAIL_TO_PASS + PASS_TO_PASS；
+        3. test_patch 全程留在工作区（不 stash，避免带走 untracked 新建测试文件）
+           → 再应用 llm_patch（git apply，失败时降级为逐文件写入）
+           → 重跑 FAIL_TO_PASS + PASS_TO_PASS；
         4. 判定：FAIL_TO_PASS 全过 且 PASS_TO_PASS 无回归 → passed；
-        5. 无论结果，git reset 恢复"仅 test_patch"基线（下一轮迭代/下一基线复用）。
+        5. 无论结果，git checkout -- . / clean -fd 清除 llm_patch 修改
+           + 重建 test_patch 基线（下一轮迭代/下一基线复用）。
 
         Args:
             repo_url: 仓库 URL（定位缓存环境）。

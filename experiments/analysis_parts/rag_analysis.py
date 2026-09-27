@@ -6,7 +6,23 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
+
+
+def _iter_rag_stats(details: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+    """遍历 details[].rag_stats 中的 dict 记录，跳过非 dict 元素。
+
+    2026-09-27 round10 P2：rag_stats 元素正常为 dict（kind/results/max_
+    similarity），但历史落盘 / 手动编辑的 JSON 可能混入字符串或数字
+    （非 dict 元素调 .get 会 AttributeError 使 build_analysis 整体崩溃）。
+    统一经此生成器遍历，非 dict 元素静默跳过（口径：贡献 0 检索记录）。
+    """
+    for row in details:
+        for s in row.get("rag_stats") or []:
+            if not isinstance(s, dict):
+                continue
+            yield s
 
 
 def _token_metrics_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:
@@ -35,15 +51,14 @@ def _rag_by_kind_from_details(details: list[dict[str, Any]]) -> dict[str, Any]:
          "repairs": {...}}；无 rag_stats 时返回空 dict。
     """
     per_kind: dict[str, dict[str, Any]] = {}
-    for r in details:
-        for s in r.get("rag_stats") or []:
-            kind = s.get("kind", "unknown")
-            stat = per_kind.setdefault(kind, {"retrievals": 0, "hits": 0, "sims": []})
-            stat["retrievals"] += 1
-            if s.get("results", 0) > 0:
-                stat["hits"] += 1
-            if s.get("max_similarity") is not None:
-                stat["sims"].append(s["max_similarity"])
+    for s in _iter_rag_stats(details):
+        kind = s.get("kind", "unknown")
+        stat = per_kind.setdefault(kind, {"retrievals": 0, "hits": 0, "sims": []})
+        stat["retrievals"] += 1
+        if s.get("results", 0) > 0:
+            stat["hits"] += 1
+        if s.get("max_similarity") is not None:
+            stat["sims"].append(s["max_similarity"])
     result: dict[str, Any] = {}
     for kind, stat in per_kind.items():
         sims = stat.pop("sims")
@@ -72,7 +87,7 @@ def _rag_hit_by_failure_category(details: list[dict[str, Any]]) -> dict[str, Any
         cat = r.get("error_category") or "unknown"
         stat = cross.setdefault(cat, {"total": 0, "with_hit": 0})
         stat["total"] += 1
-        if any(s.get("results", 0) > 0 for s in r.get("rag_stats") or []):
+        if any(s.get("results", 0) > 0 for s in _iter_rag_stats([r])):
             stat["with_hit"] += 1
     return cross
 
@@ -105,12 +120,17 @@ def _rag_token_efficiency(details: list[dict[str, Any]]) -> dict[str, Any]:
 
     def _group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         n = len(rows)
+        # 2026-09-26 round10 P2：iterations/total_tokens 可能为非数字
+        # （历史 JSON 混入异常值），int()/float() 崩溃使 build_analysis
+        # 失败——安全归一（解析失败回退 0，口径不变：贡献 0）
+        from experiments.analysis_parts.convergence_analysis import _safe_float, _safe_int
+
         avg_tokens = (
-            round(sum(float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2)
+            round(sum(_safe_float((r.get("token_usage") or {}).get("total_tokens", 0) or 0) for r in rows) / n, 2)
             if n
             else 0.0
         )
-        avg_iterations = round(sum(int(r.get("iterations", 0) or 0) for r in rows) / n, 2) if n else 0.0
+        avg_iterations = round(sum(_safe_int(r.get("iterations", 0) or 0) for r in rows) / n, 2) if n else 0.0
         success_rate = round(sum(1 for r in rows if r.get("passed")) / n, 4) if n else 0.0
         return {"tasks": n, "avg_tokens": avg_tokens, "avg_iterations": avg_iterations, "success_rate": success_rate}
 
@@ -143,17 +163,30 @@ def _rag_similarity_distribution(details: list[dict[str, Any]]) -> dict[str, Any
     bins = {f"{i * 0.1:.1f}-{(i + 1) * 0.1:.1f}": 0 for i in range(10)}
     total = 0
     sims: list[float] = []
-    for row in details:
-        for s in row.get("rag_stats") or []:
-            ms = s.get("max_similarity")
-            if ms is None:
-                continue
-            total += 1
+    for s in _iter_rag_stats(details):
+        ms = s.get("max_similarity")
+        if ms is None:
+            continue
+        total += 1
+        # 2026-09-27 round10 P1：相似度值可能为非数值（"0.5"/dict 等
+        # 坏 JSON 混入）→ float() 崩溃使整份 build_analysis 失败，加
+        # try/except 跳过该条目（口径：非数值值不计入检索统计）
+        try:
             val = float(ms)
-            sims.append(val)
-            # 归一化到 0.0-1.0（相似度可能 >1，保守截断到 1.0）
-            idx = min(int(val * 10), 9)
-            bins[f"{idx * 0.1:.1f}-{(idx + 1) * 0.1:.1f}"] += 1
+        except (TypeError, ValueError):
+            total -= 1
+            continue
+        sims.append(val)
+        # 归一化到 0.0-1.0（相似度可能 >1 或 <0，保守截断到 [0, 1]）
+        # 2026-09-27 round10 P1：旧实现仅钳位上界 min(...,9)，负相似度
+        # （-0.1 → int(-1.0)=-1 → bins 键 KeyError）使整份分析崩溃，
+        # 下界一并钳位到 0（分桶落 0.0-0.1 桶，与"低相关"语义一致）
+        idx = max(0, min(int(val * 10), 9))
+        bins[f"{idx * 0.1:.1f}-{(idx + 1) * 0.1:.1f}"] += 1
+        # 2026-09-27 round10 P2：均值按截断后口径计算（与"分桶截断到
+        # [0,1]"注释一致）——旧实现 sims 存原始值，相似度 1.5 会让
+        # avg_max_similarity 报告 1.5，与分桶 0.9-1.0 自相矛盾
+        sims[-1] = min(max(val, 0.0), 1.0)
     if total == 0:
         return {"available": False, "histogram": {}, "total_retrievals": 0}
     return {

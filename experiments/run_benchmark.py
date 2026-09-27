@@ -698,7 +698,12 @@ def run_single_task(
                         max_mutants=MUTATION_MAX_MUTANTS,
                     )
                     if _feedback.get("available"):
-                        results.setdefault(baseline, {})["mutation_feedback"] = _feedback
+                        # 2026-09-27 round10 P2：旧实现在此向 results[baseline]
+                        # 写入 mutation_feedback，但 L711 _build_task_result 整体
+                        # 替换 results[baseline]（新 dict 不含该键）→ 死写；
+                        # 真正的闭环经 final_state["mutation_feedback"] →
+                        # workflow 下轮 Generator 消费（nodes.py L240），正确。
+                        # 删除 results 死写，仅保留 final_state 写入。
                         final_state["mutation_feedback"] = _feedback
                         logger.info(
                             "    [%s] %s 变异反馈闭环: 存活 %d 变异体（score=%.4f）",
@@ -1278,9 +1283,13 @@ def run_benchmark(
         bl_results = all_results[baseline]
         passed = sum(1 for r in bl_results if r["passed"])
         total = len(bl_results)
-        avg_coverage = sum(r.get("coverage", 0) for r in bl_results) / total if total > 0 else 0
-        avg_iterations = sum(r["iterations"] for r in bl_results) / total if total > 0 else 0
-        avg_time = sum(r["elapsed_seconds"] for r in bl_results) / total if total > 0 else 0
+        avg_coverage = sum(r.get("coverage") or 0 for r in bl_results) / total if total > 0 else 0
+        # 2026-09-27 round10 P1：iterations/elapsed_seconds 可能为 None
+        # （历史落盘缺省/任务异常），裸 r["..."] KeyError/TypeError 崩溃——
+        # None 视为 0（缺省语义：该任务未记录迭代/耗时，贡献 0），
+        # 数值路径零变化
+        avg_iterations = sum(r.get("iterations") or 0 for r in bl_results) / total if total > 0 else 0
+        avg_time = sum(r.get("elapsed_seconds") or 0 for r in bl_results) / total if total > 0 else 0
 
         # 1.2 变异得分：在汇总统计前逐任务计算（仅当开关启用），
         # 把 mutation_score 写回 bl_results[].mutation_score，
@@ -1301,7 +1310,7 @@ def run_benchmark(
             "avg_coverage": round(avg_coverage, 1),
             "avg_iterations": round(avg_iterations, 2),
             "avg_elapsed_seconds": round(avg_time, 2),
-            "total_time": round(sum(r["elapsed_seconds"] for r in bl_results), 2),
+            "total_time": round(sum(r.get("elapsed_seconds") or 0 for r in bl_results), 2),
             # 2.2 公平性对照：失败原因分布（1.2 细化后 LLM_FORMAT_ERROR/INDEX_ERROR
             # 可单独计数；未失败任务不记 error_category，不计入分布）
             "failure_category_distribution": _aggregate_failure_categories(bl_results),

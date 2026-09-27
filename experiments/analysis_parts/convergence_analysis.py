@@ -11,6 +11,26 @@ from collections import Counter
 from typing import Any
 
 
+def _safe_int(v: Any) -> int:
+    """安全 int 转换：None / 非数字字符串 / dict 回退 0（round10 P2）。
+
+    历史落盘 JSON 可能混入 iterations="abc" 等非数字值，裸 int() 抛
+    ValueError 使整份 build_analysis 崩溃；统一经此函数归一。
+    """
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(v: Any) -> float:
+    """安全 float 转换：None / 非数字字符串 / dict 回退 0.0（round10 P2）。"""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _repair_convergence_curve(details: list[dict[str, Any]]) -> dict[str, Any]:
     """1.3 修复收敛曲线：按迭代轮次累计通过率与累计修复成本。
 
@@ -29,14 +49,14 @@ def _repair_convergence_curve(details: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(details)
     if total == 0:
         return {"total_tasks": 0, "rounds": {}}
-    max_observed = max((int(r.get("iterations", 0) or 0) for r in details), default=-1)
+    max_observed = max((_safe_int(r.get("iterations", 0) or 0) for r in details), default=-1)
     rounds: dict[str, dict[str, Any]] = {}
     for k in range(max(0, min(max_observed, 3)) + 1):
         label = str(k) if k < 3 else "3+"
-        reached = [r for r in details if int(r.get("iterations", 0) or 0) <= k]
+        reached = [r for r in details if _safe_int(r.get("iterations", 0) or 0) <= k]
         passed_in_reached = sum(1 for r in reached if r.get("passed"))
         elapsed_mean = (
-            round(sum(float(r.get("elapsed_seconds", 0.0) or 0.0) for r in reached) / len(reached), 2)
+            round(sum(_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in reached) / len(reached), 2)
             if reached
             else None
         )
@@ -301,7 +321,17 @@ def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]
     success_rows = [r for r in details if r.get("passed")]
     failed_rows = [r for r in details if not r.get("passed")]
     total = len(details)
-    first_attempt_passed = sum(1 for r in success_rows if int(r.get("iterations", 0) or 0) == 0)
+
+    # 2026-09-26 round10 P2：iterations/elapsed_seconds 可能为非数字
+    # （历史 JSON 混入字符串"abc"/dict），int()/float() 崩溃使整份分析
+    # 失败——统一经 _safe_int 归一（解析失败回退 0，口径：异常值不贡献迭代次数）
+    def _safe_int(v: Any) -> int:
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
+
+    first_attempt_passed = sum(1 for r in success_rows if _safe_int(r.get("iterations", 0) or 0) == 0)
 
     def _stats(values: list[float]) -> dict[str, Any]:
         if not values:
@@ -317,16 +347,22 @@ def _repair_convergence_metrics(details: list[dict[str, Any]]) -> dict[str, Any]
             "max": round(max(ordered), 2),
         }
 
+    def _safe_float(v: Any) -> float:
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
     return {
         "total_tasks": total,
         "success_tasks": len(success_rows),
         "failed_tasks": len(failed_rows),
         "first_attempt_success_rate": round(first_attempt_passed / total, 4) if total else 0.0,
         "first_attempt_success_count": first_attempt_passed,
-        "success_iteration_stats": _stats([float(r.get("iterations", 0) or 0) for r in success_rows]),
-        "failed_iteration_stats": _stats([float(r.get("iterations", 0) or 0) for r in failed_rows]),
-        "success_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
-        "failed_elapsed_seconds": _stats([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+        "success_iteration_stats": _stats([_safe_float(r.get("iterations", 0) or 0) for r in success_rows]),
+        "failed_iteration_stats": _stats([_safe_float(r.get("iterations", 0) or 0) for r in failed_rows]),
+        "success_elapsed_seconds": _stats([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+        "failed_elapsed_seconds": _stats([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
     }
 
 
@@ -358,14 +394,14 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
     total = len(details)
     if total == 0:
         return {"available": False, "total_tasks": 0, "rounds": {}}
-    max_observed = max((int(r.get("iterations", 0) or 0) for r in details), default=-1)
+    max_observed = max((_safe_int(r.get("iterations", 0) or 0) for r in details), default=-1)
     # 逐轮累计：到达任务数 / 累计通过 / 累计 Token（含本轮增量）
     rounds: dict[str, dict[str, Any]] = {}
     prev_cumulative_passed = 0
     prev_cumulative_tokens = 0.0
     for k in range(max(0, min(max_observed, 3)) + 1):
         label = str(k) if k < 3 else "3+"
-        reached = [r for r in details if int(r.get("iterations", 0) or 0) <= k]
+        reached = [r for r in details if _safe_int(r.get("iterations", 0) or 0) <= k]
         cumulative_passed = sum(1 for r in reached if r.get("passed"))
         # 逐轮 Token：优先读 token_usage.iterations[k].tokens（精确口径），
         # 缺失时按"总 Token / 任务自身轮数"均摊到当轮。
@@ -381,18 +417,18 @@ def _convergence_token_efficiency(details: list[dict[str, Any]]) -> dict[str, An
             usage = r.get("token_usage") or {}
             per_round = usage.get("iterations")
             if isinstance(per_round, list) and k < len(per_round) and isinstance(per_round[k], dict):
-                round_tokens += float(per_round[k].get("tokens", 0) or 0)
+                round_tokens += _safe_float(per_round[k].get("tokens", 0) or 0)
             else:
                 # 无逐轮明细：仅当任务恰好到达当轮（最终轮）时计入
-                r_iters = int(r.get("iterations", 0) or 0)
+                r_iters = _safe_int(r.get("iterations", 0) or 0)
                 if k >= 3:
                     # 3+ 轮：计入 iterations>=3 的任务（最终轮=3+）
                     if r_iters >= 3:
-                        round_tokens += float(usage.get("total_tokens", 0) or 0) / (r_iters + 1)
+                        round_tokens += _safe_float(usage.get("total_tokens", 0) or 0) / (r_iters + 1)
                 else:
                     # 0/1/2 轮：计入 iterations==k 的任务（最终轮=k）
                     if r_iters == k:
-                        round_tokens += float(usage.get("total_tokens", 0) or 0) / (k + 1)
+                        round_tokens += _safe_float(usage.get("total_tokens", 0) or 0) / (k + 1)
         incremental_passed = max(0, cumulative_passed - prev_cumulative_passed)
         # 2026-09-26 round9（P2 口径修复）：增量 Token = 当轮 round_tokens
         # （本轮"恰好到达最终轮"的任务的 total/(轮数+1) 分摊值）。旧实现按
@@ -457,7 +493,7 @@ def _difficulty_stratified_iterations(
     for row in details:
         task_id = str(row.get("task_id", ""))
         band = str(bands.get(task_id) or "unstratified")
-        iters = min(int(row.get("iterations", 0) or 0), 3)
+        iters = min(_safe_int(row.get("iterations", 0) or 0), 3)
         label = str(iters) if iters < 3 else "3+"
         stat = stratified.setdefault(band, {"total": 0, "iterations": {}})
         stat["total"] += 1
@@ -688,22 +724,22 @@ def _quality_proxy_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "coverage_proxy": {
             "success": {
-                "mean": _mean([float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
-                "median": _median([float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
+                "mean": _mean([_safe_float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
+                "median": _median([_safe_float(r.get("coverage", 0.0) or 0.0) for r in success_rows]),
             },
             "failed": {
-                "mean": _mean([float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
-                "median": _median([float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
+                "mean": _mean([_safe_float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
+                "median": _median([_safe_float(r.get("coverage", 0.0) or 0.0) for r in failed_rows]),
             },
         },
         "runtime_proxy": {
             "success": {
-                "mean": _mean([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
-                "median": _median([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+                "mean": _mean([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
+                "median": _median([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in success_rows]),
             },
             "failed": {
-                "mean": _mean([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
-                "median": _median([float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+                "mean": _mean([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
+                "median": _median([_safe_float(r.get("elapsed_seconds", 0.0) or 0.0) for r in failed_rows]),
             },
         },
         "assertion_proxy": _assertion_strength_proxy(details),
@@ -891,7 +927,9 @@ def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
         识别到问题所在）
     - 两者皆命中时归"无法生成有效补丁"（更具体，便于定位）
     """
-    converged_failed = [r for r in details if not r.get("passed") and int(r.get("iterations", 0) or 0) >= 3]
+    converged_failed = [
+        r for r in details if not r.get("passed") and _safe_int(r.get("iterations", 0) or 0) >= 3
+    ]
     root_cause_stuck = 0
     patch_stuck = 0
     tasks_stuck: list[str] = []
@@ -1037,6 +1075,8 @@ def _execution_trace_summary(details: list[dict[str, Any]]) -> dict[str, Any]:
 
     旧 JSON 无 execution_trace 字段时返回 available=False（渲染时跳过章节）。
     """
+    import contextlib
+
     observed = 0
     total_executions = 0
     pass_on_first = 0
@@ -1058,15 +1098,22 @@ def _execution_trace_summary(details: list[dict[str, Any]]) -> dict[str, Any]:
         last = trace[-1] if isinstance(trace[-1], dict) else {}
         rewards = last.get("reward_signals") or {}
         if isinstance(rewards, dict):
-            if "correctness" in rewards:
-                last_rew_correctness.append(float(rewards["correctness"]))
-            if "efficiency" in rewards:
-                last_rew_efficiency.append(float(rewards["efficiency"]))
+            # 2026-09-27 round10 P1：reward/coverage 值可能为非数字
+            # （"high"/"80%"/dict 等坏 JSON 混入），float() 崩溃使整份
+            # build_analysis 失败——suppress 跳过该条目（口径：非数值
+            # 奖励/覆盖率不计入均值，与 _mutation_score_metrics 畸形值
+            # 过滤同口径）
+            for key, target in (("correctness", last_rew_correctness), ("efficiency", last_rew_efficiency)):
+                if key in rewards:
+                    with contextlib.suppress(TypeError, ValueError):
+                        target.append(float(rewards[key]))
         # 首末轮覆盖率
         if isinstance(first_entry, dict) and first_entry.get("coverage") is not None:
-            first_covs.append(float(first_entry["coverage"]))
-        if "coverage" in last:
-            last_covs.append(float(last["coverage"]))
+            with contextlib.suppress(TypeError, ValueError):
+                first_covs.append(float(first_entry["coverage"]))
+        if "coverage" in last and last.get("coverage") is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                last_covs.append(float(last["coverage"]))
     if observed == 0:
         return {"available": False, "observed_tasks": 0}
     avg_first_cov = round(sum(first_covs) / len(first_covs), 2) if first_covs else None

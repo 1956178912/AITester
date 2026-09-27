@@ -297,7 +297,13 @@ def cross_batch_comparison(
         newest_cats = set(batches[-1]["failure_categories"])
         new_cats = [c for c in newest_cats if c not in oldest_cats]
         resolved_cats = [c for c in oldest_cats if c not in newest_cats]
-        regressed = [c for c in cat_series if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2]]
+        # 2026-09-26 round10 P2：regressed 排除 new_cats（品牌新类别 [0,0,1]
+        # 形态的"末批出现"被 cat_series[-1] > cat_series[-2] 判为"恶化"，
+        # 与新类别章节重复列示同一类别 → 渲染层"恶化"与"新增"混淆）
+        regressed = [
+            c for c in cat_series
+            if len(cat_series[c]) >= 2 and cat_series[c][-1] > cat_series[c][-2] and c not in new_cats
+        ]
     else:
         new_cats = resolved_cats = regressed = []
 

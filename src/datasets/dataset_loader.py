@@ -560,15 +560,17 @@ class SWEBenchDataset(BaseDatasetLoader):
 
         # total_test_count 兜底口径（SWE-bench 官方 JSONL 无 n_tests_before /
         # pass_num_after 字段，上述读取恒为 0）：FAIL_TO_PASS 是"修复前失败
-        # 但修复后必须通过"的测试节点列表，天然给出该任务的测试用例总数
-        # 下界（官方口径：通过判定 = FAIL_TO_PASS 全绿 + PASS_TO_PASS 不
-        # 回归）。官方字段缺失时用 len(FAIL_TO_PASS) 兜底，使 SWE-bench
-        # 任务能计算通过率（0/0 → 无法判定"是否修复"的根因）。
-        # 官方字段存在（自定义 JSONL）时仍以官方值为准，口径不变。
+        # 但修复后必须通过"的测试节点列表，PASS_TO_PASS 是"修复前后均通过"
+        # 的测试节点列表。SWE-bench 官方通过判定 = F2P 全绿 + P2P 不回归，
+        # 故任务测试用例总数 = len(FAIL_TO_PASS) + len(PASS_TO_PASS)。
+        # 2026-09-27 round10 P2：旧口径仅取 len(FAIL_TO_PASS)（分母漏计
+        # P2P），使通过率先被低估、修复率被高估。官方字段存在（自定义
+        # JSONL）时仍以官方值为准，口径不变。
         fail_to_pass_list = self._parse_swe_test_list(data.get("FAIL_TO_PASS", ""))
-        if total_tests <= 0 and fail_to_pass_list:
-            total_tests = len(fail_to_pass_list)
-            total_pass = total_pass if total_pass > 0 else len(fail_to_pass_list)
+        pass_to_pass_list = self._parse_swe_test_list(data.get("PASS_TO_PASS", ""))
+        if total_tests <= 0 and (fail_to_pass_list or pass_to_pass_list):
+            total_tests = len(fail_to_pass_list) + len(pass_to_pass_list)
+            total_pass = total_pass if total_pass > 0 else len(fail_to_pass_list) + len(pass_to_pass_list)
 
         return BenchmarkTask(
             task_id=task_id,

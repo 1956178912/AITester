@@ -73,9 +73,14 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
         except subprocess.TimeoutExpired as e:
             # 本调用点恒传 text=True，运行期 output/stderr 为 str 或 None；
             # _to_str 收窄类型联合（bytes 分支仅静态可达性兜底）。
-            # 合并进 last_output，让下游 Debugger 能拿到现场快照而非空白文本。
+            # 追加进 last_output（而非覆盖），让下游 Debugger 能拿到前次有效
+            # 输出 + 本次超时快照，而非仅超时的部分文本。
+            # 2026-09-26 round10 P2：旧实现 last_output = partial_output 直接
+            # 覆盖，第 1 次执行失败（rc≠0）后第 2 次超时且部分输出为空时，
+            # 下游丢失第 1 次的真实 pytest 输出（修复线索）——对齐 round9 通用
+            # 异常分支的追加口径。单次超时场景 last_output 原为空串，结果不变。
             partial_output = _to_str(e.output) + _to_str(e.stderr)
-            last_output = partial_output
+            last_output = f"{last_output or ''}\n[timeout attempt {attempt + 1}] {partial_output}" if last_output else partial_output
             error_msg = f"测试执行超时（>{self.timeout}s）"
             logger.error("测试执行超时（>%ds）: %s", self.timeout, e)
             error_info = {

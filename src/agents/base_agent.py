@@ -117,6 +117,13 @@ def _lru_store(key: tuple[str, str, float | None], value: str | None) -> None:
     with _lru_lock:
         if value is None:
             _lru_negatives[key] = time.time()
+            # 2026-09-26 round10 P2：负缓存与正缓存同容量上限（_LRU_MAXSIZE，
+            # FIFO 淘汰）——旧实现无 cap，长程 benchmark（数千任务 × 温度
+            # 变体）下从未被查的负缓存条目永久驻留，内存无界增长。超限
+            # 淘汰最久未插入项（dict 插入序 = FIFO），口径与 LRU 一致
+            while len(_lru_negatives) > _LRU_MAXSIZE:
+                oldest_key = next(iter(_lru_negatives))
+                del _lru_negatives[oldest_key]
             return
         _lru_cache[key] = value
         _lru_cache.move_to_end(key)
