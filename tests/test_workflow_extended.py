@@ -744,8 +744,11 @@ class TestGetWorkflowStats:
     @patch("src.graph.workflow.MAX_ITERATIONS", 5)
     def test_get_workflow_stats_disabled_features(self):
         """所有功能禁用时的统计信息（0.7 P1-1.3：llm_cache 统一为文件缓存口径）。"""
+        from src.agents.llm_client import reset_cache_hit_stats
         from src.graph.workflow import get_workflow_stats
 
+        # 15. 多进程缓存协调：清零命中计数，保证无 hit_rate 键（纯统计快照口径）
+        reset_cache_hit_stats()
         stats = get_workflow_stats()
 
         assert stats["llm_cache"] == {"entries": 0, "enabled": False}

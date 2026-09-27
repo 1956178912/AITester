@@ -20,28 +20,28 @@
 
 ## 附录：算法 — 代码映射表
 
-| 算法编号 | 算法名称 | 源码位置 | 关键函数/类 |
-|:--------:|---------|---------|------------|
-| Algorithm 1 | 逻辑驱动测试规划 | [src/agents/planner.py](../src/agents/planner.py) | `PlannerAgent.plan()` |
-| Algorithm 2 | 错误分类（规则匹配） | [src/agents/error_classifier.py](../src/agents/error_classifier.py) | `ErrorClassifier.classify()` |
-| Algorithm 3 | 迭代修复循环 | [src/graph/workflow.py](../src/graph/workflow.py) | `_should_debug()` + 条件路由边 |
-| Patch 应用 | 补丁写入原文件 | [src/tools/patch_applier.py](../src/tools/patch_applier.py) | `apply_patch_to_code()` |
-| 跨文件修复（3.5，默认关） | 跨文件依赖分析 + 多文件补丁 | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` 节点（插在 executor→debugger 之间） | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` |
-| RAG 检索 | 向量相似检索 | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` |
-| 批量实验 | 基准测试执行 | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` |
-| 数据污染检测（2.1） | 生成补丁 vs 黄金补丁 token 级 Jaccard 重叠度 | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` |
-| 任务难度分层（2.2） | 按 code_size / dependency_count / complexity_proxy 分层 | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
-| Docker 隔离执行（4.3） | docker CLI 容器内跑 pytest | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
-| 依赖缓存监控（4.4） | venv 缓存命中率统计 + 清理 | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
-| 收敛失败模式归因（1.2） | 区分"无法定位根因" vs "无法生成有效补丁" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` |
-| 边界用例覆盖（1.3） | AST 保守判定 generated_test 边界条件覆盖 | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` |
-| 变异得分（1.3） | 收集 details[].mutation_score（外部变异测试器产出） | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` |
-| 执行反馈轨迹（3.2） | 每次执行追加 passed/coverage_delta/elapsed/reward_signals | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` |
-| 位置感知迭代修复（3.3，默认关） | traceback 行号 + AST 定位"包围异常行的最短区间函数"，注入位置感知修复指引 | [src/agents/debugger.py](../src/agents/debugger.py) | `_position_aware_repair_enabled()` / `_locate_repair_focus()` / `_build_position_aware_prompt_section()` |
-| 嵌入后端（CodeBERT/sentence-transformers/词袋） | 按 `EMBEDDING_BACKEND` 选择后端，缺依赖时保守回退词袋余弦 | [src/utils/embedding_utils.py](../src/utils/embedding_utils.py) | `embed_text()` / `cosine_similarity()` / `backend_name()` |
-| 静态类型修复层（mypy/pyright） | `TYPE_CHECK_BACKEND` 切换后端，pyright 不可用时降级 ast 静态层 | [src/tools/type_repair.py](../src/tools/type_repair.py) | `_run_mypy_findings()` / `_run_pyright_findings()` / `type_repair_layer()` |
-| SWE-bench Pro 数据集 | `swe_bench_pro` / `swebench_pro` 注册，复用 `SWEBenchDataset`，数据目录经 `data_dir` 注入 | [src/datasets/dataset_loader.py](../src/datasets/dataset_loader.py) | `load_dataset()` / `get_available_datasets()` |
-| RAG A/B 实验 | 自动跑 RAG ON vs OFF 两批，产出 token/成功率/迭代/耗时统计 + Welch t-test + Mann-Whitney U + Cohen's d | [experiments/rag_ab_experiment.py](../experiments/rag_ab_experiment.py) | `compare_ab()` / `token_saving.delta_pct` |
+| 算法编号 | 算法名称 | 源码位置 | 关键函数/类 | 相关 ADR |
+|:--------:|---------|---------|------------|---------|
+| Algorithm 1 | 逻辑驱动测试规划 | [src/agents/planner.py](../src/agents/planner.py) | `PlannerAgent.plan()` | 0001 |
+| Algorithm 2 | 错误分类（规则匹配 + 置信度分层） | [src/agents/error_classifier.py](../src/agents/error_classifier.py) | `ErrorClassifier.classify()` / `classify_with_confidence()` | 0002 |
+| Algorithm 3 | 迭代修复循环 | [src/graph/workflow.py](../src/graph/workflow.py) | `_should_debug()` + 条件路由边 | 0001, 0005 |
+| Patch 应用 | 补丁写入原文件 | [src/tools/patch_applier.py](../src/tools/patch_applier.py) | `apply_patch_to_code()` | 0003, 0005 |
+| 跨文件修复（3.5，默认关） | 跨文件依赖分析 + 多文件补丁 | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` 节点（插在 executor→debugger 之间） | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` | 0003 |
+| RAG 检索 | 向量相似检索 | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` | 0004 |
+| 批量实验 | 基准测试执行 | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` | 0001 |
+| 数据污染检测（2.1） | 生成补丁 vs 黄金补丁 token 级 Jaccard 重叠度 | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` | — |
+| 任务难度分层（2.2） | 按 code_size / dependency_count / complexity_proxy 分层 | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` | — |
+| Docker 隔离执行（4.3） | docker CLI 容器内跑 pytest | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` | 0005 |
+| 依赖缓存监控（4.4） | venv 缓存命中率统计 + 清理 | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` | 0003 |
+| 收敛失败模式归因（1.2） | 区分"无法定位根因" vs "无法生成有效补丁" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` | — |
+| 边界用例覆盖（1.3） | AST 保守判定 generated_test 边界条件覆盖 | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` | — |
+| 变异得分（1.3） | 收集 details[].mutation_score（外部变异测试器产出） | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` | — |
+| 执行反馈轨迹（3.2） | 每次执行追加 passed/coverage_delta/elapsed/reward_signals | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` | 0001, 0005 |
+| 位置感知迭代修复（3.3，默认关） | traceback 行号 + AST 定位"包围异常行的最短区间函数"，注入位置感知修复指引 | [src/agents/debugger.py](../src/agents/debugger.py) | `_position_aware_repair_enabled()` / `_locate_repair_focus()` / `_build_position_aware_prompt_section()` | 0003 |
+| 嵌入后端（CodeBERT/sentence-transformers/词袋） | 按 `EMBEDDING_BACKEND` 选择后端，缺依赖时保守回退词袋余弦 | [src/utils/embedding_utils.py](../src/utils/embedding_utils.py) | `embed_text()` / `cosine_similarity()` / `backend_name()` | 0004 |
+| 静态类型修复层（mypy/pyright） | `TYPE_CHECK_BACKEND` 切换后端，pyright 不可用时降级 ast 静态层 | [src/tools/type_repair.py](../src/tools/type_repair.py) | `_run_mypy_findings()` / `_run_pyright_findings()` / `type_repair_layer()` | 0004 |
+| SWE-bench Pro 数据集 | `swe_bench_pro` / `swebench_pro` 注册，复用 `SWEBenchDataset`，数据目录经 `data_dir` 注入 | [src/datasets/dataset_loader.py](../src/datasets/dataset_loader.py) | `load_dataset()` / `get_available_datasets()` | — |
+| RAG A/B 实验 | 自动跑 RAG ON vs OFF 两批，产出 token/成功率/迭代/耗时统计 + Welch t-test + Mann-Whitney U + Cohen's d | [experiments/rag_ab_experiment.py](../experiments/rag_ab_experiment.py) | `compare_ab()` / `token_saving.delta_pct` | 0003 |
 
 ---
 

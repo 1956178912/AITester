@@ -1,8 +1,11 @@
 # 失败知识库 → 修复策略 离线→在线闭环设计（Design-only，未实装）
 
 > 立项日期：2026-09-28
-> 状态：**设计文档（Design-only）**——本文档定义闭环流程与落点，
-> 尚未改动任何运行时代码（默认行为不变；实装时另立批次 + ADR）。
+> 状态：**落点 B 已实装最小在线消费侧**（2026-09-28 改进批次，`src/agents/failure_kb.py`，
+> 默认关 `FAILURE_KB_ENABLE=false`）——离线积累（`analyze_failures.py -k`，条目带
+> `last_seen` 时间戳）→ 在线消费（`_debugger_node` 经 `kb_debugger_snippet()` 注入
+> 同类案例片段，频次 × 时间衰减排序）→ 效果验证（state 新增 `kb_prompt_snippet_applied`
+> 观测键）；落点 A（分类器权重增强）与 M2/M3 里程碑仍为设计（未实装），见 §4。
 > 关联：`experiments/analyze_failures.py`（`failure_knowledge_base()` /
 > `root_cause_classification()` / CLI `--knowledge-base/-k`）、
 > `src/agents/error_classifier.py`（`ErrorClassifier` /
@@ -115,11 +118,11 @@ experiments/results/failure_knowledge_base.json` 产出结构化知识库。
 
 ## 4. 实装里程碑（后续批次，独立 ADR）
 
-| 里程碑 | 内容 | 前置 |
-|--------|------|------|
-| M1 | 落点 B（prompt 片段注入，`KB_PROMPT_SNIPPET_ENABLE`）+ 2 条人工签核片段 | ①②③ 流程人工走通一次 |
-| M2 | 落点 A（分类器权重增强，`KB_CLASSIFIER_BOOST_ENABLE`） | M1 验证无回归 |
-| M3 | ⑤ 效果验证自动化（`analyze_results.py` 增"KB 增强批次"章节） | M1/M2 至少一个转正 |
+| 里程碑 | 内容 | 前置 | 状态 |
+|--------|------|------|------|
+| M1 | 落点 B（prompt 片段注入，`FAILURE_KB_ENABLE`）+ 条目时间衰减 | ①②③ 流程 | ✅ **已实装**（2026-09-28 改进批次，`src/agents/failure_kb.py`；`kb_debugger_snippet()` 经 `_debugger_node` 注入，`analyze_failures.py -k` 条目带 `last_seen`，state 新增 `kb_prompt_snippet_applied` 观测键；人工签核片段仍为可选增强） |
+| M2 | 落点 A（分类器权重增强，`KB_CLASSIFIER_BOOST_ENABLE`） | M1 验证无回归 | ⬜ 设计（未实装） |
+| M3 | ⑤ 效果验证自动化（`analyze_results.py` 增"KB 增强批次"章节） | M1/M2 至少一个转正 | ⬜ 设计（未实装；M1 已提供 `kb_prompt_snippet_applied` 观测信号可供统计） |
 
 > 任一里程碑实装前：`pytest tests/` 全绿 + 双语文档同步 +
 > BASELINE.yaml 刷新；默认行为不变（新开关全默认关）。

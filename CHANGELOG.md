@@ -4,6 +4,81 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
+
+> 本批次基于用户提交的 24 项改进清单（跨 7 个维度：架构算法 / 工程实践 /
+> 测试质量 / 文档 UX / 性能扩展 / 安全合规 / 特性生态），按 P0→P3 优先级
+> 逐项落地，**默认行为不变**（新能力均带独立开关，未启用时历史口径逐字节
+> 等价）：
+>
+> - **P0 文档基线 / CI 基建**：
+>   - `README.md` / `README.en.md` "测试状态" 数字漂移修复——移除硬编码
+>     数字（`2046 passed` / `行覆盖 89%` 等），统一指向 `BASELINE.yaml`；
+>     新增漂移守卫 `scripts/check_baseline_numbers.py`（仅对"测试状态 /
+>     Test Status" H2 段做数字正则检测，历史"迭代优化记录"段豁免）+
+>     CI 步骤集成；
+>   - `BASELINE.yaml` 结构校验 `scripts/check_baseline.py`（必填字段 /
+>     `total_failed==0` / 覆盖率区间 / `ruff_warnings`/`mypy_errors`==0 /
+>     `last_verified` 日期格式 + `--verify` 重测全量 pytest 数量比对）；
+>   - 静态报告自动刷新 `scripts/generate_static_report.py`——运行 ruff /
+>     mypy 快照归档到 `docs/history/static_report_<YYYY-MM-DD>.md`，CI
+>     主分支 3.14 矩阵上传 artifact。
+> - **P1 算法 / 安全**：
+>   - 分支覆盖率回填 + 核心路由模块门槛：`BASELINE.yaml` 回填
+>     `branch_total_pct` 与 `branch_core_routing` 块；新增
+>     `scripts/check_branch_coverage.py`（解析 coverage.xml `<class
+>     filename branch-rate>` 结构，总门槛 79%、核心 4 模块 85%）+ 组合路由
+>     测试 `tests/test_branch_coverage_gates.py`（`_should_debug` /
+>     `refine_failure_category` / `rag.py` 降级守卫 26 用例）；
+>   - LLM 文件缓存权限收敛 + TTL 过期清理：`llm_client.py` 新增
+>     `ensure_llm_cache_dir`（新目录 0o700，既有目录不动）/
+>     `secure_cache_file`（临时文件 0o600）/ `cleanup_expired_cache_files`
+>     （按 mtime 删除早于 TTL 的 `*.json`，`AITESTER_LLM_CACHE_TTL_DAYS`
+>     默认 7 天）；接入 `base_agent.py` / `cross_file.py` 写盘路径 +
+>     `workflow.py` 启动清理；新增 `tests/test_cache_security.py`（9 用例）；
+>   - 错误分类器置信度分层：`error_classifier.py` 新增
+>     `classify_with_confidence` / `ClassificationResult` / L2
+>     `ProbabilisticClassifier` 协议（当前恒 None，落地需独立 ADR）+
+>     低置信度兜底策略（confidence ≤ 0.5 时收敛到 `generic_analysis` 而非
+>     硬性路由）；模块级便利函数 + `tests/test_error_classifier_confidence.py`
+>     （17 用例）；ADR-0002 "已知局限与演进方向" 标注已落地最小置信度分层。
+> - **P2 闭环 / 测试 / 集成**：
+>   - 失败知识库最小闭环：新增 `src/agents/failure_kb.py`（落点 B 在线
+>     消费 + 频次 × 时间衰减排序），`_debugger_node` 经 `kb_debugger_snippet`
+>     注入同类案例片段（`FAILURE_KB_ENABLE` 默认关，历史 prompt 逐字节不变）；
+>     `analyze_failures.py` 条目加 `last_seen` 时间戳；state 加
+>     `kb_prompt_snippet_applied` 观测键；`failure_knowledge_feedback.md`
+>     设计文档标注 M1 已实装；新增 `tests/test_failure_kb.py` 11 用例；
+>   - LLM 输出格式异常注入测试组：`tests/test_llm_format_anomaly.py`
+>     （17 用例：空响应 / 截断 / 字段缺失 / 无效 patch 语义 / markdown
+>     包裹，纯解析层 + 分类器断言，零 LLM 调用）；
+>   - `--smoke-llm` 可选 CI 作业：`experiments/run_smoke_llm.py` + CI
+>     `smoke-llm` 作业（缺省 `AITESTER_SMOKE_LLM=false` 零 LLM 成本）+
+>     `tests/test_smoke_llm.py`（11 用例）；
+>   - 多进程缓存协调：`llm_client.py` 命中率观测层（`record_cache_hit` /
+>     `get_cache_hit_rate` / `reset_cache_hit_stats`，线程安全）+
+>     `workflow.get_workflow_stats` 附带 + `performance_guide.md` 预热 /
+>     切换说明；
+>   - 双语文档 H2 骨架结构对照：`scripts/check_bilingual_docs.py` 增章节
+>     顺序漂移检测（去序号 + 小写归一化 + 子序列逆序判定）；
+>   - ADR 索引：`docs/adr/README.md` + `algorithm_design(.en).md` 映射表
+>     增"相关 ADR"列；
+>   - CI/CD 集成示例：`docs/integration/README.md` + `.git-hooks/pre-commit.sh`
+>     （本地提交前跑 CI 同源守卫）。
+> - **P3 设计文档（未实装代码，默认行为不变）**：
+>   - `docs/design/multilanguage_extension.md`（多语言扩展架构预留：
+>     LanguageBackend 抽象 + 注册表 + 默认 Python 后端零变化）；
+>   - `docs/design/hierarchical_summary.md`（超长文件分层摘要策略：
+>     Level 0-3 纯静态 + 可选 LLM 摘要 + 降级链 + 默认关开关）。
+> - **全量回归**：2165 测试通过 / 0 失败（较批次前 2065 新增 ~100 用例）；
+>   ruff 0 告警；mypy 0 错误（70 源文件）；`BASELINE.yaml` 已刷新
+>   （`total_passed: 2165` / `branch_total_pct: 80` / `mypy_source_files: 70`）。
+>
+> 新增回归测试（本批次合计 ~100 用例）：`test_cache_security.py`（9）/
+> `test_error_classifier_confidence.py`（17）/ `test_failure_kb.py`（+11）/
+> `test_llm_format_anomaly.py`（17）/ `test_smoke_llm.py`（11）/
+> `test_branch_coverage_gates.py`（26）/ `test_check_baseline_numbers.py`（7）。
+
 ## [Unreleased] — 2026-09-28 改进清单落地批次（文档一致 / 基础设施 / 评估实验 / 可观测性 / 安全，默认行为不变）
 
 > 本批次基于用户提交的改进清单（文档一致性 / 基础设施 / 核心算法 / 用户体验 /

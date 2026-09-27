@@ -34,7 +34,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 
 
 class ErrorCategory(Enum):
@@ -144,6 +144,63 @@ class ErrorContext:
     module_name: str | None = None
     error_message: str = ""
     subtype: SyntaxSubtype | None = None
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    """
+    1. 置信度分类（改进清单 P1）：分类结果 + 置信度 + 低置信度兜底策略。
+
+    属性:
+        category: 命中/判定出的错误类别（低置信度时为兜底类别）。
+        confidence: 置信度（0.0-1.0）；规则层判定为确定性规则匹配，
+            命中即高置信，未命中（UNKNOWN）置信度低。
+        confidence_basis: 置信度口径说明（如 "regex_hit" / "fallback_unknown"）。
+        fallback_used: 是否使用了低置信度兜底策略（低置信度 + 启用兜底时
+            category 会被替换为 fallback_category）。
+        fallback_category: 兜底类别（由低置信度兜底策略选出）；None 表示未启用。
+
+    设计（分层预留，见 ADR-0002"已知局限与演进方向"）：
+        - L1 规则层：纯正则确定性匹配，零 LLM 成本，命中置信度高（0.9）；
+        - L1 兜底层：UNKNOWN / 低命中特征 → confidence 低（0.2）+ 可选
+          兜底策略（generic_analysis / 重新生成响应）；
+        - L2 概率化 / ML 层：Protocol 预留（_ProbabilisticClassifier），
+          高频类别（LLM_BREAKS_IMPORT / PATCH_SYNTAX_INVALID）后续接入
+          轻量分类器（如逻辑回归 / 微调小模型）时，L2 输出 top-2 + 置信度，
+          L1 低置信度样本可路由给 L2 精判（当前 L2 未实现，恒 None →
+          走 L1 兜底，行为与历史一致；落地 L2 需独立 ADR + 回归守卫）。
+    """
+
+    category: ErrorCategory
+    confidence: float
+    confidence_basis: str
+    fallback_used: bool = False
+    fallback_category: ErrorCategory | None = None
+
+
+class ProbabilisticClassifier(Protocol):
+    """
+    L2 概率化 / ML 分类层接口预留（改进清单 #1，分层架构 L2 层）。
+
+    当前无默认实现（_default_probabilistic_classifier 恒返回 None），
+    高频类别（LLM_BREAKS_IMPORT / PATCH_SYNTAX_INVALID）后续接入轻量
+    ML 分类器（逻辑回归 / 微调小 BERT 等）时实现本协议，经
+    classify_with_confidence(classifier=...) 注入 L1 低置信度样本精判。
+    L1 规则层保持零 LLM 成本、确定性可复现（ADR-0002 口径不变）。
+    """
+
+    def predict(
+        self,
+        combined_text: str,
+        target_module: str | None,
+    ) -> tuple[ErrorCategory, float]:
+        """返回 (类别, 置信度 0.0-1.0)。"""
+        ...
+
+
+def _default_probabilistic_classifier() -> ProbabilisticClassifier | None:
+    """L2 分类层默认实现：当前未落地，恒返回 None（走 L1 兜底，历史行为不变）。"""
+    return None
 
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
@@ -273,41 +330,173 @@ class ErrorClassifier:
         # 委托给纯数据判定路径（与 classify_with_context 共享同一实现）
         return self._classify_combined(combined, target_module)
 
+    # 1. 置信度分层（改进清单 P1）：L1 规则层命中即高置信；未命中（UNKNOWN）
+    # 或"宽松弱匹配"（如 _is_syntax_error 仅靠通用 file.py:line:col 格式命中、
+    # 无具体异常关键词）为低置信样本 → 触发低置信度兜底策略（generic_analysis），
+    # 而非硬性路由。L2 概率化/ML 层经 ProbabilisticClassifier 协议预留
+    # （当前 _default_probabilistic_classifier 恒 None，落地 L2 需独立 ADR）。
+    _CONFIDENCE_RULE_HIT = 0.9
+    _CONFIDENCE_RULE_WEAK = 0.5
+    _CONFIDENCE_FALLBACK = 0.2
+    # 置信度门槛：低于该值视为"低置信度"，触发兜底策略。
+    # 注意：门槛取 0.5，使"弱命中"（confidence=0.5）同样触发兜底
+    # （弱命中 = 仅通用格式命中、无具体异常特征，需 LLM 兜底确认而非硬性路由）。
+    _LOW_CONFIDENCE_THRESHOLD = 0.5
+    # 低置信度兜底策略：UNKNOWN → 通用 LLM 分析（generic_analysis）；
+    # 弱命中的 SYNTAX → 走 LLM 兜底而非硬性"重写整文件"路由
+    _FALLBACK_CATEGORY = ErrorCategory.UNKNOWN
+
     def _classify_combined(self, combined: str, target_module: str | None) -> ErrorCategory:
         """对已合并文本按优先级顺序做类别判定（纯数据路径，零正则重复）。
 
         2026-09-26 优化：classify() 与 classify_with_context() 共享此方法，
         避免对同一合并文本做两套独立判定逻辑（正则已预编译，判定本身为
         O(1) 查表 + 正则搜索，无重复编译开销）。
+        1. 置信度分层（改进清单 P1）：经 classify_with_confidence 内核判定，
+        历史 17 类口径逐样本等价（enable_fallback=False 时兜底不触发）。
         """
-        # 按优先级顺序检查各类错误（细粒度类别先于其粗粒度母类）
-        # 1. 检查 LLM 响应格式异常（JSON 解析失败/截断/空响应，1.2 残余细化）
+        return self.classify_with_confidence(combined, target_module, enable_fallback=False).category
+
+    def classify_with_confidence(
+        self,
+        combined_or_test_output: str,
+        target_module: str | None = None,
+        failed_cases: list[dict] | None = None,
+        *,
+        _combined: str | None = None,
+        classifier: ProbabilisticClassifier | None = None,
+        enable_fallback: bool = True,
+    ) -> ClassificationResult:
+        """
+        1. 置信度分层分类（改进清单 P1，L1 规则层 + L2 预留 + 低置信度兜底）。
+
+        在 classify() 的优先级判定基础上输出置信度，并对低置信度样本触发
+        兜底策略（而非硬性路由）：
+        - L1 规则命中（具体异常关键词/模块名/行号）→ confidence=0.9（高）；
+        - L1 弱命中（仅通用格式命中、无具体特征）→ confidence=0.5（低）；
+        - L1 未命中（UNKNOWN）→ confidence=0.2（低）；
+        - 低置信度 + enable_fallback=True → 触发兜底策略（generic_analysis），
+          fallback_category=UNKNOWN，fallback_used=True；
+        - 低置信度 + classifier（L2 概率化/ML 层）提供时，优先用 L2 精判
+          （当前 L2 恒 None，走 L1 兜底，行为与历史一致）。
+
+        与 classify() 的关系：分类结果（category 在不启用兜底时）与历史 17 类
+        口径逐样本等价（enable_fallback=False / classifier=None 时兜底不触发）。
+
+        Args:
+            combined_or_test_output: 已合并文本（_combined 显式传入时忽略此参数；
+                否则作为 test_output 与 failed_cases 拼接）。
+            target_module: 被测模块名（见 classify() 说明）。
+            failed_cases: 失败用例列表（拼接用，见 classify() 说明）。
+            _combined: 内部参数——已合并文本（避免重复拼接）。
+            classifier: L2 概率化/ML 分类器（Protocol）；None 时走 L1 兜底。
+            enable_fallback: 是否对低置信度样本触发兜底策略（默认 True）。
+
+        Returns:
+            ClassificationResult（category / confidence / confidence_basis /
+            fallback_used / fallback_category）。
+        """
+        # 合并文本（与 classify 同口径：_combined 优先，否则 test_output + 前3用例）
+        if _combined is not None:
+            combined = _combined
+        else:
+            cases = failed_cases or []
+            combined = combined_or_test_output + "\n" + "\n".join(c.get("error", "") for c in cases[:3])
+
+        # L1 规则层：判定类别 + 置信度
+        category, confidence, basis = self._classify_confidence(combined, target_module)
+
+        # L2 精判（预留）：低置信度样本且提供 L2 分类器时，用 L2 top-1 精判
+        if confidence <= self._LOW_CONFIDENCE_THRESHOLD and classifier is not None:
+            l2_cat, l2_conf = classifier.predict(combined, target_module)
+            if l2_conf > self._LOW_CONFIDENCE_THRESHOLD:
+                category, confidence, basis = l2_cat, l2_conf, "l2_probabilistic"
+
+        # 低置信度兜底策略（改进清单 P1：低置信度触发兜底而非硬性路由）
+        fallback_used = False
+        fallback_category: ErrorCategory | None = None
+        if enable_fallback and confidence <= self._LOW_CONFIDENCE_THRESHOLD:
+            fallback_used = True
+            fallback_category = self._FALLBACK_CATEGORY
+            # 兜底不改变已判定类别（若已命中具体类），仅标记"该走通用兜底"；
+            # 若类别为 UNKNOWN/弱命中 SYNTAX，则收敛到兜底类别（generic_analysis）
+            if category in (ErrorCategory.UNKNOWN, ErrorCategory.SYNTAX):
+                category = self._FALLBACK_CATEGORY
+                basis = "fallback_unknown"
+
+        return ClassificationResult(
+            category=category,
+            confidence=confidence,
+            confidence_basis=basis,
+            fallback_used=fallback_used,
+            fallback_category=fallback_category,
+        )
+
+    def _classify_confidence(self, combined: str, target_module: str | None) -> tuple[ErrorCategory, float, str]:
+        """L1 规则层置信度判定（classify_with_confidence 的内核，纯数据路径）。
+
+        在 _classify_combined 的优先级链上叠加置信度口径：
+        - 具体特征命中（模块名 / 行号 / 异常关键词）→ 0.9；
+        - 仅通用格式命中（_is_syntax_error 靠 file.py:line:col 或 E 前缀，
+          无具体异常关键词）→ 0.5；
+        - 未命中（UNKNOWN）→ 0.2。
+
+        Returns:
+            (类别, 置信度, 置信度口径说明)。
+        """
+        # 1. LLM 响应格式异常（具体特征：JSON 解析失败 / 空响应关键词）→ 高置信
         if self._is_llm_format_error(combined):
-            return ErrorCategory.LLM_FORMAT_ERROR
-        # 2. 检查 Import 错误（缺依赖/路径错误，修复路径独立于语法错误）
+            return ErrorCategory.LLM_FORMAT_ERROR, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 2. Import 错误（具体特征：缺失模块名可提取 → 高置信；否则中置信）
         if self._is_import_error(combined):
-            return ErrorCategory.IMPORT_ERROR
-        # 3. 检查 Syntax 错误
+            conf = (
+                self._CONFIDENCE_RULE_HIT if self._extract_import_module_name(combined) else self._CONFIDENCE_RULE_WEAK
+            )
+            return ErrorCategory.IMPORT_ERROR, conf, "regex_hit"
+        # 3. Syntax 错误（细分子类型判定置信度：具体语法关键词 → 高；仅通用
+        #    格式命中 → 低，触发兜底）
         if self._is_syntax_error(combined):
-            return ErrorCategory.SYNTAX
-        # 4. 检查 Type 错误（类型不匹配，修复方向区别于其他运行时异常）
+            conf = (
+                self._CONFIDENCE_RULE_HIT if self._has_concrete_syntax_feature(combined) else self._CONFIDENCE_RULE_WEAK
+            )
+            return ErrorCategory.SYNTAX, conf, "regex_hit" if conf >= self._CONFIDENCE_RULE_HIT else "regex_weak"
+        # 4. Type 错误 → 高置信
         if self._is_type_error(combined):
-            return ErrorCategory.TYPE_ERROR
-        # 5. 检查 Index 越界（索引/下标越界，1.2 残余细化：从 RUNTIME 拆出）
+            return ErrorCategory.TYPE_ERROR, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 5. Index 越界 → 高置信
         if self._is_index_error(combined):
-            return ErrorCategory.INDEX_ERROR
-        # 6. 检查 Runtime 错误
+            return ErrorCategory.INDEX_ERROR, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 6. Runtime 错误 → 高置信
         if self._is_runtime_error(combined):
-            return ErrorCategory.RUNTIME
-        # 7. 检查 Assertion 错误（子情形：测试侧逻辑错误 → LOGIC_ERROR）
+            return ErrorCategory.RUNTIME, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 7. Assertion 错误（测试侧逻辑 → LOGIC_ERROR；否则 ASSERTION）→ 高置信
         if self._is_assertion_error(combined):
             if target_module and self._is_test_side_assertion(combined, target_module):
-                return ErrorCategory.LOGIC_ERROR
-            return ErrorCategory.ASSERTION
-        # 8. 检查 Timeout 错误
+                return ErrorCategory.LOGIC_ERROR, self._CONFIDENCE_RULE_HIT, "regex_hit"
+            return ErrorCategory.ASSERTION, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 8. Timeout 错误 → 高置信
         if self._is_timeout_error(combined):
-            return ErrorCategory.TIMEOUT
-        return ErrorCategory.UNKNOWN
+            return ErrorCategory.TIMEOUT, self._CONFIDENCE_RULE_HIT, "regex_hit"
+        # 未命中 → UNKNOWN（低置信度，触发兜底）
+        return ErrorCategory.UNKNOWN, self._CONFIDENCE_FALLBACK, "fallback_unknown"
+
+    @staticmethod
+    def _extract_import_module_name(text: str) -> str | None:
+        """提取缺失模块名（ImportError/ModuleNotFoundError）；无则 None。"""
+        m = _RE_MODULE_NOT_FOUND.search(text) or _RE_IMPORT_ERROR.search(text)
+        return m.group(1) if m else None
+
+    @staticmethod
+    def _has_concrete_syntax_feature(text: str) -> bool:
+        """是否存在具体语法错误特征（异常关键词或 file.py:line:col 定位）。
+
+        具体特征 = 命中语法异常关键词（SyntaxError/IndentationError/TabError/
+        IncompleteInput 等，**不含** 泛化的 ImportError/ModuleNotFoundError——
+        那些已由 IMPORT_ERROR 分支先判定）。仅靠通用 file.py:line:col / E
+        前缀定位而无上述关键词时视为"弱命中"（低置信样本，触发兜底）。
+        """
+        concrete_keywords = ("SyntaxError", "IndentationError", "TabError", "IncompleteInput")
+        return any(kw in text for kw in concrete_keywords)
 
     def classify_with_context(
         self,
@@ -548,6 +737,42 @@ class ErrorClassifier:
     def _is_timeout_error(text: str) -> bool:
         """检查是否为 Timeout 错误。"""
         return any(pattern.search(text) for pattern in _RE_TIMEOUT_ERRORS)
+
+
+def classify_with_confidence(
+    test_output: str,
+    failed_cases: list[dict] | None = None,
+    target_module: str | None = None,
+    *,
+    enable_fallback: bool = True,
+    classifier: ProbabilisticClassifier | None = None,
+) -> ClassificationResult:
+    """
+    模块级便利函数：对 test_output + failed_cases 做置信度分层分类（改进清单 P1）。
+
+    等价于 ErrorClassifier().classify_with_confidence(...)，供 Debugger /
+    实验分析层直接调用（无需先实例化分类器）。L1 规则层零 LLM 成本、
+    确定性可复现；低置信度样本触发兜底策略而非硬性路由；L2 概率化/ML
+    层经 classifier 协议预留（当前恒 None，落地需独立 ADR）。
+
+    Args:
+        test_output: pytest 完整输出文本。
+        failed_cases: 失败用例列表（每项含 name 和 error 字段）。
+        target_module: 被测模块名（见 classify() 说明）。
+        enable_fallback: 是否对低置信度样本触发兜底策略。
+        classifier: L2 概率化/ML 分类器（None 时走 L1 兜底）。
+
+    Returns:
+        ClassificationResult（category / confidence / confidence_basis /
+        fallback_used / fallback_category）。
+    """
+    return ErrorClassifier().classify_with_confidence(
+        test_output,
+        target_module,
+        failed_cases=failed_cases or [],
+        enable_fallback=enable_fallback,
+        classifier=classifier,
+    )
 
 
 def get_fix_strategy(category: ErrorCategory, context: ErrorContext | None = None) -> str:

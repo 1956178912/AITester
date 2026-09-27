@@ -406,6 +406,18 @@ class DebuggerAgent(BaseAgent):
                 query += "\n\n以下历史修复案例可作为参考：\n" + "\n\n".join(refs_text)
                 logger.info("Debugger 使用了 %d 个 RAG 修复参考", len(refs_text))
 
+        # ── 4. 失败知识库闭环（落点 B，默认关 FAILURE_KB_ENABLE）──────────
+        # 离线 accumulate（analyze_failures.py -k）→ 在线消费：按当前 error_category
+        # 匹配知识库条目（频次 × 时间衰减排序），注入针对性修复方向片段。
+        # 开关关闭 / 知识库缺失 / 无匹配条目时返回 None，prompt 与历史逐字节一致。
+        # 追加到既有 prompt 尾部（不替换历史模板，保守口径）。
+        from src.agents.failure_kb import kb_debugger_snippet
+
+        _kb_snippet = kb_debugger_snippet(error_category.value)
+        if _kb_snippet:
+            query += "\n\n" + _kb_snippet
+            logger.info("失败知识库闭环（4. 落点 B）注入了同类案例提示（类别=%s）", error_category.value)
+
         # ── 3.1 改进（对抗性推理机制，默认关）─────────────────────────────
         # 若启用，先做"对抗性意图假设 + 针对性测试"，再把结果注入 prompt
         # 让 LLM 在生成补丁时考虑这些对抗场景；生成后独立"批评者"评估
@@ -591,12 +603,13 @@ class DebuggerAgent(BaseAgent):
             # 1.3 分层压缩降级链：本轮是否因契约拒绝反馈而收紧了上下文
             # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
             "downgrade_triggered": bool(contract_reject_feedback),
-            "downgrade_tier": (
-                str(contract_reject_feedback.get("tier")) if contract_reject_feedback else None
-            ),
+            "downgrade_tier": (str(contract_reject_feedback.get("tier")) if contract_reject_feedback else None),
             # 2.1 P1 改进：结构化修复策略标签（错误分类 → 修复路径显式映射）
             "fix_strategy_tag": _strategy_record["strategy"],
             "fix_strategy_action": _strategy_record["repair_action"],
+            # 4. 失败知识库闭环（落点 B）：本轮是否注入了 KB 同类案例提示
+            # （_kb_snippet 非 None 时 True；FAILURE_KB_ENABLE 默认关时恒 False）
+            "kb_prompt_snippet_applied": bool(_kb_snippet),
         }
 
     # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────

@@ -183,12 +183,10 @@ class TestIndexBuild:
         import json
 
         for i in range(10):
-            (tmp_path / f"f{i}.json").write_text(
-                json.dumps({"prompt": f"p{i}", "response": "r"}), encoding="utf-8"
-            )
+            (tmp_path / f"f{i}.json").write_text(json.dumps({"prompt": f"p{i}", "response": "r"}), encoding="utf-8")
         # 直接传 max_entries 参数（环境变量的解析口径在测试其他用例覆盖）
         added = build_semantic_index_from_cache_dir(str(tmp_path), max_entries=3)
         assert added == 3
         # 同文件重复扫描：upsert 幂等（键唯一），条目数不增长
-        added2 = build_semantic_index_from_cache_dir(str(tmp_path), max_entries=3)
+        build_semantic_index_from_cache_dir(str(tmp_path), max_entries=3)
         assert get_semantic_cache_stats()["entries"] == 3

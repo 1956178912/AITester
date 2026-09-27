@@ -132,6 +132,7 @@ def _context_tier_downgrade_enabled() -> bool:
     """
     return os.getenv("CONTEXT_TIER_DOWNGRADE_ENABLE", "false").lower() == "true"
 
+
 # 安全检查 2 用：函数定义探测正则（re 编译缓存命中，热路径零编译开销）。
 # 锚定行首（含缩进行）后的 `def `，与旧的"逐行 startswith('def ')"语义等价
 # （行内首 token 非 def 的注释/docstring 不命中，避免误判）。
@@ -213,7 +214,9 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         # 5.4 预算封顶：BudgetExceededError（isinstance 判定）同走默认计划兜底，
         # 任务不会因预算异常崩溃（后续迭代前置守卫快速失败，自然收敛）
         _planner_budget_hit = isinstance(e, BudgetExceededError)
-        logger.warning("Planner LLM 失败（%s），使用默认计划: %s", "5.4 预算封顶" if _planner_budget_hit else "JSON 解析失败", e)
+        logger.warning(
+            "Planner LLM 失败（%s），使用默认计划: %s", "5.4 预算封顶" if _planner_budget_hit else "JSON 解析失败", e
+        )
         test_plan = _get_default_test_plan(state.get("target_function"))
     _trace_node(
         "planner",
@@ -857,6 +860,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 实验分析"哪类错误走了哪条修复路径"消费；缺省 None = 未产出）
         "fix_strategy_tag": result.get("fix_strategy_tag"),
         "fix_strategy_action": result.get("fix_strategy_action"),
+        # 4. 失败知识库闭环落点 B 观测标志（_debugger_node 写入；默认 None，
+        # FAILURE_KB_ENABLE 默认关时恒 None，历史口径不变）
+        "kb_prompt_snippet_applied": result.get("kb_prompt_snippet_applied"),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
@@ -1272,9 +1278,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             _pp_flags = postprocess_enabled_flags()
             _sanitized, _pp_labels = sanitize_patch(original_code, state.get("patch"))
             postprocess_labels = list(_pp_labels)
-            if (
-                (_pp_flags["import_repair"] or _pp_flags["contract_alias"])
-                and ("imports_repaired" in _pp_labels or "contract_aliases_restored" in _pp_labels)
+            if (_pp_flags["import_repair"] or _pp_flags["contract_alias"]) and (
+                "imports_repaired" in _pp_labels or "contract_aliases_restored" in _pp_labels
             ):
                 # P2/P3 生效：用卫生化后的补丁重新应用单文件路径
                 new_code, applied = apply_patch_to_code(original_code=original_code, patch=_sanitized)
@@ -1390,6 +1395,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             # 重采样成功后重新走契约检查与写盘路径
             if applied and new_code != original_code:
                 from src.tools.patch_applier import check_naming_contract as _ck
+
                 _ok2, _missing2 = _ck(original_code, new_code)
                 if not _ok2:
                     logger.warning("2.2 重采样后命名契约仍被破坏（%s），拒绝写盘", _missing2[:5])

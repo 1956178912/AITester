@@ -14,23 +14,23 @@
 
 ## Appendix: Algorithm - Code Mapping Table
 
-| Algorithm No. | Algorithm Name | Source Location | Key Functions/Classes |
-|:--------:|---------|---------|------------|
-| Algorithm 1 | Logic-Driven Test Planning | [src/agents/planner.py](../src/agents/planner.py) | `PlannerAgent.plan()` |
-| Algorithm 2 | Error Classification (rule matching) | [src/agents/error_classifier.py](../src/agents/error_classifier.py) | `ErrorClassifier.classify()` |
-| Algorithm 3 | Iterative Repair Loop | [src/graph/workflow.py](../src/graph/workflow.py) | `_should_debug()` + conditional routing edges |
-| Patch Application | Patch written to original file | [src/tools/patch_applier.py](../src/tools/patch_applier.py) | `apply_patch_to_code()` |
-| Cross-file repair (3.5, off by default) | Cross-file dependency analysis + multi-file patches | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` node (inserted between executor→debugger) | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` |
-| RAG Retrieval | Vector similarity retrieval | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` |
-| Batch Experiments | Benchmark execution | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` |
-| Data contamination detection (2.1) | Token-level Jaccard overlap of generated vs. golden patches | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` |
-| Task difficulty stratification (2.2) | Stratify by code_size / dependency_count / complexity_proxy | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` |
-| Docker isolated execution (4.3) | Run pytest inside a container via the docker CLI | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` |
-| Dependency cache monitoring (4.4) | venv cache hit-rate statistics + cleanup | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` |
-| Convergence failure-mode attribution (1.2) | Distinguishes "cannot pinpoint root cause" vs "cannot produce an effective patch" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` |
-| Boundary case coverage (1.3) | AST conservative check of generated_test for boundary-condition coverage | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` |
-| Mutation score (1.3) | Collects details[].mutation_score (produced by an external mutation tester) | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` |
-| Execution feedback trace (3.2) | Appends passed/coverage_delta/elapsed/reward_signals on every execution | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` |
+| Algorithm No. | Algorithm Name | Source Location | Key Functions/Classes | Related ADR |
+|:--------:|---------|---------|------------|---------|
+| Algorithm 1 | Logic-Driven Test Planning | [src/agents/planner.py](../src/agents/planner.py) | `PlannerAgent.plan()` | 0001 |
+| Algorithm 2 | Error Classification (rule matching + confidence layering) | [src/agents/error_classifier.py](../src/agents/error_classifier.py) | `ErrorClassifier.classify()` / `classify_with_confidence()` | 0002 |
+| Algorithm 3 | Iterative Repair Loop | [src/graph/workflow.py](../src/graph/workflow.py) | `_should_debug()` + conditional routing edges | 0001, 0005 |
+| Patch Application | Patch written to original file | [src/tools/patch_applier.py](../src/tools/patch_applier.py) | `apply_patch_to_code()` | 0003, 0005 |
+| Cross-file repair (3.5, off by default) | Cross-file dependency analysis + multi-file patches | [src/tools/cross_file.py](../src/tools/cross_file.py) + [src/graph/workflow.py](../src/graph/workflow.py) `cross_file_analyzer` node (inserted between executor→debugger) | `analyze_cross_file_deps()` / `build_cross_file_repair_plan()` / `apply_multi_file_patch()` / `cross_file_fallback_single_file()` | 0003 |
+| RAG Retrieval | Vector similarity retrieval | [src/rag/retriever.py](../src/rag/retriever.py) | `TestCaseRetriever` | 0004 |
+| Batch Experiments | Benchmark execution | [experiments/run_benchmark.py](../experiments/run_benchmark.py) | `run_benchmark()` | 0001 |
+| Data contamination detection (2.1) | Token-level Jaccard overlap of generated vs. golden patches | [experiments/contamination_check.py](../experiments/contamination_check.py) | `patch_overlap_score()` / `detect_contamination()` / `render_contamination_section()` | — |
+| Task difficulty stratification (2.2) | Stratify by code_size / dependency_count / complexity_proxy | [experiments/difficulty_stratification.py](../experiments/difficulty_stratification.py) | `stratify_by_dimension()` / `render_stratification_section()` | — |
+| Docker isolated execution (4.3) | Run pytest inside a container via the docker CLI | [src/agents/executor.py](../src/agents/executor.py) | `ExecutorAgent._execute_docker()` | 0005 |
+| Dependency cache monitoring (4.4) | venv cache hit-rate statistics + cleanup | [src/tools/dependency.py](../src/tools/dependency.py) | `get_venv_cache_stats()` / `list_venv_cache()` / `clear_venv_cache()` | 0003 |
+| Convergence failure-mode attribution (1.2) | Distinguishes "cannot pinpoint root cause" vs "cannot produce an effective patch" | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_convergence_failure_modes()` | — |
+| Boundary case coverage (1.3) | AST conservative check of generated_test for boundary-condition coverage | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` | — |
+| Mutation score (1.3) | Collects details[].mutation_score (produced by an external mutation tester) | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` | — |
+| Execution feedback trace (3.2) | Appends passed/coverage_delta/elapsed/reward_signals on every execution | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` | 0001, 0005 |
 
 ---
 

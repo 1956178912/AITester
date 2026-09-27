@@ -7,10 +7,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 # ── 2.2 CFG 分析 ──────────────────────────────────────────────────────────────
-
 from src.tools.control_flow import (
     analyze_control_flow,
     build_cfg_prompt_section,
@@ -167,7 +164,7 @@ class TestBuildCfgPromptSection:
 
 # ── 1.4 事件总线 ──────────────────────────────────────────────────────────────
 
-from src.graph.event_bus import (
+from src.graph.event_bus import (  # noqa: E402
     DebuggerDiagnosed,
     EventBus,
     PatchApplied,
@@ -304,7 +301,7 @@ class TestEventBus:
 
 # ── 6.2 trace 可视化 + 回放 ───────────────────────────────────────────────────
 
-from src.utils.trace_viz import replay_trace, trace_to_html
+from src.utils.trace_viz import replay_trace, trace_to_html  # noqa: E402
 
 
 class TestTraceToHTML:
@@ -312,8 +309,21 @@ class TestTraceToHTML:
         trace_file = tmp_path / "task1.trace.jsonl"
         recs = [
             {"event": "task_start", "task_uuid": "task1", "ts": "2026-09-28T10:00:00Z"},
-            {"event": "node_end", "node": "planner", "decision": "plan_complete", "duration_ms": 1200, "token_delta": 500, "ts": "2026-09-28T10:00:01Z"},
-            {"event": "node_end", "node": "executor", "decision": "PASS", "duration_ms": 800, "ts": "2026-09-28T10:00:05Z"},
+            {
+                "event": "node_end",
+                "node": "planner",
+                "decision": "plan_complete",
+                "duration_ms": 1200,
+                "token_delta": 500,
+                "ts": "2026-09-28T10:00:01Z",
+            },
+            {
+                "event": "node_end",
+                "node": "executor",
+                "decision": "PASS",
+                "duration_ms": 800,
+                "ts": "2026-09-28T10:00:05Z",
+            },
             {"event": "task_end", "test_passed": True, "ts": "2026-09-28T10:00:05Z"},
         ]
         with open(trace_file, "w") as f:
@@ -368,7 +378,13 @@ class TestReplayTrace:
         trace_file = tmp_path / "task1.trace.jsonl"
         recs = [
             {"event": "task_start", "task_uuid": "t1", "ts": "2026-09-28T10:00:00Z"},
-            {"event": "node_end", "node": "executor", "test_passed": False, "iteration": 1, "ts": "2026-09-28T10:00:01Z"},
+            {
+                "event": "node_end",
+                "node": "executor",
+                "test_passed": False,
+                "iteration": 1,
+                "ts": "2026-09-28T10:00:01Z",
+            },
             {"event": "task_end", "test_passed": True, "iteration": 2, "ts": "2026-09-28T10:00:05Z"},
         ]
         with open(trace_file, "w") as f:

@@ -678,18 +678,21 @@ def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
     json.dump 非原子，--parallel 下双 worker 同依赖图并发写会交错
     损坏 JSON → 读侧降级 None → 重调 LLM，放大成本。
     """
-    from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
+    from src.agents.llm_client import _llm_cache_enabled
 
     if not _llm_cache_enabled():
         return
     try:
-        cache_dir = _llm_cache_dir()
-        os.makedirs(cache_dir, exist_ok=True)
+        from src.agents.llm_client import ensure_llm_cache_dir, secure_cache_file
+
+        cache_dir = ensure_llm_cache_dir()
         target = os.path.join(cache_dir, f"{key}.json")
         # 写同目录临时文件后 os.replace 原子替换（同分区保证原子性）
         tmp = target + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(plan.to_dict(), f, ensure_ascii=False)
+        # 18. 安全改进：缓存文件收敛 0o600（与 LLM 文件缓存同口径）
+        secure_cache_file(tmp)
         os.replace(tmp, target)
     except OSError as e:
         # 原子替换失败时清理临时文件，避免残留

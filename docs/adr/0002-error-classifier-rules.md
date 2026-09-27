@@ -76,6 +76,14 @@
    （默认 false，复用 5.1 嵌入后端的轻量语义兜底，见
    algorithm_design §3.1 已知局限①）先行落地，概率化作为其后
    观察项。
+   > **2026-09-28 改进批次已落地最小置信度分层**（不改变本 ADR 决策，
+   > 纯增强）：`ErrorClassifier.classify_with_confidence()` 在 L1 规则
+   > 层上叠加置信度（具体特征命中 0.9 / 弱命中 0.5 / 未命中 0.2），
+   > 低置信度样本（confidence ≤ 0.5）触发**低置信度兜底策略**
+   > （收敛到 generic_analysis 而非硬性路由），并预留 L2 概率化/ML
+   > 层 `ProbabilisticClassifier` 协议（当前 `_default_probabilistic_
+   > classifier` 恒 None，落地 L2 需独立 ADR + 回归守卫）。
+   > 历史 17 类口径逐样本等价（`enable_fallback=False` 时兜底不触发）。
 3. **UNKNOWN 收敛 SLA**：`docs/failure_analysis.md` 历史快照中
    UNKNOWN 曾占 75%，经类别扩展已收敛。建议为"UNKNOWN 占失败
    总数比例"设定监控目标（≤ 15%），超阈值时由失败知识库

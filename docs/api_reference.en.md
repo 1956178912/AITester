@@ -3,9 +3,11 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-09-28 (P0/P1 improvement batch: 1.1 LLM output post-processing layer (`patch_postprocess.sanitize_patch` + P1 empty-shell detection / P2 import backfill / P3 contract alias backfill) / 2.1 error-classification → fix-strategy explicit mapping (`get_recommended_fix_strategy`) / 5.4 task-level token/cost budget hard cap (`COST_BUDGET_ENABLE` + `cost_budget`) / 5.1 semantic LLM cache (`SEMANTIC_CACHE_ENABLE` + `semantic_cache`) / 3.3 end-to-end smoke test script (`scripts/smoke_test.sh`) / 2.2 control-flow-graph static analysis (`control_flow.analyze_control_flow`, CFG path coverage injected into planner prompt) / 1.4 lightweight event bus (`event_bus`, observation-only decoupling layer); default behavior unchanged, all new features have independent switches)
+> Last updated: 2026-09-28 (Improvement-checklist full batch P0/P1/P2/P3: P0 baseline drift guard (`scripts/check_baseline_numbers.py`) + static-report auto-refresh (`scripts/generate_static_report.py`) + BASELINE CI validation (`scripts/check_baseline.py`); P1 branch-coverage gate/backfill (`scripts/check_branch_coverage.py`) + LLM-cache 0600 permissions & TTL cleanup (`llm_client.ensure_llm_cache_dir` / `secure_cache_file` / `cleanup_expired_cache_files`) + error-classifier confidence layering (`classify_with_confidence` / L2 protocol reservation); P2 failure-KB minimal closed loop (`src/agents/failure_kb.py`) + LLM output anomaly injection tests + optional `--smoke-llm` CI (`experiments/run_smoke_llm.py`) + multiprocess cache hit-rate coordination (`record_cache_hit` / `get_cache_hit_rate`) + bilingual H2 skeleton comparison + ADR index (`docs/adr/README.md`) + CI/CD integration examples (`docs/integration/`); P3 multi-language extension & long-file hierarchical summarization design docs; default behavior unchanged, all new capabilities behind independent switches)
 >
-> Previous: 2026-09-27 (tenth-batch full-project P1/P2 convergence round: non-numeric input crash guards / negative cache capacity cap / rag similarity bins KeyError / non-numeric reward_signals crash / cross-batch duplicate task_id silent drop / summary None crash / comment & docstring wording fixes / TimeoutExpired snapshot append / dotted module-name import fix / CLI flag conflict notice / total_test_count fallback / report None rendering / closure depth caliber / convergence safe normalization / regressed excludes new_categories / dead-write removal / NaN cause disambiguation + `cohens_d` docstring fix; full 1920 test cases / ruff 0 warnings / mypy 62 source files 0 errors / 94% coverage)
+> Previous: 2026-09-28 P0/P1 improvement batch (1.1 LLM output post-processing layer (`patch_postprocess.sanitize_patch` + P1 empty-shell detection / P2 import backfill / P3 contract alias backfill) / 2.1 error-classification → fix-strategy explicit mapping (`get_recommended_fix_strategy`) / 5.4 task-level token/cost budget hard cap (`COST_BUDGET_ENABLE` + `cost_budget`) / 5.1 semantic LLM cache (`SEMANTIC_CACHE_ENABLE` + `semantic_cache`) / 3.3 end-to-end smoke test script (`scripts/smoke_test.sh`) / 2.2 control-flow-graph static analysis (`control_flow.analyze_control_flow`, CFG path coverage injected into planner prompt) / 1.4 lightweight event bus (`event_bus`, observation-only decoupling layer); default behavior unchanged, all new features have independent switches)
+>
+> Prior: 2026-09-27 (tenth-batch full-project P1/P2 convergence round: non-numeric input crash guards / negative cache capacity cap / rag similarity bins KeyError / non-numeric reward_signals crash / cross-batch duplicate task_id silent drop / summary None crash / comment & docstring wording fixes / TimeoutExpired snapshot append / dotted module-name import fix / CLI flag conflict notice / total_test_count fallback / report None rendering / closure depth caliber / convergence safe normalization / regressed excludes new_categories / dead-write removal / NaN cause disambiguation + `cohens_d` docstring fix; full 1920 test cases / ruff 0 warnings / mypy 62 source files 0 errors / 94% coverage)
 
 ---
 
@@ -201,12 +203,95 @@ category = classifier.classify(test_output, failed_cases, target_module="calcula
 
 | `execution_trace_missing` | Task failed but `execution_trace` is empty (executor abnormal path: executor node did not write the trace, or it was truncated by an upstream crash); identifies "execution trace lost" (5.2 ongoing refinement) — determined by `refine_failure_category()` based on execution_trace signals, not through `classify()` text regex | Investigate the execution chain (venv/sandbox/timeout config) and retry; fix the code conservatively per the normal strategy |
 | `multi_candidate_all_rejected` | Multi-candidate patch strategy failed: all N candidates rejected by static screening (`ENABLE_MULTI_CANDIDATE_PATCH=true` but none passed `static_validate_patch`) (5.2 ongoing refinement) — determined by `refine_failure_category()` based on multi_candidate_stats signals, not through `classify()` text regex | Fall back to the single-patch flow and reduce candidate-perspective perturbation |
+| `patch_syntax_invalid` | Patch post-processing resampling exhausted: with `PATCH_RESAMPLE_ENABLE=true`, the patch is still syntactically broken after `PATCH_RESAMPLE_MAX` resamples (2.2 batch) — determined by `refine_failure_category()` / `refine_final_error_category()` based on `patch_resample_stats` signals, not through `classify()` text regex | Check LLM output quality (whether the prompt constrained valid Python syntax); increase resample count or reduce per-call output length |
 
-Classification priority (10 categories in `classify()` text regex): `LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`, all based on regex rule matching, no LLM token consumption. LLM_FORMAT_ERROR is placed first (JSON parse failure text rarely contains IndexError, but IndexError text may contain assert; reversing the order would misclassify). The latter 4 categories (`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED`) are state-refinement categories that do not go through `classify()` text regex; instead, the pure function `refine_failure_category()` determines them at task completion based on `repair_history` (patch rejected) / `rag_stats` (retrieval all empty) / `execution_trace` (trace missing) / `multi_candidate_stats` (all candidates rejected) signals — decision priority `patch_rejected > rag_empty > trace_missing > multi_rejected`; successful tasks are returned as-is. The benchmark and CLI exits use the same criteria. The two P0 4.1 sub-classes (`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`) are classified by `classify_llm_response()` directly on the raw LLM response (empty → `LLM_EMPTY_RESPONSE`; non-empty but JSON extraction failed → `LLM_JSON_PARSE_FAILED`), decided after the response arrives and before JSON parsing; on a hit the Debugger retries once with a stricter prompt without going through `classify()` text regex.
+**Improvement checklist P1 batch (2026-09-28): confidence-layered classification (L1 rule layer + L2 protocol reservation + low-confidence fallback)**
+
+```python
+from src.agents.error_classifier import (
+    ClassificationResult,
+    ErrorClassifier,
+    ProbabilisticClassifier,
+    classify_with_confidence,
+)
+
+# Module-level convenience function (equivalent to ErrorClassifier().classify_with_confidence)
+result: ClassificationResult = classify_with_confidence(
+    test_output, failed_cases=failed_cases, target_module="calculator",
+)
+# result.category / result.confidence / result.confidence_basis /
+# result.fallback_used / result.fallback_category
+```
+
+- **L1 rule layer** (`_classify_confidence`, zero LLM cost, deterministic & reproducible): concrete-feature hit (exception keyword / missing module name / line-number location) → confidence 0.9; weak hit (only generic `file.py:line:col` / `E` prefix format, no concrete exception keyword, e.g. `SYNTAX` weak hit / `IMPORT_ERROR` without extractable module name) → confidence 0.5; miss (`UNKNOWN`) → confidence 0.2;
+- **Low-confidence fallback strategy** (`enable_fallback=True`, default on): samples with confidence ≤ 0.5 trigger fallback — category converges to the fallback category (`UNKNOWN` / weak `SYNTAX` → `generic_analysis` instead of a hard "rewrite whole file" route), `fallback_used=True` / `fallback_category=UNKNOWN`; with `enable_fallback=False` the classification is byte-equivalent to the historical 17-category criterion (`_classify_combined` via the new kernel, fallback does not fire);
+- **L2 probabilistic / ML layer protocol reservation** (`ProbabilisticClassifier`; currently `_default_probabilistic_classifier` is always `None`): low-confidence samples can be refined via the `classifier` parameter (an L2 classifier's `predict(combined, target_module) → (category, confidence)`); when L2 confidence > 0.5 it overrides the L1 verdict; landing L2 requires a separate ADR + regression guard (see [ADR-0002](adr/0002-error-classifier-rules.md) "Known limitations & evolution directions").
+
+Classification priority (10 categories in `classify()` text regex): `LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`, all based on regex rule matching, no LLM token consumption. LLM_FORMAT_ERROR is placed first (JSON parse failure text rarely contains IndexError, but IndexError text may contain assert; reversing the order would misclassify). The latter 5 categories (`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` / `PATCH_SYNTAX_INVALID`) are state-refinement categories that do not go through `classify()` text regex; instead, the pure function `refine_failure_category()` determines them at task completion based on `repair_history` (patch rejected) / `rag_stats` (retrieval all empty) / `execution_trace` (trace missing) / `multi_candidate_stats` (all candidates rejected) / `patch_resample_stats` (resampling exhausted) signals — decision priority `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`; successful tasks are returned as-is. The benchmark and CLI exits use the same criteria. The two P0 4.1 sub-classes (`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`) are classified by `classify_llm_response()` directly on the raw LLM response (empty → `LLM_EMPTY_RESPONSE`; non-empty but JSON extraction failed → `LLM_JSON_PARSE_FAILED`), decided after the response arrives and before JSON parsing; on a hit the Debugger retries once with a stricter prompt without going through `classify()` text regex.
 
 ---
 
 ## Tool Modules
+
+**Improvement checklist P1/P2 batch (2026-09-28): LLM cache security hardening + multiprocess cache coordination + failure-KB minimal closed loop**
+
+```python
+from src.agents.llm_client import (
+    cleanup_expired_cache_files,
+    ensure_llm_cache_dir,
+    get_cache_hit_rate,
+    record_cache_hit,
+    reset_cache_hit_stats,
+    secure_cache_file,
+)
+
+# Hit-rate observation (pure read, does not change cache correctness; thread-safe, --parallel concurrent calls)
+rate = get_cache_hit_rate()          # This process's hit rate (0.0-1.0); None when no records
+record_cache_hit(True)               # Hit/miss instrumentation (auto-called by _call_llm_with_cache)
+reset_cache_hit_stats()              # Reset counters (batch boundary / test isolation)
+
+# Cache security (18. permission convergence + TTL expiry cleanup)
+ensure_llm_cache_dir()               # New dir 0o700; existing dir untouched; returns path
+secure_cache_file(tmp_path)          # os.chmod(tmp_path, 0o600); OSError silenced
+removed = cleanup_expired_cache_files()  # mtime-based delete of *.json older than TTL; returns count
+# TTL: AITESTER_LLM_CACHE_TTL_DAYS (default 7 days; 0/negative = cleanup disabled)
+```
+
+- When hit rate < 0.5 (multiprocess `--parallel` high-frequency repeated tasks): each
+  worker's first 30s negative-cache window triggers repeated LLM calls;
+  recommend "main-process cache prewarm + shared directory" (first run
+  high-frequency tasks in single-process sequential mode to prewarm
+  `src/cache/`, then run the batch in multiprocess mode) or switch to the
+  multithread mode (`BENCHMARK_PARALLELISM=N`, L1 process-level shared dict
+  visible cross-thread); see [performance_guide.md](performance_guide.md)
+  "3.5 Concurrency & multiprocess cache semantics".
+- `get_workflow_stats()["llm_cache"]["hit_rate"]` automatically attaches this
+  process's hit rate (the key is omitted when there are no LLM call records,
+  keeping the existing stats snapshot byte-equivalent).
+
+**4. Failure knowledge base minimal closed loop (landing point B online consumption + decay, 2026-09-28 improvement batch)**
+
+```python
+from src.agents.failure_kb import (
+    kb_debugger_snippet,
+    load_knowledge_base,
+    rank_knowledge_entries,
+)
+
+# Offline accumulation: python experiments/analyze_failures.py -k failure_knowledge_base.json
+# Online consumption (FAILURE_KB_ENABLE=true auto-injected by _debugger_node; default off)
+snippet = kb_debugger_snippet("syntax")   # Same-category case snippets matching error_category="syntax"
+entries = load_knowledge_base()            # Load KB (missing/corrupt/non-list → [])
+ranked = rank_knowledge_entries(entries, "syntax")  # Frequency × time-decay ranked top-k
+# Decay: FAILURE_KB_DECAY_DAYS (default 30 days); older entry last_seen → lower weight
+# (0.5 ** (age_days / half_life_days); missing last_seen / half-life ≤0 → weight 1.0)
+```
+
+- `kb_prompt_snippet_applied` (state observation key): set to `True` when
+  `_debugger_node` injects the KB snippet; always `None` when
+  `FAILURE_KB_ENABLE` is off (default; historical criterion unchanged),
+  for `analyze_results.py` to tally "which tasks went through the KB-enhanced
+  path" (effect verification ⑤).
 
 ### CodeAnalyzer
 

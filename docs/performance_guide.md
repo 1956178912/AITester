@@ -221,6 +221,32 @@ LLM_2_MODEL_NAME=model-2
 - 如需最大化跨进程缓存命中、降低重复 token 消耗，优先使用多线程模式
   （`BENCHMARK_PARALLELISM=N` 同进程内 N 线程），L1 为进程级共享 dict。
 
+**15. 多进程缓存协调（命中率观测 + 预热建议，2026-09-28 改进批次）**
+
+`src/agents/llm_client.py` 提供进程内 LLM 文件缓存命中率观测层（纯读，
+不改变缓存正确性）：
+
+- `record_cache_hit(hit: bool)`：每次 LLM 文件缓存命中/未命中时记录
+  （线程安全，`--parallel` 多任务并发调用）；由 `_call_llm_with_cache`
+  的 LRU 快路径命中 / 文件缓存未命中处自动埋点；
+- `get_cache_hit_rate() -> float | None`：返回本进程视角命中率
+  （`file_hits / (file_hits + file_misses)`；无记录时 None）；
+- `get_workflow_stats()["llm_cache"]["hit_rate"]`：工作流统计自动附带
+  本进程命中率（多进程模式下各 worker 各自报告本地值，需聚合）。
+
+**命中率诊断口径**（多进程 `--parallel` 高频重复任务场景）：
+
+- 命中率 ≥ 0.5：多 worker 文件缓存共享有效（主进程或先启动的 worker
+  已预热缓存，后续 worker 命中文件层），保持现状即可；
+- 命中率 < 0.5：各 worker 前 30s 负缓存窗口内重复发起 LLM 调用，
+  建议二选一：
+  1. **主进程预热缓存 + 共享目录**：跑基准前先用单进程顺序模式对高频
+     任务跑一遍（预热 `src/cache/` 下的文件缓存），再以多进程模式
+     跑批——后续 worker 直接命中文件层，命中率显著抬升；
+  2. **改用多线程模式**（`BENCHMARK_PARALLELISM=N`）：L1 进程内
+     共享 dict 跨线程可见，命中率天然高于多进程，代价是 GIL 约束
+     （纯 LLM 调用 I/O 密集场景影响有限）。
+
 ---
 
 ## 四、常见问题排查

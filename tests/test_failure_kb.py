@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -258,3 +259,144 @@ class TestCrossBatch:
         assert comparison["regressed_categories"] == []
         # 单批次下 failure_trend 仍有该类别计数（序列长度 1）
         assert comparison["failure_trend"]["assertion"] == [1]
+
+
+# ─── 4. 失败知识库最小闭环（改进清单 P2，failure_kb.py 在线消费侧）──────────
+class TestOnlineKnowledgeBaseConsumption:
+    """src.agents.failure_kb 在线消费侧（落点 B + 衰减机制）。"""
+
+    def _write_kb(self, tmp_path, entries):
+        p = tmp_path / "kb.json"
+        p.write_text(json.dumps(entries), encoding="utf-8")
+        return str(p)
+
+    def test_snippet_none_when_disabled(self, tmp_path, monkeypatch):
+        from src.agents.failure_kb import kb_debugger_snippet
+
+        kb = self._write_kb(
+            tmp_path,
+            [
+                {
+                    "task_id": "t1",
+                    "error_category": "syntax",
+                    "root_cause": "framework",
+                    "diagnosis_excerpt": "syntax broken",
+                    "reproducible_steps": "run x",
+                    "suggested_fix": {"root_cause": "framework", "direction": "fix it"},
+                }
+            ],
+        )
+        monkeypatch.setenv("FAILURE_KB_PATH", kb)
+        monkeypatch.delenv("FAILURE_KB_ENABLE", raising=False)
+        assert kb_debugger_snippet("syntax") is None
+
+    def test_snippet_none_when_no_matching_category(self, tmp_path, monkeypatch):
+        from src.agents.failure_kb import kb_debugger_snippet
+
+        kb = self._write_kb(tmp_path, [{"task_id": "t1", "error_category": "timeout"}])
+        monkeypatch.setenv("FAILURE_KB_PATH", kb)
+        monkeypatch.setenv("FAILURE_KB_ENABLE", "true")
+        assert kb_debugger_snippet("syntax") is None
+
+    def test_snippet_injected_when_matching(self, tmp_path, monkeypatch):
+        import time as _time
+
+        from src.agents.failure_kb import kb_debugger_snippet
+
+        kb = self._write_kb(
+            tmp_path,
+            [
+                {
+                    "task_id": "t1",
+                    "error_category": "syntax",
+                    "root_cause": "llm_capability",
+                    "diagnosis_excerpt": "E   module.py:10:5: syntax error",
+                    "reproducible_steps": "run benchmark --task t1",
+                    "suggested_fix": {"root_cause": "llm_capability", "direction": "约束 JSON 输出"},
+                    "last_seen": _time.time() - 86400,
+                },
+                {"task_id": "t3", "error_category": "timeout", "diagnosis_excerpt": "slow"},
+            ],
+        )
+        monkeypatch.setenv("FAILURE_KB_PATH", kb)
+        monkeypatch.setenv("FAILURE_KB_ENABLE", "true")
+        snippet = kb_debugger_snippet("syntax")
+        assert snippet is not None
+        assert "失败知识库提示" in snippet
+        assert "约束 JSON 输出" in snippet
+        assert "t3" not in snippet  # 非匹配类别不注入
+
+    def test_snippet_none_for_empty_kb(self, tmp_path, monkeypatch):
+        from src.agents.failure_kb import kb_debugger_snippet
+
+        kb = self._write_kb(tmp_path, [])
+        monkeypatch.setenv("FAILURE_KB_PATH", kb)
+        monkeypatch.setenv("FAILURE_KB_ENABLE", "true")
+        assert kb_debugger_snippet("syntax") is None
+
+    def test_decay_weight_fresh_vs_old(self):
+        import time as _time
+
+        from src.agents.failure_kb import _entry_decay_weight
+
+        now = _time.time()
+        fresh = _entry_decay_weight({"last_seen": now}, now, 30.0)
+        old = _entry_decay_weight({"last_seen": now - 30 * 86400}, now, 30.0)
+        assert fresh > old
+
+    def test_decay_disabled_when_half_life_zero(self):
+        import time as _time
+
+        from src.agents.failure_kb import _entry_decay_weight
+
+        now = _time.time()
+        assert _entry_decay_weight({"last_seen": now - 365 * 86400}, now, 0.0) == 1.0
+
+    def test_missing_last_seen_no_decay(self):
+        import time as _time
+
+        from src.agents.failure_kb import _entry_decay_weight
+
+        assert _entry_decay_weight({}, _time.time(), 30.0) == 1.0
+
+    def test_ranking_prefers_recent_entries(self, tmp_path, monkeypatch):
+        import time as _time
+
+        from src.agents.failure_kb import rank_knowledge_entries
+
+        now = _time.time()
+        entries = [
+            {"error_category": "syntax", "last_seen": now - 60 * 86400},
+            {"error_category": "syntax", "last_seen": now - 60 * 86400},
+            {"error_category": "syntax", "last_seen": now},
+        ]
+        monkeypatch.setenv("FAILURE_KB_DECAY_DAYS", "30")
+        ranked = rank_knowledge_entries(entries, "syntax", now=now)
+        assert ranked[0]["last_seen"] == now
+        assert len(ranked) == 3
+
+    def test_load_valid_and_missing(self, tmp_path, monkeypatch):
+        from src.agents.failure_kb import load_knowledge_base
+
+        p = self._write_kb(tmp_path, [{"error_category": "syntax"}])
+        monkeypatch.setenv("FAILURE_KB_PATH", p)
+        assert len(load_knowledge_base()) == 1
+        monkeypatch.setenv("FAILURE_KB_PATH", str(tmp_path / "nope.json"))
+        assert load_knowledge_base() == []
+
+    def test_analyze_failures_writes_last_seen(self, tmp_path):
+        """离线积累侧：failure_knowledge_base 产出条目带 last_seen 时间戳。"""
+        from experiments.analyze_failures import failure_knowledge_base
+
+        details = [
+            {
+                "task_id": "t1",
+                "passed": False,
+                "error_category": "syntax",
+                "diagnosis": "SyntaxError: invalid syntax",
+            }
+        ]
+        cases = failure_knowledge_base(details)
+        assert cases, "应产出失败案例"
+        assert "last_seen" in cases[0]
+        assert isinstance(cases[0]["last_seen"], float)

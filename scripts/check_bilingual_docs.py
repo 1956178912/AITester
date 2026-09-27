@@ -68,6 +68,30 @@ _EXEMPT_NO_EN = frozenset(
 # 日期行匹配（中英文）
 _DATE_RE = re.compile(r"(最后更新|Last\s+updated)[:：]?\s*(\d{4}-\d{2}-\d{2})")
 
+# 12. P2 结构化对照检查：二级标题（## / ##）序列归一化后按序对齐，
+# 检测"英文版缺失某章节 / 章节顺序漂移"。二级标题归一化规则：
+# 去首尾空白、去前置序号（"一、" "1." 等）、转小写，便于中英标题文本
+# 差异下仍按序比对"章节骨架"（非字面翻译校验——翻译口径由人工保证）。
+_H2_RE = re.compile(r"^##\s+(?!#)(\S.*)$")
+
+
+def _extract_h2_titles(text: str) -> list[str]:
+    """提取二级标题序列（归一化：去序号前缀 + 转小写 + 去空白）。
+
+    用于结构化对照：中英文版的 H2 骨架（章节顺序）应一致；
+    缺失 / 顺序漂移会导致 H2 序列不等（超出 ±2 容差即警告，strict 时 fail）。
+    """
+    titles: list[str] = []
+    for line in text.splitlines():
+        m = _H2_RE.match(line)
+        if m:
+            t = m.group(1).strip()
+            # 去序号前缀："一、" "二、" ... "1." "2)" 等
+            t = re.sub(r"^[一二三四五六七八九十]+、\s*", "", t)
+            t = re.sub(r"^\d+[\.\)、]\s*", "", t)
+            titles.append(t.lower())
+    return titles
+
 
 def _find_en_pair(md_path: Path) -> Path | None:
     """找中英配对的英文版路径（api_reference.md ↔ api_reference.en.md 或 .md.en）。"""
@@ -147,6 +171,42 @@ def check_bilingual(strict: bool = False) -> tuple[list[str], list[str]]:
                 failures.append(msg)
             else:
                 warnings.append(msg)
+
+        # 12. P2 结构化对照：H2 骨架（章节顺序）按序对齐。
+        # 英文 H2 数量少于中文且骨架前缀不一致（缺章节 / 顺序漂移）时警告；
+        # 数量差 > 2 已被上面的章节数检查覆盖，这里补"顺序漂移"检测。
+        h2_zh = _extract_h2_titles(text_zh)
+        h2_en = _extract_h2_titles(text_en)
+        # 比较"中文 H2 序列中出现在英文序列里的相对顺序"是否保持（子序列匹配）
+        if h2_zh and h2_en:
+            shorter = min(len(h2_zh), len(h2_en))
+            zh_win = h2_zh[:shorter]
+            en_win = h2_en[:shorter]
+            # 宽松判定：英文序列中连续两节的相对顺序若与中文冲突（中文 A 在 B 前，
+            # 英文 B 在 A 前）→ 顺序漂移。仅当两侧窗口均含该对时判定。
+            drift = False
+            # 英文窗口去重保留首现顺序
+            seen_en: list[str] = []
+            for title in en_win:
+                if title not in seen_en:
+                    seen_en.append(title)
+            # 中文窗口去重保留首现顺序
+            zh_dedup: list[str] = []
+            for t in zh_win:
+                if t not in zh_dedup:
+                    zh_dedup.append(t)
+            # 对每对相邻中文节，检查英文中是否出现逆序
+            for i in range(len(zh_dedup) - 1):
+                a, b = zh_dedup[i], zh_dedup[i + 1]
+                if a in seen_en and b in seen_en and seen_en.index(b) < seen_en.index(a):
+                    drift = True
+                    break
+            if drift:
+                msg = f"章节顺序漂移：{rel} vs {en.as_posix()}（H2 骨架逆序）"
+                if strict:
+                    failures.append(msg)
+                else:
+                    warnings.append(msg)
 
     return failures, warnings
 

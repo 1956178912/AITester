@@ -3,9 +3,11 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-28（P0/P1 改进批次：1.1 LLM 输出后处理层（`patch_postprocess.sanitize_patch` + P1 空壳检测 / P2 导入回填 / P3 契约别名回填）/ 2.1 错误分类→修复策略显式映射（`get_recommended_fix_strategy`）/ 5.4 任务级 token/费用预算硬上限（`COST_BUDGET_ENABLE` + `cost_budget`）/ 5.1 语义级 LLM 缓存（`SEMANTIC_CACHE_ENABLE` + `semantic_cache`）/ 3.3 端到端冒烟测试脚本（`scripts/smoke_test.sh`）；默认行为不变，新能力均有独立开关）
+> 最后更新：2026-09-28（改进清单全量批次 P0/P1/P2/P3：P0 基线漂移守卫（`scripts/check_baseline_numbers.py`）+ 静态报告自动刷新（`scripts/generate_static_report.py`）+ BASELINE CI 校验（`scripts/check_baseline.py`）；P1 分支覆盖率门槛/回填（`scripts/check_branch_coverage.py`）+ LLM 缓存 0600 权限与 TTL 清理（`llm_client.ensure_llm_cache_dir` / `secure_cache_file` / `cleanup_expired_cache_files`）+ 错误分类器置信度分层（`classify_with_confidence` / L2 协议预留）；P2 失败知识库最小闭环（`src/agents/failure_kb.py`）+ LLM 输出异常注入测试 + `--smoke-llm` 可选 CI（`experiments/run_smoke_llm.py`）+ 多进程缓存命中率协调（`record_cache_hit` / `get_cache_hit_rate`）+ 双语文档 H2 骨架对照 + ADR 索引（`docs/adr/README.md`）+ CI/CD 集成示例（`docs/integration/`）；P3 多语言扩展与超长文件分层摘要设计文档；默认行为不变，新能力均带独立开关）
 >
-> 上一版：2026-09-27（第十一轮全项目 P1/P2 收敛 + 路线图剩余缺口落地批次：错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`）/ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）/ 1.3 分层压缩降级链透传（`contract_reject_feedback` 跨轮透传）/ 多维度污染检测（`contamination_risk_level` + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）/ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）/ SWE-bench Pro 支持（`swe_bench_pro` 注册）/ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`）/ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`）；全量 1937 测试用例 / ruff 全仓 0 告警 / mypy 64 源文件 0 错误 / 覆盖率 94%）
+> 上一版：2026-09-28 P0/P1 改进批次（1.1 LLM 输出后处理层（`patch_postprocess.sanitize_patch` + P1 空壳检测 / P2 导入回填 / P3 契约别名回填）/ 2.1 错误分类→修复策略显式映射（`get_recommended_fix_strategy`）/ 5.4 任务级 token/费用预算硬上限（`COST_BUDGET_ENABLE` + `cost_budget`）/ 5.1 语义级 LLM 缓存（`SEMANTIC_CACHE_ENABLE` + `semantic_cache`）/ 3.3 端到端冒烟测试脚本（`scripts/smoke_test.sh`）；默认行为不变，新能力均有独立开关）
+>
+> 再上一版：2026-09-27（第十一轮全项目 P1/P2 收敛 + 路线图剩余缺口落地批次：错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`）/ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）/ 1.3 分层压缩降级链透传（`contract_reject_feedback` 跨轮透传）/ 多维度污染检测（`contamination_risk_level` + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）/ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）/ SWE-bench Pro 支持（`swe_bench_pro` 注册）/ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`）/ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`）；全量 1937 测试用例 / ruff 全仓 0 告警 / mypy 64 源文件 0 错误 / 覆盖率 94%）
 
 ---
 
@@ -204,6 +206,41 @@ category = classifier.classify(test_output, failed_cases, target_module="calcula
 
 **P1 改进（2026-09-28 批次）：分类 → 修复策略显式映射**：`get_recommended_fix_strategy(category, context)` 把"该走哪条修复路径"从 workflow/debugger 的隐式分支收敛为分类器的结构化输出——返回 `{"category", "strategy"（snake_case 标签，如 `add_boundary_check` / `regenerate_strict_json`）, "description"（与 `get_fix_strategy` 同口径）, "repair_action"（llm_resample / repair_code / repair_test / investigate_infra）}`。`_debugger_node` 将标签随结果写入 state（`fix_strategy_tag` / `fix_strategy_action`），供实验分析"哪类错误走了哪条修复路径"消费。
 
+**改进清单 P1 批次（2026-09-28）：置信度分层分类（L1 规则层 + L2 协议预留 + 低置信度兜底）**：
+
+```python
+from src.agents.error_classifier import (
+    ClassificationResult,
+    ErrorClassifier,
+    ProbabilisticClassifier,
+    classify_with_confidence,
+)
+
+# 模块级便利函数（等价于 ErrorClassifier().classify_with_confidence）
+result: ClassificationResult = classify_with_confidence(
+    test_output, failed_cases=failed_cases, target_module="calculator",
+)
+# result.category / result.confidence / result.confidence_basis /
+# result.fallback_used / result.fallback_category
+```
+
+- **L1 规则层**（`_classify_confidence`，零 LLM 成本、确定性可复现）：
+  具体特征命中（异常关键词 / 缺失模块名 / 行号定位）→ confidence 0.9；
+  弱命中（仅通用 `file.py:line:col` / `E` 前缀格式命中、无具体异常关键词，
+  如 `SYNTAX` 弱命中 / `IMPORT_ERROR` 无法提取模块名）→ confidence 0.5；
+  未命中（`UNKNOWN`）→ confidence 0.2；
+- **低置信度兜底策略**（`enable_fallback=True`，默认开）：confidence ≤ 0.5
+  的样本触发兜底——类别收敛到兜底类别（`UNKNOWN` / `SYNTAX` 弱命中 →
+  `generic_analysis` 而非硬性"重写整文件"路由），`fallback_used=True` /
+  `fallback_category=UNKNOWN`；`enable_fallback=False` 时分类结果与历史 17 类
+  口径逐样本等价（`_classify_combined` 经新内核，兜底不触发）；
+- **L2 概率化 / ML 层协议预留**（`ProbabilisticClassifier`，当前
+  `_default_probabilistic_classifier` 恒 `None`）：低置信度样本可经
+  `classifier` 参数注入 L2 分类器精判（`predict(combined, target_module) →
+  (category, confidence)`），L2 置信度 > 0.5 时覆盖 L1 判定；落地 L2
+  需独立 ADR + 回归守卫（见 [ADR-0002](adr/0002-error-classifier-rules.md)
+  "已知局限与演进方向"）。
+
 分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 5 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` / `PATCH_SYNTAX_INVALID`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）/ `patch_resample_stats`（重采样耗尽）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。P0 4.1 批次的两个子类（`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`）由 `classify_llm_response()` 直接分析 LLM 原始响应（空 → `LLM_EMPTY_RESPONSE`；非空但 JSON 提取失败 → `LLM_JSON_PARSE_FAILED`），在 Debugger 收到响应后、JSON 解析前判定，命中时用更严格 prompt 重试一次，不走 `classify()` 文本正则。
 
 ---
@@ -297,6 +334,60 @@ stats = get_semantic_cache_stats()  # {entries, hits, misses, embed_failures, en
   worker 进程前 30s 内的 L1 负缓存命中率偏低；如需最大化跨进程命中，
   让所有 worker 共享同一进程（即 `--parallel` 的多线程模式）即可，
   L1 为进程级共享 dict。
+
+**15. 多进程缓存协调（命中率观测 + 预热建议，2026-09-28 改进批次）**：
+
+```python
+from src.agents.llm_client import (
+    cleanup_expired_cache_files,
+    ensure_llm_cache_dir,
+    get_cache_hit_rate,
+    record_cache_hit,
+    reset_cache_hit_stats,
+    secure_cache_file,
+)
+
+# 命中率观测（纯读，不改变缓存正确性；线程安全，--parallel 并发调用）
+rate = get_cache_hit_rate()          # 本进程视角命中率（0.0-1.0）；无记录时 None
+record_cache_hit(True)               # 命中/未命中埋点（_call_llm_with_cache 自动调用）
+reset_cache_hit_stats()              # 清零计数（批次边界 / 测试隔离）
+
+# 缓存安全（18. 权限收敛 + TTL 过期清理）
+ensure_llm_cache_dir()               # 新目录 0o700；既有目录不动；返回路径
+secure_cache_file(tmp_path)          # os.chmod(tmp_path, 0o600)；OSError 静默
+removed = cleanup_expired_cache_files()  # 按 mtime 删早于 TTL 的 *.json；返回删除数
+# TTL：AITESTER_LLM_CACHE_TTL_DAYS（默认 7 天；0/负数 = 关闭清理）
+```
+
+- 命中率 < 0.5 时（多进程 `--parallel` 高频重复任务）：各 worker 前 30s
+  负缓存窗口内重复发起 LLM 调用，建议"主进程预热缓存 + 共享目录"（先单
+  进程顺序跑高频任务预热 `src/cache/`，再多进程跑批）或改用多线程模式
+  （`BENCHMARK_PARALLELISM=N`，L1 进程内共享 dict 跨线程可见）；详见
+  [performance_guide.md](performance_guide.md) "3.5 并发与多进程缓存语义"。
+- `get_workflow_stats()["llm_cache"]["hit_rate"]` 自动附带本进程命中率
+  （无 LLM 调用记录时不附该键，保持既有统计快照逐字节不变）。
+
+**4. 失败知识库最小闭环（落点 B 在线消费 + 衰减，2026-09-28 改进批次）**：
+
+```python
+from src.agents.failure_kb import (
+    kb_debugger_snippet,
+    load_knowledge_base,
+    rank_knowledge_entries,
+)
+
+# 离线积累：python experiments/analyze_failures.py -k failure_knowledge_base.json
+# 在线消费（FAILURE_KB_ENABLE=true 时 _debugger_node 自动注入；默认关）
+snippet = kb_debugger_snippet("syntax")   # 匹配 error_category="syntax" 的同类案例片段
+entries = load_knowledge_base()            # 加载知识库（缺失/损坏/非列表 → []）
+ranked = rank_knowledge_entries(entries, "syntax")  # 频次×时间衰减排序取 top-k
+# 衰减：FAILURE_KB_DECAY_DAYS（默认 30 天）；条目 last_seen 越久权重越低
+# （0.5 ** (age_days / half_life_days)；last_seen 缺失 / 半衰期 ≤0 时权重 1.0）
+```
+
+- `kb_prompt_snippet_applied`（state 观测键）：`_debugger_node` 注入 KB
+  片段时置 `True`；`FAILURE_KB_ENABLE` 默认关时恒 `None`（历史口径不变），
+  供 `analyze_results.py` 统计"哪些任务走了 KB 增强路径"（效果验证 ⑤）。
 
 ### CodeAnalyzer
 

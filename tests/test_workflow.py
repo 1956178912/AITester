@@ -394,8 +394,11 @@ class TestGetWorkflowStats:
     @patch("src.graph.workflow.MAX_ITERATIONS", 3)
     def test_get_workflow_stats(self):
         """获取工作流统计（0.7 P1-1.3：双套缓存漂移消除后统一报告生产文件缓存口径）。"""
+        from src.agents.llm_client import reset_cache_hit_stats
         from src.graph.workflow import get_workflow_stats
 
+        # 15. 多进程缓存协调：清零命中计数，保证无 hit_rate 键（纯统计快照口径）
+        reset_cache_hit_stats()
         stats = get_workflow_stats()
 
         assert "llm_cache" in stats

@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-09-28"   # 全量回归实测日期（2026-09-28 改进批次扩展后）
+last_verified: "2026-09-28"   # 全量回归实测日期（2026-09-28 改进批次全量落地后）
 
 tests:
-  total_passed: 2065          # 全量 pytest tests/（2026-09-28 改进清单批次 +19 用例后）
+  total_passed: 2165          # 全量 pytest tests/（2026-09-28 改进批次 P0/P1/P2/P3 全量落地后）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
   suite_seconds: 32          # 全量耗时量级（~32s）
@@ -32,14 +32,17 @@ coverage:
     multi_candidate: 94
     cross_file: 95
     rag_retriever: 95
-  branch_total_pct: null     # 2026-09-28 起 CI 报告分支覆盖（--cov-branch），首测后回填；
-                             # 本批次未单独跑 --cov-branch 全量，首次 CI 跑通后更新
+  branch_total_pct: 80       # --cov=src --cov-branch 总分支覆盖（coverage.xml branch-rate 0.7956，2026-09-28 改进批次后重测）
+  branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
+    graph_workflow: 90      # _should_debug / _route_after_diagnosis 条件路由
+    error_classifier: 88     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层
+    graph_state: 100         # 状态 schema 初始化路由
 
 static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 70      # 2026-09-28 批次扩展后
+  mypy_source_files: 70      # 2026-09-28 改进批次全量落地后重测
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 

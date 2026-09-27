@@ -7,19 +7,20 @@
 
 ## 测试状态
 
-> **当前基线以 [BASELINE.yaml](BASELINE.yaml) 为准**（机器可读单一事实来源，2026-09-28 实测：
-> 全量 2046 passed / 0 failed / ruff 全仓 0 告警 / mypy 70 源文件 0 错误 / 行覆盖 89%；
-> 2026-09-28 起 CI 增分支覆盖率报告，首测后回填 BASELINE.yaml `branch_total_pct`）。
-> 下表为"状态口径"说明；具体数字随版本刷新以 BASELINE.yaml 为准，不在本表硬编码。
+> **当前基线以 [BASELINE.yaml](BASELINE.yaml) 为准**（机器可读单一事实来源）。
+> 全量测试通过、静态检查（ruff / mypy）与行/分支覆盖率等当前数字均**不在此硬编码**，
+> 统一以 BASELINE.yaml 对应节（`tests` / `coverage` / `static_checks`）为唯一事实来源，
+> 批次落地后由维护流程同步刷新（见 `CONTRIBUTING.md` "文档组织约定"）；
+> 下方表格仅描述"状态口径"，具体数值一律指向 BASELINE.yaml，避免多文档各自硬编码造成漂移。
 
 | 指标 | 状态 |
 |------|------|
-| **总测试数** | ✅ 全量 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过，约 1863 collected）——当前数值见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
-| **单元测试** | ✅ 全量 passed, 0 failed（实测 ~31s；当前用例数见 [BASELINE.yaml](BASELINE.yaml)）；精简环境 1863 passed（`skipif`/`importorskip` 优雅降级，非误报 ERROR） |
-| **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（行覆盖 89%；分支覆盖 2026-09-28 起由 CI `--cov-branch` 报告，首测后回填；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准） |
+| **总测试数** | ✅ 全量 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过）——当前数值见 [BASELINE.yaml](BASELINE.yaml) `tests` 节（`total_passed` / `slim_environment`） |
+| **单元测试** | ✅ 全量通过、零失败（实测耗时与用例数见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 `suite_seconds` / `total_passed` / `total_failed`）；精简环境 `skipif`/`importorskip` 优雅降级，非误报 ERROR |
+| **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-28 P0/P1 改进批次（LLM 输出后处理层 `patch_postprocess.sanitize_patch` + P1 空壳检测 / P2 导入回填 / P3 契约别名回填；错误分类→修复策略显式映射 `get_recommended_fix_strategy`；任务级 token/费用预算硬上限 `COST_BUDGET_ENABLE` + `cost_budget`；语义级 LLM 缓存 `SEMANTIC_CACHE_ENABLE` + `semantic_cache`；端到端冒烟测试脚本 `scripts/smoke_test.sh`；默认行为不变，新能力均有独立开关，详见 [docs/api_reference.md](docs/api_reference.md)）；此前 2026-09-27 第十一轮功能批次（错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层，默认行为不变；全量 1937 测试通过零回归）；此前 2026-09-27 全面审查与保守优化轮（十轮：静态检查清零 mypy/ruff + 死代码清理 + 线程卫生 + 项目卫生 + 并发/正确性补强 + CF-3 跨文件修复缺陷修复 + 第五轮 P0 批次：变异测试按 pytest 官方退出码判定 / 并行 API 轮询 `zlib.crc32` 可复现 / LLM 缓存与跨文件计划缓存原子写 / single_agent 基线写盘安全检查 / 状态 schema 补全 + 第六轮节点层路由语义（早期迭代诊断关键词 regenerate）与降级兜底 + 第七轮性能热路径深扫（AST 解析复用 / O(1) 任务索引 / 合并文本共享 / 关键词预编译正则）+ 第八轮收尾审计（lint/format 清零 + type_repair 契约参照口径 + type_repair_findings 状态传播 + zai 域名预编译正则）+ 第九轮并行子代理深审（P1×4：单函数 import 前缀误判完整文件 / 全候选失败仍写盘劣化 / venv 缓存竞态 / 线程锁 per-dir + P2×10：debugger 坏 JSON 降级 / 异常分支保留最近有效结果 / async def 补丁定位 / 预编译 / convergence 重复计入修正）+ 第十轮全项目 P1/P2 收敛（P1×6：非数值 coverage_delta 崩溃 / 负缓存无上限 / rag 相似度 bins KeyError / 非数值 reward_signals 崩溃 / 跨批次重复 task_id 静默丢弃 / 汇总 None 崩溃 + P2×10：注释/docstring 措辞修正 + TimeoutExpired 快照追加 + 带点模块名 import 修复 + CLI flag 冲突提示 + total_test_count 兜底口径 + 报告 None 渲染 + closure depth 口径 + convergence 安全归一 + regressed 排除 new_categories + 死写删除 + nan 成因区分；全量 1920 测试通过零回归）；此前 2026-09-25 P0 改进批次 13 项 + 0.10 深度审查修复 + 0.9 LRU 快路径，详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-28 改进清单全量批次（P0 基线漂移守卫 + 静态报告自动刷新 + BASELINE CI 校验；P1 分支覆盖率门槛/回填 + LLM 缓存 0600 权限与 TTL 清理 + 错误分类器置信度分层与 L2 协议预留；P2 失败知识库最小闭环 + LLM 输出异常注入测试 + `--smoke-llm` 可选 CI + 多进程缓存命中率协调 + 双语文档 H2 骨架对照 + ADR 索引 + CI/CD 集成示例；P3 多语言扩展与超长文件分层摘要设计文档；全部默认行为不变，新能力均带独立开关）；此前 2026-09-28 P0/P1 改进批次（LLM 输出后处理层 `patch_postprocess.sanitize_patch` + 错误分类→修复策略显式映射 + 任务级 token/费用预算 + 语义级 LLM 缓存 + 端到端冒烟测试脚本，详见 [docs/api_reference.md](docs/api_reference.md)）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
 | **最近改动** | ✅ 2026-09-27 第十一轮功能批次（默认行为不变）：5.2 错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID` 重采样耗尽标记）+ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`，默认关）+ 1.3 分层压缩降级链透传（`contract_reject_feedback` 经 `_debugger_node` 跨轮透传，`CONTEXT_TIER_DOWNGRADE_ENABLE` 默认关）+ 五、多维度污染检测（`run_benchmark._build_task_result` 新增 `contamination_risk_level` 字段）+ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`，默认关）+ 修复 `on_resample` → `resample_fn` 关键参数名（2.2 重采样此前静默失效）+ `build_tiered_context` tier-0 `str|None` → `str` + `AITesterState` 声明 4 个新键 + 全仓 ruff 8 lint + mypy 12 类型错误清零；全量 1937 测试通过零回归；详见 [CHANGELOG](CHANGELOG.md) |
@@ -1469,6 +1470,27 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
+
+**核心成果**：
+- **P0（文档基线 / CI 基建）**：README/README.en "测试状态" 数字漂移修复（移除硬编码数字，统一指向 `BASELINE.yaml`）+ 漂移守卫 `scripts/check_baseline_numbers.py` + CI 结构校验 `scripts/check_baseline.py` + 静态报告自动刷新 `scripts/generate_static_report.py` → `docs/history/static_report_<date>.md`
+- **P1（算法 / 安全）**：
+  - 分支覆盖率门槛回填 + 核心路由模块分支覆盖门禁 `scripts/check_branch_coverage.py`（总 ≥79%、核心 ≥85%）+ 组合路由测试 `tests/test_branch_coverage_gates.py`（26 用例）
+  - LLM 文件缓存 0o600 权限 + 0o700 目录 + TTL 过期清理（`llm_client.py` 的 `ensure_llm_cache_dir` / `secure_cache_file` / `cleanup_expired_cache_files`，`AITESTER_LLM_CACHE_TTL_DAYS` 默认 7 天）+ `tests/test_cache_security.py`（9 用例）
+  - 错误分类器置信度分层（`error_classifier.py` 新增 `classify_with_confidence` / `ClassificationResult` / L2 `ProbabilisticClassifier` 协议预留 + 低置信度兜底策略）+ `tests/test_error_classifier_confidence.py`（17 用例）
+- **P2（闭环 / 测试 / 集成）**：
+  - 失败知识库最小闭环（`src/agents/failure_kb.py` 落点 B + 时间衰减，`_debugger_node` 注入同类案例片段，`analyze_failures.py` 条目加 `last_seen`，state 加 `kb_prompt_snippet_applied` 观测键）+ `tests/test_failure_kb.py` 新增 11 用例
+  - LLM 输出格式异常注入测试组 `tests/test_llm_format_anomaly.py`（17 用例：空响应 / 截断 / 字段缺失 / 无效 patch 语义 / markdown 包裹）
+  - `--smoke-llm` 可选 CI 作业 `experiments/run_smoke_llm.py`（缺省 `AITESTER_SMOKE_LLM=false` 零成本）+ `tests/test_smoke_llm.py`
+  - 多进程缓存协调：LLM 文件缓存命中率观测层（`record_cache_hit` / `get_cache_hit_rate` / `reset_cache_hit_stats`）+ `performance_guide.md` 预热/切换说明
+  - 双语文档 H2 骨架结构对照检查（`scripts/check_bilingual_docs.py` 增章节顺序漂移检测）
+  - ADR 索引 `docs/adr/README.md` + `algorithm_design(.en).md` 映射表增"相关 ADR"列
+  - CI/CD 集成示例 `docs/integration/README.md` + `.git-hooks/pre-commit.sh`
+- **P3（设计文档，未实装代码）**：多语言扩展架构预留 `docs/design/multilanguage_extension.md` + 超长文件分层摘要策略 `docs/design/hierarchical_summary.md`
+- 全仓 ruff 0 告警 + mypy 0 错误（70 源文件）+ 全量 2165 测试通过 / 0 失败
+
+**验证**: 全量 2165 passed / 0 failed / ruff 全绿 / mypy 全绿 / `check_baseline_numbers.py` + `check_baseline.py --verify` + `check_branch_coverage.py` + pre-commit 钩子全通过
 
 ### 2026-09-27 第十一轮功能批次（错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 五污染检测 + 2.1 mypy 静态层，默认行为不变）
 

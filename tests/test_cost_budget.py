@@ -40,7 +40,7 @@ class TestBudgetDisabled:
     """默认关闭：全部调用返回 True（历史口径）。"""
 
     def test_check_budget_disabled_always_true(self) -> None:
-        for i in range(100):
+        for _ in range(100):
             assert check_budget(consumed_delta_tokens=1000) is True
 
     def test_record_usage_and_check_disabled(self) -> None:

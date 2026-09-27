@@ -4,6 +4,103 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-28 Improvement checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
+
+> This batch implements the user-submitted 24-item improvement checklist
+> (across 7 dimensions: architecture/algorithm, engineering practice, test
+> quality, docs/UX, performance/scalability, security/compliance,
+> feature/ecosystem), executed in P0→P3 priority order, **default behavior
+> unchanged** (new capabilities all behind independent switches; when
+> disabled, historical behavior is byte-equivalent):
+>
+> - **P0 doc baseline / CI infra**:
+>   - `README.md` / `README.en.md` "Test Status" number-drift fix — removed
+>     hardcoded numbers (`2046 passed` / `line coverage 89%` etc.), now
+>     uniformly point to `BASELINE.yaml`; new drift guard
+>     `scripts/check_baseline_numbers.py` (regex-scans the "测试状态 /
+>     Test Status" H2 section only; historical "迭代优化记录" section is
+>     exempt) + CI step integration;
+>   - `BASELINE.yaml` structural validator `scripts/check_baseline.py`
+>     (required fields / `total_failed==0` / coverage range /
+>     `ruff_warnings`/`mypy_errors`==0 / `last_verified` date format +
+>     `--verify` re-measures full pytest count);
+>   - Static report auto-refresh `scripts/generate_static_report.py` —
+>     runs ruff/mypy snapshot, archives to
+>     `docs/history/static_report_<YYYY-MM-DD>.md`; CI main-branch
+>     3.14 matrix uploads artifact.
+> - **P1 algorithm / security**:
+>   - Branch-coverage backfill + core routing module gate:
+>     `BASELINE.yaml` backfills `branch_total_pct` and
+>     `branch_core_routing` blocks; new
+>     `scripts/check_branch_coverage.py` (parses coverage.xml
+>     `<class filename branch-rate>` structure, overall gate 79%, core
+>     4 modules 85%) + combinatorial routing tests
+>     `tests/test_branch_coverage_gates.py` (26 cases covering
+>     `_should_debug` / `refine_failure_category` / `rag.py` degradation
+>     guards);
+>   - LLM file-cache permission hardening + TTL expiry cleanup:
+>     `llm_client.py` adds `ensure_llm_cache_dir` (new dirs 0o700,
+>     existing dirs untouched) / `secure_cache_file` (temp file 0o600) /
+>     `cleanup_expired_cache_files` (mtime-based, deletes `*.json` older
+>     than TTL, `AITESTER_LLM_CACHE_TTL_DAYS` default 7 days); wired into
+>     `base_agent.py` / `cross_file.py` write paths + `workflow.py`
+>     startup cleanup; new `tests/test_cache_security.py` (9 cases);
+>   - Error classifier confidence layering: `error_classifier.py` adds
+>     `classify_with_confidence` / `ClassificationResult` / L2
+>     `ProbabilisticClassifier` protocol (currently always None;
+>     implementing L2 requires a separate ADR) + low-confidence fallback
+>     strategy (confidence ≤ 0.5 converges to `generic_analysis` instead
+>     of hard routing); module-level convenience function +
+>     `tests/test_error_classifier_confidence.py` (17 cases); ADR-0002
+>     "Known Limitations & Evolution Directions" notes the minimal
+>     confidence layer is now landed.
+> - **P2 closed-loop / testing / integration**:
+>   - Failure knowledge base minimal closed loop: new
+>     `src/agents/failure_kb.py` (landing point B online consumption +
+>     frequency × time-decay ranking), `_debugger_node` injects
+>     same-category case snippets via `kb_debugger_snippet`
+>     (`FAILURE_KB_ENABLE` default off, historical prompt byte-equivalent);
+>     `analyze_failures.py` entries get `last_seen` timestamp; state gets
+>     `kb_prompt_snippet_applied` observation key;
+>     `failure_knowledge_feedback.md` design doc marks M1 as landed;
+>     11 new test cases in `tests/test_failure_kb.py`;
+>   - LLM output format anomaly injection test suite:
+>     `tests/test_llm_format_anomaly.py` (17 cases: empty response /
+>     truncated / missing fields / invalid patch semantics / markdown
+>     wrapping, pure parse-layer + classifier assertions, zero LLM calls);
+>   - `--smoke-llm` optional CI job: `experiments/run_smoke_llm.py` +
+>     CI `smoke-llm` job (default `AITESTER_SMOKE_LLM=false`, zero LLM
+>     cost) + `tests/test_smoke_llm.py` (11 cases);
+>   - Multiprocess cache coordination: `llm_client.py` hit-rate
+>     observation layer (`record_cache_hit` / `get_cache_hit_rate` /
+>     `reset_cache_hit_stats`, thread-safe) + `workflow.get_workflow_stats`
+>     attachment + `performance_guide.md` pre-warm / switchover guidance;
+>   - Bilingual doc H2 skeleton structural comparison:
+>     `scripts/check_bilingual_docs.py` adds section-order drift
+>     detection (number-stripping + lowercasing + subsequence inversion);
+>   - ADR index: `docs/adr/README.md` + `algorithm_design(.en).md`
+>     mapping table gains "Related ADR" column;
+>   - CI/CD integration examples: `docs/integration/README.md` +
+>     `.git-hooks/pre-commit.sh` (runs CI-equivalent guards before local
+>     commit).
+> - **P3 design docs (no code landed, default behavior unchanged)**:
+>   - `docs/design/multilanguage_extension.md` (multi-language extension
+>     architecture reservation: LanguageBackend abstraction + registry +
+>     default Python backend with zero change);
+>   - `docs/design/hierarchical_summary.md` (long-file hierarchical
+>     summarization strategy: Level 0-3 static + optional LLM summary +
+>     degradation chain + default-off switch).
+> - **Full regression**: 2165 tests passed / 0 failed (~100 new cases vs
+>   the pre-batch 2065); ruff 0 warnings; mypy 0 errors (70 source
+>   files); `BASELINE.yaml` refreshed (`total_passed: 2165` /
+>   `branch_total_pct: 80` / `mypy_source_files: 70`).
+>
+> New regression tests added in this batch (~100 total):
+> `test_cache_security.py` (9) / `test_error_classifier_confidence.py`
+> (17) / `test_failure_kb.py` (+11) / `test_llm_format_anomaly.py` (17) /
+> `test_smoke_llm.py` (11) / `test_branch_coverage_gates.py` (26) /
+> `test_check_baseline_numbers.py` (7).
+
 ## [Unreleased] - 2026-09-28 Improvement checklist batch (doc consistency / infra / eval / observability / security, default behavior unchanged)
 
 > This batch implements the user-submitted improvement checklist

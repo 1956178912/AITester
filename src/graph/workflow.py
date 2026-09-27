@@ -445,6 +445,21 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
     Returns:
         编译后的 LangGraph StateGraph 对象。
     """
+    # 18. 缓存安全启动钩子（每次 build_workflow 调用触发一次，纯卫生性操作）：
+    # 1) 收敛缓存目录权限到 0o700（目录不存在时以 0o700 创建；已存在则尽力 chmod）；
+    # 2) 按 AITESTER_LLM_CACHE_TTL_DAYS（默认 7 天）清理过期缓存文件，避免缓存
+    #    目录长期积累敏感 prompt/响应。失败不阻断工作流构建（主流程不变）。
+    try:
+        from src.agents.llm_client import cleanup_expired_cache_files, ensure_llm_cache_dir
+
+        if _llm_cache_enabled():
+            ensure_llm_cache_dir()
+            removed = cleanup_expired_cache_files()
+            if removed:
+                logger.info("18. LLM 缓存过期清理：删除 %d 个 TTL 过期条目", removed)
+    except Exception:
+        # 缓存目录收敛/清理属卫生性操作，任何异常（含权限 / IO）不得阻断工作流
+        pass
     workflow = _create_workflow(planner=planner, debugger=debugger)
     return workflow.compile()
 
@@ -540,4 +555,17 @@ def get_workflow_stats() -> dict[str, Any]:
         stats["semantic_cache"] = get_semantic_cache_stats()
     except Exception:
         logger.debug("get_workflow_stats 预算/语义缓存统计读取失败（保守跳过）", exc_info=True)
+    # 15. 多进程缓存协调观测层：本进程视角的 LLM 文件缓存命中率（命中率 < 阈值
+    # 时，--parallel 多 worker 各自重读文件 + 重调 LLM，建议"主进程预热缓存
+    # + 共享目录"或单进程顺序模式；多进程场景下各 worker 需聚合本进程值）。
+    # 仅当本进程确有命中/未命中记录时才附 hit_rate 键（无任何 LLM 调用的纯统计
+    # 快照不附带该键，保持既有 get_workflow_stats 口径逐字节不变）。
+    try:
+        from src.agents.llm_client import get_cache_hit_rate
+
+        _cache_hit_rate = get_cache_hit_rate()
+        if _cache_hit_rate is not None:
+            stats["llm_cache"]["hit_rate"] = _cache_hit_rate
+    except Exception:
+        logger.debug("get_workflow_stats 缓存命中率读取失败（保守跳过）", exc_info=True)
     return stats

@@ -14,6 +14,7 @@ LLM 客户端管理与调用工具模块。
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -403,6 +404,153 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
 # 缓存目录默认 src/cache/，可用 AITESTER_LLM_CACHE_DIR 覆盖（便于测试指向临时目录）。
 # 开关与目录均在每次调用时读取，便于测试用 monkeypatch.setenv 动态切换。
 _LLM_CACHE_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "cache"))
+
+# 18. 缓存安全（改进清单 P1）：缓存文件内容含完整 prompt + LLM 响应（可能夹带
+# 敏感代码片段）。默认目录创建为 0o700、缓存文件写为 0o600，确保仅当前用户
+# 可读（本地可信域仍不进 git，权限收缩是纵深防御）；测试经
+# AITESTER_LLM_CACHE_DIR 指向临时目录时权限同样生效，不影响隔离。
+_LLM_CACHE_DIR_MODE = 0o700
+_LLM_CACHE_FILE_MODE = 0o600
+
+
+def ensure_llm_cache_dir(cache_dir: str | None = None) -> str:
+    """创建 LLM 缓存目录（0o700 权限）并返回其路径。
+
+    权限口径（18. 缓存安全）：目录以 0o700 创建；已存在时不强制收敛权限——
+    历史目录可能经其他工具/用户建在共享位置（强制 chmod 在 NFS/挂载卷上
+    可能失败或误伤共享语义，且读侧 LRU / 负缓存不受影响）；新建目录才是
+    敏感暴露面的新增点，此处保证"新增即收敛"。
+
+    Args:
+        cache_dir: 目标目录；None 时读 _llm_cache_dir()。
+
+    Returns:
+        缓存目录路径（保证目录已存在）。
+    """
+    target = cache_dir or _llm_cache_dir()
+    if not os.path.isdir(target):
+        os.makedirs(target, exist_ok=True)
+        with contextlib.suppress(OSError):
+            # 权限收敛失败（如 Windows / 挂载卷不支持）不阻断主流程
+            os.chmod(target, _LLM_CACHE_DIR_MODE)
+    return target
+
+
+def secure_cache_file(tmp_path: str) -> None:
+    """缓存临时文件写盘后收敛权限到 0o600（os.replace 前调用）。
+
+    失败不阻断（非 POSIX 文件系统）；调用方在原子替换前调用，使最终
+    缓存文件权限为 0o600（0o600 的临时文件经 os.replace 后权限保留）。
+    """
+    with contextlib.suppress(OSError):
+        os.chmod(tmp_path, _LLM_CACHE_FILE_MODE)
+
+
+def _llm_cache_ttl_days() -> int:
+    """缓存过期清理 TTL（天）：AITESTER_LLM_CACHE_TTL_DAYS，默认 7。
+
+    负数 / 0 表示不启用过期清理（历史口径）；正数 = 保留最近 N 天的
+    缓存条目。读环境变量便于测试动态切换。
+    """
+    try:
+        days = int(os.environ.get("AITESTER_LLM_CACHE_TTL_DAYS", "7"))
+    except ValueError:
+        days = 7
+    return days
+
+
+def cleanup_expired_cache_files(max_age_days: int | None = None) -> int:
+    """清理过期的 LLM 缓存文件（18. 缓存过期清理机制）。
+
+    按 mtime 删除早于 TTL 的 `*.json` 缓存文件（含 cross_file 修复计划
+    缓存——同目录同口径），避免缓存目录长期积累敏感数据（完整 prompt +
+    响应可能夹带代码片段）。默认 TTL = AITESTER_LLM_CACHE_TTL_DAYS（7 天）；
+    max_age_days<=0 或 None 且 TTL<=0 时跳过（历史口径）。
+
+    Args:
+        max_age_days: 显式 TTL 覆盖（天）；None 时读环境变量。
+
+    Returns:
+        实际删除的文件数（扫描失败 / 过期清理未启用时返回 0，不抛异常——
+        清理是卫生性操作，不得阻断 LLM 调用主流程）。
+    """
+    import time
+
+    days = _llm_cache_ttl_days() if max_age_days is None else int(max_age_days)
+    if days <= 0:
+        return 0
+    try:
+        cache_dir = _llm_cache_dir()
+        if not os.path.isdir(cache_dir):
+            return 0
+        cutoff = time.time() - days * 86400
+        removed = 0
+        for name in os.listdir(cache_dir):
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(cache_dir, name)
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.unlink(path)
+                    removed += 1
+            except OSError:
+                continue  # 并发删除 / 权限问题不阻断
+        return removed
+    except OSError:
+        return 0
+
+
+# ─── 15. 多进程缓存协调（改进清单 P2）：进程内 LLM 文件缓存命中率观测 ─────
+# 多进程（--parallel / multiprocessing）下每个 worker 进程独立持有进程内
+# LRU / 负缓存，跨进程命中只能靠文件（事实来源）。"负缓存 TTL 30s 内同键
+# 跳过文件重读"的保守退化会在高频重复任务（benchmark 相同函数）造成少量
+# 重复 LLM 调用。本观测层记录每个进程视角的文件缓存命中率，供
+# get_workflow_stats 报告；命中率低于阈值时，运维侧可据此切换到"主进程
+# 预热缓存 + 共享目录"或单进程顺序模式（见 performance_guide §多进程缓存）。
+_LLM_CACHE_HIT_STATS: dict[str, int] = {"file_hits": 0, "file_misses": 0}
+_LLM_CACHE_HIT_STATS_LOCK = threading.Lock()
+
+
+def record_cache_hit(hit: bool) -> None:
+    """记录一次 LLM 文件缓存命中/未命中（15. 多进程缓存协调观测层）。
+
+    线程安全（--parallel 多任务并发调用）；命中率 = file_hits /
+    (file_hits + file_misses)，供 get_workflow_stats 与性能基准消费。
+
+    Args:
+        hit: True = 文件缓存命中（含 LRU/语义缓存快路径），False = 未命中
+            （发生了一次真实 LLM 调用）。
+    """
+    with _LLM_CACHE_HIT_STATS_LOCK:
+        if hit:
+            _LLM_CACHE_HIT_STATS["file_hits"] += 1
+        else:
+            _LLM_CACHE_HIT_STATS["file_misses"] += 1
+
+
+def get_cache_hit_rate() -> float | None:
+    """返回本进程视角的 LLM 文件缓存命中率（0.0-1.0）；无任何记录时 None。
+
+    多进程模式下每进程各自返回本地命中率（跨进程需聚合各 worker 的
+    返回值，见 performance_guide）；命中率 < 阈值（如 0.5）时建议切换为
+    "主进程预热缓存 + 共享目录"或单进程顺序执行（避免重复 LLM 调用）。
+    """
+    with _LLM_CACHE_HIT_STATS_LOCK:
+        hits = _LLM_CACHE_HIT_STATS["file_hits"]
+        misses = _LLM_CACHE_HIT_STATS["file_misses"]
+        total = hits + misses
+        return (hits / total) if total else None
+
+
+def reset_cache_hit_stats() -> None:
+    """清零进程内 LLM 文件缓存命中/未命中计数（15. 多进程缓存协调观测层）。
+
+    供测试 / 每个 benchmark 批次边界调用（命中率口径按批次独立，不跨批次
+    累计）；生产代码通常无需调用（批次边界由 run_benchmark 隐式重置）。
+    """
+    with _LLM_CACHE_HIT_STATS_LOCK:
+        _LLM_CACHE_HIT_STATS["file_hits"] = 0
+        _LLM_CACHE_HIT_STATS["file_misses"] = 0
 
 
 def _llm_cache_enabled() -> bool:

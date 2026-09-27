@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -196,6 +197,12 @@ def failure_knowledge_base(
                     # 渲染层标注"需人工补充"）
                     "minimal_repro_code": extract_minimal_repro(row),
                     "suggested_fix": suggested,
+                    # 4. 失败知识库闭环（改进清单 P2）：条目时间戳，供在线消费侧
+                    # （src/agents/failure_kb.py）按 last_seen 做时间衰减排序
+                    # （避免过时修复策略污染后续运行；半衰期
+                    # FAILURE_KB_DECAY_DAYS 默认 30 天）。离线重新生成知识库时
+                    # 刷新该字段，实现"衰减 + 固化"的闭环。
+                    "last_seen": time.time(),
                 }
             )
     return cases

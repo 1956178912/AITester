@@ -262,6 +262,12 @@ class AITesterState(TypedDict, total=False):
     # 2.1 P1 改进：推荐动作类别（llm_resample / repair_code / repair_test /
     # investigate_infra），修复路由分支选择的 coarse 标签。None 同上。
     fix_strategy_action: str | None
+    # 4. 失败知识库闭环（落点 B）：_debugger_node 是否注入了失败知识库同类
+    # 案例提示（FAILURE_KB_ENABLE=true 且当前 error_category 匹配知识库条目
+    # 时为 True，经 kb_debugger_snippet 追加到 prompt 尾部）。供
+    # analyze_results.py 统计"哪些任务走了 KB 增强路径"（效果验证 ⑤）。
+    # 默认 None = 未注入（开关关 / 知识库缺失 / 无匹配条目，历史口径不变）。
+    kb_prompt_snippet_applied: bool | None
 
 
 def create_initial_state(
@@ -382,4 +388,7 @@ def create_initial_state(
         # 1.3 分层压缩降级链档位反馈（默认 None，_patch_applier_node 契约拒绝
         # 且 CONTEXT_TIER_DOWNGRADE_ENABLE=true 时写入，透传给 _debugger_node）
         contract_reject_feedback=None,
+        # 4. 失败知识库闭环落点 B 观测标志（默认 None，_debugger_node 注入
+        # KB 片段时置 True；FAILURE_KB_ENABLE 默认关时恒 None，历史口径不变）
+        kb_prompt_snippet_applied=None,
     )

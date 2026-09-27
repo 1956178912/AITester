@@ -287,6 +287,9 @@ class BaseAgent:
         # 快路径 1：进程内 LRU 命中（零磁盘 IO）
         hit = _lru_lookup(lru_key)
         if hit is not None:
+            from src.agents.llm_client import record_cache_hit
+
+            record_cache_hit(True)  # 15. 多进程缓存协调观测：LRU 命中
             logger.info("LLM 缓存命中 (LRU 快路径): %s", cache_key[:50])
             return hit
 
@@ -339,6 +342,9 @@ class BaseAgent:
                 logger.debug("缓存读取失败: %s", e)
 
         # 未命中，执行实际调用（仅在成功时写缓存；失败如 403 额度用尽则不缓存）
+        from src.agents.llm_client import record_cache_hit
+
+        record_cache_hit(False)  # 15. 多进程缓存协调观测：文件缓存未命中
         if temperature is not None:
             response = self._call_llm(user_message, max_retries, temperature=temperature)
         else:
@@ -351,11 +357,14 @@ class BaseAgent:
         # 幂等清除，防"外部清理缓存目录 → 负缓存残留 → TTL 窗口内误跳过
         # 文件重读"的正确性回归）
         try:
+            from src.agents.llm_client import ensure_llm_cache_dir, secure_cache_file
+
             # 目录已存在时跳过 makedirs（热路径：每次命中后二次调用免系统调用；
-            # 首写仍保留建目录语义，缓存目录不存在时行为不变）
+            # 首写仍保留建目录语义，缓存目录不存在时行为不变）；18. 安全改进：
+            # 新目录以 0o700 创建（仅当前用户可读写，收敛敏感缓存暴露面）
             cache_dir = os.path.dirname(cache_file)
             if not os.path.isdir(cache_dir):
-                os.makedirs(cache_dir, exist_ok=True)
+                ensure_llm_cache_dir(cache_dir)
             # 2026-09-26 全面审查（原子写，与 cross_file CF-8 / nodes._write_file_atomic
             # 同模式）：此前直接 open("w") + json.dump 非原子——--parallel 下两
             # worker 同键（同 prompt 材料 → 同 md5 → 同 cache_file）并发写时，
@@ -372,6 +381,9 @@ class BaseAgent:
             try:
                 with open(tmp_file, "w", encoding="utf-8") as f:
                     json.dump(payload, f, ensure_ascii=False)
+                # 18. 安全改进：缓存文件收敛 0o600（仅当前用户可读），
+                # 防完整 prompt + 响应（可能夹带代码片段）被同机其他用户读取
+                secure_cache_file(tmp_file)
                 os.replace(tmp_file, cache_file)
                 tmp_file = ""  # 替换成功，无需清理
             finally:
