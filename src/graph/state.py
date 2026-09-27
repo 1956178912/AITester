@@ -247,6 +247,21 @@ class AITesterState(TypedDict, total=False):
     # 该键由 _patch_applier_node 写入并经 LangGraph 通道传递给下一轮
     # _debugger_node（节点纯函数更新字典，不在原地改写共享状态）
     contract_reject_feedback: dict[str, Any] | None
+    # 1.1 LLM 输出后处理层标签（_patch_applier_node 单文件分支写入）：
+    # 本轮补丁经 patch_postprocess.sanitize_patch 处理的标签列表，取值
+    # "empty_patch"（P1 空壳检测命中，EMPTY_LLM_PATCH 场景可观测）/
+    # "imports_repaired"（P2 导入断裂回填生效）/
+    # "contract_aliases_restored"（P3 契约符号别名回填生效）。
+    # 默认 None = 后处理层未运行（多候选/跨文件分支或异常保守跳过）。
+    postprocess_labels: list[str] | None
+    # 2.1 P1 改进（错误分类 → 修复策略显式映射）：_debugger_node 写入的
+    # 结构化策略标签（get_recommended_fix_strategy 的 strategy 字段，
+    # 如 "add_boundary_check" / "regenerate_strict_json"），供实验分析
+    # "哪类错误走了哪条修复路径"消费。None = 本轮未运行 debugger。
+    fix_strategy_tag: str | None
+    # 2.1 P1 改进：推荐动作类别（llm_resample / repair_code / repair_test /
+    # investigate_infra），修复路由分支选择的 coarse 标签。None 同上。
+    fix_strategy_action: str | None
 
 
 def create_initial_state(
@@ -357,6 +372,11 @@ def create_initial_state(
         contract_missing_symbols=None,
         # 2.2 补丁后处理重采样统计（默认 None，未启用重采样时为 None）
         patch_resample_stats=None,
+        # 1.1 LLM 输出后处理层标签（默认 None，单文件分支运行后处理层时写入）
+        postprocess_labels=None,
+        # 2.1 P1 改进：结构化修复策略标签（默认 None，_debugger_node 写入）
+        fix_strategy_tag=None,
+        fix_strategy_action=None,
         # 2.2 patch_syntax_invalid 标记（默认 None，重采样耗尽时置 True）
         patch_syntax_invalid_flag=None,
         # 1.3 分层压缩降级链档位反馈（默认 None，_patch_applier_node 契约拒绝

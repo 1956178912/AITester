@@ -139,6 +139,18 @@ def _lru_clear() -> None:
         _lru_negatives.clear()
 
 
+def _budget_exceeded_error() -> Exception:
+    """5.4 预算超限异常工厂（延迟构造，避免模块加载期对 cost_budget 的依赖）。"""
+    from src.graph.cost_budget import BudgetExceededError, get_budget_stats
+
+    stats = get_budget_stats()
+    return BudgetExceededError(
+        consumed=int(stats.get("consumed_tokens", 0)),
+        limit=int(stats.get("token_limit", 0)),
+        unit=str(stats.get("unit", "none")),
+    )
+
+
 def _reorder_api_groups_by_complexity(
     api_groups: dict[str, list[tuple[str, str]]],
     all_configs: list[tuple[str, str, str]],
@@ -278,6 +290,27 @@ class BaseAgent:
             logger.info("LLM 缓存命中 (LRU 快路径): %s", cache_key[:50])
             return hit
 
+        # 5.1 语义级缓存快路径（SEMANTIC_CACHE_ENABLE=true 时启用，默认关）：
+        # LRU/文件精确未命中后，按嵌入向量余弦相似度（复用 embedding_utils
+        # 的 CodeBERT/sentence-transformers/chromadb 后端，后端缺失时自动
+        # 降级为精确口径零行为变化）匹配"语义相同但措辞不同"的缓存条目，
+        # 命中则直接复用响应（省一次 LLM 调用）。
+        from src.agents.semantic_cache import (
+            find_semantic_cache,
+            get_semantic_cache_stats,
+            maybe_rebuild_semantic_index,
+        )
+
+        if get_semantic_cache_stats()["enabled"]:
+            # 节流 60s 的目录补建（嵌入后端缺失时全路径静默降级，零行为变化）
+            maybe_rebuild_semantic_index(_llm_cache_dir())
+            _sem_hit = find_semantic_cache(cache_file, user_message)
+            if _sem_hit is not None:
+                _sem_resp = _sem_hit[1]
+                _lru_store(lru_key, _sem_resp)
+                logger.info("5.1 语义缓存命中（复用响应，相似度 >= 阈值）: %s", cache_key[:50])
+                return _sem_resp
+
         # 快路径 2：LRU 未命中——完整读文件校验 prompt/system 一致才命中
         # （防 md5 前16位碰撞误命中），命中后回填 LRU。
         # 负缓存语义（0.10）：负缓存命中（TTL 窗口内）时跳过文件重读
@@ -396,6 +429,15 @@ class BaseAgent:
         all_configs = _get_all_api_configs()
         if not all_configs:
             raise RuntimeError("未配置任何 LLM API")
+
+        # 5.4 任务级预算硬上限：上一 LLM 调用记账后超限（cost_budget 线程
+        # 局部标志）时拒绝本次调用（快速失败，不再空转烧 token）。
+        # 开关 COST_BUDGET_ENABLE 默认 false：is_budget_exceeded() 恒 False，
+        # 历史口径零变化。
+        from src.graph.cost_budget import is_budget_exceeded
+
+        if is_budget_exceeded():
+            raise _budget_exceeded_error()
 
         # 记录最后一次异常，用于最终报错信息
         last_error: Exception | None = None

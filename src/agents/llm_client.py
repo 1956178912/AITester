@@ -217,19 +217,26 @@ def _redact_log_text(text: str) -> str:
     return redact_text(text)
 
 
-def _record_response_usage(usage: Any, model_name: str) -> None:
+def _record_response_usage(usage: Any, model_name: str) -> bool:
     """将 LLM 响应的 token 使用量记入线程局部统计（容错：缺失字段记 0）。
 
     兼容两种响应结构：
     - LangChain usage_metadata 字典：input_tokens / output_tokens
     - OpenAI/zai usage 对象：prompt_tokens / completion_tokens
 
+    5.4 改进：记账同时走任务级预算守卫（cost_budget.record_usage_and_check）——
+    开关 COST_BUDGET_ENABLE=true 时消耗超限的调用使守卫返回 False（调用方
+    据此在**下一次** LLM 调用前停止；本调用已发生，无法撤销）。
+
     Args:
         usage: 响应的 usage 字段（dict 或对象），可为 None。
         model_name: 模型名（用于 by_model 分桶）。
+
+    Returns:
+        True = 预算内（或预算开关关闭，历史口径）；False = 已超限。
     """
     if not usage:
-        return
+        return True
     try:
         from src.graph.token_usage import record_usage
 
@@ -240,8 +247,13 @@ def _record_response_usage(usage: Any, model_name: str) -> None:
             input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
             output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
         record_usage(input_tokens, output_tokens, model=model_name)
+        # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）
+        from src.graph.cost_budget import check_budget
+
+        return check_budget(consumed_delta_tokens=input_tokens + output_tokens)
     except Exception as e:  # 统计失败不影响主流程
         logger.debug("token 统计记录失败（忽略）: %s", e)
+        return True
 
 
 # 智谱系域名判定（bigmodel.cn / zhipuai）

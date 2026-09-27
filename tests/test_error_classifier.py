@@ -576,6 +576,41 @@ class TestRefineFailureCategory:
         assert refine_failure_category("assertion", False, repair_history=history, execution_trace=trace) == "assertion"
 
 
+class TestGetRecommendedFixStrategy:
+    """2.1 P1 改进：错误分类 → 修复策略显式映射（get_recommended_fix_strategy）。"""
+
+    def test_all_categories_covered(self) -> None:
+        """全部 17 类均有策略标签与动作映射（新增类别时本测试强制同步）。"""
+        from src.agents.error_classifier import get_recommended_fix_strategy
+
+        for cat in ErrorCategory:
+            record = get_recommended_fix_strategy(cat)
+            assert record["category"] == cat.value
+            assert record["strategy"], f"{cat.value} 缺少策略标签"
+            assert record["repair_action"] in {
+                "llm_resample",
+                "repair_code",
+                "repair_test",
+                "investigate_infra",
+            }
+            assert record["description"]
+
+    def test_strategy_tags_are_stable_labels(self) -> None:
+        """策略标签为 snake_case 稳定短标签（实验分析/失败知识库消费）。"""
+        from src.agents.error_classifier import get_recommended_fix_strategy
+
+        r = get_recommended_fix_strategy(ErrorCategory.INDEX_ERROR)
+        assert r["strategy"] == "add_boundary_check"
+        assert r["repair_action"] == "repair_code"
+        r2 = get_recommended_fix_strategy(ErrorCategory.LLM_EMPTY_RESPONSE)
+        assert r2["strategy"] == "regenerate_strict_json"
+        assert r2["repair_action"] == "llm_resample"
+        r3 = get_recommended_fix_strategy(ErrorCategory.LOGIC_ERROR)
+        assert r3["repair_action"] == "repair_test"
+        r4 = get_recommended_fix_strategy(ErrorCategory.EXECUTION_TRACE_MISSING)
+        assert r4["repair_action"] == "investigate_infra"
+
+
 class TestRefineFinalErrorCategory:
     """refine_final_error_category 最终状态接线封装（2.4 收敛，cli/benchmark 共用）。"""
 

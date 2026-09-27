@@ -4,6 +4,91 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-28 改进批次扩展（CFG 控制流分析 / 事件总线 / trace 可视化 / ADR / 双语同步检查 / CLI 增强，默认行为不变）
+
+> 本批次推进 P2/P3 改进项，**默认行为不变**：
+>
+> - **二、2.2 控制流图（CFG）静态分析**：`src/tools/control_flow.py`
+>   纯 AST 分析（零 LLM 成本），产出分支条件 / 循环边界 / 异常路径 /
+>   多出口 / 圈复杂度估计的 CFG 摘要，注入 Planner prompt
+>   （`CFG_ANALYSIS_ENABLE` 默认 true——纯增量信息不改变 LLM 调用次数，
+>   设 false 回退历史口径）；PlannerAgent.plan 自动调用。
+> - **一、1.4 轻量事件总线**：`src/graph/event_bus.py`
+>   纯观测旁路层（`EVENT_BUS_ENABLE` 默认 true，不改 LangGraph 路由）：
+>   五种事件类型（PlanGenerated / TestsExecuted / PatchApplied /
+>   DebuggerDiagnosed / WorkflowCompleted），线程安全发布-订阅 +
+>   异常隔离；各节点收尾处一行接线；`get_event_bus().stats()`
+>   观测统计接入 `get_workflow_stats` 与 CLI `--json` 输出。
+> - **六、6.2 trace 可视化 + 回放**：`src/utils/trace_viz.py`
+>   JSONL trace → 自包含 HTML 时间线图（无外部依赖，可离线打开）+
+>   `replay_trace` 从 trace 恢复静态决策路径（不重跑 LLM，供
+>   离线分析 / 回归对比 / RL 备料）。
+> - **四、4.2 ADR 目录**：`docs/adr/`（5 篇：LangGraph StateGraph /
+>   错误分类器纯规则 / 默认行为不变原则 / 零默认外部依赖 /
+>   节点异常降级兜底）。
+> - **四、4.4 双语文档同步检查**：`scripts/check_bilingual_docs.py`
+>   CI 守卫（.md ↔ .en.md 配对完整性 + 更新日期一致性 + 章节数
+>   粗对齐；非核心文档豁免清单）。
+> - **六、6.1 CLI --json 增强**：`src/cli/app.py` --json 输出新增
+>   `event_bus` / `cost_budget` / `semantic_cache` 观测统计字段
+>   （纯观测，供管道 / 脚本消费）；rich 输出与进度条已有（
+>   requirements.txt 含 rich==15.0.0）。
+>
+> 新增 `tests/test_new_modules_2026_09_28.py`（36 用例）；全量 2044 测试
+> 通过（此前 2008，+36）/ ruff 全仓 0 告警 / mypy 70 源文件 0 错误。
+
+## [Unreleased] — 2026-09-28 P0/P1 改进批次（后处理层 / 策略映射 / 预算上限 / 语义缓存 / 冒烟脚本，默认行为不变）
+
+> 本批次落地改进建议中的 P0/P1 五项，**默认行为不变**（新能力均有
+> 独立环境变量开关，关闭时与历史口径完全一致）：
+>
+> - **一、1.1 LLM 输出后处理层**：`src/tools/patch_postprocess.py`
+>   补丁应用前自动修复常见 LLM 代码破坏模式（与 1.3 契约守卫"拒绝层"
+>   互补，本层是"修复层"）：P1 空壳补丁检测（`EMPTY_PATCH_GUARD`，
+>   默认启用——把 `EMPTY_LLM_PATCH` 场景从不可观测变为
+>   `state.postprocess_labels` 可识别标签）；P2 导入断裂修复
+>   （`IMPORT_REPAIR_ENABLE`，默认关——丢失的顶层 import 行自动回填补丁
+>   头部，仅当原代码正文仍引用该模块）；P3 契约符号别名回填
+>   （`CONTRACT_ALIAS_ENABLE`，默认关——LLM 重命名 `Rule_L001→RuleL001`
+>   时补 `Rule_L001 = RuleL001` 别名，保持 import 链 / 插件注册不破）。
+>   `_patch_applier_node` 单文件分支接线（多候选 / 跨文件分支不重复卫生化）。
+> - **二、2.1 错误分类→修复策略显式映射**：`get_recommended_fix_strategy(category,
+>   context)`（`src/agents/error_classifier.py`）把"该走哪条修复路径"从
+>   分散在 workflow/debugger 的隐式分支收敛为分类器输出的结构化标签
+>   （`strategy` snake_case 标签 + `repair_action` 四档：llm_resample /
+>   repair_code / repair_test / investigate_infra），全 17 类显式覆盖；
+>   `_debugger_node` 把标签写入 state（`fix_strategy_tag` /
+>   `fix_strategy_action`），供实验分析"哪类错误走了哪条修复路径"消费。
+> - **三、5.4 任务级成本预算硬上限**：`src/graph/cost_budget.py`
+>   （线程局部累计，--parallel 每任务独立）——`COST_BUDGET_ENABLE`
+>   （默认 false）+ `COST_BUDGET_TOKENS` / `COST_BUDGET_USD`
+>   （+ `COST_USD_PER_1K` 计价）；超限时 `BaseAgent._call_llm`
+>   前置守卫抛 `BudgetExceededError`，planner / generator / debugger
+>   节点降级兜底（不再空转烧 token）。与 3.4 成本告警（路由侧旁路
+>   观测）独立、可叠加。
+> - **四、5.1 语义级 LLM 缓存**：`src/agents/semantic_cache.py`
+>   嵌入向量相似度匹配（复用 `embedding_utils` 的 CodeBERT →
+>   sentence-transformers → chromadb 级联后端），语义相同但措辞不同
+>   的 prompt 可复用缓存响应；`SEMANTIC_CACHE_ENABLE`（默认 false）/
+>   `SEMANTIC_CACHE_THRESHOLD`（默认 0.92 保守口径）/
+>   `SEMANTIC_CACHE_MAX_ENTRIES`（默认 256）；嵌入后端缺失时自动
+>   降级为精确缓存口径（零行为变化）；命中统计
+>   `get_semantic_cache_stats()`。
+> - **五、3.3 端到端冒烟测试脚本**：`scripts/smoke_test.sh`
+>   一键验证 S1 配置加载 → S2 核心模块导入 → S3 ruff → S4 快速单测
+>   （`--full` 全量）→ S5 最小生成流程（Planner + Generator 真实 LLM
+>   调用，`--no-llm` 纯离线模式）。
+>
+> 新增 `tests/test_patch_postprocess.py`（23 用例）/
+> `tests/test_cost_budget.py`（12 用例）/ `tests/test_semantic_cache.py`
+> （14 用例）+ `tests/test_error_classifier.py` 扩充（全 17 类策略
+> 映射守卫）；文档同步 `docs/api_reference.md` / `docs/failure_analysis.md`
+> / `QUICKSTART.md` / `.env.example`。
+>
+> 质量基线：全量 2008 测试通过（此前 1937，+71）/ ruff 全仓 0 告警 /
+> mypy 67 源文件 0 错误 / 覆盖率 88%（TOTAL，新模块 patch_postprocess
+> 92% / cost_budget 93% / semantic_cache 90% / error_classifier 94%）。
+
 ## [Unreleased] — 2026-09-27 路线图剩余缺口落地（SWE-bench Pro / CodeBERT / pyright，默认行为不变）
 
 > 本批次补齐 2026-09-27 前十一轮之后路线图核对出的 3 个剩余缺口，

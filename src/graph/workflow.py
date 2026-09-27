@@ -522,7 +522,7 @@ def get_workflow_stats() -> dict[str, Any]:
     Returns:
         统计信息字典。
     """
-    return {
+    stats: dict[str, Any] = {
         "llm_cache": {"entries": _file_cache_entry_count(), "enabled": _llm_cache_enabled()},
         "workflow_config": {
             "ENABLE_PLANNER": ENABLE_PLANNER,
@@ -531,3 +531,13 @@ def get_workflow_stats() -> dict[str, Any]:
             "MAX_ITERATIONS": MAX_ITERATIONS,
         },
     }
+    # 5.4/5.1 观测层：预算与语义缓存统计（纯读操作，无副作用）
+    try:
+        from src.agents.semantic_cache import get_semantic_cache_stats
+        from src.graph.cost_budget import get_process_budget_stats
+
+        stats["cost_budget"] = get_process_budget_stats()
+        stats["semantic_cache"] = get_semantic_cache_stats()
+    except Exception:
+        logger.debug("get_workflow_stats 预算/语义缓存统计读取失败（保守跳过）", exc_info=True)
+    return stats

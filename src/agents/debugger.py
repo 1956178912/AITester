@@ -39,7 +39,12 @@ import os
 from typing import Any, cast
 
 from src.agents.base_agent import BaseAgent
-from src.agents.error_classifier import ErrorCategory, ErrorClassifier, get_fix_strategy
+from src.agents.error_classifier import (
+    ErrorCategory,
+    ErrorClassifier,
+    get_fix_strategy,
+    get_recommended_fix_strategy,
+)
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 from src.tools.type_repair import type_repair_layer
 
@@ -275,6 +280,10 @@ class DebuggerAgent(BaseAgent):
         context = self.classifier.extract_error_context(test_output, failed_cases)
         # Step 2b: 获取对应修复策略描述
         strategy_text = get_fix_strategy(error_category, context=context)
+        # 2.1 P1 改进：分类器输出附带结构化修复策略标签（get_recommended_fix_strategy
+        # 把"该走哪条修复路径"从 workflow/debugger 的隐式分支收敛为分类器
+        # 的显式输出；本轮标签随返回 dict 写入 state，供实验分析消费）
+        _strategy_record = get_recommended_fix_strategy(error_category, context=context)
         # 记录分类结果，便于日志追踪和实验分析
         logger.info("错误分类结果: %s", error_category.value)
 
@@ -585,6 +594,9 @@ class DebuggerAgent(BaseAgent):
             "downgrade_tier": (
                 str(contract_reject_feedback.get("tier")) if contract_reject_feedback else None
             ),
+            # 2.1 P1 改进：结构化修复策略标签（错误分类 → 修复路径显式映射）
+            "fix_strategy_tag": _strategy_record["strategy"],
+            "fix_strategy_action": _strategy_record["repair_action"],
         }
 
     # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────

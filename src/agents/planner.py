@@ -12,6 +12,7 @@ from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import PLANNER_SYSTEM_PROMPT
+from src.tools.control_flow import build_cfg_prompt_section, cfg_analysis_enabled
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -136,6 +137,17 @@ class PlannerAgent(BaseAgent):
             # 明确指定要测试的函数，要求输出中包含该函数名
             query += f"\n\n**重要：请只针对以下函数生成测试计划，不要分析其他函数：**\n`{target_function}`"
             query += f"\n\n输出的 function_name 字段必须是 `{target_function}`。"
+
+        # 2.2 控制流图（CFG）静态层：纯 AST 分析（零 LLM 成本），把分支/
+        # 循环/异常路径摘要注入 prompt，使测试用例覆盖系统化（按路径
+        # 而非 LLM 自由发挥）。CFG_ANALYSIS_ENABLE=false 时零变化。
+        if cfg_analysis_enabled():
+            from src.tools.control_flow import analyze_control_flow
+
+            cfg = analyze_control_flow(target_code, target_function)
+            cfg_section = build_cfg_prompt_section(cfg)
+            if cfg_section:
+                query += cfg_section
 
         # 调用 LLM 获取原始响应（内含逻辑分析和测试计划），带文件缓存省 token
         raw = self._call_llm_with_cache(query)

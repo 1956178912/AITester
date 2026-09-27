@@ -35,6 +35,14 @@ from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent
+from src.graph.cost_budget import BudgetExceededError
+from src.graph.event_bus import (
+    PlanGenerated,
+    publish_debugger_diagnosed,
+    publish_event,
+    publish_patch_applied,
+    publish_tests_executed,
+)
 from src.graph.rag import (
     RAG_MODULE_AVAILABLE,
     TestCaseRetriever,
@@ -202,7 +210,10 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         # 复用 _get_default_test_plan（与上方验证失败分支同一构造点）：
         # 其 "or 'unknown'" 兜底比原内联 .get(key, "unknown") 更严格
         # （空串/None 键值也会归一为 "unknown"，语义向成功分支收敛）
-        logger.warning("Planner JSON 解析失败，使用默认计划: %s", e)
+        # 5.4 预算封顶：BudgetExceededError（isinstance 判定）同走默认计划兜底，
+        # 任务不会因预算异常崩溃（后续迭代前置守卫快速失败，自然收敛）
+        _planner_budget_hit = isinstance(e, BudgetExceededError)
+        logger.warning("Planner LLM 失败（%s），使用默认计划: %s", "5.4 预算封顶" if _planner_budget_hit else "JSON 解析失败", e)
         test_plan = _get_default_test_plan(state.get("target_function"))
     _trace_node(
         "planner",
@@ -212,6 +223,15 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         },
         decision="plan_complete",
         duration_ms=(time.time() - t0) * 1000,
+    )
+    # 1.4 事件总线接线：PlanGenerated（纯观测，不改路由）
+    publish_event(
+        PlanGenerated(
+            task_uuid=str(state.get("task_uuid", "")),
+            function_name=str(test_plan.get("function_name") or ""),
+            test_case_count=len(test_plan.get("test_cases", [])),
+            iteration=int(state.get("iteration", 0)),
+        )
     )
     return {"test_plan": test_plan}
 
@@ -297,7 +317,12 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
         )
     except (RuntimeError, OSError, json.JSONDecodeError) as e:
-        logger.warning("Generator LLM 调用失败，降级为空测试: %s", e)
+        # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
+        # 后续迭代经 MAX_ITERATIONS 自然收敛（各节点前置预算守卫行为一致）
+        if isinstance(e, BudgetExceededError):
+            logger.warning("Generator LLM 调用失败（5.4 预算封顶），降级为空测试: %s", e)
+        else:
+            logger.warning("Generator LLM 调用失败，降级为空测试: %s", e)
         generated_test = ""
 
     # 2.3 改进：复现测试专项生成（REPRO_TEST_ENABLE=true 且已有缺陷描述时）。
@@ -448,6 +473,9 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         prev_coverage = state["execution_trace"][-1].get("coverage")
     coverage_delta = round(result["coverage"] - prev_coverage, 2) if prev_coverage is not None else None
     strategy_suggestion = _suggest_iteration_strategy(new_trace, coverage_delta)
+
+    # 1.4 事件总线接线：TestsExecuted（纯观测，不改路由）
+    publish_tests_executed(state, passed=result["passed"], coverage=result["coverage"])
 
     return {
         "test_passed": result["passed"],
@@ -748,10 +776,15 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
         # 读写（_call_llm_with_cache）在缓存目录被外部删除/磁盘满等场景抛
         # OSError，此前未捕获会让整图崩溃（与 planner 节点同口径兜底）。
-        logger.warning("Debugger JSON 解析失败，跳过本轮修复: %s", e)
+        # 5.4 任务级预算硬上限：BudgetExceededError（RuntimeError 子类，
+        # 消息含 "LLM 预算耗尽"）捕获后本轮修复跳过，error_category 标记
+        # "budget_exceeded"（供实验分析"预算封顶任务数"消费），不再空转
+        # 迭代烧 token（后续迭代前置守卫同样快速失败，自然收敛）。
+        _is_budget_hit = isinstance(e, BudgetExceededError)
+        logger.warning("Debugger 本轮修复跳过: %s%s", e, "（5.4 预算封顶）" if _is_budget_hit else "")
         result = {
             "root_cause": f"JSON 解析失败: {e}",
-            "error_category": "unknown",
+            "error_category": "budget_exceeded" if _is_budget_hit else "unknown",
             "fix_strategy": "",
             "patch": "",
         }
@@ -761,6 +794,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         result.get("error_category", "unknown"),
         result.get("root_cause", "")[:80],
     )
+    # 1.4 事件总线接线：DebuggerDiagnosed（含 2.1 修复策略标签，纯观测）
+    publish_debugger_diagnosed(state, error_category=result.get("error_category", "unknown"))
     _trace_node(
         "debugger",
         output_summary={
@@ -818,6 +853,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # （contract_reject_feedback 非空时 True；实验分析"降级链触发率"消费）
         "downgrade_triggered": result.get("downgrade_triggered", False),
         "downgrade_tier": result.get("downgrade_tier"),
+        # 2.1 P1 改进：结构化修复策略标签（错误分类 → 修复路径显式映射，
+        # 实验分析"哪类错误走了哪条修复路径"消费；缺省 None = 未产出）
+        "fix_strategy_tag": result.get("fix_strategy_tag"),
+        "fix_strategy_action": result.get("fix_strategy_action"),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")
@@ -1217,6 +1256,32 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     else:
         new_code, applied = apply_patch_to_code(original_code=original_code, patch=state.get("patch") or "")
 
+    # ── 1.1 LLM 输出后处理层（P1 空壳检测 + P2/P3 卫生化，默认观测口径）──
+    # P2 导入回填 / P3 契约别名回填默认关（环境变量控制，见
+    # patch_postprocess.postprocess_enabled_flags）；P1 空壳检测默认启用，
+    # 仅产出"empty_patch"标签观测（EMPTY_LLM_PATCH 场景从不可观测变为
+    # 可识别标签，供 refine_failure_category / 实验分析消费），不改代码。
+    # P2/P3 启用时：卫生化结果替换本轮 patch 后重新应用（仅单文件分支；
+    # 多候选/跨文件分支的候选池各有独立静态筛选，不重复卫生化）。
+    postprocess_labels: list[str] = []
+    postprocess_update: dict[str, Any] = {}
+    if (not cross_file_deps or not cross_file_enabled()) and not multi_candidate_available():
+        try:
+            from src.tools.patch_postprocess import postprocess_enabled_flags, sanitize_patch
+
+            _pp_flags = postprocess_enabled_flags()
+            _sanitized, _pp_labels = sanitize_patch(original_code, state.get("patch"))
+            postprocess_labels = list(_pp_labels)
+            if (
+                (_pp_flags["import_repair"] or _pp_flags["contract_alias"])
+                and ("imports_repaired" in _pp_labels or "contract_aliases_restored" in _pp_labels)
+            ):
+                # P2/P3 生效：用卫生化后的补丁重新应用单文件路径
+                new_code, applied = apply_patch_to_code(original_code=original_code, patch=_sanitized)
+            postprocess_update["postprocess_labels"] = postprocess_labels
+        except Exception:
+            logger.debug("1.1 后处理层执行异常（保守跳过，保持历史口径）", exc_info=True)
+
     # P0 1.3 命名契约检查：补丁应用前对比修改前后的模块级符号集合
     # （函数/类/__all__/注册装饰器/插件入口点），缺失任何原符号则拒绝应用。
     # 开关 PATCH_CONTRACT_CHECK（默认 true）；设 false 回退历史口径。
@@ -1394,6 +1459,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         # patch_syntax_invalid 标记写入 error_category（refine_failure_category
         # 会在任务收尾时把 "patch_syntax_invalid" 归一到 PATCH_SYNTAX_INVALID）
         resample_update["error_category"] = "patch_syntax_invalid"
+    # 1.4 事件总线接线：PatchApplied（含 1.1 后处理标签，纯观测）
+    publish_patch_applied(state, applied=written, new_code=effective_code)
     return {
         "target_code": effective_code,
         "repair_history": history,
@@ -1402,6 +1469,7 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         **contract_update,
         **feedback_update,
         **resample_update,
+        **postprocess_update,
     }
 
 

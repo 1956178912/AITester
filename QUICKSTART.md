@@ -67,6 +67,16 @@ python3 main.py run examples/calculator.py --func add
 python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
 ```
 
+## 5.5 一键冒烟测试（可选）
+
+```bash
+# 全量验证（配置加载 → 模块导入 → ruff → 快速单测 → 最小 LLM 生成流程）
+bash scripts/smoke_test.sh
+
+# 纯离线模式（CI 无 LLM 密钥场景，跳过 S5 的 LLM 调用）
+bash scripts/smoke_test.sh --no-llm --skip-lint
+```
+
 ## 6. 可选：模型额度探测与省 token 缓存
 
 LLM 调用默认开启文件缓存（`src/cache/`，命中相同 prompt 不再消耗 token）。在「免费额度用完即停」的供应商下可延长可用时长。

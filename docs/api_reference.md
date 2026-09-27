@@ -3,7 +3,9 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-27（第十一轮全项目 P1/P2 收敛 + 路线图剩余缺口落地批次：错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`）/ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）/ 1.3 分层压缩降级链透传（`contract_reject_feedback` 跨轮透传）/ 多维度污染检测（`contamination_risk_level` + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）/ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）/ SWE-bench Pro 支持（`swe_bench_pro` 注册）/ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`）/ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`）；全量 1937 测试用例 / ruff 全仓 0 告警 / mypy 64 源文件 0 错误 / 覆盖率 94%）
+> 最后更新：2026-09-28（P0/P1 改进批次：1.1 LLM 输出后处理层（`patch_postprocess.sanitize_patch` + P1 空壳检测 / P2 导入回填 / P3 契约别名回填）/ 2.1 错误分类→修复策略显式映射（`get_recommended_fix_strategy`）/ 5.4 任务级 token/费用预算硬上限（`COST_BUDGET_ENABLE` + `cost_budget`）/ 5.1 语义级 LLM 缓存（`SEMANTIC_CACHE_ENABLE` + `semantic_cache`）/ 3.3 端到端冒烟测试脚本（`scripts/smoke_test.sh`）；默认行为不变，新能力均有独立开关）
+>
+> 上一版：2026-09-27（第十一轮全项目 P1/P2 收敛 + 路线图剩余缺口落地批次：错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`）/ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`）/ 1.3 分层压缩降级链透传（`contract_reject_feedback` 跨轮透传）/ 多维度污染检测（`contamination_risk_level` + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）/ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`）/ SWE-bench Pro 支持（`swe_bench_pro` 注册）/ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`）/ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`）；全量 1937 测试用例 / ruff 全仓 0 告警 / mypy 64 源文件 0 错误 / 覆盖率 94%）
 
 ---
 
@@ -200,11 +202,76 @@ category = classifier.classify(test_output, failed_cases, target_module="calcula
 | `multi_candidate_all_rejected` | 多候选补丁策略失效：N 个候选全部被静态筛选拒绝（`ENABLE_MULTI_CANDIDATE_PATCH=true` 但均未通过 static_validate_patch）（5.2 持续细化）——由 `refine_failure_category()` 按 multi_candidate_stats 信号判定，不走 `classify()` 文本正则 | 回退到单补丁流程，降低候选视角扰动幅度 |
 | `patch_syntax_invalid` | 补丁后处理重采样耗尽：`PATCH_RESAMPLE_ENABLE=true` 时重采样 `PATCH_RESAMPLE_MAX` 次后补丁仍语法损坏（2.2 批次）——由 `refine_failure_category()` / `refine_final_error_category()` 按 `patch_resample_stats` 信号判定，不走 `classify()` 文本正则 | 检查 LLM 输出质量（prompt 是否约束了合法 Python 语法）；增加重采样次数或降低单次输出长度 |
 
+**P1 改进（2026-09-28 批次）：分类 → 修复策略显式映射**：`get_recommended_fix_strategy(category, context)` 把"该走哪条修复路径"从 workflow/debugger 的隐式分支收敛为分类器的结构化输出——返回 `{"category", "strategy"（snake_case 标签，如 `add_boundary_check` / `regenerate_strict_json`）, "description"（与 `get_fix_strategy` 同口径）, "repair_action"（llm_resample / repair_code / repair_test / investigate_infra）}`。`_debugger_node` 将标签随结果写入 state（`fix_strategy_tag` / `fix_strategy_action`），供实验分析"哪类错误走了哪条修复路径"消费。
+
 分类优先级（`classify()` 文本正则十类）：`LLM_FORMAT_ERROR > IMPORT_ERROR > SYNTAX > TYPE_ERROR > INDEX_ERROR > RUNTIME > ASSERTION/LOGIC_ERROR > TIMEOUT > UNKNOWN`，全部基于正则规则匹配，不消耗 LLM token。LLM_FORMAT_ERROR 置于最前（JSON 解析失败文本几乎不含 IndexError，但 IndexError 文本可能出现 assert，顺序放反会误判）。后 5 类（`PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` / `PATCH_SYNTAX_INVALID`）为状态细化类，不走 `classify()` 文本正则，由纯函数 `refine_failure_category()` 在任务收尾按 `repair_history`（补丁被拒）/ `rag_stats`（检索全空）/ `execution_trace`（轨迹丢失）/ `multi_candidate_stats`（多候选全拒）/ `patch_resample_stats`（重采样耗尽）信号判定——判定优先级 `patch_rejected > rag_empty > trace_missing > multi_rejected > patch_syntax_invalid`；成功任务原样返回。benchmark 与 CLI 两个出口口径一致。P0 4.1 批次的两个子类（`LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED`）由 `classify_llm_response()` 直接分析 LLM 原始响应（空 → `LLM_EMPTY_RESPONSE`；非空但 JSON 提取失败 → `LLM_JSON_PARSE_FAILED`），在 Debugger 收到响应后、JSON 解析前判定，命中时用更严格 prompt 重试一次，不走 `classify()` 文本正则。
 
 ---
 
 ## 工具模块
+
+### PatchPostprocess（1.1 LLM 输出后处理层）
+
+补丁应用前的自动修复层（`src/tools/patch_postprocess.py`）：检测并修复常见 LLM
+代码破坏模式，减少无效迭代（与 1.3 契约守卫的"拒绝层"互补，本层是"修复层"）。
+
+```python
+from src.tools.patch_postprocess import sanitize_patch, detect_empty_patch
+
+# 后处理层入口（P1 空壳检测 + P2 导入回填 + P3 契约别名回填）
+patch, labels = sanitize_patch(original_code, llm_patch)
+# labels 取值：["empty_patch"]（P1 命中）/ ["imports_repaired"]（P2 生效）/
+# ["contract_aliases_restored"]（P3 生效），可叠加
+
+# P1 空壳检测（EMPTY_LLM_PATCH 场景可观测标签；EMPTY_PATCH_GUARD 默认 true）
+is_empty = detect_empty_patch(llm_patch)
+```
+
+| 开关（环境变量） | 默认 | 语义 |
+|------------------|------|------|
+| `EMPTY_PATCH_GUARD` | true | P1 空壳补丁检测（仅分类标签，不改代码） |
+| `IMPORT_REPAIR_ENABLE` | false | P2 导入断裂修复（丢失的顶层 import 行自动回填补丁头部） |
+| `CONTRACT_ALIAS_ENABLE` | false | P3 契约符号别名回填（LLM 重命名 Rule_L001→RuleL001 时补 `Rule_L001 = RuleL001`） |
+
+### CostBudget（5.4 任务级预算硬上限）
+
+`src/graph/cost_budget.py`：单任务 LLM token/费用预算封顶（线程局部累计，
+--parallel 每任务独立）。
+
+```python
+from src.graph.cost_budget import check_budget, is_budget_exceeded, get_budget_stats
+
+# 超预算时 check_budget 返回 False，BaseAgent._call_llm 前置守卫抛出
+# BudgetExceededError，工作流各节点降级兜底（不再空转烧 token）
+ok = check_budget(consumed_delta_tokens=2000)
+capped = is_budget_exceeded()
+```
+
+| 开关（环境变量） | 默认 | 语义 |
+|------------------|------|------|
+| `COST_BUDGET_ENABLE` | false | 预算守卫总开关 |
+| `COST_BUDGET_TOKENS` | 0（不限） | 单任务 token 硬上限 |
+| `COST_BUDGET_USD` | 0（不生效） | 单任务费用硬上限（美元） |
+| `COST_USD_PER_1K` | 0 | 每 1K token 费用（美元，配合 COST_BUDGET_USD 计价） |
+
+### SemanticCache（5.1 语义级 LLM 缓存）
+
+`src/agents/semantic_cache.py`：嵌入向量相似度匹配缓存（复用
+`embedding_utils` 的 CodeBERT/sentence-transformers/chromadb 后端），
+语义相同但措辞不同的 prompt 可复用缓存响应；嵌入后端缺失时自动降级
+为精确缓存口径（零行为变化）。
+
+```python
+from src.agents.semantic_cache import get_semantic_cache_stats, reset_semantic_index
+
+stats = get_semantic_cache_stats()  # {entries, hits, misses, embed_failures, enabled, threshold}
+```
+
+| 开关（环境变量） | 默认 | 语义 |
+|------------------|------|------|
+| `SEMANTIC_CACHE_ENABLE` | false | 语义级匹配总开关 |
+| `SEMANTIC_CACHE_THRESHOLD` | 0.92 | 余弦相似度阈值（保守：宁可漏命中） |
+| `SEMANTIC_CACHE_MAX_ENTRIES` | 256 | 索引扫描的缓存文件数上限 |
 
 ### CodeAnalyzer
 

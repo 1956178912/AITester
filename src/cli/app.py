@@ -43,6 +43,7 @@ from src.cli.output import (
     warning_msg,
 )
 from src.graph import token_usage
+from src.graph.event_bus import get_event_bus
 from src.graph.state import create_initial_state
 from src.graph.workflow import build_workflow, end_task_trace, start_task_trace
 from src.utils.logging_utils import SensitiveFormatter, mask_sensitive_info, setup_logger_safety
@@ -80,6 +81,11 @@ logging.basicConfig(
 setup_logger_safety()
 
 logger = logging.getLogger(__name__)
+
+
+def _event_bus_stats() -> dict[str, Any]:
+    """1.4 事件总线观测统计（各事件发布次数 + 已订阅事件名）。"""
+    return get_event_bus().stats()
 
 
 @contextlib.contextmanager
@@ -375,8 +381,23 @@ def _run_single_task(
     # 1.1 状态细化：失败任务按 repair_history / rag_stats 信号补两类专属
     # 失败类别（补丁被安全守卫拒绝 / RAG 检索全空），与 benchmark 口径一致
     from src.agents.error_classifier import refine_final_error_category
+    from src.graph.event_bus import WorkflowCompleted, publish_event
 
     error_category = refine_final_error_category(final_state)
+    # 1.4 事件总线接线：WorkflowCompleted（工作流收尾，纯观测）
+    publish_event(
+        WorkflowCompleted(
+            task_uuid=state.get("task_uuid", ""),
+            test_passed=bool(final_state.get("test_passed")),
+            iteration=int(final_state.get("iteration", 0)),
+            final_error_category=error_category,
+        )
+    )
+    # 6.1/1.4：--json 输出含 1.4 事件总线观测统计 + 5.4 预算统计
+    # （纯观测字段，供管道 / 脚本消费；非 JSON 模式不展示）
+    from src.agents.semantic_cache import get_semantic_cache_stats
+    from src.graph.cost_budget import get_process_budget_stats
+
     result = {
         "success": True,
         "file": target_file,
@@ -389,6 +410,10 @@ def _run_single_task(
         "max_iterations": max_iterations,
         "diagnosis": final_state.get("diagnosis"),
         "error_category": error_category,
+        # 1.4 事件总线 / 5.4 预算 / 5.1 语义缓存 观测统计
+        "event_bus": _event_bus_stats(),
+        "cost_budget": get_process_budget_stats(),
+        "semantic_cache": get_semantic_cache_stats(),
     }
 
     # 输出结果

@@ -745,6 +745,85 @@ _FIX_STRATEGIES: dict[ErrorCategory, str] = {
 }
 
 
+def get_recommended_fix_strategy(
+    category: ErrorCategory,
+    context: ErrorContext | None = None,
+) -> dict[str, str]:
+    """P1 改进（2.1）：错误分类 → 修复策略的**显式结构化映射**。
+
+    与 get_fix_strategy()（返回策略文字，供 Debugger prompt 注入）互补：
+    本函数返回结构化策略记录，把"该走什么修复路径"从分散在 workflow/
+    debugger 的隐式分支收敛为分类器输出的显式标签，供：
+    - Debugger 选择修复 prompt 分支（而非整段文字解析）；
+    - 实验分析按 strategy 标签统计"哪类错误走了哪条修复路径"；
+    - 失败知识库按策略去重积累。
+
+    Args:
+        category: 已分类的错误类型。
+        context: 错误上下文（可选），用于带上下文细化的类别。
+
+    Returns:
+        策略记录 dict：
+        - "category": 错误类别字符串值
+        - "strategy": 策略标签（snake_case，如 "regenerate_strict_json"）
+        - "description": 策略文字（与 get_fix_strategy 同口径）
+        - "repair_action": 推荐动作类别：
+            "llm_resample"（重新生成 LLM 响应）/ "repair_code"（修代码）/
+            "repair_test"（修测试预期）/ "investigate_infra"（查基础设施）/
+            "no_action"（无操作）
+    """
+    description = get_fix_strategy(category, context=context)
+    return {
+        "category": category.value,
+        "strategy": _STRATEGY_TAGS.get(category, "generic_analysis"),
+        "description": description,
+        "repair_action": _REPAIR_ACTIONS.get(category, "repair_code"),
+    }
+
+
+# 类别 → 策略标签（snake_case 短标签，供实验分析 / 失败知识库消费）
+_STRATEGY_TAGS: dict[ErrorCategory, str] = {
+    ErrorCategory.LLM_FORMAT_ERROR: "regenerate_loosen_json_extraction",
+    ErrorCategory.LLM_EMPTY_RESPONSE: "regenerate_strict_json",
+    ErrorCategory.LLM_JSON_PARSE_FAILED: "regenerate_strict_json",
+    ErrorCategory.IMPORT_ERROR: "install_or_fix_import",
+    ErrorCategory.SYNTAX: "regenerate_full_file",
+    ErrorCategory.INDEX_ERROR: "add_boundary_check",
+    ErrorCategory.TYPE_ERROR: "align_types",
+    ErrorCategory.RUNTIME: "analyze_traceback_fix_code",
+    ErrorCategory.ASSERTION: "judge_code_vs_test",
+    ErrorCategory.LOGIC_ERROR: "fix_test_expectation",
+    ErrorCategory.TIMEOUT: "add_termination_condition",
+    ErrorCategory.UNKNOWN: "generic_analysis",
+    ErrorCategory.PATCH_VALIDATION_FAILED: "regenerate_safe_patch",
+    ErrorCategory.RAG_RETRIEVAL_EMPTY: "normal_repair_and_expand_rag",
+    ErrorCategory.EXECUTION_TRACE_MISSING: "investigate_execution_infra",
+    ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: "fallback_single_patch",
+    ErrorCategory.PATCH_SYNTAX_INVALID: "resample_strict_patch",
+}
+
+# 类别 → 推荐动作类别（coarse 四档，供修复路由分支选择）
+_REPAIR_ACTIONS: dict[ErrorCategory, str] = {
+    ErrorCategory.LLM_FORMAT_ERROR: "llm_resample",
+    ErrorCategory.LLM_EMPTY_RESPONSE: "llm_resample",
+    ErrorCategory.LLM_JSON_PARSE_FAILED: "llm_resample",
+    ErrorCategory.IMPORT_ERROR: "repair_code",
+    ErrorCategory.SYNTAX: "llm_resample",
+    ErrorCategory.INDEX_ERROR: "repair_code",
+    ErrorCategory.TYPE_ERROR: "repair_code",
+    ErrorCategory.RUNTIME: "repair_code",
+    ErrorCategory.ASSERTION: "repair_code",
+    ErrorCategory.LOGIC_ERROR: "repair_test",
+    ErrorCategory.TIMEOUT: "repair_code",
+    ErrorCategory.UNKNOWN: "repair_code",
+    ErrorCategory.PATCH_VALIDATION_FAILED: "llm_resample",
+    ErrorCategory.RAG_RETRIEVAL_EMPTY: "repair_code",
+    ErrorCategory.EXECUTION_TRACE_MISSING: "investigate_infra",
+    ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: "llm_resample",
+    ErrorCategory.PATCH_SYNTAX_INVALID: "llm_resample",
+}
+
+
 def refine_failure_category(
     error_category: str,
     test_passed: bool | None,

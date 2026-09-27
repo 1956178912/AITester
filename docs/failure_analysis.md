@@ -184,6 +184,10 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 - [x] ~~变异得分收集（1.3）~~ → 已实现：`analyze_results.py:_mutation_score_metrics` 收集 details[].mutation_score（外部变异测试器产出），汇总平均 / 高（>=0.7）/ 低（<0.4）分布；无该字段时章节跳过
 - [x] ~~断言强度 AST 增强（1.3）~~ → 已实现：`_assertion_strength_proxy` 在原有 `assert` 行数统计基础上新增 AST 口径（`ast.parse` + `ast.Assert` 节点计数），输出 `ast_avg_assertions` 与 `ast_parse_failed_tasks`
 - [x] ~~执行反馈轨迹收集（3.2，为 RL 微调备料）~~ → 已实现：`state.execution_trace` + `nodes._record_execution_trace` 每次 Executor 执行追加 passed / coverage_delta / elapsed / reward_signals {correctness, efficiency, simplicity}，纯观测层默认常开；`run_benchmark.py` 结果行带轨迹，`analyze_results.py` 自动汇总渲染
+- [x] ~~LLM 输出后处理层（1.1，P0 改进）~~ → 已实现：`src/tools/patch_postprocess.py` 在补丁应用前自动修复常见 LLM 代码破坏模式——P1 空壳补丁检测（`EMPTY_PATCH_GUARD`，默认启用，把 `EMPTY_LLM_PATCH` 场景从不可观测变为 `postprocess_labels` 可识别标签）/ P2 导入断裂修复（`IMPORT_REPAIR_ENABLE`，默认关）/ P3 契约符号别名回填（`CONTRACT_ALIAS_ENABLE`，默认关，LLM 重命名 `Rule_L001→RuleL001` 时补别名保持 import 链）；`_patch_applier_node` 单文件分支接线
+- [x] ~~错误分类 → 修复策略显式映射（2.1 P1 改进）~~ → 已实现：`get_recommended_fix_strategy(category, context)` 返回结构化策略记录（`strategy` 标签 + `repair_action` 四档），替代"策略选择逻辑分散在 workflow 中"的隐式分支；`_debugger_node` 把标签写入 state（`fix_strategy_tag` / `fix_strategy_action`）
+- [x] ~~任务级成本预算硬上限（5.4 P1 改进）~~ → 已实现：`src/graph/cost_budget.py` 单任务 token/费用预算封顶（`COST_BUDGET_ENABLE` + `COST_BUDGET_TOKENS` / `COST_BUDGET_USD`，默认关），超限时 `BaseAgent._call_llm` 前置守卫抛 `BudgetExceededError`，各节点降级兜底不空转烧 token；与 3.4 成本告警（路由侧旁路观测）独立可叠加
+- [x] ~~语义级 LLM 缓存（5.1 P0 改进）~~ → 已实现：`src/agents/semantic_cache.py` 嵌入向量相似度匹配（复用 `embedding_utils` 的 CodeBERT 级联后端，`SEMANTIC_CACHE_ENABLE` 默认关），语义相同但措辞不同的 prompt 复用缓存响应；嵌入后端缺失时自动降级精确缓存口径；命中统计 `get_semantic_cache_stats()`
 
 ### 长期改进（3个月）
 
