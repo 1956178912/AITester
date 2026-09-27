@@ -165,6 +165,45 @@ def rank_knowledge_entries(
     return ranked
 
 
+def normalize_entry_segments(entry: dict[str, Any]) -> dict[str, str]:
+    """把知识库条目归一为四段式（外部参照：MisakaNet 失败经验网络的
+    "问题 → 根因 → 修复 → 验证"固定模板，使在线消费侧可结构化注入）。
+
+    兼容历史自由文本条目：缺失段留空串（不伪造），各段来源映射——
+    - problem：任务/复现信息（reproducible_steps，截断）；
+    - root_cause：root_cause 字段；
+    - fix：suggested_fix（dict.direction / dict.root_cause / 字符串三态）；
+    - verification：verification 字段（历史条目常缺失，空串表示"未验证"）。
+
+    本函数是纯读侧归一（不改写源文件）；analyze_failures.py 的离线生成
+    侧后续对齐同构（见 2026-09-29 批次 ADR-0010）。
+    """
+    suggested = entry.get("suggested_fix") or {}
+    if isinstance(suggested, dict):
+        fix = str(suggested.get("direction") or suggested.get("root_cause") or "")
+    else:
+        fix = str(suggested or "")
+    return {
+        "problem": str(entry.get("reproducible_steps") or entry.get("task_id") or "")[:_SNIPPET_FIELD_TRUNCATE],
+        "root_cause": str(entry.get("root_cause") or "")[:_SNIPPET_FIELD_TRUNCATE],
+        "fix": fix[:_SNIPPET_FIELD_TRUNCATE],
+        "verification": str(entry.get("verification") or "")[:_SNIPPET_FIELD_TRUNCATE],
+    }
+
+
+def entry_ocurrence_stat(entries: list[dict[str, Any]], error_category: str, entry: dict[str, Any]) -> dict[str, Any]:
+    """检索注入扩展字段（外部参照：微软 SRE"从每个错误中学习"——把历史
+    出现频次与最近修复方案一并注入 prompt，而非仅注入策略文本）。
+
+    返回 {"occurrences": 同类条目数, "last_seen": 最近一次观测时间戳或 None}，
+    供 kb_debugger_snippet 在条目行尾部追加"历史出现 N 次 / 最近修复于
+    <date>"两个字段。
+    """
+    same_cat = [e for e in entries if str(e.get("error_category") or "").lower() == error_category.lower()]
+    last_seen = entry.get("last_seen")
+    return {"occurrences": len(same_cat), "last_seen": last_seen}
+
+
 def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | None:
     """生成注入 Debugger prompt 的失败知识库片段（落点 B，默认关）。
 
@@ -173,16 +212,11 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
     - 知识库文件缺失 / 损坏 / 空；
     - 当前 error_category 在知识库中无匹配条目（不注入无关策略）。
 
-    返回非 None 时：拼接同 error_category 的 top-k 条目的"建议修复 + 诊断
-    摘录"，供 `_debugger_node` 追加到既有 prompt 尾部（不替换历史模板，
-    注入失败时 Debugger 正常走通用兜底）。
-
-    Args:
-        error_category: 当前任务错误类别（refine_failure_category 口径字符串）。
-        now: 当前时间戳（测试可注入；None 用 time.time()）。
-
-    Returns:
-        prompt 片段字符串，或 None（不注入）。
+    返回非 None 时：拼接同 error_category 的 top-k 条目的四段式
+    （问题→根因→修复→验证，normalize_entry_segments 归一）+ 扩展字段
+    （entry_ocurrence_stat 的历史频次与最近观测时间），供 `_debugger_node`
+    追加到既有 prompt 尾部（不替换历史模板，注入失败时 Debugger 正常走
+    通用兜底）。
     """
     if not _kb_enabled():
         return None
@@ -194,20 +228,26 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
         return None
 
     lines: list[str] = [
-        "【失败知识库提示（4. 闭环落点 B，默认关）】",
+        "【失败知识库提示（4. 闭环落点 B，默认关；四段式：问题→根因→修复→验证）】",
         f"以下历史案例与当前错误类别（{error_category}）同类，已按频次×时间衰减排序：",
     ]
     for i, entry in enumerate(ranked, 1):
-        cat = str(entry.get("error_category") or "unknown")
-        root_cause = str(entry.get("root_cause") or "unknown")
-        diagnosis = str(entry.get("diagnosis_excerpt") or "")[:_SNIPPET_FIELD_TRUNCATE]
-        suggested = entry.get("suggested_fix") or {}
-        suggested_fix = str(suggested.get("direction") or suggested.get("root_cause") or "")[:_SNIPPET_FIELD_TRUNCATE]
-        repro = str(entry.get("reproducible_steps") or "")[:_SNIPPET_FIELD_TRUNCATE]
+        seg = normalize_entry_segments(entry)
+        stat = entry_ocurrence_stat(entries, error_category, entry)
+        last_seen_txt = ""
+        if stat["last_seen"] is not None:
+            try:
+                last_seen_txt = time.strftime("%Y-%m-%d", time.gmtime(float(stat["last_seen"])))
+            except (TypeError, ValueError):
+                last_seen_txt = ""
         lines.append(
-            f"  案例{i}（类别={cat}，根因={root_cause}）：{suggested_fix}"
-            + (f"｜诊断摘录：{diagnosis}" if diagnosis else "")
-            + (f"｜复现：{repro}" if repro else "")
+            f"  案例{i}（类别={error_category}，历史出现 {stat['occurrences']} 次"
+            + (f"，最近修复于 {last_seen_txt}" if last_seen_txt else "")
+            + "）"
+            + f"｜问题：{seg['problem'] or '未记录'}"
+            + f"｜根因：{seg['root_cause'] or '未定位'}"
+            + f"｜修复：{seg['fix'] or '未给出建议'}"
+            + f"｜验证：{seg['verification'] or '未验证'}"
         )
     lines.append("请优先参考上述同类案例的修复方向；若与当前代码上下文冲突，以当前代码为准。")
     return "\n".join(lines)

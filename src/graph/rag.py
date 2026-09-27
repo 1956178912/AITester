@@ -1,14 +1,26 @@
 """
-RAG 检索器单例与检索质量指标辅助模块。
+RAG 检索器单例、检索质量指标辅助，与 20. 关键词兜底检索（降级路径）。
 
 从 workflow.py 拆分而来（代码可维护性优化）：承载 TestCaseRetriever 的单例
 初始化（双重检查锁定）、初始化失败短路标志，以及单次检索质量指标的构建。
 节点函数通过 `from .rag import ...` 复用，避免重复初始化 ChromaDB 客户端。
+
+20. 关键词兜底检索（外部参照：LeanKG 三层检索回退链——精确匹配 → 模糊匹配
+→ 语义嵌入/关键词回退；任一高级路径失败时降级到仍可行的另一路径，返回
+归一化分数）：ChromaDB 向量检索器不可用（未安装 / 初始化失败 / 检索异常）
+或结果空时，`retriever_or_keyword_fallback()` 退回**纯词袋关键词检索**
+（对 src/cache/ 的缓存条目 prompt 文本与 rag_data/ 的失败案例 JSON 做
+token 重叠打分，零外部依赖，确定性可复现）。该兜底让"检索增强"在
+向量后端缺失时不再是全有或全无——至少给出基于关键词的相似案例线索。
 """
 
 from __future__ import annotations
 
+import glob
+import json
 import logging
+import os
+import re
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -161,3 +173,213 @@ def rag_guarded(
     except Exception as e:
         logger.warning("RAG %s 失败，跳过: %s", op_name, e)
     return True
+
+
+# ─── 20. 关键词兜底检索（LeanKG 三层回退链最底层：词袋打分）────────────────
+# 设计约束（保守，零行为变化默认关闭）：
+# - 开关 RAG_KEYWORD_FALLBACK_ENABLE 默认 false：关闭时本模块所有函数
+#   直接返回空（调用方保持历史"检索器不可用即跳过 RAG 增强"口径）；
+# - 开启后仅作为**兜底层**：先尝试 ChromaDB 向量检索，不可用/异常/空结果
+#   时才退回关键词打分（LeanKG 口径：任一路径失败，检索器降级到仍可行的
+#   另一路径，返回归一化分数）；
+# - 关键词材料源（两处，均项目内既有产物，零新依赖）：
+#   1. src/cache/*.json 的 prompt 文本（LLM 文件缓存条目，含历史任务文本）；
+#   2. rag_data/*.json 失败案例（RAG 持久化目录，JSON 列表/对象扁平化）；
+# - 打分：分词（英文 \w+ 小写 + 中文按单字——无外部分词依赖，保守口径）
+#   后做 token 重叠度（query tokens 命中文档 tokens 的比例），除以
+#   max(1, len(query_tokens)) 归一到 [0, 1]，与向量检索的 similarity 口径
+#   对齐（下游 _build_rag_stat 直接消费）；
+# - 结果上限（RAG_KEYWORD_FALLBACK_MAX_RESULTS，默认 5，与向量检索 top-k 同
+#   量级）；空材料源 / 全部 0 分时返回空列表（调用方按"无参考案例"处理）。
+_RAG_KEYWORD_FALLBACK_ENV = "RAG_KEYWORD_FALLBACK_ENABLE"
+_RAG_KEYWORD_FALLBACK_MAX_RESULTS_ENV = "RAG_KEYWORD_FALLBACK_MAX_RESULTS"
+
+
+def _keyword_fallback_enabled() -> bool:
+    """关键词兜底开关（RAG_KEYWORD_FALLBACK_ENABLE，默认 false 历史口径）。"""
+    return os.getenv(_RAG_KEYWORD_FALLBACK_ENV, "false").lower() in ("true", "1", "on")
+
+
+def _keyword_fallback_max_results() -> int:
+    """关键词兜底结果数上限（RAG_KEYWORD_FALLBACK_MAX_RESULTS，默认 5）。"""
+    try:
+        n = int(os.getenv(_RAG_KEYWORD_FALLBACK_MAX_RESULTS_ENV, "5"))
+    except ValueError:
+        n = 5
+    return max(1, min(n, 100))
+
+
+def _tokenize(text: str) -> set[str]:
+    r"""轻量分词（零外部依赖保守口径）：英文 \w+ 小写 + 中文单字。"""
+    tokens: set[str] = set()
+    for m in re.findall(r"[a-z0-9_]+", text.lower()):
+        tokens.add(m)
+    for ch in re.findall(r"[\u4e00-\u9fff]", text):
+        tokens.add(ch)
+    return tokens
+
+
+def _iter_candidate_docs() -> list[tuple[str, str, str]]:
+    """枚举关键词材料源（cache prompt + rag_data 案例文本）。
+
+    返回:
+        (source, doc_id, text) 三元组列表；source ∈ {"cache", "rag_data"}。
+        读取失败（损坏 JSON / 目录缺失）静默跳过（兜底层不阻断主流程）。
+    """
+    docs: list[tuple[str, str, str]] = []
+    # 1. LLM 文件缓存条目（prompt 文本作参考——历史任务描述与修复指令）
+    cache_dir = os.getenv("AITESTER_LLM_CACHE_DIR", "")
+    if not cache_dir:
+        # 与 llm_client._LLM_CACHE_DIR_DEFAULT 同口径（src/cache）
+        cache_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"))
+    for f in sorted(glob.glob(os.path.join(cache_dir, "*.json")))[-200:]:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                data = json.load(fh)
+            text = f"{data.get('prompt', '')}\n{data.get('response', '')}"
+            if text.strip():
+                docs.append(("cache", os.path.basename(f), text))
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+            continue
+    # 2. rag_data 持久化案例（JSON 列表 / 对象扁平化文本）
+    rag_dir = RAG_PERSIST_PATH if isinstance(RAG_PERSIST_PATH, str) and RAG_PERSIST_PATH else ""
+    for f in sorted(glob.glob(os.path.join(rag_dir, "*.json")))[:200]:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                data = json.load(fh)
+            text = json.dumps(data, ensure_ascii=False)[:8000]
+            if text.strip():
+                docs.append(("rag_data", os.path.basename(f), text))
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue
+    return docs
+
+
+def keyword_similarity(query: str, doc_text: str) -> float:
+    """token 重叠度打分（归一化到 [0, 1]，与向量 similarity 同口径）。
+
+    保守口径：query 空 / 分词为空 → 0.0；命中数 / query token 数。
+
+    Args:
+        query: 查询文本（任务描述 / 错误摘要）。
+        doc_text: 候选文档文本。
+
+    Returns:
+        归一化相似度（0.0 = 零重叠；1.0 = query tokens 全部出现于文档）。
+    """
+    q_tokens = _tokenize(query)
+    if not q_tokens:
+        return 0.0
+    d_tokens = _tokenize(doc_text)
+    return len(q_tokens & d_tokens) / max(1, len(q_tokens))
+
+
+def keyword_fallback_search(
+    query: str,
+    max_results: int | None = None,
+    *,
+    sources: list[tuple[str, str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """20. 关键词兜底检索（LeanKG 回退链底层）。
+
+    Args:
+        query: 查询文本。
+        max_results: 结果数上限（None 时读 RAG_KEYWORD_FALLBACK_MAX_RESULTS）。
+        sources: 候选文档源（测试注入；None 时枚举 cache + rag_data 材料源）。
+
+    Returns:
+        [{"source": ..., "doc_id": ..., "similarity": 归一化分数, "text": 截断文本}]
+        按相似度降序，零分条目不返回；材料源为空 / 开关关闭时返回 []。
+    """
+    if not _keyword_fallback_enabled():
+        return []
+    if not query or not query.strip():
+        return []
+    limit = max_results if max_results is not None else _keyword_fallback_max_results()
+    docs = sources if sources is not None else _iter_candidate_docs()
+    scored: list[dict[str, Any]] = []
+    for source, doc_id, text in docs:
+        sim = keyword_similarity(query, text)
+        if sim > 0.0:
+            scored.append(
+                {
+                    "source": source,
+                    "doc_id": doc_id,
+                    "similarity": round(sim, 4),
+                    "text": text[:1200],
+                }
+            )
+    scored.sort(key=lambda d: d["similarity"], reverse=True)
+    top = scored[:limit]
+    global _keyword_fallback_last_results
+    _keyword_fallback_last_results = top
+    return top
+
+
+# 观测层：最近一次关键词兜底检索结果（retriever_or_keyword_fallback 回填）
+_keyword_fallback_last_results: list[dict[str, Any]] = []
+
+
+def keyword_fallback_result_count() -> int:
+    """观测层：关键词兜底最近一次检索的结果数（供 workflow stats 报告）。
+
+    保守实现：仅统计显式调用方（retriever_or_keyword_fallback）回填的
+    最近一次结果集；无调用记录时返回 0（不触发目录扫描，零副作用）。
+    """
+    return len(_keyword_fallback_last_results or [])
+
+
+def retriever_or_keyword_fallback(
+    op_name: str,
+    action: Callable[[Any], None],
+    *,
+    enabled: bool,
+    module_available: bool,
+    retriever_cls: Any,
+    get_retriever: Callable[[], Any],
+    keyword_query: str = "",
+) -> tuple[bool, bool]:
+    """20. LeanKG 三层回退链入口：向量检索器可用走向量；不可用/异常/空结果
+    时（开关 RAG_KEYWORD_FALLBACK_ENABLE=true）退回关键词兜底。
+
+    与 rag_guarded 的关系（历史口径保护）：`rag_guarded` 保持不变（其 4 个
+    既有调用点的测试 patch 路径不受影响）；本函数是**新增**的降级入口，
+    供后续批次把 nodes.py 的 RAG 调用逐步切到"向量→关键词"双层守卫。
+    当前默认（关键词开关关）时行为与 rag_guarded 完全等价。
+
+    Args:
+        op_name: 操作标识（如 "retrieve_test_cases"）。
+        action: 向量检索回调（接收已就绪检索器，无返回值）。
+        enabled: RAG 开关（config.ENABLE_RAG）。
+        module_available: RAG 模块是否可用。
+        retriever_cls: 检索器类（None 表示不可用）。
+        get_retriever: 取检索器单例函数。
+        keyword_query: 关键词兜底的查询文本（向量检索空结果/不可用且开关
+            开启时，经 keyword_fallback_search 检索 rag_data/cache 材料源；
+            结果经 logger 记录并写入观测层，**不替换** action 的向量结果——
+            双层守卫的"结果合并"策略由调用方按 op_name 自行消费，本函数
+            保持保守：仅在向量侧零产出时记录关键词候选，不改变 action
+            回调契约（不向 action 注入关键词结果，避免 prompt 混层）。
+
+    Returns:
+        (vector_used, fallback_used) 二元组：
+        - vector_used=True：action 经向量检索器成功执行（历史口径）；
+        - fallback_used=True：向量侧不可用/空，关键词兜底开关开启且检索到
+          候选（日志记录 + 观测层可查）；
+        全 False = 两层均未产出（历史"跳过 RAG 增强"口径）。
+    """
+    vector_used = False
+    if enabled and module_available and retriever_cls is not None:
+        retriever = get_retriever()
+        if retriever is not None:
+            try:
+                action(retriever)
+                vector_used = True
+            except Exception as e:
+                logger.warning("RAG %s 向量检索失败，尝试关键词兜底: %s", op_name, e)
+    if not vector_used and _keyword_fallback_enabled() and keyword_query:
+        results = keyword_fallback_search(keyword_query)
+        if results:
+            logger.info("20. RAG 关键词兜底命中 %d 条候选（op=%s）", len(results), op_name)
+            return vector_used, True
+    return vector_used, False

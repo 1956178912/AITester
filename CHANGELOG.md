@@ -4,6 +4,85 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-29 改进批次（缓存隔离 / 注入防御 / 可解释性 / 确定性守卫 / 流氓监控 / 关键词兜底）
+
+> 基于 2026 年行业数据（Clinejection、KeyPooling、LiteLLM
+> CVE-2026-89032、Spring AI CVE-2026-59308、DO-178C、特斯拉
+> ≥90% 分支覆盖阻断策略）的系统性改进，**默认行为不变**（新能力
+> 均带独立开关，未启用时历史口径逐字节等价）：
+>
+> - **P0 缓存用户隔离（ADR-0011）**：
+>   - `llm_client.py` 新增 `creator_uid` 字段写入 + 读侧
+>     `cache_creator_ok()` 归属校验（跨用户 / 跨 CI 步骤投毒面
+>     封堵；历史无字段条目兼容）；
+>   - `AITESTER_CACHE_CREATOR` 环境变量支持多租户逻辑隔离；
+>   - 新增 `tests/test_multiprocess_cache_consistency.py`
+>     （投毒模拟 + 负缓存过期重读 + 跨用户 creator 校验）；
+>   - `tests/test_llm_file_cache.py` 修复 latent
+>     `test_negative_cache_expiry_rechecks_file` 断言注释口径。
+>
+> - **P0/P1 注入防御层（ADR-0012）**：
+>   - 新增 `src/agents/injection_guard.py`（输入侧 4 类特征检测
+>     + 输出侧 5 类危险操作静态校验，纯正则，零 LLM 成本，
+>     默认关）；
+>   - 新增 `tests/test_injection_guard.py`（12 用例）。
+>
+> - **P1 流氓 agent 监控（OWASP ASI-10 参照）**：
+>   - 新增 `src/agents/rogue_monitor.py`（z-score 逐工具 one-hot
+>     偏离 / 香农熵 / 能力违规三信号，线程安全，默认关）；
+>   - 新增 `tests/test_rogue_monitor.py`（15 用例）。
+>
+> - **P1 RAG 关键词兜底检索（LeanKG 三层回退链底层）**：
+>   - `src/graph/rag.py` 新增 `keyword_fallback_search` /
+>     `retriever_or_keyword_fallback`（向量侧不可用时降级为词袋
+>     打分，开关 `RAG_KEYWORD_FALLBACK_ENABLE` 默认关；不向
+>     action 回调注入结果，保持保守）；
+>   - 新增 `tests/test_workflow_combinations.py` 拓扑组合用例。
+>
+> - **P2 语义缓存假阳性抽样统计**：
+>   - `semantic_cache.py` 新增 `should_sample_false_positive()`
+>     （默认 10% 命中抽样）+ 统计接口 + 并入 `get_semantic_cache_stats`。
+>
+> - **P2 确定性生成守卫**：
+>   - 新增 `src/agents/deterministic_guard.py`（AST 静态扫描
+>     random / long-sleep / wall-clock / 外部副作用，默认关）；
+>   - 新增 `tests/test_deterministic_guard.py`（13 用例）。
+>
+> - **P2 凭证剔除动态推导**：
+>   - `credential_scrub.py` 从 `PROVIDER_TEMPLATES` 键自动推导
+>     provider 中间变量脱敏模式（消除 LiteLLM CVE-2026-89032 式
+>     静态枚举漂移）；
+>   - 新增 `scripts/check_credential_scrub.py` CI 守卫
+>     （新 provider 未同步时阻断合并）；CI 接入。
+>
+> - **P2 分支覆盖率门槛上调（ADR-0014）**：
+>   - `check_branch_coverage.py` 总门槛 79% 基线 + 核心修复路由
+>     模块 90% 严格门槛 + 其余核心模块 85%；
+>   - 修复口径漂移：总分支率改用 `branches-covered/branches-valid`
+>     加权聚合（根 branch-rate 是模块简单均值，会被小模块拉低）；
+>   - 新增 `tests/test_workflow_combinations.py`（74 用例，补全
+>     `_should_debug` / `_route_after_diagnosis` / `_create_workflow`
+>     拓扑组合）；
+>   - `tests/test_branch_coverage_gates.py` 同步更新门槛常量断言。
+>
+> - **P2 脱敏一致性校验**：
+>   - `logging_utils.py` 新增 `verify_redaction_consistency()`
+>     （mask_sensitive_info vs redact_text 双路径一致性 +
+>     键派生子集校验，防 Spring AI CVE-2026-59308 同源风险）。
+>
+> - **P3 可解释性字段（ADR-0013）**：
+>   - `error_classifier.py` `ClassificationResult` 新增
+>     `explanation` 字段（命中规则特征 / 弱命中标注 / 置信度
+>     口径 / 兜底触发，零 LLM 成本纯数据口径）；
+>   - 策略追踪链四环节（分类→策略选择→补丁生成→验证结果）
+>     经 `explanation` 字段闭环。
+>
+> - **P3 文档**：
+>   - 新增 `docs/adr/0011-0014`（4 篇 ADR）；
+>   - 新增 `docs/troubleshooting.md`（症状→根因→解决→预防
+>     四段式故障排查手册）；
+>   - `CHANGELOG.md` 批次记录。
+
 ## [Unreleased] — 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
 
 > 本批次基于用户提交的 24 项改进清单（跨 7 个维度：架构算法 / 工程实践 /

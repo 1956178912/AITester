@@ -159,6 +159,11 @@ class ClassificationResult:
         fallback_used: 是否使用了低置信度兜底策略（低置信度 + 启用兜底时
             category 会被替换为 fallback_category）。
         fallback_category: 兜底类别（由低置信度兜底策略选出）；None 表示未启用。
+        explanation: 可解释性字段（2026-09-29 批次，外部数据支撑："可解释性
+            应被视为基础设计原则，而非可选功能"）：为什么选择这个修复策略
+            ——命中哪条规则特征 / 被替代的候选类别（top-2 考虑过的类别）/
+            兜底是否触发。纯数据口径（零 LLM 成本），供修复报告与 ADR-0013
+            可追踪依赖链（错误分类 → 修复策略选择 → 补丁生成 → 验证结果）消费。
 
     设计（分层预留，见 ADR-0002"已知局限与演进方向"）：
         - L1 规则层：纯正则确定性匹配，零 LLM 成本，命中置信度高（0.9）；
@@ -176,6 +181,7 @@ class ClassificationResult:
     confidence_basis: str
     fallback_used: bool = False
     fallback_category: ErrorCategory | None = None
+    explanation: str = ""
 
 
 class ProbabilisticClassifier(Protocol):
@@ -424,13 +430,64 @@ class ErrorClassifier:
                 category = self._FALLBACK_CATEGORY
                 basis = "fallback_unknown"
 
+        # 可解释性字段（2026-09-29 批次）：说明"为什么选这个类别 + 替代
+        # 候选被放弃的原因"，供修复报告 / ADR-0013 可追踪依赖链消费。
+        explanation = self._build_explanation(category, confidence, basis, fallback_used, combined, target_module)
+
         return ClassificationResult(
             category=category,
             confidence=confidence,
             confidence_basis=basis,
             fallback_used=fallback_used,
             fallback_category=fallback_category,
+            explanation=explanation,
         )
+
+    def _build_explanation(
+        self,
+        category: ErrorCategory,
+        confidence: float,
+        basis: str,
+        fallback_used: bool,
+        combined: str,
+        target_module: str | None,
+    ) -> str:
+        """构建可解释性说明（纯数据口径，零 LLM 成本；ADR-0013 追踪链第 1 环）。"""
+        parts: list[str] = []
+        # 命中的规则特征（为什么是这个类别）
+        if category == ErrorCategory.LLM_FORMAT_ERROR:
+            parts.append("命中 LLM 响应格式异常特征（JSON 解析失败/截断/空响应关键词）")
+        elif category == ErrorCategory.IMPORT_ERROR:
+            module = self._extract_import_module_name(combined)
+            parts.append("命中导入错误特征" + (f"（缺失模块 {module}）" if module else ""))
+        elif category == ErrorCategory.SYNTAX:
+            parts.append(
+                "命中语法错误特征"
+                if self._has_concrete_syntax_feature(combined)
+                else "仅通用 file.py:line:col 格式命中（弱命中）"
+            )
+        elif category == ErrorCategory.TYPE_ERROR:
+            parts.append("命中 TypeError 异常关键词")
+        elif category == ErrorCategory.INDEX_ERROR:
+            parts.append("命中 IndexError / 越界表述")
+        elif category == ErrorCategory.RUNTIME:
+            parts.append("命中运行时异常关键词（ZeroDivision/Value/Key/Attribute/Recursion/Name 等）")
+        elif category == ErrorCategory.ASSERTION:
+            parts.append("命中断言失败特征（失败栈触及被测代码）")
+        elif category == ErrorCategory.LOGIC_ERROR:
+            parts.append(f"断言失败且失败栈未触及被测模块（{target_module or '未知模块'}），判定测试侧逻辑错误")
+        elif category == ErrorCategory.TIMEOUT:
+            parts.append("命中超时特征（死循环/无限递归嫌疑）")
+        elif category == ErrorCategory.UNKNOWN:
+            parts.append("未命中任何具体规则特征，落入通用兜底")
+        else:
+            parts.append(f"状态细化类别 {category.value}")
+        # 置信度口径
+        parts.append(f"置信度 {confidence:.2f}（{basis}）")
+        # 兜底触发
+        if fallback_used:
+            parts.append("低置信度 → 触发兜底策略（generic_analysis），替代硬性路由")
+        return "；".join(parts)
 
     def _classify_confidence(self, combined: str, target_module: str | None) -> tuple[ErrorCategory, float, str]:
         """L1 规则层置信度判定（classify_with_confidence 的内核，纯数据路径）。

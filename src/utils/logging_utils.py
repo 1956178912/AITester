@@ -253,6 +253,55 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def verify_redaction_consistency(sample_texts: list[str]) -> bool:
+    """跨路径脱敏一致性守卫（外部数据支撑：LiteLLM CVE-2026-89032 与
+    Spring AI CVE-2026-59308 的根因均为"两个函数对同一概念的键/口径
+    派生不一致"；Spring AI 语义缓存甚至因此跨上下文泄漏）。
+
+    本仓历史风险模式：api_manager._redact 与 llm_client._redact_log_text
+    曾是两套独立实现（4.1 审计已收敛为委托 redact_text，但调用路径仍
+    分叉：直接调用 vs 经 SensitiveFormatter 格式化路径）。本函数对同一
+    输入做两条口径比对：
+
+    1. `mask_sensitive_info`（主路径，敏感过滤器/格式化器消费）；
+    2. `redact_text`（日志调用点直接消费，含三级降级链）；
+
+    两口径对任何输入必须输出完全一致（redact_text 首选分支即委托
+    mask_sensitive_info；仅当主路径异常抛走 fallback 时口径才分叉——
+    此时返回 False 提示降级态）。CI / 安全测试可调用本函数做注入
+    验证（对同一敏感串断言两条路径脱敏结果一致）。
+
+    另含键派生一致性校验：_SENSITIVE_PATTERNS 与 _FALLBACK_PATTERNS 的
+    替换占位符必须同源（fallback 子集 ⊆ 主模式，逐对 (pattern, 占位符)
+    等值），防止两套键命名漂移再次出现（CVE-2026-59308 同源风险）。
+
+    注：本函数使用 logging.getLogger(__name__)（模块私有 logger，保守口径——
+    不引入模块级 logger 常量，与 _redact_value 同文件的日志口径一致）。
+
+    Args:
+        sample_texts: 待验证文本列表（至少含一类敏感凭证形态）。
+
+    Returns:
+        True = 两条路径输出逐一致 + 键派生同源；False = 任一口径分叉。
+    """
+    if not sample_texts:
+        return True
+    _consist_logger = logging.getLogger(__name__)
+    for text in sample_texts:
+        direct = mask_sensitive_info(text)
+        via_redact = redact_text(text)
+        if direct != via_redact:
+            _consist_logger.warning("脱敏一致性守卫：mask_sensitive_info 与 redact_text 口径分叉（降级态？）")
+            return False
+    # 键派生一致性：fallback 占位符必须是主模式占位符的子集逐对等值
+    main_repl = {p: r for p, r in _SENSITIVE_PATTERNS}
+    for pattern, repl in _FALLBACK_PATTERNS:
+        if main_repl.get(pattern) != repl:
+            _consist_logger.warning("脱敏一致性守卫：_FALLBACK_PATTERNS 与 _SENSITIVE_PATTERNS 键派生分叉")
+            return False
+    return True
+
+
 def _redact_value(value: Any) -> Any:
     """递归脱敏任意嵌套结构（dict / list / tuple / 标量）。"""
     if isinstance(value, dict):

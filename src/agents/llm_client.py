@@ -412,6 +412,59 @@ _LLM_CACHE_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(__file__)
 _LLM_CACHE_DIR_MODE = 0o700
 _LLM_CACHE_FILE_MODE = 0o600
 
+# 19. 缓存创建者归属（外部数据支撑：Clinejection 事件——恶意 issue 标题经
+# prompt injection 污染构建缓存后跨工作流向 4000 名开发者推送恶意版本；
+# KeyPooling 研究——API 网关共享凭据可致全局缓存共享）。"本地可信域"假设
+# 在共享 CI / 多用户机器上不成立：缓存文件头部写入创建者 uid，读侧校验
+# 归属，非本用户创建的条目一律不命中（防跨用户缓存投毒），并记录告警。
+# 历史无 creator 字段的文件按"同 uid 兼容"处理（不破坏既有 2200+ 缓存文件）；
+# uid 不可得（Windows 等）时不写校验（降级为历史口径，权限位 0600 仍生效）。
+_CREDENTIAL_CREATOR_FIELD = "creator_uid"
+# 创建者标签可经环境变量显式指定（多用户共享缓存目录 / CI 场景覆盖默认 uid）
+_CACHE_CREATOR_ENV = "AITESTER_CACHE_CREATOR"
+
+
+def _cache_creator_uid() -> int | None:
+    """当前用户 uid（POSIX）；不可得时 None（读侧跳过归属校验）。"""
+    try:
+        return os.getuid()
+    except (AttributeError, OSError):
+        return None
+
+
+def _cache_creator_label() -> str:
+    """缓存条目创建者标识（写入文件头部的 creator_uid 字段）。
+
+    优先取 AITESTER_CACHE_CREATOR 显式覆盖（共享 CI / 多租户部署可为不同
+    身份注入独立标签实现逻辑隔离）；否则取当前 uid；uid 不可得时返回
+    空串（读侧跳过校验，历史口径）。
+    """
+    override = os.environ.get(_CACHE_CREATOR_ENV, "").strip()
+    if override:
+        return override
+    uid = _cache_creator_uid()
+    return str(uid) if uid is not None else ""
+
+
+def cache_creator_ok(stored_uid: Any) -> bool:
+    """读侧创建者归属校验（19. 防跨用户缓存投毒，Clinejection 教训）。
+
+    规则（与写侧 _cache_creator_label 同源，避免键派生漂移）：
+    - 当前创建者标签为空（uid 不可得且未显式覆盖）→ 恒 True（跳过校验，
+      历史口径）；
+    - 条目无 creator_uid 字段（历史文件）或值为空串 → True（兼容）；
+    - 条目 creator_uid 与当前标签一致 → True；不一致 → False（不命中，
+      该条目疑似被其他用户/CI 步骤写入，按投毒面处理）。
+
+    供 base_agent 文件命中校验与测试直接消费（纯函数，零副作用）。
+    """
+    expected = _cache_creator_label()
+    if not expected:
+        return True
+    if stored_uid is None or stored_uid == "":
+        return True
+    return str(stored_uid) == expected
+
 
 def ensure_llm_cache_dir(cache_dir: str | None = None) -> str:
     """创建 LLM 缓存目录（0o700 权限）并返回其路径。

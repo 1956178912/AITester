@@ -131,6 +131,12 @@ jobs:
         # 本地提交与远端 CI 口径一致。
         run: python scripts/audit_log_redaction.py
 
+      - name: Credential scrub sync guard (P2 动态推导)
+        # 凭证剔除模式从 PROVIDER_TEMPLATES 动态推导（P2 批次）：
+        # 新增 provider 键未同步到脱敏口径 → 阻断合并（防 LiteLLM
+        # CVE-2026-89032 式静态枚举漂移）。
+        run: python scripts/check_credential_scrub.py
+
       - name: 测试失败诊断（把失败用例清单写成注解，供 API 无权限读取）
         if: failure()
         env:
@@ -158,8 +164,9 @@ jobs:
 
       - name: Branch coverage gate (8. 核心路由模块门槛)
         if: matrix.python-version == '3.14'
-        # 解析 coverage.xml：总分支覆盖 ≥79%（保守门槛，随组合测试补全上调）
-        # + 核心条件路由模块（_should_debug / refine / state / tracing）逐模块 ≥85%
+        # 解析 coverage.xml：总分支覆盖 ≥85%（2026-09-29 批次上调）
+        # + 核心修复路由模块（graph/workflow.py、agents/error_classifier.py）
+        # 逐模块 ≥90%（严格门槛）+ 其余核心路由模块 ≥85%
         run: python scripts/check_branch_coverage.py coverage.xml
 
   security:

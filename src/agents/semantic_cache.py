@@ -161,6 +161,9 @@ class SemanticCacheIndex:
         if best_file is not None and best_response is not None and best_score >= threshold:
             with self._lock:
                 self._hits += 1
+            # 3.6 假阳性抽样验证：按确定性采样率，命中抽样时调用方应触发
+            # "无缓存口径"比对（本处仅暴露采样决策，比对动作由接线层做——
+            # 保持索引层零 LLM 成本，抽样触发的额外调用不发生在索引内）
             logger.info(
                 "5.1 语义缓存命中：similarity=%.3f (threshold=%.2f) file=%s",
                 best_score,
@@ -288,14 +291,95 @@ def maybe_rebuild_semantic_index(cache_dir: str) -> int:
 
 
 def get_semantic_cache_stats() -> dict[str, int | float | bool]:
-    """语义缓存观测统计（供 get_workflow_stats / 实验汇总消费）。"""
+    """语义缓存观测统计（供 get_workflow_stats / 实验汇总消费）。
+
+    3.6 改进：合并假阳性抽样验证统计（fp_checked / fp_false_positive /
+    fp_rate），供实验汇总报告"缓存命中但结果不可复用"比例。
+    """
     s = get_semantic_index().stats()
     return {
         **s,
         "enabled": _semantic_cache_enabled(),
         "threshold": _semantic_threshold(),
         "max_entries": _max_index_entries(),
+        **get_false_positive_stats(),
     }
+
+
+# ─── 3.6 假阳性抽样验证（外部数据支撑：银行业语义缓存实测——阈值 0.7 时
+# 假阳性率高达 99%，经系统设计优化降至 3.8%；阈值 0.95 → 假阳性 15-25%、
+# 0.97 → 5-10%、0.99 → 1-3%。"自修复"场景一次错误命中即可能应用错误
+# 补丁，故默认启用抽样验证，命中条目前抽样比对"无缓存口径"应产出的响应）
+_SEMANTIC_FALSE_POSITIVE_SAMPLING_ENV = "SEMANTIC_FALSE_POSITIVE_SAMPLING"
+
+
+def _false_positive_sampling_rate() -> float:
+    """假阳性抽样率（SEMANTIC_FALSE_POSITIVE_SAMPLING，默认 0.1 = 10%）。
+
+    0.0 关闭抽样（纯统计口径，零额外 LLM 成本）；[0,1] 区间内按命中次数
+    确定性采样（每 1/rate 次命中抽 1 次），避免随机数扰动测试可复现性。
+    """
+    try:
+        v = float(os.getenv(_SEMANTIC_FALSE_POSITIVE_SAMPLING_ENV, "0.1"))
+    except ValueError:
+        v = 0.1
+    return max(0.0, min(1.0, v))
+
+
+# 抽样验证命中计数（确定性采样：第 N/rate 次命中触发，线程安全）
+_fp_sample_counter: int = 0
+_fp_sample_lock = threading.Lock()
+# 抽样验证结果统计（供 get_semantic_cache_stats 消费）
+_fp_sample_stats: dict[str, int] = {"checked": 0, "confirmed": 0, "false_positive": 0}
+
+
+def should_sample_false_positive() -> bool:
+    """按确定性采样率决定本次语义命中是否触发假阳性抽样验证。
+
+    开关：SEMANTIC_FALSE_POSITIVE_SAMPLING 默认 0.1（每 10 次命中抽 1 次）；
+    设为 0 关闭（零额外成本，纯观测口径）。线程安全。
+    """
+    global _fp_sample_counter
+    rate = _false_positive_sampling_rate()
+    if rate <= 0.0:
+        return False
+    with _fp_sample_lock:
+        _fp_sample_counter += 1
+        n = _fp_sample_counter
+    return n % max(1, round(1.0 / rate)) == 0
+
+
+def record_false_positive_check(confirmed: bool) -> None:
+    """记录一次假阳性抽样验证结果（confirmed=True 命中响应可复用）。"""
+    with _fp_sample_lock:
+        _fp_sample_stats["checked"] += 1
+        if confirmed:
+            _fp_sample_stats["confirmed"] += 1
+        else:
+            _fp_sample_stats["false_positive"] += 1
+
+
+def get_false_positive_stats() -> dict[str, int | float]:
+    """假阳性抽样统计（含比率，供 get_semantic_cache_stats 合并消费）。"""
+    with _fp_sample_lock:
+        checked = _fp_sample_stats["checked"]
+        false_pos = _fp_sample_stats["false_positive"]
+        return {
+            "fp_checked": checked,
+            "fp_confirmed": _fp_sample_stats["confirmed"],
+            "fp_false_positive": false_pos,
+            "fp_rate": (false_pos / checked) if checked else 0.0,
+        }
+
+
+def reset_false_positive_stats() -> None:
+    """清零假阳性抽样统计（测试隔离 / 嵌入后端切换时调用）。"""
+    global _fp_sample_counter
+    with _fp_sample_lock:
+        _fp_sample_counter = 0
+        _fp_sample_stats["checked"] = 0
+        _fp_sample_stats["confirmed"] = 0
+        _fp_sample_stats["false_positive"] = 0
 
 
 def reset_semantic_index() -> None:
@@ -307,14 +391,19 @@ def reset_semantic_index() -> None:
         _index._misses = 0
         _index._embed_failures = 0
         _last_rebuild_ts = 0.0
+    reset_false_positive_stats()
 
 
 __all__ = [
     "SemanticCacheIndex",
     "build_semantic_index_from_cache_dir",
     "find_semantic_cache",
+    "get_false_positive_stats",
     "get_semantic_cache_stats",
     "get_semantic_index",
     "maybe_rebuild_semantic_index",
+    "record_false_positive_check",
+    "reset_false_positive_stats",
     "reset_semantic_index",
+    "should_sample_false_positive",
 ]

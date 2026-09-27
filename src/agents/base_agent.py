@@ -25,6 +25,7 @@ from typing import Any
 from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
 from src.agents.llm_client import (
     _DEFAULT_LLM_MAX_RETRIES,
+    _cache_creator_label,
     _call_zai,
     _get_all_api_configs,
     _get_llm_config,
@@ -35,6 +36,7 @@ from src.agents.llm_client import (
     _record_response_usage,
     _redact_log_text,
     _retry_with_exponential_backoff,
+    cache_creator_ok,
 )
 from src.utils.helpers import extract_code_block, extract_json_object
 
@@ -329,12 +331,19 @@ class BaseAgent:
                     len(cached_data.get("prompt", "")) == len(user_message)
                     and cached_data.get("prompt") == user_message
                     and cached_data.get("system") == self.system_prompt
+                    # 19. 创建者归属校验（Clinejection 教训）：uid 可得且条目
+                    # 携带非空 creator_uid 时，非本用户条目不命中并告警（防
+                    # 共享 CI / 多用户机器的跨用户缓存投毒）。历史无该字段的
+                    # 条目视为兼容（不破坏既有缓存）；条目 creator_uid 为空
+                    # 串（uid 不可得的平台）同样跳过校验。
+                    and cache_creator_ok(cached_data.get("creator_uid"))
                 ):
                     _lru_store(lru_key, cached_data["response"])
                     logger.info("LLM 缓存命中 (文件→LRU): %s", cache_key[:50])
                     return cached_data["response"]
-                # 文件存在但键材料不匹配（md5 前 16 位碰撞）：按未命中处理，
-                # 记负缓存（延长 TTL 窗口，避免热循环反复读同一错配文件）
+                # 文件存在但键材料/归属不匹配（md5 前 16 位碰撞或跨用户
+                # 投毒条目）：按未命中处理，记负缓存（延长 TTL 窗口，
+                # 避免热循环反复读同一错配文件）
                 _lru_store(lru_key, None)
             except FileNotFoundError:
                 _lru_store(lru_key, None)  # 负缓存：该键当前无文件
@@ -376,6 +385,11 @@ class BaseAgent:
                 "system": self.system_prompt,
                 "response": response,
                 "timestamp": time.time(),
+                # 19. 缓存创建者归属（Clinejection 教训）：写 uid 到文件头部，
+                # 读侧 _lru_check_negative 之外的命中校验按归属校验，非本用户
+                # 条目不命中（防跨用户/共享 CI 缓存投毒）。空串 = uid 不可得
+                # （读侧跳过校验，历史口径）。
+                "creator_uid": _cache_creator_label(),
             }
             tmp_file = f"{cache_file}.tmp.{threading.get_ident()}"
             try:

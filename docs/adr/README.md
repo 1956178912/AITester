@@ -11,6 +11,10 @@
 | [0003](0003-default-off-experiment-hygiene.md) | 默认行为不变原则（实验口径收敛） | 已采纳 | 全部新能力以"默认关 + 独立开关"落地，保证 A/B 对比（ON vs OFF）历史口径不变 | 全部新模块（`patch_postprocess.py` 等） |
 | [0004](0004-zero-default-deps.md) | 零默认外部依赖（可选依赖透明降级） | 已采纳 | 核心能力只依赖 langgraph/openai/pytest；可选增强（chromadb/onnxruntime/mypy 等）缺失时透明降级 | `requirements.txt`、`src/utils/embedding_utils.py` |
 | [0005](0005-node-degradation.md) | 节点异常降级兜底（工作流不崩溃） | 已采纳 | 各节点捕获 LLM 调用 / 缓存 / 预算异常并降级，避免 LangGraph 整图中断 | `src/graph/nodes.py`、`src/agents/base_agent.py` |
+| [0011](0011-llm-cache-user-isolation.md) | LLM 缓存用户隔离与创建者归属 | 已采纳 | `creator_uid` 字段写入 + 读侧 `cache_creator_ok()` 归属校验，封堵跨用户 / 跨 CI 步骤投毒面；`AITESTER_CACHE_CREATOR` 多租户逻辑隔离 | `src/agents/llm_client.py` |
+| [0012](0012-prompt-injection-defense.md) | Prompt Injection 防御层（输入检测 + 补丁安全校验） | 已采纳 | 输入侧 4 类特征检测 + 输出侧 5 类危险操作静态校验，纯正则零 LLM 成本，默认关 | `src/agents/injection_guard.py` |
+| [0013](0013-classifier-explanability.md) | 错误分类可解释性字段与修复策略追踪链 | 已采纳 | `ClassificationResult.explanation` 命中特征 / 置信度口径 / 兜底标注，四环节追踪链闭环，零 LLM 成本 | `src/agents/error_classifier.py` |
+| [0014](0014-branch-coverage-gates.md) | 分支覆盖率门槛上调（总 85% / 核心修复路由模块 90%） | 已采纳 | 总门槛 79%→85% + 核心修复路由模块 90% 严格门槛；总分支率改用加权聚合修复口径漂移 | `scripts/check_branch_coverage.py`、`tests/test_workflow_combinations.py` |
 
 ## 状态约定
 
@@ -21,7 +25,8 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前最大 0005 → 下一个 0006）；
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0014 已用 → 下一个 0006；
+   0006–0010 保留给在途批次，勿占用）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；
 3. 正文结构：`# ADR-NNNN: 标题` + 元信息（日期 / 状态 / 关联模块）+
    背景 / 决策 / 后果 / 已知局限与演进方向；
