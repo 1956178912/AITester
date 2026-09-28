@@ -370,6 +370,48 @@ class TestRetrieveRepairs:
         call_args = retriever.collection.query.call_args
         assert call_args.kwargs["n_results"] == 5
 
+    def test_retrieve_repairs_normalizes_invalid_error_category(self, retriever):
+        """S4 安全（2026-09-29）：非枚举形态的 error_category 归一为 "unknown"，
+        保证 Chroma where 子句稳定（含特殊操作符语法的值归一，避免解析异常
+        或误匹配）。"""
+        retriever.collection.count.return_value = 1
+        retriever.collection.query.return_value = {
+            "documents": [["doc1"]],
+            "metadatas": [[{"patch": "fix1"}]],
+            "distances": [[0.1]],
+        }
+
+        # 含 where 子句特殊操作符语法的值 → 归一为 "unknown"
+        retriever.retrieve_repairs("foo$ne:bar", "code")
+        call_args = retriever.collection.query.call_args
+        assert call_args.kwargs["where"] == {"error_category": "unknown"}
+
+    def test_retrieve_repairs_none_error_category_normalized(self, retriever):
+        """S4 安全：None / 空值归一为 "unknown"（where 子句恒有确定值）。"""
+        retriever.collection.count.return_value = 1
+        retriever.collection.query.return_value = {
+            "documents": [["doc1"]],
+            "metadatas": [[{"patch": "fix1"}]],
+            "distances": [[0.1]],
+        }
+
+        retriever.retrieve_repairs(None, "code")
+        call_args = retriever.collection.query.call_args
+        assert call_args.kwargs["where"] == {"error_category": "unknown"}
+
+    def test_retrieve_repairs_enum_style_category_preserved(self, retriever):
+        """S4 安全：纯枚举形态（字母数字/下划线/短横线）原样保留。"""
+        retriever.collection.count.return_value = 1
+        retriever.collection.query.return_value = {
+            "documents": [["doc1"]],
+            "metadatas": [[{"patch": "fix1"}]],
+            "distances": [[0.1]],
+        }
+
+        retriever.retrieve_repairs("patch-syntax-invalid", "code")
+        call_args = retriever.collection.query.call_args
+        assert call_args.kwargs["where"] == {"error_category": "patch-syntax-invalid"}
+
 
 # ============================================================================
 #  cleanup 测试

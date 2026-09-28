@@ -4,8 +4,22 @@ P1 Prompt Injection 防御层（2026-09-29 批次，外部数据支撑：PVE
 Clinejection 事件——恶意 issue 标题经 prompt injection 污染构建缓存）。
 
 设计约束（保守，默认关闭）：
-- 开关 `INJECTION_GUARD_ENABLE` 默认 false：关闭时 `detect_prompt_injection`
-  / `check_llm_patch_safety` 恒返回空列表（调用方零行为变化，历史口径）；
+- 输入侧开关 `INJECTION_GUARD_ENABLE` 默认 false：关闭时
+  `detect_prompt_injection` 恒返回空列表（调用方零行为变化，历史口径）；
+- 输出侧（PVE 的 E 前校验）开关 `INJECTION_GUARD_OUTPUT_ENABLE`
+  **默认 true**（2026-09-29 审查 S2 修复）：LLM 返回的修复补丁应用前
+  做危险操作静态扫描（os.system / subprocess / eval / exec / 网络外连
+  语句），`check_llm_patch_safety` findings 非空时调用方应拒绝应用并
+  走通用兜底（与 2.2 补丁重采样同口径接线，本模块零依赖，纯正则）。
+  输出侧默认开的原因：纯正则、零 LLM 成本、5 条强模式误伤可控，
+  而"LLM 补丁夹带危险操作落地"是真实攻击面——历史实现输出侧与输入侧
+  共用一个默认关开关，导致补丁危险操作扫描在默认配置下无接线
+  （check_llm_patch_safety 全仓无调用点，孤儿函数），默认配置下
+  危险补丁仅靠 Docker 模式（也非默认）兜底。2026-09-29 S2 同时
+  在 patch_applier 补 AST 级危险 API 守卫（dangerous_api_added，
+  默认启用）双保险——正则（本模块）+ AST（patch_applier）
+  覆盖口径互补，默认配置下即有拦截。
+  开关设 false 时 `check_llm_patch_safety` 恒返回 []（历史口径）；
 - 输入侧（PVE 的 V 层）：LLM 调用前对**外部可控文本**（任务描述、issue
   标题、检索入库内容）做注入特征扫描，命中即把"疑似注入"标记写进 prompt
   的系统侧警示（不静默吞掉——OWASP ASI 口径"检测+隔离"，但自动阻断需
@@ -24,12 +38,31 @@ import os
 import re
 
 # ─── 开关（环境变量，调用期读取，保留测试的 patch.dict 切换能力）────────────
+# 输入侧（外部数据注入检测）默认关：检测+警示语义，阻断需人工审核策略
+# （OWASP ASI 口径），自动阻断误伤面大，保守默认 false。
 _INJECTION_GUARD_ENV = "INJECTION_GUARD_ENABLE"
+# 输出侧（LLM 补丁危险操作扫描）默认开（2026-09-29 审查 S2）：
+# 纯正则、零 LLM 成本、强模式误伤可控；"LLM 补丁夹带危险操作落地"
+# 是真实攻击面，默认配置下须有拦截（AST 级 patch_applier.
+# dangerous_api_added 双保险，同默认开口径）。
+_INJECTION_GUARD_OUTPUT_ENV = "INJECTION_GUARD_OUTPUT_ENABLE"
 
 
 def injection_guard_enabled() -> bool:
-    """Prompt Injection 防御开关（INJECTION_GUARD_ENABLE，默认 false）。"""
+    """输入侧注入检测开关（INJECTION_GUARD_ENABLE，默认 false 历史口径）。"""
     return os.getenv(_INJECTION_GUARD_ENV, "false").lower() in ("true", "1", "on")
+
+
+def injection_guard_output_enabled() -> bool:
+    """输出侧补丁危险操作扫描开关（INJECTION_GUARD_OUTPUT_ENABLE，默认 true）。
+
+    2026-09-29 审查 S2：输出侧独立开关且默认开——历史实现与输入侧共用
+    INJECTION_GUARD_ENABLE（默认关），导致 check_llm_patch_safety 在默认
+    配置下恒返回 []、全仓无调用点的孤儿函数。默认开启 + 接线
+    （patch_applier.dangerous_api_added AST 级同口径默认开）后，
+    默认配置下 LLM 补丁危险操作即有拦截，不再依赖 Docker 模式兜底。
+    """
+    return os.getenv(_INJECTION_GUARD_OUTPUT_ENV, "true").lower() in ("true", "1", "on")
 
 
 # ─── 输入侧注入特征（指令覆盖 / 数据外传 / 编码绕过 / 多轮拼接）────────────
@@ -129,8 +162,10 @@ _OUTPUT_SIDE_CHECKS: tuple[tuple[str, re.Pattern], ...] = (
 def check_llm_patch_safety(patch_text: str) -> list[str]:
     """输出侧补丁危险操作扫描（PVE 的 E 前校验，纯正则零 LLM 成本）。
 
-    开关关闭（默认）或补丁为空时返回 []（历史口径零变化）。命中时返回
-    特征名列表；调用方非空即拒绝应用该补丁（走 2.2 重采样或通用兜底）。
+    开关关闭（INJECTION_GUARD_OUTPUT_ENABLE=false）或补丁为空时返回 []
+    （历史口径零变化）；默认开启（2026-09-29 审查 S2）时命中即返回
+    特征名列表，调用方非空即拒绝应用该补丁（走 2.2 重采样或通用兜底，
+    与 patch_applier.dangerous_api_added AST 级守卫双保险）。
 
     Args:
         patch_text: LLM 返回的修复补丁全文（完整文件/代码块文本）。
@@ -138,7 +173,7 @@ def check_llm_patch_safety(patch_text: str) -> list[str]:
     Returns:
         命中的危险特征名列表（空 = 未检出或开关关闭）。
     """
-    if not injection_guard_enabled() or not patch_text:
+    if not injection_guard_output_enabled() or not patch_text:
         return []
     return [name for name, pattern in _OUTPUT_SIDE_CHECKS if pattern.search(patch_text)]
 

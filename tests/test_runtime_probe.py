@@ -100,6 +100,63 @@ def test_capture_failure_snapshot_module_filter_keeps_matching_module() -> None:
     assert "x" in snapshot["frames"][0]["locals"]
 
 
+def test_capture_failure_snapshot_uses_subprocess_runner() -> None:
+    """S1 安全修复（2026-09-29 审查）：探针经**子进程**执行被测代码
+    （替代历史"主进程子线程 exec"口径——join 超时不可 kill、LLM 代码
+    可在主进程写任意文件/发网络）。
+
+    口径锁定：capture_failure_snapshot 内部经 subprocess.run 启动
+    sys.executable 子进程执行 runner（_probe_runner.py），帧快照经
+    frames.json 文件通道传回（非 stdout——子进程 stdout 可能含被测
+    代码输出，不可靠）。mock subprocess.run 返回"子进程成功退出（rc=0）"
+    形态——探针读不到 frames.json（真实 runner 会写到沙箱目录，mock 时
+    不产生）→ 降级 None，与"空帧降级"同口径。
+    """
+    from unittest.mock import patch as mock_patch
+
+    from src.agents.runtime_probe import capture_failure_snapshot
+
+    test_code = "def test_fails():\n    x = 42\n    assert x == 0\n\ntest_fails()\n"
+
+    def _fake_run(args: list[str], **kwargs) -> _FakeProc:
+        # 模拟子进程成功退出（真实 runner 会写 frames.json 到沙箱目录；
+        # mock 时不产生 frames.json → 探针降级 None，口径一致）
+        return _FakeProc(0)
+
+    with (
+        mock_patch("src.agents.runtime_probe.subprocess.run", side_effect=_fake_run) as run_fn,
+        mock_patch("src.agents.runtime_probe.scrub_os_environ", wraps=_real_scrub) as scrub_fn,
+    ):
+        snapshot = capture_failure_snapshot(test_code)
+
+    assert run_fn.call_count == 1
+    args, kwargs = run_fn.call_args
+    # runner 经 sys.executable 启动（argv[0] 为解释器路径）
+    assert str(args[0][0]).lower().endswith(("python", "python3"))
+    # 凭证脱敏环境 + 20s 上限被传入（S1/H-1 同口径）
+    assert kwargs.get("env")
+    assert kwargs["timeout"] == 20
+    # 探针降级 None（mock 时不产生 frames.json → 空帧降级口径）
+    assert snapshot is None
+    scrub_fn.assert_called()
+
+
+def _real_scrub() -> dict:
+    from src.utils.credential_scrub import scrub_os_environ
+
+    return scrub_os_environ()
+
+
+def _FakeProc(returncode: int):
+    class _P:
+        def __init__(self, rc: int) -> None:
+            self.returncode = rc
+            self.stdout = ""
+            self.stderr = ""
+
+    return _P(returncode)
+
+
 def test_exception_frames_uses_traceback_line_numbers() -> None:
     """_exception_frames 行号口径回归：行号取 tb_lineno（异常抛出行），
     非 frame.f_lineno（帧退出后停在函数体末尾）。

@@ -11,16 +11,16 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-09-29"   # 全量回归实测日期（2026-09-29 审查轮：运行时探针 P0 缺陷修复 + 测试套件 0 告警落地后）
+last_verified: "2026-09-29"   # 全量回归实测日期（2026-09-29：全面测试 + 真实 LLM 冒烟 PASS 后刷新）
 
 tests:
-  total_passed: 2502          # 全量 pytest tests/（2026-09-29 审查轮：探针修复 + 3 个新增回归用例落地后）
+  total_passed: 2538          # 全量 pytest tests/（2026-09-29 全面回归实测：全绿 0 失败）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
   suite_seconds: 33          # 全量耗时量级（~33s）
 
 coverage:
-  line_total_pct: 87         # --cov=src 总行覆盖（0.8673，2026-09-29 审查轮后重测）
+  line_total_pct: 87         # --cov=src 总行覆盖（0.8665，2026-09-29 全面回归后重测）
   line_core_modules:
     base_agent: 84
     api_manager: 94

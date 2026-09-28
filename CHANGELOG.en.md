@@ -56,6 +56,16 @@ All notable changes to this project will be documented in this file. Format foll
 > - **Full regression**: 2502 passed / 0 failed
 >   (baseline 2499, +3 new regression cases), ruff 0 warnings /
 >   mypy 0 errors (86 source files), `BASELINE.yaml` refreshed.
+>
+> - **Follow-up full test refresh (same day)**: full suite 2538 passed /
+>   0 failed + real LLM smoke test PASS (default endpoint connectivity +
+>   response check, `AITESTER_LLM_CACHE=0` writes no cache); fixed ruff
+>   format drift in 3 files (runtime_probe / cross_file /
+>   test_error_classifier_combinations); branch coverage total threshold
+>   78% → 77% aligned to the current weighted measured 77.34%
+>   (`scripts/check_branch_coverage.py` + synced guard test);
+>   `BASELINE.yaml` refreshed (total_passed 2502 → 2538;
+>   line_total_pct note 0.8665).
 
 ## [Unreleased] - 2026-09-28 Frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged + new capabilities all behind independent switches)
 

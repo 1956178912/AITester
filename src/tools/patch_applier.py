@@ -433,6 +433,10 @@ def safe_apply_patch(
 
     该函数在应用补丁后会验证生成的代码语法是否正确。
     如果语法错误，自动回滚到原始代码。
+    S2 安全（2026-09-29）：另做危险 API 守卫差集检查——补丁新引入
+    os.system / subprocess / eval / 网络外连 / 凭证读取时拒绝应用
+    （与语法失败 / 命名契约破坏同口径，回滚原代码；开关
+    PATCH_DANGEROUS_API_GUARD，默认 true）。
 
     Args:
         code: 原始代码
@@ -449,10 +453,163 @@ def safe_apply_patch(
     # 验证生成的代码语法是否正确
     try:
         ast.parse(new_code)
-        return new_code, True
     except SyntaxError:
         # 语法错误，回滚到原始代码
         return code, False
+
+    # S2 安全（2026-09-29）：危险 API 守卫差集检查——补丁新引入
+    # os.system / subprocess / eval / exec / 网络外连 / 凭证读取时
+    # 拒绝应用（与语法失败同口径回滚原代码，不引入半应用状态）。
+    # 开关 PATCH_DANGEROUS_API_GUARD 默认 true；原代码已有的危险调用
+    # 不在差集内，不拦截（避免误伤既有依赖 subprocess 的代码修复）。
+    if _dangerous_api_guard_enabled():
+        added = dangerous_api_added(code, new_code)
+        if added:
+            logger.warning(
+                "S2 危险 API 守卫：补丁新引入危险操作 %s，拒绝应用并回滚",
+                added,
+            )
+            return code, False
+    return new_code, True
+
+
+# ─── S2 安全：补丁危险 API 守卫（AST 级，默认启用）────────────────────────────
+# 背景（2026-09-29 安全审查 S2）：LLM 生成补丁可能夹带危险操作（os.system /
+# subprocess / eval / exec / 网络外连 requests.post / 凭证文件读取 open('.env')
+# 等）。历史防御仅靠 injection_guard.check_llm_patch_safety（正则、默认关、
+# 且全仓无接线——孤儿函数）+ 默认关的 deterministic_guard。现补 AST 级
+# 静态守卫作为 safe_apply_patch 的默认前置闸门（与 PATCH_CONTRACT_CHECK
+# 命名契约检查同模式：默认启用、环境变量可关、纯 AST 零 LLM 成本）：
+# - 检查应用后的**完整代码**（而非补丁文本）中是否新增危险调用；
+# - 与"原始代码已有的危险调用"做差集——只拦截**补丁新引入**的
+#   （原代码本就含 subprocess 的修复不拦截，避免误伤；与命名契约
+#   "只拦删除、放行新增"对偶，本守卫"只拦新增危险、放行既有"）；
+# - 命中时拒绝应用（safe_apply_patch 返回原代码 + False + 拒绝原因），
+#   与语法失败 / 契约破坏同口径（保守不引入半应用状态）。
+# 危险调用特征（模块限定名 AST 口径，与 deterministic_guard 的
+# _EXTERNAL_MODULE_CALLS 同集合 + shell/eval/凭证读取扩展）：
+#   shell:    os.system / os.popen / subprocess.run|call|Popen|check_output
+#   eval:     eval / exec（任意代码求值）
+#   network:  requests.post|put|delete / urllib.request.urlopen|Request /
+#             httpx.post|put / socket.socket
+#   cred:     open('.env' / '/etc/passwd' / 'credentials*')（凭证读取）
+# 开关：PATCH_DANGEROUS_API_GUARD 环境变量（默认 true；设 false 时守卫
+# 恒放行——历史对照 / 合成集无危险 API 场景，与 PATCH_CONTRACT_CHECK 同模式）。
+_DANGEROUS_CALL_TARGETS: frozenset[str] = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.Popen",
+        "subprocess.check_output",
+        "eval",
+        "exec",
+        "requests.post",
+        "requests.put",
+        "requests.delete",
+        "urllib.request.urlopen",
+        "urllib.request.Request",
+        "httpx.post",
+        "httpx.put",
+        "socket.socket",
+    }
+)
+# 凭证文件读取特征（open 调用第一实参字符串字面量命中即拦截）
+_DANGEROUS_OPEN_PATHS: frozenset[str] = frozenset(
+    {
+        ".env",
+        ".env.local",
+        "/etc/passwd",
+        "credentials.txt",
+        "credentials.json",
+        "credentials.yml",
+        "~/.ssh/id_rsa",
+    }
+)
+
+
+def _qualify_call_node(func_node: ast.AST) -> str | None:
+    """把调用节点的 func 展开为模块限定名（与 deterministic_guard
+    ._qualified_attr 同口径：Attribute 链展开 + 已知模块别名 np→numpy）。
+
+    返回形如 "subprocess.run" / "eval"（裸 Name）；无法展开（复杂表达式）
+    返回 None（不拦截——保守：只有明确的危险调用才拒绝，避免误伤）。
+    """
+    parts: list[str] = []
+    cur: ast.AST = func_node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        alias = cur.id
+        if alias == "np":
+            alias = "numpy"
+        parts.append(alias)
+        return ".".join(reversed(parts))
+    return None
+
+
+def _collect_dangerous_calls(code: str) -> set[str]:
+    """收集代码中命中的危险调用特征集合（AST 级，纯标准库）。
+
+    收集两类：
+    - 模块限定调用（_DANGEROUS_CALL_TARGETS 命中）→ 记限定名；
+    - 凭证文件 open 读取（open 第一实参字符串字面量命中 _DANGEROUS_OPEN_PATHS）
+      → 记 "open('<path>')"。
+    语法不合法时返回空集（不拦截——语法失败由 safe_apply_patch 的
+    ast.parse 校验先行拦截，本守卫只做危险调用差集，职责单一）。
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return set()
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        qual = _qualify_call_node(node.func)
+        if qual and qual in _DANGEROUS_CALL_TARGETS:
+            found.add(qual)
+        # 凭证文件读取：open(<str literal>) 命中特征路径
+        if qual == "open" and node.args:
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                # 归一：展开 ~ 前缀（保守精确匹配，不做通配）
+                val = first.value
+                if val in _DANGEROUS_OPEN_PATHS or val.replace("~/", ".") in _DANGEROUS_OPEN_PATHS:
+                    found.add(f"open({val!r})")
+    return found
+
+
+def dangerous_api_added(original_code: str, patched_code: str) -> list[str]:
+    """S2 安全守卫：返回补丁**新引入**的危险 API 特征列表（差集口径）。
+
+    新增 = patched_code 命中特征 - original_code 命中特征。
+    原代码已有的危险调用不拦截（与命名契约"放行既有"对偶口径）；
+    空 / 解析失败返回 []（保守放行，由 safe_apply_patch 语法校验兜底）。
+
+    Args:
+        original_code: 补丁应用前原始代码。
+        patched_code: 应用后的完整代码。
+
+    Returns:
+        新增危险特征列表（空 = 无新增危险 API，放行）。
+    """
+    if not original_code or not patched_code:
+        return []
+    before = _collect_dangerous_calls(original_code)
+    after = _collect_dangerous_calls(patched_code)
+    return sorted(after - before)
+
+
+def _dangerous_api_guard_enabled() -> bool:
+    """S2 安全守卫开关（PATCH_DANGEROUS_API_GUARD，默认 true）。
+
+    与 PATCH_CONTRACT_CHECK 同模式（默认启用、可环境变量关闭）；
+    设 false 时恒放行（历史对照场景）。
+    """
+    return os.getenv("PATCH_DANGEROUS_API_GUARD", "true").lower() == "true"
 
 
 # ─── P0 1.3 契约验证：命名契约检查 ─────────────────────────────────────────

@@ -228,6 +228,14 @@ def _collect_reverse_deps(
         无反向依赖时返回空列表。
     """
     reverse: list[CrossFileDependency] = []
+    # 2026 性能优化：entry_module 源码在内层循环被反复 splitlines() + 逐行
+    # 扫（_find_symbol_def_line），按 module 缓存行列表避免 O(modules ×
+    # symbols × lines) 重复切分（外层每个模块的 ast.parse 仍保留——每个模块
+    # 只 parse 一次）。
+    #
+    # 行缓存预置：entry_module 自身先缓存一次，后续符号查找与上下文切片
+    # 直接复用，整个循环内 entry 源码只切分一次。
+    _lines_cache: dict[str, list[str]] = {entry_module: source_files.get(entry_module, "").splitlines()}
     for module_name, code in source_files.items():
         if module_name == entry_module:
             continue
@@ -247,10 +255,12 @@ def _collect_reverse_deps(
                     if alias.name == "*":
                         continue
                     # 找到 entry_module 源码中该符号的定义行（保守：行号 0 占位）
-                    call_line = _find_symbol_def_line(entry_module, source_files, alias.name)
+                    call_line = _find_symbol_def_line(entry_module, source_files, alias.name, _lines_cache)
                     context = ""
                     if call_line > 0:
-                        entry_lines = source_files.get(entry_module, "").splitlines()
+                        # entry 源码行列表经 _lines_cache 预置（调用 _find_symbol_def_line
+                        # 时已缓存），此处直接复用避免重复切分
+                        entry_lines = _lines_cache[entry_module]
                         lo = max(0, call_line - 2)
                         hi = min(len(entry_lines), call_line + 1)
                         context = "\n".join(entry_lines[lo:hi])
@@ -280,20 +290,36 @@ def _collect_reverse_deps(
     return reverse
 
 
-def _find_symbol_def_line(module_name: str, source_files: dict[str, str], symbol: str) -> int:
+def _find_symbol_def_line(
+    module_name: str, source_files: dict[str, str], symbol: str, _lines_cache: dict[str, list[str]] | None = None
+) -> int:
     """在模块源码中查找符号定义行（1-based，未找到返回 0）。
 
     保守口径：匹配 `def symbol(` / `class symbol:` / `symbol =` 三类定义形式。
+
+    2026 性能优化：`_lines_cache` 参数供调用方（_collect_reverse_deps 双层循环）
+    传入按 module 缓存的 splitlines() 结果，避免内层循环反复全量切分同一模块
+    源码；正则按 symbol 现场编译（数量少且 re 内部 LRU 命中，开销可忽略，
+    与 patch_applier._find_function_start_line_in_lines 同口径）。
     """
     code = source_files.get(module_name, "")
     if not code:
         return 0
+    # 行缓存：调用方传入 _lines_cache 时按 module 复用 splitlines() 结果，
+    # 否则现场切分（单次调用口径，行为不变）
+    if _lines_cache is not None:
+        lines = _lines_cache.get(module_name)
+        if lines is None:
+            lines = code.splitlines()
+            _lines_cache[module_name] = lines
+    else:
+        lines = code.splitlines()
     patterns = [
         re.compile(rf"^\s*def\s+{re.escape(symbol)}\s*\("),
         re.compile(rf"^\s*class\s+{re.escape(symbol)}\s*[:(:]"),
         re.compile(rf"^\s*{re.escape(symbol)}\s*="),
     ]
-    for i, line in enumerate(code.splitlines(), start=1):
+    for i, line in enumerate(lines, start=1):
         for p in patterns:
             if p.search(line):
                 return i
@@ -498,7 +524,10 @@ def apply_multi_file_patch(
            （确定性、不依赖 LLM 输出顺序）。
 
     策略：
-        - 每个文件调用 patch_applier.apply_patch_to_code（单文件逻辑不变）；
+        - 每个文件调用 patch_applier.safe_apply_patch（含 AST 语法校验 +
+          S2 危险 API 守卫差集检查，2026-09-29 安全审查 M-2 修复——
+          历史实现裸调 apply_patch_to_code 绕过默认闸门，非入口模块的
+          LLM 补丁可夹带危险调用/破坏命名契约而逃逸）；
         - 任一文件应用失败则整体回滚（与单文件 safe_apply_patch 同口径）。
 
     Args:
@@ -524,9 +553,12 @@ def apply_multi_file_patch(
             # 模块不在 original_files 中（LLM 生成了不存在的模块补丁），跳过
             logger.warning("跨文件补丁：模块 %s 不在 original_files，跳过", module_name)
             continue
-        from src.tools.patch_applier import apply_patch_to_code
+        # M-2 安全修复（2026-09-29）：走 safe_apply_patch（含语法校验 +
+        # 危险 API 差集守卫，默认开）而非裸 apply_patch_to_code，
+        # 使每个模块的 LLM 补丁都过默认闸门（与单文件路径同口径）。
+        from src.tools.patch_applier import safe_apply_patch
 
-        new_code, success = apply_patch_to_code(original, patch)
+        new_code, success = safe_apply_patch(original, patch)
         if not success:
             logger.warning("跨文件补丁：模块 %s 应用失败，整体回滚", module_name)
             return dict(original_files), False

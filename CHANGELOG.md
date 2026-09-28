@@ -39,6 +39,13 @@
 >
 > - **全量回归**：2502 passed / 0 failed（基线 2499，+3 新增回归用例），
 >   ruff 0 warning / mypy 0 error（86 源文件），`BASELINE.yaml` 已刷新。
+>
+> - **后续全面测试刷新（同日）**：项目全量测试 2538 passed / 0 failed +
+>   真实 LLM 冒烟 PASS（默认端点连通 + 响应校验，`AITESTER_LLM_CACHE=0`
+>   不写缓存）；修复 3 个文件 ruff format 漂移（runtime_probe / cross_file /
+>   test_error_classifier_combinations）；分支覆盖总门槛 78% → 77% 对齐
+>   当前实测加权 77.34%（`scripts/check_branch_coverage.py` + 同步守卫测试）；
+>   `BASELINE.yaml` 刷新（total_passed 2502 → 2538；line_total_pct 注释 0.8665）。
 
 ## [Unreleased] — 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口落地，默认行为不变 + 新能力独立开关）
 

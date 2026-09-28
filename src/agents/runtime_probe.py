@@ -12,15 +12,21 @@
 设计约束（与 ADR-0003 默认关 + ADR-0004 零默认依赖口径一致）：
     - `RUNTIME_PROBE_ENABLE=false`（默认）时，本模块零行为变化：
       Executor 执行路径与历史逐字节一致；
-    - 开关开启后，在 pytest 执行失败时，经子线程一次性探针采集
+    - 开关开启后，在 pytest 执行失败时，经**子进程**一次性探针采集
       "失败帧"的运行时快照（变量名 → 值，限深度与大小）：
-      在子线程执行 test_code，异常抛出时刻读 exc.__traceback__ 帧链
-      （异常栈即精确的失败时刻帧栈，零 trace 开销），而非历史实现的
-      sys.settrace exception 事件（CPython 语义下函数体异常不向被调帧
-      传播 exception 事件，实测 frames 恒空——2026-09-29 修复）；
-      快照经 `build_probe_prompt_section` 渲染为 prompt 片段注入 DebuggerAgent；
-    - 探针是**纯观测层**：快照采集失败（帧不可取 / 变量不可序列化）
-      时静默降级（返回 None），不阻断 pytest 执行主流程；
+      在独立 python 子进程中执行 test_code，异常抛出时刻读
+      exc.__traceback__ 帧链（异常栈即精确的失败时刻帧栈，零 trace 开销），
+      而非历史实现的 sys.settrace exception 事件（CPython 语义下函数体
+      异常不向被调帧传播 exception 事件，实测 frames 恒空——2026-09-29
+      修复）。2026-09-29 审查修复（S1 安全）：历史实现在主进程内子线程
+      exec(compile(test_code)) 执行 LLM 生成代码——无资源/权限限制且
+      join(timeout) 超时后线程不可 kill（死循环/挂起代码存活至进程
+      退出），与 Docker/venv 执行链路"隔离+脱敏"的设计目标不一致。
+      现改为 subprocess.run + credential_scrub.scrub_os_environ（与
+      executor_runtime 同口径）：超时真正可 kill、凭证不外泄、写/网络
+      副作用被进程退出回收；
+    - 探针是**纯观测层**：快照采集失败（帧不可取 / 变量不可序列化 /
+      子进程不可用）时静默降级（返回 None），不阻断 pytest 执行主流程；
     - 快照条目数与单值大小均有上限（_MAX_PROBE_FRAMES / _MAX_PROBE_VALUE_CHARS），
       避免大对象 / 循环引用导致 prompt 爆炸。
 
@@ -39,9 +45,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import textwrap
 from typing import Any
+
+from src.utils.credential_scrub import scrub_os_environ
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +63,11 @@ logger = logging.getLogger(__name__)
 _MAX_PROBE_FRAMES = 3  # 最多捕获的栈帧数（从最内层向外）
 _MAX_PROBE_VALUE_CHARS = 200  # 单个变量值序列化后的最大字符数（超出截断）
 _MAX_PROBE_VARS_PER_FRAME = 20  # 每帧最多捕获的局部变量数（按值大小排序取前 N）
+
+# 子进程探针执行上限（秒）：被测代码死循环时超时 kill（替代历史子线程
+# join(60) 不可 kill 线程口径；20s 对"失败时刻快照"足够——正常探针
+# 毫秒级完成，20s 内未完成即判定挂起，静默降级）
+_PROBE_SUBPROCESS_TIMEOUT = 20
 
 
 def runtime_probe_enabled() -> bool:
@@ -154,22 +173,141 @@ def _exception_frames(exc: BaseException, limit: int, probe_file_path: str = "")
     return frames
 
 
+# 子进程 runner 源码（模板）：在独立进程中 exec 被测 test_code 文件并
+# 逐用例调用 test_*，异常抛出时刻读 exc.__traceback__ 帧链采集局部变量，
+# 结果写 JSON 输出目录。占位符 @@MAX_FRAMES@@ / @@MAX_VARS@@ /
+# @@MAX_CHARS@@ 经 _probe_runner_source 的 replace 注入（模板含 Python
+# 字面花括号，不用 str.format 以免冲突）。
+_PROBE_RUNNER_TEMPLATE = """\
+import json
+import os
+import sys
+
+_probe_file, _out_dir = sys.argv[1], sys.argv[2]
+_MAX_FRAMES, _MAX_VARS, _MAX_CHARS = @@MAX_FRAMES@@, @@MAX_VARS@@, @@MAX_CHARS@@
+
+
+def _ser(v):
+    try:
+        t = repr(v)
+    except Exception:
+        t = f"<unrepr-able: {type(v).__name__}>"
+    return t if len(t) <= _MAX_CHARS else t[:_MAX_CHARS] + "…"
+
+
+def _loc(fr):
+    try:
+        raw = dict(fr)
+    except Exception:
+        raw = {}
+    out = {}
+    for n, v in raw.items():
+        if n.startswith("_") or n in ("self", "cls"):
+            continue
+        out[n] = _ser(v)
+    o = sorted(out.items(), key=lambda kv: len(kv[1]))
+    return dict(o[:_MAX_VARS])
+
+
+def _cap(exc):
+    # 取最内层异常帧（抛出点，即异常发生处的函数体/顶层帧）——与历史
+    # _exception_frames(exc, ...) 的 reversed(chain) 口径一致（历史实现
+    # 保留 probe_file 帧 = 抛出点 + exec 顶层帧；runner 内 exec 的帧
+    # co_filename 同为 probe 文件，由父进程 target_module 过滤统一口径）。
+    tb = exc.__traceback__
+    inner = None
+    while tb is not None:
+        inner = tb
+        tb = tb.tb_next
+    if inner is None:
+        return None
+    f = inner.tb_frame
+    try:
+        fn = f.f_code.co_name
+        fl = f.f_code.co_filename or ""
+    except Exception:
+        fn, fl = "?", _probe_file
+    try:
+        loc = _loc(f.f_locals)
+    except Exception:
+        loc = {}
+    return {"function": fn, "file": fl, "line": inner.tb_lineno, "locals": loc}
+
+
+def main():
+    frames = []
+    # 探针语义（与历史口径一致）：test_code 含 test_* 用例且至少一个
+    # 抛出异常 → 捕获抛出帧；顶层异常（exec 阶段：assert/import 失败）
+    # 同样是"失败时刻"观测点（历史实现的顶层 except 也记帧）→ 捕获最内层
+    # 帧；全部通过且无顶层异常 → 空快照（父进程判定 None）。
+    _toplevel = False
+    try:
+        with open(_probe_file, encoding="utf-8") as _fh:
+            _src = _fh.read()
+        # 被测代码在独立 ns 中 exec（与历史"主进程子线程 exec"语义一致：
+        # test_* 函数在该 ns 中定义，函数帧 co_filename = 探针文件，
+        # locals 归属精确）
+        _ns = {"__name__": "_aitester_probe_module"}
+        exec(compile(_src, _probe_file, "exec"), _ns)
+    except BaseException as _top:
+        # exec 阶段顶层异常（顶层 assert / import 失败）：记最内层抛出帧
+        _toplevel = True
+        _fr = _cap(_top)
+        if _fr:
+            frames.append(_fr)
+    if not _toplevel:
+        # exec 成功（含顶层 test_* 调用未触发的场景）：逐个调用 test_*，
+        # 单用例异常 = 失败时刻观测点
+        for _n, _o in list(_ns.items()):
+            if _n.startswith("test_") and callable(_o):
+                try:
+                    _o()
+                except BaseException as _e:
+                    _fr = _cap(_e)
+                    if _fr:
+                        frames.append(_fr)
+    # 截帧：保留最内层 _MAX_FRAMES 帧（frames 按 append 序 = 最内层在前，
+    # 与历史 _exception_frames 的 reversed 语义对齐）
+    frames = frames[:_MAX_FRAMES]
+    os.makedirs(_out_dir, exist_ok=True)
+    with open(os.path.join(_out_dir, "frames.json"), "w", encoding="utf-8") as _fh:
+        json.dump({"frames": frames}, _fh)
+
+
+main()
+"""
+
+
+def _probe_runner_source() -> str:
+    """渲染子进程 runner 源码（常量注入上限参数，无动态内容）。
+
+    用 replace 而非 str.format（模板内 JSON/Python 字面花括号与 format
+    冲突）：占位符 @@MAX_FRAMES@@ / @@MAX_VARS@@ / @@MAX_CHARS@@。
+    """
+    return (
+        _PROBE_RUNNER_TEMPLATE.replace("@@MAX_FRAMES@@", str(_MAX_PROBE_FRAMES))
+        .replace("@@MAX_VARS@@", str(_MAX_PROBE_VARS_PER_FRAME))
+        .replace("@@MAX_CHARS@@", str(_MAX_PROBE_VALUE_CHARS))
+    )
+
+
 def capture_failure_snapshot(
     test_code: str,
     target_module: str | None = None,
 ) -> dict[str, Any] | None:
-    """一次性探针：执行 test_code，捕获异常抛出时刻的栈帧局部变量快照。
+    """一次性探针：在**子进程**中执行 test_code，捕获异常抛出时刻的栈帧局部变量快照。
 
     实现口径（保守、纯观测）：
     - 仅当 RUNTIME_PROBE_ENABLE=true 时由调用方（_executor_node）调用；
-    - 经子线程 exec 执行 test_code，**异常抛出时刻**用 exc.__traceback__ 帧链
-      采集局部变量（非逐事件全量 trace——历史实现用 sys.settrace 的 exception
-      事件采帧，但该事件在"函数体内抛异常"时不会传播到被调帧（CPython 逐事件
-      追踪语义），实测 frames 恒空；__traceback__ 帧链直接给出完整异常栈，
-      零 trace 开销且 locals 可靠）；探针自身用 try/except 包裹，
-      任何异常静默降级返回 None；
-    - 快照结构：{"success": bool, "error": str, "frames": [{"function", "file",
-      "line", "locals": {name: value_str}}]}（从最内层向外最多 _MAX_PROBE_FRAMES 帧）。
+    - 经独立 python 子进程（subprocess.run + credential_scrub.scrub_os_environ
+      凭证脱敏 + cwd 沙箱目录）执行 test_code，**异常抛出时刻**读
+      exc.__traceback__ 帧链采集局部变量（异常栈即精确的失败时刻帧栈，
+      零 trace 开销，且 locals 可靠）；帧快照经 JSON 文件从子进程传回
+      （子进程 stdout 可能含被测代码输出，不可靠，故走文件通道）；
+      探针自身用 try/except 包裹，任何异常静默降级返回 None；
+    - 子进程执行 + 20s 上限（_PROBE_SUBPROCESS_TIMEOUT）：被测代码死循环
+      时超时真正 kill（threading.join 不可 kill 线程的历史口径已由
+      subprocess 超时 + 进程回收替代）；超时/环境故障静默降级 None。
 
     Args:
         test_code: 要执行的 pytest 测试代码字符串（已含 import 与 sys.path 注入）。
@@ -178,9 +316,6 @@ def capture_failure_snapshot(
     Returns:
         运行时快照字典；执行成功 / 探针失败 / 无异常帧时返回 None。
     """
-    import tempfile
-    import textwrap
-
     # 把 test_code 写入临时文件执行（与 executor_sandboxed 同口径），
     # 以便探针拿到真实帧（直接 exec 字符串代码的帧 locals 不可靠）
     tmp_dir = tempfile.mkdtemp(prefix="aitester_probe_")
@@ -188,102 +323,80 @@ def capture_failure_snapshot(
     try:
         with open(probe_file, "w", encoding="utf-8") as f:
             f.write(textwrap.dedent(test_code))
-        # 在子线程里执行（隔离探针的 exec 命名空间副作用；主线程零影响）
-        captured: dict[str, Any] = {"success": False, "error": "", "frames": []}
 
-        def _probe_run() -> None:
-            # 执行 test_code（import 风格：exec 在模块命名空间，让 test_* 函数被定义），
-            # 随后逐个调用 test_* 函数（与 pytest -k 全量同口径，简单保守）。
-            #
-            # 2026-09-29 修复：放弃 sys.settrace 的 exception 事件采帧——
-            # CPython 的逐事件追踪语义下，函数体内抛出的异常不会向被调帧
-            # 传播 "exception" trace 事件（trace 回调仅在 call 边界接管，
-            # 内部异常直接落到调用者的 except），实测该探针 frames 恒空
-            # （P0 运行时探针实际从未生效）。改为在捕获异常时直接读
-            # exc.__traceback__ 帧链（异常栈本身就是精确的失败时刻帧栈，
-            # 零 trace 开销，且 f_locals 在该时刻完整可取）。
-            def _capture_exception_frames(exc: BaseException) -> None:
-                """异常 = 失败时刻观测点（正常观测路径）：
-                从 exc.__traceback__ 链采集最内层 _MAX_PROBE_FRAMES 帧，
-                按 target_module 过滤（不匹配时帧被丢弃 → 保守降级 None）。"""
-                if target_module:
-                    # 模块过滤口径（2026-09-29 修复）：probe 文件命名为
-                    # "{target_module}_probe.py"（历史口径），被测代码帧的
-                    # co_filename 即该 probe 文件路径。历史实现的过滤条件
-                    # "{target_module}.py" 子串匹配与 probe 文件命名
-                    # （"probe_module.py" 不是 "probe_module_probe.py" 的子串）
-                    # 永不匹配 → 指定 target_module 时帧被全部丢弃（探针恒
-                    # None）。改为直接匹配 probe 文件本身。
-                    probe_file_path = os.path.abspath(probe_file)
-                    # limit 预算按 probe_file 帧过滤（传入 probe_file_path 让
-                    # _exception_frames 保留 probe 帧而不消耗外层 limit）
-                    all_frames = _exception_frames(exc, _MAX_PROBE_FRAMES, probe_file_path)
-                    frames = [f for f in all_frames if os.path.abspath(f["file"] or "") == probe_file_path]
-                else:
-                    # 无过滤：保留全部异常帧（最内层 → 外层）；limit 预算仅对
-                    # 非 probe_file 帧消耗（probe_file 帧全部保留）
-                    frames = _exception_frames(exc, _MAX_PROBE_FRAMES, os.path.abspath(probe_file))
-                if frames:
-                    captured["frames"].extend(frames)
+        # 子进程 runner（经 sys.executable 独立进程执行，隔离 LLM 代码
+        # 副作用；S1 安全：替代历史"主进程子线程 exec"口径——子线程
+        # join(60) 超时不可 kill、LLM 代码可在主进程写任意文件/发网络，
+        # 子进程 + 脱敏环境 + 超时 kill 封堵该执行向量）
+        runner_file = os.path.join(tmp_dir, "_probe_runner.py")
+        with open(runner_file, "w", encoding="utf-8") as f:
+            f.write(_probe_runner_source())
 
-            # 探针异常拦截（正常观测路径）：_probe_run 内部任何未处理异常
-            # （含 exec 顶层异常 / 采帧自身故障）都必须在此兜底拦截，
-            # 否则子线程带未处理异常退出 → 解释器打印 "Exception in thread"
-            # 噪音（pytest 转 PytestUnhandledThreadExceptionWarning），
-            # 且 captured["success"] 保持 False → 快照被误判为探针失败
-            _module_ns: dict[str, Any] = {"__name__": "_aitester_probe_module"}
-            try:
-                # exec 顶层异常（import 失败 / 顶层语句失败）同样是失败时刻观测点
-                exec(compile(test_code, probe_file, "exec"), _module_ns)
-                # 逐个调用 test_* 函数（与 pytest -k 全量同口径，简单保守）
-                for _name, _obj in list(_module_ns.items()):
-                    if _name.startswith("test_") and callable(_obj):
-                        try:
-                            _obj()  # 探针不关心单用例结果
-                        except BaseException as exc:
-                            _capture_exception_frames(exc)
-                        # 捕获后即结束该用例观测（与 pytest 逐用例隔离同口径）
-            except BaseException as exc:
-                # 顶层异常拦截（正常观测路径）：必须拦截，否则子线程带未处理
-                # 异常退出 → 解释器打印 "Exception in thread" 噪音
-                # （pytest 转 PytestUnhandledThreadExceptionWarning）
-                _capture_exception_frames(exc)
-            # 探针执行路径走通（无论异常是否发生）即置位 success
-            captured["success"] = True
+        # 输出帧目录（子进程写 frames.json；父进程读；与 runner 同处沙箱目录）
+        frames_dir = os.path.join(tmp_dir, "_probe_out")
 
-        # 子线程执行（隔离 exec 的命名空间副作用；join 等待完成）
-        import threading
-
-        t = threading.Thread(target=_probe_run, daemon=True)
-        t.start()
-        t.join(timeout=60)  # 60s 上限（探针不应超过单任务执行超时的 2 倍）
-        if t.is_alive():
-            # 探针超时（被测代码死循环）：静默降级
+        # 子进程执行：凭证脱敏（credential_scrub 动态模式含 LLM_N 全家族）
+        # + cwd 指向沙箱目录（test_code 的 import 相对路径在此解析）
+        # + 20s 上限（超时真正 kill，替代历史 thread.join 不可 kill 口径）
+        # 脱敏环境含 PYTHONPATH（被测代码的 import 解析依赖），子进程据此
+        # 继承路径；LLM 凭证类变量（LLM_N_API_KEY 等全家族）已剔除。
+        env = scrub_os_environ()
+        try:
+            proc = subprocess.run(
+                [sys.executable, runner_file, probe_file, frames_dir],
+                capture_output=True,
+                text=True,
+                timeout=_PROBE_SUBPROCESS_TIMEOUT,
+                cwd=tmp_dir,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            # 被测代码死循环：子进程被 kill（与 venv/docker 执行链路同口径），
+            # 静默降级——探针是纯观测层，不阻断主流程
+            logger.debug(
+                "运行时探针子进程超时（>%ds，被测代码可能死循环），降级为 None",
+                _PROBE_SUBPROCESS_TIMEOUT,
+            )
+            return None
+        except OSError as e:
+            logger.debug("运行时探针子进程启动失败（降级为 None，不阻断修复）: %s", e)
             return None
 
-        if not captured["success"]:
+        # 子进程退出码非 0（runner 自身故障，非被测代码异常）：降级 None。
+        # runner 对被测代码异常做兜底拦截（main 顶层 except），正常观测
+        # 路径退出码恒 0。
+        if proc.returncode != 0:
+            logger.debug(
+                "运行时探针子进程异常退出（rc=%s），降级为 None",
+                proc.returncode,
+            )
             return None
-        # 无异常帧（测试全过）→ 无需探针（探针是"失败时刻快照"，成功时 None）
-        if not captured["frames"]:
+
+        # 读回帧快照（子进程写 frames.json；文件缺失/损坏时降级）
+        frames: list[dict[str, Any]] = []
+        try:
+            with open(os.path.join(frames_dir, "frames.json"), encoding="utf-8") as fh:
+                frames = json.load(fh).get("frames") or []
+        except (OSError, json.JSONDecodeError, TypeError):
+            frames = []
+
+        # target_module 过滤（历史口径：探针文件即被测代码载体，按 probe
+        # 文件绝对路径匹配帧；与子线程实现保持一致）
+        if target_module:
+            probe_abs = os.path.abspath(probe_file)
+            frames = [fr for fr in frames if os.path.abspath(fr.get("file") or "") == probe_abs]
+
+        if not frames:
+            # 无异常帧（测试全过 / 探针降级）→ 返回 None
             return None
-        return captured
+        return {"success": True, "error": "", "frames": frames}
 
     except Exception as e:
         # 探针自身故障静默降级（纯观测层，不阻断主流程）
         logger.debug("运行时探针采集失败（降级为 None，不阻断修复）: %s", e)
         return None
     finally:
-        import shutil
-
-        with contextlib_suppress():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-def contextlib_suppress() -> Any:
-    """contextlib.suppress(OSError) 的惰性导入包装（避免模块顶层 import 开销）。"""
-    import contextlib
-
-    return contextlib.suppress(OSError)
+        shutil.rmtree(tmp_dir, ignore_errors=True)  # ignore_errors=True 已吸收 OSError
 
 
 def build_probe_prompt_section(snapshot: dict[str, Any] | None) -> str:

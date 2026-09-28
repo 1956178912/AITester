@@ -18,6 +18,7 @@ from src.agents.injection_guard import (
     check_llm_patch_safety,
     detect_prompt_injection,
     injection_guard_enabled,
+    injection_guard_output_enabled,
 )
 
 
@@ -82,9 +83,27 @@ class TestOutputSidePatchSafety:
         assert "network_exfiltration" in findings
 
     def test_disabled_guard_passes_everything(self, monkeypatch):
-        monkeypatch.delenv("INJECTION_GUARD_ENABLE", raising=False)
+        # S2 修复（2026-09-29 审查）：输出侧独立开关 INJECTION_GUARD_OUTPUT_ENABLE
+        # 默认 true（历史实现与输入侧共用默认关开关，输出侧检查无接线）。
+        # 测试"关"的口径：显式设输出侧开关为 false 时 guard 全放行（历史行为）。
+        monkeypatch.setenv("INJECTION_GUARD_OUTPUT_ENABLE", "false")
         patch_text = "os.system('whatever')\n"
         assert check_llm_patch_safety(patch_text) == []
+
+    def test_output_side_default_enabled(self, monkeypatch):
+        # S2 修复：输出侧默认开——危险补丁在默认配置下即被识别
+        monkeypatch.delenv("INJECTION_GUARD_OUTPUT_ENABLE", raising=False)
+        patch_text = "import os\nos.system('ls')\n"
+        assert "dangerous_shell" in check_llm_patch_safety(patch_text)
+        assert injection_guard_output_enabled() is True
+
+    def test_output_side_flag_reflected(self, monkeypatch):
+        monkeypatch.setenv("INJECTION_GUARD_OUTPUT_ENABLE", "true")
+        assert injection_guard_output_enabled() is True
+        monkeypatch.setenv("INJECTION_GUARD_OUTPUT_ENABLE", "false")
+        assert injection_guard_output_enabled() is False
+        monkeypatch.delenv("INJECTION_GUARD_OUTPUT_ENABLE", raising=False)
+        assert injection_guard_output_enabled() is True  # 默认 true
 
     def test_legit_test_code_no_false_positive(self, monkeypatch):
         monkeypatch.setenv("INJECTION_GUARD_ENABLE", "true")

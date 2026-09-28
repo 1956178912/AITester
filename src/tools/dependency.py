@@ -48,7 +48,8 @@ _RE_IMPORT_CLAUSE = re.compile(r"^import\s+(.+)$")
 # 此前 create_venv 的"磁盘缓存判断 + 创建"序列无锁，--parallel 下多个任务
 # 命中同一缓存目录时可能同时判定缓存缺失、并发 `python -m venv` 写同一目录
 # （cp 文件互相踩 / 解释器半成品时命中检查误判）。与 venv 缓存统计同层加锁，
-# 用 WeakValueDictionary 避免锁对象随进程累积。
+# 锁键 = 归一化后的 venv 目录路径（数量 = venv 目录数，单任务/长程 benchmark
+# 下增长有限，进程存活期内持有属可接受口径，非无界泄漏）。
 _venv_dir_locks: dict[str, threading.Lock] = {}
 _venv_dir_locks_guard = threading.Lock()
 

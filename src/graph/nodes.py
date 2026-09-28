@@ -247,6 +247,78 @@ _ALLOWED_WRITE_ROOT_PREFIXES: tuple[tuple[str, str], ...] = tuple(
     (root, root.rstrip(os.sep) + os.sep) for root in _ALLOWED_WRITE_ROOTS
 )
 
+# ─── L-1 安全加固（2026-09-29 审查）：仓库核心路径黑名单 ───────────────────────
+# _ALLOWED_WRITE_ROOTS 的根含整个仓库根目录（target_file 可能指向仓库内任意
+# 文件）。白名单本身健全（realpath + os.sep 前缀 + macOS 符号链接防护），但
+# 边界偏宽：若工作流被诱导把 target_file 指向仓库自身源码（config.py /
+# main.py / init_db.py / .git / src/graph 等核心文件），LLM 内容将落进核心
+# 文件。下列 basename 黑名单在 _safe_write_patch 安全检查 3 之后追加判定，
+# 命中任一即拒绝写入（保守口径：数据集任务 target_file 应指向任务目录，
+# 不会命中仓库核心路径；若命中说明上游误配置或注入，阻断比放行更安全）。
+# 开关：PATCH_PROTECT_REPO_CORE=0 关闭（默认启用，历史行为变更仅限
+# "target_file 指向仓库核心" 这一窄场景，正常任务零影响）。
+_PROTECTED_CORE_BASENAMES: frozenset[str] = frozenset(
+    {
+        "config.py",
+        "main.py",
+        "init_db.py",
+        "setup.py",
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements.lock",
+        "llm_configs.json",
+        ".git",
+    }
+)
+_PROTECTED_CORE_DIRS: frozenset[str] = frozenset({"src", "scripts", ".github", ".git-hooks"})
+
+
+def _repo_core_protection_enabled() -> bool:
+    """仓库核心路径保护开关（PATCH_PROTECT_REPO_CORE，默认 true）。
+
+    与同文件其他开关（_patch_resample_enabled / _context_tier_downgrade_enabled
+    等）同口径：默认值经 .lower() 统一大小写判定，"0" / "false" / "FALSE"
+    等价（历史实现 not in ("0", "false", "False") 大小写敏感，"FALSE" 被
+    误判为启用——保守方向错误的 bug，2026-09-29 审查 R3 修正）。
+    """
+    return os.getenv("PATCH_PROTECT_REPO_CORE", "1").lower() not in ("0", "false")
+
+
+def _is_repo_core_path(path: str, roots: tuple[str, ...] | None = None) -> bool:
+    """判断路径是否命中仓库核心文件/目录（L-1 黑名单，basename + 一级目录口径）。
+
+    判定时基于路径相对仓库根目录（_ALLOWED_WRITE_ROOTS[0]）的相对形态：
+    ① basename 在 _PROTECTED_CORE_BASENAMES（根目录下的 config.py / main.py
+    等核心文件，含 .git 目录本身）；
+    ② 相对根目录的第一个路径分量在 _PROTECTED_CORE_DIRS（src/ / scripts/
+    / .github/ / .git-hooks/ 一级目录）——LLM 内容不应覆盖仓库自身源码树。
+    临时目录（tempfile.gettempdir()）内的路径不在此黑名单作用域
+    （数据集沙箱 task_dir 与仓库根解耦，保持历史全临时目录可写口径）。
+
+    Args:
+        path: 待判定的文件路径（原始形态，函数内做 realpath 归一）。
+        roots: 允许根目录元组；None 时用 _ALLOWED_WRITE_ROOTS。
+
+    Returns:
+        True 表示命中核心路径（应拒绝写入），False 表示放行。
+    """
+    if not _repo_core_protection_enabled():
+        return False
+    root = (roots or _ALLOWED_WRITE_ROOTS)[0]
+    abs_path = os.path.realpath(path)
+    # 仅对"位于仓库根内"的路径做黑名单判定；临时目录路径直接放行。
+    # 根目录自身（abs_path == root）无"相对分量"，直接放行（黑名单
+    # 作用对象是根内的文件/一级目录，非根自身）。
+    if abs_path == root:
+        return False
+    if not abs_path.startswith(root.rstrip(os.sep) + os.sep):
+        return False
+    rel = os.path.relpath(abs_path, root)
+    if rel in _PROTECTED_CORE_BASENAMES:
+        return True
+    first = rel.split(os.sep)[0]
+    return first in _PROTECTED_CORE_DIRS
+
 
 def _planner_node(state: AITesterState) -> dict[str, Any]:
     """
@@ -1387,10 +1459,18 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
                 focused_contexts.setdefault(dep.target_module, focused)
         if focused_contexts:
             update["cross_file_contexts"] = focused_contexts
+            # L4 逻辑修复（2026-09-29 审查）：source_files 一期仅含 entry
+            # 模块（L1349-1351），被依赖模块（dep.target_module）源码未载入
+            # → L1382 对非 entry 模块恒 "" 跳过。日志须如实反映"仅 entry
+            # 模块生效"，避免高估已构建的模块数（二期扩展跨文件源码载入后
+            # 此处可改回全模块口径）。
             logger.info(
-                "P0 1.1 跨文件调用链上下文：构建 %d 个模块的聚焦上下文（depth=%d）",
+                "P0 1.1 跨文件调用链上下文：构建 %d 个模块的聚焦上下文"
+                "（depth=%d，当前仅 entry 模块 %s 生效——被依赖模块源码"
+                "二期扩展后自动纳入）",
                 len(focused_contexts),
                 CODE_FOCUS_DEPTH,
+                state.get("module_name") or os.path.basename(state.get("target_file") or ""),
             )
 
     # 单文件项目降级：依赖边为空时不生成跨文件计划（保持单文件路径）
@@ -1556,7 +1636,9 @@ def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: A
     三道安全检查（任一不过则拒绝写入，返回 False）：
     1. 补丁不能是空字符串或比原代码短得多（防止 LLM 返回空文件）；
     2. 补丁必须含至少一个函数定义（防止 LLM 返回无意义内容）；
-    3. 目标路径必须在项目根目录或系统临时目录内（防路径穿越）。
+    3. 目标路径必须在项目根目录或系统临时目录内（防路径穿越），
+       且不得命中仓库核心保护清单（L-1 安全加固，防覆盖 config.py /
+       main.py / .git / src/ 等仓库自身文件；开关 PATCH_PROTECT_REPO_CORE）。
 
     Args:
         original_code: 应用补丁前的原始代码（用于长度比较安全检查）。
@@ -1585,6 +1667,13 @@ def _safe_write_patch(original_code: str, new_code: str, applied: bool, state: A
     target_file_path = os.path.abspath(state["target_file"])
     if not _is_within_allowed_roots(target_file_path):
         logger.error("非法文件路径，拒绝写入: %s", state["target_file"])
+        return False
+    # 安全检查 4（L-1 安全加固，2026-09-29）：仓库核心路径黑名单——
+    # target_file 命中 config.py / main.py / init_db.py / .git / src/ 等
+    # 仓库核心文件/目录时拒绝写入（防 LLM 内容覆盖仓库自身源码；
+    # 临时目录任务不受影响，开关 PATCH_PROTECT_REPO_CORE 默认开）。
+    if _is_repo_core_path(target_file_path):
+        logger.error("目标路径命中仓库核心保护清单，拒绝写入: %s", state["target_file"])
         return False
     # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
     # 写目标用 abspath（无符号链接归一化）：白名单判定走 realpath 语义，
@@ -1708,9 +1797,12 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # P0 1.3 命名契约检查：补丁应用前对比修改前后的模块级符号集合
     # （函数/类/__all__/注册装饰器/插件入口点），缺失任何原符号则拒绝应用。
     # 开关 PATCH_CONTRACT_CHECK（默认 true）；设 false 回退历史口径。
+    # S2 安全（2026-09-29）：dangerous_api_added 守卫——补丁新引入
+    # os.system / subprocess / eval / 网络外连 / 凭证读取时拒绝应用
+    # （开关 PATCH_DANGEROUS_API_GUARD，默认 true；与命名契约检查并列）。
     contract_missing: list[str] = []
     if applied and new_code != original_code:
-        from src.tools.patch_applier import check_naming_contract
+        from src.tools.patch_applier import check_naming_contract, dangerous_api_added
 
         ok, missing = check_naming_contract(original_code, new_code)
         if not ok:
@@ -1738,6 +1830,20 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
                 }
             # mypy：同上，cast 收窄（临时键不入 TypedDict 声明）
             cast("dict[str, Any]", state)["_1_3_contract_missing"] = contract_missing
+        if applied:
+            # S2 安全双保险（2026-09-29 审查）：危险操作拦截走正则
+            # （injection_guard.check_llm_patch_safety，默认开）+ AST 差集
+            # （patch_applier.dangerous_api_added，默认开）双通道。
+            # 正则 findings 或 AST 差集非空即拒绝（保守不引入半应用状态）。
+            from src.agents.injection_guard import check_llm_patch_safety
+
+            _regex_hits = check_llm_patch_safety(new_code)
+            _added = dangerous_api_added(original_code, new_code)
+            _hits = list(dict.fromkeys(_regex_hits + _added))  # 去重保序
+            if _hits:
+                logger.warning("S2 危险操作拦截：补丁被拒绝（%s）", "、".join(_hits))
+                applied = False
+                new_code = original_code
 
     # ── 2.2 改进：补丁后处理重采样（PATCH_RESAMPLE_ENABLE=true，默认关）──
     # 应用失败（定位不到目标函数 / AST 解析不通过）时，把"负面反馈"回传
@@ -1883,6 +1989,12 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         # patch_syntax_invalid 标记写入 error_category（refine_failure_category
         # 会在任务收尾时把 "patch_syntax_invalid" 归一到 PATCH_SYNTAX_INVALID）
         resample_update["error_category"] = "patch_syntax_invalid"
+        # L1 逻辑修复（2026-09-29 审查）：同时补写 TypedDict 通道键
+        # patch_syntax_invalid_flag（state.py:242 声明，refine_final_error_category
+        # 经 final_state.get("patch_syntax_invalid_flag") 消费）——历史实现只写
+        # error_category 字符串值，flag 通道恒 False（死通道），5.2 失败细化
+        # 仅靠字符串路径兜底可达，与 TypedDict 契约脱节。双通道一致。
+        resample_update["patch_syntax_invalid_flag"] = True
     # 1.4 事件总线接线：PatchApplied（含 1.1 后处理标签，纯观测）
     publish_patch_applied(state, applied=written, new_code=effective_code)
     return {

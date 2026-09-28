@@ -150,6 +150,10 @@ class CandidateResult:
     # 3.2 改进：行级信用分配评分（line_level_credit_scores 计算，
     # 静态模式排序与执行模式记录复用；None 表示未计算）
     credit_score: float | None = None
+    # P3 性能（2026-09-29 审查）：diff 变更行数缓存——line_level_credit_scores
+    # 首次计算后写回，predict_candidate_rewards 直接复用避免对同一候选
+    # 重复全文 Myers diff（O(N·M)×候选数，--parallel 多任务累积可观）
+    changed_line_count: int | None = None
 
 
 def generate_candidates(
@@ -397,12 +401,19 @@ def line_level_credit_scores(
     for c in candidates:
         if not (c.static_passed and c.new_code):
             continue
-        new_lines = c.new_code.splitlines()
-        # diff 变更行（unified diff 中 +/- 行，排除 +++/--- 文件头）
-        changed = 0
-        for line in difflib.unified_diff(old_lines, new_lines):
-            if line[:1] in "+-" and line[:3] not in {"+++", "---"}:
-                changed += 1
+        # P3 性能（2026-09-29 审查）：diff 变更行数缓存——首次计算写回
+        # CandidateResult.changed_line_count，后续调用（predict_candidate_rewards
+        # 对同批候选再算一次）直接复用，避免重复全文 Myers diff
+        if c.changed_line_count is not None:
+            changed = c.changed_line_count
+        else:
+            new_lines = c.new_code.splitlines()
+            # diff 变更行（unified diff 中 +/- 行，排除 +++/--- 文件头）
+            changed = 0
+            for line in difflib.unified_diff(old_lines, new_lines):
+                if line[:1] in "+-" and line[:3] not in {"+++", "---"}:
+                    changed += 1
+            c.changed_line_count = changed
         modified_ratio = round(changed / old_line_count, 4)
         # 信用 = 执行验证通过率 × (1 - 修改行占比)；未验证时退化为 1 - 修改行占比
         if c.exec_passed is None:
@@ -625,13 +636,17 @@ def synthesize_candidates(
     if not valid:
         return "", []
 
-    # 提取各候选的修改区域
+    # 提取各候选的修改区域（函数名集合）
     regions: list[set[str]] = []
-    region_labels: list[str] = []
     for c in valid:
         mod = _extract_modified_regions(original_code, c.new_code)  # type: ignore[arg-type]
         regions.append(mod)
-        region_labels.append(c.new_code[:60] if c.new_code else "")  # 占位，后续填充
+
+    # region_labels 统一口径：各候选实际修改的函数名（与 L715 正常路径一致），
+    # 空集合标记 "(无修改)"——早退/失败路径不再返回 new_code 前 60 字符占位
+    # （与 docstring "各候选修改区域标签列表" 语义一致，避免观测数据失真）
+    def _labels() -> list[str]:
+        return [", ".join(sorted(regions[i])) if regions[i] else "(无修改)" for i in range(len(valid))]
 
     # 检测重叠：任两个候选的修改区域有交集 → 冲突，保守不自动合成
     for i in range(len(regions)):
@@ -643,7 +658,7 @@ def synthesize_candidates(
                     j,
                     regions[i] & regions[j],
                 )
-                return "", region_labels
+                return "", _labels()
 
     # 无重叠 → 合并：从原代码出发，按候选顺序逐个应用修改区域
     # 保守实现：取各候选的 new_code，用 AST 提取被修改的函数体，
@@ -654,7 +669,7 @@ def synthesize_candidates(
         ast.parse(original_code)
     except SyntaxError:
         logger.warning("多解合成：原代码 AST 解析失败，无法合成")
-        return "", region_labels
+        return "", _labels()
 
     # 按修改区域从各候选提取函数体，替换到原代码树
     # 简化实现：用候选的 new_code 整体作为"合成基"，逐个补充其他候选的
@@ -698,11 +713,9 @@ def synthesize_candidates(
         ast.parse(base_code)
     except SyntaxError as e:
         logger.warning("多解合成：合成后代码语法错误（%s），保守回退单候选", e)
-        return "", region_labels
+        return "", _labels()
 
-    # 填充 region_labels（各候选的实际修改区域函数名）
-    region_labels = [", ".join(sorted(regions[i])) if regions[i] else "(无修改)" for i in range(len(valid))]
-    return base_code, region_labels
+    return base_code, _labels()
 
 
 def _replace_function_in_code(

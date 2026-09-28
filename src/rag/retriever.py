@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -406,6 +407,15 @@ class TestCaseRetriever:
         """
         if self.collection.count() == 0:
             return []
+
+        # S4 安全（2026-09-29 审查）：error_category 来自 LLM 输出的
+        # refine_failure_category 结果，理论上为受控枚举，但个别路径可能
+        # 透传未归类的原始字符串。Chroma where 子句的字符串值精确匹配
+        # 本身无注入面，但含特殊操作符语法的值可能引发 where 解析异常
+        # 或误匹配。归一化：非纯 ASCII 字母数字/下划线/短横线（即枚举
+        # 形态）的值归一为 "unknown"，保持 where 子句稳定。
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", str(error_category or "")):
+            error_category = "unknown"
 
         # 构建检索查询文本：包含错误类型和代码上下文
         query_text = f"error_category: {error_category}\ntarget_code:\n{target_code}"

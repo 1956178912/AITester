@@ -153,33 +153,64 @@ def _run_naming_contract_layer(original_code: str, patched_code: str) -> dict[st
     return {"passed": False, "detail": f"命名契约回归失败：缺失符号 {sorted(missing)}"}
 
 
-def _run_import_smoke_layer(patched_code: str, target_module: str) -> dict[str, Any]:
-    """导入冒烟层：仅 `import <module>` 不执行任何业务函数（保守无副作用口径）。"""
+def _run_import_smoke_layer(
+    original_code: str,
+    patched_code: str,
+    target_module: str,
+) -> dict[str, Any]:
+    """导入冒烟层：exec_module 执行 LLM 补丁代码（import 本身可能执行模块级
+    代码，这是 Python 语义固有行为，冒烟口径是"import 不崩"）。
+
+    H-1 安全修复（2026-09-29）：子进程走凭证脱敏环境 + 执行前做危险 API
+    静态预检（dangerous_api_added 差集口径），命中即拒跑。
+    """
     import subprocess
     import tempfile
 
     if not _layer_enabled("import_smoke", "TESTLESS_IMPORT_SMOKE_ENABLE", "true"):
         return {"passed": True, "detail": "导入冒烟层显式关闭（TESTLESS_IMPORT_SMOKE_ENABLE=false），跳过"}
 
+    # H-1 安全修复（2026-09-29）②：执行前对 patched_code 做危险 API 静态
+    # 预检（patch_applier.dangerous_api_added 差集口径，与原代码做差集，
+    # 只拦补丁**新引入**的危险调用，避免误伤原代码既有 subprocess 依赖）——
+    # 命中 os.system / subprocess / eval / 网络外连 / 凭证读取时直接拒跑
+    # （fail-closed，不执行），与 safe_apply_patch 的 S2 守卫同模式。
+    # dangerous_api_added 纯 AST 静态检查且内部已 try/except 兜底（解析
+    # 失败返回空集，不抛异常），无需外层 try/except（2026-09-29 审查
+    # R2 优化：死代码移除）。
+    from src.tools.patch_applier import dangerous_api_added
+
+    _added = dangerous_api_added(original_code, patched_code)
+    if _added:
+        return {
+            "passed": False,
+            "detail": f"导入冒烟拒跑（危险 API 预检命中，不执行）: {sorted(_added)}",
+        }
+
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as f:
         f.write(patched_code)
         tmp_path = f.name
 
     module_name = target_module or "import_smoke_module"
-    # 直接把临时文件当模块文件，用文件路径 + 模块名经 importlib 方式加载
-    # （仅 import / exec_module 不主动调用业务函数；import 本身可能执行
-    # 模块级代码，这是 Python 语义固有行为，冒烟口径是"import 不崩"）
     smoke_script = (
         f"import importlib.util, sys; spec = importlib.util.spec_from_file_location({module_name!r}, {tmp_path!r}); "
         f"mod = importlib.util.module_from_spec(spec); sys.modules[{module_name!r}] = mod; spec.loader.exec_module(mod)"
     )
     timeout = _import_smoke_timeout()
+    # H-1 安全修复（2026-09-29）①：子进程凭证脱敏（credential_scrub.
+    # scrub_os_environ，与 executor_runtime / runtime_probe 同口径）——
+    # 历史实现未传 env，LLM 凭证随完整 os.environ 继承进执行 LLM 代码的
+    # 子进程，补丁含网络外连/凭证读取时即成可外传向量。
+    from src.utils.credential_scrub import scrub_os_environ
+
+    env = scrub_os_environ()
     try:
         result = subprocess.run(
             [sys_executable(), "-c", smoke_script],
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return {"passed": False, "detail": f"导入冒烟超时（>{timeout}s）"}
@@ -231,7 +262,7 @@ def run_testless_validation(
     layers["ast_symbol_guard"] = _run_ast_symbol_guard(original_code, patched_code)
     layers["mypy"] = _run_mypy_layer(patched_code, target_module)
     layers["naming_contract"] = _run_naming_contract_layer(original_code, patched_code)
-    layers["import_smoke"] = _run_import_smoke_layer(patched_code, target_module)
+    layers["import_smoke"] = _run_import_smoke_layer(original_code, patched_code, target_module)
 
     failed = [name for name, layer in layers.items() if not layer.get("passed", True)]
     overall_passed = len(failed) == 0

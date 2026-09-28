@@ -351,29 +351,138 @@ def alpha(): return 0
 class TestSafeApplyPatch:
     """测试安全补丁应用。"""
 
-    def test_safe_apply_valid_patch(self):
+    def test_safe_apply_valid_patch(self, monkeypatch):
         """有效补丁安全应用。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
         original = "def foo(): return 0"
         patch_code = "def foo(): return 1"
         new_code, success = safe_apply_patch(original, patch_code)
         assert success is True
         assert "return 1" in new_code
 
-    def test_safe_apply_invalid_syntax(self):
+    def test_safe_apply_invalid_syntax(self, monkeypatch):
         """语法错误的补丁回滚。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
         original = "def foo(): return 0"
         patch_code = "def foo(: return 1"  # 语法错误
         new_code, success = safe_apply_patch(original, patch_code)
         assert success is False
         assert new_code == original
 
-    def test_safe_apply_failed_patch(self):
+    def test_safe_apply_failed_patch(self, monkeypatch):
         """应用失败的补丁返回原代码。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
         original = "def foo(): return 0"
         patch_code = "def bar(): return 1"  # 函数名不匹配
         new_code, success = safe_apply_patch(original, patch_code)
         assert success is False
         assert new_code == original
+
+    def test_safe_apply_rejects_new_dangerous_shell(self, monkeypatch):
+        """S2 安全：补丁新引入 os.system 时被拒绝（默认开关 true）。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
+        original = "def foo():\n    return 0\n"
+        patch_code = "def foo():\n    import os\n    os.system('ls')\n    return 1\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is False
+        assert new_code == original
+
+    def test_safe_apply_allows_preexisting_dangerous_calls(self, monkeypatch):
+        """S2 安全差集口径：原代码已有的 subprocess 调用不因修复被拦截。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
+        original = "import subprocess\n\ndef run():\n    return subprocess.run(['echo', 'hi'])\n"
+        patch_code = "def run():\n    return subprocess.run(['echo', 'hello'])\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is True
+        assert "hello" in new_code
+
+    def test_safe_apply_dangerous_guard_disabled(self, monkeypatch):
+        """S2 开关关闭（PATCH_DANGEROUS_API_GUARD=false）时危险调用放行。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "false")
+        original = "def foo():\n    return 0\n"
+        patch_code = "def foo():\n    import os\n    os.system('ls')\n    return 1\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is True
+        assert "os.system" in new_code
+
+
+class TestDangerousApiAdded:
+    """测试 S2 危险 API 守卫（AST 级差集检查，patch_applier.dangerous_api_added）。"""
+
+    def test_new_shell_call_detected(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "def foo():\n    return 1\n"
+        patched = "def foo():\n    import os\n    os.system('ls')\n    return 1\n"
+        assert "os.system" in dangerous_api_added(original, patched)
+
+    def test_existing_call_not_flagged(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "import subprocess\n\ndef run():\n    subprocess.run(['x'])\n"
+        patched = "import subprocess\n\ndef run():\n    subprocess.run(['y'])\n"
+        assert dangerous_api_added(original, patched) == []
+
+    def test_eval_detected(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "def foo():\n    return 0\n"
+        patched = "def foo():\n    return eval('1+1')\n"
+        assert "eval" in dangerous_api_added(original, patched)
+
+    def test_network_call_detected(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "def exfil():\n    return 0\n"
+        patched = "import requests\n\ndef exfil():\n    return requests.post('https://x/y', data={})\n"
+        assert "requests.post" in dangerous_api_added(original, patched)
+
+    def test_credential_open_detected(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "def load():\n    return ''\n"
+        patched = "def load():\n    with open('.env') as f:\n        return f.read()\n"
+        assert any("open" in s for s in dangerous_api_added(original, patched))
+
+    def test_credential_open_preexisting_not_flagged(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        original = "def load():\n    return open('.env').read()\n"
+        patched = "def load():\n    return open('.env').read().strip()\n"
+        assert dangerous_api_added(original, patched) == []
+
+    def test_unparseable_input_returns_empty(self):
+        from src.tools.patch_applier import dangerous_api_added
+
+        assert dangerous_api_added("def foo(:", "def foo(:") == []
+        assert dangerous_api_added("", "def foo(): pass") == []
+
+    def test_safe_apply_rejects_new_dangerous_shell(self, monkeypatch):
+        """S2 安全：补丁新引入 os.system 时被拒绝（默认开关 true）。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
+        original = "def foo():\n    return 0\n"
+        patch_code = "def foo():\n    import os\n    os.system('ls')\n    return 1\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is False
+        assert new_code == original
+
+    def test_safe_apply_allows_preexisting_dangerous_calls(self, monkeypatch):
+        """S2 安全差集口径：原代码已有的 subprocess 不拦截。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "true")
+        original = "import subprocess\n\ndef run():\n    return subprocess.run(['echo', 'hi'])\n"
+        patch_code = "def run():\n    return subprocess.run(['echo', 'hello'])\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is True
+        assert "hello" in new_code
+
+    def test_safe_apply_dangerous_guard_disabled(self, monkeypatch):
+        """S2 开关关闭（PATCH_DANGEROUS_API_GUARD=false）时危险调用放行。"""
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", "false")
+        original = "def foo():\n    return 0\n"
+        patch_code = "def foo():\n    import os\n    os.system('ls')\n    return 1\n"
+        new_code, success = safe_apply_patch(original, patch_code)
+        assert success is True
+        assert "os.system" in new_code
 
 
 class TestGenerateDiff:

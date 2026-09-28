@@ -60,6 +60,16 @@ _EXPERT_DIMENSIONS: tuple[str, ...] = (
     "dead_code_and_logic",  # 死代码 / 逻辑错误（不可达分支 / 恒假条件）
 )
 
+# ─── LLM 温度 / 候选置信度常量（2026 可读性审查 P3：抽取历史内联魔法数字）──
+# 此前 0.3/0.2 温度与 0.5/0.6 置信度散落内联在 generate_parallel._run_expert
+# 与 debate_round 的 LLM 调用点，无命名、无环境变量口径（对比同文件其他参数
+# 均经 expert_pool_enabled / _debate_top_k 等函数读环境变量）。收拢为命名常量，
+# 便于实验复用与一致性审阅（值保持历史口径不变）。
+_EXPERT_TEMPERATURE: float = 0.3  # 单专家候选温度（比默认 0.7 低，收紧维度聚焦）
+_DEBATE_TEMPERATURE: float = 0.2  # 辩论修订温度（修订候选需低温收敛，避免发散）
+_EXPERT_BASE_CONFIDENCE: float = 0.5  # 单专家候选基线置信度（专家无内置评估，保守值）
+_DEBATE_REVISED_CONFIDENCE: float = 0.6  # 辩论修订候选置信度（保守略高于单候选基线）
+
 
 def expert_pool_enabled() -> bool:
     """专家池开关（EXPERT_POOL_ENABLE=true 时启用，默认 false）。"""
@@ -203,12 +213,12 @@ class ExpertPoolAgent:
                     failed_cases=failed_cases,
                     rag_references=rag_references,
                     focus_function=focus_function,
-                    temperature=0.3,  # 专家维度聚焦：比默认温度低（收紧发散）
+                    temperature=_EXPERT_TEMPERATURE,  # 专家维度聚焦：比默认温度低（收紧发散）
                 )
                 candidates[idx] = {
                     "dimension": dimension,
                     "patch": result.get("patch") or "",
-                    "confidence": 0.5,  # 专家无内置置信度评估，保守置 0.5
+                    "confidence": _EXPERT_BASE_CONFIDENCE,  # 专家无内置置信度评估，保守基线
                     "expert_failed": False,
                 }
             except Exception as e:
@@ -344,7 +354,7 @@ class ExpertPoolAgent:
                 test_output=test_output,
                 failed_cases=failed_cases,
                 focus_function=focus_function,
-                temperature=0.2,  # 辩论修订：低温收紧（综合版不应发散）
+                temperature=_DEBATE_TEMPERATURE,  # 辩论修订：低温收紧（综合版不应发散）
             )
             revise_patch = (result.get("patch") or "").strip()
         except Exception as e:
@@ -357,7 +367,7 @@ class ExpertPoolAgent:
         revise_candidate = {
             "dimension": "debate_revise",
             "patch": revise_patch,
-            "confidence": 0.6,  # 修订候选置信度保守略高于单候选（0.5）
+            "confidence": _DEBATE_REVISED_CONFIDENCE,  # 修订候选置信度保守略高于单候选基线
             "expert_failed": False,
             "verified_count": max(c.get("verified_count", 0) for c in top_candidates),
             "agreed_dimensions": [c.get("dimension") for c in top_candidates],

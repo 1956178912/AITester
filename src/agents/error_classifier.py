@@ -1164,8 +1164,14 @@ def refine_failure_category(
     # 正常路径必写入至少 1 条；空值 = 执行器异常路径）
     if not execution_trace:
         return ErrorCategory.EXECUTION_TRACE_MISSING.value
-    # 5.2 持续细化：多候选全拒绝（N 个候选均未通过静态筛选）
-    if multi_candidate_stats:
+    # 5.2 持续细化：多候选全拒绝（N 个候选均未通过静态筛选）。
+    # L3 逻辑修复（2026-09-29 审查）：adaptive-skip 场景（单候选回退）下
+    # multi_candidate_stats 被写成 {"candidates": 1, "static_passed": 0/1,
+    # "adaptive_skipped": True}，若候选 1 应用失败会命中"多候选全拒绝"
+    # 误判——该任务实际根本没走多候选（自适应策略主动跳过，L482-493）。
+    # 守卫：adaptive_skipped=True 时跳过多候选全拒绝判定（真实原因已归一
+    # 为单候选应用失败，不污染"多候选策略失效"实验口径）。
+    if multi_candidate_stats and not multi_candidate_stats.get("adaptive_skipped"):
         candidates = multi_candidate_stats.get("candidates", 0)
         static_passed = multi_candidate_stats.get("static_passed", 0)
         if candidates > 0 and static_passed == 0:

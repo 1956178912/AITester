@@ -72,6 +72,30 @@ class TestRefineEdgeCombinations:
         result = refine_failure_category("runtime", False, execution_trace=[{"iter": 1}], multi_candidate_stats={})
         assert result == "runtime"
 
+    def test_multi_candidate_all_rejected_without_adaptive_skip(self):
+        """全拒绝（candidates>0 且 static_passed==0）→ 命中 multi_candidate_all_rejected。"""
+        mcs = {"candidates": 3, "static_passed": 0}
+        result = refine_failure_category("assertion", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs)
+        assert result == "multi_candidate_all_rejected"
+
+    def test_multi_candidate_adaptive_skip_not_misclassified(self):
+        """L3 逻辑修复（2026-09-29）：adaptive_skipped=True（单候选回退场景）
+        且候选应用失败时，不再误判为"多候选全拒绝"——原样返回传入类别。"""
+        mcs = {"candidates": 1, "static_passed": 0, "adaptive_skipped": True}
+        result = refine_failure_category(
+            "patch_validation_failed", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs
+        )
+        # 注意：repair_history 缺 patch_applied=False 时 patch_rejected 不命中，
+        # 走到多候选判定时 adaptive_skipped 守卫跳过 → 原样返回
+        assert result == "patch_validation_failed"
+
+    def test_multi_candidate_adaptive_skip_static_passed_still_not_misclassified(self):
+        """L3 逻辑修复：adaptive_skipped=True 且 static_passed==1（候选通过）
+        → 同样不误判（候选 1 应用失败的真实原因已归一为单候选应用失败）。"""
+        mcs = {"candidates": 1, "static_passed": 1, "adaptive_skipped": True}
+        result = refine_failure_category("logic", False, execution_trace=[{"iter": 1}], multi_candidate_stats=mcs)
+        assert result == "logic"
+
     def test_none_test_passed_passthrough(self):
         assert refine_failure_category("timeout", None, repair_history=[{"patch_applied": False}]) == "timeout"
 

@@ -164,8 +164,10 @@ class GeneratorAgent(BaseAgent):
             target_code: 被测代码全文。
             module_name: 模块名（不含 .py），用于生成 import 语句。
             rag_references: RAG 检索到的相似历史案例，每项含 test_code 字段。
-            focus_function: 焦点函数名（可选）。超长代码时按该函数做 AST
+            focus_function: 焦点函数名（可选，最高优先级）。超长代码时按该函数做 AST
                 智能截取，保留其直接依赖的辅助函数（大文件场景关键）。
+                未显式传入时，回退到 test_plan["function_name"]（Planner 已定位的函数）；
+                二者皆缺时不截取（全文件）。
             mutation_feedback: 变异反馈字典（可选，1.2 改进），含
                 survived_mutants（list[str]，存活变异体描述）、
                 mutation_score（float，当前变异得分）字段；None 时不注入。
