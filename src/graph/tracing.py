@@ -71,8 +71,19 @@ def _trace_node(
     decision: str | None = None,
     duration_ms: float | None = None,
     iteration: int | None = None,
+    input_summary: Any = None,
+    token_usage: dict[str, Any] | None = None,
+    decision_reason: str | None = None,
+    strategy_selected: str | None = None,
+    budget_remaining: int | float | None = None,
 ) -> None:
-    """记录当前线程任务的一次节点事件（未启用时 no-op）。"""
+    """记录当前线程任务的一次节点事件（未启用时 no-op）。
+
+    P1 执行感知可观测性升级：新增五个结构化决策路径参数
+    （input_summary / token_usage / decision_reason / strategy_selected /
+    budget_remaining），透传给 TraceSession.record_node。所有参数均可选，
+    缺省不写入 JSONL 记录（历史调用方零变化）。
+    """
     session: TraceSession | None = getattr(_trace_local, "session", None)
     if session is None:
         return
@@ -82,4 +93,9 @@ def _trace_node(
         decision=decision,
         duration_ms=duration_ms,
         iteration=iteration,
+        input_summary=input_summary,
+        token_usage=token_usage,
+        decision_reason=decision_reason,
+        strategy_selected=strategy_selected,
+        budget_remaining=budget_remaining,
     )

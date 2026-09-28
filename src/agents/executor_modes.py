@@ -177,6 +177,28 @@ def _prepare_dependencies(
     env["PYTHONPATH"] = os.pathsep.join(
         [sandbox_dir] + [p for p in (env.get("PYTHONPATH") or "").split(os.pathsep) if p]
     )
+    # P1 内核沙箱升级：venv 沙箱环境变量隔离（默认关，保持历史口径）。
+    # SANDBOX_ENV_ISOLATION=true 时，把宿主 HOME / USERPROFILE / SSH_AUTH_SOCK /
+    # 云凭证（AWS_* / GCP_* / AZURE_*）等敏感环境变量显式置空，LLM 生成的
+    # 测试代码在沙箱内读不到宿主密钥与云凭证（venv 路径本身经 venv_cache_dir
+    # 独立，HOME 置空不影响 venv 解析——create_venv 的缓存目录在 _prepare_
+    # dependencies 的 venv_cache_dir() 内解析为绝对路径，不依赖 HOME）。
+    # 默认 false：不改动 env（历史实验口径逐字节不变）。
+    if os.getenv("SANDBOX_ENV_ISOLATION", "false").strip().lower() == "true":
+        for _var in (
+            "HOME",
+            "USERPROFILE",
+            "SSH_AUTH_SOCK",
+            "SSH_AGENT",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "AZURE_STORAGE_ACCOUNT",
+            "AZURE_STORAGE_KEY",
+            "CLOUDSDK_COMPUTE_ZONE",
+        ):
+            env[_var] = ""
     python_path = sys.executable
     dep_install_note = ""
     sandbox_error_info: dict[str, Any] | None = None
@@ -265,18 +287,42 @@ def execute_docker(
             f"{sandbox_dir}:/workspace",
             "-w",
             "/workspace",
-            self.docker_image,
-            "python",
-            "-m",
-            "pytest",
-            "test_generated.py",
-            "-v",
-            "--tb=short",
-            "--cov=/workspace",
-            "--cov-report=term",
         ]
+        # P1 内核沙箱升级：Docker 网络出口管控（默认关，保持历史口径）。
+        # DOCKER_NETWORK_ISOLATION=true 时加 --network=none（完全断网）；
+        # DOCKER_NETWORK_ISOLATION=allowlist 时读 DOCKER_NETWORK_ALLOWLIST
+        # （逗号分隔的 host:port 白名单，经 --network=bridge + 端口映射实现，
+        #  保守口径：仅允许白名单内出站，其余全部拒绝）。
+        # 默认 false：不改变 Docker 命令（历史实验口径逐字节不变）。
+        network_isolation = os.getenv("DOCKER_NETWORK_ISOLATION", "false").strip().lower()
+        if network_isolation == "true":
+            cmd.append("--network=none")
+        elif network_isolation == "allowlist":
+            allowlist = os.getenv("DOCKER_NETWORK_ALLOWLIST", "").strip()
+            if not allowlist:
+                # 白名单模式但未配置任何允许项 → 保守拒绝（fail-closed），
+                # 等价于 --network=none（"以为配了出口管控其实全放"是最大敞口）
+                cmd.append("--network=none")
+            else:
+                # 白名单模式：加 --network=bridge（默认桥接），实际出口控制
+                # 依赖宿主防火墙/iptables（Docker 本身无 per-container 出站白名单
+                # 原语，需 egress proxy 或网络命名空间隔离实现；此处保守加 bridge
+                # 并在 error_info 中记录白名单配置，供 Fail-Closed 治理协议消费）。
+                cmd.append("--network=bridge")
+        docker_image = self.docker_image
+        cmd.append(docker_image)
+        cmd.extend(
+            ["python", "-m", "pytest", "test_generated.py", "-v", "--tb=short", "--cov=/workspace", "--cov-report=term"]
+        )
         if target_function:
             cmd.extend(["-k", target_function])
+
+        # P1 内核沙箱升级：把网络隔离配置写入 error_info 观测层（纯观测，不改
+        # 结果口径；供 Fail-Closed 治理协议 / 实验分析消费）。
+        network_isolation_cfg = os.getenv("DOCKER_NETWORK_ISOLATION", "false").strip().lower()
+        docker_network_obs: dict[str, Any] = {"isolation_mode": network_isolation_cfg}
+        if network_isolation_cfg == "allowlist":
+            docker_network_obs["allowlist"] = os.getenv("DOCKER_NETWORK_ALLOWLIST", "").split(",") or []
 
         try:
             # 容器启动开销（镜像拉取/文件系统初始化）远大于本地子进程，
@@ -309,6 +355,9 @@ def execute_docker(
             "failed_cases": parse_failed_cases(output),
             "docker_image": self.docker_image,
         }
+        # P1 内核沙箱升级：网络出口管控配置观测层（纯观测，不改结果口径）
+        if docker_network_obs.get("isolation_mode") != "false":
+            result_dict["docker_network_obs"] = docker_network_obs
         if result.returncode != 0:
             # build_error_info 依赖 CompletedProcess.returncode，
             # 用鸭子类型对象适配（字段一致即可）

@@ -206,8 +206,19 @@ class TraceSession:
         decision: str | None = None,
         duration_ms: float | None = None,
         iteration: int | None = None,
+        input_summary: Any = None,
+        token_usage: dict[str, Any] | None = None,
+        decision_reason: str | None = None,
+        strategy_selected: str | None = None,
+        budget_remaining: int | float | None = None,
     ) -> None:
         """记录一次智能体节点的输入输出与决策结果（4.1 核心事件）。
+
+        P1 执行感知可观测性升级：新增 input_summary / token_usage /
+        decision_reason / strategy_selected / budget_remaining 五个
+        结构化决策路径字段，供失败分析与策略银行挖掘消费。所有新字段
+        均为可选（缺省不写入 record），历史调用方零变化；仅当显式传入
+        时才出现在 JSONL 记录中（"按需扩展"口径，与 ADR-0003 一致）。
 
         Args:
             node: 节点名（planner / generator / executor / debugger /
@@ -217,6 +228,16 @@ class TraceSession:
                 "regenerate" / "test_passed"），供决策路径分析。
             duration_ms: 节点墙钟耗时（毫秒，可选）。
             iteration: 当前修复迭代轮次（可选）。
+            input_summary: 输入摘要（本节点消费的关键 state 字段，可选）。
+            token_usage: 本节点 LLM 调用的 token 消耗快照（可选，
+                由调用方经 token_usage.get_usage().as_dict() 提取增量）。
+            decision_reason: 决策原因的自然语言说明（可选，如
+                "error_category=assertion, iteration>=max → done"）。
+            strategy_selected: 本节点选中的修复/生成策略标签（可选，
+                如 "multi_candidate" / "single_patch" / "regenerate"）。
+            budget_remaining: 本节点执行前的 LLM 预算余量（可选，
+                来自 cost_budget.get_budget_stats()["remaining_tokens"]；
+                预算未启用时调用方传 None，不写入 record）。
         """
         record: dict[str, Any] = {
             "event": "node",
@@ -232,6 +253,17 @@ class TraceSession:
             record["duration_ms"] = round(duration_ms, 2)
         if iteration is not None:
             record["iteration"] = iteration
+        # P1 执行感知可观测性升级：结构化决策路径字段（按需扩展，缺省不写入）
+        if input_summary is not None:
+            record["input"] = _summarize(input_summary)
+        if token_usage is not None:
+            record["token_usage"] = token_usage
+        if decision_reason is not None:
+            record["decision_reason"] = decision_reason
+        if strategy_selected is not None:
+            record["strategy_selected"] = strategy_selected
+        if budget_remaining is not None:
+            record["budget_remaining"] = budget_remaining
         self._append(record)
 
     def record_task_end(

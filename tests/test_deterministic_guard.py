@@ -41,9 +41,7 @@ class TestDefaultOff:
 class TestGuardRules:
     def test_clean_test_passes(self, monkeypatch):
         _enable(monkeypatch)
-        r = scan_test_file(
-            "def test_add():\n    assert _add(1, 2) == 3\n\n\ndef _add(a, b):\n    return a + b\n"
-        )
+        r = scan_test_file("def test_add():\n    assert _add(1, 2) == 3\n\n\ndef _add(a, b):\n    return a + b\n")
         assert r.is_deterministic
 
     def test_random_usage_flagged(self, monkeypatch):

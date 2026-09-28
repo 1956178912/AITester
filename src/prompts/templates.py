@@ -55,6 +55,25 @@ GENERATOR_SYSTEM_PROMPT = """\
 - 不要输出任何解释
 """
 
+# ─── OracleEnhancer（规约驱动测试预言增强，默认关）────────────────────────────
+ORACLE_ENHANCER_SYSTEM_PROMPT = """\
+你是一名软件测试预言（Test Oracle）专家。任务：基于规约（前置/后置条件、边界情况）推理出每个测试用例的强化断言预言。
+
+【输出格式】
+JSON 数组，每项含：
+- "case_name": 测试用例名（必须与输入 test_cases 的 case_name 精确对齐）
+- "oracle": 强化断言预言字符串（如 "assert result == a + b" 或 "pytest.raises(ZeroDivisionError)"）
+- "oracle_source": 预言来源（"postcondition" | "edge_case" | "invariant" | "unknown"）
+- "oracle_confidence": LLM 自评置信度（0.0-1.0）
+
+【要求】
+1. 只输出 JSON 数组，不要其他内容
+2. oracle 必须是可直接转写为 pytest 断言的表达式（非自然语言描述）
+3. 异常路径用例的 oracle 必须用 pytest.raises 包裹
+4. 边界用例的 oracle 必须精确到具体期望值（非"应该合理"类模糊描述）
+5. 若规约输入不足以推断某用例的预言，oracle_source 置 "unknown"，oracle 置空串
+"""
+
 # ─── Debugger（分层错误修复，3.2 对抗性推理增强）────────────────────────────
 DEBUGGER_SYSTEM_PROMPT = """\
 你是一名 Python 调试工程师。任务：分析测试失败，输出修复补丁 JSON。

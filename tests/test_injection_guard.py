@@ -88,12 +88,7 @@ class TestOutputSidePatchSafety:
 
     def test_legit_test_code_no_false_positive(self, monkeypatch):
         monkeypatch.setenv("INJECTION_GUARD_ENABLE", "true")
-        patch_text = (
-            "import time\n"
-            "def test_sleep():\n"
-            "    time.sleep(0.01)\n"
-            "    assert time.time() > 0\n"
-        )
+        patch_text = "import time\ndef test_sleep():\n    time.sleep(0.01)\n    assert time.time() > 0\n"
         # 合法测试代码（短 sleep + 断言）不应被标记为危险网络/Shell
         assert check_llm_patch_safety(patch_text) == []
 

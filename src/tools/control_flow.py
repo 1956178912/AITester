@@ -56,9 +56,7 @@ def _function_node(code: str, func_name: str | None) -> ast.FunctionDef | ast.As
     except (SyntaxError, ValueError):
         return None
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-            func_name is None or node.name == func_name
-        ):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (func_name is None or node.name == func_name):
             return node
     return None
 
@@ -130,9 +128,7 @@ def analyze_control_flow(code: str, func_name: str | None = None) -> dict[str, A
             types = []
             if node.type is not None:
                 if isinstance(node.type, ast.Tuple):
-                    types = [
-                        _exc_type_name(elt) for elt in node.type.elts
-                    ]
+                    types = [_exc_type_name(elt) for elt in node.type.elts]
                 else:
                     types = [_exc_type_name(node.type)]
             exceptions.append({"line": node.lineno, "kind": "except", "types": types})
@@ -162,16 +158,15 @@ def analyze_control_flow(code: str, func_name: str | None = None) -> dict[str, A
     # 路径覆盖建议（注入 prompt 的文本形式；预算内截断）
     hint_parts: list[str] = []
     if branches_dedup:
-        hint_parts.append(f"分支 {len(branches_dedup)} 处（第 " + ", ".join(str(b["line"]) for b in branches_dedup[:8]) + " 行）")
+        hint_parts.append(
+            f"分支 {len(branches_dedup)} 处（第 " + ", ".join(str(b["line"]) for b in branches_dedup[:8]) + " 行）"
+        )
     if loops:
         hint_parts.append("循环 " + ", ".join(f"{x['kind']}@{x['line']}" for x in loops[:5]))
     if exceptions:
         hint_parts.append(
             "异常路径 "
-            + ", ".join(
-                (f"{e['kind']}[{','.join(e['types'])}]" if e["types"] else e["kind"])
-                for e in exceptions[:5]
-            )
+            + ", ".join((f"{e['kind']}[{','.join(e['types'])}]" if e["types"] else e["kind"]) for e in exceptions[:5])
         )
     if returns:
         hint_parts.append(f"出口 {len(returns)} 个")

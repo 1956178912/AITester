@@ -218,7 +218,9 @@ from src.agents.error_classifier import (
 
 # 模块级便利函数（等价于 ErrorClassifier().classify_with_confidence）
 result: ClassificationResult = classify_with_confidence(
-    test_output, failed_cases=failed_cases, target_module="calculator",
+    test_output,
+    failed_cases=failed_cases,
+    target_module="calculator",
 )
 # result.category / result.confidence / result.confidence_basis /
 # result.fallback_used / result.fallback_category
@@ -348,13 +350,13 @@ from src.agents.llm_client import (
 )
 
 # 命中率观测（纯读，不改变缓存正确性；线程安全，--parallel 并发调用）
-rate = get_cache_hit_rate()          # 本进程视角命中率（0.0-1.0）；无记录时 None
-record_cache_hit(True)               # 命中/未命中埋点（_call_llm_with_cache 自动调用）
-reset_cache_hit_stats()              # 清零计数（批次边界 / 测试隔离）
+rate = get_cache_hit_rate()  # 本进程视角命中率（0.0-1.0）；无记录时 None
+record_cache_hit(True)  # 命中/未命中埋点（_call_llm_with_cache 自动调用）
+reset_cache_hit_stats()  # 清零计数（批次边界 / 测试隔离）
 
 # 缓存安全（18. 权限收敛 + TTL 过期清理）
-ensure_llm_cache_dir()               # 新目录 0o700；既有目录不动；返回路径
-secure_cache_file(tmp_path)          # os.chmod(tmp_path, 0o600)；OSError 静默
+ensure_llm_cache_dir()  # 新目录 0o700；既有目录不动；返回路径
+secure_cache_file(tmp_path)  # os.chmod(tmp_path, 0o600)；OSError 静默
 removed = cleanup_expired_cache_files()  # 按 mtime 删早于 TTL 的 *.json；返回删除数
 # TTL：AITESTER_LLM_CACHE_TTL_DAYS（默认 7 天；0/负数 = 关闭清理）
 ```
@@ -378,8 +380,8 @@ from src.agents.failure_kb import (
 
 # 离线积累：python experiments/analyze_failures.py -k failure_knowledge_base.json
 # 在线消费（FAILURE_KB_ENABLE=true 时 _debugger_node 自动注入；默认关）
-snippet = kb_debugger_snippet("syntax")   # 匹配 error_category="syntax" 的同类案例片段
-entries = load_knowledge_base()            # 加载知识库（缺失/损坏/非列表 → []）
+snippet = kb_debugger_snippet("syntax")  # 匹配 error_category="syntax" 的同类案例片段
+entries = load_knowledge_base()  # 加载知识库（缺失/损坏/非列表 → []）
 ranked = rank_knowledge_entries(entries, "syntax")  # 频次×时间衰减排序取 top-k
 # 衰减：FAILURE_KB_DECAY_DAYS（默认 30 天）；条目 last_seen 越久权重越低
 # （0.5 ** (age_days / half_life_days)；last_seen 缺失 / 半衰期 ≤0 时权重 1.0）

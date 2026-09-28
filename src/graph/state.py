@@ -268,6 +268,28 @@ class AITesterState(TypedDict, total=False):
     # analyze_results.py 统计"哪些任务走了 KB 增强路径"（效果验证 ⑤）。
     # 默认 None = 未注入（开关关 / 知识库缺失 / 无匹配条目，历史口径不变）。
     kb_prompt_snippet_applied: bool | None
+    # P0 测试预言增强（ORACLE_ENHANCE_ENABLE=true 时由 _planner_node 写入）：
+    # 本次增强是否成功注入 oracle 字段（False = 保守降级保留原 test_cases）。
+    # 供实验分析"预言增强触发率 / 弱预言占比"消费；默认 None = 未启用开关。
+    oracle_enhanced: bool | None
+    # P0 运行时探针快照（RUNTIME_PROBE_ENABLE=true 时由 _executor_node 在测试
+    # 失败时写入）：sys.settrace 一次性探针捕获的"失败时刻局部变量快照"
+    # {"success": bool, "error": str, "frames": [{function, file, line, locals}]}；
+    # 供 _debugger_node 渲染为 prompt 片段注入修复上下文（运行时证据替代
+    # 静态猜测）。None = 探针未触发 / 降级 / 开关关；历史口径不变。
+    runtime_probe_snapshot: dict[str, Any] | None
+    # P0 运行时探针注入层观测标志（_debugger_node 写入；RUNTIME_PROBE_ENABLE
+    # 默认关 / 快照为 None 时恒 False，历史口径不变）
+    probe_section_applied: bool | None
+    # AST 级断言一致性检查疑点（ORACLE_VALIDATE_ENABLE=true 时由 _generator_node
+    # 写入）：check_assertions() 产出的疑点列表（每项 {type, line, message,
+    # suggestion}）；None = 开关关 / 无生成内容 / 无疑点（历史口径不变）。
+    # 供实验分析"恒真断言占比 / 魔数断言占比"消费（观测层，不参与路由）。
+    oracle_findings: list[dict[str, Any]] | None
+    # ANNEAL-lite 故障频率强化提示注入标志（FAILURE_FREQUENCY_ENABLE=true 且
+    # 高频故障检测命中时 _debugger_node 写入 True）：供实验分析"哪些任务
+    # 走了故障频率强化路径"消费。None = 开关关 / 非高频（历史口径不变）。
+    failure_frequency_applied: bool | None
 
 
 def create_initial_state(
@@ -391,4 +413,19 @@ def create_initial_state(
         # 4. 失败知识库闭环落点 B 观测标志（默认 None，_debugger_node 注入
         # KB 片段时置 True；FAILURE_KB_ENABLE 默认关时恒 None，历史口径不变）
         kb_prompt_snippet_applied=None,
+        # P0 测试预言增强观测标志（默认 None，ORACLE_ENHANCE_ENABLE=true 时
+        # 由 _planner_node 写入 True/False；开关默认关时恒 None，历史口径不变）
+        oracle_enhanced=None,
+        # P0 运行时探针快照（默认 None，RUNTIME_PROBE_ENABLE=true 时由
+        # _executor_node 在测试失败时写入；开关默认关时恒 None，历史口径不变）
+        runtime_probe_snapshot=None,
+        # P0 运行时探针注入层观测标志（默认 None，_debugger_node 写入；
+        # RUNTIME_PROBE_ENABLE 默认关时恒 None，历史口径不变）
+        probe_section_applied=None,
+        # AST 级断言一致性检查疑点（默认 None，ORACLE_VALIDATE_ENABLE=true 时
+        # 由 _generator_node 写入疑点列表；开关默认关时恒 None，历史口径不变）
+        oracle_findings=None,
+        # ANNEAL-lite 故障频率强化提示是否注入（默认 None，FAILURE_FREQUENCY_ENABLE
+        # =true 且高频故障检测命中时 _debugger_node 写入 True；开关默认关时恒 None）
+        failure_frequency_applied=None,
     )

@@ -136,9 +136,7 @@ def _run_mypy_findings(
     try:
         import tempfile
 
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".py", delete=False, encoding="utf-8"
-        ) as _f:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as _f:
             _f.write(patched_code or "")
             _tmp_path = _f.name
         try:
@@ -146,9 +144,7 @@ def _run_mypy_findings(
             # 2 = 命令/文件错误（语法不合法等），均保守处理
             _exit_code, _out, _err = mypy.api.run([_tmp_path, "--no-error-summary"])
             # 解析 mypy 输出（格式：path:line:col: error: message [category]）
-            _MYPY_LINE_RE = re.compile(
-                r"^.+?:?(\d+):\d+: (warning|error): (.+?) \[([a-z-]+)\]$"
-            )
+            _MYPY_LINE_RE = re.compile(r"^.+?:?(\d+):\d+: (warning|error): (.+?) \[([a-z-]+)\]$")
             findings: list[dict[str, Any]] = []
             for _line in (_out or "").splitlines():
                 _m = _MYPY_LINE_RE.match(_line)
@@ -267,9 +263,7 @@ def _run_pyright_findings(
             logger.debug("pyright 不可用（CLI 与 pyright-python 均未装），跳过静态类型检查")
             return []
 
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".py", delete=False, encoding="utf-8"
-        ) as _f:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as _f:
             _f.write(patched_code or "")
             tmp_path = _f.name
 
@@ -714,8 +708,7 @@ def type_repair_layer(
         # 去重：同 file+line+kind 只保留一条（ast 层优先，mypy/pyright 层补充）
         _existing_keys = {(f.get("file"), f.get("line", 0), f.get("kind")) for f in findings}
         _new_findings = [
-            f for f in _mypy_findings
-            if (f.get("file"), f.get("line", 0), f.get("kind")) not in _existing_keys
+            f for f in _mypy_findings if (f.get("file"), f.get("line", 0), f.get("kind")) not in _existing_keys
         ]
         findings.extend(_new_findings)
         logger.debug(

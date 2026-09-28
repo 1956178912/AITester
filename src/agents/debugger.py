@@ -219,6 +219,8 @@ class DebuggerAgent(BaseAgent):
         temperature: float | None = None,
         cross_file_contexts: dict[str, str] | None = None,
         contract_reject_feedback: dict[str, Any] | None = None,
+        probe_section: str | None = None,
+        failure_frequency_section: str | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -253,6 +255,12 @@ class DebuggerAgent(BaseAgent):
                 聚焦上下文 {module_name: focused_code}（由 cross_file_analyzer
                 按 CODE_FOCUS_DEPTH 层调用链构建，纯静态）。非 None 时注入
                 prompt，供 LLM 跨文件修复时理解被调模块接口；None 为历史口径。
+            failure_frequency_section: ANNEAL-lite 故障频率强化提示（默认关
+                FAILURE_FREQUENCY_ENABLE）。当同一 error_category 在近期迭代
+                中反复出现（≥ 阈值）时，由 failure_frequency 模块生成的
+                强化策略提示文本（如"优先启用 oracle_enhancer 重新生成断言"），
+                注入 prompt 尾部引导 LLM 换一条更强的修复路径。None / 空串
+                时 prompt 与历史逐字节一致（保守降级）。
 
         Returns:
             包含以下键的字典：
@@ -367,6 +375,23 @@ class DebuggerAgent(BaseAgent):
             f"测试输出：\n```\n{test_output}\n```\n\n"
             f"失败用例：\n{cases_summary}"
         )
+
+        # P0 运行时探针注入层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
+        # 探针快照经 nodes._debugger_node 渲染为 probe_section 字符串注入
+        # prompt 尾部（运行时证据替代静态猜测）。probe_section 为空串 / None
+        # 时 prompt 与历史逐字节一致（保守降级）。
+        if probe_section:
+            query += probe_section
+            logger.info("运行时探针（P0）注入 %d 字符快照片段", len(probe_section))
+
+        # ANNEAL-lite 故障频率强化（FAILURE_FREQUENCY_ENABLE=true 时启用，默认关）：
+        # 当同一 error_category 在近期迭代中反复出现（≥ 阈值），注入强化策略
+        # 提示（如"优先启用 oracle_enhancer / runtime_probe"），引导 LLM 换
+        # 更强的修复路径而非继续用同一策略碰运气。None / 空串时不注入
+        # （prompt 与历史逐字节一致，保守降级）。
+        if failure_frequency_section:
+            query += "\n\n" + failure_frequency_section
+            logger.info("ANNEAL-lite 故障频率强化注入 %d 字符提示", len(failure_frequency_section))
 
         # P0 1.1 分层代码压缩：跨文件任务时注入"被调模块的聚焦上下文"
         # （extract_function_context 按调用链截取，非整模块全文），让 LLM
@@ -610,6 +635,9 @@ class DebuggerAgent(BaseAgent):
             # 4. 失败知识库闭环（落点 B）：本轮是否注入了 KB 同类案例提示
             # （_kb_snippet 非 None 时 True；FAILURE_KB_ENABLE 默认关时恒 False）
             "kb_prompt_snippet_applied": bool(_kb_snippet),
+            # P0 运行时探针注入层：本轮是否注入了探针快照片段（probe_section
+            # 非空时 True；RUNTIME_PROBE_ENABLE 默认关 / 快照为 None 时恒 False）
+            "probe_section_applied": bool(probe_section),
         }
 
     # ─── 3.3 位置感知迭代修复（LoopRepair 式：先定位再补丁）──────────────

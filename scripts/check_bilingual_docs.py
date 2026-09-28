@@ -54,6 +54,8 @@ _EXEMPT_NO_EN = frozenset(
         "docs/0.7_audit_findings.md",
         "docs/assessment_2026-09-25_improvement_directions.md",
         "docs/code_analysis_report.md",
+        "docs/full_test_report_2026-09-28.md",
+        "docs/gap_report_2026-09-28_frontier_recommendations.md",
         "docs/implementation_2026-09-25_improvement_directions.md",
         "docs/implementation_2026-09-25_p0_batch.md",
         "docs/log_redaction_audit.md",
@@ -62,6 +64,7 @@ _EXEMPT_NO_EN = frozenset(
         "docs/review_2026-09-27_round10.md",
         "docs/review_2026-09-27_round11.md",
         "docs/review_2026-09-27_round9.md",
+        "docs/troubleshooting.md",
     }
 )
 

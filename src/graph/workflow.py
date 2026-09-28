@@ -568,4 +568,47 @@ def get_workflow_stats() -> dict[str, Any]:
             stats["llm_cache"]["hit_rate"] = _cache_hit_rate
     except Exception:
         logger.debug("get_workflow_stats 缓存命中率读取失败（保守跳过）", exc_info=True)
+    # P1 执行感知可观测性升级：分层缓存命中统计（tiered_cache_stats）。
+    # 双套缓存（精确 LRU + 语义向量）口径统一：
+    #   - LRU 精确层：record_cache_hit 命中/未命中计数（_lru_lookup 快路径）
+    #   - 语义层：SemanticCacheIndex._hits/_misses + 假阳性抽样统计
+    # 仅当任一层确有计数时才附该键（零 LLM 调用的纯统计快照不附带，
+    # 保持既有 get_workflow_stats 口径逐字节不变——与 llm_cache.hit_rate 同模式）。
+    try:
+        from src.agents.llm_client import _LLM_CACHE_HIT_STATS, _LLM_CACHE_HIT_STATS_LOCK
+        from src.agents.semantic_cache import get_semantic_cache_stats as _get_sem_stats
+
+        # 精确层（LRU + 文件）：hits/misses 经 llm_client._LLM_CACHE_HIT_STATS
+        # 累计（record_cache_hit 写入）；此处直接读进程级计数（与
+        # stats["llm_cache"]["hit_rate"] 同一口径——hit_rate = file_hits /
+        # (file_hits + file_misses)，无记录时 hit_rate=None 且 total=0）
+        with _LLM_CACHE_HIT_STATS_LOCK:
+            _exact_hits = int(_LLM_CACHE_HIT_STATS.get("file_hits", 0))
+            _exact_misses = int(_LLM_CACHE_HIT_STATS.get("file_misses", 0))
+        _sem_stats = _get_sem_stats()
+        _exact_total = _exact_hits + _exact_misses
+        _sem_total = int(_sem_stats.get("hits", 0)) + int(_sem_stats.get("misses", 0))
+        if _exact_total > 0 or _sem_total > 0:
+            stats["tiered_cache_stats"] = {
+                "exact_layer": {
+                    "hits": _exact_hits,
+                    "misses": _exact_misses,
+                    "hit_rate": (round(_exact_hits / _exact_total, 4) if _exact_total else None),
+                },
+                "semantic_layer": {
+                    "enabled": bool(_sem_stats.get("enabled", False)),
+                    "hits": int(_sem_stats.get("hits", 0)),
+                    "misses": int(_sem_stats.get("misses", 0)),
+                    "hit_rate": (round(int(_sem_stats.get("hits", 0)) / _sem_total, 4) if _sem_total else None),
+                    # 3.6 假阳性抽样验证统计（SEMANTIC_FALSE_POSITIVE_SAMPLING，
+                    # 默认 0.1 = 10%）：命中条目的抽样比对结果，供"语义缓存
+                    # 是否真正省了 token"的 A/B 分析消费
+                    "fp_checked": int(_sem_stats.get("fp_checked", 0)),
+                    "fp_confirmed": int(_sem_stats.get("fp_confirmed", 0)),
+                    "fp_false_positive": int(_sem_stats.get("fp_false_positive", 0)),
+                    "fp_rate": float(_sem_stats.get("fp_rate", 0.0)),
+                },
+            }
+    except Exception:
+        logger.debug("get_workflow_stats 分层缓存统计读取失败（保守跳过）", exc_info=True)
     return stats

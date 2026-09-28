@@ -540,3 +540,221 @@ def predict_candidate_rewards(
         "best_candidate_index": best_idx,
         "trend": trend,
     }
+
+
+# ─── 多解合成（PRISM 式：从多个部分正确的候选中合成更完整方案）────────────
+
+
+def _extract_modified_regions(original_code: str, new_code: str) -> set[str]:
+    """提取候选补丁相对原代码的修改区域（函数级标签集合）。
+
+    用 AST 级 diff 定位"哪个函数被修改了"（而非行级 diff，因为行号偏移
+    在 AST 归一化下不稳定）。保守口径：仅取顶层 FunctionDef/AsyncFunctionDef
+    的函数名；模块级赋值/import 变更归入 "module_level"。
+
+    Args:
+        original_code: 原始代码全文。
+        new_code: 候选应用后的代码全文。
+
+    Returns:
+        被修改的函数名集合（如 {"add", "mul"}）；两文件函数签名完全一致
+        （无修改）时返回空集。
+    """
+    import ast
+
+    def _func_signatures(code: str) -> dict[str, str]:
+        """函数名 → 函数体 AST dump（用于比较是否被修改）。"""
+        sigs: dict[str, str] = {}
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return sigs
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                sigs[node.name] = ast.dump(node)
+            elif isinstance(node, ast.Assign):
+                # 模块级赋值（如 _CONTRACT_CONSTRAINT = ...）
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        sigs[target.id] = ast.dump(node)
+        return sigs
+
+    old_sigs = _func_signatures(original_code)
+    new_sigs = _func_signatures(new_code)
+    modified: set[str] = set()
+    for name in set(old_sigs.keys()) | set(new_sigs.keys()):
+        old_v = old_sigs.get(name)
+        new_v = new_sigs.get(name)
+        if old_v != new_v:
+            modified.add(name)
+    return modified
+
+
+def synthesize_candidates(
+    original_code: str,
+    candidates: list[CandidateResult],
+    static_ok: bool = True,
+) -> tuple[str, list[str]]:
+    """从多个部分正确的候选中合成一个更完整的方案（PRISM 式合成阶段）。
+
+    核心思想：N 个候选各自修改了代码的不同部分（不同函数），
+    每个候选"部分正确"（自己的修改区域正确但其他区域未处理）。
+    合成 = 把各候选的修改区域合并为一个完整补丁，而非"投票选最好的"。
+
+    流程：
+    1. 对每个静态通过的候选，用 AST diff 提取修改区域（函数名集合）；
+    2. 检测候选间修改区域重叠：
+       - 无重叠 → 直接合并（取各候选修改区域的并集，从原代码取未修改部分）；
+       - 有重叠 → 标记冲突（保守：不自动合并，返回 None 让调用方回退）；
+    3. 合成后的完整代码做 ast.parse 语法校验；
+    4. 返回 (合成代码, 各候选的修改区域标签列表)。
+
+    Args:
+        original_code: 原始被测代码全文。
+        candidates: generate_candidates 的返回（候选列表）。
+        static_ok: 是否仅取 static_passed=True 的候选参与合成（默认 True）。
+
+    Returns:
+        (synthesized_code, region_labels) 元组：
+        - synthesized_code: 合成后的完整代码字符串；无法合成（重叠/无候选/
+          语法校验失败）时返回空串（调用方回退到单候选路径）。
+        - region_labels: 各候选的修改区域标签列表（如 ["add", "mul", "add"]），
+          供日志与实验分析消费。
+    """
+    valid = [c for c in candidates if c.static_passed and c.new_code] if static_ok else list(candidates)
+    if not valid:
+        return "", []
+
+    # 提取各候选的修改区域
+    regions: list[set[str]] = []
+    region_labels: list[str] = []
+    for c in valid:
+        mod = _extract_modified_regions(original_code, c.new_code)  # type: ignore[arg-type]
+        regions.append(mod)
+        region_labels.append(c.new_code[:60] if c.new_code else "")  # 占位，后续填充
+
+    # 检测重叠：任两个候选的修改区域有交集 → 冲突，保守不自动合成
+    for i in range(len(regions)):
+        for j in range(i + 1, len(regions)):
+            if regions[i] & regions[j]:
+                logger.info(
+                    "多解合成：候选 %d 与 %d 修改区域重叠（%s），保守不自动合成",
+                    i,
+                    j,
+                    regions[i] & regions[j],
+                )
+                return "", region_labels
+
+    # 无重叠 → 合并：从原代码出发，按候选顺序逐个应用修改区域
+    # 保守实现：取各候选的 new_code，用 AST 提取被修改的函数体，
+    # 替换回原代码对应位置（保证未修改部分保持原样）
+    import ast
+
+    try:
+        ast.parse(original_code)
+    except SyntaxError:
+        logger.warning("多解合成：原代码 AST 解析失败，无法合成")
+        return "", region_labels
+
+    # 按修改区域从各候选提取函数体，替换到原代码树
+    # 简化实现：用候选的 new_code 整体作为"合成基"，逐个补充其他候选的
+    # 非重叠修改（因为无重叠，直接取并集等价于"最后一个候选 + 前面候选的
+    # 额外修改"）
+    # 保守口径：取修改区域并集最大的候选作为基础，再用其他候选的非重叠
+    # 函数体补充。
+    union_regions: set[str] = set()
+    for r in regions:
+        union_regions |= r
+    # 找修改区域并集最大的候选（通常 = 最后一个候选，因为无重叠）
+    base_idx = max(range(len(regions)), key=lambda i: len(regions[i]))
+    base_code = valid[base_idx].new_code or ""
+    # 逐个补充其他候选的非重叠修改
+    # 由于无重叠，base_code 已包含其全部修改区域；其他候选的修改区域
+    # 与 base 不重叠，需要"粘贴"到 base_code 中对应函数位置
+    # 保守实现：用候选的修改区域函数体替换 base_code 中同名函数
+    for idx in range(len(valid)):
+        if idx == base_idx:
+            continue
+        other_mods = regions[idx]
+        if not other_mods:
+            continue
+        other_code = valid[idx].new_code or ""
+        try:
+            other_tree = ast.parse(other_code)
+        except SyntaxError:
+            continue
+        base_lines = base_code.splitlines(keepends=True)
+        for func_name in other_mods:
+            # 在 other_tree 中找该函数的源码行范围
+            for node in ast.walk(other_tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
+                    # 保守：只替换 base_code 中同名的函数体
+                    _replace_function_in_code(base_lines, func_name, node, other_code)
+                    break
+        base_code = "".join(base_lines)
+
+    # 语法校验
+    try:
+        ast.parse(base_code)
+    except SyntaxError as e:
+        logger.warning("多解合成：合成后代码语法错误（%s），保守回退单候选", e)
+        return "", region_labels
+
+    # 填充 region_labels（各候选的实际修改区域函数名）
+    region_labels = [", ".join(sorted(regions[i])) if regions[i] else "(无修改)" for i in range(len(valid))]
+    return base_code, region_labels
+
+
+def _replace_function_in_code(
+    lines: list[str],
+    func_name: str,
+    ast_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    source_code: str,
+) -> None:
+    """在 lines（原代码行列表）中替换指定函数体为 source_code 中的版本。
+
+    保守实现：用 ast.get_source_segment 提取 source_code 中该函数的源码，
+    替换 lines 中同名函数的行范围。失败时静默降级（不修改 lines）。
+    """
+    import ast as _ast
+
+    try:
+        new_func_source = _ast.get_source_segment(source_code, ast_node)
+        if not new_func_source:
+            return
+    except (ValueError, TypeError):
+        return
+
+    # 定位 lines 中同名函数的行范围（保守：按 def 行匹配）
+    start = None
+    end = None
+    indent_prefix = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (
+            stripped.startswith(f"def {func_name}(")
+            or stripped.startswith(f"async def {func_name}(")
+            or stripped == f"def {func_name}("
+            or stripped == f"async def {func_name}("
+        ):
+            start = i
+            indent_prefix = line[: len(line) - len(line.lstrip())]
+            break
+    if start is None:
+        return
+    # 找函数体结束（下一个同缩进的顶层语句或文件尾）
+    for i in range(start + 1, len(lines)):
+        line = lines[i]
+        if (
+            line.strip()
+            and not line.startswith((indent_prefix or "") + " ")
+            and not line.startswith(indent_prefix or "    ")
+        ):
+            end = i
+            break
+        if i == len(lines) - 1:
+            end = len(lines)
+    if end is None:
+        end = len(lines)
+    # 替换
+    lines[start:end] = [new_func_source + "\n"]

@@ -217,7 +217,9 @@ from src.agents.error_classifier import (
 
 # Module-level convenience function (equivalent to ErrorClassifier().classify_with_confidence)
 result: ClassificationResult = classify_with_confidence(
-    test_output, failed_cases=failed_cases, target_module="calculator",
+    test_output,
+    failed_cases=failed_cases,
+    target_module="calculator",
 )
 # result.category / result.confidence / result.confidence_basis /
 # result.fallback_used / result.fallback_category
@@ -246,13 +248,13 @@ from src.agents.llm_client import (
 )
 
 # Hit-rate observation (pure read, does not change cache correctness; thread-safe, --parallel concurrent calls)
-rate = get_cache_hit_rate()          # This process's hit rate (0.0-1.0); None when no records
-record_cache_hit(True)               # Hit/miss instrumentation (auto-called by _call_llm_with_cache)
-reset_cache_hit_stats()              # Reset counters (batch boundary / test isolation)
+rate = get_cache_hit_rate()  # This process's hit rate (0.0-1.0); None when no records
+record_cache_hit(True)  # Hit/miss instrumentation (auto-called by _call_llm_with_cache)
+reset_cache_hit_stats()  # Reset counters (batch boundary / test isolation)
 
 # Cache security (18. permission convergence + TTL expiry cleanup)
-ensure_llm_cache_dir()               # New dir 0o700; existing dir untouched; returns path
-secure_cache_file(tmp_path)          # os.chmod(tmp_path, 0o600); OSError silenced
+ensure_llm_cache_dir()  # New dir 0o700; existing dir untouched; returns path
+secure_cache_file(tmp_path)  # os.chmod(tmp_path, 0o600); OSError silenced
 removed = cleanup_expired_cache_files()  # mtime-based delete of *.json older than TTL; returns count
 # TTL: AITESTER_LLM_CACHE_TTL_DAYS (default 7 days; 0/negative = cleanup disabled)
 ```
@@ -280,8 +282,8 @@ from src.agents.failure_kb import (
 
 # Offline accumulation: python experiments/analyze_failures.py -k failure_knowledge_base.json
 # Online consumption (FAILURE_KB_ENABLE=true auto-injected by _debugger_node; default off)
-snippet = kb_debugger_snippet("syntax")   # Same-category case snippets matching error_category="syntax"
-entries = load_knowledge_base()            # Load KB (missing/corrupt/non-list → [])
+snippet = kb_debugger_snippet("syntax")  # Same-category case snippets matching error_category="syntax"
+entries = load_knowledge_base()  # Load KB (missing/corrupt/non-list → [])
 ranked = rank_knowledge_entries(entries, "syntax")  # Frequency × time-decay ranked top-k
 # Decay: FAILURE_KB_DECAY_DAYS (default 30 days); older entry last_seen → lower weight
 # (0.5 ** (age_days / half_life_days); missing last_seen / half-life ≤0 → weight 1.0)

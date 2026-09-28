@@ -3,7 +3,8 @@
 # AITester：逻辑驱动的多智能体测试生成与自修复系统
 
 > AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
-> 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**。
+> 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**
+> + **Oracle（测试预言）闭环：规约驱动断言增强与缺陷检出导向**。
 
 ## 测试状态
 

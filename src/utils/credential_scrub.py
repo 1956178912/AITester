@@ -71,9 +71,7 @@ if not _PROVIDER_KEY_PATTERNS:
     _PROVIDER_KEY_PATTERNS = _PROVIDER_KEY_PATTERNS_FALLBACK
 
 # 合并后的完整剔除模式（动态 provider + 静态通用名单）
-_CREDENTIAL_PATTERNS: tuple[re.Pattern, ...] = tuple(
-    list(_STATIC_CREDENTIAL_PATTERNS) + list(_PROVIDER_KEY_PATTERNS)
-)
+_CREDENTIAL_PATTERNS: tuple[re.Pattern, ...] = tuple(list(_STATIC_CREDENTIAL_PATTERNS) + list(_PROVIDER_KEY_PATTERNS))
 
 
 def provider_scrub_names() -> list[str]:

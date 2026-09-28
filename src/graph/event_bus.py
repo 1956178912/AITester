@@ -60,8 +60,14 @@ class PlanGenerated(Event):
 
     EVENT_NAME: str = "plan_generated"
 
-    def __init__(self, task_uuid: str = "", function_name: str = "", test_case_count: int = 0,
-                 cfg_cyclomatic: int | None = None, iteration: int = 0) -> None:
+    def __init__(
+        self,
+        task_uuid: str = "",
+        function_name: str = "",
+        test_case_count: int = 0,
+        cfg_cyclomatic: int | None = None,
+        iteration: int = 0,
+    ) -> None:
         super().__init__(
             payload={
                 "task_uuid": task_uuid,
@@ -79,8 +85,14 @@ class TestsExecuted(Event):
     __test__ = False  # 阻止 pytest 把事件类当测试类收集
     EVENT_NAME: str = "tests_executed"
 
-    def __init__(self, task_uuid: str = "", passed: bool = False, coverage: float | None = None,
-                 error_category: str = "", iteration: int = 0) -> None:
+    def __init__(
+        self,
+        task_uuid: str = "",
+        passed: bool = False,
+        coverage: float | None = None,
+        error_category: str = "",
+        iteration: int = 0,
+    ) -> None:
         super().__init__(
             payload={
                 "task_uuid": task_uuid,
@@ -97,8 +109,14 @@ class PatchApplied(Event):
 
     EVENT_NAME: str = "patch_applied"
 
-    def __init__(self, task_uuid: str = "", applied: bool = False, new_code_chars: int = 0,
-                 postprocess_labels: list[str] | None = None, iteration: int = 0) -> None:
+    def __init__(
+        self,
+        task_uuid: str = "",
+        applied: bool = False,
+        new_code_chars: int = 0,
+        postprocess_labels: list[str] | None = None,
+        iteration: int = 0,
+    ) -> None:
         payload: dict[str, Any] = {
             "task_uuid": task_uuid,
             "applied": applied,
@@ -114,8 +132,14 @@ class DebuggerDiagnosed(Event):
 
     EVENT_NAME: str = "debugger_diagnosed"
 
-    def __init__(self, task_uuid: str = "", error_category: str = "", fix_strategy_tag: str = "",
-                 fix_strategy_action: str = "", iteration: int = 0) -> None:
+    def __init__(
+        self,
+        task_uuid: str = "",
+        error_category: str = "",
+        fix_strategy_tag: str = "",
+        fix_strategy_action: str = "",
+        iteration: int = 0,
+    ) -> None:
         super().__init__(
             payload={
                 "task_uuid": task_uuid,
@@ -132,8 +156,9 @@ class WorkflowCompleted(Event):
 
     EVENT_NAME: str = "workflow_completed"
 
-    def __init__(self, task_uuid: str = "", test_passed: bool = False, iteration: int = 0,
-                 final_error_category: str = "") -> None:
+    def __init__(
+        self, task_uuid: str = "", test_passed: bool = False, iteration: int = 0, final_error_category: str = ""
+    ) -> None:
         super().__init__(
             payload={
                 "task_uuid": task_uuid,

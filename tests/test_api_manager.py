@@ -1117,9 +1117,13 @@ class TestAdaptiveHealthConcurrency:
         with mgr._lock:
             mgr.health_nodes.clear()
             for i in range(3):
-                mgr.health_nodes[f"m{i}"] = APIHealth(config=LLMConfig(
-                    api_key="k", base_url="u", model_name=f"m{i}",
-                ))
+                mgr.health_nodes[f"m{i}"] = APIHealth(
+                    config=LLMConfig(
+                        api_key="k",
+                        base_url="u",
+                        model_name=f"m{i}",
+                    )
+                )
         results = mgr.health_check_batch(batch_size=10)
         assert mgr._last_health_batch_failure_rate == 0.0
         assert mgr._last_health_batch_size == 3
@@ -1132,9 +1136,13 @@ class TestAdaptiveHealthConcurrency:
         with mgr._lock:
             mgr.health_nodes.clear()
             for i in range(3):
-                mgr.health_nodes[f"m{i}"] = APIHealth(config=LLMConfig(
-                    api_key="k", base_url="u", model_name=f"m{i}",
-                ))
+                mgr.health_nodes[f"m{i}"] = APIHealth(
+                    config=LLMConfig(
+                        api_key="k",
+                        base_url="u",
+                        model_name=f"m{i}",
+                    )
+                )
         mgr.health_check_batch(batch_size=10)
         # 关闭时 _last_health_batch_failure_rate 保持 None（不写）
         assert mgr._last_health_batch_failure_rate is None

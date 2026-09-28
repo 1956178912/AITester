@@ -46,7 +46,7 @@ def _sleep_threshold() -> float:
 class GuardFinding:
     """确定性守卫 finding。"""
 
-    rule: str            # "random_usage" / "long_sleep" / "wall_clock" / "external_side_effect"
+    rule: str  # "random_usage" / "long_sleep" / "wall_clock" / "external_side_effect"
     detail: str
     line: int = 0
 
@@ -185,9 +185,7 @@ def scan_test_file(source: str, filename: str = "<memory>") -> GuardReport:
         if isinstance(node, ast.ImportFrom):
             top = (node.module or "").split(".")[0]
             if top in _EXTERNAL_MODULE_CALLS:
-                report.findings.append(
-                    GuardFinding("external_side_effect", f"外部模块导入 {node.module}", node.lineno)
-                )
+                report.findings.append(GuardFinding("external_side_effect", f"外部模块导入 {node.module}", node.lineno))
     return report
 
 

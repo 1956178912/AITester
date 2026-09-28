@@ -35,6 +35,7 @@ from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent
+from src.agents.runtime_probe import build_probe_prompt_section
 from src.graph.cost_budget import BudgetExceededError
 from src.graph.event_bus import (
     PlanGenerated,
@@ -43,6 +44,7 @@ from src.graph.event_bus import (
     publish_patch_applied,
     publish_tests_executed,
 )
+from src.graph.expert_pool import expert_pool_enabled
 from src.graph.rag import (
     RAG_MODULE_AVAILABLE,
     TestCaseRetriever,
@@ -117,6 +119,83 @@ def _patch_resample_temperature() -> float | None:
         return temp
     except Exception:
         return None
+
+
+def _oracle_enhance_enabled() -> bool:
+    """P0 测试预言增强开关（ORACLE_ENHANCE_ENABLE=true 时启用，默认 false）。
+
+    启用后 _planner_node 在 Planner 产出 logic_analysis 后追加一次
+    OracleEnhancerAgent.enhance() 调用：对每个 test_case 做规约驱动
+    预言推理，追加 oracle / oracle_source / oracle_confidence 字段，
+    下游 Generator 经 _build_query 的 json.dumps(test_plan) 自然消费。
+    默认关闭保持历史实验口径不变（Planner → Generator 零变化）。
+    """
+    return os.getenv("ORACLE_ENHANCE_ENABLE", "false").lower() == "true"
+
+
+def _failure_frequency_enabled() -> bool:
+    """ANNEAL-lite 故障频率策略切换开关（FAILURE_FREQUENCY_ENABLE=true 时启用，默认 false）。
+
+    启用后 _debugger_node 在每轮修复前检测同一 error_category 是否在
+    近期迭代中反复出现（≥ 阈值），高频时注入强化策略提示（如"优先启用
+    oracle_enhancer / runtime_probe"），引导 LLM 换更强的修复路径而非
+    继续用同一策略碰运气。零 LLM 成本（纯配置级策略映射表查询）。
+    默认关闭保持历史修复口径不变（_debugger_node 零变化）。
+    """
+    return os.getenv("FAILURE_FREQUENCY_ENABLE", "false").lower() == "true"
+
+
+def _oracle_validate_enabled() -> bool:
+    """AST 级断言一致性检查开关（ORACLE_VALIDATE_ENABLE=true 时启用，默认 false）。
+
+    启用后 _generator_node 在生成测试代码后做 AST 静态分析（零 LLM 成本），
+    识别恒真断言 / 魔数断言 / 类型不一致三类疑点，写入
+    state["oracle_findings"] 供实验分析消费（观测层，不阻断主流程）。
+    默认关闭保持历史口径不变（_generator_node 零变化）。
+    """
+    return os.getenv("ORACLE_VALIDATE_ENABLE", "false").lower() == "true"
+
+
+def _build_failure_frequency_section(state: AITesterState) -> str:
+    """构建 ANNEAL-lite 故障频率强化提示片段（FAILURE_FREQUENCY_ENABLE=true 时非空）。
+
+    保守口径：
+    - 开关关闭 / repair_history 为空 / 非高频故障时返回空串（prompt 与历史逐字节一致）；
+    - 高频故障时返回 failure_frequency.get_escalated_strategy_hint() 产出的强化提示
+      （纯配置级策略映射表查询，零 LLM 成本）。
+    """
+    if not _failure_frequency_enabled():
+        return ""
+    from src.tools.failure_frequency import detect_high_frequency_failure, get_escalated_strategy_hint
+
+    signal = detect_high_frequency_failure(
+        repair_history=state.get("repair_history") or [],
+        current_category=state.get("error_category"),
+        target_module=state.get("module_name"),
+    )
+    if signal is None:
+        return ""
+    hint = get_escalated_strategy_hint(signal)
+    if not hint:
+        return ""
+    logger.info(
+        "ANNEAL-lite 故障频率检测：%s 在近 %d 轮中出现（阈值 %d），注入强化策略提示",
+        signal.get("category"),
+        signal.get("count", 0),
+        signal.get("threshold", 2),
+    )
+    return hint
+
+
+def _runtime_probe_enabled() -> bool:
+    """P0 运行时探针开关（RUNTIME_PROBE_ENABLE=true 时启用，默认 false）。
+
+    启用后 _executor_node 在测试失败时经 sys.settrace 一次性探针捕获
+    "失败时刻局部变量快照"，写入 state["runtime_probe_snapshot"]；
+    _debugger_node 读取后把探针片段注入修复 prompt（运行时证据替代
+    静态猜测，提升仓库级修复质量）。默认关闭保持历史实验口径不变。
+    """
+    return os.getenv("RUNTIME_PROBE_ENABLE", "false").lower() == "true"
 
 
 def _context_tier_downgrade_enabled() -> bool:
@@ -201,6 +280,25 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         if not _validate_planner_output(test_plan):
             logger.warning("Planner 输出结构不完整，使用默认计划")
             test_plan = _get_default_test_plan(state.get("target_function"))
+        # P0 测试预言增强（ORACLE_ENHANCE_ENABLE=true 时启用，默认关）：
+        # 在 Planner 产出 logic_analysis（规约）后，由独立 LLM 调用对每个
+        # test_case 做规约驱动预言推理，追加 oracle / oracle_source /
+        # oracle_confidence 字段；下游 Generator 经 _build_query 的
+        # json.dumps(test_plan) 自然消费强化断言预言。
+        # 保守降级：LLM 失败时保留原 test_cases（oracle_enhanced=False），不阻断生成。
+        # 默认关闭时零行为变化（历史口径不变）。
+        if _oracle_enhance_enabled():
+            from src.agents.oracle_enhancer import OracleEnhancerAgent
+
+            enhancer = OracleEnhancerAgent()
+            test_plan = enhancer.enhance(test_plan)
+            _oracle_enhanced = bool(test_plan.get("oracle_enhanced"))
+            logger.info(
+                "P0 测试预言增强：%s（函数=%s，oracle 注入 %d 条）",
+                "成功" if _oracle_enhanced else "降级保留原 test_cases",
+                test_plan.get("function_name", "unknown"),
+                sum(1 for c in test_plan.get("test_cases", []) if c.get("oracle")),
+            )
         logger.info("Planner 完成规划，函数=%s", test_plan.get("function_name", "unknown"))
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # LLM 调用失败或返回非 JSON 格式时，使用默认计划兜底
@@ -236,7 +334,11 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
             iteration=int(state.get("iteration", 0)),
         )
     )
-    return {"test_plan": test_plan}
+    # 观测层：把"预言增强是否触发"写回 state（供实验分析消费，默认关时不写）
+    update: dict[str, Any] = {"test_plan": test_plan}
+    if _oracle_enhance_enabled():
+        update["oracle_enhanced"] = bool(test_plan.get("oracle_enhanced"))
+    return update
 
 
 def _generator_node(state: AITesterState) -> dict[str, Any]:
@@ -348,6 +450,23 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test))
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
+
+    # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时启用，默认关）：
+    # 纯 AST 静态分析（零 LLM 成本），识别恒真断言 / 魔数断言 / 类型不一致
+    # 三类疑点，写入 state["oracle_findings"] 供实验分析消费（观测层，不阻断
+    # 主流程）。开关关闭 / 无生成内容时不执行（历史口径不变）。
+    oracle_findings: list[dict[str, Any]] = []
+    if _oracle_validate_enabled() and generated_test:
+        from src.tools.oracle_validator import check_assertions
+
+        oracle_findings = check_assertions(generated_test, state["target_code"])
+        if oracle_findings:
+            logger.info(
+                "AST 断言一致性检查发现 %d 个疑点（类型=%s）",
+                len(oracle_findings),
+                [f.get("type") for f in oracle_findings],
+            )
+
     _trace_node(
         "generator",
         output_summary={"generated_test_len": len(generated_test)},
@@ -362,6 +481,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 2.3 改进：复现测试生成结果（未启用 / 无缺陷描述时保持 None）
     if repro_test:
         update["repro_test"] = repro_test
+    # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
+    if oracle_findings:
+        update["oracle_findings"] = oracle_findings
     # 累计 RAG 检索指标（本节点读取后携带历史值，避免后续节点覆盖丢失）
     if update_rag_stat:
         update["rag_stats"] = [*list(state.get("rag_stats") or []), update_rag_stat]
@@ -461,6 +583,29 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
             get_retriever=get_rag_retriever,
         )
 
+    # P0 运行时探针采集层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
+    # 测试失败时，经 sys.settrace 一次性探针捕获"失败时刻局部变量快照"，
+    # 写入 state["runtime_probe_snapshot"] 供下一轮 _debugger_node 注入 prompt。
+    # 纯观测层：探针失败 / 测试全过时 state["runtime_probe_snapshot"]=None，
+    # 历史口径不变。默认关闭时零行为变化。
+    runtime_probe_snapshot: dict[str, Any] | None = None
+    if not result["passed"] and _runtime_probe_enabled():
+        from src.agents.runtime_probe import capture_failure_snapshot
+
+        runtime_probe_snapshot = capture_failure_snapshot(
+            test_code=state.get("generated_test") or "",
+            target_module=state.get("module_name"),
+        )
+        _trace_node(
+            "runtime_probe",
+            output_summary={
+                "captured": runtime_probe_snapshot is not None,
+                "frames": len((runtime_probe_snapshot or {}).get("frames", [])),
+            },
+            decision="probe_captured" if runtime_probe_snapshot else "probe_degraded",
+            iteration=state.get("iteration", 0),
+        )
+
     # 3.2 执行反馈轨迹：追加本次执行记录（纯观测层，默认常开）。
     # 上一轮覆盖率从入参轨迹前缀直接读（_record_execution_trace 内部再
     # 复制一份轨迹，故此处不预先计算 prev_coverage，避免重复扫描）
@@ -480,7 +625,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 1.4 事件总线接线：TestsExecuted（纯观测，不改路由）
     publish_tests_executed(state, passed=result["passed"], coverage=result["coverage"])
 
-    return {
+    update: dict[str, Any] = {
         "test_passed": result["passed"],
         "test_output": result["output"],
         "coverage_report": result["coverage"],
@@ -488,6 +633,11 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         "execution_trace": new_trace,
         "iteration_strategy_suggestion": strategy_suggestion,
     }
+    # P0 运行时探针快照（RUNTIME_PROBE_ENABLE=true 时写入；默认关时不写，
+    # 历史口径不变。None 表示探针未触发 / 降级；非 None 时含 frames 列表）
+    if _runtime_probe_enabled():
+        update["runtime_probe_snapshot"] = runtime_probe_snapshot
+    return update
 
 
 def _record_execution_trace(
@@ -774,6 +924,20 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             # mypy：AITesterState.get 对 TypedDict 返回 Any/Optional 视
             # 键是否已声明而定，显式 cast 收窄到 debug 期望类型
             contract_reject_feedback=cast("dict[str, Any] | None", state.get("contract_reject_feedback")),
+            # P0 运行时探针注入层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
+            # 上一轮 _executor_node 在测试失败时经 sys.settrace 一次性探针捕获的
+            # "失败时刻局部变量快照"，渲染为 prompt 片段注入修复上下文（运行时
+            # 证据替代静态猜测，提升仓库级修复质量）。保守降级：快照为 None /
+            # 开关关时 probe_section 为空串，prompt 与历史逐字节一致。
+            probe_section=(
+                build_probe_prompt_section(state.get("runtime_probe_snapshot")) if _runtime_probe_enabled() else ""
+            ),
+            # ANNEAL-lite 故障频率强化（FAILURE_FREQUENCY_ENABLE=true 时启用，默认关）：
+            # 检测当前 error_category 是否在 repair_history 中反复出现（≥ 阈值），
+            # 高频时注入强化策略提示（如"优先启用 oracle_enhancer / runtime_probe"），
+            # 引导 LLM 换更强修复路径。零 LLM 成本（纯配置级策略映射表查询）。
+            # 默认关闭时 failure_frequency_section 为空串，prompt 与历史逐字节一致。
+            failure_frequency_section=_build_failure_frequency_section(state),
         )
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
@@ -814,6 +978,97 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         duration_ms=(time.time() - t0) * 1000,
         iteration=state.get("iteration", 0),
     )
+
+    # P2 并行专家 Agent 池（EXPERT_POOL_ENABLE=true 时启用，默认关）：
+    # 在单 Agent 修复路径完成后，先经 ExpertPoolAgent.generate_parallel 并发调用
+    # N 个专家子 Agent（各聚焦一个修复维度），再经 cross_validate 做两两一致性
+    # 投票（过滤误报候选），取被验证数最高的候选作为本轮补丁。
+    # 保守降级：专家池全失败 / 投票无达标候选时，保留单 Agent 路径产出的
+    # result["patch"]，不引入劣化。开关默认关时本分支零执行，历史口径不变。
+    expert_pool_meta: dict[str, Any] = {}
+    if expert_pool_enabled():
+        from src.graph.expert_pool import ExpertPoolAgent
+        from src.tools.strategy_bank import select_strategy as _select_strategy
+        from src.tools.strategy_bank import strategy_bank_enabled as _sb_enabled
+
+        pool = ExpertPoolAgent()
+        candidates = pool.generate_parallel(
+            target_code=state["target_code"],
+            test_output=state.get("test_output") or "",
+            failed_cases=state.get("failed_cases") or [],
+            rag_references=rag_refs,
+            focus_function=state.get("target_function"),
+        )
+        verified = pool.cross_validate(candidates, min_agreement=2)
+        # 策略银行协同（STRATEGY_BANK_ENABLE=true 时）：按失败签名检索策略，
+        # 把策略 prompt_hint 注入胜出候选（零额外 LLM 成本，纯静态映射）
+        if verified and _sb_enabled():
+            strategy = _select_strategy(
+                error_category=state.get("error_category") or "unknown",
+                fix_strategy_tag=state.get("fix_strategy_tag"),
+                cross_file=bool(state.get("cross_file_deps")),
+            )
+            if strategy and strategy.get("prompt_hint"):
+                verified[0]["patch"] = verified[0]["patch"] + "\n\n" + strategy["prompt_hint"]
+        if verified:
+            best = verified[0]
+            # 专家池胜出候选替换单 Agent 补丁（保守：仅当单 Agent 补丁为空或
+            # 专家池候选被更多专家投票通过时才替换）
+            if not result.get("patch") or len(verified) >= 2:
+                result["patch"] = best["patch"]
+                result["expert_pool_winner"] = True
+            # 多解合成（PRISM 式，EXPERT_POOL_ENABLE=true 且验证候选 ≥ 2 时）：
+            # 对验证通过的多个候选做 AST 级修改区域检测——无重叠时合并为
+            # 更完整方案（合成 = "从多个部分正确候选中拼出完整方案"，而非
+            # "投票选最好的"）。保守降级：有重叠 / 语法校验失败 / 无多候选
+            # 时保留投票胜出候选，不引入劣化。
+            if len(verified) >= 2:
+                from src.tools.multi_candidate import CandidateResult
+                from src.tools.multi_candidate import synthesize_candidates as _synth_candidates
+
+                synth_inputs = [
+                    CandidateResult(
+                        index=i,
+                        patch=str(c.get("patch") or ""),
+                        new_code=str(c.get("patch") or ""),
+                        static_passed=True,
+                    )
+                    for i, c in enumerate(verified)
+                ]
+                synth_code, synth_labels = _synth_candidates(state["target_code"], synth_inputs)
+                if synth_code:
+                    result["patch"] = synth_code
+                    result["expert_pool_winner"] = True
+                    expert_pool_meta["synthesized"] = True
+                    logger.info(
+                        "多解合成：合并 %d 个无重叠候选，区域=%s",
+                        len(verified),
+                        synth_labels,
+                    )
+            expert_pool_meta = {
+                "dimensions_consulted": len(candidates),
+                "verified_count": len(verified),
+                "winner_dimension": best.get("dimension"),
+                "agreed_dimensions": best.get("agreed_dimensions", []),
+                "expert_pool_applied": bool(best.get("patch")),
+            }
+            logger.info(
+                "P2 并行专家池：咨询 %d 个专家，投票通过 %d 个候选，胜出维度=%s（被 %d 个专家同意）",
+                len(candidates),
+                len(verified),
+                best.get("dimension"),
+                best.get("verified_count", 1),
+            )
+            _trace_node(
+                "expert_pool",
+                output_summary={
+                    "dimensions_consulted": len(candidates),
+                    "verified_count": len(verified),
+                    "winner_dimension": best.get("dimension"),
+                },
+                decision=f"expert_{best.get('dimension')}",
+                iteration=state.get("iteration", 0),
+            )
 
     # 统一走 rag_guarded 降级守卫（P1 重构）：入库修复案例
     rag_guarded(
@@ -863,6 +1118,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 4. 失败知识库闭环落点 B 观测标志（_debugger_node 写入；默认 None，
         # FAILURE_KB_ENABLE 默认关时恒 None，历史口径不变）
         "kb_prompt_snippet_applied": result.get("kb_prompt_snippet_applied"),
+        # P0 运行时探针注入层观测标志（_debugger_node 写入；RUNTIME_PROBE_ENABLE
+        # 默认关 / 快照为 None 时恒 False，历史口径不变）
+        "probe_section_applied": result.get("probe_section_applied"),
     }
     # 累计 RAG 修复检索指标（P1）
     repair_stat = _build_rag_stat(rag_refs, kind="repairs")

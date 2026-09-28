@@ -30,11 +30,11 @@ from dataclasses import dataclass, field
 class _ConfigDefaults:
     """默认阈值（环境变量可覆盖，构造参数优先）。"""
 
-    WINDOW_SIZE = 50          # 滑动窗口事件数（z-score / 熵统计口径）
-    ZSCORE_LIMIT = 3.0        # 工具调用频率 z-score 越限阈值
-    ENTROPY_FLOOR = 0.5       # 动作熵下限（bits；序列过重复 → 疑似漂移）
-    ENTROPY_CEIL = 4.0       # 动作熵上限（bits；序列过度混乱 → 疑似漂移）
-    CAPABILITY_VIOLATION_LIMIT = 0   # 能力违规计数阈值（0 = 首次违规即报）
+    WINDOW_SIZE = 50  # 滑动窗口事件数（z-score / 熵统计口径）
+    ZSCORE_LIMIT = 3.0  # 工具调用频率 z-score 越限阈值
+    ENTROPY_FLOOR = 0.5  # 动作熵下限（bits；序列过重复 → 疑似漂移）
+    ENTROPY_CEIL = 4.0  # 动作熵上限（bits；序列过度混乱 → 疑似漂移）
+    CAPABILITY_VIOLATION_LIMIT = 0  # 能力违规计数阈值（0 = 首次违规即报）
 
     @classmethod
     def _env(cls, name: str, default: str) -> str:
@@ -86,7 +86,7 @@ class RogueFinding:
     """流氓行为 finding（check() 输出）。"""
 
     agent_id: str
-    kind: str          # "zscore" / "entropy" / "capability"
+    kind: str  # "zscore" / "entropy" / "capability"
     detail: str
     metric: float
 

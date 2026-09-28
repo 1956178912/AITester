@@ -143,7 +143,13 @@ class TestGetRecommendedStrategyAllCategories:
             assert record["category"] == cat.value
             assert record["strategy"]
             assert record["description"]
-            assert record["repair_action"] in {"llm_resample", "repair_code", "repair_test", "investigate_infra", "no_action"}
+            assert record["repair_action"] in {
+                "llm_resample",
+                "repair_code",
+                "repair_test",
+                "investigate_infra",
+                "no_action",
+            }
 
     def test_unknown_category_fallback_tag(self):
         # 未知类别（构造一个不在映射表的哨兵）→ 通用兜底标签

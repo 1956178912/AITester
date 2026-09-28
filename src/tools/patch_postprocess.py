@@ -38,6 +38,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 # ─── 开关（环境变量，功能模块在调用期读取，与 multi_candidate/cross_file
 # 模式一致，保留测试的 patch.dict(os.environ) 运行期切换能力）──────────────
 # P1 空壳补丁检测（默认 true）：检测不修改，仅返回分类标签；调用方（
@@ -46,10 +47,12 @@ logger = logging.getLogger(__name__)
 def _empty_patch_guard_enabled() -> bool:
     return os.getenv("EMPTY_PATCH_GUARD", "true").lower() != "false"
 
+
 # P2 导入断裂修复（默认 false，保持历史行为）：补丁应用前自动把原代码的
 # 顶层 import 行回填到补丁头部（仅当补丁是完整文件模式且丢失了原 import）。
 def _import_repair_enabled() -> bool:
     return os.getenv("IMPORT_REPAIR_ENABLE", "false").lower() == "true"
+
 
 # P3 契约符号别名回填（默认 false，保持历史行为）：检测 LLM 对模块级
 # 契约符号的重命名（Old → New 嫌疑），在补丁中补 `Old = New` 别名定义。
@@ -223,8 +226,10 @@ def repair_contract_aliases(original_code: str, patch: str) -> str | None:
                 for target in node.targets:
                     if isinstance(target, ast.Name) and not target.id.startswith("__"):
                         sink.add(target.id)
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and not node.target.id.startswith(
-                "__"
+            elif (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and not node.target.id.startswith("__")
             ):
                 sink.add(node.target.id)
 
@@ -239,6 +244,7 @@ def repair_contract_aliases(original_code: str, patch: str) -> str | None:
     # 重命名嫌疑：缺失符号 S 与补丁新增符号 N 前缀相关（小写归一后
     # 共同前缀长度 >= 3，且 N 是新增）
     new_symbols = patch_symbols - orig_symbols
+
     def _common_prefix_len(a: str, b: str) -> int:
         n = 0
         for x, y in zip(a, b, strict=False):

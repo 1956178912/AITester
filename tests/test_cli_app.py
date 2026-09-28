@@ -355,7 +355,16 @@ class TestRunDumpTraceOnFailure:
         files = self._make_files(tmp_path)
         seen: dict = {}
 
-        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, dump_trace_on_failure=False, **kw):
+        def fake_task(
+            target_file,
+            func,
+            max_iterations,
+            timeout,
+            coverage_threshold,
+            output_json,
+            dump_trace_on_failure=False,
+            **kw,
+        ):
             seen["dump_trace_on_failure"] = dump_trace_on_failure
             return {"success": True, "file": target_file, "func": "all", "passed": True}
 
@@ -368,7 +377,16 @@ class TestRunDumpTraceOnFailure:
         files = self._make_files(tmp_path)
         seen: dict = {}
 
-        def fake_task(target_file, func, max_iterations, timeout, coverage_threshold, output_json, dump_trace_on_failure=False, **kw):
+        def fake_task(
+            target_file,
+            func,
+            max_iterations,
+            timeout,
+            coverage_threshold,
+            output_json,
+            dump_trace_on_failure=False,
+            **kw,
+        ):
             seen["dump_trace_on_failure"] = dump_trace_on_failure
             return {"success": True, "file": target_file, "func": "all", "passed": True}
 

@@ -111,8 +111,7 @@ def _llm_applied_ratio(details: list[dict[str, object]]) -> float | None:
     marked = [
         d
         for d in details
-        if isinstance(d, dict)
-        and isinstance(d.get("repo_verification"), dict)  # type: ignore[union-attr]
+        if isinstance(d, dict) and isinstance(d.get("repo_verification"), dict)  # type: ignore[union-attr]
     ]
     if not marked:
         return None
@@ -205,7 +204,9 @@ def main() -> int:
     parser.add_argument("--list-tiers", action="store_true", help="列出可用档位后退出")
     parser.add_argument("--output-dir", default=RESULT_DIR, help="结果输出目录")
     parser.add_argument("--baseline", default="aitester", help="统计基线（默认 aitester）")
-    parser.add_argument("--no-run", action="store_true", help="仅汇总已有结果 JSON，不跑新 benchmark（--analyze-only 口径）")
+    parser.add_argument(
+        "--no-run", action="store_true", help="仅汇总已有结果 JSON，不跑新 benchmark（--analyze-only 口径）"
+    )
     args = parser.parse_args()
 
     # ── 列出可用档位 ────────────────────────────────────────────────────────

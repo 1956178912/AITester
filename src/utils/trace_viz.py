@@ -87,13 +87,7 @@ function expandAll(v){document.querySelectorAll('.detail').forEach(function(d){d
 
 def _esc(s: Any) -> str:
     """HTML 转义。"""
-    return (
-        str(s)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester Trace Timeline") -> int:
@@ -136,7 +130,10 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
 
         # 节点时间轴（只取 node 类事件，过滤 task_start/end）
         node_recs = [
-            r for r in recs_sorted if r.get("event") in ("node_start", "node_end", "planner", "executor", "debugger", "patch_applier", "generator")
+            r
+            for r in recs_sorted
+            if r.get("event")
+            in ("node_start", "node_end", "planner", "executor", "debugger", "patch_applier", "generator")
         ]
         chips: list[str] = []
         for r in node_recs:
@@ -164,7 +161,7 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
         )
         # 原始记录详情（折叠）
         raw_lines = "\n".join(json.dumps(r, ensure_ascii=False) for r in recs_sorted)
-        detail_html = f'<pre>{_esc(raw_lines)}</pre>'
+        detail_html = f"<pre>{_esc(raw_lines)}</pre>"
 
         badge = "pass" if passed_flag else "fail"
         label = "PASS" if passed_flag else "FAIL"

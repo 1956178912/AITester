@@ -61,10 +61,11 @@ Python 源码补丁、`ast` 静态解析、Python traceback 正则）。当被�
 # src/backends/base.py（示意，未落地）
 class LanguageBackend(Protocol):
     language: str
-    def planner_corpus(self) -> str: ...            # 测试框架语料 prompt
+
+    def planner_corpus(self) -> str: ...  # 测试框架语料 prompt
     def executor_command(self, test_path: str) -> list[str]: ...
     def parse_result(self, raw: str) -> ExecResult: ...
-    def classify_error(self, text: str) -> str: ... # → 17 类口径
+    def classify_error(self, text: str) -> str: ...  # → 17 类口径
     def patch_guard(self, code: str, patch: str) -> tuple[bool, list[str]]: ...
     def type_checker(self, code: str) -> list[Finding]: ...
 ```

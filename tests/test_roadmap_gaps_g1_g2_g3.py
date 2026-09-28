@@ -355,8 +355,9 @@ class TestPyrightFindingsParsing:
         class _FakeProc:
             stdout = fake_report
 
-        with patch("shutil.which", return_value="/usr/bin/pyright-fake"), patch(
-            "subprocess.run", return_value=_FakeProc()
+        with (
+            patch("shutil.which", return_value="/usr/bin/pyright-fake"),
+            patch("subprocess.run", return_value=_FakeProc()),
         ):
             findings = type_repair._run_pyright_findings(
                 "def f(x):\n    pass\n",

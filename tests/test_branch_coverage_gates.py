@@ -45,7 +45,7 @@ class TestBranchGateScript:
         cov_file = tmp_path / "coverage.xml"
         cov_file.write_text(xml, encoding="utf-8")
         # 达标：全绿（加权聚合 (91+20+10+74)/(100+20+10+80)=0.8935≥0.85；workflow 0.91 /
-            # error_classifier 0.92 过 90% 严格门槛；state / tracing 1.0 过 85% 普通门槛）
+        # error_classifier 0.92 过 90% 严格门槛；state / tracing 1.0 过 85% 普通门槛）
         assert mod.check_branch_coverage(str(cov_file)) == []
         # 未达标：workflow 降到 0.80 应被捕获（< 90% 严格门槛）
         bad = xml.replace(
