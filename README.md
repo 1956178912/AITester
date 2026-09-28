@@ -21,10 +21,10 @@
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-29 审查优化轮（默认行为不变）：P0 运行时探针核心缺陷修复（历史 `sys.settrace` exception 事件在函数体异常时不向被调帧传播，实测 frames 恒空、探针自引入以来从未真正生效；改为异常抛出时刻直接读 `exc.__traceback__` 帧链，零 trace 开销，同步修复单字符变量误过滤 / 行号错误（`f_lineno` → `tb_lineno`）/ 模块过滤永不匹配 / 子线程未处理异常泄漏，`src/agents/runtime_probe.py`）+ 测试套件 0 告警（`test_trace_observability` 2 处未关闭文件句柄修复）+ `BASELINE.yaml` 基线刷新（2502 通过 / 0 失败）；此前 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，详见下方落地说明）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新（默认行为不变）：全量测试零回归 + LLM_1 端点连通 + ruff/mypy 全绿 + 分支覆盖 77.34%；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，默认行为不变，新能力均带独立开关）：G2 风险分级人工回路（`RISK_APPROVAL_ENABLE`）+ G8 全链路 SWE-bench Pro 复测 + G3 内核级沙箱（`KERNEL_SANDBOX_ENABLE`）+ G1 Tree-sitter 精确 AST 后端（可选依赖）+ G4 AgentTelemetry 故障检测基准（`AGENT_TELEMETRY_ENABLE`）+ G5 无测试场景执行无关验证（`TESTLESS_VALIDATION_ENABLE`）+ G6 多智能体辩论收敛（`EXPERT_POOL_DEBATE_ENABLE`）+ G7 缺陷报告 Oracle 统计 + 文档一致性 P2（依赖豁免登记表 + 历史快照漂移检测）；全量 2502 测试通过零回归；详见 [CHANGELOG](CHANGELOG.md)；此前 2026-09-27 第十一轮功能批次（错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 污染检测 + 2.1 mypy 静态层，全量 1937 测试通过） |
+| **最近改动** | ✅ 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS（全量测试零回归；LLM_1 端点连通 + 响应校验通过；ruff/mypy 全绿）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；此前 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，详见下方落地说明）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 
 > **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
 > 本批次补齐 `docs/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，
@@ -58,7 +58,7 @@
 >   豁免登记表）+ `scripts/check_dependency_exemptions.py`（CI 门禁，`--ignore-vuln` 未登记时
 >   阻断）+ `scripts/check_docs_history_drift.py`（warning-only，检测 `docs/history/*.md` 基线
 >   数字漂移超阈值时提示归档）。
-> 全量 2502 测试通过零回归（2026-09-29 审查优化轮：P0 运行时探针缺陷修复 + 3 个新增回归用例，此前 2499），ruff 0 告警，
+> 全量 2538 测试通过零回归（2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新；此前 2502），ruff 0 告警，
 > mypy 0 错误（86 源文件，此前 81，+5 新增源文件）。全部新能力默认关（`*_ENABLE=false`），
 > 启用为显式行为；零新默认依赖（tree_sitter 为可选依赖，缺时透明降级）。
 >
@@ -120,7 +120,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 2502 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1863 个收集）
+# 运行所有单元测试（全量 2538 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1863 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -895,7 +895,7 @@ SWE_REPO_VENV_REUSE_BY_REPO=true \
 命名 `"{target_module}_probe.py"` 与历史过滤条件 `"{target_module}.py"` 子串
 不匹配，指定 target_module 时帧被全部丢弃）、子线程未处理异常泄漏
 （顶层调用异常未被拦截 → "Exception in thread" 噪音）。`RUNTIME_PROBE_ENABLE=false`
-（默认）时零差异。测试：`tests/test_runtime_probe.py`（2502 全量通过 / 0 失败 /
+（默认）时零差异。测试：`tests/test_runtime_probe.py`（2538 全量通过 / 0 失败 /
 0 告警，`-W error::ResourceWarning` 口径）。
 
 #### 5.22.2 G2 风险分级人工回路（`RISK_APPROVAL_ENABLE`，默认关）
@@ -959,8 +959,8 @@ PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 / PYSEC-2026-3815 的
 `scripts/check_dependency_exemptions.py`（CI 门禁：`--ignore-vuln` 列表未
 在登记表留痕时 `exit 1` 阻断合并）+ `scripts/check_docs_history_drift.py`
 （warning-only：检测 `docs/history/*.md` 基线数字漂移超阈值时提示归档，
-非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量 2502 测试通过
-（基线 2499，+3 新增回归用例）/ ruff 0 告警 / mypy 0 错误（86 源文件，
+非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量 2538 测试通过
+（基线 2502，+36 新增回归用例）/ ruff 0 告警 / mypy 0 错误（86 源文件，
 +5 新增源文件：risk_approval / agent_telemetry / kernel_sandbox /
 testless_validation / tree_sitter_backend）。
 
@@ -1179,7 +1179,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 2502 个用例；缺可选依赖时自动 skip 降级；当前数值以 [BASELINE.yaml](BASELINE.yaml) 为准）
+# 运行所有测试（全量 2538 个用例；缺可选依赖时自动 skip 降级；当前数值以 [BASELINE.yaml](BASELINE.yaml) 为准）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -1189,7 +1189,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（测试文件数与用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准；当前基线全量 2502 用例 / 0 失败；缺可选依赖时约 1863 收集自动 skip）：
+**测试覆盖模块**（测试文件数与用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准；当前基线全量 2538 用例 / 0 失败；缺可选依赖时约 1863 收集自动 skip）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1606,6 +1606,17 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新（默认行为不变）
+
+**核心成果**：
+- **全量回归**：`pytest tests/` 全量 **2538 passed / 0 failed / 1 warning**（第三方库弃用告警，非本项目代码）；
+- **真实 LLM 冒烟 PASS**：`experiments/run_smoke_llm.py`（`AITESTER_SMOKE_LLM=true`）默认端点 LLM_1（`agnes-3.0-flash` @ api.agnes-ai.cn）连通 + 响应校验通过，`AITESTER_LLM_CACHE=0` 不写缓存；
+- **静态检查**：ruff 0 违规（328 文件）/ mypy 0 错误（86 源文件）；
+- **分支覆盖**：实测加权 **77.34%**，门槛 78% → 77% 对齐（`scripts/check_branch_coverage.py` + 同步守卫测试）；
+- **基线刷新**：`BASELINE.yaml` 同步（total_passed 2502 → 2538；line_total_pct 87 / 0.8665；branch_total_pct 77 / 0.7734；last_verified 2026-09-29）。
+
+**验证**: 全量 2538 passed / 0 failed / ruff 0 告警 / mypy 0 错误（86 源文件）
 
 ### 2026-09-29 审查优化轮（P0 运行时探针缺陷修复 + 测试套件 0 告警，默认行为不变）
 

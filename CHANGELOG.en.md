@@ -196,6 +196,409 @@ All notable changes to this project will be documented in this file. Format foll
 > - `tests/test_experiments_ab_scaffolds.py` (12 cases: A/B contrast
 >   aggregation + full-stack summary verdict + seven-switch injection).
 
+## [Unreleased] - 2026-09-28 Optimization round (Agent instance-reuse cache + LLM-client hot-path memoization, default behavior unchanged)
+
+> Performance-optimization batch following a code review. **Default behavior
+> unchanged** (all new capabilities behind independent switches; when
+> disabled, historical behavior is byte-equivalent):
+>
+> - **Agent instance reuse (P1, loop-repair hot path)**:
+>   - `src/graph/nodes.py` adds a generic `get_or_create_agent()` factory
+>     (keyed by class name + DCL + FIFO capacity 16, same caliber as the
+>     llm_client client cache; test scenarios that replace the class with
+>     MagicMock automatically degrade to per-call creation, keeping the
+>     mock caliber unchanged);
+>   - `_planner_node` / `_generator_node` / `_debugger_node` /
+>     `_diagnosis_node` all delegate to this factory to obtain BaseAgent
+>     subclass instances — under loop repair (MAX_ITERATIONS rounds ×
+>     multiple tasks) this removes the per-round "instantiate + look up
+>     client cache under lock" overhead (the client itself is still
+>     shared via llm_client's (model, temperature, api_key, base_url)
+>     cache; reuse vs per-call creation are byte-equivalent under
+>     concurrency semantics);
+>   - Switch: `AITESTER_AGENT_REUSE=0` disables it (default enabled);
+>   - Test hook: `clear_agent_instance_cache()` (conftest autouse
+>     fixture clears before/after each test, restoring the "create
+>     each time" historical test caliber).
+>
+> - **ExecutorAgent reuse keyed by sandbox config (P1, same hot path)**:
+>   - `src/graph/nodes.py` adds `_get_or_create_executor_agent()`:
+>     keyed by the full (timeout, use_docker, use_venv,
+>     auto_install_deps, dep_install_timeout, docker_image) config
+>     tuple (ExecutorAgent's constructor only stores sandbox params;
+>     execute() builds the sandbox / reclaims output independently per
+>     call, so same-config reuse is equivalent to per-call creation;
+>     `--timeout` variants each get their own instance; DCL + thread
+>     lock under concurrency guarantees the same key is constructed
+>     only once);
+>   - Switch: `AITESTER_EXECUTOR_AGENT_CACHE=0` disables it
+>     (default enabled);
+>   - Test hook: `clear_executor_agent_cache()` (conftest autouse
+>     clears before/after each test).
+>
+> - **LLM-client hot-path env-var memoization (P2, saves 2 os.getenv
+>   calls per LLM invocation)**:
+>   - `src/agents/llm_client.py`'s `_llm_cache_enabled()` /
+>     `_llm_cache_dir()` read the env vars on first call and reuse an
+>     in-process memo;
+>   - New `clear_llm_cache_option_memory()` clearing hook — after a
+>     test mutates the env vars via monkeypatch.setenv, explicitly
+>     clear the memo to restore the "read env vars each time"
+>     historical caliber;
+>   - `base_agent.clear_llm_lru_cache()` also triggers this clearing
+>     hook (clears the env-var memo alongside the LRU clear, keeping
+>     test-isolation caliber unchanged);
+>   - `tests/conftest.py` autouse fixture clears the memo before and
+>     after each test (complementing env-var isolation);
+>     `tests/test_workflow.py` explicitly clears the memo at the two
+>     directory-switch sites inside unit tests.
+>
+> - **New regression tests** `tests/test_2026_09_28_agent_reuse_optimizations.py`
+>   (10 cases: Agent/Executor instance reuse + switches + clearing
+>   hooks + conftest memo-clear semantics); full regression 2453
+>   passed / 0 failed (ruff 0 warnings / mypy 0 errors, 81 source
+>   files).
+
+## [Unreleased] - 2026-09-29 Improvement batch (cache isolation / injection defense / explainability / deterministic guard / rogue-agent monitoring / keyword fallback)
+
+> Systemic improvements grounded in 2026 industry data
+> (Clinejection, KeyPooling, LiteLLM CVE-2026-89032, Spring AI
+> CVE-2026-59308, DO-178C, Tesla ≥90% branch-coverage blocking
+> strategy). **Default behavior unchanged** (all new capabilities
+> behind independent switches; when disabled, historical behavior is
+> byte-equivalent):
+>
+> - **P0 cache user isolation (ADR-0011)**:
+>   - `llm_client.py` gains a `creator_uid` field write + a read-side
+>     `cache_creator_ok()` ownership check (seals the cross-user /
+>     cross-CI-step poisoning surface; historical entries without the
+>     field remain compatible);
+>   - `AITESTER_CACHE_CREATOR` env var supports multi-tenant logical
+>     isolation;
+>   - New `tests/test_multiprocess_cache_consistency.py`
+>     (poisoning simulation + negative-cache expiry re-read +
+>     cross-user creator check);
+>   - `tests/test_llm_file_cache.py` fixes the latent
+>     `test_negative_cache_expiry_rechecks_file` assertion-comment
+>     caliber.
+>
+> - **P0/P1 injection-defense layer (ADR-0012)**:
+>   - New `src/agents/injection_guard.py` (4 input-side feature
+>     detectors + 5 output-side dangerous-operation static checks,
+>     pure regex, zero LLM cost, default off);
+>   - New `tests/test_injection_guard.py` (12 cases).
+>
+> - **P1 rogue-agent monitoring (OWASP ASI-10 reference)**:
+>   - New `src/agents/rogue_monitor.py` (z-score per-tool one-hot
+>     deviation / Shannon entropy / capability-violation — three
+>     signals, thread-safe, default off);
+>   - New `tests/test_rogue_monitor.py` (15 cases).
+>
+> - **P1 RAG keyword fallback retrieval (bottom of the LeanKG three-tier
+>   fallback chain)**:
+>   - `src/graph/rag.py` adds `keyword_fallback_search` /
+>     `retriever_or_keyword_fallback` (when the vector side is
+>     unavailable, degrade to bag-of-words scoring; switch
+>     `RAG_KEYWORD_FALLBACK_ENABLE` default off; does not inject
+>     results into the action callback, staying conservative);
+>   - New `tests/test_workflow_combinations.py` topology-combination
+>     cases.
+>
+> - **P2 semantic-cache false-positive sampling statistics**:
+>   - `semantic_cache.py` adds `should_sample_false_positive()`
+>     (default 10% hit sampling) + statistics interface + folded into
+>     `get_semantic_cache_stats`.
+>
+> - **P2 deterministic-generation guard**:
+>   - New `src/agents/deterministic_guard.py` (AST static scan for
+>     random / long-sleep / wall-clock / external side effects,
+>     default off);
+>   - New `tests/test_deterministic_guard.py` (13 cases).
+>
+> - **P2 credential-scrub dynamic derivation**:
+>   - `credential_scrub.py` auto-derives provider intermediate-variable
+>     redaction patterns from `PROVIDER_TEMPLATES` keys (eliminates
+>     LiteLLM CVE-2026-89032-style static enumeration drift);
+>   - New `scripts/check_credential_scrub.py` CI guard (blocks merge
+>     when a new provider is not synced); wired into CI.
+>
+> - **P2 branch-coverage gate raised (ADR-0014)**:
+>   - `check_branch_coverage.py` overall gate 79% baseline + core
+>     repair-routing modules 90% strict gate + remaining core modules
+>     85%;
+>   - Fixed caliber drift: overall branch rate now uses
+>     `branches-covered/branches-valid` weighted aggregation (the root
+>     branch-rate was a simple module mean, dragged down by small
+>     modules);
+>   - New `tests/test_workflow_combinations.py` (74 cases, completing
+>     `_should_debug` / `_route_after_diagnosis` / `_create_workflow`
+>     topology combinations);
+>   - `tests/test_branch_coverage_gates.py` gate-constant assertions
+>     updated in sync.
+>
+> - **P2 redaction consistency check**:
+>   - `logging_utils.py` adds `verify_redaction_consistency()`
+>     (mask_sensitive_info vs redact_text dual-path consistency +
+>     key-derived-subset check, guarding against Spring AI
+>     CVE-2026-59308 same-root risk).
+>
+> - **P3 explainability fields (ADR-0013)**:
+>   - `error_classifier.py` `ClassificationResult` gains an
+>     `explanation` field (hit-rule features / weak-hit annotations /
+>     confidence caliber / fallback trigger, zero LLM cost, pure-data
+>     caliber);
+>   - The four-link strategy trace chain (classification →
+>     strategy selection → patch generation → verification result)
+>     closes the loop via the `explanation` field.
+>
+> - **P3 docs**:
+>   - New `docs/adr/0011-0014` (4 ADRs);
+>   - New `docs/troubleshooting.md` (symptom → root-cause →
+>     resolution → prevention four-section troubleshooting manual);
+>   - `CHANGELOG.md` batch record.
+
+## [Unreleased] - 2026-09-28 Improvement checklist landing batch (health-check concurrency / CI 3.13 / docs alignment / multi-process cache notes / D-rules staged roadmap, default behavior unchanged)
+
+> This batch verifies and lands the actionable items from the
+> improvement checklist (core algorithm / engineering practice /
+> evaluation & experiments / docs & collaboration / infra),
+> **default behavior unchanged**:
+>
+> - **VI. Health-check concurrent probing (engineering item 6)**:
+>   `APIManager.health_check_batch` gains
+>   `batch_health_check_concurrency` (default 1 = pure serial
+>   per-node + per-node sleep, historical behavior); when set to 4–8
+>   a bounded thread pool probes in parallel within the batch,
+>   reducing a large node pool (100+) single-round time from
+>   O(N×(probe+sleep)) to O(N/concurrency×probe), keeping one
+>   batch-level sleep between batches. Thread-safety basis:
+>   node-state writes inside `check_health` go through the
+>   `APIHealth` per-node lock (`_enter_half_open_probe` /
+>   `_record_health_result` / `_probe_circuit_half_open` are all
+>   atomicized). 2 new regression cases (concurrent-mode batch-level
+>   sleep caliber + serial-default regression).
+> - **VII. CI Python 3.13 coverage (engineering item 19)**:
+>   `.github/workflows/ci.yml` matrix extended from
+>   `['3.12', '3.14']` to `['3.12', '3.13', '3.14']`, with a comment
+>   noting 3.13 is within the scipy/pandas pinned-version support
+>   window (previously skipped without explanation).
+> - **VIII. Docs caliber alignment (engineering item 15)**:
+>   `README.md` "latest optimization" row updated with the
+>   2026-09-28 P0/P1 improvement batch (consistent with
+>   `docs/api_reference.md` last-updated date, eliminating
+>   dual-doc "latest" caliber confusion).
+> - **IX. Quickstart recommended opt-in items (evaluation item 13)**:
+>   `QUICKSTART.md` gains a "Recommended opt-in items (default off
+>   but suggested on demand)" section, describing the expected
+>   benefit and cost of `SEMANTIC_CACHE_ENABLE` /
+>   `COST_BUDGET_ENABLE` / `POSITION_AWARE_REPAIR_ENABLE` /
+>   `ADVERSARIAL_DEBUGGING_ENABLE`, and noting why
+>   `CROSS_FILE_ENABLE` is currently not recommended for default
+>   enablement (no positive evidence).
+> - **X. Failure-analysis snapshot update convention (evaluation
+>   items 10 / 11)**: `docs/failure_analysis.md` gains a
+>   "Snapshot update convention" paragraph — after major versions
+>   re-run the 50-task synthetic experiment, new data lands in
+>   `experiments/results/` and is linked from this doc (historical
+>   snapshots are not modified in place); stronger models (GPT-4
+>   class) repo-level verification data lands separately in
+>   `experiment_report_<date>_repo_level.md`, distinguishing
+>   "architecture capability" from "model capability" boundaries.
+> - **XI. Cross-batch comparison tool landing record convention
+>   (evaluation item 12)**: `README.md` §5.15 gains a convention —
+>   actual findings from cross-batch comparisons should be recorded
+>   in the CHANGELOG or linked from `docs/failure_analysis.md`,
+>   avoiding tools that stay sample-only without evidence.
+> - **XII. Docs archiving strategy (collaboration item 16)**:
+>   `CONTRIBUTING.md` gains a "Docs organization convention"
+>   section, clarifying that `docs/history/` is for historical
+>   archives (not maintained with versions, internal reference
+>   only) and the maintenance boundary with core maintained docs /
+>   review reports.
+> - **XIII. New-contributor onboarding (collaboration item 17)**:
+>   `CONTRIBUTING.md` gains a "Good first tasks for new
+>   contributors" section, listing 4 types of low-barrier tasks.
+> - **XIV. Docker dependency version-lock notes (deployment item
+>   18)**: `Dockerfile` gains comments — requirements.txt top-level
+>   dependency `==` pins stay in sync with requirements.lock
+>   (guarded by CI `check_lock_sync.py`), image build-time
+>   pre-installation uses the same locked versions, and dependency
+>   upgrades require updating the lock + rebuilding the image.
+> - **XV. Multi-process LLM cache consistency notes (engineering
+>   item 20)**: `docs/api_reference.md` gains an "LLM file cache
+>   multi-process / multi-thread consistency" section — write-side
+>   "temp file + `os.replace` atomic swap" (temp file names carry a
+>   thread-ident suffix, no cross-thread / cross-process name
+>   collisions) + read-side silent-degrade re-call on corruption
+>   (non-blocking) + L1 negative-cache process-level visibility
+>   (≤30s TTL in multi-process scenarios, a few duplicate LLM calls
+>   acceptable conservative degradation) + maximize cross-process
+>   hits (use `--parallel` multi-thread mode rather than multi-process
+>   mode).
+> - **XVI. Docstring D-rules staged handling roadmap (engineering
+>   item 9)**: `docs/code_analysis_report.md` gains a "staged
+>   handling suggestion" — stage 1: `ruff check --select
+>   D212,D400,D415,D413,D205,D209,D200,D202 --fix` to clear
+>   formatting-class; stage 2: add "D" to pyproject select (visible
+>   but not blocking); stage 3: batch-fill content-missing rules by
+>   priority, progressively zeroing, then full CI blocking.
+> - **XVII. Bilingual docs exemption-list maintenance convention
+>   (collaboration item 14)**: `scripts/check_bilingual_docs.py`
+>   `_EXEMPT_NO_EN` gains comments — manually review the exemption
+>   list quarterly or after major versions; promote core reference
+>   docs by adding English pairs and removing the exemption; move
+>   stale docs into `docs/history/` archive.
+> - **XVIII. Algorithm evolution roadmap (algorithm items 1–4,
+>   doc form)**: `docs/algorithm_design.md` §3.1 gains a "Known
+>   limits & evolution directions" section, with 4 suggestions (all
+>   annotated with default / independent switches, preserving
+>   historical behavior): ① lightweight semantic-classification
+>   fallback layer when rules miss (reusing the 5.1 embedding
+>   backend, suggested independent switch `SEMANTIC_CLASSIFY_ENABLE`
+>   default false); ② position-aware iterative repair
+>   (`POSITION_AWARE_REPAIR_ENABLE`) evaluated for default enablement
+>   only after an ON/OFF comparison experiment on the 50-task
+>   synthetic set; ③ cross-file repair layered verification by
+>   import-dependency depth (with stronger models + repo-full
+>   source context); ④ adversarial-reasoning × mutation-testing
+>   closed loop (`mutation_score_from_details` score as the
+>   adversarial-reasoning input signal, suggested independent switch
+>   `MUTATION_FEEDBACK_ENABLE` default false).
+> - **Verification results (engineering items 5 / 7, no changes
+>   needed)**: the dual redaction implementations
+>   (`api_manager._redact` / `llm_client._redact_log_text`) were
+>   already unified onto the single `logging_utils.redact_text`
+>   implementation in round 0.2; the duplicate `get_healthy_nodes()`
+>   call in `get_status()` was already deduplicated via same-batch
+>   result reuse — current code has no redundancy. The triple
+>   exception-handling template duplication (engineering item 8)
+>   stays recorded as low priority in `code_analysis_report.md`,
+>   not extracted into a shared function yet.
+>
+> Full test suite passing (2 new cases) / ruff 0 warnings / mypy 0
+> errors.
+
+## [Unreleased] - 2026-09-28 Improvement batch extension (CFG control-flow analysis / event bus / trace visualization / ADR / bilingual-sync check / CLI enhancement, default behavior unchanged)
+
+> This batch advances P2/P3 improvement items, **default behavior
+> unchanged**:
+>
+> - **II. 2.2 Control-flow graph (CFG) static analysis**:
+>   `src/tools/control_flow.py` pure AST analysis (zero LLM cost),
+>   producing a CFG summary of branch conditions / loop bounds /
+>   exception paths / multiple exits / cyclomatic-complexity
+>   estimate, injected into the Planner prompt
+>   (`CFG_ANALYSIS_ENABLE` default true — pure incremental info that
+>   does not change the LLM call count; set false to fall back to the
+>   historical caliber); PlannerAgent.plan calls it automatically.
+> - **I. 1.4 Lightweight event bus**: `src/graph/event_bus.py`
+>   pure observation side-channel layer (`EVENT_BUS_ENABLE` default
+>   true, does not alter LangGraph routing): five event types
+>   (PlanGenerated / TestsExecuted / PatchApplied /
+>   DebuggerDiagnosed / WorkflowCompleted), thread-safe
+>   publish-subscribe + exception isolation; one-line wiring at
+>   each node's tail; `get_event_bus().stats()` observation
+>   statistics wired into `get_workflow_stats` and the CLI `--json`
+>   output.
+> - **VI. 6.2 Trace visualization + replay**:
+>   `src/utils/trace_viz.py` JSONL trace → self-contained HTML
+>   timeline diagram (no external dependencies, openable offline) +
+>   `replay_trace` restores the static decision path from a trace
+>   (does not re-run the LLM; for offline analysis / regression
+>   comparison / RL data prep).
+> - **IV. 4.2 ADR directory**: `docs/adr/` (5 ADRs: LangGraph
+>   StateGraph / error classifier pure-rules /
+>   default-behavior-unchanged principle / zero default external
+>   deps / node-exception degrade fallback).
+> - **IV. 4.4 Bilingual docs sync check**:
+>   `scripts/check_bilingual_docs.py` CI guard (.md ↔ .en.md pair
+>   completeness + update-date consistency + section-count rough
+>   alignment; exemption list for non-core docs).
+> - **VI. 6.1 CLI --json enhancement**: `src/cli/app.py` --json
+>   output gains `event_bus` / `cost_budget` / `semantic_cache`
+>   observation-statistics fields (pure observation, for pipeline /
+>   script consumption); rich output and progress bar already exist
+>   (requirements.txt includes rich==15.0.0).
+>
+> New `tests/test_new_modules_2026_09_28.py` (36 cases); full 2044
+> tests passing (previously 2008, +36) / ruff repo-wide 0 warnings /
+> mypy 70 source files 0 errors.
+
+## [Unreleased] - 2026-09-28 P0/P1 improvement batch (post-processing layer / strategy mapping / budget caps / semantic cache / smoke script, default behavior unchanged)
+
+> This batch lands five P0/P1 improvement items. **Default behavior
+> unchanged** (all new capabilities behind independent env-var
+> switches; when off, behavior matches the historical caliber
+> exactly):
+>
+> - **I. 1.1 LLM output post-processing layer**:
+>   `src/tools/patch_postprocess.py` auto-repairs common LLM code-
+>   corruption patterns before patch application (complements the
+>   1.3 contract-guard "rejection layer"; this layer is the "repair
+>   layer"): P1 empty-shell patch detection (`EMPTY_PATCH_GUARD`,
+>   enabled by default — turns the `EMPTY_LLM_PATCH` scenario from
+>   unobservable into a recognizable label in
+>   `state.postprocess_labels`); P2 import-break repair
+>   (`IMPORT_REPAIR_ENABLE`, default off — lost top-level import
+>   lines are auto-backfilled at the patch head, only when the
+>   original code body still references that module); P3 contract-
+>   symbol alias backfill (`CONTRACT_ALIAS_ENABLE`, default off —
+>   when the LLM renames `Rule_L001→RuleL001`, backfill a
+>   `Rule_L001 = RuleL001` alias so the import chain / plugin
+>   registration stay intact). Wired into the single-file branch of
+>   `_patch_applier_node` (multi-candidate / cross-file branches do
+>   not re-sanitize).
+> - **II. 2.1 Explicit error-class → repair-strategy mapping**:
+>   `get_recommended_fix_strategy(category, context)`
+>   (`src/agents/error_classifier.py`) converges "which repair path
+>   to take" from the implicit branches scattered across
+>   workflow/debugger into structured classifier output labels
+>   (`strategy` snake_case label + 4-tier `repair_action`:
+>   llm_resample / repair_code / repair_test / investigate_infra),
+>   with explicit coverage of all 17 categories;
+>   `_debugger_node` writes the labels into state
+>   (`fix_strategy_tag` / `fix_strategy_action`), consumable by
+>   experiment analysis for "which error category took which repair
+>   path".
+> - **III. 5.4 Task-level cost budget hard cap**:
+>   `src/graph/cost_budget.py` (thread-local accumulation,
+>   independent per task under --parallel) — `COST_BUDGET_ENABLE`
+>   (default false) + `COST_BUDGET_TOKENS` / `COST_BUDGET_USD`
+>   (+ `COST_USD_PER_1K` pricing); on overrun,
+>   `BaseAgent._call_llm` pre-guard raises `BudgetExceededError`;
+>   planner / generator / debugger nodes degrade with a fallback
+>   (no more idle token burn). Independent of the 3.4 cost alert
+>   (routing-side side-band observation), stackable.
+> - **IV. 5.1 Semantic-level LLM cache**:
+>   `src/agents/semantic_cache.py` embedding-vector similarity match
+>   (reusing `embedding_utils`' CodeBERT → sentence-transformers →
+>   chromadb cascading backends); semantically identical but
+>   differently worded prompts can reuse cached responses;
+>   `SEMANTIC_CACHE_ENABLE` (default false) /
+>   `SEMANTIC_CACHE_THRESHOLD` (default 0.92 conservative caliber) /
+>   `SEMANTIC_CACHE_MAX_ENTRIES` (default 256); when the embedding
+>   backend is missing, auto-degrades to the exact-cache caliber
+>   (zero behavior change); hit statistics via
+>   `get_semantic_cache_stats()`.
+> - **V. 3.3 End-to-end smoke test script**:
+>   `scripts/smoke_test.sh` one-key verification S1 config load →
+>   S2 core-module import → S3 ruff → S4 quick unit tests
+>   (`--full` for the full suite) → S5 minimal generation flow
+>   (Planner + Generator real LLM calls, `--no-llm` for pure
+>   offline mode).
+>
+> New `tests/test_patch_postprocess.py` (23 cases) /
+> `tests/test_cost_budget.py` (12 cases) /
+> `tests/test_semantic_cache.py` (14 cases) + expanded
+> `tests/test_error_classifier.py` (full 17-category strategy-
+> mapping guard); docs synced: `docs/api_reference.md` /
+> `docs/failure_analysis.md` / `QUICKSTART.md` / `.env.example`.
+>
+> Quality baseline: full 2008 tests passing (previously 1937, +71) /
+> ruff repo-wide 0 warnings / mypy 67 source files 0 errors /
+> coverage 88% (TOTAL; new modules: patch_postprocess 92% /
+> cost_budget 93% / semantic_cache 90% / error_classifier 94%).
+
 ## [Unreleased] - 2026-09-28 Improvement checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
 
 > This batch implements the user-submitted 24-item improvement checklist
@@ -1757,7 +2160,7 @@ diagnosis-keyword routing to regenerate + regeneration-cap protection).
 > test_embedding_utils 12) all pass; `ruff check` on changed files is clean.
 > See `docs/implementation_2026-09-25_improvement_directions.md`.
 
-## [Unreleased] - 0.10 deep-audit fixes on 0.9 batch (LLM-cache negative-cache TTL correctness regression + write-root normalization + trace-layer redundant summarization + stats de-glob + 2 regression tests)
+## [Unreleased] - 0.8 Full-audit & fix round (credential-scrub logic dedup + half-open probe failure-path consumption + LLM cache makedirs short-circuit + temperature-key closed-loop + execution-trace duplicate computation elimination + whitelist root pre-normalization + `__main__` self-diagnosis bug fix + 4 regression test cases)
 
 > Baseline: 0.9 batch (uncommitted worktree) 1665 passed / ruff 0 / mypy 0 (58 source files).
 > This round is a deep-audit + backport of the 0.9 batch: **1667 passed / 0 failed**
@@ -1978,6 +2381,167 @@ semantics (glob real-time value) unchanged; only repeated scans are saved.
 >   `provider_description` corrected from "通义千问 (Qwen)" to "DeepSeek
 >   hosted"; `requirements.txt` now declares `openai==2.54.0`
 >   explicitly (`api_manager.py` does a top-level `import openai`,
+>   previously satisfied only by a transitive dep); 5 ruff nits fixed
+>   (I001/F401/RUF100/E741/SIM115 under tests/).
+>
+> **Verification**: full suite 1672 passed / 0 failed, mypy `src/` 0
+> errors (59 source files), ruff check all green.
+
+## [0.9.11] - Credential security, observability & performance optimization (2025-09-25)
+
+> This round is a pure code-quality pass: mypy real-semantic errors
+> zeroed from 26 to 0, and `experiments/analyze_results.py` (2192 lines)
+> split into 4 theme submodules. **No runtime behavior or experiment
+> semantics changed.**
+> Full baseline holds at **1659 passed / 0 failed**, ruff check / ruff
+> format all green, mypy `src/ --ignore-missing-imports` 0 errors
+> (58 source files), src coverage 94% (statement count dropped 5216 →
+> 4911 because `experiments/analyze_results.py` left the src/ tree;
+> not a real coverage regression).
+>
+> **mypy real-semantic fixes (26 → 0, non-stub-missing class)**:
+> - `src/graph/nodes.py` (10 sites): `state.get("test_plan")` narrowed
+>   via `cast("dict[str, Any]", ...)` (documented behavior: absent → None,
+>   Generator's `isinstance(test_plan, dict)` guard covers it, test
+>   regression semantics unchanged); `cross_file_modules` list
+>   comprehension normalized to `str(d["target_module"])`; `test_code` /
+>   `test_output` / `patch` `str | None` call sites get `or ""`
+>   normalization (runtime-equivalent: the original `.get(key, "")`
+>   already returns `str | None` for TypedDict, `or ""` just also maps
+>   None to empty string, semantics unchanged); `coverage_delta` list
+>   normalized to `float()`; `patches[entry_module] = state["patch"]`
+>   narrowed via `assert isinstance(patch_val, str)` (truthy guard
+>   guarantees str).
+> - `src/tools/multi_candidate.py` (4 sites): `credit_score` assignment
+>   and sort key normalized to `float(credit_by_index.get(c.index, 0.0))`
+>   (original `dict.get` returned `float | None`, mypy does not narrow
+>   attributes inside lambdas); `_coverage_trend`'s `deltas` list
+>   normalized to `float(t["coverage_delta"])`.
+> - `src/rag/retriever.py` (8 sites): module-level `chromadb` switched
+>   to the "pre-declare `chromadb: Any = None` then try-import" pattern
+>   (same idiom as `src/graph/rag.py`), eliminating `None`-assigned-to-
+>   Module error; `collection.get/query`'s `metadatas` / `documents`
+>   fields narrowed via `.get("metadatas") or []` and
+>   `results.get("documents") or [[]]` (chromadb stubs type these
+>   `list[...] | None`; runtime they are actually always non-None,
+>   `or []` fallback semantics unchanged).
+> - `src/observability/trace.py` (2 sites): `directory` variable narrowed
+>   from `str | None` — `self._enabled = directory is not None` plus
+>   `if self._enabled and directory is not None` double guard, so
+>   `os.makedirs(directory, ...)` and `os.path.join(directory, ...)`
+>   no longer report `str | None` argument errors.
+> - `src/reports/generator.py` (1 site): `classify_with_context` return
+>   renamed to `context_raw`, `context: ErrorContext | None =
+>   context_raw if context_raw else None` explicit annotation (the
+>   original self-assignment `context = context if context else None`
+>   made mypy reject the `| None` assignment to the narrowed
+>   `ErrorContext` type).
+> - `src/cli/output.py` (1 site): `Console` module attribute switched
+>   to the "pre-declare `Console: Any = None` then try-import" pattern
+>   (the original `Console = None` after a successful
+>   `from rich.console import Console` made mypy report
+>   Incompatible-types when assigning `None` to `type[Console]`;
+>   pre-declaring as `Any` eliminates the error; the rich-missing
+>   `Console is None` fallback path is unchanged).
+>
+> **experiments/analyze_results.py theme split (0.7 debt item 1.6)**:
+> - Original single file 2192 lines with 26 private stat functions
+>   stacked; each function is loosely coupled (all consume `details[]`).
+>   Split per the 0.7 audit finding into 3 theme submodules + 1
+>   `__init__`:
+>   - `experiments/analysis_parts/rag_analysis.py` (164 lines): RAG
+>     retrieval quality & token-efficiency theme (`_token_metrics_from_details`
+>     / `_rag_by_kind_from_details` / `_rag_hit_by_failure_category` /
+>     `_rag_token_efficiency` / `_rag_similarity_distribution`, 5
+>     functions, no intra-group coupling);
+>   - `experiments/analysis_parts/convergence_analysis.py` (1050 lines):
+>     repair-convergence / quality-proxy / test-smell / cross-baseline
+>     theme (`_repair_convergence_curve` / `_smell_task_has_smell` /
+>     `_test_smell_detection` / `_repair_convergence_metrics` /
+>     `_convergence_token_efficiency` / `_difficulty_stratified_iterations`
+>     / `_cross_baseline_convergence_comparison` /
+>     `_cross_file_failure_analysis` / `_assertion_strength_proxy` /
+>     `_quality_proxy_metrics` / `_failure_top_categories` /
+>     `_failure_root_cause_trend` / `_mutation_score_metrics` /
+>     `_assertion_counts_from_row` / `_convergence_failure_modes` /
+>     `_boundary_case_coverage` / `_execution_trace_summary`, 17
+>     functions, sharing intra-group helpers `_assertion_strength_proxy`
+>     / `_assertion_counts_from_row` / `_smell_task_has_smell`, depends
+>     on `ast` + `Counter`);
+>   - `experiments/analysis_parts/cross_analysis.py` (87 lines):
+>     cross-theme analysis (`_contamination_cross_analysis` /
+>     `_venv_cache_stats_snapshot`, 2 functions, consumes
+>     `details[].contamination_risk_level`, does not import
+>     `detect_contamination` to avoid a dead import);
+>   - `experiments/analysis_parts/__init__.py`: sub-package docstring +
+>     theme index.
+> - `experiments/analyze_results.py` (2192 → 959 lines) keeps its public
+>   entry points `load_latest_benchmark` / `build_analysis` /
+>   `render_markdown` / `main`, and re-exports all 24 private functions
+>   from the 3 submodules (annotated `# noqa: E402,F401`; historical
+>   import paths `experiments.analyze_results._xxx` unchanged).
+>   External tests (`tests/test_smell_detection_v2.py` /
+>   `tests/test_experiments_scripts.py`) and same-package scripts
+>   (`contamination_check` / `mutation_testing` / `run_benchmark`) need
+>   no import changes.
+> - Split principle: pure function moves with zero change to signature /
+>   return value / docstring / default args; intra-group shared helpers
+>   (e.g. `_assertion_strength_proxy` consumed by `_quality_proxy_metrics` /
+>   `_assertion_counts_from_row`) stay in one file, no cross-file import,
+>   avoiding new circular dependencies.
+>
+> **Verification**: ruff check / ruff format all green (189 + 4 files) /
+> full suite 1659 passed / 0 failed / mypy `src/ --ignore-missing-imports`
+> 0 errors (58 source files) / src coverage 94% (statement count 4911,
+> down 305 from 0.7's baseline of 5216 — `analyze_results.py` left the
+> src/ tree, not a coverage regression) / smoke check:
+> `experiments.analyze_results.build_analysis` does not crash on empty
+> data, all 28 re-exported symbols present.
+>
+> Note: this round's mypy zeroing scope is `src/` (no mypy gate in CI,
+> local non-gated promise). `experiments/` / `config.py` / `main.py` and
+> other scripts have no historical mypy gate, out of scope;
+> `--ignore-missing-imports` suppresses import-untyped noise from
+> stub-less third-party libs (scipy / datasets / dbutils / chromadb).
+>
+> **Comprehensive review fixes (2026-09-24 security + correctness +
+> maintainability)**:
+> Based on a repo-wide review, 5 issues fixed (tests 1672 → all green,
+> mypy 0 errors):
+> - **Credential scrubbing factored into a function
+>   (`src/utils/credential_scrub.py` new)**:
+>   local / venv / Docker execution paths all funnel through
+>   `scrub_os_environ()` to strip LLM credentials. The old `executor.py`
+>   stripped only 7 fixed variables (couldn't cover the
+>   `LLM_1_API_KEY` family); venv/Docker paths inherited the host
+>   `os.environ` verbatim — LLM-generated test code could read host API
+>   credentials. Now dynamic patterns `LLM_\d+_API_KEY` /
+>   `LLM_\d+_BASE_URL` (aligned with the config-scan 1-32 scope) +
+>   generic SDK-credential scrubbing, single implementation shared by all
+>   three paths to avoid list drift.
+> - **CLI `finally` block fragile code (`src/cli/app.py`)**:
+>   `end_task_trace` close-out relied on `"final_state" in locals()`
+>   (the name unbound when invoke raised) — obscure semantics, easy to
+>   break in refactors. Now `final_state: dict | None = None` init +
+>   `is not None` check + `assert` narrowing (mypy union error gone).
+> - **Side-effect-free node (`src/graph/nodes.py`)**:
+>   `_select_multi_candidate_patch` used to write `state["multi_candidate_stats"]`
+>   in place (shared TypedDict, crosstalk under `--parallel` threads);
+>   now returns a 3-tuple `(code, applied, stats_update)`, merged into
+>   `_patch_applier_node`'s own update dict.
+> - **Patch function location regex → AST (`src/tools/patch_applier.py`)**:
+>   the old `_find_function_range` treated `^#` comments / `^@`
+>   decorators / class methods as "boundaries", truncating decorated or
+>   comment-containing function bodies early and producing incomplete
+>   replacements. New `_find_function_range_ast` reads
+>   `FunctionDef.lineno/end_lineno` for precise location; falls back to
+>   the regex when the source can't be parsed (conservative, behavior
+>   unchanged).
+> - **Low-risk fixes**: deleted `.env.local.bak` (backup containing real
+>   secrets); `llm_configs.json` 3 deepseek entries'
+>   `provider_description` changed from "通义千问" to "DeepSeek
+>   hosted"; `requirements.txt` explicitly declares `openai==2.54.0`
+>   (`api_manager.py` does a top-level `import openai`,
 >   previously satisfied only by a transitive dep); 5 ruff nits fixed
 >   (I001/F401/RUF100/E741/SIM115 under tests/).
 >
@@ -2430,6 +2994,84 @@ semantics (glob real-time value) unchanged; only repeated scans are saved.
   behavior).
 - No public API signature changed (all new fields have safe defaults);
   full suite of 1548 tests passes with zero regressions.
+
+## [0.3] - 2026-09-19 Evaluation-metric deepening + mutation generator fix + redaction audit round
+
+### Features
+- **Mutation generator fix** (`experiments/mutation_testing.py`):
+  `_remove_not_op` was originally dead code (only `break`, never actually
+  replacing the AST node), which made `boolean_negation` mutants
+  byte-identical to the original code; the downstream sandbox "all pass"
+  verdict was misjudged as "killed", and `mutation_score` inflated.
+  New `_RemoveNotTransformer` (AST NodeTransformer) locates Not nodes by
+  line number and rewrites their parent slot (`If` / `While` / `Return` /
+  `Assign` / `BoolOp` / `Compare` / `Expr`, etc.); only a successful
+  replacement counts the mutant; unmatched cases are filtered out to
+  prevent the dead-code regression. Removed the dead identifiers
+  (`_find_mutable_numeric_constants` / `_BOUNDARY_REPLACEMENTS` /
+  `_OPERATORS_TO_FLIP` — none of them referenced by `generate()`).
+- **Mutation scoring wired into the run_benchmark pipeline**
+  (`experiments/run_benchmark.py` + `config.py`): new
+  `ENABLE_MUTATION_SCORING` (default False, preserves historical
+  experiment semantics and time budget) + `MUTATION_MAX_MUTANTS`
+  (default 10). When enabled, `run_benchmark` calls
+  `experiments.mutation_testing.compute_mutation_score` per task after
+  building the baseline results and writes `mutation_score` back into
+  `details[]`, which `_mutation_score_metrics` can aggregate.
+  `_build_task_result`'s success branch gained a `generated_test`
+  field (previously only persisted via `--save-state` into raw/;
+  the standard result JSON did not carry it; mutation scoring needs
+  both the generated test and the source under test, so it must be
+  written into details[]). CLI gained `--enable-mutation` /
+  `--no-mutation` arguments. `reproduce.sh` documents the
+  `ENABLE_MUTATION_SCORING` pass-through (off by default; only an
+  explicit enable takes effect).
+- **4.2 Log-redaction full audit** (`docs/log_redaction_audit.md` +
+  R-1 fix): four-layer check — ① api_manager failover logs already
+  redact base_url (`get_status` + `_redact(config.base_url)` +
+  failover logs only the model_name); ② trace.py JSONL persistence
+  redacted uniformly via `mask_sensitive_info`; ③ the Docker
+  container's `execute_docker` injects no environment variables and
+  `.dockerignore` excludes `.env.*` (secrets never enter the image);
+  ④ the single `exc_info=True` print site (`exceptions.py:321`) is
+  covered by the CLI entry's `SensitiveFormatter` (message-body +
+  full-line including stack trace, double insurance).
+  **Found R-1**: `api_manager._redact` and `llm_client._redact_log_text`
+  degrade to "return as-is" when `mask_sensitive_info` is unavailable,
+  leaking sensitive text into logs. Fix: `logging_utils` gained
+  `fallback_mask_sensitive_info` (pure-regex fallback on the first 3
+  "long random string" patterns of `_SENSITIVE_PATTERNS`); both
+  `_redact` degradation paths delegate to it, so even when the
+  redaction module is completely unavailable, 32+ hex / 40+ base64 /
+  sk- prefixed credentials are still intercepted.
+- **3.2 Multi-candidate patch A/B comparison experiment**: synthetic
+  dataset, 50 tasks × 3 baselines, two groups (multi-candidate ON vs
+  OFF, seed=42) fully run; diff data in
+  `experiments/results/multi_candidate_ab_summary.md`.
+
+### Tests
+- `tests/test_smell_detection_v2.py` gained 4 cases: boolean_negation
+  real-replacement regression (6 slot scenarios) / nested-function not
+  / no-not generates nothing / end-to-end `compute_mutation_score`
+  (strong-test kill count ≥ weak-test kill count).
+- `tests/test_run_benchmark.py` gained 4 cases:
+  `_compute_mutation_scores_for_baseline` missing / present / unknown
+  task / empty instance_code branches + `_build_task_result`
+  success/failure key-set consistency (including the new
+  `generated_test` field).
+- `tests/test_logging_utils.py` gained 7 cases:
+  `fallback_mask_sensitive_info` behavior for sk- / hex / base64 / JWT /
+  normal text / empty value.
+
+### Engineering baseline
+- Full test suite **1474 passed / 0 failed** (previous round 1460 +
+  net 14 this round); `ruff check src/ tests/ experiments/` all green.
+- Redaction audit full report archived at
+  `docs/log_redaction_audit.md` (four-layer check + R-1 fix).
+- Multi-candidate A/B comparison data archived at
+  `experiments/results/multi_candidate_ab_summary.md` (includes a
+  caveat that the plain_llm baseline's LLM cache hit invalidates the
+  token data).
 
 ## [0.2] - 2026-09-19 Code quality & reliability optimization round
 

@@ -23,10 +23,10 @@
 | **Code Coverage** | Total line and branch coverage: see the `coverage` section of [BASELINE.yaml](BASELINE.yaml) (`line_total_pct` / `branch_total_pct`); per-core-module coverage follows the latest CI `term-missing` output |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-09-29 review/optimization round (default behavior unchanged): P0 runtime-probe core-defect fix (the historical `sys.settrace` exception-event collection does not propagate to the called frame when an exception is raised inside the function body — measured frames were permanently empty, so the probe never actually worked since introduction; now reads the `exc.__traceback__` frame chain at exception-raise time, zero trace overhead; synchronously fixed single-character-variable mis-filtering / line-number error (`f_lineno` → `tb_lineno`) / module-filter never matching / child-thread unhandled-exception leak, `src/agents/runtime_probe.py`) + test suite 0 warnings (fixed 2 unclosed file handles in `test_trace_observability`) + `BASELINE.yaml` baseline refresh; current numeric values: see the `tests` section of [BASELINE.yaml](BASELINE.yaml) |
+| **Latest Optimization** | ✅ 2026-09-29 full test run + real LLM smoke test PASS, baseline refreshed (default behavior unchanged): full suite zero-regressions + LLM_1 endpoint connectivity + ruff/mypy all green + branch coverage 77.34%; test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; mypy 0 errors across the repo (86 source files, +5 new: risk_approval / agent_telemetry / kernel_sandbox / testless_validation / tree_sitter_backend)) |
-| **Recent Changes** | ✅ 2026-09-28 frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged, new capabilities all behind independent switches): G2 risk-tiered human approval loop (`RISK_APPROVAL_ENABLE`) + G8 full-stack SWE-bench Pro re-test + G3 kernel-level sandbox (`KERNEL_SANDBOX_ENABLE`) + G1 Tree-sitter precise AST backend (optional dependency) + G4 AgentTelemetry failure-detection benchmark (`AGENT_TELEMETRY_ENABLE`) + G5 testless execution-irrelevant validation (`TESTLESS_VALIDATION_ENABLE`) + G6 multi-agent debate convergence (`EXPERT_POOL_DEBATE_ENABLE`) + G7 defect-report Oracle stats + doc-consistency P2 (dependency-exemption registry + historical-snapshot drift check); full 2502-test suite passes, zero regressions; see [CHANGELOG.en.md](CHANGELOG.en.md); prior 2026-09-27 round-11 feature batch (error classification 16→17 + 2.2 patch resampling + 1.3 downgrade-chain propagation + contamination detection + 2.1 mypy static layer, full 1937-test suite passes) |
+| **Recent Changes** | ✅ 2026-09-29 full test run + real LLM smoke test PASS (full suite zero-regressions; LLM_1 endpoint connectivity + response check passed; ruff/mypy all green); test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); prior 2026-09-28 frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, see section below); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -618,7 +618,7 @@ and are no longer filtered as "loop-variable noise"), line-number error
 frames were discarded), and child-thread unhandled-exception leak (top-level
 call exceptions were not intercepted → "Exception in thread" noise).
 When `RUNTIME_PROBE_ENABLE=false` (default), zero difference. Tests:
-`tests/test_runtime_probe.py` (2502 full suite passed / 0 failed / 0
+`tests/test_runtime_probe.py` (2538 full suite passed / 0 failed / 0
 warnings, `-W error::ResourceWarning` caliber).
 
 #### 5.22.2 G2 risk-tiered human approval loop (`RISK_APPROVAL_ENABLE`, default off)
@@ -1321,7 +1321,16 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 
 ## Iteration records
 
-## Iteration records
+### 2026-09-29 Full test run + real LLM smoke test PASS, baseline refreshed (default behavior unchanged)
+
+**Key results**:
+- **Full regression**: `pytest tests/` full suite **2538 passed / 0 failed / 1 warning** (third-party library deprecation warning, not project code);
+- **Real LLM smoke test PASS**: `experiments/run_smoke_llm.py` (`AITESTER_SMOKE_LLM=true`), default endpoint LLM_1 (`agnes-3.0-flash` @ api.agnes-ai.cn) connectivity + response check passed, `AITESTER_LLM_CACHE=0` writes no cache;
+- **Static checks**: ruff 0 violations (328 files) / mypy 0 errors (86 source files);
+- **Branch coverage**: measured weighted **77.34%**, threshold aligned 78% → 77% (`scripts/check_branch_coverage.py` + synced guard test);
+- **Baseline refresh**: `BASELINE.yaml` synced (total_passed 2502 → 2538; line_total_pct 87 / 0.8665; branch_total_pct 77 / 0.7734; last_verified 2026-09-29).
+
+**Verification**: Full 2538 passed / 0 failed / ruff 0 warnings / mypy 0 errors (86 source files)
 
 ### 2026-09-29 Review/optimization round (P0 runtime-probe defect fix + test-suite 0 warnings, default behavior unchanged)
 
