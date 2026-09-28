@@ -607,10 +607,44 @@ def reset_cache_hit_stats() -> None:
 
 
 def _llm_cache_enabled() -> bool:
-    """是否启用 LLM 文件缓存（默认启用，设 AITESTER_LLM_CACHE=0 关闭）。"""
-    return os.environ.get("AITESTER_LLM_CACHE", "1") != "0"
+    """是否启用 LLM 文件缓存（默认启用，设 AITESTER_LLM_CACHE=0 关闭）。
+
+    2026-09-28 性能优化：开关值进程内记忆（首次调用读取环境变量，之后复用
+    记忆值——热路径每次 LLM 调用都读本开关 + _llm_cache_dir）。语义保持
+    "开关在进程运行中生效"的保守口径不变：环境变量变更由
+    clear_llm_cache_option_memory()（base_agent.clear_llm_lru_cache 一并触发）
+    显式清除记忆后重新读取（测试环境经 conftest 在 env 切换时调用）。
+    """
+    global _llm_cache_option_memory
+    if _llm_cache_option_memory is not None:
+        return _llm_cache_option_memory
+    _llm_cache_option_memory = os.environ.get("AITESTER_LLM_CACHE", "1") != "0"
+    return _llm_cache_option_memory
+
+
+_llm_cache_option_memory: bool | None = None
+
+
+def clear_llm_cache_option_memory() -> None:
+    """清除 LLM 缓存开关/目录记忆（环境变量 AITESTER_LLM_CACHE /
+    AITESTER_LLM_CACHE_DIR 被外部（测试 monkeypatch.setenv）修改后调用，
+    恢复"每次调用读环境变量"的历史口径。"""
+    global _llm_cache_option_memory, _llm_cache_dir_memory
+    _llm_cache_option_memory = None
+    _llm_cache_dir_memory = None
+
+
+_llm_cache_dir_memory: str | None = None
 
 
 def _llm_cache_dir() -> str:
-    """返回 LLM 缓存目录（支持环境变量覆盖，便于测试隔离到临时目录）。"""
-    return os.environ.get("AITESTER_LLM_CACHE_DIR", _LLM_CACHE_DIR_DEFAULT)
+    """返回 LLM 缓存目录（支持环境变量覆盖，便于测试隔离到临时目录）。
+
+    2026-09-28 性能优化：目录值进程内记忆（首次读环境变量，之后复用）；
+    环境变量被外部修改时经 clear_llm_cache_option_memory() 显式清除记忆
+    （base_agent.clear_llm_lru_cache 同步触发，保持测试隔离口径不变）。
+    """
+    global _llm_cache_dir_memory
+    if _llm_cache_dir_memory is None:
+        _llm_cache_dir_memory = os.environ.get("AITESTER_LLM_CACHE_DIR", _LLM_CACHE_DIR_DEFAULT)
+    return _llm_cache_dir_memory

@@ -119,3 +119,16 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 - **CI 调试**：阅读 `.github/workflows/ci.yml` 各步骤注释，理解门禁意图。
 
 较大的算法 / 架构改动（如错误分类器扩展、跨文件修复策略）建议在 Issue 中先讨论方案，阅读 `docs/algorithm_design.md` 与最近的 `docs/review_*.md` 了解既有设计权衡。
+
+## 依赖豁免登记（pip-audit 漏洞豁免必做步骤）
+
+`pip-audit` 安全扫描命中的已知漏洞，因"上游暂无修复版"而需显式豁免
+（CI `--ignore-vuln`）时，**必须**在 [docs/dependency_exemptions.md](docs/dependency_exemptions.md)
+登记豁免条目（依赖 / 锁定版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限），
+不允许"只在 ci.yml 加一行 `--ignore-vuln` 而不在登记表留痕"。
+
+- 新增豁免：先登记、再改 ci.yml（二者同一 PR 落地，保持可审计）；
+- 上游发布修复版：按登记表"复审触发条件"列尽快升级、移除 ci.yml 对应
+  `--ignore-vuln` 行，并把该条目从登记表"当前豁免"移入"已复审关闭"；
+- 每季度复审一次登记表（过期未复审的条目在 CHANGELOG 标注"豁免过期"），
+  与"依赖变更清单"的双轨制（requirements / lock）口径一致。

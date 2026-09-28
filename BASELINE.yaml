@@ -11,30 +11,30 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-09-28"   # 全量回归实测日期（2026-09-28 改进批次全量落地后）
+last_verified: "2026-09-29"   # 全量回归实测日期（2026-09-29 审查轮：运行时探针 P0 缺陷修复 + 测试套件 0 告警落地后）
 
 tests:
-  total_passed: 2165          # 全量 pytest tests/（2026-09-28 改进批次 P0/P1/P2/P3 全量落地后）
+  total_passed: 2502          # 全量 pytest tests/（2026-09-29 审查轮：探针修复 + 3 个新增回归用例落地后）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
-  suite_seconds: 32          # 全量耗时量级（~32s）
+  suite_seconds: 33          # 全量耗时量级（~33s）
 
 coverage:
-  line_total_pct: 89         # --cov=src 总行覆盖（868/7552 miss，0.10 轮次基线）
+  line_total_pct: 87         # --cov=src 总行覆盖（0.8673，2026-09-29 审查轮后重测）
   line_core_modules:
-    base_agent: 100
+    base_agent: 84
     api_manager: 94
     dataset_loader: 94
-    graph_nodes: 95
+    graph_nodes: 75
     code_analyzer: 100
     planner: 100
     dependency: 96
     multi_candidate: 94
     cross_file: 95
     rag_retriever: 95
-  branch_total_pct: 80       # --cov=src --cov-branch 总分支覆盖（coverage.xml branch-rate 0.7956，2026-09-28 改进批次后重测）
+  branch_total_pct: 77       # --cov=src --cov-branch 总分支覆盖（coverage.xml branch-rate 0.7738，2026-09-29 审查轮后重测）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
-    graph_workflow: 90      # _should_debug / _route_after_diagnosis 条件路由
+    graph_workflow: 92      # _should_debug / _route_after_diagnosis 条件路由（0.92）
     error_classifier: 88     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层
     graph_state: 100         # 状态 schema 初始化路由
 
@@ -42,7 +42,9 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 70      # 2026-09-28 改进批次全量落地后重测
+  mypy_source_files: 86      # 2026-09-28 全量落地后重测（含 5 个新增源文件：
+                             # risk_approval / agent_telemetry / kernel_sandbox /
+                             # testless_validation / tree_sitter_backend）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 

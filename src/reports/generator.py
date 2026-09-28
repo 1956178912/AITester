@@ -50,6 +50,10 @@ class ErrorReport:
         coverage: 当前覆盖率
         created_at: 报告生成时间
         history: 历史修复记录列表
+        oracle_stats: G7 预言有效性统计（弱预言占比 / oracle_confidence 分布 /
+            oracle_source 分布）；默认 None，仅 `with_oracle_stats()` 注入后
+            在 Markdown / JSON 输出中渲染"Oracle 有效性"章节（字段缺失时跳过，
+            不崩、不产生误导数据）。
     """
 
     task_id: str
@@ -66,6 +70,30 @@ class ErrorReport:
     coverage: float = 0.0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     history: list[dict[str, Any]] = field(default_factory=list)
+    oracle_stats: dict[str, Any] | None = None
+
+    def with_oracle_stats(self, oracle_stats: dict[str, Any] | None) -> ErrorReport:
+        """注入 G7 预言有效性统计（Oracle 增强后的 oracle_confidence / oracle_source）。
+
+        设计口径（保守）：
+            - 仅当 oracle_stats 非空且含 "total_oracles" > 0 时渲染 Oracle 章节；
+            - 字段缺失 / total_oracles = 0 时不渲染（不产生"0 预言占比"误导数据）。
+
+        Args:
+            oracle_stats: OracleEnhancerAgent 产出的预言统计 dict，含
+                `total_oracles`（int）/ `weak_oracle_count`（int，
+                oracle_confidence < 0.5 视为弱预言）/
+                `oracle_source_distribution`（dict：source → 计数）/
+                `oracle_confidence_distribution`（dict：分桶 "0.0-0.5" /
+                "0.5-0.8" / "0.8-1.0" → 计数）/ `weak_oracle_ratio`（float，
+                弱预言占比 0.0-1.0，total_oracles = 0 时为 None）。
+
+        Returns:
+            注入后的 ErrorReport（返回 self，支持链式调用）。
+        """
+        if oracle_stats and int(oracle_stats.get("total_oracles", 0)) > 0:
+            self.oracle_stats = oracle_stats
+        return self
 
     def to_dict(self) -> dict[str, Any]:
         """将报告转换为字典格式。"""
@@ -87,6 +115,8 @@ class ErrorReport:
             "coverage": self.coverage,
             "created_at": self.created_at,
             "history": self.history,
+            # G7 预言有效性统计（oracle_stats 非空时序列化，否则 None 保持键集合同构）
+            "oracle_stats": self.oracle_stats,
         }
 
     def to_text(self) -> str:
@@ -242,6 +272,31 @@ class ErrorReport:
                     lines.append("   ```")
             if len(self.failed_cases) > 5:
                 lines.append(f"\n*... 还有 {len(self.failed_cases) - 5} 个失败用例*")
+            lines.append("")
+
+        # G7 预言有效性章节（oracle_stats 非空时渲染；字段缺失 / total=0 时跳过）
+        if self.oracle_stats and int(self.oracle_stats.get("total_oracles", 0)) > 0:
+            total_oracles = int(self.oracle_stats.get("total_oracles", 0))
+            weak_count = int(self.oracle_stats.get("weak_oracle_count", 0))
+            weak_ratio = self.oracle_stats.get("weak_oracle_ratio")
+            source_dist = self.oracle_stats.get("oracle_source_distribution") or {}
+            conf_dist = self.oracle_stats.get("oracle_confidence_distribution") or {}
+            lines.extend(
+                [
+                    "## 预言有效性（Oracle 增强，G7）",
+                    "",
+                    f"- 总预言数: {total_oracles}",
+                    f"- 弱预言数（oracle_confidence < 0.5）: {weak_count}"
+                    + (f"（占比 {weak_ratio:.1%}）" if weak_ratio is not None else ""),
+                    "- 预言来源分布:",
+                ]
+            )
+            for source, count in sorted(source_dist.items(), key=lambda kv: -int(kv[1])):
+                lines.append(f"  - {source}: {count}")
+            if conf_dist:
+                lines.append("- 预言置信度分布:")
+                for bucket, count in sorted(conf_dist.items()):
+                    lines.append(f"  - {bucket}: {count}")
             lines.append("")
 
         return "\n".join(lines)

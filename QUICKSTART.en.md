@@ -226,6 +226,38 @@ python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir
 
 # 4.1 Log redaction audit (scans all logger call sites; exit 0 = no suspicious points, can be wired into CI)
 python scripts/audit_log_redaction.py
+
+# P0 Runtime probe (RUNTIME_PROBE_ENABLE, off by default): at exception-raise time,
+# captures the exc.__traceback__ frame chain and local variable snapshots (zero trace
+# overhead; the 2026-09-29 core-defect fix makes it actually functional).
+export RUNTIME_PROBE_ENABLE=true
+
+# G3 Kernel-level sandbox (KERNEL_SANDBOX_ENABLE, off by default): macOS Seatbelt
+# (sandbox-exec) / Linux Landlock (bwrap) dual backend; platform-unsupported →
+# fail-closed rejection (does not silently degrade to un-isolated local).
+export KERNEL_SANDBOX_ENABLE=true
+
+# G4 AgentTelemetry failure-detection benchmark (AGENT_TELEMETRY_ENABLE, off by
+# default): 10 built-in failure-pattern regex matches (zero LLM cost, pure
+# observation), outputs a Markdown report for experimental-analysis consumption.
+export AGENT_TELEMETRY_ENABLE=true
+
+# G5 Testless execution-irrelevant validation (TESTLESS_VALIDATION_ENABLE, off by
+# default): four independently toggleable layers (AST symbol guard / mypy static
+# check / naming-contract regression / import smoke); any layer failure → overall
+# fail (conservative fail-closed caliber).
+export TESTLESS_VALIDATION_ENABLE=true
+
+# G6 Multi-agent debate convergence (EXPERT_POOL_DEBATE_ENABLE, off by default,
+# requires EXPERT_POOL_ENABLE=true): top-K candidate debate convergence produces
+# one debate_revise revised candidate.
+export EXPERT_POOL_ENABLE=true
+export EXPERT_POOL_DEBATE_ENABLE=true
+
+# G2 Risk-tiered human approval loop (RISK_APPROVAL_ENABLE, off by default):
+# three-factor weighted scoring → low/medium/high → auto_merge / human_confirm /
+# force_review.
+export RISK_APPROVAL_ENABLE=true
 ```
 
 ## Configuration File Description

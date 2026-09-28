@@ -38,12 +38,14 @@ def cleanup_env(monkeypatch):
 
 def _load_jsonl(path):
     """读取 JSONL 文件为记录列表（每行一个 JSON 对象）。"""
-    return [json.loads(line) for line in open(path, encoding="utf-8")]
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
 
 
 def _load_jsonl_content(path):
     """读取 JSONL 文件的原始文本（用于脱敏断言）。"""
-    return open(path, encoding="utf-8").read()
+    with open(path, encoding="utf-8") as f:
+        return f.read()
 
 
 class TestTraceSwitch:

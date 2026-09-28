@@ -66,6 +66,27 @@ def expert_pool_enabled() -> bool:
     return os.getenv("EXPERT_POOL_ENABLE", "false").lower() == "true"
 
 
+def expert_pool_debate_enabled() -> bool:
+    """G6 多 Agent 辩论修复开关（EXPERT_POOL_DEBATE_ENABLE=true 时启用，默认 false）。
+
+    在 expert_pool_enabled() 的基础上叠加辩论收敛轮次（cross_validate 之后
+    的"互辩修订"），进一步收敛候选补丁。默认关时本方法恒 False，
+    历史 cross_validate 口径零变化。
+    """
+    if not expert_pool_enabled():
+        return False
+    return os.getenv("EXPERT_POOL_DEBATE_ENABLE", "false").lower() == "true"
+
+
+def _debate_top_k() -> int:
+    """辩论收敛的 top-K（EXPERT_POOL_DEBATE_TOP_K，默认 2，范围 [2, 4]）。"""
+    try:
+        n = int(os.getenv("EXPERT_POOL_DEBATE_TOP_K", "2"))
+    except ValueError:
+        n = 2
+    return max(2, min(n, 4))
+
+
 def _expert_pool_size() -> int:
     """专家池大小（EXPERT_POOL_SIZE，默认 3，范围 [1, 7]）。"""
     try:
@@ -247,6 +268,104 @@ class ExpertPoolAgent:
         filtered.sort(key=lambda c: (c.get("verified_count", 0), c.get("confidence", 0.0)), reverse=True)
         return filtered
 
+    def debate_round(
+        self,
+        verified: list[dict[str, Any]],
+        target_code: str,
+        test_output: str,
+        failed_cases: list[dict[str, str]],
+        focus_function: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """G6 多 Agent 辩论收敛轮次（EXPERT_POOL_DEBATE_ENABLE=true 时调用，默认关）。
+
+        在 cross_validate 的投票结果之上，对 top-K 候选做"互辩修订"：
+        把 top-K 候选的维度标签 + 补丁文本拼成一个"辩论上下文"，
+        让 LLM 在已知"哪些候选被哪些专家同意"的前提下，产出一个
+        综合修订版候选（吸收 top-K 的共性修复点，规避各自的弱点）。
+        修订候选非空时直接插入排序结果首位（修订候选优先级最高），
+        不再要求与 top-K 重新投票（修订版是"综合版"，投票口径不适用）。
+
+        设计口径（保守、零额外 LLM 成本约束的例外）：
+            - 本方法是**可选增强**（EXPERT_POOL_DEBATE_ENABLE=true 时
+              才走辩论路径，默认关时历史 cross_validate 口径零变化）；
+            - 辩论只取 top-K（默认 2）候选，K 个候选互相可见
+              对方的维度标签与补丁摘要，避免无界讨论；
+            - 修订候选 LLM 失败 / 空补丁时保守降级：返回原 verified
+              列表不变（不引入劣化）；
+            - 修订候选标注 "debate_revise": True，供下游报告 / 实验
+              分析区分"投票胜出"与"辩论修订"两种来源。
+
+        Args:
+            verified: cross_validate 排序后的候选列表（每项含 dimension /
+                patch / confidence / verified_count / agreed_dimensions）。
+            target_code: 被测代码全文。
+            test_output: pytest 失败输出。
+            failed_cases: 失败用例列表。
+            focus_function: 焦点函数名（可选）。
+
+        Returns:
+            修订后的候选列表（修订候选插入首位 + 原 verified 候选），
+            每项含 "debate_revise" 布尔标记（True = 辩论修订候选，
+            False = 原投票候选）。
+        """
+        from src.agents.debugger import DebuggerAgent
+
+        if not verified:
+            return []
+        top_k = _debate_top_k()
+        top_candidates = verified[:top_k]
+        if len(top_candidates) < 2:
+            # top-K 不足 2 个时无法互辩（单候选无"弱点反馈"对象），
+            # 保守降级：原样返回（不触发 LLM 修订调用，避免无意义成本）
+            return [{**c, "debate_revise": False} for c in verified]
+
+        # 构建辩论上下文：top-K 候选的维度标签 + 补丁摘要（截断防 prompt 爆炸）
+        debate_hints: list[str] = []
+        for c in top_candidates:
+            patch_text = str(c.get("patch") or "")
+            if len(patch_text) > 800:
+                patch_text = patch_text[:800] + "…[truncated]"
+            debate_hints.append(
+                f"【候选 {c.get('dimension')}】（被 {c.get('verified_count')} 个专家同意）\n{patch_text}"
+            )
+        debate_context = (
+            "\n\n【多 Agent 辩论收敛】以下是交叉验证后的 top "
+            f"{len(top_candidates)} 候选（每个候选由不同专家维度产出）。"
+            "请综合分析这些候选的共性修复点与各自弱点，产出一个**综合修订版**补丁："
+            "吸收各候选的正确修复逻辑，规避其错误假设与冗余改动，"
+            "仅输出修订后的完整补丁代码（markdown 代码块包裹）。"
+        )
+        enriched_code = f"{target_code}\n\n{debate_context}\n\n" + "\n\n".join(debate_hints)
+
+        try:
+            agent = DebuggerAgent()
+            result = agent.debug(
+                target_code=enriched_code,
+                test_output=test_output,
+                failed_cases=failed_cases,
+                focus_function=focus_function,
+                temperature=0.2,  # 辩论修订：低温收紧（综合版不应发散）
+            )
+            revise_patch = (result.get("patch") or "").strip()
+        except Exception as e:
+            logger.warning("辩论修订 LLM 调用失败（保守降级为原 verified 列表）: %s", e)
+            return [{**c, "debate_revise": False} for c in verified]
+
+        if not revise_patch:
+            return [{**c, "debate_revise": False} for c in verified]
+
+        revise_candidate = {
+            "dimension": "debate_revise",
+            "patch": revise_patch,
+            "confidence": 0.6,  # 修订候选置信度保守略高于单候选（0.5）
+            "expert_failed": False,
+            "verified_count": max(c.get("verified_count", 0) for c in top_candidates),
+            "agreed_dimensions": [c.get("dimension") for c in top_candidates],
+            "debate_revise": True,
+        }
+        # 修订候选插入首位（优先级最高），原 verified 候选标注 debate_revise=False
+        return [revise_candidate] + [{**c, "debate_revise": False} for c in verified]
+
 
 def _patches_agree(norm_a: str, norm_b: str) -> bool:
     """两个归一化补丁文本是否"同意"（完全一致 / 一方是另一方子串）。"""
@@ -278,5 +397,6 @@ _EXPERT_DIMENSION_PROMPT_HINTS: dict[str, str] = {
 
 __all__ = [
     "ExpertPoolAgent",
+    "expert_pool_debate_enabled",
     "expert_pool_enabled",
 ]

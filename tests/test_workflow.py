@@ -422,6 +422,12 @@ class TestGetWorkflowStats:
         cache_dir.mkdir()
         monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(cache_dir))
         monkeypatch.setattr(wf, "_FILE_CACHE_COUNT_MEMORY", None)
+        # 2026-09-28 优化配套：_llm_cache_dir 带进程内记忆，monkeypatch.setenv
+        # 修改环境变量后需显式清除记忆（conftest autouse 仅在测试前后清一次，
+        # 本测试方法内切换两次缓存目录需各自清一次）
+        from src.agents.llm_client import clear_llm_cache_option_memory
+
+        clear_llm_cache_option_memory()
 
         # 首次：目录空 → 0，记忆建立（三元组含 mtime）
         assert wf._file_cache_entry_count() == 0
@@ -436,6 +442,7 @@ class TestGetWorkflowStats:
         other_dir.mkdir()
         (other_dir / "b.json").write_text("{}", encoding="utf-8")
         monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(other_dir))
+        clear_llm_cache_option_memory()
         assert wf._file_cache_entry_count() == 1
         assert wf._FILE_CACHE_COUNT_MEMORY[0] == str(other_dir)
         assert wf._FILE_CACHE_COUNT_MEMORY[1] == 1

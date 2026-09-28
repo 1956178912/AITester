@@ -4,6 +4,230 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-29 审查优化轮（项目审查：P0 运行时探针缺陷修复 + 测试套件 0 告警）
+
+> 本轮为全项目审查（静态检查 + 测试告警 + 核心模块代码走查）的修复批次，
+> **默认行为不变**（探针模块默认关，`RUNTIME_PROBE_ENABLE=false` 时零差异）：
+>
+> - **P0 运行时探针（RUNTIME_PROBE）核心缺陷修复**（`src/agents/runtime_probe.py`）：
+>   历史实现经 `sys.settrace` 的 exception 事件采集异常帧，但 CPython 逐事件
+>   追踪语义下"函数体内抛异常"时 exception 事件不向被调帧传播，实测
+>   **frames 恒空**——P0 运行时探针自引入以来从未真正生效。本轮改为
+>   异常抛出时刻直接读 `exc.__traceback__` 帧链（异常栈即精确的失败时刻
+>   帧栈，零 trace 开销），并同步修复：
+>   - 单字符变量误过滤：`_capture_frame_locals` 历史口径把 x/y/z 当
+>     "循环变量噪声"过滤，但断言失败时刻 x/y/z 正是最关键的观测变量，
+>     过滤后快照恒空；
+>   - 行号错误：已退出帧的 `f_lineno` 停在函数体末尾而非异常抛出行，
+>     改用 traceback 帧对象的 `tb_lineno`（CPython 记录的精确行号）；
+>   - 模块过滤永不匹配：probe 文件命名为 `"{target_module}_probe.py"`，
+>     历史过滤条件 `"{target_module}.py"` 子串与之永不匹配，指定
+>     target_module 时帧被全部丢弃（探针恒 None）；改为直接匹配
+>     probe 文件本身；
+>   - 子线程未处理异常泄漏：顶层调用异常未被拦截 → 解释器打印
+>     "Exception in thread" 噪音（pytest 转 PytestUnhandledThreadExceptionWarning）。
+>   新增回归用例：`tests/test_runtime_probe.py`（模块过滤保留口径 /
+>   模块过滤丢弃口径 / tb_lineno 行号口径）。
+>
+> - **测试套件 0 告警**：`tests/test_trace_observability.py` 修复 2 处
+>   未关闭文件句柄（ResourceWarning → pytest unraisable 噪音）；
+>   全量 pytest 2502 passed，0 failed，0 warning（`-W error::ResourceWarning` 口径）。
+>
+> - **基线刷新**：`BASELINE.yaml` 同步（total_passed 2499 → 2502；
+>   line_total_pct 87 / 0.8673；branch_total_pct 77 / 0.7738；
+>   last_verified 2026-09-29）。
+>
+> - **全量回归**：2502 passed / 0 failed（基线 2499，+3 新增回归用例），
+>   ruff 0 warning / mypy 0 error（86 源文件），`BASELINE.yaml` 已刷新。
+
+## [Unreleased] — 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口落地，默认行为不变 + 新能力独立开关）
+
+> 本批次基于 `docs/gap_report_2026-09-28_frontier_recommendations.md` 的
+> G1–G8 共 8 项缺口 + 文档一致性 P2 缺口逐项落地，**默认行为不变**
+> （新能力均带独立开关，未启用时历史口径逐字节等价）：
+>
+> - **G2 P0 风险分级人工回路**（`src/graph/risk_approval.py`）：
+>   - `RISK_APPROVAL_ENABLE=true` 时启用，三因子加权打分
+>     （置信度 0.4 + 补丁影响面 0.4 + 预算占比 0.2）→
+>     low/medium/high 分级 → auto_merge / human_confirm / force_review
+>     审批动作；
+>   - 阈值可配（`RISK_THRESHOLD_MEDIUM=0.35` / `RISK_THRESHOLD_HIGH=0.65`），
+>     权重可配（`RISK_WEIGHT_CONFIDENCE` / `RISK_WEIGHT_IMPACT` /
+>     `RISK_WEIGHT_BUDGET`）；
+>   - `experiments/run_benchmark.py` 结果行新增 `risk_summary` 字段
+>     （默认关时占位 `enabled=False`，键集合同构，不改变历史实验口径）；
+>   - 测试：`tests/test_risk_approval.py`（默认关占位 / 高置信度小补丁 →
+>     low / 低置信度大补丁 + 预算超限 → high / 中等影响面 → medium）。
+>
+> - **G8 P0 全链路 SWE-bench Pro 复测**（`experiments/run_full_stack_swe_bench_pro.py`
+>   + `scripts/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`）：
+>   - 一键七开关（`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` /
+>     `EXPERT_POOL_ENABLE` / `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` /
+>     `REPO_LEVEL_EXECUTION` / `SWE_REPO_VENV_ISOLATION`）+ trace 目录；
+>   - 数据前置门禁：`check_swe_bench_pro_ready.py` 校验 JSONL 存在性 +
+>     `instance_code` / `test_patch` / `FAIL_TO_PASS` / `base_commit` 齐备，
+>     缺失时阻断（`exit 1`）；
+>   - ON/OFF 对照分析：`summarize_full_stack.py` 输出成功率 / 错误分桶
+>     （assertion/runtime/import_error/syntax/unknown/other）+ 保守 verdict
+>     （ON 组全零 → "无正向信息量"，不强行宣称正向）；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（数据目录缺失 / 完整
+>     JSONL / enrichment 补全 3 场景 + runner 七开关注入）。
+>
+> - **G3 P1 内核级沙箱**（`src/agents/kernel_sandbox.py`）：
+>   - `KERNEL_SANDBOX_ENABLE=true` 时启用（默认关），macOS Seatbelt
+>     （`sandbox-exec`）/ Linux Landlock（`bwrap`）双后端；
+>   - 本地执行链路（`src/agents/executor.py` 的 `_execute_local`）接入：
+>     `KERNEL_SANDBOX_ENABLE=true` 时把 pytest 子进程包装进内核沙箱，
+>     结果 JSON 新增 `kernel_sandbox_obs` 观测字段（纯观测，不改结果口径）；
+>   - **fail-closed 口径**：平台不支持（Windows / 缺工具）时直接拒绝执行
+>     （不静默降级到无隔离本地——避免"以为隔离了其实没有"污染对比实验，
+>     与 `executor_modes` 的 `docker_unavailable` 同口径）；
+>   - 测试：`tests/test_kernel_sandbox.py`（9 用例：默认关 / 开关 / 平台
+>     探测 / Seatbelt 命令生成 / bwrap 命令生成 / fail-closed / 能力描述）。
+>
+> - **G1 P1 Tree-sitter 精确 AST 后端**（`src/tools/tree_sitter_backend.py`）：
+>   - 可选依赖 `tree_sitter` + `tree_sitter_typescript`，缺依赖时
+>     `is_tree_sitter_available()` 返回 False，自动透明降级回词法层
+>     （`language_backend.TypeScriptBackend`，不阻断 Python 主路径，
+>     与 ADR-0004 零默认依赖口径一致）；
+>   - 实现 `LanguageBackend` 协议的 4 个核心方法（`extract_symbols` /
+>     `extract_call_graph` / `check_naming_contract` / `classify_error`），
+>     精确 AST 口径（误报更少：仅对 `CallExpression` 节点取 callee，
+>     不做跨模块 / 动态调用推断）；
+>   - `register_tree_sitter_backend()` 缺依赖时 no-op（不抛错，
+>     注册表保持词法层后端）；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（缺依赖时降级 / 注册
+>     no-op / 符号提取与词法层同口径）。
+>
+> - **G4 P1 AgentTelemetry 故障检测基准**（`src/observability/agent_telemetry.py`）：
+>   - `AGENT_TELEMETRY_ENABLE=true` 时启用（默认关），10 类内置失败模式
+>     正则匹配（`llm_empty_response_loop` / `llm_json_parse_failure_loop` /
+>     `multi_candidate_all_rejected` / `execution_trace_missing` /
+>     `budget_early_stop` / `contract_break_rewrite` /
+>     `import_break_after_rewrite` / `repair_not_converging` /
+>     `cross_file_topology_mismatch` / `known_error_category_hit`），
+>     零 LLM 成本纯观测，输出 Markdown 报告供实验分析消费；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（10 类模式命中 +
+>     Markdown 渲染 + 空 records 边界）。
+>
+> - **G5 P2 无测试场景执行无关验证**（`src/tools/testless_validation.py`）：
+>   - `TESTLESS_VALIDATION_ENABLE=true` 时启用（默认关），四层独立可开关
+>     （`TESTLESS_MYPY_ENABLE` / `TESTLESS_NAMING_CONTRACT_ENABLE` /
+>     `TESTLESS_IMPORT_SMOKE_ENABLE` 单层可关）：
+>     - AST 符号守卫（补丁不得删除原代码模块级函数 / 类定义）；
+>     - mypy 静态检查（缺依赖时保守跳过，不阻断）；
+>     - 命名契约回归（复用 `patch_applier.check_naming_contract`）；
+>     - 导入冒烟（`subprocess` 跑 `importlib` 加载，超时上限可配
+>       `TESTLESS_IMPORT_SMOKE_TIMEOUT`，仅 import 不执行业务函数）；
+>   - 任一层失败 → 整体 `passed=False`（保守 fail-closed 口径）；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（合法补丁全过 / 删函数
+>     守卫失败 / 导入冒烟层显式关闭）。
+>
+> - **G6 P2 多智能体辩论收敛**（`src/graph/expert_pool.py` 新增
+>   `debate_round()` 方法）：
+>   - `EXPERT_POOL_DEBATE_ENABLE=true` 且 `EXPERT_POOL_ENABLE=true` 时
+>     启用（默认关），top-K（默认 2，`EXPERT_POOL_DEBATE_TOP_K` 可配
+>     [2,4]）候选辩论收敛产出一个 `debate_revise` 修订候选，插入
+>     verified 列表首位；
+>   - **保守降级**：top-K 不足 2 / LLM 调用失败 → 原样返回原
+>     verified 列表（不阻断主链路），标记 `debate_revise=False`；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（默认关 / 需配合
+>     EXPERT_POOL_ENABLE / top-K 不足降级 / LLM 失败降级 / 成功插入）。
+>
+> - **G7 P2 缺陷报告生成**（`src/reports/generator.py` 的 `ErrorReport`
+>   新增 `oracle_stats` 字段 + `with_oracle_stats()` 方法）：
+>   - `total_oracles > 0` 时渲染"预言有效性（Oracle 增强，G7）"章节
+>     （弱预言数 / 占比 / 来源分布 / 置信度分桶分布），缺数据时跳过
+>     （不产生误导数据）；
+>   - `to_dict()` 输出同构（`oracle_stats` 键），供下游程序化处理；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（注入 stats 后渲染 /
+>     缺 stats 跳过 / `total=0` 跳过 / JSON 同构）。
+>
+> - **文档一致性 P2**（依赖豁免治理 + 历史快照漂移）：
+>   - `docs/dependency_exemptions.md`：chromadb 1.5.9 命中 5 条已知漏洞
+>     （PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815）的豁免
+>     登记表（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 /
+>     复审期限），季度复审约定；
+>   - `scripts/check_dependency_exemptions.py`：CI 门禁，`ci.yml` 的
+>     `--ignore-vuln` 列表必须在登记表留痕（未登记 → `exit 1` 阻断
+>     合并）；登记表缺"复审期限"列 → warning（治理不闭环）；
+>   - `scripts/check_docs_history_drift.py`：warning-only，检测
+>     `docs/history/*.md` 中"基线数字声明"（`N passed` / `N tests` /
+>     `total_passed: N`）与 `BASELINE.yaml` 的 `tests.total_passed`
+>     偏离超阈值（默认 10%）时提示归档；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（未登记 → 阻断 /
+>     已登记 → 通过）。
+>
+> - **实验脚本**：
+>   - `experiments/multi_candidate_ab.py`（#5 多候选 A/B 对照：
+>     `ENABLE_MULTI_CANDIDATE_PATCH` / `MULTI_CANDIDATE_EXEC_VALIDATE`
+>     ON/OFF 双跑，输出成功率 / 错误分桶 / token 效率对比 Markdown）；
+>   - `experiments/position_aware_ab.py`（`POSITION_AWARE_REPAIR_ENABLE`
+>     ON/OFF A/B 对照 + `save_state=True` 逐 task 定位精度：
+>     `position_aware_focus.function_name` vs `task_metadata.suggested_function`）；
+>   - 测试：`tests/test_g8_g2_g4_g5_g6_g7_g1.py`（A/B 开关翻转 +
+>     定位精度聚合 + 缺 state 保守 0.0）。
+>
+> - **全量回归**：2499 passed / 0 failed（基线 2453，+46 新增测试覆盖
+>   上述 8 项缺口 + 实验脚手架 A/B 对照 + 文档一致性门禁），ruff 0 warning /
+>   mypy 0 error（86 源文件，+5 新增源文件：`risk_approval` /
+>   `agent_telemetry` / `kernel_sandbox` / `testless_validation` /
+>   `tree_sitter_backend`），`BASELINE.yaml` 已刷新。
+>
+> 配套测试文件：
+> - `tests/test_g8_g2_g4_g5_g6_g7_g1.py`（25 用例：G2/G4/G5/G6/G7/G1/G8 缺口 + 依赖豁免门禁）；
+> - `tests/test_kernel_sandbox.py`（9 用例：G3 内核沙箱）；
+> - `tests/test_experiments_ab_scaffolds.py`（12 用例：A/B 对照聚合 + 全链路汇总 verdict + 七开关注入）。
+
+## [Unreleased] — 2026-09-28 优化轮（Agent 实例复用缓存 + LLM 客户端热路径记忆，默认行为不变）
+
+> 代码审查后的性能优化批次，默认行为不变（新增能力均带独立开关，
+> 未启用时历史口径逐字节等价）：
+>
+> - **Agent 实例复用（P1，循环修复热路径优化）**：
+>   - `src/graph/nodes.py` 新增通用 `get_or_create_agent()` 工厂
+>     （按类名分键 + DCL + FIFO 容量 16，与 llm_client 客户端缓存
+>     同口径；MagicMock 替换类的测试场景自动降级为按次新建，
+>     保持 mock 口径不变）；
+>   - `_planner_node` / `_generator_node` / `_debugger_node` /
+>     `_diagnosis_node` 均委托该工厂获取 BaseAgent 子类实例——
+>     循环修复（MAX_ITERATIONS 轮 × 多任务）下省掉每轮
+>     "实例化 + 锁内查客户端缓存"的重复开销（客户端本身仍经
+>     llm_client 的 (model, temperature, api_key, base_url)
+>     缓存共享，复用与按次新建在并发语义上逐字节等价）；
+>   - 开关：`AITESTER_AGENT_REUSE=0` 关闭（默认启用）；
+>   - 测试钩子：`clear_agent_instance_cache()`（conftest autouse
+>     fixture 每测试前后清空，恢复"每次新建"的测试历史口径）。
+>
+> - **ExecutorAgent 按沙箱配置分键复用（P1，同上热路径）**：
+>   - `src/graph/nodes.py` 新增 `_get_or_create_executor_agent()`：
+>     按 (timeout, use_docker, use_venv, auto_install_deps,
+>     dep_install_timeout, docker_image) 完整配置元组分键（ExecutorAgent
+>     构造仅存储沙箱参数、execute() 每次调用独立构建沙箱/回收输出，
+>     同配置复用与按次新建等价；`--timeout` 变体各建独立实例，
+>     并发下 DCL + 线程锁保证同键只构造一次）；
+>   - 开关：`AITESTER_EXECUTOR_AGENT_CACHE=0` 关闭（默认启用）；
+>   - 测试钩子：`clear_executor_agent_cache()`（conftest autouse
+>     每测试前后清空）。
+>
+> - **LLM 客户端热路径环境变量记忆（P2，每次 LLM 调用省 2 次
+>   os.getenv）**：
+>   - `src/agents/llm_client.py` 的 `_llm_cache_enabled()` /
+>     `_llm_cache_dir()` 首次调用读环境变量定值后复用进程内记忆；
+>   - 新增 `clear_llm_cache_option_memory()` 清除钩子——环境变量
+>     经 monkeypatch.setenv 被测试修改后显式清记忆恢复"每次读
+>     环境变量"历史口径；
+>   - `base_agent.clear_llm_lru_cache()` 同步触发该清除钩子
+>     （LRU 清空时一并清环境变量记忆，保持测试隔离口径不变）；
+>   - `tests/conftest.py` autouse fixture 在每个测试前后各清一次
+>     记忆（配套环境变量隔离）；`tests/test_workflow.py` 单测内
+>     两次目录切换处显式清记忆。
+>
+> - **新增回归测试** `tests/test_2026_09_28_agent_reuse_optimizations.py`
+>   （10 用例：Agent/Executor 实例复用 + 开关 + 清除钩子 + conftest
+>   记忆清除语义）；全量回归 2453 passed / 0 failed（ruff 0
+>   warning / mypy 0 error，81 源文件）。
+
 ## [Unreleased] — 2026-09-29 改进批次（缓存隔离 / 注入防御 / 可解释性 / 确定性守卫 / 流氓监控 / 关键词兜底）
 
 > 基于 2026 年行业数据（Clinejection、KeyPooling、LiteLLM

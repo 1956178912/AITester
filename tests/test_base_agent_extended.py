@@ -316,7 +316,15 @@ class TestCallLlmWithCache:
         cache_dir.mkdir()
         monkeypatch.setenv("AITESTER_LLM_CACHE", "1")
         monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(cache_dir))
-        return cache_dir
+        # 2026-09-28 性能优化配套：清除 llm_client 的开关/目录环境变量记忆
+        # （热路径进程内记忆值），使本 fixture 设置的新环境变量立即生效；
+        # teardown 再次清除（monkeypatch 已还原环境变量，记忆清除后恢复
+        # "每次调用读环境变量"的历史口径，不污染后续测试）
+        from src.agents.llm_client import clear_llm_cache_option_memory
+
+        clear_llm_cache_option_memory()
+        yield cache_dir
+        clear_llm_cache_option_memory()
 
     def test_cache_miss_calls_llm(self, cache_env):
         """缓存未命中时调用 _call_llm 并将结果写入缓存文件。"""

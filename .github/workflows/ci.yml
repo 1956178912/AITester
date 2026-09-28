@@ -194,9 +194,27 @@ jobs:
         # 一旦发布修复版本，应升级并移除对应 --ignore-vuln。
         # 注：9-11 审计复跑后漏洞 ID 由旧 CVE-2026-45830/45831/45833 漂移为
         # PYSEC-2026-3813/3814/3815，本豁免清单与本地 pip-audit 实测结果同步（2026-09-11）。
+        # 豁免治理：所有 --ignore-vuln 必须在 docs/dependency_exemptions.md 登记表
+        # 留痕（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限），
+        # 与 CONTRIBUTING.md "依赖豁免登记" 口径一致。
         run: |
           pip-audit -r requirements.txt --no-deps \
             --ignore-vuln PYSEC-2026-311 \
             --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 \
             --ignore-vuln PYSEC-2026-3815
+
+      - name: Check dependency exemption registry
+        # 依赖豁免治理门禁：ci.yml 的 --ignore-vuln 列表必须在
+        # docs/dependency_exemptions.md 登记（每条漏洞 ID 命中登记表某一行）；
+        # 未登记的豁免 → 退出码 1 阻断合并（防"加了 --ignore-vuln 却没留痕"漂移）。
+        run: python scripts/check_dependency_exemptions.py
+
+      - name: Check docs history baseline drift (warning-only)
+        # 文档一致性治理（P2）：docs/history/ 下的历史快照文档若声明的
+        # 基线数字与 BASELINE.yaml 偏离超过阈值（默认 10%），输出 warning
+        # 提示"该文档可能已被当前基线覆盖，考虑归档"。非阻断门禁
+        # （warning-only），保持历史叙事文档不受当前基线刷新影响。
+        # 检测范围：docs/history/*.md 中匹配 "N passed" / "N tests" 的声明，
+        # 与 BASELINE.yaml 的 tests.total_passed 对比。
+        run: python scripts/check_docs_history_drift.py --warn-only

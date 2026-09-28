@@ -12,7 +12,9 @@
 > 批次的历史口径，对应 `ErrorCategory` 扩展为 12 类（新增 `LLM_FORMAT_ERROR` /
 > `INDEX_ERROR` 等）后已被分类器单独识别——**历史表述仅记录当时分类器状态，
 > 不代表当前能力**；当前 `ErrorCategory` 类别数与失败归因口径以
-> [BASELINE.yaml](../BASELINE.yaml)（类别数）与 `docs/api_reference.md` 为准。
+> [BASELINE.yaml](../BASELINE.yaml)（类别数）与 [docs/api_reference.md](api_reference.md)
+> 为准（**本文"12 类"为历史快照措辞，当前类别数以 `api_reference.md` / `BASELINE.yaml`
+> 为准，不在本文件就地刷新**）。
 >
 > 重跑实验时新的失败分布应显著低于本快照，请以最新 `experiments/analyze_results.py`
 > 输出的三处章节为准：**"按基线失败原因分布"**（1.2 细化类别可单独计数）+

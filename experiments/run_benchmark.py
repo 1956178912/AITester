@@ -494,6 +494,9 @@ def _build_task_result(
                 golden_patches,
             ),
             "task_metadata": task.metadata,
+            # G2 风险分级人工回路（RISK_APPROVAL_ENABLE=true 时写入；默认关时
+            # enabled=False 占位保持键集合同构，历史口径零变化）
+            "risk_summary": _build_risk_summary_for_result(final_state),
         }
     return {
         "task_id": task.task_id,
@@ -520,7 +523,66 @@ def _build_task_result(
         # contamination_risk_level 保守标记 "low"（无重叠证据，非"完全相同"）
         "contamination_risk_level": "low",
         "task_metadata": task.metadata,
+        # G2 风险分级人工回路（失败分支无 final_state，保守占位）
+        "risk_summary": _build_risk_summary_for_result(None),
     }
+
+
+def _build_risk_summary_for_result(final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """构建单任务结果行的 G2 风险分级摘要（默认关时 enabled=False 占位）。
+
+    设计口径（保守、零 LLM 成本）：
+        - 仅当 `RISK_APPROVAL_ENABLE=true` 时做三因子打分（error_classifier 置信度
+          + patch_applier 影响面 + cost_budget 消耗），产出 low/medium/high 分级
+          与 auto_merge / human_confirm / force_review 审批动作；
+        - 默认关（历史默认）时返回 `{"enabled": False}` 占位，保持结果键集合同构，
+          不改变任何历史实验口径。
+
+    Args:
+        final_state: 任务最终状态 dict（成功分支）；None 表示失败分支
+            （无最终状态，保守占位，不打风险分）。
+
+    Returns:
+        可直接嵌入 JSON 的 dict。
+    """
+    from src.graph.risk_approval import build_risk_summary
+
+    if final_state is None:
+        return build_risk_summary(
+            confidence=None,
+            changed_lines=None,
+            changed_files=None,
+            contract_missing_symbols=None,
+            full_file_patch=None,
+            budget_ratio=None,
+            budget_exceeded=None,
+        )
+    # 三因子输入（纯数据，缺信号时 None，保守打分不报错）：
+    #   - 置信度：final_state 未直接携带（classifier 在节点内消费），保守 None；
+    #   - 影响面：patch 行数（变更行数的保守代理）+ 跨文件数（cross_file_deps）；
+    #   - 预算：cost_budget.get_budget_stats() 的 consumed/limit 比例（未启用时 None）。
+    patch_text = final_state.get("patch") or ""
+    changed_lines = len([ln for ln in patch_text.splitlines() if ln.strip()])
+    changed_files = len(final_state.get("cross_file_deps") or []) or (1 if changed_lines else 0)
+    contract_missing = final_state.get("contract_missing_symbols") or []
+
+    from src.graph.cost_budget import get_budget_stats
+
+    budget_stats = get_budget_stats()
+    budget_exceeded = bool(budget_stats.get("exceeded"))
+    consumed = float(budget_stats.get("consumed_tokens") or 0.0)
+    limit = float(budget_stats.get("token_limit") or 0.0)
+    budget_ratio = (consumed / limit) if limit > 0 else None
+
+    return build_risk_summary(
+        confidence=None,
+        changed_lines=changed_lines,
+        changed_files=changed_files,
+        contract_missing_symbols=list(contract_missing),
+        full_file_patch=None,
+        budget_ratio=budget_ratio,
+        budget_exceeded=budget_exceeded,
+    )
 
 
 def run_single_task(

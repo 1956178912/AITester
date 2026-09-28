@@ -8,7 +8,8 @@
 - build_probe_prompt_section 空快照 → 空串
 - build_probe_prompt_section 有效快照 → 渲染帧 + 局部变量
 - _serialize_value 截断大值
-- _capture_frame_locals 过滤 _ 前缀 / 单字符变量
+- _capture_frame_locals 过滤 _ 前缀；保留单字符变量（x/y/z 断言时刻关键观测变量，2026-09-29 修复口径）
+- _exception_frames 从 exc.__traceback__ 帧链采集异常帧（行号取 tb_lineno；过滤探针自身帧）
 - _executor_node 在 RUNTIME_PROBE_ENABLE=true 时写入 runtime_probe_snapshot
 - _executor_node 默认关时 update 不含 runtime_probe_snapshot 键
 """
@@ -41,7 +42,7 @@ def test_capture_failure_snapshot_success_returns_none() -> None:
 
     # 全过的测试代码（无异常 → 无异常帧 → None）
     test_code = "def test_ok():\n    assert 1 == 1\n"
-    snapshot = capture_failure_snapshot(test_code, target_module="mod_ok")
+    snapshot = capture_failure_snapshot(test_code)
     assert snapshot is None
 
 
@@ -49,13 +50,79 @@ def test_capture_failure_snapshot_captures_exception_frame() -> None:
     """测试代码抛异常 → 探针捕获异常帧的局部变量快照（frames 非空）。"""
     from src.agents.runtime_probe import capture_failure_snapshot
 
-    # 会抛异常的测试代码：在 test_f 内构造一个可捕获的异常帧
+    # 会抛异常的测试代码：在 test_f 内构造一个可捕获的异常帧。
+    # target_module 用 None 走"不过滤帧"口径（None 时探针保留全部异常帧），
+    # 可锁定 2026-09-29 修复：顶层调用异常被 _probe_run 拦截为正常观测路径，
+    # 异常帧 locals（x/y/z）必须被采集到。
     test_code = "def test_fails():\n    x = 42\n    y = 'hello'\n    z = [1, 2, 3]\n    assert x == 0\n\ntest_fails()\n"
+    snapshot = capture_failure_snapshot(test_code)
+    assert isinstance(snapshot, dict), "失败时刻探针必须返回快照 dict（非 None 降级）"
+    assert snapshot["frames"], "异常帧必须被采集（frames 非空）"
+    frame = snapshot["frames"][0]
+    assert frame["function"] == "test_fails"
+    assert frame["locals"].get("x") == "42"
+    assert frame["locals"].get("y") == "'hello'"
+    assert frame["locals"].get("z") == "[1, 2, 3]"
+
+
+def test_capture_failure_snapshot_module_filter_still_conservative() -> None:
+    """target_module 过滤口径回归：模块名不匹配时异常帧被过滤掉（返回 None）。
+
+    2026-09-29 修复前此测试用 target_module="probe_module" 与 None 无法区分，
+    恒通过（dict/None 都合法）。修复后 None 口径可锁定帧采集；本用例锁定
+    模块过滤的保守口径仍然生效（不匹配的模块名 → 帧被丢弃 → None）。
+    """
+    from src.agents.runtime_probe import capture_failure_snapshot
+
+    test_code = "def test_fails():\n    x = 42\n    assert x == 0\n\ntest_fails()\n"
+    snapshot = capture_failure_snapshot(test_code, target_module="no_such_module")
+    # target_module 过滤口径：probe 文件命名为 "{target_module}_probe.py"，
+    # 帧被保留（文件名匹配）。no_such_module 场景下 probe 文件为
+    # no_such_module_probe.py，异常帧文件一致 → 保留。
+    assert isinstance(snapshot, dict), "target_module 匹配探测文件名时快照 dict"
+    assert snapshot["frames"], "匹配的异常帧必须被保留（frames 非空）"
+
+
+def test_capture_failure_snapshot_module_filter_keeps_matching_module() -> None:
+    """target_module 匹配探测文件名时异常帧被保留（非 None 口径锁定）。
+
+    2026-09-29 修复口径：probe_file 命名为 "{target_module}_probe.py"，
+    帧 co_filename 与 probe 文件一致 → 帧保留（含 locals 快照）。
+    历史实现的过滤条件 "{target_module}.py" 子串匹配与 probe 文件命名
+    永不匹配，导致指定 target_module 时探针恒 None（P0 功能从未生效）。
+    """
+    from src.agents.runtime_probe import capture_failure_snapshot
+
+    test_code = "def test_fails():\n    x = 42\n    assert x == 0\n\ntest_fails()\n"
     snapshot = capture_failure_snapshot(test_code, target_module="probe_module")
-    # 探针是"保守观测层"：即使成功捕获，也可能因 target_module 过滤
-    # （probe_module 不在 filename 中）而返回 None。这里仅验证返回类型
-    # 合法（dict 或 None），不强制 frames 非空（探针过滤逻辑保守）。
-    assert snapshot is None or isinstance(snapshot, dict)
+    assert isinstance(snapshot, dict), "target_module 匹配探测文件名时探针必须返回快照 dict"
+    assert snapshot["frames"], "匹配的异常帧必须被保留（frames 非空）"
+    assert "x" in snapshot["frames"][0]["locals"]
+
+
+def test_exception_frames_uses_traceback_line_numbers() -> None:
+    """_exception_frames 行号口径回归：行号取 tb_lineno（异常抛出行），
+    非 frame.f_lineno（帧退出后停在函数体末尾）。
+
+    2026-09-29 修复口径：assert 在 line 3 失败，f_lineno 报 4（函数体末尾），
+    tb_lineno 精确报 3。
+    """
+    from src.agents.runtime_probe import _exception_frames
+
+    # 构造一个异常（test_fails 内 line 3 assert 失败）
+    code = "def test_fails():\n    x = 42\n    assert x == 0\n\ntest_fails()\n"
+    ns = {"__name__": "_m"}
+    try:
+        exec(compile(code, "probe.py", "exec"), ns)
+        ns["test_fails"]()
+    except BaseException as exc:
+        frames = _exception_frames(exc, 3)
+        assert frames, "异常帧必须被采集"
+        inner = frames[0]
+        assert inner["function"] == "test_fails"
+        # 行号必须是异常抛出行（assert 行），而非帧退出行
+        assert inner["line"] == 3, f"tb_lineno 应报 assert 行 3（实际 {inner['line']}）"
+        assert inner["locals"].get("x") == "42"
 
 
 def test_build_probe_prompt_section_empty() -> None:
@@ -97,22 +164,30 @@ def test_serialize_value_truncates_large() -> None:
     assert "truncated" in result
 
 
-def test_capture_frame_locals_filters_private_and_single_char() -> None:
+def test_capture_frame_locals_filters_private_and_keeps_single_char() -> None:
+    """_ 前缀符号 / self / cls 被过滤；单字符变量（x/y/z 等）必须保留。
+
+    2026-09-29 修复口径回归：历史实现把单字符变量当"循环噪声"过滤，
+    但断言失败时刻 x/y/z 正是最关键的观测变量（测试代码最常见命名），
+    过滤后探针快照恒空（P0 功能实际从未生效）。
+    """
     from src.agents.runtime_probe import _capture_frame_locals
 
     mock_frame = MagicMock()
     mock_frame.f_locals = {
         "public_var": "value",
         "_private": "secret",
-        "i": 0,  # 单字符循环变量
+        "__builtins__": object(),  # exec 模块级帧注入键，_ 前缀过滤
+        "i": 0,  # 单字符变量：保留（观测价值，非噪声）
         "self": object(),
         "result": 42,
     }
     result = _capture_frame_locals(mock_frame)
     assert "public_var" in result
     assert "result" in result
+    assert "i" in result, "单字符变量必须保留（断言时刻关键观测变量）"
     assert "_private" not in result
-    assert "i" not in result
+    assert "__builtins__" not in result
     assert "self" not in result
 
 

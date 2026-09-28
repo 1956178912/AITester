@@ -233,6 +233,36 @@ python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir
 
 # 4.1 日志脱敏完整审计（全仓库 logger 调用点扫描，退出码 0=无可疑点，可挂 CI 门禁）
 python scripts/audit_log_redaction.py
+
+# P0 运行时探针（RUNTIME_PROBE_ENABLE，默认关）：被测代码抛异常时刻直接读
+# exc.__traceback__ 帧链采集精确失败时刻帧栈与局部变量快照（零 trace 开销，
+# 2026-09-29 修复核心缺陷后真正生效）。
+export RUNTIME_PROBE_ENABLE=true
+
+# G3 内核级沙箱（KERNEL_SANDBOX_ENABLE，默认关）：macOS Seatbelt（sandbox-exec）/
+# Linux Landlock（bwrap）双后端；平台不支持时 fail-closed 拒绝执行（不静默降级到
+# 无隔离本地，与 Docker 不可用同口径）。
+export KERNEL_SANDBOX_ENABLE=true
+
+# G4 AgentTelemetry 故障检测基准（AGENT_TELEMETRY_ENABLE，默认关）：10 类内置
+# 失败模式正则匹配（零 LLM 成本，纯观测层），输出 Markdown 报告供实验分析消费。
+export AGENT_TELEMETRY_ENABLE=true
+
+# G5 无测试场景执行无关验证（TESTLESS_VALIDATION_ENABLE，默认关）：四层独立可开关
+# （AST 符号守卫 / mypy 静态检查 / 命名契约回归 / 导入冒烟），任一层失败整体 fail
+# （保守 fail-closed 口径）。
+export TESTLESS_VALIDATION_ENABLE=true
+
+# G6 多智能体辩论收敛（EXPERT_POOL_DEBATE_ENABLE，默认关，需配合
+# EXPERT_POOL_ENABLE=true）：top-K 候选辩论收敛产出一个 debate_revise 修订候选，
+# LLM 失败时保守降级回原 verified 列表（不阻断主链路）。
+export EXPERT_POOL_ENABLE=true
+export EXPERT_POOL_DEBATE_ENABLE=true
+
+# G2 风险分级人工回路（RISK_APPROVAL_ENABLE，默认关）：三因子加权打分
+# （置信度 + 补丁影响面 + 预算占比）→ low/medium/high → auto_merge /
+# human_confirm / force_review。
+export RISK_APPROVAL_ENABLE=true
 ```
 
 ### 推荐开启项（默认关闭但建议按需启用的能力）

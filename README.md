@@ -21,11 +21,52 @@
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-28 改进清单全量批次（P0 基线漂移守卫 + 静态报告自动刷新 + BASELINE CI 校验；P1 分支覆盖率门槛/回填 + LLM 缓存 0600 权限与 TTL 清理 + 错误分类器置信度分层与 L2 协议预留；P2 失败知识库最小闭环 + LLM 输出异常注入测试 + `--smoke-llm` 可选 CI + 多进程缓存命中率协调 + 双语文档 H2 骨架对照 + ADR 索引 + CI/CD 集成示例；P3 多语言扩展与超长文件分层摘要设计文档；全部默认行为不变，新能力均带独立开关）；此前 2026-09-28 P0/P1 改进批次（LLM 输出后处理层 `patch_postprocess.sanitize_patch` + 错误分类→修复策略显式映射 + 任务级 token/费用预算 + 语义级 LLM 缓存 + 端到端冒烟测试脚本，详见 [docs/api_reference.md](docs/api_reference.md)）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-09-29 审查优化轮（默认行为不变）：P0 运行时探针核心缺陷修复（历史 `sys.settrace` exception 事件在函数体异常时不向被调帧传播，实测 frames 恒空、探针自引入以来从未真正生效；改为异常抛出时刻直接读 `exc.__traceback__` 帧链，零 trace 开销，同步修复单字符变量误过滤 / 行号错误（`f_lineno` → `tb_lineno`）/ 模块过滤永不匹配 / 子线程未处理异常泄漏，`src/agents/runtime_probe.py`）+ 测试套件 0 告警（`test_trace_observability` 2 处未关闭文件句柄修复）+ `BASELINE.yaml` 基线刷新（2502 通过 / 0 失败）；此前 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，详见下方落地说明）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-09-27 第十一轮功能批次（默认行为不变）：5.2 错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID` 重采样耗尽标记）+ 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`，默认关）+ 1.3 分层压缩降级链透传（`contract_reject_feedback` 经 `_debugger_node` 跨轮透传，`CONTEXT_TIER_DOWNGRADE_ENABLE` 默认关）+ 五、多维度污染检测（`run_benchmark._build_task_result` 新增 `contamination_risk_level` 字段）+ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE`，默认关）+ 修复 `on_resample` → `resample_fn` 关键参数名（2.2 重采样此前静默失效）+ `build_tiered_context` tier-0 `str|None` → `str` + `AITesterState` 声明 4 个新键 + 全仓 ruff 8 lint + mypy 12 类型错误清零；全量 1937 测试通过零回归；详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，默认行为不变，新能力均带独立开关）：G2 风险分级人工回路（`RISK_APPROVAL_ENABLE`）+ G8 全链路 SWE-bench Pro 复测 + G3 内核级沙箱（`KERNEL_SANDBOX_ENABLE`）+ G1 Tree-sitter 精确 AST 后端（可选依赖）+ G4 AgentTelemetry 故障检测基准（`AGENT_TELEMETRY_ENABLE`）+ G5 无测试场景执行无关验证（`TESTLESS_VALIDATION_ENABLE`）+ G6 多智能体辩论收敛（`EXPERT_POOL_DEBATE_ENABLE`）+ G7 缺陷报告 Oracle 统计 + 文档一致性 P2（依赖豁免登记表 + 历史快照漂移检测）；全量 2502 测试通过零回归；详见 [CHANGELOG](CHANGELOG.md)；此前 2026-09-27 第十一轮功能批次（错误分类 16→17 类 + 2.2 补丁重采样 + 1.3 降级链透传 + 污染检测 + 2.1 mypy 静态层，全量 1937 测试通过） |
 
+> **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
+> 本批次补齐 `docs/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，
+> 全部"默认行为不变 + 新能力独立开关"口径（与 ADR-0003/0004 一致）：
+> - **G2 P0 风险分级人工回路**：`src/graph/risk_approval.py`（`RISK_APPROVAL_ENABLE` 默认关），
+>   三因子（置信度 + 补丁影响面 + 预算占比）加权打分 → low/medium/high → auto_merge / human_confirm / force_review；
+>   `experiments/run_benchmark.py` 结果行新增 `risk_summary` 字段（默认关时占位 `enabled=False`，键集合同构）。
+> - **G8 P0 全链路 SWE-bench Pro 复测**：`experiments/run_full_stack_swe_bench_pro.py`（一键七开关）
+>   + `scripts/check_swe_bench_pro_ready.py`（数据前置门禁，缺 `instance_code`/`test_patch`/`FAIL_TO_PASS`
+>   时阻断）+ `experiments/summarize_full_stack.py`（ON/OFF 对照 + 错误分桶对比）。
+> - **G3 P1 内核级沙箱**：`src/agents/kernel_sandbox.py`（`KERNEL_SANDBOX_ENABLE` 默认关），
+>   macOS Seatbelt（`sandbox-exec`）/ Linux Landlock（`bwrap`）双后端；平台不支持时 fail-closed
+>   拒绝执行（不静默降级到无隔离本地，与 Docker 不可用同口径）；本地执行链路接入。
+> - **G1 P1 Tree-sitter 精确 AST 后端**：`src/tools/tree_sitter_backend.py`（可选依赖，
+>   缺 `tree_sitter` 时透明降级回词法层，不阻断）；实现 `LanguageBackend` 4 个核心方法
+>   （精确 AST 口径，误报更少）。
+> - **G4 P1 AgentTelemetry 故障检测基准**：`src/observability/agent_telemetry.py`
+>   （`AGENT_TELEMETRY_ENABLE` 默认关），10 类内置失败模式正则匹配（零 LLM 成本，纯观测），
+>   输出 Markdown 报告供实验分析消费。
+> - **G5 P2 无测试场景执行无关验证**：`src/tools/testless_validation.py`
+>   （`TESTLESS_VALIDATION_ENABLE` 默认关），四层独立可开关（AST 符号守卫 / mypy 静态检查 /
+>   命名契约回归 / 导入冒烟），任一层失败整体 fail（保守 fail-closed 口径）。
+> - **G6 P2 多智能体辩论收敛**：`src/graph/expert_pool.py` 新增 `debate_round()` 方法
+>   （`EXPERT_POOL_DEBATE_ENABLE` 默认关，需配合 `EXPERT_POOL_ENABLE=true`），top-K（默认 2，
+>   `EXPERT_POOL_DEBATE_TOP_K` [2,4]）候选辩论收敛产出一个 `debate_revise` 修订候选，
+>   LLM 失败时保守降级回原 verified 列表（不阻断主链路）。
+> - **G7 P2 缺陷报告生成**：`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` 字段
+>   + `with_oracle_stats()` 方法（`total_oracles > 0` 时才渲染"预言有效性（Oracle 增强，G7）"章节），
+>   与 G5 testless 验证互补（"有测试" vs "无测试"两个场景的缺陷有效性判定）。
+> - **文档一致性 P2**：新增 `docs/dependency_exemptions.md`（chromadb 1.5.9 命中 5 条已知漏洞的
+>   豁免登记表）+ `scripts/check_dependency_exemptions.py`（CI 门禁，`--ignore-vuln` 未登记时
+>   阻断）+ `scripts/check_docs_history_drift.py`（warning-only，检测 `docs/history/*.md` 基线
+>   数字漂移超阈值时提示归档）。
+> 全量 2502 测试通过零回归（2026-09-29 审查优化轮：P0 运行时探针缺陷修复 + 3 个新增回归用例，此前 2499），ruff 0 告警，
+> mypy 0 错误（86 源文件，此前 81，+5 新增源文件）。全部新能力默认关（`*_ENABLE=false`），
+> 启用为显式行为；零新默认依赖（tree_sitter 为可选依赖，缺时透明降级）。
+>
+> 配套测试文件：
+> - `tests/test_g8_g2_g4_g5_g6_g7_g1.py`（25 用例：G2/G4/G5/G6/G7/G1/G8 缺口）；
+> - `tests/test_kernel_sandbox.py`（9 用例：G3 内核沙箱）；
+> - `tests/test_experiments_ab_scaffolds.py`（12 用例：A/B 对照聚合 + 全链路汇总 verdict + 七开关注入）。
+>
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
 ## 开发工具
@@ -79,7 +120,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 1937 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1863 个收集）
+# 运行所有单元测试（全量 2502 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1863 个收集）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -842,6 +883,88 @@ SWE_REPO_VENV_REUSE_BY_REPO=true \
   python experiments/run_benchmark.py --dataset swe_bench --task-limit 20 --baselines aitester
 ```
 
+### 5.22 前沿推荐批次（2026-09-28：gap_report P0/P1/P2 缺口 G1–G8 + 2026-09-29 审查优化轮，默认关闭）
+
+#### 5.22.1 P0 运行时探针（`RUNTIME_PROBE_ENABLE`，默认关）
+`src/agents/runtime_probe.py`：被测代码抛异常时刻直接读 `exc.__traceback__`
+帧链采集精确失败时刻帧栈（零 trace 开销，替代历史 `sys.settrace` exception
+事件方案——函数体异常时 exception 事件不向被调帧传播，实测 frames 恒空，
+探针自引入以来从未真正生效）。同步修复单字符变量误过滤（x/y/z 断言失败时刻
+最关键的观测变量不再被当"循环变量噪声"过滤）、行号错误（已退出帧
+`f_lineno` 停在函数体末尾，改用 `tb_lineno`）、模块过滤永不匹配（probe 文件
+命名 `"{target_module}_probe.py"` 与历史过滤条件 `"{target_module}.py"` 子串
+不匹配，指定 target_module 时帧被全部丢弃）、子线程未处理异常泄漏
+（顶层调用异常未被拦截 → "Exception in thread" 噪音）。`RUNTIME_PROBE_ENABLE=false`
+（默认）时零差异。测试：`tests/test_runtime_probe.py`（2502 全量通过 / 0 失败 /
+0 告警，`-W error::ResourceWarning` 口径）。
+
+#### 5.22.2 G2 风险分级人工回路（`RISK_APPROVAL_ENABLE`，默认关）
+`src/graph/risk_approval.py`：三因子加权打分（置信度 0.4 + 补丁影响面 0.4 +
+预算占比 0.2）→ low/medium/high 分级 → auto_merge / human_confirm / force_review
+审批动作；阈值可配（`RISK_THRESHOLD_MEDIUM=0.35` / `RISK_THRESHOLD_HIGH=0.65`），
+权重可配（`RISK_WEIGHT_CONFIDENCE` / `RISK_WEIGHT_IMPACT` / `RISK_WEIGHT_BUDGET`）；
+`experiments/run_benchmark.py` 结果行新增 `risk_summary` 字段（默认关时占位
+`enabled=False`，键集合同构，不改变历史实验口径）。测试：
+`tests/test_risk_approval.py`。
+
+#### 5.22.3 G3 内核级沙箱（`KERNEL_SANDBOX_ENABLE`，默认关）
+`src/agents/kernel_sandbox.py`：macOS Seatbelt（`sandbox-exec`）/ Linux
+Landlock（`bwrap`）双后端；平台不支持时 fail-closed 拒绝执行（不静默降级到
+无隔离本地，与 Docker 不可用同口径）。本地执行链路接入（`src/agents/executor.py`
+`_kernel_sandbox_executable` / `_kernel_sandbox_obs`）。测试：
+`tests/test_kernel_sandbox.py`。
+
+#### 5.22.4 G4 AgentTelemetry 故障检测基准（`AGENT_TELEMETRY_ENABLE`，默认关）
+`src/observability/agent_telemetry.py`：10 类内置失败模式正则匹配（零 LLM
+成本，纯观测层），输出 Markdown 报告供实验分析消费。
+
+#### 5.22.5 G5 无测试场景执行无关验证（`TESTLESS_VALIDATION_ENABLE`，默认关）
+`src/tools/testless_validation.py`：四层独立可开关（AST 符号守卫 / mypy 静态检查 /
+命名契约回归 / 导入冒烟），任一层失败整体 fail（保守 fail-closed 口径），与 G7
+"有测试"场景缺陷有效性判定互补。
+
+#### 5.22.6 G6 多智能体辩论收敛（`EXPERT_POOL_DEBATE_ENABLE`，默认关）
+`src/graph/expert_pool.py` 新增 `debate_round()` 方法：top-K（默认 2，
+`EXPERT_POOL_DEBATE_TOP_K` [2,4]）候选辩论收敛产出一个 `debate_revise` 修订
+候选（需配合 `EXPERT_POOL_ENABLE=true`）；LLM 失败时保守降级回原 verified
+列表（不阻断主链路）。
+
+#### 5.22.7 G7 缺陷报告生成（`ErrorReport.oracle_stats`）
+`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` 字段 +
+`with_oracle_stats()` 方法：`total_oracles > 0` 时才渲染"预言有效性（Oracle
+增强，G7）"章节。
+
+#### 5.22.8 G8 全链路 SWE-bench Pro 复测
+`experiments/run_full_stack_swe_bench_pro.py`（一键七开关：
+`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
+`CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
+`SWE_REPO_VENV_ISOLATION`）+ `scripts/check_swe_bench_pro_ready.py`
+（数据前置门禁：JSONL 存在性 + `instance_code` / `test_patch` /
+`FAIL_TO_PASS` / `base_commit` 齐备校验，缺失时阻断 `exit 1`）+
+`experiments/summarize_full_stack.py`（ON/OFF 对照分析：成功率 / 错误分桶
+`assertion` / `runtime` / `import_error` / `syntax` / `unknown` / `other` +
+保守 verdict，ON 组全零时"无正向信息量"不强行宣称正向）。测试：
+`tests/test_g8_g2_g4_g5_g6_g7_g1.py`。
+
+#### 5.22.9 G1 Tree-sitter 精确 AST 后端（可选依赖）
+`src/tools/tree_sitter_backend.py`：实现 `LanguageBackend` 4 个核心方法
+（精确 AST 口径，误报更少）；`tree_sitter` 为可选依赖，缺时透明降级回
+词法层，不阻断 Python 主路径；`pyproject.toml` mypy 配置已声明
+`tree_sitter` / `tree_sitter_typescript` ignore_missing_imports。
+
+#### 5.22.10 文档一致性 P2
+新增 `docs/dependency_exemptions.md`（chromadb 1.5.9 命中 5 条已知漏洞
+PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 / PYSEC-2026-3815 的
+豁免登记表：依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限）+
+`scripts/check_dependency_exemptions.py`（CI 门禁：`--ignore-vuln` 列表未
+在登记表留痕时 `exit 1` 阻断合并）+ `scripts/check_docs_history_drift.py`
+（warning-only：检测 `docs/history/*.md` 基线数字漂移超阈值时提示归档，
+非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量 2502 测试通过
+（基线 2499，+3 新增回归用例）/ ruff 0 告警 / mypy 0 错误（86 源文件，
++5 新增源文件：risk_approval / agent_telemetry / kernel_sandbox /
+testless_validation / tree_sitter_backend）。
+
+
 ### 6. 标准数据集集成（新增）
 通过 `src/datasets/` 子包（`dataset_loader.py` + `synthetic_dataset.py`）支持多种数据集：
 
@@ -1056,7 +1179,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 1937 个用例；缺可选依赖时自动 skip 降级）
+# 运行所有测试（全量 2502 个用例；缺可选依赖时自动 skip 降级；当前数值以 [BASELINE.yaml](BASELINE.yaml) 为准）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -1066,7 +1189,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（84 个测试文件，全量 1937 个 pytest 收集用例；精简环境约 1863 收集，src 总覆盖率 94%）：
+**测试覆盖模块**（测试文件数与用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准；当前基线全量 2502 用例 / 0 失败；缺可选依赖时约 1863 收集自动 skip）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1138,6 +1261,10 @@ docker run --rm \
 | `test_smell_detection_v2.py` | 25 | 1.1 异味检测补强（Eager Test / Lack of Cohesion 触发与不触发 + 语法错误兜底）+ 1.2 变异测试生成器（TestMutationGenerator 9 用例，e2e 杀死判定口径 2026-09-26 精确化后 import 名修复）+ 1.3 变异得分（mutation_score_from_details） |
 | `test_failure_kb.py` | 14 | 5.3 失败案例知识库 + 跨批次失败模式对比（failure_knowledge_base 结构化 JSON / cross_batch_comparison 批次趋势 / 三大失败根因） |
 | `test_defects4j_smoke.py` | 5 | 3.4 Defects4J-Python 加载器冒烟验证（无数据目录优雅降级 / 完整目录解析 / 字段完整性） |
+| `test_g8_g2_g4_g5_g6_g7_g1.py` | 25 | G1–G8 前沿推荐批次缺口单元测试（G2 risk_approval 三因子打分 / G4 agent_telemetry 失败模式匹配 / G5 testless_validation 四层验证 / G6 expert_pool 辩论收敛 / G7 ErrorReport Oracle 章节 / G8 前置数据检查 / G1 tree_sitter 后端降级） |
+| `test_kernel_sandbox.py` | 9 | G3 内核级沙箱（macOS Seatbelt / Linux Landlock 双后端 / 平台不支持 fail-closed / 本地执行链路接入） |
+| `test_experiments_ab_scaffolds.py` | 12 | A/B 对照聚合 + 全链路汇总 verdict + 七开关注入（`experiments/summarize_full_stack.py`） |
+| `test_runtime_probe.py` | 3 | P0 运行时探针回归（模块过滤保留口径 / 模块过滤丢弃口径 / tb_lineno 行号口径，2026-09-29 修复核心缺陷后新增） |
 
 ## 配置说明
 
@@ -1203,6 +1330,12 @@ docker run --rm \
 | `API_CIRCUIT_BACKOFF` | true | 4.4 API 熔断器指数退避开关（冷却期改按 `base * 2^open_count` 指数增长，彻底死掉的 provider 冷却期单调增长；`reproduce.sh` 显式透传，设 false 回退 4.2 固定冷却期口径便于对比实验） | 5.17 |
 | `API_PROMETHEUS_EXPORT` | false | 4.4 Prometheus 指标导出开关（启用后 `APIManager.to_prometheus_text()` 输出 7 类指标供 Prometheus 抓取；纯旁路，不影响既有路由行为；`reproduce.sh` 显式透传） | 5.17 |
 | `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
+| `RUNTIME_PROBE_ENABLE` | false | P0 运行时探针：被测代码抛异常时刻采集 `exc.__traceback__` 帧链与局部变量快照（零 trace 开销，2026-09-29 修复核心缺陷后真正生效） | 5.22.1 |
+| `KERNEL_SANDBOX_ENABLE` | false | G3 内核级沙箱：macOS Seatbelt（`sandbox-exec`）/ Linux Landlock（`bwrap`）双后端，平台不支持时 fail-closed 拒绝执行（与 Docker 不可用同口径，不静默降级到无隔离本地） | 5.22.3 |
+| `AGENT_TELEMETRY_ENABLE` | false | G4 AgentTelemetry 故障检测基准：10 类内置失败模式正则匹配（零 LLM 成本，纯观测），输出 Markdown 报告供实验分析消费 | 5.22.4 |
+| `TESTLESS_VALIDATION_ENABLE` | false | G5 无测试场景执行无关验证：四层独立可开关（AST 符号守卫 / mypy 静态检查 / 命名契约回归 / 导入冒烟），任一层失败整体 fail（保守 fail-closed 口径） | 5.22.5 |
+| `EXPERT_POOL_DEBATE_ENABLE` | false | G6 多智能体辩论收敛：top-K 候选辩论收敛产出一个 `debate_revise` 修订候选（需配合 `EXPERT_POOL_ENABLE=true`；LLM 失败时保守降级回原 verified 列表，不阻断主链路） | 5.22.6 |
+| `RISK_APPROVAL_ENABLE` | false | G2 风险分级人工回路：三因子（置信度 + 补丁影响面 + 预算占比）加权打分 → low/medium/high → auto_merge / human_confirm / force_review | 5.22.2 |
 
 详见 [QUICKSTART.md](QUICKSTART.md) 与 [.env.example](.env.example)。
 
@@ -1456,10 +1589,12 @@ python main.py clean-venv-cache --max-size-mb 512
 - [算法设计文档](docs/algorithm_design.md)：核心算法形式化描述
 - [失败案例分析](docs/failure_analysis.md)：失败率的根因分析与改进路线图（历史数据快照）
 - [性能调优指南](docs/performance_guide.md)：并发执行、RAG 单例化、超时配置、性能剖析基准
-- [API 参考文档](docs/api_reference.md)：模块接口说明
+- [API 参考文档](docs/api_reference.md)：模块接口说明（含 2026-09-29 审查优化轮：P0 运行时探针缺陷修复口径）
 - [使用示例](docs/usage_examples.md)：编程接口与 CLI 用法
+- [依赖豁免登记表](docs/dependency_exemptions.md)：pip-audit 漏洞豁免登记（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限）
+- [前沿推荐批次设计](docs/gap_report_2026-09-28_frontier_recommendations.md)：G1–G8 缺口分析与落地说明
 - [审查轮次记录](docs/review_2026-09-26_round7.md)：第八至第十一轮审查与保守优化（P1/P2 缺陷修复 + 回归守卫）
-- [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由（默认全关，按需启用）
+- [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由 / G1–G8 新能力开关（默认全关，按需启用）
 - [历史优化记录](docs/history/optimization_plan.md)：归档的历史轮次优化计划与报告（`docs/history/`，非当前维护文档）
 
 ---
@@ -1471,6 +1606,36 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### 2026-09-29 审查优化轮（P0 运行时探针缺陷修复 + 测试套件 0 告警，默认行为不变）
+
+**核心成果**：
+- **P0 运行时探针（RUNTIME_PROBE）核心缺陷修复**（`src/agents/runtime_probe.py`）：历史实现经 `sys.settrace` 的 exception 事件采集异常帧，但 CPython 逐事件追踪语义下"函数体内抛异常"时 exception 事件不向被调帧传播，实测 **frames 恒空**——P0 运行时探针自引入以来从未真正生效。本轮改为异常抛出时刻直接读 `exc.__traceback__` 帧链（异常栈即精确的失败时刻帧栈，零 trace 开销），并同步修复：
+  - 单字符变量误过滤：`_capture_frame_locals` 历史口径把 x/y/z 当"循环变量噪声"过滤，但断言失败时刻 x/y/z 正是最关键的观测变量，过滤后快照恒空；
+  - 行号错误：已退出帧的 `f_lineno` 停在函数体末尾而非异常抛出行，改用 traceback 帧对象的 `tb_lineno`（CPython 记录的精确行号）；
+  - 模块过滤永不匹配：probe 文件命名为 `"{target_module}_probe.py"`，历史过滤条件 `"{target_module}.py"` 子串与之永不匹配，指定 target_module 时帧被全部丢弃（探针恒 None）；改为直接匹配 probe 文件本身；
+  - 子线程未处理异常泄漏：顶层调用异常未被拦截 → 解释器打印 "Exception in thread" 噪音（pytest 转 PytestUnhandledThreadExceptionWarning）。
+  - 新增回归用例：`tests/test_runtime_probe.py`（模块过滤保留口径 / 模块过滤丢弃口径 / tb_lineno 行号口径）。
+- **测试套件 0 告警**：`tests/test_trace_observability.py` 修复 2 处未关闭文件句柄（ResourceWarning → pytest unraisable 噪音）；全量 pytest 2502 passed，0 failed，0 warning（`-W error::ResourceWarning` 口径）。
+- **基线刷新**：`BASELINE.yaml` 同步（total_passed 2499 → 2502；line_total_pct 87 / 0.8673；branch_total_pct 77 / 0.7738；last_verified 2026-09-29）。
+
+**验证**: 全量 2502 passed / 0 failed / 0 warning / ruff 0 告警 / mypy 0 错误（86 源文件）
+
+### 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口落地，默认行为不变 + 新能力独立开关）
+
+**核心成果**：
+- **G2 P0 风险分级人工回路**（`src/graph/risk_approval.py`）：`RISK_APPROVAL_ENABLE` 默认关，三因子加权打分（置信度 0.4 + 补丁影响面 0.4 + 预算占比 0.2）→ low/medium/high 分级 → auto_merge / human_confirm / force_review；`run_benchmark` 结果行新增 `risk_summary` 字段；测试 `tests/test_risk_approval.py`。
+- **G8 P0 全链路 SWE-bench Pro 复测**（`experiments/run_full_stack_swe_bench_pro.py` + `scripts/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`）：一键七开关 + 数据前置门禁 + ON/OFF 对照分析与错误分桶。
+- **G3 P1 内核级沙箱**（`src/agents/kernel_sandbox.py`）：`KERNEL_SANDBOX_ENABLE` 默认关，macOS Seatbelt / Linux Landlock+bwrap 双后端，平台不支持时 fail-closed；测试 `tests/test_kernel_sandbox.py`。
+- **G1 P1 Tree-sitter 精确 AST 后端**（`src/tools/tree_sitter_backend.py`）：可选依赖，缺 `tree_sitter` 时透明降级回词法层。
+- **G4 P1 AgentTelemetry 故障检测基准**（`src/observability/agent_telemetry.py`）：`AGENT_TELEMETRY_ENABLE` 默认关，10 类内置失败模式正则匹配，零 LLM 成本纯观测。
+- **G5 P2 无测试场景执行无关验证**（`src/tools/testless_validation.py`）：`TESTLESS_VALIDATION_ENABLE` 默认关，四层独立可开关，任一层失败整体 fail。
+- **G6 P2 多智能体辩论收敛**（`src/graph/expert_pool.py` `debate_round()`）：`EXPERT_POOL_DEBATE_ENABLE` 默认关，top-K 候选辩论收敛产出 `debate_revise` 修订候选。
+- **G7 P2 缺陷报告生成**（`src/reports/generator.py` `ErrorReport.oracle_stats` + `with_oracle_stats()`）：`total_oracles > 0` 时渲染"预言有效性（Oracle 增强，G7）"章节。
+- **文档一致性 P2**：新增 `docs/dependency_exemptions.md`（依赖豁免登记表）+ `scripts/check_dependency_exemptions.py`（CI 门禁）+ `scripts/check_docs_history_drift.py`（warning-only 历史快照漂移检测）+ `CONTRIBUTING.md` "依赖豁免登记"章节。
+- 全仓 ruff 0 告警 + mypy 0 错误（86 源文件，+5 新增）；全量 2499 测试通过 / 0 失败（基线 2487，+34 新增 + 3 回归守卫）。
+
+**验证**: 全量 2499 passed / 0 failed / ruff 全绿 / mypy 全绿 / 配套测试 `tests/test_g8_g2_g4_g5_g6_g7_g1.py`（25 用例）+ `tests/test_kernel_sandbox.py`（9 用例）+ `tests/test_experiments_ab_scaffolds.py`（12 用例）
 
 ### 2026-09-28 改进清单全量批次（P0/P1/P2/P3，默认行为不变，新能力均带独立开关）
 

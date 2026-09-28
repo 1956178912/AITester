@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 import time
 from dataclasses import asdict
 from typing import Any, cast
@@ -270,7 +271,7 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     Returns:
         更新后的状态字典，包含 test_plan 字段（PlannerAgent 输出的测试计划）。
     """
-    agent = PlannerAgent()
+    agent = get_or_create_agent(PlannerAgent)
     t0 = time.time()
     try:
         # 调用 Planner 生成测试计划，传入被测代码和可选的目标函数名
@@ -360,7 +361,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     Returns:
         更新后的状态字典，包含 generated_test（测试代码字符串）和 rag_references（RAG 参考列表）。
     """
-    agent = GeneratorAgent()
+    agent = get_or_create_agent(GeneratorAgent)
 
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
     # 仅当 RAG 开关开启、模块可用时才进行检索（统一走 rag_guarded 降级守卫，P1 重构）
@@ -447,7 +448,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             cross_file_modules=cross_modules or None,
             temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
         )
-        logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test))
+        logger.info("复现测试（2.3）生成完成，长度=%d", len(repro_test or ""))
     # 记录生成结果长度，便于评估 Generator 的输出质量
     logger.info("Generator 完成测试代码生成，长度=%d", len(generated_test))
 
@@ -508,6 +509,68 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     return update
 
 
+# ─── ExecutorAgent 惰性单例（2026-09-28 性能优化）────────────────────────────
+# _executor_node 每轮迭代 new 一个 ExecutorAgent。其构造仅存储沙箱配置
+# （timeout/use_docker/use_venv/auto_install_deps/dep_install_timeout/
+# docker_image），无内部可变状态：agent.execute() 每次调用独立构建沙箱、
+# 运行 pytest、回收输出。沙箱参数全部来自 config 模块常量（进程内不变），
+# 仅 execution_timeout 可经 CLI 注入——故按完整参数元组分键缓存实例：
+# 同配置复用（省每轮构造 + 日志初始化），不同配置（--timeout 变体）各建一份，
+# 并发下 DCL + 线程锁保证同键只构造一次。开关：
+# AITESTER_EXECUTOR_AGENT_CACHE=0 关闭（默认启用，行为不变）。
+_executor_agent_cache: dict[tuple[Any, ...], ExecutorAgent] = {}
+_executor_agent_cache_lock = threading.Lock()
+
+
+def _get_or_create_executor_agent(
+    *,
+    timeout: int,
+    use_docker: bool,
+    use_venv: bool,
+    auto_install_deps: bool,
+    dep_install_timeout: int,
+    docker_image: str,
+) -> ExecutorAgent:
+    """获取（或创建）按沙箱配置分键复用的 ExecutorAgent 实例。"""
+    if os.getenv("AITESTER_EXECUTOR_AGENT_CACHE", "1") == "0":
+        return ExecutorAgent(
+            timeout=timeout,
+            use_docker=use_docker,
+            use_venv=use_venv,
+            auto_install_deps=auto_install_deps,
+            dep_install_timeout=dep_install_timeout,
+            docker_image=docker_image,
+        )
+    key = (timeout, use_docker, use_venv, auto_install_deps, dep_install_timeout, docker_image)
+    agent = _executor_agent_cache.get(key)
+    if agent is not None:
+        return agent
+    with _executor_agent_cache_lock:
+        agent = _executor_agent_cache.get(key)
+        if agent is not None:
+            return agent
+        agent = ExecutorAgent(
+            timeout=timeout,
+            use_docker=use_docker,
+            use_venv=use_venv,
+            auto_install_deps=auto_install_deps,
+            dep_install_timeout=dep_install_timeout,
+            docker_image=docker_image,
+        )
+        # 容量保护：键空间实际为"沙箱配置组合数"（远小于 16），超限 FIFO 淘汰
+        # （与 llm_client 客户端缓存同口径）
+        if len(_executor_agent_cache) >= 16:
+            _executor_agent_cache.pop(next(iter(_executor_agent_cache)))
+        _executor_agent_cache[key] = agent
+    return agent
+
+
+def clear_executor_agent_cache() -> None:
+    """清空 ExecutorAgent 复用缓存（测试 / 配置切换时调用，恢复每次新建口径）。"""
+    with _executor_agent_cache_lock:
+        _executor_agent_cache.clear()
+
+
 def _executor_node(state: AITesterState) -> dict[str, Any]:
     """
     ExecutorAgent 节点：执行测试并记录结果。
@@ -534,7 +597,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 跑 pytest（镜像 EXECUTOR_DOCKER_IMAGE，默认 aitester:latest）。
     # （2026-09-26 全面审查：EXECUTOR_DOCKER_IMAGE / EXECUTOR_USE_DOCKER 移入
     # 文件头导入，与同文件其他 config 符号风格一致）
-    agent = ExecutorAgent(
+    agent = _get_or_create_executor_agent(
         timeout=executor_timeout,
         use_docker=EXECUTOR_USE_DOCKER,
         use_venv=EXECUTOR_USE_VENV,
@@ -804,6 +867,76 @@ def _dynamic_temperature_from_suggestion(suggestion: str | None) -> float | None
     return None
 
 
+# ─── BaseAgent 子类惰性单例复用（2026-09-28 性能优化）────────────────────────
+# _debugger_node / _diagnosis_node 每轮迭代都 new 一个 DebuggerAgent()，而
+# BaseAgent.__init__ 的实质工作是"查 llm_client 的客户端缓存（或新建
+# ChatOpenAI 并锁内插缓存）"——循环修复（MAX_ITERATIONS 轮 × 多任务）下该
+# 构造/查表开销线性累积。实例缓存的并发等价性：
+# - BaseAgent 实例唯一状态 = self.llm（共享缓存客户端，线程安全）+
+#   self.system_prompt（不可变构造参数，实例间同值）；
+# - 实例方法不写实例字段（execute/debug 均走模块函数 + 共享缓存），
+#   按类键单例与按次新建在任意并发模式下逐字节等价。
+# 键 = 类名（str，稳定可哈希）；容量 16 + FIFO 淘汰（与 llm_client 客户端
+# 缓存同口径）。开关：AITESTER_AGENT_REUSE=0 关闭（默认启用，行为不变）。
+_agent_instance_cache: dict[str, Any] = {}
+_agent_instance_cache_lock = threading.Lock()
+_MAX_CACHED_AGENTS = 16
+
+
+def _agent_reuse_enabled() -> bool:
+    """Agent 实例复用开关（AITESTER_AGENT_REUSE，默认启用，历史口径不变）。"""
+    return os.getenv("AITESTER_AGENT_REUSE", "1") != "0"
+
+
+def get_or_create_agent(agent_cls: type) -> Any:
+    """获取（或创建）复用的 Agent 实例（委托按类名分键的模块级缓存）。
+
+    测试以 MagicMock 替换 agent_cls 时，"复用语义"保持原口径：MagicMock
+    自身即被 patch 的"类"（构造/实例行为由 mock 定义），直接调用
+    agent_cls() 而不走缓存（避免 mock 实例与真实类共享缓存键）。真实类
+    走 DCL + FIFO 缓存路径。
+    """
+    if not _agent_reuse_enabled():
+        return agent_cls()
+    # MagicMock / 非类对象（测试 patch 场景）：直接构造，不污染模块缓存
+    # （MagicMock 类无 __name__ 属性，构造/实例行为由 mock 定义，跨测试复用
+    # 会产生 mock 实例与真实类缓存键错位——与按次新建的历史口径等价）
+    if not isinstance(agent_cls, type):
+        return agent_cls()
+    # 真实类：按类名分键 DCL + FIFO 缓存
+    key = agent_cls.__name__
+    agent = _agent_instance_cache.get(key)
+    if agent is not None:
+        return agent
+    with _agent_instance_cache_lock:
+        agent = _agent_instance_cache.get(key)
+        if agent is not None:
+            return agent
+        agent = agent_cls()
+        if len(_agent_instance_cache) >= _MAX_CACHED_AGENTS:
+            _agent_instance_cache.pop(next(iter(_agent_instance_cache)))
+        _agent_instance_cache[key] = agent
+    return agent
+
+
+def clear_agent_instance_cache() -> None:
+    """清空 Agent 实例复用缓存（测试 / 配置切换时调用，恢复每次新建口径）。"""
+    with _agent_instance_cache_lock:
+        _agent_instance_cache.clear()
+
+
+def _get_or_create_debugger_agent() -> DebuggerAgent:
+    """获取（或创建）复用的 DebuggerAgent 实例（委托 get_or_create_agent）。"""
+    agent = get_or_create_agent(DebuggerAgent)
+    # 测试以 MagicMock 替换 DebuggerAgent 时（非 type），isinstance 校验不适用
+    # 且 get_or_create_agent 已按"非 type → 直接构造"语义返回 mock 实例；
+    # 真实类路径才做 isinstance 收窄（mypy 友好），mock 路径直返（测试口径）。
+    if not isinstance(DebuggerAgent, type):
+        return agent
+    assert isinstance(agent, DebuggerAgent)
+    return agent
+
+
 def _diagnosis_node(state: AITesterState) -> dict[str, Any]:
     """三、双向代码-测试诊断节点（BiVCode 式 DiagnosisNode，默认关）。
 
@@ -830,7 +963,7 @@ def _diagnosis_node(state: AITesterState) -> dict[str, Any]:
     Returns:
         更新后的状态字典，含 defect_type / review_reason / diagnosis_source。
     """
-    agent = DebuggerAgent()
+    agent = _get_or_create_debugger_agent()
     t0 = time.time()
     # 截断超长代码与测试输出（诊断 prompt 的 token 预算与 _debugger_node 同口径）
     from src.agents.base_agent import BaseAgent
@@ -876,7 +1009,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     Returns:
         更新后的状态字典，包含 diagnosis, error_category, patch。
     """
-    agent = DebuggerAgent()
+    agent = _get_or_create_debugger_agent()
     t0 = time.time()
 
     # 统一走 rag_guarded 降级守卫（P1 重构）：有失败用例时检索相似修复案例
@@ -1000,6 +1133,33 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             focus_function=state.get("target_function"),
         )
         verified = pool.cross_validate(candidates, min_agreement=2)
+        # G6 多 Agent 辩论收敛（EXPERT_POOL_DEBATE_ENABLE=true 时启用，默认关）：
+        # 在 cross_validate 投票结果之上对 top-K 候选做"互辩修订"——
+        # 产出一个综合修订版候选（吸收 top-K 共性修复点，规避各自弱点），
+        # 修订候选非空时插入 verified 列表首位（优先级最高），不再与
+        # top-K 重新投票（修订版是"综合版"，投票口径不适用）。
+        # 保守降级：top-K 不足 2 / LLM 调用失败 / 空补丁时返回原 verified
+        # 列表（不阻断主链路），标记 debate_revise=False。
+        # 默认关时本分支零执行（expert_pool_debate_enabled() 恒 False），
+        # 历史 cross_validate 口径不变。
+        from src.graph.expert_pool import expert_pool_debate_enabled as _debate_enabled
+
+        if verified and _debate_enabled():
+            debate_result = pool.debate_round(
+                verified=verified,
+                target_code=state["target_code"],
+                test_output=state.get("test_output") or "",
+                failed_cases=state.get("failed_cases") or [],
+                focus_function=state.get("target_function"),
+            )
+            if debate_result:
+                verified = debate_result
+                # 辩论胜出候选（修订版或原 top-K 首位）标记
+                best_revise = debate_result[0].get("debate_revise", False)
+                if best_revise:
+                    logger.info("G6 辩论收敛：修订候选插入首位（top-K 综合版）")
+                expert_pool_meta["debate_revise"] = best_revise
+                expert_pool_meta["debate_top_k"] = len(debate_result) if best_revise else 0
         # 策略银行协同（STRATEGY_BANK_ENABLE=true 时）：按失败签名检索策略，
         # 把策略 prompt_hint 注入胜出候选（零额外 LLM 成本，纯静态映射）
         if verified and _sb_enabled():

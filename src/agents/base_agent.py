@@ -667,8 +667,16 @@ class BaseAgent:
 # 已被删除条目的响应值。由于 LRU 命中值与文件内容一致时行为等价（响应不可变），
 # 该风险可接受；需要强一致口径（如测试）时调用 clear_llm_lru_cache() 清空。
 def clear_llm_lru_cache() -> None:
-    """清空 LLM 文件缓存的进程内 LRU（含负缓存），恢复纯文件读取语义。"""
+    """清空 LLM 文件缓存的进程内 LRU（含负缓存），恢复纯文件读取语义。
+
+    同步清除 llm_client 的缓存开关/目录环境变量记忆（AITESTER_LLM_CACHE /
+    AITESTER_LLM_CACHE_DIR 经 monkeypatch.setenv 被测试修改后，必须显式清记忆
+    才能恢复"每次调用读环境变量"的历史口径，否则进程内记忆值继续生效）。
+    """
     _lru_clear()
+    from src.agents.llm_client import clear_llm_cache_option_memory
+
+    clear_llm_cache_option_memory()
 
 
 __all__ = [

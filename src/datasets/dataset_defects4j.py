@@ -12,6 +12,7 @@ Defects4J 是 Java 生态中最著名的缺陷基准，Defects4J-Python 是其 P
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
@@ -96,9 +97,20 @@ class Defects4JPYDataset(BaseDatasetLoader):
         buggy_code = "".join(buggy_parts)
         test_code = "".join(test_parts)
 
-        # 统计测试函数
-        test_funcs = re.findall(r"def test_\w+", test_code)
-        total_tests = len(test_funcs)
+        # 统计测试函数（2026-09-29 P2-5 修复：优先 AST 逐文件精确计数，
+        # 避免 re.findall(r"def test_\w+") 把字符串字面量里的
+        # "def test_xxx" 误计入 total_tests → expected_pass 偏大 → 任务通过率被低估。
+        # AST 失败时（语法损坏的测试文件）回退历史 regex 口径，加载行为不变）
+        total_tests = 0
+        for tpart in test_parts:
+            try:
+                ttree = ast.parse(tpart)
+            except SyntaxError:
+                total_tests += len(re.findall(r"def test_\w+", tpart))
+            else:
+                total_tests += sum(
+                    isinstance(n, ast.FunctionDef) and n.name.startswith("test_") for n in ast.walk(ttree)
+                )
         expected_pass = info.get("expected_pass", total_tests)
 
         task_id = f"{project_name}__{version_dir}"

@@ -136,3 +136,52 @@ class TestDefects4JPYEdges:
         task = next(iter(loader))
         assert "def k()" in task.instance_code
         assert "doc" not in task.instance_code
+
+    def test_test_literal_in_string_not_miscounted(self, tmp_path: pytest.TempPathFactory) -> None:
+        """2026-09-29 P2-5 修复：字符串字面量里的 def test_xxx 不被误计入 total_tests。
+
+        历史实现用 re.findall(r"def test_\\w+")，测试代码中出现的字符串常量
+        "def test_fake()" 会被 regex 命中 → total_test_count 虚增 → 任务通过率被低估。
+        修复后优先 AST 逐文件计数（FunctionDef 节点），regex 仅作 AST 失败时的回退。
+        """
+        from src.datasets.dataset_loader import load_dataset
+
+        # 测试代码含 1 个真实 test_ 函数 + 1 个字符串字面量里的 "def test_fake"
+        test_code = 'def test_real():\n    assert True\n\nMSG = "see def test_fake() for details"\n'
+        _make_project(
+            tmp_path,
+            "lit",
+            "1.0",
+            buggy=["def m():\n    return 1\n"],
+            tests=[test_code],
+            info={"description": "literal test_"},
+        )
+        loader = load_dataset("defects4j_python", data_dir=str(tmp_path))
+        task = next(iter(loader))
+        # AST 精确计数：仅 1 个真实 FunctionDef 命中 test_ 前缀
+        assert task.total_test_count == 1, f"字符串字面量 def test_fake 不应被计入，实际 {task.total_test_count}"
+        # expected_pass 缺失时回退 total_test_count（与 AST 口径一致）
+        assert task.expected_pass_count == 1
+
+    def test_ast_fallback_to_regex_on_syntax_error(self, tmp_path: pytest.TempPathFactory) -> None:
+        """AST 解析失败（语法损坏的测试文件）时回退历史 regex 口径，加载行为不变。
+
+        修复前 total_test_count 对语法损坏文件也走 regex（全量拼接后 findall），
+        修复后优先 AST，AST 失败才回退 regex（口径一致）。
+        """
+        from src.datasets.dataset_loader import load_dataset
+
+        # 语法损坏（冒号缺失的 def）→ ast.parse 失败 → 回退 regex
+        broken_test = "def test_broken(:\n    x = 1\n"
+        _make_project(
+            tmp_path,
+            "broke",
+            "1.0",
+            buggy=["def n():\n    return 1\n"],
+            tests=[broken_test],
+            info={"description": "broken"},
+        )
+        loader = load_dataset("defects4j_python", data_dir=str(tmp_path))
+        task = next(iter(loader))
+        # 回退 regex：def test_broken 命中 1 个（与修复前口径一致）
+        assert task.total_test_count == 1

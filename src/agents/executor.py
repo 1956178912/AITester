@@ -78,6 +78,16 @@ class ExecutorAgent:
         self.auto_install_deps = auto_install_deps
         self.dep_install_timeout = dep_install_timeout
         self.docker_image = docker_image
+        # G3 内核级沙箱（KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）：
+        # 本地 / venv 沙箱执行链路把 pytest 子进程包装进内核沙箱
+        # （macOS Seatbelt / Linux Landlock+bwrap）；Docker 链路已有
+        # 容器级出口管控，不走本开关。不支持当前平台时 fail-closed
+        # （拒绝执行，不静默降级到无隔离本地——与 executor_modes 的
+        # docker_unavailable 同口径，避免"以为隔离了其实没有"污染
+        # 对比实验）。_kernel_sandbox_executable / _kernel_sandbox_obs
+        # 供 run_pytest_with_retry 的 subprocess.run(executable=...) 消费。
+        self._kernel_sandbox_executable: str | None = None
+        self._kernel_sandbox_obs: dict[str, Any] = {}
 
     def execute(
         self,
@@ -162,6 +172,32 @@ class ExecutorAgent:
             if target_function:
                 cmd.extend(["-k", target_function])
 
+            # G3 内核级沙箱（KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）：
+            # 把本地执行链路的 pytest 子进程包装进内核沙箱
+            # （macOS Seatbelt / Linux Landlock+bwrap）。fail-closed：
+            # 当前平台无可用沙箱后端时直接拒绝执行（不静默降级到无隔离
+            # 本地——避免"以为隔离了其实没有"污染对比实验口径，
+            # 与 executor_modes 的 docker_unavailable 同口径）。
+            from src.agents.kernel_sandbox import build_sandbox_command, kernel_sandbox_enabled
+
+            if kernel_sandbox_enabled():
+                sandboxed_cmd, obs = build_sandbox_command(cmd, cwd=project_root, allowed_paths=[target_dir])
+                if obs.get("supported"):
+                    self._kernel_sandbox_executable = sandboxed_cmd[0]
+                    self._kernel_sandbox_obs = obs
+                    cmd = sandboxed_cmd[1:]
+                else:
+                    # fail-closed：直接拒绝执行，观测层只随本条失败结果
+                    # 透传，不落实例状态（避免下次成功执行被旧 obs 污染）
+                    return {
+                        "passed": False,
+                        "output": "内核级沙箱在当前平台不可用（fail-closed 拒绝执行）",
+                        "coverage": 0.0,
+                        "failed_cases": [],
+                        "error_info": {"type": "kernel_sandbox_unavailable", "message": obs.get("profile_summary", "")},
+                        "kernel_sandbox_obs": obs,
+                    }
+
             output, last_result = self._run_pytest_with_retry(cmd, env, project_root)  # type: ignore[attr-defined]
             # 检查是否需要立即返回（超时/环境问题/通用异常无有效结果）
             # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
@@ -185,9 +221,17 @@ class ExecutorAgent:
                 "coverage": coverage,
                 "failed_cases": failed_cases,
             }
+            # G3 内核级沙箱观测层（纯观测，不改结果口径；供 Fail-Closed
+            # 治理协议 / 实验分析消费，与 Docker 链路的 docker_network_obs 同向）
+            if self._kernel_sandbox_obs:
+                result_dict["kernel_sandbox_obs"] = self._kernel_sandbox_obs
 
             if last_result and last_result.returncode != 0:
                 result_dict["error_info"] = self._build_error_info(last_result, output)  # type: ignore[attr-defined]
+            # 执行路径结束（成功/失败）：清理实例级内核沙箱状态，
+            # 避免下次调用（含关闭开关的场景）透传旧观测层
+            self._kernel_sandbox_executable = None
+            self._kernel_sandbox_obs = {}
 
             return result_dict
         finally:

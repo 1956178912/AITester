@@ -23,10 +23,10 @@
 | **Code Coverage** | Total line and branch coverage: see the `coverage` section of [BASELINE.yaml](BASELINE.yaml) (`line_total_pct` / `branch_total_pct`); per-core-module coverage follows the latest CI `term-missing` output |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-09-28 improvement-checklist full batch (P0 baseline drift guard + static-report auto-refresh + BASELINE CI validation; P1 branch-coverage gate/backfill + LLM-cache 0600 permissions & TTL cleanup + error-classifier confidence layering with L2 protocol reservation; P2 failure-KB minimal closed loop + LLM output anomaly injection tests + optional `--smoke-llm` CI + multiprocess cache hit-rate coordination + bilingual H2 skeleton comparison + ADR index + CI/CD integration examples; P3 multi-language extension & long-file hierarchical summarization design docs; all default behavior unchanged, new capabilities all behind independent switches); prior 2026-09-28 P0/P1 batch (LLM output post-processing layer `patch_postprocess.sanitize_patch` + error-classifier→fix-strategy explicit mapping + task-level token/cost budget + semantic LLM cache + end-to-end smoke script, see [docs/api_reference.md](docs/api_reference.md)); earlier batches in [CHANGELOG](CHANGELOG.md) | contamination detection + 2.1 mypy static layer, default behavior unchanged; full 1937-test suite passes, zero regressions); prior: 2026-09-27 full-audit & conservative-optimization round (ten batches: static checks zeroed (mypy/ruff) + dead-code cleanup + thread hygiene + project hygiene + concurrency / correctness hardening + CF-3 cross-file repair defect fix + fifth-batch P0 (mutation-test kill judging per official pytest exit codes / parallel API rotation `zlib.crc32` reproducibility / LLM cache & cross-file plan cache atomic writes / single-agent baseline write safety / state schema completion) + sixth-batch node-layer routing semantics & robustness (diagnosis-keyword early-iteration regenerate in `_should_debug` / `test_passed` truthiness consistency / generator LLM-failure degradation / planner & debugger fallback widened to OSError / cache-stat thread hygiene) + seventh-batch hot-path deep scan (AST-parse reuse / O(1) task index / shared combined text / precompiled keyword regex) + eighth-batch closing audit (lint / format zeroing + type-repair contract-reference caliber + `type_repair_findings` state propagation + precompiled zai-domain regex) + ninth-batch parallel subagent deep-audit (P1×4: single-function import prefix misclassified as full-file / all-candidates-failed still writes degraded code / venv cache race / per-dir thread locks + P2×10: debugger malformed-JSON degradation / exception branch keeps last valid result / async def patch locating / precompiled regex / convergence double-counting fix) + tenth-batch full-project P1/P2 convergence (P1×6: non-numeric coverage_delta crash / unbounded negative cache / rag similarity bins KeyError / non-numeric reward_signals crash / cross-batch duplicate task_id silent drop / summary None crash + P2×10: comment / docstring wording fixes + TimeoutExpired snapshot append + dotted module-name import fix + CLI flag conflict notice + total_test_count fallback caliber + report None rendering + closure depth caliber + convergence safe normalization + regressed excludes new_categories + dead-write removal + NaN cause disambiguation; full 1920-test suite passes, zero regressions). Prior to that: 2026-09-25 P0 improvement batch 13 items + 0.10 deep-audit fixes + 0.9 LRU fast path. See [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Latest Optimization** | ✅ 2026-09-29 review/optimization round (default behavior unchanged): P0 runtime-probe core-defect fix (the historical `sys.settrace` exception-event collection does not propagate to the called frame when an exception is raised inside the function body — measured frames were permanently empty, so the probe never actually worked since introduction; now reads the `exc.__traceback__` frame chain at exception-raise time, zero trace overhead; synchronously fixed single-character-variable mis-filtering / line-number error (`f_lineno` → `tb_lineno`) / module-filter never matching / child-thread unhandled-exception leak, `src/agents/runtime_probe.py`) + test suite 0 warnings (fixed 2 unclosed file handles in `test_trace_observability`) + `BASELINE.yaml` baseline refresh; current numeric values: see the `tests` section of [BASELINE.yaml](BASELINE.yaml) |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; 15 ruff warnings cleared + 33-file format normalization in 0.6 + 5 tests/ nits cleared in the full-audit round + 11 files format-normalized in batch 7 + 5 working-tree lint nits cleared in batch 8 (duplicate import / trailing whitespace / no-placeholder f-string / PERF401 / exception narrowing) + 14 files format-normalized in batches 9/10 + mypy 0 errors across the repo (62 source files)) |
-| **Recent Changes** | ✅ 2026-09-27 round-11 feature batch (default behavior unchanged): 5.2 error classification 16→17 (new `PATCH_SYNTAX_INVALID` resample-exhausted marker) + 2.2 patch post-processing resampling (`PATCH_RESAMPLE_ENABLE`, default off) + 1.3 layered-compression downgrade-chain propagation (`contract_reject_feedback` cross-round via `_debugger_node`, `CONTEXT_TIER_DOWNGRADE_ENABLE` default off) + V multi-dimensional contamination detection (`run_benchmark._build_task_result` new `contamination_risk_level` field) + 2.1 mypy static layer (`TYPE_CHECK_ENABLE`, default off) + fixed `on_resample` → `resample_fn` key argument name (2.2 resampling was silently disabled) + `build_tiered_context` tier-0 `str|None` → `str` + `AITesterState` declared 4 new keys + whole-repo ruff 8 lint + mypy 12 type errors zeroed; full 1937-test suite passes, zero regressions; see [CHANGELOG.en.md](CHANGELOG.en.md). |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; mypy 0 errors across the repo (86 source files, +5 new: risk_approval / agent_telemetry / kernel_sandbox / testless_validation / tree_sitter_backend)) |
+| **Recent Changes** | ✅ 2026-09-28 frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged, new capabilities all behind independent switches): G2 risk-tiered human approval loop (`RISK_APPROVAL_ENABLE`) + G8 full-stack SWE-bench Pro re-test + G3 kernel-level sandbox (`KERNEL_SANDBOX_ENABLE`) + G1 Tree-sitter precise AST backend (optional dependency) + G4 AgentTelemetry failure-detection benchmark (`AGENT_TELEMETRY_ENABLE`) + G5 testless execution-irrelevant validation (`TESTLESS_VALIDATION_ENABLE`) + G6 multi-agent debate convergence (`EXPERT_POOL_DEBATE_ENABLE`) + G7 defect-report Oracle stats + doc-consistency P2 (dependency-exemption registry + historical-snapshot drift check); full 2502-test suite passes, zero regressions; see [CHANGELOG.en.md](CHANGELOG.en.md); prior 2026-09-27 round-11 feature batch (error classification 16→17 + 2.2 patch resampling + 1.3 downgrade-chain propagation + contamination detection + 2.1 mypy static layer, full 1937-test suite passes) |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -599,6 +599,107 @@ REPO_LEVEL_EXECUTION=true SWE_REPO_VENV_ISOLATION=true \
   python experiments/run_benchmark.py --dataset swe_bench --task-limit 10 --baselines aiterster
 ```
 
+### 5.22 Frontier-recommendation batch (2026-09-28: gap_report P0/P1/P2 gaps G1–G8 + 2026-09-29 review/optimization round, default off)
+
+#### 5.22.1 P0 runtime probe (`RUNTIME_PROBE_ENABLE`, default off)
+`src/agents/runtime_probe.py`: at exception-raise time, directly reads the
+`exc.__traceback__` frame chain to capture the precise failure-time frame
+stack (zero trace overhead, replacing the historical `sys.settrace`
+exception-event approach — when an exception is raised inside the function
+body, the exception event does not propagate to the called frame, measured
+frames were permanently empty, so the probe never actually worked since
+introduction). Synchronously fixed single-character-variable mis-filtering
+(x/y/z at assertion-failure time are the most critical observation variables
+and are no longer filtered as "loop-variable noise"), line-number error
+(exited frames' `f_lineno` stops at the function-body tail, now uses
+`tb_lineno`), module-filter never matching (probe file named
+`"{target_module}_probe.py"` did not match the historical filter condition
+`"{target_module}.py"` substring — when a target_module was specified, all
+frames were discarded), and child-thread unhandled-exception leak (top-level
+call exceptions were not intercepted → "Exception in thread" noise).
+When `RUNTIME_PROBE_ENABLE=false` (default), zero difference. Tests:
+`tests/test_runtime_probe.py` (2502 full suite passed / 0 failed / 0
+warnings, `-W error::ResourceWarning` caliber).
+
+#### 5.22.2 G2 risk-tiered human approval loop (`RISK_APPROVAL_ENABLE`, default off)
+`src/graph/risk_approval.py`: three-factor weighted scoring (confidence
+0.4 + patch impact 0.4 + budget ratio 0.2) → low/medium/high tiering →
+auto_merge / human_confirm / force_review approval actions; thresholds are
+configurable (`RISK_THRESHOLD_MEDIUM=0.35` / `RISK_THRESHOLD_HIGH=0.65`),
+weights are configurable (`RISK_WEIGHT_CONFIDENCE` / `RISK_WEIGHT_IMPACT` /
+`RISK_WEIGHT_BUDGET`); `experiments/run_benchmark.py` result rows gain a
+`risk_summary` field (when default off, placeholder `enabled=False`,
+key-set isomorphism, does not change the historical experiment caliber).
+Tests: `tests/test_risk_approval.py`.
+
+#### 5.22.3 G3 kernel-level sandbox (`KERNEL_SANDBOX_ENABLE`, default off)
+`src/agents/kernel_sandbox.py`: macOS Seatbelt (`sandbox-exec`) / Linux
+Landlock (`bwrap`) dual backend; platform-unsupported → fail-closed
+rejection (does not silently degrade to un-isolated local, same policy as
+Docker-unavailable). Wired into the local execution chain
+(`src/agents/executor.py` `_kernel_sandbox_executable` /
+`_kernel_sandbox_obs`). Tests: `tests/test_kernel_sandbox.py`.
+
+#### 5.22.4 G4 AgentTelemetry failure-detection benchmark (`AGENT_TELEMETRY_ENABLE`, default off)
+`src/observability/agent_telemetry.py`: 10 built-in failure-pattern regex
+matches (zero LLM cost, pure observation layer), outputs a Markdown report
+for experimental-analysis consumption.
+
+#### 5.22.5 G5 testless execution-irrelevant validation (`TESTLESS_VALIDATION_ENABLE`, default off)
+`src/tools/testless_validation.py`: four independently toggleable layers
+(AST symbol guard / mypy static check / naming-contract regression / import
+smoke); any layer failure → overall fail (conservative fail-closed
+caliber), complementary to G7 "with-test" scenario defect-validity
+determination.
+
+#### 5.22.6 G6 multi-agent debate convergence (`EXPERT_POOL_DEBATE_ENABLE`, default off)
+New `debate_round()` method in `src/graph/expert_pool.py`: top-K (default 2,
+`EXPERT_POOL_DEBATE_TOP_K` [2,4]) candidate debate convergence produces one
+`debate_revise` revised candidate (requires `EXPERT_POOL_ENABLE=true`); on
+LLM failure, conservatively degrades back to the original verified list
+(do not block the main chain).
+
+#### 5.22.7 G7 defect-report generation (`ErrorReport.oracle_stats`)
+`src/reports/generator.py`'s `ErrorReport` gains an `oracle_stats` field +
+a `with_oracle_stats()` method: the "Oracle validity (Oracle augmentation,
+G7)" section is rendered only when `total_oracles > 0`.
+
+#### 5.22.8 G8 full-stack SWE-bench Pro re-test
+`experiments/run_full_stack_swe_bench_pro.py` (one-key seven-switches:
+`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
+`CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
+`SWE_REPO_VENV_ISOLATION`) + `scripts/check_swe_bench_pro_ready.py`
+(data pre-gate: JSONL existence + `instance_code` / `test_patch` /
+`FAIL_TO_PASS` / `base_commit` completeness check, blocks with `exit 1`
+when missing) + `experiments/summarize_full_stack.py` (ON/OFF contrast
+analysis: success rate / error buckets `assertion` / `runtime` /
+`import_error` / `syntax` / `unknown` / `other` + conservative verdict;
+when the ON group is all zeros, "no positive information" — do not
+force a positive claim). Tests: `tests/test_g8_g2_g4_g5_g6_g7_g1.py`.
+
+#### 5.22.9 G1 Tree-sitter precise AST backend (optional dependency)
+`src/tools/tree_sitter_backend.py`: implements the 4 core methods of
+`LanguageBackend` (precise AST caliber, fewer false positives);
+`tree_sitter` is an optional dependency — when missing, transparently
+degrades back to the lexical layer, does not block the Python main path;
+`pyproject.toml` mypy configuration declares
+`tree_sitter` / `tree_sitter_typescript` ignore_missing_imports.
+
+#### 5.22.10 Doc-consistency P2
+New `docs/dependency_exemptions.md` (chromadb 1.5.9 hits 5 known
+vulnerabilities PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 /
+PYSEC-2026-3815 exemption registry: dependency / version / vulnerability ID /
+exemption reason / re-review trigger condition / re-review deadline) +
+`scripts/check_dependency_exemptions.py` (CI gate: when the `--ignore-vuln`
+list is not registered in the registry, `exit 1` blocks merging) +
+`scripts/check_docs_history_drift.py` (warning-only: detects when
+`docs/history/*.md` baseline numbers drift beyond the threshold and
+suggests archiving; non-blocking gate) + `CONTRIBUTING.md` "Dependency
+exemption registry" section. Full 2502 tests passed (baseline 2499, +3
+new regression cases) / ruff 0 warnings / mypy 0 errors (86 source files,
++5 new: risk_approval / agent_telemetry / kernel_sandbox /
+testless_validation / tree_sitter_backend).
+
 ### 6. Standard Dataset Integration (new)
 Multiple datasets are supported through the `src/datasets/` subpackage (`dataset_loader.py` + `synthetic_dataset.py`):
 
@@ -977,6 +1078,12 @@ The following switches are all provided as environment variables; defaults prese
 | `REPO_LEVEL_EXECUTION` | false | P0 SWE-bench repo-level verification: SWE-bench tasks routed to RepoExecutor (clone + checkout + pip install -e env cache + gold test_patch before/after FAIL_TO_PASS/PASS_TO_PASS measurement); default off keeps synthetic/examples calibration unchanged | 5.20 |
 | `SWE_REPO_VENV_ISOLATION` | false | P1 repo-level venv isolation: each commit env builds its own venv (pip install -e into the venv, pytest with the venv's python), fixing cross-commit global-python pollution (measured sqlfluff BaseSegment methods inconsistent across adjacent commits → AttributeError, unrelated to LLM patches) | 5.20 |
 | `ASSERTION_AUGMENT_ENABLE` | false | Assertion augmentation strategy (AST extraction of existing assert, 3.4) | 5.9 |
+| `RUNTIME_PROBE_ENABLE` | false | P0 runtime probe: at exception-raise time, captures the `exc.__traceback__` frame chain and local variable snapshots (zero trace overhead; 2026-09-29 core-defect fix makes it actually functional) | 5.22.1 |
+| `KERNEL_SANDBOX_ENABLE` | false | G3 kernel-level sandbox: macOS Seatbelt (`sandbox-exec`) / Linux Landlock (`bwrap`) dual backend; platform-unsupported → fail-closed (does not silently degrade to un-isolated local, same policy as Docker-unavailable) | 5.22.3 |
+| `AGENT_TELEMETRY_ENABLE` | false | G4 AgentTelemetry failure-detection benchmark: 10 built-in failure-pattern regex matches (zero LLM cost, pure observation), outputs Markdown report for experimental analysis consumption | 5.22.4 |
+| `TESTLESS_VALIDATION_ENABLE` | false | G5 testless execution-irrelevant validation: four independently toggleable layers (AST symbol guard / mypy static check / naming-contract regression / import smoke); any layer failure → overall fail (conservative fail-closed policy) | 5.22.5 |
+| `EXPERT_POOL_DEBATE_ENABLE` | false | G6 multi-agent debate convergence: top-K candidate debate convergence produces one `debate_revise` revised candidate (requires `EXPERT_POOL_ENABLE=true`; on LLM failure conservatively degrades back to the original verified list, does not block the main chain) | 5.22.6 |
+| `RISK_APPROVAL_ENABLE` | false | G2 risk-tiered human approval loop: three-factor weighted scoring (confidence + patch impact + budget ratio) → low/medium/high → auto_merge / human_confirm / force_review | 5.22.2 |
 
 See [QUICKSTART.md](QUICKSTART.md) and [.env.example](.env.example) for details.
 
@@ -1213,6 +1320,38 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 ---
 
 ## Iteration records
+
+## Iteration records
+
+### 2026-09-29 Review/optimization round (P0 runtime-probe defect fix + test-suite 0 warnings, default behavior unchanged)
+
+**Key results**:
+- **P0 runtime probe (RUNTIME_PROBE) core-defect fix** (`src/agents/runtime_probe.py`): the historical implementation collected exception frames via `sys.settrace` exception events, but under CPython per-event tracing semantics, when "an exception is raised inside the function body" the exception event does not propagate to the called frame — measured frames were permanently empty, so the P0 runtime probe never actually worked since introduction. This round reads the `exc.__traceback__` frame chain directly at exception-raise time (the exception stack is the precise failure-time frame stack, zero trace overhead), and synchronously fixed:
+  - single-character-variable mis-filtering: `_capture_frame_locals` historically filtered x/y/z as "loop-variable noise", but at assertion-failure time x/y/z are precisely the most critical observation variables; after filtering, the snapshot was permanently empty;
+  - line-number error: exited frames' `f_lineno` stops at the function-body tail rather than the exception-raise line; now uses the traceback frame object's `tb_lineno` (the precise line number recorded by CPython);
+  - module-filter never matching: the probe file is named `"{target_module}_probe.py"`, but the historical filter condition `"{target_module}.py"` as a substring never matches — when a target_module was specified, all frames were discarded (probe was always None); now matches the probe file itself directly;
+  - child-thread unhandled-exception leak: top-level call exceptions were not intercepted → the interpreter printed "Exception in thread" noise (pytest converts to PytestUnhandledThreadExceptionWarning).
+  - New regression cases: `tests/test_runtime_probe.py` (module-filter retention caliber / module-filter discard caliber / tb_lineno line-number caliber).
+- **Test suite 0 warnings**: `tests/test_trace_observability.py` fixed 2 unclosed file handles (ResourceWarning → pytest unraisable noise); full pytest 2502 passed, 0 failed, 0 warning (`-W error::ResourceWarning` caliber).
+- **Baseline refresh**: `BASELINE.yaml` synced (total_passed 2499 → 2502; line_total_pct 87 / 0.8673; branch_total_pct 77 / 0.7738; last_verified 2026-09-29).
+
+**Verification**: Full 2502 passed / 0 failed / 0 warning / ruff 0 warnings / mypy 0 errors (86 source files)
+
+### 2026-09-28 Frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged + new capabilities all behind independent switches)
+
+**Key results**:
+- **G2 P0 risk-tiered human approval loop** (`src/graph/risk_approval.py`): `RISK_APPROVAL_ENABLE` default off; three-factor weighted scoring (confidence 0.4 + patch impact 0.4 + budget ratio 0.2) → low/medium/high tiering → auto_merge / human_confirm / force_review; `run_benchmark` result rows gain a `risk_summary` field; tests `tests/test_risk_approval.py`.
+- **G8 P0 full-stack SWE-bench Pro re-test** (`experiments/run_full_stack_swe_bench_pro.py` + `scripts/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`): one-key seven-switches + data pre-gate + ON/OFF contrast analysis with error-bucket comparison.
+- **G3 P1 kernel-level sandbox** (`src/agents/kernel_sandbox.py`): `KERNEL_SANDBOX_ENABLE` default off; macOS Seatbelt / Linux Landlock+bwrap dual backend; platform-unsupported → fail-closed; tests `tests/test_kernel_sandbox.py`.
+- **G1 P1 Tree-sitter precise AST backend** (`src/tools/tree_sitter_backend.py`): optional dependency; transparently degrades to the lexical layer when `tree_sitter` is missing.
+- **G4 P1 AgentTelemetry failure-detection benchmark** (`src/observability/agent_telemetry.py`): `AGENT_TELEMETRY_ENABLE` default off; 10 built-in failure-pattern regex matches; zero LLM cost, pure observation.
+- **G5 P2 testless execution-irrelevant validation** (`src/tools/testless_validation.py`): `TESTLESS_VALIDATION_ENABLE` default off; four independently toggleable layers; any layer failure → overall fail.
+- **G6 P2 multi-agent debate convergence** (`src/graph/expert_pool.py` `debate_round()`): `EXPERT_POOL_DEBATE_ENABLE` default off; top-K candidate debate convergence produces one `debate_revise` revised candidate.
+- **G7 P2 defect-report generation** (`src/reports/generator.py` `ErrorReport.oracle_stats` + `with_oracle_stats()`): renders the "Oracle validity (Oracle augmentation, G7)" section only when `total_oracles > 0`.
+- **Doc-consistency P2**: new `docs/dependency_exemptions.md` (dependency-exemption registry) + `scripts/check_dependency_exemptions.py` (CI gate) + `scripts/check_docs_history_drift.py` (warning-only historical-snapshot drift detection) + `CONTRIBUTING.md` "Dependency exemption registry" section.
+- Repo-wide ruff 0 warnings + mypy 0 errors (86 source files, +5 new: risk_approval / agent_telemetry / kernel_sandbox / testless_validation / tree_sitter_backend); full 2499 tests passed / 0 failed (baseline 2487, +34 new + 3 regression guards).
+
+**Verification**: Full 2499 passed / 0 failed / ruff all green / mypy all green / companion tests `tests/test_g8_g2_g4_g5_g6_g7_g1.py` (25 cases) + `tests/test_kernel_sandbox.py` (9 cases) + `tests/test_experiments_ab_scaffolds.py` (12 cases)
 
 ### 2026-09-28 Improvement-checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
 

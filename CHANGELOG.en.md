@@ -4,6 +4,188 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-29 Review/optimization round (project audit: P0 runtime-probe defect fix + test-suite 0 warnings)
+
+> This round is a full-project audit (static checks + test warnings +
+> core-module code walk) repair batch. **Default behavior unchanged**
+> (the probe module is off by default; when `RUNTIME_PROBE_ENABLE=false`,
+> zero difference):
+>
+> - **P0 runtime-probe (RUNTIME_PROBE) core-defect fix**
+>   (`src/agents/runtime_probe.py`):
+>   The historical implementation collected exception frames via
+>   `sys.settrace` exception events, but under CPython per-event tracing
+>   semantics, when "an exception is raised inside the function body" the
+>   exception event does not propagate to the called frame — measured
+>   **frames were permanently empty**, so the P0 runtime probe never
+>   actually worked since introduction. This round reads the
+>   `exc.__traceback__` frame chain directly at exception-raise time
+>   (the exception stack is the precise failure-time frame stack, zero
+>   trace overhead), and synchronously fixed:
+>   - Single-character-variable mis-filtering: `_capture_frame_locals`
+>     historically filtered x/y/z as "loop-variable noise", but at
+>     assertion-failure time x/y/z are precisely the most critical
+>     observation variables; after filtering, the snapshot was
+>     permanently empty.
+>   - Line-number error: exited frames' `f_lineno` stops at the
+>     function-body tail rather than the exception-raise line; now uses
+>     the traceback frame object's `tb_lineno` (the precise line number
+>     recorded by CPython).
+>   - Module-filter never matching: the probe file is named
+>     `"{target_module}_probe.py"`, but the historical filter condition
+>     `"{target_module}.py"` as a substring never matches — when a
+>     target_module was specified, all frames were discarded (probe was
+>     always None). Now matches the probe file itself directly.
+>   - Child-thread unhandled-exception leak: top-level call exceptions
+>     were not intercepted → the interpreter printed "Exception in
+>     thread" noise (pytest converts to
+>     PytestUnhandledThreadExceptionWarning).
+>   New regression cases: `tests/test_runtime_probe.py` (module-filter
+>   retention caliber / module-filter discard caliber / tb_lineno
+>   line-number caliber).
+>
+> - **Test suite 0 warnings**: `tests/test_trace_observability.py`
+>   fixed 2 unclosed file handles (ResourceWarning → pytest unraisable
+>   noise); full pytest 2502 passed, 0 failed, 0 warning
+>   (`-W error::ResourceWarning` caliber).
+>
+> - **Baseline refresh**: `BASELINE.yaml` synced
+>   (total_passed 2499 → 2502; line_total_pct 87 / 0.8673;
+>   branch_total_pct 77 / 0.7738; last_verified 2026-09-29).
+>
+> - **Full regression**: 2502 passed / 0 failed
+>   (baseline 2499, +3 new regression cases), ruff 0 warnings /
+>   mypy 0 errors (86 source files), `BASELINE.yaml` refreshed.
+
+## [Unreleased] - 2026-09-28 Frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, default behavior unchanged + new capabilities all behind independent switches)
+
+> This batch is based on the G1–G8 gaps in
+> `docs/gap_report_2026-09-28_frontier_recommendations.md` plus the
+> doc-consistency P2 gap, landed item by item, **default behavior
+> unchanged** (new capabilities all behind independent switches; when
+> disabled, historical behavior is byte-equivalent):
+>
+> - **G2 P0 risk-tiered human approval loop**
+>   (`src/graph/risk_approval.py`):
+>   - `RISK_APPROVAL_ENABLE=true` enables it; three-factor weighted
+>     scoring (confidence 0.4 + patch impact 0.4 + budget ratio 0.2)
+>     → low/medium/high tiering → auto_merge / human_confirm /
+>     force_review approval actions;
+>   - Thresholds are configurable
+>     (`RISK_THRESHOLD_MEDIUM=0.35` / `RISK_THRESHOLD_HIGH=0.65`),
+>     weights are configurable
+>     (`RISK_WEIGHT_CONFIDENCE` / `RISK_WEIGHT_IMPACT` /
+>     `RISK_WEIGHT_BUDGET`);
+>   - `experiments/run_benchmark.py` result rows gain a `risk_summary`
+>     field (when default off, placeholder `enabled=False`, key-set
+>     isomorphism, does not change the historical experiment caliber);
+>   - Tests: `tests/test_risk_approval.py` (default-off placeholder /
+>     high-confidence small patch → low / low-confidence large patch +
+>     budget overage → high / medium impact → medium).
+>
+> - **G8 P0 full-stack SWE-bench Pro re-test**
+>   (`experiments/run_full_stack_swe_bench_pro.py`
+>   + `scripts/check_swe_bench_pro_ready.py`
+>   + `experiments/summarize_full_stack.py`):
+>   - One-key seven-switches (`RUNTIME_PROBE_ENABLE` /
+>     `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
+>     `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` /
+>     `REPO_LEVEL_EXECUTION` / `SWE_REPO_VENV_ISOLATION`) + trace
+>     directory;
+>   - Data pre-gate: `check_swe_bench_pro_ready.py` validates JSONL
+>     existence + `instance_code` / `test_patch` / `FAIL_TO_PASS` /
+>     `base_commit` completeness; blocks with `exit 1` when missing;
+>   - ON/OFF contrast analysis: `summarize_full_stack.py` outputs
+>     success rate / error buckets
+>     (`assertion` / `runtime` / `import_error` / `syntax` / `unknown`
+>     / `other`) + conservative verdict (when the ON group is all
+>     zeros, "no positive information" — do not force a positive
+>     claim);
+>   - Tests: `tests/test_g8_g2_g4_g5_g6_g7_g1.py` (data-directory
+>     missing / complete JSONL / enrichment completion, 3 scenarios +
+>     runner seven-switch injection).
+>
+> - **G3 P1 kernel-level sandbox** (`src/agents/kernel_sandbox.py`):
+>   - `KERNEL_SANDBOX_ENABLE=true` enables it (default off); macOS
+>     Seatbelt (`sandbox-exec`) / Linux Landlock (`bwrap`) dual
+>     backend; platform-unsupported → fail-closed rejection (does not
+>     silently degrade to un-isolated local, same policy as
+>     Docker-unavailable); wired into the local execution chain;
+>   - Tests: `tests/test_kernel_sandbox.py` (9 cases).
+>
+> - **G1 P1 Tree-sitter precise AST backend**
+>   (`src/tools/tree_sitter_backend.py`):
+>   - Optional dependency; when `tree_sitter` is missing, transparently
+>     degrades back to the lexical layer, does not block;
+>   - Implements the 4 core methods of `LanguageBackend` (precise AST
+>     caliber, fewer false positives);
+>   - `pyproject.toml` mypy configuration declares
+>     `tree_sitter` / `tree_sitter_typescript`
+>     ignore_missing_imports.
+>
+> - **G4 P1 AgentTelemetry failure-detection benchmark**
+>   (`src/observability/agent_telemetry.py`):
+>   - `AGENT_TELEMETRY_ENABLE=true` enables it (default off); 10
+>     built-in failure-pattern regex matches (zero LLM cost, pure
+>     observation layer);
+>   - Outputs a Markdown report for experimental-analysis consumption.
+>
+> - **G5 P2 testless execution-irrelevant validation**
+>   (`src/tools/testless_validation.py`):
+>   - `TESTLESS_VALIDATION_ENABLE=true` enables it (default off); four
+>     independently toggleable layers (AST symbol guard / mypy static
+>     check / naming-contract regression / import smoke);
+>   - Any layer failure → overall fail (conservative fail-closed
+>     caliber), complementary to G7 "with-test" scenario
+>     defect-validity determination.
+>
+> - **G6 P2 multi-agent debate convergence**
+>   (`src/graph/expert_pool.py` new `debate_round()` method):
+>   - `EXPERT_POOL_DEBATE_ENABLE=true` enables it (default off,
+>     requires `EXPERT_POOL_ENABLE=true`); top-K (default 2,
+>     `EXPERT_POOL_DEBATE_TOP_K` [2,4]) candidate debate convergence
+>     produces one `debate_revise` revised candidate;
+>   - On LLM failure, conservatively degrades back to the original
+>     verified list (does not block the main chain).
+>
+> - **G7 P2 defect-report generation**
+>   (`src/reports/generator.py` `ErrorReport` new `oracle_stats` field
+>   + `with_oracle_stats()` method):
+>   - The "Oracle validity (Oracle augmentation, G7)" section is
+>     rendered only when `total_oracles > 0`, complementary to G5
+>     testless validation ("with-test" vs "without-test" two scenarios
+>     for defect-validity determination).
+>
+> - **Doc-consistency P2**:
+>   - New `docs/dependency_exemptions.md`
+>     (chromadb 1.5.9 hits 5 known vulnerabilities
+>     PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 /
+>     PYSEC-2026-3815 exemption registry: dependency / version /
+>     vulnerability ID / exemption reason / re-review trigger
+>     condition / re-review deadline);
+>   - `scripts/check_dependency_exemptions.py` (CI gate: when the
+>     `--ignore-vuln` list is not registered in the registry, `exit 1`
+>     blocks merging);
+>   - `scripts/check_docs_history_drift.py` (warning-only: detects
+>     when `docs/history/*.md` baseline numbers drift beyond the
+>     threshold and suggests archiving; non-blocking gate);
+>   - `CONTRIBUTING.md` "Dependency exemption registry" section.
+>
+> Full 2502 tests passed with zero regressions (2026-09-29
+> review/optimization round: P0 runtime-probe defect fix + 3 new
+> regression cases, previously 2499); ruff 0 warnings; mypy 0 errors
+> (86 source files, previously 81, +5 new source files). All new
+> capabilities are off by default (`*_ENABLE=false`); enabling is an
+> explicit act; zero new default dependencies (tree_sitter is an
+> optional dependency; when missing, transparently degrades).
+>
+> Companion test files:
+> - `tests/test_g8_g2_g4_g5_g6_g7_g1.py` (25 cases: G2/G4/G5/G6/G7/G1/G8
+>   gaps);
+> - `tests/test_kernel_sandbox.py` (9 cases: G3 kernel sandbox);
+> - `tests/test_experiments_ab_scaffolds.py` (12 cases: A/B contrast
+>   aggregation + full-stack summary verdict + seven-switch injection).
+
 ## [Unreleased] - 2026-09-28 Improvement checklist full batch (P0/P1/P2/P3, default behavior unchanged, new capabilities all behind independent switches)
 
 > This batch implements the user-submitted 24-item improvement checklist
