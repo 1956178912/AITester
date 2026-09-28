@@ -4,6 +4,38 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-28 真实功能缺口实验补齐批次（A/B 对照 + 死循环修复 + 跨文件脚手架）
+
+> 本批次补齐论文实验章节的证据缺口（位置感知 / RAG / 跨文件三组 A/B），
+> 并修复实验过程中暴露的两处真实缺陷。**默认行为不变**（各开关保持原默认值）：
+>
+> - **`_generator_node` 死循环修复**（`src/graph/nodes.py`）：2026-09-26 审查把
+>   "diagnosis 命中 test-generation 关键词"提升为**任意 iteration 可触发**的早期
+>   regenerate 分支（`_should_debug` reason=`test_gen_diagnosis_early`），但
+>   `_generator_node` 的 `regeneration_count` 增量逻辑仍只覆盖原有的两条路径
+>   （`iteration >= max_iterations` 或 `defect_type == test_defect`）。早期路径
+>   漏计 → `_should_debug` 第 425 行上限保护（`regeneration_count <
+>   _MAX_REGENERATIONS`）永远 0 < 1 成立 → 关键词持续命中时
+>   generator↔executor 无限乒乓（实测 `fibonacci_inefficient` 单任务 trace 6000+ 行）。
+>   现扩展增量条件为"iteration > 0 且 diagnosis 非空"（首生成恒 iteration=0 且
+>   diagnosis=None，可区分），并清空旧 diagnosis 断开死循环。新增回归测试
+>   `test_early_regenerate_path_increments_counter`。
+> - **`_dump_state_artifacts` 补落盘 `position_aware_focus`**（`experiments/run_benchmark.py`）：
+>   此前该字段缺失 → `experiments/position_aware_ab.py` 的定位正确率指标恒 0.0
+>   （指标失真，非功能未生效）。
+> - **跨文件 T1/T4 验收脚手架**（`experiments/cross_file_ab.py`，新增）：
+>   `docs/design/cross_file_repair.md` §"默认启用前置条件"的 T1 / T4 验收标准
+>   此前无对应脚本。现自动跑 `CROSS_FILE_ENABLE=true/false` 两臂并按
+>   T1（level3 ≥ +15pp）/ T4（level1 下降 ≤ 5pp）阈值自动判定。
+> - **三组 A/B 实验数据**（`docs/experiment_ab_results_2026-09-28.md`，新增）：
+>   位置感知 ON/OFF（合成集 n=30，成功率 0pp，定位 0/30 命中——**阴性结果**，
+>   因合成集失败以 assertion 为主、无 traceback 行号，定位阶段从未激活）；
+>   RAG ON/OFF（合成集 n=20，token ON 比 OFF +40.7%（负向，p=0.292 不显著），
+>   检索命中率 100% 但效率收益不成立）；跨文件 T1/T4（level3 +10.00pp 未达
+>   T1 阈值 +15pp，level1 +2.00pp 通过 T4）。全部数据为免费档小模型 + 合成集
+>   + seed=42 口径，可复现。
+> - 全量 2418 测试通过 / 零回归。
+
 ## [Unreleased] — 2026-09-29 审查优化轮（项目审查：P0 运行时探针缺陷修复 + 测试套件 0 告警）
 
 > 本轮为全项目审查（静态检查 + 测试告警 + 核心模块代码走查）的修复批次，

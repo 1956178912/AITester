@@ -4,6 +4,47 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-09-28 Gap-closure A/B batch (position-aware / RAG / cross-file experiments + dead-loop fix + cross-file scaffold)
+
+> This batch closes the paper-experiment evidence gaps (three A/B contrasts:
+> position-aware / RAG / cross-file) and fixes two real defects surfaced while
+> running the experiments. **Default behavior unchanged** (all switches keep
+> their default values):
+>
+> - **`_generator_node` dead-loop fix** (`src/graph/nodes.py`): the 2026-09-26
+>   review promoted "diagnosis hits test-generation keywords" into an early
+>   regenerate branch triggerable at any iteration (`_should_debug`
+>   reason=`test_gen_diagnosis_early`), but `_generator_node`'s
+>   `regeneration_count` increment still only covered the two legacy paths
+>   (`iteration >= max_iterations` or `defect_type == test_defect`). The early
+>   path under-counts → the cap guard at `_should_debug` line 425
+>   (`regeneration_count < _MAX_REGENERATIONS`) is forever 0 < 1 → when the
+>   keyword keeps hitting, generator↔executor ping-pong infinitely (measured:
+>   a single `fibonacci_inefficient` task trace of 6000+ lines). Now the
+>   increment condition is extended to "iteration > 0 and diagnosis non-null"
+>   (first generation is always iteration=0 and diagnosis=None, so they are
+>   distinguishable), and the stale diagnosis is cleared to break the loop.
+>   New regression test `test_early_regenerate_path_increments_counter`.
+> - **`_dump_state_artifacts` now persists `position_aware_focus`**
+>   (`experiments/run_benchmark.py`): previously the field was missing →
+>   `experiments/position_aware_ab.py`'s locate-accuracy metric was always 0.0
+>   (a metric artifact, not "feature not working").
+> - **Cross-file T1/T4 acceptance scaffold** (`experiments/cross_file_ab.py`,
+>   new): the T1/T4 acceptance criteria in
+>   `docs/design/cross_file_repair.md` §"Default-enable precondition" had no
+>   corresponding script. Now it auto-runs the `CROSS_FILE_ENABLE=true/false`
+>   arms and auto-judges by T1 (level3 ≥ +15pp) / T4 (level1 drop ≤ 5pp)
+>   thresholds.
+> - **Three A/B experiment datasets** (`docs/experiment_ab_results_2026-09-28.md`,
+>   new): position-aware ON/OFF (synthetic n=30, success 0pp, 0/30 locate hits
+>   — **negative result**, because synthetic failures are assertion-dominated
+>   with no traceback line numbers, so the locate stage never activates);
+>   RAG ON/OFF (synthetic n=20, tokens ON +40.7% vs OFF (negative, p=0.292 not
+>   significant), retrieval hit-rate 100% but no efficiency gain); cross-file
+>   T1/T4 (level3 +10.00pp misses T1's +15pp threshold, level1 +2.00pp passes
+>   T4). All data are free-tier small model + synthetic + seed=42, reproducible.
+> - Full suite of 2418 tests passes / zero regression.
+
 ## [Unreleased] - 2026-09-29 Review/optimization round (project audit: P0 runtime-probe defect fix + test-suite 0 warnings)
 
 > This round is a full-project audit (static checks + test warnings +

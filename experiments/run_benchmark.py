@@ -364,7 +364,11 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         "iterations": final_state.get("iteration"),
         "coverage": final_state.get("coverage_report"),
         "rag_stats": final_state.get("rag_stats"),
-        "token_usage": token_usage.get_usage().as_dict(),
+        # 3.3 位置感知迭代修复定位结果（POSITION_AWARE_REPAIR_ENABLE=true 时
+        # 由 debugger 节点写入；position_aware_ab.py 的 _locate_accuracy 读取
+        # 本字段计算"定位正确率"。此前缺失 → A/B 脚本永远读到 None → 定位
+        # 正确率恒 0.0（指标失真，非功能未生效）。
+        "position_aware_focus": final_state.get("position_aware_focus"),
         # P0 仓库级验证诊断（仅 REPO_LEVEL_EXECUTION=true 且 SWE-bench 任务有）
         "repo_verification": final_state.get("repo_verification"),
     }

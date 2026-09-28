@@ -560,16 +560,27 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 累计 RAG 检索指标（本节点读取后携带历史值，避免后续节点覆盖丢失）
     if update_rag_stat:
         update["rag_stats"] = [*list(state.get("rag_stats") or []), update_rag_stat]
-    # 再生成路径检测：两类进入方式都需 +1 计数并清空上一轮诊断：
+    # 再生成路径检测：判定"本节点是否由 regenerate 路由进入"。
+    # 覆盖三类进入方式：
     #   1. _should_debug 路由 "regenerate"（iteration >= max_iterations，诊断指向测试生成错误）；
     #   2. 3.1 双向诊断路由 "regenerate"（defect_type == "test_defect"，Review Agent
-    #      判定为测试缺陷，可在任意 iteration 触发）。
-    #   - 首次生成：不改变 regeneration_count，保留原有 diagnosis（尚无修复结论）
-    #   - 再生成：计数 +1（供 _should_debug 上限判断），并清空上一轮诊断，
-    #     避免旧的 diagnosis 关键词在新测试仍失败时再次触发 regenerate（死循环根因）
+    #      判定为测试缺陷，可在任意 iteration 触发）；
+    #   3. _should_debug 早期路由 "regenerate"（iteration < max_iterations 且 diagnosis
+    #      命中 test-generation 关键词，2026-09-26 审查提升为任意 iteration 可触发的
+    #      独立分支，reason=test_gen_diagnosis_early）：特征为 iteration > 0 且
+    #      diagnosis 非空（首生成恒 iteration=0 且 diagnosis=None，故可区分）。
+    # 此前仅条件 1/2 成立时 +1 计数，条件 3 的早期路径漏计 regeneration_count
+    # → _should_debug 第 425 行上限保护（regeneration_count < _MAX_REGENERATIONS）
+    # 永远 0 < 1 成立 → 关键词持续命中时 generator↔executor 无限乒乓
+    # （实测 fibonacci_inefficient 任务 trace 6000+ 行死循环）。
+    # - 首次生成（iteration=0，diagnosis=None）：不改变 regeneration_count，保留原有
+    #   diagnosis（尚无修复结论）
+    # - 再生成：计数 +1（供 _should_debug 上限判断），并清空上一轮诊断，
+    #   避免旧的 diagnosis 关键词在新测试仍失败时再次触发 regenerate（死循环根因）
     if (
         state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS)
         or state.get("defect_type") == "test_defect"
+        or (state.get("iteration", 0) > 0 and state.get("diagnosis") is not None)
     ):
         update["regeneration_count"] = state.get("regeneration_count", 0) + 1
         update["diagnosis"] = None

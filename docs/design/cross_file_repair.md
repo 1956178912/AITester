@@ -269,6 +269,12 @@ python experiments/rag_ab_experiment.py --analyze-only \
     --off-dir experiments/results/cross_file_off
 ```
 
+> **2026-09-28 补充**：T1/T4 验收已有专用脚手架 `experiments/cross_file_ab.py`
+> （自动跑 ON/OFF 两臂 + 按 T1/T4 阈值判定，输出 `cross_file_ab_summary.md`）。
+> 首批合成双模块实测（n=50，seed=42，免费档小模型）：T1 level3 提升 +10.00pp
+> （未达 +15pp 阈值），T4 level1 无回归 +2.00pp（通过）。数据汇总见
+> `docs/experiment_ab_results_2026-09-28.md` §3。
+
 > 结论沉淀：T1-T4 全部满足时，在本文档追加"转正记录"节（日期 / 各档位数据 /
 > 成本口径），并将 `CROSS_FILE_ENABLE` 默认值改为 true（独立批次、默认行为变更
 > 需单独 ADR 记录，不在跨文件批次内偷改默认值）；任一条件不满足则维持现状

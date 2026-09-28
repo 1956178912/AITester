@@ -703,6 +703,34 @@ class TestGeneratorNodeRegeneration:
             self._restore(workflow_module, orig)
 
     @patch("src.graph.nodes.GeneratorAgent")
+    def test_early_regenerate_path_increments_counter(self, mock_generator_class):
+        """死循环回归（2026-09-28）：_should_debug 早期路由 "regenerate"
+        （iteration < max_iterations 且 diagnosis 命中 test-generation 关键词，
+        reason=test_gen_diagnosis_early）进入 _generator_node 时，
+        regeneration_count 必须 +1 并清空 diagnosis。
+        此前该路径漏计 → _should_debug 上限保护（regeneration_count <
+        _MAX_REGENERATIONS）永远 0 < 1 → 关键词持续命中时 generator↔executor
+        无限乒乓（实测 fibonacci_inefficient 任务 trace 6000+ 行死循环）。"""
+        workflow_module, orig = self._with_rag_disabled()
+        try:
+            mock_generator_class.return_value.generate.return_value = "def test_x(): pass"
+            # 早期 regenerate 入口：iteration=1 < max=3，diagnosis 非空（前一轮修复诊断命中关键词）
+            state = {
+                "iteration": 1,
+                "max_iterations": 3,
+                "target_code": "def x(): pass",
+                "module_name": "m",
+                "diagnosis": "测试生成错误，重新生成测试代码",
+                "generated_test": "def test_old(): pass",
+            }
+            result = workflow_module._generator_node(state)
+            assert result["regeneration_count"] == 1
+            assert result["diagnosis"] is None  # 清空旧诊断，断开死循环
+            assert result["error_category"] is None
+        finally:
+            self._restore(workflow_module, orig)
+
+    @patch("src.graph.nodes.GeneratorAgent")
     def test_generator_node_llm_failure_degrades_to_empty(self, mock_generator_class):
         """2026-09-26 全面审查（P1 降级兜底回归）：agent.generate 抛
         RuntimeError（LLM 跨 API 故障转移耗尽）时，_generator_node 不再让

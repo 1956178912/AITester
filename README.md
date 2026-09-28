@@ -832,6 +832,22 @@ python experiments/rag_ab_experiment.py \
     --output-dir experiments/results/rag_ab_$(date +%Y%m%d)
 ```
 
+#### 5.21.6b 跨文件修复 T1/T4 验收脚手架（2026-09-28 新增）
+`experiments/cross_file_ab.py`（新增）：自动执行 `CROSS_FILE_ENABLE=true` /
+`false` 两次 benchmark，配对分析成功率 / 迭代，并按 `docs/design/cross_file_repair.md`
+§"默认启用前置条件"的 T1 / T4 验收阈值自动判定（T1：level3 跨文件子集
+ON 成功率 - OFF 成功率 ≥ +15pp；T4：level1 单文件子集下降 ≤ 5pp 无回归），
+输出 `cross_file_ab_summary.md` + `cross_file_ab_raw.json`。
+
+```bash
+# T1（跨文件提升）+ T4（单文件无回归）
+python experiments/cross_file_ab.py --dataset synthetic --difficulty level3 --task-count 50
+python experiments/cross_file_ab.py --dataset synthetic --difficulty level1 --task-count 50
+```
+
+> **配套 A/B 数据汇总**：`docs/experiment_ab_results_2026-09-28.md`（位置感知
+> ON/OFF + RAG ON/OFF + 跨文件 T1/T4 三组对照实验的论文级数据与阴性结果标注）。
+
 #### 5.21.7 多候选自适应触发（3.2，默认 adaptive）
 `src/graph/nodes.py` 的 `_select_multi_candidate_patch` 新增
 `MULTI_CANDIDATE_TRIGGER_STRATEGY`（默认 `adaptive`）：仅当
