@@ -188,6 +188,46 @@ def _build_failure_frequency_section(state: AITesterState) -> str:
     return hint
 
 
+def _resolve_target_module(state: AITesterState) -> str | None:
+    """2026-10 P0（A/B 阴性结果驱动）：解析定位/探针用的 target_module。
+
+    跨文件任务（state 携带 cross_file_deps / cross_file_plan 的 target_modules）
+    时，被调方真实模块名是依赖图里的 target_module（如 module_c），而
+    state["module_name"] 是 task_id 末段（如 synthetic__xxx__test）——
+    两者不一致会导致 _locate_repair_focus 的跨文件保护误判
+    "traceback 帧文件名与 target_module 不符"而降级全文件修复
+    （L3.5 三模块深链定位无法激活的根因）。
+
+    解析口径（保守，单文件零变化）：
+    - 跨文件任务（state.get("cross_file_deps") 非空）且 cross_file_plan
+      携带 target_modules（analyze 节点解析出的被调方模块名列表）→
+      取首元素；
+    - 单文件任务 / 无 cross_file_deps / 无 target_modules → 取
+      state["module_name"]（历史口径逐字节不变）。
+
+    Args:
+        state: 当前工作流状态。
+
+    Returns:
+        定位/探针用的 target_module（str），单文件任务恒为
+        state["module_name"]。
+    """
+    cross_file_deps = state.get("cross_file_deps")
+    if cross_file_deps:
+        cross_file_plan = state.get("cross_file_plan") or {}
+        target_modules = cross_file_plan.get("target_modules") or []
+        if target_modules:
+            return target_modules[0]
+        # cross_file_plan 缺失时（analyze 节点未产出计划），回退到
+        # cross_file_deps 里 target_module 字段去重集合的**末元素**
+        # （依赖链末位 = 最内层被调用方，如 module_a → module_b → module_c
+        # 中的 module_c；缺陷通常在最内层被调用模块）
+        target_from_deps = [d.get("target_module") for d in cross_file_deps if d.get("target_module")]
+        if target_from_deps:
+            return target_from_deps[-1]
+    return state.get("module_name")
+
+
 def _runtime_probe_enabled() -> bool:
     """P0 运行时探针开关（RUNTIME_PROBE_ENABLE=true 时启用，默认 false）。
 
@@ -197,6 +237,21 @@ def _runtime_probe_enabled() -> bool:
     静态猜测，提升仓库级修复质量）。默认关闭保持历史实验口径不变。
     """
     return os.getenv("RUNTIME_PROBE_ENABLE", "false").lower() == "true"
+
+
+def _probe_snapshot_locate_enabled() -> bool:
+    """P1 探针快照第二定位源开关（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认 false）。
+
+    2026-10 改进（A/B 阴性结果驱动）：位置感知 A/B 定位命中 0/30，根因是
+    assertion 主导的失败无 traceback 行号，_locate_repair_focus 的
+    context.line 恒 None 而降级全文件修复。本开关启用后，_debugger_node
+    把结构化探针快照（非渲染文本）透传给 debugger，使定位阶段可用
+    快照最内层帧（_locate_repair_focus_from_probe）作为第二定位源。
+    纯静态（零 LLM 成本）；需同时启用 RUNTIME_PROBE_ENABLE（快照来源）
+    与 POSITION_AWARE_REPAIR_ENABLE（定位消费方）才产生实际效果，
+    任一缺失时 probe_snapshot=None，debugger 走历史降级口径。
+    """
+    return os.getenv("PROBE_SNAPSHOT_LOCATE_ENABLE", "false").lower() == "true"
 
 
 def _context_tier_downgrade_enabled() -> bool:
@@ -443,6 +498,13 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     def _on_retrieve(retriever) -> None:
         # top_k=3 是经验值：太多会增加 prompt 长度，太少可能缺乏代表性
         refs = retriever.retrieve_test_cases(state["target_code"], top_k=3)
+        # P2 RAG 相关性评分 + 条件注入（2026-10 改进，A/B 阴性结果驱动）：
+        # 生成侧同样做相关性过滤（默认关，历史口径零变化）——低相关案例
+        # 反增 token 噪声（ContextSniper 式"先筛选再注入"）
+        if refs:
+            from src.graph.rag import filter_by_relevance
+
+            refs, _filtered_n, _filter_rate = filter_by_relevance(refs)
         logger.info("RAG 检索到 %d 个相似测试用例", len(refs) if refs else 0)
         rag_refs_box[0] = refs
 
@@ -1096,7 +1158,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     t0 = time.time()
 
     # 统一走 rag_guarded 降级守卫（P1 重构）：有失败用例时检索相似修复案例
-    rag_refs_box: list = [None]
+    rag_refs_box: list = [None, 0, 0.0]  # [refs, relevance_filtered, relevance_filter_rate]
     if state.get("failed_cases"):
 
         def _on_retrieve_repairs(retriever) -> None:
@@ -1105,6 +1167,24 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 target_code=state["target_code"],
                 top_k=2,
             )
+            # P2 RAG 相关性评分 + 条件注入（2026-10 改进，A/B 阴性结果驱动）：
+            # 1. 相关性阈值过滤：similarity < RAG_RELEVANCE_THRESHOLD 的案例
+            #    不注入 prompt（避免"检索到但没用上"的噪声，默认关保持历史口径）；
+            # 2. 条件注入门控：仅当有匹配案例时才注入（零结果不占位，默认关）。
+            # 两开关均默认 false 时，refs 原样透传，行为与历史逐字节一致。
+            if refs:
+                from src.graph.rag import filter_by_relevance, should_inject_refs
+
+                refs, _filtered_n, _filter_rate = filter_by_relevance(refs)
+                _inject = should_inject_refs(refs, error_category=state.get("error_category"))
+                refs = refs if _inject else []
+                if not _inject:
+                    logger.info(
+                        "P2 RAG 条件注入：error_category=%s 无匹配案例，本轮不注入",
+                        state.get("error_category"),
+                    )
+                rag_refs_box[1] = _filtered_n
+                rag_refs_box[2] = _filter_rate
             logger.info("RAG 检索到 %d 个相似修复案例", len(refs) if refs else 0)
             rag_refs_box[0] = refs
 
@@ -1125,7 +1205,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             failed_cases=state.get("failed_cases") or [],
             rag_references=rag_refs,
             focus_function=state.get("target_function"),
-            target_module=state.get("module_name"),
+            # 2026-10 P0（A/B 阴性结果驱动）：跨文件任务的定位/探针 target_module
+            # 应取 cross_file_plan.target_modules[0]（被调方真实模块名，如 module_c），
+            # 而非 state["module_name"]（task_id 末段，如 synthetic__xxx__test）。
+            # 单文件任务两者一致（module_name = 被测文件名 stem），行为不变。
+            target_module=_resolve_target_module(state),
             # P0 1.1 分层代码压缩：跨文件任务时，把 cross_file_analyzer 构建的
             # 各模块"目标函数 + CODE_FOCUS_DEPTH 层调用链"聚焦上下文注入 prompt，
             # 替代"整模块全文 → 截断后靠猜"的旧口径（纯静态文本，零 LLM token）
@@ -1148,6 +1232,19 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             probe_section=(
                 build_probe_prompt_section(state.get("runtime_probe_snapshot")) if _runtime_probe_enabled() else ""
             ),
+            # P1 探针快照第二定位源（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认关）：
+            # 把结构化探针快照（非渲染文本）透传给 debugger，使 _locate_repair_focus
+            # 在 traceback 行号缺失（assertion 主导失败）时可用快照最内层帧定位。
+            # 开关关闭 / 快照缺失时 probe_snapshot=None，debugger 走历史降级口径。
+            probe_snapshot=(
+                state.get("runtime_probe_snapshot")
+                if _probe_snapshot_locate_enabled()
+                else None
+            ),
+            # 2026-10 P0（A/B 阴性结果驱动）：定位/探针 target_module 解析
+            # （跨文件任务取 cross_file_plan.target_modules[0]，单文件取 module_name）
+            # 注：target_module 已在调用首段传入（_resolve_target_module），
+            # 此处不再重复传入——debug 调用的 target_module 即解析后的值。
             # ANNEAL-lite 故障频率强化（FAILURE_FREQUENCY_ENABLE=true 时启用，默认关）：
             # 检测当前 error_category 是否在 repair_history 中反复出现（≥ 阈值），
             # 高频时注入强化策略提示（如"优先启用 oracle_enhancer / runtime_probe"），
@@ -1365,8 +1462,15 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 默认关 / 快照为 None 时恒 False，历史口径不变）
         "probe_section_applied": result.get("probe_section_applied"),
     }
-    # 累计 RAG 修复检索指标（P1）
-    repair_stat = _build_rag_stat(rag_refs, kind="repairs")
+    # 累计 RAG 修复检索指标（P1 + P2 相关性观测）
+    from src.graph.rag import _build_rag_stat_with_relevance
+
+    repair_stat = _build_rag_stat_with_relevance(
+        rag_refs,
+        kind="repairs",
+        relevance_filtered=rag_refs_box[1],
+        relevance_filter_rate=rag_refs_box[2],
+    )
     if repair_stat:
         update["rag_stats"] = [*list(state.get("rag_stats") or []), repair_stat]
     return update
@@ -1449,7 +1553,29 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
     # 显式 asdict（而非 d.__dict__）：dataclass 未来加内部字段会无声改变
     # state["cross_file_deps"] 的 schema，下游节点按固定 key 取值的契约
     # （_patch_applier_node :985）保持稳定——2026-09-26 全面审查修复
-    update: dict[str, Any] = {"cross_file_deps": [asdict(d) for d in deps]}
+    #
+    # 2026-10 P3（A/B 阴性结果驱动）：跨文件任务预置依赖边（_write_cross_file_state
+    # 按 dep_chain 写入 state["cross_file_deps"]）时，本节点只对被调方
+    # target_code（如 module_c）做 AST 分析——module_c 是被调方，其 import
+    # 方向为反向（不 import 调用方 module_a/b）→ AST 分析 0 条边 → 覆盖预置边。
+    # 修复：AST 分析结果为空、且预置边非空时，保留预置边（双向依赖图：被调方
+    # 视角缺失的"调用方 → 被调方"反向边由 dep_chain 预置补全）。预置边为空时
+    # 维持历史 AST 单视角口径（零行为变化）。
+    _preset_deps = state.get("cross_file_deps") or []
+    if deps:
+        # AST 分析命中 → 用 AST 结果（历史口径）
+        update: dict[str, Any] = {"cross_file_deps": [asdict(d) for d in deps]}
+    elif _preset_deps:
+        # AST 为空 + 预置边非空 → 保留预置边（双向依赖图反向补全）
+        update = {"cross_file_deps": _preset_deps}
+        logger.info(
+            "3.5 跨文件修复：AST 单视角 0 条边，保留预置依赖边 %d 条"
+            "（双向依赖图：被调方视角缺失的调用方反向边由 dep_chain 补全）",
+            len(_preset_deps),
+        )
+    else:
+        # 无 AST 边 + 无预置边 → 历史单文件降级口径
+        update = {"cross_file_deps": []}
 
     # ── P0 1.1 分层代码压缩（跨文件调用链上下文）────────────────────────
     # 跨文件任务时，为每个依赖边的 target_module 构建"目标函数 → 被调函数

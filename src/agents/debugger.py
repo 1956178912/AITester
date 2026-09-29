@@ -94,6 +94,20 @@ def _position_aware_repair_enabled() -> bool:
     return os.getenv("POSITION_AWARE_REPAIR_ENABLE", "false").lower() == "true"
 
 
+def _probe_snapshot_locate_enabled() -> bool:
+    """P1 探针快照第二定位源开关（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认 false）。
+
+    2026-10 改进（A/B 阴性结果驱动）：位置感知 A/B 定位命中 0/30，根因是
+    合成集失败以 assertion 为主、无 traceback 行号，_locate_repair_focus
+    的 context.line 恒 None 而直接降级全文件修复。本开关启用后：当
+    traceback 行号缺失且 RUNTIME_PROBE_ENABLE 已产出探针快照时，用快照
+    "最内层帧"的函数名 + 行号作为第二定位源，使纯 assertion 失败也能
+    激活定位阶段。纯静态（零 LLM 成本），探针快照缺失/帧不可解析时
+    保持历史降级口径。需同时启用 POSITION_AWARE_REPAIR_ENABLE 才生效。
+    """
+    return os.getenv("PROBE_SNAPSHOT_LOCATE_ENABLE", "false").lower() == "true"
+
+
 def _bidirectional_diagnosis_enabled() -> bool:
     """3.1 双向代码-测试诊断开关（BIDIRECTIONAL_DIAGNOSIS_ENABLE=true 时启用，默认 false）。
 
@@ -221,6 +235,7 @@ class DebuggerAgent(BaseAgent):
         contract_reject_feedback: dict[str, Any] | None = None,
         probe_section: str | None = None,
         failure_frequency_section: str | None = None,
+        probe_snapshot: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -418,6 +433,10 @@ class DebuggerAgent(BaseAgent):
         # RAG 增强：若检索到相似修复案例，注入参考补丁
         # 最多取前 _MAX_RAG_REPAIR_REFS 个案例
         # 同时截断 original_code 至 _RAG_ORIGINAL_CODE_TRUNCATE_LEN 字符，避免 prompt 过长
+        # P2 RAG 判断指令（2026-10 改进，RAG_RAG_JUDGE_INSTRUCTION_ENABLE=true 时启用，默认关）：
+        # 注入"以下历史案例仅供参考，若与当前错误类型/代码上下文不匹配请忽略"指令，
+        # 让 LLM 自主判断相关性而非盲目拼接（ContextSniper 式"先筛选再注入"的
+        # prompt 侧配套）。默认关时 prompt 与历史逐字节一致。
         if rag_references:
             refs_text = []
             for i, ref in enumerate(rag_references[:_MAX_RAG_REPAIR_REFS], start=1):
@@ -428,7 +447,15 @@ class DebuggerAgent(BaseAgent):
                         f"【参考修复案例 {i}】\n原始代码：\n```python\n{orig}\n```\n修复代码：\n```python\n{patch}\n```"
                     )
             if refs_text:
-                query += "\n\n以下历史修复案例可作为参考：\n" + "\n\n".join(refs_text)
+                _rag_header = (
+                    "\n\n以下历史修复案例可作为参考："
+                )
+                if os.getenv("RAG_JUDGE_INSTRUCTION_ENABLE", "false").lower() == "true":
+                    _rag_header += (
+                        "【判断指令】以下案例仅供参考，若与当前错误类型或代码上下文不匹配请忽略，"
+                        "不要强行套用历史补丁。"
+                    )
+                query += _rag_header + "\n" + "\n\n".join(refs_text)
                 logger.info("Debugger 使用了 %d 个 RAG 修复参考", len(refs_text))
 
         # ── 4. 失败知识库闭环（落点 B，默认关 FAILURE_KB_ENABLE）──────────
@@ -473,6 +500,23 @@ class DebuggerAgent(BaseAgent):
             # 传入截断版会使行号偏移/目标函数被丢弃（focused=False 降级
             # 全文件修复或定位到错误函数）；prompt 用截断版省 token 不变。
             focus_result = self._locate_repair_focus(original_target_code, context, target_module)
+            # P1 探针快照第二定位源（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认关）：
+            # assertion 主导的失败无 traceback 行号，context.line 恒 None → 定位
+            # 阶段降级全文件修复。启用探针快照定位后，从 probe_snapshot（RUNTIME_PROBE_ENABLE
+            # 开启时由 _executor_node 写入 state["runtime_probe_snapshot"]，经
+            # _debugger_node 透传）取"最内层帧"的函数名 + 行号作为第二定位源，
+            # 使纯 assertion 失败也能定位到问题函数。纯静态（零 LLM 成本），
+            # 探针快照缺失 / 帧不可解析时保持 focus_result 原值（历史口径不变）。
+            if not focus_result.get("focused") and _probe_snapshot_locate_enabled() and probe_snapshot:
+                probe_focus = self._locate_repair_focus_from_probe(original_target_code, probe_snapshot, target_module)
+                if probe_focus.get("focused"):
+                    focus_result = probe_focus
+                    logger.info(
+                        "P1 探针快照定位：assertion 失败（无 traceback 行号）经探针"
+                        "最内层帧定位到 %s() 第 %s 行",
+                        focus_result.get("function_name"),
+                        focus_result.get("line"),
+                    )
             position_aware_section = self._build_position_aware_prompt_section(focus_result)
             if focus_result.get("focused"):
                 logger.info(
@@ -681,12 +725,15 @@ class DebuggerAgent(BaseAgent):
 
         # 跨文件保护：traceback 文件名与 target_module 不符时，异常发生在
         # 其他文件，本文件定位无意义（避免误导 LLM 修错文件）
+        # 口径：basename == target_module（精确）或 startswith(target_module)
+        # （允许 ".py" 后缀；编号后缀场景下 target_module 本身含编号，
+        # 精确匹配已覆盖，无需放宽——保持保守"宁缺勿误"）
         if target_module and getattr(context, "filename", None):
             file_base = str(context.filename).rsplit("/", 1)[-1]
-            if (
-                file_base
-                and target_module
-                and not (file_base.startswith(target_module) or file_base == f"{target_module}.py")
+            if not (
+                file_base.startswith(target_module)
+                or file_base == f"{target_module}.py"
+                or file_base == target_module
             ):
                 return {"focused": False, "function_name": None, "line": line, "hint": ""}
 
@@ -718,6 +765,92 @@ class DebuggerAgent(BaseAgent):
             + "）。请优先检查并修复该函数内的逻辑，避免改动无关代码。"
         )
         return {"focused": True, "function_name": focus_name, "line": line, "hint": hint}
+
+    def _locate_repair_focus_from_probe(
+        self,
+        target_code: str,
+        probe_snapshot: dict[str, Any] | None,
+        target_module: str | None,
+    ) -> dict[str, Any]:
+        """P1 探针快照第二定位源（纯静态，不消耗 LLM token）。
+
+        2026-10 改进（A/B 阴性结果驱动）：assertion 主导的失败无 traceback
+        行号，_locate_repair_focus 的 context.line 恒 None 而全文件降级。
+        本方法从 runtime_probe 快照的"最内层帧"（frames[0]，抛出点）取
+        函数名 + 行号，经 AST 定位到所属函数，生成位置感知修复指引。
+
+        定位口径（保守、与 _locate_repair_focus 同族）：
+        - 探针快照 frames 为空 / 首帧无 function/line → focused=False（降级）；
+        - 首帧文件名与 target_module 不符（跨文件）→ focused=False（不误导）；
+        - 行号越界 / AST 解析失败 → focused=False（降级全文件修复）；
+        - 定位成功 → hint 明确标注"来自运行时探针"，与 traceback 路径区分。
+
+        Args:
+            target_code: 被测代码全文（未截断版，便于行号对齐）。
+            probe_snapshot: runtime_probe.capture_failure_snapshot 产物
+                （{"frames": [{"function", "file", "line", "locals"}...]}），
+                帧序为"最内层抛出点 → 外层"，frames[0] 即抛出点帧。
+            target_module: 被测模块名（可选，用于跨文件保护）。
+
+        Returns:
+            {"focused": bool, "function_name": str | None, "line": int | None,
+             "hint": str, "probe_sourced": bool}
+            focused=True 时 hint 非空且 probe_sourced=True；False 时 probe_sourced=True、
+            hint 空串（主流程据此区分"探针尝试过但失败"与"探针未启用"）。
+        """
+        result: dict[str, Any] = {
+            "focused": False,
+            "function_name": None,
+            "line": None,
+            "hint": "",
+            "probe_sourced": True,
+        }
+        frames = (probe_snapshot or {}).get("frames") or []
+        if not frames:
+            return result
+        first = frames[0]
+        probe_line = first.get("line")
+        probe_func = first.get("function") or ""
+        probe_file = first.get("file") or ""
+        if not isinstance(probe_line, int) or probe_line <= 0:
+            return result
+        # 跨文件保护：探针帧文件名与 target_module 不符时，异常发生在其他文件
+        if target_module and probe_file:
+            file_base = probe_file.rsplit("/", 1)[-1]
+            if not (file_base.startswith(target_module) or file_base == f"{target_module}.py"):
+                return result
+        # 行号落在被测代码（original_target_code）内才有效
+        code_lines = target_code.count("\n") + 1
+        if probe_line > code_lines:
+            return result
+        # AST 定位：找包围探针帧行号的最内层函数（与 _locate_repair_focus 同族）
+        try:
+            import ast
+
+            tree = ast.parse(target_code)
+        except (SyntaxError, ValueError):
+            return result
+        enclosing = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.lineno <= probe_line <= (node.end_lineno or node.lineno)
+        ]
+        if not enclosing:
+            # 探针帧行号落在模块顶层（如模块级 assert / 顶层表达式）：
+            # 保守降级全文件修复（与 traceback 路径同口径）
+            return result
+        focus = min(enclosing, key=lambda n: (n.end_lineno or n.lineno) - n.lineno)
+        focus_name = focus.name
+        # 探针帧的函数名优先（co_name 即抛出点所在函数），AST 包围函数作交叉验证
+        hint = (
+            f"位置感知修复指引（P1 探针快照）：运行时探针捕获到异常抛出点"
+            f" `{probe_func or focus_name}()` 第 {probe_line} 行"
+            + (f"（AST 包围函数为 `{focus_name}()`，与探针帧一致）" if focus_name == probe_func else "")
+            + "。请优先检查并修复该位置附近的逻辑，避免改动无关代码。"
+        )
+        result.update({"focused": True, "function_name": focus_name, "line": probe_line, "hint": hint})
+        return result
 
     def _build_position_aware_prompt_section(self, focus: dict[str, Any]) -> str:
         """把位置感知修复指引注入 prompt（focus["focused"] 为 False 时返回空串）。"""

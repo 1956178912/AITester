@@ -132,6 +132,28 @@ def _build_rag_stat(rag_refs: list | None, kind: str) -> dict[str, Any] | None:
     }
 
 
+def _build_rag_stat_with_relevance(
+    rag_refs: list | None,
+    kind: str,
+    relevance_filtered: int = 0,
+    relevance_filter_rate: float = 0.0,
+) -> dict[str, Any] | None:
+    """P2 RAG 相关性观测：在 _build_rag_stat 基础上追加过滤比例指标。
+
+    2026-10 改进（A/B 阴性结果驱动）：RAG 命中率 100% 但成功率 0pp，
+    根因是"检索到但没用上"。本函数把"被相关性阈值过滤掉的案例数/比例"
+    写进 rag_stats，让实验报告能分析"高命中率中有多少是低相关"。
+    开关关闭时 relevance_filtered/relevance_filter_rate 均为 0，指标与
+    _build_rag_stat 逐字段一致（历史口径零变化）。
+    """
+    base = _build_rag_stat(rag_refs, kind)
+    if base is None:
+        return None
+    base["relevance_filtered"] = relevance_filtered
+    base["relevance_filter_rate"] = relevance_filter_rate
+    return base
+
+
 def rag_guarded(
     op_name: str,
     action: Callable[[Any], None],
@@ -172,6 +194,118 @@ def rag_guarded(
         action(retriever)
     except Exception as e:
         logger.warning("RAG %s 失败，跳过: %s", op_name, e)
+    return True
+
+
+# ─── P2 RAG 相关性评分 + 条件注入（2026-10 改进，A/B 阴性结果驱动）────────────
+# 背景：RAG A/B 显示检索命中率 100% 但成功率 0pp、token +40.7%——"检索到了
+# 但没用上"。根因：retrieve_repairs 的 where 过滤只保证同类目非空即返回，
+# 无相关性阈值；注入侧无条件拼接，低相关案例反增噪声。本层提供两个默认关
+# 开关的增强能力（保守口径：未启用时与历史逐字节一致）：
+#   1. RAG_RELEVANCE_THRESHOLD_ENABLE=true + RAG_RELEVANCE_THRESHOLD=0.7：
+#      对检索结果按 similarity 过滤，低于阈值的案例不注入 prompt，并记录
+#      被过滤比例（"高命中率中低相关占比"观测）；
+#   2. RAG_CONDITIONAL_ENABLE=true：按错误类型条件注入——仅当检索到与
+#      当前 error_category 匹配的案例时才注入（检索器侧 where 过滤已保证
+#      同类目，本开关在注入侧做二次门控：零结果时明确不注入，避免空
+#      案例占位）。
+import os as _os
+
+_RAG_RELEVANCE_THRESHOLD_ENABLE_ENV = "RAG_RELEVANCE_THRESHOLD_ENABLE"
+_RAG_RELEVANCE_THRESHOLD_ENV = "RAG_RELEVANCE_THRESHOLD"
+_RAG_CONDITIONAL_ENABLE_ENV = "RAG_CONDITIONAL_ENABLE"
+
+
+def rag_relevance_threshold_enabled() -> bool:
+    """P2 RAG 相关性阈值过滤开关（默认 false，历史口径零变化）。"""
+    return _os.getenv(_RAG_RELEVANCE_THRESHOLD_ENABLE_ENV, "false").lower() == "true"
+
+
+def rag_relevance_threshold() -> float:
+    """P2 RAG 相关性阈值（默认 0.7，similarity = 1 - cosine_distance）。"""
+    raw = _os.getenv(_RAG_RELEVANCE_THRESHOLD_ENV, "")
+    try:
+        v = float(raw)
+        return max(0.0, min(v, 1.0))
+    except ValueError:
+        return 0.7
+
+
+def rag_conditional_enabled() -> bool:
+    """P2 RAG 条件注入开关（默认 false，历史口径零变化）。
+
+    启用后：检索结果为空时明确不注入（保守降级）；非空时按错误类型
+    门控（where 过滤已保证同类目，本开关仅在注入侧做二次确认，避免
+    跨类目案例被误注入）。
+    """
+    return _os.getenv(_RAG_CONDITIONAL_ENABLE_ENV, "false").lower() == "true"
+
+
+def filter_by_relevance(
+    refs: list[dict[str, Any]] | None,
+    threshold: float | None = None,
+) -> tuple[list[dict[str, Any]], int, float]:
+    """按 similarity 过滤 RAG 检索结果（纯函数，零 LLM 成本）。
+
+    开关关闭（rag_relevance_threshold_enabled()=False）时直接原样返回，
+    历史口径零变化；开启时过滤 similarity < threshold 的案例，并返回
+    被过滤数量与过滤比例（供实验分析"高命中率中低相关占比"消费）。
+
+    Args:
+        refs: RAG 检索结果列表（每项含 similarity 字段）。
+        threshold: 相关性阈值（None 时读 RAG_RELEVANCE_THRESHOLD，默认 0.7）。
+
+    Returns:
+        (filtered_refs, filtered_count, filter_rate_pct)：
+        - filtered_refs：过滤后保留的案例列表（similarity >= threshold）；
+        - filtered_count：被过滤掉的案例数；
+        - filter_rate_pct：被过滤比例（0.0 = 无案例被过滤）。
+    """
+    if refs is None:
+        return refs, 0, 0.0
+    if not rag_relevance_threshold_enabled():
+        return refs, 0, 0.0
+    if threshold is None:
+        threshold = rag_relevance_threshold()
+    kept = [r for r in refs if isinstance(r, dict) and float(r.get("similarity", 0.0) or 0.0) >= threshold]
+    filtered_count = len(refs) - len(kept)
+    filter_rate = round(filtered_count / len(refs) * 100, 2) if refs else 0.0
+    if filtered_count:
+        logger.info(
+            "P2 RAG 相关性过滤：阈值=%.2f，保留 %d / 过滤 %d（%.1f%%）",
+            threshold,
+            len(kept),
+            filtered_count,
+            filter_rate,
+        )
+    return kept, filtered_count, filter_rate
+
+
+def should_inject_refs(
+    refs: list[dict[str, Any]] | None,
+    error_category: str | None = None,
+) -> bool:
+    """P2 RAG 条件注入门控（纯函数，零 LLM 成本）。
+
+    开关关闭（rag_conditional_enabled()=False）时恒返回 True（历史口径：
+    有案例即注入，零变化）；开启时：
+    - refs 为空 / None → False（不注入，避免空案例占位）；
+    - error_category 提供时，确认至少一个案例的 error_category 匹配
+      （where 过滤已保证同类目，此为二次确认）→ 不匹配则不注入；
+    - 其余情况 → True（注入）。
+    """
+    if not rag_conditional_enabled():
+        return True
+    if not refs:
+        return False
+    if error_category:
+        matched = any(
+            isinstance(r, dict) and str(r.get("metadata", {}).get("error_category", "")).lower() == str(error_category).lower()
+            for r in refs
+        )
+        if not matched:
+            logger.info("P2 RAG 条件注入：error_category=%s 无匹配案例，跳过注入", error_category)
+            return False
     return True
 
 

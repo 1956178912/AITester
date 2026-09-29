@@ -514,6 +514,396 @@ def test_display_normal():
     },
 ]
 
+# 2026-10 改进（A/B 阴性结果驱动）：Level 2.5 运行时异常缺陷库。
+# 三组 A/B（position_aware / rag / cross_file）共同揭示的结构性问题：合成集失败
+# 模式以 assertion 为主，无 traceback 帧行号 → 位置感知修复定位阶段从未激活
+# （定位命中 0/30）。本库构造四类"执行即抛运行时异常"的缺陷：
+#   - IndexError（数组/列表越界访问）
+#   - KeyError（字典键缺失）
+#   - AttributeError（对 None/错误类型对象做属性访问）
+#   - TypeError（类型不匹配调用 / 不兼容运算）
+# 关键设计：模板代码**可正常 import**（无语法错误、无顶层异常），但被测试
+# 用例调用时抛出上述异常 → pytest 失败输出携带完整 traceback 帧
+# （File "xxx", line N），使 _locate_repair_focus 能提取到具体行号，激活
+# 位置感知修复路径。每个模式附 suggested_function（gold 定位目标，供
+# position_aware_ab._locate_accuracy 做定位正确率金标准匹配）。
+# 修复态（fixed）：补边界/空值/类型守卫，全部测试通过。
+BUG_PATTERNS_LEVEL25: list[dict[str, Any]] = [
+    {
+        "name": "runtime_index_error_boundary",
+        "description": "列表边界访问未检查长度，索引越界抛 IndexError",
+        "template": """def get_last_two(items: list) -> list:
+    return items[-2:]
+
+def first_and_last(items: list) -> tuple:
+    return (items[0], items[-1])
+
+def middle(items: list) -> any:
+    return items[len(items) // 2]""",
+        "fixed": """def get_last_two(items: list) -> list:
+    if not items:
+        return []
+    return items[-2:]
+
+def first_and_last(items: list) -> tuple:
+    if not items:
+        return (None, None)
+    return (items[0], items[-1])
+
+def middle(items: list) -> any:
+    if not items:
+        return None
+    return items[len(items) // 2]""",
+        "test_cases": """from runtime_index_error_boundary import get_last_two, first_and_last, middle
+
+def test_get_last_two_normal():
+    assert get_last_two([1, 2, 3, 4]) == [3, 4]
+
+def test_get_last_two_empty():
+    assert get_last_two([]) == []
+
+def test_first_and_last_normal():
+    assert first_and_last([1, 2, 3]) == (1, 3)
+
+def test_first_and_last_single():
+    assert first_and_last([5]) == (5, 5)
+
+def test_first_and_last_empty():
+    assert first_and_last([]) == (None, None)
+
+def test_middle_normal():
+    assert middle([1, 2, 3, 4]) in (2, 3)
+
+def test_middle_empty():
+    assert middle([]) is None""",
+        "bug_type": "runtime",
+        "expected_pass": 7,
+        "total_tests": 7,
+        "difficulty": 2,
+        "trigger_exception": "IndexError",
+        # P0 2026-10（A/B 阴性结果驱动）：定位目标 = 缺陷所在函数
+        # （first_and_last 空列表越界）。注意"取最内层帧"语义下定位命中
+        # 取决于首个失败测试，此处 gold 供 A/B 定位正确率参考。
+        "suggested_function": "first_and_last",
+    },
+    {
+        "name": "runtime_key_error_missing",
+        "description": "字典按键取值未处理键缺失，抛 KeyError",
+        "template": """def lookup_user(users: dict, user_id: str) -> str:
+    return users[user_id]["name"]
+
+def user_age(users: dict, user_id: str) -> int:
+    return users[user_id]["age"]
+
+def summary(users: dict, user_id: str) -> str:
+    user = users[user_id]
+    return "({0}) {1}".format(user["age"], user["name"])""",
+        "fixed": """def lookup_user(users: dict, user_id: str) -> str:
+    user = users.get(user_id) or {}
+    return user.get("name", "unknown")
+
+def user_age(users: dict, user_id: str) -> int:
+    user = users.get(user_id) or {}
+    return user.get("age", 0)
+
+def summary(users: dict, user_id: str) -> str:
+    user = users.get(user_id) or {}
+    name = user.get("name", "unknown")
+    age = user.get("age", 0)
+    return "({0}) {1}".format(age, name)""",
+        "test_cases": """from runtime_key_error_missing import lookup_user, user_age, summary
+
+USERS = {"a": {"name": "Alice", "age": 30}, "b": {"name": "Bob", "age": 25}}
+
+def test_lookup_user_found():
+    assert lookup_user(USERS, "a") == "Alice"
+
+def test_lookup_user_missing():
+    assert lookup_user(USERS, "x") == "unknown"
+
+def test_user_age_found():
+    assert user_age(USERS, "b") == 25
+
+def test_user_age_missing():
+    assert user_age(USERS, "x") == 0
+
+def test_summary_found():
+    assert summary(USERS, "a") == "(30) Alice"
+
+def test_summary_missing():
+    assert summary(USERS, "x") == "(0) unknown"
+
+def test_summary_partial_user():
+    users = {"c": {"name": "Carol"}}
+    assert summary(users, "c") == "(0) Carol"
+
+def test_summary_empty_dict():
+    assert summary({}, "a") == "(0) unknown" """
+        ,
+        "bug_type": "runtime",
+        "expected_pass": 8,
+        "total_tests": 8,
+        "difficulty": 2,
+        "trigger_exception": "KeyError",
+        "suggested_function": "lookup_user",
+    },
+    {
+        "name": "runtime_attribute_error_none",
+        "description": "对 None 返回结果做属性访问，抛 AttributeError",
+        "template": """class Config:
+    def __init__(self):
+        self.settings = None
+
+    def get_option(self, key: str) -> str:
+        return self.settings.get(key, "")
+
+    def has_option(self, key: str) -> bool:
+        return key in self.settings
+
+    def size(self) -> int:
+        return len(self.settings)""",
+        "fixed": """class Config:
+    def __init__(self):
+        self.settings = None
+
+    def get_option(self, key: str) -> str:
+        if not self.settings:
+            return ""
+        return self.settings.get(key, "")
+
+    def has_option(self, key: str) -> bool:
+        if not self.settings:
+            return False
+        return key in self.settings
+
+    def size(self) -> int:
+        if not self.settings:
+            return 0
+        return len(self.settings)""",
+        "test_cases": """from runtime_attribute_error_none import Config
+
+def test_config_get_option_unset():
+    cfg = Config()
+    assert cfg.get_option("theme") == ""
+
+def test_config_has_option_unset():
+    cfg = Config()
+    assert cfg.has_option("theme") is False
+
+def test_config_size_unset():
+    cfg = Config()
+    assert cfg.size() == 0
+
+def test_config_get_option_set():
+    cfg = Config()
+    cfg.settings = {"theme": "dark"}
+    assert cfg.get_option("theme") == "dark"
+
+def test_config_get_option_set_missing_key():
+    cfg = Config()
+    cfg.settings = {"theme": "dark"}
+    assert cfg.get_option("lang") == ""
+
+def test_config_has_option_set():
+    cfg = Config()
+    cfg.settings = {"theme": "dark"}
+    assert cfg.has_option("theme") is True
+    assert cfg.has_option("lang") is False
+
+def test_config_size_set():
+    cfg = Config()
+    cfg.settings = {"a": 1, "b": 2}
+    assert cfg.size() == 2
+
+def test_config_partial_none_values():
+    cfg = Config()
+    cfg.settings = {"theme": None, "lang": "en"}
+    assert cfg.get_option("theme") is None
+    assert cfg.has_option("theme") is True""",
+        "bug_type": "runtime",
+        "expected_pass": 8,
+        "total_tests": 8,
+        "difficulty": 2,
+        "trigger_exception": "AttributeError",
+        "suggested_function": "get_option",
+    },
+    {
+        "name": "runtime_type_error_mismatch",
+        "description": "类型不匹配调用：int 列表混入 str，对不可加元素求和/比较抛 TypeError",
+        "template": """def total(values: list) -> int:
+    return sum(values)
+
+def max_value(values: list) -> any:
+    return max(values)
+
+def is_increasing(values: list) -> bool:
+    for i in range(1, len(values)):
+        if values[i - 1] > values[i]:
+            return False
+    return True""",
+        "fixed": """def total(values: list) -> float:
+    return sum(float(v) for v in values if isinstance(v, (int, float)))
+
+def max_value(values: list) -> float:
+    numeric = [float(v) for v in values if isinstance(v, (int, float))]
+    if not numeric:
+        return 0.0
+    return max(numeric)
+
+def is_increasing(values: list) -> bool:
+    numeric = [float(v) for v in values if isinstance(v, (int, float))]
+    for i in range(1, len(numeric)):
+        if numeric[i - 1] > numeric[i]:
+            return False
+    return True""",
+        "test_cases": """from runtime_type_error_mismatch import total, max_value, is_increasing
+
+def test_total_normal():
+    assert total([1, 2, 3]) == 6
+
+def test_total_mixed():
+    assert total([1, 2.5, "x"]) == 3.5
+
+def test_total_all_invalid():
+    assert total(["a", "b"]) == 0
+
+def test_total_empty():
+    assert total([]) == 0
+
+def test_max_normal():
+    assert max_value([3, 1, 2]) == 3
+
+def test_max_mixed():
+    assert max_value([1, "x", 5.5]) == 5.5
+
+def test_max_empty():
+    assert max_value([]) == 0.0
+
+def test_is_increasing_normal():
+    assert is_increasing([1, 2, 3]) is True
+
+def test_is_increasing_mixed():
+    assert is_increasing([1, "x", 3]) is True
+
+def test_is_increasing_decreasing():
+    assert is_increasing([3, 2, 1]) is False
+
+def test_is_increasing_empty():
+    assert is_increasing([]) is True
+
+def test_is_increasing_with_float():
+    assert is_increasing([1.5, 2.5, 3.0]) is True""",
+        "bug_type": "runtime",
+        "expected_pass": 12,
+        "total_tests": 12,
+        "difficulty": 2,
+        "trigger_exception": "TypeError",
+        "suggested_function": "total",
+    },
+]
+
+# P0 2.1 Level 3.5：复杂跨文件依赖（3 文件依赖链 module_a → module_b → module_c）。
+# 2026-10 改进（A/B 阴性结果驱动）：Level 3 双模块 +10pp 未达 T1 +15pp 阈值，
+# 根因之一是依赖图粒度过粗（单入口视角 AST import 分析）。Level 3.5 用 3 文件
+# 依赖链把"目标文件导入了谁"与"谁导入了目标文件"都纳入修复视野，验证双向
+# 依赖图（CROSS_FILE_BIDIRECTIONAL_ENABLE，默认关）能否覆盖更深的跨模块缺陷。
+CROSS_FILE_DEEP_PATTERNS: list[dict[str, Any]] = [
+    {
+        "name": "cross_file_three_module_chain",
+        "description": (
+            "module_a → module_b → module_c 三级调用链，缺陷在 module_c 的聚合函数"
+            "（空列表未处理导致 IndexError + 类型混用导致求和精度丢失），"
+            "修复需理解双向依赖（谁调用 module_c）并修改 module_c 接口实现"
+        ),
+        "module_a_code": """from module_b import transform_batch
+from module_c import doubled
+
+def analyze_dataset(records: list) -> dict:
+    cleaned = [r for r in records if r is not None]
+    transformed = transform_batch(records)
+    return {"count": len(cleaned), "doubled_sum": doubled(cleaned)}""",
+        "module_b_code": """from module_c import normalize_values, aggregate, doubled
+
+def transform_batch(records: list) -> list:
+    cleaned = [r for r in records if r is not None]
+    normalized = normalize_values(cleaned)
+    mean = aggregate(normalized) if normalized else 0.0
+    return [float(v) for v in normalized]""",
+        "module_c_code": """def normalize_values(values: list) -> list:
+    return [v * 2 for v in values] + [0]  # 历史 bug：空列表返回 [0] 而非 []
+
+def aggregate(values: list) -> float:
+    return sum(values) / len(values)  # 历史 bug：空列表除零
+
+def doubled(values: list) -> float:
+    return 2 * sum(values, 0)  # 历史 bug：int 混用未归一化 float""",
+        "fixed_module_c_code": """def normalize_values(values: list) -> list:
+    if not values:
+        return []
+    return [float(v) * 2 for v in values]
+
+def aggregate(values: list) -> float:
+    if not values:
+        return 0.0
+    total = 0.0
+    for v in values:
+        total += float(v)
+    return total / len(values)
+
+def doubled(values: list) -> float:
+    if not values:
+        return 0.0
+    return 2.0 * sum((float(v) for v in values), 0.0)""",
+        "test_cases": """from module_c import normalize_values, aggregate
+from module_a import analyze_dataset
+from module_b import transform_batch
+
+def test_aggregate_empty():
+    # 置于首位：空列表除零（ZeroDivisionError）展开被测模块帧
+    # module_c.py:N: in aggregate，使位置感知定位阶段可被激活
+    # （--tb=short 下纯 assertion 失败不展开被测帧，运行时异常才展开）
+    assert aggregate([]) == 0.0
+
+def test_normalize_normal():
+    assert normalize_values([1, 2, 3]) == [2.0, 4.0, 6.0]
+
+def test_normalize_empty():
+    assert normalize_values([]) == []
+
+def test_aggregate_normal():
+    assert abs(aggregate([1.0, 2.0, 3.0]) - 2.0) < 1e-9
+
+def test_transform_batch_mixed_types():
+    # int/float 混用历史缺陷：sum([1, 2.5]) 旧口径 int*2 丢精度
+    assert transform_batch([1, 2.5]) == [2.0, 5.0]
+
+def test_analyze_dataset_normal():
+    result = analyze_dataset([1, 2, 3])
+    assert result["count"] == 3
+    assert abs(result["doubled_sum"] - 12.0) < 1e-9
+
+def test_analyze_dataset_empty():
+    result = analyze_dataset([])
+    assert result["count"] == 0
+    assert result["doubled_sum"] == 0
+
+def test_analyze_dataset_with_none():
+    result = analyze_dataset([1, None, 3])
+    assert result["count"] == 2
+    assert abs(result["doubled_sum"] - 8.0) < 1e-9""",
+        "bug_type": "runtime",
+        "expected_pass": 8,
+        "total_tests": 8,
+        "difficulty": 3,
+        "target_module": "module_c",
+        "num_files": 3,
+        "dep_chain": ["module_a", "module_b", "module_c"],
+        # P0 2026-10（A/B 阴性结果驱动）：gold 定位目标 = 缺陷所在函数
+        # （module_c.aggregate 的除零缺陷），供 position_aware_ab 定位正确率匹配。
+        "suggested_function": "aggregate",
+    },
+]
+
 # P0 2.1 Level 4：边界条件 + 异常路径隐蔽缺陷
 BUG_PATTERNS_LEVEL4: list[dict[str, Any]] = [
     {
@@ -583,13 +973,161 @@ def test_is_expired_past():
         "total_tests": 5,
         "difficulty": 4,
     },
+    {
+        "name": "type_mismatch_contract",
+        "description": (
+            "PAGENT 风格类型缺陷：compute_scores 契约上返回 dict[str, float]，"
+            "但 normalize 路径漏了 float() 转换，int 输入混入后 dict 值类型不稳定；"
+            "average 对空 dict 除零 + 对 int 值求平均丢精度。修复需补类型转换"
+            "（触发 2.1 PAGENT 类型修复层：type_repair_layer 静态识别类型疑点）"
+        ),
+        "template": """def compute_scores(records: list) -> dict:
+    scores = {}
+    for record in records:
+        key = record.get("name", "unknown")
+        value = record.get("value", 0)
+        scores[key] = value
+    return scores
+
+def average(scores: dict) -> float:
+    if not scores:
+        return 0.0
+    total = sum(scores.values())
+    return total / len(scores)
+
+def rank_top(scores: dict, k: int) -> list:
+    items = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    return items[:k]""",
+        "fixed": """def compute_scores(records: list) -> dict:
+    scores = {}
+    for record in records:
+        key = str(record.get("name", "unknown"))
+        value = float(record.get("value", 0))
+        scores[key] = value
+    return scores
+
+def average(scores: dict) -> float:
+    if not scores:
+        return 0.0
+    total = sum(float(v) for v in scores.values())
+    return total / len(scores)
+
+def rank_top(scores: dict, k: int) -> list:
+    if k <= 0:
+        return []
+    items = sorted(scores.items(), key=lambda kv: float(kv[1]), reverse=True)
+    return items[:k]""",
+        "test_cases": """from type_mismatch_contract import compute_scores, average, rank_top
+
+def test_compute_scores_normal():
+    records = [{"name": "a", "value": 1}, {"name": "b", "value": 2.5}]
+    scores = compute_scores(records)
+    assert isinstance(scores, dict)
+    assert isinstance(scores["a"], float)
+    assert isinstance(scores["b"], float)
+
+def test_compute_scores_mixed_types():
+    records = [{"name": "a", "value": 1}, {"name": "b", "value": 2.5}]
+    scores = compute_scores(records)
+    assert all(isinstance(v, float) for v in scores.values())
+
+def test_average_empty():
+    assert average({}) == 0.0
+
+def test_average_normal():
+    assert abs(average({"a": 1.0, "b": 2.0}) - 1.5) < 1e-9
+
+def test_rank_top_empty_dict():
+    assert rank_top({}, 3) == []
+
+def test_rank_top_k_zero():
+    assert rank_top({"a": 1.0}, 0) == []
+
+def test_rank_top_normal():
+    result = rank_top({"a": 1.0, "b": 3.0, "c": 2.0}, 2)
+    assert result == [("b", 3.0), ("c", 2.0)]""",
+        "bug_type": "assertion",
+        "expected_pass": 6,
+        "total_tests": 7,
+        "difficulty": 4,
+    },
+]
+
+# P0 2.1 Level 4.5：导入链破坏缺陷（命名契约守卫触发场景）。
+# 与 type_mismatch_contract 的区别：缺陷不在函数体逻辑，而在模块级契约
+# （_TABLE 值类型 + lookup 返回类型），修复需同时改 module 级常量与函数签名，
+# 是"命名契约守卫"（patch_applier 符号守卫）拒绝 LLM 误删符号的典型场景。
+BUG_PATTERNS_LEVEL45: list[dict[str, Any]] = [
+    {
+        "name": "import_chain_type_contract",
+        "description": (
+            "导入链破坏缺陷：lookup 契约上返回 str（_TABLE 值应为字符串），"
+            "实际 _TABLE 值被写成 int，lookup 返回 int；调用方 module_a 的 "
+            "display 假设 str 调 .strip()/.upper()，TypeError。修复需同时"
+            "修正 _TABLE 值类型与 lookup 签名（module 级符号契约 + 函数体）"
+        ),
+        "template": """_TABLE = {"alpha": 1, "beta": 2, "gamma": 3}
+
+def lookup(key: str) -> int:
+    return _TABLE.get(key, 0)
+
+def describe(value: int) -> str:
+    return f"value={value}"
+
+def display(name: str) -> str:
+    value = lookup(name)
+    return f"name={name} " + value.strip().upper()""",
+        "fixed": """_TABLE = {"alpha": "one", "beta": "two", "gamma": "three"}
+
+def lookup(key: str) -> str:
+    return _TABLE.get(key, "unknown")
+
+def describe(value: str) -> str:
+    return f"value={value}"
+
+def display(name: str) -> str:
+    value = lookup(name)
+    return f"name={name} " + value.strip().upper()""",
+        "test_cases": """from import_chain_type_contract import lookup, describe, display, _TABLE
+
+def test_table_values_are_str():
+    assert all(isinstance(v, str) for v in _TABLE.values())
+
+def test_lookup_normal():
+    assert lookup("alpha") == "one"
+    assert isinstance(lookup("alpha"), str)
+
+def test_lookup_missing():
+    assert lookup("delta") == "unknown"
+
+def test_describe():
+    assert describe("one") == "value=one"
+
+def test_display_normal():
+    assert display("alpha") == "name=alpha ONE"
+
+def test_display_missing():
+    assert display("delta") == "name=delta UNKNOWN"
+
+def test_display_keeps_contract():
+    # 契约守卫：修复后 _TABLE 键集合不变（命名契约不破坏）
+    assert set(_TABLE.keys()) == {"alpha", "beta", "gamma"}""",
+        "bug_type": "assertion",
+        "expected_pass": 7,
+        "total_tests": 7,
+        "difficulty": 5,
+    },
 ]
 
 # 按 difficulty 分组的模板库索引
 _DIFFICULTY_PATTERNS: dict[int, list[dict[str, Any]]] = {
     1: BUG_PATTERNS,
     2: BUG_PATTERNS_LEVEL2,
+    25: BUG_PATTERNS_LEVEL25,  # 2026-10：Level 2.5 运行时异常缺陷库（独立整数码 25）
+    3: CROSS_FILE_PATTERNS + CROSS_FILE_DEEP_PATTERNS,
+    35: CROSS_FILE_DEEP_PATTERNS,  # 2026-10：Level 3.5 三模块深链（独立整数码 35）
     4: BUG_PATTERNS_LEVEL4,
+    5: BUG_PATTERNS_LEVEL45,
 }
 
 
@@ -615,7 +1153,18 @@ class SyntheticDataset(BaseDatasetLoader):
 
     DATASET_NAME = "synthetic"
 
-    _VALID_DIFFICULTIES: frozenset[str] = frozenset({"mixed", "level1", "level2", "level3", "level4"})
+    _VALID_DIFFICULTIES: frozenset[str] = frozenset(
+        {
+            "mixed",
+            "level1",
+            "level2",
+            "level2.5",
+            "level3",
+            "level3.5",
+            "level4",
+            "level4.5",
+        }
+    )
 
     def __init__(
         self,
@@ -644,24 +1193,37 @@ class SyntheticDataset(BaseDatasetLoader):
         super().__init__(subset=subset)
 
     def _difficulty_sequence(self, n: int, rng: random.Random) -> list[int]:
-        """生成 n 个任务的难度序列（P0 2.1）。
+        """生成 n 个任务的难度序列（P0 2.1 + 2026-10 失败模式多样性）。
 
-        mixed：在 [1, 2, 3, 4] 间均匀随机；
-        levelN：恒为 N；
-        level3（跨文件）：恒为 3。
+        mixed：在 [1, 2, 3, 4, 5] 间均匀随机（含 Level 2.5 运行时异常与
+        Level 4.5 导入链破坏缺陷，覆盖 4 类运行时异常 + 类型/契约缺陷）；
+        levelN / levelN.5：恒为 N（level2.5 → 25，level3.5 → 35，level4.5 → 45，
+        level2 → 2，level3 → 3，level4 → 4）。
+
+        2026-10 修正（A/B 阴性结果驱动）：此前 level2.5 → 2，与 level2
+        共用 difficulty=2 的 BUG_PATTERNS_LEVEL2 池（assertion 风格缺陷，
+        无 traceback 帧）——新定义的 BUG_PATTERNS_LEVEL25（运行时异常缺陷
+        库：IndexError/KeyError/AttributeError/TypeError）从未被选中，
+        导致位置感知定位阶段永远无法激活（A/B 定位命中 0/30 的根因）。
+        现改为 25/35/45 独立整数码，_DIFFICULTY_PATTERNS 据此精确路由。
         """
         if self._difficulty == "mixed":
-            return [rng.choice([1, 2, 3, 4]) for _ in range(n)]
-        level = int(self._difficulty.replace("level", ""))
+            return [rng.choice([1, 2, 3, 4, 5]) for _ in range(n)]
+        # "level2.5" → 25，"level3.5" → 35，"level4.5" → 45，"levelN" → N
+        level_str = self._difficulty.replace("level", "")
+        _FRACTIONAL_MAP = {"2.5": 25, "3.5": 35, "4.5": 45}
+        level = _FRACTIONAL_MAP.get(level_str)
+        if level is None:
+            level = int(level_str)
         return [level] * n
 
     def _pick_pattern(self, difficulty: int, rng: random.Random) -> dict[str, Any]:
-        """按难度选模板（Level 3 走跨文件库，其他走单文件库）。"""
-        pool = CROSS_FILE_PATTERNS if difficulty == 3 else _DIFFICULTY_PATTERNS.get(difficulty, BUG_PATTERNS)
+        """按难度选模板（Level 3 走跨文件库（含 3.5 深链），Level 5 走契约库，其他走单文件库）。"""
+        pool = _DIFFICULTY_PATTERNS.get(difficulty, BUG_PATTERNS)
         return rng.choice(pool)
 
     def _load_raw_data(self) -> None:
-        """根据模板库生成指定数量的合成缺陷任务（P0 2.1 分层难度）。"""
+        """根据模板库生成指定数量的合成缺陷任务（P0 2.1 分层难度 + 2026-10 失败模式多样性）。"""
         rng = random.Random(self._seed)
         tasks: list[BenchmarkTask] = []
         seq = self._difficulty_sequence(self._task_count, rng)
@@ -671,15 +1233,43 @@ class SyntheticDataset(BaseDatasetLoader):
             noise = rng.randint(0, 9999)
             task_id = f"synthetic__{pattern['name']}_{i:04d}"
 
-            # 跨文件任务（difficulty=3）：双模块构造
-            if difficulty == 3:
-                module_b_code = pattern["module_b_code"] + f"\n# noise_seed_b={noise}\n"
-                # instance_code 是 module_b（被调方，含缺陷）；
-                # module_a 代码经 metadata 传递（跨文件修复架构消费）
+            # gold 定位目标（position_aware_ab._locate_accuracy 的金标准匹配键）：
+            # 模板自带 suggested_function 时直接采用；跨文件任务取 target_module 的
+            # 首个顶层函数（缺陷所在模块）；单文件无标注时留 None（保守口径）。
+            suggested_function: str | None = pattern.get("suggested_function")
+            # 跨文件任务（difficulty=3 / 35）：双模块（L3）或三模块深链（L3.5）构造
+            # 35 = Level 3.5 独立整数码（_FRACTIONAL_MAP 映射 level3.5 → 35），
+            # 与 3 同走跨文件分支（CROSS_FILE_DEEP_PATTERNS 无 template 键，
+            # 单文件分支会 KeyError）；metadata.difficulty 按 3/35 原值记录
+            # （_load_raw_data 的分布日志据此区分 level3 与 level3.5 任务）。
+            if difficulty in (3, 35):
+                num_files = int(pattern.get("num_files", 2))
+                target_module = pattern.get("target_module", "module_b")
+                base_modules = {
+                    "module_a": pattern.get("module_a_code", ""),
+                    "module_b": pattern.get("module_b_code", ""),
+                    "module_c": pattern.get("module_c_code", ""),
+                }
+                # instance_code 是被调方（含缺陷）：双模块取 module_b，三模块取 module_c
+                def_module_key = "module_c" if num_files >= 3 else "module_b"
+                base_code = base_modules.get(def_module_key, pattern.get("module_b_code", ""))
+                fixed_code = base_modules.get(
+                    "module_c_fixed", pattern.get("fixed_module_c_code", "")
+                ) or pattern.get("fixed_module_b_code", "")
+                module_b_code = base_code + f"\n# noise_seed_b={noise}\n"
                 task = BenchmarkTask(
                     task_id=task_id,
                     repo_name=f"synthetic/{pattern['name']}",
                     problem_statement=pattern["description"],
+                    # 跨文件任务：instance_code 是被调方（含缺陷）模块源码
+                    # （双模块 = module_b，三模块 = module_c）。run_benchmark 按
+                    # task_id 末段命名为 <task_id 末段>.py 落盘，伴生模块
+                    # （module_a/b/c）经 _write_cross_file_modules 物化为
+                    # <module_name>.py；测试代码 import module_c 时由
+                    # auto_fix_imports 解析到同目录伴生文件。定位/探针的
+                    # target_module 经 nodes._resolve_target_module 解析为
+                    # cross_file_plan.target_modules（如 module_c），与被调方
+                    # 真实文件名口径一致。
                     instance_code=module_b_code,
                     test_code=pattern["test_cases"],
                     expected_pass_count=pattern["expected_pass"],
@@ -689,18 +1279,23 @@ class SyntheticDataset(BaseDatasetLoader):
                         "pattern_name": pattern["name"],
                         "source": "synthetic",
                         "noise_seed": noise,
-                        "difficulty": 3,
+                        "difficulty": difficulty,
                         "is_cross_file": True,
-                        "module_a_code": pattern["module_a_code"],
+                        "module_a_code": pattern.get("module_a_code", ""),
                         "module_a_name": "module_a",
+                        "module_b_code": pattern.get("module_b_code", ""),
                         "module_b_name": "module_b",
-                        "target_module": pattern.get("target_module", "cross_file_module_b"),
-                        "fixed_module_b_code": pattern.get("fixed_module_b_code", ""),
-                        "num_files": 2,
+                        "module_c_code": pattern.get("module_c_code", ""),
+                        "module_c_name": "module_c",
+                        "target_module": target_module,
+                        "fixed_module_code": fixed_code,
+                        "num_files": num_files,
+                        "dep_chain": pattern.get("dep_chain"),
+                        "suggested_function": suggested_function,
                     },
                 )
             else:
-                # 单文件任务（Level 1/2/4）：历史口径
+                # 单文件任务（Level 1/2/2.5/4/4.5）：历史口径 + gold 定位目标
                 instance_code = pattern["template"] + f"\n# noise_seed={noise}"
                 task = BenchmarkTask(
                     task_id=task_id,
@@ -717,6 +1312,8 @@ class SyntheticDataset(BaseDatasetLoader):
                         "noise_seed": noise,
                         "difficulty": difficulty,
                         "is_cross_file": False,
+                        "trigger_exception": pattern.get("trigger_exception"),
+                        "suggested_function": suggested_function,
                     },
                 )
             tasks.append(task)

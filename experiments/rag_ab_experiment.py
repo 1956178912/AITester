@@ -22,6 +22,14 @@
         --dataset synthetic --task-count 20 --task-limit 20 \
         --seed 42 --output-dir experiments/results/rag_ab_$(date +%Y%m%d)
 
+    # 2026-10 改进（A/B 阴性结果驱动）：RAG 相关性评分 + 条件注入 A/B
+    # ON 组启用 RAG_RELEVANCE_THRESHOLD_ENABLE=true（相似度 < 0.7 的案例不注入）
+    # + RAG_CONDITIONAL_ENABLE=true（仅当有匹配案例时才注入）
+    python experiments/rag_ab_experiment.py \
+        --dataset synthetic --task-count 30 --task-limit 30 --difficulty level2.5 \
+        --seed 42 --output-dir experiments/results/rag_relevance_ab \
+        --relevance-ab
+
     # 在 SWE-bench lite 上跑（需 enrichment 文件）
     export SWE_BENCH_ENRICHMENT=~/Workspace/AITester/data/swe_bench_lite_enriched.jsonl
     python experiments/rag_ab_experiment.py \
@@ -366,6 +374,9 @@ def _run_benchmark_once(
     output_dir: str,
     baseline: str,
     sub_run_dir: str | None = None,
+    relevance_ab: bool = False,
+    relevance_threshold: float = 0.7,
+    difficulty: str = "mixed",
 ) -> str:
     """调用 run_benchmark 一次（RAG ON 或 OFF），返回结果 JSON 路径。
 
@@ -375,10 +386,21 @@ def _run_benchmark_once(
     output_dir，若恰好在同一秒内先后写出（时间戳 %Y%m%d_%H%M%S 精度仅秒级），
     mtime 相同 → sorted [-1] 可能拿到另一组的结果，A/B 互相污染。
     sub_run_dir=None 时退回历史口径（直接在 output_dir 查找，兼容旧调用）。
+
+    2026-10 改进（A/B 阴性结果驱动）：relevance_ab=True 时，RAG ON 组额外
+    启用 RAG_RELEVANCE_THRESHOLD_ENABLE + RAG_CONDITIONAL_ENABLE（相关性评分
+    + 条件注入增强层），OFF 组保持历史 RAG 口径，对比"先筛选再注入"是否
+    降低 token 且提升成功率。
     """
     env = os.environ.copy()
     # RAG 开关
     env["ENABLE_RAG"] = "true" if enable_rag else "false"
+    # 2026-10 改进：RAG 相关性评分 + 条件注入（仅 ON 组 + relevance_ab 时启用）
+    if relevance_ab and enable_rag:
+        env["RAG_RELEVANCE_THRESHOLD_ENABLE"] = "true"
+        env["RAG_RELEVANCE_THRESHOLD"] = str(relevance_threshold)
+        env["RAG_CONDITIONAL_ENABLE"] = "true"
+        env["RAG_JUDGE_INSTRUCTION_ENABLE"] = "true"
     # 确保 trace 层默认开启（P0 4.2）
     if not env.get("AITESTER_TRACE_DIR"):
         env["AITESTER_TRACE_DIR"] = str(Path(output_dir) / "traces")
@@ -400,13 +422,20 @@ def _run_benchmark_once(
         str(seed),
         "--output-dir",
         run_dir,
+        "--difficulty",
+        difficulty,
     ]
     if subset:
         cmd += ["--subset", subset]
     if task_limit:
         cmd += ["--task-limit", str(task_limit)]
 
-    logger.info("运行 RAG %s benchmark: %s", "ON" if enable_rag else "OFF", " ".join(cmd))
+    logger.info(
+        "运行 RAG %s benchmark（relevance_ab=%s）: %s",
+        "ON" if enable_rag else "OFF",
+        relevance_ab,
+        " ".join(cmd),
+    )
     t0 = time.time()
     proc = subprocess.run(
         cmd,
@@ -458,6 +487,20 @@ def _run_benchmark_once(
 )
 @click.option("--results-rag-on", default=None, help="--analyze-only 时 RAG ON 结果 JSON 路径")
 @click.option("--results-rag-off", default=None, help="--analyze-only 时 RAG OFF 结果 JSON 路径")
+@click.option(
+    "--relevance-ab",
+    is_flag=True,
+    help="2026-10 改进：RAG 相关性评分 + 条件注入 A/B——ON 组启用 "
+    "RAG_RELEVANCE_THRESHOLD_ENABLE=true + RAG_CONDITIONAL_ENABLE=true，"
+    "OFF 组保持历史 RAG 口径，对比'先筛选再注入'是否降低 token 且提升成功率",
+)
+@click.option(
+    "--relevance-threshold",
+    default=0.7,
+    type=float,
+    help="RAG 相关性阈值（0-1，默认 0.7，similarity = 1 - cosine_distance）",
+)
+@click.option("--difficulty", default="mixed", help="合成数据集难度级别（默认 mixed）")
 def main(
     dataset: str,
     subset: str | None,
@@ -469,9 +512,16 @@ def main(
     analyze_only: bool,
     results_rag_on: str | None,
     results_rag_off: str | None,
+    relevance_ab: bool,
+    relevance_threshold: float,
+    difficulty: str,
 ) -> None:
     """P0 3.1：RAG A/B 对比实验（--enable-rag vs --no-rag，记录 token/成功率/迭代，
-    按错误类型分析 RAG 收益，输出 t-test/Mann-Whitney U/Cohen's d 统计检验）。"""
+    按错误类型分析 RAG 收益，输出 t-test/Mann-Whitney U/Cohen's d 统计检验）。
+
+    2026-10 改进（A/B 阴性结果驱动）：新增 --relevance-ab 开关，ON 组启用
+    RAG 相关性评分 + 条件注入（默认关开关的增强层），验证'先筛选再注入'
+    能否把 token 从 +40.7% 降回并转化检索命中为成功率。"""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -495,6 +545,9 @@ def main(
             output_dir,
             baseline,
             sub_run_dir=str(Path(output_dir) / "rag_on"),
+            relevance_ab=relevance_ab,
+            relevance_threshold=relevance_threshold,
+            difficulty=difficulty,
         )
         off_path = _run_benchmark_once(
             dataset,
@@ -506,6 +559,7 @@ def main(
             output_dir,
             baseline,
             sub_run_dir=str(Path(output_dir) / "rag_off"),
+            difficulty=difficulty,
         )
         on_records = _load_results(on_path)
         off_records = _load_results(off_path)

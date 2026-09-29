@@ -58,11 +58,15 @@ class TestSyntheticTaskGeneration:
         assert len(set(patterns1)) >= 3
 
         # Level 3（跨文件）：全部任务为跨文件任务，module_a_code 存在
+        # 2026-10 改进：Level 3.5 三模块深链（module_a → module_b → module_c）
+        # 加入 Level 3 池后，target_module 可能是 module_b（双模块）或
+        # module_c（三模块深链），num_files 为 2 或 3
         ds3 = SyntheticDataset(task_count=4, seed=0, difficulty="level3")
         for t in ds3.tasks:
             assert t.metadata["is_cross_file"] is True
             assert t.metadata.get("module_a_code")
-            assert t.metadata.get("target_module") == "module_b"
+            assert t.metadata.get("target_module") in ("module_b", "module_c")
+            assert t.metadata.get("num_files") in (2, 3)
 
         # Level 2 / Level 4：单难度梯度
         ds2 = SyntheticDataset(task_count=4, seed=0, difficulty="level2")

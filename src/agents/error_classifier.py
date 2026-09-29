@@ -217,6 +217,34 @@ _RE_IMPORT_ERROR = re.compile(r"ImportError:\s*cannot import name\s+'(\w+)'", re
 _RE_SYNTAX_ERROR_FILE_LINE = re.compile(r"(\w+\.py):(\d+):(\d+):\s*(.+)")
 _RE_PYTEST_SYNTAX = re.compile(r"E\s*\S+\.py:(\d+):(\d+)", re.IGNORECASE)
 _RE_TRACEBACK = re.compile(r'File\s+"([^"]+)",\s*line\s+(\d+)')
+# 2026-10 P0（A/B 阴性结果驱动）：pytest --tb=short 帧行模式。
+# short 模式省略 "File "...", line N" 完整帧，改为紧凑行
+# "path/to/module.py:6: in get_option"（被测模块帧），
+# "test_file.py:8: in test_x"（测试帧），末尾 "E   异常类型: 消息"。
+# 此前 _RE_TRACEBACK 只匹配完整帧形式 → --tb=short 下
+# extract_error_context 提取不到 filename/line → _locate_repair_focus
+# 的 context.line 恒 None → 定位阶段 0/30 命中（A/B 阴性根因）。
+# 本模式捕获被测模块帧（排除 E 开头的异常消息行），供
+# extract_error_context 在完整帧缺失时降级匹配。
+# 口径注意：_RE_TRACEBACK 的 group(1) 是完整路径（"path/to/module.py"），
+# 本模式 group(1) 是 basename（"module.py"）——消费方（_locate_repair_focus
+# 的跨文件保护、_is_test_side_assertion 的 endswith 判定）均按 basename
+# 口径工作，两者在下游可互换。
+# 帧行在 pytest --tb=short 输出中按调用栈深度排序（外层/测试帧先出现，
+# 最内层/被测模块帧最后出现），故消费方取 findall 的**最后一个**匹配
+# 即被测模块帧；纯测试侧断言失败（无被测模块帧）时最后匹配是测试帧，
+# 由 _locate_repair_focus 跨文件保护兜底（focused=False，不误定位）。
+# 行首路径前缀用 (?:[\w\-\./]+/)* 匹配（目录段可含点/斜杠/下划线，
+# 覆盖 macOS 临时目录 /var/folders/pj/x/.../T/tmpXXXX/ 的完整路径形态）；
+# basename 帧行（行首无目录）时前缀组为空，捕获组 1 始终是 basename。
+# 实测（L2.5 验证）：被测模块帧形如
+# "/var/.../tmpXXXX/runtime_index_error_boundary_0002.py:5: in first_and_last"
+# （行首完整路径），前缀组需能匹配整段路径，不能只吃字母数字段。
+_RE_TRACEBACK_SHORT_FRAME = re.compile(
+    r'^(?:[\w\-\./]+/)*([\w\.\-]+\.py):(\d+):\s+in\s+(\w+)', re.MULTILINE
+)
+
+
 # Runtime Error 检测模式
 _RE_RUNTIME_ERRORS = [
     re.compile(r"ZeroDivisionError", re.IGNORECASE),
@@ -659,6 +687,31 @@ class ErrorClassifier:
             # 取最后一个匹配（最深处的文件）
             context.filename = traceback_matches[-1][0]
             context.line = int(traceback_matches[-1][1])
+            return context
+
+        # 2026-10 P0（A/B 阴性结果驱动）：pytest --tb=short 帧行降级匹配。
+        # --tb=short 省略 "File "...", line N" 完整帧，改为紧凑帧行
+        # "module.py:6: in get_option"。完整帧缺失时按多行匹配捕获
+        # "被测模块帧 + 测试帧"。
+        # 关键口径：失败栈中**被测模块帧在文本上位于测试帧之后**
+        # （pytest 帧行按调用栈深度排序：外层/测试帧先出现，最内层/
+        # 被测模块帧最后出现），故取**最后一个**匹配帧行（即被测模块帧），
+        # 而非"优先非 test 帧"（此前误判：测试帧总在前，非 test 帧
+        # 后取会命中被测模块帧——但取"最后一个非 test 帧"在纯测试
+        # 帧失败时回退到测试帧本身，定位到测试代码而非被测代码）。
+        # 统一取最后一个匹配 + 由下游 _locate_repair_focus 的跨文件
+        # 保护（context.filename 与 target_module 不符时 focused=False）
+        # 兜底"测试侧断言失败"误定位场景。不赋 subtype（与完整帧
+        # 分支同口径：仅定位，不改错误分类）。
+        short_frames = _RE_TRACEBACK_SHORT_FRAME.findall(combined)
+        if short_frames:
+            # findall 返回 3 元组 [(file, line, func), ...]（basename 口径）；
+            # 取最后一个匹配帧行（--tb=short 帧行按调用栈深度排序：外层/
+            # 测试帧先出现，被测模块帧最后出现；纯测试帧失败时取到测试帧，
+            # 由 _locate_repair_focus 跨文件保护兜底不误定位）
+            picked = short_frames[-1]
+            context.filename = picked[0]
+            context.line = int(picked[1])
             return context
 
         return context

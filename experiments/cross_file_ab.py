@@ -7,6 +7,17 @@
     T4: 无回归——单文件任务（Level 1）开启 CROSS_FILE_ENABLE=true 后成功率
         不下降（下降 > 5pp 视为降级路径缺陷）。
 
+2026-10 改进（A/B 正向但幅度有限：level3 +10pp 未达 T1）：
+    - 新增 --bidirectional 开关：ON 组额外启用 CROSS_FILE_BIDIRECTIONAL=true
+      （双向依赖图，被调用方视角的"谁调用了 entry"反向边 + 双向拓扑序），
+      用于验证"单入口视角依赖图粒度不足"是否是 +10pp 卡在 +15pp 阈值下
+      的根因；默认关闭保持历史单入口口径。
+    - 新增 --difficulty level3.5（三模块深链 module_a → module_b → module_c，
+      缺陷在最内层 module_c），配套分析走 cross_file_root_cause.py。
+    - 2% 未修复任务根因分析：跑完 A/B 后调用 experiments/cross_file_root_cause.py
+      提取失败任务按 DEP_GRAPH_INCOMPLETE / ROLLBACK_CONSERVATIVE /
+      TOPOLOGICAL_ORDER / LLM_CAPABILITY 分类，为下一步优化提供数据。
+
 设计口径（与 position_aware_ab.py 保持一致，保守、可复现）：
     - ON 组：CROSS_FILE_ENABLE=true（cross_file_analyzer 节点 + 多文件补丁分支）；
     - OFF 组：CROSS_FILE_ENABLE=false（历史单文件口径）；
@@ -14,7 +25,13 @@
     - 输出 Markdown 汇总（供论文引用）+ JSON 原始数据。
 
 使用方式：
+    # level3 双模块 A/B（历史口径）
     python experiments/cross_file_ab.py --dataset synthetic --difficulty level3 --task-count 50
+    # level3 双向依赖图 A/B（2026-10 改进，验证 T1 瓶颈）
+    python experiments/cross_file_ab.py --dataset synthetic --difficulty level3 --task-count 50 --bidirectional
+    # level3.5 三模块深链 A/B
+    python experiments/cross_file_ab.py --dataset synthetic --difficulty level3.5 --task-count 50 --bidirectional
+    # T4 无回归检查（单文件）
     python experiments/cross_file_ab.py --dataset synthetic --difficulty level1 --task-count 50
 """
 
@@ -43,13 +60,21 @@ def _run_one_arm(
     difficulty: str,
     output_dir: str,
     cross_file_on: bool,
+    bidirectional: bool = False,
 ) -> dict[str, Any]:
-    """跑一组（跨文件 ON 或 OFF）benchmark，返回汇总 dict。"""
+    """跑一组（跨文件 ON 或 OFF）benchmark，返回汇总 dict。
+
+    2026-10 改进：bidirectional=True 且 cross_file_on 时，ON 组额外启用
+    CROSS_FILE_BIDIRECTIONAL=true（双向依赖图）；OFF 组 / 非 bidirectional
+    时恒 false（历史单入口口径）。
+    """
     from experiments.run_benchmark import run_benchmark
 
     prev = os.environ.get("CROSS_FILE_ENABLE")
+    prev_bi = os.environ.get("CROSS_FILE_BIDIRECTIONAL")
     try:
         os.environ["CROSS_FILE_ENABLE"] = "true" if cross_file_on else "false"
+        os.environ["CROSS_FILE_BIDIRECTIONAL"] = "true" if (cross_file_on and bidirectional) else "false"
         summary = run_benchmark(
             dataset_name=dataset_name,
             subset=subset,
@@ -70,6 +95,10 @@ def _run_one_arm(
             os.environ["CROSS_FILE_ENABLE"] = prev
         else:
             os.environ.pop("CROSS_FILE_ENABLE", None)
+        if prev_bi is not None:
+            os.environ["CROSS_FILE_BIDIRECTIONAL"] = prev_bi
+        else:
+            os.environ.pop("CROSS_FILE_BIDIRECTIONAL", None)
     return summary
 
 
@@ -122,6 +151,21 @@ def _render_markdown(
             f"- **T1（跨文件提升 ≥ +{T1_MIN_DELTA_PP:.0f}pp）**: "
             + ("✅ 通过" if passed else f"❌ 未通过（实测 {delta_pp:+.2f}pp）")
         )
+    elif difficulty == "level3.5":
+        # 2026-10 改进：level3.5 三模块深链（module_a → module_b → module_c），
+        # T1 阈值同 level3（+15pp），但根因分析指向双向依赖图
+        # （CROSS_FILE_BIDIRECTIONAL_ENABLE）与依赖图粒度。未达阈值时
+        # cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 占比是关键指标。
+        passed = delta_pp >= T1_MIN_DELTA_PP
+        lines.append(
+            f"- **T1（3.5 跨文件提升 ≥ +{T1_MIN_DELTA_PP:.0f}pp）**: "
+            + ("✅ 通过" if passed else f"❌ 未通过（实测 {delta_pp:+.2f}pp）")
+        )
+        lines.append(
+            "- 提示：level3.5 为 3 文件依赖链，未达阈值时优先检查 "
+            "CROSS_FILE_BIDIRECTIONAL_ENABLE（双向依赖图）是否启用，"
+            "以及 cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 占比。"
+        )
     elif difficulty == "level1":
         dropped = delta_pp < -T4_MAX_DROP_PP
         lines.append(
@@ -143,7 +187,9 @@ def _render_markdown(
                 "on": {"success_rate": on_rate, "avg_iterations": on_iter},
                 "off": {"success_rate": off_rate, "avg_iterations": off_iter},
                 "delta_pp": delta_pp,
-                "t1_pass": (delta_pp >= T1_MIN_DELTA_PP) if difficulty == "level3" else None,
+                "t1_pass": (delta_pp >= T1_MIN_DELTA_PP)
+                if difficulty in ("level3", "level3.5")
+                else None,
                 "t4_pass": (not (delta_pp < -T4_MAX_DROP_PP)) if difficulty == "level1" else None,
             },
             f,
@@ -164,8 +210,22 @@ def main() -> int:
     parser.add_argument(
         "--difficulty",
         default="level3",
-        choices=["level1", "level2", "level3", "level4", "mixed"],
-        help="合成数据集难度层级（默认 level3 跨文件；level1 用于 T4 无回归检查）",
+        choices=[
+            "level1",
+            "level2",
+            "level2.5",
+            "level3",
+            "level3.5",
+            "level4",
+            "level4.5",
+            "mixed",
+        ],
+        help="合成数据集难度层级（默认 level3 跨文件；level3.5 = 3 文件依赖链；level1 用于 T4 无回归检查）",
+    )
+    parser.add_argument(
+        "--bidirectional",
+        action="store_true",
+        help="2026-10 改进：ON 组额外启用 CROSS_FILE_BIDIRECTIONAL=true（双向依赖图 + 双向拓扑序），验证'单入口视角粒度不足'是否为 T1 瓶颈；默认关保持历史单入口口径",
     )
     parser.add_argument(
         "--output-dir",
@@ -175,7 +235,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.output_dir:
-        args.output_dir = os.path.join(PROJECT_ROOT, "experiments", "results", f"cross_file_ab_{args.difficulty}")
+        suffix = "_bi" if args.bidirectional else ""
+        args.output_dir = os.path.join(PROJECT_ROOT, "experiments", "results", f"cross_file_ab_{args.difficulty}{suffix}")
     on_dir = os.path.join(args.output_dir, "cross_file_on")
     off_dir = os.path.join(args.output_dir, "cross_file_off")
     os.makedirs(on_dir, exist_ok=True)
@@ -192,7 +253,7 @@ def main() -> int:
         cross_file_on=False,
     )
 
-    print(f"[A/B] 跑 ON 组（跨文件启用，difficulty={args.difficulty}）...")
+    print(f"[A/B] 跑 ON 组（跨文件启用，bidirectional={args.bidirectional}，difficulty={args.difficulty}）...")
     on_summary = _run_one_arm(
         dataset_name=args.dataset,
         task_limit=args.task_limit,
@@ -201,9 +262,15 @@ def main() -> int:
         difficulty=args.difficulty,
         output_dir=on_dir,
         cross_file_on=True,
+        bidirectional=args.bidirectional,
     )
 
     _render_markdown(on_summary, off_summary, args.difficulty, args.output_dir)
+
+    # 2026-10 改进：跑完后提示根因分析脚本（level3/level3.5 未达 T1 时定位瓶颈）
+    if args.difficulty in ("level3", "level3.5"):
+        print(f"\n[A/B] 提示：若 delta 未达 T1（+{T1_MIN_DELTA_PP:.0f}pp），可用根因分析脚本定位 2% 未修复任务瓶颈：")
+        print(f"  python experiments/cross_file_root_cause.py --results-on {on_dir}/benchmark_*.json --difficulty {args.difficulty}")
     return 0
 
 

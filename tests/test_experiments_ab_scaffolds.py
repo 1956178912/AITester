@@ -96,7 +96,8 @@ def test_position_aware_ab_locate_accuracy_hit() -> None:
                 "task_metadata": {"suggested_function": "divide"},
             },
         )
-        summary = {"results": {"aitester": {"details": [{"task_id": "task_1"}]}}}
+        # iterations>0（有修复轮次）→ 定位激活 + 命中 gold → 100%
+        summary = {"results": {"aitester": {"details": [{"task_id": "task_1", "iterations": 1}]}}}
         assert _locate_accuracy(d, summary) == 100.0
 
 
@@ -114,12 +115,15 @@ def test_position_aware_ab_locate_accuracy_miss() -> None:
                 "task_metadata": {"suggested_function": "divide"},
             },
         )
-        summary = {"results": {"aitester": {"details": [{"task_id": "task_1"}]}}}
+        # iterations>0（有修复轮次）→ 定位激活但未命中 gold → 0.0
+        summary = {"results": {"aitester": {"details": [{"task_id": "task_1", "iterations": 1}]}}}
         assert _locate_accuracy(d, summary) == 0.0
 
 
 def test_position_aware_ab_locate_accuracy_unfocused_skipped() -> None:
-    """focused=False 时跳过（不计入 total，正确率保守 0.0）。"""
+    """focused=False 且无修复（iterations=0）→ 定位未激活，返回 -1.0（渲染层
+    显示"未激活"而非误导性 0%）。2026-10 改进：区分"定位未执行"（无修复轮次）
+    与"定位未命中"（有修复但 function_name 不命中 gold）。"""
     from experiments.position_aware_ab import _locate_accuracy
 
     with tempfile.TemporaryDirectory() as d:
@@ -132,7 +136,27 @@ def test_position_aware_ab_locate_accuracy_unfocused_skipped() -> None:
                 "task_metadata": {"suggested_function": "divide"},
             },
         )
-        summary = {"results": {"aitester": {"details": [{"task_id": "task_1"}]}}}
+        # iterations=0 → 无修复轮次 → 定位未激活
+        summary = {"results": {"aitester": {"details": [{"task_id": "task_1", "iterations": 0}]}}}
+        assert _locate_accuracy(d, summary) == -1.0
+
+
+def test_position_aware_ab_locate_accuracy_repaired_but_unfocused() -> None:
+    """有修复（iterations>0）但 focused=False → 定位激活但未命中，计入 total
+    （正确率 0.0，非 -1.0 的"未激活"口径）。"""
+    from experiments.position_aware_ab import _locate_accuracy
+
+    with tempfile.TemporaryDirectory() as d:
+        raw_dir = os.path.join(d, "raw")
+        _write_state(
+            raw_dir,
+            "task_1",
+            {
+                "position_aware_focus": {"focused": False},
+                "task_metadata": {"suggested_function": "divide"},
+            },
+        )
+        summary = {"results": {"aitester": {"details": [{"task_id": "task_1", "iterations": 2}]}}}
         assert _locate_accuracy(d, summary) == 0.0
 
 

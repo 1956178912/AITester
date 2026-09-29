@@ -371,6 +371,13 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         "position_aware_focus": final_state.get("position_aware_focus"),
         # P0 仓库级验证诊断（仅 REPO_LEVEL_EXECUTION=true 且 SWE-bench 任务有）
         "repo_verification": final_state.get("repo_verification"),
+        # 2026-10 P3（A/B 阴性结果驱动）：跨文件依赖图 + 任务元数据
+        # （cross_file_root_cause.py 的 DEP_GRAPH_INCOMPLETE 判定依赖
+        # cross_file_deps 边数 vs num_files；难度过滤依赖 task_metadata.difficulty。
+        # 此前 raw state 未落盘这两键 → 根因分析永远拿到 dep_edges=0 →
+        # 失败任务全部误判为 DEP_GRAPH_INCOMPLETE，根因分析对真实瓶颈全盲）。
+        "cross_file_deps": final_state.get("cross_file_deps"),
+        "task_metadata": task.metadata,
     }
     raw_dir = os.path.join(output_dir, "raw", task.task_id)
     os.makedirs(raw_dir, exist_ok=True)
@@ -589,6 +596,100 @@ def _build_risk_summary_for_result(final_state: dict[str, Any] | None) -> dict[s
     )
 
 
+def _write_cross_file_modules(tmp_dir: str, task_metadata: dict[str, Any]) -> None:
+    """P0 2026-10 改进：跨文件任务的伴生模块物化（纯磁盘操作，零 LLM 成本）。
+
+    把 SyntheticDataset 写入 task.metadata 的 module_a_code / module_b_code /
+    module_c_code 同步落盘到 tmp_dir，使跨文件修复架构（cross_file_analyzer
+    节点 + 多文件 patch_applier）能在真实多文件工作区上消费依赖图。
+
+    设计口径（保守、历史零变化）：
+    - 仅当 metadata 携带 is_cross_file=True 且存在 module_a_code 时才执行；
+      非跨文件任务（Level 1/2/4）直接 return，行为与历史逐字节一致；
+    - 模块名取 metadata 的 module_a_name / module_b_name / module_c_name
+      （缺省时按 module_a.py / module_b.py / module_c.py 兜底）；
+    - 写文件失败（磁盘满 / 权限）仅记录 warning，不阻断任务主流程
+      （降级为"仅被调方单文件"的历史口径，cross_file_analyzer 拿到
+      缺模块的 source_files 时自动降级单文件模式）。
+
+    Args:
+        tmp_dir: 任务临时目录（已存在，含被调方 instance_code 文件）。
+        task_metadata: BenchmarkTask.metadata（跨文件任务含伴生模块键）。
+    """
+    if not task_metadata.get("is_cross_file"):
+        return
+    module_specs = [
+        ("module_a_code", task_metadata.get("module_a_name", "module_a")),
+        ("module_b_code", task_metadata.get("module_b_name", "module_b")),
+        ("module_c_code", task_metadata.get("module_c_name", "module_c")),
+    ]
+    for code_key, name_key in module_specs:
+        code = task_metadata.get(code_key)
+        if not code:
+            continue  # 模块缺失（如 level3 双模块无 module_c）：跳过，保守口径
+        module_name = task_metadata.get(name_key, code_key.replace("_code", ""))
+        try:
+            with open(os.path.join(tmp_dir, f"{module_name}.py"), "w", encoding="utf-8") as f:
+                f.write(code)
+        except OSError as e:
+            logger.warning("跨文件伴生模块 %s.py 写入失败（降级单文件口径）: %s", module_name, e)
+
+
+def _write_cross_file_state(initial_state: dict[str, Any], task_metadata: dict[str, Any]) -> None:
+    """P0 2026-10 改进：跨文件任务的 state["cross_file_deps"] 预置（零 LLM 成本）。
+
+    跨文件任务（metadata 携带 dep_chain + is_cross_file）把依赖链
+    （如 module_a → module_b → module_c）预置到 state["cross_file_deps"]，
+    使 nodes._cross_file_analyzer_node 在 CROSS_FILE_ENABLE=true 时能
+    消费预置依赖图（避免 AST 分析空转），同时 _resolve_target_module
+    能从 cross_file_deps 解析出被调方真实模块名（module_c），供
+    _locate_repair_focus 的跨文件保护与探针定位消费。
+
+    设计口径（保守、历史零变化）：
+    - 仅当 metadata 携带 is_cross_file=True 且 dep_chain 非空时执行；
+      非跨文件任务 / 无 dep_chain 时直接 return（state 保持 None，
+      由 _cross_file_analyzer_node 现场 AST 分析，历史口径不变）；
+    - 依赖边按 dep_chain 相邻对构造（source_module → target_module），
+      symbol 留空（LLM 补丁侧按需解析调用符号）；
+    - 已存在 cross_file_deps（CLI 手动注入 / 此前节点已写入）时不覆盖。
+
+    Args:
+        initial_state: 任务初始状态 dict（create_initial_state 产物）。
+        task_metadata: BenchmarkTask.metadata（跨文件任务含 dep_chain）。
+    """
+    if not task_metadata.get("is_cross_file"):
+        return
+    dep_chain = task_metadata.get("dep_chain") or []
+    if len(dep_chain) < 2:
+        # 2026-10 改进（P3 双向依赖图驱动）：双模块任务（L3）dep_chain 为 None，
+        # 历史 _write_cross_file_state 直接跳过 → cross_file_deps 为空 →
+        # 跨文件修复架构（CROSS_FILE_ENABLE=true）拿不到依赖图，降级单文件
+        # 修复，根因分析报 DEP_GRAPH_INCOMPLETE（OFF 组 L3 失败任务的主要
+        # 根因之一）。现按 module_a_name → target_module 补一条单边（调用方
+        # module_a → 被调方 target_module，如 module_b / module_c），使双模块
+        # 任务也拥有依赖边。dep_chain 已存在（L3.5 三模块）时仍走原路径，
+        # 不重复补边。
+        target_module = task_metadata.get("target_module")
+        module_a_name = task_metadata.get("module_a_name", "module_a")
+        if target_module:
+            dep_chain = [module_a_name, target_module]
+    if len(dep_chain) < 2:
+        return
+    # 依赖边：dep_chain[i] → dep_chain[i+1]（调用方 → 被调用方）
+    dep_edges = []
+    for i in range(len(dep_chain) - 1):
+        dep_edges.append(
+            {
+                "source_module": dep_chain[i],
+                "target_module": dep_chain[i + 1],
+                "symbol": "",
+                "call_line": 0,
+                "context": f"dep_chain[{i}]: {dep_chain[i]} -> {dep_chain[i + 1]}",
+            }
+        )
+    initial_state["cross_file_deps"] = dep_edges
+
+
 def run_single_task(
     task: BenchmarkTask,
     baselines: list[str],
@@ -636,6 +737,13 @@ def run_single_task(
         with open(instance_file, "w", encoding="utf-8") as f:
             f.write(task.instance_code)
 
+        # P0 2026-10 改进（失败模式多样性）：跨文件任务（is_cross_file=True）
+        # 把 metadata 里的 module_a / module_b / module_c 源码同步写入临时目录，
+        # 使跨文件修复架构（cross_file_analyzer → 多文件 patch_applier）能在
+        # 真实多文件工作区上消费依赖图，而非仅靠"被调方单文件 + 文本拼接"。
+        # 非跨文件任务零行为变化（无 module_a_code 键时直接跳过）。
+        _write_cross_file_modules(tmp_dir, task.metadata)
+
         # 初始化工作流状态（唯一构造点：create_initial_state，与 CLI 口径一致）
         # 作为所有基线的起点，逐基线 deepcopy 隔离
         # P0：SWE-bench 任务从官方 patch 提取的 suggested_function 初始化
@@ -649,6 +757,10 @@ def run_single_task(
             target_code=task.instance_code,
             max_iterations=MAX_ITERATIONS,
         )
+
+        # 2026-10 改进：跨文件任务预置 cross_file_deps（供 _resolve_target_module
+        # 解析被调方真实模块名；单文件任务 no-op）
+        _write_cross_file_state(initial_state, task.metadata)
 
         # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
         # 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，写入
