@@ -251,6 +251,7 @@ def main() -> int:
         "--difficulty",
         default="level2.5",
         help="合成数据集难度级别（默认 level2.5：运行时异常缺陷库，定位阶段可被激活；"
+        "level2.5-hard：困难运行时异常库（缺陷藏更深，小样本首跑即修复的天花板已抬高）；"
         "mixed 为历史口径，定位大概率不激活）",
     )
     parser.add_argument(

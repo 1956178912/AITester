@@ -504,6 +504,10 @@ def _build_task_result(
                 {"task_id": task.task_id, "patch": final_state.get("patch") or ""},
                 golden_patches,
             ),
+            # P0 仓库级验证诊断（仅 REPO_LEVEL_EXECUTION=true 且 SWE-bench 任务有；
+            # 未启用 / 路由未命中时 final_state 无此键，get 返回 None 占位保持
+            # 键集合同构，历史口径零变化）
+            "repo_verification": final_state.get("repo_verification"),
             "task_metadata": task.metadata,
             # G2 风险分级人工回路（RISK_APPROVAL_ENABLE=true 时写入；默认关时
             # enabled=False 占位保持键集合同构，历史口径零变化）
@@ -533,6 +537,9 @@ def _build_task_result(
         # 五、多维度污染检测：失败分支无生成补丁（patch=None），
         # contamination_risk_level 保守标记 "low"（无重叠证据，非"完全相同"）
         "contamination_risk_level": "low",
+        # P0 仓库级验证诊断：失败分支（无 final_state）无仓库级验证结果，
+        # None 兜底保持键集合同构（成功分支在 final_state 非 None 时写入）
+        "repo_verification": None,
         "task_metadata": task.metadata,
         # G2 风险分级人工回路（失败分支无 final_state，保守占位）
         "risk_summary": _build_risk_summary_for_result(None),
@@ -676,17 +683,16 @@ def _write_cross_file_state(initial_state: dict[str, Any], task_metadata: dict[s
     if len(dep_chain) < 2:
         return
     # 依赖边：dep_chain[i] → dep_chain[i+1]（调用方 → 被调用方）
-    dep_edges = []
-    for i in range(len(dep_chain) - 1):
-        dep_edges.append(
-            {
-                "source_module": dep_chain[i],
-                "target_module": dep_chain[i + 1],
-                "symbol": "",
-                "call_line": 0,
-                "context": f"dep_chain[{i}]: {dep_chain[i]} -> {dep_chain[i + 1]}",
-            }
-        )
+    dep_edges = [
+        {
+            "source_module": dep_chain[i],
+            "target_module": dep_chain[i + 1],
+            "symbol": "",
+            "call_line": 0,
+            "context": f"dep_chain[{i}]: {dep_chain[i]} -> {dep_chain[i + 1]}",
+        }
+        for i in range(len(dep_chain) - 1)
+    ]
     initial_state["cross_file_deps"] = dep_edges
 
 
@@ -1666,8 +1672,10 @@ if __name__ == "__main__":
     @click.option(
         "--difficulty",
         default="mixed",
-        type=click.Choice(["mixed", "level1", "level2", "level3", "level4"]),
-        help="P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）：mixed（默认，历史口径）/ level1 / level2 / level3（跨文件）/ level4（边界+异常隐蔽缺陷）",
+        type=click.Choice(
+            ["mixed", "level1", "level2", "level2.5", "level2.5-hard", "level3", "level3.5", "level4", "level4.5"]
+        ),
+        help="P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）：mixed（默认，历史口径）/ level1 / level2 / level2.5（运行时异常缺陷库）/ level2.5-hard（困难运行时异常库，定位阶段可激活）/ level3（跨文件双模块）/ level3.5（三模块深链）/ level4 / level4.5",
     )
     def cli(
         dataset,

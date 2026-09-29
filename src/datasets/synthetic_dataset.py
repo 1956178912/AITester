@@ -802,6 +802,463 @@ def test_is_increasing_with_float():
     },
 ]
 
+# 2026-10（第二轮，A/B 统计效力驱动）：Level 2.5-Hard 困难运行时异常缺陷库。
+# 背景：BUG_PATTERNS_LEVEL25（4 模式）在 n=40 规模位置感知 A/B 中
+# ON/OFF 成功率均 100%（agnes-3.0-flash 首轮生成即修复），定位阶段仍未
+# 激活——无区分度，A/B 无信息量。本库 8 个模式按"缺陷藏得更深"设计：
+#   - 调用链深处（入口函数委托 helper，缺陷在 helper 的隐蔽分支）；
+#   - 缺陷只在特定输入形状下触发（嵌套 dict 缺内层键 / 混合类型 / 空迭代器）；
+#   - 正确修复需补守卫 + 类型归一化 + 空值兜底三处联动（单点修复不够）；
+#   - 模板代码可正常 import，正常输入路径全绿，仅特定测试用例触发
+#     IndexError/KeyError/AttributeError/TypeError → traceback 携带帧行号，
+#     位置感知定位阶段可被激活（与 LEVEL25 同口径，但缺陷隐蔽性 +1 档）。
+# 每个模式携带 suggested_function（gold 定位目标，缺陷所在函数），供
+# position_aware_ab._locate_accuracy 做定位正确率匹配。
+BUG_PATTERNS_LEVEL25HARD: list[dict[str, Any]] = [
+    {
+        "name": "hard_depth_blind_nested",
+        "description": "扁平统计器：stats_of 委托 count_items，对嵌套 list 不递归展开，返回 0",
+        "template": "def stats_of(data):\n    return count_items(data)\n\ndef count_items(data):\n    if isinstance(data, list):\n        total = 0\n        for x in data:\n            if isinstance(x, int):\n                total += 1\n        return total\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n",
+        "fixed": "def stats_of(data):\n    return count_items(data)\n\ndef _flatten(data):\n    out = []\n    for x in data:\n        if isinstance(x, (list, tuple)):\n            out.extend(_flatten(x))\n        else:\n            out.append(x)\n    return out\n\ndef count_items(data):\n    if isinstance(data, list):\n        return sum(1 for x in _flatten(data) if isinstance(x, int))\n    return 0\n\ndef describe(data):\n    n = count_items(data)\n    return f'items={n}'\n",
+        "test_cases": "from hard_depth_blind_nested import stats_of, count_items, describe\n\ndef test_flat_list():\n    assert count_items([1, 2, 3]) == 3\n\ndef test_nested_list():\n    assert count_items([[1, 2], [3, [4, 5]]]) == 5\n\ndef test_mixed_types():\n    assert count_items([1, \"a\", 2, None, 3]) == 3\n\ndef test_deep_nesting():\n    assert count_items([[[[1]]], [2, [3]]]) == 3\n\ndef test_empty_and_scalars():\n    assert count_items([]) == 0\n    assert count_items(5) == 0\n    assert stats_of([1, [2, 3]]) == 3\n    assert describe([[1, 2]]) == 'items=2'\n",
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 5,
+        "difficulty": 2,
+        "trigger_exception": "AssertionError",
+        "suggested_function": "count_items",
+    },
+    {
+        "name": "hard_chained_dict_lookup",
+        "description": "嵌套映射取链路：metric 在 layers 缺失或某层缺 key 时抛 KeyError",
+        "template": """def lookup_metric(metrics: dict, layer_name: str, key: str):
+    layers = metrics[layer_name]
+    return layers[key]
+
+def summarize(metrics: dict, layer_name: str):
+    total = 0
+    for key in metrics[layer_name]:
+        total += lookup_metric(metrics, layer_name, key)
+    return total
+
+def rank(metrics: dict, layer_name: str, k: int):
+    keys = sorted(metrics[layer_name], key=lambda s: -lookup_metric(metrics, layer_name, s))
+    return keys[:k]""",
+        "fixed": """def lookup_metric(metrics: dict, layer_name: str, key: str):
+    layers = metrics.get(layer_name) or {}
+    return layers.get(key, 0.0)
+
+def summarize(metrics: dict, layer_name: str):
+    total = 0
+    for key in (metrics.get(layer_name) or {}):
+        total += lookup_metric(metrics, layer_name, key)
+    return total
+
+def rank(metrics: dict, layer_name: str, k: int):
+    keys = sorted((metrics.get(layer_name) or {}), key=lambda s: -lookup_metric(metrics, layer_name, s))
+    return keys[:k]""",
+        "test_cases": """from hard_chained_dict_lookup import lookup_metric, summarize, rank
+
+M = {"a": {"x": 1.0, "y": 2.0}}
+
+def test_metric_found():
+    assert lookup_metric(M, "a", "x") == 1.0
+
+def test_metric_missing_key():
+    assert lookup_metric(M, "a", "z") == 0.0
+
+def test_metric_missing_layer():
+    assert lookup_metric(M, "b", "x") == 0.0
+
+def test_summarize_empty():
+    assert summarize({}, "a") == 0
+
+def test_rank_missing_layer():
+    assert rank(M, "b", 2) == []
+
+def test_rank_order():
+    assert rank(M, "a", 1) == ["y"] """,
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 6,
+        "difficulty": 2,
+        "trigger_exception": "KeyError",
+        "suggested_function": "lookup_metric",
+    },
+    {
+        "name": "hard_polluted_entry_guard",
+        "description": "记录池遍历：pool_status 对混入 dict 条目的池抛 TypeError",
+        "template": """def pool_status(entries: list) -> dict:
+    total = 0
+    for e in entries:
+        total += len(e)
+    return {"total": total, "count": len(entries)}
+
+def merge(a: list, b: list) -> list:
+    out = list(a)
+    for item in b:
+        if item not in out:
+            out.append(item)
+    return out
+
+def largest(entries: list):
+    return max((len(e) for e in entries), default=0)""",
+        "fixed": """def pool_status(entries: list) -> dict:
+    total = 0
+    for e in entries:
+        if isinstance(e, dict):
+            total += len(e)
+        else:
+            total += len(e or [])
+    return {"total": total, "count": len(entries)}
+
+def merge(a: list, b: list) -> list:
+    out = list(a or [])
+    for item in b or []:
+        if item not in out:
+            out.append(item)
+    return out
+
+def largest(entries: list):
+    sizes = [len(e) for e in entries if isinstance(e, (list, tuple, dict))]
+    return max(sizes, default=0)""",
+        "test_cases": """from hard_polluted_entry_guard import pool_status, merge, largest
+
+def test_clean_pool():
+    assert pool_status([[1, 2], [3]]) == {"total": 3, "count": 2}
+
+def test_polluted_pool():
+    assert pool_status([[1], {"k": 1}]) == {"total": 2, "count": 2}
+
+def test_empty_pool():
+    assert pool_status([]) == {"total": 0, "count": 0}
+
+def test_merge_disjoint():
+    assert merge([1, 2], [3]) == [1, 2, 3]
+
+def test_merge_empty():
+    assert merge([], [1]) == [1]
+    assert merge(None, None) == []
+
+def test_largest_mixed():
+    assert largest([[1, 2], {"a": 1, "b": 2}]) == 2
+    assert largest([]) == 0 """,
+        "bug_type": "runtime",
+        "expected_pass": 5,
+        "total_tests": 6,
+        "difficulty": 2,
+        "trigger_exception": "TypeError",
+        "suggested_function": "pool_status",
+    },
+    {
+        "name": "hard_iter_over_none",
+        "description": "迭代器展开：expand_regions 对 None 输入抛 TypeError（None 不可迭代）",
+        "template": """def expand_regions(regions):
+    flat = []
+    for region in regions:
+        for coord in region:
+            flat.append(coord)
+    return flat
+
+def region_count(regions):
+    return len(expand_regions(regions))
+
+def contains(regions, coord):
+    return coord in expand_regions(regions)""",
+        "fixed": """def expand_regions(regions):
+    flat = []
+    for region in regions or []:
+        if region is None:
+            continue
+        for coord in region:
+            flat.append(coord)
+    return flat
+
+def region_count(regions):
+    return len(expand_regions(regions))
+
+def contains(regions, coord):
+    return coord in expand_regions(regions)""",
+        "test_cases": """from hard_iter_over_none import expand_regions, region_count, contains
+
+def test_normal_regions():
+    assert expand_regions([[1, 2], [3]]) == [1, 2, 3]
+
+def test_none_input():
+    assert expand_regions(None) == []
+
+def test_none_element():
+    assert expand_regions([[1], None, [2]]) == [1, 2]
+
+def test_count_none():
+    assert region_count(None) == 0
+
+def test_contains_empty():
+    assert contains([], 1) is False
+    assert contains(None, 1) is False """,
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 5,
+        "difficulty": 2,
+        "trigger_exception": "TypeError",
+        "suggested_function": "expand_regions",
+    },
+    {
+        "name": "hard_nested_iter_mixed",
+        "description": "深度收集器：collect 不递归展开嵌套列表，且对 dict 元素抛异常",
+        "template": """def collect(items):
+    out = []
+    for item in items:
+        if isinstance(item, list):
+            out.extend(item)
+        else:
+            out.append(item)
+    return out
+
+def collect_depth(items):
+    return len(collect(items))
+
+def first_leaf(items):
+    for x in collect(items):
+        if not isinstance(x, list):
+            return x
+    return None""",
+        "fixed": """def _flatten(items):
+    out = []
+    for item in items or []:
+        if isinstance(item, (list, tuple)):
+            out.extend(_flatten(item))
+        else:
+            out.append(item)
+    return out
+
+def collect(items):
+    return _flatten(items)
+
+def collect_depth(items):
+    return len(collect(items))
+
+def first_leaf(items):
+    for x in collect(items):
+        if not isinstance(x, list):
+            return x
+    return None""",
+        "test_cases": """from hard_nested_iter_mixed import collect, collect_depth, first_leaf
+
+def test_flat():
+    assert collect([1, 2, 3]) == [1, 2, 3]
+
+def test_nested():
+    assert collect([[1, 2], [3]]) == [1, 2, 3]
+
+def test_deep_nested():
+    assert collect([[ [1], [2, 3] ], 4]) == [1, 2, 3, 4]
+
+def test_mixed_types():
+    assert collect([1, "a", [2, 3], None]) == [1, "a", 2, 3, None]
+
+def test_none_input():
+    assert collect(None) == []
+    assert collect_depth(None) == 0
+
+def test_first_leaf():
+    assert first_leaf([[1, [2]], 3]) == 1
+    assert first_leaf([]) is None """,
+        "bug_type": "runtime",
+        "expected_pass": 4,
+        "total_tests": 6,
+        "difficulty": 2,
+        "trigger_exception": "TypeError",
+        "suggested_function": "collect",
+    },
+    {
+        "name": "hard_mixed_numeric_agg",
+        "description": "数值聚合：total/max_value/percent_share 对 int-str 混列表抛 TypeError",
+        "template": """def total(values: list) -> float:
+    return sum(values)
+
+def max_value(values: list) -> float:
+    return max(values)
+
+def percent_share(value, values: list) -> float:
+    t = total(values)
+    return value / t * 100.0""",
+        "fixed": """def _numeric(values: list) -> list:
+    return [float(v) for v in (values or []) if isinstance(v, (int, float))]
+
+def total(values: list) -> float:
+    return sum(_numeric(values))
+
+def max_value(values: list) -> float:
+    nums = _numeric(values)
+    return max(nums) if nums else 0.0
+
+def percent_share(value, values: list) -> float:
+    t = total(values)
+    if t == 0:
+        return 0.0
+    return float(value) / t * 100.0""",
+        "test_cases": """from hard_mixed_numeric_agg import total, max_value, percent_share
+
+def test_total_numeric():
+    assert total([1, 2, 3]) == 6
+
+def test_total_mixed():
+    assert total([1, "x", 2.5]) == 3.5
+
+def test_total_all_invalid():
+    assert total(["a", "b"]) == 0
+
+def test_max_mixed():
+    assert max_value([1, "x", 5.5]) == 5.5
+
+def test_max_empty():
+    assert max_value([]) == 0.0
+
+def test_share_normal():
+    assert abs(percent_share(1.0, [1.0, 1.0]) - 50.0) < 1e-9
+
+def test_share_zero_total():
+    assert percent_share(1.0, ["a"]) == 0.0 """,
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 7,
+        "difficulty": 2,
+        "trigger_exception": "TypeError",
+        "suggested_function": "total",
+    },
+    {
+        "name": "hard_attribute_chain_guard",
+        "description": "配置链：resolve_option 对未初始化 settings / 部分 None 值抛 AttributeError",
+        "template": """class Config:
+    def __init__(self):
+        self.settings = None
+        self.override = {}
+
+    def resolve_option(self, key):
+        if key in self.override:
+            return self.override[key]
+        return self.settings.get(key, "")
+
+    def has_option(self, key):
+        return key in self.settings
+
+    def dump(self):
+        return dict(self.settings)""",
+        "fixed": """class Config:
+    def __init__(self):
+        self.settings = None
+        self.override = {}
+
+    def resolve_option(self, key):
+        if key in self.override:
+            return self.override[key]
+        base = self.settings or {}
+        value = base.get(key, "")
+        return "" if value is None else value
+
+    def has_option(self, key):
+        if key in self.override:
+            return True
+        base = self.settings or {}
+        return key in base and base.get(key) is not None
+
+    def dump(self):
+        base = dict(self.settings or {})
+        base.update(self.override)
+        return base""",
+        "test_cases": """from hard_attribute_chain_guard import Config
+
+def test_uninitialized_resolve():
+    assert Config().resolve_option("theme") == ""
+
+def test_uninitialized_has():
+    assert Config().has_option("theme") is False
+
+def test_uninitialized_dump():
+    assert Config().dump() == {}
+
+def test_partial_none_values():
+    cfg = Config()
+    cfg.settings = {"theme": None, "lang": "en"}
+    assert cfg.resolve_option("theme") == ""
+    assert cfg.resolve_option("lang") == "en"
+    assert cfg.has_option("theme") is False
+    assert cfg.has_option("lang") is True
+
+def test_override_wins():
+    cfg = Config()
+    cfg.override = {"theme": "dark"}
+    assert cfg.resolve_option("theme") == "dark"
+
+def test_dump_merges():
+    cfg = Config()
+    cfg.settings = {"lang": "en"}
+    cfg.override = {"theme": "dark"}
+    assert cfg.dump() == {"lang": "en", "theme": "dark"} """,
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 6,
+        "difficulty": 2,
+        "trigger_exception": "AttributeError",
+        "suggested_function": "resolve_option",
+    },
+    {
+        "name": "hard_slice_contract",
+        "description": "切片契约：entries 长度不定（2/3/4 字段混合），split_entry 对短条目抛 IndexError",
+        "template": """def split_entry(entry):
+    return {"head": entry[0], "body": entry[1], "tail": entry[2], "flag": entry[3]}
+
+def count_flags(entries):
+    n = 0
+    for e in entries:
+        if split_entry(e)["flag"]:
+            n += 1
+    return n
+
+def entry_names(entries):
+    return [e[0] for e in entries]""",
+        "fixed": """def split_entry(entry):
+    pad = list(entry) + [None] * (4 - len(entry))
+    return {"head": pad[0], "body": pad[1], "tail": pad[2], "flag": pad[3]}
+
+def count_flags(entries):
+    n = 0
+    for e in entries or []:
+        if split_entry(e)["flag"]:
+            n += 1
+    return n
+
+def entry_names(entries):
+    return [e[0] for e in (entries or []) if e]""",
+        "test_cases": """from hard_slice_contract import split_entry, count_flags, entry_names
+
+E = [["a", 1, "x", True], ["b", 2, "y"], ["c"], ["d", 4, "w", False]]
+
+def test_full_entry():
+    assert split_entry(["a", 1, "x", True]) == {"head": "a", "body": 1, "tail": "x", "flag": True}
+
+def test_short_entry():
+    assert split_entry(["c"])["body"] is None
+
+def test_mixed_lengths():
+    assert count_flags(E) == 1
+
+def test_empty_entries():
+    assert count_flags([]) == 0
+    assert entry_names([]) == []
+
+def test_names_skip_empty():
+    assert entry_names([["z", 9, "q", True], []]) == ["z"] """,
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 5,
+        "difficulty": 2,
+        "trigger_exception": "IndexError",
+        "suggested_function": "split_entry",
+    },
+]
+
 # P0 2.1 Level 3.5：复杂跨文件依赖（3 文件依赖链 module_a → module_b → module_c）。
 # 2026-10 改进（A/B 阴性结果驱动）：Level 3 双模块 +10pp 未达 T1 +15pp 阈值，
 # 根因之一是依赖图粒度过粗（单入口视角 AST import 分析）。Level 3.5 用 3 文件
@@ -1124,6 +1581,7 @@ _DIFFICULTY_PATTERNS: dict[int, list[dict[str, Any]]] = {
     1: BUG_PATTERNS,
     2: BUG_PATTERNS_LEVEL2,
     25: BUG_PATTERNS_LEVEL25,  # 2026-10：Level 2.5 运行时异常缺陷库（独立整数码 25）
+    26: BUG_PATTERNS_LEVEL25HARD,  # 2026-10（第二轮）：Level 2.5-Hard 困难运行时异常库（缺陷更隐蔽）
     3: CROSS_FILE_PATTERNS + CROSS_FILE_DEEP_PATTERNS,
     35: CROSS_FILE_DEEP_PATTERNS,  # 2026-10：Level 3.5 三模块深链（独立整数码 35）
     4: BUG_PATTERNS_LEVEL4,
@@ -1159,6 +1617,7 @@ class SyntheticDataset(BaseDatasetLoader):
             "level1",
             "level2",
             "level2.5",
+            "level2.5-hard",
             "level3",
             "level3.5",
             "level4",
@@ -1209,9 +1668,9 @@ class SyntheticDataset(BaseDatasetLoader):
         """
         if self._difficulty == "mixed":
             return [rng.choice([1, 2, 3, 4, 5]) for _ in range(n)]
-        # "level2.5" → 25，"level3.5" → 35，"level4.5" → 45，"levelN" → N
+        # "level2.5" → 25，"level2.5-hard" → 26，"level3.5" → 35，"level4.5" → 45，"levelN" → N
         level_str = self._difficulty.replace("level", "")
-        _FRACTIONAL_MAP = {"2.5": 25, "3.5": 35, "4.5": 45}
+        _FRACTIONAL_MAP = {"2.5": 25, "2.5-hard": 26, "3.5": 35, "4.5": 45}
         level = _FRACTIONAL_MAP.get(level_str)
         if level is None:
             level = int(level_str)

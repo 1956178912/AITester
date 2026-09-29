@@ -14,6 +14,11 @@
 >
 > 下方各节（告警统计 / 死代码 / 热点路径等）为 2026-09 快照内容，仅作历史参考；
 > 最新静态检查结论以 `ruff check .` / `mypy src/ config.py` 实时输出为准。
+>
+> **最新分析输出（2026-10）**：各改进批次的 A/B 实验结果与代码级改进记录
+> 见 [docs/implementation_2026-10_ab_negative_batch.md](implementation_2026-10_ab_negative_batch.md)
+> （位置感知 / RAG 相关性 / 跨文件双向依赖 / L2.5-hard 难度层落地 + n=8 小样本验证）；
+> 本文件的 ruff 告警统计已被后续批次的 `ruff check .` 全绿结果取代。
 
 ---
 

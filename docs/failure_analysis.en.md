@@ -2,11 +2,13 @@
 
 # Failure Case Analysis
 
+> ⚠️ **Historical snapshot**: this document is a 2026-09 batch data snapshot (50-task synthetic experiment + SWE-bench repo-level P0/P1); **data is not auto-refreshed across version iterations**. All repo-level verification data is based on the free-tier model (`agnes-3.0-flash`); results from stronger models are stored in separate files, not appended here.
+
 ## Overview
 
 This document analyzes in depth the failure cases of AITester in synthetic dataset experiments, identifying system bottlenecks and directions for improvement.
 
-> **⚠️ Historical-snapshot declaration (archival rule: CONTRIBUTING.md "Documentation organization conventions")**: this document is a
+> **Historical-snapshot declaration** (archival rule: CONTRIBUTING.md "Documentation organization conventions"): this document is a
 > historical data snapshot (50-task synthetic experiment + SWE-bench repo-level
 > verification P0/P1, measured on a free-tier small model) and its data is not
 > auto-refreshed as versions iterate. The "UNKNOWN 75%" distribution below is the

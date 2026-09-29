@@ -107,7 +107,7 @@
 | G5 | **执行无关（testless）修复验证** | ⑧ | 全新模块 | 静态层（AST 符号守卫 + mypy + 契约回归）+ 轻量动态层（导入冒烟）组合验证，不依赖测试执行，用于企业级无测试仓库 |
 | G6 | **多 Agent 辩论修复**（独立于专家池交叉验证） | ② | 增强 | 在 `expert_pool.cross_validate` 之上增加"互辩收敛"轮次（候选互引对方补丁弱点重新生成 1 轮）；默认关 |
 | G7 | **缺陷报告生成**（预言有效性维度的报告出口） | ① | 小 | `reports/generator.py` 增加"弱预言占比 / oracle_confidence 分布"报表节 |
-| G8 | **SWE-bench Pro 复测**（开启探针 + 策略银行后验证引擎能力天花板） | ②⑧ | 实验 | 全开 `RUNTIME_PROBE_ENABLE` + `STRATEGY_BANK_ENABLE` + `EXPERT_POOL_ENABLE`，跑 `swe_bench_pro` 数据目录（现无数据，需先解决 `docs/design/swe_bench_probe.md` 的"数据集无可用源码"阻塞） |
+| G8 | **SWE-bench Pro 复测**（开启探针 + 策略银行后验证引擎能力天花板） | ②⑧ | 实验 | 全开 `RUNTIME_PROBE_ENABLE` + `STRATEGY_BANK_ENABLE` + `EXPERT_POOL_ENABLE`，跑 `swe_bench_pro` 数据目录。**2026-10 更新**：数据阻塞已通过 SWE-bench lite（dev split）20-task sqlfluff 子集解决（`data/swe_bench_lite_g8_ready.jsonl`，门禁通过 20/20）；`run_full_stack_swe_bench_pro.py` + `RepoExecutor` 仓库级验证链路已全链路打通（n=3 + n=2 两次复测）。当前结果：免费档 `agnes-3.0-flash` 对真实 sqlfluff 仓库 0% 成功率（全部 `patch_validation_failed`，`llm_applied=False`，FAIL_TO_PASS 基线全挂），失败根因为 LLM 能力边界（非管道缺陷），与 `failure_analysis.md` 0/7 `LLM_BREAKS_IMPORT` 归因一致。**更强模型（GPT-4 级）下数据单独落 `experiments/results/experiment_report_<date>_repo_level.md`**。 |
 
 ## 优先级建议矩阵（更新版）
 

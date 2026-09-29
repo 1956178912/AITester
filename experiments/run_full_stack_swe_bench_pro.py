@@ -88,6 +88,13 @@ def _check_pro_data_ready(data_dir: str | None, dataset: str) -> bool:
     resolved_dir = data_dir or os.getenv("AITESTER_SWE_BENCH_PRO_DIR") or os.getenv("SWE_BENCH_DATA_DIR")
     if not resolved_dir:
         resolved_dir = os.path.join(os.path.expanduser("~"), ".cache", "aitester", "swe_bench_pro")
+    # 数据目录注入：检查通过 ≠ 加载器能读到数据。SWEBenchDataset 经
+    # AITESTER_SWE_BENCH_PRO_DIR 环境变量读数据目录（load_dataset("swe_bench_pro")
+    # 按注册名注入），显式 --data-dir 时同步导出该环境变量，保证门禁检查
+    # 与后续基准加载读同一目录（2026-10 G8-lite 复测暴露的第三层断点：
+    # 门禁对 data/ 校验通过，加载器却默认读 ~/.cache/aitester/swe_bench_pro，
+    # 任务静默降级 examples——门禁结论失真）。
+    os.environ["AITESTER_SWE_BENCH_PRO_DIR"] = resolved_dir
     enrichment = os.getenv("SWE_BENCH_ENRICHMENT")
     report = check_pro_ready(resolved_dir, enrichment=enrichment)
     print(f"\n[G8 前置检查] 数据目录: {resolved_dir}")

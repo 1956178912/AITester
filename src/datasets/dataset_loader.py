@@ -258,12 +258,50 @@ class SWEBenchDataset(BaseDatasetLoader):
 
     DATASET_NAME = "swe_bench"
 
+    # 2.1 外部数据目录注入（类级 env var 钩子）：key = load_dataset() 的
+    # 注册名，value = 外部数据目录环境变量名。swe_rebench / swe_bench_pro 等
+    # 注册名经 load_dataset() 按 dataset name 注入各自的环境变量。此前文档声称
+    # "数据文件经 AITESTER_SWE_BENCH_PRO_DIR 指向 Pro 数据集目录"但加载器从不读
+    # 该环境变量——设置后数据仍从默认缓存目录找文件（G8 全开链路复测数据注入
+    # 通道断点，2026-10 修复）。
+    _EXTRA_DATA_DIR_ENV: ClassVar[dict[str, str]] = {
+        "swe_rebench": "SWE_BENCH_DATA_DIR",
+        "swebench_rebench": "SWE_BENCH_DATA_DIR",
+        "swe_bench_pro": "AITESTER_SWE_BENCH_PRO_DIR",
+        "swebench_pro": "AITESTER_SWE_BENCH_PRO_DIR",
+    }
+
     # 可选子集及其对应的任务数量（用于快速预览）
     SUBSET_MAP: ClassVar[dict[str, int]] = {
         "lite": 500,  # Lite 子集：500 个任务，适合快速验证
         "mini": 50,  # Mini 子集：50 个任务，适合开发调试
         "full": 2294,  # 完整数据集：2294 个任务
     }
+
+    def __init__(self, subset: str | None = None, data_dir: str | None = None, **kwargs: Any) -> None:
+        """
+        初始化 SWE-bench 风格数据集加载器。
+
+        Args:
+            subset: 数据子集名称。None 表示加载全部数据。
+            data_dir: 显式覆盖数据集根目录（优先级最高）；None 时依次回退：
+                1. 注册名对应的环境变量（_EXTRA_DATA_DIR_ENV，经 load_dataset()
+                   按注册名解析；直接用类构造时按注册名逐个探测环境变量）；
+                2. 默认缓存目录（DEFAULT_CACHE_DIR/swe_bench/，历史口径）。
+            **kwargs: 兼容 load_dataset 工厂透传的额外参数（data_dir_env_value）。
+        """
+        # 注册名：load_dataset() 传入 data_dir_env_value（str 注册名）；
+        # 直接类构造时为 None——逐个探测环境变量（命中即用，零副作用）。
+        registered_name: str | None = kwargs.get("data_dir_env_value") or None
+        env_dir: str | None = None
+        if registered_name:
+            env_dir = os.getenv(self._EXTRA_DATA_DIR_ENV.get(registered_name, "")) or None
+        else:
+            for _env_key in self._EXTRA_DATA_DIR_ENV.values():
+                env_dir = os.getenv(_env_key)
+                if env_dir:
+                    break
+        super().__init__(subset=subset, data_dir=data_dir or env_dir)
 
     def _resolve_jsonl_paths(self) -> list[str]:
         """解析本加载器实例应读取的 JSONL 文件路径列表。
@@ -534,7 +572,16 @@ class SWEBenchDataset(BaseDatasetLoader):
         if task_id in self._seen_task_ids:
             return None
         self._seen_task_ids.add(task_id)
-        repo_name = data.get("repository", "unknown")
+        # 仓库名：官方 JSONL 的 repo 字段（org/name）优先；兼容旧数据
+        # repository 字段（同为 org/name）；均缺失时按 instance_id 的
+        # "org__repo" 命名约定推导；都推不出才兜底 "unknown"。
+        # 2026-10（G8-lite 复测暴露）：旧口径只读 repository，官方 JSONL
+        # 的 repo 字段从未被读取 → repo_name 恒 "unknown" → repo_url 为空 →
+        # REPO_LEVEL_EXECUTION 仓库级路由永不命中（"数据集就绪但路由断点"
+        # 的第二层缺口）。
+        repo_name = data.get("repo") or data.get("repository") or (
+            task_id.split("__")[0] if "__" in task_id else "unknown"
+        )
         problem_statement = data.get(
             "problem_statement",
             f"Fix bug in {repo_name} ({task_id})",
@@ -726,7 +773,10 @@ def load_dataset(
         return SyntheticDataset(subset=subset, **kwargs)
 
     loader_class = dataset_map.get(name_lower, InMemoryDataset)
-    instance = loader_class(subset=subset, **kwargs)
+    if loader_class is SWEBenchDataset:
+        instance = loader_class(subset=subset, data_dir_env_value=name_lower, **kwargs)
+    else:
+        instance = loader_class(subset=subset, **kwargs)
     # InMemoryDataset（含 "examples" 别名）需要预填充示例任务
     if isinstance(instance, InMemoryDataset):
         instance.add_sample_tasks()

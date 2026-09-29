@@ -500,7 +500,11 @@ def _run_benchmark_once(
     type=float,
     help="RAG 相关性阈值（0-1，默认 0.7，similarity = 1 - cosine_distance）",
 )
-@click.option("--difficulty", default="mixed", help="合成数据集难度级别（默认 mixed）")
+@click.option(
+    "--difficulty",
+    default="mixed",
+    help="合成数据集难度级别（mixed / level1 / level2 / level2.5 / level2.5-hard / level3 / level3.5 / level4 / level4.5）",
+)
 def main(
     dataset: str,
     subset: str | None,
