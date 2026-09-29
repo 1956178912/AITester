@@ -2,6 +2,31 @@
 
 # Failure Case Analysis
 
+> ## 🚨 Historical Snapshot Warning (reader notice, pinned 2026-10)
+>
+> **This document is a 2026-09-14 batch data snapshot** (50-task synthetic
+> experiment + SWE-bench repo-level verification P0/P1); **all data is frozen
+> to that batch and is not auto-refreshed across version iterations**:
+>
+> 1. **All repo-level verification data is based on the free-tier model
+>    (`agnes-3.0-flash`)**, reflecting that model's capability boundary rather
+>    than AITester's architecture. Results from stronger models (GPT-4 class)
+>    are stored separately in
+>    `experiments/results/experiment_report_<date>_repo_level.md` and are not
+>    appended here (to avoid polluting the free-tier baseline snapshot).
+> 2. **Error-classification counts in the body (e.g. "12 classes / 16
+>    classes") are in-batch historical figures**. The classification scheme now
+>    has **17 categories** (`ErrorCategory` enum, `PATCH_SYNTAX_INVALID` added
+>    in the 2026-09-27 batch); see
+>    [docs/api_reference.md](api_reference.md) § error-category enum
+>    (seventeen categories) for the canonical list.
+> 3. After re-running experiments, treat the latest
+>    `experiments/analyze_failures.py` / `experiments/analyze_results.py` output
+>    as authoritative; this file is retained only as a historical evidence
+>    chain.
+>
+> Snapshot frozen date: 2026-09-14 (batch scope).
+
 > ⚠️ **Historical snapshot**: this document is a 2026-09 batch data snapshot (50-task synthetic experiment + SWE-bench repo-level P0/P1); **data is not auto-refreshed across version iterations**. All repo-level verification data is based on the free-tier model (`agnes-3.0-flash`); results from stronger models are stored in separate files, not appended here.
 
 ## Overview
@@ -194,7 +219,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 ### Short-term Improvements (1-2 weeks)
 
 - [x] ~~Enhance JSON extraction logic to support multiple response formats~~ → Implemented: JSON extraction now supports multiple formats (markdown code blocks / raw JSON / mixed content; see `extract_json_object`)
-- [x] ~~Expand the error classification pattern library~~ → Implemented: error classification expanded from 5 to 12 categories (e.g. `LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY`)
+- [x] ~~Expand the error classification pattern library~~ → Implemented: error classification expanded from 5 to 17 categories (e.g. `LLM_FORMAT_ERROR` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `PATCH_SYNTAX_INVALID`; full 17-category enum in [docs/api_reference.md](api_reference.md) § error-category enum). The "12 categories" figure in this line was a 2026-09-14 in-batch count; see the snapshot warning at the top of this file.
 - [ ] Add dedicated repair templates for key bug patterns
 - [x] ~~Enable RAG and optimize the retrieval strategy~~ → Implemented: `--enable-rag` included in the main experiment (2.3 RAG ablation); retrieval metrics auto-summarized (Hit Rate / MRR / breakdown by retrieval type / RAG hit × failure-category cross-tab)
 

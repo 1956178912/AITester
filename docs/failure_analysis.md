@@ -2,6 +2,24 @@
 
 # 失败案例分析 (Failure Case Analysis)
 
+> ## 🚨 历史快照警告（读者须知，2026-10 置顶）
+>
+> **本文档为 2026-09-14 批次数据快照**（50 任务合成实验 + SWE-bench 仓库级验证
+> P0/P1），**所有数据口径冻结于该批次，不随版本迭代自动刷新**：
+>
+> 1. **所有仓库级验证数据均基于免费档小模型（`agnes-3.0-flash`）**，反映的是该
+>    模型能力边界而非 AITester 架构能力；更强模型（GPT-4 级）下的数据单独落
+>    `experiments/results/experiment_report_<date>_repo_level.md`，不在本文件就地
+>    追加（避免污染免费档基线快照）。
+> 2. **文中错误分类数字（如"12 类/16 类"）为批次内历史口径**。当前错误分类
+>    已扩展至 **17 类**（`ErrorCategory` 枚举，2026-09-27 批次新增
+>    `PATCH_SYNTAX_INVALID`），以 [docs/api_reference.md](api_reference.md)
+>    §错误类别枚举（十七类）为准。
+> 3. 重跑实验后请以最新 `experiments/analyze_failures.py` /
+>    `experiments/analyze_results.py` 输出为准，本文件仅作历史证据链保留。
+>
+> 快照冻结日：2026-09-14（批次口径）。
+
 > ⚠️ **历史快照**：本文档为 2026-09 批次的数据快照（50 任务合成实验 + SWE-bench 仓库级验证 P0/P1），**数据不随版本迭代自动刷新**。所有仓库级验证数据均基于免费档小模型（`agnes-3.0-flash`），更强模型下的数据单独落盘，不在本文件就地追加。
 
 ## 概述
@@ -176,7 +194,7 @@ diagnosis: "JSON 解析失败: Could not find complete JSON: line 1 column 1 (ch
 ### 短期改进（1-2周）
 
 - [x] ~~增强JSON提取逻辑，支持多种响应格式~~ → 已实现：JSON 提取已支持多格式（markdown 代码块 / 纯 JSON / 混合内容，见 `extract_json_object`）
-- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 16 类（`LLM_FORMAT_ERROR` / `LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` 等；P0 4.1 批次新增 `LLM_EMPTY_RESPONSE` 与 `LLM_JSON_PARSE_FAILED` 两个精确子类，由 `ErrorClassifier.classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类）
+- [x] ~~扩充错误分类模式库~~ → 已实现：错误分类已从 5 类扩展至 17 类（`LLM_FORMAT_ERROR` / `LLM_EMPTY_RESPONSE` / `LLM_JSON_PARSE_FAILED` / `INDEX_ERROR` / `PATCH_VALIDATION_FAILED` / `RAG_RETRIEVAL_EMPTY` / `EXECUTION_TRACE_MISSING` / `MULTI_CANDIDATE_ALL_REJECTED` / `PATCH_SYNTAX_INVALID` 等；P0 4.1 批次新增 `LLM_EMPTY_RESPONSE` 与 `LLM_JSON_PARSE_FAILED` 两个精确子类，由 `ErrorClassifier.classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类；2.2 批次新增 `PATCH_SYNTAX_INVALID`（重采样耗尽标记）。当前完整 17 类枚举以 [docs/api_reference.md](api_reference.md) §错误类别枚举为准）
 - [ ] 为关键bug模式添加专用修复模板
 - [x] ~~启用RAG并优化检索策略~~ → 已实现：`--enable-rag` 纳入主实验（2.3 RAG 消融），检索指标自动汇总（Hit Rate / MRR / 按检索类型分解 / RAG 命中 × 失败类别交叉表）
 

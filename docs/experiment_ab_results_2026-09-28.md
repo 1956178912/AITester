@@ -58,6 +58,21 @@
 数据集（或 SWE-bench + GPT-4 级模型）重测，方能产出方向性证据。
 不建议论文将合成集 +3.34pp（首批次的非复现波动）作为定位修复的收益主张。
 
+**2026-10 改进批次（P1.1 补测，定位阶段激活验证）**：定位激活条件已落实为
+合成数据集 `level2.5` / `level2.5-hard` 运行时异常缺陷库
+（`IndexError` / `KeyError` / `AttributeError` / `TypeError`，失败输出携带
+traceback 帧行号，`SyntheticDataset` 写入 `metadata["suggested_function"]` 供定位
+金标准匹配），`position_aware_ab.py` 默认 difficulty 由 `mixed` 改
+`level2.5`。level2.5-hard n=40（seed=42，免费档 2026-09-29 重跑口径）实测：
+定位正确率 21.43%（ON 组 `focused=True` 命中 gold function，定位阶段
+**已激活**，不再是 0/30 全降级），ON 85.0% / OFF 90.0%（−5.00pp，
+定位开销 −0.08 迭代收益未显现；小样本波动区间内，方向性证据有限）。
+**论文可引用定位（保守）**：位置感知修复在**运行时异常类缺陷**上定位阶段
+可激活（21.43% 定位命中 vs 合成 mixed 集 0 命中），效率增益未显现——
+该功能在论文中的定位是"针对运行时异常类缺陷（携带 traceback 行号）的
+专项优化"，而非通用增强；对 assertion 类失败（无行号）仍全部降级全文件
+修复（历史阴性结果保留）。结果：`experiments/results/pa_l25h_n40_g8batch/`。
+
 ---
 
 ## 2. RAG 检索增强（ENABLE_RAG）
@@ -84,6 +99,21 @@
 > （delta_pct 负值 = ON 更耗）"。若论文主张 RAG 效率收益，本批次数据不支持；
 > 应如实报告为"检索命中率 100% 但 token 效率无收益、成功率无增益"。
 
+**2026-10 改进批次（P1.2 补测，RAG 增强层在困难任务上的验证）**：
+`RAG_RELEVANCE_THRESHOLD_ENABLE`（相似度阈值过滤，默认 0.7）+
+`RAG_CONDITIONAL_ENABLE`（按错误类型条件注入）+ `RAG_JUDGE_INSTRUCTION_ENABLE`
+三个增强层开关已实现但从未在有效场景中验证。level2.5-hard n=40（seed=42，
+免费档 2026-09-29 重跑口径，`rag_ab_experiment.py --relevance-ab`）实测：
+RAG ON（增强层全开）95% vs OFF 88%（**+7pp 成功率**，检索命中转化为成功率），
+平均迭代 0.3 vs 0.7（ON 组 −0.4 轮，p=0.0497 显著），token 消耗
+ON 3397 vs OFF 1724（+97%，检索注入的 token 成本未回收，但方向与历史
+−40.7% 负向结论一致）。**RAG 真实适用边界（保守表述）**：困难任务
+（level2.5-hard，运行时异常类缺陷）上，RAG 增强层带来 +7pp 成功率与
+−0.4 迭代收敛收益；合成集简单任务（历史 n=20 口径）上 RAG 收益为 0 且
+token +40.7% 负向。建议论文将 RAG 定位表述为"面向困难任务的检索增强层，
+需与相关性阈值 + 条件注入联合启用"。结果：
+`experiments/results/rag_lvl25h_n40_g8batch/`。
+
 ---
 
 ## 3. 跨文件修复（CROSS_FILE_ENABLE）
@@ -98,7 +128,15 @@
 | 成功率 | 88.0% | 98.0% | **+10.00pp** |
 | 平均迭代 | 0.54 | 0.48 | -0.06 |
 
-**判定**：T1 阈值 ≥ +15pp **未达**（实测 +10.00pp），但方向为正且量级可观。
+**判定**：T1（3.5 跨文件提升 ≥ +15pp）未达——三批次一致方向为正（合成集 +10.00pp
+双模块 / +7.50pp 三模块 / +0.00pp L3.5 小样本 n=16 无分化，唯一失败任务归因
+`LLM_CAPABILITY`：dep_edges=2 依赖图完整、3 轮修复未闭合），量级在合成集口径下
+稳定低于 T1 阈值。结合 `cross_file_root_cause.py` 修复的 `_cross_file_analyzer_node`
+跨文件 AST 分析缺陷（对被调方分析得 0 边覆盖预置依赖边），T1 缺口归因于
+**LLM 引擎能力边界（免费档小模型）**而非跨文件管道缺陷。转正需 GPT-4 级模型
+重跑（本批次 2026-09-29 G8 全开链路重测提供最新数据，见
+`experiments/results/experiment_report_20260929_repo_level.md` §跨文件对照）。
+T4 通过（单文件无回归 +2.00pp）。
 
 ### 3.2 T4：level1 单文件无回归（n=50，seed=42）
 

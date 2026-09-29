@@ -4,6 +4,56 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-29 P0/P1/P2 缺口执行批次（G8 全开链路重测 + 默认关功能验证 + 文档一致性）
+
+> 本批次执行 `docs/gap_report_2026-09-28_frontier_recommendations.md` §9 缺口清单
+> 的 P0/P1/P2 条目，默认行为不变（各开关保持原默认值）：
+>
+> - **P0 G8 全开链路重测（更强免费档模型）**：`data/swe_bench_lite_g8_ready.jsonl`
+>   20-task sqlfluff 子集 + 5 个实测可用端点（kimi-k2.7-code / kimi-k2.5 /
+>   glm-4.7 / agnes-3.0-flash / agnes-2.5-flash，2026-09-29 端点探明 kimi 系
+>   为可用池）+ 数据门禁修复（`data/g8_lite/swe_bench_lite_g8_ready_instances.jsonl`
+>   补齐 `instance_code` 字段，门禁 20/20 通过）+ 全开开关 7 项
+>   （`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
+>   `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
+>   `SWE_REPO_VENV_ISOLATION`）。仓库级验证结果单独落
+>   `experiments/results/experiment_report_20260929_repo_level.md`。
+> - **P1.1 位置感知补测（定位激活验证）**：合成数据集 `level2.5` /
+>   `level2.5-hard` 运行时异常缺陷库（`IndexError` / `KeyError` /
+>   `AttributeError` / `TypeError`，失败输出携带 traceback 帧行号，
+>   `SyntheticDataset` 写入 `metadata["suggested_function"]` 金标准），
+>   `experiments/position_aware_ab.py` 默认 difficulty 由 `mixed` 改
+>   `level2.5`。level2.5-hard n=40 实测定位正确率 21.43%（定位阶段
+>   **已激活**，不再是 0/30 全降级），ON 85.0% / OFF 90.0%（−5.00pp，
+>   小样本波动，方向性证据有限）。结果：
+>   `experiments/results/pa_l25h_n40_g8batch/`。
+> - **P1.2 RAG 增强层补测（困难任务）**：`RAG_RELEVANCE_THRESHOLD_ENABLE` +
+>   `RAG_CONDITIONAL_ENABLE` + `RAG_JUDGE_INSTRUCTION_ENABLE` 三增强层在
+>   level2.5-hard n=40 实测 RAG ON 95% vs OFF 88%（+7pp），平均迭代
+>   −0.4 轮（p=0.0497 显著），token +97%（检索注入成本未回收）。结果：
+>   `experiments/results/rag_lvl25h_n40_g8batch/`。
+> - **P1.3 跨文件 T1 阈值状态**：三批次（level3 双模块 +10.00pp /
+>   level3.5 三模块 +7.50pp / L3.5 小样本 n=16 +0.00pp 无分化）一致方向
+>   为正但量级低于 T1 阈值 +15pp。结合 `cross_file_root_cause.py`
+>   修复的 `_cross_file_analyzer_node` 缺陷（对被调方分析得 0 边覆盖
+>   预置依赖边）+ L3.5 唯一失败任务归因 `LLM_CAPABILITY`（dep_edges=2
+>   依赖图完整、3 轮修复未闭合），T1 缺口归因 LLM 引擎能力边界（免费档
+>   小模型）而非跨文件管道缺陷。转正需 GPT-4 级模型重跑。
+> - **P2.1 `code_analysis_report.md` 可访问性**：该文档在 raw 路径下曾
+>   返回错误，现确认可访问且顶部已有"2026-09 静态快照"过期标注 +
+>   指向最新分析输出的链接（`docs/implementation_2026-10_ab_negative_batch.md`），
+>   内容已过期，保留作历史证据链。
+> - **P2.2 `failure_analysis.md` 历史快照声明置顶**：顶部新增醒目
+>   `🚨 历史快照警告` 块（冻结日 2026-09-14、免费档小模型口径、
+>   错误分类 17 类同步口径），英文档同步。
+> - **P2.3 错误分类数字跨文档同步**：`docs/failure_analysis.md` §
+>   "已实现"清单由"16 类"更正为"17 类"（补 `PATCH_SYNTAX_INVALID`），
+>   `README.md` §2 / §5.19 / §876 / 测试表 / v0.1 历史批次数更正，
+>   `README.en.md` 同步。当前 `ErrorCategory` 枚举锁定 17 类
+>   （`tests/test_error_classifier.py::test_seventeen_categories_total`）。
+> - 本批次无生产代码变更（仅实验 + 文档 + 数据门禁修复），全量测试 /
+>   ruff / mypy 基线不变（2418 测试 / ruff 全仓 0 告警 / 覆盖率 94%）。
+
 ## [Unreleased] — 2026-09-28 真实功能缺口实验补齐批次（A/B 对照 + 死循环修复 + 跨文件脚手架）
 
 > 本批次补齐论文实验章节的证据缺口（位置感知 / RAG / 跨文件三组 A/B），
