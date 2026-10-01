@@ -656,7 +656,22 @@ def _collect_dynamic_bypass_constructions(code: str) -> set[str]:
                     "windll",
                     "oledll",
                 }
-                if _attr_arg.value in _dangerous_attrs:
+                # P1-2（2026-10-02 审查）：getattr 第一参数须为已知危险模块
+                # （Name 或别名）才拦截——与 _collect_dynamic_import_bypass
+                # L784 的"危险模块限定"同口径，避免 getattr(obj, "run")
+                # 这类高频普通属性访问被误报（"run" 是合法属性名）。
+                _base_arg = node.args[0]
+                _dangerous_mod_names = {"os", "subprocess", "socket", "urllib", "ctypes", "shutil", "shlex", "pty"}
+                _base_id: str | None = None
+                if isinstance(_base_arg, _ast.Name):
+                    _base_id = _base_arg.id
+                elif isinstance(_base_arg, _ast.Attribute):
+                    _base_id = _base_arg.attr
+                if _base_id in _dangerous_mod_names:
+                    found.add(f"getattr({_base_id!r}, {_attr_arg.value!r})")
+                elif _attr_arg.value in _dangerous_attrs:
+                    # 未知基对象但属性名命中危险集 → 保守拦截（防 getattr(
+                    # 任意对象, "system") 漏网；与上方 L784 的别名兜底同口径）
                     found.add(f"getattr(…, {_attr_arg.value!r})")
         # importlib.import_module("os" / "subprocess" / ...)
         if (
@@ -1043,10 +1058,13 @@ def _current_context_tier() -> tuple[str, int, float]:
     return name, idx, _CONTEXT_TIER_TEMPERATURES[name]
 
 
-_CONTEXT_TIER_INDEX = _contract_context_tier_index()
 # 降级链档位的进程级临界区锁（--parallel 多任务共享进程时，advance 的
 # 读-改-写 + os.environ 同步需原子；读路径同锁口径，避免中间值）
+# P2-1（2026-10-02 审查）：_TIER_LOCK 须先于 _CONTEXT_TIER_INDEX 初始化
+# 定义——加载期调用 advance_context_tier 时锁已就绪（历史顺序下锁在
+# 初始化之后才定义，加载期调用会 NameError）。
 _TIER_LOCK = threading.Lock()
+_CONTEXT_TIER_INDEX = _contract_context_tier_index()
 
 
 def build_tiered_context(
@@ -1205,6 +1223,15 @@ def apply_patch_with_resample(
         - success: bool（最终是否成功应用且 AST 合法）
     """
     stats: dict[str, Any] = {"ast_valid": False, "resampled": False, "resample_count": 0, "success": False}
+
+    # Step 0: 空补丁 / 全空白补丁短路（P0 性能优化 2026-10-01）
+    # 空补丁既无法应用也无法被 LLM"修订"出有效内容——早退避免触发
+    # resample_fn（真实 LLM 调用含指数退避时单次可 50s+），消除
+    # 全量测试套件中该路径的 100s 级耗时瓶颈。
+    # 返回 applied=False（空补丁不构成有效修复），ast_valid=False。
+    if not patch or not patch.strip():
+        stats["ast_valid"] = False
+        return original_code, False, stats
 
     # Step 1: 首次应用
     new_code, applied = apply_patch_to_code(original_code, patch)

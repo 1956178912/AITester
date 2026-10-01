@@ -650,9 +650,9 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
     # 包，当前未安装，待后续批次引入。
     _checkpointer = None
     try:
-        import os as _os
-
-        if _os.getenv("RISK_APPROVAL_ENABLE", "false").lower() in ("true", "1", "on"):
+        # P2-2（2026-10-02 审查）：复用模块顶部 `import os`（L47），
+        # 此前函数内 `import os as _os` 冗余。
+        if os.getenv("RISK_APPROVAL_ENABLE", "false").lower() in ("true", "1", "on"):
             from langgraph.checkpoint.memory import MemorySaver
 
             _checkpointer = MemorySaver()

@@ -50,12 +50,21 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 新增功能必须附带单元测试：
 
 ```bash
-# 运行全部测试
+# 运行全部测试（串行，历史口径）
 .venv/bin/python -m pytest tests/ -v
+
+# 并行加速（本地开发推荐：-n auto 按 CPU 核数分片，全量 ~21s vs 串行 ~49s）
+.venv/bin/python -m pytest tests/ -n auto --dist loadfile
 
 # 查看覆盖率
 .venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
+
+并行说明（2026-10-01 性能优化批次引入）：
+- `pytest-xdist`（requirements 锁定 3.8.0）提供 `-n` 并行；`--dist loadfile` 按文件
+  分片保持同文件用例顺序，隔离口径不变。
+- 不传 `-n` 时完全退化为历史串行行为（默认零变化）。
+- CI 已用 `-n 4 --dist loadfile` 跑全量（与串行同口径产出 coverage.xml）。
 
 覆盖率要求：核心模块 ≥ 92%，整体 ≥ 90%。
 

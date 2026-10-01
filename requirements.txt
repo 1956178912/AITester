@@ -30,6 +30,10 @@ pytest-cov==7.1.0
 # 注：锁定 2.4.0。2.5.0 已被上游 yank（原因 "accidental breaking change (probably)"），
 # 且 lock 曾误锁 2.5.0；2026-09-09 降级为最新未 yank 版本 2.4.0（已验证与 pytest 9.1.1 兼容）
 pytest-timeout==2.4.0
+# pytest-xdist: 测试并行加速插件（-n auto 按 CPU 核数并行；本地/CI 可选，
+# 默认串行行为不变——不传 -n 时完全退化为历史串行口径）
+# 注：2026-10-01 全面审查性能优化批次引入，CI 并行 job 用 -n 4
+pytest-xdist==3.8.0
 # python-dotenv: 从 .env 文件加载环境变量
 python-dotenv==1.2.2
 
