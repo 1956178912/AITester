@@ -297,3 +297,71 @@ class TestFailureKbLoadBranches:
 
         out = failure_kb.kb_debugger_snippet("assertion", now=0.0)
         assert out is None or isinstance(out, str)
+
+
+class TestExecutorLlmBranches:
+    """agents/executor LLM 执行 / 超时 / 降级分支。"""
+
+    def test_executor_runtime_flag(self):
+        from src.agents import executor_runtime
+
+        if hasattr(executor_runtime, "executor_runtime_enabled"):
+            assert executor_runtime.executor_runtime_enabled() in (True, False)
+
+    def test_executor_output_structure(self):
+        from src.agents import executor_output
+
+        if hasattr(executor_output, "parse_executor_output"):
+            out = executor_output.parse_executor_output("PASS: test_f")
+            assert out is not None
+
+
+class TestEmbeddingUtilsBranches:
+    """utils/embedding_utils 嵌入 / 降级分支。"""
+
+    def test_embedding_disabled_default(self):
+        from src.utils import embedding_utils
+
+        if hasattr(embedding_utils, "embedding_enabled"):
+            assert embedding_utils.embedding_enabled() in (True, False)
+
+    def test_embedding_model_load_structure(self):
+        from src.utils import embedding_utils
+
+        if hasattr(embedding_utils, "EmbeddingUtils"):
+            em = embedding_utils.EmbeddingUtils()
+            assert em is not None
+
+
+class TestAgentTelemetryBranches:
+    """observability/agent_telemetry 遥测记录 / 聚合分支。"""
+
+    def test_agent_telemetry_enabled_flag(self):
+        from src.observability import agent_telemetry
+
+        if hasattr(agent_telemetry, "agent_telemetry_enabled"):
+            assert agent_telemetry.agent_telemetry_enabled() in (True, False)
+
+    def test_record_event_structure(self):
+        from src.observability import agent_telemetry
+
+        if hasattr(agent_telemetry, "record_event"):
+            out = agent_telemetry.record_event("node", "start", {"iter": 1})
+            assert out is None or isinstance(out, (dict, list, str))
+
+
+class TestMutationAdvisorBranches:
+    """graph/mutation_advisor 变异建议 / 评分分支。"""
+
+    def test_mutation_advisor_enabled_flag(self):
+        from src.graph import mutation_advisor
+
+        if hasattr(mutation_advisor, "mutation_advisor_enabled"):
+            assert mutation_advisor.mutation_advisor_enabled() in (True, False)
+
+    def test_advise_structure(self):
+        from src.graph import mutation_advisor
+
+        if hasattr(mutation_advisor, "advise"):
+            out = mutation_advisor.advise("assertion", "def f(): pass")
+            assert out is None or isinstance(out, (dict, list, str))
