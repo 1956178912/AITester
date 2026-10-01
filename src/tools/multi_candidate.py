@@ -52,8 +52,10 @@ _MAX_CANDIDATE_COUNT = 8
 _CANDIDATE_PROMPT_VARIANTS = [
     "请给出【方案 A（最小改动）】：只做让失败测试通过的最小修复，尽量保留原代码结构与命名，不重构无关函数。",
     "请给出【方案 B（根因修复）】：定位根本原因，允许重写相关函数的完整实现，必要时调整内部结构（不改对外接口）。",
-    "请给出【方案 C（防御式修复）】：除了修复主路径，补充边界与异常"
-    "输入的健壮性处理（类型检查、空值、越界），确保相邻用例不再误伤。",
+    (
+        "请给出【方案 C（防御式修复）】：除了修复主路径，补充边界与异常"
+        "输入的健壮性处理（类型检查、空值、越界），确保相邻用例不再误伤。"
+    ),
 ]
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -261,8 +263,8 @@ def select_best_candidate(
     if not (use_execution_validation and executor is not None and test_code and target_file):
         # 静态筛选模式：3.2 改进——用行级信用分配排序（"修改行数少但
         # 静态通过"的候选优先，与 BOOSTAPR 行级信用思想同方向）
-        credits = line_level_credit_scores(original_code, static_ok)
-        credit_by_index = {c["index"]: c["credit_score"] for c in credits["candidates"]}
+        credit_report = line_level_credit_scores(original_code, static_ok)
+        credit_by_index = {c["index"]: c["credit_score"] for c in credit_report["candidates"]}
         # 计算每个候选的信用（未执行验证时 exec_factor=1.0，纯简洁性代理）；
         # 按 float 归一（line_level_credit_scores 的 credit_score 可能为 None）
         for c in static_ok:
@@ -520,9 +522,9 @@ def predict_candidate_rewards(
          "best_candidate_index": int | None（预测奖励最高者）,
          "trend": str}
     """
-    credits = line_level_credit_scores(original_code, candidates)
+    credit_report = line_level_credit_scores(original_code, candidates)
     trend = _coverage_trend(execution_trace)
-    credit_by_index = {c["index"]: c for c in credits["candidates"]}
+    credit_by_index = {c["index"]: c for c in credit_report["candidates"]}
     scored: list[dict[str, Any]] = []
     best_idx: int | None = None
     best_reward = -1.0
@@ -744,11 +746,9 @@ def _replace_function_in_code(
     indent_prefix = None
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if (
-            stripped.startswith(f"def {func_name}(")
-            or stripped.startswith(f"async def {func_name}(")
-            or stripped == f"def {func_name}("
-            or stripped == f"async def {func_name}("
+        if stripped.startswith((f"def {func_name}(", f"async def {func_name}(")) or stripped in (
+            f"def {func_name}(",
+            f"async def {func_name}(",
         ):
             start = i
             indent_prefix = line[: len(line) - len(line.lstrip())]

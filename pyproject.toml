@@ -1,3 +1,63 @@
+# O9（2026-09-29 审查 P0）：PEP 621 [project] 元数据 + [build-system]。
+# 三处依赖一致性（pyproject.toml / requirements.txt / setup.py）：
+# - pyproject.toml 的 [project] 为唯一事实来源（setup.py 退化为
+#   兼容 shim，pip 构建时优先读 pyproject.toml）；
+# - [build-system] 声明 setuptools 构建后端，wheel 只含 src/ + config.py；
+# - LICENSE 字段指向仓库根 LICENSE 文件（须存在）。
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aitester"
+# O35（2026-09-30 全面审查优化 P1）：版本改为 dynamic，由 src/__init__.py 的
+# __version__ 单一事实来源提供。此前静态 version = "0.0.0"（注释声称"实际版本
+# 由 setup.py 读取"）在 PEP 517 默认构建路径下会**覆盖** setup.py 的
+# _load_version()——实测 `python -m build` 产出 aitester-0.0.0-py3-none-any.whl，
+# 与 `aitester --version`（0.7）不一致，安装后 pip show aitester 也显示 0.0.0。
+dynamic = ["version"]
+description = "AI-powered test generation and repair workflow (LangGraph multi-agent)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {file = "LICENSE"}
+dependencies = [
+    "langchain>=1.0.0",
+    "langchain-openai>=1.0.0",
+    "langgraph>=1.0.0",
+    "pymysql>=1.0.0",
+    "DBUtils>=3.0.0",
+    "click>=8.0.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    # O35（P1）：openai / zai-sdk 此前只在 requirements.txt/.lock 中声明，
+    # pyproject 漏声明 → `pip install .` 的用户缺这两个直接 import 依赖：
+    #   openai   — src/api/api_manager.py 顶层 `import openai`（多模型路由核心）
+    #   zai-sdk  — src/agents/llm_client.py `from zai import ZhipuAiClient`
+    #              （config.local.example 的 GLM/BigModel 端点需要）
+    # 二者均被 requirements.txt 显式声明（含注释说明"直接 import"），
+    # 此处对齐同一口径（check_lock_sync 只比对 requirements.txt↔lock，
+    # pyproject 侧此前无任何守卫，现由 tests/test_packaging.py 锁定）。
+    "openai>=1.0.0",
+    "zai-sdk>=0.2.0",
+]
+
+[tool.setuptools.dynamic]
+# 与 setup.py _load_version() 同源（读 src/__init__.py 的 __version__），
+# 保证 wheel / sdist / pip show / aitester --version 四处版本一致。
+version = {attr = "src.__version__"}
+
+[project.optional-dependencies]
+rag = ["chromadb>=0.5.0"]
+viz = ["matplotlib>=3.7.0", "pandas>=2.0.0"]
+experiments = ["scipy>=1.10.0", "datasets>=5.0.0"]
+ux = ["rich>=13.0.0", "tqdm>=4.65.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
+
+[project.scripts]
+aitester = "src.cli.app:cli"
+
 [tool.ruff]
 # Ruff 配置文件
 # 快速 Python lint 工具，替代 flake8 + pydocstyle + isort
@@ -6,6 +66,11 @@
 target-version = "py312"
 line-length = 120
 
+# 工作树临时目录（未 gitignore 的审查探针 / 实验 scratch 代码，
+# 不纳入 lint 口径；CI 只跑 `ruff check .` 于 clean checkout，
+# 该目录不存在 → 无影响）
+extend-exclude = ["tmp_apr_baseline"]
+
 [tool.ruff.lint]
 # 启用的规则集
 select = [
@@ -13,23 +78,71 @@ select = [
     "W",    # pycodestyle 警告
     "F",    # pyflakes
     "I",    # isort 导入排序
-    "C90",  # mccabe 复杂度检查
     "B",    # flake8-bugbear
     "UP",   # pyupgrade
     "SIM",  # flake8-simplify 代码简化
     "PERF", # perflint 性能优化
     "RET",  # flake8-return 返回语句改进
     "RUF",  # ruff 自有规则（排除中文全角误报 001/002/003）
+    # O32（2026-09-30 全面审查优化）：扩充规则集——见下方逐项说明与
+    # per-file-ignores 豁免口径（豁免均为"CLI 用户输出 / 测试脚手架 /
+    # 合成数据集模板字符串"三类合法场景，非漏检）。
+    "T20",  # print 禁令（库代码禁 print；CLI 输出文件按豁免口径放行）
+    "A",    # flake8-builtins（内建名遮蔽）
+    "S",    # flake8-bandit（安全反模式；与 CI bandit 双口径互补）
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez（naive datetime）
+    "G",    # flake8-logging-format（日志格式）
+    "ISC",  # implicit-str-concat
+    "PIE",  # flake8-pie
+    "PL",   # pylint（含 PLW1510 subprocess 无 check 等）
+    "PLE",  # pylint errors（含 PLE0704 bare raise）
+    "TRY",  # tryceratops（保留：仅 TRY003/TRY300/TRY301/TRY400 等高噪项被 ignore）
+    "FURB", # refurb（现代写法替换）
+    "PGH",  # pygrep-hooks（含 PGH003 blanket type: ignore）
 ]
 
-# 忽略的规则（与项目风格冲突的）
+# 忽略的规则（与项目风格冲突的 / 高噪低值的）
+# O27（2026-09-29 审查 P0）：移除 "C90" + "C901" 死配置——
+# 此前 mccabe 复杂度检查（"C90"）被 select 但又被 ignore 全局忽略，
+# 等价于未启用（零检查效果），保留会误导阅读者以为复杂度有门禁。
+# 现彻底删除，避免"死配置"假象。
 ignore = [
     "E501",  # 行长度由 line-length 控制
     "W191",  # 允许缩进使用空格
-    "C901",  # 允许函数复杂度超过阈值（设计决策，非 bug）
     "RUF001",  # 模糊 unicode 字符（全角逗号/引号等中文标点，注释中大量存在，误报）
     "RUF002",  # 模糊 unicode 字符（同上，中文注释误报）
     "RUF003",  # 模糊 unicode 字符（同上，中文注释误报）
+    # ── O32（2026-09-30 全面审查优化）扩充规则集的配套 ignore ──────────────
+    # 每条均附"为什么这类场景在本仓属可接受/高噪"的理由（不掩盖真实缺陷：
+    # 同类风险仍由 CI bandit 扫描 + review 守卫覆盖）。
+    "S101",  # assert：src 内 5 处均为 mypy 类型窄化（节点路由/mock 路径），非运行时校验
+    "S102",  # exec：runtime_probe 对 LLM 生成代码的探针执行（沙箱链路核心，有意设计）
+    "S103",  # os.chmod：llm_client 缓存目录 0700 / 文件 0600 收敛（安全加固而非风险）
+    "S105",  # hardcoded-password-string：误报面大（"password"/"secret" 常量名命中枚举值/合成数据集模板）
+    "S108",  # hardcoded-temp-path：多为 docker --tmpfs 参数与测试路径字面量，非真实落盘
+    "S110",  # try-except-pass：14 处均有注释说明"卫生性操作不阻断主流程"（审查口径）
+    "S311",  # 非加密随机数：负载均衡加权轮询与合成数据集生成（非安全用途）
+    "S314",  # xml.etree：无外部输入解析场景（仅内部生成序列化）
+    "S324",  # md5/sha1：缓存键与去重指纹（非安全用途，与 bandit B324 同口径 skip）
+    "S603",  # subprocess 无 shell：全仓 list 形式调用（无注入面），executor 设计核心
+    "S607",  # 部分路径启动：PATH 查找 python/git 等可信解释器（有意）
+    "PLC0415",  # 延迟 import：本仓惯例（避免循环导入 / 可选依赖透明降级）
+    "PLC0206",  # dict 索引拆包：低频且显式写法可读性更好
+    "PLR2004",  # 魔数比较：tests/** 已豁免；src 内散见阈值多有注释（逐个常量化属独立批次）
+    "PLR0124",  # 自比较：experiments 中 `p != p` 为 NaN 判定惯用法（有意）
+    "PLR0911",  # too-many-return：逐函数拆分属独立重构批次（本轮不动控制流）
+    "PLR0912",  # too-many-branches：同上
+    "PLR0913",  # too-many-arguments：同上
+    "PLR0915",  # too-many-statements：同上
+    "PLR0917",  # too-many-positional：同上
+    "PLW0603",  # global：单例/缓存模块级状态为既有设计（api_manager/rag/dependency 等）
+    "TRY003",  # 长错误消息：中文用户可读消息为项目风格（不强制自定义异常类）
+    "TRY300",  # try-else：既有控制流，逐处改动风险大于收益
+    "TRY301",  # try 内 raise：同上
+    "TRY400",  # logging.error(exc_info=True) → exception：输出等价，存量 16 处不动（2 处 src 本轮改）
+    "PGH003",  # blanket type: ignore：存量 9 处，收窄需先开 mypy warn_unused_ignores（独立批次）
+    "DTZ005",  # naive datetime.now()：报告时间戳/文件名均为本地时间口径（改 UTC 影响既有工件比对）
 ]
 
 [tool.ruff.lint.isort]
@@ -39,14 +152,35 @@ known-third-party = ["langchain", "langgraph", "pytest"]
 force-single-line = false
 case-sensitive = true
 
-[tool.ruff.lint.mccabe]
-# 最大复杂度阈值
-max-complexity = 10
-
 [tool.ruff.lint.per-file-ignores]
-# 测试文件忽略某些规则
-"tests/**" = ["PLR2004"]  # 允许测试中的魔数
-"examples/**" = ["E501"]  # 示例代码允许长行
+# 测试 / 脚本 / 实验 / 示例目录的豁免口径（O32 扩充规则集的配套）：
+# 这些目录的 print / dict() 字面量 / 循环变量覆盖等属测试脚手架与 CLI 工具
+# 的正常写法，不做约束；生产代码 src/ 不豁免（仅 5 个 CLI 报表模块经文件级
+# `# ruff: noqa: T201` 放行用户可见的表格输出）。
+"tests/**" = ["PLR2004", "T201", "C401", "C408", "PLW0108", "C416", "C420", "PLW1510", "A001", "A002", "A004", "ISC004", "FURB122", "FURB167", "FURB171", "FURB188", "FURB192", "PIE790", "PIE807", "PIE808", "PLR0402", "G201", "S105", "S108"]
+"examples/**" = ["E501", "T201", "PLR0402", "C408"]
+"scripts/**" = ["T201", "PLR0402", "C408", "C416", "C401", "FURB122", "FURB167", "PLW2901", "ISC004", "PLW1510", "A001", "A004", "DTZ005", "PIE810", "PLR1714", "FURB188", "C420", "PLR5501", "PLW0108", "G201", "TRY400", "FURB192", "FURB171", "PLC0207"]
+"experiments/**" = ["T201", "PLR0402", "C408", "C416", "C401", "FURB122", "FURB167", "PLW2901", "ISC004", "PLW1510", "A001", "A004", "DTZ005", "PIE810", "PLR1714", "FURB188", "C420", "PLR5501", "PLW0108", "G201", "TRY400", "FURB192", "FURB171", "PLC0207"]
+
+# O34（2026-09-30 全面审查优化 P1）：bandit 配置（CI supply-chain 作业以
+# `bandit -r src/ -c pyproject.toml` 消费；此前 pyproject 无 [tool.bandit]
+# 段 → bandit 直接报配置错误，扫描从未真正执行）。
+# skip 口径（本地 bandit 1.9.4 实测 79 条 findings 逐类核对后的"已接受风险"
+# 清单；新增类型如 B100 exec / B601 shell / B302 pickle / B701 jinja2 仍会命中）：
+#   B101 assert        — src 内 5 处为 mypy 类型窄化（路由/mock 路径），非运行时校验
+#   B105 hardcode-pwd  — 枚举值/合成数据集模板字符串误报（"password" 常量名命中）
+#   B108 tmp-path      — docker --tmpfs 参数误报（非真实落盘）
+#   B110 try-except-pass — 3 处均有注释说明"卫生性操作不阻断主流程"
+#   B311 pseudo-random — 负载均衡加权轮询与合成数据集生成（非加密用途）
+#   B324 md5/sha1      — 缓存键与去重指纹（非安全用途，与 ruff S324 同口径）
+#   B404 import-subprocess — executor 设计核心（list 形式调用，无注入面）
+#   B603 subprocess-no-shell — 同上：全部 list 形式 + 无 shell=True
+#   B607 partial-path  — PATH 查找 python/git 等可信解释器（有意）
+#   B615 HF unpinned   — 未钉 revision 的 HF 下载（模型/数据集版本钉住为独立
+#                        批次 TODO：需联网解析 revision hash 后固化）
+[tool.bandit]
+skips = ["B101", "B105", "B108", "B110", "B311", "B324", "B404", "B603", "B607", "B615"]
+exclude_dirs = ["tests", "examples", "build", "dist", ".venv", "experiments/results"]
 
 [tool.mypy]
 # 第三方库缺少 py.typed/stubs 时跳过其分析（不影响本仓代码类型检查）
@@ -57,6 +191,9 @@ module = [
     "dbutils.*",
     "tree_sitter",
     "tree_sitter_typescript",
+    # R7（2026-09-30 独立审查 P0）：hypothesis 为可选依赖（SpecIR 编译
+    # Hypothesis 策略；未安装时降级为 pytest 参数化断言），无 py.typed 声明
+    "hypothesis.*",
 ]
 ignore_missing_imports = true
 

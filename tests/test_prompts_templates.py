@@ -58,11 +58,18 @@ class TestPromptModuleContract:
             assert isinstance(prompt, str)
 
     def test_no_trailing_whitespace_lines(self):
+        """三个 prompt 每行不含尾随空白（尾部单个换行允许）。
+
+        此前断言写成 `prompt == prompt.rstrip("\\n") or True`——`or True`
+        使比较恒真（无论 prompt 是否带尾随换行都通过，2026-10-02 审查
+        修复消除恒真断言）。
+        """
         for name, prompt in (
             ("PLANNER", PLANNER_SYSTEM_PROMPT),
             ("GENERATOR", GENERATOR_SYSTEM_PROMPT),
             ("DEBUGGER", DEBUGGER_SYSTEM_PROMPT),
         ):
-            assert prompt == prompt.rstrip("\n") or True  # 允许尾部换行，仅记录不强制
+            for i, line in enumerate(prompt.split("\n"), start=1):
+                assert line == line.rstrip(), f"{name} prompt 第 {i} 行含尾随空白"
             # 关键：不能是空串或纯空白
             assert prompt.strip(), f"{name} prompt 不应为空白"

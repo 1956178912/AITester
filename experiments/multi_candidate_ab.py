@@ -35,7 +35,13 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # 错误类型分桶（与 summarize_full_stack 同口径）
-_ERROR_BUCKETS: tuple[str, ...] = ("assertion", "runtime", "import_error", "syntax", "unknown")
+# 2026-10-01 全面审查 P1 修复：此前 5 桶硬编码与 ErrorCategory 17 值枚举
+# 零交集漂移，实测 88% 失败行落 "other"，分桶失去区分度。现直接
+# import ErrorCategory 动态分桶（枚举值单一来源，与
+# experiments/summarize_full_stack.py 同口径）。
+from src.agents.error_classifier import ErrorCategory  # noqa: E402
+
+_ERROR_BUCKETS: tuple[str, ...] = tuple(v.value for v in ErrorCategory)
 
 
 def _run_one_arm(

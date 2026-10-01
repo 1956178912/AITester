@@ -160,6 +160,22 @@ class AITesterState(TypedDict, total=False):
     iteration: int
     max_iterations: int
     regeneration_count: int
+    # M5（2026-09-29 审查 P0）：测试重生成假通过标记。_executor_node 在
+    # "本节点由再生成路由进入（regeneration_count > 0）且本轮 test_passed=True"
+    # 时写入 True。此时源码未被修复（regenerate 路由不经过 debugger/patch_applier），
+    # 测试重生成后通过不等于缺陷被处理——经典 oracle-from-implementation 假成功。
+    # 该标记为纯观测（不参与路由），供评估层把该类任务归入"未验证假通过"。
+    # 缺省 None = 本任务未触发再生成路径（历史口径不变）。
+    test_regenerated_pass_unverified: bool | None
+    # 2026-09-29 审查 P0（StopReason 统一停止条件）：工作流终止原因枚举值
+    # （"test_passed" / "max_iterations" / "skip_debugger_repair_invalid" /
+    # "test_defect_regeneration_cap" / "test_gen_diagnosis_early" /
+    # "test_gen_diagnosis" / "budget_exceeded" / "regression_detected" /
+    # "recursion_limit" / "unknown"）。由 determine_stop_reason 单点判定，
+    # 路由函数在返回 "done" 时写入 state["stop_reason"]（纯观测，不参与
+    # 路由），供实验层"终止原因分布可解释"消费。缺省 None = 未终止
+    # （历史口径不变）。
+    stop_reason: str | None
     repair_history: list[dict[str, Any]]
     # 3.2 执行反馈轨迹（默认常开：纯观测层，随 executor 节点追加）
     execution_trace: list[dict[str, Any]]
@@ -226,6 +242,28 @@ class AITesterState(TypedDict, total=False):
     # （每项 {file, line, message, kind}；LLM 层修订成功时 patch 已被替换，
     # 疑点仍保留供实验分析消费）
     type_repair_findings: list[dict[str, Any]] | None
+    # M14（2026-09-29 审查 P0）：TYPE_CHECK_ENABLE=true 时 _debugger_node 写入的
+    # mypy 静态层疑点数（原为 4 键之一，未在 TypedDict 声明 → LangGraph 静默
+    # 丢弃，导致 TYPE_CHECK_ENABLE 的效果永远无法被度量）。缺省 0 = 未启用 /
+    # 未安装 mypy。
+    mypy_findings_count: int | None
+    # M14：1.3 分层压缩降级链本轮是否因契约拒绝反馈而收紧了上下文
+    # （原 4 键之一，声明缺失被丢弃）。缺省 False = 未触发降级。
+    downgrade_triggered: bool | None
+    # M14：1.3 分层压缩降级链档位名（原 4 键之一，声明缺失被丢弃）。
+    # 缺省 None = 未触发降级。
+    downgrade_tier: str | None
+    # 3.2 对抗性推理：_debugger_node 写入的 LLM 输出对抗性校验结果
+    # （原 4 键之一，声明缺失被丢弃；缺省 {"scenarios_checked":0,
+    # "all_passed":False} = 未运行 / 未启用）。
+    adversarial_check: dict[str, Any] | None
+    # P2 并行专家池（EXPERT_POOL_ENABLE=true 时 _debugger_node 写入）：
+    # 专家池元数据 {dimensions_consulted, verified_count, winner_dimension,
+    # agreed_dimensions, expert_pool_applied, expert_pool_winner,
+    # synthesized, debate_revise, debate_top_k}。缺省 None = 未启用专家池。
+    # M14（2026-09-29 审查 P0）：expert_pool_meta 此前为节点内死局部变量，
+    # 6 处赋值从未并入返回 dict，该假设不可证伪；现显式声明并入 state。
+    expert_pool_meta: dict[str, Any] | None
     # 1.3 改进（命名契约 AST 符号守卫）：_patch_applier_node 被契约检查拒绝时
     # 写入本轮缺失的模块级符号列表（check_naming_contract 口径）；None = 本轮
     # 无契约拒绝。供 1.3 分层降级链（advance_context_tier）与实验分析消费
@@ -272,6 +310,23 @@ class AITesterState(TypedDict, total=False):
     # 本次增强是否成功注入 oracle 字段（False = 保守降级保留原 test_cases）。
     # 供实验分析"预言增强触发率 / 弱预言占比"消费；默认 None = 未启用开关。
     oracle_enhanced: bool | None
+    # R7（2026-09-30 独立审查 P0）：SpecIR 可执行规约 IR（SPEC_IR_ENABLE=true
+    # 时由 _planner_node 经 parse_logic_analysis 解析后写入）：
+    # {schema_version, source, function_name, preconditions, postconditions,
+    #  invariants, boundaries[], oracle_kind, findings[]}；None = 未启用 /
+    # 解析失败 / 无规约材料（纯观测，不阻断主流程）。
+    # 供实验层"SpecIR 覆盖率 / oracle 转换率 / 规约变异杀死率"消费。
+    spec_ir: dict[str, Any] | None
+    # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁标记（FLAKY_CHECK_ENABLE=true
+    # 时由 _executor_node 对失败轮做重复执行一致性检测后写入）：
+    # flaky_detected = 既有 pass 又有 fail（测试不稳定，test_passed 保守记 False）；
+    # flaky_pass_count / flaky_total_count 供统计层 flaky fraction 消费；
+    # flaky_unverified = True 时该轮结果不可信（M1 指标按"不可测"处理）。
+    # 默认 None / False（未启用 / 未检测 / 稳定失败）。
+    flaky_detected: bool | None
+    flaky_pass_count: int | None
+    flaky_total_count: int | None
+    flaky_unverified: bool | None
     # P0 运行时探针快照（RUNTIME_PROBE_ENABLE=true 时由 _executor_node 在测试
     # 失败时写入）：sys.settrace 一次性探针捕获的"失败时刻局部变量快照"
     # {"success": bool, "error": str, "frames": [{function, file, line, locals}]}；
@@ -290,6 +345,67 @@ class AITesterState(TypedDict, total=False):
     # 高频故障检测命中时 _debugger_node 写入 True）：供实验分析"哪些任务
     # 走了故障频率强化路径"消费。None = 开关关 / 非高频（历史口径不变）。
     failure_frequency_applied: bool | None
+    # O3（2026-09-29 审查 P1）：分支覆盖率测量结果（BRANCH_COVERAGE_INJECT_ENABLE=true
+    # 时由 _executor_node 在本地 / venv 沙箱执行完成后写入）：coverage 模块
+    # branch=True 独立测量产物，含 {"branch_coverage": float, "total_branches": int,
+    # "covered_branches": int, "missing_branches": [{"line": int, "to": int}, ...],
+    # "target_module": str}；None = 开关关 / 测量失败 / coverage 不可用 /
+    # Docker 链路（历史口径不变）。供 _generator_node 渲染未覆盖分支清单
+    # 注入 prompt，以及实验分析"未覆盖分支数随迭代收敛曲线"消费。
+    branch_coverage: dict[str, Any] | None
+    # O2（2026-09-29 审查 P1）：谱系故障定位 Top-k 结果（FL_SPECTRAL_ENABLE=true
+    # 时由 _debugger_node 经 measure_fl_spectral_focus 测量后写入）：Ochiai
+    # 打分产物，含 {"top_k": [{"line": int, "score": float}, ...],
+    # "total_candidates": int, "failed_lines": int, "target_module": str}；
+    # None = 开关关 / 测量失败 / 无失败用例（历史口径不变）。
+    # 供 _debugger_node 渲染定位先验段落注入修复 prompt（O2 谱系定位），
+    # 以及实验分析"FL@k 指标"消费。
+    fl_spectral_focus: dict[str, Any] | None
+    # M6（2026-09-29 审查 P0）：补丁写盘前快照的内部通道键（节点间传递，
+    # 不出现在 workflow 输入/输出）。_safe_write_patch 在写盘前把原始代码
+    # shutil.copy2 到 tempfile 目录，记入 _last_patch_snapshot（路径）+
+    # _last_patch_iteration（迭代编号）；_rollback_last_patch 读取快照原子
+    # 写回 target_file 后清除这两个键。
+    _last_patch_snapshot: str | None
+    _last_patch_iteration: int | None
+    # O35（2026-09-30 全面审查 P1）：以下三个键此前由节点 update dict 写入但
+    # **未在本 TypedDict 声明**——LangGraph 按 schema 白名单收敛节点返回值，
+    # 未声明键被静默丢弃（实测 langgraph 1.2.11：node 返回 {"a":1,
+    # "undeclared": "x"} → 下一状态只有 {"a":1}，无任何告警）。后果：
+    # O6 确定性守卫报告 / O6 testless 四层验证结果 / M6 回滚标记永远到不了
+    # final_state，实验分析读到的恒是 None。现补声明（与 M14 补
+    # expert_pool_meta 同一修复模式）。
+    # 确定性守卫报告（DETERMINISTIC_GUARD_ENABLE=true 时 _generator_node
+    # 写入；开关默认关时恒 None）。
+    deterministic_guard_report: dict[str, Any] | None
+    # testless 四层验证结果（TESTLESS_VALIDATION_ENABLE=true 且补丁写盘后
+    # _patch_applier_node 写入；开关默认关时恒 None）。
+    testless_validation: dict[str, Any] | None
+    # M6 坏补丁回滚标记：_executor_node 判定本轮失败并成功从快照恢复
+    # 源码时置 True（纯观测，供"回滚成功率"统计）。None = 未触发回滚。
+    last_patch_rolled_back: bool | None
+    # 5.4 预算封顶标记：任一节点捕获 BudgetExceededError 时置 True，
+    # 供 determine_stop_reason 的 BUDGET_EXCEEDED 分支与实验分析消费。
+    # 此前该分支读 state.get("budget_exceeded") 但全仓无写入点 + 键未声明
+    # → 分支不可达，预算封顶任务恒被标成 max_iterations。None = 未超限。
+    budget_exceeded: bool | None
+    # 回归检测标记（P2P 门禁 / regression 检测写入点预留）：determine_stop_reason
+    # 的 REGRESSION_DETECTED 分支读取。声明后写入方不再被静默丢弃；
+    # None = 未检测到回归（当前无写入方，分支保持保守不可达）。
+    regression_detected: bool | None
+    # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门（src/tools/patch_evidence.py）。
+    # patch_evidence_gate_enabled()（默认 true）时 _patch_applier_node 在写盘前
+    # 以"gold / sbfl / keyword / none"判级：等级不足（keyword/none）拒绝写盘
+    # （patch_applied=False，源码保持原样）并把本键置 True——"源码被改但无
+    # 规格/gold/谱系定位依据"的轮次计数，供实验分析"源码腐蚀风险"消费
+    # （R33 验证指标：该计数 = 0）。None = 证据门未触发（opt-out 或被拒轮次
+    # 未发生），历史口径不变。
+    source_patched_unverified: bool | None
+    # P0（R33）：本轮补丁的确定性证据等级（"gold" / "sbfl" / "keyword" /
+    # "none"），_patch_applier_node 写盘前经 patch_evidence.assess_patch_
+    # evidence 计算并写入（纯观测，证据门 opt-out 时仍记录供消融对照）。
+    # None = 本轮无补丁 / 未计算。
+    patch_evidence_level: str | None
 
 
 def create_initial_state(
@@ -356,6 +472,10 @@ def create_initial_state(
         iteration=0,
         max_iterations=max_iterations,
         regeneration_count=0,
+        # M5（2026-09-29 审查 P0）：测试重生成假通过标记（缺省 None = 未触发再生成路径）
+        test_regenerated_pass_unverified=None,
+        # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因（缺省 None = 未终止）
+        stop_reason=None,
         repair_history=[],
         # 3.2 执行反馈轨迹（随 executor 节点追加，初始空列表）
         execution_trace=[],
@@ -396,6 +516,14 @@ def create_initial_state(
         diagnosis_source=None,
         # 2.1 PAGENT 风格类型修复层疑点（默认 None，_debugger_node 写入）
         type_repair_findings=None,
+        # M14（2026-09-29 审查 P0）：TYPE_CHECK_ENABLE 观测键 + 降级链键 +
+        # 对抗性推理键 + 专家池元数据（原 4 键未在 TypedDict 声明 → LangGraph
+        # 静默丢弃；expert_pool_meta 原为节点内死局部变量，现并入 state）
+        mypy_findings_count=None,
+        downgrade_triggered=None,
+        downgrade_tier=None,
+        adversarial_check=None,
+        expert_pool_meta=None,
         # 1.3 命名契约符号守卫（默认 None，_patch_applier_node 契约拒绝时写入）
         contract_missing_symbols=None,
         # 2.2 补丁后处理重采样统计（默认 None，未启用重采样时为 None）
@@ -416,6 +544,13 @@ def create_initial_state(
         # P0 测试预言增强观测标志（默认 None，ORACLE_ENHANCE_ENABLE=true 时
         # 由 _planner_node 写入 True/False；开关默认关时恒 None，历史口径不变）
         oracle_enhanced=None,
+        # R7（2026-09-30 独立审查 P0）：SpecIR 默认 None（未启用 / 解析失败）
+        spec_ir=None,
+        # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁默认未检测
+        flaky_detected=None,
+        flaky_pass_count=None,
+        flaky_total_count=None,
+        flaky_unverified=None,
         # P0 运行时探针快照（默认 None，RUNTIME_PROBE_ENABLE=true 时由
         # _executor_node 在测试失败时写入；开关默认关时恒 None，历史口径不变）
         runtime_probe_snapshot=None,
@@ -428,4 +563,28 @@ def create_initial_state(
         # ANNEAL-lite 故障频率强化提示是否注入（默认 None，FAILURE_FREQUENCY_ENABLE
         # =true 且高频故障检测命中时 _debugger_node 写入 True；开关默认关时恒 None）
         failure_frequency_applied=None,
+        # O3（2026-09-29 审查 P1）：分支覆盖率测量结果（默认 None，
+        # BRANCH_COVERAGE_INJECT_ENABLE=true 时由 _executor_node 写入；
+        # 开关默认关时恒 None，历史口径不变）
+        branch_coverage=None,
+        # O2（2026-09-29 审查 P1）：谱系故障定位 Top-k 结果（默认 None，
+        # FL_SPECTRAL_ENABLE=true 时由 _debugger_node 写入；
+        # 开关默认关时恒 None，历史口径不变）
+        fl_spectral_focus=None,
+        # M6（2026-09-29 审查 P0）：补丁写盘前快照内部通道键（节点间传递，
+        # 不出现在 workflow 输入/输出）。_safe_write_patch 写盘前写入，
+        # _rollback_last_patch 读取后清除。缺省 None = 本轮无快照。
+        _last_patch_snapshot=None,
+        _last_patch_iteration=None,
+        # O35（2026-09-30 全面审查 P1）：三个"声明缺失即被 LangGraph 静默丢弃"
+        # 的观测键补初始值（见 AITesterState 对应字段注释）。
+        deterministic_guard_report=None,
+        testless_validation=None,
+        last_patch_rolled_back=None,
+        # 5.4 预算封顶标记 / 回归检测标记（determine_stop_reason 消费）
+        budget_exceeded=None,
+        regression_detected=None,
+        # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门（缺省 None = 未触发）
+        source_patched_unverified=None,
+        patch_evidence_level=None,
     )

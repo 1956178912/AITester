@@ -110,9 +110,16 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
         tmp_path = f.name
 
     try:
+        import sys
+
         result = subprocess.run(
             [
-                "python",
+                # O35（P2）：用当前解释器而非 PATH 上的 "python"——本模块
+                # sys_executable() 已为导入冒烟层统一口径（L231），mypy 层此前
+                # 硬编码 "python"：venv 场景可能解析到系统解释器（缺 mypy →
+                # OSError → 静默"保守跳过"，该层实际从未生效），且跳过原因
+                # 只进 detail 文本，调用方无从区分"没装 mypy"与"解释器不对"。
+                sys.executable,
                 "-m",
                 "mypy",
                 "--no-error-summary",
@@ -120,12 +127,13 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
                 "--ignore-missing-imports",
                 "--allow-redefinition",
                 "--python-version",
-                f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+                f"{sys.version_info.major}.{sys.version_info.minor}",
                 tmp_path,
             ],
             capture_output=True,
             text=True,
             timeout=60,
+            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
         output = (result.stdout + result.stderr).strip()
         # mypy 返回码：0 = 无错误，1 = 有类型错误，2 = 致命错误，3 = 内部错误
@@ -211,6 +219,7 @@ def _run_import_smoke_layer(
             text=True,
             timeout=timeout,
             env=env,
+            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
     except subprocess.TimeoutExpired:
         return {"passed": False, "detail": f"导入冒烟超时（>{timeout}s）"}

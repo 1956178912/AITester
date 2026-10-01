@@ -5,6 +5,7 @@ SensitiveFormatter 的行为，以及 redact_dict 对字典的脱敏。
 """
 
 import logging
+from typing import ClassVar
 
 import pytest
 
@@ -16,6 +17,7 @@ from src.utils.logging_utils import (
 )
 
 
+@pytest.mark.unit
 class TestMaskSensitiveInfo:
     """mask_sensitive_info 的各敏感模式覆盖测试。"""
 
@@ -73,6 +75,7 @@ class TestMaskSensitiveInfo:
         assert short_hex in mask_sensitive_info(f"id {short_hex} end")
 
 
+@pytest.mark.unit
 class TestSensitiveFilter:
     """SensitiveFilter 行为测试。"""
 
@@ -95,6 +98,7 @@ class TestSensitiveFilter:
         assert record.getMessage() == "plain"
 
 
+@pytest.mark.unit
 class TestSensitiveFormatter:
     """SensitiveFormatter 行为测试（对完整格式化行脱敏）。"""
 
@@ -117,6 +121,7 @@ class TestSensitiveFormatter:
         assert "<REDACTED_API_KEY>" in out
 
 
+@pytest.mark.unit
 class TestRedactDict:
     """redact_dict 对字典值的脱敏测试。"""
 
@@ -145,6 +150,7 @@ class TestRedactDict:
         assert redact_dict(None) == {}
 
 
+@pytest.mark.unit
 class TestSensitiveFilterEdgeCases:
     """5.1 脱敏边界用例补强：格式化失败 / exc_info 堆栈 / 嵌套结构。"""
 
@@ -216,6 +222,7 @@ class TestSensitiveFilterEdgeCases:
         assert "<REDACTED_API_KEY>" in twice
 
 
+@pytest.mark.unit
 class TestFallbackMaskSensitiveInfo:
     """4.2 审计 R-1：fallback_mask_sensitive_info 降级兜底行为测试。
 
@@ -276,6 +283,7 @@ class TestFallbackMaskSensitiveInfo:
         assert fallback_mask_sensitive_info(None) == ""
 
 
+@pytest.mark.unit
 class TestSensitiveFormatterExceptionPath:
     """5.1 formatter 异常路径补强。"""
 
@@ -307,6 +315,7 @@ class TestSensitiveFormatterExceptionPath:
         assert out == "plain", "脱敏失败时退回原始文本，不阻断日志输出"
 
 
+@pytest.mark.unit
 class TestSensitiveInjectionRegression:
     """4.2 自动化脱敏回归测试：模拟敏感信息注入，验证任何新代码路径
     都不会绕过脱敏（CI 用例，确保 mask_sensitive_info 的核心拦截规则
@@ -377,6 +386,7 @@ class TestSensitiveInjectionRegression:
         assert secret not in out, "APIManager._redact 泄漏"
 
 
+@pytest.mark.unit
 class TestSensitiveInjectionCIPassGuard:
     """4.2 CI 脱敏检查：模拟'新增日志输出点'场景，验证敏感信息注入
     到结构化 JSONL 追踪（trace.py）时仍被脱敏，不绕过。"""
@@ -395,3 +405,95 @@ class TestSensitiveInjectionCIPassGuard:
         redacted = redact_dict(payload)
         assert secret not in str(redacted), "redact_dict 未拦截嵌套敏感字段"
         assert redacted["normal_field"] == "hello", "非敏感字段应保留"
+
+
+@pytest.mark.unit
+class TestUppercaseCredentialAssignmentRedaction:
+    """O17 残留（2026-09-29 审查 D.4-4 + 2026-10-02 修复）：大写命名凭证
+    赋值（MYSQL_PASSWORD= / DB_SECRET= 等）的脱敏回归。
+
+    历史盲区：`(?:key|token|secret|password)=` 模式小写锚定且大小写敏感，
+    `.env:15` 形态的 `MYSQL_PASSWORD=<值>` 原样通过 mask_sensitive_info
+    （审查实测"敏感行漏检"）。修复后新增大写赋值模式，与
+    .git-hooks/check_secret_leak.sh 同口径。
+    """
+
+    def test_uppercase_password_assignment_redacted(self):
+        """MYSQL_PASSWORD= 形态不再原样通过。"""
+        line = "MYSQL_PASSWORD=SuperSecret123"
+        out = mask_sensitive_info(line)
+        assert "SuperSecret123" not in out, f"大写凭证赋值未脱敏: {out!r}"
+        assert "<REDACTED_CREDENTIAL>" in out
+
+    def test_uppercase_secret_assignment_redacted(self):
+        """DB_SECRET= / AWS_SECRET_ACCESS_KEY= 形态同样拦截。"""
+        for line in ("DB_SECRET=abcdef123456", "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGBPxRfiCYEX"):
+            out = mask_sensitive_info(line)
+            assert "<REDACTED_" in out, f"未脱敏: {line!r} -> {out!r}"
+            assert line.split("=", 1)[1] not in out
+
+    def test_lowercase_assignment_unchanged_behavior(self):
+        """既有小写 key= / password= 锚定行为不变（历史口径回归）。"""
+        out = mask_sensitive_info("request with key=abcd123456efgh completed")
+        assert "abcd123456efgh" not in out
+        assert "key=<REDACTED>" in out
+
+    def test_normal_text_unaffected(self):
+        """无凭证形态的普通文本不被误伤。"""
+        text = "MYSQL 连接池已创建: max=10, pass rate 100%"
+        assert mask_sensitive_info(text) == text
+
+    def test_redact_text_same_output_as_mask(self):
+        """redact_text 与 mask_sensitive_info 对该形态口径一致（一致性守卫）。"""
+        line = "MYSQL_PASSWORD=SuperSecret123"
+        from src.utils.logging_utils import redact_text
+
+        assert redact_text(line) == mask_sensitive_info(line)
+
+
+@pytest.mark.unit
+class TestVerifyRedactionConsistency:
+    """verify_redaction_consistency 跨路径一致性守卫（O33 补测：此前零覆盖）。
+
+    该函数是 LiteLLM CVE-2026-89032 / Spring AI CVE-2026-59308 同源风险
+    （两套键/口径派生不一致 → 跨上下文泄漏）在本仓的护栏：主路径
+    mask_sensitive_info 与降级链 redact_text 对同一输入必须逐字一致，
+    且 _FALLBACK_PATTERNS 的占位符必须与 _SENSITIVE_PATTERNS 同源派生。
+    """
+
+    _SAMPLES: ClassVar[list[str]] = [
+        "sk-abcdefghijklmnopqrstuv1234",
+        "Authorization: Bearer abcdef123456",
+        "api_key=deadbeefdeadbeefdeadbeef",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
+        "mysql://root:Passw0rd@dbhost:3306/prod",
+        "MYSQL_PASSWORD=SuperSecret123",
+        "https://user:pass@host.example/path",
+    ]
+
+    def test_consistent_on_sensitive_samples(self):
+        from src.utils.logging_utils import verify_redaction_consistency
+
+        assert verify_redaction_consistency(self._SAMPLES) is True
+
+    def test_empty_samples_returns_true(self):
+        """空样本（无可比对输入）按"无数据即无分叉"口径返回 True。"""
+        from src.utils.logging_utils import verify_redaction_consistency
+
+        assert verify_redaction_consistency([]) is True
+
+    def test_both_paths_agree_on_every_sample(self):
+        """逐样本比对主路径与降级链输出（守卫内部逻辑的显式复算）。"""
+        from src.utils.logging_utils import redact_text
+
+        for s in self._SAMPLES:
+            assert mask_sensitive_info(s) == redact_text(s), f"口径分叉: {s!r}"
+
+    def test_fallback_patterns_derived_from_main(self):
+        """_FALLBACK_PATTERNS 每条 (pattern, 占位符) 必须与 _SENSITIVE_PATTERNS 同源（键派生一致性）。"""
+        from src.utils.logging_utils import _FALLBACK_PATTERNS, _SENSITIVE_PATTERNS
+
+        main_map = {p: r for p, r in _SENSITIVE_PATTERNS}
+        assert len(_FALLBACK_PATTERNS) > 0
+        for pattern, repl in _FALLBACK_PATTERNS:
+            assert main_map.get(pattern) == repl, "fallback 占位符与主模式键派生分叉（CVE-2026-59308 同源风险）"

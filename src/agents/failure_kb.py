@@ -22,6 +22,7 @@ JSON）可被后续运行复用，同类错误的修复策略跨任务传递。
     ④ 后续运行消费：`_debugger_node` 经 `kb_debugger_snippet()` 注入
     ⑤ 效果验证：`analyze_results.py` 统计"走 KB 路径"的任务（观测层）
 """
+# ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
 
 from __future__ import annotations
 

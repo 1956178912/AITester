@@ -223,18 +223,16 @@ class TestCodebertBackend:
         embedding_utils._backend_cache = {"instance": fake_instance, "name": "codebert"}
         embedding_utils._backend_initialized = True
 
-        # torch 未安装时 _embed_with_backend 的 codebert 分支应走异常路径回退 None
-        # （保守口径：不崩溃）
-        try:
-            vec = embedding_utils._embed_with_backend(fake_instance, "def f(): pass")
-            # torch 可用时返回归一化向量列表
-            if vec is not None:
-                assert isinstance(vec, list)
-                assert all(isinstance(x, float) for x in vec)
-        except Exception:
-            # 无 torch：保守路径（_embed_with_backend 捕获后回退 None 语义由
-            # 调用方 embed_text 承担）；本测试仅验证不抛出未捕获异常
-            pass
+        # O35（2026-09-30 审查 F）：本用例此前把调用包在
+        # `try/except Exception: pass` 里，而注释声称"仅验证不抛出未捕获
+        # 异常"——except 吞掉的正是它要检测的异常，用例永不失败（自相矛盾）。
+        # _embed_with_backend 的契约是"要么返回归一化向量，要么（异常路径）
+        # 由内部捕获回退 None"，故直接调用并断言返回值类型；若真的抛出，
+        # 就是被测代码破坏了契约 → 用例如实失败。
+        vec = embedding_utils._embed_with_backend(fake_instance, "def f(): pass")
+        if vec is not None:
+            assert isinstance(vec, list)
+            assert all(isinstance(x, float) for x in vec)
 
 
 # ─── G3: pyright 静态类型后端 ───────────────────────────────────────────────

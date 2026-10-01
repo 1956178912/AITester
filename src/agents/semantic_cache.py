@@ -93,6 +93,22 @@ class SemanticCacheIndex:
         self._misses: int = 0
         self._embed_failures: int = 0
 
+    def clear(self) -> None:
+        """清空索引与统计（持**本实例锁**，供 reset_semantic_index 调用）。
+
+        O35（2026-09-30 全面审查 P2）：此前模块级 reset_semantic_index() 在
+        持 `_index_lock`（模块锁，仅该处使用）时直接 `_index._entries.clear()`，
+        而 upsert/find/stats 全部同步在 `self._lock` 上——两把锁互不相干，
+        clear 可与 find 内的 `list(self._entries.values())` 并发，命中
+        "dictionary changed size during iteration" 的 RuntimeError 窗口。
+        把清理收进实例方法并持 self._lock，与读写方同口径。
+        """
+        with self._lock:
+            self._entries.clear()
+            self._hits = 0
+            self._misses = 0
+            self._embed_failures = 0
+
     def upsert(self, cache_file: str, prompt: str, response: str) -> bool:
         """把缓存条目做嵌入后加入索引（嵌入失败时记统计并返回 False）。"""
         if not _semantic_cache_enabled():
@@ -222,20 +238,39 @@ def build_semantic_index_from_cache_dir(cache_dir: str, max_entries: int | None 
         return 0
     # 按 mtime 取最近 limit 个（缓存文件不可变，读入即嵌入）
     with contextlib.suppress(OSError):
-        files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+        files.sort(key=os.path.getmtime, reverse=True)
     files = files[:limit]
     index = get_semantic_index()
     added = 0
+    skipped_creator = 0
+    # 19. 创建者归属校验（与 L1 精确缓存路径 base_agent.cache_creator_ok 同口径）：
+    # 2026-10-01 全面审查 P1 修复——此前语义索引构建侧不校验 creator_uid，
+    # SEMANTIC_CACHE_ENABLE=true 时跨用户/共享 CI 写入的投毒缓存条目只要
+    # 语义相似（余弦 >= 阈值）就被命中并直接返回（绕过 L1 的隔离）。
+    # 现构建侧校验：creator_uid 与当前创建者标签不一致的条目不入索引
+    # （单点、命中路径零成本；uid 不可得 / 条目无 creator 字段时兼容历史，
+    # 与 L1 的 cache_creator_ok 规则完全一致）。
+    from src.agents.llm_client import cache_creator_ok
+
     for f in files:
         try:
             with open(f, encoding="utf-8") as fh:
                 data: dict[str, Any] = json.load(fh)
+            # 创建者归属校验（与 L1 精确缓存同口径）
+            if not cache_creator_ok(data.get("creator_uid")):
+                skipped_creator += 1
+                continue  # 非本用户条目不入语义索引（防跨用户投毒）
             prompt = str(data.get("prompt", ""))
             response = str(data.get("response", ""))
             if index.upsert(f, prompt, response):
                 added += 1
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             continue  # 损坏文件跳过（与文件缓存读侧"半截 JSON 降级重调"同口径）
+    if skipped_creator:
+        logger.warning(
+            "5.1 语义缓存索引：跳过 %d 条非本用户创建者条目（creator_uid 不一致，防跨用户投毒）",
+            skipped_creator,
+        )
     if added:
         logger.info("5.1 语义缓存索引：新增 %d 条（目录 %s，扫描 %d 文件）", added, cache_dir, len(files))
     return added
@@ -383,13 +418,16 @@ def reset_false_positive_stats() -> None:
 
 
 def reset_semantic_index() -> None:
-    """清空语义索引与统计（测试隔离 / 嵌入后端切换时调用）。"""
+    """清空语义索引与统计（测试隔离 / 嵌入后端切换时调用）。
+
+    O35：索引清空改经 SemanticCacheIndex.clear()（持实例锁 self._lock），
+    与 upsert/find 的同步口径一致——此前在**模块锁** _index_lock 内直接
+    clear 实例的 _entries，与持另一把锁的读写方并发时会撞
+    "dictionary changed size during iteration"。
+    """
     global _last_rebuild_ts
     with _index_lock:
-        _index._entries.clear()
-        _index._hits = 0
-        _index._misses = 0
-        _index._embed_failures = 0
+        _index.clear()
         _last_rebuild_ts = 0.0
     reset_false_positive_stats()
 

@@ -142,7 +142,6 @@ def cli() -> None:
     一个基于 LangGraph 的多智能体系统，自动为 Python 代码生成测试、诊断错误、
     并尝试修复问题，直至测试通过或达到最大迭代次数。
     """
-    pass
 
 
 # ─── 任务执行 ─────────────────────────────────────────────────────────────────
@@ -369,6 +368,18 @@ def _run_single_task(
         任务结果字典，包含 success、file、func、passed、coverage、coverage_ok、iterations 等字段。
     """
     logger.info("开始测试任务：file=%s, func=%s, timeout=%ds", target_file, func, timeout)
+
+    # O35（2026-09-30 全面审查 P1）：任务级统计逐任务复位（与 run_benchmark
+    # 同口径）。此前 CLI 侧**从不** reset：
+    #   - token_usage 是线程局部累计，--parallel 的 ThreadPoolExecutor 复用
+    #     工作线程 → 第 2 个任务的 trace token_snapshot 含第 1 个任务的量，
+    #     "逐任务 token 消耗"随同线程任务数递增（虚高）；
+    #   - cost_budget 的 budget.exceeded 一旦置真永不复位 → 同线程后续任务
+    #     所有 LLM 调用被前置守卫拦下（任务级预算退化为线程级终身封顶）。
+    token_usage.reset()
+    from src.graph.cost_budget import reset_budget
+
+    reset_budget()
 
     # 读取被测代码文件内容
     with open(target_file, encoding="utf-8") as f:

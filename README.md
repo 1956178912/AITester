@@ -21,10 +21,10 @@
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新（默认行为不变）：全量测试零回归 + LLM_1 端点连通 + ruff/mypy 全绿 + 分支覆盖 77.34%；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-10-02 审查优化轮（默认行为不变）：CI 分支覆盖门禁回绿（总分支 73%→77.6%，门禁 77%）+ 密钥守卫自锁修复 + 三处真实缺陷（rag 材料源误扫 / O17 大写凭证脱敏盲区 / S6 补丁路径越界写）+ 恒真断言 11 处清零；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS（全量测试零回归；LLM_1 端点连通 + 响应校验通过；ruff/mypy 全绿）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；此前 2026-09-28 前沿推荐批次（gap_report P0/P1/P2 缺口 G1–G8 全量落地，详见下方落地说明）；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-10-02 审查优化轮（CI 门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零，默认行为不变）；此前 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复，详见 CHANGELOG）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 
 > **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
 > 本批次补齐 `docs/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，
@@ -58,8 +58,9 @@
 >   豁免登记表）+ `scripts/check_dependency_exemptions.py`（CI 门禁，`--ignore-vuln` 未登记时
 >   阻断）+ `scripts/check_docs_history_drift.py`（warning-only，检测 `docs/history/*.md` 基线
 >   数字漂移超阈值时提示归档）。
-> 全量 2538 测试通过零回归（2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新；此前 2502），ruff 0 告警，
-> mypy 0 错误（86 源文件，此前 81，+5 新增源文件）。全部新能力默认关（`*_ENABLE=false`），
+> 本批次验证结论：全量测试零回归 + ruff 0 告警 + mypy 0 错误（新增 5 源文件）——
+> 当前基线数字（测试数 / 覆盖率 / ruff / mypy）一律见 [BASELINE.yaml](BASELINE.yaml)，此处不再硬编码。
+> 全部新能力默认关（`*_ENABLE=false`），
 > 启用为显式行为；零新默认依赖（tree_sitter 为可选依赖，缺时透明降级）。
 >
 > 配套测试文件：
@@ -120,7 +121,7 @@ pre-commit run --all-files
 ### 测试命令
 
 ```bash
-# 运行所有单元测试（全量 2538 个用例；缺 chromadb/matplotlib 时 RAG/可视化用例自动 skip，约 1863 个收集）
+# 运行所有单元测试（全量用例数与精简环境收集数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并显示覆盖率
@@ -134,6 +135,23 @@ pre-commit run --all-files
 ```
 
 ## 快速开始
+
+> **⚠️ 安全执行警告（2026-09-30 独立审查 N8/R10）**：本系统会让 LLM 生成 Python 代码，
+> 并**自动执行**这些代码（测试 + 补丁验证）。自 2026-09-30 起，`EXECUTOR_USE_VENV`
+> **默认开启**——LLM 生成的代码在隔离 venv 沙箱内运行（venv 缓存于
+> `~/.cache/aitester/venvs/`，相同依赖组合任务复用），不再直接落在宿主系统
+> Python 环境。
+>
+> - 如需**显式关闭** venv 沙箱（仅调试 / 无 venv 权限的环境）：
+>   `EXECUTOR_USE_VENV=false`。此时 LLM 生成的代码将在宿主环境直接执行——
+>   请仅在本机可信、无敏感数据与网络凭证的机器上进行，并配合
+>   `KERNEL_SANDBOX_ENABLE=true`（macOS Seatbelt / Linux bwrap，可用时）
+>   进一步限制文件系统与网络出口。
+> - `EXECUTOR_AUTO_INSTALL_DEPS` 默认**关闭**；开启后 venv 会 `pip install`
+>   LLM 推断出的依赖包名——**存在包名幻觉（slopsquatting）攻击面**，
+>   生产使用请配合包名白名单（`PIP_PACKAGE_WHITELIST_ENABLE=true`，
+>   R59/S6 守卫：仅白名单内包名放行，未知名默认拒绝，堵供应链向量）。
+> - 更高强度隔离：`EXECUTOR_USE_DOCKER=true`（容器级隔离，需预构建镜像）。
 
 ```bash
 # 0. 创建虚拟环境（推荐 Python 3.12+；锁定依赖 scipy 要求 ≥3.12）
@@ -911,8 +929,8 @@ SWE_REPO_VENV_REUSE_BY_REPO=true \
 命名 `"{target_module}_probe.py"` 与历史过滤条件 `"{target_module}.py"` 子串
 不匹配，指定 target_module 时帧被全部丢弃）、子线程未处理异常泄漏
 （顶层调用异常未被拦截 → "Exception in thread" 噪音）。`RUNTIME_PROBE_ENABLE=false`
-（默认）时零差异。测试：`tests/test_runtime_probe.py`（2538 全量通过 / 0 失败 /
-0 告警，`-W error::ResourceWarning` 口径）。
+（默认）时零差异。测试：`tests/test_runtime_probe.py`（全量通过 / 0 失败 /
+0 告警，`-W error::ResourceWarning` 口径；用例数见 [BASELINE.yaml](BASELINE.yaml)）。
 
 #### 5.22.2 G2 风险分级人工回路（`RISK_APPROVAL_ENABLE`，默认关）
 `src/graph/risk_approval.py`：三因子加权打分（置信度 0.4 + 补丁影响面 0.4 +
@@ -975,10 +993,9 @@ PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 / PYSEC-2026-3815 的
 `scripts/check_dependency_exemptions.py`（CI 门禁：`--ignore-vuln` 列表未
 在登记表留痕时 `exit 1` 阻断合并）+ `scripts/check_docs_history_drift.py`
 （warning-only：检测 `docs/history/*.md` 基线数字漂移超阈值时提示归档，
-非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量 2538 测试通过
-（基线 2502，+36 新增回归用例）/ ruff 0 告警 / mypy 0 错误（86 源文件，
-+5 新增源文件：risk_approval / agent_telemetry / kernel_sandbox /
-testless_validation / tree_sitter_backend）。
+非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量测试通过 / ruff 0 告警 /
+mypy 0 错误（新增 5 源文件：risk_approval / agent_telemetry / kernel_sandbox /
+testless_validation / tree_sitter_backend；当前数字见 [BASELINE.yaml](BASELINE.yaml)）。
 
 
 ### 6. 标准数据集集成（新增）
@@ -1195,7 +1212,7 @@ docker run --rm \
 ## 单元测试
 
 ```bash
-# 运行所有测试（全量 2538 个用例；缺可选依赖时自动 skip 降级；当前数值以 [BASELINE.yaml](BASELINE.yaml) 为准）
+# 运行所有测试（全量用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准；缺可选依赖时自动 skip 降级）
 .venv/bin/python -m pytest tests/ -v
 
 # 运行测试并生成覆盖率报告
@@ -1205,7 +1222,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**测试覆盖模块**（测试文件数与用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准；当前基线全量 2538 用例 / 0 失败；缺可选依赖时约 1863 收集自动 skip）：
+**测试覆盖模块**（测试文件数与用例数以 [BASELINE.yaml](BASELINE.yaml) `tests` 节为准，此处不硬编码会过期的数字）：
 
 | 测试文件 | 测试函数数 | 覆盖范围 |
 |---------|-------|---------|
@@ -1309,8 +1326,15 @@ docker run --rm \
 | `RAG_PERSIST_PATH` | RAG 持久化路径（空=内存模式，默认项目根 rag_data/） | rag_data |
 | `RAG_COLLECTION_NAME` | RAG ChromaDB 集合名 | aitester_cases |
 | `RAG_TTL_SECONDS` | RAG 缓存 TTL（秒，持久化场景默认 7 天） | 604800 |
-| `EXECUTOR_USE_VENV` | venv 沙箱隔离执行（依赖隔离，P1） | false |
-| `EXECUTOR_AUTO_INSTALL_DEPS` | 执行前自动 pip install 缺失依赖（P1） | false |
+| `EXECUTOR_USE_VENV` | venv 沙箱隔离执行（依赖隔离，P1；**R10 起默认 true**，设 false 回退宿主环境直跑，仅调试用） | true |
+| `FL_SPECTRAL_ENABLE` | O2 谱系故障定位（Ochiai Top-k，零 LLM 成本；**R8 起默认 true**，设 false 作消融对照组） | true |
+| `SPEC_IR_ENABLE` | R7 SpecIR 可执行规约 IR（logic_analysis 解析 + 边界三元组 → pytest/Hypothesis oracle 编译，纯观测层） | false |
+| `FLAKY_CHECK_ENABLE` | R35/R31 flaky 门禁（失败轮重复执行一致性检测，flaky 时 test_passed 保守记 False，flaky fraction 入工件） | false |
+| `FLAKY_REPEAT_COUNT` | flaky 门禁重复执行次数（默认 3；稳定性口径设 30） | 3 |
+| `SWE_BENCH_P2P_GATE_ENABLE` | R46（2026-09-30 独立审查 P0）：SWE-bench 实例可解性前置门禁（**默认 true**——SWE-bench ProMax 实测 ~60% 未解出实例的测试本身有缺陷，开门禁后不可解实例记 `harness_invalid` 剔除，"0 解出"还原为"harness 无效"而非"系统无效"；设 false 消融对照） | true |
+| `SWE_BENCH_P2P_GATE_THRESHOLD` | P2P 门禁阈值（基线 PASS_TO_PASS 通过率下限，默认 0.95） | 0.95 |
+| `EXECUTOR_AUTO_INSTALL_DEPS` | 执行前自动 pip install 缺失依赖（P1；R59/S6 包名幻觉防护见 `PIP_PACKAGE_WHITELIST_ENABLE`） | false |
+| `PIP_PACKAGE_WHITELIST_ENABLE` | R59（2026-09-30 独立审查 P0）/S6：pip 包名白名单守卫（true 时仅白名单内包名放行安装，PEP 503 大小写不敏感；白名单来源 `PIP_PACKAGE_WHITELIST` 逗号分隔或内置 ~40 常用包，未知名默认拒绝，堵 slopsquatting 供应链向量） | false |
 | `EXECUTOR_DEP_INSTALL_TIMEOUT` | 依赖安装超时（秒） | 120 |
 | `AITESTER_VENV_CACHE_DIR` | 4.4 venv 缓存目录覆盖（默认 `~/.cache/aitester/venvs`；配合 `clean-venv-cache` 清理） | 未设 |
 | `MYSQL_POOL_MIN_CACHED` | 连接池最小预留连接 | 5 |
@@ -1526,21 +1550,28 @@ python main.py clean-venv-cache --max-size-mb 512
 
 **汇总**：成功率 **100%**，平均覆盖率 **91.7%**，平均耗时 **30.1s/任务**。
 
-### 合成数据集实验（50个任务，3种基线对比，最新数据快照）
+### 合成数据集实验（50个任务，3种基线对比）
 
-> 某次 50 任务运行（3 种基线对比）的最新数据快照，用于演示多基线方法论，非当前版本性能承诺。
+> ⚠️ **数字已过期（2026-09-29 审查订正）**：以下快照使用旧 `success_rate` 口径，
+> 审查复算确认约 65.9% 为"测试未检出缺陷"而非"修复成功"（假成功）。
+> 新指标（`detection_rate` / `repair_rate` / `false_fix_rate`）已实现（`experiments/_m1_metrics.py`），
+> 首次固定 seed 重跑批次产出后，本表将更新为真实数字。
+> 历史快照存档于 `experiments/results/benchmark_synthetic_20260925_135638.json`（未入库）。
 
-| 基线方法 | 成功率 (%) | 平均覆盖率 (%) | 平均迭代次数 | 平均耗时 (s) |
+> 某次 50 任务运行（3 种基线对比）的旧口径数据快照，仅用于演示多基线方法论，非当前版本性能承诺。
+
+| 基线方法 | 成功率 (%) [旧口径] | 平均覆盖率 (%) | 平均迭代次数 | 平均耗时 (s) |
 |---------|-----------|---------------|-------------|-------------|
 | **AITester** | **88.0** | **97.8** | 0.64 | 45.33 |
 | Plain LLM | 68.0 | 98.0 | 0.0 | 16.6 |
 | Single Agent | 4.0 | 0.0 | 0.24 | 26.85 |
 
-**关键发现**：
-- AITester 成功率显著高于 Plain LLM（88.0% vs 68.0%），覆盖率持平（97.8% vs 98.0%）
-- AITester 平均耗时 45.33s，Plain LLM 为 16.6s，多智能体修复循环带来约 2.7 倍耗时增加
-- Single Agent 基线成功率仅 4.0%（50 任务仅 2 个通过），验证多智能体架构的必要性
-- 统计检验：AITester vs Single Agent 差异极显著（p < 0.001，Cohen's d 远大于 0.8）
+**关键发现**（旧口径，待新指标重跑后更新）：
+- 旧 `success_rate` 口径下 AITester 高于 Plain LLM（88.0% vs 68.0%），但 2026-09-29 审查确认
+  AITester 的 88% 中约 2/3 为假成功（测试在带缺陷代码上通过，缺陷未检出）
+- Plain LLM 旧 `success_rate` 口径 100% 假成功（0/50 有效修复）
+- 新三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）已实现，
+  待固定 seed 重跑批次（`AITESTER_CACHE_ISOLATE_MODEL=1` + `AITESTER_BASELINE_LOAD_BALANCE=0`）产出工件后统一刷新
 
 详细结果参见 [experiments/results/synthetic_50_final/charts/](experiments/results/synthetic_50_final/charts/)（本地保留，不入库；仓库内 `experiments/results/` 仅跟踪占位说明，历史产物经 .gitignore 排除）
 
@@ -1564,7 +1595,8 @@ python main.py clean-venv-cache --max-size-mb 512
   0/N），跨文件收益验证需更强模型 + 仓库全量源码上下文重做。
 
 论文定位：SWE-bench 0/N 写入"局限性讨论"章节（引擎修复质量边界），
-主实验仍用合成数据集（88% vs 60% vs 8%，p=0.002 显著）。
+主实验仍用合成数据集（旧 success_rate 口径 88% vs 60% vs 8%；
+新 M1 三指标口径待固定 seed 重跑批次产出后统一刷新，见上方过期数字标注）。
 
 ### 关键修复记录
 
@@ -1622,6 +1654,42 @@ python main.py clean-venv-cache --max-size-mb 512
 ---
 
 ## 迭代优化记录
+
+### 2026-10-02 审查优化轮（CI 分支覆盖门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零，默认行为不变）
+
+**核心成果**：
+- **CI 门禁回绿（分支覆盖 73%→77.6%）**：本批次前 CI 已红灯（`scripts/check_branch_coverage.py` 门槛 77% vs 实测 73%、`graph/workflow.py` 严格门槛 90% vs 实测 74%）；为 4 个零覆盖 opt-in 模块补测试（`fl_spectral` 32 用例 / `branch_coverage_inject` 15 / `mutation_advisor` 18 / `rag` 关键词兜底层 40）+ `determine_stop_reason` 11 分支 + nodes 三大闭包回调 19 用例 + logic_spec/type_repair 私有纯函数 56 用例 + 分层摘要缺失分支 29 用例——`graph/workflow.py` 分支 74%→98.75%，总分支 3057→3213/4094；
+- **P0 密钥守卫自锁修复**：`.git-hooks/check_secret_leak.sh` 头部注释含 `sk-` 真实前缀样例，守卫扫描 untracked 文件时扫到自身 → 任何提交均被阻断；注释改为占位符表述 + 本地审查报告（`REVIEW_*.md` / `review_infra_hygiene_report.md` 等含取证 `sk-` 截断样例）加入 `.gitignore`，守卫现 exit=0；
+- **三处真实缺陷**：① `rag` `_iter_candidate_docs` 在 `RAG_PERSIST_PATH` 为空时误扫 CWD 一切 JSON（污染关键词兜底材料源，空目录现直接跳过）；② `mask_sensitive_info` 小写锚定漏 `MYSQL_PASSWORD=<值>` 大写凭证形态（O17 残留盲区，新增大写赋值模式，`redact_text` / fallback / trace JSONL 同源生效）；③ `executor_repo._apply_patch_robust` new-file 兜底写盘对 `+++ b/<path>` 无路径校验（`../` 序列 / 绝对路径可逃出 repo_dir，现 realpath 归一 + 前缀校验越界即拒绝）；
+- **恒真断言清零（11 处）**：`assert ... or True` / `in out or not in out` / `or len(...) > 3000` 等全部收紧为真实行为断言，2 处 `assert True` 占位补真实内容校验；
+- **基线刷新**：`BASELINE.yaml` 同步（2815 passed / 行 86% / 分支 78% / `graph_workflow: 99` / `error_classifier: 90` / suite 46s；`check_baseline --verify` 实测一致性通过）。
+
+**验证**: 全量 2815 passed / 0 failed（45.4s）/ ruff 0 告警 / mypy 91 源文件 0 错误（当前数字见 [BASELINE.yaml](BASELINE.yaml)）
+
+### 2026-09-30 全面审查优化轮（O32–O34：ruff 规则集扩充 + 安全审计扩面 + CI 真门禁修复 + 三处真实缺陷修复，默认行为不变）
+
+**核心成果**：
+- **O32 ruff 规则集扩充（10→26 组）**：新增 `T20` / `A` / `S` / `C4` / `DTZ` / `G` / `ISC` / `PIE` / `PL` / `PLE` / `TRY` / `FURB` / `PGH`——`pyproject.toml` 逐条附 ignore 理由（25 条），`per-file-ignores` 按"测试脚手架 / CLI 脚本 / 实验代码"三类目录豁免；`src/` 逐条清理 70 处（`check=False` 显式化 12 处、`raise e` 替换 2 处词法裸 raise、内建遮蔽重命名、现代写法 25+ 处）；
+- **O34 CI 真门禁**：① `test` 作业新增 **mypy 硬门禁步骤**（`mypy==1.7.1` 固定安装 + 非 0 即红——此前 mypy 装而不用、恒返回 0 吞掉退出码）；② bandit 1.8.2→**1.9.4**（1.8.2 在 Python ≥3.12 逐文件崩溃恒空却 exit 0）+ `pyproject.toml` 补 `[tool.bandit]` 段（10 类已接受风险 skip 逐条附理由，实测 79 findings→0）；③ gitleaks 改为下载固定版本官方二进制（旧 `pip install gitleaks` 恒失败 → 全历史扫描恒被静默跳过）；④ `.git-hooks/pre-commit.sh` 补 `ruff check .` + `ruff format --check .`（本地 pre-commit 框架未安装 → 此前"推送后 CI 必挂"复发面收口）；⑤ 修复 ci.yml 中 `run:` plain scalar 内裸 `}` 的 YAML 解析错误；
+- **安全审计扩面**：`scripts/audit_log_redaction.py` `_SENSITIVE_FIELD_RE` 补 3 类残余盲区（字段名变体 `api key:`/`passwd=`/`access_token=` + AWS AKIA/ASIA 裸值 + DB DSN scheme+userinfo）——7/7 注入探针全命中、全仓 438 个 logger 调用点 0 新增误报；`print_config_report` 出口 base_url 脱敏；`verify_redaction_consistency()`（LiteLLM CVE-2026-89032 / Spring AI CVE-2026-59308 同源风险护栏）此前零覆盖，新增 4 用例；
+- **真实缺陷修复（裸 raise）**：`APIManager._handle_api_error` / `_handle_generic_error` 的 bare `raise` 词法上不在 except 块内，直接调用抛 `RuntimeError: No active exception`；改为显式 `raise e`（生产路径行为不变）；
+- **卫生债清理**：死代码 2 处（`patch_applier._find_function_start_line` / `risk_approval._env_int`，全仓零调用）；README 双语 8 处过期基线数字改为指向 `BASELINE.yaml`。
+
+**验证**: 全量 2821 passed / 0 failed（47.9s）/ ruff 0 告警（规则集 10→26）/ mypy 91 源文件 0 错误 / 行覆盖 84.1% / 分支覆盖 77.58%（门禁 77% 绿；当前数字见 [BASELINE.yaml](BASELINE.yaml)）
+
+### 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复 + 文档/基线同步，默认行为不变）
+
+**核心成果**：
+- **P0 密钥泄漏守卫**：`.gitignore` L30 `.env.local.bak` 精确匹配漏掉 `.env.local.bak_g8` 等带后缀的密钥备份（untracked 含 22 个真实 LLM API Key）；现改为 `.env.local.bak*` 通配 + 新增 `.git-hooks/check_secret_leak.sh`（pre-commit 第 4 项守卫，扫描 staged 新文件 + untracked 文件中 `sk-(ws|or)-?[A-Za-z0-9._]{16,}` 前缀，命中阻断提交）；
+- **P1 CI 双语门禁漂移**：CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md / pre-commit.sh 均声称"双语文档由 CI 守卫"，但 `ci.yml` 全文无调用步骤（文档承诺与 CI 实现漂移）；现补 "Check bilingual docs pairing" 步骤 + `scripts/check_bilingual_docs.py` 同步登记 3 个 2026-10 新批次文档豁免；
+- **P1 实验指标口径**：错误类型分桶由 5 桶硬编码改为直接 import `ErrorCategory` 枚举动态分桶（实测 63 个 benchmark JSON 中 88% 失败行落 "other"，分桶失去区分度）；`_welch_ttest` / `_mann_whitney_u` 由手写 Z/正态近似 p 值改为 `scipy.stats.ttest_ind(equal_var=False)` + `scipy.stats.mannwhitneyu`（n<50 自动 exact）；`--difficulty` choices 补 4 个中间档（level2.5 / level2.5-hard / level3.5 / level4.5）；
+- **P1 graph 特性开关启用路径**：`expert_pool.generate_parallel` 超时保护是死代码（`cf.wait(futures, timeout)` 从不抛 `TimeoutError`，`shutdown(wait=True)` 仍阻塞等挂死 future——EXPERT_POOL_TIMEOUT 完全失效，单专家挂死即整池+整图卡死）；现改为逐个 `fut.result(timeout=remaining)` + `pool.shutdown(wait=False)`；`_generator_node` 2.3 复现测试分支补与主生成路径同口径 try/except 兜底；
+- **P1 agents 默认路径安全**：`executor.py` kernel_sandbox 包裹命令 `cmd = sandboxed_cmd[1:]` 使 argv[0] 变成 `-p`/`--ro-bind`（KERNEL_SANDBOX_ENABLE=true 时目标场景 100% `file_not_found`）；现保留完整 `sandboxed_cmd` 作 argv；`semantic_cache.build_semantic_index_from_cache_dir` 补 `cache_creator_ok` 创建者归属校验（防跨用户投毒条目语义命中）；
+- **P2 边界/一致性问题**：`filter_by_relevance` refs=None 分支返回类型与签名不符（mypy 修复）+ L212 模块级 import 移到文件头（E402）；`_parse_failed_cases` 补 name-first 正则 + 放宽后缀正则；`config_manager` 自动分配索引补 `_LLM_MAX_SCAN_INDEX=32` 上界钳制（防"幽灵 LLM_33"）；`dataset_loader` 直接类构造路径 env 探测改显式优先级序（Pro 先于 rebench）；`executor_modes` 测试文件写入补 try/except OSError；`deterministic_guard` urllib 家族漏检修复（顶层模块前缀匹配）；`injection_guard` 输出侧补 requests.get / urllib.request.urlopen 外发语句 + `__import__`/`getattr` 动态获取绕过检测；`patch_applier` AST 守卫补 `_collect_dynamic_import_bypass`（`__import__`/`getattr`/别名引用三类动态绕过）；`rogue_monitor` 不再隐式重置进程单例；
+- **P2 pre-commit 守卫补强**：`.git-hooks/pre-commit.sh` 新增 check_lock_sync / check_credential_scrub / check_dependency_exemptions 三项 CI 同源守卫（缺失脚本时跳过不阻断）；
+- **文档/基线同步**：`BASELINE.yaml` last_verified 刷新为 2026-10-01；`.env.example` 补 6 个 config.py 已有默认值但未纳入模板的变量。
+
+**验证**: 全量 2540 passed / 0 failed（34s）/ ruff 全仓 0 告警 / mypy 86 文件 0 错误（当前数字见 [BASELINE.yaml](BASELINE.yaml)）
 
 ### 2026-09-29 全面测试 + 真实 LLM 冒烟 PASS 后基线刷新（默认行为不变）
 
@@ -1764,14 +1832,17 @@ python main.py clean-venv-cache --max-size-mb 512
 - 测试异味检测 / 修复收敛曲线 / 边界用例覆盖 / 变异得分 / 执行反馈轨迹（1.2/1.3/3.2）
 - 内置变异测试生成器（`experiments/mutation_testing.py`，AST 级七类变异体；杀死判定按 pytest 官方退出码精确化，2026-09-26）
 - Docker 隔离执行（`EXECUTOR_USE_DOCKER`，4.3）
-- 全量 1459 个测试用例 / 覆盖率 96% / Ruff 全绿
+- 全量测试通过、Ruff 全绿（历史快照当时全量 2565 用例；当前测试数量与覆盖率见 [BASELINE.yaml](BASELINE.yaml) `tests` / `coverage` 节）
 
-**基准测试**（合成数据集 50 任务，3 基线对比）：
-- AITester：成功率 88.0%，覆盖率 97.8%，平均耗时 45.33s
-- Plain LLM：成功率 68.0%，覆盖率 98.0%，平均耗时 16.6s
-- Single Agent：成功率 4.0%，覆盖率 0.0%，平均耗时 26.85s
+**基准测试**（合成数据集 50 任务，3 基线对比；旧 `success_rate` 口径数字，已过期）：
+- AITester：成功率 88.0%（旧口径，含约 66% 假成功；新三指标待重跑批次）
+- Plain LLM：成功率 68.0%（旧口径）
+- Single Agent：成功率 4.0%（旧口径）
+> ⚠️ 以上为旧口径历史快照（2026-09-29 审查确认失效）。新指标
+> （`detection_rate` / `repair_rate` / `false_fix_rate`）已实现，
+> 待固定 seed 重跑批次（`AITESTER_CACHE_ISOLATE_MODEL=1`）产出工件后统一刷新。
 
-**验证**: 全量 1459 passed / 0 failed / ruff 全绿 / 覆盖率 96%
+**验证**: 全量 2565 passed / 0 failed / ruff 全绿（历史快照当时全量 2565 用例；当前测试数见 [BASELINE.yaml](BASELINE.yaml) `tests` 节）
 
 ---
 

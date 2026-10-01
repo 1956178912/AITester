@@ -238,7 +238,9 @@ class TestGenerate:
 
         call_args = mock_call_llm.call_args[0][0]
         # 截断后的代码应包含截断提示
-        assert "代码已截断" in call_args or len(long_code) > 3000
+        # （此前为 `... or len(long_code) > 3000`——输入长度恒真，
+        # 截断从未被验证；2026-10-02 审查收紧为标记必须出现）
+        assert "代码已截断" in call_args, "超长 target_code 未在 prompt 中标记截断"
 
     @patch("src.agents.generator.BaseAgent._call_llm")
     def test_generate_with_module_name_constraint(self, mock_call_llm):

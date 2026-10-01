@@ -47,6 +47,7 @@ import logging
 import os
 import re
 import threading
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,10 @@ from langgraph.graph import END, StateGraph
 
 from config import ENABLE_DEBUGGER, ENABLE_PLANNER, ENABLE_RAG, MAX_ITERATIONS
 from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
+from src.graph.mutation_advisor import (
+    _mutation_advisor_node,
+    mutation_advisor_enabled,
+)
 
 # 纯 re-export：保持历史 `from src.graph.workflow import ...` 导入路径不变。
 # 这些符号的实现已拆分到 nodes/rag/tracing 模块，workflow 自身不直接使用，
@@ -78,6 +83,113 @@ from src.tools.cross_file import cross_file_enabled
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
 
+
+# ─── StopReason 枚举（2026-09-29 审查 P0：统一停止条件单点判定）────────────
+# 历史口径：终止原因散落在 _should_debug / _route_after_diagnosis 的多个
+# 分支里（test_passed / max_iterations / skip_debugger_repair_invalid /
+# test_defect_regeneration_cap / test_gen_diagnosis / test_gen_diagnosis_early
+# / test_passed_converged / max_iterations_reached / budget_exceeded /
+# regression_detected），各分支各写各的字符串，口径不一且"一个开关可
+# 全部绕过"。现收拢为枚举 + 单点判定函数 determine_stop_reason：
+# 所有路由函数在返回 "done" 前经本函数判定终止原因并写入
+# state["stop_reason"]（纯观测，不参与路由），供实验层"终止原因
+# 分布可解释"消费。
+class StopReason(Enum):
+    """工作流终止原因（统一单点判定口径）。"""
+
+    TEST_PASSED = "test_passed"
+    MAX_ITERATIONS = "max_iterations"
+    REPAIR_INVALID = "skip_debugger_repair_invalid"
+    TEST_DEFECT_REGEN_CAP = "test_defect_regeneration_cap"
+    TEST_GEN_KEYWORD_EARLY = "test_gen_diagnosis_early"
+    TEST_GEN_KEYWORD_LATE = "test_gen_diagnosis"
+    TEST_PASSED_CONVERGED = "test_passed_converged"
+    MAX_ITERATIONS_REACHED = "max_iterations_reached"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    REGRESSION_DETECTED = "regression_detected"
+    RECURSION_LIMIT = "recursion_limit"
+    UNKNOWN = "unknown"
+
+
+def determine_stop_reason(state: AITesterState) -> StopReason:
+    """单点判定终止原因（纯数据，零副作用）。
+
+    所有路由函数在返回 "done" 时调用本函数获取终止原因枚举，
+    并写入 state["stop_reason"]（纯观测字段，不参与路由逻辑）。
+    判定优先级（从上到下，首个命中即返回）：
+    1. test_passed=True → TEST_PASSED / TEST_PASSED_CONVERGED
+    2. budget_exceeded=True → BUDGET_EXCEEDED
+    3. regression_detected=True → REGRESSION_DETECTED
+    4. defect_type=test_defect 且再生成达上限 → TEST_DEFECT_REGEN_CAP
+    5. iteration >= max_iterations → MAX_ITERATIONS / MAX_ITERATIONS_REACHED
+    6. 最近 2 次修复均无效 → REPAIR_INVALID
+    7. 诊断关键词命中（早期/晚期）→ TEST_GEN_KEYWORD_EARLY / LATE
+    8. 未知 → UNKNOWN
+
+    Args:
+        state: 当前工作流状态。
+
+    Returns:
+        StopReason 枚举值。
+    """
+    # 1. 测试已通过（最优先：收敛即终止）
+    if state.get("test_passed"):
+        return StopReason.TEST_PASSED
+    # 2. 预算超限（硬上界优先于迭代上限）
+    if state.get("budget_exceeded"):
+        return StopReason.BUDGET_EXCEEDED
+    # 3. 回归检测（P2P 门禁 / regression_detected 标记）
+    if state.get("regression_detected"):
+        return StopReason.REGRESSION_DETECTED
+    # 4. 测试缺陷 + 再生成达上限
+    if state.get("defect_type") == "test_defect" and state.get("regeneration_count", 0) >= _MAX_REGENERATIONS:
+        return StopReason.TEST_DEFECT_REGEN_CAP
+    # 5. 迭代达上限
+    if int(state.get("iteration", 0)) >= int(state.get("max_iterations", MAX_ITERATIONS)):
+        return StopReason.MAX_ITERATIONS
+    # 6. 连续修复无效快速终止
+    if _recent_repairs_invalid(state):
+        return StopReason.REPAIR_INVALID
+    # 7. 诊断关键词命中
+    diagnosis = state.get("diagnosis", "") or ""
+    if _diagnosis_hits_test_gen_keywords(diagnosis):
+        if int(state.get("iteration", 0)) < int(state.get("max_iterations", MAX_ITERATIONS)):
+            return StopReason.TEST_GEN_KEYWORD_EARLY
+        return StopReason.TEST_GEN_KEYWORD_LATE
+    # 8. 未知（保守兜底）
+    return StopReason.UNKNOWN
+
+
+def effective_stop_reason(state: AITesterState) -> str | None:
+    """读取终止原因（O35 修复：路由层写入会被 LangGraph 丢弃，读取侧兜底）。
+
+    背景：``_should_debug`` / ``_route_after_diagnosis`` 在返回 "done" 前执行
+    ``state["stop_reason"] = _stop_reason.value``——但条件边函数拿到的 state 是
+    LangGraph 按 channel 值物化的**入参副本**，原地改写不会写回状态（已在
+    langgraph 1.2.11 实测复现：路由里改 state，最终输出仍为初始 None）。
+    于是 ``final_state["stop_reason"]`` 恒为初始值 None，实验结果的
+    stop_reason 列全空，StopReason 机制实际不可观测。
+
+    本函数作为**唯一读取口径**：优先取 state 里已有的 stop_reason（若未来
+    有节点经 update dict 正规写入），缺失时用 determine_stop_reason 按
+    同一优先级对最终状态重新判定——路由层判定与读取时判定基于同一组
+    输入键（test_passed / budget_exceeded / iteration / diagnosis 等），
+    仅可能相差 iteration 的自增时机，观测语义等价。
+
+    Args:
+        state: 工作流最终状态（或任意中间状态）。
+
+    Returns:
+        终止原因字符串（枚举 .value）；状态信息不足时返回 None。
+    """
+    existing = state.get("stop_reason")
+    if existing:
+        return str(existing)
+    if not state:
+        return None
+    return determine_stop_reason(state).value
+
+
 # 重新生成测试代码的上限：达到最大迭代后，诊断指向"测试生成错误"时路由回
 # generator 再生成一次。若无上限，旧的 diagnosis 关键词会反复命中，
 # generator↔executor 无限乒乓，最终撞上 LangGraph recursion_limit 崩掉任务并空烧 token。
@@ -88,13 +200,18 @@ _MAX_REGENERATIONS = 1
 # 2026-09-26 全面审查：从 _should_debug 函数体内提取为模块级常量——
 # 此前每次路由调用（每轮迭代）都重建 list 字面量；提取后口径单一来源，
 # 后续调整触发词只改一处（与 _MAX_REGENERATIONS 同文件同注释区）。
+#
+# M5（2026-09-29 审查 P0）：删除三个源码缺陷最常见的异常签名
+# （AttributeError / NameError / SyntaxError）。这三个词出现在被测代码
+# 的失败 traceback 中时，诊断节点会**误判为测试生成错误** → 路由回
+# generator 重写测试 → 源码一字未改而测试通过 → 假通过且无任何标记
+# （error_classifier.py:1202 的 test_passed is not False 早退使该假通过
+# 永远不会被标记）。保留其余通用词，源码缺陷签名交由
+# test_regenerated_pass_unverified 标记通道处理（见 M5 对应节点改动）。
 _TEST_GEN_DIAGNOSIS_KEYWORDS: tuple[str, ...] = (
     "测试生成错误",
     "测试设计存在错误",
     "test code",
-    "AttributeError",
-    "NameError",
-    "SyntaxError",
     "测试用例",
     "期望的异常类型",
 )
@@ -142,6 +259,8 @@ def _route_after_diagnosis(state: AITesterState) -> str:
     - test_defect 且再生成未达上限 → "regenerate"（路由回 generator 重新生成测试）；
     - test_defect 且再生成已达上限 → "done"（与 _should_debug 同口径收敛，
       防 generator↔executor 无上限乒乓撞 recursion_limit）；
+    - test_passed=True 或 iteration>=max_iterations → "done"（M4 收敛保护，
+      与 _should_debug 同口径，防无界回环撞 LangGraph 默认 recursion_limit）；
     - 其余（implementation_defect / 缺省）→ "debug"（路由到 debugger 生成补丁）。
 
     Args:
@@ -168,12 +287,41 @@ def _route_after_diagnosis(state: AITesterState) -> str:
         # DIAGNOSIS_NODE_ENABLE 路径，默认行为不变）。
         if state.get("regeneration_count", 0) >= _MAX_REGENERATIONS:
             logger.info("双向诊断（三）：已达重新生成上限，结束流程")
+            _stop_reason = determine_stop_reason(state)
             _trace_node(
-                "_route_after_diagnosis", decision="done", output_summary={"reason": "test_defect_regeneration_cap"}
+                "_route_after_diagnosis",
+                decision="done",
+                output_summary={"reason": _stop_reason.value},
             )
+            state["stop_reason"] = _stop_reason.value
             return "done"
         _trace_node("_route_after_diagnosis", decision="regenerate", output_summary={"reason": "diagnosis_test_defect"})
         return "regenerate"
+    # M4（2026-09-29 审查 P0）：双向诊断开启时，test_passed 收敛与迭代上限
+    # 曾在此分支全部绕过（test_passed=True / iteration>=MAX_ITERATIONS 时仍
+    # 返回 debug，回环只受 LangGraph 默认 recursion_limit=10007 约束）。
+    # 现补同口径收敛保护：已收敛即 done；超迭代上限即 done。
+    # 2026-09-29 审查 P0（StopReason）：终止原因经 determine_stop_reason 单点判定。
+    if state.get("test_passed") is True:
+        _stop_reason = determine_stop_reason(state)
+        _trace_node(
+            "_route_after_diagnosis",
+            decision="done",
+            output_summary={"reason": _stop_reason.value},
+        )
+        state["stop_reason"] = _stop_reason.value
+        return "done"
+    max_iterations = state.get("max_iterations", MAX_ITERATIONS)
+    if int(state.get("iteration", 0)) >= int(max_iterations):
+        logger.info("双向诊断（三）：已达迭代上限，结束流程")
+        _stop_reason = determine_stop_reason(state)
+        _trace_node(
+            "_route_after_diagnosis",
+            decision="done",
+            output_summary={"reason": _stop_reason.value, "iteration": int(state.get("iteration", 0))},
+        )
+        state["stop_reason"] = _stop_reason.value
+        return "done"
     _trace_node("_route_after_diagnosis", decision="debug", output_summary={"defect_type": defect_type})
     return "debug"
 
@@ -232,6 +380,21 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
 
     # ── 条件注册：Debugger + PatchApplier（消融开关 ENABLE_DEBUGGER 控制）────
     if enable_debugger:
+        # M7（2026-09-29 审查 P0）：mutation_advisor 节点（MUTATION_ADVISOR_ENABLE
+        # =true 时启用，默认关）。在 executor → _should_debug 的 "regenerate"
+        # 路径中插入该节点（executor → mutation_advisor → generator），
+        # 把历史"benchmark 层预置 mutation_feedback 死代码"变为图内即时
+        # 产出（每轮 executor 失败后跑变异评估，存活变异体清单写入
+        # state["mutation_feedback"]，Generator 下一轮消费补强断言）。
+        # 默认关时图拓扑与历史完全一致。
+        use_mutation_advisor = mutation_advisor_enabled()
+        if use_mutation_advisor:
+            workflow.add_node("mutation_advisor", _mutation_advisor_node)
+            # mutation_advisor → generator 固定边（regenerate 路径终点）
+            workflow.add_edge("mutation_advisor", "generator")
+        # M7：regenerate 目标节点——启用 mutation_advisor 时路由到
+        # "mutation_advisor"（经变异评估后再生成），否则直接路由到 "generator"
+        _regen_target = "mutation_advisor" if use_mutation_advisor else "generator"
         # 添加调试节点和补丁应用节点，构成修复循环
         workflow.add_node("debugger", _debugger_node)
         workflow.add_node("patch_applier", _patch_applier_node)
@@ -255,7 +418,7 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
                     "diagnosis",
                     _route_after_diagnosis,
                     {
-                        "regenerate": "generator",
+                        "regenerate": _regen_target,
                         "debug": "cross_file_analyzer",
                         # P2 一致性（2026-09-26）：test_defect 达再生成上限时
                         # 路由 done（与 _should_debug 同口径收敛）
@@ -271,36 +434,35 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
                     {
                         "debug": "cross_file_analyzer",
                         "done": END,
-                        "regenerate": "generator",
+                        "regenerate": _regen_target,
                     },
                 )
                 workflow.add_edge("cross_file_analyzer", "debugger")
+        elif use_diagnosis_node:
+            # 诊断节点开启：executor → diagnosis → (generator | debugger)
+            workflow.add_edge("executor", "diagnosis")
+            workflow.add_conditional_edges(
+                "diagnosis",
+                _route_after_diagnosis,
+                {
+                    "regenerate": _regen_target,
+                    "debug": "debugger",
+                    # P2 一致性（2026-09-26）：test_defect 达再生成上限时
+                    # 路由 done（与 _should_debug 同口径收敛）
+                    "done": END,
+                },
+            )
         else:
-            if use_diagnosis_node:
-                # 诊断节点开启：executor → diagnosis → (generator | debugger)
-                workflow.add_edge("executor", "diagnosis")
-                workflow.add_conditional_edges(
-                    "diagnosis",
-                    _route_after_diagnosis,
-                    {
-                        "regenerate": "generator",
-                        "debug": "debugger",
-                        # P2 一致性（2026-09-26）：test_defect 达再生成上限时
-                        # 路由 done（与 _should_debug 同口径收敛）
-                        "done": END,
-                    },
-                )
-            else:
-                # 默认路径：executor → _should_debug → (debugger | END | generator)
-                workflow.add_conditional_edges(
-                    "executor",
-                    _should_debug,
-                    {
-                        "debug": "debugger",
-                        "done": END,
-                        "regenerate": "generator",
-                    },
-                )
+            # 默认路径：executor → _should_debug → (debugger | END | generator)
+            workflow.add_conditional_edges(
+                "executor",
+                _should_debug,
+                {
+                    "debug": "debugger",
+                    "done": END,
+                    "regenerate": _regen_target,
+                },
+            )
 
         # 顺序边：Debugger 输出补丁 → PatchApplier 应用到代码 → 回到 Executor 验证
         # 这构成一个可多次迭代的修复循环，每次循环后更新 iteration 计数
@@ -358,7 +520,9 @@ def _should_debug(state: AITesterState) -> str:
     # 现统一为 truthiness（与 _recent_repairs_invalid / _executor_node 写入口径
     # 一致：test_passed 由 executor 的 test_result["passed"] 赋值，语义即"测试全过"）。
     if state.get("test_passed"):
-        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_passed"})
+        _stop_reason = determine_stop_reason(state)
+        _trace_node("_should_debug", decision="done", output_summary={"reason": _stop_reason.value})
+        state["stop_reason"] = _stop_reason.value
         return "done"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
     # （纯数据判定，日志副作用留在路由层；_recent_repairs_invalid 保持零副作用）。
@@ -376,7 +540,13 @@ def _should_debug(state: AITesterState) -> str:
     # 生效（此时继续修代码确无意义，省 token 口径不变）。
     if state.get("iteration", 0) < state.get("max_iterations", MAX_ITERATIONS) and _recent_repairs_invalid(state):
         logger.info("连续多次修复无效，跳过 Debugger")
-        _trace_node("_should_debug", decision="done", output_summary={"reason": "skip_debugger_repair_invalid"})
+        _stop_reason = determine_stop_reason(state)
+        _trace_node(
+            "_should_debug",
+            decision="done",
+            output_summary={"reason": _stop_reason.value, "iteration": int(state.get("iteration", 0))},
+        )
+        state["stop_reason"] = _stop_reason.value
         return "done"
 
     # 3.1 双向诊断：Review Agent 判定为"测试缺陷"时，直接路由回 generator
@@ -402,7 +572,9 @@ def _should_debug(state: AITesterState) -> str:
                 _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis"})
                 return "regenerate"
             logger.info("已达重新生成上限，结束流程")
-        _trace_node("_should_debug", decision="done", output_summary={"reason": "max_iterations"})
+        _stop_reason = determine_stop_reason(state)
+        _trace_node("_should_debug", decision="done", output_summary={"reason": _stop_reason.value})
+        state["stop_reason"] = _stop_reason.value
         return "done"
 
     if state.get("defect_type") == "test_defect":
@@ -411,7 +583,17 @@ def _should_debug(state: AITesterState) -> str:
             _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "review_test_defect"})
             return "regenerate"
         logger.info("双向诊断（3.1）：已达重新生成上限，结束流程")
-        _trace_node("_should_debug", decision="done", output_summary={"reason": "test_defect_regeneration_cap"})
+        # 2026-09-30 审查修复：与其余 done 分支同口径，经 determine_stop_reason
+        # 单点判定终止原因并写入 state["stop_reason"]（此前该分支只 trace
+        # 了硬编码 reason 而未写 stop_reason，effective_stop_reason 读取侧
+        # 会落到 UNKNOWN，掩盖真实终止原因 test_defect_regeneration_cap）。
+        _stop_reason = determine_stop_reason(state)
+        _trace_node(
+            "_should_debug",
+            decision="done",
+            output_summary={"reason": _stop_reason.value, "regeneration_count": state.get("regeneration_count", 0)},
+        )
+        state["stop_reason"] = _stop_reason.value
         return "done"
 
     # 2026-09-26 全面审查（P1 路由语义澄清）：诊断指向"测试生成错误"时，
@@ -461,7 +643,74 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
         # 缓存目录收敛/清理属卫生性操作，任何异常（含权限 / IO）不得阻断工作流
         pass
     workflow = _create_workflow(planner=planner, debugger=debugger)
-    return workflow.compile()
+    # M12（2026-09-30 审查 D.4-2）：RISK_APPROVAL_ENABLE=true 时注入
+    # checkpointer，使 LangGraph interrupt() 可真正暂停并恢复。
+    # 默认关时（RISK_APPROVAL_ENABLE=false）不注入，保持历史行为零变化。
+    # 使用 MemorySaver（进程内）；SqliteSaver 需 langgraph-checkpoint-sqlite
+    # 包，当前未安装，待后续批次引入。
+    _checkpointer = None
+    try:
+        import os as _os
+
+        if _os.getenv("RISK_APPROVAL_ENABLE", "false").lower() in ("true", "1", "on"):
+            from langgraph.checkpoint.memory import MemorySaver
+
+            _checkpointer = MemorySaver()
+            logger.info("M12：RISK_APPROVAL_ENABLE=true，注入 MemorySaver checkpointer")
+    except ImportError:
+        logger.warning("M12：MemorySaver 不可用（langgraph.checkpoint.memory 缺失），跳过 checkpointer")
+
+    # 20. M4（2026-09-29 审查 P0）：DIAGNOSIS_NODE_ENABLE=true 时诊断分支曾绕过
+    # 收敛保护，回环只受 LangGraph 默认 recursion_limit=10007 约束（已实测发生
+    # Recursion limit of 10007 reached 事故）。现通过带 recursion_limit 的可运行
+    # 包装注入显式上界：每次 invoke 传入 langgraph 的 config 参数（recursion_limit
+    # 为合法键），使无界回环在 4*MAX_ITERATIONS+8 个 super-step 后终止，
+    # 不再依赖框架默认值。包装仅重写 invoke / ainvoke（注入 config），
+    # 其余方法透传底层 CompiledStateGraph，语义不变。
+    _base_graph = workflow.compile(checkpointer=_checkpointer) if _checkpointer else workflow.compile()
+
+    class _RecursionLimitedGraph:
+        """带显式 recursion_limit 的 LangGraph 包装（M4 硬上界 + M12 checkpointer）。
+
+        - invoke / ainvoke 透传给底层 CompiledStateGraph 并注入
+          config={"recursion_limit": N}（LangGraph 的 invoke 接受 config
+          参数，recursion_limit 为合法键），覆盖框架默认 10007；
+          M12 checkpointer 启用时同时注入 configurable.thread_id（invoke
+          调用方需传入 thread_id，否则用默认 "default"）；
+        - 其余方法（get_state / stream / with_config 等）透传，语义不变。
+        """
+
+        def __init__(self, graph, recursion_limit: int, has_checkpointer: bool):
+            self._graph = graph
+            self._recursion_limit = recursion_limit
+            self._has_checkpointer = has_checkpointer
+
+        def _build_config(self, thread_id: str | None = None) -> dict:
+            config: dict = {"recursion_limit": self._recursion_limit}
+            if self._has_checkpointer:
+                config["configurable"] = {"thread_id": thread_id or "default"}
+            return config
+
+        def invoke(self, *args, **kwargs):
+            # 调用方已显式传 config（含自己的 recursion_limit）时不覆盖
+            if "config" in kwargs and kwargs["config"] is not None:
+                return self._graph.invoke(*args, **kwargs)
+            # 合并调用方传入的 thread_id（M12 checkpointer 场景）
+            thread_id = kwargs.pop("thread_id", None)
+            kwargs["config"] = self._build_config(thread_id)
+            return self._graph.invoke(*args, **kwargs)
+
+        async def ainvoke(self, *args, **kwargs):
+            if "config" in kwargs and kwargs["config"] is not None:
+                return await self._graph.ainvoke(*args, **kwargs)
+            thread_id = kwargs.pop("thread_id", None)
+            kwargs["config"] = self._build_config(thread_id)
+            return await self._graph.ainvoke(*args, **kwargs)
+
+        def __getattr__(self, item):
+            return getattr(self._graph, item)
+
+    return _RecursionLimitedGraph(_base_graph, 4 * int(MAX_ITERATIONS) + 8, _checkpointer is not None)
 
 
 # 缓存条目数统计的进程内记忆（0.10 轮次）：生产 LLM 文件缓存在本进程内

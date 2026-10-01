@@ -121,6 +121,34 @@ else
   fail "配置校验失败（见上方缺失项提示；修复后重跑 bash scripts/bootstrap_dev.sh --check-only）"
 fi
 
+# ── O17（2026-09-29 审查 P0）：git hooks 安装 + gitleaks 全历史扫描 ─────
+# 历史缺陷：.git-hooks/check_secret_leak.sh 从未被 git 激活（无
+# core.hooksPath 设置 + 未安装 pre-commit），41% 敏感模式盲区（仅 sk- 前缀）
+# 从未真正拦截过提交。现补两步：
+# 1. git config core.hooksPath .git-hooks（激活 O17 全口径守卫）；
+# 2. gitleaks 全历史扫描（若已安装）；未安装时提示 + 跳过（不阻断）。
+if [[ "$CHECK_ONLY" -eq 0 ]]; then
+  info "安装 git pre-commit hooks（O17 密钥守卫）"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    git config core.hooksPath .git-hooks \
+      && ok "core.hooksPath → .git-hooks（O17 守卫已激活）" \
+      || warn "git config 失败（非 git 仓库或权限不足）"
+    # 确保 hooks 可执行
+    chmod +x .git-hooks/*.sh 2>/dev/null || true
+  else
+    warn "非 git 仓库，跳过 hooks 安装"
+  fi
+
+  info "gitleaks 全历史扫描（若已安装）"
+  if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks detect --repo-root . --no-git -v 2>&1 | tail -5 \
+      && ok "gitleaks 扫描通过" \
+      || warn "gitleaks 检测到疑似凭证（详见上方输出；请 rotate + filter-branch 清理历史）"
+  else
+    warn "gitleaks 未安装——建议 brew install gitleaks 或 apt install gitleaks"
+  fi
+fi
+
 info "bootstrap 校验全部通过"
 echo
 echo "下一步："

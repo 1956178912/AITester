@@ -257,11 +257,16 @@ class GraphRAGIndex:
         query_lower = query.lower()
         snippets: list[str] = []
         for mod_name, mod_src in self._module_sources.items():
-            # 保守子串匹配（小写化，定位 query 出现的行）
-            for i, line in enumerate(mod_src.splitlines()):
-                if query_lower in line.lower():
+            # 保守子串匹配（小写化，定位 query 出现的行）。
+            # O35（P2 性能）：splitlines 提到循环外——此前**每次命中**都在
+            # 命中分支内重跑一遍 `mod_src.splitlines()`，而外层迭代器本身
+            # 也对同一字符串 splitlines，命中 k 次即多做 k 次全量分割
+            # （O(行数²)），跨文件大模块 + 高 top_k 时开销明显。
+            lines = mod_src.splitlines()
+            lowered = [ln.lower() for ln in lines]
+            for i, line_lowered in enumerate(lowered):
+                if query_lower in line_lowered:
                     # 取 query 所在行 + 前后 2 行上下文
-                    lines = mod_src.splitlines()
                     start = max(0, i - 2)
                     end = min(len(lines), i + 3)
                     context_block = "\n".join(lines[start:end])

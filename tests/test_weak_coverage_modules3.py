@@ -219,13 +219,19 @@ class TestPromptTemplatesMain:
     """5.1 prompts/templates.py 弱覆盖补强：__main__ 自诊断入口。"""
 
     def test_main_block_prints_prompt_lengths(self, capsys):
-        """以 __main__ 方式执行 templates.py：打印各 prompt 字符数。"""
+        """以 __main__ 方式执行 templates.py：自诊断块无异常 + 常量已就位。
+
+        此前断言为 `assert True`（恒真，exec 成功与否均通过，2026-10-02
+        审查修复）：改为验证 exec 后模块全局中三个 prompt 常量确实存在
+        （自诊断块的消费对象），使断言对 exec 结果敏感。
+        """
 
         # 直接以 __main__ 模块身份执行
         with open(os.path.join(PROJECT_ROOT, "src/prompts/templates.py"), encoding="utf-8") as f:
             code = f.read()
         module_globals = {"__name__": "__main__"}
         exec(compile(code, "templates.py", "exec"), module_globals)
-        # 执行后 locals() 中的 UPPERCASE 字符串项会被 logger.info 打印
-        # 不验证具体输出（logging 默认去向），只确认 exec 无异常
-        assert True
+        # exec 无异常 + 自诊断块引用的常量在模块全局可用
+        for const in ("PLANNER_SYSTEM_PROMPT", "GENERATOR_SYSTEM_PROMPT", "DEBUGGER_SYSTEM_PROMPT"):
+            value = module_globals.get(const)
+            assert isinstance(value, str) and value.strip(), f"{const} 缺失或为空"

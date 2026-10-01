@@ -88,6 +88,11 @@ class ErrorReport:
                 "0.5-0.8" / "0.8-1.0" → 计数）/ `weak_oracle_ratio`（float，
                 弱预言占比 0.0-1.0，total_oracles = 0 时为 None）。
 
+        R24（2026-09-30 独立审查 P0）：oracle_confidence 为 LLM 自评，
+        本节渲染时显式标注"非验收/断言强度信号"（渲染在 to_markdown，
+        保守不改动数据口径）——验收与断言有效性以 mutation kill /
+        gold 独立裁决（M1 三指标）为准。
+
         Returns:
             注入后的 ErrorReport（返回 self，支持链式调用）。
         """
@@ -285,8 +290,12 @@ class ErrorReport:
                 [
                     "## 预言有效性（Oracle 增强，G7）",
                     "",
+                    "> **R24（2026-09-30 独立审查 P0）**：下列 oracle_confidence 为**LLM 自评**",
+                    "> 置信度（0.0-1.0），仅作观测参考，**不作为验收/断言强度信号**——信念",
+                    "> 条件化膨胀是 LLM 自评估的已知失效模式（ACL 2026 Findings）。断言有效性",
+                    "> 请以 mutation kill / gold 独立裁决为准（M1 三指标），勿以本节自评为依据。",
                     f"- 总预言数: {total_oracles}",
-                    f"- 弱预言数（oracle_confidence < 0.5）: {weak_count}"
+                    f"- 弱预言数（oracle_confidence < 0.5，LLM 自评）: {weak_count}"
                     + (f"（占比 {weak_ratio:.1%}）" if weak_ratio is not None else ""),
                     "- 预言来源分布:",
                 ]
@@ -294,7 +303,7 @@ class ErrorReport:
             for source, count in sorted(source_dist.items(), key=lambda kv: -int(kv[1])):
                 lines.append(f"  - {source}: {count}")
             if conf_dist:
-                lines.append("- 预言置信度分布:")
+                lines.append("- 预言置信度分布（LLM 自评，非验收信号）:")
                 for bucket, count in sorted(conf_dist.items()):
                     lines.append(f"  - {bucket}: {count}")
             lines.append("")
@@ -352,7 +361,7 @@ class ReportGenerator:
         # 旧写法 classify() + context=None 导致 _analyze_root_cause/_generate_fix_suggestion
         # 的 ImportError 分支（依赖 context.module_name）永不可达、error_subtype 恒为 None
         category, context_raw = self._classifier.classify_with_context(error_output, parsed_cases)
-        context: ErrorContext | None = context_raw if context_raw else None
+        context: ErrorContext | None = context_raw or None
 
         # 分析根本原因
         root_cause = self._analyze_root_cause(category, context, error_output)
@@ -456,8 +465,22 @@ class ReportGenerator:
         #   - 短格式（-q/--tb=no）：`FAILED tests/x.py::test_y - AssertionError`
         #     （用例名 + 行内错误后缀一次提取）
         #   - 裸 FAILED 行（无用例名）：name 兜底 "unknown"（历史行为保持）
+        # 2026-10-01 全面审查 P2 修复两处残留缺口：
+        #   (1) name 提取正则 `^(\S+\.py::\S+)\s+FAILED` 假设 FAILED 在行
+        #       首——但 pytest 失败用例汇总行实际是 "FAILED tests/a.py::t1 [E]"
+        #       （FAILED 在行首）。原实现用 _FAILED_TOKEN_RE.search 取行内
+        #       首个 token，对 "FAILED tests/a.py::t1" 会取到 "FAILED" 自身
+        #       而非用例名。现改为 name 优先正则：`^FAILED\s+(\S+\.py::\S+)`
+        #       命中即用；未命中再退回 search（兼容 "FAILED" 在行中的少见格式）。
+        #   (2) 后缀提取 `_ERROR_SUFFIX_RE = r"\s+-\s+(.*Error.*)$"` 仅匹配
+        #       含 "Error" 的后缀——短格式下 `FAILED tests/x.py::t - ValueError`
+        #       能命中但 `FAILED tests/x.py::t - KeyError: 'x'` 或
+        #       `FAILED tests/x.py::t - assert 1 == 2` 等非 Error 类后缀
+        #       会被丢弃。现放宽为 `r"\s+-\s+(\S.*)$"`（取 "-" 后全部内容，
+        #       不限制 Error 前缀）。
+        _FAILED_NAME_FIRST_RE = re.compile(r"^FAILED\s+(\S+\.py::\S+)")
         _FAILED_TOKEN_RE = re.compile(r"FAILED\s+([^\s\[\]@]+)")
-        _ERROR_SUFFIX_RE = re.compile(r"\s+-\s+(.*Error.*)$")
+        _ERROR_SUFFIX_RE = re.compile(r"\s+-\s+(\S.*)$")
         _ERROR_LINE_RE = re.compile(r"^\s*(E\s+)?\w*(Error|Exception)\b")
 
         current_case: dict[str, str] = {}
@@ -465,14 +488,17 @@ class ReportGenerator:
             if "FAILED" in line:
                 if current_case:
                     cases.append(current_case)
-                token_m = _FAILED_TOKEN_RE.search(line)
-                # 行内错误后缀（短格式 ` - AssertionError: ...`），先剥离再
-                # 取用例名（防后缀 token 混入 name）
-                suffix_m = _ERROR_SUFFIX_RE.search(line)
-                error_suffix = suffix_m.group(1).strip() if suffix_m else ""
-                current_case = {"name": token_m.group(1)} if token_m else {"name": "unknown"}
+                # 先用 name-first 正则取用例名（pytest 汇总行 FAILED 在行首）；
+                # 未命中退回 token search（兼容 FAILED 在行中的少见格式）。
+                name_m = _FAILED_NAME_FIRST_RE.match(line)
+                error_suffix = _ERROR_SUFFIX_RE.search(line)
+                if name_m:
+                    current_case = {"name": name_m.group(1)}
+                else:
+                    token_m = _FAILED_TOKEN_RE.search(line)
+                    current_case = {"name": token_m.group(1)} if token_m else {"name": "unknown"}
                 if error_suffix:
-                    current_case["error"] = error_suffix
+                    current_case["error"] = error_suffix.group(1).strip()
             elif current_case and "error" not in current_case:
                 # 详细格式：FAILED 行后的第一行异常（E AssertionError: ... /
                 # AssertionError: ...）作为错误详情
@@ -488,7 +514,7 @@ class ReportGenerator:
         self,
         report: ErrorReport,
         output_dir: str = "reports",
-        format: ReportFormat = ReportFormat.TEXT,
+        format: ReportFormat = ReportFormat.TEXT,  # noqa: A002 — 公开 API 关键字参数（历史调用方以 format= 传参）
     ) -> Path:
         """
         保存报告到文件。

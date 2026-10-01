@@ -12,6 +12,8 @@ ErrorClassifier 单元测试
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agents.error_classifier import (
@@ -25,6 +27,7 @@ from src.agents.error_classifier import (
 )
 
 
+@pytest.mark.unit
 class TestErrorCategory:
     """测试 ErrorCategory 枚举。"""
 
@@ -79,19 +82,25 @@ class TestErrorCategory:
         """RAG_RETRIEVAL_EMPTY 类别的值。"""
         assert ErrorCategory.RAG_RETRIEVAL_EMPTY.value == "rag_retrieval_empty"
 
-    def test_seventeen_categories_total(self):
-        """错误分类体系共 17 类（10 文本类 + 2 状态细化类 + 2 多候选/轨迹类
+    def test_eighteen_categories_total(self):
+        """错误分类体系共 18 类（10 文本类 + 2 状态细化类 + 2 多候选/轨迹类
         + P0 4.1 两个 LLM_FORMAT_ERROR 精确子类 LLM_EMPTY_RESPONSE /
-        LLM_JSON_PARSE_FAILED + 2.2 重采样耗尽标记 PATCH_SYNTAX_INVALID）。"""
-        assert len(ErrorCategory) == 17
+        LLM_JSON_PARSE_FAILED + 2.2 重采样耗尽标记 PATCH_SYNTAX_INVALID
+        + M5 测试重生成假通过标记 TEST_REGENERATED_PASS_UNVERIFIED）。"""
+        assert len(ErrorCategory) == 18
         # P0 4.1 子类存在性校验
         assert ErrorCategory.LLM_EMPTY_RESPONSE.value == "llm_empty_response"
         assert ErrorCategory.LLM_JSON_PARSE_FAILED.value == "llm_json_parse_failed"
         # 2.2 重采样耗尽标记（patch_applier.apply_patch_with_resample 统计
         # 经 _patch_applier_node 写入 state["error_category"] 的消费口径）
         assert ErrorCategory.PATCH_SYNTAX_INVALID.value == "patch_syntax_invalid"
+        # M5（2026-09-29 审查 P0）：测试重生成后通过但源码未修复（regenerate
+        # 路由不经过 debugger/patch_applier）= 假成功通道。refine_failure_category
+        # 在任务收尾时把该标记归为"不通过"，使假成功率可被实验层度量。
+        assert ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED.value == "test_regenerated_pass_unverified"
 
 
+@pytest.mark.unit
 class TestSyntaxSubtype:
     """测试 SyntaxSubtype 枚举。"""
 
@@ -108,6 +117,7 @@ class TestSyntaxSubtype:
         assert SyntaxSubtype.UNRECOGNIZED.value == "unrecognized"
 
 
+@pytest.mark.unit
 class TestErrorContext:
     """测试 ErrorContext 数据类。"""
 
@@ -136,6 +146,7 @@ class TestErrorContext:
         assert ctx.module_name == "pandas"
 
 
+@pytest.mark.unit
 class TestErrorClassifier:
     """测试 ErrorClassifier 分类器。"""
 
@@ -404,6 +415,7 @@ class TestErrorClassifier:
         assert ErrorClassifier._is_timeout_error("RuntimeError: something") is False
 
 
+@pytest.mark.unit
 class TestGetFixStrategy:
     """测试 get_fix_strategy 函数。"""
 
@@ -508,6 +520,7 @@ class TestGetFixStrategy:
         assert "常规" in strategy
 
 
+@pytest.mark.unit
 class TestRefineFailureCategory:
     """refine_failure_category 任务收尾状态细化测试（1.1 状态细化）。"""
 
@@ -576,6 +589,7 @@ class TestRefineFailureCategory:
         assert refine_failure_category("assertion", False, repair_history=history, execution_trace=trace) == "assertion"
 
 
+@pytest.mark.unit
 class TestGetRecommendedFixStrategy:
     """2.1 P1 改进：错误分类 → 修复策略显式映射（get_recommended_fix_strategy）。"""
 
@@ -611,6 +625,7 @@ class TestGetRecommendedFixStrategy:
         assert r4["repair_action"] == "investigate_infra"
 
 
+@pytest.mark.unit
 class TestRefineFinalErrorCategory:
     """refine_final_error_category 最终状态接线封装（2.4 收敛，cli/benchmark 共用）。"""
 

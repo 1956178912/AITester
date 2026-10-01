@@ -27,6 +27,7 @@ def env_file(tmp_path, monkeypatch):
     return path
 
 
+@pytest.mark.unit
 class TestGetAllLLMConfigs:
     """测试 get_all_llm_configs"""
 
@@ -46,6 +47,7 @@ class TestGetAllLLMConfigs:
             assert hasattr(cfg, "model_name")
 
 
+@pytest.mark.unit
 class TestCountLLMConfigs:
     """测试 count_llm_configs"""
 
@@ -55,6 +57,7 @@ class TestCountLLMConfigs:
         assert isinstance(count, int)
 
 
+@pytest.mark.unit
 class TestGetModelNames:
     """测试 get_model_names"""
 
@@ -81,6 +84,7 @@ class TestGetModelNames:
         assert any(k in n for n in names for k in vendor_keywords)
 
 
+@pytest.mark.unit
 class TestGetConfigByModel:
     """测试 get_config_by_model"""
 
@@ -101,6 +105,7 @@ class TestGetConfigByModel:
         assert cfg is None
 
 
+@pytest.mark.unit
 class TestAddLLMConfig:
     """测试 add_llm_config（真实临时文件 + 隔离 load_dotenv/refresh）"""
 
@@ -198,6 +203,7 @@ class TestAddLLMConfig:
         assert result is False
 
 
+@pytest.mark.unit
 class TestRemoveLLMConfig:
     """测试 remove_llm_config（真实临时文件 + 隔离 load_dotenv/refresh）"""
 
@@ -295,6 +301,7 @@ class TestRemoveLLMConfig:
         assert remove_llm_config("m") is False
 
 
+@pytest.mark.unit
 class TestPrintConfigReport:
     """测试 print_config_report（不应抛出异常）"""
 
@@ -304,6 +311,7 @@ class TestPrintConfigReport:
         assert "总模型数" in captured.out
 
 
+@pytest.mark.unit
 class TestValidateConfigs:
     """测试 validate_configs"""
 
@@ -343,6 +351,7 @@ class TestValidateConfigs:
         assert len(result["issues"]) == 3
 
 
+@pytest.mark.unit
 class TestBatchAddModels:
     """测试 batch_add_models（使用 mock）"""
 

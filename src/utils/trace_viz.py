@@ -40,8 +40,8 @@ def _parse_jsonl(path: str) -> list[dict[str, Any]]:
         logger.warning("trace 文件不存在: %s", path)
         return records
     with open(p, encoding="utf-8") as fh:
-        for i, line in enumerate(fh):
-            line = line.strip()
+        for i, raw_line in enumerate(fh):
+            line = raw_line.strip()
             if not line:
                 continue
             try:
@@ -144,7 +144,7 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
             tok_s = f"{tok} tok" if tok else ""
             decision = r.get("decision", "")
             chip_cls = "node"
-            if decision == "PASS" or decision == "done" or decision == "written":
+            if decision in ("PASS", "done", "written"):
                 chip_cls += " pass-node"
             elif decision in ("FAIL", "rejected"):
                 chip_cls += " fail-node"

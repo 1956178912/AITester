@@ -81,4 +81,9 @@ class TestSyntheticTaskGeneration:
     def test_get_task_by_id(self):
         ds = SyntheticDataset(task_count=3, seed=42)
         t = ds.get_task_by_id(ds.tasks[0].task_id)
-        assert t is ds.tasks[0] or (t is not None and t.task_id == ds.tasks[0].task_id)
+        # 此前为 `t is ds.tasks[0] or (t is not None and ...)`——第一个分句
+        # 为真时整个 or 恒真，未验证 task_id 匹配语义（2026-10-02 审查修复）：
+        # 统一为"返回对象的 task_id 必须等于入参" + 未知 id 返回 None 边界。
+        assert t is not None, "get_task_by_id 未命中已知 task_id"
+        assert t.task_id == ds.tasks[0].task_id
+        assert ds.get_task_by_id("nonexistent-task-id") is None

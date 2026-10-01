@@ -15,6 +15,8 @@ graph/workflow.py 组合路由补全测试（2026-09-29 批次，把 85% 分支�
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.graph.workflow import (
@@ -40,6 +42,7 @@ def _state(**overrides) -> dict:
     return base
 
 
+@pytest.mark.unit
 class TestShouldDebugCombinations:
     """_should_debug 全组合（"达上限 × 关键词 × 再生成上限"交叉场景）。"""
 
@@ -82,7 +85,9 @@ class TestShouldDebugCombinations:
         assert _should_debug(state) == "done"
 
     def test_diagnosis_keyword_hit_early_iteration_regen(self):
-        state = _state(iteration=1, diagnosis="AttributeError 出现在测试断言中")
+        # M5（2026-09-29 审查 P0）：AttributeError/NameError/SyntaxError 已从
+        # 关键词表删除（防源码缺陷误判为测试缺陷→假通过），现用保留关键词命中。
+        state = _state(iteration=1, diagnosis="测试生成错误：断言了错误的异常类型")
         assert _should_debug(state) == "regenerate"
 
     def test_diagnosis_empty_string_early_iteration_debug(self):
@@ -238,6 +243,7 @@ class TestShouldDebugCombinations:
         assert _should_debug(state) == "regenerate"
 
 
+@pytest.mark.unit
 class TestRecentRepairsInvalid:
     def test_empty_history_false(self):
         assert _recent_repairs_invalid(_state()) is False
@@ -290,14 +296,21 @@ class TestRecentRepairsInvalid:
         assert _recent_repairs_invalid(state) is True
 
 
+@pytest.mark.unit
 class TestDiagnosisKeywords:
     def test_keyword_hits(self):
+        # M5（2026-09-29 审查 P0）：AttributeError 已删除（源码缺陷签名词），
+        # 用保留的"测试生成错误"关键词验证命中路径。
         assert _diagnosis_hits_test_gen_keywords("测试生成错误")
-        assert _diagnosis_hits_test_gen_keywords("出现了 AttributeError")
+        assert _diagnosis_hits_test_gen_keywords("出现了测试用例设计错误")
 
     def test_keyword_misses(self):
         assert not _diagnosis_hits_test_gen_keywords("运行时除零")
-        assert not _diagnosis_hits_test_gen_keywords("attribute error")  # 关键词是精确 "AttributeError"
+        # M5：AttributeError/NameError/SyntaxError 已删除（源码缺陷签名词），
+        # 命中它们不再触发"测试生成错误"路由（防实现缺陷误判→假通过）。
+        assert not _diagnosis_hits_test_gen_keywords("出现了 AttributeError")
+        assert not _diagnosis_hits_test_gen_keywords("出现了 NameError")
+        assert not _diagnosis_hits_test_gen_keywords("出现了 SyntaxError")
 
     def test_none_diagnosis_safe(self):
         # _should_debug 的 `state.get("diagnosis", "") or ""` 已归一 None → ""；
@@ -305,6 +318,7 @@ class TestDiagnosisKeywords:
         assert not _diagnosis_hits_test_gen_keywords("")
 
 
+@pytest.mark.unit
 class TestRouteAfterDiagnosis:
     def test_no_defect_routes_debug(self):
         assert _route_after_diagnosis(_state()) == "debug"
@@ -333,6 +347,7 @@ class TestRouteAfterDiagnosis:
         assert _route_after_diagnosis(state) == "regenerate"
 
 
+@pytest.mark.unit
 class TestCreateWorkflowConditionalEdges:
     """_create_workflow 的消融开关组合（planner/debugger 矩阵 4 态 +
     DIAGNOSIS_NODE_ENABLE / ENABLE_RAG 条件边）。"""
@@ -390,6 +405,7 @@ class TestCreateWorkflowConditionalEdges:
         monkeypatch.delenv("ENABLE_RAG", raising=False)
 
 
+@pytest.mark.unit
 class TestWorkflowStatsKeys:
     """get_workflow_stats 全键存在性（真实口径：llm_cache / workflow_config /
     cost_budget / semantic_cache，含 3.6 假阳性抽样统计合并消费）。"""
@@ -454,6 +470,7 @@ if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
 
 
+@pytest.mark.unit
 class TestWorkflowGraphShapes:
     """_create_workflow 的边拓扑各组合（cross_file / diagnosis 开关矩阵）。"""
 

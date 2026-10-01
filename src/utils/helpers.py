@@ -39,18 +39,32 @@ def extract_code_block(text: str, language: str | None = None) -> str:
     从 LLM 输出中提取代码块。
 
     支持四种格式（按优先级）：
-    1. ```python ... ```（带语言标记的 markdown 代码块）
-    2. ``` ... ```（通用 markdown 代码块）
-    3. python: ... 前缀格式（某些模型输出不带反引号）
-    4. 纯文本（无标记时直接返回）
+    1. ```<language> ... ```（按调用方期望语言精确匹配的代码块）
+    2. ```python ... ```（带语言标记的 markdown 代码块）
+    3. ``` ... ```（通用 markdown 代码块）
+    4. python: ... 前缀格式（某些模型输出不带反引号）
+    5. 纯文本（无标记时直接返回）
 
     Args:
         text: LLM 返回的包含代码的原始文本。
         language: 期望的代码语言（如 "python"），None 表示不限制。
+            O35（2026-09-30 全面审查 P3）：此前该参数**完全未被读取**（docstring
+            承诺"期望的代码语言"但函数体从不引用），language="javascript" 的
+            调用方会拿到第一个 ```python 块。现按 language 优先精确匹配
+            对应标记的块；未命中时回退到原优先级链（对现有 python 调用方
+            行为不变：language="python" 时第 1 步与原第 1 步等价）。
 
     Returns:
         提取出的代码字符串（已去除 markdown 包裹和首尾空白）。
     """
+    # 0. 按调用方期望语言精确匹配（language 给定且非 python 时的新增前置档；
+    #    language="python" 命中即等价于下方原第 1 步，不改变既有行为）
+    if language:
+        lang_pat = re.compile(rf"```{re.escape(language)}\s*\n(.*?)\n\s*```", re.DOTALL | re.IGNORECASE)
+        match = lang_pat.search(text)
+        if match:
+            return match.group(1).strip()
+
     # 尝试带语言标记的格式：```python ... ```（优先匹配）
     match = _CODE_BLOCK_PYTHON_PATTERN.search(text)
     if match:

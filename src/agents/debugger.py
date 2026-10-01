@@ -91,7 +91,7 @@ def _position_aware_repair_enabled() -> bool:
     该定位是纯静态（不消耗 LLM token）；LLM 调用失败或无法定位时降级为
     常规全文件修复（保持历史口径，不因定位失败阻断修复）。
     """
-    return os.getenv("POSITION_AWARE_REPAIR_ENABLE", "false").lower() == "true"
+    return os.getenv("POSITION_AWARE_REPAIR_ENABLE", "true").lower() == "true"
 
 
 def _probe_snapshot_locate_enabled() -> bool:
@@ -236,6 +236,11 @@ class DebuggerAgent(BaseAgent):
         probe_section: str | None = None,
         failure_frequency_section: str | None = None,
         probe_snapshot: dict[str, Any] | None = None,
+        # O2（2026-09-29 审查 P1）：谱系定位先验段落（FL_SPECTRAL_ENABLE=true
+        # 时由 _debugger_node 经 measure_fl_spectral_focus 测量并经
+        # build_fl_spectral_prompt_section 渲染传入）。None / 空串时不注入，
+        # 历史口径零变化。
+        fl_spectral_section: str | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -408,6 +413,12 @@ class DebuggerAgent(BaseAgent):
             query += "\n\n" + failure_frequency_section
             logger.info("ANNEAL-lite 故障频率强化注入 %d 字符提示", len(failure_frequency_section))
 
+        # O2（2026-09-29 审查 P1）：谱系定位先验段落（FL_SPECTRAL_ENABLE=true
+        # 时非空；None / 空串时不注入，prompt 与历史逐字节一致，保守降级）
+        if fl_spectral_section:
+            query += "\n\n" + fl_spectral_section
+            logger.info("O2 FL_spectral 定位先验注入 %d 字符提示", len(fl_spectral_section))
+
         # P0 1.1 分层代码压缩：跨文件任务时注入"被调模块的聚焦上下文"
         # （extract_function_context 按调用链截取，非整模块全文），让 LLM
         # 修复跨文件缺陷时理解被调模块的接口契约；每模块 2000 字符预算，
@@ -447,13 +458,10 @@ class DebuggerAgent(BaseAgent):
                         f"【参考修复案例 {i}】\n原始代码：\n```python\n{orig}\n```\n修复代码：\n```python\n{patch}\n```"
                     )
             if refs_text:
-                _rag_header = (
-                    "\n\n以下历史修复案例可作为参考："
-                )
+                _rag_header = "\n\n以下历史修复案例可作为参考："
                 if os.getenv("RAG_JUDGE_INSTRUCTION_ENABLE", "false").lower() == "true":
                     _rag_header += (
-                        "【判断指令】以下案例仅供参考，若与当前错误类型或代码上下文不匹配请忽略，"
-                        "不要强行套用历史补丁。"
+                        "【判断指令】以下案例仅供参考，若与当前错误类型或代码上下文不匹配请忽略，不要强行套用历史补丁。"
                     )
                 query += _rag_header + "\n" + "\n\n".join(refs_text)
                 logger.info("Debugger 使用了 %d 个 RAG 修复参考", len(refs_text))
@@ -512,8 +520,7 @@ class DebuggerAgent(BaseAgent):
                 if probe_focus.get("focused"):
                     focus_result = probe_focus
                     logger.info(
-                        "P1 探针快照定位：assertion 失败（无 traceback 行号）经探针"
-                        "最内层帧定位到 %s() 第 %s 行",
+                        "P1 探针快照定位：assertion 失败（无 traceback 行号）经探针最内层帧定位到 %s() 第 %s 行",
                         focus_result.get("function_name"),
                         focus_result.get("line"),
                     )
@@ -730,11 +737,7 @@ class DebuggerAgent(BaseAgent):
         # 精确匹配已覆盖，无需放宽——保持保守"宁缺勿误"）
         if target_module and getattr(context, "filename", None):
             file_base = str(context.filename).rsplit("/", 1)[-1]
-            if not (
-                file_base.startswith(target_module)
-                or file_base == f"{target_module}.py"
-                or file_base == target_module
-            ):
+            if file_base not in (target_module, f"{target_module}.py") and not file_base.startswith(target_module):
                 return {"focused": False, "function_name": None, "line": line, "hint": ""}
 
         try:

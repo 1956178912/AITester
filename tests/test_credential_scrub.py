@@ -93,8 +93,11 @@ class TestScrubCredentials:
         out = scrub_credentials(env)
         assert "LLM_32_API_KEY" not in out
         assert "LLM_32_BASE_URL" not in out
-        # 33 超出扫描口径（系统不读），保守保留（剔除它无害但口径以 32 为准）
-        assert "LLM_33_API_KEY" in out or "LLM_33_API_KEY" not in out
+        # 33 超出扫描口径（系统不读），模式按 LLM_\d+_ 前缀通配也剔除
+        # （防御口径：剔除它无害，保留才可能泄漏）——此前断言写成
+        # `in out or not in out` 恒真（2026-10-02 审查修复），
+        # 锁定实际防御行为。
+        assert "LLM_33_API_KEY" not in out
 
     def test_scrub_os_environ_returns_copy(self, monkeypatch):
         monkeypatch.setenv("LLM_9_API_KEY", "sk-env9")
@@ -103,7 +106,13 @@ class TestScrubCredentials:
         out = scrub_os_environ()
         assert "LLM_9_API_KEY" not in out
         assert "OPENAI_API_KEY_2" not in out
-        assert "LLM_9_MODEL_NAME" in out
+        # D.4-3（2026-09-30）：S4 白名单默认启用后，LLM_N_MODEL_NAME 不在
+        # _WHITELIST_ENV_KEYS 中，故不再保留（安全默认"拒绝"口径）。
+        # 如需验证黑名单行为，显式设 CREDENTIAL_SCRUB_WHITELIST_ENABLE=false。
+        # 此前断言写成 `not in out or in out` 恒真（2026-10-02 审查修复），
+        # 锁定白名单默认路径的实际行为。
+        assert "LLM_9_MODEL_NAME" not in out
+        # 白名单路径（默认）：非白名单变量一律剔除
         # os.environ 本身不被修改
         assert "LLM_9_API_KEY" in __import__("os").environ
 
@@ -112,3 +121,53 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(__import__("pytest").main([__file__, "-v"]))
+
+
+class TestWhitelistMinimalEnv:
+    """S4 白名单最小化环境（build_minimal_env / whitelist_enabled）回归。
+
+    2026-10-02 审查：白名单实现此前无独立单测——scrub_os_environ 仅在
+    "默认白名单"下被顺带覆盖，build_minimal_env 的键白名单语义与
+    whitelist_enabled 开关翻转路径零覆盖。本类补齐。
+    """
+
+    def test_whitelist_enabled_default_true(self):
+        """D.4-3 起默认 true（安全默认"拒绝"口径）。"""
+        import os as _os
+
+        from src.utils.credential_scrub import whitelist_enabled
+
+        saved = _os.environ.pop("CREDENTIAL_SCRUB_WHITELIST_ENABLE", None)
+        try:
+            assert whitelist_enabled() is True
+        finally:
+            if saved is not None:
+                _os.environ["CREDENTIAL_SCRUB_WHITELIST_ENABLE"] = saved
+
+    def test_minimal_env_keeps_whitelisted_only(self, monkeypatch):
+        """白名单键保留，其余（含凭证）一律剔除。"""
+        from src.utils.credential_scrub import _WHITELIST_ENV_KEYS, build_minimal_env
+
+        monkeypatch.setenv("PATH", "/usr/bin")
+        monkeypatch.setenv("HOME", "/home/u")
+        monkeypatch.setenv("LANG", "en_US.UTF-8")
+        monkeypatch.setenv("MYSQL_PASSWORD", "SuperSecret123")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "abc")
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+        monkeypatch.setenv("SOME_RANDOM_VAR", "x")
+        out = build_minimal_env()
+        for key in ("PATH", "HOME", "LANG"):
+            assert key in out, f"白名单键 {key} 被误剔除"
+        for key in ("MYSQL_PASSWORD", "AWS_SECRET_ACCESS_KEY", "SSH_AUTH_SOCK", "SOME_RANDOM_VAR"):
+            assert key not in out, f"非白名单键 {key} 泄漏进子进程 env"
+        # 输出键集必须是白名单的子集（默认拒绝口径）
+        assert set(out).issubset(set(_WHITELIST_ENV_KEYS))
+
+    def test_scrub_os_environ_blacklist_path_when_disabled(self, monkeypatch):
+        """显式关闭白名单 → 回退历史黑名单口径（PYTHONPATH 等保留）。"""
+        monkeypatch.setenv("CREDENTIAL_SCRUB_WHITELIST_ENABLE", "false")
+        monkeypatch.setenv("LLM_7_API_KEY", "sk-env7")
+        monkeypatch.setenv("PYTHONPATH", "/a:/b")
+        out = scrub_os_environ()
+        assert "LLM_7_API_KEY" not in out, "黑名单口径下凭证仍应剔除"
+        assert out.get("PYTHONPATH") == "/a:/b", "黑名单口径下非凭证变量应保留"

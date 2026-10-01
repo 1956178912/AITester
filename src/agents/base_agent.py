@@ -40,6 +40,38 @@ from src.agents.llm_client import (
 )
 from src.utils.helpers import extract_code_block, extract_json_object
 
+
+def _is_rate_limit_error(e: BaseException) -> bool:
+    """O15（2026-09-29 审查 P2）：判断异常是否为限流（429）错误。
+
+    覆盖 openai.RateLimitError / httpx.HTTPStatusError(429) / 通用
+    "429" / "rate limit" / "too many requests" 关键词匹配（SDK 版本差异
+    下异常类名不同，关键词兜底确保跨 SDK 可识别）。
+    """
+    _msg = str(e).lower()
+    if "429" in _msg or "rate limit" in _msg or "too many requests" in _msg:
+        return True
+    _type_name = type(e).__name__
+    if "RateLimit" in _type_name or "rate_limit" in _msg:
+        return True
+    # httpx.HTTPStatusError with status_code == 429
+    return getattr(e, "status_code", None) == 429
+
+
+def _extract_retry_after_seconds(e: BaseException) -> float | None:
+    """O15：从限流异常中提取 Retry-After 头（秒），无则返回 None。"""
+    _resp = getattr(e, "http_response", None) or getattr(e, "response", None)
+    if _resp is not None:
+        _h = getattr(_resp, "headers", {})
+        _ra = _h.get("retry-after") if isinstance(_h, dict) else None
+        if _ra:
+            try:
+                return float(_ra)
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
 logger = logging.getLogger(__name__)
 
 # ─── Token 优化常量 ─────────────────────────────────────────────────────────
@@ -242,6 +274,7 @@ class BaseAgent:
         user_message: str,
         max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
         temperature: float | None = None,
+        complexity_class: str | None = None,
     ) -> str:
         """
         带缓存的 LLM 调用方法。
@@ -255,26 +288,43 @@ class BaseAgent:
            保证跨进程/跨会话命中（文件是事实来源）；
         3. LLM 调用成功且缓存开启时写文件并回填 LRU。
 
+        O12（2026-09-29 审查 P1）：complexity_class 参数透传至 _call_llm，
+        使 MODEL_ROUTING_STRATEGY=complexity_aware（默认值）的复杂度感知
+        路由在缓存命中/未命中路径下均生效（此前该参数恒为 None，
+        复杂度路由为死代码）。
+
         Args:
             user_message: 用户消息内容。
             max_retries: 单次 API 的最大重试次数。
             temperature: 采样温度覆盖（3.3 动态策略接线用）；None 时使用
                 config.TEMPERATURE。非 None 时温度参与缓存键，避免不同温度
                 命中同一缓存导致结果串味。
+            complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
+                非 None 时经 _call_llm → _reorder_api_groups_by_complexity
+                按档位重排 API 组（complex → 高成本端点在前）。
 
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
         # 缓存开关关闭时直接透传（测试环境默认关闭，避免缓存文件污染与 flaky）
         if not _llm_cache_enabled():
+            if complexity_class is not None:
+                if temperature is not None:
+                    return self._call_llm(
+                        user_message, max_retries, temperature=temperature, complexity_class=complexity_class
+                    )
+                return self._call_llm(user_message, max_retries, complexity_class=complexity_class)
             if temperature is not None:
                 return self._call_llm(user_message, max_retries, temperature=temperature)
             return self._call_llm(user_message, max_retries)
 
         # 生成缓存键（基于 user_message + system_prompt + temperature）
         # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
-        # 说明：键不含 model，缓存的是"成功的 LLM 输出文本"；配额故障转移/模型切换后，
-        # 命中旧结果仍有效（都是该 prompt 的合理回答），且不再消耗 token。
+        # 说明：键不含 model（M8：基线/实验场景下跨模型调用时，缓存的是
+        # "成功的 LLM 输出文本"；同一 prompt 在不同模型下的输出可能不同，
+        # 但配额故障转移/模型切换后命中旧结果仍是该 prompt 的合理回答，
+        # 且不再消耗 token——历史口径保持。正式实验须显式 AITESTER_LLM_CACHE=0
+        # 以消除跨模型串味；此注释仅说明设计意图，不改变默认行为）。
         # 键材料用 \x00 分隔（user_message 与 system_prompt 均可能含冒号）；
         # 读缓存时先比长度再比全量文本，命中路径零额外成本
         # 写入缓存记录 temperature（None 归一为默认 TEMPERATURE）：读取校验时
@@ -285,6 +335,22 @@ class BaseAgent:
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
         cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
         lru_key = (cache_file, user_message, temperature)
+
+        # M8（2026-09-29 审查 P0）：跨模型缓存隔离开关。
+        # R13（2026-09-30 独立审查 P0）起**默认开启**（"1"）：缓存键加入
+        # "当前配置链中首个有效 model_name"作为隔离材料——同一 prompt 在
+        # 不同 model 命名空间下不再共享缓存条目（消除跨模型串味，保证
+        # A/B 对照与可复现性）。设 AITESTER_CACHE_ISOLATE_MODEL=0 可显式
+        # 退回"不隔离"历史口径（配额故障转移/模型切换复用旧结果的场景）。
+        if os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1").strip() != "0":
+            from src.agents.llm_client import get_first_valid_model_name
+
+            _iso_model = get_first_valid_model_name()
+            if _iso_model:
+                cache_key = f"{cache_key}\x00m{_iso_model}"
+                cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]
+                cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
+                lru_key = (cache_file, user_message, temperature)
 
         # 快路径 1：进程内 LRU 命中（零磁盘 IO）
         hit = _lru_lookup(lru_key)
@@ -354,7 +420,14 @@ class BaseAgent:
         from src.agents.llm_client import record_cache_hit
 
         record_cache_hit(False)  # 15. 多进程缓存协调观测：文件缓存未命中
-        if temperature is not None:
+        if complexity_class is not None:
+            if temperature is not None:
+                response = self._call_llm(
+                    user_message, max_retries, temperature=temperature, complexity_class=complexity_class
+                )
+            else:
+                response = self._call_llm(user_message, max_retries, complexity_class=complexity_class)
+        elif temperature is not None:
             response = self._call_llm(user_message, max_retries, temperature=temperature)
         else:
             response = self._call_llm(user_message, max_retries)
@@ -407,6 +480,19 @@ class BaseAgent:
                         os.unlink(tmp_file)
             _lru_store(lru_key, response)  # 回填 L1 + 清除该键负缓存条目（文件已存在）
             logger.info("LLM 缓存已写入: %s", cache_key[:50])
+            # 5.1 P2 修复（2026-10-01 全面审查）：语义命中后未 upsert 新响应，
+            # docstring 宣称"下轮可命中"与实现不符——此前 LLM 调用成功写文件后
+            # 不同步入语义索引，"省 token"完全依赖 60s 节流目录重扫（同任务内
+            # 连续相似 prompt 若 L1/L1.5 未命中、新响应又未经 60s 重扫入索引，
+            # 后续轮次仍走真实 LLM 调用）。现写文件成功后即时 upsert（嵌入失败
+            # 静默跳过，零默认外部依赖、不阻断主流程）。
+            try:
+                from src.agents.semantic_cache import _semantic_cache_enabled, get_semantic_index
+
+                if _semantic_cache_enabled():
+                    get_semantic_index().upsert(cache_file, user_message, response)
+            except Exception:
+                logger.debug("语义缓存 upsert 失败（保守跳过，不影响文件缓存）", exc_info=True)
         except Exception as e:
             logger.debug("缓存写入失败: %s", e)
 
@@ -543,6 +629,27 @@ class BaseAgent:
                     return text
 
                 except Exception as e:
+                    # O15（2026-09-29 审查 P2）：限流（429 RateLimitError）
+                    # 可重试分支——此前 except Exception 吞掉所有异常统一
+                    # continue（跨模型切换），外层 except RateLimitError 分支
+                    # 永远不可达。现补限流识别：命中 openai.RateLimitError /
+                    # httpx.HTTPStatusError 429 时，在**当前模型内**等待
+                    # Retry-After（或指数退避）后重试（不立即跨模型切换），
+                    # 避免"一个 429 就把所有模型端点轮一遍"的浪费。
+                    _is_rate_limit = _is_rate_limit_error(e)
+                    if _is_rate_limit:
+                        _retry_after = _extract_retry_after_seconds(e)
+                        # 限流退避：Retry-After 优先，未设则用基础等待 2s，统一封顶 30s
+                        _wait = min(max(_retry_after or 0.0, 2.0), 30.0)
+                        logger.warning(
+                            "O15 限流（429）模型 %s：等待 %.1fs 后重试（Retry-After=%s）",
+                            model_name,
+                            _wait,
+                            f"{_retry_after}s" if _retry_after else "未设",
+                        )
+                        time.sleep(_wait)
+                        # 限流重试一次后再走常规故障转移（continue 到下一模型）
+                        continue
                     # 记录当前模型失败原因，继续尝试同 API 的下一个模型
                     # 异常文本可能携带请求头/URL 中的 API Key（部分 SDK 会把
                     # Authorization 头打进报错信息），统一走脱敏后再落日志（P2-8）

@@ -19,6 +19,16 @@ P2（2026-09-29 批次）：provider 中间变量不再静态枚举——
 新增 provider 时脱敏口径自动跟随（消除 LiteLLM CVE-2026-89032 式
 "静态枚举与动态接口漂移"根因）；CI 守卫 scripts/check_credential_scrub.py
 在新增 provider 未同步时阻断合并。
+
+S4（M11，2026-09-29 审查 P0）：白名单最小化环境构建
+`build_minimal_env()`。历史口径的"动态模式剔除"是黑名单——新增凭证
+变量（如 `MYSQL_PASSWORD` / `AWS_ACCESS_KEY_ID` / `DATABASE_URL`）
+不在剔除名单内即原样进入子进程（实测 `MYSQL_PASSWORD` 泄漏）。
+现补白名单：`build_minimal_env()` 仅保留路径/语言/Python/SSL/TMPDIR
+等**非敏感**基础变量（13 个，见 `_WHITELIST_ENV_KEYS`），其余一律剔除。
+D.4-3（2026-09-30）起 `CREDENTIAL_SCRUB_WHITELIST_ENABLE` **默认 true**
+（安全默认"拒绝"口径）；显式设为 `false` 时 `scrub_credentials` 保持
+历史黑名单口径（需要全量继承环境的场景）。
 """
 
 from __future__ import annotations
@@ -73,6 +83,71 @@ if not _PROVIDER_KEY_PATTERNS:
 # 合并后的完整剔除模式（动态 provider + 静态通用名单）
 _CREDENTIAL_PATTERNS: tuple[re.Pattern, ...] = tuple(list(_STATIC_CREDENTIAL_PATTERNS) + list(_PROVIDER_KEY_PATTERNS))
 
+# S4（M11，2026-09-29 审查 P0；D.4-3 修复 2026-09-30）：白名单最小化环境构建。
+# 仅保留路径/语言/Python/SSL/TMPDIR 等非敏感基础变量，
+# 其余（含 MYSQL_PASSWORD / AWS_* / DATABASE_URL 等一切未列入白名单
+# 的变量）一律剔除——"默认拒绝"口径，新增凭证变量无需更新名单。
+# 开关 CREDENTIAL_SCRUB_WHITELIST_ENABLE（D.4-3 起默认 true，安全默认"拒绝"口径）。
+_WHITELIST_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        # 路径 / 语言 / locale（非敏感）
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        # Python 运行时
+        "PYTHONPATH",
+        "PYTHONIOENCODING",
+        "PYTHONUNBUFFERED",
+        # 临时目录 / 系统
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        # SSL 证书（系统信任链，非凭证）
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    }
+)
+
+
+def whitelist_enabled() -> bool:
+    """S4 白名单最小化环境开关（M11 D.4-3 修复：默认 true）。
+
+    2026-09-30 审查 D.4-3 确认 S4 凭证白名单已实现但默认关（false），
+    实测 MYSQL_PASSWORD / AWS_* / SSH_AUTH_SOCK 仍进子进程。
+    现改为默认 true（安全默认"拒绝"口径），如需回退到历史黑名单行为
+    可显式设 CREDENTIAL_SCRUB_WHITELIST_ENABLE=false。
+    """
+    return os.getenv("CREDENTIAL_SCRUB_WHITELIST_ENABLE", "true").lower() in ("true", "1", "on")
+
+
+def build_minimal_env() -> dict[str, str]:
+    """S4（M11，2026-09-29 审查 P0）：白名单最小化环境构建。
+
+    仅保留 `_WHITELIST_ENV_KEYS` 中当前 os.environ 实际存在的键
+    （缺失的键不注入空值，保持"有则保留、无则不造"口径）。
+    其余全部剔除——包括所有未列入白名单的凭证变量
+    （`MYSQL_PASSWORD` / `AWS_*` / `DATABASE_URL` 等），
+    实现"默认拒绝"口径。
+
+    与 `scrub_credentials`（黑名单）的对比：
+    - 黑名单：新增凭证变量需手动加剔除模式（易遗漏）；
+    - 白名单：仅保留已知安全变量，新增凭证自动被拒（安全默认）。
+
+    调用方：三条执行链路（本地 / venv 沙箱 / Docker）在
+    `whitelist_enabled()=True` 时用本函数替代 `scrub_credentials`。
+
+    Returns:
+        仅含白名单变量的环境字典（非空键值对）。
+    """
+    minimal: dict[str, str] = {}
+    for key in _WHITELIST_ENV_KEYS:
+        val = os.environ.get(key)
+        if val is not None:
+            minimal[key] = val
+    return minimal
+
 
 def provider_scrub_names() -> list[str]:
     """当前动态推导覆盖的 provider 中间变量全名清单（守卫/测试消费）。
@@ -120,11 +195,19 @@ def scrub_credentials(env: dict[str, str]) -> dict[str, str]:
 
 
 def scrub_os_environ() -> dict[str, str]:
-    """os.environ.copy() 后再剔除凭证，一步到位。
+    """os.environ 脱敏，一步到位。
+
+    S4（M11，2026-09-29 审查 P0）：白名单最小化环境开关
+    （CREDENTIAL_SCRUB_WHITELIST_ENABLE，D.4-3 起**默认 true**——
+    安全默认"拒绝"口径）。启用时直接走 `build_minimal_env()`（白名单
+    "默认拒绝"），显式设为 false 时保持历史 `scrub_credentials` 黑名单
+    口径（需要全量继承环境的场景）。
 
     供执行链路直接使用（替代此前的 `env = os.environ.copy()` + 手工 pop 列表）。
 
     Returns:
         已剔除凭证的环境字典副本。
     """
+    if whitelist_enabled():
+        return build_minimal_env()
     return scrub_credentials(os.environ.copy())

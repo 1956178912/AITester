@@ -141,8 +141,20 @@ _RE_DANGEROUS_SHELL = re.compile(
 # eval / exec 动态执行（修复代码不应需要任意代码求值）
 _RE_EVAL_EXEC = re.compile(r"\b(eval|exec)\s*\(", re.IGNORECASE)
 # 网络外连（修复补丁出现外发语句即高危；requests/urllib/socket + 外发动词）
+# 2026-10-01 全面审查 P2 修复：此前仅匹配 requests.(post|put) 漏掉
+# requests.get（等价的探测/外连语句）；urllib.request 仅匹配子模块名未覆盖
+# urlopen/Request 调用。现补全 requests.(get|post|put|delete) +
+# urllib.request.(urlopen|Request|urlretrieve)。
 _RE_NETWORK_EXFIL = re.compile(
-    r"(requests\.(post|put)|urllib\.request|socket\.socket|httpx\.(post|put))",
+    r"(requests\.(get|post|put|delete)|urllib\.request\.(urlopen|Request|urlretrieve)|socket\.socket|httpx\.(get|post|put|delete))",
+    re.IGNORECASE,
+)
+# 动态导入/反射获取（__import__("os").system / getattr(os_module, "system")
+# 绕过正则静态展开——AST 守卫 patch_applier._collect_dynamic_import_bypass
+# 同口径双保险，与 patch_applier 修复口径一致）。
+# 保守：仅匹配 __import__/getattr + 已知危险模块/函数的明确组合。
+_RE_DYNAMIC_BYPASS = re.compile(
+    r"(__import__\(\s*['\"](os|subprocess|socket|urllib)|getattr\(\s*\w+\s*,\s*['\"](system|popen|run|call|Popen|check_output))",
     re.IGNORECASE,
 )
 # 文件破坏（rm / unlink 针对非临时路径——保守：只报 `rm -rf` 强模式）
@@ -154,6 +166,7 @@ _OUTPUT_SIDE_CHECKS: tuple[tuple[str, re.Pattern], ...] = (
     ("dangerous_shell", _RE_DANGEROUS_SHELL),
     ("eval_or_exec", _RE_EVAL_EXEC),
     ("network_exfiltration", _RE_NETWORK_EXFIL),
+    ("dynamic_import_bypass", _RE_DYNAMIC_BYPASS),
     ("file_destruction", _RE_FILE_DESTRUCT),
     ("credential_read", _RE_CREDENTIAL_READ),
 )

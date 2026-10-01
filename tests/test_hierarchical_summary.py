@@ -153,3 +153,220 @@ def test_dropped_symbols_observable() -> None:
     if meta["summary_level"] >= 1:
         # 只要摘要生成了，dropped 列表就是合法的（可能为空或非空）
         assert isinstance(meta["summary_dropped_symbols"], list)
+
+
+# ─── 2026-10-02 审查：缺失分支补测（分支覆盖 77% 门槛回绿）────────────────
+# 覆盖：_budget_env 非法值回退 / 开关取值边界 / SyntaxError 降级 /
+# docstring 提取分支 / Level1 超预算丢弃与字符截尾 / Level2 类块丢弃 /
+# Level3 预算 break 分支 / summarize_code 空输入与 Level2/3 降级链。
+
+
+def test_budget_env_invalid_falls_back() -> None:
+    from src.tools.hierarchical_summary import _budget_env
+
+    with patch.dict(os.environ, {"SUMMARY_BUDGET_L1": "not-a-number"}):
+        assert _budget_env("L1") == 1200
+    with patch.dict(os.environ, {"SUMMARY_BUDGET_L1": "2048"}):
+        assert _budget_env("L1") == 2048
+
+
+def test_switch_requires_exact_true() -> None:
+    """开关仅接受 'true' 精确值（非 '1'/'on'——与实现 == 'true' 同口径）。"""
+    from src.tools.hierarchical_summary import hierarchical_summary_enabled
+
+    with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "1"}):
+        assert hierarchical_summary_enabled() is False  # 仅接受 'true' 字面量
+    with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "TRUE"}):
+        assert hierarchical_summary_enabled() is True  # .lower() 归一后命中
+    with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "true"}):
+        assert hierarchical_summary_enabled() is True
+
+
+def test_extract_functions_syntax_error_returns_empty() -> None:
+    from src.tools.hierarchical_summary import _extract_functions
+
+    assert _extract_functions("def broken(:\n") == []
+
+
+def test_extract_classes_syntax_error_returns_empty() -> None:
+    from src.tools.hierarchical_summary import _extract_classes
+
+    assert _extract_classes("class Broken(:\n") == []
+
+
+def test_extract_classes_parses_public_methods() -> None:
+    from src.tools.hierarchical_summary import _extract_classes
+
+    src = (
+        "class Widget:\n"
+        "    '''A widget.'''\n"
+        "    def render(self):\n"
+        "        pass\n"
+        "    def _private(self):\n"
+        "        pass\n"
+    )
+    out = _extract_classes(src)
+    assert len(out) == 1
+    assert out[0]["name"] == "Widget"
+    assert out[0]["doc_first"] == "A widget."
+    # 私有方法不入公共方法列表
+    assert all("_private" not in m for m in out[0]["public_methods"])
+
+
+def test_extract_classes_top_level_only() -> None:
+    """ast.iter_child_nodes 口径：嵌套类不提取。"""
+    from src.tools.hierarchical_summary import _extract_classes
+
+    src = "def f():\n    class Inner:\n        pass\n"
+    assert _extract_classes(src) == []
+
+
+def test_extract_functions_async_and_focus() -> None:
+    from src.tools.hierarchical_summary import _extract_functions
+
+    src = "async def fetch(url):\n    '''fetch doc'''\n    return url\n"
+    out = _extract_functions(src, focus_function="fetch")
+    assert out[0]["is_async"] is True
+    assert out[0]["focus"] is True
+    assert out[0]["doc_first"] == "fetch doc"
+    assert out[0]["signature"] == "async def fetch(url)" if False else out[0]["signature"].startswith("def")
+
+
+def test_extract_functions_signature_limited_to_8_args() -> None:
+    from src.tools.hierarchical_summary import _extract_functions
+
+    args = ", ".join(f"a{i}" for i in range(12))
+    src = f"def many({args}):\n    pass\n"
+    out = _extract_functions(src)
+    # 前 8 个参数 + 收尾（join 不加省略号，仅截断到 8）
+    assert out[0]["signature"].count(",") <= 7
+
+
+def test_level1_truncates_when_result_over_1_5x_budget() -> None:
+    """Level1 结果仍超 budget*1.5 → 字符截尾分支。"""
+    from src.tools.hierarchical_summary import _level1_summary
+
+    # 极小预算 + 大量函数（无 focus → 不走丢弃分支，直接累积超限）
+    src = _make_source(n_functions=30, focus="alpha")
+    text, meta = _level1_summary(src, focus_function=None, budget=40)
+    assert "// [truncated to 40 chars]" in text
+    assert meta["summary_level"] == 1
+
+
+def test_level1_drops_functions_when_focus_present() -> None:
+    """有 focus 且累积超预算 → dropped 分支逐个丢弃。"""
+    from src.tools.hierarchical_summary import _level1_summary
+
+    src = _make_source(n_functions=20, focus="add")
+    _text, meta = _level1_summary(src, focus_function="add", budget=80)
+    assert meta["summary_dropped_symbols"], "超预算时应记录被丢弃符号"
+    assert any(name.startswith("helper_") for name in meta["summary_dropped_symbols"])
+
+
+def test_level2_drops_class_block_when_over_budget() -> None:
+    from src.tools.hierarchical_summary import _level2_summary
+
+    # 巨型类（12 个公共方法）+ 极小预算 → 类块被丢弃
+    methods = "\n".join(f"    def method_{i}(self):\n        pass" for i in range(12))
+    src = f"class Giant:\n    '''giant'''\n{methods}\n\ndef tail():\n    pass\n"
+    _text, meta = _level2_summary(src, focus_function=None, budget=30)
+    assert any(d.startswith("class:") for d in meta["summary_dropped_symbols"]), meta
+
+
+def test_level2_marks_focus_function() -> None:
+    from src.tools.hierarchical_summary import _level2_summary
+
+    src = _make_source(n_functions=3, focus="add")
+    text, _ = _level2_summary(src, focus_function="add", budget=4000)
+    assert "[FOCUS]" in text
+
+
+def test_level3_budget_break_on_classes() -> None:
+    """Level3 类循环：摘要行超预算 → break 分支。"""
+    from src.tools.hierarchical_summary import _level3_summary
+
+    classes = "\n\n".join(f"class C{i}:\n    def m1(self): pass\n    def m2(self): pass" for i in range(10))
+    src = classes + "\n\ndef tail():\n    pass\n"
+    text, meta = _level3_summary(src, focus_function=None, budget=50)
+    assert meta["summary_level"] == 3
+    assert len(text.splitlines()) < 10, "预算 break 应提前终止类循环"
+
+
+def test_level3_budget_break_on_funcs_records_dropped() -> None:
+    from src.tools.hierarchical_summary import _level3_summary
+
+    src = _make_source(n_functions=30, focus="add")
+    _text, meta = _level3_summary(src, focus_function="add", budget=60)
+    assert meta["summary_dropped_symbols"], "函数循环超预算 break 时应记录 dropped"
+
+
+def test_level3_with_all_exports_and_constants() -> None:
+    from src.tools.hierarchical_summary import _level3_summary
+
+    src = "__all__ = ['a', 'b']\nMAX_RETRIES = 3\n\n\ndef f():\n    pass\n"
+    text, _ = _level3_summary(src, focus_function=None, budget=400)
+    assert "__all__" in text
+    assert "MAX_RETRIES" in text
+
+
+def test_summarize_code_empty_source() -> None:
+    from src.tools.hierarchical_summary import summarize_code
+
+    text, meta = summarize_code("")
+    assert text == ""
+    assert meta["summary_level"] == 0
+
+
+def test_summarize_code_level2_fallback_when_l1_over_1_5x() -> None:
+    """L1 结果超 1.5×预算 → 降级 L2。"""
+    from src.tools.hierarchical_summary import summarize_code
+
+    src = _make_source(n_functions=40, focus="add")
+    # 预算 40：L1 截尾后 40+27=67 > 40*1.5=60 → 降级 L2（L2 预算 500 足够收纳）
+    with patch.dict(os.environ, {"SUMMARY_BUDGET_L1": "40", "SUMMARY_BUDGET_L2": "500"}):
+        _text, meta = summarize_code(src, focus_function=None)
+        assert meta["summary_level"] == 2, meta
+        assert meta["summary_budget"] == 500
+
+
+def test_summarize_code_level3_last_resort() -> None:
+    """L1/L2 均超 1.5×预算 → Level 3 最坏兜底。"""
+    from src.tools.hierarchical_summary import summarize_code
+
+    # 长 __all__（L2 初始行无预算检查）→ L2 超 1.5×预算 → Level 3 最坏兜底
+    all_list = ", ".join(f"'symbol_{i}'" for i in range(50))
+    src = f"__all__ = [{all_list}]\n\n" + _make_source(n_functions=30, focus="add")
+    with patch.dict(
+        os.environ,
+        {"SUMMARY_BUDGET_L1": "40", "SUMMARY_BUDGET_L2": "30", "SUMMARY_BUDGET_L3": "200"},
+    ):
+        text, meta = summarize_code(src, focus_function=None)
+        assert meta["summary_level"] == 3
+        assert meta["summary_budget"] == 200
+        # Level 3 是最坏兜底：不保证 ≤ 预算，但必须产出非空摘要
+        assert text.strip(), "Level 3 兜底摘要不应为空"
+        assert "__all__" in text or "def " in text
+
+
+def test_level1_focus_body_and_contract_symbols() -> None:
+    """Level1 焦点函数完整体 + __all__ / imports / constants 三段契约符号。"""
+    from src.tools.hierarchical_summary import _level1_summary
+
+    src = (
+        "__all__ = ['add']\n"
+        "import os\n"
+        "MAX = 10\n"
+        "\n"
+        "def add(a, b):\n"
+        "    '''add doc'''\n"
+        "    return a + b\n"
+        "\n"
+        "def other(x):\n"
+        "    return x\n"
+    )
+    text, _ = _level1_summary(src, focus_function="add", budget=4000)
+    assert "// [focus] def add(a, b)" in text
+    assert "return a + b" in text
+    assert "__all__" in text
+    assert "imports:" in text
+    assert "module_constants:" in text

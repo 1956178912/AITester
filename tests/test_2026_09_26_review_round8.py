@@ -53,9 +53,17 @@ class TestLastHealthCheckRemoved:
         assert "self._last_health_check" not in src, "APIManager.__init__ 不应再初始化 self._last_health_check"
 
     def test_test_isolation_no_longer_sets_it(self) -> None:
-        # 3 处旧测试初始化（tests/test_api_manager.py L463/507/539）已清理
-        # 本测试文件与旧测试文件不同名，仅作口径记录
-        assert True
+        # 3 处旧测试初始化（tests/test_api_manager.py L463/507/539）已清理。
+        # 此前断言为 `assert True`（恒真口径记录，2026-10-02 审查修复）：
+        # 改为实际扫描旧测试文件，锁定"确实不再出现该初始化"。
+        import os as _os
+
+        old_test = _os.path.join(_os.path.dirname(__file__), "test_api_manager.py")
+        with open(old_test, encoding="utf-8") as f:
+            src = f.read()
+        assert "self._last_health_check = " not in src, (
+            "tests/test_api_manager.py 仍在初始化 self._last_health_check（旧测试隔离已回潮）"
+        )
 
 
 # ─── 2. api_manager：_cost_weight_for 注册时序缺陷（本轮 P1 修复） ─────────

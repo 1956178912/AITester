@@ -65,13 +65,27 @@ class GuardReport:
 
 
 # 危险/非确定性调用模式（AST 级判定，保守口径）
-_EXTERNAL_MODULE_CALLS = {
+# 2026-10-01 全面审查 P2 修复：此前 set 含 "urllib.request" 但匹配用
+# qual.split(".")[0]（仅顶层模块名）——urllib 家族（urllib.request.urlopen /
+# urllib.parse.urlencode / urllib.error.HTTPError）全部漏检。现改为顶层模块
+# 前缀匹配（qual.split(".")[0] in 顶层名集合 + urllib 子模块白名单），
+# 并把 set 统一为顶层模块名集合（与 Import/ImportFrom 分支同口径）。
+_EXTERNAL_MODULE_TOPLEVEL = {
     "requests",
-    "urllib.request",
+    "urllib",
     "httpx",
     "socket",
     "subprocess",
 }
+
+
+def _is_external_call(qual: str) -> bool:
+    """判定调用限定名 qual（如 "urllib.request.urlopen"）是否属于
+    外部副作用模块家族（保守：按顶层模块名匹配，urllib 含全部子模块）。"""
+    top = qual.split(".", maxsplit=1)[0]
+    return top in _EXTERNAL_MODULE_TOPLEVEL
+
+
 _WALL_CLOCK_ATTRS = {
     "datetime.now",
     "datetime.utcnow",
@@ -167,7 +181,7 @@ def scan_test_file(source: str, filename: str = "<memory>") -> GuardReport:
                         GuardFinding("wall_clock", f"墙钟时间依赖 {qual}（结果随时间漂移）", node.lineno)
                     )
                     continue
-                if qual.split(".")[0] in _EXTERNAL_MODULE_CALLS:
+                if _is_external_call(qual):
                     report.findings.append(
                         GuardFinding(
                             "external_side_effect",
@@ -178,13 +192,13 @@ def scan_test_file(source: str, filename: str = "<memory>") -> GuardReport:
         # 2. 模块级 import（import subprocess / from socket import …）
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".")[0] in _EXTERNAL_MODULE_CALLS:
+                if alias.name.split(".")[0] in _EXTERNAL_MODULE_TOPLEVEL:
                     report.findings.append(
                         GuardFinding("external_side_effect", f"外部模块导入 {alias.name}", node.lineno)
                     )
         if isinstance(node, ast.ImportFrom):
             top = (node.module or "").split(".")[0]
-            if top in _EXTERNAL_MODULE_CALLS:
+            if top in _EXTERNAL_MODULE_TOPLEVEL:
                 report.findings.append(GuardFinding("external_side_effect", f"外部模块导入 {node.module}", node.lineno))
     return report
 

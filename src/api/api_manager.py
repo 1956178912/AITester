@@ -18,6 +18,7 @@
     manager = APIManager()
     result = manager.call(messages=[...], model="qwen-max")
 """
+# ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
 
 from __future__ import annotations
 
@@ -330,7 +331,20 @@ class APIManager:
 
         4.2：半开探测窗口内的节点，其健康检查同样消费探测结果——
         成功则闭合熔断器，失败则重开半程冷却期，与 call 路径口径一致。
+
+        O35（2026-09-30 全面审查 P2）：**冷却期内不探测**。此前
+        health_check_all / health_check_batch 对每个节点无条件发探测请求，
+        而 `_record_health_result(ok=True)` → `mark_success()` 会把
+        `circuit_open_until` 清零——60s 定时器上的探测一成功就把熔断器
+        提前闭合，冷却期永远等不到期、4.2 的半开窗口（in_circuit_half_open）
+        实际不可达，与 api_health 文档"冷却期内即使健康检查线程翻回
+        is_healthy=True 也继续被路由层跳过"直接矛盾，也白烧一次真实
+        LLM 调用。现冷却期内直接短路（不发请求、不动熔断状态），
+        冷却到期后由半开探测（本方法的既有路径）消费结果。
         """
+        if node.in_circuit_open:
+            logger.debug("健康检查跳过（熔断冷却期内，等待半开窗口）: %s", node.config.model_name)
+            return False
         is_half_open_probe = self._enter_half_open_probe(node)
         client = self._client_cache.get(node.config.model_name)
         if not client:
@@ -621,7 +635,14 @@ class APIManager:
                 if response is not None:
                     return response
             except openai.RateLimitError as e:
-                self._handle_rate_limit(node, attempt, len(nodes_to_try), is_half_open_probe=is_half_open_probe)
+                self._handle_rate_limit(
+                    node,
+                    attempt,
+                    len(nodes_to_try),
+                    is_half_open_probe=is_half_open_probe,
+                    # O35：候选总数（主 + 备用）——最后一个候选不再空睡 5s
+                    total_count=len(all_nodes),
+                )
                 last_error = e
             except openai.APIError as e:
                 self._handle_api_error(e, node, is_half_open_probe=is_half_open_probe)
@@ -720,7 +741,12 @@ class APIManager:
         return node.in_circuit_half_open
 
     def _handle_rate_limit(
-        self, node: APIHealth, attempt: int, primary_count: int, is_half_open_probe: bool = False
+        self,
+        node: APIHealth,
+        attempt: int,
+        primary_count: int,
+        is_half_open_probe: bool = False,
+        total_count: int | None = None,
     ) -> None:
         """处理限流错误，根据配置决定是否等待重试。
 
@@ -733,15 +759,26 @@ class APIManager:
         窗口状态可能已被前序 handler 改变（限流路径 mark_failure 后重判恒
         False → 探测失败计数丢失；api_error 路径 mark_failure 后窗口仍在时
         重判恒 True → 探测成功口径多计一次），与预检矛盾。
+
+        O35（2026-09-30 全面审查 P2）：新增可选 total_count——call() 的
+        候选序列是 nodes_to_try + fallback_candidates，而本方法只拿到
+        primary_count。历史 `elif` 分支在"主节点已耗尽"时无条件 sleep(5)，
+        即便这是 all_nodes 的**最后一个**候选：sleep 完直接落到
+        "所有 API 节点调用失败" 的 RuntimeError，纯浪费 5s。
+        total_count 传入 len(all_nodes) 后，最后一跳不再睡；
+        未传（旧签名调用方 / 单测）保持历史语义不变。
         """
         probe = is_half_open_probe
         node.mark_failure("rate_limit")
         if probe:
             node._probe_circuit_half_open(False)
         logger.warning("限流: %s (attempt %d)", node.config.model_name, attempt + 1)
-        if self.config.fallback_on_failure and attempt < primary_count - 1:
+        if not self.config.fallback_on_failure:
+            return
+        has_next_candidate = total_count is None or attempt < total_count - 1
+        if attempt < primary_count - 1:
             time.sleep(2)
-        elif self.config.fallback_on_failure:
+        elif has_next_candidate:
             time.sleep(5)
 
     def _handle_api_error(self, e: openai.APIError, node: APIHealth, is_half_open_probe: bool = False) -> None:
@@ -757,8 +794,10 @@ class APIManager:
             node._probe_circuit_half_open(False)
         logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
-            # fallback 禁用时，记录错误后直接抛出原始异常
-            raise
+            # fallback 禁用时，记录错误后显式重抛传入的原始异常（语义等价于
+            # 历史 bare raise：call() 的 except 块内两者抛出同一异常对象；但
+            # 显式 `raise e` 摆脱了对"调用方处于 except 上下文"的隐式依赖）
+            raise e
 
     def _handle_generic_error(self, e: Exception, node: APIHealth, is_half_open_probe: bool = False) -> None:
         """处理通用异常，根据配置决定是否抛出。
@@ -773,7 +812,7 @@ class APIManager:
             node._probe_circuit_half_open(False)
         logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
-            raise
+            raise e  # 同 _handle_api_error：显式重抛（摆脱 active-exception 隐式依赖）
 
     def get_status(self) -> dict[str, Any]:
         """获取所有节点的当前状态（4.1：含熔断冷却信息；4.4：含指数退避/半开探测成功率）。

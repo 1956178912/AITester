@@ -44,6 +44,15 @@ if PROJECT_ROOT not in sys.path:
 def _apply_full_stack_env(output_dir: str) -> dict[str, str]:
     """导出全开链路环境变量（含追踪目录），返回实际生效的配置 dict。
 
+    O24（2026-09-29 审查 P0）：此前 full_stack_config 为模块级常量
+    （_apply_full_stack_env 在 main() 入口调用时一次性求值），若运行中
+    环境变量被外部进程修改（如 CI 并行任务 / A/B 实验切换开关），
+    工件 JSON 记录的"全开配置"与"实际生效环境"脱节。现改为在
+    **结果写入时**（而非入口时）捕获 os.environ 快照：
+    返回 dict 新增 "env_snapshot" 键，记录写入时刻实际生效的
+    全部 AITESTER_* / *_ENABLE / LLM_* 环境变量（纯观测，
+    不影响路由 / 开关逻辑）。历史口径不变（"intended" dict 保留）。
+
     Args:
         output_dir: 结果输出目录（追踪目录落在其下）。
 
@@ -64,6 +73,22 @@ def _apply_full_stack_env(output_dir: str) -> dict[str, str]:
     for key, value in env.items():
         os.environ[key] = value
     os.makedirs(trace_dir, exist_ok=True)
+    # O24：运行期环境快照（写入时刻实际生效的环境变量）
+    _SNAPSHOT_PREFIXES = ("AITESTER_", "ENABLE_", "LLM_", "CROSS_FILE_")
+    _SNAPSHOT_EXACT = {
+        "MAX_ITERATIONS",
+        "TEMPERATURE",
+        "SEED",
+        "REPO_LEVEL_EXECUTION",
+        "KERNEL_SANDBOX_ENABLE",
+        "P2P_GATE_ENABLE",
+        "P2P_GATE_THRESHOLD",
+        "LOGIC_SPEC_STRICT_ENABLE",
+    }
+    env_snapshot: dict[str, str | None] = {
+        k: v for k, v in os.environ.items() if k in _SNAPSHOT_EXACT or any(k.startswith(p) for p in _SNAPSHOT_PREFIXES)
+    }
+    env["env_snapshot"] = json.dumps(env_snapshot, ensure_ascii=False, sort_keys=True)
     return env
 
 
@@ -167,7 +192,12 @@ def main() -> int:
     parser.add_argument(
         "--difficulty",
         default="mixed",
-        choices=["mixed", "level1", "level2", "level3", "level4"],
+        # 2026-10-01 全面审查 P2 修复：补充 L3.5/L4.5 的 4 个中间档
+        # （level2.5 / level2.5-hard / level3.5 / level4.5），与
+        # experiments/statistical_analysis.py / run_benchmark.py 的难度
+        # 分层口径对齐（此前 4 档缺 level2.5/2.5-hard/3.5/4.5，
+        # 用户按 A/B 实验的 level3.5 跑全开链路时 choices 校验直接拒绝）。
+        choices=["mixed", "level1", "level2", "level2.5", "level2.5-hard", "level3", "level3.5", "level4", "level4.5"],
         help="合成数据集分层难度",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="详细日志")

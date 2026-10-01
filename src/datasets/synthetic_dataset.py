@@ -638,8 +638,7 @@ def test_summary_partial_user():
     assert summary(users, "c") == "(0) Carol"
 
 def test_summary_empty_dict():
-    assert summary({}, "a") == "(0) unknown" """
-        ,
+    assert summary({}, "a") == "(0) unknown" """,
         "bug_type": "runtime",
         "expected_pass": 8,
         "total_tests": 8,
@@ -1712,9 +1711,9 @@ class SyntheticDataset(BaseDatasetLoader):
                 # instance_code 是被调方（含缺陷）：双模块取 module_b，三模块取 module_c
                 def_module_key = "module_c" if num_files >= 3 else "module_b"
                 base_code = base_modules.get(def_module_key, pattern.get("module_b_code", ""))
-                fixed_code = base_modules.get(
-                    "module_c_fixed", pattern.get("fixed_module_c_code", "")
-                ) or pattern.get("fixed_module_b_code", "")
+                fixed_code = base_modules.get("module_c_fixed", pattern.get("fixed_module_c_code", "")) or pattern.get(
+                    "fixed_module_b_code", ""
+                )
                 module_b_code = base_code + f"\n# noise_seed_b={noise}\n"
                 task = BenchmarkTask(
                     task_id=task_id,
@@ -1751,6 +1750,10 @@ class SyntheticDataset(BaseDatasetLoader):
                         "num_files": num_files,
                         "dep_chain": pattern.get("dep_chain"),
                         "suggested_function": suggested_function,
+                        # M1（2026-09-29 审查 P0）：跨文件任务 gold 裁决材料
+                        # （gold test_cases；跨文件 fixed 已由 fixed_module_code
+                        # 提供，供 _gold_fixed_code 消费）。
+                        "test_cases": pattern.get("test_cases", ""),
                     },
                 )
             else:
@@ -1773,6 +1776,13 @@ class SyntheticDataset(BaseDatasetLoader):
                         "is_cross_file": False,
                         "trigger_exception": pattern.get("trigger_exception"),
                         "suggested_function": suggested_function,
+                        # M1（2026-09-29 审查 P0）：gold 独立裁决材料入 metadata，
+                        # 供 run_benchmark._m1_metrics 计算 detection_rate /
+                        # repair_rate / false_fix_rate（gold test_cases 在
+                        # buggy/fixed 两侧独立裁决，消除 oracle-from-implementation
+                        # 假成功通道）。
+                        "test_cases": pattern.get("test_cases", ""),
+                        "fixed": pattern.get("fixed", ""),
                     },
                 )
             tasks.append(task)

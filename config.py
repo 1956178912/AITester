@@ -12,6 +12,7 @@ LLM 配置（API Key / Base URL / Model）属于敏感信息，
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 
@@ -69,7 +70,12 @@ def _parse_int_env(name: str, default: int, min_val: int | None = None, max_val:
 
 
 def _parse_float_env(name: str, default: float, min_val: float | None = None, max_val: float | None = None) -> float:
-    """容错读取浮点环境变量（语义同 _parse_int_env，针对 float）。"""
+    """容错读取浮点环境变量（语义同 _parse_int_env，针对 float）。
+
+    非有限值（NaN / ±inf）与越界值同口径回退默认值：`nan` 参与任何 `<` / `>`
+    比较都返回 False，只做范围检查会让 `COVERAGE_THRESHOLD=nan` 这类值静默
+    穿透（覆盖率门槛恒不满足、阈值判定恒 False），故先做 isfinite 判定。
+    """
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default
@@ -77,6 +83,9 @@ def _parse_float_env(name: str, default: float, min_val: float | None = None, ma
         value = float(raw.strip())
     except ValueError:
         logger.warning("环境变量 %s=%r 不是合法浮点数，回退默认值 %g", name, raw, default)
+        return default
+    if not math.isfinite(value):
+        logger.warning("环境变量 %s=%r 非有限值（NaN/inf），回退默认值 %g", name, raw.strip(), default)
         return default
     if (min_val is not None and value < min_val) or (max_val is not None and value > max_val):
         logger.warning("环境变量 %s=%g 超出范围 [%s, %s]，回退默认值 %g", name, value, min_val, max_val, default)
@@ -293,11 +302,18 @@ RAG_TTL_SECONDS: int = _parse_int_env("RAG_TTL_SECONDS", 7 * 24 * 3600, 60, None
 SWE_BENCH_ENRICHMENT: str = os.getenv("SWE_BENCH_ENRICHMENT", "")
 
 # ─── 执行隔离配置（依赖检测 / venv 沙箱）─────────────────────────────────────
-# 本地执行默认直接跑在系统 Python 环境：被测代码 import 的第三方库缺失时
-# 测试直接失败，且无法区分"代码 bug"与"环境缺依赖"。
-# 沙箱模式（EXECUTOR_USE_VENV=true）：为任务创建隔离 venv 并用其解释器执行 pytest，
-# 通过 PYTHONPATH 控制模块搜索路径，避免污染系统环境。
-EXECUTOR_USE_VENV: bool = os.getenv("EXECUTOR_USE_VENV", "false").lower() == "true"
+# 本地执行：被测代码 import 的第三方库缺失时测试直接失败，且无法区分
+# "代码 bug"与"环境缺依赖"。
+# 沙箱模式（EXECUTOR_USE_VENV=true）：为任务创建隔离 venv 并用其解释器执行
+# pytest，通过 PYTHONPATH 控制模块搜索路径，避免污染系统环境。
+# R10（2026-09-30 独立审查 N8，P1）起**默认开启 venv 沙箱**：LLM 生成的
+# 测试代码在隔离 venv 内执行（venv 缓存在 ~/.cache/aitester/venvs/，
+# 相同依赖组合任务复用），不再直接落在宿主系统 Python 环境——
+# 默认配置从 fail-open（无沙箱）转为 fail-closed（有沙箱），
+# 消除"默认在宿主机执行任意 LLM 生成代码"的攻击面。
+# 设 EXECUTOR_USE_VENV=false 可显式退回"本地系统 Python"历史口径
+# （仅调试 / 无 venv 权限的环境使用）。
+EXECUTOR_USE_VENV: bool = os.getenv("EXECUTOR_USE_VENV", "true").lower() == "true"
 # 是否自动 pip install 缺失的第三方依赖（需配合 venv 沙箱使用）
 EXECUTOR_AUTO_INSTALL_DEPS: bool = os.getenv("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true"
 # 依赖安装等待超时（秒）：防止 pip 网络卡顿拖垮整个实验
@@ -327,6 +343,23 @@ SWE_REPO_SETUP_TIMEOUT: int = _parse_int_env("SWE_REPO_SETUP_TIMEOUT", 600, 60, 
 # venv（而非全局 sys.executable），pytest 用 venv 的 python 运行。
 # 各 repo_env 共享全局 python 时，全局 site-packages 的 editable 安装指向
 # "最近一次 pip install -e"的 commit 源码 → 跨 commit 任务 `import <repo_pkg>`
+# M3（2026-09-29 审查 P0 + D.4-7）：SWE-bench 实例可解性前置门禁。
+# R46（2026-09-30 独立审查 P0）起 SWE-bench 批次**默认开启门禁**
+# （SWE_BENCH_P2P_GATE_ENABLE 缺省视为 "true"）：SWE-bench ProMax 实测
+# ~60% 未解出实例的测试本身有缺陷（P2P 基线通过率不达标），把"0 解出"
+# 从"能力边界"误读为"系统无效"——开门禁后不可解实例记 harness_invalid
+# 并剔除（不计入失败统计），0% 还原为"harness 无效"。
+# 设 SWE_BENCH_P2P_GATE_ENABLE=false 可显式退回"关闭"历史口径
+# （消融对照 / 无 verify 脚本环境使用）。
+# 仅对 source=swe_bench 且含 repo_url/base_commit 的任务生效（合成 /
+# examples 任务永不命中，零行为变化）；验证基线 PASS_TO_PASS ≥
+# SWE_BENCH_P2P_GATE_THRESHOLD，不可解实例标记 harness_invalid 剔除。
+SWE_BENCH_P2P_GATE_ENABLE: bool = os.getenv("SWE_BENCH_P2P_GATE_ENABLE", "true").lower() == "true"
+# 阈值经容错解析（坏值回退 0.95）+ [0, 1] 范围校验（通过率阈值超出区间无意义）：
+# 此前此处是裸 float(os.getenv(...))，与本文件"坏值不让 import 崩溃"的口径
+# 相悖——SWE_BENCH_P2P_GATE_THRESHOLD=abc 会让所有入口（import config）直接
+# ValueError 崩溃。
+SWE_BENCH_P2P_GATE_THRESHOLD: float = _parse_float_env("SWE_BENCH_P2P_GATE_THRESHOLD", 0.95, 0.0, 1.0)
 # 解析到错误版本（实测 sqlfluff BaseSegment._log_apply_fixes_check_issue
 # 在 8e724ef 存在、38cff664 不存在 → AttributeError，与 LLM 补丁无关）。
 # 默认关保持与已缓存 repo_envs（全局 .pip_installed 标记）的兼容；

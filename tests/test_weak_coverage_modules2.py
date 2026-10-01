@@ -32,7 +32,9 @@ class TestConfigGeneratorMain:
             # 直接调用各生成函数，验证不崩溃
             template = gen.generate_env_template()
             assert isinstance(template, str)
-            assert "API_KEY" in template or "OPENAI" in template or len(template) > 0
+            # 此前为 `... or len(template) > 0`——最后一个 or 分支恒真
+            # （2026-10-02 审查修复），收紧为模板必须含凭证实例键
+            assert "API_KEY" in template, "env 模板缺少 API_KEY 占位"
 
             json_content = gen.generate_config_json()
             assert isinstance(json_content, str)

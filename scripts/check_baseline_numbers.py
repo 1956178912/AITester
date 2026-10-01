@@ -46,6 +46,15 @@ _DRIFT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("测试通过计数 `\\d+ passed`", re.compile(r"\d+\s+passed")),
     ("测试失败计数 `\\d+ failed`", re.compile(r"\d+\s+failed")),
     ("测试收集计数 `\\d+ collected`", re.compile(r"\d+\s+collected")),
+    # O30（2026-09-29 审查 P1）：benchmark 节硬编码——实验数字（成功率 /
+    # 变异得分 / FL@k 等）同样会随迭代漂移，守卫扩展至 benchmark 节
+    ("benchmark 成功率百分比", re.compile(r"success_rate\s*[:=]\s*\d+\.\d+")),
+    ("benchmark 变异得分", re.compile(r"mutation_score\s*[:=]\s*\d+\.\d+")),
+    ("benchmark FL@k 指标", re.compile(r"FL@\d+\s*[:=]\s*\d+\.\d+")),
+    ("benchmark 迭代次数", re.compile(r"avg_iterations\s*[:=]\s*\d+\.?\d*")),
+    ("benchmark 任务总数", re.compile(r"total_tasks\s*[:=]\s*\d+")),
+    # O30（2026-09-29 审查 P1）：ruff 检查计数硬编码（ruff 全过 / N 处 error）
+    ("ruff 检查计数", re.compile(r"ruff\s+(?:全过|all checks passed|\d+\s+errors?)", re.IGNORECASE)),
     ("行覆盖百分比（中文）", re.compile(r"行覆盖\s*\d+\s*%")),
     ("行覆盖百分比（英文）", re.compile(r"(?:total|line)\s+coverage\s*[:=]?\s*\d+\s*%", re.IGNORECASE)),
     ("mypy 源文件数（中文）", re.compile(r"mypy\s+\d+\s+源文件")),

@@ -83,6 +83,12 @@ class ErrorCategory(Enum):
             （AST 解析失败），已记录到失败知识库（failure_knowledge_base.json
             同口径，由 _patch_applier_node 的重采样统计产出），标识"补丁语法
             反复损坏"场景（2.2 改进，重采样耗尽标记）
+    TEST_REGENERATED_PASS_UNVERIFIED: M5（2026-09-29 审查 P0）——测试重生成
+            后通过但源码未被修复（regenerate 路由不经过 debugger/patch_applier，
+            源码一字未改而测试通过 = 经典 oracle-from-implementation 假成功通道）。
+            由 _executor_node 在 regeneration_count>0 且 test_passed=True 时写入
+            state["test_regenerated_pass_unverified"]=True；refine_failure_category
+            在任务收尾时把该标记归为"不通过"，使假成功率可被实验层度量。
     """
 
     LLM_FORMAT_ERROR = "llm_format_error"
@@ -107,6 +113,13 @@ class ErrorCategory(Enum):
     MULTI_CANDIDATE_ALL_REJECTED = "multi_candidate_all_rejected"
     # 2.2 改进：重采样耗尽标记（patch_applier.apply_patch_with_resample 统计）
     PATCH_SYNTAX_INVALID = "patch_syntax_invalid"
+    # M5（2026-09-29 审查 P0）：测试重生成后通过但源码未修复（regenerate 路由
+    # 不经过 debugger/patch_applier，源码一字未改而测试通过 = 经典
+    # oracle-from-implementation 假成功通道）。由 _executor_node 在
+    # regeneration_count>0 且 test_passed=True 时写入
+    # state["test_regenerated_pass_unverified"]=True；refine_failure_category
+    # 在任务收尾时把该标记归为"不通过"，使假成功率可被实验层度量。
+    TEST_REGENERATED_PASS_UNVERIFIED = "test_regenerated_pass_unverified"
 
 
 class SyntaxSubtype(Enum):
@@ -240,9 +253,7 @@ _RE_TRACEBACK = re.compile(r'File\s+"([^"]+)",\s*line\s+(\d+)')
 # 实测（L2.5 验证）：被测模块帧形如
 # "/var/.../tmpXXXX/runtime_index_error_boundary_0002.py:5: in first_and_last"
 # （行首完整路径），前缀组需能匹配整段路径，不能只吃字母数字段。
-_RE_TRACEBACK_SHORT_FRAME = re.compile(
-    r'^(?:[\w\-\./]+/)*([\w\.\-]+\.py):(\d+):\s+in\s+(\w+)', re.MULTILINE
-)
+_RE_TRACEBACK_SHORT_FRAME = re.compile(r"^(?:[\w\-\./]+/)*([\w\.\-]+\.py):(\d+):\s+in\s+(\w+)", re.MULTILINE)
 
 
 # Runtime Error 检测模式
@@ -255,6 +266,13 @@ _RE_RUNTIME_ERRORS = [
     re.compile(r"AttributeError", re.IGNORECASE),
     re.compile(r"RecursionError", re.IGNORECASE),
     re.compile(r"NameError", re.IGNORECASE),
+    # O35（2026-09-30 全面审查 P1）：JSONDecodeError 是被测代码极常见的运行时
+    # 异常（解析外部输入必踩）。pytest 输出形态的样本在第 1 步被
+    # _RE_PYTEST_OUTPUT 挡掉 LLM 格式分支后，此前会一路落到 UNKNOWN(0.2)
+    # 触发通用兜底——现在归 RUNTIME(0.9)，走"分析异常栈定位 bug 函数"策略。
+    # 非 pytest 形态的裸 "json.decoder.JSONDecodeError: …" 仍在第 1 步被
+    # LLM 格式分支接走（历史口径不变，既有单测锁定）。
+    re.compile(r"JSONDecodeError", re.IGNORECASE),
 ]
 # Assertion Error 检测模式
 _RE_ASSERTION_ERRORS = [
@@ -285,6 +303,24 @@ _RE_LLM_FORMAT_ERRORS = [
     re.compile(r"empty response|响应为空|空响应", re.IGNORECASE),
     re.compile(r"incomplete response|truncated response|响应被截断|响应截断", re.IGNORECASE),
 ]
+# O35（2026-09-30 全面审查 P1）：pytest 输出形态标记。
+# _is_llm_format_error 的关键词（JSONDecodeError / Expecting value /
+# empty response…）同时是**被测代码**最常见的运行时异常文本——
+# `FAILED tests/test_parser.py::test_parse - json.decoder.JSONDecodeError:
+# Expecting value…` 这类真实测试失败此前被 L1 链条第 1 优先级以 0.9 置信
+# 判成 LLM_FORMAT_ERROR，修复 prompt 注入"请重新请求 LLM 生成合规响应"
+# （对着被测代码毫无意义），失败统计也随之失真。
+# LLM 响应格式异常本身**不会**出现在 pytest 输出里（它发生在 LLM 调用侧，
+# 由 classify_llm_response 单独判定），故：命中下列任一 pytest 形态即
+# 说明文本是测试输出 → 跳过 LLM 格式分支，让后续规则按真实异常判定。
+#   - 测试节点 id（path.py::test_name）
+#   - pytest 汇总头（FAILED/ERRORS 行、short test summary info、分隔线）
+#   - traceback 帧（file.py:NN: in func）/ pytest 断言详情缩进（E 开头）
+_RE_PYTEST_OUTPUT = re.compile(
+    r"\.py::|^\s*(?:FAILED|ERROR)\s+\S+\.py|short test summary info|_{5,}\s*(?:FAILURES|ERRORS)"
+    r"|\.py:\d+:\s*in\s+\S+|^\s*E\s{2,}\S",
+    re.IGNORECASE | re.MULTILINE,
+)
 # 语法错误关键词（模块级常量，避免每次 _is_syntax_error 调用重复构建列表）
 _SYNTAX_ERROR_KEYWORDS = (
     "SyntaxError",
@@ -530,7 +566,11 @@ class ErrorClassifier:
             (类别, 置信度, 置信度口径说明)。
         """
         # 1. LLM 响应格式异常（具体特征：JSON 解析失败 / 空响应关键词）→ 高置信
-        if self._is_llm_format_error(combined):
+        # O35（2026-09-30 全面审查 P1）：仅当文本**不是** pytest 输出时才适用
+        # ——否则被测代码自身的 JSONDecodeError / "empty response" 等会被误判
+        # 成 LLM 格式异常（详见 _RE_PYTEST_OUTPUT 注释）。pytest 形态的样本
+        # 落到下方规则链按真实异常类判定。
+        if not _RE_PYTEST_OUTPUT.search(combined) and self._is_llm_format_error(combined):
             return ErrorCategory.LLM_FORMAT_ERROR, self._CONFIDENCE_RULE_HIT, "regex_hit"
         # 2. Import 错误（具体特征：缺失模块名可提取 → 高置信；否则中置信）
         if self._is_import_error(combined):
@@ -1077,6 +1117,17 @@ _FIX_STRATEGIES: dict[ErrorCategory, str] = {
         "未产出可用补丁。请回退到单补丁流程，并降低对 LLM 输出的"
         "扰动幅度（候选视角差异过大时 LLM 易输出残缺代码）。"
     ),
+    # M5（2026-09-29 审查 P0）：测试重生成后通过但源码未被修复
+    # （regenerate 路由不经过 debugger/patch_applier，源码一字未改而
+    # 测试通过 = 经典 oracle-from-implementation 假成功通道）。
+    # 这不是代码/测试 bug，而是实验口径问题——需人工/评估层介入，
+    # 把该类任务归入"未验证假通过"而非"修复成功"。
+    ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: (
+        "检测到测试重生成后通过但源码未被修复（oracle-from-implementation 假成功通道）。"
+        "regenerate 路由不经过 debugger/patch_applier，源码一字未改而测试通过，"
+        "说明测试断言被重写为恒真或与实现一致而非与规格一致。"
+        "此任务应归入未验证假通过而非修复成功，需人工或评估层介入确认。"
+    ),
 }
 
 
@@ -1135,6 +1186,7 @@ _STRATEGY_TAGS: dict[ErrorCategory, str] = {
     ErrorCategory.EXECUTION_TRACE_MISSING: "investigate_execution_infra",
     ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: "fallback_single_patch",
     ErrorCategory.PATCH_SYNTAX_INVALID: "resample_strict_patch",
+    ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: "investigate_oracle_from_implementation",
 }
 
 # 类别 → 推荐动作类别（coarse 四档，供修复路由分支选择）
@@ -1156,6 +1208,11 @@ _REPAIR_ACTIONS: dict[ErrorCategory, str] = {
     ErrorCategory.EXECUTION_TRACE_MISSING: "investigate_infra",
     ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: "llm_resample",
     ErrorCategory.PATCH_SYNTAX_INVALID: "llm_resample",
+    # M5（2026-09-29 审查 P0）：假通过 = 测试重生成后通过但源码未修复
+    # （regenerate 路由不经过 debugger/patch_applier）。修复方向是
+    # "investigate_infra"——这不是代码/测试问题，而是实验口径问题
+    # （oracle-from-implementation 假成功通道），需人工/评估层介入。
+    ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: "investigate_infra",
 }
 
 
@@ -1167,15 +1224,27 @@ def refine_failure_category(
     execution_trace: list[dict] | None = None,
     multi_candidate_stats: dict | None = None,
     patch_syntax_invalid: bool | None = None,
+    test_regenerated_pass_unverified: bool | None = None,
 ) -> str:
-    """任务收尾时按最终状态信号细化失败类别（1.1 状态细化 + 5.2 持续细化）。
+    """任务收尾时按最终状态信号细化失败类别（1.1 状态细化 + 5.2 持续细化 + M5 假通过标记）。
 
     与 classify() 的文本正则分类互补：classify() 在测试输出上工作，
     本函数在任务最终状态（repair_history / rag_stats / execution_trace /
     multi_candidate_stats）上工作，把"修复失败"与"补丁不安全"、"RAG 失效"、
     "执行轨迹丢失"、"多候选全拒绝"单独标识出来，供失败分布统计与实验分析使用。
 
-    判定规则（仅对 test_passed 为 False 的任务生效，成功任务原样返回）：
+    M5（2026-09-29 审查 P0）：test_regenerated_pass_unverified 早退规则
+    （优先于"成功任务原样返回"）——测试重生成后通过（regeneration_count>0
+    且 test_passed=True）但源码未被修复（regenerate 路由不经过
+    debugger/patch_applier）= 经典 oracle-from-implementation 假成功通道。
+    此时把任务归为 TEST_REGENERATED_PASS_UNVERIFIED（不通过），使假
+    成功率可被实验层度量（M5 验收指标：test_regenerated_pass 计数 = 0）。
+    判定优先于其他规则：即使 test_passed=True，只要
+    test_regenerated_pass_unverified=True 就归为假通过。
+
+    判定规则（M5 假通过标记优先；其余仅对 test_passed 为 False 的任务生效）：
+    0. TEST_REGENERATED_PASS_UNVERIFIED（M5）：test_regenerated_pass_unverified
+       为 True（测试重生成后通过但源码未修复）——优先于"成功原样返回"；
     1. PATCH_VALIDATION_FAILED：repair_history 中任一轮 patch_applied
        为 False（补丁被安全守卫拒绝）——比 RAG 检索空更具体的失败原因，
        优先级更高；
@@ -1197,10 +1266,20 @@ def refine_failure_category(
         execution_trace: 任务内 executor 执行轨迹（3.2 默认常开写入）。
         multi_candidate_stats: 多候选补丁统计 {"candidates": N, "static_passed": M}
             （可选；None 表示未启用多候选）。
+        patch_syntax_invalid: 补丁经重采样后仍语法不合法（2.2 改进标记）。
+        test_regenerated_pass_unverified: M5 标记——测试重生成后通过但
+            源码未修复（可选；None/False = 未触发，历史口径不变）。
 
     Returns:
         细化后的错误类别字符串。
     """
+    # M5（2026-09-29 审查 P0）：假通过早退——测试重生成后通过（regenerate
+    # 路由不经过 debugger/patch_applier，源码未修复）优先归为
+    # TEST_REGENERATED_PASS_UNVERIFIED（不通过），使假成功率可度量。
+    # 判定优先于"成功任务原样返回"：即使 test_passed=True，只要
+    # test_regenerated_pass_unverified=True 就归为假通过。
+    if test_regenerated_pass_unverified:
+        return ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED.value
     if test_passed is not False:
         return error_category
     history = repair_history or []
@@ -1260,4 +1339,10 @@ def refine_final_error_category(final_state: dict) -> str:
         execution_trace=final_state.get("execution_trace"),
         multi_candidate_stats=final_state.get("multi_candidate_stats"),
         patch_syntax_invalid=bool(final_state.get("patch_syntax_invalid_flag", False)),
+        # M5（2026-09-29 审查 P0）：测试重生成后通过但源码未修复（regenerate
+        # 路由不经过 debugger/patch_applier）= 假成功通道。executor 节点在
+        # regeneration_count>0 且 test_passed=True 时写入该标记；收尾时
+        # refine_failure_category 把该标记归为 TEST_REGENERATED_PASS_UNVERIFIED
+        # （不通过），使假成功率可被实验层度量。
+        test_regenerated_pass_unverified=bool(final_state.get("test_regenerated_pass_unverified", False)),
     )

@@ -68,15 +68,6 @@ def _env_float(name: str, default: float, minimum: float, maximum: float) -> flo
     return max(minimum, min(maximum, value))
 
 
-def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    """读取环境变量整数值（解析失败时回退默认值，并夹在 [minimum, maximum]）。"""
-    try:
-        value = int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-    return max(minimum, min(maximum, value))
-
-
 @dataclass
 class RiskAssessment:
     """风险分级结果（纯数据，供 JSON / 报告 / 人工回路消费）。
@@ -262,9 +253,21 @@ def build_risk_summary(
 ) -> dict[str, Any]:
     """构建 benchmark 结果行可直接 JSON 序列化的风险摘要 dict。
 
-    设计目标：
-        - 单任务结果行新增 `risk_summary` 字段时，调用方只需用本函数一行生成；
-        - 默认关时调用方通常不会调用本函数，避免历史口径变化。
+    M12（2026-09-29 审查 P0）：实际暂停接线。
+    历史口径：assess_task_risk 产出 risk_level/approval_action 纯数据，
+    但全仓无任何消费方把 approval_action 落成 LangGraph interrupt_before
+    + checkpoint 的人工暂停（"medium → human_confirm" / "high →
+    force_review" 只是 JSON 里的字符串字段，工作流从不真正停下来等人工）。
+    现补接线：当 RISK_APPROVAL_ENABLE=true 且 approval_action ∈
+    (human_confirm, force_review) 时，本函数返回的 dict 中
+    `pause_requested=True`，调用方（_debugger_node / _patch_applier_node）
+    据此触发 LangGraph `interrupt()` 暂停（需配合 checkpointer），
+    人工 approve/reject 后经 `resume()` 恢复。
+    默认关时（RISK_APPROVAL_ENABLE=false）pause_requested=False，
+    工作流不暂停（历史零变化）。
+    保守降级：无 checkpointer 时 interrupt 不生效（LangGraph 文档明确
+    "interrupt 需要 checkpointer 否则立即恢复"），此时仅记录日志
+    "M12 暂停未生效（无 checkpointer）"，不阻断工作流。
 
     Returns:
         可直接嵌入 JSON 的 dict（包含 enabled=False 占位，保持键集合同构）。
@@ -278,6 +281,7 @@ def build_risk_summary(
             "approval_action": None,
             "factors": {},
             "reasons": [],
+            "pause_requested": False,
         }
     result = assess_task_risk(
         confidence=confidence,
@@ -288,7 +292,17 @@ def build_risk_summary(
         budget_ratio=budget_ratio,
         budget_exceeded=budget_exceeded,
     )
-    return {"enabled": True, **result.to_dict()}
+    # M12：medium/high 风险级别需要人工回路 → 请求暂停
+    _needs_pause = result.approval_action in ("human_confirm", "force_review")
+    if _needs_pause:
+        logger.info(
+            "M12 风险分级暂停请求：action=%s level=%s score=%.3f"
+            "（需 checkpointer + LangGraph interrupt 实际暂停；无 checkpointer 时仅记录）",
+            result.approval_action,
+            result.risk_level,
+            result.risk_score,
+        )
+    return {"enabled": True, **result.to_dict(), "pause_requested": _needs_pause}
 
 
 __all__ = [

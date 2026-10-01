@@ -13,9 +13,12 @@ import shutil
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+@pytest.mark.unit
 class TestExecutionTrace:
     """3.2 执行反馈轨迹：_executor_node 每次执行追加到 state["execution_trace"]。"""
 
@@ -115,6 +118,7 @@ class TestExecutionTrace:
         assert result["execution_trace"][0]["coverage"] == 80.0
 
 
+@pytest.mark.unit
 class TestShouldDebug:
     """测试 _should_debug 路由函数。"""
 
@@ -171,8 +175,10 @@ class TestShouldDebug:
     @patch("src.graph.workflow._trace_node")
     @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
     def test_consecutive_failed_repairs_records_skip_reason(self, mock_trace):
-        """0.9 回归：跳过 Debugger 时路由层记录 reason=skip_debugger_repair_invalid
-        （拆分后日志/追踪副作用由 _should_debug 承担，判定函数保持零副作用）。"""
+        """0.9 回归 + O27 2026-09-29 审查 P0（StopReason）：跳过 Debugger 时路由层
+        经 determine_stop_reason 单点判定终止原因，记录 reason=skip_debugger_repair_invalid
+        （拆分后日志/追踪副作用由 _should_debug 承担，判定函数保持零副作用）。
+        终止原因统一经 StopReason 枚举判定，输出含 iteration 辅助字段。"""
         from src.graph.workflow import _should_debug
 
         state = {
@@ -183,12 +189,14 @@ class TestShouldDebug:
         }
         result = _should_debug(state)
         assert result == "done"
-        # _trace_node("_should_debug", decision="done", output_summary={...})
-        # 第 1 参位置传入 node 名，第 2/3 参为关键字 decision/output_summary
+        # determine_stop_reason 返回 StopReason.REPAIR_INVALID（.value =
+        # "skip_debugger_repair_invalid"），_trace_node 的 output_summary
+        # 含 reason + iteration（StopReason 统一判定口径）
         matched = any(
             c.args[0] == "_should_debug"
             and c.kwargs.get("decision") == "done"
-            and c.kwargs.get("output_summary") == {"reason": "skip_debugger_repair_invalid"}
+            and c.kwargs.get("output_summary", {}).get("reason") == "skip_debugger_repair_invalid"
+            and c.kwargs.get("output_summary", {}).get("iteration") == 1
             for c in mock_trace.call_args_list
         )
         assert matched
@@ -209,6 +217,7 @@ class TestShouldDebug:
         assert result == "done"
 
 
+@pytest.mark.unit
 class TestRecentRepairsInvalid:
     """测试 _recent_repairs_invalid 纯数据判定函数（0.9 轮次由
     _should_skip_debugger 拆分而来，日志副作用已留在 _should_debug 路由层；
@@ -247,6 +256,7 @@ class TestRecentRepairsInvalid:
         assert result is True
 
 
+@pytest.mark.unit
 class TestValidatePlannerOutput:
     """测试 Planner 输出验证。"""
 
@@ -285,6 +295,7 @@ class TestValidatePlannerOutput:
         assert _validate_planner_output(plan) is False
 
 
+@pytest.mark.unit
 class TestGetDefaultTestPlan:
     """测试默认测试计划生成。"""
 
@@ -305,6 +316,7 @@ class TestGetDefaultTestPlan:
         assert plan["function_name"] == "unknown"
 
 
+@pytest.mark.unit
 class TestBuildWorkflow:
     """测试工作流构建。"""
 
@@ -383,6 +395,7 @@ class TestBuildWorkflow:
         assert found_direct, f"executor→debugger 直连未注册: {cond_calls}"
 
 
+@pytest.mark.unit
 class TestGetWorkflowStats:
     """测试工作流统计信息。"""
 
@@ -453,6 +466,7 @@ class TestGetWorkflowStats:
         assert wf._FILE_CACHE_COUNT_MEMORY[1] == 0
 
 
+@pytest.mark.unit
 class TestNodeFunctions:
     """测试节点函数。"""
 
@@ -607,6 +621,7 @@ class TestNodeFunctions:
             workflow_module.TestCaseRetriever = original_cls
 
 
+@pytest.mark.unit
 class TestPatchApplierNode:
     """_patch_applier_node 状态/磁盘一致性回归测试。"""
 
@@ -646,6 +661,7 @@ class TestPatchApplierNode:
         assert result["repair_history"][-1]["patch_applied"] is False
 
 
+@pytest.mark.unit
 class TestGeneratorNodeRegeneration:
     """_generator_node 再生成路径：递增 regeneration_count 并清空过期 diagnosis。"""
 

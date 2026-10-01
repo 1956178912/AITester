@@ -192,7 +192,10 @@ class TestDiagnosisKeywordRegexInit:
         assert w._DIAGNOSIS_KEYWORD_RE is not None  # 懒初始化成功
         # 第二次调用走预编译正则（不再重新编译）
         compiled = w._DIAGNOSIS_KEYWORD_RE
-        assert w._diagnosis_hits_test_gen_keywords("AttributeError") is True
+        # M5（2026-09-29 审查 P0）：AttributeError 已从关键词表删除（源码
+        # 缺陷签名词），用保留的"测试用例"关键词验证第二次调用命中。
+        assert w._diagnosis_hits_test_gen_keywords("测试用例") is True
+        assert w._diagnosis_hits_test_gen_keywords("AttributeError") is False
         assert compiled is w._DIAGNOSIS_KEYWORD_RE
 
 

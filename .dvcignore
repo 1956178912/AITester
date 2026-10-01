@@ -1,0 +1,27 @@
+# N7（2026-09-29 审查 P2）：工件归档配置（DVC / git-lfs）。
+#
+# 设计口径：
+# - 实验结果 JSON / trace JSONL / 图表 PNG 等大文件走 DVC 或 git-lfs
+#   （二者选一，按仓库现有工具链决定），避免直接 commit 大文件导致
+#   仓库体积失控；
+# - 里程碑结果打 Zenodo DOI（ACM Artifacts 合规），需 zenodo 账号
+#   与 DOI 申请（手动触发，非 CI 自动）；
+# - 本文件仅声明归档规则，不改变现有 git 跟踪行为（opt-in 口径）。
+
+# ── DVC 配置（若使用 DVC 管理大文件）────────────────────────────────────
+# 启用方式：pip install dvc && dvc init && dvc add experiments/results/
+# dvc cache 目录默认 ~/.dvc/cache（可经 DVC_CACHE_DIR 重定向）
+
+# ── git-lfs 配置（若使用 git-lfs 管理大文件）────────────────────────────
+# 启用方式：git lfs install
+# 以下 pattern 声明需走 LFS 的文件类型：
+#   *.json   # 实验结果 JSON（benchmark_*.json / task_*.json）
+#   *.jsonl  # trace JSONL（traces/*.trace.jsonl）
+#   *.png    # 可视化图表（docs/*.png / experiments/*.png）
+#   *.pt     # 嵌入模型 checkpoint（chromadb / sentence-transformers）
+#   *.onnx   # CodeBERT / ONNX 后端模型文件
+#   *.tar.gz # 数据集压缩包（SWE-bench / SWT-Bench）
+
+# ── .gitignore 白名单（归档目录走 DVC/LFS，不直接 commit）────────────────
+# experiments/results/ 下的大文件（JSON/JSONL/PNG）应由 DVC/LFS 管理；
+# 小文件（< 1MB 的 CSV/MD 摘要）可直接 git commit。

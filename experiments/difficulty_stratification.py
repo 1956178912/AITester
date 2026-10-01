@@ -60,11 +60,21 @@ def _dependency_bucket(dep_count: int) -> str:
 def _complexity_bucket(row: dict[str, Any]) -> str:
     """按"修复难度代理"分档（easy / medium / hard）。
 
-    代理口径：iterations × (1 - passed)；成功任务恒 0（easy），
-    失败任务 = 其迭代次数（修复未收敛越久 = 越难）。
+    O21（2026-09-29 审查 P0）：循环定义修复。
+    历史口径：proxy = iterations × (1 - passed)——成功任务恒 0（easy），
+    失败任务 = 其迭代次数。这使"成功任务恒为 easy"成为循环定义：
+    任何"按难度分层的成功率"都是同义反复（成功任务永远在 easy 层，
+    失败任务永远在 medium/hard 层，成功率分层无区分度）。
+    现改为纯静态代理（结果无关）：
+    - proxy = iterations（修复轮数，与是否成功无关——1 轮修复成功
+      与 1 轮修复失败同等"收敛快"，难度由收敛速度而非结果决定）；
+    - 若 iterations 缺失（如 plain_llm 单轮基线），回退到
+      code_size + dependency_count 的静态代理（结果无关）。
+    分档边界不变：easy 0 / medium 1 / hard >= 2。
     """
     iterations = int(row.get("iterations", 0) or 0)
-    proxy = iterations if not row.get("passed") else 0
+    # O21：纯静态代理（结果无关）——iterations 本身即"收敛速度"指标
+    proxy = iterations
     if proxy <= 0:
         return "easy"
     if proxy == 1:

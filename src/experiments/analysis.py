@@ -7,6 +7,7 @@
 - 统计显著性检验
 - 生成对比报告
 """
+# ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
 
 from __future__ import annotations
 

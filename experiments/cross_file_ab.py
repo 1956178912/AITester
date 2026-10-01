@@ -187,9 +187,7 @@ def _render_markdown(
                 "on": {"success_rate": on_rate, "avg_iterations": on_iter},
                 "off": {"success_rate": off_rate, "avg_iterations": off_iter},
                 "delta_pp": delta_pp,
-                "t1_pass": (delta_pp >= T1_MIN_DELTA_PP)
-                if difficulty in ("level3", "level3.5")
-                else None,
+                "t1_pass": (delta_pp >= T1_MIN_DELTA_PP) if difficulty in ("level3", "level3.5") else None,
                 "t4_pass": (not (delta_pp < -T4_MAX_DROP_PP)) if difficulty == "level1" else None,
             },
             f,
@@ -236,7 +234,9 @@ def main() -> int:
 
     if not args.output_dir:
         suffix = "_bi" if args.bidirectional else ""
-        args.output_dir = os.path.join(PROJECT_ROOT, "experiments", "results", f"cross_file_ab_{args.difficulty}{suffix}")
+        args.output_dir = os.path.join(
+            PROJECT_ROOT, "experiments", "results", f"cross_file_ab_{args.difficulty}{suffix}"
+        )
     on_dir = os.path.join(args.output_dir, "cross_file_on")
     off_dir = os.path.join(args.output_dir, "cross_file_off")
     os.makedirs(on_dir, exist_ok=True)
@@ -270,7 +270,9 @@ def main() -> int:
     # 2026-10 改进：跑完后提示根因分析脚本（level3/level3.5 未达 T1 时定位瓶颈）
     if args.difficulty in ("level3", "level3.5"):
         print(f"\n[A/B] 提示：若 delta 未达 T1（+{T1_MIN_DELTA_PP:.0f}pp），可用根因分析脚本定位 2% 未修复任务瓶颈：")
-        print(f"  python experiments/cross_file_root_cause.py --results-on {on_dir}/benchmark_*.json --difficulty {args.difficulty}")
+        print(
+            f"  python experiments/cross_file_root_cause.py --results-on {on_dir}/benchmark_*.json --difficulty {args.difficulty}"
+        )
     return 0
 
 

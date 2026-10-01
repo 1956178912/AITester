@@ -233,16 +233,23 @@ class TestWorkflowDiagnosisKeywordRegex:
             "",
             "普通诊断文本",
             "测试生成错误",
-            "AttributeError in test code",
-            "NameError 测试用例",
             "期望的异常类型不匹配",
-            "SyntaxError at line 3",
             "test code has bug",
             "测试设计存在错误",
+            "测试用例",
         ]
         for s in samples:
             legacy = any(kw in s for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS)
             assert _diagnosis_hits_test_gen_keywords(s) == legacy == bool(ref.search(s)), s
+
+    def test_m5_source_defect_signatures_removed(self):
+        """M5（2026-09-29 审查 P0）：三个源码缺陷签名词（AttributeError /
+        NameError / SyntaxError）已从关键词表删除，命中它们不再触发"测试
+        生成错误"路由（防止把实现缺陷误判为测试缺陷 → 假通过）。"""
+        from src.graph.workflow import _diagnosis_hits_test_gen_keywords
+
+        for kw in ("AttributeError", "NameError", "SyntaxError"):
+            assert not _diagnosis_hits_test_gen_keywords(f"xx {kw} xx"), f"M5 后 {kw} 不应命中"
 
 
 # ─── llm_client：zai 域名预编译正则等价性守卫 ────────────────────────────────

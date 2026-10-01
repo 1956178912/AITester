@@ -105,6 +105,7 @@ def _success_rate(summary: dict[str, Any]) -> float:
         return round(passed / total * 100, 2) if total > 0 else 0.0
     return 0.0
 
+
 def _avg_iterations(summary: dict[str, Any]) -> float:
     """aitester 基线平均迭代次数。"""
     for baseline, bl in summary.get("results", {}).items():
@@ -176,7 +177,11 @@ def _locate_accuracy(output_dir: str, summary: dict[str, Any]) -> float:
 
 
 def _render_markdown(
-    on_summary: dict[str, Any], off_summary: dict[str, Any], on_dir: str, off_dir: str, output_dir: str,
+    on_summary: dict[str, Any],
+    off_summary: dict[str, Any],
+    on_dir: str,
+    off_dir: str,
+    output_dir: str,
     difficulty: str = "level2.5",
 ) -> str:
     """渲染位置感知 A/B 对比 Markdown。"""

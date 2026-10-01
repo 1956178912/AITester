@@ -298,8 +298,9 @@ class TestVisualizeNoneDiagonal:
     """2026-09-26 round9 P2：visualize p 值热力图 None 对角线渲染为 "—"。"""
 
     def test_none_cell_renders_dash(self):
-        import matplotlib
+        import pytest
 
+        matplotlib = pytest.importorskip("matplotlib")
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -310,11 +311,12 @@ class TestVisualizeNoneDiagonal:
                 ["aitester", "plain_llm", 0.05, 0.03, 1.0, 0.9, 0.5, "*", "x"],
             ],
         }
-        # 仅验证不抛异常（matplotlib 已装时）
+        # O35（2026-09-30 审查 F）：此前是 `try/except Exception: pass`——
+        # 宽 except 把本用例要防的渲染异常一并吞掉，用例恒绿（自相矛盾）。
+        # 上方已 matplotlib.use("Agg")（无显示环境也安全），故直接断言
+        # 渲染不抛异常；抛出即用例失败，符合"None 对角线渲染为 —"的意图。
         try:
             visualize_results.plot_statistical_significance(sig_result)
-        except Exception:
-            pass  # 无显示环境时可能失败，不锁定
         finally:
             plt.close("all")
 

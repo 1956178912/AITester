@@ -23,10 +23,10 @@
 | **Code Coverage** | Total line and branch coverage: see the `coverage` section of [BASELINE.yaml](BASELINE.yaml) (`line_total_pct` / `branch_total_pct`); per-core-module coverage follows the latest CI `term-missing` output |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-09-29 full test run + real LLM smoke test PASS, baseline refreshed (default behavior unchanged): full suite zero-regressions + LLM_1 endpoint connectivity + ruff/mypy all green + branch coverage 77.34%; test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
+| **Latest Optimization** | ✅ 2026-10-02 Review/Optimization Round (default behavior unchanged): CI branch-coverage gate back to green (total branch 73%→77.6%, gate 77%) + secret-guard self-lock fix + three real defects (rag material-source mis-scan / O17 uppercase-credential redaction blind spot / S6 patch path escape write) + 11 tautological assertions zeroed; full-suite zero-regression + ruff/mypy all green; current baseline numbers: see [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 | **Core Module Coverage** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; mypy 0 errors across the repo (86 source files, +5 new: risk_approval / agent_telemetry / kernel_sandbox / testless_validation / tree_sitter_backend)) |
-| **Recent Changes** | ✅ 2026-09-29 full test run + real LLM smoke test PASS (full suite zero-regressions; LLM_1 endpoint connectivity + response check passed; ruff/mypy all green); test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); prior 2026-09-28 frontier-recommendation batch (gap_report P0/P1/P2 gaps G1–G8 fully landed, see section below); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; mypy 0 errors across the repo (91 source files, see [BASELINE.yaml](BASELINE.yaml) `static_checks` section for current counts)) |
+| **Recent Changes** | ✅ 2026-10-02 Review/Optimization Round (CI gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge, default behavior unchanged); prior 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes, see CHANGELOG); test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -81,7 +81,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 ### Test Commands
 
 ```bash
-# Run all unit tests (full 1937 cases; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped, ~1863 collected)
+# Run all unit tests (see BASELINE.yaml `tests` for current totals; when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests with coverage
@@ -618,8 +618,8 @@ and are no longer filtered as "loop-variable noise"), line-number error
 frames were discarded), and child-thread unhandled-exception leak (top-level
 call exceptions were not intercepted → "Exception in thread" noise).
 When `RUNTIME_PROBE_ENABLE=false` (default), zero difference. Tests:
-`tests/test_runtime_probe.py` (2538 full suite passed / 0 failed / 0
-warnings, `-W error::ResourceWarning` caliber).
+`tests/test_runtime_probe.py` (full suite passed / 0 failed / 0
+warnings, `-W error::ResourceWarning` caliber; totals in BASELINE.yaml).
 
 #### 5.22.2 G2 risk-tiered human approval loop (`RISK_APPROVAL_ENABLE`, default off)
 `src/graph/risk_approval.py`: three-factor weighted scoring (confidence
@@ -940,7 +940,7 @@ docker run --rm \
 ## Unit Tests
 
 ```bash
-# Run all tests (full 1937 cases; optional dependencies missing → auto-skip degradation)
+# Run all tests (current totals: BASELINE.yaml `tests`; optional dependencies missing → auto-skip degradation)
 .venv/bin/python -m pytest tests/ -v
 
 # Run tests and generate a coverage report
@@ -950,7 +950,7 @@ docker run --rm \
 .venv/bin/python -m pytest tests/test_dataset_loader.py -v
 ```
 
-**Tested modules** (75+ test files, full 1937 collected pytest cases; reduced environment collects ~1863 / auto-skips RAG and visualization cases, total src coverage 94%):
+**Tested modules** (file list below; current case counts and coverage are in [BASELINE.yaml](BASELINE.yaml) `tests` / `coverage` — no hard-coded totals here):
 
 | Test File | Test Function Count | Coverage Scope |
 |---------|-------|---------|
@@ -1320,6 +1320,42 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 ---
 
 ## Iteration records
+
+### 2026-10-02 Review/Optimization Round (CI branch-coverage gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge, default behavior unchanged)
+
+**Key results**:
+- **CI gate back to green (branch coverage 73%→77.6%)**: before this batch CI was red (`scripts/check_branch_coverage.py` threshold 77% vs measured 73%; `graph/workflow.py` strict threshold 90% vs measured 74%); tests added for 4 zero-coverage opt-in modules (`fl_spectral` 32 cases / `branch_coverage_inject` 15 / `mutation_advisor` 18 / `rag` keyword-fallback layer 40) + `determine_stop_reason` 11 branches + nodes three major closure callbacks 19 cases + logic_spec/type_repair private pure-function branches 56 cases + hierarchical-summary missing-branch 29 cases — `graph/workflow.py` branch coverage 74%→98.75%, total branches 3057→3213/4094;
+- **P0 secret-guard self-lock fix**: `.git-hooks/check_secret_leak.sh` header comments contained a real `sk-` prefix example; when the guard scanned untracked files it scanned **itself** → every commit was blocked (measured exit=1); fixed by changing comments to placeholder wording + adding local audit reports (`REVIEW_*.md` / `review_infra_hygiene_report.md` etc. containing forensic `sk-` truncated samples) to `.gitignore`. Guard now exits 0;
+- **Three real defects**: ① `rag` `_iter_candidate_docs` mis-scans every JSON in the CWD when `RAG_PERSIST_PATH` is empty (pollutes keyword-fallback material source; empty directory now skipped directly); ② `mask_sensitive_info` lowercase-anchored patterns missed `MYSQL_PASSWORD=<value>` uppercase credential shapes (O17 residual blind spot; new uppercase assignment pattern, effective across `redact_text` / fallback / trace JSONL); ③ `executor_repo._apply_patch_robust` new-file fallback write had no path validation on `+++ b/<path>` (`../` sequences / absolute paths could escape repo_dir; now realpath normalization + prefix check, out-of-bounds rejected with a warning);
+- **Tautological assertions zeroed (11 sites)**: `assert ... or True` / `in out or not in out` / `or len(...) > 3000` all tightened to real behavior assertions; 2 `assert True` placeholders filled with real content checks;
+- **Baseline refresh**: `BASELINE.yaml` synced (2815 passed / line 86% / branch 78% / `graph_workflow: 99` / `error_classifier: 90` / suite 46s; `check_baseline --verify` measured consistency passed).
+
+**Verification**: Full 2815 passed / 0 failed (45.4s) / ruff 0 warnings / mypy 91 source files 0 errors (current numbers: see [BASELINE.yaml](BASELINE.yaml))
+
+### 2026-09-30 Full review & optimization round (O32–O34: ruff rule-family expansion + security-audit widening + CI real-gating fixes + three real defect fixes, default behavior unchanged)
+
+**Key results**:
+- **O32 ruff rule expansion (10→26 families)**: added `T20` / `A` / `S` / `C4` / `DTZ` / `G` / `ISC` / `PIE` / `PL` / `PLE` / `TRY` / `FURB` / `PGH` — `pyproject.toml` documents every ignore with a reason (25 entries), `per-file-ignores` exempts three directory classes (test scaffolding / CLI scripts / experiment code); **70 findings cleaned inside `src/`** (12 subprocess calls made explicit with `check=False`, 2 lexical bare `raise`s replaced, builtin shadowing renames, 25+ modern-idiom rewrites);
+- **O34 real CI gates**: ① new **mypy hard-gate step** in the `test` job (`mypy==1.7.1` pinned + non-zero exit fails the build — previously mypy was installed but never executed, `generate_static_report.py` always returned 0 and swallowed the exit code); ② bandit 1.8.2→**1.9.4** (1.8.2 crashes per-file on Python ≥3.12 → empty scan with exit 0) + `[tool.bandit]` section added to `pyproject.toml` (10 accepted-risk skips with per-code justification; measured 79 findings→0); ③ gitleaks now downloads the pinned official binary (the old `pip install gitleaks` always failed → the full-history scan was silently skipped on every CI run); ④ `.git-hooks/pre-commit.sh` gains `ruff check .` + `ruff format --check .` (the pre-commit framework was never installed locally, so no formatting check ever ran before commit — the recurrence vector for "CI red right after push" is closed); ⑤ fixed a **YAML parse error** in ci.yml (a bare `}` inside a `run:` plain scalar made the whole workflow unloadable);
+- **Security audit widening**: `scripts/audit_log_redaction.py` `_SENSITIVE_FIELD_RE` gains 3 residual blind spots (field-name variants `api key:`/`passwd=`/`access_token=` + bare AWS AKIA/ASIA values + DB DSN scheme+userinfo) — 7/7 injection probes hit, **0 new false positives** across all 438 logger call sites; `print_config_report` now masks `base_url` at the stdout exit; `verify_redaction_consistency()` (LiteLLM CVE-2026-89032 / Spring AI CVE-2026-59308 same-class risk guardrail) had zero coverage, 4 new cases added;
+- **Real defect fix (bare raise)**: `APIManager._handle_api_error` / `_handle_generic_error` bare `raise` is not lexically inside the except block — direct calls raised `RuntimeError: No active exception`; now explicit `raise e` (production path behavior unchanged);
+- **Hygiene debt cleanup**: 2 dead-code sites (`patch_applier._find_function_start_line` / `risk_approval._env_int`, zero calls repo-wide); README bilingual 8 stale baseline numbers now point at `BASELINE.yaml`.
+
+**Verification**: Full 2821 passed / 0 failed (47.9s) / ruff 0 warnings (rule families 10→26) / mypy 91 source files 0 errors / line coverage 84.1% / branch coverage 77.58% (gate 77% green; current numbers: see [BASELINE.yaml](BASELINE.yaml))
+
+### 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync, default behavior unchanged)
+
+**Key results**:
+- **P0 secret-leak guard**: `.gitignore` L30 `.env.local.bak` exact match missed suffixed backups like `.env.local.bak_g8` (untracked files contained 22 real LLM API Keys); now `.env.local.bak*` wildcard + new `.git-hooks/check_secret_leak.sh` (pre-commit 4th guard, scans staged new files + untracked files for `sk-(ws|or)-?[A-Za-z0-9._]{16,}` prefix, hit blocks the commit);
+- **P1 CI bilingual-gate drift**: CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md / pre-commit.sh all claim "bilingual docs guarded by CI check_bilingual_docs", but `ci.yml` had no such step (doc promise vs CI implementation drift); now added "Check bilingual docs pairing" step + `scripts/check_bilingual_docs.py` synced with 3 new 2026-10 batch doc exemptions;
+- **P1 experiment-metric caliber**: error-type bucketing changed from 5 hardcoded buckets to direct `ErrorCategory` enum dynamic bucketing (measured 88% of failure rows in 63 benchmark JSONs fell into "other", bucketing lost discriminative power); `_welch_ttest` / `_mann_whitney_u` changed from hand-rolled Z/normal-approx p-values to `scipy.stats.ttest_ind(equal_var=False)` + `scipy.stats.mannwhitneyu` (auto exact for n<50); `--difficulty` choices gained 4 intermediate levels (level2.5 / level2.5-hard / level3.5 / level4.5);
+- **P1 graph feature-switch enable path**: `expert_pool.generate_parallel` timeout protection was dead code (`cf.wait(futures, timeout)` never raises `TimeoutError`, `shutdown(wait=True)` still blocks on stuck futures — EXPERT_POOL_TIMEOUT completely ineffective, one stuck expert freezes the whole pool + whole graph); now per-future `fut.result(timeout=remaining)` + `pool.shutdown(wait=False)`; `_generator_node` 2.3 repro-test branch gained same-caliber try/except fallback as the main generation path;
+- **P1 agents default-path safety**: `executor.py` kernel_sandbox wrapped command `cmd = sandboxed_cmd[1:]` made argv[0] become `-p`/`--ro-bind` (KERNEL_SANDBOX_ENABLE=true → target scenario 100% `file_not_found`); now full `sandboxed_cmd` kept as argv; `semantic_cache.build_semantic_index_from_cache_dir` gained `cache_creator_ok` creator-ownership check (prevents cross-user poisoned entries semantic-hit under SEMANTIC_CACHE_ENABLE);
+- **P2 boundary/consistency issues**: `filter_by_relevance` refs=None branch return type inconsistent with signature (mypy fix) + L212 module-level import moved to file top (E402); `_parse_failed_cases` gained name-first regex + relaxed suffix regex; `config_manager` auto-assigned index gained `_LLM_MAX_SCAN_INDEX=32` upper-bound clamp (prevents "ghost LLM_33"); `dataset_loader` direct class-construction path env probing changed to explicit priority order (Pro before rebench); `executor_modes` test-file write gained try/except OSError; `deterministic_guard` urllib-family miss fixed (top-level module prefix matching); `injection_guard` output-side gained requests.get / urllib.request.urlopen outbound statements + `__import__`/`getattr` dynamic-bypass detection; `patch_applier` AST guard gained `_collect_dynamic_import_bypass` (`__import__`/`getattr`/alias-reference three dynamic bypass classes); `rogue_monitor` no longer implicitly resets the process singleton;
+- **P2 pre-commit guard hardening**: `.git-hooks/pre-commit.sh` gained check_lock_sync / check_credential_scrub / check_dependency_exemptions three CI-same-source guards (missing scripts skip without blocking);
+- **Doc/baseline sync**: `BASELINE.yaml` last_verified refreshed to 2026-10-01; `.env.example` gained 6 config.py variables with existing defaults but missing from template.
+
+**Verification**: Full 2540 passed / 0 failed (34s) / ruff 0 warnings repo-wide / mypy 86 files 0 errors (current numbers: see [BASELINE.yaml](BASELINE.yaml))
 
 ### 2026-09-29 Full test run + real LLM smoke test PASS, baseline refreshed (default behavior unchanged)
 

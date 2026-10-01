@@ -145,8 +145,10 @@ class TestCombinedRiskLevel:
         sims = {"jaccard": 0.9, "structural": None, "semantic": None}
         assert _combined_risk_level(sims) == "high"
 
-    def test_all_none_returns_low(self):
-        assert _combined_risk_level({}) == "low"
+    def test_all_none_returns_unknown(self):
+        # O22（2026-09-29 审查 P1）：缺 patch / 缺 gold / 解析异常 → "unknown"
+        # （此前 fail-open 归 "low"，导致 852 行 100% "low" 的零判别力结果）
+        assert _combined_risk_level({}) == "unknown"
 
 
 class TestDetectContamination:

@@ -94,7 +94,7 @@ def _pattern_budget_early_stop(record: dict[str, Any]) -> bool:
     """预算早停：budget_remaining=0 或 error_category=budget_exceeded。"""
     budget_remaining = record.get("budget_remaining")
     category = str(record.get("error_category", "")).lower()
-    if budget_remaining == 0 or budget_remaining == "0":
+    if budget_remaining in (0, "0"):
         return True
     return category in ("budget_exceeded", "llm_budget_exceeded")
 

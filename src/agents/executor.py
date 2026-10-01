@@ -65,12 +65,22 @@ class ExecutorAgent:
     def __init__(
         self,
         timeout: int = 30,
-        use_docker: bool = False,
-        use_venv: bool = False,
+        use_docker: bool | None = None,
+        use_venv: bool | None = None,
         auto_install_deps: bool = False,
         dep_install_timeout: int = 120,
         docker_image: str = "aitester:latest",
     ) -> None:
+        # R10（2026-09-30 独立审查 N8，P1）：use_docker / use_venv 缺省（None）
+        # 时回落 config 值（EXECUTOR_USE_DOCKER / EXECUTOR_USE_VENV）——
+        # 节点层与直接构造两条路径同口径；显式传 bool 时尊重调用方
+        # （测试 / 消融实验可显式关沙箱，不退化为 config 默认）。
+        from config import EXECUTOR_USE_DOCKER, EXECUTOR_USE_VENV as _CFG_VENV  # isort: skip
+
+        if use_docker is None:
+            use_docker = EXECUTOR_USE_DOCKER
+        if use_venv is None:
+            use_venv = _CFG_VENV
         # timeout 从参数传入，默认 30 秒
         self.timeout = timeout
         self.use_docker = use_docker
@@ -85,7 +95,9 @@ class ExecutorAgent:
         # （拒绝执行，不静默降级到无隔离本地——与 executor_modes 的
         # docker_unavailable 同口径，避免"以为隔离了其实没有"污染
         # 对比实验）。_kernel_sandbox_executable / _kernel_sandbox_obs
-        # 供 run_pytest_with_retry 的 subprocess.run(executable=...) 消费。
+        # 观测层：executable 记录沙箱工具名（sandbox-exec / bwrap，
+        # 2026-10-01 P1 修复后完整命令作 argv 直接传入，executable 字段
+        # 仅作观测/校验用途），obs 记录沙箱 profile 摘要。
         self._kernel_sandbox_executable: str | None = None
         self._kernel_sandbox_obs: dict[str, Any] = {}
 
@@ -152,6 +164,19 @@ class ExecutorAgent:
             # 生成代码意外外传向量）。按动态模式剔除 LLM_N_API_KEY 等
             # （credential_scrub，三条执行链路共用，避免固定名单漂移）。
             env = scrub_os_environ()
+            # S4（2026-09-29 审查 P0）：最小环境白名单——此前
+            # env = scrub_os_environ() 保留全部继承环境（HOME / PATH /
+            # LD_LIBRARY_PATH / PYTHONPATH / AWS_* / OPENAI_* / GITHUB_*），
+            # LLM 生成代码内 os.environ 可整包读取并外传。现收敛到
+            # EXECUTOR_ENV_WHITELIST 环境变量（逗号分隔，默认最小集
+            # PATH,HOME,LANG,LC_ALL,PYTHONPATH），同时保留 4.1 脱敏。
+            _env_whitelist_raw = os.getenv("EXECUTOR_ENV_WHITELIST", "").strip()
+            if _env_whitelist_raw:
+                _env_whitelist = {k.strip() for k in _env_whitelist_raw.split(",") if k.strip()}
+                env = {k: v for k, v in env.items() if k in _env_whitelist}
+            else:
+                _env_whitelist = {"PATH", "HOME", "LANG", "LC_ALL", "PYTHONPATH"}
+                env = {k: v for k, v in env.items() if k in _env_whitelist}
             # 尾随冒号防护：原 PYTHONPATH 未设置时直接拼接会产生 "<dir>:" 尾随空段
             # （sys.path 中空元素等价 CWD，同名文件可遮蔽第三方库）；空段过滤后 join
             env["PYTHONPATH"] = os.pathsep.join(
@@ -183,18 +208,34 @@ class ExecutorAgent:
             if kernel_sandbox_enabled():
                 sandboxed_cmd, obs = build_sandbox_command(cmd, cwd=project_root, allowed_paths=[target_dir])
                 if obs.get("supported"):
-                    self._kernel_sandbox_executable = sandboxed_cmd[0]
                     self._kernel_sandbox_obs = obs
-                    cmd = sandboxed_cmd[1:]
+                    # 2026-10-01 全面审查 P1 修复：此前 `cmd = sandboxed_cmd[1:]` 把
+                    # sandboxed_cmd[0]（"sandbox-exec" / "bwrap"）取出存到
+                    # self._kernel_sandbox_executable，但该字段全仓从未被
+                    # run_pytest_with_retry 的 subprocess.run(executable=...) 消费
+                    # （注释 L88 承诺与实现脱节）——cmd[0] 此时是 "-p"（seatbelt）/
+                    # "--ro-bind"（bwrap），子进程按 cmd[0] 查找可执行文件抛
+                    # FileNotFoundError: '-p'，开关目标场景 100% 失效。
+                    # 现改为保留完整 sandboxed_cmd 作为 argv（零 subprocess 语义
+                    # 歧义——seatbelt/bwrap 的 argv[0] 即工具自身，后续是参数），
+                    # self._kernel_sandbox_executable 仅作观测/校验用途。
+                    self._kernel_sandbox_executable = sandboxed_cmd[0]
+                    cmd = sandboxed_cmd
                 else:
-                    # fail-closed：直接拒绝执行，观测层只随本条失败结果
-                    # 透传，不落实例状态（避免下次成功执行被旧 obs 污染）
+                    # S1（2026-09-29 审查 P0）：fail-closed —— obs["supported"]=False
+                    # 时此前直接返回"无隔离执行"结果（调用方忘检查 obs 时
+                    # fail-open 裸跑）；现改为拒绝执行（与 docker_unavailable
+                    # 同口径），返回 error_info type=kernel_sandbox_unavailable。
                     return {
                         "passed": False,
-                        "output": "内核级沙箱在当前平台不可用（fail-closed 拒绝执行）",
+                        "output": "内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行；"
+                        "如需无隔离调试请显式设 ALLOW_UNSANDBOXED=true 并记录工件档位）",
                         "coverage": 0.0,
                         "failed_cases": [],
-                        "error_info": {"type": "kernel_sandbox_unavailable", "message": obs.get("profile_summary", "")},
+                        "error_info": {
+                            "type": "kernel_sandbox_unavailable",
+                            "message": obs.get("profile_summary", ""),
+                        },
                         "kernel_sandbox_obs": obs,
                     }
 

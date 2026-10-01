@@ -168,7 +168,14 @@ class APIHealth:
                 # 关：固定基础冷却（4.2 历史口径，便于对比实验）
                 if API_CIRCUIT_BACKOFF:
                     backoff = self.circuit_cooldown_seconds * (2**self.circuit_open_count)
-                    penalty = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
+                    # O20（2026-09-29 审查 P0）：绝对上限 60s——此前
+                    # cap = half_open_probe_penalty_cap_seconds * max(1, n)
+                    # 随 n 线性增长（实测 #10→210s、#20→510s、#40→1110s、
+                    # #60→1710s，外推 24h），与文档"上限 30s"矛盾。现固定
+                    # 上限 = max(half_open_probe_penalty_cap_seconds, 60.0)，
+                    # 保证退避永不超出 60s（API 熔断冷却的合理上界）。
+                    _ABSOLUTE_BACKOFF_CAP = 60.0
+                    penalty = min(backoff, max(self.half_open_probe_penalty_cap_seconds, _ABSOLUTE_BACKOFF_CAP))
                 else:
                     penalty = min(self.circuit_cooldown_seconds, self.half_open_probe_penalty_cap_seconds)
                 self.circuit_open_count += 1
@@ -255,7 +262,14 @@ class APIHealth:
                 # 关：冷却期恒为固定 base（4.2 历史口径，便于对比实验）
                 if API_CIRCUIT_BACKOFF:
                     backoff = self.circuit_cooldown_seconds * (2**self.circuit_open_count)
-                    cooldown = min(backoff, self.half_open_probe_penalty_cap_seconds * max(1, self.circuit_open_count))
+                    # O20（2026-09-29 审查 P0）：绝对上限 60s——此前
+                    # cap = half_open_probe_penalty_cap_seconds * max(1, n)
+                    # 随 n 线性增长（实测 #10→210s、#20→510s、#40→1110s、
+                    # #60→1710s，外推 24h），与文档"上限 30s"矛盾。现固定
+                    # 上限 = max(half_open_probe_penalty_cap_seconds, 60.0)，
+                    # 保证退避永不超出 60s（API 熔断冷却的合理上界）。
+                    _ABSOLUTE_BACKOFF_CAP = 60.0
+                    cooldown = min(backoff, max(self.half_open_probe_penalty_cap_seconds, _ABSOLUTE_BACKOFF_CAP))
                 else:
                     cooldown = min(self.circuit_cooldown_seconds, self.half_open_probe_penalty_cap_seconds)
                 self.circuit_open_until = time.monotonic() + cooldown

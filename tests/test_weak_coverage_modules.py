@@ -21,12 +21,20 @@ class TestCliOutputBoundary:
     """5.1 cli_output 弱覆盖补强：print_rich_table 边界用例。"""
 
     def test_print_rich_table_empty_list(self, capsys):
-        """空列表：不崩溃。"""
+        """空列表：不崩溃 + 表头仍渲染（此前 `out is not None or err is not None`
+        恒真——capsys 属性恒非 None，2026-10-02 审查修复）。"""
         from src.cli.output import print_rich_table
 
         print_rich_table([])
         captured = capsys.readouterr()
-        assert captured.out is not None or captured.err is not None
+        # rich 可用时表头应渲染到 stdout；不可用时静默返回（两种口径均可，
+        # 但"渲染了"必须真的有内容——恒真断言已替换为内容断言）
+        from src.cli.output import _rich_available
+
+        if _rich_available():
+            assert "测试执行结果" in captured.out, f"空列表未渲染表头: {captured.out!r}"
+        else:
+            assert captured.out == ""
 
     def test_print_rich_table_single_result(self, capsys):
         """单条结果：正常渲染。"""
@@ -38,13 +46,17 @@ class TestCliOutputBoundary:
         assert "test_a.py" in captured.out or "test_a.py" in captured.err
 
     def test_print_rich_table_missing_fields(self, capsys):
-        """字段缺失：容错处理，不崩溃。"""
-        from src.cli.output import print_rich_table
+        """字段缺失：容错处理 + 落盘行为有断言（此前 `out is not None or
+        err is not None` 恒真，2026-10-02 审查修复）。"""
+        from src.cli.output import _rich_available, print_rich_table
 
         print_rich_table([{"status": "FAIL"}])
-        # 不抛异常即可
         captured = capsys.readouterr()
-        assert captured.out is not None or captured.err is not None
+        if _rich_available():
+            # 缺字段行的兜底值（file→basename("")、func→"all"、coverage→N/A）
+            assert "测试执行结果" in captured.out or "N/A" in captured.out
+        else:
+            assert captured.out == ""
 
 
 # ─── error_classifier: 新分类路径 ────────────────────────────────────────

@@ -32,16 +32,26 @@ def start_task_trace(task_id: str, task_meta: dict[str, Any] | None = None) -> N
     历史调用方（未设 AITESTER_TRACE_DIR）视角下行为不变（零 I/O、零副作用
     ——线程局部在 end_task_trace 时清空）。
 
+    O35（2026-09-30 全面审查 P1）：文件追踪关闭时也要建 session。
+    此前条件是 ``not trace_enabled()`` 即 return，而 TraceSession 在无目录时
+    本来就不写盘（_enabled=False，只累积 self.records）——于是默认配置下
+    session 恒为 None → ``end_task_trace`` 在 ``if session is None: return``
+    处提前返回、永远到不了 memory_buffer_snapshot → 环形缓冲恒空 →
+    ``--dump-trace-on-failure`` 在**它被设计出来的那个场景**（不开文件追踪的
+    常规运行）静默失效，dump_recent_to 恒返回 None。与 trace.py L318-321
+    文档承诺（"本缓冲在追踪未启用时保留最近 N 次任务快照"）矛盾。
+    现改为"文件追踪开 或 内存缓冲开"任一成立即建 session；
+    TRACE_MEMORY_BUFFER_ENABLE=false（显式关缓冲）时恢复历史零开销口径。
+
     Args:
         task_id: 任务标识（JSONL 文件名与记录字段）。
         task_meta: 任务静态元数据（target_file / func / dataset 等）。
     """
-    if not trace_enabled() and getattr(_trace_local, "session", None) is None:
-        # 文件追踪未启用且本线程无进行中的会话：保持历史"线程局部无 session"
-        # 口径（_trace_node / end_task_trace 全 no-op、零 I/O），不创建
-        # TraceSession 实例（避免常规使用下每任务一次对象分配的微小开销）；
-        # 内存快照缓冲仅在"会话创建后"才累积——文件追踪启用时（实验回放
-        # 场景）会话本就会创建，快照顺带累积，行为对齐。
+    from src.observability.trace import _memory_buffer_enabled
+
+    if not trace_enabled() and not _memory_buffer_enabled():
+        # 文件追踪与内存缓冲双关：保持历史"线程局部无 session"口径
+        # （_trace_node / end_task_trace 全 no-op、零 I/O、零对象分配）
         _trace_local.session = None
         return
     _trace_local.session = TraceSession(task_id, task_meta=task_meta)

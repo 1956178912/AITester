@@ -252,7 +252,18 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
         from src.graph.cost_budget import check_budget
 
         return check_budget(consumed_delta_tokens=input_tokens + output_tokens)
-    except Exception as e:  # 统计失败不影响主流程
+    except Exception as e:  # O14（2026-09-29 审查 P0）：记账异常 fail-closed。
+        # 历史口径：except Exception: return True（统计失败不影响主流程）——
+        # 缺陷：记账层任何异常（含磁盘满 / import 失败）都会静默把
+        # check_budget 短路为"预算内"，使 COST_BUDGET_ENABLE 守卫可永久
+        # 失效且无告警。现改为 fail-closed：COST_BUDGET_ENABLE=true 时记账
+        # 异常直接上抛（让调用方感知守卫不可用），默认关时保持历史
+        # "静默忽略"口径（零行为变化）。
+        from src.graph.cost_budget import _budget_enabled as _cb_enabled
+
+        if _cb_enabled():
+            logger.exception("O14 预算记账异常（fail-closed）: %s", e)  # noqa: TRY401 — %s 仅取 str 摘要（traceback 由 exception 自带）
+            raise RuntimeError(f"预算记账异常（fail-closed）: {e}") from e
         logger.debug("token 统计记录失败（忽略）: %s", e)
         return True
 
@@ -385,6 +396,26 @@ def _get_llm_config() -> tuple[str, str, str]:
         return cfg.api_key, cfg.base_url, cfg.model_name
     # 无任何配置时返回空串（调用方应捕获并抛出 RuntimeError）
     return "", "", ""
+
+
+def get_first_valid_model_name() -> str | None:
+    """M8（2026-09-29 审查 P0）：返回当前线程/全局 LLM 配置链中第一个有效的
+    model_name，供缓存隔离键使用。
+
+    行为：
+    - 线程局部覆盖值存在（_thread_local.model_name 非空）→ 直接返回；
+    - 否则回退到 LLM_CONFIGS[0].model_name（若 LLM_CONFIGS 非空）；
+    - 无任何配置时返回 None（调用方跳过隔离键材料，保持历史行为）。
+
+    用于 AITESTER_CACHE_ISOLATE_MODEL=1 时把"当前模型命名空间"加入
+    缓存键，消除跨模型缓存串味（见 base_agent._call_llm_with_cache 的
+    M8 隔离逻辑）。
+    """
+    if getattr(_thread_local, "model_name", ""):
+        return _thread_local.model_name
+    if LLM_CONFIGS:
+        return LLM_CONFIGS[0].model_name
+    return None
 
 
 def _get_all_api_configs() -> list[tuple[str, str, str]]:

@@ -133,7 +133,10 @@ def check_pro_ready(
                 issues: list[str] = []
                 merged = {**data, **enriched.get(task_id, {})}
                 instance_code = merged.get("instance_code") or merged.get("base_code") or ""
-                if not instance_code or instance_code == merged.get("problem_statement", ""):
+                # 2026-10-01 全面审查 P1 修复：strip 后再比较——dataset_loader 兜底
+                # 口径是 instance_code = problem_statement 的直接引用（可能带
+                # BOM / 尾换行），全等比较会因首尾空白误判"已就绪"，放行无效批次。
+                if not instance_code.strip() or instance_code.strip() == merged.get("problem_statement", "").strip():
                     issues.append("instance_code 缺失（需 SWE_BENCH_ENRICHMENT 或官方源码字段）")
                     missing_source.append(task_id)
                 test_code = (

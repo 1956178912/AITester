@@ -48,6 +48,7 @@ def _clear_llm_client_cache():
 # ─── TestCallZai ──────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestCallZai:
     """测试 zai SDK 调用路径 (_call_zai)。"""
 
@@ -96,6 +97,7 @@ class TestCallZai:
 
 
 # ─── TestZaiClientReuse ──────────────────────────────────────────────────────
+@pytest.mark.unit
 class TestZaiClientReuse:
     """测试 zai SDK 客户端复用缓存（_get_or_create_zai_client）。
 
@@ -203,6 +205,7 @@ class TestZaiClientReuse:
 # ─── TestGetLlmConfigThreadLocal ──────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestGetLlmConfigThreadLocal:
     """测试 _get_llm_config 的线程局部覆盖分支。"""
 
@@ -249,6 +252,7 @@ class TestGetLlmConfigThreadLocal:
 # ─── TestGetAllApiConfigs ─────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestGetAllApiConfigs:
     """测试 _get_all_api_configs。"""
 
@@ -290,11 +294,25 @@ class TestGetAllApiConfigs:
 
 
 def _cache_file_for(user_message: str, system_prompt: str, cache_dir) -> Path:
-    """计算给定消息对应的缓存文件路径（与 base_agent 实现同步，用于测试预置/断言）。"""
-    digest = hashlib.md5(f"{user_message}\x00{system_prompt}".encode()).hexdigest()[:16]
+    """计算给定消息对应的缓存文件路径（与 base_agent 实现同步，用于测试预置/断言）。
+
+    R13（2026-09-30 独立审查 P0）：跨模型缓存隔离默认开启
+    （AITESTER_CACHE_ISOLATE_MODEL 默认 "1"），键材料追加
+    "\x00m{model}"——与 base_agent._call_llm_with_cache 的 M8 隔离
+    逻辑同口径（取 llm_client.get_first_valid_model_name() 当前配置链
+    首个有效模型名；无配置时不追加）。
+    """
+    key = f"{user_message}\x00{system_prompt}"
+    from src.agents.llm_client import get_first_valid_model_name
+
+    model = get_first_valid_model_name()
+    if model:
+        key = f"{key}\x00m{model}"
+    digest = hashlib.md5(key.encode()).hexdigest()[:16]
     return Path(cache_dir) / f"{digest}.json"
 
 
+@pytest.mark.unit
 class TestCallLlmWithCache:
     """测试 _call_llm_with_cache 缓存读写路径。"""
 
@@ -420,6 +438,7 @@ class TestCallLlmWithCache:
 # ─── TestCallLlm ──────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestCallLlm:
     """测试 _call_llm 的 OpenAI 兼容路径。"""
 
@@ -576,6 +595,7 @@ class TestCallLlm:
 # ─── TestExtractJsonEdgeCases ─────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestExtractJsonEdgeCases:
     """测试 _extract_json 的边缘情况和降级路径。"""
 
@@ -613,6 +633,7 @@ class TestExtractJsonEdgeCases:
 # ─── TestFindBalancedJsonEdgeCases ────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestFindBalancedJsonEdgeCases:
     """测试 _find_balanced_json 的边缘情况（直接测 helpers 底层实现）。
 
@@ -648,6 +669,7 @@ class TestFindBalancedJsonEdgeCases:
 # ─── TestExtractPythonCodeEdgeCases ───────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestExtractPythonCodeEdgeCases:
     """测试 _extract_python_code 的边缘情况。"""
 
@@ -686,6 +708,7 @@ class TestExtractPythonCodeEdgeCases:
 # ─── TestTruncateCodeEdgeCases ────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestTruncateCodeEdgeCases:
     """测试 truncate_code 的边缘情况。"""
 
@@ -719,6 +742,7 @@ class TestTruncateCodeEdgeCases:
 # ─── TestGetLlmConfigIntegration ──────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestGetLlmConfigIntegration:
     """集成测试：验证 _get_llm_config 在有配置时的完整路径。"""
 

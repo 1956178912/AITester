@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import ast
 import atexit
 import hashlib
 import importlib.util
@@ -52,6 +53,153 @@ _RE_IMPORT_CLAUSE = re.compile(r"^import\s+(.+)$")
 # 下增长有限，进程存活期内持有属可接受口径，非无界泄漏）。
 _venv_dir_locks: dict[str, threading.Lock] = {}
 _venv_dir_locks_guard = threading.Lock()
+
+
+# S6（M11，2026-09-29 审查 P0）：pip 包名白名单（PIP_PACKAGE_WHITELIST_ENABLE
+# =true 时 suggest_package_names 仅返回白名单内包名，未知名默认拒绝）。
+# 内置清单覆盖常见测试/科学计算/数据/网络包（~40 个）；
+# PIP_PACKAGE_WHITELIST 环境变量（逗号分隔）可覆盖本清单。
+# PEP 503：pip 包名不区分大小写，匹配时统一 lower。
+_PIP_PACKAGE_WHITELIST: frozenset[str] = frozenset(
+    {
+        # 科学计算 / 数据
+        "numpy",
+        "pandas",
+        "scipy",
+        "matplotlib",
+        "scikit-learn",
+        "sklearn",
+        "polars",
+        "xarray",
+        "dask",
+        # 测试框架
+        "pytest",
+        "pytest-cov",
+        "pytest-mock",
+        "pytest-asyncio",
+        "hypothesis",
+        "tox",
+        "mock",
+        # 语言 / 工具
+        "pyyaml",
+        "pydantic",
+        "click",
+        "setuptools",
+        "wheel",
+        "pip",
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib3",
+        "sqlalchemy",
+        "pymysql",
+        "psycopg2",
+        "redis",
+        "jinja2",
+        "flask",
+        "fastapi",
+        "uvicorn",
+        "colorama",
+        "tqdm",
+        "regex",
+        "dateutil",
+        "opencv-python",
+        "opencv-python-headless",
+        "pillow",
+        "torch",
+        "tensorflow",
+        "keras",
+        "sqlfluff",
+        "bandit",
+        "semgrep",
+        "typing-extensions",
+    }
+)
+
+# S6（M11，2026-09-29 审查 P0）：conftest.py / setup.py 危险调用 AST 扫描。
+# 恶意 conftest.py 可在 pytest 收集阶段执行任意代码（subprocess /
+# os.system / eval / importlib 动态导入 / 网络外联），守卫在文件写入
+# 前做 AST 级扫描（纯标准库，零 LLM 成本），命中即拒绝执行。
+_CONTEST_DANGEROUS_CALLS: frozenset[str] = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.Popen",
+        "subprocess.check_output",
+        "eval",
+        "exec",
+        "importlib",
+        "importlib.import_module",
+        "ctypes",
+        "ctypes.CDLL",
+        "shutil.rmtree",
+        "requests.post",
+        "requests.put",
+        "requests.delete",
+        "urllib.request.urlopen",
+        "urllib.request.Request",
+        "httpx.post",
+        "httpx.put",
+        "socket.socket",
+    }
+)
+
+
+def _qualify_call_node(func_node: ast.AST) -> str | None:
+    """把调用节点的 func 展开为模块限定名（与 patch_applier 同口径）。"""
+    parts: list[str] = []
+    cur: ast.AST = func_node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        parts.append(cur.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def scan_conftest_ast_safety(code: str) -> list[str]:
+    """S6（M11，2026-09-29 审查 P0）：conftest.py / setup.py 危险调用 AST 扫描。
+
+    纯标准库（ast），零 LLM 成本。解析 Python 代码，收集命中的
+    `_CONTEST_DANGEROUS_CALLS` 特征（subprocess / os.system / eval /
+    importlib / ctypes / shutil.rmtree / 网络外联），返回命中的特征名
+    列表（空 = 安全；非空 = 恶意 conftest 候选，应拒绝执行）。
+
+    语法不合法时返回空列表（保守：语法错误由 pytest 自身拦截，
+    本守卫只做危险调用差集，职责单一）。
+
+    Args:
+        code: conftest.py / setup.py 的完整 Python 源码文本。
+
+    Returns:
+        命中的危险调用特征名列表（去重，排序）。
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return []
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        qual = _qualify_call_node(node.func)
+        if qual and qual in _CONTEST_DANGEROUS_CALLS:
+            found.add(qual)
+        # importlib.import_module / __import__ 动态导入
+        if qual in ("importlib.import_module", "__import__"):
+            found.add(qual)
+        # getattr 动态获取（getattr(os, "system") 等混淆绕过）
+        if qual == "getattr":
+            found.add("getattr")
+    return sorted(found)
+
+
+def conftest_ast_scan_enabled() -> bool:
+    """S6 conftest.py AST 扫描守卫开关（默认 true 保持安全口径）。"""
+    return os.getenv("CONTEST_AST_SCAN_ENABLE", "true").lower() not in ("false", "0", "off")
 
 
 def _get_venv_dir_lock(venv_dir: str) -> threading.Lock:
@@ -257,14 +405,47 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     已知不一致（PIL→pillow、cv2→opencv-python-headless 等）查映射表，
     未知模块默认"模块名即包名"（多数库如此）。
 
+    S6（M11，2026-09-29 审查 P0）：pip 包名白名单守卫
+    （PIP_PACKAGE_WHITELIST_ENABLE=true 时启用，默认 false 保持历史口径）。
+    启用时仅返回白名单内的包名，未知名默认拒绝——防止 LLM 生成的测试代码
+    引入任意第三方包（如含恶意 setup.py 的 typosquatting 包）污染 venv。
+    白名单来源：PIP_PACKAGE_WHITELIST（逗号分隔）或内置
+    `_PIP_PACKAGE_WHITELIST`（常见测试/科学计算包 ~40 个）。
+
     Args:
         module_names: 缺失的顶层模块名集合。
 
     Returns:
-        pip 包名列表（排序去重）。
+        pip 包名列表（排序去重；白名单启用时仅含白名单内包名）。
     """
-    packages = {_MODULE_TO_PACKAGE.get(name, name) for name in module_names if not is_standard_library(name)}
-    return sorted(packages)
+    # S6：白名单守卫（默认关）
+    _whitelist_enabled = os.getenv("PIP_PACKAGE_WHITELIST_ENABLE", "false").lower() in ("true", "1", "on")
+    if _whitelist_enabled:
+        _custom = os.getenv("PIP_PACKAGE_WHITELIST", "").strip()
+        if _custom:
+            allowed: set[str] | frozenset[str] = {p.strip().lower() for p in _custom.split(",") if p.strip()}
+        else:
+            allowed = _PIP_PACKAGE_WHITELIST
+        # 白名单匹配：pip 包名不区分大小写（PEP 503）
+        _norm_allowed = {p.lower() for p in allowed}
+        _filtered = [
+            pkg
+            for pkg in sorted(
+                {_MODULE_TO_PACKAGE.get(name, name) for name in module_names if not is_standard_library(name)}
+            )
+            if pkg.lower() in _norm_allowed
+        ]
+        _rejected = sorted(
+            set({_MODULE_TO_PACKAGE.get(name, name) for name in module_names if not is_standard_library(name)})
+            - set(_filtered)
+        )
+        if _rejected:
+            logger.warning(
+                "S6 pip 白名单守卫：拒绝未知名包 %s（PIP_PACKAGE_WHITELIST_ENABLE=true）",
+                _rejected,
+            )
+        return _filtered
+    return sorted({_MODULE_TO_PACKAGE.get(name, name) for name in module_names if not is_standard_library(name)})
 
 
 def venv_cache_dir(
@@ -332,6 +513,7 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
             )
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"venv 创建超时（>{timeout}s）: {venv_dir}") from e
@@ -693,6 +875,7 @@ def install_packages(
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
     except subprocess.TimeoutExpired:
         detail = f"pip install 超时（>{timeout}s）: {package_names}"

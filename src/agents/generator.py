@@ -140,6 +140,20 @@ class GeneratorAgent(BaseAgent):
         focus_function: str | None = None,
         mutation_feedback: dict[str, Any] | None = None,
         temperature: float | None = None,
+        # O12（2026-09-29 审查 P1）：complexity_class 参数透传至 _call_llm_with_cache，
+        # 使 MODEL_ROUTING_STRATEGY=complexity_aware（默认值）的复杂度感知路由
+        # 在缓存命中/未命中路径下均生效（此前该参数恒为 None，复杂度路由为死代码）。
+        # 缺省 None 保持历史口径不变。
+        complexity_class: str | None = None,
+        # O3（2026-09-29 审查 P1）：未覆盖分支清单提示段落（BRANCH_COVERAGE_INJECT_ENABLE
+        # =true 时由 _executor_node 测量并经 _generator_node 传入）。None 时不注入，
+        # 历史口径零变化。
+        branch_coverage_section: str | None = None,
+        # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（BOUNDARY_TRIPLETS_ENABLE
+        # =true 时由 _generator_node 经 derive_boundary_triplets 推导并经
+        # build_boundary_triplets_section 渲染传入）。None 时不注入，
+        # 历史口径零变化。
+        boundary_triplets_section: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -185,11 +199,19 @@ class GeneratorAgent(BaseAgent):
         # 截断超长代码，节省 token（大文件按焦点函数做 AST 智能截取）
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
 
-        # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）
+        # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈 + O3 分支覆盖率）
         query = self._build_query(test_plan, target_code, module_name, rag_references, mutation_feedback)
+        # O3（2026-09-29 审查 P1）：未覆盖分支清单注入（BRANCH_COVERAGE_INJECT_ENABLE=true
+        # 时非空字符串；None/空串时不注入，历史口径零变化）
+        if branch_coverage_section:
+            query += "\n\n" + branch_coverage_section
+        # M10（2026-09-29 审查 P0）：确定性边界锚点注入（BOUNDARY_TRIPLETS_ENABLE=true
+        # 时非空字符串；None/空串时不注入，历史口径零变化）
+        if boundary_triplets_section:
+            query += "\n\n" + boundary_triplets_section
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
-        raw = self._call_llm_with_cache(query, temperature=temperature)
+        raw = self._call_llm_with_cache(query, temperature=temperature, complexity_class=complexity_class)
         # 从响应中提取 Python 代码块（去除 markdown 包裹）
         code = self._extract_python_code(raw)
         # Import 验证：修正错误的模块名
@@ -205,7 +227,7 @@ class GeneratorAgent(BaseAgent):
                 "请确保每个用例元组的元素数量与参数名列表完全一致，"
                 "不要混入 case_name 等额外字段。"
             )
-            raw = self._call_llm_with_cache(retry_query, temperature=temperature)
+            raw = self._call_llm_with_cache(retry_query, temperature=temperature, complexity_class=complexity_class)
             code = self._extract_python_code(raw)
             if module_name:
                 code = self._fix_import_module(code, module_name)
@@ -223,6 +245,7 @@ class GeneratorAgent(BaseAgent):
         module_name: str = "",
         cross_file_modules: list[str] | None = None,
         temperature: float | None = None,
+        complexity_class: str | None = None,
     ) -> str:
         """2.3 改进：复现测试（reproduction test）专项生成。
 
@@ -250,7 +273,7 @@ class GeneratorAgent(BaseAgent):
         # 截断超长代码，避免 token 浪费（与 generate 同口径）
         target_code = BaseAgent.truncate_code(target_code)
         query = self._build_repro_prompt(defect_description, target_code, module_name, cross_file_modules)
-        raw = self._call_llm_with_cache(query, temperature=temperature)
+        raw = self._call_llm_with_cache(query, temperature=temperature, complexity_class=complexity_class)
         code = self._extract_python_code(raw)
         # Import 验证：修正错误的模块名（与 generate 同口径）
         if module_name:

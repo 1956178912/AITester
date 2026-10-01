@@ -225,11 +225,24 @@ _monitor_lock = threading.Lock()
 
 
 def get_rogue_monitor(allowed_tools: set[str] | None = None) -> RogueAgentMonitor:
-    """获取进程内流氓 agent 监控单例（allowed_tools 提供时重建，测试注入）。"""
+    """获取进程内流氓 agent 监控单例。
+
+    2026-10-01 全面审查 P2 修复：此前 `allowed_tools is not None` 时**隐式重置
+    进程单例**（覆盖 _default_monitor，丢弃已累积的滑动窗口 / 违规计数，无
+    告警）——任何调用方一次传 allowed_tools 即静默清空累积统计，使监控"失忆"。
+    现分离语义：
+    - `allowed_tools is None`：复用/创建进程单例（历史生产口径）；
+    - `allowed_tools is not None`：**纯新建、不动单例**（测试注入/独立实例
+      场景，调用方自行持有返回的实例，不影响 _default_monitor）。
+    测试需要重置单例时改用 reset_rogue_monitor()。
+    """
+    if allowed_tools is not None:
+        # 纯新建（测试注入 / 独立实例），不触碰进程单例
+        return RogueAgentMonitor(allowed_tools=allowed_tools)
     global _default_monitor
     with _monitor_lock:
-        if _default_monitor is None or allowed_tools is not None:
-            _default_monitor = RogueAgentMonitor(allowed_tools=allowed_tools)
+        if _default_monitor is None:
+            _default_monitor = RogueAgentMonitor()
         return _default_monitor
 
 

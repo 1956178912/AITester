@@ -386,20 +386,6 @@ def apply_multi_function_patch(
     return current_code, all_success
 
 
-def _find_function_start_line(code: str, func_name: str) -> int:
-    """
-    查找函数在代码中的起始行号。
-
-    Args:
-        code: Python 代码字符串
-        func_name: 函数名
-
-    Returns:
-        函数起始行号（从0开始），未找到返回 -1
-    """
-    return _find_function_start_line_in_lines(code.split("\n"), func_name)
-
-
 def _find_function_start_line_in_lines(code_lines: list[str], func_name: str) -> int:
     """按预切分的行查找函数起始行号（P13 性能优化：供批量排序 key 复用，避免每个
     patch 都重新 split 一遍代码）。
@@ -550,7 +536,7 @@ def _qualify_call_node(func_node: ast.AST) -> str | None:
     return None
 
 
-def _collect_dangerous_calls(code: str) -> set[str]:
+def _collect_dangerous_calls_core(code: str) -> set[str]:
     """收集代码中命中的危险调用特征集合（AST 级，纯标准库）。
 
     收集两类：
@@ -579,6 +565,235 @@ def _collect_dangerous_calls(code: str) -> set[str]:
                 val = first.value
                 if val in _DANGEROUS_OPEN_PATHS or val.replace("~/", ".") in _DANGEROUS_OPEN_PATHS:
                     found.add(f"open({val!r})")
+    return found
+
+
+def _collect_dangerous_calls(code: str) -> set[str]:
+    """收集代码中命中的危险调用特征集合（AST 级，语法失败返回空集）。
+
+    含三层检测：
+    - _collect_dangerous_calls_core：静态模块限定调用 + 凭证读取；
+    - _collect_dynamic_import_bypass：__import__/getattr 动态获取绕过
+      （2026-10-01 全面审查 P2 修复——此前 __import__("os").system /
+      getattr(os_module, "system") 绕过 AST 守卫，现补充动态模式检测）；
+    - O19（2026-09-29 审查 P0）：_collect_dynamic_bypass_constructions
+      补齐 5 类可平凡混淆绕过的动态构造（getattr / importlib.import_module
+      / ctypes / shutil.rmtree / __import__ 完整形态）。
+    """
+    found = _collect_dangerous_calls_core(code)
+    found |= _collect_dynamic_import_bypass(code)
+    found |= _collect_dynamic_bypass_constructions(code)
+    return found
+
+
+# O19（2026-09-29 审查 P0）：危险调用目标 —— 在 5.4 S2 安全守卫基础上
+# 补齐 5 类可平凡混淆绕过的形态（getattr 构造调用 / importlib.import_module
+# 动态导入 / ctypes 任意二进制加载 / shutil 文件破坏 / __import__ 完整形态）。
+# 此前 _collect_dynamic_import_bypass 仅拦截"别名 os.system"类静态模式，
+# getattr(os_module, "system")、importlib.import_module("subprocess").run(...)
+# 等动态构造调用可绕过守卫，补丁内仍可注入任意 shell/网络/凭证读取。
+# 现把 5 类构造形态纳入 _collect_dangerous_calls 的差集口径：
+# 原代码已有的动态导入不拦截，补丁**新增**的动态导入即拦截。
+# 2026-09-30 审查订正：shutil 检测的是 **shutil.<attr> 属性访问调用**
+# （_collect_dynamic_bypass_constructions 匹配 shutil.rmtree / copy2 / move /
+# unlink 四个属性），裸 `import shutil` 本身并不构成调用特征——集合项以
+# 可检测形态命名。
+_DYNAMIC_IMPORT_CONSTRUCT: frozenset[str] = frozenset(
+    {
+        "getattr",  # getattr(os_module, "system") / getattr(subprocess_mod, "run")
+        "importlib",  # importlib.import_module("os") / importlib.import_module("subprocess")
+        "ctypes",  # ctypes.CDLL / ctypes.create_string_buffer 任意二进制加载
+        "shutil",  # shutil.rmtree / shutil.copy2 / shutil.move 文件破坏与覆盖
+        "__import__",  # __import__("os").system 模式（已部分覆盖，此处完整纳入）
+    }
+)
+
+
+def _collect_dynamic_bypass_constructions(code: str) -> set[str]:
+    """O19（2026-09-29 审查 P0）：AST 级动态构造导入/反射调用检测。
+
+    对 code 做单遍 AST 扫描，检测 5 类可平凡混淆绕过 5.4 S2 静态守卫
+    的构造形态（getattr / importlib.import_module / ctypes / shutil.rmtree /
+    __import__），返回命中特征列表（与 _collect_dangerous_calls 的差集
+    口径结合：仅"补丁新增"的构造才拦截，原代码已有的构造放行——与
+    命名契约"放行既有"对偶口径）。
+
+    与 injection_guard._RE_DYNAMIC_BYPASS 的口径对齐但更严格：
+    正则版匹配文本，AST 版识别真实调用节点（避免"getattr 出现在注释/
+    字符串"的误报）。
+    """
+    import ast as _ast
+
+    found: set[str] = set()
+    try:
+        tree = _ast.parse(code)
+    except Exception:
+        return found
+    # 第一遍：收集所有"可能是动态构造"的调用节点
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Call):
+            continue
+        # getattr(X, "system" / "run" / "Popen" / ...)
+        if isinstance(node.func, _ast.Name) and node.func.id == "getattr" and len(node.args) >= 2:
+            _attr_arg = node.args[1]
+            if isinstance(_attr_arg, _ast.Constant) and isinstance(_attr_arg.value, str):
+                # 5.4 S2 扩展：getattr 目标属性命中危险 API 集即拦截
+                # （与 _DANGEROUS_CALL_TARGETS 末段属性名匹配）
+                _dangerous_attrs = {
+                    "system",
+                    "popen",
+                    "run",
+                    "call",
+                    "Popen",
+                    "check_output",
+                    "socket",
+                    "urlopen",
+                    "post",
+                    "put",
+                    "delete",
+                    "CDLL",
+                    "create_string_buffer",
+                    "windll",
+                    "oledll",
+                }
+                if _attr_arg.value in _dangerous_attrs:
+                    found.add(f"getattr(…, {_attr_arg.value!r})")
+        # importlib.import_module("os" / "subprocess" / ...)
+        if (
+            isinstance(node.func, _ast.Attribute)
+            and node.func.attr == "import_module"
+            and isinstance(node.func.value, _ast.Name)
+            and node.func.value.id == "importlib"
+            and node.args
+            and isinstance(node.args[0], _ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            _mod_name = node.args[0].value.split(".")[0]
+            _dangerous_mod_names = {"os", "subprocess", "socket", "urllib", "ctypes", "shutil"}
+            if _mod_name in _dangerous_mod_names:
+                found.add(f"importlib.import_module({_mod_name!r})")
+        # ctypes.CDLL / ctypes.create_string_buffer / ctypes.memmove
+        if (
+            isinstance(node.func, _ast.Attribute)
+            and isinstance(node.func.value, _ast.Name)
+            and node.func.value.id == "ctypes"
+            and node.func.attr in ("CDLL", "create_string_buffer", "memmove", "windll", "oledll")
+        ):
+            found.add(f"ctypes.{node.func.attr}")
+        # shutil.rmtree / shutil.copy2（文件破坏/覆盖）
+        if (
+            isinstance(node.func, _ast.Attribute)
+            and isinstance(node.func.value, _ast.Name)
+            and node.func.value.id == "shutil"
+            and node.func.attr in ("rmtree", "copy2", "move", "unlink")
+        ):
+            found.add(f"shutil.{node.func.attr}")
+        # __import__("os") / __import__("subprocess")
+        if (
+            isinstance(node.func, _ast.Name)
+            and node.func.id == "__import__"
+            and node.args
+            and isinstance(node.args[0], _ast.Constant)
+            and isinstance(node.args[0].value, str)
+            and node.args[0].value.split(".")[0] in {"os", "subprocess", "socket", "urllib", "ctypes", "shutil"}
+        ):
+            found.add(f"__import__({node.args[0].value!r})")
+    return found
+
+
+def _collect_dynamic_import_bypass(code: str) -> set[str]:
+    """检测 __import__/getattr 动态获取危险模块/函数的绕过模式（P2）。
+
+    2026-10-01 全面审查 P2 修复：__import__("os").system(...) /
+    getattr(importlib.import_module("os"), "system") 等动态获取模式
+    绕过 _qualify_call_node 的静态展开（Name 链无法穿透 __import__ 调用），
+    导致 AST 守卫漏检。现补充模式：
+      - 函数体出现 __import__("os") 或 importlib.import_module("os") 且
+        后跟 .system/.popen 属性访问
+      - getattr(<module>, "system"/"popen"/...) 调用
+
+    保守口径：仅在明确命中已知危险模块名（os/subprocess/socket/urllib）
+    时报告，避免误伤 getattr 的常规用途。
+    """
+    import ast as _ast
+
+    try:
+        tree = _ast.parse(code)
+    except (SyntaxError, ValueError):
+        return set()
+    found: set[str] = set()
+    dangerous_mod_names = {"os", "subprocess", "socket", "urllib"}
+    dangerous_attrs = {"system", "popen", "run", "call", "Popen", "check_output", "socket"}
+    # 预扫描：哪些 Name 被赋值为危险模块引用（__import__("os") /
+    # importlib.import_module("os") / 裸 import os），供别名模式匹配
+    dangerous_mod_aliases: set[str] = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], _ast.Name):
+            alias_name = node.targets[0].id
+            val = node.value
+            if (
+                isinstance(val, _ast.Call)
+                and isinstance(val.func, _ast.Name)
+                and val.func.id == "__import__"
+                and val.args
+                and isinstance(val.args[0], _ast.Constant)
+                and isinstance(val.args[0].value, str)
+                and val.args[0].value.split(".")[0] in dangerous_mod_names
+            ):
+                dangerous_mod_aliases.add(alias_name)
+            if (
+                isinstance(val, _ast.Call)
+                and isinstance(val.func, _ast.Attribute)
+                and val.func.attr == "import_module"
+                and isinstance(val.func.value, _ast.Name)
+                and val.func.value.id == "importlib"
+                and val.args
+                and isinstance(val.args[0], _ast.Constant)
+                and isinstance(val.args[0].value, str)
+                and val.args[0].value.split(".")[0] in dangerous_mod_names
+            ):
+                dangerous_mod_aliases.add(alias_name)
+        if isinstance(node, _ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                if top in dangerous_mod_names:
+                    dangerous_mod_aliases.add(alias.asname or alias.name)
+    for node in _ast.walk(tree):
+        # __import__("os").system 模式：Attribute(value=Call(func=Name('__import__')))
+        if (
+            isinstance(node, _ast.Attribute)
+            and isinstance(node.value, _ast.Call)
+            and isinstance(node.value.func, _ast.Name)
+            and node.value.func.id == "__import__"
+            and node.value.args
+            and isinstance(node.value.args[0], _ast.Constant)
+            and isinstance(node.value.args[0].value, str)
+            and node.value.args[0].value.split(".")[0] in dangerous_mod_names
+            and node.attr in dangerous_attrs
+        ):
+            found.add(f"__import__({node.value.args[0].value!r}).{node.attr}")
+        # 别名引用：m.system / m.run（m 是 __import__/import_module/裸 import 的别名）
+        if (
+            isinstance(node, _ast.Attribute)
+            and isinstance(node.value, _ast.Name)
+            and node.value.id in dangerous_mod_aliases
+            and node.attr in dangerous_attrs
+        ):
+            found.add(f"{node.value.id}.{node.attr}")
+        # getattr(module, "system") 模式
+        if (
+            isinstance(node, _ast.Call)
+            and isinstance(node.func, _ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], _ast.Constant)
+            and isinstance(node.args[1].value, str)
+            and node.args[1].value in dangerous_attrs
+        ):
+            # 第一参数是已知危险模块 Name 引用或已赋值为危险模块的别名
+            base = node.args[0]
+            if isinstance(base, _ast.Name) and base.id in (dangerous_mod_names | dangerous_mod_aliases):
+                found.add(f"getattr({base.id}, {node.args[1].value!r})")
     return found
 
 

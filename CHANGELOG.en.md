@@ -4,6 +4,396 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-09-30 Full review & optimization round (O32–O34: static-gate expansion + security-audit widening + CI real-gating fixes)
+
+> An independent "full review + optimization" round (prior review records ignored,
+> audited from scratch) targeting four classes of engineering-quality issues:
+> **stale lint rules** (ruff ran only 10 rule families; T20 / security / modern-
+> idiom families entirely disabled), **security audits that never really ran**
+> (bandit 1.8.2 crashes per-file on Python ≥3.12 and reports an empty result with
+> exit 0; `pyproject.toml` had no `[tool.bandit]` section at all; gitleaks was
+> installed via `pip install gitleaks`, which can never succeed; the log-redaction
+> audit missed 3 credential shapes), **fake CI gates** (mypy installed but never
+> executed, so `BASELINE.yaml` `mypy_errors: 0` was never verified), and
+> **hygiene debt** (dead code / bare `raise` / stale README numbers / no local
+> lint hook). Full regression **2821 passed / 0 failed (47.9s)**, ruff 0 warnings
+> (rule families 10→26), mypy 91 source files 0 errors, line coverage 84.1%,
+> branch coverage 77.58% (gate 77% green):
+>
+> - **O32 ruff rule expansion (10→26 families)**: added `T20` (print ban) / `A`
+>   (builtin shadowing) / `S` (security anti-patterns) / `C4` / `DTZ` / `G` / `ISC`
+>   / `PIE` / `PL` / `PLE` / `TRY` / `FURB` / `PGH` — `pyproject.toml` documents
+>   every ignore with a reason (assert narrowing / lazy imports / known long-function
+>   debt: 25 entries), `per-file-ignores` exempts three directory classes (test
+>   scaffolding / CLI scripts / experiment code); **70 findings cleaned inside
+>   `src/`** (12 subprocess calls made explicit with `check=False`, 2 lexical bare
+>   `raise`s replaced, `credits`/`id` builtin shadowing renamed, 3 loop-variable
+>   overwrites, 2 `logger.error(exc_info=True)`→`exception`, plus 25+ modern-idiom
+>   rewrites such as `removesuffix`/`dict.fromkeys`/merged tuple comparisons); five
+>   CLI report modules carry a file-level `# ruff: noqa: T201` for user-visible
+>   table output (print is intentional behaviour).
+> - **O34 real CI gates**: ① new **mypy hard-gate step** in the `test` job
+>   (`mypy==1.7.1` pinned + `python -m mypy src/ config.py` fails the build —
+>   previously mypy was installed only in the smoke-llm job and never run, while
+>   `generate_static_report.py` always returned 0 and swallowed the exit code);
+>   ② bandit 1.8.2→**1.9.4** (1.8.2 raises AttributeError per file because
+>   `ast.Constant.s` was removed → empty scan with exit 0) plus a
+>   **`[tool.bandit]`** section in `pyproject.toml` (10 accepted-risk skips with
+>   per-code justification; measured 79 findings→0, while new types B100/B601/B302
+>   still fire); ③ gitleaks now downloads the pinned official binary (the old
+>   `pip install gitleaks` always failed → the full-history scan was silently
+>   skipped on every CI run); ④ `.git-hooks/pre-commit.sh` gains
+>   `ruff check .` + `ruff format --check .` (same caliber as the CI lint step —
+>   the pre-commit framework was never installed locally, so no formatting check
+>   ever ran before commit, which was the recurrence vector for "CI red right after
+>   push"); ⑤ fixed a **YAML parse error** in ci.yml (a bare `}` inside a
+>   `run:` plain scalar made the whole workflow unloadable by any YAML loader —
+>   pre-existing in the working tree).
+> - **Security audit widening**: `scripts/audit_log_redaction.py`
+>   `_SENSITIVE_FIELD_RE` gains **3 residual blind spots** (field-name variants
+>   `api key:`/`passwd=`/`access_token=` requiring a following `:`/`=` so prose
+>   cannot false-positive + bare AWS AKIA/ASIA values + DB DSN scheme+userinfo) —
+>   7/7 injection probes hit, **0 new false positives** across all 438 logger call
+>   sites, locked by 2 new regression tests; `print_config_report` now masks
+>   `base_url` at the stdout exit (same caliber as `APIManager.get_status`, for
+>   gateway tokens embedded in URLs).
+> - **Security test blind spot closed**: `verify_redaction_consistency()` (the
+>   same-origin-risk guard for LiteLLM CVE-2026-89032 / Spring AI CVE-2026-59308
+>   — main-path vs fallback-path divergence + fallback key derivation) had **zero
+>   coverage**; added `TestVerifyRedactionConsistency` with 4 cases (including an
+>   explicit recomputation that `_FALLBACK_PATTERNS ⊆ _SENSITIVE_PATTERNS`).
+> - **Real defect fix (bare `raise`)**: `APIManager._handle_api_error` /
+>   `_handle_generic_error` contained a bare `raise` that is lexically outside any
+>   except block — it only works when called from `call()`'s except context via the
+>   thread-level active exception (fragile), and raises
+>   `RuntimeError: No active exception` when invoked directly. Replaced with an
+>   explicit `raise e` (production-path behaviour unchanged: the same exception
+>   object propagates); 2 direct-call tests updated accordingly.
+> - **Hygiene debt**: 2 dead functions removed (`patch_applier._find_function_start_line`
+>   / `risk_approval._env_int`, zero repo-wide callers); **8 stale baseline numbers**
+>   in the bilingual READMEs (2538/1937/94%/75+ test files etc. vs measured
+>   2815→2821) replaced with pointers to `BASELINE.yaml` across four sections
+>   (Test Status / Development Tools / Unit Tests / Core Methods; the iteration-log
+>   exemption zone untouched).
+> - **Baseline refresh**: `BASELINE.yaml` → 2821 passed / line coverage 84% /
+>   branch 77.58% / per-module coverage re-measured; +6 new test cases
+>   (2 audit-widening + 4 redaction-consistency).
+>
+> Default behaviour unchanged (no new switches, no default-value changes); the
+> `raise e` change only affects the edge path of "calling the handler directly with
+> fallback disabled" (semantically equivalent inside the production `call()` chain).
+
+## [Unreleased] - 2026-10-02 Review/Optimization Round (CI branch-coverage gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge)
+
+> This round is a "review + optimize" pass: after a full baseline re-check it
+> fixes **CI going red** (`scripts/check_branch_coverage.py` threshold 77% vs
+> measured 73%, `graph/workflow.py` strict threshold 90% vs measured 74% —
+> already unfailable before this batch), the **secret-guard self-lock**
+> (`check_secret_leak.sh` header comment contained real `sk-` prefix samples;
+> the guard scans untracked files including *itself*, so every commit was
+> blocked), plus three real defects found during review.
+> Default behavior unchanged (no opt-in switch default touched). Full regression
+> **2815 passed / 0 failed (45.4s)**, ruff 0 warnings, mypy 0 errors across
+> 91 source files, line coverage 86.4%, branch coverage 77.6% (gate 77% back
+> to green), core routing `graph/workflow.py` branch 98.75% /
+> `error_classifier` 90.35%:
+>
+> - **CI gate back to green (branch coverage 73%→77.6%)**: added tests for the
+>   four opt-in modules that landed with zero coverage (`fl_spectral` 32 cases /
+>   `branch_coverage_inject` 15 / `mutation_advisor` 18 / RAG keyword-fallback
+>   layer 40), plus `determine_stop_reason` 11 branches
+>   (`tests/test_workflow_stop_reason.py`), `_route_after_diagnosis` convergence
+>   / M12 checkpointer / M4 recursion-limited wrapper invoke-ainvoke
+>   (`tests/test_workflow_internal_branches.py`), nodes' three closure callbacks
+>   (`tests/test_nodes_callbacks.py`, 19 cases), logic_spec/type_repair private
+>   pure-function branches (56 cases), and missing hierarchical-summary branches
+>   (29 cases) — `graph/workflow.py` branch coverage 74%→98.75%, total branches
+>   3057→3213/4094.
+> - **P0 secret-guard self-lock fix**: `.git-hooks/check_secret_leak.sh` header
+>   comment contained real `sk-` prefix samples; the guard scans untracked files
+>   and found *itself*, so any commit was blocked (`sh check_secret_leak.sh`
+>   measured exit=1). Fixed: comment rewritten with placeholder wording + local
+>   review reports (`REVIEW_*.md` / `review_infra_hygiene_report.md` etc., which
+>   carry `sk-` forensic prefix samples, are untracked and referenced nowhere)
+>   added to `.gitignore`. Guard now exits 0.
+> - **Real defect ① (rag material-source over-scan)**: `_iter_candidate_docs`
+>   ran `glob(os.path.join("", "*.json"))` = `glob("*.json")` when
+>   `RAG_PERSIST_PATH` was empty — scanning every JSON in the current working
+>   directory (coverage/benchmark artifacts), polluting the keyword-fallback
+>   material source and potentially pulling unrelated large files into the
+>   prompt; an empty directory now skips the section entirely.
+> - **Real defect ② (O17 residual redaction blind spot)**: `mask_sensitive_info`'s
+>   `key=/token=/password=` pattern is lowercase-anchored (case-sensitive), so
+>   `MYSQL_PASSWORD=<value>` passed through untouched (leftover from the
+>   2026-09-29 review D.4-4); added an uppercase credential-assignment pattern
+>   (same dialect as `check_secret_leak.sh`) emitting `<REDACTED_CREDENTIAL>`,
+>   effective through `redact_text` / fallback / trace JSONL alike, with 6
+>   regression cases.
+> - **Real defect ③ (S6 patch path traversal write)**: the new-file fallback
+>   write in `executor_repo._apply_patch_robust` did no path validation on
+>   `+++ b/<path>` — `../` sequences / absolute paths could escape repo_dir
+>   (review D.4-6 holds verbatim; `git apply` itself rejects `../../evil.txt`
+>   but the manual backfill had no guard); now realpath-normalizes + prefix
+>   checks, rejecting escapes with a warning, with 3 cases (including a
+>   legit in-repo path that must still be written).
+> - **Tautological-assert purge (11 sites)**: `assert ... or True` (prompts
+>   trailing-whitespace / dataset lazy-import / cli template / __main__ block),
+>   `in out or not in out` (credential_scrub ×2), `or len(...) > 3000`
+>   (debugger/generator truncation ×3), `captured.out is not None or ...`
+>   (capsys-true ×2), routing `== debug or == regenerate` (actual route never
+>   locked) — all tightened to real behavior assertions (truncation marker must
+>   appear / whitelist keys must be stripped / route must be regenerate), plus
+>   two `assert True` placeholders replaced with real content checks.
+> - **Doc/baseline sync**: `BASELINE.yaml` refreshed to 2815 passed / line 86% /
+>   branch 78% / `graph_workflow: 99` / `error_classifier: 90` / suite 46s
+>   (`check_baseline --verify` measured-consistency passes); `credential_scrub`
+>   module docstring and `scrub_os_environ` docstring corrected to "default true"
+>   (docs still claimed default false after D.4-3); `.env.example` whitelist key
+>   count 12→13; `check_bilingual_docs` registers the exemption for
+>   `docs/Python工程化前沿基线（2024–2026）.md` (previously unregistered →
+>   `--strict` always exited 1, making the CI `|| true` fallback permanent and
+>   the gate ineffective); `.gitignore` gains `coverage.json`.
+> - **240 new regression tests** (2579→2815): `test_workflow_stop_reason` /
+>   `test_workflow_internal_branches` / `test_nodes_callbacks` /
+>   `test_fl_spectral` / `test_branch_coverage_inject` /
+>   `test_mutation_advisor` / `test_rag_keyword_fallback` /
+>   `test_logic_spec_type_repair_branches` + assertion tightening in existing
+>   test files.
+
+## [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
+
+> This batch lands the fixes from a full-repo comprehensive code review
+> (6-module parallel subagent cross-validation + Lead re-verification).
+> **Default behavior unchanged**: all opt-in feature switch defaults are
+> untouched; fixes concentrate on correctness of switch-enabled paths,
+> boundary cases on the default path, and experimental-metric caliber.
+> Full regression: 2540 passed / ruff 0 warnings / mypy 86 files 0 errors:
+>
+> - **P0 secret-leak guard**: `.gitignore` L30 exact-match
+>   `.env.local.bak` missed suffixed key backups (`.env.local.bak_g8`,
+>   untracked with 22 real LLM API keys); now wildcarded to
+>   `.env.local.bak*` + new `.git-hooks/check_secret_leak.sh`
+>   (4th pre-commit guard, scans staged-new + untracked files for
+>   `sk-(ws|or)-?[A-Za-z0-9._]{16,}` prefixes, blocks commit on hit) +
+>   wired into `pre-commit.sh`.
+> - **P1 CI bilingual-docs gate drift**: CONTRIBUTING.md /
+>   PULL_REQUEST_TEMPLATE.md / pre-commit.sh all claim "bilingual docs
+>   are CI-guarded by check_bilingual_docs" but `ci.yml` had no such step
+>   (doc-vs-CI drift); now a "Check bilingual docs pairing" step added
+>   (`--strict || true` fallback — 5 pre-existing "missing date line"
+>   warnings not blocking for now, upgrade to hard gate once those are
+>   fixed). `scripts/check_bilingual_docs.py` also adds the 3 new
+>   2026-10 batch docs to `_EXEMPT_NO_EN` (same precedent as the
+>   existing full_test_report / implementation_2026-09-25_* exemptions).
+> - **P1 experimental-metric caliber**: `experiments/summarize_full_stack.py`
+>   + `experiments/multi_candidate_ab.py` error-type bucketing changed
+>   from 5 hardcoded buckets to dynamically importing the `ErrorCategory`
+>   enum (measured: 88% of failure rows in 63 benchmark JSONs fell into
+>   "other", losing discriminating power; now enum is the single source
+>   of truth). `experiments/rag_ab_experiment.py` `_welch_ttest` /
+>   `_mann_whitney_u` switched from hand-rolled Z/normal-approx p-values
+>   (small-sample n=2 gave p=0.081 vs exact 0.318 — directionally wrong)
+>   to `scipy.stats.ttest_ind(equal_var=False)` +
+>   `scipy.stats.mannwhitneyu` (same source as
+>   experiments/statistical_analysis.py; auto-exact for n<50).
+>   `scripts/check_swe_bench_pro_ready.py` L135 `instance_code` comparison
+>   now `.strip()`'d (BOM / trailing newline in the dataset_loader
+>   fallback caused false "ready" verdicts, letting invalid batches pass).
+>   `experiments/run_full_stack_swe_bench_pro.py` `--difficulty` choices
+>   now include the 4 intermediate levels (level2.5 / level2.5-hard /
+>   level3.5 / level4.5, aligned with the statistical_analysis stratification
+>   caliber).
+> - **P1 graph switch-enabled paths**: `src/graph/expert_pool.py`
+>   `generate_parallel` timeout protection was dead code (`cf.wait(futures,
+>   timeout)` never raises `TimeoutError`, and the `with ThreadPoolExecutor`
+>   exit still blocks on the hung future via `shutdown(wait=True)` —
+>   EXPERT_POOL_TIMEOUT was entirely ineffective; a single hung expert
+>   hung the whole pool + graph). Now uses `fut.result(timeout=remaining)`
+>   + `pool.shutdown(wait=False)`. `src/graph/nodes.py`
+>   `_generator_node` 2.3 repro-test branch (`generate_repro_test`) now
+>   carries the same try/except fallback as the main generation path
+>   (LLM failure → repro_test=None downgrade, no more whole-graph crash).
+> - **P1 agents default-path security**: `src/agents/executor.py`
+>   kernel_sandbox wrapping `cmd = sandboxed_cmd[1:]` made argv[0] become
+>   `-p` / `--ro-bind` (the `_kernel_sandbox_executable` field was never
+>   consumed by `subprocess.run(executable=...)`); with
+>   KERNEL_SANDBOX_ENABLE=true the target scenario hit `file_not_found`
+>   100% of the time. Now the full `sandboxed_cmd` is kept as argv,
+>   executable field is observation/verification only.
+>   `src/agents/semantic_cache.py` `build_semantic_index_from_cache_dir`
+>   now validates `cache_creator_ok` creator attribution (same caliber as
+>   the L1 exact-cache path, preventing cross-user poisoned entries from
+>   semantic hits under SEMANTIC_CACHE_ENABLE); `base_agent.py` now
+>   upserts the semantic index immediately after a successful cache-file
+>   write (fixing the docstring's "next round can hit" claim that
+>   implementation never honored).
+> - **P2 boundary / consistency**: `src/graph/rag.py`
+>   `filter_by_relevance` refs=None branch return type now matches the
+>   signature (returns `([], 0, 0.0)` instead of `(refs, 0, 0.0)` where
+>   refs is None — mypy error) + module-level import moved to file head
+>   (E402). `src/reports/generator.py` `_parse_failed_cases` now uses a
+>   name-first regex (`^FAILED\s+(\S+\.py::\S+)`) + a loosened suffix
+>   regex (`r"\s+-\s+(\S.*)$"` covers non-"Error" suffixes).
+>   `src/config/config_manager.py` auto-assigned index now clamped to
+>   `_LLM_MAX_SCAN_INDEX=32` (prevents "ghost LLM_33" — config written
+>   but never scanned by `_load_llm_configs`).
+>   `src/datasets/dataset_loader.py` direct-class-construction env-probe
+>   path now uses an explicit priority order (Pro before rebench,
+>   removing the dict.values() insertion-order ambiguity).
+>   `src/agents/executor_modes.py` test-file write now wrapped in
+>   try/except OSError (OSError → cleanup sandbox + return
+>   file_write_failed diagnostic, eliminating sandbox dir leak).
+>   `src/agents/deterministic_guard.py` `_EXTERNAL_MODULE_CALLS`
+>   urllib-family miss fixed (top-level-module prefix match, covering
+>   urllib.request / urllib.urlopen / urllib.parse).
+>   `src/agents/injection_guard.py` output side now covers requests.get
+>   / urllib.request.urlopen and other exfiltration verbs + new
+>   `__import__` / `getattr` dynamic-acquisition bypass detection
+>   (_RE_DYNAMIC_BYPASS).
+>   `src/tools/patch_applier.py` AST guard now includes
+>   `_collect_dynamic_import_bypass` (catches `__import__("os").system`,
+>   `getattr(os_module, "system")`, and alias references like `m.system` —
+>   complementing the regex side).
+>   `src/agents/rogue_monitor.py` `get_rogue_monitor(allowed_tools=...)`
+>   no longer implicitly resets the process singleton (pure new instance,
+>   test injection does not clobber accumulated stats).
+>   `scripts/check_quota.py` `_targets_by_provider` empty-catalog comment
+>   clarified (P2 wording).
+>   `experiments/cross_file_root_cause.py` 4 ruff lints fixed
+>   (F401 unused glob / B007 unused bl_name / PERF102 / SIM103).
+>   `experiments/run_smoke_llm.py` L95 `LLM_1_MODEL` →
+>   `LLM_1_MODEL_NAME` + `ci.yml` L18 comment synced.
+> - **P2 pre-commit guard strengthening**: `.git-hooks/pre-commit.sh`
+>   now runs check_lock_sync / check_credential_scrub /
+>   check_dependency_exemptions (three CI-equivalent guards; missing
+>   scripts are skipped without blocking, aligned with CI step behavior).
+> - **Doc / baseline sync**: `BASELINE.yaml` last_verified refreshed to
+>   2026-10-01, total_passed 2538→2540, suite_seconds 33→34 (full
+>   regression measured). `.env.example` now documents the 6 config.py
+>   vars that had defaults but were missing from the template
+>   (ENABLE_MUTATION_SCORING / MUTATION_MAX_MUTANTS /
+>   REPO_LEVEL_EXECUTION / SWE_REPO_SETUP_TIMEOUT /
+>   SWE_REPO_VENV_ISOLATION / LLM_CALL_BUDGET_SECONDS).
+>
+> Regression: full pytest 2540 passed / 0 failed (34s), ruff 0 warnings
+> across the repo (incl. ruff format on the 9 files touched this batch),
+> mypy 86 files 0 errors.
+
+## [Unreleased] - 2026-10-01 Comprehensive Review Batch (P0 secret-leak guard + P1/P2 defect fixes + doc/baseline sync)
+
+> **Language**: [简体中文](CHANGELOG.md) — see the corresponding entry in the Chinese changelog for the full detail; this entry mirrors its structure.
+
+> This batch is the landing-fix batch for a whole-repo code review (6 parallel
+> sub-agent modules cross-validated + main-agent review). **Default behavior
+> unchanged** principle throughout: all opt-in feature switches keep their
+> default values; fixes concentrate on enable-path correctness, default-path
+> edge cases, and experiment/script metric caliber. Full regression 2540
+> passed / ruff 0 warnings repo-wide / mypy 86 files 0 errors:
+>
+> - **P0 secret-leak guard**: `.gitignore` L30 `.env.local.bak` exact match
+>   missed suffixed backups like `.env.local.bak_g8` (untracked files contained
+>   22 real LLM API Keys); now `.env.local.bak*` wildcard + new
+>   `.git-hooks/check_secret_leak.sh` (pre-commit 4th guard, scans staged new
+>   files + untracked files for `sk-(ws|or)-?[A-Za-z0-9._]{16,}` prefix, hit
+>   blocks the commit) + wired into `pre-commit.sh`.
+> - **P1 CI bilingual-gate drift**: CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md /
+>   pre-commit.sh all claim "bilingual docs guarded by CI
+>   check_bilingual_docs", but `ci.yml` had no such step (doc promise vs CI
+>   implementation drift); now added "Check bilingual docs pairing" step
+>   (`--strict || true` fallback — 5 existing "missing date line" warnings
+>   don't block yet, to be promoted to a hard gate after backfilling).
+>   `scripts/check_bilingual_docs.py` synced by adding the 3 new 2026-10 batch
+>   docs (experiment_ab_results_2026-09-28 / implementation_2026-10_ab_negative_batch /
+>   implementation_2026-10_l25hard_n40_batch) to `_EXEMPT_NO_EN`
+>   (same precedent as the existing full_test_report /
+>   implementation_2026-09-25_* exemptions).
+> - **P1 experiment-metric caliber**: `experiments/summarize_full_stack.py` +
+>   `experiments/multi_candidate_ab.py` error-type bucketing changed from 5
+>   hardcoded buckets (assertion/runtime/import_error/syntax/unknown) to
+>   direct `ErrorCategory` enum dynamic bucketing (measured 88% of failure rows
+>   in 63 benchmark JSONs fell into "other", bucketing lost discriminative
+>   power; now the enum is the single source of truth, eliminating drift).
+>   `experiments/rag_ab_experiment.py` `_welch_ttest` / `_mann_whitney_u`
+>   changed from hand-rolled Z/normal-approx p-values (small-sample n=2 gave
+>   p=0.081 vs exact 0.318 — directional error) to
+>   `scipy.stats.ttest_ind(equal_var=False)` + `scipy.stats.mannwhitneyu`
+>   (same source as experiments/statistical_analysis.py, auto exact for n<50).
+>   `scripts/check_swe_bench_pro_ready.py` L135 `instance_code` comparison
+>   gained `.strip()` (dataset_loader fallback caliber — BOM/trailing newline
+>   caused false "ready" verdicts letting invalid batches through).
+>   `experiments/run_full_stack_swe_bench_pro.py` `--difficulty` choices
+>   gained 4 intermediate levels (level2.5 / level2.5-hard / level3.5 /
+>   level4.5, aligned with statistical_analysis stratification).
+> - **P1 graph feature-switch enable path**: `src/graph/expert_pool.py`
+>   `generate_parallel` timeout protection was dead code (`cf.wait(futures,
+>   timeout)` never raises `TimeoutError`, `with ThreadPoolExecutor` block
+>   exit still blocks on stuck futures via `shutdown(wait=True)` —
+>   EXPERT_POOL_TIMEOUT completely ineffective, one stuck expert freezes the
+>   whole pool + whole graph); now per-future `fut.result(timeout=remaining)`
+>   + `pool.shutdown(wait=False)`. `src/graph/nodes.py` `_generator_node`
+>   2.3 repro-test branch (`generate_repro_test`) gained same-caliber
+>   try/except fallback as the main generation path (LLM failure → repro_test=
+>   None degradation, no longer crashes the whole graph).
+> - **P1 agents default-path safety**: `src/agents/executor.py` kernel_sandbox
+>   wrapped command `cmd = sandboxed_cmd[1:]` made argv[0] become `-p`/
+>   `--ro-bind` (`_kernel_sandbox_executable` field was never consumed by
+>   `subprocess.run(executable=...)` repo-wide; KERNEL_SANDBOX_ENABLE=true →
+>   target scenario 100% `file_not_found`); now the full `sandboxed_cmd` is
+>   kept as argv, the executable field is observation/verification only.
+>   `src/agents/semantic_cache.py` `build_semantic_index_from_cache_dir`
+>   gained `cache_creator_ok` creator-ownership check (same caliber as the L1
+>   exact cache path, prevents cross-user poisoned entries semantic-hit under
+>   SEMANTIC_CACHE_ENABLE); `base_agent.py` upserts the semantic index
+>   immediately after a successful cache write (docstring promised "next
+>   round hit" but the implementation didn't match).
+> - **P2 boundary/consistency issues**: `src/graph/rag.py`
+>   `filter_by_relevance` refs=None branch return type inconsistent with
+>   signature (mypy fix, returns `([], 0, 0.0)` matching the signature) + L212
+>   module-level import moved to file top (E402); `src/reports/generator.py`
+>   `_parse_failed_cases` gained name-first regex (`^FAILED\s+(\S+\.py::\S+)`)
+>   + relaxed suffix regex (`r"\s+-\s+(\S.*)$"` covering non-Error suffixes);
+>   `src/config/config_manager.py` auto-assigned index gained
+>   `_LLM_MAX_SCAN_INDEX=32` upper-bound clamp (prevents "ghost LLM_33" —
+>   config writes succeed but `_load_llm_configs` never scans it);
+>   `src/datasets/dataset_loader.py` direct class-construction path env
+>   probing changed to explicit priority order (Pro before rebench,
+>   eliminating dict.values() insertion-order ambiguity);
+>   `src/agents/executor_modes.py` test-file write gained try/except OSError
+>   (OSError → clean up sandbox + return `file_write_failed` diagnosis,
+>   eliminating sandbox directory leak);
+>   `src/agents/deterministic_guard.py` `_EXTERNAL_MODULE_CALLS` urllib-family
+>   miss fixed (top-level module prefix matching, urllib.request/urlopen/parse
+>   all covered); `src/agents/injection_guard.py` output-side gained
+>   requests.get / urllib.request.urlopen outbound statements + new
+>   `__import__`/`getattr` dynamic-bypass detection (_RE_DYNAMIC_BYPASS);
+>   `src/tools/patch_applier.py` AST guard gained
+>   `_collect_dynamic_import_bypass` (`__import__("os").system` /
+>   `getattr(os_module, "system")` / alias-reference m.system — three dynamic
+>   bypass classes, dual insurance with the regex side);
+>   `src/agents/rogue_monitor.py` `get_rogue_monitor(allowed_tools=...)`
+>   no longer implicitly resets the process singleton (pure new instance,
+>   test injection doesn't touch accumulated stats);
+>   `scripts/check_quota.py` `_targets_by_provider` empty-directory comment
+>   clarification (P2 wording); `experiments/cross_file_root_cause.py` 4 ruff
+>   lint items (F401 unused glob / B007 unused bl_name / PERF102 / SIM103);
+>   `experiments/run_smoke_llm.py` L95 `LLM_1_MODEL` → `LLM_1_MODEL_NAME`
+>   + `ci.yml` L18 comment synced.
+> - **P2 pre-commit guard hardening**: `.git-hooks/pre-commit.sh` gained
+>   check_lock_sync / check_credential_scrub / check_dependency_exemptions
+>   three CI-same-source guards (missing scripts skip without blocking,
+>   aligned with CI step caliber).
+> - **Doc/baseline sync**: `BASELINE.yaml` last_verified refreshed to
+>   2026-10-01, total_passed 2538→2540, suite_seconds 33→34 (full
+>   regression measured). `.env.example` now documents the 6 config.py
+>   vars that had defaults but were missing from the template
+>   (ENABLE_MUTATION_SCORING / MUTATION_MAX_MUTANTS /
+>   REPO_LEVEL_EXECUTION / SWE_REPO_SETUP_TIMEOUT /
+>   SWE_REPO_VENV_ISOLATION / LLM_CALL_BUDGET_SECONDS).
+>
+> Regression: full pytest 2540 passed / 0 failed (34s), ruff 0 warnings
+> across the repo (incl. ruff format on the 9 files touched this batch),
+> mypy 86 files 0 errors.
+
 ## [Unreleased] - 2026-09-28 Gap-closure A/B batch (position-aware / RAG / cross-file experiments + dead-loop fix + cross-file scaffold)
 
 > This batch closes the paper-experiment evidence gaps (three A/B contrasts:

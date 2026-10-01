@@ -16,6 +16,8 @@ import os
 import sys
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.cross_file import (
@@ -32,6 +34,7 @@ from src.tools.cross_file import (
 )
 
 
+@pytest.mark.unit
 class TestCrossFileSwitch:
     """3.5 跨文件修复开关与配置。"""
 
@@ -66,6 +69,7 @@ class TestCrossFileSwitch:
                 assert cross_file_max_modules() == 5
 
 
+@pytest.mark.unit
 class TestAnalyzeCrossFileDeps:
     """3.5 AST 跨文件依赖分析。"""
 
@@ -133,6 +137,7 @@ class TestAnalyzeCrossFileDeps:
         assert len(deps) == 1
 
 
+@pytest.mark.unit
 class TestFindCallLine:
     """_find_call_line 调用行定位。"""
 
@@ -150,6 +155,7 @@ class TestFindCallLine:
         assert _find_call_line(lines, "compute") == 0
 
 
+@pytest.mark.unit
 class TestBuildCrossFileRepairPlan:
     """3.5 协调器-提议者：多文件修复计划构建。"""
 
@@ -321,6 +327,7 @@ class TestBuildCrossFileRepairPlan:
         assert target_modules_seen == ["caller", "lib", "other"]
 
 
+@pytest.mark.unit
 class TestApplyMultiFilePatch:
     """3.5 多文件补丁应用。"""
 
@@ -366,6 +373,7 @@ class TestApplyMultiFilePatch:
         assert new_files["lib"] == original_files["lib"]
 
 
+@pytest.mark.unit
 class TestCrossFileFallbackSingleFile:
     """3.5 降级单文件路径。"""
 
@@ -385,6 +393,7 @@ class TestCrossFileFallbackSingleFile:
         assert "return 2" in new_files["lib"]
 
 
+@pytest.mark.unit
 class TestCrossFileRepairPlanSerialization:
     """CrossFileRepairPlan.to_dict 可 JSON 化（供 workflow state / trace 使用）。"""
 
@@ -408,6 +417,7 @@ class TestCrossFileRepairPlanSerialization:
 # ─── 3.5 二期：多入口依赖分析 + 拓扑序补丁应用 + 修复计划缓存 ──────────────────────
 
 
+@pytest.mark.unit
 class TestAnalyzeMultiEntryDeps:
     """3.5 二期 analyze_multi_entry_deps：多入口依赖分析（一级展开，去重合并）。"""
 
@@ -464,6 +474,7 @@ class TestAnalyzeMultiEntryDeps:
         assert by_src["b"].call_line >= 1
 
 
+@pytest.mark.unit
 class TestTopologicalOrder:
     """3.5 二期 apply_multi_file_patch 拓扑序：被调用方先改，调用方后改。"""
 
@@ -584,6 +595,7 @@ class TestTopologicalOrder:
         assert "lib" in order
 
 
+@pytest.mark.unit
 class TestRepairPlanCache:
     """3.5 二期 build_cross_file_repair_plan_cached：相同依赖图复用 LLM 结果，省 token。"""
 

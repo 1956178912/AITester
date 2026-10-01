@@ -8,6 +8,7 @@ Planner 在输出测试计划前，先对函数进行输入域、输出域、前
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
@@ -156,6 +157,13 @@ class PlannerAgent(BaseAgent):
 
         # 兼容性处理：确保返回的 JSON 包含 logic_analysis 字段
         # 部分模型可能跳过思维链步骤直接输出测试计划，填充空值避免下游崩溃
+        # M10（2026-09-29 审查 P0）：静默兜底改为显式标记。
+        # 历史口径：LLM 不输出 logic_analysis 时静默填 5 个空字段
+        # （"逻辑驱动"主张不可证伪）。现补 logic_degraded=True 标记
+        # （纯观测，不参与路由），供实验层把该任务归入"未走逻辑驱动
+        # 路径"而非"逻辑驱动成功"。LOGIC_SPEC_STRICT_ENABLE=true
+        # （默认 false）时把 degraded 态提升为 ValueError（强校验），
+        # 供 CI 科学主张测试消费。
         if "logic_analysis" not in result or result["logic_analysis"] is None:
             result["logic_analysis"] = {
                 "input_domain": "",
@@ -164,7 +172,47 @@ class PlannerAgent(BaseAgent):
                 "postconditions": [],
                 "edge_cases": [],
             }
-            logger.warning("LLM 未输出 logic_analysis，已填充空值")
+            result["logic_degraded"] = True
+            logger.warning("M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True")
+            if os.getenv("LOGIC_SPEC_STRICT_ENABLE", "false").lower() in ("true", "1", "on"):
+                raise ValueError("M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底")
+        else:
+            result.setdefault("logic_degraded", False)
+        # M10（2026-09-29 审查 P0）：schema 强校验——对 logic_analysis 做
+        # 必填字段 + 类型 + 非空校验（纯数据，零 LLM 成本）。findings 非空时
+        # 写入 result["logic_spec_findings"]（纯观测，不参与路由），供
+        # 实验层"空值率 = 0"指标消费。LOGIC_SPEC_STRICT_ENABLE=true
+        # （默认 false）时把 degraded 态提升为 ValueError（强校验），
+        # 供 CI 科学主张测试消费。
+        from src.tools.logic_spec import logic_spec_strict_enabled as _logic_spec_strict_enabled
+        from src.tools.logic_spec import validate_logic_spec as _validate_spec
+
+        _spec_findings = _validate_spec(result.get("logic_analysis"))
+        if _spec_findings:
+            result["logic_spec_findings"] = _spec_findings
+            # 仅当 LLM 已输出 logic_analysis（非静默兜底路径）且 findings 非空时
+            # 才标记 logic_degraded=True（静默兜底路径已在上方 L176 标记）
+            if not result.get("logic_degraded", False):
+                result["logic_degraded"] = True
+            logger.warning(
+                "M10 schema 校验：%d 条 findings（fields=%s）",
+                len(_spec_findings),
+                [f.get("field") for f in _spec_findings],
+            )
+            if _logic_spec_strict_enabled() and result.get("logic_degraded"):
+                raise ValueError("M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底")
+        # M10（2026-09-29 审查 P0）：logic_coverage 字段消费者验证。
+        # 历史口径：prompt 要求 test_case 标注 logic_coverage，但全仓
+        # 无任何消费者（字段纯写入无读取）。现补 coverage_completeness
+        # 观测指标（0.0–1.0）：统计 test_cases 中非空 logic_coverage
+        # 的占比，供实验层度量"逻辑驱动"实际生效程度（纯观测，默认
+        # 零行为变化）。
+        _cases = result.get("test_cases") or []
+        if _cases:
+            _with_cov = sum(1 for c in _cases if isinstance(c, dict) and c.get("logic_coverage"))
+            result["coverage_completeness"] = round(_with_cov / len(_cases), 4)
+        else:
+            result["coverage_completeness"] = None
 
         # 记录规划完成日志，便于追踪每个函数的分析耗时
         logger.info("Planner 完成对 %s 的逻辑分析", result.get("function_name", "unknown"))

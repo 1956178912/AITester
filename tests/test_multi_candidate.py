@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.tools import multi_candidate as mc
 
 _GOOD_ORIGINAL = """\
@@ -27,6 +29,7 @@ def mul(a, b):
 """
 
 
+@pytest.mark.unit
 class TestCandidateVariantPrompt:
     """扰动提示词生成。"""
 
@@ -42,6 +45,7 @@ class TestCandidateVariantPrompt:
         assert "方案 A" in mc.candidate_variant_prompt(3, 4)
 
 
+@pytest.mark.unit
 class TestStaticValidatePatch:
     """静态筛选各分支。"""
 
@@ -123,6 +127,7 @@ def mul(a, b):
         assert rejected == ""
 
 
+@pytest.mark.unit
 class TestGenerateCandidates:
     """候选生成（mock debugger，隔离 LLM）。"""
 
@@ -158,6 +163,7 @@ class TestGenerateCandidates:
         assert len(results) == 3
 
 
+@pytest.mark.unit
 class TestSelectBestCandidate:
     """最优候选选择。"""
 
@@ -212,6 +218,7 @@ class TestSelectBestCandidate:
         assert best is cand_b
 
 
+@pytest.mark.unit
 class TestEnvSwitches:
     """环境变量开关。"""
 
@@ -248,6 +255,7 @@ class TestEnvSwitches:
         assert mc.multi_candidate_exec_validate() is False
 
 
+@pytest.mark.unit
 class TestLineLevelCreditScores:
     """3.2 改进：行级信用分配（BOOSTAPR 式）。"""
 
@@ -296,6 +304,7 @@ class TestLineLevelCreditScores:
         assert best.credit_score >= 0.0
 
 
+@pytest.mark.unit
 class TestMutationFeedback:
     """1.2 改进：build_mutation_feedback（MutGen 式执行反馈回路）。
 

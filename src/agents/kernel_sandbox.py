@@ -54,6 +54,16 @@ logger = logging.getLogger(__name__)
 _HOST_PLATFORM: str = platform.system().lower()  # "darwin" / "linux" / "windows" / ...
 
 
+class SandboxUnavailable(RuntimeError):
+    """S1（2026-09-29 审查 P0）：内核沙箱后端不可用且未显式容忍无隔离
+    （ALLOW_UNSANDBOXED=false，默认）时由 build_sandbox_command 抛出。
+
+    历史口径：平台不支持时返回原命令 + obs["supported"]=False（调用方
+    忘检查 obs 时 fail-open 裸跑）。现 fail-closed：直接拒绝执行，
+    除非显式设 ALLOW_UNSANDBOXED=true（保守降级，工件须记录该档位）。
+    """
+
+
 def kernel_sandbox_enabled() -> bool:
     """内核级沙箱开关（KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）。"""
     return os.getenv("KERNEL_SANDBOX_ENABLE", "false").lower() in ("true", "1", "on")
@@ -100,13 +110,33 @@ def _seatbelt_profile(allowed_paths: list[str]) -> str:
         Seatbelt profile 文本（sandbox-exec -p <profile> 消费）。
     """
     lines = ["(version 1)", "(deny default)"]
-    # 基础放行：读系统目录 + 工作目录（否则 pytest 连解释器都跑不起来）
-    lines.append("(allow file-read*)")
+    # S2（2026-09-29 审查 P0）：最小读集 —— 不再 (allow file-read*)（全盘可读，
+    # .env / llm_configs.json / ~/.ssh / ~/.aws 均可读 + 进 LLM prompt → 外泄链），
+    # 改为显式放行必要子路径：
+    #   - allowed_paths（任务工作目录）
+    #   - /usr（Python 解释器与系统库）
+    #   - /System 与 /Library（macOS 系统框架）
+    #   - /tmp（pytest 临时文件）
+    # 并显式 DENY 凭证文件（.env* / .ssh / .aws / llm_configs.json /
+    # credentials*），即使它们位于 allowed_paths 内也拒绝。
+    for path in allowed_paths:
+        lines.append(f"(allow file-read* (subpath {path!r}))")
+        lines.append(f"(allow file-write* (subpath {path!r}))")
+    # 系统库（/usr）：pytest 解释器与 C 扩展依赖
+    lines.append('(allow file-read* (subpath "/usr"))')
+    lines.append('(allow file-read* (subpath "/System"))')
+    lines.append('(allow file-read* (subpath "/Library"))')
+    lines.append('(allow file-read* (subpath "/tmp"))')
+    lines.append('(allow file-write* (subpath "/tmp"))')
     lines.append("(allow sysctl-read)")
-    lines.append("(allow process*)")  # pytest 需 fork / spawn 子进程
+    # 进程：pytest 需 fork/exec，但限定可执行目标为 /usr 与 allowed_paths
+    # （不再 (allow process*) 全放行——可 exec 任意二进制）
+    lines.append("(allow process-fork)")
+    lines.extend(f"(allow process-exec (subpath {path!r}))" for path in allowed_paths)
+    lines.append('(allow process-exec (subpath "/usr"))')
     lines.append("(allow ipc*)")
-    # 工作目录写放行（仅 allowed_paths，不放开全文件系统）
-    lines.extend(f"(allow file-write* (subpath {path!r}))" for path in allowed_paths)
+    # S2 凭证文件显式 DENY（覆盖 allowed_paths 内误含的凭证路径）
+    lines.append('(deny file-read* (regex #".env.*|\\.ssh|\\.aws|llm_configs\\.json|credentials"))')
     # 保守：不放开网络出站（本地执行场景默认断网，与 Docker 出口管控同向）
     return "\n".join(lines)
 
@@ -202,15 +232,26 @@ def build_sandbox_command(
         }
         return sandboxed_cmd, obs
 
-    # 不支持（Windows / 缺工具）→ fail-closed：原命令 + supported=False
+    # S1（2026-09-29 审查 P0）：fail-closed —— 平台不支持时**抛
+    # SandboxUnavailable**（不再返回原命令 + supported=False 让调用方
+    # "忘检查 obs" 时 fail-open 裸跑）。设 ALLOW_UNSANDBOXED=true 可显式
+    # 容忍无隔离（保守降级，供无沙箱工具的平台做本地调试，但工件须
+    # 记录该档位）。
+    _allow_unsandboxed = os.getenv("ALLOW_UNSANDBOXED", "false").lower() in ("true", "1", "on")
     obs_unsupported: dict[str, Any] = {
         "platform": _HOST_PLATFORM,
         "backend": "none",
         "supported": False,
         "allowed_paths": paths,
         "profile_summary": "当前平台无可用内核沙箱后端（fail-closed，拒绝执行）",
+        "allow_unsandboxed": _allow_unsandboxed,
     }
-    logger.warning("内核沙箱不支持当前平台（%s），fail-closed 拒绝执行", _HOST_PLATFORM)
+    if not _allow_unsandboxed:
+        raise SandboxUnavailable(
+            f"内核沙箱不支持当前平台（{_HOST_PLATFORM}），fail-closed 拒绝执行；"
+            "如需无隔离调试请显式设 ALLOW_UNSANDBOXED=true（工件须记录该档位）"
+        )
+    logger.warning("内核沙箱不支持当前平台（%s），ALLOW_UNSANDBOXED=true 容忍无隔离", _HOST_PLATFORM)
     return list(args), obs_unsupported
 
 
@@ -239,6 +280,7 @@ def describe_capabilities() -> dict[str, Any]:
 
 
 __all__ = [
+    "SandboxUnavailable",
     "build_sandbox_command",
     "describe_capabilities",
     "kernel_sandbox_enabled",

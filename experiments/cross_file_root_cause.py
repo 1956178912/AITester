@@ -30,7 +30,6 @@
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import logging
 import os
@@ -65,7 +64,7 @@ def _load_results(path: str) -> list[dict[str, Any]]:
             return data["details"]
         # 嵌套形态：results.<baseline>.details（取 aiterster 基线）
         results = data.get("results") or {}
-        for bl_name, bl_data in results.items():
+        for bl_data in results.values():
             if isinstance(bl_data, dict) and "details" in bl_data:
                 return bl_data["details"] or []
         # 兼容 results 直接是 list 的旧口径
@@ -116,8 +115,7 @@ def _classify_root_cause(result: dict[str, Any], state: dict[str, Any] | None) -
                 if applied[i] in call_targets and applied[j] in target_sources:
                     # 进一步检查是否真的有依赖边 source->target
                     has_edge = any(
-                        d.get("source_module") == applied[i] and d.get("target_module") == applied[j]
-                        for d in deps
+                        d.get("source_module") == applied[i] and d.get("target_module") == applied[j] for d in deps
                     )
                     if has_edge:
                         return "TOPOLOGICAL_ORDER"
@@ -143,7 +141,15 @@ def analyze(results: list[dict[str, Any]], raw_dir: str | None, difficulty: str 
     # 全被过滤掉。现改为：先按原始值精确匹配（兼容数字/字符串），再按
     # "level3.5"↔35 / "level3"↔3 的数字码等价匹配。
     if difficulty:
-        _difficulty_to_code = {"level1": 1, "level2": 2, "level2.5": 25, "level3": 3, "level3.5": 35, "level4": 4, "level4.5": 45}
+        _difficulty_to_code = {
+            "level1": 1,
+            "level2": 2,
+            "level2.5": 25,
+            "level3": 3,
+            "level3.5": 35,
+            "level4": 4,
+            "level4.5": 45,
+        }
         want_code = _difficulty_to_code.get(difficulty)
 
         def _match(r: dict[str, Any]) -> bool:
@@ -155,9 +161,7 @@ def analyze(results: list[dict[str, Any]], raw_dir: str | None, difficulty: str 
             if want_code is not None and d == want_code:
                 return True
             # 字符串 difficulty ↔ 数字码双向
-            if difficulty in _difficulty_to_code and d == _difficulty_to_code[difficulty]:
-                return True
-            return False
+            return difficulty in _difficulty_to_code and d == _difficulty_to_code[difficulty]
 
         failed = [r for r in failed if _match(r)]
     dist: Counter[str] = Counter()

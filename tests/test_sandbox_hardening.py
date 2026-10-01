@@ -103,13 +103,24 @@ def test_docker_network_isolation_allowlist_with_entries() -> None:
 
 
 def test_docker_network_isolation_default_off() -> None:
-    """默认（false）→ 命令无网络标志（历史口径逐字节不变）。"""
+    """默认（false）+ S3（2026-09-29 审查 P0）：容器默认断网（--network=none）。
+
+    S3 安全加固后 DOCKER_DEFAULT_NETWORK_NONE=true（默认），容器默认
+    断网——历史口径"默认 false → 无网络标志"已被安全加固口径取代。
+    设 DOCKER_DEFAULT_NETWORK_NONE=false 可恢复历史 bridge 口径。
+    """
     from src.agents.executor import ExecutorAgent
 
     agent = ExecutorAgent(timeout=30, use_docker=True, docker_image="aitester:latest")
-    out = _call_execute_docker(agent, {})  # 未设 DOCKER_NETWORK_ISOLATION
-    assert "--network=none" not in out["cmd"]
-    assert "--network=bridge" not in out["cmd"]
+    # S3：默认断网（--network=none 注入）
+    with patch.dict(os.environ, {"DOCKER_DEFAULT_NETWORK_NONE": "true"}, clear=False):
+        out = _call_execute_docker(agent, {})
+        assert "--network=none" in out["cmd"]
+    # 恢复历史口径（DOCKER_DEFAULT_NETWORK_NONE=false）：无网络标志
+    with patch.dict(os.environ, {"DOCKER_DEFAULT_NETWORK_NONE": "false"}, clear=False):
+        out2 = _call_execute_docker(agent, {})
+        assert "--network=none" not in out2["cmd"]
+        assert "--network=bridge" not in out2["cmd"]
     # 默认 false 时不写 docker_network_obs（历史口径不变）
     assert "docker_network_obs" not in out["result"]
 

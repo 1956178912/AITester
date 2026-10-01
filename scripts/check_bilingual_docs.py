@@ -54,11 +54,24 @@ _EXEMPT_NO_EN = frozenset(
         "docs/0.7_audit_findings.md",
         "docs/assessment_2026-09-25_improvement_directions.md",
         "docs/code_analysis_report.md",
+        "docs/experiment_ab_results_2026-09-28.md",
         "docs/full_test_report_2026-09-28.md",
         "docs/gap_report_2026-09-28_frontier_recommendations.md",
+        # 2026-10-01 登记：英文单语"可验证前沿基线"核查文档（2024–2026 工具/标准/
+        # 合规调研，含 UNVERIFIED 标注），属参考资料非核心参考文档，与上述中文
+        # 单语基线文档同口径豁免。
+        "docs/frontier-baseline-2024-2026-python-ai-compliance.md",
         "docs/implementation_2026-09-25_improvement_directions.md",
         "docs/implementation_2026-09-25_p0_batch.md",
+        "docs/implementation_2026-10_ab_negative_batch.md",
+        "docs/implementation_2026-10_l25hard_n40_batch.md",
         "docs/log_redaction_audit.md",
+        # 2026-10-02 审查修复：未登记豁免导致 check_bilingual_docs --strict
+        # 恒 exit 1（该文档为中文单语"前沿基线核查清单"，属参考资料非
+        # 核心参考文档，与 gap_report / implementation_* 同口径豁免；
+        # 此前无豁免 → 失败项使 CI --strict || true 兜底永远生效，
+        # 门禁形同虚设）。
+        "docs/Python工程化前沿基线（2024–2026）.md",
         "docs/review_2026-09-26_round7.md",
         "docs/review_2026-09-26_round8.md",
         "docs/review_2026-09-27_round10.md",

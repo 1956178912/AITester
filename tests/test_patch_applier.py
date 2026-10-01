@@ -11,6 +11,8 @@ PatchApplier 单元测试
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.tools.patch_applier import (
@@ -26,6 +28,7 @@ from src.tools.patch_applier import (
 from src.utils.helpers import extract_code_block
 
 
+@pytest.mark.unit
 class TestExtractFunctionNames:
     """测试函数名提取。"""
 
@@ -58,6 +61,7 @@ def baz(): pass
         assert "foo" in result
 
 
+@pytest.mark.unit
 class TestCountFunctionDefs:
     """测试函数定义计数。"""
 
@@ -80,6 +84,7 @@ def bar(): pass
         assert _count_function_defs(code) == 0
 
 
+@pytest.mark.unit
 class TestIsFullFilePatch:
     """测试完整文件补丁判断。"""
 
@@ -112,6 +117,7 @@ def bar(): pass
         assert _is_full_file_patch(patch_code, original_code) is False
 
 
+@pytest.mark.unit
 class TestFindFunctionRange:
     """测试函数范围查找。"""
 
@@ -154,6 +160,7 @@ class Bar:
         assert end == 3
 
 
+@pytest.mark.unit
 class TestExtractPatchCode:
     """测试补丁代码提取。"""
 
@@ -203,6 +210,7 @@ class TestExtractPatchCode:
         assert result.strip() == "def foo(): pass"
 
 
+@pytest.mark.unit
 class TestApplyPatchToCode:
     """测试补丁应用。"""
 
@@ -287,6 +295,7 @@ def foo(): return 1
         assert success is True
 
 
+@pytest.mark.unit
 class TestApplyMultiFunctionPatch:
     """测试多函数补丁应用。"""
 
@@ -348,6 +357,7 @@ def alpha(): return 0
         assert new_code == original
 
 
+@pytest.mark.unit
 class TestSafeApplyPatch:
     """测试安全补丁应用。"""
 
@@ -406,6 +416,7 @@ class TestSafeApplyPatch:
         assert "os.system" in new_code
 
 
+@pytest.mark.unit
 class TestDangerousApiAdded:
     """测试 S2 危险 API 守卫（AST 级差集检查，patch_applier.dangerous_api_added）。"""
 
@@ -485,6 +496,7 @@ class TestDangerousApiAdded:
         assert "os.system" in new_code
 
 
+@pytest.mark.unit
 class TestGenerateDiff:
     """测试 diff 生成。"""
 
@@ -518,6 +530,7 @@ def foo():
         assert "return 2" in diff
 
 
+@pytest.mark.unit
 class TestCollapseBlankLines:
     """测试空行压缩（通过 apply_patch_to_code 间接测试）。"""
 

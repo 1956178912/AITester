@@ -21,9 +21,10 @@ PLANNER_SYSTEM_PROMPT = """\
 2. 每个 test_case 用 logic_coverage 标明覆盖的逻辑条件
 3. 覆盖 normal/boundary/error 三类场景
 4. 异常函数必须包含异常路径测试
-5. 除法运算必须测试除零
-6. 只输出 JSON，不要其他内容
-7. 输出紧凑，无多余空格换行
+5. 数值型入参必须测试 0 / 负数 / 溢出 / 空集合等边界（按实际签名判定，不得臆测不存在的行为）
+6. 期望值必须来自代码的 docstring / 类型注解 / 调用方约定；无法确定时 expected_output 置 null 并在 description 说明"期望值未知"，禁止为让测试通过而臆造具体值
+7. 只输出 JSON，不要其他内容
+8. 输出紧凑，无多余空格换行
 """
 
 # ─── Generator（根据逻辑分析生成测试）─────────────────────────────────────────
@@ -37,17 +38,19 @@ GENERATOR_SYSTEM_PROMPT = """\
 
 【导入规范】（严格执行）
 4. 被测函数必须从目标模块 import，严禁重新定义
-5. 使用相对导入或完整路径导入，如 `from calculator import divide`
+5. 使用相对导入或完整路径导入（import 目标必须是任务给定的 module_name）
 6. 若给出 module_name，必须严格使用：`from {module_name} import ...`
 
 【测试设计】
 7. 函数名以 test_ 开头，语义清晰
 8. **必须包含目标函数名**：每个测试函数名必须包含被测函数名，
-   如 `test_{function_name}_xxx`（例如 `test_divide_by_zero`、
-   `test_binary_search_not_found`）
+   如 `test_{function_name}_xxx`
 9. 异常用例用 pytest.raises
 10. 禁止访问不存在属性（如 expected.expect）
-11. 若被测函数对边界情况返回特定值（如 -1、None），必须用 assert 断言：`assert binary_search([], 1) == -1`
+11. 边界期望值必须来自 docstring / 类型注解 / 调用方约定；
+    无法确定时禁止臆造具体值——用例改为"记录实际行为"的探索性
+    断言（断言与 docstring 一致），并在 docstring 标注"期望值来源
+    不明，需人工确认"，不得让测试恒失败或恒真以掩盖问题
 
 【输出】
 - 完整 Python 文件，包含所有 import
@@ -95,7 +98,7 @@ DEBUGGER_SYSTEM_PROMPT = """\
 在生成修复补丁之前，执行以下对抗性校验：
 1. 对抗性意图生成：针对当前诊断出的根因，构思 2-3 个"可能让修复补丁失败的对抗性场景"。
    例如：若诊断"边界条件未处理"，对抗意图 = "补丁修复了空列表但未修复负数输入"；
-   若诊断"除零错误"，对抗意图 = "补丁修复了 x=0 但未修复 y=0 的对称情况"。
+   若诊断"某入参取零/空导致异常"，对抗意图 = "补丁修复了入参 A 为零/空但未修复对称入参 B 的同型边界"。
 2. 自校验：对每个对抗性场景，检查当前候选补丁是否能通过——
    - 若某场景下补丁仍失败，必须补充修复后再提交；
    - 若所有对抗性场景均通过，标记 all_passed=true。

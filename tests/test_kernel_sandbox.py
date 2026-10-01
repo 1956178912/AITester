@@ -106,18 +106,42 @@ def test_build_sandbox_command_bwrap() -> None:
 
 
 def test_build_sandbox_command_unsupported_fail_closed() -> None:
-    """不支持平台：返回原命令 + supported=False（调用方应拒绝执行）。"""
+    """S1（2026-09-29 审查 P0）：不支持平台 → 抛 SandboxUnavailable（fail-closed）。
+
+    历史口径：返回原命令 + supported=False（调用方忘检查 obs 时
+    fail-open 裸跑）。现 fail-closed：直接拒绝执行，除非显式设
+    ALLOW_UNSANDBOXED=true（保守降级，工件须记录该档位）。
+    """
+    from src.agents.kernel_sandbox import SandboxUnavailable, build_sandbox_command
+
+    with (
+        patch("src.agents.kernel_sandbox._HOST_PLATFORM", "windows"),
+        patch("src.agents.kernel_sandbox._seatbelt_available", return_value=False),
+        patch("src.agents.kernel_sandbox._landlock_available", return_value=False),
+        patch.dict(os.environ, {"ALLOW_UNSANDBOXED": "false"}),
+    ):
+        try:
+            build_sandbox_command(["python", "-m", "pytest", "test_x.py"], cwd="/workspace")
+            raise AssertionError("Expected SandboxUnavailable to be raised")
+        except SandboxUnavailable:
+            pass  # 预期：fail-closed 拒绝执行
+
+
+def test_build_sandbox_command_unsupported_allow_unsandboxed() -> None:
+    """S1：ALLOW_UNSANDBOXED=true 时保守降级——返回原命令 + supported=False。"""
     from src.agents.kernel_sandbox import build_sandbox_command
 
     with (
         patch("src.agents.kernel_sandbox._HOST_PLATFORM", "windows"),
         patch("src.agents.kernel_sandbox._seatbelt_available", return_value=False),
         patch("src.agents.kernel_sandbox._landlock_available", return_value=False),
+        patch.dict(os.environ, {"ALLOW_UNSANDBOXED": "true"}),
     ):
         cmd, obs = build_sandbox_command(["python", "-m", "pytest", "test_x.py"], cwd="/workspace")
         assert cmd == ["python", "-m", "pytest", "test_x.py"]  # 原命令（不支持时不包装）
         assert obs["supported"] is False
         assert obs["backend"] == "none"
+        assert obs.get("allow_unsandboxed") is True
 
 
 def test_describe_capabilities_structure() -> None:

@@ -68,8 +68,6 @@ class ConfigurationError(AITesterError):
     当配置文件缺失、格式错误或必需参数未设置时抛出。
     """
 
-    pass
-
 
 class ExecutionError(AITesterError):
     """执行相关错误。
@@ -77,16 +75,12 @@ class ExecutionError(AITesterError):
     当测试执行失败时抛出，包括超时、权限不足等。
     """
 
-    pass
 
-
-class TimeoutError(ExecutionError):
+class TimeoutError(ExecutionError):  # noqa: A001 — 公开导出的异常类名（与内置同名为既有 API，测试锁定）
     """超时错误。
 
     当操作超过指定时间限制时抛出。
     """
-
-    pass
 
 
 class ParsingError(AITesterError):
@@ -94,8 +88,6 @@ class ParsingError(AITesterError):
 
     当解析失败时抛出，包括 JSON 解析、语法解析等。
     """
-
-    pass
 
 
 class JSONParseError(ParsingError):
@@ -148,8 +140,6 @@ class APIError(AITesterError):
     当外部 API 调用失败时抛出。
     """
 
-    pass
-
 
 class RateLimitError(APIError):
     """速率限制错误。
@@ -175,8 +165,6 @@ class AuthenticationError(APIError):
 
     当 API 认证失败时抛出。
     """
-
-    pass
 
 
 def _redact_exception_text(exc: BaseException) -> str:
@@ -338,5 +326,5 @@ def safe_execute(
         if error_handler:
             error_handler(e)
         else:
-            logger.error("安全执行失败: %s", e, exc_info=True)
+            logger.exception("安全执行失败: %s", e)  # noqa: TRY401 — %s 仅取 str 摘要（traceback 由 exception 自带）
         return default

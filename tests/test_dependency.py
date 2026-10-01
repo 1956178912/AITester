@@ -29,6 +29,7 @@ from src.tools.dependency import (
 )
 
 
+@pytest.mark.unit
 class TestExtractImportedModules:
     """extract_imported_modules 行为。"""
 
@@ -65,6 +66,7 @@ class TestExtractImportedModules:
         assert extract_imported_modules("import numpy, scipy, os\n") == {"numpy", "scipy", "os"}
 
 
+@pytest.mark.unit
 class TestExtractImportModuleNames:
     """extract_import_module_names 共享实现（executor 导入修复同源复用）。"""
 
@@ -92,6 +94,7 @@ class TestExtractImportModuleNames:
         assert "os" in extract_import_module_names(code)
 
 
+@pytest.mark.unit
 class TestIsStandardLibrary:
     """is_standard_library 判定。"""
 
@@ -105,6 +108,7 @@ class TestIsStandardLibrary:
         assert not is_standard_library("torch")
 
 
+@pytest.mark.unit
 class TestFindMissingModules:
     """find_missing_modules 判定链。"""
 
@@ -129,6 +133,7 @@ class TestFindMissingModules:
         assert "logging" not in missing
 
 
+@pytest.mark.unit
 class TestSuggestPackageNames:
     """suggest_package_names 映射。"""
 
@@ -150,6 +155,7 @@ class TestSuggestPackageNames:
         assert result == ["alpha", "zeta"]
 
 
+@pytest.mark.unit
 class TestVenvCacheDir:
     """venv_cache_dir 确定性。"""
 
@@ -177,6 +183,7 @@ class TestVenvCacheDir:
         assert len(label) <= 40
 
 
+@pytest.mark.unit
 class TestCreateVenv:
     """create_venv / install_packages（mock 子进程）。"""
 
@@ -233,6 +240,7 @@ class TestCreateVenv:
         assert "超时" in detail
 
 
+@pytest.mark.unit
 class TestVenvCacheMonitoring:
     """4.4 依赖缓存监控：命中率统计 / 列表 / 清理（仅新增函数，不改 create_venv 复用行为）"""
 

@@ -43,6 +43,7 @@ def _mock_client(return_value=None, side_effect=None):
     return mc
 
 
+@pytest.mark.unit
 class TestAPIHealth:
     """测试 APIHealth 数据类的属性和方法"""
 
@@ -185,6 +186,7 @@ class TestAPIHealth:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestCallHalfOpenProbeConsumption:
     """4.2 回归：call 路径半开探测窗口内的失败请求必须消费探测结果。
 
@@ -246,6 +248,7 @@ class TestCallHalfOpenProbeConsumption:
         assert self.node.in_circuit_half_open is False
 
 
+@pytest.mark.unit
 class TestRotationStrategy:
     """测试轮换策略枚举"""
 
@@ -257,6 +260,7 @@ class TestRotationStrategy:
         assert RotationStrategy.FASTEST_FIRST.value == "fastest_first"
 
 
+@pytest.mark.unit
 class TestAPIManagerConfig:
     """测试 API 管理器配置"""
 
@@ -285,6 +289,7 @@ class TestAPIManagerConfig:
         assert config.timeout == 30
 
 
+@pytest.mark.unit
 class TestAPIManagerNodeManagement:
     """测试节点管理功能"""
 
@@ -421,6 +426,7 @@ class TestAPIManagerNodeManagement:
         assert node_x.circuit_open_until == 0.0
 
 
+@pytest.mark.unit
 class TestAPIManagerRotationStrategies:
     """测试轮换策略"""
 
@@ -548,6 +554,7 @@ class TestAPIManagerRotationStrategies:
         assert selected is not None
 
 
+@pytest.mark.unit
 class TestAPIManagerHealthCheck:
     """测试健康检查功能"""
 
@@ -659,6 +666,7 @@ class TestAPIManagerHealthCheck:
             assert mock_check.call_count == 5
 
 
+@pytest.mark.unit
 class TestAPIManagerCall:
     """测试 API 调用功能"""
 
@@ -858,6 +866,7 @@ class TestAPIManagerCall:
             )
 
 
+@pytest.mark.unit
 class TestAPIManagerStatus:
     """测试状态查询功能"""
 
@@ -931,6 +940,7 @@ class TestAPIManagerStatus:
             assert node.is_healthy is True
 
 
+@pytest.mark.unit
 class TestHealthCheckerThread:
     """测试后台健康检查线程"""
 
@@ -959,15 +969,28 @@ class TestHealthCheckerThread:
         assert not thread.is_alive()
 
     def test_thread_skips_if_already_running(self):
-        """测试已运行线程不重复启动"""
+        """测试已运行线程不重复启动。
+
+        O35（2026-09-30 审查 F）：本用例此前**零断言**（start → sleep →
+        stop → join，没有任何 assert），且构造的 thread 从未赋回
+        mgr._health_checker —— _start_health_checker 看到的仍是 None，
+        走的是"启动新线程"分支，被守护的跳过逻辑根本没被执行、用例恒绿。
+        现把在跑的线程挂到 mgr._health_checker 上再触发二次启动，
+        断言对象未被替换（跳过分支真实生效），并去掉无意义的 sleep。
+        """
         mgr = APIManager(enable_health_checker=False)
         thread = HealthCheckerThread(mgr, interval=60.0)
+        mgr._health_checker = thread
         thread.start()
-        # 尝试再次启动（应该跳过）
-        mgr._start_health_checker()
-        time.sleep(0.1)
-        thread.stop()
-        thread.join(timeout=1.0)
+        try:
+            assert thread.is_alive()
+            mgr._start_health_checker()
+            # 跳过分支：不得用新线程替换已在运行的线程
+            assert mgr._health_checker is thread
+        finally:
+            thread.stop()
+            thread.join(timeout=1.0)
+        assert not thread.is_alive()
 
     def test_ctor_flag_false_skips_thread(self):
         """构造参数 enable_health_checker=False 时不创建后台线程（嵌入式/测试场景防副作用）"""
@@ -986,6 +1009,7 @@ class TestHealthCheckerThread:
         assert mgr._health_checker is None
 
 
+@pytest.mark.unit
 class TestGlobalFunctions:
     """测试全局函数"""
 
@@ -1039,6 +1063,7 @@ def _make_manager(**config_kwargs) -> APIManager:
     )
 
 
+@pytest.mark.unit
 class TestAdaptiveHealthConcurrency:
     """自适应健康检查并发（2026-09-28，默认关不改变历史行为）。"""
 
@@ -1148,6 +1173,7 @@ class TestAdaptiveHealthConcurrency:
         assert mgr._last_health_batch_failure_rate is None
 
 
+@pytest.mark.unit
 class TestAPIManagerEdgeCases:
     """测试边界情况和异常处理"""
 
@@ -1224,6 +1250,7 @@ class TestAPIManagerEdgeCases:
         assert len(errors) == 0
 
 
+@pytest.mark.unit
 class TestGhostConfigWiring:
     """APIManagerConfig.max_consecutive_failures 幽灵配置接线（0.1 批次）。
 
@@ -1261,6 +1288,7 @@ class TestGhostConfigWiring:
         assert not node.is_healthy
 
 
+@pytest.mark.unit
 class TestCircuitCooldownBoundaries:
     """1.5 熔断冷却期边界测试（冷却结束回归 / 多节点同时冷却 / 冷却期内快速失败）。
 
@@ -1350,6 +1378,7 @@ class TestCircuitCooldownBoundaries:
         assert cold_client.chat.completions.create.call_count == 0, "冷却期内节点不应承接任何请求"
 
 
+@pytest.mark.unit
 class TestRedactionWiring:
     """4.1 脱敏审计回归：APIManager 日志点就地脱敏 + get_status 出口脱敏。"""
 

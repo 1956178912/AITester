@@ -349,6 +349,7 @@ def capture_failure_snapshot(
                 timeout=_PROBE_SUBPROCESS_TIMEOUT,
                 cwd=tmp_dir,
                 env=env,
+                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
             )
         except subprocess.TimeoutExpired:
             # 被测代码死循环：子进程被 kill（与 venv/docker 执行链路同口径），

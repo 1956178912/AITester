@@ -114,9 +114,13 @@ class TestShouldDebugBranches:
         assert _should_debug(state) == "done"
 
     def test_early_iter_keyword_regenerates(self):
-        """交叉场景：未达上限 + 关键词命中 + 再生成未达上限 → regenerate（早期迭代分支）。"""
+        """交叉场景：未达上限 + 关键词命中 + 再生成未达上限 → regenerate（早期迭代分支）。
+
+        此前断言为 `== "debug" or == "regenerate"`——两分支任一即放行，
+        实际路由（regenerate）从未被锁定（2026-10-02 审查修复）。
+        """
         state = self._state(iteration=1, diagnosis="测试生成错误", regeneration_count=0)
-        assert _should_debug(state) == "debug" or _should_debug(state) == "regenerate"
+        assert _should_debug(state) == "regenerate"
 
     def test_test_defect_regenerates(self):
         state = self._state(defect_type="test_defect", regeneration_count=0)

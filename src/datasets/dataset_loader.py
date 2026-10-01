@@ -292,12 +292,21 @@ class SWEBenchDataset(BaseDatasetLoader):
         """
         # 注册名：load_dataset() 传入 data_dir_env_value（str 注册名）；
         # 直接类构造时为 None——逐个探测环境变量（命中即用，零副作用）。
+        # 2026-10-01 全面审查 P2 修复：此前直接类构造路径用
+        # dict.values() 按"插入顺序"探测——SWE_BENCH_DATA_DIR（swe_rebench）
+        # 排在 AITESTER_SWE_BENCH_PRO_DIR 之前，若用户同时设了两个变量
+        # 且目标数据集是 swe_bench_pro，会误用 SWE_BENCH_DATA_DIR 指向
+        # rebench 目录。现改为显式优先级序（Pro 先于 rebench——Pro 是
+        # 更具体的指向，rebench 是泛化兜底），与注册名路径的"精确匹配"
+        # 语义对齐。
         registered_name: str | None = kwargs.get("data_dir_env_value") or None
         env_dir: str | None = None
         if registered_name:
             env_dir = os.getenv(self._EXTRA_DATA_DIR_ENV.get(registered_name, "")) or None
         else:
-            for _env_key in self._EXTRA_DATA_DIR_ENV.values():
+            # 显式优先级序：Pro 数据集变量先于 rebench 泛化变量
+            _PROBE_ORDER: tuple[str, ...] = ("AITESTER_SWE_BENCH_PRO_DIR", "SWE_BENCH_DATA_DIR")
+            for _env_key in _PROBE_ORDER:
                 env_dir = os.getenv(_env_key)
                 if env_dir:
                     break
@@ -457,8 +466,8 @@ class SWEBenchDataset(BaseDatasetLoader):
             return {}
         enriched: dict[str, dict[str, Any]] = {}
         with open(enrichment_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+            for raw_line in f:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -508,8 +517,8 @@ class SWEBenchDataset(BaseDatasetLoader):
             if not os.path.exists(jsonl_path):
                 continue
             with open(jsonl_path, encoding="utf-8") as f:
-                for line_num, line in enumerate(f, start=1):
-                    line = line.strip()
+                for line_num, raw_line in enumerate(f, start=1):
+                    line = raw_line.strip()
                     if not line:
                         continue
                     try:
@@ -579,8 +588,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         # 的 repo 字段从未被读取 → repo_name 恒 "unknown" → repo_url 为空 →
         # REPO_LEVEL_EXECUTION 仓库级路由永不命中（"数据集就绪但路由断点"
         # 的第二层缺口）。
-        repo_name = data.get("repo") or data.get("repository") or (
-            task_id.split("__")[0] if "__" in task_id else "unknown"
+        repo_name = (
+            data.get("repo") or data.get("repository") or (task_id.split("__")[0] if "__" in task_id else "unknown")
         )
         problem_statement = data.get(
             "problem_statement",
@@ -696,8 +705,7 @@ class SWEBenchDataset(BaseDatasetLoader):
         # 文件名带子集标识，避免不同子集互相覆盖（加载器按子集读取）
         output_path = os.path.join(target_dir, f"swe_bench_{subset}_instances.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
-            for item in dataset:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            f.writelines(json.dumps(item, ensure_ascii=False) + "\n" for item in dataset)
 
         logger.info("SWE-bench [%s] 下载完成，已保存至: %s", subset, output_path)
         return output_path

@@ -43,10 +43,25 @@ class TestSandboxRouting:
         assert cwd is not None and "aitester_sandbox_" in cwd
 
     @patch("src.agents.executor_runtime.subprocess.run")
-    def test_default_mode_keeps_local_path(self, mock_run, tmp_path):
+    def test_default_mode_routes_to_sandbox(self, mock_run, tmp_path, monkeypatch):
+        """R10（2026-09-30 独立审查 N8）：默认构造回落 config，
+        EXECUTOR_USE_VENV 默认 true → 缺省 ExecutorAgent() 走 venv 沙箱
+        （fail-closed：不再默认在宿主环境直跑 LLM 生成代码）。"""
         target = _make_target_file(tmp_path)
         mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
-        agent = ExecutorAgent(timeout=30)  # use_venv=False 默认
+        agent = ExecutorAgent(timeout=30)  # use_venv 缺省 → config 默认 true
+        result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", target)
+        assert result["passed"] is True
+        kwargs = mock_run.call_args.kwargs
+        assert "aitester_sandbox_" in str(kwargs.get("cwd", ""))
+
+    @patch("src.agents.executor_runtime.subprocess.run")
+    def test_explicit_optout_keeps_local_path(self, mock_run, tmp_path, monkeypatch):
+        """显式 use_venv=False 可退回本地执行（调试 / 无 venv 权限环境）。"""
+        monkeypatch.delenv("EXECUTOR_USE_VENV", raising=False)
+        target = _make_target_file(tmp_path)
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
+        agent = ExecutorAgent(timeout=30, use_venv=False)
         result = agent.execute("def test_add():\n    assert add(1, 2) == 3\n", target)
         assert result["passed"] is True
         kwargs = mock_run.call_args.kwargs
@@ -139,3 +154,29 @@ class TestSandboxFileReadFailure:
         result = agent._execute_sandboxed("def test_x(): pass", str(tmp_path / "nope.py"))
         assert result["passed"] is False
         assert result["error_info"]["type"] == "file_not_found"
+
+
+class TestS6DependencyWhitelist:
+    """R59/S6：pip 包名白名单守卫（suggest_package_names 内置）。
+
+    PIP_PACKAGE_WHITELIST_ENABLE=true 时，suggest_package_names 仅放行
+    白名单内包名（未知名默认拒绝）——幻觉包名不进入 install_packages。
+    """
+
+    def test_whitelist_blocks_unknown_package(self, monkeypatch):
+        from src.tools import dependency as dep
+
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST_ENABLE", "true")
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST", "pandas,numpy")
+        # "definitely_not_real_zzz" 不在白名单 → 被拒绝，仅 pandas 放行
+        result = dep.suggest_package_names({"pandas", "definitely_not_real_zzz"})
+        assert "pandas" in result
+        assert "definitely_not_real_zzz" not in result
+
+    def test_whitelist_disabled_passes_all(self, monkeypatch):
+        from src.tools import dependency as dep
+
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
+        # 默认关：白名单守卫不生效，未知模块默认"模块名即包名"放行
+        result = dep.suggest_package_names({"pandas", "definitely_not_real_zzz"})
+        assert "definitely_not_real_zzz" in result

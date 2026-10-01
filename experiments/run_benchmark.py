@@ -61,6 +61,8 @@ from config import (  # noqa: E402
     MAX_ITERATIONS,
     MUTATION_MAX_MUTANTS,
     REPO_LEVEL_EXECUTION,
+    SWE_BENCH_P2P_GATE_ENABLE,
+    SWE_BENCH_P2P_GATE_THRESHOLD,
     SWE_REPO_SETUP_TIMEOUT,
 )
 from src.api.complexity_router import (  # noqa: E402
@@ -75,7 +77,7 @@ from src.datasets.dataset_loader import (  # noqa: E402
 )
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
-from src.graph.workflow import build_workflow, end_task_trace, start_task_trace  # noqa: E402
+from src.graph.workflow import build_workflow, effective_stop_reason, end_task_trace, start_task_trace  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -152,7 +154,16 @@ class _DummyProgressBar:
 
 
 # 所有可用的 API 配置（从 config.LLM_CONFIGS 读取）
+# O32（2026-09-29 审查 P0）：repr 脱敏——此前 _VALID_APIS 是含
+# api_key 明文的 dict 列表，repr(_VALID_APIS) / 日志 / JSON 工件
+# 中 "valid_apis" 字段若被序列化会泄露密钥。现改为：
+# 1. 存储时保留 key（运行期 _set_thread_api 消费）；
+# 2. 工件 JSON 的 "valid_apis" 字段只写**数量**（历史口径不变）；
+# 3. 新增 _VALID_APIS_REDACTED 供日志 / repr 场景消费（key 已脱敏）。
 _VALID_APIS = [{"key": c.api_key, "url": c.base_url, "model": c.model_name} for c in LLM_CONFIGS]
+_VALID_APIS_REDACTED = [
+    {"key": "<REDACTED>" if c.api_key else "", "url": c.base_url, "model": c.model_name} for c in LLM_CONFIGS
+]
 
 
 def _get_api_for_task(task_index: int) -> dict:
@@ -437,6 +448,220 @@ def _compute_contamination_risk_level(
         return "low"
 
 
+def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """M1（2026-09-29 审查 P0）：检出率（SWT-Bench 口径）—— 详见
+    experiments/_m1_metrics.py。
+    """
+    from experiments._m1_metrics import _compute_detection_rate as _impl
+
+    return _impl(task, final_state)
+
+
+def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """M1（2026-09-29 审查 P0）：修复率（gold 独立裁决）—— 详见
+    experiments/_m1_metrics.py。
+    """
+    from experiments._m1_metrics import _compute_repair_rate as _impl
+
+    return _impl(task, final_state)
+
+
+def _compute_false_fix_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """M1（2026-09-29 审查 P0）：假修复率（任务级布尔）—— 详见
+    experiments/_m1_metrics.py。
+    """
+    from experiments._m1_metrics import _compute_false_fix_rate as _impl
+
+    return _impl(task, final_state)
+
+
+def _compute_regression_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """R4（2026-09-30 独立审查 P0）：回归率（任务级布尔）—— 详见
+    experiments/_m1_metrics.py。
+    """
+    from experiments._m1_metrics import _compute_regression_rate as _impl
+
+    return _impl(task, final_state)
+
+
+def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """M1（2026-09-30 独立审查 N1，P0）：测试执行错误率（任务级布尔）——
+    生成测试在 buggy 代码上以"收集错误/语法错误"（根本没跑起来）退出
+    记 1.0。详见 experiments/_m1_metrics.py。
+    """
+    from experiments._m1_metrics import _compute_test_error_rate as _impl
+
+    return _impl(task, final_state)
+
+
+def _oracle_type_label(final_state: dict[str, Any] | None) -> str:
+    """R52（2026-09-30 独立审查 P0）：验收 oracle 类型标签。
+
+    口径：
+    - ORACLE_ENHANCE_ENABLE=true 且 test_plan 经增强（oracle_enhanced=True）
+      → "enhanced_generated_test"（规约驱动的增强断言）；
+    - 否则 → "generated_test"（历史口径：LLM 自生成测试的通过性）。
+    最终状态缺失时保守记 "generated_test"（历史默认口径）。
+    """
+    try:
+        import os as _os
+
+        enhanced = _os.getenv("ORACLE_ENHANCE_ENABLE", "false").lower() in ("true", "1", "on")
+        if final_state is not None and enhanced and bool(final_state.get("oracle_enhanced")):
+            return "enhanced_generated_test"
+    except Exception:
+        pass
+    return "generated_test"
+
+
+def _patch_plausible(final_state: dict[str, Any] | None) -> int:
+    """R53：本轮是否产出"可行"补丁（plausible 计数，任务级 0/1）。
+
+    plausible = 有补丁文本 且 写盘成功（repair_history 末条 patch_applied=True）。
+    无补丁 / 无 repair_history → 0。
+    """
+    if final_state is None:
+        return 0
+    patch = final_state.get("patch") or ""
+    if not str(patch).strip():
+        return 0
+    history = final_state.get("repair_history") or []
+    if not history:
+        # 有补丁文本但无写盘记录（未进入 patch_applier）→ 保守 0
+        return 0
+    last = history[-1] if isinstance(history[-1], dict) else {}
+    return 1 if bool(last.get("patch_applied")) else 0
+
+
+def _patch_correct(task: Any, final_state: dict[str, Any] | None) -> int:
+    """R53：本轮补丁是否被 gold 独立裁决背书（correct 计数，任务级 0/1）。
+
+    口径：repair_rate == 1.0（gold 测试在应用补丁后的代码上全过）。
+    无 gold 材料（repair_rate=None）→ 保守 0（不可证正确）。
+    """
+    if final_state is None:
+        return 0
+    try:
+        from experiments._m1_metrics import _compute_repair_rate as _impl
+
+        val = _impl(task, final_state)
+        return 1 if val == 1.0 else 0
+    except Exception:
+        return 0
+
+
+def _patch_precision(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """R53：补丁精确率 = correct / plausible（plausible=0 时 None，避免除零）。"""
+    plausible = _patch_plausible(final_state)
+    if plausible == 0:
+        return None
+    return _patch_correct(task, final_state) / plausible
+
+
+def _fl_at_k(final_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    """R8（2026-09-30 独立审查 N7，P1）：FL@k 定位命中指标（FL@1/3/5）。
+
+    口径：fl_spectral_focus 非空时，取真实缺陷行（gold fixed 代码与 buggy
+    代码的 diff 行号集合）是否落在 Top-k 的命中情况。无 fl_spectral_focus
+    （O2 关 / 测量失败 / Docker 链路）或无 gold diff 行时返回 None
+    （保持键集合同构，统计层按"不可测"处理）。
+    """
+    if final_state is None:
+        return None
+    focus = final_state.get("fl_spectral_focus")
+    if not focus or not focus.get("top_k"):
+        return None
+    top_k = focus.get("top_k", [])
+    ranked_lines = [item.get("line") for item in top_k]
+    # gold diff 行：从 state 携带的 patch diff 提取（applied patch 的变更行）
+    patch = final_state.get("patch") or ""
+    diff_lines = _extract_diff_line_numbers(patch)
+    if not diff_lines:
+        return None
+    diff_set = set(diff_lines)
+    result: dict[str, Any] = {}
+    for k in (1, 3, 5):
+        top_set = set(ranked_lines[:k])
+        hit = len(top_set & diff_set)
+        result[f"fl_at_{k}"] = 1.0 if hit > 0 else 0.0
+    return result
+
+
+def _extract_diff_line_numbers(patch_text: str) -> list[int]:
+    """从 unified diff / 补丁文本中提取 new 侧变更行号（保守口径）。
+
+    复用 patch_evidence._patch_changed_lines 的 @@ 解析逻辑（不依赖
+    evidence 门开关）；非 diff 格式补丁返回空列表。
+    """
+    if not patch_text or not patch_text.strip():
+        return []
+    try:
+        from src.tools.patch_evidence import _patch_changed_lines
+
+        return sorted(_patch_changed_lines(patch_text))
+    except Exception:
+        return []
+
+
+def _check_swe_bench_p2p_gate(task: BenchmarkTask) -> dict[str, Any] | None:
+    """M3（2026-09-29 审查 P0 + D.4-7）/ R46（2026-09-30 独立审查 P0）：
+    SWE-bench 实例可解性前置门禁（**默认开启**）。
+
+    R46 起 SWE-bench 批次默认执行本门禁（SWE_BENCH_P2P_GATE_ENABLE 缺省
+    "true"）：调用 scripts/verify_instance_solvable.verify_single_instance
+    验证基线 PASS_TO_PASS ≥ SWE_BENCH_P2P_GATE_THRESHOLD；不可解实例返回
+    {"harness_invalid": True, ...} 供调用方标记并剔除（不计入"0 解出"
+    统计，还原为"harness 无效"而非"系统无效"）。
+    设 SWE_BENCH_P2P_GATE_ENABLE=false 可显式退回关闭（消融 / 无 verify 脚本）。
+
+    合成数据集 / examples 任务无 repo_url/base_commit 元数据，永不命中，
+    历史口径零变化。
+
+    Returns:
+        不可解时返回 {"harness_invalid": True, "error_type": str, "details": dict}；
+        可解或未启用门禁时返回 None。
+    """
+    if not SWE_BENCH_P2P_GATE_ENABLE:
+        return None
+    meta = task.metadata or {}
+    repo_url = meta.get("repo_url", "")
+    base_commit = meta.get("base_commit", "")
+    if meta.get("source") != "swe_bench" or not repo_url or not base_commit:
+        return None
+    try:
+        from scripts.verify_instance_solvable import verify_single_instance
+    except ImportError:
+        logger.warning("M3 P2P 门禁：verify_single_instance 不可用，跳过门禁检查")
+        return None
+    fail_to_pass = meta.get("fail_to_pass") or []
+    pass_to_pass = meta.get("pass_to_pass") or []
+    gold_patch = meta.get("golden_patch") or ""
+    test_patch = meta.get("test_patch") or ""
+    logger.info("M3 P2P 门禁：验证任务 %s 可解性（P2P 阈值 %.2f）", task.task_id, SWE_BENCH_P2P_GATE_THRESHOLD)
+    result = verify_single_instance(
+        repo_url=repo_url,
+        base_commit=base_commit,
+        gold_patch=gold_patch,
+        test_patch=test_patch,
+        fail_to_pass=fail_to_pass,
+        pass_to_pass=pass_to_pass,
+        p2p_gate_threshold=SWE_BENCH_P2P_GATE_THRESHOLD,
+    )
+    if not result["solvable"]:
+        logger.warning(
+            "M3 P2P 门禁：任务 %s 不可解（%s），标记 harness_invalid 剔除",
+            task.task_id,
+            result.get("error_type"),
+        )
+        return {
+            "harness_invalid": True,
+            "error_type": result.get("error_type", "unknown"),
+            "details": result.get("details", {}),
+        }
+    logger.info("M3 P2P 门禁：任务 %s 可解，继续执行", task.task_id)
+    return None
+
+
 def _build_task_result(
     task: BenchmarkTask,
     elapsed: float,
@@ -444,6 +669,7 @@ def _build_task_result(
     diagnosis: str = "",
     error_category: str = "",
     golden_patches: dict[str, str] | None = None,
+    harness_invalid: bool = False,
 ) -> dict[str, Any]:
     """构建单基线运行的结果字典（单一构造点，供成功/限流重试/异常三分支复用）。
 
@@ -459,6 +685,7 @@ def _build_task_result(
             diagnosis/error_category 用传入值。
         diagnosis: 失败分支的诊断说明（如 "执行异常: …"）。
         error_category: 失败分支的错误类别（"rate_limit" / "error"）。
+        harness_invalid: M3 门禁：基线 P2P 不达标标记（不计入"0 解出"统计）。
 
     Returns:
         结果字典（结构见 run_single_task 各分支的原始实现，字段完全一致）。
@@ -512,6 +739,70 @@ def _build_task_result(
             # G2 风险分级人工回路（RISK_APPROVAL_ENABLE=true 时写入；默认关时
             # enabled=False 占位保持键集合同构，历史口径零变化）
             "risk_summary": _build_risk_summary_for_result(final_state),
+            # M1（2026-09-29 审查 P0）：假通过标记 + 独立裁决三指标。
+            # test_regenerated_pass_unverified：M5 执行层标记（测试重生成后
+            # 通过且源码未改 → 假成功通道），直接读 state 键（缺省 None）。
+            "test_regenerated_pass_unverified": final_state.get("test_regenerated_pass_unverified"),
+            # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门观测。
+            # source_patched_unverified：本轮写盘无 gold/谱系定位证据（True）
+            # 或有证据背书（False）；None = 本轮无补丁 / 证据门未触发。
+            "source_patched_unverified": final_state.get("source_patched_unverified"),
+            "patch_evidence_level": final_state.get("patch_evidence_level"),
+            # M1 三指标（并行产出，不改变 passed 的历史口径）：
+            #   detection_rate（生成测试能否让带缺陷代码变红）/
+            #   repair_rate（gold 独立裁决修复是否正确）/
+            #   false_fix_rate（passed=True 但 gold 裁决失败的占比）
+            # 计算依赖 gold test_cases / fixed（合成模板自带），无 gold 材料时
+            # 以 None 占位保持键集合同构（历史结果 JSON 结构向后兼容）。
+            "detection_rate": _compute_detection_rate(task, final_state),
+            "repair_rate": _compute_repair_rate(task, final_state),
+            "false_fix_rate": _compute_false_fix_rate(task, final_state),
+            # 2026-09-30 独立审查 N1：测试执行错误率（坏测试直接防线，
+            # 恒失败/收集错误测试不得记 detection=1.0 的占比观测）
+            "test_error_rate": _compute_test_error_rate(task, final_state),
+            # 2026-09-30 独立审查 R52（P0）：oracle 类型声明（APR 严谨性
+            # 检查点 #2）——供读者判断结论强度：本系统的验收 oracle 是什么
+            # 来源（自生成测试 / 增强测试 / 留出 gold / 人工），以及测试
+            # 是否对系统自身可见（test_visible_to_system）。
+            # 口径（保守、零 LLM 成本）：
+            #   - oracle_type = "generated_test"（历史口径：验收以 LLM 生成
+            #     的测试通过为准）；ORACLE_ENHANCE_ENABLE=true 时为
+            #     "enhanced_generated_test"；
+            #   - test_visible_to_system = True（生成测试由 Executor 直接
+            #     执行并通过性作为验收信号——系统"看见"了测试）。
+            #   repair_rate / false_fix_rate 为独立裁决通道（gold 材料），
+            #   与自生成验收并行产出，不改变 passed 的历史口径。
+            "oracle_type": _oracle_type_label(final_state),
+            "test_visible_to_system": True,
+            # 2026-09-30 独立审查 R53（P0）：补丁精确率框架
+            # （"plausible 精确率 = correct / plausible" 是信息量最大的
+            # 修正指标）。口径：
+            #   - patch_plausible = 本轮有补丁产出且写盘成功（静态守卫通过）；
+            #   - patch_correct = gold 独立裁决通过（repair_rate == 1.0）；
+            #   - patch_precision = correct / plausible（无 plausible 时 None）。
+            # 供统计层"过拟合度量"消费（假修复 = plausible 但 correct=0）。
+            "patch_plausible": _patch_plausible(final_state),
+            "patch_correct": _patch_correct(task, final_state),
+            "patch_precision": _patch_precision(task, final_state),
+            # R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标
+            # （Ochiai 谱系定位的"真实缺陷行是否落在 Top-k"量化口径）
+            "fl_at_k": _fl_at_k(final_state),
+            # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因分布
+            # 可解释（"test_passed" / "max_iterations" /
+            # "skip_debugger_repair_invalid" / "test_defect_regeneration_cap" /
+            # "budget_exceeded" / "regression_detected" / "unknown"）。
+            # O35（2026-09-30 全面审查 P1）：此前直接读 final_state["stop_reason"]
+            # ——该键由条件边函数原地写入入参 dict，LangGraph 不回写状态，
+            # 实测恒为 None（stop_reason 列全空）。现经 effective_stop_reason
+            # 兜底：state 已有值则用之，否则按 determine_stop_reason 同一优先级
+            # 对最终状态重新判定（各基线均可得终止原因，不再恒 None）。
+            "stop_reason": effective_stop_reason(final_state),
+            # R4（2026-09-30 独立审查 P0）：回归率（修复引入回归观测）
+            # 补丁应用后 gold P2P 基线测试出现回归 → 1.0；否则 0.0；
+            # 无 P2P 材料 / 超时 → None（不可测量）
+            "regression_rate": _compute_regression_rate(task, final_state),
+            # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）
+            "harness_invalid": harness_invalid,
         }
     return {
         "task_id": task.task_id,
@@ -543,6 +834,33 @@ def _build_task_result(
         "task_metadata": task.metadata,
         # G2 风险分级人工回路（失败分支无 final_state，保守占位）
         "risk_summary": _build_risk_summary_for_result(None),
+        # M1（2026-09-29 审查 P0）：失败分支（无 final_state）三指标与假
+        # 通过标记以 None 占位保持键集合同构（假通过通道仅对 passed=True
+        # 有意义，失败分支恒无）
+        "test_regenerated_pass_unverified": None,
+        # P0（2026-09-30 独立审查 N9/R33）：失败分支无 final_state，
+        # 证据门观测键以 None 占位保持键集合同构
+        "source_patched_unverified": None,
+        "patch_evidence_level": None,
+        "detection_rate": None,
+        "repair_rate": None,
+        "false_fix_rate": None,
+        # 2026-09-30 独立审查 N1：失败分支无生成测试，测试执行错误率占位
+        "test_error_rate": None,
+        # 2026-09-30 独立审查 R52/R53：失败分支无 final_state，
+        # oracle 类型声明 / 补丁精确率框架以保守占位保持键集合同构
+        "oracle_type": "generated_test",
+        "test_visible_to_system": True,
+        "patch_plausible": 0,
+        "patch_correct": 0,
+        "patch_precision": None,
+        "fl_at_k": None,
+        # R4（2026-09-30 独立审查 P0）：失败分支无 final_state，回归率占位
+        "regression_rate": None,
+        # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因为 None
+        "stop_reason": None,
+        # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）
+        "harness_invalid": harness_invalid,
     }
 
 
@@ -689,6 +1007,11 @@ def _write_cross_file_state(initial_state: dict[str, Any], task_metadata: dict[s
             "target_module": dep_chain[i + 1],
             "symbol": "",
             "call_line": 0,
+            # O11（2026-09-29 审查 P1）：显式标记边来源为 benchmark 层预置
+            # （区别于 _cross_file_analyzer_node 的 AST 推导边）。
+            # "source": "benchmark_preset" 使实验分析能区分"预置边"与"
+            # AST 推导边"，跨文件 A/B 结论可外推的前提是两类边均非空。
+            "source": "benchmark_preset",
             "context": f"dep_chain[{i}]: {dep_chain[i]} -> {dep_chain[i + 1]}",
         }
         for i in range(len(dep_chain) - 1)
@@ -731,9 +1054,37 @@ def run_single_task(
     _gp = (task.metadata or {}).get("golden_patch")
     if _gp:
         golden_patches[task.task_id] = _gp
+
+    # M3 门禁（2026-09-29 审查 P0 + D.4-7）：SWE-bench 实例可解性前置验证。
+    # SWE_BENCH_P2P_GATE_ENABLE=true 时，验证基线 PASS_TO_PASS ≥ 阈值；
+    # 不可解实例标记 harness_invalid 并直接返回（不计入"0 解出"统计）。
+    _harness_invalid = False
+    _gate_result = _check_swe_bench_p2p_gate(task)
+    if _gate_result is not None:
+        _harness_invalid = True
+        logger.warning(
+            "M3 P2P 门禁：任务 %s 基线 P2P 不达标（%s），标记 harness_invalid",
+            task.task_id,
+            _gate_result.get("error_type"),
+        )
     # 创建临时目录存放任务相关文件（避免修改原始文件）
     tmp_dir = tempfile.mkdtemp(prefix=f"aitester_{task.task_id}_")
     try:
+        # M3 门禁（2026-09-29 审查 P0 + D.4-7）：harness_invalid 时跳过执行，
+        # 直接构建失败结果（不计入"0 解出"统计）。
+        if _harness_invalid:
+            logger.info("M3 P2P 门禁：任务 %s harness_invalid，跳过执行", task.task_id)
+            results: dict[str, dict[str, Any]] = {}
+            for baseline in baselines:
+                results[baseline] = _build_task_result(
+                    task,
+                    0.0,
+                    diagnosis=f"M3 P2P 门禁：harness_invalid（{_gate_result.get('error_type', 'unknown')}）",
+                    error_category="harness_invalid",
+                    golden_patches=golden_patches,
+                    harness_invalid=True,
+                )
+            return results
         # 写入 instance_code 到临时文件
         # 使用 task_id 的最后一段作为模块名，确保与文件名一致
         # 转换非法字符：连字符→下划线，确保是合法 Python 标识符
@@ -836,19 +1187,23 @@ def run_single_task(
         else:
             initial_state["complexity_class"] = "medium"  # 历史口径
 
-        # 为每个基线分配不同的 API（轮询）
+        # 为每个基线分配 API
+        # O31（2026-09-29 审查 P0 + 2026-09-30 修复验证 D.4-1）：基线模型混淆修复。
+        #
+        # 正确语义：三基线（aitester / plain_llm / single_agent）在同一任务上
+        # 必须使用**同一模型**，否则架构效应与模型效应不可分离。
+        # 默认口径（O31 修复后）：按 task 哈希选 slot，同任务三基线共享 slot。
+        # 可选覆盖：设 AITESTER_BASELINE_LOAD_BALANCE=1 可按 baseline 名称
+        # 哈希分散到不同 slot（用于不需要控制模型变量的负载测试）。
         results: dict[str, dict[str, Any]] = {}
         for _baseline_idx, baseline in enumerate(baselines):
-            # 根据任务索引和基线索引分配 API
-            # 2026-09-26 全面审查（P0 可复现性修复）：此前用内建 hash(task_id)
-            # 做轮询索引——Python 3 的 str hash 受 PYTHONHASHSEED 随机化，
-            # 同一任务在不同进程/启动间映射的 API 索引不一致，破坏
-            # "任务→API 稳定轮询"的文档承诺（基线对比不可复现）。
-            # 改用 zlib.crc32（跨进程确定性）+ 基线索引混合（保持任务内
-            # 多基线轮错开的历史行为）：(crc32(task_id) + baseline_idx) % n
-            _set_thread_api(
-                (zlib.crc32(task.task_id.encode()) + _baseline_idx) % len(_VALID_APIS) if _VALID_APIS else 0
-            )
+            if os.environ.get("AITESTER_BASELINE_LOAD_BALANCE", "0") == "1":
+                # 负载均衡模式：按 baseline 名称哈希，同基线跨任务稳定
+                _api_idx = zlib.crc32(baseline.encode()) % len(_VALID_APIS) if _VALID_APIS else 0
+            else:
+                # O31 默认口径：同任务三基线同 slot（消除模型混淆）
+                _api_idx = zlib.crc32(task.task_id.encode()) % len(_VALID_APIS) if _VALID_APIS else 0
+            _set_thread_api(_api_idx)
 
             # 基线隔离：deepcopy 初始状态并重置磁盘实例文件为原始代码。
             # single_agent 基线执行中会把修复后的代码写回 target_file
@@ -864,6 +1219,17 @@ def run_single_task(
             # P0-2 效率指标：重置本线程 token 统计，基线运行结束后记录消耗
             # （parallel 模式下每个工作线程独立累计，互不串扰）
             token_usage.reset()
+            # O35（2026-09-30 全面审查 P1）：任务级成本预算同口径复位。
+            # reset_budget() 此前**零生产调用点**（仅测试 / demo 引用），而
+            # cost_budget 是线程局部 BudgetSnapshot 且 budget.exceeded 会一直
+            # 置真——开启 COST_BUDGET_ENABLE 后，一旦某线程上的任务触顶，
+            # 该线程后续**所有**任务的 LLM 调用都被 is_budget_exceeded()
+            # 前置守卫拦下（planner→默认计划 / generator→空测试），
+            # "任务级预算"退化成"线程级终身封顶"，产批系统性假失败。
+            # 与 token_usage.reset() 并置：每个任务（每基线）开跑前清零。
+            from src.graph.cost_budget import reset_budget
+
+            reset_budget()
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
             # 4.1 结构化追踪：本任务（baseline）会话开启（未启用时 no-op），
@@ -974,7 +1340,11 @@ def run_single_task(
                         )
 
                 results[baseline] = _build_task_result(
-                    task, elapsed, final_state=final_state, golden_patches=golden_patches
+                    task,
+                    elapsed,
+                    final_state=final_state,
+                    golden_patches=golden_patches,
+                    harness_invalid=_harness_invalid,
                 )
                 if save_state:
                     _dump_state_artifacts(output_dir, task, baseline, final_state)
@@ -999,7 +1369,11 @@ def run_single_task(
                     final_state = BASELINE_REGISTRY[baseline](state)
                     elapsed = time.time() - start_time
                     results[baseline] = _build_task_result(
-                        task, elapsed, final_state=final_state, golden_patches=golden_patches
+                        task,
+                        elapsed,
+                        final_state=final_state,
+                        golden_patches=golden_patches,
+                        harness_invalid=_harness_invalid,
                     )
                     if save_state:
                         _dump_state_artifacts(output_dir, task, baseline, final_state)
@@ -1013,6 +1387,7 @@ def run_single_task(
                         diagnosis=f"限流重试失败: {e2}",
                         error_category="rate_limit",
                         golden_patches=golden_patches,
+                        harness_invalid=_harness_invalid,
                     )
                     end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
             except Exception as e:
@@ -1024,6 +1399,7 @@ def run_single_task(
                     diagnosis=f"执行异常: {e}",
                     error_category="error",
                     golden_patches=golden_patches,
+                    harness_invalid=_harness_invalid,
                 )
                 end_task_trace(False, token_snapshot=token_usage.get_usage().as_dict())
 
@@ -1501,6 +1877,12 @@ def run_benchmark(
         "enable_rag": rag_enabled,
         "parallelism": parallel,
         "valid_apis": len(_VALID_APIS),
+        # R46（2026-09-30 独立审查 P0）：SWE-bench 批次 P2P 门禁默认开，
+        # harness_invalid（基线 P2P 不达标）实例从统计中剔除（不计入"0 解出"）。
+        # 汇总含 harness_invalid_count + 剔除后的有效任务数 + 有效通过率，
+        # 使"0 解出"可区分"系统无效"与"harness 无效"。
+        "p2p_gate_enabled": SWE_BENCH_P2P_GATE_ENABLE,
+        "p2p_gate_threshold": SWE_BENCH_P2P_GATE_THRESHOLD,
         "results": {},
     }
 
@@ -1555,6 +1937,13 @@ def run_benchmark(
         bl_results = all_results[baseline]
         passed = sum(1 for r in bl_results if r["passed"])
         total = len(bl_results)
+        # R46（2026-09-30 独立审查 P0）：harness_invalid（P2P 门禁剔除）计数。
+        # 有效任务数 = total - harness_invalid_count；有效通过率 =
+        # passed / 有效任务数（剔除 harness 无效实例后"0 解出"才反映
+        # 系统真实能力边界，而非 harness 缺陷）。
+        harness_invalid_count = sum(1 for r in bl_results if r.get("harness_invalid"))
+        effective_total = total - harness_invalid_count
+        effective_success_rate = round(passed / effective_total * 100, 1) if effective_total > 0 else 0
         avg_coverage = sum(r.get("coverage") or 0 for r in bl_results) / total if total > 0 else 0
         # 2026-09-27 round10 P1：iterations/elapsed_seconds 可能为 None
         # （历史落盘缺省/任务异常），裸 r["..."] KeyError/TypeError 崩溃——
@@ -1579,6 +1968,10 @@ def run_benchmark(
             "passed_count": passed,
             "failure_count": total - passed,
             "success_rate": round(passed / total * 100, 1) if total > 0 else 0,
+            # R46（2026-09-30 独立审查 P0）：P2P 门禁剔除口径
+            "harness_invalid_count": harness_invalid_count,
+            "effective_total": effective_total,
+            "effective_success_rate": effective_success_rate,
             "avg_coverage": round(avg_coverage, 1),
             "avg_iterations": round(avg_iterations, 2),
             "avg_elapsed_seconds": round(avg_time, 2),
@@ -1591,6 +1984,161 @@ def run_benchmark(
             "rag_metrics": _aggregate_rag_metrics(bl_results),
             "details": bl_results,
         }
+
+    # M9（2026-09-29 审查 P0）：实验 provenance 块 —— 把结果 JSON 顶层
+    # 补全 git SHA / 模型版本 / 温度 / max_iterations / 开关快照 / seed，
+    # 使论文数字可追溯、可复现（此前结果工件只有 timestamp / dataset /
+    # subset / seed / baselines / results，无 git commit SHA、无模型版本、
+    # 无 temperature、无 ~118 个环境开关快照 → 跨模型/跨代码版本串味且
+    # 不可复算）。
+    import subprocess as _subprocess
+
+    def _git_sha() -> str | None:
+        try:
+            _res = _subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+                timeout=10,
+            )
+            if _res.returncode == 0:
+                return _res.stdout.strip()
+        except Exception:
+            pass
+        return None
+
+    _env_snapshot_keys = [
+        "MAX_ITERATIONS",
+        "LLM_TIMEOUT",
+        "EXECUTION_TIMEOUT",
+        "TEMPERATURE",
+        "ENABLE_PLANNER",
+        "ENABLE_DEBUGGER",
+        "ENABLE_RAG",
+        "DIAGNOSIS_NODE_ENABLE",
+        "TYPE_CHECK_ENABLE",
+        "COST_BUDGET_ENABLE",
+        "EXPERT_POOL_ENABLE",
+        "MUTATION_TEST_ENABLE",
+        "KERNEL_SANDBOX_ENABLE",
+        "PATCH_RESAMPLE_ENABLE",
+        "REPO_LEVEL_EXECUTION",
+        "AITESTER_LLM_CACHE",
+        "AITESTER_CACHE_ISOLATE_MODEL",
+        # M7/M10/O2/O3/O8 系列新增开关（2026-09-29 审查批次）
+        "MUTATION_ADVISOR_ENABLE",
+        "LOGIC_SPEC_STRICT_ENABLE",
+        "BOUNDARY_TRIPLETS_ENABLE",
+        "FL_SPECTRAL_ENABLE",
+        "FL_SPECTRAL_TOP_K",
+        "BRANCH_COVERAGE_INJECT_ENABLE",
+        "RAG_POISONING_FILTER",
+        # R7/R35/R59（2026-09-30 独立审查批次）
+        "SPEC_IR_ENABLE",
+        "FLAKY_CHECK_ENABLE",
+        "FLAKY_REPEAT_COUNT",
+        "PIP_PACKAGE_WHITELIST_ENABLE",
+        # R46：SWE-bench P2P 门禁（R46 起默认开）
+        "SWE_BENCH_P2P_GATE_ENABLE",
+        "SWE_BENCH_P2P_GATE_THRESHOLD",
+    ]
+    _env_snapshot: dict[str, str | None] = {}
+    for _k in _env_snapshot_keys:
+        _v = os.environ.get(_k)
+        _env_snapshot[_k] = _v
+
+    # 模型版本：从 llm_client.get_first_valid_model_name 读取（线程局部
+    # 覆盖的 model_name 作为当前活跃模型的代理；R13 起
+    # AITESTER_CACHE_ISOLATE_MODEL 默认开启跨模型缓存隔离，正式实验
+    # 如需"不隔离"历史口径可显式设 0）
+    try:
+        from src.agents.llm_client import get_first_valid_model_name as _get_model_name
+
+        _model_version = _get_model_name()
+    except Exception:
+        _model_version = None
+
+    _temperature_raw = os.environ.get("TEMPERATURE", "")
+    try:
+        _temperature_val: float | str = float(_temperature_raw)
+    except (ValueError, TypeError):
+        _temperature_val = _temperature_raw
+
+    _git_sha_val = _git_sha()
+
+    # M9（2026-09-29 审查 P0）补充：git dirty 状态（工作树有未提交变更时
+    # provenance 须如实标注，否则"git_sha 指向某 commit"具有误导性——
+    # 实际运行的是该 commit + 本地 diff 的混合体）
+    def _git_dirty() -> bool:
+        try:
+            _res = _subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+                timeout=10,
+            )
+            return bool(_res.stdout.strip())
+        except Exception:
+            return False
+
+    summary["provenance"] = {
+        "git_sha": _git_sha_val,
+        "git_dirty": _git_dirty(),
+        "model_name": _model_version,
+        "temperature": _temperature_val,
+        "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
+        "seed": seed,
+        "env_snapshot": _env_snapshot,
+        "cache_enabled": os.environ.get("AITESTER_LLM_CACHE", "1") != "0",
+        "cache_isolate_model": os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1") != "0",
+        # O32（2026-09-29 审查 P0）：API 配置脱敏（不写入明文密钥）
+        "valid_apis": [{"url": a["url"], "model": a["model"], "key": "<REDACTED>"} for a in _VALID_APIS],
+        # R56（2026-09-30 独立审查 P0）：harness 披露——消除"脚手架主张
+        # 伪装成协作主张"（2608.26218：只改 harness → F2PF 28%→49%）。
+        # 披露执行隔离档位 / 上下文策略 / 重试与停止规则 / 单次时限 /
+        # 模型版本 + 快照日期，使架构主张须对"调好的单智能体 harness"
+        # 消融才成立（工件含 harness 快照，读者可判定增益来自角色协作
+        # 还是脚手架）。
+        "harness": {
+            "snapshot_date": datetime.now().strftime("%Y-%m-%d"),
+            "execution_isolation": {
+                # R10 起 EXECUTOR_USE_VENV 默认 true（venv 沙箱），
+                # Docker / 内核沙箱为可选增强档位（默认关）
+                "use_venv": os.environ.get("EXECUTOR_USE_VENV", "true").lower() == "true",
+                "use_docker": os.environ.get("EXECUTOR_USE_DOCKER", "false").lower() == "true",
+                "kernel_sandbox": os.environ.get("KERNEL_SANDBOX_ENABLE", "false").lower() == "true",
+                "auto_install_deps": os.environ.get("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true",
+            },
+            "context_strategy": {
+                # 上下文管理：RAG 检索增强 / 分层压缩 / 截断优先（R49）
+                "rag_enabled": os.environ.get("ENABLE_RAG", "false").lower() == "true",
+                "context_tier_downgrade": os.environ.get("CONTEXT_TIER_DOWNGRADE_ENABLE", "false").lower() == "true",
+                "truncation_first": os.environ.get("TRUNCATION_FIRST_ENABLE", "false").lower() == "true",
+                "branch_coverage_inject": os.environ.get("BRANCH_COVERAGE_INJECT_ENABLE", "false").lower() == "true",
+            },
+            "retry_stop_rules": {
+                # 重试与停止：失败重试一次 / 最大迭代 / 预算封顶 /
+                # 测试重生成上限 / 回归检测停止条件（StopReason 统一）
+                "executor_retry_on_fail": 1,
+                "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
+                "cost_budget_enabled": os.environ.get("COST_BUDGET_ENABLE", "false").lower() == "true",
+                "test_regeneration_cap": int(os.environ.get("TEST_REGENERATION_CAP", "2")),
+                "stop_reasons": [
+                    "test_passed",
+                    "max_iterations",
+                    "skip_debugger_repair_invalid",
+                    "test_defect_regeneration_cap",
+                    "budget_exceeded",
+                    "regression_detected",
+                    "unknown",
+                ],
+            },
+            "per_task_time_limit_seconds": int(os.environ.get("EXECUTION_TIMEOUT", "30")),
+            "model_version": _model_version,
+        },
+    }
 
     # 保存结果
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -14,10 +14,18 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
+    # O28（2026-09-29 审查 P1）：mypy hook 从 v1.7.1 升级到 v1.15.0——
+    # v1.7.1 是 2023 年版本，Python 3.12+ 类型支持不完整；v1.15.0 是
+    # 2025 年最新稳定版。
+    rev: v1.15.0
     hooks:
       - id: mypy
-        additional_dependencies: [types-all]
+        # O28（2026-09-29 审查 P1）：删除 types-all（已废弃的 shim 包，
+        # 2023 年起被 typeshed 内置类型替代；保留会导致 mypy 报
+        # "unknown package" 或拉入不兼容的 stub 版本）。
+        # 用 additional_dependencies 显式列出所需的 types-* 包：
+        # types-requests（requests 类型）、types-PyYAML（YAML 类型）
+        additional_dependencies: [types-requests, types-PyYAML]
         args: [--ignore-missing-imports, --no-strict-optional]
         exclude: ^tests/
 

@@ -67,10 +67,24 @@ def execute_sandboxed(
     # 测试文件写入沙箱（导入修复以沙箱为搜索根，模块名与文件名天然对齐）
     # 2026-09-26 round9 P2：写入失败时走 finally 清理沙箱（旧实现 L70-71
     # 的 with open 在 try/finally 之外，OSError 时沙箱目录泄漏）。
+    # 2026-10-01 全面审查 P2 修复：此前 try/finally 注释与实际代码不符——
+    # with open 仍在 try/finally 之外（L70-73 直接写，无 try 包裹），
+    # open(test_file, "w") 抛 OSError（磁盘满 / 权限）时沙箱目录泄漏。
+    # 现补 try/except OSError：写失败 → 清理沙箱 + 返回 file_write_failed 诊断。
     fixed_test_code = auto_fix_imports(test_code, module_file, sandbox_dir)
     test_file = os.path.join(sandbox_dir, "test_generated.py")
-    with open(test_file, "w", encoding="utf-8") as f:
-        f.write(fixed_test_code)
+    try:
+        with open(test_file, "w", encoding="utf-8") as f:
+            f.write(fixed_test_code)
+    except OSError as e:
+        cleanup_sandbox(sandbox_dir)
+        return {
+            "passed": False,
+            "output": f"测试文件写入沙箱失败: {e}",
+            "coverage": 0.0,
+            "failed_cases": [],
+            "error_info": {"type": "file_write_failed", "message": str(e), "file_path": test_file},
+        }
 
     # ── 依赖检测与安装 ──────────────────────────────────────────────────
     env, python_path, dep_install_note, sandbox_error_info, missing_modules = _prepare_dependencies(
@@ -207,6 +221,13 @@ def _prepare_dependencies(
         # 创建/复用缓存 venv（相同依赖组合 + 当前 Python 版本共享，省 1-3s 重建开销）
         # 4.4 多版本缓存：venv_cache_dir 默认将 sys.version_info 前两位纳入 key，
         # 不同 Python 版本的 venv 隔离存放，避免交叉复用导致依赖不兼容
+        # R59（2026-09-30 独立审查 P0）/ S6（M11 2026-09-29 审查 P0）：
+        # 包名幻觉（slopsquatting）防护经 suggest_package_names 内置的
+        # PIP_PACKAGE_WHITELIST_ENABLE 白名单守卫实现——开启后仅白名单内
+        # 包名放行安装（PEP 503 大小写不敏感），未知名默认拒绝，堵供应链
+        # 向量。本处不重复实现白名单逻辑（单一事实来源在 dependency.py），
+        # 仅记录：missing_packages 已经 suggest_package_names 的白名单过滤，
+        # 白名单外的幻觉包名不会进入 install_packages。
         venv_dir = venv_cache_dir(missing_packages)
         try:
             python_path = create_venv(venv_dir, timeout=self.dep_install_timeout)
@@ -309,6 +330,32 @@ def execute_docker(
                 # 原语，需 egress proxy 或网络命名空间隔离实现；此处保守加 bridge
                 # 并在 error_info 中记录白名单配置，供 Fail-Closed 治理协议消费）。
                 cmd.append("--network=bridge")
+        # S3（2026-09-29 审查 P0）：资源限制 —— 容器 CPU / 内存 / 进程数
+        # 上限（防 fork 炸弹 / 内存爆炸把宿主打死）。
+        # DOCKER_CPU_LIMIT（默认 2.0）/ DOCKER_MEM_LIMIT_MB（默认 2048）
+        # / DOCKER_PIDS_LIMIT（默认 256）/ DOCKER_READ_ONLY（默认 true）。
+        # 全部默认非 0，历史口径有变化（安全加固）；设 0/false 可恢复
+        # 无限制口径（工件须记录该档位）。
+        _docker_cpu_limit = float(os.getenv("DOCKER_CPU_LIMIT", "2.0"))
+        _docker_mem_limit_mb = int(os.getenv("DOCKER_MEM_LIMIT_MB", "2048"))
+        _docker_pids_limit = int(os.getenv("DOCKER_PIDS_LIMIT", "256"))
+        _docker_read_only = os.getenv("DOCKER_READ_ONLY", "true").lower() in ("true", "1", "on")
+        if _docker_cpu_limit > 0:
+            cmd.extend(["--cpus", str(_docker_cpu_limit)])
+        if _docker_mem_limit_mb > 0:
+            cmd.extend(["--memory", f"{_docker_mem_limit_mb}m"])
+        if _docker_pids_limit > 0:
+            cmd.extend(["--pids-limit", str(_docker_pids_limit)])
+        # S3：容器内以非特权用户运行（nobody 65534）+ 只读根文件系统
+        # + /tmp tmpfs（容器内 pytest 需写 /tmp）+ 全 cap drop
+        if _docker_read_only:
+            cmd.extend(["--read-only", "--tmpfs", "/tmp:size=256m"])
+        cmd.extend(["--cap-drop=ALL", "--security-opt", "no-new-privileges"])
+        # S3：默认断网（--network=none）；DOCKER_NETWORK_ISOLATION=false 且
+        # DOCKER_DEFAULT_NETWORK_NONE=true（默认 true）时保持历史 bridge 口径
+        _default_network_none = os.getenv("DOCKER_DEFAULT_NETWORK_NONE", "true").lower() in ("true", "1", "on")
+        if network_isolation == "true" or (_default_network_none and network_isolation != "allowlist"):
+            cmd.append("--network=none")
         docker_image = self.docker_image
         cmd.append(docker_image)
         cmd.extend(
@@ -335,6 +382,7 @@ def execute_docker(
                 text=True,
                 timeout=max(self.timeout, 120),
                 env=scrub_os_environ(),
+                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
             )
         except subprocess.TimeoutExpired as e:
             return {

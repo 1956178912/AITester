@@ -113,6 +113,46 @@ def test_exc_info_not_a_finding(tmp_path) -> None:
     assert result.ok, [f.line for f in result.findings]
 
 
+def test_injected_field_variants_flagged(tmp_path) -> None:
+    """O33 三类残余盲区注入 → 必须被检出（字段名变体 / AWS 裸值 / DSN 口令）。"""
+    src_dir = str(tmp_path / "src")
+    _write(
+        src_dir,
+        "leaky3.py",
+        (
+            "import logging\n"
+            "logger = logging.getLogger(__name__)\n"
+            'logger.info("conn passwd=%s", "hunter2hunter2")\n'
+            'logger.info("api key: %s", "abcdefghijklmnop1234")\n'
+            'logger.info("access_token=%s", "eyJhbGciOiJIUzI1NiJ9.payload.sig")\n'
+            'logger.info("AWS AKIAIOSFODNN7EXAMPLE leaked")\n'
+            'logger.info("dsn mysql://root:pw0rd@dbhost/prod")\n'
+        ),
+    )
+    result = audit(str(tmp_path))
+    assert not result.ok
+    assert len(result.findings) >= 5, [f.line for f in result.findings]
+
+
+def test_benign_field_words_not_flagged(tmp_path) -> None:
+    """字段名词根后不跟 :/= 的叙述性文本不误报（O33 收紧口径回归护栏）。"""
+    src_dir = str(tmp_path / "src")
+    _write(
+        src_dir,
+        "benign.py",
+        (
+            "import logging\n"
+            "logger = logging.getLogger(__name__)\n"
+            'logger.info("password reset email sent")\n'
+            'logger.info("API key rotation scheduled")\n'
+            'logger.info("token 统计记录失败: %s", e)\n'
+            'logger.info("mysql pool created")\n'
+        ),
+    )
+    result = audit(str(tmp_path))
+    assert result.ok, [f.line for f in result.findings]
+
+
 def test_tests_dir_skipped(tmp_path) -> None:
     """tests/ 目录注入不扫描（测试代码常有意构造敏感串验证脱敏，避免误报）。"""
     tests_dir = str(tmp_path / "tests")

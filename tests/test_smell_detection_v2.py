@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 import sys
 
+import pytest
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
@@ -17,6 +19,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # ─── Eager Test / Lack of Cohesion 异味检测 ──────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSmellDetectionV2:
     """1.1 补强异味检测：Eager Test + Lack of Cohesion。"""
 
@@ -108,6 +111,7 @@ def test_divide():
 # ─── 内置变异生成器 ──────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestMutationGenerator:
     """1.2 内置变异生成器单元测试。"""
 
@@ -276,6 +280,7 @@ class TestMutationGenerator:
 # ─── 跨批次失败模式对比 ──────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestCrossBatchComparison:
     """5.3 跨批次失败模式对比。"""
 
@@ -404,6 +409,7 @@ class TestCrossBatchComparison:
 # ─── 多版本 venv 缓存 ────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestMultiVersionVenvCache:
     """4.4 多版本依赖缓存。"""
 

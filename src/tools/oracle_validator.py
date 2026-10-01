@@ -146,18 +146,87 @@ def _infer_constant_type(expr: ast.expr) -> str | None:
 
 
 def _is_tautological_assert(assert_expr: ast.expr) -> bool:
-    """判断断言体是否为恒真表达式（True / x is not None / True or False）。"""
+    """判断断言体是否为恒真表达式。
+
+    O4（2026-09-29 审查 P1）：恒真判定修正 + 4 类漏检补充。
+    历史口径：仅识别 `assert True` 和 `x is not None` 两种模式。
+    现补充 4 类漏检（均为浅层 reaching-definition 判定，保守口径）：
+    1. 自反比较：`assert x == x` / `assert x is x`（恒真）；
+    2. 逻辑恒真：`assert x or not x`（德·摩根恒真式）；
+    3. 范围恒真：`assert len(x) >= 0` / `assert len(x) < 0` 取反（len 永远非负）；
+    4. 自包含：`assert x in x`（元素恒属于自身集合/序列）。
+    原两类保留：
+    5. `assert True`（常量 True）；
+    6. `x is not None`（浅层 reaching-definition：x 为同作用域刚赋值的局部变量）。
+    """
+    # 1. 常量 True
     if isinstance(assert_expr, ast.Constant) and assert_expr.value is True:
         return True
-    # x is not None（且 x 为同作用域刚赋值的局部变量）
-    return (
+    # 2. x is not None（浅层 reaching-definition）
+    if (
         isinstance(assert_expr, ast.Compare)
         and len(assert_expr.ops) == 1
         and isinstance(assert_expr.ops[0], ast.IsNot)
         and len(assert_expr.comparators) == 1
         and isinstance(assert_expr.comparators[0], ast.Constant)
         and assert_expr.comparators[0].value is None
-    )
+    ):
+        return True
+    # 3. O4 漏检：自反比较 assert x == x / assert x is x
+    if (
+        isinstance(assert_expr, ast.Compare)
+        and len(assert_expr.ops) == 1
+        and len(assert_expr.comparators) == 1
+        and isinstance(assert_expr.ops[0], (ast.Eq, ast.Is))
+        and isinstance(assert_expr.left, ast.Name)
+        and isinstance(assert_expr.comparators[0], ast.Name)
+        and assert_expr.left.id == assert_expr.comparators[0].id
+    ):
+        return True
+    # 4. O4 漏检：逻辑恒真 assert x or not x / assert x and not x
+    if isinstance(assert_expr, ast.BoolOp) and len(assert_expr.values) == 2:
+        v0, v1 = assert_expr.values
+        # x or not x（v0=Name, v1=Unary(Not, Name) 同名）
+        if (
+            isinstance(assert_expr.op, ast.Or)
+            and isinstance(v0, ast.Name)
+            and isinstance(v1, ast.UnaryOp)
+            and isinstance(v1.op, ast.Not)
+            and isinstance(v1.operand, ast.Name)
+            and v0.id == v1.operand.id
+        ):
+            return True
+        # x and not x（v0=Name, v1=Unary(Not, Name) 同名）——恒假，也标记为恒真（无信息量）
+        if (
+            isinstance(assert_expr.op, ast.And)
+            and isinstance(v0, ast.Name)
+            and isinstance(v1, ast.UnaryOp)
+            and isinstance(v1.op, ast.Not)
+            and isinstance(v1.operand, ast.Name)
+            and v0.id == v1.operand.id
+        ):
+            return True
+    # 5. O4 漏检：范围恒真 assert len(x) >= 0 / assert len(x) < 0（恒真）
+    # 6. O4 漏检：自包含 assert x in x（元素恒属于自身序列/集合）
+    # 检查 5 与 6 合并为单一 return（避免 SIM "inline condition" 嵌套模式）
+    if isinstance(assert_expr, ast.Compare) and len(assert_expr.ops) == 1 and len(assert_expr.comparators) == 1:
+        op = assert_expr.ops[0]
+        left = assert_expr.left
+        comp = assert_expr.comparators[0]
+        # 5. len(x) >= 0 / len(x) < 0（len 永远非负，两种比较均无信息量）
+        if (
+            isinstance(comp, ast.Constant)
+            and comp.value == 0
+            and isinstance(left, ast.Call)
+            and isinstance(left.func, ast.Name)
+            and left.func.id == "len"
+            and isinstance(op, (ast.GtE, ast.Lt))
+        ):
+            return True
+        # 6. x in x（自包含，恒真）
+        if isinstance(op, ast.In) and isinstance(left, ast.Name) and isinstance(comp, ast.Name) and left.id == comp.id:
+            return True
+    return False
 
 
 def _check_assert_node(

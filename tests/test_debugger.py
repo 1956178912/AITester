@@ -253,8 +253,10 @@ def factorial(n):
             )
 
         # 验证调用中包含截断标记
+        # （此前断言为 `... or len(long_code) > 3000`——输入长度恒真，
+        # 截断行为从未被真正验证；2026-10-02 审查收紧为标记必须出现）
         call_args = mock_call.call_args[0][0]
-        assert "截断" in call_args or len(long_code) > 3000
+        assert "[代码已截断" in call_args, "超长 target_code 未在 prompt 中标记截断"
 
     def test_debug_truncates_test_output(self):
         """测试测试输出截断。"""
@@ -273,8 +275,12 @@ def factorial(n):
             )
 
         # 验证调用中输出被截断
+        # （此前断言 `len(prompt) < len(output)*2` 恒真——prompt 只要不超
+        # 输入的两倍即过，与截断实现无关；2026-10-02 审查收紧为截断标记
+        # 必须出现 + prompt 不含完整原始输出）
         call_args = mock_call.call_args[0][0]
-        assert len(call_args) < len(long_output) * 2  # 应该被截断
+        assert "[代码已截断" in call_args, "超长 test_output 未在 prompt 中标记截断"
+        assert len(call_args) < len(long_output), "test_output 未被截断（prompt 含完整原始输出）"
 
     def test_debug_limits_failed_cases_summary(self):
         """测试失败用例摘要限制数量。"""
@@ -352,13 +358,21 @@ def factorial(n):
         )
         long_code = "x" * 1000
         rag_refs = [{"original_code": long_code, "patch": "patch"}]
-        with patch.object(self.agent, "_call_llm", return_value=mock_response):
+        with patch.object(self.agent, "_call_llm", return_value=mock_response) as mock_call:
             self.agent.debug(
                 target_code="def f(): pass", test_output="AssertionError", failed_cases=[], rag_references=rag_refs
             )
 
-        # original_code 应被截断
-        assert len(long_code) > 500
+        # original_code 应被截断到 _RAG_ORIGINAL_CODE_TRUNCATE_LEN（500）：
+        # 此前断言为 `assert len(long_code) > 500`——只断言输入长度，
+        # 与实现无关恒真（2026-10-02 审查修复）；现断言 prompt 内
+        # "原始代码" 代码块的实际长度受限。
+        call_args = mock_call.call_args[0][0]
+        marker = "原始代码：\n```python\n"
+        assert marker in call_args, "RAG 参考修复案例未注入 prompt"
+        block = call_args.split(marker, 1)[1].split("\n```", 1)[0]
+        assert len(block) <= 500, f"RAG original_code 未截断（prompt 内 {len(block)} 字符）"
+        assert len(block) < len(long_code), "RAG original_code 疑似未截断（prompt 含完整原文）"
 
     def test_debug_returns_default_values_on_missing_fields(self):
         """测试 LLM 返回缺少字段时的默认值处理。"""
@@ -637,10 +651,15 @@ class TestPositionAwareRepair:
         self.agent = DebuggerAgent()
 
     def test_default_switch_off(self, monkeypatch):
-        """未设置环境变量时默认关闭（保持历史口径）。"""
+        """O1（2026-09-29 审查 P1）：默认值改为 true（位置感知定位已实现且
+        零 LLM 成本，默认启用）；显式设为 false 时关闭（A/B OFF 组口径）。"""
         import src.agents.debugger as d
 
+        # 未设置环境变量时默认 true（O1 起）
         monkeypatch.delenv("POSITION_AWARE_REPAIR_ENABLE", raising=False)
+        assert d._position_aware_repair_enabled() is True
+        # 显式 false 时关闭（历史 OFF 组口径）
+        monkeypatch.setenv("POSITION_AWARE_REPAIR_ENABLE", "false")
         assert d._position_aware_repair_enabled() is False
 
     def test_switch_on(self, monkeypatch):
@@ -687,8 +706,9 @@ class TestPositionAwareRepair:
         assert res["focused"] is False
 
     def test_debug_returns_position_aware_focus_key(self, monkeypatch):
-        """debug() 返回 dict 始终含 position_aware_focus 键（默认关闭为零值）。"""
-        monkeypatch.delenv("POSITION_AWARE_REPAIR_ENABLE", raising=False)
+        """debug() 返回 dict 始终含 position_aware_focus 键（O1 起默认启用；
+        无法定位时 focused=False、hint 为空，零值口径不变）。"""
+        monkeypatch.setenv("POSITION_AWARE_REPAIR_ENABLE", "true")
         mock_response = json.dumps(
             {
                 "root_cause": "r",

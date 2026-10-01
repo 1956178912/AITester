@@ -40,6 +40,8 @@ import logging
 import os
 import threading
 import time
+import uuid
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -145,6 +147,10 @@ class TraceSession:
         self._enabled = directory is not None
         self._file_path: str | None = None
         self._started_at: float | None = None
+        # O7（2026-09-29 审查 P1）：run_id —— 本次工作流运行的唯一标识
+        # （会话级，同一 TraceSession 内所有 record_node 共享）。
+        # 供跨任务聚合（"同一 run 的 N 个 task"）与 OTel 语义对齐。
+        self._run_id = uuid.uuid4().hex[:16]
         if self._enabled and directory is not None:
             os.makedirs(directory, exist_ok=True)
             safe_task = "".join(c if c.isalnum() or c in "-_." else "_" for c in task_id) or "task"
@@ -244,6 +250,13 @@ class TraceSession:
             "task": self.task_id,
             "node": node,
             "ts": time.time(),
+            # O7（2026-09-29 审查 P1）：结构化追踪 run_id / span_id / parent
+            # —— run_id 标识本次工作流运行（会话级），span_id 标识本节点
+            # 调用（节点级），parent 指向父 span（路由层 → 节点层）。
+            # 缺省自动填充（uuid4 短 ID），历史调用方零变化（新键不影响
+            # 既有 JSONL 消费方的解析，仅多 3 个可选字段）。
+            "run_id": getattr(self, "_run_id", None),
+            "span_id": uuid.uuid4().hex[:12],
         }
         if output_summary is not None:
             record["output"] = _summarize(output_summary)
@@ -373,11 +386,26 @@ def dump_recent_to(target_dir: str, limit: int | None = None) -> str | None:
 
     filename = f"{int(_time.time())}_failed_trace.jsonl"
     path = os.path.join(target_dir, filename)
+    # O35（2026-09-30 全面审查 P1）：内存快照里的 record 是**原始未脱敏**值
+    # （_append 只对写入文件的那一行做 mask，self.records 保留原对象），
+    # 而 dump_recent_to 是 --dump-trace-on-failure 的落盘出口——此前逐行
+    # json.dumps 直写，把 sk-/URL 凭证原样写进 ./tmp_trace/*.jsonl，
+    # 违反本模块"所有写入文本统一过 mask_sensitive_info"的契约
+    # （模块 docstring L22）。现与 _append 同口径逐行脱敏；脱敏模块
+    # 不可用时降级原样写入（与 _append 的降级档一致，不阻断诊断出口）。
+    try:
+        from src.utils.logging_utils import mask_sensitive_info as _mask_fn
+
+        _mask: Callable[[str], str] | None = _mask_fn
+    except Exception:
+        # 纯标准库模块，理论上不会失败；失败时降级为不脱敏（与 _append 口径一致）
+        _mask = None
     try:
         with open(path, "w", encoding="utf-8") as f:
             for snap in recent:
                 for record in snap.get("records", []):
-                    f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+                    line = json.dumps(record, ensure_ascii=False, default=str)
+                    f.write((_mask(line) if _mask is not None else line) + "\n")
                 # 快照级收尾标记（非 TraceSession 事件，供诊断区分任务边界）
                 f.write(
                     json.dumps(

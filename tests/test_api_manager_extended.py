@@ -64,6 +64,7 @@ def _mock_client(return_value=None, side_effect=None):
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestAPIHealthEdgeCases:
     """测试 APIHealth 的边界行为"""
 
@@ -143,6 +144,7 @@ class TestAPIHealthEdgeCases:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestTryCallNode:
     """测试 _try_call_node 内部方法（现有测试未覆盖）"""
 
@@ -206,6 +208,7 @@ class TestTryCallNode:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestErrorHandlers:
     """测试各类错误处理器（现有测试未直接覆盖）"""
 
@@ -251,13 +254,17 @@ class TestErrorHandlers:
         assert self.node.total_requests == 1
 
     def test_handle_api_error_raises_when_fallback_disabled(self):
-        """fallback 禁用时 _handle_api_error 会触发 bare raise（无 active exception → RuntimeError）"""
+        """fallback 禁用时 _handle_api_error 显式重抛传入的原始异常（raise e）。"""
         self.mgr.config.fallback_on_failure = False
-        mock_error = MagicMock()
-        mock_error.status_code = 500
-        # _handle_api_error 在 fallback_disabled 时执行 bare `raise`，
-        # 但此时没有正在处理的异常，会抛出 RuntimeError: No active exception to reraise
-        with pytest.raises(RuntimeError, match="No active exception"):
+        import openai
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_error = openai.APIError("api error", request=mock_resp, body={"code": "error"})
+        # 2026-09-30 审查修复：历史 bare raise 依赖"调用方处于 except 上下文"的
+        # 隐式语义（直接调用时抛 RuntimeError: No active exception）；改为显式
+        # `raise e` 后，无论是否处于 except 上下文都重抛传入的异常对象本身。
+        with pytest.raises(openai.APIError):
             self.mgr._handle_api_error(mock_error, self.node)
 
     def test_handle_api_error_no_raise_when_fallback_enabled(self):
@@ -276,12 +283,12 @@ class TestErrorHandlers:
         assert self.node.total_requests == 1
 
     def test_handle_generic_error_raises_when_fallback_disabled(self):
-        """fallback 禁用时 _handle_generic_error 重新抛出（source 代码在 disable 时 raise 无异常对象，验证不抛出）"""
+        """fallback 禁用时 _handle_generic_error 显式重抛传入的原始异常（raise e）。"""
         self.mgr.config.fallback_on_failure = False
         mock_error = TimeoutError("timeout")
-        # source 代码在 fallback_disabled 时执行 bare `raise`，但此时没有 active exception
-        # 实际行为是抛出 RuntimeError: No active exception to reraise
-        with pytest.raises(RuntimeError, match="No active exception"):
+        # 2026-09-30 审查修复：同 _handle_api_error，bare raise → 显式 raise e，
+        # 直接调用时重抛传入的 TimeoutError 而非 RuntimeError。
+        with pytest.raises(TimeoutError):
             self.mgr._handle_generic_error(mock_error, self.node)
 
     def test_handle_generic_error_no_raise_when_fallback_enabled(self):
@@ -296,6 +303,7 @@ class TestErrorHandlers:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestBuildNodeList:
     """测试 _build_node_list 方法（现有测试未直接覆盖）"""
 
@@ -347,6 +355,7 @@ class TestBuildNodeList:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestCallFallbackScenarios:
     """测试 call() 在各类故障场景下的行为（现有测试部分覆盖，此处补充）"""
 
@@ -453,6 +462,7 @@ class TestCallFallbackScenarios:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestHealthCheckExceptions:
     """测试 check_health 的各类异常分支（现有测试覆盖了部分，此处补充 ConnectionError/TimeoutError）"""
 
@@ -569,6 +579,7 @@ class TestHealthCheckExceptions:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestHalfOpenProbe:
     """测试 4.2 半开探测：熔断冷却到期后，节点先"半开"，仅承载一次探测请求；
     探测成功闭合熔断器，失败重开半程冷却期（cooldown/2，受 penalty_cap 上限约束）。"""
@@ -626,18 +637,22 @@ class TestHalfOpenProbe:
         assert 19.0 <= remaining <= 20.5
 
     def test_probe_failure_penalty_capped(self):
-        """惩罚时长受 penalty_cap 约束：指数退避 backoff > cap*open_count 时按 cap 重开（4.4）。
+        """O20 绝对上限 60s：半开探测失败时重开冷却被 max(cap, 60.0) 封顶。
 
-        4.4 口径：重开冷却 = min(cooldown * 2^open_count, cap * max(1, open_count))。
-        本用例 cooldown=100、cap=30、open_count=1 → min(100*2, 30*1) = 30s。
+        O20 口径（2026-09-29 审查 P0）：重开冷却 = min(cooldown * 2^open_count,
+        max(cap, 60.0))。此前 cap 随 open_count 线性增长（cap * max(1, n)），
+        实测 #10→210s、#20→510s，与文档"上限 30s"矛盾；现固定绝对上限 60s
+        （API 熔断冷却的合理上界）。
+        本用例 cooldown=100、cap=30、open_count=1 →
+        min(100*2, max(30, 60.0)) = min(200, 60) = 60s。
         """
         self.node1.circuit_cooldown_seconds = 100.0
         self.node1.half_open_probe_penalty_cap_seconds = 30.0
         self._open_circuit_and_expire(cooldown=100.0)
         self.node1._probe_circuit_half_open(False)
         remaining = self.node1.circuit_open_until - time.monotonic()
-        # min(100*2^1, 30*max(1,1)) = 30s，指数退避被 cap 顶住
-        assert 28.0 <= remaining <= 30.5
+        # min(100*2^1, max(30, 60.0)) = 60s，O20 绝对上限封顶
+        assert 59.0 <= remaining <= 60.5
 
     def test_probe_noop_outside_half_open_window(self):
         """不在半开窗口时 _probe_circuit_half_open 无任何状态变化"""
@@ -767,6 +782,7 @@ class TestHalfOpenProbe:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestStatusQueries:
     """测试状态查询方法的边界情况"""
 
@@ -840,6 +856,7 @@ class TestStatusQueries:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestNodeLifecycle:
     """测试节点动态添加/移除后的状态一致性"""
 
@@ -896,6 +913,7 @@ class TestNodeLifecycle:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestHealthCheckerThreadExceptions:
     """测试 HealthCheckerThread 在异常时的行为"""
 
@@ -942,6 +960,7 @@ class TestHealthCheckerThreadExceptions:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestConcurrentAccess:
     """测试多线程并发访问的安全性"""
 
@@ -1027,6 +1046,7 @@ class TestConcurrentAccess:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestStatusDataIntegrity:
     """测试 get_status 返回数据的类型和完整性"""
 
@@ -1073,6 +1093,7 @@ class TestStatusDataIntegrity:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestPrintStatusTable:
     """测试 print_status_table 输出"""
 
@@ -1098,6 +1119,7 @@ class TestPrintStatusTable:
 # ════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestSingletonThreadHygiene:
     """测试 get_manager/reset_manager 的线程卫生与单例语义。
 

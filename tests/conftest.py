@@ -44,11 +44,27 @@ def _isolate_llm_cache(tmp_path, monkeypatch) -> None:
     """
     monkeypatch.setenv("AITESTER_LLM_CACHE", "0")
     monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path / "llm_cache"))
-    # 2026-09-28 性能优化配套：llm_client 热路径把缓存开关/目录做了进程内
-    # 环境变量记忆（首次调用定值后复用，省每次 LLM 调用的两次 getenv）。
-    # autouse 隔离在本 fixture 内切目录/开关，必须在切后清一次记忆；teardown
-    # （monkeypatch 还原环境变量后）再清一次，恢复"读环境变量"历史口径
-    # （conftest 是测试入口模块，顶层导入保持 import 排序干净、零运行时成本）
-    clear_llm_cache_option_memory()
-    yield
-    clear_llm_cache_option_memory()
+    # R13（2026-09-30 独立审查 P0）：跨模型缓存隔离默认开启（=1）会把
+    # model 名加入缓存键——测试未配置真实 LLM 时默认链为空，隔离键不
+    # 追加，但个别测试 patch 了 get_first_valid_model_name 返回非空值，
+    # 会改变缓存文件哈希。统一 pin 到 "0"（显式 opt-out），使缓存键
+    # 口径在测试内恒为"不含 model"（_cache_file_for 同口径）。
+    # 需要验证 R13 隔离行为的测试可显式 monkeypatch 覆盖为 "1"。
+    monkeypatch.setenv("AITESTER_CACHE_ISOLATE_MODEL", "0")
+    # M8 隔离键材料 get_first_valid_model_name() 的线程局部/全局 LLM
+    # 配置链：测试进程可能残留宿主环境注入的 LLM 配置（含 model_name），
+    # 使"未 patch 该函数"的测试路径意外追加 model 键材料。统一 patch
+    # 为 None（无有效配置 → 不追加），与 AITESTER_CACHE_ISOLATE_MODEL=0
+    # 的"不隔离"口径双重一致。需要验证 R13 隔离行为的测试自行 patch
+    # 回真实值。
+    from unittest.mock import patch as _mock_patch
+
+    with _mock_patch("src.agents.llm_client.get_first_valid_model_name", return_value=None):
+        # 2026-09-28 性能优化配套：llm_client 热路径把缓存开关/目录做了进程内
+        # 环境变量记忆（首次调用定值后复用，省每次 LLM 调用的两次 getenv）。
+        # autouse 隔离在本 fixture 内切目录/开关，必须在切后清一次记忆；teardown
+        # （monkeypatch 还原环境变量后）再清一次，恢复"读环境变量"历史口径
+        # （conftest 是测试入口模块，顶层导入保持 import 排序干净、零运行时成本）
+        clear_llm_cache_option_memory()
+        yield
+        clear_llm_cache_option_memory()

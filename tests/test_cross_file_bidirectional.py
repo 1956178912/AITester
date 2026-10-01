@@ -47,8 +47,10 @@ class TestUnidirectional:
         assert deps[0].source_module == "entry"
         assert deps[0].target_module == "utils"
         assert deps[0].symbol == "helper"
-        # 调用行上下文含 compute
-        assert "compute" in deps[0].context or deps[0].call_line > 0
+        # 调用行上下文含 compute（此前 `... or deps[0].call_line > 0` 第二分句
+        # 独立为真即放行，context 为空也通过；2026-10-02 审查修复）
+        assert "compute" in deps[0].context, f"调用行上下文不含 compute: {deps[0].context!r}"
+        assert deps[0].call_line > 0
 
     def test_entry_missing_returns_empty(self):
         deps = analyze_cross_file_deps("nope", {"entry": _ENTRY})

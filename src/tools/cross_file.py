@@ -34,6 +34,7 @@ import json
 import logging
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -594,7 +595,7 @@ def _topological_order(
     # 入度：module 的入度 = 它引用了哪些其他待改模块（需等这些模块先改）。
     # 按"边"计数（同一对模块的 K 条并行依赖边计 K，释放时逐边 -1，
     # 统计口径对称——见下方队列循环注释）
-    in_degree: dict[str, int] = {m: 0 for m in modules}
+    in_degree: dict[str, int] = dict.fromkeys(modules, 0)
     for d in deps:
         if d.source_module in modules and d.target_module in modules and d.source_module != d.target_module:
             # source 引用 target → source 入度 +1（需等 target 先改）
@@ -714,22 +715,30 @@ def _save_repair_plan_cache(key: str, plan: CrossFileRepairPlan) -> None:
 
     if not _llm_cache_enabled():
         return
+    target = ""
+    tmp = ""
     try:
         from src.agents.llm_client import ensure_llm_cache_dir, secure_cache_file
 
         cache_dir = ensure_llm_cache_dir()
         target = os.path.join(cache_dir, f"{key}.json")
-        # 写同目录临时文件后 os.replace 原子替换（同分区保证原子性）
-        tmp = target + ".tmp"
+        # 写同目录临时文件后 os.replace 原子替换（同分区保证原子性）。
+        # O35（P2 并发）：临时名此前固定为 `target + ".tmp"`——原子性只保证
+        # 单写者，--parallel 下两个 worker 命中同一 key 时会**共用同一个
+        # 临时路径**，各自 write 到一半互相截断，replace 进 target 的是
+        # 交错损坏的 JSON（与本函数 docstring 要解决的问题同型）。加
+        # pid + thread ident 双键后各写各的临时文件，replace 各自原子生效。
+        tmp = f"{target}.{os.getpid()}.{threading.get_ident()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(plan.to_dict(), f, ensure_ascii=False)
         # 18. 安全改进：缓存文件收敛 0o600（与 LLM 文件缓存同口径）
         secure_cache_file(tmp)
         os.replace(tmp, target)
     except OSError as e:
-        # 原子替换失败时清理临时文件，避免残留
-        with contextlib.suppress(OSError):
-            os.unlink(target + ".tmp")
+        # 原子替换失败时清理临时文件，避免残留（tmp 未赋值时为安全空串）
+        if tmp:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
         logger.debug("跨文件修复计划缓存写入失败 %s: %s", key, e)
 
 

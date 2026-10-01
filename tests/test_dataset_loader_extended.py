@@ -645,12 +645,18 @@ class TestLoadDatasetExtended:
     """测试 load_dataset 工厂函数扩展场景（第 623-634 行）"""
 
     def test_synthetic_import_without_error(self):
-        """synthetic 名称触发导入但不立即加载"""
+        """synthetic 名称可正常触发 SyntheticDataset 惰性导入构造。
 
-        # 验证 SyntheticDataset 可导入
-        # load_dataset 会传递 subset 参数，但 SyntheticDataset 不接受
-        # 因此测试导入本身即可
-        assert "SyntheticDataset" in dir() or True  # 导入检查
+        此前断言为 `assert "SyntheticDataset" in dir() or True`——`or True`
+        恒真（dir() 中从未导入该名也通过，2026-10-02 审查修复消除恒真
+        断言）。改为真实执行 load_dataset("synthetic") 的惰性导入路径，
+        断言返回 SyntheticDataset 实例（不触发任务生成，task_count 用
+        最小值避免耗时）。
+        """
+        ds = load_dataset("synthetic", task_count=1)
+        from src.datasets.synthetic_dataset import SyntheticDataset
+
+        assert isinstance(ds, SyntheticDataset), f"synthetic 惰性导入失败: {type(ds)}"
 
     def test_load_dataset_in_memory_auto_adds_samples(self):
         """load_dataset('in_memory') 自动添加示例任务"""

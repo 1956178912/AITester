@@ -47,6 +47,7 @@ from __future__ import annotations
 import ast
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -175,8 +176,12 @@ class ExpertPoolAgent:
             focus_function: 焦点函数名（可选）。
 
         Returns:
-            候选列表，每项含 {"dimension": str, "patch": str, "confidence": float,
-            "expert_failed": bool}（expert_failed=True 时 patch 为空串）。
+            候选列表，每项含 {"dimension": str, "patch": str, "new_code":
+            str | None, "confidence": float, "expert_failed": bool}
+            （expert_failed=True 时 patch 为空串、new_code 为 None）。
+            new_code（2026-09-30 审查补充）：补丁应用后的完整代码——
+            _debugger_node 多解合成按 CandidateResult 契约消费（new_code
+            参与 AST 区域 diff）；apply 失败时为 None，调用侧兜底。
         """
         if not target_code:
             return []
@@ -215,29 +220,85 @@ class ExpertPoolAgent:
                     focus_function=focus_function,
                     temperature=_EXPERT_TEMPERATURE,  # 专家维度聚焦：比默认温度低（收紧发散）
                 )
+                _patch_expert = result.get("patch") or ""
+                from src.tools.patch_applier import apply_patch_to_code as _apply_patch_expert
+
+                _exp_code, _exp_applied = _apply_patch_expert(target_code, _patch_expert)
                 candidates[idx] = {
                     "dimension": dimension,
-                    "patch": result.get("patch") or "",
+                    # 合成口径（2026-09-30 审查修复）：_debugger_node 多解合成
+                    # 按 CandidateResult 契约消费候选——patch=补丁文本、
+                    # new_code=应用后的完整代码。补丁应用失败时 new_code=None
+                    # （调用侧经 static_validate_patch 兜底判定，不劣化）。
+                    "new_code": _exp_code if _exp_applied else None,
+                    "patch": _patch_expert,
                     "confidence": _EXPERT_BASE_CONFIDENCE,  # 专家无内置置信度评估，保守基线
                     "expert_failed": False,
                 }
             except Exception as e:
                 logger.warning("专家 %d（维度=%s）产出候选失败（保守降级为空候选）: %s", idx, dimension, e)
-                candidates[idx] = {"dimension": dimension, "patch": "", "confidence": 0.0, "expert_failed": True}
+                candidates[idx] = {
+                    "dimension": dimension,
+                    "patch": "",
+                    # 与成功路径同口径携带 new_code 键（失败 = None，调用侧
+                    # static_validate_patch 兜底判定）
+                    "new_code": None,
+                    "confidence": 0.0,
+                    "expert_failed": True,
+                }
 
-        with ThreadPoolExecutor(max_workers=self.expert_count, thread_name_prefix="expert_pool") as pool:
-            futures = [pool.submit(_run_expert, i, dim) for i, dim in enumerate(dimensions)]
-            # 带超时等待（避免单专家卡死拖垮整池）
-            import concurrent.futures as cf
+        # 2026-10-01 全面审查 P1 修复：此前用 cf.wait(futures, timeout) +
+        # except cf.TimeoutError 做超时保护——但 concurrent.futures.wait 从不
+        # 抛 TimeoutError（它返回 (done, not_done) 集合），该 except 是死代码；
+        # 且 `with ThreadPoolExecutor` 块退出时 shutdown(wait=True) 仍会阻塞等
+        # 所有 future（含挂死的那个），"填充未完成槽位"循环永不触发。净效果：
+        # 单专家 LLM 挂死 = 整池 + 整轮 debugger + 整图卡死，EXPERT_POOL_TIMEOUT
+        # 完全失效（与文档"带超时等待避免单专家拖住整池"直接矛盾）。
+        # 现改为：不用 with 块（避免 shutdown(wait=True) 阻塞），逐个
+        # fut.result(timeout=remaining) 等待（Future.result 才会抛
+        # concurrent.futures.TimeoutError——注意是 future 级异常而非
+        # cf.TimeoutError 类型），超时的 future 保守降级为空候选（专家线程
+        # 后台继续跑但不再阻塞主流程；线程是守护线程，进程退出时自然终止）。
+        # 挂死专家的 _run_expert 异常分支仍会写 candidates[idx]（线程内写，
+        # 主流程已跳过——保守口径：主流程不再等它，已写到的值也不读）。
+        pool = ThreadPoolExecutor(max_workers=self.expert_count, thread_name_prefix="expert_pool")
+        futures = [pool.submit(_run_expert, i, dim) for i, dim in enumerate(dimensions)]
+        import concurrent.futures as cf
 
-            try:
-                cf.wait(futures, timeout=timeout_s)
-            except cf.TimeoutError:
-                logger.warning("专家池等待超时（%ds），未完成专家保守降级为空候选", timeout_s)
-        # 填充未完成的槽位（保守：expert_failed=True 的空候选）
+        start = time.monotonic()
+        timed_out = False
         for i, fut in enumerate(futures):
-            if not fut.done():
-                candidates[i] = {"dimension": dimensions[i], "patch": "", "confidence": 0.0, "expert_failed": True}
+            remaining = timeout_s - (time.monotonic() - start)
+            if remaining <= 0:
+                timed_out = True
+                break
+            try:
+                fut.result(timeout=remaining)
+            except cf.TimeoutError:
+                timed_out = True
+                logger.warning(
+                    "专家池等待超时（%.1fs），专家 %d 起未完成专家保守降级为空候选",
+                    timeout_s,
+                    i,
+                )
+                break
+            except Exception as e:
+                # _run_expert 内部已捕获全部异常，这里仅防御性兜底
+                logger.warning("专家 %d 线程异常（保守降级为空候选）: %s", i, e)
+        if timed_out:
+            # 未完成的槽位保守降级（含已 break 时剩余 futures 全部）
+            for j in range(len(futures)):
+                if candidates[j] is None:
+                    candidates[j] = {
+                        "dimension": dimensions[j],
+                        "patch": "",
+                        "new_code": None,  # 与成功路径同口径（失败 = None）
+                        "confidence": 0.0,
+                        "expert_failed": True,
+                    }
+        # 不阻塞 shutdown（wait=False）：挂死专家的线程后台自然终止，
+        # 主流程立即返回（避免 with 块退出时的 shutdown(wait=True) 卡死）。
+        pool.shutdown(wait=False)
         return [c for c in candidates if c is not None]
 
     def cross_validate(self, candidates: list[dict[str, Any]], min_agreement: int = 2) -> list[dict[str, Any]]:
@@ -250,13 +311,27 @@ class ExpertPoolAgent:
         - 按 (被验证数, 置信度) 降序排序，过滤被验证数 < min_agreement 的候选
           （"误报"过滤，Anthropic Code Review 同口径）。
 
+        O5（2026-09-29 审查 P1）：置信度由可验证信号派生——此前所有候选
+        confidence 恒为 _EXPERT_BASE_CONFIDENCE（0.5），投票仅按
+        verified_count 排序、confidence 并列无区分度。现按可验证信号
+        重新计算：
+        - 基线 = _EXPERT_BASE_CONFIDENCE（历史口径）；
+        - + 0.1 × min(verified_count - 1, 3)（被更多专家验证 → 更高置信度，
+          封顶 3 防饱和）；
+        - + 0.05（patch 长度 ≥ 200 字符 → 实质性修复，非空壳）；
+        - - 0.1（patch 含"TODO"/"FIXME"/"HACK" → 未完成标记，保守降权）；
+        - 结果 clip 到 [0.0, 1.0]。
+        历史基线（verified_count=0、无 TODO、patch 短）= 0.5，不变。
+        默认关时（EXPERT_POOL_ENABLE=false）本方法不被调用，历史口径不变。
+
         Args:
             candidates: generate_parallel 产出的候选列表。
             min_agreement: 最小同意数（默认 2 = 至少 1 个其他专家同意，
                 1 = 不投票仅按置信度排序）。
 
         Returns:
-            排序后的候选列表（每项追加 "verified_count" / "agreed_dimensions" 字段）。
+            排序后的候选列表（每项追加 "verified_count" / "agreed_dimensions"
+            / "confidence"（O5 可验证信号派生）字段）。
         """
         valid = [c for c in candidates if not c.get("expert_failed") and c.get("patch")]
         if not valid:
@@ -273,6 +348,15 @@ class ExpertPoolAgent:
                     agreed.append(j)
             c["verified_count"] = len(agreed)
             c["agreed_dimensions"] = [normalized[k][0]["dimension"] for k in agreed]
+            # O5（2026-09-29 审查 P1）：可验证信号派生置信度
+            _o5_conf = _EXPERT_BASE_CONFIDENCE
+            _o5_conf += 0.1 * min(c["verified_count"] - 1, 3)
+            _o5_patch_text = c.get("patch", "")
+            if len(_o5_patch_text) >= 200:
+                _o5_conf += 0.05
+            if any(marker in _o5_patch_text for marker in ("TODO", "FIXME", "HACK")):
+                _o5_conf -= 0.1
+            c["confidence"] = round(max(0.0, min(1.0, _o5_conf)), 4)
         # 过滤 + 排序（被验证数 + 置信度 降序）
         filtered = [c for c in valid if c.get("verified_count", 0) >= min_agreement]
         filtered.sort(key=lambda c: (c.get("verified_count", 0), c.get("confidence", 0.0)), reverse=True)

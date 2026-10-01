@@ -23,8 +23,60 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9+/=_-]{40,}={0,2})(?![A-Za-z0-9+/_=])"), "<REDACTED_KEY>"),
     # Base64 编码的密钥
     (re.compile(r'(?:key|token|secret|password)=(.{8,})(?:\s|$|")'), r"key=<REDACTED>"),
+    # O17 残留（2026-09-29 审查 D.4-4 + 2026-10-02 修复）：大写命名凭证赋值
+    # （MYSQL_PASSWORD= / DB_SECRET= / AWS_SECRET_ACCESS_KEY= 等）不匹配上面
+    # 小写锚定模式（大小写敏感），值被原样放进日志/trace 即成泄露面。
+    # 与 .git-hooks/check_secret_leak.sh 的同名模式同口径（锚定大写前缀 +
+    # 凭证词根 + 值 >= 8 位）；占位符（YOUR_ / xxxxx 等）由调用方的
+    # 占位符过滤放行，本模式保持纯匹配语义。
+    (
+        re.compile(r"\b[A-Z][A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|API_KEY|TOKEN|CREDENTIAL)=[^\s\"']{8,}"),
+        r"<REDACTED_CREDENTIAL>",
+    ),
     # JWT Token
     (re.compile(r"(eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"), "<REDACTED_JWT>"),
+    # O18（2026-09-29 审查 P0）：四类脱敏盲区补齐。
+    # 历史实测：Authorization: Bearer <token> / URL userinfo (https://user:pass@host)
+    # / DSN (mysql://root:pass@host) / AWS key (AKIA...) 四类凭证在
+    # SensitiveFilter/SensitiveFormatter 与 audit_log_redaction.py 实测
+    # **原样通过**（4 类探针全未脱敏），而审计脚本自身对同 4 类也漏检
+    # （假绿）。本 4 条模式补齐该缺口，使 4 类探针全部被脱敏。
+    # 1. Authorization: Bearer <token>
+    (re.compile(r"(Bearer\s+[A-Za-z0-9\-_\.~+/=]{8,})"), "<REDACTED_BEARER>"),
+    # 2. URL userinfo: https://user:pass@host
+    (
+        re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)(?P<userinfo>[^/@\s]+:)(?P<password>[^@\s]+)@"),
+        r"\g<1><REDACTED_USERINFO>@",
+    ),
+    # 3. AWS Access Key（AKIA/ASIA 前缀 + 16~20 位大写字母数字）
+    (re.compile(r"\b((?:AKIA|ASIA)[A-Z0-9]{16,20})\b"), "<REDACTED_AWS_KEY>"),
+    # 4. DB DSN 口令（mysql://、postgres://、mongodb:// 等）
+    (
+        re.compile(
+            r"(?i)\b((?:mysql|postgres|postgresql|mongodb|redis|amqp)://)(?P<userinfo>[^/@\s]+:)(?P<password>[^@\s]+)@"
+        ),
+        r"\g<1><REDACTED_DSN_USERINFO>@",
+    ),
+    # O35（2026-09-30 全面审查 P2）：冒号 / JSON 键值形态的凭证赋值。
+    # 历史探针实测三类原样通过（本文件既有模式只锚定 `key=` 小写等号与
+    # 全大写 `PASSWORD=` 等号，覆盖不到）：
+    #   {"password": "supersecret123"}   （JSON 序列化配置回显）
+    #   password: supersecret123         （YAML / 结构化日志）
+    #   api_key: AIzaSyA1b2...            （39 位 Google 风格 key，不足
+    #                                       base64 规则的 40 位下限）
+    # 关键点后须跟 : 或 = 才命中（与 audit_log_redaction._SENSITIVE_FIELD_RE
+    # 同口径），避免 "password reset"、"secret management" 类叙述误报；
+    # 值长 <8 字符不命中（占位/示例值），值内不含空白与 JSON 分隔符。
+    # 追加于列表末尾 → 既有下标 [0..9] 不移位，_FALLBACK_PATTERNS 的
+    # (0,1,2,4,5,7) 选取与 verify_redaction_consistency 的键派生校验均不受影响。
+    (
+        re.compile(
+            r"(?i)(\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token"
+            r"|private[_-]?key|client[_-]?secret|credential)s?\b[\"']?\s*[:=]\s*[\"']?)"
+            r"([^\s\"',;}\]]{8,})"
+        ),
+        r"\g<1><REDACTED>",
+    ),
 ]
 
 # 4.2 改进：fallback 兜底模式（"长随机串 + JWT"类凭证）——脱敏模块
@@ -35,7 +87,10 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
 # 注：_SENSITIVE_PATTERNS[0]=sk- 前缀、[1]=32+ hex、[2]=40+ base64、
 # [3]=key=xxx 赋值、[4]=JWT；fallback 取 [0,1,2,4]（sk/hex/base64/JWT），
 # 跳过 [3]（key=xxx 依赖上下文匹配，降级态保守起见不纳入，避免误伤）。
-_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(_SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4))
+# O18：fallback 现扩展纳入 Bearer（索引 5）与 AWS key（索引 7）两条
+# 高优先级模式，URL userinfo / DSN 保持主模式覆盖（降级态保守，
+# 避免误伤普通 URL）。
+_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(_SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4, 5, 7))
 
 # setup_logger_safety 的"检查-追加"段锁（2026-09-26 全面审查：并发调用幂等化）
 _logger_safety_lock = threading.Lock()
@@ -294,7 +349,7 @@ def verify_redaction_consistency(sample_texts: list[str]) -> bool:
             _consist_logger.warning("脱敏一致性守卫：mask_sensitive_info 与 redact_text 口径分叉（降级态？）")
             return False
     # 键派生一致性：fallback 占位符必须是主模式占位符的子集逐对等值
-    main_repl = {p: r for p, r in _SENSITIVE_PATTERNS}
+    main_repl = dict(_SENSITIVE_PATTERNS)
     for pattern, repl in _FALLBACK_PATTERNS:
         if main_repl.get(pattern) != repl:
             _consist_logger.warning("脱敏一致性守卫：_FALLBACK_PATTERNS 与 _SENSITIVE_PATTERNS 键派生分叉")

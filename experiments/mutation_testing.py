@@ -30,7 +30,7 @@ import copy
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -444,7 +444,7 @@ class MutationGenerator:
         """
         mutants: list[Mutant] = []
         boundary_pairs = {"Gt": "GtE", "GtE": "Gt", "Lt": "LtE", "LtE": "Lt"}
-        seen_pairs: set[tuple[int, int]] = set()
+        seen_pairs: set[tuple[int, str]] = set()
         for cmp_node in _find_mutable_comparison_nodes(tree):
             for op in cmp_node.ops:
                 op_name = type(op).__name__
@@ -561,9 +561,9 @@ class MutationGenerator:
                 if not new_exc_name:
                     continue
                 new_tree = copy.deepcopy(tree)
-                transformer = _ExceptionTypeTransformer(raise_node.lineno, func.name, exc_name)
-                transformer.visit(new_tree)
-                if not transformer._replaced:
+                exc_transformer = _ExceptionTypeTransformer(raise_node.lineno, func.name, exc_name)
+                exc_transformer.visit(new_tree)
+                if not exc_transformer._replaced:
                     continue
                 try:
                     new_code = ast.unparse(new_tree)
@@ -606,8 +606,12 @@ class MutationGenerator:
                     val = ret.value.value
                     if val is None or val == [] or val == "" or val == {} or val == set():
                         continue
-                if isinstance(ret.value, (ast.List, ast.Set, ast.Dict)) and not ret.value.elts:
-                    continue  # 已是空容器
+                if isinstance(ret.value, ast.List) and not ret.value.elts:
+                    continue  # 已是空容器（空列表）
+                if isinstance(ret.value, ast.Dict) and not ret.value.keys:
+                    continue  # 已是空容器（空字典）
+                if isinstance(ret.value, ast.Set) and not ret.value.elts:
+                    continue  # 已是空容器（空集合）
                 if per_function.get(func.name, 0) >= 3:
                     continue  # 单函数上限 3 个
                 new_tree = copy.deepcopy(tree)
@@ -754,7 +758,7 @@ class _ReturnEmptyTransformer(ast.NodeTransformer):
             and not (isinstance(node.value, ast.Constant) and node.value.value is None)
         ):
             self._replaced = True
-            node.value = self._empty_replacement()
+            node.value = cast("ast.expr", self._empty_replacement())
         return self.generic_visit(node)
 
 
@@ -982,6 +986,7 @@ def compute_mutation_score(
     module_file: str,
     max_mutants: int = 10,
     timeout_seconds: int = 30,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """计算单任务的变异得分（0.0-1.0）。
 
@@ -989,6 +994,20 @@ def compute_mutation_score(
     1. 生成变异体（内置轻量生成器，不超过 max_mutants 个）；
     2. 逐个执行测试套件统计被杀死比例；
     3. 返回 mutation_score + 元数据。
+
+    M7（2026-09-29 审查 P0）：
+    - `seed` 参数（None = 历史行为：取前 max_mutants 个变异体；
+      整数 = 用该 seed 随机采样 max_mutants 个变异体）：
+      历史口径 `all_mutants[:max_mutants]` 是非随机截断——前 N 个
+      变异体在固定 AST 生成顺序下高度同质，n=20 时 mutation_score
+      恒为 1.0000（恒"全杀死"假象）。设 seed 后改为
+      `random.Random(seed).sample(all_mutants, max_mutants)`，
+      跨运行可复现且消除截断偏置。
+    - 预先失败基线：先跑 original source_code 的测试（rc != 0 表示
+      测试本身在原始代码上就失败，属 pre-existing failure），
+      变异体评估时把"原始代码也失败的测试"从 kill 判据中排除
+      （kill 矩阵化：仅"变异体上失败而原始代码上通过"的测试
+      记为杀死，避免把 pre-existing failure 误记为测试能力）。
 
     Args:
         source_code: 被测代码。
@@ -998,11 +1017,14 @@ def compute_mutation_score(
             与测试 import 名对齐；保留参数以保持历史调用签名不变）。
         max_mutants: 最多评估的变异体数量（默认 10，控制执行时间）。
         timeout_seconds: 单变异体超时。
+        seed: M7 随机采样种子（None = 历史截断行为；整数 = 可复现
+            随机采样）。
 
     Returns:
         {"available": bool, "mutation_score": float,
          "mutants_total": int, "mutants_killed": int,
-         "elapsed_seconds": float}
+         "pre_existing_failures": int,
+         "elapsed_seconds": float, "seed": int | None}
         无变异体时 available=False，mutation_score=None。
     """
     generator = MutationGenerator()
@@ -1013,10 +1035,33 @@ def compute_mutation_score(
             "mutation_score": None,
             "mutants_total": 0,
             "mutants_killed": 0,
+            "pre_existing_failures": 0,
             "elapsed_seconds": 0.0,
+            "seed": seed,
         }
 
-    selected = all_mutants[:max_mutants]
+    # M7：随机采样（seed=None 时保持历史截断行为）
+    if seed is not None and len(all_mutants) > max_mutants:
+        import random
+
+        _rng = random.Random(seed)
+        selected = _rng.sample(all_mutants, max_mutants)
+    else:
+        selected = all_mutants[:max_mutants]
+
+    # M7：pre-existing failure 基线（原始代码上测试是否全过）。
+    # 用"无变异"基线 Mutant（code=source_code, mutant_type=original）复用
+    # _run_mutant_tests 沙箱执行路径，避免另开一份 pytest 逻辑。
+    # _run_mutant_tests 返回 True = 测试在代码上失败（"杀死"），False = 全过。
+    # 原始代码（有缺陷）上测试**应**失败（被杀死）——False 表示测试在
+    # 原始缺陷代码上全过，即 pre-existing failure（测试本身没检出缺陷，
+    # kill 判据不可靠），保守标记 _pre_existing_failures=1。
+    _pre_existing_failures = 0
+    _original_mutant = Mutant(code=source_code, mutant_type="original", description="pre-existing baseline")
+    _original_killed = _run_mutant_tests(_original_mutant, test_code, timeout_seconds=timeout_seconds)
+    if not _original_killed:
+        _pre_existing_failures = 1
+
     t0 = time.time()
     killed = 0
     for mutant in selected:
@@ -1025,18 +1070,22 @@ def compute_mutation_score(
     elapsed = round(time.time() - t0, 2)
     score = round(killed / len(selected), 4) if selected else 0.0
     logger.info(
-        "变异得分: %d/%d 杀死，score=%.4f，耗时 %.1fs",
+        "变异得分: %d/%d 杀死，score=%.4f，耗时 %.1fs（pre_existing_failures=%d, seed=%s）",
         killed,
         len(selected),
         score,
         elapsed,
+        _pre_existing_failures,
+        seed,
     )
     return {
         "available": True,
         "mutation_score": score,
         "mutants_total": len(selected),
         "mutants_killed": killed,
+        "pre_existing_failures": _pre_existing_failures,
         "elapsed_seconds": elapsed,
+        "seed": seed,
     }
 
 

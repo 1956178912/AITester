@@ -374,3 +374,59 @@ class TestLlmPatchHelpers:
             text=True,
         )
         assert r.returncode == 0, f"git apply --check failed: {r.stderr}"
+
+
+class TestPatchPathBoundary:
+    """S6（2026-09-29 审查 P0 + 2026-10-02 修复）：补丁 new-file 兜底写盘
+    的越界路径防护。
+
+    rel_path 取自补丁 `+++ b/<path>`（LLM / 上游数据可控），绝对路径或
+    `../` 序列此前经 os.path.join 直接写盘 → 可逃出 repo_dir（如
+    `+++ b/../../evil.txt`）。修复后 realpath 归一化必须仍在 repo_dir 内，
+    否则跳过该 hunk 的手动回填（git apply 自身校验不受影响）。
+    """
+
+    def test_traversal_rel_path_rejected(self, tmp_path):
+        """`../` 逃逸路径：兜底写入被拒绝，越界文件不落盘。"""
+        ex = _executor(tmp_path)
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        outside_target = tmp_path.parent / "evil_s6_marker.txt"
+        patch = _new_file_patch("../../evil_s6_marker.txt", "pwned")
+        patch_file = tmp_path / "evil.patch"
+        patch_file.write_text(patch)
+        ex._apply_patch_robust(str(repo), str(patch_file))
+        assert not outside_target.exists(), "越界 new-file 兜底写入未被拦截"
+        # repo 内也不应产生解析后越界的残留
+        assert not (repo / ".." / ".." / "evil_s6_marker.txt").exists()
+
+    def test_absolute_rel_path_rejected(self, tmp_path):
+        """绝对路径 rel_path：os.path.join 会丢弃 repo_dir 前缀，须拒绝。"""
+        ex = _executor(tmp_path)
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        abs_marker = tmp_path / "abs_s6_marker.txt"
+        # 手工构造 +++ b/<绝对路径> 形态（_new_file_patch 带 b/ 前缀，绝对路径
+        # 形态需裸路径）
+        body = "pwned-abs"
+        patch = (
+            "diff --git a/x b/x\nnew file mode 100644\nindex 0000000..abc\n"
+            f"--- /dev/null\n+++ {abs_marker}\n" + "".join(f"+{ln}\n" for ln in body.splitlines())
+        )
+        patch_file = tmp_path / "abs.patch"
+        patch_file.write_text(patch)
+        ex._apply_patch_robust(str(repo), str(patch_file))
+        assert not abs_marker.exists(), "绝对路径 new-file 兜底写入未被拦截"
+
+    def test_in_repo_new_file_still_written(self, tmp_path):
+        """仓库内正常 new-file 路径：兜底写入照常（防护不误伤）。"""
+        ex = _executor(tmp_path)
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        patch = _new_file_patch("tests/test_new_s6.py", "def test_ok():\n    assert True\n")
+        patch_file = tmp_path / "ok.patch"
+        patch_file.write_text(patch)
+        ex._apply_patch_robust(str(repo), str(patch_file))
+        written = repo / "tests" / "test_new_s6.py"
+        assert written.is_file(), "仓库内合法 new-file 兜底写入被误拦截"
+        assert "test_ok" in written.read_text()

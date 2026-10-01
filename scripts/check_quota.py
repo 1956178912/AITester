@@ -167,7 +167,7 @@ def _targets_by_provider(provider: str, key_env: str | None) -> list[dict]:
         return []
     models = [e["model_name"] for e in _load_catalog() if e.get("provider") == provider]
     if not models:
-        models = []  # 目录里没有该 provider
+        models = []  # 目录里没有该 provider（保守：返回空，由 main 的 targets 空检查提示）
     key = os.getenv(key_env) if key_env else _key_for_base_url(base_url)
     return [{"model": m, "base_url": base_url, "key": key, "origin": f"catalog:{provider}"} for m in models]
 

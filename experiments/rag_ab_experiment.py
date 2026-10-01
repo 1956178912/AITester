@@ -80,55 +80,39 @@ def _std(vals: list[float]) -> float:
 
 
 def _welch_ttest(a: list[float], b: list[float]) -> tuple[float, float]:
-    """Welch's t-test（不假设方差齐性），返回 (t_stat, p_value)。"""
+    """Welch's t-test（不假设方差齐性），返回 (t_stat, p_value)。
+
+    2026-10-01 全面审查 P1 修复：此前用 Z 近似 + 保守系数（df<30 时
+    p *= (1+1/(4df))^(-1/2)）计算 p 值，小样本（n=2）时系统性失真——
+    实测 n=2 时 rag_ab 报 p=0.081 而 scipy 精确 p=0.318（方向性错误）。
+    现改用 scipy.stats.ttest_ind（equal_var=False，与
+    experiments/statistical_analysis.py 同源），n<2 的 guard 不变。
+    """
     if len(a) < 2 or len(b) < 2:
         return 0.0, 1.0
-    ta, tb = _mean(a), _mean(b)
-    va, vb = _var(a), _var(b)
-    na, nb = len(a), len(b)
-    se = ((va / na) + (vb / nb)) ** 0.5
-    if se == 0:
-        return 0.0, 1.0
-    t = (ta - tb) / se
-    df = ((va / na + vb / nb) ** 2) / ((va / na) ** 2 / (na - 1) + (vb / nb) ** 2 / (nb - 1))
-    # p 值近似（df >= 30 时 Z 近似）
-    from math import erf, sqrt
+    import scipy.stats as _st
 
-    p = 1.0 - erf(abs(t) / sqrt(2.0))
-    if df < 30:
-        p *= (1.0 + 1.0 / (4.0 * df)) ** -0.5
-    return t, min(p, 1.0)
+    t_stat, p_value = _st.ttest_ind(a, b, equal_var=False)
+    return float(t_stat), float(p_value)
 
 
 def _mann_whitney_u(a: list[float], b: list[float]) -> tuple[float, float]:
-    """Mann-Whitney U 检验（秩和检验），返回 (U_stat, p_value)。"""
+    """Mann-Whitney U 检验（秩和检验），返回 (U_stat, p_value)。
+
+    2026-10-01 全面审查 P1 修复：此前用正态近似 z=(U-mu)/sigma 计算 p 值，
+    小样本（n1=n2=2）时 exact p 应为 0.333 但报成 1.0。现改用
+    scipy.stats.mannwhitneyu（exact 当样本量 < 50 时自动启用，
+    与 experiments/statistical_analysis.py 同源）。
+    """
     if len(a) < 1 or len(b) < 1:
         return 0.0, 1.0
-    combined = sorted([(v, 0) for v in a] + [(v, 1) for v in b])
-    n1, n2 = len(a), len(b)
-    ranks: list[float] = [0.0] * (n1 + n2)
-    i = 0
-    while i < len(combined):
-        j = i
-        while j + 1 < len(combined) and combined[j + 1][0] == combined[i][0]:
-            j += 1
-        avg_rank = (i + 1 + j + 1) / 2.0
-        for k in range(i, j + 1):
-            ranks[k] = avg_rank
-        i = j + 1
-    r1 = sum(ranks[k] for k in range(n1 + n2) if combined[k][1] == 0)
-    u1 = r1 - n1 * (n1 + 1) / 2.0
-    u2 = n1 * n2 - u1
-    u = min(u1, u2)
-    mu = n1 * n2 / 2.0
-    sigma = (n1 * n2 * (n1 + n2 + 1) / 12.0) ** 0.5
-    if sigma == 0:
-        return u, 1.0
-    z = (u - mu) / sigma
-    from math import erf, sqrt
+    import scipy.stats as _st
 
-    p = 2.0 * (1.0 - 0.5 * (1.0 + erf(z / sqrt(2.0))))
-    return u, min(max(p, 0.0), 1.0)
+    result = _st.mannwhitneyu(a, b, alternative="two-sided")
+    # scipy 1.11+ 返回 MannwhitneyuResult（.statistic/.pvalue），旧版返回 (U, p)
+    u_stat = getattr(result, "statistic", result[0])
+    p_value = getattr(result, "pvalue", result[1])
+    return float(u_stat), float(p_value)
 
 
 def _cohens_d(a: list[float], b: list[float]) -> float:

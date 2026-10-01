@@ -41,9 +41,36 @@ _EXC_INFO_RE = re.compile(r"exc_info\s*=\s*True")
 # 避免中文叙述词（如 "token 统计" 指用量而非密钥）误报。
 _SENSITIVE_FIELD_RE = re.compile(
     r"""(?:"?api_key"?\s*=|'?api_key'?\s*=|"?secret"?\s*=|"?password"?\s*=|'password'\s*=|"""
-    r"""Authorization|Bearer\s+[A-Za-z0-9]|sk-[A-Za-z0-9]|credential[s]?\s*=)""",
+    r"""Authorization|Bearer\s+[A-Za-z0-9]|sk-[A-Za-z0-9]|credential[s]?\s*=|"""
+    # O33（2026-09-30 全面审查优化）：三类残余盲区（探针实测原样通过）——
+    # ① 带空格/连字符的字段名变体（api key: / api-key= / passwd= / access_token= /
+    #    private key:，字段名后必须跟 : 或 = 才命中，避免"password reset"类叙述误报）；
+    # ② AWS Access Key 裸值（AKIA/ASIA + 16~20 位大写——字段名形态已由 O18 覆盖，
+    #    裸值形态缺失）；
+    # ③ DB DSN scheme+userinfo（mysql://root:pw@host——字段名形态缺失）。
+    # 实测：对全仓 438 个 logger 调用点零新增误报（与 logging_utils._SENSITIVE_PATTERNS 同步口径）。
+    r"""\b(?:api[-_ ]?key|passwd|access[-_ ]?token|refresh[-_ ]?token|private[-_ ]?key)\s*[:=]|"""
+    r"""\b(?:AKIA|ASIA)[0-9A-Z]{16,20}\b|"""
+    r"""(?:mysql|postgres|postgresql|mongodb|redis|amqp)://[^/@\s]+:)""",
     re.IGNORECASE,
 )
+# O18（2026-09-29 审查 P0）：四类脱敏盲区同步扩展（与
+# src/utils/logging_utils.py _SENSITIVE_PATTERNS 后 4 条同口径）：
+# 1. Bearer token（Authorization: Bearer <token>）
+# 2. URL userinfo（https://user:pass@host）
+# 3. AWS Access Key（AKIA/ASIA + 16~20 位大写）
+# 4. DB DSN 口令（mysql://root:pass@host 等）
+_SENSITIVE_PATTERNS_O18: list[re.Pattern] = [
+    re.compile(r"Bearer\s+[A-Za-z0-9\-_\.~+/=]{8,}"),
+    re.compile(r"[a-zA-Z][a-zA-Z0-9+.\-]*://[^/@\s]+:[^@\s]+@"),
+    re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16,20}\b"),
+    re.compile(r"(?i)\b(?:mysql|postgres|postgresql|mongodb|redis|amqp)://[^/@\s]+:[^@\s]+@"),
+]
+
+
+def _match_o18_patterns(line: str) -> bool:
+    """O18：检测日志行是否命中 4 类脱敏盲区模式。"""
+    return any(p.search(line) for p in _SENSITIVE_PATTERNS_O18)
 
 
 @dataclass
@@ -121,6 +148,9 @@ def audit(repo_root: str) -> AuditResult:
             #    （项目统一入口 cli/app.py setup_logger_safety 已全局挂上，
             #      此处仅标记供人工复核，不算 finding）
             # 2) 参数含敏感字段名且无 _redact/mask_sensitive_info → 可疑
+            # O18（2026-09-29 审查 P0）：4 类脱敏盲区（Bearer / URL
+            # userinfo / AWS key / DSN）同步纳入检测，与 logging_utils
+            # 的 _SENSITIVE_PATTERNS 后 4 条同口径。
             if (
                 _SENSITIVE_FIELD_RE.search(stripped)
                 and not _REDACTED_CALL_RE.search(stripped)
@@ -132,6 +162,19 @@ def audit(repo_root: str) -> AuditResult:
                         line_no=i,
                         line=stripped[:160],
                         reason="logger 参数含敏感字段名且未检测到脱敏调用",
+                    )
+                )
+            elif (
+                _match_o18_patterns(stripped)
+                and not _REDACTED_CALL_RE.search(stripped)
+                and re.match(r"^(logger|logging)\.", stripped)
+            ):
+                result.findings.append(
+                    Finding(
+                        file=rel,
+                        line_no=i,
+                        line=stripped[:160],
+                        reason="O18：logger 参数命中 4 类脱敏盲区（Bearer/URL userinfo/AWS key/DSN）且未检测到脱敏调用",
                     )
                 )
     return result

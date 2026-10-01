@@ -92,7 +92,9 @@ def main() -> int:
 
     if not _smoke_enabled():
         print("AITESTER_SMOKE_LLM != true，跳过 LLM 冒烟（历史口径零 LLM 成本）。")
-        print("如需真实 LLM 集成冒烟，设 AITESTER_SMOKE_LLM=true 并配置 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL。")
+        print(
+            "如需真实 LLM 集成冒烟，设 AITESTER_SMOKE_LLM=true 并配置 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL_NAME。"
+        )
         return 0
 
     require_json = args.require_json and not args.allow_empty

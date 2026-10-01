@@ -37,7 +37,10 @@ class TestExtractPatchTokens:
     def test_metadata_lines_dropped(self):
         tokens = extract_patch_tokens(_SAMPLE_GOLDEN)
         # 文件头/ hunk 头 的行标记（a/b 路径词）不参与
-        assert "calc.py" not in tokens or not any("calc" in t and t.endswith(".py") for t in tokens)
+        # （此前 `X not in tokens or not any(...)` 两分句等价、第一分句恒真即
+        # 放行；2026-10-02 审查修复为逐项断言 token 集合不含任何 .py 路径词）
+        assert "calc.py" not in tokens
+        assert not any(t.endswith(".py") for t in tokens), f"元数据路径词混入 token: {tokens}"
         # 修改行内容参与
         assert "return" in tokens
         assert "zerodivisionerror" in tokens

@@ -23,6 +23,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+@pytest.mark.unit
 class TestRAGModuleImport:
     """测试 RAG 模块导入异常情况。"""
 
@@ -39,6 +40,7 @@ class TestRAGModuleImport:
             assert workflow_module.TestCaseRetriever is None
 
 
+@pytest.mark.unit
 class TestGetRAGRetriever:
     """测试 RAG 检索器单例获取。"""
 
@@ -123,6 +125,7 @@ class TestGetRAGRetriever:
         mock_retriever_class.assert_not_called()
 
 
+@pytest.mark.unit
 class TestPlannerNode:
     """测试 Planner 节点更多场景。"""
 
@@ -178,6 +181,7 @@ class TestPlannerNode:
         assert call_args[0][1] is None
 
 
+@pytest.mark.unit
 class TestGeneratorNode:
     """测试 Generator 节点更多场景。"""
 
@@ -263,6 +267,7 @@ class TestGeneratorNode:
             workflow_module.ENABLE_PLANNER = original_planner
 
 
+@pytest.mark.unit
 class TestExecutorNode:
     """测试 Executor 节点更多场景。"""
 
@@ -342,6 +347,7 @@ class TestExecutorNode:
         assert result["test_passed"] is True
 
 
+@pytest.mark.unit
 class TestDebuggerNode:
     """测试 Debugger 节点完整流程。"""
 
@@ -500,6 +506,7 @@ class TestDebuggerNode:
         assert result["diagnosis"] == "未知错误"
 
 
+@pytest.mark.unit
 class TestPatchApplierNode:
     """测试 PatchApplier 节点安全检查和迭代逻辑。"""
 
@@ -621,6 +628,7 @@ class TestPatchApplierNode:
         assert result["iteration"] == 3
 
 
+@pytest.mark.unit
 class TestEdgeCases:
     """测试边界情况和异常场景。"""
 
@@ -677,13 +685,13 @@ class TestEdgeCases:
         """不同关键词触发的重新生成路由。"""
         from src.graph.workflow import _should_debug
 
+        # M5（2026-09-29 审查 P0）：AttributeError/NameError/SyntaxError 已从
+        # 关键词表删除（源码缺陷签名词，防实现缺陷误判为测试缺陷→假通过），
+        # 用保留的通用关键词验证 regenerate 路径。
         keywords = [
             "测试生成错误",
             "测试设计存在错误",
             "test code",
-            "AttributeError",
-            "NameError",
-            "SyntaxError",
             "测试用例",
             "期望的异常类型",
         ]
@@ -692,6 +700,22 @@ class TestEdgeCases:
             state = {"test_passed": False, "iteration": 3, "max_iterations": 3, "diagnosis": f"问题: {keyword}"}
             result = _should_debug(state)
             assert result == "regenerate", f"关键词 '{keyword}' 应触发重新生成"
+
+    @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
+    def test_should_debug_source_defect_signatures_not_regen(self):
+        """M5（2026-09-29 审查 P0）：源码缺陷签名词不再触发 regenerate。
+
+        修复前：AttributeError / NameError / SyntaxError 出现在诊断文本中即
+        路由回 generator 重写测试（把实现缺陷误判为测试缺陷 → 源码未改而
+        测试通过 → 假成功且无任何标记）。修复后：这些词仅作为自由文本出现，
+        不命中"测试生成错误"关键词表 → 走常规 debug 路径。
+        """
+        from src.graph.workflow import _should_debug
+
+        for sig in ("AttributeError", "NameError", "SyntaxError"):
+            state = {"test_passed": False, "iteration": 3, "max_iterations": 3, "diagnosis": f"问题: 出现 {sig}"}
+            result = _should_debug(state)
+            assert result != "regenerate", f"{sig} 不应触发重新生成（M5 修复）"
 
     @patch("src.graph.workflow.ENABLE_DEBUGGER", True)
     def test_should_debug_non_test_error(self):
@@ -733,6 +757,7 @@ class TestEdgeCases:
         assert _should_debug(state_capped) == "debug"
 
 
+@pytest.mark.unit
 class TestGetWorkflowStats:
     """测试工作流统计的更多场景。"""
 
@@ -758,6 +783,7 @@ class TestGetWorkflowStats:
         assert stats["workflow_config"]["MAX_ITERATIONS"] == 5
 
 
+@pytest.mark.unit
 class TestPlannerNodeDedup:
     """_planner_node 异常路径与校验失败路径共用 _get_default_test_plan 构造点（0.1 去重）。
 
@@ -767,7 +793,12 @@ class TestPlannerNodeDedup:
 
     @patch("src.graph.nodes.PlannerAgent")
     def test_exception_path_equals_helper_output(self, mock_planner_class):
-        """异常路径产出的默认计划必须与 helper 输出完全一致（同构造点护栏）"""
+        """异常路径产出的默认计划必须与 helper 输出完全一致（同构造点护栏）。
+
+        M10（2026-09-29 审查 P0）：异常路径额外标记 logic_degraded=True
+        （纯观测，供实验层区分"逻辑驱动成功"与"降级到默认计划"），
+        此键为观测新增键，不影响历史字段等价性。
+        """
         from src.graph.workflow import _get_default_test_plan, _planner_node
 
         mock_agent = MagicMock()
@@ -776,7 +807,12 @@ class TestPlannerNodeDedup:
 
         state = {"target_code": "def foo(): pass"}
         result = _planner_node(state)
-        assert result["test_plan"] == _get_default_test_plan(None)
+        expected = _get_default_test_plan(None)
+        # 历史字段必须与 helper 输出完全一致
+        for key, val in expected.items():
+            assert result["test_plan"][key] == val, f"key {key!r} mismatch"
+        # M10：异常路径额外标记 logic_degraded=True（纯观测新增键）
+        assert result["test_plan"].get("logic_degraded") is True
 
     @patch("src.graph.nodes.PlannerAgent")
     def test_exception_path_empty_function_name_normalized(self, mock_planner_class):
@@ -792,6 +828,7 @@ class TestPlannerNodeDedup:
         assert result["test_plan"]["function_name"] == "unknown"
 
 
+@pytest.mark.unit
 class TestDefaultOffFeatureBranches:
     """3.1 多候选补丁 / 3.5 跨文件修复（默认关）的节点分支补测。
 

@@ -3,6 +3,11 @@ AITester 包管理配置文件。
 
 使用 python setup.py install 或 pip install -e . 进行安装。
 包含基础依赖与可选 extras：[rag], [viz], [dev]。
+
+O9（2026-09-29 审查 P0）：PEP 621 [project] 元数据已迁移到
+pyproject.toml（唯一事实来源）。本 setup.py 退化为兼容 shim：
+pip 构建时优先读 pyproject.toml；setup.py 仅在 setuptools
+回退路径（非 PEP 517 构建）下生效。
 """
 
 from setuptools import find_packages, setup
@@ -21,7 +26,9 @@ def _load_version() -> str:
 setup(
     name="aitester",
     version=_load_version(),
-    packages=find_packages(),
+    # O9：仅收录 src/ 包（排除 experiments/ / scripts/ / tests/ 等
+    # 非发布目录），使 wheel 只含 src/ + config.py
+    packages=find_packages(include=["src", "src.*"]),
     # 根级 config.py 是全局配置模块（src/ 内 6 个模块 from config import ...），
     # 它不是含 __init__.py 的包，find_packages() 不会收录；不声明 py_modules
     # 则正式安装（pip install . 非 editable）后 entry point 触发 ModuleNotFoundError: config
@@ -41,6 +48,12 @@ setup(
         "python-dotenv>=1.0.0",
         # 注：radon 于 2026-09-09 依赖审计中移除（全项目无 import 引用）
         "requests>=2.31.0",
+        # O35（2026-09-30 全面审查 P1）：与 pyproject.toml [project].dependencies
+        # 对齐的两个直接 import 依赖（src/api/api_manager.py → openai；
+        # src/agents/llm_client.py → zai）。PEP 517 路径以 pyproject 为准，
+        # 此处保留仅为非 PEP 517 回退路径的口径一致。
+        "openai>=1.0.0",
+        "zai-sdk>=0.2.0",
     ],
     extras_require={
         "rag": ["chromadb>=0.5.0"],
@@ -57,4 +70,6 @@ setup(
             "aitester=src.cli.app:cli",
         ],
     },
+    # O9：LICENSE 字段（与 pyproject.toml [project] license = {file = "LICENSE"} 对齐）
+    license_files=["LICENSE"],
 )

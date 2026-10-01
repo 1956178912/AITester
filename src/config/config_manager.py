@@ -6,6 +6,7 @@ API 配置管理工具
 - 生成配置报告
 - 验证配置完整性
 """
+# ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
 
 from __future__ import annotations
 
@@ -113,9 +114,28 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         return False
 
     if index is None:
-        # 自动分配：已占用编号的最大值 + 1（空文件则为 1）
+        # 自动分配：已占用编号的最大值 + 1（空文件则为 1）。
+        # 2026-10-01 全面审查 P2 修复：此前自动分配无上界钳制——删除
+        # LLM_32~LLM_33 后重新自动分配会落到 34，超出 config.py 的
+        # _LLM_MAX_SCAN_INDEX=32 扫描窗口，_load_llm_configs 永远扫不到
+        # 新写入的 LLM_34_* 块（"幽灵 LLM_34"——配置写成功但实际不生效，
+        # 与自动分配的"避免冲突"语义直接矛盾）。现钳制到
+        # config._LLM_MAX_SCAN_INDEX 上限，超出时返回 False（与"已占用编号
+        # 冲突"同口径拒绝，调用方拿到 False 可改走显式 index 或清理旧块）。
         used = _scan_llm_indices(existing_content)
         index = max(used) + 1 if used else 1
+        from config import _LLM_MAX_SCAN_INDEX
+
+        if index > _LLM_MAX_SCAN_INDEX:
+            logger.warning(
+                "自动分配 LLM 配置索引 %d 超出 config._LLM_MAX_SCAN_INDEX=%d 扫描上限，"
+                "写入后 _load_llm_configs 不会扫到（幽灵 LLM_%d），已拒绝——"
+                "请清理旧 LLM_N_* 块或改用显式 index 参数",
+                index,
+                _LLM_MAX_SCAN_INDEX,
+                index,
+            )
+            return False
     else:
         # 显式指定：校验合法性。编号冲突（已有 LLM_N_* 块）时若仍追加，
         # 会产生同一编号两套配置——_load_llm_configs 按编号扫描时后读覆盖
@@ -246,17 +266,26 @@ def remove_llm_config(model_name: str) -> bool:
 
 
 def print_config_report() -> None:
-    """打印配置报告"""
+    """打印配置报告（stdout 出口：base_url 经 mask_sensitive_info 脱敏后显示）。
+
+    O33（2026-09-30 全面审查优化）：本函数直接 print 到 stdout（不经 logging
+    handler 的 SensitiveFilter/Formatter 双层脱敏），部分网关会把 token 内嵌在
+    base_url 路径/查询串中——与 APIManager.get_status() 的出口脱敏口径对齐，
+    显示前先过 mask_sensitive_info（幂等，已是安全形态的 URL 不受影响）。
+    """
+    from src.utils.logging_utils import mask_sensitive_info
+
     print("\n" + "=" * 80)
     print("LLM 配置报告")
     print("=" * 80)
     print(f"总模型数: {len(LLM_CONFIGS)}")
     print("-" * 80)
-    print(f"{'编号':<6} {'模型名称':<25} {'API 端点':<45}")
+    print(f"{'编号':<6} {'模型名称':<25} {'API 端点（脱敏）':<45}")
     print("-" * 80)
     for idx, config in enumerate(LLM_CONFIGS, start=1):
-        # 截取 URL 显示
-        url_display = config.base_url[:42] + "..." if len(config.base_url) > 45 else config.base_url
+        # 截取 URL 显示（先脱敏后截断：保证泄露段不落入显示窗口）
+        masked_url = mask_sensitive_info(config.base_url)
+        url_display = masked_url[:42] + "..." if len(masked_url) > 45 else masked_url
         print(f"{idx:<6} {config.model_name:<25} {url_display:<45}")
     print("=" * 80 + "\n")
 

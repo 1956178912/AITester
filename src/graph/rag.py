@@ -20,6 +20,7 @@ import glob
 import json
 import logging
 import os
+import os as _os
 import re
 import threading
 from collections.abc import Callable
@@ -209,7 +210,6 @@ def rag_guarded(
 #      当前 error_category 匹配的案例时才注入（检索器侧 where 过滤已保证
 #      同类目，本开关在注入侧做二次门控：零结果时明确不注入，避免空
 #      案例占位）。
-import os as _os
 
 _RAG_RELEVANCE_THRESHOLD_ENABLE_ENV = "RAG_RELEVANCE_THRESHOLD_ENABLE"
 _RAG_RELEVANCE_THRESHOLD_ENV = "RAG_RELEVANCE_THRESHOLD"
@@ -262,7 +262,12 @@ def filter_by_relevance(
         - filter_rate_pct：被过滤比例（0.0 = 无案例被过滤）。
     """
     if refs is None:
-        return refs, 0, 0.0
+        # 2026-10-01 全面审查 P2 修复：mypy 错误——此前返回 refs（None）但签名
+        # 声明 tuple[list[dict[str, Any]], int, float]。调用点 nodes.py:505/507、
+        # 1176/1178 在调用前均 if refs: 兜底，None 输入永不到达此处（dead branch），
+        # 但类型标注与返回值不符。现返回 ([], 0, 0.0) 与签名一致（语义等价：
+        # "无案例"= 空列表）。
+        return [], 0, 0.0
     if not rag_relevance_threshold_enabled():
         return refs, 0, 0.0
     if threshold is None:
@@ -300,7 +305,8 @@ def should_inject_refs(
         return False
     if error_category:
         matched = any(
-            isinstance(r, dict) and str(r.get("metadata", {}).get("error_category", "")).lower() == str(error_category).lower()
+            isinstance(r, dict)
+            and str(r.get("metadata", {}).get("error_category", "")).lower() == str(error_category).lower()
             for r in refs
         )
         if not matched:
@@ -376,8 +382,12 @@ def _iter_candidate_docs() -> list[tuple[str, str, str]]:
         except (OSError, json.JSONDecodeError, AttributeError, TypeError):
             continue
     # 2. rag_data 持久化案例（JSON 列表 / 对象扁平化文本）
+    # 2026-10-02 审查修复：RAG_PERSIST_PATH 为空时此前仍执行
+    # `glob(os.path.join("", "*.json"))` = `glob("*.json")`——在**当前工作
+    # 目录**误扫一切 JSON（如 coverage.json / benchmark 结果），既污染关键词
+    # 兜底材料源，也可能把无关大文件读进 prompt。空目录时直接跳过本段。
     rag_dir = RAG_PERSIST_PATH if isinstance(RAG_PERSIST_PATH, str) and RAG_PERSIST_PATH else ""
-    for f in sorted(glob.glob(os.path.join(rag_dir, "*.json")))[:200]:
+    for f in sorted(glob.glob(os.path.join(rag_dir, "*.json")))[:200] if rag_dir else []:
         try:
             with open(f, encoding="utf-8") as fh:
                 data = json.load(fh)

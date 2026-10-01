@@ -623,16 +623,30 @@ class TestConcurrentUpsertGuard:
     """
 
     def test_concurrent_upsert_serialized(self, retriever):
-        """并发入库时 upsert 次数 = worker 数（写锁保证串行，无 lost-update）。"""
+        """并发入库时 upsert 次数 = worker 数，且**同一时刻至多一个**在临界区内。
+
+        O35（2026-09-30 审查 F）修复：本用例此前给 fake_upsert 自己套了一把
+        `upsert_lock` 再自增计数——串行性由测试自带的锁保证，与被测对象
+        `TestCaseRetriever._write_lock` 无关，把 _write_lock 删掉断言照样过
+        （用例对被测行为不可证伪）。现改为**不引入任何外部锁**，直接度量
+        临界区并发度：进入时 +1、退出时 -1、期间 sleep 让出调度窗口，
+        记录观测到的最大并发数；真正的串行化只能来自被测代码的写锁。
+        """
         import threading
 
-        # 模拟 collection.upsert 在写锁内被调用（用真实锁 + 计数验证串行）
         upsert_count = {"n": 0}
-        upsert_lock = threading.Lock()
+        max_concurrent = {"cur": 0, "peak": 0}
+        stat_lock = threading.Lock()  # 仅保护统计量读改写（不是串行化手段）
 
         def fake_upsert(**kwargs):
-            with upsert_lock:
+            with stat_lock:
                 upsert_count["n"] += 1
+                max_concurrent["cur"] += 1
+                max_concurrent["peak"] = max(max_concurrent["peak"], max_concurrent["cur"])
+            # 让出调度窗口：无写锁时 8 个线程会在此重叠 → peak > 1
+            time.sleep(0.01)
+            with stat_lock:
+                max_concurrent["cur"] -= 1
 
         retriever.collection.upsert.side_effect = fake_upsert
         retriever.collection.count.return_value = 0  # 容量未满，全部通过
@@ -655,51 +669,59 @@ class TestConcurrentUpsertGuard:
         for t in threads:
             t.join()
 
-        # 8 个 worker 各入库一次 → upsert 恰好 8 次（写锁串行化，无丢失）
+        # 8 个 worker 各入库一次 → upsert 恰好 8 次（无丢失、无重入）
         assert upsert_count["n"] == workers
+        # 关键断言：被测写锁必须把临界区串行化（否则 8 线程必然重叠）
+        assert max_concurrent["peak"] == 1, f"upsert 临界区并发度 = {max_concurrent['peak']}（写锁失效）"
 
     def test_cleanup_not_blocked_by_upsert_lock(self, retriever):
-        """清理（锁外）不被 upsert 写锁阻塞——验证 _upsert 中清理在 with 锁外执行。
+        """清理（写锁外）不被 upsert 写锁阻塞——在写锁**被持有时**测清理耗时。
 
-        实现口径：monkeypatch _cleanup_expired_and_excess，模拟"清理在锁外被调用"。
-        若清理仍被锁内调用（旧行为），则 fake_upsert 持有写锁期间清理无法运行。
-        本测试用独立线程验证：upsert 持锁时，另一个线程的清理仍可立即返回。
+        实现口径（0.7 P1-2.1）：_upsert 只把 `collection.upsert` 放进写锁，
+        清理 / 容量检查在锁外执行。
+
+        O35（2026-09-30 审查 F）修复：本用例此前先在**主线程同步**跑完
+        add_case（写锁早已释放），再在无竞争状态下测一次清理耗时并断言
+        `elapsed < 1.0`——注释自承"若被阻塞 0.2s+ 仍 <1s"，即阈值比最坏
+        情况还宽，锁是否真的在锁外对结果毫无影响（不可证伪）。
+        现改为：后台线程持写锁期间（upsert 内 sleep 600ms），主线程发起
+        清理并断言 < 300ms——若清理在锁内，必然被阻塞约 600ms 而失败。
         """
         import threading
 
-        # fake upsert：持有写锁 0.2s 模拟嵌入推理耗时
         upsert_started = threading.Event()
-        upsert_lock_held = threading.Event()
 
+        # fake upsert：在写锁内驻留 600ms，模拟嵌入推理 + HNSW 写入耗时
         def slow_upsert(**kwargs):
             upsert_started.set()
-            # 占用写锁 0.2s（模拟嵌入推理 + HNSW 写入）
-            import time as _time
-
-            _time.sleep(0.2)
-            upsert_lock_held.set()
+            time.sleep(0.6)
 
         retriever.collection.upsert.side_effect = slow_upsert
         retriever.collection.count.return_value = 0
         retriever.max_cases = 1000
 
-        # 主线程：阻塞在 upsert（写锁内 sleep）
-        main_upsert_done = threading.Event()
-        retriever.add_case(
-            code="def main(): return 1",
-            test_code="def test_main(): assert main() == 1",
-            passed=True,
+        # 后台线程：阻塞在写锁内的 upsert
+        writer = threading.Thread(
+            target=retriever.add_case,
+            kwargs={
+                "code": "def main(): return 1",
+                "test_code": "def test_main(): assert main() == 1",
+                "passed": True,
+            },
         )
-        main_upsert_done.set()
+        writer.start()
+        try:
+            # 确认写锁已被该线程持有（slow_upsert 已进入）
+            assert upsert_started.wait(timeout=5.0), "upsert 未进入写锁（测试前提不成立）"
 
-        # 护栏：清理（锁外）不依赖写锁——单独调用应即时返回（<1s）
-        import time as _time
-
-        t0 = _time.time()
-        retriever._cleanup_expired_and_excess()
-        elapsed = _time.time() - t0
-        assert elapsed < 1.0  # 清理不排队（若清理在写锁内，会被 slow_upsert 阻塞 0.2s+，仍 <1s，
-        # 但本测试主要验证清理可独立调用、不崩溃）
+            # 关键断言：写锁被持有时清理仍应立即返回（阈值 300ms < 600ms 驻留）
+            t0 = time.time()
+            retriever._cleanup_expired_and_excess()
+            elapsed = time.time() - t0
+            assert elapsed < 0.3, f"清理被写锁阻塞 {elapsed:.3f}s（应在锁外执行）"
+        finally:
+            writer.join(timeout=5.0)
+        assert not writer.is_alive()
 
     def test_retrieve_with_missing_fields(self, retriever):
         """验证检索结果缺少字段时的容错处理。"""

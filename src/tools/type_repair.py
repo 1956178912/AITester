@@ -279,6 +279,7 @@ def _run_pyright_findings(
             capture_output=True,
             text=True,
             timeout=60,
+            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
         # 解析 JSON 输出：{"version":..., "generalDiagnostics": [...]}
         import json as _json
@@ -354,7 +355,7 @@ def _infer_literal_type(node: ast.expr) -> str | None:
             return "str"
         if isinstance(v, bytes):
             return "bytes"
-        if isinstance(v, type(None)):
+        if v is None:
             return "None"
         return None
     if isinstance(node, ast.List):

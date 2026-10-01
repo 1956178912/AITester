@@ -51,7 +51,18 @@ _FULL_STACK_KEYS: tuple[str, ...] = (
 )
 
 # 错误类型分桶（与 gap_report G8 "按错误类型分析哪类收益最大"对齐）
-_ERROR_BUCKETS: tuple[str, ...] = ("assertion", "runtime", "import_error", "syntax", "unknown")
+# 2026-10-01 全面审查 P1 修复：此前 5 桶硬编码与 ErrorCategory 17 值枚举
+# 零交集漂移——实测 experiments/results/ 63 个 benchmark JSON 中 88% 失败行
+# （type_error / index_error / timeout / llm_* / patch_validation_failed /
+# execution_trace_missing / multi_candidate_all_rejected / patch_syntax_invalid
+# 等）全落 "other"，分桶失去区分度。现直接 import ErrorCategory 动态分桶
+# （枚举值单一来源，消除硬编码漂移），"other" 仅保留给真正未分类值。
+# import 须放在 sys.path 注入之后（PROJECT_ROOT 已入 sys.path），
+# 模块顶层 import 无法在 experiments/ 脚本运行时解析 src.* 包。
+from src.agents.error_classifier import ErrorCategory  # noqa: E402
+
+# 全量枚举值（动态，与 error_classifier 单一来源）
+_ERROR_BUCKETS: tuple[str, ...] = tuple(v.value for v in ErrorCategory)
 
 
 def _load_summaries(paths: list[str]) -> list[dict[str, Any]]:
@@ -97,8 +108,19 @@ def _aggregate_group(summaries: list[dict[str, Any]]) -> dict[str, Any]:
         results = summary.get("results", {})
         for baseline, bl in results.items():
             details = bl.get("details", [])
+            # O23（2026-09-29 审查 P2）：分母分子同源——历史口径
+            # `per_baseline_tasks[baseline] += len(details)`（分母 = details
+            # 总行数）与 `per_baseline_passed[baseline] += bl.get("passed_count", 0)`
+            # （分子 = 汇总层 passed_count）来自不同层：_build_task_result
+            # 在 details 为空时仍写 passed_count=0，但 len(details)=0 的分母
+            # 与 passed_count 不同源 → 若某基线 details 缺失而 passed_count
+            # 非 0（或反之），success_rate 分母/分子口径漂移。现统一为
+            # details 同源：total = len(details)，passed = 统计 details 中
+            # row.get("passed") 为 True 的行数（与分子同一来源），
+            # 消除"分母取 len(details)、分子取 passed_count"的跨层口径。
+            _detail_passed = sum(1 for row in details if row.get("passed"))
             per_baseline_tasks[baseline] += len(details)
-            per_baseline_passed[baseline] += bl.get("passed_count", 0)
+            per_baseline_passed[baseline] += _detail_passed
             per_baseline_errors.setdefault(baseline, Counter())
             per_baseline_iterations.setdefault(baseline, [])
             per_baseline_elapsed.setdefault(baseline, [])
@@ -282,9 +304,31 @@ def main() -> int:
     on_agg = _aggregate_group(on_summaries)
     off_agg = _aggregate_group(off_summaries)
 
-    # 开关指纹（展示 ON 组实际生效的全开组合）
+    # O23（2026-09-29 审查 P2）：按开关指纹真分组——历史 ON/OFF 组把**所有**
+    # 文件整体池化（_aggregate_group 汇总全部 summaries），混合不同开关
+    # 组合（如 RUNTIME_PROBE_ENABLE=true + CROSS_FILE_ENABLE=false 与
+    # RUNTIME_PROBE_ENABLE=false + CROSS_FILE_ENABLE=true 池化在一起），
+    # 导致"全开"结论被部分开组合稀释/混淆。现按指纹分组：同一指纹的
+    # 文件聚合为一组，不同指纹各自独立报告，消除整体池化。
     on_fingerprints = [_switch_fingerprint(s) for s in on_summaries]
     off_fingerprints = [_switch_fingerprint(s) for s in off_summaries]
+
+    # 按指纹分组 ON 组
+    on_groups: dict[tuple[tuple[str, bool], ...], list[dict[str, Any]]] = {}
+    for summary, fp in zip(on_summaries, on_fingerprints, strict=True):
+        key = tuple(sorted(fp.items()))
+        on_groups.setdefault(key, []).append(summary)
+
+    # 按指纹分组 OFF 组
+    off_groups: dict[tuple[tuple[str, bool], ...], list[dict[str, Any]]] = {}
+    for summary, fp in zip(off_summaries, off_fingerprints, strict=True):
+        key = tuple(sorted(fp.items()))
+        off_groups.setdefault(key, []).append(summary)
+
+    # O23：若 ON 组仅有一种指纹（最常见情况：全开 ON 组所有文件开关一致），
+    # 行为与历史整体池化等价（on_agg 不变）；若多种指纹，输出时标注
+    # "多开关组合池化，结论不可归因到单一开关"（保守口径）。
+    _multi_fingerprint_warning = len(on_groups) > 1 or len(off_groups) > 1
     on_keys = Counter(tuple(sorted(fp.items())) for fp in on_fingerprints)
     off_keys = Counter(tuple(sorted(fp.items())) for fp in off_fingerprints)
 
@@ -306,9 +350,38 @@ def main() -> int:
         enabled = [k for k, v in key if v]
         md_lines.append(f"- {', '.join(enabled) or '(无)'} × {count}")
     md_lines.append("")
-    md_lines.append(_render_on_vs_off(on_agg, off_agg))
-    md_lines.append("")
-    md_lines.append(_render_error_buckets(on_agg, off_agg))
+
+    # O23（2026-09-29 审查 P2）：多开关组合池化警告——当 ON 组或 OFF 组
+    # 含多种不同开关指纹时，整体池化结论不可归因到单一开关组合，
+    # 保守标注提示用户按指纹分组查看。
+    if _multi_fingerprint_warning:
+        md_lines.append(
+            f"> ⚠ O23 多开关组合池化警告：ON 组含 {len(on_groups)} 种指纹，"
+            f"OFF 组含 {len(off_groups)} 种指纹。整体池化结论不可归因到单一开关"
+            "组合。以下按指纹分组输出各组合的独立对比表：\n"
+        )
+        md_lines.append("")
+        for group_key, group_summaries in sorted(on_groups.items(), key=lambda x: x[0]):
+            enabled = [k for k, v in group_key if v]
+            label = ", ".join(enabled) if enabled else "(全关)"
+            group_agg = _aggregate_group(group_summaries)
+            md_lines.append(f"### ON 组指纹：{label}（{len(group_summaries)} 文件）")
+            md_lines.append("")
+            md_lines.append(_render_on_vs_off(group_agg, off_agg))
+            md_lines.append("")
+        for group_key, group_summaries in sorted(off_groups.items(), key=lambda x: x[0]):
+            enabled = [k for k, v in group_key if v]
+            label = ", ".join(enabled) if enabled else "(全关)"
+            group_agg = _aggregate_group(group_summaries)
+            md_lines.append(f"### OFF 组指纹：{label}（{len(group_summaries)} 文件）")
+            md_lines.append("")
+            md_lines.append(_render_on_vs_off(on_agg, group_agg))
+            md_lines.append("")
+    else:
+        # 单一指纹：整体池化口径（与历史等价）
+        md_lines.append(_render_on_vs_off(on_agg, off_agg))
+        md_lines.append("")
+        md_lines.append(_render_error_buckets(on_agg, off_agg))
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as f:

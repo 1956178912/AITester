@@ -126,7 +126,12 @@ class TestExtractImports:
 
 
 class TestExecuteEnv:
-    """execute() 非 venv 路径的环境构造（PYTHONPATH / cwd 深度）。"""
+    """execute() 非 venv 路径的环境构造（PYTHONPATH / cwd 深度）。
+
+    R10（2026-09-30 独立审查 N8，P1）：EXECUTOR_USE_VENV 默认 true，
+    ExecutorAgent() 缺省回落 config（venv 沙箱）。本类测的是"非 venv
+    路径"的环境构造，故显式 use_venv=False 构造（opt-out 历史口径）。
+    """
 
     @patch("src.agents.executor.ExecutorAgent._run_pytest_with_retry")
     @patch("src.agents.executor.ExecutorAgent._auto_fix_imports")
@@ -143,7 +148,7 @@ class TestExecuteEnv:
         target = tmp_path / "target.py"
         target.write_text("def x(): return 1\n", encoding="utf-8")
 
-        ExecutorAgent().execute("def test_x(): pass", str(target))
+        ExecutorAgent(use_venv=False).execute("def test_x(): pass", str(target))
 
         _, _, project_root = mock_retry.call_args.args
         # 测试文件位于 tests/test_executor.py → 上溯两层即仓库根
@@ -161,7 +166,7 @@ class TestExecuteEnv:
         target = tmp_path / "target.py"
         target.write_text("def x(): return 1\n", encoding="utf-8")
 
-        ExecutorAgent().execute("def test_x(): pass", str(target))
+        ExecutorAgent(use_venv=False).execute("def test_x(): pass", str(target))
 
         env = mock_retry.call_args.args[1]
         assert not env["PYTHONPATH"].endswith(os.pathsep)
@@ -178,7 +183,7 @@ class TestExecuteEnv:
         target = tmp_path / "target.py"
         target.write_text("def x(): return 1\n", encoding="utf-8")
 
-        ExecutorAgent().execute("def test_x(): pass", str(target))
+        ExecutorAgent(use_venv=False).execute("def test_x(): pass", str(target))
 
         env = mock_retry.call_args.args[1]
         assert env["PYTHONPATH"] == os.pathsep.join([str(tmp_path), "/a", "/b"])

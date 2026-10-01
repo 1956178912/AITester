@@ -143,19 +143,27 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         exceeded = True
     if budget.usd_limit > 0 and _usd_per_1k() > 0 and budget.consumed_usd >= budget.usd_limit:
         exceeded = True
+    # O35（2026-09-30 全面审查 P2）：tasks_capped 语义修正——此前超限后的
+    # **每一次** check_budget 调用都 +1（含被前置守卫拦下的后续调用），
+    # 该字段名是"被封顶的任务数"，实际计的是"被拦下的 LLM 调用数"
+    # （一次封顶任务可累计数十）。现只在 False→True 转跃沿 +1：
+    # budget_exceeded_events 保持逐事件计数（语义本就是事件数），两者解耦。
+    _was_exceeded = budget.exceeded
     budget.exceeded = exceeded
     if exceeded:
         with _lock:
             _process_stats["budget_exceeded_events"] += 1
-            _process_stats["tasks_capped"] += 1
+            if not _was_exceeded:
+                _process_stats["tasks_capped"] += 1
             _process_stats["total_consumed"] += consumed_delta_tokens
-        logger.warning(
-            "5.4 任务级预算超限：消耗 %d tokens / $%.4f >= 上限（tokens=%d, usd=%.4f），停止后续 LLM 调用",
-            budget.consumed_tokens,
-            budget.consumed_usd,
-            budget.token_limit,
-            budget.usd_limit,
-        )
+        if not _was_exceeded:
+            logger.warning(
+                "5.4 任务级预算超限：消耗 %d tokens / $%.4f >= 上限（tokens=%d, usd=%.4f），停止后续 LLM 调用",
+                budget.consumed_tokens,
+                budget.consumed_usd,
+                budget.token_limit,
+                budget.usd_limit,
+            )
     elif consumed_delta_tokens:
         with _lock:
             _process_stats["total_consumed"] += consumed_delta_tokens

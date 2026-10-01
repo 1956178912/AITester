@@ -32,8 +32,10 @@ Returns:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -92,6 +94,7 @@ def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = No
             text=True,
             timeout=timeout,
             env=env if env is not None else scrub_os_environ(),
+            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
     except subprocess.TimeoutExpired as e:
         # 超时：构造哨兵结果（stdout/stderr 取已捕获部分，None 兜底空串；
@@ -176,8 +179,7 @@ class RepoExecutor:
         """
         repo_name = repo_url.rstrip("/").split("/")[-1]
         # 去 .git 后缀（"sqlfluff/sqlfluff.git" → "sqlfluff"）
-        if repo_name.endswith(".git"):
-            repo_name = repo_name[: -len(".git")]
+        repo_name = repo_name.removesuffix(".git")
         env_dir = os.path.join(self.env_root, repo_name, base_commit[:12])
         repo_dir = os.path.join(env_dir, "repo")
 
@@ -279,8 +281,19 @@ class RepoExecutor:
                                                 "P0 4.3 editable 重指向失败（venv 仍指旧 commit 源码）: %s",
                                                 _repoint_err,
                                             )
+                                        # O35（P2 性能）：指纹命中分支已做过一次
+                                        # `pip install -e .`（上方 repoint），此前
+                                        # need_install 保持初值 True，下方会**再跑一次
+                                        # 同样的 pip install**——每次 venv 复用命中都
+                                        # 白付一遍 pip 启动/解析开销（秒级 × 每任务）。
+                                        # repoint 本身就是这次 install，故置 False 收口。
+                                        need_install = False
                                 else:
-                                    need_install = True
+                                    # 指纹不同（依赖变了）→ 必须重装。
+                                    # need_install 已在上方初始化为 True，本分支
+                                    # 无需再赋值（O35：原 `else: need_install = True`
+                                    # 是对初值的无操作死代码，已删）。
+                                    pass
                                 if need_install:
                                     env_error = self._venv_pip_install(repo_dir, venv_dir)
                                     if env_error:
@@ -355,8 +368,7 @@ class RepoExecutor:
             共享 venv 目录路径。
         """
         repo_name = repo_url.rstrip("/").split("/")[-1]
-        if repo_name.endswith(".git"):
-            repo_name = repo_name[: -len(".git")]
+        repo_name = repo_name.removesuffix(".git")
         return os.path.join(self.env_root, repo_name, "_shared_venv")
 
     def _dep_fingerprint(self, repo_dir: str) -> str:
@@ -504,94 +516,176 @@ class RepoExecutor:
             base_result["repo_env"] = env
             return base_result
 
-        # 临时文件名按 (pid, thread) 双键隔离——2026-09-26 全面审查 P1 并发安全：
-        # 此前仅 os.getpid()，--parallel 下多线程同仓库 verify 并发时同一 pid
-        # 的多个线程命中同一临时文件（一个线程正在 git apply 的补丁文件被
-        # 另一个线程覆盖/删除 → 半成品读入）。pid+thread ident 双键在
-        # ThreadPoolExecutor 复用线程场景下仍唯一（ident 在 thread.join() 前
-        # 不复用，且 os.getpid() 恒为当前进程，组合键进程内唯一）。
-        test_file = os.path.join(
-            tempfile.gettempdir(),
-            f"aitester_repo_test_{base_commit[:8]}_{os.getpid()}_{threading.get_ident()}.patch",
-        )
-        with open(test_file, "w", encoding="utf-8") as f:
-            f.write(test_patch)
-
+        # O35（2026-09-30 全面审查 P1）：verify() 与 setup() 共用同一工作区，
+        # 但此前**不持锁**——setup() 明确为 (repo, commit) 目录加 per-env 锁
+        # （L202 起的注释即写明"--parallel 下多任务同 (repo, commit) 并发"），
+        # 而 verify() 在锁外做 `git checkout -- .` / `git clean -fdx` / 应用补丁 /
+        # 跑测试。两线程同 (repo, commit) 并发 verify 时，一方的 checkout/clean
+        # 会把另一方刚 apply 的 llm_patch / test_patch 抹掉，F2P/P2P 裁决
+        # 静默失真（无任何报错）。现用**同一把 per-env_dir 锁**串行化。
+        # 锁在 setup() 返回后获取（setup 内部的同名锁已释放，无死锁；
+        # 本锁为非重入 Lock，故 verify 体内不得再进 setup()）。
+        # 获取点紧贴 try——下方**所有**路径（官方 harness 提前 return / 临时
+        # 文件写盘失败 / 正常收尾 / 任意异常）统一由 finally 释放，无泄漏。
+        _repo_name = repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
+        _verify_env_dir = os.path.join(self.env_root, _repo_name, base_commit[:12])
+        _verify_lock = _get_repo_setup_lock(_verify_env_dir)
+        _verify_lock.acquire()
         try:
-            # 1. 恢复干净基线（丢弃 llm_patch 残留与 test_patch 残留，从 HEAD 起）
-            _run(["git", "checkout", "--", "."], repo_dir, 60)
-            _run(["git", "clean", "-fd", "-x"], repo_dir, 120)
-
-            # 2. 应用 test_patch（基线 FAIL_TO_PASS 验证：确认缺陷可复现）。
-            # 空 test_patch（任务无 gold 测试）跳过 apply 与 --check，直接进
-            # FAIL_TO_PASS 基线实测（正常函数在基线就过 → base_not_failing）。
-            # 非空 test_patch：损坏文本经 git apply --check 拦截 → 显式诊断；
-            # 合法补丁走 _apply_patch_robust（含 Apple Git new-file bug 兜底）。
-            if test_patch and test_patch.strip():
-                pre_apply = _run(["git", "apply", "--check", test_file], repo_dir, 60)
-                if pre_apply.returncode != 0:
-                    base_result["error_info"] = {
-                        "type": "test_patch_apply_failed",
-                        "message": pre_apply.stderr.strip()[:500] or "test_patch 无法应用（git apply --check 拒绝）",
-                    }
+            # M3（2026-09-29 审查 P0）：官方 swebench 包路径（SWE_USE_OFFICIAL_HARNESS=true
+            # 时启用，默认 false 保持历史自建 harness 口径）。启用时先尝试
+            # `python -m swebench.harness.run_evaluation`，成功则以官方结果为准；
+            # 官方包未安装 / 执行失败时降级历史自建口径（零行为变化）。
+            if self._official_harness_enabled():
+                _official_result = self._run_official_swebench_harness(
+                    repo_url=repo_url,
+                    base_commit=base_commit,
+                    test_patch=test_patch,
+                    llm_patch=llm_patch,
+                    fail_to_pass=fail_to_pass,
+                    pass_to_pass=pass_to_pass,
+                )
+                if _official_result is not None:
+                    base_result.update(_official_result)
                     base_result["repo_env"] = env
+                    base_result["harness_source"] = "official_swebench"
                     return base_result
-                self._apply_patch_robust(repo_dir, test_file)
-            baseline_failures = self._run_fail_to_pass(repo_dir, fail_to_pass, repo_url=repo_url)
-            # 基线全过 = 任务数据有问题（缺陷已修）或 test_patch 未覆盖缺陷，如实记录
-            base_not_failing = len(baseline_failures["failed_cases"]) == 0
+                # 官方路径降级：记日志后继续自建口径
+                logger.info("M3 官方 swebench harness 降级（未安装/执行失败），回退自建 harness 口径")
 
-            # 3. 应用 llm_patch 后重跑。test_patch 全程留在工作区（不 stash，
-            # 避免带走 untracked 新建测试文件）；llm_patch 经
-            # _apply_patch_robust → git apply（含 --check 预检 + new-file
-            # 兜底回填），失败不阻断，FAIL_TO_PASS 实测裁决。
-            llm_applied = self._apply_llm_patch(repo_dir, llm_patch)
-            after = self._run_fail_to_pass(repo_dir, fail_to_pass, repo_url=repo_url)
-            p2p = (
-                self._run_pass_to_pass(repo_dir, pass_to_pass, repo_url=repo_url)
-                if pass_to_pass
-                else {"expected": 0, "passed": 0, "failed_cases": []}
+            # 临时文件名按 (pid, thread) 双键隔离——2026-09-26 全面审查 P1 并发安全：
+            # 此前仅 os.getpid()，--parallel 下多线程同仓库 verify 并发时同一 pid
+            # 的多个线程命中同一临时文件（一个线程正在 git apply 的补丁文件被
+            # 另一个线程覆盖/删除 → 半成品读入）。pid+thread ident 双键在
+            # ThreadPoolExecutor 复用线程场景下仍唯一（ident 在 thread.join() 前
+            # 不复用，且 os.getpid() 恒为当前进程，组合键进程内唯一）。
+            test_file = os.path.join(
+                tempfile.gettempdir(),
+                f"aitester_repo_test_{base_commit[:8]}_{os.getpid()}_{threading.get_ident()}.patch",
             )
+            with open(test_file, "w", encoding="utf-8") as f:
+                f.write(test_patch)
 
-            f2p_all = len(fail_to_pass) > 0 and len(after["failed_cases"]) == 0
-            p2p_no_regression = p2p["expected"] == 0 or len(p2p["failed_cases"]) == 0
-            passed = f2p_all and p2p_no_regression and not base_not_failing
+            # 内层 try：主验证体；finally 只负责临时补丁文件清理。
+            # 外层 finally（本 try 的配对）负责释放 _verify_lock。
+            try:
+                # 1. 恢复干净基线（丢弃 llm_patch 残留与 test_patch 残留，从 HEAD 起）
+                _run(["git", "checkout", "--", "."], repo_dir, 60)
+                _run(["git", "clean", "-fd", "-x"], repo_dir, 120)
 
-            # 4. 恢复"仅 test_patch"基线（下一轮迭代/下一基线复用该环境）。
-            # checkout -- . 清除 llm_patch 对已跟踪文件的修改；clean -fdx
-            # 清除全部 untracked（含 test_patch 新建测试文件 + llm_patch
-            # 副产物）；_apply_patch_robust 重建 test_patch 基线（new-file
-            # 兜底回填每轮生效）。空 test_patch 时跳过重建。
-            _run(["git", "checkout", "--", "."], repo_dir, 60)
-            _run(["git", "clean", "-fdx"], repo_dir, 120)
-            if test_patch and test_patch.strip():
-                self._apply_patch_robust(repo_dir, test_file)
+                # 2. 应用 test_patch（基线 FAIL_TO_PASS 验证：确认缺陷可复现）。
+                # 空 test_patch（任务无 gold 测试）跳过 apply 与 --check，直接进
+                # FAIL_TO_PASS 基线实测（正常函数在基线就过 → base_not_failing）。
+                # 非空 test_patch：损坏文本经 git apply --check 拦截 → 显式诊断；
+                # 合法补丁走 _apply_patch_robust（含 Apple Git new-file bug 兜底）。
+                if test_patch and test_patch.strip():
+                    pre_apply = _run(["git", "apply", "--check", test_file], repo_dir, 60)
+                    if pre_apply.returncode != 0:
+                        base_result["error_info"] = {
+                            "type": "test_patch_apply_failed",
+                            "message": pre_apply.stderr.strip()[:500]
+                            or "test_patch 无法应用（git apply --check 拒绝）",
+                        }
+                        base_result["repo_env"] = env
+                        return base_result
+                    self._apply_patch_robust(repo_dir, test_file)
+                baseline_failures = self._run_fail_to_pass(repo_dir, fail_to_pass, repo_url=repo_url)
+                # 基线全过 = 任务数据有问题（缺陷已修）或 test_patch 未覆盖缺陷，如实记录
+                base_not_failing = len(baseline_failures["failed_cases"]) == 0
 
-            output = f"[FAIL_TO_PASS baseline] {baseline_failures['expected'] - len(baseline_failures['failed_cases'])}/{baseline_failures['expected']} passed\n"
-            output += f"[FAIL_TO_PASS after-llm-patch] {after['expected'] - len(after['failed_cases'])}/{after['expected']} passed\n"
-            output += f"[PASS_TO_PASS] {p2p['passed']}/{p2p['expected']} passed"
-            if not llm_applied:
-                output += "\n[llm_patch_apply_failed] 补丁未成功应用（判定按 FAIL_TO_PASS 实测）"
-            base_result["passed"] = passed
-            base_result["output"] = output
-            base_result["failed_cases"] = after["failed_cases"]
-            base_result["repo_env"] = {k: v for k, v in env.items()}
-            base_result["fail_to_pass"] = {
-                "expected": after["expected"],
-                "passed": after["expected"] - len(after["failed_cases"]),
-                "baseline_passed": baseline_failures["expected"] - len(baseline_failures["failed_cases"]),
-            }
-            base_result["pass_to_pass"] = {"expected": p2p["expected"], "passed": p2p["passed"]}
-            base_result["llm_patch_applied"] = llm_applied
-            if base_not_failing:
-                base_result["error_info"] = {
-                    "type": "base_not_failing",
-                    "message": "FAIL_TO_PASS 在基线（未打修复补丁）上全部通过：缺陷不可复现或任务数据异常",
+                # 3. 应用 llm_patch 后重跑。test_patch 全程留在工作区（不 stash，
+                # 避免带走 untracked 新建测试文件）；llm_patch 经
+                # _apply_patch_robust → git apply（含 --check 预检 + new-file
+                # 兜底回填），失败不阻断，FAIL_TO_PASS 实测裁决。
+                llm_applied = self._apply_llm_patch(repo_dir, llm_patch)
+                after = self._run_fail_to_pass(repo_dir, fail_to_pass, repo_url=repo_url)
+                p2p = (
+                    self._run_pass_to_pass(repo_dir, pass_to_pass, repo_url=repo_url)
+                    if pass_to_pass
+                    else {"expected": 0, "passed": 0, "failed_cases": []}
+                )
+
+                f2p_all = len(fail_to_pass) > 0 and len(after["failed_cases"]) == 0
+                p2p_no_regression = p2p["expected"] == 0 or len(p2p["failed_cases"]) == 0
+                passed = f2p_all and p2p_no_regression and not base_not_failing
+
+                # 4. 恢复"仅 test_patch"基线（下一轮迭代/下一基线复用该环境）。
+                # checkout -- . 清除 llm_patch 对已跟踪文件的修改；clean -fdx
+                # 清除全部 untracked（含 test_patch 新建测试文件 + llm_patch
+                # 副产物）；_apply_patch_robust 重建 test_patch 基线（new-file
+                # 兜底回填每轮生效）。空 test_patch 时跳过重建。
+                _run(["git", "checkout", "--", "."], repo_dir, 60)
+                _run(["git", "clean", "-fdx"], repo_dir, 120)
+                if test_patch and test_patch.strip():
+                    self._apply_patch_robust(repo_dir, test_file)
+
+                output = f"[FAIL_TO_PASS baseline] {baseline_failures['expected'] - len(baseline_failures['failed_cases'])}/{baseline_failures['expected']} passed\n"
+                output += f"[FAIL_TO_PASS after-llm-patch] {after['expected'] - len(after['failed_cases'])}/{after['expected']} passed\n"
+                output += f"[PASS_TO_PASS] {p2p['passed']}/{p2p['expected']} passed"
+                if not llm_applied:
+                    output += "\n[llm_patch_apply_failed] 补丁未成功应用（判定按 FAIL_TO_PASS 实测）"
+                base_result["passed"] = passed
+                base_result["output"] = output
+                base_result["failed_cases"] = after["failed_cases"]
+                base_result["repo_env"] = dict(env.items())
+                base_result["fail_to_pass"] = {
+                    "expected": after["expected"],
+                    "passed": after["expected"] - len(after["failed_cases"]),
+                    "baseline_passed": baseline_failures["expected"] - len(baseline_failures["failed_cases"]),
                 }
-            return base_result
+                base_result["pass_to_pass"] = {"expected": p2p["expected"], "passed": p2p["passed"]}
+                base_result["llm_patch_applied"] = llm_applied
+                # M3（2026-09-29 审查 P0）：基线 PASS_TO_PASS 硬前置门禁。
+                # 历史口径：P2P 通过率无检查，基线环境本身损坏（如 click 版本
+                # 不兼容导致 P2P 4/131）时实验照常产出"结果"，但这些结果
+                # 既不能证明系统好也不能证明系统差——harness 无效。
+                # 现加硬门禁：P2P 期望数 > 0 且通过率 < P2P_GATE_THRESHOLD
+                # （默认 0.95，环境变量 P2P_GATE_THRESHOLD 可调）时，
+                # 标记 harness_invalid=True 并将 passed 强制置 False
+                # （结果行带 error_info type=harness_invalid，调用方应剔除）。
+                # 默认 0.95 与 M3 审查建议"基线 P2P≥95%"一致；
+                # P2P_GATE_ENABLE=false（默认 true）可关闭门禁恢复历史口径。
+                _p2p_gate_enabled = os.getenv("P2P_GATE_ENABLE", "true").lower() not in ("false", "0", "off")
+                _p2p_gate_threshold = float(os.getenv("P2P_GATE_THRESHOLD", "0.95"))
+                _harness_invalid = False
+                if _p2p_gate_enabled and p2p["expected"] > 0:
+                    _p2p_baseline_rate = p2p["passed"] / p2p["expected"]
+                    base_result["p2p_baseline_rate"] = round(_p2p_baseline_rate, 4)
+                    if _p2p_baseline_rate < _p2p_gate_threshold:
+                        _harness_invalid = True
+                        base_result["harness_invalid"] = True
+                        base_result["passed"] = False
+                        base_result["error_info"] = {
+                            "type": "harness_invalid",
+                            "message": (
+                                f"M3 基线 P2P 门禁：P2P 通过率 {_p2p_baseline_rate:.2%} "
+                                f"低于阈值 {_p2p_gate_threshold:.2%}（期望 {p2p['expected']}，"
+                                f"通过 {p2p['passed']}），harness 环境本身损坏，"
+                                "实验结果不可信（应剔除本任务）"
+                            ),
+                        }
+                        logger.warning(
+                            "M3 基线 P2P 门禁未通过：P2P %d/%d（%.2f%% < %.2f%%），harness_invalid=True",
+                            p2p["passed"],
+                            p2p["expected"],
+                            _p2p_baseline_rate * 100,
+                            _p2p_gate_threshold * 100,
+                        )
+                else:
+                    base_result["harness_invalid"] = False
+                if base_not_failing:
+                    base_result["error_info"] = {
+                        "type": "base_not_failing",
+                        "message": "FAIL_TO_PASS 在基线（未打修复补丁）上全部通过：缺陷不可复现或任务数据异常",
+                    }
+                return base_result
+            finally:
+                if os.path.isfile(test_file):
+                    os.remove(test_file)
         finally:
-            if os.path.isfile(test_file):
-                os.remove(test_file)
+            # O35：与 acquire() 配对（覆盖官方 harness 提前 return / 临时文件
+            # 写盘失败 / 正常收尾 / 任意异常——非重入 Lock，单点释放）
+            _verify_lock.release()
 
     def _run_fail_to_pass(self, repo_dir: str, fail_to_pass: list[str], repo_url: str = "") -> dict[str, Any]:
         """运行 FAIL_TO_PASS 测试节点，返回 expected 总数与 failed_cases 列表。"""
@@ -683,6 +777,154 @@ class RepoExecutor:
                 failed_cases.append({"name": node, "error": (res.stdout + res.stderr).strip()[-400:]})
         return {"expected": len(test_nodes), "passed": passed_count, "failed_cases": failed_cases}
 
+    # M2（2026-09-29 审查 P0）：测试文件保护——LLM 补丁触碰测试目录 / 测试
+    # 文件即拒绝应用（防改 gold 测试让 F2P 假过）。_apply_llm_patch 在
+    # test_patch 之后应用，无路径过滤时 LLM 可改写 gold 测试文件。
+    # O35（2026-09-30 全面审查 P2）：补两个漏检形态——
+    #   - 裸 `test.py`（`test_[^/]*\.py` 要求 test 后有下划线，命中不了）；
+    #   - `*_tests/` 目录（`tests?/` 只覆盖 test/、tests/、testing/）。
+    # 二者都是真实仓库里常见的 gold 测试落点，漏检即绕过 M2 守卫。
+    _TEST_PATH_RE = re.compile(
+        r"(^|/)(tests?|testing)/|(^|/)[^/]*_tests?/|(^|/)test_[^/]*\.py$|(^|/)test\.py$"
+        r"|(^|/)[^/]+_test\.py$|(^|/)conftest\.py$",
+        re.IGNORECASE,
+    )
+
+    # M3（2026-09-29 审查 P0）官方 swebench 包开关（SWE_USE_OFFICIAL_HARNESS=true
+    # 时启用，默认 false 保持历史自建 harness 口径）。启用时 verify() 在
+    # 自建路径之外先尝试 `python -m swebench.harness.run_evaluation`
+    # （pip install swebench），成功则以官方结果为准；失败/未安装时降级
+    # 历史自建口径（零行为变化）。
+    @staticmethod
+    def _official_harness_enabled() -> bool:
+        return os.getenv("SWE_USE_OFFICIAL_HARNESS", "false").lower() in ("true", "1", "on")
+
+    def _run_official_swebench_harness(
+        self,
+        repo_url: str,
+        base_commit: str,
+        test_patch: str,
+        llm_patch: str,
+        fail_to_pass: list[str],
+        pass_to_pass: list[str],
+    ) -> dict[str, Any] | None:
+        """M3（2026-09-29 审查 P0）：官方 swebench 包验证路径。
+
+        调用 `python -m swebench.harness.run_evaluation`（官方 harness），
+        把 LLM 补丁与 gold test_patch 喂给官方 runner，读取其产出的
+        `predictions.json` / `report.json` 提取 F2P/P2P 结果。
+
+        降级口径（保守）：
+        - swebench 包未安装（ModuleNotFoundError / 命令不存在）→ 返回
+          None，verify() 继续自建 harness 口径（历史行为零变化）；
+        - 官方 runner 执行异常 / 输出文件缺失 → 返回 None + 日志；
+        - 仅当官方 runner 成功产出 report 且 F2P/P2P 判定与自建口径
+          同构时才返回 dict（passed / fail_to_pass / pass_to_pass /
+          harness_invalid 字段），否则降级。
+
+        Args:
+            repo_url: 仓库 URL（定位缓存环境，与 verify 同口径）。
+            base_commit: 基础 commit（定位缓存环境）。
+            test_patch: gold test_patch（unified diff 文本）。
+            llm_patch: LLM 生成的修复（unified diff）。
+            fail_to_pass: FAIL_TO_PASS 测试节点列表。
+            pass_to_pass: PASS_TO_PASS 测试节点列表。
+
+        Returns:
+            与 verify() 自建口径同构的结果 dict（passed / fail_to_pass /
+            pass_to_pass / harness_invalid / error_info），或 None（降级
+            到自建口径）。
+        """
+        import subprocess
+        import tempfile as _tempfile
+
+        # 准备官方 runner 输入：predictions.json（LLM 补丁 + 元数据）
+        pred = {
+            "model_name_or_path": "aitester",
+            "instance_id": f"{repo_url}@{base_commit[:8]}",
+            "repo": repo_url,
+            "base_commit": base_commit,
+            "patch": llm_patch or "",
+            "test_patch": test_patch or "",
+            "fail_to_pass": fail_to_pass,
+            "pass_to_pass": pass_to_pass or [],
+        }
+        pred_file = os.path.join(
+            _tempfile.gettempdir(),
+            f"aitester_swebench_pred_{os.getpid()}_{threading.get_ident()}.json",
+        )
+        with open(pred_file, "w", encoding="utf-8") as f:
+            json.dump([pred], f, ensure_ascii=False, indent=2)
+
+        try:
+            # 官方 runner（pip install swebench）：python -m
+            # swebench.harness.run_evaluation <pred_file>
+            # 输出：日志 + 同目录 report.json（F2P/P2P 判定）
+            res = subprocess.run(
+                [sys.executable, "-m", "swebench.harness.run_evaluation", pred_file],
+                capture_output=True,
+                text=True,
+                timeout=max(self.timeout, 300),
+                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+            )
+            if res.returncode != 0:
+                logger.info(
+                    "M3 官方 swebench runner 退出码 %d（降级自建口径）: %s",
+                    res.returncode,
+                    (res.stderr or res.stdout).strip()[:300],
+                )
+                return None
+
+            # 读取官方 report（与 pred_file 同目录的 report.json）
+            report_file = pred_file.replace(".json", "_report.json")
+            if not os.path.exists(report_file):
+                # 官方 runner 可能把 report 写到 cwd 或 stdout（JSON 块）
+                logger.info("M3 官方 swebench report 文件缺失（%s），降级自建口径", report_file)
+                return None
+            with open(report_file, encoding="utf-8") as f:
+                report = json.load(f)
+            # 官方 report 同构提取（字段名与 SWE-bench 官方口径一致）
+            return {
+                "passed": bool(report.get("resolved", False)),
+                "fail_to_pass": {
+                    "expected": len(fail_to_pass),
+                    "passed": int(report.get("fail_to_pass_pass", 0) or 0),
+                },
+                "pass_to_pass": {
+                    "expected": len(pass_to_pass),
+                    "passed": int(report.get("pass_to_pass_pass", 0) or 0),
+                },
+                "harness_invalid": False,
+                "output": f"[M3 官方 swebench harness] resolved={report.get('resolved')}",
+            }
+        except (OSError, json.JSONDecodeError, subprocess.SubprocessError, ModuleNotFoundError) as e:
+            logger.info("M3 官方 swebench 路径异常（降级自建口径）: %s", e)
+            return None
+        finally:
+            for p in (pred_file, pred_file.replace(".json", "_report.json")):
+                try:
+                    if os.path.exists(p):
+                        os.remove(p)
+                except OSError:
+                    pass
+
+    @classmethod
+    def _patch_touches_test_files(cls, patch_text: str) -> str | None:
+        """解析 unified diff 目标路径，命中测试文件即返回路径（否则 None）。"""
+        for m in re.finditer(
+            r"^\+\+\+ [^/]*(\S+)|^--- [^/]*(\S+)|^diff --git a/(\S+) b/(\S+)", patch_text, re.MULTILINE
+        ):
+            paths = [p for p in m.groups() if p]
+            for p in paths:
+                if p in ("/dev/null", "/dev/zero"):
+                    continue
+                # 统一 b/<p> / a/<p> 前缀
+                norm = p[2:] if p[:2] in ("a/", "b/") else p
+                if cls._TEST_PATH_RE.search(norm):
+                    return norm
+        return None
+
     def _apply_llm_patch(self, repo_dir: str, llm_patch: str) -> bool:
         """把 LLM 补丁应用到仓库工作区。
 
@@ -706,6 +948,19 @@ class RepoExecutor:
             # 与仓库内真实文件路径（src/sqlfluff/cli/commands.py）对不上，
             # 无法直接应用 → 保守 False（FAIL_TO_PASS 实测裁决，不误判）
             logger.info("LLM 补丁为非 unified diff 形态（完整文件代码），仓库级无法映射路径，按无补丁实测")
+            return False
+        # M2（2026-09-29 审查 P0）：测试文件保护。解析 unified diff 的所有
+        # 目标路径（`+++ b/<p>` / `--- a/<p>` / `diff --git a/<p> b/<p>`），
+        # 若命中测试目录（tests/ / testing/ / test_*.py / *_test.py / conftest.py）
+        # 即拒绝应用——LLM 改 gold 测试让 F2P"全过"是典型假修复通道
+        # （_apply_llm_patch 在 test_patch 之后应用，无路径过滤时可改写
+        # gold 测试文件）。保守拒绝，FAIL_TO_PASS 实测裁决。
+        touched_test_file = self._patch_touches_test_files(llm_patch)
+        if touched_test_file:
+            logger.info(
+                "M2 测试文件保护：LLM 补丁触碰测试文件 %s，拒绝应用（防改 gold 测试让 F2P 假过）",
+                touched_test_file,
+            )
             return False
         # 临时补丁文件按 (pid, thread) 隔离——2026-09-26 全面审查 P1 并发安全：
         # --parallel 下多线程共享同一进程（同 pid、同 tempfile.gettempdir()），
@@ -763,7 +1018,7 @@ class RepoExecutor:
             if raw.startswith("diff --git "):
                 _flush()
                 continue
-            if raw.startswith("new file mode") or raw.startswith("index "):
+            if raw.startswith(("new file mode", "index ")):
                 continue
             if raw.startswith("--- "):
                 # 当前 section 的源端：/dev/null 即 new-file，其余是修改
@@ -777,8 +1032,7 @@ class RepoExecutor:
                 # 路径重置 current_file/lines（上一 section 由 _flush 收尾，
                 # 此处仅设定本 section 目标，不重复 flush）。
                 path = raw[4:]
-                if path.startswith("b/"):
-                    path = path[2:]
+                path = path.removeprefix("b/")
                 current_file = path
                 lines = []
                 continue
@@ -807,7 +1061,20 @@ class RepoExecutor:
             patch_text = f.read()
         new_files = self.parse_new_file_bodies(patch_text)
         for rel_path, content in new_files.items():
-            target = os.path.join(repo_dir, rel_path)
+            # S6（2026-09-29 审查 P0 + 2026-10-02 修复）：补丁路径越界写防护。
+            # rel_path 取自补丁 `+++ b/<path>`（LLM / 上游数据可控），
+            # 绝对路径或 `../` 序列可使 os.path.join 逃出 repo_dir
+            # （如 `+++ b/../../.ssh/authorized_keys`）。realpath 归一化后
+            # 必须仍位于 repo_dir 内，否则拒绝该 hunk 的兜底写入
+            # （git apply 自身的路径校验不受影响，本防护仅约束手动回填）。
+            if os.path.isabs(rel_path):
+                logger.warning("拒绝越界补丁路径（绝对路径）: %r", rel_path)
+                continue
+            target = os.path.realpath(os.path.join(repo_dir, rel_path))
+            repo_root = os.path.realpath(repo_dir)
+            if not (target == repo_root or target.startswith(repo_root.rstrip(os.sep) + os.sep)):
+                logger.warning("拒绝越界补丁路径: %r（解析为 %s，超出仓库根）", rel_path, target)
+                continue
             existing = ""
             if os.path.isfile(target):
                 with open(target, encoding="utf-8") as f:

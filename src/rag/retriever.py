@@ -37,6 +37,41 @@ _DEFAULT_MAX_CASES = 1000  # 默认最大缓存条目数
 # 累积为 O(N^2) 成本）。容量满时仍每次扫描，保证驱逐语义不变。
 _CLEANUP_INTERVAL_SECONDS = 60.0
 
+# O8（2026-09-29 审查 P1）：记忆投毒检测——浅层静态扫描模式。
+# test_code / patch 含以下任意构造时视为疑似投毒，拒绝入库（RAG_POISONING_FILTER=true 时启用，默认关）。
+# 口径保守：仅匹配**代码体**中的危险调用（非注释/字符串），false-positive 风险由
+# "拒入不拒检索"（只挡入库不挡已有数据）控制；开关默认关时零行为变化。
+_POISONING_PATTERNS: tuple[str, ...] = (
+    r"os\.system\s*\(",
+    r"os\.popen\s*\(",
+    r"subprocess\.(run|Popen|call|check_output|check_call)\s*\(",
+    r"shutil\.(rmtree|move|copy2|unlink)\s*\(",
+    r"__import__\s*\(",
+    r"importlib\.import_module\s*\(",
+    r"ctypes\.(CDLL|create_string_buffer)\s*\(",
+    r"socket\.socket\s*\(",
+    r"urllib\.request\.urlopen\s*\(",
+    r"requests\.(get|post|put|delete)\s*\(",
+)
+_POISONING_RE: re.Pattern[str] | None = None
+
+
+def _poisoning_filter_enabled() -> bool:
+    """O8 记忆投毒过滤开关（RAG_POISONING_FILTER=true 时启用，默认 false 保持历史口径）。"""
+    import os as _os
+
+    return _os.getenv("RAG_POISONING_FILTER", "false").lower() == "true"
+
+
+def _detect_poisoning(code: str) -> bool:
+    """O8 记忆投毒浅层静态扫描：code 含任一危险调用模式时返回 True。"""
+    global _POISONING_RE
+    if not code or not code.strip():
+        return False
+    if _POISONING_RE is None:
+        _POISONING_RE = re.compile("|".join(_POISONING_PATTERNS))
+    return bool(_POISONING_RE.search(code))
+
 
 class TestCaseRetriever:
     """
@@ -228,7 +263,7 @@ class TestCaseRetriever:
                     ts = 0.0
                 id_time_pairs.append((doc_id, ts))
             id_time_pairs.sort(key=lambda x: x[1], reverse=True)  # 按时间降序
-            remove_ids = [id for id, _ in id_time_pairs[self.max_cases :]]
+            remove_ids = [doc_id for doc_id, _ in id_time_pairs[self.max_cases :]]
 
             if remove_ids:
                 self.collection.delete(ids=remove_ids)
@@ -281,20 +316,36 @@ class TestCaseRetriever:
         test_code: str,
         passed: bool,
         metadata: dict[str, Any] | None = None,
+        task_uuid: str | None = None,
     ) -> None:
         """
         添加一个成功测试用例到检索库。
         只有 passed=True 的测试用例才会被入库，确保检索到的案例都是高质量样本。
         入库前会自动清理过期和超额的缓存条目。
 
+        O8（2026-09-29 审查 P1）：task_uuid 非 None 时写入 metadata["task_uuid"]，
+        供检索侧 where 过滤实现任务命名空间隔离（跨任务/跨实验的记忆投毒封堵）。
+
         Args:
             code: 被测代码原文。
             test_code: 成功的测试代码。
             passed: 是否通过测试（仅 True 才会入库）。
             metadata: 额外元数据（如函数名、覆盖率等）。
+            task_uuid: 任务唯一标识（O8 任务命名空间隔离用，缺省 None 保持历史口径）。
         """
         if not passed:
             return  # 只索引成功的测试用例
+
+        # O8 记忆投毒过滤（默认关，RAG_POISONING_FILTER=true 时启用）：
+        # 入库前做浅层静态扫描——test_code 含明显注入构造（os.system /
+        # subprocess 调用 / 文件删除 / 网络外联）时拒入（日志 warning）。
+        # 默认关时零变化，历史口径不变。
+        if _poisoning_filter_enabled() and _detect_poisoning(test_code):
+            logger.warning(
+                "O8 记忆投毒过滤：test_code 含疑似注入构造，拒绝入库（md5=%s）",
+                hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16],
+            )
+            return
 
         # 生成唯一 ID：使用代码 hash 避免重复入库
         doc_id = hashlib.md5(f"{code}|{test_code}".encode()).hexdigest()[:16]
@@ -305,6 +356,9 @@ class TestCaseRetriever:
         meta["code"] = code
         meta["test_code"] = test_code
         meta["passed"] = passed
+        # O8：任务命名空间隔离——task_uuid 非 None 时写入 metadata
+        if task_uuid:
+            meta["task_uuid"] = task_uuid
         self._upsert(doc_id, document, meta, "已入库测试用例")
 
     def add_repair(
@@ -313,18 +367,32 @@ class TestCaseRetriever:
         patch: str,
         error_category: str,
         metadata: dict[str, Any] | None = None,
+        task_uuid: str | None = None,
     ) -> None:
         """
         添加一个修复案例到检索库。
         用于 Debugger 在遇到相似错误时参考历史修复方案。
         入库前会自动清理过期和超额的缓存条目。
 
+        O8（2026-09-29 审查 P1）：task_uuid 非 None 时写入 metadata["task_uuid"]，
+        供检索侧 where 过滤实现任务命名空间隔离；RAG_POISONING_FILTER=true 时
+        patch 含危险调用构造则拒入（记忆投毒封堵）。
+
         Args:
             original_code: 原始有 bug 的代码。
             patch: 修复后的代码。
             error_category: 错误类型（syntax/runtime/assertion 等）。
             metadata: 额外元数据。
+            task_uuid: 任务唯一标识（O8 任务命名空间隔离用，缺省 None 保持历史口径）。
         """
+        # O8 记忆投毒过滤（默认关，RAG_POISONING_FILTER=true 时启用）
+        if _poisoning_filter_enabled() and _detect_poisoning(patch):
+            logger.warning(
+                "O8 记忆投毒过滤：patch 含疑似注入构造，拒绝入库（error_category=%s）",
+                error_category,
+            )
+            return
+
         # 生成唯一 ID：使用代码 hash 避免重复入库
         doc_id = hashlib.md5(f"{original_code}|{patch}".encode()).hexdigest()[:16]
         # 构建检索文档，包含错误类型和代码
@@ -334,6 +402,9 @@ class TestCaseRetriever:
         meta["error_category"] = error_category
         meta["original_code"] = original_code
         meta["patch"] = patch
+        # O8：任务命名空间隔离——task_uuid 非 None 时写入 metadata
+        if task_uuid:
+            meta["task_uuid"] = task_uuid
         self._upsert(doc_id, document, meta, f"已入库修复案例 (类型={error_category})")
 
     def retrieve_test_cases(

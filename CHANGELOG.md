@@ -4,6 +4,229 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-09-30 全面审查优化轮（O32–O34：静态门禁扩充 + 安全审计扩面 + CI 真门禁修复）
+
+> 本批次为独立"全面审查 + 优化"轮（忽略既往审查记录、从零复核），聚焦四类
+> 工程质量问题：**静态检查规则陈旧**（ruff 10 个规则集、T201/安全/现代写法类
+> 全未启用）、**安全审计形同虚设**（bandit 1.8.2 在 Python ≥3.12 逐文件崩溃恒空、
+> `pyproject.toml` 无 `[tool.bandit]` 段、gitleaks 走 `pip install` 永远装不上、
+> 日志脱敏审计漏 3 类凭证形态）、**CI 假门禁**（mypy 装而不用、`BASELINE.yaml`
+> `mypy_errors: 0` 从未被验证）、**卫生债**（死代码 / 裸 raise / 过期 README 数字 /
+> 本地 pre-commit 无 lint）。全量回归 **2821 passed / 0 failed（47.9s）**、
+> ruff 0 告警（规则集 10→26）、mypy 91 源文件 0 错误、行覆盖 84.1%、
+> 分支覆盖 77.58%（门禁 77% 绿）：
+>
+> - **O32 ruff 规则集扩充（10→26 组）**：新增 `T20`（print 禁令）/ `A`（内建遮蔽）/
+>   `S`（安全反模式）/ `C4` / `DTZ` / `G` / `ISC` / `PIE` / `PL` / `PLE` / `TRY` /
+>   `FURB` / `PGH`——`pyproject.toml` 逐条附 ignore 理由（assert 窄化 / 延迟导入 /
+>   已知超长函数债务等 25 条），`per-file-ignores` 按"测试脚手架 / CLI 脚本 /
+>   实验代码"三类目录豁免；`src/` 逐条清理 **70 处**（含 `check=False` 显式化 12 处
+>   subprocess 调用、`raise e` 替换 2 处词法裸 raise、`credits`/`id` 内建遮蔽重命名、
+>   循环变量覆盖 3 处、`logger.error(exc_info=True)`→`exception` 2 处、
+>   `removesuffix`/`dict.fromkeys`/元组合并比较等 25+ 处现代写法），5 个 CLI 报表
+>   模块以文件级 `# ruff: noqa: T201` 放行用户可见表格输出（print 属有意行为）。
+> - **O34 CI 真门禁**：① `test` 作业新增 **mypy 硬门禁步骤**（`mypy==1.7.1` 固定
+>   安装 + `python -m mypy src/ config.py` 非 0 即红——此前 mypy 只在 smoke-llm
+>   作业安装且从不执行，`generate_static_report.py` 恒返回 0 吞掉退出码）；
+>   ② bandit 1.8.2→**1.9.4**（1.8.2 因 `ast.Constant.s` 移除逐文件 AttributeError
+>   → 扫描恒空却退出码 0）+ `pyproject.toml` 补 **`[tool.bandit]`** 段（10 类已接受
+>   风险 skip 逐条附理由，实测 79 findings→0，B100/B601/B302 等新类型仍命中）；
+>   ③ gitleaks 改为下载固定版本官方二进制（旧 `pip install gitleaks` 恒失败 →
+>   每次 CI 静默跳过全历史扫描）；④ `.git-hooks/pre-commit.sh` 补
+>   `ruff check .` + `ruff format --check .`（与 CI Lint 步骤同口径——此前
+>   pre-commit 框架未安装导致本地从无格式化检查，"推送后 CI 必挂"复发面收口）；
+>   ⑤ 修复 ci.yml 中 `run:` plain scalar 内裸 `}` 的 **YAML 解析错误**
+>   （工作树既有问题，任何 YAML 加载器均无法解析整个 workflow）。
+> - **安全审计扩面**：`scripts/audit_log_redaction.py` `_SENSITIVE_FIELD_RE` 补
+>   **3 类残余盲区**（字段名变体 `api key:`/`passwd=`/`access_token=` 后必须跟
+>   `:`/`=` 防叙述误报 + AWS AKIA/ASIA 裸值 + DB DSN scheme+userinfo）——
+>   7/7 注入探针全命中、全仓 438 个 logger 调用点 **0 新增误报**，新增 2 个
+>   回归用例锁定；`print_config_report` 出口 base_url 经 `mask_sensitive_info`
+>   脱敏（与 `APIManager.get_status` 同口径，网关 token 内嵌 URL 场景）。
+> - **安全测试补盲**：`verify_redaction_consistency()`（LiteLLM CVE-2026-89032 /
+>   Spring AI CVE-2026-59308 同源风险护栏——主路径与降级链口径分叉检测 +
+>   fallback 键派生一致性）此前 **零覆盖**，新增 `TestVerifyRedactionConsistency`
+>   4 用例（含 `_FALLBACK_PATTERNS` ⊆ `_SENSITIVE_PATTERNS` 键派生显式复算）。
+> - **真实缺陷修复（裸 raise）**：`APIManager._handle_api_error` /
+>   `_handle_generic_error` 的 bare `raise` 词法上不在 except 块内——经 `call()`
+>   的 except 上下文调用时靠线程级 active-exception 隐式重抛（可用但脆弱），
+>   直接调用抛 `RuntimeError: No active exception`。改为显式 `raise e`
+>   （生产路径行为不变：同一异常对象传播），2 个直接调用测试同步更新。
+> - **卫生债清理**：死代码 2 处（`patch_applier._find_function_start_line` /
+>   `risk_approval._env_int`，全仓零调用）；README 双语 **8 处过期基线数字**
+>   （2538/1937/94%/75+ 测试文件等，实测 2815→2821）改为指向 `BASELINE.yaml`
+>   （H2 测试状态 / 开发工具 / 单元测试 / 核心方法四节，迭代日志豁免区不动）。
+> - **基线刷新**：`BASELINE.yaml` → 2821 passed / 行覆盖 84% / 分支 77.58% /
+>   逐模块覆盖重测；新增 6 个测试用例（审计扩面 2 + 脱敏一致性 4）。
+>
+> 默认行为不变（无新开关、无默认值变更）；`raise e` 仅影响"直接调用 handler 且
+> fallback 禁用"的边缘路径（生产链路 `call()` 内语义等价）。
+
+## [Unreleased] — 2026-10-02 审查优化轮（CI 分支覆盖门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零）
+
+> 本批次为"审查 + 优化"轮：全面复核基线状态后，修复 **CI 红灯**
+> （`scripts/check_branch_coverage.py` 门槛 77% vs 实测 73%、`graph/workflow.py`
+> 严格门槛 90% vs 实测 74%——本批次前已不可过）、**密钥守卫自锁**
+> （`check_secret_leak.sh` 注释含真实 `sk-` 截断样例，扫描 untracked 文件时
+> 扫到自身 → 一切提交被阻断），以及三处审查发现的真实缺陷。
+> 默认行为不变（所有 opt-in 开关默认值未动）。全量回归
+> **2815 passed / 0 failed（45.4s）**、ruff 0 告警、mypy 91 源文件 0 错误、
+> 行覆盖 86.4%、分支覆盖 77.6%（门禁 77% 回绿）、核心路由
+> `graph/workflow.py` 分支 98.75% / `error_classifier` 90.35%：
+>
+> - **CI 门禁回绿（分支覆盖 73%→77.6%）**：为本批次零覆盖的 4 个 opt-in
+>   模块补测试（`fl_spectral` 32 用例 / `branch_coverage_inject` 15 /
+>   `mutation_advisor` 18 / `rag` 关键词兜底层 40），并补
+>   `determine_stop_reason` 11 分支（`tests/test_workflow_stop_reason.py`）、
+>   `_route_after_diagnosis` 收敛 / M12 checkpointer / M4 递归限制包装
+>   invoke-ainvoke（`tests/test_workflow_internal_branches.py`）、
+>   nodes 三大闭包回调（`tests/test_nodes_callbacks.py` 19 用例）、
+>   logic_spec/type_repair 私有纯函数分支（56 用例）、分层摘要缺失分支
+>   （29 用例）——`graph/workflow.py` 分支覆盖 74%→98.75%，
+>   总分支 3057→3213/4094。
+> - **P0 密钥守卫自锁修复**：`.git-hooks/check_secret_leak.sh` 头部注释含
+>   `sk-` 真实前缀样例，守卫扫描 untracked 文件时扫到**自身**→
+>   任何提交均被阻断（`sh check_secret_leak.sh` 实测 exit=1）。修复：
+>   注释改为占位符表述 + 本地审查报告（`REVIEW_*.md` /
+>   `review_infra_hygiene_report.md` 等，含取证用 `sk-` 截断样例、untracked、
+>   全仓零引用）加入 `.gitignore`。守卫现 exit=0。
+> - **真实缺陷 ①（rag 材料源误扫）**：`_iter_candidate_docs` 在
+>   `RAG_PERSIST_PATH` 为空时执行 `glob(os.path.join("", "*.json"))` =
+>   `glob("*.json")`——在当前工作目录误扫一切 JSON（coverage/benchmark
+>   结果），污染关键词兜底材料源并可能把无关大文件读进 prompt；空目录
+>   现直接跳过。
+> - **真实缺陷 ②（O17 残留脱敏盲区）**：`mask_sensitive_info` 的
+>   `key=/token=/password=` 模式小写锚定（大小写敏感），
+>   `MYSQL_PASSWORD=<值>` 形态原样通过（2026-09-29 审查 D.4-4 遗留）；
+>   新增大写凭证赋值模式（与 `check_secret_leak.sh` 同口径），替换
+>   `<REDACTED_CREDENTIAL>`，`redact_text` / fallback / trace JSONL 同源生效，
+>   补 6 用例回归。
+> - **真实缺陷 ③（S6 补丁路径越界写）**：`executor_repo._apply_patch_robust`
+>   的 new-file 兜底写盘对 `+++ b/<path>` 未做路径校验，`../` 序列 /
+>   绝对路径可逃出 repo_dir（审查 D.4-6 逐字成立，`git apply` 自身会拒
+>   `../../evil.txt`，但手动回填路径此前无防护）；现 realpath 归一 +
+>   前缀校验，越界即拒绝并告警，补 3 用例（含仓库内合法路径不误伤）。
+> - **恒真断言清零（11 处）**：`assert ... or True`（prompts 尾随空白 /
+>   dataset 惰性导入 / cli 模板 / main 块）、`in out or not in out`
+>   （credential_scrub ×2）、`or len(...) > 3000`（debugger/generator 截断 ×3）、
+>   `captured.out is not None or ...`（capsys 恒真 ×2）、路由
+>   `== debug or == regenerate`（未锁定实际路由）等——全部收紧为
+>   真实行为断言（截断标记必须出现 / 白名单键必须剔除 / 路由必须为
+>   regenerate），并对 2 处 `assert True` 占位补真实内容校验。
+> - **文档/基线同步**：`BASELINE.yaml` 刷新 2815 passed /
+>   行 86% / 分支 78% / `graph_workflow: 99` / `error_classifier: 90` /
+>   suite 46s（`check_baseline --verify` 实测一致性通过）；
+>   `credential_scrub` 模块 docstring 与 `scrub_os_environ` docstring
+>   修正为"默认 true"（D.4-3 后文档仍写默认 false 的漂移）；
+>   `.env.example` 白名单变量数 12→13；`check_bilingual_docs`
+>   登记 `docs/Python工程化前沿基线（2024–2026）.md` 豁免（此前无豁免
+>   → `--strict` 恒 exit 1，CI `|| true` 兜底永远生效，门禁形同虚设）；
+>   `.gitignore` 补 `coverage.json`。
+> - **新增回归测试 240 个**（2579→2815）：`test_workflow_stop_reason` /
+>   `test_workflow_internal_branches` / `test_nodes_callbacks` /
+>   `test_fl_spectral` / `test_branch_coverage_inject` /
+>   `test_mutation_advisor` / `test_rag_keyword_fallback` /
+>   `test_logic_spec_type_repair_branches` + 既有测试文件的断言收紧。
+
+## [Unreleased] — 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复 + 文档/基线同步）
+
+> 本批次为全仓全面代码审查（6 模块并行子代理交叉验证 + 主代理复核）的
+> 落地修复。**默认行为不变**原则贯穿：所有 opt-in 特性开关默认值未变，
+> 修复集中在开关启用路径的正确性、默认路径的边界情形、以及实验/脚本
+> 侧指标口径。全量回归 2540 passed / ruff 全仓 0 告警 / mypy 86 文件 0 错误：
+>
+> - **P0 密钥泄漏守卫**：`.gitignore` L30 `.env.local.bak` 精确匹配漏掉
+>   `.env.local.bak_g8` 等带后缀的密钥备份（untracked 含 22 个真实 LLM
+>   API Key）；现改为 `.env.local.bak*` 通配 + 新增
+>   `.git-hooks/check_secret_leak.sh`（pre-commit 第 4 项守卫，扫描
+>   staged 新文件 + untracked 文件中 `sk-(ws|or)-?[A-Za-z0-9._]{16,}`
+>   前缀，命中阻断提交）+ `pre-commit.sh` 接入。
+> - **P1 CI 双语门禁漂移**：CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md /
+>   pre-commit.sh 均声称"双语文档由 CI check_bilingual_docs 守卫"，但
+>   `ci.yml` 全文无调用步骤（文档承诺与 CI 实现漂移）；现补
+>   "Check bilingual docs pairing" 步骤（`--strict || true` 兜底——
+>   5 条存量"缺日期行"warning 暂不阻断，后续补齐后升级硬门禁）。
+>   `scripts/check_bilingual_docs.py` 同步把 3 个 2026-10 新批次文档
+>   （experiment_ab_results_2026-09-28 / implementation_2026-10_ab_negative_batch /
+>   implementation_2026-10_l25hard_n40_batch）加入 `_EXEMPT_NO_EN`
+>   （与既有 full_test_report / implementation_2026-09-25_* 先例同口径）。
+> - **P1 实验指标口径**：`experiments/summarize_full_stack.py` +
+>   `experiments/multi_candidate_ab.py` 错误类型分桶由 5 桶硬编码
+>   （assertion/runtime/import_error/syntax/unknown）改为直接 import
+>   `ErrorCategory` 枚举动态分桶（实测 63 个 benchmark JSON 中 88%
+>   失败行落 "other"，分桶失去区分度；现枚举单一来源，消除漂移）。
+>   `experiments/rag_ab_experiment.py` `_welch_ttest` / `_mann_whitney_u`
+>   由手写 Z/正态近似 p 值（小样本 n=2 时 p=0.081 vs 精确 0.318 方向性
+>   错误）改为 `scipy.stats.ttest_ind(equal_var=False)` +
+>   `scipy.stats.mannwhitneyu`（与 experiments/statistical_analysis.py
+>   同源，n<50 自动 exact）。
+>   `scripts/check_swe_bench_pro_ready.py` L135 `instance_code` 比较补
+>   `.strip()`（dataset_loader 兜底口径的 BOM/尾换行导致误判"已就绪"
+>   放行无效批次）。`experiments/run_full_stack_swe_bench_pro.py`
+>   `--difficulty` choices 补 4 个中间档（level2.5 / level2.5-hard /
+>   level3.5 / level4.5，与 statistical_analysis 分层口径对齐）。
+> - **P1 graph 特性开关启用路径**：`src/graph/expert_pool.py`
+>   `generate_parallel` 超时保护是死代码（`cf.wait(futures, timeout)`
+>   从不抛 `TimeoutError`，`with ThreadPoolExecutor` 块退出时
+>   `shutdown(wait=True)` 仍阻塞等挂死 future——EXPERT_POOL_TIMEOUT
+>   完全失效，单专家挂死即整池+整图卡死）；现改为逐个
+>   `fut.result(timeout=remaining)` + `pool.shutdown(wait=False)`。
+>   `src/graph/nodes.py` `_generator_node` 2.3 复现测试分支
+>   （`generate_repro_test`）补与主生成路径同口径 try/except 兜底
+>   （LLM 失败时 repro_test=None 降级，不再崩整图）。
+> - **P1 agents 默认路径安全**：`src/agents/executor.py`
+>   kernel_sandbox 包裹命令 `cmd = sandboxed_cmd[1:]` 使 argv[0] 变成
+>   `-p`/`--ro-bind`（`_kernel_sandbox_executable` 字段全仓从未被
+>   `subprocess.run(executable=...)` 消费），KERNEL_SANDBOX_ENABLE=true
+>   时目标场景 100% `file_not_found`；现保留完整 `sandboxed_cmd` 作 argv，
+>   executable 字段仅作观测/校验。`src/agents/semantic_cache.py`
+>   `build_semantic_index_from_cache_dir` 补 `cache_creator_ok`
+>   创建者归属校验（与 L1 精确缓存路径同口径，防 SEMANTIC_CACHE_ENABLE
+>   下跨用户投毒条目语义命中）；`base_agent.py` 写缓存成功后即时
+>   upsert 语义索引（docstring 宣称"下轮可命中"与实现不符的修复）。
+> - **P2 边界/一致性问题**：`src/graph/rag.py` `filter_by_relevance`
+>   refs=None 分支返回类型与签名不符（myptpe→mypy 修复，返回
+>   `([], 0, 0.0)` 与签名一致）+ L212 模块级 import 移到文件头
+>   （E402）；`src/reports/generator.py` `_parse_failed_cases` 补
+>   name-first 正则（`^FAILED\s+(\S+\.py::\S+)`）+ 放宽后缀正则
+>   （`r"\s+-\s+(\S.*)$"` 覆盖非 Error 类后缀）；
+>   `src/config/config_manager.py` 自动分配索引补
+>   `_LLM_MAX_SCAN_INDEX=32` 上界钳制（防"幽灵 LLM_33"——配置写成功
+>   但 _load_llm_configs 永远扫不到）；`src/datasets/dataset_loader.py`
+>   直接类构造路径 env 探测改显式优先级序（Pro 先于 rebench，消除
+>   dict.values() 插入顺序歧义）；`src/agents/executor_modes.py`
+>   测试文件写入补 try/except OSError（OSError 时清理沙箱 + 返回
+>   file_write_failed 诊断，消除沙箱目录泄漏）；
+>   `src/agents/deterministic_guard.py` `_EXTERNAL_MODULE_CALLS`
+>   urllib 家族漏检修复（顶层模块前缀匹配，urllib.request/urlopen/
+>   parse 全覆盖）；`src/agents/injection_guard.py` 输出侧补
+>   requests.get / urllib.request.urlopen 等外发语句 + 新增
+>   `__import__`/`getattr` 动态获取绕过检测（_RE_DYNAMIC_BYPASS）；
+>   `src/tools/patch_applier.py` AST 守卫补
+>   `_collect_dynamic_import_bypass`（__import__("os").system /
+>   getattr(os_module, "system") / 别名引用 m.system 三类动态绕过，
+>   与正则侧双保险）；`src/agents/rogue_monitor.py`
+>   `get_rogue_monitor(allowed_tools=...)` 不再隐式重置进程单例
+>   （纯新建实例，测试注入不触碰累积统计）；
+>   `scripts/check_quota.py` `_targets_by_provider` 空目录注释澄清
+>   （P2 表述性）；`experiments/cross_file_root_cause.py` 4 项
+>   ruff lint（F401 未用 glob / B007 未用 bl_name / PERF102 /
+>   SIM103）；`experiments/run_smoke_llm.py` L95 `LLM_1_MODEL` →
+>   `LLM_1_MODEL_NAME` + `ci.yml` L18 注释同步。
+> - **P2 pre-commit 守卫补强**：`.git-hooks/pre-commit.sh` 新增
+>   check_lock_sync / check_credential_scrub / check_dependency_exemptions
+>   三项 CI 同源守卫（缺失脚本时跳过不阻断，与 CI 步骤口径对齐）。
+> - **文档/基线同步**：`BASELINE.yaml` last_verified 刷新为 2026-10-01、
+>   total_passed 2538→2540、suite_seconds 33→34（全量回归实测）。
+>   `.env.example` 补 6 个 config.py 已有默认值但未纳入模板的变量
+>   （ENABLE_MUTATION_SCORING / MUTATION_MAX_MUTANTS /
+>   REPO_LEVEL_EXECUTION / SWE_REPO_SETUP_TIMEOUT /
+>   SWE_REPO_VENV_ISOLATION / LLM_CALL_BUDGET_SECONDS）。
+>
+> 回归验证：全量 pytest 2540 passed / 0 failed（34s），ruff 全仓
+> 0 告警（含 ruff format 已格式化的 9 个本次触碰文件），mypy 86 文件
+> 0 错误。
+
 ## [Unreleased] — 2026-09-29 P0/P1/P2 缺口执行批次（G8 全开链路重测 + 默认关功能验证 + 文档一致性）
 
 > 本批次执行 `docs/gap_report_2026-09-28_frontier_recommendations.md` §9 缺口清单

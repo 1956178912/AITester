@@ -11,41 +11,74 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-09-29"   # 全量回归实测日期（2026-09-29：全面测试 + 真实 LLM 冒烟 PASS 后刷新）
+last_verified: "2026-10-01"   # 全量回归实测日期（2026-10-01：2026-09-30 独立审查 R1/R2/R3/R5/R10/R13/R33/R42/R52/R53 落地后全绿刷新）
 
 tests:
-  total_passed: 2538          # 全量 pytest tests/（2026-09-29 全面回归实测：全绿 0 失败）
+  total_passed: 2886          # 全量 pytest tests/（2026-10-01 独立审查 S5 Darwin rlimit 兜底 + R4 主批次落地后全绿 0 失败，+6：S5 Darwin 测试 6）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
-  suite_seconds: 33          # 全量耗时量级（~33s）
+  suite_seconds: 53          # 全量耗时量级（~53s，2026-10-01 实测 52.6s）
 
 coverage:
-  line_total_pct: 87         # --cov=src 总行覆盖（0.8665，2026-09-29 全面回归后重测）
+  line_total_pct: 84         # --cov=src 总行覆盖（percent_covered 84.1%，2026-09-30 审查优化轮后重测）
   line_core_modules:
-    base_agent: 84
-    api_manager: 94
-    dataset_loader: 94
-    graph_nodes: 75
-    code_analyzer: 100
-    planner: 100
-    dependency: 96
-    multi_candidate: 94
-    cross_file: 95
-    rag_retriever: 95
-  branch_total_pct: 77       # --cov=src --cov-branch 总分支覆盖（coverage.xml branch-rate 0.7738，2026-09-29 审查轮后重测）
+    base_agent: 70
+    api_manager: 90
+    dataset_loader: 91
+    graph_nodes: 70
+    code_analyzer: 89
+    planner: 89
+    dependency: 82
+    multi_candidate: 84
+    cross_file: 91
+    rag_retriever: 86
+  branch_total_pct: 78       # --cov=src --cov-branch 总分支覆盖（77.58%，2026-09-30 审查优化轮后重测，门禁 77% 绿）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
-    graph_workflow: 92      # _should_debug / _route_after_diagnosis 条件路由（0.92）
-    error_classifier: 88     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层
+    graph_workflow: 99      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9875）
+    error_classifier: 90     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9035）
     graph_state: 100         # 状态 schema 初始化路由
 
 static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 86      # 2026-09-28 全量落地后重测（含 5 个新增源文件：
-                             # risk_approval / agent_telemetry / kernel_sandbox /
-                             # testless_validation / tree_sitter_backend）
+  mypy_source_files: 91      # 2026-09-30 重测（O9/O27/O28 修复轮后 91 源文件；O34 起 CI 以 mypy==1.7.1 硬门禁执行同口径检查）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
-error_categories: 17         # ErrorCategory 当前类别数（17 类，2026-09-27 批次⑪）
+error_categories: 18         # ErrorCategory 当前类别数（18 类，2026-10-01 独立审查 N6 更正：此前误记 17，实跑枚举为 18）
+
+# O30（D.4-7 修复）：benchmark 节——承载当前有效的主实验指标，
+# 守卫脚本 check_baseline_numbers.py 校验文档引用与本节一致性。
+# 新工件落地后（run_benchmark.py 产出含 detection_rate 的批次）刷新本节点。
+benchmark:
+  # M1（2026-09-29 审查 P0）：三指标口径（替代旧 success_rate 单一指标）
+  #   detection_rate  = 生成测试在已知缺陷代码上变红的比例（fail-to-pass 三段判定：
+  #                     buggy 红 + fixed 绿 + 无收集/语法错误；2026-10-01 R1 修正）
+  #   repair_rate     = 补丁应用后独立测试判定修复正确的比例
+  #   false_fix_rate  = 测试通过但源码未变 / 补丁仅改测试的比例
+  # 2026-10-01 独立审查 R42/R52/R53 增补：test_error_rate（坏测试直接防线）/
+  # oracle_type + test_visible_to_system（APR 严谨性检查点 #2）/
+  # patch_plausible + patch_correct + patch_precision（过拟合度量）/
+  # source_patched_unverified + patch_evidence_level（R33 源码腐蚀风险观测）/
+  # fl_at_k（R8 Ochiai FL@1/3/5 定位质量）
+  metrics_schema:
+    [detection_rate, repair_rate, false_fix_rate, regression_rate, test_error_rate,
+     oracle_type, test_visible_to_system, patch_plausible, patch_correct,
+     patch_precision, source_patched_unverified, patch_evidence_level, fl_at_k]
+  current_main_batch: "experiments/results/main_batch/benchmark_synthetic_20261001_121523.json"
+  # 2026-10-01 独立审查 R4 落地：固定 seed 42 / n=50 主批次已产出（R4 可复现
+  # 主批次 + provenance 块 + R14 统计协议）。数字与工件路径：
+  #   aitester: success=90.0% (45/50)，M1 三指标可测 49/50（1 个跨文件任务
+  #     无单文件 gold 材料，保守 None）；detection=2.0% / repair=0.0% /
+  #     false_fix=89.8%（历史"假成功"通道的直接证据）
+  #   plain_llm: success=52.0% (26/50)
+  #   single_agent: success=0.0% (0/50)，test_error_rate=94%
+  #   McNemar（R14 二值配对）：aitester vs plain_llm p=0.0001（BH-FDR 显著）；
+  #   aitester vs single_agent p=0.0000（显著）。统计报告：
+  #   experiments/results/main_batch/statistical_report.md
+  # 历史批次（仅存档，不作当前口径引用）：
+  history:
+    - batch: "experiments/results/benchmark_synthetic_20260925_135638.json"
+      metric: "success_rate (旧口径，含 65.9% 假成功)"
+      note: "已被 M1 三指标口径取代；数字 88% vs 60% vs 8% 存于旧批次 JSON（未入库）"

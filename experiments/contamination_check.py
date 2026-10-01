@@ -296,13 +296,18 @@ def patch_semantic_similarity(generated_patch: str, golden_patch: str) -> dict[s
 def _combined_risk_level(similarities: dict[str, float | None]) -> str:
     """综合多维度相似度得出污染风险等级（取最严重维度）。
 
-    规则：任一维度（jaccard/structural/semantic，非 None）>= HIGH 阈值 → high；
-    否则任一 >= MEDIUM → medium；其余 low。
+    O22（2026-09-29 审查 P1）：新增 "unknown" 档——此前缺 patch / 缺 gold /
+    异常时一律 fail-open 归 "low"，导致 852 行 100% "low"（其中 580 行
+    补丁为空串）的"零判别力"结果。现改为：
+    - 数值维度全部为 None（缺 patch / 缺 gold）→ "unknown"（无法判定）；
+    - 数值维度有值但均 < MEDIUM 阈值 → "low"（确实低重叠）；
+    - 其余按历史口径 high / medium。
     """
     # 仅取数值维度（semantic_source 为字符串标注，不参与阈值比较）
     values = [v for v in similarities.values() if isinstance(v, (int, float))]
     if not values:
-        return "low"
+        # O22：无有效数值维度（缺 patch / 缺 gold / 解析异常）→ "unknown"
+        return "unknown"
     if any(v >= HIGH_OVERLAP_THRESHOLD for v in values):
         return "high"
     if any(v >= MEDIUM_OVERLAP_THRESHOLD for v in values):
@@ -347,6 +352,7 @@ def detect_contamination(
     high: list[str] = []
     medium: list[str] = []
     low: list[str] = []
+    unknown: list[str] = []
     contaminated_success = 0
     contaminated_total = 0
     clean_success = 0
@@ -389,6 +395,10 @@ def detect_contamination(
             contaminated_total += 1
             if passed:
                 contaminated_success += 1
+        elif risk_level == "unknown":
+            # O22（2026-09-29 审查 P1）：缺 patch / 缺 gold / 解析异常 → "unknown"
+            # 不计入 clean（low），独立统计供"污染检测判别力"评估
+            unknown.append(task_id)
         else:
             low.append(task_id)
             clean_total += 1
@@ -406,12 +416,15 @@ def detect_contamination(
         "high": high,
         "medium": medium,
         "low": low,
+        # O22（2026-09-29 审查 P1）：unknown 档（缺 patch / 缺 gold / 解析异常）
+        "unknown": unknown,
         "scores": scores,
         "contaminated_tasks": high + medium,
         "clean_tasks": low,
         "contamination_summary": {
             "contaminated": contaminated_n,
             "clean": clean_n,
+            "unknown": len(unknown),
             "contaminated_success_rate": contaminated_rate,
             "clean_success_rate": clean_rate,
             "delta": delta,
