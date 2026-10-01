@@ -5,6 +5,23 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  # 定期依赖豁免复查（P2-4，2026-10-01 全面审查批次）：
+  # chromadb 豁免清单（--ignore-vuln PYSEC-*）需定期对照上游
+  # "是否已发布修复版" 复查，避免"豁免遗忘"。security 作业仅在此
+  # 触发器（schedule）或手动 workflow_dispatch(run_security_audit=true)
+  # 时运行网络 pip-audit 扫描；push/PR 不跑网络审计。
+  # 豁免登记门禁 check_dependency_exemptions.py 仍在 test 作业每次 PR
+  # 跑（无网络、快检），保证"未登记豁免阻断合并"语义不变。
+  schedule:
+    - cron: "0 6 * * 0"  # 每周日 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      run_security_audit:
+        description: "强制重跑依赖豁免审计（P2-4 定期复查）"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 # O10（2026-09-29 审查 P1）：最小化 permissions——默认无权限，
 # 仅 code-scanning 与 security 作业需要 pull-requests 读取权限。
@@ -218,6 +235,15 @@ jobs:
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # P2-4（2026-10-01 全面审查）：security 作业仅在 schedule（每周定期）或
+    # 手动 workflow_dispatch(run_security_audit=true) 时运行网络 pip-audit
+    # 扫描；push/PR 不跑网络审计（历史口径中该作业并入 push/PR 全量，现改
+    # 为定期 + 手动触发，避免每次 PR 重复网络扫描拖慢合并门禁）。
+    # 豁免登记门禁 check_dependency_exemptions.py 仍在 test 作业每次 PR 跑
+    # （无网络、快检），保证"未登记豁免阻断合并"语义不变。
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_security_audit == 'true')
     steps:
       # O10：SHA 固定
       - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
@@ -246,11 +272,35 @@ jobs:
         # 留痕（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限），
         # 与 CONTRIBUTING.md "依赖豁免登记" 口径一致。
         run: |
+          # P2-4（2026-10-01 全面审查）：JSON 报告写入 workspace 内文件（GH
+          # Actions artifact 上传仅接受 workspace 相对路径，/tmp 不可用）；
+          # 保留 7 天供人工对照登记表"复审触发条件"判断 chromadb 上游是否
+          # 已发布修复版 → 触发"移除 --ignore-vuln + 更新登记表"动作。
+          # 历史口径：chromadb==1.5.9 命中 5 条 PYSEC（311 重复两条 +
+          # 3813/3814/3815），PyPI 暂无修复版；一旦上游发布含修复的新版本，
+          # 本次审计的 JSON 会反映新 advisory 列表，维护者据此关闭豁免。
           pip-audit -r requirements.txt --no-deps \
             --ignore-vuln PYSEC-2026-311 \
             --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 \
-            --ignore-vuln PYSEC-2026-3815
+            --ignore-vuln PYSEC-2026-3815 \
+            -f json > pip_audit_latest.json || {
+              echo "::warning::pip-audit 退出码非 0（可能出现新漏洞或网络错误），已生成 JSON 供人工复查"
+            }
+          echo "=== pip-audit JSON 报告（最近一次定期审计） ==="
+          cat pip_audit_latest.json 2>/dev/null || echo "(无 JSON 输出)"
+
+      - name: Upload pip-audit report (P2-4 定期复查工件)
+        # 仅 schedule / workflow_dispatch(run_security_audit=true) 触发时存在；
+        # 7 天保留期供维护者对照 docs/dependency_exemptions.md 复审期限。
+        if: always()
+        # O10：SHA 固定——actions/upload-artifact@v4 →
+        # 84488ed32758509799cae3ed5e43ef903669d08b（v4.2.0, 2024-02）
+        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        with:
+          name: pip-audit-report-${{ github.run_number }}
+          path: pip_audit_latest.json
+          retention-days: 7
 
       - name: Check dependency exemption registry
         # 依赖豁免治理门禁：ci.yml 的 --ignore-vuln 列表必须在
