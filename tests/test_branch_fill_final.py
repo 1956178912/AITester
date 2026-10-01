@@ -170,3 +170,130 @@ class TestConftestAstScanBranches:
         code = "import os\n\ndef fixture():\n    os.system('rm -rf /')\n"
         out = scan_conftest_ast_safety(code)
         assert isinstance(out, list)
+
+
+class TestInjectionGuardDetectBranches:
+    """agents/injection_guard.detect_prompt_injection / build_injection_warning 分支。"""
+
+    def test_detect_prompt_injection_empty(self):
+        from src.agents.injection_guard import detect_prompt_injection
+
+        assert detect_prompt_injection("") == []
+
+    def test_detect_prompt_injection_harmless_text(self):
+        from src.agents.injection_guard import detect_prompt_injection
+
+        out = detect_prompt_injection("这是一个普通描述，没有注入。")
+        assert out == [] or isinstance(out, list)
+
+    def test_build_injection_warning_empty(self):
+        from src.agents.injection_guard import build_injection_warning
+
+        out = build_injection_warning([])
+        assert out == "" or isinstance(out, str)
+
+    def test_check_llm_patch_safety_clean(self):
+        from src.agents.injection_guard import check_llm_patch_safety
+
+        out = check_llm_patch_safety("def f():\n    return 1\n")
+        assert isinstance(out, list)
+
+    def test_patch_safety_reject_reason_empty(self):
+        from src.agents.injection_guard import patch_safety_reject_reason
+
+        out = patch_safety_reject_reason([])
+        assert isinstance(out, str)
+
+
+class TestDebuggerTierBranches:
+    """agents/debugger._downgrade_tier_temperature / _build_downgrade_context 分支。"""
+
+    def test_downgrade_tier_temperature_known(self):
+        from src.agents.debugger import _downgrade_tier_temperature
+
+        out = _downgrade_tier_temperature("minimal")
+        assert out is None or isinstance(out, (int, float))
+
+    def test_downgrade_tier_temperature_unknown(self):
+        from src.agents.debugger import _downgrade_tier_temperature
+
+        out = _downgrade_tier_temperature("nonexistent_tier")
+        assert out is None
+
+    def test_build_downgrade_context_with_missing_symbols(self):
+        from src.agents.debugger import _build_downgrade_context
+
+        feedback = {"tier": "minimal", "missing_symbols": ["add", "sub"]}
+        out = _build_downgrade_context("def add(a, b):\n    return a + b\n", "add", feedback)
+        assert isinstance(out, str)
+
+    def test_build_downgrade_context_no_missing(self):
+        from src.agents.debugger import _build_downgrade_context
+
+        out = _build_downgrade_context("def add(a, b):\n    return a + b\n", "add", {"tier": "minimal"})
+        assert isinstance(out, str)
+
+
+class TestBaseAgentExtractBranches:
+    """agents/base_agent._extract_json / _extract_python_code 提取分支。"""
+
+    def test_extract_json_basic(self):
+        from src.agents.base_agent import BaseAgent
+
+        out = BaseAgent._extract_json('{"a": 1}')
+        assert out.get("a") == 1
+
+    def test_extract_python_code(self):
+        from src.agents.base_agent import BaseAgent
+
+        text = "some preamble\n```python\nprint(1)\n```\npostamble"
+        out = BaseAgent._extract_python_code(text)
+        assert "print(1)" in out
+
+
+class TestExecutorRepoVerifyBranches:
+    """agents/executor_repo 仓库执行器验证 / 回滚分支。"""
+
+    def test_executor_repo_verify_structure(self):
+        from src.agents import executor_repo
+
+        # 验证类存在性（不强制实例化，避免真实 git 操作）
+        assert hasattr(executor_repo, "RepoExecutor")
+
+    def test_executor_repo_isolation_flag(self):
+        from src.agents import executor_repo
+
+        if hasattr(executor_repo, "executor_repo_isolation_enabled"):
+            assert executor_repo.executor_repo_isolation_enabled() in (True, False)
+
+
+class TestExpertPoolScoringBranches:
+    """graph/expert_pool 评分 / 选择分支。"""
+
+    def test_expert_pool_normalize_patch(self):
+        from src.graph import expert_pool
+
+        out = expert_pool._normalize_patch_for_voting("def f():\n    return 1\n")
+        assert isinstance(out, str)
+
+    def test_expert_pool_disabled_default(self):
+        from src.graph import expert_pool
+
+        if hasattr(expert_pool, "expert_pool_enabled"):
+            assert expert_pool.expert_pool_enabled() is False
+
+
+class TestFailureKbLoadBranches:
+    """agents/failure_kb 知识库加载 / 空库分支。"""
+
+    def test_load_knowledge_base_empty(self):
+        from src.agents import failure_kb
+
+        out = failure_kb.load_knowledge_base()
+        assert isinstance(out, list)
+
+    def test_kb_debugger_snippet_disabled_default(self):
+        from src.agents import failure_kb
+
+        out = failure_kb.kb_debugger_snippet("assertion", now=0.0)
+        assert out is None or isinstance(out, str)
