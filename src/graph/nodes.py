@@ -2478,10 +2478,16 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # os.system / subprocess / eval / 网络外连 / 凭证读取时拒绝应用
     # （开关 PATCH_DANGEROUS_API_GUARD，默认 true；与命名契约检查并列）。
     contract_missing: list[str] = []
+    _naming_contract: tuple | None = None
+    _dangerous_added: list[str] | None = None
     if applied and new_code != original_code:
         from src.tools.patch_applier import check_naming_contract, dangerous_api_added
 
-        ok, missing = check_naming_contract(original_code, new_code)
+        _naming_contract = check_naming_contract(original_code, new_code)
+        ok, missing = _naming_contract
+        # P0-4 性能（2026-10-01）：预计算 AST 危险差集，供下方 S2 双保险复用
+        # （同一 (original, new) 输入只算一次，避免重复 ast.parse×2）
+        _dangerous_added = dangerous_api_added(original_code, new_code)
         if not ok:
             logger.warning("P0 1.3 命名契约检查失败，拒绝应用补丁：缺失符号 %s", missing)
             applied = False
@@ -2515,7 +2521,10 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             from src.agents.injection_guard import check_llm_patch_safety
 
             _regex_hits = check_llm_patch_safety(new_code)
-            _added = dangerous_api_added(original_code, new_code)
+            # P0-4 性能（2026-10-01）：复用上方已算的 dangerous_api_added 结果，
+            # 避免对同一 (original_code, new_code) 重复做 AST 差集（两遍
+            # ast.parse×2）
+            _added = _dangerous_added if _dangerous_added is not None else dangerous_api_added(original_code, new_code)
             _hits = list(dict.fromkeys(_regex_hits + _added))  # 去重保序
             if _hits:
                 logger.warning("S2 危险操作拦截：补丁被拒绝（%s）", "、".join(_hits))
@@ -2568,12 +2577,21 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
                 if not _extracted:
                     return None
                 # 二次静态验证：必须能 ast.parse 且不破坏命名契约
-                from src.tools.patch_applier import check_naming_contract, safe_apply_patch
+                from src.tools.patch_applier import safe_apply_patch
 
                 _try_code, _try_ok = safe_apply_patch(original_code, _extracted)
                 if not _try_ok:
                     return None
-                _contract_ok, _missing = check_naming_contract(original_code, _try_code)
+                # P0-4 性能（2026-10-01）：safe_apply_patch 已对
+                # (original_code, _extracted) 做过命名契约 + 危险 API 差集
+                # （safe_apply_patch_contract 路径），此处重复调用是纯冗余
+                # AST 解析。契约结果已由 safe_apply_patch 把关（_try_ok
+                # 非 True 即代表契约/语法/危险 API 任一失败），此处仅保留
+                # 契约检查用于收集 missing 符号供日志观测（缺失时保守返回
+                # None 与原行为一致）。
+                from src.tools.patch_applier import check_naming_contract as _ck
+
+                _contract_ok, _missing = _ck(original_code, _try_code)
                 if not _contract_ok:
                     return None
                 return _extracted
