@@ -120,16 +120,35 @@ DEBUGGER_SYSTEM_PROMPT = """\
 """
 
 
+# ─── 快速验证（python -m src.prompts.templates 或作为脚本直接运行）────────────
+# 2026-10-02 审查批次·七：原 `if __name__ == "__main__":` 块（打印各 prompt
+# 字符数，供排查 token 超限）在模块被 import 时永不执行——覆盖率 35% 的
+# 主要缺口。现抽为可测试的纯函数 `log_prompt_char_counts()`：
+# - 保留原语义：遍历 globals() 快照，对每个 UPPER_CASE str 常量记一条
+#   "NAME: N 字符" 日志；
+# - 可被 import 调用（测试 / 诊断脚本复用），`__main__` 仅负责
+#   basicConfig + 调用，使 `python -m` 直接运行时行为不变。
+def log_prompt_char_counts() -> None:
+    """打印各 prompt 常量的字符数（供排查 token 超限问题）。
+
+    遍历模块 globals() 快照，对每个 `isupper()` 命名的 `str` 常量
+    记录一条 "NAME: N 字符" 日志。纯观测，零副作用（只写日志）。
+
+    历史上此逻辑直接内联在 `if __name__ == "__main__":` 块——被 import 时
+    永不执行（覆盖率缺口）。现抽为可测试函数，`__main__` 仅做
+    `logging.basicConfig` + 调用本函数，保留"脚本直跑打印字符数"语义。
+    """
+    import logging
+
+    _logger = logging.getLogger(__name__)
+    for name, value in list(globals().items()):
+        if isinstance(value, str) and name.isupper():
+            _logger.info("%s: %d 字符", name, len(value))
+
+
 if __name__ == "__main__":
     # 快速验证：打印各 prompt 的字符数，便于排查 token 超限问题
     import logging
 
     logging.basicConfig(level=logging.INFO)
-    # 用 globals() 的快照遍历本模块的全局变量（此前误用 locals()——在模块顶层
-    # 上下文中 locals() 仅含少数内置名，三个 prompt 常量不在其中，
-    # 过滤后集合恒空，"字符数验证"从未真正执行）。取 list(...) 快照
-    # 防 dict size 迭代期被 logging.basicConfig 等改动的 RuntimeError。
-    logger = logging.getLogger(__name__)
-    for name, value in list(globals().items()):
-        if isinstance(value, str) and name.isupper():
-            logger.info("%s: %d 字符", name, len(value))
+    log_prompt_char_counts()

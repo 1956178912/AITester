@@ -40,6 +40,20 @@ _ZAI_MAX_TOKENS = 4096
 # 通用 LLM 调用单次最大重试次数（指数退避：1s, 2s, 4s）
 _DEFAULT_LLM_MAX_RETRIES = 3
 
+
+class LLMEmptyResponseError(RuntimeError):
+    """LLM 返回空响应（content 与 reasoning_content 均为空）。
+
+    确定性失败（同一 prompt / 参数下必然复现），不应按可重试的瞬态故障
+    做指数退避——zai 路径 (Exception,) 兜底此前会把空响应误判为可重试，
+    浪费 5+10+20=35s 墙钟才最终抛出。现作为模块级哨兵异常，zai 路径
+    传入 non_retryable_exceptions=(LLMEmptyResponseError,) 立即抛出，
+    交由调用方（base_agent._call_llm）按既有"空响应触发重试"语义处理
+    （base_agent 的 OpenAI 路径本就对空响应 raise RuntimeError 触发同 API
+    内的有限重试 + 跨模型故障转移，本异常仅消除 zai SDK 直连路径的
+    无效指数退避，不改变跨模型切换行为）。
+    """
+
 # ─── LLM 客户端复用缓存（性能优化）────────────────────────────────────────────
 # _call_llm 此前每次调用都新建 ChatOpenAI 实例，其底层 httpx 连接池随实例
 # 创建/销毁，无法复用 TCP/TLS 连接；改为按 (model, temperature, api_key,
@@ -149,6 +163,7 @@ def _retry_with_exponential_backoff(
     max_retries: int,
     base_wait: int = 1,
     retryable_exceptions: tuple[type[Exception], ...] = (),
+    non_retryable_exceptions: tuple[type[Exception], ...] = (),
 ) -> Any:
     """带指数退避的重试通用工具函数。
 
@@ -160,12 +175,19 @@ def _retry_with_exponential_backoff(
         max_retries: 最大重试次数（不含首次尝试）。
         base_wait: 基础等待秒数（首次重试等待 base_wait，后续翻倍）。
         retryable_exceptions: 可重试的异常类型元组，为空则捕获所有异常。
+        non_retryable_exceptions: 不可重试的异常类型元组（优先级高于
+            retryable_exceptions）——命中即立即抛出，不重试。用于把
+            "确定性失败"（如 LLM 空响应、客户端参数错误）与"瞬态失败"
+            （限流 / 网络抖动 / 服务端 5xx）区分开，避免对必然失败的操作
+            做无意义的指数退避（zai 路径 (Exception,) 兜底会误把空响应
+            也按可重试处理，浪费 5+10+20=35s 墙钟才最终抛出）。
 
     Returns:
         函数执行的返回值。
 
     Raises:
         RuntimeError: 所有重试均失败时抛出，携带最后一次异常信息。
+        原始异常: 命中 non_retryable_exceptions 时立即抛出，不重试。
     """
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):  # attempt 0 是首次尝试
@@ -174,6 +196,10 @@ def _retry_with_exponential_backoff(
         except Exception as e:
             # 非 retryable 异常立即抛出
             if retryable_exceptions and not isinstance(e, retryable_exceptions):
+                raise
+            # 不可重试的确定性失败立即抛出（优先级高于 retryable 兜底，
+            # 否则 (Exception,) 兜底会把 non_retryable 也误判为可重试）
+            if non_retryable_exceptions and isinstance(e, non_retryable_exceptions):
                 raise
             last_error = e
             if attempt < max_retries:
@@ -309,6 +335,10 @@ def _call_zai(
     - 所有可重试异常统一按 base_wait=5s 指数退避：等待 5 * 2^attempt 秒（5s, 10s, 20s ...）。
       因 _ZAI_RETRYABLE_EXCEPTIONS 含 Exception（兜底捕获全部异常），zai 限流（APIReachLimitError）
       与普通 API 错误（APIStatusError）不做区分，一律使用 5s 基准（zai 限速严格，取较长基准）。
+    - 空响应（LLMEmptyResponseError）为确定性失败，**不参与**上述指数退避——
+      通过 non_retryable_exceptions 立即向上抛出（5+10+20=35s 墙钟浪费消除），
+      交由调用方（base_agent._call_llm）按既有"空响应触发同 API 内有限重试
+      + 跨模型故障转移"语义处理。
 
     Args:
         api_key: API Key 凭证字符串。
@@ -355,19 +385,28 @@ def _call_zai(
         # 优先取 content（普通响应），回退到 reasoning_content（深度思考内容）
         text = (msg.content or msg.reasoning_content or "").strip()
         if not text:
-            raise RuntimeError("LLM 返回空响应")
+            # 空响应是确定性失败（同 prompt 必然复现），不属于可重试的
+            # 瞬态故障——抛模块级哨兵 LLMEmptyResponseError，由
+            # _call_zai 的 non_retryable_exceptions 立即向上抛出，
+            # 避免 (Exception,) 兜底误判为空响应可重试而做无效指数退避。
+            raise LLMEmptyResponseError("LLM 返回空响应")
         # token 消耗统计（zai 路径响应携带 OpenAI 风格的 usage 字段，可能缺失）
         _record_response_usage(getattr(response, "usage", None), model_name)
         logger.info("zai API 调用成功 (model=%s)", model_name)
         return text
 
     try:
-        # 使用通用重试工具函数，zai 限流时使用更长的等待基准（5秒）
+        # 使用通用重试工具函数，zai 限流时使用更长的等待基准（5秒）。
+        # non_retryable_exceptions 把"空响应"（LLMEmptyResponseError）排除在
+        # 指数退避之外：该错误是确定性失败，重试必然复现，立即抛出交
+        # 调用方（base_agent._call_llm）按既有"空响应触发同 API 内有限
+        # 重试 + 跨模型故障转移"语义处理，不再浪费 5+10+20=35s 墙钟。
         return _retry_with_exponential_backoff(
             func=_do_zai_call,
             max_retries=max_retries,
             base_wait=_ZAI_RATE_LIMIT_WAIT_BASE_SECONDS,  # zai 限流基准 5 秒
             retryable_exceptions=_ZAI_RETRYABLE_EXCEPTIONS,
+            non_retryable_exceptions=(LLMEmptyResponseError,),
         )
     except Exception as e:
         # 重新抛出带有明确上下文的异常（异常文本可能含请求头凭证，先脱敏）

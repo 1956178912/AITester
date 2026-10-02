@@ -23,6 +23,7 @@ from src.agents.base_agent import (
     _get_llm_config,
 )
 from src.agents.llm_client import (
+    LLMEmptyResponseError,
     _get_or_create_zai_client,
     _llm_client_cache,
     _thread_local,
@@ -94,6 +95,46 @@ class TestCallZai:
         call_kwargs = mock_retry.call_args
         assert call_kwargs.kwargs["base_wait"] == 5
         assert call_kwargs.kwargs["max_retries"] == 2
+
+    @patch("src.agents.llm_client._get_or_create_zai_client")
+    def test_zai_empty_response_not_retried(self, mock_client_factory):
+        """P1-3 回归：zai 空响应走 non_retryable_exceptions，不做指数退避。
+
+        历史口径：_ZAI_RETRYABLE_EXCEPTIONS=(Exception,) 兜底会把
+        RuntimeError("LLM 返回空响应") 也按可重试处理，浪费 5+10+20=35s
+        墙钟才最终抛出。现空响应抛 LLMEmptyResponseError（模块级哨兵，
+        继承 RuntimeError），经 non_retryable_exceptions 立即向上抛出，
+        重试器对 func 仅调用 1 次（attempt 0）即失败。
+        """
+        # 让 _do_zai_call 的 create() 返回空响应（content 与 reasoning_content 均空）
+        mock_client = MagicMock()
+        empty_msg = MagicMock()
+        empty_msg.content = ""
+        empty_msg.reasoning_content = None
+        empty_response = MagicMock()
+        empty_response.choices = [MagicMock(message=empty_msg)]
+        mock_client.chat.completions.create.return_value = empty_response
+        mock_client_factory.return_value = mock_client
+
+        # patch time.sleep 加速（non_retryable 路径本就不 sleep，这是双保险）
+        # 并 spy _retry_with_exponential_backoff 验证 create() 仅被调用 1 次
+        with patch("time.sleep", lambda s: None), pytest.raises(RuntimeError, match="zai API 调用失败"):
+            _call_zai(
+                api_key="k",
+                base_url="https://open.bigmodel.cn/api",
+                model_name="m",
+                system_prompt="s",
+                user_message="u",
+                max_retries=3,
+            )
+        # non_retryable 命中：func 仅被调用 1 次 → create() 仅 1 次（不触发指数退避）
+        assert mock_client.chat.completions.create.call_count == 1
+
+    def test_zai_empty_response_error_is_runtime_error_subclass(self):
+        """LLMEmptyResponseError 是 RuntimeError 子类（保持既有 except 兼容）。"""
+        assert issubclass(LLMEmptyResponseError, RuntimeError)
+        e = LLMEmptyResponseError("LLM 返回空响应")
+        assert "空响应" in str(e)
 
 
 # ─── TestZaiClientReuse ──────────────────────────────────────────────────────

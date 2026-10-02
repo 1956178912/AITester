@@ -1321,6 +1321,15 @@ Contributions are welcome! Read the [Contributing Guide](CONTRIBUTING.md) to lea
 
 ## Iteration records
 
+### 2026-10-02 Continue-Optimization Batches 7–14 (pure-logic / mock-isolated branch coverage + two real defect fixes, default behavior unchanged)
+
+**Key results** (cumulative across 8 batches, full regression 2821 → **3760 passed**, zero default-behavior change):
+- **Two real defect fixes**: ① `llm_client` — zhipuai empty responses entered the exponential backoff path (retrying an empty response is a no-op; now empty responses and network errors use distinct retry semantics); ② `tree_sitter_backend` — top-level call edges entirely missing on the AST/lexical fallback path (top-level call-edge extraction now completed);
+- **Pure-logic / mock-isolated branch coverage across 18 low-coverage modules** (12 new test files, 400+ cases, zero LLM / zero network / zero subprocess): `generator` (assertion extraction / parametrize validation / import repair / prompt construction / retry, 57 cases, line 85.6%→95%), `executor_repo` (setup lock registry / subprocess timeout sentinel / venv resolution / cache-hit judgment, 24 cases), `graph.nodes` (path whitelist / atomic write / 4 safety checks / M6 rollback / execution trace / planner fallback, 45 cases, missing branches 110→51), `base_agent` (rate-limit detection / retry-after extraction / API-group complexity reorder, 21 cases), `patch_applier` (dynamic-bypass constructions / naming contract / diff / AST validation, 51 cases, branch 93%), `debugger` (hypothesis rendering / diagnosis sections, 42 cases), `api_manager` (cost weight / half-open probe / success-rate precedence, 15 cases), `type_repair` (assignment-type collection / auto LLM repair, 23 cases), `code_analyzer` (decorator parsing / ingredient retention / focused context, 97%) + `cross_file` (conservative dependency-edge caliber), `multi_candidate` (exec-validation rollback / credit factors / candidate-count clamping / variant wrapping), `cli.app` (arg validation / glob expansion / trace dump on failure / quality report, 94%), `graphrag` / `expert_pool` / `dependency` (switch stacking semantics / pure-logic extraction);
+- **Baseline refresh**: `BASELINE.yaml` synced (3760 passed / line 88% / branch gate 77% green; `check_baseline` / `check_baseline_numbers` / `check_branch_coverage` / ruff / mypy all green).
+
+**Verification**: Full 3760 passed / 0 failed (~24s, -n 4) / ruff 0 warnings / mypy 95 source files 0 errors / line coverage 88% / branch gate green (current numbers: see [BASELINE.yaml](BASELINE.yaml))
+
 ### 2026-10-02 Review/Optimization Round (CI branch-coverage gate back to green + secret-guard self-lock fix + three real defects + tautological-assert purge, default behavior unchanged)
 
 **Key results**:

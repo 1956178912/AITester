@@ -4,6 +4,36 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-02 继续优化批次·七～十四（纯逻辑 / mock 隔离分支补齐 + 两处真实缺陷修复，默认行为不变）
+
+> 八批次累计（2026-10-02），聚焦 18 个低覆盖模块的纯逻辑 / mock 隔离分支补齐
+> （零 LLM / 零网络 / 零子进程调用），并修复 2 处真实缺陷；全量回归
+> **2821 → 3760 passed / 0 failed**（`-n 4 --dist loadfile` ~24s），ruff 0 告警、
+> mypy 95 源文件 0 错误、总行覆盖 88%、分支门禁 77% 绿、`BASELINE.yaml` 同步刷新：
+>
+> - **真实缺陷修复（2 处）**：① `llm_client` zhipuai 空响应误入指数退避
+>   （空响应重试无效退避 → 区分空响应与网络异常的重试口径）；②
+>   `tree_sitter_backend` 顶层调用边全丢（AST 词法回退路径顶层函数调用边
+>   丢失 → 补齐顶层调用边提取）；
+> - **分支补齐（12 个新测试文件，400+ 用例）**：
+>   - `generator`：断言提取 / parametrize 校验 / import 修正 / prompt 构造 /
+>     重试（57 用例，行 85.6%→95%）；
+>   - `executor_repo`：setup 锁注册 / 子进程超时哨兵 / venv 解析 / 缓存命中
+>     （24 用例）；
+>   - `graph.nodes`：路径白名单 / 原子写盘 / 四道安全检查 / M6 回滚 /
+>     执行轨迹 / planner 降级（45 用例，分支缺失 110→51）；
+>   - `base_agent`：限流判定 / retry-after 提取 / API 组复杂度重排（21 用例）；
+>   - `patch_applier`：动态 bypass 构造 / 命名契约 / diff / AST 校验
+>     （51 用例，分支 93%）；
+>   - `debugger`（42）/ `api_manager`（15）/ `type_repair`（23）/
+>     `code_analyzer`+`cross_file`（29，code_analyzer 行 97%）/
+>     `multi_candidate`（18，执行验证回退 / 信用因子 / 候选数钳制）/
+>     `cli.app`（22，行 94%）/ `graphrag`+`expert_pool`+`dependency`
+>     （27，dependency 行 93%）；
+> - **基线刷新**：`BASELINE.yaml` → 3760 passed / 行 88% / 分支门禁 77% 绿；
+>   `check_baseline` / `check_baseline_numbers` / `check_branch_coverage` /
+>   ruff / mypy 全绿。
+
 ## [Unreleased] — 2026-09-30 全面审查优化轮（O32–O34：静态门禁扩充 + 安全审计扩面 + CI 真门禁修复）
 
 > 本批次为独立"全面审查 + 优化"轮（忽略既往审查记录、从零复核），聚焦四类

@@ -148,8 +148,16 @@ class TypeScriptTreeSitterBackend:
                         if callee_name != caller:
                             edges.append((caller, callee_name))
                     return  # CallExpression 不再递归（避免把参数内的调用重复计）
-                if caller and node.type in ("FunctionDeclaration", "ClassMethod"):
-                    # 进入顶层函数 / 类方法体时更新 caller
+                if node.type in ("FunctionDeclaration", "ClassMethod"):
+                    # 进入顶层函数 / 类方法体时刷新 caller（2026-10-02 审查 P1 修复：
+                    # 此前条件含 `caller and`——顶层（caller=None）的函数体调用
+                    # 不被识别为 caller，顶层函数的调用边全丢（如 a 调 b 时
+                    # a 是顶层 FunctionDeclaration，_collect_calls(Program, None)
+                    # 进入 a 时 caller 仍为 None，b 的调用边因 `and caller` 被丢弃）。
+                    # 现去掉 `caller and` 限定：任何 FunctionDeclaration/ClassMethod
+                    # 均按 name 字段刷新 caller 并遍历其子节点，顶层与嵌套体同口径。
+                    # CallExpression 的 return 在上方已先行拦截，不会递归进
+                    # CallExpression 内的调用，保守口径不变。）
                     name_node = node.child_by_field_name("name")
                     if name_node is not None:
                         new_caller = name_node.text.decode("utf-8")

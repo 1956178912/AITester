@@ -4,6 +4,41 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-02 Continue-optimization batches 7–14 (pure-logic / mock-isolated branch coverage + two real defect fixes, default behavior unchanged)
+
+> Eight batches cumulative (2026-10-02), focused on pure-logic / mock-isolated
+> branch coverage across 18 low-coverage modules (zero LLM / zero network /
+> zero subprocess) and two real defect fixes; full regression
+> **2821 → 3760 passed / 0 failed** (`-n 4 --dist loadfile` ~24s), ruff 0
+> warnings, mypy 95 source files 0 errors, line coverage 88%, branch gate 77%
+> green, `BASELINE.yaml` synced:
+>
+> - **Real defect fixes (2)**: ① `llm_client` zhipuai empty responses entered
+>   the exponential-backoff path (retrying an empty response is a no-op → empty
+>   responses and network errors now use distinct retry semantics); ②
+>   `tree_sitter_backend` lost all top-level call edges on the AST/lexical
+>   fallback path (top-level call-edge extraction now completed);
+> - **Branch coverage (12 new test files, 400+ cases)**:
+>   - `generator`: assertion extraction / parametrize validation / import
+>     repair / prompt construction / retry (57 cases, line 85.6%→95%);
+>   - `executor_repo`: setup lock registry / subprocess timeout sentinel /
+>     venv resolution / cache-hit judgment (24 cases);
+>   - `graph.nodes`: path whitelist / atomic write / 4 safety checks / M6
+>     rollback / execution trace / planner fallback (45 cases, missing branches
+>     110→51);
+>   - `base_agent`: rate-limit detection / retry-after extraction / API-group
+>     complexity reorder (21 cases);
+>   - `patch_applier`: dynamic-bypass constructions / naming contract / diff /
+>     AST validation (51 cases, branch 93%);
+>   - `debugger` (42) / `api_manager` (15) / `type_repair` (23) /
+>     `code_analyzer`+`cross_file` (29, code_analyzer line 97%) /
+>     `multi_candidate` (18, exec-validation rollback / credit factors /
+>     candidate-count clamping) / `cli.app` (22, line 94%) /
+>     `graphrag`+`expert_pool`+`dependency` (27, dependency line 93%);
+> - **Baseline refresh**: `BASELINE.yaml` → 3760 passed / line 88% / branch
+>   gate 77% green; `check_baseline` / `check_baseline_numbers` /
+>   `check_branch_coverage` / ruff / mypy all green.
+
 ## [Unreleased] — 2026-09-30 Full review & optimization round (O32–O34: static-gate expansion + security-audit widening + CI real-gating fixes)
 
 > An independent "full review + optimization" round (prior review records ignored,

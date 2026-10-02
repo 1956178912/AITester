@@ -1655,6 +1655,15 @@ python main.py clean-venv-cache --max-size-mb 512
 
 ## 迭代优化记录
 
+### 2026-10-02 继续优化批次·七～十四（纯逻辑 / mock 隔离分支补齐 + 两处真实缺陷修复，默认行为不变）
+
+**核心成果**（八批次累计，全量回归 2821 → **3760 passed**，零默认行为变化）：
+- **两处真实缺陷修复**：① `llm_client` zhipuai 空响应误入指数退避（空响应立即重试无效退避，现区分空响应与网络异常的重试口径）；② `tree_sitter_backend` 顶层调用边全丢（AST 词法回退路径顶层函数调用边丢失，现补齐顶层调用边提取）；
+- **18 个低覆盖模块纯逻辑 / mock 隔离分支补齐**（新增测试文件 12 个、400+ 用例，零 LLM / 零网络 / 零子进程）：`generator`（断言提取 / parametrize 校验 / import 修正 / prompt 构造 / 重试 57 用例，行 85.6%→95%）、`executor_repo`（setup 锁注册 / 子进程超时哨兵 / venv 解析 / 缓存命中 24 用例）、`graph.nodes`（路径白名单 / 原子写盘 / 四道安全检查 / M6 回滚 / 执行轨迹 / planner 降级 45 用例，分支缺失 110→51）、`base_agent`（限流判定 / retry-after 提取 / API 组复杂度重排 21 用例）、`patch_applier`（动态 bypass 构造 / 命名契约 / diff / AST 校验 51 用例，分支 93%）、`debugger`（假设渲染 / 诊断章节 42 用例）、`api_manager`（成本权重 / 半开探测 / 成功率优先 15 用例）、`type_repair`（赋值类型收集 / 自动 LLM 修复 23 用例）、`code_analyzer`（装饰器解析 / 成分保留 / 焦点上下文 97%）+ `cross_file`（依赖边保守口径）、`multi_candidate`（执行验证回退 / 信用因子 / 候选数钳制 / 变体取模）、`cli.app`（参数校验 / glob 展开 / 失败追踪 dump / 质量报告 94%）、`graphrag` / `expert_pool` / `dependency`（开关叠加口径 / 纯逻辑提取）；
+- **基线刷新**：`BASELINE.yaml` 同步（3760 passed / 行 88% / 分支门禁 77% 绿；`check_baseline` / `check_baseline_numbers` / `check_branch_coverage` / ruff / mypy 全绿）。
+
+**验证**: 全量 3760 passed / 0 failed（~24s, -n 4）/ ruff 0 告警 / mypy 95 源文件 0 错误 / 行覆盖 88% / 分支门禁绿（当前数字见 [BASELINE.yaml](BASELINE.yaml)）
+
 ### 2026-10-02 审查优化轮（CI 分支覆盖门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零，默认行为不变）
 
 **核心成果**：
