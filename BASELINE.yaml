@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-01"   # 全量回归实测日期（2026-10-01：2026-09-30 独立审查 R1/R2/R3/R5/R10/R13/R33/R42/R52/R53 落地后全绿刷新）
+last_verified: "2026-10-02"   # 全量回归实测日期（2026-10-02 分支提档批次：spec_ir/debugger/type_repair 补齐后 3138 全绿刷新）
 
 tests:
-  total_passed: 3058          # 全量 pytest tests/（2026-10-01 全面审查批次：P0/P1/P2 修复 + 分支覆盖补齐 + 性能优化落地后全绿 0 失败）
+  total_passed: 3138          # 全量 pytest tests/（2026-10-01 全面审查批次 + 2026-10-02 分支提档批次落地后全绿 0 失败）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
   suite_seconds: 49          # 全量耗时量级（串行 ~49s；P0-2 空补丁短路消除 100s 级 LLM 重采样路径后。2026-10-01 性能批次：引入 pytest-xdist，CI/本地 -n 4 并行 ~22s）
@@ -32,7 +32,7 @@ coverage:
     multi_candidate: 84
     cross_file: 91
     rag_retriever: 86
-  branch_total_pct: 77       # --cov=src --cov-branch 总分支覆盖（77.25%，2026-10-01 全面审查批次 + 分支覆盖补齐测试后实测，门禁 77% 绿）
+  branch_total_pct: 78       # --cov=src --cov-branch 总分支覆盖（78.46%，2026-10-02 分支提档批次 + spec_ir/debugger/type_repair 补齐后实测，门禁 77% 绿）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
