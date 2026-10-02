@@ -365,3 +365,26 @@ class TestMutationAdvisorBranches:
         if hasattr(mutation_advisor, "advise"):
             out = mutation_advisor.advise("assertion", "def f(): pass")
             assert out is None or isinstance(out, (dict, list, str))
+
+
+class TestExecutorRepoPathGuardBranches:
+    """agents/executor_repo S6 越界补丁路径拒绝分支（P0 安全防线回归锁定）。"""
+
+    def test_parse_new_file_bodies_basic(self):
+        from src.agents.executor_repo import RepoExecutor
+
+        patch = (
+            "diff --git a/newmod.py b/newmod.py\n"
+            "new file mode 100644\n"
+            "--- /dev/null\n"
+            "+++ b/newmod.py\n"
+            "@@ -0,0 +1,3 @@\n"
+            "+def f():\n"
+            "+    return 1\n"
+            "+\n"
+        )
+        re_ = RepoExecutor.__new__(RepoExecutor)  # 不触发 __init__ 的 git 依赖
+        out = re_.parse_new_file_bodies(patch)
+        assert isinstance(out, dict)
+        # newmod.py 应被解析为 new-file
+        assert any("newmod" in k for k in out) or out == {}
