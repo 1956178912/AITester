@@ -137,8 +137,11 @@ class TestGenerateConfigJson:
 class TestPrintModelCatalog:
     """测试 print_model_catalog（不应抛出异常）"""
 
-    def test_print_catalog_no_error(self):
-        print_model_catalog()  # 只检查不抛出
+    def test_print_catalog_no_error(self, capsys):
+        # U3（2026-10-05 系统性审查落地）：补断言——目录打印实际产出了模型清单
+        print_model_catalog()
+        captured = capsys.readouterr()
+        assert "qwen-max" in captured.out
 
     def test_catalog_contains_models(self, capsys):
         print_model_catalog()

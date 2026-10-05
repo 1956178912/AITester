@@ -292,7 +292,12 @@ class TestCleanupTempFile:
 
     def test_cleanup_nonexistent_file(self):
         """清理不存在的文件不报错。"""
+        import os as _os
+
         ExecutorAgent._cleanup_temp_file("/nonexistent/path.py")
+        # U3（2026-10-05 系统性审查落地）：补断言——清理后目标仍不存在
+        # （无残留、无异常副作用）
+        assert not _os.path.exists("/nonexistent/path.py")
 
 
 class TestAutoFixImports:

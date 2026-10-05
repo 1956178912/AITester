@@ -268,11 +268,16 @@ class TestErrorHandlers:
             self.mgr._handle_api_error(mock_error, self.node)
 
     def test_handle_api_error_no_raise_when_fallback_enabled(self):
-        """fallback 启用时 _handle_api_error 不抛出"""
+        """fallback 启用时 _handle_api_error 不抛出，且节点状态被标记为失败"""
         mock_error = MagicMock()
         mock_error.status_code = 500
-        # 不应抛出异常
+        self.node.total_requests = 0
+        # U3（2026-10-05 系统性审查落地）：补节点状态断言——fallback 启用时
+        # 除"不抛异常"外，_handle_api_error 必须已通过 mark_failure 记账
+        # （与 test_handle_api_error_marks_failure 同口径，锁定两分支共有行为）。
         self.mgr._handle_api_error(mock_error, self.node)
+        assert self.node.error_count == 1
+        assert self.node.total_requests == 1
 
     def test_handle_generic_error_marks_failure(self):
         """_handle_generic_error 正确标记失败"""
@@ -292,10 +297,14 @@ class TestErrorHandlers:
             self.mgr._handle_generic_error(mock_error, self.node)
 
     def test_handle_generic_error_no_raise_when_fallback_enabled(self):
-        """fallback 启用时 _handle_generic_error 不抛出"""
+        """fallback 启用时 _handle_generic_error 不抛出，且节点状态被标记为失败"""
         mock_error = ValueError("bad value")
-        # 不应抛出
+        self.node.total_requests = 0
+        # U3（2026-10-05 系统性审查落地）：补节点状态断言（同上，锁定
+        # fallback 分支的 mark_failure 记账行为）。
         self.mgr._handle_generic_error(mock_error, self.node)
+        assert self.node.error_count == 1
+        assert self.node.total_requests == 1
 
 
 # ════════════════════════════════════════════════════════════════════════════

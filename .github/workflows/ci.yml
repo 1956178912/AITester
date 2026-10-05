@@ -160,6 +160,22 @@ jobs:
       - name: Check lock sync
         run: python scripts/check_lock_sync.py
 
+      - name: Verify experiment artifact checksums (U1 证据链门禁)
+        # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
+        # traces + SHA256SUMS）已入库（.gitignore 白名单修复）。本步骤校验
+        # 工作区工件与 SHA256SUMS 清单一致（防工件被静默篡改/损坏），并附带
+        # 校验"清单与实际入库文件集一致"（缺失/多余都报错）。纯 stdlib 快检，
+        # 三档矩阵只跑 3.14（工件与 Python 版本无关）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/checksum_results.py --results-dir experiments/results/main_batch --verify
+
+      - name: Check zero-assertion tests (U3 弱断言守卫)
+        # U3（2026-10-05 系统性审查落地）：tests/ 内"零断言"测试函数守卫——
+        # 无任何 assert 信号（assert 语句 / assert_* 调用 / pytest.raises 等）
+        # 的用例使行覆盖率虚高。AST 静态扫描，豁免清单内置于脚本（EXEMPT）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/check_zero_assert_tests.py
+
       - name: Check baseline numbers (11. 漂移守卫)
         # 核心文档"当前基线"块不得硬编码会过期的测试/静态检查数字
         #（README "测试状态" 表指向 BASELINE.yaml；历史叙事章节豁免）
@@ -406,6 +422,18 @@ jobs:
         run: |
           gitleaks detect --redact || \
             echo "::warning title=Gitleaks 历史扫描仍有命中::已知存量见步骤注释（历史残留密钥待轮换 + filter-repo 清理；清理完成后本步骤可转阻断）"
+
+      - name: Citation link check (G15：非阻断周检)
+        # 文档引用真实性核验（scripts/check_citations.py --online）：对 5 份
+        # 前沿基线综述中的 arXiv / DOI 做存在性 HEAD 核验。非阻断（continue-
+        # on-error）原因：外部端点限流 / DNS 抖动会造成假红，与"代码正确性"
+        # 无关的基建噪声不应阻断合并；missing 命中以 ::warning 提示人工修
+        # 正引用。仅周日全量档 / 手动安全审计时运行（push/PR 不引入网络依赖）。
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_security_audit == 'true')
+        continue-on-error: true
+        run: |
+          python scripts/check_citations.py --online --no-strict || \
+            echo "::warning title=引用核验出现 missing::见上方输出清单，人工核对对应综述文档中的编号"
 
       - name: Check dependency exemption registry
         # 依赖豁免治理门禁：ci.yml 的 --ignore-vuln 列表必须在

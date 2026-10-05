@@ -1031,7 +1031,7 @@ class TestGlobalFunctions:
         assert mgr1 is not mgr2
 
     @patch("src.api.api_manager.get_manager")
-    def test_print_status_table_none_manager(self, mock_get_manager):
+    def test_print_status_table_none_manager(self, mock_get_manager, capsys):
         """测试打印状态表格（使用默认管理器）"""
         mock_mgr = MagicMock()
         mock_mgr.get_status.return_value = {
@@ -1049,8 +1049,10 @@ class TestGlobalFunctions:
             },
         }
         mock_get_manager.return_value = mock_mgr
-        # 不应抛出异常
         print_status_table()
+        # U3（2026-10-05 系统性审查落地）：补断言——表格实际打印了节点内容
+        captured = capsys.readouterr()
+        assert "model1" in captured.out
 
 
 def _make_manager(**config_kwargs) -> APIManager:

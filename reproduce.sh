@@ -159,11 +159,18 @@ info "Step 3/6: 运行单元测试..."
 # 先确保日志目录存在（tee 重定向在管道前求值，目录缺失会直接失败）
 mkdir -p experiments/results
 # 运行所有 tests/ 下的 pytest 用例，输出到 log 文件便于排查
-# pipefail + set -e 下管道失败会直接终止脚本，用 || 捕获退出码改为告警继续
+# U2（2026-10-05 系统性审查落地）：测试失败默认硬失败——"复现全绿"结论
+# 不得建立在未察觉的测试失败上（审查实证：此前 warn-continue 口径会让
+# 失败被吞、后续基准数字仍被当作有效复现）。需要宽容口径时用
+# REPRODUCE_ALLOW_TEST_FAILURES=1 显式逃生（仅告警继续，并在收尾提示）。
 TEST_EXIT=0
 python -m pytest tests/ -v --tb=short 2>&1 | tee experiments/results/test_output.log || TEST_EXIT=$?
 if [[ $TEST_EXIT -ne 0 ]]; then
-    warn "部分单元测试失败，但继续执行（可能依赖 LLM API 可用性）"
+    if [[ "${REPRODUCE_ALLOW_TEST_FAILURES:-0}" == "1" ]]; then
+        warn "部分单元测试失败（REPRODUCE_ALLOW_TEST_FAILURES=1，继续执行——复现结论将不可信）"
+    else
+        error "单元测试失败（exit=$TEST_EXIT）。复现实验前必须先让全量测试通过；如确需带失败继续，设 REPRODUCE_ALLOW_TEST_FAILURES=1"
+    fi
 fi
 
 # ─── 步骤 4/6：准备数据集 ────────────────────────────────────────────────────────

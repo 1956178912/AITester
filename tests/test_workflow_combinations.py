@@ -401,7 +401,11 @@ class TestCreateWorkflowConditionalEdges:
 
         monkeypatch.setenv("ENABLE_RAG", "false")
         g = build_workflow(planner=False, debugger=False)
-        g.get_graph()  # 构建不抛异常即可（RAG 边省略路径）
+        nodes = g.get_graph().nodes
+        # U3（2026-10-05 系统性审查落地）：补断言——RAG 关闭时基础节点集合
+        # 不变（RAG 是边级增强，不增删节点）
+        assert "generator" in nodes and "executor" in nodes
+        assert "debugger" not in nodes and "planner" not in nodes
         monkeypatch.delenv("ENABLE_RAG", raising=False)
 
 

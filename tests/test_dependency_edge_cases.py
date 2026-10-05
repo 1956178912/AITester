@@ -104,8 +104,10 @@ class TestPersistCacheStatsOSError:
         try:
             monkeypatch.setattr(dep, "_VENV_CACHE_DIR", str(ro_dir))
             dep._venv_cache_stats["hits"] = 1
-            # 不应抛出
             dep._persist_cache_stats()
+            # U3（2026-10-05 系统性审查落地）：补断言——落盘失败静默降级，
+            # 统计文件不应被创建（半写文件也不存在）
+            assert not (ro_dir / "cache_stats.json").exists()
         finally:
             os.chmod(ro_dir, 0o755)
 

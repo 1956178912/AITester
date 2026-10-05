@@ -297,7 +297,7 @@ class TestMutationScoreFloatGuard:
 class TestVisualizeNoneDiagonal:
     """2026-09-26 round9 P2：visualize p 值热力图 None 对角线渲染为 "—"。"""
 
-    def test_none_cell_renders_dash(self):
+    def test_none_cell_renders_dash(self, capsys):
         import pytest
 
         matplotlib = pytest.importorskip("matplotlib")
@@ -316,7 +316,12 @@ class TestVisualizeNoneDiagonal:
         # 上方已 matplotlib.use("Agg")（无显示环境也安全），故直接断言
         # 渲染不抛异常；抛出即用例失败，符合"None 对角线渲染为 —"的意图。
         try:
+            # U3（2026-10-05 系统性审查落地）：补断言——渲染路径完整执行
+            # （函数内部 savefig 后自关图窗，plt.get_fignums() 恒空，故以
+            # "图表已保存" 提示输出作为全路径执行的观测信号）
             visualize_results.plot_statistical_significance(sig_result)
+            captured = capsys.readouterr()
+            assert "图表已保存: statistical_significance.png" in captured.out
         finally:
             plt.close("all")
 

@@ -157,8 +157,10 @@ class TestExecutorRuntimeCleanup:
         """cleanup_temp_file 对不存在的文件不崩溃。"""
         from src.agents.executor_runtime import cleanup_temp_file
 
-        cleanup_temp_file(str(tmp_path / "does_not_exist.py"))
-        # 不抛异常即可
+        target = tmp_path / "does_not_exist.py"
+        cleanup_temp_file(str(target))
+        # U3（2026-10-05 系统性审查落地）：补断言——目标仍不存在（无副作用）
+        assert not target.exists()
 
     def test_cleanup_sandbox_removes_directory(self, tmp_path):
         """cleanup_sandbox 删除沙箱目录。"""
@@ -174,8 +176,10 @@ class TestExecutorRuntimeCleanup:
         """cleanup_sandbox 对不存在的目录不崩溃。"""
         from src.agents.executor_runtime import cleanup_sandbox
 
-        cleanup_sandbox(str(tmp_path / "no_such_dir"))
-        # 不抛异常即可
+        sandbox = tmp_path / "no_such_dir"
+        cleanup_sandbox(str(sandbox))
+        # U3（2026-10-05 系统性审查落地）：补断言——目录仍不存在（无副作用）
+        assert not sandbox.exists()
 
     def test_run_pytest_with_retry_timeout_returns_early_return(self, tmp_path, monkeypatch):
         """超时分支：subprocess.run 抛 TimeoutExpired → EARLY_RETURN 标记。"""

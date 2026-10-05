@@ -22,7 +22,8 @@ class TestValidateRunArgsBranches:
         _validate_run_args(parallel, max_iterations, coverage_threshold, timeout)
 
     def test_valid_args_no_raise(self):
-        self._val()  # 合法 → 不抛
+        # U3（2026-10-05 系统性审查落地）：补断言——合法参数校验通过且无返回值
+        assert self._val() is None  # 合法 → 不抛
 
     def test_parallel_below_one_raises(self):
         import pytest
@@ -62,7 +63,8 @@ class TestValidateRunArgsBranches:
 
     def test_timeout_none_allowed(self):
         """timeout=None（未指定）→ 走配置默认值，不校验不抛。"""
-        self._val(timeout=None)
+        # U3（2026-10-05 系统性审查落地）：补断言
+        assert self._val(timeout=None) is None
 
 
 # ─── _expand_target_files 三分支 ──────────────────────────────────────────
@@ -132,14 +134,19 @@ class TestDumpTraceOnFailureBranches:
 
 
 class TestPrintQualityReportBranches:
-    def test_no_report_no_loader_method(self):
-        """loader 无 quality_report 属性 → 视为通过（无加载问题）。"""
+    def test_no_report_no_loader_method(self, capsys):
+        """loader 无 quality_report 属性 → 视为通过（info_msg 提示走 stdout）。"""
         from src.cli.app import _print_quality_report
 
         class _Loader:
             pass
 
-        _print_quality_report(_Loader(), [1, 2, 3])  # 不抛
+        # U3（2026-10-05 系统性审查落地）：补断言——无报告属性与空报告同语义
+        # （走 test_empty_report_shows_pass 的 info_msg 分支）。
+        _print_quality_report(_Loader(), [1, 2, 3])
+        out = capsys.readouterr().out
+        assert "全量质量检查通过" in out
+        assert "3" in out
 
     def test_report_present_shows_issues(self, capsys):
         from src.cli.app import _print_quality_report
@@ -183,14 +190,19 @@ class TestPrintQualityReportBranches:
 
 
 class TestPrintMissingSourceBranches:
-    def test_no_missing_source_method(self):
-        """loader 无 tasks_missing_source 属性 → 静默（无缺失信息）。"""
+    def test_no_missing_source_method(self, capsys):
+        """loader 无 tasks_missing_source 属性 → 静默（无任何输出）。"""
         from src.cli.app import _print_missing_source
 
         class _Loader:
             pass
 
-        _print_missing_source(_Loader(), [1, 2, 3])  # 不抛
+        # U3（2026-10-05 系统性审查落地）：补断言——无属性时函数整体静默
+        # （stdout/stderr 均无输出，锁定"静默兜底"语义本身）。
+        _print_missing_source(_Loader(), [1, 2, 3])
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
 
     def test_missing_source_present_shows_list(self, capsys):
         from src.cli.app import _print_missing_source

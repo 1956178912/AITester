@@ -166,10 +166,13 @@ class TestMypyStaticLayer:
 
         # 用一个明显类型错误的代码（未定义名称），若 mypy 装了会报 [name-defined]
         # 无论 mypy 装没装都不应抛异常（保守降级）
-        _ = _run_mypy_findings(
+        findings = _run_mypy_findings(
             original_code="def f():\n    return 1\n",
             patched_code="def f():\n    return totally_undefined_symbol\n",
         )
+        # U3（2026-10-05 系统性审查落地）：补断言——返回值恒为列表
+        # （mypy 缺失时保守降级为空列表，不返回 None/抛异常）
+        assert isinstance(findings, list)
 
 
 # ─── 2.2 refine_failure_category 消费 patch_syntax_invalid

@@ -122,7 +122,6 @@ def test_trace_node_no_session_no_op() -> None:
 
     # 确保无会话（trace 未启用且线程局部 session=None）
     tracing_mod._trace_local.session = None
-    # 不抛异常即通过
     tracing_mod._trace_node(
         node="test",
         input_summary={"x": 1},
@@ -131,3 +130,5 @@ def test_trace_node_no_session_no_op() -> None:
         strategy_selected="w",
         budget_remaining=0,
     )
+    # U3（2026-10-05 系统性审查落地）：补断言——调用后仍无会话
+    assert tracing_mod._trace_local.session is None

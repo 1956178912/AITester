@@ -110,7 +110,8 @@ class TestLogPromptCharCounts:
 
     def test_callable_no_side_effect(self):
         """纯观测函数：可被 import 调用，不抛异常（只写日志）。"""
-        log_prompt_char_counts()  # 不抛异常即通过（行为是记日志，无返回值）
+        # U3（2026-10-05 系统性审查落地）：补断言——无返回值（纯观测副作用）
+        assert log_prompt_char_counts() is None
 
     def test_logs_all_four_prompts(self, caplog):
         import logging

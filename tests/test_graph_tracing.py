@@ -40,9 +40,11 @@ class TestGraphTracingThreadLocal:
 
     def test_trace_node_without_session_is_noop(self, cleanup_env) -> None:
         """无会话时 _trace_node 安全 no-op。"""
-        from src.graph.tracing import _trace_node
+        import src.graph.tracing as tracing
 
-        _trace_node("planner", output_summary={"x": 1}, decision="y", duration_ms=1.0, iteration=0)
+        tracing._trace_node("planner", output_summary={"x": 1}, decision="y", duration_ms=1.0, iteration=0)
+        # U3（2026-10-05 系统性审查落地）：补断言——调用后仍无会话（未意外创建）
+        assert getattr(tracing._trace_local, "session", None) is None
 
     def test_start_creates_and_end_clears_session(self, cleanup_env, tmp_path, monkeypatch) -> None:
         """start 挂载 TraceSession 到线程局部，end 写 task_end 后清空。"""

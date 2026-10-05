@@ -239,5 +239,7 @@ class TestSandboxCleanup:
         sandbox = tmp_path / "sandbox"
         sandbox.mkdir()
         monkeypatch.setattr(shutil, "rmtree", MagicMock(side_effect=OSError("disk full")))
-        # 不应抛出
         ExecutorAgent._cleanup_sandbox(str(sandbox))
+        # U3（2026-10-05 系统性审查落地）：补断言——rmtree 被模拟失败后，
+        # 目录仍存在（清理确实没发生）且未中断主流程
+        assert sandbox.exists()

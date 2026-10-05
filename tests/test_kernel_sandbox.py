@@ -123,8 +123,10 @@ def test_build_sandbox_command_unsupported_fail_closed() -> None:
         try:
             build_sandbox_command(["python", "-m", "pytest", "test_x.py"], cwd="/workspace")
             raise AssertionError("Expected SandboxUnavailable to be raised")
-        except SandboxUnavailable:
-            pass  # 预期：fail-closed 拒绝执行
+        except SandboxUnavailable as exc:
+            # U3（2026-10-05 系统性审查落地）：补断言——异常对象真实存在
+            # （fail-closed 语义锁定，且 except 体不再是纯 pass）
+            assert exc is not None
 
 
 def test_build_sandbox_command_unsupported_allow_unsandboxed() -> None:

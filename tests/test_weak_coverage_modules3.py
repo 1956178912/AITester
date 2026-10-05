@@ -208,8 +208,13 @@ class TestCliOutputNoRich:
             {"status": "PASS", "file": "test_a.py", "function": "test_x"},
             {"status": "FAIL", "file": "test_b.py", "function": "test_y"},
         ]
-        # 不应抛异常
         out.print_rich_table(results)
+        # U3（2026-10-05 系统性审查落地）：补断言——修正测试前提：
+        # print_rich_table 无 rich 时是"静默 no-op"（函数首行 _rich_available()
+        # 为假直接 return，并无纯文本降级输出路径），锁定该真实行为防将来
+        # 被误改为半写输出。
+        captured = capsys.readouterr()
+        assert captured.out == ""
 
 
 # ─── prompts/templates: __main__ 自诊断块 ──────────────────────────────
