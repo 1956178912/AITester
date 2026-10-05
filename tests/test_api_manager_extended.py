@@ -931,14 +931,16 @@ class TestHealthCheckerThreadExceptions:
         mgr = _empty_mgr()
         mgr.add_node(LLMConfig("key1", "url1", "model1"))
 
-        original_batch = mgr.health_check_batch
         call_count = [0]
 
         def raising_batch(*args, **kwargs):
             call_count[0] += 1
             if call_count[0] >= 2:
                 raise RuntimeError("simulated health check failure")
-            return original_batch(*args, **kwargs)
+            # 首次调用不透传 original_batch：真实 batch 会对假 URL 发起
+            # HTTP 探测，慢 DNS 环境下 socket 建连阻塞超过 join(2s) 使
+            # is_alive 断言 flaky（本用例主题是线程异常处理，非网络探测）
+            return {"model1": True}
 
         mgr.health_check_batch = raising_batch
         thread = HealthCheckerThread(mgr, interval=0.05)

@@ -25,10 +25,24 @@ Generator → Executor → Debugger → PatchApplier 闭环生成 pytest 测试�
 
 - 本项目**不训练模型**，无训练数据。
 - 评估数据：`data/swe_bench_lite_*`（SWE-bench Lite 派生，来源为公开
-  SWE-bench 数据集；**数据许可以 SWE-bench 官方仓库声明为准，接入发表前
-  需人工核对并在此处补充具体许可证条目——待办**）与
-  `src/datasets/synthetic_dataset.py` 程序化生成的合成任务（无第三方版权）。
+  SWE-bench 数据集；数据许可：SWE-bench 官方仓库以 **Apache License 2.0**
+  分发数据（P1-9 补齐，引用以 [官方仓库](https://github.com/SWE-bench/SWE-bench)
+  声明为准——第三方使用前请自行复核当期版本）与
+  `src/datasets/synthetic_dataset.py` 程序化生成的合成任务（本项目自研，
+  随仓库 MIT 许可）。
 - RAG 案例库：来自实验自身产出的历史用例（用户本地 `rag_data/`）。
+
+### 3.1 已知偏差（Bias）
+
+- **语言偏差**：仅支持 Python 单语言（多语言为设计未实现，见
+  `docs/design/multilanguage_extension.md`），结论不可外推至其他语言生态。
+- **任务分布偏差**：合成模板为人工编写的经典缺陷形态（边界/异常/契约类），
+  与真实仓库缺陷分布（跨文件、依赖性、语义性缺陷为主）存在系统性差距——
+  detection/repair 在合成集上的数字不应外推到真实仓库场景。
+- **难度偏差**：模板以函数级单文件为主（Level 3/3.5 跨文件占少数），
+  仓库级/工程级任务未覆盖。
+- **LLM 同源偏差**：测试生成与修复使用同一 LLM 配置池，自产生/自验证的
+  循环（M1 三指标中的 false_fix 即其产物）已量化但未消除。
 
 ## 4. 评估口径与已知局限（诚实声明）
 

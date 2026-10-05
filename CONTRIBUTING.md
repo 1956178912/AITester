@@ -66,7 +66,11 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 - 不传 `-n` 时完全退化为历史串行行为（默认零变化）。
 - CI 已用 `-n 4 --dist loadfile` 跑全量（与串行同口径产出 coverage.xml）。
 
-覆盖率要求：核心模块 ≥ 92%，整体 ≥ 90%。
+覆盖率要求以 [BASELINE.yaml](BASELINE.yaml) `coverage` 节为单一事实来源
+（P1-9 修正：本行原硬编码"核心 ≥ 92% / 整体 ≥ 90%"与实测口径漂移且违反
+单一事实源规则）。合并门槛以 CI 实际门禁为准：总行覆盖 ≥85%、总分支
+覆盖 ≥77%、严格核心模块 ≥90%、其余核心路由 ≥85%
+（`scripts/check_branch_coverage.py` 常量为事实口径）。
 
 ## Pull Request 流程
 

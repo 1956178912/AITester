@@ -1,6 +1,6 @@
 # ADR-0001: 选用 LangGraph StateGraph 作为工作流编排引擎
 
-- 日期：2025-10（项目初始架构）
+- 日期：2026-09（原文误标 2025-10，git 首次入库为 2026-09-27，V 批次 P1-9 修正）（项目初始架构）
 - 状态：已采纳（Accepted）
 - 关联：`src/graph/workflow.py`、`src/graph/nodes.py`、`src/graph/state.py`
 

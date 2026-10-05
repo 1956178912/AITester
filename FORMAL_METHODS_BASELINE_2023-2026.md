@@ -21,7 +21,7 @@ Conventions and limits, stated plainly:
 3. **Paywalled standards** (ISO, IEC, RTCA, IEEE, DO-178C, UL 4600) are cited via their **official catalogue/publisher page**. The normative text itself was not fetched; treat clause-level claims as "not verified in this session".
 4. **ACM DL, IEEE Xplore, ScienceDirect, Springer and doi.org landing pages were blocked** in this environment (HTTP 403 / cross-origin redirect). For those, the artefact is tagged [S]; DOIs are given as `https://doi.org/<doi>` only where the DOI string itself appeared in a search result or an arXiv API record.
 5. **Dates**: current date is 2026-09-30, so 2025–2026 venues (FSE 2025, ICSE 2026, TOSEM 2026, ASE 2025, ISSTA 2025) are real and included. Preprint year ≠ venue year in some rows; both are given where known.
-6. This file deliberately excludes the LLM-**test-generation-tooling** cluster already covered in the workspace file [前沿基线（2023–2026）核查清单.md](前沿基线（2023–2026）核查清单.md); overlap is limited to the neuro-symbolic and oracle rows that the present brief explicitly requires.
+6. This file deliberately excludes the LLM-**test-generation-tooling** cluster already covered in FRONTIER_BASELINE_LLM_UNIT_TEST_GENERATION_2023-2026.md (P1-9 修正：原引用指向仓库中不存在的文件，断链；该职能实际由前沿测试生成基线文档承担); overlap is limited to the neuro-symbolic and oracle rows that the present brief explicitly requires.
 
 ---
 
