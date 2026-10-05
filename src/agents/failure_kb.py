@@ -192,7 +192,7 @@ def normalize_entry_segments(entry: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def entry_ocurrence_stat(entries: list[dict[str, Any]], error_category: str, entry: dict[str, Any]) -> dict[str, Any]:
+def entry_occurrence_stat(entries: list[dict[str, Any]], error_category: str, entry: dict[str, Any]) -> dict[str, Any]:
     """检索注入扩展字段（外部参照：微软 SRE"从每个错误中学习"——把历史
     出现频次与最近修复方案一并注入 prompt，而非仅注入策略文本）。
 
@@ -215,7 +215,7 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
 
     返回非 None 时：拼接同 error_category 的 top-k 条目的四段式
     （问题→根因→修复→验证，normalize_entry_segments 归一）+ 扩展字段
-    （entry_ocurrence_stat 的历史频次与最近观测时间），供 `_debugger_node`
+    （entry_occurrence_stat 的历史频次与最近观测时间），供 `_debugger_node`
     追加到既有 prompt 尾部（不替换历史模板，注入失败时 Debugger 正常走
     通用兜底）。
     """
@@ -234,7 +234,7 @@ def kb_debugger_snippet(error_category: str, now: float | None = None) -> str | 
     ]
     for i, entry in enumerate(ranked, 1):
         seg = normalize_entry_segments(entry)
-        stat = entry_ocurrence_stat(entries, error_category, entry)
+        stat = entry_occurrence_stat(entries, error_category, entry)
         last_seen_txt = ""
         if stat["last_seen"] is not None:
             try:
@@ -276,3 +276,17 @@ if __name__ == "__main__":
             print(f"  - {e.get('error_category')} / {e.get('root_cause')} / {e.get('task_id')}")
     else:
         print("（知识库为空或不存在；离线积累：python experiments/analyze_failures.py -k）")
+
+
+# U10（2026-10-05 系统性审查落地）：历史拼写兼容别名（entry_ocurrence_stat
+# → entry_occurrence_stat，ocurrence 缺 'c'）；外部若仍引用旧名会命中本
+# 别名并得到 DeprecationWarning 提示。仅别名转发，无行为差异。
+def entry_ocurrence_stat(*args: object, **kwargs: object) -> object:
+    import warnings
+
+    warnings.warn(
+        "entry_ocurrence_stat 已更名 entry_occurrence_stat（U10 批次），旧名将在后续版本移除",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return entry_occurrence_stat(*args, **kwargs)  # type: ignore[arg-type]

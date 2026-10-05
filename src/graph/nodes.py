@@ -39,7 +39,7 @@ from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent
 from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.agents.runtime_probe import build_probe_prompt_section
-from src.graph.cost_budget import BudgetExceededError
+from src.budget.cost_budget import BudgetExceededError
 from src.graph.event_bus import (
     PlanGenerated,
     publish_debugger_diagnosed,
@@ -1204,6 +1204,7 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     )
 
     # 统一走 rag_guarded 降级守卫（P1 重构）：测试通过时入库成功用例
+    _consume_pending_repair = False
     if result["passed"]:
         rag_guarded(
             "add_case",
@@ -1218,6 +1219,26 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
             retriever_cls=TestCaseRetriever,
             get_retriever=get_rag_retriever,
         )
+        # C10（2026-10-05 系统审查 P1）：修复案例验证门入库。上一轮写盘的
+        # 补丁（_patch_applier_node 暂存 last_applied_repair）经本轮执行验证
+        # 通过（test_passed=True）才进入修复案例库——失败/回滚补丁不再污染
+        # 后续任务的 RAG 检索参考。入库后经下方 update dict 置 None 消费
+        # （防重复入库）。
+        _pending_repair = state.get("last_applied_repair")
+        if _pending_repair and _pending_repair.get("patch"):
+            rag_guarded(
+                "add_repair",
+                lambda r: r.add_repair(
+                    original_code=_pending_repair.get("original_code", ""),
+                    patch=_pending_repair.get("patch", ""),
+                    error_category=_pending_repair.get("error_category", "unknown"),
+                ),
+                enabled=ENABLE_RAG,
+                module_available=RAG_MODULE_AVAILABLE,
+                retriever_cls=TestCaseRetriever,
+                get_retriever=get_rag_retriever,
+            )
+            _consume_pending_repair = True
 
     # P0 运行时探针采集层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
     # 测试失败时，经 sys.settrace 一次性探针捕获"失败时刻局部变量快照"，
@@ -1269,6 +1290,10 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         "execution_trace": new_trace,
         "iteration_strategy_suggestion": strategy_suggestion,
     }
+    # C10：验证门入库消费——入库完成的暂存补丁置 None（经 update dict
+    # 合法通道回写，防下一轮重复入库）
+    if _consume_pending_repair:
+        update["last_applied_repair"] = None
     # R16（2026-10-05 审查 P1）：流氓 agent 行为监控消费点
     # （ROGUE_MONITOR_ENABLE=true 时启用，默认关零开销）。对四个核心
     # agent（BaseAgent 上报侧的 agent_id = 类名）做三类信号检测
@@ -1364,11 +1389,19 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 内部的 state.pop 改写的是节点入参 dict，LangGraph 不回写（否则陈旧
     # 快照路径会留在 state，下一轮失败时重复回滚到更早的版本）。
     if not result["passed"]:
-        _rolled_back = _rollback_last_patch(state)
+        # C6（2026-10-05 系统审查 P0）：磁盘与 state 同事务恢复——
+        # restored_out 携带快照原文，写回 state["target_code"]，否则下一轮
+        # Debugger 分析/补丁基底仍是坏补丁代码（"测原码/修补码"幻象迭代）。
+        _restored: dict[str, Any] = {}
+        _rolled_back = _rollback_last_patch(state, restored_out=_restored)
         if _rolled_back:
             update["last_patch_rolled_back"] = True
             update["_last_patch_snapshot"] = None
             update["_last_patch_iteration"] = None
+            if "content" in _restored:
+                update["target_code"] = _restored["content"]
+        # C10：本轮失败 → 上一轮补丁未通过验证，丢弃暂存（不入修复案例库）
+        update["last_applied_repair"] = None
     return update
 
 
@@ -2020,19 +2053,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 iteration=state.get("iteration", 0),
             )
 
-    # 统一走 rag_guarded 降级守卫（P1 重构）：入库修复案例
-    rag_guarded(
-        "add_repair",
-        lambda r: r.add_repair(
-            original_code=state["target_code"],
-            patch=result.get("patch", ""),
-            error_category=result.get("error_category", "unknown"),
-        ),
-        enabled=ENABLE_RAG,
-        module_available=RAG_MODULE_AVAILABLE,
-        retriever_cls=TestCaseRetriever,
-        get_retriever=get_rag_retriever,
-    )
+    # C10（2026-10-05 系统审查 P1）：修复案例入库从"debugger 每轮无条件写入"
+    # 改为"验证门写入"——_patch_applier_node 写盘成功时把补丁三元组暂存
+    # state["last_applied_repair"]，_executor_node 验证通过后才 add_repair。
+    # （此前此处每轮无条件 add_repair，未经验证（含最终失败/回滚）的补丁
+    # 进入修复案例库，成为后续任务检索到的"参考修复案例"——记忆污染。）
     # O13（2026-09-29 审查 P1）：策略银行独立于专家池——专家池未启用时，
     # 若 STRATEGY_BANK_ENABLE=true 仍检索策略并注入单 Agent 补丁
     # （prompt_hint 追加到 result["patch"]，零额外 LLM 成本，纯静态映射）。
@@ -2142,7 +2167,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         _budget_ratio_val: float | None = None
         _budget_exceeded_val: bool | None = None
         try:
-            from src.graph.cost_budget import get_budget_stats
+            from src.budget.cost_budget import get_budget_stats
 
             _budget_stats = get_budget_stats()
             # 预算快照键：consumed_tokens / token_limit / consumed_usd / usd_limit
@@ -2423,6 +2448,9 @@ def _select_multi_candidate_patch(
                     "selected": 0 if applied else None,
                     "adaptive_skipped": True,
                     "skip_reason": f"iteration={iteration},category={error_category}",
+                    # C10：验证门修复案例用——实际应用的补丁文本（回退单补丁
+                    # 时即 state["patch"]；胜出候选时为 best.patch）
+                    "applied_patch": state.get("patch") or "",
                 }
             }
             return new_code, applied, update
@@ -2473,6 +2501,8 @@ def _select_multi_candidate_patch(
             "static_passed": static_passed_count,
             "exec_validated": use_exec,
             "selected": best.index if best else None,
+            # C10：验证门修复案例用——实际应用的补丁文本（胜出候选或回退单补丁）
+            "applied_patch": (best.patch if best else (state.get("patch") or "")),
         },
     }
     if best is None:
@@ -2546,7 +2576,9 @@ def _safe_write_patch(
     # M6（2026-09-29 审查 P0）：写盘前快照（shutil.copy2 到 tempfile 目录）。
     # 若后续 executor 判定本补丁失败（test_passed=False），_rollback_last_patch
     # 读取 state["last_patch_snapshot"] 恢复原始代码，使修复质量不被坏补丁
-    # 污染。快照失败（IO / 权限）不阻断写盘——历史行为保持，但记 WARNING。
+    # 污染。W12（2026-10-05 系统审查 P0）：快照失败（IO / 权限）fail-closed
+    # 拒绝写盘——无快照即无回滚能力，坏补丁将永久落盘且下一轮以坏代码为
+    # 基底叠加；宁可损失本轮修复，不可绕过回滚保障。
     snapshot_path: str | None = None
     try:
         _snap_dir = os.path.join(
@@ -2567,7 +2599,11 @@ def _safe_write_patch(
             snapshot_out["path"] = snapshot_path
             snapshot_out["iteration"] = int(state.get("iteration", 0))
     except Exception:
-        logger.warning("M6 补丁快照写入失败（不影响写盘）: %s", state["target_file"], exc_info=True)
+        logger.exception(
+            "M6 补丁快照写入失败，fail-closed 拒绝写盘（无快照即无回滚能力）: %s",
+            state["target_file"],
+        )
+        return False
     # 原子写入：写临时文件后 os.replace，崩溃不损坏用户源文件
     # 写目标用 abspath（无符号链接归一化）：白名单判定走 realpath 语义，
     # 写盘路径保持调用方视角的原始路径（行为与历史一致）
@@ -2576,7 +2612,7 @@ def _safe_write_patch(
     return True
 
 
-def _rollback_last_patch(state: AITesterState) -> bool:
+def _rollback_last_patch(state: AITesterState, restored_out: dict[str, Any] | None = None) -> bool:
     """M6（2026-09-29 审查 P0）：恢复上一轮补丁写盘前的原始代码快照。
 
     _safe_write_patch 在写盘前把原始代码 shutil.copy2 到
@@ -2585,6 +2621,12 @@ def _rollback_last_patch(state: AITesterState) -> bool:
     state["_last_patch_snapshot"]。本函数读取该快照，原子写回 target_file。
 
     快照缺失 / IO 异常时保守返回 False（不影响主流程）。
+
+    C6（2026-10-05 系统审查 P0）：回滚成功时经 ``restored_out["content"]``
+    把快照原文交还调用方——调用方（_executor_node）须把它写回
+    ``state["target_code"]``。此前只恢复磁盘不恢复 state，下一轮
+    Debugger 分析的仍是坏补丁代码、下一轮补丁以坏补丁代码为基底叠加，
+    磁盘回滚的收益被状态侧抵消（"测原码/修补码"幻象迭代）。
 
     O35：**键清理必须经 update dict**——本函数内 ``state.pop(...)`` 改写的是
     LangGraph 传入的节点入参 dict（每 super-step 从 channel 重新物化），不会
@@ -2605,6 +2647,8 @@ def _rollback_last_patch(state: AITesterState) -> bool:
         os.remove(snap)
         state.pop("_last_patch_snapshot", None)
         state.pop("_last_patch_iteration", None)
+        if restored_out is not None:
+            restored_out["content"] = snap_content
         logger.info("M6 坏补丁回滚成功：恢复 %s（快照=%s）", state["target_file"], snap)
         return True
     except Exception:
@@ -2949,9 +2993,9 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     # A-03（2026-10-04 系统审查 P0）：快照/P2P 全量回归/失败自动回滚协议
     # （PATCH_SNAPSHOT_ROLLBACK_ENABLE=true 时启用，默认 false 历史口径零变化）。
     # 协议：写盘后对"应用补丁后的代码"跑独立测试套件 P2P 回归——
-    #   回归失败（rc=1 断言级）→ 自动回滚 target_code 到 original_code
-    #     （内容级 restore，与 cross_file 的整体回滚口径对齐；仅回滚代码
-    #     状态，不撤销已发生的 LLM 调用 / 已落盘工件，保守防二次污染）；
+    #   回归失败（rc=1 断言级）→ 自动回滚：target_code 恢复 original_code
+    #     **且磁盘同步写回原文**（C6 2026-10-05：此前仅改 state 不写盘，
+    #     状态与存储分叉；回滚落盘失败时如实记 rolled_back=False）；
     #   回归通过（rc=0）→ 保留补丁并标注 verdict=verified（M1 可消费）；
     #   无测试材料（no_oracle）/ 坏测试（regression_error）→ 保守保留补丁
     #     （不臆测测试、不误杀好补丁，由 M1 repair_rate 的 None 口径兜底）。
@@ -2974,12 +3018,28 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             # 自动回滚：target_code 恢复快照原文（written=False，patch_applied
             # 记 False——与"安全检查失败保持原代码"同口径，避免 Executor
             # 测回滚前代码、Debugger 分析回滚后代码的"幻象迭代"）
+            # C6（2026-10-05 系统审查 P0）：同时恢复**磁盘**——此前仅改
+            # state（effective_code/original_code）不写回 target_file，下一轮
+            # executor 读磁盘测到的仍是"已回滚"的坏补丁代码，状态与存储分叉。
             effective_code = original_code
             written = False
+            _disk_restored = False
+            try:
+                _write_file_atomic(os.path.abspath(state.get("target_file", "")), original_code)
+                _disk_restored = True
+            except Exception:
+                logger.exception(
+                    "A-03 回滚落盘失败：磁盘仍保留坏补丁（target_file=%s）",
+                    state.get("target_file"),
+                )
+            # 磁盘未恢复时如实报告 rolled_back=False（避免下游把
+            # "仅状态回滚"当作已恢复证据消费）
+            _rolled_back = _disk_restored
             logger.warning(
-                "A-03 P2P 回归失败，补丁已自动回滚（verdict=%s, snapshot=%s）",
+                "A-03 P2P 回归失败，补丁已自动回滚（verdict=%s, snapshot=%s, disk_restored=%s）",
                 _verdict,
                 _pr_result["snapshot_id"],
+                _disk_restored,
             )
         resample_update["patch_rollback_verdict"] = _verdict
         resample_update["patch_rolled_back"] = _rolled_back
@@ -3043,6 +3103,26 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     _testless_update: dict[str, Any] = {}
     if testless_validation_result is not None:
         _testless_update["testless_validation"] = testless_validation_result
+    # C10（2026-10-05 系统审查 P1）：验证门修复案例暂存——写盘成功的补丁
+    # 三元组（含写盘前原文）经 state["last_applied_repair"] 交给下一轮
+    # executor：验证通过才 add_repair 入库，失败/回滚（written=False）置
+    # None 丢弃。多候选胜出时补丁文本取 stats.applied_patch（胜出候选，
+    # 而非 debugger 原始单补丁）。
+    _repair_patch = state.get("patch") or ""
+    _mc_stats_for_repair = multi_candidate_update.get("multi_candidate_stats") or {}
+    if isinstance(_mc_stats_for_repair.get("applied_patch"), str) and _mc_stats_for_repair["applied_patch"]:
+        _repair_patch = _mc_stats_for_repair["applied_patch"]
+    _repair_stash_update: dict[str, Any] = (
+        {
+            "last_applied_repair": {
+                "original_code": original_code,
+                "patch": _repair_patch,
+                "error_category": state.get("error_category") or "unknown",
+            }
+        }
+        if written
+        else {"last_applied_repair": None}
+    )
     return {
         "target_code": effective_code,
         "repair_history": history,
@@ -3064,6 +3144,8 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
             if "path" in _snapshot
             else {}
         ),
+        # C10：验证门修复案例暂存（见上方注释）
+        **_repair_stash_update,
     }
 
 

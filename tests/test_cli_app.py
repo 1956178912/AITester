@@ -96,15 +96,35 @@ class TestSensitiveFormatter:
         assert secret not in text
         assert "<REDACTED_API_KEY>" in text
 
-    def test_sensitive_formatter_attached_to_cli_handlers(self):
-        """src.cli.app 创建的控制台/文件 handler 应挂 SensitiveFormatter（保证落盘日志也脱敏）。"""
+    def test_sensitive_formatter_attached_to_cli_handlers(self, tmp_path, monkeypatch):
+        """CLI 日志初始化后的控制台/文件 handler 应挂 SensitiveFormatter（落盘脱敏）。
+
+        U8（2026-10-05 系统性审查落地）：日志初始化已从导入期副作用改为
+        cli() 入口惰性执行——本用例直接调 _configure_cli_logging()（在
+        tmp_path CWD 中，不污染仓库目录），并断言生效 handler 全部挂
+        SensitiveFormatter。
+        """
         from src.cli import app as cli_app
         from src.utils.logging_utils import SensitiveFormatter
 
+        monkeypatch.chdir(tmp_path)
+        cli_app._LOGGING_CONFIGURED = False
+        cli_app._configure_cli_logging()
+
         assert isinstance(cli_app._log_formatter, SensitiveFormatter)
-        assert cli_app._console_handler.formatter is cli_app._log_formatter
-        for handler in cli_app._log_handlers:
+        assert cli_app._ACTIVE_CLI_HANDLERS, "初始化后应存在生效 handler"
+        for handler in cli_app._ACTIVE_CLI_HANDLERS:
             assert handler.formatter is cli_app._log_formatter
+
+    def test_import_has_no_log_file_side_effect(self, tmp_path, monkeypatch):
+        """U8：导入 src.cli.app 不得在 CWD 产生 aitester.log 或改 root logger。"""
+        monkeypatch.chdir(tmp_path)
+        import importlib
+
+        from src.cli import app as cli_app
+
+        importlib.reload(cli_app)
+        assert not (tmp_path / "aitester.log").exists(), "导入期产生了日志文件（副作用回归）"
 
 
 class TestRunSequentialResilience:

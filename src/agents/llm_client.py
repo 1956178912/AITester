@@ -266,7 +266,7 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
     if not usage:
         return True
     try:
-        from src.graph.token_usage import record_usage
+        from src.budget.token_usage import record_usage
 
         if isinstance(usage, dict):
             input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
@@ -276,7 +276,7 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
             output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
         record_usage(input_tokens, output_tokens, model=model_name)
         # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）
-        from src.graph.cost_budget import check_budget
+        from src.budget.cost_budget import check_budget
 
         return check_budget(consumed_delta_tokens=input_tokens + output_tokens)
     except Exception as e:  # O14（2026-09-29 审查 P0）：记账异常 fail-closed。
@@ -286,7 +286,7 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
         # 失效且无告警。现改为 fail-closed：COST_BUDGET_ENABLE=true 时记账
         # 异常直接上抛（让调用方感知守卫不可用），默认关时保持历史
         # "静默忽略"口径（零行为变化）。
-        from src.graph.cost_budget import _budget_enabled as _cb_enabled
+        from src.budget.cost_budget import _budget_enabled as _cb_enabled
 
         if _cb_enabled():
             logger.exception("O14 预算记账异常（fail-closed）: %s", e)  # noqa: TRY401 — %s 仅取 str 摘要（traceback 由 exception 自带）

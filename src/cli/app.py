@@ -32,6 +32,7 @@ import click
 
 from config import COVERAGE_THRESHOLD, EXECUTION_TIMEOUT, MAX_ITERATIONS
 from src import __version__
+from src.budget import token_usage
 from src.cli.output import (
     Colors,
     _rich_available,
@@ -42,7 +43,6 @@ from src.cli.output import (
     success_msg,
     warning_msg,
 )
-from src.graph import token_usage
 from src.graph.event_bus import get_event_bus
 from src.graph.state import create_initial_state
 from src.graph.workflow import build_workflow, end_task_trace, start_task_trace
@@ -57,28 +57,47 @@ LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # 堆栈）上再脱敏一次，堵住 SensitiveFilter 只覆盖消息体、异常堆栈绕过的盲区
 _log_formatter = SensitiveFormatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
-# 文件 handler 在导入期立即打开 aitester.log：CWD 不可写时（只读环境/无权限目录）
-# 不能因此让整个 CLI 崩溃，降级为仅控制台输出
-_console_handler = logging.StreamHandler(sys.stdout)
-_console_handler.setFormatter(_log_formatter)
-_log_handlers: list[logging.Handler] = [_console_handler]
-try:
-    _file_handler = logging.FileHandler("aitester.log", encoding="utf-8")
-    _file_handler.setFormatter(_log_formatter)
-    _log_handlers.append(_file_handler)
-except OSError:
-    pass
+# U8（2026-10-05 系统性审查落地）：日志初始化从"导入期副作用"改为 CLI 入口
+# 惰性初始化——此前 import src.cli.app 即 basicConfig + 在 CWD 打开
+# aitester.log，任何把它当库导入的代码（测试/嵌入/experiments）都被迫产生
+# 日志文件、被改 root logger。现拆为 _configure_cli_logging()，仅 click 组
+# cli() 回调调用（幂等哨兵防重）；模块导入零副作用。
+_LOGGING_CONFIGURED = False
+# U8：生效中的 handler 清单（_configure_cli_logging 执行后填充，供测试/诊断
+# 观测脱敏 formatter 是否挂载；导入期为空列表 = 未初始化）。
+_ACTIVE_CLI_HANDLERS: list[logging.Handler] = []
 
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=_log_handlers,
-)
 
-# 接入敏感信息脱敏过滤器（SensitiveFilter）：
-# LLM 调用异常文本可能携带 API Key / JWT 等凭证，过滤后自动替换为占位符，
-# 避免凭证泄露进 aitester.log 与控制台输出。此前该模块未被任何入口引用，
-# 脱敏能力实际从未生效。
-setup_logger_safety()
+def _configure_cli_logging() -> None:
+    """CLI 入口日志初始化（幂等；文件 handler 失败降级仅控制台）。"""
+    global _LOGGING_CONFIGURED
+    if _LOGGING_CONFIGURED:
+        return
+    _LOGGING_CONFIGURED = True
+    # 文件 handler 在 CLI 启动时打开 aitester.log：CWD 不可写时（只读环境/
+    # 无权限目录）不能因此让 CLI 崩溃，降级为仅控制台输出
+    _console_handler = logging.StreamHandler(sys.stdout)
+    _console_handler.setFormatter(_log_formatter)
+    handlers: list[logging.Handler] = [_console_handler]
+    try:
+        _file_handler = logging.FileHandler("aitester.log", encoding="utf-8")
+        _file_handler.setFormatter(_log_formatter)
+        handlers.append(_file_handler)
+    except OSError:
+        pass
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=handlers,
+    )
+    _ACTIVE_CLI_HANDLERS.clear()
+    _ACTIVE_CLI_HANDLERS.extend(handlers)
+
+    # 接入敏感信息脱敏过滤器（SensitiveFilter）：
+    # LLM 调用异常文本可能携带 API Key / JWT 等凭证，过滤后自动替换为占位符，
+    # 避免凭证泄露进 aitester.log 与控制台输出。
+    setup_logger_safety()
+
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +161,8 @@ def cli() -> None:
     一个基于 LangGraph 的多智能体系统，自动为 Python 代码生成测试、诊断错误、
     并尝试修复问题，直至测试通过或达到最大迭代次数。
     """
+    # U8：CLI 入口惰性日志初始化（幂等；库导入不再产生 aitester.log）
+    _configure_cli_logging()
 
 
 # ─── 任务执行 ─────────────────────────────────────────────────────────────────
@@ -377,7 +398,7 @@ def _run_single_task(
     #   - cost_budget 的 budget.exceeded 一旦置真永不复位 → 同线程后续任务
     #     所有 LLM 调用被前置守卫拦下（任务级预算退化为线程级终身封顶）。
     token_usage.reset()
-    from src.graph.cost_budget import reset_budget
+    from src.budget.cost_budget import reset_budget
 
     reset_budget()
 
@@ -448,7 +469,7 @@ def _run_single_task(
     # 6.1/1.4：--json 输出含 1.4 事件总线观测统计 + 5.4 预算统计
     # （纯观测字段，供管道 / 脚本消费；非 JSON 模式不展示）
     from src.agents.semantic_cache import get_semantic_cache_stats
-    from src.graph.cost_budget import get_process_budget_stats
+    from src.budget.cost_budget import get_process_budget_stats
 
     result = {
         "success": True,

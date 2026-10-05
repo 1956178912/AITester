@@ -176,7 +176,7 @@ def _lru_clear() -> None:
 
 def _budget_exceeded_error() -> Exception:
     """5.4 预算超限异常工厂（延迟构造，避免模块加载期对 cost_budget 的依赖）。"""
-    from src.graph.cost_budget import BudgetExceededError, get_budget_stats
+    from src.budget.cost_budget import BudgetExceededError, get_budget_stats
 
     stats = get_budget_stats()
     return BudgetExceededError(
@@ -559,7 +559,7 @@ class BaseAgent:
         # 局部标志）时拒绝本次调用（快速失败，不再空转烧 token）。
         # 开关 COST_BUDGET_ENABLE 默认 false：is_budget_exceeded() 恒 False，
         # 历史口径零变化。
-        from src.graph.cost_budget import is_budget_exceeded
+        from src.budget.cost_budget import is_budget_exceeded
 
         if is_budget_exceeded():
             raise _budget_exceeded_error()

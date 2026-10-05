@@ -11,6 +11,7 @@ test_runs.output 和 repair_history.patch 使用 MEDIUMTEXT，可存储完整的
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 
@@ -95,9 +96,15 @@ def init_database() -> None:
     """)
 
     # 提交事务并关闭连接
-    conn.commit()
-    cursor.close()
-    conn.close()
+    # U10（2026-10-05 系统性审查落地）：关闭动作包 try/finally——建表 SQL
+    # 异常时此前直接抛出，cursor/conn 泄漏（MySQL 连接池有限，泄漏会耗尽）。
+    try:
+        conn.commit()
+    finally:
+        with contextlib.suppress(Exception):
+            cursor.close()
+        with contextlib.suppress(Exception):
+            conn.close()
     # 初始化完成后记录日志（INFO 级别），替代原有 print 输出
     logger.info("数据库 `%s` 初始化完成，包含表：tasks, test_runs, repair_history", MYSQL_DATABASE)
 

@@ -255,7 +255,21 @@ class ExpertPoolAgent:
         candidates: list[dict[str, Any]] = [None] * self.expert_count  # type: ignore[list-item]
         timeout_s = _expert_timeout_seconds()
 
+        # C8（2026-10-05 系统审查 P0）：任务级记账实例跨线程传播。
+        # token_usage / cost_budget 均为线程局部——工作线程不绑定时，专家池
+        # 的 LLM 调用记到孤儿线程上（任务统计失真 + 预算上限被绕过）。
+        # 提交前捕获本任务（提交线程）的两个累计器实例，_run_expert 在
+        # 工作线程内 attach 到同实例，记账/预算作用域跟随任务。
+        from src.budget.cost_budget import attach_budget, current_budget
+        from src.budget.token_usage import attach_usage, get_usage
+
+        _task_usage = get_usage()
+        _task_budget = current_budget()
+
         def _run_expert(idx: int, dimension: str) -> None:
+            # C8：工作线程记账绑定（同实例可变共享，字段读改写由各模块锁保护）
+            attach_usage(_task_usage)
+            attach_budget(_task_budget)
             # 专家聚焦单一维度：注入维度标签 + 全量上下文（target_code / test_output /
             # failed_cases / rag_references），让 LLM 按该维度产出候选补丁。
             # 实现口径（保守、零新依赖）：复用 DebuggerAgent.debug 的 prompt 构建

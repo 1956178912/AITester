@@ -648,6 +648,14 @@ _ROOT_CAUSE_MAP: dict[ErrorCategory, str] = {
     ErrorCategory.ASSERTION: "断言失败：测试期望值与实际返回值不一致，可能是逻辑 bug 或测试用例设计问题",
     ErrorCategory.TIMEOUT: "执行超时：函数可能存在死循环或性能问题，需要优化算法复杂度",
     ErrorCategory.UNKNOWN: "未知错误类型：请检查错误输出并手动分析原因",
+    # U10（2026-10-05 系统性审查落地）：补齐 6 类缺失映射——此前命中即
+    # 静默落"未知错误类型"（reports 覆盖面与 error_classifier 18 类漂移）。
+    ErrorCategory.LLM_EMPTY_RESPONSE: "LLM 返回空响应（无任何内容），可能为配额耗尽/网关拒绝/上下文超限",
+    ErrorCategory.LLM_JSON_PARSE_FAILED: "LLM 响应非空但 JSON 解析失败（格式不合约定或被截断）",
+    ErrorCategory.EXECUTION_TRACE_MISSING: "任务失败但执行轨迹为空（执行链路未落轨迹或提前崩溃）",
+    ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: "多候选补丁全部被静态筛选拒绝（无候选可用）",
+    ErrorCategory.PATCH_SYNTAX_INVALID: "补丁经重采样后仍语法不合法（无法进入应用阶段）",
+    ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: "测试经重生成后通过，但源码未变——通过不可归因于修复（假通过风险）",
 }
 
 
@@ -700,6 +708,37 @@ _FIX_SUGGESTION_MAP: dict[ErrorCategory, list[str]] = {
         "1. 仔细分析错误输出信息",
         "2. 检查代码逻辑是否符合预期",
         "3. 添加更多调试信息辅助定位",
+    ],
+    # U10：补齐 6 类缺失的修复建议映射（同 _ROOT_CAUSE_MAP 扩展口径）
+    ErrorCategory.LLM_EMPTY_RESPONSE: [
+        "1. 检查端点配额与账单状态（空响应常见于配额耗尽）",
+        "2. 缩短输入上下文（超限会被网关静默置空）",
+        "3. 重试一次并记录端点健康状态，连续空响应时切换 provider",
+    ],
+    ErrorCategory.LLM_JSON_PARSE_FAILED: [
+        "1. 在 prompt 中给出严格 JSON schema 与示例",
+        "2. 使用仓内 extract_json_object 的多级降级提取（括号平衡）",
+        "3. 连续失败时降低输出复杂度或换模型",
+    ],
+    ErrorCategory.EXECUTION_TRACE_MISSING: [
+        "1. 检查 executor 是否被提前中断（超时/崩溃）",
+        "2. 确认 AITESTER_TRACE 开关与轨迹落盘路径可写",
+        "3. 对该任务单独重跑以补齐轨迹证据",
+    ],
+    ErrorCategory.MULTI_CANDIDATE_ALL_REJECTED: [
+        "1. 查看拒绝原因分布（语法/契约/危险 API），针对性调整生成 prompt",
+        "2. 放宽过严的静态筛选门槛（保留语法合法候选）",
+        "3. 提高候选数量上限后重试",
+    ],
+    ErrorCategory.PATCH_SYNTAX_INVALID: [
+        "1. 对补丁输出做 AST 语法自检后再提交应用",
+        "2. 检查 prompt 是否混入了非代码文本（markdown/解释）",
+        "3. 采用完整文件替换格式而非片段拼接",
+    ],
+    ErrorCategory.TEST_REGENERATED_PASS_UNVERIFIED: [
+        "1. 该轮'通过'不可计入修复成功（源码未变）",
+        "2. 核对重生成测试是否覆盖了原失败路径",
+        "3. 以 gold/独立测试裁决为准，避免把测试抖动当修复",
     ],
 }
 

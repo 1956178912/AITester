@@ -926,7 +926,7 @@ def get_workflow_stats() -> dict[str, Any]:
     # 5.4/5.1 观测层：预算与语义缓存统计（纯读操作，无副作用）
     try:
         from src.agents.semantic_cache import get_semantic_cache_stats
-        from src.graph.cost_budget import get_process_budget_stats
+        from src.budget.cost_budget import get_process_budget_stats
 
         stats["cost_budget"] = get_process_budget_stats()
         stats["semantic_cache"] = get_semantic_cache_stats()

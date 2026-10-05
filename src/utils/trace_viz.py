@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -165,13 +166,18 @@ def trace_to_html(trace_paths: list[str], out_path: str, title: str = "AITester 
 
         badge = "pass" if passed_flag else "fail"
         label = "PASS" if passed_flag else "FAIL"
+        # U10（2026-10-05 系统性审查落地）：DOM id 白名单净化——此前仅把
+        # "." 替换为 "_"，task_id/文件名含引号（'、"）或其他字符时会逃出
+        # onclick 字符串/属性边界注入 HTML/JS。现只保留 [A-Za-z0-9_-]，
+        # 其余一律替换为 "_"（显示文本仍走 _esc(fname)）。
+        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", fname)
         task_cards.append(
-            f'<div class="task"><div class="task-head" onclick="toggle(\'{fname.replace(".", "_")}\')">'
+            f'<div class="task"><div class="task-head" onclick="toggle(\'{safe_id}\')">'
             f"<b>{_esc(fname)}</b> "
             f'<span class="badge {badge}">{label}</span></div>'
             f"{timeline_html}"
             f'<div class="decision">节点数: {len(node_recs)}</div>'
-            f'<div id="{fname.replace(".", "_")}" class="detail">{detail_html}</div></div>'
+            f'<div id="{safe_id}" class="detail">{detail_html}</div></div>'
         )
 
     summary_html = (
