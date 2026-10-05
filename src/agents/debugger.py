@@ -303,7 +303,18 @@ class DebuggerAgent(BaseAgent):
         """
         # Step 1: 用规则分类器快速判断错误类型（不消耗 LLM token）
         # target_module 提供时，断言失败可区分 ASSERTION 与 LOGIC_ERROR（P2 细化）
-        error_category = self.classifier.classify(test_output, failed_cases, target_module=target_module)
+        # P2-4（2026-10-05 独立审查）：改走 classify_with_confidence（fallback 关闭
+        # 时分类结果与 classify 逐样本等价），置信度随返回 dict 写 state
+        # error_confidence——risk_approval 三因子风险的"错误置信度"因子此前
+        # 恒 None 占位，接线后真实信号可用。
+        _cls_result = self.classifier.classify_with_confidence(
+            test_output,
+            target_module=target_module,
+            failed_cases=failed_cases,
+            enable_fallback=False,
+        )
+        error_category = _cls_result.category
+        error_confidence: float = _cls_result.confidence
         # Step 2: 提取错误上下文（含 traceback 行号/语法错误行列，3.3 位置感知复用）
         context = self.classifier.extract_error_context(test_output, failed_cases)
         # Step 2b: 获取对应修复策略描述
@@ -370,6 +381,7 @@ class DebuggerAgent(BaseAgent):
                 return {
                     "root_cause": review_reason or "测试本身存在缺陷（Review Agent 判定）",
                     "error_category": error_category.value,
+                    "error_confidence": error_confidence,
                     "fix_strategy": "重新生成测试（测试缺陷，非实现缺陷）",
                     "patch": "",
                     "adversarial_check": {"scenarios_checked": 0, "all_passed": False, "critic_degraded": False},
@@ -663,6 +675,9 @@ class DebuggerAgent(BaseAgent):
         return {
             "root_cause": result.get("root_cause", "未知"),
             "error_category": error_category.value,
+            # P2-4：规则分类置信度（0.2/0.5/0.9 分层），供 state["error_confidence"]
+            # → risk_approval 置信度因子消费（此前三因子恒缺一）
+            "error_confidence": error_confidence,
             "fix_strategy": result.get("fix_strategy", strategy_text),
             "patch": patch,
             # 3.1 改进：对抗性推理结果（未启用时为零值，启用时含

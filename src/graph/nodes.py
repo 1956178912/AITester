@@ -1455,6 +1455,22 @@ def _record_execution_trace(
     )
 
 
+def _patch_line_delta_for_reward(state: AITesterState) -> int | None:
+    """P2-5：估算本轮补丁的行数变化（|补丁后 − 原代码|，None = 无法度量）。
+
+    信号源：state["last_applied_repair"]["original_code"]（patch_applier
+    写盘成功时的原文暂存）与 state["target_code"]（executor 本轮实测的
+    补丁后代码）。两者齐备时行数差即补丁体量；任一缺失（无补丁轮 /
+    写盘被拒）返回 None（simplicity 保守记 0）。
+    """
+    last_repair = state.get("last_applied_repair") or {}
+    original_code = last_repair.get("original_code")
+    current_code = state.get("target_code")
+    if not original_code or not current_code:
+        return None
+    return abs(len(str(current_code).splitlines()) - len(str(original_code).splitlines()))
+
+
 def _append_trace_record(
     state: AITesterState,
     trace: list[dict[str, Any]],
@@ -1464,7 +1480,12 @@ def _append_trace_record(
     elapsed_seconds: float,
 ) -> list[dict[str, Any]]:
     """把本次执行记录追加到轨迹列表（3.2 观测层，写入失败不阻断主流程）。"""
-    reward_signals = _compute_reward_signals(passed, coverage_delta, elapsed_seconds)
+    reward_signals = _compute_reward_signals(
+        passed,
+        coverage_delta,
+        elapsed_seconds,
+        patch_line_delta=_patch_line_delta_for_reward(state),
+    )
     trace.append(
         {
             "iteration": state.get("iteration", 0),
@@ -1478,23 +1499,38 @@ def _append_trace_record(
     return trace
 
 
-def _compute_reward_signals(passed: bool, coverage_delta: float | None, elapsed_seconds: float) -> dict[str, float]:
+def _compute_reward_signals(
+    passed: bool,
+    coverage_delta: float | None,
+    elapsed_seconds: float,
+    patch_line_delta: int | None = None,
+) -> dict[str, float]:
     """计算多维度奖励信号（3.2 保守线性归一，供执行反馈 RL 备料）。
 
     Args:
         passed: 测试是否通过。
         coverage_delta: 相对上一轮覆盖率变化（首轮为 None）。
         elapsed_seconds: 本次执行耗时（秒）。
+        patch_line_delta: 本轮补丁的行数变化（|补丁后行数 − 原代码行数|，
+            P2-5 注入；None = 无补丁来源，无法度量）。
 
     Returns:
         {"correctness": 0.0-1.0, "efficiency": 0.0-1.0,
          "simplicity": 0.0-1.0} 的保守归一奖励信号。
+
+    P2-5（2026-10-05 独立审查）：simplicity 此前与 efficiency 同源（都是
+    elapsed 线性归一，仅分母 ×2）——"简单性"名不副实，作为 RL 备料会引入
+    系统性噪声。现改为真实的补丁简洁度度量：|行数变化| 越小信号越高
+    （线性归一，30 行饱和为 0——BOOSTAPR 式最小改动偏好的信号化）；
+    None（无补丁/无来源）保守记 0.0（不奖励无法度量的维度）。
     """
     correctness = 1.0 if passed else 0.0
-    # efficiency/simplicity 沿用历史口径（基于 EXECUTION_TIMEOUT 的线性归一），
-    # 不改变奖励信号定义（避免影响历史实验数据可比性）
+    # efficiency 沿用历史口径（基于 EXECUTION_TIMEOUT 的线性归一）
     efficiency = max(0.0, round(1.0 - elapsed_seconds / EXECUTION_TIMEOUT, 3))
-    simplicity = max(0.0, round(1.0 - elapsed_seconds / (EXECUTION_TIMEOUT * 2.0), 3))
+    if patch_line_delta is None:
+        simplicity = 0.0
+    else:
+        simplicity = max(0.0, round(1.0 - abs(patch_line_delta) / 30.0, 3))
     return {
         "correctness": round(correctness, 4),
         "efficiency": efficiency,
@@ -2076,6 +2112,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     update: dict[str, Any] = {
         "diagnosis": result["root_cause"],
         "error_category": result.get("error_category", "unknown"),
+        # P2-4（2026-10-05 独立审查）：规则分类置信度入 state（risk_approval
+        # 置信度因子的信号源；此前该键未声明未写入，三因子恒缺一）
+        "error_confidence": result.get("error_confidence"),
         "patch": result["patch"],
         # 3.2 对抗性推理：记录 LLM 输出的对抗性校验结果（缺省时为零值）
         "adversarial_check": result.get("adversarial_check", {"scenarios_checked": 0, "all_passed": False}),
@@ -2160,9 +2199,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
 
     if _risk_enabled():
         # M12 D.4-2：传入真实三因子（此前恒 None → 风险分接近常量）
-        # error_confidence 尚未声明为 state 键（M14 补全前用 None 占位），
-        # 待 error_classifier 置信度写入 state 后可读真实值。
-        _confidence_val: float | None = None
+        # P2-4（2026-10-05 独立审查）：error_confidence 已声明为 state 键
+        # （debugger.classify_with_confidence 产出，_debugger_node 写入），
+        # 此处读真实值；None（未运行 debugger / 旧路径）按保守高风险处理
+        _confidence_val: float | None = state.get("error_confidence")
         _changed_files_val = len(state.get("cross_file_deps") or []) or None
         _budget_ratio_val: float | None = None
         _budget_exceeded_val: bool | None = None
@@ -2204,6 +2244,25 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                     "risk_score": _risk_result.get("risk_score"),
                 }
             )
+            # P2-4（2026-10-05 独立审查）：resume 值消费——人工审批决策记录入
+            # state（此前仅判 None 不消费，审批结果丢失，回路闭环不完整）。
+            # 决策语义（保守）：Command(resume=True/"approve") = 放行本轮补丁
+            # 继续；其余值（False / "reject"）= 人工拒绝——保守丢弃本轮补丁
+            # （patch 置空，路由走"无补丁"分支，不应用未审批的高风险修改）。
+            _approved = _resume_value in (True, "approve", "approved")
+            if _resume_value is not None:
+                update["risk_approval_decision"] = {
+                    "resume_value": _resume_value if isinstance(_resume_value, (str, int, float, bool)) else str(_resume_value),
+                    "approved": _approved,
+                    "risk_level": _risk_result.get("risk_level"),
+                }
+                if not _approved:
+                    logger.warning(
+                        "M12 人工审批拒绝（resume=%r）：丢弃本轮高风险补丁（risk_level=%s）",
+                        _resume_value,
+                        _risk_result.get("risk_level"),
+                    )
+                    result["patch"] = ""
             if _resume_value is None:
                 logger.warning(
                     "M12 暂停未生效（无 checkpointer），继续工作流（risk_level=%s）",

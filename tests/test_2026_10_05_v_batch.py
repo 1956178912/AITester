@@ -295,3 +295,57 @@ class TestV6MainBatchReproGates:
         args = rmb._parse_args()
         assert args.no_deterministic is True
         assert args.allow_dirty is False
+
+
+class TestV7ConfidenceWiring:
+    """V7：错误置信度接线 + reward simplicity 语义（P2-4 / P2-5）。"""
+
+    def test_debugger_result_contains_error_confidence(self, monkeypatch):
+        """debugger.debug 返回 dict 必含 error_confidence（规则层 0.2/0.5/0.9）。"""
+        from src.agents.debugger import DebuggerAgent
+        from src.agents.error_classifier import ErrorClassifier
+
+        monkeypatch.setattr("src.agents.base_agent.BaseAgent.__init__", lambda self, *a, **k: None)
+        agent = DebuggerAgent()  # system prompt 设置被跳过，classifier 正常实例化
+        assert isinstance(agent.classifier, ErrorClassifier)
+        # classify_with_confidence 走规则层（无 LLM），直接构造最小调用
+        result = agent.classifier.classify_with_confidence(
+            "E   assert 3 == 4\nE   +  where 3 = add(1, 2)\n",
+            target_module="mod",
+            failed_cases=[{"name": "test_x"}],
+            enable_fallback=False,
+        )
+        assert result.confidence in (0.2, 0.5, 0.9)
+        assert result.category is not None
+
+    def test_state_declares_confidence_keys(self):
+        """error_confidence / risk_approval_decision 已声明为 state 键（防
+        LangGraph 通道静默丢弃——M14/O35 同类事故的守卫）。"""
+        from src.graph.state import AITesterState, create_initial_state
+
+        init = create_initial_state(
+            task_uuid="v7-test", target_file="/tmp/v7_mod.py", target_code="def f():\n    return 1\n", max_iterations=3
+        )
+        assert "error_confidence" in init
+        assert "risk_approval_decision" in init
+        assert "error_confidence" in AITesterState.__annotations__
+        assert "risk_approval_decision" in AITesterState.__annotations__
+
+    def test_reward_simplicity_is_patch_size_not_elapsed(self):
+        """P2-5：simplicity 必须对补丁行数敏感、对耗时无感（历史口径
+        simplicity=1-elapsed/(2*TIMEOUT) 与 efficiency 同源的语义失真）。"""
+        from src.graph.nodes import _compute_reward_signals
+
+        # 同耗时、不同补丁体量 → simplicity 必须不同
+        small = _compute_reward_signals(True, None, 5.0, patch_line_delta=2)
+        big = _compute_reward_signals(True, None, 5.0, patch_line_delta=30)
+        assert small["simplicity"] > big["simplicity"]
+        assert small["simplicity"] == 1.0 - 2 / 30 or small["simplicity"] > 0.9
+        assert big["simplicity"] == 0.0
+        # None（无补丁来源）→ 保守 0
+        assert _compute_reward_signals(True, None, 5.0)["simplicity"] == 0.0
+        # efficiency 仍只随耗时变化
+        assert (
+            _compute_reward_signals(True, None, 5.0, patch_line_delta=2)["efficiency"]
+            == (_compute_reward_signals(True, None, 5.0, patch_line_delta=30)["efficiency"])
+        )

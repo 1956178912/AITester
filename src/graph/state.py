@@ -312,6 +312,16 @@ class AITesterState(TypedDict, total=False):
     # 如 "add_boundary_check" / "regenerate_strict_json"），供实验分析
     # "哪类错误走了哪条修复路径"消费。None = 本轮未运行 debugger。
     fix_strategy_tag: str | None
+    # P2-4（2026-10-05 独立审查）：本轮错误分类置信度（0.2/0.5/0.9 分层，
+    # error_classifier.classify_with_confidence 产出，debugger 经返回 dict
+    # 透传写入）。消费方：risk_approval 三因子风险的"错误置信度"因子
+    # （此前恒 None 占位，置信度因子按保守高风险计）。None = 未运行
+    # debugger / 旧路径未产出。
+    error_confidence: float | None
+    # P2-4：人工审批决策记录（M12 risk_approval interrupt 的 resume 值消费
+    # 结果：{"resume_value", "approved", "risk_level"}）。此前 resume 值仅判
+    # None 不消费，审批决策丢失。None = 未触发人工审批。
+    risk_approval_decision: dict[str, Any] | None
     # 2.1 P1 改进：推荐动作类别（llm_resample / repair_code / repair_test /
     # investigate_infra），修复路由分支选择的 coarse 标签。None 同上。
     fix_strategy_action: str | None
@@ -580,6 +590,11 @@ def create_initial_state(
         # 2.1 P1 改进：结构化修复策略标签（默认 None，_debugger_node 写入）
         fix_strategy_tag=None,
         fix_strategy_action=None,
+        # P2-4（2026-10-05 独立审查）：错误分类置信度（默认 None，debugger 写入）
+        error_confidence=None,
+        # P2-4：人工审批决策记录（默认 None，risk_approval interrupt resume
+        # 消费后写入——闭环决策入 state，此前 resume 值仅判 None 不消费）
+        risk_approval_decision=None,
         # 2.2 patch_syntax_invalid 标记（默认 None，重采样耗尽时置 True）
         patch_syntax_invalid_flag=None,
         # A-03（2026-10-04 系统审查 P0）：快照/P2P 回归/自动回滚协议观测字段
