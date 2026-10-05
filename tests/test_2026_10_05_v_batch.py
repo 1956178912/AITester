@@ -224,3 +224,74 @@ class TestV4EvidenceGateBlocking:
         assert update["repair_history"][-1]["patch_applied"] is True
         assert update["patch_evidence_level"] in ("keyword", "none")
         assert (tmp_path / "mod.py").read_text() != original
+
+
+class TestV5NeutralTaskIds:
+    """V5：合成数据集 task_id 中性化（P1-4 评估泄漏修复）。
+
+    锁定：task_id 末段为中性 task_XXXX（不含 pattern 语义），且 gold
+    test_cases 的 import 与该中性模块名一致（M1 裁决与生成测试同名）。
+    pattern 名仅保留在 metadata.pattern_name（分析用，不进 prompt）。
+    """
+
+    def test_task_id_neutral_and_gold_import_matches(self):
+        from src.datasets.synthetic_dataset import SyntheticDataset
+
+        ds = SyntheticDataset(task_count=6, seed=42)
+        for t in ds.tasks:
+            mod = t.task_id.split("__")[-1]
+            assert mod.startswith("task_"), f"task_id 末段必须中性：{t.task_id}"
+            assert t.metadata.get("pattern_name"), "pattern 名保留在 metadata 供分析"
+            gold = t.metadata.get("test_cases") or ""
+            if t.metadata.get("is_cross_file"):
+                continue  # 跨文件 import module_a/b/c（本身中性）
+            assert f"from {mod} import" in gold or f"import {mod}" in gold, (
+                f"gold import 必须与中性模块名一致：{t.task_id}"
+            )
+            assert t.metadata.get("pattern_name") not in t.task_id
+
+    def test_same_seed_same_task_ids(self):
+        from src.datasets.synthetic_dataset import SyntheticDataset
+
+        ids_a = [t.task_id for t in SyntheticDataset(task_count=5, seed=7).tasks]
+        ids_b = [t.task_id for t in SyntheticDataset(task_count=5, seed=7).tasks]
+        assert ids_a == ids_b, "同 seed 的中性 task_id 序列必须稳定"
+
+
+class TestV6MainBatchReproGates:
+    """V6：主批次 runner 复现性前置守卫（P0-1）。
+
+    锁定：dirty tree 硬失败（SystemExit 2）、--allow-dirty 豁免；
+    --no-deterministic 旗标解析（默认确定性开）。
+    """
+
+    def test_dirty_tree_rejected(self, tmp_path, monkeypatch):
+        import subprocess
+
+        from experiments.run_main_batch import _check_repo_clean
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": " M f.py\n"})())
+        try:
+            _check_repo_clean()
+        except SystemExit as e:
+            assert e.code == 2, "dirty tree 必须硬失败退出码 2"
+        else:
+            raise AssertionError("dirty tree 未被拒绝")
+
+    def test_clean_tree_passes(self, monkeypatch):
+        import subprocess
+
+        from experiments.run_main_batch import _check_repo_clean
+
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+        _check_repo_clean()  # 不抛即通过
+
+    def test_no_deterministic_flag_parsed(self, monkeypatch):
+        import sys as _sys
+
+        import experiments.run_main_batch as rmb
+
+        monkeypatch.setattr(_sys, "argv", ["run_main_batch.py", "--no-deterministic"])
+        args = rmb._parse_args()
+        assert args.no_deterministic is True
+        assert args.allow_dirty is False

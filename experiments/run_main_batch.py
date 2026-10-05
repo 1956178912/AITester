@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -61,19 +62,82 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--baselines", default=DEFAULT_BASELINES, help="基线方法列表（逗号分隔）")
     p.add_argument("--output-dir", default=MAIN_BATCH_DIR, help="输出目录（默认 main_batch/ 白名单）")
     p.add_argument("--skip-stats", action="store_true", help="跳过 R14 统计协议（仅跑批次）")
+    # P0-1（2026-10-05 独立审查）：主批次 = 论文数字通道，确定性采样为默认
+    # 协议（R11：temp 强制 0.0 三处级联）；--no-deterministic 显式退出
+    # （对照实验用，provenance 仍如实记录生效温度）。
+    p.add_argument(
+        "--no-deterministic",
+        action="store_true",
+        help="退出确定性采样协议（默认强制 TEMPERATURE=0.0；仅对照实验使用）",
+    )
+    # P0-1：dirty tree 拒绝——git sha 不足以复现代码态时硬失败（U2 先例），
+    # --allow-dirty 显式豁免（provenance 记录 git_dirty=true 供审计）
+    p.add_argument("--allow-dirty", action="store_true", help="豁免 dirty tree 拒绝（不推荐，仅调试）")
     return p.parse_args()
+
+
+def _check_repo_clean() -> None:
+    """P0-1（2026-10-05 独立审查）：dirty tree 硬失败。
+
+    主批次 provenance 记录 git sha + git_dirty，但 sha 不足以复现工作树
+    （历史主批次 provenance git_dirty=true——工件与代码态脱钩）。现把
+    "干净树"前置为硬门禁（与 U2 复现硬失败同口径），豁免仅经
+    --allow-dirty 显式给出。
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f"⚠️ git status 不可用（{e}），跳过 dirty tree 检查（非 git 环境合法）")
+        return
+    if out.stdout.strip():
+        print(
+            "❌ 工作树不干净——主批次实验要求 git 干净树（provenance git sha 才足以复现代码态）：\n"
+            f"{out.stdout}\n"
+            "请先 commit/stash 全部改动；如确需带脏树跑（调试用），加 --allow-dirty。",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+
+def _warn_llm_cache_if_enabled() -> None:
+    """P0-1：LLM 文件缓存开启时警告（缓存命中使"重复实验"非独立样本）。
+
+    不阻断：首批运行缓存是合法的省钱手段；重跑协议（同 prompt 重测）必须
+    AITESTER_LLM_CACHE=0，此处仅提示，避免"看起来重跑了实际全是缓存"。
+    """
+    if os.getenv("AITESTER_LLM_CACHE", "1").strip().lower() not in ("0", "false", "off"):
+        print(
+            "⚠️ AITESTER_LLM_CACHE 未禁用：LLM 文件缓存（TTL 7 天）命中时同 prompt 不再调用 LLM——\n"
+            "   重跑/重复实验请设 AITESTER_LLM_CACHE=0，否则观测非独立样本（p 值失真）。",
+            file=sys.stderr,
+        )
 
 
 def main() -> None:
     args = _parse_args()
+    if not args.allow_dirty:
+        _check_repo_clean()
+    _warn_llm_cache_if_enabled()
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 导入 run_benchmark（副作用：加载 config 开关、校验 API 配置）
     import experiments.run_benchmark as rb
 
+    deterministic = not args.no_deterministic
     print(f"R4 主批次：dataset={args.dataset} task_count={args.task_count} seed={args.seed}")
-    print(f"基线：{args.baselines}；输出：{out_dir}")
+    print(
+        f"基线：{args.baselines}；输出：{out_dir}；确定性采样：{'开（temp=0.0）' if deterministic else '关（对照口径）'}"
+    )
 
     # 跑批次（run_benchmark.run_benchmark 内部已含 provenance 块 + M9 快照）
     summary = rb.run_benchmark(
@@ -82,6 +146,7 @@ def main() -> None:
         output_dir=str(out_dir),
         task_count=args.task_count,
         seed=args.seed,
+        deterministic=deterministic,
     )
 
     # 定位刚产出的批次文件（按 mtime 最大定位）
@@ -108,7 +173,14 @@ def main() -> None:
     # batch_path.name 缺父目录会解析不到；用 relative_to 生成正确相对路径）
     batch_rel = batch_path.relative_to(out_dir.parent).as_posix()
     results = load_experiment_results(str(out_dir.parent), [batch_rel])
-    run_all_statistics(str(out_dir.parent), str(out_dir / "statistical_report.md"))
+    # P0-1（2026-10-05 独立审查）修复：run_all_statistics 同步传入批次白名单
+    # ——此前仅 load_experiment_results 用白名单（结果只喂 task_counts 计数），
+    # 报告本体走 glob 全目录，统计分母与白名单脱钩（跨批次重复任务混入）
+    run_all_statistics(
+        str(out_dir.parent),
+        str(out_dir / "statistical_report.md"),
+        batch_files=[batch_rel],
+    )
     summary["r14_batch_whitelist"] = {
         "batch_file": batch_rel,
         "task_counts": {bl: len(rows) for bl, rows in results.items()},

@@ -1588,6 +1588,24 @@ _DIFFICULTY_PATTERNS: dict[int, list[dict[str, Any]]] = {
 }
 
 
+def _neutralize_gold_imports(test_cases: str, old_module: str, new_module: str) -> str:
+    """P1-4（2026-10-05 独立审查）：把 gold test_cases 的 import 重写为中性模块名。
+
+    单文件模板的 gold 测试以 ``from <pattern 名> import ...`` 引用被测模块；
+    task_id 中性化后模块文件名变为 task_XXXX，gold 裁决与生成测试必须
+    import 同名模块。仅重写 import 语句中的模块 token（from/import 行首），
+    不触碰测试正文中的同名词符串。跨文件模板 import module_a/b/c（与
+    pattern 名无关），替换为 no-op。
+    """
+    import re
+
+    if not test_cases or not old_module or old_module == new_module:
+        return test_cases
+    text = re.sub(rf"^(\s*from ){re.escape(old_module)}( import )", rf"\g<1>{new_module}\g<2>", test_cases, flags=re.MULTILINE)
+    text = re.sub(rf"^(\s*import ){re.escape(old_module)}(\s*$)", rf"\g<1>{new_module}\g<2>", text, flags=re.MULTILINE)
+    return text
+
+
 class SyntheticDataset(BaseDatasetLoader):
     """
     合成缺陷数据集：通过预定义模板自动生成大量缺陷任务，无需外部数据。
@@ -1689,7 +1707,16 @@ class SyntheticDataset(BaseDatasetLoader):
         for i, difficulty in enumerate(seq):
             pattern = self._pick_pattern(difficulty, rng)
             noise = rng.randint(0, 9999)
-            task_id = f"synthetic__{pattern['name']}_{i:04d}"
+            # P1-4（2026-10-05 独立审查）：task_id 末段中性化（task_XXXX）。
+            # 历史口径 task_id 末段 = pattern 名（如 sqrt_negative_input_0043），
+            # 经 run_benchmark 的"task_id 末段 = 模块文件名"约定进入 generator
+            # 输入——文件名即缺陷答案，检出能力被命名提示污染高估。中性序号
+            # 下模块文件名不含缺陷语义；pattern 名保留在 metadata.pattern_name
+            # （仅结果分析/聚类用，不进 prompt）。gold test_cases 的 import 同步
+            # 重写为中性模块名（_neutralize_gold_imports），保证 gold 裁决与
+            # 生成测试 import 同名模块。
+            neutral_module = f"task_{i:04d}"
+            task_id = f"synthetic__{neutral_module}"
 
             # gold 定位目标（position_aware_ab._locate_accuracy 的金标准匹配键）：
             # 模板自带 suggested_function 时直接采用；跨文件任务取 target_module 的
@@ -1729,7 +1756,7 @@ class SyntheticDataset(BaseDatasetLoader):
                     # cross_file_plan.target_modules（如 module_c），与被调方
                     # 真实文件名口径一致。
                     instance_code=module_b_code,
-                    test_code=pattern["test_cases"],
+                    test_code=_neutralize_gold_imports(pattern["test_cases"], pattern["name"], neutral_module),
                     expected_pass_count=pattern["expected_pass"],
                     total_test_count=pattern["total_tests"],
                     metadata={
@@ -1753,7 +1780,9 @@ class SyntheticDataset(BaseDatasetLoader):
                         # M1（2026-09-29 审查 P0）：跨文件任务 gold 裁决材料
                         # （gold test_cases；跨文件 fixed 已由 fixed_module_code
                         # 提供，供 _gold_fixed_code 消费）。
-                        "test_cases": pattern.get("test_cases", ""),
+                        "test_cases": _neutralize_gold_imports(
+                            pattern.get("test_cases", ""), pattern["name"], neutral_module
+                        ),
                     },
                 )
             else:
@@ -1764,7 +1793,7 @@ class SyntheticDataset(BaseDatasetLoader):
                     repo_name=f"synthetic/{pattern['name']}",
                     problem_statement=pattern["description"],
                     instance_code=instance_code,
-                    test_code=pattern["test_cases"],
+                    test_code=_neutralize_gold_imports(pattern["test_cases"], pattern["name"], neutral_module),
                     expected_pass_count=pattern["expected_pass"],
                     total_test_count=pattern["total_tests"],
                     metadata={
@@ -1780,8 +1809,11 @@ class SyntheticDataset(BaseDatasetLoader):
                         # 供 run_benchmark._m1_metrics 计算 detection_rate /
                         # repair_rate / false_fix_rate（gold test_cases 在
                         # buggy/fixed 两侧独立裁决，消除 oracle-from-implementation
-                        # 假成功通道）。
-                        "test_cases": pattern.get("test_cases", ""),
+                        # 假成功通道）。P1-4：import 同步中性化（与 test_code 同一
+                        # 重写，gold 裁决与生成测试 import 同名模块）。
+                        "test_cases": _neutralize_gold_imports(
+                            pattern.get("test_cases", ""), pattern["name"], neutral_module
+                        ),
                         "fixed": pattern.get("fixed", ""),
                     },
                 )

@@ -1093,6 +1093,10 @@ def run_single_task(
         # 写入 instance_code 到临时文件
         # 使用 task_id 的最后一段作为模块名，确保与文件名一致
         # 转换非法字符：连字符→下划线，确保是合法 Python 标识符
+        # P1-4（2026-10-05 独立审查）：泄漏修复在生成层——synthetic_dataset
+        # 已把 task_id 末段中性化（task_XXXX）并同步重写 gold import，本侧
+        # 派生规则不变即自动中性（单点派生，generator 看到的文件名不含
+        # pattern 语义）
         raw_name = task.task_id.split("__")[-1]
         module_name = raw_name.replace("-", "_")[:50]
         instance_file = os.path.join(tmp_dir, f"{module_name}.py")
@@ -1743,7 +1747,8 @@ def _compute_mutation_detection_for_baseline(
             continue
         mat = _extract_gold_material(task)
         # 有 fixed 材料但无 gold test_cases 的边缘任务：模块名按 M1 同规则
-        # 从 task_id 末段派生（与 _extract_gold_material 一致）
+        # 从 task_id 末段派生（与 _extract_gold_material 一致；P1-4 中性化
+        # 在生成层完成后，此处自动为中性 task_XXXX）
         module_name = mat[0] if mat is not None else str(task.task_id).split("__")[-1].replace("-", "_")[:50]
         result = mutation_detection_rate(
             fixed_code=fixed_code,

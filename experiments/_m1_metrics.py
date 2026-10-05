@@ -187,6 +187,9 @@ def _extract_gold_material(task: Any) -> tuple[str, str, str] | None:
     fixed = md.get("fixed") or ""
     if not test_cases.strip():
         return None
+    # P1-4（2026-10-05 独立审查）：模块名 = task_id 末段。泄漏修复在**生成
+    # 层**完成（synthetic_dataset 中性化 task_id 并同步重写 gold import），
+    # 本侧派生规则保持不变即自动中性——单点派生，避免双名机制。
     raw_name = str(task.task_id).split("__")[-1]
     module_name = raw_name.replace("-", "_")[:50]
     return module_name, test_cases, fixed
