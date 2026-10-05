@@ -2013,7 +2013,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                         signature=_sb_signature,
                         strategy=str(strategy.get("strategy") or ""),
                         success=False,
-                        task_id=str(state.get("task_id") or ""),
+                        task_id=str(state.get("task_uuid") or ""),  # P1-6：task_id 未声明（死读恒 None），改读 task_uuid
                     )
                 # M14（2026-09-29 审查 P0）：expert_pool_winner 此前写入 result
                 # 但从未并入节点返回 dict（result 的键 ≠ update 的键），现并入

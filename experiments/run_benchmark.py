@@ -1122,6 +1122,9 @@ def run_single_task(
             module_name=module_name,
             target_code=task.instance_code,
             max_iterations=MAX_ITERATIONS,
+            # P1-6：问题描述入 state（注入防护的外部可控文本主源——此前
+            # state.get("problem_statement") 读未声明键恒 None，防护空转）
+            problem_statement=getattr(task, "problem_statement", None),
         )
 
         # 2026-10 改进：跨文件任务预置 cross_file_deps（供 _resolve_target_module

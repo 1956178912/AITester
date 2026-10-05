@@ -312,6 +312,13 @@ class AITesterState(TypedDict, total=False):
     # 如 "add_boundary_check" / "regenerate_strict_json"），供实验分析
     # "哪类错误走了哪条修复路径"消费。None = 本轮未运行 debugger。
     fix_strategy_tag: str | None
+    # P1-6（2026-10-05 独立审查）：任务问题描述（SWE-bench issue 文本 /
+    # 合成任务 description）——注入防护的外部可控文本主源（此前
+    # nodes.state.get("problem_statement") 读未声明键恒 None，静默死读）。
+    # None = 调用方未提供（CLI 单文件场景）。
+    problem_statement: str | None
+    # P1-6：CLI 自定义任务描述（预留通道，当前无写入方，读取合法恒 None）。
+    task_description: str | None
     # P2-4（2026-10-05 独立审查）：本轮错误分类置信度（0.2/0.5/0.9 分层，
     # error_classifier.classify_with_confidence 产出，debugger 经返回 dict
     # 透传写入）。消费方：risk_approval 三因子风险的"错误置信度"因子
@@ -469,6 +476,8 @@ def create_initial_state(
     max_iterations: int,
     module_name: str | None = None,
     target_function: str | None = None,
+    problem_statement: str | None = None,
+    task_description: str | None = None,
     execution_timeout: int | None = None,
     coverage_threshold: float | None = None,
 ) -> AITesterState:
@@ -592,6 +601,9 @@ def create_initial_state(
         fix_strategy_action=None,
         # P2-4（2026-10-05 独立审查）：错误分类置信度（默认 None，debugger 写入）
         error_confidence=None,
+        # P1-6：任务问题描述（benchmark 传入，CLI 默认 None）
+        problem_statement=problem_statement,
+        task_description=task_description,
         # P2-4：人工审批决策记录（默认 None，risk_approval interrupt resume
         # 消费后写入——闭环决策入 state，此前 resume 值仅判 None 不消费）
         risk_approval_decision=None,
