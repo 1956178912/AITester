@@ -4,6 +4,175 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-05 优化批次 U（独立系统性审查落地：证据链入库 + 零断言治理 + 并发原子性 + 预算分层下沉 + 终局失效分类框架）
+
+> 同日第二轮**独立系统性审查**（13 节报告：前沿基线对照 + Python/领域专项诊断）
+> 的可执行项落地。审查三条结构性发现驱动本批次：
+> ① 主批次工件未入 git（.gitignore 裸 `results/` 规则压掉白名单，
+> `git ls-files experiments/results` 为 0——BASELINE 引用的"单一事实来源"
+> 对 clone 者不可验证）；② 4049 用例中 22 个零断言（行覆盖虚高）；
+> ③ agents→graph 分层倒置靠延迟 import 掩盖。
+> 全量回归 **4049 → 4091 passed / 0 failed**（+42 新用例），ruff 0 警告、
+> mypy 104 源文件 0 错误，覆盖率重测（行 88% / 分支 83%），`BASELINE.yaml`
+> 已同步。历史密钥轮换 + git filter-repo 清史（危险操作）仍待用户确认，
+> 本批次不触碰。
+
+### 新增
+
+- **U1 证据链入库（P0）**：修复 `.gitignore` 白名单失效（`experiments/results/`
+  目录排除使 negation 链永不生效 + 裸 `results/` 后置规则二次压掉，改
+  `experiments/results/**` + 锚定 `/results/`）；主批次 185 个工件（3 份
+  汇总 JSON + statistical_report + SHA256SUMS + 180 份已脱敏 trace.jsonl）
+  入库，`checksum_results.py --verify` 接线 CI（防工件静默篡改）。
+  入库前密钥/本机路径双扫描零命中（traces 的 task UUID 已是
+  `<REDACTED_KEY>` 占位）。
+- **U3 零断言守卫（P1）**：新脚本 `scripts/check_zero_assert_tests.py`
+  （AST 扫描测试函数的断言信号：assert 语句 / assert_* / pytest.raises /
+  同类 _check_* 辅助一层内联解析；EXEMPT 豁免登记表）接入 CI；22 个
+  零断言用例全部补有效断言（含锁定真实行为：`print_rich_table` 无 rich
+  时静默 no-op、`plot_statistical_significance` 渲染后落盘提示输出），
+  豁免清单当前为空。
+- **U4 并发与原子性**：新模块 `src/utils/atomic_io.py`（tmp + os.replace
+  原子写，默认 0600，失败清理临时文件；10 用例含 8 线程并发压力护栏）；
+  `strategy_bank.record_strategy_outcome` 读-改-写加锁 + 原子写（防并发
+  lost-update 与半写 JSON）；`config_manager` 两处 .env.local 写盘改原子
+  替换；`retriever.clear()` 纳入写锁；`api_health` 退避上限提为模块常量 +
+  新增 `try_probe_half_open` / `mark_unhealthy` 公共带锁接口（api_manager
+  5 处跨类私有调用与 1 处绕锁直写修复）；`get_status` 遍历前快照（防并发
+  add/remove RuntimeError）；distances 缺失回退加失真 debug 日志。
+- **U5 fail-open 三态化**：`debugger._run_critic_eval` 异常降级新增
+  `critic_degraded=True` 显式标记（`all_passed=True` 路由语义不变——
+  ADR-0003；实验分析可区分"评估通过/被击穿/不可用"三态）；
+  `testless_validation` mypy 层/导入冒烟层的降级路径新增
+  `infra_degraded=True`（"保守跳过"不再与"真实通过"同形）。
+- **U9 预算包下沉**：`src/graph/cost_budget.py` / `token_usage.py` 实现整体
+  下沉新包 `src/budget/`（agents 层依赖倒置修复，分层恢复
+  cli → graph → agents → budget/tools 单向）；旧路径退化为 re-export shim
+  （含私有锁名转发，`tests/test_budget_package.py` 锁定新旧路径同一对象 +
+  agents 层零回引 + 导入无副作用）。
+- **U11 终局失效分类框架**：新模块 `src/observability/failure_taxonomy.py`
+  （五自有桶：TASK_COMPLETED / SPECIFICATION_FAILURE /
+  GENERATION_CAPABILITY_FAILURE / VERIFICATION_FAILURE / UNCATEGORIZED，
+  分类视角参考 MAST arXiv:2503.13657；与 workflow.StopReason 全枚举对齐，
+  27 用例含映射完备性守卫）；纯观测层，不参与路由。
+- **U13 真实基准升级设计稿**：`docs/design/real_benchmark_upgrade.md`
+  （QuixBugs → BugsInPy → SWE-bench Lite 三级递进，对齐 0/20 根因）。
+
+### 变更
+
+- **U2 复现口径**：`reproduce.sh` 单测失败从 warn-continue 改硬失败
+  （`REPRODUCE_ALLOW_TEST_FAILURES=1` 显式逃生）——"复现全绿"不得建立在
+  未察觉的失败上；pytest `--strict-markers`（未声明 marker 直接报错，
+  防分层标记漂移；全量套件实测 ~34s，保持全量单跑不分层）。
+- **U6 沙箱命名诚实化**：`executor_modes` 的 `DOCKER_NETWORK_ISOLATION=
+  allowlist` 档注释修正（bridge 网络无容器级出站白名单，出口控制依赖
+  宿主防火墙/egress proxy——此前"仅允许白名单内出站"表述与实际行为
+  不符）+ 运行期 WARNING 提醒 + 观测层 `egress_enforced=False` 字段。
+- **U8 CLI 导入零副作用**：`src/cli.app` 日志初始化从导入期（basicConfig +
+  CWD 打开 aitester.log）改为 `cli()` 入口惰性执行（幂等哨兵；库导入不再
+  产生文件/改 root logger；生效 handler 暴露 `_ACTIVE_CLI_HANDLERS` 供观测）。
+- **U10 杂项**：`reports/generator` 两张映射表补齐 6 类缺失
+  （LLM_EMPTY_RESPONSE / LLM_JSON_PARSE_FAILED / EXECUTION_TRACE_MISSING /
+  MULTI_CANDIDATE_ALL_REJECTED / PATCH_SYNTAX_INVALID /
+  TEST_REGENERATED_PASS_UNVERIFIED，命中不再静默落"未知错误类型"）；
+  `failure_kb.entry_ocurrence_stat` 更名 `entry_occurrence_stat`（旧名保留
+  DeprecationWarning 别名）；`trace_viz` DOM id 白名单净化（task_id 含引号
+  不可再逃逸 onclick/属性边界）；`init_db` 建表异常不泄漏连接（try/finally）。
+- **U12 profile 补齐**：scientific/logic 档补 `SPEC_SMT_ENABLE`（SMT 见证
+  层属规约确定性链路）；logic 档补 `PATCH_ROLLBACK_FAIL_CLOSED=true`
+  （逻辑档主批次"回归无法裁决 = 回滚"口径）；配套 .env.example 已有
+  SMT 段说明，profile 测试同步锁定新键。
+- **U7 文档漂移治理**：README 中英文"核心模块覆盖"表改为指向
+  `BASELINE.yaml coverage.line_core_modules`（原内联逐模块百分比与实测
+  漂移，如 base_agent 100% vs 实测 70）；守卫新增
+  `module.py (N%)` 模式防回填。
+
+## [Unreleased] — 2026-10-05 优化批次 T（独立系统审查落地：SMT 见证层 + 属性测试 + 引用/工件守卫 + 0/20 根因分析，默认行为不变）
+
+> 同日**独立全量审查**（未沿用历史批次结论，全部重新取证）的可执行项落地。
+> 审查同时修正两处误判：G5 Docker 加固（`--network=none`/`--read-only`/
+> `--cap-drop=ALL` 等已由 S3/P1 批次实现）与 G17 SBOM（ci.yml 供应链作业
+> 已有 CycloneDX）——本批次不重复实施。
+> 全量回归 **4028 → 4049 passed / 0 failed**（+21 新用例），ruff 0 警告、
+> mypy 99 源文件 0 错误，`BASELINE.yaml` 已同步。
+
+### 新增
+
+- **T2 SMT 见证层（G4，默认关）**：新模块 `src/specs/spec_smt.py`——对 SpecIR
+  前件做 z3 求解（SAT 模型 + 数值边界 min/max optimize），见证输入经
+  **Python 语义复核**（白名单子句 eval，杜绝 z3/Python 语义分歧导致的
+  假检出）后由 `compile_spec_oracle` 编译为并列的
+  `test_specir_v2_smt_witness_*`（前件断言 + 调用 + 后件断言）——
+  "逻辑驱动"链路上第一条纯求解器输入通道（字面量 0 / boundaries 之外的
+  第三类来源），并附前件空洞检测 `check_precondition_vacuity`（UNSAT 规约
+  直接报 finding）。开关 `SPEC_SMT_ENABLE` 默认 false（关时产物与历史
+  逐字节一致）；z3 为可选依赖 `pip install "aitester[formal]"`
+  （pyproject/setup.py 双源 extras，packaging 守卫锁定），缺失时整层
+  保守降级。13 个新用例（含端到端：正确实现见证通过 / 违反后件变红）。
+- **T5 属性测试（G18）**：`tests/test_property_invariants.py`（hypothesis，
+  已入 requirements.txt/lock）——路由优先级偏序（test_passed > budget >
+  regression）、覆盖率停滞开关零行为变化、含 CJK 子句恒不可机器化、
+  编译产物恒为合法 assert 行、预算开关关时恒放行等 8 条不变式。
+- **T4 引用核验（G15）**：`scripts/check_citations.py`——5 份前沿基线综述的
+  arXiv/DOI 提取与 `--online` 存在性核验（HEAD→GET 降级、重试、
+  network_error 与 missing 严格区分）；接入 ci.yml 周日全量档（非阻断，
+  外部端点抖动不拦截合并）。
+- **T6 工件校验和（G6-lite）**：`scripts/checksum_results.py --write/--verify`
+  ——实验结果目录 SHA256SUMS 清单（experiments/results 全部未入 git，
+  本工具给论文附件 / Zenodo / 复现校验提供最小完整性锚点）。
+- **T6 模型卡（G23）**：`MODEL_CARD.md` + `MODEL_CARD.en.md`（模型来源 /
+  数据 provenance / 风险面与防护 / 诚实局限声明；SWE-bench 数据许可
+  标注为发表前待核对 TODO）。
+- **T7 根因分析工件**：`experiments/results/analysis/swe_lite_root_cause_2026-10-05.md`
+  ——对 09-25 SWE Lite 0/20 批次的取证式归因：20/20 原始切片可解析（实测），
+  18/20 patch_validation_failed + 17/20 coverage=0.0，诊断文本一致指向
+  目标文件被写坏；该批次早于 M6/A-03 回滚防线（09-29 入树），**H1=
+  补丁写入旁路损坏文件，且现防线从未复跑验证**——处置首选
+  `AITESTER_PROFILE=safe` 同 20 任务复跑（见工件第 3 节）。
+
+### 变更
+
+- **T3 变异上限默认 10→20（G10）**：`MUTATION_MAX_MUTANTS` 默认值上调——
+  10 个变异体下 mutation_detection_rate 二值噪声区间 ±30pct，20 起才有
+  区分度；评估仍为 opt-in（`ENABLE_MUTATION_SCORING` 默认关），历史批次
+  口径不受影响（.env.example 同步）。
+- **`.env.example`**：补 `logic` profile 条目（config.py 已有而文档漂移）、
+  `SPEC_SMT_*` 三开关说明、MUTATION_MAX_MUTANTS 新默认值说明。
+
+## [Unreleased] — 2026-10-05 系统审查修复批次（S 系列：FL 定位修复 + 守卫防绕过 + 回滚事务化 + 记账传播 + 记忆验证门）
+
+> 对同日系统性审查 P0/P1 缺口的直接修复批次（C3/C4/C6/C8/C10/W12 + O1/O6/C7）。
+> 本批次不新增默认开关行为（与 ADR-0003 一致，`AITESTER_PROFILE=logic` 为显式预设）；
+> 修复对象均为审查实证的**算法退化 / 安全绕过 / 状态分叉 / 记账击穿 / 记忆污染**。
+> 全量回归 **3991 → 4028 passed / 0 failed**（+37 新用例），ruff / mypy（98 源文件）/
+> 分支覆盖门禁（83.3% vs 门槛 77%）/ 六项守卫脚本全绿，`BASELINE.yaml` 已同步。
+
+### 修复（算法与正确性）
+
+- **C3 谱系定位退化（P0）**：`fl_spectral` 此前聚合测量 + `passed_set` 恒空集 → 所有候选行 Ochiai 恒 1.0、"Top-k 可疑行"退化为行号升序；且公式 `(Ndf/sqrt(Nd))/Nd` 非经典 Ochiai（随失败命中数递减，方向相反）。重写测量层（coverage `dynamic_context="test_function"` 逐用例上下文 + `--junitxml` 逐用例通过/失败裁决，一次子进程产出 Ndf/Npf 真实计数）与公式层（经典 `susp = Ndf / sqrt(|F|×(Ndf+Npf))`）；逐用例数据缺失 / junit 全通过时保守降级 None（不产出恒分数假证据）。端到端回归锁：失败独占行必须排 Top-1（score=1.0）、失败+通过共享行 <1.0。连带恢复 R33 证据门 "sbfl" 档的判别力。
+- **C6 回滚链状态分叉（P0）**：M6 坏补丁回滚此前只恢复磁盘不恢复 `state["target_code"]`——下一轮 Debugger 分析/补丁基底仍是坏补丁代码（"测原码/修补码"幻象迭代）。`_rollback_last_patch` 新增 `restored_out` 出参（与 O35 snapshot_out 同模式），executor 回滚成功时同事务写回 `target_code`。
+- **C6 A-03 回滚不落盘（P0）**：P2P 回归失败回滚此前只改 state 不写回 `target_file`——磁盘仍保留坏补丁，下一轮 executor 读盘测"已回滚"的代码。回滚分支现在原子写回原文；落盘失败时如实记 `patch_rolled_back=False`（不虚报已恢复）。
+- **W12 快照失败 fail-closed（P0）**：M6 补丁快照 `shutil.copy2` 失败此前仅 WARNING 后照常写盘——无快照即无回滚能力，坏补丁永久落盘。改为拒绝写盘（宁可损失一轮修复，不可绕过回滚保障）。
+- **C4 危险 API 守卫 from-import 别名绕过（P0，安全）**：`_qualify_call_node` 对裸 Name 只回原名——`from os import system; system(...)` / `from subprocess import Popen as P; P(...)` 的限定名不在危险集内，AST 差集守卫整体被绕过（补丁可注入任意 shell/网络后落盘执行）。新增 `_build_import_alias_map`（Import/ImportFrom → 本地名→模块限定名映射），限定名展开经别名解析；差集口径不变（原代码既有调用仍放行）。补 8 个别名绕过回归用例。
+
+### 修复（多智能体记账与记忆）
+
+- **C8 线程局部记账被并发组件击穿（P0）**：token_usage / cost_budget 均为 `threading.local`——专家池在 ThreadPoolExecutor 新线程里发起 LLM 调用时读到全新空累计器：任务级 `get_usage()` 失真、**预算上限完全不受约束**。新增 `attach_usage` / `attach_budget`（实例绑定传播，registry 按实例同一性去重防 global_usage 翻倍）+ `current_budget()` 实例 getter；专家池 worker 首行绑定任务实例；`check_budget` 字段读改写整体入锁（并发共享实例无丢更新，与 token_usage round8 同口径）。并发回归锁：8 线程 × 50 次记账零丢失。
+- **C10 修复案例库记忆污染（P1）**：`_debugger_node` 此前每轮**无条件** `add_repair`——未经验证（含最终失败/回滚）的补丁进入修复案例库，成为后续任务 RAG 检索到的"参考修复案例"。改为验证门链路：`_patch_applier_node` 写盘成功暂存 `state["last_applied_repair"]`（含写盘前原文；多候选时取 `stats.applied_patch` 胜出补丁）→ `_executor_node` 验证通过才入库并消费，失败/回滚轮清除暂存。与 add_case 的"通过才入库"口径对齐。
+
+### 新增
+
+- **O1 `AITESTER_PROFILE=logic` 预设**：scientific 超集 + 逻辑链强化（`LOGIC_SPEC_STRICT_ENABLE` 规约 schema 强校验 / `DETERMINISTIC_GUARD_ENABLE` / `BRANCH_COVERAGE_INJECT_ENABLE` AST 边界锚点 / `ROUTE_STRUCTURED_ENABLE` 结构化路由）——"逻辑驱动"主张的完整链路（规约解析→DSL 编译→确定性 oracle→守卫→覆盖测量→结构化路由）一键可测可观测；setdefault 注入，显式单开关优先级不变。
+- **O6 setup.py extras 补 `db` 组（P2）**：pyproject `[db]` 有而回退路径缺——非 PEP 517 构建 `pip install ".[db]"` 装不到 MySQL 驱动；新增 `test_setup_py_extras_groups_match_pyproject` 守卫（extras 分组名 + 各组依赖包名集合双路径一致，防未来漂移）。
+
+### 文档
+
+- **C7 README 双语基准指标诚实化**：测试状态表新增"基准指标（诚实口径）"行——旧口径 `success` 不得单独引用，必须与 M1 三指标（detection/repair/false_fix）并列呈现；主批次 `repair_rate=0.0%` / `false_fix_rate=89.8%` 与 SWE-bench Lite 0/20 负结果如实披露（中英同步，双语守卫通过）。
+
+### 测试
+
+- 新增 `tests/test_2026_10_05_review_fixes_batch.py`（21 用例：C6a restored_out ×3 + W12 fail-closed ×2 + C6b A-03 磁盘恢复节点级 ×3 + C8 记账传播 ×5 + C10 验证门 ×5 + O1 logic 预设 ×2 + executor 接线锁 ×1）；`test_fl_spectral.py` 重构（+6：经典公式方向锁 / 逐上下文计数 / 端到端判别力 / junit 全通过降级）；`test_patch_applier_dynamic_bypass.py` +8（from-import 别名四形态 / 差集不误伤既有 / 安全导入不误报）；`test_packaging.py` +1（extras 守卫）；`test_workflow_extended.py` 的 `test_debugger_rag_ingestion` 按 C10 新口径改写（add_repair 不得在 debugger 直接调用）。
+
 ## [Unreleased] — 2026-10-05 复审批次（N 系列：口径诚实化 + R 批次潜伏门禁修复 + 打包漂移守卫）
 
 > 对同日 R1-R18 批次的复核收尾：**评估口径诚实化**（N5/N7/N10）+ **R 批次

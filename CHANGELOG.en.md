@@ -1,10 +1,210 @@
-> Last updated: 2026-10-05 (re-audit N batch: measurement-honesty fixes + latent R-batch CI gate repairs + packaging drift guard)
+> Last updated: 2026-10-05 (optimization batch T: SMT witness layer + property tests + citation/artifact guards + 0/20 root-cause analysis, default behavior unchanged)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-05 Optimization Batch U (Independent Systematic Review Landing: Evidence Chain VCS + Zero-Assertion Cleanup + Concurrency & Atomicity + Budget Layer Sink + Terminal Failure Taxonomy)
+
+> Second same-day **independent systematic review** (13-section report: frontier
+> baseline comparison + Python/domain-specific diagnosis) executable items.
+> Three structural findings drove this batch: (1) main-batch artifacts were not
+> in git (bare `results/` gitignore rule overrode the whitelist;
+> `git ls-files experiments/results` returned 0 — the "single source of truth"
+> cited by BASELINE was unverifiable for cloners); (2) 22 of 4049 tests had
+> zero assertions (inflated line coverage); (3) agents→graph layering inversion
+> masked by lazy imports.
+> Full regression **4049 → 4091 passed / 0 failed** (+42 new tests), ruff 0
+> warnings, mypy 104 source files 0 errors, coverage re-measured (line 88% /
+> branch 83%), `BASELINE.yaml` synced. Historical secret rotation +
+> git filter-repo history rewrite (dangerous ops) still await user
+> confirmation — untouched in this batch.
+
+### Added
+
+- **U1 Evidence chain in VCS (P0)**: fixed `.gitignore` whitelist ineffectiveness
+  (directory-exclude made negation chain dead + trailing bare `results/` rule
+  re-ignored main_batch; now `experiments/results/**` + anchored `/results/`);
+  185 main-batch artifacts committed (3 aggregate JSONs + statistical_report +
+  SHA256SUMS + 180 redacted trace.jsonl), `checksum_results.py --verify`
+  wired into CI. Key/home-path scans clean before commit (trace task UUIDs
+  already `<REDACTED_KEY>` placeholders).
+- **U3 Zero-assertion guard (P1)**: new script `scripts/check_zero_assert_tests.py`
+  (AST scan for assertion signals: assert statements / assert_* / pytest.raises /
+  one-level inline resolution of same-class `_check_*` helpers; EXEMPT registry),
+  wired into CI; all 22 zero-assertion tests given real assertions (including
+  locking true behavior: `print_rich_table` is a silent no-op without rich;
+  `plot_statistical_significance` emits a save notice). Exemption list empty.
+- **U4 Concurrency & atomicity**: new `src/utils/atomic_io.py` (tmp + os.replace
+  atomic writes, default 0600, temp cleanup on failure; 10 tests incl. 8-thread
+  concurrency guard); `strategy_bank.record_strategy_outcome` read-modify-write
+  now locked + atomic (no lost updates / half-written JSON); `config_manager`
+  .env.local writes made atomic; `retriever.clear()` under write lock;
+  `api_health` backoff cap hoisted to module constant + new public locked
+  `try_probe_half_open` / `mark_unhealthy` (fixing 5 cross-class private calls
+  and 1 lock-bypassing direct write in api_manager); `get_status` snapshots
+  before iteration (no RuntimeError under concurrent add/remove); distances
+  fallback logs a distortion debug line.
+- **U5 fail-open three-stating**: `debugger._run_critic_eval` degradation now
+  sets `critic_degraded=True` (`all_passed=True` routing semantics unchanged —
+  ADR-0003; analytics can distinguish passed / broken / unavailable);
+  `testless_validation` mypy & import-smoke degradation paths set
+  `infra_degraded=True` ("conservative skip" no longer indistinguishable
+  from a real pass).
+- **U9 Budget package sink**: `src/graph/cost_budget.py` / `token_usage.py`
+  implementations moved to new package `src/budget/` (fixes agents→graph
+  layering inversion; layering restored to cli → graph → agents → budget/tools);
+  old paths remain as re-export shims (incl. private lock names;
+  `tests/test_budget_package.py` locks same-object semantics, zero agents-side
+  re-imports, import side-effect freedom).
+- **U11 Terminal failure taxonomy**: new `src/observability/failure_taxonomy.py`
+  (five own buckets: TASK_COMPLETED / SPECIFICATION_FAILURE /
+  GENERATION_CAPABILITY_FAILURE / VERIFICATION_FAILURE / UNCATEGORIZED;
+  taxonomy perspective referencing MAST arXiv:2503.13657; aligned with all
+  workflow.StopReason values, 27 tests incl. a mapping-completeness guard);
+  pure observation layer, not wired into routing.
+- **U13 Real-benchmark upgrade design draft**: `docs/design/real_benchmark_upgrade.md`
+  (QuixBugs → BugsInPy → SWE-bench Lite three-tier progression, aligned with
+  the 0/20 root causes).
+
+### Changed
+
+- **U2 Reproduction semantics**: `reproduce.sh` test failures now hard-fail
+  (escape hatch `REPRODUCE_ALLOW_TEST_FAILURES=1`) — a "clean reproduction"
+  must not be built on unnoticed failures; pytest `--strict-markers`
+  (undeclared markers error out; full suite ~34s, kept as a single run).
+- **U6 Sandbox naming honesty**: `executor_modes` `DOCKER_NETWORK_ISOLATION=
+  allowlist` comments corrected (bridge network has no per-container egress
+  allowlist; egress control relies on host firewall/egress proxy — previous
+  wording did not match actual behavior) + runtime WARNING + observation field
+  `egress_enforced=False`.
+- **U8 CLI import side-effect free**: `src/cli.app` logging init moved from
+  import time (basicConfig + opening aitester.log in CWD) into the `cli()`
+  entry callback (idempotent; library imports no longer create files or mutate
+  the root logger; active handlers exposed via `_ACTIVE_CLI_HANDLERS`).
+- **U10 Misc**: `reports/generator` maps completed with 6 missing categories
+  (LLM_EMPTY_RESPONSE / LLM_JSON_PARSE_FAILED / EXECUTION_TRACE_MISSING /
+  MULTI_CANDIDATE_ALL_REJECTED / PATCH_SYNTAX_INVALID /
+  TEST_REGENERATED_PASS_UNVERIFIED — no longer silently "unknown");
+  `failure_kb.entry_ocurrence_stat` renamed `entry_occurrence_stat` (old name
+  kept as a DeprecationWarning alias); `trace_viz` DOM id sanitized
+  (task ids containing quotes can no longer escape onclick/attribute
+  boundaries); `init_db` no longer leaks connections on schema errors
+  (try/finally).
+- **U12 Profile completion**: scientific/logic profiles add `SPEC_SMT_ENABLE`
+  (SMT witness layer is part of the spec-deterministic chain); logic profile
+  adds `PATCH_ROLLBACK_FAIL_CLOSED=true` ("regression undecidable = roll back"
+  for logic-profile main batches); profile tests lock the new keys.
+- **U7 Doc drift governance**: README (zh/en) per-module coverage table now
+  points to `BASELINE.yaml coverage.line_core_modules` (previously inlined
+  percentages had drifted from reality, e.g. base_agent 100% vs measured 70);
+  guard adds a `module.py (N%)` pattern to prevent re-inlining.
+
+## [Unreleased] — 2026-10-05 Optimization batch T (independent systematic review follow-up: SMT witness layer + property tests + citation/artifact guards + 0/20 root-cause analysis, default behavior unchanged)
+
+> Landing of the executable items from the same-day **independent full review**
+> (no reuse of prior batch conclusions; all evidence re-collected). The review
+> also corrected two of its own mis-judgments: G5 Docker hardening
+> (`--network=none` / `--read-only` / `--cap-drop=ALL` etc. already shipped by
+> the S3/P1 batches) and G17 SBOM (the ci.yml supply-chain job already emits
+> CycloneDX) — not re-implemented here.
+> Full regression **4028 → 4049 passed / 0 failed** (+21 new cases), ruff 0
+> warnings, mypy 99 source files 0 errors; `BASELINE.yaml` synced.
+
+### Added
+
+- **T2 SMT witness layer (G4, off by default)**: new module
+  `src/specs/spec_smt.py` — solves SpecIR preconditions with z3 (SAT model +
+  numeric boundary min/max via optimize); witness inputs pass a **Python
+  semantics re-check** (whitelisted-clause eval, ruling out false detections
+  from z3/Python semantic divergence) and are then compiled by
+  `compile_spec_oracle` into parallel `test_specir_v2_smt_witness_*` tests
+  (precondition asserts + call + postcondition asserts) — the first pure
+  solver-driven input channel on the "logic-driven" path (a third source
+  beyond literal-0 and boundaries), plus a precondition vacuity check
+  `check_precondition_vacuity` (UNSAT specs surface as findings). Flag
+  `SPEC_SMT_ENABLE` defaults to false (output byte-identical when off); z3
+  is an optional dependency (`pip install "aitester[formal]"`, extras kept
+  consistent across pyproject/setup.py and locked by the packaging guard),
+  degrading conservatively when absent. 13 new cases including end-to-end
+  (witnesses pass on a correct implementation, go red on postcondition
+  violations).
+- **T5 Property tests (G18)**: `tests/test_property_invariants.py`
+  (hypothesis, added to requirements.txt/lock) — 8 invariants covering the
+  routing priority order (test_passed > budget > regression), zero behavior
+  change of the coverage-stall switch when off, CJK-containing clauses never
+  machine-compilable, compiled output always a legal assert line, and budget
+  always allowing when disabled.
+- **T4 Citation check (G15)**: `scripts/check_citations.py` — extracts
+  arXiv/DOI references from the five frontier-baseline surveys and verifies
+  existence online (`--online`, HEAD→GET fallback, retries, strict
+  separation of network_error vs missing); wired into the Sunday full-scan CI
+  job as non-blocking.
+- **T6 Artifact checksums (G6-lite)**: `scripts/checksum_results.py
+  --write/--verify` — SHA256SUMS manifests for experiment-result directories
+  (nothing under experiments/results is in git; this provides a minimal
+  integrity anchor for paper attachments / Zenodo / reproduction checks).
+- **T6 Model card (G23)**: `MODEL_CARD.md` + `MODEL_CARD.en.md` (model
+  provenance / data provenance / risk surface and mitigations / honest
+  limitation notes; the SWE-bench data license is marked as a verify-before-
+  publication TODO).
+- **T7 Root-cause artifact**: `experiments/results/analysis/
+  swe_lite_root_cause_2026-10-05.md` — forensic attribution of the 09-25
+  SWE Lite 0/20 batch: all 20 original slices parse (measured), 18/20
+  patch_validation_failed + 17/20 coverage=0.0, diagnoses consistently
+  describe corrupted target files; that batch predates the M6/A-03 rollback
+  defenses (in-tree since 09-29) — **H1 = a patch-write bypass corrupting
+  files, with the current defenses never re-validated by a rerun** — the
+  recommended first step is rerunning the same 20 tasks with
+  `AITESTER_PROFILE=safe` (see artifact section 3).
+
+### Changed
+
+- **T3 Mutation cap default 10→20 (G10)**: `MUTATION_MAX_MUTANTS` default
+  raised — with 10 mutants the binary noise band of mutation_detection_rate
+  is ±30pct; 20 is where it gains discriminating power. Scoring remains
+  opt-in (`ENABLE_MUTATION_SCORING` off by default), so historical batches
+  are unaffected (.env.example synced).
+- **`.env.example`**: added the missing `logic` profile entry (present in
+  config.py but drifted from docs), `SPEC_SMT_*` flag docs, and the new
+  MUTATION_MAX_MUTANTS default note.
+
+## [Unreleased] — 2026-10-05 Review-fix batch S (FL localization repair + guard bypass sealing + transactional rollback + accounting propagation + memory verification gate)
+
+> Direct fixes for P0/P1 findings from the same-day systematic review (C3/C4/C6/C8/C10/W12 + O1/O6/C7).
+> No new default-switch behavior (per ADR-0003; `AITESTER_PROFILE=logic` is an explicit opt-in preset);
+> every target is a review-evidenced **algorithmic degeneration / security bypass / state fork /
+> accounting breach / memory poisoning**. Full regression **3991 → 4028 passed / 0 failed**
+> (+37 new cases); ruff / mypy (98 source files) / branch-coverage gate (83.3% vs 77% threshold) /
+> six guard scripts all green; `BASELINE.yaml` synced.
+
+### Fixed (algorithm & correctness)
+
+- **C3 spectral fault-localization degeneration (P0)**: `fl_spectral` used one aggregate measurement with a permanently empty `passed_set` — every candidate line scored a constant Ochiai 1.0 and "Top-k suspicious lines" degenerated to ascending line numbers; the formula `(Ndf/sqrt(Nd))/Nd` was not classic Ochiai either (it *decreases* with more failed hits — direction inverted). Measurement layer rewritten (coverage `dynamic_context="test_function"` per-test contexts + `--junitxml` per-test pass/fail adjudication in a single subprocess, yielding true Ndf/Npf counts) and formula corrected to classic `susp = Ndf / sqrt(|F|×(Ndf+Npf))`; missing per-test data or an all-passed junit now degrades to None (no constant-score fake evidence). End-to-end regression lock: a failure-exclusive line must rank Top-1 (score 1.0) while failure+passed shared lines score <1.0. This also restores the discriminative power of the R33 evidence gate's "sbfl" tier.
+- **C6 rollback-chain state fork (P0)**: the M6 bad-patch rollback restored the disk but not `state["target_code"]` — the next round's Debugger analysis and patch base still used the bad patched code ("test-original / patch-clone" phantom iterations). `_rollback_last_patch` gains a `restored_out` out-param (same pattern as O35 snapshot_out); on successful rollback the executor writes `target_code` back in the same transaction.
+- **C6 A-03 rollback not persisted to disk (P0)**: the P2P regression-failure rollback previously changed only state, never wrote back to `target_file` — the disk kept the bad patch and the next executor round read the "rolled-back" code. The rollback branch now atomically writes the original back; if that write fails it honestly reports `patch_rolled_back=False` (no false "restored" claim).
+- **W12 snapshot failure is now fail-closed (P0)**: an M6 snapshot `shutil.copy2` failure previously logged a WARNING and wrote anyway — no snapshot means no rollback capability and a permanently landed bad patch. Now the write is refused (lose one repair round rather than bypass the rollback guarantee).
+- **C4 dangerous-API guard from-import alias bypass (P0, security)**: `_qualify_call_node` returned bare names unchanged — `from os import system; system(...)` / `from subprocess import Popen as P; P(...)` produced qualified names outside the dangerous set, bypassing the AST diff guard entirely (patches could inject arbitrary shell/network and land on disk for execution). Added `_build_import_alias_map` (Import/ImportFrom → local-name→module-qualified-name mapping); qualified-name expansion now resolves through aliases. The diff semantics are unchanged (pre-existing calls in original code still allowed). 8 alias-bypass regression cases added.
+
+### Fixed (multi-agent accounting & memory)
+
+- **C8 thread-local accounting breached by concurrent components (P0)**: token_usage / cost_budget are `threading.local` — expert-pool LLM calls inside ThreadPoolExecutor worker threads saw fresh empty accumulators: task-level `get_usage()` was distorted and **budget limits were not enforced at all** for pooled experts. Added `attach_usage` / `attach_budget` (instance-binding propagation; registry dedupes by instance identity to prevent global_usage double counting) plus a `current_budget()` instance getter; expert-pool workers bind the task instances on their first line; `check_budget` field read-modify-write is now fully locked (no lost updates on a shared instance, same policy as token_usage round8). Concurrency lock: 8 threads × 50 records with zero loss.
+- **C10 repair-case memory poisoning (P1)**: `_debugger_node` previously called `add_repair` **unconditionally** every round — unvalidated (including ultimately failed/rolled-back) patches entered the repair-case store and became "reference repairs" retrieved by later tasks. Now gated: `_patch_applier_node` stashes `state["last_applied_repair"]` on successful write (with the pre-write original; multi-candidate uses the winning `stats.applied_patch`) → `_executor_node` ingests it only after verification passes and consumes the stash; failed/rolled-back rounds clear it. Aligned with add_case's "only passed tests are ingested" policy.
+
+### Added
+
+- **O1 `AITESTER_PROFILE=logic` preset**: a scientific superset + logic-chain hardening (`LOGIC_SPEC_STRICT_ENABLE` strict spec schema validation / `DETERMINISTIC_GUARD_ENABLE` / `BRANCH_COVERAGE_INJECT_ENABLE` AST boundary anchors / `ROUTE_STRUCTURED_ENABLE` structured routing) — the full "logic-driven" chain (spec parsing → DSL compilation → deterministic oracle → guard → coverage measurement → structured routing) becomes testable and observable with one switch; injected via setdefault, explicit single switches keep precedence.
+- **O6 setup.py extras gain the `db` group (P2)**: pyproject had `[db]` while the fallback path lacked it — a non-PEP 517 build with `pip install ".[db]"` could not install the MySQL drivers; added `test_setup_py_extras_groups_match_pyproject` guard (extras group names + per-group dependency name sets must match across both paths, preventing future drift).
+
+### Documentation
+
+- **C7 bilingual README honest-metrics row**: the status table now carries a "Benchmark Metrics (honest reporting)" row — the legacy `success` metric must never be quoted alone and must always be presented alongside the M1 triple (detection/repair/false_fix); the main batch's `repair_rate=0.0%` / `false_fix_rate=89.8%` and the SWE-bench Lite 0/20 negative result are disclosed as-is (zh/en synced, bilingual guard green).
+
+### Tests
+
+- New `tests/test_2026_10_05_review_fixes_batch.py` (21 cases: C6a restored_out ×3 + W12 fail-closed ×2 + C6b A-03 node-level disk restore ×3 + C8 accounting propagation ×5 + C10 verification gate ×5 + O1 logic preset ×2 + executor wiring lock ×1); `test_fl_spectral.py` reworked (+6: classic-formula direction lock / per-context counting / end-to-end discrimination / all-passed junit degradation); `test_patch_applier_dynamic_bypass.py` +8 (four from-import alias forms / diff not flagging pre-existing calls / safe imports not over-flagged); `test_packaging.py` +1 (extras guard); `test_workflow_extended.py::test_debugger_rag_ingestion` rewritten for the C10 policy (add_repair must not be called directly in the debugger node).
 
 ## [Unreleased] — 2026-10-05 Re-audit batch N (measurement honesty + latent R-batch CI gate repairs + packaging drift guard)
 

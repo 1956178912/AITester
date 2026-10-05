@@ -59,6 +59,12 @@ _DRIFT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("行覆盖百分比（英文）", re.compile(r"(?:total|line)\s+coverage\s*[:=]?\s*\d+\s*%", re.IGNORECASE)),
     ("mypy 源文件数（中文）", re.compile(r"mypy\s+\d+\s+源文件")),
     ("mypy 源文件数（英文）", re.compile(r"mypy\s+\d+\s+source files", re.IGNORECASE)),
+    # U7（2026-10-05 系统性审查落地）：逐模块覆盖率硬编码——README 曾内联
+    # "code_analyzer.py (100%) ... api_manager.py (94%)" 逐模块表，与
+    # BASELINE.yaml coverage.line_core_modules 漂移（100% vs 实测 89%）。
+    # 该表已改为指向 BASELINE；本模式防回填（允许表内引用 BASELINE 数字时
+    # 用"模块名 数字 /"的格式，不带 "(N%)" 括号形态）。
+    ("逐模块覆盖率硬编码 `module.py (N%)`", re.compile(r"\w+\.py\s*\(\d+%\)")),
 ]
 
 

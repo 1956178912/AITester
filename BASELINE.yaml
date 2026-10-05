@@ -11,16 +11,16 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-05"   # 全量回归实测日期（R1-R18 审查批次 + 同日 N 复审批次：污染口径 N/A 化 + 统计 mtime 去重 + 打包漂移守卫 + CI 潜伏门禁修复，全绿 3991）
+last_verified: "2026-10-05"   # 全量回归实测日期（R1-R18 + N 复审批次 + S/T 优化批次 + 同日 U 系统性审查落地批次（证据链入库/零断言治理/并发原子性/预算下沉/失效分类框架等），全绿 4091）
 
 tests:
-  total_passed: 3991          # 全量 pytest tests/（2026-10-05 N 复审批次：3991 全绿 0 失败；+7 新用例 = test_2026_10_05_n_batch(6：N5 mtime 去重×2 + N7 污染 not_applicable×4) + test_packaging 漂移守卫(1)）
+  total_passed: 4091          # 全量 pytest tests/（2026-10-05 U 批次实测：4091 全绿 0 失败；+42 = test_atomic_io 10 + test_budget_package 4 + test_failure_taxonomy 27 + test_cli_app import 副作用 1）
   total_failed: 0
-  slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
-  suite_seconds: 32          # 全量耗时量级（pytest-xdist -n 4 实测 ~32s；P0-2 空补丁短路）
+  slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；S/T/U 批次未重测精简环境——U 新增用例均为纯 stdlib（atomic_io/budget 包/taxonomy），无新增可选依赖）
+  suite_seconds: 34          # 全量耗时量级（pytest-xdist -n 4 实测 ~33-36s）
 
 coverage:
-  line_total_pct: 88         # --cov=src 总行覆盖（88%，2026-10-04 优化批次·续四实测；P0-4 内核沙箱启用路径 / 注入警示注入闭环各补回归用例）
+  line_total_pct: 88         # --cov=src 总行覆盖（2026-10-05 U 批次实测 88%；U 批次新增 atomic_io/failure_taxonomy/budget 包等模块及配套测试，总量口径下小幅回落——新模块自带测试，稀释既有高覆盖模块权重）
   line_core_modules:
     base_agent: 70
     api_manager: 90
@@ -32,7 +32,7 @@ coverage:
     multi_candidate: 84
     cross_file: 91
     rag_retriever: 86
-  branch_total_pct: 83       # --cov=src --cov-branch 总分支覆盖（83%，2026-10-04 优化批次实测：json 口径 percent_branches_covered_display；门禁 77% 绿）
+  branch_total_pct: 83       # --cov=src --cov-branch 总分支覆盖（83%（82.66），2026-10-05 U 批次实测：json 口径 percent_branches_covered_display；门禁 77% 绿）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
@@ -42,7 +42,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 98      # 2026-10-05 优化批次实测：mypy src/ config.py 98 源文件 0 错误（+2 = src/specs/spec_ir_v2.py + src/tools/patch_rollback.py；CI mypy 与 pre-commit 均锁 1.15.0，B-05 版本漂移已消除）
+  mypy_source_files: 104     # 2026-10-05 U 批次实测：mypy src/ config.py 104 源文件 0 错误（+5 = src/utils/atomic_io.py + src/budget/{__init__,cost_budget,token_usage}.py（U9 下沉）+ src/observability/failure_taxonomy.py（U11）；CI mypy 与 pre-commit 均锁 1.15.0）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
