@@ -281,7 +281,9 @@ class TestBoundaryLiteralCoercion:
             "preconditions": [],
             "postconditions": ["r == 0 or r == 1"],
             "invariants": [],
-            "boundaries": [{"input": t["input"], "expected": t["expected"], "rationale": t["rationale"]} for t in triplets],
+            "boundaries": [
+                {"input": t["input"], "expected": t["expected"], "rationale": t["rationale"]} for t in triplets
+            ],
         }
         code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
         assert code != ""

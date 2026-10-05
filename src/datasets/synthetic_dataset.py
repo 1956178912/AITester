@@ -1601,9 +1601,10 @@ def _neutralize_gold_imports(test_cases: str, old_module: str, new_module: str) 
 
     if not test_cases or not old_module or old_module == new_module:
         return test_cases
-    text = re.sub(rf"^(\s*from ){re.escape(old_module)}( import )", rf"\g<1>{new_module}\g<2>", test_cases, flags=re.MULTILINE)
-    text = re.sub(rf"^(\s*import ){re.escape(old_module)}(\s*$)", rf"\g<1>{new_module}\g<2>", text, flags=re.MULTILINE)
-    return text
+    text = re.sub(
+        rf"^(\s*from ){re.escape(old_module)}( import )", rf"\g<1>{new_module}\g<2>", test_cases, flags=re.MULTILINE
+    )
+    return re.sub(rf"^(\s*import ){re.escape(old_module)}(\s*$)", rf"\g<1>{new_module}\g<2>", text, flags=re.MULTILINE)
 
 
 class SyntheticDataset(BaseDatasetLoader):
