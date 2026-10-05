@@ -99,13 +99,7 @@ class TestLocateRepairFocusBranches:
     def test_locates_innermost_function(self):
         """嵌套函数：取包围区间最短（最内层）的函数。"""
         dbg = _mk_debugger()
-        code = (
-            "def outer():\n"
-            "    def inner():\n"
-            "        x = 1\n"
-            "        return x\n"
-            "    return inner()\n"
-        )
+        code = "def outer():\n    def inner():\n        x = 1\n        return x\n    return inner()\n"
         # inner 体在 L4-5，异常定位到 L4
         ctx = _mk_ctx(4)
         out = dbg._locate_repair_focus(code, ctx, None)

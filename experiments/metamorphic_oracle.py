@@ -33,6 +33,7 @@ detection_rate 差异）。
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 __all__ = [
@@ -123,10 +124,21 @@ def suggest_metamorphic_relations(
         _trigger = tpl["trigger"].lower()
         _matched = False
         if "func name contains" in _trigger:
-            _kws = _trigger.split("'")[2].split("|") if "'" in _trigger else []
+            # P2-7 接线审计修复（2026-10）：此前 split("'")[2] 硬编码第 3 段，
+            # 对"contains 后紧跟 name 检查"的模板（monotonicity / idempotence /
+            # reversibility / dimension_preserve）取到的是尾段（如
+            # " and a paired..."）而非关键词段，6 类模板全部 0 命中
+            # （接线进主链路后首次真实触发才暴露）。现取 contains 后的
+            # **第 1 段引号内容**（index 1）。
+            _kws = _trigger.split("'")[1].split("|") if "'" in _trigger else []
             _matched = any(kw and kw in _fn_lower for kw in _kws if kw)
         if not _matched and "func has" in _trigger:
-            _min_args = int(_trigger.split("func has")[1].split(" args")[0]) if "func has" in _trigger else 0
+            # P2-7 接线审计修复（2026-10）：trigger 形如 "func has 2+ args"——
+            # 此前 int() 解析 " 2+" 抛 ValueError（接线进主链路后首次真实触发）。
+            # 现取 "func has" 后首个数字子串（"+"/前导空白忽略）。
+            _tail = _trigger.split("func has", 1)[1]
+            _m = re.search(r"\d+", _tail.split(" args")[0])
+            _min_args = int(_m.group()) if _m else 0
             _matched = len(_sig_params) >= _min_args if _min_args > 0 else False
         if not _matched:
             continue

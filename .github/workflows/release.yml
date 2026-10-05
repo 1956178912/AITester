@@ -1,0 +1,122 @@
+name: AITester Release
+
+# R13（2026-10-05 审查批次）：tag push 触发的发布流水线。
+# 触发：v* 形态的 tag push（如 v0.7.1）。
+# 流程：构建（sdist + wheel）→ twine check 元数据校验 → CycloneDX SBOM →
+#       PyPI 发布（守卫：仅官方仓 + PYPI_API_KEY 已配置）→ GitHub Release
+#       附 dist 产物 + SBOM。
+# 设计取舍：
+# - 单作业流水线（不做 build/publish 作业拆分 + download-artifact 中转）：
+#   发布是低频事件，拆分只为省几分钟缓存收益不大，且避免引入
+#   actions/download-artifact 这个本仓从未用过、需另行钉 SHA 的新 action
+#   （O10 口径：action 全部 SHA 钉版，能不加新 action 就不加）。
+# - Release 创建用 runner 预装 gh CLI（GH_TOKEN = github.token），
+#   不引入 softprops/action-gh-release 第三方 action（同理免钉 SHA）。
+# - PyPI 发布默认跳过：secrets.PYPI_API_KEY 未配置或非官方仓
+#   （1956178912/AITester）时只做本地构建校验 + GitHub Release，
+#   避免误发；配置 Secret 后无需改本文件即可启用真实发布。
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 最小权限默认；release 作业内显式提权 contents: write（gh release create 需要）
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and release (sdist + wheel + SBOM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # gh release create / upload 需要 write 权限（仅本作业提权，O10 最小权限口径）
+      contents: write
+    env:
+      # secrets 上下文不允许直接用于 step 级 if（GitHub 表达式上下文限制，
+      # actionlint 实测报错）——经 job env 中转后再判断
+      HAS_PYPI_KEY: ${{ secrets.PYPI_API_KEY != '' }}
+    steps:
+      - name: Check out code
+        # O10：SHA 固定——与 ci.yml 同源（actions/checkout@v4 → v4.1.1）
+        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+
+      - name: Set up Python 3.12
+        # O10：SHA 固定——与 ci.yml test/security 作业同源
+        #（actions/setup-python@v6 → v6.0.0）
+        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        with:
+          python-version: '3.12'
+
+      - name: Install build toolchain
+        # 锁版本防漂移（与仓库"pip 工具固定版本"口径一致）：
+        # - build==1.6.1：PEP 517 构建前端（python -m build）
+        # - twine==7.0.0：dist 元数据校验 + PyPI 上传
+        # - cyclonedx-bom==4.5.0：与 ci.yml supply-chain 作业同版本（SBOM 生成）
+        run: pip install "build==1.6.1" "twine==7.0.0" "cyclonedx-bom==4.5.0"
+
+      - name: Build sdist and wheel
+        # 版本号来自 pyproject [tool.setuptools.dynamic]（src/__init__.py 的
+        # __version__ 单一事实来源），产物形如 aitester-<version>.tar.gz /
+        # aitester-<version>-py3-none-any.whl（2026-10-05 本地实测 0.7 双产物
+        # 构建通过，wheel 只含 src/ + config.py + LICENSE）
+        run: python -m build
+
+      - name: Twine metadata check
+        # PyPI 上传前的元数据/长描述校验（readme 渲染、元数据完整性），
+        # 失败即阻断——避免推到 PyPI 后才被发现不可安装/描述损坏
+        run: twine check dist/*
+
+      - name: Generate CycloneDX SBOM (R13，复用 ci.yml 写法)
+        # 与 ci.yml supply-chain 作业同口径：cyclonedx-bom 旧包名优先，
+        # 失败回退新包名 cyclonedx-python（同一工具更名前后关系）
+        run: |
+          cyclonedx-py requirements.txt -o sbom.cyclonedx.json || \
+            pip install cyclonedx-python && cyclonedx-python requirements.txt -o sbom.cyclonedx.json
+
+      - name: Upload build artifacts
+        # 无论后续发布步骤成败都保留构建产物（90 天，供失败排查/人工发布）
+        if: always()
+        # O10：SHA 固定——与 ci.yml 同源（actions/upload-artifact@v4 → v4.2.0）
+        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        with:
+          name: release-dist-${{ github.run_number }}
+          path: |
+            dist/*
+            sbom.cyclonedx.json
+          retention-days: 90
+
+      - name: Publish to PyPI
+        # 双重守卫（R13 要求：secrets 缺失时跳过发布只做 Release，避免误发）：
+        # 1. 仅官方仓执行（fork 推 tag 不会把包发到 PyPI 项目所有者的账号下）；
+        # 2. PYPI_API_KEY 必须已配置（token 形式，见
+        #    https://pypi.org/help/#apitoken；未配置 → 本步显式 skip）。
+        if: github.repository == '1956178912/AITester' && env.HAS_PYPI_KEY == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
+        run: twine upload --non-interactive dist/*
+
+      - name: PyPI publish skipped (no API key / non-canonical repo)
+        # 反向提示步：发布被守卫跳过时在日志里显式留痕，避免"静默没发"误判
+        if: ${{ !(github.repository == '1956178912/AITester' && env.HAS_PYPI_KEY == 'true') }}
+        run: |
+          echo "::notice title=PyPI 发布跳过::未配置 PYPI_API_KEY Secret 或非官方仓（${{ github.repository }}）——本次仅构建校验 + GitHub Release，未上传 PyPI"
+
+      - name: Create GitHub Release with artifacts
+        # gh CLI 为 runner 预装（无新增第三方 action，O10 SHA 钉版口径零新增）；
+        # --verify-tag 校验 tag 存在；--generate-notes 自动生成变更摘要；
+        # 已存在同名 Release（失败重跑场景）时改走 upload --clobber 幂等追加。
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，幂等追加产物（--clobber 覆盖同名文件）"
+            gh release upload "$TAG" dist/* sbom.cyclonedx.json --clobber
+          else
+            gh release create "$TAG" dist/* sbom.cyclonedx.json \
+              --title "AITester $TAG" \
+              --generate-notes \
+              --verify-tag
+          fi

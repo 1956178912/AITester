@@ -211,7 +211,9 @@ class TestRepairWithLlmBranches:
     def test_valid_repair_returned(self):
         from src.tools.type_repair import _repair_with_llm
 
-        out = _repair_with_llm("o", "p", [{"line": 1, "kind": "k", "message": "m"}], lambda *a: "def f():\n    return 1\n")
+        out = _repair_with_llm(
+            "o", "p", [{"line": 1, "kind": "k", "message": "m"}], lambda *a: "def f():\n    return 1\n"
+        )
         assert out == "def f():\n    return 1\n"
 
     def test_query_contains_findings_and_codes(self):

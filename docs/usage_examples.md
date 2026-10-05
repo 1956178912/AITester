@@ -3,7 +3,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-09-18（新增 1.1 异味检测补强 / 1.2 内置变异生成器 / 3.2 对抗性推理 / 5.3 跨批次对比 / 4.4 多版本缓存示例）
+> 最后更新：2026-10-05（新增 2026-10-05 审查批次示例：开关预设 / 确定性采样 / 规约 oracle 执行 / 回滚 fail-closed / 变异检出率 / 统计报告白名单）
 > **当前基线**：以仓库根 [BASELINE.yaml](../BASELINE.yaml) 为唯一事实来源（机器可读，
 > 批次落地后同步刷新）；本文档不再内嵌基线数字，避免随轮次推进产生过期快照。
 >
@@ -175,6 +175,47 @@ ENABLE_PLANNER=true ENABLE_DEBUGGER=false python experiments/run_benchmark.py \
 ---
 
 ## 高级功能
+
+### 示例 A：开关预设（2026-10-05 审查批次 R15）
+
+```bash
+# 三档预设（setdefault 注入，显式设置的 env 不被覆盖）：
+export AITESTER_PROFILE=scientific   # safe / scientific / fast
+# scientific = SpecIR + DSL + 规约 oracle 执行 + 变异检出率 + oracle 校验 + 快照回滚
+# safe       = 内核沙箱 + 回滚(fail-closed) + 注入守卫 + 流氓监控 + flaky 门禁
+# fast       = 历史默认（与不设 PROFILE 等价）
+```
+
+### 示例 B：确定性采样主批次（R11）
+
+```python
+from experiments.run_benchmark import run_benchmark
+
+# TEMPERATURE=0.0 三处级联（env + config + base_agent），
+# provenance 快照记录真实生效温度；配合干净 git tag 可复现。
+result = run_benchmark(
+    dataset_name="synthetic", task_count=50, seed=42, deterministic=True
+)
+```
+
+### 示例 C：规约 oracle 并列执行 + 变异检出率（R1c / R5）
+
+```bash
+export SPEC_ORACLE_EXEC_ENABLE=true     # 规约 oracle 追加到 LLM 测试尾部并列执行
+export ENABLE_MUTATION_SCORING=true     # 结果行写入 mutation_detection_rate 三字段
+```
+
+### 示例 D：回滚 fail-closed 与统计报告白名单（R4b / R2）
+
+```bash
+export PATCH_SNAPSHOT_ROLLBACK_ENABLE=true   # 快照/P2P/自动回滚协议
+export PATCH_ROLLBACK_FAIL_CLOSED=true       # rc>=2/超时/IO 异常也触发回滚
+
+# 统计报告：白名单显式批次（替代 glob 全目录混批次），McNemar/BH-FDR/
+# bootstrap CI/Cliff's delta 全部落盘 statistical_report.md
+python experiments/statistical_analysis.py --results-dir experiments/results/main_batch \
+  --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
+```
 
 ### 示例 12：JSON 输出（程序化处理）
 

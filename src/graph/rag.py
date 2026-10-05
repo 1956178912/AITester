@@ -370,8 +370,12 @@ def _iter_candidate_docs() -> list[tuple[str, str, str]]:
     # 1. LLM 文件缓存条目（prompt 文本作参考——历史任务描述与修复指令）
     cache_dir = os.getenv("AITESTER_LLM_CACHE_DIR", "")
     if not cache_dir:
-        # 与 llm_client._LLM_CACHE_DIR_DEFAULT 同口径（src/cache）
-        cache_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache"))
+        # 与 llm_client._LLM_CACHE_DIR_DEFAULT 同口径（2026-10-05 起
+        # 默认用户缓存目录 ~/.cache/aitester/llm，此前 src/cache——
+        # 直接引用常量消除路径双写）
+        from src.agents.llm_client import _LLM_CACHE_DIR_DEFAULT
+
+        cache_dir = _LLM_CACHE_DIR_DEFAULT
     for f in sorted(glob.glob(os.path.join(cache_dir, "*.json")))[-200:]:
         try:
             with open(f, encoding="utf-8") as fh:

@@ -58,6 +58,8 @@ _FAILURE_PATTERN_NAMES: tuple[str, ...] = (
     "repair_not_converging",
     "cross_file_topology_mismatch",
     "known_error_category_hit",
+    # P2 注入扫描回归基准（2026-10 批次·续二）
+    "injection_detected",
 )
 
 
@@ -147,6 +149,22 @@ def _pattern_known_error_category_hit(record: dict[str, Any]) -> bool:
     return bool(category) and category.lower() != "unknown"
 
 
+def _pattern_injection_detected(record: dict[str, Any]) -> bool:
+    """P2 注入扫描回归基准联动（2026-10 批次·续二）：
+
+    记录含 `injection_findings`（输入侧 detect_prompt_injection 命中的特征名列表，
+    由 _generator_node / planner 在 prompt 构建期写入 trace）且非空 → 判命中。
+    用途：把"任务文本被检出注入"作为可度量的失败模式接入 G4 周报，
+    配合 experiments/injection_benchmark_samples.json 回归基准（P2 缺口
+    "注入扫描无回归基准" 的观测侧落点——本模式只消费 trace 中已记的
+    findings，不重跑启发式，零 LLM 成本）。
+    """
+    findings = record.get("injection_findings")
+    return isinstance(findings, list) and len(findings) > 0
+
+
+_PATTERns_detectors_alias = None  # 占位防误用（_PATTERN_DETECTORS 在下方定义）
+
 _PATTERN_DETECTORS: dict[str, Any] = {
     "llm_empty_response_loop": _pattern_llm_empty_response_loop,
     "llm_json_parse_failure_loop": _pattern_llm_json_parse_failure_loop,
@@ -158,6 +176,8 @@ _PATTERN_DETECTORS: dict[str, Any] = {
     "repair_not_converging": _pattern_repair_not_converging,
     "cross_file_topology_mismatch": _pattern_cross_file_topology_mismatch,
     "known_error_category_hit": _pattern_known_error_category_hit,
+    # P2 注入扫描回归基准（2026-10 批次·续二）：消费 trace 中 injection_findings 字段
+    "injection_detected": _pattern_injection_detected,
 }
 
 

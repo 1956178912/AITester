@@ -237,7 +237,10 @@ def test_extract_call_graph_edges_no_callers_yields_empty() -> None:
         FakeNode(
             "Program",
             children=[
-                FakeNode("VariableDeclaration", children=[FakeNode("VariableDeclarator", fields={"name": FakeNode("identifier", text="X")})]),
+                FakeNode(
+                    "VariableDeclaration",
+                    children=[FakeNode("VariableDeclarator", fields={"name": FakeNode("identifier", text="X")})],
+                ),
             ],
         )
     )
@@ -349,9 +352,7 @@ def _two_version_backend() -> Any:
         names = re.findall(r"function (\w+)", code)
         root = FakeNode(
             "Program",
-            children=[
-                FakeNode("FunctionDeclaration", fields={"name": FakeNode("identifier", text=n)}) for n in names
-            ],
+            children=[FakeNode("FunctionDeclaration", fields={"name": FakeNode("identifier", text=n)}) for n in names],
         )
         return FakeTree(root)
 

@@ -1,0 +1,86 @@
+{
+  "_meta": {
+    "description": "R14 性能基准基线：结构与 scripts/performance_benchmark.py 的输出一致（category -> metric -> {avg_ms, min_ms, max_ms, iterations}）。每周日 perf.yml 用 check_perf_regression.py 与最新跑分比对（15% 相对阈值 + 0.05ms 绝对下限，仅告警不阻断）。",
+    "generated_at": "2026-10-05",
+    "generated_on": "macOS arm64 开发机, Python 3.14.6",
+    "note": "CI 跑分在 ubuntu-latest 上执行，硬件与开发机不同，亚毫秒级指标存在跨机固有偏差（_auto_fix_imports_complex 首轮含 tree-sitter 懒加载预热，max_ms 波动大属正常）。阈值比对只看 avg_ms 且带绝对下限过滤定时器噪声。基线漂移需刷新时：下载 CI 产物 performance_benchmark.json 后本地执行 python scripts/check_perf_regression.py --current <产物路径> --update-baseline 并提交。"
+  },
+  "executor": {
+    "_auto_fix_imports_simple": {
+      "avg_ms": 0.0010517245391383767,
+      "min_ms": 0.0009160139597952366,
+      "max_ms": 0.00658305361866951,
+      "iterations": 100
+    },
+    "_auto_fix_imports_import": {
+      "avg_ms": 0.004010851262137294,
+      "min_ms": 0.0019170111045241356,
+      "max_ms": 0.19329198403283954,
+      "iterations": 100
+    },
+    "_auto_fix_imports_complex": {
+      "avg_ms": 1.825731669086963,
+      "min_ms": 0.012790958862751722,
+      "max_ms": 181.24383297981694,
+      "iterations": 100
+    }
+  },
+  "error_classifier": {
+    "classify_syntax_import": {
+      "avg_ms": 0.0051388132851570845,
+      "min_ms": 0.004832982085645199,
+      "max_ms": 0.015666999388486147,
+      "iterations": 100
+    },
+    "classify_syntax_syntax": {
+      "avg_ms": 0.004644626169465482,
+      "min_ms": 0.004165980499237776,
+      "max_ms": 0.022707972675561905,
+      "iterations": 100
+    },
+    "classify_runtime_type": {
+      "avg_ms": 0.007886709063313901,
+      "min_ms": 0.00700005330145359,
+      "max_ms": 0.019041006453335285,
+      "iterations": 100
+    },
+    "classify_runtime_zero": {
+      "avg_ms": 0.006270916201174259,
+      "min_ms": 0.005790963768959045,
+      "max_ms": 0.012417032849043608,
+      "iterations": 100
+    },
+    "classify_assertion_fail": {
+      "avg_ms": 0.008452150505036116,
+      "min_ms": 0.006582995411008596,
+      "max_ms": 0.04116701893508434,
+      "iterations": 100
+    },
+    "classify_timeout": {
+      "avg_ms": 0.007960131042636931,
+      "min_ms": 0.0075830030255019665,
+      "max_ms": 0.01270900247618556,
+      "iterations": 100
+    },
+    "classify_unknown": {
+      "avg_ms": 0.007089232676662505,
+      "min_ms": 0.006875023245811462,
+      "max_ms": 0.00925001242640276,
+      "iterations": 100
+    },
+    "extract_context": {
+      "avg_ms": 0.0038046506233513355,
+      "iterations": 100
+    }
+  },
+  "base_agent": {
+    "extract_json": {
+      "avg_ms": 0.002364243846386671,
+      "iterations": 100
+    },
+    "extract_python_code": {
+      "avg_ms": 0.0013867608504369855,
+      "iterations": 100
+    }
+  }
+}

@@ -6,10 +6,11 @@ G3 内核级沙箱（Kernel Sandbox，默认关，平台相关最小可用集）
     （DOCKER_NETWORK_ISOLATION / allowlist 模式），但全仓无
     seccomp/landlock/seatbelt 引用——内核级隔离未实现。
     本模块补齐"本地非容器执行链路"的内核级隔离纵深（容器模式
-    继续保留现有出口管控，不替换）：
-    - macOS：Seatbelt（sandbox-exec）——平台原生沙箱；
-    - Linux：Landlock（内核 5.x 沙箱框架）+ seccomp（系统调用白名单）；
-    - Windows：暂不实现（记录为未支持，fail-closed 提示）。
+    继续保留现有出口管控，不替换）；接入点：
+    - 本地链路（executor._execute_local，2026-09-30 G3 接入）；
+    - venv 沙箱链路（executor_modes.execute_sandboxed，P2-5，2026-10 接入）；
+    - 后端选择：macOS Seatbelt（sandbox-exec）/ Linux Landlock+bwrap；
+      Windows 暂未实现（记录为未支持，fail-closed 提示）。
 
 设计约束（与 ADR-0003 默认关 + ADR-0004 零默认依赖口径一致）：
     - `KERNEL_SANDBOX_ENABLE=false`（默认）时本模块零行为变化：

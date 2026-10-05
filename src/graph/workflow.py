@@ -107,6 +107,11 @@ class StopReason(Enum):
     MAX_ITERATIONS_REACHED = "max_iterations_reached"
     BUDGET_EXCEEDED = "budget_exceeded"
     REGRESSION_DETECTED = "regression_detected"
+    # P2-4（2026-10 停滞检测最小版）：连续 COVERAGE_STALL_ROUNDS 轮
+    # 覆盖率 delta < eps 且测试仍失败 → 提前停止（归因"无法生成有效
+    # 补丁"口径，与 1.3 收敛失败模式归因对齐）。COVERAGE_STALL_DETECT_ENABLE
+    # 默认关，OFF 时本枚举值不可达（determine_stop_reason 守卫）。
+    COVERAGE_STALL = "coverage_stall"
     RECURSION_LIMIT = "recursion_limit"
     UNKNOWN = "unknown"
 
@@ -123,6 +128,9 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
     4. defect_type=test_defect 且再生成达上限 → TEST_DEFECT_REGEN_CAP
     5. iteration >= max_iterations → MAX_ITERATIONS / MAX_ITERATIONS_REACHED
     6. 最近 2 次修复均无效 → REPAIR_INVALID
+    6.5. P2-4 覆盖率停滞（COVERAGE_STALL_DETECT_ENABLE=true，默认关）：
+        连续 N 轮 coverage_delta < eps 且 test_passed 为假 → COVERAGE_STALL
+        （插入在 REPAIR_INVALID 与诊断关键词之间，OFF 时零行为变化）
     7. 诊断关键词命中（早期/晚期）→ TEST_GEN_KEYWORD_EARLY / LATE
     8. 未知 → UNKNOWN
 
@@ -150,9 +158,18 @@ def determine_stop_reason(state: AITesterState) -> StopReason:
     # 6. 连续修复无效快速终止
     if _recent_repairs_invalid(state):
         return StopReason.REPAIR_INVALID
-    # 7. 诊断关键词命中
+    # 6.5. P2-4 覆盖率停滞检测（COVERAGE_STALL_DETECT_ENABLE=true 时启用，
+    # 默认关零行为变化）：连续 N 轮覆盖率 delta < eps 且测试仍失败 →
+    # 提前停止（"无法生成有效补丁"口径，对齐 1.3 收敛失败模式归因）。
+    # 纯观测层判定（本函数本身不改路由；消费方按返回的 COVERAGE_STALL
+    # 决定是否提前 done——见 _should_debug / _route_after_diagnosis 的
+    # 停滞短路分支）。
+    if _coverage_stall_detected(state):
+        return StopReason.COVERAGE_STALL
+    # 7. 诊断关键词命中（R17：结构化 error_category 优先，关键词兜底——
+    #    ROUTE_STRUCTURED_ENABLE 默认关时与历史关键词口径逐字节一致）
     diagnosis = state.get("diagnosis", "") or ""
-    if _diagnosis_hits_test_gen_keywords(diagnosis):
+    if _test_gen_signal_hit(state, diagnosis)[0]:
         if int(state.get("iteration", 0)) < int(state.get("max_iterations", MAX_ITERATIONS)):
             return StopReason.TEST_GEN_KEYWORD_EARLY
         return StopReason.TEST_GEN_KEYWORD_LATE
@@ -238,6 +255,41 @@ def _diagnosis_hits_test_gen_keywords(diagnosis: str) -> bool:
         _DIAGNOSIS_KEYWORD_RE = re.compile("|".join(re.escape(kw) for kw in _TEST_GEN_DIAGNOSIS_KEYWORDS))
     assert _DIAGNOSIS_KEYWORD_RE is not None  # 上方 if 分支已赋值
     return bool(_DIAGNOSIS_KEYWORD_RE.search(diagnosis))
+
+
+# R17（2026-10-05 审查 P1）：结构化"测试生成错误"信号——错误分类器的
+# error_category（ErrorCategory.LOGIC_ERROR = 断言失败但失败栈未触及被测
+# 模块，即"测试逻辑错误"语义）优先于中文诊断关键词匹配做路由判定。
+# 动机：关键词匹配依赖 LLM 诊断文本（M5 事故证明其脆弱性——AttributeError/
+# NameError/SyntaxError 曾被误判为测试生成错误触发假通过）；结构化枚举
+# 由 error_classifier 从失败栈零歧义判定。
+# 受 ROUTE_STRUCTURED_ENABLE 守门（默认 false，历史关键词口径逐字节不变）。
+_ROUTE_STRUCTURED_ENV = "ROUTE_STRUCTURED_ENABLE"
+# 结构化判定为"测试侧缺陷"的 error_category 集合（保守：仅收录语义无歧义的
+# LOGIC_ERROR；TYPE_ERROR 等两侧皆可归因的类别不纳入，防误路由）
+_TEST_GEN_ERROR_CATEGORIES: frozenset[str] = frozenset({"logic_error"})
+
+
+def _structured_route_enabled() -> bool:
+    """R17 结构化路由开关（ROUTE_STRUCTURED_ENABLE=true 时启用，默认 false）。"""
+    return os.getenv(_ROUTE_STRUCTURED_ENV, "false").lower() in ("true", "1", "on")
+
+
+def _test_gen_signal_hit(state: AITesterState, diagnosis: str) -> tuple[bool, str]:
+    """R17：测试生成错误信号判定（结构化优先，关键词兜底）。
+
+    Returns:
+        (是否命中, 信号来源标签)——来源 ∈ {"structured_error_category",
+        "diagnosis_keyword", ""}，供 trace 打点度量"关键词兜底触发率"
+        （验证指标：<1%，高则说明分类器覆盖不足）。
+    """
+    if _structured_route_enabled():
+        category = state.get("error_category") or ""
+        if category in _TEST_GEN_ERROR_CATEGORIES:
+            return True, "structured_error_category"
+    if _diagnosis_hits_test_gen_keywords(diagnosis):
+        return True, "diagnosis_keyword"
+    return False, ""
 
 
 def _diagnosis_node_enabled() -> bool:
@@ -498,6 +550,71 @@ def _recent_repairs_invalid(state: AITesterState) -> bool:
     return all(not h.get("patch_applied", False) for h in recent)
 
 
+# ── P2-4（2026-10 停滞检测最小版）：覆盖率停滞 → 提前停止 ──────────────────
+# 背景：修复循环的停止条件此前为 MAX_ITERATIONS 常数 + 预算硬上限；
+# 覆盖率连续多轮无增益（delta < eps）的"无效迭代"仍会耗尽全部
+# MAX_ITERATIONS 轮才停（浪费 token，与 1.3 收敛失败模式归因中
+# "无法生成有效补丁" 口径对齐）。本层提供纯观测判定（默认关，
+# OFF 时 determine_stop_reason 的 6.5 分支恒 False，零行为变化）。
+# 判定口径：从 state["execution_trace"]（3.2 默认常开的执行反馈轨迹）
+# 取最近 K 轮（COVERAGE_STALL_ROUNDS，默认 2）的 coverage_delta，
+# 全部 |delta| < eps（COVERAGE_STALL_EPS，默认 0.5 个百分点；按绝对值
+# 口径——小幅负增长与零增长都算停滞，显著负增长 |delta| >= eps 视为
+# "仍在变化"不判停滞）且最近一轮 test_passed 为假 → 判为停滞。
+# 首轮 delta=None（无上一轮）不计入（保守不判）。
+def _coverage_stall_enabled() -> bool:
+    """P2-4 停滞检测开关（COVERAGE_STALL_DETECT_ENABLE=true 时启用，默认关）。"""
+    return os.getenv("COVERAGE_STALL_DETECT_ENABLE", "false").lower() in ("true", "1", "on")
+
+
+def _coverage_stall_rounds() -> int:
+    """P2-4：停滞判定窗口轮数（COVERAGE_STALL_ROUNDS，默认 2，下限 1）。"""
+    try:
+        return max(1, int(os.getenv("COVERAGE_STALL_ROUNDS", "2")))
+    except ValueError:
+        return 2
+
+
+def _coverage_stall_eps() -> float:
+    """P2-4：覆盖率 delta 停滞阈值 eps（COVERAGE_STALL_EPS，默认 0.5，即 0.5 个百分点）。"""
+    try:
+        return float(os.getenv("COVERAGE_STALL_EPS", "0.5"))
+    except ValueError:
+        return 0.5
+
+
+def _coverage_stall_detected(state: AITesterState) -> bool:
+    """P2-4 判定最近 K 轮覆盖率是否停滞（纯数据，无日志副作用）。
+
+    开关 OFF（默认）时恒返回 False（零行为变化）；ON 时：
+    - 从 state["execution_trace"] 尾部取 K 轮；不足 K 轮 → False（保守：
+      信息不足不判停滞，保持 MAX_ITERATIONS 自然收敛口径）；
+    - 任一轮 delta 为 None（首轮）或 test_passed=True → False；
+    - 全部 delta < eps（按绝对值口径：负增长与零增长都算停滞）→ True。
+    """
+    if not _coverage_stall_enabled():
+        return False
+    if state.get("test_passed"):
+        return False
+    trace = state.get("execution_trace") or []
+    k = _coverage_stall_rounds()
+    if len(trace) < k:
+        return False
+    recent = trace[-k:]
+    eps = _coverage_stall_eps()
+    for entry in recent:
+        if not isinstance(entry, dict):
+            return False
+        if entry.get("passed"):
+            return False
+        delta = entry.get("coverage_delta")
+        if delta is None:
+            return False
+        if abs(float(delta)) >= eps:
+            return False
+    return True
+
+
 def _should_debug(state: AITesterState) -> str:
     """
     判断是否进入调试修复环节的路由函数。
@@ -563,13 +680,18 @@ def _should_debug(state: AITesterState) -> str:
     if state.get("iteration", 0) >= state.get("max_iterations", MAX_ITERATIONS):
         diagnosis = state.get("diagnosis", "") or ""
         # 若诊断指出失败源于测试代码本身的问题（如 Attribute error、测试预期值错误），
-        # 重新生成测试代码而不是放弃
-        if _diagnosis_hits_test_gen_keywords(diagnosis):
+        # 重新生成测试代码而不是放弃（R17：结构化 error_category 优先，关键词兜底）
+        _hit, _hit_source = _test_gen_signal_hit(state, diagnosis)
+        if _hit:
             # 上限保护：已再生成过（旧 diagnosis 关键词反复命中）时不再路由 regenerate，
             # 避免 generator↔executor 无限乒乓撞上 recursion_limit
             if state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
-                logger.info("诊断表明测试生成错误，触发重新生成测试代码")
-                _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis"})
+                logger.info("诊断表明测试生成错误（信号=%s），触发重新生成测试代码", _hit_source)
+                _trace_node(
+                    "_should_debug",
+                    decision="regenerate",
+                    output_summary={"reason": "test_gen_diagnosis", "signal": _hit_source},
+                )
                 return "regenerate"
             logger.info("已达重新生成上限，结束流程")
         _stop_reason = determine_stop_reason(state)
@@ -603,12 +725,18 @@ def _should_debug(state: AITesterState) -> str:
     # 及 3.1 双向诊断路径口径不一致。现把诊断关键词判定提升为独立分支：
     # 任意 iteration 命中即 regenerate（仍受 regeneration_count 上限保护）；
     # 上限已满时落到下方常规 debug（保守口径：上限保护不变）。
+    # R17：结构化 error_category 优先，关键词兜底（信号来源入 trace 打点）。
     diagnosis = state.get("diagnosis", "") or ""
-    if _diagnosis_hits_test_gen_keywords(diagnosis) and state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
-        logger.info("诊断表明测试生成错误（iteration < max），触发重新生成测试代码")
-        _trace_node("_should_debug", decision="regenerate", output_summary={"reason": "test_gen_diagnosis_early"})
+    _hit_early, _hit_early_source = _test_gen_signal_hit(state, diagnosis)
+    if _hit_early and state.get("regeneration_count", 0) < _MAX_REGENERATIONS:
+        logger.info("诊断表明测试生成错误（iteration < max，信号=%s），触发重新生成测试代码", _hit_early_source)
+        _trace_node(
+            "_should_debug",
+            decision="regenerate",
+            output_summary={"reason": "test_gen_diagnosis_early", "signal": _hit_early_source},
+        )
         return "regenerate"
-    # 早期迭代但（关键词未命中或再生成上限已满）：落到下方常规 debug
+    # 早期迭代但（信号未命中或再生成上限已满）：落到下方常规 debug
 
     _trace_node("_should_debug", decision="debug", output_summary={"iteration": state.get("iteration", 0)})
     return "debug"

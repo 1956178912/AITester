@@ -1,0 +1,44 @@
+# AITester 实验复现镜像（P1 Docker 化实验复现，2026-10 批次）
+#
+# 与 Dockerfile（运行时镜像，EXECUTOR_USE_DOCKER=true 的被执行侧）不同，
+# 本镜像是**宿主侧实验复现环境**：把 全量依赖 + 锁定版本 + 代码 固定进
+# 一个可复算容器，任意批次实验一条 docker run 复现（provenance 写进
+# 结果 JSON 的 environment 字段，由 run_benchmark 自动附带 git sha）。
+#
+# 构建:  docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
+# 运行:  docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results \
+#             -v $(pwd)/.env.local:/workspace/.env.local:ro \
+#             aitester-repro:<sha> \
+#             bash reproduce.sh --dataset synthetic --full
+#
+# 口径说明（与 ci.yml 矩阵下限对齐）：
+# - python:3.14-slim 为开发环境基准（lock 生成自 3.14）；
+# - requirements.txt 全量安装（含 chromadb / matplotlib / scipy，
+#   即"全量依赖"而非 slim_environment 精简口径，保证 BASELINE.yaml
+#   total_passed=3760 口径可复现）；
+# - git sha 由 docker build --build-arg 注入，结果 provenance 可追溯。
+
+FROM python:3.14-slim
+
+# 系统依赖：pytest-cov 编译 + git（SWE-bench 源码导出脚本需要）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG GIT_SHA=unknown
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /workspace
+
+# 依赖层先行（层缓存口径与 Dockerfile 一致）
+COPY requirements.txt requirements.lock .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 代码层（含 git 元数据用于 provenance；.dockerignore 排除缓存/venv）
+COPY . .
+RUN echo "GIT_SHA=${GIT_SHA}" > /workspace/.repro_provenance
+
+# 默认命令：全量复现（quick 模式 + 内置示例，零 LLM 成本路径）
+CMD ["bash", "reproduce.sh"]

@@ -3,7 +3,9 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-09-29 (Review/optimization round: P0 runtime-probe defect fix — the historical `sys.settrace` exception-event collection does not propagate to the called frame when an exception is raised inside the function body, measured frames were permanently empty (the probe never actually worked since introduction); this round reads the `exc.__traceback__` frame chain at exception-raise time (zero trace overhead), synchronously fixed single-character-variable mis-filtering / line-number error (`f_lineno` → `tb_lineno`) / module-filter never matching / child-thread unhandled-exception leak; default behavior unchanged, when `RUNTIME_PROBE_ENABLE=false` zero difference)
+> Last updated: 2026-10-05 (2026-10-05 review batch R1-R18: R1a/R1b spec-compilation fixes + signature-aware binding / R1c spec oracle executed alongside LLM tests (`SPEC_ORACLE_EXEC_ENABLE` default off) / R4b rollback fail-closed (`PATCH_ROLLBACK_FAIL_CLOSED` default off) / R5 mutation detection rate (gated by `ENABLE_MUTATION_SCORING`) / R2 statistical report persisted (McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`) / R17 structured routing priority (`ROUTE_STRUCTURED_ENABLE` default off) / R16 rogue-agent monitoring (`ROGUE_MONITOR_ENABLE` default off) / R11 deterministic sampling (`run_benchmark(deterministic=True)`) / R15 `AITESTER_PROFILE` three-tier presets / `API_HEALTH_CHECKER_ENABLE` health-checker-thread switch / LLM cache directory default migrated to `~/.cache/aitester/llm`; default behavior unchanged, all new capabilities behind independent switches)
+>
+> Previous: 2026-09-29 (Review/optimization round: P0 runtime-probe defect fix — the historical `sys.settrace` exception-event collection does not propagate to the called frame when an exception is raised inside the function body, measured frames were permanently empty (the probe never actually worked since introduction); this round reads the `exc.__traceback__` frame chain at exception-raise time (zero trace overhead), synchronously fixed single-character-variable mis-filtering / line-number error (`f_lineno` → `tb_lineno`) / module-filter never matching / child-thread unhandled-exception leak; default behavior unchanged, when `RUNTIME_PROBE_ENABLE=false` zero difference)
 >
 > Previous: 2026-09-28 (Frontier-recommendation batch P0/P1/P2 gaps landed: G2 risk-tiered human approval loop (`src/graph/risk_approval.py`, `RISK_APPROVAL_ENABLE` default off) / G8 full-stack SWE-bench Pro re-test (`experiments/run_full_stack_swe_bench_pro.py` + `scripts/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`) / G3 kernel-level sandbox (`src/agents/kernel_sandbox.py`, `KERNEL_SANDBOX_ENABLE` default off, macOS Seatbelt / Linux Landlock+bwrap, fail-closed) / G1 Tree-sitter precise AST backend (`src/tools/tree_sitter_backend.py`, optional dependency, transparent degradation when the dependency is missing) / G4 AgentTelemetry failure-detection benchmark (`src/observability/agent_telemetry.py`, `AGENT_TELEMETRY_ENABLE` default off, 10 built-in failure patterns) / G5 testless execution-irrelevant validation (`src/tools/testless_validation.py`, `TESTLESS_VALIDATION_ENABLE` default off, four independently toggleable layers) / G6 multi-agent debate convergence (`src/graph/expert_pool.py` new `debate_round()`, `EXPERT_POOL_DEBATE_ENABLE` default off) / G7 defect-report generation (`src/reports/generator.py` `ErrorReport` new `oracle_stats` + `with_oracle_stats()`) / doc-consistency P2 (`docs/dependency_exemptions.md` + `scripts/check_dependency_exemptions.py` CI gate + `scripts/check_docs_history_drift.py` warning-only drift detection); default behavior unchanged, all new capabilities behind independent switches)
 >
@@ -266,8 +268,9 @@ removed = cleanup_expired_cache_files()  # mtime-based delete of *.json older th
 - When hit rate < 0.5 (multiprocess `--parallel` high-frequency repeated tasks): each
   worker's first 30s negative-cache window triggers repeated LLM calls;
   recommend "main-process cache prewarm + shared directory" (first run
-  high-frequency tasks in single-process sequential mode to prewarm
-  `src/cache/`, then run the batch in multiprocess mode) or switch to the
+  high-frequency tasks in single-process sequential mode to prewarm the
+  LLM file-cache directory (default `~/.cache/aitester/llm` since
+  2026-10-05), then run the batch in multiprocess mode) or switch to the
   multithread mode (`BENCHMARK_PARALLELISM=N`, L1 process-level shared dict
   visible cross-thread); see [performance_guide.md](performance_guide.md)
   "3.5 Concurrency & multiprocess cache semantics".
@@ -506,6 +509,69 @@ report = _mutation_score_metrics(details)
 # → {"available": bool, "observed_tasks": n, "avg_mutation_score": f,
 #    "high_score_tasks": n, "low_score_tasks": n}
 ```
+
+---
+
+### Mutation Detection Rate (R5, 2026-10-05 batch)
+
+`experiments/mutation_detection.py`: the SWE-Mutation 2026-caliber objective metric of test validity — the generated tests must be fully green on the **gold fixed code** (first proving the tests themselves are valid), and the metric is the share of the code's AST mutants they turn red. Complementary to the 1.3 mutation score: the latter mutates the **buggy code** (generator-perspective fault coverage), while this metric mutates the **gold fixed code** (an independent verdict on test validity). Wired into `run_benchmark.py` (sharing the `ENABLE_MUTATION_SCORING` gate and hook point with the 1.2 mutation score); result rows gain three fields.
+
+```python
+from experiments.mutation_detection import mutation_detection_rate
+
+result = mutation_detection_rate(
+    fixed_code=gold_fixed_code, test_code=generated_test,
+    module_name="calculator", n_mutants=20,
+)
+# → {"rate": 0.65, "mutants_killed": 13, "mutants_total": 20, "skipped": False, ...}
+# Missing gold-fixed material / tests not green on fixed / no mutants generatable
+# → rate=None + skipped=True (conservatively no false 0; the stats layer skips
+#   as unmeasurable)
+```
+
+| Result field | Type | Description |
+|---------|------|------|
+| `mutation_detection_rate` | `float \| None` | Mutation detection rate (None when skip conditions hit) |
+| `mutants_killed` | `int` | Number of mutants detected (0 placeholder when skipped, isomorphic to the function return) |
+| `mutants_total` | `int` | Total number of mutants evaluated (0 placeholder when skipped) |
+
+**Conservative criteria (pure subprocess, zero LLM)**: a mutant counts as detected only when pytest rc != 0 and it is NOT a collection error (rc >= 2 / "no tests were run" etc. — the suite never ran — do not count); a single-mutant timeout / IO exception counts as "survived" (does not inflate the rate); when there are more mutants than `n_mutants`, random sampling by `seed` (reproducible across runs).
+
+---
+
+### Statistical Test Report (R2, 2026-10-05 batch)
+
+`experiments/statistical_analysis.py`: McNemar paired test (task_id-paired 2×2 discordant pairs, chi2 with continuity correction) / independent two-group binomial test / BH-FDR multiple-comparison correction results are persisted to `statistical_report.md` (previously console-only); two new nonparametric statistics functions and a batch-whitelist CLI:
+
+```python
+from experiments.statistical_analysis import bootstrap_paired_diff_ci, cliffs_delta
+
+# Percentile-method bootstrap 95% CI of the paired-difference mean (default
+# 10000 resamples, seed=42; pure-Python random.Random(seed) with a fixed seed —
+# byte-reproducible across calls with the same parameters, auditable)
+mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(
+    aitester_results, baseline_results
+)
+
+# Sign-version Cliff's delta for paired differences (δ = (n⁺ − n⁻) / n_pairs;
+# more robust than Cohen's d for binary paired data — d degrades to ±inf on
+# zero-variance differences); output alongside d
+delta, n_pairs = cliffs_delta(aitester_results, baseline_results)
+# Effect-size grading (interpret_cliffs_delta, Romano et al. 2006 thresholds):
+# |δ| < 0.147 negligible / < 0.33 small / < 0.474 medium / ≥ 0.474 large
+```
+
+```bash
+# --batches batch whitelist: include only the specified result files
+# (comma-separated paths relative to --results-dir; when omitted, the
+# historical "recursive glob of the whole directory" behavior is unchanged)
+python experiments/statistical_analysis.py \
+    --results-dir experiments/results \
+    --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
+```
+
+- The report header gains a **"Data sources" audit section**: the batch files actually included and their entry counts, so readers can verify the sample behind each p-value;
+- Companion: `experiments/analyze_results.py` aggregates the four M1 metrics (`detection_rate` / `repair_rate` / `false_fix_rate` / `test_error_rate`; None values are excluded from the denominator; old JSON without the field is skipped automatically).
 
 ---
 

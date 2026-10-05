@@ -51,8 +51,12 @@ class ExecutorAgent:
       提前返回 dependency_install_failed 诊断，不静默降级到本地（避免
       "以为隔离了其实没有" 的实验口径混淆）。
     - use_venv=True：在临时沙箱目录 + 缓存 venv 中执行，PYTHONPATH 仅指向
-      沙箱目录，被测代码的 import 不污染系统环境，任务间依赖互不冲突。
-    - 默认：本地系统 Python 执行（历史行为）。
+      沙箱目录，被测代码的 import 不污染系统环境，任务间依赖互不冲突；
+      P2-5（2026-10 批次）起，KERNEL_SANDBOX_ENABLE=true 时该链路的 pytest
+      子进程进一步包装进内核沙箱（macOS Seatbelt / Linux bwrap），
+      fail-closed 口径与本地链路一致（结果附 kernel_sandbox_obs 观测层）。
+    - 默认：本地系统 Python 执行（历史行为）；KERNEL_SANDBOX_ENABLE=true 时
+      经内核沙箱包装（G3，2026-09-30 接入）。
 
     属性:
         timeout: 单次测试最大运行时间（秒），可通过 EXECUTION_TIMEOUT 环境变量配置。

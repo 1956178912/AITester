@@ -3,7 +3,9 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-09-29（审查优化轮：P0 运行时探针缺陷修复——历史 settrace exception 事件采集在函数体异常时不传播到被调帧，实测 frames 恒空（探针自引入以来从未真正生效）；本轮改为异常抛出时刻读 exc.__traceback__ 帧链（零 trace 开销），同步修复单字符变量误过滤 / 行号错误（f_lineno → tb_lineno）/ 模块过滤永不匹配 / 子线程未处理异常泄漏；默认行为不变，RUNTIME_PROBE_ENABLE=false 时零差异）
+> 最后更新：2026-10-05（2026-10-05 审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
+>
+> 上一轮：2026-09-29（审查优化轮：P0 运行时探针缺陷修复——历史 settrace exception 事件采集在函数体异常时不传播到被调帧，实测 frames 恒空（探针自引入以来从未真正生效）；本轮改为异常抛出时刻读 exc.__traceback__ 帧链（零 trace 开销），同步修复单字符变量误过滤 / 行号错误（f_lineno → tb_lineno）/ 模块过滤永不匹配 / 子线程未处理异常泄漏；默认行为不变，RUNTIME_PROBE_ENABLE=false 时零差异）
 >
 > 上一轮：2026-09-28（前沿推荐批次 P0/P1/P2 缺口落地：G2 风险分级人工回路（`src/graph/risk_approval.py`，`RISK_APPROVAL_ENABLE` 默认关）/ G8 全链路 SWE-bench Pro 复测（`experiments/run_full_stack_swe_bench_pro.py` + `scripts/check_swe_bench_pro_ready.py` + `experiments/summarize_full_stack.py`）/ G3 内核级沙箱（`src/agents/kernel_sandbox.py`，`KERNEL_SANDBOX_ENABLE` 默认关，macOS Seatbelt / Linux Landlock+bwrap，fail-closed）/ G1 Tree-sitter 精确 AST 后端（`src/tools/tree_sitter_backend.py`，可选依赖，缺依赖时透明降级）/ G4 AgentTelemetry 故障检测基准（`src/observability/agent_telemetry.py`，`AGENT_TELEMETRY_ENABLE` 默认关，10 类内置失败模式）/ G5 无测试场景执行无关验证（`src/tools/testless_validation.py`，`TESTLESS_VALIDATION_ENABLE` 默认关，四层独立可开关）/ G6 多智能体辩论收敛（`src/graph/expert_pool.py` 新增 `debate_round()`，`EXPERT_POOL_DEBATE_ENABLE` 默认关）/ G7 缺陷报告生成（`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` + `with_oracle_stats()`）/ 文档一致性 P2（`docs/dependency_exemptions.md` + `scripts/check_dependency_exemptions.py` CI 门禁 + `scripts/check_docs_history_drift.py` warning-only 漂移检测）；默认行为不变，新能力均带独立开关）
 >
@@ -318,7 +320,9 @@ stats = get_semantic_cache_stats()  # {entries, hits, misses, embed_failures, en
 
 `src/agents/base_agent.py` 的 LLM 文件缓存分两级：进程内 L1（`_lru_store` /
 `_lru_negatives`，内存 dict，仅当前进程可见）+ 文件层（md5 键命名的 JSON
-文件，进程间共享）。**多进程（多个 worker 进程共用同一 `src/cache/` 目录）
+文件，进程间共享；默认目录 2026-10-05 起迁移至 `~/.cache/aitester/llm`
+（`XDG_CACHE_HOME` 优先），此前为 `src/cache/`，可经 `AITESTER_LLM_CACHE_DIR`
+覆盖）。**多进程（多个 worker 进程共用同一缓存目录）
 一致性策略（2026-09-28 补充说明）**：
 
 - **写侧**：采用"临时文件 + `os.replace` 原子替换"（与 `cross_file` /
@@ -365,7 +369,8 @@ removed = cleanup_expired_cache_files()  # 按 mtime 删早于 TTL 的 *.json；
 
 - 命中率 < 0.5 时（多进程 `--parallel` 高频重复任务）：各 worker 前 30s
   负缓存窗口内重复发起 LLM 调用，建议"主进程预热缓存 + 共享目录"（先单
-  进程顺序跑高频任务预热 `src/cache/`，再多进程跑批）或改用多线程模式
+  进程顺序跑高频任务预热 LLM 文件缓存目录（默认 `~/.cache/aitester/llm`），
+  再多进程跑批）或改用多线程模式
   （`BENCHMARK_PARALLELISM=N`，L1 进程内共享 dict 跨线程可见）；详见
   [performance_guide.md](performance_guide.md) "3.5 并发与多进程缓存语义"。
 - `get_workflow_stats()["llm_cache"]["hit_rate"]` 自动附带本进程命中率
@@ -600,6 +605,65 @@ report = _mutation_score_metrics(details)
 # → {"available": bool, "observed_tasks": n, "avg_mutation_score": f,
 #    "high_score_tasks": n, "low_score_tasks": n}
 ```
+
+---
+
+### 变异检出率（R5，2026-10-05 批次）
+
+`experiments/mutation_detection.py`：SWE-Mutation 2026 口径的测试有效性客观指标——生成的测试在 **gold 修复代码**上必须全绿（先证测试本身有效），再看其 AST 变异体变红的比例。与 1.3 变异得分互补：后者对**缺陷代码**做变异（生成器视角的故障覆盖），本指标对 **gold 修复代码**做变异（测试有效性的独立裁决）。`run_benchmark.py` 接线（与 1.2 变异得分共用 `ENABLE_MUTATION_SCORING` 门控与挂点），结果行新增三个字段。
+
+```python
+from experiments.mutation_detection import mutation_detection_rate
+
+result = mutation_detection_rate(
+    fixed_code=gold_fixed_code, test_code=generated_test,
+    module_name="calculator", n_mutants=20,
+)
+# → {"rate": 0.65, "mutants_killed": 13, "mutants_total": 20, "skipped": False, ...}
+# 缺 gold fixed 材料 / 测试在 fixed 上不绿 / 无变异体可生成 → rate=None + skipped=True
+# （保守不误报 0，统计层按不可测跳过）
+```
+
+| 结果字段 | 类型 | 说明 |
+|---------|------|------|
+| `mutation_detection_rate` | `float \| None` | 变异检出率（跳过条件命中时 None） |
+| `mutants_killed` | `int` | 被检出的变异体数（跳过时 0 占位，与函数返回同构） |
+| `mutants_total` | `int` | 评估的变异体总数（跳过时 0 占位） |
+
+**保守口径（纯子进程、零 LLM）**：变异体检出 = pytest rc != 0 且非收集错误（rc>=2 / "no tests were run" 等套件未跑起来的情况不算检出）；单变异体超时 / IO 异常按"存活"计（不夸大检出率）；变异体多于 `n_mutants` 时按 `seed` 随机采样（跨运行可复现）。
+
+---
+
+### 统计检验报告（R2，2026-10-05 批次）
+
+`experiments/statistical_analysis.py`：McNemar 配对检验（按 task_id 配对的 2×2 不一致对，chi2 连续性校正）/ 独立两组二项检验 / BH-FDR 多重比较校正结果落盘 `statistical_report.md`（此前仅打印控制台）；新增两个非参数统计函数与批次白名单 CLI：
+
+```python
+from experiments.statistical_analysis import bootstrap_paired_diff_ci, cliffs_delta
+
+# 配对差值均值的百分位法 bootstrap 95% CI（默认 10000 次重采样、seed=42，
+# 纯 Python random.Random(seed) 固定种子——同参数多次调用逐位可复现，可审计）
+mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(
+    aitester_results, baseline_results
+)
+
+# 配对差值符号版 Cliff's delta（δ = (n⁺ − n⁻) / n_pairs，二值配对场景比
+# Cohen's d 更稳健——d 在零方差差值时退化为 ±inf）；与 d 并列输出
+delta, n_pairs = cliffs_delta(aitester_results, baseline_results)
+# 效应量分级（interpret_cliffs_delta，Romano et al. 2006 阈值）：
+# |δ| < 0.147 negligible / < 0.33 small / < 0.474 medium / ≥ 0.474 large
+```
+
+```bash
+# --batches 批次白名单：只纳入指定结果文件（相对 --results-dir 的逗号分隔路径；
+# 未提供时保持历史"递归 glob 全目录"行为不变）
+python experiments/statistical_analysis.py \
+    --results-dir experiments/results \
+    --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
+```
+
+- 报告头部新增**"数据来源"审计章节**：列出实际纳入的批次文件与条目数，读者可核对 p 值背后的样本构成；
+- 配套：`experiments/analyze_results.py` 聚合 M1 四指标（`detection_rate` / `repair_rate` / `false_fix_rate` / `test_error_rate`；None 不计入分母，旧 JSON 无该字段时自动跳过）。
 
 ---
 
@@ -843,13 +907,20 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 复现流程默认显式启用（`--no-multi-candidate` 可回退历史口径） |
 | `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`experiments/results/traces`） |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
-| `TEMPERATURE` | float | 0.2 | LLM 采样温度 |
+| `TEMPERATURE` | float | 0.2 | LLM 采样温度；R11（2026-10-05）确定性采样用法：`run_benchmark(deterministic=True)` 强制 TEMPERATURE=0.0（三处级联——`os.environ` + `config` + `base_agent` 命名空间，后二者 import 时求值仅改 env 不生效），供主批次复现实验使用 |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
 | `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest；需本机安装 docker 且镜像已构建，不可用时返回 `docker_unavailable` 诊断不降级本地） |
 | `EXECUTOR_DOCKER_IMAGE` | str | `aitester:latest` | 4.3 Docker 执行使用的镜像名（对应仓库根 Dockerfile） |
 | `EXECUTOR_USE_VENV` | bool | false | venv 沙箱隔离执行（按依赖组合磁盘缓存，不污染系统环境） |
 | `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动 pip install 缺失依赖 |
 | `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 venv 缓存目录覆盖（容器/CI 隔离场景指向挂载卷；配合 `clean-venv-cache` 子命令清理） |
+| `AITESTER_LLM_CACHE_DIR` | str | `~/.cache/aitester/llm` | LLM 文件缓存目录覆盖（2026-10-05 起默认用户缓存目录，`XDG_CACHE_HOME` 优先解析；此前默认 `src/cache/`；`src/graph/rag.py` 兜底检索路径同口径收敛为引用同一常量，消除路径双写） |
+| `AITESTER_PROFILE` | str | 未设（不注入） | R15 开关预设（非布尔）：`safe` 安全敏感档（KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / PATCH_ROLLBACK_FAIL_CLOSED / INJECTION_GUARD / ROGUE_MONITOR / FLAKY_CHECK 全开）/ `scientific` 科研评测档（SPEC_IR / SPEC_IR_DSL / SPEC_ORACLE_EXEC / ENABLE_MUTATION_SCORING / ORACLE_VALIDATE / PATCH_SNAPSHOT_ROLLBACK 全开，配合 `run_benchmark(deterministic=True)`）/ `fast` 历史默认档（全部默认关，等价不设）；经 `os.environ.setdefault` 注入，显式设置的单开关不被覆盖；未识别值记 WARNING 并忽略 |
+| `SPEC_ORACLE_EXEC_ENABLE` | bool | false | R1c 规约 oracle 执行注入：`_append_spec_oracle_to_test` 把 `compile_spec_oracle` 编译产物（签名感知绑定）追加到 LLM 生成测试尾部并列执行；state 新增 `spec_oracle_injected` 观测字段；默认关时历史口径零变化 |
+| `PATCH_ROLLBACK_FAIL_CLOSED` | bool | false | R4b 补丁回滚 fail-closed 口径：P2P 全量回归 rc>=2 / 超时 / IO 异常时改判 `regression_failed` 触发快照自动回滚（默认口径为 `regression_error` 不回滚——"坏测试不误杀好补丁"）；`PatchRollbackProtocol.run` 透传 `fail_closed` 参数，编程接口可显式覆盖 |
+| `ROUTE_STRUCTURED_ENABLE` | bool | false | R17 结构化路由优先：`_should_debug` 判定"回 generator 重新生成"时，`error_category=logic_error` 的结构化信号优先于中文诊断关键词匹配（`_test_gen_signal_hit`），信号来源（`structured_error_category` / `diagnosis_keyword`）写入 trace 供打点度量"关键词兜底触发率"；默认关时与历史关键词口径逐字节一致 |
+| `ROGUE_MONITOR_ENABLE` | bool | false | R16 流氓行为监控：`base_agent._call_llm_with_cache` 上报 `AgentEvent`（agent_id=类名，tool="llm_call"），`_executor_node` 每轮 check 四个核心 agent 写 `state["rogue_findings"]`（纯观测不改路由——隔离/升级由调用方决定）；默认关时零开销 |
+| `API_HEALTH_CHECKER_ENABLE` | bool | true | APIManager 后台健康检查线程开关：该线程每 60s 对所有节点发起真实 LLM 请求（消耗 API 配额）；免费/低配额场景建议 `.env` 设 false 关闭（编程接口 `APIManager(enable_health_checker=False)` 同效；默认 true 历史行为不变） |
 
 **APIManagerConfig 字段**（`src/api/api_health.py` 数据模型，`api_manager.py` 消费；编程接口配置，非环境变量；4.1/4.2 熔断器 + 3.4 成本感知）：
 
@@ -954,6 +1025,7 @@ class CustomDataset(BaseDatasetLoader):
 ---
 
 ## 版本历史
+| Unreleased（2026-10-05） | 2026-10-05 | 2026-10-05 审查批次 R1-R18 落地（默认行为不变，新能力均带独立开关）：① R1a SpecIR v1 编译缺陷修复（参数化 `'; '.join`→`', '.join`；NL invariants 不再编译为 `assert True` 恒真断言——假通过通道封堵，无边界材料返回空串）；② R1b/R6 签名感知绑定（`spec_ir.extract_signature_params` AST 签名提取（None/[]/非空三态）+ `compile_spec_oracle` 新增 `signature_params`——绑定上下文按真实签名扩展，修正调用元数）；③ R1c 确定性规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE` 默认关：compile 产物追加到 LLM 测试尾部并列执行，state 新增 `spec_oracle_injected`——规约从观测层指标升级为执行链确定性 oracle）；④ R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关：rc>=2/超时/IO 异常改判 regression_failed 触发回滚，`PatchRollbackProtocol.run` 透传）；⑤ R5 变异检出率（新模块 `experiments/mutation_detection.py` + `run_benchmark.py` 接线（`ENABLE_MUTATION_SCORING` 门控），结果行新增 mutation_detection_rate / mutants_killed / mutants_total）；⑥ R2 统计报告（McNemar/BH-FDR 落盘 statistical_report.md + `bootstrap_paired_diff_ci`（10000 次重采样 seed 42）+ `cliffs_delta` + `--batches` 白名单 + "数据来源"审计章节 + `analyze_results.py` 聚合 M1 四指标（None 不计分母））；⑦ R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关：logic_error 结构化信号优先于中文诊断关键词，信号来源入 trace）；⑧ R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关：AgentEvent 上报 + `state["rogue_findings"]`）；⑨ R11 确定性采样（`run_benchmark(deterministic=True)` 三处级联 TEMPERATURE=0.0）；⑩ R15 `AITESTER_PROFILE` 三档预设（safe/scientistic/fast，setdefault 注入不覆盖显式设置）；⑪ `API_HEALTH_CHECKER_ENABLE`（默认 true）后台 60s 健康检查线程可关；⑫ LLM 缓存目录默认迁移 `~/.cache/aitester/llm`（XDG_CACHE_HOME 优先，`src/graph/rag.py` 路径双写收敛）；CI 硬化（security 作业转 push/PR 阻断、分支覆盖门禁扩全矩阵、新增 release.yml（tag v* → build → twine check → SBOM → GitHub Release）与 perf.yml（周巡检 + `scripts/check_perf_regression.py` 15% 阈值 + `docs/performance_baseline.json`））；全量 3984 测试通过（+71：test_2026_10_05_review_batch 34 + test_r2_statistical_report 18 + test_r5_mutation_detection 19）/ ruff 0 告警 / mypy 98 源文件 0 错误 |
 | 0.12（2026-09-28） | 2026-09-28 | 前沿推荐批次落地（gap_report P0/P1/P2 缺口，全部默认行为不变 + 新能力独立开关）：① G2 P0 风险分级人工回路（`src/graph/risk_approval.py`，`RISK_APPROVAL_ENABLE` 默认关，三因子加权打分 → low/medium/high → auto_merge/human_confirm/force_review，`run_benchmark` 结果行新增 `risk_summary` 占位字段）；② G8 P0 全链路 SWE-bench Pro 复测（`experiments/run_full_stack_swe_bench_pro.py` 一键七开关 + `scripts/check_swe_bench_pro_ready.py` 数据前置门禁 + `experiments/summarize_full_stack.py` ON/OFF 对照与错误分桶对比）；③ G3 P1 内核级沙箱（`src/agents/kernel_sandbox.py`，`KERNEL_SANDBOX_ENABLE` 默认关，macOS Seatbelt / Linux Landlock+bwrap 双后端，平台不支持时 fail-closed 拒绝执行）；④ G1 P1 Tree-sitter 精确 AST 后端（`src/tools/tree_sitter_backend.py`，可选依赖，缺 `tree_sitter` 时透明降级回词法层，不阻断 Python 主路径）；⑤ G4 P1 AgentTelemetry 故障检测基准（`src/observability/agent_telemetry.py`，`AGENT_TELEMETRY_ENABLE` 默认关，10 类内置失败模式正则匹配，零 LLM 成本纯观测，输出 Markdown 报告）；⑥ G5 P2 无测试场景执行无关验证（`src/tools/testless_validation.py`，`TESTLESS_VALIDATION_ENABLE` 默认关，四层独立可开关：AST 符号守卫 / mypy 静态检查 / 命名契约回归 / 导入冒烟，任一层失败整体 fail）；⑦ G6 P2 多智能体辩论收敛（`src/graph/expert_pool.py` 新增 `debate_round()`，`EXPERT_POOL_DEBATE_ENABLE` 默认关需配合 `EXPERT_POOL_ENABLE=true`，top-K（默认 2，`EXPERT_POOL_DEBATE_TOP_K` [2,4]）候选辩论收敛产出一个 `debate_revise` 修订候选，LLM 失败时保守降级回原 verified 列表）；⑧ G7 P2 缺陷报告生成（`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` 字段 + `with_oracle_stats()` 方法，`total_oracles > 0` 时才渲染"预言有效性（Oracle 增强，G7）"章节）；⑨ 文档一致性 P2（`docs/dependency_exemptions.md` 依赖豁免登记表 + `scripts/check_dependency_exemptions.py` CI 门禁 + `scripts/check_docs_history_drift.py` warning-only 历史快照基线漂移检测）；全量 2487 测试通过零回归（基线 2453，+34 新增测试覆盖上述 8 项缺口）/ ruff 0 告警 / mypy 0 错误（86 源文件） |
 | 0.9（2026-09-27） | 2026-09-27 | 路线图剩余缺口落地 + 第十一轮功能批次（默认行为不变）：① 错误分类 16→17 类（新增 `PATCH_SYNTAX_INVALID`，2.2 重采样耗尽标记）；② 2.2 补丁后处理重采样（`PATCH_RESAMPLE_ENABLE`，最多 `PATCH_RESAMPLE_MAX` 次）；③ 1.3 分层压缩降级链透传（`contract_reject_feedback` 经 `_debugger_node` 跨轮透传 + 档位温度映射）；④ 多维度污染检测（`contamination_risk_level` 字段 + `rag_ab_experiment.compare_ab` 新增 `token_saving.delta_pct`）；⑤ 2.1 mypy 静态层（`TYPE_CHECK_ENABLE` 时 `type_repair._run_mypy_findings` 补充分层类型疑点）；⑥ 路线图剩余缺口补齐：SWE-bench Pro 支持（`swe_bench_pro` / `swebench_pro` 注册）+ CodeBERT 嵌入后端（`EMBEDDING_BACKEND=codebert`，`transformers.AutoModel` 加载，缺依赖时保守回退）+ pyright 静态类型后端（`TYPE_CHECK_BACKEND=pyright`，pyright CLI / pyright-python，不可用时降级 ast 静态层）；全量 1937 测试通过（基线 1920 + 17 新增）/ ruff / mypy 全绿（64 源文件）/ 覆盖率 94% |
 | 0.8（2026-09-27） | 2026-09-27 | 全面审查与保守优化轮（九轮 + 十轮，默认行为不变）：第九轮并行子代理深审 P1×4——局部 import 落在前 200 字符触发顶层 import 静默丢弃；`multi_candidate` 执行验证模式全部候选 `exec_passed=False` 时仍返回最不差候选写盘劣化代码——加守卫返回 None；`dependency` `create_venv` 缓存命中检查+创建序列无锁 `--parallel` 并发同缓存目录竞态——per-dir 锁；`executor_repo` `verify()` 临时测试文件名仅按 `(commit, pid)` 键多线程同 pid 并发覆盖——加 thread ident 第三键 + `setup()` clone/venv/pip 序列 per-env_dir 锁）+ P2×10（`debugger` 两次坏 JSON 时 `_extract_json` 必抛异常崩溃节点——try/except 降级空 patch + critic requery 同守卫；`executor_runtime` 通用异常分支把第 1 次失败 last_result 置 None 丢失真实输出——保留最近有效结果 + 无有效结果返回 `(UNAVAILABLE, error_info)` 标记；`patch_applier` `_find_function_start_line_in_lines` 正则缺 async 前缀——补 `(?:async\s+)?` 与 `_TOP_DEF_RE` 同口径；`multi_candidate` `_coverage_trend` 非数值 delta float() 崩溃——try/except 跳过；`generator` 每次调用现场 re.compile——预编译为模块级 `_FROM_IMPORT_RE`；`convergence_analysis` 无逐轮明细时 total_tokens 重复计入各轮——每个任务 total 仅计入最终到达轮一次 + 增量按当轮 round_tokens 直接取值）+ 新增回归守卫 26 用例（`tests/test_2026_09_26_review_round9.py`）；第十轮全项目 P1/P2 收敛 P1×6（`graph/nodes._suggest_iteration_strategy` 非数值 coverage_delta 裸 float() 崩溃 executor 节点——try/except 跳过该条目；`agents/base_agent._lru_store` 负缓存无容量上限——与正缓存同 `_LRU_MAXSIZE` 上限 FIFO 淘汰；`experiments/analysis_parts/rag_analysis._rag_similarity_distribution` 负 max_similarity 致 bins 键 KeyError——下界钳位到 0 + 非数值 float() try/except 跳过；`experiments/analysis_parts/convergence_analysis._execution_trace_summary` 非数值 reward_signals/coverage 裸 float() 崩溃——contextlib.suppress 跳过；`experiments/statistical_analysis._pair_by_task` 跨批次重复 task_id 旧 dict 推导"末者胜"静默丢弃——首见优先去重 + warning 日志；`experiments/run_benchmark` 汇总裸 r["iterations"]/r["elapsed_seconds"] 在键存在但值为 None 时崩溃——r.get(...) or 0 防护）+ P2×10（`executor_repo` verify() 流程注释与 docstring "git stash" 措辞改为实际 "git checkout -- . / clean -fd"；`executor_runtime` TimeoutExpired 分支第 2 次超时不再覆盖第 1 次有效 pytest 输出——追加 [timeout attempt N] 快照；`generator._fix_import_module` 带点路径裸子串 code.replace 误改包形式 import——按模块名锚定的正则；`cli/app.py` --verbose + --json 组合显式提示 verbose 在 --json 模式下不生效；`datasets/dataset_loader` total_test_count 兜底口径 len(FAIL_TO_PASS) 漏计 P2P——改 len(F2P) + len(P2P)；`reports/generator` error_context None 字段渲染 "None" 改 "未知"/"—"；`tools/code_context._closure_names` depth=N 口径文档澄清；`analysis_parts/convergence_analysis` 模块级 _safe_int/_safe_float 辅助 + 所有裸 int()/float() 转换点统一安全归一；`analysis_parts/rag_analysis` _iter_rag_stats 跳过非 dict 元素 + _rag_similarity_distribution 均值按截断后 [0,1] 口径；`compare_failures` regressed 排除 new_categories；`run_benchmark` L701 死写 results[baseline]["mutation_feedback"] 删除；`statistical_analysis.run_all_statistics` 区分两种 nan 成因 + `cohens_d` docstring 修正）+ 新增回归守卫 33 用例（`tests/test_2026_09_27_review_round10.py`）；全仓 ruff format 归一 14 文件；全量 1920 测试通过 / ruff 全仓 0 告警 / mypy 62 源文件 0 错误 / 覆盖率 94% |

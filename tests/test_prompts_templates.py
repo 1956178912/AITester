@@ -118,6 +118,11 @@ class TestLogPromptCharCounts:
         with caplog.at_level(logging.INFO):
             log_prompt_char_counts()
         logged_msgs = [r.getMessage() for r in caplog.records]
-        for name in ("PLANNER_SYSTEM_PROMPT", "GENERATOR_SYSTEM_PROMPT", "DEBUGGER_SYSTEM_PROMPT", "ORACLE_ENHANCER_SYSTEM_PROMPT"):
+        for name in (
+            "PLANNER_SYSTEM_PROMPT",
+            "GENERATOR_SYSTEM_PROMPT",
+            "DEBUGGER_SYSTEM_PROMPT",
+            "ORACLE_ENHANCER_SYSTEM_PROMPT",
+        ):
             assert any(name in m for m in logged_msgs), f"{name} 未出现在日志中"
             assert "字符" in next(m for m in logged_msgs if name in m), f"{name} 日志缺字符数"

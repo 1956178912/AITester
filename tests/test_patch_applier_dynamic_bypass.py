@@ -40,7 +40,7 @@ class TestCollectDynamicBypassConstructions:
 
     def test_getattr_non_string_attr_not_hit(self):
         """getattr(obj, var)：属性参数非字符串常量 → 不命中（保守放行）。"""
-        out = self._collect('def f(attr):\n    getattr(config, attr)\n')
+        out = self._collect("def f(attr):\n    getattr(config, attr)\n")
         assert out == set()
 
     def test_importlib_dangerous_module_hit(self):
@@ -55,7 +55,7 @@ class TestCollectDynamicBypassConstructions:
 
     def test_importlib_non_constant_arg_not_hit(self):
         """importlib.import_module(mod_var)：参数非常量 → 不命中。"""
-        out = self._collect('import importlib\ndef f(m):\n    importlib.import_module(m)\n')
+        out = self._collect("import importlib\ndef f(m):\n    importlib.import_module(m)\n")
         assert out == set()
 
     def test_ctypes_dangerous_hits(self):
@@ -80,11 +80,7 @@ class TestCollectDynamicBypassConstructions:
     def test_shutil_dangerous_hits(self):
         """shutil.rmtree / copy2 / move / unlink 全命中。"""
         out = self._collect(
-            "import shutil\n"
-            "shutil.rmtree('/tmp/x')\n"
-            "shutil.copy2(a, b)\n"
-            "shutil.move(a, b)\n"
-            "shutil.unlink(f)\n"
+            "import shutil\nshutil.rmtree('/tmp/x')\nshutil.copy2(a, b)\nshutil.move(a, b)\nshutil.unlink(f)\n"
         )
         assert any("rmtree" in s for s in out)
         assert any("copy2" in s for s in out)
@@ -138,7 +134,7 @@ class TestCollectDynamicImportBypass:
 
     def test_plain_import_alias_hit(self):
         """import socket as s; s.socket(...) → 裸 import 别名命中。"""
-        out = self._collect('import socket as s\ns.socket()\n')
+        out = self._collect("import socket as s\ns.socket()\n")
         assert any("s.socket" in s for s in out)
 
     def test_getattr_module_pattern_hit(self):

@@ -438,7 +438,10 @@ class TestGenerateInjectionBranches:
     def test_branch_coverage_section_injected(self):
         gen = _real_gen_with_mocked_llm()
         gen.generate(
-            {"name": "t"}, "code", "m", None,
+            {"name": "t"},
+            "code",
+            "m",
+            None,
             branch_coverage_section="未覆盖分支：line 5",
         )
         assert gen._call_llm_with_cache.called
@@ -449,7 +452,10 @@ class TestGenerateInjectionBranches:
     def test_boundary_triplets_section_injected(self):
         gen = _real_gen_with_mocked_llm()
         gen.generate(
-            {"name": "t"}, "code", "m", None,
+            {"name": "t"},
+            "code",
+            "m",
+            None,
             boundary_triplets_section="边界三元组：(0, 1, -1)",
         )
         called_query = gen._call_llm_with_cache.call_args[0][0]
@@ -458,7 +464,10 @@ class TestGenerateInjectionBranches:
     def test_both_sections_injected(self):
         gen = _real_gen_with_mocked_llm()
         gen.generate(
-            {"name": "t"}, "code", "m", None,
+            {"name": "t"},
+            "code",
+            "m",
+            None,
             branch_coverage_section="branches",
             boundary_triplets_section="triplets",
         )

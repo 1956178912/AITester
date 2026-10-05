@@ -910,6 +910,84 @@ def _assertion_counts_from_row(row: dict[str, Any]) -> int | None:
     return sum(1 for _ in ast.walk(tree) if isinstance(_, ast.Assert))
 
 
+def _fl_at_k_metrics(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """B-02（2026-10-04 系统审查 P1）：故障定位质量指标 FL@1/3/5 汇总。
+
+    消费 details[].fl_at_k（run_benchmark._fl_at_k 的产物：{"fl_at_1": 0|1,
+    "fl_at_3": 0|1, "fl_at_5": 0|1}；无 fl_spectral_focus / 无 gold diff 行
+    时为 None，统计层按"不可测"处理，不计入分母——与 M1 指标的 None 口径
+    一致）。输出供 render_markdown 的"故障定位质量"章节消费（旧 JSON 无
+    fl_at_k 字段时 available=False，章节自动跳过，历史口径零变化）。
+
+    Returns:
+        {"available": bool, "observed_tasks": int, "total_tasks": int,
+         "fl_at_1_rate": float | None, "fl_at_3_rate": float | None,
+         "fl_at_5_rate": float | None}
+    """
+    observed = 0
+    hit_counts: dict[str, int] = {}
+    for row in details:
+        fl = row.get("fl_at_k")
+        if not isinstance(fl, dict) or not fl:
+            continue
+        observed += 1
+        for k in (1, 3, 5):
+            key = f"fl_at_{k}"
+            if key in fl:
+                try:
+                    hit_counts[key] = hit_counts.get(key, 0) + int(fl[key])
+                except (TypeError, ValueError):
+                    continue
+    if observed == 0:
+        return {"available": False, "observed_tasks": 0, "total_tasks": len(details)}
+    return {
+        "available": True,
+        "observed_tasks": observed,
+        "total_tasks": len(details),
+        "fl_at_1_rate": round(hit_counts.get("fl_at_1", 0) / observed, 4),
+        "fl_at_3_rate": round(hit_counts.get("fl_at_3", 0) / observed, 4),
+        "fl_at_5_rate": round(hit_counts.get("fl_at_5", 0) / observed, 4),
+    }
+
+
+def _m1_metrics_aggregate(details: list[dict[str, Any]]) -> dict[str, Any]:
+    """R2（2026-10-05 审查：统计协议完整性）：M1 指标汇总（None 剔除口径）。
+
+    消费 details[].detection_rate / repair_rate / false_fix_rate /
+    test_error_rate（run_benchmark._m1_metrics 的逐任务产物；oracle 材料
+    缺失 / 坏测试等场景下为 None）。口径：**None 不计入分母**——
+    每个指标各自统计"可测任务数（observed）"与"非 None 值的均值"，
+    与 run_main_batch._print_r4_summary 及 fl_at_k 的 None 剔除口径一致
+    （"不可测"是测量能力约束，不是 0 分，混入分母会低估指标）。
+
+    畸形值（无法 float() 的脏数据）与 None 同口径剔除，不崩溃。
+
+    Returns:
+        {"available": bool（四指标均无可测任务时 False，渲染层跳过章节）,
+         "total_tasks": int,
+         "metrics": {指标名: {"observed": 可测任务数, "mean": 非 None 均值
+                             （observed=0 时为 None）}}
+    """
+    field_names = ("detection_rate", "repair_rate", "false_fix_rate", "test_error_rate")
+    metrics: dict[str, dict[str, Any]] = {}
+    for name in field_names:
+        values: list[float] = []
+        for row in details:
+            v = row.get(name)
+            if v is None:
+                continue
+            try:
+                values.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        metrics[name] = {
+            "observed": len(values),
+            "mean": round(sum(values) / len(values), 4) if values else None,
+        }
+    available = any(m["observed"] > 0 for m in metrics.values())
+    return {"available": available, "total_tasks": len(details), "metrics": metrics}
+
+
 def _convergence_failure_modes(details: list[dict[str, Any]]) -> dict[str, Any]:
     """1.2 收敛失败模式归因：达到 MAX_ITERATIONS 仍未修复的任务，
     区分"无法定位根因"（诊断反复同义/空）vs "无法生成有效补丁"

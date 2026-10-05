@@ -8,6 +8,14 @@
 #   bash reproduce.sh --dataset swe_bench  # 使用 SWE-bench 数据集
 #   bash reproduce.sh --quick --verbose  # 快速模式 + 详细日志
 #
+# P1（2026-10 Docker 化实验复现）：任意批次可用 Docker 一条命令复现，
+# 结果 JSON 自带 environment provenance 块（git sha / python 版本 /
+# 容器标记），由 Dockerfile.repro 构建的镜像执行：
+#   docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
+#   docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results \
+#         -v $(pwd)/.env.local:/workspace/.env.local:ro \
+#         aitester-repro:<sha> bash reproduce.sh --full
+#
 # 所有命令在项目根目录（本脚本所在目录）下执行
 # ═══════════════════════════════════════════════════════════════════════════════
 

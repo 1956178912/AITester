@@ -18,6 +18,7 @@ from typing import Any
 from src.agents.executor_imports import auto_fix_imports, extract_module_name_from_file
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
 from src.agents.executor_runtime import cleanup_sandbox
+from src.agents.kernel_sandbox import kernel_sandbox_enabled
 from src.utils.credential_scrub import scrub_os_environ
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ def execute_sandboxed(
          （失败将由错误分类器归为 import_error，便于区分代码 bug 与环境问题）；
     4. 用 venv 解释器（或系统解释器）在沙箱目录运行 pytest，
        PYTHONPATH 仅指向沙箱目录，实现任务间依赖隔离；
+       （P2-5，2026-10 批次）KERNEL_SANDBOX_ENABLE=true 时，上述 pytest 子进程
+       进一步包装进内核沙箱（macOS Seatbelt / Linux bwrap），fail-closed 口径
+       与本地链路（executor._execute_local）一致，结果附 kernel_sandbox_obs；
     5. 清理沙箱目录（venv 保留缓存，相同依赖组合的任务复用）。
 
     Returns:
@@ -103,20 +107,85 @@ def execute_sandboxed(
             "error_info": sandbox_error_info,
         }
 
-    try:
-        cmd = [
-            python_path,
-            "-m",
-            "pytest",
-            test_file,
-            "-v",
-            "--tb=short",
-            f"--cov={sandbox_dir}",
-            "--cov-report=term",
-        ]
-        if target_function:
-            cmd.extend(["-k", target_function])
+    # G3 内核级沙箱（P2-5，2026-10 批次，KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）：
+    # 把 venv 沙箱执行链路的 pytest 子进程包装进内核沙箱
+    # （macOS Seatbelt / Linux Landlock+bwrap）——此前仅本地链路
+    # （executor._execute_local，2026-09-30 G3）接入，venv 沙箱作为默认
+    # 推荐隔离路径（EXECUTOR_USE_VENV=true）却走裸子进程，内核沙箱开关
+    # 在"venv 开 + kernel 开"组合下静默失效（"以为有隔离其实只有 venv"，
+    # 与 kernel_sandbox 模块 docstring 声明的目标场景矛盾）。
+    # 接入口径与本地链路逐条对齐（同 fail-closed、同 S1 修复的完整 argv 传法）：
+    # - 允许路径：sandbox_dir（pytest 在沙箱目录执行）+ 解释器路径
+    #   （seatbelt 的 process-exec 需可执行目标；bwrap 的 ro-bind 需
+    #   解释器所在库目录可达）；
+    # - S1（fail-closed）：build_sandbox_command 抛 SandboxUnavailable
+    #   （平台无后端且 ALLOW_UNSANDBOXED=false）→ 拒绝执行并返回
+    #   kernel_sandbox_unavailable 诊断（不静默降级到无隔离 venv 裸跑）；
+    # - 完整 argv 传法（2026-10-01 P1 修复同款）：cmd 直接替换为
+    #   sandboxed_cmd（seatbelt/bwrap 自身作 argv[0]，无 subprocess 语义歧义）；
+    # - 观测层：结果 dict 附 kernel_sandbox_obs（与本地链路同字段，供
+    #   Fail-Closed 治理协议 / 实验分析消费，纯观测不改结果口径）。
+    # 默认关（KERNEL_SANDBOX_ENABLE=false）时本段零行为变化。
+    cmd = [
+        python_path,
+        "-m",
+        "pytest",
+        test_file,
+        "-v",
+        "--tb=short",
+        f"--cov={sandbox_dir}",
+        "--cov-report=term",
+    ]
+    if target_function:
+        cmd.extend(["-k", target_function])
 
+    result_extras: dict[str, Any] = {}
+    if kernel_sandbox_enabled():
+        from src.agents.kernel_sandbox import SandboxUnavailable, build_sandbox_command
+
+        _ks_allowed = [sandbox_dir, sys.executable]
+        try:
+            sandboxed_cmd, ks_obs = build_sandbox_command(
+                cmd,
+                cwd=sandbox_dir,
+                allowed_paths=_ks_allowed,
+            )
+        except SandboxUnavailable as ks_exc:
+            # S1 fail-closed：平台无可用内核沙箱后端且未显式容忍无隔离 →
+            # 拒绝执行（与本地链路口径一致），不静默降级 venv 裸跑
+            return {
+                "passed": False,
+                "output": f"内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行）: {ks_exc}",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": {
+                    "type": "kernel_sandbox_unavailable",
+                    "message": str(ks_exc),
+                },
+            }
+        if ks_obs.get("supported"):
+            cmd = sandboxed_cmd
+            result_extras = {"kernel_sandbox_obs": ks_obs}
+        else:
+            # S1 双保险：build_sandbox_command 已对"不支持且
+            # ALLOW_UNSANDBOXED=false"抛 SandboxUnavailable；此处
+            # supported=False 仅在 ALLOW_UNSANDBOXED=true 容忍档可达，
+            # 同样拒绝执行（保守 fail-closed：容忍无隔离须走异常路径感知，
+            # 不静默裸跑）。
+            return {
+                "passed": False,
+                "output": "内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行；"
+                "如需无隔离调试请显式设 ALLOW_UNSANDBOXED=true 并记录工件档位）",
+                "coverage": 0.0,
+                "failed_cases": [],
+                "error_info": {
+                    "type": "kernel_sandbox_unavailable",
+                    "message": ks_obs.get("profile_summary", ""),
+                },
+                "kernel_sandbox_obs": ks_obs,
+            }
+
+    try:
         output, last_result = self._run_pytest_with_retry(cmd, env, sandbox_dir)
         # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
         # 结果时），与 EARLY_RETURN 走同一早退分支（error_info 透传）。
@@ -127,6 +196,7 @@ def execute_sandboxed(
                 "coverage": 0.0,
                 "failed_cases": [],
                 "error_info": last_result[1],
+                **result_extras,
             }
         else:
             coverage = parse_coverage(output)
@@ -137,6 +207,7 @@ def execute_sandboxed(
                 "output": output,
                 "coverage": coverage,
                 "failed_cases": failed_cases,
+                **result_extras,
             }
             if last_result is not None and last_result.returncode != 0:
                 result["error_info"] = build_error_info(last_result, output)

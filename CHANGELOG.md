@@ -4,6 +4,320 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-05 审查优化批次（R1-R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变）
+
+> 本批次为 2026-10-05 系统性审查（R1–R18 建议）落地的第一批：**科学内核修复
+> + 评估口径完整化 + 工程门禁硬化**，全部"默认开关不变 + 新能力独立开关"口径；
+> 全量回归 **3913 → 3984 passed / 0 failed**（+71 新用例 = R 批次 34 + R2 统计 18 +
+> R5 变异检出 19），ruff 0 命告警、mypy 98 源文件 0 错误，`BASELINE.yaml` 已同步。
+>
+> **P0 科学内核（审查 R1/R4/R5）**：
+> - **R1a SpecIR v1 编译缺陷修复**（`src/specs/spec_ir.py`）：
+>   - 参数化列表 `'; '.join` → `', '.join`（≥2 条边界产物此前为 SyntaxError）；
+>   - NL invariants 不再编译为 `assert True` 恒真断言（假通过通道封堵；
+>     无边界材料时保守返回空串，不产出无断言空测试文件）；
+> - **R1b/R6 签名感知绑定**（`src/specs/spec_ir.py` + `spec_ir_v2.py`）：
+>   - 新增 `extract_signature_params`（AST 签名提取，顶层函数 + 类方法，
+>     None/[]/非空三态：未找到 / 0 参 / 按签名）；
+>   - `compile_spec_oracle` 新增 `signature_params` 参数——绑定上下文从
+>     硬编码 `{r,x,a,b,y}` 扩展为真实参数名（多参数 / 关键字参数 / 自定义
+>     参数名函数的规约子句从"必然不可编译"变为可编译）；调用元数按签名
+>     修正（单参函数不再误产 `func(a, b)` 的 TypeError）；
+> - **R1c 确定性规约 oracle 执行接线**（`src/graph/nodes.py` 新开关
+>   `SPEC_ORACLE_EXEC_ENABLE` 默认关）：`compile_spec_oracle` 产物（签名感知）
+>   追加到 LLM 生成测试尾部**并列**执行——修复审查指出的"可执行规约从未
+>   进入执行链"死代码缺口；state 新增 `spec_oracle_injected` 观测字段；
+> - **R4b 回滚 fail-closed 口径**（`src/tools/patch_rollback.py` 新开关
+>   `PATCH_ROLLBACK_FAIL_CLOSED` 默认关）：rc≥2 / 超时 / IO 异常口径可
+>   一律改判 regression_failed 触发自动回滚（历史"坏测试不误杀好补丁"
+>   口径默认不变，`PatchRollbackProtocol.run` 透传）；
+> - **R5 变异检出率接入主批次**（新模块 `experiments/mutation_detection.py`
+>   + `run_benchmark.py` 接线，`ENABLE_MUTATION_SCORING` 门控）：
+>   `mutation_detection_rate`（生成测试在 gold fixed 上全绿 + 对 AST 变异体
+>   变红的比例）作为测试有效性客观裁决（SWE-Mutation 2026 口径），
+>   结果行新增 `mutation_detection_rate / mutants_killed / mutants_total`；
+>
+> **P1 评估与工程（审查 R2/R10/R11/R13/R14/R16/R17）**：
+> - **R2 统计报告完整化**（`experiments/statistical_analysis.py` +
+>   `analyze_results.py` + `analysis_parts/convergence_analysis.py`）：
+>   McNemar / BH-FDR 结果落盘 `statistical_report.md`（此前仅控制台）；
+>   新增 bootstrap 95% CI（10000 次重采样，seed 42 可复现）与
+>   Cliff's delta 效应量；`--batches` 白名单参数（替代 glob 全目录混批次）
+>   + 报告头部"数据来源"审计清单；`analyze_results` 聚合 M1 三指标
+>   （None 不计入分母）；
+> - **R17 结构化路由**（`src/graph/workflow.py` 新开关
+>   `ROUTE_STRUCTURED_ENABLE` 默认关）：`error_category=logic_error`
+>   （断言失败但栈未触及被测模块）结构化信号优先于中文诊断关键词
+>   匹配（M5 事故的根因面），信号来源入 trace 打点（可度量关键词兜底率）；
+> - **R16 rogue_monitor 孤儿模块接线**（新开关 `ROGUE_MONITOR_ENABLE`
+>   默认关）：`base_agent._call_llm_with_cache` 上报调用事件，
+>   `_executor_node` 每轮 check 四核心 agent 写 `state["rogue_findings"]`；
+> - **R11 确定性采样**：`run_benchmark(deterministic=True)` 强制
+>   TEMPERATURE=0.0（os.environ + config + base_agent 三处级联，
+>   provenance 记录真实生效值）；
+> - **R10 CI 硬化**（`.github/workflows/ci.yml`）：security 作业（pip-audit /
+>   gitleaks 工作树 / bandit）转 push/PR **阻断**（此前周日才跑且非阻断）；
+>   分支覆盖门禁扩至 3.12/3.13/3.14 全矩阵；smoke-llm 周日自动触发
+>   （secrets 齐备时）+ 补 LLM_1_* secrets 注入；双语文档检查显式化
+>   （continue-on-error，CHANGELOG.en.md 补齐后转硬）；新增 `.gitleaks.toml`
+>   （tests/ 脱敏夹具假密钥豁免）；
+>   ⚠️ **安全发现**：gitleaks 全历史扫描在已删除文件
+>   `API_MANAGER_EXTENSION_GUIDE.md`（commit 2e5272a）检出疑似历史密钥残留
+>   ——建议轮换该密钥并 `git filter-repo` 清史后把全历史扫描转阻断；
+> - **R13 发布流水线**（新 `.github/workflows/release.yml`）：tag `v*` 触发
+>   build（sdist+wheel，本地实测产物正确）→ twine check（实测 PASSED）→
+>   CycloneDX SBOM → GitHub Release 附产物；PyPI 发布经 secrets 守卫
+>   （缺失时跳过发布只做 Release，防误发）；
+> - **R14 性能巡检**（新 `.github/workflows/perf.yml` + `scripts/check_perf_regression.py`
+>   + `docs/performance_baseline.json`）：周日跑 performance_benchmark，
+>   15% 相对阈值 + 0.05ms 绝对下限告警（non-blocking，跨机噪声防护），
+>   产物归档 90 天；
+>
+> **P2 体验与安全（审查 R15/R18 + 专项）**：
+> - **R15 开关预设**（`config.py`）：`AITESTER_PROFILE=safe|scientific|fast`
+>   ——safe（沙箱+回滚+注入守卫+流氓监控全开）/ scientific（规约 oracle +
+>   变异检出评测链全开）/ fast（历史默认）；setdefault 注入，显式 env 优先；
+> - **api_manager 健康检查开关**（`API_HEALTH_CHECKER_ENABLE` 默认 true
+>   保持历史）：免费/低配额场景可关后台 60s 真实 API 探测（故障转移
+>   即时探测不受影响）；
+> - **LLM 缓存目录迁出源码树**：默认 `~/.cache/aitester/llm/`（XDG_CACHE_HOME
+>   优先），此前 `src/cache/`；`rag.py` 缓存路径双写收敛到单一常量；
+>   历史缓存不自动迁移（需保留命中时显式设 AITESTER_LLM_CACHE_DIR）；
+> - **R18 威胁模型增补**（`docs/threat_model.md` 双语）：T7 CI/CD 自身供应链
+>   威胁、T8 多层沙箱同时失效复合场景、T9 资源耗尽/DoS 面；
+>
+> 配套测试：`tests/test_2026_10_05_review_batch.py`（34 用例）、
+> `tests/test_r2_statistical_report.py`（18 用例）、`tests/test_r5_mutation_detection.py`
+> （19 用例）；`tests/test_spec_ir_branches.py` 两处锁定旧缺陷行为的用例
+> 更新为新口径（NL-only 材料返回空串 / 恒真断言封堵）。
+
+## [Unreleased] — 2026-10-04 优化批次·续四（P0-4 内核沙箱启用路径自验证 + P2 注入警示注入 LLM query 闭环 + 威胁模型更新，默认行为不变）
+
+> 本批次为 2026-10-04 系统性审查后第四批可自验证优化项（紧接续三 P2 注入基准
+> + P1-1 嵌入钩子）；全部改动"默认开关不变 + 新能力独立开关"口径，全量回归
+> **3862 → 3870 passed / 0 failed**（+8 新回归用例），ruff 0 告警、
+> mypy 96 源文件 0 错误、行覆盖 88% / 分支 83%（json 口径），`BASELINE.yaml`
+> 已同步刷新：
+>
+> - **P0-4 内核沙箱"显式启用路径"自验证**（新增
+>   `tests/test_p0_4_kernel_sandbox_enabled_path.py`，7 用例，零 LLM / 零子进程，
+>   纯 monkeypatch 平台探测 + argv 装配断言）：
+>   - 威胁模型 P0-4 缺口"内核沙箱已接线本地 + venv 两条主链路但
+>     KERNEL_SANDBOX_ENABLE 默认关 + CI 未预装 bwrap → 显式启用时仍
+>     fail-closed 拒绝执行"的可自验证部分；
+>   - 锁定 CI 预装 bwrap 路径下 `build_sandbox_command` 的 argv 装配口径
+>     （argv[0]=bwrap/sandbox-exec 本身，零 subprocess 语义歧义——旧 bug
+>     `cmd = sandboxed_cmd[1:]` 把 argv[0] 当可执行文件，本测试复锁防止回归）；
+>   - 锁定 fail-closed 口径（无后端 + ALLOW_UNSANDBOXED=false → 抛
+>     SandboxUnavailable；ALLOW_UNSANDBOXED=true → 原命令 + obs.supported=False
+>     保守降级）；
+>   - 平台探测 `_landlock_available` / `_seatbelt_available` / `sandbox_supported`
+>     的 bwrap 预装判定锁定；
+> - **P0-4 一键可启用**（CI 预装 bwrap + `.env.example` 入口）：
+>   - `.github/workflows/ci.yml` test 作业新增 "Install system tools" 步骤
+>     （`sudo apt-get install -y bubblewrap`，安装失败不阻断——默认
+>     KERNEL_SANDBOX_ENABLE=false 路径不受影响，零行为变化）；
+>   - `.env.example` 新增 `KERNEL_SANDBOX_ENABLE=false` 入口 + 显式启用说明
+>     （一行 env 即可启用，无需改代码；CI 已预装 bwrap）；
+>   - 威胁模型 P0-4 说明更新为"已接线 + CI 预装 bwrap，一键可显式启用；
+>     默认值保持 false（ADR-0003 新能力默认关口径，翻转为 true 需 ADR
+>     变更 + 全部实验工件重新标注档位，属主张口径决策）"；
+> - **P2 注入警示真正注入 LLM query 闭环**（`src/agents/generator.py` +
+>   `src/graph/nodes.py`）：
+>   - 续三批次接了"检测 + state 写入 injection_findings"，但警示文本
+>     （`build_injection_warning` 输出）尚未传给 `generate`（LLM 实际收不到
+>     系统侧警示，闭环未闭合）；
+>   - 本批次给 `GeneratorAgent.generate` 新增 `injection_warning` 参数
+>     （None/空串时不注入，历史口径零变化），命中时追加到 query 尾部
+>     （与 N2/N4 段落同口径的 prompt 注入位）；`_generator_node` 把
+>     `_injection_warning` 传入 `generate`；
+>   - 新增 1 用例锁定"injection_warning 非空时真正出现在 LLM query"；
+> - **威胁模型 P0-4/P1-1 条目更新**（`docs/threat_model.md` + `.en.md`）：
+>   - P0-4 说明补"CI 预装 bwrap 路径由 test_p0_4 自验证"；
+>   - P1-1 说明补"钩子已实现（embedding_utils.py），需运维显式装
+>     sentence-transformers 或设 EMBEDDING_BACKEND=sentence_transformers
+>     才实际启用"（默认零外部依赖口径下不自动加载）；
+> - **验证**：全量 3870 用例通过 + ruff/mypy/check_lock_sync/
+>   check_branch_coverage/check_baseline_numbers/check_bilingual_docs 全绿。
+
+## [Unreleased] — 2026-10-04 优化批次·续三（P2 注入扫描回归基准 + P1-1 污染嵌入钩子 + injection_findings 状态接线，默认行为不变）
+
+> 本批次为 2026-10-04 系统性审查后第三批可自验证优化项（紧接续二 P2-1/2/3
+> + 威胁模型双语）；全部改动"默认开关不变 + 新能力独立开关"口径，全量回归
+> **3815 → 3862 passed / 0 failed**（+47 新回归用例），ruff 0 告警、
+> mypy 96 源文件 0 错误、行覆盖 88% / 分支 83%（json 口径），`BASELINE.yaml`
+> 已同步刷新：
+>
+> - **P2 注入扫描回归基准**（威胁模型 P2 缺口"注入扫描为启发式、无回归基准"）：
+>   - 新增 `experiments/injection_benchmark_samples.json`（对抗样本集
+>     `positive_input` 10 条 + 良性对照 `false_positive_input` 5 条 +
+>     危险补丁 `positive_patch` 8 条 + 合法代码 `clean_patch` 5 条），
+>     固化注入对抗样本 + 良性对照，供召回率 / 误伤率度量；
+>   - 新增 `tests/test_p2_injection_benchmark.py`（36 用例）：驱动
+>     `detect_prompt_injection`（输入侧）/ `check_llm_patch_safety`（输出侧）
+>     对基准样本集度量，锁定"召回率 ≥ 0.8 且误伤率 == 0"的下限守卫
+>     （启发式非形式化，基准作用是防回归而非宣称完备）；
+>   - **接线补齐**：`detect_prompt_injection` 输入侧此前全仓无调用方
+>     （孤儿函数，与 P2-7 接线审计同口径的缺口）。`_generator_node` 在
+>     消费外部可控文本（`problem_statement` / `diagnosis` / `review_reason` /
+>     `task_description`）前做输入侧注入特征扫描，命中时写入
+>     `state["injection_findings"]`（新增状态字段，默认 `[]`）并追加
+>     系统侧警示（OWASP ASI "检测+隔离"口径，只警示不自动阻断）；
+>   - **遥测联动**：`agent_telemetry` 新增 `injection_detected` 失败模式
+>     （消费 trace 中 `injection_findings` 非空判定），把"任务文本被检出
+>     注入"作为可度量项接入 G4 周报；
+>   - `src/graph/state.py` 新增 `injection_findings: list[str]` 字段 +
+>     `create_initial_state` 工厂补默认 `[]`；
+> - **P1-1 污染嵌入钩子回归测试**（威胁模型 P1-1 缺口"语义级污染嵌入
+>     默认未接"的可自验证部分）：
+>   - 新增 `tests/test_p1_1_embedding_hook.py`（11 用例）：锁定
+>     `embedding_utils` 后端选择（`EMBEDDING_BACKEND=none` 强制 None /
+>     缺失后端保守回退 None）+ 嵌入边界（空文本 → None）+ 余弦计算
+>     （维度不一致 / 零向量 / 正交 / 同向 / 反向量非负夹取口径）；
+>   - `experiments/contamination_check.py` 的 `_embed_code` 钩子此前已委托
+>     `embedding_utils.embed_text`（真实嵌入接入点完整），本批次补测试
+>     锁定"未接入嵌入库时透明回退词袋余弦"的保守口径不变；
+> - **验证**：全量 3862 用例通过 + ruff/mypy/check_lock_sync/
+>   check_branch_coverage/check_baseline_numbers/check_bilingual_docs 全绿。
+
+## [Unreleased] — 2026-10-04 优化批次·续二（P2-1 OTel 导出器 + P2-2 专家池维度条件化 + P2-3 策略银行 outcome 积累 + 威胁模型双语，默认行为不变）
+
+> 本批次为 2026-10-04 系统性审查后第二批可自验证优化项（紧接首次批次
+> P2-7 / P2-4 / P2-5 / P1 Docker 化 / P2-6）；全部改动"默认开关不变 +
+> 新能力独立开关"口径，全量回归 **3797 → 3815 passed / 0 failed**
+> （+18 新回归用例），ruff 0 告警、mypy 96 源文件 0 错误（新增
+> `src/observability/otel_export.py`）、行覆盖 88% / 分支 83%（json 口径），
+> `BASELINE.yaml` 已同步刷新：
+>
+> - **P2-1 trace.jsonl → OpenTelemetry 导出器**
+>   （新增 `src/observability/otel_export.py`，纯离线转换，零 SDK 依赖）：
+>   - `export_trace_jsonl(path)` 把 `TraceSession` 落盘的 JSONL 转为
+>     OTel 兼容 span 列表（trace_id / span_id / parent_id /
+>     start_time_unix_nano / duration / attributes）；
+>   - 映射 GenAI 语义约定属性（`gen_ai.system` / `gen_ai.operation.name` /
+>     `gen_ai.usage.*`）+ AITester 专有属性（`aitester.*`）；
+>   - `task_start` → root span；`node` / `task_end` → 子 span（parent=root）；
+>     无 `task_start` 记录时自动合成 root（保证 Jaeger 渲染连通）；
+>   - 损坏行跳过（不阻断整文件导出）；缺失 `run_id`/`span_id` 时派生确定性
+>     短 ID（重复导出同一文件时 ID 稳定）；
+>   - 新增 `tests/test_p2_1_otel_export.py`（7 用例）；
+> - **P2-2 专家池维度按 error_category 条件化**
+>   （`src/graph/expert_pool.py` + `src/graph/nodes.py`，零新 LLM 成本）：
+>   - 新增 `_ERROR_CATEGORY_TO_PRIORITY_DIMENSION` 映射表
+>     （type_error→type_safety / index_error→boundary_handling /
+>     assertion→dead_code_and_logic / ...）；
+>   - 新增 `_dimensions_for_category(category, count)` +
+>     `_category_conditioned()` 开关（`EXPERT_POOL_CATEGORY_CONDITIONED`，
+>     默认关）；命中类别把关联维度排前、其余按原序补位
+>     （expert_count 不变，只重排不增删）；
+>   - `generate_parallel` 新增 `error_category` 参数（None 时零作用，
+>     历史口径不变）；`_debugger_node` 传 `state.get("error_category")`；
+>   - 新增 `tests/test_p2_2_expert_dimension.py`（6 用例）；
+> - **P2-3 策略银行 outcome 积累（ESDA Phase 2）**
+>   （`src/graph/nodes.py` 专家池路径 + `src/tools/strategy_bank.py`，
+>   零 LLM 成本）：
+>   - 此前 `record_strategy_outcome` 有 API 但无调用方（outcome 积累侧
+>     从未被填充，`select_strategy` 成功率加权恒 1.0，等价历史口径）；
+>   - 在 `_debugger_node` 专家池路径（`STRATEGY_BANK_ENABLE=true` 且
+>     `expert_pool_enabled=true`）中，策略条目被消费时追加
+>     `(签名, 策略名, success=False占位, task_id)` 到 strategy_bank.json
+>     的 `outcomes` 字段（纯追加，不改写 strategies；写盘失败静默降级）；
+>   - 占位 success=False（本节点不预判执行结果，离线分析可结合 task_id
+>     关联后续 executor 结果做"真实成功率"归因，与 failure_kb 同口径）；
+>   - 默认关（`STRATEGY_BANK_ENABLE=false`）时本段零执行，历史口径不变；
+>   - 新增 `tests/test_p2_3_strategy_bank_outcomes.py`（5 用例）；
+> - **P2-6 威胁模型双语**（新增 `docs/threat_model.en.md`）：
+>   中文单语 `docs/threat_model.md` 配英文版，`scripts/check_bilingual_docs.py`
+>   豁免项已移除（双语门禁恢复对 `docs/threat_model.md` 的强制检查）；
+> - **文档同步**：`BASELINE.yaml`（3815 / 88% / 83% / 96 文件）；
+>   `CHANGELOG.md`（本条 + 首次批次条目已在前批次登记）；
+>   `.env.example`（新增 `EXPERT_POOL_CATEGORY_CONDITIONED` 开关说明）。
+>
+> 验证：全量 3815 用例通过 + ruff/mypy/check_lock_sync/check_branch_coverage/
+> check_baseline_numbers/check_bilingual_docs 全绿。
+
+## [Unreleased] — 2026-10-04 优化批次·续（P2-5 内核沙箱 venv 链路接线 + P0-4 缺口关闭，默认行为不变）
+
+> 本批次为 2026-10-04 首次优化批次（P2-7/P2-4/P2-5 依赖分组/P1 Docker 化/P2-6 威胁模型）
+> 的延续落地：补上 `docs/threat_model.md` 登记的 **P0-4 缺口**（内核级沙箱此前仅接
+> 本地链路 `executor._execute_local`，venv 沙箱链路 `executor_modes.execute_sandboxed`
+> —— 默认推荐隔离路径 —— 走裸子进程，`KERNEL_SANDBOX_ENABLE=true` 时在内核层
+> 静默失效，"以为有隔离其实只有 venv"）。全部改动"默认开关不变 + 新能力独立
+> 开关"口径，默认关时零行为变化：
+>
+> - **P2-5 内核沙箱 venv 沙箱链路接线**（`src/agents/executor_modes.py`）：
+>   `execute_sandboxed` 在 pytest 命令构建后、执行前按 `KERNEL_SANDBOX_ENABLE`
+>   （默认 false）经 `kernel_sandbox.build_sandbox_command` 把 venv 链路子进程包装进
+>   内核沙箱（macOS Seatbelt / Linux bwrap），接入口径与本地链路逐条对齐：
+>   - 允许路径 = 沙箱目录 + 宿主解释器（`sys.executable`，seatbelt process-exec /
+>     bwrap 库目录可达口径）；
+>   - S1 fail-closed：`SandboxUnavailable`（平台无后端且 `ALLOW_UNSANDBOXED=false`）
+>     → 拒绝执行并返回 `error_info.type=kernel_sandbox_unavailable` 诊断，
+>     **不静默降级到无隔离 venv 裸跑**（与本地链路 / docker_unavailable 同口径）；
+>   - 完整 argv 传法（2026-10-01 P1 修复同款）：`cmd` 直接替换为 `sandboxed_cmd`
+>     （seatbelt/bwrap 自身作 argv[0]，无 subprocess 语义歧义）；
+>   - 观测层：结果 dict 附 `kernel_sandbox_obs`（与本地链路同字段，纯观测，
+>     供 Fail-Closed 治理协议 / 实验分析消费）；
+>   - `src/agents/executor.py` 的 `_execute_local` 结果组装同字段透传
+>     （venv 链路经 `execute_sandboxed` 返回的 `kernel_sandbox_obs` 进结果 JSON）；
+>   - `src/agents/kernel_sandbox.py` 模块 docstring 更新接入点声明
+>     （本地 2026-09-30 G3 / venv P2-5，2026-10-04）；
+>   - 新增 `tests/test_p2_5_venv_kernel_sandbox.py`（4 用例：默认关零变化 /
+>     ON+支持完整 argv 传法 / SandboxUnavailable fail-closed /
+>     supported=False 双保险拒绝）；
+> - **P0-4 缺口关闭**（`docs/threat_model.md`）：A4 行由"⚠️ 部分（P0-4 缺口）/
+>   尚未接进 executor 主链路"更新为"本地 + venv 两条非容器主链路均已接入，
+>   `KERNEL_SANDBOX_ENABLE` 默认关（启用为显式行为）"；缺口表 P0-4 行改为
+>   "已接线，待显式启用"。
+>
+> 验证：新增 4 用例 + 全量回归零失败 + ruff 0 告警（mypy 95 文件 0 错误，
+> CI 口径）。
+
+## [Unreleased] — 2026-10-04 优化批次（P2-7 无 oracle 接线 + P2-4 停滞检测 + P2-5 依赖分组 + P1 Docker 化复现 + 威胁模型文档，默认行为不变）
+
+> 本批次为 2026-10-04 系统性审查后的低风险可自验证优化项（P0 强模型证据类
+> 因涉及 API 成本/预算未在本批次执行）；全部改动"默认开关不变 + 新能力独立
+> 开关"口径，全量回归 **3760 → 3793 passed / 0 failed**（+31 新回归用例），
+> ruff 0 告警、mypy 95 源文件 0 错误、行覆盖 88% / 分支 83%（json 口径），
+> `BASELINE.yaml` 已同步刷新：
+>
+> - **P2-7 N2/N4 无 oracle 接线审计 + 接入**（`experiments/metamorphic_oracle.py`
+>   / `experiments/differential_test.py` 两个"纯数据原语"模块此前零调用方、
+>   零测试，接进 `_generator_node` 主链路）：
+>   - `GeneratorAgent.generate` 新增 `metamorphic_section` /
+>     `differential_section` 参数（None 时不注入，同 O3/M10 历史口径）；
+>   - `src/graph/nodes.py::_generator_node` 经 `METAMORPHIC_ENABLE` /
+>     `DIFFERENTIAL_TEST_ENABLE`（均默认 false）守门构建段落注入；
+>   - **修复两个接线才暴露的真实缺陷**（原模块孤立故 0 触发）：
+>     ① `suggest_metamorphic_relations` "func name contains" 关键词解析
+>     （`split("'")[2]` → `split("'")[1]`，此前 6 类 MR 模板全部 0 命中）；
+>     ② "func has 2+ args" 参数数解析（`int(" 2+")` ValueError →
+>     正则提取数字子串）；
+>   - 新增 `tests/test_p2_7_oracle_wiring.py`（19 用例）；
+> - **P2-4 停止条件最小版停滞检测**（`src/graph/workflow.py`）：
+>   `StopReason.COVERAGE_STALL` + `_coverage_stall_detected()`（读
+>   `state["execution_trace"]` 最近 K 轮 coverage_delta，全部 |delta| < eps
+>   且 test_passed 为假 → 停滞）；`COVERAGE_STALL_DETECT_ENABLE` 默认关，
+>   OFF 时 `determine_stop_reason` 优先级序列与历史完全一致（零行为变化）；
+>   新增 `tests/test_p2_4_coverage_stall.py`（12 用例）；
+> - **P2-5 依赖分组**（`pyproject.toml`）：`pytest` / `pytest-cov` 移入
+>   `dev` extra，`pymysql` / `DBUtils` 移入新增 `db` extra（发行安装面
+>   收敛；`requirements.txt` 全量清单不变，CI/dev 装全量口径不变）；
+>   新增 `tests/test_packaging.py` 两个分组锁定用例（防漂移）；
+> - **P1 Docker 化实验复现**：新增 `Dockerfile.repro`（python:3.14-slim +
+>   全量 requirements.lock + git sha provenance 标记 `.repro_provenance`）；
+>   `experiments/run_benchmark.py` 结果 JSON 新增 `environment` provenance
+>   块（python 版本 / git sha / 容器标记）；`reproduce.sh` 头部补 Docker
+>   复现命令；
+> - **P2-6 威胁模型成文**：新增 `docs/threat_model.md`（6 类攻击面
+>   → 现有守卫映射 + 已知缺口 P0-4/P1-1/P2 + 文档化豁免 +
+>   Fail-Closed 治理原则）；
+> - **文档同步**：`.env.example` 新增 P2-4 三个开关（COVERAGE_STALL_*）
+>   + N2/N4 接线说明更新；`BASELINE.yaml`（3793 / 88% / 83% / 95 文件）。
+>
+> 验证：全量 3793 用例通过 + ruff/mypy/check_lock_sync/check_branch_coverage/
+> check_baseline_numbers 全绿。
+
 ## [Unreleased] — 2026-10-02 继续优化批次·七～十四（纯逻辑 / mock 隔离分支补齐 + 两处真实缺陷修复，默认行为不变）
 
 > 八批次累计（2026-10-02），聚焦 18 个低覆盖模块的纯逻辑 / mock 隔离分支补齐

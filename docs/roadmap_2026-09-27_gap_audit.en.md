@@ -1,3 +1,5 @@
+> Last updated: 2026-09-27 (initial audit date (matches the Chinese version))
+
 # Roadmap 7-Section Landing Audit (2026-09-27)
 
 > Audited target: the user-supplied "improvement roadmap" 7 sections

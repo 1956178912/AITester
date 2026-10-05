@@ -84,7 +84,7 @@ bash scripts/smoke_test.sh --no-llm --skip-lint
 
 ## 6. 可选：模型额度探测与省 token 缓存
 
-LLM 调用默认开启文件缓存（`src/cache/`，命中相同 prompt 不再消耗 token）。在「免费额度用完即停」的供应商下可延长可用时长。
+LLM 调用默认开启文件缓存（默认目录 `~/.cache/aitester/llm/`，2026-10-05 起迁出源码树；命中相同 prompt 不再消耗 token）。在「免费额度用完即停」的供应商下可延长可用时长。
 
 ```bash
 # 探测各已配置模型哪些还活着、哪些 403 额度用尽（每个仅 1-token，不打印 key）
@@ -92,7 +92,7 @@ python scripts/check_quota.py
 
 # 关闭缓存 / 清缓存
 export AITESTER_LLM_CACHE=0
-rm -rf src/cache
+rm -rf ~/.cache/aitester/llm
 ```
 
 ## 7. 可选：高级开关（默认全部关闭，不影响常规使用）
@@ -100,6 +100,40 @@ rm -rf src/cache
 以下开关均默认关闭，按需启用（详见 `.env.example` 注释）：
 
 ```bash
+# ── 2026-10-05 审查批次：开关预设（推荐入口）─────────────────────────────
+# 三档预设一次配置一组开关（setdefault 注入，显式设置的 env 不被覆盖）：
+#   safe       —— 安全敏感档：内核沙箱 + 补丁回滚（fail-closed）+ 注入守卫 +
+#                 流氓监控 + flaky 门禁全开
+#   scientific —— 科研评测档：SpecIR/DSL/规约 oracle 执行 + 变异检出率 +
+#                 oracle 校验 + 快照回滚全开（配合 deterministic=True）
+#   fast       —— 历史默认档（与不设 PROFILE 等价）
+export AITESTER_PROFILE=scientific
+
+# ── 2026-10-05 审查批次：单项开关（预设之外也可单独启用）──────────────────
+# R1c 确定性规约 oracle 执行：compile_spec_oracle 产物（签名感知绑定）追加到
+# LLM 生成测试尾部并列执行——LLM 测试通过 ≠ 规约 oracle 通过。
+export SPEC_ORACLE_EXEC_ENABLE=true
+
+# R4b 回滚 fail-closed：P2P 回归的 rc>=2/超时/IO 异常口径也触发自动回滚
+# （默认关 = 历史口径"坏测试不误杀好补丁"）。
+export PATCH_ROLLBACK_FAIL_CLOSED=true
+
+# R17 结构化路由：error_category=logic_error（断言失败但栈未触及被测模块）
+# 优先于中文诊断关键词触发"重新生成测试"路由。
+export ROUTE_STRUCTURED_ENABLE=true
+
+# R16 流氓 agent 监控：LLM 调用事件上报 + 每轮 check（state["rogue_findings"]）。
+export ROGUE_MONITOR_ENABLE=true
+
+# api_manager 后台健康检查线程（默认 true 保持历史；免费配额场景建议关，
+# 故障转移的即时探测不受影响）。
+export API_HEALTH_CHECKER_ENABLE=false
+
+# R11 确定性采样（run_benchmark 参数，非环境变量）：
+# TEMPERATURE=0.0 三处级联（env + config + base_agent），provenance 记录。
+# from experiments.run_benchmark import run_benchmark
+# run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
+
 # 结构化 JSONL 追踪（4.1）：每任务落 <task_uuid>.trace.jsonl，
 # 记录各智能体节点决策/token/耗时，供实验分析回放。未设置时全 no-op。
 export AITESTER_TRACE_DIR=./trace_out
@@ -241,7 +275,10 @@ export RUNTIME_PROBE_ENABLE=true
 
 # G3 内核级沙箱（KERNEL_SANDBOX_ENABLE，默认关）：macOS Seatbelt（sandbox-exec）/
 # Linux Landlock（bwrap）双后端；平台不支持时 fail-closed 拒绝执行（不静默降级到
-# 无隔离本地，与 Docker 不可用同口径）。
+# 无隔离本地，与 Docker 不可用同口径）。P2-5（2026-10 批次）起本地 + venv 沙箱
+# 两条非容器执行链路均已接入（venv 链路此前走裸子进程，内核开关在
+# EXECUTOR_USE_VENV=true 推荐档位下静默失效——现已补齐，结果附
+# kernel_sandbox_obs 观测层，与本地链路同字段）。
 export KERNEL_SANDBOX_ENABLE=true
 
 # G4 AgentTelemetry 故障检测基准（AGENT_TELEMETRY_ENABLE，默认关）：10 类内置

@@ -250,6 +250,9 @@ class TestCompileToHypothesisBranches:
     def test_postconditions_only_compiles(self):
         from src.specs.spec_ir import compile_to_hypothesis
 
+        # R1a（2026-10-05 审查修复）：NL postconditions 无法机器化——历史
+        # 口径产出"只有 import 行、零断言零测试函数"的空测试文件（假通过
+        # 面）；现保守返回空串（可执行表达式子句由 v2 DSL 层编译）。
         code = compile_to_hypothesis(
             {
                 "function_name": "f",
@@ -260,14 +263,13 @@ class TestCompileToHypothesisBranches:
             },
             target_module="m",
         )
-        assert "from m import f" in code
-        # 无边界 → 无 parametrize；有 postcondition → 仍出非空产物
-        assert code != ""
+        assert code == ""
 
     def test_invariants_require_hypothesis(self):
         from src.specs.spec_ir import compile_to_hypothesis
 
-        # 无 hypothesis 时 invariants 分支不进产物；保守仍出非空边界/后置产物
+        # R1a：NL invariants 不再产出 assert True 恒真测试；有边界材料时
+        # 产物以边界参数化为主体，invariants 降级为溯源注释。
         code = compile_to_hypothesis(
             {
                 "function_name": "f",
@@ -279,6 +281,7 @@ class TestCompileToHypothesisBranches:
             target_module="m",
         )
         assert "from m import f" in code
+        assert "assert True" not in code
 
 
 class TestAsStrListBranches:

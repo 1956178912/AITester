@@ -1,3 +1,5 @@
+> Last updated: 2026-09-29 (historical-snapshot banner synced with the Chinese version (frozen 2026-09-14, free-tier model caliber))
+
 > **Language**: [中文版](failure_analysis.md) | English (this document)
 
 # Failure Case Analysis

@@ -38,6 +38,7 @@ from src.agents.llm_client import (
     _retry_with_exponential_backoff,
     cache_creator_ok,
 )
+from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.utils.helpers import extract_code_block, extract_json_object
 
 
@@ -306,6 +307,18 @@ class BaseAgent:
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
         """
+        # R16（2026-10-05 审查 P1）：流氓行为监控上报（ROGUE_MONITOR_ENABLE=true
+        # 时启用，默认关零开销）。每次 LLM 调用（含缓存命中——命中也是 agent 的
+        # 一次"动作"）上报到进程内监控单例；失控循环（同一 agent 短窗口内调用
+        # 频率 z-score 越限）由 _executor_node 的 check 消费写 state。上报异常
+        # 不影响主链路（监控层自身故障不崩 LLM 调用）。
+        if rogue_monitor_enabled():
+            try:
+                from src.agents.rogue_monitor import AgentEvent, get_rogue_monitor
+
+                get_rogue_monitor().report_tool_call(AgentEvent(agent_id=type(self).__name__, tool="llm_call"))
+            except Exception:  # 监控旁路失败静默（观测层不阻断主链路）
+                pass
         # 缓存开关关闭时直接透传（测试环境默认关闭，避免缓存文件污染与 flaky）
         if not _llm_cache_enabled():
             if complexity_class is not None:

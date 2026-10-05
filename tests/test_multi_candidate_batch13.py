@@ -68,7 +68,8 @@ class TestSelectBestCandidateBranches:
         fake_executor = MagicMock()
         fake_executor.execute.return_value = {"passed": False, "coverage": 10.0}
         out = select_best_candidate(
-            [c0], self._ORIG,
+            [c0],
+            self._ORIG,
             test_code="def test_x():\n    assert 1\n",
             target_file="/tmp/aitester_mc_probe_xyz.py",
             use_execution_validation=True,
@@ -95,7 +96,8 @@ class TestSelectBestCandidateBranches:
         fake_executor = MagicMock()
         fake_executor.execute.side_effect = _exec
         out = select_best_candidate(
-            [c0, c1], self._ORIG,
+            [c0, c1],
+            self._ORIG,
             test_code="def test_x():\n    assert 1\n",
             target_file="/tmp/aitester_mc_probe_target.py",
             use_execution_validation=True,
@@ -113,7 +115,8 @@ class TestSelectBestCandidateBranches:
         fake_executor = MagicMock()
         fake_executor.execute.side_effect = RuntimeError("boom")
         out = select_best_candidate(
-            [c0], self._ORIG,
+            [c0],
+            self._ORIG,
             test_code="def test_x():\n    assert 1\n",
             target_file="/tmp/aitester_mc_probe_xyz.py",
             use_execution_validation=True,

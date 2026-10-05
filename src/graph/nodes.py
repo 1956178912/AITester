@@ -37,6 +37,7 @@ from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
 from src.agents.generator import GeneratorAgent, _repro_test_enabled
 from src.agents.planner import PlannerAgent
+from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.agents.runtime_probe import build_probe_prompt_section
 from src.graph.cost_budget import BudgetExceededError
 from src.graph.event_bus import (
@@ -65,6 +66,7 @@ from src.tools.multi_candidate import (
     select_best_candidate,
 )
 from src.tools.patch_applier import apply_patch_to_code
+from src.tools.patch_rollback import snapshot_rollback_enabled
 
 # 模块级 logger，用于记录节点执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -309,6 +311,91 @@ def _spec_ir_enabled() -> bool:
     保守：解析失败 / 无规约材料 → spec_ir=None（纯观测，不阻断主流程）。
     """
     return os.getenv("SPEC_IR_ENABLE", "false").lower() in ("true", "1", "on")
+
+
+def _spec_ir_dsl_enabled() -> bool:
+    """A-01（2026-10-04 系统审查 P0）：SpecIR v2 受限表达式 DSL 层开关
+    （SPEC_IR_DSL_ENABLE=true 时启用，默认 false，与 R7 主开关独立）。
+
+    启用后 _planner_node 在 SpecIR 解析（或独立解析）之后，对 pre/post/
+    invariant 子句做"可编译率"判定（spec_compile_rate）+ NL 溯源清单
+    （spec_provenance），写入 state 纯观测字段（不参与路由）——把
+    "逻辑驱动"主张从不可证伪升级为"可编译规约占比"可测量量。
+    纯静态零 LLM / 零子进程，失败路径保守返回 0.0 / []（不阻断主流程）。
+    """
+    return os.getenv("SPEC_IR_DSL_ENABLE", "false").lower() in ("true", "1", "on")
+
+
+def _spec_oracle_exec_enabled() -> bool:
+    """R1c（2026-10-05 审查 P0）：确定性规约 oracle 执行接线开关。
+
+    SPEC_ORACLE_EXEC_ENABLE=true 时启用（默认 false，历史口径零变化）：
+    _generator_node 在 LLM 测试生成后，把 spec_ir_v2.compile_spec_oracle
+    的产物（签名感知绑定，R1b）追加到 generated_test 尾部**并列**执行——
+    LLM 生成的测试通过 ≠ 规约 oracle 通过，后者的失败是"逻辑驱动"通道
+    的确定性检出（修复审查指出的"compile_spec_oracle 全仓无调用点，
+    可执行规约从未进入执行链"死代码缺口）。
+
+    规约材料来源（两级降级）：
+    1. state["spec_ir"]（SPEC_IR_ENABLE=true 时 _planner_node 已写入）；
+    2. 未启用 R7 主开关时现场解析 test_plan.logic_analysis（与 DSL 层
+       的独立降级口径一致）。
+    编译失败 / 无可编译子句 / 产物自检失败 → 不追加（保守，零注入）。
+    """
+    return os.getenv("SPEC_ORACLE_EXEC_ENABLE", "false").lower() in ("true", "1", "on")
+
+
+def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tuple[str, bool]:
+    """R1c：把确定性规约 oracle 测试追加到 LLM 生成测试尾部（可独立测试的纯函数）。
+
+    compile_spec_oracle 产物（签名感知绑定的可执行断言）与 LLM 测试**并列**
+    执行——LLM 测试通过 ≠ 规约 oracle 通过，后者失败 = "逻辑驱动"通道的
+    确定性检出。产物经编译层 ast.parse 自检 + "无断言即丢弃"双重守卫
+    （spec_ir_v2 口径），注入面与 LLM 生成代码同沙箱档执行。
+
+    Args:
+        generated_test: LLM 生成的测试代码。
+        state: 工作流状态（spec_ir / test_plan / target_code / module_name /
+            target_function）。
+
+    Returns:
+        (追加后的测试代码, 是否注入)。编译失败 / 无材料 / 异常 → 原文 + False。
+    """
+    from src.specs import compile_spec_oracle as _compile_spec_oracle
+    from src.specs import extract_signature_params as _extract_signature_params
+    from src.specs import parse_logic_analysis as _parse_logic_analysis
+
+    # 规约材料两级降级：state["spec_ir"]（R7 开关产物）→ 现场解析
+    # test_plan.logic_analysis（与 DSL 层独立降级同口径）
+    spec_material: dict[str, Any] | None = state.get("spec_ir")
+    if spec_material is None:
+        spec_material = _parse_logic_analysis(
+            (state.get("test_plan") or {}).get("logic_analysis") if isinstance(state.get("test_plan"), dict) else None
+        )
+    oracle_func = state.get("target_function") or (spec_material or {}).get("function_name") or ""
+    if not (spec_material and oracle_func and state.get("module_name")):
+        return generated_test, False
+    sig_params = _extract_signature_params(state.get("target_code") or "", str(oracle_func))
+    try:
+        oracle_code = _compile_spec_oracle(
+            spec_material,
+            target_module=str(state.get("module_name") or ""),
+            target_function=str(oracle_func),
+            signature_params=sig_params,
+        )
+    except (SyntaxError, ValueError, TypeError, KeyError) as e:
+        # 编译层内部已保守降级，此处兜底捕获意外异常（防注入链路崩图）
+        logger.warning("R1c 规约 oracle 编译异常，保守跳过注入：%s", e)
+        return generated_test, False
+    if not oracle_code:
+        return generated_test, False
+    logger.info(
+        "R1c 确定性规约 oracle 已注入（fn=%s, sig_params=%d, 追加 %d 字符）",
+        oracle_func,
+        len(sig_params),
+        len(oracle_code),
+    )
+    return f"{generated_test}\n\n\n{oracle_code}", True
 
 
 def _fl_spectral_enabled() -> bool:
@@ -565,6 +652,26 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         if _spec_ir is not None:
             _spec_ir["findings"] = validate_spec_ir(_spec_ir)
         update["spec_ir"] = _spec_ir
+    # A-01（2026-10-04 系统审查 P0）：SpecIR v2 DSL 层——"逻辑驱动"主张的
+    # 可测量内核：SPEC_IR_DSL_ENABLE=true（默认关，与 R7 主开关独立）时，
+    # 对 SpecIR 的 pre/post/invariant 子句做"可编译率"判定（受限表达式
+    # DSL + 白名单，纯静态零 LLM）写入 state["spec_compile_rate"]（float
+    # 0.0~1.0，无规约材料时 0.0——可证伪口径："逻辑驱动"贡献 = 可编译率，
+    # 而非 100% 宣称）。纯观测字段，不参与路由（与 spec_ir 同档位）。
+    if _spec_ir_dsl_enabled():
+        from src.specs import compile_readiness, spec_provenance
+
+        _dsl_spec = update.get("spec_ir")
+        if _dsl_spec is None:
+            # DSL 层独立于 R7 主开关：R7 关但 DSL 开时，直接解析
+            # logic_analysis（保守降级：无材料 → 0.0）
+            from src.specs import parse_logic_analysis
+
+            _dsl_spec = parse_logic_analysis(test_plan.get("logic_analysis"))
+        update["spec_compile_rate"] = compile_readiness(_dsl_spec)
+        _prov = spec_provenance(_dsl_spec)
+        if _prov:
+            update["spec_provenance"] = _prov
     # 5.4 预算封顶标记（O35）：置真后不回退，供 determine_stop_reason 的
     # BUDGET_EXCEEDED 分支与实验分析消费（此前该分支无任何写入点，恒不可达）。
     if _planner_budget_hit:
@@ -669,6 +776,81 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             _bt_triplets = _derive_bt(state["target_code"], state.get("target_function"))
             if _bt_triplets:
                 _bt_section = _build_bt_section(_bt_triplets)
+        # P2-7（N2/N4 接线审计，2026-10）：无 oracle 场景增强段落。
+        # N2 蜕变关系：从函数名/签名/文档启发式匹配 MR 模板（零 LLM 成本），
+        # 命中时渲染 prompt 段落注入（METAMORPHIC_ENABLE=true 时非空，默认关
+        # 时 None，历史口径零变化）。
+        # N4 差分测试：引导 LLM 生成"参考实现 vs 被测实现"随机输入比对指令
+        # （DIFFERENTIAL_TEST_ENABLE=true 时非空，默认关时 None）。
+        # 两节均为纯观测层 prompt 增强，不改变路由 / 开关默认行为。
+        _fn_name = state.get("target_function") or ""
+        _mr_section: str | None = None
+        _diff_section: str | None = None
+        try:
+            from experiments.metamorphic_oracle import (
+                build_metamorphic_prompt_section as _build_mr_section,
+            )
+            from experiments.metamorphic_oracle import (
+                metamorphic_enabled as _mr_enabled,
+            )
+            from experiments.metamorphic_oracle import (
+                suggest_metamorphic_relations as _suggest_mrs,
+            )
+
+            if _mr_enabled() and _fn_name:
+                _mrs = _suggest_mrs(_fn_name)
+                if _mrs:
+                    _mr_section = _build_mr_section(_mrs)
+            from experiments.differential_test import (
+                build_differential_prompt_section as _build_diff_section,
+            )
+            from experiments.differential_test import (
+                differential_enabled as _diff_enabled,
+            )
+
+            if _diff_enabled() and _fn_name:
+                _diff_section = _build_diff_section(_fn_name)
+        except Exception as _oracle_hook_exc:  # 观测层钩子失败不得阻断主生成
+            logger.warning("N2/N4 无 oracle 增强段落构建失败，降级跳过: %s", _oracle_hook_exc)
+        # P2（2026-10 批次·续二）：注入扫描回归基准接线——此前
+        # detect_prompt_injection 输入侧全仓无调用方（孤儿函数，威胁模型 P2
+        # 缺口"注入扫描无回归基准"）。本段在 Generator 消费外部可控文本
+        # （problem_statement / 缺陷描述 / 任务描述）前做输入侧注入特征扫描
+        # （INJECTION_GUARD_ENABLE 默认关时恒 []，历史口径零变化）；命中时
+        # 把 findings 写入 state["injection_findings"]（供 agent_telemetry
+        # 的 injection_detected 模式消费 + trace 记录）并经
+        # build_injection_warning 追加系统侧警示到本次 LLM query（OWASP ASI
+        # "检测+隔离"口径：只警示不自动阻断，阻断决策留给调用方）。
+        # 外部可控文本来源（按优先级）：
+        #   1. state["problem_statement"]（SWE-bench 任务描述 / issue 文本）
+        #   2. state["diagnosis"] / state["review_reason"]（上一轮诊断描述）
+        #   3. state["task_description"]（CLI 自定义任务描述，若存在）
+        _injection_task_text = (
+            state.get("problem_statement")
+            or state.get("diagnosis")
+            or state.get("review_reason")
+            or state.get("task_description")
+            or ""
+        )
+        _injection_findings: list[str] = []
+        _injection_warning: str | None = None
+        if _injection_task_text:
+            from src.agents.injection_guard import (
+                build_injection_warning,
+                detect_prompt_injection,
+            )
+            from src.agents.injection_guard import (
+                injection_guard_enabled as _injection_guard_enabled,
+            )
+
+            _injection_text = str(_injection_task_text)
+            if _injection_guard_enabled():
+                _injection_findings = detect_prompt_injection(_injection_text)
+                if _injection_findings:
+                    _injection_warning = build_injection_warning(_injection_findings)
+                    logger.warning(
+                        "P2 注入扫描：外部文本检出注入特征 %s（追加系统侧警示，不自动阻断）", _injection_findings
+                    )
         generated_test = agent.generate(
             test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
             state["target_code"],
@@ -689,6 +871,12 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             branch_coverage_section=_bc_section,
             # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（None 时不注入）
             boundary_triplets_section=_bt_section,
+            # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
+            metamorphic_section=_mr_section,
+            differential_section=_diff_section,
+            # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
+            # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
+            injection_warning=_injection_warning,
         )
     except (RuntimeError, OSError, json.JSONDecodeError) as e:
         # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
@@ -796,6 +984,13 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             generated_test = _deduped_code
             logger.info("N5 测试套件断言去重：移除 %d 条重复断言", len(_dedup_removed))
 
+    # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入（SPEC_ORACLE_EXEC_ENABLE=true
+    # 时启用，默认关时零注入，历史口径不变）。详见 _append_spec_oracle_to_test。
+    if _spec_oracle_exec_enabled():
+        generated_test, _spec_oracle_injected = _append_spec_oracle_to_test(generated_test, state)
+    else:
+        _spec_oracle_injected = False
+
     _trace_node(
         "generator",
         output_summary={"generated_test_len": len(generated_test)},
@@ -807,6 +1002,10 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         "generated_test": generated_test,
         "rag_references": rag_refs,
     }
+    # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入标记（state 键已声明，
+    # 不会被 LangGraph 白名单丢弃；默认关时恒 False）
+    if _spec_oracle_injected:
+        update["spec_oracle_injected"] = True
     # 5.4 预算封顶标记（O35）：Generator 捕获 BudgetExceededError 时置真
     # （planner / debugger 同口径），使 determine_stop_reason 可达 BUDGET_EXCEEDED。
     if _generator_budget_hit or state.get("budget_exceeded"):
@@ -814,6 +1013,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 2.3 改进：复现测试生成结果（未启用 / 无缺陷描述时保持 None）
     if repro_test:
         update["repro_test"] = repro_test
+    # P2（2026-10 批次·续二）：注入扫描 findings 写入 state（INJECTION_GUARD_ENABLE
+    # 默认关时恒 []，历史口径零变化；非空时供 agent_telemetry 的
+    # injection_detected 模式消费 + trace 记录，配合 experiments/
+    # injection_benchmark_samples.json 回归基准度量召回/误伤）。
+    update["injection_findings"] = _injection_findings
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
     if oracle_findings:
         update["oracle_findings"] = oracle_findings
@@ -1065,6 +1269,27 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         "execution_trace": new_trace,
         "iteration_strategy_suggestion": strategy_suggestion,
     }
+    # R16（2026-10-05 审查 P1）：流氓 agent 行为监控消费点
+    # （ROGUE_MONITOR_ENABLE=true 时启用，默认关零开销）。对四个核心
+    # agent（BaseAgent 上报侧的 agent_id = 类名）做三类信号检测
+    # （调用频率 z-score / 动作熵 / 能力违规），findings 非空写入
+    # state["rogue_findings"]（纯观测，不改路由——隔离/升级由调用方决定，
+    # 与 rogue_monitor 模块"只报警不熔断"口径一致）。
+    if rogue_monitor_enabled():
+        from src.agents.rogue_monitor import get_rogue_monitor as _get_rogue_monitor
+
+        _rogue_findings: list[dict[str, Any]] = []
+        _monitor = _get_rogue_monitor()
+        for _agent_cls in ("PlannerAgent", "GeneratorAgent", "ExecutorAgent", "DebuggerAgent"):
+            _rogue_findings.extend(
+                {"agent_id": f.agent_id, "kind": f.kind, "detail": f.detail, "metric": f.metric}
+                for f in _monitor.check(_agent_cls)
+            )
+        if _rogue_findings:
+            logger.warning(
+                "R16 流氓行为监控：%d 个 finding（%s）", len(_rogue_findings), [f["kind"] for f in _rogue_findings]
+            )
+            update["rogue_findings"] = _rogue_findings
     # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁（FLAKY_CHECK_ENABLE=true
     # 时启用，默认关）。对**失败轮**做重复执行一致性检测：同 (target_code,
     # generated_test) 重跑 FLAKY_REPEAT_COUNT 次（默认 3），既有 pass 又有
@@ -1648,6 +1873,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             failed_cases=state.get("failed_cases") or [],
             rag_references=rag_refs,
             focus_function=state.get("target_function"),
+            # P2-2（2026-10 批次）：把当前 error_category 传给专家池，
+            # EXPERT_POOL_CATEGORY_CONDITIONED=true 时按类别重排维度
+            # （命中维度排前，expert_count 不变）；开关 OFF 或类别为
+            # None 时本参数零作用（维度表固定原序，历史口径零变化）。
+            error_category=state.get("error_category"),
         )
         verified = pool.cross_validate(candidates, min_agreement=2)
         # G6 多 Agent 辩论收敛（EXPERT_POOL_DEBATE_ENABLE=true 时启用，默认关）：
@@ -1694,6 +1924,28 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             if not result.get("patch") or len(verified) >= 2:
                 result["patch"] = best["patch"]
                 result["expert_pool_winner"] = True
+                # P2-3 ESDA Phase 2（2026-10 批次）：把策略银行的 (签名, 策略名,
+                # 是否产出可执行补丁) 追加到 outcome 积累侧（record_strategy_outcome），
+                # 供后续离线挖掘"哪类签名 + 哪条策略 历史成功率最高"。
+                # 纯追加（不改写策略库 strategies 字段，零 LLM 成本）；写盘失败
+                # 静默降级（纯观测层，不阻断修复主流程，与 record_strategy_outcome
+                # 自身口径一致）。默认关（STRATEGY_BANK_ENABLE=false）时本段零执行，
+                # 历史口径零变化。success=False 为占位（离线分析可结合 task_id
+                # 关联后续执行结果做"真实成功率"归因，不预判本节点内结果）。
+                if _sb_enabled() and strategy:
+                    from src.tools.strategy_bank import record_strategy_outcome as _record_sb_outcome
+
+                    _sb_signature = (
+                        (state.get("error_category") or "unknown").strip().lower() or "unknown",
+                        (state.get("fix_strategy_tag") or "").strip().lower() or None,
+                        bool(state.get("cross_file_deps")),
+                    )
+                    _record_sb_outcome(
+                        signature=_sb_signature,
+                        strategy=str(strategy.get("strategy") or ""),
+                        success=False,
+                        task_id=str(state.get("task_id") or ""),
+                    )
                 # M14（2026-09-29 审查 P0）：expert_pool_winner 此前写入 result
                 # 但从未并入节点返回 dict（result 的键 ≠ update 的键），现并入
                 # expert_pool_meta 供 state 消费。
@@ -2694,6 +2946,46 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         # error_category 字符串值，flag 通道恒 False（死通道），5.2 失败细化
         # 仅靠字符串路径兜底可达，与 TypedDict 契约脱节。双通道一致。
         resample_update["patch_syntax_invalid_flag"] = True
+    # A-03（2026-10-04 系统审查 P0）：快照/P2P 全量回归/失败自动回滚协议
+    # （PATCH_SNAPSHOT_ROLLBACK_ENABLE=true 时启用，默认 false 历史口径零变化）。
+    # 协议：写盘后对"应用补丁后的代码"跑独立测试套件 P2P 回归——
+    #   回归失败（rc=1 断言级）→ 自动回滚 target_code 到 original_code
+    #     （内容级 restore，与 cross_file 的整体回滚口径对齐；仅回滚代码
+    #     状态，不撤销已发生的 LLM 调用 / 已落盘工件，保守防二次污染）；
+    #   回归通过（rc=0）→ 保留补丁并标注 verdict=verified（M1 可消费）；
+    #   无测试材料（no_oracle）/ 坏测试（regression_error）→ 保守保留补丁
+    #     （不臆测测试、不误杀好补丁，由 M1 repair_rate 的 None 口径兜底）。
+    # 观测字段（纯观测，不参与路由，与 spec_compile_rate 同档位）：
+    #   patch_rollback_verdict: verified / regression_failed / no_oracle /
+    #     regression_error / apply_failed / not_enabled
+    #   patch_rolled_back: bool（True = 本轮补丁已被 P2P 回归失败回滚）
+    if snapshot_rollback_enabled() and written:
+        from src.tools.patch_rollback import PatchRollbackProtocol
+
+        _pr_result = PatchRollbackProtocol().run(
+            original_code=original_code,
+            patch=state.get("patch") or "",
+            test_code=state.get("generated_test") or "",
+            module_name=state.get("module_name") or "module_under_test",
+        )
+        _verdict = _pr_result["verdict"]
+        _rolled_back = bool(_pr_result["rolled_back"])
+        if _rolled_back and _verdict == "regression_failed":
+            # 自动回滚：target_code 恢复快照原文（written=False，patch_applied
+            # 记 False——与"安全检查失败保持原代码"同口径，避免 Executor
+            # 测回滚前代码、Debugger 分析回滚后代码的"幻象迭代"）
+            effective_code = original_code
+            written = False
+            logger.warning(
+                "A-03 P2P 回归失败，补丁已自动回滚（verdict=%s, snapshot=%s）",
+                _verdict,
+                _pr_result["snapshot_id"],
+            )
+        resample_update["patch_rollback_verdict"] = _verdict
+        resample_update["patch_rolled_back"] = _rolled_back
+    else:
+        resample_update["patch_rollback_verdict"] = "not_enabled"
+        resample_update["patch_rolled_back"] = False
     # 1.4 事件总线接线：PatchApplied（含 1.1 后处理标签，纯观测）
     # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门在写盘**之后**判定
     # （写盘本身仍受命名契约/危险 API 守卫保护；证据门决定"本轮写盘是否

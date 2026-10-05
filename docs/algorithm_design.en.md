@@ -1,3 +1,5 @@
+> Last updated: 2026-10-05 (R1a/R1b/R1c spec-oracle compilation fixes, signature-aware binding, and side-by-side spec-oracle execution wiring)
+
 > **Language**: [中文版](algorithm_design.md) | English (this document)
 
 # Multi-Agent Collaborative Test Generation and Self-Repair Protocol (Algorithm Design Document)
@@ -92,6 +94,16 @@ Output: test plan P = (LA, TC), where LA is the logic analysis and TC is the lis
 - The System Prompt is defined in `PLANNER_SYSTEM_PROMPT` in [src/prompts/templates.py](../src/prompts/templates.py)
 - If the LLM does not return a `logic_analysis` field (compatibility fallback), empty values are filled in automatically to avoid downstream crashes
 
+### 2.5 Spec-Oracle Compilation and Side-by-Side Execution (2026-10-05 review batch R1)
+
+Machine-executable compilation of the logic analysis (LA) happens in two layers (previously LA existed only as prompt-injected material with no executable spec-side artifact):
+
+1. **Boundary parametrize layer (v1, `src/specs/spec_ir.py::compile_to_hypothesis`)**: SpecIR `boundaries` (deterministic boundary anchors, input/expected pairs) compile into `@pytest.mark.parametrize` assertions; NL pre/post/invariant clauses produce no tests (R1a fix: the historical version emitted `assert True` tautologies for invariants — a fake-pass channel, now sealed; empty string when no boundary material).
+2. **Restricted-expression DSL layer (v2, `src/specs/spec_ir_v2.py::compile_spec_oracle`)**: expression-shaped clauses such as `r == x * 2` pass whitelist AST validation (11 pure-function call names + attribute whitelist + node-type restrictions) and compile into `assert <expr>`; non-mechanizable clauses degrade to NL provenance comments. **Signature-aware binding (R1b)**: `extract_signature_params` extracts real parameter names from the target function's AST signature (tri-state: None = not found, degrade; [] = zero params; non-empty = per signature); the binding context extends from the hardcoded `{r,x,a,b,y}` to the real parameter set, and call arity is fixed per signature.
+3. **Side-by-side execution wiring (R1c, `SPEC_ORACLE_EXEC_ENABLE`, default off)**: `_generator_node` appends the v2 compilation output to the tail of the LLM-generated tests via `_append_spec_oracle_to_test` so both run **side by side** — LLM tests passing ≠ the spec oracle passing; the latter's failures constitute deterministic detection on the "logic-driven" channel (observation field `state["spec_oracle_injected"]`). Enable via the single switch or one-shot via `AITESTER_PROFILE=scientific`.
+
+**Compilation-rate observation**: `spec_compile_rate` (compilable clauses / non-empty clauses) quantifies how much of "logic-driven" is actually mechanized (written to state by the Planner node when `SPEC_IR_DSL_ENABLE=true`).
+
 ---
 
 ## 3. Layered Error Repair Protocol (Algorithms 2 & 3)
@@ -153,6 +165,8 @@ Output: repaired source code S', whether tests pass (bool)
 ```
 
 **Implementation location**: `_should_debug()` in [src/graph/workflow.py](../src/graph/workflow.py) controls the routing condition.
+
+> **Routing-signal priority (2026-10-05 review batch R17)**: when `ROUTE_STRUCTURED_ENABLE=true` (default off), the "test-generation error" routing signal uses a **structured-first, keyword-fallback** policy — `error_category=logic_error` (classified from the failure stack: an assertion failure whose stack never touches the module under test, i.e., a test-side logic error) takes priority over Chinese diagnosis-keyword matching (`_test_gen_signal_hit`); the signal source (`structured_error_category` / `diagnosis_keyword`) is written to trace, making the keyword-fallback rate measurable. Motivation: keyword matching relies on LLM diagnosis text and was misled by source-code exception signatures (AttributeError/NameError/SyntaxError) in the M5 incident into triggering a false pass. With the switch off, behavior is byte-identical to the historical keyword policy.
 
 > **3.5 Cross-file extension path** (enabled when `CROSS_FILE_ENABLE=true`, off by default): a `cross_file_analyzer` node (`_cross_file_analyzer_node`) is inserted between `executor` and `debugger`, performing AST cross-file import dependency analysis and writing the dependency edges into `state["cross_file_deps"]`; `_patch_applier_node` applies patches to multiple modules in topological order in the cross-file branch (callee modified first, caller second); if any file fails, `cross_file_fallback_single_file()` degrades to applying the patch only to the entry module (with the same semantics as single-file `safe_apply_patch`). See [docs/design/cross_file_repair.md](design/cross_file_repair.md) for details.
 

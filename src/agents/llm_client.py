@@ -54,6 +54,7 @@ class LLMEmptyResponseError(RuntimeError):
     无效指数退避，不改变跨模型切换行为）。
     """
 
+
 # ─── LLM 客户端复用缓存（性能优化）────────────────────────────────────────────
 # _call_llm 此前每次调用都新建 ChatOpenAI 实例，其底层 httpx 连接池随实例
 # 创建/销毁，无法复用 TCP/TLS 连接；改为按 (model, temperature, api_key,
@@ -471,9 +472,19 @@ def _get_all_api_configs() -> list[tuple[str, str, str]]:
 
 # ─── LLM 文件缓存开关（省 token）────────────────────────────────────────────
 # 默认启用；设环境变量 AITESTER_LLM_CACHE=0 可关闭（测试环境用于隔离，避免 flaky）。
-# 缓存目录默认 src/cache/，可用 AITESTER_LLM_CACHE_DIR 覆盖（便于测试指向临时目录）。
+# 缓存目录可用 AITESTER_LLM_CACHE_DIR 覆盖（便于测试指向临时目录）。
 # 开关与目录均在每次调用时读取，便于测试用 monkeypatch.setenv 动态切换。
-_LLM_CACHE_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "cache"))
+# 2026-10-05 审查修复（运行时缓存迁出源码树）：默认目录从 src/cache/ 改为
+# 用户缓存目录（XDG_CACHE_HOME 或 ~/.cache/aitester/llm）——此前运行时
+# 缓存写进源码树（src/cache/*.json，gitignore 挡 git 但污染源码树、且
+# 打包/分发口径含混）。历史 src/cache/ 的既有缓存不自动迁移（迁移涉及
+# 2200+ 文件的 rename，收益一次性），需要保留历史命中时显式设：
+#   AITESTER_LLM_CACHE_DIR=<repo>/src/cache
+_LLM_CACHE_DIR_DEFAULT = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache")),
+    "aitester",
+    "llm",
+)
 
 # 18. 缓存安全（改进清单 P1）：缓存文件内容含完整 prompt + LLM 响应（可能夹带
 # 敏感代码片段）。默认目录创建为 0o700、缓存文件写为 0o600，确保仅当前用户

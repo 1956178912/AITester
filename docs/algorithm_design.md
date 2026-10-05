@@ -103,6 +103,16 @@ Output: 测试计划 P = (LA, TC)，其中 LA 为逻辑分析，TC 为测试用�
 - System Prompt 定义于 [src/prompts/templates.py](../src/prompts/templates.py) 的 `PLANNER_SYSTEM_PROMPT`
 - 若 LLM 未返回 `logic_analysis` 字段（兼容性兜底），自动填充空值避免下游崩溃
 
+### 2.5 规约 Oracle 编译与并列执行（2026-10-05 审查批次 R1）
+
+逻辑分析（LA）的机器可执行化分两层（此前 LA 仅作为 prompt 注入材料，规约侧无可执行产物）：
+
+1. **边界参数化层（v1，`src/specs/spec_ir.py::compile_to_hypothesis`）**：SpecIR 的 `boundaries`（确定性边界锚点，输入/期望值对）编译为 `@pytest.mark.parametrize` 断言；NL 前置/后置/不变量子句不产出测试（R1a 修复：历史版本对 invariants 产出 `assert True` 恒真断言——假通过通道，已封堵；无边界材料时保守返回空串）。
+2. **受限表达式 DSL 层（v2，`src/specs/spec_ir_v2.py::compile_spec_oracle`）**：形如 `r == x * 2` 的表达式子句经白名单 AST 验证（11 个纯函数调用白名单 + 属性白名单 + 节点类型限制）编译为 `assert <expr>`；不可机器化子句降级为 NL 溯源注释。**签名感知绑定（R1b）**：`extract_signature_params` 从被测函数 AST 签名提取真实参数名（三态：None=未找到降级 / []=0 参 / 非空=按签名），绑定上下文从硬编码 `{r,x,a,b,y}` 扩展为真实参数集，调用元数按签名修正。
+3. **并列执行接线（R1c，`SPEC_ORACLE_EXEC_ENABLE` 默认关）**：`_generator_node` 经 `_append_spec_oracle_to_test` 把 v2 编译产物追加到 LLM 生成测试尾部**并列**执行——LLM 测试通过 ≠ 规约 oracle 通过，后者的失败构成"逻辑驱动"通道的确定性检出（观测字段 `state["spec_oracle_injected"]`）。启用方式：单开关，或 `AITESTER_PROFILE=scientific` 一键。
+
+**编译率观测**：`spec_compile_rate`（可编译子句数/非空子句总数）量化"逻辑驱动"的实际机器化程度（`SPEC_IR_DSL_ENABLE=true` 时由 Planner 节点写入 state）。
+
 ---
 
 ## 3. 分层错误修复协议（Algorithm 2 & 3）
@@ -199,6 +209,8 @@ Output: 修复后的源代码 S'，测试是否通过 bool
 ```
 
 **实现位置**：[src/graph/workflow.py](../src/graph/workflow.py) 中的 `_should_debug()` 控制路由条件。
+
+> **路由信号优先级（2026-10-05 审查批次 R17）**：`ROUTE_STRUCTURED_ENABLE=true`（默认关）时，"测试生成错误"路由信号采用**结构化优先、关键词兜底**口径——`error_category=logic_error`（错误分类器从失败栈判定：断言失败但栈未触及被测模块，即测试自身逻辑错误）优先于中文诊断关键词匹配（`_test_gen_signal_hit`）；信号来源（`structured_error_category` / `diagnosis_keyword`）写入 trace，可度量关键词兜底触发率。动机：关键词匹配依赖 LLM 诊断文本，曾在 M5 事故中被源码异常签名（AttributeError/NameError/SyntaxError）误判触发假通过。开关关时与历史关键词口径逐字节一致。
 
 > **3.5 跨文件扩展路径**（`CROSS_FILE_ENABLE=true` 时启用，默认关）：在 `executor` 与 `debugger` 之间插入 `cross_file_analyzer` 节点（`_cross_file_analyzer_node`），做 AST 跨文件 import 依赖分析并把依赖边写入 `state["cross_file_deps"]`；`_patch_applier_node` 在跨文件分支按拓扑序对多模块应用补丁（被调用方先改、调用方后改），任一文件失败经 `cross_file_fallback_single_file()` 降级为仅入口模块应用（与单文件 `safe_apply_patch` 同口径）。详见 [docs/design/cross_file_repair.md](design/cross_file_repair.md)。
 

@@ -1691,6 +1691,97 @@ def _compute_mutation_scores_for_baseline(
         )
 
 
+def _compute_mutation_detection_for_baseline(
+    bl_results: list[dict[str, Any]],
+    dataset_tasks: dict[str, BenchmarkTask],
+    n_mutants: int,
+    seed: int = 42,
+) -> None:
+    """R5（2026-10-05 审查建议）：变异检出率逐任务写回 details[] 三个新字段。
+
+    口径（SWE-Mutation 2026，测试有效性客观裁决）：生成的测试在 **gold
+    修复代码**上全绿、且在其 AST 变异体上变红的比例。与 mutation_score
+    （对缺陷代码变异，生成器视角故障覆盖）互补——主批次 detection_rate=2% /
+    false_fix=90% 说明生成测试大多检不出缺陷，本指标给出"测试究竟有没有
+    效"的独立客观测量（纯子进程，零 LLM）。
+
+    就地写回：
+    - mutation_detection_rate：float | None（缺 gold fixed 材料 / 测试在
+      fixed 上不绿 / 无变异体时 None——保守不误报 0，统计层按不可测跳过）；
+    - mutants_killed / mutants_total：int（跳过时 0/0 占位，与函数返回同构）。
+
+    fixed 材料来源：复用 _m1_metrics._gold_fixed_code（单文件任务把
+    metadata["fixed"] 应用到 instance_code；跨文件任务用 fixed_module_code；
+    SWE-bench / 无 gold 材料 → 空 → 跳过写 None）。模块名与 M1 指标同源
+    （_extract_gold_material 从 task_id 末段派生），保证生成测试的 import
+    名与变异沙箱写盘名一致。
+
+    Args:
+        bl_results: 该基线的逐任务结果列表（就地修改）。
+        dataset_tasks: task_id → BenchmarkTask 映射。
+        n_mutants: 每任务最多评估的变异体数量。
+        seed: 变异体随机采样种子（跨运行可复现）。
+    """
+    from experiments._m1_metrics import _extract_gold_material, _gold_fixed_code
+    from experiments.mutation_detection import mutation_detection_rate
+
+    for r in bl_results:
+        task_id = str(r.get("task_id") or "")
+        task = dataset_tasks.get(task_id)
+        test_code = r.get("generated_test")
+        fixed_code = _gold_fixed_code(task) if task is not None else ""
+        if task is None or not test_code or not fixed_code.strip():
+            # 缺任务映射 / 无生成测试 / 缺 gold fixed 材料 → 跳过记 None
+            r["mutation_detection_rate"] = None
+            r["mutants_killed"] = 0
+            r["mutants_total"] = 0
+            continue
+        mat = _extract_gold_material(task)
+        # 有 fixed 材料但无 gold test_cases 的边缘任务：模块名按 M1 同规则
+        # 从 task_id 末段派生（与 _extract_gold_material 一致）
+        module_name = mat[0] if mat is not None else str(task.task_id).split("__")[-1].replace("-", "_")[:50]
+        result = mutation_detection_rate(
+            fixed_code=fixed_code,
+            test_code=str(test_code),
+            module_name=module_name,
+            n_mutants=n_mutants,
+            seed=seed,
+        )
+        r["mutation_detection_rate"] = result.get("rate")
+        r["mutants_killed"] = result.get("mutants_killed", 0)
+        r["mutants_total"] = result.get("mutants_total", 0)
+        logger.info(
+            "    [%s] %s 变异检出率: %s（%s/%s 检出，%.1fs%s）",
+            task_id,
+            r.get("repo", ""),
+            result.get("rate"),
+            result.get("mutants_killed", 0),
+            result.get("mutants_total", 0),
+            result.get("elapsed_seconds", 0.0),
+            f"，跳过：{result.get('skip_reason', '')}" if result.get("skipped") else "",
+        )
+
+
+def _apply_deterministic_temperature() -> None:
+    """R11：强制 TEMPERATURE=0.0（三处级联，可独立测试的纯副作用函数）。
+
+    config.TEMPERATURE 与 base_agent.TEMPERATURE 均为 import 时求值的
+    模块级常量（from config import TEMPERATURE 是值拷贝），仅改
+    os.environ 不生效；本函数三处同步：
+    1. os.environ["TEMPERATURE"]="0.0"（供 provenance temperature 快照记录真实生效值）；
+    2. config.TEMPERATURE=0.0（后续 import config 的读取方）；
+    3. src.agents.base_agent.TEMPERATURE=0.0（LLM 调用侧的 from-import 拷贝，
+       base_agent.py `_get_or_create_chat_client` 与 `_call_llm` 直接读该名）。
+    """
+    import config as _config_module
+    import src.agents.base_agent as _base_agent_module
+
+    os.environ["TEMPERATURE"] = "0.0"
+    _config_module.TEMPERATURE = 0.0
+    _base_agent_module.TEMPERATURE = 0.0
+    logger.info("R11 确定性采样模式：TEMPERATURE 强制 0.0（config + base_agent 级联）")
+
+
 def run_benchmark(
     dataset_name: str = "examples",
     subset: str | None = None,
@@ -1705,6 +1796,7 @@ def run_benchmark(
     save_state: bool = False,
     enable_mutation_scoring: bool | None = None,
     difficulty: str = "mixed",
+    deterministic: bool = False,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -1730,10 +1822,19 @@ def run_benchmark(
         difficulty: P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）。
             可选值："mixed"（默认，历史口径）/ "level1" / "level2" /
             "level3"（跨文件）/ "level4"（边界+异常隐蔽缺陷）。
+        deterministic: R11（2026-10-05 审查 P1）确定性采样模式。True 时
+            强制 TEMPERATURE=0.0（级联 config 与 base_agent 命名空间——
+            二者均为 import 时求值，仅改 os.environ 不生效）+ os.environ
+            同步（供 provenance 快照记录 temperature=0.0）。主批次复现
+            实验建议开启（配合干净 git tag，缓解"LLM 输出非确定性导致
+            结果不可复现"的审查缺口）。默认 False 历史口径不变。
 
     Returns:
         汇总结果字典。
     """
+    # R11 确定性采样：三处级联更新（详见 _apply_deterministic_temperature）
+    if deterministic:
+        _apply_deterministic_temperature()
     # P0 4.2 追踪层主动启用：默认 AITESTER_TRACE_DIR=results/traces/（可被
     # 环境变量覆盖；设置 AITESTER_TRACE_DIR= 为空串可显式关闭追踪）。
     # 节点级 JSONL 记录（输入长度、输出长度、token、耗时、路由决策）随
@@ -1864,6 +1965,24 @@ def run_benchmark(
                 pbar.set_description(f"{desc} - 耗时: {total_time:.1f}s")
 
     # 生成汇总统计
+    # P1（2026-10 Docker 化实验复现）：environment provenance 块——
+    # Python 版本 / git sha（有 git 时）/ 容器标记（.repro_provenance 存在时）
+    # / 关键开关，写入 summary["environment"]，使任意批次结果 JSON 自带
+    # 复现坐标（配合 Dockerfile.repro 的 docker run 一条命令复现）。
+    import platform as _platform
+    import subprocess as _sp
+
+    _env_provenance: dict[str, Any] = {
+        "python_version": sys.version.split()[0],
+        "platform": _platform.platform(),
+        "git_sha": None,
+        "in_docker_repro": os.path.exists(os.path.join(os.getcwd(), ".repro_provenance")),
+    }
+    try:
+        _git_sha = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
+        _env_provenance["git_sha"] = _git_sha or None
+    except (OSError, _sp.SubprocessError):
+        _env_provenance["git_sha"] = None
     summary = {
         "timestamp": datetime.now().isoformat(),
         "dataset": dataset_name,
@@ -1877,6 +1996,7 @@ def run_benchmark(
         "enable_rag": rag_enabled,
         "parallelism": parallel,
         "valid_apis": len(_VALID_APIS),
+        "environment": _env_provenance,
         # R46（2026-09-30 独立审查 P0）：SWE-bench 批次 P2P 门禁默认开，
         # harness_invalid（基线 P2P 不达标）实例从统计中剔除（不计入"0 解出"）。
         # 汇总含 harness_invalid_count + 剔除后的有效任务数 + 有效通过率，
@@ -1962,6 +2082,12 @@ def run_benchmark(
             task_map = {t.task_id: t for t in tasks}
             logger.info("启用变异得分评估（1.2）：每任务 ≤ %d 变异体", MUTATION_MAX_MUTANTS)
             _compute_mutation_scores_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS)
+            # R5（2026-10-05 审查建议）：变异检出率（SWE-Mutation 2026 口径）
+            # 挂同一开关（ENABLE_MUTATION_SCORING）与同一挂点——测试有效性
+            # 的客观裁决（生成的测试在 gold 修复代码上全绿、在其 AST 变异体
+            # 上变红的比例）；缺 gold fixed 材料的任务记 None。默认关时
+            # 零行为变化。
+            _compute_mutation_detection_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS, seed=seed)
 
         summary["results"][baseline] = {
             "total_functions": total,

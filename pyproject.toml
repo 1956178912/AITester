@@ -24,11 +24,12 @@ dependencies = [
     "langchain>=1.0.0",
     "langchain-openai>=1.0.0",
     "langgraph>=1.0.0",
-    "pymysql>=1.0.0",
-    "DBUtils>=3.0.0",
+    # P2-5（2026-10 依赖分组）：pytest / pytest-cov 移入 dev extra——
+    # 测试工具不应进运行时依赖面（安装面最小化 + pip-audit 覆盖面收敛）；
+    # src/ 内 "import pytest" 仅出现在**生成的代码字符串**中（spec_ir /
+    # fl_spectral / synthetic_dataset 输出给 LLM 的测试代码），非运行期
+    # 直接 import，故运行时不依赖 pytest。
     "click>=8.0.0",
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
     # O35（P1）：openai / zai-sdk 此前只在 requirements.txt/.lock 中声明，
@@ -41,6 +42,13 @@ dependencies = [
     # pyproject 侧此前无任何守卫，现由 tests/test_packaging.py 锁定）。
     "openai>=1.0.0",
     "zai-sdk>=0.2.0",
+    # P2-5（2026-10 依赖分组）：pymysql / DBUtils 移入 db extra——
+    # MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
+    # 单例客户端仅在调用时导入）。requirements.txt 全量清单不变
+    # （开发/CI 环境装全量，pip install . 的发行安装面收敛）。
+    # 注意：发行安装（pip install .）不再默认携带 pymysql/DBUtils/pytest/
+    # pytest-cov；需要 MySQL 持久化时 pip install "aitester[db]"，
+    # 开发/测试时 pip install "aitester[dev]"。
 ]
 
 [tool.setuptools.dynamic]
@@ -54,6 +62,9 @@ viz = ["matplotlib>=3.7.0", "pandas>=2.0.0"]
 experiments = ["scipy>=1.10.0", "datasets>=5.0.0"]
 ux = ["rich>=13.0.0", "tqdm>=4.65.0"]
 dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
+# P2-5：MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
+# 仅调用时导入）。
+db = ["pymysql>=1.0.0", "DBUtils>=3.0.0"]
 
 [project.scripts]
 aitester = "src.cli.app:cli"

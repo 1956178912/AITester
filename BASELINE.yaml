@@ -11,16 +11,16 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-02"   # 全量回归实测日期（2026-10-02 分支提档批次·六 + 继续优化批次·七/八/九/十/十一/十二/十三/十四：cli/app 纯逻辑 _validate_run_args / _expand_target_files / _dump_trace_on_failure / _print_quality_report / _print_missing_source 22 用例 + graphrag/expert_pool/dependency 开关与纯逻辑 27 用例 + 此前批次补齐后全绿 3760）
+last_verified: "2026-10-05"   # 全量回归实测日期（2026-10-05 审查优化批次 R1-R18：规约 oracle 执行接线 + 统计报告完整化 + 变异检出率 + CI 硬化，全绿 3984）
 
 tests:
-  total_passed: 3760          # 全量 pytest tests/（2026-10-01 全面审查批次 + 2026-10-02 分支提档批次·六 + 继续优化批次·七/八/九/十/十一/十二/十三/十四（cli/app 纯逻辑 22 用例 + graphrag/expert_pool/dependency 开关 27 用例 + 此前 multi_candidate 18 / code_analyzer+cross_file 29 / nodes 45 / generator 57 / executor_repo 24 / base_agent 21 / patch_applier 51 / debugger 42 / api_manager 15 / type_repair 23 用例）后全绿 0 失败）
+  total_passed: 3984          # 全量 pytest tests/（2026-10-05 审查优化批次：3984 全绿 0 失败；+71 新用例 = test_2026_10_05_review_batch(34) + test_r2_statistical_report(18) + test_r5_mutation_detection(19)）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
-  suite_seconds: 55          # 全量耗时量级（串行 ~55s；P0-2 空补丁短路 + pytest-xdist 并行 -n 4 ~22s）
+  suite_seconds: 32          # 全量耗时量级（pytest-xdist -n 4 实测 ~32s；P0-2 空补丁短路）
 
 coverage:
-  line_total_pct: 88         # --cov=src 总行覆盖（88%，2026-10-02 继续优化批次·七～十四后实测：generator 95% + executor_repo 69% + base_agent 78% + patch_applier 93% + nodes 73% + code_analyzer 97% + cli/app 94% + dependency 93% + api_manager 92% 累计补齐）
+  line_total_pct: 88         # --cov=src 总行覆盖（88%，2026-10-04 优化批次·续四实测；P0-4 内核沙箱启用路径 / 注入警示注入闭环各补回归用例）
   line_core_modules:
     base_agent: 70
     api_manager: 90
@@ -32,7 +32,7 @@ coverage:
     multi_candidate: 84
     cross_file: 91
     rag_retriever: 86
-  branch_total_pct: 79       # --cov=src --cov-branch 总分支覆盖（79.40%，2026-10-02 分支提档批次·六 + patch_postprocess/control_flow 补齐后实测，门禁 77% 绿）
+  branch_total_pct: 83       # --cov=src --cov-branch 总分支覆盖（83%，2026-10-04 优化批次实测：json 口径 percent_branches_covered_display；门禁 77% 绿）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
@@ -42,7 +42,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 95      # 2026-10-02 审查刷新：mypy 实测 95 源文件 0 错误（mypy==1.7.1，含本轮 P1-2/P2-1 修复后重新计数）；CI 以 mypy==1.7.1 硬门禁执行同口径检查
+  mypy_source_files: 98      # 2026-10-05 优化批次实测：mypy src/ config.py 98 源文件 0 错误（+2 = src/specs/spec_ir_v2.py + src/tools/patch_rollback.py；CI mypy 与 pre-commit 均锁 1.15.0，B-05 版本漂移已消除）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
@@ -61,11 +61,26 @@ benchmark:
   # oracle_type + test_visible_to_system（APR 严谨性检查点 #2）/
   # patch_plausible + patch_correct + patch_precision（过拟合度量）/
   # source_patched_unverified + patch_evidence_level（R33 源码腐蚀风险观测）/
-  # fl_at_k（R8 Ochiai FL@1/3/5 定位质量）
+  # fl_at_k（R8 Ochiai FL@1/3/5 定位质量）/
+  # A-01（2026-10-04 系统审查 P0）：spec_compile_rate（SpecIR v2 可编译规约占比，
+  #   "逻辑驱动"主张的可测量内核；SPEC_IR_DSL_ENABLE=true 启用，默认关）
+  # A-03（2026-10-04 系统审查 P0）：patch_rollback_verdict + patch_rolled_back
+  #   （快照/P2P 全量回归/失败自动回滚协议观测；PATCH_SNAPSHOT_ROLLBACK_ENABLE=true
+  #   启用，默认关；regression_failed 时自动回滚 target_code 到快照原文；
+  #   PATCH_ROLLBACK_FAIL_CLOSED=true 时 rc>=2/超时/IO 异常口径也触发回滚）
+  # R1c（2026-10-05 审查 P0）：spec_oracle_injected（确定性规约 oracle 注入
+  #   观测；SPEC_ORACLE_EXEC_ENABLE=true 启用，默认关——compile_spec_oracle
+  #   产物与 LLM 测试并列执行，"逻辑驱动"通道的确定性检出）
+  # R5（2026-10-05 审查 P0）：mutation_detection_rate / mutants_killed /
+  #   mutants_total（生成测试对 gold fixed 的 AST 变异体检出比例——测试
+  #   有效性的客观裁决，SWE-Mutation 2026 口径；ENABLE_MUTATION_SCORING=true
+  #   时 run_benchmark 逐基线写入结果行，默认关）
   metrics_schema:
     [detection_rate, repair_rate, false_fix_rate, regression_rate, test_error_rate,
      oracle_type, test_visible_to_system, patch_plausible, patch_correct,
-     patch_precision, source_patched_unverified, patch_evidence_level, fl_at_k]
+     patch_precision, source_patched_unverified, patch_evidence_level, fl_at_k,
+     spec_compile_rate, patch_rollback_verdict, patch_rolled_back,
+     mutation_detection_rate, mutants_killed, mutants_total]
   current_main_batch: "experiments/results/main_batch/benchmark_synthetic_20261001_121523.json"
   # 2026-10-01 独立审查 R4 落地：固定 seed 42 / n=50 主批次已产出（R4 可复现
   # 主批次 + provenance 块 + R14 统计协议）。数字与工件路径：

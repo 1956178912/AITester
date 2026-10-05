@@ -36,7 +36,11 @@
     - 收敛失败模式归因（1.2）：区分"无法定位根因"（诊断反复同义）与
       "无法生成有效补丁"（写盘/守卫反复拒绝）；
     - 执行反馈轨迹汇总（3.2）：收集 details[].execution_trace（executor 节点
-      默认常开写入），统计总执行次数/首轮即通过率/末轮奖励信号/覆盖率趋势。
+      默认常开写入），统计总执行次数/首轮即通过率/末轮奖励信号/覆盖率趋势；
+    - M1 指标汇总（R2，2026-10-05 审查）：收集 details[].detection_rate /
+      repair_rate / false_fix_rate / test_error_rate（run_benchmark._m1_metrics
+      的逐任务产物，可能为 None 表示不可测），None 不计入分母——各指标
+      输出可测任务数与非 None 均值；旧 JSON 无该字段时章节自动跳过。
 """
 
 from __future__ import annotations
@@ -67,6 +71,8 @@ from experiments.analysis_parts.convergence_analysis import (  # noqa: E402,F401
     _execution_trace_summary,
     _failure_root_cause_trend,
     _failure_top_categories,
+    _fl_at_k_metrics,
+    _m1_metrics_aggregate,
     _mutation_score_metrics,
     _quality_proxy_metrics,
     _repair_convergence_curve,
@@ -188,6 +194,14 @@ def build_analysis(data: dict[str, Any], golden_patches: dict[str, str] | None =
             # 1.3 变异得分（保守代理：从 details[].mutation_score 字段收集；
             # 无该字段时 available=False，渲染时跳过章节）
             "mutation_score_metrics": _mutation_score_metrics(details),
+            # B-02（2026-10-04 系统审查 P1）：故障定位质量 FL@1/3/5 汇总
+            # （从 details[].fl_at_k 收集，run_benchmark._fl_at_k 的产物；
+            # 旧 JSON 无该字段时 available=False，渲染时跳过章节）
+            "fl_at_k_metrics": _fl_at_k_metrics(details),
+            # R2（2026-10-05 审查）：M1 指标汇总（detection/repair/false_fix/
+            # test_error_rate，None 不计入分母；旧 JSON 无该字段时
+            # available=False，渲染时跳过章节）
+            "m1_metrics": _m1_metrics_aggregate(details),
             # 1.2 收敛失败模式归因（达到 MAX_ITERATIONS 仍未修复的任务，
             # 区分"无法定位根因" vs "无法生成有效补丁"）
             "convergence_failure_modes": _convergence_failure_modes(details),
@@ -669,6 +683,67 @@ def render_markdown(analysis: dict[str, Any], source_file: str) -> str:
         lines.append(
             "> 注：边界类型由 generated_test 的 AST 保守判定（None/空字符串/0/-1/空集合/>=/<= 比较）；"
             "仅当结果 JSON 携带 details[].generated_test 时可用，否则章节跳过。"
+        )
+        lines.append("")
+
+    # B-02（2026-10-04 系统审查 P1）：故障定位质量 FL@1/3/5（details[].fl_at_k
+    # 携带时输出；旧 JSON 无该字段时章节自动跳过，历史口径零变化）
+    fl_rows = [
+        (b, m.get("fl_at_k_metrics")) for b, m in per.items() if (m.get("fl_at_k_metrics") or {}).get("available")
+    ]
+    if fl_rows:
+        lines.append("## 故障定位质量（B-02，Ochiai FL@1/3/5）")
+        lines.append("")
+        lines.append("| 基线 | 观测任务/总数 | FL@1 命中率 | FL@3 命中率 | FL@5 命中率 |")
+        lines.append("|------|--------------|-----------|-----------|-----------|")
+        for baseline, fl in fl_rows:
+            lines.append(
+                f"| {baseline} | {fl.get('observed_tasks', 0)}/{fl.get('total_tasks', 0)} "
+                f"| {fl.get('fl_at_1_rate')} | {fl.get('fl_at_3_rate')} | {fl.get('fl_at_5_rate')} |"
+            )
+        lines.append(
+            "> 注：FL@k = Ochiai 谱系 Top-k 可疑行覆盖真实缺陷行（gold diff）的比例；"
+            "仅当 details[].fl_at_k 字段存在（FL_SPECTRAL_ENABLE 且 gold 材料可解）时输出本章节。"
+        )
+        lines.append("")
+
+    # R2（2026-10-05 审查：统计协议完整性）：M1 指标汇总（None 剔除口径，
+    # 任一基线有可测任务时输出；旧 JSON 无该字段时章节自动跳过，历史输出零变化）
+    m1_rows = [(b, m.get("m1_metrics")) for b, m in per.items() if (m.get("m1_metrics") or {}).get("available")]
+    if m1_rows:
+        lines.append("## M1 指标汇总（R2，None 不计入分母）")
+        lines.append("")
+        lines.append(
+            "| 基线 | 可测任务/总数 | detection_rate 均值 | repair_rate 均值 | false_fix_rate 均值 | test_error_rate 均值 |"
+        )
+        lines.append(
+            "|------|--------------|--------------------|----------------|-------------------|-------------------|"
+        )
+
+        def _m1_cell(m1: dict[str, Any], name: str) -> str:
+            # 单指标单元格："mean（n=observed）"；无可测任务时输出 "—"
+            stat = (m1.get("metrics") or {}).get(name) or {}
+            if not stat.get("observed"):
+                return "—"
+            return f"{stat.get('mean')}（n={stat.get('observed')}）"
+
+        for baseline, m1 in m1_rows:
+            total = m1.get("total_tasks", 0)
+            # 可测任务数四指标可能不同（逐字段各自剔除 None），取 detection_rate
+            # 的可测数作主列口径，其余指标均值旁以 n= 标注
+            det = (m1.get("metrics") or {}).get("detection_rate", {})
+            observed_disp = f"{det.get('observed', 0)}/{total}"
+            lines.append(
+                f"| {baseline} | {observed_disp} "
+                f"| {_m1_cell(m1, 'detection_rate')} | {_m1_cell(m1, 'repair_rate')} "
+                f"| {_m1_cell(m1, 'false_fix_rate')} | {_m1_cell(m1, 'test_error_rate')} |"
+            )
+        lines.append("")
+        lines.append(
+            "> 注：M1 指标（detection/repair/false_fix/test_error_rate）为 oracle 材料"
+            "可测任务的逐任务 0/1 值均值；None（不可测：oracle 缺失 / 坏测试剔除等）"
+            "不计入分母，各列 n 为该指标的可测任务数——与 run_main_batch 的 R4 批次"
+            "摘要同口径。旧结果 JSON 无这些字段时本章节自动跳过。"
         )
         lines.append("")
 

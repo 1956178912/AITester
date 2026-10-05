@@ -21,10 +21,10 @@
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-10-02 审查优化轮（默认行为不变）：CI 分支覆盖门禁回绿（总分支 73%→77.6%，门禁 77%）+ 密钥守卫自锁修复 + 三处真实缺陷（rag 材料源误扫 / O17 大写凭证脱敏盲区 / S6 补丁路径越界写）+ 恒真断言 11 处清零；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ code_analyzer.py (100%), helpers.py (100%), planner.py (100%), base_agent.py (100%), mysql_client.py (98%), token_usage.py (98%), reports/generator.py (99%), api_manager.py (94%), rag/retriever.py (95%), dataset_loader.py (94%), graph/nodes.py (95%), config/config_manager.py (95%), multi_candidate.py (94%), observability/trace.py (98%), error_classifier.py (95%), cli/app.py (93%), cli/output.py (94%), logging_utils.py (95%), tools/dependency.py (96%), executor_modes.py (96%), cross_file.py (95%), credential_scrub.py (100%) |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-10-02 审查优化轮（CI 门禁回绿 + 密钥守卫自锁修复 + 三处真实缺陷 + 恒真断言清零，默认行为不变）；此前 2026-10-01 全面审查批次（P0 密钥泄漏守卫 + P1/P2 缺陷修复，详见 CHANGELOG）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-10-05 审查优化批次（R1–R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变，详见 CHANGELOG）；此前 2026-10-04 系统审查批次（A-01 SpecIR v2 DSL + A-03 快照/回滚协议 等）与 2026-10-02 审查优化轮；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 
 > **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
 > 本批次补齐 `docs/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，
@@ -212,15 +212,16 @@ python experiments/run_benchmark.py --dataset examples
 
 ### LLM 文件缓存（省 token）
 
-`base_agent` 的 LLM 调用已接入**持久化文件缓存**（`src/cache/*.json`，按 `md5(prompt + system_prompt)` 命名）。相同输入第二次起直接命中缓存，不再消耗 token——在「免费额度用完即停」的模型供应商下可显著延长可用时长。
+`base_agent` 的 LLM 调用已接入**持久化文件缓存**（按 `md5(prompt + system_prompt)` 命名的 JSON 文件）。相同输入第二次起直接命中缓存，不再消耗 token——在「免费额度用完即停」的模型供应商下可显著延长可用时长。
 
 - **默认启用**；设环境变量 `AITESTER_LLM_CACHE=0` 可关闭；缓存目录可用 `AITESTER_LLM_CACHE_DIR` 覆盖。
+- **缓存目录**（2026-10-05 审查批次起）：默认 `~/.cache/aitester/llm/`（`XDG_CACHE_HOME` 优先）——运行时缓存不再写入源码树 `src/cache/`；需要沿用历史缓存时显式设 `AITESTER_LLM_CACHE_DIR=<repo>/src/cache`。
 - **仅缓存成功响应**：调用失败（如 403 额度用尽）不写缓存。
-- 缓存是本地优化产物，`src/cache/` 已加入 `.gitignore`，不会提交。
+- 缓存是本地优化产物，不提交版本库（目录权限 0700 / 文件 0600，跨用户缓存投毒防护）。
 
 ```bash
 export AITESTER_LLM_CACHE=0      # 临时关闭缓存（需要"换种思路重生成"时）
-rm -rf src/cache                # 清空缓存，让所有 prompt 重新调用 LLM
+rm -rf ~/.cache/aitester/llm     # 清空缓存，让所有 prompt 重新调用 LLM
 ```
 
 ### LLM 客户端复用（连接池共享）

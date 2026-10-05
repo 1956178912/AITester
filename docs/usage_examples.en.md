@@ -3,7 +3,7 @@
 # AITester Usage Examples
 
 > This document provides detailed usage examples to help developers get started with AITester quickly.
-> Last updated: 2026-09-18 (added 1.1 smell-detection enhancement / 1.2 built-in mutation generator / 3.2 adversarial reasoning / 5.3 cross-batch comparison / 4.4 multi-version cache examples)
+> Last updated: 2026-10-05 (added 2026-10-05 review-batch examples: switch presets / deterministic sampling / spec-oracle execution / rollback fail-closed / mutation detection rate / statistical-report allowlist)
 > **Current baseline**: treat the repo-root [BASELINE.yaml](../BASELINE.yaml) as the single
 > source of truth (machine-readable, refreshed after each batch lands); this document no
 > longer embeds baseline numbers, avoiding stale snapshots as batches progress.
@@ -177,6 +177,51 @@ ENABLE_PLANNER=true ENABLE_DEBUGGER=false python experiments/run_benchmark.py \
 ---
 
 ## Advanced Features
+
+### Example A: Switch presets (2026-10-05 review batch R15)
+
+```bash
+# Three presets (setdefault injection; explicitly set env vars are never overridden):
+export AITESTER_PROFILE=scientific   # safe / scientific / fast
+# scientific = SpecIR + DSL + spec-oracle execution + mutation detection +
+#              oracle validation + snapshot rollback
+# safe       = kernel sandbox + rollback (fail-closed) + injection guard +
+#              rogue-agent monitoring + flaky gate
+# fast       = historical defaults (equivalent to no PROFILE)
+```
+
+### Example B: Deterministic-sampling main batch (R11)
+
+```python
+from experiments.run_benchmark import run_benchmark
+
+# TEMPERATURE=0.0 cascaded across three namespaces (env + config +
+# base_agent); the provenance snapshot records the effective temperature;
+# pair with a clean git tag for reproducibility.
+result = run_benchmark(
+    dataset_name="synthetic", task_count=50, seed=42, deterministic=True
+)
+```
+
+### Example C: Side-by-side spec oracle + mutation detection rate (R1c / R5)
+
+```bash
+export SPEC_ORACLE_EXEC_ENABLE=true     # spec oracle appended to LLM tests, executed side by side
+export ENABLE_MUTATION_SCORING=true     # result rows gain the mutation_detection_rate fields
+```
+
+### Example D: Rollback fail-closed and statistical-report allowlist (R4b / R2)
+
+```bash
+export PATCH_SNAPSHOT_ROLLBACK_ENABLE=true   # snapshot / P2P / auto-rollback protocol
+export PATCH_ROLLBACK_FAIL_CLOSED=true       # rc>=2/timeout/IO errors also trigger rollback
+
+# Statistical reports: explicit batch allowlist (replaces glob-based
+# cross-batch mixing); McNemar/BH-FDR/bootstrap CI/Cliff's delta are all
+# persisted into statistical_report.md
+python experiments/statistical_analysis.py --results-dir experiments/results/main_batch \
+  --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
+```
 
 ### Example 12: JSON Output (Programmatic Processing)
 

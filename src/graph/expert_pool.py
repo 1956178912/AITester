@@ -61,6 +61,59 @@ _EXPERT_DIMENSIONS: tuple[str, ...] = (
     "dead_code_and_logic",  # 死代码 / 逻辑错误（不可达分支 / 恒假条件）
 )
 
+# P2-2（2026-10 批次）：错误类别 → 优先维度 映射表。
+# 背景：此前 3 维度固定（边界/类型/死代码），不随 error_category 变化——
+# 对 type_error 任务仍派"边界处理"专家（维度错位，候选命中率低）。
+# 现按 ErrorCategory 映射到维度子集：命中类别把关联维度排前、其余维度补位
+# （保持 expert_count 不变，只重排序不增删，零新 LLM 成本、零行为默认变化）。
+# EXPERT_POOL_CATEGORY_CONDITIONED=true（默认 false，历史口径 3 维固定）时
+# generate_parallel 接受 error_category 参数并重排维度。
+# 映射口径（保守，缺类别/未知类别 → 原序 3 维，等价历史行为）：
+_ERROR_CATEGORY_TO_PRIORITY_DIMENSION: dict[str, str] = {
+    "type_error": "type_safety",
+    "index_error": "boundary_handling",
+    "assertion": "dead_code_and_logic",
+    "logic_error": "dead_code_and_logic",
+    "runtime": "boundary_handling",
+    "import_error": "type_safety",  # 导入失败多为 API/类型误用
+    "syntax": "dead_code_and_logic",
+    "unknown": "dead_code_and_logic",
+}
+
+
+def _category_conditioned() -> bool:
+    """P2-2 维度条件化开关（EXPERT_POOL_CATEGORY_CONDITIONED=true 时启用，默认关）。"""
+    return os.getenv("EXPERT_POOL_CATEGORY_CONDITIONED", "false").lower() in ("true", "1", "on")
+
+
+def _dimensions_for_category(error_category: str | None, count: int) -> list[str]:
+    """P2-2：按 error_category 重排维度（命中类别关联维度排前，其余补位）。
+
+    开关 OFF（默认）或 error_category 为空/未知 → 返回原序 _EXPERT_DIMENSIONS
+    前 count 个（与历史固定 3 维口径一致，零行为变化）。
+    开关 ON 且类别命中映射表 → 命中维度排前 + 其余维度按原序补位到 count。
+    """
+    base = list(_EXPERT_DIMENSIONS)
+    if not _category_conditioned() or not error_category:
+        return _take_n(base, count)
+    top = _ERROR_CATEGORY_TO_PRIORITY_DIMENSION.get(error_category)
+    if top is None or top not in base:
+        return _take_n(base, count)  # 未知类别 → 保守回退原序
+    ordered = [top] + [d for d in base if d != top]
+    return _take_n(ordered, count)
+
+
+def _take_n(dimensions: list[str], n: int) -> list[str]:
+    """取前 n 个维度（不足时循环复用，与原 generate_parallel 补位口径一致）。"""
+    if n <= 0 or not dimensions:
+        return []
+    out = list(dimensions[:n])
+    if len(out) < n:
+        cycles = (n - len(out)) // len(dimensions) + 1
+        out += list(dimensions) * cycles
+    return out[:n]
+
+
 # ─── LLM 温度 / 候选置信度常量（2026 可读性审查 P3：抽取历史内联魔法数字）──
 # 此前 0.3/0.2 温度与 0.5/0.6 置信度散落内联在 generate_parallel._run_expert
 # 与 debate_round 的 LLM 调用点，无命名、无环境变量口径（对比同文件其他参数
@@ -161,6 +214,7 @@ class ExpertPoolAgent:
         failed_cases: list[dict[str, str]],
         rag_references: list[dict[str, Any]] | None = None,
         focus_function: str | None = None,
+        error_category: str | None = None,
     ) -> list[dict[str, Any]]:
         """并发调用 N 个专家子 Agent，汇总候选补丁。
 
@@ -168,12 +222,20 @@ class ExpertPoolAgent:
         产出候选补丁 + 置信度。线程池并发（互不阻塞），异常专家
         保守降级（产出空候选，不影响其他专家）。
 
+        P2-2（2026-10 批次）：error_category 参数（默认 None 保持历史口径）
+        —— EXPERT_POOL_CATEGORY_CONDITIONED=true 且 error_category 非空时，
+        按 _ERROR_CATEGORY_TO_PRIORITY_DIMENSION 把关联维度排前（命中维度
+        优先），其余维度按原序补位（expert_count 不变，只重排序不增删）。
+        开关 OFF 或 error_category=None 时，本参数零作用（维度表固定原序）。
+
         Args:
             target_code: 被测代码全文。
             test_output: pytest 失败输出。
             failed_cases: 失败用例列表。
             rag_references: RAG 参考案例（可选，注入各专家 prompt）。
             focus_function: 焦点函数名（可选）。
+            error_category: 错误类别字符串（ErrorCategory.value，如
+                "type_error" / "index_error"，可选；None 时维度表固定原序）。
 
         Returns:
             候选列表，每项含 {"dimension": str, "patch": str, "new_code":
@@ -185,14 +247,9 @@ class ExpertPoolAgent:
         """
         if not target_code:
             return []
-        # 取前 expert_count 个维度（expert_count > len(_EXPERT_DIMENSIONS) 时
-        # 循环复用维度表，保守：不新增维度，仅重复已有维度）
-        dimensions = list(_EXPERT_DIMENSIONS[: self.expert_count])
-        if len(dimensions) < self.expert_count:
-            dimensions += list(_EXPERT_DIMENSIONS) * (
-                (self.expert_count - len(dimensions)) // len(_EXPERT_DIMENSIONS) + 1
-            )
-            dimensions = dimensions[: self.expert_count]
+        # P2-2：维度选择（默认固定原序；EXPERT_POOL_CATEGORY_CONDITIONED=true
+        # 且 error_category 命中映射表时按类别重排，命中维度排前）
+        dimensions = _dimensions_for_category(error_category, self.expert_count)
 
         # 并发调用各专家（ThreadPoolExecutor，线程数 = 专家数）
         candidates: list[dict[str, Any]] = [None] * self.expert_count  # type: ignore[list-item]

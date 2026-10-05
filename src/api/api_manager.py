@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
 import threading
 import time
@@ -96,10 +97,16 @@ class APIManager:
     针对大规模节点池（100+ 模型）优化。
     """
 
-    def __init__(self, config: APIManagerConfig | None = None, enable_health_checker: bool = True) -> None:
-        # enable_health_checker：是否自动启动后台健康检查守护线程（默认 True，保持历史行为）。
-        # 该线程每 60s 会对所有节点发起真实 LLM 请求（消耗 API 配额）；
-        # 嵌入式使用、单元测试等不想引入后台线程的场景传 False 显式关闭。
+    def __init__(self, config: APIManagerConfig | None = None, enable_health_checker: bool | None = None) -> None:
+        # enable_health_checker：是否自动启动后台健康检查守护线程。
+        # None（默认）= 读环境开关 API_HEALTH_CHECKER_ENABLE（缺省 "true"，
+        # 保持历史行为）；True/False 显式覆盖（嵌入式使用、单元测试等不想
+        # 引入后台线程的场景传 False）。
+        # 该线程每 60s 对所有节点发起真实 LLM 请求（消耗 API 配额）；
+        # 免费/低配额场景建议 .env 设 API_HEALTH_CHECKER_ENABLE=false
+        # （故障转移不受影响——调用失败时仍即时探测并熔断冷却）。
+        if enable_health_checker is None:
+            enable_health_checker = os.getenv("API_HEALTH_CHECKER_ENABLE", "true").lower() in ("true", "1", "on")
         self.config = config or APIManagerConfig()
         self.health_nodes: dict[str, APIHealth] = {}
         self._rr_index: int = 0  # 轮询索引

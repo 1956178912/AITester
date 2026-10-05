@@ -1,8 +1,265 @@
+> Last updated: 2026-10-05 (review-optimization batch R1-R18; six missing 2026-10-04/2026-09-29 sections backfilled for section parity)
+
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-05 Review-optimization batch R1–R18 (spec-oracle execution wiring + complete statistical reports + mutation detection + CI hardening, default behavior unchanged)
+
+> First landing batch of the 2026-10-05 systematic review (recommendations
+> R1–R18): **scientific-core fixes + evaluation-pipeline completeness +
+> engineering-gate hardening**. All changes follow the "default switches
+> unchanged + new capabilities behind independent switches" policy; full
+> regression **3913 → 3984 passed / 0 failed** (+71 new cases), ruff 0
+> warnings, mypy clean on 98 source files, `BASELINE.yaml` synced.
+>
+> **P0 scientific core (R1/R4/R5)**:
+> - **R1a SpecIR v1 compile fixes** (`src/specs/spec_ir.py`): parametrize list
+>   `'; '.join` → `', '.join` (≥2 boundaries previously produced a
+>   SyntaxError); NL invariants no longer compile to `assert True`
+>   tautologies (fake-pass channel sealed; empty string when no boundary
+>   material — no assertion-less test files);
+> - **R1b/R6 signature-aware binding** (`spec_ir.py` + `spec_ir_v2.py`): new
+>   `extract_signature_params` (AST signature extraction, tri-state
+>   None/[]/non-empty); `compile_spec_oracle` gains `signature_params` —
+>   binding context extends from hardcoded `{r,x,a,b,y}` to real parameter
+>   names; call arity fixed per signature (single-param functions no longer
+>   emit `func(a, b)` TypeErrors);
+> - **R1c deterministic spec-oracle execution wiring**
+>   (`src/graph/nodes.py`, new switch `SPEC_ORACLE_EXEC_ENABLE`, default
+>   off): `compile_spec_oracle` output is appended to LLM-generated tests and
+>   executed **side by side** — closes the dead-code gap where executable
+>   specs never reached the execution chain; new state field
+>   `spec_oracle_injected`;
+> - **R4b rollback fail-closed mode** (`src/tools/patch_rollback.py`, new
+>   switch `PATCH_ROLLBACK_FAIL_CLOSED`, default off): rc≥2 / timeout / IO
+>   errors can be re-classified as regression_failed to trigger automatic
+>   rollback;
+> - **R5 mutation detection rate in main benchmark** (new
+>   `experiments/mutation_detection.py` + `run_benchmark.py` wiring behind
+>   `ENABLE_MUTATION_SCORING`): objective oracle adjudication for test-suite
+>   effectiveness (SWE-Mutation 2026 style), result rows gain
+>   `mutation_detection_rate / mutants_killed / mutants_total`;
+>
+> **P1 evaluation & engineering (R2/R10/R11/R13/R14/R16/R17)**:
+> - **R2 complete statistical reports**: McNemar / BH-FDR persisted into
+>   `statistical_report.md` (previously console-only); bootstrap 95% CI
+>   (10,000 resamples, seed 42) and Cliff's delta effect size; `--batches`
+>   allowlist (replaces glob-based cross-batch mixing) with a data-source
+>   audit header; `analyze_results` aggregates M1 metrics (None excluded
+>   from denominators);
+> - **R17 structured routing** (new switch `ROUTE_STRUCTURED_ENABLE`, default
+>   off): `error_category=logic_error` takes priority over Chinese diagnosis
+>   keywords in `_should_debug` / `determine_stop_reason`; signal source
+>   traced (keyword-fallback rate measurable);
+> - **R16 rogue_monitor orphan wiring** (new switch `ROGUE_MONITOR_ENABLE`,
+>   default off): `base_agent._call_llm_with_cache` reports call events,
+>   `_executor_node` checks four core agents per round into
+>   `state["rogue_findings"]`;
+> - **R11 deterministic sampling**: `run_benchmark(deterministic=True)`
+>   forces TEMPERATURE=0.0 (three-namespace cascade);
+> - **R10 CI hardening** (`ci.yml`): security job (pip-audit / working-tree
+>   gitleaks / bandit) now blocking on push/PR (previously weekly and
+>   non-blocking); branch-coverage gate extended to the full 3.12/3.13/3.14
+>   matrix; smoke-llm weekly trigger with secrets guard; new `.gitleaks.toml`
+>   (test-fixture false-key exemptions). ⚠️ **Security finding**: gitleaks
+>   full-history scan found a suspected real key in the deleted file
+>   `API_MANAGER_EXTENSION_GUIDE.md` (commit 2e5272a) — rotate the key and
+>   run `git filter-repo`, then make the full-history scan blocking;
+> - **R13 release pipeline** (new `release.yml`): tag `v*` → build → twine
+>   check → CycloneDX SBOM → GitHub Release with artifacts; PyPI publishing
+>   guarded by secrets;
+> - **R14 weekly perf patrol** (new `perf.yml` + `check_perf_regression.py` +
+>   `docs/performance_baseline.json`): 15% relative threshold + 0.05ms
+>   absolute floor, non-blocking;
+>
+> **P2 UX & security (R15/R18 + misc)**:
+> - **R15 switch presets** (`config.py`): `AITESTER_PROFILE=safe|scientific|fast`
+>   (setdefault injection, explicit env wins);
+> - **api_manager health-checker switch** (`API_HEALTH_CHECKER_ENABLE`,
+>   default true): background 60s real-API probing can be disabled on
+>   free-tier quotas (failover probing unaffected);
+> - **LLM cache dir moved out of the source tree**: default
+>   `~/.cache/aitester/llm/` (XDG aware), previously `src/cache/`;
+>   `rag.py` cache-path duplication converged to a single constant;
+> - **R18 threat-model additions** (bilingual): T7 CI/CD supply-chain,
+>   T8 compound multi-layer sandbox failure, T9 resource exhaustion/DoS;
+>
+> Tests: `tests/test_2026_10_05_review_batch.py` (34),
+> `tests/test_r2_statistical_report.py` (18),
+> `tests/test_r5_mutation_detection.py` (19); two legacy cases in
+> `tests/test_spec_ir_branches.py` updated to the fixed semantics.
+
+## [Unreleased] — 2026-10-04 Optimization batch, continuation 4 (P0-4 kernel-sandbox enabled-path self-verification + P2 injection-warning closed loop into the LLM query + threat-model update, default behavior unchanged)
+
+> Fourth self-verifiable batch after the 2026-10-04 systematic review (following
+> continuation 3's P2 injection benchmark + P1-1 embedding hook); all changes
+> follow "default switches unchanged + new capabilities behind independent
+> switches"; full regression **3862 → 3870 passed / 0 failed** (+8 new cases),
+> ruff 0 warnings, mypy clean on 96 source files, line coverage 88% / branch
+> 83%, `BASELINE.yaml` synced:
+>
+> - **P0-4 kernel-sandbox enabled-path self-verification** (new
+>   `tests/test_p0_4_kernel_sandbox_enabled_path.py`, 7 cases, zero LLM /
+>   zero subprocess, pure monkeypatched platform probing + argv-assembly
+>   assertions): locks the argv assembly of `build_sandbox_command` under the
+>   CI-preinstalled bwrap path (argv[0]=bwrap/sandbox-exec itself — the old
+>   bug `cmd = sandboxed_cmd[1:]` treated argv[0] as the executable); locks
+>   the fail-closed semantics (no backend + ALLOW_UNSANDBOXED=false → raise
+>   SandboxUnavailable; ALLOW_UNSANDBOXED=true → original command +
+>   obs.supported=False conservative degradation); locks platform probing
+>   (`_landlock_available` / `_seatbelt_available` / `sandbox_supported`);
+> - **P0-4 one-line enablement** (CI preinstalls bwrap + `.env.example`
+>   entry): new "Install system tools" step in the ci.yml test job
+>   (`sudo apt-get install -y bubblewrap`, failure non-blocking — the default
+>   KERNEL_SANDBOX_ENABLE=false path is unaffected); `.env.example` gains a
+>   `KERNEL_SANDBOX_ENABLE=false` entry with enablement notes; threat-model
+>   P0-4 note updated to "wired + CI-preinstalled bwrap, one line to enable;
+>   default stays false (ADR-0003; flipping to true requires an ADR change +
+>   re-labeling all experiment artifacts)";
+> - **P2 injection warning actually injected into the LLM query (closed
+>   loop)** (`src/agents/generator.py` + `src/graph/nodes.py`): continuation 3
+>   wired detection + `state["injection_findings"]`, but the warning text
+>   never reached `generate`; this batch adds an `injection_warning` parameter
+>   to `GeneratorAgent.generate` (None/empty → not injected, zero historical
+>   change), appended to the query tail on hit; 1 new case locks that a
+>   non-empty warning truly appears in the LLM query;
+> - **Threat-model P0-4/P1-1 entry updates** (bilingual): P0-4 notes the
+>   bwrap path is self-verified by test_p0_4; P1-1 notes the hook is
+>   implemented (`embedding_utils.py`) and requires explicitly installing
+>   sentence-transformers or setting EMBEDDING_BACKEND=sentence_transformers;
+> - **Verification**: full suite 3870 passed + ruff/mypy/check_lock_sync/
+>   check_branch_coverage/check_baseline_numbers/check_bilingual_docs all green.
+
+## [Unreleased] — 2026-10-04 Optimization batch, continuation 3 (P2 injection-scan regression benchmark + P1-1 contamination-embedding hook + injection_findings state wiring, default behavior unchanged)
+
+> Third self-verifiable batch after the 2026-10-04 systematic review; full
+> regression **3815 → 3862 passed / 0 failed** (+47 new cases), ruff 0
+> warnings, mypy clean on 96 source files, 88% / 83% coverage:
+>
+> - **P2 injection-scan regression benchmark**: new
+>   `experiments/injection_benchmark_samples.json` (10 `positive_input` +
+>   5 `false_positive_input` + 8 `positive_patch` + 5 `clean_patch`
+>   adversarial/benign pairs); new `tests/test_p2_injection_benchmark.py`
+>   (36 cases) driving `detect_prompt_injection` (input side) /
+>   `check_llm_patch_safety` (output side) with the floor guard
+>   "recall ≥ 0.8 and false-positive rate == 0" (heuristic, benchmark guards
+>   against regression rather than claiming completeness);
+> - **Wiring gap closed**: `detect_prompt_injection` previously had no caller
+>   (orphan); `_generator_node` now scans externally controlled text
+>   (`problem_statement` / `diagnosis` / `review_reason` /
+>   `task_description`) before consumption, writing hits into the new
+>   `state["injection_findings"]` field (default `[]`) and appending a
+>   system-side warning (OWASP ASI "detect + warn", no auto-blocking);
+>   `agent_telemetry` gains the `injection_detected` failure mode;
+> - **P1-1 contamination-embedding hook regression tests**: new
+>   `tests/test_p1_1_embedding_hook.py` (11 cases) locking backend selection
+>   (`EMBEDDING_BACKEND=none` → None / missing backend → conservative None),
+>   embedding boundaries (empty text → None), and cosine edge cases;
+> - **Verification**: full suite 3862 passed + all gates green.
+
+## [Unreleased] — 2026-10-04 Optimization batch, continuation 2 (P2-1 OTel exporter + P2-2 expert-pool dimension conditioning + P2-3 strategy-bank outcome accumulation + bilingual threat model, default behavior unchanged)
+
+> Second self-verifiable batch after the 2026-10-04 systematic review; full
+> regression **3797 → 3815 passed / 0 failed** (+18 new cases), ruff 0
+> warnings, mypy clean on 96 source files (incl. new
+> `src/observability/otel_export.py`), 88% / 83% coverage:
+>
+> - **P2-1 trace.jsonl → OpenTelemetry exporter** (new
+>   `src/observability/otel_export.py`, offline conversion, zero SDK
+>   dependency): `export_trace_jsonl(path)` converts JSONL into OTel-compatible
+>   spans (trace/span/parent ids, nanosecond timestamps, attributes); maps
+>   GenAI semantic-convention attributes (`gen_ai.system` /
+>   `gen_ai.operation.name` / `gen_ai.usage.*`) plus `aitester.*` attributes;
+>   `task_start` → root span, `node`/`task_end` → child spans; synthesizes a
+>   root when missing (Jaeger renders connected); corrupt lines skipped;
+>   deterministic short ids for stable re-exports; 7 new cases;
+> - **P2-2 expert-pool dimensions conditioned on error_category** (zero new
+>   LLM cost): new `_ERROR_CATEGORY_TO_PRIORITY_DIMENSION` mapping +
+>   `_dimensions_for_category()`; switch `EXPERT_POOL_CATEGORY_CONDITIONED`
+>   (default off) reorders related dimensions first without changing
+>   expert_count; `generate_parallel` gains an `error_category` parameter
+>   (None → no-op); 6 new cases;
+> - **P2-3 strategy-bank outcome accumulation (ESDA Phase 2)**:
+>   `record_strategy_outcome` previously had no caller; the `_debugger_node`
+>   expert-pool path (STRATEGY_BANK_ENABLE=true + expert pool on) appends
+>   `(signature, strategy, success=False placeholder, task_id)` entries to
+>   strategy_bank.json `outcomes` (append-only, silent degradation on write
+>   failure); offline analysis can join task_id with later executor results
+>   for true success-rate attribution; default off → zero execution; 5 cases;
+> - **P2-6 bilingual threat model** (new `docs/threat_model.en.md`); the
+>   bilingual-docs gate exemption removed (threat model now enforced);
+> - **Doc sync**: BASELINE.yaml (3815 / 88% / 83% / 96 files); `.env.example`
+>   gains `EXPERT_POOL_CATEGORY_CONDITIONED`.
+
+## [Unreleased] — 2026-10-04 Optimization batch, continuation (P2-5 kernel-sandbox venv-chain wiring + P0-4 gap closed, default behavior unchanged)
+
+> Continuation of the first 2026-10-04 batch; closes the **P0-4 gap** logged
+> in the threat model (the kernel sandbox was wired only into the local chain
+> `executor._execute_local`; the venv chain `executor_modes.execute_sandboxed`
+> — the default recommended isolation path — ran a bare subprocess, silently
+> losing kernel isolation when KERNEL_SANDBOX_ENABLE=true):
+>
+> - **P2-5 venv-chain kernel-sandbox wiring**
+>   (`src/agents/executor_modes.py`): `execute_sandboxed` wraps the pytest
+>   subprocess via `kernel_sandbox.build_sandbox_command` (macOS Seatbelt /
+>   Linux bwrap) when enabled; allowed paths = sandbox dir + host interpreter
+>   (`sys.executable`); S1 fail-closed: `SandboxUnavailable` → refuse to
+>   execute with `error_info.type=kernel_sandbox_unavailable` (never silently
+>   degrade to unsandboxed venv); full-argv passing (the sandbox binary is
+>   argv[0]); result dict carries `kernel_sandbox_obs` (observation-only,
+>   same fields as the local chain); `executor._execute_local` forwards the
+>   same field; module docstrings updated; new
+>   `tests/test_p2_5_venv_kernel_sandbox.py` (4 cases: default-off zero
+>   change / ON full argv / fail-closed / supported=False refusal);
+> - **P0-4 gap closed** (`docs/threat_model.md`): A4 updated to "both
+>   non-container chains (local + venv) wired; KERNEL_SANDBOX_ENABLE default
+>   off (enablement is explicit)".
+>
+> Verification: +4 cases + full regression zero failures + ruff 0 warnings
+> (mypy clean on 95 files, CI caliber).
+
+## [Unreleased] — 2026-10-04 Optimization batch (P2-7 oracle-less wiring + P2-4 stall detection + P2-5 dependency grouping + P1 Dockerized repro + threat-model doc, default behavior unchanged)
+
+> First low-risk self-verifiable batch after the 2026-10-04 systematic review
+> (P0 strong-model evidence items deferred — they need API budget); full
+> regression **3760 → 3793 passed / 0 failed** (+31 new cases), ruff 0
+> warnings, mypy clean on 95 source files, 88% / 83% coverage:
+>
+> - **P2-7 N2/N4 oracle-less wiring audit + hookup**: the two pure-data
+>   primitive modules `experiments/metamorphic_oracle.py` /
+>   `experiments/differential_test.py` previously had zero callers and zero
+>   tests; `GeneratorAgent.generate` gains `metamorphic_section` /
+>   `differential_section` parameters (None → not injected);
+>   `_generator_node` gates them via `METAMORPHIC_ENABLE` /
+>   `DIFFERENTIAL_TEST_ENABLE` (both default false); **two real defects fixed
+>   that the wiring exposed**: ① `suggest_metamorphic_relations` keyword
+>   parsing (`split("'")[2]` → `split("'")[1]` — all 6 MR templates
+>   previously matched nothing); ② "func has 2+ args" arity parsing
+>   (`int(" 2+")` ValueError → regex digit extraction); 19 new cases;
+> - **P2-4 minimal stall detection** (`src/graph/workflow.py`):
+>   `StopReason.COVERAGE_STALL` + `_coverage_stall_detected()` (last K rounds
+>   of execution_trace coverage_delta all below eps with test_passed false);
+>   `COVERAGE_STALL_DETECT_ENABLE` default off — OFF keeps the
+>   determine_stop_reason priority sequence byte-identical; 12 new cases;
+> - **P2-5 dependency grouping** (`pyproject.toml`): pytest/pytest-cov moved
+>   into the `dev` extra; pymysql/DBUtils moved into a new `db` extra
+>   (smaller install surface; requirements.txt full list unchanged); two new
+>   packaging lock cases;
+> - **P1 Dockerized experiment repro**: new `Dockerfile.repro`
+>   (python:3.14-slim + full requirements.lock + git-sha provenance marker
+>   `.repro_provenance`); run_benchmark result JSON gains an `environment`
+>   provenance block (python version / git sha / container flag);
+>   `reproduce.sh` header gains Docker commands;
+> - **P2-6 threat model written**: new `docs/threat_model.md` (6 attack
+>   surfaces → existing guard mapping + known gaps P0-4/P1-1/P2 +
+>   documented exemptions + fail-closed governance principles);
+> - **Doc sync**: `.env.example` gains the three COVERAGE_STALL_* switches;
+>   BASELINE.yaml (3793 / 88% / 83% / 95 files).
+>
+> Verification: full suite 3793 passed + all gates green.
 
 ## [Unreleased] — 2026-10-02 Continue-optimization batches 7–14 (pure-logic / mock-isolated branch coverage + two real defect fixes, default behavior unchanged)
 
@@ -428,6 +685,63 @@ All notable changes to this project will be documented in this file. Format foll
 > Regression: full pytest 2540 passed / 0 failed (34s), ruff 0 warnings
 > across the repo (incl. ruff format on the 9 files touched this batch),
 > mypy 86 files 0 errors.
+
+## [Unreleased] — 2026-09-29 P0/P1/P2 gap-execution batch (G8 full-stack retest + default-off capability verification + doc consistency)
+
+> Executes the P0/P1/P2 items of the gap list in
+> `docs/gap_report_2026-09-28_frontier_recommendations.md` §9, default
+> behavior unchanged (all switches keep their original defaults):
+>
+> - **P0 G8 full-stack retest (stronger free-tier models)**: the
+>   `data/swe_bench_lite_g8_ready.jsonl` 20-task sqlfluff subset + 5 verified
+>   usable endpoints (kimi-k2.7-code / kimi-k2.5 / glm-4.7 / agnes-3.0-flash
+>   / agnes-2.5-flash) + data-gate repair
+>   (`data/g8_lite/swe_bench_lite_g8_ready_instances.jsonl` backfilled with
+>   `instance_code`, gate 20/20 passed) + 7 switches all on
+>   (`RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
+>   `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` /
+>   `REPO_LEVEL_EXECUTION` / `SWE_REPO_VENV_ISOLATION`); repo-level results
+>   archived separately in
+>   `experiments/results/experiment_report_20260929_repo_level.md`;
+> - **P1.1 position-aware re-test (localization activation)**: synthetic
+>   level2.5 / level2.5-hard runtime-exception defect library (IndexError /
+>   KeyError / AttributeError / TypeError with traceback line numbers;
+>   `SyntheticDataset` writes `metadata["suggested_function"]` gold);
+>   `experiments/position_aware_ab.py` default difficulty switched to
+>   level2.5; level2.5-hard n=40 measured localization accuracy 21.43%
+>   (localization now **activated** vs the earlier 0/30 full degradation);
+>   ON 85.0% vs OFF 90.0% (−5.00pp, small-sample noise); results in
+>   `experiments/results/pa_l25h_n40_g8batch/`;
+> - **P1.2 RAG enhancement-layer re-test (hard tasks)**: the three
+>   enhancement layers (RAG_RELEVANCE_THRESHOLD_ENABLE / RAG_CONDITIONAL_ENABLE
+>   / RAG_JUDGE_INSTRUCTION_ENABLE) on level2.5-hard n=40: RAG ON 95% vs OFF
+>   88% (+7pp), mean iterations −0.4 (p=0.0497 significant), tokens +97%
+>   (retrieval-injection cost not recouped); results in
+>   `experiments/results/rag_lvl25h_n40_g8batch/`;
+> - **P1.3 cross-file T1 threshold status**: three batches (level3 two-module
+>   +10.00pp / level3.5 three-module +7.50pp / L3.5 small-sample n=16 +0.00pp)
+>   consistently positive but below the +15pp T1 threshold; combined with the
+>   `cross_file_root_cause.py` fix in `_cross_file_analyzer_node` (0-edge
+>   coverage preset dependency edges for callees) and the single L3.5 failure
+>   attributed to `LLM_CAPABILITY` (dep_edges=2 complete dependency graph, 3
+>   repair rounds unclosed), the T1 gap is attributed to the LLM engine's
+>   capability boundary (free-tier small models) rather than a cross-file
+>   pipeline defect; turning it positive requires a GPT-4-class model rerun;
+> - **P2.1 `code_analysis_report.md` accessibility**: confirmed accessible,
+>   already carries a "2026-09 static snapshot" expiry banner + a link to the
+>   latest analysis output; kept as historical evidence;
+> - **P2.2 `failure_analysis.md` historical-snapshot banner**: prominent
+>   `🚨 historical snapshot` block added on top (frozen 2026-09-14, free-tier
+>   small-model caliber, 17-category sync note), English file synced;
+> - **P2.3 error-category count cross-doc sync**: `docs/failure_analysis.md`
+>   §"implemented" list corrected 16 → 17 categories (adds
+>   `PATCH_SYNTAX_INVALID`); README.md §2 / §5.19 / §876 / test table /
+>   v0.1 historical batch counts corrected; README.en.md synced;
+>   `ErrorCategory` locked at 17 by
+>   `tests/test_error_classifier.py::test_seventeen_categories_total`;
+> - No production-code changes this batch (experiments + docs + data-gate
+>   repair only); full-suite / ruff / mypy baselines unchanged (2418 tests /
+>   ruff 0 warnings repo-wide / coverage 94%).
 
 ## [Unreleased] - 2026-09-28 Gap-closure A/B batch (position-aware / RAG / cross-file experiments + dead-loop fix + cross-file scaffold)
 

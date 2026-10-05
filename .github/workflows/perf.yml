@@ -1,0 +1,82 @@
+name: AITester Performance Benchmark
+
+# R14（2026-10-05 审查批次）：每周日性能基准巡检。
+# 跑 scripts/performance_benchmark.py（Executor / ErrorClassifier / BaseAgent
+# 关键操作微基准），与 docs/performance_baseline.json 基线比对（15% 相对阈值
+# + 0.05ms 绝对下限，non-blocking 告警——跨机硬件差异下阻断必生假阳性），
+# 跑分产物归档 90 天供人工对照与基线刷新（--update-baseline）。
+#
+# 为什么是独立 perf.yml 而非并入 release.yml：
+# release.yml 的触发器是 tag push（v*）；若共用一个文件承载 schedule，
+# 周日定时会把 build/twine/发布等全部 release 作业也拉起（除非给每个作业
+# 加事件类型条件，发布流水线反而更难读）。发布（tag 驱动、高风险、低频）
+# 与性能巡检（schedule 驱动、只读观测）职责正交，拆分互不干扰。
+on:
+  schedule:
+    # 每周日 07:30 UTC——错开 ci.yml 周日 06:00 的全量安全扫描，
+    # 避免 GitHub Actions schedule 高峰时段排队延迟叠加
+    - cron: "30 7 * * 0"
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: "回归比对转阻断（--strict，本地/同机环境排查用）"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: read
+
+jobs:
+  perf-benchmark:
+    name: Weekly micro-benchmark vs baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out code
+        # O10：SHA 固定——与 ci.yml 同源（actions/checkout@v4 → v4.1.1）
+        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+
+      - name: Set up Python 3.14
+        # 与 ci.yml test 矩阵的开发环境档（3.14）对齐；benchmark import
+        # src.agents.*（langchain/langgraph 依赖链）→ 需全量 requirements
+        # O10：SHA 固定——与 ci.yml test 作业同源（actions/setup-python@v6）
+        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run performance benchmark
+        # 脚本无 CLI 参数：跑 Executor._auto_fix_imports / ErrorClassifier.classify /
+        # BaseAgent 解析三组微基准（各 100 次迭代取 avg/min/max ms），
+        # 输出写 experiments/results/performance_benchmark.json
+        run: python scripts/performance_benchmark.py
+
+      - name: Check regression vs docs/performance_baseline.json (non-blocking)
+        # R14：15% 相对阈值 + 0.05ms 绝对下限（过滤亚毫秒指标的定时器噪声），
+        # 默认仅告警不阻断（基线在开发机生成、CI 在 ubuntu 跑，跨机固有偏差
+        # 下阻断必生假阳性）；手动 dispatch 可选 --strict 转阻断排查。
+        # 基线漂移（代码性重构导致整体量级变化）时：下载下方工件后本地执行
+        # `python scripts/check_perf_regression.py --current <产物> --update-baseline`
+        # 并提交刷新后的 docs/performance_baseline.json。
+        run: |
+          STRICT_FLAG=""
+          if [ "${{ inputs.strict }}" = "true" ]; then STRICT_FLAG="--strict"; fi
+          python scripts/check_perf_regression.py --baseline docs/performance_baseline.json --current experiments/results/performance_benchmark.json $STRICT_FLAG
+
+      - name: Upload benchmark artifact
+        # 跑分 JSON 归档 90 天：供人工对照历史趋势 + 基线刷新原料
+        if: always()
+        # O10：SHA 固定——与 ci.yml 同源（actions/upload-artifact@v4 → v4.2.0）
+        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        with:
+          name: perf-benchmark-${{ github.run_number }}
+          path: experiments/results/performance_benchmark.json
+          retention-days: 90

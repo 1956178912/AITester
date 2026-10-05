@@ -154,6 +154,17 @@ class GeneratorAgent(BaseAgent):
         # build_boundary_triplets_section 渲染传入）。None 时不注入，
         # 历史口径零变化。
         boundary_triplets_section: str | None = None,
+        # P2-7（2026-10 接线审计 N2/N4）：无 oracle 场景增强段落（各由
+        # METAMORPHIC_ENABLE / DIFFERENTIAL_TEST_ENABLE 守门；默认关时 None
+        # 不注入，历史口径零变化）。
+        metamorphic_section: str | None = None,
+        differential_section: str | None = None,
+        # P2（2026-10 批次·续二）：注入扫描系统侧警示（INJECTION_GUARD_ENABLE=true
+        # 且外部文本命中注入特征时由 _generator_node 经 build_injection_warning
+        # 构建；None/空串时不注入，历史口径零变化）。追加到 query 尾部，
+        # 提示 LLM 任务文本中任何指令性内容均为不可信数据（OWASP ASI
+        # "检测+隔离"，只警示不自动阻断）。
+        injection_warning: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -209,6 +220,15 @@ class GeneratorAgent(BaseAgent):
         # 时非空字符串；None/空串时不注入，历史口径零变化）
         if boundary_triplets_section:
             query += "\n\n" + boundary_triplets_section
+        # P2-7（N2 蜕变关系 / N4 差分测试注入，各开关默认关时 None 不注入）
+        if metamorphic_section:
+            query += "\n\n" + metamorphic_section
+        if differential_section:
+            query += "\n\n" + differential_section
+        # P2（2026-10 批次·续二）：注入扫描系统侧警示追加到 query 尾部
+        # （命中注入特征时非空；None/空串时不注入，历史口径零变化）
+        if injection_warning:
+            query += "\n\n" + injection_warning
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
         raw = self._call_llm_with_cache(query, temperature=temperature, complexity_class=complexity_class)

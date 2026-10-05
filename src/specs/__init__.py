@@ -32,6 +32,7 @@ from __future__ import annotations
 
 __all__ = [
     "compile_to_hypothesis",
+    "extract_signature_params",
     "parse_logic_analysis",
     "spec_ir_enabled",
     "validate_spec_ir",
@@ -39,7 +40,23 @@ __all__ = [
 
 from src.specs.spec_ir import (
     compile_to_hypothesis,
+    extract_signature_params,
     parse_logic_analysis,
     spec_ir_enabled,
     validate_spec_ir,
 )
+from src.specs.spec_ir_v2 import (
+    compile_readiness,
+    compile_spec_oracle,
+    is_expression_clause,
+    spec_ir_dsl_enabled,
+    spec_provenance,
+)
+
+__all__ += [
+    "compile_readiness",
+    "compile_spec_oracle",
+    "is_expression_clause",
+    "spec_ir_dsl_enabled",
+    "spec_provenance",
+]

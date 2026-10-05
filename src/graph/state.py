@@ -156,6 +156,13 @@ class AITesterState(TypedDict, total=False):
     diagnosis: str | None
     error_category: str | None
     patch: str | None
+    # P2 注入扫描（2026-10 批次·续二）：输入侧 detect_prompt_injection
+    # 在 _generator_node 消费的"任务文本"上命中的注入特征名列表（如
+    # ["directive_override"]）。INJECTION_GUARD_ENABLE=false（默认）时恒
+    # 空列表；非空时 _generator_node 经 build_injection_warning 追加系统侧
+    # 警示（OWASP ASI "检测+隔离"口径，只警示不自动阻断）。供
+    # agent_telemetry 的 injection_detected 模式消费（trace 写入）。
+    injection_findings: list[str]
     # 迭代控制
     iteration: int
     max_iterations: int
@@ -278,6 +285,14 @@ class AITesterState(TypedDict, total=False):
     # 写入的 True 标志；refine_failure_category 把该轮 error_category 归一为
     # PATCH_SYNTAX_INVALID（"补丁语法反复损坏"场景的失败知识库口径）
     patch_syntax_invalid_flag: bool | None
+    # A-03（2026-10-04 系统审查 P0）：快照/P2P 全量回归/失败自动回滚协议
+    # 观测字段（_patch_applier_node 写入，纯观测不参与路由，默认关时恒为
+    # not_enabled 值，零默认行为变化；PATCH_SNAPSHOT_ROLLBACK_ENABLE=true 启用）。
+    # patch_rollback_verdict: verified / regression_failed / no_oracle /
+    #   regression_error / apply_failed / not_enabled
+    # patch_rolled_back: bool（True = 本轮补丁已被 P2P 回归失败自动回滚）
+    patch_rollback_verdict: str | None
+    patch_rolled_back: bool | None
     # 1.3 分层压缩降级链（_patch_applier_node → _debugger_node 跨轮透传）：
     # 上一轮补丁被命名契约符号守卫拒绝后写入的档位反馈
     # {"tier": 档位名, "missing_symbols": 缺失符号列表}；_debugger_node 读取后
@@ -317,6 +332,28 @@ class AITesterState(TypedDict, total=False):
     # 解析失败 / 无规约材料（纯观测，不阻断主流程）。
     # 供实验层"SpecIR 覆盖率 / oracle 转换率 / 规约变异杀死率"消费。
     spec_ir: dict[str, Any] | None
+    # A-01（2026-10-04 系统审查 P0）：SpecIR v2 DSL 层——"逻辑驱动"主张的
+    # 可测量内核（SPEC_IR_DSL_ENABLE=true 时由 _planner_node 写入，默认关
+    # 时 None，历史口径零变化）：
+    # - spec_compile_rate: 规约子句可编译率 ∈ [0.0, 1.0]（受限表达式 DSL +
+    #   白名单判定，纯静态零 LLM）；0.0 = 无规约材料 / 全部 NL 不可机器化
+    #   （可证伪口径："逻辑驱动"实际贡献 = 可编译率，而非 100% 宣称）；
+    # - spec_provenance: 不可机器化的 NL 子句清单（"未验证"溯源，与可编译
+    #   子句的确定性 oracle 形成"可证伪 + 不可证伪"双清单）。
+    # 供 M1 指标层与实验层（SpecIR ON/OFF 对照的"可编译规约占比"门槛）消费。
+    spec_compile_rate: float | None
+    spec_provenance: list[str] | None
+    # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入标记（SPEC_ORACLE_EXEC_ENABLE=true
+    # 时由 _generator_node 写入）——spec_ir_v2.compile_spec_oracle 的产物（签名感知绑定，
+    # R1b）追加到 generated_test 尾部与 LLM 测试**并列**执行：LLM 测试通过 ≠ 规约 oracle
+    # 通过，后者的失败是"逻辑驱动"通道的确定性检出（计入 detection 观测）。
+    # None/False = 未启用 / 无可编译子句 / 编译产物自检失败（默认关，历史口径零变化）。
+    spec_oracle_injected: bool | None
+    # R16（2026-10-05 审查 P1）：流氓 agent 行为监控 findings
+    # （ROGUE_MONITOR_ENABLE=true 时由 _executor_node 每轮写入）。非空 =
+    # 某核心 agent 触发 z-score / 熵 / 能力违规信号（只报警不熔断，
+    # 隔离/升级由调用方决定）。None = 未启用 / 无 finding。
+    rogue_findings: list[dict[str, Any]] | None
     # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁标记（FLAKY_CHECK_ENABLE=true
     # 时由 _executor_node 对失败轮做重复执行一致性检测后写入）：
     # flaky_detected = 既有 pass 又有 fail（测试不稳定，test_passed 保守记 False）；
@@ -468,6 +505,9 @@ def create_initial_state(
         diagnosis=None,
         error_category=None,
         patch=None,
+        # P2 注入扫描（2026-10 批次·续二）：输入侧 detect_prompt_injection
+        # 命中的注入特征名列表；INJECTION_GUARD_ENABLE 默认关时恒空列表。
+        injection_findings=[],
         # 迭代控制
         iteration=0,
         max_iterations=max_iterations,
@@ -535,6 +575,10 @@ def create_initial_state(
         fix_strategy_action=None,
         # 2.2 patch_syntax_invalid 标记（默认 None，重采样耗尽时置 True）
         patch_syntax_invalid_flag=None,
+        # A-03（2026-10-04 系统审查 P0）：快照/P2P 回归/自动回滚协议观测字段
+        # （默认关时 _patch_applier_node 写 not_enabled 值，零默认行为变化）
+        patch_rollback_verdict=None,
+        patch_rolled_back=None,
         # 1.3 分层压缩降级链档位反馈（默认 None，_patch_applier_node 契约拒绝
         # 且 CONTEXT_TIER_DOWNGRADE_ENABLE=true 时写入，透传给 _debugger_node）
         contract_reject_feedback=None,
@@ -546,6 +590,12 @@ def create_initial_state(
         oracle_enhanced=None,
         # R7（2026-09-30 独立审查 P0）：SpecIR 默认 None（未启用 / 解析失败）
         spec_ir=None,
+        # A-01（2026-10-04 系统审查 P0）：SpecIR v2 DSL 层默认 None
+        # （SPEC_IR_DSL_ENABLE 默认关；_planner_node 启用时写入 float / list）
+        spec_compile_rate=None,
+        spec_provenance=None,
+        spec_oracle_injected=None,
+        rogue_findings=None,
         # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁默认未检测
         flaky_detected=None,
         flaky_pass_count=None,

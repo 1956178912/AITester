@@ -1,3 +1,5 @@
+> Last updated: 2026-09-28 (registry established with the frontier-recommendation batch (chromadb PYSEC exemptions))
+
 # Dependency Exemption Registry
 
 > This file records the explicit exemptions for known vulnerabilities in the

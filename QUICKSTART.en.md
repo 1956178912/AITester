@@ -92,6 +92,48 @@ rm -rf src/cache
 All of the following switches are off by default; enable them as needed (see the comments in `.env.example` for details):
 
 ```bash
+# ── 2026-10-05 review batch: switch presets (recommended entry point) ───
+# Three presets configure a group of switches at once (setdefault injection;
+# explicitly set env vars are never overridden):
+#   safe       — security-sensitive: kernel sandbox + patch rollback
+#                 (fail-closed) + injection guard + rogue-agent monitoring +
+#                 flaky gate all on
+#   scientific — research-evaluation: SpecIR/DSL/spec-oracle execution +
+#                 mutation detection + oracle validation + snapshot rollback
+#                 all on (pair with deterministic=True)
+#   fast       — historical defaults (equivalent to no PROFILE)
+export AITESTER_PROFILE=scientific
+
+# ── 2026-10-05 review batch: individual switches (also usable standalone) ─
+# R1c deterministic spec-oracle execution: compile_spec_oracle output
+# (signature-aware binding) is appended to LLM-generated tests and executed
+# side by side — LLM tests passing ≠ spec oracle passing.
+export SPEC_ORACLE_EXEC_ENABLE=true
+
+# R4b rollback fail-closed: rc>=2/timeout/IO errors in P2P regression also
+# trigger automatic rollback (default off = legacy "bad tests don't kill
+# good patches" semantics).
+export PATCH_ROLLBACK_FAIL_CLOSED=true
+
+# R17 structured routing: error_category=logic_error (assertion failure whose
+# stack never touches the module under test) takes priority over Chinese
+# diagnosis keywords for the "regenerate tests" route.
+export ROUTE_STRUCTURED_ENABLE=true
+
+# R16 rogue-agent monitoring: LLM-call event reporting + per-round checks
+# (state["rogue_findings"]).
+export ROGUE_MONITOR_ENABLE=true
+
+# api_manager background health-checker thread (default true, historical
+# behavior; disable on free-tier quotas — failover probing is unaffected).
+export API_HEALTH_CHECKER_ENABLE=false
+
+# R11 deterministic sampling (a run_benchmark parameter, not an env var):
+# TEMPERATURE=0.0 cascaded across three namespaces (env + config +
+# base_agent), recorded in provenance.
+# from experiments.run_benchmark import run_benchmark
+# run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
+
 # Structured JSONL tracing (4.1): write <task_uuid>.trace.jsonl per task,
 # recording the decisions/tokens/latency of each agent node, for replaying in experimental analysis. When unset, everything is a no-op.
 export AITESTER_TRACE_DIR=./trace_out

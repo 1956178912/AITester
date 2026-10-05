@@ -22,6 +22,64 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# ─── R15（2026-10-05 审查 P2）：AITESTER_PROFILE 开关预设 ─────────────────────
+# 背景：全仓 60+ 环境变量开关导航成本高（审查指出"开关矩阵不可导航"）。
+# Profile 用 os.environ.setdefault 注入一组推荐开关值——**不覆盖用户显式
+# 设置**（显式 env 优先级最高），且发生在各开关定义求值之前（本块位于
+# 全部开关常量定义之前），保证 setdefault 的值被后续 os.getenv 读到。
+# 预设口径（均可被单开关显式覆盖；未识别的 profile 值记 WARNING 并忽略）：
+#   safe       —— 安全敏感档：执行隔离 + 补丁回滚 + 注入守卫全开
+#                 （KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / INJECTION_GUARD /
+#                  ROGUE_MONITOR / CREDENTIAL 白名单环境已默认启用）；
+#   scientific —— 科研评测档：R1c/R5 审查落地的评测链路全开
+#                 （SPEC_IR / SPEC_IR_DSL / SPEC_ORACLE_EXEC / MUTATION_SCORING /
+#                  ORACLE_VALIDATE），配合 run_benchmark(deterministic=True)；
+#   fast       —— 历史默认档（全部维持默认关，与不设 PROFILE 等价）。
+_PROFILE_PRESETS: dict[str, dict[str, str]] = {
+    "safe": {
+        "KERNEL_SANDBOX_ENABLE": "true",
+        "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+        "PATCH_ROLLBACK_FAIL_CLOSED": "true",
+        "INJECTION_GUARD_ENABLE": "true",
+        "ROGUE_MONITOR_ENABLE": "true",
+        "FLAKY_CHECK_ENABLE": "true",
+    },
+    "scientific": {
+        "SPEC_IR_ENABLE": "true",
+        "SPEC_IR_DSL_ENABLE": "true",
+        "SPEC_ORACLE_EXEC_ENABLE": "true",
+        "ENABLE_MUTATION_SCORING": "true",
+        "ORACLE_VALIDATE_ENABLE": "true",
+        "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+    },
+    "fast": {},
+}
+
+
+def _apply_profile_presets() -> str | None:
+    """按 AITESTER_PROFILE 注入预设开关（setdefault，显式 env 不被覆盖）。
+
+    Returns:
+        生效的 profile 名（未设置时 None）；未识别值记 WARNING 返回 None。
+    """
+    profile = (os.getenv("AITESTER_PROFILE") or "").strip().lower()
+    if not profile:
+        return None
+    presets = _PROFILE_PRESETS.get(profile)
+    if presets is None:
+        logging.getLogger(__name__).warning("AITESTER_PROFILE=%r 未识别（可选：safe/scientific/fast），忽略", profile)
+        return None
+    for key, value in presets.items():
+        os.environ.setdefault(key, value)
+    logging.getLogger(__name__).info(
+        "AITESTER_PROFILE=%s 生效：%d 个开关预设注入（显式设置不受影响）", profile, len(presets)
+    )
+    return profile
+
+
+ACTIVE_PROFILE: str | None = _apply_profile_presets()
+
+
 def load_env_local() -> None:
     """加载本地敏感配置文件 .env.local（若存在），覆盖 .env 中的 LLM 配置。
 

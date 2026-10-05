@@ -14,13 +14,25 @@ run_statistical_test.py 退化为薄壳入口（逻辑全部收敛到本模块�
 interpret_p / interpret_d 供本文件的报告流程与 experiments/visualize_results.py
 （图表统计面板）共用，配对逻辑不另起副本。
 
+R2（2026-10-05 审查：统计协议完整性）新增（全部为增量，历史 t 检验表不变）：
+- 报告落盘 McNemar / BH-FDR 章节（此前仅打印控制台）；
+- bootstrap_paired_diff_ci：配对差值均值的百分位法 95% CI（纯 Python，
+  random.Random(seed) 固定 seed=42，10000 次重采样）；
+- cliffs_delta：非参数效应量，与 Cohen's d 并列输出；
+- --batches 批次白名单 CLI + 报告头部"数据来源"审计章节。
+
 用法：
     python experiments/statistical_analysis.py
+    python experiments/statistical_analysis.py \
+        --results-dir experiments/results \
+        --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import random
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -40,7 +52,7 @@ _BASELINES = ("aitester", "plain_llm", "single_agent")
 
 def load_experiment_results(results_dir: str, batch_files: list[str] | None = None) -> dict[str, list[dict]]:
     """
-    加载实验结果数据
+    加载实验结果数据（历史入口，语义与 R2 之前完全一致）
 
     Args:
         results_dir: 实验结果目录路径
@@ -58,8 +70,42 @@ def load_experiment_results(results_dir: str, batch_files: list[str] | None = No
     Returns:
         按基线分组的实验结果字典
     """
-    results = {baseline: [] for baseline in _BASELINES}
+    results, _ = load_experiment_results_with_sources(results_dir, batch_files)
+    return results
+
+
+def load_experiment_results_with_sources(
+    results_dir: str, batch_files: list[str] | None = None
+) -> tuple[dict[str, list[dict]], list[str]]:
+    """R2（2026-10-05 审查）：加载实验结果并返回"实际纳入"的批次文件清单。
+
+    与 load_experiment_results 同一套加载逻辑（该函数退化为薄壳委托，
+    历史调用方零变化），额外返回审计信息：实际纳入统计的批次文件路径
+    列表（按加载顺序 = 路径排序序）。"实际纳入"口径：
+    - 白名单模式：指定的文件中 dataset == "synthetic" 且成功解析的；
+    - glob 模式：递归扫描的 benchmark_*.json 中同样实际加载了数据的。
+
+    报告头部"数据来源"章节消费本清单（审计用：读者可核对 p 值背后
+    恰好是哪些批次，避免混批次结论不可复现）。
+
+    Args:
+        results_dir: 实验结果目录路径
+        batch_files: 批次文件白名单（相对 results_dir；None 时走 glob）
+
+    Returns:
+        (按基线分组的结果字典, 实际纳入的批次文件路径字符串列表——
+        位于 results_dir 内的文件返回相对 posix 路径，其余返回绝对路径)
+    """
+    results: dict[str, list[dict]] = {baseline: [] for baseline in _BASELINES}
     results_path = Path(results_dir)
+    included_files: list[str] = []
+
+    def _display_path(p: Path) -> str:
+        """审计清单用的展示路径：目录内相对 posix，目录外绝对路径。"""
+        try:
+            return p.relative_to(results_path).as_posix()
+        except ValueError:
+            return str(p)
 
     # M13：显式批次白名单（排序后确定性加载；同一文件多次出现仅加载一次）
     if batch_files is not None:
@@ -68,34 +114,45 @@ def load_experiment_results(results_dir: str, batch_files: list[str] | None = No
             _bp = results_path / _bf
             if _bp not in _seen_files:
                 _seen_files.add(_bp)
-                _load_batch_file(results, _bp)
-        return results
+                if _load_batch_file(results, _bp):
+                    included_files.append(_display_path(_bp))
+        return results, included_files
 
-    # 递归查找所有 benchmark JSON 文件（M13：排序保证确定性遍历顺序）
-    for json_file in sorted(results_path.glob("**/benchmark_*.json")):
-        _load_batch_file(results, json_file)
+    # 递归查找所有 benchmark JSON 文件（M13：排序保证确定性遍历顺序；
+    # R2：记录实际纳入的文件供"数据来源"审计章节消费）
+    included_files.extend(
+        _display_path(json_file)
+        for json_file in sorted(results_path.glob("**/benchmark_*.json"))
+        if _load_batch_file(results, json_file)
+    )
 
-    return results
+    return results, included_files
 
 
-def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> None:
+def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> bool:
     """M13（2026-09-29 审查 P0）：加载单个批次文件并写入 results。
 
     仅纳入 dataset 为 "synthetic" 的批次（口径见 load_experiment_results
     的 2026-09-26 round9 注释）。
+
+    Returns:
+        该文件是否实际纳入（R2 审计口径：dataset 非 synthetic 或解析
+        失败时返回 False，不进入"数据来源"清单）
     """
     try:
         with open(json_file, encoding="utf-8") as f:
             data = json.load(f)
-            dataset = data.get("dataset", "")
-            if dataset != "synthetic":
-                return
-            for baseline, baseline_data in data.get("results", {}).items():
-                if baseline in results:
-                    details = baseline_data.get("details", [])
-                    results[baseline].extend(details)
+        dataset = data.get("dataset", "")
+        if dataset != "synthetic":
+            return False
+        for baseline, baseline_data in data.get("results", {}).items():
+            if baseline in results:
+                details = baseline_data.get("details", [])
+                results[baseline].extend(details)
+        return True
     except Exception as e:
         print(f"警告：加载 {json_file} 失败: {e}")
+        return False
 
 
 def _pair_by_task(
@@ -406,23 +463,181 @@ def bh_fdr_correct(
     return q_values, rejected
 
 
-def run_all_statistics(results_dir: str, output_file: str | None = None) -> list[dict]:
+# ─── R2（2026-10-05 审查：统计协议完整性）新增统计原语 ──────────────────────
+# 补齐三块协议缺口（均为增量输出，历史 t 检验表与既有 comparisons 字段不变）：
+# 1. cliffs_delta：非参数效应量（不假设差值正态，与 Cohen's d 并列呈现，
+#    二值配对场景比 d 更稳健）；
+# 2. bootstrap_paired_diff_ci：配对差值均值的百分位法置信区间（点估计的
+#    不确定度此前完全未量化）；
+# 3. 报告落盘 + 审计章节（见 run_all_statistics 与 main）。
+
+# bootstrap 重采样默认参数（R2 固定口径：可复现优先）
+_BOOTSTRAP_N_RESAMPLES = 10000
+_BOOTSTRAP_SEED = 42
+
+
+def cliffs_delta(
+    aitester_results: list[dict],
+    baseline_results: list[dict],
+) -> tuple[float, int]:
+    """R2：配对差值符号版 Cliff's delta（非参数效应量）。
+
+    δ = (n⁺ − n⁻) / n_pairs，其中 n⁺/n⁻ 为配对差值（AITester − 基线，
+    0/1 通过率的逐任务差）中正值/负值的个数（差值为 0 的对不贡献符号）。
+    这是 Romano et al.（2006）的 Cliff's delta P(X>Y) − P(X<Y) 在**配对**
+    场景的自然推广：与 cohens_d 共用 _pair_by_task 的 task_id 配对，
+    不假设差值正态分布——二值配对数据（差值仅取 −1/0/1）下比基于
+    差值标准差的 Cohen's d 更稳健（d 在零方差差值时退化为 ±inf）。
+
+    边界：全正差值 → +1.0；全负差值 → −1.0；正负个数相等（或全 0）→ 0.0。
+
+    Args:
+        aitester_results: AITester 结果列表
+        baseline_results: 基线结果列表
+
+    Returns:
+        (delta, n_pairs)；共同任务数 < 2 时返回 (nan, n_pairs)（样本不足，
+        与 cohens_d 同口径）
+    """
+    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results)
+    n_pairs = len(common_tasks)
+    if n_pairs < 2:
+        return float("nan"), n_pairs
+    n_pos = sum(1 for a, b in zip(paired_a, paired_b, strict=True) if a > b)
+    n_neg = sum(1 for a, b in zip(paired_a, paired_b, strict=True) if a < b)
+    return (n_pos - n_neg) / n_pairs, n_pairs
+
+
+def interpret_cliffs_delta(delta: float) -> str:
+    """根据 Cliff's delta 返回效应量描述（Romano et al. 2006 阈值）。
+
+    nan（无法计算）→ "unknown"；|δ| 阈值：0.147 / 0.33 / 0.474。
+    """
+    import math
+
+    if math.isnan(delta):
+        return "unknown"
+    abs_d = abs(delta)
+    if abs_d >= 0.474:
+        return "large"
+    if abs_d >= 0.33:
+        return "medium"
+    if abs_d >= 0.147:
+        return "small"
+    return "negligible"
+
+
+def bootstrap_paired_diff_ci(
+    aitester_results: list[dict],
+    baseline_results: list[dict],
+    n_resamples: int = _BOOTSTRAP_N_RESAMPLES,
+    seed: int = _BOOTSTRAP_SEED,
+) -> tuple[float, float, float, int]:
+    """R2：配对差值均值的百分位法 bootstrap 置信区间（95%）。
+
+    对 task_id 配对后的逐任务差值（AITester − 基线）做有放回重采样，
+    每次重采样计算差值均值，取全部重采样均值的 2.5% / 97.5% 百分位
+    作为 CI 上下界。纯 Python 实现（random.Random(seed) 固定种子，
+    默认 seed=42、重采样 10000 次）——不引入 numpy.random 等新依赖
+    路径，且同参数多次调用结果**逐位可复现**（报告可审计）。
+
+    百分位口径（order-statistic）：对升序排序的 B 个重采样均值，
+    p 分位取索引 round(p × (B−1)) 处的次序统计量（端点收缩，避免
+    线性插值在重数少的桶内产生"数据中不存在的值"）。
+
+    Args:
+        aitester_results: AITester 结果列表
+        baseline_results: 基线结果列表
+        n_resamples: 重采样次数（默认 10000，R2 固定口径）
+        seed: 随机种子（默认 42，R2 固定口径）
+
+    Returns:
+        (mean_diff, ci_low, ci_high, n_pairs)——配对差值均值的点估计与
+        95% CI 下/上界；共同任务数 < 2 时返回 (nan, nan, nan, n_pairs)
+        （样本不足，与 paired_t_test / cohens_d 同口径）
+    """
+    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results)
+    n_pairs = len(common_tasks)
+    if n_pairs < 2:
+        return float("nan"), float("nan"), float("nan"), n_pairs
+
+    differences = [a - b for a, b in zip(paired_a, paired_b, strict=True)]
+    mean_diff = sum(differences) / n_pairs
+
+    # 纯 Python bootstrap：random.Random(seed) 独立实例（不受全局 random
+    # 状态影响），rng.choice 有放回抽索引等价于均匀重采样
+    rng = random.Random(seed)
+    boot_means: list[float] = []
+    for _ in range(n_resamples):
+        total = 0.0
+        for _ in range(n_pairs):
+            total += differences[rng.randrange(n_pairs)]
+        boot_means.append(total / n_pairs)
+    boot_means.sort()
+
+    ci_low = _percentile(boot_means, 0.025)
+    ci_high = _percentile(boot_means, 0.975)
+    return mean_diff, ci_low, ci_high, n_pairs
+
+
+def _percentile(sorted_values: list[float], p: float) -> float:
+    """升序列表的 p 分位（order-statistic 口径，见 bootstrap_paired_diff_ci）。
+
+    空列表返回 nan（防御：调用方已保证非空）。
+    """
+    if not sorted_values:
+        return float("nan")
+    k = int(p * (len(sorted_values) - 1) + 0.5)
+    k = min(max(k, 0), len(sorted_values) - 1)
+    return sorted_values[k]
+
+
+def _fmt_stat_num(value: float, fmt: str = "{:.4f}") -> str:
+    """统计量渲染：nan → "n/a"，±inf → "+inf"/"-inf"，其余按格式化串。
+
+    R2 抽为模块级函数（此前在报告生成循环内逐次定义，McNemar / bootstrap
+    / Cliff's delta 等新章节复用同一渲染口径）。2026-09-26 round9：inf
+    渲染为 "+inf"/"-inf"（此前 p=0 被格式化为 "0.0000 (***)" 误显显著）。
+    """
+    import math
+
+    if math.isnan(value):
+        return "n/a"
+    if math.isinf(value):
+        return "+inf" if value > 0 else "-inf"
+    return fmt.format(value)
+
+
+def run_all_statistics(
+    results_dir: str,
+    output_file: str | None = None,
+    batch_files: list[str] | None = None,
+) -> list[dict]:
     """
     运行所有统计检验并生成报告
 
     Args:
         results_dir: 实验结果目录
         output_file: Markdown 报告输出路径（None 时仅打印控制台，不落盘）
+        batch_files: R2 可选的批次文件白名单（相对 results_dir 的路径，
+            透传 load_experiment_results_with_sources；None 时保持历史
+            glob 全目录行为不变）
 
     Returns:
-        比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig / cohens_d / effect
+        比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig /
+        cohens_d / effect，以及 R14 的 mcnemar_* / fdr_* 与 R2 的
+        cliffs_delta / cliffs_effect / bootstrap_* 字段
     """
     print("=" * 70)
     print("统计显著性检验报告")
     print("=" * 70)
 
-    # 加载数据
-    data = load_experiment_results(results_dir)
+    # 加载数据（R2：同时取"实际纳入"的批次清单，供审计章节与控制台输出）
+    data, source_files = load_experiment_results_with_sources(results_dir, batch_files)
+    _mode = "白名单" if batch_files is not None else "glob 全目录"
+    print(f"\n数据来源：{len(source_files)} 个批次文件（{_mode}模式）")
+    for _src in source_files:
+        print(f"  - {_src}")
 
     # 计算基本统计量
     stats_summary: dict[str, dict[str, float]] = {}
@@ -474,6 +689,27 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
             }
         )
 
+        # R2：Cliff's delta 非参数效应量（与 Cohen's d 并列，二值配对更稳健）
+        delta, _ = cliffs_delta(data["aitester"], data[baseline])
+        comparisons[-1].update(
+            {
+                "cliffs_delta": delta,
+                "cliffs_effect": interpret_cliffs_delta(delta),
+            }
+        )
+
+        # R2：配对差值均值的 bootstrap 95% CI（seed=42、10000 次重采样，可复现）
+        boot_mean, boot_low, boot_high, _ = bootstrap_paired_diff_ci(data["aitester"], data[baseline])
+        comparisons[-1].update(
+            {
+                "bootstrap_mean_diff": boot_mean,
+                "bootstrap_ci_low": boot_low,
+                "bootstrap_ci_high": boot_high,
+                "bootstrap_n_resamples": _BOOTSTRAP_N_RESAMPLES,
+                "bootstrap_seed": _BOOTSTRAP_SEED,
+            }
+        )
+
         # nan 值（共同任务 < 3）与 inf 值（退化配对：差值恒定非零 →
         # t=inf/p=0，2026-09-26 round9 补 isfinite 守卫）无法按常规格式化，
         # 单独处理
@@ -504,6 +740,12 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
         print(f"  t统计量: {t_stat:.4f}")
         print(f"  p值: {p_value:.4f} ({sig})")
         print(f"  Cohen's d: {d:.4f} ({interpret_d(d)})")
+        # R2：Cliff's delta 与 bootstrap CI（并列呈现；nan 时 _fmt_stat_num 渲染 n/a）
+        print(f"  Cliff's δ: {_fmt_stat_num(delta)} ({interpret_cliffs_delta(delta)})")
+        print(
+            f"  Bootstrap 95% CI（差值均值）: [{_fmt_stat_num(boot_low)}, {_fmt_stat_num(boot_high)}]"
+            f"（{_BOOTSTRAP_N_RESAMPLES} 次重采样，seed={_BOOTSTRAP_SEED}）"
+        )
         # R14：McNemar 二值配对检验（并列呈现）
         _mcn_p = comparisons[-1]["mcnemar_p"]
         if not math.isnan(_mcn_p):
@@ -532,9 +774,22 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
             )
 
     if output_file:
-        # 生成 Markdown 报告
+        # 生成 Markdown 报告（R2：新增"数据来源 / McNemar / Bootstrap CI /
+        # 效应量对比（Cliff's δ）/ BH-FDR"五个章节——历史 t 检验表原样保留）
         report_lines = [
             "# 统计显著性检验报告",
+            "",
+            "## 数据来源",
+            "",
+            # R2 审计章节：p 值背后"恰好是哪些批次"的可核对清单（glob 混批次
+            # 曾导致不可复现结论，见 load_experiment_results 的 M13 注释）
+            f"R2 审计：本报告实际纳入 {len(source_files)} 个批次文件"
+            f"（{'--batches 白名单模式' if batch_files is not None else '递归 glob 全目录模式'}）：",
+            "",
+        ]
+        report_lines.extend(f"- `{src}`" for src in source_files)
+
+        report_lines += [
             "",
             "## 数据概览",
             "",
@@ -555,23 +810,87 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
         ]
 
         for comp in comparisons:
-            import math as _math
-
-            def _fmt_num(value: float, fmt: str = "{:.4f}") -> str:
-                # 2026-09-26 round9：inf t/d 渲染为 "+inf"/"-inf"（此前 f"{inf:.4f}"
-                # 也输出 "inf" 但 p=0 被格式化为 "0.0000 (***)" 误显显著）
-                if _math.isnan(value):
-                    return "n/a"
-                if _math.isinf(value):
-                    return "+inf" if value > 0 else "-inf"
-                return fmt.format(value)
-
-            t_disp = _fmt_num(comp["t_stat"])
-            p_disp = _fmt_num(comp["p_value"])
-            d_disp = _fmt_num(comp["cohens_d"])
+            t_disp = _fmt_stat_num(comp["t_stat"])
+            p_disp = _fmt_stat_num(comp["p_value"])
+            d_disp = _fmt_stat_num(comp["cohens_d"])
             report_lines.append(
                 f"| {comp['comparison']} | {comp['n_pairs']} | {t_disp} | {p_disp} | "
                 f"{comp['sig']} | {d_disp} | {comp['effect']} |"
+            )
+
+        # R2：McNemar 配对检验落盘（此前仅打印控制台——二值配对的正确检验
+        # 不进报告等于"算而未报"，报告读者只能看到口径错误的 t 检验）
+        report_lines += [
+            "",
+            "## McNemar 配对检验（二值指标）",
+            "",
+            "R14 协议：二值配对数据（passed 0/1）的正确检验（Arcuri & Briand,",
+            "ICSE 2011）；与上方 t 检验并列呈现，t 检验表保持历史口径不变。",
+            "",
+            "| 比较 | 共同任务数 | 不一致对 (n01+n10) | χ²（连续性校正） | p值 | 显著性 |",
+            "|------|-----------|-------------------|------------------|-----|--------|",
+        ]
+        for comp in comparisons:
+            report_lines.append(
+                f"| {comp['comparison']} | {comp['n_pairs']} "
+                f"| {comp['mcnemar_n_concordant_diff']} | {_fmt_stat_num(comp['mcnemar_chi2'])} "
+                f"| {_fmt_stat_num(comp['mcnemar_p'])} | {comp['mcnemar_sig']} |"
+            )
+
+        # R2：BH-FDR 多重比较校正落盘（多组同时检验时的假发现率控制）
+        report_lines += [
+            "",
+            "## 多重比较校正（BH-FDR）",
+            "",
+            "对上表各 McNemar p 值做 Benjamini-Hochberg FDR 校正（α=0.05）；",
+            "q 为校正后 p 值，拒绝 H0 表示校正后仍显著。",
+            "",
+            "| 比较 | 原始 p（McNemar） | BH-FDR q | 拒绝 H0 |",
+            "|------|-------------------|----------|---------|",
+        ]
+        for comp in comparisons:
+            reject_disp = "是" if comp.get("fdr_rejected") else "否"
+            report_lines.append(
+                f"| {comp['comparison']} | {_fmt_stat_num(comp['mcnemar_p'])} "
+                f"| {_fmt_stat_num(comp.get('fdr_adjusted_p', float('nan')))} | {reject_disp} |"
+            )
+
+        # R2：bootstrap 置信区间落盘（点估计的不确定度量化）
+        report_lines += [
+            "",
+            "## Bootstrap 95% 置信区间",
+            "",
+            "R2 协议：配对差值均值（AITester − 基线，逐任务 0/1 差）的有放回",
+            "重采样百分位法 95% CI（默认 10000 次，random.Random(seed=42) 固定，",
+            "结果逐位可复现）。CI 不含 0 即方向稳健。",
+            "",
+            "| 比较 | 配对数 | 差值均值 | 95% CI 下界 | 95% CI 上界 | 重采样次数 | seed |",
+            "|------|--------|---------|------------|------------|-----------|------|",
+        ]
+        for comp in comparisons:
+            report_lines.append(
+                f"| {comp['comparison']} | {comp['n_pairs']} "
+                f"| {_fmt_stat_num(comp['bootstrap_mean_diff'])} | {_fmt_stat_num(comp['bootstrap_ci_low'])} "
+                f"| {_fmt_stat_num(comp['bootstrap_ci_high'])} "
+                f"| {comp['bootstrap_n_resamples']} | {comp['bootstrap_seed']} |"
+            )
+
+        # R2：效应量对比落盘（Cohen's d 与 Cliff's δ 并列；δ 为非参数口径，
+        # 零方差差值下 d 退化为 ±inf 而 δ 仍有界）
+        report_lines += [
+            "",
+            "## 效应量对比（Cohen's d 与 Cliff's δ）",
+            "",
+            "R2 协议：Cliff's δ = (n⁺ − n⁻)/n_pairs（配对差值符号版，非参数）；",
+            "阈值 |δ|：0.147 / 0.33 / 0.474（Romano et al. 2006）。",
+            "",
+            "| 比较 | Cohen's d | 效应量 | Cliff's δ | 效应量 |",
+            "|------|-----------|--------|-----------|--------|",
+        ]
+        for comp in comparisons:
+            report_lines.append(
+                f"| {comp['comparison']} | {_fmt_stat_num(comp['cohens_d'])} | {comp['effect']} "
+                f"| {_fmt_stat_num(comp['cliffs_delta'])} | {comp['cliffs_effect']} |"
             )
 
         report_lines += [
@@ -585,10 +904,16 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
             "",
             "## 效应量解释",
             "",
-            "- `negligible`: |d| < 0.2",
-            "- `small`: 0.2 ≤ |d| < 0.5",
-            "- `medium`: 0.5 ≤ |d| < 0.8",
-            "- `large`: |d| ≥ 0.8",
+            "- Cohen's d（配对差值口径）：",
+            "  - `negligible`: |d| < 0.2",
+            "  - `small`: 0.2 ≤ |d| < 0.5",
+            "  - `medium`: 0.5 ≤ |d| < 0.8",
+            "  - `large`: |d| ≥ 0.8",
+            "- Cliff's δ（R2，非参数，Romano et al. 2006）：",
+            "  - `negligible`: |δ| < 0.147",
+            "  - `small`: 0.147 ≤ |δ| < 0.33",
+            "  - `medium`: 0.33 ≤ |δ| < 0.474",
+            "  - `large`: |δ| ≥ 0.474",
             "",
             "---",
             f"*报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
@@ -606,5 +931,38 @@ def run_all_statistics(results_dir: str, output_file: str | None = None) -> list
     return comparisons
 
 
+def main() -> None:
+    """R2：命令行入口（--batches 批次白名单；未提供时行为与历史完全一致）。
+
+    参数：
+        --results-dir: 实验结果目录（默认 experiments/results）
+        --output: Markdown 报告输出路径（默认 experiments/statistical_report.md）
+        --batches: 逗号分隔的批次文件白名单（相对 --results-dir 的路径，
+            如 main_batch/benchmark_a.json,main_batch/benchmark_b.json）。
+            显式指定后仅纳入这些文件（dataset 非 synthetic 的仍会被
+            _load_batch_file 过滤），报告头部"数据来源"章节记录实际
+            纳入清单（审计用）；未提供时保持递归 glob 全目录行为不变。
+    """
+    parser = argparse.ArgumentParser(description="统计显著性检验（R2 统计协议完整性）")
+    parser.add_argument("--results-dir", default="experiments/results", help="实验结果目录（默认 experiments/results）")
+    parser.add_argument(
+        "--output",
+        default="experiments/statistical_report.md",
+        help="Markdown 报告输出路径（默认 experiments/statistical_report.md）",
+    )
+    parser.add_argument(
+        "--batches",
+        default=None,
+        help="R2：逗号分隔的批次文件白名单（相对 --results-dir 的路径），"
+        "仅纳入指定文件；未提供时递归 glob 全目录（历史行为）",
+    )
+    args = parser.parse_args()
+
+    batch_files: list[str] | None = None
+    if args.batches:
+        batch_files = [p.strip() for p in args.batches.split(",") if p.strip()]
+    run_all_statistics(args.results_dir, args.output, batch_files=batch_files)
+
+
 if __name__ == "__main__":
-    run_all_statistics("experiments/results", "experiments/statistical_report.md")
+    main()

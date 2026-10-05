@@ -19,16 +19,18 @@ SpecIR 结构（JSON Schema 描述）：
     }
 
 可执行化（compile）：
-    - boundaries → pytest 参数化断言（`@pytest.mark.parametrize`）或
-      Hypothesis `given(sampled_from(...))` 策略；
-    - invariants → Hypothesis `@given` 随机输入 + assert 不变量；
-    - postconditions → Hypothesis `@given` + 后置条件断言。
-    hypothesis 不可用（import 失败）时降级为纯 pytest 参数化断言
-    （零依赖，stdlib 路径），保证编译产物恒可执行。
+    - boundaries → pytest 参数化断言（`@pytest.mark.parametrize`），
+      确定性 oracle、零非标准库依赖、产物恒可执行；
+    - pre/post/invariant 为自然语言，本层不生成测试（R1a 2026-10-05
+      修复：历史版本对 invariants 产出 `assert True` 占位断言——恒真
+      断言即假通过通道，已移除）；表达式形态子句由 v2 DSL
+      （spec_ir_v2.compile_spec_oracle）编译为可执行断言，
+      绑定上下文经 extract_signature_params（R1b）按函数签名扩展。
 """
 
 from __future__ import annotations
 
+import ast
 import logging
 import os
 from typing import Any
@@ -197,11 +199,15 @@ def compile_to_hypothesis(
     target_module: str = "",
     target_function: str = "",
 ) -> str:
-    """把 SpecIR 编译为可执行测试代码（oracle 转换）。
+    """把 SpecIR 的 boundaries 编译为可执行 pytest 参数化断言（oracle 转换）。
 
-    优先 Hypothesis 策略（boundaries → sampled_from / invariants → @given
-    随机输入）；hypothesis 不可用时降级为 pytest 参数化断言（纯 stdlib，
-    零依赖，保证编译产物恒可执行）。
+    R1a（2026-10-05 审查 P0 修复）后的口径：
+    - 仅 boundaries（确定性边界锚点）可机器化 → pytest 参数化断言
+      （无 hypothesis 依赖、恒可执行、可复算）；
+    - pre/post/invariant 为自然语言，本层**不**生成任何测试函数
+      （历史版本对 invariants 产出 `assert True` 占位——恒真断言即
+      oracle_validator 识别的假通过模式，已移除）；表达式形态子句的
+      可执行编译由 v2 DSL 层（spec_ir_v2.compile_spec_oracle）承担。
 
     Args:
         spec: parse_logic_analysis 的产物（None / 空 boundaries 时返回空串）。
@@ -209,7 +215,8 @@ def compile_to_hypothesis(
         target_function: 被测函数名（调用用）。
 
     Returns:
-        测试代码字符串；无 SpecIR / 无边界 / 无函数名时返回空串（保守）。
+        测试代码字符串；无 SpecIR / 无边界 / 无函数名 / 无模块名时
+        返回空串（保守——不产出无断言的空测试文件）。
     """
     if not spec:
         return ""
@@ -218,48 +225,103 @@ def compile_to_hypothesis(
     boundaries = [b for b in (spec.get("boundaries") or []) if b.get("expected") is not None]
     if not func or not module:
         return ""
-    if not boundaries and not (spec.get("invariants") or spec.get("postconditions")):
+    if not boundaries:
+        # NL pre/post/invariant 无法机器化（v2 DSL 层负责表达式子句），
+        # 无 boundaries 即无可执行断言材料 → 保守返回空串
         return ""
 
-    import_hypothesis = _hypothesis_available()
+    # R1a（2026-10-05 审查 P0 修复）：两处编译缺陷——
+    # ① 参数化列表此前用 `'; '.join(cases)` 拼接，≥2 条边界时产物为
+    #   `[(a, b); (c, d)]`（SyntaxError，Python 列表字面量不接受分号），
+    #   改为 `', '.join`；
+    # ② invariants（自然语言）此前编译为 `@given` + `assert True` 占位——
+    #   恒真断言正是 oracle_validator 识别的假通过模式（v1 自己产出假通过
+    #   通道）。修复口径：NL 不变量不可机器化 → 只产出注释，不生成任何
+    #   测试函数；可机器化的表达式子句由 v2 DSL（spec_ir_v2）负责编译。
+    #   因此本函数现只编译 boundaries 参数化断言；无 boundaries 时返回
+    #   空串（不产出"只有 import 无断言"的空测试文件）。
+    if not boundaries:
+        return ""
 
-    # 边界 → pytest 参数化断言（确定性 oracle，Hypothesis 可用与否同产物：
-    # sampled_from 策略对"有限已知边界集合"等价于参数化，且参数化产物
-    # 无 hypothesis 依赖、恒可执行、可复算——统一走参数化口径，Hypothesis
-    # 仅用于下方 invariants 的随机输入属性式断言）
     lines: list[str] = []
     lines.append(f"# SpecIR 编译产物（oracle_kind={spec.get('oracle_kind')}）")
     lines.append("import pytest")
     lines.append(f"from {module} import {func}")
     lines.append("")
-    if boundaries:
-        cases = [f"({b.get('input')!r}, {b.get('expected')!r})" for b in boundaries]
-        lines.append(f"@pytest.mark.parametrize('inp,exp', [{'; '.join(cases)}])")
-        lines.append("def test_specir_boundary(inp, exp):")
-        lines.append(f"    assert {func}(inp) == exp")
+    cases = [f"({b.get('input')!r}, {b.get('expected')!r})" for b in boundaries]
+    lines.append(f"@pytest.mark.parametrize('inp,exp', [{', '.join(cases)}])")
+    lines.append("def test_specir_boundary(inp, exp):")
+    lines.append(f"    assert {func}(inp) == exp")
 
-    # 不变量 → Hypothesis @given 随机输入属性式断言（仅 hypothesis 可用时）
-    if import_hypothesis and spec.get("invariants"):
+    # NL 不变量溯源注释（不生成测试函数——杜绝 v1 历史的 assert True 假通过）
+    if spec.get("invariants"):
         lines.append("")
-        lines.append("from hypothesis import given, strategies as st")
-        lines.append("")
-        lines.append("@given(x=st.integers())")
-        lines.append("def test_specir_invariant(x):")
-        # 不变量为自然语言描述：保守编译为占位断言（assert True + 注释），
-        # 不引入假通过；需人工/LLM 将自然语言补强为可执行断言。
-        lines.extend(f"    # invariant: {inv}" for inv in spec["invariants"])
-        lines.append("    assert True")
+        lines.extend(f"# invariant（未机器化，见 spec_ir_v2 DSL 层）: {inv}" for inv in spec["invariants"])
 
     return "\n".join(lines)
 
 
 def _hypothesis_available() -> bool:
+    """hypothesis 可用性探测（R1a 后编译产物不再依赖 hypothesis，仅保留探测）。
+
+    用途：实验层若需评估"hypothesis 可用环境占比"仍可调用；主编译路径
+    （compile_to_hypothesis）已与 hypothesis 解耦（纯 pytest 参数化口径）。
+    """
     try:
         import hypothesis  # noqa: F401  # type: ignore[import-not-found]
 
         return True
     except ImportError:
         return False
+
+
+def extract_signature_params(
+    source_code: str,
+    function_name: str,
+) -> list[str] | None:
+    """从源码提取目标函数的参数名列表（R1b，签名感知绑定的材料源）。
+
+    用途：spec_ir_v2.compile_spec_oracle 的绑定上下文（known_names）
+    此前硬编码 {r,x,a,b,y}，多参数 / 关键字参数 / 自定义参数名函数的
+    规约子句一律不可编译（审查 R6）；本函数从被测函数 AST 签名提取
+    真实参数名，供编译层按签名动态扩展绑定集合。
+
+    口径（保守）：
+    - 排除 *args / **kwargs（规约子句不应引用可变参数）与约定俗成的
+      self / cls（方法场景首个参数）；
+    - 搜索范围：顶层函数定义 + 顶层类的直接方法（嵌套函数不参与）；
+    - 返回 None 的三种情况（调用方降级回默认绑定集合 {r,x,a,b,y}，
+      行为不变）：function_name 缺失 / 源码解析失败 / 未找到目标函数；
+    - 返回 [] 表示"签名已知且无参数"（0 参函数——与"未找到"的 None
+      显式区分，编译层走 0 参保守分支）。
+    """
+    if not source_code or not function_name:
+        return None
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return None
+
+    def _params_of(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+        params: list[str] = []
+        args = node.args
+        positional = list(args.posonlyargs) + list(args.args)
+        for p in positional:
+            if p.arg in ("self", "cls") and not params:
+                continue  # 方法首参（self/cls）不是规约绑定变量
+            params.append(p.arg)
+        params.extend(p.arg for p in args.kwonlyargs)
+        # vararg/kwarg 不纳入：规约子句引用 *args/**kwargs 无法静态绑定
+        return params
+
+    for node in tree.body:  # 顶层函数 + 顶层类的直接方法（嵌套不参与）
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+            return _params_of(node)
+        if isinstance(node, ast.ClassDef):
+            for sub in node.body:
+                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)) and sub.name == function_name:
+                    return _params_of(sub)
+    return None
 
 
 def _as_str_list(value: Any) -> list[str]:
@@ -277,6 +339,7 @@ def _as_str_list(value: Any) -> list[str]:
 
 __all__ = [
     "compile_to_hypothesis",
+    "extract_signature_params",
     "parse_logic_analysis",
     "spec_ir_enabled",
     "validate_spec_ir",

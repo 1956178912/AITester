@@ -7,11 +7,14 @@ on:
     branches: [main, master]
   # 定期依赖豁免复查（P2-4，2026-10-01 全面审查批次）：
   # chromadb 豁免清单（--ignore-vuln PYSEC-*）需定期对照上游
-  # "是否已发布修复版" 复查，避免"豁免遗忘"。security 作业仅在此
-  # 触发器（schedule）或手动 workflow_dispatch(run_security_audit=true)
-  # 时运行网络 pip-audit 扫描；push/PR 不跑网络审计。
-  # 豁免登记门禁 check_dependency_exemptions.py 仍在 test 作业每次 PR
-  # 跑（无网络、快检），保证"未登记豁免阻断合并"语义不变。
+  # "是否已发布修复版" 复查，避免"豁免遗忘"。
+  # R10（2026-10-05 审查批次）：security 作业从"仅周日 schedule / 手动
+  # 触发"升级为 push/PR 即跑且阻断（pip-audit + bandit + gitleaks +
+  # 豁免登记守卫全部硬门禁，2026-10-05 本地实测当前仓库全绿）；本
+  # schedule 仅保留"周日全量扫描"语义（附加 gitleaks 全历史扫描与
+  # 审计 JSON 工件归档）。豁免登记门禁 check_dependency_exemptions.py
+  # 仍在 security 作业每次 push/PR 跑（无网络、快检），
+  # "未登记豁免阻断合并"语义不变。
   schedule:
     - cron: "0 6 * * 0"  # 每周日 06:00 UTC
   workflow_dispatch:
@@ -36,9 +39,14 @@ jobs:
     name: Smoke LLM (optional)
     runs-on: ubuntu-latest
     env:
-      # P2 #9：默认关闭（历史口径零 LLM 成本）；需要真实 LLM 集成冒烟时设为 true。
+      # P2 #9：push/PR 默认关闭（历史口径零 LLM 成本）；需要真实 LLM 集成冒烟时设为 true。
       # 冒烟作业读取 LLM_1_API_KEY / LLM_1_BASE_URL / LLM_1_MODEL_NAME（.env 或 Secrets）。
-      AITESTER_SMOKE_LLM: 'false'
+      # R10-c（2026-10-05 审查批次）：周日 schedule 自动开启真实冒烟——
+      # 仅当三个 LLM_1_* Secrets 均已配置时置 true（缺任一自动回退 false
+      # 跳过并打印说明，防 Secrets 未配置的仓库定时任务恒红）；
+      # step 内 `"$AITESTER_SMOKE_LLM" = true` 的条件逻辑保持不变，
+      # push/PR 路径仍恒 false（零 LLM 成本口径不受影响）。
+      AITESTER_SMOKE_LLM: ${{ github.event_name == 'schedule' && secrets.LLM_1_API_KEY != '' && secrets.LLM_1_BASE_URL != '' && secrets.LLM_1_MODEL_NAME != '' && 'true' || 'false' }}
       AITESTER_LLM_CACHE: '0'
       AITESTER_LLM_CACHE_TTL_DAYS: '0'
     steps:
@@ -64,6 +72,15 @@ jobs:
 
       - name: LLM 集成冒烟（默认关闭；AITESTER_SMOKE_LLM=true 时跑最小连通性 + JSON 输出校验）
         working-directory: ${{ github.workspace }}/experiments
+        env:
+          # R10-c：schedule 触发的真实冒烟需把 Secrets 注入环境变量——
+          # config._load_llm_configs 只读 LLM_N_* env（CI 无 .env.local，
+          # 不注入则 BaseAgent 拿不到任何 LLM 配置）。上方开关守卫已保证
+          # 三者任一缺失时 AITESTER_SMOKE_LLM=false，此处的空串注入仅是
+          # 跳过路径下的无害占位。
+          LLM_1_API_KEY: ${{ secrets.LLM_1_API_KEY }}
+          LLM_1_BASE_URL: ${{ secrets.LLM_1_BASE_URL }}
+          LLM_1_MODEL_NAME: ${{ secrets.LLM_1_MODEL_NAME }}
         run: |
           if [ "$AITESTER_SMOKE_LLM" = "true" ]; then
             python run_smoke_llm.py
@@ -116,7 +133,24 @@ jobs:
           # 的 mypy 块在缺模块时退出码被 main() 恒 0 吞掉，BASELINE.yaml
           # `static_checks.mypy_errors: 0` 从未被 CI 实际验证（此前审查 P0 未闭环）。
           # 现与 ruff 同口径：固定版本安装 + 独立硬门禁步骤。
-          pip install "mypy==1.7.1"
+          # B-05（2026-10-04 系统审查 P1）：mypy 版本与 pre-commit hook
+          # （mirrors-mypy v1.15.0，O28 已升级）对齐——此前 CI 锁 1.7.1
+          # （2023 年版本，Python 3.12+ 类型支持不完整），本地 hook 绿 ≠
+          # CI 绿的双版本漂移。现统一 1.15.0。
+          pip install "mypy==1.15.0"
+
+      - name: Install system tools (P0-4 内核沙箱显式启用路径预装 bwrap)
+        # P0-4（2026-10-04 优化批次·续四）：内核沙箱（KERNEL_SANDBOX_ENABLE=true）
+        # 在 Linux CI 容器走 Landlock+bwrap（bubblewrap）后端。CI 默认 ubuntu-latest
+        # 不预装 bwrap → 显式启用 KERNEL_SANDBOX_ENABLE 时 fail-closed 拒绝执行
+        # （测试 test_p0_4 锁定该口径）。本步骤预装 bwrap，使"显式启用路径"
+        # 在 CI 可实际跑通（默认关 KERNEL_SANDBOX_ENABLE=false 时本步骤仅安装
+        # 工具不改变任何默认行为，零行为变化）。安装失败不阻断（非关键路径，
+        # bwrap 缺失时 KERNEL_SANDBOX_ENABLE=false 默认路径不受影响）。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap || \
+            echo "::warning title=bubblewrap 安装失败::P0-4 内核沙箱显式启用路径不可用（默认关不受影响）"
 
       - name: Type check with mypy (O34 硬门禁)
         # 与 BASELINE.yaml static_checks 同口径：mypy src/ config.py 零错误。
@@ -139,17 +173,21 @@ jobs:
         # CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md / pre-commit.sh 声称
         # "双语文档由 CI check_bilingual_docs 守卫"，此前 CI 全文无调用步骤
         #（文档承诺与 CI 实现漂移，2026-10-01 全面审查 P1 修复）。
-        # 2026-10-02：登记 docs/Python工程化前沿基线（2024–2026）.md 豁免后
-        # failures 清零；当前仅余 5 条存量"英文版缺更新日期行" warning
-        #（与中文版同样缺日期行——该告警以英文侧为准，补齐两侧日期行后
-        # --strict 可过，届时去掉下方 || 兜底升级为硬门禁）。
+        # R10-b（2026-10-05 审查批次）：软门禁显式化——去掉 `|| exit 0`
+        # 兜底（其会把真实失败也吞成绿，步骤红/绿不可见），改
+        # continue-on-error: true。
+        # R10-b 转硬（2026-10-05 文档批次）：此前阻断转硬的 7 项已全部补齐——
+        #   ① CHANGELOG.en.md 补齐 6 个缺失章节（2026-10-04 续/续二/续三/续四/
+        #      首次批次 + 2026-09-29 G8 批次，41=41 章节对齐）；
+        #   ② 6 个英文文档补 "Last updated:" 行（algorithm_design /
+        #      dependency_exemptions / failure_analysis /
+        #      roadmap_2026-09-27_gap_audit / threat_model / CHANGELOG）。
+        # 实测证据（2026-10-05 本地）：check_bilingual_docs --strict
+        #   "双语文档同步检查通过（0 警告 / 0 失败）"。据此去掉
+        # continue-on-error 转为阻断门禁。
         # 注意：YAML 块标量（|）——此前写成 plain scalar 时续行的 "}" 触发
         # flow-mapping 解析错误（整个 ci.yml 无法被 YAML 解析器加载）。
-        run: |
-          python scripts/check_bilingual_docs.py --strict || {
-            echo "::notice::check_bilingual_docs --strict 存在存量 warning（缺更新日期行），本步骤暂不阻断"
-            exit 0
-          }
+        run: python scripts/check_bilingual_docs.py --strict
 
       - name: Generate static-check snapshot (5a. 归档 docs/history/)
         # 批次落地后把 ruff / mypy 实测输出归档为带时间戳的 Markdown 快照，
@@ -226,27 +264,37 @@ jobs:
           fail_ci_if_error: false
 
       - name: Branch coverage gate (8. 核心路由模块门槛)
-        if: matrix.python-version == '3.14'
+        # R10-d（2026-10-05 审查批次）：从"仅 3.14 单档"扩到全部三个矩阵档
+        #（3.12/3.13/3.14）。成本评估：上面 "Run tests with coverage" 步骤在
+        # 各档本就无条件带 --cov-branch --cov-report=xml（coverage.xml 已在
+        # 每档生成），本脚本只是解析既有产物的快检（毫秒级）——扩档零额外
+        # 测试成本，仅多两次脚本运行；收益是防止"某版本分支覆盖静默劣化"
+        # 只在 3.14 被拦截。2026-10-05 本地实测（3.14 全量 3950 用例，
+        # 总分支覆盖 88% ≥ 77% 门槛）：脚本退出码 0。
         # 解析 coverage.xml：总分支覆盖 ≥85%（2026-09-29 批次上调）
         # + 核心修复路由模块（graph/workflow.py、agents/error_classifier.py）
         # 逐模块 ≥90%（严格门槛）+ 其余核心路由模块 ≥85%
         run: python scripts/check_branch_coverage.py coverage.xml
 
+  # R10（2026-10-05 审查批次）：security 作业升级为 push/PR 即跑且阻断的
+  # 安全门禁（此前仅周日 schedule / 手动触发、部分检查 info-only）：
+  #   - bandit 静态安全扫描（自 supply-chain 作业迁入，转阻断）
+  #   - gitleaks 工作树凭证扫描（自 supply-chain 作业迁入，转阻断；
+  #     全历史扫描保持非阻断周检——历史存量泄漏待凭证轮换，见对应步骤注释）
+  #   - pip-audit 依赖漏洞扫描（转阻断：新 advisory 未登记豁免即红）
+  #   - 豁免登记守卫 / 文档漂移告警口径不变
+  # 转阻断前均已在本地实测当前仓库通过（2026-10-05，见各步骤注释）。
   security:
+    name: Security (blocking)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # P2-4（2026-10-01 全面审查）：security 作业仅在 schedule（每周定期）或
-    # 手动 workflow_dispatch(run_security_audit=true) 时运行网络 pip-audit
-    # 扫描；push/PR 不跑网络审计（历史口径中该作业并入 push/PR 全量，现改
-    # 为定期 + 手动触发，避免每次 PR 重复网络扫描拖慢合并门禁）。
-    # 豁免登记门禁 check_dependency_exemptions.py 仍在 test 作业每次 PR 跑
-    # （无网络、快检），保证"未登记豁免阻断合并"语义不变。
-    if: |
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && inputs.run_security_audit == 'true')
+    timeout-minutes: 15
     steps:
       # O10：SHA 固定
       - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+        with:
+          # 周日全量档的 gitleaks 全历史扫描需要完整 git 历史
+          #（push/PR 路径的工作树扫描用不到，多拉历史代价可接受）
+          fetch-depth: 0
 
       - name: Set up Python
         # O10：SHA 固定
@@ -256,11 +304,52 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Install pip-audit
+      - name: Install security toolchain
         # 固定版本：与项目"锁版本防漂移"原则一致，避免上游发版改变扫描行为
-        run: pip install "pip-audit==2.10.1"
+        #（bandit 自 supply-chain 作业迁入；O34：bandit 1.9.4 修复 ≥3.12 上
+        #  ast.Constant.s 移除导致的逐文件扫描失效问题，详见 pyproject
+        #  [tool.bandit] 注释）
+        run: pip install "pip-audit==2.10.1" "bandit[toml]==1.9.4"
 
-      - name: Check dependencies for vulnerabilities
+      - name: Bandit security scan (R10 转阻断)
+        # 静态安全扫描（仅 src/ 下 Python 代码）。
+        # 配置来自 pyproject [tool.bandit]（skip 列表逐项附理由：md5 指纹 /
+        # subprocess list 调用 / assert 窄化 / HF revision 钉版本 TODO 等），
+        # 新类型 findings（B100 exec / B601 shell / B302 pickle 等）仍会命中。
+        # R10：去掉 `|| warning` 兜底转硬门禁——2026-10-05 本地实测
+        #（bandit 1.9.4 + 同 pyproject 配置）退出码 0、零 findings。
+        run: bandit -r src/ -c pyproject.toml -q
+
+      - name: Install gitleaks (R10 转阻断，SHA256 校验)
+        # 下载固定版本官方二进制（v8.28.0, linux_x64）；与本地实测同版本。
+        # R10：下载/校验失败直接 fail（fail-closed）——旧版此处降级跳过，
+        # 转阻断后"扫描器缺失静默放行"等于门禁失效。ubuntu-latest runner
+        # 从 github.com releases 下载可靠性高，失败属基础设施异常应当显红。
+        run: |
+          GITLEAKS_VERSION="8.28.0"
+          if command -v gitleaks >/dev/null 2>&1 && gitleaks version 2>/dev/null | grep -q "$GITLEAKS_VERSION"; then
+            echo "gitleaks $GITLEAKS_VERSION 已可用，跳过下载"
+            exit 0
+          fi
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Gitleaks working-tree scan (R10 转阻断)
+        # 工作树（干净 checkout，即推送代码在 HEAD 的状态）凭证扫描。
+        # 自动加载仓库根 .gitleaks.toml（R10 配套：仅豁免 tests/ 脱敏测试
+        # 夹具的固定假密钥字面量，见该文件内逐条理由）。
+        # --redact：日志/报告不回显命中密钥明文。
+        # R10：去掉 `|| warning` 兜底转硬门禁——2026-10-05 本地以同版本
+        # 8.28.0 二进制 + 同配置对 HEAD 干净导出实测：9 条 tests/ 夹具命中
+        # 经 .gitleaks.toml 豁免后 0 findings、退出码 0。
+        run: |
+          gitleaks detect --no-git --redact \
+            --report-format json --report-path gitleaks_report.json
+
+      - name: Check dependencies for vulnerabilities (R10 转阻断)
         # 说明：safety 工具已于 2024-06 起弃用 `check` 子命令（CI 上退出码 64），
         # 改用 PyPA 维护的 pip-audit。
         # 当前 chromadb==1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），
@@ -271,36 +360,52 @@ jobs:
         # 豁免治理：所有 --ignore-vuln 必须在 docs/dependency_exemptions.md 登记表
         # 留痕（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限），
         # 与 CONTRIBUTING.md "依赖豁免登记" 口径一致。
+        # R10：去掉 `|| warning` 降级兜底转硬门禁（新 advisory 未登记豁免
+        # 即阻断合并）；失败时仍把 JSON 报告打到日志 + 工件供定位。
+        # 2026-10-05 本地实测（pip-audit 2.10.1 同版本 + 同豁免清单）：
+        # "No known vulnerabilities found, 5 ignored"，退出码 0。
         run: |
-          # P2-4（2026-10-01 全面审查）：JSON 报告写入 workspace 内文件（GH
-          # Actions artifact 上传仅接受 workspace 相对路径，/tmp 不可用）；
-          # 保留 7 天供人工对照登记表"复审触发条件"判断 chromadb 上游是否
-          # 已发布修复版 → 触发"移除 --ignore-vuln + 更新登记表"动作。
-          # 历史口径：chromadb==1.5.9 命中 5 条 PYSEC（311 重复两条 +
-          # 3813/3814/3815），PyPI 暂无修复版；一旦上游发布含修复的新版本，
-          # 本次审计的 JSON 会反映新 advisory 列表，维护者据此关闭豁免。
           pip-audit -r requirements.txt --no-deps \
             --ignore-vuln PYSEC-2026-311 \
             --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 \
             --ignore-vuln PYSEC-2026-3815 \
-            -f json > pip_audit_latest.json || {
-              echo "::warning::pip-audit 退出码非 0（可能出现新漏洞或网络错误），已生成 JSON 供人工复查"
-            }
-          echo "=== pip-audit JSON 报告（最近一次定期审计） ==="
-          cat pip_audit_latest.json 2>/dev/null || echo "(无 JSON 输出)"
+            -f json -o pip_audit_latest.json || {
+            code=$?
+            echo "::error title=pip-audit 退出码非 0（R10 阻断）::出现未豁免的新漏洞或网络错误；JSON 报告见下方输出与工件，新 advisory 请评估升级，暂无法修复时按 docs/dependency_exemptions.md 流程登记豁免"
+            cat pip_audit_latest.json 2>/dev/null || echo "(无 JSON 输出——网络错误时可能未生成)"
+            exit "$code"
+          }
+          echo "=== pip-audit 通过（最近一次审计 JSON 报告） ==="
+          cat pip_audit_latest.json
 
-      - name: Upload pip-audit report (P2-4 定期复查工件)
-        # 仅 schedule / workflow_dispatch(run_security_audit=true) 触发时存在；
-        # 7 天保留期供维护者对照 docs/dependency_exemptions.md 复审期限。
+      - name: Upload security scan reports (审计工件)
+        # pip-audit / gitleaks 报告：失败排查 + 维护者对照登记表"复审触发
+        # 条件"判断 chromadb 上游是否已发布修复版（7 天保留期）。
         if: always()
         # O10：SHA 固定——actions/upload-artifact@v4 →
-        # 84488ed32758509799cae3ed5e43ef903669d08b（v4.2.0, 2024-02）
+        # 84488ed32758509799cae3ed5e43ef903669d08b（v4.2.0，2024-02）
         uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
         with:
-          name: pip-audit-report-${{ github.run_number }}
-          path: pip_audit_latest.json
+          name: security-reports-${{ github.run_number }}
+          path: |
+            pip_audit_latest.json
+            gitleaks_report.json
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Gitleaks full history scan (R10：非阻断周检)
+        # 全历史凭证扫描——保持非阻断（info-only），原因：2026-10-05 本地
+        # 实测存在存量历史泄漏（API_MANAGER_EXTENSION_GUIDE.md 已从工作树
+        # 删除，但 commit 2e5272a / c505f506 历史中残留一把疑似真实
+        # api.agnes-ai.cn 密钥 + 2 条旧版测试夹具误报），转阻断会使 CI
+        # 恒红直至"凭证轮换 + git filter-repo 重写历史"完成（需仓库所有者
+        # 操作）。工作树阻断扫描（上一步）已覆盖"新推送代码不含凭证"；
+        # 本步骤仅周日全量档运行做轮换提醒。
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_security_audit == 'true')
+        run: |
+          gitleaks detect --redact || \
+            echo "::warning title=Gitleaks 历史扫描仍有命中::已知存量见步骤注释（历史残留密钥待轮换 + filter-repo 清理；清理完成后本步骤可转阻断）"
 
       - name: Check dependency exemption registry
         # 依赖豁免治理门禁：ci.yml 的 --ignore-vuln 列表必须在
@@ -312,21 +417,22 @@ jobs:
         # 文档一致性治理（P2）：docs/history/ 下的历史快照文档若声明的
         # 基线数字与 BASELINE.yaml 偏离超过阈值（默认 10%），输出 warning
         # 提示"该文档可能已被当前基线覆盖，考虑归档"。非阻断门禁
-        # （warning-only），保持历史叙事文档不受当前基线刷新影响。
+        #（warning-only），保持历史叙事文档不受当前基线刷新影响。
         # 检测范围：docs/history/*.md 中匹配 "N passed" / "N tests" 的声明，
         # 与 BASELINE.yaml 的 tests.total_passed 对比。
         run: python scripts/check_docs_history_drift.py --warn-only
 
-  # N10（2026-09-29 审查 P2）：供应链安全工具链——bandit / CycloneDX SBOM /
-  # gitleaks 全历史扫描。非阻断门禁（info 日志记录，不 exit 1），
-  # 待漏洞基线稳定后升级为硬门禁。
+  # N10（2026-09-29 审查 P2）→ R10（2026-10-05 审查批次）：供应链安全
+  # 工具链收敛为"SBOM 生成 + 归档"单一职责（保持非阻断 info-only）——
+  # bandit / gitleaks 已迁入 security 作业并转阻断（安全门禁归口一处），
+  # 本作业不再做判定类扫描。
   supply-chain:
+    name: Supply chain (SBOM, info-only)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # R10：无需完整 git 历史（gitleaks 已迁出），默认浅检出即可
       - uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
-        with:
-          fetch-depth: 0  # gitleaks 全历史扫描需完整 git 历史
 
       - name: Set up Python
         uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
@@ -335,24 +441,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Install bandit + cyclonedx-bom
-        run: |
-          # O34（2026-09-30 全面审查优化 P1）：bandit 1.8.2 → 1.9.4。
-          # 1.8.2 在 Python ≥3.12 上因 ast.Constant.s（3.12 起移除）逐文件抛
-          # AttributeError → 每个文件 "skipped (exception while scanning)"、
-          # 结果恒空却退出码 0——扫描长期形同虚设。1.9.4 改用 node.value，
-          # 且 Requires-Python ≥3.10（CI 3.12 作业可装）。实测 1.9.4 对本仓
-          # src/ 产出 79 条 findings，经 pyproject [tool.bandit] skip 口径收敛后归零。
-          pip install "bandit[toml]==1.9.4" "cyclonedx-bom==4.5.0"
-
-      - name: Bandit security scan (N10)
-        # 静态安全扫描（仅 src/ 下 Python 代码，非阻断）。
-        # 配置来自 pyproject [tool.bandit]（skip 列表逐项附理由：md5 指纹 /
-        # subprocess list 调用 / assert 窄化 / HF revision 钉版本 TODO 等），
-        # 新类型 findings（B100 exec / B601 shell / B302 pickle 等）仍会命中。
-        run: |
-          bandit -r src/ -c pyproject.toml -q || \
-            echo "::warning title=Bandit 检测到安全问题::详见上方输出（N10 info-only，待基线稳定后升级为硬门禁）"
+      - name: Install cyclonedx-bom
+        # 锁版本防漂移（与 security 作业 / release.yml 同版本口径）
+        run: pip install "cyclonedx-bom==4.5.0"
 
       - name: Generate CycloneDX SBOM (N10)
         # 生成 CycloneDX 格式 SBOM（Software Bill of Materials），
@@ -368,24 +459,3 @@ jobs:
           name: sbom-cyclonedx-${{ github.run_number }}
           path: sbom.cyclonedx.json
           retention-days: 90
-
-      - name: Gitleaks full history scan (N10)
-        # 全历史凭证扫描（非阻断：info 日志记录命中项，待凭证轮换后升级为硬门禁）。
-        # O34（2026-09-30 全面审查优化 P1）：旧安装分支 `pip install gitleaks`
-        # 恒失败（gitleaks 是 Go 二进制，PyPI 无此包）→ 每次 CI 静默跳过扫描。
-        # 改为下载固定版本官方二进制（v8.28.0, linux_x64, SHA256 校验）；
-        # 下载失败仍降级跳过（保持 N10 非阻断口径，不因网络抖动红 CI）。
-        run: |
-          GITLEAKS_VERSION="8.28.0"
-          if ! command -v gitleaks >/dev/null 2>&1; then
-            curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz && \
-            tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks && \
-            sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks || \
-              echo "::warning title=Gitleaks 下载失败::跳过全历史扫描（N10 非阻断）"
-          fi
-          if command -v gitleaks >/dev/null 2>&1 && gitleaks version 2>/dev/null | grep -q "8.28.0"; then
-            gitleaks detect --no-git --verbose 2>&1 | tail -20 || \
-              echo "::warning title=Gitleaks 检测到疑似凭证::请 rotate + git filter-branch 清理历史（N10 info-only）"
-          else
-            echo "gitleaks 不可用或版本不符，跳过全历史扫描（N10，非阻断）"
-          fi
