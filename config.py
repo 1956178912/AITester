@@ -34,6 +34,10 @@ load_dotenv()
 #   scientific —— 科研评测档：R1c/R5 审查落地的评测链路全开
 #                 （SPEC_IR / SPEC_IR_DSL / SPEC_ORACLE_EXEC / MUTATION_SCORING /
 #                  ORACLE_VALIDATE），配合 run_benchmark(deterministic=True)；
+#   logic      —— 逻辑链全开档（2026-10-05 系统审查 O1）：scientific 超集，
+#                 另开规约强校验 / 确定性守卫 / 分支覆盖注入 / 结构化路由——
+#                 使"逻辑驱动"主张的完整链路（规约解析→DSL 编译→确定性
+#                 oracle→守卫→覆盖测量→结构化路由）一键可测可观测；
 #   fast       —— 历史默认档（全部维持默认关，与不设 PROFILE 等价）。
 _PROFILE_PRESETS: dict[str, dict[str, str]] = {
     "safe": {
@@ -45,12 +49,37 @@ _PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "FLAKY_CHECK_ENABLE": "true",
     },
     "scientific": {
+        # U12（2026-10-05 系统性审查落地）：补 SPEC_SMT_ENABLE——SMT 见证层
+        # （T2 批次新增）属规约确定性 oracle 链路的一部分，scientific 档
+        # 应一键覆盖（z3 未安装时保守降级，无行为风险）。
         "SPEC_IR_ENABLE": "true",
         "SPEC_IR_DSL_ENABLE": "true",
+        "SPEC_SMT_ENABLE": "true",
         "SPEC_ORACLE_EXEC_ENABLE": "true",
         "ENABLE_MUTATION_SCORING": "true",
         "ORACLE_VALIDATE_ENABLE": "true",
         "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+    },
+    "logic": {
+        # scientific 全量（评测链路）
+        "SPEC_IR_ENABLE": "true",
+        "SPEC_IR_DSL_ENABLE": "true",
+        # U12：SMT 见证层（与前件约束求解见证，逻辑链路组成部分）
+        "SPEC_SMT_ENABLE": "true",
+        "SPEC_ORACLE_EXEC_ENABLE": "true",
+        "ENABLE_MUTATION_SCORING": "true",
+        "ORACLE_VALIDATE_ENABLE": "true",
+        "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+        # U12：回滚 fail-closed——逻辑档主批次口径"回归无法裁决 = 回滚"
+        # （R4b 开关；bad-test 误杀由 M1 None 口径在下游兜底）
+        "PATCH_ROLLBACK_FAIL_CLOSED": "true",
+        # 逻辑链强化（O1）：规约 schema 强校验（拒绝空规约静默兜底）+
+        # 确定性守卫 + AST 边界锚点注入 + 分支覆盖测量 + 结构化路由
+        # （替代中文诊断关键词路由，ROUTE_STRUCTURED 默认关的历史口径在此档打开）
+        "LOGIC_SPEC_STRICT_ENABLE": "true",
+        "DETERMINISTIC_GUARD_ENABLE": "true",
+        "BRANCH_COVERAGE_INJECT_ENABLE": "true",
+        "ROUTE_STRUCTURED_ENABLE": "true",
     },
     "fast": {},
 }
@@ -67,7 +96,9 @@ def _apply_profile_presets() -> str | None:
         return None
     presets = _PROFILE_PRESETS.get(profile)
     if presets is None:
-        logging.getLogger(__name__).warning("AITESTER_PROFILE=%r 未识别（可选：safe/scientific/fast），忽略", profile)
+        logging.getLogger(__name__).warning(
+            "AITESTER_PROFILE=%r 未识别（可选：safe/scientific/logic/fast），忽略", profile
+        )
         return None
     for key, value in presets.items():
         os.environ.setdefault(key, value)
@@ -324,8 +355,10 @@ ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
 # 与 ENABLE_RAG 同口径：消融实验开关，不影响核心修复管线，仅影响评估产出。
 ENABLE_MUTATION_SCORING: bool = os.getenv("ENABLE_MUTATION_SCORING", "false").lower() == "true"
 # 每任务最多评估的变异体数量（来源：mutation_testing.MutationGenerator._MAX_MUTANTS_PER_TASK
-# 的上限口径，默认 10 控制单任务变异评估耗时；设为 0/负数时回退 10）
-MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 10, 1, None)
+# 的上限口径；T3（2026-10-05 优化批次）默认 10→20——审查 G10：10 个变异体下
+# mutation_detection_rate 的二值噪声区间过宽（±30pct），20 个起才有区分度；
+# 变异评估为 opt-in（ENABLE_MUTATION_SCORING 默认关），调默认不影响历史批次）
+MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 20, 1, None)
 
 # ─── 4.4 API 观测层开关（0.6 轮次幽灵开关实装）──────────────────────────────
 # 0.6 轮次性能/文档审计发现：.env.example / QUICKSTART / api_reference /

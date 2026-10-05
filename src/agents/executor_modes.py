@@ -383,10 +383,23 @@ def execute_docker(
         # P1 内核沙箱升级：Docker 网络出口管控（默认关，保持历史口径）。
         # DOCKER_NETWORK_ISOLATION=true 时加 --network=none（完全断网）；
         # DOCKER_NETWORK_ISOLATION=allowlist 时读 DOCKER_NETWORK_ALLOWLIST
-        # （逗号分隔的 host:port 白名单，经 --network=bridge + 端口映射实现，
-        #  保守口径：仅允许白名单内出站，其余全部拒绝）。
+        # （逗号分隔的 host:port 白名单）——
+        # U6（2026-10-05 系统性审查落地）命名诚实化：allowlist 档实际加的是
+        # --network=bridge（默认桥接），Docker 无 per-container 出站白名单
+        # 原语，**真正的出口控制依赖宿主防火墙/iptables 或 egress proxy**。
+        # 此前注释声称"仅允许白名单内出站，其余全部拒绝"与实际行为不符
+        # （bridge 下容器出站不受限）——虚假安全感比无防护更危险（审查结论）。
+        # 现修正口径：①注释如实声明"allowlist 档 = bridge + 白名单元数据
+        # 记录，出口控制须由宿主侧配置"；②运行期一次性 WARNING 提醒部署者
+        # 该档位不提供容器级出站限制（观测层，不改变命令构造）。
         # 默认 false：不改变 Docker 命令（历史实验口径逐字节不变）。
         network_isolation = os.getenv("DOCKER_NETWORK_ISOLATION", "false").strip().lower()
+        if network_isolation == "allowlist" and os.getenv("DOCKER_NETWORK_ALLOWLIST", "").strip():
+            logger.warning(
+                "U6 诚实化提醒：DOCKER_NETWORK_ISOLATION=allowlist 仅记录白名单元数据"
+                "并使用 --network=bridge，Docker 不提供容器级出站白名单——出口控制"
+                "必须由宿主防火墙/egress proxy 实施；需容器级断网请用 =true（--network=none）"
+            )
         if network_isolation == "true":
             cmd.append("--network=none")
         elif network_isolation == "allowlist":
@@ -441,6 +454,10 @@ def execute_docker(
         docker_network_obs: dict[str, Any] = {"isolation_mode": network_isolation_cfg}
         if network_isolation_cfg == "allowlist":
             docker_network_obs["allowlist"] = os.getenv("DOCKER_NETWORK_ALLOWLIST", "").split(",") or []
+            # U6（2026-10-05 系统性审查落地）：观测层如实标注 allowlist 档的
+            # 实际隔离能力（bridge 无容器级出站限制），供报告/治理协议消费
+            docker_network_obs["egress_enforced"] = False
+            docker_network_obs["egress_note"] = "bridge 网络，无容器级出站白名单；出口控制依赖宿主防火墙/egress proxy"
 
         try:
             # 容器启动开销（镜像拉取/文件系统初始化）远大于本地子进程，
