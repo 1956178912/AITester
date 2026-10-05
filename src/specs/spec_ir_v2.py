@@ -392,6 +392,75 @@ def compile_spec_oracle(
     # 产物必须有可执行断言（无 assert 行 = 假通过空测试 → 保守丢弃）
     if not any(line.strip().startswith("assert") for line in lines):
         return ""
+    # G4（2026-10-05 优化批次·T2）：SPEC_SMT_ENABLE=true 且 z3 可用时，
+    # 追加 SMT 见证测试（前件驱动的求解器输入，与主 oracle 并列执行）。
+    # 开关关 / z3 缺失 / 无可翻译前件 → witness 段为空，产物与历史逐字节一致。
+    witness_code = _compile_smt_witness_tests(spec, signature_params, pre_lines, post_lines, target_function)
+    if witness_code:
+        code = f"{code}\n\n{witness_code}"
+    return code
+
+
+def _compile_smt_witness_tests(
+    spec: dict[str, Any] | None,
+    signature_params: list[str] | None,
+    pre_lines: list[str],
+    post_lines: list[str],
+    target_function: str,
+) -> str:
+    """把 SpecSMT 见证编译为并列的 pytest 见证测试（保守失败 → 空串）。
+
+    每个见证产出一个 ``test_specir_v2_smt_witness_<i>``：绑定见证输入 →
+    断言前件（求解器已保证 Python 语义成立，见 spec_smt._extract 复核）→
+    调用被测函数 → 断言后件（与主 oracle 同一 post_lines，见证提供了
+    字面量 0 / boundaries 之外的第三类输入来源：约束求解边界）。
+
+    保守条件（任一不满足返回空串，主 oracle 不受影响）：
+    - SPEC_SMT_ENABLE 关闭 / z3 未安装 / 无见证；
+    - signature_params 未知或为空（无法把输入名映射到调用实参）；
+    - 无任何可执行后件断言（见证测试无后件 = 只验前件的弱测试，不产出）；
+    - 产物 ast.parse 自检失败。
+    """
+    from src.specs.spec_smt import generate_spec_witnesses, spec_smt_enabled
+
+    if not spec_smt_enabled() or not signature_params:
+        return ""
+    if not any(line.strip().startswith("assert") for line in post_lines):
+        return ""
+    witnesses = generate_spec_witnesses(spec, signature_params)
+    if not witnesses:
+        return ""
+    blocks: list[str] = []
+    for idx, witness in enumerate(witnesses):
+        inputs = witness.get("inputs") or {}
+        header = (
+            f"# SMT witness #{idx}（kind={witness.get('kind')}, "
+            f"objective={witness.get('objective')}，前件求解产物，非 LLM 举例）"
+        )
+        test_lines = [header]
+        test_lines.append(f"def test_specir_v2_smt_witness_{idx}():")
+        bound = 0
+        for param in signature_params:
+            if param in inputs:
+                test_lines.append(f"    {param} = {inputs[param]!r}")
+                bound += 1
+        if bound == 0:
+            continue  # 见证输入与签名无交集（理论不可达，保守跳过）
+        call_args = ", ".join(p for p in signature_params if p in inputs)
+        test_lines.extend(pre_lines)
+        test_lines.append(f"    r = {target_function}({call_args})")
+        test_lines.extend(post_lines)
+        if not any(line.strip().startswith("assert") for line in test_lines):
+            continue
+        blocks.append("\n".join(test_lines))
+    if not blocks:
+        return ""
+    code = "\n\n".join(blocks)
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        logger.warning("SpecIR v2 SMT 见证产物自检失败，保守丢弃（防坏代码注入执行链路）")
+        return ""
     return code
 
 

@@ -59,6 +59,13 @@ setup(
         # CLI 富文本与进度条
         "ux": ["rich>=13.0.0", "tqdm>=4.65.0"],
         "dev": ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"],
+        # O6（2026-10-05 系统审查 P2）：补 db 组——pyproject [db] 有而此处缺，
+        # 非 PEP 517 回退路径 pip install ".[db]" 装不到 MySQL 驱动
+        # （tests/test_packaging.py 此前只守卫 install_requires，不守卫 extras）
+        "db": ["pymysql>=1.0.0", "DBUtils>=3.0.0"],
+        # G4（2026-10-05 优化批次·T2）：与 pyproject [formal] 对齐
+        # （SMT 见证层可选求解器；tests/test_packaging.py extras 守卫锁双源一致）
+        "formal": ["z3-solver>=4.12.0"],
     },
     entry_points={
         "console_scripts": [

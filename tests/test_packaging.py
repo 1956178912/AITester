@@ -144,3 +144,52 @@ def test_setup_py_install_requires_matches_pyproject():
         f"仅 setup.py 有 {sorted(setup_names - pyproject_names)}，"
         f"仅 pyproject 有 {sorted(pyproject_names - setup_names)}"
     )
+
+
+def _setup_py_extras_require() -> dict[str, list[str]]:
+    """ast 解析 setup.py 的 setup(extras_require={...}) 字面量（不执行文件）。"""
+    tree = _ast.parse((PROJECT_ROOT / "setup.py").read_text(encoding="utf-8"))
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call):
+            func = node.func
+            func_name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if func_name == "setup":
+                for kw in node.keywords:
+                    if kw.arg == "extras_require" and isinstance(kw.value, _ast.Dict):
+                        out: dict[str, list[str]] = {}
+                        for key_node, val_node in zip(kw.value.keys, kw.value.values, strict=False):
+                            if (
+                                isinstance(key_node, _ast.Constant)
+                                and isinstance(key_node.value, str)
+                                and isinstance(val_node, _ast.List)
+                            ):
+                                out[key_node.value] = [
+                                    elt.value
+                                    for elt in val_node.elts
+                                    if isinstance(elt, _ast.Constant) and isinstance(elt.value, str)
+                                ]
+                        return out
+    raise AssertionError("setup.py 中未找到 setup(extras_require={...}) 字面量字典")
+
+
+def test_setup_py_extras_groups_match_pyproject():
+    """O6（2026-10-05 系统审查 P2）：setup.py extras 分组集合 == pyproject extras。
+
+    此前 setup.py 缺 db 组（pyproject 有）——非 PEP 517 回退路径
+    pip install ".[db]" 装不到 MySQL 驱动；本守卫锁定两条路径 extras
+    分组名与各组依赖包名集合一致（防未来再次漂移）。
+    """
+    project = _pyproject_project()
+    pyproject_extras = project.get("optional-dependencies", {})
+    setup_extras = _setup_py_extras_require()
+    assert set(setup_extras) == set(pyproject_extras), (
+        f"extras 分组漂移：仅 setup.py 有 {sorted(set(setup_extras) - set(pyproject_extras))}，"
+        f"仅 pyproject 有 {sorted(set(pyproject_extras) - set(setup_extras))}"
+    )
+    for group in pyproject_extras:
+        py_names = {_normalize_dep_name(d) for d in pyproject_extras[group]}
+        setup_names = {_normalize_dep_name(d) for d in setup_extras.get(group, [])}
+        assert py_names == setup_names, (
+            f"extras[{group}] 依赖漂移：仅 setup.py 有 {sorted(setup_names - py_names)}，"
+            f"仅 pyproject 有 {sorted(py_names - setup_names)}"
+        )

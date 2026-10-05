@@ -466,7 +466,13 @@ class TestDebuggerNode:
     @patch("src.graph.nodes.ENABLE_RAG", True)
     @patch("src.graph.nodes.RAG_MODULE_AVAILABLE", True)
     def test_debugger_rag_ingestion(self, mock_debugger_class, mock_get_retriever):
-        """Debugger 修复案例入库。"""
+        """C10（2026-10-05 审查 P1）：Debugger 不再无条件入库修复案例。
+
+        修复案例（add_repair）移至验证门链路：_patch_applier_node 写盘成功
+        暂存 last_applied_repair → _executor_node 验证通过才入库。Debugger
+        节点直接 add_repair 会把未验证（含最终失败/回滚）的补丁写入修复
+        案例库，污染后续任务的 RAG 检索参考（记忆污染）。
+        """
         from src.graph.workflow import _debugger_node
 
         mock_retriever = MagicMock()
@@ -484,7 +490,7 @@ class TestDebuggerNode:
         state = {"target_code": "def foo(): pass", "iteration": 0}
         _debugger_node(state)
 
-        mock_retriever.add_repair.assert_called_once()
+        mock_retriever.add_repair.assert_not_called()
 
     @patch("src.graph.nodes.DebuggerAgent")
     def test_debugger_without_failed_cases(self, mock_debugger_class):

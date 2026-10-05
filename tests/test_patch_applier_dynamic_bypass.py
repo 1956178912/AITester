@@ -159,6 +159,71 @@ class TestCollectDynamicImportBypass:
         assert self._collect("") == set()
 
 
+# ─── C4 from-import 别名绕过守卫（2026-10-05 系统审查 P0）──────────────────
+
+
+class TestFromImportAliasBypassGuard:
+    """`from os import system; system(...)` 类别名调用必须按限定名命中守卫。
+
+    C4 背景：此前 _qualify_call_node 对裸 Name 只回原名，from-import
+    别名调用的限定名（"system"/"run"）不在 _DANGEROUS_CALL_TARGETS 内，
+    差集守卫整体被绕过——补丁可注入任意 shell/网络后落盘执行。
+    """
+
+    def _added(self, original: str, patched: str):
+        from src.tools.patch_applier import dangerous_api_added
+
+        return dangerous_api_added(original, patched)
+
+    def test_from_os_import_system_bypass_blocked(self):
+        """from os import system + 调用 → 新增 "os.system" 必须命中。"""
+        patched = 'from os import system\n\ndef f():\n    system("id")\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "os.system" in added, f"from-import 别名绕过未拦截：{added}"
+
+    def test_from_subprocess_import_run_bypass_blocked(self):
+        """from subprocess import run → 新增 "subprocess.run" 命中。"""
+        patched = 'from subprocess import run\n\ndef f():\n    run(["ls"])\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "subprocess.run" in added
+
+    def test_from_import_with_as_alias_bypass_blocked(self):
+        """from subprocess import Popen as P → 新增 "subprocess.Popen" 命中。"""
+        patched = 'from subprocess import Popen as P\n\ndef f():\n    P("ls")\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "subprocess.Popen" in added
+
+    def test_from_urllib_import_urlopen_bypass_blocked(self):
+        """from urllib.request import urlopen → 新增限定名命中。"""
+        patched = 'from urllib.request import urlopen\n\ndef f():\n    urlopen("http://x")\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "urllib.request.urlopen" in added
+
+    def test_import_dotted_as_alias_qualified(self):
+        """import urllib.request as ur; ur.urlopen(...) → 限定名命中。"""
+        patched = 'import urllib.request as ur\n\ndef f():\n    ur.urlopen("http://x")\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "urllib.request.urlopen" in added
+
+    def test_preexisting_from_import_call_not_flagged_as_new(self):
+        """差集口径不回归：原代码已有的 from-import 调用不算新增。"""
+        original = 'from os import system\n\ndef f():\n    system("id")\n'
+        patched = 'from os import system\n\ndef f():\n    system("id")\n\n\ndef g():\n    pass\n'
+        assert self._added(original, patched) == []
+
+    def test_from_import_safe_symbol_not_flagged(self):
+        """from math import sqrt 等安全导入 → 不拦截（防误报）。"""
+        patched = "from math import sqrt\n\ndef f():\n    return sqrt(4)\n"
+        assert self._added("def f():\n    pass\n", patched) == []
+
+    def test_local_name_shadowing_safe_import_still_resolves(self):
+        """同文件 import os + from os import system 混用均可命中。"""
+        patched = 'import os\nfrom subprocess import call\n\ndef f():\n    os.system("id")\n    call(["ls"])\n'
+        added = self._added("def f():\n    pass\n", patched)
+        assert "os.system" in added
+        assert "subprocess.call" in added
+
+
 # ─── _collect_module_level_symbols 分支 ─────────────────────────────────────
 
 

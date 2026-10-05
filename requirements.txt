@@ -34,6 +34,12 @@ pytest-timeout==2.4.0
 # 默认串行行为不变——不传 -n 时完全退化为历史串行口径）
 # 注：2026-10-01 全面审查性能优化批次引入，CI 并行 job 用 -n 4
 pytest-xdist==3.8.0
+# hypothesis: 属性测试框架（G18，2026-10-05 优化批次·T5）
+# tests/test_property_invariants.py 用其校验核心纯函数不变式（路由优先级 /
+# 开关零行为变化 / SpecIR 编译产物形态）；亦是 SpecIR v1 编译 Hypothesis
+# 策略的可选运行时（缺失时属性测试整文件跳过、SpecIR 降级为 pytest
+# 参数化断言——CI 全量口径应跑属性测试，故入本清单）
+hypothesis==6.168.4
 # python-dotenv: 从 .env 文件加载环境变量
 python-dotenv==1.2.2
 

@@ -62,6 +62,11 @@ viz = ["matplotlib>=3.7.0", "pandas>=2.0.0"]
 experiments = ["scipy>=1.10.0", "datasets>=5.0.0"]
 ux = ["rich>=13.0.0", "tqdm>=4.65.0"]
 dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
+# G4（2026-10-05 优化批次·T2）：SMT 见证层（src/specs/spec_smt.py）的
+# 可选求解器依赖。SPEC_SMT_ENABLE=true 且可导入时，SpecIR v2 oracle
+# 追加前件求解见证测试；缺失时该层保守降级为无见证（与 chromadb /
+# hypothesis 的可选依赖惯例同口径），故不进默认安装面（wheel ~50MB）。
+formal = ["z3-solver>=4.12.0"]
 # P2-5：MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
 # 仅调用时导入）。
 db = ["pymysql>=1.0.0", "DBUtils>=3.0.0"]
@@ -205,6 +210,9 @@ module = [
     # R7（2026-09-30 独立审查 P0）：hypothesis 为可选依赖（SpecIR 编译
     # Hypothesis 策略；未安装时降级为 pytest 参数化断言），无 py.typed 声明
     "hypothesis.*",
+    # G4（2026-10-05）：z3-solver 为可选依赖（[formal] extra，SMT 见证层），
+    # 无 py.typed 声明（CPython 扩展分发）
+    "z3",
 ]
 ignore_missing_imports = true
 
@@ -214,7 +222,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --timeout=1200"
+addopts = "-v --tb=short --timeout=1200 --strict-markers"
+# U2（2026-10-05 系统性审查落地）：--strict-markers——声明未使用的 marker
+# 拼写错误（如 mark.slow 误写 mark.slowtest）此前静默通过；strict 模式下
+# 未在 markers 声明的 marker 直接报错（防"分层标记形同虚设"的漂移口径）。
+# 分层执行决策：全量套件实测 32s（xdist -n 4），push/PR 拆 unit/integration
+# 分层收益趋零，故保持全量单跑口径（历史行为不变），以 strict-markers +
+# 声明纪律代替强制分层。
 timeout = 1200
 markers = [
     "slow: 标记为慢速测试（需 API）",

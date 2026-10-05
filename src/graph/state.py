@@ -421,6 +421,13 @@ class AITesterState(TypedDict, total=False):
     # M6 坏补丁回滚标记：_executor_node 判定本轮失败并成功从快照恢复
     # 源码时置 True（纯观测，供"回滚成功率"统计）。None = 未触发回滚。
     last_patch_rolled_back: bool | None
+    # C10（2026-10-05 系统审查 P1）：验证门修复案例暂存。_patch_applier_node
+    # 写盘成功时暂存 {original_code, patch, error_category}（节点间通道键），
+    # _executor_node 验证通过（test_passed=True）时才经 add_repair 入库、
+    # 随即置 None 消费；失败/回滚轮置 None 丢弃——此前 _debugger_node 每轮
+    # 无条件入库未验证补丁，失败补丁会成为后续任务的"参考修复案例"
+    # （记忆污染）。None = 无待验证补丁。
+    last_applied_repair: dict[str, Any] | None
     # 5.4 预算封顶标记：任一节点捕获 BudgetExceededError 时置 True，
     # 供 determine_stop_reason 的 BUDGET_EXCEEDED 分支与实验分析消费。
     # 此前该分支读 state.get("budget_exceeded") 但全仓无写入点 + 键未声明
@@ -631,6 +638,8 @@ def create_initial_state(
         deterministic_guard_report=None,
         testless_validation=None,
         last_patch_rolled_back=None,
+        # C10：验证门修复案例暂存（见 TypedDict 注释；None = 无待验证补丁）
+        last_applied_repair=None,
         # 5.4 预算封顶标记 / 回归检测标记（determine_stop_reason 消费）
         budget_exceeded=None,
         regression_detected=None,

@@ -515,9 +515,56 @@ _DANGEROUS_OPEN_PATHS: frozenset[str] = frozenset(
 )
 
 
-def _qualify_call_node(func_node: ast.AST) -> str | None:
+def _build_import_alias_map(tree: ast.AST) -> dict[str, str]:
+    """C4（2026-10-05 系统审查 P0）：收集 import 绑定的"本地名 → 模块限定名"。
+
+    此前 _qualify_call_node 对裸 Name 只回原名——`from os import system;
+    system("...")` 的限定名是 "system"，不在 _DANGEROUS_CALL_TARGETS 内，
+    from-import 别名可整体绕过 AST 差集守卫（守卫只拦新增危险，绕过即
+    可在补丁内注入任意 shell/网络/凭证读取后落盘执行）。
+
+    覆盖形态（与解释器绑定语义一致，同名后绑定覆盖前绑定）：
+    - import os                    → {"os": "os"}
+    - import os as o               → {"o": "os"}
+    - import urllib.request        → {"urllib": "urllib"}（绑定顶层名）
+    - import urllib.request as ur  → {"ur": "urllib.request"}
+    - from os import system        → {"system": "os.system"}
+    - from subprocess import run as r → {"r": "subprocess.run"}
+
+    相对导入（level>0，无绝对模块名）与 `*` 导入跳过（保守：不可静态展开）。
+    注意：静态映射不跟踪后续重绑定/遮蔽（本地 def system 覆盖导入等）——
+    守卫方向为保守拦截（宁可误拒可解释，不可漏放可执行），与既有差集口径一致。
+    """
+    alias_map: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for name in node.names:
+                if name.asname:
+                    alias_map[name.asname] = name.name
+                else:
+                    top = name.name.split(".")[0]
+                    alias_map[top] = top
+        elif isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                continue
+            module = node.module or ""
+            if not module:
+                continue
+            for name in node.names:
+                if name.name == "*":
+                    continue
+                alias_map[name.asname or name.name] = f"{module}.{name.name}"
+    return alias_map
+
+
+def _qualify_call_node(func_node: ast.AST, alias_map: dict[str, str] | None = None) -> str | None:
     """把调用节点的 func 展开为模块限定名（与 deterministic_guard
     ._qualified_attr 同口径：Attribute 链展开 + 已知模块别名 np→numpy）。
+
+    C4（2026-10-05）：alias_map（_build_import_alias_map 产物）非空时，
+    裸 Name / Attribute 基名先经 import 别名映射解析——
+    `from os import system; system(...)` → "os.system"、
+    `import urllib.request as ur; ur.urlopen(...)` → "urllib.request.urlopen"。
 
     返回形如 "subprocess.run" / "eval"（裸 Name）；无法展开（复杂表达式）
     返回 None（不拦截——保守：只有明确的危险调用才拒绝，避免误伤）。
@@ -529,7 +576,9 @@ def _qualify_call_node(func_node: ast.AST) -> str | None:
         cur = cur.value
     if isinstance(cur, ast.Name):
         alias = cur.id
-        if alias == "np":
+        if alias_map and alias in alias_map:
+            alias = alias_map[alias]
+        elif alias == "np":
             alias = "numpy"
         parts.append(alias)
         return ".".join(reversed(parts))
@@ -550,11 +599,12 @@ def _collect_dangerous_calls_core(code: str) -> set[str]:
         tree = ast.parse(code)
     except (SyntaxError, ValueError):
         return set()
+    alias_map = _build_import_alias_map(tree)
     found: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        qual = _qualify_call_node(node.func)
+        qual = _qualify_call_node(node.func, alias_map)
         if qual and qual in _DANGEROUS_CALL_TARGETS:
             found.add(qual)
         # 凭证文件读取：open(<str literal>) 命中特征路径
