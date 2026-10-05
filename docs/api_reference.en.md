@@ -520,8 +520,10 @@ report = _mutation_score_metrics(details)
 from experiments.mutation_detection import mutation_detection_rate
 
 result = mutation_detection_rate(
-    fixed_code=gold_fixed_code, test_code=generated_test,
-    module_name="calculator", n_mutants=20,
+    fixed_code=gold_fixed_code,
+    test_code=generated_test,
+    module_name="calculator",
+    n_mutants=20,
 )
 # → {"rate": 0.65, "mutants_killed": 13, "mutants_total": 20, "skipped": False, ...}
 # Missing gold-fixed material / tests not green on fixed / no mutants generatable
@@ -549,9 +551,7 @@ from experiments.statistical_analysis import bootstrap_paired_diff_ci, cliffs_de
 # Percentile-method bootstrap 95% CI of the paired-difference mean (default
 # 10000 resamples, seed=42; pure-Python random.Random(seed) with a fixed seed —
 # byte-reproducible across calls with the same parameters, auditable)
-mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(
-    aitester_results, baseline_results
-)
+mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(aitester_results, baseline_results)
 
 # Sign-version Cliff's delta for paired differences (δ = (n⁺ − n⁻) / n_pairs;
 # more robust than Cohen's d for binary paired data — d degrades to ±inf on

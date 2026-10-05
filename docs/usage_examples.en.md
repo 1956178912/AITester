@@ -198,9 +198,7 @@ from experiments.run_benchmark import run_benchmark
 # TEMPERATURE=0.0 cascaded across three namespaces (env + config +
 # base_agent); the provenance snapshot records the effective temperature;
 # pair with a clean git tag for reproducibility.
-result = run_benchmark(
-    dataset_name="synthetic", task_count=50, seed=42, deterministic=True
-)
+result = run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
 ```
 
 ### Example C: Side-by-side spec oracle + mutation detection rate (R1c / R5)

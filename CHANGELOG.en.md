@@ -1,10 +1,42 @@
-> Last updated: 2026-10-05 (review-optimization batch R1-R18; six missing 2026-10-04/2026-09-29 sections backfilled for section parity)
+> Last updated: 2026-10-05 (re-audit N batch: measurement-honesty fixes + latent R-batch CI gate repairs + packaging drift guard)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-05 Re-audit batch N (measurement honesty + latent R-batch CI gate repairs + packaging drift guard)
+
+> Follow-up audit of the same-day R1–R18 batch: **measurement-honesty fixes**
+> (N5/N7/N10) + **two latent CI-breaking gate issues left by the R batch**
+> (mypy 1.15.0 arg-type on `len(sig_params)` in nodes.py; ruff format drift in
+> four bilingual docs' embedded code blocks) + **a packaging fallback-path
+> dependency drift guard**. Full regression **3984 → 3991 passed / 0 failed**
+> (+7 new cases); ruff check / format (422 files) / mypy 1.15.0 (98 source
+> files) all clean; `BASELINE.yaml` synced.
+
+### Improved (measurement honesty)
+
+- **N7 contamination check**: `run_benchmark._compute_contamination_risk_level` now returns `"not_applicable"` instead of a constant `"low"` when no golden-patch material exists (no golden_patches dict / task missing from it / either patch side empty) — "detection never happened" is not "detection happened and found no overlap". The failure branch follows suit; `cross_analysis` buckets `not_applicable` separately and keeps it out of the high-vs-low contrast. Synthetic-dataset batches no longer show a misleading all-"low" column.
+- **N5 statistical batch dedup**: batch loading in `statistical_analysis` now sorts by mtime descending (new `_sort_batch_files_by_mtime`; path-name tiebreak for equal mtime), turning `_pair_by_task`'s documented "latest batch wins" policy into an actual implementation fact (previously first-wins over sorted-glob path order, which is not chronological). Both the glob mode and the `--batches` whitelist follow the same ordering.
+- **N6 oracle self-report labeling**: the G7 report's objective cross-check pointer now names the concrete field `mutation_detection_rate` (R5, `ENABLE_MUTATION_SCORING`) instead of the vague "mutation kill".
+- **N10 fl_eval boundary**: module docstring corrected to "standalone offline ground-truth evaluation script, not wired into analyze_results / run_benchmark" (row-level FL@k in main batches is produced by `run_benchmark._fl_at_k`); removed the misleading "can be grouped in analyze_results.py" wording.
+
+### Fixed (latent gate issues from the R batch)
+
+- `src/graph/nodes.py` R1c log line `len(sig_params)` arg-type error and runtime TypeError hazard when the signature is None (would fail the CI mypy hard gate under 1.15.0).
+- Embedded Python code blocks in `docs/api_reference(.en).md` / `docs/usage_examples(.en).md` drifted from ruff format (CI runs `ruff format --check .` repo-wide, which covers md code blocks).
+
+### Engineering
+
+- `setup.py` (non-PEP 517 fallback path) install_requires now matches pyproject [project].dependencies: removed pymysql / DBUtils (→ [db] extra) and pytest / pytest-cov (→ [dev] extra), closing the drift left behind by the P2-5 dependency split; added an ast-based static guard test locking the two paths together.
+- Added `.github/dependabot.yml` (weekly pip + github-actions funnel — items like the chromadb PYSEC exemptions that wait on upstream releases now have an automated follow-up channel) and `.github/CODEOWNERS`.
+- Dev venv mypy upgraded 1.7.1 → 1.15.0 (aligned with the CI hard gate / pre-commit, removing the "green locally ≠ green in CI" dual-version drift).
+
+### Tests
+
+- Added `tests/test_2026_10_05_n_batch.py` (6 cases: N5 mtime dedup ×2 + N7 contamination not_applicable ×4) and a drift guard case in `tests/test_packaging.py`; updated contamination assertions in `test_run_benchmark` / `test_roadmap_13_22_21_mypy_5` ("low" → "not_applicable"; the golden-positive "high" assertion is unchanged).
 
 ## [Unreleased] — 2026-10-05 Review-optimization batch R1–R18 (spec-oracle execution wiring + complete statistical reports + mutation detection + CI hardening, default behavior unchanged)
 

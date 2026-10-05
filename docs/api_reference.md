@@ -616,8 +616,10 @@ report = _mutation_score_metrics(details)
 from experiments.mutation_detection import mutation_detection_rate
 
 result = mutation_detection_rate(
-    fixed_code=gold_fixed_code, test_code=generated_test,
-    module_name="calculator", n_mutants=20,
+    fixed_code=gold_fixed_code,
+    test_code=generated_test,
+    module_name="calculator",
+    n_mutants=20,
 )
 # → {"rate": 0.65, "mutants_killed": 13, "mutants_total": 20, "skipped": False, ...}
 # 缺 gold fixed 材料 / 测试在 fixed 上不绿 / 无变异体可生成 → rate=None + skipped=True
@@ -643,9 +645,7 @@ from experiments.statistical_analysis import bootstrap_paired_diff_ci, cliffs_de
 
 # 配对差值均值的百分位法 bootstrap 95% CI（默认 10000 次重采样、seed=42，
 # 纯 Python random.Random(seed) 固定种子——同参数多次调用逐位可复现，可审计）
-mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(
-    aitester_results, baseline_results
-)
+mean_diff, ci_low, ci_high, n_pairs = bootstrap_paired_diff_ci(aitester_results, baseline_results)
 
 # 配对差值符号版 Cliff's delta（δ = (n⁺ − n⁻) / n_pairs，二值配对场景比
 # Cohen's d 更稳健——d 在零方差差值时退化为 ±inf）；与 d 并列输出

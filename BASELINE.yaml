@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-05"   # 全量回归实测日期（2026-10-05 审查优化批次 R1-R18：规约 oracle 执行接线 + 统计报告完整化 + 变异检出率 + CI 硬化，全绿 3984）
+last_verified: "2026-10-05"   # 全量回归实测日期（R1-R18 审查批次 + 同日 N 复审批次：污染口径 N/A 化 + 统计 mtime 去重 + 打包漂移守卫 + CI 潜伏门禁修复，全绿 3991）
 
 tests:
-  total_passed: 3984          # 全量 pytest tests/（2026-10-05 审查优化批次：3984 全绿 0 失败；+71 新用例 = test_2026_10_05_review_batch(34) + test_r2_statistical_report(18) + test_r5_mutation_detection(19)）
+  total_passed: 3991          # 全量 pytest tests/（2026-10-05 N 复审批次：3991 全绿 0 失败；+7 新用例 = test_2026_10_05_n_batch(6：N5 mtime 去重×2 + N7 污染 not_applicable×4) + test_packaging 漂移守卫(1)）
   total_failed: 0
   slim_environment: 1863     # 缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过
   suite_seconds: 32          # 全量耗时量级（pytest-xdist -n 4 实测 ~32s；P0-2 空补丁短路）

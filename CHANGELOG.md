@@ -4,6 +4,36 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-05 复审批次（N 系列：口径诚实化 + R 批次潜伏门禁修复 + 打包漂移守卫）
+
+> 对同日 R1-R18 批次的复核收尾：**评估口径诚实化**（N5/N7/N10）+ **R 批次
+> 遗留的两处必红 CI 门禁修复**（mypy 1.15.0 下 nodes.py len(None) 隐患、
+> 4 个双语文档内嵌代码块 ruff format 漂移）+ **打包回退路径依赖漂移守卫**。
+> 全量回归 **3984 → 3991 passed / 0 failed**（+7 新用例），ruff check /
+> format（422 文件）/ mypy 1.15.0（98 源文件）三绿，`BASELINE.yaml` 已同步。
+
+### 改进（评估口径诚实化）
+
+- **N7 污染检测**：`run_benchmark._compute_contamination_risk_level` 在无黄金补丁材料时（无 golden_patches / 任务无对应条目 / 补丁任一侧为空）从恒标 `"low"` 改为 `"not_applicable"`——"检测没有发生"不等于"检测过且无重叠证据"；失败分支同步；`cross_analysis` 的 not_applicable 分桶不进入 high vs low 对照。合成数据集批次不再出现误导性的全 "low"。
+- **N5 统计批次去重**：`statistical_analysis` 批次加载改为 mtime 降序（新增 `_sort_batch_files_by_mtime`，同 mtime 按路径名稳定打破平局），使 `_pair_by_task` 的"最新批次优先"docstring 口径成为实现事实（此前实现是 sorted(glob) 路径序首见优先，路径序 ≠ 时间序）；glob 与 `--batches` 白名单两种模式同口径。
+- **N6 预言自评标注**：G7 报告的客观校验指引从泛指 "mutation kill" 收敛为具体字段 `mutation_detection_rate`（R5，`ENABLE_MUTATION_SCORING`）。
+- **N10 fl_eval 边界声明**：模块 docstring 修正为"独立离线真值评测脚本，未接入 analyze_results / run_benchmark 主流程"（主批次的行级 FL@k 由 `run_benchmark._fl_at_k` 接线产出），移除"可在 analyze_results.py 分组输出"的误导性表述。
+
+### 修复（R 批次遗留门禁隐患）
+
+- `src/graph/nodes.py` R1c 日志行 `len(sig_params)` 在签名为 None 时的 arg-type 错误与运行时 TypeError 隐患（mypy 1.15.0 下 CI mypy 硬门禁必红）。
+- `docs/api_reference(.en).md` / `docs/usage_examples(.en).md` 内嵌 Python 代码块 ruff format 漂移（CI `ruff format --check .` 为全仓口径，含 md 代码块，必红）。
+
+### 工程化
+
+- `setup.py`（非 PEP 517 回退路径）install_requires 与 pyproject [project].dependencies 对齐：移除 pymysql / DBUtils（→ [db] extra）与 pytest / pytest-cov（→ [dev] extra），消除"P2-5 分组后回退路径未同步"的漂移；新增 ast 静态解析守卫测试锁定两条路径一致。
+- 新增 `.github/dependabot.yml`（pip + github-actions 周更漏斗，chromadb PYSEC 豁免等"等上游发版"事项获得自动跟进通道）与 `.github/CODEOWNERS`。
+- 开发环境 venv mypy 1.7.1 → 1.15.0（与 CI 硬门禁 / pre-commit 对齐，消除"本地绿 ≠ CI 绿"双版本漂移）。
+
+### 测试
+
+- 新增 `tests/test_2026_10_05_n_batch.py`（6 用例：N5 mtime 去重 ×2 + N7 污染 not_applicable ×4）与 `tests/test_packaging.py` 漂移守卫（1 用例）；更新 `test_run_benchmark` / `test_roadmap_13_22_21_mypy_5` 的污染口径断言（"low" → "not_applicable"，golden 正例 high 断言不变）。
+
 ## [Unreleased] — 2026-10-05 审查优化批次（R1-R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变）
 
 > 本批次为 2026-10-05 系统性审查（R1–R18 建议）落地的第一批：**科学内核修复

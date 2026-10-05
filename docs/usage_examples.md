@@ -193,9 +193,7 @@ from experiments.run_benchmark import run_benchmark
 
 # TEMPERATURE=0.0 三处级联（env + config + base_agent），
 # provenance 快照记录真实生效温度；配合干净 git tag 可复现。
-result = run_benchmark(
-    dataset_name="synthetic", task_count=50, seed=42, deterministic=True
-)
+result = run_benchmark(dataset_name="synthetic", task_count=50, seed=42, deterministic=True)
 ```
 
 ### 示例 C：规约 oracle 并列执行 + 变异检出率（R1c / R5）
