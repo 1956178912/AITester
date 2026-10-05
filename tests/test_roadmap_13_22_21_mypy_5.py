@@ -234,12 +234,14 @@ class TestContaminationRiskLevelInDetails:
             metadata={},
         )
 
-    def test_no_golden_low(self):
+    def test_no_golden_not_applicable(self):
         from experiments.run_benchmark import _build_task_result
 
         task = self._make_task()
         result = _build_task_result(task, 1.0, final_state={"patch": "def f():\n    return 1\n"})
-        assert result["contamination_risk_level"] == "low"
+        # N7（2026-10-05 复审）：合成数据集无 golden patch → 检测不适用，
+        # 不再标 "low"（"检测没有发生"≠"检测过且无重叠证据"）
+        assert result["contamination_risk_level"] == "not_applicable"
         assert "contract_missing_symbols" in result
         assert "patch_resample_stats" in result
 

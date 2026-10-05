@@ -34,6 +34,7 @@ import argparse
 import json
 import random
 import sys
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -58,11 +59,11 @@ def load_experiment_results(results_dir: str, batch_files: list[str] | None = No
         results_dir: 实验结果目录路径
         batch_files: M13（2026-09-29 审查 P0）可选的批次文件白名单
             （相对 results_dir 的路径列表）。指定后**仅加载**这些文件
-            （按路径排序），消除"p 值由 glob 顺序决定"的致命可复现性
-            缺陷——历史口径中 glob 未排序 + "首见优先"去重使同一数据
-            只打乱文件遍历顺序即让 p 在 0.0062~0.3764 间跳动（跨度
-            0.3702）。默认 None 时保持历史行为（递归 glob 全部
-            benchmark_*.json，但按路径排序保证确定性遍历）。
+            （按 mtime 降序加载，N5），消除"p 值由 glob 顺序决定"的致命
+            可复现性缺陷——历史口径中 glob 未排序 + "首见优先"去重使
+            同一数据只打乱文件遍历顺序即让 p 在 0.0062~0.3764 间跳动
+            （跨度 0.3702）。默认 None 时保持递归 glob 全部
+            benchmark_*.json（N5：mtime 降序 + 路径名平局打破，确定性遍历）。
         仅纳入 dataset 为 "synthetic" 的批次（2026-09-26 round9 注释：
         synthetic 固定 task_id 前缀，可复现；SWE-bench 批次由
         SWE_BENCH_DATASET_PATH 单独加载，不纳入本函数的 glob 路径）。
@@ -81,7 +82,7 @@ def load_experiment_results_with_sources(
 
     与 load_experiment_results 同一套加载逻辑（该函数退化为薄壳委托，
     历史调用方零变化），额外返回审计信息：实际纳入统计的批次文件路径
-    列表（按加载顺序 = 路径排序序）。"实际纳入"口径：
+    列表（按加载顺序 = mtime 降序，N5）。"实际纳入"口径：
     - 白名单模式：指定的文件中 dataset == "synthetic" 且成功解析的；
     - glob 模式：递归扫描的 benchmark_*.json 中同样实际加载了数据的。
 
@@ -107,26 +108,46 @@ def load_experiment_results_with_sources(
         except ValueError:
             return str(p)
 
-    # M13：显式批次白名单（排序后确定性加载；同一文件多次出现仅加载一次）
+    # M13：显式批次白名单（N5：mtime 降序加载；同一文件多次出现仅加载一次）
     if batch_files is not None:
         _seen_files: set[Path] = set()
-        for _bf in sorted(batch_files, key=str):
-            _bp = results_path / _bf
+        for _bp in _sort_batch_files_by_mtime(results_path / _bf for _bf in batch_files):
             if _bp not in _seen_files:
                 _seen_files.add(_bp)
                 if _load_batch_file(results, _bp):
                     included_files.append(_display_path(_bp))
         return results, included_files
 
-    # 递归查找所有 benchmark JSON 文件（M13：排序保证确定性遍历顺序；
+    # 递归查找所有 benchmark JSON 文件（M13：确定性遍历；N5：mtime 降序 =
+    # 最新批次先加载，使 _pair_by_task 首见去重的"最新批次优先"口径成立；
     # R2：记录实际纳入的文件供"数据来源"审计章节消费）
     included_files.extend(
         _display_path(json_file)
-        for json_file in sorted(results_path.glob("**/benchmark_*.json"))
+        for json_file in _sort_batch_files_by_mtime(results_path.glob("**/benchmark_*.json"))
         if _load_batch_file(results, json_file)
     )
 
     return results, included_files
+
+
+def _sort_batch_files_by_mtime(files: Iterable[Path]) -> list[Path]:
+    """N5（2026-10-05 复审）：批次文件按 mtime 降序排序（最新先加载）。
+
+    M13 的 _pair_by_task docstring 声称"按文件修改时间排序后首见即最新"，
+    但加载实现是 sorted(glob) 路径序——路径序 ≠ 时间序（不同前缀/重命名/
+    拷贝的批次文件会乱序），同 task_id 跨批次重复时哪条数据胜出取决于
+    命名而非新旧，docstring 与实现不一致。本函数把 docstring 口径落实到
+    加载顺序：mtime 降序；同 mtime 按路径名升序稳定打破平局；stat 失败
+    （并发删除等）的文件排最后并保持路径序。
+    """
+
+    def _key(p: Path) -> tuple[int, str]:
+        try:
+            return (-p.stat().st_mtime_ns, str(p))
+        except OSError:
+            return (1, str(p))
+
+    return sorted(files, key=_key)
 
 
 def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> bool:
@@ -171,11 +192,14 @@ def _pair_by_task(
     反复运行时天然重复）旧 dict 推导"末者胜"静默丢弃早期批次数据——
     配对样本量被截断且哪条数据胜出取决于文件 glob 顺序（不确定）。
     现改为**首见优先**去重并打 warning，口径可预期、可追溯。
-    M13（2026-09-29 审查 P0）：进一步改为**最新批次优先**（按文件修改
-    时间排序后首见即最新）——历史"首见优先"在排序 glob 下语义为"最早
-    批次胜出"，跨版本数据混入会稀释最新结果；现口径为"同一 task_id
-    以最新批次为准，旧批次作对照"，与实验科学惯例一致（最新数据代表
-    当前系统行为）。
+    M13（2026-09-29 审查 P0）：进一步改为**最新批次优先**——历史"首见
+    优先"在排序 glob 下语义为"最早批次胜出"，跨版本数据混入会稀释最新
+    结果；现口径为"同一 task_id 以最新批次为准，旧批次作对照"，与实验
+    科学惯例一致（最新数据代表当前系统行为）。
+    N5（2026-10-05 复审）：该口径此前仅存在于 docstring——加载顺序实为
+    路径序而非 mtime 序。现 load_experiment_results_with_sources 已按
+    mtime 降序加载（_sort_batch_files_by_mtime），本函数首见 = 最新批次，
+    docstring 与实现一致。
 
     Args:
         results_a: 基线 A（通常为 AITester）结果列表。
@@ -195,8 +219,8 @@ def _pair_by_task(
             if not tid:
                 continue
             if tid in seen:
-                # 首见优先：早期批次的数据胜出，重复行跳过
-                _logger.debug("%s task_id=%r 重复行跳过（首见优先去重）", label, tid)
+                # 首见优先：最新批次的数据胜出（N5：load 已按 mtime 降序），重复行跳过
+                _logger.debug("%s task_id=%r 重复行跳过（首见=最新批次优先去重）", label, tid)
                 continue
             seen[tid] = 1 if r.get("passed") else 0
         return seen
@@ -209,7 +233,7 @@ def _pair_by_task(
     dup_b = sum(1 for r in results_b if r.get("task_id") and r.get("task_id") in pass_b) - n_b
     if dup_a > 0 or dup_b > 0:
         _logger.warning(
-            "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 首见优先），建议检查是否存在跨批次重复运行",
+            "task_id 去重：基线A %d 行/基线B %d 行（重复 task_id 最新批次优先），建议检查是否存在跨批次重复运行",
             dup_a,
             dup_b,
         )

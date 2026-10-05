@@ -17,15 +17,18 @@ from typing import Any
 def _contamination_cross_analysis(details: list[dict[str, Any]]) -> dict[str, Any]:
     """5.3 失败分析 × 污染检测交叉：高污染风险任务是否具有更高修复成功率。
 
-    2.1 改进联动：details[].contamination_risk_level（high/medium/low，由
-    contamination_check.detect_contamination 产出）与 passed 交叉，验证
-    "污染效应"是否真实存在——若 high 风险任务成功率显著高于 low 风险任务，
-    提示系统确实在"背出"黄金补丁而非真正定位根因。
+    2.1 改进联动：details[].contamination_risk_level（high/medium/low/
+    not_applicable，由 run_benchmark._compute_contamination_risk_level 产出）
+    与 passed 交叉，验证"污染效应"是否真实存在——若 high 风险任务成功率
+    显著高于 low 风险任务，提示系统确实在"背出"黄金补丁而非真正定位根因。
+    not_applicable（无黄金补丁材料，N7 口径）计入独立分桶展示，但**不进入**
+    high vs low 对照（无法分类的样本不参与污染效应对比）。
 
     Returns:
         {"available": bool,
          "by_risk_level": {"high": {tasks, passed, success_rate},
-                            "medium": {...}, "low": {...}},
+                            "medium": {...}, "low": {...},
+                            "not_applicable": {...}},
          "high_vs_low_success_delta": float | None}
         无 contamination_risk_level 字段时 available=False。
     """

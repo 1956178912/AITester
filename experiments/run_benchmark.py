@@ -401,33 +401,35 @@ def _compute_contamination_risk_level(
     task_result: dict[str, Any],
     golden_patches: dict[str, str] | None,
 ) -> str:
-    """五、多维度污染检测：对单个任务计算污染风险等级（high/medium/low）。
+    """五、多维度污染检测：对单个任务计算污染风险等级（high/medium/low/not_applicable）。
 
     口径（与 experiments.contamination_check 一致）：
     - 取 task_result["patch"]（系统生成的补丁）与 golden_patches 中对应
       任务的黄金补丁（run_benchmark 顶层 golden_patches 字典，task_id →
-      补丁文本；缺失时跳过 → 返回 "low"）；
-    - 调 patch_semantic_similarity 的多维度检测（token Jaccard + AST 语句
-      骨架 LCS + 嵌入余弦/词袋余弦保守代理；EMBEDDING_BACKEND 接入真实
-      嵌入库时自动升级为 CodeBERT 类语义余弦），综合得出 risk_level；
-    - 返回 "high" / "medium" / "low" 三档之一，写入 details[] 的
-      contamination_risk_level 字段（供 analyze_results 的
+      补丁文本），调 patch_semantic_similarity 的多维度检测（token Jaccard +
+      AST 语句骨架 LCS + 嵌入余弦/词袋余弦保守代理；EMBEDDING_BACKEND 接入
+      真实嵌入库时自动升级为 CodeBERT 类语义余弦），综合得出 risk_level；
+    - 返回 "high" / "medium" / "low" / "not_applicable" 之一，写入 details[]
+      的 contamination_risk_level 字段（供 analyze_results 的
       _contamination_cross_analysis 消费，区分"含污染样本"与"不含
       污染样本"的结果）。
 
-    设计约束（保守、可复算）：
-    - 无黄金补丁（纯合成数据集 / 无 ground truth 场景）→ "low"（无重叠
-      证据，非"完全相同"）；
-    - 检测器抛异常（补丁格式异常等）→ "low"（保守不阻断实验主流程）；
+    设计约束（保守、可复算、口径诚实）：
+    - 无黄金补丁材料（无 golden_patches / task 无对应条目 / 补丁任一侧
+      为空）→ "not_applicable"（N7，2026-10-05 复审：合成数据集此前恒标
+      "low"，把"检测没有发生"与"检测过且无重叠证据"混为一谈——前者
+      应显式声明检测不适用，而非暗示低风险）；
+    - 检测器抛异常（补丁格式异常等）→ "low"（保守不阻断实验主流程；
+      检测已尝试、无重叠证据）；
     - 仅读 task_result["patch"]（LLM 修订后的最终补丁），不读中间态。
     """
     task_id = task_result.get("task_id", "")
     generated_patch = task_result.get("patch", "") or ""
     if not golden_patches or not task_id or task_id not in golden_patches:
-        return "low"
+        return "not_applicable"
     golden_patch = golden_patches.get(task_id, "") or ""
     if not generated_patch or not golden_patch:
-        return "low"
+        return "not_applicable"
     try:
         from experiments.contamination_check import _combined_risk_level, patch_semantic_similarity
 
@@ -724,9 +726,10 @@ def _build_task_result(
             "contract_missing_symbols": final_state.get("contract_missing_symbols"),
             # 2.2 补丁后处理重采样统计（PATCH_RESAMPLE_ENABLE=true 时写入）
             "patch_resample_stats": final_state.get("patch_resample_stats"),
-            # 五、多维度污染检测：对单任务计算 risk_level（high/medium/low）
-            # （供 analyze_results 的 _contamination_cross_analysis 消费；
-            # 无 golden_patches 时 _compute_contamination_risk_level 保守返回 "low"）
+            # 五、多维度污染检测：对单任务计算 risk_level（high/medium/low/
+            # not_applicable）（供 analyze_results 的 _contamination_cross_analysis
+            # 消费；无黄金补丁材料时返回 "not_applicable"——N7 口径：检测
+            # 不适用与"检测过且无重叠证据"的 "low" 区分）
             "contamination_risk_level": _compute_contamination_risk_level(
                 {"task_id": task.task_id, "patch": final_state.get("patch") or ""},
                 golden_patches,
@@ -825,9 +828,10 @@ def _build_task_result(
         # 各以 None 兜底保持键集合同构
         "contract_missing_symbols": None,
         "patch_resample_stats": None,
-        # 五、多维度污染检测：失败分支无生成补丁（patch=None），
-        # contamination_risk_level 保守标记 "low"（无重叠证据，非"完全相同"）
-        "contamination_risk_level": "low",
+        # 五、多维度污染检测：失败分支无生成补丁（patch=None）→ 检测不适用
+        # （N7 口径：与"检测过且无重叠证据"的 "low" 区分；成功分支走
+        # _compute_contamination_risk_level 实算）
+        "contamination_risk_level": "not_applicable",
         # P0 仓库级验证诊断：失败分支（无 final_state）无仓库级验证结果，
         # None 兜底保持键集合同构（成功分支在 final_state 非 None 时写入）
         "repo_verification": None,
@@ -1049,7 +1053,8 @@ def run_single_task(
     # （None 沿用 config.ENABLE_MUTATION_SCORING 默认值；True/False 显式覆盖）
     mutation_enabled = ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
     # 五、多维度污染检测：从任务 metadata 收集黄金补丁（SWE-bench 数据集
-    # 携带 metadata["golden_patch"]，合成数据集无 golden patch → 全 "low"）
+    # 携带 metadata["golden_patch"]，合成数据集无 golden patch → 全
+    # "not_applicable"，N7 口径：检测不适用而非低风险）
     golden_patches: dict[str, str] = {}
     _gp = (task.metadata or {}).get("golden_patch")
     if _gp:

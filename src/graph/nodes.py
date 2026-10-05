@@ -392,7 +392,7 @@ def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tu
     logger.info(
         "R1c 确定性规约 oracle 已注入（fn=%s, sig_params=%d, 追加 %d 字符）",
         oracle_func,
-        len(sig_params),
+        len(sig_params or []),  # 签名提取失败时为 None，日志口径按 0 参计
         len(oracle_code),
     )
     return f"{generated_test}\n\n\n{oracle_code}", True

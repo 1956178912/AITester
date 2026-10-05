@@ -19,6 +19,13 @@ on vs off 对修复率的影响）无法归因到定位质量。
 按 golden_patch 有无分组输出；阴性 A/B（fl_spectral on/off）的
 MRR 差异可归因到定位质量而非修复策略。
 
+边界（2026-10-05 复审 N10 修正）：本模块是**独立离线真值评测脚本**，
+当前未接入 analyze_results / run_benchmark 主流程——主批次的行级
+FL@k（Ochiai top-k 行与 gold diff 行交集）由 run_benchmark._fl_at_k
+接线产出并写入结果行 fl_at_k；上文"按 golden_patch 分组输出"为历史
+设计意图而非已接线现状。函数级 FL@k / MRR 需在实验脚本中显式
+import 本模块调用（零 LLM / 零 subprocess，可离线复算）。
+
 用法：
     from experiments.fl_eval import evaluate_fl_spectral
     result = evaluate_fl_spectral(

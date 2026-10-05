@@ -90,9 +90,10 @@ class TestBuildTaskResult:
         assert success["patch_resample_stats"] is None
         assert failure["patch_resample_stats"] is None
         # 五、多维度污染检测：contamination_risk_level 字段必须存在；
-        # 无 golden_patches 时保守返回 "low"
-        assert success["contamination_risk_level"] == "low"
-        assert failure["contamination_risk_level"] == "low"
+        # 无 golden_patches 材料时返回 "not_applicable"（N7，2026-10-05
+        # 复审：检测不适用与"检测过且无重叠证据"的 "low" 区分）
+        assert success["contamination_risk_level"] == "not_applicable"
+        assert failure["contamination_risk_level"] == "not_applicable"
 
 
 class TestRunSingleTask:

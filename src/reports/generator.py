@@ -293,7 +293,8 @@ class ErrorReport:
                     "> **R24（2026-09-30 独立审查 P0）**：下列 oracle_confidence 为**LLM 自评**",
                     "> 置信度（0.0-1.0），仅作观测参考，**不作为验收/断言强度信号**——信念",
                     "> 条件化膨胀是 LLM 自评估的已知失效模式（ACL 2026 Findings）。断言有效性",
-                    "> 请以 mutation kill / gold 独立裁决为准（M1 三指标），勿以本节自评为依据。",
+                    "> 请以 mutation_detection_rate（ENABLE_MUTATION_SCORING=true 的批次，R5）",
+                    "> / gold 独立裁决（M1 三指标）为准，勿以本节自评为依据。",
                     f"- 总预言数: {total_oracles}",
                     f"- 弱预言数（oracle_confidence < 0.5，LLM 自评）: {weak_count}"
                     + (f"（占比 {weak_ratio:.1%}）" if weak_ratio is not None else ""),
