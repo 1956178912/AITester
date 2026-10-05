@@ -103,7 +103,12 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
     try:
         import mypy.api  # noqa: F401  # 探活（缺依赖时降级跳过，不阻断）
     except ImportError:
-        return {"passed": True, "detail": "mypy 未安装（ADR-0004 零默认依赖口径），保守跳过"}
+        # U5（2026-10-05 系统性审查落地）：三态化（缺依赖 ≠ 类型通过）
+        return {
+            "passed": True,
+            "infra_degraded": True,
+            "detail": "mypy 未安装（ADR-0004 零默认依赖口径），保守跳过",
+        }
 
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as f:
         f.write(patched_code)
@@ -143,7 +148,14 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
         detail = f"mypy 发现 {len(error_lines)} 处问题（前 5 条）：" + "；".join(error_lines[:5])
         return {"passed": len(error_lines) == 0, "detail": detail}
     except (OSError, subprocess.TimeoutExpired) as e:
-        return {"passed": True, "detail": f"mypy 执行失败（保守跳过，不阻断）: {e}"}
+        # U5（2026-10-05 系统性审查落地）：fail-open 三态化——保持 passed=True
+        # 保守跳过语义不变（ADR-0003），但新增 infra_degraded=True 显式区分
+        # "mypy 真实通过" 与 "mypy 不可用跳过"（防降级被当稳健统计）。
+        return {
+            "passed": True,
+            "infra_degraded": True,
+            "detail": f"mypy 执行失败（保守跳过，不阻断）: {e}",
+        }
     finally:
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)
@@ -224,7 +236,12 @@ def _run_import_smoke_layer(
     except subprocess.TimeoutExpired:
         return {"passed": False, "detail": f"导入冒烟超时（>{timeout}s）"}
     except OSError as e:
-        return {"passed": True, "detail": f"导入冒烟执行失败（保守跳过，不阻断）: {e}"}
+        # U5（2026-10-05 系统性审查落地）：三态化（同 mypy 层口径）
+        return {
+            "passed": True,
+            "infra_degraded": True,
+            "detail": f"导入冒烟执行失败（保守跳过，不阻断）: {e}",
+        }
     finally:
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)

@@ -216,6 +216,12 @@ def select_strategy(
     return ranked[0] if ranked else None
 
 
+# U4（2026-10-05 系统性审查落地）：outcome 记录的读-改-写串行化锁——
+# 此前多线程 benchmark 并发记录会互相覆盖 outcomes（lost-update），
+# 与落盘原子写（atomic_write_json）配合保证"并发不丢记录、半写不产生"。
+_OUTCOME_WRITE_LOCK = threading.Lock()
+
+
 def record_strategy_outcome(
     signature: tuple[str, str | None, bool],
     strategy: str,
@@ -235,24 +241,29 @@ def record_strategy_outcome(
     """
     bank_file = path or _bank_path()
     try:
-        os.makedirs(os.path.dirname(bank_file) or ".", exist_ok=True)
-        data: dict[str, Any] = {"strategies": [], "outcomes": []}
-        if os.path.isfile(bank_file):
-            with open(bank_file, encoding="utf-8") as f:
-                loaded = json.load(f)
-            if isinstance(loaded, dict):
-                data = loaded
-        entry = {
-            "error_category": signature[0],
-            "fix_strategy_tag": signature[1],
-            "cross_file": signature[2],
-            "strategy": strategy,
-            "success": success,
-            "task_id": task_id,
-        }
-        data.setdefault("outcomes", []).append(entry)
-        with open(bank_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # U4：读-改-写整段持锁串行化（防并发 lost-update），落盘改原子替换
+        # （防半写 JSON 使下次 json.load 失败）。锁内只做内存操作 + 一次
+        # 原子 rename，临界区开销可忽略（写盘 IO 在临时文件上，rename O(1)）。
+        with _OUTCOME_WRITE_LOCK:
+            os.makedirs(os.path.dirname(bank_file) or ".", exist_ok=True)
+            data: dict[str, Any] = {"strategies": [], "outcomes": []}
+            if os.path.isfile(bank_file):
+                with open(bank_file, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    data = loaded
+            entry = {
+                "error_category": signature[0],
+                "fix_strategy_tag": signature[1],
+                "cross_file": signature[2],
+                "strategy": strategy,
+                "success": success,
+                "task_id": task_id,
+            }
+            data.setdefault("outcomes", []).append(entry)
+            from src.utils.atomic_io import atomic_write_json
+
+            atomic_write_json(bank_file, data)
     except (OSError, json.JSONDecodeError, TypeError) as e:
         logger.debug("策略库 outcome 记录写盘失败（忽略，纯观测层）: %s", e)
 

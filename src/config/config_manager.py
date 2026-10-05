@@ -168,8 +168,14 @@ def add_llm_config(api_key: str, base_url: str, model_name: str, index: int | No
         "\n",
     ]
     try:
-        with ENV_FILE.open("a", encoding="utf-8") as f:
-            f.writelines(new_lines)
+        # U4（2026-10-05 系统性审查落地）：追加改"读全文 + 原子替换"——
+        # 直接 open("a") 追加在进程崩溃/磁盘满时会留半行残缺配置；先读后
+        # 原子写保证 .env.local 恒为完整内容（与 remove_llm_config 同口径），
+        # 写后 chmod 0600（含 API Key 的文件收敛权限，对齐 llm_client 缓存）。
+        from src.utils.atomic_io import atomic_write_text
+
+        old_content = ENV_FILE.read_text(encoding="utf-8") if ENV_FILE.exists() else ""
+        atomic_write_text(str(ENV_FILE), old_content + "".join(new_lines))
         # 重新加载环境变量并原地刷新 config.LLM_CONFIGS（导入时的快照不会自动更新）
         load_dotenv(str(ENV_FILE), override=True)
         refresh_llm_configs()
@@ -246,7 +252,11 @@ def remove_llm_config(model_name: str) -> bool:
 
         new_content = "".join(new_lines)
         # 写回文件
-        ENV_FILE.write_text(new_content, encoding="utf-8")
+        # U4（2026-10-05 系统性审查落地）：open("w") 直写 → 原子替换（防半写
+        # .env.local 丢配置），写后 chmod 0600（含 API Key 收敛权限）。
+        from src.utils.atomic_io import atomic_write_text
+
+        atomic_write_text(str(ENV_FILE), new_content)
 
         # 清理 os.environ 中已删除编号的 LLM_N_* 变量：
         # load_dotenv 只会新增/覆盖，不会删除残留变量，不清理则 refresh 后旧配置仍在

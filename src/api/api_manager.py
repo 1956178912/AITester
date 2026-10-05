@@ -330,7 +330,7 @@ class APIManager:
             node.mark_failure(error_type)
             logger.warning("健康检查失败: %s (%s)", node.config.model_name, error_type)
         if is_half_open_probe:
-            node._probe_circuit_half_open(ok)
+            node.try_probe_half_open(ok)
         return ok
 
     def check_health(self, node: APIHealth) -> bool:
@@ -355,7 +355,9 @@ class APIManager:
         is_half_open_probe = self._enter_half_open_probe(node)
         client = self._client_cache.get(node.config.model_name)
         if not client:
-            node.is_healthy = False
+            # U4（2026-10-05 系统性审查落地）：直写 is_healthy → 带锁公共接口
+            # （补连续失败计数联动，与并发 mark_success/mark_failure 互斥）
+            node.mark_unhealthy(reason="check_health_probe_failed")
             return False
         start = time.time()
         try:
@@ -712,7 +714,7 @@ class APIManager:
         if is_half_open_probe:
             # 探测成功：熔断器闭合（mark_success 已清零 circuit_open_until，
             # 此处显式消费一次以记录"半开→闭合"日志，成功与失败口径一致）
-            node._probe_circuit_half_open(True)
+            node.try_probe_half_open(True)
         if attempt > 0:
             # 故障转移成功：记录"上一个节点 -> 当前节点"（此前误把当前节点名打印了两遍）
             logger.info("故障转移成功: %s -> %s", prev_model or "unknown", node.config.model_name)
@@ -778,7 +780,7 @@ class APIManager:
         probe = is_half_open_probe
         node.mark_failure("rate_limit")
         if probe:
-            node._probe_circuit_half_open(False)
+            node.try_probe_half_open(False)
         logger.warning("限流: %s (attempt %d)", node.config.model_name, attempt + 1)
         if not self.config.fallback_on_failure:
             return
@@ -798,7 +800,7 @@ class APIManager:
         probe = is_half_open_probe
         node.mark_failure(f"api_error:{getattr(e, 'status_code', 'unknown')}")
         if probe:
-            node._probe_circuit_half_open(False)
+            node.try_probe_half_open(False)
         logger.warning("API 错误: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             # fallback 禁用时，记录错误后显式重抛传入的原始异常（语义等价于
@@ -816,7 +818,7 @@ class APIManager:
         probe = is_half_open_probe
         node.mark_failure(f"error:{type(e).__name__}")
         if probe:
-            node._probe_circuit_half_open(False)
+            node.try_probe_half_open(False)
         logger.error("调用失败: %s - %s", node.config.model_name, _redact(str(e)))
         if not self.config.fallback_on_failure:
             raise e  # 同 _handle_api_error：显式重抛（摆脱 active-exception 隐式依赖）
@@ -836,7 +838,11 @@ class APIManager:
 
         now = time.monotonic()
         nodes_summary = {}
-        for name, h in self.health_nodes.items():
+        # U4（2026-10-05 系统性审查落地）：先快照再遍历——并发 add/remove_node
+        # 时对活 dict 迭代会抛 RuntimeError（health_check_all 已有同口径快照，
+        # 此处补齐）；快照内的 APIHealth 对象本身线程安全（节点锁保护）。
+        nodes_snapshot = list(self.health_nodes.items())
+        for name, h in nodes_snapshot:
             # 熔断剩余冷却秒数（0 = 未熔断或已到期），便于监控/实验分析
             circuit_remaining = max(0.0, h.circuit_open_until - now) if h.circuit_open_until > 0 else 0.0
             nodes_summary[name] = {

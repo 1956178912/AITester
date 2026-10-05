@@ -372,7 +372,7 @@ class DebuggerAgent(BaseAgent):
                     "error_category": error_category.value,
                     "fix_strategy": "重新生成测试（测试缺陷，非实现缺陷）",
                     "patch": "",
-                    "adversarial_check": {"scenarios_checked": 0, "all_passed": False},
+                    "adversarial_check": {"scenarios_checked": 0, "all_passed": False, "critic_degraded": False},
                     "defect_type": defect_type,
                     "review_reason": review_reason,
                 }
@@ -482,7 +482,11 @@ class DebuggerAgent(BaseAgent):
         # 若启用，先做"对抗性意图假设 + 针对性测试"，再把结果注入 prompt
         # 让 LLM 在生成补丁时考虑这些对抗场景；生成后独立"批评者"评估
         # 是否能击穿补丁，被击穿则重新生成一次
-        adversarial_check: dict[str, Any] = {"scenarios_checked": 0, "all_passed": False}
+        adversarial_check: dict[str, Any] = {
+            "scenarios_checked": 0,
+            "all_passed": False,
+            "critic_degraded": False,
+        }
         adversarial_hypotheses: list[str] = []
         if _adversarial_debugging_enabled():
             adversarial_hypotheses = self._generate_adversarial_intents(target_code, error_category.value)
@@ -936,14 +940,23 @@ class DebuggerAgent(BaseAgent):
             break_cases = [str(c) for c in (result.get("break_cases") or [])[:_MAX_CRITIC_BREAK_CASES]]
             return {
                 "all_passed": bool(result.get("all_passed", not break_cases)),
+                "critic_degraded": False,
                 "break_cases": break_cases,
                 "intent_hypotheses": hypotheses,
                 "scenarios_checked": len(hypotheses),
             }
         except Exception as e:
-            logger.warning("批评者评估失败（视为未击穿，3.1）: %s", e)
+            # U5（2026-10-05 系统性审查落地）：fail-open 乐观偏向三态化——
+            # 历史口径：critic 异常 → all_passed=True（"批评者未击穿"），
+            # 把"评估不可用"与"评估通过"混为一谈（乐观偏向：下游把降级
+            # 当稳健）。现保持 all_passed=True 路由语义不变（ADR-0003：
+            # 不改默认行为），但新增 critic_degraded=True 显式标记
+            # "该 all_passed 是降级产物而非评估结论"，随 adversarial_check
+            # 写入 state 供实验分析/报告层区分三态（通过 / 被击穿 / 不可用）。
+            logger.warning("批评者评估失败（降级：视为未击穿并标记 critic_degraded）: %s", e)
             return {
                 "all_passed": True,
+                "critic_degraded": True,
                 "break_cases": [],
                 "intent_hypotheses": hypotheses,
                 "scenarios_checked": len(hypotheses),

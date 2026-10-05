@@ -38,6 +38,11 @@ class RotationStrategy(Enum):
 # 覆盖（阈值过低导致过多误报时上调；成本敏感度高时下调），无需改代码。
 _COST_ALERT_THRESHOLD = 2.0
 
+# U4（2026-10-05 系统性审查落地）：指数退避绝对上限（秒）——原为两个方法内
+# 各自重复定义的局部变量（:177/:271），提为模块级常量单一事实来源（防两处
+# 漂移）。
+_ABSOLUTE_BACKOFF_CAP = 60.0
+
 
 @dataclass
 class APIHealth:
@@ -128,6 +133,38 @@ class APIHealth:
             return False
         return time.monotonic() >= self.circuit_open_until
 
+    def try_probe_half_open(self, probe_succeeded: bool) -> None:
+        """消费半开探测结果的公共接口（U4，2026-10-05 系统性审查落地）。
+
+        语义与 ``_probe_circuit_half_open`` 完全一致（历史上 APIManager 跨类
+        直接调用该方法私有名，破坏封装且绕过锁纪律的可审计性）；现提供
+        公共命名供管理器调用，私有名保留为内部别名（存量测试兼容）。
+
+        Args:
+            probe_succeeded: 本次半开探测请求是否成功。
+        """
+        self._probe_circuit_half_open(probe_succeeded)
+
+    def mark_unhealthy(self, reason: str = "health_check_failed") -> None:
+        """把节点标记为不健康（带锁公共接口，U4）。
+
+        背景：APIManager.check_health 此前直接写 ``node.is_healthy = False``，
+        绕过节点锁与 mark_failure 的失败计数/熔断联动。本接口经节点锁
+        置位，保证与并发 mark_success/mark_failure/半开探测互斥。
+
+        Args:
+            reason: 标记原因（仅记录用）。
+
+        行为（保守口径）：仅在节点当前仍健康时置 False 并累加连续失败
+        计数（不触发熔断冷却——健康检查轮询的失败不应叠加业务熔断；
+        与历史"仅置位"语义等价，只是补上了锁与计数联动）。
+        """
+        with self._lock:
+            if self.is_healthy:
+                self.is_healthy = False
+                self.consecutive_failures += 1
+                logger.debug("节点 %s 标记不健康（%s）", self.config.model_name, reason)
+
     def _probe_circuit_half_open(self, probe_succeeded: bool) -> None:
         """4.2：消费半开探测结果（在发起/结束真实请求前后调用）。
 
@@ -174,7 +211,6 @@ class APIHealth:
                     # #60→1710s，外推 24h），与文档"上限 30s"矛盾。现固定
                     # 上限 = max(half_open_probe_penalty_cap_seconds, 60.0)，
                     # 保证退避永不超出 60s（API 熔断冷却的合理上界）。
-                    _ABSOLUTE_BACKOFF_CAP = 60.0
                     penalty = min(backoff, max(self.half_open_probe_penalty_cap_seconds, _ABSOLUTE_BACKOFF_CAP))
                 else:
                     penalty = min(self.circuit_cooldown_seconds, self.half_open_probe_penalty_cap_seconds)
@@ -268,7 +304,6 @@ class APIHealth:
                     # #60→1710s，外推 24h），与文档"上限 30s"矛盾。现固定
                     # 上限 = max(half_open_probe_penalty_cap_seconds, 60.0)，
                     # 保证退避永不超出 60s（API 熔断冷却的合理上界）。
-                    _ABSOLUTE_BACKOFF_CAP = 60.0
                     cooldown = min(backoff, max(self.half_open_probe_penalty_cap_seconds, _ABSOLUTE_BACKOFF_CAP))
                 else:
                     cooldown = min(self.circuit_cooldown_seconds, self.half_open_probe_penalty_cap_seconds)

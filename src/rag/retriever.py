@@ -441,7 +441,15 @@ class TestCaseRetriever:
         # 外层长度 1，空集为 []）；"or [[]]" 回退为历史 mock 形状（外层 None）
         # 保留的防御——取 0 号层时按 list 归一，运行期语义与 [] 一致
         distances_raw = results.get("distances")
-        distances = distances_raw[0] if distances_raw else [0.0]
+        if distances_raw:
+            distances = distances_raw[0]
+        else:
+            # U4（2026-10-05 系统性审查落地）：回退口径保留数值（实验分析侧
+            # rag_analysis 的相似度直方图按 float 分桶，None 会破坏消费方），
+            # 但显式 debug 记录失真场景（distances 缺失 → similarity 恒记 1.0），
+            # 生产链路不应命中该分支（chromadb 真实返回恒含 distances）。
+            logger.debug("RAG 查询结果缺 distances 字段（mock/异常形状），similarity 回退记 1.0（观测失真）")
+            distances = [0.0]
         documents = results.get("documents") or [[]]
         metadatas = results.get("metadatas") or [[]]
         doc_rows = documents[0] if isinstance(documents, list) and documents else []
@@ -503,7 +511,15 @@ class TestCaseRetriever:
         # documents/metadatas 取 0 号层时按 list 归一（chromadb 真实返回恒为
         # list[list]，"or [[]]" 回退仅防御历史 mock 形状），运行期语义不变
         distances_raw = results.get("distances")
-        distances = distances_raw[0] if distances_raw else [0.0]
+        if distances_raw:
+            distances = distances_raw[0]
+        else:
+            # U4（2026-10-05 系统性审查落地）：回退口径保留数值（实验分析侧
+            # rag_analysis 的相似度直方图按 float 分桶，None 会破坏消费方），
+            # 但显式 debug 记录失真场景（distances 缺失 → similarity 恒记 1.0），
+            # 生产链路不应命中该分支（chromadb 真实返回恒含 distances）。
+            logger.debug("RAG 查询结果缺 distances 字段（mock/异常形状），similarity 回退记 1.0（观测失真）")
+            distances = [0.0]
         documents = results.get("documents") or [[]]
         metadatas = results.get("metadatas") or [[]]
         doc_rows = documents[0] if isinstance(documents, list) and documents else []
@@ -611,10 +627,17 @@ class TestCaseRetriever:
         }
 
     def clear(self) -> None:
-        """清空检索库（用于实验重置）。"""
-        self.client.delete_collection(self.collection_name)
-        self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+        """清空检索库（用于实验重置）。
+
+        U4（2026-10-05 系统性审查落地）：集合重建纳入 _write_lock——此前
+        delete_collection + get_or_create 与并发 query/upsert 存在竞态
+        （重建窗口内 query 会命中已删除集合抛异常）。写锁串行化后与
+        upsert/query 的互斥口径一致。
+        """
+        with self._write_lock:
+            self.client.delete_collection(self.collection_name)
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
         logger.info("RAG 检索库已清空")
