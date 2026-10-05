@@ -6,6 +6,80 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-05 Optimization batch V (third independent review: scientific fixes + experiment infrastructure + template expansion + hardening)
+
+> Executable items from the same-day **third fully independent systematic
+> review** (four parallel deep audits of src pipeline / experiment methodology /
+> tests & CI / docs & compliance; all load-bearing findings re-verified by
+> direct code reading). Three decisive findings drove this batch:
+> (1) **under honest metrics the full system shows no difference vs simplified
+> baselines** (detection 2%=2% / repair 0%=0%, while significance testing was
+> only ever run on the self-referential `passed` metric); (2) **repair-correctness
+> adjudication is self-referential** (evidence gate documented as blocking but
+> implemented as post-write marking; P2P guard reuses the very test being
+> targeted); (3) **synthetic-dataset leakage + clustering** (module filename
+> encodes the defect answer; 50 tasks span only 15 unique templates).
+> Landed as six atomic commits. Full regression **4091 → 4130 passed / 0
+> failed**, ruff 0 warnings, mypy 104 files 0 errors, line 89% / branch 83%
+> (new hard line-coverage gate 85%), `BASELINE.yaml` synced.
+
+### Fixed (scientific, P0)
+- Spec boundary type contract: `derive_boundary_triplets` now emits typed
+  numeric values (previously numeric strings flowed into SpecIR v2 literal
+  binding, causing systematic TypeError on int functions — deterministic
+  detection became false detection); `_coerce_boundary_literal` backfills
+  LLM-provided string boundaries.
+- Statistical pipeline reproducibility: batch dedup ordering key switched from
+  mtime (drifts on clone — root cause of the χ²=12.96 vs 15.04 irreproducibility)
+  to the timestamp embedded in batch filenames; honest-metric McNemar added as
+  the report's primary conclusion (detection p=0.4795 / repair p=1.0, n.s. —
+  the parity now has statistical backing); main-batch report regenerated +
+  SHA256SUMS refreshed + BASELINE p-value label corrected.
+- Evidence gate now truly blocks: documented contract honored — gate on by
+  default + insufficient evidence → restore original file on disk +
+  written=False (previously post-write marking, fail-open); degraded to marking
+  only if restore itself fails (disk/state declaration consistency).
+- run_main_batch statistics whitelist decoupling fix (report previously omitted
+  batch_files, mixing global glob into the denominator).
+
+### Added (experiment infrastructure & guards)
+- Main-batch reproducibility protocol: dirty-tree hard fail (--allow-dirty
+  opt-out), deterministic sampling on by default (--no-deterministic opt-out),
+  LLM-cache warning (cached reruns are not independent samples).
+- Synthetic-dataset neutralization: task_id tail becomes task_XXXX (removes the
+  "filename is the answer" evaluation leakage); gold imports rewritten in sync;
+  pattern name kept in metadata only.
+- Template library 30 → **50 unique patterns** (+20 new) with a bulk
+  self-verification tool (triple invariant); **caught and fixed 6 legacy
+  templates with defective gold material** (including one whose buggy and fixed
+  code were byte-identical copy-paste — a direct partial cause of detection=2%).
+- State-channel contract static guard (AST difference audit; first run caught 3
+  dead reads incl. problem_statement reading an undeclared key — injection
+  defense was inert).
+- Risk-approval confidence wiring end-to-end (error_confidence + resume-value
+  consumption); reward simplicity semantics fixed (patch-size dimension,
+  previously same source as efficiency).
+
+### Hardening (CI)
+- Full pip-audit over requirements.lock's 132 transitive deps (previously only
+  24 top-level); hard line-coverage gate 85% (previously report-only); release
+  CI-green gate (check-runs polling on the tagged commit, conservative timeout
+  block); concurrency group; setup-python SHA alignment.
+
+### Documentation governance (P1-9)
+- ADR-0014 Amended (85%→77%); three citation misalignments in the
+  MULTIAGENT baseline fixed (venue/URL mismatch + TestAgent URL reuse; principle:
+  never fabricate URLs); LICENSE and ADR year errata (2025→2026); 13 historical
+  review snapshots + README iteration-log sections archived; CONTRIBUTING
+  coverage thresholds re-pointed to the single source of truth; MODEL_CARD data
+  licenses filled in + bias section added.
+
+### Verification
+- Full 4130 passed / 0 failed (+39 new cases); ruff 0.16.3 check+format clean;
+  mypy 1.15.0 104 files 0 errors; line 89% (85% gate green) / branch 83% (77%
+  gate green); bilingual-doc / baseline-numbers / citations / artifact SHA256
+  guards all green.
+
 ## [Unreleased] — 2026-10-05 Optimization Batch U (Independent Systematic Review Landing: Evidence Chain VCS + Zero-Assertion Cleanup + Concurrency & Atomicity + Budget Layer Sink + Terminal Failure Taxonomy)
 
 > Second same-day **independent systematic review** (13-section report: frontier

@@ -1527,10 +1527,7 @@ def _compute_reward_signals(
     correctness = 1.0 if passed else 0.0
     # efficiency 沿用历史口径（基于 EXECUTION_TIMEOUT 的线性归一）
     efficiency = max(0.0, round(1.0 - elapsed_seconds / EXECUTION_TIMEOUT, 3))
-    if patch_line_delta is None:
-        simplicity = 0.0
-    else:
-        simplicity = max(0.0, round(1.0 - abs(patch_line_delta) / 30.0, 3))
+    simplicity = 0.0 if patch_line_delta is None else max(0.0, round(1.0 - abs(patch_line_delta) / 30.0, 3))
     return {
         "correctness": round(correctness, 4),
         "efficiency": efficiency,
@@ -2013,7 +2010,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                         signature=_sb_signature,
                         strategy=str(strategy.get("strategy") or ""),
                         success=False,
-                        task_id=str(state.get("task_uuid") or ""),  # P1-6：task_id 未声明（死读恒 None），改读 task_uuid
+                        task_id=str(
+                            state.get("task_uuid") or ""
+                        ),  # P1-6：task_id 未声明（死读恒 None），改读 task_uuid
                     )
                 # M14（2026-09-29 审查 P0）：expert_pool_winner 此前写入 result
                 # 但从未并入节点返回 dict（result 的键 ≠ update 的键），现并入
@@ -2252,7 +2251,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             _approved = _resume_value in (True, "approve", "approved")
             if _resume_value is not None:
                 update["risk_approval_decision"] = {
-                    "resume_value": _resume_value if isinstance(_resume_value, (str, int, float, bool)) else str(_resume_value),
+                    "resume_value": _resume_value
+                    if isinstance(_resume_value, (str, int, float, bool))
+                    else str(_resume_value),
                     "approved": _approved,
                     "risk_level": _risk_result.get("risk_level"),
                 }

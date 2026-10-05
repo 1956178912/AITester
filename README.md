@@ -25,7 +25,7 @@
 | **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ 逐模块行覆盖以 [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` 为单一事实来源（base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86，分支覆盖与核心路由门槛同见该文件） |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-10-05 审查优化批次（R1–R18：规约 oracle 接线 + 统计报告完整化 + 变异检出率 + CI 硬化，默认行为不变，详见 CHANGELOG）；此前 2026-10-04 系统审查批次（A-01 SpecIR v2 DSL + A-03 快照/回滚协议 等）与 2026-10-02 审查优化轮；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-10-05 V 批次（第三轮独立审查落地：规约边界类型契约 + 统计管线可复算化（诚实指标 McNemar 成首要口径）+ 证据门真阻断 + 合成任务中性化 + 模板库 50 pattern（修复 6 个存量 gold 材料缺陷）+ 状态契约守卫 + CI 加固 + 文档治理，详见 CHANGELOG）；同日更早批次（R1-R18 / N / S / T / U）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
 
 > **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
 > 本批次补齐 `docs/history/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，

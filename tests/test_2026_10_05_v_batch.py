@@ -284,7 +284,8 @@ class TestV6MainBatchReproGates:
         from experiments.run_main_batch import _check_repo_clean
 
         monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
-        _check_repo_clean()  # 不抛即通过
+        result = _check_repo_clean()  # 干净树返回 None（不抛 SystemExit）
+        assert result is None
 
     def test_no_deterministic_flag_parsed(self, monkeypatch):
         import sys as _sys

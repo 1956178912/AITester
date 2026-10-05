@@ -4,6 +4,66 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-05 优化批次 V（第三轮独立审查落地：科学性修复 + 实验基建 + 模板库扩容 + 工程加固）
+
+> 同日第三轮**全新独立系统性审查**（忽略此前审查，四路并行深查 src 链路 /
+> 实验方法学 / 测试与 CI / 文档合规，载荷性结论均二次读码核验）的可执行
+> 项落地。审查三条决定性发现驱动本批次：
+> ① **诚实指标下完整系统与简化基线无差异**（detection 2%=2% / repair 0%=0%，
+> 而显著性检验只做在自指的 passed 上）；② **修复正确性裁决自指**（证据门
+> 文档称阻断、实现为写盘后标记；P2P 守卫用同一份被瞄准的测试）；③ **合成
+> 数据集缺陷泄漏 + 聚类**（模块文件名=缺陷答案；50 任务仅 15 唯一模板）。
+> 落地分六个原子提交（科学修复 / 实验基建 / P2 接线 / 契约守卫 / CI 加固 /
+> 模板扩容 / 文档治理）。全量回归 **4091 → 4130 passed / 0 failed**，
+> ruff 0 警告、mypy 104 源文件 0 错误、行 89% / 分支 83%（新增行覆盖 85%
+> 硬门禁），`BASELINE.yaml` 已同步。
+
+### 修复（科学性，P0）
+- **规约边界类型契约**：`derive_boundary_triplets` 产出类型化数值（此前数字
+  字符串流入 SpecIR v2 字面量绑定，int 函数系统性 TypeError——确定性检出
+  变假检出）；`_coerce_boundary_literal` 兜底转换 LLM 字符串边界。
+- **统计管线可复算化**：批次去重排序主键从 mtime（clone 即漂移，χ²=12.96
+  vs 15.04 不可复算的根因）改为文件名内嵌时间戳；新增 M1 诚实指标
+  McNemar 为报告首要结论口径（detection p=0.4795 / repair p=1.0 不显著——
+  平手首次有统计背书）；主批次报告再生成 + SHA256SUMS 刷新 + BASELINE
+  p 值标签修正（此前把 t 检验 p 误标为 McNemar）。
+- **证据门真阻断**：文档契约（等级不足拒绝写盘）兑现——gate 默认开 +
+  无证据 → 恢复磁盘原文件 + written=False（此前写盘后仅标记 fail-open）；
+  恢复失败降级为标记口径（磁盘状态声明一致）。
+- **run_main_batch 统计白名单脱钩修复**：报告此前未传 batch_files（分母
+  混入全局 glob）。
+
+### 新增（实验基建与守卫）
+- 主批次复现协议：dirty tree 硬失败（--allow-dirty 豁免）+ 确定性采样默认
+  开（--no-deterministic 退出）+ LLM 缓存警告（重复观测非独立样本）。
+- 合成数据集中性化：task_id 末段 task_XXXX（消除"文件名即缺陷答案"的
+  评估泄漏）；gold import 同步重写；pattern 名保留在 metadata。
+- 模板库 30 → **50 唯一 pattern**（+20 新模板）+ 批量自验证工具
+  （三重不变量）；**抓获并修复 6 个存量模板的 gold 材料缺陷**（含 1 个
+  buggy 与 fixed 完全相同的复制粘贴模板——detection=2% 的部分直接根因）。
+- 状态通道契约静态守卫（AST 差集审计，首跑抓获 3 处死读并修复——
+  problem_statement 读未声明键恒 None，注入防护空转）。
+- 风险审批置信度闭环（error_confidence 全链接线 + resume 值消费）；
+  reward simplicity 语义修复（补丁体量维度，此前与 efficiency 同源）。
+
+### 工程加固（CI）
+- requirements.lock 132 项传递依赖全量 pip-audit（此前只扫顶层 24 项）；
+- 行覆盖 85% 硬门禁（此前仅报告）；release CI 绿门（tagged commit 的
+  check-runs 轮询，超时保守阻断）；concurrency 组；setup-python SHA 对齐。
+
+### 文档治理（P1-9）
+- ADR-0014 Amended（85%→77% 口径）；MULTIAGENT 基线三处引用错位修复
+  （venue/URL 错位 + TestAgent URL 复用，原则：不编造 URL）；LICENSE 与
+  ADR 年份勘误（2025→2026）；13 份历史审查快照 + README 迭代记录节归档；
+  CONTRIBUTING 覆盖率口径收口；MODEL_CARD 数据许可补齐 + 偏差小节。
+
+### 验证
+- 全量 4130 passed / 0 failed（+39 新用例：V1-V7 守卫 + 契约守卫 + 模板
+  验证器）；ruff 0.16.3 check+format 全绿；mypy 1.15.0 104 文件 0 错误；
+  行覆盖 89%（85% 门禁绿）/ 分支 83%（77% 门禁绿）；双语文档守卫 /
+  基线数字守卫 / 引用守卫 / 工件 SHA256 校验全过。
+- 主批次统计报告已按可复算管线再生成（含诚实指标节 + 复算命令）。
+
 ## [Unreleased] — 2026-10-05 优化批次 U（独立系统性审查落地：证据链入库 + 零断言治理 + 并发原子性 + 预算分层下沉 + 终局失效分类框架）
 
 > 同日第二轮**独立系统性审查**（13 节报告：前沿基线对照 + Python/领域专项诊断）

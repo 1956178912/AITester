@@ -78,11 +78,7 @@ def _audit_file(path: Path, declared: set[str]) -> list[tuple[str, int, str, str
                 key = _literal_key(node.args[0]) if node.args else None
                 if key and not _allowed(key, declared):
                     violations.append((str(path), node.lineno, "get", key))
-        elif (
-            isinstance(node, ast.Subscript)
-            and not isinstance(node.ctx, ast.Store)
-            and _is_state_var(node.value)
-        ):
+        elif isinstance(node, ast.Subscript) and not isinstance(node.ctx, ast.Store) and _is_state_var(node.value):
             key = _literal_key(node.slice)
             if key and not _allowed(key, declared):
                 violations.append((str(path), node.lineno, "read", key))

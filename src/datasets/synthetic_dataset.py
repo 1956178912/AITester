@@ -309,7 +309,8 @@ def test_safe_div_zero_neg():
         "bug_type": "runtime",
         "expected_pass": 2,
         "total_tests": 3,
-    },    {
+    },
+    {
         "name": "clamp_boundary_inverted",
         "description": "区间钳制函数把上下界写反，越界值被放大而非收敛",
         "template": """def clamp(value: int, low: int, high: int) -> int:
@@ -490,7 +491,6 @@ def test_normalize_warm():
         "expected_pass": 2,
         "total_tests": 4,
     },
-
 ]
 
 
@@ -614,7 +614,8 @@ def test_report_none():
         "expected_pass": 3,
         "total_tests": 4,
         "difficulty": 2,
-    },    {
+    },
+    {
         "name": "helper_missing_return_none",
         "description": "辅助函数部分分支漏写 return 隐式返回 None，主函数链上取值崩溃",
         "template": """def pick_label(score: int) -> str:
@@ -764,7 +765,6 @@ def test_empty():
         "expected_pass": 3,
         "total_tests": 4,
     },
-
 ]
 
 # P0 2.1 Level 3：跨文件依赖缺陷（module_a 调用 module_b，缺陷在 module_b 接口）
@@ -1127,7 +1127,8 @@ def test_is_increasing_with_float():
         "difficulty": 2,
         "trigger_exception": "TypeError",
         "suggested_function": "total",
-    },    {
+    },
+    {
         "name": "runtime_zero_division_average",
         "description": "空集合求均值未守卫除零，ZeroDivisionError",
         "template": """def average(grades: list) -> float:
@@ -1235,7 +1236,6 @@ def test_zero_defaults():
         "expected_pass": 1,
         "total_tests": 3,
     },
-
 ]
 
 # 2026-10（第二轮，A/B 统计效力驱动）：Level 2.5-Hard 困难运行时异常缺陷库。
@@ -1692,7 +1692,8 @@ def test_names_skip_empty():
         "difficulty": 2,
         "trigger_exception": "IndexError",
         "suggested_function": "split_entry",
-    },    {
+    },
+    {
         "name": "hard_mutable_default_arg",
         "description": "可变默认参数跨调用累积（Python 经典陷阱），多次调用结果互染",
         "template": """def append_tag(item: str, tags: list = []) -> list:
@@ -1813,7 +1814,6 @@ def test_no_unbound_error():
         "expected_pass": 1,
         "total_tests": 4,
     },
-
 ]
 
 # P0 2.1 Level 3.5：复杂跨文件依赖（3 文件依赖链 module_a → module_b → module_c）。
@@ -2064,7 +2064,8 @@ def test_rank_top_normal():
         "expected_pass": 6,
         "total_tests": 7,
         "difficulty": 4,
-    },    {
+    },
+    {
         "name": "type_none_branch_missing",
         "description": "可空输入未处理 None 分支，静默返回错误类型（None 传播）",
         "template": """def initials(full_name: str | None) -> str:
@@ -2128,7 +2129,6 @@ def test_key_type_contract():
         "expected_pass": 1,
         "total_tests": 3,
     },
-
 ]
 
 # P0 2.1 Level 4.5：导入链破坏缺陷（命名契约守卫触发场景）。
@@ -2194,7 +2194,8 @@ def test_display_keeps_contract():
         "expected_pass": 7,
         "total_tests": 7,
         "difficulty": 5,
-    },    {
+    },
+    {
         "name": "import45_shadow_builtin",
         "description": (
             "模块级符号覆盖内建名（list 被复用为变量名），下游函数把内建类型"
@@ -2230,7 +2231,6 @@ def test_no_builtin_shadow():
         "expected_pass": 1,
         "total_tests": 3,
     },
-
 ]
 
 # 按 difficulty 分组的模板库索引
