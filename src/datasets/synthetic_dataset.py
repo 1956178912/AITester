@@ -210,10 +210,10 @@ def test_clamp_invalid_range():
     },
     {
         "name": "fibonacci_inefficient",
-        "description": "斐波那契未使用迭代导致重复计算",
+        "description": "斐波那契零值边界返回错误（P0-5 修正：原纯性能缺陷 gold 测试测不到——buggy 与 fixed 数值等价，任务在 detection_rate 分母里恒不可检出；改为确定性边界缺陷）",
         "template": """def fibonacci(n: int) -> int:
     if n <= 0:
-        return 0
+        return 1
     if n == 1:
         return 1
     return fibonacci(n - 1) + fibonacci(n - 2)""",
@@ -237,17 +237,15 @@ def test_fibonacci_one():
 def test_fibonacci_ten():
     assert fibonacci(10) == 55""",
         "bug_type": "assertion",
-        "expected_pass": 3,
+        "expected_pass": 2,
         "total_tests": 3,
     },
     {
         "name": "list_index_out_of_range",
-        "description": "列表访问未检查边界",
+        "description": "列表越界被静默吞掉返回 None（P0-5 修正：原 buggy 直接 lst[1] 自然抛 IndexError，与 fixed 行为对测试等价——不可检出；改为吞异常违反抛错契约）",
         "template": """def get_second(lst: list) -> any:
-    return lst[1]""",
+    return lst[1] if len(lst) > 1 else None""",
         "fixed": """def get_second(lst: list) -> any:
-    if len(lst) < 2:
-        raise IndexError("列表元素不足两个")
     return lst[1]""",
         "test_cases": """from list_index_out_of_range import get_second
 
@@ -264,9 +262,9 @@ def test_get_second_empty():
     },
     {
         "name": "string_split_empty",
-        "description": "字符串分割未处理空字符串情况",
+        "description": "字符串分割用显式单空格分隔符而非空白聚合口径（P0-5 修正：原 buggy 的默认 split 对空串/纯空白自然返回空列表，与 fixed 等价不可检出；显式单空格口径在空输入产出单空串元素）",
         "template": """def split_words(text: str) -> list:
-    return text.split()""",
+    return text.split(" ")""",
         "fixed": """def split_words(text: str) -> list:
     if not text or not text.strip():
         return []
@@ -311,7 +309,188 @@ def test_safe_div_zero_neg():
         "bug_type": "runtime",
         "expected_pass": 2,
         "total_tests": 3,
+    },    {
+        "name": "clamp_boundary_inverted",
+        "description": "区间钳制函数把上下界写反，越界值被放大而非收敛",
+        "template": """def clamp(value: int, low: int, high: int) -> int:
+    if value < high:
+        return high
+    if value > low:
+        return low
+    return value""",
+        "fixed": """def clamp(value: int, low: int, high: int) -> int:
+    if value > high:
+        return high
+    if value < low:
+        return low
+    return value""",
+        "test_cases": """from clamp_boundary_inverted import clamp
+
+def test_clamp_within():
+    assert clamp(5, 0, 10) == 5
+
+def test_clamp_above_high():
+    assert clamp(99, 0, 10) == 10
+
+def test_clamp_below_low():
+    assert clamp(-7, 0, 10) == 0
+
+def test_clamp_boundary_equals():
+    assert clamp(0, 0, 10) == 0
+    assert clamp(10, 0, 10) == 10""",
+        "bug_type": "assertion",
+        "expected_pass": 1,
+        "total_tests": 4,
     },
+    {
+        "name": "string_slice_off_by_one",
+        "description": "取前 n 个字符的切片少取一位（range/切片边界差一）",
+        "template": """def first_n_chars(s: str, n: int) -> str:
+    if n <= 0:
+        return ""
+    return s[: n - 1]""",
+        "fixed": """def first_n_chars(s: str, n: int) -> str:
+    if n <= 0:
+        return ""
+    return s[:n]""",
+        "test_cases": """from string_slice_off_by_one import first_n_chars
+
+def test_first_n_normal():
+    assert first_n_chars("hello", 3) == "hel"
+
+def test_first_n_zero():
+    assert first_n_chars("hello", 0) == ""
+
+def test_first_n_negative():
+    assert first_n_chars("hello", -1) == ""
+
+def test_first_n_exceeds():
+    assert first_n_chars("hi", 10) == "hi"
+
+def test_first_n_one():
+    assert first_n_chars("hello", 1) == "h\"""",
+        "bug_type": "assertion",
+        "expected_pass": 4,
+        "total_tests": 5,
+    },
+    {
+        "name": "distance_abs_missing",
+        "description": "数轴距离计算漏掉绝对值，反向距离返回负数",
+        "template": """def distance(a: int, b: int) -> int:
+    return a - b""",
+        "fixed": """def distance(a: int, b: int) -> int:
+    return abs(a - b)""",
+        "test_cases": """from distance_abs_missing import distance
+
+def test_distance_forward():
+    assert distance(10, 3) == 7
+
+def test_distance_backward():
+    assert distance(3, 10) == 7
+
+def test_distance_zero():
+    assert distance(5, 5) == 0""",
+        "bug_type": "assertion",
+        "expected_pass": 2,
+        "total_tests": 3,
+    },
+    {
+        "name": "cumulative_sum_wrong_init",
+        "description": "累计器初始值非零，所有结果整体偏移",
+        "template": """def cumulative(values: list) -> list:
+    out = []
+    total = -1
+    for v in values:
+        total += v
+        out.append(total)
+    return out""",
+        "fixed": """def cumulative(values: list) -> list:
+    out = []
+    total = 0
+    for v in values:
+        total += v
+        out.append(total)
+    return out""",
+        "test_cases": """from cumulative_sum_wrong_init import cumulative
+
+def test_cumulative_basic():
+    assert cumulative([1, 2, 3]) == [1, 3, 6]
+
+def test_cumulative_empty():
+    assert cumulative([]) == []
+
+def test_cumulative_negatives():
+    assert cumulative([5, -2, 1]) == [5, 3, 4]
+
+def test_cumulative_single():
+    assert cumulative([7]) == [7]""",
+        "bug_type": "assertion",
+        "expected_pass": 1,
+        "total_tests": 4,
+    },
+    {
+        "name": "boolean_inverted_flag",
+        "description": "布尔校验函数把返回值取反，调用方判定全反",
+        "template": """def is_valid_username(name: str) -> bool:
+    ok = bool(name) and name.isalnum() and len(name) <= 20
+    return not ok""",
+        "fixed": """def is_valid_username(name: str) -> bool:
+    ok = bool(name) and name.isalnum() and len(name) <= 20
+    return ok""",
+        "test_cases": """from boolean_inverted_flag import is_valid_username
+
+def test_valid_name():
+    assert is_valid_username("alice01") is True
+
+def test_empty_name():
+    assert is_valid_username("") is False
+
+def test_special_chars():
+    assert is_valid_username("a-b!") is False
+
+def test_too_long():
+    assert is_valid_username("a" * 21) is False""",
+        "bug_type": "assertion",
+        "expected_pass": 3,
+        "total_tests": 4,
+    },
+    {
+        "name": "sign_check_wrong_operator",
+        "description": "温度符号判断用错比较运算符（<= 写成 >=），极值判定全反",
+        "template": """def is_freezing(celsius: int) -> bool:
+    return celsius >= 0
+
+
+def normalize(temp: int) -> int:
+    if is_freezing(temp):
+        return 0
+    return temp""",
+        "fixed": """def is_freezing(celsius: int) -> bool:
+    return celsius <= 0
+
+
+def normalize(temp: int) -> int:
+    if is_freezing(temp):
+        return 0
+    return temp""",
+        "test_cases": """from sign_check_wrong_operator import is_freezing, normalize
+
+def test_freezing_point():
+    assert is_freezing(-5) is True
+
+def test_above_zero():
+    assert is_freezing(10) is False
+
+def test_normalize_freezing():
+    assert normalize(-3) == 0
+
+def test_normalize_warm():
+    assert normalize(25) == 25""",
+        "bug_type": "assertion",
+        "expected_pass": 2,
+        "total_tests": 4,
+    },
+
 ]
 
 
@@ -354,7 +533,7 @@ def sort_desc(arr: list) -> list:
     n = len(arr)
     for i in range(n - 1):
         for j in range(n - 1 - i):
-            if compare(arr[j], arr[j + 1]) > 0:
+            if compare(arr[j], arr[j + 1]) < 0:
                 arr[j], arr[j + 1] = arr[j + 1], arr[j]
     return arr
 
@@ -382,7 +561,7 @@ def test_top_k_edge():
     assert top_k([1, 2, 3], 0) == []
     assert top_k([1, 2, 3], 10) == [3, 2, 1]""",
         "bug_type": "assertion",
-        "expected_pass": 3,
+        "expected_pass": 1,
         "total_tests": 4,
         "difficulty": 2,
     },
@@ -435,7 +614,157 @@ def test_report_none():
         "expected_pass": 3,
         "total_tests": 4,
         "difficulty": 2,
+    },    {
+        "name": "helper_missing_return_none",
+        "description": "辅助函数部分分支漏写 return 隐式返回 None，主函数链上取值崩溃",
+        "template": """def pick_label(score: int) -> str:
+    if score >= 90:
+        return "excellent"
+    if score >= 60:
+        return "pass"
+
+def report(score: int) -> str:
+    return f"result: {pick_label(score).upper()}\"""",
+        "fixed": """def pick_label(score: int) -> str:
+    if score >= 90:
+        return "excellent"
+    if score >= 60:
+        return "pass"
+    return "fail"
+
+def report(score: int) -> str:
+    return f"result: {pick_label(score).upper()}\"""",
+        "test_cases": """from helper_missing_return_none import pick_label, report
+
+def test_excellent():
+    assert pick_label(95) == "excellent"
+
+def test_pass():
+    assert pick_label(70) == "pass"
+
+def test_fail_branch():
+    assert pick_label(30) == "fail"
+
+def test_report_fail_path():
+    assert report(10) == "result: FAIL\"""",
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 4,
     },
+    {
+        "name": "max_min_swapped_helpers",
+        "description": "统计函数中 min/max 比较方向写反，极值结果互换",
+        "template": """def _better(current: int, candidate: int) -> bool:
+    return candidate < current
+
+def best_score(scores: list) -> int:
+    best = scores[0]
+    for s in scores[1:]:
+        if _better(best, s):
+            best = s
+    return best
+
+def worst_score(scores: list) -> int:
+    worst = scores[0]
+    for s in scores[1:]:
+        if not _better(worst, s):
+            worst = s
+    return worst""",
+        "fixed": """def _better(current: int, candidate: int) -> bool:
+    return candidate > current
+
+def best_score(scores: list) -> int:
+    best = scores[0]
+    for s in scores[1:]:
+        if _better(best, s):
+            best = s
+    return best
+
+def worst_score(scores: list) -> int:
+    worst = scores[0]
+    for s in scores[1:]:
+        if not _better(worst, s):
+            worst = s
+    return worst""",
+        "test_cases": """from max_min_swapped_helpers import best_score, worst_score
+
+def test_best_basic():
+    assert best_score([3, 9, 4]) == 9
+
+def test_worst_basic():
+    assert worst_score([3, 9, 4]) == 3
+
+def test_best_single():
+    assert best_score([5]) == 5
+
+def test_consistency():
+    scores = [10, 2, 8]
+    assert best_score(scores) >= worst_score(scores)""",
+        "bug_type": "assertion",
+        "expected_pass": 2,
+        "total_tests": 4,
+    },
+    {
+        "name": "round_floor_precision",
+        "description": "统计口径四舍五入被写成向下取整，系统性偏低",
+        "template": """def rounded_ratio(hit: int, total: int) -> float:
+    if total == 0:
+        return 0.0
+    import math
+    return math.floor(hit / total * 100) / 100""",
+        "fixed": """def rounded_ratio(hit: int, total: int) -> float:
+    if total == 0:
+        return 0.0
+    return round(hit / total * 100) / 100""",
+        "test_cases": """from round_floor_precision import rounded_ratio
+
+def test_round_up_case():
+    # 2/3 = 66.67%：round → 67，floor → 66（无 .5 临界，规避 banker's rounding）
+    assert rounded_ratio(2, 3) == 0.67
+
+def test_zero_total():
+    assert rounded_ratio(0, 0) == 0.0
+
+def test_exact_value():
+    assert rounded_ratio(1, 4) == 0.25
+
+def test_all_hits():
+    assert rounded_ratio(10, 10) == 1.0""",
+        "bug_type": "assertion",
+        "expected_pass": 3,
+        "total_tests": 4,
+    },
+    {
+        "name": "range_skip_last_element",
+        "description": "处理循环 range 少覆盖最后一个元素（应 range(len) 而非 len-1）",
+        "template": """def mark_positions(text: str, ch: str) -> list:
+    marks = []
+    for i in range(len(text) - 1):
+        marks.append(i if text[i] == ch else -1)
+    return marks""",
+        "fixed": """def mark_positions(text: str, ch: str) -> list:
+    marks = []
+    for i in range(len(text)):
+        marks.append(i if text[i] == ch else -1)
+    return marks""",
+        "test_cases": """from range_skip_last_element import mark_positions
+
+def test_marks_all():
+    assert mark_positions("aaa", "a") == [0, 1, 2]
+
+def test_marks_partial():
+    assert mark_positions("aba", "a") == [0, -1, 2]
+
+def test_last_char_hit():
+    assert mark_positions("xyz", "z") == [-1, -1, 2]
+
+def test_empty():
+    assert mark_positions("", "a") == []""",
+        "bug_type": "assertion",
+        "expected_pass": 3,
+        "total_tests": 4,
+    },
+
 ]
 
 # P0 2.1 Level 3：跨文件依赖缺陷（module_a 调用 module_b，缺陷在 module_b 接口）
@@ -444,14 +773,14 @@ def test_report_none():
 CROSS_FILE_PATTERNS: list[dict[str, Any]] = [
     {
         "name": "cross_file_api_contract",
-        "description": "module_a 调用 module_b.process()，module_b 未处理空列表导致 IndexError",
+        "description": "module_a 依赖 module_b.process() 的输出长度契约（长度=输入），module_b 返回尾部多一个哨兵元素（P0-5 修正：原 buggy 对空列表行为与 fixed 等价，不可检出）",
         "module_a_code": """from module_b import process
 
 def run_pipeline(items: list) -> list:
     result = process(items)
     return [x * 10 for x in result]""",
         "module_b_code": """def process(items: list) -> list:
-    return [x + 1 for x in items]""",
+    return [x + 1 for x in items] + [0]""",
         "fixed_module_b_code": """def process(items: list) -> list:
     if not items:
         return []
@@ -471,7 +800,7 @@ def test_run_pipeline_normal():
 def test_run_pipeline_empty():
     assert run_pipeline([]) == []""",
         "bug_type": "runtime",
-        "expected_pass": 3,
+        "expected_pass": 0,
         "total_tests": 4,
         "difficulty": 3,
         "target_module": "module_b",
@@ -798,7 +1127,115 @@ def test_is_increasing_with_float():
         "difficulty": 2,
         "trigger_exception": "TypeError",
         "suggested_function": "total",
+    },    {
+        "name": "runtime_zero_division_average",
+        "description": "空集合求均值未守卫除零，ZeroDivisionError",
+        "template": """def average(grades: list) -> float:
+    return sum(grades) / len(grades)""",
+        "fixed": """def average(grades: list) -> float:
+    if not grades:
+        raise ValueError("grades 不能为空")
+    return sum(grades) / len(grades)""",
+        "test_cases": """import pytest
+
+from runtime_zero_division_average import average
+
+def test_average_normal():
+    assert average([2, 4, 6]) == 4.0
+
+def test_average_single():
+    assert average([9]) == 9.0
+
+def test_average_float():
+    assert average([1, 2]) == 1.5
+
+def test_average_empty_raises():
+    with pytest.raises(ValueError):
+        average([])""",
+        "bug_type": "runtime",
+        "expected_pass": 3,
+        "total_tests": 4,
     },
+    {
+        "name": "runtime_type_error_str_num",
+        "description": "数量拼接把 str 与 int 直接相加，TypeError",
+        "template": """def build_summary(count: int, label: str) -> str:
+    return "共 " + count + " 个 " + label""",
+        "fixed": """def build_summary(count: int, label: str) -> str:
+    return f"共 {count} 个 {label}\"""",
+        "test_cases": """from runtime_type_error_str_num import build_summary
+
+def test_summary_normal():
+    assert build_summary(3, "苹果") == "共 3 个 苹果"
+
+def test_summary_zero():
+    assert build_summary(0, "错误") == "共 0 个 错误"
+
+def test_summary_large():
+    assert build_summary(12345, "条目") == "共 12345 个 条目\"""",
+        "bug_type": "runtime",
+        "expected_pass": 0,
+        "total_tests": 3,
+    },
+    {
+        "name": "runtime_value_error_int_cast",
+        "description": "字符串转整数未守卫非数字输入，ValueError 未收敛为域错误",
+        "template": """def parse_port(raw: str) -> int:
+    return int(raw)""",
+        "fixed": """def parse_port(raw: str) -> int:
+    try:
+        port = int(raw.strip())
+    except ValueError:
+        raise ValueError(f"无效端口: {raw!r}") from None
+    if not (0 <= port <= 65535):
+        raise ValueError(f"端口越界: {port}")
+    return port""",
+        "test_cases": """import pytest
+
+from runtime_value_error_int_cast import parse_port
+
+def test_parse_normal():
+    assert parse_port("8080") == 8080
+
+def test_parse_with_spaces():
+    assert parse_port(" 80 ") == 80
+
+def test_parse_non_numeric_raises():
+    with pytest.raises(ValueError):
+        parse_port("abc")
+
+def test_parse_out_of_range_raises():
+    with pytest.raises(ValueError):
+        parse_port("99999")""",
+        "bug_type": "runtime",
+        "expected_pass": 2,
+        "total_tests": 4,
+    },
+    {
+        "name": "runtime_key_error_dict_get",
+        "description": "字典取默认值用下标访问，缺键抛 KeyError 而非回退默认",
+        "template": """def describe_level(level: int) -> str:
+    _NAMES = {1: "入门", 2: "进阶", 3: "专家"}
+    return _NAMES[level]""",
+        "fixed": """def describe_level(level: int) -> str:
+    _NAMES = {1: "入门", 2: "进阶", 3: "专家"}
+    return _NAMES.get(level, "未知")""",
+        "test_cases": """from runtime_key_error_dict_get import describe_level
+
+def test_known_levels():
+    assert describe_level(1) == "入门"
+    assert describe_level(3) == "专家"
+
+def test_unknown_level_defaults():
+    assert describe_level(9) == "未知"
+
+def test_zero_defaults():
+    assert describe_level(0) == "未知\"""",
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 3,
+    },
+
 ]
 
 # 2026-10（第二轮，A/B 统计效力驱动）：Level 2.5-Hard 困难运行时异常缺陷库。
@@ -1255,7 +1692,128 @@ def test_names_skip_empty():
         "difficulty": 2,
         "trigger_exception": "IndexError",
         "suggested_function": "split_entry",
+    },    {
+        "name": "hard_mutable_default_arg",
+        "description": "可变默认参数跨调用累积（Python 经典陷阱），多次调用结果互染",
+        "template": """def append_tag(item: str, tags: list = []) -> list:
+    tags.append(item)
+    return tags
+
+def tag_pair(a: str, b: str) -> list:
+    first = append_tag(a)
+    second = append_tag(b)
+    return [first, second]""",
+        "fixed": """def append_tag(item: str, tags: list | None = None) -> list:
+    if tags is None:
+        tags = []
+    tags.append(item)
+    return tags
+
+def tag_pair(a: str, b: str) -> list:
+    first = append_tag(a)
+    second = append_tag(b)
+    return [first, second]""",
+        "test_cases": """from hard_mutable_default_arg import append_tag, tag_pair
+
+def test_single_call():
+    assert append_tag("x") == ["x"]
+
+def test_pair_independent():
+    result = tag_pair("a", "b")
+    assert result == [["a"], ["b"]]
+
+def test_repeated_calls_isolated():
+    first = append_tag("p")
+    second = append_tag("q")
+    assert first == ["p"]
+    assert second == ["q"]""",
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 3,
     },
+    {
+        "name": "hard_is_vs_equality",
+        "description": "身份比较 is 用于值比较，大整数/新对象场景恒 False",
+        "template": """def find_index(values: list, target: int) -> int:
+    for i, v in enumerate(values):
+        if v is target:
+            return i
+    return -1
+
+def lookup(values: list, target: int) -> str:
+    idx = find_index(values, target)
+    return "found" if idx >= 0 else "missing\"""",
+        "fixed": """def find_index(values: list, target: int) -> int:
+    for i, v in enumerate(values):
+        if v == target:
+            return i
+    return -1
+
+def lookup(values: list, target: int) -> str:
+    idx = find_index(values, target)
+    return "found" if idx >= 0 else "missing\"""",
+        "test_cases": """from hard_is_vs_equality import find_index, lookup
+
+def test_find_present():
+    assert find_index([1000, 2000], int("2000")) == 1
+
+def test_find_absent():
+    assert find_index([1000, 2000], int("3000")) == -1
+
+def test_lookup_found():
+    assert lookup([500, 600, 700], int("600")) == "found"
+
+def test_lookup_missing():
+    assert lookup([500, 600, 700], int("999")) == "missing\"""",
+        "bug_type": "assertion",
+        "expected_pass": 2,
+        "total_tests": 4,
+    },
+    {
+        "name": "hard_except_swallows_nameerror",
+        "description": "过宽 except 捕获并吞掉 NameError，后续分支引用未定义变量",
+        "template": """def parse_config(raw: dict) -> int:
+    try:
+        timeout = raw["timeout"]
+    except Exception:
+        pass
+    return timeout
+
+
+def load_default() -> int:
+    return parse_config({})""",
+        "fixed": """def parse_config(raw: dict) -> int:
+    try:
+        timeout = raw["timeout"]
+    except KeyError:
+        timeout = 30
+    return timeout
+
+
+def load_default() -> int:
+    return parse_config({})""",
+        "test_cases": """import pytest
+
+from hard_except_swallows_nameerror import parse_config, load_default
+
+def test_timeout_present():
+    assert parse_config({"timeout": 5}) == 5
+
+def test_timeout_missing_default():
+    assert parse_config({}) == 30
+
+def test_load_default():
+    assert load_default() == 30
+
+def test_no_unbound_error():
+    # 缺键路径必须返回默认值而非抛 NameError/UnboundLocalError
+    with pytest.raises((ValueError, TypeError)):
+        parse_config(None)""",
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 4,
+    },
+
 ]
 
 # P0 2.1 Level 3.5：复杂跨文件依赖（3 文件依赖链 module_a → module_b → module_c）。
@@ -1364,11 +1922,14 @@ def test_analyze_dataset_with_none():
 BUG_PATTERNS_LEVEL4: list[dict[str, Any]] = [
     {
         "name": "boundary_and_exception",
-        "description": "日期解析：负数年份 + 无效时区字符串未处理，异常路径隐蔽",
+        "description": "日期解析吞掉无效输入返回哨兵值（P0-5 修正：原 buggy 的 strptime 本就抛 ValueError 与 fixed 等价不可检出；fixed 侧 tz replace 混算 naive/aware 是真 bug，一并修复）",
         "template": """import datetime
 
 def parse_date(s: str) -> datetime.datetime:
-    return datetime.datetime.strptime(s, "%Y-%m-%d")
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        return datetime.datetime.min
 
 def days_until(target: str) -> int:
     dt = parse_date(target)
@@ -1385,16 +1946,13 @@ def parse_date(s: str) -> datetime.datetime:
     try:
         return datetime.datetime.strptime(s.strip(), "%Y-%m-%d")
     except ValueError:
-        raise ValueError(f"无法解析日期: {s!r}（期望格式 YYYY-MM-DD）")
+        raise ValueError(f"无法解析日期: {s!r}（期望格式 YYYY-MM-DD）") from None
 
 def days_until(target: str) -> int:
     if target is None:
         raise ValueError("target 不能为 None")
     dt = parse_date(target)
-    now = datetime.datetime.now()
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.timezone.utc)
-    delta = dt - now
+    delta = dt - datetime.datetime.now()
     return delta.days
 
 def is_expired(target: str) -> bool:
@@ -1506,7 +2064,71 @@ def test_rank_top_normal():
         "expected_pass": 6,
         "total_tests": 7,
         "difficulty": 4,
+    },    {
+        "name": "type_none_branch_missing",
+        "description": "可空输入未处理 None 分支，静默返回错误类型（None 传播）",
+        "template": """def initials(full_name: str | None) -> str:
+    parts = full_name.split()
+    return ".".join(p[0].upper() for p in parts)""",
+        "fixed": """def initials(full_name: str | None) -> str:
+    if not full_name or not full_name.strip():
+        return ""
+    parts = full_name.split()
+    return ".".join(p[0].upper() for p in parts)""",
+        "test_cases": """from type_none_branch_missing import initials
+
+def test_two_words():
+    assert initials("Ada Lovelace") == "A.L"
+
+def test_none_input():
+    assert initials(None) == ""
+
+def test_empty_input():
+    assert initials("") == ""
+
+def test_whitespace_input():
+    assert initials("   ") == ""
+
+def test_single_word():
+    assert initials("guide") == "G\"""",
+        "bug_type": "runtime",
+        "expected_pass": 3,
+        "total_tests": 5,
     },
+    {
+        "name": "type_int_str_key_contract",
+        "description": "键类型契约不一致：写入 int 键、查询 str 键，静默走 miss 分支",
+        "template": """_STOCK = {}
+
+def add_item(sku: int, qty: int) -> None:
+    _STOCK[sku] = qty
+
+def stock_of(sku: str) -> int:
+    return _STOCK.get(sku, 0)""",
+        "fixed": """_STOCK = {}
+
+def add_item(sku: int, qty: int) -> None:
+    _STOCK[sku] = qty
+
+def stock_of(sku: str) -> int:
+    return _STOCK.get(int(sku), 0)""",
+        "test_cases": """from type_int_str_key_contract import add_item, stock_of, _STOCK
+
+def test_add_then_query():
+    add_item(42, 7)
+    assert stock_of("42") == 7
+
+def test_unknown_sku_zero():
+    assert stock_of("999") == 0
+
+def test_key_type_contract():
+    add_item(7, 1)
+    assert 7 in _STOCK and isinstance(next(iter(_STOCK)), int)""",
+        "bug_type": "assertion",
+        "expected_pass": 1,
+        "total_tests": 3,
+    },
+
 ]
 
 # P0 2.1 Level 4.5：导入链破坏缺陷（命名契约守卫触发场景）。
@@ -1572,7 +2194,43 @@ def test_display_keeps_contract():
         "expected_pass": 7,
         "total_tests": 7,
         "difficulty": 5,
+    },    {
+        "name": "import45_shadow_builtin",
+        "description": (
+            "模块级符号覆盖内建名（list 被复用为变量名），下游函数把内建类型"
+            "当值调用，TypeError。修复需重命名 shadowing 符号并同步引用"
+        ),
+        "template": """list = ["a", "b", "c"]
+
+def first_item() -> str:
+    return list[0]
+
+def char_count(s: str) -> int:
+    return len(list(s))""",
+        "fixed": """ITEMS = ["a", "b", "c"]
+
+def first_item() -> str:
+    return ITEMS[0]
+
+def char_count(s: str) -> int:
+    return len(list(s))""",
+        "test_cases": """from import45_shadow_builtin import first_item, char_count
+
+def test_first_item():
+    assert first_item() == "a"
+
+def test_char_count_uses_real_builtin():
+    assert char_count("xyz") == 3
+
+def test_no_builtin_shadow():
+    import import45_shadow_builtin as m
+
+    assert m.__dict__.get("list") in (None, list)""",
+        "bug_type": "runtime",
+        "expected_pass": 1,
+        "total_tests": 3,
     },
+
 ]
 
 # 按 difficulty 分组的模板库索引
