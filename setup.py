@@ -39,19 +39,15 @@ setup(
         "langchain>=1.0.0",
         "langchain-openai>=1.0.0",
         "langgraph>=1.0.0",
-        "pymysql>=1.0.0",
-        # DBUtils: PooledDB 连接池，src/db/mysql_client.py 使用
-        "DBUtils>=3.0.0",
         "click>=8.0.0",
-        "pytest>=8.0.0",
-        "pytest-cov>=4.0.0",
         "python-dotenv>=1.0.0",
         # 注：radon 于 2026-09-09 依赖审计中移除（全项目无 import 引用）
         "requests>=2.31.0",
-        # O35（2026-09-30 全面审查 P1）：与 pyproject.toml [project].dependencies
-        # 对齐的两个直接 import 依赖（src/api/api_manager.py → openai；
-        # src/agents/llm_client.py → zai）。PEP 517 路径以 pyproject 为准，
-        # 此处保留仅为非 PEP 517 回退路径的口径一致。
+        # N-漂移修复（2026-10-05 复审）：与非 PEP 517 回退路径对齐
+        # pyproject [project].dependencies——此前此处仍列 pymysql/DBUtils
+        # （→ [db] extra）与 pytest/pytest-cov（→ [dev] extra），回退安装
+        # 会把测试工具与可选 DB 驱动装进运行时依赖面（见下方 extras_require
+        # 与 tests/test_packaging.py 的 install_requires 漂移守卫）。
         "openai>=1.0.0",
         "zai-sdk>=0.2.0",
     ],

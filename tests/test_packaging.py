@@ -6,6 +6,7 @@
 本测试不依赖 setuptools（venv 中可能未安装），改用文件系统断言锁定。
 """
 
+import ast as _ast
 import tomllib as _tomllib
 from pathlib import Path
 
@@ -98,3 +99,48 @@ def test_db_optional_extra_exists():
     }
     assert {"pymysql", "dbutils"} <= db_deps, "pymysql/DBUtils 应在 db extra"
     assert not ({"pymysql", "dbutils"} & deps), "pymysql/DBUtils 不得在核心运行时依赖中"
+
+
+# N-漂移守卫（2026-10-05 复审）：setup.py 是非 PEP 517 回退路径，其
+# install_requires 曾与 pyproject [project].dependencies 漂移（多出
+# pymysql/DBUtils/pytest/pytest-cov——P2-5 分组后未同步回退路径），导致
+# 走 setup.py 安装的用户多装测试工具与 DB 驱动。下方测试用 ast 静态解析
+# setup.py（不执行），锁定两条路径核心依赖集合一致。
+
+
+def _normalize_dep_name(dep: str) -> str:
+    """PyPI 名称归一：取约束前的包名，小写，-/_ 视为等价（PEP 503）。"""
+    name = dep.strip()
+    for sep in (">=", "<=", "==", "!=", "~=", ">", "<", ";", "["):
+        name = name.split(sep)[0]
+    return name.strip().lower().replace("_", "-")
+
+
+def _setup_py_install_requires() -> list[str]:
+    """ast 解析 setup.py 的 setup(install_requires=[...]) 字面量（不执行文件）。"""
+    tree = _ast.parse((PROJECT_ROOT / "setup.py").read_text(encoding="utf-8"))
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call):
+            func = node.func
+            func_name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if func_name == "setup":
+                for kw in node.keywords:
+                    if kw.arg == "install_requires" and isinstance(kw.value, _ast.List):
+                        return [
+                            elt.value
+                            for elt in kw.value.elts
+                            if isinstance(elt, _ast.Constant) and isinstance(elt.value, str)
+                        ]
+    raise AssertionError("setup.py 中未找到 setup(install_requires=[...]) 字面量列表")
+
+
+def test_setup_py_install_requires_matches_pyproject():
+    """N-漂移守卫：setup.py 回退路径核心依赖集合 == pyproject [project].dependencies。"""
+    project = _pyproject_project()
+    pyproject_names = {_normalize_dep_name(d) for d in project.get("dependencies", [])}
+    setup_names = {_normalize_dep_name(d) for d in _setup_py_install_requires()}
+    assert setup_names == pyproject_names, (
+        f"setup.py install_requires 与 pyproject [project].dependencies 漂移："
+        f"仅 setup.py 有 {sorted(setup_names - pyproject_names)}，"
+        f"仅 pyproject 有 {sorted(pyproject_names - setup_names)}"
+    )
