@@ -55,6 +55,11 @@ _CORE_THRESHOLD = 0.85
 # 更高门槛的核心修复路由模块（8. 门槛分两级：总 85% + 修复路由 90% +
 # 其余核心 85%）
 _STRICT_CORE_THRESHOLD = 0.90
+# P1-8（2026-10-05 独立审查）：行覆盖总门禁——历史口径行覆盖仅 Codecov
+# 非阻断上传（新增 0% 覆盖代码可静默合入）；现以实测 88%（BASELINE
+# line_total_pct）为基线下探 3pp 设门槛，防总量漂移（增量门禁属后续
+# diff-cover 批次）。随覆盖提升应同步上调本值。
+_TOTAL_LINE_THRESHOLD = 0.85
 _STRICT_CORE_MODULES: tuple[str, ...] = (
     "graph/workflow.py",
     "agents/error_classifier.py",
@@ -139,8 +144,25 @@ def _read_branch_rates(xml_path: Path) -> tuple[float, dict[str, float]]:
     return total_rate, rates
 
 
+def _read_line_rate(xml_path: Path) -> float | None:
+    """解析 coverage.xml 全仓行覆盖率（lines-covered / lines-valid 聚合口径）。
+
+    与分支同理由：根节点 line-rate 是模块均值口径，优先用根节点聚合计数；
+    产物无行覆盖聚合数据时返回 None（门禁跳过——数据缺失不阻断，与分支
+    门槛"产物缺 branch-count 时兜底"同口径）。
+    """
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    valid = root.get("lines-valid")
+    covered = root.get("lines-covered")
+    if valid is not None and covered is not None and int(valid) > 0:
+        return int(covered) / int(valid)
+    rate = root.get("line-rate")
+    return float(rate) if rate is not None else None
+
+
 def check_branch_coverage(xml_path: str | Path = "coverage.xml") -> list[str]:
-    """校验总门槛 + 核心路由模块逐模块门槛。
+    """校验行覆盖总门禁 + 总门槛 + 核心路由模块逐模块门槛。
 
     Returns:
         fail 信息列表（空 = 全过）。
@@ -152,12 +174,17 @@ def check_branch_coverage(xml_path: str | Path = "coverage.xml") -> list[str]:
         return [f"coverage.xml 不存在：{p}（先运行 pytest --cov=src --cov-branch --cov-report=xml）"]
     try:
         total_rate, rates = _read_branch_rates(p)
+        line_rate = _read_line_rate(p)
     except (ET.ParseError, ValueError) as e:
         return [f"coverage.xml 解析失败：{e}"]
 
     failures: list[str] = []
     if total_rate < _TOTAL_THRESHOLD:
         failures.append(f"总分支覆盖率 {total_rate:.0%} 低于门槛 {_TOTAL_THRESHOLD:.0%}（--cov-branch 总口径）")
+    # P1-8：行覆盖总门禁（历史口径仅报告不阻断——新增 0% 覆盖代码可静默合入）；
+    # 产物无行覆盖聚合数据（line_rate=None）时跳过，不误报
+    if line_rate is not None and line_rate < _TOTAL_LINE_THRESHOLD:
+        failures.append(f"总行覆盖率 {line_rate:.0%} 低于门槛 {_TOTAL_LINE_THRESHOLD:.0%}（P1-8 行覆盖门禁）")
 
     for module in _CORE_MODULES:
         # coverage.xml 中 filename 形如 "graph/workflow.py"（相对 src/ 口径）
@@ -185,7 +212,8 @@ def main() -> int:
         print(f"分支覆盖门槛未达标（{len(failures)} 处）")
         return 1
     print(
-        f"分支覆盖门槛达标（总 ≥{_TOTAL_THRESHOLD:.0%}，核心修复路由模块 ≥{_STRICT_CORE_THRESHOLD:.0%}，"
+        f"覆盖门槛达标（行 ≥{_TOTAL_LINE_THRESHOLD:.0%}，分支总 ≥{_TOTAL_THRESHOLD:.0%}，"
+        f"核心修复路由模块 ≥{_STRICT_CORE_THRESHOLD:.0%}，"
         f"其余核心路由模块 ≥{_CORE_THRESHOLD:.0%}）"
     )
     return 0

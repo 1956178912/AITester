@@ -31,6 +31,13 @@ on:
 permissions:
   contents: read
 
+# P1-10（2026-10-05 独立审查）：同 ref 连续 push 自动取消在途旧 run
+#（3 档矩阵 × 全量套件 30s+ 安装 3-8min，旧 run 空跑浪费矩阵资源；
+# main 分支取消旧保新，PR 天然 per-ref 无冲突）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   # 9. P2 #9: LLM 集成冒烟（可选，低默认关闭；成本敏感——仅真实 API 端点连通性
   #    + 最小 JSON 输出校验，不跑基准、不写缓存。AITESTER_SMOKE_LLM=true 时启用，
@@ -56,9 +63,9 @@ jobs:
         uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
 
       - name: Set up Python 3.14
-        # O10：SHA 固定——actions/setup-python@v5 →
-        # f858eb078f638818a12f38e006512481708417d4（v5.1.0, 2024-03）
-        uses: actions/setup-python@f858eb078f638818a12f38e006512481708417d4
+        # O10：SHA 固定——actions/setup-python@v6（P1-10：与 test/security
+        # 作业同版本对齐，消除同文件 v5/v6 混用）
+        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
         with:
           python-version: '3.14'
           cache: pip
@@ -287,7 +294,9 @@ jobs:
         # 测试成本，仅多两次脚本运行；收益是防止"某版本分支覆盖静默劣化"
         # 只在 3.14 被拦截。2026-10-05 本地实测（3.14 全量 3950 用例，
         # 总分支覆盖 88% ≥ 77% 门槛）：脚本退出码 0。
-        # 解析 coverage.xml：总分支覆盖 ≥85%（2026-09-29 批次上调）
+        # 解析 coverage.xml：总分支覆盖 ≥77%（脚本 _TOTAL_THRESHOLD 实际值；
+        # 2026-10-02 批次回绿口径，ADR-0014 的 85% 已被该批次 Amended）
+        # + 总行覆盖 ≥85%（P1-8 新增行覆盖硬门禁，历史口径仅报告）
         # + 核心修复路由模块（graph/workflow.py、agents/error_classifier.py）
         # 逐模块 ≥90%（严格门槛）+ 其余核心路由模块 ≥85%
         run: python scripts/check_branch_coverage.py coverage.xml
@@ -394,6 +403,28 @@ jobs:
           }
           echo "=== pip-audit 通过（最近一次审计 JSON 报告） ==="
           cat pip_audit_latest.json
+
+      - name: Check transitive dependencies for vulnerabilities (P1-7 lock 全量审计)
+        # P1-7（2026-10-05 独立审查）：上一步 `pip-audit -r requirements.txt
+        # --no-deps` 只审计顶层 24 个直接依赖——requirements.lock 里的 132
+        # 项传递依赖（aiohttp/urllib3/grpcio/protobuf/pyarrow 等）此前不进
+        # 任何漏洞扫描（SBOM 同样只含顶层）。本步骤对 lock 全量清单审计
+        # （pip freeze 口径，pip-audit 原生支持），豁免清单与顶层步骤同款
+        # （chromadb 及其豁免登记治理不变）。CI 不按 lock 安装（执行环境
+        # 仍走 requirements.txt），lock 审计是"静态全量漏洞面"守卫。
+        run: |
+          pip-audit -r requirements.lock \
+            --ignore-vuln PYSEC-2026-311 \
+            --ignore-vuln PYSEC-2026-3813 \
+            --ignore-vuln PYSEC-2026-3814 \
+            --ignore-vuln PYSEC-2026-3815 \
+            -f json -o pip_audit_lock.json || {
+            code=$?
+            echo "::error title=pip-audit(lock) 退出码非 0（P1-7 阻断）::传递依赖出现未豁免漏洞；新 advisory 请评估升级，暂无法修复时按 docs/dependency_exemptions.md 流程登记豁免"
+            cat pip_audit_lock.json 2>/dev/null || echo "(无 JSON 输出——网络错误时可能未生成)"
+            exit "$code"
+          }
+          echo "=== pip-audit(lock) 通过：132 项传递依赖全量审计 ==="
 
       - name: Upload security scan reports (审计工件)
         # pip-audit / gitleaks 报告：失败排查 + 维护者对照登记表"复审触发

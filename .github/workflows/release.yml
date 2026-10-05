@@ -25,8 +25,41 @@ permissions:
   contents: read
 
 jobs:
+  # P1-10（2026-10-05 独立审查）：CI 绿门——发布作业此前不依赖 CI 结果
+  #（tag 可指向测试全红/安全扫描未过的 commit 直接构建发布）。本作业用
+  # GitHub commit status API 查询 tag 所指 commit 的 ci.yml 汇总状态
+  #（"AITester CI" workflow 的 test/security 作业），任一失败/pending
+  # 即阻断发布。tag push 时 CI 若尚未跑完，status 为 pending → 发布等待
+  # 由重试逻辑覆盖（最多 10 分钟，超时保守阻断——发布可以重打 tag，
+  # 误发不可撤回）。
+  ci-green:
+    name: Require CI green on tagged commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check CI status of tagged commit
+        run: |
+          sha="${{ github.sha }}"
+          echo "检查 commit ${sha} 的 CI 状态..."
+          for i in $(seq 1 20); do
+            resp=$(curl -sSf -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/commits/${sha}/check-runs?per_page=100")
+            fail_count=$(echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); runs=d.get('check_runs',[]); print(sum(1 for r in runs if r['conclusion'] in ('failure','timed_out','action_required') or r['status']!='completed'))")
+            total=$(echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('check_runs',[])))")
+            echo "第 $i 次轮询：check_runs 总数 ${total}，未通过/在途 ${fail_count}"
+            if [ "$total" -gt 0 ] && [ "$fail_count" -eq 0 ]; then
+              echo "CI 全绿，放行发布"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error title=CI 绿门超时::tagged commit 的 CI 未在 10 分钟内全绿（或无任何 check run——请确认 CI 已在该 commit 上触发），保守阻断发布"
+          exit 1
+
   release:
     name: Build and release (sdist + wheel + SBOM)
+    needs: ci-green
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
