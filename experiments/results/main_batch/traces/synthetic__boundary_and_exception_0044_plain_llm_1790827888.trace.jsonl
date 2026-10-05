@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790827888.669587, "meta": {"dataset_task_id": "synthetic__boundary_and_exception_0044", "baseline": "plain_llm", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790827901.235192, "run_id": "b6e083402d7e4986", "span_id": "291cf8e60297", "output": {"generated_test_len": 4059}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790827902.0489678, "run_id": "b6e083402d7e4986", "span_id": "801430972c76", "output": {"passed": false, "coverage": 95.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 813.11, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790827904.639124, "passed": false, "duration_s": 15.97, "token_usage": {"input_tokens": 579, "output_tokens": 1208, "total_tokens": 1787, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1787}}}

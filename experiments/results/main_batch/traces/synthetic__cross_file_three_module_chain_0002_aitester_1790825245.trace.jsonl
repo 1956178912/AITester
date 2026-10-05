@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790825245.9949691, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": "aggregate"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790825246.016225, "run_id": "184a8ffd314449c7", "span_id": "af2dd8ca8256", "output": {"function_name": "aggregate", "test_cases": 0}, "decision": "plan_complete", "duration_ms": 0.49}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790825246.017087, "run_id": "184a8ffd314449c7", "span_id": "8354441e4ba1", "output": {"generated_test_len": 2533}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790825246.4174862, "run_id": "184a8ffd314449c7", "span_id": "a39df4af1438", "output": {"passed": true, "coverage": 58.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 400.13, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790825246.417803, "run_id": "184a8ffd314449c7", "span_id": "e5035a54fb5e", "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790825246.4183521, "passed": true, "duration_s": 0.42, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790827716.2668931, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "single_agent", "target_function": "aggregate"}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790827731.549324, "passed": false, "duration_s": 15.28, "token_usage": {"input_tokens": 609, "output_tokens": 762, "total_tokens": 1371, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1371}}}

@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790827025.665864, "meta": {"dataset_task_id": "synthetic__fibonacci_inefficient_0027", "baseline": "plain_llm", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790827030.977851, "run_id": "3791a8913e354070", "span_id": "1446c55e240d", "output": {"generated_test_len": 858}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790827060.9877162, "run_id": "3791a8913e354070", "span_id": "2c785535e480", "output": {"passed": false, "coverage": 0.0, "failed_cases": 0}, "decision": "FAIL", "duration_ms": 30009.21, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790827302.5356202, "passed": false, "duration_s": 276.87, "token_usage": {"input_tokens": 554, "output_tokens": 275, "total_tokens": 829, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 829}}}

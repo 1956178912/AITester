@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790827904.639582, "meta": {"dataset_task_id": "synthetic__boundary_and_exception_0044", "baseline": "single_agent", "target_function": null}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790827942.4995258, "passed": false, "duration_s": 37.86, "token_usage": {"input_tokens": 583, "output_tokens": 1197, "total_tokens": 1780, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1780}}}

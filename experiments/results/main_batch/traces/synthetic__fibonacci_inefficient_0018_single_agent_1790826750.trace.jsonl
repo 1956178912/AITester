@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790826750.458029, "meta": {"dataset_task_id": "synthetic__fibonacci_inefficient_0018", "baseline": "single_agent", "target_function": null}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790826761.2052312, "passed": false, "duration_s": 10.75, "token_usage": {"input_tokens": 550, "output_tokens": 538, "total_tokens": 1088, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1088}}}

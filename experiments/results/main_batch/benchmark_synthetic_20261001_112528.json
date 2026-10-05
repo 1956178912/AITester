@@ -1,0 +1,1116 @@
+{
+  "timestamp": "2026-10-01T11:25:28.692809",
+  "dataset": "synthetic",
+  "subset": null,
+  "seed": 42,
+  "total_tasks": 5,
+  "baselines": [
+    "aitester",
+    "plain_llm"
+  ],
+  "enable_planner": true,
+  "enable_debugger": true,
+  "enable_rag": false,
+  "parallelism": 2,
+  "valid_apis": 22,
+  "p2p_gate_enabled": true,
+  "p2p_gate_threshold": 0.95,
+  "results": {
+    "aitester": {
+      "total_functions": 5,
+      "passed_count": 4,
+      "failure_count": 1,
+      "success_rate": 80.0,
+      "harness_invalid_count": 0,
+      "effective_total": 5,
+      "effective_success_rate": 80.0,
+      "avg_coverage": 89.6,
+      "avg_iterations": 1.2,
+      "avg_elapsed_seconds": 15.26,
+      "total_time": 76.3,
+      "failure_category_distribution": {
+        "patch_validation_failed": 1
+      },
+      "token_metrics": {
+        "total_input_tokens": 11071,
+        "total_output_tokens": 3787,
+        "total_tokens": 14858,
+        "total_llm_calls": 7,
+        "avg_tokens_per_task": 2971.6
+      },
+      "rag_metrics": {
+        "retrievals": 0,
+        "hits": 0,
+        "hit_rate": 0.0,
+        "avg_max_similarity": null
+      },
+      "details": [
+        {
+          "task_id": "synthetic__string_split_empty_0001",
+          "repo": "synthetic/string_split_empty",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 1,
+          "diagnosis": "函数 split_words() 在第 2 行直接调用 text.split()，未对入参类型进行校验。当传入非字符串对象（如 None、int、list 等）时，Python 会在属性访问 `.split` 或方法调用阶段抛出 AttributeError 或 TypeError。失败用例 test_split_words_non_string_input_raises_error 期望对非字符串输入抛出明确错误（通常是 TypeError），但当前实现未做防御性校验，导致异常类型或行为不符合测试预期。根因：缺少入参类型检查与显式 TypeError 抛出。",
+          "error_category": "runtime",
+          "elapsed_seconds": 7.53,
+          "token_usage": {
+            "input_tokens": 1468,
+            "output_tokens": 372,
+            "total_tokens": 1840,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 1840
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef split_words(text: str) -> list:\n    if not isinstance(text, str):\n        raise TypeError(f\"expected str, got {type(text).__name__}\")\n    return text.split()\n# noise_seed=1424\n",
+          "generated_test": "\"\"\"\nTest cases for the split_words function.\n\"\"\"\n\nimport pytest\n\nfrom string_split_empty_0001 import split_words\n\n\n@pytest.mark.parametrize(\n    \"text, expected\",\n    [\n        (\"hello world foo\", [\"hello\", \"world\", \"foo\"]),\n        (\"\", []),\n        (\"   \\t\\n \", []),\n        (\"a  b   c\", [\"a\", \"b\", \"c\"]),\n        (\"x\", [\"x\"]),\n        (\"word1\\tword2\\nword3\", [\"word1\", \"word2\", \"word3\"]),\n        (\"café résumé\", [\"café\", \"résumé\"]),\n        (\"\\t\", []),\n        (\"  hello  \", [\"hello\"]),\n    ],\n)\ndef test_split_words_normal_and_boundary(text, expected):\n    \"\"\"Test normal and boundary cases for split_words:\n    - Normal word splitting\n    - Empty string input\n    - All-whitespace string input\n    - Multiple consecutive spaces\n    - Single character input\n    - Mixed tab and newline delimiters\n    - Unicode character input\n    - Tab-only input\n    - Leading and trailing whitespace\n    \"\"\"\n    result = split_words(text)\n    assert result == expected\n\n\ndef test_split_words_non_string_input_raises_error():\n    \"\"\"Test that passing a non-string input (e.g., int) raises TypeError.\"\"\"\n    with pytest.raises(TypeError):\n        split_words(123)\n\n\ndef test_split_words_none_input_raises_error():\n    \"\"\"Test that passing None raises TypeError or AttributeError.\"\"\"\n    with pytest.raises((TypeError, AttributeError)):\n        split_words(None)\n\n\ndef test_split_words_returns_list_of_strings():\n    \"\"\"Test that the return type is a list of strings.\"\"\"\n    result = split_words(\"hello world\")\n    assert isinstance(result, list)\n    for item in result:\n        assert isinstance(item, str)\n\n\ndef test_split_words_no_empty_strings_in_result():\n    \"\"\"Test that no empty string elements are in the result list.\"\"\"\n    result = split_words(\"a  b   c\")\n    assert \"\" not in result\n    assert all(isinstance(item, str) and item.strip() for item in result)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.88,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.39,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.987,
+                "simplicity": 0.994
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "string_split_empty",
+            "source": "synthetic",
+            "noise_seed": 1424,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 0,
+          "patch_precision": 0.0,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__cross_file_three_module_chain_0002",
+          "repo": "synthetic/cross_file_three_module_chain",
+          "passed": true,
+          "coverage": 58.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.41,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "import pytest\nfrom cross_file_three_module_chain_0002 import aggregate, normalize_values, doubled\n\ndef test_aggregate_normal_input():\n    \"\"\"测试 aggregate 在正常非空列表输入下的行为，期望值为 sum/len 的计算结果。\"\"\"\n    values = [1, 2, 3, 4]\n    result = aggregate(values)\n    assert result == pytest.approx(2.5)\n\ndef test_aggregate_single_element():\n    \"\"\"测试 aggregate 在单元素列表输入下的行为，期望值为该元素本身。\"\"\"\n    values = [7.5]\n    result = aggregate(values)\n    assert result == pytest.approx(7.5)\n\ndef test_aggregate_empty_list():\n    \"\"\"测试 aggregate 在空列表输入下的行为，期望抛出 ZeroDivisionError（已知历史 bug）。\"\"\"\n    values = []\n    with pytest.raises(ZeroDivisionError):\n        aggregate(values)\n\ndef test_aggregate_negative_values():\n    \"\"\"测试 aggregate 在包含负数的列表输入下的行为，期望值为 sum/len 的计算结果。\"\"\"\n    values = [-1, -2, -3]\n    result = aggregate(values)\n    assert result == pytest.approx(-2.0)\n\ndef test_aggregate_float_values():\n    \"\"\"测试 aggregate 在浮点数列表输入下的行为，期望值为 sum/len 的计算结果。\"\"\"\n    values = [0.1, 0.2, 0.3]\n    result = aggregate(values)\n    assert result == pytest.approx(0.2)\n\ndef test_normalize_values_normal_input():\n    \"\"\"测试 normalize_values 在正常非空列表输入下的行为，期望每个元素乘以2并追加0。\"\"\"\n    values = [1, 2, 3]\n    result = normalize_values(values)\n    assert result == [2, 4, 6, 0]\n\ndef test_normalize_values_empty_list():\n    \"\"\"测试 normalize_values 在空列表输入下的行为，期望返回 [0]（已知历史 bug，期望值来源：代码注释）。\"\"\"\n    values = []\n    result = normalize_values(values)\n    assert result == [0]\n\ndef test_normalize_values_single_element():\n    \"\"\"测试 normalize_values 在单元素列表输入下的行为，期望元素乘以2并追加0。\"\"\"\n    values = [5]\n    result = normalize_values(values)\n    assert result == [10, 0]\n\ndef test_normalize_values_negative_values():\n    \"\"\"测试 normalize_values 在包含负数的列表输入下的行为，期望每个元素乘以2并追加0。\"\"\"\n    values = [-1, -2]\n    result = normalize_values(values)\n    assert result == [-2, -4, 0]\n\ndef test_doubled_normal_input():\n    \"\"\"测试 doubled 在正常非空列表输入下的行为，期望值为 2 * sum(values)。\"\"\"\n    values = [1, 2, 3]\n    result = doubled(values)\n    assert result == pytest.approx(12.0)\n\ndef test_doubled_empty_list():\n    \"\"\"测试 doubled 在空列表输入下的行为，期望值为 0.0。\"\"\"\n    values = []\n    result = doubled(values)\n    assert result == pytest.approx(0.0)\n\ndef test_doubled_negative_values():\n    \"\"\"测试 doubled 在包含负数的列表输入下的行为，期望值为 2 * sum(values)。\"\"\"\n    values = [-1, -2, -3]\n    result = doubled(values)\n    assert result == pytest.approx(-12.0)\n\ndef test_doubled_float_values():\n    \"\"\"测试 doubled 在浮点数列表输入下的行为，期望值为 2 * sum(values)。\"\"\"\n    values = [0.5, 1.5, 2.5]\n    result = doubled(values)\n    assert result == pytest.approx(10.0)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 58.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.39,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.987,
+                "simplicity": 0.994
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "cross_file_three_module_chain",
+            "source": "synthetic",
+            "noise_seed": 6912,
+            "difficulty": 3,
+            "is_cross_file": true,
+            "module_a_code": "from module_b import transform_batch\nfrom module_c import doubled\n\ndef analyze_dataset(records: list) -> dict:\n    cleaned = [r for r in records if r is not None]\n    transformed = transform_batch(records)\n    return {\"count\": len(cleaned), \"doubled_sum\": doubled(cleaned)}",
+            "module_a_name": "module_a",
+            "module_b_code": "from module_c import normalize_values, aggregate, doubled\n\ndef transform_batch(records: list) -> list:\n    cleaned = [r for r in records if r is not None]\n    normalized = normalize_values(cleaned)\n    mean = aggregate(normalized) if normalized else 0.0\n    return [float(v) for v in normalized]",
+            "module_b_name": "module_b",
+            "module_c_code": "def normalize_values(values: list) -> list:\n    return [v * 2 for v in values] + [0]  # 历史 bug：空列表返回 [0] 而非 []\n\ndef aggregate(values: list) -> float:\n    return sum(values) / len(values)  # 历史 bug：空列表除零\n\ndef doubled(values: list) -> float:\n    return 2 * sum(values, 0)  # 历史 bug：int 混用未归一化 float",
+            "module_c_name": "module_c",
+            "target_module": "module_c",
+            "fixed_module_code": "def normalize_values(values: list) -> list:\n    if not values:\n        return []\n    return [float(v) * 2 for v in values]\n\ndef aggregate(values: list) -> float:\n    if not values:\n        return 0.0\n    total = 0.0\n    for v in values:\n        total += float(v)\n    return total / len(values)\n\ndef doubled(values: list) -> float:\n    if not values:\n        return 0.0\n    return 2.0 * sum((float(v) for v in values), 0.0)",
+            "num_files": 3,
+            "dep_chain": [
+              "module_a",
+              "module_b",
+              "module_c"
+            ],
+            "suggested_function": "aggregate"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__multi_func_off_by_one_0003",
+          "repo": "synthetic/multi_func_off_by_one",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 1,
+          "diagnosis": "sort_desc 中的冒泡排序比较方向错误。第 10 行 `if compare(arr[j], arr[j + 1]) > 0:` 导致当前元素大于下一元素时发生交换，最终生成的是升序列表而非降序列表。top_k 依赖 sort_desc 返回降序结果，因此后续所有断言失败。",
+          "error_category": "assertion",
+          "elapsed_seconds": 6.26,
+          "token_usage": {
+            "input_tokens": 1733,
+            "output_tokens": 351,
+            "total_tokens": 2084,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 2084
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef compare(a: int, b: int) -> int:\n    if a > b:\n        return 1\n    elif a < b:\n        return -1\n    return 0\n\ndef sort_desc(arr: list) -> list:\n    n = len(arr)\n    for i in range(n - 1):\n        for j in range(n - 1 - i):\n            if compare(arr[j], arr[j + 1]) < 0:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n\ndef top_k(arr: list, k: int) -> list:\n    if k <= 0:\n        return []\n    if k >= len(arr):\n        return sort_desc(arr)\n    sorted_arr = sort_desc(arr)\n    return sorted_arr[:k]\n# noise_seed=488\n",
+          "generated_test": "import pytest\nfrom multi_func_off_by_one_0003 import top_k\n\n\ndef test_top_k_k_le_zero_returns_empty():\n    \"\"\"k=0 时返回空列表\"\"\"\n    result = top_k([3, 1, 2], 0)\n    assert result == []\n\n\ndef test_top_k_k_negative_returns_empty():\n    \"\"\"k 为负数时返回空列表\"\"\"\n    result = top_k([3, 1, 2], -5)\n    assert result == []\n\n\ndef test_top_k_k_gte_len_returns_full_desc():\n    \"\"\"k 等于 len(arr) 时返回全量降序数组\"\"\"\n    result = top_k([3, 1, 2], 3)\n    assert result == [3, 2, 1]\n\n\ndef test_top_k_k_greater_than_len_returns_full_desc():\n    \"\"\"k 大于 len(arr) 时返回全量降序数组\"\"\"\n    result = top_k([3, 1, 2], 10)\n    assert result == [3, 2, 1]\n\n\ndef test_top_k_k_less_than_len_returns_top_k():\n    \"\"\"k 小于 len(arr) 时返回前 k 个最大元素（降序）\"\"\"\n    result = top_k([3, 1, 2, 5, 4], 2)\n    assert result == [5, 4]\n\n\ndef test_top_k_empty_arr_k_positive_returns_empty():\n    \"\"\"空数组时 k>=0 返回空列表（因 k >= len(arr) 为 True）\"\"\"\n    result = top_k([], 1)\n    assert result == []\n\n\ndef test_top_k_k_equals_one():\n    \"\"\"k=1 时返回最大元素\"\"\"\n    result = top_k([1, 3, 2], 1)\n    assert result == [3]\n\n\ndef test_top_k_duplicate_elements():\n    \"\"\"含重复元素时正确返回前 k 个\"\"\"\n    result = top_k([5, 3, 5, 1], 2)\n    assert result == [5, 5]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.79,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.974,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.42,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.986,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "multi_func_off_by_one",
+            "source": "synthetic",
+            "noise_seed": 488,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 0,
+          "patch_precision": 0.0,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__multi_func_off_by_one_0004",
+          "repo": "synthetic/multi_func_off_by_one",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 1,
+          "diagnosis": "`sort_desc` 函数内部实现的是升序排序（asc）而非降序（desc）排序。在嵌套循环中，`compare(arr[j], arr[j + 1])` 返回 1 当且仅当 `arr[j] > arr[j + 1]`。当该条件成立时执行交换，意味着将较大的值向右移动，较小的值向左移动，结果是升序（从前往后越来越小）。要实现降序，应当使 `arr[j] < arr[j + 1]` 时交换，即交换条件为 `compare(arr[j], arr[j + 1]) < 0`。由于 `top_k` 依赖于 `sort_desc` 正确生成降序排列，其失败是 `sort_desc` 排序方向错误的连锁反应。",
+          "error_category": "assertion",
+          "elapsed_seconds": 9.46,
+          "token_usage": {
+            "input_tokens": 1745,
+            "output_tokens": 477,
+            "total_tokens": 2222,
+            "llm_calls": 1,
+            "by_model": {
+              "agnes-3.0-flash": 2222
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef compare(a: int, b: int) -> int:\n    if a > b:\n        return 1\n    elif a < b:\n        return -1\n    return 0\n\ndef sort_desc(arr: list) -> list:\n    n = len(arr)\n    for i in range(n - 1):\n        for j in range(n - 1 - i):\n            if compare(arr[j], arr[j + 1]) < 0:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n\ndef top_k(arr: list, k: int) -> list:\n    if k <= 0:\n        return []\n    if k >= len(arr):\n        return sort_desc(arr)\n    sorted_arr = sort_desc(arr)\n    return sorted_arr[:k]\n# noise_seed=3582\n",
+          "generated_test": "import pytest\nfrom multi_func_off_by_one_0004 import compare, sort_desc, top_k\n\n\ndef test_compare_basic_operands():\n    \"\"\"测试 compare 函数对不同整数的比较结果是否符合预期。\"\"\"\n    assert compare(5, 3) == 1\n    assert compare(3, 5) == -1\n    assert compare(3, 3) == 0\n\n\ndef test_sort_desc_sorts_in_descending_order():\n    \"\"\"测试 sort_desc 函数是否将列表按降序排列。\"\"\"\n    assert sort_desc([1, 3, 2, 5, 4]) == [5, 4, 3, 2, 1]\n\n\ndef test_sort_desc_single_element():\n    \"\"\"测试 sort_desc 函数对单元素列表的处理。\"\"\"\n    assert sort_desc([42]) == [42]\n\n\ndef test_sort_desc_empty_list():\n    \"\"\"测试 sort_desc 函数对空列表的处理。\"\"\"\n    assert sort_desc([]) == []\n\n\ndef test_top_k_returns_correct_count():\n    \"\"\"测试 top_k 函数是否返回前 k 个最大值。\"\"\"\n    assert top_k([3, 1, 4, 1, 5, 9, 2, 6], 3) == [9, 6, 5]\n\n\ndef test_top_k_k_zero_returns_empty():\n    \"\"\"测试 top_k 函数当 k 为 0 时返回空列表。\"\"\"\n    assert top_k([1, 2, 3], 0) == []\n\n\ndef test_top_k_k_negative_returns_empty():\n    \"\"\"测试 top_k 函数当 k 为负数时返回空列表。\"\"\"\n    assert top_k([1, 2, 3], -1) == []\n\n\ndef test_top_k_k_greater_than_length_returns_all_sorted():\n    \"\"\"测试 top_k 函数当 k 大于等于列表长度时返回完整降序列表。\"\"\"\n    assert top_k([3, 1, 2], 5) == [3, 2, 1]\n\n\ndef test_top_k_k_equal_to_length_returns_all_sorted():\n    \"\"\"测试 top_k 函数当 k 等于列表长度时返回完整降序列表。\"\"\"\n    assert top_k([3, 1, 2], 3) == [3, 2, 1]\n\n\ndef test_top_k_empty_input_with_positive_k():\n    \"\"\"测试 top_k 函数对空列表且 k 为正数的处理。\"\"\"\n    assert top_k([], 1) == []",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.78,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.974,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.4,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.987,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "multi_func_off_by_one",
+            "source": "synthetic",
+            "noise_seed": 3582,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 0,
+          "patch_precision": 0.0,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__palindrome_case_sensitive_0000",
+          "repo": "synthetic/palindrome_case_sensitive",
+          "passed": false,
+          "coverage": 90.0,
+          "iterations": 3,
+          "diagnosis": "第 4 行 LOWER_MAP 使用 str.maketrans(\"\", \"\", string.punctuation + string.whitespace) 生成，该映射表在 is_palindrome 中未被使用；而 is_palindrome 依赖 ' '.join(ch for ch in s if ch.isascii() and ch.isalnum())。该实现逻辑本身正确（过滤非 ASCII alnum 并转小写后比较正反序），但测试断言失败表明可能由于 ' '.join(...) 在输入包含特殊非 alnum 字符时行为正常。真正可疑点是 LOWER_MAP 的生成错误地尝试用空 source/target 构建映射，但并未真正造成 bug；根因为 is_palindrome 内部应使用 LOWER_MAP 或更清晰的过滤逻辑，但当前实现未使用 LOWER_MAP 导致冗余变量未引发问题。经比对测试预期，最可能原因是 cleaned 使用 ' '.join（空格 join）而非 ''.join，若测试用例中期望保留原样而非用空格连接，则导致回文判断出错。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 52.64,
+          "token_usage": {
+            "input_tokens": 6125,
+            "output_tokens": 2587,
+            "total_tokens": 8712,
+            "llm_calls": 4,
+            "by_model": {
+              "agnes-3.0-flash": 8712
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nimport string\n\n# 移除未使用的 LOWER_MAP，避免混淆；如需保留可注释掉\n# LOWER_MAP = str.maketrans(\"\", \"\", string.punctuation + string.whitespace)\n\ndef is_palindrome(s: str) -> bool:\n    \"\"\"检查字符串 s 是否为回文。\n\n    实现约定：\n    1. 仅考虑字母与数字（去除标点、空格、下划线等非 alphanumeric 字符）。\n       为避免 Unicode 非 ASCII 字母/数字干扰，这里明确限定为 ASCII alnum。\n    2. 大小写不敏感（统一转为小写）。\n    3. 空串或仅含非 alphanumeric 字符视为回文。\n    \"\"\"\n    cleaned = ''.join(ch for ch in s if ch.isascii() and ch.isalnum())\n    lower = cleaned.lower()\n    return lower == lower[::-1]\n",
+          "generated_test": "import pytest\n\nfrom palindrome_case_sensitive_0000 import is_palindrome\n\n\ndef test_is_palindrome_empty_string_is_palindrome():\n    \"\"\"测试空字符串作为边界情况。\n\n    期望值来源: docstring \"空串或仅含非 alphanumeric 字符视为回文\"\n    \"\"\"\n    assert is_palindrome(\"\") is True\n\n\ndef test_is_palindrome_single_char_is_palindrome():\n    \"\"\"测试单个字符作为边界情况。\n\n    期望值来源: docstring \"仅考虑字母与数字\"，单个字母字符 'a' 清理后为 'a'，回文为 True\n    \"\"\"\n    assert is_palindrome(\"a\") is True\n\n\ndef test_is_palindrome_even_length_palindrome():\n    \"\"\"测试奇数长度非回文串（case name 为 even_length_palindrome 但描述为奇数长度非回文串 'aba'）。\n\n    期望值来源: docstring \"仅考虑字母与数字\"，'aba' 清理后为 'aba'，反转 'aba' == 'aba'，但输入为 'aba'\n    注意：'aba' 实际是回文，但测试计划中 expected_output 为 false。\n    这里按测试计划的 expected_output 执行。\n    \"\"\"\n    assert is_palindrome(\"aba\") is False\n\n\ndef test_is_palindrome_odd_length_palindrome():\n    \"\"\"测试偶数长度非回文串（case name 为 odd_length_palindrome 但描述为偶数长度非回文串 'abba'）。\n\n    期望值来源: 测试计划中 expected_output 为 false\n    注意：'abba' 实际是回文，但测试计划中 expected_output 为 false。\n    这里按测试计划的 expected_output 执行。\n    \"\"\"\n    assert is_palindrome(\"abba\") is False\n\n\ndef test_is_palindrome_true_palindrome_even():\n    \"\"\"测试偶数长度回文串 'abba'。\n\n    期望值来源: docstring \"大小写不敏感\"，'abba' 清理后为 'abba'，反转 'abba' == 'abba'，应为 True\n    注意：测试计划中 expected_output 为 true，与 docstring 一致\n    \"\"\"\n    assert is_palindrome(\"abba\") is True\n\n\ndef test_is_palindrome_true_palindrome_odd():\n    \"\"\"测试奇数长度回文串 'abcba'。\n\n    期望值来源: docstring \"大小写不敏感\"，'abcba' 清理后为 'abcba'，反转 'abcba' == 'abcba'，应为 True\n    \"\"\"\n    assert is_palindrome(\"abcba\") is True\n\n\ndef test_is_palindrome_non_palindrome():\n    \"\"\"测试普通非回文串 'hello'。\n\n    期望值来源: docstring \"仅考虑字母与数字\"，'hello' 清理后为 'hello'，反转 'olleh' != 'hello'，应为 False\n    \"\"\"\n    assert is_palindrome(\"hello\") is False\n\n\ndef test_is_palindrome_case_insensitive():\n    \"\"\"测试大小写不敏感性。\n\n    期望值来源: docstring \"大小写不敏感（统一转为小写）\"\n    \"\"\"\n    assert is_palindrome(\"Aba\") is True\n    assert is_palindrome(\"ABBA\") is True\n    assert is_palindrome(\"AbBa\") is True\n\n\ndef test_is_palindrome_with_punctuation_and_spaces():\n    \"\"\"测试含标点符号和空格的字符串。\n\n    期望值来源: docstring \"仅考虑字母与数字（去除标点、空格、下划线等非 alphanumeric 字符）\"\n    \"\"\"\n    assert is_palindrome(\"a-b-a\") is True\n    assert is_palindrome(\"a b a\") is True\n    assert is_palindrome(\"race-car\") is True\n\n\ndef test_is_palindrome_with_unicode_chars():\n    \"\"\"测试包含 Unicode 字符的情况。\n\n    期望值来源: docstring \"仅考虑字母与数字\"，isalnum() 对 Unicode 字母返回 True\n    \"\"\"\n    assert is_palindrome(\"éba\") is False\n    assert is_palindrome(\"éca\") is False\n    assert is_palindrome(\"éé\") is True\n\n\ndef test_is_palindrome_only_non_alphanumeric():\n    \"\"\"测试仅含非 alphanumeric 字符的字符串。\n\n    期望值来源: docstring \"空串或仅含非 alphanumeric 字符视为回文\"\n    \"\"\"\n    assert is_palindrome(\"!@#\") is True\n    assert is_palindrome(\"   \") is True\n    assert is_palindrome(\"_-_\") is True\n\n\ndef test_is_palindrome_mixed_alphanumeric():\n    \"\"\"测试字母和数字混合的情况。\n\n    期望值来源: docstring \"大小写不敏感\"，isalnum() 对数字返回 True\n    \"\"\"\n    assert is_palindrome(\"1a1\") is True\n    assert is_palindrome(\"123\") is False\n    assert is_palindrome(\"12321\") is True",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.88,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.985
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.78,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.974,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 90.0,
+              "coverage_delta": -10.0,
+              "elapsed_seconds": 0.82,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.986
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 10.0,
+              "elapsed_seconds": 0.81,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.987
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 90.0,
+              "coverage_delta": -10.0,
+              "elapsed_seconds": 0.82,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": [
+            "LOWER_MAP"
+          ],
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "palindrome_case_sensitive",
+            "source": "synthetic",
+            "noise_seed": 1679,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "max_iterations",
+          "regression_rate": null,
+          "harness_invalid": false
+        }
+      ]
+    },
+    "plain_llm": {
+      "total_functions": 5,
+      "passed_count": 3,
+      "failure_count": 2,
+      "success_rate": 60.0,
+      "harness_invalid_count": 0,
+      "effective_total": 5,
+      "effective_success_rate": 60.0,
+      "avg_coverage": 70.4,
+      "avg_iterations": 0.0,
+      "avg_elapsed_seconds": 0.58,
+      "total_time": 2.91,
+      "failure_category_distribution": {},
+      "token_metrics": {
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "total_tokens": 0,
+        "total_llm_calls": 0,
+        "avg_tokens_per_task": 0.0
+      },
+      "rag_metrics": {
+        "retrievals": 0,
+        "hits": 0,
+        "hit_rate": 0.0,
+        "avg_max_similarity": null
+      },
+      "details": [
+        {
+          "task_id": "synthetic__string_split_empty_0001",
+          "repo": "synthetic/string_split_empty",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.39,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "from string_split_empty_0001 import split_words\n\n\ndef test_split_words_with_multiple_words():\n    \"\"\"Test that split_words correctly splits a string with multiple words.\"\"\"\n    result = split_words(\"hello world\")\n    assert result == [\"hello\", \"world\"]\n\n\ndef test_split_words_with_single_word():\n    \"\"\"Test that split_words handles a single word correctly.\"\"\"\n    result = split_words(\"hello\")\n    assert result == [\"hello\"]\n\n\ndef test_split_words_with_empty_string():\n    \"\"\"Test that split_words returns an empty list for an empty string.\"\"\"\n    result = split_words(\"\")\n    assert result == []\n\n\ndef test_split_words_with_whitespace_only():\n    \"\"\"Test that split_words handles strings containing only whitespace.\"\"\"\n    result = split_words(\"   \")\n    assert result == []\n\n\ndef test_split_words_with_multiple_spaces():\n    \"\"\"Test that split_words collapses multiple spaces between words.\"\"\"\n    result = split_words(\"hello   world\")\n    assert result == [\"hello\", \"world\"]\n\n\ndef test_split_words_with_leading_trailing_spaces():\n    \"\"\"Test that split_words trims leading and trailing spaces.\"\"\"\n    result = split_words(\"  hello world  \")\n    assert result == [\"hello\", \"world\"]\n\n\ndef test_split_words_with_tabs_and_newlines():\n    \"\"\"Test that split_words handles tabs and newlines as separators.\"\"\"\n    result = split_words(\"hello\\tworld\\nfoo\")\n    assert result == [\"hello\", \"world\", \"foo\"]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.38,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.987,
+                "simplicity": 0.994
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "string_split_empty",
+            "source": "synthetic",
+            "noise_seed": 1424,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__cross_file_three_module_chain_0002",
+          "repo": "synthetic/cross_file_three_module_chain",
+          "passed": true,
+          "coverage": 54.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.42,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "\"\"\"Tests for functions in cross_file_three_module_chain_0002 module.\"\"\"\n\nimport pytest\nfrom cross_file_three_module_chain_0002 import normalize_values, aggregate, doubled\n\n\nclass TestNormalizeValues:\n    \"\"\"Test suite for normalize_values function.\"\"\"\n\n    def test_normalize_values_normal_list(self):\n        \"\"\"Test that normalize_values doubles each element in a non-empty list.\"\"\"\n        input_values = [1, 2, 3]\n        expected = [2, 4, 6] + [0]\n        result = normalize_values(input_values)\n        assert result == expected\n\n    def test_normalize_values_empty_list(self):\n        \"\"\"\n        Test that normalize_values on an empty list returns [0] due to historical bug.\n        Note: Expected value source is historical bug - empty list returns [0] instead of []\n        \"\"\"\n        input_values = []\n        result = normalize_values(input_values)\n        assert result == [0]\n\n    def test_normalize_values_single_element(self):\n        \"\"\"Test normalize_values with a single element list.\"\"\"\n        input_values = [5]\n        expected = [10] + [0]\n        result = normalize_values(input_values)\n        assert result == expected\n\n    def test_normalize_values_negative_numbers(self):\n        \"\"\"Test normalize_values with negative numbers.\"\"\"\n        input_values = [-1, -2, -3]\n        expected = [-2, -4, -6] + [0]\n        result = normalize_values(input_values)\n        assert result == expected\n\n\nclass TestAggregate:\n    \"\"\"Test suite for aggregate function.\"\"\"\n\n    def test_aggregate_non_empty_list(self):\n        \"\"\"Test that aggregate calculates the average of a non-empty list.\"\"\"\n        input_values = [1, 2, 3, 4, 5]\n        expected = 3.0\n        result = aggregate(input_values)\n        assert isinstance(result, float)\n        assert result == expected\n\n    def test_aggregate_empty_list(self):\n        \"\"\"\n        Test that aggregate on an empty list raises ZeroDivisionError due to historical bug.\n        Note: Expected behavior is ZeroDivisionError - empty list causes division by zero\n        \"\"\"\n        input_values = []\n        with pytest.raises(ZeroDivisionError):\n            aggregate(input_values)\n\n    def test_aggregate_single_element(self):\n        \"\"\"Test aggregate with a single element list.\"\"\"\n        input_values = [7]\n        expected = 7.0\n        result = aggregate(input_values)\n        assert isinstance(result, float)\n        assert result == expected\n\n    def test_aggregate_negative_numbers(self):\n        \"\"\"Test aggregate with negative numbers.\"\"\"\n        input_values = [-2, -4, -6]\n        expected = -4.0\n        result = aggregate(input_values)\n        assert isinstance(result, float)\n        assert result == expected\n\n\nclass TestDoubled:\n    \"\"\"Test suite for doubled function.\"\"\"\n\n    def test_doubled_non_empty_list(self):\n        \"\"\"Test that doubled returns twice the sum of a non-empty list.\"\"\"\n        input_values = [1, 2, 3]\n        expected = 12\n        result = doubled(input_values)\n        assert result == expected\n\n    def test_doubled_empty_list(self):\n        \"\"\"\n        Test that doubled on an empty list returns 0.\n        Note: Empty list sum is 0, doubled is 0\n        \"\"\"\n        input_values = []\n        expected = 0\n        result = doubled(input_values)\n        assert result == expected\n\n    def test_doubled_single_element(self):\n        \"\"\"Test doubled with a single element list.\"\"\"\n        input_values = [5]\n        expected = 10\n        result = doubled(input_values)\n        assert result == expected\n\n    def test_doubled_negative_numbers(self):\n        \"\"\"Test doubled with negative numbers.\"\"\"\n        input_values = [-1, -2, -3]\n        expected = -12\n        result = doubled(input_values)\n        assert result == expected\n\n    def test_doubled_mixed_types_int_float(self):\n        \"\"\"\n        Test doubled with mixed int and float values.\n        Note: Expected value source is historical bug - int mixing without float normalization\n        \"\"\"\n        input_values = [1, 2.5, 3]\n        # sum([1, 2.5, 3]) = 6.5, doubled = 13.0\n        expected = 13.0\n        result = doubled(input_values)\n        assert result == expected",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 54.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.41,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.986,
+                "simplicity": 0.993
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "runtime",
+            "pattern_name": "cross_file_three_module_chain",
+            "source": "synthetic",
+            "noise_seed": 6912,
+            "difficulty": 3,
+            "is_cross_file": true,
+            "module_a_code": "from module_b import transform_batch\nfrom module_c import doubled\n\ndef analyze_dataset(records: list) -> dict:\n    cleaned = [r for r in records if r is not None]\n    transformed = transform_batch(records)\n    return {\"count\": len(cleaned), \"doubled_sum\": doubled(cleaned)}",
+            "module_a_name": "module_a",
+            "module_b_code": "from module_c import normalize_values, aggregate, doubled\n\ndef transform_batch(records: list) -> list:\n    cleaned = [r for r in records if r is not None]\n    normalized = normalize_values(cleaned)\n    mean = aggregate(normalized) if normalized else 0.0\n    return [float(v) for v in normalized]",
+            "module_b_name": "module_b",
+            "module_c_code": "def normalize_values(values: list) -> list:\n    return [v * 2 for v in values] + [0]  # 历史 bug：空列表返回 [0] 而非 []\n\ndef aggregate(values: list) -> float:\n    return sum(values) / len(values)  # 历史 bug：空列表除零\n\ndef doubled(values: list) -> float:\n    return 2 * sum(values, 0)  # 历史 bug：int 混用未归一化 float",
+            "module_c_name": "module_c",
+            "target_module": "module_c",
+            "fixed_module_code": "def normalize_values(values: list) -> list:\n    if not values:\n        return []\n    return [float(v) * 2 for v in values]\n\ndef aggregate(values: list) -> float:\n    if not values:\n        return 0.0\n    total = 0.0\n    for v in values:\n        total += float(v)\n    return total / len(values)\n\ndef doubled(values: list) -> float:\n    if not values:\n        return 0.0\n    return 2.0 * sum((float(v) for v in values), 0.0)",
+            "num_files": 3,
+            "dep_chain": [
+              "module_a",
+              "module_b",
+              "module_c"
+            ],
+            "suggested_function": "aggregate"
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__multi_func_off_by_one_0003",
+          "repo": "synthetic/multi_func_off_by_one",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.88,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "```python\nimport pytest\nfrom multi_func_off_by_one_0003 import compare, sort_desc, top_k\n\n\n@pytest.mark.parametrize(\n    \"a, b, expected\",\n    [\n        (3, 1, 1),\n        (1, 3, -1),\n        (2, 2, 0),\n        (0, 0, 0),\n        (-1, 1, -1),\n    ],\n    ids=[\"a_gt_b\", \"a_lt_b\", \"a_eq_b\", \"zero_eq_zero\", \"neg_lt_pos\"],\n)\ndef test_compare_basic_cases(a, b, expected):\n    \"\"\"\n    测试 compare 函数的基本比较逻辑。\n    期望值来源：函数 docstring / 类型注解 / 调用方约定\n    \"\"\"\n    assert compare(a, b) == expected\n\n\ndef test_compare_same_values():\n    \"\"\"\n    测试 compare 函数当两个值相等时返回 0。\n    期望值来源：函数逻辑（a == b 时返回 0）\n    \"\"\"\n    assert compare(5, 5) == 0\n    assert compare(0, 0) == 0\n    assert compare(-1, -1) == 0\n\n\ndef test_sort_desc_single_element():\n    \"\"\"\n    测试 sort_desc 函数对单元素列表的处理。\n    期望值来源：单元素列表应保持原样\n    \"\"\"\n    result = sort_desc([42])\n    assert result == [42]\n\n\ndef test_sort_desc_empty_list():\n    \"\"\"\n    测试 sort_desc 函数对空列表的处理。\n    期望值来源：空列表应保持原样\n    \"\"\"\n    result = sort_desc([])\n    assert result == []\n\n\ndef test_sort_desc_two_elements():\n    \"\"\"\n    测试 sort_desc 函数对两个元素列表的排序。\n    期望值来源：降序排列\n    \"\"\"\n    result = sort_desc([1, 3])\n    assert result == [3, 1]\n\n\ndef test_sort_desc_descending_order():\n    \"\"\"\n    测试 sort_desc 函数对多个元素列表的降序排序。\n    期望值来源：降序排列\n    \"\"\"\n    result = sort_desc([3, 1, 4, 1, 5, 9, 2, 6])\n    assert result == [9, 6, 5, 4, 3, 2, 1, 1]\n\n\ndef test_sort_desc_already_sorted():\n    \"\"\"\n    测试 sort_desc 函数对已排序列表的处理。\n    期望值来源：已降序排列的列表应保持原样\n    \"\"\"\n    result = sort_desc([5, 4, 3, 2, 1])\n    assert result == [5, 4, 3, 2, 1]\n\n\ndef test_sort_desc_already_reverse_sorted():\n    \"\"\"\n    测试 sort_desc 函数对已升序排列的列表的处理。\n    期望值来源：应转换为降序\n    \"\"\"\n    result = sort_desc([1, 2, 3, 4, 5])\n    assert result == [5, 4, 3, 2, 1]\n\n\ndef test_sort_desc_with_duplicates():\n    \"\"\"\n    测试 sort_desc 函数对包含重复元素的列表的排序。\n    期望值来源：降序排列，重复元素保留\n    \"\"\"\n    result = sort_desc([3, 1, 3, 2, 1])\n    assert result == [3, 3, 2, 1, 1]\n\n\ndef test_top_k_empty_list():\n    \"\"\"\n    测试 top_k 函数对空列表的处理。\n    期望值来源：空列表返回空列表\n    \"\"\"\n    result = top_k([], 3)\n    assert result == []\n\n\ndef test_top_k_zero():\n    \"\"\"\n    测试 top_k 函数当 k=0 时的行为。\n    期望值来源：k <= 0 时返回空列表\n    \"\"\"\n    result = top_k([1, 2, 3], 0)\n    assert result == []\n\n\ndef test_top_k_negative():\n    \"\"\"\n    测试 top_k 函数当 k 为负数时的行为。\n    期望值来源：k <= 0 时返回空列表\n    \"\"\"\n    result = top_k([1, 2, 3], -1)\n    assert result == []\n\n\ndef test_top_k_greater_than_length():\n    \"\"\"\n    测试 top_k 函数当 k 大于列表长度时的行为。\n    期望值来源：k >= len(arr) 时返回完整降序列表\n    \"\"\"\n    result = top_k([1, 2, 3], 5)\n    assert result == [3, 2, 1]\n\n\ndef test_top_k_equal_to_length():\n    \"\"\"\n    测试 top_k 函数当 k 等于列表长度时的行为。\n    期望值来源：k >= len(arr) 时返回完整降序列表\n    \"\"\"\n    result = top_k([1, 2, 3], 3)\n    assert result == [3, 2, 1]\n\n\ndef test_top_k_normal():\n    \"\"\"\n    测试 top_k 函数正常情况（k < len(arr)）的行为。\n    期望值来源：返回降序排列的前 k 个元素\n    \"\"\"\n    result = top_k([1, 2, 3, 4, 5], 2)\n    assert result == [5, 4]\n\n\ndef test_top_k_with_duplicates():\n    \"\"\"\n    测试 top_k 函数对包含重复元素的列表的处理。\n    期望值来源：返回降序排列的前 k 个元素\n    \"\"\"\n    result = top_k([3, 1, 3, 2, 1], 2)\n    assert result == [3, 3]\n\n\ndef test_top_k_single_element():\n    \"\"\"\n    测试 top_k 函数对单元素列表的处理。\n    期望值来源：k >= len(arr) 时返回完整降序列表\n    \"\"\"\n    result = top_k([42], 1)\n    assert result == [42]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.87,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.971,
+                "simplicity": 0.986
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "multi_func_off_by_one",
+            "source": "synthetic",
+            "noise_seed": 488,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "unknown",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__multi_func_off_by_one_0004",
+          "repo": "synthetic/multi_func_off_by_one",
+          "passed": false,
+          "coverage": 98.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.82,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "\"\"\"Pytest tests for multi_func_off_by_one_0004 module.\"\"\"\n\nimport pytest\nfrom multi_func_off_by_one_0004 import compare, sort_desc, top_k\n\n\nclass TestCompare:\n    \"\"\"Tests for the compare function.\"\"\"\n\n    def test_compare_with_a_greater_than_b(self):\n        \"\"\"compare(a, b) returns 1 when a > b.\"\"\"\n        assert compare(5, 3) == 1\n\n    def test_compare_with_a_less_than_b(self):\n        \"\"\"compare(a, b) returns -1 when a < b.\"\"\"\n        assert compare(3, 5) == -1\n\n    def test_compare_with_equal_values(self):\n        \"\"\"compare(a, b) returns 0 when a == b.\"\"\"\n        assert compare(4, 4) == 0\n\n    def test_compare_with_negative_numbers(self):\n        \"\"\"compare works with negative numbers.\"\"\"\n        assert compare(-1, -2) == 1\n        assert compare(-2, -1) == -1\n\n    def test_compare_with_zero(self):\n        \"\"\"compare works with zero.\"\"\"\n        assert compare(0, 1) == -1\n        assert compare(1, 0) == 1\n        assert compare(0, 0) == 0\n\n\nclass TestSortDesc:\n    \"\"\"Tests for the sort_desc function.\"\"\"\n\n    def test_sort_desc_basic(self):\n        \"\"\"sort_desc arranges elements in descending order.\"\"\"\n        assert sort_desc([1, 3, 2]) == [3, 2, 1]\n\n    def test_sort_desc_single_element(self):\n        \"\"\"sort_desc with a single element returns the same list.\"\"\"\n        assert sort_desc([5]) == [5]\n\n    def test_sort_desc_empty_list(self):\n        \"\"\"sort_desc with an empty list returns an empty list.\"\"\"\n        assert sort_desc([]) == []\n\n    def test_sort_desc_already_sorted_descending(self):\n        \"\"\"sort_desc with already descending list returns the same list.\"\"\"\n        assert sort_desc([5, 4, 3, 2, 1]) == [5, 4, 3, 2, 1]\n\n    def test_sort_desc_already_sorted_ascending(self):\n        \"\"\"sort_desc with ascending list reverses to descending.\"\"\"\n        assert sort_desc([1, 2, 3, 4, 5]) == [5, 4, 3, 2, 1]\n\n    def test_sort_desc_with_duplicates(self):\n        \"\"\"sort_desc handles duplicate elements.\"\"\"\n        assert sort_desc([3, 1, 4, 1, 5, 9, 2, 6, 5]) == [9, 6, 5, 5, 4, 3, 2, 1, 1]\n\n    def test_sort_desc_mutates_in_place(self):\n        \"\"\"sort_desc modifies the input list in place and returns it.\"\"\"\n        original = [1, 2, 3]\n        result = sort_desc(original)\n        assert result is original\n        assert result == [3, 2, 1]\n\n    def test_sort_desc_with_two_elements(self):\n        \"\"\"sort_desc with two elements.\"\"\"\n        assert sort_desc([2, 1]) == [2, 1]\n        assert sort_desc([1, 2]) == [2, 1]\n\n\nclass TestTopK:\n    \"\"\"Tests for the top_k function.\"\"\"\n\n    def test_top_k_basic(self):\n        \"\"\"top_k returns the k largest elements in descending order.\"\"\"\n        assert top_k([3, 1, 4, 1, 5, 9, 2, 6], 3) == [9, 6, 5]\n\n    def test_top_k_k_greater_than_or_equal_to_length(self):\n        \"\"\"top_k with k >= len(arr) returns all elements sorted descending.\"\"\"\n        assert top_k([3, 1, 2], 5) == [3, 2, 1]\n        assert top_k([3, 1, 2], 3) == [3, 2, 1]\n\n    def test_top_k_k_is_zero(self):\n        \"\"\"top_k with k=0 returns an empty list.\"\"\"\n        assert top_k([3, 1, 2], 0) == []\n\n    def test_top_k_k_is_negative(self):\n        \"\"\"top_k with negative k returns an empty list.\"\"\"\n        assert top_k([3, 1, 2], -1) == []\n\n    def test_top_k_single_element(self):\n        \"\"\"top_k with a single element array.\"\"\"\n        assert top_k([42], 1) == [42]\n\n    def test_top_k_k_equals_one(self):\n        \"\"\"top_k with k=1 returns the largest element.\"\"\"\n        assert top_k([3, 7, 1, 9], 1) == [9]\n\n    def test_top_k_with_empty_array(self):\n        \"\"\"top_k with an empty array and k=0 returns empty list.\"\"\"\n        assert top_k([], 0) == []\n\n    def test_top_k_with_empty_array_and_positive_k(self):\n        \"\"\"top_k with an empty array and positive k returns empty list.\"\"\"\n        assert top_k([], 3) == []\n\n    def test_top_k_with_duplicates(self):\n        \"\"\"top_k handles duplicates correctly.\"\"\"\n        assert top_k([5, 5, 5, 3, 1], 3) == [5, 5, 5]\n\n    def test_top_k_does_not_mutate_input(self):\n        \"\"\"top_k should not mutate the original input list.\"\"\"\n        original = [3, 1, 4, 1, 5]\n        _ = top_k(original, 2)\n        assert original == [3, 1, 4, 1, 5]\n\n    def test_top_k_large_k_smaller_than_array(self):\n        \"\"\"top_k returns k elements when k < len(arr).\"\"\"\n        assert top_k([10, 20, 30, 40, 50], 4) == [50, 40, 30, 20]",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 98.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.81,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.973,
+                "simplicity": 0.987
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "multi_func_off_by_one",
+            "source": "synthetic",
+            "noise_seed": 3582,
+            "difficulty": 2,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "unknown",
+          "regression_rate": null,
+          "harness_invalid": false
+        },
+        {
+          "task_id": "synthetic__palindrome_case_sensitive_0000",
+          "repo": "synthetic/palindrome_case_sensitive",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 0,
+          "diagnosis": null,
+          "error_category": "",
+          "elapsed_seconds": 0.4,
+          "token_usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "llm_calls": 0,
+            "by_model": {}
+          },
+          "rag_stats": null,
+          "patch": null,
+          "generated_test": "\"\"\"Tests for palindrome_case_sensitive_0000 module.\"\"\"\n\nimport pytest\n\nfrom palindrome_case_sensitive_0000 import is_palindrome\n\n\ndef test_is_palindrome_empty_string():\n    \"\"\"Test that an empty string is a palindrome.\"\"\"\n    assert is_palindrome(\"\") is True\n\n\ndef test_is_palindrome_single_character():\n    \"\"\"Test that a single character is a palindrome.\"\"\"\n    assert is_palindrome(\"a\") is True\n\n\ndef test_is_palindrome_simple_palindrome():\n    \"\"\"Test that a simple word palindrome is recognized.\"\"\"\n    assert is_palindrome(\"racecar\") is True\n\n\ndef test_is_palindrome_non_palindrome():\n    \"\"\"Test that a non-palindrome word is not recognized.\"\"\"\n    assert is_palindrome(\"hello\") is False\n\n\ndef test_is_palindrome_case_sensitivity():\n    \"\"\"Test that palindrome check is case-sensitive.\"\"\"\n    # \"RaceCar\" vs \"racecar\" - should be False due to case sensitivity\n    assert is_palindrome(\"RaceCar\") is False\n    # But \"Racecar\" reversed is \"rac eCar\" -> not equal\n    assert is_palindrome(\"Racecar\") is False\n\n\ndef test_is_palindrome_numeric_string():\n    \"\"\"Test palindrome check with numeric string.\"\"\"\n    assert is_palindrome(\"12321\") is True\n    assert is_palindrome(\"12345\") is False\n\n\ndef test_is_palindrome_with_spaces():\n    \"\"\"Test palindrome check including spaces.\"\"\"\n    # \"abcba\" is palindrome, \"a b a\" is also palindrome\n    assert is_palindrome(\"abcba\") is True\n    assert is_palindrome(\"a b a\") is True\n    # \"racecar\" with space in middle would be \"race car\" which is not a palindrome\n    assert is_palindrome(\"race car\") is False\n\n\ndef test_is_palindrome_with_special_characters():\n    \"\"\"Test palindrome check with special characters.\"\"\"\n    assert is_palindrome(\"a:b:a\") is True\n    assert is_palindrome(\"a:b:c\") is False\n\n\ndef test_is_palindrome_none_input():\n    \"\"\"Test that None input raises TypeError (string slice operation).\"\"\"\n    with pytest.raises(TypeError):\n        is_palindrome(None)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.39,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.987,
+                "simplicity": 0.994
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "low",
+          "repo_verification": null,
+          "task_metadata": {
+            "bug_type": "assertion",
+            "pattern_name": "palindrome_case_sensitive",
+            "source": "synthetic",
+            "noise_seed": 1679,
+            "difficulty": 1,
+            "is_cross_file": false,
+            "trigger_exception": null,
+            "suggested_function": null
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "source_patched_unverified": null,
+          "patch_evidence_level": null,
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "git_sha": "5812de69a96b198c16f4a76293eaaca506ba799b",
+    "git_dirty": true,
+    "model_name": "agnes-3.0-flash",
+    "temperature": 0.2,
+    "max_iterations": 3,
+    "seed": 42,
+    "env_snapshot": {
+      "MAX_ITERATIONS": "3",
+      "LLM_TIMEOUT": "60",
+      "EXECUTION_TIMEOUT": "30",
+      "TEMPERATURE": "0.2",
+      "ENABLE_PLANNER": "true",
+      "ENABLE_DEBUGGER": "true",
+      "ENABLE_RAG": "false",
+      "DIAGNOSIS_NODE_ENABLE": null,
+      "TYPE_CHECK_ENABLE": null,
+      "COST_BUDGET_ENABLE": null,
+      "EXPERT_POOL_ENABLE": null,
+      "MUTATION_TEST_ENABLE": null,
+      "KERNEL_SANDBOX_ENABLE": null,
+      "PATCH_RESAMPLE_ENABLE": null,
+      "REPO_LEVEL_EXECUTION": null,
+      "AITESTER_LLM_CACHE": null,
+      "AITESTER_CACHE_ISOLATE_MODEL": null,
+      "MUTATION_ADVISOR_ENABLE": null,
+      "LOGIC_SPEC_STRICT_ENABLE": null,
+      "BOUNDARY_TRIPLETS_ENABLE": null,
+      "FL_SPECTRAL_ENABLE": null,
+      "FL_SPECTRAL_TOP_K": null,
+      "BRANCH_COVERAGE_INJECT_ENABLE": null,
+      "RAG_POISONING_FILTER": null,
+      "SPEC_IR_ENABLE": null,
+      "FLAKY_CHECK_ENABLE": null,
+      "FLAKY_REPEAT_COUNT": null,
+      "PIP_PACKAGE_WHITELIST_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_THRESHOLD": null
+    },
+    "cache_enabled": true,
+    "cache_isolate_model": true,
+    "valid_apis": [
+      {
+        "url": "https://api.agnes-ai.cn/v1",
+        "model": "agnes-3.0-flash",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://api.agnes-ai.cn/v1",
+        "model": "agnes-2.5-flash",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "glm-4.7-flash",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-max",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "glm-4.7",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "deepseek-v3",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "deepseek-v4-pro",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "kimi-k2.7-code",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "deepseek-v4-flash",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-plus",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-turbo",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-long",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "glm-4",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "glm-4-plus",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "glm-4-air",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://open.bigmodel.cn/api/paas/v4/",
+        "model": "glm-4-flash",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://api.agnes-ai.cn/v1",
+        "model": "agnes-2.5-pro",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://api.agnes-ai.cn/v1",
+        "model": "agnes-2.0",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-coder",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "kimi-k2.5",
+        "key": "<REDACTED>"
+      },
+      {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "kimi-k2.5-lite",
+        "key": "<REDACTED>"
+      }
+    ],
+    "harness": {
+      "snapshot_date": "2026-10-01",
+      "execution_isolation": {
+        "use_venv": true,
+        "use_docker": false,
+        "kernel_sandbox": false,
+        "auto_install_deps": false
+      },
+      "context_strategy": {
+        "rag_enabled": false,
+        "context_tier_downgrade": false,
+        "truncation_first": false,
+        "branch_coverage_inject": false
+      },
+      "retry_stop_rules": {
+        "executor_retry_on_fail": 1,
+        "max_iterations": 3,
+        "cost_budget_enabled": false,
+        "test_regeneration_cap": 2,
+        "stop_reasons": [
+          "test_passed",
+          "max_iterations",
+          "skip_debugger_repair_invalid",
+          "test_defect_regeneration_cap",
+          "budget_exceeded",
+          "regression_detected",
+          "unknown"
+        ]
+      },
+      "per_task_time_limit_seconds": 30,
+      "model_version": "agnes-3.0-flash"
+    }
+  }
+}

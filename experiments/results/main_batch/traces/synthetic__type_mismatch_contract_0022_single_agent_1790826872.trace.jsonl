@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790826872.125261, "meta": {"dataset_task_id": "synthetic__type_mismatch_contract_0022", "baseline": "single_agent", "target_function": null}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790826899.4728231, "passed": false, "duration_s": 27.35, "token_usage": {"input_tokens": 636, "output_tokens": 1322, "total_tokens": 1958, "llm_calls": 1, "by_model": {"agnes-3.0-flash": 1958}}}

@@ -99,14 +99,30 @@ paper.md
 # 主批次 JSON 与 provenance 快照可入库（论文数字可追溯、可复现），
 # 其余本地实验输出（tmp/ / ad-hoc 批次）仍不提交。
 .private/
-# 主批次工件白名单（negation：experiments/results/ 下仅 main_batch/ 子目录入库）
-experiments/results/
+# 主批次工件白名单（negation：experiments/results/ 下仅 main_batch/ 顶层 *.json/*.md 入库）
+# U1（2026-10-05 系统性审查落地 P0）：修复白名单失效——历史写法有两处互相踩踏：
+#   ① "experiments/results/"（目录排除）使 git 不再下钻该目录，:104-107 的
+#      negation 链对"被排除目录内的文件"永不生效（gitignore 规范：父目录被
+#      排除时其内文件不可 re-include），须改用 "experiments/results/**"
+#      （只排除内容、保留目录可遍历）negation 才能命中；
+#   ② 裸 "results/" 匹配任意层级 results 目录，作为后置规则把 ①修复后的
+#      白名单再次压掉（git check-ignore 实证：主批次 JSON 命中 results/
+#      而非本块规则）——改为锚定 "/results/"（仅根目录，当前不存在该目录，
+#      保留防误建语义）。
+experiments/results/**
 !experiments/results/main_batch/
 experiments/results/main_batch/**
 !experiments/results/main_batch/*.json
 !experiments/results/main_batch/*.md
+!experiments/results/main_batch/SHA256SUMS
+# U1：traces/ 任务级执行轨迹（.trace.jsonl）一并入库——落盘前已过
+# observability/trace.py 脱敏管道（task UUID 为 <REDACTED_KEY> 占位），
+# 且经密钥/本机路径扫描零命中；入库使统计报告数字可逐任务复核
+#（完整证据链：汇总 JSON + 统计报告 + 逐任务轨迹 + SHA256SUMS）。
+!experiments/results/main_batch/traces/
+!experiments/results/main_batch/traces/**
 data/
-results/
+/results/
 
 # 本地审查报告（含 sk- 前缀密钥截断样例作为取证证据——密钥泄漏守卫
 # .git-hooks/check_secret_leak.sh 会拦截 untracked 文件中的 sk- 样式，

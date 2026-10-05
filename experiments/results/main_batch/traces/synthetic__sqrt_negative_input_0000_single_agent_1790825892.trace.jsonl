@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790825892.671974, "meta": {"dataset_task_id": "synthetic__sqrt_negative_input_0000", "baseline": "single_agent", "target_function": null}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790825962.639269, "passed": false, "duration_s": 69.97, "token_usage": {"input_tokens": 455, "output_tokens": 658, "total_tokens": 1113, "llm_calls": 1, "by_model": {"glm-4.7-flash": 1113}}}

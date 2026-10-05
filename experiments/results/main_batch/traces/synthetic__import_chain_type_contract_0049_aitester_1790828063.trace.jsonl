@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790828063.167552, "meta": {"dataset_task_id": "<REDACTED_KEY>", "baseline": "aitester", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1790828069.610816, "run_id": "37892ab8519f4183", "span_id": "5bfb1d3856c9", "output": {"function_name": "lookup", "test_cases": 4}, "decision": "plan_complete", "duration_ms": 6422.6}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790828072.5423958, "run_id": "37892ab8519f4183", "span_id": "dd787ce401c8", "output": {"generated_test_len": 601}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790828072.938604, "run_id": "37892ab8519f4183", "span_id": "12873bcfa4aa", "output": {"passed": true, "coverage": 86.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 395.57, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1790828072.939114, "run_id": "37892ab8519f4183", "span_id": "d48e93777c1b", "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790828075.434766, "passed": true, "duration_s": 12.27, "token_usage": {"input_tokens": 1650, "output_tokens": 654, "total_tokens": 2304, "llm_calls": 2, "by_model": {"agnes-3.0-flash": 2304}}}

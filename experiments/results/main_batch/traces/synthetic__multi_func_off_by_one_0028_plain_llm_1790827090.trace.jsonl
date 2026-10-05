@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1790827090.9185112, "meta": {"dataset_task_id": "synthetic__multi_func_off_by_one_0028", "baseline": "plain_llm", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1790827118.310921, "run_id": "1497445ede2f4fe2", "span_id": "6e9966421cee", "output": {"generated_test_len": 1467}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1790827119.17587, "run_id": "1497445ede2f4fe2", "span_id": "4440c0548b34", "output": {"passed": false, "coverage": 100.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 864.58, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1790827122.0943239, "passed": false, "duration_s": 31.18, "token_usage": {"input_tokens": 1422, "output_tokens": 2182, "total_tokens": 3604, "llm_calls": 2, "by_model": {"agnes-3.0-flash": 3604}}}
