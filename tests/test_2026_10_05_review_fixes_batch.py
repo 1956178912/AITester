@@ -131,6 +131,9 @@ class TestA03RollbackRestoresDisk:
 
         monkeypatch.setenv("PATCH_SNAPSHOT_ROLLBACK_ENABLE", "true")
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是 A-03 回滚协议，
+        # 需要补丁先成功写盘；无证据补丁在 gate 默认开时会被证据门先行拒绝
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         original = "def f():\n    return 1\n"
         state = self._state(tmp_path, original)
         target = tmp_path / "mod.py"
@@ -194,6 +197,8 @@ class TestA03RollbackRestoresDisk:
 
         monkeypatch.setenv("PATCH_SNAPSHOT_ROLLBACK_ENABLE", "true")
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：同上，A-03 主题需要补丁先写盘
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         original = "def f():\n    return 1\n"
         state = self._state(tmp_path, original)
         target = tmp_path / "mod.py"
@@ -320,6 +325,9 @@ class TestRepairCaseVerificationGate:
         from src.graph.nodes import _patch_applier_node
 
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是暂存协议，
+        # 需要无证据补丁也能成功写盘（历史口径）
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         original = "def f():\n    return 1\n"
         target = tmp_path / "mod.py"
         target.write_text(original)
@@ -345,6 +353,9 @@ class TestRepairCaseVerificationGate:
 
         monkeypatch.setenv("PATCH_SNAPSHOT_ROLLBACK_ENABLE", "true")
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是暂存协议，
+        # 需要无证据补丁也能成功写盘（历史口径）
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         original = "def f():\n    return 1\n"
         target = tmp_path / "mod.py"
         target.write_text(original)

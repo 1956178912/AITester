@@ -89,7 +89,7 @@ class TestReportSectionsOnDisk:
         assert "| AITester vs plain_llm | 8 |" in text
 
         # McNemar 章节落盘（手算：n01=6, n10=0, chi2=4.1667, p=0.0412 → *）
-        assert "## McNemar 配对检验（二值指标）" in text
+        assert "## McNemar 配对检验（passed，自指指标——仅作诊断参考）" in text  # 2026-10-05 P0 口径
         assert "| AITester vs plain_llm | 8 | 6 | 4.1667 | 0.0412 | * |" in text
 
         # BH-FDR 章节落盘（单对比：q = 原始 p，拒绝 H0）

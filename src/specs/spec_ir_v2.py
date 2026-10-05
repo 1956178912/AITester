@@ -336,7 +336,11 @@ def compile_spec_oracle(
     # 已知保守权衡（有边界材料时层 1 优先，层 2 仅在无任何边界时兜底）。
     boundaries = [b for b in (spec.get("boundaries") or []) if b.get("input") is not None]
     if boundaries:
-        first_input = boundaries[0]["input"]
+        # P0（2026-10-05 独立审查）：边界输入字面量类型矫正。derive_boundary_triplets
+        # 历史产出字符串型 input（如 "4"），直绑成 str 字面量 `'4'` 会让 int 型被测
+        # 函数在运行期 TypeError——"确定性检出"通道变"确定性假检出"通道。
+        # 数字字符串（含容器元素）保守转 int/float；转换失败保持原值（不臆测）。
+        first_input = _coerce_boundary_literal(boundaries[0]["input"])
         if signature_params is not None:
             if len(signature_params) == 1 and not isinstance(first_input, (tuple, list)):
                 p0 = signature_params[0]
@@ -399,6 +403,34 @@ def compile_spec_oracle(
     if witness_code:
         code = f"{code}\n\n{witness_code}"
     return code
+
+
+def _coerce_boundary_literal(value: Any) -> Any:
+    """把边界输入中的数字字符串字面量保守转为 int/float（P0 类型矫正）。
+
+    规则（宁保持原值，不臆测）：
+    - int / float / bool / None → 原样返回；
+    - str → 仅当整体可 ast.literal_eval 为 int/float 时转换（"4"→4，
+      "2.5"→2.5；"abc"/"4 "→"abc"/"4 " 保持原串）；
+    - list → 逐元素递归转换（保持 list 形态，供多参 *args 展开）；
+    - 其他类型（tuple/dict 等）→ 原样返回。
+
+    源头层（logic_spec.derive_boundary_triplets）已同步产出类型化数值，
+    本层兜底覆盖 LLM logic_analysis 产出的字符串型结构化边界。
+    """
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = ast.literal_eval(value)
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            return value
+        if isinstance(parsed, (int, float)) and not isinstance(parsed, bool):
+            return parsed
+        return value
+    if isinstance(value, list):
+        return [_coerce_boundary_literal(v) for v in value]
+    return value
 
 
 def _compile_smt_witness_tests(

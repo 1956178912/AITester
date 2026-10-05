@@ -637,10 +637,13 @@ class TestPatchApplierNode:
             "repair_history": [],
         }
 
-    def test_write_success_updates_state(self, tmp_path):
+    def test_write_success_updates_state(self, tmp_path, monkeypatch):
         """写盘成功：target_code 更新、patch_applied=True、文件被真实修改。"""
         from src.graph.workflow import _patch_applier_node
 
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是写盘状态更新，
+        # 无 gold/sbfl 证据的补丁在 gate 默认开时会被证据门拒绝写盘
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         target = tmp_path / "mod.py"
         target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         state = self._state(str(target), "def add(a, b):\n    return a + b\n", "def add(a, b):\n    return a + b + 1\n")

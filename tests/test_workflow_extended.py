@@ -517,9 +517,12 @@ class TestPatchApplierNode:
     """测试 PatchApplier 节点安全检查和迭代逻辑。"""
 
     @patch("src.graph.nodes.apply_patch_to_code")
-    def test_patch_applied_successfully(self, mock_apply_patch, tmp_path):
+    def test_patch_applied_successfully(self, mock_apply_patch, tmp_path, monkeypatch):
         """补丁成功写盘：target_code 更新、patch_applied=True、文件被真实修改。"""
         from src.graph.workflow import _patch_applier_node
+
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是写盘状态更新
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
 
         # 新代码须含函数定义且不过短，且路径在允许根目录内（tmp_path 在系统 temp 目录下）
         target = tmp_path / "mod.py"
@@ -977,6 +980,8 @@ class TestDefaultOffFeatureBranches:
         from src.tools import cross_file as cf
 
         monkeypatch.setenv("CROSS_FILE_ENABLE", "true")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是 cross_file 分支路由
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         target = tmp_path / "m.py"
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
@@ -994,6 +999,8 @@ class TestDefaultOffFeatureBranches:
         from src.tools import cross_file as cf
 
         monkeypatch.setenv("CROSS_FILE_ENABLE", "true")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是 cross_file 分支路由
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         target = tmp_path / "m.py"
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"
@@ -1010,6 +1017,8 @@ class TestDefaultOffFeatureBranches:
         from src.graph import nodes
 
         monkeypatch.setenv("ENABLE_MULTI_CANDIDATE_PATCH", "true")
+        # 证据门 opt-out（2026-10-05 P0 真阻断）：本用例主题是多候选分支路由
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         target = tmp_path / "m.py"
         original = "def f():\n    return 1\n"
         new = "def f():\n    return 2\n"

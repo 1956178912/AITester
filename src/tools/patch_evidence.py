@@ -24,6 +24,11 @@ P0（2026-09-30 独立审查 N9/R33，P0）：源码补丁证据门（确定性�
     - 等级 "gold" / "sbfl" → 放行（有独立裁决 / 定位证据）；
     - 等级 "keyword" / "none" → 拒绝写盘（patch_applied=False，
       源码保持原样），把该轮标记为 source_patched_unverified=True。
+      实现（2026-10-05 独立审查对齐）：判定发生在 _patch_applier_node
+      写盘之后立即进行，等级不足时**恢复磁盘原文件**并置 written=False
+      ——对下游（A-03 回归守卫 / M6 回滚 / repair_history / 事件总线）
+      等价于"本轮未写盘"；原文件恢复失败时如实降级为写盘后标记口径
+      （磁盘与状态声明必须一致，C6 教训）。
 
     历史口径（PATCH_EVIDENCE_GATE_ENABLE=false，opt-out）：
     行为与历史完全一致（证据判定仍计算并写入 state，但不阻断写盘），

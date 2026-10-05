@@ -2929,6 +2929,55 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
     _snapshot: dict[str, Any] = {}
     written = _safe_write_patch(original_code, new_code, applied, state, snapshot_out=_snapshot)
 
+    # P0（2026-10-05 独立审查）：源码补丁证据门**真阻断**——文档契约
+    # （patch_evidence.py / state.py：等级不足"拒绝写盘，源码保持原样"）
+    # 此前未兑现：实现为"写盘后仅标记"，无证据补丁留在盘上，若下一轮
+    # 测试恰好通过（迁就错误测试）坏补丁即固化（主批次 patch_correct=0/15
+    # 的场景）。现对齐 fail-closed 契约（与 W12 快照失败拒绝写盘同文化）：
+    # gate 启用（默认 true）+ 证据等级不足 → 恢复磁盘原文件 + written=False
+    # （与"安全检查失败保持原代码"同口径，A-03 / M6 / history / 事件总线
+    # 全部自然一致）；证据等级仍记录（消融对照不受影响）。
+    _evidence_update: dict[str, Any] = {}
+    if written:
+        from src.tools.patch_evidence import (
+            assess_patch_evidence,
+            evidence_allows_write,
+            patch_evidence_gate_enabled,
+        )
+
+        _ev_level = assess_patch_evidence(cast("dict[str, Any]", state), original_code, new_code)
+        _evidence_update["patch_evidence_level"] = _ev_level
+        if patch_evidence_gate_enabled() and not evidence_allows_write(_ev_level):
+            _evidence_update["source_patched_unverified"] = True
+            _disk_restored_ev = False
+            try:
+                _write_file_atomic(os.path.abspath(state.get("target_file", "")), original_code)
+                _disk_restored_ev = True
+            except Exception:
+                logger.exception(
+                    "证据门阻断恢复原文件失败：磁盘仍保留无证据补丁（target_file=%s）",
+                    state.get("target_file"),
+                )
+            if _disk_restored_ev:
+                written = False
+                new_code = original_code
+                _snapshot.clear()  # 与"安全检查拒绝"同构：无可回滚物，快照键不写 channel
+                logger.warning(
+                    "P0 源码补丁证据门：本轮补丁证据等级=%s（不足 gold/sbfl），"
+                    "已恢复原文件（拒绝写盘，patch_applied=False）",
+                    _ev_level,
+                )
+            else:
+                # 恢复失败时如实降级为"写盘后标记"口径（C6 教训：磁盘与
+                # 状态必须一致声明——盘上有补丁就不能声称拒绝写盘）
+                logger.warning(
+                    "P0 源码补丁证据门：等级=%s 不足但原文件恢复失败，"
+                    "降级为写盘后标记口径（source_patched_unverified）",
+                    _ev_level,
+                )
+        else:
+            _evidence_update["source_patched_unverified"] = False
+
     # 状态/磁盘一致性：仅写盘成功才更新 target_code，否则保留原代码
     effective_code = new_code if written else original_code
 
@@ -3047,34 +3096,11 @@ def _patch_applier_node(state: AITesterState) -> dict[str, Any]:
         resample_update["patch_rollback_verdict"] = "not_enabled"
         resample_update["patch_rolled_back"] = False
     # 1.4 事件总线接线：PatchApplied（含 1.1 后处理标签，纯观测）
-    # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门在写盘**之后**判定
-    # （写盘本身仍受命名契约/危险 API 守卫保护；证据门决定"本轮写盘是否
-    # 有确定性证据背书"——无证据时把 patch_applied 标记为 False 并置
-    # source_patched_unverified=True，供实验分析"源码腐蚀风险"消费。
-    # 证据门 opt-out（PATCH_EVIDENCE_GATE_ENABLE=false）时零行为变化，
-    # 证据等级仍记录（供消融对照）。
-    _evidence_update: dict[str, Any] = {}
-    if applied:
-        from src.tools.patch_evidence import (
-            assess_patch_evidence,
-            evidence_allows_write,
-            patch_evidence_gate_enabled,
-        )
-
-        _ev_level = assess_patch_evidence(cast("dict[str, Any]", state), original_code, effective_code)
-        _evidence_update["patch_evidence_level"] = _ev_level
-        if patch_evidence_gate_enabled() and not evidence_allows_write(_ev_level):
-            # 无 gold / 谱系定位证据 → 本轮写盘不被独立裁决背书，标记为
-            # "未验证的源码修改"（源码已在盘上，下一轮 executor 若失败
-            # 经 M6 回滚通道恢复原文件；本标记供统计层归因）。
-            logger.warning(
-                "P0 源码补丁证据门：本轮补丁证据等级=%s（不足 gold/sbfl），"
-                "标记 source_patched_unverified（源码腐蚀风险观测）",
-                _ev_level,
-            )
-            _evidence_update["source_patched_unverified"] = True
-        else:
-            _evidence_update["source_patched_unverified"] = False
+    # P0（2026-10-05 独立审查）：证据门判定已**前移**至写盘点之后
+    # （_safe_write_patch 返回处）——阻断语义（等级不足恢复原文件、
+    # written=False）必须在 A-03 快照回滚 / repair_history / 事件总线
+    # 构造之前生效，否则下游基于"已写盘"的假象运行。此处仅剩
+    # publish_patch_applied 消费阻断后的 written。
     publish_patch_applied(state, applied=written, new_code=effective_code)
     # O6（2026-09-29 审查 P1）：testless 修复验证层（TESTLESS_VALIDATION_ENABLE=true 时启用，默认关）。
     # 补丁应用成功后，经 run_testless_validation 对 (original_code, effective_code)

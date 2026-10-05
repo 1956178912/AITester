@@ -438,12 +438,12 @@ class AITesterState(TypedDict, total=False):
     # None = 未检测到回归（当前无写入方，分支保持保守不可达）。
     regression_detected: bool | None
     # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门（src/tools/patch_evidence.py）。
-    # patch_evidence_gate_enabled()（默认 true）时 _patch_applier_node 在写盘前
-    # 以"gold / sbfl / keyword / none"判级：等级不足（keyword/none）拒绝写盘
-    # （patch_applied=False，源码保持原样）并把本键置 True——"源码被改但无
-    # 规格/gold/谱系定位依据"的轮次计数，供实验分析"源码腐蚀风险"消费
-    # （R33 验证指标：该计数 = 0）。None = 证据门未触发（opt-out 或被拒轮次
-    # 未发生），历史口径不变。
+    # patch_evidence_gate_enabled()（默认 true）时 _patch_applier_node 在写盘后
+    # 立即以"gold / sbfl / keyword / none"判级：等级不足（keyword/none）拒绝
+    # 写盘（2026-10-05 独立审查对齐：恢复磁盘原文件 + patch_applied=False，
+    # 源码保持原样）并把本键置 True——"源码被改但无规格/gold/谱系定位依据"
+    # 的轮次标记，供实验分析"源码腐蚀风险"消费（R33 验证指标：该计数 = 0）。
+    # None = 证据门未触发（opt-out 或被拒轮次未发生），历史口径不变。
     source_patched_unverified: bool | None
     # P0（R33）：本轮补丁的确定性证据等级（"gold" / "sbfl" / "keyword" /
     # "none"），_patch_applier_node 写盘前经 patch_evidence.assess_patch_

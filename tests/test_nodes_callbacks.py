@@ -283,6 +283,9 @@ class TestPatchApplierOnResample:
     def test_llm_returns_valid_code_applies(self, tmp_path, monkeypatch):
         """LLM 返回合法且符合契约的补丁 → 重采样成功写盘。"""
         monkeypatch.setenv("PATCH_RESAMPLE_ENABLE", "true")
+        # 证据门 opt-out（2026-10-05 P0 真阻断语义）：本用例主题是重采样逻辑，
+        # 无 gold/sbfl 证据的补丁在 gate 默认开时会被证据门拒绝写盘
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         import src.agents.debugger as dbg
         from src.graph.nodes import _patch_applier_node
 

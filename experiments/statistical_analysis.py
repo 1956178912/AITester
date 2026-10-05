@@ -108,46 +108,71 @@ def load_experiment_results_with_sources(
         except ValueError:
             return str(p)
 
-    # M13：显式批次白名单（N5：mtime 降序加载；同一文件多次出现仅加载一次）
+    # M13：显式批次白名单（2026-10-05 P0：确定性排序 = 内嵌时间戳降序，
+    # mtime 兜底；同一文件多次出现仅加载一次）
     if batch_files is not None:
         _seen_files: set[Path] = set()
-        for _bp in _sort_batch_files_by_mtime(results_path / _bf for _bf in batch_files):
+        for _bp in _sort_batch_files_deterministic(results_path / _bf for _bf in batch_files):
             if _bp not in _seen_files:
                 _seen_files.add(_bp)
                 if _load_batch_file(results, _bp):
                     included_files.append(_display_path(_bp))
         return results, included_files
 
-    # 递归查找所有 benchmark JSON 文件（M13：确定性遍历；N5：mtime 降序 =
-    # 最新批次先加载，使 _pair_by_task 首见去重的"最新批次优先"口径成立；
+    # 递归查找所有 benchmark JSON 文件（M13：确定性遍历；2026-10-05 P0：
+    # 排序主键 = 文件名内嵌时间戳降序（实验属性，跨机可复算），mtime 兜底；
+    # "最新批次先加载"使 _pair_by_task 首见去重语义成立；
     # R2：记录实际纳入的文件供"数据来源"审计章节消费）
     included_files.extend(
         _display_path(json_file)
-        for json_file in _sort_batch_files_by_mtime(results_path.glob("**/benchmark_*.json"))
+        for json_file in _sort_batch_files_deterministic(results_path.glob("**/benchmark_*.json"))
         if _load_batch_file(results, json_file)
     )
 
     return results, included_files
 
 
-def _sort_batch_files_by_mtime(files: Iterable[Path]) -> list[Path]:
-    """N5（2026-10-05 复审）：批次文件按 mtime 降序排序（最新先加载）。
+def _sort_batch_files_deterministic(files: Iterable[Path]) -> list[Path]:
+    """批次文件确定性排序（2026-10-05 独立审查 P0：去重口径可复算化）。
 
-    M13 的 _pair_by_task docstring 声称"按文件修改时间排序后首见即最新"，
-    但加载实现是 sorted(glob) 路径序——路径序 ≠ 时间序（不同前缀/重命名/
-    拷贝的批次文件会乱序），同 task_id 跨批次重复时哪条数据胜出取决于
-    命名而非新旧，docstring 与实现不一致。本函数把 docstring 口径落实到
-    加载顺序：mtime 降序；同 mtime 按路径名升序稳定打破平局；stat 失败
-    （并发删除等）的文件排最后并保持路径序。
+    N5 的"最新批次优先"语义保留，但主键从 mtime（文件系统属性，clone/
+    重命名/拷贝即漂移——同一份工件在开发机与 CI 上可解出不同去重顺序，
+    χ²=12.96 vs 15.04 的报告不可复算即源于此）改为**批次文件名内嵌
+    时间戳**（benchmark_*_YYYYMMDD_HHMMSS.json，run_benchmark 写盘时
+    固化的实验属性）：
+
+    - 有内嵌时间戳（规范命名批次）：按时间戳降序（最新先加载），平局按
+      路径名升序稳定打破；
+    - 无内嵌时间戳（历史/外部批次）：排在规范批次之后，组内按 mtime 降序
+      （N5 兜底语义），再按路径名升序平局；stat 失败排最后保持路径序。
+
+    同一目录树在任意机器/任意时刻的加载顺序逐位一致——"最新批次优先"
+    从文件系统巧合变为工件自描述。
     """
+    import re
 
-    def _key(p: Path) -> tuple[int, str]:
-        try:
-            return (-p.stat().st_mtime_ns, str(p))
-        except OSError:
-            return (1, str(p))
+    _TS_RE = re.compile(r"_(\d{8}_\d{6})\.json$")
 
-    return sorted(files, key=_key)
+    keyed: list[tuple[int, int, int, str, Path]] = []
+    for p in files:
+        m = _TS_RE.search(p.name)
+        if m:
+            keyed.append((0, -_ts_rank(m.group(1)), 0, str(p), p))
+        else:
+            try:
+                keyed.append((1, -p.stat().st_mtime_ns, 0, str(p), p))
+            except OSError:
+                keyed.append((2, 0, 0, str(p), p))
+    keyed.sort(key=lambda k: (k[0], k[1], k[3]))
+    return [k[4] for k in keyed]
+
+
+def _ts_rank(ts: str) -> int:
+    """YYYYMMDD_HHMMSS → 可比较整数（20261001_121523 → 20261001121523）。"""
+    try:
+        return int(ts.replace("_", ""))
+    except ValueError:
+        return 0
 
 
 def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> bool:
@@ -179,11 +204,12 @@ def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> bool:
 def _pair_by_task(
     results_a: list[dict],
     results_b: list[dict],
+    field: str = "passed",
 ) -> tuple[list[int], list[int], list[str]]:
     """
     按 task_id 将两个基线的结果配成同一任务的观测对。
 
-    返回配对后的通过率列表（0/1）与共同任务 ID 列表（按 task_id 排序，
+    返回配对后的二值列表（0/1）与共同任务 ID 列表（按 task_id 排序，
     保证两次运行配对顺序一致）。位置配对（min_len 截断）在两个基线结果
     顺序不一致时会错配任务，故废弃。
 
@@ -197,16 +223,21 @@ def _pair_by_task(
     结果；现口径为"同一 task_id 以最新批次为准，旧批次作对照"，与实验
     科学惯例一致（最新数据代表当前系统行为）。
     N5（2026-10-05 复审）：该口径此前仅存在于 docstring——加载顺序实为
-    路径序而非 mtime 序。现 load_experiment_results_with_sources 已按
-    mtime 降序加载（_sort_batch_files_by_mtime），本函数首见 = 最新批次，
-    docstring 与实现一致。
+    路径序而非 mtime 序。2026-10-05 独立审查 P0 进一步把排序主键从 mtime
+    （文件系统属性，不可复算）改为文件名内嵌时间戳降序（实验属性，
+    _sort_batch_files_deterministic），本函数首见 = 最新批次，docstring、
+    实现与可复算性三者一致。
 
     Args:
         results_a: 基线 A（通常为 AITester）结果列表。
         results_b: 基线 B 结果列表。
+        field: 配对所用的二值结果行字段（2026-10-05 独立审查 P0：
+            "passed"（历史默认，自指指标）外新增 "detection_rate" /
+            "repair_rate" 等 M1 诚实指标——逐任务值 0.0/1.0/None，
+            None（无 gold 材料，M1 分母外）跳过该任务，不并入分母）。
 
     Returns:
-        (pass_a, pass_b, common_task_ids)
+        (paired_a, paired_b, common_task_ids)
     """
     import logging
 
@@ -219,10 +250,15 @@ def _pair_by_task(
             if not tid:
                 continue
             if tid in seen:
-                # 首见优先：最新批次的数据胜出（N5：load 已按 mtime 降序），重复行跳过
+                # 首见优先：最新批次的数据胜出（排序主键 = 内嵌时间戳降序），重复行跳过
                 _logger.debug("%s task_id=%r 重复行跳过（首见=最新批次优先去重）", label, tid)
                 continue
-            seen[tid] = 1 if r.get("passed") else 0
+            val = r.get(field)
+            if val is None:
+                # M1 诚实指标的 None = 无 gold 材料（分母外），非"未通过"——
+                # 记 0 会把"无法测量"混入"测量为失败"，分母口径失真
+                continue
+            seen[tid] = 1 if val else 0
         return seen
 
     pass_a = _dedup(results_a, "基线A")
@@ -365,6 +401,7 @@ def interpret_d(d: float) -> str:
 def mcnemar_test(
     aitester_results: list[dict],
     baseline_results: list[dict],
+    field: str = "passed",
 ) -> tuple[float, float, int, int]:
     """R14：McNemar 检验（二值配对，按 task_id 配对）。
 
@@ -380,10 +417,17 @@ def mcnemar_test(
     - pass_a / pass_b 为 {task_id: 0|1} 字典，共同任务 = 双方 task_id 交集
     - 逐任务对比 0/1 值计数不一致对
 
+    Args:
+        aitester_results: AITester 结果列表。
+        baseline_results: 基线结果列表。
+        field: 二值结果行字段（2026-10-05 独立审查 P0："passed"（历史
+            默认，自指指标）外新增 "detection_rate" / "repair_rate"——
+            M1 诚实指标的独立裁决检验；None 值任务（无 gold 材料）跳过）。
+
     Returns:
         (chi2, p_value, n_concordant_diff, n_common)
     """
-    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results)
+    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results, field=field)
     n_common = len(common_tasks)
     if n_common < 2:
         return float("nan"), float("nan"), 0, n_common
@@ -663,17 +707,44 @@ def run_all_statistics(
     for _src in source_files:
         print(f"  - {_src}")
 
-    # 计算基本统计量
+    # 计算基本统计量（2026-10-05 P0：并列统计 M1 诚实指标——passed 为
+    # 自指指标（系统自产测试在未修复代码上通过，false_fix 主批次 89.8% 的
+    # 直接来源），detection/repair 为 gold 独立裁决，报告读者第一眼应看
+    # 诚实口径）
     stats_summary: dict[str, dict[str, float]] = {}
     for baseline in _BASELINES:
         if data[baseline]:
             passed = sum(1 for r in data[baseline] if r.get("passed"))
             total = len(data[baseline])
             rate = passed / total * 100 if total > 0 else 0
-            stats_summary[baseline] = {"n": total, "passed": passed, "rate": rate}
+            det_vals = [r["detection_rate"] for r in data[baseline] if r.get("detection_rate") is not None]
+            rep_vals = [r["repair_rate"] for r in data[baseline] if r.get("repair_rate") is not None]
+            stats_summary[baseline] = {
+                "n": total,
+                "passed": passed,
+                "rate": rate,
+                "det_n": len(det_vals),
+                "det_rate": sum(det_vals) / len(det_vals) * 100 if det_vals else 0.0,
+                "rep_n": len(rep_vals),
+                "rep_rate": sum(rep_vals) / len(rep_vals) * 100 if rep_vals else 0.0,
+            }
             print(f"\n{baseline}: {passed}/{total} 通过 ({rate:.1f}%)")
+            print(
+                f"  诚实指标（gold 独立裁决）: detection {sum(det_vals)}/{len(det_vals)}"
+                f" ({stats_summary[baseline]['det_rate']:.1f}%)"
+                f" / repair {sum(rep_vals)}/{len(rep_vals)}"
+                f" ({stats_summary[baseline]['rep_rate']:.1f}%)"
+            )
         else:
-            stats_summary[baseline] = {"n": 0, "passed": 0, "rate": 0}
+            stats_summary[baseline] = {
+                "n": 0,
+                "passed": 0,
+                "rate": 0,
+                "det_n": 0,
+                "det_rate": 0.0,
+                "rep_n": 0,
+                "rep_rate": 0.0,
+            }
             print(f"\n{baseline}: 无数据")
 
     # 配对 t 检验 + Cohen's d
@@ -797,6 +868,43 @@ def run_all_statistics(
                 f"({'显著' if comp['fdr_rejected'] else '不显著'})"
             )
 
+    # 2026-10-05 独立审查 P0：M1 诚实指标（detection / repair，gold 独立
+    # 裁决）的 McNemar 检验——历史口径只对 passed（自指）做推断统计，
+    # 而主批次 honest 指标下 aitester 与 plain_llm 为 2% vs 2% / 0% vs 0%
+    # 的平手，该事实从未被检验。本节使报告主结论与科学主张对齐。
+    honest_metric_fields: tuple[tuple[str, str], ...] = (
+        ("detection_rate", "detection（F2P 检出）"),
+        ("repair_rate", "repair（gold 裁决修复）"),
+    )
+    honest_comparisons: list[dict] = []
+    for metric_field, metric_label in honest_metric_fields:
+        for baseline in ("plain_llm", "single_agent"):
+            if stats_summary[baseline]["n"] == 0:
+                continue
+            h_chi2, h_p, h_ndiff, h_ncommon = mcnemar_test(data["aitester"], data[baseline], field=metric_field)
+            honest_comparisons.append(
+                {
+                    "metric": metric_label,
+                    "field": metric_field,
+                    "comparison": f"AITester vs {baseline}",
+                    "n_common": h_ncommon,
+                    "n_diff": h_ndiff,
+                    "chi2": h_chi2,
+                    "p": h_p,
+                    "sig": interpret_p(h_p),
+                }
+            )
+    if honest_comparisons:
+        print("\n" + "=" * 70)
+        print("诚实指标 McNemar（M1 三指标，gold 独立裁决——首要结论口径）")
+        print("=" * 70)
+        for h in honest_comparisons:
+            print(
+                f"  [{h['metric']}] {h['comparison']}: 共同任务 {h['n_common']}"
+                f"，不一致对 {h['n_diff']}，χ²={_fmt_stat_num(h['chi2'])}"
+                f"，p={_fmt_stat_num(h['p'])} ({h['sig']})"
+            )
+
     if output_file:
         # 生成 Markdown 报告（R2：新增"数据来源 / McNemar / Bootstrap CI /
         # 效应量对比（Cliff's δ）/ BH-FDR"五个章节——历史 t 检验表原样保留）
@@ -813,17 +921,56 @@ def run_all_statistics(
         ]
         report_lines.extend(f"- `{src}`" for src in source_files)
 
+        # 2026-10-05 P0：可复算声明——排序主键为文件名内嵌时间戳（实验
+        # 属性），报告数值可用如下命令从入库工件逐位复现
+        _recompute_cmd = (
+            "python experiments/statistical_analysis.py "
+            f"--results-dir {results_dir} --output <report.md>"
+            + (f" --batches {','.join(source_files)}" if source_files else "")
+        )
+        report_lines += [
+            "",
+            f"复算命令（工件与代码齐备时数值逐位可复现）：`{_recompute_cmd}`",
+            "",
+            "去重口径：同一 task_id 跨批次重复时最新批次优先（排序主键 = 批次",
+            "文件名内嵌时间戳降序，文件系统 mtime 仅作无内嵌时间戳批次的兜底）。",
+        ]
+
         report_lines += [
             "",
             "## 数据概览",
             "",
-            "| Baseline | 任务数 | 通过数 | 通过率 |",
-            "|----------|--------|--------|--------|",
+            # 2026-10-05 P0：passed（自指）与 M1 诚实指标（detection/repair，
+            # gold 独立裁决）并列——分母为该指标可测任务数（None = 无 gold
+            # 材料，不计入分母）
+            "| Baseline | 任务数 | 通过数 (passed) | 通过率 | detection 可测数 | detection 率 | repair 可测数 | repair 率 |",
+            "|----------|--------|-----------------|--------|------------------|--------------|---------------|-----------|",
         ]
 
         for baseline in _BASELINES:
             s = stats_summary[baseline]
-            report_lines.append(f"| {baseline} | {s['n']} | {s['passed']} | {s['rate']:.1f}% |")
+            report_lines.append(
+                f"| {baseline} | {s['n']} | {s['passed']} | {s['rate']:.1f}% "
+                f"| {s['det_n']} | {s['det_rate']:.1f}% | {s['rep_n']} | {s['rep_rate']:.1f}% |"
+            )
+
+        report_lines += [
+            "",
+            "## 诚实指标 McNemar 检验（M1 三指标，gold 独立裁决）",
+            "",
+            "2026-10-05 P0 协议：passed = 系统自产测试在（未修复的）缺陷代码上",
+            "通过，为自指指标（奖励写不出能抓 bug 的测试）；detection / repair",
+            "由留出 gold 材料独立裁决。**本节为报告的首要结论口径**——与",
+            "下方 passed 系列检验并列呈现，解读冲突时以本节为准。",
+            "",
+            "| 指标 | 比较 | 共同任务数 | 不一致对 | χ²（连续性校正） | p值 | 显著性 |",
+            "|------|------|-----------|---------|------------------|-----|--------|",
+        ]
+        for h in honest_comparisons:
+            report_lines.append(
+                f"| {h['metric']} | {h['comparison']} | {h['n_common']} | {h['n_diff']} "
+                f"| {_fmt_stat_num(h['chi2'])} | {_fmt_stat_num(h['p'])} | {h['sig']} |"
+            )
 
         report_lines += [
             "",
@@ -844,12 +991,17 @@ def run_all_statistics(
 
         # R2：McNemar 配对检验落盘（此前仅打印控制台——二值配对的正确检验
         # 不进报告等于"算而未报"，报告读者只能看到口径错误的 t 检验）
+        # 2026-10-05 P0：标题加"自指指标"限定——passed 系列仅作诊断参考，
+        # 首要结论口径见上方"诚实指标 McNemar"节
         report_lines += [
             "",
-            "## McNemar 配对检验（二值指标）",
+            "## McNemar 配对检验（passed，自指指标——仅作诊断参考）",
             "",
-            "R14 协议：二值配对数据（passed 0/1）的正确检验（Arcuri & Briand,",
-            "ICSE 2011）；与上方 t 检验并列呈现，t 检验表保持历史口径不变。",
+            "R14 协议：二值配对数据（passed 0/1）的检验（Arcuri & Briand,",
+            "ICSE 2011）。注意：passed 为系统自产测试在（未修复的）缺陷代码",
+            "上的通过（自指口径，false_fix 主批次 89.8% 的直接来源），本节",
+            "不作为架构增益主张的依据；与上方 t 检验并列呈现，t 检验表保持",
+            "历史口径不变。",
             "",
             "| 比较 | 共同任务数 | 不一致对 (n01+n10) | χ²（连续性校正） | p值 | 显著性 |",
             "|------|-----------|-------------------|------------------|-----|--------|",

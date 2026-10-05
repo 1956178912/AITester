@@ -150,8 +150,10 @@ def derive_boundary_triplets(
             默认 20）。
 
     Returns:
-        [{"input": str, "expected": str, "rationale": str, "line": int}, ...]
-        空列表 = 无边界条件可推导 / target_code 为空 / 语法错误。
+        [{"input": int|float|str, "expected": str, "rationale": str, "line": int}, ...]
+        input 为类型化数值（P0：比较常量 ±1 直接产出 int/float，不产数字
+        字符串——下游 SpecIR v2 字面量绑定需要真实类型）；空列表 = 无边界
+        条件可推导 / target_code 为空 / 语法错误。
     """
     if not target_code or not target_code.strip():
         return []
@@ -240,32 +242,35 @@ def _extract_compare_triplet(node: ast.Compare) -> dict[str, Any] | None:
         if const_val is None:
             return None
 
-    # 根据运算符推导边界输入
+    # 根据运算符推导边界输入（P0：input 产出类型化数值而非数字字符串——
+    # 字符串型 input 流入 SpecIR v2 编译会被绑定为 str 字面量，int 型被测
+    # 函数运行期 TypeError，"确定性检出"变假检出；prompt 渲染 f-string
+    # 对 int/float 与等值字符串输出一致，不影响注入段落）
     op_name = _op_name(op)
     if isinstance(op, ast.GtE):  # x >= N → 边界输入 N-1（不满足）/ N（满足）
-        input_str = f"{const_val - 1}"
+        input_val: Any = const_val - 1
         expected = f"< {const_val}（不满足）/ = {const_val}（满足）"
     elif isinstance(op, ast.LtE):  # x <= N → 边界输入 N+1（不满足）/ N（满足）
-        input_str = f"{const_val + 1}"
+        input_val = const_val + 1
         expected = f"> {const_val}（不满足）/ = {const_val}（满足）"
     elif isinstance(op, ast.Eq):  # x == N → 边界输入 N（满足）/ N±1（不满足）
-        input_str = f"{const_val}"
+        input_val = const_val
         expected = f"= {const_val}（满足）/ ≠ {const_val}（不满足）"
     elif isinstance(op, ast.NotEq):  # x != N → 边界输入 N（不满足）/ N±1（满足）
-        input_str = f"{const_val}"
+        input_val = const_val
         expected = f"= {const_val}（不满足）/ ≠ {const_val}（满足）"
     elif isinstance(op, ast.Gt):  # x > N → 边界输入 N（不满足）/ N+1（满足）
-        input_str = f"{const_val + 1}"
+        input_val = const_val + 1
         expected = f"= {const_val}（不满足）/ > {const_val}（满足）"
     elif isinstance(op, ast.Lt):  # x < N → 边界输入 N（不满足）/ N-1（满足）
-        input_str = f"{const_val - 1}"
+        input_val = const_val - 1
         expected = f"= {const_val}（不满足）/ < {const_val}（满足）"
     else:  # In / NotIn（容器成员）
-        input_str = f"{const_val}"
+        input_val = const_val
         expected = "在容器内（满足）/ 不在容器内（不满足）"
 
     return {
-        "input": input_str,
+        "input": input_val,
         "expected": expected,
         "rationale": f"第 {node.lineno} 行：{op_name} 比较（常量 {const_val}）",
         "line": node.lineno,

@@ -89,9 +89,16 @@ benchmark:
   #     false_fix=89.8%（历史"假成功"通道的直接证据）
   #   plain_llm: success=52.0% (26/50)
   #   single_agent: success=0.0% (0/50)，test_error_rate=94%
-  #   McNemar（R14 二值配对）：aitester vs plain_llm p=0.0001（BH-FDR 显著）；
-  #   aitester vs single_agent p=0.0000（显著）。统计报告：
-  #   experiments/results/main_batch/statistical_report.md
+  #   2026-10-05 独立审查 P0（统计口径修正）：passed 为自指指标（自产测试在
+  #     未修复代码上通过），McNemar p=0.0001（χ²=15.0417，不一致对 24，BH-FDR
+  #     显著）**仅作诊断参考**；首要结论口径为诚实指标 McNemar（gold 独立裁决）：
+  #     detection aitester vs plain_llm = 2.0% vs 2.0%（不一致对 2，p=0.4795
+  #     不显著）/ repair = 0.0% vs 0.0%（不一致对 0，p=1.0）——诚实指标下
+  #     完整系统与简化基线无显著差异。统计报告（含诚实指标节与复算命令）：
+  #     experiments/results/main_batch/statistical_report.md
+  #   统计管线 2026-10-05 P0 修正：批次去重排序主键 = 文件名内嵌时间戳
+  #     （实验属性，跨机可复算），mtime 降级为无内嵌时间戳批次的兜底；
+  #     本节数值由 statistical_analysis.py 白名单模式从入库工件逐位复现。
   # 历史批次（仅存档，不作当前口径引用）：
   history:
     - batch: "experiments/results/benchmark_synthetic_20260925_135638.json"

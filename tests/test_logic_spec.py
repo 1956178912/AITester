@@ -119,7 +119,7 @@ def check(x):
         # 找 x >= 10 的三元组：input 应为 9（10-1）
         found = [t for t in triplets if t["line"] == 3]
         assert found
-        assert found[0]["input"] == "9"
+        assert found[0]["input"] == 9  # P0 类型矫正：产出 int 而非数字字符串
 
     @pytest.mark.unit
     def test_lte_boundary(self):
@@ -132,7 +132,7 @@ def check(x):
         triplets = derive_boundary_triplets(code)
         found = [t for t in triplets if t["line"] == 3]
         assert found
-        assert found[0]["input"] == "6"  # 5+1
+        assert found[0]["input"] == 6  # 5+1（P0 类型矫正：int 而非 "6"）
 
     @pytest.mark.unit
     def test_eq_boundary(self):
@@ -145,7 +145,7 @@ def check(x):
         triplets = derive_boundary_triplets(code)
         found = [t for t in triplets if t["line"] == 3]
         assert found
-        assert found[0]["input"] == "42"
+        assert found[0]["input"] == 42  # P0 类型矫正：int 而非 "42"
 
     @pytest.mark.unit
     def test_negative_constant(self):
@@ -158,7 +158,7 @@ def check(x):
         triplets = derive_boundary_triplets(code)
         found = [t for t in triplets if t["line"] == 3]
         assert found
-        assert found[0]["input"] == "0"  # -1+1
+        assert found[0]["input"] == 0  # -1+1（P0 类型矫正：int 而非 "0"）
 
     @pytest.mark.unit
     def test_focus_function_filtering(self):

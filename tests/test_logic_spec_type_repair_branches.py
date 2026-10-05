@@ -43,12 +43,12 @@ class TestExtractCompareTriplet:
     @pytest.mark.parametrize(
         ("expr", "expected_input"),
         [
-            ("x >= 10", "9"),  # GtE → N-1
-            ("x <= 10", "11"),  # LtE → N+1
-            ("x == 10", "10"),  # Eq → N
-            ("x != 10", "10"),  # NotEq → N
-            ("x > 10", "11"),  # Gt → N+1
-            ("x < 10", "9"),  # Lt → N-1
+            ("x >= 10", 9),  # GtE → N-1（P0-2：类型化数值，非数字字符串）
+            ("x <= 10", 11),  # LtE → N+1
+            ("x == 10", 10),  # Eq → N
+            ("x != 10", 10),  # NotEq → N
+            ("x > 10", 11),  # Gt → N+1
+            ("x < 10", 9),  # Lt → N-1
         ],
     )
     def test_operator_inputs(self, expr, expected_input):
@@ -61,19 +61,19 @@ class TestExtractCompareTriplet:
         t = _triplet("10 < x")
         assert t is not None
         # Lt 分支：input = const-1 = 9（常量 10 从 left 提取成功）
-        assert t["input"] == "9"
+        assert t["input"] == 9  # P0-2：int 而非 "9"
         assert "10" in t["expected"]
 
     def test_negative_constant(self):
         """-1 负常量：UnaryOp(USub, Constant) 路径。"""
         t = _triplet("x >= -1")
         assert t is not None
-        assert t["input"] == "-2"  # -1 - 1
+        assert t["input"] == -2  # -1 - 1（P0-2：int 而非 "-2"）
 
     def test_float_constant(self):
         t = _triplet("x > 0.5")
         assert t is not None
-        assert "1.5" in t["input"] or "0.5" in t["input"]
+        assert t["input"] == 1.5  # P0-2：float 类型化（Gt → 0.5+1），非 "1.5" 字符串
 
     def test_non_compare_returns_none(self):
         """非 Compare 节点 → None（类型守卫）。"""

@@ -201,3 +201,101 @@ class TestDslGate:
         for v in ("false", "0", "off", "no", "x"):
             monkeypatch.setenv("SPEC_IR_DSL_ENABLE", v)
             assert spec_ir_dsl_enabled() is False
+
+
+class TestBoundaryLiteralCoercion:
+    """P0（2026-10-05 独立审查）：边界输入字面量类型矫正。
+
+    锁定语义：数字字符串在绑定期保守转 int/float，int 型被测函数不再
+    因 str 字面量注入而系统性 TypeError（假检出通道）；转换失败保持原值。
+    """
+
+    def test_numeric_string_bound_to_int(self):
+        # 字符串型 input "4" + 单参 int 函数 → 绑定 x = 4（非 '4'）
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r > 0"],
+            "invariants": [],
+            "boundaries": [{"input": "4", "expected": "> 3", "rationale": "line 2"}],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
+        assert code != ""
+        assert "x = 4" in code
+        assert "x = '4'" not in code
+
+    def test_float_string_bound_to_float(self):
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r > 0"],
+            "invariants": [],
+            "boundaries": [{"input": "2.5", "expected": "", "rationale": ""}],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
+        assert "x = 2.5" in code
+        assert "x = '2.5'" not in code
+
+    def test_non_numeric_string_kept(self):
+        # 非数字字符串保守保持（不臆测）
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r > 0"],
+            "invariants": [],
+            "boundaries": [{"input": "abc", "expected": "", "rationale": ""}],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
+        assert "x = 'abc'" in code
+
+    def test_numeric_string_with_space_coerced(self):
+        # ast.literal_eval 语义：容忍首尾空白（"4 " → 4），转换口径由
+        # literal_eval 定义，与 int() 的宽松解析一致
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r > 0"],
+            "invariants": [],
+            "boundaries": [{"input": "4 ", "expected": "", "rationale": ""}],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
+        assert "x = 4" in code
+        assert "x = '4 '" not in code
+
+    def test_tuple_elements_coerced(self):
+        # 多参 tuple 输入的元素逐个矫正
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r > 0"],
+            "invariants": [],
+            "boundaries": [{"input": ["3", 5], "expected": "", "rationale": ""}],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["a", "b"])
+        assert "args = [3, 5]" in code
+        assert "'3'" not in code
+
+    def test_typed_source_triplet_roundtrip(self):
+        # 源头层（logic_spec）+ 编译层端到端：int 函数 + AST 推导边界
+        # → oracle 绑定 int 字面量，eval 后调用不 TypeError
+        from src.tools.logic_spec import derive_boundary_triplets
+
+        target = "def check(x):\n    if x >= 4:\n        return 1\n    return 0\n"
+        triplets = derive_boundary_triplets(target, focus_function="check")
+        spec = {
+            "preconditions": [],
+            "postconditions": ["r == 0 or r == 1"],
+            "invariants": [],
+            "boundaries": [{"input": t["input"], "expected": t["expected"], "rationale": t["rationale"]} for t in triplets],
+        }
+        code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
+        assert code != ""
+        assert "x = 4" in code or "x = 3" in code  # 4-1=3 / 4 均为 int
+
+    def test_coerce_helper_direct(self):
+        from src.specs.spec_ir_v2 import _coerce_boundary_literal
+
+        assert _coerce_boundary_literal("4") == 4
+        assert _coerce_boundary_literal("2.5") == 2.5
+        assert _coerce_boundary_literal("abc") == "abc"
+        assert _coerce_boundary_literal("4 ") == 4  # literal_eval 容忍首尾空白
+        assert _coerce_boundary_literal(7) == 7
+        assert _coerce_boundary_literal(None) is None
+        assert _coerce_boundary_literal(True) is True  # bool 不当 int 转换
+        assert _coerce_boundary_literal(["1", 2]) == [1, 2]
+        assert _coerce_boundary_literal((1, 2)) == (1, 2)  # 非 list/tuple 元素不递归
