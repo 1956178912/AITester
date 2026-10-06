@@ -661,7 +661,7 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     # 0.0~1.0，无规约材料时 0.0——可证伪口径："逻辑驱动"贡献 = 可编译率，
     # 而非 100% 宣称）。纯观测字段，不参与路由（与 spec_ir 同档位）。
     if _spec_ir_dsl_enabled():
-        from src.specs import compile_readiness, spec_provenance
+        from src.specs import compile_readiness, spec_expr_coverage, spec_provenance
 
         _dsl_spec = update.get("spec_ir")
         if _dsl_spec is None:
@@ -671,6 +671,9 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
 
             _dsl_spec = parse_logic_analysis(test_plan.get("logic_analysis"))
         update["spec_compile_rate"] = compile_readiness(_dsl_spec)
+        # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率并列透出
+        # （compile_rate=编译器接受率，coverage=LLM 形式化覆盖率，正交观测）
+        update["spec_expr_coverage"] = spec_expr_coverage(_dsl_spec)
         _prov = spec_provenance(_dsl_spec)
         if _prov:
             update["spec_provenance"] = _prov
@@ -1448,6 +1451,46 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         _df_status = _derive_detection_first_status(bool(result["passed"]), _df_red_seen)
         if _df_status is not None:
             update["detection_first_status"] = _df_status
+    # AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门——
+    # ①特异性门（DETECTION_SPECIFICITY_GATE_ENABLE，默认关）：首轮红时把
+    #   当前测试在 gold fixed 代码上执行（复用 M1 原语），specific_red =
+    #   缺陷特异红（放行修复循环）/ over_red = 过红（_should_debug 路由
+    #   regenerate）/ unavailable = 无 gold 或不可判定（保守放行）；
+    # ②红回归门（RED_REGRESSION_GATE_ENABLE，默认关）：曾见红 + 测试被
+    #   再生成后变绿 + 源码未修补 = 抹红假成功——恢复红证人测试并保守
+    #   置失败，交回修复循环走"修源码"通道（纯状态比较，零额外执行）。
+    # 红证人快照随检出优先主开关注入（iteration==0 首轮红且非过红）。
+    if detection_first_enabled():
+        from src.tools.detection_gates import (
+            detection_specificity_gate_enabled,
+            red_regression_check,
+            specificity_verdict,
+        )
+
+        _gate_passed = bool(update.get("test_passed", result["passed"]))
+        if int(state.get("iteration", 0)) == 0 and not _gate_passed:
+            _verdict: str | None = None
+            if detection_specificity_gate_enabled():
+                _verdict = specificity_verdict(
+                    state.get("generated_test") or "",
+                    state.get("gold_fixed_code"),
+                    state.get("module_name"),
+                )
+                update["specificity_gate_verdict"] = _verdict
+                logger.info("AC2 特异性门判定：%s", _verdict)
+            if _verdict != "over_red":
+                update["red_witness_test_code"] = state.get("generated_test")
+        elif _gate_passed:
+            _gate_upd = red_regression_check(state, state.get("generated_test") or "")
+            if _gate_upd:
+                update.update(_gate_upd)
+                # 门②恢复后同步重推三值终态（本轮 test_passed 已被门改 False）
+                _rv_status = _derive_detection_first_status(
+                    False, update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
+                )
+                if _rv_status is not None:
+                    update["detection_first_status"] = _rv_status
+                logger.warning("AC2 红回归门：再生成测试抹掉红证人（源码未修补），恢复红证人交回修复循环")
     # O3（2026-09-29 审查 P1）：分支覆盖率注入层（BRANCH_COVERAGE_INJECT_ENABLE=true
     # 时启用，默认关）。本节点在本地 / venv 沙箱执行完成后，用 coverage 模块
     # （subprocess 同解释器，独立临时数据文件）对 (target_file, generated_test)

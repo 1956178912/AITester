@@ -88,6 +88,28 @@ _PROFILE_PRESETS: dict[str, dict[str, str]] = {
         # false_fix=89.8% 的奖励自指根因（代价：+1 LLM call/任务，
         # regeneration_count 上限保护）。默认档（fast / 不设 PROFILE）零变化。
         "DETECTION_FIRST_ENABLE": "true",
+        # AB1（2026-10-06 生死实验根因修复）：M10 强校验拒绝降级出口——
+        # 实验实测 21/261 任务因 strict raise 整任务死亡（detection=None，
+        # M1 分母外），同任务 plain_llm_df 臂正常检出。开启后强校验拒绝
+        # 改为显式标记（logic_spec_rejected）+ 降级继续，吞吐恢复且
+        # 非"静默"兜底（M10 科学主张口径不回退）。默认档零变化
+        # （LOGIC_SPEC_STRICT_ENABLE 默认 false，本开关无从触发）。
+        "LOGIC_SPEC_STRICT_FALLBACK_ENABLE": "true",
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门——
+        # ①特异性门：首轮红在 gold fixed 上对照执行，过红（非缺陷特异）
+        # 路由 regenerate 而非修复循环（机制依据：生死实验 88 行过红通道）；
+        # ②红回归门：再生成测试在未修补源码上变绿 = 抹红假成功，恢复
+        # 红证人交回修复循环（机制依据：28 行抹红通道）。两门均默认关，
+        # logic 档（检出优先协议主口径）注入开启。
+        "DETECTION_SPECIFICITY_GATE_ENABLE": "true",
+        "RED_REGRESSION_GATE_ENABLE": "true",
+        # AI1（2026-10-06 第十一轮审查漏配审计）：FL 谱定位（Ochiai）——
+        # fl_spectral 经 C3（第四轮）修复后从未接入 logic 档：生死实验
+        # 实测 fl_at_k 0/87 全空（ab1 env 快照 FL_SPECTRAL_ENABLE=None
+        # 实证），定位质量指标在全部 logic 档批次缺数。E2 复跑前补齐
+        # （AA1 同类"漏配补齐"先例：档位定义早于该能力落地）。纯测量
+        # 开关，不改变生成/修复行为；默认档零变化。
+        "FL_SPECTRAL_ENABLE": "true",
     },
     "fast": {},
 }

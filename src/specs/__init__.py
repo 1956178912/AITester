@@ -49,6 +49,7 @@ from src.specs.spec_ir_v2 import (
     compile_readiness,
     compile_spec_oracle,
     is_expression_clause,
+    spec_expr_coverage,
     spec_ir_dsl_enabled,
     spec_provenance,
 )
@@ -57,6 +58,7 @@ __all__ += [
     "compile_readiness",
     "compile_spec_oracle",
     "is_expression_clause",
+    "spec_expr_coverage",
     "spec_ir_dsl_enabled",
     "spec_provenance",
 ]

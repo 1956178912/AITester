@@ -697,6 +697,26 @@ def _should_debug(state: AITesterState) -> str:
         _trace_node("_should_debug", decision="done", output_summary={"reason": _stop_reason.value})
         state["stop_reason"] = _stop_reason.value
         return "done"
+    # AC2（2026-10-06 第十轮审查 T-P0-4①）特异性门路由：首轮红但判定为
+    # 过红（gold fixed 上也红，非缺陷特异，verdict 由 _executor_node 的
+    # 门①对照执行写入）→ 修代码无意义（测试对无缺陷代码也失败），
+    # 路由 regenerate 换缺陷特异的测试（regeneration_count 上限保护与
+    # 其余再生成路径同口径）。verdict 缺失 / unavailable 时零行为变化。
+    from src.tools.detection_gates import detection_specificity_gate_enabled as _specificity_gate_on
+
+    if (
+        _specificity_gate_on()
+        and int(state.get("iteration", 0)) == 0
+        and state.get("specificity_gate_verdict") == "over_red"
+        and int(state.get("regeneration_count", 0)) < _MAX_REGENERATIONS
+    ):
+        logger.info("AC2 特异性门：过红测试（gold fixed 上仍红），路由再生成缺陷特异测试")
+        _trace_node(
+            "_should_debug",
+            decision="regenerate",
+            output_summary={"reason": "specificity_gate_over_red"},
+        )
+        return "regenerate"
     # 智能优化：若连续修复无效，直接结束而非继续浪费 token
     # （纯数据判定，日志副作用留在路由层；_recent_repairs_invalid 保持零副作用）。
     # 2026-09-26 全面审查（P1 分支顺序）：本判定限定在"迭代未达上限"时执行——

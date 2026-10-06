@@ -73,6 +73,16 @@ def _parse_args() -> argparse.Namespace:
     # P0-1：dirty tree 拒绝——git sha 不足以复现代码态时硬失败（U2 先例），
     # --allow-dirty 显式豁免（provenance 记录 git_dirty=true 供审计）
     p.add_argument("--allow-dirty", action="store_true", help="豁免 dirty tree 拒绝（不推荐，仅调试）")
+    # R-P0-4（2026-10-06 第九轮审查）：主批次应带同池模板重复上限，防单
+    # pattern 分布塌缩（旧批次 import_chain_type_contract×10 病理）。透传
+    # run_benchmark.max_pattern_repeat（AA 批次已实现）；默认 None=历史口径。
+    p.add_argument(
+        "--max-pattern-repeat",
+        dest="max_pattern_repeat",
+        type=int,
+        default=None,
+        help="合成数据集同池模板重复上限（仅 synthetic 生效；>=1 时同 (difficulty, pattern) 至多出现 N 次；默认 None=历史口径）",
+    )
     return p.parse_args()
 
 
@@ -147,6 +157,7 @@ def main() -> None:
         task_count=args.task_count,
         seed=args.seed,
         deterministic=deterministic,
+        max_pattern_repeat=args.max_pattern_repeat,
     )
 
     # 定位刚产出的批次文件（按 mtime 最大定位）

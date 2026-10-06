@@ -1,10 +1,555 @@
-> Last updated: 2026-10-06 (code optimization batch AA: detection-first in logic profile + synthetic sampling cap + doc matrix guard; batch Z details below, default behavior unchanged)
+> Last updated: 2026-10-06 (batch AL: AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script; batch AK details below, default behavior unchanged)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-06 Batch AL (Round-13 review: red-line-guard erratum restored to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script)
+
+> **Erratum (AL1)**: the AK batch claim "4327 passed / 0 failed" did not
+> hold — after the AK annotation landed, the working tree measured 4326
+> passed + 1 failed (the `tests/test_aj_batch.py` AJ red-line guard: the
+> annotation mentioned `--allow-dirty` in a non-forbidding context and
+> tripped the line-level rule). This batch rewords the annotation into a
+> forbidding context so the guard is green again; lesson = document
+> annotations coupled to guard text require a full-suite rerun after
+> landing (this batch closes at 4349 all green).
+
+- **AL1**: the bilingual prereg AK annotation reworded into a forbidding
+  context (**never** pass `--allow-dirty` in re-runs) — the AJ line-level
+  red-line guard is green again while the erratum fact (R-P0-2 ran on a
+  dirty tree) is preserved;
+- **AL5**: external repositioning — README(.en) title/tagline and
+  MODEL_CARD(.en) overview drop the "self-repair system/framework" claim
+  (aligned with the CITATION.cff detection-first wording); the tagline
+  gains an honest-disclosure line (repair = 0.0% under gold adjudication,
+  pointing to `repair_ceiling_report.md`; orchestration positioning in
+  ADR-0016);
+- **AL7 (E6 pre-registration)**: budget-matched 2×2 four arms =
+  {aitester, plain_llm_df} × {standard, budget-matched} (per-task token
+  caps swapped at 26,115 / 4,223); primary endpoint = detection paired
+  difference on the two equal-budget comparisons; run precondition
+  `--per-task-token-cap` (must not run before that flag is implemented and
+  tested); one-shot experiment with no iteration clause;
+- **AL10 (E7 pre-registration + script)**: repair-ceiling stratified
+  sampling — patch_plausible=1 rows (72/261) stratified by
+  patch_evidence_level, ceil(×10%) per stratum, deterministic seed=42; new
+  `experiments/repair_sample_selection.py` (fully offline; the candidate
+  manifest embeds the review rubric — equivalent>0 → repair metric erratum
+  / =0 → true-zero finalized); scope-of-effect amendment states it
+  precedes any E6/E7 data;
+- **AL14**: `docs/design/real_benchmark_upgrade.md` L3 caliber update —
+  SWE-bench Verified was officially retired by OpenAI on 2026-02-23
+  (59.4% of the hardest unsolved tasks had flawed tests + pollution;
+  Pro/Live/SWE-rebench rankings conflict) → L3 selection becomes a
+  pre-registered choice between contamination-resistant rolling benchmarks
+  (SWE-bench Live vs SWE-rebench), single-source calibers forbidden;
+- **ADR index**: stale numbering note fixed — "0011–0015 used / next 0006"
+  → "0011–0016 used / next 0017" (0006–0010 verified as never used via git
+  history; the gap is kept, not recycled).
+- Full regression **4327 → 4349 passed / 0 failed** (+22 =
+  tests/test_al_batch.py: AL1 context re-check 2 + AL5 positioning locks 5
+  + E6/E7 pre-registration locks 4 + sampling pure functions 11).
+- Deliberately deferred (red-team trade-offs): AL13 three-arm trace-schema
+  unification (E2 runner stability first, revisit after E2); AL11
+  nodes.py decomposition / AL12 uv migration / AL9 release (awaiting the
+  user's terminal commit and real author info); AL2 commit / AL3 key
+  rotation / AL4 E1 execution remain with the user (budget + terminal).
+
+## [Unreleased] — 2026-10-06 Batch AK (Round-12 review: repair-ceiling attribution + provenance erratum + sensitivity bounds + price/guard wiring)
+
+> All four items landed offline at zero LLM cost: repair=0 gets its first
+> funnel-level attribution (patch produced 94% / plausible 47% / correct 0
+> — the ceiling sits in plausibility and gold correctness, not in patch
+> production); the pooled report's provenance misstatement corrected in
+> place + dual bounds for the 21 differentially-missing rows (both
+> qualitative conclusions robust); $/task registered from official pricing
+> pages (aitester $0.026 vs plain_llm_df $0.0045); three guards wired
+> into CI. Full regression **4316 → 4327 passed / 0 failed**
+> (+11 = tests/test_ak_batch.py).
+
+### Added
+- **AK1 Repair-ceiling attribution + sensitivity bounds**
+  (`experiments/repair_ceiling_analysis.py` +
+  `results/main_batch/repair_ceiling_report.md`): funnel decomposition of
+  repair=0 (repair loop 154/261 → patch produced 145 [94.2%] → plausible
+  72 [46.8%] → correct 0; patch_evidence_level=none 48.1%, stop_reason=
+  skip_debugger_repair_invalid 50.0%) — the stratified sampling frame for
+  E7; dual-bound fill recomputation for the 21 detection=None rows: vs
+  plain_llm worst case **+13.0pp** still significant, vs plain_llm_df
+  best case **−22.2pp** still significant (p=1.7e-08) — both headline
+  conclusions robust to the differential missingness.
+- **AK2 Price table registered from official pages**
+  (`experiments/price_table.json`): deepseek-flash ($0.30/$1.20 per
+  million tokens, conservative peak-hour basis, verifiable official
+  pricing page) + qwen-long (¥0.5/¥2.0, official billing page);
+  agnes-3.0-flash stays null absent a public official page (honesty
+  clause). First $/task numbers: aitester 0.0259 / plain_llm 0.0034 /
+  plain_llm_df 0.0045 USD (7.6× cost ratio feeds the budget-matching
+  argument).
+- **AK3 Artifact-tracking guard** (`scripts/check_artifacts_tracked.py` +
+  CI): the "report → evidence artifact → commit time-order" reference
+  chain (11-entry allowlist) must be tracked in git — closes the gap
+  where R-P0-2's report and artifacts were all untracked and the
+  time-order audit was unenforceable (expected red locally before
+  commit; CI enforces).
+
+### Fixed
+- **AK1b Pooled-report provenance erratum**
+  (`statistical_report_3seed_pooled.md`): the original "clean worktree @
+  b533cff (git_dirty=False, three files consistent)" statement
+  contradicted the artifacts (all three batches measured
+  `git_dirty: true`, --allow-dirty regime) — corrected in place + an
+  erratum section at the end (with the bounds table and a cross-reference
+  to the repair-ceiling report).
+
+### Changed
+- **AK4 Guard wiring in CI/Makefile**: check_state_contract (state-
+  channel static contract) and check_tool_versions (three-way tool
+  version consistency) were previously not wired into CI despite the
+  scripts' own claims — now steps in the ci.yml test job + `make gates`;
+  Makefile gains state-contract / tool-versions targets.
+
+## [Unreleased] — 2026-10-06 Batch AJ (E4 data precondition complete + all three experiments ready-to-run)
+
+> E4's data precondition is complete at zero cost: QuixBugs (MIT) cloned
+> into data/ (gitignored) with a zero-LLM loader smoke. Execution commands
+> for E1/E2/E4 are all preset in the pre-registration — **once the budget
+> is approved and the tree is clean, all three experiments run
+> command-by-command**. Full regression **4308 → 4316 passed / 0 failed**
+> (+8 = tests/test_aj_batch.py).
+
+### Added
+- **AJ1 QuixBugs data fetched with provenance registered**: `data/quixbugs`
+  cloned (commit `4257f44b0ff1…`, gitignored, registered in DATA_CARD §4
+  in both languages); zero-LLM loader smoke measured: **50 programs
+  loaded, 41 with the complete gold triplet** (the pre-registration's "29
+  tasks" was an estimate — noted in the pre-registration that the decision
+  rule does not depend on n; the 9 tasks without official tests stay out
+  of the M1 denominator). E4's only remaining precondition = budget
+  approval.
+- **AJ2 E2/E4 ready commands preset** (preregistration, both languages):
+  E4 single run command; E2 two-seed batches + pooled statistics + a
+  one-line over-red/erase-red channel counter; **including the dedup
+  footgun warning** (the --batches whitelist must select only the new E2
+  batches — same-seed "newest wins" folding would mix the lifespan
+  experiment's pre-gate rows into the post-gate basis).
+- **AJ3 static guards** (tests/test_aj_batch.py): provenance registration,
+  all-three-experiment command presence, the E2 dedup warning, the
+  `--allow-dirty` red line (line-level prohibitive-context check), and
+  data/ gitignore isolation.
+
+## [Unreleased] — 2026-10-06 Batch AI (logic-profile omission audit: FL spectral added — root cause of fl_at_k 0/87)
+
+> Evidence-driven: the ab1_validation provenance env snapshot
+> (`FL_SPECTRAL_ENABLE=None`) and the lifespan experiment's all-empty
+> fl_at_k (0/87) are mutually confirming evidence — fl_spectral (Ochiai),
+> fixed in round 4 (C3), was **never wired into the logic profile**. Full
+> regression **4303 → 4308 passed / 0 failed** (+5 =
+> tests/test_ai_batch.py).
+
+### Fixed (omission completed, AA1-style precedent)
+- **AI1 logic profile adds `FL_SPECTRAL_ENABLE=true`** (config.py): root
+  cause fixed for the localization-quality metric (fl@1/3/5) being absent
+  from every logic-profile batch; the E2 rerun will produce fl_at_k data
+  for the first time (noted in the preregistration E2 section). A pure
+  measurement switch — no generation/repair behavior change, default
+  profile unchanged. The audit also confirmed the AC2 gates / SPEC_IR_DSL
+  (AC1 contract) / mutation scoring / fail-closed rollback are all
+  correctly injected — FL was the logic profile's only omission.
+
+### Added (guardrail)
+- **AI2 experiment-switch completeness lock** (tests/test_ai_batch.py):
+  all 13 experiment-relevant switches must be injected as true in the
+  logic profile (the `_EXPERIMENT_SWITCHES` set — landing a new
+  experiment switch requires explicitly updating the set, preventing
+  recurrence of "profile defined before the capability" omissions);
+  behavioral injection verification (profile applied / explicit env wins /
+  default profile unchanged); and a documented decision that
+  `AGENT_TELEMETRY_ENABLE` is deliberately absent (MAST is covered by the
+  AG1 offline analysis, avoiding a runtime double basis).
+
+## [Unreleased] — 2026-10-06 Batch AH (experiment preconditions closed out: upstream licenses verified + E1 ready-to-run commands preset)
+
+> A pure verification-and-docs batch (zero API / zero behavior change, test
+> count unchanged): the E1 rerun is gated by the pre-registration's own rule
+> (git_dirty must be False — run_main_batch refuses dirty trees; the 805
+> untracked files await the user's terminal commit). This batch completes
+> the adjacent preconditions.
+
+### Verified / Registered
+- **AH1 upstream data licenses verified** (E4 precondition, DATA_CARD §4
+  updated in both languages):
+  - **QuixBugs = MIT** (GitHub API license field, spdx_id=MIT, verified
+    2026-10-06) — **the L1/E4 precondition is lifted**;
+  - **BugsInPy = no SPDX-detectable license** (GitHub API license=null) —
+    a new compliance gate: before chartering L2, pick one of three (written
+    permission / a licensed alternative benchmark / dual risk acceptance);
+    QuixBugs L1 is unaffected;
+  - Also corrected DATA_CARD §3.3: the test-lock TODO for the
+    problem_statement "no-prompt-consumer" invariant was closed by AF-D;
+    the registration now says so; the DATA_CARD state assertions in
+    tests/test_z_batch.py were upgraded from "to be verified" to
+    "verification registered" (locking the spdx_id and the BugsInPy null
+    gate strings).
+- **AH2 E1 ready-to-run commands preset** (docs/preregistration.md,
+  both languages, "ready commands" section): E1 can be executed directly
+  once the budget is approved and the tree is clean (12 tasks ≈0.1M
+  tokens, including a one-line result verification); explicit rule:
+  `run_main_batch` refuses dirty trees by default, **do not** pass
+  `--allow-dirty` (that would violate the pre-registration).
+- **AH3 hygiene**: `.hypothesis/` (hypothesis example-cache, regenerable)
+  added to .gitignore; the paper skeleton (.private) updated with the MAST
+  distribution evidence and the BugsInPy license gate.
+
+## [Unreleased] — 2026-10-06 Batch AG (telemetry flatten fix + MAST trace distribution analysis)
+
+> A zero-API-cost batch: offline MAST failure-mode aggregation over the
+> 963 existing traces of the lifespan experiment, which surfaced and fixed
+> a real observability defect. Full regression **4290 → 4303 passed /
+> 0 failed** (+13 = tests/test_ag_batch.py).
+
+### Fixed (observability correctness)
+- **AG-Fix telemetry flatten defect** (src/observability/agent_telemetry.py
+  `_flatten_record`): on-disk traces carry node-event payloads inside the
+  `output` dict, while match_failure_patterns reads record top-level
+  fields — **every error_category-based pattern missed on all real traces**
+  (measured: 963 traces, zero hits; weekly-report basis distorted; existing
+  tests used flat fixtures so this never surfaced). Fixed by flattening
+  before matching (top-level keys win, output as fallback, non-dict output
+  ignored), a single-point fix for all consumers; all 7 existing telemetry
+  tests pass (flat-fixture behavior unchanged).
+
+### Added
+- **AG1 MAST distribution analysis** (experiments/mast_trace_analysis.py +
+  experiments/results/main_batch/mast_distribution_report.md): 963 traces
+  (aitester 326 / plain_llm 326 / plain_llm_df 261 / single_agent 50)
+  aggregated per arm offline — the aitester arm hits
+  known_error_category_hit on 54.6% (umbrella class); the error_category
+  value distribution: assertion 23.0% / runtime 15.6% / type_error 11.3% /
+  syntax 3.4% / timeout 0.9%, **with zero exotic multi-agent failure
+  classes** (no LLM empty-response loops, no budget early-stops, no
+  all-candidates-rejected) — consistent with ADR-0016's mechanism
+  attribution: the orchestration pipeline's detection deficit is not MAST
+  exotic miscoordination but the already-identified over-red / erase-red
+  protocol channels. The report includes an honesty caveat: the zero hits
+  on plain_llm/df reflect trace schema (no debugger node → no
+  error_category emitted), not zero failures; SHA256SUMS refreshed
+  (971→972).
+
+## [Unreleased] — 2026-10-06 Batch AF (Round-11 second pass: two stale findings corrected + N12 blocker registered + leak-channel invariant locked)
+
+> A verification-driven batch: Round-11 items N10/N11 were verified by code
+> reading to be **already satisfied by existing batches** (P1-7 lock
+> full-list audit / S3 container default hardening), and N12 is structurally
+> blocked by the security scanner — all three are recorded as corrections or
+> registrations with evidence, no wheel reinvention. Full regression
+> **4283 → 4290 passed / 0 failed** (+7 = tests/test_af_batch.py).
+
+### Corrected / Registered (verification findings, not new features)
+- **AF-A (N11 correction)**: the Round-11 report's "repo-level execution has
+  no network isolation" was a stale finding — the S3 batch (2026-09-29)
+  already landed default container hardening, fully locked by
+  tests/test_sandbox_hardening.py: unconditional `--cap-drop=ALL` +
+  `no-new-privileges`, `DOCKER_READ_ONLY` default true (--read-only + tmpfs
+  /tmp), `DOCKER_DEFAULT_NETWORK_NONE` default true (default is
+  --network=none; only the allowlist profile downgrades to bridge with a
+  runtime WARNING honestly noting egress control must be host-side), default
+  CPU/memory/PID limits, and container env scrubbed via scrub_os_environ. No
+  remaining gap on this dimension.
+- **AF-B (N10 correction)**: the Round-11 report's "132 transitive deps
+  unaudited" was a stale finding — the P1-7 step (V batch, 2026-10-05)
+  already runs a blocking pip-audit over the full requirements.lock list;
+  the top-level step's --no-deps is a deliberate "top-level vs lock
+  full-list" split, not a gap. This round's local full-resolution audit
+  (pip-audit 2.10.1, without --no-deps) found exactly the same surface as
+  the top-level audit (the 5 exempted chromadb advisories, zero new
+  transitive findings). **Actual fix**: `pip_audit_lock.json` added to the
+  CI audit artifact upload list (previously only the top-level report was
+  uploaded — a failed lock audit had no JSON for triage).
+- **AF-C (N12 blocker registered)**: three attempts to land ADR-0016
+  decision 5 ("src-layer unified execution primitive") were all blocked by
+  the Mimosa PreToolUse scanner as high-risk "command injection" (dataflow
+  taint: os.getenv / sys.executable flowing into a command list is flagged;
+  function indirection, is_file validation, and shell=False do not clear
+  it). Per the "do not bypass security tooling" principle the attempt was
+  stopped: the primitive stays in experiments/_m1_metrics as-is, the reverse
+  import count remains at 6 frozen sites; ADR-0016 revision 2 records the
+  blocker details and resolution paths (gate-side allowlist, or the user
+  adjusting MIMOSA_GIT_GATE_MODE for manual review).
+
+### Added
+- **AF-D problem_statement consumption-invariant lock** (closing a
+  DATA_CARD TODO): a static guard test — zero occurrences in src/prompts
+  and src/agents; the only runtime consumption in src/graph is the
+  `state.get("problem_statement")` read in nodes.py's injection-scan block
+  (all other hits must be comment lines or state.py schema declarations).
+  Any new prompt-side consumption requires explicitly updating the DATA_CARD
+  registration and this test (prevents silent drift of the "leak-channel
+  status" registration).
+
+## [Unreleased] — 2026-10-06 Batch AE (Round-11 review: pre-registration document + $/task cost basis + trace-residue cleanup + paper skeleton)
+
+> Closing the autonomously executable items of the Round-11 systematic
+> review (full state re-verification after the AC/AD batches + refreshed
+> frontier baselines); budget-dependent items (E1/E2/E4 reruns) and
+> user-only items (terminal commit, key rotation) are out of this batch's
+> scope. Full regression **4263 → 4283 passed / 0 failed** (+20 =
+> tests/test_ae_batch.py).
+
+### Added
+- **AE1 Pre-registration document** (docs/preregistration.md + .en.md,
+  Round-11 N4): hypotheses, primary endpoints, pre-registered decision
+  thresholds (E1 spec_compile_rate ≥0.3 retain / <0.2 abandon /
+  [0.2,0.3) gray zone with exactly one iteration; E2 over-red/erase-red
+  channel zeroing + aitester vs plain_llm_df convergence), stopping rules
+  (a ≥50% drop allows exactly one gate-parameter fix, preventing
+  gate-parameter search from overfitting the benchmark), the statistical
+  plan, and honesty clauses (replication-nature statement + chronology
+  audit + decision rules are immutable). **The execution log table is
+  "pending"** — commits landing E1/E2 rerun artifacts must come after the
+  commit landing this file (auditable via git history).
+- **AE2 $/task cost basis** (experiments/price_table.json +
+  statistical_analysis.py, Round-11 N8):
+  - Model-level price registry (input/output_per_mtok + currency + source
+    + as_of); **honesty clause: a null price or an unregistered model →
+    no costing, no fabricated prices**;
+  - cost_analysis aggregates row-level token_usage per baseline (by_model
+    attribution; tokens without by_model are disclosed as
+    unattributed_tokens; mixed models with different prices make in/out
+    attribution impossible → the cost honestly degrades to None);
+  - New report section "Cost basis ($/task, price-table driven — AE2)"
+    (prices complete → table; missing → list of models awaiting pricing
+    and fill-in guidance); historical reports are not rewritten;
+  - CLI `--price-table` (default experiments/price_table.json; missing or
+    corrupted files degrade automatically). Real-batch smoke: aggregates
+    match token_metrics bit-for-bit; pricing math self-check exact.
+- **AE3 Trace-residue cleanup** (Makefile): the `clean-traces` target
+  (tmp_trace/ holds --dump-trace-on-failure runtime artifacts, covered by
+  gitignore, regenerable; 201 residual *_failed_trace.jsonl files cleaned
+  in this batch).
+- **AE4 Paper skeleton** (.private/paper/OUTLINE.md, Round-11 N9, local
+  private artifact, not committed): the B/C/A three-point contribution
+  framework (C1 attribution methodology / C2 the −28pp negative attribution
+  finding / C3 detection-first protocol + double gates [PENDING-E2]) +
+  novelty alignment with AssertFlip (ICSE 2026) / Less Is More (TOSEM) —
+  this protocol needs no buggy-behavior prior, vs AssertFlip's requirement
+  to capture buggy behavior first — plus the statistics and validity
+  framework; placed under .private/ per the privacy-isolation convention
+  (paper material never pushed to GitHub).
+
+## [Unreleased] — 2026-10-06 Output-cost control batch AD (LLM thinking governance: output token cost ↓ 1-2 orders of magnitude)
+
+> Diagnostic fix following the R-P0-2 lifespan experiment and its API
+> billing: of the 12.13M tokens used on 2026-10-06, **output was 10.05M
+> (83%)**; per-arm decomposition shows the aitester arm emitted 5.23M
+> output with a per-task maximum of 84k — while the actual artifacts
+> (tests + patches) are only ~1-2k tokens. **90%+ of output is DeepSeek
+> V4-series' default-on chain of thought** (official docs: thinking
+> defaults to enabled; max_tokens defaults to 64K in thinking mode;
+> reasoning_tokens are billed as output). Full regression
+> **4247 → 4263 passed / 0 failed** (+16 = tests/test_ad_batch.py);
+> env budget 162 → 165.
+
+### Added (cost & observability)
+- **AD1 LLM transport thinking control** (src/agents/llm_client.py
+  `_openai_extra_body` + `_get_or_create_chat_client`): the
+  OpenAI-compatible path (DeepSeek etc.) gains three parameters; the zai
+  path keeps its own hardcoded disabled behavior:
+  - `LLM_THINKING_MODE`: **disabled by default** (aligning with the zai
+    path's "thinking off" precedent — output is the artifact itself,
+    cutting cost by 1-2 orders of magnitude); `enabled` opts in
+    (= the R-P0-2 historical configuration; quality-sensitive experiments
+    may choose it explicitly);
+  - `LLM_REASONING_EFFORT`: none/low/high/max (not sent by default; none
+    also disables thinking; low is the quality/cost compromise);
+  - `LLM_MAX_OUTPUT_TOKENS`: hard output cap 1..393216 (not sent by
+    default; with thinking off the non-thinking default of 8K suffices).
+  The client cache key now includes the extra_body JSON, so environment
+  changes take effect immediately. **Calibration warning**: switching
+  thinking mode changes model behavior — verify provenance across batch
+  comparisons (the three keys are now auto-recorded, see AD2).
+- **AD2 output-cost observability**: provenance env_snapshot gains
+  LLM_THINKING_MODE / LLM_REASONING_EFFORT / LLM_MAX_OUTPUT_TOKENS
+  (cross-batch cost/quality audit); token_metrics gains
+  `output_share_pct` / `avg_output_per_task` / `avg_output_per_call`
+  (output share is the primary cost-structure metric — output unit price
+  is >10× cache-hit input on DeepSeek).
+
+### Expected savings (quantified)
+- From the R-P0-2 aitester-arm measurements: 5.23M output → expected
+  ≤0.6M with thinking off (artifact size + minor formatting), i.e.
+  **~88% output-cost reduction**; a full experiment run drops from
+  ~8.76M to ~3.5-4M tokens (input side unchanged). The upcoming
+  E1/E2/E3 reruns (~15M budgeted) should cost ~5-6M under this
+  configuration.
+- If a quality-sensitive run needs the thinking chain: set
+  `LLM_REASONING_EFFORT=low` (official tier) as a compromise, or enable
+  it for the aitester arm only and annotate the per-arm cost.
+
+## [Unreleased] — 2026-10-06 Round-10 review batch AC (spec contract fix + detection-first double gates + orchestration repositioning + cluster-robust statistics)
+
+> Four items landed from the R-P0-2 pooled report
+> (statistical_report_3seed_pooled.md) and the round-10 systematic review
+> (T-P0-2/3/4/5). Full regression **4226 → 4247 passed / 0 failed**
+> (+21 = tests/test_ac_batch.py), ruff 0 / format 0 / mypy 0 across 106
+> files; env budget 160 → 162 (DETECTION_SPECIFICITY_GATE_ENABLE /
+> RED_REGRESSION_GATE_ENABLE registered).
+
+### Fixed (correctness)
+- **AC1 prompt–DSL specification contract fix** (T-P0-2): the lifespan
+  experiment and the AB1 validation batch (12/12) proved that
+  `spec_compile_rate` is identically 0.0 under the logic profile — the
+  `PLANNER_SYSTEM_PROMPT` asks only for Chinese natural-language clauses
+  while SpecIR v2's `is_expression_clause` applies an ASCII expression
+  whitelist (Chinese clauses rejected 100%); the two ends were never
+  aligned, so the specification chain contributed nothing in every real
+  run. Fix: ① new `SPEC_EXPR_CONTRACT_SECTION` contract block
+  (src/prompts/templates.py), injected by the Planner when
+  `SPEC_IR_DSL_ENABLE=true` (logic/scientific profiles), asking the LLM to
+  emit machine-executable `*_expr` clauses alongside the NL clauses
+  (default profiles: prompt unchanged, ADR-0003); ② `parse_logic_analysis`
+  passes through `preconditions_expr` / `postconditions_expr` /
+  `invariants_expr`; ③ `compile_readiness` becomes channel-aware (measures
+  compiler acceptance when expr clauses exist, falls back to the
+  historical NL channel otherwise); ④ a contract lock test
+  (test_ac1_contract_roundtrip_compile_rate_positive) asserts that
+  prompt-conformant specifications must compile above 0 — a permanent
+  regression guard against contract drift.
+
+### Added (protocol & statistics)
+- **AC2 detection-first double gates** (T-P0-4, ADR-0016 + ADR-0015
+  revision 6, new module src/tools/detection_gates.py): mechanism analysis
+  of the −28pp gap identified two channels — 88 over-red rows (red on
+  buggy AND on gold fixed) and 28 red-erasure rows (regenerated tests go
+  green on the unpatched buggy code). ① Specificity gate
+  (`DETECTION_SPECIFICITY_GATE_ENABLE`): on a first-iteration red, execute
+  the current tests against gold fixed (reusing the M1 adjudication
+  primitive); an over-red verdict routes to regenerate instead of the
+  repair loop, moving F2P adjudication into the in-loop routing;
+  degrades to unavailable without gold material (real repositories).
+  ② Red-regression gate (`RED_REGRESSION_GATE_ENABLE`): red seen + tests
+  regenerated + still green + source unpatched = red-witness erasure
+  (a false success); the gate restores the red-witness test
+  (`red_witness_test_code`) and hands it back to the repair loop — the
+  mechanism enforcing "fix the source, never swap the tests"; pure state
+  comparison, zero extra execution. Both gates default off, injected by
+  the logic profile; row-level observability via
+  `specificity_gate_verdict` / `red_regression_violation` (key-set
+  isomorphic); gold material plumbed via `state["gold_fixed_code"]`
+  (evaluation/gate-only, never injected into prompts).
+- **AC4 template-cluster robust sensitivity analysis** (T-P0-5): under
+  pooled multi-seed data, same-template tasks across seeds are correlated
+  observations (50 template clusters vs 261 observations per arm), so
+  per-pair McNemar's independence assumption is nominally optimistic. New
+  `template_cluster_sensitivity` + `run_cluster_sensitivity` (CLI
+  `--cluster-by-template`): design-effect correction (DEFF=1+(m̄−1)·ICC)
+  plus a template-level paired sign test (exact binomial). All three
+  lifespan-experiment comparisons stay significant after correction
+  (df vs plain_llm χ²_adj=33.06 / sign test 22:0 p=4.8e-07; aitester vs
+  plain_llm_df 5:17 p=0.017) — the sensitivity section has been appended
+  to the pooled report.
+- **AC4 companion fix: plain_llm_df promoted to a first-class statistics
+  baseline** (`_BASELINES` completed): the core comparison arm was
+  previously missing from the loader list, so the canonical report could
+  only cover it via out-of-repo scripts; all three arms (including
+  aitester vs plain_llm_df χ²=48.7935) now come from the canonical
+  pipeline, and the canonical `statistical_report.md` has been regenerated
+  (whitelist + pool-seeds).
+- **CITATION.cff** (T-P2-2): CFF 1.2.0 software citation metadata
+  (v0.7 / MIT / repository + M1 methodology abstract), closing a round-9
+  review gap.
+
+### Documentation & governance
+- **AC3 ADR-0016 orchestration repositioning** (docs/adr/0016): under the
+  decisive lifespan-experiment evidence (−28pp vs the prompt-only
+  protocol, 8.1× tokens), multi-agent orchestration is demoted to an
+  "ablatable container"; the headline claim shrinks to "detection-first
+  prompting +43pp"; the optimization direction is the lightweight
+  pipeline (double gates / contract / specificity feedback), not more
+  orchestration; graph→experiments reverse imports are frozen as legacy
+  (the gate executor delegates to the M1 primitive, following existing
+  precedent).
+- ADR-0015 revision 6 (double-gate protocol extension); ADR index gains
+  the 0016 row; .env.example documents both gates; .gitignore excludes
+  .mimosa runtime state (hook-state/hook-status carry session IDs;
+  untracking the 4 tracked files awaits a terminal commit).
+
+## [Unreleased] — 2026-10-06 Life-or-death experiment root-cause fix batch AB (M10 degraded exit + provenance/row-level observability + seed-pooled statistics)
+
+> Fixes for three root-cause/observability gaps found in the R-P0-2
+> life-or-death experiment (n=87 × 3 arms × 3 seeds; full artifacts in
+> main_batch/). Full regression **4210 → 4226 passed / 0 failed**
+> (+16 = tests/test_ab_batch.py), ruff 0 / format 0 / mypy 0; env budget
+> 159 → 160 (new LOGIC_SPEC_STRICT_FALLBACK_ENABLE registered).
+
+### Fixed (correctness, default off)
+- **AB1: M10 strict-spec rejection degraded exit**
+  (`LOGIC_SPEC_STRICT_FALLBACK_ENABLE`, src/agents/planner.py
+  `_strict_reject`): the experiment measured 21/261 tasks killed at Planner
+  iteration 0 by the logic-profile `LOGIC_SPEC_STRICT_ENABLE=true` raise
+  (error_category='error', detection=None, outside the M1 denominator) while
+  the same tasks ran fine in the plain_llm_df arm — strict mode upgraded a
+  model behavior (spec not emitted) into a system failure (whole-task death).
+  With the switch on, rejection becomes an **explicitly marked degradation**
+  (`logic_spec_rejected`, first cause preserved) and the task continues;
+  throughput is restored without a "silent" fallback (the M10 scientific-claim
+  semantics do not regress). Default false keeps the raise (CI claim tests
+  depend on it); the logic profile preset injects true.
+
+### Added (observability)
+- **AB2: provenance gains an explicit `profile` field**: the experiment
+  review found no profile field in provenance (the active preset could only
+  be reverse-engineered); it now records `config.ACTIVE_PROFILE`, and the
+  env snapshot adds `AITESTER_PROFILE` and
+  `LOGIC_SPEC_STRICT_FALLBACK_ENABLE` (audit visibility).
+- **AB3: row-level `spec_compile_rate` passthrough** (first slice of
+  R-P0-5): the spec compilable rate already written by `_generator_node`
+  into state now flows to result rows (success passthrough / failure None
+  placeholder with key-set isomorphism) — the experiment review flagged this
+  gap as blocking any evaluation of the spec oracle's independent
+  contribution.
+- **AB4: seed-pooled statistics `--pool-seeds`**
+  (statistical_analysis.py, `pool_seeds` threaded through the chain):
+  multi-seed batches share task_ids across seeds (neutralized naming, by
+  design), which the "latest batch wins" dedup folds into a single seed
+  (measured: 3 seeds × 261 pairs folded to 87). When enabled, row task_ids
+  get an `s<seed>__` prefix from the batch's `provenance.seed` — different
+  seeds pool fully into pairing; same-seed reruns still fold (rerun-protocol
+  semantics preserved); seedless batches fall back to the file stem. The
+  canonical main-batch report was regenerated under the new caliber
+  (detection McNemar χ²=27.2250 / 240 common tasks, bit-identical to the
+  manual pooled analysis in statistical_report_3seed_pooled.md).
+
+### Experiment findings registered (R-P0-2; see main_batch/statistical_report_3seed_pooled.md)
+- detection (gold-adjudicated, significant after BH-FDR): plain_llm_df
+  +43pp vs plain_llm (δ=+0.426); aitester +14pp vs plain_llm (significant
+  per seed); **aitester −28pp vs plain_llm_df (δ=−0.279)** — detection gains
+  come mainly from the detection-first prompt protocol itself; the full
+  system is a net negative contributor against the pure prompt protocol
+  under a strong model; repair is 0 across the board; cross-analysis pinned
+  two mechanism channels (88 over-red rows failing F2P, 28 rows whose repair
+  loop erased the red) plus the M10 task-kill (fixed by AB1).
+
+## [Unreleased] — 2026-10-06 Main-batch runner passthrough (life-or-death experiment prerequisite)
+
+> Prerequisite change before launching the preregistered experiment (R-P0-2:
+> strong model × three arms × 3 seeds × n=87): run_main_batch now passes
+> `--max-pattern-repeat` through (R-P0-4 in-batch pattern cap ≤2; the underlying
+> capability landed in AA2). Full regression **4207 → 4210 passed / 0 failed**
+> (+3 = tests/test_2026_10_05_v_batch.py V6b: default-None parsing / kwargs
+> passthrough / explicit-None legacy lock), ruff 0 / format 0 / mypy 0
+> (src/ + config.py gate scope).
+
+### Added
+- **`run_main_batch.py --max-pattern-repeat`**: passes through
+  `run_benchmark.max_pattern_repeat` (synthetic only; default None = legacy
+  behavior, rng consumption sequence unchanged bit-for-bit). Main batches can
+  now use the same-pool pattern repeat cap under the R4 scaffold's clean-tree
+  hard gate + temp=0 deterministic protocol + R14 stats whitelist, without
+  bypassing to run_benchmark directly and losing the reproducibility gates.
 
 ## [Unreleased] — 2026-10-06 Code optimization batch AA (review follow-ups: detection-first in logic profile + synthetic sampling cap + doc matrix guard)
 

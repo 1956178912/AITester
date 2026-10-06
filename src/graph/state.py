@@ -184,6 +184,23 @@ class AITesterState(TypedDict, total=False):
     # "all_green_unverified" = 从未变红即通过（弱测试假成功，评估层应归入
     # 未验证而非修复成功）；None = 开关关闭（历史口径不变）。
     detection_first_status: str | None
+    # ── AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门观测/材料 ──
+    # gold_fixed_code：gold 修复代码全文（合成任务由 run_benchmark 从任务
+    #   材料管道注入；真实任务恒 None）。**评估/门禁专用材料，严禁注入
+    #   任何 agent prompt**（test_visible_to_system 卫生口径）。
+    gold_fixed_code: str | None
+    # original_target_code：任务起始 buggy 原码快照（create_initial_state
+    #   写入）——红回归门对照原码 + 补丁前后 target_code 变化判定。
+    original_target_code: str | None
+    # red_witness_test_code：红证人测试快照（iteration==0 首轮红时由
+    #   _executor_node 写入；过红判定为 over_red 时不写——见 detection_gates）。
+    red_witness_test_code: str | None
+    # specificity_gate_verdict：门①终审（"specific_red" / "over_red" /
+    #   "unavailable"；DETECTION_SPECIFICITY_GATE_ENABLE=true 时写）。
+    specificity_gate_verdict: str | None
+    # red_regression_violation：门②违规标记（True = 再生成抹红被门拦截
+    #   并恢复红证人；RED_REGRESSION_GATE_ENABLE=true 时写）。
+    red_regression_violation: bool | None
     # 2026-09-29 审查 P0（StopReason 统一停止条件）：工作流终止原因枚举值
     # （"test_passed" / "max_iterations" / "skip_debugger_repair_invalid" /
     # "test_defect_regeneration_cap" / "test_gen_diagnosis_early" /
@@ -377,6 +394,11 @@ class AITesterState(TypedDict, total=False):
     # 供 M1 指标层与实验层（SpecIR ON/OFF 对照的"可编译规约占比"门槛）消费。
     spec_compile_rate: float | None
     spec_provenance: list[str] | None
+    # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率——LLM 把 NL
+    # 规约形式化为 *_expr 子句的占比（与 spec_compile_rate 的"编译器
+    # 接受率"正交：rate×coverage = NL 子句最终可确定性执行占比；
+    # SPEC_IR_DSL_ENABLE=true 时由 _planner_node 写入，默认关恒 None）。
+    spec_expr_coverage: float | None
     # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入标记（SPEC_ORACLE_EXEC_ENABLE=true
     # 时由 _generator_node 写入）——spec_ir_v2.compile_spec_oracle 的产物（签名感知绑定，
     # R1b）追加到 generated_test 尾部与 LLM 测试**并列**执行：LLM 测试通过 ≠ 规约 oracle
@@ -535,6 +557,10 @@ def create_initial_state(
         target_function=target_function,
         module_name=module_name,
         target_code=target_code,
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：任务起始 buggy 原码快照
+        # （红回归门对照材料；gold_fixed_code 由 run_benchmark 按任务材料
+        # 单独注入，此处保持 None）
+        original_target_code=target_code,
         # Planner 输出
         test_plan=None,
         # Generator 输出
@@ -562,6 +588,11 @@ def create_initial_state(
         # 由 _executor_node 写入）
         detection_first_red_seen=None,
         detection_first_status=None,
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：双门材料/观测默认 None
+        gold_fixed_code=None,
+        red_witness_test_code=None,
+        specificity_gate_verdict=None,
+        red_regression_violation=None,
         # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因（缺省 None = 未终止）
         stop_reason=None,
         repair_history=[],
@@ -653,6 +684,8 @@ def create_initial_state(
         # （SPEC_IR_DSL_ENABLE 默认关；_planner_node 启用时写入 float / list）
         spec_compile_rate=None,
         spec_provenance=None,
+        # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率默认 None
+        spec_expr_coverage=None,
         spec_oracle_injected=None,
         rogue_findings=None,
         # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁默认未检测

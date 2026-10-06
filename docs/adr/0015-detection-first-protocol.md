@@ -76,3 +76,16 @@ M5 标记"再生成后通过 = 假通过"，是**观测层**；本协议是**行
      本 ADR"可经 `AITESTER_PROFILE=logic` 组合"的口径由此在配置层成立
      （`tests/test_aa_batch.py::TestLogicProfileDetectionFirst` 锁定）；
      默认档（fast / 不设 PROFILE）零变化。
+  6. **2026-10-06 AC 批次修订（双门协议扩展，ADR-0016）**：生死实验
+     （R-P0-2）机制归因实证 −28pp 的两条主通道——88 行过红测试（首轮红
+     非缺陷特异仍进修复循环空耗）与 28 行修复循环抹红（再生成测试在
+     buggy 原码上变绿，检出证据被销毁）。本 ADR 协议补两门（均默认关、
+     logic 档注入，`tests/test_ac_batch.py` 锁定）：**特异性门**
+     （`DETECTION_SPECIFICITY_GATE_ENABLE`——首轮红先在 gold fixed 上对照
+     执行，over_red 路由 regenerate 而非 debug，F2P 三段判定前移到环路内
+     路由；真实仓库无 gold 时降级 unavailable，后续以变异体裁决替代）
+     与**红回归门**（`RED_REGRESSION_GATE_ENABLE`——曾见红 + 再生成变绿 +
+     源码未修补 = 抹红假成功，恢复红证人测试 `red_witness_test_code` 并
+     交回修复循环，"修复只许修源码不许换测试"原则的机制保证；已落地
+     补丁场景交 M1 gold 独立裁决）。观测透出：`specificity_gate_verdict` /
+     `red_regression_violation` 行级字段（键集合同构）。

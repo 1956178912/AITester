@@ -54,6 +54,7 @@ if PROJECT_ROOT not in sys.path:
 
 # 延迟导入，避免 E402
 from config import (  # noqa: E402
+    ACTIVE_PROFILE,
     BENCHMARK_PARALLELISM,
     ENABLE_DEBUGGER,
     ENABLE_MUTATION_SCORING,
@@ -838,6 +839,21 @@ def _build_task_result(
             # 协议的 +1 LLM call 成本（协议开启时首轮全绿任务计 1；O4/诊断
             # 关键词路径同样累计）。协议关时恒 None（键集合同构）。
             "regeneration_count": final_state.get("regeneration_count"),
+            # AB3（2026-10-06，R-P0-5 首块）：规约可编译率行级透出——
+            # _generator_node 在 SPEC_IR_DSL_ENABLE=true 时把 SpecIR
+            # invariant 子句可编译率写入 state（logic/scientific 档生效）。
+            # 默认关恒 None（键集合同构，历史批次 JSON 向后兼容）；
+            # 生死实验复审指出该缺口使规约 oracle 独立贡献无法评估。
+            "spec_compile_rate": final_state.get("spec_compile_rate"),
+            # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率——LLM 把
+            # NL 规约形式化为 *_expr 子句的占比（与 compile_rate 的编译器
+            # 接受率正交；默认关恒 None，键集合同构）。
+            "spec_expr_coverage": final_state.get("spec_expr_coverage"),
+            # AC2（T-P0-4）：双门观测——特异性门终审（specific_red /
+            # over_red / unavailable）与红回归门违规标记（True = 抹红被
+            # 门拦截并恢复红证人）。默认关恒 None，键集合同构。
+            "specificity_gate_verdict": final_state.get("specificity_gate_verdict"),
+            "red_regression_violation": final_state.get("red_regression_violation"),
             # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门观测。
             # source_patched_unverified：本轮写盘无 gold/谱系定位证据（True）
             # 或有证据背书（False）；None = 本轮无补丁 / 证据门未触发。
@@ -939,6 +955,14 @@ def _build_task_result(
         "detection_first_status": None,
         # Y1：再生成计数失败分支占位（键集合同构）
         "regeneration_count": None,
+        # AB3：规约可编译率失败分支占位（无 final_state / 生成测试，
+        # SPEC_IR_DSL 链路未触达；键集合同构）
+        "spec_compile_rate": None,
+        # AC1：表达式通道覆盖率失败分支占位（键集合同构）
+        "spec_expr_coverage": None,
+        # AC2：双门观测失败分支占位（无 final_state，键集合同构）
+        "specificity_gate_verdict": None,
+        "red_regression_violation": None,
         # P0（2026-09-30 独立审查 N9/R33）：失败分支无 final_state，
         # 证据门观测键以 None 占位保持键集合同构
         "source_patched_unverified": None,
@@ -1227,6 +1251,20 @@ def run_single_task(
         # 2026-10 改进：跨文件任务预置 cross_file_deps（供 _resolve_target_module
         # 解析被调方真实模块名；单文件任务 no-op）
         _write_cross_file_state(initial_state, task.metadata)
+
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：门①材料管道——gold 修复
+        # 代码注入 state["gold_fixed_code"]（特异性门在 gold fixed 上对照
+        # 执行）。**评估/门禁专用材料，任何 agent prompt 不得引用**
+        # （test_visible_to_system 卫生口径）；无 gold 材料（真实仓库任务）
+        # 保持缺省 None，门①自动降级 unavailable（后续批次以变异体裁决）。
+        try:
+            from experiments._m1_metrics import _gold_fixed_code as _extract_gold_fixed
+
+            _gold_fixed = _extract_gold_fixed(task)
+            if _gold_fixed and _gold_fixed.strip():
+                initial_state["gold_fixed_code"] = _gold_fixed
+        except Exception:
+            pass
 
         # P0 1.2 复杂度感知路由（MODEL_ROUTING_STRATEGY=complexity_aware）：
         # 按任务代码行数 / import 数量 / 圈复杂度计算复杂度分数，写入
@@ -2165,7 +2203,13 @@ def run_benchmark(
         }
 
     def _aggregate_token_metrics(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
-        """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。"""
+        """聚合一个基线的 token 消耗（P0-2：多智能体系统 vs Plain LLM 性价比对比）。
+
+        AD1（2026-10-06 输出成本控制）新增 output_share_pct / avg_output_per_task /
+        avg_output_per_call——输出 token 单价约为输入命中缓存的 10 倍以上
+        （DeepSeek 口径），输出占比是成本结构的首要指标（R-P0-2 实测
+        aitester 臂输出占 78%）。
+        """
         total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
         total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
         total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
@@ -2176,6 +2220,12 @@ def run_benchmark(
             "total_tokens": total_input + total_output,
             "total_llm_calls": total_calls,
             "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
+            # AD1：输出成本结构观测（键集合同构，纯新增）
+            "output_share_pct": round(total_output / (total_input + total_output) * 100, 2)
+            if (total_input + total_output) > 0
+            else 0.0,
+            "avg_output_per_task": round(total_output / total, 2) if total > 0 else 0,
+            "avg_output_per_call": round(total_output / total_calls, 2) if total_calls > 0 else 0,
         }
 
     def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str, int]:
@@ -2310,6 +2360,17 @@ def run_benchmark(
         # 不成立，provenance 须可审计）
         "DETECTION_FIRST_ENABLE",
         "AITESTER_CACHE_NAMESPACE",
+        # AB2（2026-10-06 生死实验观测缺口）：profile 原文 + M10 降级开关入
+        # 快照——此前 profile 生效证据只能靠反推预设开关组合，分析侧无法
+        # 直接按档位分桶；fallback 开关改变 strict 语义，审计必须可见。
+        "AITESTER_PROFILE",
+        "LOGIC_SPEC_STRICT_FALLBACK_ENABLE",
+        # AD1（2026-10-06 输出成本控制）：LLM 传输层三参数入快照——thinking
+        # 模式直接改变输出 token 量级（R-P0-2 实测 90%+ 输出为思维链，
+        # 单任务最高 84k），跨批次成本/质量对比必须可审计。
+        "LLM_THINKING_MODE",
+        "LLM_REASONING_EFFORT",
+        "LLM_MAX_OUTPUT_TOKENS",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:
@@ -2358,6 +2419,11 @@ def run_benchmark(
         "temperature": _temperature_val,
         "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
         "seed": seed,
+        # AB2（2026-10-06 生死实验观测缺口）：profile 显式入 provenance——
+        # 生死实验复审发现 provenance 无 profile 字段（档位只能反推），
+        # 多档位批次横比时分析侧无法直接分桶。config.ACTIVE_PROFILE 为
+        # import 期 _apply_profile_presets 的生效值（None = 默认档 fast）。
+        "profile": ACTIVE_PROFILE,
         "env_snapshot": _env_snapshot,
         "cache_enabled": os.environ.get("AITESTER_LLM_CACHE", "1") != "0",
         "cache_isolate_model": os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1") != "0",

@@ -298,6 +298,85 @@ class TestV6MainBatchReproGates:
         assert args.allow_dirty is False
 
 
+class TestV6bMainBatchPatternRepeatPassthrough:
+    """V6b：主批次 runner 透传 --max-pattern-repeat（R-P0-4，AA 批次口径）。
+
+    锁定：argparse 解析（默认 None / 显式 N）与 kwargs 透传到
+    run_benchmark.run_benchmark（仅 synthetic 生效的历史口径不变）。
+    """
+
+    def _run_main_capture(self, monkeypatch, tmp_path, argv):
+        """跑 rmb.main()，捕获透传给 run_benchmark 的 kwargs（统计被跳过）。"""
+        import subprocess
+        import sys as _sys
+
+        import experiments.run_benchmark as rb
+        import experiments.run_main_batch as rmb
+
+        captured: dict = {}
+
+        def fake_run_benchmark(**kwargs):
+            captured.update(kwargs)
+            return {"results": {}}
+
+        monkeypatch.setattr(_sys, "argv", ["run_main_batch.py", *argv])
+        monkeypatch.setattr(rb, "run_benchmark", fake_run_benchmark)
+        # 密闭化：干净树检查打桩，不依赖运行测试时的真实工作树状态
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+        monkeypatch.setattr(rmb, "_warn_llm_cache_if_enabled", lambda: None)
+        rmb.main()
+        return captured
+
+    def test_flag_parsed_default_none(self, monkeypatch):
+        import sys as _sys
+
+        import experiments.run_main_batch as rmb
+
+        monkeypatch.setattr(_sys, "argv", ["run_main_batch.py"])
+        args = rmb._parse_args()
+        assert args.max_pattern_repeat is None, "默认必须 None（历史口径）"
+
+    def test_passthrough_reaches_run_benchmark(self, tmp_path, monkeypatch):
+        captured = self._run_main_capture(
+            monkeypatch,
+            tmp_path,
+            [
+                "--dataset",
+                "synthetic",
+                "--task-count",
+                "5",
+                "--seed",
+                "42",
+                "--baselines",
+                "plain_llm",
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--skip-stats",
+                "--max-pattern-repeat",
+                "2",
+            ],
+        )
+        assert captured["max_pattern_repeat"] == 2
+        assert captured["task_count"] == 5
+        assert captured["seed"] == 42
+        assert captured["baselines"] == ["plain_llm"]
+        assert captured["deterministic"] is True, "默认确定性采样协议不得被透传改动破坏"
+
+    def test_default_none_keeps_legacy_behavior(self, tmp_path, monkeypatch):
+        captured = self._run_main_capture(
+            monkeypatch,
+            tmp_path,
+            [
+                "--dataset",
+                "synthetic",
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--skip-stats",
+            ],
+        )
+        assert captured["max_pattern_repeat"] is None, "不带旗标时必须显式传 None（历史口径）"
+
+
 class TestV7ConfidenceWiring:
     """V7：错误置信度接线 + reward simplicity 语义（P2-4 / P2-5）。"""
 

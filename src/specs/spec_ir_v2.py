@@ -499,18 +499,54 @@ def _compile_smt_witness_tests(
 # ─── 4. 可编译率（"逻辑驱动"主张的量化内核，入 M1 metrics_schema）────────
 
 
+def _expr_channel_clauses(spec: dict[str, Any] | None) -> list[str]:
+    """提取表达式通道（AC1，*_expr 字段）的非空子句列表。"""
+    if not spec:
+        return []
+    out: list[str] = []
+    for key in ("preconditions_expr", "postconditions_expr", "invariants_expr"):
+        out.extend(c.strip() for c in spec.get(key) or [] if isinstance(c, str) and c.strip())
+    return out
+
+
+def _nl_channel_clauses(spec: dict[str, Any] | None) -> list[str]:
+    """提取 NL 通道（pre/post/invariant 字段）的非空子句列表（历史口径）。"""
+    if not spec:
+        return []
+    out: list[str] = []
+    for key in ("preconditions", "postconditions", "invariants"):
+        out.extend(c.strip() for c in spec.get(key) or [] if isinstance(c, str) and c.strip())
+    return out
+
+
 def compile_readiness(spec: dict[str, Any] | None) -> float:
     """SpecIR 子句可编译率 ∈ [0.0, 1.0]（A-01 验证指标 ①）。
 
-    定义：(pre+post+invariant 中可机器解析且白名单通过的子句数) /
-          (非空子句总数)。分母为 0 时返回 0.0（无规约材料 = 不可编译，
-          保守口径——"逻辑驱动"主张在 0% 时可证伪为"纯 LLM 话术"）。
+    定义（AC1 双通道口径，2026-10-06 第十轮审查 T-P0-2）：
+    - 表达式通道存在非空子句（*_expr 字段，SPEC_EXPR_CONTRACT_SECTION
+      契约产物）时：rate = 可编译 expr 子句数 / expr 子句总数——衡量
+      **编译器对 LLM 形式化产物的接受率**；
+    - expr 通道为空时回落历史口径：rate = 可机器解析 NL 子句 /
+      非空 NL 子句总数（中文 NL 子句被 _EXPR_TOKEN_RE 拒绝 → 恒 0.0，
+      即 AB1 验证批 12/12 实证的契约断裂基线）。分母为 0 时返回 0.0
+      （无规约材料 = 不可编译，保守口径——"逻辑驱动"主张在 0% 时
+      可证伪为"纯 LLM 话术"）。
 
     用途：
     - M1 指标层：每任务 spec_compile_rate 字段（与 detection/repair/
       false_fix 并列，衡量"逻辑驱动"实际贡献）；
     - 实验层：SpecIR ON/OFF 对照批次的"可编译规约占比 ≥60%"门槛。
     """
+    expr_clauses = _expr_channel_clauses(spec)
+    if expr_clauses:
+        compiled = 0
+        for clause in expr_clauses:
+            if not is_expression_clause(clause):
+                continue
+            if _whitelist_check(clause):
+                continue
+            compiled += 1
+        return compiled / len(expr_clauses)
     if not spec:
         return 0.0
     pre = [c for c in (spec.get("preconditions") or []) if isinstance(c, str) and c.strip()]
@@ -532,6 +568,21 @@ def compile_readiness(spec: dict[str, Any] | None) -> float:
             continue
         compiled += 1
     return compiled / len(clauses)
+
+
+def spec_expr_coverage(spec: dict[str, Any] | None) -> float | None:
+    """表达式通道覆盖率 ∈ [0.0, 1.0]（AC1 观测指标，与 compile_rate 并列）。
+
+    定义：expr 子句总数 / max(NL 子句总数, expr 子句总数)。衡量
+    **LLM 把 NL 规约形式化的意愿/能力覆盖率**（与 compile_readiness
+    衡量的"编译器接受率"正交：rate×coverage = NL 子句最终可确定性
+    执行的占比）。None = 无任何规约材料。
+    """
+    expr_total = len(_expr_channel_clauses(spec))
+    nl_total = len(_nl_channel_clauses(spec))
+    if expr_total == 0 and nl_total == 0:
+        return None
+    return min(1.0, expr_total / max(nl_total, expr_total, 1))
 
 
 # ─── 5. spec_provenance（NL 原文溯源，保守保留）─────────────────────────
@@ -561,6 +612,7 @@ __all__ = [
     "compile_readiness",
     "compile_spec_oracle",
     "is_expression_clause",
+    "spec_expr_coverage",
     "spec_ir_dsl_enabled",
     "spec_provenance",
 ]

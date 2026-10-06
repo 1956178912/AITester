@@ -2,10 +2,12 @@
 
 # Data Card
 
-Last updated: 2026-10-06 (AA2: §2 registers the `max_pattern_repeat` mitigation
-for the sampling-repetition bias; previously Z6: closing a data-governance gap —
-data provenance used to live only in MODEL_CARD §3 with no standalone card;
-review item R15)
+Last updated: 2026-10-06 (AH1: §4 licensing authoritatively verified —
+QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no SPDX
+license [new L2 decision gate registered]; previously AA2: §2 registers the
+`max_pattern_repeat` mitigation for the sampling-repetition bias; previously
+Z6: closing a data-governance gap — data provenance used to live only in
+MODEL_CARD §3 with no standalone card; review item R15)
 
 ## 1. Dataset Overview
 
@@ -54,7 +56,9 @@ review item R15)
 3. **Leak-channel status**: `problem_statement` (= the pattern description,
    literally the defect answer) is currently only consumed by the
    injection scanner and never enters any prompt — this "no-prompt-consumer"
-   invariant is **not yet locked by a test** (registered as a TODO);
+   invariant is **now locked by a static guard test** (AF-D, 2026-10-06:
+   tests/test_af_batch.py; any new prompt-side consumption must explicitly
+   update this card and that test);
 4. **Statistical power**: at n=50 with a 2% detection baseline, the test has
    insufficient power for a 10pp difference (recomputable via
    `scripts/power_analysis.py`).
@@ -70,9 +74,27 @@ review item R15)
   fixed_code / test_code); the last task-id segment is a ≤30-char neutral
   module name (to avoid leaking defect semantics); injected via
   `AITESTER_BUGSINPY_DATA`;
-- **Licensing**: before actually running on upstream QuixBugs / BugsInPy data,
-  the licenses of their repositories must be verified and recorded here
-  together with the fetched commit (current status: to be verified).
+- **Licensing** (AH1, authoritatively verified via the GitHub API on
+  2026-10-06 and recorded here):
+  - **QuixBugs: MIT License (verified — the L1/E4 precondition is lifted)**
+    — the `license` field of `api.github.com/repos/jkoppel/QuixBugs`
+    reports `spdx_id=MIT` (verified 2026-10-06); **data fetched** (batch
+    AJ, 2026-10-06): local `data/quixbugs` (gitignored, not committed),
+    commit `4257f44b0ff1181dedaedee6a447e133219fcebf`; zero-LLM loader
+    smoke measured 50 programs loaded and 41 with the complete gold
+    triplet (the 9 tasks without official tests get detection=None per the
+    M1 rule and stay out of the denominator);
+  - **BugsInPy: no SPDX-detectable license (new compliance gate — a user
+    decision is required before L2 runs)** — the `license` field of
+    `api.github.com/repos/google/bugsinpy` is null (verified 2026-10-06),
+    i.e. the upstream repository declares no license and default copyright
+    applies; mitigation: local research-only use (gitignored, not
+    distributed with the repository), but **this does not constitute full
+    compliance**. Before chartering L2, pick one: ① contact upstream for
+    written permission; ② switch to a licensed real-defect benchmark
+    (e.g. the MIT-licensed SWE-bench family / Multi-SWE-bench); ③ accept
+    the risk with dual registration in this card and the global decision
+    log. QuixBugs L1 (E4) is unaffected and can proceed.
 
 ## 5. Maintenance Conventions
 

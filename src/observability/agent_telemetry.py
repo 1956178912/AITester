@@ -246,6 +246,24 @@ _PATTERN_DETECTORS: dict[str, Any] = {
 }
 
 
+def _flatten_record(record: dict[str, Any]) -> dict[str, Any]:
+    """展平 trace 记录：output 内层字段提升为顶层兜底（AG1 修复）。
+
+    背景：trace 落盘时 node 事件的业务负载在 `output` 字典内
+    （error_category / iteration / passed 等），而模式判定函数按
+    顶层字段读取——直接喂原始 JSONL 记录时所有 error_category 系列
+    模式恒不命中（真实 trace 实测零命中，周报口径失真）。展平口径：
+    顶层键优先（事件骨架字段语义为准），output 内层仅作兜底补充；
+    非 dict 的 output 忽略。
+    """
+    flat = dict(record)
+    output = record.get("output")
+    if isinstance(output, dict):
+        for key, value in output.items():
+            flat.setdefault(key, value)
+    return flat
+
+
 def match_failure_patterns(
     trace_records: list[dict[str, Any]],
     examples_per_pattern: int = 3,
@@ -275,11 +293,12 @@ def match_failure_patterns(
     for record in trace_records:
         if not isinstance(record, dict):
             continue
-        task_id = str(record.get("task", "unknown"))
+        flat = _flatten_record(record)
+        task_id = str(flat.get("task", "unknown"))
         record_matched = False
         for pattern_name, detector in _PATTERN_DETECTORS.items():
             try:
-                hit = detector(record)
+                hit = detector(flat)
             except Exception:
                 # 模式判定失败保守降级（不误报，不崩主流程）
                 hit = False

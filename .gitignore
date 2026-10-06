@@ -44,6 +44,9 @@ venv_old/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# AH3（2026-10-06）：hypothesis 示例库缓存（tests 用 hypothesis 时自动生成，
+# 纯本地可再生）
+.hypothesis/
 # O35（2026-09-30 全面审查 P3）：`.coverage` 只匹配精确名——pytest-cov 并行
 # 模式（-n auto / COVERAGE_FILE 带后缀）产出的 .coverage.<host>.<pid> 与
 # coverage html 单文件报告此前均不在忽略名单，可被误提交。
@@ -132,3 +135,10 @@ REVIEW_2026-*.md
 review_infra_hygiene_report.md
 review_report_agents_findings.md
 review_report_graph_api.md
+
+# AC5（2026-10-06 第十轮审查 T-P1-1）：Mimosa 扫描器运行时状态不入库——
+# hook-state/hook-status 含会话 ID 且每会话漂移，会污染 diff 并把会话
+# 标识带进公开仓；ledger 审计件（finding-ledger/history/reports）保留
+# 入库（安全审计链）。已跟踪的 4 个运行时文件待用户终端 git rm --cached。
+.mimosa/hook-state/
+.mimosa/hook-status/

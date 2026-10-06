@@ -1,10 +1,15 @@
 > **语言 / Language**：[English](README.en.md) | 简体中文（本文）
 
-# AITester：逻辑驱动的多智能体测试生成与自修复系统
+# AITester：逻辑锚定的多智能体测试生成与修复评估系统（检出优先协议）
 
-> AITester 是一个基于多智能体协作的 Python 自动化测试生成与自修复框架。
-> 核心创新：**逻辑驱动思维链（Logic-driven CoT）** + **分层错误修复机制（Hierarchical Repair）**
+> AITester 是一个基于多智能体协作的 Python 自动化测试生成与修复评估框架
+> （检出优先协议为主成功口径）。核心创新：**检出优先思维链（Detection-first
+> CoT，"先红后绿"）** + **分层错误修复机制（Hierarchical Repair）**
 > + **Oracle（测试预言）闭环：规约驱动断言增强与缺陷检出导向**。
+> 诚实披露（AL5）：三种子主批次（n=261，gold 独立裁决）实测检出优先提示
+> 协议带来决定性检出增益，而 repair = 0.0%——**自修复为可测量口径而非
+> 已证实主张**（上限归因见 `experiments/results/main_batch/repair_ceiling_report.md`，
+> 编排定位见 ADR-0016）。
 
 ## 测试状态
 
@@ -19,13 +24,13 @@
 | **总测试数** | ✅ 全量 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过）——当前数值见 [BASELINE.yaml](BASELINE.yaml) `tests` 节（`total_passed` / `slim_environment`） |
 | **单元测试** | ✅ 全量通过、零失败（实测耗时与用例数见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 `suite_seconds` / `total_passed` / `total_failed`）；精简环境 `skipif`/`importorskip` 优雅降级，非误报 ERROR |
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
-| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。主批次实测 `repair_rate=0.0%` / `false_fix_rate=89.8%`（success 高但真实修复近零，"假成功通道"的系统自测证据）；SWE-bench Lite（sqlfluff-20）真实基准结果（含 0/20 负结果）与统计检验同样以 BASELINE.yaml 及 `experiments/results/main_batch/statistical_report.md` 为准，如实披露、不筛选 |
+| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 全线 0.0%**（上限归因：patch 产出 94%/plausible 47%/correct 0，见 `repair_ceiling_report.md`）；$/task 0.0259 vs 0.0045（价目表官方登记口径）。历史批（2026-10-01 n=50）false_fix=89.8% 为"假成功通道"证据；SWE-bench Lite（sqlfluff-20）真实基准 0/20 负结果与统计检验同样如实披露、不筛选 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
 | **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ 逐模块行覆盖以 [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` 为单一事实来源（base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86，分支覆盖与核心路由门槛同见该文件） |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3）+ mypy 全仓 0 错误（源文件数与版本锁定见 [BASELINE.yaml](BASELINE.yaml) `static_checks` 节 `mypy_source_files`）；历轮 lint 清零叙事归档 [CHANGELOG.md](CHANGELOG.md) |
-| **最近改动** | ✅ 2026-10-06 AA 代码优化批次（logic 档补检出优先协议 `DETECTION_FIRST_ENABLE`〔ADR-0015 漏配补齐，`AITESTER_PROFILE=logic` 一键生效〕+ 合成集同池模板重复上限 `max_pattern_repeat` / `--max-pattern-repeat`（opt-in，默认口径与主批次 seed=42 复现性不变）+ README CI 矩阵漂移修复与静态守卫）；此前同日 Z 批次（第八轮审查：代码级修复四项 + 功效分析/贝叶斯配对 + 数据卡/Makefile）与 X/Y 批次（第七轮审查：LLM 缓存实验命名空间 `AITESTER_CACHE_NAMESPACE` + `plain_llm_df` 归因基线 + 统计管线 M1 schema 过滤 + env 开关预算棘轮 + 检出优先终态第三值 `red_not_repaired` + telemetry MAST 对齐），详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
+| **最近改动** | ✅ 2026-10-06 AL 批次（第十三轮审查落地：AK 补注勘误回绿〔AK"4327 全绿"声明经 AL1 勘误——补注非禁止语境触发 AJ 红线守卫，改写后 4349 全绿收口〕+ 对外定位去"自修复"主张〔README/MODEL_CARD 双语对齐 CITATION.cff detection-first 口径 + 导语诚实披露行〕+ E6 预算匹配四臂 / E7 修复上限分层抽样预注册增补〔效力声明先于数据产生；E7 确定性抽样脚本 `experiments/repair_sample_selection.py`，seed=42 分层 ceil 10%〕+ L3 真实基准口径更新〔SWE-bench Verified 2026-02-23 官方弃用→防污染滚动基准二选一预注册〕+ ADR 索引编号注释修复〔下一个 0017〕）；此前同日 AK 批次（第十二轮审查落地：修复上限归因 + pooled 报告 provenance 勘误 + 21 行差异性缺失双界 + $/task 价目官方登记 + 工件入库守卫 + state-contract/tool-versions 守卫接线），详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -694,7 +699,7 @@ TYPE_CHECK_ENABLE=true python main.py run examples/calculator.py
 ```
 
 ### 5.19.5 检出优先协议（W3，`DETECTION_FIRST_ENABLE`，默认关；ADR-0015）
-主批次实证 `false_fix_rate=89.8%` 的根因是**奖励自指**：成功信号"自产测试通过"
+历史主批次（2026-10-01，n=50）实证 `false_fix_rate=89.8%` 的根因是**奖励自指**：成功信号"自产测试通过"
 与"缺陷被检出"无任何关联。检出优先协议（"先红后绿"）对齐两者：
 
 - **首轮红灯观测**（`_executor_node`）：iteration==0（被测代码未修复）的执行写

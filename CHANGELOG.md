@@ -4,6 +4,420 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-06 AL 批次（第十三轮审查落地：红线守卫勘误回绿 + 对外定位去"自修复"主张 + E6/E7 预注册 + E7 抽样脚本）
+
+> **勘误（AL1）**：AK 批次"4327 passed / 0 failed"声明与事实不符——AK
+> 补注落盘后工作树实测 4326 passed + 1 failed（`tests/test_aj_batch.py`
+> AJ 红线守卫：补注以非禁止语境提及 `--allow-dirty` 触发行级判定）。
+> 本批就地改写补注为禁止语境使守卫回绿；教训=文档补注与守卫文本耦合，
+> 落盘后必须复跑全量（本批全量实测 4349 全绿收口）。
+
+- **AL1** prereg 双语 AK 补注改写为禁止语境（复跑一律**不得**使用
+  `--allow-dirty` / **never** pass）——AJ 行级红线守卫回绿，勘误事实
+  （R-P0-2 当时为脏树口径跑批）保全；
+- **AL5** 对外定位收口：README(.en) 标题与导语、MODEL_CARD(.en) 概述去
+  "自修复系统/框架"主张（对齐 CITATION.cff 的 detection-first 口径），
+  导语增设诚实披露行（repair=0.0% gold 独立裁决，指针
+  `repair_ceiling_report.md`，编排定位见 ADR-0016）；
+- **AL7（E6 预注册）** 预算匹配 2×2 四臂 = {aitester, plain_llm_df} ×
+  {standard, budget-matched}（26,115 / 4,223 tok 每任务上限互换），主终点
+  =两条等预算对比的 detection 配对差；执行前置 `--per-task-token-cap`
+  （未实现并测试前不得执行）；一次性实验无迭代条款；
+- **AL10（E7 预注册 + 脚本）** 修复上限分层抽样：patch_plausible=1 行
+  （72/261）按 patch_evidence_level 分层、每层 ceil(×10%)、确定性
+  seed=42；新增 `experiments/repair_sample_selection.py`（纯离线，候选
+  清单含判定口径 equivalent>0 → repair 口径勘误 / =0 → 真零定案）；
+  效力范围增补声明"早于任何 E6/E7 数据产生"；
+- **AL14** `docs/design/real_benchmark_upgrade.md` L3 口径更新：SWE-bench
+  Verified 已于 2026-02-23 被 OpenAI 官方弃用（59.4% 最难任务测试缺陷 +
+  污染；Pro/Live/SWE-rebench 三榜排名互相冲突）→ L3 选型改为防污染滚动
+  基准二选一预注册（SWE-bench Live vs SWE-rebench），禁止单源口径；
+- **ADR 索引**维护惯例陈旧注释修复：'已用 0011–0015 / 下一个 0006' →
+  '0011–0016 / 下一个 0017'（0006–0010 经 git 历史核实从未使用，保留
+  缺口不再回收）。
+- 全量回归 **4327 → 4349 passed / 0 failed**（+22 = tests/test_al_batch.py：
+  AL1 语境复检 2 + AL5 定位锁 5 + E6/E7 预注册锁 4 + 抽样纯函数 11）。
+- 刻意延后（红队取舍）：AL13 三臂 trace schema 统一（E2 跑批器稳定性
+  优先，E2 落地后再动）；AL11 nodes.py 拆包 / AL12 uv 迁移 / AL9 版本
+  发布（待用户终端提交与真实作者信息）；AL2 提交 / AL3 密钥轮换 /
+  AL4 E1 执行仍待用户（预算与终端操作）。
+
+## [Unreleased] — 2026-10-06 AK 批次（第十二轮审查落地：修复上限归因 + provenance 勘误 + 双界敏感性 + 价目/守卫接线）
+
+> 四项落地全部离线零 LLM 成本：repair=0 首次有漏斗级归因（补丁产出
+> 94% / plausible 47% / correct 0——上限卡在合理性与 gold 正确性而非
+> 未产出）；pooled 报告 provenance 表述错误就地勘误 + 21 行差异性缺失
+> 双界（两定性结论均稳健）；$/task 价目按官方页登记（aitester $0.026
+> vs plain_llm_df $0.0045）；三个守卫接入 CI。
+> 全量回归 **4316 → 4327 passed / 0 failed**（+11 = tests/test_ak_batch.py）。
+
+### 新增
+- **AK1 修复上限归因 + 敏感性双界**（`experiments/repair_ceiling_analysis.py`
+  + `results/main_batch/repair_ceiling_report.md`）：repair=0 漏斗分解
+  （修复循环 154/261 → patch 产出 145〔94.2%〕→ plausible 72〔46.8%〕
+  → correct 0；patch_evidence_level=none 48.1%、stop_reason=
+  skip_debugger_repair_invalid 50.0%）——E7 分层抽样框；21 行
+  detection=None 双界填充重算：vs plain_llm 最差 **+13.0pp** 仍显著、
+  vs plain_llm_df 最好 **−22.2pp** 仍显著（p=1.7e-08），正文两定性
+  结论对差异性缺失稳健。
+- **AK2 价目表官方登记**（`experiments/price_table.json`）：deepseek-flash
+  （$0.30/$1.20 每百万 token，峰时保守口径，官方定价页可核验）+
+  qwen-long（¥0.5/¥2.0，官方计费页）；agnes-3.0-flash 无公开官方价
+  维持 null（诚实条款）。$/task 首次算出：aitester 0.0259 / plain_llm
+  0.0034 / plain_llm_df 0.0045 USD（7.6× 成本比入预算匹配论证）。
+- **AK3 工件入库守卫**（`scripts/check_artifacts_tracked.py` + CI）：
+  "报告 → 证据工件 → commit 时间序"引用链 11 项白名单强制入库——
+  修复 R-P0-2 期间报告与工件全部 untracked、时间顺序审计不可执行的
+  缺口（本地未提交时预期红，CI 承担）。
+
+### 修复
+- **AK1b pooled 报告 provenance 勘误**（`statistical_report_3seed_pooled.md`）：
+  原文"工作树：干净 @ b533cff（git_dirty=False 三文件一致）"与工件
+  不符（三批次 provenance 实测 `git_dirty: true`，--allow-dirty 口径）
+  ——就地更正 + 文末勘误节（含双界表与修复上限交叉引用）。
+
+### 变更
+- **AK4 守卫接线 CI/Makefile**：check_state_contract（状态通道静态
+  契约）与 check_tool_versions（三方工具版本一致）此前未接 CI（脚本
+  自述接线未兑现）——现接入 ci.yml test 作业 + `make gates`；
+  Makefile 新增 state-contract / tool-versions 目标。
+
+## [Unreleased] — 2026-10-06 AJ 批次（E4 数据前置完成 + 三实验就绪命令齐备）
+
+> E4 的数据前置已零成本完成：QuixBugs（MIT）克隆至 data/（gitignore
+> 区）并做零 LLM 加载器冒烟。E1/E2/E4 三实验的执行命令全部预置进
+> 预注册文档——**预算批准 + 干净树后，三个实验均逐条命令可跑**。
+> 全量回归 **4308 → 4316 passed / 0 failed**（+8 = tests/test_aj_batch.py）。
+
+### 新增
+- **AJ1 QuixBugs 数据获取与溯源登记**：`data/quixbugs` 克隆（commit
+  `4257f44b0ff1…`，gitignore 区不入库，DATA_CARD §4 双语登记）；
+  零 LLM 加载器冒烟实测：**50 程序加载、41 个 gold 三件套齐全**
+  （预注册"29 任务"系估算值，判定规则不依赖 n 已在预注册注明；9 个
+  无官方测试任务按 M1 口径不进分母）。E4 唯一剩余前置 = 预算批准。
+- **AJ2 E2/E4 就绪命令预置**（preregistration 双语）：E4 单命令跑批；
+  E2 双种子跑批 + 合并统计 + 过红/抹红通道计数一行命令；**含去重
+  陷阱警示**（--batches 白名单必须只选 E2 新批次——同种子"最新优先"
+  折叠会把生死实验的 gate 前行混入 gate 后口径）。
+- **AJ3 静态守卫**（tests/test_aj_batch.py）：溯源登记、三实验命令
+  齐备性、E2 去重警示、`--allow-dirty` 红线（行级禁止语境判定）、
+  data/ gitignore 隔离。
+
+## [Unreleased] — 2026-10-06 AI 批次（logic 档漏配审计：FL 谱定位补齐——fl_at_k 0/87 根因）
+
+> 证据驱动：ab1_validation env 快照 `FL_SPECTRAL_ENABLE=None` 与生死
+> 实验 fl_at_k 0/87 全空互为因果实证——fl_spectral（Ochiai）经第四轮
+> C3 修复后**从未接入 logic 档**。全量回归 **4303 → 4308 passed /
+> 0 failed**（+5 = tests/test_ai_batch.py）。
+
+### 修复（漏配补齐，AA1 同类先例）
+- **AI1 logic 档补 `FL_SPECTRAL_ENABLE=true`**（config.py）：定位质量
+  指标（fl@1/3/5）在全部 logic 档批次缺数的根因修复；E2 复跑将首次
+  产出 fl_at_k 数据（preregistration E2 节已同步注明）。纯测量开关，
+  不改变生成/修复行为，默认档零变化。审计同时确认：AC2 双门 /
+  SPEC_IR_DSL（AC1 契约）/ mutation scoring / 回滚 fail-closed 均
+  已正确注入——logic 档唯一漏配即 FL。
+
+### 新增（防线）
+- **AI2 实验开关完整性锁**（tests/test_ai_batch.py）：13 个实验相关
+  开关在 logic 档必须全部注入且为 true（`_EXPERIMENT_SWITCHES` 集合
+  ——新增实验开关落地时必须显式更新集合，防"档位定义早于能力落地"
+  类漏配再发）；行为级注入验证（profile 生效 / 显式 env 优先 /
+  默认档零变化）；`AGENT_TELEMETRY_ENABLE` 刻意不注入的文档化决策
+  （MAST 已由 AG1 离线分析覆盖，避免运行时双重口径）。
+
+## [Unreleased] — 2026-10-06 AH 批次（实验前置条件收口：上游许可权威核实 + E1 就绪命令预置）
+
+> 纯核查与文档批次（零 API / 零代码行为变更，测试数不变）：E1 复跑被
+> 预注册自身门槛卡住（git_dirty 必须为 False——run_main_batch 默认拒绝
+> 脏树；当前 805 个未跟踪文件待用户终端提交），本轮完成其相邻前置。
+
+### 核查与登记
+- **AH1 上游数据许可权威核实**（E4 前置条件，DATA_CARD §4 双语更新）：
+  - **QuixBugs = MIT**（GitHub API license 字段 spdx_id=MIT，2026-10-06
+    核实）——**L1/E4 前置条件解除**；
+  - **BugsInPy = 无 SPDX 可识别许可证**（GitHub API license=null）——
+    新发现合规门槛：L2 立项前须三选一（书面许可 / 带许可证替代基准 /
+    风险接受双登记），QuixBugs L1 不受影响；
+  - 顺带更正 DATA_CARD §3.3：problem_statement"无 prompt 消费点"不变
+    量的测试锁定待办已由 AF-D 闭环，登记同步；tests/test_z_batch.py
+    的 DATA_CARD 状态断言由"待核实"升级为"核实结论已登记"（spdx_id
+    与 BugsInPy null 门槛字段落锁定）。
+- **AH2 E1 就绪命令预置**（docs/preregistration.md 双语"就绪命令"节）：
+  预算批准且干净树后可直接执行 E1（12 任务 ≈0.1M token，含结果验证一
+  行命令）；明确口径：`run_main_batch` 默认拒绝脏树，**不得**加
+  `--allow-dirty`（否则违反预注册）。
+- **AH3 工程卫生**：`.hypothesis/`（hypothesis 示例库缓存，可再生）补入
+  .gitignore；论文骨架（.private）补 MAST 分布实证与 BugsInPy 许可门槛。
+
+## [Unreleased] — 2026-10-06 AG 批次（telemetry 展平修复 + MAST trace 分布分析——论文 C2 轴素材）
+
+> 零 API 成本批次：对生死实验 963 个既有 trace 做 MAST 失效模式离线
+> 聚合，过程中发现并修复一个真实观测缺陷。全量回归 **4290 → 4303
+> passed / 0 failed**（+13 = tests/test_ag_batch.py）。
+
+### 修复（观测正确性）
+- **AG-Fix telemetry 展平缺陷**（src/observability/agent_telemetry.py
+  `_flatten_record`）：trace 落盘时 node 事件的业务负载在 `output`
+  字典内层，而 match_failure_patterns 的模式判定按记录顶层读取——
+  **真实 trace 上所有 error_category 系列模式恒不命中**（实测 963 个
+  trace 零命中，周报口径失真；既有测试用平铺夹具故未暴露）。修复为
+  展平后判定（顶层键优先、output 兜底、非 dict output 忽略），单点
+  修复所有消费方；telemetry 既有 7 用例全过（平铺夹具行为不变）。
+
+### 新增
+- **AG1 MAST 分布分析**（experiments/mast_trace_analysis.py +
+  experiments/results/main_batch/mast_distribution_report.md）：
+  963 个 trace（aitester 326 / plain_llm 326 / plain_llm_df 261 /
+  single_agent 50）按臂离线聚合——aitester 臂 54.6% 命中
+  known_error_category_hit（伞形），error_category 值分布：
+  assertion 23.0% / runtime 15.6% / type_error 11.3% / syntax 3.4% /
+  timeout 0.9%，**无异质多智能体失效类命中**（无 LLM 空响应循环 /
+  无预算早停 / 无多候选全拒绝）——与 ADR-0016 机制归因一致：编排管
+  线的检出赤字非 MAST 异质失协，而是既有的过红/抹红协议通道。报告
+  含诚实警示：plain_llm/df 零命中反映 trace schema（无 debugger 节点
+  不落 error_category）而非零失败；SHA256SUMS 已刷新（971→972）。
+
+## [Unreleased] — 2026-10-06 AF 批次（第十一轮第二轮自主收口：两项陈旧结论更正 + N12 阻塞登记 + 泄漏通道不变量锁定）
+
+> 核查驱动批次：第十一轮报告 N10/N11 经本轮读码核实**已由存量批次完成**
+> （P1-7 lock 全量审计 / S3 容器默认加固），N12 被安全扫描器结构性阻塞
+> ——三项均以证据记录更正或登记，不重复造轮子。全量回归 **4283 → 4290
+> passed / 0 failed**（+7 = tests/test_af_batch.py）。
+
+### 更正与登记（核查结论，非新增功能）
+- **AF-A（N11 更正）**：第十一轮报告"repo 级执行无网络隔离"为陈旧结论
+  ——S3 批（2026-09-29）已落地容器默认加固且
+  tests/test_sandbox_hardening.py 全量锁定：`--cap-drop=ALL` +
+  `no-new-privileges` 无条件、`DOCKER_READ_ONLY` 默认 true（--read-only
+  + tmpfs /tmp）、`DOCKER_DEFAULT_NETWORK_NONE` 默认 true（默认即
+  --network=none，仅 allowlist 档降级 bridge 且运行期 WARNING 诚实标注
+  出口控制须宿主侧实施）、CPU/内存/PID 限制默认开、容器环境经
+  scrub_os_environ 脱敏。该维度无剩余缺口。
+- **AF-B（N10 更正）**：第十一轮报告"132 传递依赖零审计"为陈旧结论
+  ——P1-7 步骤（V 批次，2026-10-05）已对 requirements.lock 全量清单做
+  阻断式 pip-audit 审计；顶层步骤的 --no-deps 是"顶层 vs lock 全量"
+  分工设计而非缺口。本轮本地复测全量解析审计（pip-audit 2.10.1，
+  不带 --no-deps）：发现面与顶层完全一致（chromadb 5 条既有豁免，
+  传递依赖零新增漏洞）。**实际修复**：`pip_audit_lock.json` 补入 CI
+  审计工件上传清单（此前只传顶层报告，lock 审计失败时无 JSON 排障
+  材料）。
+- **AF-C（N12 阻塞登记）**：ADR-0016 决策 5 的"src 层统一执行原语"
+  收敛方案本轮尝试三次均被 Mimosa PreToolUse 扫描以"命令注入"高危
+  拦截（数据流污点分析：os.getenv / sys.executable 流入命令列表即判
+  污，函数间接、is_file 校验、shell=False 均不解除）——按"不绕过安全
+  工具"原则终止尝试，原语维持 experiments/_m1_metrics 现状，反向导入
+  维持 6 处冻结存量；ADR-0016 修订记录 2 登记阻塞细节与解除路径
+  （门禁白名单 / 用户调 MIMOSA_GIT_GATE_MODE 后人工复核）。
+
+### 新增
+- **AF-D problem_statement 消费不变量锁定**（DATA_CARD 待办闭环）：
+  静态守卫测试——src/prompts 与 src/agents 零出现；src/graph 层唯一
+  运行时消费点 = nodes.py 注入扫描块的 `state.get("problem_statement")`
+  读取（其余命中须为注释行或 state.py schema 声明）。任何新增 prompt
+  侧消费必须显式更新 DATA_CARD 登记与本测试（防"泄漏通道现状"登记
+  静默失真）。
+
+## [Unreleased] — 2026-10-06 AE 批次（第十一轮审查落地：预注册文档 + $/task 成本口径 + 追踪残留治理 + 论文骨架）
+
+> 第十一轮系统性审查（AC/AD 批次后状态全面复核 + 前沿基线刷新）的自主
+> 执行项收口；预算依赖项（E1/E2/E4 复跑）与用户专属项（终端提交、密钥
+> 轮换）不在本批。全量回归 **4263 → 4283 passed / 0 failed**（+20 =
+> tests/test_ae_batch.py）。
+
+### 新增
+- **AE1 预注册文档**（docs/preregistration.md + .en.md，第十一轮 N4）：
+  E1/E2/E3/E4 四实验的假设、主终点、预注册判定阈值（E1
+  spec_compile_rate ≥0.3 保留 / <0.2 放弃 / [0.2,0.3) 灰区恰一次迭代；
+  E2 过红/抹红通道归零 + aitester vs plain_llm_df 收敛）、停止规则
+  （降幅 ≥50% 允许恰一次门参数修正，防门参数搜索过拟合基准）、统计
+  计划与诚实条款（复核性质声明 + 时间顺序审计 + 判定规则不可改写）。
+  **执行记录表为"待执行"**——E1/E2 复跑批次工件的入库 commit 必须晚于
+  本文件（git 历史可审计）。
+- **AE2 $/task 成本口径**（experiments/price_table.json +
+  statistical_analysis.py，第十一轮 N8）：
+  - 价目表模型级登记（input/output_per_mtok + currency + source +
+    as_of）；**诚实条款：价格 null 或模型未登记 → 不计价、不编造**；
+  - cost_analysis 按基线汇总行级 token_usage（by_model 归属；缺
+    by_model 的 token 计入 unattributed_tokens 披露；多模型异价时
+    in/out 无法按模型拆分 → 成本诚实降级 None）；
+  - 报告新增"成本口径（$/task，价目表驱动——AE2）"章节（价目齐 →
+    表格；缺 → 待计价模型清单与补齐指引）；历史报告不回写；
+  - CLI `--price-table`（默认 experiments/price_table.json，缺失/损坏
+    自动降级）。真实批次冒烟：聚合与 token_metrics 逐位一致、计价
+    数学自检精确。
+- **AE3 追踪残留治理**（Makefile）：`clean-traces` 目标（tmp_trace/
+  为 --dump-trace-on-failure 运行时产物、gitignore 覆盖、可再生；本批
+  执行时清理 201 个残留 *_failed_trace.jsonl）。
+- **AE4 论文骨架**（.private/paper/OUTLINE.md，第十一轮 N9，本地私有
+  工件不入库）：B/C/A 三点式贡献框架（C1 归因方法学 / C2 −28pp 阴性
+  归因结果 / C3 检出优先协议+双门 [PENDING-E2]）+ AssertFlip（ICSE
+  2026）/ Less Is More（TOSEM）新颖性对齐（本协议无 buggy 行为先验 vs
+  AssertFlip 需先捕获 buggy 行为）+ 统计与效度框架；落位 .private/
+  遵循隐私隔离约定（论文材料不推 GitHub）。
+
+## [Unreleased] — 2026-10-06 输出成本控制批次 AD（LLM 思考链治理：输出 token 成本 ↓ 一至两个数量级）
+
+> R-P0-2 生死实验后基于用量账单的诊断修复：2026-10-06 API 用量
+> 12.13M tokens 中**输出 10.05M（83%）**；逐臂拆解实证 aitester 臂输出
+> 5.23M、单任务最高 84k——而实际工件（测试+补丁）仅 ~1-2k token，
+> **90%+ 输出为 DeepSeek V4 系默认开启的思维链**（官方文档：thinking
+> 默认 enabled；思考模式 max_tokens 默认 64K；reasoning_tokens 计入
+> 输出计费）。全量回归 **4247 → 4263 passed / 0 failed**（+16 =
+> tests/test_ad_batch.py）；env 预算 162 → 165。
+
+### 新增（成本与可观测）
+- **AD1 LLM 传输层思考控制**（src/agents/llm_client.py
+  `_openai_extra_body` + `_get_or_create_chat_client`）：OpenAI 兼容
+  路径（DeepSeek 等）新增三参数，zai 路径保持自身硬编码 disabled 不变：
+  - `LLM_THINKING_MODE`：**默认 disabled**（对齐 zai 路径"关思考"先例，
+    输出即工件本身，成本降一至两个数量级）；`enabled` 显式开启（=
+    R-P0-2 历史口径，质量敏感实验自行选择）；
+  - `LLM_REASONING_EFFORT`：none/low/high/max（默认不发；none 亦关
+    思考，low 为质量/成本折中档）；
+  - `LLM_MAX_OUTPUT_TOKENS`：输出硬上限 1..393216（默认不发；思考
+    关闭后非思考默认 8K 已够，设小值可进一步截断）。
+  客户端缓存键同步扩展（extra_body JSON 参与），环境变更即时生效。
+  **口径警示**：切换 thinking 模式改变模型行为——跨批次对比前核对
+  provenance（已自动记录三键，见 AD2）。
+- **AD2 输出成本可观测**：provenance env_snapshot 补
+  LLM_THINKING_MODE / LLM_REASONING_EFFORT / LLM_MAX_OUTPUT_TOKENS 三键
+  （跨批次成本/质量审计）；token_metrics 新增 `output_share_pct` /
+  `avg_output_per_task` / `avg_output_per_call`（输出占比为成本结构
+  首要指标——输出单价约为命中缓存输入的 10 倍以上）。
+
+### 预期收益（量化）
+- 以 R-P0-2 aitester 臂实测推算：5.23M 输出 → 关思考后预期 ≤0.6M
+  （工件体积 + 少量格式化文本），**输出成本约 ↓88%**；单批实验总成本
+  从 ~8.76M tokens 降至 ~3.5-4M（输入侧不变）。E1/E2/E3 后续复跑
+  （预算 ~15M）在关思考口径下预计总成本 ~5-6M。
+- 若质量敏感场景需保留思考链：`LLM_REASONING_EFFORT=low`（官方档位）
+  折中，或仅对 aitester 臂开启并作臂间成本注记。
+
+## [Unreleased] — 2026-10-06 第十轮审查落地批次 AC（规约契约修复 + 检出优先双门 + 编排定位重述 + 聚类稳健统计）
+
+> R-P0-2 生死实验合并报告（statistical_report_3seed_pooled.md）与第十轮
+> 系统性审查（T-P0-2/3/4/5）四项落地。全量回归 **4226 → 4247 passed /
+> 0 failed**（+21 = tests/test_ac_batch.py），ruff 0 / format 0 /
+> mypy 106 文件 0；env 预算 160 → 162（新增
+> DETECTION_SPECIFICITY_GATE_ENABLE / RED_REGRESSION_GATE_ENABLE 已登记）。
+
+### 修复（正确性）
+- **AC1 prompt–DSL 规约契约修复**（T-P0-2）：生死实验与 AB1 验证批
+  （12/12）实证 logic 档 `spec_compile_rate` 恒 0.0——根因是
+  `PLANNER_SYSTEM_PROMPT` 只要求中文 NL 规约，而 SpecIR v2
+  `is_expression_clause` 按 ASCII 表达式白名单判定（中文子句 100% 被拒），
+  prompt 与编译器两头从未对齐，规约链在一切真实运行中 0% 生效。修复：
+  ① 新增 `SPEC_EXPR_CONTRACT_SECTION` 契约段（src/prompts/templates.py），
+  `SPEC_IR_DSL_ENABLE=true`（logic/scientific 档）时 Planner 追加注入，
+  要求 LLM 在 NL 子句之外并行输出可机器执行的 `*_expr` 表达式子句
+  （默认关 prompt 零变化，ADR-0003）；② `parse_logic_analysis` 透传
+  `preconditions_expr` / `postconditions_expr` / `invariants_expr`；
+  ③ `compile_readiness` 分通道计率（expr 通道存在时衡量编译器接受率，
+  否则回落历史 NL 口径）；④ 契约锁定测试
+  （test_ac1_contract_roundtrip_compile_rate_positive）断言"按 prompt 契约
+  格式产出的规约必须编译率 > 0"——契约再漂移的永久回归防线。
+
+### 新增（协议与统计）
+- **AC2 检出优先双门**（T-P0-4，ADR-0016 + ADR-0015 修订记录第 6 条，
+  新模块 src/tools/detection_gates.py）：生死实验机制归因实证 −28pp 的
+  两条主通道——88 行过红测试（buggy 红 fixed 也红）与 28 行修复循环抹红
+  （再生成测试使最终测试在 buggy 原码上变绿）。① 特异性门
+  （`DETECTION_SPECIFICITY_GATE_ENABLE`）：首轮红先在 gold fixed 上对照
+  执行（复用 M1 判定原语），over_red 路由 regenerate 而非修复循环，
+  F2P 三段判定前移到环路内路由；真实仓库无 gold 时降级 unavailable。
+  ② 红回归门（`RED_REGRESSION_GATE_ENABLE`）：曾见红 + 测试被再生成后
+  变绿 + 源码未修补 = 抹红假成功，恢复红证人测试
+  （`red_witness_test_code`）并交回修复循环——"修复只许修源码，不许换
+  测试"原则的机制保证；纯状态比较零额外执行。两门均默认关、logic 档
+  注入；观测行级透出 `specificity_gate_verdict` /
+  `red_regression_violation`（键集合同构）；gold 材料经
+  `state["gold_fixed_code"]` 管道注入（评估/门禁专用，严禁入 prompt）。
+- **AC4 聚类稳健敏感性分析**（T-P0-5）：多种子拼接口径下同模板任务
+  跨种子为相关观测（50 模板簇 vs 261 观测/臂），逐对 McNemar 独立性
+  假设名义偏乐观。新增 `template_cluster_sensitivity` +
+  `run_cluster_sensitivity`（CLI `--cluster-by-template`）：设计效应
+  校正（DEFF=1+(m̄−1)·ICC）+ 模板级配对符号检验（精确二项）。生死实验
+  三组对比实测全部稳健（df vs plain_llm 校正后 χ²_adj=33.06 / 符号检验
+  22:0 p=4.8e-07；aitester vs plain_llm_df 5:17 p=0.017）——敏感性节已
+  追加进合并报告。
+- **AC4 伴随修复：plain_llm_df 升统计加载一等基线**（`_BASELINES`
+  补录）：生死实验核心对比臂此前被加载名单漏收，canonical 报告只能靠
+  仓外脚本补对比；现三臂对比（含 aitester vs plain_llm_df χ²=48.7935）
+  由规范管线直接产出，canonical `statistical_report.md` 已按白名单 +
+  pool-seeds 重生成。
+- **CITATION.cff**（T-P2-2）：cff 1.2.0 软件引用元数据（v0.7 / MIT /
+  仓库与 M1 方法学摘要），补第九轮审查缺口。
+
+### 文档与治理
+- **AC3 ADR-0016 编排定位重述**（docs/adr/0016）：生死实验决定性证据
+  （−28pp vs 纯提示协议、8.1× token）下，多智能体编排降级为"可消融
+  容器"，增益主张收缩为"检出优先提示协议 +43pp"；后续优化方向为
+  轻量管线（双门/契约/特异性反馈），不做编排加码；graph→experiments
+  反向导入冻结存量（门执行委托 M1 原语沿既有先例）。
+- ADR-0015 修订记录第 6 条（双门协议扩展）；ADR 索引补 0016 行；
+  .env.example 补双门口径说明；.gitignore 增 .mimosa 运行时状态排除
+  （hook-state/hook-status 含会话 ID，已跟踪 4 文件退跟踪待终端提交）。
+
+## [Unreleased] — 2026-10-06 生死实验根因修复批次 AB（M10 降级出口 + provenance/行级观测补齐 + 统计多种子拼接）
+
+> R-P0-2 生死实验（n=87×3 臂×3 种子，全量工件见 main_batch/）三项根因/
+> 观测缺口的修复落地。全量回归 **4210 → 4226 passed / 0 failed**
+> （+16 = tests/test_ab_batch.py），ruff 0 / format 0 / mypy 0；
+> env 预算 159 → 160（新增 LOGIC_SPEC_STRICT_FALLBACK_ENABLE 已登记）。
+
+### 修复（正确性，默认关）
+- **AB1 M10 强校验拒绝降级出口**（`LOGIC_SPEC_STRICT_FALLBACK_ENABLE`，
+  src/agents/planner.py `_strict_reject`）：生死实验实测 21/261 任务因
+  logic 档 `LOGIC_SPEC_STRICT_ENABLE=true` 在 Planner 第 0 轮直接 raise
+  （error_category='error'、detection=None、M1 分母外），同任务
+  plain_llm_df 臂正常检出——强校验把"模型未输出规约"（模型行为）升级成
+  "整任务死亡"（系统故障）。开启本开关后拒绝改为**显式标记降级**
+  （`logic_spec_rejected` 保留首因）+ 继续执行，吞吐恢复且非"静默"兜底
+  （M10 科学主张口径不回退）；默认 false 保持 raise（CI 科学主张测试
+  依赖）；logic 档预设注入 true。
+
+### 新增（观测）
+- **AB2 provenance 补 `profile` 字段**：生死实验复审发现 provenance 无
+  profile 字段（档位只能反推预设开关组合）；现显式记录
+  `config.ACTIVE_PROFILE`，快照键补 `AITESTER_PROFILE` 原文与
+  `LOGIC_SPEC_STRICT_FALLBACK_ENABLE`（审计可见性）。
+- **AB3 `spec_compile_rate` 行级透出**（R-P0-5 首块）：state 中
+  `_generator_node` 已写入的规约可编译率透出到结果行（成功透传 /
+  失败 None 占位键集合同构）——生死实验复审指出该缺口使规约 oracle
+  独立贡献无法评估。
+- **AB4 统计多种子拼接口径 `--pool-seeds`**
+  （statistical_analysis.py `pool_seeds` 全链路透传）：多种子批次
+  task_id 跨种子同名（中性化命名，设计使然）被"最新批次优先"去重
+  折叠成单种子（生死实验实测 3 种子 261 对折叠为 87 对）。开启后行
+  task_id 按批次 `provenance.seed` 加 `s<seed>__` 前缀——异种子分层
+  全量进入配对；同种子重复跑仍折叠（重跑协议语义保留）；无 seed
+  批次用文件名 stem 兜底。主批次 canonical 报告已按新口径重生成
+  （detection McNemar χ²=27.2250 / 240 共同任务，与手工合并分析
+  statistical_report_3seed_pooled.md 逐位一致）。
+
+### 实验结论登记（R-P0-2，详见 main_batch/statistical_report_3seed_pooled.md）
+- detection（gold 独立裁决，BH-FDR 后全显著）：plain_llm_df +43pp vs
+  plain_llm（δ=+0.426）；aitester +14pp vs plain_llm（三种子逐一显著）；
+  **aitester −28pp vs plain_llm_df（δ=−0.279）**——检出收益主要来自
+  检出优先提示协议本身，完整系统在强模型下相对纯提示协议净负贡献；
+  repair 全线 0；交叉分析定位两条机制通道（88 行过红测试 F2P 不通过、
+  28 行修复循环抹红）+ M10 杀任务（AB1 修复）。
+
+## [Unreleased] — 2026-10-06 主批次 runner 透传补齐（R-P0-2 生死实验前置）
+
+> 生死实验（R-P0-2 预注册：强模型 × 三臂 × 3 种子 × n=87）发车前置改动：
+> run_main_batch 补 `--max-pattern-repeat` 透传（R-P0-4 批次内 pattern 去重
+> ≤2 口径，底层能力 AA2 已实现）。全量回归 **4207 → 4210 passed / 0 failed**
+> （+3 = tests/test_2026_10_05_v_batch.py V6b：默认 None 解析 / kwargs 透传 /
+> 显式 None 历史口径锁定），ruff 0 / format 0 / mypy 0（src/ + config.py 门禁口径）。
+
+### 新增（功能）
+- **`run_main_batch.py --max-pattern-repeat`**：透传 `run_benchmark.max_pattern_repeat`
+  （仅 synthetic 生效；默认 None=历史口径，rng 消费序列逐位不变）。主批次从此
+  可在 R4 脚手架的干净树硬门禁 + temp=0 确定性协议 + R14 统计白名单下使用
+  同池模板重复上限，无需绕行 run_benchmark 直调而失去复现性门禁。
+
 ## [Unreleased] — 2026-10-06 代码优化批次 AA（审查优化项落地：logic 档补检出优先 + 合成集采样上限 + 文档矩阵守卫）
 
 > 来源：2026-10-06 系统性审查报告 R-P0-3 残余缺口 / R-P0-4a / R-P2-5 三项

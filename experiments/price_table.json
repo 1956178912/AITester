@@ -1,0 +1,26 @@
+{
+  "_comment": "AE2（2026-10-06 第十一轮审查 N8）：$/task 成本口径价目表。模型级登记；input_per_mtok / output_per_mtok = 每百万 token 价格（与 currency 同币种）。诚实条款：价格留 null 或模型未登记时该模型不参与成本计算（统计报告成本节按'价目未登记'口径输出，不编造价格）。source 必须填可核验的官方价目页 URL，as_of 填价格生效日期（YYYY-MM-DD）。补齐后重跑 statistical_analysis.py 即得 $/task 列。AK2（2026-10-06 第十二轮审查 R6）：deepseek-flash / qwen-long 已按官方页登记（峰时/标准价，非优惠价）；官方页未标注生效日期，as_of 按核验日登记。deepseek-flash 官方口径另有错峰半价（非 UTC 01:00-04:00/06:00-10:00 峰时）与缓存命中价（$0.006/M），本表按峰时全额登记（保守口径，成本为上界）；qwen-long 另有 Batch 半价，同按标准价登记。agnes-3.0-flash（api.agnes-ai.cn 聚合方）无公开官方价目页，维持 null 待用户登记。",
+  "models": {
+    "deepseek-flash": {
+      "input_per_mtok": 0.3,
+      "output_per_mtok": 1.2,
+      "currency": "USD",
+      "source": "https://api-docs.deepseek.com/quick_start/pricing",
+      "as_of": "2026-10-06"
+    },
+    "agnes-3.0-flash": {
+      "input_per_mtok": null,
+      "output_per_mtok": null,
+      "currency": "USD",
+      "source": "",
+      "as_of": ""
+    },
+    "qwen-long": {
+      "input_per_mtok": 0.5,
+      "output_per_mtok": 2.0,
+      "currency": "CNY",
+      "source": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
+      "as_of": "2026-10-06"
+    }
+  }
+}

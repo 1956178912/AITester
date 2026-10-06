@@ -5,9 +5,9 @@
 
 ## 1. 动机与现状
 
-当前系统在真实基准上的实证为零：SWE-bench Lite n=20 冒烟 resolved 0/20（限流 + 缺 `instance_code`/`sqlfluff` 依赖，工件 `results/swebench_20_summary.json` 等 5 份一致）；主批次全部证据来自合成数据集（n=50，detection 2.0% / repair 0.0% / false_fix 89.8%）。合成集无法回答"系统对真实历史缺陷是否有效"。
+当前系统在真实基准上的实证为零：SWE-bench Lite n=20 冒烟 resolved 0/20（限流 + 缺 `instance_code`/`sqlfluff` 依赖，工件 `results/swebench_20_summary.json` 等 5 份一致）；主批次全部证据来自合成数据集（历史批 n=50：detection 2.0% / repair 0.0% / false_fix 89.8%；当前口径 R-P0-2 三种子 n=261/臂：detection 15.8% / repair 0.0%）。合成集无法回答"系统对真实历史缺陷是否有效"。
 
-系统能力定位是**函数级**修复（合成集同为函数级），而 SWE-bench Lite 是仓库级基准——靶点错位。2026-10 检索口径：SWE-bench Verified 已趋饱和（官方 76%+，聚合器口径 90%+），对非 SOTA 系统的区分度下降；函数级/单文件级基准更贴合本系统能力。
+系统能力定位是**函数级**修复（合成集同为函数级），而 SWE-bench Lite 是仓库级基准——靶点错位。2026-10 检索口径（AL14 更新）：**SWE-bench Verified 已于 2026-02-23 被 OpenAI 官方弃用**（定性"饱和且高度污染"，内部审计发现 59.4% 最难未解任务的测试本身有缺陷）；替代榜 SWE-bench Pro / SWE-bench Live / SWE-rebench 三者排名互相冲突（2026-04 分析）——**L3 选型原则（预注册）：防污染滚动基准二选一（SWE-bench Live〔arXiv 2505.23419，滚动新增真实 issue〕 vs SWE-rebench〔Nebius 持续重建〕），执行前在 ADR 固化选型与理由，禁止单源口径；引用任何具体 SOTA 分数须先联网核验**；函数级/单文件级基准更贴合本系统能力（不变）。
 
 ## 2. 三级递进设计
 

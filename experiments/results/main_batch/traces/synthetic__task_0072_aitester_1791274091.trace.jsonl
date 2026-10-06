@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791274091.714804, "meta": {"dataset_task_id": "synthetic__task_0072", "baseline": "aitester", "target_function": null}}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791274108.2324748, "passed": false, "duration_s": 16.52, "token_usage": {"input_tokens": 460, "output_tokens": 3557, "total_tokens": 4017, "llm_calls": 1, "by_model": {"deepseek-flash": 4017}}}

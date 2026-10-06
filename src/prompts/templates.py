@@ -27,6 +27,31 @@ PLANNER_SYSTEM_PROMPT = """\
 8. 输出紧凑，无多余空格换行
 """
 
+# AC1（2026-10-06 第十轮审查 T-P0-2）：规约表达式通道契约段。
+# 背景：生死实验与 AB1 验证批实证 spec_compile_rate 恒 0.0——根因是
+# prompt 只要求中文 NL 规约，而 SpecIR v2 的 is_expression_clause 按
+# ASCII 表达式白名单判定（中文子句 100% 被拒），两头从未对齐
+# （templates.py NL 要求 vs spec_ir_v2.py _EXPR_TOKEN_RE）。
+# 修复：SPEC_IR_DSL_ENABLE=true（logic/scientific 档）时由 Planner 把
+# 本段追加进查询——要求 LLM 在 NL 子句之外**并行**输出可机器执行的表达式
+# 子句（受限 DSL：只用函数参数与白名单调用）。默认档不追加，prompt 零
+# 变化（ADR-0003）；compile_readiness 对 *_expr 字段分通道计率。
+SPEC_EXPR_CONTRACT_SECTION = """
+
+【规约表达式通道（机器可验证规约，严格执行）】
+在 logic_analysis 中追加三个可选字段（与既有 NL 字段并行，不替代）：
+"preconditions_expr": ["<布尔表达式>"], "postconditions_expr": ["<布尔表达式>"], "invariants_expr": ["<布尔表达式>"]
+表达式子句规则：
+1. 每条必须是**单条 Python 布尔表达式**，只用：函数参数名、数字、字符串字面量、
+   True/False/None、比较与布尔运算符（== != < <= > >= and or not）、
+   白名单调用 len() abs() min() max() round() float() int() str() sorted() any() all()、
+   索引与属性访问（如 result[0]）
+2. 禁止：中文、赋值、函数定义、import、白名单外的函数调用、超过 200 字符
+3. 示例：除法函数的前置条件 "b != 0"；排序函数的后置条件 "result == sorted(result)"
+4. 无法形式化的条件只写在原 NL 字段，不要写进 *_expr（宁缺毋滥）
+5. NL 字段（preconditions 等）照常输出，*_expr 是其可形式化子集
+"""
+
 # ─── Generator（根据逻辑分析生成测试）─────────────────────────────────────────
 GENERATOR_SYSTEM_PROMPT = """\
 你是一名测试代码生成专家。任务：根据测试计划生成 pytest 代码。

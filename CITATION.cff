@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: >-
+  If you use AITester in your research, please cite this software.
+title: AITester — Logic-anchored Multi-agent Test Generation with Detection-first Protocol
+authors:
+  - name: AITester Contributors
+    website: https://github.com/1956178912/AITester
+version: 0.7
+date-released: "2026-10-06"
+license: MIT
+repository-code: https://github.com/1956178912/AITester
+abstract: >-
+  A logic-anchored multi-agent system for Python unit test generation with a
+  detection-first protocol ("red before green"), SpecIR specification oracles,
+  paired attribution baselines (plain_llm / plain_llm_df), and M1 honest
+  metrics (detection / repair / false-fix) adjudicated by held-out gold
+  materials. The accompanying evaluation methodology — pooled multi-seed
+  statistics with McNemar, Bayesian paired analysis, BH-FDR, and
+  template-cluster sensitivity — is an integral part of the artifact.
+keywords:
+  - software testing
+  - LLM agents
+  - unit test generation
+  - automated program repair
+  - fault detection
+  - specification mining

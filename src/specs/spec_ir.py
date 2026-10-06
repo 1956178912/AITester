@@ -93,6 +93,14 @@ def parse_logic_analysis(
     inv = _as_str_list(
         logic_analysis.get("invariants") or logic_analysis.get("invariant") or logic_analysis.get("invariants_list")
     )
+    # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道字段透传——
+    # SPEC_EXPR_CONTRACT_SECTION（prompt 契约段）要求 LLM 在 NL 子句之外
+    # 并行输出可机器执行的 *_expr 子句；此处原样带入 SpecIR，由
+    # spec_ir_v2.compile_readiness 分通道计率（expr 通道 ASCII 白名单 +
+    # ast 判定，NL 通道维持历史保守口径）。
+    pre_expr = _as_str_list(logic_analysis.get("preconditions_expr"))
+    post_expr = _as_str_list(logic_analysis.get("postconditions_expr"))
+    inv_expr = _as_str_list(logic_analysis.get("invariants_expr"))
     # 规约来源：docstring 驱动（LLM 从 docstring 抽取）vs 手写
     source = logic_analysis.get("spec_source") or ("docstring" if func_name else "logic_analysis")
 
@@ -145,12 +153,23 @@ def parse_logic_analysis(
         "boundaries": boundaries,
         "oracle_kind": _infer_oracle_kind(pre, post, inv, boundaries),
     }
+    # AC1：表达式通道字段（非空才写键——历史 spec 无该键，消费方按缺省
+    # 空列表处理，schema 向后兼容）
+    if pre_expr:
+        spec["preconditions_expr"] = pre_expr
+    if post_expr:
+        spec["postconditions_expr"] = post_expr
+    if inv_expr:
+        spec["invariants_expr"] = inv_expr
     logger.info(
-        "SpecIR 解析：fn=%s pre=%d post=%d inv=%d boundaries=%d oracle=%s",
+        "SpecIR 解析：fn=%s pre=%d post=%d inv=%d expr(pre/post/inv)=%d/%d/%d boundaries=%d oracle=%s",
         func_name or "(unknown)",
         len(pre),
         len(post),
         len(inv),
+        len(pre_expr),
+        len(post_expr),
+        len(inv_expr),
         len(boundaries),
         spec["oracle_kind"],
     )

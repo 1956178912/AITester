@@ -2,7 +2,9 @@
 
 # 数据卡（DATA CARD）
 
-最后更新：2026-10-06（AA2：§2 重复采样偏差登记缓解机制 `max_pattern_repeat`；
+最后更新：2026-10-06（AH1：§4 许可节权威核实——QuixBugs MIT 已确认
+〔L1 前置解除〕、BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；
+此前 AA2：§2 重复采样偏差登记缓解机制 `max_pattern_repeat`；
 此前 Z6 新增：数据治理缺口补齐——此前数据说明并入
 MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 
@@ -45,7 +47,8 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
    runtime 两类，不代表真实仓库缺陷分布；
 3. **泄漏通道现状**：`problem_statement`（= pattern description，字面上
    是缺陷答案）当前仅被注入扫描消费、不进任何 prompt——该"无 prompt
-   消费点"不变量**尚无测试锁定**（登记为待办）；
+   消费点"不变量**已由静态守卫测试锁定**（AF-D，2026-10-06：
+   tests/test_af_batch.py；新增 prompt 侧消费必须显式更新本卡与该测试）；
 4. **统计功效**：n=50 在 detection 2% 基线下对 10pp 差异的检验功效不足
    （`scripts/power_analysis.py` 可复算）。
 
@@ -58,8 +61,22 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 - **BugsInPy**：manifest JSONL 口径（project / bug_id / buggy_code /
   fixed_code / test_code），task_id 末段为 ≤30 字符中性模块名（防泄缺陷
   语义）；`AITESTER_BUGSINPY_DATA` 注入；
-- **许可**：上游 QuixBugs / BugsInPy 数据**接入实跑前**须核实各自仓库
-  许可并在本卡登记核实结论与获取 commit（当前标注：待核实）。
+- **许可**（AH1，2026-10-06 经 GitHub API 权威核实并登记）：
+  - **QuixBugs：MIT License（已核实，L1/E4 前置条件解除）**——
+    `api.github.com/repos/jkoppel/QuixBugs` license 字段
+    `spdx_id=MIT`（核实日期 2026-10-06）；**数据已获取**（AJ 批，
+    2026-10-06）：本地 `data/quixbugs`（gitignore 区不入库），
+    commit `4257f44b0ff1181dedaedee6a447e133219fcebf`；零 LLM 加载器
+    冒烟实测 50 程序加载、41 个 gold 三件套齐全（9 个无官方测试的
+    任务按 M1 口径 detection=None 不进分母）；
+  - **BugsInPy：无 SPDX 可识别许可证（新发现合规门槛，L2 实跑前须
+    用户决策）**——`api.github.com/repos/google/bugsinpy` license 字段
+    为 null（2026-10-06 核实），即上游未随仓库声明许可、默认版权保留；
+    缓解措施：数据仅本地研究性使用（gitignore 区，不随仓库分发），
+    但**不构成完整合规**。L2 立项前三选一：①联系上游取得书面许可；
+    ②改用带许可证的真实缺陷基准（如 SWE-bench 系 MIT / Multi-SWE-bench）；
+    ③风险接受并在本卡与全局决策日志双登记。QuixBugs L1（E4）不受此
+    影响，可先行。
 
 ## 5. 维护约定
 

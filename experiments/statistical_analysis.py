@@ -37,6 +37,7 @@ import sys
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import scipy.stats as stats
@@ -53,13 +54,19 @@ if str(PROJECT_ROOT) not in sys.path:
 from experiments.bayesian_paired import bayesian_paired_analysis, interpret_bayes  # noqa: E402
 
 # 参与对比的基线（AITester 完整管线 + 两个简化基线）
-_BASELINES = ("aitester", "plain_llm", "single_agent")
+# AC4（2026-10-06 第十轮审查 T-P0-5 伴随修复）：plain_llm_df（检出优先
+# 协议归因基线，X1）升为统计加载一等基线——生死实验（n=87×3 臂×3 种子）
+# 的核心对比即 aitester vs plain_llm_df（−28pp），此前该臂被 _BASELINES
+# 名单漏收，canonical 报告只能靠仓外脚本补对比（statistical_report_3seed_
+# pooled.md 的已知缺口）。历史批次无该臂时自动空集，行为向后兼容。
+_BASELINES = ("aitester", "plain_llm", "single_agent", "plain_llm_df")
 
 
 def load_experiment_results(
     results_dir: str,
     batch_files: list[str] | None = None,
     allow_schema_mixed: bool = False,
+    pool_seeds: bool = False,
 ) -> dict[str, list[dict]]:
     """
     加载实验结果数据（历史入口，语义与 R2 之前完全一致）
@@ -80,7 +87,9 @@ def load_experiment_results(
     Returns:
         按基线分组的实验结果字典
     """
-    results, _ = load_experiment_results_with_sources(results_dir, batch_files, allow_schema_mixed=allow_schema_mixed)
+    results, _ = load_experiment_results_with_sources(
+        results_dir, batch_files, allow_schema_mixed=allow_schema_mixed, pool_seeds=pool_seeds
+    )
     return results
 
 
@@ -88,6 +97,7 @@ def load_experiment_results_with_sources(
     results_dir: str,
     batch_files: list[str] | None = None,
     allow_schema_mixed: bool = False,
+    pool_seeds: bool = False,
 ) -> tuple[dict[str, list[dict]], list[str]]:
     """R2（2026-10-05 审查）：加载实验结果并返回"实际纳入"的批次文件清单。
 
@@ -130,7 +140,7 @@ def load_experiment_results_with_sources(
         for _bp in _sort_batch_files_deterministic(results_path / _bf for _bf in batch_files):
             if _bp not in _seen_files:
                 _seen_files.add(_bp)
-                if _load_batch_file(results, _bp, allow_schema_mixed=allow_schema_mixed):
+                if _load_batch_file(results, _bp, allow_schema_mixed=allow_schema_mixed, pool_seeds=pool_seeds):
                     included_files.append(_display_path(_bp))
         return results, included_files
 
@@ -142,7 +152,7 @@ def load_experiment_results_with_sources(
     included_files.extend(
         _display_path(json_file)
         for json_file in _sort_batch_files_deterministic(results_path.glob("**/benchmark_*.json"))
-        if _load_batch_file(results, json_file, allow_schema_mixed=allow_schema_mixed)
+        if _load_batch_file(results, json_file, allow_schema_mixed=allow_schema_mixed, pool_seeds=pool_seeds)
     )
 
     return results, included_files
@@ -209,7 +219,9 @@ def _batch_is_m1_schema_complete(data: dict) -> bool:
     return False
 
 
-def _load_batch_file(results: dict[str, list[dict]], json_file: Path, allow_schema_mixed: bool = False) -> bool:
+def _load_batch_file(
+    results: dict[str, list[dict]], json_file: Path, allow_schema_mixed: bool = False, pool_seeds: bool = False
+) -> bool:
     """M13（2026-09-29 审查 P0）：加载单个批次文件并写入 results。
 
     仅纳入 dataset 为 "synthetic" 的批次（口径见 load_experiment_results
@@ -219,6 +231,13 @@ def _load_batch_file(results: dict[str, list[dict]], json_file: Path, allow_sche
     （结果行含 detection_rate 键，见 _batch_is_m1_schema_complete）——
     schema 不完备的早期/冒烟批次默认剔除（warning 可见），历史混批口径
     可经 allow_schema_mixed=True 显式恢复。
+
+    AB4（2026-10-06 生死实验方法学修复）：pool_seeds=True 时给每行
+    task_id 加 `s<seed>__` 前缀（seed 取批次 provenance.seed；缺失时用
+    文件名 stem 兜底）——多种子批次 task_id 跨种子同名（中性化命名，
+    设计使然）不再被 _pair_by_task"最新批次优先"去重折叠成单种子
+    （生死实验实测 3 种子 261 对折叠为 87 对）；同种子重复跑仍折叠
+    （前缀相同，重跑协议语义保留）。
 
     Returns:
         该文件是否实际纳入（R2 审计口径：dataset 非 synthetic、schema
@@ -237,9 +256,15 @@ def _load_batch_file(results: dict[str, list[dict]], json_file: Path, allow_sche
                 "--allow-schema-mixed"
             )
             return False
+        _seed_prefix: str | None = None
+        if pool_seeds:
+            _seed = (data.get("provenance") or {}).get("seed")
+            _seed_prefix = f"s{_seed}__" if _seed is not None else f"{json_file.stem}__"
         for baseline, baseline_data in data.get("results", {}).items():
             if baseline in results:
                 details = baseline_data.get("details", [])
+                if _seed_prefix is not None:
+                    details = [{**row, "task_id": f"{_seed_prefix}{row.get('task_id', '')}"} for row in details]
                 results[baseline].extend(details)
         return True
     except Exception as e:
@@ -722,11 +747,163 @@ def _fmt_stat_num(value: float, fmt: str = "{:.4f}") -> str:
     return fmt.format(value)
 
 
+# ----------------------------- AE2：成本口径（$/task，价目表驱动） -----------------------------
+
+
+def load_price_table(path: str | Path | None) -> dict[str, dict[str, Any]]:
+    """AE2（2026-10-06 第十一轮审查 N8）：加载 $/task 成本口径价目表。
+
+    文件结构（experiments/price_table.json）::
+
+        {"models": {"<model_name>": {"input_per_mtok": float | None,
+                                     "output_per_mtok": float | None,
+                                     "currency": "USD",
+                                     "source": "<官方价目页 URL>",
+                                     "as_of": "YYYY-MM-DD"}}}
+
+    诚实条款：模型未登记或任一价格为 null → 该模型不参与成本计算
+    （不编造价格）；文件缺失/解析失败/结构不符 → 返回空表（报告成本
+    节降级为"价目未登记"提示，不阻断报告生成）。
+    """
+    if path is None:
+        return {"models": {}}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"警告：价目表 {path} 加载失败（成本节按未登记口径输出）: {e}")
+        return {"models": {}}
+    models = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(models, dict):
+        return {"models": {}}
+    return {"models": {str(k): v for k, v in models.items() if isinstance(v, dict)}}
+
+
+def _model_is_priced(entry: Any) -> bool:
+    """AE2：模型条目是否具备完整可用价目（in/out 均为非负数值）。"""
+    if not isinstance(entry, dict):
+        return False
+    p_in = entry.get("input_per_mtok")
+    p_out = entry.get("output_per_mtok")
+    return all(isinstance(p, (int, float)) and not isinstance(p, bool) and p >= 0 for p in (p_in, p_out))
+
+
+def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) -> list[dict]:
+    """AE2：按基线汇总 token_usage 并计算 $/task（None 安全，不编造价格）。
+
+    行级口径：row["token_usage"]["input_tokens" / "output_tokens"]（缺失
+    按 0 计，行本身仍计入任务数分母）；模型归属按 row["token_usage"]
+    ["by_model"]（模型名 → 该任务 token 总数）。成本计算采用基线级
+    in/out 拆分（sum(input) × 输入单价 + sum(output) × 输出单价）——
+    当基线内出现**多个价目不同**的模型时，行级 in/out 无法按模型拆分
+    归属，此时成本诚实降级为 None（宁缺毋错）；缺 by_model 但有总
+    token 的行计入 token 汇总但不计入成本（unattributed_tokens 披露）。
+
+    Returns:
+        每个 baseline 一行（按 baseline 名排序）：{baseline, n_tasks,
+        input_tokens, output_tokens, by_model, missing_models,
+        unattributed_tokens, cost, cost_per_task, currency, priced}
+    """
+    models = price_table.get("models", {}) if isinstance(price_table, dict) else {}
+    cost_rows: list[dict] = []
+    for baseline in sorted(results):
+        rows = results[baseline] or []
+        input_total = 0
+        output_total = 0
+        unattributed = 0
+        by_model: dict[str, int] = {}
+        for row in rows:
+            tu = row.get("token_usage")
+            if not isinstance(tu, dict):
+                continue
+            input_total += tu.get("input_tokens") or 0
+            output_total += tu.get("output_tokens") or 0
+            bm = tu.get("by_model")
+            if isinstance(bm, dict) and bm:
+                for model_name, tokens in bm.items():
+                    by_model[str(model_name)] = by_model.get(str(model_name), 0) + (tokens or 0)
+            elif (tu.get("total_tokens") or 0) > 0:
+                unattributed += tu.get("total_tokens") or 0
+        used_models = [m for m, t in by_model.items() if t > 0]
+        missing = sorted(m for m in used_models if not _model_is_priced(models.get(m)))
+        cost: float | None = None
+        currency: str | None = None
+        if used_models and not missing:
+            price_pairs = {(models[m].get("input_per_mtok"), models[m].get("output_per_mtok")) for m in used_models}
+            currencies = {models[m].get("currency") or "USD" for m in used_models}
+            # 单一价目组合（常见：单模型批次）才可按基线级 in/out 拆分计价
+            if len(price_pairs) == 1 and len(currencies) == 1:
+                p_in, p_out = price_pairs.pop()
+                cost = input_total / 1_000_000 * float(p_in) + output_total / 1_000_000 * float(p_out)
+                currency = currencies.pop()
+        cost_per_task = cost / len(rows) if cost is not None and rows else None
+        cost_rows.append(
+            {
+                "baseline": baseline,
+                "n_tasks": len(rows),
+                "input_tokens": input_total,
+                "output_tokens": output_total,
+                "by_model": by_model,
+                "missing_models": missing,
+                "unattributed_tokens": unattributed,
+                "cost": cost,
+                "cost_per_task": cost_per_task,
+                "currency": currency,
+                "priced": cost is not None,
+            }
+        )
+    return cost_rows
+
+
+def _cost_report_lines(cost_rows: list[dict], price_table: dict[str, dict]) -> list[str]:
+    """AE2：报告成本章节 Markdown 行。
+
+    价目齐全 → 输出 $/task 表；价目缺失 → 诚实降级为"未登记"提示并
+    列出待计价模型清单（绝不编造价格）。历史报告不回写：本节仅在
+    新报告生成时出现。
+    """
+    lines = [
+        "成本口径：$/task = (Σ输入 token × 输入单价 + Σ输出 token × 输出单价) / 任务数；",
+        "价目来自 experiments/price_table.json（模型级登记，含来源与生效日期）；",
+        "token 行级来源 = 结果行 token_usage（input_tokens / output_tokens）；",
+        "多模型异价的基线无法按 in/out 拆分归属，成本诚实降级为未计价（—）。",
+    ]
+    priced = [r for r in cost_rows if r["priced"]]
+    if not priced:
+        models_seen = sorted({m for r in cost_rows for m, t in r["by_model"].items() if t > 0})
+        lines += [
+            "",
+            "**价目未登记**——本报告不含 $/task 数字（诚实条款：不编造价格）。",
+            f"待计价模型：{', '.join(models_seen) if models_seen else '（无 token 观测）'}。",
+            "补齐方式：在 experiments/price_table.json 对应模型条目填入",
+            "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
+        ]
+        return lines
+    lines += [
+        "",
+        "| Baseline | 任务数 | 输入 token | 输出 token | 成本/任务 | 币种 |",
+        "|----------|--------|-----------|-----------|-----------|------|",
+    ]
+    for r in cost_rows:
+        cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
+        cur = r["currency"] or "—"
+        lines.append(
+            f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} | {cpt} | {cur} |"
+        )
+    partial = [r for r in cost_rows if not r["priced"]]
+    if partial:
+        missing_desc = "；".join(f"{r['baseline']}（缺: {', '.join(r['missing_models'])}）" for r in partial)
+        lines += ["", f"注：{len(partial)} 个基线未计价——{missing_desc}。"]
+    return lines
+
+
 def run_all_statistics(
     results_dir: str,
     output_file: str | None = None,
     batch_files: list[str] | None = None,
     allow_schema_mixed: bool = False,
+    pool_seeds: bool = False,
+    price_table: dict[str, dict] | None = None,
 ) -> list[dict]:
     """
     运行所有统计检验并生成报告
@@ -741,6 +918,12 @@ def run_all_statistics(
             （结果行缺 detection_rate 的早期/冒烟批次；历史混批口径）。
             默认 False：仅纳入 M1 schema 完备批次，防 None/缺失行混入
             诚实指标分母（"detection 可测数"口径失真）。
+        pool_seeds: AB4（2026-10-06）——多种子拼接口径（task_id 按批次
+            seed 加前缀，多种子批次不再被去重折叠；语义见
+            load_experiment_results docstring）。
+        price_table: AE2（2026-10-06）——价目表（load_price_table 产物，
+            {"models": {...}}）；None 时按"价目未登记"口径输出成本节
+            （诚实降级，不编造价格）。
 
     Returns:
         比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig /
@@ -753,12 +936,20 @@ def run_all_statistics(
 
     # 加载数据（R2：同时取"实际纳入"的批次清单，供审计章节与控制台输出）
     data, source_files = load_experiment_results_with_sources(
-        results_dir, batch_files, allow_schema_mixed=allow_schema_mixed
+        results_dir, batch_files, allow_schema_mixed=allow_schema_mixed, pool_seeds=pool_seeds
     )
     _mode = "白名单" if batch_files is not None else "glob 全目录"
-    print(f"\n数据来源：{len(source_files)} 个批次文件（{_mode}模式）")
+    _pool_note = "，多种子拼接（seed 前缀）" if pool_seeds else ""
+    print(f"\n数据来源：{len(source_files)} 个批次文件（{_mode}模式{_pool_note}）")
     for _src in source_files:
         print(f"  - {_src}")
+
+    # AE2（2026-10-06 第十一轮审查 N8）：$/task 成本口径（价目表驱动，
+    # 价目缺失时诚实降级；None 参数 → "价目未登记"口径）
+    _effective_price_table = price_table if price_table is not None else {"models": {}}
+    cost_rows = cost_analysis(data, _effective_price_table)
+    _priced_n = sum(1 for r in cost_rows if r["priced"])
+    print(f"成本口径（AE2）：{_priced_n}/{len(cost_rows)} 基线价目齐全（$/task 见报告成本节）")
 
     # 计算基本统计量（2026-10-05 P0：并列统计 M1 诚实指标——passed 为
     # 自指指标（系统自产测试在未修复代码上通过，false_fix 主批次 89.8% 的
@@ -806,7 +997,7 @@ def run_all_statistics(
     print("=" * 70)
 
     comparisons: list[dict] = []
-    for baseline in ("plain_llm", "single_agent"):
+    for baseline in ("plain_llm", "single_agent", "plain_llm_df"):
         if stats_summary[baseline]["n"] == 0:
             continue
 
@@ -956,7 +1147,7 @@ def run_all_statistics(
     )
     honest_comparisons: list[dict] = []
     for metric_field, metric_label in honest_metric_fields:
-        for baseline in ("plain_llm", "single_agent"):
+        for baseline in ("plain_llm", "single_agent", "plain_llm_df"):
             if stats_summary[baseline]["n"] == 0:
                 continue
             h_chi2, h_p, h_ndiff, h_ncommon = mcnemar_test(data["aitester"], data[baseline], field=metric_field)
@@ -1024,6 +1215,7 @@ def run_all_statistics(
             f"--results-dir {results_dir} --output <report.md>"
             + (f" --batches {','.join(source_files)}" if source_files else "")
             + (" --allow-schema-mixed" if allow_schema_mixed else "")
+            + (" --pool-seeds" if pool_seeds else "")
         )
         report_lines += [
             "",
@@ -1032,6 +1224,14 @@ def run_all_statistics(
             "去重口径：同一 task_id 跨批次重复时最新批次优先（排序主键 = 批次",
             "文件名内嵌时间戳降序，文件系统 mtime 仅作无内嵌时间戳批次的兜底）。",
         ]
+        if pool_seeds:
+            report_lines += [
+                "",
+                "AB4 多种子拼接口径（--pool-seeds）：行 task_id 已按批次",
+                "provenance.seed 加 `s<seed>__` 前缀——多种子批次（task_id 跨种子",
+                "同名是中性化命名的设计使然）按种子分层全量进入配对检验；同种子",
+                "重复跑仍按上述去重口径折叠（重跑协议语义保留）。",
+            ]
 
         report_lines += [
             "",
@@ -1211,6 +1411,12 @@ def run_all_statistics(
                 f"| {comp['bayes_p_greater']:.4f} | {comp['bayes_p_rope']:.4f} | {comp['bayes_verdict']} |"
             )
 
+        # AE2（2026-10-06 第十一轮审查 N8）：$/task 成本口径章节——价目表
+        # 驱动，价目缺失时诚实降级为"未登记"提示（不编造价格）。历史
+        # 报告不回写：本节仅在新报告生成时出现。
+        report_lines += ["", "## 成本口径（$/task，价目表驱动——AE2）", ""]
+        report_lines += _cost_report_lines(cost_rows, _effective_price_table)
+
         report_lines += [
             "",
             "## 显著性标记说明",
@@ -1249,6 +1455,165 @@ def run_all_statistics(
     return comparisons
 
 
+def _icc_one_way_binary(values_by_cluster: dict[Any, list[float]]) -> float | None:
+    """AC4（2026-10-06 第十轮审查 T-P0-5）：单因素随机效应 ICC(1,1)（ANOVA 估计量）。
+
+    用于二值观测（detection 0/1）按模板聚类的组内相关估计——多种子
+    拼接口径下同模板任务跨种子是相关观测（261 对 McNemar 的独立性假设
+    需以设计效应校正做敏感性检验）。负估计量裁剪到 0（保守）；
+    退化解（单簇 / 全同值 / k<2）返回 None。
+    """
+    clusters = [v for v in values_by_cluster.values() if len(v) > 0]
+    k = len(clusters)
+    n_total = sum(len(c) for c in clusters)
+    if k < 2 or n_total <= k:
+        return None
+    grand = sum(sum(c) for c in clusters) / n_total
+    msb = sum(len(c) * (sum(c) / len(c) - grand) ** 2 for c in clusters) / (k - 1)
+    msw = sum(sum((x - sum(c) / len(c)) ** 2 for x in c) for c in clusters) / (n_total - k)
+    n0 = (n_total - sum(len(c) ** 2 for c in clusters) / n_total) / (k - 1)
+    denom = msb + (n0 - 1) * msw
+    if denom <= 0:
+        return None
+    return max(0.0, (msb - msw) / denom)
+
+
+def _exact_sign_test_p(wins_a: int, wins_b: int) -> float:
+    """精确双侧符号检验 p 值（二项分布，n=wins_a+wins_b，p=0.5）。"""
+    n = wins_a + wins_b
+    if n == 0:
+        return 1.0
+    from math import comb
+
+    tail = sum(comb(n, i) for i in range(min(wins_a, wins_b) + 1))
+    return min(1.0, 2.0 * tail / (2**n))
+
+
+def _rows_pattern_name(row: dict) -> Any:
+    """提取行级模板标识（task_metadata.pattern_name；缺失→None）。"""
+    md = row.get("task_metadata") or {}
+    return md.get("pattern_name")
+
+
+def template_cluster_sensitivity(
+    rows_a: list[dict],
+    rows_b: list[dict],
+    label_a: str,
+    label_b: str,
+) -> str:
+    """AC4：模板聚类稳健敏感性分析（单对比，返回 Markdown 段）。
+
+    内容：
+    1. 逐对 McNemar（与规范 _pair_by_task 同口径的二值 discordant 计数）
+       + 设计效应校正后的保守 χ²（χ²_adj = χ² × n_eff/n，DEFF=1+(m̄-1)·ICC）；
+    2. 模板级聚合配对符号检验（每模板臂内 detection 均值，公共模板
+       逐一比较胜负，精确二项 p）——完全摆脱逐对独立性假设的非参数口径。
+
+    仅消费行级 detection_rate 与 task_metadata.pattern_name；缺失
+    pattern_name 的行按 "unknown" 簇处理（敏感性口径，不丢弃观测）。
+    """
+    lines = [f"### {label_a} vs {label_b}（模板聚类稳健敏感性）", ""]
+
+    def _binary(rows: list[dict]) -> dict[Any, float]:
+        out: dict[Any, float] = {}
+        for r in rows:
+            det = r.get("detection_rate")
+            if det is None:
+                continue
+            out[r.get("task_id")] = 1.0 if det > 0 else 0.0
+        return out
+
+    bin_a, bin_b = _binary(rows_a), _binary(rows_b)
+    common = sorted(set(bin_a) & set(bin_b), key=str)
+    b_cnt = sum(1 for t in common if bin_a[t] > bin_b[t])
+    c_cnt = sum(1 for t in common if bin_b[t] > bin_a[t])
+    chi2 = (b_cnt - c_cnt) ** 2 / (b_cnt + c_cnt) if (b_cnt + c_cnt) > 0 else 0.0
+
+    # 模板簇结构（按臂内可测行聚合；两臂合并估计 ICC 更稳健）
+    clusters: dict[Any, list[float]] = {}
+    for bin_map in (bin_a, bin_b):
+        row_by_id = {r.get("task_id"): r for r in (rows_a if bin_map is bin_a else rows_b)}
+        for t, v in bin_map.items():
+            pat = _rows_pattern_name(row_by_id.get(t, {})) or "unknown"
+            clusters.setdefault(pat, []).append(v)
+    k = len(clusters)
+    n_obs = sum(len(v) for v in clusters.values())
+    m_bar = n_obs / k if k else 0.0
+    icc = _icc_one_way_binary(clusters)
+    if icc is None:
+        lines.append(f"- ICC 不可估（簇结构退化：k={k}），逐对口径维持原判。")
+        return "\n".join(lines) + "\n"
+    deff = 1.0 + (m_bar - 1.0) * icc
+    n_eff = n_obs / deff if deff > 0 else n_obs
+    chi2_adj = chi2 * (n_eff / n_obs)
+
+    # 模板级配对符号检验
+    tmpl_a: dict[Any, list[float]] = {}
+    row_by_id_a = {r.get("task_id"): r for r in rows_a}
+    for t, v in bin_a.items():
+        pat = _rows_pattern_name(row_by_id_a.get(t, {})) or "unknown"
+        tmpl_a.setdefault(pat, []).append(v)
+    tmpl_b: dict[Any, list[float]] = {}
+    row_by_id_b = {r.get("task_id"): r for r in rows_b}
+    for t, v in bin_b.items():
+        pat = _rows_pattern_name(row_by_id_b.get(t, {})) or "unknown"
+        tmpl_b.setdefault(pat, []).append(v)
+    common_pats = sorted(set(tmpl_a) & set(tmpl_b), key=str)
+    wins_a = sum(1 for p in common_pats if sum(tmpl_a[p]) / len(tmpl_a[p]) > sum(tmpl_b[p]) / len(tmpl_b[p]))
+    wins_b = sum(1 for p in common_pats if sum(tmpl_b[p]) / len(tmpl_b[p]) > sum(tmpl_a[p]) / len(tmpl_a[p]))
+    ties = len(common_pats) - wins_a - wins_b
+    sign_p = _exact_sign_test_p(wins_a, wins_b)
+
+    lines.append(
+        f"- 逐对 McNemar：discordant {b_cnt}:{c_cnt}，χ²={chi2:.4f}；"
+        f"聚类校正（k={k} 模板簇，m̄={m_bar:.2f}，ICC={icc:.3f}，DEFF={deff:.3f}，"
+        f"n_eff={n_eff:.1f}/{n_obs}）→ 保守 χ²_adj≈{chi2_adj:.4f}"
+    )
+    lines.append(
+        f"- 模板级符号检验（{label_a} 胜 {wins_a} / {label_b} 胜 {wins_b} / 平 {ties}，"
+        f"共 {len(common_pats)} 公共模板）：精确二项 p={sign_p:.6g}"
+    )
+    return "\n".join(lines) + "\n"
+
+
+def run_cluster_sensitivity(
+    results_dir: str = "experiments/results",
+    output_file: str | None = None,
+    batch_files: list[str] | None = None,
+    allow_schema_mixed: bool = False,
+    pool_seeds: bool = True,
+) -> str:
+    """AC4 运行器：对全部基线对比产出聚类稳健敏感性 Markdown 章节。
+
+    数据口径与 run_all_statistics 完全一致（load_experiment_results_with_sources
+    + pool_seeds 拼接）；默认 pool_seeds=True（敏感性分析主要服务多种子
+    合并口径）。output_file 提供时落盘（追加模式），恒打印控制台。
+    """
+    data, source_files = load_experiment_results_with_sources(
+        results_dir, batch_files, allow_schema_mixed=allow_schema_mixed, pool_seeds=pool_seeds
+    )
+    header = [
+        "## 模板聚类稳健敏感性分析（AC4，T-P0-5）",
+        "",
+        f"数据来源：{len(source_files)} 个批次（pool_seeds={pool_seeds}）。",
+        "动机：多种子拼接口径下同模板任务跨种子为相关观测，逐对 McNemar 的",
+        "独立性假设名义偏乐观；本节以设计效应校正 + 模板级符号检验做敏感性检验，",
+        "方向与量级一致即结论稳健。",
+        "",
+    ]
+    sections: list[str] = []
+    pairs = [("plain_llm_df", "plain_llm"), ("aitester", "plain_llm"), ("aitester", "plain_llm_df")]
+    for a, b in pairs:
+        if data.get(a) and data.get(b):
+            sections.append(template_cluster_sensitivity(data[a], data[b], a, b))
+    body = "\n".join(header + sections)
+    print(body)
+    if output_file:
+        with open(output_file, "a", encoding="utf-8") as f:
+            f.write("\n" + body + "\n")
+    return body
+
+
 def main() -> None:
     """R2：命令行入口（--batches 批次白名单；未提供时行为与历史完全一致）。
 
@@ -1279,13 +1644,51 @@ def main() -> None:
         action="store_true",
         help="X2（P0-4b）：纳入 schema 不完备批次（结果行缺 detection_rate 的早期/冒烟批次）——历史混批口径，默认剔除",
     )
+    parser.add_argument(
+        "--pool-seeds",
+        action="store_true",
+        help="AB4（2026-10-06）：多种子拼接口径——行 task_id 按批次 provenance.seed 加前缀，"
+        "多种子批次不再被 task_id 去重折叠成单种子；同种子重复跑仍折叠（重跑协议语义保留）",
+    )
+    parser.add_argument(
+        "--cluster-by-template",
+        action="store_true",
+        help="AC4（2026-10-06，T-P0-5）：仅产出模板聚类稳健敏感性分析章节"
+        "（设计效应校正 + 模板级符号检验；默认 pool_seeds=True 口径）",
+    )
+    parser.add_argument(
+        "--sensitivity-output",
+        default=None,
+        help="AC4：敏感性章节落盘路径（追加模式；缺省仅打印控制台）",
+    )
+    parser.add_argument(
+        "--price-table",
+        default="experiments/price_table.json",
+        help="AE2（2026-10-06）：$/task 价目表路径（默认 experiments/price_table.json；"
+        "文件不存在或价格未登记时成本节按'价目未登记'口径输出，不编造价格）",
+    )
     args = parser.parse_args()
+
+    if args.cluster_by_template:
+        run_cluster_sensitivity(
+            args.results_dir,
+            output_file=args.sensitivity_output,
+            batch_files=[p.strip() for p in (args.batches or "").split(",") if p.strip()] or None,
+            allow_schema_mixed=args.allow_schema_mixed,
+            pool_seeds=True,
+        )
+        return
 
     batch_files: list[str] | None = None
     if args.batches:
         batch_files = [p.strip() for p in args.batches.split(",") if p.strip()]
     run_all_statistics(
-        args.results_dir, args.output, batch_files=batch_files, allow_schema_mixed=args.allow_schema_mixed
+        args.results_dir,
+        args.output,
+        batch_files=batch_files,
+        allow_schema_mixed=args.allow_schema_mixed,
+        pool_seeds=args.pool_seeds,
+        price_table=load_price_table(args.price_table),
     )
 
 

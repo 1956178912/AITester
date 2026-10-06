@@ -15,6 +15,7 @@ LLM 客户端管理与调用工具模块。
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import re
@@ -62,18 +63,63 @@ class LLMEmptyResponseError(RuntimeError):
 # ChatOpenAI 内部客户端线程安全，可被并发任务（--parallel）共享。
 # 缓存上限：配置组合数远小于 16，超出时按 FIFO 淘汰（防止 key 轮换场景膨胀）
 _MAX_CACHED_LLM_CLIENTS = 16
-_llm_client_cache: dict[tuple[str, float, str, str], ChatOpenAI] = {}
+# AD1：缓存键含 extra_body JSON（思考控制/输出上限参与键）
+_llm_client_cache: dict[tuple[str, float, str, str, str], ChatOpenAI] = {}
 # 缓存锁：get→构造→evict→insert 整段需原子，否则并发同 key miss 会各建一份
 # 客户端（双份 httpx 连接池），且双线程同时触发 FIFO evict 时互相淘汰新插入
 # 的实例（thrashing）。采用双检锁：无锁快路径命中直接返回，miss 时加锁再查
 _llm_client_cache_lock = threading.Lock()
 
 
+def _openai_extra_body() -> dict[str, Any]:
+    """构建 OpenAI 兼容路径的额外请求体（AD1，2026-10-06 输出成本控制）。
+
+    背景（实测证据）：R-P0-2 生死实验 aitester 臂输出 5.23M tokens、
+    单任务最高 84k 输出，而实际工件（测试 + 补丁）仅 ~1-2k token——
+    90%+ 输出为 deepseek V4 系（V4.1 Flash）**默认开启的思维链**
+    （官方文档：thinking 默认 enabled；未设 max_tokens 时思考模式默认
+    上限 64K；reasoning_tokens 计入 completion 输出计费）。zai 路径
+    此前已硬编码 thinking disabled（跨服务商先例），本函数把同口径
+    带到 OpenAI 兼容路径。
+
+    环境变量（三者均登记 docs/env_budget.yaml）：
+    - LLM_THINKING_MODE："disabled"（**默认**，对齐 zai 先例的成本保护）
+      / "enabled"（质量敏感实验显式开启；R-P0-2 历史口径即默认开启）；
+    - LLM_REASONING_EFFORT："none" / "low" / "high" / "max"（默认不发；
+      none 亦关闭思考，low 为质量/成本折中）；
+    - LLM_MAX_OUTPUT_TOKENS：输出硬上限 1..393216（默认不发——思考
+      关闭后 V4 非思考默认 8K 已够；设小值可进一步截断长响应）。
+
+    Returns:
+        传给 ChatOpenAI extra_body 的字典（空字典 = 不附加任何额外字段）。
+    """
+    body: dict[str, Any] = {}
+    mode = (os.getenv("LLM_THINKING_MODE", "disabled") or "").strip().lower()
+    if mode in ("disabled", "enabled"):
+        body["thinking"] = {"type": mode}
+    effort = (os.getenv("LLM_REASONING_EFFORT", "") or "").strip().lower()
+    if effort in ("none", "low", "high", "max"):
+        body["reasoning_effort"] = effort
+    mt_raw = (os.getenv("LLM_MAX_OUTPUT_TOKENS", "") or "").strip()
+    if mt_raw:
+        try:
+            mt = int(mt_raw)
+            if 1 <= mt <= 393216:
+                body["max_tokens"] = mt
+            else:
+                logger.warning("LLM_MAX_OUTPUT_TOKENS=%s 越界（1..393216），忽略", mt_raw)
+        except ValueError:
+            logger.warning("LLM_MAX_OUTPUT_TOKENS=%s 非整数，忽略", mt_raw)
+    return body
+
+
 def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str, base_url: str) -> ChatOpenAI:
     """获取（或创建）缓存的 ChatOpenAI 客户端实例。
 
-    以 (model_name, temperature, api_key, base_url) 为缓存键，相同组合复用
-    同一实例，避免每次 LLM 调用重复构建 OpenAI SDK 客户端与 HTTP 连接池。
+    以 (model_name, temperature, api_key, base_url, extra_body) 为缓存键，
+    相同组合复用同一实例，避免每次 LLM 调用重复构建 OpenAI SDK 客户端与
+    HTTP 连接池；extra_body（AD1 思考控制/输出上限）参与键——进程内
+    变更环境变量后能取到新配置的客户端（测试与多配置口径）。
 
     Args:
         model_name: 模型名称。
@@ -84,7 +130,8 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
     Returns:
         ChatOpenAI 实例（缓存命中或新建）。
     """
-    key = (model_name, temperature, api_key, base_url)
+    _extra_body = _openai_extra_body()
+    key = (model_name, temperature, api_key, base_url, json.dumps(_extra_body, sort_keys=True))
     client = _llm_client_cache.get(key)
     if client is not None:
         return client
@@ -94,12 +141,15 @@ def _get_or_create_chat_client(model_name: str, temperature: float, api_key: str
         if client is not None:
             return client
         # langchain-openai 的 ChatOpenAI 接受 openai_api_key（与 OpenAI SDK 的
-        # api_key 等价）；mypy 按严格 API 签名校验会报 call-arg，显式忽略
+        # api_key 等价）；mypy 按严格 API 签名校验会报 call-arg，显式忽略。
+        # extra_body 承载 DeepSeek V4 thinking 控制 / 输出上限（AD1）——
+        # LangChain 透传给底层 OpenAI 兼容端点，空字典时透传 {} 等价无附加。
         client = ChatOpenAI(  # type: ignore[call-arg]
             model=model_name,
             temperature=temperature,
             openai_api_key=api_key,
             base_url=base_url,
+            extra_body=_extra_body,
         )
         # 达到上限时淘汰最早插入的条目（dict 保持插入序，FIFO）
         if len(_llm_client_cache) >= _MAX_CACHED_LLM_CLIENTS:

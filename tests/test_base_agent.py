@@ -27,7 +27,11 @@ from src.agents.base_agent import (
     _get_or_create_chat_client,
     _is_zai_compatible,
 )
-from src.agents.llm_client import _llm_client_cache, _retry_with_exponential_backoff
+from src.agents.llm_client import (
+    _llm_client_cache,
+    _openai_extra_body,
+    _retry_with_exponential_backoff,
+)
 from src.utils.helpers import _find_balanced_json
 
 
@@ -359,17 +363,25 @@ class TestChatClientReuse:
 
     @patch("src.agents.llm_client.ChatOpenAI")
     def test_fifo_eviction_at_capacity(self, mock_chat_openai, monkeypatch):
-        """缓存达到上限时按 FIFO 淘汰最早条目。"""
+        """缓存达到上限时按 FIFO 淘汰最早条目。
+
+        AD1（2026-10-06）：缓存键扩展为 5 元组（extra_body JSON 参与），
+        预期键以 _openai_extra_body() 的当前环境值拼接。
+        """
         import src.agents.llm_client as ba
 
+        monkeypatch.delenv("LLM_THINKING_MODE", raising=False)
+        monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+        monkeypatch.delenv("LLM_MAX_OUTPUT_TOKENS", raising=False)
         monkeypatch.setattr(ba, "_MAX_CACHED_LLM_CLIENTS", 2)
 
-        k1 = ("m1", 0.0, "k", "https://a.example.com")
-        k2 = ("m2", 0.0, "k", "https://a.example.com")
-        k3 = ("m3", 0.0, "k", "https://a.example.com")
-        _get_or_create_chat_client(*k1)
-        _get_or_create_chat_client(*k2)
-        _get_or_create_chat_client(*k3)
+        _suffix = json.dumps(_openai_extra_body(), sort_keys=True)
+        k1 = (*("m1", 0.0, "k", "https://a.example.com"), _suffix)
+        k2 = (*("m2", 0.0, "k", "https://a.example.com"), _suffix)
+        k3 = (*("m3", 0.0, "k", "https://a.example.com"), _suffix)
+        _get_or_create_chat_client(*k1[:-1])
+        _get_or_create_chat_client(*k2[:-1])
+        _get_or_create_chat_client(*k3[:-1])
 
         assert len(_llm_client_cache) == 2
         assert k1 not in _llm_client_cache  # 最早插入的 m1 被淘汰

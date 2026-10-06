@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check gates repro power self-check
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces
 
 PY := .venv/bin/python
 
@@ -40,7 +40,13 @@ baseline-check:  ## BASELINE.yaml 结构 + 文档数字漂移守卫
 	$(PY) scripts/check_baseline.py
 	$(PY) scripts/check_baseline_numbers.py
 
-gates: lint typecheck test docs-check env-budget baseline-check  ## 本地全部门禁（合并前自检）
+state-contract:  ## LangGraph 状态通道静态契约守卫（AK4 接入 CI）
+	$(PY) scripts/check_state_contract.py
+
+tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
+	$(PY) scripts/check_tool_versions.py
+
+gates: lint typecheck test docs-check env-budget baseline-check state-contract tool-versions  ## 本地全部门禁（合并前自检）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
@@ -50,3 +56,7 @@ power:  ## 统计功效分析速览（Z8：先算样本量，再跑实验）
 
 self-check:  ## 功效分析往返一致性自检
 	$(PY) scripts/power_analysis.py --self-check
+
+clean-traces:  ## 清理失败追踪残留（tmp_trace/，--dump-trace-on-failure 运行时产物，可再生）
+	rm -rf tmp_trace
+	@echo "tmp_trace/ 已清理"

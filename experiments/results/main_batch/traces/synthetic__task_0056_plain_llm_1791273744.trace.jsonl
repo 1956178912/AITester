@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791273744.708212, "meta": {"dataset_task_id": "synthetic__task_0056", "baseline": "plain_llm", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791273751.0688682, "run_id": "1fdc87482b314ced", "span_id": "53477eeed72a", "output": {"generated_test_len": 2259}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791273751.522978, "run_id": "1fdc87482b314ced", "span_id": "e9276561fb02", "output": {"passed": true, "coverage": 100.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 452.56, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791273755.292166, "passed": true, "duration_s": 10.58, "token_usage": {"input_tokens": 455, "output_tokens": 1478, "total_tokens": 1933, "llm_calls": 1, "by_model": {"deepseek-flash": 1933}}}

@@ -167,6 +167,18 @@ jobs:
       - name: Check lock sync
         run: python scripts/check_lock_sync.py
 
+      - name: Check tool versions (B-05 三方版本一致)
+        # AK4（2026-10-06 第十二轮审查 R10）：check_tool_versions.py 此前
+        # 未接入 CI（脚本自述"CI 接线：Check lock sync 之后"未兑现）——
+        # ci.yml / pre-commit / lock 三方工具版本漂移只在本地可发现。
+        run: python scripts/check_tool_versions.py
+
+      - name: Check LangGraph state contract (P1-6 静态契约)
+        # AK4（2026-10-06 第十二轮审查 R10）：check_state_contract.py 此前
+        # 未接入 CI——状态通道"写不进 + 读不到"静默链（M14/O35 同类根因）
+        # 的静态差集审计只在本地可发现。纯 stdlib AST 快检。
+        run: python scripts/check_state_contract.py
+
       - name: Verify experiment artifact checksums (U1 证据链门禁)
         # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
         # traces + SHA256SUMS）已入库（.gitignore 白名单修复）。本步骤校验
@@ -175,6 +187,16 @@ jobs:
         # 三档矩阵只跑 3.14（工件与 Python 版本无关）。
         if: matrix.python-version == '3.14'
         run: python scripts/checksum_results.py --results-dir experiments/results/main_batch --verify
+
+      - name: Check artifacts tracked (AK3 引用链入库守卫)
+        # AK3（2026-10-06 第十二轮审查 R1）：报告引用的关键证据工件
+        #（三种子批次 JSON / 统计报告 / 预注册 / 价目表）必须被 git 跟踪，
+        # 否则"报告 → 工件 → commit 时间序"引用链断裂（R-P0-2 期间
+        # pooled 报告曾与工件 provenance 矛盾且全部 untracked）。仅查
+        # git ls-files，零网络秒级；本地未提交时预期红（由 CI 承担）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/check_artifacts_tracked.py
+
 
       - name: Check zero-assertion tests (U3 弱断言守卫)
         # U3（2026-10-05 系统性审查落地）：tests/ 内"零断言"测试函数守卫——
@@ -453,6 +475,7 @@ jobs:
           name: security-reports-${{ github.run_number }}
           path: |
             pip_audit_latest.json
+            pip_audit_lock.json
             gitleaks_report.json
           retention-days: 7
           if-no-files-found: ignore

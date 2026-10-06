@@ -16,6 +16,7 @@
 | [0013](0013-classifier-explanability.md) | 错误分类可解释性字段与修复策略追踪链 | 已采纳 | `ClassificationResult.explanation` 命中特征 / 置信度口径 / 兜底标注，四环节追踪链闭环，零 LLM 成本 | `src/agents/error_classifier.py` |
 | [0014](0014-branch-coverage-gates.md) | 分支覆盖率门槛上调（总 85% / 核心修复路由模块 90%） | 已采纳 | 总门槛 79%→85% + 核心修复路由模块 90% 严格门槛；总分支率改用加权聚合修复口径漂移 | `scripts/check_branch_coverage.py`、`tests/test_workflow_combinations.py` |
 | [0015](0015-detection-first-protocol.md) | 检出优先协议（DETECTION_FIRST_ENABLE，默认关） | 已采纳 | "先红后绿"成功口径：首轮全绿不再视为成功，路由一次再生成强化测试；终态标注 red_then_green / all_green_unverified | `config.py`、`src/graph/workflow.py`、`nodes.py`、`src/agents/generator.py` |
+| [0016](0016-orchestration-container-repositioning.md) | 编排定位重述：可消融容器 + 检出优先轻量管线 | 已采纳 | 生死实验（−28pp vs 纯提示协议、8.1× token）实证编排净负后，增益主张收缩为检出优先协议 +43pp；双门（特异性门/红回归门）为协议层扩展；修复循环测试文件锁定；AK 补修复上限归因（patch 产出 94%/plausible 47%/correct 0） | `src/tools/detection_gates.py`、`src/graph/workflow.py`、`experiments/statistical_analysis.py`、`experiments/repair_ceiling_analysis.py` |
 
 ## 状态约定
 
@@ -26,8 +27,10 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0015 已用 → 下一个 0006；
-   0006–0010 保留给在途批次，勿占用）；
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0016 已用 → 下一个
+   0017；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
+   （`git log --diff-filter=A` 零命中），为避免与外部引用错位不再回收，
+   新 ADR 勿占用该段）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；
 3. 正文结构：`# ADR-NNNN: 标题` + 元信息（日期 / 状态 / 关联模块）+
    背景 / 决策 / 后果 / 已知局限与演进方向；

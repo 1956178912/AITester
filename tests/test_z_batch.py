@@ -153,9 +153,15 @@ class TestZ6Z7DocsAndTooling(unittest.TestCase):
         self.assertTrue(en.exists())
         zh_text = zh.read_text(encoding="utf-8")
         en_text = en.read_text(encoding="utf-8")
-        # 泄漏控制与许可核实结论是数据卡的核心承诺字段
-        self.assertIn("待核实", zh_text)
-        self.assertIn("to be verified", en_text)
+        # 泄漏控制与许可核实结论是数据卡的核心承诺字段。
+        # AH1（2026-10-06）许可经 GitHub API 权威核实：QuixBugs=MIT（L1 前置
+        # 解除）、BugsInPy 无 SPDX 许可证（L2 决策门槛）——断言由"待核实"
+        # 状态升级为"核实结论已登记"状态。
+        self.assertIn("spdx_id=MIT", zh_text)
+        self.assertIn("spdx_id=MIT", en_text)
+        # BugsInPy 无许可门槛必须保持登记（L2 立项前置）
+        self.assertIn("null", zh_text)
+        self.assertIn("null", en_text)
 
     def test_makefile_and_issue_templates_exist(self):
         makefile = PROJECT_ROOT / "Makefile"

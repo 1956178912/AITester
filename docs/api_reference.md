@@ -3,9 +3,10 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
+> 最后更新：2026-10-06（第十二轮审查落地批次 AK：实验侧新增 `experiments/repair_ceiling_analysis.py` 离线归因分析〔repair=0 修复漏斗 + detection=None 双界敏感性，见 2.x 统计分析配套条目〕；src/ 零改动、默认行为不变；AA 及更早批次见"上一批"与 CHANGELOG）
+> 上一批：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
 >
-> 上一批：2026-10-05（审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
+> 更早批次：2026-10-05（审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
 >
 > 上一轮：2026-09-29（审查优化轮：P0 运行时探针缺陷修复——历史 settrace exception 事件采集在函数体异常时不传播到被调帧，实测 frames 恒空（探针自引入以来从未真正生效）；本轮改为异常抛出时刻读 exc.__traceback__ 帧链（零 trace 开销），同步修复单字符变量误过滤 / 行号错误（f_lineno → tb_lineno）/ 模块过滤永不匹配 / 子线程未处理异常泄漏；默认行为不变，RUNTIME_PROBE_ENABLE=false 时零差异）
 >
@@ -666,6 +667,7 @@ python experiments/statistical_analysis.py \
 
 - 报告头部新增**"数据来源"审计章节**：列出实际纳入的批次文件与条目数，读者可核对 p 值背后的样本构成；
 - 配套：`experiments/analyze_results.py` 聚合 M1 四指标（`detection_rate` / `repair_rate` / `false_fix_rate` / `test_error_rate`；None 不计入分母，旧 JSON 无该字段时自动跳过）。
+- 配套（AK1，2026-10-06）：`experiments/repair_ceiling_analysis.py`——R-P0-2 工件的纯离线归因分析：repair=0 修复漏斗（修复循环 → patch 产出 → patch_plausible → patch_correct，附 patch_evidence_level / stop_reason / error_category 分布与 fl_at_k、mutation 观测覆盖率）+ 21 行 `detection=None` 双界敏感性（None→0/1 填充重算 McNemar）。与 pooled 报告同参口径（`--batches` 白名单 + `--pool-seeds`），产出 `experiments/results/main_batch/repair_ceiling_report.md`。
 
 ---
 

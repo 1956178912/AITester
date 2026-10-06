@@ -1,15 +1,20 @@
 # AITester Model Card
 
-Last updated: 2026-10-05 (optimization batch T6)
+Last updated: 2026-10-06 (Round-13 review batch AL: the AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim in line with CITATION.cff + E6/E7 pre-registration; previous batch AK: evaluation caliber refreshed to the R-P0-2 three-seed pooled batch + repair-ceiling attribution + officially sourced $/task)
 
 ## 1. System Overview
 
-AITester is a logic-driven multi-agent test generation and self-repair research
-system: given function-level repair tasks (from a synthetic dataset or SWE-bench
-Lite splits), a LangGraph-orchestrated Planner → Generator → Executor →
-Debugger → PatchApplier loop generates pytest tests, executes them, diagnoses
-failures, and patches code. This card describes model usage, data provenance,
-and the risk surface (following NIST AI RMF and common model-card entries; the
+AITester is a logic-anchored multi-agent test generation and repair-evaluation
+research system (detection-first criterion): given function-level repair
+tasks (from a synthetic dataset or SWE-bench Lite splits), a
+LangGraph-orchestrated Planner → Generator → Executor → Debugger →
+PatchApplier loop generates pytest tests, executes them, diagnoses failures,
+and patches code. The three-seed main batch measured repair = 0.0% (gold
+adjudication) — **self-repair is a measurable metric, not a demonstrated
+claim** (AL5 repositioning; ceiling attribution in
+`experiments/results/main_batch/repair_ceiling_report.md`). This card
+describes model usage, data provenance, and the risk surface (following
+NIST AI RMF and common model-card entries; the
 system is research code, not a deployed product).
 
 ## 2. Model Usage
@@ -39,11 +44,30 @@ system is research code, not a deployed product).
 
 ## 4. Evaluation Protocol and Known Limitations (Honesty Notes)
 
-- Current main batch (synthetic n=50, seed 42): detection_rate=2.0%,
-  repair_rate=0.0%, false_fix_rate=89.8% (see the `benchmark` section of
-  `BASELINE.yaml`); real SWE-bench Lite (n=20 smoke run): 0/20 resolved.
-  The system's effectiveness claims are **not yet supported by real-benchmark
-  evidence**; BASELINE.yaml is the single source of truth for numbers.
+- Current caliber = R-P0-2 lifespan experiment, three seeds pooled
+  (2026-10-06, n=261/arm, logic profile, deepseek-flash, McNemar + BH-FDR
+  all significant; see the `benchmark` section of `BASELINE.yaml` and
+  `statistical_report_3seed_pooled.md`): detection plain_llm_df 44.8% >
+  aitester 15.8% > plain_llm 1.5%; aitester vs df **−28pp** — the full
+  system is significantly worse than the plain prompting protocol on a
+  strong model (net-negative orchestration contribution; robust under dual
+  bounds for the 21 missing rows).
+- **repair 0.0% across all arms** (zero discordant pairs): the repair claim
+  has no supporting evidence. Ceiling attribution
+  (`repair_ceiling_report.md`, AK1): repair loop 154/261 → patch produced
+  94.2% → plausible 46.8% → correct 0 — the bottleneck is patch plausibility
+  and gold correctness, not patch production.
+- Cost: aitester $0.0259 / plain_llm_df $0.0045 per task (officially sourced
+  price table, 2026-10-06: deepseek-flash peak-hour rates, qwen-long
+  standard rates; agnes unregistered absent a public official price).
+- spec_compile_rate measured constantly 0.0 in the logic profile (AB1
+  validation batch 12/12) — the "logic-driven" spec chain is not activated;
+  current detection gains attribute to the detection-first prompting
+  protocol. E1 (preregistered thresholds ≥0.3 keep / <0.2 drop) is the
+  deciding experiment for that claim.
+- Real SWE-bench Lite (n=20 smoke run): 0/20 resolved. The system's
+  effectiveness claims are **not yet supported by real-benchmark evidence**;
+  BASELINE.yaml is the single source of truth for numbers.
 - The full "logic-driven" chain (SpecIR DSL / deterministic oracle / structured
   routing) is off by default; enable with `AITESTER_PROFILE=logic`.
 
