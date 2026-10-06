@@ -75,7 +75,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
 formal = ["z3-solver>=4.12.0"]
 # P2-5：MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
 # 仅调用时导入）。
-db = ["pymysql>=1.0.0", "DBUtils>=3.0.0"]
+db = ["pymysql>=1.0.0", "DBUtils>=3.2.0"]
 
 [project.scripts]
 aitester = "src.cli.app:cli"

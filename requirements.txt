@@ -17,7 +17,7 @@ openai==2.54.0
 pymysql==1.2.0
 # DBUtils: 数据库连接池（PooledDB），src/db/mysql_client.py 使用以提升并发能力
 # （2026-09-09 依赖审计补齐：此前漏声明，全新环境安装本文件后 src.db 模块无法导入）
-DBUtils==3.1.2
+DBUtils==3.2.0
 # click: 命令行接口框架，提供 aitester run 等子命令
 click==8.4.2
 
