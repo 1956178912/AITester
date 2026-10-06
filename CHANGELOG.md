@@ -4,6 +4,272 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-06 代码优化批次 AA（审查优化项落地：logic 档补检出优先 + 合成集采样上限 + 文档矩阵守卫）
+
+> 来源：2026-10-06 系统性审查报告 R-P0-3 残余缺口 / R-P0-4a / R-P2-5 三项
+> "无需预算 / 无破坏性"代码优化。全量回归 **4195 → 4207 passed / 0 failed**
+> （+12 = tests/test_aa_batch.py），ruff 0 / format 0 / mypy 0（105 文件）；
+> env 预算 159 不变（零新增开关，AA1 复用已登记名 DETECTION_FIRST_ENABLE）。
+
+### 修复（正确性）
+- **AA1 logic 档预设补 `DETECTION_FIRST_ENABLE`**（config.py `_PROFILE_PRESETS["logic"]`）：
+  logic 档定义于 O1，早于 W3 检出优先协议（ADR-0015）落地，漏配行为层核心开关——
+  ADR-0015"可经 AITESTER_PROFILE=logic 组合"的口径由此补齐：logic 档主批次下
+  首轮全绿不再计成功，路由 regenerate 逼 generator 先检出（红）再修复（绿），
+  直指主批次 false_fix=89.8% 的奖励自指根因。默认档（fast / 不设 PROFILE）行为零变化。
+
+### 新增（功能，默认关）
+- **AA2 `SyntheticDataset(max_pattern_repeat=...)` 同池模板重复上限**（src/datasets/synthetic_dataset.py
+  + experiments/run_benchmark.py `--max-pattern-repeat` CLI 透传）：opt-in 参数
+  （默认 None=历史口径，`_pick_pattern` 走原路径，rng 消费序列逐位不变，主批次
+  seed=42 复现性不受影响）。启用时同 `(difficulty, pattern)` 出现次数达上限即从
+  候选剔除，全池达上限清零该池计数后轮转重选——缓解主批次
+  "import_chain_type_contract 重复 10 次"式分布塌缩（DATA_CARD §2/§3 声明的
+  分布偏差第一项落地缓解）。
+
+### 文档（漂移守卫）
+- **AA3 README CI 矩阵漂移修复 + 静态守卫**（README.md / README.en.md）：CI 实跑
+  矩阵为 3.12/3.13/3.14（ci.yml `python-version`，BASELINE.yaml `python_ci_matrix`
+  为单一事实来源），README 仍写"3.12, 3.14"——已对齐，并新增
+  tests/test_aa_batch.py::TestCIMatrixDocGuard（README(.en) ↔ BASELINE.yaml
+  `python_ci_matrix` 一致性断言）防再漂移。
+
+### 测试
+- tests/test_aa_batch.py 12 用例（AA1 ×3 / AA2 ×7 / AA3 ×2）。教训固化：profile
+  档 setdefault 注入类测试的清理列表必须动态取自档位键全集且先清场后断言——
+  首版静态枚举漏清理，12 个泄漏开关污染同 worker 后续测试，误伤
+  test_patch_rollback / test_planner 共 5 用例（xdist 下环境变量泄漏是横向
+  污染源）。
+
+## [Unreleased] — 2026-10-06 优化批次 Z（第八轮独立系统性审查落地：代码级修复四项 + 统计方法学升级 + 文档治理扩围 + 工程入口补齐）
+
+> 本轮审查（2026-10-06，全新独立执行：工作树文件实读 + 外部文献检索）结论：评估诚实性与工程
+> 纪律达标，但核心科学主张仍无阳性实证（detection 2.0% / repair 0.0% / false_fix 89.8%，
+> 与 plain_llm 无显著差异；SWE-bench Lite 0/20）。本批次落地全部"无需预算 / 无破坏性"的
+> 改进项；需要付费 API 或危险操作的项仅登记待办（见文末），不擅自执行。
+> 全量回归 **4177 → 4195 passed / 0 failed**（+18 = tests/test_z_batch.py），
+> ruff 0 / mypy 0（105 文件）/ 覆盖率行 89.48% 分支 82.56%（ratchet 水位 89.0/82.0 双绿，
+> 较 W 批次 89.44/82.47 均微升）。
+
+### 修复（正确性）
+- **Z1 策略银行提示文本不再拼入补丁代码**（src/graph/nodes.py 专家池路径 + 独立路径两处；
+  src/graph/state.py 新声明键 `strategy_bank_hint` + 工厂初始化 None）：`prompt_hint` 是给
+  下一轮 debugger **prompt** 的自然语言策略提示（strategy_bank.py:34 注释原文如此），此前被
+  `+ "\n\n" +` 直接追加进候选 patch **代码**——自然语言混入代码，只能靠下游 AST 守卫兜底
+  拒绝（浪费候选且污染补丁内容）。现改存 state 观测键（默认关时恒 None，键集合同构），
+  patch 保持纯代码；空补丁轮次的策略命中同样记录（观测解耦）。
+- **Z2 再生成上限单一事实源**（config.py 新增 `MAX_REGENERATIONS`；workflow 别名 + nodes
+  局部字面量收敛同源）：删除 nodes 内靠注释"同口径"维系的重复定义（漂移风险已登记）。
+- **Z3 仓库环境缓存校验全等**（src/agents/executor_repo.py 首检 + 锁内复检两处）：
+  `commit[:12]` 前缀比较改全等——前缀碰撞时会把"同仓库不同 commit"的缓存环境误判命中
+  （错 commit 基线代码）。全等的退化方向是安全的：短 sha 入参时重建而非误用。
+- **Z4 telemetry 死占位符清理**（src/observability/agent_telemetry.py 删除
+  `_PATTERns_detectors_alias` 拼写遗留行；11 个失败模式检测器完整性由测试锁定）。
+
+### 新增（统计方法学——审查 R06 落地）
+- **Z8 功效分析脚本**（scripts/power_analysis.py，纯 stdlib，`make power` / `--self-check`）：
+  配对比例（McNemar 口径）的 required_n / detectable_delta / power 闭式实现 + 往返一致性
+  自检。**实测结论：主批次口径（基线 2%、p11=1%）下以 80% 功效检出 10pp detection 差异
+  需 n≈87——"n=50 功效不足"自此有量化依据**（下一轮实验设计的预注册依据）。
+- **Z9 贝叶斯配对分析**（experiments/bayesian_paired.py 新模块 + statistical_analysis.py
+  接线）：2×2 列联表 Dirichlet 均匀先验后验，δ = p(AITester)−p(基线) 的后验均值 /
+  95% 可信区间 / P(δ>0) / ROPE（±5pp）概率；Monte Carlo 纯 stdlib、固定 seed=42 逐位
+  可复现；配对口径与 `_pair_by_task` 等价性由测试锁定。统计报告新增"贝叶斯配对分析"
+  章节（诚实指标 + passed 并列，与 NHST 并列呈现不替换；方法学依据 Furia et al., TSE
+  2019, arXiv:1811.05422——小样本下"p=0.4795 不显著"无法区分"真无差异"与"功效不足"，
+  后验直接量化效应量不确定度）。存量批次报告不回写（历史工件口径不变，新批次生效）。
+
+### 新增（文档治理与工程入口）
+- **Z5 双语文档门禁扩围**（scripts/check_bilingual_docs.py `_CHECK_FILES` 增加根目录
+  5 组配对：README / QUICKSTART / CONTRIBUTING / MODEL_CARD / SECURITY）：此前门禁只扫
+  docs/ 与 CHANGELOG，CONTRIBUTING.en.md 曾落后中文版 8 天而 CI 无感知（本轮审查发现）。
+  配套：重写 CONTRIBUTING.en.md 与中文版对齐（补并行测试说明、修正违反单一事实源规则的
+  硬编码覆盖率数字、补"依赖豁免登记"整节）；新建 SECURITY.en.md；4 个英文版补
+  Last updated 日期行（strict 门禁 0 警告 0 失败）。
+- **Z6 数据卡**（docs/DATA_CARD.md + .en.md 双语，入 docs 门禁）：数据集来源 / 构造 /
+  gold 材料 schema / 偏差声明（出题人=判卷人）/ 泄漏控制现状（`problem_statement` 无
+  prompt 消费点的不变量**尚无测试锁定**——登记待办）/ QuixBugs·BugsInPy 许可
+  "接入实跑前须核实"。
+- **Z7 工程入口**（Makefile：help / install / lint / format / typecheck / test / test-cov /
+  docs-check / env-budget / baseline-check / gates / repro / power 单入口；
+  .github/ISSUE_TEMPLATE/ bug + feature 两模板）。
+
+### 卫生
+- **Z11 孤儿缓存清理**：删除 `src/cache/3e97ed3084b42d4e.json`（缓存目录迁
+  `~/.cache/aitester/llm` 后残留的含完整 prompt+响应文本文件；已确认 gitignore 覆盖、
+  未入库）。注意：`.env.local` 与 `src/.env.local`（明文密钥，均未入库）**未动**——
+  移出源码树涉及本地工作流变更，待用户决策。
+
+### 待办（需要预算 / 用户决策，本批次不执行）
+- 真实基准实跑（L1 QuixBugs 40 全量 / L2 BugsInPy 30，加载器已就绪）；检出优先协议
+  生死实验（强模型 × ≥5 seed × plain_llm_df 三臂）；single_agent 受损基线复跑
+  （W6 修复后的数字）；`$/resolved` 成本报告（llm_configs.json 无价目字段，需先补价目
+  表）；密钥轮换 + git 历史重写（runbook 就绪，破坏性操作）；ADR-0016"多智能体降为
+  消融维度"定位决策。
+
+## [Unreleased] — 2026-10-06 优化批次 Y（X 批次真实冒烟补遗：检出优先终态三值 + 再生成计数透出 + MAST 对齐 + README 瘦身）
+
+> 2026-10-05 深夜—10-06 凌晨：用免费档存活模型（qwen-long 等）对 X 批次新链路做**真实 LLM 端到端冒烟**
+> （examples/calculator_divide，plain_llm_df 基线）：trace 实证
+> PASS→regenerate→FAIL→done——弱测试全绿被检出优先协议逼出再生成，
+> 第二版测试**检出除零缺陷（红）**；缓存命名空间 seed42 自动生效、
+> provenance 字段落盘。冒烟同时发现两处观测缺陷并当场修复：
+> ①终态标注只在通过轮写——"全绿→再生成→变红→终止"轨迹下
+> all_green_unverified 残留为终值，与 red_seen=True 矛盾；②
+> regeneration_count 不进结果行，协议的 +1 LLM call 成本不可量化。
+> 全量回归 **4169 → 4177 passed / 0 failed**（+8 =
+> tests/test_y_batch.py；W3 观测用例按三值口径更新），ruff 0 / mypy 0。
+
+### 修复（科学性）
+- **Y1 检出优先终态三值**（src/graph/nodes.py `_derive_detection_first_status`
+  纯函数）：red_then_green / all_green_unverified / **red_not_repaired**
+  （新增：检出成功但未修复——plain_llm_df 无修复循环的正常终态 /
+  aitester 修复失败终态，**评估层 detection 口径应计数，不得因
+  passed=False 丢弃**）；无红失败不写（保留上一轮值）。ADR-0015 已追加
+  修订记录（含本次冒烟证据）。
+- **Y1 regeneration_count 透出**（experiments/run_benchmark.py）：结果行
+  成功/失败两分支均携带（协议关恒 None，键集合同构）。
+
+### 新增
+- **Y2 MAST 分类法对齐**（src/observability/agent_telemetry.py）：11 个
+  本地失败模式按保守判定映射到 MAST 14 类（Cemri et al., arXiv
+  2503.13657, NeurIPS 2025）——报告 patterns 每项新增 mast_class /
+  mast_category，Markdown 渲染新增两列；无对应类显式 None（资源治理
+  信号 budget_early_stop 与本地伞形 known_error_category_hit，诚实口径
+  不硬凑）。跨系统失效标注自此可与其他 MAST 标注研究横向比较。
+
+### 文档
+- **README 瘦身**（P1-6 首批）：删除"2026-09-28 前沿推荐批次落地说明"
+  blockquote 42 行（内容已由 CHANGELOG G 批次条目承载，-42 行）；修复
+  两处硬编码漂移（代码规范行 mypy 源文件数 zh"62"/en"91" vs 实际 105
+  ——改指向 BASELINE.yaml `static_checks.mypy_source_files`，历轮 lint
+  叙事归档 CHANGELOG）；"最近改动"行双语更新至 X/Y 批次。
+
+## [Unreleased] — 2026-10-05 优化批次 X（第七轮独立系统性审查落地：复现性机制 + 归因基线 + 统计口径 + repo 守卫 + 开关冻结）
+
+> 同日第七轮独立全量审查（忽略此前审查；子代理额度耗尽改主会话直读）
+> 落地其全部可自主执行项；需要付费 API / 危险操作的项（强模型生死实验、
+> QuixBugs 数据获取与实测、密钥轮换 + filter-repo）仅就绪基础设施，
+> 不擅自执行。本批次核心发现：①**缓存键不含 seed 且 seed 不传 API**
+> ——多 seed 复跑在缓存开启下是确定性重放，统计独立性失效（X1/P0-4a
+> 修复）；②**统计报告白名单混入 2 个 n=5 冒烟批次**（detection_rate
+> 全 None）——"60 任务/可测 49"分母口径失真（X2/P0-4b 修复，重生成报告
+> 后数据概览收敛 50/50/50，与 BASELINE.yaml 历史引用数字逐位一致）；
+> ③缺 plain_llm+检出优先归因基线——强模型下 plain_llm 追平时无法区分
+> "协议提示词效应"与"多智能体编排效应"（X1/P0-3 新增 plain_llm_df）。
+> 全量回归 **4149 → 4169 passed / 0 failed**（+20 = tests/test_x_batch.py），
+> ruff 0 警告、mypy 105 源文件 0 错误，`BASELINE.yaml` 已同步，
+> main_batch/SHA256SUMS 已随统计报告重生成刷新（184 项校验通过）。
+
+### 新增（科学性，P0）
+- **X1/P0-4a 缓存实验命名空间**：`AITESTER_CACHE_NAMESPACE` 加入 LLM
+  文件缓存键材料（src/agents/base_agent.py）；run_benchmark 在 seed
+  指定且缓存开启时自动设为 `seed<N>`（不同 seed 各自真实调用，同 seed
+  复跑共享缓存 = 可复现性保留）；provenance 新增 `cache_namespace` 字段
+  与 `DETECTION_FIRST_ENABLE` / `AITESTER_CACHE_NAMESPACE` 快照键
+  （缓存开但无命名空间的批次 = 跨批次复用风险，工件可审计）。
+- **X1/P0-3 plain_llm_df 归因基线**（experiments/run_benchmark.py +
+  src/graph/workflow.py + config.py）：plain_llm + 检出优先协议
+  （ADR-0015）叠加——无 Planner、无修复循环，但保留 executor →
+  generator 再生成路由（`build_workflow(allow_regeneration=True)` 新
+  拓扑；"debug"（测试失败需修复）映射 "done"：失败即潜在检出，交 M1
+  独立裁决，与 plain_llm 不修复口径一致）。检出优先经
+  `config.set_detection_first_thread_override` **线程级覆盖**启用
+  （--parallel 下多任务线程并发跑不同基线，进程级 os.environ 会串扰
+  邻线程 plain_llm；finally 恢复防线程池残留）。不进默认基线列表
+  （历史批次可比性保持），显式 `--baselines plain_llm_df` 指定。
+- **X2/P0-4b 统计 schema 完备性过滤**（experiments/statistical_analysis.py）：
+  批次含任一非 None `detection_rate` 行才纳入（"M1 指标已计算"判据）；
+  键存在但全 None 的批次（main_batch 的 2 个 n=5 冒烟批次）默认剔除
+  （warning 可见），`--allow-schema-mixed` 显式恢复历史混批口径；
+  复算命令在 mixed 模式自动追加同名旗标（可复现性自洽）。
+- **X3/P0-5 env 开关预算守卫**（scripts/check_env_budget.py +
+  docs/env_budget.yaml + CI）：产品开关面（src/ + config.py，实测 159 个
+  唯一环境变量）冻结棘轮——新增环境变量须本地运行脚本登记进
+  docs/env_budget.yaml 随改动提交（登记 = 显式 PR 动作），CI `--check`
+  阻断未登记新增；删名允许（表随之收缩）。
+- **X4/P2 PEP 561 类型标记**：src/py.typed + pyproject
+  [tool.setuptools.package-data]（wheel 随包分发；缺此安装方 mypy 视
+  本包 untyped）。
+
+### 修复（安全，P0/P1）
+- **C5 repo 链路危险 API 守卫**（src/agents/executor_repo.py）：
+  `_apply_llm_patch` 在 git apply 之前对补丁 "+" 行（新增代码）跑
+  patch_applier._collect_dangerous_calls（含 C4 from-import 别名图与
+  动态构造绕过检测）——本地链路有 AST 差集守卫而 repo 链路裸奔的
+  缺口封堵；命中即拒绝应用（FAIL_TO_PASS 按无补丁实测裁决，与 M2
+  测试文件保护同口径），在任何写盘/git 操作之前返回。
+
+### 变更（行为口径）
+- 统计报告默认口径变化（X2）：main_batch 统计报告已按新口径重生成
+  （数据概览 50/50/50；诚实指标 McNemar 数字不变：detection 2.0% vs
+  2.0% p=0.4795 / repair 0% vs 0% p=1.0）；旧行为可 `--allow-schema-mixed`
+  复现。tests/test_r2_statistical_report.py 与
+  tests/test_2026_10_05_n_batch.py 的批次 fixture 补非 None
+  detection_rate 字段（新口径下不带该字段的 fixture 会被过滤）。
+
+## [Unreleased] — 2026-10-05 优化批次 W（第四轮独立系统性审查的可执行项落地：检出优先协议 + 基线健全性修复 + 真实基准加载器 + ratchet 门禁 + 安全文档）
+
+> 同日第四轮独立系统性审查（3 路并行深查 + 文献核验，忽略此前审查）落地其
+> 可自动化子集；需要 API 预算 / GPU / 危险操作的项（强模型多种子复跑、
+> SWE T7 复跑、git 历史重写）以 runbook 形式交付（见 W8）而非擅自执行。
+> 核心发现驱动本批次：①**single_agent 基线是残废基线**（prompt 不含模块名
+> → 主批次 50/50 猜错导入 → test_error_rate=94% 纯伪影；绕过工作流致
+> error_category 100% 误报 execution_trace_missing——"t=21、d=2.97 大效应量"
+> 不可作架构收益证据）；②**修复奖励自指**是 false_fix 89.8% 的根因。
+> 全量回归 **4130 → 4149 passed / 0 failed**（+19 = tests/test_w_batch.py），
+> ruff 0 警告、mypy 105 源文件 0 错误、行 89.44% / 分支 82.47%，
+> `BASELINE.yaml` 已同步。
+
+### 修复（科学性，P0）
+- **W6 single_agent 基线健全性**（experiments/run_benchmark.py）：prompt
+  注入真实模块名（此前合成任务模块名=task_id 末段，LLM 只能猜，主批次
+  50/50 猜成 math_utils 等——plain_llm 走完整工作流有模块名注入，两基线
+  口径不对齐）；移除与"只输出测试代码"自相矛盾的"生成修复补丁"要求；
+  变异反馈拼接移到 LLM 调用**之前**（原实现拼在调用后，从未进入 prompt，
+  死代码）；补记 execution_trace（首轮 + 修复轮，此前恒空 → 失败类别
+  100% 误报 execution_trace_missing，掩盖真实失败归因）。
+- **W1 文档漂移**：README 双语 round7 断链改指 CHANGELOG（原 docs/review_*
+  已随 P1-9 删除）；check_bilingual_docs.py 清除 5 个指向已删文件的死豁免项；
+  experiments/statistical_report.md（2026-09-25 旧口径 71.7%/66.4%/8.6%）
+  解除跟踪并入 gitignore 区（statistical_analysis 默认输出改
+  experiments/results/statistical_report.md）；Dockerfile.repro 注释硬编码
+  total_passed=3760 改指向 BASELINE.yaml；合成模板唯一 pattern 数 = 50
+  经全池去重复核确认（新增守卫测试锁定与 BASELINE.yaml 一致，防三处口径漂移）。
+
+### 新增（科学性）
+- **W3 检出优先协议**（ADR-0015，`DETECTION_FIRST_ENABLE` 默认关）：
+  "先红后绿"成功口径——首轮（iteration==0，代码未修复）测试全绿 = 未检出
+  任何缺陷，不再视为成功：路由一次再生成（detection_first_all_green），
+  Generator 注入强化段落（断言期望值必须来自问题语义，禁止放松断言/重写
+  被测函数）；终态标注 red_then_green / all_green_unverified（评估层不得
+  把 all_green_unverified 计为检出/修复成功）；red_seen 为任务级粘性信号；
+  再生成计数并入第 4 类入口（防 executor↔generator 乒乓）；结果行透出
+  detection_first_red_seen / detection_first_status 两键。直指 false_fix
+  89.8% 的奖励自指根因；红-on-original 是 F2P 的"buggy 红"半段，无需 gold
+  即可在线生效。
+- **W4 真实缺陷基准加载器**（docs/design/real_benchmark_upgrade.md 阶梯
+  L1/L2 由"设计稿"转落地）：`src/datasets/dataset_realbugs.py` 新增
+  QuixBugsDataset（python_programs/correct_python_programs/python_testcases
+  目录解析）与 BugsInPyDataset（manifest JSONL 口径，官方工作流导出），
+  注册 `load_dataset("quixbugs"|"bugsinpy")`；gold 材料对齐合成集口径
+  （metadata.test_cases/fixed），M1 诚实指标开箱可用（含 task_id 末段
+  = 模块名的中性化约定）；目录缺失空数据集 + warning 优雅降级。
+- **W2 覆盖率渐进 ratchet**（scripts/coverage_ratchet.py + ci.yml 接线 +
+  docs/coverage_ratchet.yaml 水位 89.0/82.0）：静态硬门禁（85/77）之上
+  只升不降的水位门禁——本地跑 ratchet 实测高于水位+步长自动上调随改动
+  提交，CI --check 阻断回退；消除"贴基线设门槛 + 为门槛写测试"的动机。
+- **W8 安全文档**：新增 SECURITY.md（披露与响应流程，此前缺失的社区健康
+  文件）+ docs/security/history_leak_remediation_runbook.md（历史泄漏
+  cleanup runbook：密钥轮换 → git filter-repo → gitleaks 全历史转阻断，
+  含验收标准——仓库当前最大未了结安全债的闭环路径）。
+
+### 变更（实验口径，阴性证据驱动）
+- **W7 reproduce.sh 默认口径**：RAG 与多候选补丁退出默认集（A/B 实测
+  RAG token +40.7% 无成功率增益、多候选 -2pp + token +256%）——默认全关，
+  `--enable-rag` / `--multi-candidate` 显式开启（--no-* 参数保留为兼容
+  空操作）；README 双语对应描述同步。
+
 ## [Unreleased] — 2026-10-05 优化批次 V（第三轮独立审查落地：科学性修复 + 实验基建 + 模板库扩容 + 工程加固）
 
 > 同日第三轮**全新独立系统性审查**（忽略此前审查，四路并行深查 src 链路 /

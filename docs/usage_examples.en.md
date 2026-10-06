@@ -104,6 +104,15 @@ python experiments/run_benchmark.py \
     --dataset synthetic \
     --task-count 50 \
     --baselines aitester
+
+# AA (2026-10-06): per-pool template repeat cap (opt-in; a (difficulty,
+# pattern) pair appears at most 2 times, preventing distribution collapse;
+# omitting the flag = legacy behavior)
+python experiments/run_benchmark.py \
+    --dataset synthetic \
+    --task-count 50 \
+    --max-pattern-repeat 2 \
+    --baselines aitester
 ```
 
 ---

@@ -912,6 +912,11 @@ class TestGetAvailableDatasets:
             "swebench_pro",
             "defects4j_python",
             "d4j_py",
+            # W4（2026-10-05 审查落地）：真实缺陷基准阶梯 L1/L2
+            "quixbugs",
+            "quix_bugs",
+            "bugsinpy",
+            "bugs_in_py",
             "in_memory",
             "examples",
             "synthetic",

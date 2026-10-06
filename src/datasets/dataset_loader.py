@@ -717,6 +717,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 # BaseDatasetLoader / BenchmarkTask，顶层导入会触发循环导入。
 # ruff E402/I001：刻意置于模块中部（非顶层），忽略排序告警。
 from src.datasets.dataset_defects4j import Defects4JPYDataset  # noqa: E402, I001
+from src.datasets.dataset_realbugs import BugsInPyDataset, QuixBugsDataset  # noqa: E402
 from src.datasets.dataset_inmemory import InMemoryDataset  # noqa: E402
 
 
@@ -739,6 +740,9 @@ def load_dataset(
           （强 copyleft 设计 + 高区分度任务，字段与 SWE-bench 同构，
           数据文件经 AITESTER_SWE_BENCH_PRO_DIR 环境变量指向）
         - "defects4j_python" 或 "d4j_py": Defects4J-Python 数据集
+        - "quixbugs" / "quix_bugs": QuixBugs 真实缺陷基准（W4 阶梯 L1）
+        - "bugsinpy" / "bugs_in_py": BugsInPy 真实缺陷基准（W4 阶梯 L2，
+          manifest JSONL 口径，见 dataset_realbugs.BugsInPyDataset）
         - "in_memory": 内置示例数据集
         - 其他名称返回 InMemoryDataset（允许 graceful degradation）
 
@@ -769,6 +773,14 @@ def load_dataset(
         "swebench_pro": SWEBenchDataset,
         "defects4j_python": Defects4JPYDataset,
         "d4j_py": Defects4JPYDataset,
+        # W4（2026-10-05 审查落地）：真实缺陷基准阶梯 L1/L2（real_benchmark_upgrade
+        # 设计稿实现）——本地目录解析，目录缺失时空数据集 + warning 优雅降级
+        # （与 d4j_py 同口径）；gold 材料对齐合成集（metadata.test_cases/fixed）
+        # 使 M1 诚实指标开箱可用。
+        "quixbugs": QuixBugsDataset,
+        "quix_bugs": QuixBugsDataset,
+        "bugsinpy": BugsInPyDataset,
+        "bugs_in_py": BugsInPyDataset,
         "in_memory": InMemoryDataset,
         # "synthetic": SyntheticDataset,  # 使用懒加载避免循环导入
         # "synth": SyntheticDataset,  # 使用懒加载避免循环导入
@@ -811,6 +823,10 @@ def get_available_datasets() -> list[str]:
             "swebench_pro",
             "defects4j_python",
             "d4j_py",
+            "quixbugs",
+            "quix_bugs",
+            "bugsinpy",
+            "bugs_in_py",
             "in_memory",
             "examples",
             "synthetic",

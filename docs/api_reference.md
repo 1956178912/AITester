@@ -3,7 +3,9 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-10-05（2026-10-05 审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
+> 最后更新：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
+>
+> 上一批：2026-10-05（审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
 >
 > 上一轮：2026-09-29（审查优化轮：P0 运行时探针缺陷修复——历史 settrace exception 事件采集在函数体异常时不传播到被调帧，实测 frames 恒空（探针自引入以来从未真正生效）；本轮改为异常抛出时刻读 exc.__traceback__ 帧链（零 trace 开销），同步修复单字符变量误过滤 / 行号错误（f_lineno → tb_lineno）/ 模块过滤永不匹配 / 子线程未处理异常泄漏；默认行为不变，RUNTIME_PROBE_ENABLE=false 时零差异）
 >
@@ -827,6 +829,9 @@ dataset = load_dataset("examples")
 from src.datasets import SyntheticDataset
 
 dataset = SyntheticDataset(task_count=50, seed=42)
+# AA（2026-10-06）：同池模板重复上限（opt-in，默认 None=历史口径；>=1 时同
+# (difficulty, pattern) 至多出现 N 次，防单 pattern 分布塌缩——见 DATA_CARD §2）
+dataset = SyntheticDataset(task_count=50, seed=42, max_pattern_repeat=2)
 
 # 加载 SWE-bench 数据集
 from src.datasets import SWEBenchDataset
@@ -915,7 +920,7 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | venv 内自动 pip install 缺失依赖 |
 | `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 venv 缓存目录覆盖（容器/CI 隔离场景指向挂载卷；配合 `clean-venv-cache` 子命令清理） |
 | `AITESTER_LLM_CACHE_DIR` | str | `~/.cache/aitester/llm` | LLM 文件缓存目录覆盖（2026-10-05 起默认用户缓存目录，`XDG_CACHE_HOME` 优先解析；此前默认 `src/cache/`；`src/graph/rag.py` 兜底检索路径同口径收敛为引用同一常量，消除路径双写） |
-| `AITESTER_PROFILE` | str | 未设（不注入） | R15 开关预设（非布尔）：`safe` 安全敏感档（KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / PATCH_ROLLBACK_FAIL_CLOSED / INJECTION_GUARD / ROGUE_MONITOR / FLAKY_CHECK 全开）/ `scientific` 科研评测档（SPEC_IR / SPEC_IR_DSL / SPEC_ORACLE_EXEC / ENABLE_MUTATION_SCORING / ORACLE_VALIDATE / PATCH_SNAPSHOT_ROLLBACK 全开，配合 `run_benchmark(deterministic=True)`）/ `fast` 历史默认档（全部默认关，等价不设）；经 `os.environ.setdefault` 注入，显式设置的单开关不被覆盖；未识别值记 WARNING 并忽略 |
+| `AITESTER_PROFILE` | str | 未设（不注入） | R15 开关预设（非布尔；2026-10-06 AA 批次起共四档）：`safe` 安全敏感档（KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / PATCH_ROLLBACK_FAIL_CLOSED / INJECTION_GUARD / ROGUE_MONITOR / FLAKY_CHECK 全开）/ `scientific` 科研评测档（SPEC_IR / SPEC_IR_DSL / SPEC_SMT / SPEC_ORACLE_EXEC / ENABLE_MUTATION_SCORING / ORACLE_VALIDATE / PATCH_SNAPSHOT_ROLLBACK 全开，配合 `run_benchmark(deterministic=True)`）/ `logic` 逻辑链全开档（scientific 全量 + PATCH_ROLLBACK_FAIL_CLOSED + LOGIC_SPEC_STRICT / DETERMINISTIC_GUARD / BRANCH_COVERAGE_INJECT / ROUTE_STRUCTURED 全开 + `DETECTION_FIRST_ENABLE`〔AA 2026-10-06 补齐——ADR-0015 检出优先协议，首轮全绿不计成功〕）/ `fast` 历史默认档（全部默认关，等价不设）；经 `os.environ.setdefault` 注入，显式设置的单开关不被覆盖；未识别值记 WARNING 并忽略 |
 | `SPEC_ORACLE_EXEC_ENABLE` | bool | false | R1c 规约 oracle 执行注入：`_append_spec_oracle_to_test` 把 `compile_spec_oracle` 编译产物（签名感知绑定）追加到 LLM 生成测试尾部并列执行；state 新增 `spec_oracle_injected` 观测字段；默认关时历史口径零变化 |
 | `PATCH_ROLLBACK_FAIL_CLOSED` | bool | false | R4b 补丁回滚 fail-closed 口径：P2P 全量回归 rc>=2 / 超时 / IO 异常时改判 `regression_failed` 触发快照自动回滚（默认口径为 `regression_error` 不回滚——"坏测试不误杀好补丁"）；`PatchRollbackProtocol.run` 透传 `fail_closed` 参数，编程接口可显式覆盖 |
 | `ROUTE_STRUCTURED_ENABLE` | bool | false | R17 结构化路由优先：`_should_debug` 判定"回 generator 重新生成"时，`error_category=logic_error` 的结构化信号优先于中文诊断关键词匹配（`_test_gen_signal_hit`），信号来源（`structured_error_category` / `diagnosis_keyword`）写入 trace 供打点度量"关键词兜底触发率"；默认关时与历史关键词口径逐字节一致 |

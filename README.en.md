@@ -1,4 +1,6 @@
 > **Language**: [中文版](README.md) | English (this document)
+>
+> Last updated: 2026-10-06 (Z5: bilingual gate now covers root-level pairs; this line added to satisfy the date-sync check)
 
 # AITester: A Logic-Driven Multi-Agent Test Generation and Self-Repair System
 
@@ -26,8 +28,8 @@
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
 | **Latest Optimization** | ✅ 2026-10-05 Review-optimization batch R1–R18 (default behavior unchanged): spec-oracle execution wiring (`SPEC_ORACLE_EXEC_ENABLE` — executable specs now run alongside LLM tests for the first time) + SpecIR v1 compile fixes (tautological assertion sealed) + signature-aware binding + mutation detection rate in the main benchmark (`mutation_detection_rate`, objective oracle adjudication) + complete statistical reports (McNemar/BH-FDR persisted + bootstrap CI + Cliff's delta + `--batches` allowlist) + rollback fail-closed switch + structured-routing switch + CI security scanning turned blocking + release/perf workflows + `AITESTER_PROFILE` presets; full-suite zero-regression + ruff/mypy all green; current baseline numbers: see [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 | **Core Module Coverage** | ✅ Per-module line coverage is sourced from [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` (single source of truth: base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86; branch coverage and core routing gates in the same file) |
-| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3; mypy 0 errors across the repo (91 source files, see [BASELINE.yaml](BASELINE.yaml) `static_checks` section for current counts)) |
-| **Recent Changes** | ✅ 2026-10-05 Review-optimization batch R1–R18 (spec-oracle wiring + complete statistical reports + mutation detection + CI hardening, default behavior unchanged, see CHANGELOG); prior 2026-10-04 systematic-review batch (A-01 SpecIR v2 DSL + A-03 snapshot/rollback protocol, etc.) and the 2026-10-02 round; test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
+| **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) + mypy 0 errors across the repo (source-file count and version pinning: see [BASELINE.yaml](BASELINE.yaml) `static_checks` section, `mypy_source_files`); historical lint-cleanup narratives are archived in [CHANGELOG.en.md](CHANGELOG.en.md) |
+| **Recent Changes** | ✅ 2026-10-06 code-optimization batch AA (logic profile now injects the detection-first protocol `DETECTION_FIRST_ENABLE` [completing the ADR-0015 preset gap, one-shot via `AITESTER_PROFILE=logic`] + synthetic per-pool template repeat cap `max_pattern_repeat` / `--max-pattern-repeat` (opt-in; legacy behavior and main-batch seed=42 reproducibility unchanged) + README CI-matrix drift fix with a static guard); earlier the same day, batch Z (eighth review: four code-level fixes + power analysis/Bayesian pairing + data card/Makefile) and batches X/Y (seventh review: LLM-cache experiment namespace `AITESTER_CACHE_NAMESPACE` + `plain_llm_df` attribution baseline + statistical M1-schema filter + env-switch budget ratchet + third detection-first terminal status `red_not_repaired` + telemetry MAST alignment), see CHANGELOG; test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml) |
 
 For more details, see [CHANGELOG.md](CHANGELOG.md), [QUICKSTART.md](QUICKSTART.md), [docs/api_reference.md](docs/api_reference.md), [docs/usage_examples.md](docs/usage_examples.md).
 
@@ -72,7 +74,7 @@ pre-commit run --all-files
 ### CI/CD
 
 The project is configured with GitHub Actions continuous integration, supporting:
-- Multi-Python-version testing (3.12, 3.14; the lower bound is determined by locked dependencies: scipy requires ≥3.12)
+- Multi-Python-version testing (3.12 / 3.13 / 3.14, matching the `python_ci_matrix` in [BASELINE.yaml](BASELINE.yaml); the lower bound is determined by locked dependencies: scipy requires ≥3.12)
 - Ruff lint checks
 - pytest tests + coverage reports
 - Dependency security scanning (pip-audit; chromadb 1.5.9 hits 5 known vulnerabilities (PYSEC-2026-311 counted twice + PYSEC-2026-3813/3814/3815), explicitly exempted because no fixed version is yet available on PyPI; see the ci.yml comments and CHANGELOG for details)
@@ -543,6 +545,20 @@ CONTEXT_TIER_DOWNGRADE_ENABLE=true python main.py run examples/calculator.py
 ```bash
 # Enable the mypy static type-check layer (default off, explicit enable)
 TYPE_CHECK_ENABLE=true python main.py run examples/calculator.py
+```
+
+#### 5.19.5 Detection-first protocol (W3, `DETECTION_FIRST_ENABLE`, default off; ADR-0015)
+The main batch's `false_fix_rate=89.8%` stems from a **self-referential reward**: the success signal "self-generated tests pass" has no link to "the defect was detected". The detection-first protocol ("red-before-green") aligns the two:
+
+- **First-round red observation** (`_executor_node`): executions at iteration==0 (unrepaired code) write `detection_first_red_seen` (task-level sticky — True once any round went red);
+- **Routing** (`_should_debug`): an all-green first round with regeneration budget left no longer counts as success — routes `regenerate` (reason=detection_first_all_green), and Generator receives a strengthened prompt section (expected values must come from problem semantics; no weakening assertions to pass, no reimplementing the function);
+- **Terminal annotation**: on final pass writes `detection_first_status` — `red_then_green` (detect then repair) / `all_green_unverified` (weak-test false success — **evaluation must not count it as detection/repair success**); both keys are surfaced in result rows (None when off, key-set isomorphic).
+
+"Red-on-original" is the "buggy red" half of F2P and works online without gold material — the minimal-change path to turn `detection_rate` from an evaluation metric into a runtime reward signal.
+
+```bash
+# Enable the detection-first protocol (default off, explicit enable)
+DETECTION_FIRST_ENABLE=true python experiments/run_benchmark.py --dataset synthetic --task-count 10 --baselines aitester
 ```
 
 ### 5.20 SWE-bench Repo-Level Verification (P0/P1, default off)
@@ -1085,6 +1101,7 @@ The following switches are all provided as environment variables; defaults prese
 | `TESTLESS_VALIDATION_ENABLE` | false | G5 testless execution-irrelevant validation: four independently toggleable layers (AST symbol guard / mypy static check / naming-contract regression / import smoke); any layer failure → overall fail (conservative fail-closed policy) | 5.22.5 |
 | `EXPERT_POOL_DEBATE_ENABLE` | false | G6 multi-agent debate convergence: top-K candidate debate convergence produces one `debate_revise` revised candidate (requires `EXPERT_POOL_ENABLE=true`; on LLM failure conservatively degrades back to the original verified list, does not block the main chain) | 5.22.6 |
 | `RISK_APPROVAL_ENABLE` | false | G2 risk-tiered human approval loop: three-factor weighted scoring (confidence + patch impact + budget ratio) → low/medium/high → auto_merge / human_confirm / force_review | 5.22.2 |
+| `DETECTION_FIRST_ENABLE` | false | W3 detection-first protocol (ADR-0015, "red-before-green" success criterion: an all-green first round means no defect detected and triggers one strengthened regeneration; terminal annotation red_then_green / all_green_unverified — evaluation must not count all_green_unverified as detection/repair success) | 5.19.5 |
 
 See [QUICKSTART.md](QUICKSTART.md) and [.env.example](.env.example) for details.
 
@@ -1308,7 +1325,7 @@ dataset (88% vs 60% vs 8%, p=0.002 significant).
 - [Performance Tuning Guide](docs/performance_guide.md): parallel execution, RAG singleton, timeout configuration, profiling benchmarks
 - [API Reference](docs/api_reference.md): module interface documentation
 - [Usage Examples](docs/usage_examples.md): programming interfaces and CLI usage
-- [Review Round Records](docs/review_2026-09-26_round7.md): rounds 8–11 audit & conservative optimization (P1/P2 defect fixes + regression guards)
+- [Review Round Records](CHANGELOG.md): rounds 6–11 audit & conservative optimization (P1/P2 defect fixes + regression guards; see the 2026-09-26 comprehensive-audit batch in CHANGELOG)
 - [Advanced Switches](QUICKSTART.md): structured tracing / multi-candidate patches / cost-aware routing (all off by default, enable as needed)
 - [Historical Optimization Records](docs/history/optimization_plan.md): archived historical round optimization plans and reports (`docs/history/`, not currently maintained)
 

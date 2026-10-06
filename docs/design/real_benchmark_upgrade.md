@@ -1,6 +1,6 @@
 # 真实基准升级设计（BugsInPy / QuixBugs / SWE-bench Lite 三级递进）
 
-批次：U13（2026-10-05 系统性审查落地）·状态：**设计稿（未实现）**
+批次：U13（2026-10-05 系统性审查落地）·状态：**L1/L2 加载器已落地（W4，2026-10-05：`src/datasets/dataset_realbugs.py` 的 `QuixBugsDataset` / `BugsInPyDataset`，经 `load_dataset("quixbugs"|"bugsinpy")` 注册）**；L2 manifest 导出与 L3 复测仍未实现——本文档其余部分仍为设计稿
 前置约束（全局决策日志 2026-10-05 条目）：R3 基准升级属大改动，需先出设计文档再动代码——本文档即该设计。
 
 ## 1. 动机与现状

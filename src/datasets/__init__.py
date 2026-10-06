@@ -4,7 +4,9 @@
 公开接口：
     from src.datasets import SWEBenchDataset, Defects4JPYDataset, load_dataset
     from src.datasets import SyntheticDataset  # 合成数据集生成器
+    from src.datasets import QuixBugsDataset, BugsInPyDataset  # W4 真实缺陷基准
 """
 
 from src.datasets.dataset_loader import Defects4JPYDataset, SWEBenchDataset, load_dataset  # noqa: F401
+from src.datasets.dataset_realbugs import BugsInPyDataset, QuixBugsDataset  # noqa: F401
 from src.datasets.synthetic_dataset import SyntheticDataset  # noqa: F401

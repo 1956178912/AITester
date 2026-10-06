@@ -24,51 +24,9 @@
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
 | **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ 逐模块行覆盖以 [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` 为单一事实来源（base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86，分支覆盖与核心路由门槛同见该文件） |
-| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3；0.6 轮次 15 告警清零 + 33 文件 format 归一 + 全面审查轮次 5 处 tests/ 瑕疵清零 + 第七轮 11 文件格式归一 + 第八轮 5 处工作树 lint 瑕疵清零（重复 import / 尾随空白 / 无占位 f-string / PERF401 / 异常面收紧）+ 第九/十轮 14 文件格式归一（round9/round10 改动文件批量归一）+ mypy 全仓 0 错误（62 源文件）） |
-| **最近改动** | ✅ 2026-10-05 V 批次（第三轮独立审查落地：规约边界类型契约 + 统计管线可复算化（诚实指标 McNemar 成首要口径）+ 证据门真阻断 + 合成任务中性化 + 模板库 50 pattern（修复 6 个存量 gold 材料缺陷）+ 状态契约守卫 + CI 加固 + 文档治理，详见 CHANGELOG）；同日更早批次（R1-R18 / N / S / T / U）；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
+| **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3）+ mypy 全仓 0 错误（源文件数与版本锁定见 [BASELINE.yaml](BASELINE.yaml) `static_checks` 节 `mypy_source_files`）；历轮 lint 清零叙事归档 [CHANGELOG.md](CHANGELOG.md) |
+| **最近改动** | ✅ 2026-10-06 AA 代码优化批次（logic 档补检出优先协议 `DETECTION_FIRST_ENABLE`〔ADR-0015 漏配补齐，`AITESTER_PROFILE=logic` 一键生效〕+ 合成集同池模板重复上限 `max_pattern_repeat` / `--max-pattern-repeat`（opt-in，默认口径与主批次 seed=42 复现性不变）+ README CI 矩阵漂移修复与静态守卫）；此前同日 Z 批次（第八轮审查：代码级修复四项 + 功效分析/贝叶斯配对 + 数据卡/Makefile）与 X/Y 批次（第七轮审查：LLM 缓存实验命名空间 `AITESTER_CACHE_NAMESPACE` + `plain_llm_df` 归因基线 + 统计管线 M1 schema 过滤 + env 开关预算棘轮 + 检出优先终态第三值 `red_not_repaired` + telemetry MAST 对齐），详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
 
-> **2026-09-28 前沿推荐批次落地说明（gap_report 2026-09-28 P0/P1/P2 缺口）**：
-> 本批次补齐 `docs/history/gap_report_2026-09-28_frontier_recommendations.md` 中 G1–G8 共 8 项缺口，
-> 全部"默认行为不变 + 新能力独立开关"口径（与 ADR-0003/0004 一致）：
-> - **G2 P0 风险分级人工回路**：`src/graph/risk_approval.py`（`RISK_APPROVAL_ENABLE` 默认关），
->   三因子（置信度 + 补丁影响面 + 预算占比）加权打分 → low/medium/high → auto_merge / human_confirm / force_review；
->   `experiments/run_benchmark.py` 结果行新增 `risk_summary` 字段（默认关时占位 `enabled=False`，键集合同构）。
-> - **G8 P0 全链路 SWE-bench Pro 复测**：`experiments/run_full_stack_swe_bench_pro.py`（一键七开关）
->   + `scripts/check_swe_bench_pro_ready.py`（数据前置门禁，缺 `instance_code`/`test_patch`/`FAIL_TO_PASS`
->   时阻断）+ `experiments/summarize_full_stack.py`（ON/OFF 对照 + 错误分桶对比）。
-> - **G3 P1 内核级沙箱**：`src/agents/kernel_sandbox.py`（`KERNEL_SANDBOX_ENABLE` 默认关），
->   macOS Seatbelt（`sandbox-exec`）/ Linux Landlock（`bwrap`）双后端；平台不支持时 fail-closed
->   拒绝执行（不静默降级到无隔离本地，与 Docker 不可用同口径）；本地执行链路接入。
-> - **G1 P1 Tree-sitter 精确 AST 后端**：`src/tools/tree_sitter_backend.py`（可选依赖，
->   缺 `tree_sitter` 时透明降级回词法层，不阻断）；实现 `LanguageBackend` 4 个核心方法
->   （精确 AST 口径，误报更少）。
-> - **G4 P1 AgentTelemetry 故障检测基准**：`src/observability/agent_telemetry.py`
->   （`AGENT_TELEMETRY_ENABLE` 默认关），10 类内置失败模式正则匹配（零 LLM 成本，纯观测），
->   输出 Markdown 报告供实验分析消费。
-> - **G5 P2 无测试场景执行无关验证**：`src/tools/testless_validation.py`
->   （`TESTLESS_VALIDATION_ENABLE` 默认关），四层独立可开关（AST 符号守卫 / mypy 静态检查 /
->   命名契约回归 / 导入冒烟），任一层失败整体 fail（保守 fail-closed 口径）。
-> - **G6 P2 多智能体辩论收敛**：`src/graph/expert_pool.py` 新增 `debate_round()` 方法
->   （`EXPERT_POOL_DEBATE_ENABLE` 默认关，需配合 `EXPERT_POOL_ENABLE=true`），top-K（默认 2，
->   `EXPERT_POOL_DEBATE_TOP_K` [2,4]）候选辩论收敛产出一个 `debate_revise` 修订候选，
->   LLM 失败时保守降级回原 verified 列表（不阻断主链路）。
-> - **G7 P2 缺陷报告生成**：`src/reports/generator.py` 的 `ErrorReport` 新增 `oracle_stats` 字段
->   + `with_oracle_stats()` 方法（`total_oracles > 0` 时才渲染"预言有效性（Oracle 增强，G7）"章节），
->   与 G5 testless 验证互补（"有测试" vs "无测试"两个场景的缺陷有效性判定）。
-> - **文档一致性 P2**：新增 `docs/dependency_exemptions.md`（chromadb 1.5.9 命中 5 条已知漏洞的
->   豁免登记表）+ `scripts/check_dependency_exemptions.py`（CI 门禁，`--ignore-vuln` 未登记时
->   阻断）+ `scripts/check_docs_history_drift.py`（warning-only，检测 `docs/history/*.md` 基线
->   数字漂移超阈值时提示归档）。
-> 本批次验证结论：全量测试零回归 + ruff 0 告警 + mypy 0 错误（新增 5 源文件）——
-> 当前基线数字（测试数 / 覆盖率 / ruff / mypy）一律见 [BASELINE.yaml](BASELINE.yaml)，此处不再硬编码。
-> 全部新能力默认关（`*_ENABLE=false`），
-> 启用为显式行为；零新默认依赖（tree_sitter 为可选依赖，缺时透明降级）。
->
-> 配套测试文件：
-> - `tests/test_g8_g2_g4_g5_g6_g7_g1.py`（25 用例：G2/G4/G5/G6/G7/G1/G8 缺口）；
-> - `tests/test_kernel_sandbox.py`（9 用例：G3 内核沙箱）；
-> - `tests/test_experiments_ab_scaffolds.py`（12 用例：A/B 对照聚合 + 全链路汇总 verdict + 七开关注入）。
->
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
 ## 开发工具
@@ -112,7 +70,7 @@ pre-commit run --all-files
 ### CI/CD
 
 项目配置了 GitHub Actions 持续集成，支持：
-- 多 Python 版本测试（3.12, 3.14；下限由锁定依赖决定：scipy 需 ≥3.12）
+- 多 Python 版本测试（3.12 / 3.13 / 3.14，与 [BASELINE.yaml](BASELINE.yaml) `python_ci_matrix` 一致；下限由锁定依赖决定：scipy 需 ≥3.12）
 - Ruff lint 检查
 - pytest 测试 + 覆盖率报告
 - 依赖安全扫描（pip-audit；chromadb 1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），因 PyPI 暂无修复版本而显式豁免，详见 ci.yml 注释与 CHANGELOG）
@@ -477,7 +435,7 @@ JSONL 追加式记录每个任务各智能体节点的输入输出、决策路�
 - [src/api/api_manager.py](src/api/api_manager.py) 中的 `RotationStrategy.COST_AWARE` / `_select_node_cost_aware()` / 成本告警分支
 
 ### 5.4 RAG 纳入主实验（2.3）
-`reproduce.sh` 对合成/内置数据集默认显式 `--enable-rag`（`rag_data/` 持久化跨实验复用），`--no-rag` 可回退 config 默认；`run_benchmark.py` 新增 `--no-rag` 参数与 `--enable-rag` 共同覆盖 `config.ENABLE_RAG`。
+`reproduce.sh` 的 RAG 默认口径已随 **W7（2026-10-05 审查落地·阴性证据驱动）改为默认关闭**（RAG A/B 实测 token +40.7% 负向、无成功率增益，见 `docs/experiment_ab_results_2026-09-28.md`）；需对照时显式 `--enable-rag`。`run_benchmark.py` 的 `--no-rag` / `--enable-rag` 参数共同覆盖 `config.ENABLE_RAG`。
 
 ### 5.5 结果分析脚本（4.3 + 1.1/1.2 首批指标增强）
 `experiments/analyze_results.py` 从 benchmark JSON 提取成功率 / 覆盖率 / 迭代次数分布 / Token 效率 / 按基线失败原因分布（1.2 细化类别可单独计数）/ RAG 检索质量 / 修复收敛效率（首次尝试成功率、成功与失败任务的迭代及耗时统计）/ 多维质量代理（覆盖率与耗时代理、可选 `generated_test` 的断言行数代理、失败类别 Top N），终端打印 Markdown 汇总并写 `analysis_summary.md`；旧 JSON 无 `token_metrics`/`rag_metrics`/`generated_test` 键时自动兜底或降级，不崩。
@@ -733,6 +691,27 @@ dict-item, list-item, assignment, operator, index, has-type]`），过滤
 ```bash
 # 启用 mypy 静态类型检查层（默认关，显式启用）
 TYPE_CHECK_ENABLE=true python main.py run examples/calculator.py
+```
+
+### 5.19.5 检出优先协议（W3，`DETECTION_FIRST_ENABLE`，默认关；ADR-0015）
+主批次实证 `false_fix_rate=89.8%` 的根因是**奖励自指**：成功信号"自产测试通过"
+与"缺陷被检出"无任何关联。检出优先协议（"先红后绿"）对齐两者：
+
+- **首轮红灯观测**（`_executor_node`）：iteration==0（被测代码未修复）的执行写
+  `detection_first_red_seen`（任务级粘性——任一轮红过即 True）；
+- **路由**（`_should_debug`）：首轮全绿 + 再生成预算未用尽 → 不视为成功，路由
+  `regenerate`（reason=detection_first_all_green），Generator 注入强化段落
+  （断言期望值必须来自问题语义；禁止放松断言换取通过、禁止重写被测函数）；
+- **终态标注**：最终通过时写 `detection_first_status`——`red_then_green`
+  （先检出再修复）/ `all_green_unverified`（弱测试假成功，**评估层不得计为
+  检出/修复成功**）；结果行透出两键（默认关时恒 None，键集合同构）。
+
+"红-on-original"是 F2P 的"buggy 红"半段，无需 gold 材料即可在线生效——
+这是把 `detection_rate` 从评估指标变成运行时奖励信号的最小改动路径。
+
+```bash
+# 启用检出优先协议（默认关，显式启用）
+DETECTION_FIRST_ENABLE=true python experiments/run_benchmark.py --dataset synthetic --task-count 10 --baselines aitester
 ```
 
 ### 5.20 SWE-bench 仓库级验证（P0/P1，默认关闭）
@@ -1358,7 +1337,7 @@ docker run --rm \
 
 | 开关 | 默认 | 启用效果 | 关联章节 |
 |------|------|---------|----------|
-| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1；`reproduce.sh` 复现流程默认显式启用，`--no-multi-candidate` 可回退历史口径） | 5.1 |
+| `ENABLE_MULTI_CANDIDATE_PATCH` | false | 多候选补丁生成与验证筛选（3.1；W7 起 reproduce.sh 默认关闭——A/B 实测成功率 -2pp 且 token +256%；`--multi-candidate` 显式开启） | 5.1 |
 | `AITESTER_TRACE_DIR` | 未设（no-op） | 结构化 JSONL 追踪层（4.1；`reproduce.sh` 默认启用至 `experiments/results/traces`） | 5.2 |
 | `ENABLE_MUTATION_SCORING` | false | 1.2 变异得分评估：benchmark 运行后对每任务"生成测试 vs 被测源码"计算 mutation_score（内置轻量变异生成器，每任务 ≤ `MUTATION_MAX_MUTANTS` 个变异体）；耗时显著增加，默认关闭保持历史口径 | 5.14 |
 | `MUTATION_MAX_MUTANTS` | 10 | 1.2 每任务最多评估的变异体数量（需配合 `ENABLE_MUTATION_SCORING=true` 生效） | 5.14 |
@@ -1369,6 +1348,7 @@ docker run --rm \
 | `SWE_REPO_VENV_ISOLATION` | false | P1 仓库级 venv 隔离：每 commit 环境旁建独立 venv（pip install -e 装入 venv，pytest 用 venv python），解决跨 commit 全局 python 环境污染（实测 sqlfluff BaseSegment 方法在相邻 commit 不一致 → AttributeError，与 LLM 补丁无关） | 5.20 |
 | `CROSS_FILE_BIDIRECTIONAL` | false | 2.2 跨文件双向依赖图（额外收集"其他模块→entry"反向依赖边，修复计划同步更新调用方；需配合 `CROSS_FILE_ENABLE=true` 生效，独立开关保证"跨文件启用 ≠ 双向启用"两级保守） | 5.8 |
 | `ADVERSARIAL_DEBUGGING_ENABLE` | false | 3.1 对抗性推理（AdverIntent 式：生成补丁前注入 2-3 个对抗性意图假设 + 生成针对性测试，生成后独立批评者评估，被击穿则重生成一次；纯观测层，默认关保持历史口径） | 5.16 |
+| `DETECTION_FIRST_ENABLE` | false | W3 检出优先协议（ADR-0015，"先红后绿"成功口径：首轮全绿 = 未检出缺陷，触发一次再生成强化测试；终态标注 red_then_green / all_green_unverified，评估层不得把 all_green_unverified 计为检出/修复成功） | 5.19.5 |
 | `API_CIRCUIT_BACKOFF` | true | 4.4 API 熔断器指数退避开关（冷却期改按 `base * 2^open_count` 指数增长，彻底死掉的 provider 冷却期单调增长；`reproduce.sh` 显式透传，设 false 回退 4.2 固定冷却期口径便于对比实验） | 5.17 |
 | `API_PROMETHEUS_EXPORT` | false | 4.4 Prometheus 指标导出开关（启用后 `APIManager.to_prometheus_text()` 输出 7 类指标供 Prometheus 抓取；纯旁路，不影响既有路由行为；`reproduce.sh` 显式透传） | 5.17 |
 | `ASSERTION_AUGMENT_ENABLE` | false | 断言增强策略（AST 提取现有 assert，3.4） | 5.9 |
@@ -1643,7 +1623,7 @@ python main.py clean-venv-cache --max-size-mb 512
 - [使用示例](docs/usage_examples.md)：编程接口与 CLI 用法
 - [依赖豁免登记表](docs/dependency_exemptions.md)：pip-audit 漏洞豁免登记（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限）
 - [前沿推荐批次设计](docs/gap_report_2026-09-28_frontier_recommendations.md)：G1–G8 缺口分析与落地说明
-- [审查轮次记录](docs/review_2026-09-26_round7.md)：第八至第十一轮审查与保守优化（P1/P2 缺陷修复 + 回归守卫）
+- [审查轮次记录](CHANGELOG.md)：第六至第十一轮审查与保守优化（P1/P2 缺陷修复 + 回归守卫；见 CHANGELOG「2026-09-26 全面审查与保守优化轮」批次条目；原 docs/review_* 文件已随 P1-9 文档治理删除）
 - [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由 / G1–G8 新能力开关（默认全关，按需启用）
 - [历史优化记录](docs/history/optimization_plan.md)：归档的历史轮次优化计划与报告（`docs/history/`，非当前维护文档）
 

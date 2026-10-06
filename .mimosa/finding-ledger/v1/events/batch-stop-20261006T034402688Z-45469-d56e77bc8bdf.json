@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20261006T034402688Z-45469-d56e77bc8bdf",
+  "runId": "20261006T034402688Z-45469-d56e77bc8bdf",
+  "runStatus": "inconclusive",
+  "coverage": {
+    "status": "partial",
+    "reasons": [
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "config.py",
+        "detail": "spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "src/datasets/synthetic_dataset.py",
+        "detail": "spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "experiments/run_benchmark.py",
+        "detail": "spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "scanner_failed",
+        "stage": "scan",
+        "target": "tests/test_aa_batch.py",
+        "detail": "spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "config.py",
+        "detail": "scanner_failed: spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "src/datasets/synthetic_dataset.py",
+        "detail": "scanner_failed: spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "experiments/run_benchmark.py",
+        "detail": "scanner_failed: spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      },
+      {
+        "code": "project_check_failed",
+        "stage": "scan",
+        "target": "tests/test_aa_batch.py",
+        "detail": "scanner_failed: spawnSync /usr/local/bin/node ETIMEDOUT",
+        "affectsCompletion": true
+      }
+    ]
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "30891a19cb622de11ba86c7631b71ab8a6bc9981",
+  "diffHash": "8c9c45dc8d7713fa030be7270fdb062de53967fd2b52d8e133e6ea39952f03df",
+  "rulesVersion": "unavailable",
+  "sessionHash": "c5d2648db1d5b7535795e11a758450a4aa60c54d11ae7c36a5dff790298123f4",
+  "reportRef": ".mimosa/reports/task-review-sess_1cbc5c5a-c798-4733-acd5-ce75a20b14fc-20261006T034402688Z-45469-d56e77bc8bdf.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [],
+  "recordedAt": "2026-10-06T03:44:02.874Z"
+}

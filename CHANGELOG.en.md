@@ -1,10 +1,357 @@
-> Last updated: 2026-10-05 (optimization batch T: SMT witness layer + property tests + citation/artifact guards + 0/20 root-cause analysis, default behavior unchanged)
+> Last updated: 2026-10-06 (code optimization batch AA: detection-first in logic profile + synthetic sampling cap + doc matrix guard; batch Z details below, default behavior unchanged)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-06 Code optimization batch AA (review follow-ups: detection-first in logic profile + synthetic sampling cap + doc matrix guard)
+
+> Source: three "no-budget / non-destructive" code optimizations from the
+> 2026-10-06 systematic review report (R-P0-3 residual gap / R-P0-4a / R-P2-5).
+> Full regression **4195 → 4207 passed / 0 failed** (+12 = tests/test_aa_batch.py),
+> ruff 0 / format 0 / mypy 0 (105 files); env budget unchanged at 159 (no new
+> switches; AA1 reuses the already-registered DETECTION_FIRST_ENABLE name).
+
+### Fixed (correctness)
+- **AA1 logic profile preset now injects `DETECTION_FIRST_ENABLE`** (config.py
+  `_PROFILE_PRESETS["logic"]`): the logic profile was defined at O1, before the
+  W3 detection-first protocol (ADR-0015) landed, and missed the behavioral
+  core switch — this closes the gap against ADR-0015's "combinable via
+  AITESTER_PROFILE=logic" wording: under the logic profile, an all-green first
+  round no longer counts as success; routing regenerates to force the
+  generator to detect (red) before repairing (green), directly targeting the
+  reward-self-reference root cause behind false_fix=89.8% in the main batch.
+  Default profiles (fast / no PROFILE) are behaviorally unchanged.
+
+### Added (feature, default off)
+- **AA2 `SyntheticDataset(max_pattern_repeat=...)` per-pool template repeat cap**
+  (src/datasets/synthetic_dataset.py + experiments/run_benchmark.py
+  `--max-pattern-repeat` passthrough): opt-in parameter (default None =
+  historical behavior; `_pick_pattern` takes the original path and the rng
+  consumption sequence is bit-identical, so main-batch seed=42 reproducibility
+  is unaffected). When enabled, a `(difficulty, pattern)` pair that reaches the
+  cap is excluded from candidates; when the whole pool is capped, the pool's
+  counters reset and selection rotates — mitigating the "import_chain_type_contract
+  repeated 10 times" style distribution collapse observed in the main batch
+  (first concrete mitigation for the distribution bias declared in DATA_CARD §2/§3).
+
+### Documentation (drift guard)
+- **AA3 README CI matrix drift fix + static guard** (README.md / README.en.md):
+  the CI matrix actually runs 3.12/3.13/3.14 (ci.yml `python-version`;
+  BASELINE.yaml `python_ci_matrix` is the single source of truth) while the
+  READMEs still said "3.12, 3.14" — now aligned, with a new
+  tests/test_aa_batch.py::TestCIMatrixDocGuard consistency assertion
+  (README(.en) ↔ BASELINE.yaml `python_ci_matrix`) to prevent recurrence.
+
+### Tests
+- tests/test_aa_batch.py, 12 cases (AA1 ×3 / AA2 ×7 / AA3 ×2). Lesson encoded:
+  profile-preset setdefault injection tests must derive their cleanup list
+  from the full preset key set and clear-before-assert — the first version's
+  static enumeration leaked 12 switches into the same xdist worker and broke
+  5 cases in test_patch_rollback / test_planner (env leakage is a cross-test
+  pollution vector under xdist).
+
+## [Unreleased] — 2026-10-06 Optimization batch Z (eighth independent systematic review: four code-level fixes + statistical methodology + doc-governance expansion + engineering entry points)
+
+> This review round (2026-10-06, fully independent: working-tree file reads + external
+> literature scan) concluded: evaluation honesty and engineering discipline are on par,
+> but the core scientific claims still lack positive evidence (detection 2.0% / repair
+> 0.0% / false_fix 89.8%, not significantly different from plain_llm; SWE-bench Lite
+> 0/20). This batch lands every improvement that needs no budget and is non-destructive;
+> items requiring paid APIs or dangerous operations are registered as TODOs only.
+> Full regression **4177 → 4195 passed / 0 failed** (+18 = tests/test_z_batch.py),
+> ruff 0 / mypy 0 (105 files) / coverage line 89.48% branch 82.56% (ratchet watermarks
+> 89.0/82.0 both green, slightly up from W's 89.44/82.47).
+
+### Fixed (correctness)
+- **Z1 Strategy-bank hint text no longer concatenated into patch code** (src/graph/nodes.py,
+  both the expert-pool path and the standalone path; new declared state key
+  `strategy_bank_hint` in src/graph/state.py, initialized to None): `prompt_hint` is a
+  natural-language strategy hint for the *next* debugger **prompt** (as strategy_bank.py:34
+  documents), but it was previously appended into the candidate patch **code** via
+  `+ "\n\n" +` — prose mixed into code, only rejected downstream by the AST guard (wasting
+  the candidate). It now goes to a state observation key (None whenever the switch is off,
+  key-set isomorphic); patches stay pure code. Strategy hits on empty-patch rounds are now
+  recorded too (observation decoupled from patch presence).
+- **Z2 Regeneration cap single source of truth** (new `MAX_REGENERATIONS` in config.py;
+  the workflow alias and the nodes-local literal now share it): removed the duplicate
+  literal in nodes that was only kept "in sync" by a comment.
+- **Z3 Repo-environment cache check uses exact commit equality** (both the first check and
+  the in-lock re-check in src/agents/executor_repo.py): the `commit[:12]` prefix compare
+  could mistake a same-repo/different-commit cache hit on prefix collision (wrong-commit
+  baseline code). The degenerate direction of exact equality is safe: short-sha inputs
+  rebuild instead of being misused.
+- **Z4 Telemetry dead placeholder removed** (deleted the misspelled
+  `_PATTERns_detectors_alias` line in src/observability/agent_telemetry.py; integrity of
+  the 11 failure-mode detectors is locked by a test).
+
+### Added (statistical methodology — review item R06)
+- **Z8 Power-analysis script** (scripts/power_analysis.py, pure stdlib, `make power` /
+  `--self-check`): closed-form required_n / detectable_delta / power for paired
+  proportions (McNemar framing) with a round-trip self-check. **Key measured result: at
+  the main-batch setting (2% baseline, p11=1%), detecting a 10pp detection difference
+  with 80% power requires n≈87 — "n=50 is underpowered" now has a quantitative basis**
+  (input for pre-registering the next experiment design).
+- **Z9 Bayesian paired analysis** (new experiments/bayesian_paired.py + wiring in
+  statistical_analysis.py): Dirichlet uniform-prior posterior over the 2×2 contingency
+  table; posterior mean / 95% credible interval / P(δ>0) / ROPE (±5pp) for
+  δ = p(AITester) − p(baseline); pure-stdlib Monte Carlo with fixed seed=42, bit-wise
+  reproducible; pairing semantics equivalence with `_pair_by_task` is locked by a test.
+  Statistical reports gain a "Bayesian paired analysis" section (honest metrics + passed
+  side by side; presented alongside NHST, not replacing it; methodological basis: Furia
+  et al., TSE 2019, arXiv:1811.05422 — at small n, "p=0.4795 n.s." cannot distinguish
+  "truly no difference" from "insufficient power", while the posterior quantifies the
+  effect-size uncertainty directly). Existing batch reports are not rewritten (historical
+  artifacts unchanged; takes effect for new batches).
+
+### Added (doc governance & engineering entry points)
+- **Z5 Bilingual gate expanded to root-level pairs** (scripts/check_bilingual_docs.py
+  `_CHECK_FILES` now includes README / QUICKSTART / CONTRIBUTING / MODEL_CARD /
+  SECURITY): the gate previously scanned only docs/ and CHANGELOG — CONTRIBUTING.en.md
+  had drifted 8 days behind the Chinese version with CI none the wiser (found in this
+  review). Accompanying changes: CONTRIBUTING.en.md rewritten in sync with the Chinese
+  version (parallel-test notes added, hard-coded coverage numbers that violated the
+  single-source rule fixed, the whole "Dependency Exemption Registry" section added);
+  SECURITY.en.md created; "Last updated" date lines added to four English docs (strict
+  gate: 0 warnings / 0 failures).
+- **Z6 Data card** (docs/DATA_CARD.md + .en.md, bilingual, inside the docs gate):
+  dataset origins / construction / gold-material schema / bias statement (question
+  author = grader) / leak-control status (the "problem_statement has no prompt consumer"
+  invariant is **not yet locked by a test** — registered TODO) / QuixBugs & BugsInPy
+  licenses "to be verified before real runs".
+- **Z7 Engineering entry points** (Makefile with help / install / lint / format /
+  typecheck / test / test-cov / docs-check / env-budget / baseline-check / gates / repro
+  / power; two issue templates under .github/ISSUE_TEMPLATE/).
+
+### Hygiene
+- **Z11 Orphan cache cleanup**: deleted `src/cache/3e97ed3084b42d4e.json` (a leftover
+  from before the cache directory moved to `~/.cache/aitester/llm`, containing full
+  prompt+response text; confirmed gitignored and never committed). Note: `.env.local`
+  and `src/.env.local` (plaintext keys, both untracked) were deliberately **left
+  untouched** — moving them out of the source tree changes local workflows and awaits
+  a user decision.
+
+### TODO (requires budget / user decisions; not executed in this batch)
+- Real-benchmark runs (L1 QuixBugs all 40 / L2 BugsInPy 30 — loaders ready); the
+  detection-first protocol life-or-death experiment (strong model × ≥5 seeds ×
+  plain_llm_df three arms); re-running the single_agent baseline damaged by the W6-era
+  prompt bug; `$/resolved` cost reporting (llm_configs.json has no pricing fields — a
+  price table is needed first); key rotation + git history rewrite (runbook ready,
+  destructive); ADR-0016 "demote multi-agent to an ablation dimension" positioning
+  decision.
+
+## [Unreleased] — 2026-10-06 Optimization batch Y (post-X real-LLM smoke follow-ups: three-valued detection-first terminal status + regeneration-count passthrough + MAST alignment + README slimming)
+
+> A **real-LLM end-to-end smoke** of the X-batch chain (examples/
+> calculator_divide, plain_llm_df baseline) using live free-tier models
+> (qwen-long etc.): trace shows PASS→regenerate→FAIL→done — the weak
+> all-green test was forced into regeneration by the detection-first
+> protocol, and the second test **detected the divide-by-zero defect
+> (red)**; the cache namespace seed42 took effect automatically and
+> provenance fields landed. The smoke also surfaced two observability
+> defects, fixed in place: (1) the terminal status was written only on
+> passing rounds — under the "all-green → regenerate → red → stop"
+> trajectory, all_green_unverified lingered as the terminal value,
+> contradicting red_seen=True; (2) regeneration_count never reached the
+> result row, so the protocol's +1 LLM-call cost was unquantifiable.
+> Full regression **4169 → 4177 passed / 0 failed** (+8 =
+> tests/test_y_batch.py; W3 observability case updated to three-valued
+> semantics), ruff 0 / mypy 0.
+
+### Fixed (scientific validity)
+- **Y1 three-valued detection-first terminal status** (src/graph/nodes.py,
+  pure function `_derive_detection_first_status`): red_then_green /
+  all_green_unverified / **red_not_repaired** (new: detection succeeded
+  but unrepaired — the normal terminal of plain_llm_df (no repair loop) /
+  the repair-failure terminal of aitester; **the evaluation layer's
+  detection metric must count it, not discard on passed=False**); failing
+  without any red writes nothing (previous value preserved). ADR-0015
+  amended with the smoke evidence.
+- **Y1 regeneration_count passthrough**
+  (experiments/run_benchmark.py): carried in both success and failure
+  result-row branches (None when the protocol is off; key-set
+  isomorphism).
+
+### Added
+- **Y2 MAST taxonomy alignment**
+  (src/observability/agent_telemetry.py): the 11 local failure patterns
+  are conservatively mapped to the MAST 14-class taxonomy (Cemri et al.,
+  arXiv 2503.13657, NeurIPS 2025) — each patterns entry gains mast_class
+  / mast_category and the Markdown render gains two columns; classes with
+  no counterpart are explicitly None (the resource-governance signal
+  budget_early_stop and the local umbrella known_error_category_hit —
+  honest scope, no forced mapping). Failure annotations are now
+  cross-comparable with other MAST-annotated studies.
+
+### Docs
+- **README slimming** (first P1-6 cut): removed the 42-line
+  "2026-09-28 frontier-recommendation batch" blockquote (content already
+  carried by the CHANGELOG G-batch entry, −42 lines); fixed two hardcoded
+  drifts (Code Style row's mypy source-file count zh "62"/en "91" vs the
+  actual 105 — now pointing to BASELINE.yaml `static_checks.
+  mypy_source_files`, with historical lint narratives archived in
+  CHANGELOG); "Recent Changes" row updated to batches X/Y in both
+  languages.
+
+## [Unreleased] — 2026-10-05 Optimization batch X (seventh independent systematic review: reproducibility mechanics + attribution baseline + statistics scope + repo guard + switch freeze)
+
+> Executable items from the same-day seventh independent full review
+> (ignoring prior reviews; subagent quota exhausted, main-session direct
+> reading). Items requiring paid API / dangerous operations (strong-model
+> decisive experiment, QuixBugs data fetch & run, key rotation +
+> filter-repo) are prepared as infrastructure only, not executed
+> unilaterally. Key findings driving this batch: (1) the **LLM cache key
+> contains no seed and seed is never sent to the API** — multi-seed reruns
+> with cache enabled are deterministic replays; statistical independence
+> is void (fixed by X1/P0-4a). (2) The **statistical-report whitelist
+> mixed in 2 n=5 smoke batches** (detection_rate all None) — the
+> "60 tasks / 49 measurable" denominator was distorted (fixed by X2/P0-4b;
+> regenerated report converges to 50/50/50, bit-identical with
+> BASELINE.yaml's quoted numbers). (3) Missing plain_llm + detection-first
+> attribution baseline — if plain_llm catches up under a strong model, the
+> "protocol prompt effect" vs "multi-agent orchestration effect" cannot be
+> distinguished (X1/P0-3 adds plain_llm_df). Full regression **4149 → 4169
+> passed / 0 failed** (+20 = tests/test_x_batch.py), ruff 0 warnings,
+> mypy 105 source files 0 errors, `BASELINE.yaml` synced,
+> main_batch/SHA256SUMS refreshed with the regenerated statistical report
+> (184 items verified).
+
+### Added (scientific validity, P0)
+- **X1/P0-4a cache experiment namespace**: `AITESTER_CACHE_NAMESPACE`
+  joins the LLM file-cache key material (src/agents/base_agent.py);
+  run_benchmark auto-sets it to `seed<N>` when a seed is given and cache
+  is enabled (different seeds → separate real calls; same-seed reruns
+  still share cache = reproducibility preserved); provenance gains a
+  `cache_namespace` field plus `DETECTION_FIRST_ENABLE` /
+  `AITESTER_CACHE_NAMESPACE` snapshot keys (cache-on-without-namespace
+  batches = cross-batch reuse risk, auditable from artifacts).
+- **X1/P0-3 plain_llm_df attribution baseline** (experiments/
+  run_benchmark.py + src/graph/workflow.py + config.py): plain_llm +
+  detection-first protocol (ADR-0015) — no Planner, no repair loop, but
+  the executor → generator regeneration route is retained (new
+  `build_workflow(allow_regeneration=True)` topology; "debug" (failing
+  test needs repair) maps to "done": a failing test is itself a potential
+  detection, left to M1 adjudication, consistent with plain_llm's
+  no-repair scope). Detection-first is enabled via
+  `config.set_detection_first_thread_override` (**thread-local** override
+  — under --parallel, concurrent task threads run different baselines and
+  a process-global os.environ would leak into neighboring plain_llm
+  threads; finally-restore prevents thread-pool residue). Not in the
+  default baseline list (historical batch comparability preserved);
+  opt-in via `--baselines plain_llm_df`.
+- **X2/P0-4b statistical schema-completeness filter**
+  (experiments/statistical_analysis.py): a batch is included only if it
+  has at least one non-None `detection_rate` row ("M1 metrics were
+  computed" criterion); batches where the key exists but is all None
+  (main_batch's 2 n=5 smoke batches) are excluded by default (visible
+  warning); `--allow-schema-mixed` explicitly restores the legacy
+  mixed-batch scope; the recompute command auto-appends the same flag in
+  mixed mode (self-consistent reproducibility).
+- **X3/P0-5 env-switch budget guard** (scripts/check_env_budget.py +
+  docs/env_budget.yaml + CI): freeze ratchet over the product switch
+  surface (src/ + config.py; measured 159 unique env vars) — new env
+  vars must be registered into docs/env_budget.yaml by running the script
+  locally and committed with the change (registration = an explicit PR
+  action); CI `--check` blocks unregistered additions; removals allowed
+  (the table shrinks accordingly).
+- **X4/P2 PEP 561 type marker**: src/py.typed + pyproject
+  [tool.setuptools.package-data] (shipped in the wheel; without it,
+  installers' mypy treats this package as untyped).
+
+### Fixed (security, P0/P1)
+- **C5 repo-chain dangerous-API guard** (src/agents/executor_repo.py):
+  before git apply, `_apply_llm_patch` runs
+  patch_applier._collect_dangerous_calls over the patch's "+" lines
+  (added code; includes the C4 from-import alias map and dynamic-bypass
+  detection) — closing the gap where the local chain had an AST diff
+  guard while the repo chain applied patches bare; on a hit the patch is
+  rejected (FAIL_TO_PASS judged without the patch, same scope as the M2
+  test-file protection), returning before any write/git operation.
+
+### Changed (behavioral scope)
+- Statistical report default scope change (X2): the main_batch
+  statistical report was regenerated under the new scope (data overview
+  50/50/50; honest-metric McNemar numbers unchanged: detection 2.0% vs
+  2.0% p=0.4795 / repair 0% vs 0% p=1.0); the legacy behavior is
+  reproducible via `--allow-schema-mixed`. Batch fixtures in
+  tests/test_r2_statistical_report.py and
+  tests/test_2026_10_05_n_batch.py gained a non-None detection_rate field
+  (under the new scope, fixtures without the field would be filtered).
+
+## [Unreleased] — 2026-10-05 Optimization batch W (fourth independent systematic review: detection-first protocol + baseline sanity fix + real-bug loaders + ratchet + security docs)
+
+> Executable items from the same-day fourth independent systematic review
+> (3 parallel deep audits + literature verification, ignoring prior reviews).
+> Items requiring API budget / GPU / dangerous operations (strong-model
+> multi-seed rerun, SWE T7 replay, git history rewrite) are delivered as
+> runbooks (W8) instead of being executed unilaterally. Key findings driving
+> this batch: (1) the **single_agent baseline was a crippled baseline** — its
+> prompt never told the LLM the module name, so 50/50 tasks guessed wrong
+> imports and test_error_rate=94% is pure artifact; bypassing the workflow
+> left execution_trace empty so error_category misreported
+> execution_trace_missing 100% of the time — the "t=21, d=2.97 large effect"
+> is not evidence of architecture gains; (2) the **self-referential repair
+> reward** is the root cause of false_fix 89.8%. Full suite **4130 → 4149
+> passed / 0 failed** (+19 = tests/test_w_batch.py), ruff 0 warnings, mypy
+> 105 source files 0 errors, line 89.44% / branch 82.47%; `BASELINE.yaml`
+> synchronized.
+
+### Fixed (scientific rigor, P0)
+- **W6 single_agent baseline sanity** (experiments/run_benchmark.py): inject
+  the real module name into the prompt (synthetic module names are the
+  task_id tail; the LLM could only guess — 50/50 wrong in the main batch,
+  while plain_llm gets module-name injection via the full workflow);
+  removed the self-contradictory "also emit a fix patch" requirement;
+  mutation feedback is now appended **before** the LLM call (dead code
+  before); execution_trace is now recorded (first run + retry round — was
+  always empty, misreporting every failure as execution_trace_missing).
+- **W1 doc drift**: README round7 dangling link now points at CHANGELOG
+  (docs/review_* files were deleted in P1-9); removed 5 dead exemptions in
+  check_bilingual_docs.py; untracked the stale
+  experiments/statistical_report.md (old-caliber 71.7%/66.4%/8.6%) and moved
+  the default output to experiments/results/ (gitignored); Dockerfile.repro
+  no longer hardcodes total_passed; synthetic unique-pattern count = 50
+  re-verified and locked by a new guard test against BASELINE.yaml.
+
+### Added (scientific rigor)
+- **W3 detection-first protocol** (ADR-0015, `DETECTION_FIRST_ENABLE`,
+  default off): "red-before-green" success criterion — an all-green first
+  round (iteration==0, unrepaired code) means no defect was detected and no
+  longer counts as success: route one regeneration with a strengthened
+  prompt (expected values must come from problem semantics; no weakening
+  assertions, no reimplementing the function); terminal annotation
+  red_then_green / all_green_unverified (evaluation must not count
+  all_green_unverified as detection/repair success); sticky task-level
+  red_seen; regeneration counting integrated (4th entry type, prevents
+  executor↔generator ping-pong); result rows expose
+  detection_first_red_seen / detection_first_status. Targets the root cause
+  of false_fix 89.8%; red-on-original is the "buggy red" half of F2P and
+  works online without gold material.
+- **W4 real-bug benchmark loaders** (design doc ladder L1/L2 now landed):
+  src/datasets/dataset_realbugs.py adds QuixBugsDataset (directory-based)
+  and BugsInPyDataset (manifest JSONL), registered via
+  `load_dataset("quixbugs"|"bugsinpy")`; gold material follows the
+  synthetic-dataset convention (metadata.test_cases/fixed) so M1 honest
+  metrics work out of the box; graceful degradation when data is absent.
+- **W2 coverage ratchet** (scripts/coverage_ratchet.py + ci.yml +
+  docs/coverage_ratchet.yaml floors 89.0/82.0): a never-lowering watermark
+  above the static hard gates (85/77) — local runs auto-raise the floor by
+  the step size when headroom allows, CI `--check` blocks regressions;
+  removes the incentive to "write tests to meet a baseline-hugging gate".
+- **W8 security docs**: SECURITY.md (disclosure & response policy,
+  previously missing) +
+  docs/security/history_leak_remediation_runbook.md (key rotation →
+  git filter-repo → flip full-history gitleaks to blocking, with acceptance
+  criteria — the closure path for the repo's largest open security debt).
+
+### Changed (experiment defaults, negative-evidence driven)
+- **W7 reproduce.sh defaults**: RAG and multi-candidate patches leave the
+  default set (A/B evidence: RAG +40.7% tokens with no success gain,
+  multi-candidate −2pp and +256% tokens) — both default off,
+  `--enable-rag` / `--multi-candidate` opt in (--no-* flags kept as no-op
+  compatibility); README descriptions updated in both languages.
 
 ## [Unreleased] — 2026-10-05 Optimization batch V (third independent review: scientific fixes + experiment infrastructure + template expansion + hardening)
 

@@ -365,6 +365,21 @@ class BaseAgent:
                 cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
                 lru_key = (cache_file, user_message, temperature)
 
+        # X1（2026-10-05 审查 P0-4a）：实验命名空间隔离。
+        # 背景：缓存键（prompt+system+temperature+model）不含实验 seed，
+        # seed 也不传给 API——多 seed 复跑在缓存开启时是同一响应的确定性
+        # 重放，"独立重复"主张不成立（统计独立性失效）。修复口径：
+        # AITESTER_CACHE_NAMESPACE 非空时作为额外键材料参与哈希——
+        # run_benchmark 的 CLI 入口在 seed 指定时自动设为 "seed<N>"
+        # （不同 seed → 不同命名空间 → 各自真实调用；同 seed 复跑仍共享
+        # 缓存 = 可复现性特性保留）。默认空 = 键与历史逐字节一致，零行为变化。
+        _cache_ns = os.environ.get("AITESTER_CACHE_NAMESPACE", "").strip()
+        if _cache_ns:
+            cache_key = f"{cache_key}\x00ns{_cache_ns}"
+            cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]
+            cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
+            lru_key = (cache_file, user_message, temperature)
+
         # 快路径 1：进程内 LRU 命中（零磁盘 IO）
         hit = _lru_lookup(lru_key)
         if hit is not None:

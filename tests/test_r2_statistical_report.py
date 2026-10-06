@@ -50,15 +50,22 @@ def _write_batch(
     plain_llm_passed: list[bool],
     single_agent_passed: list[bool] | None = None,
 ) -> str:
-    """写一个 benchmark_*.json 批次文件（task_id 对齐 t0..tn-1），返回文件名。"""
+    """写一个 benchmark_*.json 批次文件（task_id 对齐 t0..tn-1），返回文件名。
+
+    X2（2026-10-05 P0-4b）起：行携带非 None 的 detection_rate（镜像
+    passed 值）——统计加载默认剔除"M1 指标未计算"的批次，fixture 不带
+    该字段会被新口径过滤，报告为空。
+    """
+
+    def _rows_x2(passed: list[bool]) -> list[dict]:
+        return [{"task_id": f"t{i}", "passed": p, "detection_rate": 1.0 if p else 0.0} for i, p in enumerate(passed)]
+
     results: dict[str, dict] = {
-        "aitester": {"details": [{"task_id": f"t{i}", "passed": p} for i, p in enumerate(aitester_passed)]},
-        "plain_llm": {"details": [{"task_id": f"t{i}", "passed": p} for i, p in enumerate(plain_llm_passed)]},
+        "aitester": {"details": _rows_x2(aitester_passed)},
+        "plain_llm": {"details": _rows_x2(plain_llm_passed)},
     }
     if single_agent_passed is not None:
-        results["single_agent"] = {
-            "details": [{"task_id": f"t{i}", "passed": p} for i, p in enumerate(single_agent_passed)]
-        }
+        results["single_agent"] = {"details": _rows_x2(single_agent_passed)}
     (root / name).write_text(json.dumps({"dataset": dataset, "results": results}), encoding="utf-8")
     return name
 

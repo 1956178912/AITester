@@ -56,6 +56,12 @@ dependencies = [
 # 保证 wheel / sdist / pip show / aitester --version 四处版本一致。
 version = {attr = "src.__version__"}
 
+# X4（2026-10-05 审查 P2）：PEP 561 类型标记随包分发（find_packages 默认
+# 只收 .py；无 package-data 时 wheel 缺 py.typed，安装方 mypy 视本包为
+# untyped，全部 import 报 "Skipping analyzing" 并丢失内联注解收益）
+[tool.setuptools.package-data]
+src = ["py.typed"]
+
 [project.optional-dependencies]
 rag = ["chromadb>=0.5.0"]
 viz = ["matplotlib>=3.7.0", "pandas>=2.0.0"]

@@ -1,8 +1,17 @@
 > **Language**: [中文版](CONTRIBUTING.md) | English (this document)
+>
+> Last updated: 2026-10-06
 
 # Contributing Guide
 
 Thanks for your interest in AITester! This document explains how to participate in the project's development.
+
+> Z5 (2026-10-06 review fix): this English version had drifted ~8 days behind the
+> Chinese one (missing the parallel-test notes, still carrying outdated hard-coded
+> coverage numbers that violate the single-source rule, and missing the whole
+> "Dependency Exemption Registry" section). It has now been resynchronized with
+> CONTRIBUTING.md, and the bilingual gate (`scripts/check_bilingual_docs.py
+> --strict`) now covers the root-level document pairs.
 
 ## Setting Up the Development Environment
 
@@ -50,14 +59,32 @@ git commit -m "fix: fix incorrect parametrize validation logic"
 New features must be accompanied by unit tests:
 
 ```bash
-# Run all tests
+# Run all tests (serial, historical default)
 .venv/bin/python -m pytest tests/ -v
+
+# Parallel speed-up (recommended for local dev: -n auto shards by CPU count, full suite ~21s vs ~49s serial)
+.venv/bin/python -m pytest tests/ -n auto --dist loadfile
 
 # View coverage
 .venv/bin/python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
-Coverage requirements: core modules ≥ 90%, overall ≥ 80%.
+Notes on parallel runs (introduced in the 2026-10-01 performance batch):
+- `pytest-xdist` (locked at 3.8.0 in requirements) provides `-n`; `--dist loadfile`
+  shards by file, preserving within-file case order — the isolation semantics
+  are unchanged.
+- Without `-n`, everything degrades to the historical serial behavior (zero
+  change by default).
+- CI already runs the full suite with `-n 4 --dist loadfile` (same semantics as
+  serial, producing coverage.xml).
+
+Coverage requirements use [BASELINE.yaml](BASELINE.yaml)'s `coverage` section as
+the single source of truth (P1-9 fix: this section used to hard-code "core ≥ 92% /
+overall ≥ 90%", which had drifted from the measured values and violated the
+single-source rule). Merge gates follow the actual CI thresholds: total line
+coverage ≥ 85%, total branch coverage ≥ 77%, strict core modules ≥ 90%, other
+core routing modules ≥ 85% (the constants in `scripts/check_branch_coverage.py`
+are the authoritative values).
 
 ## Pull Request Process
 
@@ -69,7 +96,7 @@ Coverage requirements: core modules ≥ 90%, overall ≥ 80%.
 
 ## Reporting Issues
 
-Please use GitHub Issues to report bugs or propose feature suggestions, in the following format:
+Please use GitHub Issues to report bugs or propose features, in the following format:
 
 - **Bug report**: reproduction steps, expected behavior, actual behavior, environment information
 - **Feature suggestion**: problem description, proposed solution, use cases
@@ -77,7 +104,7 @@ Please use GitHub Issues to report bugs or propose feature suggestions, in the f
 ## Documentation Organization Conventions
 
 - **Core maintenance docs** (updated with each release): `README.md` / `QUICKSTART.md` / `docs/api_reference.md` / `docs/algorithm_design.md` / `CHANGELOG.md` and their `.en.md` counterparts — must be refreshed after a feature batch lands; CI's `scripts/check_bilingual_docs.py` guards the Chinese/English pairing.
-- **Historical archive docs** (`docs/history/`, including `optimization_plan.md` / `optimization_report.md`, etc.): record the decisions and experiment logs of past batches — **not** current maintenance docs; internal reference only, no need to update per release; each doc's header carries an archival note, and the CHANGELOG is the authority on current decisions.
+- **Historical archive docs** (`docs/history/`, including `optimization_plan.md` / `optimization_report.md`, etc.): record the decisions and experiment logs of past batches — **not current maintenance docs**; internal reference only, no need to update per release; each doc's header carries an archival note, and the CHANGELOG is the authority on current decisions.
 - **Review / audit reports** (`docs/review_*.md` / `docs/*_audit_findings.md`): snapshot of the corresponding review round; archived after completion, not required to stay in sync long-term.
 
 ### Hard rule: single source of truth for current baseline numbers (BASELINE.yaml)
@@ -122,8 +149,8 @@ knowledge required):
 - **Doc gap-filling**: core-doc docstring / comment errata, missing sections (see the
   `check_bilingual_docs.py` pairing-missing items in CI).
 - **Regression tests**: add boundary-condition cases under `tests/` (read the target
-  module's docstring first to understand its contract).
-- **Dependency hygiene**: use of `pip-audit` / the `requirements.lock` sync validator
+  module's docstring first to understand the contract).
+- **Dependency hygiene**: use of `pip-audit` / `requirements.lock` sync validator
   (`scripts/check_lock_sync.py`).
 - **CI debugging**: read the step comments in `.github/workflows/ci.yml` to understand
   each gate's intent.
@@ -131,3 +158,21 @@ knowledge required):
 Larger algorithm / architecture changes (error-classifier expansion, cross-file repair
 strategy, etc.) should be discussed in an Issue first; read `docs/algorithm_design.md`
 and the most recent `docs/review_*.md` to understand the existing design trade-offs.
+
+## Dependency Exemption Registry (required steps for pip-audit vulnerability exemptions)
+
+Known vulnerabilities hit by `pip-audit` that need an explicit exemption (CI
+`--ignore-vuln`) because "no fixed version is available upstream" **must** be
+registered in [docs/dependency_exemptions.md](docs/dependency_exemptions.md)
+(dependency / locked version / vulnerability ID / exemption reason / re-review
+trigger / re-review deadline). Adding `--ignore-vuln` to ci.yml without leaving
+a registry entry is not allowed.
+
+- New exemption: register first, then edit ci.yml (both land in the same PR,
+  keeping it auditable);
+- Upstream releases a fix: follow the registry's "re-review trigger" column to
+  upgrade promptly, remove the corresponding `--ignore-vuln` line from ci.yml,
+  and move the entry from "current exemptions" to "reviewed & closed";
+- Re-review the registry quarterly (entries past their re-review deadline get a
+  "exemption expired" note in the CHANGELOG), consistent with the dual-track
+  dependency-change checklist (requirements / lock).

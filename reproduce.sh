@@ -46,10 +46,15 @@ DATASET="examples"  # examples | swe_bench | synthetic：数据集选择
 TASK_LIMIT=3        # 由 MODE 决定（quick=3，full=不限）；默认 quick 即 3，与文档一致
 BASELINES="aitester,plain_llm,single_agent"  # 基线方法列表
 VERBOSE=""          # 是否输出详细日志
-ENABLE_RAG=""       # 2.3 RAG 纳入主实验：默认对合成/内置数据集显式开启 RAG
-# 3.1 多候选补丁：默认在 reproduce 流程中显式启用（A/B 口径说明见下），
-# 用户可用 --no-multi-candidate 回退到历史口径（ENABLE_MULTI_CANDIDATE_PATCH=false）
-MULTI_CANDIDATE=""  # 默认空 = 启用（export 为 true）；--no-multi-candidate 时设为 false
+# 2.3 RAG：W7（2026-10-05 审查落地·阴性证据驱动）默认关闭——RAG A/B 对照实验
+#（experiments/results/rag_ab_*，docs/experiment_ab_results_2026-09-28.md）实测
+# token +40.7% 负向、成功率无显著增益；此前"合成/内置数据集默认 --enable-rag"
+# 的口径不再成立。需要 RAG 对照时显式 --enable-rag；--no-rag 保留为兼容参数（空操作）。
+ENABLE_RAG=""
+# 3.1 多候选补丁：W7（2026-10-05 审查落地·阴性证据驱动）默认关闭——A/B 实测
+# 成功率 -2pp 且 token +256%（experiments/results/multi_candidate*）。需要时显式
+# --multi-candidate；--no-multi-candidate 保留为兼容参数（空操作）。
+MULTI_CANDIDATE="false"
 # 3.5 跨文件修复：默认关闭（保持历史单文件口径），--cross-file 显式启用
 CROSS_FILE=""       # 默认空 = 关闭；--cross-file 时设为 true
 
@@ -60,7 +65,9 @@ while [[ $# -gt 0 ]]; do
         --full)      MODE="full";  TASK_LIMIT="";  shift ;;
         --dataset)   DATASET="$2"; shift 2 ;;
         --baselines) BASELINES="$2"; shift 2 ;;
-        --no-rag)    ENABLE_RAG="--no-rag"; shift ;;
+        --enable-rag) ENABLE_RAG="--enable-rag"; shift ;;
+        --no-rag)    ENABLE_RAG=""; shift ;;
+        --multi-candidate) MULTI_CANDIDATE="true"; shift ;;
         --no-multi-candidate) MULTI_CANDIDATE="false"; shift ;;
         --cross-file) CROSS_FILE="true"; shift ;;
         --no-cross-file) CROSS_FILE="false"; shift ;;
@@ -69,27 +76,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 2.3 RAG 纳入主实验（消融公平性）：合成/内置数据集默认显式开启 RAG，
-# 使"完整系统 vs Plain LLM"的对比包含检索增强效果；rag_data/ 持久化目录
-# 跨实验复用（config.RAG_PERSIST_PATH 默认项目下 rag_data/）。
-# 用户可用 --no-rag 回退到 config.ENABLE_RAG（默认 false）口径。
-if [[ "$DATASET" == "synthetic" || "$DATASET" == "examples" ]]; then
-    if [[ -z "$ENABLE_RAG" ]]; then
-        ENABLE_RAG="--enable-rag"
-        info "数据集 '$DATASET' 默认开启 RAG（检索增强 + rag_data/ 持久化，2.3）"
-    fi
+# 2.3 RAG（W7 口径，2026-10-05）：默认关闭（阴性证据：token +40.7% 无成功率
+# 增益，见 rag_ab A/B 对照）；显式 --enable-rag 时开启（rag_data/ 持久化目录
+# 跨实验复用，config.RAG_PERSIST_PATH 默认项目下 rag_data/）。
+if [[ -n "$ENABLE_RAG" ]]; then
+    info "RAG: 显式开启（--enable-rag，rag_data/ 持久化）"
 else
     ENABLE_RAG=""
+    info "RAG: 默认关闭（W7 阴性证据口径；--enable-rag 显式开启）"
 fi
 
 info "模式: $MODE  |  数据集: $DATASET  |  基线: $BASELINES"
 [[ -n "$TASK_LIMIT" ]] && info "任务限制: $TASK_LIMIT"
 [[ -n "$ENABLE_RAG" ]] && info "RAG: 显式开启（--enable-rag）"
 
-# 3.1 多候选补丁：reproduce 默认显式启用（多候选 + 静态筛选），
-# 与历史单补丁口径的 A/B 对比经 `bash reproduce.sh --no-multi-candidate` 复现，
-# 两组结果 JSON 分别保留在 experiments/results/（文件名含时间戳，不互相覆盖）。
-export ENABLE_MULTI_CANDIDATE_PATCH="${MULTI_CANDIDATE:-true}"
+# 3.1 多候选补丁（W7 口径，2026-10-05）：默认关闭（阴性证据：成功率 -2pp、
+# token +256%）；显式 --multi-candidate 开启（多候选 + 静态筛选），
+# 与单补丁口径的 A/B 对照经该开关一键切换。
+export ENABLE_MULTI_CANDIDATE_PATCH="${MULTI_CANDIDATE:-false}"
 export MULTI_CANDIDATE_COUNT="${MULTI_CANDIDATE_COUNT:-3}"
 info "多候选补丁(3.1): ENABLE_MULTI_CANDIDATE_PATCH=$ENABLE_MULTI_CANDIDATE_PATCH MULTI_CANDIDATE_COUNT=$MULTI_CANDIDATE_COUNT"
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import threading
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -80,6 +81,13 @@ _PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "DETERMINISTIC_GUARD_ENABLE": "true",
         "BRANCH_COVERAGE_INJECT_ENABLE": "true",
         "ROUTE_STRUCTURED_ENABLE": "true",
+        # AA（2026-10-06 代码优化批次）：检出优先协议（ADR-0015 / W3）——logic 档
+        # 定义于 O1，早于 W3 落地，漏配行为层核心开关。ADR-0015"可经
+        # AITESTER_PROFILE=logic 组合"的口径由此补齐：开启后首轮全绿不再计成功，
+        # 路由 regenerate 逼 generator 先检出（红）再修复（绿），直指主批次
+        # false_fix=89.8% 的奖励自指根因（代价：+1 LLM call/任务，
+        # regeneration_count 上限保护）。默认档（fast / 不设 PROFILE）零变化。
+        "DETECTION_FIRST_ENABLE": "true",
     },
     "fast": {},
 }
@@ -340,6 +348,12 @@ EXECUTION_TIMEOUT: int = _validate_timeout(_EXECUTION_TIMEOUT_RAW, "EXECUTION_TI
 # ─── 工作流配置 ──────────────────────────────────────────────────────────────
 # 最小 1：迭代 0 次的工作流无意义（至少执行一次生成/执行循环）
 MAX_ITERATIONS: int = _parse_int_env("MAX_ITERATIONS", 3, 1, None)
+# Z2（2026-10-06 审查修复）：测试再生成次数上限的单一事实源。此前该值以
+# 字面量 1 同时硬编码在 workflow._MAX_REGENERATIONS 与 nodes 内局部变量
+# （两处靠注释"同口径"维系），漂移风险已在审查中登记。取 1：一次再生成
+# 已足够验证"换一版测试"是否解决问题，再多只会浪费 token（背景见
+# workflow.py 同名注释）。非环境变量（不进 env_budget 登记口径）。
+MAX_REGENERATIONS: int = 1
 # 范围 [0, 100]：百分比阈值超出区间无意义（来源：覆盖率定义域）
 COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 100.0)
 
@@ -347,6 +361,54 @@ COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 10
 ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
 ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
 ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
+
+
+def detection_first_enabled() -> bool:
+    """W3（2026-10-05 审查落地）：检出优先协议开关（DETECTION_FIRST_ENABLE）。
+
+    背景：主批次（benchmark_synthetic_20261001_121523）实证 false_fix_rate=89.8%——
+    修复循环以"自产测试通过"为成功信号，系统被奖励生成"能在缺陷代码上通过"
+    的弱测试而非"能让缺陷代码变红"的强测试。检出优先协议（"先红后绿"）：
+
+    1. 首轮执行（iteration==0，被测代码未修复）全绿 = 测试未检出任何缺陷
+       → 不视为成功，路由 regenerate 逼 generator 生成能让缺陷代码变红的
+       测试（受 _MAX_REGENERATIONS 上限保护，防乒乓）；
+    2. 首轮曾红（detection_first_red_seen=True）且修复后变绿 → 成功标记
+       red_then_green；再生成预算耗尽仍全绿 → all_green_unverified
+       （评估层应归入"未验证"，不计修复成功）。
+
+    读取口径：函数调用时读 env（非 import 期常量），与 nodes 层
+    TEST_SUITE_DEDUP_ENABLE 等开关同口径，便于测试 monkeypatch 与
+    运行时切换。默认 false 保持历史行为零变化（ADR-0003）。
+
+    X1（2026-10-05 审查 P0-3）：线程级覆盖。基准实验在同一进程内逐基线
+    顺序执行（run_benchmark 任务循环内 BASELINE_REGISTRY 逐个调用），
+    但 --parallel 下多个任务线程并发——进程级 os.environ 开关无法
+    区分"本线程正在跑 plain_llm_df 基线"与"邻线程正在跑 plain_llm"。
+    线程局部覆盖（set_detection_first_thread_override）供
+    run_plain_llm_df_baseline 在自身执行窗口内强制开启检出优先，
+    不污染同进程其他基线；None（默认）时回落 env 口径。
+    """
+    _override = getattr(_DETECTION_FIRST_THREAD_LOCAL, "override", None)
+    if _override is not None:
+        return bool(_override)
+    return os.getenv("DETECTION_FIRST_ENABLE", "false").lower() in ("true", "1", "on")
+
+
+# X1：检出优先协议的线程局部覆盖载体（与 llm_client._thread_local 同模式）
+_DETECTION_FIRST_THREAD_LOCAL = threading.local()
+
+
+def set_detection_first_thread_override(value: bool | None) -> None:
+    """设置/清除当前线程的检出优先覆盖（None = 回落 env 开关）。
+
+    供 run_benchmark 的 plain_llm_df 基线在 invoke 窗口内启用检出优先
+    路由与 prompt 段落；finally 中置 None 恢复，防跨任务残留
+    （线程池线程复用时尤其重要）。
+    """
+    _DETECTION_FIRST_THREAD_LOCAL.override = value
+
+
 # 1.2 变异得分评估：benchmark 运行后对每个任务的"生成测试 vs 被测源码"
 # 计算 mutation_score（内置轻量变异生成器，experiments/mutation_testing.py）。
 # 默认关闭——变异测试需对每任务跑 N 个变异体 × pytest 子进程（约 1-3s/变异体，

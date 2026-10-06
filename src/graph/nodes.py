@@ -31,7 +31,9 @@ from config import (
     EXECUTOR_USE_DOCKER,
     EXECUTOR_USE_VENV,
     MAX_ITERATIONS,
+    MAX_REGENERATIONS,
     TEMPERATURE,
+    detection_first_enabled,
 )
 from src.agents.debugger import DebuggerAgent
 from src.agents.executor import ExecutorAgent
@@ -679,6 +681,63 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     return update
 
 
+def _detection_first_regenerate_entry(state: AITesterState) -> bool:
+    """W3（2026-10-05 审查落地·检出优先协议）：判定本节点是否由"检出优先
+    再生成"路由进入（_should_debug 的 detection_first_all_green 分支）。
+
+    特征（与首生成 / 其他三类再生成路径可区分）：
+    - DETECTION_FIRST_ENABLE=true；
+    - test_passed 为 True（首生成恒 None；其余再生成路径均因测试失败触发）；
+    - iteration==0（未发生修复；detection_first 的再生成只发生在首轮）。
+
+    供两处消费：
+    1. 再生成计数（regeneration_count +1，防 executor↔generator 乒乓，
+       与其余三类再生成路径同口径）；
+    2. 构造"先红后绿"强化提示段落（见 _detection_first_section）。
+    """
+    return detection_first_enabled() and state.get("test_passed") is True and int(state.get("iteration", 0)) == 0
+
+
+def _detection_first_section(state: AITesterState) -> str | None:
+    """W3：检出优先再生成路径的 prompt 强化段落（非该路径时 None 不注入）。"""
+    if not _detection_first_regenerate_entry(state):
+        return None
+    return (
+        "【检出优先·先红后绿】上一版测试在当前（未修复的）代码上全部通过——"
+        "这说明测试没有检出任何缺陷，属于无效的全绿测试。请重新生成更强的测试："
+        "针对代码中最可能隐藏缺陷的边界条件、异常路径与特殊输入构造断言，"
+        "使测试在当前含缺陷的代码上**至少一个用例失败（变红）**。"
+        "禁止放松、删减或条件化断言来换取通过；禁止重新实现被测函数；"
+        "断言的期望值必须来自问题语义（数学定律/规约），不得抄袭实现当前行为。"
+    )
+
+
+def _derive_detection_first_status(passed: bool, red_seen: bool | None) -> str | None:
+    """Y1（2026-10-05 X 批次真实冒烟发现）：检出优先终态标注的三值推导（纯函数）。
+
+    背景：W3 原实现仅在 test_passed=True 时写 detection_first_status——
+    "首轮全绿 → 再生成 → 第二版变红 → 终止"轨迹（plain_llm_df 冒烟实测，
+    trace: PASS→regenerate→FAIL→done）下，exec1 写入的 all_green_unverified
+    残留为终值，与 detection_first_red_seen=True 并列出现语义矛盾
+    （"从未红"标注 vs "曾检出"信号）。终态标注应覆盖失败终局：
+
+    - passed ∧ red_seen  → red_then_green（先检出再修复——W3 原口径）
+    - passed ∧ 无 red    → all_green_unverified（弱测试假成功——W3 原口径）
+    - ¬passed ∧ red_seen → red_not_repaired（检出成功但未修复：plain_llm_df
+      无修复循环的正常终态 / aitester 修复失败的终态；**这是有效检出**，
+      评估层 detection 口径应计数，不得因 passed=False 丢弃）
+    - ¬passed ∧ 无 red   → None（不写：无检出无修复的失败无可标注语义，
+      保留上一轮写入值）
+
+    每轮执行后写，LangGraph 后写覆盖 → 最终值即终态（与 W3 注释口径一致）。
+    """
+    if passed:
+        return "red_then_green" if red_seen else "all_green_unverified"
+    if red_seen:
+        return "red_not_repaired"
+    return None
+
+
 def _generator_node(state: AITesterState) -> dict[str, Any]:
     """
     GeneratorAgent 节点：根据测试计划生成 pytest 测试代码。
@@ -874,6 +933,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
             metamorphic_section=_mr_section,
             differential_section=_diff_section,
+            # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
+            # "先红后绿"强化段落（非该路径时 None 不注入，历史口径零变化）
+            detection_first_section=_detection_first_section(state),
             # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
             # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
             injection_warning=_injection_warning,
@@ -959,15 +1021,17 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             deterministic_guard_report = _det_report
     # O4（2026-09-29 审查 P1）：恒真断言触发一次强制重生成。
     # tautological>=1 时标记 defect_type=test_defect，路由回 generator
-    # 重生成（受 _MAX_REGENERATIONS 上限保护，防死循环）。
+    # 重生成（受再生成上限保护，防死循环）。
     # 开关关闭（ORACLE_VALIDATE_ENABLE=false，默认）时 oracle_findings 恒空，
     # 历史口径零变化。
-    _MAX_REGENERATIONS = 1  # 与 workflow._MAX_REGENERATIONS 同口径
+    # Z2（2026-10-06 审查修复）：删除本函数内的同值局部字面量
+    # `_MAX_REGENERATIONS = 1`（与 workflow 模块常量双源，靠注释"同口径"
+    # 维系，漂移风险已登记），改用 config.MAX_REGENERATIONS 单一事实源。
     _tautological_count = sum(1 for f in oracle_findings if f.get("type") == "tautological")
     _o4_triggered = (
         _tautological_count >= 1
         and state.get("defect_type") != "test_defect"
-        and int(state.get("regeneration_count", 0)) < _MAX_REGENERATIONS
+        and int(state.get("regeneration_count", 0)) < MAX_REGENERATIONS
     )
 
     # N5（2026-09-29 审查 P2）：测试套件断言去重（HYPOTHESIS_ENABLE 同口径，
@@ -1071,6 +1135,12 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         or state.get("defect_type") == "test_defect"
         or (state.get("iteration", 0) > 0 and state.get("diagnosis") is not None)
         or _o4_triggered
+        # W3（2026-10-05 审查落地·检出优先协议）：第 4 类再生成进入方式——
+        # _should_debug 的 detection_first_all_green 分支（首轮全绿未检出）。
+        # 特征 iteration==0 + test_passed=True 与首生成（test_passed=None）可区分，
+        # 不并入本条件则该路径 regeneration_count 恒 0 → 上限保护失效 →
+        # executor↔generator 无限乒乓直至 recursion_limit（O4 同类根因）。
+        or _detection_first_regenerate_entry(state)
     ):
         update["regeneration_count"] = state.get("regeneration_count", 0) + 1
         update["diagnosis"] = None
@@ -1361,6 +1431,23 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
     # 路由），供评估层把该类任务归入"未验证假通过"而非"修复成功"。
     if result["passed"] and int(state.get("regeneration_count", 0)) > 0:
         update["test_regenerated_pass_unverified"] = True
+    # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关时
+    # 零行为变化）：见 config.detection_first_enabled 协议说明。
+    # - 首轮（iteration==0，被测代码未修复）执行：detection_first_red_seen 为
+    #   **任务级粘性信号**——本轮红灯（测试让缺陷代码变红）或历史任一轮
+    #   iteration==0 曾红过即为 True（再生成换一版测试不抹掉"系统曾检出"
+    #   的事实；"当前这套测试"口径由 M5 test_regenerated_pass_unverified 单独标记）。
+    # - 每轮执行后按 (passed, red_seen) 写三值终态标注（Y1 补失败终局，
+    #   纯函数 _derive_detection_first_status）：red_then_green /
+    #   all_green_unverified / red_not_repaired。最后一次写入即终态
+    #   （LangGraph 后写覆盖）。
+    if detection_first_enabled():
+        if int(state.get("iteration", 0)) == 0:
+            update["detection_first_red_seen"] = (not result["passed"]) or bool(state.get("detection_first_red_seen"))
+        _df_red_seen = update.get("detection_first_red_seen", state.get("detection_first_red_seen"))
+        _df_status = _derive_detection_first_status(bool(result["passed"]), _df_red_seen)
+        if _df_status is not None:
+            update["detection_first_status"] = _df_status
     # O3（2026-09-29 审查 P1）：分支覆盖率注入层（BRANCH_COVERAGE_INJECT_ENABLE=true
     # 时启用，默认关）。本节点在本地 / venv 沙箱执行完成后，用 coverage 模块
     # （subprocess 同解释器，独立临时数据文件）对 (target_file, generated_test)
@@ -1924,10 +2011,15 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     # STRATEGY_BANK_ENABLE 嵌套在 if expert_pool_enabled(): 内，单独开启
     # 策略银行（EXPERT_POOL_ENABLE=false）时策略检索永不触发（死开关）。
     # 现拆出独立条件：expert_pool_enabled() 或 strategy_bank_enabled() 时
-    # 均检索策略；专家池候选存在时注入胜出候选（原口径）；专家池未启用
-    # 时注入单 Agent 补丁（prompt_hint 追加到 result["patch"]）。
+    # 均检索策略。Z1（2026-10-06 审查修复）：prompt_hint 不再拼进 patch
+    # 代码（自然语言混入代码，靠下游 AST 守卫兜底拒绝——浪费候选），
+    # 改存 state 新声明键 strategy_bank_hint（观测 + 后续 prompt 注入挂点）。
     from src.tools.strategy_bank import select_strategy as _select_strategy
     from src.tools.strategy_bank import strategy_bank_enabled as _sb_enabled
+
+    # Z1：本节点检出的策略提示文本（两条路径共用；None = 未检出/开关关，
+    # 经 update["strategy_bank_hint"] 持久化，默认关时恒 None 键集合同构）
+    _sb_hint: str | None = None
 
     if expert_pool_enabled():
         from src.graph.expert_pool import ExpertPoolAgent
@@ -1974,7 +2066,8 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 expert_pool_meta["debate_revise"] = best_revise
                 expert_pool_meta["debate_top_k"] = len(debate_result) if best_revise else 0
         # 策略银行协同（STRATEGY_BANK_ENABLE=true 时）：按失败签名检索策略，
-        # 把策略 prompt_hint 注入胜出候选（零额外 LLM 成本，纯静态映射）
+        # 把策略 prompt_hint 记录到 _sb_hint（零额外 LLM 成本，纯静态映射；
+        # Z1：不再字符串拼进候选 patch——见上方 _sb_hint 初始化处注释）
         if verified and _sb_enabled():
             strategy = _select_strategy(
                 error_category=state.get("error_category") or "unknown",
@@ -1982,7 +2075,7 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 cross_file=bool(state.get("cross_file_deps")),
             )
             if strategy and strategy.get("prompt_hint"):
-                verified[0]["patch"] = verified[0]["patch"] + "\n\n" + strategy["prompt_hint"]
+                _sb_hint = str(strategy["prompt_hint"])
         if verified:
             best = verified[0]
             # 专家池胜出候选替换单 Agent 补丁（保守：仅当单 Agent 补丁为空或
@@ -2094,17 +2187,20 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
     # （此前此处每轮无条件 add_repair，未经验证（含最终失败/回滚）的补丁
     # 进入修复案例库，成为后续任务检索到的"参考修复案例"——记忆污染。）
     # O13（2026-09-29 审查 P1）：策略银行独立于专家池——专家池未启用时，
-    # 若 STRATEGY_BANK_ENABLE=true 仍检索策略并注入单 Agent 补丁
-    # （prompt_hint 追加到 result["patch"]，零额外 LLM 成本，纯静态映射）。
+    # 若 STRATEGY_BANK_ENABLE=true 仍检索策略并记录提示文本
+    # （零额外 LLM 成本，纯静态映射。Z1：prompt_hint 不再追加到
+    # result["patch"]，改入 _sb_hint → state["strategy_bank_hint"]）。
     if not expert_pool_enabled() and _sb_enabled():
         _sb_strategy = _select_strategy(
             error_category=state.get("error_category") or "unknown",
             fix_strategy_tag=state.get("fix_strategy_tag"),
             cross_file=bool(state.get("cross_file_deps")),
         )
-        if _sb_strategy and _sb_strategy.get("prompt_hint") and result.get("patch"):
-            result["patch"] = result["patch"] + "\n\n" + _sb_strategy["prompt_hint"]
-            logger.info("O13 策略银行（独立路径）：注入 prompt_hint（error_category=%s）", state.get("error_category"))
+        if _sb_strategy and _sb_strategy.get("prompt_hint"):
+            # Z1：不再以 result.get("patch") 非空为前提——提示文本与补丁
+            # 是否产出解耦（空补丁轮次的策略命中同样有观测价值）
+            _sb_hint = str(_sb_strategy["prompt_hint"])
+            logger.info("O13 策略银行（独立路径）：记录 prompt_hint（error_category=%s）", state.get("error_category"))
     # 显式标注 dict[str, Any]：值类型混含 str / dict（adversarial_check），
     # mypy 按字面量推断为 dict[str, str | dict[str, int]] 导致后续
     # update["rag_stats"] = list[...] 赋值报错
@@ -2114,6 +2210,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # P2-4（2026-10-05 独立审查）：规则分类置信度入 state（risk_approval
         # 置信度因子的信号源；此前该键未声明未写入，三因子恒缺一）
         "error_confidence": result.get("error_confidence"),
+        # Z1（2026-10-06 审查修复）：策略银行提示文本入 state（新声明键，
+        # 两条检索路径共用；默认关时恒 None，键集合同构）
+        "strategy_bank_hint": _sb_hint,
         "patch": result["patch"],
         # 3.2 对抗性推理：记录 LLM 输出的对抗性校验结果（缺省时为零值）
         "adversarial_check": result.get("adversarial_check", {"scenarios_checked": 0, "all_passed": False}),

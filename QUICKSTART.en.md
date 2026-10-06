@@ -1,4 +1,6 @@
 > **Language**: [中文版](QUICKSTART.md) | English (this document)
+>
+> Last updated: 2026-10-06 (Z5: bilingual gate now covers root-level pairs; this line added to satisfy the date-sync check)
 
 # AITester Quick Start Guide
 
@@ -92,8 +94,8 @@ rm -rf src/cache
 All of the following switches are off by default; enable them as needed (see the comments in `.env.example` for details):
 
 ```bash
-# ── 2026-10-05 review batch: switch presets (recommended entry point) ───
-# Three presets configure a group of switches at once (setdefault injection;
+# ── Switch presets (recommended entry point; four tiers since batch AA, 2026-10-06)
+# Tier presets configure a group of switches at once (setdefault injection;
 # explicitly set env vars are never overridden):
 #   safe       — security-sensitive: kernel sandbox + patch rollback
 #                 (fail-closed) + injection guard + rogue-agent monitoring +
@@ -101,6 +103,11 @@ All of the following switches are off by default; enable them as needed (see the
 #   scientific — research-evaluation: SpecIR/DSL/spec-oracle execution +
 #                 mutation detection + oracle validation + snapshot rollback
 #                 all on (pair with deterministic=True)
+#   logic      — full logic chain: superset of scientific + strict spec
+#                 validation + deterministic guard + branch-coverage injection
+#                 + structured routing + detection-first protocol (batch AA
+#                 completed DETECTION_FIRST_ENABLE — the whole "logic-driven"
+#                 chain testable in one shot)
 #   fast       — historical defaults (equivalent to no PROFILE)
 export AITESTER_PROFILE=scientific
 

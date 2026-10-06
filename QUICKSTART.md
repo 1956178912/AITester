@@ -100,12 +100,15 @@ rm -rf ~/.cache/aitester/llm
 以下开关均默认关闭，按需启用（详见 `.env.example` 注释）：
 
 ```bash
-# ── 2026-10-05 审查批次：开关预设（推荐入口）─────────────────────────────
-# 三档预设一次配置一组开关（setdefault 注入，显式设置的 env 不被覆盖）：
+# ── 开关预设（推荐入口；2026-10-06 AA 批次起共四档）──────────────────────
+# 档位预设一次配置一组开关（setdefault 注入，显式设置的 env 不被覆盖）：
 #   safe       —— 安全敏感档：内核沙箱 + 补丁回滚（fail-closed）+ 注入守卫 +
 #                 流氓监控 + flaky 门禁全开
 #   scientific —— 科研评测档：SpecIR/DSL/规约 oracle 执行 + 变异检出率 +
 #                 oracle 校验 + 快照回滚全开（配合 deterministic=True）
+#   logic      —— 逻辑链全开档：scientific 超集 + 规约强校验 + 确定性守卫 +
+#                 分支覆盖注入 + 结构化路由 + 检出优先协议（AA 批次补齐
+#                 DETECTION_FIRST_ENABLE——"逻辑驱动"完整链路一键可测）
 #   fast       —— 历史默认档（与不设 PROFILE 等价）
 export AITESTER_PROFILE=scientific
 

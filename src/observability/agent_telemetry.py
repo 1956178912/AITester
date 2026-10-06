@@ -62,6 +62,73 @@ _FAILURE_PATTERN_NAMES: tuple[str, ...] = (
     "injection_detected",
 )
 
+# ─── Y2（2026-10-05 审查 P2-3）：本地失败模式 → MAST 分类法对齐表 ────────────
+# MAST（Multi-Agent System Failure Taxonomy，Cemri et al., arXiv 2503.13657,
+# NeurIPS 2025 Datasets & Benchmarks）是 LLM 多智能体系统失效的 14 类
+# 分类法，三大类：Specification & Design（规约与设计，3 类）/
+# Inter-agent Misalignment（智能体间失调，3 类）/ Task Verification &
+# Alignment（任务验证与对齐，8 类）。
+# 对齐价值：本系统的失败签名可与其他 MAST 标注的多智能体研究横向比较
+# （可发表的分析框架）；映射为本仓维护者的保守判定——
+#   - 多对一是常态（多个本地签名对应同一 MAST 类）；
+#   - 无对应显式置 None（如 budget_early_stop 是资源治理信号，MAST v1
+#     不覆盖；known_error_category_hit 是本地伞形类别）——诚实口径，
+#     不为"全覆盖"硬凑映射。
+_PATTERN_TO_MAST: dict[str, str | None] = {
+    # LLM 空响应 → 无法执行所需行为（能力维度）
+    "llm_empty_response_loop": "Incapability of required action or behavior",
+    # JSON 解析失败循环 → 无法产出合法输出格式
+    "llm_json_parse_failure_loop": "Incapability of valid output format",
+    # 多候选全拒绝 → 聚合阶段的错误/不完整结果
+    "multi_candidate_all_rejected": "Aggregation of wrong or incomplete results",
+    # 执行轨迹丢失 → 节点间信息交换失败（executor → 消费方）
+    "execution_trace_missing": "Information exchange failure",
+    # 预算早停 → 资源治理信号（MAST v1 无对应类）
+    "budget_early_stop": None,
+    # 命名契约破坏重写 → 违反系统指令（禁止重写契约）
+    "contract_break_rewrite": "Instruction violations",
+    # 重写破坏导入 → 违反任务/过程依赖（依赖图破坏）
+    "import_break_after_rewrite": "Violation of task and process dependencies",
+    # 修复不收敛（iteration 递增 correctness 恒 0）→ 优化目标与任务目标失调
+    "repair_not_converging": "Goal and action misalignment",
+    # 跨文件拓扑错配 → 任务分配与协调错配
+    "cross_file_topology_mismatch": "Task allocation and coordination mismatch",
+    # 已知错误类别命中 → 本地伞形类别（不映射）
+    "known_error_category_hit": None,
+    # 注入命中 → 优先服从注入指令而非系统指令
+    "injection_detected": "Instruction violations",
+}
+
+# MAST 三大类（供渲染分组；映射到类的本地签名归入其所属大类）
+_MAST_TOP_CATEGORIES: dict[str, str] = {
+    "Specification underspecification": "Specification & Design",
+    "Task allocation and coordination mismatch": "Specification & Design",
+    "Violation of task and process dependencies": "Specification & Design",
+    "Information exchange failure": "Inter-agent Misalignment",
+    "Goal and action misalignment": "Inter-agent Misalignment",
+    "Aggregation of wrong or incomplete results": "Inter-agent Misalignment",
+    "Inadequate verification": "Task Verification & Alignment",
+    "Incapability of required action or behavior": "Task Verification & Alignment",
+    "Incapability of valid output format": "Task Verification & Alignment",
+    "Instruction violations": "Task Verification & Alignment",
+    "Knowledge boundaries": "Task Verification & Alignment",
+    "Hallucination": "Task Verification & Alignment",
+    "Context overflow": "Task Verification & Alignment",
+    "Attention and saliency failure": "Task Verification & Alignment",
+}
+
+
+def mast_class_of(pattern_name: str) -> str | None:
+    """本地失败模式名 → MAST 类名（无对应返回 None）。"""
+    return _PATTERN_TO_MAST.get(pattern_name)
+
+
+def mast_top_category_of(mast_class: str | None) -> str | None:
+    """MAST 类名 → MAST 三大类之一（未知/None 返回 None）。"""
+    if mast_class is None:
+        return None
+    return _MAST_TOP_CATEGORIES.get(mast_class)
+
 
 def agent_telemetry_enabled() -> bool:
     """AgentTelemetry 开关（AGENT_TELEMETRY_ENABLE=true 时启用，默认 false）。"""
@@ -163,8 +230,6 @@ def _pattern_injection_detected(record: dict[str, Any]) -> bool:
     return isinstance(findings, list) and len(findings) > 0
 
 
-_PATTERns_detectors_alias = None  # 占位防误用（_PATTERN_DETECTORS 在下方定义）
-
 _PATTERN_DETECTORS: dict[str, Any] = {
     "llm_empty_response_loop": _pattern_llm_empty_response_loop,
     "llm_json_parse_failure_loop": _pattern_llm_json_parse_failure_loop,
@@ -195,7 +260,9 @@ def match_failure_patterns(
     Returns:
         结构化报告 dict：
             {
-              "patterns": {模式名: {"count": int, "examples": [task_id, ...]}},
+              "patterns": {模式名: {"count": int, "examples": [task_id, ...],
+                                    "mast_class": str | None,       # Y2
+                                    "mast_category": str | None}},  # Y2
               "total_records": int,
               "matched_records": int,   # 至少命中一个模式的记录数
               "unmatched_records": int  # 未命中任何模式的记录数
@@ -225,7 +292,14 @@ def match_failure_patterns(
     patterns: dict[str, dict[str, Any]] = {}
     for name in _FAILURE_PATTERN_NAMES:
         examples = pattern_hits[name][:examples_per_pattern]
-        patterns[name] = {"count": len(pattern_hits[name]), "examples": examples}
+        mast_class = mast_class_of(name)
+        patterns[name] = {
+            "count": len(pattern_hits[name]),
+            "examples": examples,
+            # Y2：MAST 对齐标注（无对应类为 None——诚实口径，不为全覆盖硬凑）
+            "mast_class": mast_class,
+            "mast_category": mast_top_category_of(mast_class),
+        }
 
     report = {
         "patterns": patterns,
@@ -258,18 +332,26 @@ def render_telemetry_report(report: dict[str, Any]) -> str:
         f"- 命中至少一个模式的记录数: {report.get('matched_records', 0)}",
         f"- 未命中任何模式的记录数: {report.get('unmatched_records', 0)}",
         "",
-        "| 失败模式 | 命中次数 | 示例 task_id（前 3） |",
-        "|----------|----------|----------------------|",
+        "MAST 对齐口径：本地模式按维护者保守判定映射到 MAST 14 类",
+        "（Cemri et al., arXiv 2503.13657, NeurIPS 2025）；无对应类显式",
+        "标「—」（如资源治理信号 budget_early_stop，MAST v1 不覆盖）。",
+        "",
+        "| 失败模式 | 命中次数 | MAST 类 | MAST 大类 | 示例 task_id（前 3） |",
+        "|----------|----------|---------|-----------|----------------------|",
     ]
     for pattern_name, info in report.get("patterns", {}).items():
         examples = ", ".join(info.get("examples", [])) or "—"
-        lines.append(f"| {pattern_name} | {info.get('count', 0)} | {examples} |")
+        mast_class = info.get("mast_class") or "—"
+        mast_category = info.get("mast_category") or "—"
+        lines.append(f"| {pattern_name} | {info.get('count', 0)} | {mast_class} | {mast_category} | {examples} |")
     lines.append("")
     return "\n".join(lines)
 
 
 __all__ = [
     "agent_telemetry_enabled",
+    "mast_class_of",
+    "mast_top_category_of",
     "match_failure_patterns",
     "render_telemetry_report",
 ]

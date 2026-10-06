@@ -47,11 +47,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Z9（2026-10-06 审查落地）：贝叶斯配对分析（Dirichlet 后验，纯 stdlib）。
+# 与 NHST 并列呈现、不替换——详见 bayesian_paired.py 模块 docstring
+# （方法学依据：Furia et al., TSE 2019 对 SE 实验 NHST 的批评）。
+from experiments.bayesian_paired import bayesian_paired_analysis, interpret_bayes  # noqa: E402
+
 # 参与对比的基线（AITester 完整管线 + 两个简化基线）
 _BASELINES = ("aitester", "plain_llm", "single_agent")
 
 
-def load_experiment_results(results_dir: str, batch_files: list[str] | None = None) -> dict[str, list[dict]]:
+def load_experiment_results(
+    results_dir: str,
+    batch_files: list[str] | None = None,
+    allow_schema_mixed: bool = False,
+) -> dict[str, list[dict]]:
     """
     加载实验结果数据（历史入口，语义与 R2 之前完全一致）
 
@@ -71,12 +80,14 @@ def load_experiment_results(results_dir: str, batch_files: list[str] | None = No
     Returns:
         按基线分组的实验结果字典
     """
-    results, _ = load_experiment_results_with_sources(results_dir, batch_files)
+    results, _ = load_experiment_results_with_sources(results_dir, batch_files, allow_schema_mixed=allow_schema_mixed)
     return results
 
 
 def load_experiment_results_with_sources(
-    results_dir: str, batch_files: list[str] | None = None
+    results_dir: str,
+    batch_files: list[str] | None = None,
+    allow_schema_mixed: bool = False,
 ) -> tuple[dict[str, list[dict]], list[str]]:
     """R2（2026-10-05 审查）：加载实验结果并返回"实际纳入"的批次文件清单。
 
@@ -85,6 +96,9 @@ def load_experiment_results_with_sources(
     列表（按加载顺序 = mtime 降序，N5）。"实际纳入"口径：
     - 白名单模式：指定的文件中 dataset == "synthetic" 且成功解析的；
     - glob 模式：递归扫描的 benchmark_*.json 中同样实际加载了数据的。
+    - X2（P0-4b）：默认还要求 M1 schema 完备（结果行含 detection_rate，
+      见 _batch_is_m1_schema_complete）；allow_schema_mixed=True 恢复
+      历史"混批"口径。
 
     报告头部"数据来源"章节消费本清单（审计用：读者可核对 p 值背后
     恰好是哪些批次，避免混批次结论不可复现）。
@@ -92,6 +106,7 @@ def load_experiment_results_with_sources(
     Args:
         results_dir: 实验结果目录路径
         batch_files: 批次文件白名单（相对 results_dir；None 时走 glob）
+        allow_schema_mixed: X2——True 时纳入 schema 不完备批次（历史口径）
 
     Returns:
         (按基线分组的结果字典, 实际纳入的批次文件路径字符串列表——
@@ -115,18 +130,19 @@ def load_experiment_results_with_sources(
         for _bp in _sort_batch_files_deterministic(results_path / _bf for _bf in batch_files):
             if _bp not in _seen_files:
                 _seen_files.add(_bp)
-                if _load_batch_file(results, _bp):
+                if _load_batch_file(results, _bp, allow_schema_mixed=allow_schema_mixed):
                     included_files.append(_display_path(_bp))
         return results, included_files
 
     # 递归查找所有 benchmark JSON 文件（M13：确定性遍历；2026-10-05 P0：
     # 排序主键 = 文件名内嵌时间戳降序（实验属性，跨机可复算），mtime 兜底；
     # "最新批次先加载"使 _pair_by_task 首见去重语义成立；
-    # R2：记录实际纳入的文件供"数据来源"审计章节消费）
+    # R2：记录实际纳入的文件供"数据来源"审计章节消费；
+    # X2：schema 不完备批次默认剔除（allow_schema_mixed 恢复历史口径））
     included_files.extend(
         _display_path(json_file)
         for json_file in _sort_batch_files_deterministic(results_path.glob("**/benchmark_*.json"))
-        if _load_batch_file(results, json_file)
+        if _load_batch_file(results, json_file, allow_schema_mixed=allow_schema_mixed)
     )
 
     return results, included_files
@@ -175,21 +191,51 @@ def _ts_rank(ts: str) -> int:
         return 0
 
 
-def _load_batch_file(results: dict[str, list[dict]], json_file: Path) -> bool:
+def _batch_is_m1_schema_complete(data: dict) -> bool:
+    """X2（2026-10-05 审查 P0-4b）：批次是否携带 M1 诚实指标字段。
+
+    判据：任一基线的任一 detail 行的 "detection_rate" **非 None**——键存在
+    但全 None 的批次（如 main_batch/benchmark_synthetic_20261001_112528.json
+    等 n=5 冒烟批次：schema 已落盘但 M1 三指标从未在该批次上计算）与
+    M1 批次混合会把 None 行并入"detection 可测数"分母口径（历史报告
+    "60 任务/可测 49"即 2 个 n=5 冒烟批次混入所致），故默认剔除。
+    """
+    for baseline_data in data.get("results", {}).values():
+        if not isinstance(baseline_data, dict):
+            continue
+        for row in baseline_data.get("details", []):
+            if isinstance(row, dict) and row.get("detection_rate") is not None:
+                return True
+    return False
+
+
+def _load_batch_file(results: dict[str, list[dict]], json_file: Path, allow_schema_mixed: bool = False) -> bool:
     """M13（2026-09-29 审查 P0）：加载单个批次文件并写入 results。
 
     仅纳入 dataset 为 "synthetic" 的批次（口径见 load_experiment_results
     的 2026-09-26 round9 注释）。
 
+    X2（2026-10-05 审查 P0-4b）：默认同时要求批次为 M1 schema 完备
+    （结果行含 detection_rate 键，见 _batch_is_m1_schema_complete）——
+    schema 不完备的早期/冒烟批次默认剔除（warning 可见），历史混批口径
+    可经 allow_schema_mixed=True 显式恢复。
+
     Returns:
-        该文件是否实际纳入（R2 审计口径：dataset 非 synthetic 或解析
-        失败时返回 False，不进入"数据来源"清单）
+        该文件是否实际纳入（R2 审计口径：dataset 非 synthetic、schema
+        不完备（默认口径）或解析失败时返回 False，不进入"数据来源"清单）
     """
     try:
         with open(json_file, encoding="utf-8") as f:
             data = json.load(f)
         dataset = data.get("dataset", "")
         if dataset != "synthetic":
+            return False
+        if not allow_schema_mixed and not _batch_is_m1_schema_complete(data):
+            print(
+                f"警告：批次 {json_file.name} 无任何非 None 的 detection_rate 行——"
+                "M1 指标未计算（早期/冒烟批次），默认剔除；如需历史混批口径传 "
+                "--allow-schema-mixed"
+            )
             return False
         for baseline, baseline_data in data.get("results", {}).items():
             if baseline in results:
@@ -680,6 +726,7 @@ def run_all_statistics(
     results_dir: str,
     output_file: str | None = None,
     batch_files: list[str] | None = None,
+    allow_schema_mixed: bool = False,
 ) -> list[dict]:
     """
     运行所有统计检验并生成报告
@@ -690,6 +737,10 @@ def run_all_statistics(
         batch_files: R2 可选的批次文件白名单（相对 results_dir 的路径，
             透传 load_experiment_results_with_sources；None 时保持历史
             glob 全目录行为不变）
+        allow_schema_mixed: X2（P0-4b）——True 时纳入 schema 不完备批次
+            （结果行缺 detection_rate 的早期/冒烟批次；历史混批口径）。
+            默认 False：仅纳入 M1 schema 完备批次，防 None/缺失行混入
+            诚实指标分母（"detection 可测数"口径失真）。
 
     Returns:
         比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig /
@@ -701,7 +752,9 @@ def run_all_statistics(
     print("=" * 70)
 
     # 加载数据（R2：同时取"实际纳入"的批次清单，供审计章节与控制台输出）
-    data, source_files = load_experiment_results_with_sources(results_dir, batch_files)
+    data, source_files = load_experiment_results_with_sources(
+        results_dir, batch_files, allow_schema_mixed=allow_schema_mixed
+    )
     _mode = "白名单" if batch_files is not None else "glob 全目录"
     print(f"\n数据来源：{len(source_files)} 个批次文件（{_mode}模式）")
     for _src in source_files:
@@ -784,6 +837,20 @@ def run_all_statistics(
             }
         )
 
+        # Z9：贝叶斯配对后验（与 McNemar 并列呈现；n=50 级样本量下 p 值
+        # 无分辨力时，后验直接量化效应量不确定度——P(δ>0) 与 ROPE 概率）
+        _bayes = bayesian_paired_analysis(data["aitester"], data[baseline], field="passed")
+        comparisons[-1].update(
+            {
+                "bayes_mean_diff": _bayes["post_mean"],
+                "bayes_ci_low": _bayes["ci_low"],
+                "bayes_ci_high": _bayes["ci_high"],
+                "bayes_p_greater": _bayes["p_greater"],
+                "bayes_p_rope": _bayes["p_rope"],
+                "bayes_verdict": interpret_bayes(_bayes),
+            }
+        )
+
         # R2：Cliff's delta 非参数效应量（与 Cohen's d 并列，二值配对更稳健）
         delta, _ = cliffs_delta(data["aitester"], data[baseline])
         comparisons[-1].update(
@@ -849,6 +916,17 @@ def run_all_statistics(
                 f"(p={_mcn_p:.4f} "
                 f"{comparisons[-1]['mcnemar_sig']}, 不一致对={comparisons[-1]['mcnemar_n_concordant_diff']})"
             )
+        # Z9：贝叶斯配对后验（并列呈现；δ = AITester − 基线的后验边际差）
+        if comparisons[-1].get("bayes_p_greater") is not None:
+            print(
+                f"  贝叶斯后验（Dirichlet，MC seed=42）: δ均值="
+                f"{_fmt_stat_num(comparisons[-1]['bayes_mean_diff'])}, "
+                f"95% CI [{_fmt_stat_num(comparisons[-1]['bayes_ci_low'])}, "
+                f"{_fmt_stat_num(comparisons[-1]['bayes_ci_high'])}], "
+                f"P(δ>0)={comparisons[-1]['bayes_p_greater']:.4f}, "
+                f"P(ROPE)={comparisons[-1]['bayes_p_rope']:.4f} "
+                f"({comparisons[-1]['bayes_verdict']})"
+            )
 
     # R14：二值率独立两组二项检验 + BH-FDR 多重比较校正（并列呈现）
     print("\n" + "=" * 70)
@@ -882,6 +960,9 @@ def run_all_statistics(
             if stats_summary[baseline]["n"] == 0:
                 continue
             h_chi2, h_p, h_ndiff, h_ncommon = mcnemar_test(data["aitester"], data[baseline], field=metric_field)
+            # Z9：诚实指标的贝叶斯配对后验（与 McNemar 并列；detection/repair
+            # 的 0.0/1.0 逐任务值直接构成列联表，None 无 gold 材料任务已跳过）
+            h_bayes = bayesian_paired_analysis(data["aitester"], data[baseline], field=metric_field)
             honest_comparisons.append(
                 {
                     "metric": metric_label,
@@ -892,6 +973,12 @@ def run_all_statistics(
                     "chi2": h_chi2,
                     "p": h_p,
                     "sig": interpret_p(h_p),
+                    "bayes_mean": h_bayes["post_mean"],
+                    "bayes_ci_low": h_bayes["ci_low"],
+                    "bayes_ci_high": h_bayes["ci_high"],
+                    "bayes_p_greater": h_bayes["p_greater"],
+                    "bayes_p_rope": h_bayes["p_rope"],
+                    "bayes_verdict": interpret_bayes(h_bayes),
                 }
             )
     if honest_comparisons:
@@ -904,6 +991,13 @@ def run_all_statistics(
                 f"，不一致对 {h['n_diff']}，χ²={_fmt_stat_num(h['chi2'])}"
                 f"，p={_fmt_stat_num(h['p'])} ({h['sig']})"
             )
+            if h.get("bayes_p_greater") is not None:
+                print(
+                    f"    贝叶斯后验: δ均值={_fmt_stat_num(h['bayes_mean'])}, "
+                    f"95% CI [{_fmt_stat_num(h['bayes_ci_low'])}, {_fmt_stat_num(h['bayes_ci_high'])}], "
+                    f"P(δ>0)={h['bayes_p_greater']:.4f}, P(ROPE)={h['bayes_p_rope']:.4f} "
+                    f"({h['bayes_verdict']})"
+                )
 
     if output_file:
         # 生成 Markdown 报告（R2：新增"数据来源 / McNemar / Bootstrap CI /
@@ -923,10 +1017,13 @@ def run_all_statistics(
 
         # 2026-10-05 P0：可复算声明——排序主键为文件名内嵌时间戳（实验
         # 属性），报告数值可用如下命令从入库工件逐位复现
+        # X2（P0-4b）：allow_schema_mixed 时复算命令须带同名旗标（否则
+        # 默认口径会剔除 schema 不完备批次，数值不可复现）
         _recompute_cmd = (
             "python experiments/statistical_analysis.py "
             f"--results-dir {results_dir} --output <report.md>"
             + (f" --batches {','.join(source_files)}" if source_files else "")
+            + (" --allow-schema-mixed" if allow_schema_mixed else "")
         )
         report_lines += [
             "",
@@ -1069,6 +1166,51 @@ def run_all_statistics(
                 f"| {_fmt_stat_num(comp['cliffs_delta'])} | {comp['cliffs_effect']} |"
             )
 
+        # Z9（2026-10-06 审查落地）：贝叶斯配对分析落盘——n=50 级样本量下
+        # NHST p 值无分辨力（"不显著"≠"无差异"），后验分布直接量化效应量
+        # 不确定度。诚实指标（detection/repair）与 passed（自指，仅诊断）
+        # 并列呈现；解读冲突时与 McNemar 节同序——以诚实指标为准。
+        report_lines += [
+            "",
+            "## 贝叶斯配对分析（Z9，Dirichlet 后验——与 NHST 并列）",
+            "",
+            "Z9 协议：配对二值列联表 (n11, n01, n10, n00) 上取均匀先验的",
+            "Dirichlet 后验，报告边际差 δ = p(AITester) − p(基线) 的后验均值、",
+            "95% 可信区间、P(δ>0) 与 ROPE 概率（|δ| ≤ 0.05 视为实践等价）。",
+            "Monte Carlo 20000 次、random.Random(seed=42)（纯 stdlib，逐位可复现）。",
+            "结论标签：bayes_pos / bayes_neg（方向稳健）、bayes_equiv（实践等价）、",
+            "bayes_inconclusive（证据不足——小样本最常见结局，诚实标注而非",
+            "强行二分）。方法学依据：Furia et al., TSE 2019（arXiv:1811.05422）。",
+            "",
+            "### 诚实指标（首要结论口径）",
+            "",
+            "| 指标 | 比较 | δ 后验均值 | 95% CI | P(δ>0) | P(ROPE) | 结论 |",
+            "|------|------|-----------|--------|--------|---------|------|",
+        ]
+        for h in honest_comparisons:
+            if h.get("bayes_mean") is None:
+                continue
+            report_lines.append(
+                f"| {h['metric']} | {h['comparison']} | {_fmt_stat_num(h['bayes_mean'])} "
+                f"| [{_fmt_stat_num(h['bayes_ci_low'])}, {_fmt_stat_num(h['bayes_ci_high'])}] "
+                f"| {h['bayes_p_greater']:.4f} | {h['bayes_p_rope']:.4f} | {h['bayes_verdict']} |"
+            )
+        report_lines += [
+            "",
+            "### passed（自指指标，仅作诊断参考）",
+            "",
+            "| 比较 | δ 后验均值 | 95% CI | P(δ>0) | P(ROPE) | 结论 |",
+            "|------|-----------|--------|--------|---------|------|",
+        ]
+        for comp in comparisons:
+            if comp.get("bayes_mean_diff") is None:
+                continue
+            report_lines.append(
+                f"| {comp['comparison']} | {_fmt_stat_num(comp['bayes_mean_diff'])} "
+                f"| [{_fmt_stat_num(comp['bayes_ci_low'])}, {_fmt_stat_num(comp['bayes_ci_high'])}] "
+                f"| {comp['bayes_p_greater']:.4f} | {comp['bayes_p_rope']:.4f} | {comp['bayes_verdict']} |"
+            )
+
         report_lines += [
             "",
             "## 显著性标记说明",
@@ -1112,7 +1254,7 @@ def main() -> None:
 
     参数：
         --results-dir: 实验结果目录（默认 experiments/results）
-        --output: Markdown 报告输出路径（默认 experiments/statistical_report.md）
+        --output: Markdown 报告输出路径（默认 experiments/results/statistical_report.md，gitignore 区）
         --batches: 逗号分隔的批次文件白名单（相对 --results-dir 的路径，
             如 main_batch/benchmark_a.json,main_batch/benchmark_b.json）。
             显式指定后仅纳入这些文件（dataset 非 synthetic 的仍会被
@@ -1123,8 +1265,8 @@ def main() -> None:
     parser.add_argument("--results-dir", default="experiments/results", help="实验结果目录（默认 experiments/results）")
     parser.add_argument(
         "--output",
-        default="experiments/statistical_report.md",
-        help="Markdown 报告输出路径（默认 experiments/statistical_report.md）",
+        default="experiments/results/statistical_report.md",
+        help="Markdown 报告输出路径（默认 experiments/results/statistical_report.md，gitignore 区）",
     )
     parser.add_argument(
         "--batches",
@@ -1132,12 +1274,19 @@ def main() -> None:
         help="R2：逗号分隔的批次文件白名单（相对 --results-dir 的路径），"
         "仅纳入指定文件；未提供时递归 glob 全目录（历史行为）",
     )
+    parser.add_argument(
+        "--allow-schema-mixed",
+        action="store_true",
+        help="X2（P0-4b）：纳入 schema 不完备批次（结果行缺 detection_rate 的早期/冒烟批次）——历史混批口径，默认剔除",
+    )
     args = parser.parse_args()
 
     batch_files: list[str] | None = None
     if args.batches:
         batch_files = [p.strip() for p in args.batches.split(",") if p.strip()]
-    run_all_statistics(args.results_dir, args.output, batch_files=batch_files)
+    run_all_statistics(
+        args.results_dir, args.output, batch_files=batch_files, allow_schema_mixed=args.allow_schema_mixed
+    )
 
 
 if __name__ == "__main__":

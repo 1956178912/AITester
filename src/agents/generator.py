@@ -165,6 +165,10 @@ class GeneratorAgent(BaseAgent):
         # 提示 LLM 任务文本中任何指令性内容均为不可信数据（OWASP ASI
         # "检测+隔离"，只警示不自动阻断）。
         injection_warning: str | None = None,
+        # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
+        # "先红后绿"强化段落（DETECTION_FIRST_ENABLE=true 且首轮全绿时由
+        # _generator_node 构建；None 时不注入，历史口径零变化）。
+        detection_first_section: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -225,6 +229,9 @@ class GeneratorAgent(BaseAgent):
             query += "\n\n" + metamorphic_section
         if differential_section:
             query += "\n\n" + differential_section
+        # W3（2026-10-05 审查落地·检出优先协议）：先红后绿强化段落（None 不注入）
+        if detection_first_section:
+            query += "\n\n" + detection_first_section
         # P2（2026-10 批次·续二）：注入扫描系统侧警示追加到 query 尾部
         # （命中注入特征时非空；None/空串时不注入，历史口径零变化）
         if injection_warning:

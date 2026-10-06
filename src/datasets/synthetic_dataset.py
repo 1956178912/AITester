@@ -2282,6 +2282,11 @@ class SyntheticDataset(BaseDatasetLoader):
             - "mixed"（默认，历史口径）：Level 1-4 轮换
             - "level1" / "level2" / "level4"：单难度梯度
             - "level3"：跨文件任务（双模块构造，需配合 CROSS_FILE_ENABLE 使用）
+        max_pattern_repeat: AA（2026-10-06 代码优化批次）：同池同模板重复上限
+            （opt-in）。None（默认）= 历史口径，rng 消费序列逐位不变（主批次
+            seed=42 复现性不受影响）；>=1 时同 (difficulty, pattern) 的出现
+            次数达上限即从候选剔除，全池达上限清零该池计数后轮转重选——
+            防主批次"单 pattern 重复 10 次"式分布塌缩（DATA_CARD §2/§3）。
         subset: 数据子集名称（保留接口兼容）。
     """
 
@@ -2307,6 +2312,7 @@ class SyntheticDataset(BaseDatasetLoader):
         seed: int = 42,
         subset: str | None = None,
         difficulty: str = "mixed",
+        max_pattern_repeat: int | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -2316,11 +2322,17 @@ class SyntheticDataset(BaseDatasetLoader):
             task_count: 生成的任务数量。
             seed: 随机种子（确保可复现）。
             difficulty: P0 2.1 难度级别（"mixed"/"level1"/"level2"/"level3"/"level4"）。
+            max_pattern_repeat: 同池同模板重复上限（opt-in，AA 批次；None=历史口径，
+                须 >=1；无效值告警后回退 None）。
             subset: 数据子集名称（保留接口兼容，实际忽略）。
             **kwargs: 兼容 load_dataset 工厂传递的额外参数（本数据集忽略）。
         """
         self._task_count = task_count
         self._seed = seed
+        if max_pattern_repeat is not None and max_pattern_repeat < 1:
+            logger.warning("max_pattern_repeat=%r 无效（须 >=1 或 None），回退 None（历史口径）", max_pattern_repeat)
+            max_pattern_repeat = None
+        self._max_pattern_repeat = max_pattern_repeat
         if difficulty not in self._VALID_DIFFICULTIES:
             logger.warning("未知 difficulty=%r，回退 'mixed'（历史口径）", difficulty)
             difficulty = "mixed"
@@ -2352,19 +2364,40 @@ class SyntheticDataset(BaseDatasetLoader):
             level = int(level_str)
         return [level] * n
 
-    def _pick_pattern(self, difficulty: int, rng: random.Random) -> dict[str, Any]:
-        """按难度选模板（Level 3 走跨文件库（含 3.5 深链），Level 5 走契约库，其他走单文件库）。"""
+    def _pick_pattern(
+        self, difficulty: int, rng: random.Random, usage: dict[tuple[int, str], int] | None = None
+    ) -> dict[str, Any]:
+        """按难度选模板（Level 3 走跨文件库（含 3.5 深链），Level 5 走契约库，其他走单文件库）。
+
+        AA（2026-10-06）：``max_pattern_repeat`` 启用时按 ``(difficulty, pattern)``
+        维度剔除已达上限的模板；全池达上限时清零该池计数后整池重选（轮转语义，
+        保证 task_count > 池规模时仍可生成）。默认 None（历史口径）走原路径，
+        rng 消费序列逐位不变（主批次 seed=42 复现性不受影响）。
+        """
         pool = _DIFFICULTY_PATTERNS.get(difficulty, BUG_PATTERNS)
-        return rng.choice(pool)
+        cap = self._max_pattern_repeat
+        if not cap or usage is None:
+            return rng.choice(pool)
+        available = [p for p in pool if usage.get((difficulty, p["name"]), 0) < cap]
+        if not available:
+            for p in pool:
+                usage[(difficulty, p["name"])] = 0
+            available = list(pool)
+        pattern = rng.choice(available)
+        usage[(difficulty, pattern["name"])] = usage.get((difficulty, pattern["name"]), 0) + 1
+        return pattern
 
     def _load_raw_data(self) -> None:
         """根据模板库生成指定数量的合成缺陷任务（P0 2.1 分层难度 + 2026-10 失败模式多样性）。"""
         rng = random.Random(self._seed)
         tasks: list[BenchmarkTask] = []
         seq = self._difficulty_sequence(self._task_count, rng)
+        # AA：max_pattern_repeat 启用时记录 (difficulty, pattern) 使用次数
+        # （None=历史口径不建表，_pick_pattern 走原路径，rng 序列逐位不变）。
+        usage: dict[tuple[int, str], int] | None = {} if self._max_pattern_repeat else None
 
         for i, difficulty in enumerate(seq):
-            pattern = self._pick_pattern(difficulty, rng)
+            pattern = self._pick_pattern(difficulty, rng, usage)
             noise = rng.randint(0, 9999)
             # P1-4（2026-10-05 独立审查）：task_id 末段中性化（task_XXXX）。
             # 历史口径 task_id 末段 = pattern 名（如 sqrt_negative_input_0043），

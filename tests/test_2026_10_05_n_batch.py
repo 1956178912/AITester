@@ -28,13 +28,15 @@ def _write_batch_file(root: Path, name: str, *, passed: bool, task_id: str = "t0
     """写 aitester + plain_llm 双臂单任务的 benchmark_*.json，返回文件路径。
 
     plain_llm 臂恒 passed=False（不参与胜负断言，仅提供配对所需的同 task_id 观测）。
+    X2（2026-10-05 P0-4b）起：行携带非 None 的 detection_rate（统计加载
+    默认剔除"M1 指标未计算"批次，fixture 不带该字段会被新口径过滤）。
     """
     path = root / name
     payload = {
         "dataset": "synthetic",
         "results": {
-            "aitester": {"details": [{"task_id": task_id, "passed": passed}]},
-            "plain_llm": {"details": [{"task_id": task_id, "passed": False}]},
+            "aitester": {"details": [{"task_id": task_id, "passed": passed, "detection_rate": 1.0 if passed else 0.0}]},
+            "plain_llm": {"details": [{"task_id": task_id, "passed": False, "detection_rate": 0.0}]},
         },
     }
     path.write_text(json.dumps(payload), encoding="utf-8")

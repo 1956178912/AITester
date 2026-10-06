@@ -33,8 +33,19 @@ from pathlib import Path
 _CHECK_DIRS = [
     "docs",  # docs/*.md ↔ docs/*.en.md
 ]
+# Z5（2026-10-06 审查修复）：门禁扩围到根目录核心文档配对——此前只扫
+# docs/ 与 CHANGELOG，根目录 README / QUICKSTART / CONTRIBUTING /
+# MODEL_CARD / SECURITY 的 .en 配对不在守卫范围（实测 CONTRIBUTING.en.md
+# 曾落后中文版 8 天而 CI 无感知）。根目录其余单语文件（5 份
+# *_BASELINE_2023-2026.md 前沿调研笔记、config.local.example 等）为研究
+# 参考材料，不强制英文配对（与 _EXEMPT_NO_EN 同口径，不列入即不扫）。
 _CHECK_FILES = [
     "CHANGELOG.md",  # CHANGELOG.md ↔ CHANGELOG.en.md
+    "README.md",
+    "QUICKSTART.md",
+    "CONTRIBUTING.md",
+    "MODEL_CARD.md",
+    "SECURITY.md",
 ]
 
 # 豁免清单：非核心文档（审查报告/审计/历史实施记录等）不强制英文配对。
@@ -72,11 +83,9 @@ _EXEMPT_NO_EN = frozenset(
         # 此前无豁免 → 失败项使 CI --strict || true 兜底永远生效，
         # 门禁形同虚设）。
         "docs/Python工程化前沿基线（2024–2026）.md",
-        "docs/review_2026-09-26_round7.md",
-        "docs/review_2026-09-26_round8.md",
-        "docs/review_2026-09-27_round10.md",
-        "docs/review_2026-09-27_round11.md",
-        "docs/review_2026-09-27_round9.md",
+        # W1（2026-10-05 审查落地）：删除 5 个 review_2026-09-* 豁免项——
+        # 这些文件在 P1-9 文档治理归档时已删除，豁免登记与 README 链接
+        # 残留成"指向不存在文件"的死条目（本轮一并修复 README 断链）。
         "docs/troubleshooting.md",
     }
 )

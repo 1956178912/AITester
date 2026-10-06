@@ -15,7 +15,8 @@
 # - python:3.14-slim 为开发环境基准（lock 生成自 3.14）；
 # - requirements.txt 全量安装（含 chromadb / matplotlib / scipy，
 #   即"全量依赖"而非 slim_environment 精简口径，保证 BASELINE.yaml
-#   total_passed=3760 口径可复现）；
+#   `tests` 节的 total_passed 口径可复现——具体数值以 BASELINE.yaml
+#   为唯一事实来源，此处不硬编码避免漂移）；
 # - git sha 由 docker build --build-arg 注入，结果 provenance 可追溯。
 
 FROM python:3.14-slim

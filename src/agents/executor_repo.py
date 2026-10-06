@@ -191,8 +191,13 @@ class RepoExecutor:
         _pip_marker = ".venv_pip_installed" if self.use_venv else ".pip_installed"
         if os.path.isfile(os.path.join(env_dir, _pip_marker)) and os.path.isdir(repo_dir):
             # 缓存命中：确认 checkout 仍在目标 commit
+            # Z3（2026-10-06 审查修复）：前缀（commit[:12]）比较改全等——
+            # 12 位前缀碰撞概率虽低，但碰撞时会把"同仓库不同 commit"的
+            # 缓存环境误判命中（错 commit 环境 + 错误基线代码）。全等的
+            # 退化方向是安全的：短 sha 入参时永不命中缓存（重建），性能
+            # 损失而非正确性损失（SWE-bench 数据源均为 40 位完整 sha）。
             head = _run(["git", "rev-parse", "HEAD"], repo_dir, 30)
-            if head.returncode == 0 and head.stdout.strip().startswith(base_commit[:12]):
+            if head.returncode == 0 and head.stdout.strip() == base_commit:
                 cached = True
                 logger.info("仓库环境命中缓存: %s", env_dir)
             else:
@@ -212,9 +217,10 @@ class RepoExecutor:
             lock = _get_repo_setup_lock(env_dir)
             with lock:
                 # 锁内重检缓存：持锁前可能已被其他线程完成 setup
+                # （Z3：同全等比较口径，见上方首次检查处注释）
                 if os.path.isfile(os.path.join(env_dir, _pip_marker)) and os.path.isdir(repo_dir):
                     head = _run(["git", "rev-parse", "HEAD"], repo_dir, 30)
-                    if head.returncode == 0 and head.stdout.strip().startswith(base_commit[:12]):
+                    if head.returncode == 0 and head.stdout.strip() == base_commit:
                         cached = True
                         logger.info("仓库环境命中缓存（锁内复检）: %s", env_dir)
                 if not cached:
@@ -910,6 +916,30 @@ class RepoExecutor:
                     pass
 
     @classmethod
+    def _llm_patch_dangerous_calls(cls, patch_text: str) -> set[str]:
+        """C5：从 unified diff 的 "+" 行提取新增代码，收集危险调用特征。
+
+        实现口径：
+        - 仅取 hunk 新增行（行首 "+" 且排除 "+++" 文件头）——新增行即
+          "补丁新引入"（无需与原代码做差集，与本地链路
+          patch_applier.dangerous_api_added 的差集口径在此处天然等价）；
+        - 复用 patch_applier._collect_dangerous_calls（模块限定调用 +
+          from-import 别名图（C4）+ 凭证读取 + 动态构造绕过，同一特征集）；
+        - 上下文行（" " 前缀）不参与——原代码既有危险调用不拦截（与
+          本地链路"只拦新增危险、放行既有"口径一致）。
+        """
+        from src.tools.patch_applier import _collect_dangerous_calls
+
+        added_lines: list[str] = []
+        for line in patch_text.splitlines():
+            if line.startswith("+++") or not line.startswith("+"):
+                continue
+            added_lines.append(line[1:])
+        if not added_lines:
+            return set()
+        return _collect_dangerous_calls("\n".join(added_lines))
+
+    @classmethod
     def _patch_touches_test_files(cls, patch_text: str) -> str | None:
         """解析 unified diff 目标路径，命中测试文件即返回路径（否则 None）。"""
         for m in re.finditer(
@@ -960,6 +990,25 @@ class RepoExecutor:
             logger.info(
                 "M2 测试文件保护：LLM 补丁触碰测试文件 %s，拒绝应用（防改 gold 测试让 F2P 假过）",
                 touched_test_file,
+            )
+            return False
+        # C5（2026-10-05 系统审查 P0·X 批次落地）：危险 API 静态守卫。
+        # 背景：本地链路（patch_applier.safe_apply_patch）有 AST 级危险调用
+        # 差集守卫（os.system / subprocess / eval / 网络外连 / 凭证读取 /
+        # 动态构造绕过，C4 起含 from-import 别名图），但 repo 级链路的
+        # unified diff 此前**直接 git apply 后在宿主/venv 裸跑**——同一
+        # 守卫口径的缺口。现从补丁 "+" 行（新增代码，新增即"新引入"，
+        # 无需与原代码做差集）提取伪模块跑同一收集器（_collect_dangerous_calls），
+        # 命中即拒绝应用（与 M2 测试文件保护同口径：FAIL_TO_PASS 实测裁决，
+        # 不误判通过）。能力边界：'+' 行片段 AST 解析失败时收集器返回空集
+        # （不拦截——与本地链路"语法失败由 ast.parse 先行拦截"的分工不同，
+        # 此处片段本就可能不独立成模块；git apply 后的执行仍受 venv 隔离
+        # 与 P2P 门禁约束，属纵深一层而非唯一防线）。
+        _dangerous = self._llm_patch_dangerous_calls(llm_patch)
+        if _dangerous:
+            logger.warning(
+                "C5 危险 API 守卫：LLM 补丁新增行命中危险调用 %s，拒绝应用（FAIL_TO_PASS 按无补丁实测）",
+                sorted(_dangerous),
             )
             return False
         # 临时补丁文件按 (pid, thread) 隔离——2026-09-26 全面审查 P1 并发安全：

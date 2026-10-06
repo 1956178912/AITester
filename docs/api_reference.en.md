@@ -3,7 +3,9 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-10-05 (2026-10-05 review batch R1-R18: R1a/R1b spec-compilation fixes + signature-aware binding / R1c spec oracle executed alongside LLM tests (`SPEC_ORACLE_EXEC_ENABLE` default off) / R4b rollback fail-closed (`PATCH_ROLLBACK_FAIL_CLOSED` default off) / R5 mutation detection rate (gated by `ENABLE_MUTATION_SCORING`) / R2 statistical report persisted (McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`) / R17 structured routing priority (`ROUTE_STRUCTURED_ENABLE` default off) / R16 rogue-agent monitoring (`ROGUE_MONITOR_ENABLE` default off) / R11 deterministic sampling (`run_benchmark(deterministic=True)`) / R15 `AITESTER_PROFILE` three-tier presets / `API_HEALTH_CHECKER_ENABLE` health-checker-thread switch / LLM cache directory default migrated to `~/.cache/aitester/llm`; default behavior unchanged, all new capabilities behind independent switches)
+> Last updated: 2026-10-06 (code-optimization batch AA: `AITESTER_PROFILE` expanded to four tiers, with the logic tier now injecting `DETECTION_FIRST_ENABLE` [completing the ADR-0015 detection-first preset gap]; `SyntheticDataset` gains `max_pattern_repeat` (per-pool template repeat cap) + `run_benchmark` gains the `--max-pattern-repeat` CLI flag (both opt-in, default None = legacy behavior, seed=42 reproducibility unchanged); README CI-matrix drift fix; default behavior unchanged)
+>
+> Previous: 2026-10-05 (review batch R1-R18: R1a/R1b spec-compilation fixes + signature-aware binding / R1c spec oracle executed alongside LLM tests (`SPEC_ORACLE_EXEC_ENABLE` default off) / R4b rollback fail-closed (`PATCH_ROLLBACK_FAIL_CLOSED` default off) / R5 mutation detection rate (gated by `ENABLE_MUTATION_SCORING`) / R2 statistical report persisted (McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`) / R17 structured routing priority (`ROUTE_STRUCTURED_ENABLE` default off) / R16 rogue-agent monitoring (`ROGUE_MONITOR_ENABLE` default off) / R11 deterministic sampling (`run_benchmark(deterministic=True)`) / R15 `AITESTER_PROFILE` three-tier presets / `API_HEALTH_CHECKER_ENABLE` health-checker-thread switch / LLM cache directory default migrated to `~/.cache/aitester/llm`; default behavior unchanged, all new capabilities behind independent switches)
 >
 > Previous: 2026-09-29 (Review/optimization round: P0 runtime-probe defect fix — the historical `sys.settrace` exception-event collection does not propagate to the called frame when an exception is raised inside the function body, measured frames were permanently empty (the probe never actually worked since introduction); this round reads the `exc.__traceback__` frame chain at exception-raise time (zero trace overhead), synchronously fixed single-character-variable mis-filtering / line-number error (`f_lineno` → `tb_lineno`) / module-filter never matching / child-thread unhandled-exception leak; default behavior unchanged, when `RUNTIME_PROBE_ENABLE=false` zero difference)
 >
@@ -735,6 +737,10 @@ dataset = load_dataset("examples")
 from src.datasets import SyntheticDataset
 
 dataset = SyntheticDataset(task_count=50, seed=42)
+# AA (2026-10-06): per-pool template repeat cap (opt-in, default None =
+# legacy behavior; with >=1, a (difficulty, pattern) pair appears at most N
+# times, preventing distribution collapse — see DATA_CARD §2)
+dataset = SyntheticDataset(task_count=50, seed=42, max_pattern_repeat=2)
 
 # Load the SWE-bench dataset
 from src.datasets import SWEBenchDataset
@@ -823,6 +829,7 @@ print(MODEL_NAME)  # Name of the default model (LLM_1)
 | `EXECUTOR_USE_VENV` | bool | false | venv sandbox isolated execution (disk cache keyed by dependency combination; does not pollute the system environment) |
 | `EXECUTOR_AUTO_INSTALL_DEPS` | bool | false | Automatically pip install missing dependencies before execution |
 | `AITESTER_VENV_CACHE_DIR` | str | `~/.cache/aitester/venvs` | 4.4 Override the venv cache directory (in container/CI isolation, point at a mounted volume; clean up with the `clean-venv-cache` subcommand) |
+| `AITESTER_PROFILE` | str | unset (no injection) | R15 switch presets (non-boolean; four tiers as of batch AA, 2026-10-06): `safe` security-sensitive (KERNEL_SANDBOX / PATCH_SNAPSHOT_ROLLBACK / PATCH_ROLLBACK_FAIL_CLOSED / INJECTION_GUARD / ROGUE_MONITOR / FLAKY_CHECK all on) / `scientific` research-evaluation (SPEC_IR / SPEC_IR_DSL / SPEC_SMT / SPEC_ORACLE_EXEC / ENABLE_MUTATION_SCORING / ORACLE_VALIDATE / PATCH_SNAPSHOT_ROLLBACK all on, pair with `run_benchmark(deterministic=True)`) / `logic` full logic chain (scientific superset + PATCH_ROLLBACK_FAIL_CLOSED + LOGIC_SPEC_STRICT / DETERMINISTIC_GUARD / BRANCH_COVERAGE_INJECT / ROUTE_STRUCTURED all on + `DETECTION_FIRST_ENABLE` [completed in batch AA 2026-10-06 — the ADR-0015 detection-first protocol; an all-green first round no longer counts as success]) / `fast` historical defaults (all off, equivalent to unset); injected via `os.environ.setdefault`, explicitly set single switches are never overridden; unrecognized values log a WARNING and are ignored |
 
 **APIManagerConfig fields** (data model in `src/api/api_health.py`, consumed by `api_manager.py`; a programming-interface configuration, not an environment variable; 4.1/4.2 circuit breaker + 3.4 cost awareness):
 

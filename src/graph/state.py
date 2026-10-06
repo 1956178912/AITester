@@ -174,6 +174,16 @@ class AITesterState(TypedDict, total=False):
     # 该标记为纯观测（不参与路由），供评估层把该类任务归入"未验证假通过"。
     # 缺省 None = 本任务未触发再生成路径（历史口径不变）。
     test_regenerated_pass_unverified: bool | None
+    # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关）：
+    # 首轮（iteration==0，被测代码未修复）执行是否出现过红灯（测试失败）。
+    # True = 测试曾让缺陷代码变红（检出潜势）；False = 首轮全绿（未检出）；
+    # None = 开关关闭 / 执行器未运行（历史口径不变）。由 _executor_node 写入。
+    detection_first_red_seen: bool | None
+    # W3 终态标注（纯观测，评估层消费）：开关开启且最终 test_passed=True 时——
+    # "red_then_green" = 曾红后绿（先检出再修复的完整链路）；
+    # "all_green_unverified" = 从未变红即通过（弱测试假成功，评估层应归入
+    # 未验证而非修复成功）；None = 开关关闭（历史口径不变）。
+    detection_first_status: str | None
     # 2026-09-29 审查 P0（StopReason 统一停止条件）：工作流终止原因枚举值
     # （"test_passed" / "max_iterations" / "skip_debugger_repair_invalid" /
     # "test_defect_regeneration_cap" / "test_gen_diagnosis_early" /
@@ -325,6 +335,13 @@ class AITesterState(TypedDict, total=False):
     # （此前恒 None 占位，置信度因子按保守高风险计）。None = 未运行
     # debugger / 旧路径未产出。
     error_confidence: float | None
+    # Z1（2026-10-06 审查修复）：策略银行提示文本（_debugger_node 经
+    # _select_strategy 检出的 prompt_hint，STRATEGY_BANK_ENABLE=true 时
+    # 写入）。该文本是给下一轮 debugger prompt 的策略提示——此前被直接
+    # 拼进 patch 代码（自然语言混入代码，只能靠下游 AST 守卫兜底拒绝），
+    # 现独立入 state：观测（哪些错误类别命中了策略）+ 后续 prompt 注入
+    # 的挂点。None = 开关关 / 无匹配策略（默认关时恒 None，键集合同构）。
+    strategy_bank_hint: str | None
     # P2-4：人工审批决策记录（M12 risk_approval interrupt 的 resume 值消费
     # 结果：{"resume_value", "approved", "risk_level"}）。此前 resume 值仅判
     # None 不消费，审批决策丢失。None = 未触发人工审批。
@@ -540,6 +557,11 @@ def create_initial_state(
         regeneration_count=0,
         # M5（2026-09-29 审查 P0）：测试重生成假通过标记（缺省 None = 未触发再生成路径）
         test_regenerated_pass_unverified=None,
+        # W3（2026-10-05 审查落地·检出优先协议）：首轮红灯/终态标注（缺省 None =
+        # 开关关闭或执行器未运行，历史口径不变；DETECTION_FIRST_ENABLE=true 时
+        # 由 _executor_node 写入）
+        detection_first_red_seen=None,
+        detection_first_status=None,
         # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因（缺省 None = 未终止）
         stop_reason=None,
         repair_history=[],
@@ -601,6 +623,9 @@ def create_initial_state(
         fix_strategy_action=None,
         # P2-4（2026-10-05 独立审查）：错误分类置信度（默认 None，debugger 写入）
         error_confidence=None,
+        # Z1（2026-10-06 审查修复）：策略银行提示文本（默认 None，debugger
+        # 两条检索路径写入；开关关时恒 None）
+        strategy_bank_hint=None,
         # P1-6：任务问题描述（benchmark 传入，CLI 默认 None）
         problem_statement=problem_statement,
         task_description=task_description,

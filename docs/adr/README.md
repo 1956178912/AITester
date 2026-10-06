@@ -15,6 +15,7 @@
 | [0012](0012-prompt-injection-defense.md) | Prompt Injection 防御层（输入检测 + 补丁安全校验） | 已采纳 | 输入侧 4 类特征检测 + 输出侧 5 类危险操作静态校验，纯正则零 LLM 成本，默认关 | `src/agents/injection_guard.py` |
 | [0013](0013-classifier-explanability.md) | 错误分类可解释性字段与修复策略追踪链 | 已采纳 | `ClassificationResult.explanation` 命中特征 / 置信度口径 / 兜底标注，四环节追踪链闭环，零 LLM 成本 | `src/agents/error_classifier.py` |
 | [0014](0014-branch-coverage-gates.md) | 分支覆盖率门槛上调（总 85% / 核心修复路由模块 90%） | 已采纳 | 总门槛 79%→85% + 核心修复路由模块 90% 严格门槛；总分支率改用加权聚合修复口径漂移 | `scripts/check_branch_coverage.py`、`tests/test_workflow_combinations.py` |
+| [0015](0015-detection-first-protocol.md) | 检出优先协议（DETECTION_FIRST_ENABLE，默认关） | 已采纳 | "先红后绿"成功口径：首轮全绿不再视为成功，路由一次再生成强化测试；终态标注 red_then_green / all_green_unverified | `config.py`、`src/graph/workflow.py`、`nodes.py`、`src/agents/generator.py` |
 
 ## 状态约定
 
@@ -25,7 +26,7 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0014 已用 → 下一个 0006；
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0015 已用 → 下一个 0006；
    0006–0010 保留给在途批次，勿占用）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；
 3. 正文结构：`# ADR-NNNN: 标题` + 元信息（日期 / 状态 / 关联模块）+

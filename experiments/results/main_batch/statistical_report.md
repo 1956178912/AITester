@@ -2,13 +2,11 @@
 
 ## 数据来源
 
-R2 审计：本报告实际纳入 3 个批次文件（--batches 白名单模式）：
+R2 审计：本报告实际纳入 1 个批次文件（--batches 白名单模式）：
 
 - `main_batch/benchmark_synthetic_20261001_121523.json`
-- `main_batch/benchmark_synthetic_20261001_112801.json`
-- `main_batch/benchmark_synthetic_20261001_112528.json`
 
-复算命令（工件与代码齐备时数值逐位可复现）：`python experiments/statistical_analysis.py --results-dir experiments/results --output <report.md> --batches main_batch/benchmark_synthetic_20261001_121523.json,main_batch/benchmark_synthetic_20261001_112801.json,main_batch/benchmark_synthetic_20261001_112528.json`
+复算命令（工件与代码齐备时数值逐位可复现）：`python experiments/statistical_analysis.py --results-dir experiments/results --output <report.md> --batches main_batch/benchmark_synthetic_20261001_121523.json`
 
 去重口径：同一 task_id 跨批次重复时最新批次优先（排序主键 = 批次
 文件名内嵌时间戳降序，文件系统 mtime 仅作无内嵌时间戳批次的兜底）。
@@ -17,8 +15,8 @@ R2 审计：本报告实际纳入 3 个批次文件（--batches 白名单模式�
 
 | Baseline | 任务数 | 通过数 (passed) | 通过率 | detection 可测数 | detection 率 | repair 可测数 | repair 率 |
 |----------|--------|-----------------|--------|------------------|--------------|---------------|-----------|
-| aitester | 60 | 54 | 90.0% | 49 | 2.0% | 50 | 0.0% |
-| plain_llm | 60 | 32 | 53.3% | 49 | 2.0% | 50 | 0.0% |
+| aitester | 50 | 45 | 90.0% | 49 | 2.0% | 50 | 0.0% |
+| plain_llm | 50 | 26 | 52.0% | 49 | 2.0% | 50 | 0.0% |
 | single_agent | 50 | 0 | 0.0% | 50 | 0.0% | 50 | 0.0% |
 
 ## 诚实指标 McNemar 检验（M1 三指标，gold 独立裁决）
@@ -39,7 +37,7 @@ R2 审计：本报告实际纳入 3 个批次文件（--batches 白名单模式�
 
 | 比较 | 配对数 | t统计量 | p值 | 显著性 | Cohen's d | 效应量 |
 |------|--------|---------|-----|--------|-----------|--------|
-| AITester vs plain_llm | 53 | 4.8840 | 0.0000 | *** | 0.6709 | medium |
+| AITester vs plain_llm | 50 | 4.7349 | 0.0000 | *** | 0.6696 | medium |
 | AITester vs single_agent | 50 | 21.0000 | 0.0000 | *** | 2.9698 | large |
 
 ## McNemar 配对检验（passed，自指指标——仅作诊断参考）
@@ -52,7 +50,7 @@ ICSE 2011）。注意：passed 为系统自产测试在（未修复的）缺陷�
 
 | 比较 | 共同任务数 | 不一致对 (n01+n10) | χ²（连续性校正） | p值 | 显著性 |
 |------|-----------|-------------------|------------------|-----|--------|
-| AITester vs plain_llm | 53 | 24 | 15.0417 | 0.0001 | *** |
+| AITester vs plain_llm | 50 | 23 | 14.0870 | 0.0002 | *** |
 | AITester vs single_agent | 50 | 45 | 43.0222 | 0.0000 | *** |
 
 ## 多重比较校正（BH-FDR）
@@ -62,7 +60,7 @@ q 为校正后 p 值，拒绝 H0 表示校正后仍显著。
 
 | 比较 | 原始 p（McNemar） | BH-FDR q | 拒绝 H0 |
 |------|-------------------|----------|---------|
-| AITester vs plain_llm | 0.0001 | 0.0001 | 是 |
+| AITester vs plain_llm | 0.0002 | 0.0002 | 是 |
 | AITester vs single_agent | 0.0000 | 0.0001 | 是 |
 
 ## Bootstrap 95% 置信区间
@@ -73,7 +71,7 @@ R2 协议：配对差值均值（AITester − 基线，逐任务 0/1 差）的�
 
 | 比较 | 配对数 | 差值均值 | 95% CI 下界 | 95% CI 上界 | 重采样次数 | seed |
 |------|--------|---------|------------|------------|-----------|------|
-| AITester vs plain_llm | 53 | 0.3774 | 0.2264 | 0.5283 | 10000 | 42 |
+| AITester vs plain_llm | 50 | 0.3800 | 0.2200 | 0.5400 | 10000 | 42 |
 | AITester vs single_agent | 50 | 0.9000 | 0.8200 | 0.9800 | 10000 | 42 |
 
 ## 效应量对比（Cohen's d 与 Cliff's δ）
@@ -83,7 +81,7 @@ R2 协议：Cliff's δ = (n⁺ − n⁻)/n_pairs（配对差值符号版，非�
 
 | 比较 | Cohen's d | 效应量 | Cliff's δ | 效应量 |
 |------|-----------|--------|-----------|--------|
-| AITester vs plain_llm | 0.6709 | medium | 0.3774 | medium |
+| AITester vs plain_llm | 0.6696 | medium | 0.3800 | medium |
 | AITester vs single_agent | 2.9698 | large | 0.9000 | large |
 
 ## 显著性标记说明
@@ -107,4 +105,4 @@ R2 协议：Cliff's δ = (n⁺ − n⁻)/n_pairs（配对差值符号版，非�
   - `large`: |δ| ≥ 0.474
 
 ---
-*报告生成时间: 2026-10-05 17:14:47*
+*报告生成时间: 2026-10-05 20:12:09*

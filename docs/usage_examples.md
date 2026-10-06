@@ -102,6 +102,14 @@ python experiments/run_benchmark.py \
     --dataset synthetic \
     --task-count 50 \
     --baselines aitester
+
+# AA（2026-10-06）：同池模板重复上限（opt-in；同 (difficulty, pattern) 至多
+# 出现 2 次，防单 pattern 分布塌缩；不传 = 历史口径）
+python experiments/run_benchmark.py \
+    --dataset synthetic \
+    --task-count 50 \
+    --max-pattern-repeat 2 \
+    --baselines aitester
 ```
 
 ---

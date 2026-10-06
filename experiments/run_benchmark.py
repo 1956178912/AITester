@@ -5,6 +5,9 @@
     - aitester     : 完整多智能体系统（Planner+Generator+Executor+Debugger）
     - plain_llm    : 纯 LLM 基线（无 Planner、无修复循环，仅一次调用）
     - single_agent : 单智能体基线（所有功能合并为一个 LLM 调用）
+    - plain_llm_df : plain_llm + 检出优先协议（X1/2026-10-05 审查 P0-3，
+                     归因基线：隔离"检出优先提示词效应"与"多智能体编排
+                     效应"；显式 --baselines 指定，不进默认列表）
 
 支持的数据集（通过 dataset 参数指定）：
     - examples     : 内置示例数据集（InMemoryDataset，无需下载）
@@ -250,6 +253,7 @@ def run_single_agent_baseline(
     """
     from src.agents.executor import ExecutorAgent
     from src.agents.generator import GeneratorAgent
+    from src.graph.nodes import _record_execution_trace
 
     agent = GeneratorAgent()
     # 执行超时必须走 config.EXECUTION_TIMEOUT（含容错解析 + [10, 300] 范围校验）；
@@ -257,40 +261,64 @@ def run_single_agent_baseline(
     # 运行在 import 后立即 ValueError 崩溃，绕过配置层的兜底
     executor = ExecutorAgent(timeout=EXECUTION_TIMEOUT)
 
+    # W6（2026-10-05 审查落地·基线健全性修复）：
+    # 1) prompt 注入真实模块名——此前不含模块名，合成任务模块名是 task_id
+    #    末段（如 sqrt_negative_input_0000），LLM 只能猜测（主批次
+    #    benchmark_synthetic_20261001_121523 实测 50/50 猜成 math_utils 等
+    #    错误名）→ M1 干净复跑全部 collection error（test_error_rate=94%），
+    #    且失败类别恒误报 execution_trace_missing。plain_llm 走完整工作流
+    #    （模块名由 Generator 节点注入），单智能体基线口径应对齐。
+    # 2) 移除与"只输出测试代码"自相矛盾的"生成修复补丁"要求——修复轮
+    #    由下方 fix_query 独立承载，该要求从未被消费且诱导模型输出双代码块。
+    module_name = str(state.get("module_name") or os.path.splitext(os.path.basename(str(state["target_file"])))[0])
     # 单次 LLM 调用：要求直接生成测试并自行判断是否需要修复
     query = (
         f"你是一个软件测试专家。请分析以下代码并直接生成完整的 pytest 测试代码。\n\n"
+        f"被测模块名为 `{module_name}`：测试代码必须 `from {module_name} import ...` 导入被测函数，"
+        f"禁止猜测其他模块名，禁止重新实现被测函数。\n\n"
         f"目标代码：\n```python\n{state['target_code']}\n```\n\n"
         f"要求：\n"
         f"1. 找出代码中可能存在的 bug，编写能捕获这些 bug 的测试用例\n"
-        f"2. 同时生成一个简化版的修复补丁（如果需要）\n"
-        f"3. 只输出 pytest 测试代码（用 ```python 包裹），不要输出其他内容"
+        f"2. 只输出 pytest 测试代码（用 ```python 包裹），不要输出其他内容"
     )
-
-    test_code = agent._extract_python_code(agent._call_llm(query))
-    state["generated_test"] = test_code
 
     # 1.2 改进（MutGen 式变异反馈闭环）：单智能体基线在修复前消费上一轮
     # 变异评估的"存活变异体"反馈（state["mutation_feedback"]），引导 LLM
-    # 针对"当前测试未捕获的故障模式"补强断言；无反馈时行为与历史口径一致
+    # 针对"当前测试未捕获的故障模式"补强断言；无反馈时行为与历史口径一致。
+    # W6 修复：反馈拼接移到 LLM 调用**之前**——此前在调用之后才拼进 query，
+    # 修改后的 query 从未再次使用（反馈从未真正进入 prompt，死代码）。
     feedback = state.get("mutation_feedback")
     if feedback and feedback.get("survived_mutants"):
         query += "\n\n【变异反馈】以下变异体未被现有测试捕获，请在生成测试时补充针对性断言：\n" + "\n".join(
             f"- {d}" for d in feedback["survived_mutants"][:5]
         )
 
+    test_code = agent._extract_python_code(agent._call_llm(query))
+    state["generated_test"] = test_code
+
     # 执行测试
+    _t0 = time.perf_counter()
     result = executor.execute(
         test_code=test_code,
         target_file=state["target_file"],
         target_function=state.get("target_function"),
     )
+    _elapsed = time.perf_counter() - _t0
 
     state["test_passed"] = result["passed"]
     state["test_output"] = result["output"]
     state["coverage_report"] = result["coverage"]
     state["failed_cases"] = result["failed_cases"]
     state["iteration"] = 0
+    # W6 修复：补记 execution_trace——此前绕过工作流 _executor_node 直接调
+    # ExecutorAgent，轨迹恒空 → refine_final_error_category 把全部失败
+    # 误判为 EXECUTION_TRACE_MISSING（"执行器异常路径"），掩盖真实失败类别
+    state["execution_trace"] = _record_execution_trace(
+        state,
+        passed=bool(result["passed"]),
+        coverage=float(result.get("coverage") or 0.0),
+        elapsed_seconds=round(_elapsed, 3),
+    )
 
     # 若测试失败，尝试一轮 LLM 修复（单智能体只能修复一次）
     if not result["passed"] and result["failed_cases"]:
@@ -321,6 +349,7 @@ def run_single_agent_baseline(
                     # 安全检查通过，写回文件并重试
                     with open(state["target_file"], "w", encoding="utf-8") as f:
                         f.write(new_code)
+                    _t1 = time.perf_counter()
                     retry_result = executor.execute(
                         test_code=test_code,
                         target_file=state["target_file"],
@@ -331,6 +360,13 @@ def run_single_agent_baseline(
                     state["coverage_report"] = retry_result["coverage"]
                     state["failed_cases"] = retry_result["failed_cases"]
                     state["iteration"] = 1
+                    # W6 修复：修复轮执行同样补记 execution_trace（口径同首轮）
+                    state["execution_trace"] = _record_execution_trace(
+                        state,
+                        passed=bool(retry_result["passed"]),
+                        coverage=float(retry_result.get("coverage") or 0.0),
+                        elapsed_seconds=round(time.perf_counter() - _t1, 3),
+                    )
                 else:
                     # 不安全：放弃写盘，保持原代码（与 patch_applier 拒写口径一致）
                     logger.warning("single_agent 基线：修复代码未通过安全检查（过短/丢失函数定义），保留原代码")
@@ -339,11 +375,55 @@ def run_single_agent_baseline(
     return state
 
 
+def run_plain_llm_df_baseline(
+    state: AITesterState,
+) -> dict[str, Any]:
+    """plain_llm + 检出优先协议基线（X1/2026-10-05 审查 P0-3，归因基线）。
+
+    动机：检出优先协议（ADR-0015）的提示词效应与多智能体编排效应在
+    "aitester(DETECTION_FIRST_ENABLE=true) vs plain_llm" 对照中混在一起
+    ——强模型下若 plain_llm 追平 aitester，无法归因是"协议提示词有效"
+    还是"编排无效"。本基线把检出优先协议叠加到 plain_llm（无 Planner、
+    无修复循环）上：单次生成 + 执行 + 首轮全绿时再生成更强测试（受
+    _MAX_REGENERATIONS 上限保护），隔离两个效应。
+
+    实现：
+    - build_workflow(planner=False, debugger=False, allow_regeneration=True)：
+      无修复循环但保留 executor → generator 再生成路由（"debug" 映射
+      "done"——失败测试即潜在检出，不修复，与 plain_llm 口径一致）；
+    - config.set_detection_first_thread_override(True)：线程级覆盖（非
+      os.environ——--parallel 下多任务线程并发跑不同基线，进程级 env
+      会串扰邻线程的 plain_llm 基线）；invoke 结束 finally 恢复 None，
+      防线程池复用残留；
+    - 复用全套既有机制：_should_debug 的 detection_first_all_green 分支、
+      _generator_node 的强化段落与 regeneration_count 计数、
+      detection_first_red_seen / detection_first_status 观测字段
+      （_build_task_result 通用透传，无需特判）。
+
+    Args:
+        state: 初始工作流状态。
+
+    Returns:
+        最终状态字典。
+    """
+    import config as _cfg
+
+    graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
+    _cfg.set_detection_first_thread_override(True)
+    try:
+        return graph.invoke(state)
+    finally:
+        _cfg.set_detection_first_thread_override(None)
+
+
 # 基线方法注册表
 BASELINE_REGISTRY: dict[str, callable] = {
     "aitester": run_aitester_baseline,
     "plain_llm": run_plain_llm_baseline,
     "single_agent": run_single_agent_baseline,
+    # X1（2026-10-05 审查 P0-3）：检出优先归因基线（显式 --baselines 指定，
+    # 不进默认列表——默认三基线口径不变，历史批次可比性保持）
+    "plain_llm_df": run_plain_llm_df_baseline,
 }
 
 
@@ -746,6 +826,18 @@ def _build_task_result(
             # test_regenerated_pass_unverified：M5 执行层标记（测试重生成后
             # 通过且源码未改 → 假成功通道），直接读 state 键（缺省 None）。
             "test_regenerated_pass_unverified": final_state.get("test_regenerated_pass_unverified"),
+            # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关）：
+            # 首轮红灯观测 + 终态标注（red_then_green / all_green_unverified /
+            # red_not_repaired——Y1 补失败终局：检出成功但未修复，评估层
+            # detection 口径应计数）。默认关时恒 None（键集合同构，历史口径
+            # 零变化）；评估层消费口径：all_green_unverified 的 passed 不得计为
+            # "检出/修复成功"。
+            "detection_first_red_seen": final_state.get("detection_first_red_seen"),
+            "detection_first_status": final_state.get("detection_first_status"),
+            # Y1（2026-10-05 X 批次冒烟补遗）：再生成计数透出——量化检出优先
+            # 协议的 +1 LLM call 成本（协议开启时首轮全绿任务计 1；O4/诊断
+            # 关键词路径同样累计）。协议关时恒 None（键集合同构）。
+            "regeneration_count": final_state.get("regeneration_count"),
             # P0（2026-09-30 独立审查 N9/R33）：源码补丁证据门观测。
             # source_patched_unverified：本轮写盘无 gold/谱系定位证据（True）
             # 或有证据背书（False）；None = 本轮无补丁 / 证据门未触发。
@@ -842,6 +934,11 @@ def _build_task_result(
         # 通过标记以 None 占位保持键集合同构（假通过通道仅对 passed=True
         # 有意义，失败分支恒无）
         "test_regenerated_pass_unverified": None,
+        # W3（检出优先协议）：失败分支无 final_state，None 占位保持键集合同构
+        "detection_first_red_seen": None,
+        "detection_first_status": None,
+        # Y1：再生成计数失败分支占位（键集合同构）
+        "regeneration_count": None,
         # P0（2026-09-30 独立审查 N9/R33）：失败分支无 final_state，
         # 证据门观测键以 None 占位保持键集合同构
         "source_patched_unverified": None,
@@ -1809,6 +1906,7 @@ def run_benchmark(
     save_state: bool = False,
     enable_mutation_scoring: bool | None = None,
     difficulty: str = "mixed",
+    max_pattern_repeat: int | None = None,
     deterministic: bool = False,
 ) -> dict[str, Any]:
     """
@@ -1835,6 +1933,9 @@ def run_benchmark(
         difficulty: P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）。
             可选值："mixed"（默认，历史口径）/ "level1" / "level2" /
             "level3"（跨文件）/ "level4"（边界+异常隐蔽缺陷）。
+        max_pattern_repeat: AA（2026-10-06）合成数据集同池模板重复上限
+            （仅 synthetic 生效）。None（默认）= 历史口径；>=1 透传
+            SyntheticDataset，防单 pattern 分布塌缩（DATA_CARD §2/§3）。
         deterministic: R11（2026-10-05 审查 P1）确定性采样模式。True 时
             强制 TEMPERATURE=0.0（级联 config 与 base_agent 命名空间——
             二者均为 import 时求值，仅改 os.environ 不生效）+ os.environ
@@ -1878,14 +1979,37 @@ def run_benchmark(
     if unknown:
         raise ValueError(f"不支持的基线方法: {unknown}，支持: {list(BASELINE_REGISTRY.keys())}")
 
+    # X1（2026-10-05 审查 P0-4a）：缓存实验命名空间自动设置。
+    # 背景：LLM 文件缓存键不含 seed（seed 只作用于任务采样，不传 API）——
+    # 缓存开启时多 seed 复跑是同一响应的确定性重放，统计独立性失效。
+    # 修复：缓存开启且用户未显式设 AITESTER_CACHE_NAMESPACE 时，自动设为
+    # "seed<N>"（不同 seed → 不同缓存命名空间 → 各自真实调用；同 seed
+    # 复跑共享缓存 = 可复现性保留）。缓存关闭时无需隔离（无缓存可串）。
+    # 注意：os.environ 为进程级，--parallel 下同批全部任务同 seed 同批
+    # 次共享同一命名空间——正是期望语义（批次内命中 OK，跨 seed 隔离）。
+    if os.environ.get("AITESTER_LLM_CACHE", "1") != "0" and not os.environ.get("AITESTER_CACHE_NAMESPACE"):
+        os.environ["AITESTER_CACHE_NAMESPACE"] = f"seed{seed}"
+        logger.info(
+            "X1 缓存命名空间：AITESTER_CACHE_NAMESPACE=seed%d（多 seed 复跑独立性隔离；同 seed 复跑仍共享缓存）",
+            seed,
+        )
+
     logger.info("加载数据集: %s (subset=%s, seed=%d)", dataset_name, subset, seed)
 
     if dataset_name in ("synthetic", "synth"):
         tc = task_count or 60
-        logger.info("生成合成数据集：%d 个任务（seed=%d, difficulty=%s）", tc, seed, difficulty)
+        logger.info(
+            "生成合成数据集：%d 个任务（seed=%d, difficulty=%s, max_pattern_repeat=%s）",
+            tc,
+            seed,
+            difficulty,
+            max_pattern_repeat,
+        )
         from src.datasets.synthetic_dataset import SyntheticDataset
 
-        dataset = SyntheticDataset(task_count=tc, seed=seed, difficulty=difficulty)
+        dataset = SyntheticDataset(
+            task_count=tc, seed=seed, difficulty=difficulty, max_pattern_repeat=max_pattern_repeat
+        )
         # 确保数据集已加载
         _ = dataset.tasks
     else:
@@ -2181,6 +2305,11 @@ def run_benchmark(
         # R46：SWE-bench P2P 门禁（R46 起默认开）
         "SWE_BENCH_P2P_GATE_ENABLE",
         "SWE_BENCH_P2P_GATE_THRESHOLD",
+        # X1（2026-10-05 审查 P0-3/P0-4a）：检出优先协议开关 + 缓存命名空间
+        # （多 seed 独立性口径——缓存开但无命名空间 = 复跑重放，统计独立性
+        # 不成立，provenance 须可审计）
+        "DETECTION_FIRST_ENABLE",
+        "AITESTER_CACHE_NAMESPACE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:
@@ -2232,6 +2361,9 @@ def run_benchmark(
         "env_snapshot": _env_snapshot,
         "cache_enabled": os.environ.get("AITESTER_LLM_CACHE", "1") != "0",
         "cache_isolate_model": os.environ.get("AITESTER_CACHE_ISOLATE_MODEL", "1") != "0",
+        # X1（P0-4a）：缓存命名空间入 provenance（None/空 + cache_enabled=true
+        # = 跨批次复用风险口径，读者可据此判定"多批次"是否独立样本）
+        "cache_namespace": os.environ.get("AITESTER_CACHE_NAMESPACE") or None,
         # O32（2026-09-29 审查 P0）：API 配置脱敏（不写入明文密钥）
         "valid_apis": [{"url": a["url"], "model": a["model"], "key": "<REDACTED>"} for a in _VALID_APIS],
         # R56（2026-09-30 独立审查 P0）：harness 披露——消除"脚手架主张
@@ -2364,6 +2496,13 @@ if __name__ == "__main__":
         ),
         help="P0 2.1 合成数据集分层难度（仅对 synthetic 数据集生效）：mixed（默认，历史口径）/ level1 / level2 / level2.5（运行时异常缺陷库）/ level2.5-hard（困难运行时异常库，定位阶段可激活）/ level3（跨文件双模块）/ level3.5（三模块深链）/ level4 / level4.5",
     )
+    @click.option(
+        "--max-pattern-repeat",
+        "max_pattern_repeat",
+        default=None,
+        type=int,
+        help="AA：合成数据集同池模板重复上限（仅 synthetic 生效；默认 None=历史口径；>=1 时同 (difficulty, pattern) 至多出现 N 次，全池达上限后轮转重置，防单 pattern 分布塌缩）",
+    )
     def cli(
         dataset,
         subset,
@@ -2380,6 +2519,7 @@ if __name__ == "__main__":
         enable_mutation,
         no_mutation,
         difficulty,
+        max_pattern_repeat,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
@@ -2413,6 +2553,7 @@ if __name__ == "__main__":
             save_state=save_state,
             enable_mutation_scoring=mutation_override,
             difficulty=difficulty,
+            max_pattern_repeat=max_pattern_repeat,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

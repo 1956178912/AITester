@@ -183,6 +183,14 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python scripts/check_zero_assert_tests.py
 
+      - name: Check env budget (X3 开关预算守卫)
+        # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
+        #（src/ + config.py）新环境变量须先本地运行 check_env_budget.py
+        # 登记到 docs/env_budget.yaml 并随改动提交（登记 = 显式 PR 动作），
+        # CI 阻断未登记新增；删名允许（表随之收缩）。
+        if: matrix.python-version == '3.14'
+        run: python scripts/check_env_budget.py --check
+
       - name: Check baseline numbers (11. 漂移守卫)
         # 核心文档"当前基线"块不得硬编码会过期的测试/静态检查数字
         #（README "测试状态" 表指向 BASELINE.yaml；历史叙事章节豁免）
@@ -300,6 +308,14 @@ jobs:
         # + 核心修复路由模块（graph/workflow.py、agents/error_classifier.py）
         # 逐模块 ≥90%（严格门槛）+ 其余核心路由模块 ≥85%
         run: python scripts/check_branch_coverage.py coverage.xml
+
+      - name: Coverage ratchet gate (W2 渐进式紧箍，回退即失败)
+        # W2（2026-10-05 审查落地）：静态门槛（85/77）之上的只升不降水位门禁。
+        # 水位存 docs/coverage_ratchet.yaml（随提交演进）——本地跑
+        # `python scripts/coverage_ratchet.py` 实测高于水位+步长(0.5pp)时自动
+        # 上调并随改动提交；CI 本步骤以 --check 模式阻断任何回退。消除
+        # "贴基线设门槛 + 为门槛写测试"的动机（门禁从"不退化"变"单调提升"）。
+        run: python scripts/coverage_ratchet.py --check --coverage-xml coverage.xml
 
   # R10（2026-10-05 审查批次）：security 作业升级为 push/PR 即跑且阻断的
   # 安全门禁（此前仅周日 schedule / 手动触发、部分检查 info-only）：

@@ -53,7 +53,14 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from config import ENABLE_DEBUGGER, ENABLE_PLANNER, ENABLE_RAG, MAX_ITERATIONS
+from config import (
+    ENABLE_DEBUGGER,
+    ENABLE_PLANNER,
+    ENABLE_RAG,
+    MAX_ITERATIONS,
+    MAX_REGENERATIONS,
+    detection_first_enabled,
+)
 from src.agents.llm_client import _llm_cache_dir, _llm_cache_enabled
 from src.graph.mutation_advisor import (
     _mutation_advisor_node,
@@ -211,7 +218,10 @@ def effective_stop_reason(state: AITesterState) -> str | None:
 # generator 再生成一次。若无上限，旧的 diagnosis 关键词会反复命中，
 # generator↔executor 无限乒乓，最终撞上 LangGraph recursion_limit 崩掉任务并空烧 token。
 # 取 1：一次再生成已足够验证"换一版测试"是否解决问题，再多只会浪费。
-_MAX_REGENERATIONS = 1
+# Z2（2026-10-06 审查修复）：数值迁至 config.MAX_REGENERATIONS 单一事实源
+# （nodes 侧原有一份同值局部字面量，靠注释"同口径"维系——已删除并改为
+# 同源 import；本别名保留以维持模块内既有引用不变）。
+_MAX_REGENERATIONS = MAX_REGENERATIONS
 
 # 诊断关键词 → "测试生成错误"判定（路由回 generator 的触发词）。
 # 2026-09-26 全面审查：从 _should_debug 函数体内提取为模块级常量——
@@ -378,7 +388,9 @@ def _route_after_diagnosis(state: AITesterState) -> str:
     return "debug"
 
 
-def _create_workflow(planner: bool | None = None, debugger: bool | None = None) -> StateGraph:
+def _create_workflow(
+    planner: bool | None = None, debugger: bool | None = None, allow_regeneration: bool = False
+) -> StateGraph:
     """
     构建多智能体工作流图（有向无环图 + 条件循环）。
 
@@ -397,6 +409,14 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
                  消融实验可按需显式传 False 构建无规划基线图，无需 reload 模块。
         debugger: 是否启用 Debugger + PatchApplier 修复循环。None（默认）时读取
                  config.ENABLE_DEBUGGER。
+        allow_regeneration: X1（2026-10-05 审查 P0-3）：debugger=False 时是否
+                 保留 executor → generator 的再生成路由。默认 False（历史：
+                 executor → END）。True 供 plain_llm_df 基线使用——无修复
+                 循环但保留"检出优先再生成"（_should_debug 的
+                 detection_first_all_green 分支；"debug"（测试失败需修复）
+                 在无 Debugger 语义下映射为 "done"：失败测试本身即潜在
+                 检出，保留失败状态交 M1 裁决，不触发修复）。enable_debugger
+                 =True 时本参数无效果（默认图已含完整路由）。
 
     Returns:
         已注册的 StateGraph 实例（尚未编译，需调用 .compile() 后才能运行）。
@@ -520,6 +540,21 @@ def _create_workflow(planner: bool | None = None, debugger: bool | None = None) 
         # 这构成一个可多次迭代的修复循环，每次循环后更新 iteration 计数
         workflow.add_edge("debugger", "patch_applier")
         workflow.add_edge("patch_applier", "executor")
+    elif allow_regeneration:
+        # X1（2026-10-05 审查 P0-3）：无修复循环但保留再生成路由——
+        # plain_llm_df 基线（plain_llm + 检出优先协议）专用拓扑：
+        # executor → _route_no_debugger → ("regenerate" → generator | "done" → END)。
+        # 检出优先分支的生效条件由调用方经线程级覆盖控制
+        # （config.set_detection_first_thread_override，见
+        # run_benchmark.run_plain_llm_df_baseline）。
+        workflow.add_conditional_edges(
+            "executor",
+            _route_no_debugger,
+            {
+                "regenerate": "generator",
+                "done": END,
+            },
+        )
     else:
         # 无 Debugger 模式：Executor 完成后直接结束，不做任何修复尝试
         # 适用于消融实验中移除 Debugger 或纯 LLM 单次调用基线
@@ -637,6 +672,27 @@ def _should_debug(state: AITesterState) -> str:
     # 现统一为 truthiness（与 _recent_repairs_invalid / _executor_node 写入口径
     # 一致：test_passed 由 executor 的 test_result["passed"] 赋值，语义即"测试全过"）。
     if state.get("test_passed"):
+        # W3（2026-10-05 审查落地·检出优先协议，DETECTION_FIRST_ENABLE 默认关时
+        # 零行为变化）：首轮全绿（iteration==0，被测代码未修复，测试在缺陷代码上
+        # 全通过 = 未检出任何缺陷）且再生成预算未用尽时，不把全绿当成功——路由
+        # regenerate 逼 generator 产出能让缺陷代码变红的测试（先红后绿协议）。
+        # 上限保护：regeneration_count < _MAX_REGENERATIONS（与 generator 侧
+        # 计数 +1 联动，防 executor↔generator 乒乓撞 recursion_limit）。
+        # 执行过判定：execution_trace 非空（防未执行态误路由）。
+        if (
+            detection_first_enabled()
+            and int(state.get("iteration", 0)) == 0
+            and not state.get("detection_first_red_seen")
+            and int(state.get("regeneration_count", 0)) < _MAX_REGENERATIONS
+            and state.get("execution_trace")
+        ):
+            logger.info("W3 检出优先：首轮全绿未检出缺陷，触发再生成更强的测试（先红后绿）")
+            _trace_node(
+                "_should_debug",
+                decision="regenerate",
+                output_summary={"reason": "detection_first_all_green"},
+            )
+            return "regenerate"
         _stop_reason = determine_stop_reason(state)
         _trace_node("_should_debug", decision="done", output_summary={"reason": _stop_reason.value})
         state["stop_reason"] = _stop_reason.value
@@ -742,7 +798,22 @@ def _should_debug(state: AITesterState) -> str:
     return "debug"
 
 
-def build_workflow(planner: bool | None = None, debugger: bool | None = None) -> Any:
+def _route_no_debugger(state: AITesterState) -> str:
+    """X1（2026-10-05 审查 P0-3）：无 Debugger 拓扑的 executor 路由包装。
+
+    复用 _should_debug 的全部判定（含 W3 检出优先的
+    detection_first_all_green 分支），仅把 "debug"（测试失败需修复——
+    无 Debugger 可去）映射为 "done"：失败测试本身即潜在检出（buggy 侧
+    变红），保留失败状态交 M1 独立裁决，不触发修复（与 plain_llm
+    "不修复"口径一致）。供 plain_llm_df 基线拓扑
+    （build_workflow(allow_regeneration=True)）使用；模块级定义便于
+    直接单测。
+    """
+    verdict = _should_debug(state)
+    return "done" if verdict == "debug" else verdict
+
+
+def build_workflow(planner: bool | None = None, debugger: bool | None = None, allow_regeneration: bool = False) -> Any:
     """
     编译工作流图并返回可执行的 graph 对象。
     每次调用都创建新的 graph 实例，避免状态污染。
@@ -770,7 +841,7 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None) ->
     except Exception:
         # 缓存目录收敛/清理属卫生性操作，任何异常（含权限 / IO）不得阻断工作流
         pass
-    workflow = _create_workflow(planner=planner, debugger=debugger)
+    workflow = _create_workflow(planner=planner, debugger=debugger, allow_regeneration=allow_regeneration)
     # M12（2026-09-30 审查 D.4-2）：RISK_APPROVAL_ENABLE=true 时注入
     # checkpointer，使 LangGraph interrupt() 可真正暂停并恢复。
     # 默认关时（RISK_APPROVAL_ENABLE=false）不注入，保持历史行为零变化。
