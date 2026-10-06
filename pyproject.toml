@@ -40,7 +40,7 @@ dependencies = [
     # 二者均被 requirements.txt 显式声明（含注释说明"直接 import"），
     # 此处对齐同一口径（check_lock_sync 只比对 requirements.txt↔lock，
     # pyproject 侧此前无任何守卫，现由 tests/test_packaging.py 锁定）。
-    "openai>=1.0.0",
+    "openai>=3.24.0",
     "zai-sdk>=0.2.0",
     # P2-5（2026-10 依赖分组）：pymysql / DBUtils 移入 db extra——
     # MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
