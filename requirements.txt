@@ -55,7 +55,7 @@ chromadb==1.5.9
 # matplotlib: 图表绘制库，用于实验结果可视化
 matplotlib==3.11.1
 # pandas: 数据分析库，用于结果表格生成和统计
-pandas==3.0.5
+pandas==3.0.6
 
 # ─── 实验与数据集依赖 ─────────────────────────────────────────────────────────
 # datasets: HuggingFace 数据集加载库（SWE-bench 下载用）
