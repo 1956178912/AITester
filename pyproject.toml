@@ -30,7 +30,7 @@ dependencies = [
     # fl_spectral / synthetic_dataset 输出给 LLM 的测试代码），非运行期
     # 直接 import，故运行时不依赖 pytest。
     "click>=8.0.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.4",
     "requests>=2.31.0",
     # O35（P1）：openai / zai-sdk 此前只在 requirements.txt/.lock 中声明，
     # pyproject 漏声明 → `pip install .` 的用户缺这两个直接 import 依赖：
