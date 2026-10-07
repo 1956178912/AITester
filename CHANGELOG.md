@@ -4,6 +4,31 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-07 E1 执行批次（E1 契约冒烟通过生死门 + recursion_limit 上界后置修复）
+
+> 用户预算续费（DeepSeek V4.1 Flash）+ 终端提交七批（059343f）后，按
+> 预注册就绪命令原样执行 E1。批次工件 `experiments/results/ab1_validation_e1/`
+> （12 任务，87,495 tok，AITESTER_PROFILE=logic，seed 42，temp 0.0，
+> **provenance 首次 git_dirty=False**）：
+> - **E1 生死门通过：spec_compile_rate 均值 0.367 ≥ 0.3 保留线**
+>   （n=10/12 可测；契约修复前 AB1 批 12/12 全 0）——AC1 契约修复后
+>   "逻辑驱动"链路首次在真实批次生效；
+> - 伴随观测：detection=20.0%（2 例均 `specific_red` 门确认，远高于
+>   历史主批次 2%）、repair=0.0%、false_fix=80.0%、regression=0%、
+>   test_error=0%；双门观测 specific_red×2 / over_red×2（AC2 双门
+>   真实批次首次工作）；
+> - **E1 后置 harness 修复**：logic 档双门图往返使 2/12 任务触发
+>   LangGraph recursion_limit=20（4×MAX_ITERATIONS+8）触顶无终态——
+>   上界公式上调为 **8×MAX_ITERATIONS+8**（防失控语义仍由内部轮次
+>   上限承担，本值只是 LangGraph 层最后防线）；修复属执行环境参数，
+>   不触碰预注册任何判定规则（效力注记已入 prereg 文首）；
+> - 全量回归 **4429 passed / 0 failed**（test_workflow_internal_branches
+>   两处断言同步 + test_ae_batch E1 行锁随执行记录合法推进）。
+>
+> 下一步：E2 双门复核（87 任务 × 3 臂 × 2 种子，≈3-6M tok）待预算批准；
+> prereg 就绪命令中 E1 验证 glob 路径与 run_main_batch 实际写盘路径的
+> 偏差已随工件归位（experiments/results/）消除。
+
 ## [Unreleased] — 2026-10-07 AT 批次（第十五轮审查续五：make 目标与 workflow 运行时全量自检——零改动纯验证，自主优化系列收官）
 
 > 用户第六次"继续优化"。本批**零代码/工件改动**，纯运行时健康自检，

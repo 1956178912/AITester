@@ -1,6 +1,13 @@
 # Pre-registration: E1–E4 Validation Experiments (Detection-First Protocol + Logic Chain + Double Gates)
 
-Last updated: 2026-10-07 (batch AO: E6 matched-cap source amendment —
+Last updated: 2026-10-07 (E1 executed and logged in the execution log:
+mean spec_compile_rate 0.367 ≥ the 0.3 keep threshold, batch artifacts
+at `experiments/results/ab1_validation_e1/`; same-day post-E1 harness
+fix: the logic-profile double-gate graph detours pushed 2/12 tasks into
+LangGraph recursion_limit=20 exhaustion with no final state — the cap
+formula 4×MAX_ITERATIONS+8 is raised to 8×MAX_ITERATIONS+8; this is an
+execution-environment parameter fix and touches no decision rule.
+Previously the same day, batch AO: E6 matched-cap source amendment —
 caps now derived from E2 measured means, the R-P0-2 legacy constants are
 demoted to magnitude references; the amendment precedes any E6 data.
 Previously the same day, batch AN: AN2/AN5 presentation-only additions

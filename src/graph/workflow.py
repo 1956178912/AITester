@@ -929,7 +929,11 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None, al
         def __getattr__(self, item):
             return getattr(self._graph, item)
 
-    return _RecursionLimitedGraph(_base_graph, 4 * int(MAX_ITERATIONS) + 8, _checkpointer is not None)
+    # E1 实证（2026-10-07，ab1_validation_e1）：logic 档双门（特异性门
+    # over_red 路由再生成 + 红回归门）显著增加图节点往返，4×MAX+8=20 使
+    # 2/12 任务触顶无终态。上界翻倍至 8×MAX+8；防失控语义仍由内部
+    # _MAX_REGENERATIONS 等轮次上限承担，本值只是 LangGraph 层最后防线。
+    return _RecursionLimitedGraph(_base_graph, 8 * int(MAX_ITERATIONS) + 8, _checkpointer is not None)
 
 
 # 缓存条目数统计的进程内记忆（0.10 轮次）：生产 LLM 文件缓存在本进程内

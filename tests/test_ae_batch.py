@@ -75,9 +75,13 @@ class TestPreregistrationDoc:
             assert "95% CI" in text
 
     def test_execution_log_table_pending(self) -> None:
-        """执行记录表存在且为"待执行"状态——判定规则区与结果区隔离。"""
+        """执行记录表状态锁：E1 已执行（保留判定回填），E2+E3/E4 仍待执行。"""
         zh = (_ROOT / "docs" / "preregistration.md").read_text(encoding="utf-8")
-        assert "| E1 | 待执行 |" in zh
+        # E1 于 2026-10-07 执行：spec_compile_rate=0.367 ≥ 0.3 → 保留
+        # （合法状态演进，AO 改 cap 同步 test_am 先例：锁随执行记录推进）
+        assert "| E1 | 已执行" in zh
+        assert "0.367" in zh
+        assert "experiments/results/ab1_validation_e1/" in zh
         assert "| E2+E3 | 待执行 |" in zh
         assert "| E4 | 待执行 |" in zh
 

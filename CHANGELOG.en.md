@@ -1,10 +1,44 @@
-> Last updated: 2026-10-07 (batch AT: full runtime self-check of make targets and workflows — zero-change pure verification, autonomous-optimization series closed; batch AS details below, default behavior unchanged)
+> Last updated: 2026-10-07 (batch E1-exec: E1 contract smoke passed its生死门 gate + post-E1 recursion_limit cap fix; full details below, default behavior unchanged)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-07 Batch E1-exec (E1 contract smoke passed the life-or-death gate + post-E1 recursion_limit cap fix)
+
+> After the user renewed the model budget (DeepSeek V4.1 Flash) and
+> committed the seven pending batches at the terminal (059343f), E1 was
+> executed verbatim from the pre-registered ready command. Batch
+> artifacts `experiments/results/ab1_validation_e1/` (12 tasks, 87,495
+> tokens, AITESTER_PROFILE=logic, seed 42, temp 0.0, **first-ever
+> git_dirty=False provenance on a main-protocol batch**):
+> - **E1 life-or-death gate PASSED: mean spec_compile_rate 0.367 ≥ the
+>   0.3 keep threshold** (n=10/12 measurable; the pre-fix AB1 batch was
+>   0 across all 12) — the first time the logic-driven chain (post-AC1
+>   contract repair) works on a real batch;
+> - Accompanying observations: detection=20.0% (both hits confirmed by
+>   the `specific_red` gate, far above the legacy 2% main batch),
+>   repair=0.0%, false_fix=80.0%, regression=0%, test_error=0%;
+>   gate observations specific_red×2 / over_red×2 (first real-batch
+>   operation of the AC2 double gates);
+> - **Post-E1 harness fix**: the logic-profile double-gate graph detours
+>   pushed 2/12 tasks into LangGraph recursion_limit=20
+>   (4×MAX_ITERATIONS+8) exhaustion with no final state — the cap
+>   formula is raised to **8×MAX_ITERATIONS+8** (runaway protection
+>   still lives in the internal iteration caps; this value is only the
+>   LangGraph-level last resort); an execution-environment parameter
+>   fix that touches no pre-registered decision rule (efficacy note in
+>   the prereg header);
+> - Full regression **4429 passed / 0 failed**
+>   (test_workflow_internal_branches assertions synced + test_ae_batch
+>   E1-row lock advanced legitimately with the execution log).
+>
+> Next: E2 double-gate replication (87 tasks × 3 arms × 2 seeds,
+> ≈3-6M tokens) awaits budget approval; the prereg E1 verification glob
+> path vs. run_main_batch's actual write path mismatch is resolved by
+> relocating the artifacts under experiments/results/.
 
 ## [Unreleased] — 2026-10-07 Batch AT (Round-15 review continued V: full runtime self-check of make targets and workflows — zero-change pure verification; autonomous-optimization series closed)
 
