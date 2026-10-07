@@ -87,9 +87,7 @@ def select_stratified_sample(
         n_pick = math.ceil(len(members) * fraction)
         if n_pick <= 0:
             continue
-        selected.extend(
-            {**row, "_stratum": stratum_name} for row in rng.sample(members, min(n_pick, len(members)))
-        )
+        selected.extend({**row, "_stratum": stratum_name} for row in rng.sample(members, min(n_pick, len(members))))
     return selected
 
 

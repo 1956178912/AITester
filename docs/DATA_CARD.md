@@ -2,7 +2,9 @@
 
 # 数据卡（DATA CARD）
 
-最后更新：2026-10-06（AH1：§4 许可节权威核实——QuixBugs MIT 已确认
+最后更新：2026-10-07（AN1：§4 新增 TestGenEval L2 候补评估登记——
+CC BY-NC 4.0 经 LICENSE 原文核实，与 BugsInPy 同列非清洁许可门槛；
+此前 AH1：§4 许可节权威核实——QuixBugs MIT 已确认
 〔L1 前置解除〕、BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；
 此前 AA2：§2 重复采样偏差登记缓解机制 `max_pattern_repeat`；
 此前 Z6 新增：数据治理缺口补齐——此前数据说明并入
@@ -61,6 +63,16 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 - **BugsInPy**：manifest JSONL 口径（project / bug_id / buggy_code /
   fixed_code / test_code），task_id 末段为 ≤30 字符中性模块名（防泄缺陷
   语义）；`AITESTER_BUGSINPY_DATA` 注入；
+- **TestGenEval（L2 候补评估登记，AN1，2026-10-07；未加载零实跑）**：
+  `facebookresearch/testgeneval`（Jain et al., ICLR 2025，
+  arXiv:2410.00752）——真实仓库上下文的单元测试生成/补全基准
+  （1,210 文件对 / 68,647 测试 / 11 个活跃 Python 仓库，由 SWE-bench
+  改造），与本项目"测试生成"主命题同域，比 BugsInPy 的"缺陷修复"口径
+  更贴题；**许可：CC BY-NC 4.0**（GitHub API license 字段
+  `spdx_id=NOASSERTION`，LICENSE 原文核实 2026-10-07 =
+  Attribution-NonCommercial 4.0 International）——学术非商业研究评估
+  可用（署名），商业用途与衍生工件再分发受限；与 BugsInPy 同列
+  "非清洁许可"门槛（下方三选一口径同样适用），L2 立项时并列决策；
 - **许可**（AH1，2026-10-06 经 GitHub API 权威核实并登记）：
   - **QuixBugs：MIT License（已核实，L1/E4 前置条件解除）**——
     `api.github.com/repos/jkoppel/QuixBugs` license 字段

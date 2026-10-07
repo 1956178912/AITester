@@ -71,7 +71,10 @@ def _pre_commit_rev(path: Path, repo_name: str) -> str | None:
         if in_block:
             if line.strip().startswith("- repo:"):
                 break  # 下一块开始，本 repo 块结束
-            m = re.match(r"rev:\s*v?([0-9.]+)\s*$", line)
+            # AP 批（2026-10-07）修复：rev 行带 YAML 缩进（`    rev: v0.16.3`），
+            # re.match 锚定行首导致恒不匹配 → pre-commit 版本恒报 "<absent>"，
+            # ci↔hook 一致性校验（B-05 建立之本）此前形同虚设。strip 后匹配。
+            m = re.match(r"rev:\s*v?([0-9.]+)\s*$", line.strip())
             if m:
                 return m.group(1)
     return None

@@ -4,6 +4,278 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-07 AT 批次（第十五轮审查续五：make 目标与 workflow 运行时全量自检——零改动纯验证，自主优化系列收官）
+
+> 用户第六次"继续优化"。本批**零代码/工件改动**，纯运行时健康自检，
+> 测试数与门禁状态不变（4429）：
+> - `make power`：功效分析表产出正常（基线 10% 检出、10pp 差需 n≈87，
+>   与 prereg 功效依据一致）；
+> - `make self-check`：三组 δ→n→反解往返一致性全过（Z8）；
+> - `make build-check`：AS2 目标端到端验证（build → /tmp 全新 venv →
+>   安装 → `aitester --version` 0.7 → import 断言，全绿）；
+> - workflow 健全性：ci.yml（4 jobs）/ perf.yml / release.yml（ci-green
+>   + release）/ dependabot.yml（2 更新组）YAML 解析与结构全部正常。
+>
+> **自主优化系列至此收官**：AO/AP/AQ/AR/AS/AT 六批把可自主面收敛到
+> "证实系统健康"形态——剩余全部为用户侧六决策（终端提交七批 / 密钥
+> 轮换 / E1 预算 / E7 人工比对 / L2 许可 / 价目与作者）。
+
+## [Unreleased] — 2026-10-07 AS 批次（第十五轮审查续四：发行构建链路首次全链取证 + PEP 639 license 现代化 + make build-check）
+
+> 用户第五次"继续优化"。全部离线零 LLM 成本。全量回归
+> **4425 → 4429 passed / 0 failed**（+4 = tests/test_as_batch.py）。
+
+- **AS1a（基线取证，本批最高价值）** 十五轮审查首次真实走过**发行构建
+  链路**：`python -m build --wheel` → 全新 venv 安装（依赖树解析）→
+  `aitester --version`（0.7）→ `import config, src` + CLI 入口 →
+  `pip show` 版本一致——**全链无 latent bug**，O9（PEP 621）/O35
+  （dynamic version）/X4（py.typed）打包决策端到端成立；wheel 114 项
+  内容物核验（config.py/py.typed/LICENSE 全在）。AL9（v0.7.0 发布）
+  的重要前置证据落袋。
+- **AS1b（PEP 639 现代化，survey 打包缺口清零）** `license = "MIT"`
+  SPDX 表达式 + `license-files = ["LICENSE"]` + `[build-system]`
+  setuptools>=77（PEP 639 实现下限）；重建实测 wheel METADATA 产出
+  **Metadata-Version 2.4 / License-Expression: MIT**，--no-deps 重装
+  冒烟通过；setup.py shim 的 license_files 键名本就与 PEP 639 一致。
+  survey"许可证元数据"行闭环为"~~P2~~ 已达成"（O9 立声明→AS 完成风格
+  现代化），打包三 P0+两 P2 缺口全部清零。
+- **AS2（make build-check）** 发行链路冒烟目标（build → /tmp 全新 venv
+  → 安装 → CLI/import 断言），本地可复现入口；**刻意不接 CI**——是否
+  纳入发布流水线由 AL9 发布批次决定。测试锁静态声明面（SPDX 字符串/
+  license-files/构建下限/shim 对齐/Makefile 目标）。
+
+### 用户侧关键路径不变
+
+终端提交（AM…AR+AS 七批，含 E7 两工件入库）/ 密钥轮换 / E1 最小预算
+批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 / agnes 价目
++ CITATION 真实作者。
+
+## [Unreleased] — 2026-10-07 AR 批次（第十五轮审查续三：hypothesis extras 缺口补齐 + README CI 矩阵声称勘误 + prereg 双语结构奇偶锁）
+
+> 用户"继续优化"后第十五轮审查续三批。全部离线零 LLM 成本。全量回归
+> **4420 → 4425 passed / 0 failed**（+5 = tests/test_ar_batch.py）。
+> AR1 勘误：首轮全量实测 4424+1F——AR2 断言裸子串被本批勘误文本
+> "3.12/3.14→…"误伤（AQ 批同类教训复现），断言锚定原句语境收窄后
+> 回绿；"落盘后必须复跑全量"纪律再次生效。
+
+- **AR1（打包 extras 缺口）** `hypothesis` 此前仅 requirements.txt 声明
+  （G18/T5，2026-10-05），pyproject/setup.py 各 extras 均无入口——
+  `pip install "aitester[formal]"` 用户拿不到属性测试工具链，而 G18/T5
+  的 SpecIR→Hypothesis 策略编译与 AN4 属性模板路线（E1 阴性出口）同以
+  hypothesis 为执行底座。现补入 **[formal] extra 双源**
+  （pyproject `formal = ["z3-solver>=4.12.0", "hypothesis>=6.100.0"]` +
+  setup.py shim 对齐），test_packaging 奇偶守卫 + AR 内容断言双锁；
+  requirements.txt 开发环境来源不变。
+- **AR2（README 矩阵声称勘误）** 双语"已知失败"行"CI 3.12/3.14 全绿"
+  系 2026-09-28 补入 3.13 档前的陈旧写法，改为 **3.12/3.13/3.14** 并加
+  测试锁：双语声称与 BASELINE `python_ci_matrix` 交叉一致 + 陈旧两档
+  写法不得残留。
+- **AR3（prereg 双语结构奇偶锁）** `check_bilingual_docs` 只查配对存在
+  与日期，不查结构奇偶——新增测试锁定 prereg zh/en 的二级/三级标题数与
+  bash 命令块数逐项相等（当前实测 **13/3/9**）+ 非退化守卫；单侧增删
+  节造成内容级漂移从此显式红。
+
+### 用户侧关键路径不变
+
+终端提交（AM+AN+AO+AP+AQ+AR 六批，含 E7 两工件入库）/ 密钥轮换 /
+E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
+agnes 价目 + CITATION 真实作者。
+
+## [Unreleased] — 2026-10-07 AQ 批次（第十五轮审查续二：E7 工作表 v2 逐行差异 + E7 工件纳入入库守卫 + survey 打包陈旧结论勘误）
+
+> 用户"继续优化"后第十五轮审查续二批。全部离线零 LLM 成本。全量回归
+> **4415 → 4420 passed / 0 failed**（+5 = tests/test_aq_batch.py）。
+
+- **AQ1（E7 工作表 v2）** 每候选节增补"patch vs gold fixed 逐行差异"
+  （`difflib.unified_diff`，四反引号 ```diff 围栏）：整文件替换口径下
+  补丁正文即补丁应用后完整文件，行级差异就是审阅者核心判读对象——抽查
+  实证 task_0044 一图看穿三类素材（LLM 格式伪影首行 / 多余 int 转换
+  try/except / stock_of 行为分歧）。**机械对比备料，判定仍属人工**；
+  两次复算逐位一致，SHA256SUMS 975 项过。
+- **AQ3（工件引用链扩展）** `check_artifacts_tracked` MANIFEST 11→13：
+  登记 prereg 双语 E7 节引用的 `e7_repair_sample_candidates.md`（AO5）与
+  `e7_review_worksheet.md`（AP1），清单长度测试锁定。**本地预期红**
+  （2 项未跟踪——脚本文档化的"入库前 CI 承担"口径），随四批终端提交转绿。
+- **AQ2/AQ4（survey 打包陈旧结论勘误）** `docs/Python工程化前沿基线
+  （2024–2026）.md` 四处过期评估勘误：**PEP 621/[build-system]/license
+  三处 P0 结论系 O9 批（2026-09-29）落地前的过期评估**（pyproject 早已
+  有 `[project]` 唯一事实来源 + `[build-system]` + `license={file=…}`，
+  setup.py 为兼容 shim，test_packaging 双源守卫）——表格三行 + 正文
+  "完全没有 license 元数据"节分别改为"已达成（O9）"+ 剩余差距
+  （PEP 639 SPDX 风格需 setuptools>=77，降级 P2）；"动态版本"行勘误为
+  O35 的 `{attr=…}` 主路径。勘误引用旧结论原文的写法与测试断言的
+  "不得残留"口径冲突一处（勘误引文被误伤），断言锚定旧句原始表格语境
+  收窄——教训：**勘误文本引用旧结论时应加"旧结论："前缀或改述，
+  防与残留断言互相误伤**。
+
+### 用户侧关键路径不变
+
+终端提交（AM+AN+AO+AP+AQ 五批，含 E7 两工件入库）/ 密钥轮换 /
+E1 最小预算批准 / **E7 人工比对（工作表 v2 已备）** / L2 许可三选一 /
+agnes 价目 + CITATION 真实作者。
+
+## [Unreleased] — 2026-10-07 AP 批次（第十五轮审查续：E7 复核工作表生成器 + E6 提取命令端到端验证 + B-05 检查器缩进盲区修复 + survey 文档陈旧行更新）
+
+> 用户"继续优化"后第十五轮审查续批。全部离线零 LLM 成本；付费实验
+> 与用户专属项（提交/密钥/许可）维持待决。全量回归
+> **4407 → 4415 passed / 0 failed**（+8 = tests/test_ap_batch.py）。
+
+- **AP1（E7 加速器）** 复核工作表生成器 `experiments/repair_review_worksheet.py`
+  （复用 repair_sample_selection 同参抽样：72 框行/sbfl 单层/ceil10%/seed=42
+  → 8 候选节）：每节内嵌四段素材（生成补丁 / gold fixed〔task_metadata.fixed〕/
+  gold 官方测试〔test_cases〕/ 最终生成测试）+ 五选一判定勾选栏 + 整文件替换
+  口径判定提示；四反引号围栏防破栏（修复过一次 6 反引号拼接 bug，测试锁定）。
+  产出 `experiments/results/main_batch/e7_review_worksheet.md`，两次复算逐位
+  一致，SHA256SUMS 975 项过。**E7 人工比对素材从"清单索引"升级为"逐节
+  对照可判"，结论仍以人工判定为准**。prereg 双语 E7 节补工作表引用。
+- **AP2（E6 命令端到端验证 + schema 守卫）** 预注册 E6"第 1 步提取均值"
+  命令对三种子批次实测运行成功（9 臂均值正确产出；种子间波动 ±10% 进一步
+  佐证 AO1"实测均值优于常数"）；新增行级 `token_usage.total_tokens` 路径
+  守卫测试——字段改名会静默断链 E6 就绪命令，此处显式红。
+- **AP3（B-05 检查器修复）** `scripts/check_tool_versions.py` 的
+  `_pre_commit_rev` 用 `re.match` 匹配**带缩进**的 rev 行 → 恒不匹配 →
+  pre-commit 版本恒报 `<absent>`，ci↔hook 一致性校验（B-05 建立之本）自
+  2026-10-04 落地起形同虚设。strip 后修复，pre-commit 版本首次真实检出且
+  三方一致（mypy ci=1.15.0 hook=1.15.0 / ruff ci=0.16.3 hook=0.16.3
+  lock=0.16.3）。测试锁：main() 直调输出断言 + 缩进/跨块单元夹具。
+- **AP4（survey 陈旧行）** `docs/Python工程化前沿基线（2024–2026）.md`
+  hash 校验行的"❌ CI 里是裸 pip install -r requirements.txt"更新为
+  AO2 后现实（lock 132 项全钉安装；剩余差距=lock 无 hash，P1 维持），
+  测试锁定旧行不得残留。
+
+### 用户侧关键路径不变
+
+终端提交（AM+AN+AO+AP 四批）/ 密钥轮换 / E1 最小预算批准 / **E7 人工
+比对（工作表已备，~1 人日）** / L2 许可三选一 / agnes 价目 + CITATION
+真实作者。
+
+## [Unreleased] — 2026-10-07 AO 批次（第十五轮审查落地：E6 matched cap 来源修订 + CI 按 lock 安装 + E7 候选清单生成 + 文档日期同步）
+
+> 第十五轮系统性审查（AN 批后独立复测 4396 全绿核实）可自主执行项落地。
+> 全部离线零 LLM 成本；不触碰付费实验（E1–E6 跑批维持待预算状态）。
+> 全量回归 **4396 → 4407 passed / 0 failed**（+11 = tests/test_ao_batch.py）。
+
+- **AO1（R15-4，P0）** E6 预注册修订（`docs/preregistration` 双语 E6 节 +
+  就绪命令块）：matched 上限来源从 R-P0-2 无门控常数（26,115/4,223）改为
+  **E2 同种子 standard 批次实测的每任务 `token_usage.total_tokens` 均值**——
+  双门会改变 aitester 的 token 消耗曲线（门路由减少无效修复循环），若门控
+  后均值低于旧 df 均值，硬编码 cap 将不绑定，aitester(matched) 退化为无约束
+  对照、等预算对比失效。就绪命令改为"第 1 步提取均值 + 第 2 步占位变量
+  注入"两步式；修订效力声明留痕（设计增补：主终点/判定规则/停止规则不变，
+  时点早于任何 E6 数据，git 可核）。同步更新 `tests/test_am_batch.py` 文本锁
+  （`aitester=4223`/`plain_llm_df=26115` 字面 cap 断言 → 占位变量断言 + 旧
+  常数禁止再出现断言；E7 执行记录行随状态推进）。
+- **AO2（R15-7，P1）** CI 执行环境切换 requirements.lock（`ci.yml` test/smoke
+  两作业安装与缓存键）：此前安装走 requirements.txt（25 项顶层钉）时传递
+  依赖浮动，与"lock 审计"（132 项）口径不对称；requirements.txt 仍为用户
+  安装入口（README/QUICKSTART 口径不变）。落地前经 PyPI 元数据全量核查：
+  132 钉版 requires_python 无一排除 3.12，wheel 覆盖完整（ruff 为
+  py3-none-\<platform\> 标签、multiprocess 为 py310-none-any，两初筛疑点均为
+  检查模式误报）；mypy 不在 lock，CI 显式钉版安装保留。
+- **AO3（R15-9，P2）** `README.en.md` 头部 Last updated 行同步 AN/AO 批次
+  （修复"头部 2026-10-06/AM vs 正文已含 AN"内部日期漂移）。
+- **AO4（R15-9，P2）** U10 弃用别名移除时间线定档：`entry_ocurrence_stat`
+  告警文本改为"计划于 v0.8.0 移除（AO 批定档）"。
+- **AO5（R15-6 前置）** E7 候选清单生成（`repair_sample_selection.py` 首次对
+  真实工件运行，零 LLM）：`experiments/results/main_batch/e7_repair_sample_candidates.md`
+  ——72 框行（patch_plausible=1，全部 sbfl 单层）按层 ceil(10%)、seed=42
+  确定性抽出 8 候选行；两次复算逐位一致；SHA256SUMS 974 项校验通过。
+  **E7 现仅欠人工比对（约 1 人日）**，prereg 执行记录表 E7 行推进为
+  "待人工复核"；清单已可见 5/8 行呈现 `test_regenerated_pass_unverified`
+  抹红通道签名，与 E2 双门假设互证。
+- **AO6** tmp_trace 残留清理（2 个 `*_failed_trace.jsonl` 运行时产物，
+  `make clean-traces`）。
+- **AO7** 覆盖率棘轮上调（W2 纪律）：行覆盖实测 89.56% 触发步长
+  （水位 89.00 + 0.5pp）→ 水位升至 **89.5**（`docs/coverage_ratchet.yaml`
+  随批提交）；分支 82.78% 未达步长维持 82.5。BASELINE coverage 注释
+  同步刷新（89.56 / 82.78）。
+
+### 用户侧关键路径不变（第十五轮审查确认）
+
+终端提交（AM+AN+AO 三批）/ 密钥轮换 / E1 最小预算批准（≈0.1M token，
+"逻辑驱动"主张生死门）/ L2 许可三选一（BugsInPy+TestGenEval）/
+agnes 价目 + CITATION 真实作者。
+
+## [Unreleased] — 2026-10-07 AN 批次（第十四轮审查落地：报告层呈现性增补 $/detection 与测试套件可靠性 + TestGenEval L2 候补许可登记 + E1 失败出口骨架 + 工件卫生）
+
+> 第十四轮系统性审查（AM 批后独立复测 4374 全绿核实）五项自主执行项
+> 落地。全部离线零 LLM 成本；报告层改动均为**呈现性增补**（主终点/
+> 判定阈值/停止规则不变，prereg 双语 E3 节已留效力声明，增补时点早于
+> E2 数据产生）。全量回归 **4374 → 4396 passed / 0 failed**
+> （+22 = tests/test_an_batch.py）。
+
+- **AN1** TestGenEval L2 候补评估登记（`docs/design/real_benchmark_upgrade.md`
+  + `docs/DATA_CARD` 双语 §4）：`facebookresearch/testgeneval`（Jain et al.,
+  ICLR 2025，arXiv:2410.00752，真实仓库上下文测试生成/补全基准，与本项目
+  "测试生成"主命题同域，比 BugsInPy"缺陷修复"口径更贴题）——**许可
+  CC BY-NC 4.0**（GitHub API license 字段 `spdx_id=NOASSERTION`，LICENSE
+  原文核实 2026-10-07；沿用 AH 批"API 字段 + 原文定案、不采信搜索表述"
+  纪律）——学术非商业研究评估可用（署名），商业用途与衍生工件再分发
+  受限，与 BugsInPy（无 SPDX）同列"非清洁许可"三选一门槛；L2 立项时
+  并列决策，当前零加载零实跑。审查报告原预期"清洁许可候补"被证据
+  修正——登记本身即结论。
+- **AN2** 测试套件可靠性节（`experiments/statistical_analysis.py`：
+  `mutation_reliability_summary` + `_mutation_report_lines` + 报告组装
+  接线）：E2 起新批次报告新增 mutation_detection_rate 按臂聚合（可测行
+  均值 / None 不进分母〔保守不误报 0〕/ 杀灭-变异体合计 / 全不可测诚实
+  披露），对齐 SWE-Mutation（2026）"变异分 = LLM 测试套件可靠性主信号"
+  口径；历史报告不回写。
+- **AN5** $/detection 推导列（`cost_per_detection` + `_cost_report_lines`
+  可选 `det_rates` 参数）：成本表追加"成本/检出"列（$/task ÷ 检出率，
+  领域口径对齐 SWE-bench 生态 $/resolved）；检出率 0% → "—"（∞ 语义，
+  不显示为有限数字）；**det_rates=None 缺省输出与 AE2 历史格式逐位一致**
+  （向后兼容锁 tests/test_an_batch）；prereg 双语同批声明"呈现性推导，
+  不得脱离 detection 配对差单独作结论"。
+- **AN4** E1 失败出口骨架（`docs/design/property_template_route_skeleton.md`）：
+  属性模板路线预注册草案占位——触发条件字面绑定 prereg E1 判定
+  （<0.2 / 灰区迭代后仍 <0.3）、激活前零实验承诺、对外表述红线
+  （激活即放弃逻辑驱动主张，不得复活规约驱动表述——AL5 纪律同口径）、
+  草案默认阈值具体化（策略编译率 ≥0.5 可行 / <0.3 双 gate 失败、检出
+  配对差 ≥+5pp）+ 前沿依据登记（LLM-PBT 实证 / PropertyEval /
+  LLM4UT 综述 2025-11）。
+- **AN6** 工件卫生：tmp_trace 21 个失败追踪残留经 `make clean-traces`
+  清理 + 根目录 0 字节 `aitester.log` 删除（均 gitignore 区可再生产物，
+  零仓库影响）。
+- 刻意不做：N3（修复先验通道 / E8 候选）按预注册纪律**禁动至 E7 定案**
+  （防抢跑指控）；AK/AL/AM 批次未追记全局决策日志，由本批以"补记"
+  形式补齐（源 = CHANGELOG 权威记录，不重构决策过程）。
+
+## [Unreleased] — 2026-10-06 AM 批次（第十三轮审查落地续：E6 执行前置 --per-task-token-caps 全链实现 + 预注册就绪命令）
+
+> 预注册 E6（预算匹配四臂）的最后一块工程前置补齐：旗标、注入、观测、
+> 透传、预注册一致性五层同批落地。全部离线零 LLM 成本；默认口径零变化
+> （不传旗标 = 历史行为逐位一致）。全量回归 **4349 → 4374 passed /
+> 0 failed**（+25 = tests/test_am_batch.py）。
+
+- **AM1a** `src/budget/cost_budget.py`：`BudgetSnapshot` 新增实例级
+  `token_cap_override` 字段 + `set_task_token_cap()`；cap>0 时预算检查
+  自动生效（无需 COST_BUDGET_ENABLE），上限覆盖优先于 env；
+  cap 写在**实例**上（非线程局部）——专家池 worker 经 `attach_budget`
+  绑定同一实例后自动继承（C8 作用域语义），`reset_budget()` 每任务
+  重建实例天然清零；as_dict 透出 `token_cap_override` 观测键。
+- **AM1b** `experiments/run_benchmark.py`：`--per-task-token-caps`
+  （click CLI）+ `per_task_token_caps` 参数（run_benchmark /
+  run_single_task / _run_tasks_sliding_window / _run_task_with_progress
+  6 元组兼容旧 5 元组）；`parse_per_task_token_caps()` fail-fast 解析
+  （未知臂/非正整数/缺 = 均抛 ValueError——E6 是预注册实验，静默忽略
+  cap 会让 budget-matched 臂退化为 standard 口径而不自知）；注入点在
+  每 (任务, 基线) 的 `reset_budget()` 之后；结果行新增
+  `token_budget_capped`（成功/失败分支键集合同构）；provenance 新增
+  `per_task_token_caps` 留痕。
+- **AM1c** `experiments/run_main_batch.py`：`--per-task-token-caps`
+  参数 + `rb.run_benchmark` 透传。
+- **AM2** 预注册双语同步：E6"执行前置"改写为"AM 批次已达成"（附唯一
+  勘误：实现复用既有枚举值 budget_exceeded 而非原稿的 budget_cap，
+  判定规则未改）；执行记录表补 E6/E7 行；就绪命令节新增 E6 命令块
+  （matched 两臂跑批 + 与 E2 standard 批次 pool-seeds 配对 + 
+  token_budget_capped 护栏核对命令）。
+- 超限行为复用既有通道：BudgetExceededError → 节点降级 →
+  stop_reason=budget_exceeded（StopReason.BUDGET_EXCEEDED 既有判定），
+  零新停机路径。
+- 刻意不做：AL13 三臂 trace schema 统一仍延后至 E2 落地后（跑批器
+  稳定性优先）；Mimosa 弱随机告警为误报（抽样确定性要求，非加密用途，
+  cost_budget/repair_sample_selection 均已注释声明）。
+
 ## [Unreleased] — 2026-10-06 AL 批次（第十三轮审查落地：红线守卫勘误回绿 + 对外定位去"自修复"主张 + E6/E7 预注册 + E7 抽样脚本）
 
 > **勘误（AL1）**：AK 批次"4327 passed / 0 failed"声明与事实不符——AK

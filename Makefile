@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces build-check
 
 PY := .venv/bin/python
 
@@ -60,3 +60,11 @@ self-check:  ## 功效分析往返一致性自检
 clean-traces:  ## 清理失败追踪残留（tmp_trace/，--dump-trace-on-failure 运行时产物，可再生）
 	rm -rf tmp_trace
 	@echo "tmp_trace/ 已清理"
+
+build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
+	$(PY) -m build --wheel
+	rm -rf /tmp/aitester_build_check
+	python3 -m venv /tmp/aitester_build_check
+	/tmp/aitester_build_check/bin/pip install --quiet dist/*.whl
+	/tmp/aitester_build_check/bin/aitester --version
+	/tmp/aitester_build_check/bin/python -c "import config, src; from src.cli.app import cli; print('build-check OK: wheel 安装/入口/导入全部正常')"

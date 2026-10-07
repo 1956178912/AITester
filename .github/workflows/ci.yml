@@ -69,13 +69,16 @@ jobs:
         with:
           python-version: '3.14'
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov ruff mypy
+          # AO 批（2026-10-07）：与 test 作业同口径——lock 全量钉版安装
+          #（pytest/pytest-cov/ruff 均已在 lock 内固定，去除原"装最新版"
+          # 未钉版行）；mypy 不在 lock（开发工具链走 pre-commit/显式钉版），
+          # 冒烟作业不运行 mypy，此行为与历史安装面对齐的显式声明。
+          pip install -r requirements.lock
 
       - name: LLM 集成冒烟（默认关闭；AITESTER_SMOKE_LLM=true 时跑最小连通性 + JSON 输出校验）
         working-directory: ${{ github.workspace }}/experiments
@@ -102,7 +105,10 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        # 矩阵与 requirements.txt 的锁定版本对齐（lock 生成自 Python 3.14 开发环境）：
+        # 矩阵与 requirements.lock 的钉版兼容性对齐（lock 生成自 Python 3.14 开发环境；
+        # AO 批 2026-10-07 经 PyPI 元数据全量核查：132 钉版 requires_python 无一排除
+        # 3.12，cp312/py3-none/abi3 wheel 覆盖完整——ruff 为 py3-none-<platform> 标签、
+        # multiprocess 为 py310-none-any）：
         # - scipy==1.18.0 要求 >=3.12（下限）
         # - pandas==3.0.5 / matplotlib==3.11.1 要求 >=3.11
         # 3.10/3.11 无法安装当前锁定版本集（3.10 也即将 EOL），故矩阵收窄为
@@ -121,19 +127,26 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           # 缓存 pip wheel：chromadb/onnxruntime/grpcio/pyarrow 等 130 个包冷装很重，
-          # 命中缓存可省 3-8 分钟/矩阵
+          # 命中缓存可省 3-8 分钟/矩阵（AO 批起缓存键随 lock 走）
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # requirements.txt 已含 pytest-cov/pytest-timeout 等测试依赖（版本锁定）
-          pip install -r requirements.txt
-          # ruff 固定版本（与 requirements.lock 中的 ruff==0.16.3 一致）：
-          # 此前"始终用最新版"导致上游发版改变格式化规则时，ruff format --check
-          # 门禁随机转红（2026-09-09 两次相邻 CI 运行结果不一致即此原因）。
-          # 升级 ruff 时同步更新 lock 与 requirements.txt 注释即可。
+          # AO 批（2026-10-07，第十五轮审查 R15-7）：执行环境切换为
+          # requirements.lock（132 项全量钉版，含全部传递依赖）——此前安装走
+          # requirements.txt（25 项顶层钉）时传递依赖浮动，CI 环境可复现性
+          # 依赖 PyPI 当日解析结果，与"lock 审计"口径不对称。requirements.txt
+          # 仍是用户安装入口（README/QUICKSTART 口径不变）；两文件一致性由
+          # 下方 check_lock_sync 门禁强制；lock 对 3.12 矩阵的兼容性已经
+          # PyPI 元数据全量核查（见矩阵注释）。
+          pip install -r requirements.lock
+          # ruff 固定版本（lock 内已含 ruff==0.16.3，此处显式钉版为文档性
+          # 冗余守卫）：此前"始终用最新版"导致上游发版改变格式化规则时，
+          # ruff format --check 门禁随机转红（2026-09-09 两次相邻 CI 运行
+          # 结果不一致即此原因）。升级 ruff 时同步更新 lock 与
+          # requirements.txt 注释即可。
           pip install "ruff==0.16.3"
           # O34（2026-09-30 全面审查优化 P0）：mypy 此前"装而不用"——test 作业
           # 不安装 mypy（仅 smoke-llm 作业安装且不执行），generate_static_report
@@ -443,13 +456,14 @@ jobs:
           cat pip_audit_latest.json
 
       - name: Check transitive dependencies for vulnerabilities (P1-7 lock 全量审计)
-        # P1-7（2026-10-05 独立审查）：上一步 `pip-audit -r requirements.txt
+        # P1-7（2026-10-05 独立审查）：顶层步骤 `pip-audit -r requirements.txt
         # --no-deps` 只审计顶层 24 个直接依赖——requirements.lock 里的 132
         # 项传递依赖（aiohttp/urllib3/grpcio/protobuf/pyarrow 等）此前不进
         # 任何漏洞扫描（SBOM 同样只含顶层）。本步骤对 lock 全量清单审计
         # （pip freeze 口径，pip-audit 原生支持），豁免清单与顶层步骤同款
-        # （chromadb 及其豁免登记治理不变）。CI 不按 lock 安装（执行环境
-        # 仍走 requirements.txt），lock 审计是"静态全量漏洞面"守卫。
+        # （chromadb 及其豁免登记治理不变）。AO 批（2026-10-07）起 test/smoke
+        # 作业执行环境已按 lock 安装（R15-7），本步骤 lock 审计继续作为
+        # "静态全量漏洞面"守卫，语义不变。
         run: |
           pip-audit -r requirements.lock \
             --ignore-vuln PYSEC-2026-311 \

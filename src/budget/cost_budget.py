@@ -91,6 +91,12 @@ class BudgetSnapshot:
     usd_limit: float = 0.0
     exceeded: bool = False
     enabled: bool = False
+    # AM1（2026-10-06 第十三轮审查 / 预注册 E6 执行前置）：任务级 token 上限
+    # 的**实例级**覆盖（0 = 无覆盖）。放在 BudgetSnapshot 实例而非线程局部，
+    # 使 cap 作用域跟随任务而非线程——专家池 worker 经 attach_budget 绑定
+    # 同一实例后自动继承（与 C8 预算作用域修复同语义）；reset_budget()
+    # 每 (任务, 基线) 重建实例时天然清零，无跨任务残留。
+    token_cap_override: int = 0
 
     def as_dict(self) -> dict[str, float | int | bool | str]:
         return {
@@ -100,6 +106,7 @@ class BudgetSnapshot:
             "usd_limit": self.usd_limit,
             "exceeded": self.exceeded,
             "enabled": self.enabled,
+            "token_cap_override": self.token_cap_override,
             "unit": "tokens" if self.token_limit > 0 else ("usd" if self.usd_limit > 0 else "none"),
         }
 
@@ -129,7 +136,9 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
     Returns:
         True = 预算内可继续；False = 已超限（调用方应停止 LLM 调用）。
     """
-    if not _budget_enabled():
+    # AM1：实例级 cap 覆盖存在时预算检查自动生效（无需 COST_BUDGET_ENABLE）——
+    # CLI --per-task-token-caps 注入的 cap 自足生效，env 开关语义不变。
+    if not _budget_enabled() and getattr(_current_budget(), "token_cap_override", 0) <= 0:
         return True
     budget = _current_budget()
     # C8（2026-10-05 系统审查 P0）：字段读改写整体入锁——专家池 worker 经
@@ -140,7 +149,9 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         budget.enabled = True
         budget.consumed_tokens += consumed_delta_tokens
         budget.consumed_usd += consumed_delta_usd
-        budget.token_limit = _budget_tokens_limit()
+        # AM1：cap 覆盖优先于 env（E6 预算匹配臂按臂设 cap，--parallel 下
+        # env 全局值会串扰邻基线——X1 检出优先线程局部 override 同因）。
+        budget.token_limit = budget.token_cap_override if budget.token_cap_override > 0 else _budget_tokens_limit()
         budget.usd_limit = _budget_usd_limit()
 
         exceeded = False
@@ -221,6 +232,21 @@ def get_process_budget_stats() -> dict[str, int]:
 def reset_budget() -> None:
     """重置当前线程的预算累计器（每个任务开始前调用，与 token_usage.reset 同口径）。"""
     _thread_local.budget = BudgetSnapshot()
+
+
+def set_task_token_cap(cap: int) -> None:
+    """AM1（预注册 E6 执行前置）：设置当前任务实例的 token 上限覆盖。
+
+    写入当前线程 BudgetSnapshot 实例的 token_cap_override 字段（0 = 清除，
+    回落 COST_BUDGET_TOKENS env 口径）。cap 跟随实例而非线程：
+    - 专家池 worker 经 attach_budget 绑定同一实例后自动继承（C8 语义）；
+    - reset_budget() 每任务重建实例时天然清零，无跨任务残留；
+    - cap > 0 时预算检查自动生效（无需 COST_BUDGET_ENABLE），
+      超限走既有 BudgetExceededError → BUDGET_EXCEEDED 停止通道。
+
+    供 run_benchmark --per-task-token-cap 按 (任务, 基线) 注入。
+    """
+    _current_budget().token_cap_override = max(0, int(cap))
 
 
 def is_budget_exceeded() -> bool:

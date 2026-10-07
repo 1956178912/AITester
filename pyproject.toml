@@ -5,7 +5,10 @@
 # - [build-system] 声明 setuptools 构建后端，wheel 只含 src/ + config.py；
 # - LICENSE 字段指向仓库根 LICENSE 文件（须存在）。
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+# AS 批（2026-10-07）：setuptools 下限 68.0 → 77.0——PEP 639（SPDX license
+# 表达式 + license-files）需 setuptools>=77；本地实测 isolated build 拉取
+# 正常，wheel 构建 + 全新 venv 安装 + CLI 冒烟全链验证过（make build-check）。
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,7 +22,13 @@ dynamic = ["version"]
 description = "AI-powered test generation and repair workflow (LangGraph multi-agent)"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {file = "LICENSE"}
+# AS 批（2026-10-07）：PEP 639 现代化——license 由旧式 {file="LICENSE"}
+# 表改为 SPDX 表达式字符串 + license-files 通配列表（Core Metadata 2.4，
+# wheel METADATA 产出 License-Expression: MIT）；同步关闭 setuptools 对
+# 旧式的 deprecation 路径。setup.py shim 的 license_files=["LICENSE"]
+# 键名与 PEP 639 一致，无需改动。
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "langchain>=1.0.0",
     "langchain-openai>=1.0.0",
@@ -72,7 +81,11 @@ dev = ["pytest>=8.0.0", "pytest-cov>=4.0.0", "pytest-timeout>=2.0.0"]
 # 可选求解器依赖。SPEC_SMT_ENABLE=true 且可导入时，SpecIR v2 oracle
 # 追加前件求解见证测试；缺失时该层保守降级为无见证（与 chromadb /
 # hypothesis 的可选依赖惯例同口径），故不进默认安装面（wheel ~50MB）。
-formal = ["z3-solver>=4.12.0"]
+# AR 批（2026-10-07）：补 hypothesis——G18/T5 的 SpecIR→Hypothesis 策略
+# 编译与 AN4 属性模板路线（E1 阴性出口）同以 hypothesis 为执行底座，
+# 此前仅 requirements.txt 声明、extras 无入口，`pip install
+# "aitester[formal]"` 用户拿不到属性测试工具链。
+formal = ["z3-solver>=4.12.0", "hypothesis>=6.100.0"]
 # P2-5：MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
 # 仅调用时导入）。
 db = ["pymysql>=1.0.0", "DBUtils>=3.0.0"]
@@ -91,7 +104,11 @@ line-length = 120
 # 工作树临时目录（未 gitignore 的审查探针 / 实验 scratch 代码，
 # 不纳入 lint 口径；CI 只跑 `ruff check .` 于 clean checkout，
 # 该目录不存在 → 无影响）
-extend-exclude = ["tmp_apr_baseline"]
+# AS 批（2026-10-07）补 experiments/results：实验工件树（批次 JSON/报告/
+# SHA256SUMS/E7 工作表 md）是数据不是代码——ruff 0.16 的 format --check
+# 会把工作表 md 按代码块重排（可能破坏受 SHA256SUMS 保护的工件字节），
+# lint/format 一律排除。
+extend-exclude = ["tmp_apr_baseline", "experiments/results"]
 
 [tool.ruff.lint]
 # 启用的规则集

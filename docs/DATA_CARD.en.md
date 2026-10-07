@@ -2,12 +2,14 @@
 
 # Data Card
 
-Last updated: 2026-10-06 (AH1: §4 licensing authoritatively verified —
-QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no SPDX
-license [new L2 decision gate registered]; previously AA2: §2 registers the
-`max_pattern_repeat` mitigation for the sampling-repetition bias; previously
-Z6: closing a data-governance gap — data provenance used to live only in
-MODEL_CARD §3 with no standalone card; review item R15)
+Last updated: 2026-10-07 (AN1: §4 registers the TestGenEval L2-candidate
+evaluation — CC BY-NC 4.0, verified against the LICENSE text; joins BugsInPy
+in the non-clean-license gate; previously AH1: §4 licensing authoritatively
+verified — QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no
+SPDX license [new L2 decision gate registered]; previously AA2: §2 registers
+the `max_pattern_repeat` mitigation for the sampling-repetition bias;
+previously Z6: closing a data-governance gap — data provenance used to live
+only in MODEL_CARD §3 with no standalone card; review item R15)
 
 ## 1. Dataset Overview
 
@@ -74,6 +76,19 @@ MODEL_CARD §3 with no standalone card; review item R15)
   fixed_code / test_code); the last task-id segment is a ≤30-char neutral
   module name (to avoid leaking defect semantics); injected via
   `AITESTER_BUGSINPY_DATA`;
+- **TestGenEval (L2-candidate evaluation registration, AN1, 2026-10-07;
+  not loaded, never run)**: `facebookresearch/testgeneval` (Jain et al.,
+  ICLR 2025, arXiv:2410.00752) — a real-repository-context unit-test
+  generation/completion benchmark (1,210 code/test file pairs / 68,647
+  tests / 11 actively maintained Python repos, adapted from SWE-bench),
+  same-domain with this project's "test generation" thesis and a closer fit
+  than BugsInPy's "defect repair" framing; **license: CC BY-NC 4.0** (the
+  GitHub API license field reports `spdx_id=NOASSERTION`; the LICENSE text,
+  verified 2026-10-07, is Attribution-NonCommercial 4.0 International) —
+  usable for non-commercial academic research with attribution, but
+  commercial use and redistribution of derived artifacts are restricted;
+  it joins BugsInPy in the "non-clean-license" gate (the three-way choice
+  below applies equally), to be decided side by side when L2 is chartered;
 - **Licensing** (AH1, authoritatively verified via the GitHub API on
   2026-10-06 and recorded here):
   - **QuixBugs: MIT License (verified — the L1/E4 precondition is lifted)**

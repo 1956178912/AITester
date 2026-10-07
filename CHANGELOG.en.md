@@ -1,10 +1,372 @@
-> Last updated: 2026-10-06 (batch AL: AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script; batch AK details below, default behavior unchanged)
+> Last updated: 2026-10-07 (batch AT: full runtime self-check of make targets and workflows — zero-change pure verification, autonomous-optimization series closed; batch AS details below, default behavior unchanged)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-07 Batch AT (Round-15 review continued V: full runtime self-check of make targets and workflows — zero-change pure verification; autonomous-optimization series closed)
+
+> The user's sixth "keep optimizing". **Zero code/artifact changes** in
+> this batch — pure runtime health verification; test count and gate
+> status unchanged (4429):
+> - `make power`: the power-analysis table produces correctly (10%
+>   baseline detection, 10pp delta needs n≈87 — consistent with the
+>   prereg power rationale);
+> - `make self-check`: all three δ→n→back-solve round-trips pass (Z8);
+> - `make build-check`: the AS2 target verified end-to-end (build →
+>   fresh /tmp venv → install → `aitester --version` 0.7 → import
+>   assertions, all green);
+> - workflow sanity: ci.yml (4 jobs) / perf.yml / release.yml (ci-green
+>   + release) / dependabot.yml (2 update groups) all parse and are
+>   structurally sound.
+>
+> **The autonomous-optimization series is hereby closed**: the six
+> batches AO/AP/AQ/AR/AS/AT have converged the autonomously-actionable
+> surface into a "system health confirmed" form — everything remaining
+> belongs to the user's six decisions (terminal commits of seven
+> batches / key rotation / E1 budget / E7 manual comparison / L2
+> license / pricing and authors).
+
+## [Unreleased] — 2026-10-07 Batch AS (Round-15 review continued IV: first end-to-end release-build verification + PEP 639 license modernization + make build-check)
+
+> The user's fifth "keep optimizing". All offline, zero LLM cost. Full
+> regression **4425 → 4429 passed / 0 failed** (+4 = tests/test_as_batch.py).
+
+- **AS1a (baseline evidence — highest value of this batch)** Fifteen
+  review rounds had never walked the **release build chain** for real:
+  `python -m build --wheel` → fresh-venv install (dependency resolution)
+  → `aitester --version` (0.7) → `import config, src` + CLI entry →
+  `pip show` version consistency — **the whole chain is latent-bug
+  free**; the O9 (PEP 621) / O35 (dynamic version) / X4 (py.typed)
+  packaging decisions hold end-to-end; wheel contents audited (114
+  entries; config.py / py.typed / LICENSE all present). Key
+  release-readiness evidence banked for AL9 (v0.7.0).
+- **AS1b (PEP 639 modernization — last packaging gap closed)** `license
+  = "MIT"` SPDX expression + `license-files = ["LICENSE"]` +
+  `[build-system]` setuptools>=77 (PEP 639 implementation floor);
+  rebuild verified the wheel METADATA now emits **Metadata-Version 2.4
+  / License-Expression: MIT**, with a --no-deps reinstall smoke passing;
+  the setup.py shim's license_files key was already PEP 639-consistent.
+  The survey's "license metadata" row is closed as "~~P2~~ achieved"
+  (O9 established the declaration → AS modernized the style) — all
+  three P0 and two P2 packaging gaps now cleared.
+- **AS2 (make build-check)** Release-chain smoke target (build → fresh
+  /tmp venv → install → CLI/import assertions), a locally reproducible
+  entry point; **deliberately not CI-wired** — whether it joins the
+  release pipeline is AL9's call. Tests lock the static declaration
+  surface (SPDX string / license-files / build floor / shim alignment /
+  Makefile target).
+
+### User-side critical path unchanged
+
+Terminal commits (AM…AR+AS batches, including the two E7 artifacts) /
+key rotation / minimal E1 budget approval / **E7 manual comparison
+(worksheet v2 ready)** / L2 license three-way decision / agnes pricing +
+real CITATION authors.
+
+## [Unreleased] — 2026-10-07 Batch AR (Round-15 review continued III: hypothesis extras gap closed + README CI-matrix claim errata + prereg bilingual structure-parity lock)
+
+> Continuation batch III after the user's "keep optimizing". All offline,
+> zero LLM cost. Full regression **4420 → 4425 passed / 0 failed**
+> (+5 = tests/test_ar_batch.py). AR1 erratum: the first full-suite run
+> measured 4424+1F — the AR2 assertion's bare substring collided with
+> this batch's own errata text "3.12/3.14→…" (same lesson class as AQ);
+> narrowed to the original-sentence anchor and back to green — the
+> "re-run the full suite after writing" discipline strikes again.
+
+- **AR1 (packaging extras gap)** `hypothesis` was declared only in
+  requirements.txt (G18/T5, 2026-10-05) with no extras entry in
+  pyproject/setup.py — `pip install "aitester[formal]"` users could not
+  get the property-testing toolchain, even though both the G18/T5
+  SpecIR→Hypothesis strategy compilation and the AN4 property-template
+  route (the E1 negative-exit) build on hypothesis. Now added to the
+  **[formal] extra in both sources** (pyproject
+  `formal = ["z3-solver>=4.12.0", "hypothesis>=6.100.0"]` + setup.py shim
+  aligned), guarded by the test_packaging parity check plus explicit AR
+  content assertions; the requirements.txt dev-environment source is
+  unchanged.
+- **AR2 (README matrix-claim errata)** Both bilingual "Known Failures"
+  rows said "CI 3.12/3.14 all green" — stale wording from before the
+  3.13 leg was added on 2026-09-28; now **3.12/3.13/3.14** with a test
+  lock: the bilingual claim cross-checks against BASELINE
+  `python_ci_matrix`, and the stale two-leg wording must not reappear.
+- **AR3 (prereg bilingual structure-parity lock)** `check_bilingual_docs`
+  only verifies pairing existence and dates, not structural parity — a
+  new test locks the prereg zh/en counts of second/third-level headings
+  and bash command blocks to be equal per-item (currently measured
+  **13/3/9**) plus a non-degeneration guard; one-sided section
+  additions/removals now fail explicitly instead of drifting silently.
+
+### User-side critical path unchanged
+
+Terminal commits (AM+AN+AO+AP+AQ+AR batches, including the two E7
+artifacts) / key rotation / minimal E1 budget approval / **E7 manual
+comparison (worksheet v2 ready)** / L2 license three-way decision /
+agnes pricing + real CITATION authors.
+
+## [Unreleased] — 2026-10-07 Batch AQ (Round-15 review continued II: E7 worksheet v2 line-level diffs + E7 artifacts into the tracked-artifacts guard + survey packaging stale-conclusion errata)
+
+> Continuation batch II after the user's "keep optimizing". All offline,
+> zero LLM cost. Full regression **4415 → 4420 passed / 0 failed**
+> (+5 = tests/test_aq_batch.py).
+
+- **AQ1 (E7 worksheet v2)** Each candidate section gains a "patch vs gold
+  fixed line-level diff" (`difflib.unified_diff`, four-backtick ```diff
+  fence): under the whole-file-replacement caliber the patch body IS the
+  post-patch full file, so the line-level delta is the reviewer's core
+  object — spot-check on task_0044 exposes all three material classes at
+  a glance (LLM format-artifact first line / gratuitous int-conversion
+  try-except / stock_of behavioral divergence). **Mechanical comparison
+  material; the verdict remains human**; two recomputations
+  byte-identical; SHA256SUMS verified 975/975.
+- **AQ3 (artifact reference-chain extension)** `check_artifacts_tracked`
+  MANIFEST 11→13: registers `e7_repair_sample_candidates.md` (AO5) and
+  `e7_review_worksheet.md` (AP1) — both referenced by the bilingual
+  prereg E7 section — with the manifest length test-locked. **Locally red
+  as documented** (2 untracked files — the script's own "CI owns the
+  pre-commit enforcement" caliber); turns green with the batch commits.
+- **AQ2/AQ4 (survey packaging stale-conclusion errata)** Four outdated
+  assessments in `docs/Python工程化前沿基线（2024–2026）.md` corrected:
+  **the three P0 conclusions (PEP 621 / [build-system] / license) were
+  stale pre-O9 evaluations** (pyproject has long had `[project]` as the
+  single source of truth + `[build-system]` + `license={file=…}`;
+  setup.py is a compat shim; test_packaging guards both sources) — three
+  table rows plus the "完全没有 license 元数据" body paragraph now read
+  "achieved (O9)" with the remaining gap noted (PEP 639 SPDX style needs
+  setuptools>=77, downgraded to P2); the "dynamic version" row corrected
+  to O35's `{attr=…}` main path. One self-inflicted lesson: quoting the
+  old conclusion verbatim inside errata text collided with the
+  test's "must be absent" assertion — errata quotes should carry an
+  "old claim:" prefix or paraphrase to avoid mutual interference with
+  residue assertions.
+
+### User-side critical path unchanged
+
+Terminal commits (AM+AN+AO+AP+AQ batches, including the two E7 artifacts)
+/ key rotation / minimal E1 budget approval / **E7 manual comparison
+(worksheet v2 ready)** / L2 license three-way decision / agnes pricing +
+real CITATION authors.
+
+## [Unreleased] — 2026-10-07 Batch AP (Round-15 review continued: E7 review worksheet generator + E6 extraction command verified end-to-end + B-05 checker indentation-blindspot fix + survey doc stale row updated)
+
+> Continuation batch after the user's "keep optimizing". All offline, zero
+> LLM cost; paid experiments and user-owned items (commits/keys/licensing)
+> remain pending. Full regression **4407 → 4415 passed / 0 failed**
+> (+8 = tests/test_ap_batch.py).
+
+- **AP1 (E7 accelerator)** Review worksheet generator
+  `experiments/repair_review_worksheet.py` (reuses repair_sample_selection's
+  identical sampling: 72 frame rows / single sbfl stratum / ceil10% /
+  seed=42 → 8 candidate sections): each section embeds four materials
+  (generated patch / gold fixed [task_metadata.fixed] / gold official
+  tests [test_cases] / final generated test) + five-way judgment
+  checkboxes + whole-file-replacement caliber hints; four-backtick fences
+  prevent breakout (one 6-backtick concatenation bug fixed en route,
+  test-locked). Produces
+  `experiments/results/main_batch/e7_review_worksheet.md`; two
+  recomputations byte-identical; SHA256SUMS verified 975/975. **E7 manual
+  comparison materials upgraded from a row index to per-section
+  side-by-side, verdict-ready — the verdict itself remains human.**
+  Bilingual prereg E7 section now references the worksheet.
+- **AP2 (E6 command verified end-to-end + schema guard)** The prereg E6
+  "step 1: extract means" command was run for real against the three
+  lifecycle batches (all 9 arm means produced; ±10% cross-seed variance
+  further supports AO1's "measured means over constants"); new row-level
+  `token_usage.total_tokens` path guard test — a field rename would
+  silently break the E6 ready command, now explicitly red.
+- **AP3 (B-05 checker fix)** `scripts/check_tool_versions.py`'s
+  `_pre_commit_rev` matched the **indented** rev line with `re.match` →
+  never matched → pre-commit versions permanently reported `<absent>`,
+  leaving the ci↔hook consistency check (the whole point of B-05)
+  ineffective since its 2026-10-04 landing. Fixed via strip; pre-commit
+  versions detected for the first time and three-way consistent
+  (mypy ci=1.15.0 hook=1.15.0 / ruff ci=0.16.3 hook=0.16.3 lock=0.16.3).
+  Test locks: main() direct-call output assertions + indented/cross-block
+  unit fixture.
+- **AP4 (survey stale row)** The hash-install row in
+  `docs/Python工程化前沿基线（2024–2026）.md` ("❌ CI runs a bare
+  pip install -r requirements.txt") updated to the post-AO2 reality
+  (lock install, 132 pins; remaining gap = no hashes, P1 kept), with a
+  test locking the stale claim out.
+
+### User-side critical path unchanged
+
+Terminal commits (AM+AN+AO+AP batches) / key rotation / minimal E1 budget
+approval / **E7 manual comparison (worksheet ready, ~1 person-day)** /
+L2 license three-way decision / agnes pricing + real CITATION authors.
+
+## [Unreleased] — 2026-10-07 Batch AO (Round-15 review landing: E6 matched-cap source amendment + CI installs from lock + E7 candidate list generated + doc date sync)
+
+> Autonomous items from the round-15 systematic review (independent re-verification
+> after batch AN: 4396 all green) are landed. All offline, zero LLM cost; paid
+> experiments untouched (E1–E6 batch runs remain pending budget approval).
+> Full regression **4396 → 4407 passed / 0 failed** (+11 = tests/test_ao_batch.py).
+
+- **AO1 (R15-4, P0)** E6 pre-registration amendment (`docs/preregistration`
+  bilingual E6 section + ready-commands block): the matched-cap source moves
+  from the R-P0-2 gate-less constants (26,115/4,223) to the **per-task
+  `token_usage.total_tokens` empirical means of the E2 same-seed standard
+  batches** — the gates change the aitester token-consumption curve (gate
+  routing removes futile repair loops); if the gated mean falls below the old
+  df mean, a hardcoded cap would never bind, degenerating aitester(matched)
+  into an unconstrained arm and voiding the equal-budget contrast. Ready
+  commands restructured into "step 1: extract means + step 2: inject via
+  shell placeholders"; an amendment effect statement is on record (design
+  amendment: primary endpoints/decision rules/stopping rule unchanged,
+  timestamped before any E6 data, git-auditable). `tests/test_am_batch.py`
+  text locks updated in lockstep (literal-cap assertions `aitester=4223` /
+  `plain_llm_df=26115` → placeholder assertions + legacy-constant ban;
+  E7 execution-log row advanced with its status).
+- **AO2 (R15-7, P1)** CI execution environment switched to requirements.lock
+  (`ci.yml` test/smoke jobs, install + cache key): installs previously used
+  requirements.txt (25 top-level pins) leaving transitive dependencies
+  floating — asymmetric with the lock audit (132 entries); requirements.txt
+  remains the user-facing install entry (README/QUICKSTART unchanged).
+  Before landing, verified via full PyPI metadata sweep: no pinned version
+  excludes Python 3.12 via requires_python, wheel coverage complete (ruff
+  uses py3-none-\<platform\> tags, multiprocess ships py310-none-any — both
+  initial-scan suspects were check-pattern false positives); mypy is not in
+  the lock, CI keeps its explicit pinned install.
+- **AO3 (R15-9, P2)** `README.en.md` head Last-updated line synced to the
+  AN/AO batches (fixes the internal date drift "head 2026-10-06/AM vs body
+  already mentioning AN").
+- **AO4 (R15-9, P2)** U10 deprecated-alias removal timeline fixed:
+  the `entry_ocurrence_stat` warning now says "scheduled for removal in
+  v0.8.0 (set by batch AO)".
+- **AO5 (R15-6 enabler)** E7 candidate list generated
+  (`repair_sample_selection.py` run against real artifacts for the first
+  time, zero LLM):
+  `experiments/results/main_batch/e7_repair_sample_candidates.md` — 72
+  frame rows (patch_plausible=1, all in the single sbfl stratum), 8
+  candidate rows drawn via per-stratum ceil(10%), seed=42, deterministic;
+  two recomputations byte-identical; SHA256SUMS verified 974/974. **E7 now
+  only needs the manual comparison (~1 person-day)**; the prereg execution
+  log row advanced to "pending manual review"; 5/8 rows already show the
+  `test_regenerated_pass_unverified` erase-red channel signature,
+  corroborating the E2 double-gate hypotheses.
+- **AO6** tmp_trace residual cleanup (2 `*_failed_trace.jsonl` runtime
+  byproducts, `make clean-traces`).
+- **AO7** Coverage ratchet raised (W2 discipline): measured line coverage
+  89.56% triggered the step (watermark 89.00 + 0.5pp) → watermark raised
+  to **89.5** (`docs/coverage_ratchet.yaml`, committed with this batch);
+  branch 82.78% did not reach the step and stays at 82.5. BASELINE
+  coverage comments refreshed (89.56 / 82.78).
+
+### User-side critical path unchanged (confirmed by round-15 review)
+
+Terminal commits (AM+AN+AO batches) / key rotation / minimal E1 budget
+approval (≈0.1M tokens, the life-or-death gate of the logic-driven claim) /
+L2 license three-way decision (BugsInPy+TestGenEval) / agnes pricing +
+real CITATION authors.
+
+## [Unreleased] — 2026-10-07 Batch AN (Round-14 review landing: presentation-only report additions — $/detection & test-suite reliability — + TestGenEval L2-candidate license registration + E1-fallback route skeleton + artifact hygiene)
+
+> Five self-executable items from the Round-14 systematic review (which
+> independently re-verified the 4374-green AM state) landed. All offline,
+> zero LLM cost; the report-layer changes are **presentation-only**
+> (primary endpoints / preregistered thresholds / stopping rules unchanged —
+> effect statements recorded bilingually in the prereg E3 section, timestamped
+> before any E2 data exists). Full regression **4374 → 4396 passed / 0
+> failed** (+22 = tests/test_an_batch.py).
+
+- **AN1** TestGenEval L2-candidate evaluation registration
+  (`docs/design/real_benchmark_upgrade.md` + `docs/DATA_CARD` bilingual §4):
+  `facebookresearch/testgeneval` (Jain et al., ICLR 2025, arXiv:2410.00752;
+  real-repository-context unit-test generation/completion benchmark, same
+  domain as this project's "test generation" thesis and a closer fit than
+  BugsInPy's "defect repair" framing) — **license CC BY-NC 4.0** (GitHub API
+  license field reports `spdx_id=NOASSERTION`; LICENSE text verified
+  2026-10-07, following the AH-batch discipline of deciding by API field +
+  source text rather than search summaries) — usable for non-commercial
+  academic research with attribution; commercial use and redistribution of
+  derived artifacts restricted; joins BugsInPy (no SPDX) in the
+  "non-clean-license" three-way gate; to be decided side by side when L2 is
+  chartered; currently not loaded, never run. The review's original
+  "clean-license candidate" expectation was corrected by the evidence —
+  the registration itself is the finding.
+- **AN2** Test-suite reliability section (`experiments/statistical_analysis.py`:
+  `mutation_reliability_summary` + `_mutation_report_lines` + report-assembly
+  wiring): new-batch reports (E2 onward) gain a per-arm aggregation of
+  mutation_detection_rate (measurable-row mean; None rows stay out of the
+  denominator [conservative, never misreported as 0]; killed/total mutant
+  sums; honest disclosure when nothing is measurable), aligning with
+  SWE-Mutation (2026) "mutation score as the primary LLM test-suite
+  reliability signal" framing; historical reports are not rewritten.
+- **AN5** $/detection derived column (`cost_per_detection` +
+  `_cost_report_lines` optional `det_rates` parameter): the cost table gains
+  a "cost/detection" column ($/task ÷ detection rate; field framing aligned
+  with the SWE-bench ecosystem's $/resolved); a 0% detection rate renders
+  as "—" (∞ semantics, never shown as a finite number); **the default
+  det_rates=None output is byte-identical to the AE2 historical format**
+  (backward-compat lock in tests/test_an_batch.py); prereg bilingually
+  declares it "a derived presentation metric that must not be cited apart
+  from the detection paired difference".
+- **AN4** E1-fallback route skeleton
+  (`docs/design/property_template_route_skeleton.md`): a placeholder
+  pre-registration draft for the property-template route — trigger bound
+  verbatim to the prereg E1 verdict (<0.2 / still <0.3 after the one gray-zone
+  iteration), zero-experiments-before-activation commitment, external-claim
+  red line (activation means the logic-driven claim is abandoned; no revival
+  of spec-driven wording — same discipline as AL5), concrete draft default
+  thresholds (strategy compile rate ≥0.5 viable / <0.3 double-gate failure;
+  detection paired difference ≥+5pp), plus frontier references (LLM-PBT
+  studies / PropertyEval / LLM4UT survey 2025-11).
+- **AN6** Artifact hygiene: 21 residual failure traces in tmp_trace removed
+  via `make clean-traces`, plus the 0-byte root `aitester.log` deleted (all
+  gitignored regenerable runtime artifacts, zero repository impact).
+- Deliberately not done: N3 (repair-prior channel / E8 candidate) stays
+  **frozen until E7 adjudicates** (pre-registration discipline, no
+  fast-running); the missing decision-log entries for AK/AL/AM are backfilled
+  by this batch as explicitly-marked "补记" (sourced from the authoritative
+  CHANGELOG record, without reconstructing the decision process).
+
+## [Unreleased] — 2026-10-06 Batch AM (Round-13 review continuation: E6 run precondition `--per-task-token-caps` implemented end-to-end + prereg ready commands)
+
+> The last engineering precondition for pre-registered E6 (budget-matched
+> four arms) is in place: flag, injection, observability, plumbing, and
+> prereg consistency landed in one batch. Fully offline at zero LLM cost;
+> zero change to the default caliber (without the flag, behavior is
+> bit-identical to history). Full regression **4349 → 4374 passed /
+> 0 failed** (+25 = tests/test_am_batch.py).
+
+- **AM1a** `src/budget/cost_budget.py`: `BudgetSnapshot` gains an
+  instance-level `token_cap_override` field + `set_task_token_cap()`; a
+  cap > 0 activates the budget check automatically (no
+  COST_BUDGET_ENABLE needed) and overrides the env limit; the cap lives on
+  the **instance** (not thread-local) — expert-pool workers inherit it via
+  `attach_budget` (C8 scope semantics), and `reset_budget()` naturally
+  clears it per task by rebuilding the instance; as_dict exposes
+  `token_cap_override`.
+- **AM1b** `experiments/run_benchmark.py`: `--per-task-token-caps` (click
+  CLI) + `per_task_token_caps` parameter (run_benchmark /
+  run_single_task / _run_tasks_sliding_window / _run_task_with_progress
+  6-tuple, backward compatible with the old 5-tuple);
+  `parse_per_task_token_caps()` fail-fast parsing (unknown arm /
+  non-positive int / missing `=` all raise ValueError — E6 is a
+  pre-registered experiment; silently ignoring a cap would degrade a
+  budget-matched arm to the standard caliber unnoticed); the injection
+  point sits right after each (task, baseline) `reset_budget()`; result
+  rows gain `token_budget_capped` (key-isomorphic across success/failure
+  branches); provenance records `per_task_token_caps`.
+- **AM1c** `experiments/run_main_batch.py`: `--per-task-token-caps`
+  argument + pass-through to `rb.run_benchmark`.
+- **AM2** prereg bilingual sync: the E6 "run precondition" now reads "met
+  by batch AM" (with the single erratum: the implementation reuses the
+  existing enum value budget_exceeded instead of the draft's budget_cap;
+  decision rules unchanged); the execution log gains E6/E7 rows; the
+  ready-commands section gains the E6 block (matched-arm runs + pool-seeds
+  pairing against the E2 standard batches + a token_budget_capped
+  guardrail check command).
+- Cap-hit behavior reuses the existing channel: BudgetExceededError →
+  node degradation → stop_reason=budget_exceeded (existing
+  StopReason.BUDGET_EXCEEDED rule); zero new stop paths.
+- Deliberately not done: AL13 three-arm trace-schema unification stays
+  deferred until after E2 (runner stability first); the Mimosa weak-random
+  warnings are false positives (sampling determinism requirement, not
+  crypto use — noted in comments in cost_budget /
+  repair_sample_selection).
 
 ## [Unreleased] — 2026-10-06 Batch AL (Round-13 review: red-line-guard erratum restored to green + external positioning de-emphasizes the self-repair claim + E6/E7 pre-registration + E7 sampling script)
 

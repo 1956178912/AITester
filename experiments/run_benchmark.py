@@ -914,6 +914,11 @@ def _build_task_result(
             "regression_rate": _compute_regression_rate(task, final_state),
             # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）
             "harness_invalid": harness_invalid,
+            # AM1（2026-10-06 第十三轮审查 / 预注册 E6 执行前置）：本任务
+            # LLM 调用是否被臂级 token 上限拦停（与任务末预算快照一致；
+            # harness_invalid 早退路径为上一任务残留快照，但该行经 M3 门禁
+            # 本就不计入统计）。cap 未注入（历史口径）时恒 False。
+            "token_budget_capped": _current_budget_exceeded(),
         }
     return {
         "task_id": task.task_id,
@@ -986,6 +991,8 @@ def _build_task_result(
         "stop_reason": None,
         # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）
         "harness_invalid": harness_invalid,
+        # AM1：失败分支同读当前线程预算快照（异常路径同线程，值为真实口径）
+        "token_budget_capped": _current_budget_exceeded(),
     }
 
 
@@ -1144,6 +1151,51 @@ def _write_cross_file_state(initial_state: dict[str, Any], task_metadata: dict[s
     initial_state["cross_file_deps"] = dep_edges
 
 
+def _current_budget_exceeded() -> bool:
+    """AM1：当前线程预算快照是否已超限（结果行 token_budget_capped 取值）。"""
+    try:
+        from src.graph.cost_budget import is_budget_exceeded
+
+        return bool(is_budget_exceeded())
+    except Exception:  # pragma: no cover - 预算模块不可用时观测位降级 False
+        return False
+
+
+def parse_per_task_token_caps(spec: str | None) -> dict[str, int]:
+    """AM1（2026-10-06 第十三轮审查 / 预注册 E6 执行前置）：解析臂级 token 上限。
+
+    Args:
+        spec: 形如 ``"aitester=4223,plain_llm_df=26115"`` 的映射串；
+            None / 空串 → 空 dict（历史口径，无 cap）。
+
+    Returns:
+        臂名 → 每任务 token 硬上限（正整数）。未知臂名或非法数值抛
+        ValueError（fail-fast：E6 是预注册实验，静默忽略 cap 会让
+        "budget-matched" 臂退化为 standard 口径而不自知）。
+    """
+    if not spec or not spec.strip():
+        return {}
+    caps: dict[str, int] = {}
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise ValueError(f"--per-task-token-caps 片段须为 arm=cap 形式，收到 {part!r}")
+        arm, _, raw = part.partition("=")
+        arm = arm.strip()
+        try:
+            cap = int(raw.strip())
+        except ValueError as exc:
+            raise ValueError(f"--per-task-token-caps 的 {arm} 上限须为整数，收到 {raw!r}") from exc
+        if cap <= 0:
+            raise ValueError(f"--per-task-token-caps 的 {arm} 上限须为正整数，收到 {cap}")
+        if arm not in BASELINE_REGISTRY:
+            raise ValueError(f"--per-task-token-caps 未知基线臂 {arm!r}（可选：{sorted(BASELINE_REGISTRY)}）")
+        caps[arm] = cap
+    return caps
+
+
 def run_single_task(
     task: BenchmarkTask,
     baselines: list[str],
@@ -1151,6 +1203,7 @@ def run_single_task(
     verbose: bool = False,
     save_state: bool = False,
     enable_mutation_scoring: bool | None = None,
+    per_task_token_caps: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """
     对单个 BenchmarkTask 运行所有指定的基线方法，返回汇总结果。
@@ -1166,6 +1219,10 @@ def run_single_task(
             None 时沿用 config.ENABLE_MUTATION_SCORING（默认 False）；
             True 时每个基线任务运行结束后把"存活变异体"写回结果行，
             供后续再生成/分析消费（mutation_feedback 字段）。
+        per_task_token_caps: AM1（预注册 E6 执行前置）臂级每任务 token
+            硬上限（arm → cap；空/None = 历史口径无 cap）。经
+            set_task_token_cap 写入任务预算实例，超限走既有
+            BudgetExceededError → BUDGET_EXCEEDED 停止通道。
 
     Returns:
         包含各基线结果的字典。
@@ -1374,9 +1431,16 @@ def run_single_task(
             # 前置守卫拦下（planner→默认计划 / generator→空测试），
             # "任务级预算"退化成"线程级终身封顶"，产批系统性假失败。
             # 与 token_usage.reset() 并置：每个任务（每基线）开跑前清零。
-            from src.graph.cost_budget import reset_budget
+            from src.graph.cost_budget import reset_budget, set_task_token_cap
 
             reset_budget()
+            # AM1（预注册 E6 执行前置）：臂级 token 上限在预算复位后注入——
+            # cap 写入本任务 BudgetSnapshot 实例（跟随任务，专家池 worker 经
+            # attach_budget 自动继承）；超限走既有 BudgetExceededError 通道，
+            # 结果行 stop_reason=budget_exceeded、token_budget_capped=True。
+            _arm_cap = (per_task_token_caps or {}).get(baseline)
+            if _arm_cap:
+                set_task_token_cap(_arm_cap)
             start_time = time.time()
             state["task_uuid"] = f"{task.task_id}_{baseline}_{int(start_time)}"
             # 4.1 结构化追踪：本任务（baseline）会话开启（未启用时 no-op），
@@ -1689,8 +1753,10 @@ def _extract_gold_target_relpath(golden_patch: str) -> str:
 
 def _run_task_with_progress(args: tuple) -> tuple[BenchmarkTask, dict[str, Any]]:
     """并行执行任务包装器。"""
-    task, baselines, output_dir, verbose, save_state = args
-    results = run_single_task(task, baselines, output_dir, verbose, save_state=save_state)
+    task, baselines, output_dir, verbose, save_state, *rest = args
+    # AM1：第 6 位为臂级 token 上限映射（旧 5 元组兼容，cap=None 历史口径）
+    caps = rest[0] if rest else None
+    results = run_single_task(task, baselines, output_dir, verbose, save_state=save_state, per_task_token_caps=caps)
     return task, results
 
 
@@ -1703,6 +1769,7 @@ def _run_tasks_sliding_window(
     save_state: bool,
     max_inflight: int,
     on_task_done: Callable[[BenchmarkTask, dict[str, Any]], None],
+    per_task_token_caps: dict[str, int] | None = None,
 ) -> None:
     """0.7 债务项 2.5：滑窗提交任务，保持在途 future ≤ max_inflight。
 
@@ -1731,7 +1798,9 @@ def _run_tasks_sliding_window(
             task = next(task_iter)
         except StopIteration:
             return
-        fut = executor.submit(_run_task_with_progress, (task, baselines, output_dir, verbose, save_state))
+        fut = executor.submit(
+            _run_task_with_progress, (task, baselines, output_dir, verbose, save_state, per_task_token_caps)
+        )
         pending[fut] = task
 
     # 填满初始滑窗
@@ -1946,6 +2015,7 @@ def run_benchmark(
     difficulty: str = "mixed",
     max_pattern_repeat: int | None = None,
     deterministic: bool = False,
+    per_task_token_caps: str | None = None,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -1980,10 +2050,20 @@ def run_benchmark(
             同步（供 provenance 快照记录 temperature=0.0）。主批次复现
             实验建议开启（配合干净 git tag，缓解"LLM 输出非确定性导致
             结果不可复现"的审查缺口）。默认 False 历史口径不变。
+        per_task_token_caps: AM1（2026-10-06 第十三轮审查 / 预注册 E6
+            执行前置）臂级每任务 token 硬上限映射串
+            （如 "aitester=4223,plain_llm_df=26115"；None = 历史口径
+            无 cap）。解析经 parse_per_task_token_caps（未知臂/非法值
+            fail-fast）；超限走既有 BudgetExceededError →
+            BUDGET_EXCEEDED 停止通道，结果行透出 token_budget_capped。
 
     Returns:
         汇总结果字典。
     """
+    # AM1：臂级 token 上限解析（fail-fast，入口即校验）
+    token_caps = parse_per_task_token_caps(per_task_token_caps)
+    if token_caps:
+        logger.info("AM1 臂级每任务 token 上限：%s", token_caps)
     # R11 确定性采样：三处级联更新（详见 _apply_deterministic_temperature）
     if deterministic:
         _apply_deterministic_temperature()
@@ -2124,11 +2204,14 @@ def run_benchmark(
                     save_state,
                     max(2 * parallel, 1),
                     _on_task_done,
+                    token_caps,
                 )
         else:
             for task in tasks:
                 logger.info("处理任务: %s", task.task_id)
-                task_results = run_single_task(task, baselines, output_dir, verbose, save_state=save_state)
+                task_results = run_single_task(
+                    task, baselines, output_dir, verbose, save_state=save_state, per_task_token_caps=token_caps
+                )
 
                 for baseline, result in task_results.items():
                     all_results[baseline].append(result)
@@ -2430,6 +2513,10 @@ def run_benchmark(
         # X1（P0-4a）：缓存命名空间入 provenance（None/空 + cache_enabled=true
         # = 跨批次复用风险口径，读者可据此判定"多批次"是否独立样本）
         "cache_namespace": os.environ.get("AITESTER_CACHE_NAMESPACE") or None,
+        # AM1（2026-10-06 第十三轮审查 / 预注册 E6 执行前置）：臂级 token 上限
+        # 入 provenance——budget-matched 臂与 standard 臂的口径区分字段
+        # （None = 全臂无 cap 历史口径；非 None 时读者可判定哪些臂被限流）
+        "per_task_token_caps": token_caps or None,
         # O32（2026-09-29 审查 P0）：API 配置脱敏（不写入明文密钥）
         "valid_apis": [{"url": a["url"], "model": a["model"], "key": "<REDACTED>"} for a in _VALID_APIS],
         # R56（2026-09-30 独立审查 P0）：harness 披露——消除"脚手架主张
@@ -2569,6 +2656,12 @@ if __name__ == "__main__":
         type=int,
         help="AA：合成数据集同池模板重复上限（仅 synthetic 生效；默认 None=历史口径；>=1 时同 (difficulty, pattern) 至多出现 N 次，全池达上限后轮转重置，防单 pattern 分布塌缩）",
     )
+    @click.option(
+        "--per-task-token-caps",
+        "per_task_token_caps",
+        default=None,
+        help="AM1：臂级每任务 token 硬上限映射（如 'aitester=4223,plain_llm_df=26115'；默认 None=历史口径无上限；超限走 budget_exceeded 停止通道，预注册 E6 预算匹配臂专用）",
+    )
     def cli(
         dataset,
         subset,
@@ -2586,6 +2679,7 @@ if __name__ == "__main__":
         no_mutation,
         difficulty,
         max_pattern_repeat,
+        per_task_token_caps,
     ):
         """AITester 基准测试工具"""
         bl_list = [b.strip() for b in baselines.split(",") if b.strip()]
@@ -2620,6 +2714,7 @@ if __name__ == "__main__":
             enable_mutation_scoring=mutation_override,
             difficulty=difficulty,
             max_pattern_repeat=max_pattern_repeat,
+            per_task_token_caps=per_task_token_caps,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
 

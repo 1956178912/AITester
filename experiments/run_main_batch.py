@@ -83,6 +83,16 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="合成数据集同池模板重复上限（仅 synthetic 生效；>=1 时同 (difficulty, pattern) 至多出现 N 次；默认 None=历史口径）",
     )
+    # AM1（2026-10-06 第十三轮审查 / 预注册 E6 执行前置）：臂级每任务
+    # token 硬上限映射（"aitester=4223,plain_llm_df=26115"），透传
+    # run_benchmark.per_task_token_caps；默认 None=历史口径无上限。
+    # E6 预算匹配臂专用——standard 臂口径不受影响。
+    p.add_argument(
+        "--per-task-token-caps",
+        dest="per_task_token_caps",
+        default=None,
+        help="臂级每任务 token 硬上限映射（arm=cap 逗号分隔，如 'aitester=4223'；默认 None=历史口径；超限走 budget_exceeded 停止通道；预注册 E6 预算匹配臂专用）",
+    )
     return p.parse_args()
 
 
@@ -158,6 +168,7 @@ def main() -> None:
         seed=args.seed,
         deterministic=deterministic,
         max_pattern_repeat=args.max_pattern_repeat,
+        per_task_token_caps=args.per_task_token_caps,
     )
 
     # 定位刚产出的批次文件（按 mtime 最大定位）

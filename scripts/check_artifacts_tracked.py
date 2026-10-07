@@ -46,6 +46,10 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/main_batch/statistical_report_3seed_pooled.md",
     "experiments/results/main_batch/mast_distribution_report.md",
     "experiments/results/main_batch/repair_ceiling_report.md",
+    # E7 修复上限人工复核工件（AO5 候选清单 + AP1 工作表；AQ 批登记——
+    # prereg 双语 E7 节引用的复核入口，入库前本守卫本地预期红）
+    "experiments/results/main_batch/e7_repair_sample_candidates.md",
+    "experiments/results/main_batch/e7_review_worksheet.md",
     # 完整性锚点与成本价目（$/task 口径依赖）
     "experiments/results/main_batch/SHA256SUMS",
     "experiments/price_table.json",

@@ -855,12 +855,99 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
     return cost_rows
 
 
-def _cost_report_lines(cost_rows: list[dict], price_table: dict[str, dict]) -> list[str]:
-    """AE2：报告成本章节 Markdown 行。
+def cost_per_detection(cost_per_task: float | None, det_rate_pct: float | None) -> float | None:
+    """AN5：$/detection 推导——成本/任务 ÷ 检出率（检出优先口径的成本对偶）。
+
+    领域口径对齐 SWE-bench 生态的 $/resolved（2026 六前沿模型同分位展布
+    $0.46–$74）：本项目的自然对偶是"每检出一个缺陷的成本"。
+
+    任一输入缺失（未计价 / 检出率为 0 或 None）→ None（诚实降级为 "—"）；
+    检出率 0% 在语义上是 ∞，不得显示为有限数字误导读者。
+
+    Args:
+        cost_per_task: 每任务成本（cost_analysis 产物，None = 未计价）。
+        det_rate_pct: detection 率百分比（stats_summary["det_rate"] 口径，
+            0-100；None = 无可测行）。
+
+    Returns:
+        $/detection 数值；不可推导时 None。
+    """
+    if cost_per_task is None or det_rate_pct is None or det_rate_pct <= 0:
+        return None
+    return cost_per_task / (det_rate_pct / 100.0)
+
+
+def mutation_reliability_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, float | int | None]]:
+    """AN2：按臂聚合 mutation_detection_rate（测试套件可靠性）。
+
+    行级来源：run_benchmark ENABLE_MUTATION_SCORING 写回的
+    mutation_detection_rate（float | None——None = 不可测：缺 gold fixed
+    材料 / 生成测试在 gold fixed 上不绿 / 无变异体，保守不误报 0）与
+    mutants_killed / mutants_total 占位对。聚合口径：可测行均值（百分比）
+    + 可测率分母（None 不进分母，M1 同则）+ 杀灭/变异体合计。
+
+    Returns:
+        baseline → {n_total, n_measurable, mean_pct（None=无可测行）,
+        mutants_killed, mutants_total}（按 baseline 名排序）。
+    """
+    summary: dict[str, dict[str, float | int | None]] = {}
+    for baseline in sorted(data):
+        rows = data[baseline] or []
+        vals = [r["mutation_detection_rate"] for r in rows if r.get("mutation_detection_rate") is not None]
+        killed = sum(int(r.get("mutants_killed") or 0) for r in rows)
+        total = sum(int(r.get("mutants_total") or 0) for r in rows)
+        summary[baseline] = {
+            "n_total": len(rows),
+            "n_measurable": len(vals),
+            "mean_pct": (sum(vals) / len(vals) * 100.0) if vals else None,
+            "mutants_killed": killed,
+            "mutants_total": total,
+        }
+    return summary
+
+
+def _mutation_report_lines(mutation_summary: dict[str, dict]) -> list[str]:
+    """AN2：测试套件可靠性章节 Markdown 行（呈现性增补，非主终点变更）。
+
+    与 SWE-Mutation（2026）的"变异分作为 LLM 测试套件可靠性主信号"口径
+    同向：检出优先协议下，测试有效性需要独立于 detection 的客观测量。
+    """
+    lines = [
+        "口径：mutation_detection_rate = 生成的测试在 gold 修复代码上全绿、且在其",
+        "AST 变异体上变红的比例（ENABLE_MUTATION_SCORING 写回；None = 不可测，",
+        "按不可测跳过不进分母——保守不误报 0）。领域口径与 SWE-Mutation（2026）",
+        "的测试套件可靠性主信号同向：检出优先协议下，测试有效性需要独立于",
+        "detection 的客观测量（变异检出提供该测量，纯子进程零 LLM）。",
+        "**呈现性增补（AN2，2026-10-07）**：本节为报告呈现口径，非预注册主终点",
+        "变更；主终点仍为 detection 配对差（见预注册）。增补时点早于 E2 数据产生。",
+        "",
+        "| Baseline | 可测行 | 总行 | 均值 (%) | 杀灭/变异体合计 |",
+        "|----------|--------|------|----------|-----------------|",
+    ]
+    for baseline, s in mutation_summary.items():
+        mean_disp = f"{s['mean_pct']:.2f}" if s["mean_pct"] is not None else "—"
+        lines.append(
+            f"| {baseline} | {s['n_measurable']} | {s['n_total']} | {mean_disp} | {s['mutants_killed']}/{s['mutants_total']} |"
+        )
+    if all(s["n_measurable"] == 0 for s in mutation_summary.values()):
+        lines += ["", "注：全部臂无可测行——本批该指标不可测（诚实披露，而非 0 检出）。"]
+    return lines
+
+
+def _cost_report_lines(
+    cost_rows: list[dict], price_table: dict[str, dict], det_rates: dict[str, float] | None = None
+) -> list[str]:
+    """AE2：报告成本章节 Markdown 行；AN5：可选 $/detection 推导列。
 
     价目齐全 → 输出 $/task 表；价目缺失 → 诚实降级为"未登记"提示并
     列出待计价模型清单（绝不编造价格）。历史报告不回写：本节仅在
     新报告生成时出现。
+
+    AN5（2026-10-07 第十四轮审查 N5）：det_rates（baseline → detection
+    率百分比，stats_summary["det_rate"] 口径 0-100）非 None 时表格追加
+    "成本/检出"列（= cost_per_task ÷ (det_rate/100)，推导见
+    cost_per_detection）并附口径说明——呈现性增补，非新测量；
+    det_rates=None（缺省）时输出与 AE2 逐位一致的历史格式（向后兼容）。
     """
     lines = [
         "成本口径：$/task = (Σ输入 token × 输入单价 + Σ输出 token × 输出单价) / 任务数；",
@@ -868,6 +955,12 @@ def _cost_report_lines(cost_rows: list[dict], price_table: dict[str, dict]) -> l
         "token 行级来源 = 结果行 token_usage（input_tokens / output_tokens）；",
         "多模型异价的基线无法按 in/out 拆分归属，成本诚实降级为未计价（—）。",
     ]
+    if det_rates is not None:
+        lines += [
+            "$/detection（成本/检出）= $/task ÷ 检出率——AN5 呈现性推导（两次已登记",
+            "测量的商，非独立测量；领域口径对齐 SWE-bench 生态 $/resolved）。检出率",
+            "0% 的基线该列为 —（语义上趋于无穷，不得显示为有限数字）。",
+        ]
     priced = [r for r in cost_rows if r["priced"]]
     if not priced:
         models_seen = sorted({m for r in cost_rows for m, t in r["by_model"].items() if t > 0})
@@ -879,17 +972,33 @@ def _cost_report_lines(cost_rows: list[dict], price_table: dict[str, dict]) -> l
             "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
         ]
         return lines
-    lines += [
-        "",
-        "| Baseline | 任务数 | 输入 token | 输出 token | 成本/任务 | 币种 |",
-        "|----------|--------|-----------|-----------|-----------|------|",
-    ]
-    for r in cost_rows:
-        cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
-        cur = r["currency"] or "—"
-        lines.append(
-            f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} | {cpt} | {cur} |"
-        )
+    if det_rates is None:
+        lines += [
+            "",
+            "| Baseline | 任务数 | 输入 token | 输出 token | 成本/任务 | 币种 |",
+            "|----------|--------|-----------|-----------|-----------|------|",
+        ]
+        for r in cost_rows:
+            cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
+            cur = r["currency"] or "—"
+            lines.append(
+                f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} | {cpt} | {cur} |"
+            )
+    else:
+        lines += [
+            "",
+            "| Baseline | 任务数 | 输入 token | 输出 token | 成本/任务 | 成本/检出 | 币种 |",
+            "|----------|--------|-----------|-----------|-----------|-----------|------|",
+        ]
+        for r in cost_rows:
+            cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
+            cpd_val = cost_per_detection(r["cost_per_task"], det_rates.get(r["baseline"]))
+            cpd = f"{cpd_val:.4f}" if cpd_val is not None else "—"
+            cur = r["currency"] or "—"
+            lines.append(
+                f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} "
+                f"| {cpt} | {cpd} | {cur} |"
+            )
     partial = [r for r in cost_rows if not r["priced"]]
     if partial:
         missing_desc = "；".join(f"{r['baseline']}（缺: {', '.join(r['missing_models'])}）" for r in partial)
@@ -1414,8 +1523,21 @@ def run_all_statistics(
         # AE2（2026-10-06 第十一轮审查 N8）：$/task 成本口径章节——价目表
         # 驱动，价目缺失时诚实降级为"未登记"提示（不编造价格）。历史
         # 报告不回写：本节仅在新报告生成时出现。
+        # AN5（2026-10-07 第十四轮审查 N5）：追加 $/detection 推导列——
+        # 呈现性增补（两次已登记测量的商），主终点与判定规则不变。
         report_lines += ["", "## 成本口径（$/task，价目表驱动——AE2）", ""]
-        report_lines += _cost_report_lines(cost_rows, _effective_price_table)
+        _det_rates = {b: s["det_rate"] for b, s in stats_summary.items()}
+        report_lines += _cost_report_lines(cost_rows, _effective_price_table, det_rates=_det_rates)
+
+        # AN2（2026-10-07 第十四轮审查 N2）：测试套件可靠性章节——
+        # mutation_detection_rate 按臂聚合（SWE-Mutation 2026 口径对齐）；
+        # 呈现性增补，增补时点早于 E2 数据产生，主终点不变。
+        report_lines += [
+            "",
+            "## 测试套件可靠性（mutation_detection_rate 按臂聚合——AN2 呈现性增补）",
+            "",
+        ]
+        report_lines += _mutation_report_lines(mutation_reliability_summary(data))
 
         report_lines += [
             "",

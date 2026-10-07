@@ -51,8 +51,9 @@ class TestPreregistrationDoc:
         en = (_ROOT / "docs" / "preregistration.en.md").read_text(encoding="utf-8")
         zh_date = next(line for line in zh.splitlines() if "最后更新" in line)
         en_date = next(line for line in en.splitlines() if "Last updated" in line)
-        assert "2026-10-06" in zh_date
-        assert "2026-10-06" in en_date
+        # AN2/AN5（2026-10-07）呈现性增补入 E3 节——日期随批升级
+        assert "2026-10-07" in zh_date
+        assert "2026-10-07" in en_date
 
     def test_e1_thresholds_locked(self) -> None:
         """E1 预注册判定阈值三段齐备：≥0.3 保留 / <0.2 放弃 / 灰区一次迭代。"""

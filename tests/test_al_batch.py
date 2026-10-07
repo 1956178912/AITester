@@ -98,9 +98,7 @@ class TestAL5Positioning:
         assert "repair-evaluation" in en_head
 
     def test_citation_alignment(self) -> None:
-        title_line = next(
-            line for line in _read(CITATION).splitlines() if line.startswith("title:")
-        )
+        title_line = next(line for line in _read(CITATION).splitlines() if line.startswith("title:"))
         assert "Detection-first" in title_line
         assert "Self-Repair" not in title_line
 
@@ -136,12 +134,7 @@ class TestPreregE6E7:
         assert "the amendment precedes any" in en
 
 
-def _row(
-    task_id: str,
-    status: str | None,
-    plausible: int,
-    evidence: str | None, **extra: object
-) -> dict[str, object]:
+def _row(task_id: str, status: str | None, plausible: int, evidence: str | None, **extra: object) -> dict[str, object]:
     row: dict[str, object] = {
         "task_id": task_id,
         "detection_first_status": status,
@@ -221,9 +214,7 @@ class TestRenderManifest:
     def test_manifest_structure(self) -> None:
         strata = TestStratifiedSelection._strata()
         selected = select_stratified_sample(strata, 1.0, 7)
-        manifest = render_markdown(
-            selected, {k: len(v) for k, v in strata.items()}, ["a.json"], 1.0, 7
-        )
+        manifest = render_markdown(selected, {k: len(v) for k, v in strata.items()}, ["a.json"], 1.0, 7)
         assert manifest.startswith("# E7")
         assert "seed=7" in manifest and "fraction=100%" in manifest
         assert "人工判定" in manifest and "待复核" in manifest

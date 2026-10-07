@@ -1,6 +1,9 @@
 # 预注册：E1–E4 验证实验（检出优先协议 + 逻辑链 + 双门）
 
-最后更新: 2026-10-06
+最后更新: 2026-10-07（AO 批：E6 matched 上限来源修订——改取 E2 实测
+均值，R-P0-2 旧常数降为量级参照，修订早于任何 E6 数据；此前同日
+AN2/AN5 呈现性增补入 E3 节——主终点/阈值/停止规则不变；2026-10-06
+AM 批：E6 执行前置达成声明 + 执行记录表 E6/E7 行 + E6 就绪命令块）
 
 ## 目的与效力范围
 
@@ -82,6 +85,12 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   spec_compile_rate / spec_expr_coverage 在全部可测行非空（None 仅允许
   "无 gold 材料"口径，且须在报告披露占比与根因——不得出现 schema
   在而运行时未开的情况）。
+- AN2/AN5（2026-10-07）呈现性增补：E2 统计报告新增"测试套件可靠性"节
+  （mutation_detection_rate 按臂聚合，SWE-Mutation 2026 口径对齐）与成本
+  节 $/detection 推导列（$/task ÷ 检出率）——两者均为**呈现性增补**
+  （已登记测量的聚合/商，非新测量），主终点、判定阈值与停止规则不变；
+  增补时点早于 E2 数据产生（本文件改动的入库 commit 早于 E2 批次
+  工件入库 commit，git 历史可核），防"事后呈现"质疑。
 
 ## E4：真实基准首跑（QuixBugs L1）
 
@@ -106,13 +115,28 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 - **设计**：2×2 四臂 = {aitester, plain_llm_df} × {standard,
   budget-matched}；synthetic n=87 × 2 种子 {42, 44} × logic 档 ×
   双门开 × `TEMPERATURE=0` × `--max-pattern-repeat 2` × `--pool-seeds`。
-  - budget-matched 定义：df(matched) = df 标准臂 + 每任务 token 上限
-    抬至 aitester 标准臂实测均值（26,115，允许更多再生成轮次直至预算
-    触顶）；aitester(matched) = aitester 标准臂 + 每任务 token 上限压至
-    df 标准臂实测均值（4,223）。
-  - **执行前置**：run_main_batch/run_benchmark 新增
-    `--per-task-token-cap`（预算触顶走既有 budget 停止路径，
-    stop_reason 记 budget_cap；该旗标实现并测试前本节不得执行）。
+  - budget-matched 定义（**AO 修订，2026-10-07，早于任何 E6 数据**）：
+    matched 上限一律取 **E2 同种子 standard 批次实测的每任务总 token
+    均值**（行级 `token_usage.total_tokens` 按臂聚合）——df(matched) =
+    df 标准臂 + 每任务上限抬至 E2 aitester 标准臂实测均值（允许更多
+    再生成轮次直至预算触顶）；aitester(matched) = aitester 标准臂 +
+    每任务上限压至 E2 df 标准臂实测均值。R-P0-2 的 26,115/4,223 为
+    **无门控口径**，仅作量级参照、不得直接用作 cap——双门会改变
+    aitester 的 token 消耗曲线（门路由减少无效修复循环），若门控后
+    均值低于旧 df 均值，硬编码 cap 将不绑定，aitester(matched) 退化为
+    无约束对照，等预算对比失效。
+  - **修订效力声明**：本修订（AO 批次，2026-10-07）为设计增补——主
+    终点、判定规则与停止规则不变，仅"matched 上限的数值来源"从
+    R-P0-2 常数改为 E2 实测均值；增补时点早于任何 E6 批次数据
+    （E6 零批次），git 历史可核。
+  - **执行前置（AM 批次已达成，2026-10-06）**：
+    `run_main_batch/run_benchmark` 已实现 `--per-task-token-caps`
+    （臂=上限映射，经 `set_task_token_cap` 写入任务预算实例，超限走既有
+    budget 停止路径——stop_reason=budget_exceeded，结果行
+    token_budget_capped=true，provenance.per_task_token_caps 留痕）。
+    注：预注册原稿写 stop_reason 记 "budget_cap"，实现复用既有枚举值
+    `budget_exceeded`（语义一致，判定读该字段即可）——本行为唯一
+    勘误，判定规则未改。
 - **主终点**：两条"等预算"对比的 detection 配对差 δ（McNemar + 贝叶斯
   + BH-FDR）——df(matched) vs aitester(standard)、aitester(matched) vs
   df(standard)。
@@ -142,6 +166,16 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   BASELINE/pooled 报告须勘误并给出修正后 repair 上界；= 0 → "repair
   上限卡在合理性与 gold 正确性"结论定案（repair=0 为真零）。
 - **成本**：人工约 1 天，零 LLM 成本（纯离线抽样 + 人工比对）。
+- **候选清单（AO 批已生成，2026-10-07）**：
+  `experiments/results/main_batch/e7_repair_sample_candidates.md`——
+  抽样脚本已对真实工件运行（seed=42，确定性，可复算），人工复核自该
+  清单逐行执行，复核完成后按上方判定规则回填执行记录表。
+  **对照式复核工作表（AP 批已生成，2026-10-07）**：
+  `experiments/results/main_batch/e7_review_worksheet.md`——每个候选节
+  内嵌四段素材（生成补丁 / gold fixed / gold 官方测试 / 最终生成测试）
+  与判定勾选栏；整文件替换口径下 patch 正文即补丁应用后完整文件，与
+  gold fixed 逐行对照即可分类。复核结论仍以人工判定为准，工作表仅
+  备料不裁决。
 
 ## 统计分析计划（全部实验通用）
 
@@ -188,6 +222,8 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 | E1 | 待执行 | — | — | — | — |
 | E2+E3 | 待执行 | — | — | — | — |
 | E4 | 待执行 | — | — | — | — |
+| E6 | 待执行（前置旗标已实现，AM 批） | — | — | — | — |
+| E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |
 
 ## 就绪命令（AH2 预置：预算批准且干净树后直接执行）
 
@@ -257,4 +293,62 @@ rows = [r for f in sys.argv[1:] for r in json.load(open(f))['results']['aitester
 over = sum(1 for r in rows if r.get('detection_first_status')=='red_not_repaired' and r.get('detection_rate')==0)
 erase = sum(1 for r in rows if r.get('detection_first_status')=='red_then_green' and r.get('detection_rate')==0)
 print(f'过红(over-red)={over}  抹红(erase-red)={erase}  (n={len(rows)})')"
+```
+
+### E6 就绪命令（AM 批补：前置旗标 --per-task-token-caps 已实现；AO 批修订：cap 改取 E2 实测均值）
+
+E6 四臂 = {aitester, plain_llm_df} × {standard, budget-matched}；
+standard 口径直接复用 E2 双门批次（同 seed 42/44、同 gate/档位），
+只需新跑两个 matched 臂批次。**matched 上限不得使用 R-P0-2 旧常数
+（26,115/4,223）**——按 AO 修订从 E2 standard 批次实测提取。
+
+第 1 步：从 E2 双种子 standard 批次提取各臂每任务 token 均值：
+
+```bash
+.venv/bin/python -c "
+import json, sys
+for f in sys.argv[1:]:
+    d = json.load(open(f))
+    for arm in sorted(d['results']):
+        toks = [r['token_usage']['total_tokens'] for r in d['results'][arm]['details'] if r.get('token_usage')]
+        if toks:
+            print(f.rsplit('/',1)[-1], arm, f'mean_total_tokens_per_task={sum(toks)/len(toks):.0f}')
+" experiments/results/main_batch/benchmark_synthetic_<E2_seed42 时间戳>.json \
+  experiments/results/main_batch/benchmark_synthetic_<E2_seed44 时间戳>.json
+```
+
+第 2 步：以上一步打印的 aitester / plain_llm_df 均值分别替换
+`AITESTER_MEAN` / `DF_MEAN` 后执行（df(matched) 抬至 aitester 均值，
+对 df 实际近似无约束，作对称对照留档）。同样**不得** --allow-dirty：
+
+```bash
+AITESTER_MEAN=<E2 aitester 实测均值> DF_MEAN=<E2 df 实测均值>
+for SEED in 42 44; do
+  AITESTER_PROFILE=logic .venv/bin/python experiments/run_main_batch.py \
+    --task-count 87 --seed "$SEED" \
+    --baselines aitester --per-task-token-caps "aitester=${DF_MEAN}" \
+    --max-pattern-repeat 2 --skip-stats
+  AITESTER_PROFILE=logic .venv/bin/python experiments/run_main_batch.py \
+    --task-count 87 --seed "$SEED" \
+    --baselines plain_llm_df --per-task-token-caps "plain_llm_df=${AITESTER_MEAN}" \
+    --max-pattern-repeat 2 --skip-stats
+done
+```
+
+配对分析：matched 批次与 E2 同种子 standard 批次按 `--pool-seeds`
+拼接（task_id 加 s<seed>__ 前缀后同任务配对），--batches 白名单 =
+两个 matched 批次 + E2 同种子批次；判定读 aitester(matched) vs
+df(standard)、df(matched) vs aitester(standard) 两组 detection 配对差。
+护栏核对（token_budget_capped=True 行数应集中于 aitester(matched) 臂）：
+
+```bash
+.venv/bin/python -c "
+import json, glob
+for f in sorted(glob.glob('experiments/results/main_batch/benchmark_synthetic_*.json')):
+    d = json.load(open(f)); caps = d.get('provenance', {}).get('per_task_token_caps')
+    if not caps:
+        continue
+    for arm, rows in d['results'].items():
+        n = sum(1 for r in rows['details'] if r.get('token_budget_capped'))
+        print(f, arm, f'capped={n}/{len(rows[\"details\"])}', caps)"
 ```

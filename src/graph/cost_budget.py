@@ -17,6 +17,7 @@ from src.budget.cost_budget import (
     is_budget_exceeded,
     record_usage_and_check,
     reset_budget,
+    set_task_token_cap,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "is_budget_exceeded",
     "record_usage_and_check",
     "reset_budget",
+    "set_task_token_cap",
 ]

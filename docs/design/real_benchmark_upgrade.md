@@ -17,6 +17,18 @@
 | L2 | **BugsInPy**（2020，持续维护） | 单文件/模块 | 真实 GitHub 项目历史缺陷、含 gold 补丁与 F2P/P2P 测试清单、Python 生态；per-repo 容器化后工程量可控 | 3 个项目 × 10 缺陷 = 30 | per-repo venv/Docker 构建 + 测试裁剪（沿用 executor_repo 的 per-env 锁与超时收敛） |
 | L3 | **SWE-bench Lite**（ICLR 2024） | 仓库级 | 外部效度终点；官方评价口径（F2P/P2P/patch apply） | 20（修复 0/20 的阻塞项后复测） | ① download_swe_bench 补 lite 子集；② export_swe_bench_source 生成 SWE_BENCH_ENRICHMENT（git clone 各仓库）；③ per-repo 依赖安装脚本（0/20 根因：sqlfluff 等缺依赖 + API 限流重试） |
 
+**L2 候补评估登记（AN1，2026-10-07）**：TestGenEval（Jain et al., ICLR 2025，
+arXiv:2410.00752；`facebookresearch/testgeneval`，1,210 代码/测试文件对 ×
+68,647 测试 × 11 个活跃 Python 仓库，由 SWE-bench 改造为**测试生成/补全**
+基准）与 L2 选型高度同域——本项目主命题即测试生成，其"仓库上下文测试
+生成"口径比 BugsInPy 的"缺陷修复"口径更贴题。**许可门槛：CC BY-NC 4.0**
+（GitHub API license 字段 `spdx_id=NOASSERTION`，LICENSE 原文核实
+2026-10-07 = Attribution-NonCommercial 4.0 International）——学术非商业
+研究评估可用（署名），商业用途与衍生工件再分发受限；与 BugsInPy（无
+SPDX）同列"非清洁许可"决策门槛（DATA_CARD §4 三选一口径同样适用）。
+L2 立项时与 BugsInPy 并列决策，均未解除实跑前置（当前零加载零实跑，
+仅有此登记）。
+
 **判定口径（对齐 M1 严谨性检查点）**：
 - 主指标：resolved（gold F2P 全过 ∧ P2P 不回归 ∧ 补丁非仅改测试）；辅助：detection / repair / false_fix / FL@k / patch_plausible / $/task。
 - 严谨性红线：`test_visible_to_system`（系统不得看见 gold 测试）、`source_patched_unverified` 观测、`fail-to-pass` 三段判定全部沿用 `experiments/_m1_metrics` 既有实现，不另造口径。
@@ -47,3 +59,4 @@
 - QuixBugs: Lin et al., arXiv:1708.00154（程序修复多语言基准）。
 - BugsInPy: Widyasari et al., ASE 2020（真实 PyPI 项目缺陷库，F2P/P2P 清单）。
 - SWE-bench: Jimenez et al., ICLR 2024；Verified 为 OpenAI 2024 人工筛选子集（引用前经 `scripts/check_citations.py --online` 核验）。
+- TestGenEval: Jain et al., ICLR 2025, arXiv:2410.00752（真实仓库上下文单元测试生成/补全基准；CC BY-NC 4.0，AN1 许可登记，2026-10-07 经 LICENSE 原文核实）。

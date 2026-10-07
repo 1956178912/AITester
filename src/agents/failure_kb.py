@@ -285,7 +285,8 @@ def entry_ocurrence_stat(*args: object, **kwargs: object) -> object:
     import warnings
 
     warnings.warn(
-        "entry_ocurrence_stat 已更名 entry_occurrence_stat（U10 批次），旧名将在后续版本移除",
+        "entry_ocurrence_stat 已更名 entry_occurrence_stat（U10 批次），"
+        "旧名计划于 v0.8.0 移除（AO 批，2026-10-07 定档）",
         DeprecationWarning,
         stacklevel=2,
     )
