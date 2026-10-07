@@ -700,6 +700,31 @@ def _fl_at_k(final_state: dict[str, Any] | None, task: Any = None) -> dict[str, 
     return result
 
 
+def _localization_hit_function(task: Any, final_state: dict[str, Any] | None) -> bool | None:
+    """修复引擎第一阶段：函数级局部化命中（局部化独立指标口径）。
+
+    LLM 推理定位（state["llm_localization"]）的 function_name 是否落在
+    gold 变更函数集合（buggy vs gold fixed 的 diff 行 → AST 所属函数）。
+    None = 未定位 / 无 gold 材料（保守不可测，键集合同构占位）。
+    """
+    if final_state is None:
+        return None
+    loc = final_state.get("llm_localization")
+    if not loc:
+        return None
+    try:
+        from experiments._m1_metrics import _gold_fixed_code as _gold_fixed
+        from src.agents.fault_localizer import gold_changed_functions, localization_hit
+
+        fixed_code = _gold_fixed(task)
+        buggy_code = str(getattr(task, "instance_code", "") or "")
+        if not fixed_code.strip() or not buggy_code.strip():
+            return None
+        return localization_hit(loc, gold_changed_functions(buggy_code, fixed_code)).get("localization_hit_function")
+    except Exception:
+        return None
+
+
 def _extract_diff_line_numbers(patch_text: str) -> list[int]:
     """从 unified diff / 补丁文本中提取 new 侧变更行号（保守口径）。
 
@@ -950,6 +975,11 @@ def _build_task_result(
             # R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标
             # （Ochiai 谱系定位的"真实缺陷行是否落在 Top-k"量化口径）
             "fl_at_k": _fl_at_k(final_state, task),
+            # 修复引擎第一阶段（2026-10-07 范式转向）：局部化独立指标——
+            # LLM 推理定位（RGFL 式）透出 + 函数级命中（与 gold 变更函数
+            # 集合比对）。None = 未定位 / 无 gold 材料（键集合同构占位）。
+            "llm_localization": (final_state or {}).get("llm_localization"),
+            "localization_hit_function": _localization_hit_function(task, final_state),
             # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因分布
             # 可解释（"test_passed" / "max_iterations" /
             # "skip_debugger_repair_invalid" / "test_defect_regeneration_cap" /
@@ -1037,6 +1067,10 @@ def _build_task_result(
         "patch_correct": 0,
         "patch_precision": None,
         "fl_at_k": None,
+        # 修复引擎第一阶段：失败分支无 final_state，定位键 None 占位
+        # （键集合同构，与成功分支 llm_localization/localization_hit_function 配对）
+        "llm_localization": None,
+        "localization_hit_function": None,
         # R4（2026-09-30 独立审查 P0）：失败分支无 final_state，回归率占位
         "regression_rate": None,
         # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因为 None

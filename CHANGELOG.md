@@ -4,6 +4,36 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-07 修复引擎批次 I（范式转向：独立 FaultLocalizer 落地 + 局部化独立指标首测通过）
+
+> 用户 scope 级决策"立即转向修复引擎"（前沿 APR 范式：局部化→合成→
+> 验证；引用核验：RGFL arXiv 2601.18044 / Hunk-SWE 多 Hunk 研究 /
+> PSR 均属实，Kronumos 2 Kairos 系未评审预印本慎引）；E4/E6/E7 与
+> 论文成稿暂停，按三阶段推进。**本批=第一阶段核心**：
+> - **新增 `src/agents/fault_localizer.py`**：RGFL 式 LLM 推理定位
+>   智能（FaultLocalizerAgent）——输入失败测试 + 错误输出 + Ochiai
+>   谱系 Top-k 佐证，输出结构化定位 JSON（function_name/line/
+>   confidence/reasoning）；`gold_changed_functions`（diff 行→AST
+>   所属函数）与 `localization_hit`（函数级命中判定，叶子名归一）
+>   构成局部化独立指标的 gold 口径；
+> - **管线接入**：`_debugger_node` 谱系测量后调用 LLM 定位（谱系
+>   Top-k 佐证），定位段落与谱系段落并列注入修复 prompt；结果写
+>   state["llm_localization"]（state.py 声明 + 工厂 None，键集合
+>   同构）；`debug()` 新增 localization_section 参数（None 时 prompt
+>   与历史逐字节一致）；
+> - **指标透出**：结果行新增 `llm_localization` +
+>   `localization_hit_function`（与检出率/修复率/FL@k 并列的局部化
+>   独立口径；失败分支 None 占位同构）；FAULT_LOCALIZER_ENABLE
+>   默认开（显式 false 退纯谱系消融口径；env 预算 165→166 登记）；
+> - **真实冒烟首测**（synthetic 3 任务，logic 档）：函数级命中
+>   True / 可测未命中 False / 无失败用例 None 三态全部按预期产出，
+>   结构化 reasoning 可解释（"错误输出被截断…唯一可疑行"）——
+>   局部化从 Debugger 副产品升格为可独立量化的阶段（修复引擎
+>   原则一落地）；
+> - 全量回归 **4437 → 4453 passed / 0 failed**（+16 =
+>   tests/test_fault_localizer.py：解析容错/gold 函数提取/命中
+>   判定/开关缺省四组行为锁）。
+
 ## [Unreleased] — 2026-10-07 E2 迭代批（"恰好一次"迭代前置三缺陷修复：fl_at_k gold diff 对齐 + recursion_limit 56 + mutation 口径定性）
 
 > 用户批准动用预注册"恰好一次"门参数/路由修正迭代；本批为迭代重跑

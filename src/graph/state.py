@@ -454,6 +454,13 @@ class AITesterState(TypedDict, total=False):
     # 供 _debugger_node 渲染定位先验段落注入修复 prompt（O2 谱系定位），
     # 以及实验分析"FL@k 指标"消费。
     fl_spectral_focus: dict[str, Any] | None
+    # 修复引擎第一阶段（2026-10-07 范式转向）：RGFL 式 LLM 推理定位结果
+    # （FaultLocalizerAgent.localize 产出，_debugger_node 写入）：结构化
+    # {"function_name", "line_start", "line_end", "confidence", "reasoning"}；
+    # None = 开关关 / LLM 失败 / JSON 解析失败 / 无失败用例（历史口径
+    # 不变）。实验层消费：函数级命中指标 localization_hit_function
+    # （与 gold 变更函数集合比对，局部化独立指标口径）。
+    llm_localization: dict[str, Any] | None
     # M6（2026-09-29 审查 P0）：补丁写盘前快照的内部通道键（节点间传递，
     # 不出现在 workflow 输入/输出）。_safe_write_patch 在写盘前把原始代码
     # shutil.copy2 到 tempfile 目录，记入 _last_patch_snapshot（路径）+
@@ -713,6 +720,7 @@ def create_initial_state(
         # FL_SPECTRAL_ENABLE=true 时由 _debugger_node 写入；
         # 开关默认关时恒 None，历史口径不变）
         fl_spectral_focus=None,
+        llm_localization=None,
         # M6（2026-09-29 审查 P0）：补丁写盘前快照内部通道键（节点间传递，
         # 不出现在 workflow 输入/输出）。_safe_write_patch 写盘前写入，
         # _rollback_last_patch 读取后清除。缺省 None = 本轮无快照。

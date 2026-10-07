@@ -241,6 +241,10 @@ class DebuggerAgent(BaseAgent):
         # build_fl_spectral_prompt_section 渲染传入）。None / 空串时不注入，
         # 历史口径零变化。
         fl_spectral_section: str | None = None,
+        # 修复引擎第一阶段（2026-10-07 范式转向）：RGFL 式 LLM 推理定位段落
+        # （FaultLocalizerAgent.localize 产出，经 build_localization_prompt_section
+        # 渲染传入）。None / 空串时不注入，历史口径零变化。
+        localization_section: str | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -430,6 +434,12 @@ class DebuggerAgent(BaseAgent):
         if fl_spectral_section:
             query += "\n\n" + fl_spectral_section
             logger.info("O2 FL_spectral 定位先验注入 %d 字符提示", len(fl_spectral_section))
+
+        # 修复引擎第一阶段（2026-10-07 范式转向）：RGFL 式推理定位段落
+        # （FaultLocalizer 结构化定位注入；None / 空串时不注入，历史口径零变化）
+        if localization_section:
+            query += "\n\n" + localization_section
+            logger.info("FaultLocalizer 定位段落注入 %d 字符提示", len(localization_section))
 
         # P0 1.1 分层代码压缩：跨文件任务时注入"被调模块的聚焦上下文"
         # （extract_function_context 按调用链截取，非整模块全文），让 LLM

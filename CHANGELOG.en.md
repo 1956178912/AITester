@@ -1,10 +1,46 @@
-> Last updated: 2026-10-07 (batch E2-iter: three defect fixes as preconditions for the pre-registered "exactly one" iteration re-run — fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified; details below, default behavior unchanged beyond the harness fixes)
+> Last updated: 2026-10-07 (batch RepairEngine-I: paradigm pivot — standalone FaultLocalizer landed + localization as a first-class metric first-measured; details below)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-I (paradigm pivot: standalone FaultLocalizer + localization as a first-class metric, first smoke passed)
+
+> User scope-level decision: "pivot to a repair engine now" (frontier
+> APR paradigm: localize → synthesize → verify; citation verification:
+> RGFL arXiv 2601.18044 / Hunk-SWE multi-hunk research / PSR all
+> verified real; Kronumos 2 Kairos is a non-peer-reviewed preprint —
+> cite with caution). E4/E6/E7 and the paper draft are paused; the
+> three-stage plan proceeds. **This batch = stage-one core**:
+> - **New `src/agents/fault_localizer.py`**: RGFL-style LLM reasoning
+>   localization (FaultLocalizerAgent) — inputs: failing test + error
+>   output + Ochiai spectral Top-k as corroboration; output: structured
+>   localization JSON (function_name/line/confidence/reasoning);
+>   `gold_changed_functions` (diff lines → AST enclosing function) and
+>   `localization_hit` (function-level hit adjudication, leaf-name
+>   normalized) form the gold semantics of the localization metric;
+> - **Pipeline integration**: `_debugger_node` invokes LLM localization
+>   after the spectral measurement (spectral Top-k as corroboration);
+>   the localization section is injected alongside the spectral section
+>   in the repair prompt; results land in state["llm_localization"]
+>   (declared in state.py + factory None, key-set isomorphic); `debug()`
+>   gains a localization_section parameter (None → prompt byte-identical
+>   to history);
+> - **Metric exposure**: result rows gain `llm_localization` +
+>   `localization_hit_function` (a localization-first-class metric
+>   alongside detection/repair/FL@k; failure branch None placeholders
+>   keep isomorphism); FAULT_LOCALIZER_ENABLE defaults on (explicit
+>   false reverts to spectral-only ablation; env budget 165→166);
+> - **First real smoke** (synthetic 3 tasks, logic profile): hit True /
+>   measurable-miss False / no-failing-case None all produced as
+>   expected, with interpretable structured reasoning — localization is
+>   now an independently quantifiable stage (repair-engine principle
+>   one landed);
+> - Full regression **4437 → 4453 passed / 0 failed** (+16 =
+>   tests/test_fault_localizer.py: parse tolerance / gold function
+>   extraction / hit adjudication / switch default locks).
 
 ## [Unreleased] — 2026-10-07 Batch E2-iter (three defect fixes as preconditions of the "exactly one" iteration: fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified)
 

@@ -1951,6 +1951,42 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                         len(_fl_focus.get("top_k", [])),
                         _fl_focus.get("top_k", [{}])[0].get("line"),
                     )
+        # 修复引擎第一阶段（2026-10-07 范式转向）：RGFL 式 LLM 推理定位——
+        # 谱系 Top-k 作佐证，LLM 输出结构化定位（函数/行/置信度），渲染为
+        # 定位段落与谱系段落并列注入；结果写 state["llm_localization"]
+        # 供实验层函数级命中指标消费。保守降级：开关关 / LLM 失败 / JSON
+        # 解析失败 → None（不阻断修复主流程，历史口径零变化）。
+        from src.agents.fault_localizer import (
+            build_localization_prompt_section as _build_loc_section,
+        )
+
+        _loc_result: dict[str, Any] | None = None
+        if state.get("failed_cases"):
+            from src.agents.fault_localizer import FaultLocalizerAgent as _FLAgent
+            from src.agents.fault_localizer import (
+                fault_localizer_enabled as _fl_enabled,
+            )
+
+            if _fl_enabled():
+                try:
+                    _loc_agent = _FLAgent()
+                    _loc_result = _loc_agent.localize(
+                        target_code=state.get("target_code") or "",
+                        test_code=state.get("generated_test") or "",
+                        test_output=state.get("test_output") or "",
+                        failed_cases=state.get("failed_cases") or [],
+                        spectral_top_k=(_fl_focus or {}).get("top_k"),
+                    )
+                    if _loc_result is not None:
+                        logger.info(
+                            "FaultLocalizer 定位：fn=%s conf=%.2f",
+                            _loc_result.get("function_name"),
+                            _loc_result.get("confidence", 0.0),
+                        )
+                except Exception as _loc_err:  # 定位失败不阻断修复主流程
+                    logger.warning("FaultLocalizer 异常，保守降级 None: %s", _loc_err)
+                    _loc_result = None
+
         result = agent.debug(
             target_code=state["target_code"],
             test_output=state.get("test_output") or "",
@@ -2002,6 +2038,9 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
             # O2（2026-09-29 审查 P1）：谱系定位先验段落（FL_SPECTRAL_ENABLE=true
             # 时非空；默认关 / 测量失败时为空串，prompt 与历史逐字节一致）
             fl_spectral_section=_fl_section,
+            # 修复引擎第一阶段：RGFL 式推理定位段落（_loc_result 渲染；
+            # None 时 build_localization_prompt_section 返回空串 = 不注入）
+            localization_section=_build_loc_section(_loc_result),
         )
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
@@ -2296,6 +2335,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # 时由 _debugger_node 经 measure_fl_spectral_focus 测量后写入；开关默认关 /
         # 测量失败时恒 None，历史口径不变）。
         "fl_spectral_focus": _fl_focus,
+        # 修复引擎第一阶段（2026-10-07 范式转向）：RGFL 式 LLM 推理定位
+        # （FaultLocalizer 结构化输出；开关关 / 失败 / 无失败用例时恒
+        # None，历史口径零变化）。实验层消费：函数级命中指标
+        # localization_hit_function（与 gold 变更函数集合比对）。
+        "llm_localization": _loc_result,
         # 5.4 预算封顶标记（O35）：Debugger 捕获 BudgetExceededError 时
         # error_category 已被置为 "budget_exceeded"（上方 except 分支），
         # 据此写 budget_exceeded=True；已由上游节点置真时同样保持（不回退）。
