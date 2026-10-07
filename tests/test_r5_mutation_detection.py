@@ -236,10 +236,12 @@ class TestWiringComputeMutationDetection:
         assert bl_results[0]["mutation_detection_rate"] == 0.6
         assert bl_results[0]["mutants_killed"] == 3
         assert bl_results[0]["mutants_total"] == 5
-        # 材料对齐：fixed 取 metadata["fixed"]（完整文件形态直用），模块名
-        # 取 task_id 末段，测试取 generated_test，采样种子透传
+        # 材料对齐：fixed 取 metadata["fixed"]（完整文件形态经
+        # _gold_fixed_code → _target_code_after_patch，批次 VII 起与写盘
+        # 同口径清理——尾换文 strip，语义零变化），模块名取 task_id 末段，
+        # 测试取 generated_test，采样种子透传
         assert len(captured) == 1
-        assert captured[0]["fixed_code"] == 'def grade(score):\n    return "A"\n'
+        assert captured[0]["fixed_code"] == 'def grade(score):\n    return "A"'
         assert captured[0]["test_code"] == "def t(): pass"
         assert captured[0]["module_name"] == "grade"
         assert captured[0]["n_mutants"] == 5

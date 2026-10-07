@@ -155,13 +155,23 @@ def _target_code_after_patch(original_code: str, patch: str) -> str:
     - 完整文件代码形态（非 unified diff）→ 直接用 patch 文本作为新代码；
     - unified diff 形态 → 用 patch_applier 的安全应用路径（safe_apply_patch）；
     - 应用失败 / 空补丁 → 返回原始代码（口径保守：不假设修复发生）。
+
+    批次 VII（ADR-0021）：完整文件分支先经 normalize_patch_text 清理
+    （markdown 围栏 / python 前缀剥离，与写盘链路同口径）。此前直接用
+    原始文本——state["patch"] 约定可含围栏残留（E2 存量 274/274 实测
+    以 "python\n" 开头），未清理文本首行不可解析，gold 测试 100%
+    NameError 失败，repair_rate 被系统性压零（"repair 全线 0"测量伪影，
+    清理后重放 51/106 通过）。本修复弥合"透出口径 ≠ 执行口径"分叉；
+    干净补丁幂等（清理后不变），历史行为仅在受染输入上改变。
     """
     if not patch or not patch.strip():
         return original_code
     stripped = patch.lstrip()
     if not stripped.startswith(("diff --git", "@@", "---", "+++", "old ", "new ")):
-        # 完整文件代码形态
-        return patch
+        # 完整文件代码形态（批次 VII：写盘同口径清理，见 docstring）
+        from src.tools.patch_applier import normalize_patch_text
+
+        return normalize_patch_text(patch)
     try:
         from src.tools.patch_applier import safe_apply_patch
 

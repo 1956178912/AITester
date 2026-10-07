@@ -18,6 +18,7 @@
 | 缓存投毒 / 缓存命中结果异常 | [§5](#5-缓存投毒检测) |
 | 修复 agent 反复调用同一工具 / 烧 token | [§6](#6-流氓-agent-行为) |
 | 文档链接 404 / 双语漂移 | [§7](#7-文档可访问性与双语守卫) |
+| 定位结果恒为 null / `localization_hit_function` 全空 | [§8](#8-故障定位双通道谱系--llm-推理) |
 
 ---
 
@@ -197,6 +198,39 @@ done
 
 ---
 
+## 8. 故障定位双通道（谱系 + LLM 推理）
+
+**症状**：结果行 `llm_localization` 恒为 null / `localization_hit_function` 全空；
+或日志频繁出现 `FaultLocalizer JSON 解析失败` / `FaultLocalizer LLM 调用失败，保守降级 None`；
+或 `fl_at_k` 全空（谱系行级命中缺数）。
+
+**根因**（按概率排序）：
+1. `FAULT_LOCALIZER_ENABLE` 被显式设 false（纯谱系消融口径——推理定位整体关闭，
+   `llm_localization` / `localization_hit_function` 恒 null，属设计行为，先查环境）；
+2. 任务无失败用例（`failed_cases` 为空时定位不触发——测试通过的任务无需定位）；
+3. LLM 输出非 JSON / `function_name` 等必填字段缺失（解析失败保守降级 None，
+   不产出假定位）；
+4. gold 材料缺失或 buggy 代码无法 AST 解析：`localization_hit_function` 与
+   `fl_at_k` 的 gold diff 路均不可解时按"不可测"返回 null 占位（键集合同构，
+   统计层区分"不可测"与"未命中"，不是缺陷）。
+
+**解决步骤**：
+```bash
+# 1) 确认开关状态（默认 true；显式 "false" 才是消融口径）
+python -c "import os; print('FAULT_LOCALIZER_ENABLE =', os.getenv('FAULT_LOCALIZER_ENABLE', 'true（默认）'))"
+# 2) 查看单任务定位结果与函数级命中
+python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('localization_hit_function'), r.get('llm_localization')) for r in d['results']['aitester']['details'][:5]]"
+# 3) 误设消融开关时恢复默认（删除该 env 即回到默认开）
+unset FAULT_LOCALIZER_ENABLE
+```
+
+**预防措施**：跑批前在 provenance/env 快照核对 `FAULT_LOCALIZER_ENABLE` 与
+`FL_SPECTRAL_ENABLE` 实际取值（程序内注入的开关不进 env 快照，以行为证据
+——定位字段是否产出——为准）；定位质量分析先把"开关关 / 无 gold 材料"
+的不可测人群与"定位了但未命中"人群分开统计，避免把不可测当未命中。
+
+---
+
 ## 升级路径
 
 | 问题域 | 第一响应 | 升级条件 |
@@ -205,3 +239,4 @@ done
 | RAG | §2 重装 / 清目录 | 嵌入模型持续下载失败 → 回退内存模式 |
 | 缓存 | §5 归属校验 + 标签隔离 | 投毒反复出现 → 全量清缓存 + 收紧语义阈值 |
 | Agent 行为 | §6 体检 | 行为漂移无法归因 → 锁定模型版本 + 人工介入 |
+| 故障定位 | §8 开关核对 + 字段抽查 | 定位恒 null 且开关确认为开 → 抓 trace JSONL + 日志 `FaultLocalizer` 关键字上报 |

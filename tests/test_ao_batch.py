@@ -86,9 +86,9 @@ class TestReadmeEnHeader:
     """AO3：en README 头部 Last updated 与最新批次同步。"""
 
     def test_head_updated_line_current(self) -> None:
-        """头部日期行为 2026-10-07 且提及 AO 批（不再滞留 2026-10-06/AM）。"""
+        """头部日期行为 2026-10-07 且提及最新修复引擎批次（行锁随最新批次推进——批次 XIV 批 2026-10-07 合法更新本锁）。"""
         assert "Last updated: 2026-10-07" in README_EN_HEAD
-        assert "batch AO" in README_EN_HEAD
+        assert "repair-engine batch XIV" in README_EN_HEAD
 
 
 class TestDeprecationTimeline:

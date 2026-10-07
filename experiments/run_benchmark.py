@@ -82,6 +82,7 @@ from src.datasets.dataset_loader import (  # noqa: E402
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
 from src.graph.workflow import build_workflow, effective_stop_reason, end_task_trace, start_task_trace  # noqa: E402
+from src.tools.patch_abstain import evaluate_patch_abstention  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -641,6 +642,33 @@ def _patch_precision(task: Any, final_state: dict[str, Any] | None) -> float | N
     return _patch_correct(task, final_state) / plausible
 
 
+def _test_hacking_result(task: Any, final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """批次 VIII（ADR-0022 观测层）：test-hacking 确定性检测。
+
+    补丁后代码经 _target_code_after_patch（批次 VII 修正口径）与原码做
+    AST 差集——只看补丁新引入的硬编码输入分支 / 断言删除 / 吞异常。
+    无补丁 / 无原码 / 解析失败 → {"suspected": False, "signals": []}
+    （保守降级，与弃权门口径一致）。
+    """
+    empty = {"suspected": False, "signals": []}
+    if final_state is None:
+        return empty
+    patch = final_state.get("patch") or ""
+    if not str(patch).strip():
+        return empty
+    original_code = str(getattr(task, "instance_code", "") or "")
+    if not original_code.strip():
+        return empty
+    try:
+        from experiments._m1_metrics import _target_code_after_patch
+        from src.tools.patch_test_hacking import detect_test_hacking
+
+        patched = _target_code_after_patch(original_code, patch)
+        return detect_test_hacking(original_code, patched)
+    except Exception:  # —— 检测异常不阻断结果行组装
+        return empty
+
+
 def _fl_at_k(final_state: dict[str, Any] | None, task: Any = None) -> dict[str, Any] | None:
     """R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标（FL@1/3/5）。
 
@@ -723,6 +751,104 @@ def _localization_hit_function(task: Any, final_state: dict[str, Any] | None) ->
         return localization_hit(loc, gold_changed_functions(buggy_code, fixed_code)).get("localization_hit_function")
     except Exception:
         return None
+
+
+def _localization_rank_metrics(task: Any, final_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    """修复引擎批次 II：元素级 Top-3 命中与 MRR（RGFL 排序评测口径）。
+
+    与 _localization_hit_function 同 gold 口径（buggy vs gold fixed 的
+    diff 行 → AST 所属函数集合），消费 state["llm_localization"]["candidates"]
+    （批次 II 起 localize 输出 1~3 个排序候选；旧 schema 无 candidates 时
+    在 localization_rank_metrics 内退化为单候选）。
+    None = 未定位 / 无 gold 材料（不可测，键集合同构占位）。
+    """
+    if final_state is None:
+        return None
+    loc = final_state.get("llm_localization")
+    if not loc:
+        return None
+    try:
+        from experiments._m1_metrics import _gold_fixed_code as _gold_fixed
+        from src.agents.fault_localizer import gold_changed_functions, localization_rank_metrics
+
+        fixed_code = _gold_fixed(task)
+        buggy_code = str(getattr(task, "instance_code", "") or "")
+        if not fixed_code.strip() or not buggy_code.strip():
+            return None
+        return localization_rank_metrics(loc, gold_changed_functions(buggy_code, fixed_code))
+    except Exception:
+        return None
+
+
+def _fl_constraint_result(task: Any, final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """修复引擎批次 XIV（ADR-0028 观测层）：FL Top-k 约束门结果。
+
+    问题口径（外部报告 P0-3 净新增）："补丁是否真的修改了定位候选
+    位置之一"——定位命中但补丁改在别处 = 定位信号被合成侧浪费
+    （ADR-0024"生成侧主导"假设的行级验证器）。补丁后代码经
+    _target_code_after_patch（批次 VII 修正口径）与原码做 diff →
+    AST 函数归属（patch_changed_functions，含纯插入锚定），与
+    state["llm_localization"] Top-3 候选求交（fl_constraint_verdict）。
+
+    Returns:
+        {"verdict": "hit" | "miss" | "not_evaluable", "hit_rank": int | None,
+         "changed_functions": [str, ...]}；not_evaluable = 无定位 / 无补丁 /
+         无原码 / 变更集合为空（保守降级，与 test-hacking 门口径一致）。
+
+    已知局限（ADR-0028 登记）：整文件重写补丁的变更集合 ≈ 全文件函数，
+    判定近乎恒 hit（无约束力）——约束力集中在局部编辑通道
+    （EDIT_INTENT / 函数级补丁）。观测层零行为影响（passed 历史口径
+    不变）；阻断档转正判据见 ADR-0028。
+    """
+    empty: dict[str, Any] = {"verdict": "not_evaluable", "hit_rank": None, "changed_functions": []}
+    if final_state is None:
+        return empty
+    patch = str(final_state.get("patch") or "")
+    if not patch.strip():
+        return empty
+    loc = final_state.get("llm_localization")
+    if not loc:
+        return empty
+    original_code = str(getattr(task, "instance_code", "") or "")
+    if not original_code.strip():
+        return empty
+    try:
+        from experiments._m1_metrics import _target_code_after_patch
+        from src.agents.fault_localizer import fl_constraint_verdict, patch_changed_functions
+
+        patched = _target_code_after_patch(original_code, patch)
+        changed = patch_changed_functions(original_code, patched)
+        verdict = fl_constraint_verdict(loc, changed)
+        if verdict is None:
+            return empty
+        return verdict
+    except Exception:  # —— 观测异常不阻断结果行组装
+        return empty
+
+
+def _self_repair_trap_result(final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """修复引擎批次 XIV（ADR-0028 观测层）：Self-Repair Trap 判定。
+
+    消费 state["oracle_quality_history"]（Generator 每次产出测试后的
+    质量快照序列）跑 detect_self_repair_trap 三信号判定核（DCAware
+    "迭代自修复驱使断言退化"风险口径；最新快照不可解析时不冒充退化）。
+
+    Returns:
+        {"suspected": bool, "signals": [str, ...]}；无历史 / 结构异常 →
+        不怀疑（保守，与 test-hacking / 弃权门降级口径一致）。
+    """
+    empty: dict[str, Any] = {"suspected": False, "signals": []}
+    if final_state is None:
+        return empty
+    history = final_state.get("oracle_quality_history")
+    if not isinstance(history, list):
+        return empty
+    try:
+        from src.tools.self_repair_trap import detect_self_repair_trap
+
+        return detect_self_repair_trap(history)
+    except Exception:  # —— 观测异常不阻断结果行组装
+        return empty
 
 
 def _extract_diff_line_numbers(patch_text: str) -> list[int]:
@@ -857,6 +983,13 @@ def _build_task_result(
         from src.agents.error_classifier import refine_final_error_category
 
         error_category = refine_final_error_category(final_state)
+        # 修复引擎批次 II：元素级排序指标（Top-3 命中 + MRR）单次计算，
+        # 下方结果行两键共享（gold 提取与 diff/AST 解析不重复执行）
+        _loc_rank = _localization_rank_metrics(task, final_state) or {}
+        # 修复引擎批次 XIV（ADR-0028 观测层）：约束门与陷阱判定单次计算，
+        # 下方结果行共享（观测异常在 helper 内降级，不阻断组装）
+        _fl_constraint = _fl_constraint_result(task, final_state)
+        _trap = _self_repair_trap_result(final_state)
         return {
             "task_id": task.task_id,
             "repo": task.repo_name,
@@ -980,6 +1113,46 @@ def _build_task_result(
             # 集合比对）。None = 未定位 / 无 gold 材料（键集合同构占位）。
             "llm_localization": (final_state or {}).get("llm_localization"),
             "localization_hit_function": _localization_hit_function(task, final_state),
+            # 修复引擎批次 II：元素级排序指标（Top-3 命中 + MRR），
+            # 与 Hit@1 并列透出（None 占位口径同上）。
+            "localization_hit_function_at_3": _loc_rank.get("localization_hit_function_at_3"),
+            "localization_mrr": _loc_rank.get("localization_mrr"),
+            # 修复引擎批次 III：编辑意图确定性落盘观测（EDIT_INTENT_ENABLE
+            # 默认关时恒 None；开启时 {"ok","applied","total","diagnostics"}，
+            # ok=False 表示确定性引擎拒绝并回落整文件补丁通道）。
+            "edit_intent_status": (final_state or {}).get("edit_intent_status"),
+            # 修复引擎批次 IV（ADR-0019）：确定性优先修复路由观测（默认关
+            # 恒 None；patch_produced=True 表示该修复轮跳过 LLM、补丁由
+            # 确定性变换器产出——实验层据此统计接管率与省 token 量）。
+            "deterministic_repair_status": (final_state or {}).get("deterministic_repair_status"),
+            # 修复引擎批次 V（ADR-0020 观测层）：弃权门判定核输出——
+            # patch_abstained = 命中任一不可信信号（M5 假通过 / 全程
+            # 全绿未检出 / 终审过红 / 证据等级 none / 写盘未验证）；
+            # 历史口径零变化（passed 不受影响），供"弃权调整后 passed
+            # 率"与弃权精确率 A/B 消费（阻断档转正判据见 ADR-0020）。
+            "patch_abstained": evaluate_patch_abstention(final_state)["abstain"],
+            "patch_abstain_signals": evaluate_patch_abstention(final_state)["signals"],
+            # 修复引擎批次 VIII（ADR-0022 观测层）：test-hacking 确定性检测——
+            # 补丁新引入的硬编码输入分支 / 断言删除 / 吞异常（AST 差集，
+            # 零 LLM）；补丁后代码经 _target_code_after_patch（批次 VII 修正
+            # 口径，与写盘对齐清理）。历史口径零变化（passed 不受影响），
+            # 供误伤率/富集度 A/B 消费（阻断档转正判据见 ADR-0022）。
+            "test_hacking_suspected": _test_hacking_result(task, final_state)["suspected"],
+            "test_hacking_signals": _test_hacking_result(task, final_state)["signals"],
+            # 修复引擎批次 XIV（ADR-0028 观测层）：FL Top-k 约束门——
+            # "补丁是否真的修改了定位候选位置之一"（定位命中但补丁改在
+            # 别处 = 定位信号被合成侧浪费，ADR-0024 生成侧主导的行级
+            # 验证器）；hit_rank = 首个命中候选序数。观测层 passed 历史
+            # 口径零变化，阻断档转正判据见 ADR-0028。
+            "fl_constraint_verdict": _fl_constraint["verdict"],
+            "fl_constraint_hit_rank": _fl_constraint["hit_rank"],
+            "fl_constraint_changed_functions": _fl_constraint["changed_functions"],
+            # 修复引擎批次 XIV（ADR-0028 观测层）：Self-Repair Trap——
+            # 迭代自修复是否驱使断言退化（三信号判定核，DCAware 风险
+            # 口径）；oracle_quality_history 一并透出供离线复算。
+            "oracle_quality_history": final_state.get("oracle_quality_history"),
+            "self_repair_trap_suspected": _trap["suspected"],
+            "self_repair_trap_signals": _trap["signals"],
             # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因分布
             # 可解释（"test_passed" / "max_iterations" /
             # "skip_debugger_repair_invalid" / "test_defect_regeneration_cap" /
@@ -1071,6 +1244,29 @@ def _build_task_result(
         # （键集合同构，与成功分支 llm_localization/localization_hit_function 配对）
         "llm_localization": None,
         "localization_hit_function": None,
+        # 修复引擎批次 II：失败分支排序指标 None 占位（键集合同构）
+        "localization_hit_function_at_3": None,
+        "localization_mrr": None,
+        # 修复引擎批次 III：失败分支编辑意图观测 None 占位（键集合同构）
+        "edit_intent_status": None,
+        # 修复引擎批次 IV：失败分支确定性路由观测 None 占位（键集合同构）
+        "deterministic_repair_status": None,
+        # 修复引擎批次 V：失败分支弃权观测占位（无 final_state 不可评估，
+        # 保守 False/[]——与求值核 None 口径一致，键集合同构）
+        "patch_abstained": False,
+        "patch_abstain_signals": [],
+        # 修复引擎批次 VIII（ADR-0022）：失败分支无补丁可检测，
+        # False/[] 占位（键集合同构）
+        "test_hacking_suspected": False,
+        "test_hacking_signals": [],
+        # 修复引擎批次 XIV（ADR-0028）：失败分支无 final_state，约束门 /
+        # 陷阱观测以 None/False/[] 占位（键集合同构）
+        "fl_constraint_verdict": None,
+        "fl_constraint_hit_rank": None,
+        "fl_constraint_changed_functions": [],
+        "oracle_quality_history": None,
+        "self_repair_trap_suspected": False,
+        "self_repair_trap_signals": [],
         # R4（2026-09-30 独立审查 P0）：失败分支无 final_state，回归率占位
         "regression_rate": None,
         # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因为 None

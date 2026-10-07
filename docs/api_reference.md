@@ -3,7 +3,8 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-10-06（第十二轮审查落地批次 AK：实验侧新增 `experiments/repair_ceiling_analysis.py` 离线归因分析〔repair=0 修复漏斗 + detection=None 双界敏感性，见 2.x 统计分析配套条目〕；src/ 零改动、默认行为不变；AA 及更早批次见"上一批"与 CHANGELOG）
+> 最后更新：2026-10-07（修复引擎批次 I：范式转向——独立 `FaultLocalizerAgent` 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，只定位不修复，失败保守降级 None〕，见智能体模块新增条目；`DebuggerAgent.debug()` 新增 `localization_section` 定位段落形参；工作流 `debugger` 节点内联推理定位并写 `state["llm_localization"]`）
+> 上一批：2026-10-06（第十二轮审查落地批次 AK：实验侧新增 `experiments/repair_ceiling_analysis.py` 离线归因分析〔repair=0 修复漏斗 + detection=None 双界敏感性，见 2.x 统计分析配套条目〕；src/ 零改动、默认行为不变；AA 及更早批次见"上一批"与 CHANGELOG）
 > 上一批：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
 >
 > 更早批次：2026-10-05（审查批次 R1-R18：R1a/R1b 规约编译修复与签名感知绑定、R1c 规约 oracle 与 LLM 测试并列执行（`SPEC_ORACLE_EXEC_ENABLE` 默认关）、R4b 回滚 fail-closed（`PATCH_ROLLBACK_FAIL_CLOSED` 默认关）、R5 变异检出率（`ENABLE_MUTATION_SCORING` 门控）、R2 统计报告落盘（McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`）、R17 结构化路由优先（`ROUTE_STRUCTURED_ENABLE` 默认关）、R16 流氓行为监控（`ROGUE_MONITOR_ENABLE` 默认关）、R11 确定性采样（`run_benchmark(deterministic=True)`）、R15 `AITESTER_PROFILE` 三档预设、`API_HEALTH_CHECKER_ENABLE` 健康检查线程开关、LLM 缓存目录默认迁移 `~/.cache/aitester/llm`；默认行为不变，新能力均带独立开关）
@@ -162,7 +163,7 @@ result = agent.debug(
 
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
-| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None` | `dict` | 分析失败并生成修复补丁（后三项均默认 None：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR） |
+| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None`, `fl_spectral_section: str \| None = None`, `localization_section: str \| None = None` | `dict` | 分析失败并生成修复补丁（中间参数均默认 None：大文件 AST 聚焦截取 / 区分 ASSERTION 与 LOGIC_ERROR；末两项为定位段落注入——谱系 Ochiai Top-k 段与 RGFL 推理定位段，与既有段落并列注入，None/空串不注入，历史口径零变化） |
 
 **返回格式：**
 ```json
@@ -173,6 +174,53 @@ result = agent.debug(
   "patch": "```python\ndef divide(a, b): return a / b\n```"
 }
 ```
+
+---
+
+### FaultLocalizerAgent
+
+RGFL 式 LLM 推理故障定位智能体（修复引擎第一阶段，2026-10-07 范式转向批）：只定位不修复，双通道融合——Ochiai 谱系（零 LLM，`fl_spectral` 测量层）提供行级可疑度佐证，LLM 输出结构化定位 JSON。开关 `FAULT_LOCALIZER_ENABLE`（默认 true；显式 false 退回纯谱系消融口径）。
+
+```python
+from src.agents.fault_localizer import (
+    FaultLocalizerAgent,
+    fault_localizer_enabled,
+    gold_changed_functions,
+    localization_hit,
+)
+
+agent = FaultLocalizerAgent()
+loc = agent.localize(
+    target_code="def divide(a, b): return a - b",
+    test_code="def test_divide():\n    assert divide(1, 2) == 0.5",
+    test_output="AssertionError: expected 0.5, got -1.0",
+    failed_cases=[{"test": "test_divide"}],
+    spectral_top_k=[{"line": 3, "score": 0.87}],  # 可选，谱系 Top-k 佐证
+)
+```
+
+**关键方法 / 函数：**
+
+| 名称 | 参数 | 返回值 | 说明 |
+|------|------|--------|------|
+| `FaultLocalizerAgent.localize()` | `target_code: str`, `test_code: str`, `test_output: str`, `failed_cases: list[dict] \| None = None`, `spectral_top_k: list[dict] \| None = None`, `max_retries: int = 2` | `dict \| None` | LLM 推理定位：源码带行号 + 失败测试 + 错误输出（截断 2000 字符）+ 谱系 Top-5 佐证 → 结构化 JSON；LLM 失败 / 空输入保守返回 None（不阻断修复主流程） |
+| `fault_localizer_enabled()` | 无 | `bool` | 开关读取（`FAULT_LOCALIZER_ENABLE`，默认 true；显式 false = 纯谱系消融对照） |
+| `gold_changed_functions()` | `buggy_code: str`, `fixed_code: str` | `set[str]` | gold 变更函数集合：buggy↔fixed diff 缺陷行经 AST 向上追溯所属函数（嵌套取最内层；函数外变更记 `"<module>"`） |
+| `localization_hit()` | `loc: dict \| None`, `gold_functions: set[str]` | `dict \| None` | 函数级命中判定：`{"localization_hit_function": bool}`（函数名按 `.` 末段归一比较，方法/嵌套容错）；未定位或无 gold 材料返回 None（不可测，键集合同构占位） |
+| `build_localization_prompt_section()` | `loc: dict \| None` | `str` | 定位结果渲染为 Debugger prompt 段落（None/空 → 空串，历史口径） |
+
+**返回格式（`localize()` 成功时）：**
+```json
+{
+  "function_name": "divide",
+  "line_start": 3,
+  "line_end": 3,
+  "confidence": 0.9,
+  "reasoning": "除法实现误写为减法"
+}
+```
+
+> 接线：`_debugger_node` 在有失败用例且开关开启时内联调用本智能体，定位结果写 `state["llm_localization"]`，并经 `build_localization_prompt_section()` 与谱系段落并列注入 Debugger prompt；实验层消费 `localization_hit_function` 指标（与 gold 变更函数集合比对）。
 
 ---
 
@@ -803,7 +851,7 @@ final_state = graph.invoke(state)
 | `planner` | 生成测试计划 | ✅ |
 | `generator` | 生成测试代码 | ✅ |
 | `executor` | 执行测试 | ❌ |
-| `debugger` | 分层诊断 + 生成修复补丁（错误分类在节点内联调用 `error_classifier.classify`，无独立分类节点） | ✅ |
+| `debugger` | 分层诊断 + 生成修复补丁（错误分类在节点内联调用 `error_classifier.classify`，无独立分类节点；修复引擎批次 I 起节点内还内联 RGFL 式 LLM 推理定位〔`FAULT_LOCALIZER_ENABLE` 默认开〕——谱系 Top-k 佐证 + 结构化定位，结果写 `state["llm_localization"]`，定位段落与谱系段落并列注入 prompt） | ✅ |
 | `patch_applier` | 应用补丁（单文件 `safe_apply_patch`；`CROSS_FILE_ENABLE=true` 时走跨文件多文件分支） | ❌ |
 | `cross_file_analyzer` | 3.5 跨文件依赖分析（仅 `CROSS_FILE_ENABLE=true` 时注册，插在 `executor → debugger` 之间） | ❌ |
 

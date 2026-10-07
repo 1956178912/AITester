@@ -60,6 +60,7 @@ from src.graph.rag import (
 from src.graph.state import AITesterState
 from src.graph.tracing import _trace_node
 from src.tools.cross_file import analyze_multi_entry_deps, cross_file_enabled
+from src.tools.deterministic_repair import deterministic_repair_first_enabled
 from src.tools.multi_candidate import (
     generate_candidates,
     multi_candidate_available,
@@ -701,6 +702,24 @@ def _detection_first_regenerate_entry(state: AITesterState) -> bool:
     return detection_first_enabled() and state.get("test_passed") is True and int(state.get("iteration", 0)) == 0
 
 
+def _specificity_over_red_regenerate_entry(state: AITesterState) -> bool:
+    """AC2 特异性门过红再生成入口检测（修复引擎批次 III 补漏，2026-10-07）。
+
+    根因（E2 实证 16/174 任务撞 recursion_limit 的通道之一）：
+    _should_debug 的 over_red 分支以 test_passed=**False** 进入 generator
+    （测试红、但红得不特异），而 _detection_first_regenerate_entry 只认
+    test_passed is True → 五类再生成入口检测无一命中 → regeneration_count
+    恒不递增 → over_red 分支的 regeneration_count < MAX_REGENERATIONS
+    上限永不绑定 → executor↔generator 无限乒乓直至 recursion_limit
+    （O4/W3 同类漏计根因的第三个实例）。
+
+    判定特征：iteration==0（over_red 分支只在首轮触发）且
+    specificity_gate_verdict=="over_red"（该值只在特异性门对照执行时
+    写入——门关时恒 None，无需重复判门开关）。
+    """
+    return int(state.get("iteration", 0)) == 0 and state.get("specificity_gate_verdict") == "over_red"
+
+
 def _detection_first_section(state: AITesterState) -> str | None:
     """W3：检出优先再生成路径的 prompt 强化段落（非该路径时 None 不注入）。"""
     if not _detection_first_regenerate_entry(state):
@@ -817,11 +836,18 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
     _generator_budget_hit = False  # 5.4 预算封顶标记（O35；正常路径恒 False）
     try:
+        # 修复引擎批次 XI（ADR-0025）：oracle 上下文消融档——minimal 时
+        # 下方四个增强段（分支覆盖/AST 边界锚点/蜕变/差分）全部保持
+        # None 不注入（ASE 2025"额外上下文无边际收益"的消融对照臂）。
+        # 默认 full：各段按自身开关构造，历史口径零变化。
+        from src.tools.logic_spec import oracle_context_minimal as _oracle_ctx_minimal
+
+        _ctx_minimal = _oracle_ctx_minimal()
         # O3（2026-09-29 审查 P1）：分支覆盖率注入——_executor_node 上一轮测量
         # 的未覆盖分支清单渲染为 prompt 段落（BRANCH_COVERAGE_INJECT_ENABLE=true
         # 时非空，默认关时 None，历史口径零变化）
         _bc_section: str | None = None
-        if _branch_coverage_inject_enabled() and state.get("branch_coverage"):
+        if not _ctx_minimal and _branch_coverage_inject_enabled() and state.get("branch_coverage"):
             from src.tools.branch_coverage_inject import build_branch_coverage_prompt_section as _build_bc_section
 
             _bc_section = _build_bc_section(state.get("branch_coverage"))
@@ -831,7 +857,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         # 历史口径零变化）。与 O3 分支覆盖率注入同位（在 generate 调用前
         # 构建，传入 generate 的新参数 boundary_triplets_section）。
         _bt_section: str | None = None
-        if _boundary_triplets_enabled():
+        if not _ctx_minimal and _boundary_triplets_enabled():
             from src.tools.logic_spec import build_boundary_triplets_section as _build_bt_section
             from src.tools.logic_spec import derive_boundary_triplets as _derive_bt
 
@@ -859,7 +885,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 suggest_metamorphic_relations as _suggest_mrs,
             )
 
-            if _mr_enabled() and _fn_name:
+            if not _ctx_minimal and _mr_enabled() and _fn_name:
                 _mrs = _suggest_mrs(_fn_name)
                 if _mrs:
                     _mr_section = _build_mr_section(_mrs)
@@ -870,7 +896,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 differential_enabled as _diff_enabled,
             )
 
-            if _diff_enabled() and _fn_name:
+            if not _ctx_minimal and _diff_enabled() and _fn_name:
                 _diff_section = _build_diff_section(_fn_name)
         except Exception as _oracle_hook_exc:  # 观测层钩子失败不得阻断主生成
             logger.warning("N2/N4 无 oracle 增强段落构建失败，降级跳过: %s", _oracle_hook_exc)
@@ -1088,6 +1114,25 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
     if oracle_findings:
         update["oracle_findings"] = oracle_findings
+    # 修复引擎批次 XIV（ADR-0028 观测层）：oracle 质量历史快照——
+    # Self-Repair Trap（DCAware：迭代自修复驱使断言退化）的数据面。
+    # 每次生成/再生成的最终测试（去重与规约注入之后）落一份快照；
+    # 空测试不落（生成失败是另一类失败模式，不属于"断言退化"）。
+    # 纯观测零行为影响；阻断 / 策略切换须先有 A/B 数据与预注册判据。
+    if generated_test:
+        from src.tools.self_repair_trap import snapshot_test_quality
+
+        _mf = state.get("mutation_feedback")
+        _ms = _mf.get("mutation_score") if isinstance(_mf, dict) else None
+        _quality_history = list(state.get("oracle_quality_history") or [])
+        _quality_history.append(
+            snapshot_test_quality(
+                generated_test,
+                mutation_score=float(_ms) if isinstance(_ms, (int, float)) and not isinstance(_ms, bool) else None,
+                regeneration=int(state.get("regeneration_count", 0)),
+            )
+        )
+        update["oracle_quality_history"] = _quality_history
     # O4（2026-09-29 审查 P1）：恒真断言强制重生成——标记 defect_type=test_defect，
     # 触发 _should_debug 的 regenerate 路由（受 regeneration_count 上限保护，防死循环）。
     if _o4_triggered:
@@ -1144,6 +1189,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         # 不并入本条件则该路径 regeneration_count 恒 0 → 上限保护失效 →
         # executor↔generator 无限乒乓直至 recursion_limit（O4 同类根因）。
         or _detection_first_regenerate_entry(state)
+        # 修复引擎批次 III（AC2 补漏）：第 5 类再生成进入方式——特异性门
+        # over_red 路由（test_passed=False，W3 检测不覆盖；不并入则该路径
+        # 计数恒 0 → 上限失效 → executor↔generator 无限乒乓撞 recursion_limit，
+        # E2 实证 16/174 触顶的根因通道）。
+        or _specificity_over_red_regenerate_entry(state)
     ):
         update["regeneration_count"] = state.get("regeneration_count", 0) + 1
         update["diagnosis"] = None
@@ -1964,10 +2014,26 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         if state.get("failed_cases"):
             from src.agents.fault_localizer import FaultLocalizerAgent as _FLAgent
             from src.agents.fault_localizer import (
+                build_gold_injection_localization as _build_gold_loc,
+            )  # 修复引擎批次 X：反事实臂构造器 + 双开关（ruff I001 合并例外：保持可读）
+            from src.agents.fault_localizer import (
                 fault_localizer_enabled as _fl_enabled,
             )
+            from src.agents.fault_localizer import (
+                gold_injection_enabled as _gold_inj_on,
+            )
 
-            if _fl_enabled():
+            # 修复引擎批次 X（ADR-0024）：反事实 FL 上界臂——gold 注入开关
+            # 开启且 state 带 gold 材料时，定位段直接用 gold 变更函数构造
+            # （零 LLM，跳过推理通道），模拟"完美定位"。优先级高于
+            # FAULT_LOCALIZER_ENABLE；该臂数据不得与正常口径混读
+            # （reasoning 字段自带反事实臂标注）。
+            if _gold_inj_on() and state.get("gold_fixed_code"):
+                _loc_result = _build_gold_loc(
+                    state.get("target_code") or "",
+                    str(state.get("gold_fixed_code") or ""),
+                )
+            elif _fl_enabled():
                 try:
                     _loc_agent = _FLAgent()
                     _loc_result = _loc_agent.localize(
@@ -1987,61 +2053,98 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                     logger.warning("FaultLocalizer 异常，保守降级 None: %s", _loc_err)
                     _loc_result = None
 
-        result = agent.debug(
-            target_code=state["target_code"],
-            test_output=state.get("test_output") or "",
-            failed_cases=state.get("failed_cases") or [],
-            rag_references=rag_refs,
-            focus_function=state.get("target_function"),
-            # 2026-10 P0（A/B 阴性结果驱动）：跨文件任务的定位/探针 target_module
-            # 应取 cross_file_plan.target_modules[0]（被调方真实模块名，如 module_c），
-            # 而非 state["module_name"]（task_id 末段，如 synthetic__xxx__test）。
-            # 单文件任务两者一致（module_name = 被测文件名 stem），行为不变。
-            target_module=_resolve_target_module(state),
-            # P0 1.1 分层代码压缩：跨文件任务时，把 cross_file_analyzer 构建的
-            # 各模块"目标函数 + CODE_FOCUS_DEPTH 层调用链"聚焦上下文注入 prompt，
-            # 替代"整模块全文 → 截断后靠猜"的旧口径（纯静态文本，零 LLM token）
-            cross_file_contexts=state.get("cross_file_contexts") or None,
-            # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
-            temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
-            # 1.3 分层压缩降级链：上一轮补丁被命名契约符号守卫拒绝时
-            # （_patch_applier_node 写入 state["contract_reject_feedback"] =
-            # {"tier", "missing_symbols"}），本轮按"更高约束"的上下文档位
-            # （补丁配方保留 / 签名+import 极简）+ 更低温度重新生成；
-            # 未触发时 None（行为与历史完全一致）
-            # mypy：AITesterState.get 对 TypedDict 返回 Any/Optional 视
-            # 键是否已声明而定，显式 cast 收窄到 debug 期望类型
-            contract_reject_feedback=cast("dict[str, Any] | None", state.get("contract_reject_feedback")),
-            # P0 运行时探针注入层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
-            # 上一轮 _executor_node 在测试失败时经 sys.settrace 一次性探针捕获的
-            # "失败时刻局部变量快照"，渲染为 prompt 片段注入修复上下文（运行时
-            # 证据替代静态猜测，提升仓库级修复质量）。保守降级：快照为 None /
-            # 开关关时 probe_section 为空串，prompt 与历史逐字节一致。
-            probe_section=(
-                build_probe_prompt_section(state.get("runtime_probe_snapshot")) if _runtime_probe_enabled() else ""
-            ),
-            # P1 探针快照第二定位源（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认关）：
-            # 把结构化探针快照（非渲染文本）透传给 debugger，使 _locate_repair_focus
-            # 在 traceback 行号缺失（assertion 主导失败）时可用快照最内层帧定位。
-            # 开关关闭 / 快照缺失时 probe_snapshot=None，debugger 走历史降级口径。
-            probe_snapshot=(state.get("runtime_probe_snapshot") if _probe_snapshot_locate_enabled() else None),
-            # 2026-10 P0（A/B 阴性结果驱动）：定位/探针 target_module 解析
-            # （跨文件任务取 cross_file_plan.target_modules[0]，单文件取 module_name）
-            # 注：target_module 已在调用首段传入（_resolve_target_module），
-            # 此处不再重复传入——debug 调用的 target_module 即解析后的值。
-            # ANNEAL-lite 故障频率强化（FAILURE_FREQUENCY_ENABLE=true 时启用，默认关）：
-            # 检测当前 error_category 是否在 repair_history 中反复出现（≥ 阈值），
-            # 高频时注入强化策略提示（如"优先启用 oracle_enhancer / runtime_probe"），
-            # 引导 LLM 换更强修复路径。零 LLM 成本（纯配置级策略映射表查询）。
-            # 默认关闭时 failure_frequency_section 为空串，prompt 与历史逐字节一致。
-            failure_frequency_section=_build_failure_frequency_section(state),
-            # O2（2026-09-29 审查 P1）：谱系定位先验段落（FL_SPECTRAL_ENABLE=true
-            # 时非空；默认关 / 测量失败时为空串，prompt 与历史逐字节一致）
-            fl_spectral_section=_fl_section,
-            # 修复引擎第一阶段：RGFL 式推理定位段落（_loc_result 渲染；
-            # None 时 build_localization_prompt_section 返回空串 = 不注入）
-            localization_section=_build_loc_section(_loc_result),
-        )
+        # ── 修复引擎批次 IV（ADR-0019）：确定性优先修复路由（默认关）──
+        # DETERMINISTIC_REPAIR_FIRST_ENABLE 开启且本任务尚未尝试过
+        # （state["deterministic_repair_status"] is None）时，先走确定性
+        # 变换器（缺 import 推断 / 导入别名回填 / tab 缩进归一，零 LLM）；
+        # 产出候选则跳过本轮 LLM 调用（省 token），由 executor 回归验证
+        # 兜底——补丁无效时下一轮 state 已带 status，自然回落 LLM 路径
+        # （每任务至多一次确定性尝试，防同签名无限重试）。
+        _det_status: dict[str, Any] | None = None
+        _det_result: dict[str, Any] | None = None
+        if deterministic_repair_first_enabled() and state.get("deterministic_repair_status") is None:
+            from src.tools.deterministic_repair import attempt_deterministic_repair
+
+            _det = attempt_deterministic_repair(
+                target_code=state["target_code"],
+                test_output=state.get("test_output") or "",
+                error_category=str(state.get("error_category") or ""),
+            )
+            _det_status = {
+                "attempted": bool(_det.get("attempted")),
+                "method": _det.get("method"),
+                "reason": _det.get("reason"),
+                "patch_produced": bool(_det.get("patch_code")),
+            }
+            if _det.get("patch_code"):
+                from src.tools.deterministic_repair import build_deterministic_debug_result
+
+                _det_result = build_deterministic_debug_result(
+                    patch_code=str(_det["patch_code"]),
+                    method=str(_det.get("method")),
+                    reason=str(_det.get("reason")),
+                    error_category=str(state.get("error_category") or ""),
+                )
+                logger.info("确定性接管命中（%s），跳过本轮 LLM 修复调用", _det.get("method"))
+
+        if _det_result is not None:
+            result = _det_result
+        else:
+            result = agent.debug(
+                target_code=state["target_code"],
+                test_output=state.get("test_output") or "",
+                failed_cases=state.get("failed_cases") or [],
+                rag_references=rag_refs,
+                focus_function=state.get("target_function"),
+                # 2026-10 P0（A/B 阴性结果驱动）：跨文件任务的定位/探针 target_module
+                # 应取 cross_file_plan.target_modules[0]（被调方真实模块名，如 module_c），
+                # 而非 state["module_name"]（task_id 末段，如 synthetic__xxx__test）。
+                # 单文件任务两者一致（module_name = 被测文件名 stem），行为不变。
+                target_module=_resolve_target_module(state),
+                # P0 1.1 分层代码压缩：跨文件任务时，把 cross_file_analyzer 构建的
+                # 各模块"目标函数 + CODE_FOCUS_DEPTH 层调用链"聚焦上下文注入 prompt，
+                # 替代"整模块全文 → 截断后靠猜"的旧口径（纯静态文本，零 LLM token）
+                cross_file_contexts=state.get("cross_file_contexts") or None,
+                # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+                # 1.3 分层压缩降级链：上一轮补丁被命名契约符号守卫拒绝时
+                # （_patch_applier_node 写入 state["contract_reject_feedback"] =
+                # {"tier", "missing_symbols"}），本轮按"更高约束"的上下文档位
+                # （补丁配方保留 / 签名+import 极简）+ 更低温度重新生成；
+                # 未触发时 None（行为与历史完全一致）
+                # mypy：AITesterState.get 对 TypedDict 返回 Any/Optional 视
+                # 键是否已声明而定，显式 cast 收窄到 debug 期望类型
+                contract_reject_feedback=cast("dict[str, Any] | None", state.get("contract_reject_feedback")),
+                # P0 运行时探针注入层（RUNTIME_PROBE_ENABLE=true 时启用，默认关）：
+                # 上一轮 _executor_node 在测试失败时经 sys.settrace 一次性探针捕获的
+                # "失败时刻局部变量快照"，渲染为 prompt 片段注入修复上下文（运行时
+                # 证据替代静态猜测，提升仓库级修复质量）。保守降级：快照为 None /
+                # 开关关时 probe_section 为空串，prompt 与历史逐字节一致。
+                probe_section=(
+                    build_probe_prompt_section(state.get("runtime_probe_snapshot")) if _runtime_probe_enabled() else ""
+                ),
+                # P1 探针快照第二定位源（PROBE_SNAPSHOT_LOCATE_ENABLE=true 时启用，默认关）：
+                # 把结构化探针快照（非渲染文本）透传给 debugger，使 _locate_repair_focus
+                # 在 traceback 行号缺失（assertion 主导失败）时可用快照最内层帧定位。
+                # 开关关闭 / 快照缺失时 probe_snapshot=None，debugger 走历史降级口径。
+                probe_snapshot=(state.get("runtime_probe_snapshot") if _probe_snapshot_locate_enabled() else None),
+                # 2026-10 P0（A/B 阴性结果驱动）：定位/探针 target_module 解析
+                # （跨文件任务取 cross_file_plan.target_modules[0]，单文件取 module_name）
+                # 注：target_module 已在调用首段传入（_resolve_target_module），
+                # 此处不再重复传入——debug 调用的 target_module 即解析后的值。
+                # ANNEAL-lite 故障频率强化（FAILURE_FREQUENCY_ENABLE=true 时启用，默认关）：
+                # 检测当前 error_category 是否在 repair_history 中反复出现（≥ 阈值），
+                # 高频时注入强化策略提示（如"优先启用 oracle_enhancer / runtime_probe"），
+                # 引导 LLM 换更强修复路径。零 LLM 成本（纯配置级策略映射表查询）。
+                # 默认关闭时 failure_frequency_section 为空串，prompt 与历史逐字节一致。
+                failure_frequency_section=_build_failure_frequency_section(state),
+                # O2（2026-09-29 审查 P1）：谱系定位先验段落（FL_SPECTRAL_ENABLE=true
+                # 时非空；默认关 / 测量失败时为空串，prompt 与历史逐字节一致）
+                fl_spectral_section=_fl_section,
+                # 修复引擎第一阶段：RGFL 式推理定位段落（_loc_result 渲染；
+                # None 时 build_localization_prompt_section 返回空串 = 不注入）
+                localization_section=_build_loc_section(_loc_result),
+            )
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
         # 读写（_call_llm_with_cache）在缓存目录被外部删除/磁盘满等场景抛
@@ -2340,6 +2443,17 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # None，历史口径零变化）。实验层消费：函数级命中指标
         # localization_hit_function（与 gold 变更函数集合比对）。
         "llm_localization": _loc_result,
+        # 修复引擎批次 III（2026-10-07）：编辑意图确定性落盘观测
+        # （EDIT_INTENT_ENABLE 默认关时恒 None；开启时 {"ok","applied",
+        # "total","diagnostics"}，ok=False 表示锚点校验拒绝并回落
+        # 整文件补丁通道——实验层据此统计意图通道接管率）。
+        "edit_intent_status": result.get("edit_intent_status"),
+        # 修复引擎批次 IV（ADR-0019）：确定性优先修复路由观测
+        # （DETERMINISTIC_REPAIR_FIRST_ENABLE 默认关时恒 None；开启且
+        # 已尝试过一轮后非 None——{"attempted","method","reason",
+        # "patch_produced"}，patch_produced=True 表示该轮跳过 LLM、
+        # 补丁由确定性变换器产出）。
+        "deterministic_repair_status": _det_status,
         # 5.4 预算封顶标记（O35）：Debugger 捕获 BudgetExceededError 时
         # error_category 已被置为 "budget_exceeded"（上方 except 分支），
         # 据此写 budget_exceeded=True；已由上游节点置真时同样保持（不回退）。

@@ -1,6 +1,6 @@
 # AITester Model Card
 
-Last updated: 2026-10-06 (Round-13 review batch AL: the AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim in line with CITATION.cff + E6/E7 pre-registration; previous batch AK: evaluation caliber refreshed to the R-P0-2 three-seed pooled batch + repair-ceiling attribution + officially sourced $/task)
+Last updated: 2026-10-07 (repair-engine batch I: paradigm shift to "localization → synthesis → verification" — standalone FaultLocalizer landed [RGFL-style LLM reasoning localization + Ochiai spectral corroboration dual channel, `FAULT_LOCALIZER_ENABLE` on by default] + the standalone localization metric `localization_hit_function` first measured; previous batch AL: the AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim in line with CITATION.cff + E6/E7 pre-registration)
 
 ## 1. System Overview
 
@@ -24,12 +24,19 @@ system is research code, not a deployed product).
   triples: API key / base URL / model name; any OpenAI-compatible provider and
   Zhipu zai-sdk endpoints are supported).
 - **Model roles**: Planner (logic analysis / spec production), Generator (test
-  code), Debugger/Review (root-cause diagnosis and patches), optional
-  ExpertPool (parallel dimension experts).
+  code), Debugger/Review (root-cause diagnosis and patches), FaultLocalizer
+  (RGFL-style reasoning fault localization, localization only no repair,
+  since repair-engine batch I 2026-10-07), optional ExpertPool (parallel
+  dimension experts).
 - **Deterministic channels**: SpecIR v2 DSL-compiled assertions, SMT witnesses
   (`[formal]` extra), Ochiai spectral fault localization, mutation scoring, and
   the P2P regression gate are **non-LLM** deterministic components; the system
-  degrades conservatively when the LLM fails (see module docstrings).
+  degrades conservatively when the LLM fails (see module docstrings). Note:
+  fault localization is **dual-channel** — besides the spectral channel
+  (Ochiai, non-LLM), the reasoning channel (RGFL-style `FaultLocalizerAgent`,
+  `FAULT_LOCALIZER_ENABLE` on by default) **consumes LLM** and degrades
+  conservatively to None on failure; `FAULT_LOCALIZER_ENABLE=false` falls
+  back to the pure-spectral ablation caliber.
 
 ## 3. Training Data and Data Sources
 
@@ -56,7 +63,15 @@ system is research code, not a deployed product).
   has no supporting evidence. Ceiling attribution
   (`repair_ceiling_report.md`, AK1): repair loop 154/261 → patch produced
   94.2% → plausible 46.8% → correct 0 — the bottleneck is patch plausibility
-  and gold correctness, not patch production.
+  and gold correctness, not patch production. After the 2026-10-07 paradigm
+  shift, repair turns from "an honestly measured conclusion" into "a target
+  to optimize" (repair-engine route: localization → synthesis → verification).
+- Localization dimension: `fl_at_k` (spectral line-level Top-k hit, since R8)
+  and `localization_hit_function` (LLM reasoning localization function-level
+  hit, since batch I, compared against the gold changed-function set;
+  schema-isomorphic placeholder when unlocalized / no gold material) ship
+  alongside detection / repair metrics. The E2 final-adjudication batch
+  first measured FL@1 at 19/53 = 35.8% (after the gold-diff alignment fix).
 - Cost: aitester $0.0259 / plain_llm_df $0.0045 per task (officially sourced
   price table, 2026-10-06: deepseek-flash peak-hour rates, qwen-long
   standard rates; agnes unregistered absent a public official price).

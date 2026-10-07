@@ -35,6 +35,10 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   plain_llm、aitester +14pp vs plain_llm、**aitester −28pp vs
   plain_llm_df**、repair 全线 0（`statistical_report_3seed_pooled.md`，
   261 对，聚类校正后全稳健）。
+  **修订注记（2026-10-07 批次 XIII，ADR-0021/0027）**：repair 全线 0
+  系 patch 字段围栏残留测量伪影——修正口径存量重放 R-P0-2 = 35.9%
+  （52/145 可重放行）。上述 detection 类结论与 H2 判定不受影响
+  （detection 通道未受染）；引用 repair 数字处一律以修正口径为准。
 - AB1 12 任务验证批已完成于契约修复**之前**（spec_compile_rate 全 0）。
 - 因此 E1/E2 属**复核（replication）性质**：判定阈值在本文件落盘时固定，
   但实验方向的先验知识已存在——任何解读不得声称双盲预测。
@@ -177,6 +181,13 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 - **预注册判定**：equivalent 占比 > 0 → repair 口径存在低估，
   BASELINE/pooled 报告须勘误并给出修正后 repair 上界；= 0 → "repair
   上限卡在合理性与 gold 正确性"结论定案（repair=0 为真零）。
+  **修订注记（2026-10-07 批次 XIII，早于任何人脸复核数据）**：E7 的
+  动机已被 ADR-0021 机制性回答——gold 裁决非"过严低估"，而是从未
+  执行真实补丁（patch 字段围栏残留 → 100% NameError）；修正口径
+  repair = 35.9%（52/145，`make corrected-metrics`）。原判定分支
+  "= 0 → 真零"作废；人工复核仍有独立价值（检验修正口径下 61% 的
+  wrong_patch 行是否存在语义等价被漏判），但性质从"口径低估检验"
+  降级为"残余语义等价抽样审计"，预期占比大幅缩水。
 - **成本**：人工约 1 天，零 LLM 成本（纯离线抽样 + 人工比对）。
 - **候选清单（AO 批已生成，2026-10-07）**：
   `experiments/results/main_batch/e7_repair_sample_candidates.md`——

@@ -1,6 +1,6 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-06（第十三轮审查落地批次 AL：AK 补注勘误回绿 + 对外定位去"自修复"主张对齐 CITATION + E6/E7 预注册；上一批 AK：评估口径刷新至 R-P0-2 三种子合并 + 修复上限归因 + 官方价目 $/task）
+最后更新：2026-10-07（修复引擎批次 I：范式转向"局部化 → 合成 → 验证"——独立 FaultLocalizer 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，`FAULT_LOCALIZER_ENABLE` 默认开〕+ 局部化独立指标 `localization_hit_function` 首测；上一批 AL：AK 补注勘误回绿 + 对外定位去"自修复"主张对齐 CITATION + E6/E7 预注册）
 
 ## 1. 系统概述
 
@@ -19,10 +19,15 @@ repair = 0.0%（gold 独立裁决）——**自修复为可测量口径而非已
   提供（`.env.local` 的 `LLM_N_*` 三元组：API Key / Base URL / 模型名，
   支持任意 OpenAI 兼容 provider 与智谱 zai-sdk 端点）。
 - **模型角色**：Planner（逻辑分析/规约产出）、Generator（测试代码生成）、
-  Debugger/Review（根因诊断与补丁生成）、ExpertPool（可选多维度并行专家）。
+  Debugger/Review（根因诊断与补丁生成）、FaultLocalizer（RGFL 式推理故障
+  定位，只定位不修复，2026-10-07 修复引擎批次 I 起）、ExpertPool（可选
+  多维度并行专家）。
 - **确定性通道**：SpecIR v2 DSL 编译断言、SMT 见证（`[formal]` extra）、
   Ochiai 谱系定位、变异评估、P2P 回归门禁均为**非 LLM** 的确定性组件，
-  LLM 失败时系统保守降级（详见各模块 docstring）。
+  LLM 失败时系统保守降级（详见各模块 docstring）。注意：故障定位为
+  **双通道**——谱系通道（Ochiai，非 LLM）之外，推理通道（RGFL 式
+  `FaultLocalizerAgent`，`FAULT_LOCALIZER_ENABLE` 默认开）**消耗 LLM**
+  且失败时保守降级 None；`FAULT_LOCALIZER_ENABLE=false` 退回纯谱系消融口径。
 
 ## 3. 训练数据与数据来源
 
@@ -57,7 +62,13 @@ repair = 0.0%（gold 独立裁决）——**自修复为可测量口径而非已
 - **repair 全线 0.0%**（三臂不一致对 0）：修复主张无证据。上限归因
   （`repair_ceiling_report.md`，AK1）：修复循环 154/261 → patch 产出 94.2%
   → plausible 46.8% → correct 0——瓶颈在补丁合理性与 gold 正确性，
-  非补丁未产出。
+  非补丁未产出。2026-10-07 范式转向后 repair 从"诚实测量的结论"转为
+  "要优化的目标"（修复引擎路线：局部化 → 合成 → 验证）。
+- 局部化维度：`fl_at_k`（谱系行级 Top-k 命中，R8 起）与
+  `localization_hit_function`（LLM 推理定位函数级命中，批次 I 起，与
+  gold 变更函数集合比对；未定位/无 gold 材料时键集合同构占位）与
+  检出/修复指标并列输出。E2 定案批 FL@1 首度可测 19/53=35.8%
+  （gold diff 对齐修复后口径）。
 - 成本：aitester $0.0259 / plain_llm_df $0.0045 每任务（价目表 2026-10-06
   官方登记口径：deepseek-flash 峰时价、qwen-long 标准价；agnes 无公开
   官方价未登记）。

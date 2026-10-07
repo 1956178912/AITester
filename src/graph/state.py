@@ -461,6 +461,25 @@ class AITesterState(TypedDict, total=False):
     # 不变）。实验层消费：函数级命中指标 localization_hit_function
     # （与 gold 变更函数集合比对，局部化独立指标口径）。
     llm_localization: dict[str, Any] | None
+    # 修复引擎批次 III（2026-10-07）：编辑意图确定性落盘观测
+    # （_debugger_node 从 debugger debug() 结果透传；EDIT_INTENT_ENABLE
+    # 默认关时恒 None，历史口径零变化）。结构：
+    # {"ok": bool, "code": str, "applied": int, "total": int,
+    #  "diagnostics": [str, ...]}——ok=False 表示锚点唯一性/AST 门拒绝、
+    # 已原子回退整文件补丁通道；实验层据此统计意图通道接管率。
+    edit_intent_status: dict[str, Any] | None
+    # 修复引擎批次 IV（2026-10-07，ADR-0019）：确定性优先修复路由观测
+    # （_debugger_node 写入；DETERMINISTIC_REPAIR_FIRST_ENABLE 默认关时
+    # 恒 None，历史口径零变化）。结构：{"attempted": bool, "method": str|None,
+    # "reason": str, "patch_produced": bool}——非 None 同时充当"本任务已
+    # 尝试过确定性路由"的哨兵（防同签名无限重试，每任务至多一次）。
+    deterministic_repair_status: dict[str, Any] | None
+    # 修复引擎批次 XIV（2026-10-07，ADR-0028 观测层）：oracle 质量历史
+    # （_generator_node 每次产出测试后追加一份快照，Self-Repair Trap
+    # 判定核消费）。结构：[{"regeneration": int, "assert_count": int,
+    # "test_count": int, "parse_ok": bool, "mutation_score": float|None},
+    # ...]——空测试不落快照；None = 本任务无生成路径（键集合同构占位）。
+    oracle_quality_history: list[dict[str, Any]] | None
     # M6（2026-09-29 审查 P0）：补丁写盘前快照的内部通道键（节点间传递，
     # 不出现在 workflow 输入/输出）。_safe_write_patch 在写盘前把原始代码
     # shutil.copy2 到 tempfile 目录，记入 _last_patch_snapshot（路径）+
@@ -721,6 +740,15 @@ def create_initial_state(
         # 开关默认关时恒 None，历史口径不变）
         fl_spectral_focus=None,
         llm_localization=None,
+        # 修复引擎批次 III：编辑意图落盘观测（EDIT_INTENT_ENABLE 默认关
+        # 时恒 None，历史口径零变化；结构见 TypedDict 字段注释）
+        edit_intent_status=None,
+        # 修复引擎批次 IV：确定性优先修复路由观测（默认关恒 None；
+        # 非 None 兼任"已尝试"哨兵——结构见 TypedDict 字段注释）
+        deterministic_repair_status=None,
+        # 修复引擎批次 XIV：oracle 质量历史（Self-Repair Trap 数据面，
+        # _generator_node 逐份追加；无生成路径恒 None）
+        oracle_quality_history=None,
         # M6（2026-09-29 审查 P0）：补丁写盘前快照内部通道键（节点间传递，
         # 不出现在 workflow 输入/输出）。_safe_write_patch 写盘前写入，
         # _rollback_last_patch 读取后清除。缺省 None = 本轮无快照。

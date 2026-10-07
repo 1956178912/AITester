@@ -33,6 +33,8 @@
 | Boundary case coverage (1.3) | AST conservative check of generated_test for boundary-condition coverage | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_boundary_case_coverage()` | — |
 | Mutation score (1.3) | Collects details[].mutation_score (produced by an external mutation tester) | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` | — |
 | Execution feedback trace (3.2) | Appends passed/coverage_delta/elapsed/reward_signals on every execution | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` | 0001, 0005 |
+| Spectral fault localization (O2, on by default) | Ochiai Top-k line-level suspiciousness ranking (zero LLM), Top-k section injected into the Debugger prompt | [src/agents/fl_spectral.py](../src/agents/fl_spectral.py) | `measure_fl_spectral_focus()` / `compute_ochiai_scores()` / `rank_top_k()` / `build_fl_spectral_prompt_section()` | — |
+| RGFL reasoning fault localization (repair-engine phase one, on by default) | Spectral Top-k corroboration + LLM structured localization [function/line range/confidence], gold diff→AST function-level hit adjudication | [src/agents/fault_localizer.py](../src/agents/fault_localizer.py) | `FaultLocalizerAgent.localize()` / `gold_changed_functions()` / `localization_hit()` / `build_localization_prompt_section()` | 0017 |
 
 ---
 
@@ -40,7 +42,7 @@
 
 AITester is a Python automated test generation and self-repair system based on multi-agent collaboration.
 
-The system consists of four core agents, with responsibilities as follows:
+The system consists of five core agents, with responsibilities as follows:
 
 | Agent | Responsibility | Calls LLM |
 |:------:|------|:------------:|
@@ -48,6 +50,7 @@ The system consists of four core agents, with responsibilities as follows:
 | **GeneratorAgent** | Generates runnable pytest code based on the test plan | ✅ Yes |
 | **ExecutorAgent** | Executes tests in an isolated environment and captures output and coverage | ❌ No |
 | **DebuggerAgent** | Analyzes failure causes and generates layered repair patches | ✅ Yes |
+| **FaultLocalizerAgent** | RGFL-style LLM reasoning fault localization (localization only, no repair; repair-engine phase one; inline-invoked by the `debugger` node, not a standalone graph node) | ✅ Yes |
 
 The system's overall workflow is a directed graph (orchestrated by LangGraph), supporting looped repair paths and ablation experiment switches.
 
@@ -107,6 +110,12 @@ Machine-executable compilation of the logic analysis (LA) happens in two layers 
 ---
 
 ## 3. Layered Error Repair Protocol (Algorithms 2 & 3)
+
+> **Repair-engine paradigm (2026-10-07 batch I paradigm shift)**: the repair pipeline is upgraded to the three stages "**localization → synthesis → verification**", with localization promoted from a Debugger by-product to an independently quantifiable first stage. Localization uses **dual-channel fusion**:
+> 1. **Spectral channel** (zero LLM): Ochiai spectral Top-k line-level suspiciousness ranking (`FL_SPECTRAL_ENABLE`, true by default), injected into the prompt as objective corroboration;
+> 2. **Reasoning channel** (LLM): RGFL-style structured localization (`FAULT_LOCALIZER_ENABLE`, true by default) — fed the line-numbered source + failing test + error output + spectral Top-k corroboration, it outputs `{function_name, line_start, line_end, confidence, reasoning}`, **localizing without repairing**; LLM failure / JSON parse failure degrade conservatively to None — no fabricated localization, no blocking of repair.
+>
+> The fusion wiring lives in `_debugger_node`: the localization result is written to `state["llm_localization"]` and injected into the Debugger prompt side by side with the spectral section via `build_localization_prompt_section()`. Localization quality is quantified by standalone metrics: `localization_hit_function` (the LLM-localized function ∈ the gold changed-function set, function level) and `fl_at_k` (spectral line-level Top-k hit), output alongside detection / repair rates.
 
 ### 3.1 Error Classifier (Algorithm 2)
 
@@ -192,6 +201,8 @@ task_uuid ─▶ target_file ─▶ target_code
                               END     Debugger ─▶ PatchApplier ─┘
 ```
 
+> **State keys added in repair-engine batch I**: `llm_localization` (RGFL reasoning-localization result, written by `_debugger_node`, `{function_name, line_start, line_end, confidence, reasoning}` or None); the existing key `fl_spectral_focus` (spectral Top-k, O2) carries the spectral channel. Both feed the experiment layer's localization metrics.
+
 ### 4.2 Ablation Experiment Configuration Matrix
 
 Boolean switches control node enablement/disabling, forming 4 experiment variants (configuration in [config.py](../config.py)):
@@ -203,6 +214,8 @@ Boolean switches control node enablement/disabling, forming 4 experiment variant
 | No Debugger | true | false | false | No-repair baseline |
 | Plain LLM | false | false | false | plain_llm |
 | Single agent | — | — | — | single_agent |
+
+> **Localization-channel ablation (since repair-engine batch I)**: `FAULT_LOCALIZER_ENABLE` (true by default; false = pure-spectral ablation caliber) and `FL_SPECTRAL_ENABLE` (true by default) are independent of the four variants above and can be combined into four localization ablation arms — "dual-channel full / spectral-only / reasoning-only / no localization" — to isolate each localization channel's contribution.
 
 ---
 

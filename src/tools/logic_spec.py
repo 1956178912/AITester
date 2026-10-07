@@ -61,6 +61,28 @@ def _triplets_max() -> int:
         return _DEFAULT_TRIPLETS_MAX
 
 
+# ─── 修复引擎批次 XI（ADR-0025）：oracle 生成上下文消融档 ─────────────────────
+# ASE 2025 实证（13,866 个训练截止后测试预言，135 个 Java 项目）：
+# 测试前缀 + 被测方法调用信息已足以生成高质量预言，**额外代码上下文
+# 不带来相关收益**。ORACLE_CONTEXT_TIER=minimal 时 _generator_node
+# 的四个增强段（分支覆盖/AST 边界锚点/蜕变/差分）全部强制不注入
+# （消融对照臂），A/B 量化边际贡献（spec_compile_rate / oracle 质量
+# / token 成本）后决定是否降默认成本。默认 full（历史口径零变化，
+# ADR-0003 惯例）。
+_ORACLE_CONTEXT_TIER_ENV = "ORACLE_CONTEXT_TIER"
+
+
+def oracle_context_tier() -> str:
+    """oracle 生成上下文档位（full | minimal，默认 full；非法值回退 full）。"""
+    tier = os.getenv(_ORACLE_CONTEXT_TIER_ENV, "full").strip().lower()
+    return tier if tier in ("full", "minimal") else "full"
+
+
+def oracle_context_minimal() -> bool:
+    """minimal 档判定（额外上下文段全剥离的消融臂）。"""
+    return oracle_context_tier() == "minimal"
+
+
 # ─── 1. schema 强校验 ──────────────────────────────────────────────────────────
 
 

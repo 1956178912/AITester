@@ -1,8 +1,293 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
+>
+> Last updated: 2026-10-07（修复引擎批次 XIV：外部报告净新增收割——FL Top-k 约束观测门 + Self-Repair Trap 观测器〔均观测层，ADR-0028〕+ Frame Lifetime Trace 设计输入 + BASELINE 测试链勘误；批次 XIII 见下方条目）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028：FL Top-k 约束观测门 + Self-Repair Trap 观测器 + Frame Lifetime Trace 设计输入）
+
+> 第三份外部「前沿对齐审查报告」对照评估净新增五条的离线收割（全部
+> 零 LLM、观测层先行，passed 历史口径零变化）：
+> - **FL Top-k 约束观测门**：`patch_changed_functions`（补丁变更函数
+>   集合——与 gold_changed_functions 同一 AST 归属口径，insert 段锚定
+>   buggy 侧，纯插入型修复不漏）+ `fl_constraint_verdict`（定位 Top-3
+>   候选与变更集合求交，hit_rank 分层）→ 结果行 `fl_constraint_verdict`/
+>   `fl_constraint_hit_rank`/`fl_constraint_changed_functions` 三键——
+>   ADR-0024「生成侧主导」从分层推断细化为行级可验证命题；阻断档
+>   Proposed（判据建议稿见 ADR-0028：miss 行 correct 率显著低于 hit 行
+>   ∧ A/B 不压制 correct ∧ 模块级 miss 豁免）；
+> - **Self-Repair Trap 观测器**（DCAware 风险口径，零 LLM）：generator
+>   每次产出测试后落质量快照（state["oracle_quality_history"]：断言数/
+>   测试函数数/可解析性/变异分）+ `detect_self_repair_trap` 三信号判定
+>   核（断言数连降 / 断言坍缩 / 变异分下降；最新快照不可解析不冒充
+>   退化、变异分稀疏缺失不进判定）→ 结果行 `self_repair_trap_suspected`/
+>   `self_repair_trap_signals` + `oracle_quality_history` 透出（供离线
+>   复算）；策略切换刻意不做，待 A/B 数据与预注册判据；
+> - **Frame Lifetime Trace 设计输入**（ADI FSE 2026 对齐）：docs/design/
+>   frame_lifetime_trace.md——63.8% 锚点已核验，报告其余数字标 [未核验]
+>   红线；激活门槛 = Debugger 拆分批立项评审，不预埋开关（ADR-0003）；
+> - **回收与延后**（AF 纪律）：报告 P1-5 test-file-path 冲突检测回收为
+>   已覆盖（repo 模式 M2 + O35 守卫覆盖 tests/ testing/ test_*.py/
+>   *_test.py/conftest.py 及 `+++ b/` 新建文件形态；repo 模式无生成
+>   测试落盘点）；PatchDiff 式差分行为测试延后（E7 人工比对定案后）；
+> - **BASELINE 测试链勘误**：批次 VII–XII 与 XIII 的记录数字系预写
+>   失真（+84 新测试只记 +5 净增），本批实测 4669 = 4537+84+13+35
+>   逐位吻合，低估 79 的漂移就此收口。
+> 全量 4669/0（+35 = tests/test_batch_xiv.py）；mypy 112 文件 0（+1 =
+> src/tools/self_repair_trap.py）；env 预算 168 不变（纯观测零新开关）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 XIII（修正口径重估收口 ADR-0027：false_fix/CPR/弃权精确率首次非平凡 + 归因解混杂 + 对外文档勘误）
+
+> ADR-0021 勘误义务的执行收口（全部零 LLM 存量回放，`make
+> corrected-metrics` 一键重估）：
+> - **修正 repair 按实验代际定案**：R-P0-2 生死实验三种子 = **35.86%**
+>   （52/145 可重放行）；E1/E2 logic 档 = **48.11%**（51/106）；早期
+>   10-01 批 = **0/15 系真零**——README 引用的"false_fix=89.8% 假成功
+>   通道"证据维持成立（该批 repair=0 非伪影，与其余批次性质不同）；
+> - **修正 false_fix = 87.16%**（380/436 passed 可测行，非平凡——历史
+>   口径受染 repair 推导下 passed 行恒 1.0）；
+> - **CPR = 84.29%（59/70）与弃权精确率 = 85.97% 首次有真实分母**——
+>   弃权阻断档（ADR-0020）转正判据 ①② 落地：被压制"成功"中 86% 确为
+>   false_fix，但当前信号集将误伤 15.7% 的 correct 行（**必须先预注册
+>   阈值再转正**）；IDR 修正 34.33%（原 27.78%）：15 个负信号行修正后
+>   correct=1，信号集保守误报首次实证；
+> - **ADR-0024 归因结论经 bug_type 分层解混杂加固**：assertion 层内
+>   P(correct|FL命中)=15.4% < P(correct|FL未命中)=50%、runtime 层内
+>   16.7% < 91.7%——负相关层内成立，"生成侧主导"非纯难度混杂（可分解
+>   层仅 2 个，n=53，方向性结论）；
+> - **对外文档勘误四处**：README 中英门面披露（repair=0.0% → 修正口径
+>   35.9% + 伪影定性）、prereg 中英（R-P0-2 汇总行修订注记 + E7 预注册
+>   判定"=0 真零"分支作废——gold 裁决非过严而是从未执行真实补丁，人工
+>   复核降级为"残余语义等价抽样审计"，注记早于任何人脸复核数据）、
+>   BASELINE.yaml benchmark 节 repair 行勘误注记（detection/H2 结论
+>   不受影响）；AL5 诚实披露位置锁随勘误推进（锁语义不变：披露必须
+>   携带修正数字与伪影定性）；
+> - **四开关转正判据重定建议**入报告 §5（显式标注非预注册）：EDIT_INTENT
+>   / DETERMINISTIC_REPAIR_FIRST 判据结构保留、分母改修正 correct；
+>   ORACLE_CONTEXT_TIER 判据原样有效；正式判据须预注册文档修订后生效；
+> - 新增 `experiments/corrected_metrics.py`（correct_row 行级修正四态 +
+>   代际聚合 + cpr_idr 判定核复用 + bug_type 分层）+ Makefile
+>   `corrected-metrics`；`cf_upper_bound.fl_hit_value` 抽出复用；
+> - 全量回归 **4542 → 4555 passed / 0 failed**（+13 =
+>   tests/test_batch_xiii.py；AL5 锁随勘误推进重写）；ADR-0027 + 索引
+>   同步（下一个 0028）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 VIII–XII（第十七轮审查对标五连批：test-hacking 守卫 + 评估口径收口 + 反事实 FL 上界 + oracle 消融档 + 交互中心归因）
+
+> 第十七轮审查（2026-10-07 前沿对标报告）对照评估后确认有效的增量建议
+> 全部落地（每批 ADR + 测试锁；审查中"时机不对/需拍板"项未做，见
+> ADR-0021/0024 的优先级重排结论）：
+> - **批次 VIII（ADR-0022）test-hacking 确定性守卫观测层**：新增
+>   `src/tools/patch_test_hacking.py`（AST 差集三信号——
+>   `hardcoded_input_branch`「新增 if==常量→return 常量」后门 /
+>   `assert_weakened` 断言删除 / `exception_swallow_added` 吞异常；
+>   零 LLM、原有结构零误报）+ 结果行 `test_hacking_suspected`/
+>   `test_hacking_signals`（passed 历史口径零变化；存量缺原码不可
+>   回放已披露，运行时起测；阻断档 A/B 判据预注册）；
+> - **批次 IX（ADR-0023）评估报告口径收口三节**：统计报告新增
+>   pass@k（HumanEval 无偏估计，同 task 跨批次行 = 采样轮次，k 超
+>   轮次最小值诚实截断——注意缓存重放非独立轮次）+ $/solved task
+>   （对齐 SWE-bench $/resolved；correct=0 诚实未定义）+ 污染视角
+>   （行级三维分级按臂聚合 + 含污染 vs 干净 passed 率对照；存量首测
+>   0 high / 0 medium / 50 low）；三节随附 ADR-0021 伪影披露注记；
+> - **批次 X（ADR-0024）反事实 FL 上界两件套**：①存量回放
+>   `experiments/cf_upper_bound.py` + `make cf-upper-bound`（FL×修正
+>   correct 2×2 分解）——**首测（E2 迭代双批 53 可分解行）：P(correct
+>   | FL 命中)=15.79% < P(correct | FL 未命中)=64.71%（负相关），
+>   FL 命中组 84% 修不好 → 生成侧（Debugger 合成）是主瓶颈，
+>   ADR-0017"局部化第一短板"假设获首份反证数据**（合理解释：整文件
+>   重写补丁对定位信号消费本弱 + 谱系命中与缺陷难度混杂）；②运行时
+>   反事实臂 `FL_GOLD_INJECTION_ENABLE`（默认关，gold 变更函数构造
+>   定位、跳过 LLM；AC2"gold 材料不入 prompt"卫生口径的显式消融
+>   例外登记；臂间差分 = FL 端到端贡献严格上界，待跑批预算）；
+> - **批次 XI（ADR-0025）oracle 上下文消融档**：`ORACLE_CONTEXT_TIER`
+>   （full|minimal，默认 full）——minimal 剥离 Generator 四增强段
+>   （分支覆盖/AST 边界锚点/蜕变/差分；ASE 2025"额外上下文无边际
+>   收益"实证的消融对照臂）；A/B 出数后再议默认值；
+> - **批次 XII（ADR-0026）交互中心失败归因**：终局桶增补
+>   `interaction_attribution`（edge ∈ 四交互边+harness × fault_side ∈
+>   model/harness/environment/grader）——**回归门拦截归 harness 侧与
+>   补丁质量差归 model 侧显式区分**，修复动作指向列入渲染；MAST 式
+>   桶分布保留（跨臂可比职能不替换）；`annotate_final_state` 加键
+>   向后兼容；
+> - 全量回归 **4542 passed / 0 failed / 63 skipped**（新增 84 项测试
+>   全过 = 批次 VII 19 + VIII 18 + IX 17 + X 10 + XI 7 + XII 12 - 1
+>   参数化重计；另 1 处既有测试尾换行期望对齐——mutation 检测的
+>   fixed 材料经批次 VII 清理后 strip 尾换行，语义零变化）；
+>   ADR-0021–0026 六份 + ADR-0017 修订记录 3（动机勘误）+ 索引
+>   同步（下一个 0027）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 VII（repair=0 围栏伪影定案修复 ADR-0021 + 存量重放工具 + make repair-replay）
+
+> **P0 测量口径修复——"repair 全线 0"的最大单一成分系伪影**（第十七轮
+> 审查落地侦察中发现，决定性重放定案）：
+> - **根因**：debugger 的 `state["patch"]` 按约定保存 LLM JSON 原始值
+>   （可含 ````` ```python ```` 围栏 / `python:` 前缀，写盘链路
+>   `apply_patch_to_code` Step 1/2 负责清理），但 M1 独立裁决
+>   （`_target_code_after_patch` → repair_rate/false_fix_rate/
+>   regression_rate）与结果行透出**直接消费原始值未经清理**——10 个
+>   主批次工件实测 **274/274（100%）带补丁行以 `"python\n"` 围栏残留
+>   开头**，gold 测试在未清理文本上 100% NameError 失败（决定性重放：
+>   原样 0/106 vs 清理后 51/106）；`generated_test` 通道 974/974 干净，
+>   plain_llm / plain_llm_df 臂不产补丁（repair=0 为真值）；
+> - **修复**：①清理口径函数化为单一权威 `patch_applier.
+>   normalize_patch_text()`（= 原 Step 1/2，行为等价重构），②
+>   `_target_code_after_patch` 完整文件分支经其清理——四项 M1 指标的
+>   补丁应用口径与写盘链路对齐（干净补丁幂等，历史行为仅在受染输入
+>   上改变），③`_PYTHON_PREFIX_RE` 补 `(?!\w)` 负向后瞻（旧正则会把
+>   首行 `python_x = 1` 剥成 `_x = 1`，严格减少误伤）；
+> - **存量重放工具 `experiments/repair_replay.py`（零 LLM）+ `make
+>   repair-replay`**：按修正口径重放存量批次——**全量定案：可重放
+>   266 行，修正 correct = 103（修正 repair_rate = 38.7%），原口径
+>   correct = 0（伪影归零）；E2 双种子批稳定 44.4%–53.8%**；diff
+>   形态补丁因存量行缺原码记 `not_replayable_diff`（诚实降级）；
+> - **历史结论连锁勘误（ADR-0021 登记）**：E2"次要终点 repair 全线 0
+>   未破零"→ 修正 44–48%；false_fix 分布 / IDR-CPR 的 correct 分母
+>   （correct>0 后 CPR 首次可定义）/ 弃权精确率"correct=0 按构造"
+>   表述均需按修正口径重述；**ADR-0017 范式转向不撤销**（FL 短板 /
+>   H2c 劣后 / 前沿共识动机独立成立）但第二阶段优先级重排——repair
+>   目标从"破零"修正为"38.7% → 提升"，反事实 FL 上界与弃权阻断档
+>   价值上升、四子智能体重构紧迫性下降（修订记录 3 已回填）；
+> - ADR-0021 首次落地 + ADR-0017 修订记录 3（动机勘误）+ ADR 索引
+>   同步（下一个 0022）；全量回归 **4537 → 4556 passed / 0 failed**
+>   （+19 = tests/test_batch_vii.py：清理八态 / 测量口径修复 /
+>   apply 行为回归锁 / 重放五态 + 汇总数学 + CLI）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 VI（--staging-dir 跑批运营收口 + make cpr-idr 入口 + R16-8 陈旧建议回收）
+
+> 多种子顺序跑批的运营摩擦代码化 + 验证段报告入口：
+> - **run_main_batch 新增 `--staging-dir`**：跑前递归快照输出目录既有
+>   工件 → 跑后把**本次新增**（批次 JSON / 统计报告 / traces）自动外移
+>   到指定目录（保持相对路径结构），工作树保持干净——**多种子顺序
+>   跑批第二批不再被干净树门禁拒绝**（E2 双种子"暂移-恢复"两次手工
+>   实操的固化；`--skip-stats` 早退出口同样执行外移）；移回入库提示
+>   随批打印（mv + 重算 SHA256SUMS）；路径穿越防御：拒绝含 `..` 分量、
+>   拒绝位于输出目录内（Mimosa 建议口径）；
+> - **Makefile 新增 `make cpr-idr`**：一键产出 IDR/CPR + 弃权视角报告
+>   （批次 II/V 报告入口，零 LLM 读存量工件）；
+> - **R16-8 陈旧建议回收（AF 纪律第二次生效）**：经核实"变异反馈入
+>   prompt"已由 M7 批（2026-09-29，`mutation_advisor` 图内节点 +
+>   `build_mutation_prompt_section` 注入 + 再生成上限保护 + 专项测试）
+>   完整落地——第十六轮审查 R16-8 系重复建议，勿再立项；
+> - 全量回归 **4530 → 4537 passed / 0 failed**（+7 =
+>   tests/test_batch_vi.py：路径校验/快照差集外移/双出口接线/Makefile 目标锁）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 V（补丁弃权门观测层 ADR-0020 + 弃权视角存量回放）
+
+> 验证段对症（R16-4；IDR 27.78%——72% plausible-but-wrong 零负信号
+> 通过 + Abstain-and-Validate +39pp 依据）：
+> - **新增 `src/tools/patch_abstain.py`（弃权判定核，纯函数零 LLM）**：
+>   五信号任一命中 → abstain——`test_regenerated_pass_unverified`
+>   （M5 假通过）/ `detection_first_status == "all_green_unverified"`
+>   （Y1 全程全绿未检出）/ `specificity_gate_verdict == "over_red"`
+>   （终审过红）/ `patch_evidence_level == "none"`（证据零背书）/
+>   `source_patched_unverified`（写盘未验证）；与 CPR/IDR 负信号同源
+>   （弃权门只看"接受时刻仍带病通过"类）；
+> - **观测层透出（passed 历史口径零变化，AN2 呈现性增补先例）**：
+>   结果行新增 `patch_abstained` / `patch_abstain_signals`（失败分支
+>   False/[] 占位，键集合同构）；
+> - **CPR/IDR 报告新增"弃权视角"节**（存量工件零成本回放 would-be
+>   abstention）：**首测（10 批次主工件）——passed 443 中 392
+>   （88.5%）将命中弃权信号，弃权精确率 1.0（correct=0 按构造）**，
+>   即信号集在无 gold 条件下于运行时几乎完整重构 false-fix 类（与
+>   历史 false_fix 89.8% 吻合）；plausible 拦截面 78.5%（113/144）；
+> - **阻断档（回滚 + 终态 abstained）登记为 Proposed**：转正判据
+>   预注册于 ADR-0020（弃权精确率 ≥ 阈值 ∧ 不压制 gold 正确补丁 ∧
+>   A/B 确认调整后修复质量不降）；
+> - ADR-0020 + 索引同步（下一个 0021）；全量回归 **4520 → 4530
+>   passed / 0 failed**（+10 = tests/test_batch_v.py）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 IV（确定性优先修复路由 ADR-0019）
+
+> 第二阶段"合成"段第二块（R16-5 落地；PAGENT 针对性确定性层 + To Run
+> or Not to Run 成本调度依据）：
+> - **新增 `src/tools/deterministic_repair.py`**：三个保守确定性变换器
+>   （全部零 LLM）——`missing_import_inference`（NameError ∧ 标准库
+>   白名单 ∧ 词边界使用 ∧ 无既有 import → 插入 import）、
+>   `import_alias_backfill`（cannot import name ∧ 顶层恰一个同前缀
+>   重命名嫌疑 → 追加别名，多重嫌疑保守放弃）、`tab_indent_normalize`
+>   （tab/空格混用缩进错误 → 归一 4 空格）；统一 AST 验证门（候选须
+>   可解析且 ≠ 原码，否则弃用）；
+> - **接线（每任务至多一次）**：`DETERMINISTIC_REPAIR_FIRST_ENABLE`
+>   （默认关，ADR-0003）开启时 `_debugger_node` 在 LLM 调用前先走本
+>   路由，命中即**跳过该轮 LLM 调用**（省 token），补丁照常进入
+>   executor 回归验证；`state["deterministic_repair_status"]` 非 None
+>   兼任哨兵（防同签名无限重试），确定性补丁无效后自然回落 LLM；
+>   确定性结果与 `debug()` 返回**键集合同构**（下游分支不缺键）；
+> - `deterministic_repair_status` 结果行透出（实验层统计接管率与省
+>   token 量）；ADR-0019 + 索引同步（下一个 0020）；
+> - env 预算 167→168；全量回归 **4502 → 4520 passed / 0 failed**
+>   （+18 = tests/test_batch_iv.py）。
+
+## [Unreleased] — 2026-10-07 修复引擎批次 III（结构化编辑意图确定性落盘 ADR-0018 + AC2 过红再生成计数补漏）
+
+
+
+> 第二阶段核心（ADR-0017"合成"段）+ E2 触顶根因修复；ADR-0018 首次落地：
+> - **新增 `src/tools/patch_intent.py`（编辑意图引擎）**：LLM 在 debug()
+>   JSON 响应附加 `edit_intents`（`{"old_str","new_str"}` 唯一锚点
+>   search/replace，多 Hunk 每处一条）→ 确定性引擎逐条校验锚点唯一性
+>   （出现≠1 整体拒绝）、顺序应用、**原子性**（任一条拒绝丢弃全部修改
+>   返回原码）、AST 语法门（结果须可解析；存量语法错误豁免）——对标
+>   2609.00227"宽容 diff ~1/7 静默错应用"实证与 Diff-XYZ"search/replace
+>   最优"结论（LLM 产意图、确定性管道执行）；应用成功用最小编辑结果
+>   替换整文件 patch，失败原子回落 legacy 通道；
+> - **接线**：`EDIT_INTENT_ENABLE`（默认关，ADR-0003 惯例；A/B 后转正）
+>   ——debugger prompt 追加意图输出契约（开关关 prompt 逐字节一致）；
+>   debug() 内确定性应用（复刻 2.1 类型修复层"成功即替换"模式）；
+>   `state["edit_intent_status"]`（TypedDict 声明 + 工厂 None）→ 结果行
+>   `edit_intent_status`（成功/失败分支键集合同构；实验层据此统计
+>   意图通道接管率与拒绝原因分布）；
+> - **AC2 过红再生成入口计数补漏**（E2 实证 16/174 撞 recursion_limit
+>   的根因通道）：`_should_debug` 特异性门 over_red 分支以 test_passed=
+>   False 进入 generator，五类再生成入口检测无一命中 → regeneration_count
+>   恒不递增 → 上限保护失效 → executor↔generator 无限乒乓。新增
+>   `_specificity_over_red_regenerate_entry`（iteration==0 且 verdict=
+>   over_red）并入计数判定（O4/W3 同类漏计的第三个实例）；
+> - **ADR-0018**（结构化编辑意图 + 确定性落盘，默认关灰度）+ ADR 索引
+>   同步（下一个 0019）；
+> - env 预算 166→167；全量回归 **4478 → 4502 passed / 0 failed**
+>   （+24 = tests/test_batch_iii.py：引擎数学/原子性/语法门/存量豁免/
+>   开关缺省/debug 接线四态/计数补漏/状态契约）。
+
+
+
+> 第十六轮系统性审查（3 路联网核验约 80 条前沿文献）+ 用户三阶段量化
+> 目标（定位 ≥75% / repair 15-25% / token -50%）驱动；本批为第一阶段
+> 可离线执行部分 + 第三阶段测量前置：
+> - **FaultLocalizer 升级 Top-3 候选排序（RGFL 两阶段式）**：prompt
+>   要求输出 1~3 个按可能性降序的候选，每候选新增 `expected_logic`
+>   字段（推理引导——先写"该处应有的正确行为"再对比实际代码）；
+>   解析器兼容旧单对象 schema（历史口径零变化），顶层字段 = 首位
+>   候选（prompt 段落渲染与既有指标只读顶层，不受影响）；
+> - **元素级排序指标**：`localization_rank_metrics`（纯函数，去重
+>   叶子名后计 Top-3 命中与 1/rank）→ 结果行新增
+>   `localization_hit_function_at_3` / `localization_mrr`（与 Hit@1
+>   并列透出；旧 schema 退化单候选；None 占位键集合同构）；
+> - **CPR/IDR 离线分析**（`experiments/cpr_idr_report.py`，零 LLM，
+>   确定性 stdout 报告）：错误补丁检测率 / 正确补丁保留率——
+>   **首测（10 批次主工件）：IDR = 27.78%（40/144），即 72% 的
+>   plausible-but-wrong 补丁零负信号通过**，验证通道缺口首次定量化
+>   （第二阶段"验证越过 plausible + 弃权机制"的实测依据）；CPR 因
+>   correct=0 诚实输出未定义（None ≠ 0.0）；
+> - **引用核验（第十六轮联网）**：TDFlow（Lite 88.8% 有人类测试，
+>   +27.8% 超次优）/ PAGENT（类型与数据结构错误占失败补丁 27.19%；
+>   类型修复层 29/127——34.56% 引用与原文有出入）/ BLAgent（TOSEM
+>   2026，开源 78% / 闭源 86%）/ SWE-Debate（arXiv:2507.22305，
+>   81.67%）/ SWE-Swiss（32B，Verified 60.2%）均属实；DeepSeek Flash
+>   79.0% 系厂商自报口径（技术报告另有 73.7% 一说，无独立去污染
+>   复跑）；多 Hunk 行为研究（arXiv:2511.11012：Claude Code 92.82%
+>   vs Qwen Code 26.98%）与用户引用数字接近但非同值；"BIRCH"基准名
+>   未定位；RGFL 全称勘误 = **Reasoning**-Guided（非 Retrieval）；
+>   ADR-0017 引用面同步修正（"Hunk-SWE"/"PSR"未定位，替换为已核验
+>   锚点）；
+> - **BASELINE 勘误补记**：total_passed 4429→4478（E2 迭代 +8 与批次
+>   I +16 此前未同步，链条一并补记）；metrics_schema 补登定位四键
+>   （批次 I 遗漏）；mypy 源文件数 106→107（批次 I 未同步）；
+> - 全量回归 **4453 → 4478 passed / 0 failed**（+25 =
+>   test_fault_localizer.py 排序组 +14、test_cpr_idr_report.py +11）。
 
 ## [Unreleased] — 2026-10-07 修复引擎批次 I（范式转向：独立 FaultLocalizer 落地 + 局部化独立指标首测通过）
 

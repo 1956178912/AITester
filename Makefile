@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces build-check
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics
 
 PY := .venv/bin/python
 
@@ -60,6 +60,18 @@ self-check:  ## 功效分析往返一致性自检
 clean-traces:  ## 清理失败追踪残留（tmp_trace/，--dump-trace-on-failure 运行时产物，可再生）
 	rm -rf tmp_trace
 	@echo "tmp_trace/ 已清理"
+
+cpr-idr:  ## 补丁检测有效性 + 弃权视角报告（批次 II/V：IDR/CPR + would-be abstention，零 LLM 读存量工件）
+	$(PY) experiments/cpr_idr_report.py --results-dir experiments/results/main_batch --arm aitester
+
+repair-replay:  ## repair=0 围栏伪影存量重放（批次 VII/ADR-0021：修正口径 correct vs 原口径伪影，零 LLM）
+	$(PY) -m experiments.repair_replay experiments/results/main_batch --arm aitester
+
+cf-upper-bound:  ## 反事实 FL 上界归因分解（批次 X/ADR-0024：FL×correct 2×2 分解 + P(correct|FL命中)，零 LLM）
+	$(PY) -m experiments.cf_upper_bound experiments/results/main_batch --arm aitester
+
+corrected-metrics:  ## 修正口径重估总报告（批次 XIII/ADR-0027：repair/false_fix/CPR/弃权精确率 + bug_type 分层解混杂，零 LLM）
+	$(PY) -m experiments.corrected_metrics experiments/results/main_batch --arm aitester
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel

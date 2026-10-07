@@ -97,7 +97,7 @@ rm -rf ~/.cache/aitester/llm
 
 ## 7. 可选：高级开关（默认全部关闭，不影响常规使用）
 
-以下开关均默认关闭，按需启用（详见 `.env.example` 注释）：
+以下开关除特别注明外默认关闭，按需启用（详见 `.env.example` 注释）：
 
 ```bash
 # ── 开关预设（推荐入口；2026-10-06 AA 批次起共四档）──────────────────────
@@ -194,6 +194,14 @@ export ASSERTION_AUGMENT_ENABLE=true
 # 纯观测层，启用会增加 2-4 次 LLM 调用/修复轮。
 export ADVERSARIAL_DEBUGGING_ENABLE=true
 
+# ── 2026-10-07 修复引擎批次 I：故障定位双通道（默认开，仅消融时需要动作）──────
+# 谱系通道（Ochiai Top-k，零 LLM，FL_SPECTRAL_ENABLE，R8 起默认开）+ 推理通道
+# （RGFL 式 LLM 结构化定位，FAULT_LOCALIZER_ENABLE，批次 I 起默认开）：定位结果
+# 注入 Debugger prompt 并随结果行透出 localization_hit_function 指标（函数级命中，
+# 与 gold 变更函数集合比对）；推理失败保守降级 None，不阻断修复主流程。
+# 仅消融对照时设 false——退回纯谱系口径（无 LLM 定位）：
+export FAULT_LOCALIZER_ENABLE=false
+
 # 4.4 API 熔断器指数退避（默认开，API_CIRCUIT_BACKOFF）：冷却期改按
 # base*2^open_count 指数退避（彻底死掉的 provider 冷却期单调增长），
 # 设 false 回退 4.2 固定冷却期口径（便于对比实验）。
@@ -215,6 +223,7 @@ export API_PROMETHEUS_EXPORT=true
 # 收敛失败模式归因（1.2，区分"无法定位根因" vs "无法生成有效补丁"）/
 # 边界用例覆盖（1.3，AST 保守判定 None/空集合/0/-1/>=/<= 等边界条件）/
 # 变异得分（1.3，外部变异测试器产出，无 mutation_score 字段时跳过）/
+# 故障定位质量 FL@1/3/5（B-02，details[].fl_at_k 存在且 gold 材料可解时输出）/
 # 断言强度 AST 增强（1.3，ast.parse + ast.Assert 节点计数，输出 ast_avg_assertions）/
 # 数据污染检测（2.1，SWE-bench 黄金补丁 token 级 Jaccard 重叠度，high ≥ 0.85 / medium ≥ 0.6）/
 # 任务难度分层（2.2，code_size / dependency_count / complexity_proxy 三维度）/
@@ -230,6 +239,13 @@ python experiments/analyze_results.py --results-dir experiments/results \
 # elapsed / reward_signals {correctness, efficiency, simplicity} 到 state.execution_trace。
 # 查看某任务的轨迹（结果 JSON 的 details[].execution_trace）：
 python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
+
+# 修复引擎批次 I 新增结果行字段（与 detection/repair/fl_at_k 并列）：
+# details[].llm_localization——LLM 推理定位 JSON（function_name / line_start /
+# line_end / confidence / reasoning；开关关、LLM 失败或无失败用例时为 null）；
+# details[].localization_hit_function——函数级命中 bool（定位函数 ∈ gold 变更函数
+# 集合；未定位或无 gold 材料时为 null，键集合同构占位）。
+python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('localization_hit_function'), r.get('llm_localization')) for r in d['results']['aitester']['details'][:3]]"
 
 # 失败根因分类 + 案例知识库（5.3）：按 LLM 能力 / 依赖 / 框架三大根因归因，
 # 结构化案例落盘 failure_knowledge_base.json（含 task_id / root_cause / 复现步骤 / 建议修复）。

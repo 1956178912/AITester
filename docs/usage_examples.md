@@ -3,7 +3,7 @@
 # AITester 使用示例
 
 > 本文档提供详细的使用示例，帮助开发者快速上手 AITester。
-> 最后更新：2026-10-05（新增 2026-10-05 审查批次示例：开关预设 / 确定性采样 / 规约 oracle 执行 / 回滚 fail-closed / 变异检出率 / 统计报告白名单）
+> 最后更新：2026-10-07（修复引擎批次 I：新增故障定位双通道消融示例〔示例 E〕+ 示例 12 输出补充 `llm_localization` / `localization_hit_function` 结果行字段；上一批 2026-10-05：开关预设 / 确定性采样 / 规约 oracle 执行 / 回滚 fail-closed / 变异检出率 / 统计报告白名单）
 > **当前基线**：以仓库根 [BASELINE.yaml](../BASELINE.yaml) 为唯一事实来源（机器可读，
 > 批次落地后同步刷新）；本文档不再内嵌基线数字，避免随轮次推进产生过期快照。
 >
@@ -223,6 +223,18 @@ python experiments/statistical_analysis.py --results-dir experiments/results/mai
   --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
 ```
 
+### 示例 E：故障定位双通道消融（2026-10-07 修复引擎批次 I）
+
+```bash
+# 定位双通道默认全开（谱系 Ochiai + RGFL 式 LLM 推理定位），常规使用无需任何动作。
+# 仅消融对照时设 false——退回纯谱系口径（无 LLM 定位调用，localization_hit_function
+# 恒 null，键集合同构保持批次兼容）：
+export FAULT_LOCALIZER_ENABLE=false
+
+# 也可只关谱系佐证（推理通道失去 Ochiai Top-k 客观佐证，纯 LLM 推理定位）：
+export FL_SPECTRAL_ENABLE=false
+```
+
 ### 示例 12：JSON 输出（程序化处理）
 
 ```bash
@@ -241,11 +253,24 @@ python experiments/run_benchmark.py \
       "task_id": "calculator.py::divide",
       "status": "pass",
       "coverage": 100.0,
-      "iterations": 0
+      "iterations": 0,
+      "detection": 1.0,
+      "repair": null,
+      "fl_at_k": {"fl_at_1": 1.0, "fl_at_3": 1.0, "fl_at_5": 1.0},
+      "llm_localization": {
+        "function_name": "divide",
+        "line_start": 3,
+        "line_end": 3,
+        "confidence": 0.9,
+        "reasoning": "除法实现误写为减法"
+      },
+      "localization_hit_function": true
     }
   ]
 }
 ```
+
+> `llm_localization` / `localization_hit_function` 为 2026-10-07 修复引擎批次 I 起新增（与 detection / repair / fl_at_k 并列）：前者为 RGFL 式 LLM 推理定位 JSON（开关关 / LLM 失败 / 无失败用例时为 null），后者为函数级命中 bool（定位函数 ∈ gold 变更函数集合；未定位或无 gold 材料时为 null，键集合同构占位保持历史批次兼容）。
 
 ---
 

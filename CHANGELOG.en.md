@@ -1,10 +1,327 @@
-> Last updated: 2026-10-07 (batch RepairEngine-I: paradigm pivot — standalone FaultLocalizer landed + localization as a first-class metric first-measured; details below)
+> Last updated: 2026-10-07 (batch RepairEngine-XIV: external-report net-new harvest — FL Top-k constraint gate + Self-Repair Trap observer [both observability-layer, ADR-0028] + Frame Lifetime Trace design input + BASELINE test-chain errata; batch XIII below)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-XIV (external-report net-new harvest per ADR-0028: FL Top-k constraint gate + Self-Repair Trap observer + Frame Lifetime Trace design input)
+
+> Offline harvest of the five net-new items from the third external
+> frontier-alignment report's cross-evaluation (all zero-LLM,
+> observability-layer first, passed semantics unchanged):
+> - **FL Top-k constraint gate**: `patch_changed_functions` (set of
+>   functions actually modified by the patch — same AST-attribution
+>   caliber as gold_changed_functions with insert segments anchored to
+>   the buggy side, so pure-insertion fixes are not missed) +
+>   `fl_constraint_verdict` (intersection of the Top-3 localization
+>   candidates with the changed set, with hit_rank) → result rows
+>   `fl_constraint_verdict`/`fl_constraint_hit_rank`/
+>   `fl_constraint_changed_functions` — turns ADR-0024's
+>   "generation-side dominance" from a stratified inference into a
+>   row-level verifiable proposition; blocking tier Proposed (criteria
+>   draft in ADR-0028);
+> - **Self-Repair Trap observer** (DCAware risk caliber, zero LLM):
+>   the generator appends a quality snapshot per produced test
+>   (state["oracle_quality_history"]: assert count / test count /
+>   parseability / mutation score) + `detect_self_repair_trap` three-
+>   signal core (declining asserts / assertion collapse / mutation-score
+>   decline; an unparseable latest snapshot never masquerades as decay,
+>   sparse mutation scores are excluded) → result rows
+>   `self_repair_trap_suspected`/`self_repair_trap_signals` +
+>   `oracle_quality_history` passthrough (offline replayable); policy
+>   switching deliberately deferred pending A/B data and pre-registration;
+> - **Frame Lifetime Trace design input** (ADI, FSE 2026 alignment):
+>   docs/design/frame_lifetime_trace.md — the 63.8% anchor is verified,
+>   other report numbers carry an explicit [unverified] red line;
+>   activation gate = review when the Debugger-split batch is chartered,
+>   no switch pre-wired (ADR-0003);
+> - **Recycled & deferred** (AF discipline): the report's P1-5
+>   test-file-path conflict detection is already covered (repo-mode M2 +
+>   O35 guards cover tests/ testing/ test_*.py / *_test.py / conftest.py
+>   and `+++ b/` new-file forms; repo mode writes no generated tests);
+>   PatchDiff-style differential behavioral testing deferred until E7
+>   manual review concludes;
+> - **BASELINE test-chain errata**: the recorded counts for batches
+>   VII–XII and XIII were pre-written distortions (+84 tests recorded as
+>   +5 net); this batch's measured 4669 = 4537+84+13+35 reconciles
+>   exactly, closing the 79-test undercount.
+> Full suite 4669/0 (+35 = tests/test_batch_xiv.py); mypy 112 files 0
+> (+1 = src/tools/self_repair_trap.py); env budget unchanged at 168
+> (pure observability, zero new switches).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-XIII (corrected-caliber re-estimation closure per ADR-0027: false_fix/CPR/abstention precision non-trivial for the first time + attribution confound check + external-doc errata)
+
+> Executes ADR-0021's chained-errata obligations (all zero-LLM replay,
+> `make corrected-metrics`):
+> - **Corrected repair by generation**: R-P0-2 lifespan three-seed =
+>   **35.86%** (52/145 replayable); E1/E2 logic-profile = **48.11%**
+>   (51/106); the early 10-01 batch is a **true zero at 0/15** — the
+>   README-cited false_fix=89.8% false-success evidence holds (that
+>   batch's repair=0 was not the artifact);
+> - **Corrected false_fix = 87.16%** (380/436 measurable passed rows,
+>   non-trivial vs the artifact-era constant 1.0);
+> - **CPR = 84.29% (59/70) and abstention precision = 85.97% gain real
+>   denominators for the first time** — the abstention blocking tier
+>   (ADR-0020) preregistration criteria ①② now have data: 86% of
+>   suppressed "successes" are genuine false fixes, but the current
+>   signal set would suppress 15.7% of correct rows (**thresholds must
+>   be preregistered before the blocking tier activates**); corrected
+>   IDR = 34.33% (vs 27.78%): 15 negative-signal rows are actually
+>   correct — first empirical evidence of the signal set's conservative
+>   false-positive rate;
+> - **ADR-0024's attribution conclusion hardened by bug_type
+>   stratification**: within-stratum P(correct | FL hit) 15.4%/16.7% <
+>   P(correct | FL miss) 50%/91.7% for assertion/runtime — the negative
+>   correlation holds within strata; "generation-side dominance" is not
+>   a pure difficulty confound (only 2 decomposable strata, n=53,
+>   directional);
+> - **Four external-doc errata**: README zh/en front-page disclosure
+>   (repair=0.0% → corrected 35.9% + artifact characterization);
+>   preregistration zh/en (R-P0-2 summary-row amendment note + E7
+>   pre-registered "=0 true zero" branch voided — the gold adjudication
+>   was not overly strict, it never executed the real patch; manual
+>   review downgraded to a residual semantic-equivalence sampling audit,
+>   note predating any human-review data); BASELINE.yaml benchmark
+>   section repair-line errata note (detection/H2 conclusions
+>   unaffected); the AL5 honest-disclosure positioning lock advanced
+>   with the errata (lock semantics unchanged);
+> - **Re-registration proposals for the four switch A/B criteria** in
+>   report §5 (explicitly marked non-preregistered);
+> - New `experiments/corrected_metrics.py` (per-row correction with four
+>   verdict states + per-generation aggregation + cpr_idr adjudication
+>   core reuse + bug_type stratification) + Makefile `corrected-metrics`;
+>   `cf_upper_bound.fl_hit_value` extracted for reuse;
+> - Full regression **4542 → 4555 passed / 0 failed** (+13 =
+>   tests/test_batch_xiii.py); ADR-0027 + index synced (next 0028).
+
+## [Unreleased] — 2026-10-07 Batches RepairEngine-VII–XII (17th-review alignment: repair=0 artifact fix + test-hacking guard + eval pass@k/cost/contamination + counterfactual FL upper bound + oracle context tier + interaction-centric attribution)
+
+> Six batches landing every confirmed-effective increment from the 17th
+> review round (each with ADR + test locks; items ruled out for timing or
+> pending user sign-off are documented in ADR-0021/0024):
+> - **Batch VII (ADR-0021, P0) — repair=0 was a measurement artifact**:
+>   `state["patch"]` stores raw LLM JSON (fenced by convention; the
+>   write-to-disk chain cleans it) but M1 independent adjudication
+>   consumed it uncleaned — **274/274 patched rows across 10 main-batch
+>   artifacts start with a `python\n` fence residue**, failing gold
+>   tests 100% via NameError. Fix: `normalize_patch_text()` as the single
+>   authoritative cleanup + `_target_code_after_patch` aligned +
+>   negative-lookahead hardening. New replay tool
+>   (`experiments/repair_replay.py`, `make repair-replay`):
+>   **corrected correct = 103/266 replayable rows (repair_rate 38.7%;
+>   E2 dual-seed batches 44–48%) vs 0 under the old caliber**.
+>   ADR-0017 motivation amended (pivot stands; phase-2 priorities
+>   re-ranked — see its revision record 3).
+> - **Batch VIII (ADR-0022) — deterministic test-hacking guard**
+>   (observation layer): AST-diff three signals (hardcoded input branch /
+>   assert weakened / exception swallow; zero LLM, pre-existing
+>   structures never flagged); result rows `test_hacking_suspected` /
+>   `test_hacking_signals` with passed untouched; blocking tier gated on
+>   preregistered A/B criteria.
+> - **Batch IX (ADR-0023) — eval report sections**: pass@k (HumanEval
+>   unbiased estimator over cross-batch rounds per task, honest
+>   truncation when k exceeds rounds), $/solved task (SWE-bench
+>   $/resolved alignment; undefined at correct=0), contamination view
+>   (per-arm risk-level aggregation + contaminated-vs-clean passed
+>   rates); all sections carry the ADR-0021 artifact disclosure.
+> - **Batch X (ADR-0024) — counterfactual FL upper bound**: replay
+>   decomposition (`make cf-upper-bound`) — **first result (53
+>   decomposable rows): P(correct | FL hit) = 15.79% < P(correct | FL
+>   miss) = 64.71%** — FL hit and repair success are negatively
+>   correlated; the generation side dominates (84% of FL-hit rows fail
+>   repair), amending the "localization-first bottleneck" hypothesis
+>   (whole-file rewrite barely consumes localization). Runtime arm
+>   `FL_GOLD_INJECTION_ENABLE` (default off) ready for budgeted A/B.
+> - **Batch XI (ADR-0025) — oracle context ablation tier**:
+>   `ORACLE_CONTEXT_TIER` (full|minimal, default full) — minimal strips
+>   the four Generator enhancement sections (branch coverage / AST
+>   boundary triplets / metamorphic / differential) per the ASE-2025
+>   "extra context yields no gain" finding.
+> - **Batch XII (ADR-0026) — interaction-centric failure attribution**:
+>   `interaction_attribution` (edge × fault_side) added to the terminal
+>   failure taxonomy — regression-gate rejection (harness side) now
+>   explicitly distinguished from patch-quality failure (model side),
+>   with repair-action pointers rendered; MAST-style bucket distribution
+>   retained for cross-arm comparability.
+> - Full regression **4542 passed / 0 failed / 63 skipped** (84 new tests
+>   all green + one legacy expectation aligned to the trailing-newline
+>   strip); ADR-0021–0026 + ADR-0017 revision-3 + index synced (next
+>   0027); env budget registered to 168.
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-VI (--staging-dir batch-run operations + make cpr-idr entry + stale R16-8 recalled)
+
+> Codifying the multi-seed sequential-run friction plus a verification-report
+> entry point:
+> - **run_main_batch gains `--staging-dir`**: before the run it snapshots
+>   the existing artifacts under the output dir (recursive); after the run
+>   it moves **the newly created files** (batch JSON / statistical report /
+>   traces) to the given directory (relative structure preserved), keeping
+>   the worktree clean — **the second seed of a sequential multi-seed run
+>   no longer trips the clean-tree gate** (codifying the twice-manual
+>   "stage-out and restore" workaround from E2; the `--skip-stats` early
+>   exit also stages out); a restore hint prints with the run (mv +
+>   recompute SHA256SUMS); path-traversal defense: reject `..` components
+>   and staging inside the output dir (per the Mimosa advisory);
+> - **Makefile gains `make cpr-idr`**: one-shot IDR/CPR + abstention-view
+>   report (the batch-II/V report entry, zero LLM over existing artifacts);
+> - **Stale R16-8 recalled (AF discipline, second occurrence)**: verified
+>   that "mutation feedback into the prompt" already landed in batch M7
+>   (2026-09-29 — the `mutation_advisor` graph node +
+>   `build_mutation_prompt_section` injection + regeneration cap + dedicated
+>   tests); the round-16 R16-8 recommendation was redundant — do not
+>   re-open;
+> - full regression **4530 -> 4537 passed / 0 failed** (+7 =
+>   tests/test_batch_vi.py: path validation / snapshot-diff staging /
+>   dual-exit wiring / Makefile target lock).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-V (patch abstention gate observability layer per ADR-0020 + would-be abstention replay)
+
+> Verification-stage countermeasure (R16-4; IDR 27.78% — 72% of
+> plausible-but-wrong patches pass with zero negative signals, plus the
+> Abstain-and-Validate +39pp evidence):
+> - **New `src/tools/patch_abstain.py` (abstention decision core, pure
+>   function, zero LLM)**: any of five signals -> abstain —
+>   `test_regenerated_pass_unverified` (M5 false-pass) /
+>   `detection_first_status == "all_green_unverified"` (never-red) /
+>   `specificity_gate_verdict == "over_red"` (final over-red) /
+>   `patch_evidence_level == "none"` (zero evidence backing) /
+>   `source_patched_unverified` (unverified write); same signal family
+>   as CPR/IDR (the abstention gate only watches signals that still pass
+>   while untrusted at acceptance time);
+> - **Observability layer (zero change to the historical passed metric —
+>   AN2 presentation-first precedent)**: result rows gain
+>   `patch_abstained` / `patch_abstain_signals` (False/[] placeholders
+>   on the failure branch, key-set isomorphism);
+> - **CPR/IDR report gains an abstention-view section** (zero-cost
+>   would-be abstention replay over existing artifacts): **first
+>   measurement (10 main-batch artifacts) — 392 of 443 passed rows
+>   (88.5%) would hit an abstention signal, abstention precision 1.0
+>   (by construction while correct=0)**, i.e. the signal family
+>   reconstructs the false-fix class at runtime without gold (consistent
+>   with the historical false_fix 89.8%); plausible interception 78.5%
+>   (113/144);
+> - **Blocking tier (rollback + terminal `abstained`) registered as
+>   Proposed**: promotion criteria pre-registered in ADR-0020
+>   (abstention precision >= threshold AND no suppression of gold-correct
+>   patches AND A/B confirming adjusted repair quality does not drop);
+> - ADR-0020 + index sync (next 0021); full regression **4520 -> 4530
+>   passed / 0 failed** (+10 = tests/test_batch_v.py).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-IV (deterministic-first repair routing per ADR-0019)
+
+> Second piece of the Phase-2 "synthesize" stage (landing R16-5; grounded in
+> PAGENT's targeted deterministic layer and To Run or Not to Run's
+> cost-aware scheduling):
+> - **New `src/tools/deterministic_repair.py`**: three conservative
+>   deterministic transformers (all zero-LLM) — `missing_import_inference`
+>   (NameError AND a stdlib whitelist name AND word-boundary usage AND no
+>   existing import -> insert the import), `import_alias_backfill`
+>   (cannot-import-name AND exactly one same-prefix rename suspect at top
+>   level -> append an alias; multiple suspects conservatively abandon),
+>   and `tab_indent_normalize` (tab/space mixed indentation errors ->
+>   normalize to 4 spaces); a unified AST validation gate (the candidate
+>   must parse and differ from the original, otherwise it is dropped);
+> - **Wiring (at most once per task)**: with `DETERMINISTIC_REPAIR_FIRST_ENABLE`
+>   (default off per ADR-0003), `_debugger_node` routes through this layer
+>   **before** the LLM call and skips that LLM round on a hit (token
+>   savings), while the patch still goes through the existing executor
+>   regression validation; `state["deterministic_repair_status"]` doubles
+>   as a sentinel once non-None (no same-signature retries), and an
+>   ineffective deterministic patch naturally falls back to the LLM path;
+>   the deterministic result is key-set isomorphic with the `debug()`
+>   return (downstream branches never miss keys);
+> - result rows emit `deterministic_repair_status` (experiments consume
+>   takeover rate and token savings); ADR-0019 + index sync (next 0020);
+> - env budget 167->168; full regression **4502 -> 4520 passed / 0
+>   failed** (+18 = tests/test_batch_iv.py).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-III (structured edit intents with deterministic landing per ADR-0018 + AC2 over-red regenerate counter fix)
+
+> Phase-2 core (the "synthesize" stage of ADR-0017) + root-cause fix for
+> the E2 recursion-limit hits; first landing of ADR-0018:
+> - **New `src/tools/patch_intent.py` (edit-intent engine)**: the LLM
+>   attaches `edit_intents` to the debug() JSON response (`{"old_str",
+>   "new_str"}` unique-anchor search/replace, one entry per hunk) -> the
+>   deterministic engine verifies anchor uniqueness per entry (any
+>   occurrence count != 1 rejects the whole batch), applies sequentially,
+>   guarantees **atomicity** (a rejected entry discards all modifications
+>   and returns the original code), and enforces an AST syntax gate (the
+>   result must parse; pre-existing syntax errors are exempt) — following
+>   the 2609.00227 finding (lenient diffs silently mis-apply ~1/7) and
+>   Diff-XYZ (search/replace is the best format): the LLM emits intent,
+>   a deterministic pipeline performs the edit; on success the minimal
+>   edit result replaces the whole-file patch; on failure it falls back
+>   atomically to the legacy channel;
+> - **Wiring**: `EDIT_INTENT_ENABLE` (default off per ADR-0003; promotes
+>   after A/B) — the debugger prompt gains the intent output contract
+>   (byte-identical prompt when off); debug() applies the engine
+>   (mirroring the 2.1 type-repair-layer "replace on success" pattern);
+>   `state["edit_intent_status"]` (TypedDict declaration + factory None)
+>   -> result rows emit `edit_intent_status` (key-set isomorphism on both
+>   branches; experiments consume takeover rate and rejection reasons);
+> - **AC2 over-red regenerate counter fix** (root channel of the 16/174
+>   recursion-limit hits measured in E2): the specificity-gate over-red
+>   branch enters the generator with test_passed=**False**, which none of
+>   the five existing regenerate-entry detectors matched -> the counter
+>   never incremented -> the cap never bound -> executor-generator ping
+>   -pong until recursion_limit. New `_specificity_over_red_regenerate_entry`
+>   (iteration==0 and verdict==over_red) joins the counting predicate
+>   (third instance of the O4/W3 missed-entry class);
+> - **ADR-0018** (structured edit intents + deterministic landing, default
+>   off for A/B) + ADR index sync (next 0019);
+> - env budget 166->167; full regression **4478 -> 4502 passed / 0
+>   failed** (+24 = tests/test_batch_iii.py: engine math / atomicity /
+>   syntax gate / pre-existing-syntax exemption / switch default / debug
+>   wiring four states / counter fix / state contract).
+
+## [Unreleased] — 2026-10-07 Batch RepairEngine-II (Top-3 ranked localization candidates + element-level Hit@3/MRR + offline CPR/IDR + citation verification)
+
+> Driven by round-16 systematic review (~80 frontier references verified
+> online across 3 agents) and the user's three-phase quantified targets
+> (localization >=75% / repair 15-25% / token -50%); this batch lands the
+> offline-executable part of Phase 1 plus a Phase-3 measurement primitive:
+> - **FaultLocalizer upgraded to Top-3 ranked candidates (RGFL two-stage
+>   style)**: the prompt now requests 1-3 candidates ordered by likelihood,
+>   each with a new `expected_logic` field (reasoning guidance: state the
+>   expected correct behavior first, then contrast with actual code); the
+>   parser stays backward compatible with the legacy single-object schema
+>   (zero change to historical semantics); top-level fields mirror the
+>   first candidate (prompt section rendering and existing metrics are
+>   unaffected);
+> - **Element-level ranking metrics**: `localization_rank_metrics` (pure
+>   function; dedup by leaf name, Top-3 hit + 1/rank MRR) -> result rows
+>   now emit `localization_hit_function_at_3` / `localization_mrr`
+>   alongside Hit@1 (legacy schema degrades to a single candidate; None
+>   placeholders keep the key-set isomorphism);
+> - **Offline CPR/IDR analysis** (`experiments/cpr_idr_report.py`, zero
+>   LLM, deterministic stdout report): incorrect-patch detection rate /
+>   correct-patch retention rate — **first measurement (10 batches):
+>   IDR = 27.78% (40/144), i.e. 72% of plausible-but-wrong patches pass
+>   with zero negative signals**, quantifying the verification-channel gap
+>   for the first time (direct evidence for Phase 2 "verify beyond
+>   plausible + abstention"); CPR honestly reports undefined while
+>   correct=0 (None != 0.0);
+> - **Citation verification (round 16, online)**: TDFlow (88.8% Lite with
+>   human tests, +27.8% over next best) / PAGENT (type & data-structure
+>   errors = 27.19% of failed patches; type-repair layer 29/127 — the
+>   quoted 34.56% diverges from the paper) / BLAgent (TOSEM 2026, 78%
+>   open / 86% closed) / SWE-Debate (arXiv:2507.22305, 81.67%) /
+>   SWE-Swiss (32B, 60.2% Verified) all confirmed; DeepSeek Flash 79.0%
+>   is a vendor self-reported figure (tech report also cites 73.7%; no
+>   independent contamination-free re-run); multi-hunk behavioral study
+>   (arXiv:2511.11012: Claude Code 92.82% vs Qwen Code 26.98%) is close
+>   to but not identical with the quoted numbers; the "BIRCH" benchmark
+>   name could not be located; RGFL name correction = **Reasoning**-Guided
+>   (not Retrieval); ADR-0017 citations updated accordingly
+>   ("Hunk-SWE"/"PSR" unlocated, replaced with verified anchors);
+> - **BASELINE erratum backfill**: total_passed 4429->4478 (E2-iter +8
+>   and Batch-I +16 had not been synced; chain backfilled in one go);
+>   metrics_schema gained the four localization keys (Batch-I omission);
+>   mypy source files 106->107 (Batch-I unsynced);
+> - Full regression **4453 -> 4478 passed / 0 failed** (+25 = 14 in
+>   test_fault_localizer.py ranking groups + 11 in test_cpr_idr_report.py).
 
 ## [Unreleased] — 2026-10-07 Batch RepairEngine-I (paradigm pivot: standalone FaultLocalizer + localization as a first-class metric, first smoke passed)
 

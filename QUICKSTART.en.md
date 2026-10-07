@@ -89,9 +89,9 @@ export AITESTER_LLM_CACHE=0
 rm -rf src/cache
 ```
 
-## 7. Optional: Advanced Switches (all off by default; no impact on normal use)
+## 7. Optional: Advanced Switches (off by default unless noted; no impact on normal use)
 
-All of the following switches are off by default; enable them as needed (see the comments in `.env.example` for details):
+All of the following switches are off by default unless explicitly noted; enable them as needed (see the comments in `.env.example` for details):
 
 ```bash
 # ── Switch presets (recommended entry point; four tiers since batch AA, 2026-10-06)
@@ -188,6 +188,16 @@ export CROSS_FILE_MAX_MODULES=5
 # avoiding assertion weakening / always-true assertions / magic-number smells.
 export ASSERTION_AUGMENT_ENABLE=true
 
+# ── 2026-10-07 repair-engine batch I: dual-channel fault localization (on by default; action needed only for ablation) ──
+# Spectral channel (Ochiai Top-k, zero LLM, FL_SPECTRAL_ENABLE, on by default since R8) +
+# reasoning channel (RGFL-style structured LLM localization, FAULT_LOCALIZER_ENABLE, on by
+# default since batch I): the localization result is injected into the Debugger prompt and
+# surfaced with the result rows as the localization_hit_function metric (function-level hit,
+# compared against the gold changed-function set); reasoning failures degrade conservatively
+# to None and never block the repair main path. Set false only for ablation controls —
+# falls back to the pure-spectral caliber (no LLM localization):
+export FAULT_LOCALIZER_ENABLE=false
+
 # Result analysis (4.3 + 1.1/1.2/1.3 metric enhancements + 2.1 contamination detection
 # + 2.2 difficulty stratification + 4.4 dependency cache): after running the benchmark,
 # generate a Markdown summary including success rate / token efficiency / iteration
@@ -197,7 +207,8 @@ export ASSERTION_AUGMENT_ENABLE=true
 # vs "cannot produce an effective patch") / boundary case coverage (1.3, AST conservative
 # detection of None / empty collection / 0 / -1 / >= / <= boundary conditions) /
 # mutation score (1.3, produced by external mutation testers; skipped when the field is
-# absent) / assertion-strength AST enhancement (1.3, ast.parse + ast.Assert node
+# absent) / fault-localization quality FL@1/3/5 (B-02, emitted when details[].fl_at_k exists
+# and gold material is solvable) / assertion-strength AST enhancement (1.3, ast.parse + ast.Assert node
 # counting, outputting ast_avg_assertions) /
 # data contamination detection (2.1, token-level Jaccard overlap of SWE-bench golden
 # patches, high >= 0.85 / medium >= 0.6) / task difficulty stratification (2.2,
@@ -218,6 +229,14 @@ python experiments/analyze_results.py --results-dir experiments/results \
 # simplicity} to state.execution_trace. To inspect a task's trace (details[].execution_trace
 # in the result JSON):
 python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('execution_trace')) for r in d['results']['aitester']['details'][:3]]"
+
+# Repair-engine batch I result-row fields (alongside detection/repair/fl_at_k):
+# details[].llm_localization — LLM reasoning-localization JSON (function_name / line_start /
+# line_end / confidence / reasoning; null when the switch is off, the LLM fails, or there are
+# no failed cases); details[].localization_hit_function — function-level hit bool (localized
+# function ∈ gold changed-function set; null when unlocalized or no gold material,
+# schema-isomorphic placeholder).
+python -c "import json; d=json.load(open('experiments/results/benchmark_xxx.json')); [print(r['task_id'], r.get('localization_hit_function'), r.get('llm_localization')) for r in d['results']['aitester']['details'][:3]]"
 
 # Failure root-cause classification + case knowledge base (5.3): attribute causes to the three major root causes
 # (LLM capability / dependencies / frameworks); structured cases are written to failure_knowledge_base.json

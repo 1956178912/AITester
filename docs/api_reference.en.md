@@ -3,7 +3,8 @@
 # AITester API Reference Document
 
 > This document describes the core classes and methods of AITester, for developer integration and extension.
-> Last updated: 2026-10-06 (Round-12 review batch AK: experiments side adds `experiments/repair_ceiling_analysis.py` offline attribution [repair=0 funnel + detection=None dual-bound sensitivity; see the statistical-analysis companion entries]; zero src/ changes, default behavior unchanged; batch AA and earlier see "Previous" and CHANGELOG)
+> Last updated: 2026-10-07 (repair-engine batch I: paradigm shift — standalone `FaultLocalizerAgent` landed [RGFL-style LLM reasoning localization fused with Ochiai spectral corroboration, localization-only, conservative None degradation]; see the new Agent Modules entry; `DebuggerAgent.debug()` gains the `localization_section` localization-section parameter; the workflow `debugger` node inline-runs reasoning localization and writes `state["llm_localization"]`)
+> Previous: 2026-10-06 (Round-12 review batch AK: experiments side adds `experiments/repair_ceiling_analysis.py` offline attribution [repair=0 funnel + detection=None dual-bound sensitivity; see the statistical-analysis companion entries]; zero src/ changes, default behavior unchanged; batch AA and earlier see "Previous" and CHANGELOG)
 > Previous: 2026-10-06 (code-optimization batch AA: `AITESTER_PROFILE` expanded to four tiers, with the logic tier now injecting `DETECTION_FIRST_ENABLE` [completing the ADR-0015 detection-first preset gap]; `SyntheticDataset` gains `max_pattern_repeat` (per-pool template repeat cap) + `run_benchmark` gains the `--max-pattern-repeat` CLI flag (both opt-in, default None = legacy behavior, seed=42 reproducibility unchanged); README CI-matrix drift fix; default behavior unchanged)
 >
 > Earlier: 2026-10-05 (review batch R1-R18: R1a/R1b spec-compilation fixes + signature-aware binding / R1c spec oracle executed alongside LLM tests (`SPEC_ORACLE_EXEC_ENABLE` default off) / R4b rollback fail-closed (`PATCH_ROLLBACK_FAIL_CLOSED` default off) / R5 mutation detection rate (gated by `ENABLE_MUTATION_SCORING`) / R2 statistical report persisted (McNemar/BH-FDR/bootstrap CI/Cliff's delta/`--batches`) / R17 structured routing priority (`ROUTE_STRUCTURED_ENABLE` default off) / R16 rogue-agent monitoring (`ROGUE_MONITOR_ENABLE` default off) / R11 deterministic sampling (`run_benchmark(deterministic=True)`) / R15 `AITESTER_PROFILE` three-tier presets / `API_HEALTH_CHECKER_ENABLE` health-checker-thread switch / LLM cache directory default migrated to `~/.cache/aitester/llm`; default behavior unchanged, all new capabilities behind independent switches)
@@ -164,7 +165,7 @@ result = agent.debug(
 
 | Method | Parameters | Return Value | Description |
 |------|------|--------|------|
-| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None` | `dict` | Analyzes the failure and generates a repair patch (the last three are all None by default: AST focused truncation for large files / distinguishing ASSERTION from LOGIC_ERROR) |
+| `debug()` | `target_code: str`, `test_output: str`, `failed_cases: list`, `rag_references: list[dict] \| None = None`, `focus_function: str \| None = None`, `target_module: str \| None = None`, `fl_spectral_section: str \| None = None`, `localization_section: str \| None = None` | `dict` | Analyzes the failure and generates a repair patch (the middle parameters are all None by default: AST focused truncation for large files / distinguishing ASSERTION from LOGIC_ERROR; the last two are localization-section injections — the spectral Ochiai Top-k section and the RGFL reasoning-localization section, injected side by side with the existing sections, no injection when None/empty, zero change to the historical caliber) |
 
 **Return format:**
 ```json
@@ -175,6 +176,53 @@ result = agent.debug(
   "patch": "```python\ndef divide(a, b): return a / b\n```"
 }
 ```
+
+---
+
+### FaultLocalizerAgent
+
+RGFL-style LLM reasoning fault localization agent (repair-engine phase one, 2026-10-07 paradigm-shift batch): localization only, no repair; dual-channel fusion — the Ochiai spectrum (zero LLM, the `fl_spectral` measurement layer) provides line-level suspiciousness corroboration while the LLM outputs structured localization JSON. Switch: `FAULT_LOCALIZER_ENABLE` (true by default; explicit false falls back to the pure-spectral ablation caliber).
+
+```python
+from src.agents.fault_localizer import (
+    FaultLocalizerAgent,
+    fault_localizer_enabled,
+    gold_changed_functions,
+    localization_hit,
+)
+
+agent = FaultLocalizerAgent()
+loc = agent.localize(
+    target_code="def divide(a, b): return a - b",
+    test_code="def test_divide():\n    assert divide(1, 2) == 0.5",
+    test_output="AssertionError: expected 0.5, got -1.0",
+    failed_cases=[{"test": "test_divide"}],
+    spectral_top_k=[{"line": 3, "score": 0.87}],  # optional, spectral Top-k corroboration
+)
+```
+
+**Key methods / functions:**
+
+| Name | Parameters | Return Value | Description |
+|------|------|--------|------|
+| `FaultLocalizerAgent.localize()` | `target_code: str`, `test_code: str`, `test_output: str`, `failed_cases: list[dict] \| None = None`, `spectral_top_k: list[dict] \| None = None`, `max_retries: int = 2` | `dict \| None` | LLM reasoning localization: line-numbered source + failing test + error output (truncated at 2000 chars) + spectral Top-5 corroboration → structured JSON; LLM failure / empty input conservatively returns None (never blocks the repair main path) |
+| `fault_localizer_enabled()` | none | `bool` | Switch read (`FAULT_LOCALIZER_ENABLE`, true by default; explicit false = pure-spectral ablation control) |
+| `gold_changed_functions()` | `buggy_code: str`, `fixed_code: str` | `set[str]` | Gold changed-function set: defect lines from the buggy↔fixed diff are traced upward via AST to their owning function (innermost for nesting; outside-function changes record `"<module>"`) |
+| `localization_hit()` | `loc: dict \| None`, `gold_functions: set[str]` | `dict \| None` | Function-level hit adjudication: `{"localization_hit_function": bool}` (function names compared by their final `.`-segment, method/nesting tolerant); returns None when unlocalized or no gold material (unmeasurable, schema-isomorphic placeholder) |
+| `build_localization_prompt_section()` | `loc: dict \| None` | `str` | Renders the localization result as a Debugger prompt section (None/empty → empty string, historical caliber) |
+
+**Return format (on `localize()` success):**
+```json
+{
+  "function_name": "divide",
+  "line_start": 3,
+  "line_end": 3,
+  "confidence": 0.9,
+  "reasoning": "division implemented as subtraction"
+}
+```
+
+> Wiring: `_debugger_node` inline-invokes this agent when failed cases exist and the switch is on; the localization result is written to `state["llm_localization"]` and injected into the Debugger prompt side by side with the spectral section via `build_localization_prompt_section()`; the experiment layer consumes the `localization_hit_function` metric (compared against the gold changed-function set).
 
 ---
 
@@ -711,7 +759,7 @@ final_state = graph.invoke(state)
 | `planner` | Generates the test plan | ✅ |
 | `generator` | Generates test code | ✅ |
 | `executor` | Executes the tests | ❌ |
-| `debugger` | Layered diagnosis + generates repair patches (error classification is called inline within the node via `error_classifier.classify`; there is no standalone classification node) | ✅ |
+| `debugger` | Layered diagnosis + generates repair patches (error classification is called inline within the node via `error_classifier.classify`; there is no standalone classification node; since repair-engine batch I the node also inline-runs RGFL-style LLM reasoning localization [`FAULT_LOCALIZER_ENABLE` on by default] — spectral Top-k corroboration + structured localization, result written to `state["llm_localization"]`, localization section injected side by side with the spectral section) | ✅ |
 | `patch_applier` | Applies patches (single-file `safe_apply_patch`; when `CROSS_FILE_ENABLE=true`, takes the cross-file multi-file branch) | ❌ |
 | `cross_file_analyzer` | 3.5 Cross-file dependency analysis (registered only when `CROSS_FILE_ENABLE=true`, inserted between `executor → debugger`) | ❌ |
 

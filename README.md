@@ -6,10 +6,12 @@
 > （检出优先协议为主成功口径）。核心创新：**检出优先思维链（Detection-first
 > CoT，"先红后绿"）** + **分层错误修复机制（Hierarchical Repair）**
 > + **Oracle（测试预言）闭环：规约驱动断言增强与缺陷检出导向**。
-> 诚实披露（AL5）：三种子主批次（n=261，gold 独立裁决）实测检出优先提示
-> 协议带来决定性检出增益，而 repair = 0.0%——**自修复为可测量口径而非
-> 已证实主张**（上限归因见 `experiments/results/main_batch/repair_ceiling_report.md`，
-> 编排定位见 ADR-0016）。
+> 诚实披露（AL5，2026-10-07 批次 XIII 勘误）：三种子主批次（n=261，gold
+> 独立裁决）实测检出优先提示协议带来决定性检出增益；**repair 经 ADR-0021
+> 测量口径修正（patch 字段围栏残留伪影）后存量重放 = 35.9%**（145 可重放
+> 行 correct=52；E1/E2 logic 档 48.1%）——修复能力存在但未达前沿，为当前
+> 优化主线（修正重估见 `make corrected-metrics` / ADR-0027，上限归因与
+> 编排定位见 `repair_ceiling_report.md` / ADR-0016）。
 
 ## 测试状态
 
@@ -24,13 +26,13 @@
 | **总测试数** | ✅ 全量 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过）——当前数值见 [BASELINE.yaml](BASELINE.yaml) `tests` 节（`total_passed` / `slim_environment`） |
 | **单元测试** | ✅ 全量通过、零失败（实测耗时与用例数见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 `suite_seconds` / `total_passed` / `total_failed`）；精简环境 `skipif`/`importorskip` 优雅降级，非误报 ERROR |
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
-| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 全线 0.0%**（上限归因：patch 产出 94%/plausible 47%/correct 0，见 `repair_ceiling_report.md`）；$/task 0.0259 vs 0.0045（价目表官方登记口径）。历史批（2026-10-01 n=50）false_fix=89.8% 为"假成功通道"证据；SWE-bench Lite（sqlfluff-20）真实基准 0/20 负结果与统计检验同样如实披露、不筛选 |
+| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 修正口径 35.9%**（ADR-0021：历史"全线 0.0%"系 patch 字段围栏残留测量伪影，修正重放 52/145 可重放行；E1/E2 logic 档 48.1%；早期 10-01 批 0/15 系真零；漏斗修正：patch 产出 94%/plausible 47%/correct 35.9%，见 `repair_ceiling_report.md` + ADR-0021/0027）；$/task 0.0259 vs 0.0045（价目表官方登记口径）；定位维度随结果行并列输出——`fl_at_k`（谱系 Top-k 行级命中）与 `localization_hit_function`（LLM 推理定位函数级命中，2026-10-07 修复引擎批次 I 起，与 gold 变更函数集合比对，未定位时键集合同构占位）。历史批（2026-10-01 n=50）false_fix=89.8% 为"假成功通道"证据（ADR-0027 重估：该批修正 repair=0/15 系真零，证据维持成立；主批次修正 false_fix=87.2%）；SWE-bench Lite（sqlfluff-20）真实基准 0/20 负结果与统计检验同样如实披露、不筛选 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.13/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
 | **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ 逐模块行覆盖以 [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` 为单一事实来源（base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86，分支覆盖与核心路由门槛同见该文件） |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3）+ mypy 全仓 0 错误（源文件数与版本锁定见 [BASELINE.yaml](BASELINE.yaml) `static_checks` 节 `mypy_source_files`）；历轮 lint 清零叙事归档 [CHANGELOG.md](CHANGELOG.md) |
-| **最近改动** | ✅ 2026-10-07 AS 批次（第十五轮审查续四：发行构建链路首次全链取证〔wheel 构建→全新 venv 安装→CLI/import 冒烟全绿，O9/O35/X4 打包链端到端无 latent bug，AL9 发布前置证据〕+ PEP 639 license 现代化〔SPDX `license="MIT"`+license-files+setuptools>=77，METADATA 实测 License-Expression: MIT，survey 打包缺口清零〕+ `make build-check` 本地冒烟目标）；此前同日 AR 批次（第十五轮审查续三：hypothesis 补入 [formal] extras 双源 + README"已知失败"行 CI 矩阵勘误〔3.12/3.13/3.14〕+ prereg 双语结构奇偶锁〔13/3/9〕，含 AR1 公开勘误）；此前同日 AQ 批次（E7 工作表 v2 逐行差异 + E7 两工件入库守卫〔11→13〕+ survey 打包陈旧结论勘误）；此前同日 AP 批次（E7 复核工作表生成器 + E6 提取命令端到端验证 + B-05 检查器缩进盲区修复）；此前同日 AO 批次（E6 预注册修订〔matched cap 改取 E2 实测均值〕+ CI 按 requirements.lock 安装 + E7 候选清单生成）；此前同日 AN 批次（统计报告呈现性增补 + TestGenEval L2 候补登记 + E1 失败出口属性模板路线骨架）；此前 2026-10-06 AL/AM 批次（红线守卫勘误回绿 + 去"自修复"主张 + E6/E7 预注册 + E6 执行前置 --per-task-token-caps 全链），详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
+| **最近改动** | ✅ 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028——FL Top-k 约束观测门〔`patch_changed_functions` 补丁变更函数集合 × 定位 Top-3 候选求交，hit_rank 分层；结果行 `fl_constraint_verdict`/`fl_constraint_hit_rank`/`fl_constraint_changed_functions` 三键；ADR-0024「生成侧主导」行级可验证〕+ Self-Repair Trap 观测器〔`oracle_quality_history` 逐次质量快照 + `detect_self_repair_trap` 三信号判定核；结果行三键〕+ Frame Lifetime Trace 设计输入〔docs/design/frame_lifetime_trace.md，激活门槛=Debugger 拆分批立项〕+ BASELINE 测试链勘误〔批次 VII–XIII 记录数字预写失真收口〕；全量 4669/0）；此前同日批次 VII–XIII（repair=0 测量伪影定案〔修正口径 35.9%/48.1%〕+ test-hacking 守卫 + 统计报告三节 + 反事实 FL 上界 + ORACLE_CONTEXT_TIER 消融档 + 交互归因 + 修正口径重估收口，详见 CHANGELOG）；此前同日批次 VI（run_main_batch `--staging-dir` 跑批运营收口——跑前快照输出目录、跑后新工件自动外移保持工作树干净，**多种子顺序跑批第二批不再被干净树门禁拒绝**〔E2 双种子"暂移-恢复"两次手工实操固化；--skip-stats 早退同样外移；路径穿越防御拒 .. 与输出目录内〕+ `make cpr-idr` 报告入口〔IDR/CPR + 弃权视角〕）；此前同日批次 V（ADR-0020：补丁弃权门观测层——五信号判定核 + 结果行 `patch_abstained`/`patch_abstain_signals`；弃权视角存量回放：passed 443 中 392〔88.5%〕将命中、精确率 1.0；阻断档 Proposed 待 A/B）；此前同日批次 IV（ADR-0019：确定性优先修复路由）；此前同日批次 III（ADR-0018：编辑意图落盘 + AC2 计数补漏）；此前同日批次 II（定位 Top-3 + Hit@3/MRR + CPR/IDR〔IDR=27.78%〕）；此前同日批次 I（范式转向修复引擎路线，FaultLocalizer 落地）；此前同日 AS 批次（发行构建链路取证 + PEP 639）；更早批次详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
 
 更多详情参见 [CHANGELOG.md](CHANGELOG.md)、[QUICKSTART.md](QUICKSTART.md)、[docs/api_reference.md](docs/api_reference.md)、[docs/usage_examples.md](docs/usage_examples.md)。
 
@@ -287,6 +289,8 @@ AITester/
 │   │   ├── executor_output.py        # 执行结果解析（覆盖率 / 失败用例 / 错误信息，0.1 拆分）
 │   │   ├── executor_runtime.py       # 子进程运行、重试与临时资源清理（0.1 拆分）
 │   │   ├── debugger.py               # 调试修复师（分层错误修复）
+│   │   ├── fl_spectral.py            # Ochiai 谱系故障定位（零 LLM，Top-k 可疑行佐证；R8 起）
+│   │   ├── fault_localizer.py        # RGFL 式 LLM 推理故障定位（修复引擎第一阶段，只定位不修复；FAULT_LOCALIZER_ENABLE 默认开）
 │   │   └── error_classifier.py       # 错误类型分类器（规则匹配）
 │   ├── api/                          # API 配置管理
 │   │   ├── api_manager.py            # 多 LLM 配置 CRUD（.env.local / llm_configs.json）+ 熔断/路由
@@ -382,6 +386,13 @@ Planner 在输出测试计划前，先对函数进行**输入域、输出域、�
 - [src/prompts/templates.py](src/prompts/templates.py) 中的 `PLANNER_SYSTEM_PROMPT`
 
 ### 2. 分层错误修复机制（Hierarchical Repair Strategy）
+**局部化先行（2026-10-07 修复引擎范式转向）**：修复流程升格为"**局部化 → 合成 → 验证**"三段，局部化从"Debugger 的副产品"升格为可独立量化的第一阶段——谱系通道（Ochiai Top-k，零 LLM）提供行级可疑度佐证，推理通道（RGFL 式 LLM 结构化定位：函数 / 行区间 / 置信度 / 推理依据）只定位不修复，两通道融合后与谱系段落并列注入 Debugger prompt；LLM 失败 / JSON 解析失败保守降级 None，不产出假定位、不阻断修复。局部化质量由独立指标量化：`localization_hit_function`（LLM 定位函数 ∈ gold 变更函数集合）与 `fl_at_k`（谱系行级 Top-k 命中）。
+
+**技术实现**：
+- [src/agents/fault_localizer.py](src/agents/fault_localizer.py) 中的 `FaultLocalizerAgent.localize()`（推理定位）与 `gold_changed_functions()` / `localization_hit()`（gold 口径提取与函数级命中判定）
+- [src/agents/fl_spectral.py](src/agents/fl_spectral.py) 中的谱系定位测量层（Ochiai Top-k）
+- [src/graph/nodes.py](src/graph/nodes.py) 中的 `_debugger_node`（双通道融合接线，定位结果写 `state["llm_localization"]` 供实验层消费）
+
 将测试失败分为十七类：**LLM 响应格式异常（llm_format_error）、LLM 空响应（llm_empty_response，P0 4.1 子类）、LLM JSON 解析失败（llm_json_parse_failed，P0 4.1 子类）、导入失败（import_error）、语法错误（syntax）、类型不匹配（type_error）、索引越界（index_error）、断言失败（assertion）、测试逻辑错误（logic_error）、运行时异常（runtime）、超时（timeout）、未知（unknown）、补丁被安全守卫拒绝（patch_validation_failed）、RAG 检索全空（rag_retrieval_empty）、执行轨迹丢失（execution_trace_missing）、多候选全被静态筛选拒绝（multi_candidate_all_rejected）、补丁语法反复损坏（patch_syntax_invalid，2.2 重采样耗尽标记，2026-09-27 第十一轮新增）**，每类采用差异化修复策略（P2 细化：import/type/logic 三类从旧的五类中拆出；1.2 残余：LLM_FORMAT_ERROR 与 INDEX_ERROR 从 UNKNOWN 拆出；1.1 状态细化：PATCH_VALIDATION_FAILED 与 RAG_RETRIEVAL_EMPTY 为流程状态类；5.2 持续细化：EXECUTION_TRACE_MISSING 与 MULTI_CANDIDATE_ALL_REJECTED 为多候选/轨迹流程类；P0 4.1 子类：LLM_EMPTY_RESPONSE 与 LLM_JSON_PARSE_FAILED 为 LLM_FORMAT_ERROR 的两个精确子类，由 `ErrorClassifier.classify_llm_response()` 在 Debugger 收到 LLM 响应后、JSON 解析前直接分类，命中时用更严格 prompt 重试一次并记录原始响应片段，不走 `classify()` 文本正则，成功任务原样返回）。
 
 **技术实现**：
@@ -1314,6 +1325,7 @@ docker run --rm \
 | `RAG_TTL_SECONDS` | RAG 缓存 TTL（秒，持久化场景默认 7 天） | 604800 |
 | `EXECUTOR_USE_VENV` | venv 沙箱隔离执行（依赖隔离，P1；**R10 起默认 true**，设 false 回退宿主环境直跑，仅调试用） | true |
 | `FL_SPECTRAL_ENABLE` | O2 谱系故障定位（Ochiai Top-k，零 LLM 成本；**R8 起默认 true**，设 false 作消融对照组） | true |
+| `FAULT_LOCALIZER_ENABLE` | 修复引擎第一阶段 RGFL 式 LLM 推理故障定位（局部化 → 合成 → 验证范式，2026-10-07 批次 I；结构化定位〔函数/行区间/置信度〕注入 Debugger prompt 并透出 `localization_hit_function` 指标；失败保守降级 None 不阻断修复；**默认 true**，设 false 退回纯谱系消融口径） | true |
 | `SPEC_IR_ENABLE` | R7 SpecIR 可执行规约 IR（logic_analysis 解析 + 边界三元组 → pytest/Hypothesis oracle 编译，纯观测层） | false |
 | `FLAKY_CHECK_ENABLE` | R35/R31 flaky 门禁（失败轮重复执行一致性检测，flaky 时 test_passed 保守记 False，flaky fraction 入工件） | false |
 | `FLAKY_REPEAT_COUNT` | flaky 门禁重复执行次数（默认 3；稳定性口径设 30） | 3 |

@@ -61,6 +61,16 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"合成数据集随机种子（默认 {DEFAULT_SEED}）")
     p.add_argument("--baselines", default=DEFAULT_BASELINES, help="基线方法列表（逗号分隔）")
     p.add_argument("--output-dir", default=MAIN_BATCH_DIR, help="输出目录（默认 main_batch/ 白名单）")
+    p.add_argument(
+        "--staging-dir",
+        default=None,
+        help=(
+            "跑批后把本次新增工件自动移到该目录（仓库外），保持工作树干净——"
+            "多种子顺序跑批（第二批不被干净树门禁拒绝）的代码化"
+            "（E2 双种子'暂移-恢复'两次手工实操的固化）。禁止含 .. 的路径；"
+            "不得位于输出目录内。移回：mv <staging>/* <output-dir>/"
+        ),
+    )
     p.add_argument("--skip-stats", action="store_true", help="跳过 R14 统计协议（仅跑批次）")
     # P0-1（2026-10-05 独立审查）：主批次 = 论文数字通道，确定性采样为默认
     # 协议（R11：temp 强制 0.0 三处级联）；--no-deterministic 显式退出
@@ -142,6 +152,55 @@ def _warn_llm_cache_if_enabled() -> None:
         )
 
 
+def _validated_staging_dir(staging: str, out_dir: Path) -> Path:
+    """校验 --staging-dir（路径穿越防御：拒绝 .. 分量；禁止位于输出目录内）。
+
+    Returns:
+        解析后的绝对 Path。
+
+    Raises:
+        SystemExit: 校验失败（含原因）。
+    """
+    candidate = Path(staging).expanduser()
+    if ".." in candidate.parts:
+        print(f"❌ --staging-dir 含 '..' 分量（{staging}）——禁止路径穿越。", file=sys.stderr)
+        raise SystemExit(2)
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(out_dir.resolve())
+    except ValueError:
+        pass
+    else:
+        print(f"❌ --staging-dir（{staging}）不得位于输出目录（{out_dir}）内。", file=sys.stderr)
+        raise SystemExit(2)
+    return resolved
+
+
+def _snapshot_files(root: Path) -> set[Path]:
+    """递归快照 root 下既有文件集合（跑批前调用，供跑后差集定位新工件）。"""
+    return {p for p in root.rglob("*") if p.is_file()}
+
+
+def _stage_out_new_artifacts(out_dir: Path, staging_dir: Path, before: set[Path]) -> list[Path]:
+    """把跑批新增工件移入 staging 目录（保持相对路径结构），返回移动清单。
+
+    E2 双种子实操固化的代码版：第一批产物落在 tracked 目录即令工作树变脏，
+    第二批被 _check_repo_clean 拒绝——此前两次手工"暂移-恢复"，现固化。
+    只移动新文件，不触碰既有工件（SHA256SUMS 等入库物不受影响）。
+    """
+    import shutil
+
+    moved: list[Path] = []
+    for path in sorted(out_dir.rglob("*")):
+        if not path.is_file() or path in before:
+            continue
+        target = staging_dir / path.relative_to(out_dir)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(target))
+        moved.append(target)
+    return moved
+
+
 def main() -> None:
     args = _parse_args()
     if not args.allow_dirty:
@@ -149,6 +208,20 @@ def main() -> None:
     _warn_llm_cache_if_enabled()
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 批次 VI（2026-10-07）：--staging-dir 前置——跑前快照既有工件，
+    # 跑后把新增工件外移（多种子顺序跑批不再触发干净树门禁）
+    staging_dir = _validated_staging_dir(args.staging_dir, out_dir) if args.staging_dir else None
+    files_before = _snapshot_files(out_dir) if staging_dir is not None else set()
+
+    def _stage_and_report() -> None:
+        """批次 VI 收尾：新工件外移 + 移回提示（--skip-stats 早退同样执行）。"""
+        if staging_dir is None:
+            return
+        moved = _stage_out_new_artifacts(out_dir, staging_dir, files_before)
+        print(f"\n--staging-dir：本次新增工件 {len(moved)} 件已外移至 {staging_dir}")
+        for target in moved:
+            print(f"  - {target}")
+        print(f"移回入库：mv {staging_dir}/* {out_dir}/（随后重算 SHA256SUMS）")
 
     # 导入 run_benchmark（副作用：加载 config 开关、校验 API 配置）
     import experiments.run_benchmark as rb
@@ -183,6 +256,7 @@ def main() -> None:
 
     if args.skip_stats:
         print("--skip-stats：跳过 R14 统计协议")
+        _stage_and_report()
         return
 
     # R14 统计协议（M13 批次白名单锁定：仅统计本批次文件）
@@ -209,6 +283,10 @@ def main() -> None:
     }
     print(f"\nR14 统计报告：{out_dir / 'statistical_report.md'}")
     print(f"批次白名单锁定：{json.dumps(summary['r14_batch_whitelist'], ensure_ascii=False)}")
+
+    # 批次 VI：--staging-dir 后置——新工件外移（含统计报告），工作树保持
+    # 干净（第二批种子可直接顺序执行）；提交前 mv 回 output-dir 入库。
+    _stage_and_report()
 
 
 def _print_r4_summary(batch_path: Path) -> None:

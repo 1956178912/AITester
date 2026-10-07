@@ -877,6 +877,159 @@ def cost_per_detection(cost_per_task: float | None, det_rate_pct: float | None) 
     return cost_per_task / (det_rate_pct / 100.0)
 
 
+# ─── 修复引擎批次 IX（ADR-0023）：pass@k / $/solved / 污染视角 ────────────────
+
+
+def _pass_at_k_value(n: int, c: int, k: int) -> float | None:
+    """标准 pass@k（HumanEval 官方口径的无偏估计）。
+
+    pass@k = 1 - ∏_{i=n-c+1}^{n} (1 - k/i)（k > n-c 时恒 1.0）；
+    k > n 时无定义（采样不足）→ None。
+    """
+    if k > n or k < 1:
+        return None
+    if n - c < k:
+        return 1.0
+    prod = 1.0
+    for i in range(n - c + 1, n + 1):
+        prod *= 1.0 - k / i
+    return 1.0 - prod
+
+
+def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct") -> dict[str, dict[str, Any]]:
+    """批次 IX（ADR-0023）：按臂的 pass@k（多轮采样并集解决率）。
+
+    口径：同 task_id 的跨批次行 = 同一任务的多个采样轮次（默认加载
+    模式保留全部轮次行）；行级成功 = row[field] 真值（patch_correct =
+    gold 独立裁决主口径；passed = 自指口径仅供对照）。k 上界取全臂
+    各任务轮次数的最小值（轮次不足 k 的任务无法参与该档，诚实截断）
+    并披露轮次分布（min/中位/max）。
+
+    注意（ADR-0021 披露义务）：存量批次的 patch_correct 恒 0（围栏
+    伪影）——存量数据下本节的 correct 口径 pass@k 无信息量，修复后
+    跑批起有效；存量修正数字用 make repair-replay。
+    """
+    summary: dict[str, dict[str, Any]] = {}
+    for baseline in sorted(data):
+        rounds_by_task: dict[str, list[bool]] = {}
+        for row in data[baseline] or []:
+            tid = str(row.get("task_id", ""))
+            if not tid:
+                continue
+            val = row.get(field)
+            if val is None:
+                continue  # 不可测行不入轮次（M1 None 口径一致）
+            rounds_by_task.setdefault(tid, []).append(bool(val))
+        if not rounds_by_task:
+            summary[baseline] = {"n_tasks": 0}
+            continue
+        ns = [len(v) for v in rounds_by_task.values()]
+        cs = [sum(v) for v in rounds_by_task.values()]
+        n_min, n_max = min(ns), max(ns)
+        n_median = sorted(ns)[len(ns) // 2]
+        k_values = sorted({k for k in (1, 2, 3, 5, 10) if k <= n_min})
+        table: dict[int, float | None] = {}
+        for k in k_values:
+            per_task = [_pass_at_k_value(n_i, c_i, k) for n_i, c_i in zip(ns, cs, strict=True)]
+            vals = [v for v in per_task if v is not None]
+            table[k] = (sum(vals) / len(vals)) if vals else None
+        summary[baseline] = {
+            "n_tasks": len(rounds_by_task),
+            "rounds_min": n_min,
+            "rounds_median": n_median,
+            "rounds_max": n_max,
+            "pass_at": table,
+        }
+    return summary
+
+
+def _pass_at_k_report_lines(summary: dict[str, dict[str, Any]], field_label: str) -> list[str]:
+    """pass@k 章节 Markdown 行。"""
+    lines = [
+        "| 基线 | 任务数 | 轮次 (min/中位/max) | " + " | ".join(f"pass@{k}" for k in (1, 2, 3, 5, 10)) + " |",
+        "|---|---|---|" + "---|" * 5,
+    ]
+    for baseline, s in summary.items():
+        if not s.get("n_tasks"):
+            lines.append(f"| {baseline} | 0 | — | — | — | — | — | — |")
+            continue
+        rounds = f"{s['rounds_min']}/{s['rounds_median']}/{s['rounds_max']}"
+        cells = []
+        for k in (1, 2, 3, 5, 10):
+            v = s["pass_at"].get(k)
+            cells.append(f"{v:.4f}" if isinstance(v, float) else "—")
+        lines.append(f"| {baseline} | {s['n_tasks']} | {rounds} | " + " | ".join(cells) + " |")
+    return lines
+
+
+def cost_per_solved(cost_rows: list[dict], data: dict[str, list[dict]]) -> dict[str, float | None]:
+    """批次 IX（ADR-0023）：$/solved task——总成本 ÷ gold 裁决 correct 总数。
+
+    与 $/task 的区别：分母从任务数换成 patch_correct=1 的行数（SWE-bench
+    生态 $/resolved 对齐）。correct=0（未解决任何任务）→ None（语义 ∞，
+    与 cost_per_detection 的诚实降级同口径）；未计价 → None。
+    存量批次 correct 恒 0 系 ADR-0021 伪影，修复后跑批起有效。
+    """
+    out: dict[str, float | None] = {}
+    for row in cost_rows:
+        baseline = row.get("baseline")
+        cost = row.get("cost")
+        rows = data.get(baseline) or []
+        solved = sum(1 for r in rows if r.get("patch_correct") == 1)
+        if cost is None or solved == 0:
+            out[baseline] = None
+        else:
+            out[baseline] = cost / solved
+    return out
+
+
+def contamination_view_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, Any]]:
+    """批次 IX（ADR-0023）：污染视角按臂聚合（行级 contamination_risk_level）。
+
+    行级来源：run_benchmark._compute_contamination_risk_level 写回的
+    contamination_risk_level（high/medium/low/unknown/not_applicable）。
+    聚合：各档计数 + 含污染（high/medium）vs 干净（low）的 passed 率
+    对照（not_applicable/unknown 不入两组分母，诚实披露）。
+    """
+    summary: dict[str, dict[str, Any]] = {}
+    for baseline in sorted(data):
+        counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0, "not_applicable": 0}
+        cont_pass = cont_n = clean_pass = clean_n = 0
+        for row in data[baseline] or []:
+            level = row.get("contamination_risk_level") or "unknown"
+            counts[level] = counts.get(level, 0) + 1
+            if level in ("high", "medium"):
+                cont_n += 1
+                cont_pass += 1 if row.get("passed") else 0
+            elif level == "low":
+                clean_n += 1
+                clean_pass += 1 if row.get("passed") else 0
+        summary[baseline] = {
+            "counts": counts,
+            "contaminated_passed_rate": round(cont_pass / cont_n, 4) if cont_n else None,
+            "clean_passed_rate": round(clean_pass / clean_n, 4) if clean_n else None,
+        }
+    return summary
+
+
+def _contamination_view_report_lines(summary: dict[str, dict[str, Any]]) -> list[str]:
+    """污染视角章节 Markdown 行。"""
+    lines = [
+        "| 基线 | high | medium | low | unknown | not_applicable | 含污染 passed 率 | 干净 passed 率 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for baseline, s in summary.items():
+        c = s["counts"]
+        cp = s["contaminated_passed_rate"]
+        kp = s["clean_passed_rate"]
+        lines.append(
+            f"| {baseline} | {c.get('high', 0)} | {c.get('medium', 0)} | {c.get('low', 0)} "
+            f"| {c.get('unknown', 0)} | {c.get('not_applicable', 0)} "
+            f"| {cp if cp is not None else '—'} | {kp if kp is not None else '—'} |"
+        )
+    return lines
+
+
 def mutation_reliability_summary(data: dict[str, list[dict]]) -> dict[str, dict[str, float | int | None]]:
     """AN2：按臂聚合 mutation_detection_rate（测试套件可靠性）。
 
@@ -1538,6 +1691,48 @@ def run_all_statistics(
             "",
         ]
         report_lines += _mutation_report_lines(mutation_reliability_summary(data))
+
+        # 修复引擎批次 IX（ADR-0023，呈现性增补）：pass@k / $/solved /
+        # 污染视角三节——多轮采样并集解决率、每解决一任务的成本、
+        # 含污染 vs 干净样本对照。主终点与判定规则零变化。
+        # 披露义务（ADR-0021）：存量批次 patch_correct 恒 0 系围栏伪影，
+        # correct 口径的 pass@k 与 $/solved 须以修复后跑批解读；存量修正
+        # 数字用 make repair-replay。
+        report_lines += [
+            "",
+            "## pass@k（多轮采样并集解决率——批次 IX / ADR-0023 呈现性增补）",
+            "",
+            "口径：同任务跨批次行 = 采样轮次；成功 = patch_correct（gold 独立裁决）。",
+            "k 上界 = 各任务轮次数的最小值（轮次不足诚实截断为 —）。",
+            "",
+        ]
+        report_lines += _pass_at_k_report_lines(pass_at_k_summary(data, field="patch_correct"), "patch_correct")
+        report_lines += [
+            "",
+            "> 注：存量批次的 patch_correct 恒 0 系 ADR-0021 围栏伪影——本节",
+            "> correct 口径以修复后跑批解读；存量修正数字见 `make repair-replay`。",
+            "",
+            "## $/solved task（每解决一任务成本——批次 IX / ADR-0023）",
+            "",
+        ]
+        _solved_costs = cost_per_solved(cost_rows, data)
+        for _b in sorted(_solved_costs):
+            _v = _solved_costs[_b]
+            _cell = f"{_v:.6f}" if _v is not None else "未定义（correct=0 或未计价）——与 $/detection 同口径诚实降级"
+            report_lines.append("- " + _b + ": " + _cell)
+        report_lines += [
+            "",
+            "## 污染视角（contamination_risk_level 按臂聚合——批次 IX / ADR-0023）",
+            "",
+        ]
+        report_lines += _contamination_view_report_lines(contamination_view_summary(data))
+        report_lines += [
+            "",
+            "> 口径：行级三维相似度（token Jaccard + AST 骨架 LCS + 语义词袋）",
+            "> 综合分级；含污染组成功率显著高于干净组（Δ≥0.2）时，结果归因",
+            "> 须剔除含污染样本单独报告（experiments/contamination_check.py）。",
+            "",
+        ]
 
         report_lines += [
             "",

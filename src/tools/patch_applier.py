@@ -41,7 +41,11 @@ logger = logging.getLogger(__name__)
 _DEF_RE = re.compile(r"def\s+(\w+)\s*\(")
 _TOP_DEF_RE = re.compile(r"^(?:async\s+)?def\s+\w+\s*\(", re.MULTILINE)
 _TRIPLE_QUOTE_RE = re.compile(r'^"""')
-_PYTHON_PREFIX_RE = re.compile(r"^python\s*\n?", re.IGNORECASE)
+# python 前缀剥离（批次 VII：补 (?!\w) 负向后瞻，与 helpers
+# _PYTHON_PREFIX_STRIP_PATTERN 对齐——旧正则会把首行 "python_x = 1"
+# 剥成 "_x = 1" 产出损坏代码；带后瞻后仅剥离独立 "python"/"python:"
+# 前缀标签，严格减少误伤，见 ADR-0021）
+_PYTHON_PREFIX_RE = re.compile(r"^python(?!\w)\s*:?\s*\n?", re.IGNORECASE)
 # 正则兜底路径的函数边界探测（_find_function_range 热循环内不再逐次编译）
 _BOUNDARY_RE = re.compile(r"^(def |class |@|#)")
 # 2026-09-26 round9 P1：顶层 import 探测（行首 ^import / ^from，与 _TOP_DEF_RE
@@ -49,6 +53,35 @@ _BOUNDARY_RE = re.compile(r"^(def |class |@|#)")
 # 函数体内局部 import（`def g(): import os`）落在前 200 字符内时被误判为
 # 完整文件模式 → 原文件顶层 import 被静默丢弃（round9 P1 发现，已复现）。
 _TOP_IMPORT_RE = re.compile(r"^(?:import |from )", re.MULTILINE)
+
+
+def normalize_patch_text(patch: str | None) -> str:
+    """补丁文本清理（写盘口径的函数化，修复引擎批次 VII / ADR-0021）。
+
+    背景：debugger 的 ``state["patch"]`` 保存 LLM JSON 原始值——项目约定
+    该字段可含 `````python`` 围栏 / ``python:`` 前缀（写盘链路由
+    apply_patch_to_code Step 1/2 负责清理；类型修复层 / 编辑意图通道
+    替换补丁时也主动构造围栏形态）。但 M1 独立裁决（repair_rate /
+    false_fix_rate / regression_rate）与结果行透出直接消费该原始值，
+    未经清理——E2 存量工件实测 **274/274 带补丁行的 patch 字段以
+    "python\\n" 围栏残留开头**，gold 测试在未清理文本上 100% 因
+    NameError 失败 → "repair 全线 0" 属测量伪影（清理后重放 51/106
+    通过，详见 ADR-0021）。本函数把写盘口径的清理（extract_code_block
+    + python 前缀剥离，幂等）供测量层复用，弥合"透出口径 ≠ 执行口径"
+    的分叉。
+
+    Args:
+        patch: 补丁原始文本（可含 markdown 围栏 / python: 前缀）；
+            None / 空串 → ""。
+
+    Returns:
+        清理后的文本。unified diff 形态不受影响（"diff --git" / "@@"
+        开头不匹配围栏与前缀正则，原样返回）；纯代码幂等。
+    """
+    if not patch:
+        return ""
+    cleaned = extract_code_block(patch)
+    return _PYTHON_PREFIX_RE.sub("", cleaned, count=1)
 
 
 def _extract_function_names(code: str) -> set[str]:
@@ -198,14 +231,12 @@ def apply_patch_to_code(
             - 成功时返回 (新代码, True)
             - 失败时返回 (原代码, False)
     """
-    # Step 1: 从补丁文本中提取纯代码（去除 markdown 包裹和前缀）
-    clean_patch = extract_code_block(patch)
+    # Step 1/2（批次 VII 函数化）：提取纯代码（去 markdown 包裹 + python 前缀）
+    # ——与测量层共用的单一权威口径 normalize_patch_text（ADR-0021）
+    clean_patch = normalize_patch_text(patch)
     # 补丁为空时无法应用，直接返回原代码
     if not clean_patch:
         return original_code, False
-
-    # Step 2: 移除可能的 "python" 前缀（LLM 有时输出不带反引号的格式）
-    clean_patch = _PYTHON_PREFIX_RE.sub("", clean_patch, count=1)
 
     # Step 3: 检测补丁类型（完整文件模式 or 单函数模式）
     if _is_full_file_patch(clean_patch, original_code):

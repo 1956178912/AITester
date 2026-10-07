@@ -3,7 +3,7 @@
 # AITester Usage Examples
 
 > This document provides detailed usage examples to help developers get started with AITester quickly.
-> Last updated: 2026-10-05 (added 2026-10-05 review-batch examples: switch presets / deterministic sampling / spec-oracle execution / rollback fail-closed / mutation detection rate / statistical-report allowlist)
+> Last updated: 2026-10-07 (repair-engine batch I: new dual-channel fault-localization ablation example [Example E] + Example 12 output extended with the `llm_localization` / `localization_hit_function` result-row fields; previous 2026-10-05: switch presets / deterministic sampling / spec-oracle execution / rollback fail-closed / mutation detection rate / statistical-report allowlist)
 > **Current baseline**: treat the repo-root [BASELINE.yaml](../BASELINE.yaml) as the single
 > source of truth (machine-readable, refreshed after each batch lands); this document no
 > longer embeds baseline numbers, avoiding stale snapshots as batches progress.
@@ -230,6 +230,20 @@ python experiments/statistical_analysis.py --results-dir experiments/results/mai
   --batches benchmark_synthetic_20261001_121523.json,benchmark_plain_llm_20261001_121523.json
 ```
 
+### Example E: Dual-channel fault-localization ablation (2026-10-07 repair-engine batch I)
+
+```bash
+# Both localization channels are on by default (spectral Ochiai + RGFL-style LLM reasoning
+# localization); normal use needs no action. Set false only for ablation controls — falls
+# back to the pure-spectral caliber (no LLM localization calls; localization_hit_function
+# stays null with a schema-isomorphic key set for batch compatibility):
+export FAULT_LOCALIZER_ENABLE=false
+
+# Or disable only the spectral corroboration (the reasoning channel loses the objective
+# Ochiai Top-k corroboration and localizes on pure LLM reasoning):
+export FL_SPECTRAL_ENABLE=false
+```
+
 ### Example 12: JSON Output (Programmatic Processing)
 
 ```bash
@@ -248,11 +262,24 @@ python experiments/run_benchmark.py \
       "task_id": "calculator.py::divide",
       "status": "pass",
       "coverage": 100.0,
-      "iterations": 0
+      "iterations": 0,
+      "detection": 1.0,
+      "repair": null,
+      "fl_at_k": {"fl_at_1": 1.0, "fl_at_3": 1.0, "fl_at_5": 1.0},
+      "llm_localization": {
+        "function_name": "divide",
+        "line_start": 3,
+        "line_end": 3,
+        "confidence": 0.9,
+        "reasoning": "division implemented as subtraction"
+      },
+      "localization_hit_function": true
     }
   ]
 }
 ```
+
+> `llm_localization` / `localization_hit_function` are new since the 2026-10-07 repair-engine batch I (alongside detection / repair / fl_at_k): the former is the RGFL-style LLM reasoning-localization JSON (null when the switch is off / the LLM fails / there are no failed cases), the latter the function-level hit bool (the localized function ∈ the gold changed-function set; null when unlocalized or no gold material, schema-isomorphic placeholder for batch compatibility).
 
 ---
 

@@ -47,6 +47,12 @@ this document, and must be labeled as such when reported.
 - The R-P0-2 life-or-death experiment was completed and archived on
   2026-10-06: plain_llm_df +43pp vs plain_llm, aitester +14pp vs plain_llm,
   **aitester −28pp vs plain_llm_df**, repair = 0 across all arms
+  (**amendment note, batch XIII 2026-10-07, ADR-0021/0027**: the
+  all-arms repair = 0 was a patch-field fence-residue measurement
+  artifact — corrected-caliber replay gives R-P0-2 = 35.9% (52/145
+  replayable rows). The detection-side conclusions and H2 rulings are
+  unaffected (the detection channel was not contaminated); wherever
+  repair figures are quoted, the corrected caliber prevails.)
   (`statistical_report_3seed_pooled.md`, 261 pairs, robust after cluster
   correction).
 - The AB1 12-task validation batch was completed **before** the contract fix
@@ -232,6 +238,17 @@ this document, and must be labeled as such when reported.
 - **Pre-registered decision**: equivalent share > 0 → the repair metric is
   underestimated; BASELINE/pooled reports must be corrected with the
   revised repair upper bound; = 0 → "the repair ceiling is bounded by
+  plausibility and gold correctness" is finalized.
+  **Amendment note (batch XIII, 2026-10-07, predating any human-review
+  data)**: E7's motivation has been answered mechanistically by
+  ADR-0021 — the gold adjudication was not "overly strict"; it never
+  executed the real patch (patch-field fence residue → 100% NameError);
+  corrected-caliber repair = 35.9% (52/145, `make corrected-metrics`).
+  The "= 0 → true zero" branch is void. Manual review retains
+  independent value (auditing whether the 61% wrong_patch rows under
+  the corrected caliber hide semantic equivalents), downgraded from
+  "caliber underestimation test" to "residual semantic-equivalence
+  sampling audit".
   plausibility and gold correctness" is finalized (repair=0 is a true
   zero).
 - **Cost**: ~1 person-day, zero LLM cost (offline sampling + manual diff).

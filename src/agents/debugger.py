@@ -46,6 +46,7 @@ from src.agents.error_classifier import (
     get_recommended_fix_strategy,
 )
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
+from src.tools.patch_intent import edit_intent_enabled
 from src.tools.type_repair import type_repair_layer
 
 # 模块级日志记录器
@@ -500,6 +501,19 @@ class DebuggerAgent(BaseAgent):
             query += "\n\n" + _kb_snippet
             logger.info("失败知识库闭环（4. 落点 B）注入了同类案例提示（类别=%s）", error_category.value)
 
+        # ── 修复引擎第二阶段（批次 III）：结构化编辑意图输出契约（默认关）──
+        # EDIT_INTENT_ENABLE=true 时要求 LLM 在 JSON 中附加 edit_intents
+        # 字段（唯一锚点 search/replace 意图），供下方确定性引擎最小化落盘
+        # （arXiv:2609.00227：宽容 diff ~1/7 静默错应用 → LLM 产意图、
+        # 确定性管道执行）。开关关时 prompt 与历史逐字节一致。
+        _edit_intent_on = False
+        if edit_intent_enabled():
+            from src.tools.patch_intent import EDIT_INTENT_PROMPT_SECTION
+
+            _edit_intent_on = True
+            query += "\n\n" + EDIT_INTENT_PROMPT_SECTION
+            logger.info("编辑意图输出契约注入（EDIT_INTENT_ENABLE）")
+
         # ── 3.1 改进（对抗性推理机制，默认关）─────────────────────────────
         # 若启用，先做"对抗性意图假设 + 针对性测试"，再把结果注入 prompt
         # 让 LLM 在生成补丁时考虑这些对抗场景；生成后独立"批评者"评估
@@ -623,6 +637,41 @@ class DebuggerAgent(BaseAgent):
             result = {}
         patch = result.get("patch", "")
 
+        # ── 修复引擎第二阶段（批次 III）：编辑意图确定性落盘（默认关）────
+        # LLM 在 JSON 中附加 edit_intents 时，用确定性引擎应用到原码
+        # （锚点唯一性 + 原子性 + AST 语法门，见 src/tools/patch_intent.py），
+        # 成功则用最小编辑结果替换整文件 patch（最小 diff 口径，对标
+        # PatchPilot/2609.00227）；失败原子回退 legacy 整文件补丁通道。
+        # 开关关时零行为变化（edit_intent_status 恒 None）。
+        edit_intent_status: dict[str, Any] | None = None
+        if _edit_intent_on:
+            from src.tools.patch_intent import apply_edit_intents, parse_edit_intents
+
+            _intents = parse_edit_intents(result.get("edit_intents"))
+            if _intents:
+                _intent_result = apply_edit_intents(target_code, _intents)
+                edit_intent_status = _intent_result
+                if _intent_result.get("ok"):
+                    patch = f"```python\n{_intent_result['code']}\n```"
+                    logger.info(
+                        "编辑意图确定性落盘成功（%d/%d 条），补丁替换为最小编辑结果",
+                        _intent_result.get("applied", 0),
+                        _intent_result.get("total", 0),
+                    )
+                else:
+                    logger.warning(
+                        "编辑意图被确定性引擎拒绝（%s），回落整文件补丁通道",
+                        "; ".join(_intent_result.get("diagnostics") or []),
+                    )
+            else:
+                edit_intent_status = {
+                    "ok": False,
+                    "code": "",
+                    "applied": 0,
+                    "total": 0,
+                    "diagnostics": ["no_valid_edit_intents_in_response"],
+                }
+
         # 3.1 改进：批评者评估——若启用对抗性推理，独立 LLM 调用尝试构造
         # 击穿补丁的对抗性测试用例；若批评者成功（构造出击穿用例），
         # 触发一次补丁重新生成（仍被击穿则保留当前补丁并记录风险）
@@ -697,6 +746,9 @@ class DebuggerAgent(BaseAgent):
             # （未启用时恒为 implementation_defect，保持历史口径）
             "defect_type": defect_type,
             "review_reason": review_reason,
+            # 修复引擎批次 III：编辑意图确定性落盘观测（EDIT_INTENT_ENABLE
+            # 默认关时恒 None；开启时 {"ok","applied","total","diagnostics"}）
+            "edit_intent_status": edit_intent_status,
             # 3.3 改进：位置感知修复定位结果（未启用时 focused=False，hint=""）
             # 启用时 focused=True 且 hint 非空（已注入 prompt），function_name/line 供实验消费
             "position_aware_focus": focus_result,

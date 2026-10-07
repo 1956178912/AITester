@@ -38,6 +38,8 @@
 | 变异得分（1.3） | 收集 details[].mutation_score（外部变异测试器产出） | [experiments/analyze_results.py](../experiments/analyze_results.py) | `_mutation_score_metrics()` | — |
 | 执行反馈轨迹（3.2） | 每次执行追加 passed/coverage_delta/elapsed/reward_signals | [src/graph/state.py](../src/graph/state.py) + [src/graph/nodes.py](../src/graph/nodes.py) | `_record_execution_trace()` / `state.execution_trace` | 0001, 0005 |
 | 位置感知迭代修复（3.3，默认关） | traceback 行号 + AST 定位"包围异常行的最短区间函数"，注入位置感知修复指引 | [src/agents/debugger.py](../src/agents/debugger.py) | `_position_aware_repair_enabled()` / `_locate_repair_focus()` / `_build_position_aware_prompt_section()` | 0003 |
+| 谱系故障定位（O2，默认开） | Ochiai Top-k 行级可疑度排序（零 LLM），Top-k 段落注入 Debugger prompt | [src/agents/fl_spectral.py](../src/agents/fl_spectral.py) | `measure_fl_spectral_focus()` / `compute_ochiai_scores()` / `rank_top_k()` / `build_fl_spectral_prompt_section()` | — |
+| RGFL 推理故障定位（修复引擎一期，默认开） | 谱系 Top-k 佐证 + LLM 结构化定位〔函数/行区间/置信度〕，gold diff→AST 函数级命中判定 | [src/agents/fault_localizer.py](../src/agents/fault_localizer.py) | `FaultLocalizerAgent.localize()` / `gold_changed_functions()` / `localization_hit()` / `build_localization_prompt_section()` | 0017 |
 | 嵌入后端（CodeBERT/sentence-transformers/词袋） | 按 `EMBEDDING_BACKEND` 选择后端，缺依赖时保守回退词袋余弦 | [src/utils/embedding_utils.py](../src/utils/embedding_utils.py) | `embed_text()` / `cosine_similarity()` / `backend_name()` | 0004 |
 | 静态类型修复层（mypy/pyright） | `TYPE_CHECK_BACKEND` 切换后端，pyright 不可用时降级 ast 静态层 | [src/tools/type_repair.py](../src/tools/type_repair.py) | `_run_mypy_findings()` / `_run_pyright_findings()` / `type_repair_layer()` | 0004 |
 | SWE-bench Pro 数据集 | `swe_bench_pro` / `swebench_pro` 注册，复用 `SWEBenchDataset`，数据目录经 `data_dir` 注入 | [src/datasets/dataset_loader.py](../src/datasets/dataset_loader.py) | `load_dataset()` / `get_available_datasets()` | — |
@@ -49,7 +51,7 @@
 
 AITester 是一个基于多智能体协作（Multi-Agent Collaboration）的 Python 自动化测试生成与自修复系统。
 
-系统由四个核心智能体构成，各自职责如下：
+系统由五个核心智能体构成，各自职责如下：
 
 | 智能体 | 职责 | 是否调用 LLM |
 |:------:|------|:------------:|
@@ -57,6 +59,7 @@ AITester 是一个基于多智能体协作（Multi-Agent Collaboration）的 Pyt
 | **GeneratorAgent** | 根据测试计划生成可运行的 pytest 代码 | ✅ 是 |
 | **ExecutorAgent** | 在隔离环境中执行测试，捕获输出与覆盖率 | ❌ 否 |
 | **DebuggerAgent** | 分析失败原因，生成分层修复补丁 | ✅ 是 |
+| **FaultLocalizerAgent** | RGFL 式 LLM 推理故障定位（只定位不修复，修复引擎第一阶段；由 `debugger` 节点内联调用，非独立图节点） | ✅ 是 |
 
 系统整体工作流为有向图（由 LangGraph 编排），支持循环修复路径及消融实验开关。
 
@@ -116,6 +119,12 @@ Output: 测试计划 P = (LA, TC)，其中 LA 为逻辑分析，TC 为测试用�
 ---
 
 ## 3. 分层错误修复协议（Algorithm 2 & 3）
+
+> **修复引擎范式（2026-10-07 批次 I 范式转向）**：修复流程升格为"**局部化 → 合成 → 验证**"三段，局部化从"Debugger 的副产品"升格为可独立量化的第一阶段。局部化采用**双通道融合**：
+> 1. **谱系通道**（零 LLM）：Ochiai 谱系 Top-k 行级可疑度排序（`FL_SPECTRAL_ENABLE`，默认 true），作为客观佐证注入 prompt；
+> 2. **推理通道**（LLM）：RGFL 式结构化定位（`FAULT_LOCALIZER_ENABLE`，默认 true）——输入带行号源码 + 失败测试 + 错误输出 + 谱系 Top-k 佐证，输出 `{function_name, line_start, line_end, confidence, reasoning}`，**只定位不修复**；LLM 失败 / JSON 解析失败保守降级 None，不产出假定位、不阻断修复。
+>
+> 融合接线在 `_debugger_node`：定位结果写 `state["llm_localization"]`，经 `build_localization_prompt_section()` 与谱系段落并列注入 Debugger prompt。局部化质量由独立指标量化：`localization_hit_function`（LLM 定位函数 ∈ gold 变更函数集合，函数级）与 `fl_at_k`（谱系行级 Top-k 命中），与检出率 / 修复率并列输出。
 
 ### 3.1 错误分类器（Algorithm 2）
 
@@ -236,6 +245,8 @@ task_uuid ─▶ target_file ─▶ target_code
                              END     Debugger ─▶ PatchApplier ─┘
 ```
 
+> **修复引擎批次 I 新增状态键**：`llm_localization`（RGFL 推理定位结果，`_debugger_node` 写入，`{function_name, line_start, line_end, confidence, reasoning}` 或 None）；既有键 `fl_spectral_focus`（谱系 Top-k，O2）承担谱系通道。两者共同供实验层局部化指标消费。
+
 ### 4.2 消融实验配置矩阵
 
 通过布尔开关控制节点启用/禁用，形成 4 种实验变体（配置见 [config.py](../config.py)）：
@@ -247,6 +258,8 @@ task_uuid ─▶ target_file ─▶ target_code
 | 无 Debugger | true | false | false | 无修复基线 |
 | 纯 LLM | false | false | false | plain_llm |
 | 单智能体 | — | — | — | single_agent |
+
+> **定位通道消融（修复引擎批次 I 起）**：`FAULT_LOCALIZER_ENABLE`（默认 true，false=纯谱系消融口径）与 `FL_SPECTRAL_ENABLE`（默认 true）独立于上述四变体，可叠加出"双通道完整 / 仅谱系 / 仅推理 / 无定位"四档定位消融，用于隔离两条局部化通道各自的贡献。
 
 ---
 
