@@ -641,13 +641,24 @@ def _patch_precision(task: Any, final_state: dict[str, Any] | None) -> float | N
     return _patch_correct(task, final_state) / plausible
 
 
-def _fl_at_k(final_state: dict[str, Any] | None) -> dict[str, Any] | None:
-    """R8（2026-09-30 独立审查 N7，P1）：FL@k 定位命中指标（FL@1/3/5）。
+def _fl_at_k(final_state: dict[str, Any] | None, task: Any = None) -> dict[str, Any] | None:
+    """R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标（FL@1/3/5）。
 
-    口径：fl_spectral_focus 非空时，取真实缺陷行（gold fixed 代码与 buggy
-    代码的 diff 行号集合）是否落在 Top-k 的命中情况。无 fl_spectral_focus
-    （O2 关 / 测量失败 / Docker 链路）或无 gold diff 行时返回 None
-    （保持键集合同构，统计层按"不可测"处理）。
+    口径：fl_spectral_focus 非空时，取**真实缺陷行**是否落在 Top-k 的命中
+    情况。真实缺陷行的提取优先级（E2-iter 修复，2026-10-07）：
+    1. **gold diff**（R8 设计口径，docstring 既有承诺）：buggy 代码与
+       gold fixed 代码的 SequenceMatcher 差异行（buggy 侧 1-based 行号——
+       fl Top-k 行号即 buggy 代码行号，两轴一致）；有 gold 材料的合成任务
+       （repair=0 主力人群）由此**首次可测**；
+    2. fallback：系统补丁的 diff 变更行（真实仓库无 gold 场景；整文件
+       替换口径下解析不出行号 → None，历史口径）。
+    无 fl_spectral_focus（O2 关 / 测量失败 / 无 debugger 路径）或两路
+    均无 diff 行时返回 None（保持键集合同构，统计层按"不可测"处理）。
+
+    E2 实证根因（0/174 全空）：实现原只走第 2 路——synthetic 任务的
+    patch 是整文件替换文本（非 unified diff）恒解析为空，且修复失败
+    任务（patch 本就为空）同样被排除，使 fl 分母在 gold 材料齐备的
+    合成集上结构性为空。
     """
     if final_state is None:
         return None
@@ -656,9 +667,28 @@ def _fl_at_k(final_state: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     top_k = focus.get("top_k", [])
     ranked_lines = [item.get("line") for item in top_k]
-    # gold diff 行：从 state 携带的 patch diff 提取（applied patch 的变更行）
-    patch = final_state.get("patch") or ""
-    diff_lines = _extract_diff_line_numbers(patch)
+    diff_lines: list[int] = []
+    if task is not None:
+        try:
+            from experiments._m1_metrics import _gold_fixed_code as _gold_fixed
+
+            fixed_code = _gold_fixed(task)
+            buggy_code = str(getattr(task, "instance_code", "") or "")
+            if fixed_code.strip() and buggy_code.strip():
+                import difflib
+
+                sm = difflib.SequenceMatcher(a=buggy_code.splitlines(), b=fixed_code.splitlines(), autojunk=False)
+                defect_set: set[int] = set()
+                for tag, i1, i2, _j1, _j2 in sm.get_opcodes():
+                    if tag in ("delete", "replace"):
+                        defect_set.update(range(i1 + 1, i2 + 1))
+                diff_lines = sorted(defect_set)
+        except Exception:
+            diff_lines = []
+    if not diff_lines:
+        # fallback：系统补丁 diff 行（真实仓库无 gold 场景，历史口径）
+        patch = final_state.get("patch") or ""
+        diff_lines = _extract_diff_line_numbers(patch)
     if not diff_lines:
         return None
     diff_set = set(diff_lines)
@@ -673,15 +703,37 @@ def _fl_at_k(final_state: dict[str, Any] | None) -> dict[str, Any] | None:
 def _extract_diff_line_numbers(patch_text: str) -> list[int]:
     """从 unified diff / 补丁文本中提取 new 侧变更行号（保守口径）。
 
-    复用 patch_evidence._patch_changed_lines 的 @@ 解析逻辑（不依赖
-    evidence 门开关）；非 diff 格式补丁返回空列表。
+    E2-iter 修复（2026-10-07）：原实现把 patch 文本单参数传入
+    patch_evidence._patch_changed_lines（签名为 original/new 两参）——
+    TypeError 被裸 except 吞掉**恒返回空列表**，本函数自诞生起从未
+    成功解析过任何 diff。现直接解析 unified diff 文本（@@ 起始行 +
+    "+" 行计数，与 _patch_changed_lines 同口径）；非 diff 格式补丁
+    （如整文件替换文本）无 @@ → new_line 恒 0 → 空列表（语义不变）。
     """
     if not patch_text or not patch_text.strip():
         return []
+    changed: list[int] = []
+    new_line = 0
     try:
-        from src.tools.patch_evidence import _patch_changed_lines
-
-        return sorted(_patch_changed_lines(patch_text))
+        for line in patch_text.splitlines():
+            if line.startswith(("---", "+++")):
+                continue
+            if line.startswith("@@"):
+                try:
+                    plus_part = line.split("+", 2)[1]
+                    new_line = int(plus_part.split(",")[0].strip())
+                except (IndexError, ValueError):
+                    new_line = 0
+                continue
+            if line.startswith("+"):
+                if new_line > 0:
+                    changed.append(new_line)
+                    new_line += 1
+            elif line.startswith("-"):
+                continue
+            elif new_line > 0:
+                new_line += 1
+        return sorted(set(changed))
     except Exception:
         return []
 
@@ -897,7 +949,7 @@ def _build_task_result(
             "patch_precision": _patch_precision(task, final_state),
             # R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标
             # （Ochiai 谱系定位的"真实缺陷行是否落在 Top-k"量化口径）
-            "fl_at_k": _fl_at_k(final_state),
+            "fl_at_k": _fl_at_k(final_state, task),
             # 2026-09-29 审查 P0（StopReason 统一停止条件）：终止原因分布
             # 可解释（"test_passed" / "max_iterations" /
             # "skip_debugger_repair_invalid" / "test_defect_regeneration_cap" /

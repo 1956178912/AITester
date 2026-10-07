@@ -4,6 +4,34 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-07 E2 迭代批（"恰好一次"迭代前置三缺陷修复：fl_at_k gold diff 对齐 + recursion_limit 56 + mutation 口径定性）
+
+> 用户批准动用预注册"恰好一次"门参数/路由修正迭代；本批为迭代重跑
+> 前置修复（修正均为 harness/测量口径，不触碰主终点判定规则与统计
+> 协议，效力注记已入 prereg 文首）：
+> - **fl_at_k 0/174 根因修复（双 bug 叠加）**：①实现背离 R8 docstring
+>   设计——只认系统补丁 diff，而 synthetic patch 系整文件替换文本恒
+>   解析为空（`_fl_at_k` 现按 gold diff 优先：SequenceMatcher buggy
+>   侧差异行，与 fl Top-k 行号同轴；fallback patch diff 保留）；②
+>   `_extract_diff_line_numbers` 单参调用两参函数 TypeError 被吞、
+>   fallback 自诞生即死——改为直接解析 unified diff 文本。端到端
+>   实测：修复后首个真实 fl 数据产出（Top-1 命中 1.0 / 可测未命中
+>   0.0 均出现），fl 维度三度缺数（生死实验 0/87 → E2 0/174）就此
+>   收口；
+> - **recursion_limit 16×MAX_ITERATIONS+8**（8×MAX+8=32 在 E2 仍触顶
+>   16/174；正常任务 trace 事件 p90=21，生产复现最长 ~36 步，56 为
+>   实测最长 ~1.55 倍；防失控语义仍由内部轮次上限承担）；
+> - **mutation_detection_rate 31/174 定性为设计保守口径而非缺陷**：
+>   "生成测试在 gold fixed 上不全绿 → None 不误报"（SWE-Mutation 对
+>   齐，AN2 口径）——即 **82% 的生成测试在正确代码上不能全绿**，本
+>   身为主要科学发现（比 detection 更基础的质量缺口）；
+> - 全量回归 **4429 → 4437 passed / 0 failed**（+8 =
+>   tests/test_e2_iter_batch.py：fl gold/fallback 双路径 + 上界公式
+>   锁 + mutation 口径锁）。
+>
+> 迭代重跑：同 prereg 命令同种子（42/44），重跑后按预注册停止规则
+> 最终判定（本次迭代为恰好一次，无论结果如何不再迭代）。
+
 ## [Unreleased] — 2026-10-07 E1 执行批次（E1 契约冒烟通过生死门 + recursion_limit 上界后置修复）
 
 > 用户预算续费（DeepSeek V4.1 Flash）+ 终端提交七批（059343f）后，按

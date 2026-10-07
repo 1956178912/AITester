@@ -1,10 +1,47 @@
-> Last updated: 2026-10-07 (batch E1-exec: E1 contract smoke passed its生死门 gate + post-E1 recursion_limit cap fix; full details below, default behavior unchanged)
+> Last updated: 2026-10-07 (batch E2-iter: three defect fixes as preconditions for the pre-registered "exactly one" iteration re-run — fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified; details below, default behavior unchanged beyond the harness fixes)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-07 Batch E2-iter (three defect fixes as preconditions of the "exactly one" iteration: fl_at_k gold-diff alignment + recursion_limit 56 + mutation semantics classified)
+
+> The user approved spending the pre-registered "exactly one" gate/
+> routing-fix iteration; this batch lands the iteration preconditions
+> (harness/measurement fixes only — no primary-endpoint decision rules
+> or statistical protocol touched; efficacy note in the prereg header):
+> - **fl_at_k 0/174 root-cause fix (two stacked bugs)**: (1) the
+>   implementation deviated from the R8 docstring design — system patch
+>   diff only, while synthetic patches are whole-file replacement text
+>   that never parses (`_fl_at_k` now prefers the gold diff:
+>   SequenceMatcher buggy-side diff lines, same axis as the fl Top-k
+>   line numbers; the patch-diff fallback is kept); (2)
+>   `_extract_diff_line_numbers` called a two-arg function with one
+>   argument — the swallowed TypeError left the fallback dead since
+>   birth — now parses unified diff text directly. End-to-end verified:
+>   first real fl data ever produced (Top-1 hit 1.0 and a measurable
+>   miss 0.0 both appear), closing the thrice-missing fl dimension
+>   (lifespan 0/87 → E2 0/174);
+> - **recursion_limit 16×MAX_ITERATIONS+8** (8×MAX+8=32 still exhausted
+>   16/174 in E2; normal tasks' trace events p90=21, longest measured
+>   ~36 steps — 56 ≈ 1.55× the observed max; runaway protection still
+>   lives in the internal iteration caps);
+> - **mutation_detection_rate 31/174 classified as conservative-by-
+>   design, not a defect**: "generated tests not all-green on gold
+>   fixed → None instead of a false 0" (SWE-Mutation aligned, AN2) —
+>   i.e. **82% of generated tests fail on correct code**, itself a
+>   major scientific finding (a quality gap even more basic than
+>   detection);
+> - Full regression **4429 → 4437 passed / 0 failed** (+8 =
+>   tests/test_e2_iter_batch.py: fl gold/fallback dual-path + cap
+>   formula lock + mutation semantics lock).
+>
+> Iteration re-run: same prereg commands and seeds (42/44); after the
+> re-run the pre-registered stop rule is applied for the final
+> adjudication (this is the exactly-once iteration — no further
+> iterations regardless of outcome).
 
 ## [Unreleased] — 2026-10-07 Batch E1-exec (E1 contract smoke passed the life-or-death gate + post-E1 recursion_limit cap fix)
 

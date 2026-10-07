@@ -1,14 +1,21 @@
 # 预注册：E1–E4 验证实验（检出优先协议 + 逻辑链 + 双门）
 
-最后更新: 2026-10-07（E1 已执行并回填执行记录表：spec_compile_rate
-均值 0.367 ≥ 0.3 保留线，批次工件 `experiments/results/ab1_validation_e1/`；
-同日 E1 后置 harness 修复：logic 档双门图往返使 2/12 任务触发
-LangGraph recursion_limit=20 触顶无终态，上界公式 4×MAX_ITERATIONS+8
-上调为 8×MAX_ITERATIONS+8——修复属执行环境参数，不触碰任何判定规则；
-此前同日 AO 批：E6 matched 上限来源修订——改取 E2 实测均值，R-P0-2
-旧常数降为量级参照，修订早于任何 E6 数据；此前同日 AN2/AN5 呈现性
-增补入 E3 节——主终点/阈值/停止规则不变；2026-10-06 AM 批：E6 执行
-前置达成声明 + 执行记录表 E6/E7 行 + E6 就绪命令块）
+最后更新: 2026-10-07（**E2 迭代批**：用户批准动用"恰好一次"门参数/
+路由修正迭代——迭代前置三缺陷修复：①fl_at_k 0/174 根因=实现背离
+R8 docstring 设计（只认系统补丁 diff，而 synthetic patch 系整文件
+替换文本恒解析为空，且 `_extract_diff_line_numbers` 单参调用两参
+函数 TypeError 被吞、fallback 自诞生即死）——修复为 gold diff
+优先（SequenceMatcher buggy 侧差异行，与 fl Top-k 行号同轴）+
+修活的 patch diff fallback；②recursion_limit 8×MAX+8=32 仍触顶
+16/174 → 16×MAX+8=56；③mutation 31/174 系**设计保守口径非缺陷**
+（生成测试在 gold fixed 上不全绿 → None 不误报；即 82% 生成测试
+在正确代码上不过——本身为主要科学发现）——修正均为 harness/测量
+口径修复，不触碰主终点判定规则与统计协议；迭代重跑同命令同种子。
+此前同日 E2 首跑判定：两通道降幅 67.0%/85.7% 过停止线落入本迭代
+分支、H2c δ=−0.3673 显著为负结论升级；E1 已执行 0.367≥0.3 保留；
+此前同日 AO 批：E6 matched 上限来源修订——改取 E2 实测均值，修订
+早于任何 E6 数据；此前同日 AN2/AN5 呈现性增补入 E3 节；2026-10-06
+AM 批：E6 执行前置达成声明 + 执行记录表 E6/E7 行 + E6 就绪命令块）
 
 ## 目的与效力范围
 
@@ -225,7 +232,7 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 | 实验 | 状态 | 批次工件 | 主终点结果 | 判定 | 日期 |
 |------|------|----------|------------|------|------|
 | E1 | 已执行（12/12 有效，其中 2 任务 recursion_limit 触顶无终态，E1 后置修复，见文首注记） | `experiments/results/ab1_validation_e1/`（AITESTER_PROFILE=logic，seed 42，temp 0.0，git_dirty=False，deepseek-flash，87,495 tok） | spec_compile_rate 均值=0.367（n=10/12 可测）；伴随观测：detection=20.0%（2 例均 specific_red 门确认）、repair=0.0%、false_fix=80.0% | **保留**（≥0.3） | 2026-10-07 |
-| E2+E3 | 待执行 | — | — | — | — |
+| E2+E3 | 已执行（双种子 42/44 各 87 任务 × 3 臂，174 任务次/臂全有效） | `experiments/results/main_batch/benchmark_synthetic_20261007_161053.json` + `..._170147.json` + `statistical_report_e2.md`（--batches 白名单 + --pool-seeds） | 过红 88→29（降幅 67.0%）、抹红 28→4（降幅 85.7%）；aitester vs df：δ=−0.3673 [−0.4552, −0.2785]（bayes_neg，P(δ>0)=0.0000）；pooled detection：aitester 12.7% / plain_llm 1.7% / df 52.3%；repair 全线 0.0%；spec_compile_rate pooled=0.212（n=158，灰区） | H2a/H2b **未成立**（未归零但降幅均 ≥50% → 落入预注册"允许恰好一次门参数/路由修正后重跑"分支）；H2c **仍显著为负 → "编排容器在检出口径下结构性劣后"结论升级**（ADR-0016 预写，可发表）；次要终点 repair 未破零；E3 非空率不达标（fl_at_k 0/174、mutation 31/174 待查缺陷，见决策日志） | 2026-10-07 |
 | E4 | 待执行 | — | — | — | — |
 | E6 | 待执行（前置旗标已实现，AM 批） | — | — | — | — |
 | E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |

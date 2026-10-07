@@ -1,19 +1,30 @@
 # Pre-registration: E1–E4 Validation Experiments (Detection-First Protocol + Logic Chain + Double Gates)
 
-Last updated: 2026-10-07 (E1 executed and logged in the execution log:
-mean spec_compile_rate 0.367 ≥ the 0.3 keep threshold, batch artifacts
-at `experiments/results/ab1_validation_e1/`; same-day post-E1 harness
-fix: the logic-profile double-gate graph detours pushed 2/12 tasks into
-LangGraph recursion_limit=20 exhaustion with no final state — the cap
-formula 4×MAX_ITERATIONS+8 is raised to 8×MAX_ITERATIONS+8; this is an
-execution-environment parameter fix and touches no decision rule.
-Previously the same day, batch AO: E6 matched-cap source amendment —
-caps now derived from E2 measured means, the R-P0-2 legacy constants are
-demoted to magnitude references; the amendment precedes any E6 data.
-Previously the same day, batch AN: AN2/AN5 presentation-only additions
-merged into the E3 section — primary endpoints/thresholds/stopping rules
-unchanged; batch AM, 2026-10-06: E6 execution-precondition statement +
-E6/E7 rows in the execution log + E6 ready-commands block)
+Last updated: 2026-10-07 (**E2 iteration batch**: the user approved
+spending the pre-registered "exactly one" gate/routing fix re-run —
+three defect fixes as iteration preconditions: (1) fl_at_k 0/174 root
+cause = implementation deviating from the R8 docstring design (system
+patch diff only, while synthetic patches are whole-file replacement
+text that never parses, plus `_extract_diff_line_numbers` calling a
+two-arg function with one arg — the swallowed TypeError left the
+fallback dead since birth); fixed to gold-diff-first (SequenceMatcher
+buggy-side diff lines, same axis as fl Top-k line numbers) + a repaired
+patch-diff fallback; (2) recursion_limit 8×MAX+8=32 still exhausted
+16/174 task-runs → 16×MAX+8=56; (3) mutation 31/174 is **conservative
+by design, not a defect** (generated tests not all-green on gold fixed
+→ None instead of a false 0; i.e. 82% of generated tests fail on
+correct code — itself a major scientific finding). All three are
+harness/measurement fixes touching no primary-endpoint decision rules
+or the statistical protocol; the re-run uses the same commands and
+seeds. Previously the same day, E2 first-run adjudication: both
+channels reduced 67.0%/85.7% past the stop line into this iteration
+branch, H2c δ=−0.3673 significantly negative → conclusion escalated;
+E1 executed 0.367≥0.3 keep. Previously the same day, batch AO: E6
+matched-cap source amendment — caps now derived from E2 measured means,
+the amendment precedes any E6 data. Previously the same day, batch AN:
+AN2/AN5 presentation-only additions merged into the E3 section.
+Batch AM, 2026-10-06: E6 execution-precondition statement + E6/E7 rows
+in the execution log + E6 ready-commands block)
 
 ## Purpose and Scope of Effect
 
@@ -294,7 +305,7 @@ this document, and must be labeled as such when reported.
 | Experiment | Status | Batch artifacts | Primary endpoint result | Decision | Date |
 |------------|--------|-----------------|-------------------------|----------|------|
 | E1 | pending | — | — | — | — |
-| E2+E3 | pending | — | — | — | — |
+| E2+E3 | executed (2 seeds 42/44, 87 tasks × 3 arms each, 174 task-runs per arm, all valid) | `experiments/results/main_batch/benchmark_synthetic_20261007_161053.json` + `..._170147.json` + `statistical_report_e2.md` (--batches whitelist + --pool-seeds) | over-red 88→29 (−67.0%), erase-red 28→4 (−85.7%); aitester vs df: δ=−0.3673 [−0.4552, −0.2785] (bayes_neg, P(δ>0)=0.0000); pooled detection: aitester 12.7% / plain_llm 1.7% / df 52.3%; repair 0.0% across all arms; spec_compile_rate pooled=0.212 (n=158, grey zone) | H2a/H2b **not upheld** (not zeroed but both reductions ≥50% → lands in the pre-registered "exactly one gate/routing fix re-run allowed" branch); H2c **still significantly negative → the "orchestration container is structurally inferior on detection" conclusion is escalated** (pre-written in ADR-0016, publishable); secondary endpoint repair stays at zero; E3 non-null rates miss targets (fl_at_k 0/174, mutation 31/174 — open defects, see decision log) | 2026-10-07 |
 | E4 | pending | — | — | — | — |
 | E6 | pending (precondition flag implemented, batch AM) | — | — | — | — |
 | E7 | pending manual review (candidate list generated, batch AO) | — | — | — | — |

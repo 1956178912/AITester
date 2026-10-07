@@ -159,8 +159,8 @@ class TestRecursionLimitedGraphInvoke:
 
         g._graph = _FakeGraph()
         assert g.invoke({"x": 1}, thread_id="t-9") == "ok"
-        # E1 后公式 4×MAX+8 → 8×MAX+8（logic 档双门往返 2/12 触顶实证）
-        assert seen["config"]["recursion_limit"] == 8 * 3 + 8
+        # E1/E2 实测：4×MAX+8 与 8×MAX+8 均触顶（2/12 与 16/174）→ 16×MAX+8
+        assert seen["config"]["recursion_limit"] == 16 * 3 + 8
         # 无 checkpointer 时 configurable 不注入
         assert "configurable" not in seen["config"]
 
@@ -197,8 +197,8 @@ class TestRecursionLimitedGraphInvoke:
 
         g._graph = _FakeGraph()
         assert asyncio.run(g.ainvoke({"x": 1})) == "aok"
-        # E1 后公式 4×MAX+8 → 8×MAX+8（logic 档双门往返 2/12 触顶实证）
-        assert seen["config"]["recursion_limit"] == 8 * 3 + 8
+        # E1/E2 实测：4×MAX+8 与 8×MAX+8 均触顶（2/12 与 16/174）→ 16×MAX+8
+        assert seen["config"]["recursion_limit"] == 16 * 3 + 8
 
     def test_ainvoke_thread_id_injected_when_checkpointer(self, monkeypatch):
         """checkpointer 开时 ainvoke 注入 configurable.thread_id（默认 default）。"""
