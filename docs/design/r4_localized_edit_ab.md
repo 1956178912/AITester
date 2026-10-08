@@ -93,3 +93,32 @@ edit_intent 通道本身，未新增约束力。这与 ADR-0028 预判（"整文
 
 本结果为**诚实阴性记录**，不因方向不理想而筛选或改判。
 
+## 行级约束升级 + QuixBugs 并行复跑（2026-10-08 追加）
+
+首测发现"函数级约束空洞"后，把约束升级为**行级**（`validate_edit_localization` 主判定改用
+FaultLocalizer 的 `line_start/line_end` ± 窗口 `LOCALIZED_EDIT_WINDOW`（默认 3），候选缺 line
+信息回退函数级），并在 synthetic + QuixBugs 上并行复跑：
+
+| 数据集 | 臂 | edit_localization | localized_ratio | repair_rate | FL@1 |
+|--------|----|-------------------|-----------------|-------------|------|
+| synthetic（n=50） | B2（行级） | 17 行 mode=line | 恒 1.00（0 越界） | 8/50 (16.0%) | 10/18 (55.6%) |
+| QuixBugs（n=50） | A（对照） | 0 行（预期） | — | 0/50 (0.0%) | 11/37 (29.7%) |
+| QuixBugs（n=50） | B（行级） | 37 行 mode=line | 36/37=1.00（1 越界） | 0/50 (0.0%) | 11/37 (29.7%) |
+
+**结论（阴性，方向性）**：
+
+1. **行级约束机制生效但区分度仍极低**：synthetic 上函数太小（±3 窗口覆盖整个函数）；
+   QuixBugs 上仅 1/37 越界——根因是 FaultLocalizer 缺陷行定位不准（FL@1=29.7%），
+   "缺陷行 ±3 窗口"仍覆盖锚点。行级约束的前提（精确缺陷行定位）尚不成立。
+
+2. **QuixBugs repair=0 的真正根因不在局部化约束**：`patch_evidence_level` 分布
+   sbfl=20 / none=29——29 个补丁被证据门（`PATCH_EVIDENCE_GATE_ENABLE` 默认 true）以
+   "无确定性证据"拒绝写盘；而 20 个放行补丁 `patch_plausible=1` 但 gold `correct=0`
+   （**plausible ≠ correct 过拟合**）。对照 synthetic：5 plausible → 8 correct。
+
+3. **优化优先级重排**（R4"局部化约束"方向被证伪为当前非瓶颈）：
+   ① 补丁正确性 / 过拟合（QuixBugs 20 plausible 但 0 correct——ADR-0024"生成侧主导"、
+   PRepair"over-editing"的同构证据）；② 证据门在真实基准上的行为（29/50 被拒，需
+   重新审视 sbfl 证据在 QuixBugs 上的可得性）；③ FaultLocalizer 行级定位精度（29.7%）。
+
+
