@@ -468,12 +468,13 @@ class AITesterState(TypedDict, total=False):
     #  "diagnostics": [str, ...]}——ok=False 表示锚点唯一性/AST 门拒绝、
     # 已原子回退整文件补丁通道；实验层据此统计意图通道接管率。
     edit_intent_status: dict[str, Any] | None
-    # R4（2026-10-08 局部编辑通道原型）：定位锚定的局部编辑合规观测
+    # R4（2026-10-08 局部编辑通道）：定位锚定的局部编辑合规观测
     # （_debugger_node 从 debug() 结果透传；LOCALIZED_EDIT_ENABLE 默认关时
     # 恒 None，历史口径零变化）。结构：{"localized_count": int, "total": int,
-    # "constrained": bool, "candidate_functions": [str], "violations": [str],
-    # "localized_ratio": float}——edit_intents 锚点落在定位候选函数内的占比
-    # （定位信号被合成侧消费程度的行级观测，ADR-0024 反事实的验证器）。
+    # "constrained": bool, "candidate_functions": [str], "window": int,
+    # "mode": "line"|"function"|"none", "violations": [str],
+    # "localized_ratio": float}——edit_intents 锚点落在定位缺陷行窗口内的占比
+    # （行级约束；定位信号被合成侧消费程度的观测，ADR-0024 反事实的验证器）。
     edit_localization: dict[str, Any] | None
     # 修复引擎批次 IV（2026-10-07，ADR-0019）：确定性优先修复路由观测
     # （_debugger_node 写入；DETERMINISTIC_REPAIR_FIRST_ENABLE 默认关时
