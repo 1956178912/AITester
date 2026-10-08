@@ -279,33 +279,34 @@ def compile_spec_oracle(
         known_names = frozenset({"r"} | set(signature_params) | _ALLOWED_CALL_NAMES | {"True", "False", "None"})
     else:
         known_names = frozenset({"r", "x", "a", "b", "y"} | _ALLOWED_CALL_NAMES | {"True", "False", "None"})
+    # 计数在构建断言行的同一轮循环内累积，避免每个子句被
+    # _compile_single_clause 二次编译（该函数内含 ast.parse 白名单校验，
+    # 双重编译是纯浪费；readiness 数值与逐字复用编译结果完全一致）。
     pre_lines: list[str] = []
+    pre_compiled_n = 0
     for clause in pre:
         compiled = _compile_single_clause(clause, "precondition", target_module, target_function, known_names)
         if compiled:
+            pre_compiled_n += 1
             pre_lines.append(f"    # pre: {clause}")
             pre_lines.append(f"    {compiled}")
         else:
             pre_lines.append(f"    # NL provenance (uncompiled pre): {clause}")
 
     post_lines: list[str] = []
+    post_compiled_n = 0
     for clause in post + inv:
         # post 与 invariant 共用后置断言口径（invariant = 任意输入下的性质，
         # 保守编译为"在边界输入下成立"——不臆测全输入域）
         compiled = _compile_single_clause(clause, "postcondition", target_module, target_function, known_names)
         if compiled:
+            post_compiled_n += 1
             kind_tag = "post" if clause in post else "invariant"
             post_lines.append(f"    # {kind_tag}: {clause}")
             post_lines.append(compiled.replace("assert ", "    assert ", 1))
         else:
             post_lines.append(f"    # NL provenance (uncompiled post): {clause}")
 
-    pre_compiled_n = sum(
-        1 for c in pre if _compile_single_clause(c, "precondition", target_module, target_function, known_names)
-    )
-    post_compiled_n = sum(
-        1 for c in post + inv if _compile_single_clause(c, "postcondition", target_module, target_function, known_names)
-    )
     total_n = len(pre) + len(post) + len(inv)
     readiness = (pre_compiled_n + post_compiled_n) / total_n if total_n else 0.0
 

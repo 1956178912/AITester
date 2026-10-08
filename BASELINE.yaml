@@ -105,7 +105,7 @@ benchmark:
      oracle_type, test_visible_to_system, patch_plausible, patch_correct,
      patch_precision, source_patched_unverified, patch_evidence_level, fl_at_k,
      llm_localization, localization_hit_function, localization_hit_function_at_3,
-     localization_mrr, edit_intent_status, deterministic_repair_status,
+     localization_mrr, edit_intent_status, edit_localization, deterministic_repair_status,
      patch_abstained, patch_abstain_signals,
      spec_compile_rate, patch_rollback_verdict, patch_rolled_back,
      mutation_detection_rate, mutants_killed, mutants_total,

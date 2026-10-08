@@ -246,6 +246,11 @@ class DebuggerAgent(BaseAgent):
         # （FaultLocalizerAgent.localize 产出，经 build_localization_prompt_section
         # 渲染传入）。None / 空串时不注入，历史口径零变化。
         localization_section: str | None = None,
+        # R4（2026-10-08 局部编辑通道原型）：结构化定位结果（FaultLocalizer
+        # 输出，与 localization_section 同源但未渲染）。LOCALIZED_EDIT_ENABLE
+        # 且 EDIT_INTENT_ENABLE 均开启时，用它把定位信号转化为 edit_intents
+        # 的局部性约束（prompt 段 + 确定性合规观测）。默认 None 零行为变化。
+        localization: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         分析测试失败并生成修复补丁。
@@ -514,6 +519,25 @@ class DebuggerAgent(BaseAgent):
             query += "\n\n" + EDIT_INTENT_PROMPT_SECTION
             logger.info("编辑意图输出契约注入（EDIT_INTENT_ENABLE）")
 
+        # ── R4（2026-10-08 局部编辑通道原型）：定位锚定的编辑约束（默认关）──
+        # LOCALIZED_EDIT_ENABLE 且 EDIT_INTENT_ENABLE 均开启、且结构化定位
+        # 可用时，把"缺陷定位在函数 X（L12-L15）"转化为 edit_intents 的局部性
+        # 约束（锚点必须落在候选函数内），直指 ADR-0024 反事实（整文件重写
+        # 不消费定位 → 生成侧瓶颈）。默认关时 prompt 与历史逐字节一致。
+        _localized_edit_on = False
+        if _edit_intent_on and localization:
+            from src.tools.patch_localized import (
+                build_localized_edit_section,
+                localized_edit_enabled,
+            )
+
+            if localized_edit_enabled():
+                _loc_edit_section = build_localized_edit_section(localization)
+                if _loc_edit_section:
+                    _localized_edit_on = True
+                    query += "\n\n" + _loc_edit_section
+                    logger.info("局部编辑约束段注入（LOCALIZED_EDIT_ENABLE）")
+
         # ── 3.1 改进（对抗性推理机制，默认关）─────────────────────────────
         # 若启用，先做"对抗性意图假设 + 针对性测试"，再把结果注入 prompt
         # 让 LLM 在生成补丁时考虑这些对抗场景；生成后独立"批评者"评估
@@ -644,6 +668,7 @@ class DebuggerAgent(BaseAgent):
         # PatchPilot/2609.00227）；失败原子回退 legacy 整文件补丁通道。
         # 开关关时零行为变化（edit_intent_status 恒 None）。
         edit_intent_status: dict[str, Any] | None = None
+        _intents: list[dict[str, str]] = []
         if _edit_intent_on:
             from src.tools.patch_intent import apply_edit_intents, parse_edit_intents
 
@@ -671,6 +696,22 @@ class DebuggerAgent(BaseAgent):
                     "total": 0,
                     "diagnostics": ["no_valid_edit_intents_in_response"],
                 }
+
+        # ── R4：局部编辑合规观测（LOCALIZED_EDIT_ENABLE 默认关时恒 None）──
+        # 计算 edit_intents 锚点落在定位候选函数内的占比（观测层，不强制
+        # 过滤——阻断档须 A/B 确认不压制 correct 补丁后转正，承接
+        # ADR-0028/0020"观测层先行"纪律）。
+        edit_localization: dict[str, Any] | None = None
+        if _localized_edit_on and _intents:
+            from src.tools.patch_localized import validate_edit_localization
+
+            edit_localization = validate_edit_localization(target_code, _intents, localization)
+            logger.info(
+                "局部编辑合规观测：%d/%d 条锚点落在候选函数内（%s）",
+                edit_localization.get("localized_count", 0),
+                edit_localization.get("total", 0),
+                "constrained" if edit_localization.get("constrained") else "unconstrained",
+            )
 
         # 3.1 改进：批评者评估——若启用对抗性推理，独立 LLM 调用尝试构造
         # 击穿补丁的对抗性测试用例；若批评者成功（构造出击穿用例），
@@ -749,6 +790,10 @@ class DebuggerAgent(BaseAgent):
             # 修复引擎批次 III：编辑意图确定性落盘观测（EDIT_INTENT_ENABLE
             # 默认关时恒 None；开启时 {"ok","applied","total","diagnostics"}）
             "edit_intent_status": edit_intent_status,
+            # R4：局部编辑合规观测（LOCALIZED_EDIT_ENABLE 默认关时恒 None；
+            # 开启时 {"localized_count","total","constrained","candidate_functions",
+            # "violations","localized_ratio"}——定位信号被合成侧消费程度的行级观测）
+            "edit_localization": edit_localization,
             # 3.3 改进：位置感知修复定位结果（未启用时 focused=False，hint=""）
             # 启用时 focused=True 且 hint 非空（已注入 prompt），function_name/line 供实验消费
             "position_aware_focus": focus_result,

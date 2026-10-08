@@ -1121,6 +1121,12 @@ def _build_task_result(
             # 默认关时恒 None；开启时 {"ok","applied","total","diagnostics"}，
             # ok=False 表示确定性引擎拒绝并回落整文件补丁通道）。
             "edit_intent_status": (final_state or {}).get("edit_intent_status"),
+            # R4（2026-10-08 局部编辑通道原型）：定位锚定的局部编辑合规观测
+            # （LOCALIZED_EDIT_ENABLE 默认关时恒 None；开启时 {"localized_count",
+            # "total","constrained","candidate_functions","violations",
+            # "localized_ratio"}——edit_intents 锚点落在定位候选函数内的占比，
+            # ADR-0024"生成侧不消费定位"反事实的行级验证器）。
+            "edit_localization": (final_state or {}).get("edit_localization"),
             # 修复引擎批次 IV（ADR-0019）：确定性优先修复路由观测（默认关
             # 恒 None；patch_produced=True 表示该修复轮跳过 LLM、补丁由
             # 确定性变换器产出——实验层据此统计接管率与省 token 量）。
@@ -1249,6 +1255,8 @@ def _build_task_result(
         "localization_mrr": None,
         # 修复引擎批次 III：失败分支编辑意图观测 None 占位（键集合同构）
         "edit_intent_status": None,
+        # R4：失败分支局部编辑合规观测 None 占位（键集合同构）
+        "edit_localization": None,
         # 修复引擎批次 IV：失败分支确定性路由观测 None 占位（键集合同构）
         "deterministic_repair_status": None,
         # 修复引擎批次 V：失败分支弃权观测占位（无 final_state 不可评估，

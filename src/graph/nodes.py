@@ -2144,6 +2144,10 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
                 # 修复引擎第一阶段：RGFL 式推理定位段落（_loc_result 渲染；
                 # None 时 build_localization_prompt_section 返回空串 = 不注入）
                 localization_section=_build_loc_section(_loc_result),
+                # R4（2026-10-08 局部编辑通道原型）：结构化定位结果透传
+                # （与 localization_section 同源但未渲染），供 debug() 在
+                # LOCALIZED_EDIT_ENABLE 开启时转化为 edit_intents 局部性约束。
+                localization=_loc_result,
             )
     except (json.JSONDecodeError, RuntimeError, OSError) as e:
         # 2026-09-26 全面审查：扩捕获 OSError——agent.debug 内部 LLM 文件缓存
@@ -2448,6 +2452,11 @@ def _debugger_node(state: AITesterState) -> dict[str, Any]:
         # "total","diagnostics"}，ok=False 表示锚点校验拒绝并回落
         # 整文件补丁通道——实验层据此统计意图通道接管率）。
         "edit_intent_status": result.get("edit_intent_status"),
+        # R4（2026-10-08 局部编辑通道原型）：局部编辑合规观测
+        # （LOCALIZED_EDIT_ENABLE 默认关时恒 None；开启时 {"localized_count",
+        # "total","constrained","candidate_functions","violations",
+        # "localized_ratio"}——定位信号被合成侧消费程度的行级观测）。
+        "edit_localization": result.get("edit_localization"),
         # 修复引擎批次 IV（ADR-0019）：确定性优先修复路由观测
         # （DETERMINISTIC_REPAIR_FIRST_ENABLE 默认关时恒 None；开启且
         # 已尝试过一轮后非 None——{"attempted","method","reason",
