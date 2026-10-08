@@ -1,10 +1,42 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-07（修复引擎批次 XIV：外部报告净新增收割——FL Top-k 约束观测门 + Self-Repair Trap 观测器〔均观测层，ADR-0028〕+ Frame Lifetime Trace 设计输入 + BASELINE 测试链勘误；批次 XIII 见下方条目）
+> Last updated: 2026-10-08（R2 落地批次：跨文件测量修复〔第三起伪影 R27〕+ 统计门泛化/脏树断言/spec_smt 受限 eval 收紧 + R4 工件入库与修正口径 v2〔ADR-0029〕+ 对外叙事对齐；此前 2026-10-07 修复引擎批次 XIV：外部报告净新增收割——FL Top-k 约束观测门 + Self-Repair Trap 观测器〔均观测层，ADR-0028〕+ Frame Lifetime Trace 设计输入 + BASELINE 测试链勘误；批次 XIII 见下方条目）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-08 R2 落地批次（测量伪影第三起根修 + 存量批次入库 + 对外口径 v2 收口）
+
+> 承接第十三/十四轮审查报告 R2 落地项（全部零 LLM、离线回放/单测验证；
+> 默认行为不变——除明确修复的测量口径与新增默认关开关）：
+> - **跨文件测量修复（R27，第三起测量伪影）**：`_run_pytest_in_tmp` 对
+>   `is_cross_file` 任务物化完整包树（目标模块 + 伴生模块），弃用
+>   `"python_programs" in test_code` 子串启发式改显式分派；fail-closed——
+>   support 缺失记 None + warning，rc==5（no tests collected）并入执行错误；
+>   空补丁口径早退 0.0（R28）。修正后 QuixBugs A/B repair 逐位不变
+>   （M1 可测口径 37/41、36/41），R4 跨文件带补丁行 0/2 → 2/2，六批次
+>   跨文件合计 0/25 → 11/25；
+> - **修正口径 v2（R13）**：R-P0-2 repair 35.86% → **39.31%（57/145）**、
+>   E1/E2 48.11% → **54.72%（58/106）**、R4-A 可重放 44.4% → 55.6%；
+>   口径矩阵 `docs/design/repair_caliber_matrix.md`（引用纪律）+ ADR-0029；
+> - **统计门泛化（R17）**：`_SUPPORTED_DATASETS` 白名单 `{synthetic, quixbugs}`，
+>   统计报告可消费 QuixBugs 批次（此前仅 synthetic）；
+> - **脏树断言（R15/R16）**：`run_main_batch --dirty-reason`（写入
+>   provenance.dirty_reason）+ 跑批后 `_assert_provenance_dirty`（未豁免
+>   而脏 / 已豁免而缺原因 → 抛错，豁免可审计）；
+> - **spec_smt 受限 eval 收紧（R9）**：`ast.literal_eval` 快速路径（常量子句
+>   零 eval）+ 兜底 eval 显式 debug 告警（eval 面未消除但不再静默）；
+> - **R4/QuixBugs 存量批次入库（R14）**：`experiments/results/r4_batches/`
+>   6 批次 JSON + SHA256SUMS/README（此前滞留 /tmp）；`check_artifacts_tracked`
+>   MANIFEST 13→21；
+> - **对外叙事对齐（R20/R26/R21）**：DATA_CARD §1/§4（QuixBugs 定位降格声明 +
+>   状态列"单臂复跑非 E4"）、prereg 执行记录表（R4/QuixBugs 行 + E4 状态 +
+>   v2 指针）、README/MODEL_CARD 去"多智能体"主断言、R21 引用更正
+>   （Less Is More 作者）。
+> 全量收集 4717（本机受限环境实测 4707 passed + 10 环境类 failed，均已定性为环境非代码〔涉及文件隔离复跑 170/170 全绿〕；CI 最终确认）；env 预算 168→170（补齐
+> src/tools/patch_localized.py 的 LOCALIZED_EDIT_ENABLE / LOCALIZED_EDIT_WINDOW
+> 两处历史漏登记，非新增开关）；mypy 113 文件 0；ruff 0.16.3 0 警告。
 
 ## [Unreleased] — 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028：FL Top-k 约束观测门 + Self-Repair Trap 观测器 + Frame Lifetime Trace 设计输入）
 

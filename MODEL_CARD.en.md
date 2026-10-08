@@ -1,17 +1,20 @@
 # AITester Model Card
 
-Last updated: 2026-10-07 (repair-engine batch I: paradigm shift to "localization → synthesis → verification" — standalone FaultLocalizer landed [RGFL-style LLM reasoning localization + Ochiai spectral corroboration dual channel, `FAULT_LOCALIZER_ENABLE` on by default] + the standalone localization metric `localization_hit_function` first measured; previous batch AL: the AK-annotation erratum restored the AJ red-line guard to green + external positioning de-emphasizes the self-repair claim in line with CITATION.cff + E6/E7 pre-registration)
+Last updated: 2026-10-08 (R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2; previously 2026-10-07 repair-engine batch I: paradigm shift to "localization → synthesis → verification" — standalone FaultLocalizer landed [RGFL-style LLM reasoning localization + Ochiai spectral corroboration dual channel, `FAULT_LOCALIZER_ENABLE` on by default] + the standalone localization metric `localization_hit_function` first measured)
 
 ## 1. System Overview
 
-AITester is a logic-anchored multi-agent test generation and repair-evaluation
-research system (detection-first criterion): given function-level repair
-tasks (from a synthetic dataset or SWE-bench Lite splits), a
+AITester is a **detection-first research system for attribution-aware Python
+test-generation and repair-evaluation**: given function-level
+repair tasks (from a synthetic dataset or SWE-bench Lite splits), a
 LangGraph-orchestrated Planner → Generator → Executor → Debugger →
 PatchApplier loop generates pytest tests, executes them, diagnoses failures,
-and patches code. The three-seed main batch measured repair = 0.0% (gold
-adjudication) — **self-repair is a measurable metric, not a demonstrated
-claim** (AL5 repositioning; ceiling attribution in
+and patches code. "**Multi-agent orchestration**" is positioned as an
+**ablatable container** (not a primary claim — after the E2 double gates,
+aitester vs plain_llm_df δ=−0.3673, structurally inferior, ADR-0016). The
+three-seed main batch repair, after the ADR-0021/0027/0029 measurement-caliber
+corrections, is **39.31% (v2, 57/145 replayable rows; gold adjudication)**
+(v1 35.86%; ceiling attribution in
 `experiments/results/main_batch/repair_ceiling_report.md`). This card
 describes model usage, data provenance, and the risk surface (following
 NIST AI RMF and common model-card entries; the
@@ -42,10 +45,13 @@ system is research code, not a deployed product).
 
 - This project **trains no models**; there is no training data.
 - Evaluation data: `data/swe_bench_lite_*` (derived from the public SWE-bench
-  Lite dataset; **the license is whatever the official SWE-bench repository
-  declares — verify and record the exact license here before publication:
-  TODO**) and programmatic synthetic tasks from
-  `src/datasets/synthetic_dataset.py` (no third-party copyright).
+  Lite dataset; the data license: the official SWE-bench repository
+  distributes the data under the **Apache License 2.0** (P1-9 completion;
+  refer to the [official repository](https://github.com/SWE-bench/SWE-bench)
+  declaration — third parties should re-verify the current version) and
+  programmatic synthetic tasks from
+  `src/datasets/synthetic_dataset.py` (built in-house, distributed under the
+  repository's MIT license).
 - RAG case base: historical cases produced by the user's own experiment runs
   (local `rag_data/`).
 
@@ -59,13 +65,18 @@ system is research code, not a deployed product).
   system is significantly worse than the plain prompting protocol on a
   strong model (net-negative orchestration contribution; robust under dual
   bounds for the 21 missing rows).
-- **repair 0.0% across all arms** (zero discordant pairs): the repair claim
-  has no supporting evidence. Ceiling attribution
-  (`repair_ceiling_report.md`, AK1): repair loop 154/261 → patch produced
-  94.2% → plausible 46.8% → correct 0 — the bottleneck is patch plausibility
-  and gold correctness, not patch production. After the 2026-10-07 paradigm
-  shift, repair turns from "an honestly measured conclusion" into "a target
-  to optimize" (repair-engine route: localization → synthesis → verification).
+- **repair = 39.31% after the measurement-caliber correction (57/145
+  replayable rows)**: the historical "0.0% across all arms" resulted from
+  two stacked measurement artifacts (ADR-0021 patch-field fence residue +
+  ADR-0029 cross-file tasks not materialized), not from a lack of evidence
+  for the repair claim. Ceiling attribution (`repair_ceiling_report.md`,
+  AK1): repair loop 154/261 → patch produced 94.2% → plausible 46.8% →
+  correct 39.31% — the bottleneck is patch plausibility and gold
+  correctness, not patch production. After the 2026-10-07 paradigm shift,
+  repair turns from "an honestly measured conclusion" into "a target to
+  optimize" (repair-engine route: localization → synthesis → verification);
+  the v1 caliber 35.86% is a cross-file artifact lower bound (caliber matrix
+  in `docs/design/repair_caliber_matrix.md`).
 - Localization dimension: `fl_at_k` (spectral line-level Top-k hit, since R8)
   and `localization_hit_function` (LLM reasoning localization function-level
   hit, since batch I, compared against the gold changed-function set;

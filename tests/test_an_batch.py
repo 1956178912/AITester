@@ -217,7 +217,9 @@ class TestN1TestGenEvalRegistration:
         date_re = re.compile(r"(最后更新|Last updated)[:：]?\s*(\d{4}-\d{2}-\d{2})")
         zh = date_re.search((_ROOT / "docs" / "DATA_CARD.md").read_text(encoding="utf-8"))
         en = date_re.search((_ROOT / "docs" / "DATA_CARD.en.md").read_text(encoding="utf-8"))
-        assert zh and en and zh.group(2) == en.group(2) == "2026-10-07"
+        # R2（2026-10-08）R20 叙事对齐：DATA_CARD §1/§4 更新（QuixBugs 定位降格
+        # 声明 + 状态列），"最后更新"随批升级；锁语义不变（zh == en 同步）。
+        assert zh and en and zh.group(2) == en.group(2) == "2026-10-08"
 
 
 # ─── AN2/AN5：预注册呈现性增补声明锁定 ───────────────────────────────────────

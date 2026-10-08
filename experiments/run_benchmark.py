@@ -2306,6 +2306,7 @@ def run_benchmark(
     max_pattern_repeat: int | None = None,
     deterministic: bool = False,
     per_task_token_caps: str | None = None,
+    dirty_reason: str | None = None,
 ) -> dict[str, Any]:
     """
     批量运行基准测试，支持多基线方法对比和消融实验。
@@ -2788,6 +2789,11 @@ def run_benchmark(
     summary["provenance"] = {
         "git_sha": _git_sha_val,
         "git_dirty": _git_dirty(),
+        # R15（2026-10-08 R2）：脏树豁免原因入 provenance——--allow-dirty 跑批时
+        # 记录"为何带脏树"（如调试/迭代），使豁免可审计（此前豁免无登记，
+        # 历史 synthetic 两臂 provenance git_dirty=True 而无原因字段）。
+        # 非 allow-dirty 时为 None（干净树无豁免）。
+        "dirty_reason": dirty_reason,
         "model_name": _model_version,
         "temperature": _temperature_val,
         "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),

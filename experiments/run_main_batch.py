@@ -83,6 +83,14 @@ def _parse_args() -> argparse.Namespace:
     # P0-1：dirty tree 拒绝——git sha 不足以复现代码态时硬失败（U2 先例），
     # --allow-dirty 显式豁免（provenance 记录 git_dirty=true 供审计）
     p.add_argument("--allow-dirty", action="store_true", help="豁免 dirty tree 拒绝（不推荐，仅调试）")
+    # R15（2026-10-08 R2）：脏树豁免原因登记——与 --allow-dirty 配套，写入
+    # provenance.dirty_reason（供工件审计）；未给原因时填 "unspecified"
+    # （保持向后兼容，但豁免本身可见）。
+    p.add_argument(
+        "--dirty-reason",
+        default=None,
+        help="--allow-dirty 的豁免原因（写入 provenance.dirty_reason；缺省 unspecified）",
+    )
     # R-P0-4（2026-10-06 第九轮审查）：主批次应带同池模板重复上限，防单
     # pattern 分布塌缩（旧批次 import_chain_type_contract×10 病理）。透传
     # run_benchmark.max_pattern_repeat（AA 批次已实现）；默认 None=历史口径。
@@ -136,6 +144,35 @@ def _check_repo_clean() -> None:
             file=sys.stderr,
         )
         raise SystemExit(2)
+
+
+def _assert_provenance_dirty(batch_path: Path, *, allow_dirty: bool) -> None:
+    """R15（2026-10-08 R2）：跑批后 provenance 脏树断言（防御竞态/绕过）。
+
+    前置 `_check_repo_clean` 在跑批**开始前**硬拒绝脏树，但存在两类残余风险：
+    ① 跑批期间工作树被外部改动（竞态）；② 其他路径绕过门禁直接调用
+    run_benchmark。本断言在批次工件落盘后复核 provenance：
+    - 未给 --allow-dirty 而 provenance.git_dirty=True → 抛错（拒绝把代码态
+      不可复现的批次当作干净批次工件留存）；
+    - 给了 --allow-dirty → provenance 必须含 dirty_reason（豁免可审计；
+      缺省应为 "unspecified"）。
+    provenance 不可读时仅告警跳过（不因辅助断言阻断主流程）。
+    """
+    try:
+        prov = json.loads(batch_path.read_text(encoding="utf-8")).get("provenance") or {}
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"⚠️ 无法读取 provenance 做脏树断言（{e}），跳过", file=sys.stderr)
+        return
+    if not allow_dirty and bool(prov.get("git_dirty")):
+        raise SystemExit(
+            "❌ 未使用 --allow-dirty 但 provenance.git_dirty=True——工作树在跑批期间变脏"
+            "（竞态/绕过干净树门禁）。请清理工作树后重跑，或显式加"
+            " --allow-dirty --dirty-reason '<原因>'（并随工件登记豁免）。"
+        )
+    if allow_dirty and not prov.get("dirty_reason"):
+        raise SystemExit(
+            "❌ --allow-dirty 已给出但 provenance.dirty_reason 缺失——豁免必须登记原因（缺省应填 'unspecified'）。"
+        )
 
 
 def _warn_llm_cache_if_enabled() -> None:
@@ -205,6 +242,10 @@ def main() -> None:
     args = _parse_args()
     if not args.allow_dirty:
         _check_repo_clean()
+    # R15：脏树豁免原因（仅 allow_dirty 时生效）——未给原因填 "unspecified"
+    dirty_reason = None
+    if args.allow_dirty:
+        dirty_reason = (args.dirty_reason or "").strip() or "unspecified"
     _warn_llm_cache_if_enabled()
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -242,6 +283,7 @@ def main() -> None:
         deterministic=deterministic,
         max_pattern_repeat=args.max_pattern_repeat,
         per_task_token_caps=args.per_task_token_caps,
+        dirty_reason=dirty_reason,
     )
 
     # 定位刚产出的批次文件（按 mtime 最大定位）
@@ -252,6 +294,7 @@ def main() -> None:
 
     batch_path = batch_files[-1]
     print(f"批次工件：{batch_path}")
+    _assert_provenance_dirty(batch_path, allow_dirty=bool(args.allow_dirty))
     _print_r4_summary(batch_path)
 
     if args.skip_stats:

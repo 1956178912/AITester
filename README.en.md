@@ -2,22 +2,24 @@
 >
 > Last updated: 2026-10-07 (repair-engine batch XIV: external-report net-new harvest — FL Top-k constraint gate [patch-changed functions × Top-3 localization intersection, hit_rank; three result-row keys] + Self-Repair Trap observer [oracle_quality_history snapshots + three-signal core] + Frame Lifetime Trace design input [docs/design; activation gated on the Debugger-split batch] + BASELINE test-chain errata [pre-written count distortions for batches VII–XIII reconciled]; see the Recent Changes row and BASELINE.yaml)
 
-# AITester: A Logic-Anchored Multi-Agent Test Generation and Repair Evaluation System (Detection-First Protocol)
+# AITester: A Detection-First Python Test Generation and Repair (Attribution) Evaluation System
 
-> AITester is a Python automation framework for test generation and repair
-> evaluation based on multi-agent collaboration (detection-first protocol as
-> the primary success criterion). Core innovations: **Detection-first
-> Chain-of-Thought ("red before green")** + **Hierarchical Repair Mechanism**.
-> Honest disclosure (AL5, amended by batch XIII 2026-10-07): across the
-> three-seed main batch (n=261, gold adjudication) the detection-first
-> prompting protocol yields a decisive detection gain; **repair, after
-> the ADR-0021 measurement-caliber correction (patch-field fence-residue
-> artifact), replays at 35.9%** (correct=52 of 145 replayable rows;
-> E1/E2 logic-profile batches 48.1%) — self-repair exists but is far
-> from the frontier and remains the optimization mainline (corrected
-> re-estimation via `make corrected-metrics` / ADR-0027; ceiling
-> attribution and orchestration positioning in
-> `repair_ceiling_report.md` / ADR-0016).
+> AITester is a Python automation system for **attribution-aware** evaluation of test
+> generation and repair, with the detection-first protocol as the primary success
+> criterion. Core innovations: **Detection-first Chain-of-Thought ("red before
+> green")** + **Hierarchical Repair Mechanism**. **Multi-agent orchestration** is an
+> **ablatable container** (not a primary claim; E2 δ=−0.3673, ADR-0016/R26).
+> Honest disclosure (AL5; 2026-10-08 R2 errata: two measurement artifacts
+> — ADR-0021 patch-field fence residue + ADR-0029 cross-file tasks not
+> materialized): across the three-seed main batch (n=261, gold
+> adjudication) the detection-first protocol yields a decisive detection
+> gain; **repair, after the measurement-caliber correction, replays at
+> 39.31%** (correct=57 of 145 replayable rows; E1/E2 logic batches
+> 54.72%) — self-repair exists but is far from the frontier and remains
+> the optimization mainline (v1 calibers 35.86% / 48.11% are artifact
+> lower bounds; caliber matrix in `docs/design/repair_caliber_matrix.md`;
+> corrected via `make corrected-metrics` / ADR-0027/0029; ceiling
+> attribution in `repair_ceiling_report.md` / ADR-0016).
 
 ## Test Status
 
@@ -35,7 +37,7 @@
 | **Total Tests** | ✅ Full collected (full dependencies) / slim environment (when chromadb/matplotlib are missing, RAG/visualization cases are auto-skipped) — current values: see the `tests` section of [BASELINE.yaml](BASELINE.yaml) (`total_passed` / `slim_environment`) |
 | **Unit Tests** | ✅ Full suite: all pass, zero failures (suite duration and case count: see `tests` section of [BASELINE.yaml](BASELINE.yaml), `suite_seconds` / `total_passed` / `total_failed`); slim environment degrades gracefully via `skipif`/`importorskip` — no false-positive ERROR |
 | **Code Coverage** | Total line and branch coverage: see the `coverage` section of [BASELINE.yaml](BASELINE.yaml) (`line_total_pct` / `branch_total_pct`); per-core-module coverage follows the latest CI `term-missing` output |
-| **Benchmark Metrics (honest reporting)** | ⚠️ Main-batch numbers: the [BASELINE.yaml](BASELINE.yaml) `benchmark` section is the single source of truth. The legacy `success` metric ("generated tests pass on the final code") **must never be quoted alone** — always present it alongside the M1 triple (`detection_rate` / `repair_rate` / `false_fix_rate`). Current caliber = R-P0-2 three-seed pooled (261 tasks/arm): detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%, **aitester vs df −28pp (net-negative orchestration contribution, robust under dual bounds for the 21 missing rows)**; **repair 35.9% under the corrected caliber** (ADR-0021: the historical "0.0% across all arms" was a patch-field fence-residue measurement artifact; corrected replay 52/145 replayable rows; E1/E2 logic-profile batches 48.1%; the early 10-01 batch is a true zero at 0/15; corrected funnel: patch produced 94% / plausible 47% / correct 35.9%, see `repair_ceiling_report.md` + ADR-0021/0027); $/task 0.0259 vs 0.0045 (officially sourced price table); localization metrics ship alongside the result rows — `fl_at_k` (spectral Top-k line-level hit) and `localization_hit_function` (LLM reasoning localization function-level hit, since repair-engine batch I 2026-10-07, compared against the gold changed-function set, schema-isomorphic placeholder when unlocalized). Historical batch (2026-10-01, n=50) false_fix=89.8% stands as evidence of the false-success channel (ADR-0027 re-estimation: that batch's corrected repair is a true zero at 0/15 — the evidence holds; main-batch corrected false_fix = 87.2%); SWE-bench Lite (sqlfluff-20) 0/20 negative result and statistical tests disclosed as-is without cherry-picking |
+| **Benchmark Metrics (honest reporting)** | ⚠️ Main-batch numbers: the [BASELINE.yaml](BASELINE.yaml) `benchmark` section is the single source of truth. The legacy `success` metric ("generated tests pass on the final code") **must never be quoted alone** — always present it alongside the M1 triple (`detection_rate` / `repair_rate` / `false_fix_rate`). Current caliber = R-P0-2 three-seed pooled (261 tasks/arm): detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%, **aitester vs df −28pp (net-negative orchestration contribution, robust under dual bounds for the 21 missing rows)**; **repair 39.31% under the corrected caliber** (ADR-0021/0029: the historical "0.0% across all arms" was two stacked measurement artifacts — patch-field fence residue and cross-file tasks not materialized; corrected replay 57/145 replayable rows; E1/E2 logic-profile batches 54.72%; the early 10-01 batch is a true zero at 0/15; corrected funnel: patch produced 94% / plausible 47% / correct 39.31%; the v1 calibers 35.86%/48.11% are artifact lower bounds, caliber matrix in `docs/design/repair_caliber_matrix.md`, ceiling attribution in `repair_ceiling_report.md` + ADR-0021/0027/0029); $/task 0.0259 vs 0.0045 (officially sourced price table); localization metrics ship alongside the result rows — `fl_at_k` (spectral Top-k line-level hit) and `localization_hit_function` (LLM reasoning localization function-level hit, since repair-engine batch I 2026-10-07, compared against the gold changed-function set, schema-isomorphic placeholder when unlocalized). Historical batch (2026-10-01, n=50) false_fix=89.8% stands as evidence of the false-success channel (ADR-0027 re-estimation: that batch's corrected repair is a true zero at 0/15 — the evidence holds; main-batch corrected false_fix = 87.2%); SWE-bench Lite (sqlfluff-20) 0/20 negative result and statistical tests disclosed as-is without cherry-picking |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.13/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
 | **Latest Optimization** | ✅ 2026-10-05 Review-optimization batch R1–R18 (default behavior unchanged): spec-oracle execution wiring (`SPEC_ORACLE_EXEC_ENABLE` — executable specs now run alongside LLM tests for the first time) + SpecIR v1 compile fixes (tautological assertion sealed) + signature-aware binding + mutation detection rate in the main benchmark (`mutation_detection_rate`, objective oracle adjudication) + complete statistical reports (McNemar/BH-FDR persisted + bootstrap CI + Cliff's delta + `--batches` allowlist) + rollback fail-closed switch + structured-routing switch + CI security scanning turned blocking + release/perf workflows + `AITESTER_PROFILE` presets; full-suite zero-regression + ruff/mypy all green; current baseline numbers: see [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |

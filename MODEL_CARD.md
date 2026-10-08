@@ -1,15 +1,19 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-07（修复引擎批次 I：范式转向"局部化 → 合成 → 验证"——独立 FaultLocalizer 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，`FAULT_LOCALIZER_ENABLE` 默认开〕+ 局部化独立指标 `localization_hit_function` 首测；上一批 AL：AK 补注勘误回绿 + 对外定位去"自修复"主张对齐 CITATION + E6/E7 预注册）
+最后更新：2026-10-08（R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2；此前 2026-10-07 修复引擎批次 I：范式转向"局部化 → 合成 → 验证"——独立 FaultLocalizer 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，`FAULT_LOCALIZER_ENABLE` 默认开〕+ 局部化独立指标 `localization_hit_function` 首测）
 
 ## 1. 系统概述
 
-AITester 是一个逻辑锚定的多智能体测试生成与修复评估研究系统（检出优先
-口径）：给定函数级修复任务（合成数据集或 SWE-bench Lite 拆分任务），由
+AITester 是一个**检出优先的 Python 测试生成与修复评估研究系统**（归因口径）：
+给定函数级修复任务（合成数据集或 SWE-bench Lite 拆分任务），由
 LangGraph 编排的 Planner → Generator → Executor → Debugger →
-PatchApplier 闭环生成 pytest 测试、执行、诊断并打补丁。三种子主批次实测
-repair = 0.0%（gold 独立裁决）——**自修复为可测量口径而非已证实主张**
-（AL5 定位收口，上限归因见 `experiments/results/main_batch/repair_ceiling_report.md`）。
+PatchApplier 闭环生成 pytest 测试、执行、诊断并打补丁。其中"**多智能体
+编排**"定位为**可消融容器**（非主断言——E2 双门后 aitester vs
+plain_llm_df δ=−0.3673 结构性劣后，ADR-0016）。三种子主批次 repair 经
+ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行；gold
+独立裁决）**（v1 35.86%；上限归因见
+`experiments/results/main_batch/repair_ceiling_report.md`）；**自修复为可测量
+口径而非已证实主张**（AL5 定位收口）。
 本卡描述其模型使用、数据来源与风险面（参考 NIST AI RMF 与
 模型卡通行条目；本系统当前定位为科研代码，非部署产品）。
 
@@ -59,11 +63,14 @@ repair = 0.0%（gold 独立裁决）——**自修复为可测量口径而非已
   与 `statistical_report_3seed_pooled.md`）：detection plain_llm_df 44.8% >
   aitester 15.8% > plain_llm 1.5%；aitester vs df **−28pp**——完整系统在
   强模型下显著劣于纯提示协议（编排净负贡献；21 行缺失双界下结论稳健）。
-- **repair 全线 0.0%**（三臂不一致对 0）：修复主张无证据。上限归因
+- **repair 经测量口径修正后 = 39.31%（57/145 可重放行）**：历史"全线
+  0.0%"系两起测量伪影（ADR-0021 patch 字段围栏残留 + ADR-0029 跨文件任务
+  未物化）叠加所致，非修复主张缺证。上限归因
   （`repair_ceiling_report.md`，AK1）：修复循环 154/261 → patch 产出 94.2%
-  → plausible 46.8% → correct 0——瓶颈在补丁合理性与 gold 正确性，
+  → plausible 46.8% → correct 39.31%——瓶颈在补丁合理性与 gold 正确性，
   非补丁未产出。2026-10-07 范式转向后 repair 从"诚实测量的结论"转为
-  "要优化的目标"（修复引擎路线：局部化 → 合成 → 验证）。
+  "要优化的目标"（修复引擎路线：局部化 → 合成 → 验证）；v1 口径
+  35.86% 系跨文件伪影下界（口径矩阵见 `docs/design/repair_caliber_matrix.md`）。
 - 局部化维度：`fl_at_k`（谱系行级 Top-k 命中，R8 起）与
   `localization_hit_function`（LLM 推理定位函数级命中，批次 I 起，与
   gold 变更函数集合比对；未定位/无 gold 材料时键集合同构占位）与

@@ -1,10 +1,54 @@
-> Last updated: 2026-10-07 (batch RepairEngine-XIV: external-report net-new harvest — FL Top-k constraint gate + Self-Repair Trap observer [both observability-layer, ADR-0028] + Frame Lifetime Trace design input + BASELINE test-chain errata; batch XIII below)
+> Last updated: 2026-10-08 (batch R2: cross-file measurement fix [third artifact, R27] + stats-gate generalization / dirty-tree assertion / spec_smt restricted-eval tightening + R4 artifact archival and corrected caliber v2 [ADR-0029] + external narrative alignment; previously 2026-10-07 batch RepairEngine-XIV: external-report net-new harvest — FL Top-k constraint gate + Self-Repair Trap observer [both observability-layer, ADR-0028] + Frame Lifetime Trace design input + BASELINE test-chain errata; batch XIII below)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-08 Batch R2 (third measurement artifact root-fix + legacy-batch archival + external caliber v2 closure)
+
+> R2 landing items from the 13th/14th review reports (all zero-LLM,
+> offline replay / unit-test verified; default behavior unchanged —
+> except the explicitly fixed measurement calibers and new default-off
+> switches):
+> - **Cross-file measurement fix (R27, third measurement artifact)**:
+>   `_run_pytest_in_tmp` materializes a complete package tree (target
+>   module + companion modules) for `is_cross_file` tasks, replacing the
+>   `"python_programs" in test_code` substring heuristic with explicit
+>   dispatch; fail-closed — missing support records None + warning, and
+>   rc==5 (no tests collected) folds into the execution error; empty-patch
+>   caliber early-returns 0.0 (R28). After the fix, QuixBugs A/B repair is
+>   digit-identical (M1 measurable caliber 37/41, 36/41), R4 cross-file
+>   patched rows 0/2 → 2/2, six-batch cross-file total 0/25 → 11/25;
+> - **Corrected caliber v2 (R13)**: R-P0-2 repair 35.86% → **39.31%
+>   (57/145)**, E1/E2 48.11% → **54.72% (58/106)**, R4-A replayable
+>   44.4% → 55.6%; caliber matrix `docs/design/repair_caliber_matrix.md`
+>   (citation discipline) + ADR-0029;
+> - **Stats-gate generalization (R17)**: `_SUPPORTED_DATASETS` whitelist
+>   `{synthetic, quixbugs}` so statistical reports can consume QuixBugs
+>   batches (previously synthetic-only);
+> - **Dirty-tree assertion (R15/R16)**: `run_main_batch --dirty-reason`
+>   (writes provenance.dirty_reason) + post-run
+>   `_assert_provenance_dirty` (dirty without exemption / exempted without
+>   reason → raises; exemptions are auditable);
+> - **spec_smt restricted-eval tightening (R9)**: `ast.literal_eval` fast
+>   path (zero eval for constant clauses) + explicit debug warning for the
+>   fallback eval (the eval surface is narrowed but not eliminated, and no
+>   longer silent);
+> - **R4/QuixBugs legacy-batch archival (R14)**:
+>   `experiments/results/r4_batches/` 6 batch JSONs + SHA256SUMS/README
+>   (previously stranded in /tmp); `check_artifacts_tracked` MANIFEST
+>   13→21;
+> - **External narrative alignment (R20/R26/R21)**: DATA_CARD §1/§4
+>   (QuixBugs positioning downgrade + status column "single-arm rerun, not
+>   E4"), prereg execution log (R4/QuixBugs row + E4 status + v2 pointer),
+>   README/MODEL_CARD drop of the "multi-agent" primary claim, R21 citation
+>   correction (Less Is More authors).
+> Suite collected 4717 (on this restricted host: 4707 passed + 10 environment-class failures, all triaged as non-code [170/170 green when re-run in isolation]; CI will confirm); env budget 168→170 (backfilling
+> two historical missed registrations from src/tools/patch_localized.py,
+> LOCALIZED_EDIT_ENABLE / LOCALIZED_EDIT_WINDOW — not new switches); mypy
+> 113 source files 0; ruff 0.16.3 0 warnings.
 
 ## [Unreleased] — 2026-10-07 Batch RepairEngine-XIV (external-report net-new harvest per ADR-0028: FL Top-k constraint gate + Self-Repair Trap observer + Frame Lifetime Trace design input)
 

@@ -159,5 +159,40 @@ FaultLocalizer 的 `line_start/line_end` ± 窗口 `LOCALIZED_EDIT_WINDOW`（默
 **测试**：`tests/test_m1_packaged_tests.py`（7 项，锁定包结构分支与端到端链路）；
 引用 `_m1_metrics` 的 6 个测试文件 84 passed 零回归。
 
+## 【勘误·分母口径】QuixBugs repair 分母修正（2026-10-08 R2，R13）
+
+上文"74%/72%"系 **all-task 口径**（分母 n=50，含 9 个无官方 gold 测试的任务）。
+按 M1 预注册口径（**无 gold 材料行不进分母**），正确表述应为：
+
+| 臂 | all-task 口径（保守展示） | **M1 可测口径（对外引用口径）** |
+|----|---------------------------|-------------------------------|
+| QuixBugs A（对照） | 37/50 = 74.0% | **37/41 = 90.2%** |
+| QuixBugs B（行级约束） | 36/50 = 72.0% | **36/41 = 87.8%** |
+
+两臂差异恰 1 行（`shortest_path_length`）。all-task 口径仅作保守下界展示，
+**对外引用一律用 M1 可测口径**（37/41、36/41）。口径纪律见
+`docs/design/repair_caliber_matrix.md`。
+
+### 跨文件任务测量伪影（R27，同批勘误）
+
+上述 QuixBugs 数字不受跨文件伪影影响（QuixBugs 非跨文件任务）；但**合成集**
+（本文件上文 R4 synthetic A/B）的跨文件任务（Level 3/3.5）gold 测试
+`import module_a/b/c` 在历史单文件判分口径下未物化 → rc=2 收集错误 →
+跨文件行 repair 系统性 0（R4-A 8 行、false_fix 6/8=1.0）。R27 修复（按 metadata
+物化伴生模块树 + 显式 dispatch）后重放：R4-A 跨文件带补丁行 0/2 → **2/2**，
+全批可重放行 44.4%（8/18）→ **55.6%（10/18）**。synthetic 两臂初测"repair 逐任务完全相同 8/50"结论**在跨文件行上同样成立**——v1
+两臂跨文件行皆为 0（伪影所致）；R27 修复后逐任务独立重放，两臂跨文件行仍一致
+（各 2/2 正确，无差异），阴性结论不受影响；非跨文件行不变。
+详见 ADR-0029 与 `experiments/results/r4_batches/replay_r4_ab_arm_a_v2.md`。
+
+B 臂复现路径（同口径，零 LLM）：
+
+```bash
+python -m experiments.repair_replay experiments/results/r4_batches/r4_ab_arm_b --arm aitester
+```
+
+→ 可重放 18 行、修正 correct 10（repair_rate = 0.5556），与 A 臂逐位一致
+（对应 ADR-0029 决策 7 的 R4-A 55.6%）。
+
 
 

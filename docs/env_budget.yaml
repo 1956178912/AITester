@@ -3,7 +3,7 @@
 # 规则：本地运行 check_env_budget.py（无 --check）发现新名自动登记写回，
 # 由贡献者随改动提交——'登记'即'修改本文件'，PR diff 强制可见（P0-5 冻结决策）。
 # CI 以 --check 模式阻断未登记新增；删名允许（表随之收缩）。
-env_total: 168
+env_total: 170
 names:
   - ADVERSARIAL_DEBUGGING_ENABLE
   - AGENT_TELEMETRY_ENABLE
@@ -103,6 +103,8 @@ names:
   - LLM_MAX_OUTPUT_TOKENS
   - LLM_REASONING_EFFORT
   - LLM_THINKING_MODE
+  - LOCALIZED_EDIT_ENABLE
+  - LOCALIZED_EDIT_WINDOW
   - LOGIC_SPEC_STRICT_ENABLE
   - LOGIC_SPEC_STRICT_FALLBACK_ENABLE
   - MODEL_ROUTING_STRATEGY

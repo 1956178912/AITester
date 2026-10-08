@@ -2,7 +2,11 @@
 
 # Data Card
 
-Last updated: 2026-10-07 (AN1: §4 registers the TestGenEval L2-candidate
+Last updated: 2026-10-08 (R20: §4 adds the QuixBugs positioning downgrade —
+near-saturation (citing 2025–2026 cross-model coordinates) + memorization-
+contamination risk, limited to L1 pipeline validation; §1 status column
+updated to "single-arm rerun (not the formal E4 execution)". Previously
+2026-10-07: AN1: §4 registers the TestGenEval L2-candidate
 evaluation — CC BY-NC 4.0, verified against the LICENSE text; joins BugsInPy
 in the non-clean-license gate; previously AH1: §4 licensing authoritatively
 verified — QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no
@@ -16,7 +20,7 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
 | Dataset | Loader name | Status | Purpose |
 |---------|-------------|--------|---------|
 | Synthetic defect template library | `synthetic` | ✅ in use for the main batch (n=50 tasks) | main experiments / ablations |
-| QuixBugs (Python subset) | `quixbugs` | loader ready, **never run** | real-defect ladder L1 |
+| QuixBugs (Python subset) | `quixbugs` | single-arm aitester rerun (an R4 by-product, **not the formal E4 execution**); used for L1 pipeline validation | real-defect ladder L1 |
 | BugsInPy | `bugsinpy` | loader ready, **never run** | real-defect ladder L2 |
 | SWE-bench Lite | `swe_bench` | historical 0/20 smoke run | repo-level (target mismatch, see below) |
 
@@ -99,6 +103,28 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
     smoke measured 50 programs loaded and 41 with the complete gold
     triplet (the 9 tasks without official tests get detection=None per the
     M1 rule and stay out of the denominator);
+  - **QuixBugs positioning downgrade (R20, 2026-10-08 R2) — near-saturation +
+    memorization-contamination risk; positioned for L1 pipeline validation
+    rather than external-validity claims**:
+    - **Near-saturation**: 2025–2026 cross-model coordinates show frontier
+      models near the ceiling — GPT-o1 40/40, GPT-4o 38/40, ThinkRepair /
+      ContrastRepair 40/40 (40 = the full QuixBugs Python subset),
+      claude-code adapter resolve ≈80.75% (**aggregated sources; individual
+      figures pending primary-source verification**); this project's
+      measurable caliber 90.2%/87.8% (37/41, 36/41) sits below the
+      saturation frontier and is not SOTA;
+    - **Memorization-contamination risk**: QuixBugs is a small public
+      benchmark (40 programs) and is suspected of training-set contamination
+      (consistent with this project's hygiene stance on retiring SWE-bench
+      Verified);
+    - **Use limited to** "pipeline-usability validation" (verifying that the
+      real-benchmark path runs, and that gold material / package structure /
+      evidence-gate behavior are observable); **external-validity claims
+      migrate** to BugsInPy (license pending, below) or TestGenEval (CC BY-NC
+      gate).
+    - Citation discipline: citing its numbers requires noting "M1 measurable
+      caliber + near-saturated + no external-validity claim" (see
+      `docs/design/repair_caliber_matrix.md`).
   - **BugsInPy: no SPDX-detectable license (new compliance gate — a user
     decision is required before L2 runs)** — the `license` field of
     `api.github.com/repos/google/bugsinpy` is null (verified 2026-10-06),

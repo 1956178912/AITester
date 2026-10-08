@@ -87,13 +87,14 @@ class TestAL5Positioning:
         en_head = _head(README_EN, 22)
         assert "诚实披露" in zh_head and "repair_ceiling_report.md" in zh_head
         assert "Honest disclosure" in en_head and "repair_ceiling_report.md" in en_head
-        # 批次 XIII（2026-10-07，ADR-0021/0027）：repair=0.0% 经查系 patch
-        # 字段围栏残留测量伪影（修复口径 35.9%）——诚实披露主张随勘误推进
+        # 批次 XIII（2026-10-07，ADR-0021/0027）+ R2（2026-10-08，
+        # ADR-0029）：repair=0.0% 经查系 patch 字段围栏残留 + 跨文件任务
+        # 未物化两起测量伪影（修正口径 39.31%）——诚实披露主张随勘误推进
         # （历史行"修复杂铺"锁）；锁语义不变：披露必须携带修正口径数字与
         # 伪影定性，不得回退为"自修复已达成"类未证实主张。
-        assert "35.9%" in zh_head and "伪影" in zh_head
-        assert "35.9%" in en_head and "artifact" in en_head
-        assert "可测量口径" not in zh_head or "35.9%" in zh_head
+        assert "39.31%" in zh_head and "伪影" in zh_head
+        assert "39.31%" in en_head and "artifact" in en_head
+        assert "可测量口径" not in zh_head or "39.31%" in zh_head
 
     def test_model_card_overview(self) -> None:
         zh_head = _head(MODEL_CARD_ZH, 16)

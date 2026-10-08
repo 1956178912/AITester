@@ -368,10 +368,30 @@ def generate_spec_witnesses(
         # 的见证会让编译产物在执行期 TypeError/断言失败 → 假检出，直接丢弃）。
         # 子句已过 spec_ir_v2 白名单（无调用/属性逃逸），eval 面与 compile
         # 路径同源受限；空 __builtins__ + 仅注入白名单纯函数。
+        #
+        # R9（2026-10-08 R2）：受限 eval 面收紧——
+        #   ① 先走 ast.literal_eval 快速路径（纯字面量子句如 True / 1 / "x"）：
+        #      不经 eval，直接得到常量真值；literal_eval 对非字面量（比较 /
+        #      运算表达式）抛 ValueError → 落到 ②；
+        #   ② 保留受限 eval（上述白名单契约下的必要兜底）：显式记 debug 日志，
+        #      使"仍有 eval 执行"这一事实在运行时可见（面未消除，告警不静默）。
+        # 安全性：白名单已在 spec_ir_v2 层拦截调用/属性/下标逃逸，此处
+        # literal_eval 优先进一步缩小 eval 触发面（常量子句零 eval）。
         safe_env: dict[str, Any] = dict(inputs)
+        eval_globals: dict[str, Any] = {"__builtins__": {}, **_EVAL_SAFE_FUNCS}
         try:
             for clause in usable:
-                if not eval(clause, {"__builtins__": {}, **_EVAL_SAFE_FUNCS}, safe_env):  # noqa: S307
+                try:
+                    value = ast.literal_eval(clause)
+                except (ValueError, SyntaxError):
+                    # 非字面量（比较 / 运算）：受限 eval 兜底（面未消除，
+                    # 显式告警日志；如需彻底消除须改白名单 DSL 求值器）
+                    logger.debug(
+                        "SpecSMT 见证复核使用受限 eval（非字面量子句）：%s",
+                        clause[:120],
+                    )
+                    value = eval(clause, eval_globals, safe_env)  # noqa: S307
+                if not value:
                     return None
         except Exception:
             return None

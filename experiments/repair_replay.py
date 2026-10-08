@@ -85,7 +85,10 @@ def replay_row(row: dict[str, Any], timeout: int = 60) -> dict[str, Any]:
 
     module_name = str(row.get("task_id", "")).split("__")[-1].replace("-", "_")[:50]
     new_code = normalize_patch_text(patch)
-    rc = _run_pytest_in_tmp(test_cases, new_code, module_name, timeout=timeout)
+    # R27（2026-10-08 R2）：把任务 metadata 透传执行器，跨文件任务（is_cross_file）
+    # 走伴生模块物化分支——否则 module_a/b/c 未物化 → gold 测试收集错误 rc=2 →
+    # 跨文件行 repair 被系统性误判为 0（第三起测量伪影）。
+    rc = _run_pytest_in_tmp(test_cases, new_code, module_name, timeout=timeout, task_metadata=meta)
     if rc is None:
         return {"status": "unverifiable", "rc": None, "old_patch_correct": old_correct}
     rc_val, _out, _err = rc

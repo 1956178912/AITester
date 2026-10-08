@@ -53,6 +53,16 @@ MANIFEST: tuple[str, ...] = (
     # 完整性锚点与成本价目（$/task 口径依赖）
     "experiments/results/main_batch/SHA256SUMS",
     "experiments/price_table.json",
+    # R14（2026-10-08 R2）：R4 / QuixBugs 存量批次入库（口径矩阵与勘误引用的
+    # 证据链——此前全部滞留 /tmp，易失且违反预注册工件条款）
+    "experiments/results/r4_batches/README.md",
+    "experiments/results/r4_batches/SHA256SUMS",
+    "experiments/results/r4_batches/r4_ab_arm_a/benchmark_synthetic_20261008_133303.json",
+    "experiments/results/r4_batches/r4_ab_arm_b/benchmark_synthetic_20261008_134156.json",
+    "experiments/results/r4_batches/r4_synth_arm_b2/benchmark_synthetic_20261008_161508.json",
+    "experiments/results/r4_batches/r4_qb_arm_a/benchmark_quixbugs_20261008_165558.json",
+    "experiments/results/r4_batches/r4_qb_arm_b/benchmark_quixbugs_20261008_165603.json",
+    "experiments/results/r4_batches/loc_test_quix/benchmark_quixbugs_20261007_195728.json",
     # 预注册（时间顺序审计条款的执行前提）
     "docs/preregistration.md",
     "docs/preregistration.en.md",

@@ -2,7 +2,10 @@
 
 # 数据卡（DATA CARD）
 
-最后更新：2026-10-07（AN1：§4 新增 TestGenEval L2 候补评估登记——
+最后更新：2026-10-08（R20：§4 新增 QuixBugs 定位降格声明——近饱和
+（引 2025–2026 横向坐标）+ 记忆污染风险，限定为 L1 管道验证；§1 状态列
+更新为"单臂复跑（非 E4 正式执行）"。此前 2026-10-07：AN1：§4 新增
+TestGenEval L2 候补评估登记——
 CC BY-NC 4.0 经 LICENSE 原文核实，与 BugsInPy 同列非清洁许可门槛；
 此前 AH1：§4 许可节权威核实——QuixBugs MIT 已确认
 〔L1 前置解除〕、BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；
@@ -15,7 +18,7 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 | 数据集 | 加载名 | 状态 | 用途 |
 |--------|--------|------|------|
 | 合成缺陷模板库 | `synthetic` | ✅ 主批次在用（n=50 任务） | 主实验 / 消融 |
-| QuixBugs（Python 子集） | `quixbugs` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L1 |
+| QuixBugs（Python 子集） | `quixbugs` | 单臂 aitester 复跑（R4 副产品，**非 E4 正式执行**）；L1 管道验证用 | 真实缺陷阶梯 L1 |
 | BugsInPy | `bugsinpy` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L2 |
 | SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟 | 仓库级（靶点错位，见下） |
 
@@ -81,6 +84,20 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
     commit `4257f44b0ff1181dedaedee6a447e133219fcebf`；零 LLM 加载器
     冒烟实测 50 程序加载、41 个 gold 三件套齐全（9 个无官方测试的
     任务按 M1 口径 detection=None 不进分母）；
+  - **QuixBugs 定位降格（R20，2026-10-08 R2）——近饱和 + 记忆污染风险，
+    定位为 L1 管道验证而非外部效度主张**：
+    - **近饱和**：2025–2026 横向坐标显示前沿模型已接近满分——
+      GPT-o1 40/40、GPT-4o 38/40、ThinkRepair / ContrastRepair 40/40
+      （40 为 QuixBugs Python 子集全量）、claude-code 适配器 resolve
+      ≈80.75%（**聚合来源，个别数字待原文复核**）；本项目可测口径
+      90.2%/87.8%（37/41、36/41）位于"饱和前沿之下、非 SOTA"区间；
+    - **记忆污染风险**：QuixBugs 为公开小基准（40 程序），存在训练集
+      记忆污染嫌疑（与本项目对 SWE-bench Verified 弃用的卫生叙事同向）；
+    - **用途限定**：仅作"管道可用性验证"（验证真实基准链路可跑通、
+      gold 材料/包结构/证据门行为可观测）；**外部效度主张迁移**至
+      BugsInPy（许可待决，见下）或 TestGenEval（CC BY-NC 门槛）。
+    - 引用纪律：引用其数字须注明"M1 可测口径 + 近饱和 + 不作外效主张"
+      （见 `docs/design/repair_caliber_matrix.md`）。
   - **BugsInPy：无 SPDX 可识别许可证（新发现合规门槛，L2 实跑前须
     用户决策）**——`api.github.com/repos/google/bugsinpy` license 字段
     为 null（2026-10-06 核实），即上游未随仓库声明许可、默认版权保留；

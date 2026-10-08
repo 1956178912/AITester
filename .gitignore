@@ -124,6 +124,12 @@ experiments/results/main_batch/**
 #（完整证据链：汇总 JSON + 统计报告 + 逐任务轨迹 + SHA256SUMS）。
 !experiments/results/main_batch/traces/
 !experiments/results/main_batch/traces/**
+# R14（2026-10-08 R2）：R4 / QuixBugs 存量批次入库——r4_batches/ 全量子树
+# 放行（批次 JSON + 逐任务 trace + SHA256SUMS + README，与主批次同口径）。
+# 需同时 negation 目录与其递归内容（父目录被排除时其内文件不可 re-include，
+# 见上方 U1 注释的同一 gitignore 规范）。
+!experiments/results/r4_batches/
+!experiments/results/r4_batches/**
 data/
 /results/
 

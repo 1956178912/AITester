@@ -1,0 +1,6 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791446470.7387571, "meta": {"dataset_task_id": "synthetic__task_0001", "baseline": "aitester", "target_function": null}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "planner", "ts": 1791446471.074733, "run_id": "02f6960808ee451b", "span_id": "08a5d4dc24f6", "output": {"function_name": "fibonacci", "test_cases": 7}, "decision": "plan_complete", "duration_ms": 9.18}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791446471.0966752, "run_id": "02f6960808ee451b", "span_id": "8442f0cd4c50", "output": {"generated_test_len": 1517}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791446471.862952, "run_id": "02f6960808ee451b", "span_id": "95e1dd426c07", "output": {"passed": true, "coverage": 97.0, "failed_cases": 0}, "decision": "PASS", "duration_ms": 757.37, "iteration": 0}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "_should_debug", "ts": 1791446472.453521, "run_id": "02f6960808ee451b", "span_id": "0399b6477f00", "output": {"reason": "test_passed"}, "decision": "done"}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791446480.845678, "passed": true, "duration_s": 10.11, "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "llm_calls": 0, "by_model": {}}}

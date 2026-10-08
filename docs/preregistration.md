@@ -244,9 +244,17 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 |------|------|----------|------------|------|------|
 | E1 | 已执行（12/12 有效，其中 2 任务 recursion_limit 触顶无终态，E1 后置修复，见文首注记） | `experiments/results/ab1_validation_e1/`（AITESTER_PROFILE=logic，seed 42，temp 0.0，git_dirty=False，deepseek-flash，87,495 tok） | spec_compile_rate 均值=0.367（n=10/12 可测）；伴随观测：detection=20.0%（2 例均 specific_red 门确认）、repair=0.0%、false_fix=80.0% | **保留**（≥0.3） | 2026-10-07 |
 | E2+E3 | 已执行（首跑 + 迭代重跑各双种子 42/44 × 3 臂；迭代批逐位复现首跑主指标——temp 0.0 缓存命中确定性重放，本迭代为恰好一次，后续不再迭代） | 迭代批 `main_batch/benchmark_synthetic_20261007_181638.json` + `..._185941.json` + `statistical_report_e2_iter.md`；首跑 `..._161053.json` + `..._170147.json` + `statistical_report_e2.md` | 迭代终判：过红 88→31（降幅 64.8%）、抹红 28→2（降幅 92.9%）；aitester vs df δ=−0.3673 [−0.4552,−0.2785]（bayes_neg，与首跑逐位一致）；pooled detection：aitester 12.7% / plain_llm 1.7% / df 52.3%；repair 全线 0.0%；spec_compile_rate=0.212（灰区）；**FL@1 首度可测 19/53=35.8%**（gold diff 修复后）；mutation 可测 31/174 均值 0.767（保守口径）；触顶 16/174（56 上界下 df 臂失控回环仍在，如实披露） | H2a/H2b **不成立**（未归零；降幅均 ≥50% 但"恰好一次"迭代已用尽 → 按停止规则接受结果：门削减过红约 2/3、抹红约 93%）；H2c **"编排容器在检出口径下结构性劣后"结论最终确立**（ADR-0016 预写，可发表）；次要终点 repair 未破零；E3 非空率：fl 30% 可测（修复后）/mutation 18%（设计口径）/spec 91% | 2026-10-07 |
-| E4 | 待执行 | — | — | — | — |
+| R4 A/B + QuixBugs 单臂（**预注册外调试豁免**，非 E4） | 已执行（R4 通道原型验证的副产品；synthetic 两臂系 **dirty 树跑批**、QuixBugs 两臂系干净树跑批） | `experiments/results/r4_batches/{r4_ab_arm_a,r4_ab_arm_b,r4_synth_arm_b2,r4_qb_arm_a,r4_qb_arm_b,loc_test_quix}`（2026-10-08 R2 入库，含 SHA256SUMS/README） | synthetic repair 8/50；QuixBugs A/B repair M1 可测口径 **37/41、36/41**（all-task 37/50、36/50） | R4 局部化约束**阴性**（A/B 无增益）；QuixBugs 单臂仅验证管道，**不构成 E4 正式执行** | 2026-10-08 |
+| E4 | 待执行 | — | — | 真实基准阶梯——2026-10-08 的 QuixBugs 复跑系 **R4 副产品单臂**（n=50、无统计报告、非 3 臂），**≠ E4 正式执行**；E4 须按上方预注册设计 3 臂 × logic 档 × 主终点 detection>0 ∧ resolved>0 + 统计报告，并先用 R17 统计门接入 quixbugs | — |
 | E6 | 待执行（前置旗标已实现，AM 批） | — | — | — | — |
 | E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |
+
+**v2 修正口径指针（2026-10-08 R2，R27/R13）**：上表 E2+E3 行"repair 全线 0.0%"
+系 ADR-0021 围栏伪影 + **第三起伪影（跨文件任务未物化，R27）** 双重受染的原始值。
+R27 修复后按修正口径重放（`experiments/results/main_batch/corrected_report_v2.md`）：
+R-P0-2 修正 repair **39.31%（57/145）**（v1 35.86%，52/145）；E1/E2 **54.72%（58/106）**
+（v1 48.11%，51/106）。对外引用一律以 v2 与
+`docs/design/repair_caliber_matrix.md` 口径矩阵为准（引用须注明分子/分母/oracle/臂）。
 
 ## 就绪命令（AH2 预置：预算批准且干净树后直接执行）
 

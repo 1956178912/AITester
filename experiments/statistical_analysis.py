@@ -61,6 +61,14 @@ from experiments.bayesian_paired import bayesian_paired_analysis, interpret_baye
 # pooled.md 的已知缺口）。历史批次无该臂时自动空集，行为向后兼容。
 _BASELINES = ("aitester", "plain_llm", "single_agent", "plain_llm_df")
 
+# R17（2026-10-08 R2）：统计加载的数据集支持集。此前 _load_batch_file 硬编码
+# dataset == "synthetic"，QuixBugs（E4 真实基准）批次被静默剔除 → E4 正式执行
+# 时"统计报告无法生成"（P0 阻塞）。改为白名单判定并集中在此登记扩展点：
+# 新增基准（如 BugsInPy / TestGenEval）在此加入即接入统计协议。
+# 注意：SWE-bench 批次的 task_id 前缀与合成集冲突风险由调用侧 glob 路径隔离
+# （历史注释所述），不在本支持集范围。
+_SUPPORTED_DATASETS = frozenset({"synthetic", "quixbugs"})
+
 
 def load_experiment_results(
     results_dir: str,
@@ -104,7 +112,8 @@ def load_experiment_results_with_sources(
     与 load_experiment_results 同一套加载逻辑（该函数退化为薄壳委托，
     历史调用方零变化），额外返回审计信息：实际纳入统计的批次文件路径
     列表（按加载顺序 = mtime 降序，N5）。"实际纳入"口径：
-    - 白名单模式：指定的文件中 dataset == "synthetic" 且成功解析的；
+    - 白名单模式：指定的文件中 dataset ∈ _SUPPORTED_DATASETS 且成功解析的
+      （R17：支持集含 synthetic 与 quixbugs）；
     - glob 模式：递归扫描的 benchmark_*.json 中同样实际加载了数据的。
     - X2（P0-4b）：默认还要求 M1 schema 完备（结果行含 detection_rate，
       见 _batch_is_m1_schema_complete）；allow_schema_mixed=True 恢复
@@ -224,8 +233,8 @@ def _load_batch_file(
 ) -> bool:
     """M13（2026-09-29 审查 P0）：加载单个批次文件并写入 results。
 
-    仅纳入 dataset 为 "synthetic" 的批次（口径见 load_experiment_results
-    的 2026-09-26 round9 注释）。
+    仅纳入 dataset ∈ _SUPPORTED_DATASETS 的批次（R17：synthetic + quixbugs；
+    口径见 load_experiment_results 的 2026-09-26 round9 注释）。
 
     X2（2026-10-05 审查 P0-4b）：默认同时要求批次为 M1 schema 完备
     （结果行含 detection_rate 键，见 _batch_is_m1_schema_complete）——
@@ -240,14 +249,18 @@ def _load_batch_file(
     （前缀相同，重跑协议语义保留）。
 
     Returns:
-        该文件是否实际纳入（R2 审计口径：dataset 非 synthetic、schema
+        该文件是否实际纳入（R2 审计口径：dataset 不在支持集、schema
         不完备（默认口径）或解析失败时返回 False，不进入"数据来源"清单）
     """
     try:
         with open(json_file, encoding="utf-8") as f:
             data = json.load(f)
         dataset = data.get("dataset", "")
-        if dataset != "synthetic":
+        # R17（2026-10-08 R2）：数据集白名单泛化——此前硬编码 synthetic-only，
+        # 导致 QuixBugs（E4 真实基准阶梯）批次**无法进入统计协议**（E4 正式
+        # 执行/出报告的前置阻塞）。现改为支持集判定，留扩展点 _SUPPORTED_DATASETS
+        # （新增基准在此登记即接入，避免多点散改）。
+        if dataset not in _SUPPORTED_DATASETS:
             return False
         if not allow_schema_mixed and not _batch_is_m1_schema_complete(data):
             print(

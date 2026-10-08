@@ -26,12 +26,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # 收集错误 / 语法错误的保守信号（pytest 输出子串，大小写不敏感匹配）。
 # 仅取高置信标记，避免把普通断言失败文本误判为"测试执行错误"。
@@ -64,6 +68,12 @@ def _looks_like_test_execution_error(returncode: int, output: str) -> bool:
        非标准执行器的场景。
     """
     if returncode >= 2:
+        # R16（2026-10-08 第三起测量伪影配套）：rc>=2 覆盖 pytest 的 rc==2
+        # （收集/编译中断）与 rc==5（no tests collected，收集到 0 个用例）。
+        # 两者同属"没跑起来"而非"跑通了/断言失败"，一律判为执行错误——
+        # 供 detection / test_error_rate / repair 三处消费（repair 侧对
+        # rc==5 记 None 而非 0，见 _compute_repair_rate），遵循
+        # "不误报→不漏报"（宁可标不可测，不产假信号）。
         return True
     if not output:
         return False
@@ -172,20 +182,148 @@ def _prepare_packaged_test_tree(tmpdir: str, target_code: str, test_code: str, m
     return str(test_path), os.pathsep.join([tmpdir, str(testcases_dir)])
 
 
+# QuixBugs 官方测试对辅助模块（node / load_testdata）的 import——正则限定
+# 行首 from/import，避免把正文中的同名词符串误判为依赖。
+_QUIXBUGS_SUPPORT_IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+(?:node|load_testdata)\b", re.MULTILINE)
+
+
+def _needs_quixbugs_support(test_code: str) -> bool:
+    """测试代码是否依赖 QuixBugs 辅助模块（node / load_testdata）。"""
+    return bool(_QUIXBUGS_SUPPORT_IMPORT_RE.search(test_code or ""))
+
+
+def _packaged_support_ready() -> tuple[bool, str]:
+    """QuixBugs 包结构判分所需辅助材料是否就绪（R16 fail-closed 前置检查）。
+
+    返回 (就绪, 原因)：就绪时原因为空；否则原因给出缺失项（供 logger.warning）。
+    仅当测试确实 import 辅助模块时才需调用（自足包结构测试无需辅助材料）。
+
+    R16（2026-10-08 第三起测量伪影配套）：历史上辅助材料缺失时"尽力而为"
+    会把"没跑起来"（收集错误 rc=2）静默记成 repair=0 / detection=0——与
+    "真的没修好/没检出"不可区分（假结论来源）。现改 fail-closed：材料缺失
+    时调用方记 None + logger.warning（不误报→不漏报）。
+    """
+    root = _quixbugs_support_root()
+    if root is None:
+        return False, "AITESTER_QUIXBUGS_DATA 未配置或其目录不存在"
+    src_testcases = os.path.join(root, "python_testcases")
+    missing = [aux for aux in ("node.py", "load_testdata.py") if not os.path.isfile(os.path.join(src_testcases, aux))]
+    if missing:
+        return False, f"QuixBugs 辅助模块缺失 {missing}（预期位于 {src_testcases}）"
+    return True, ""
+
+
+def _prepare_cross_file_test_tree(
+    tmpdir: str, target_code: str, test_code: str, task_metadata: dict[str, Any]
+) -> tuple[str, str]:
+    """为"跨文件任务"（synthetic Level 3 / 3.5）构建 tmp 目录树并返回 (test_path, PYTHONPATH)。
+
+    背景（2026-10-08 R2 第三起测量伪影）：
+        跨文件任务的 gold test_cases 直接 import 伴生模块
+        （``from module_a import run_pipeline`` / ``from module_b import process``），
+        与 pattern 名无关，故 P1-4 的模块名中性化不重写它们。历史"单文件
+        判分口径"只在 tmp 写 ``{task_id末段}.py`` + ``test_{task_id末段}.py``，
+        ``module_a/b/c`` 全部 ModuleNotFoundError → pytest 收集错误 rc=2 →
+        跨文件行的 repair 被系统性判 0、false_fix 被抬升、detection 偏低
+        （六批次实证：R4-A 8/50 跨文件行 repair 全 0、false_fix 6/8）。
+
+    物化规则（与被测系统真实工作区 ``run_benchmark._write_cross_file_modules``
+    同口径，仅补"被测目标模块 = 传入 target_code"这一判分必需项）：
+        - 模块名取 metadata 的 module_a_name / module_b_name / module_c_name
+          （缺省按 module_a / module_b / module_c 兜底，与物化链路一致）；
+        - **被测目标模块**（metadata["target_module"] 指向者，如 module_b /
+          module_c）的内容 = 传入的 target_code —— buggy / patched / fixed
+          三态统一走此参数（detection 侧传 original_code / gold fixed，
+          repair 侧传应用补丁后的代码）；
+        - 其余伴生模块取 metadata 的缺陷原版代码（module_*_code）；
+        - 顶层模块直接落 ``{name}.py``（gold 测试为 ``from module_x import``
+          顶层 import，无需包 ``__init__.py``，与真实工作区同结构）；
+        - PYTHONPATH 覆盖 tmpdir，保证 import 解析到物化模块。
+
+    模块缺失 / 目标模块名不在伴生列表中时尽力而为（至少落 target_code），
+    不阻断——与 _write_cross_file_modules 的保守降级一致。
+    """
+    from pathlib import Path
+
+    root = Path(tmpdir)
+    target_module = str(task_metadata.get("target_module") or "module_b")
+    specs = (
+        ("module_a_name", "module_a_code"),
+        ("module_b_name", "module_b_code"),
+        ("module_c_name", "module_c_code"),
+    )
+    written: set[str] = set()
+    for name_key, code_key in specs:
+        name = str(task_metadata.get(name_key) or code_key.replace("_code", ""))
+        if not name:
+            continue
+        if name == target_module:
+            # 目标模块内容 = 传入 target_code（buggy/patched/fixed 三态统一）
+            (root / f"{name}.py").write_text(target_code, encoding="utf-8")
+            written.add(name)
+            continue
+        body = str(task_metadata.get(code_key) or "")
+        if not body.strip():
+            continue  # 伴生模块缺失（如 L3 无 module_c）：跳过，同 _write_cross_file_modules
+        (root / f"{name}.py").write_text(body, encoding="utf-8")
+        written.add(name)
+    if target_module not in written:
+        # metadata 缺伴生名（异常输入）时至少保证目标模块可被 import
+        (root / f"{target_module}.py").write_text(target_code, encoding="utf-8")
+    test_path = root / f"test_{target_module}.py"
+    test_path.write_text(test_code, encoding="utf-8")
+    return str(test_path), tmpdir
+
+
 def _run_pytest_in_tmp(
-    test_code: str, target_code: str, module_name: str, timeout: int = 120
+    test_code: str,
+    target_code: str,
+    module_name: str,
+    timeout: int = 120,
+    task_metadata: dict[str, Any] | None = None,
 ) -> tuple[int, str, str] | None:
     """在临时目录里写 target + test 文件并跑 pytest。
 
     返回 (pytest 退出码, stdout, stderr)；
     - 0 = 全过；非 0 = 存在失败/错误；
-    - 超时 / IO 异常 → 返回 None（无法判定，调用方保守记 None）。
+    - 超时 / IO 异常 / 材料缺失（fail-closed）→ 返回 None（无法判定，
+      调用方保守记 None）。
+
+    分派（R27/R16，2026-10-08）：**优先消费显式信号**——
+        - task_metadata["is_cross_file"] 为真 → 跨文件物化分支
+          （_prepare_cross_file_test_tree）；
+        - 否则回退历史子串启发式 ``"python_programs" in test_code``
+          （QuixBugs 包结构兼容回退，见 _prepare_packaged_test_tree）；
+        - 其余走历史单文件口径（synthetic 单文件）。
+    task_metadata 为 None 时行为与历史逐位一致（detection_gates.py:85 的
+    委托调用不传该参数 → 零回归）。
     """
     tmpdir = tempfile.mkdtemp(prefix=f"aitester_m1_{module_name}_")
     try:
-        if "python_programs" in test_code:
+        md = task_metadata or {}
+        # 显式分派（R16/R27）：metadata 在场时信号优先；仅当 metadata 缺省
+        # （detection_gates 委托调用）才回退历史子串启发式。
+        #   - is_cross_file=True → 跨文件物化；
+        #   - source=="quixbugs"（显式）或（缺省时）测试含 "python_programs"
+        #     子串 → 包结构物化。含字面 "python_programs" 的 synthetic 单文件
+        #     测试在 metadata 在场时**不再**被误分派到包分支。
+        packaged = md.get("source") == "quixbugs" or (not md and "python_programs" in test_code)
+        if md.get("is_cross_file"):
+            # 跨文件任务（显式信号优先）：物化 module_a/b/c 伴生模块树
+            test_path, pythonpath = _prepare_cross_file_test_tree(tmpdir, target_code, test_code, md)
+        elif packaged:
             # 包结构测试（QuixBugs 等真实基准口径，2026-10-08 修复）：
-            # 镜像包目录树，不让 gold 测试的 import 在 tmp 环境里失败
+            # 镜像包目录树，不让 gold 测试的 import 在 tmp 环境里失败。
+            # R16 fail-closed：依赖辅助模块（node/load_testdata）而材料缺失
+            # 时记 None（不静默判 0）。
+            if _needs_quixbugs_support(test_code):
+                ready, reason = _packaged_support_ready()
+                if not ready:
+                    logger.warning(
+                        "M1 包结构判分需 QuixBugs 辅助材料但不可用（%s）——保守记 None（fail-closed，不误判为 0）",
+                        reason,
+                    )
+                    return None
             test_path, pythonpath = _prepare_packaged_test_tree(tmpdir, target_code, test_code, module_name)
         else:
             # 历史口径（synthetic 单文件：{module}.py + test_{module}.py）
@@ -355,11 +493,14 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
     if not fixed_code.strip():
         return None
 
-    rc_buggy = _run_pytest_in_tmp(generated_test, original_code, module_name)
+    # R27：把任务上下文（跨文件物化信号）透传执行器——显式分派，不再依赖
+    # 测试文本子串启发式。
+    task_md = getattr(task, "metadata", None) or {}
+    rc_buggy = _run_pytest_in_tmp(generated_test, original_code, module_name, task_metadata=task_md)
     if rc_buggy is None:
         return None
     buggy_rc, buggy_out, buggy_err = rc_buggy
-    rc_fixed = _run_pytest_in_tmp(generated_test, fixed_code, module_name)
+    rc_fixed = _run_pytest_in_tmp(generated_test, fixed_code, module_name, task_metadata=task_md)
     if rc_fixed is None:
         return None
     fixed_rc, fixed_out, fixed_err = rc_fixed
@@ -402,7 +543,9 @@ def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> f
     original_code = str(getattr(task, "instance_code", "") or "")
     if not original_code.strip():
         return None
-    rc = _run_pytest_in_tmp(generated_test, original_code, module_name)
+    # R27：透传任务上下文（跨文件物化信号）供显式分派
+    task_md = getattr(task, "metadata", None) or {}
+    rc = _run_pytest_in_tmp(generated_test, original_code, module_name, task_metadata=task_md)
     if rc is None:
         return None
     rc_val, out, err = rc
@@ -419,11 +562,18 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
         new_code；再在 new_code 上跑 gold test_cases（模板自带）：
         rc == 0 → repair_rate = 1.0（修复被独立验证）；
         rc != 0 → 0.0（补丁未通过独立裁决）；
-        无补丁（iterations=0）→ 0.0（没有修复动作，与历史口径区分）。
+        无补丁（iterations=0，patch 为空）→ 0.0（没有修复动作，与历史口径区分）；
+        rc == 5（no tests collected，gold 材料未跑起来）→ None（R16
+        fail-closed：不可测量，不误判为 0）。
 
     与 passed（"我生成的测试在（可能未修复的）代码上通过"）的区别：
         本指标只看 gold 测试在**最终代码**上的通过性，不依赖 LLM 自写
         测试，消除 oracle-from-implementation 假成功通道。
+
+    R28（2026-10-08 R2）：空补丁早退 return 0.0 —— 对齐本 docstring 与
+    _false_fix_rate 的推导口径。此前空补丁仍走"应用空补丁 = 原代码 → 跑
+    gold"，若缺陷原码**恰好**能过 gold 测试（oracle 与缺陷不打架的边界行）
+    会被误判 repair=1.0；早退消除该假阳性。
     """
     if final_state is None:
         return None
@@ -435,12 +585,21 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
     if not original_code.strip():
         return None
     patch = final_state.get("patch") or ""
+    if not patch.strip():
+        return 0.0  # 无修复动作（iterations=0）——早退，不假设修复发生（R28）
     new_code = _target_code_after_patch(original_code, patch)
-    rc = _run_pytest_in_tmp(test_cases, new_code, module_name)
+    # R27：透传任务上下文（跨文件物化信号）供显式分派
+    task_md = getattr(task, "metadata", None) or {}
+    rc = _run_pytest_in_tmp(test_cases, new_code, module_name, task_metadata=task_md)
     if rc is None:
         return None
     rc_val, _out, _err = rc
-    return 1.0 if rc_val == 0 else 0.0
+    if rc_val == 0:
+        return 1.0
+    if rc_val == 5:
+        # R16 fail-closed：gold 材料收集到 0 个用例 = "没跑起来"，非"没修好"
+        return None
+    return 0.0
 
 
 def _compute_false_fix_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
@@ -503,10 +662,11 @@ def _compute_regression_rate(task: Any, final_state: dict[str, Any] | None) -> f
     p2p_code = "\n\n".join(str(t) for t in p2p_tests if str(t).strip())
     if not p2p_code.strip():
         return None
-    rc_patched = _run_pytest_in_tmp(p2p_code, new_code, module_name)
+    # R27：透传任务上下文（跨文件物化信号）供显式分派
+    rc_patched = _run_pytest_in_tmp(p2p_code, new_code, module_name, task_metadata=md)
     if rc_patched is None:
         return None  # 超时/异常，不可测量
-    rc_base = _run_pytest_in_tmp(p2p_code, original_code, module_name)
+    rc_base = _run_pytest_in_tmp(p2p_code, original_code, module_name, task_metadata=md)
     if rc_base is None:
         return None
     # 回归 = 基线（原始代码）P2P 全过 且 补丁后 P2P 出现失败

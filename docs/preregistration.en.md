@@ -249,8 +249,6 @@ this document, and must be labeled as such when reported.
   the corrected caliber hide semantic equivalents), downgraded from
   "caliber underestimation test" to "residual semantic-equivalence
   sampling audit".
-  plausibility and gold correctness" is finalized (repair=0 is a true
-  zero).
 - **Cost**: ~1 person-day, zero LLM cost (offline sampling + manual diff).
 - **Candidate list (generated in batch AO, 2026-10-07)**:
   `experiments/results/main_batch/e7_repair_sample_candidates.md` — the
@@ -321,11 +319,22 @@ this document, and must be labeled as such when reported.
 
 | Experiment | Status | Batch artifacts | Primary endpoint result | Decision | Date |
 |------------|--------|-----------------|-------------------------|----------|------|
-| E1 | pending | — | — | — | — |
+| E1 | executed (12/12 valid; 2 tasks hit recursion_limit with no terminal state, fixed in an E1 follow-up, see the note at the top) | `experiments/results/ab1_validation_e1/` (AITESTER_PROFILE=logic, seed 42, temp 0.0, git_dirty=False, deepseek-flash, 87,495 tok) | spec_compile_rate mean=0.367 (n=10/12 measurable); accompanying observations: detection=20.0% (both cases confirmed by the specific_red gate), repair=0.0%, false_fix=80.0% | **keep** (≥0.3) | 2026-10-07 |
 | E2+E3 | executed (first run + iteration re-run, each 2 seeds 42/44 × 3 arms; the iteration reproduced the first-run primary metrics digit-for-digit — temp-0.0 cache-hit deterministic replay; this was the exactly-once iteration, no further iterations) | iteration `main_batch/benchmark_synthetic_20261007_181638.json` + `..._185941.json` + `statistical_report_e2_iter.md`; first run `..._161053.json` + `..._170147.json` + `statistical_report_e2.md` | Final adjudication: over-red 88→31 (−64.8%), erase-red 28→2 (−92.9%); aitester vs df δ=−0.3673 [−0.4552,−0.2785] (bayes_neg, digit-identical to the first run); pooled detection: aitester 12.7% / plain_llm 1.7% / df 52.3%; repair 0.0% across all arms; spec_compile_rate=0.212 (grey zone); **FL@1 measurable for the first time: 19/53=35.8%** (after the gold-diff fix); mutation measurable 31/174, mean 0.767 (conservative semantics); recursion exhaustion 16/174 (under the 56 cap the df-arm runaway loop persists, disclosed as-is) | H2a/H2b **not upheld** (not zeroed; both reductions ≥50% but the exactly-once iteration is spent → accepted per the stop rule: gates cut over-red by ~2/3 and erase-red by ~93%); H2c **the "orchestration container is structurally inferior on detection" conclusion is finalized** (pre-written in ADR-0016, publishable); secondary endpoint repair stays at zero; E3 non-null rates: fl 30% measurable (post-fix) / mutation 18% (by design) / spec 91% | 2026-10-07 |
-| E4 | pending | — | — | — | — |
+| R4 A/B + QuixBugs single-arm (**out-of-preregistration debug exemption**, not E4) | executed (a by-product of R4 channel-prototype validation; the two synthetic arms ran on a **dirty tree**, the two QuixBugs arms on a clean tree) | `experiments/results/r4_batches/{r4_ab_arm_a,r4_ab_arm_b,r4_synth_arm_b2,r4_qb_arm_a,r4_qb_arm_b,loc_test_quix}` (committed in batch R2, 2026-10-08, with SHA256SUMS/README) | synthetic repair 8/50; QuixBugs A/B repair M1 measurable caliber **37/41, 36/41** (all-task 37/50, 36/50) | R4 localization constraint is **negative** (no A/B gain); the QuixBugs single-arm only validates the pipeline and does **not constitute the formal E4 execution** | 2026-10-08 |
+| E4 | pending | — | — | real-benchmark ladder — the 2026-10-08 QuixBugs rerun is an **R4 by-product single-arm** (n=50, no statistical report, not 3-arm), **≠ the formal E4 execution**; E4 must follow the design above: 3 arms × logic profile × primary endpoint detection>0 ∧ resolved>0 + statistical report, and must first wire quixbugs into the stats gate via R17 | — |
 | E6 | pending (precondition flag implemented, batch AM) | — | — | — | — |
 | E7 | pending manual review (candidate list generated, batch AO) | — | — | — | — |
+
+**v2 corrected-caliber pointer (2026-10-08 R2, R27/R13)**: the E2+E3 row's
+"repair 0.0% across all arms" is the raw value doubly contaminated by the
+ADR-0021 fencing artifact and the **third artifact (cross-file tasks not
+materialized, R27)**. Replayed under the corrected caliber after the R27 fix
+(`experiments/results/main_batch/corrected_report_v2.md`): R-P0-2 corrected
+repair **39.31% (57/145)** (v1 35.86%, 52/145); E1/E2 **54.72% (58/106)**
+(v1 48.11%, 51/106). All external citations must follow v2 and the caliber
+matrix in `docs/design/repair_caliber_matrix.md` (citing must state the
+numerator/denominator/oracle/arm).
 
 ## Ready-to-Run Commands (AH2 preset: execute directly once the budget is approved and the tree is clean)
 
