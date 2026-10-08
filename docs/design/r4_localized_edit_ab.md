@@ -121,4 +121,43 @@ FaultLocalizer 的 `line_start/line_end` ± 窗口 `LOCALIZED_EDIT_WINDOW`（默
    PRepair"over-editing"的同构证据）；② 证据门在真实基准上的行为（29/50 被拒，需
    重新审视 sbfl 证据在 QuixBugs 上的可得性）；③ FaultLocalizer 行级定位精度（29.7%）。
 
+## 【勘误】测量层修复：QuixBugs repair=0 是伪影（2026-10-08 归因后定案）
+
+上述第 ②③ 条结论经归因后**部分作废**——"QuixBugs repair=0"是**测量层 bug**：
+
+**归因链**：B 臂 20 个 plausible 补丁 → 9 个「弃权门未标记但 correct=0」盲区 → 用 QuixBugs
+官方测试**直接检验 patch**（写回 `python_programs/xxx.py` 跑官方测试）→ **9/9 全 PASS**
+（均为真实正确修复）→ 复现 `_compute_repair_rate` 捕获真实报错：
+`ModuleNotFoundError: No module named 'node'`（pytest rc=2，收集阶段中断）。
+
+**根因**：`experiments/_m1_metrics.py::_run_pytest_in_tmp` 的历史"单文件口径"只在 tmp 目录
+写 `{module}.py` + `test_{module}.py`；而 QuixBugs 官方测试依赖辅助模块（`from node import Node`、
+`from load_testdata import ...`）、包结构（`from python_programs.xxx import xxx`）与
+`pytest.use_correct`（conftest）→ 上述 import 在 tmp 环境全部失败 → repair 被系统性判 0
+（与 ADR-0021 同类测量伪影，且影响面更大）。synthetic 因 gold 测试是单文件口径而不受影响。
+
+**修复**：新增 `_quixbugs_support_root()` + `_prepare_packaged_test_tree()`（镜像包目录树：
+`python_programs/` 包 + `correct_python_programs/` 占位 + `conftest.py` + 从 `AITESTER_QUIXBUGS_DATA`
+复制 `node.py`/`load_testdata.py`/`json_testcases/` + 测试 prelude 注入 `pytest.use_correct`）；
+`_run_pytest_in_tmp` 检测 `python_programs` 走包分支，synthetic 单文件走历史分支（零行为变化）。
+
+**修复后重算（同存量工件）**：
+
+| 臂 | 原判 repair | 修复后 repair |
+|----|-------------|---------------|
+| QuixBugs A（对照） | 0/50 (0.0%) | **37/50 (74.0%)** |
+| QuixBugs B（行级约束） | 0/50 (0.0%) | **36/50 (72.0%)** |
+
+**连锁更正**：
+1. 本文档上文"② 证据门 29/50 被拒 / ③ 定位精度"对 repair=0 的归因**不成立**——0 是测量伪影；
+2. A/B（LOCALIZED 行级）真实差异 = 74% vs 72%（1 行，无显著差异）→ R4 局部化约束在
+   QuixBugs 上**同样无增益**（但正确率水平 72–74% 远高于此前认知）；
+3. **真实基准修复率首次测得 72–74%**（synthetic 16%、历史 BASELINE 修正口径 35.9%）——
+   与"真实基准更难"的直觉相反，提示 synthetic 模板缺陷可能更刁钻，或 synthetic 侧仍有
+   测量问题待查（后续批次跟进）。
+
+**测试**：`tests/test_m1_packaged_tests.py`（7 项，锁定包结构分支与端到端链路）；
+引用 `_m1_metrics` 的 6 个测试文件 84 passed 零回归。
+
+
 

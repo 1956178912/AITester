@@ -101,6 +101,77 @@ def _python_interpreter() -> str:
     return interpreter
 
 
+def _quixbugs_support_root() -> str | None:
+    """QuixBugs 数据根目录（AITESTER_QUIXBUGS_DATA），未配置/不存在 → None。
+
+    真实基准（QuixBugs）的 gold 测试依赖辅助模块（node / load_testdata）
+    与 json 测试数据，需从克隆目录复制进 tmp 环境；未配置时保守返回
+    None（包结构测试将在缺辅助模块时自然失败，与历史口径同，不误报）。
+    """
+    root = os.getenv("AITESTER_QUIXBUGS_DATA", "").strip()
+    return root if root and os.path.isdir(root) else None
+
+
+def _prepare_packaged_test_tree(tmpdir: str, target_code: str, test_code: str, module_name: str) -> tuple[str, str]:
+    """为"包结构测试"（QuixBugs 口径）构建 tmp 目录树，返回 (test_path, PYTHONPATH)。
+
+    QuixBugs 官方测试的 import 形态（实测 2026-10-08）：
+        from node import Node                          # 辅助模块
+        from load_testdata import load_json_testcases  # 辅助模块（读 ../json_testcases/*.json）
+        from python_programs.<module> import <name>    # 被测模块（包结构）
+
+    历史口径（单文件 synthetic）只在 tmpdir 写 {module}.py + test_{module}.py，
+    上述 import 全部 ModuleNotFoundError → pytest 收集错误（rc=2）→
+    repair/detection 被系统性判 0（2026-10-08 QuixBugs A/B 实测：9 个
+    **通过官方测试的正确补丁**被误判 patch_correct=0，根因即此——测量层
+    bug，与 ADR-0021 同类）。本函数按真实基准的包结构镜像 tmp 目录：
+
+        tmpdir/
+          conftest.py                          # pytest.use_correct=False（测试 if 分支需要）
+          python_programs/__init__.py
+          python_programs/{module}.py          # 补丁后代码
+          correct_python_programs/__init__.py  # 测试 if 分支占位（默认不执行）
+          python_testcases/                    # 辅助模块 + 本次 gold 测试（从克隆目录复制辅助件）
+          json_testcases/                      # load_testdata 的相对路径依赖
+
+    PYTHONPATH = [tmpdir, tmpdir/python_testcases]。辅助模块缺失时尽力而为
+    （至少建包结构 + conftest），不阻断其余场景。
+    """
+    from pathlib import Path
+
+    root = Path(tmpdir)
+    pkg = root / "python_programs"
+    pkg.mkdir(exist_ok=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / f"{module_name}.py").write_text(target_code, encoding="utf-8")
+    correct_pkg = root / "correct_python_programs"
+    correct_pkg.mkdir(exist_ok=True)
+    (correct_pkg / "__init__.py").write_text("", encoding="utf-8")
+    (root / "conftest.py").write_text(
+        "import pytest\n\npytest.use_correct = False\npytest.run_slow = False\n", encoding="utf-8"
+    )
+    testcases_dir = root / "python_testcases"
+    testcases_dir.mkdir(exist_ok=True)
+    support_root = _quixbugs_support_root()
+    if support_root:
+        src_testcases = Path(support_root) / "python_testcases"
+        for aux in ("node.py", "load_testdata.py"):
+            src = src_testcases / aux
+            if src.is_file():
+                shutil.copy(str(src), str(testcases_dir / aux))
+        src_json = Path(support_root) / "json_testcases"
+        if src_json.is_dir():
+            shutil.copytree(str(src_json), str(root / "json_testcases"))
+    test_path = testcases_dir / f"test_{module_name}.py"
+    # 前置注入 pytest.use_correct / run_slow（QuixBugs 测试的 `if pytest.use_correct:`
+    # 条件依赖）——直接写进测试模块头部比依赖 conftest 的目录收集更可靠
+    # （tmp 目录无 pytest 配置文件时，conftest 的自动收集不覆盖该路径，
+    # 实测 AttributeError；注入 prelude 后与 conftest.py 双保险）。
+    prelude = "import pytest\n\npytest.use_correct = False\npytest.run_slow = False\n\n"
+    test_path.write_text(prelude + test_code, encoding="utf-8")
+    return str(test_path), os.pathsep.join([tmpdir, str(testcases_dir)])
+
+
 def _run_pytest_in_tmp(
     test_code: str, target_code: str, module_name: str, timeout: int = 120
 ) -> tuple[int, str, str] | None:
@@ -112,12 +183,19 @@ def _run_pytest_in_tmp(
     """
     tmpdir = tempfile.mkdtemp(prefix=f"aitester_m1_{module_name}_")
     try:
-        target_path = os.path.join(tmpdir, f"{module_name}.py")
-        test_path = os.path.join(tmpdir, f"test_{module_name}.py")
-        with open(target_path, "w", encoding="utf-8") as f:
-            f.write(target_code)
-        with open(test_path, "w", encoding="utf-8") as f:
-            f.write(test_code)
+        if "python_programs" in test_code:
+            # 包结构测试（QuixBugs 等真实基准口径，2026-10-08 修复）：
+            # 镜像包目录树，不让 gold 测试的 import 在 tmp 环境里失败
+            test_path, pythonpath = _prepare_packaged_test_tree(tmpdir, target_code, test_code, module_name)
+        else:
+            # 历史口径（synthetic 单文件：{module}.py + test_{module}.py）
+            target_path = os.path.join(tmpdir, f"{module_name}.py")
+            test_path = os.path.join(tmpdir, f"test_{module_name}.py")
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(target_code)
+            with open(test_path, "w", encoding="utf-8") as f:
+                f.write(test_code)
+            pythonpath = tmpdir
         try:
             res = subprocess.run(
                 [
@@ -137,7 +215,7 @@ def _run_pytest_in_tmp(
                 env={
                     **os.environ,
                     "PYTHONDONTWRITEBYTECODE": "1",
-                    "PYTHONPATH": tmpdir,
+                    "PYTHONPATH": pythonpath,
                 },
             )
             return res.returncode, res.stdout or "", res.stderr or ""
