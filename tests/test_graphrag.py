@@ -186,3 +186,58 @@ def test_build_graphrag_prompt_section_with_data() -> None:
     assert "相关片段" in section
     assert "符号锚点" in section
     assert "a.helper" in section or "b.helper" in section
+
+
+class TestGraphRAGMoreBranches:
+    """build_from_call_graph / 非法依赖跳过 / 片段截断（2026-10-08 补齐 86% → 100%）。"""
+
+    def test_build_skips_invalid_deps(self):
+        from src.tools.graphrag import GraphRAGIndex
+
+        deps = [
+            "not-a-dict",  # 非 dict 跳过
+            {"source_module": "a"},  # 缺 target/symbol 跳过
+            {"source_module": "a", "target_module": "b"},  # 缺 symbol 跳过
+        ]
+        index = GraphRAGIndex.build_from_cross_file_deps(deps)
+        assert index._symbols == set()
+
+    def test_build_from_call_graph_cross_module(self):
+        from src.tools.graphrag import GraphRAGIndex
+
+        call_edges = [("caller_fn", "callee_fn")]
+        module_sources = {
+            "mod_a": "function caller_fn() {}",
+            "mod_b": "function callee_fn() {}",
+        }
+        index = GraphRAGIndex.build_from_call_graph(call_edges, module_sources)
+        assert ("mod_b", "callee_fn") in index._symbols
+
+    def test_build_from_call_graph_same_module_skipped(self):
+        from src.tools.graphrag import GraphRAGIndex
+
+        # 同模块内调用 → 跳过（图索引只关心跨模块边）
+        call_edges = [("fn_a", "fn_b")]
+        module_sources = {"mod": "function fn_a() {}\nfunction fn_b() {}"}
+        index = GraphRAGIndex.build_from_call_graph(call_edges, module_sources)
+        assert index._symbols == set()
+
+    def test_find_text_snippets_capped(self):
+        from src.tools.graphrag import GraphRAGIndex
+
+        index = GraphRAGIndex()
+        index._module_sources = {"mod": "hello\nhello\nhello\nhello\n"}
+        snippets = index.find_text_snippets("hello", top_k=2)
+        assert len(snippets) == 2
+
+    def test_max_hops_invalid_falls_back(self, monkeypatch):
+        from src.tools.graphrag import _graph_rag_max_hops
+
+        monkeypatch.setenv("GRAPH_RAG_MAX_HOPS", "abc")
+        assert _graph_rag_max_hops() == 2
+
+    def test_top_k_snippets_invalid_falls_back(self, monkeypatch):
+        from src.tools.graphrag import _graph_rag_top_k_snippets
+
+        monkeypatch.setenv("GRAPH_RAG_TOP_K_SNIPPETS", "abc")
+        assert _graph_rag_top_k_snippets() == 5

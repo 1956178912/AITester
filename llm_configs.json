@@ -2,28 +2,28 @@
   {
     "model_name": "qwen-max",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
     "model_name": "qwen-plus",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
     "model_name": "qwen-turbo",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
     "model_name": "qwen-long",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
@@ -44,21 +44,21 @@
   {
     "model_name": "deepseek-v3",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
     "model_name": "deepseek-v4-pro",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
   {
     "model_name": "deepseek-v4-flash",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
@@ -93,7 +93,7 @@
   {
     "model_name": "glm-4.7",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },
@@ -107,7 +107,7 @@
   {
     "model_name": "kimi-k2.7-code",
     "provider": "aliyun_bailian",
-    "provider_description": "阿里云百炼（通义千问）",
+    "provider_description": "阿里云百炼",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "required_api_key": "ALIYUN_BAILIAN_API_KEY"
   },

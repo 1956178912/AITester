@@ -54,9 +54,10 @@ _ENV_DSL = "SPEC_IR_DSL_ENABLE"
 _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
     {"len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all"}
 )
-# 允许的下标 / 长度属性（容器边界锚点）：len(x) 之外的属性访问仅放行
-# 白名单属性（防 x.__class__ 类 introspection 逃逸）
-_ALLOWED_ATTRS: frozenset[str] = frozenset({"len", "value", "real", "imag"})
+# 允许的属性访问（容器/数值边界锚点）：仅放行白名单属性（防 x.__class__
+# 类 introspection 逃逸）。注意：`len` 是函数（走 _ALLOWED_CALL_NAMES），
+# 不是属性——此处原含 "len" 系笔误（会放行无效的 x.len 属性访问），已移除。
+_ALLOWED_ATTRS: frozenset[str] = frozenset({"value", "real", "imag"})
 # 数值 / 字符串 / 布尔 / None / 容器字面量：全放行（ast 字面量）
 
 
@@ -98,14 +99,20 @@ def is_expression_clause(clause: Any) -> bool:
     # 通道 1：字符白名单（中文 / 动词短语必含白名单外字符 → 快速排除）
     if not _EXPR_TOKEN_RE.match(text):
         return False
-    # 通道 2：ast 精确判（mode="eval" 顶层必须是 Expr，Assign 等语句
+    # 通道 2：ast 精确判（mode="eval" 顶层必须是表达式节点，Assign 等语句
     # 在 eval 模式下 parse 失败 → 自动拒绝）
     try:
         tree = ast.parse(text, mode="eval")
     except (SyntaxError, ValueError):
         return False
-    # 顶层为单一 Expr 节点（Assign 等语句在 eval 模式 parse 失败 → 自动拒绝）
-    return isinstance(tree.body, (ast.Expr, ast.Compare))
+    # S11（2026-10-08 修复）：eval 模式下 tree.body 直接是表达式节点本身
+    # （非 Expr 包装）——`ast.Expr` 分支恒不可达，此前 `(ast.Expr, ast.Compare)`
+    # 只有 ast.Compare 能通过，纯算术（BinOp）/ 布尔（BoolOp/UnaryOp）/
+    # 字面量（Constant）/ bare 名（Name）/ 调用（Call）子句被误判为
+    # "非表达式"（spec_compile_rate 与 SMT 前件见证均受此低估）。
+    # 改为 isinstance(tree.body, ast.expr)：所有表达式形态都是 ast.expr
+    # 子类；语句（Assign 等）在 eval 模式 parse 失败已由上方 except 拒绝。
+    return isinstance(tree.body, ast.expr)
 
 
 # ─── 2. SpecExpr 白名单验证（可执行化前置安全闸）──────────────────────────

@@ -87,6 +87,117 @@ class _Untranslatable(Exception):
     """子句含保守算子集之外的构造（调用 / 幂 / 下标 / …）——整体跳过。"""
 
 
+# ─── 0. 受限 AST 求值器（S8，2026-10-08 R3：彻底消除裸 eval）────────────────
+# 背景：见证的 Python 语义复核原先用 eval(clause, {"__builtins__": {}}, env)
+# 求值白名单子句。白名单（spec_ir_v2._whitelist_check）已拦截危险调用/属性
+# 逃逸，翻译层（_translate）进一步把 usable 限制到 常量/名称/布尔/一元/比较/
+# 二元 子集，理论上 eval 面无注入；但"仍有 eval 存在"这一事实本身是审计噪音
+# （bandit S307 noqa），且未来白名单/翻译层放宽时该面可能被重新打开。
+# 此处以受限 AST 求值器替代裸 eval：只递归支持白名单节点类型，任何其他节点
+# /异常一律抛 _Untranslatable（保守丢弃见证，与"宁可无见证，不产坏约束"同口径）。
+
+# 二元运算符 → Python 语义（与 _translate 支持的算子集对齐，Pow/FloorDiv 为
+# 防御性补齐：翻译层当前不产 Pow/FloorDiv，但求值器独立存在，宁多不缺口）
+_BINOP_FUNCS: dict[type[ast.operator], Any] = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.Div: lambda a, b: a / b,
+    ast.Mod: lambda a, b: a % b,
+    ast.Pow: lambda a, b: a**b,
+    ast.FloorDiv: lambda a, b: a // b,
+}
+
+# 比较运算符 → Python 语义（In/NotIn/Is/IsNot 不支持 → 保守拒绝）
+_CMPOP_FUNCS: dict[type[ast.cmpop], Any] = {
+    ast.Eq: lambda a, b: a == b,
+    ast.NotEq: lambda a, b: a != b,
+    ast.Lt: lambda a, b: a < b,
+    ast.LtE: lambda a, b: a <= b,
+    ast.Gt: lambda a, b: a > b,
+    ast.GtE: lambda a, b: a >= b,
+}
+
+
+def _safe_eval(node: ast.AST, env: dict[str, Any]) -> Any:
+    """受限 AST 求值器（白名单节点子集，零 eval/exec）。
+
+    支持：Constant / Name / BoolOp(And,Or) / UnaryOp(Not,USub,UAdd) /
+    Compare(Eq,NotEq,Lt,LtE,Gt,GtE) / BinOp(Add,Sub,Mult,Div,Mod,Pow,
+    FloorDiv) / Call（仅 _EVAL_SAFE_FUNCS 白名单内名称、无关键字实参）。
+    其余节点（Attribute / Subscript / Lambda / 推导式 / f-string / …）一律
+    抛 _Untranslatable → 见证保守丢弃。Name 仅在 env（见证 inputs）内解析，
+    不注入 __builtins__，无 import/exec/属性/下标逃逸面。
+    """
+    if isinstance(node, ast.Expr):
+        # 防御性：eval 模式 body 理论上不包 Expr，但若上游传入 exec 形态
+        # 子树则剥壳继续（与 _infer_sorts/_translate 的 Expr 分支同口径）
+        return _safe_eval(node.value, env)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id not in env:
+            raise _Untranslatable
+        return env[node.id]
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.And):
+            result: Any = True
+            for value in node.values:
+                result = _safe_eval(value, env)
+                if not result:
+                    return result
+            return result
+        if isinstance(node.op, ast.Or):
+            for value in node.values:
+                result = _safe_eval(value, env)
+                if result:
+                    return result
+            return result
+        raise _Untranslatable
+    if isinstance(node, ast.UnaryOp):
+        operand = _safe_eval(node.operand, env)
+        if isinstance(node.op, ast.Not):
+            return not operand
+        if isinstance(node.op, ast.USub):
+            return -operand
+        if isinstance(node.op, ast.UAdd):
+            return +operand
+        raise _Untranslatable
+    if isinstance(node, ast.Compare):
+        left = _safe_eval(node.left, env)
+        for op, comp in zip(node.ops, node.comparators, strict=True):
+            right = _safe_eval(comp, env)
+            fn = _CMPOP_FUNCS.get(type(op))
+            if fn is None:
+                raise _Untranslatable
+            if not fn(left, right):
+                return False
+            left = right
+        return True
+    if isinstance(node, ast.BinOp):
+        left = _safe_eval(node.left, env)
+        right = _safe_eval(node.right, env)
+        fn = _BINOP_FUNCS.get(type(node.op))
+        if fn is None:
+            raise _Untranslatable
+        return fn(left, right)
+    if isinstance(node, ast.Call):
+        name = node.func.id if isinstance(node.func, ast.Name) else None
+        if name is None or name not in _EVAL_SAFE_FUNCS:
+            raise _Untranslatable
+        if node.keywords:
+            raise _Untranslatable
+        args = [_safe_eval(a, env) for a in node.args]
+        return _EVAL_SAFE_FUNCS[name](*args)
+    raise _Untranslatable
+
+
+def _safe_eval_clause(clause: str, env: dict[str, Any]) -> Any:
+    """解析并受限求值单个子句（失败抛 _Untranslatable）。"""
+    tree = ast.parse(clause, mode="eval")
+    return _safe_eval(tree.body, env)
+
+
 # ─── 1. 排序推断（名称 → z3 Int/Real/Bool，冲突即不可翻译）───────────────────
 
 
@@ -313,10 +424,22 @@ def _collect_pre_constraints(
     if sorts is None or not sorts:
         return None
     constraints: list[Any] = []
+    usable_bool: list[str] = []
     try:
         for clause in usable:
             tree = ast.parse(clause, mode="eval")
-            constraints.append(_translate(tree.body, sorts, z3))
+            translated = _translate(tree.body, sorts, z3)
+            # S11 配套（2026-10-08）：is_expression_clause 放宽后，算术子句
+            # （如 "x + 1"）也会通过——_translate 对 BinOp 返回算术表达式
+            # （非 Bool sort），solver.add 会抛 Z3Exception。前件 SAT 见证
+            # 只关心 Bool 前件（比较/布尔/裸名），非 Bool 子句跳过
+            # （保守：不产坏约束，与"宁可无见证"口径一致）；同步过滤
+            # usable，使 clauses 字段与约束对齐（防 Python 复核对算术
+            # 子句求值产生假见证）。
+            if not z3.is_bool(translated):
+                continue
+            constraints.append(translated)
+            usable_bool.append(clause)
     except _Untranslatable:
         return None
     except Exception:
@@ -324,7 +447,10 @@ def _collect_pre_constraints(
         # 保守跳过（不产出半翻译约束；与"宁可无见证，不产坏约束"口径一致）
         logger.debug("SpecSMT 子句翻译失败（保守跳过该规约）", exc_info=True)
         return None
-    return constraints, sorts, usable
+    if not constraints:
+        # 全部子句均为非 Bool（如纯算术表达式）→ 无有效前件约束
+        return None
+    return constraints, sorts, usable_bool
 
 
 def generate_spec_witnesses(
@@ -366,33 +492,24 @@ def generate_spec_witnesses(
         # Python 语义复核：z3 见证必须在 **Python** 下满足全部前件子句
         # （z3 的 Bool/Int 隐式收敛、除法语义与 Python 存在分歧；复核失败
         # 的见证会让编译产物在执行期 TypeError/断言失败 → 假检出，直接丢弃）。
-        # 子句已过 spec_ir_v2 白名单（无调用/属性逃逸），eval 面与 compile
-        # 路径同源受限；空 __builtins__ + 仅注入白名单纯函数。
-        #
-        # R9（2026-10-08 R2）：受限 eval 面收紧——
-        #   ① 先走 ast.literal_eval 快速路径（纯字面量子句如 True / 1 / "x"）：
-        #      不经 eval，直接得到常量真值；literal_eval 对非字面量（比较 /
-        #      运算表达式）抛 ValueError → 落到 ②；
-        #   ② 保留受限 eval（上述白名单契约下的必要兜底）：显式记 debug 日志，
-        #      使"仍有 eval 执行"这一事实在运行时可见（面未消除，告警不静默）。
-        # 安全性：白名单已在 spec_ir_v2 层拦截调用/属性/下标逃逸，此处
-        # literal_eval 优先进一步缩小 eval 触发面（常量子句零 eval）。
+        # 子句已过 spec_ir_v2 白名单（无调用/属性逃逸）+ 翻译层（无 Call/
+        # 下标/属性），此处以受限 AST 求值器求值（零 eval/exec，见
+        # _safe_eval_clause）。求值顺序：ast.literal_eval 快速路径（纯字面量
+        # 子句如 True / 1 / "x" 不经求值器）→ 非字面量落 _safe_eval_clause
+        # （S8 彻底消除裸 eval；R9 历史的"受限 eval + debug 告警"口径升级）。
         safe_env: dict[str, Any] = dict(inputs)
-        eval_globals: dict[str, Any] = {"__builtins__": {}, **_EVAL_SAFE_FUNCS}
         try:
             for clause in usable:
                 try:
                     value = ast.literal_eval(clause)
                 except (ValueError, SyntaxError):
-                    # 非字面量（比较 / 运算）：受限 eval 兜底（面未消除，
-                    # 显式告警日志；如需彻底消除须改白名单 DSL 求值器）
-                    logger.debug(
-                        "SpecSMT 见证复核使用受限 eval（非字面量子句）：%s",
-                        clause[:120],
-                    )
-                    value = eval(clause, eval_globals, safe_env)  # noqa: S307
+                    # 非字面量（比较 / 运算）：受限 AST 求值器兜底（白名单
+                    # 节点子集，越界抛 _Untranslatable → 见证保守丢弃）
+                    value = _safe_eval_clause(clause, safe_env)
                 if not value:
                     return None
+        except _Untranslatable:
+            return None
         except Exception:
             return None
         key = repr(sorted(inputs.items()))

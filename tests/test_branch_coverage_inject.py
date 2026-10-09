@@ -124,3 +124,44 @@ class TestMeasureBranchCoverage:
         assert result["missing_branches"], "仅覆盖单侧分支时应报告 missing"
         first = result["missing_branches"][0]
         assert "line" in first and "to" in first
+
+    def test_coverage_unavailable_returns_none(self, tmp_path):
+        """coverage 模块不可用 → ImportError → 保守降级 None。"""
+        import sys
+        from unittest.mock import patch
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        with patch.dict(sys.modules, {"coverage": None}):
+            assert measure_branch_coverage(str(target), "def test(): pass") is None
+
+    def test_subprocess_failure_returns_none(self, tmp_path):
+        """子进程 rc != 0 且无 result 文件 → None。"""
+        from unittest.mock import MagicMock, patch
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.stderr = "boom"
+        with patch("subprocess.run", return_value=proc):
+            assert measure_branch_coverage(str(target), "def test(): pass") is None
+
+    def test_timeout_returns_none(self, tmp_path):
+        """子进程超时 → TimeoutExpired → None。"""
+        import subprocess
+        from unittest.mock import patch
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="x", timeout=60)):
+            assert measure_branch_coverage(str(target), "def test(): pass") is None
+
+    def test_unexpected_exception_returns_none(self, tmp_path):
+        """测量过程意外异常 → 保守降级 None。"""
+        from unittest.mock import patch
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        with patch("subprocess.run", side_effect=RuntimeError("boom")):
+            assert measure_branch_coverage(str(target), "def test(): pass") is None

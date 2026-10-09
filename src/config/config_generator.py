@@ -18,7 +18,11 @@ from pathlib import Path
 PROVIDER_TEMPLATES = {
     "aliyun_bailian": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "description": "阿里云百炼（通义千问）",
+        # S6（2026-10-09 修正）：百炼 compatible-mode 端点可路由多模型
+        # （通义千问 + 第三方 deepseek/glm/kimi 经 OpenAI 兼容端点），
+        # 原"（通义千问）"会让 deepseek-v3/glm-4.7/kimi 等条目误读为
+        # 通义千问系列；改为中性"阿里云百炼"，模型身份由 model_name 表达。
+        "description": "阿里云百炼",
     },
     "agnes_domestic": {"base_url": "https://api.agnes-ai.cn/v1", "description": "Agnes AI 国内站"},
     "agnes_international": {"base_url": "https://apihub.agnes-ai.com/v1", "description": "Agnes AI 国际站"},

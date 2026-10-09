@@ -60,7 +60,7 @@ class TestGoldInjectionLocalization:
 
     def test_nodes_wiring_priority_contract(self) -> None:
         # 源码契约：gold 注入分支必须先于 fault_localizer_enabled 分支
-        src = Path("src/graph/nodes.py").read_text(encoding="utf-8")
+        src = Path("src/graph/debugger.py").read_text(encoding="utf-8")
         assert "build_gold_injection_localization as _build_gold_loc" in src
         assert 'if _gold_inj_on() and state.get("gold_fixed_code"):' in src
         assert "elif _fl_enabled():" in src

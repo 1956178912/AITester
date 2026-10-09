@@ -72,7 +72,7 @@ def _load_backend() -> tuple[str | None, Any]:
     # 时透明回退到下方通用文本后端（保守降级，不阻断主流程）。
     if choice in ("auto", "codebert"):
         try:
-            from transformers import AutoModel, AutoTokenizer  # type: ignore
+            from transformers import AutoModel, AutoTokenizer
 
             _model_name = os.getenv(_CODEBERT_MODEL_ENV, "").strip() or _CODEBERT_MODEL_DEFAULT
             _tokenizer = AutoTokenizer.from_pretrained(_model_name)
@@ -96,7 +96,7 @@ def _load_backend() -> tuple[str | None, Any]:
 
     if instance is None and choice in ("auto", "sentence_transformers"):
         try:
-            from sentence_transformers import SentenceTransformer  # type: ignore
+            from sentence_transformers import SentenceTransformer
 
             instance = SentenceTransformer("all-MiniLM-L6-v2")
             name = "sentence_transformers"
@@ -108,8 +108,8 @@ def _load_backend() -> tuple[str | None, Any]:
 
     if instance is None and choice in ("auto", "chromadb"):
         try:
-            from chromadb import EmbeddingFunction  # type: ignore  # noqa: F401
-            from chromadb.utils.embedding_functions import (  # type: ignore
+            from chromadb import EmbeddingFunction  # noqa: F401
+            from chromadb.utils.embedding_functions import (
                 DefaultEmbeddingFunction,
             )
 
@@ -141,7 +141,7 @@ def _embed_with_backend(instance: Any, text: str) -> list[float] | None:
             _mdl = instance["model"]
             _trunc = _tok(text, truncation=True, max_length=512)
             try:
-                import torch  # type: ignore
+                import torch
             except ImportError:
                 # transformers 已装但 torch 运行时缺失（保守降级）
                 return None

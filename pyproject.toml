@@ -180,7 +180,10 @@ ignore = [
     "TRY300",  # try-else：既有控制流，逐处改动风险大于收益
     "TRY301",  # try 内 raise：同上
     "TRY400",  # logging.error(exc_info=True) → exception：输出等价，存量 16 处不动（2 处 src 本轮改）
-    "PGH003",  # blanket type: ignore：存量 9 处，收窄需先开 mypy warn_unused_ignores（独立批次）
+    # S8b（2026-10-08 R3）：PGH003 blanket type: ignore 已从全局 ignore 移除——
+    # src/ 内 6 处 blanket ignore 已收窄（可选依赖 import-not-found 改由
+    # [tool.mypy.overrides] ignore_missing_imports 承接；tests/experiments 2 处
+    # 脚手架改具体码 [assignment]）。重新启用 PGH003 门禁，防 blanket ignore 回归。
     "DTZ005",  # naive datetime.now()：报告时间戳/文件名均为本地时间口径（改 UTC 影响既有工件比对）
 ]
 
@@ -236,6 +239,14 @@ module = [
     # G4（2026-10-05）：z3-solver 为可选依赖（[formal] extra，SMT 见证层），
     # 无 py.typed 声明（CPython 扩展分发）
     "z3",
+    # S8b（2026-10-08 R3）：embedding 后端（transformers / sentence_transformers
+    # / torch）与 pyright-python 为可选依赖，未安装时 mypy 报 import-not-found；
+    # 收窄 blanket `# type: ignore` 后改为模块级 ignore_missing_imports（与
+    # scipy / datasets 同口径，消除 src/ 内 PGH003 blanket ignore 存量）。
+    "transformers.*",
+    "sentence_transformers",
+    "torch",
+    "pyright",
 ]
 ignore_missing_imports = true
 

@@ -204,3 +204,55 @@ def test_validate_function_level_fallback() -> None:
     assert out["mode"] == "function"
     # 锚点 L2 在 add 函数定义 [1,2] 内 → localized
     assert out["localized_count"] == 1
+
+
+class TestInternalHelpersBranches:
+    """内部辅助函数的边界分支（2026-10-08 补齐 89% → 100%）。"""
+
+    def test_window_invalid_falls_back(self, monkeypatch):
+        from src.tools.patch_localized import _window
+
+        monkeypatch.setenv("LOCALIZED_EDIT_WINDOW", "abc")
+        assert _window() == 3
+
+    def test_candidate_functions_non_dict_skipped(self):
+        from src.tools.patch_localized import _candidate_functions
+
+        loc = {"candidates": [{"function_name": "f"}, "not-a-dict", {"function_name": "g"}]}
+        assert _candidate_functions(loc) == ["f", "g"]
+
+    def test_function_ranges_syntax_error(self):
+        from src.tools.patch_localized import _function_ranges
+
+        assert _function_ranges("def f(:") == []
+
+    def test_line_windows_none_loc(self):
+        from src.tools.patch_localized import _candidate_line_windows
+
+        assert _candidate_line_windows(None, 3) == []
+
+    def test_line_windows_non_dict_and_bad_line_skipped(self):
+        from src.tools.patch_localized import _candidate_line_windows
+
+        loc = {
+            "candidates": [
+                {"line_start": 2, "line_end": 4},
+                "not-a-dict",
+                {"line_start": "abc", "line_end": 3},  # TypeError → 跳过
+            ]
+        }
+        windows = _candidate_line_windows(loc, 3)
+        assert windows == [(1, 7)]
+
+    def test_function_level_anchor_not_found(self):
+        loc = {"candidates": [{"function_name": "add"}]}
+        out = validate_edit_localization(CODE, [{"old_str": "nonexistent"}], loc)
+        assert out["mode"] == "function"
+        assert any("anchor_not_found" in v for v in out["violations"])
+
+    def test_function_level_outside_candidates(self):
+        loc = {"candidates": [{"function_name": "add"}]}
+        # old_str 落在 sub 函数（非候选）→ outside_candidates
+        out = validate_edit_localization(CODE, [{"old_str": "def sub"}], loc)
+        assert out["mode"] == "function"
+        assert any("outside_candidates" in v for v in out["violations"])

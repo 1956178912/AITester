@@ -48,13 +48,13 @@ def _read(rel: str) -> str:
 
 class TestZ1StrategyBankHintIsolation(unittest.TestCase):
     def test_prompt_hint_no_longer_concatenated_into_patch(self):
-        """静态守卫：nodes.py 不得再把 prompt_hint 字符串拼进 patch。
+        """静态守卫：debugger.py 不得再把 prompt_hint 字符串拼进 patch。
 
         历史 bug：策略提示文本（自然语言）直接 `+ "\\n\\n" +` 追加到候选
         patch 代码尾部（专家池路径 / 独立路径各一处），只能靠下游 AST
         守卫兜底拒绝——浪费候选且污染补丁内容。
         """
-        src = _read("src/graph/nodes.py")
+        src = _read("src/graph/debugger.py")
         self.assertNotIn('+ "\\n\\n" + strategy["prompt_hint"]', src)
         self.assertNotIn('+ "\\n\\n" + _sb_strategy["prompt_hint"]', src)
         # 修复后：提示文本经 update["strategy_bank_hint"] 持久化

@@ -184,9 +184,9 @@ class TestV4EvidenceGateBlocking:
         monkeypatch.delenv("PATCH_EVIDENCE_GATE_ENABLE", raising=False)
         original = "def f(x):\n    if x > 0:\n        return 1\n    return -1\n"
         state = self._state(tmp_path, original, "def f(x):\n    if x > 0:\n        return 2\n    return -1\n")
-        # 补丁改动行（_patch_changed_lines 的 diff 计数口径 = 4）→ 与
-        # Top-1 可疑行重叠（行号取值经 _patch_changed_lines 实测锁定）
-        state["fl_spectral_focus"] = {"top_k": [{"line": 4, "score": 0.9}]}
+        # 补丁改动行（_patch_changed_lines 的 diff 计数口径 = 3，2026-10-08
+        # off-by-one 修复后与实际代码行号一致）→ 与 Top-1 可疑行重叠
+        state["fl_spectral_focus"] = {"top_k": [{"line": 3, "score": 0.9}]}
 
         update = _patch_applier_node(state)  # type: ignore[arg-type]
 

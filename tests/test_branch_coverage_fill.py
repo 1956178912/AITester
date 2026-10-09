@@ -58,7 +58,7 @@ class TestPatchEvidenceBranches:
     def test_sbfl_when_fl_focus_overlaps_changed_lines(self):
         from src.tools.patch_evidence import assess_patch_evidence
 
-        state = {"fl_spectral_focus": {"top_k": [{"line": 4}]}}
+        state = {"fl_spectral_focus": {"top_k": [{"line": 3}]}}
         orig = "def f():\n    x = 1\n    y = 2\n    return x\n"
         new = "def f():\n    x = 1\n    y = 3\n    return x\n"
         assert assess_patch_evidence(state, orig, new) == "sbfl"

@@ -158,3 +158,66 @@ def test_compile_oracle_witness_requires_post_assert(monkeypatch: pytest.MonkeyP
     spec = {"preconditions": ["n >= 2"], "postconditions": ["r 是非负数"], "boundaries": []}
     code = compile_spec_oracle(spec, "spec_smt_good_mod", "scale", ["n"])
     assert "smt_witness" not in code or "assert" in code
+
+
+# ─── 受限 AST 求值器（S8，2026-10-08 R3：消除裸 eval）────────────────────────
+# 不依赖 z3，始终运行。锁定 _safe_eval_clause 的两条契约：
+# ① 白名单子句求值语义与 Python 逐字一致（比较/算术/布尔/一元/链式/调用）；
+# ② 越界构造（属性逃逸/危险调用/下标/import/lambda/open）保守抛
+#    _Untranslatable，绝不执行副作用。
+
+
+def test_safe_eval_arithmetic_and_compare() -> None:
+    assert spec_smt._safe_eval_clause("x > 0", {"x": 5}) is True
+    assert spec_smt._safe_eval_clause("x > 0", {"x": -1}) is False
+    assert spec_smt._safe_eval_clause("x + 1 > 0", {"x": -2}) is False
+    assert spec_smt._safe_eval_clause("x % 2 == 0", {"x": 4}) is True
+    assert spec_smt._safe_eval_clause("a + b >= 0", {"a": 1, "b": -3}) is False
+    assert spec_smt._safe_eval_clause("x / 2 > 1", {"x": 5}) is True
+
+
+def test_safe_eval_boolean_unary_and_chained() -> None:
+    assert spec_smt._safe_eval_clause("x > 0 and x < 10", {"x": 5}) is True
+    assert spec_smt._safe_eval_clause("x < 0 or x > 100", {"x": 50}) is False
+    assert spec_smt._safe_eval_clause("-x > 0", {"x": -5}) is True
+    assert spec_smt._safe_eval_clause("not flag", {"flag": False}) is True
+    assert spec_smt._safe_eval_clause("0 < x < 10", {"x": 5}) is True
+    assert spec_smt._safe_eval_clause("0 < x < 10", {"x": 50}) is False
+
+
+def test_safe_eval_whitelist_calls_only() -> None:
+    assert spec_smt._safe_eval_clause("len(x) > 0", {"x": [1, 2]}) is True
+    assert spec_smt._safe_eval_clause("len(x) > 0", {"x": []}) is False
+    assert spec_smt._safe_eval_clause("abs(x) > 1", {"x": -3}) is True
+    assert spec_smt._safe_eval_clause("min(x, 5) == 2", {"x": 2}) is True
+    assert spec_smt._safe_eval_clause("any(x)", {"x": [0, 1]}) is True
+
+
+def test_safe_eval_literal_fast_path() -> None:
+    assert spec_smt._safe_eval_clause("True", {}) is True
+    assert spec_smt._safe_eval_clause("1", {}) == 1
+
+
+def test_safe_eval_rejects_dangerous_constructs() -> None:
+    # 越界构造一律保守抛 _Untranslatable（不执行、不静默返回真值）。
+    # 注：`.real` 虽在 spec_ir_v2._ALLOWED_ATTRS 白名单内，但求值器
+    # 不支持任何属性访问（翻译层已先拦截 Attribute → 到不了此处），
+    # 属"宁可无见证，不产坏约束"的最严格口径。
+    dangerous = [
+        "x.__class__",  # 属性逃逸（introspection）
+        "x.real",  # 属性访问（求值器不支持任何 Attribute）
+        "os.system('ls')",  # 危险调用（Attribute 链）
+        "x[0] > 0",  # 下标（容器元素访问）
+        "__import__('os')",  # import 逃逸
+        "open('/etc/passwd')",  # 文件访问
+        "lambda: 1",  # 匿名函数
+    ]
+    for clause in dangerous:
+        with pytest.raises(spec_smt._Untranslatable):
+            spec_smt._safe_eval_clause(clause, {"x": [1]})
+
+
+def test_safe_eval_unknown_name_rejected() -> None:
+    # 求值器 env 仅含见证 inputs，引用签名之外的名称（如结果变量 r）→ 保守拒绝
+    with pytest.raises(spec_smt._Untranslatable):
+        spec_smt._safe_eval_clause("r > 0", {"n": 1})

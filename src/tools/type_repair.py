@@ -114,7 +114,7 @@ def _run_mypy_findings(
     if not patched_code or not patched_code.strip():
         return []
     try:
-        import mypy.api  # type: ignore
+        import mypy.api
     except ImportError:
         logger.debug("mypy 未安装，跳过静态类型检查（保持 ast 层口径）")
         return []
@@ -252,7 +252,7 @@ def _run_pyright_findings(
             backend_cmd = [pyright_bin]
         else:
             try:
-                import pyright as _pyright_pkg  # type: ignore  # pyright-python
+                import pyright as _pyright_pkg  # pyright-python
 
                 _pkg_bin = getattr(_pyright_pkg, "pyright", None)
                 if _pkg_bin:

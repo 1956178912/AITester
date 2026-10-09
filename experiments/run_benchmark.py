@@ -98,7 +98,7 @@ try:
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
-    tqdm = None  # type: ignore
+    tqdm = None  # type: ignore[assignment]
 
 
 # ─── 进度条工具 ───────────────────────────────────────────────────────────────

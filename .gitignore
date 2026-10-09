@@ -76,6 +76,10 @@ tmp_trace/
 # RAG 持久化检索库（实验数据，本地生成，不提交）
 rag_data/
 
+# pytest 专用 TMPDIR 沙箱（WorkBuddy shim 对已存在目录 mkdir 转 PermissionError，
+# 用 TMPDIR=$(mktemp -d) 兜底产物目录，纯本地可再生，不提交）
+.pytest_tmp/
+
 # 学术调研中间产物（APR 前沿基线爬取缓存等，本地一次性脚本，不提交）
 tmp_apr_baseline/
 

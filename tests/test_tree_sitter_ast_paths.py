@@ -410,3 +410,54 @@ def test_classify_error_delegates_to_lexical() -> None:
     ref = TypeScriptBackend()
     for text in ("TypeError: x is not a function", "SyntaxError: Unexpected token", ""):
         assert b.classify_error(text) == ref.classify_error(text)
+
+
+# ─── 可选依赖边界（grammar 失败降级 / parse 异常，2026-10-08 补齐）──────────
+
+
+def test_init_grammar_unavailable_degrades(monkeypatch) -> None:
+    """tree-sitter 可用但 grammar 包（tree_sitter_typescript）缺失 → 降级 None。"""
+    import sys
+    from unittest.mock import patch
+
+    import src.tools.tree_sitter_backend as tsb
+
+    monkeypatch.setattr(tsb, "_HAS_TREE_SITTER", True)
+    with patch.dict(sys.modules, {"tree_sitter_typescript": None}):
+        backend = tsb.TypeScriptTreeSitterBackend()
+    assert backend._parser is None
+
+
+def test_parse_exception_returns_none(monkeypatch) -> None:
+    """parser.parse 抛异常 → 保守返回 None（调用方降级词法层）。"""
+    from unittest.mock import MagicMock
+
+    import src.tools.tree_sitter_backend as tsb
+
+    backend = tsb.TypeScriptTreeSitterBackend()
+    mock_parser = MagicMock()
+    mock_parser.parse.side_effect = Exception("boom")
+    backend._parser = mock_parser
+    assert backend._parse("code") is None
+
+
+def test_tree_sitter_installed_and_grammar_loaded() -> None:
+    """tree_sitter + grammar 均可用：_HAS_TREE_SITTER=True + parser 成功构建。"""
+    import importlib
+    import sys
+    from unittest.mock import MagicMock, patch
+
+    import src.tools.tree_sitter_backend as tsb
+
+    mock_ts = MagicMock()
+    mock_tst = MagicMock()
+    mock_tst.language.return_value = "lang"
+
+    try:
+        with patch.dict(sys.modules, {"tree_sitter": mock_ts, "tree_sitter_typescript": mock_tst}):
+            importlib.reload(tsb)
+            assert tsb._HAS_TREE_SITTER is True
+            backend = tsb.TypeScriptTreeSitterBackend()
+            assert backend._parser is not None
+    finally:
+        importlib.reload(tsb)  # 恢复未安装 tree_sitter 的真实状态

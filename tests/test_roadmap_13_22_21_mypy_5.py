@@ -143,7 +143,7 @@ class TestMypyStaticLayer:
         _real_mypy_api = sys.modules.get("mypy.api")
         try:
             # 让 `import mypy.api` 抛 ImportError
-            sys.modules["mypy.api"] = None  # type: ignore
+            sys.modules["mypy.api"] = None  # type: ignore[assignment]
             # 触发 _run_mypy_findings 的 try import 路径
             from src.tools.type_repair import _run_mypy_findings
 

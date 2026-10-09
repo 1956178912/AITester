@@ -106,7 +106,11 @@ def _patch_changed_lines(original_code: str, new_code: str) -> set[int]:
             try:
                 plus_part = line.split("+", 2)[1]
                 start_s = plus_part.split(",")[0].strip()
-                new_line = int(start_s)
+                # off-by-one 修复（2026-10-08 补测暴露）：new 侧起始行减 1——
+                # 紧随其后的上下文行（new 侧第 start_s 行）会 +1 回落到正确行号；
+                # 若不减 1，+ 行的 changed 行号整体偏移 +1，与 fl_spectral_focus
+                # Top-k 可疑行的重叠判定错位，导致 sbfl 证据门误拒绝。
+                new_line = int(start_s) - 1
             except (IndexError, ValueError):
                 new_line = 0
             continue

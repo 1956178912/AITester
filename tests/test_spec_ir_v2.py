@@ -49,6 +49,23 @@ class TestIsExpressionClause:
         assert not is_expression_clause("   ")
         assert not is_expression_clause("a > 0" * 60)  # > 200 字符保守拒绝
 
+    def test_bare_bool_and_boolop_expressions(self):
+        # S11（2026-10-08 修复）：bare 名 / not / and / or / 布尔字面量均为
+        # 合法表达式（此前 ast.Expr 分支恒不可达，只有 ast.Compare 能通过，
+        # 这些形态被误判为"非表达式"）。
+        assert is_expression_clause("flag")
+        assert is_expression_clause("not flag")
+        assert is_expression_clause("x and y")
+        assert is_expression_clause("x or y")
+        assert is_expression_clause("True")
+        assert is_expression_clause("False")
+
+    def test_arithmetic_and_subscript_expressions(self):
+        # 算术 / 下标 / 调用均为表达式（SMT 层会再过滤非 Bool 子句）
+        assert is_expression_clause("x + 1")
+        assert is_expression_clause("result[0]")
+        assert is_expression_clause("abs(x) > 1")
+
     def test_dangerous_calls_rejected_by_whitelist_not_channel1(self):
         # 危险调用经通道 1（字符白名单）或白名单层拦截，口径：
         # is_expression_clause=False 或 _whitelist_check 非空 → 不可执行。
@@ -82,6 +99,9 @@ class TestWhitelistCheck:
         from src.specs.spec_ir_v2 import _whitelist_check
 
         assert any("attr_escape" in v for v in _whitelist_check("x.real_part"))
+        # S11b（2026-10-08 R3）：`len` 是函数（走 _ALLOWED_CALL_NAMES），不是
+        # 属性——白名单曾误含 "len" 放行无效的 x.len 属性访问，已移除，此处锁回归。
+        assert any("attr_escape" in v for v in _whitelist_check("x.len"))
 
 
 class TestCompileReadiness:

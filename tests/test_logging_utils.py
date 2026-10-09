@@ -497,3 +497,66 @@ class TestVerifyRedactionConsistency:
         assert len(_FALLBACK_PATTERNS) > 0
         for pattern, repl in _FALLBACK_PATTERNS:
             assert main_map.get(pattern) == repl, "fallback 占位符与主模式键派生分叉（CVE-2026-59308 同源风险）"
+
+
+class TestRedactDegradationChain:
+    """redact_text 三级降级链 + 一致性守卫分叉分支（2026-10-08 补齐 88% → 100%）。"""
+
+    def test_redact_text_mask_failure_falls_back(self):
+        from unittest.mock import patch
+
+        from src.utils.logging_utils import fallback_mask_sensitive_info, redact_text
+
+        text = "sk-abcdefghijklmnopqrstuvwxyz123456"
+        with patch("src.utils.logging_utils.mask_sensitive_info", side_effect=RuntimeError("boom")):
+            assert redact_text(text) == fallback_mask_sensitive_info(text)
+
+    def test_redact_text_both_fail_returns_raw(self):
+        from unittest.mock import patch
+
+        from src.utils.logging_utils import redact_text
+
+        with (
+            patch("src.utils.logging_utils.mask_sensitive_info", side_effect=RuntimeError),
+            patch("src.utils.logging_utils.fallback_mask_sensitive_info", side_effect=RuntimeError),
+        ):
+            assert redact_text("hello") == "hello"
+
+    def test_formatter_both_fail_returns_formatted(self):
+        from unittest.mock import patch
+
+        from src.utils.logging_utils import SensitiveFormatter
+
+        record = logging.LogRecord("test", logging.INFO, "", 0, "hello", None, None)
+        formatter = SensitiveFormatter()
+        expected = logging.Formatter().format(record)  # 默认 %(message)s → "hello"
+        with (
+            patch("src.utils.logging_utils.mask_sensitive_info", side_effect=RuntimeError),
+            patch("src.utils.logging_utils.fallback_mask_sensitive_info", side_effect=RuntimeError),
+        ):
+            assert formatter.format(record) == expected
+
+    def test_consistency_detects_divergence(self):
+        from unittest.mock import patch
+
+        from src.utils.logging_utils import verify_redaction_consistency
+
+        with patch("src.utils.logging_utils.redact_text", return_value="DIFFERENT"):
+            assert verify_redaction_consistency(["sk-abc"]) is False
+
+    def test_consistency_detects_key_derivation_divergence(self):
+        from unittest.mock import patch
+
+        from src.utils.logging_utils import verify_redaction_consistency
+
+        with patch("src.utils.logging_utils._FALLBACK_PATTERNS", [("fake-pattern", "X")]):
+            assert verify_redaction_consistency(["hello"]) is False
+
+    def test_setup_logger_safety_idempotent_short_circuit(self):
+        """logger 已有过滤器且 handlers 为空 → 幂等短路（不重复挂）。"""
+        from src.utils.logging_utils import SensitiveFilter, setup_logger_safety
+
+        logger = logging.getLogger("test_idempotent_safety")
+        logger.addFilter(SensitiveFilter())
+        setup_logger_safety("test_idempotent_safety")  # 已挂 → 短路 return
+        assert sum(1 for f in logger.filters if isinstance(f, SensitiveFilter)) == 1
