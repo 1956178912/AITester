@@ -232,7 +232,9 @@ def main():
     print("\n【3. 生成性能报告】\n")
 
     report_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "performance_profile_report.md"
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "docs",
+        "performance_profile_report.md",
     )
 
     with open(report_path, "w", encoding="utf-8") as f:

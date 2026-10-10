@@ -153,7 +153,9 @@ def grade_dir(trace_dir: str) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="轨迹质量分级（Lucky/Solid/Ideal，纯离线）")
-    parser.add_argument("--trace-dir", required=True, help="trace JSONL 目录（如 experiments/results/main_batch/traces）")
+    parser.add_argument(
+        "--trace-dir", required=True, help="trace JSONL 目录（如 experiments/results/main_batch/traces）"
+    )
     parser.add_argument("--json", action="store_true", help="以 JSON 输出（供下游消费）")
     args = parser.parse_args()
 
