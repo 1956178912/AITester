@@ -24,21 +24,21 @@ PY="${PYTHON:-python3}"
 echo "[pre-commit] 运行 CI 同源守卫（check_lock_sync / check_credential_scrub / check_baseline_numbers / check_baseline / check_bilingual_docs / check_secret_leak）…"
 
 # lock 同步守卫（requirements.lock 与 pyproject 一致性，CI 同名步骤）
-if [ -f scripts/check_lock_sync.py ]; then
-  "$PY" scripts/check_lock_sync.py
+if [ -f scripts/gates/check_lock_sync.py ]; then
+  "$PY" scripts/gates/check_lock_sync.py
 fi
 # 凭证脱敏审计（4.2 日志脱敏门禁，CI 同名步骤；缺失时跳过不阻断）
-if [ -f scripts/check_credential_scrub.py ]; then
-  "$PY" scripts/check_credential_scrub.py
+if [ -f scripts/gates/check_credential_scrub.py ]; then
+  "$PY" scripts/gates/check_credential_scrub.py
 fi
 # 依赖豁免守卫（check_dependency_exemptions.py，缺失时跳过）
-if [ -f scripts/check_dependency_exemptions.py ]; then
-  "$PY" scripts/check_dependency_exemptions.py
+if [ -f scripts/gates/check_dependency_exemptions.py ]; then
+  "$PY" scripts/gates/check_dependency_exemptions.py
 fi
-"$PY" scripts/check_baseline_numbers.py
-"$PY" scripts/check_baseline.py
+"$PY" scripts/gates/check_baseline_numbers.py
+"$PY" scripts/gates/check_baseline.py
 # 双语文档检查：提交时仅警告不阻塞（避免历史警告误拦提交）；CI 用 --strict 门禁用。
-"$PY" scripts/check_bilingual_docs.py || true
+"$PY" scripts/gates/check_bilingual_docs.py || true
 
 # O34（2026-09-30 全面审查优化 P1）：与 CI "Lint with ruff" 同口径的本地门禁。
 # 根因（此前审查 D.3"推送后 CI 必挂"复发面）：.pre-commit-config.yaml 的

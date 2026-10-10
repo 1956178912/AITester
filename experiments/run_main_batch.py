@@ -35,9 +35,12 @@ R4（2026-09-30 独立审查 P0）：主批次运行脚手架。
 from __future__ import annotations
 
 import argparse
+import contextlib
+import glob
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -238,6 +241,26 @@ def _stage_out_new_artifacts(out_dir: Path, staging_dir: Path, before: set[Path]
     return moved
 
 
+def _sweep_own_patch_snap_dirs() -> None:
+    """删除**本进程**遗留的 `aitester_patch_snap_<pid>_*` 目录（仅当已空）。
+
+    2026-10-09（审查报告 §11.1b 结果十八：临时目录泄漏）：`_safe_write_patch`
+    的快照目录按 `pid_thread` 命名、**跨任务复用**，而只有"回滚"路径会
+    `os.remove` 快照**文件**（且从不删目录）；未回滚的快照文件会一直留存 →
+    长跑批在 TMPDIR 下持续累积。
+
+    保守口径：① 只匹配 `aitester_patch_snap_<本进程pid>_` 前缀——绝不触碰
+    其他进程/其他前缀的目录；② 只 `os.rmdir`（非空即抛错跳过），**不递归
+    删除**——残留快照文件不会被误删（其内容可能仍被 state 引用）；
+    ③ 任何异常静默忽略（纯清理路径，不得影响批次退出码）。
+    """
+    pattern = os.path.join(tempfile.gettempdir(), f"aitester_patch_snap_{os.getpid()}_*")
+    for d in glob.glob(pattern):
+        # 仅空目录成功；非空抛 OSError 被 suppress 吞掉（保留残留快照文件）
+        with contextlib.suppress(OSError):
+            os.rmdir(d)
+
+
 def main() -> None:
     args = _parse_args()
     if not args.allow_dirty:
@@ -369,4 +392,12 @@ def _print_r4_summary(batch_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # 2026-10-09（审查报告 §11.1b 结果十九）：批次级临时目录清扫放在入口侧，
+    # **不改动 main() 函数体**——既有接线锁（tests/test_batch_vi.py
+    # TestWiringLocks）以 inspect.getsource(main) 断言 staging 双出口接线，
+    # 若把 main() 包进 try/finally 并抽出 _main_body，会误伤该锁的语义。
+    # 此处 try/finally 保证正常退出、异常退出、--skip-stats 早退都执行清扫。
+    try:
+        main()
+    finally:
+        _sweep_own_patch_snap_dirs()

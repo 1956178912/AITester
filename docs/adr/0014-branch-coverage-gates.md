@@ -6,7 +6,7 @@
 
 **Amended（2026-10-05）**：总门槛 85% 已在 2026-10-02 批次**回调为 77%**
 （该批次记录"CI 门禁回绿（分支覆盖 73%→77.6%）"——总门槛 85% 在后续
-模块扩张下不可维持，`scripts/check_branch_coverage.py` 的
+模块扩张下不可维持，`scripts/gates/check_branch_coverage.py` 的
 `_TOTAL_THRESHOLD = 0.77`、`tests/test_branch_coverage_gates.py` 断言
 0.77 为当前事实口径）。本 ADR 的**严格核心模块 90% 门槛与两级结构**
 仍然有效并持续执行。2026-10-05 V 批次另在脚本新增总行覆盖门槛 85%
@@ -19,7 +19,7 @@
 
 - 任务关键软件标准（RTCA DO-178C）要求 100% 分支覆盖；行业实践
   （特斯拉车载控制器）以"分支覆盖 ≥90% 方可合并"作为阻断策略。
-- 本仓 `scripts/check_branch_coverage.py`（8. 批次）原有口径：总门槛
+- 本仓 `scripts/gates/check_branch_coverage.py`（8. 批次）原有口径：总门槛
   79%（实测 79.56% 的保守值）+ 核心路由模块 85%。
 - 2026-09-28 改进批次后实测：总 79.56%、`graph/workflow.py` 90.48%、
   `agents/error_classifier.py` 88.46%（< 90% 目标）、`state` /
@@ -31,7 +31,7 @@
 
 ## 决策
 
-`scripts/check_branch_coverage.py` 门槛分两级（单一来源，
+`scripts/gates/check_branch_coverage.py` 门槛分两级（单一来源，
 CI 门禁 + 本地脚本同口径）：
 
 | 层级 | 模块 | 旧门槛 | 新门槛 |

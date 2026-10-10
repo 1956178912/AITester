@@ -23,11 +23,11 @@ pip install -r requirements.txt
 ```
 
 > **One-command bootstrap (recommended)**: steps 2-4 above are automated by
-> `bash scripts/bootstrap_dev.sh` (venv creation + dependency install + copying
+> `bash scripts/tools/bootstrap_dev.sh` (venv creation + dependency install + copying
 > both env files + config-load validation, with concrete missing-item hints on
 > failure); you only need to edit `.env.local` with a real `LLM_N_API_KEY` after
 > the script completes. To validate an already-configured environment, run
-> `bash scripts/bootstrap_dev.sh --check-only`.
+> `bash scripts/tools/bootstrap_dev.sh --check-only`.
 
 ## 3. Configure Environment Variables
 
@@ -60,7 +60,7 @@ vim .env.local
 python3 -c "from config import LLM_CONFIGS; print(f'Loaded {len(LLM_CONFIGS)} LLM configs')"
 
 # To actually probe each model's API connectivity and quota (1 token each), use the script in step 6:
-# python scripts/check_quota.py
+# python scripts/tools/check_quota.py
 ```
 
 ## 5. Run Tests
@@ -82,7 +82,7 @@ LLM calls enable the file cache by default (`src/cache/`; a cache hit on the sam
 
 ```bash
 # Probe which of the configured models are still alive and which have exhausted their 403 quota (1 token each, keys are not printed)
-python scripts/check_quota.py
+python scripts/tools/check_quota.py
 
 # Disable the cache / clear the cache
 export AITESTER_LLM_CACHE=0
@@ -255,7 +255,7 @@ python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv
 docker build -t aitester:latest .
 EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
 # Docker vs venv execution time comparison (Markdown table output, basis for choosing execution environment)
-python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+python scripts/tools/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
 
 # 4.4 API circuit breaker exponential backoff (on by default, API_CIRCUIT_BACKOFF): the cooldown
 # period grows as base*2^open_count (fully-dead providers see a monotonically increasing
@@ -293,7 +293,7 @@ python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir
 
 
 # 4.1 Log redaction audit (scans all logger call sites; exit 0 = no suspicious points, can be wired into CI)
-python scripts/audit_log_redaction.py
+python scripts/gates/audit_log_redaction.py
 
 # P0 Runtime probe (RUNTIME_PROBE_ENABLE, off by default): at exception-raise time,
 # captures the exc.__traceback__ frame chain and local variable snapshots (zero trace

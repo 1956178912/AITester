@@ -55,6 +55,7 @@ class TestRollbackRestoredOut:
     def test_rollback_failure_leaves_restored_out_empty(self, tmp_path, monkeypatch):
         """回滚失败（写盘异常）→ False 且 restored_out 不携带内容。"""
         import src.graph.nodes as nodes_mod
+        import src.graph.patch_io as patch_io
 
         target = tmp_path / "f.py"
         target.write_text("patched\n")
@@ -65,7 +66,7 @@ class TestRollbackRestoredOut:
         def _boom(*_a, **_k):
             raise OSError("disk full")
 
-        monkeypatch.setattr(nodes_mod, "_write_file_atomic", _boom)
+        monkeypatch.setattr(patch_io, "_write_file_atomic", _boom)
         restored: dict = {}
         assert nodes_mod._rollback_last_patch(state, restored_out=restored) is False
         assert "content" not in restored
@@ -78,6 +79,7 @@ class TestSafeWritePatchSnapshotFailClosed:
     def test_snapshot_failure_refuses_write(self, tmp_path, monkeypatch):
         """快照 copy2 异常 → 拒绝写盘（W12：无快照即无回滚能力）。"""
         import src.graph.nodes as nodes_mod
+        import src.graph.patch_io as patch_io
 
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
         target = tmp_path / "f.py"
@@ -88,7 +90,7 @@ class TestSafeWritePatchSnapshotFailClosed:
         def _boom(*_a, **_k):
             raise OSError("snapshot io error")
 
-        monkeypatch.setattr(nodes_mod.shutil, "copy2", _boom)
+        monkeypatch.setattr(patch_io.shutil, "copy2", _boom)
         out = nodes_mod._safe_write_patch(original, "def f():\n    return 2\n", True, state)
         assert out is False
         assert target.read_text() == original, "快照失败时不得写入新代码"
@@ -159,19 +161,20 @@ class TestA03RollbackRestoresDisk:
 
         monkeypatch.setenv("PATCH_SNAPSHOT_ROLLBACK_ENABLE", "true")
         monkeypatch.setenv("PATCH_PROTECT_REPO_CORE", "0")
+        # 证据门 opt-out（同 test_a03_rollback_restores_disk）：本用例主题是
+        # A-03 回滚落盘失败，需要补丁先成功写盘（否则证据门先行拒绝，written=False，
+        # A-03 分支不触发 → verdict 恒 not_enabled，无法测"回滚落盘失败"口径）。
+        monkeypatch.setenv("PATCH_EVIDENCE_GATE_ENABLE", "false")
         original = "def f():\n    return 1\n"
         state = self._state(tmp_path, original)
         target = tmp_path / "mod.py"
 
-        # 第一次写（补丁落盘）成功，第二次写（回滚恢复原文）失败
-        _real_write = nodes_mod._write_file_atomic
-        _calls = {"n": 0}
-
-        def _flaky_write(path, content):
-            _calls["n"] += 1
-            if _calls["n"] >= 2:
-                raise OSError("disk full")
-            _real_write(path, content)
+        # S4 拆分后：补丁落盘走 patch_io._write_file_atomic（真实写盘，成功），
+        # A-03 回滚恢复原文走 nodes_mod._write_file_atomic（本测试 mock 成恒抛
+        # 异常）——验证回滚落盘失败时 patch_rolled_back=False 的诚实口径
+        # （磁盘如实保留坏补丁，state 侧仍恢复原文）。
+        def _boom_write(*_a, **_k):
+            raise OSError("disk full")
 
         with (
             patch.object(
@@ -179,7 +182,7 @@ class TestA03RollbackRestoresDisk:
                 "run",
                 return_value={"verdict": "regression_failed", "rolled_back": True, "snapshot_id": "snap42"},
             ),
-            patch.object(nodes_mod, "_write_file_atomic", _flaky_write),
+            patch.object(nodes_mod, "_write_file_atomic", _boom_write),
         ):
             update = nodes_mod._patch_applier_node(state)  # type: ignore[arg-type]
 

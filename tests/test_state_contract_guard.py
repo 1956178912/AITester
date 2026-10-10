@@ -1,6 +1,6 @@
 """P1-6（2026-10-05 独立审查）：状态通道契约静态守卫测试。
 
-锁定：scripts/check_state_contract.py 对"未声明键读写"的捕获能力
+锁定：scripts/gates/check_state_contract.py 对"未声明键读写"的捕获能力
 （M14 四键 / O35 三键 / problem_statement 死读均属此类——LangGraph
 channel 白名单外的键被静默丢弃或恒 None），守卫脚本本身回归即红。
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.check_state_contract import _allowed, _audit_file, _literal_key, declared_state_keys
+from scripts.gates.check_state_contract import _allowed, _audit_file, _literal_key, declared_state_keys
 
 
 def _audit(tmp_path: Path, code: str) -> list[tuple[str, int, str, str]]:

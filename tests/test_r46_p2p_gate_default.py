@@ -99,7 +99,7 @@ class TestGateVerifyUnavailableSkips:
 
         with (
             patch.object(rb, "SWE_BENCH_P2P_GATE_ENABLE", True),
-            patch.dict("sys.modules", {"scripts.verify_instance_solvable": None}),
+            patch.dict("sys.modules", {"scripts.tools.verify_instance_solvable": None}),
         ):
             # verify_single_instance 导入失败（ImportError）→ 保守跳过，返回 None
             result = rb._check_swe_bench_p2p_gate(_swe_task())

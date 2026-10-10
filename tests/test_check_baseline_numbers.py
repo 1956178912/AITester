@@ -1,5 +1,5 @@
 """
-11. 基线数字漂移守卫（scripts/check_baseline_numbers.py）单元测试。
+11. 基线数字漂移守卫（scripts/gates/check_baseline_numbers.py）单元测试。
 
 验证改进清单 #11（P0）：README / README.en 的"当前基线"块硬编码数字被
 守卫捕获，历史叙事章节与指向 BASELINE.yaml 的合规写法不被误报。
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from scripts.check_baseline_numbers import _extract_section, check_baseline_numbers
+from scripts.gates.check_baseline_numbers import _extract_section, check_baseline_numbers
 
 
 class TestExtractSection:
@@ -47,7 +47,7 @@ class TestBaselineNumbers:
             encoding="utf-8",
         )
         monkeypatch.chdir(tmp_path)
-        import scripts.check_baseline_numbers as mod
+        import scripts.gates.check_baseline_numbers as mod
 
         mod._TARGETS = [("README.md", r"^##\s+测试状态\s*$")]
         failures = mod.check_baseline_numbers()
@@ -58,7 +58,7 @@ class TestBaselineNumbers:
         readme = tmp_path / "README.md"
         readme.write_text("## 测试状态\n\n全量 999 collected（历史数字）\n\n## 开发工具\n\n", encoding="utf-8")
         monkeypatch.chdir(tmp_path)
-        import scripts.check_baseline_numbers as mod
+        import scripts.gates.check_baseline_numbers as mod
 
         mod._TARGETS = [("README.md", r"^##\s+测试状态\s*$")]
         failures = mod.check_baseline_numbers()
@@ -73,7 +73,7 @@ class TestBaselineNumbers:
             encoding="utf-8",
         )
         monkeypatch.chdir(tmp_path)
-        import scripts.check_baseline_numbers as mod
+        import scripts.gates.check_baseline_numbers as mod
 
         mod._TARGETS = [("README.md", r"^##\s+测试状态\s*$")]
         assert mod.check_baseline_numbers() == []
@@ -86,7 +86,7 @@ class TestBaselineNumbers:
             encoding="utf-8",
         )
         monkeypatch.chdir(tmp_path)
-        import scripts.check_baseline_numbers as mod
+        import scripts.gates.check_baseline_numbers as mod
 
         mod._TARGETS = [("README.md", r"^##\s+测试状态\s*$")]
         assert mod.check_baseline_numbers() == []

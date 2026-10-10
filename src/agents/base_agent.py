@@ -115,6 +115,10 @@ _LRU_NEGATIVE_TTL_SECONDS = 30.0
 _lru_cache: OrderedDict[tuple[str, str, float | None], str] = OrderedDict()
 # 负缓存：键 → 最近一次"文件不存在"确认的时间戳（TTL 窗口内跳过文件读取）
 _lru_negatives: dict[tuple[str, str, float | None], float] = {}
+# P0 止血（缓存记账缺口）：LRU 正缓存并行存"该 key 对应的上次实际调用 token
+# 数"，供 LRU 快路径命中时还原 cache_avoided_tokens（此前快路径拿不到 token、
+# 只能记 0，导致进程内重复命中的"避免 token"被系统性低估）。
+_lru_tokens: dict[tuple[str, str, float | None], int] = {}
 _lru_lock = threading.Lock()
 
 
@@ -125,6 +129,12 @@ def _lru_lookup(key: tuple[str, str, float | None]) -> str | None:
             _lru_cache.move_to_end(key)
             return _lru_cache[key]
         return None
+
+
+def _lru_lookup_tokens(key: tuple[str, str, float | None]) -> int:
+    """读取 LRU 中该 key 对应的上次实际调用 token 数（P0 止血，0 = 无记录）。"""
+    with _lru_lock:
+        return _lru_tokens.get(key, 0)
 
 
 def _lru_check_negative(key: tuple[str, str, float | None]) -> bool:
@@ -143,7 +153,7 @@ def _lru_check_negative(key: tuple[str, str, float | None]) -> bool:
         return False
 
 
-def _lru_store(key: tuple[str, str, float | None], value: str | None) -> None:
+def _lru_store(key: tuple[str, str, float | None], value: str | None, tokens: int = 0) -> None:
     """进程内 LRU 写入（None 记为负缓存，容量超限时淘汰最久未用条目）。
 
     非 None 值写入 LRU 正缓存的同时清除该键的负缓存条目（文件写入成功
@@ -161,6 +171,7 @@ def _lru_store(key: tuple[str, str, float | None], value: str | None) -> None:
                 del _lru_negatives[oldest_key]
             return
         _lru_cache[key] = value
+        _lru_tokens[key] = tokens
         _lru_cache.move_to_end(key)
         _lru_negatives.pop(key, None)
         while len(_lru_cache) > _LRU_MAXSIZE:
@@ -386,6 +397,11 @@ class BaseAgent:
             from src.agents.llm_client import record_cache_hit
 
             record_cache_hit(True)  # 15. 多进程缓存协调观测：LRU 命中
+            # P0 止血（缓存记账缺口）：LRU 并行存 token（_lru_tokens），快路径
+            # 命中同样能还原"避免的 token"；历史条目无 token 记录时记 0。
+            from src.budget.token_usage import record_cache_hit_usage
+
+            record_cache_hit_usage(_lru_lookup_tokens(lru_key))
             logger.info("LLM 缓存命中 (LRU 快路径): %s", cache_key[:50])
             return hit
 
@@ -432,7 +448,12 @@ class BaseAgent:
                     # 串（uid 不可得的平台）同样跳过校验。
                     and cache_creator_ok(cached_data.get("creator_uid"))
                 ):
-                    _lru_store(lru_key, cached_data["response"])
+                    _lru_store(lru_key, cached_data["response"], int(cached_data.get("tokens", 0) or 0))
+                    # P0 止血（缓存记账缺口）：读缓存文件记录的上次实际调用 token，
+                    # 计入 cache_avoided_tokens（独立口径，不污染真实消耗语义）。
+                    from src.budget.token_usage import record_cache_hit_usage
+
+                    record_cache_hit_usage(int(cached_data.get("tokens", 0) or 0))
                     logger.info("LLM 缓存命中 (文件→LRU): %s", cache_key[:50])
                     return cached_data["response"]
                 # 文件存在但键材料/归属不匹配（md5 前 16 位碰撞或跨用户
@@ -448,6 +469,13 @@ class BaseAgent:
         from src.agents.llm_client import record_cache_hit
 
         record_cache_hit(False)  # 15. 多进程缓存协调观测：文件缓存未命中
+        # P0 止血（缓存记账缺口）：记录本次真实调用的 token 增量，写入缓存
+        # 文件，供下次命中时还原"避免的 token"。token 已在 _call_llm 内部经
+        # _record_response_usage 累加到线程局部，此处取调用前后 total 差值
+        # （含内部重试/故障转移的全部真实消耗，正是缓存命中省下的量）。
+        from src.budget.token_usage import get_usage as _get_usage
+
+        _before_total = _get_usage().total_tokens
         if complexity_class is not None:
             if temperature is not None:
                 response = self._call_llm(
@@ -459,6 +487,7 @@ class BaseAgent:
             response = self._call_llm(user_message, max_retries, temperature=temperature)
         else:
             response = self._call_llm(user_message, max_retries)
+        _call_tokens = max(0, _get_usage().total_tokens - _before_total)
 
         # 写入缓存（文件是事实来源；写成功则同步回填 LRU 供后续快路径）
         # 0.10 正确性：写成功 = "该键文件现已存在"，回填 LRU 时同步清除
@@ -485,6 +514,10 @@ class BaseAgent:
                 "prompt": user_message,
                 "system": self.system_prompt,
                 "response": response,
+                # P0 止血（缓存记账缺口）：记录本次实际调用的 token 总数，
+                # 供下次缓存命中时还原"若未命中会消耗"的量（见命中路径的
+                # record_cache_hit_usage 读取）。
+                "tokens": _call_tokens,
                 "timestamp": time.time(),
                 # 19. 缓存创建者归属（Clinejection 教训）：写 uid 到文件头部，
                 # 读侧 _lru_check_negative 之外的命中校验按归属校验，非本用户
@@ -506,7 +539,7 @@ class BaseAgent:
                     # 替换失败（OSError）时清理临时文件，避免残留堆积
                     with suppress(OSError):
                         os.unlink(tmp_file)
-            _lru_store(lru_key, response)  # 回填 L1 + 清除该键负缓存条目（文件已存在）
+            _lru_store(lru_key, response, _call_tokens)  # 回填 L1（含 token 供快路径记账）+ 清除负缓存
             logger.info("LLM 缓存已写入: %s", cache_key[:50])
             # 5.1 P2 修复（2026-10-01 全面审查）：语义命中后未 upsert 新响应，
             # docstring 宣称"下轮可命中"与实现不符——此前 LLM 调用成功写文件后

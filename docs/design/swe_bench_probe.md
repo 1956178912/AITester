@@ -9,7 +9,7 @@
 
 原探路方案（§3.1 的 5 任务 LLM 调用探路）已被 **P0/P1 仓库级验证**取代：
 
-- **数据管道已修复**：`SWE_BENCH_ENRICHMENT`（`scripts/export_swe_bench_source.py`
+- **数据管道已修复**：`SWE_BENCH_ENRICHMENT`（`scripts/tools/export_swe_bench_source.py`
   生成）注入真实 `instance_code`，解决了 §5.1 发现的"数据集无可用源码"阻塞；
 - **执行环境已修复**：`RepoExecutor`（`src/agents/executor_repo.py`，
   `REPO_LEVEL_EXECUTION=true`）按 SWE-bench 官方口径验证——
@@ -142,8 +142,8 @@ cd /Users/wangchenyu/Workspace/AITester
 
 **结论：R-01 的真实阻塞项不是"配额不够"，而是"数据集无可用源码"。**
 需先解决以下任一项才能有效探路：
-- (a) 用 `scripts/download_swe_bench.py` 补下载 lite 子集 JSONL（若源站有）；
-- (b) 用 `scripts/export_swe_bench_source.py` 生成 `SWE_BENCH_ENRICHMENT` 补充
+- (a) 用 `scripts/tools/download_swe_bench.py` 补下载 lite 子集 JSONL（若源站有）；
+- (b) 用 `scripts/tools/export_swe_bench_source.py` 生成 `SWE_BENCH_ENRICHMENT` 补充
   文件（需先 `git clone` 各仓库到 `--repos-dir`，成本较高）；
 - (c) 接受现状，把 R-01 标记为"数据集准备未完成，待源码补齐后再探路"。
 

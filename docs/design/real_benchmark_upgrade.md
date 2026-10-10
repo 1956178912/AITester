@@ -58,5 +58,5 @@ L2 立项时与 BugsInPy 并列决策，均未解除实跑前置（当前零加�
 
 - QuixBugs: Lin et al., arXiv:1708.00154（程序修复多语言基准）。
 - BugsInPy: Widyasari et al., ASE 2020（真实 PyPI 项目缺陷库，F2P/P2P 清单）。
-- SWE-bench: Jimenez et al., ICLR 2024；Verified 为 OpenAI 2024 人工筛选子集（引用前经 `scripts/check_citations.py --online` 核验）。
+- SWE-bench: Jimenez et al., ICLR 2024；Verified 为 OpenAI 2024 人工筛选子集（引用前经 `scripts/gates/check_citations.py --online` 核验）。
 - TestGenEval: Jain et al., ICLR 2025, arXiv:2410.00752（真实仓库上下文单元测试生成/补全基准；CC BY-NC 4.0，AN1 许可登记，2026-10-07 经 LICENSE 原文核实）。

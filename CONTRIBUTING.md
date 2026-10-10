@@ -70,7 +70,7 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 （P1-9 修正：本行原硬编码"核心 ≥ 92% / 整体 ≥ 90%"与实测口径漂移且违反
 单一事实源规则）。合并门槛以 CI 实际门禁为准：总行覆盖 ≥85%、总分支
 覆盖 ≥77%、严格核心模块 ≥90%、其余核心路由 ≥85%
-（`scripts/check_branch_coverage.py` 常量为事实口径）。
+（`scripts/gates/check_branch_coverage.py` 常量为事实口径）。
 
 ## Pull Request 流程
 
@@ -89,9 +89,8 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 
 ## 文档组织约定
 
-- **核心维护文档**（随功能更新）：`README.md` / `QUICKSTART.md` / `docs/api_reference.md` / `docs/algorithm_design.md` / `CHANGELOG.md` 及各自的 `.en.md` 英文版——功能批次落地后需同步更新，由 CI 的 `scripts/check_bilingual_docs.py` 守卫中英文配对完整性。
+- **核心维护文档**（随功能更新）：`README.md` / `QUICKSTART.md` / `docs/api_reference.md` / `docs/algorithm_design.md` / `CHANGELOG.md` 及各自的 `.en.md` 英文版——功能批次落地后需同步更新，由 CI 的 `scripts/gates/check_bilingual_docs.py` 守卫中英文配对完整性。
 - **历史归档文档**（`docs/history/`，含 `optimization_plan.md` / `optimization_report.md` 等）：记录历史轮次的工作决策与实验记录，**非当前维护文档**，仅作开发内部参考，无需随版本迭代更新；每篇文档头部有归档说明，当前决策以 CHANGELOG 为准。
-- **审查 / 审计报告**（`docs/review_*.md` / `docs/*_audit_findings.md`）：对应轮次的审查快照，完成后归入历史快照，不要求长期同步。
 
 ### 硬性规则：当前基线数字单一来源（BASELINE.yaml）
 
@@ -103,7 +102,7 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 ## 依赖变更清单（修改 requirements / lock 必做步骤）
 
 `requirements.txt`（顶层依赖 + `==` 锁定）与 `requirements.lock`（含传递依赖的完整锁定）
-是**双轨制**：CI 由 `scripts/check_lock_sync.py` 守卫二者同步（顶层依赖必须出现在 lock
+是**双轨制**：CI 由 `scripts/gates/check_lock_sync.py` 守卫二者同步（顶层依赖必须出现在 lock
 中且版本一致）。修改任何依赖时**必须**按以下清单执行，否则容易出现"requirements 加了包
 但 lock 没更新 → CI 通过但生产 / Docker 环境行为不一致"的漂移：
 
@@ -111,7 +110,7 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
    避免上游发版导致门禁漂移）；
 2. **更新 `requirements.lock`**：在目标 Python 版本（CI 矩阵 3.12 / 3.13 / 3.14）下
    重新生成 lock（pip-compile 或 `pip freeze` 口径，与 lock 现有格式对齐——含传递依赖）；
-3. **本地校验**：`python scripts/check_lock_sync.py` 退出码 0（规则 1/2 阻断；规则 4
+3. **本地校验**：`python scripts/gates/check_lock_sync.py` 退出码 0（规则 1/2 阻断；规则 4
    的"lock 多余项"仅 WARNING 不阻断，但提示重新生成 lock）；
 4. **Docker 镜像**：依赖变更需重建镜像（`docker build -t aitester:latest .`，构建期
    预安装使用同一锁定版本，见 `Dockerfile` 注释）；
@@ -128,10 +127,10 @@ git commit -m "fix: 修复 parametrize 校验逻辑错误"
 
 - **文档补齐**：核心文档的 docstring / 注释勘误、缺失章节（参见 CI 提示的 `check_bilingual_docs.py` 配对缺失项）。
 - **回归测试**：在 `tests/` 中补充边界条件用例（先读对应模块 docstring 理解契约）。
-- **依赖卫生**：`pip-audit` / `requirements.lock` 同步校验脚本的使用（`scripts/check_lock_sync.py`）。
+- **依赖卫生**：`pip-audit` / `requirements.lock` 同步校验脚本的使用（`scripts/gates/check_lock_sync.py`）。
 - **CI 调试**：阅读 `.github/workflows/ci.yml` 各步骤注释，理解门禁意图。
 
-较大的算法 / 架构改动（如错误分类器扩展、跨文件修复策略）建议在 Issue 中先讨论方案，阅读 `docs/algorithm_design.md` 与最近的 `docs/review_*.md` 了解既有设计权衡。
+较大的算法 / 架构改动（如错误分类器扩展、跨文件修复策略）建议在 Issue 中先讨论方案，阅读 `docs/algorithm_design.md` 与 `CHANGELOG.md` 了解既有设计权衡。
 
 ## 依赖豁免登记（pip-audit 漏洞豁免必做步骤）
 

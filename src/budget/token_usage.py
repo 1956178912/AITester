@@ -34,6 +34,16 @@ class TokenUsage:
     output_tokens: int = 0
     total_tokens: int = 0
     llm_calls: int = 0
+    # P0 止血（缓存记账缺口）：缓存命中路径此前只记 record_cache_hit、不记
+    # token，导致 $/task 与 token 效率结论随缓存命中率系统性偏低（缓存密集的
+    # 多智能体场景可能低报 30-50%）。新增两个独立口径（不污染 record_usage 的
+    # "真实 API 消耗"语义）：
+    #   cache_hits           —— 缓存命中次数（真实调用次数 = llm_calls 不变，
+    #                           命中额外计数，供报告层算命中率）；
+    #   cache_avoided_tokens —— 命中时"若未命中会消耗"的 token（缓存文件记录的
+    #                           上次实际调用 token；LRU 快路径无该值记 0）。
+    cache_hits: int = 0
+    cache_avoided_tokens: int = 0
     by_model: dict[str, int] = field(default_factory=dict)  # 模型名 → total_tokens
 
     def merge(self, other: TokenUsage) -> None:
@@ -42,6 +52,8 @@ class TokenUsage:
         self.output_tokens += other.output_tokens
         self.total_tokens += other.total_tokens
         self.llm_calls += other.llm_calls
+        self.cache_hits += other.cache_hits
+        self.cache_avoided_tokens += other.cache_avoided_tokens
         for model, tokens in other.by_model.items():
             self.by_model[model] = self.by_model.get(model, 0) + tokens
 
@@ -52,6 +64,8 @@ class TokenUsage:
             "output_tokens": self.output_tokens,
             "total_tokens": self.total_tokens,
             "llm_calls": self.llm_calls,
+            "cache_hits": self.cache_hits,
+            "cache_avoided_tokens": self.cache_avoided_tokens,
             "by_model": dict(self.by_model),
         }
 
@@ -110,6 +124,28 @@ def record_usage(input_tokens: int, output_tokens: int, model: str = "") -> None
         usage.llm_calls += 1
         if model:
             usage.by_model[model] = usage.by_model.get(model, 0) + input_tokens + output_tokens
+
+
+def record_cache_hit_usage(avoided_tokens: int, model: str = "") -> None:
+    """记录一次缓存命中（P0 止血：缓存命中路径的 token 记账缺口）。
+
+    缓存命中不产生真实 API 消耗，但"若未命中会消耗"的 token 数必须可观测，
+    否则 $/task 与 token 效率结论随缓存命中率系统性漂移。本函数把"避免的
+    token"独立累计到 cache_hits / cache_avoided_tokens，**不写入 record_usage
+    的 input/output/total/llm_calls**（保持"真实 API 消耗"口径不变，避免破坏
+    既有 $/task 结论）；报告层可据 total_tokens + cache_avoided_tokens 还原
+    "无缓存理论成本"。
+
+    Args:
+        avoided_tokens: 本次命中若未发生会消耗的 token 数（缓存文件记录的
+            上次实际调用 token；LRU 快路径拿不到该值时传 0，仅记命中次数）。
+        model: 产生原始消耗的模型名（供报告层分桶，不并入 by_model 的真实
+            消耗累计）。
+    """
+    usage = _current_usage()
+    with _usage_lock:
+        usage.cache_hits += 1
+        usage.cache_avoided_tokens += avoided_tokens
 
 
 def get_usage() -> TokenUsage:

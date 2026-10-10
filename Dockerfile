@@ -15,7 +15,7 @@ WORKDIR /workspace
 
 # 先复制依赖文件以利用 Docker 层缓存。
 # 版本锁定说明（2026-09-28 补充）：requirements.txt 内所有顶层依赖均以 == 锁定
-# 到本地验证过的版本（与 requirements.lock 同步，由 scripts/check_lock_sync.py 在
+# 到本地验证过的版本（与 requirements.lock 同步，由 scripts/gates/check_lock_sync.py 在
 # CI 守卫一致性）。镜像构建期依赖预安装使用同一锁定版本，保证 Docker 隔离执行
 # （4.3）与本地开发环境依赖完全一致，避免"镜像内旧版依赖 / 本地新版依赖"导致
 # 难以排查的执行差异。升级依赖流程：先改 requirements.txt + 在 .venv 重新

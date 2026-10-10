@@ -26,7 +26,7 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 
 - **来源**：全部由项目作者手写（8 个 pattern 池按 name 去重共 50 个唯一
   缺陷 pattern，`BASELINE.yaml synthetic_templates` 为单一事实来源，
-  `scripts/verify_synthetic_templates.py` 三重不变量自验证）；
+  `scripts/tools/verify_synthetic_templates.py` 三重不变量自验证）；
 - **构造**：每 pattern 含 buggy `template` / `fixed` / gold `test_cases`
   三件套；实例化仅追加噪声注释（`# noise_seed=<0-9999>`）并做 task_id
   中性化（`task_0000..`，P1-4 泄漏修复——此前文件名内嵌 pattern 名等于
@@ -55,7 +55,7 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
    消费点"不变量**已由静态守卫测试锁定**（AF-D，2026-10-06：
    tests/test_af_batch.py；新增 prompt 侧消费必须显式更新本卡与该测试）；
 4. **统计功效**：n=50 在 detection 2% 基线下对 10pp 差异的检验功效不足
-   （`scripts/power_analysis.py` 可复算）。
+   （`scripts/tools/power_analysis.py` 可复算）。
 
 ## 4. 真实缺陷阶梯（L1/L2）
 
@@ -110,7 +110,7 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 ## 5. 维护约定
 
 - 本卡随数据集变更同步更新（双语配对由 CI
-  `scripts/check_bilingual_docs.py --strict` 守卫）；
+  `scripts/gates/check_bilingual_docs.py --strict` 守卫）；
 - pattern 总数 / 主批次构成数字以 `BASELINE.yaml` 为单一事实来源，
   本卡只描述口径不承载"当前数字"；
 - 新增数据源必须在本卡登记：来源、构造方式、gold 材料位置、泄漏

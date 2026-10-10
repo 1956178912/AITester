@@ -18,7 +18,7 @@
 
 **核心成果**：
 - **CI 门禁回绿（分支覆盖 73%→77.6%）**：本批次前 CI 已红灯（`scripts/check_branch_coverage.py` 门槛 77% vs 实测 73%、`graph/workflow.py` 严格门槛 90% vs 实测 74%）；为 4 个零覆盖 opt-in 模块补测试（`fl_spectral` 32 用例 / `branch_coverage_inject` 15 / `mutation_advisor` 18 / `rag` 关键词兜底层 40）+ `determine_stop_reason` 11 分支 + nodes 三大闭包回调 19 用例 + logic_spec/type_repair 私有纯函数 56 用例 + 分层摘要缺失分支 29 用例——`graph/workflow.py` 分支 74%→98.75%，总分支 3057→3213/4094；
-- **P0 密钥守卫自锁修复**：`.git-hooks/check_secret_leak.sh` 头部注释含 `sk-` 真实前缀样例，守卫扫描 untracked 文件时扫到自身 → 任何提交均被阻断；注释改为占位符表述 + 本地审查报告（`REVIEW_*.md` / `review_infra_hygiene_report.md` 等含取证 `sk-` 截断样例）加入 `.gitignore`，守卫现 exit=0；
+- **P0 密钥守卫自锁修复**：`.git-hooks/check_secret_leak.sh` 头部注释含 `sk-` 真实前缀样例，守卫扫描 untracked 文件时扫到自身 → 任何提交均被阻断；注释改为占位符表述 + 本地审查报告（`review_infra_hygiene_report.md` 等含取证 `sk-` 截断样例）加入 `.gitignore`，守卫现 exit=0；
 - **三处真实缺陷**：① `rag` `_iter_candidate_docs` 在 `RAG_PERSIST_PATH` 为空时误扫 CWD 一切 JSON（污染关键词兜底材料源，空目录现直接跳过）；② `mask_sensitive_info` 小写锚定漏 `MYSQL_PASSWORD=<值>` 大写凭证形态（O17 残留盲区，新增大写赋值模式，`redact_text` / fallback / trace JSONL 同源生效）；③ `executor_repo._apply_patch_robust` new-file 兜底写盘对 `+++ b/<path>` 无路径校验（`../` 序列 / 绝对路径可逃出 repo_dir，现 realpath 归一 + 前缀校验越界即拒绝）；
 - **恒真断言清零（11 处）**：`assert ... or True` / `in out or not in out` / `or len(...) > 3000` 等全部收紧为真实行为断言，2 处 `assert True` 占位补真实内容校验；
 - **基线刷新**：`BASELINE.yaml` 同步（2815 passed / 行 86% / 分支 78% / `graph_workflow: 99` / `error_classifier: 90` / suite 46s；`check_baseline --verify` 实测一致性通过）。

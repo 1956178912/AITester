@@ -4,7 +4,7 @@
 - W1 文档漂移守卫（模板数 50 与 BASELINE.yaml 一致 / README 无指向已删文件的断链）
 - W3 检出优先协议（DETECTION_FIRST_ENABLE，默认关；ADR-0015）
 - W6 single_agent 基线健全性修复（模块名注入 / 轨迹补记 / 变异反馈死代码修复）
-- W2 覆盖率渐进 ratchet（scripts/coverage_ratchet.py，进程内 importlib 加载）
+- W2 覆盖率渐进 ratchet（scripts/gates/coverage_ratchet.py，进程内 importlib 加载）
 - W4 QuixBugs / BugsInPy 真实基准加载器
 
 全部用例零 LLM / 零网络 / 零子进程（mock 或本地 fixture）。
@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-_RATCHET_SCRIPT = PROJECT_ROOT / "scripts" / "coverage_ratchet.py"
+_RATCHET_SCRIPT = PROJECT_ROOT / "scripts" / "gates" / "coverage_ratchet.py"
 
 
 def _load_ratchet_module():

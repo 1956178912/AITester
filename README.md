@@ -9,6 +9,15 @@
 > **多智能体编排**在本系统中定位为**可消融容器**（非主断言）——E2 双门后
 > `aitester vs plain_llm_df` δ=−0.3673 结构性劣后（ADR-0016），故标题与开篇
 > 不再以"多智能体"为主表述（叙事对齐 ADR-0016，R26）。
+> **为什么不用"手工设计"的多智能体（2026-10-09 补充，待核验引用）**：
+> 项目自身 n=261 生死实验（−28pp，vs 检出优先提示协议 plain_llm_df）之外，
+> 2026 年跨论文证据已形成共识——one-shot 提示协议全面击败手工多智能体
+> 编排（CANDOR，ICST 2026 [待核验]：one-shot Gemini 88.35% vs CANDOR
+> 35.92%，且耗时 45s vs 50h）；但 bandit 自动搜索发现的层级多智能体
+> （BOAD，ICLR 2026 [待核验]）可超越更大的单模型——负面证据指向
+> **"手工设计的编排"而非"多智能体范式本身"**。因此本系统保留编排层
+> 作为可消融研究容器，转正判据与 ADR-0016 一致（预算对照下复现正向
+> detection 增量），后续探索方向为"自动搜索编排 vs 手工编排"对照。
 > 诚实披露（AL5，2026-10-08 R2 勘误：ADR-0021 围栏残留 + ADR-0029 跨文件
 > 未物化两起测量伪影）：三种子主批次（n=261，gold 独立裁决）实测检出优先
 > 提示协议带来决定性检出增益；**repair 经测量口径修正后存量重放 = 39.31%**
@@ -33,7 +42,7 @@
 | **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 修正口径 39.31%**（ADR-0021/0029：历史"全线 0.0%"系 patch 字段围栏残留 + 跨文件任务未物化两起测量伪影，修正重放 57/145 可重放行；E1/E2 logic 档 54.72%；早期 10-01 批 0/15 系真零；漏斗修正：patch 产出 94%/plausible 47%/correct 39.31%；v1 口径 35.86%/48.11% 系伪影下界，口径矩阵见 `docs/design/repair_caliber_matrix.md`，上限归因见 `repair_ceiling_report.md` + ADR-0021/0027/0029）；$/task 0.0259 vs 0.0045（价目表官方登记口径）；定位维度随结果行并列输出——`fl_at_k`（谱系 Top-k 行级命中）与 `localization_hit_function`（LLM 推理定位函数级命中，2026-10-07 修复引擎批次 I 起，与 gold 变更函数集合比对，未定位时键集合同构占位）。历史批（2026-10-01 n=50）false_fix=89.8% 为"假成功通道"证据（ADR-0027 重估：该批修正 repair=0/15 系真零，证据维持成立；主批次修正 false_fix=87.2%）；SWE-bench Lite（sqlfluff-20）真实基准 0/20 负结果与统计检验同样如实披露、不筛选 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.13/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
-| **最新优化** | ✅ 2026-10-05 审查优化批次（R1–R18，默认行为不变）：规约 oracle 执行接线（`SPEC_ORACLE_EXEC_ENABLE`，可执行规约首次进入执行链与 LLM 测试并列裁决）+ SpecIR v1 编译缺陷修复（恒真断言封堵）+ 签名感知绑定 + 变异检出率接入主批次（`mutation_detection_rate`，测试有效性客观裁决）+ 统计报告完整化（McNemar/BH-FDR 落盘 + bootstrap CI + Cliff's delta + `--batches` 白名单）+ 回滚 fail-closed 口径开关 + 结构化路由开关 + CI 安全扫描转阻断 + release/perf 工作流 + `AITESTER_PROFILE` 三档预设；全量测试零回归 + ruff/mypy 全绿；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
+| **最新优化** | ✅ 2026-10-09 R4 审查落地批次（默认行为不变，新增能力均默认关/零 LLM 成本）：逻辑驱动反例精化闭环（`src/specs/spec_refine.py` CEGIR——规约矛盾反例回灌 LLM 只改契约 + SMT 复验预算化迭代，`SPEC_REFINE_ENABLE` 默认关；`spec_smt` 补后件一致性 UNSAT 检测）+ nodes.py 续拆补丁应用安全核心至 `src/graph/patch_io.py`（四簇共 3593→1909 行，历史导入路径不变）+ E4 污染防控预注册增补（prereg 双语，强制披露口径）+ llm_configs.json schema 守卫（`validate_llm_configs` + CI 快检）+ MAS 技能库编译路线设计文档（探索性 Proposed）；全量用例零代码回归 + ruff/mypy 全绿（测试用例数与 mypy 源文件数见 [BASELINE.yaml](BASELINE.yaml)）；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |
 | **核心模块覆盖** | ✅ 逐模块行覆盖以 [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` 为单一事实来源（base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86，分支覆盖与核心路由门槛同见该文件） |
 | **代码规范** | ✅ Ruff 检查全部通过（`ruff check` + `ruff format --check`，CI 固定 0.16.3）+ mypy 全仓 0 错误（源文件数与版本锁定见 [BASELINE.yaml](BASELINE.yaml) `static_checks` 节 `mypy_source_files`）；历轮 lint 清零叙事归档 [CHANGELOG.md](CHANGELOG.md) |
 | **最近改动** | ✅ 2026-10-07 修复引擎批次 XIV（外部报告净新增收割 ADR-0028——FL Top-k 约束观测门〔`patch_changed_functions` 补丁变更函数集合 × 定位 Top-3 候选求交，hit_rank 分层；结果行 `fl_constraint_verdict`/`fl_constraint_hit_rank`/`fl_constraint_changed_functions` 三键；ADR-0024「生成侧主导」行级可验证〕+ Self-Repair Trap 观测器〔`oracle_quality_history` 逐次质量快照 + `detect_self_repair_trap` 三信号判定核；结果行三键〕+ Frame Lifetime Trace 设计输入〔docs/design/frame_lifetime_trace.md，激活门槛=Debugger 拆分批立项〕+ BASELINE 测试链勘误〔批次 VII–XIII 记录数字预写失真收口〕；全量 4669/0）；此前同日批次 VII–XIII（repair=0 测量伪影定案〔修正口径 35.9%/48.1%〕+ test-hacking 守卫 + 统计报告三节 + 反事实 FL 上界 + ORACLE_CONTEXT_TIER 消融档 + 交互归因 + 修正口径重估收口，详见 CHANGELOG）；此前同日批次 VI（run_main_batch `--staging-dir` 跑批运营收口——跑前快照输出目录、跑后新工件自动外移保持工作树干净，**多种子顺序跑批第二批不再被干净树门禁拒绝**〔E2 双种子"暂移-恢复"两次手工实操固化；--skip-stats 早退同样外移；路径穿越防御拒 .. 与输出目录内〕+ `make cpr-idr` 报告入口〔IDR/CPR + 弃权视角〕）；此前同日批次 V（ADR-0020：补丁弃权门观测层——五信号判定核 + 结果行 `patch_abstained`/`patch_abstain_signals`；弃权视角存量回放：passed 443 中 392〔88.5%〕将命中、精确率 1.0；阻断档 Proposed 待 A/B）；此前同日批次 IV（ADR-0019：确定性优先修复路由）；此前同日批次 III（ADR-0018：编辑意图落盘 + AC2 计数补漏）；此前同日批次 II（定位 Top-3 + Hit@3/MRR + CPR/IDR〔IDR=27.78%〕）；此前同日批次 I（范式转向修复引擎路线，FaultLocalizer 落地）；此前同日 AS 批次（发行构建链路取证 + PEP 639）；更早批次详见 CHANGELOG；测试数量见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 |
@@ -85,7 +94,7 @@ pre-commit run --all-files
 - Ruff lint 检查
 - pytest 测试 + 覆盖率报告
 - 依赖安全扫描（pip-audit；chromadb 1.5.9 命中 5 条已知漏洞（PYSEC-2026-311 重复两条 + PYSEC-2026-3813/3814/3815），因 PyPI 暂无修复版本而显式豁免，详见 ci.yml 注释与 CHANGELOG）
-- requirements 与 requirements.lock 一致性校验（scripts/check_lock_sync.py）
+- requirements 与 requirements.lock 一致性校验（scripts/gates/check_lock_sync.py）
 - 测试失败诊断注解：测试步骤挂掉时自动把 FAILED/ERROR 用例清单写成 GitHub 注解（check-runs annotations API 可读，无需 admin 下载日志）
 
 ### 测试命令
@@ -118,9 +127,12 @@ pre-commit run --all-files
 >   `KERNEL_SANDBOX_ENABLE=true`（macOS Seatbelt / Linux bwrap，可用时）
 >   进一步限制文件系统与网络出口。
 > - `EXECUTOR_AUTO_INSTALL_DEPS` 默认**关闭**；开启后 venv 会 `pip install`
->   LLM 推断出的依赖包名——**存在包名幻觉（slopsquatting）攻击面**，
->   生产使用请配合包名白名单（`PIP_PACKAGE_WHITELIST_ENABLE=true`，
->   R59/S6 守卫：仅白名单内包名放行，未知名默认拒绝，堵供应链向量）。
+>   LLM 推断出的依赖包名——**存在包名幻觉（slopsquatting）攻击面**
+>   （USENIX Security 2025 已量化确认：19.7% 代码样本含幻觉包名
+>   [待核验]）。包名白名单 `PIP_PACKAGE_WHITELIST_ENABLE` 自 2026-10-09
+>   审查修订 C-08 起**默认开启**（R59/S6 守卫：仅白名单内包名放行，
+>   未知名默认拒绝，堵供应链向量）；显式设 `false` 退回历史放行口径
+>   （仅可信环境调试用）。
 > - 更高强度隔离：`EXECUTOR_USE_DOCKER=true`（容器级隔离，需预构建镜像）。
 
 ```bash
@@ -205,15 +217,15 @@ rm -rf ~/.cache/aitester/llm     # 清空缓存，让所有 prompt 重新调用 
 
 **技术实现**：`src/agents/base_agent.py` 的 `_get_or_create_chat_client()` 与 `_get_or_create_zai_client()`。
 
-### 模型额度探测（scripts/check_quota.py）
+### 模型额度探测（scripts/tools/check_quota.py）
 
 探测各已配置模型当前是「存活 / 免费额度用尽(403) / 限流 / key 失效 / 模型不存在」，每个模型仅发 1-token 请求，**不打印任何密钥**：
 
 ```bash
-.venv/bin/python scripts/check_quota.py                      # 探测 .env.local 已配置的全部 LLM
-.venv/bin/python scripts/check_quota.py --provider aliyun_bailian   # 扫某 provider 目录全模型
-.venv/bin/python scripts/check_quota.py --models qwen-max,qwen-plus --provider aliyun_bailian
-.venv/bin/python scripts/check_quota.py --dry-run           # 只列出将探测的目标，不发请求
+.venv/bin/python scripts/tools/check_quota.py                      # 探测 .env.local 已配置的全部 LLM
+.venv/bin/python scripts/tools/check_quota.py --provider aliyun_bailian   # 扫某 provider 目录全模型
+.venv/bin/python scripts/tools/check_quota.py --models qwen-max,qwen-plus --provider aliyun_bailian
+.venv/bin/python scripts/tools/check_quota.py --dry-run           # 只列出将探测的目标，不发请求
 ```
 
 ### LLM 调用超时配置
@@ -323,7 +335,13 @@ AITester/
 │   │   └── cross_file.py             # 3.5 跨文件修复（协调器-提议者架构，默认关）
 │   ├── graph/                        # 工作流编排模块
 │   │   ├── workflow.py               # LangGraph 工作流图（支持消融开关；节点注册与 RAG 接线）
-│   │   ├── nodes.py                  # 节点函数实现（_planner/_generator/_executor/_debugger/_patch_applier/_cross_file_analyzer）
+│   │   ├── nodes.py                  # 节点函数实现（_planner/_generator/_executor/_cross_file_analyzer + 编排节点；
+│   │   │                               大簇已按批次 S7/S4 拆分至 trace_reward/flags/agents_cache/debugger/patch_io，全量 re-export 保持历史导入路径）
+│   │   ├── trace_reward.py           # R3 S7：6 纯函数轨迹/奖励/迭代策略（自 nodes.py 拆分，re-export 保留）
+│   │   ├── flags.py                  # R3 S7：开关读取函数簇（自 nodes.py 拆分，re-export 保留）
+│   │   ├── agents_cache.py           # R3 S7：Executor/通用 Agent 实例复用缓存（自 nodes.py 拆分，re-export 保留）
+│   │   ├── debugger.py               # R3 S7：_diagnosis_node/_debugger_node 节点实现（自 nodes.py 拆分，re-export 保留）
+│   │   ├── patch_io.py               # R4 S4：补丁应用安全核心（路径白名单 + 原子写盘 + 多候选选择 + 安全写盘 + 快照回滚，自 nodes.py 拆分，re-export 保留）
 │   │   ├── rag.py                    # RAG 检索器单例管理（get_rag_retriever，经 workflow.py re-export）
 │   │   ├── tracing.py                # 追踪层接线（任务级 JSONL 会话，经 workflow.py re-export）
 │   │   ├── state.py                  # 全局状态定义（TypedDict）+ create_initial_state 工厂（单一构造点）
@@ -371,6 +389,16 @@ AITester/
 │   ├── calculator.py                 # 计算器示例（除零、负数阶乘 bug）
 │   ├── buggy_library.py              # 算法库示例（二分查找、排序合并等）
 │   └── string_utils.py               # 字符串工具示例（回文、Caesar 密码等）
+├── scripts/                          # 仓库级脚本（见 scripts/README.md）
+│   ├── gates/                        # CI / pre-commit 阻断项（20 个，违规即 fail）
+│   │   ├── check_baseline.py         # BASELINE.yaml 健全性
+│   │   ├── check_lock_sync.py        # requirements.txt ↔ requirements.lock 同步
+│   │   ├── check_branch_coverage.py  # 核心路由分支覆盖门槛
+│   │   └── ...                       # 双语配对 / 引用真实性 / 工件入库 / 覆盖率 ratchet 等
+│   └── tools/                        # 运维 / 生成 / 实验辅助（17 个，不阻断）
+│       ├── bootstrap_dev.sh          # 开发者环境搭建
+│       ├── smoke_test.sh             # 发布前冒烟
+│       └── performance_benchmark.py  # 性能基准
 ├── main.py                           # CLI 入口（薄封装，实现位于 src/cli/）
 ├── config.py                         # 全局配置（含消融实验开关）
 ├── init_db.py                        # 数据库初始化脚本
@@ -474,12 +502,12 @@ python experiments/analyze_results.py --input experiments/results/benchmark_xxx.
 4.2 半开探测（默认开，`APIManagerConfig.enable_half_open_probe=True`）：冷却到期后节点不直接恢复全量路由，而是进入"半开"窗口——该节点被纳入路由候选（`in_circuit_half_open`），承载一次探测请求；探测成功闭合熔断器恢复全量路由，失败则重新打开半程冷却期（`min(cooldown/2, half_open_probe_penalty_cap_seconds)`，默认 cap 30s），防止死 provider 被反复打流量。`call()` 与 `check_health()` 的成功 / 各异常分支统一消费探测结果；置 `enable_half_open_probe=False` 退回 4.1 直接放行行为，便于对比实验。
 
 ### 5.7 SWE-bench 源码导出自动化（2.1）
-官方 SWE-bench JSONL 无 `instance_code` 字段（任务只有 patch 文本）。新增 `scripts/export_swe_bench_source.py` 自动补全：读取已下载的 JSONL，按 patch 的 `+++ b/<path>` 提取首个非测试目标文件，经 `git show <base_commit>:<path>` 只读导出（不污染工作树），输出 `SWE_BENCH_ENRICHMENT` 格式的 enrichment JSONL；支持 `--instance-ids`（逗号或 @文件，配合 check-dataset 输出的缺失列表批量补）、`--dry-run`、`--limit`。`SWEBenchDataset` 新增 `tasks_missing_source()`（识别 instance_code 兜底为 issue 文本的任务）；`check-dataset` 质量报告输出缺失源码的 instance_id 列表与补全指引。
+官方 SWE-bench JSONL 无 `instance_code` 字段（任务只有 patch 文本）。新增 `scripts/tools/export_swe_bench_source.py` 自动补全：读取已下载的 JSONL，按 patch 的 `+++ b/<path>` 提取首个非测试目标文件，经 `git show <base_commit>:<path>` 只读导出（不污染工作树），输出 `SWE_BENCH_ENRICHMENT` 格式的 enrichment JSONL；支持 `--instance-ids`（逗号或 @文件，配合 check-dataset 输出的缺失列表批量补）、`--dry-run`、`--limit`。`SWEBenchDataset` 新增 `tasks_missing_source()`（识别 instance_code 兜底为 issue 文本的任务）；`check-dataset` 质量报告输出缺失源码的 instance_id 列表与补全指引。
 
 ```bash
 # 补全全部缺失源码（需 SWE-bench 仓库缓存 + git）
-python scripts/export_swe_bench_source.py --dry-run          # 先看导出计划
-python scripts/export_swe_bench_source.py --instance-ids @missing_ids.txt
+python scripts/tools/export_swe_bench_source.py --dry-run          # 先看导出计划
+python scripts/tools/export_swe_bench_source.py --instance-ids @missing_ids.txt
 # 加载 enrichment（自动合并到任务的 instance_code）
 python main.py check-dataset swe_bench
 ```
@@ -826,13 +854,13 @@ cyclomatic_complexity)` 输出 [0,1] 归一化复杂度评分（阈值 `<0.35 �
 `experiments/run_benchmark.py` CLI 新增 `--difficulty` 选项（仅对 synthetic 数据集生效）。
 
 #### 5.21.5 SWE-bench 源码导出质量验证（2.3）
-`scripts/verify_swe_bench_export.py`（新增）：对 `SWE_BENCH_ENRICHMENT` JSONL 做
+`scripts/tools/verify_swe_bench_export.py`（新增）：对 `SWE_BENCH_ENRICHMENT` JSONL 做
 5 维度验证（非空 / 行数 >= 阈值 / Python 语法合法 / 目标函数存在 / 目标文件路径
 匹配），输出结构化质量报告（`pass_rate` / `by_label` / `failed_instances` /
 `avg_line_count`），CLI `--output` 写 JSON，`--instances` 可选传官方 JSONL 做交叉验证。
 
 ```bash
-python scripts/verify_swe_bench_export.py \
+python scripts/tools/verify_swe_bench_export.py \
     --enrichment data/swe_bench_lite_enriched.jsonl \
     --output experiments/results/enrichment_quality_report.json
 ```
@@ -973,7 +1001,7 @@ Landlock（`bwrap`）双后端；平台不支持时 fail-closed 拒绝执行（�
 `experiments/run_full_stack_swe_bench_pro.py`（一键七开关：
 `RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
 `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
-`SWE_REPO_VENV_ISOLATION`）+ `scripts/check_swe_bench_pro_ready.py`
+`SWE_REPO_VENV_ISOLATION`）+ `scripts/gates/check_swe_bench_pro_ready.py`
 （数据前置门禁：JSONL 存在性 + `instance_code` / `test_patch` /
 `FAIL_TO_PASS` / `base_commit` 齐备校验，缺失时阻断 `exit 1`）+
 `experiments/summarize_full_stack.py`（ON/OFF 对照分析：成功率 / 错误分桶
@@ -991,8 +1019,8 @@ Landlock（`bwrap`）双后端；平台不支持时 fail-closed 拒绝执行（�
 新增 `docs/dependency_exemptions.md`（chromadb 1.5.9 命中 5 条已知漏洞
 PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 / PYSEC-2026-3815 的
 豁免登记表：依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限）+
-`scripts/check_dependency_exemptions.py`（CI 门禁：`--ignore-vuln` 列表未
-在登记表留痕时 `exit 1` 阻断合并）+ `scripts/check_docs_history_drift.py`
+`scripts/gates/check_dependency_exemptions.py`（CI 门禁：`--ignore-vuln` 列表未
+在登记表留痕时 `exit 1` 阻断合并）+ `scripts/gates/check_docs_history_drift.py`
 （warning-only：检测 `docs/history/*.md` 基线数字漂移超阈值时提示归档，
 非阻断门禁）+ `CONTRIBUTING.md` "依赖豁免登记"章节。全量测试通过 / ruff 0 告警 /
 mypy 0 错误（新增 5 源文件：risk_approval / agent_telemetry / kernel_sandbox /
@@ -1308,8 +1336,8 @@ docker run --rm \
 |--------|------|--------|
 | `LLM_N_API_KEY` | LLM API 密钥（支持多配置，见 `config.local.example`）| 必填 |
 | `LLM_N_BASE_URL` | LLM Base URL | - |
-| `LLM_N_MODEL_NAME` | LLM 模型名称 | agnes-3.0-flash |
-| `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | agnes-3.0-flash |
+| `LLM_N_MODEL_NAME` | LLM 模型名称 | deepseek-flash |
+| `MODEL_NAME` | 向后兼容：默认 LLM 模型名称 | deepseek-flash |
 | `MAX_ITERATIONS` | 最大修复迭代次数 | 3 |
 | `COVERAGE_THRESHOLD` | 覆盖率阈值 | 80.0 |
 | `CROSS_FILE_ENABLE` | 3.5 跨文件修复开关（协调器-提议者架构，默认关） | false |
@@ -1331,12 +1359,14 @@ docker run --rm \
 | `FL_SPECTRAL_ENABLE` | O2 谱系故障定位（Ochiai Top-k，零 LLM 成本；**R8 起默认 true**，设 false 作消融对照组） | true |
 | `FAULT_LOCALIZER_ENABLE` | 修复引擎第一阶段 RGFL 式 LLM 推理故障定位（局部化 → 合成 → 验证范式，2026-10-07 批次 I；结构化定位〔函数/行区间/置信度〕注入 Debugger prompt 并透出 `localization_hit_function` 指标；失败保守降级 None 不阻断修复；**默认 true**，设 false 退回纯谱系消融口径） | true |
 | `SPEC_IR_ENABLE` | R7 SpecIR 可执行规约 IR（logic_analysis 解析 + 边界三元组 → pytest/Hypothesis oracle 编译，纯观测层） | false |
+| `SPEC_REFINE_ENABLE` | R4 S1（2026-10-09）：逻辑驱动反例精化开关（`spec_refine.refine_spec_with_counterexample`——规约矛盾反例回灌 LLM **只修正契约（不改代码）** + SMT 复验预算化迭代（CEGIR）；LLM 回调可注入（测试 mock，零真实 LLM）；**默认关**，未接入主链路——调用点接入属后续批次） | false |
+| `SPEC_REFINE_MAX_ROUNDS` | R4 S1：反例精化迭代上限（默认 2，下限 0 上限 5；越界值保守回退默认 2；非数字回退 2） | 2 |
 | `FLAKY_CHECK_ENABLE` | R35/R31 flaky 门禁（失败轮重复执行一致性检测，flaky 时 test_passed 保守记 False，flaky fraction 入工件） | false |
 | `FLAKY_REPEAT_COUNT` | flaky 门禁重复执行次数（默认 3；稳定性口径设 30） | 3 |
 | `SWE_BENCH_P2P_GATE_ENABLE` | R46（2026-09-30 独立审查 P0）：SWE-bench 实例可解性前置门禁（**默认 true**——SWE-bench ProMax 实测 ~60% 未解出实例的测试本身有缺陷，开门禁后不可解实例记 `harness_invalid` 剔除，"0 解出"还原为"harness 无效"而非"系统无效"；设 false 消融对照） | true |
 | `SWE_BENCH_P2P_GATE_THRESHOLD` | P2P 门禁阈值（基线 PASS_TO_PASS 通过率下限，默认 0.95） | 0.95 |
 | `EXECUTOR_AUTO_INSTALL_DEPS` | 执行前自动 pip install 缺失依赖（P1；R59/S6 包名幻觉防护见 `PIP_PACKAGE_WHITELIST_ENABLE`） | false |
-| `PIP_PACKAGE_WHITELIST_ENABLE` | R59（2026-09-30 独立审查 P0）/S6：pip 包名白名单守卫（true 时仅白名单内包名放行安装，PEP 503 大小写不敏感；白名单来源 `PIP_PACKAGE_WHITELIST` 逗号分隔或内置 ~40 常用包，未知名默认拒绝，堵 slopsquatting 供应链向量） | false |
+| `PIP_PACKAGE_WHITELIST_ENABLE` | R59（2026-09-30 独立审查 P0）/S6：pip 包名白名单守卫（true 时仅白名单内包名放行安装，PEP 503 大小写不敏感；白名单来源 `PIP_PACKAGE_WHITELIST` 逗号分隔或内置 ~40 常用包，未知名默认拒绝，堵 slopsquatting 供应链向量；**自 2026-10-09 审查修订 C-08 起默认 true**，显式设 false 退回历史放行口径） | true |
 | `EXECUTOR_DEP_INSTALL_TIMEOUT` | 依赖安装超时（秒） | 120 |
 | `AITESTER_VENV_CACHE_DIR` | 4.4 venv 缓存目录覆盖（默认 `~/.cache/aitester/venvs`；配合 `clean-venv-cache` 清理） | 未设 |
 | `MYSQL_POOL_MIN_CACHED` | 连接池最小预留连接 | 5 |
@@ -1643,7 +1673,6 @@ python main.py clean-venv-cache --max-size-mb 512
 - [API 参考文档](docs/api_reference.md)：模块接口说明（含 2026-09-29 审查优化轮：P0 运行时探针缺陷修复口径）
 - [使用示例](docs/usage_examples.md)：编程接口与 CLI 用法
 - [依赖豁免登记表](docs/dependency_exemptions.md)：pip-audit 漏洞豁免登记（依赖 / 版本 / 漏洞 ID / 豁免原因 / 复审触发条件 / 复审期限）
-- [前沿推荐批次设计](docs/gap_report_2026-09-28_frontier_recommendations.md)：G1–G8 缺口分析与落地说明
 - [审查轮次记录](CHANGELOG.md)：第六至第十一轮审查与保守优化（P1/P2 缺陷修复 + 回归守卫；见 CHANGELOG「2026-09-26 全面审查与保守优化轮」批次条目；原 docs/review_* 文件已随 P1-9 文档治理删除）
 - [高级开关说明](QUICKSTART.md)：结构化追踪 / 多候选补丁 / 成本感知路由 / G1–G8 新能力开关（默认全关，按需启用）
 - [历史优化记录](docs/history/optimization_plan.md)：归档的历史轮次优化计划与报告（`docs/history/`，非当前维护文档）

@@ -894,7 +894,7 @@ def _check_swe_bench_p2p_gate(task: BenchmarkTask) -> dict[str, Any] | None:
     SWE-bench 实例可解性前置门禁（**默认开启**）。
 
     R46 起 SWE-bench 批次默认执行本门禁（SWE_BENCH_P2P_GATE_ENABLE 缺省
-    "true"）：调用 scripts/verify_instance_solvable.verify_single_instance
+    "true"）：调用 scripts/tools/verify_instance_solvable.verify_single_instance
     验证基线 PASS_TO_PASS ≥ SWE_BENCH_P2P_GATE_THRESHOLD；不可解实例返回
     {"harness_invalid": True, ...} 供调用方标记并剔除（不计入"0 解出"
     统计，还原为"harness 无效"而非"系统无效"）。
@@ -915,7 +915,7 @@ def _check_swe_bench_p2p_gate(task: BenchmarkTask) -> dict[str, Any] | None:
     if meta.get("source") != "swe_bench" or not repo_url or not base_commit:
         return None
     try:
-        from scripts.verify_instance_solvable import verify_single_instance
+        from scripts.tools.verify_instance_solvable import verify_single_instance
     except ImportError:
         logger.warning("M3 P2P 门禁：verify_single_instance 不可用，跳过门禁检查")
         return None
@@ -2587,12 +2587,26 @@ def run_benchmark(
         total_input = sum((r.get("token_usage") or {}).get("input_tokens", 0) for r in bl_results)
         total_output = sum((r.get("token_usage") or {}).get("output_tokens", 0) for r in bl_results)
         total_calls = sum((r.get("token_usage") or {}).get("llm_calls", 0) for r in bl_results)
+        # P0 止血（缓存记账缺口）配套：缓存命中数 + 避免 token（cache_avoided_tokens
+        # 来自 token_usage.as_dict() 新增字段，结果行已自动携带）。
+        #   cache_hit_rate = 命中 / (命中 + 真实调用)——缓存命中率是成本首要指标
+        #   （前沿：缓存命中率 0%→94% 产生 9 倍成本差异，超过模型层级差异）。
+        #   uncached_theoretical_tokens = 真实 + 避免——还原"无缓存理论成本"，
+        #   消除"缓存命中率漂移导致 $/token 结论不可比"的系统性偏差。
+        total_cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in bl_results)
+        total_cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in bl_results)
         total = len(bl_results)
         return {
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_tokens": total_input + total_output,
             "total_llm_calls": total_calls,
+            "total_cache_hits": total_cache_hits,
+            "total_cache_avoided_tokens": total_cache_avoided,
+            "cache_hit_rate_pct": round(total_cache_hits / (total_cache_hits + total_calls) * 100, 2)
+            if (total_cache_hits + total_calls) > 0
+            else 0.0,
+            "uncached_theoretical_tokens": total_input + total_output + total_cache_avoided,
             "avg_tokens_per_task": round((total_input + total_output) / total, 2) if total > 0 else 0,
             # AD1：输出成本结构观测（键集合同构，纯新增）
             "output_share_pct": round(total_output / (total_input + total_output) * 100, 2)
@@ -2745,6 +2759,15 @@ def run_benchmark(
         "LLM_THINKING_MODE",
         "LLM_REASONING_EFFORT",
         "LLM_MAX_OUTPUT_TOKENS",
+        # 2026-10-09（D3 修复）：A1 消融开关入快照——A1 首跑工件缺该键，
+        # 消融臂可复现性证据缺失（无法从工件证明 strip 是否生效）。
+        # 消融类开关必须在 provenance 留痕，否则臂间不可审计。
+        "PLAN_STRIP_EXPECTED_OUTPUT_ENABLE",
+        # 2026-10-10（本轮审计发现）：over_red 强化段开关也必须入快照。
+        # 首跑 over_red 受控臂时该键未登记 → env_snapshot 无此项 →
+        # **无法从工件证明干预是否生效**，与 A1 首跑（PLAN_STRIP 未生效却
+        # 被当成"零效应"）是同一审计缺口。消融类开关一律在 provenance 留痕。
+        "OVER_RED_SECTION_ENABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

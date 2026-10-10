@@ -249,6 +249,31 @@ def _agent_reuse_enabled() -> bool:
     return os.getenv("AITESTER_AGENT_REUSE", "1") != "0"
 
 
+def _plan_expected_output_strip_enabled() -> bool:
+    """A1 消融开关：从 Generator prompt 中剥除 Planner 的 ``expected_output``。
+
+    **默认 false（历史口径零变化）**，仅消融实验显式启用。
+
+    背景（审查报告 §5 路径 A1 / §8.6 红队 RT3，2026-10-09）：
+        R-P0-2 三种子主批次中，aitester 臂 detection 15.8% 显著低于
+        plain_llm_df 44.8%（δ=−0.279）。代码级归因显示主导通道不是
+        文档所述的"过红/抹红"，而是 **never-red（从未变红）86/240**：
+        ``planner.plan(state["target_code"])`` 读的是**缺陷代码**
+        （``nodes.py:240``），而 Planner 契约要求产出
+        ``test_cases[].expected_output``（``templates.py:25``），Generator
+        再把整段 plan JSON 序列化进 query（``generator.py:353``）——
+        于是"期望值"= **被测实现的当前（错误）行为**，断言在 buggy 上
+        全绿，检出被系统性抹掉（oracle-from-implementation）。
+
+    本开关只剥除 ``test_cases[].expected_output`` 字段，**保留**
+    ``case_name`` / ``input_args`` / ``category`` / ``description`` /
+    ``logic_coverage`` 与整个 ``logic_analysis``——即消融的是"期望值
+    锚点"这一单变量，而非 plan 结构本身。判定用途见报告 §5 A1 的
+    "plan 去 expected_output 消融臂"。
+    """
+    return os.getenv("PLAN_STRIP_EXPECTED_OUTPUT_ENABLE", "false").lower() in ("true", "1", "on")
+
+
 __all__ = [
     "_agent_reuse_enabled",
     "_boundary_triplets_enabled",
@@ -262,6 +287,7 @@ __all__ = [
     "_patch_resample_enabled",
     "_patch_resample_max",
     "_patch_resample_temperature",
+    "_plan_expected_output_strip_enabled",
     "_probe_snapshot_locate_enabled",
     "_repo_core_protection_enabled",
     "_runtime_probe_enabled",

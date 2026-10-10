@@ -174,9 +174,22 @@ class TestS6DependencyWhitelist:
         assert "definitely_not_real_zzz" not in result
 
     def test_whitelist_disabled_passes_all(self, monkeypatch):
+        """显式 PIP_PACKAGE_WHITELIST_ENABLE=false 退回历史放行口径（C-08，2026-10-09）。"""
+        from src.tools import dependency as dep
+
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST_ENABLE", "false")
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST", raising=False)
+        # 显式关：白名单守卫不生效，未知模块默认"模块名即包名"放行
+        result = dep.suggest_package_names({"pandas", "definitely_not_real_zzz"})
+        assert "definitely_not_real_zzz" in result
+
+    def test_default_enforced_rejects_unknown(self, monkeypatch):
+        """C-08（2026-10-09）：未设置环境变量时白名单默认开——
+        内置 _PIP_PACKAGE_WHITELIST 生效，幻觉包名不进入 install_packages。"""
         from src.tools import dependency as dep
 
         monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
-        # 默认关：白名单守卫不生效，未知模块默认"模块名即包名"放行
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST", raising=False)
         result = dep.suggest_package_names({"pandas", "definitely_not_real_zzz"})
-        assert "definitely_not_real_zzz" in result
+        assert "pandas" in result
+        assert "definitely_not_real_zzz" not in result

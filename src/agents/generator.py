@@ -43,6 +43,50 @@ def _assertion_augment_enabled() -> bool:
     return os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
 
 
+def _plan_without_expected_output(plan: Any) -> Any:
+    """A1 消融纯函数：递归剥除 test_cases[].expected_output（默认关，历史口径不变）。
+
+    背景（审查报告 §5 路径 A1 / §8.6 RT3，2026-10-09）：
+        Planner 读**缺陷代码**产出 ``expected_output``（``templates.py:25``），
+        Generator 把整段 plan JSON 灌进 query（``generator.py:353``）→
+        期望值 = 实现当前（错误）行为 → oracle-from-implementation →
+        never-red 通道（86/240）系统性抹掉检出。
+
+    开关（``PLAN_STRIP_EXPECTED_OUTPUT_ENABLE``，默认 false）关闭时**原样
+    返回入参对象**（同一引用，零拷贝、零行为变化）；开启时返回浅拷贝后的
+    新结构，仅删除每个 ``test_case`` 下的 ``expected_output`` 键。
+
+    只剥这一个键：``case_name`` / ``input_args`` / ``category`` /
+    ``description`` / ``logic_coverage`` 与整个 ``logic_analysis`` 全部保留——
+    消融的是"期望值锚点"单变量，而非 plan 结构本身。缺键 / 类型异常时
+    保守降级为原对象（不抛异常、不产出半成品结构）。
+    """
+    from src.graph.flags import _plan_expected_output_strip_enabled
+
+    if not _plan_expected_output_strip_enabled():
+        return plan
+    if not isinstance(plan, dict):
+        return plan
+    cases = plan.get("test_cases")
+    if not isinstance(cases, list):
+        return plan
+    stripped = dict(plan)
+    new_cases: list[Any] = []
+    removed = 0
+    for case in cases:
+        if isinstance(case, dict) and "expected_output" in case:
+            c = dict(case)
+            c.pop("expected_output", None)
+            new_cases.append(c)
+            removed += 1
+        else:
+            new_cases.append(case)
+    stripped["test_cases"] = new_cases
+    if removed:
+        logger.info("A1 消融生效：已从 %d 个 test_case 剥除 expected_output", removed)
+    return stripped
+
+
 def _repro_test_enabled() -> bool:
     """2.3 改进：复现测试专项生成开关（REPRO_TEST_ENABLE=true 时启用，默认 false）。
 
@@ -169,6 +213,10 @@ class GeneratorAgent(BaseAgent):
         # "先红后绿"强化段落（DETECTION_FIRST_ENABLE=true 且首轮全绿时由
         # _generator_node 构建；None 时不注入，历史口径零变化）。
         detection_first_section: str | None = None,
+        # 2026-10-10 审查报告 §11.1b 结果二十四：**过红（over_red）**再生成路径的
+        # 强化段落（OVER_RED_SECTION_ENABLE=true 且本轮由 over_red 路由进入时由
+        # _generator_node 构建；None 时不注入，默认关 = 历史口径零变化）。
+        over_red_section: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -232,6 +280,9 @@ class GeneratorAgent(BaseAgent):
         # W3（2026-10-05 审查落地·检出优先协议）：先红后绿强化段落（None 不注入）
         if detection_first_section:
             query += "\n\n" + detection_first_section
+        # 2026-10-10（结果二十四）：过红再生成强化段落（None 不注入）
+        if over_red_section:
+            query += "\n\n" + over_red_section
         # P2（2026-10 批次·续二）：注入扫描系统侧警示追加到 query 尾部
         # （命中注入特征时非空；None/空串时不注入，历史口径零变化）
         if injection_warning:
@@ -349,6 +400,10 @@ class GeneratorAgent(BaseAgent):
         mutation_feedback: dict[str, Any] | None = None,
     ) -> str:
         """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）。"""
+        # A1 消融（PLAN_STRIP_EXPECTED_OUTPUT_ENABLE，默认关）：剥除 Planner 由
+        # 缺陷代码派生的 expected_output，切断 oracle-from-implementation 锚点。
+        # 默认关时 _plan_without_expected_output 原样返回同一引用，行为零变化。
+        test_plan = _plan_without_expected_output(test_plan)
         # 将测试计划序列化为 JSON 字符串，便于 LLM 理解结构
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 

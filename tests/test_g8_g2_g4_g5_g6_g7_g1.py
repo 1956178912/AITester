@@ -377,7 +377,7 @@ def test_g8_pro_check_missing_dir_not_ready() -> None:
     """数据目录不存在 → ready=False，退出码 1。"""
     import sys
 
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_swe_bench_pro_ready import check_pro_ready
 
     report = check_pro_ready("/tmp/definitely_no_swe_bench_pro_dir_xyz")
@@ -390,7 +390,7 @@ def test_g8_pro_check_complete_jsonl_ready() -> None:
     import sys as _sys
     import tempfile
 
-    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_swe_bench_pro_ready import check_pro_ready
 
     row = {
@@ -416,7 +416,7 @@ def test_g8_pro_check_missing_source_not_ready() -> None:
     import sys as _sys
     import tempfile
 
-    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_swe_bench_pro_ready import check_pro_ready
 
     row = {
@@ -441,7 +441,7 @@ def test_g8_pro_check_enrichment_fills_source() -> None:
     import sys as _sys
     import tempfile
 
-    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_swe_bench_pro_ready import check_pro_ready
 
     row = {
@@ -472,7 +472,7 @@ def test_dependency_exemption_check_blocks_unregistered() -> None:
     import sys as _sys
     import tempfile
 
-    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_dependency_exemptions import _extract_ci_ignore_vulns, _extract_registry_vuln_ids
 
     with tempfile.TemporaryDirectory() as d:
@@ -499,7 +499,7 @@ def test_dependency_exemption_check_passes_when_registered() -> None:
     import sys as _sys
     import tempfile
 
-    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "gates"))
     from check_dependency_exemptions import _extract_ci_ignore_vulns, _extract_registry_vuln_ids
 
     with tempfile.TemporaryDirectory() as d:

@@ -38,7 +38,7 @@ def _load_price_table() -> dict:
 def _artifacts_manifest() -> tuple[str, ...]:
     """加载入库守卫的 MANIFEST 常量（importlib，零子进程）。"""
     spec = importlib.util.spec_from_file_location(
-        "check_artifacts_tracked", PROJECT_ROOT / "scripts" / "check_artifacts_tracked.py"
+        "check_artifacts_tracked", PROJECT_ROOT / "scripts" / "gates" / "check_artifacts_tracked.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -34,9 +34,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.14' }
-      - run: python scripts/check_baseline_numbers.py
-      - run: python scripts/check_baseline.py
-      - run: python scripts/check_bilingual_docs.py --strict
+      - run: python scripts/gates/check_baseline_numbers.py
+      - run: python scripts/gates/check_baseline.py
+      - run: python scripts/gates/check_bilingual_docs.py --strict
 ```
 
 ## 三、可选 LLM 冒烟（成本敏感）
@@ -59,21 +59,21 @@ jobs:
 ## 四、分支覆盖率门槛
 
 核心路由模块（`graph/workflow.py` / `state.py` / `tracing.py` /
-`error_classifier.py`）分支覆盖率门槛经 `scripts/check_branch_coverage.py`
+`error_classifier.py`）分支覆盖率门槛经 `scripts/gates/check_branch_coverage.py`
 校验（总门槛 79%、核心 85%），CI 在 `coverage.xml` 生成后运行：
 
 ```bash
-python scripts/check_branch_coverage.py coverage.xml
+python scripts/gates/check_branch_coverage.py coverage.xml
 ```
 
 ## 五、静态报告归档
 
-`scripts/generate_static_report.py` 把 ruff / mypy 快照归档到
+`scripts/tools/generate_static_report.py` 把 ruff / mypy 快照归档到
 `docs/history/static_report_<date>.md`（CI 主分支上传 artifact）：
 
 ```bash
-python scripts/generate_static_report.py            # 写快照
-python scripts/generate_static_report.py --check    # 仅打印不写盘
+python scripts/tools/generate_static_report.py            # 写快照
+python scripts/tools/generate_static_report.py --check    # 仅打印不写盘
 ```
 
 ---

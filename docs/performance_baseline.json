@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "description": "R14 性能基准基线：结构与 scripts/performance_benchmark.py 的输出一致（category -> metric -> {avg_ms, min_ms, max_ms, iterations}）。每周日 perf.yml 用 check_perf_regression.py 与最新跑分比对（15% 相对阈值 + 0.05ms 绝对下限，仅告警不阻断）。",
+    "description": "R14 性能基准基线：结构与 scripts/tools/performance_benchmark.py 的输出一致（category -> metric -> {avg_ms, min_ms, max_ms, iterations}）。每周日 perf.yml 用 check_perf_regression.py 与最新跑分比对（15% 相对阈值 + 0.05ms 绝对下限，仅告警不阻断）。",
     "generated_at": "2026-10-05",
     "generated_on": "macOS arm64 开发机, Python 3.14.6",
-    "note": "CI 跑分在 ubuntu-latest 上执行，硬件与开发机不同，亚毫秒级指标存在跨机固有偏差（_auto_fix_imports_complex 首轮含 tree-sitter 懒加载预热，max_ms 波动大属正常）。阈值比对只看 avg_ms 且带绝对下限过滤定时器噪声。基线漂移需刷新时：下载 CI 产物 performance_benchmark.json 后本地执行 python scripts/check_perf_regression.py --current <产物路径> --update-baseline 并提交。"
+    "note": "CI 跑分在 ubuntu-latest 上执行，硬件与开发机不同，亚毫秒级指标存在跨机固有偏差（_auto_fix_imports_complex 首轮含 tree-sitter 懒加载预热，max_ms 波动大属正常）。阈值比对只看 avg_ms 且带绝对下限过滤定时器噪声。基线漂移需刷新时：下载 CI 产物 performance_benchmark.json 后本地执行 python scripts/gates/check_perf_regression.py --current <产物路径> --update-baseline 并提交。"
   },
   "executor": {
     "_auto_fix_imports_simple": {

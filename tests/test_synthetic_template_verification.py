@@ -3,7 +3,7 @@
 锁定 verify_template 的三类判定语义（不可检出 / fixed 不自洽 / 口径漂移）
 与跨文件落盘的 target-module 覆盖修复（companion buggy 版不得覆盖 target
 的 fixed 版——首版验证器的真实 bug）。全库 50 模板的完整子进程验证由
-scripts/verify_synthetic_templates.py 承担（发布前手动跑，CI 不进——
+scripts/tools/verify_synthetic_templates.py 承担（发布前手动跑，CI 不进——
 50×2 子进程 pytest 约 2 分钟，属重工具）。
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.verify_synthetic_templates import verify_template
+from scripts.tools.verify_synthetic_templates import verify_template
 
 _GOOD_SINGLE = {
     "name": "v_probe_good",

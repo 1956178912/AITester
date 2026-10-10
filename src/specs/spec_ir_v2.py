@@ -51,8 +51,17 @@ _ENV_DSL = "SPEC_IR_DSL_ENABLE"
 # 允许出现的调用名（函数白名单）：纯 Python 内置无副作用判定函数 +
 # len/abs（数值/容器边界判定常用）。其他调用（open/eval/任意属性链深度>2）
 # 一律不可编译（保守降级为 NL 注释，防"规约里藏命令"的注入面）。
+#
+# S6b（2026-10-09 审查报告 §5 路径 A2）：补入 `isinstance`。实测依据——
+# 真实 Planner 产出的 *_expr 子句高频使用类型判定（如
+# `isinstance(celsius, int)` / `isinstance(result, bool)`），而它不在
+# 白名单时整条子句被保守丢弃，是 S6 接线后注入率的主要残余阻塞项之一。
+# 安全性：isinstance 为纯函数（无副作用、无 I/O、不触发用户代码执行），
+# 与既有 len/abs/sorted 同风险级；其第二参为类型对象（int/str/bool/float
+# 等内建），仍受 AST 白名单节点约束（属性链深度与 Name 解析照旧受限），
+# 不扩大"规约里藏命令"的注入面。
 _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
-    {"len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all"}
+    {"len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all", "isinstance"}
 )
 # 允许的属性访问（容器/数值边界锚点）：仅放行白名单属性（防 x.__class__
 # 类 introspection 逃逸）。注意：`len` 是函数（走 _ALLOWED_CALL_NAMES），
@@ -272,9 +281,23 @@ def compile_spec_oracle(
     """
     if not spec or not target_module or not target_function:
         return ""
-    pre = [c for c in (spec.get("preconditions") or []) if isinstance(c, str)]
-    post = [c for c in (spec.get("postconditions") or []) if isinstance(c, str)]
-    inv = [c for c in (spec.get("invariants") or []) if isinstance(c, str)]
+    # S6（2026-10-09 审查报告 §5 路径 A2 / J1 根因）：编译器改读**表达式通道**。
+    # 历史缺口：本函数只读 NL 通道（preconditions/postconditions/invariants），
+    # 而 spec_compile_rate 度量的是 *_expr 通道（见 _expr_channel_clauses）——
+    # **度量通道 ≠ 消费通道**，导致主批次 10 批 1,997 行臂中可执行规约 oracle
+    # 注入 0 行（"逻辑驱动"从未真正运行）。
+    # 修复：优先读 *_expr（机器化子句）；该通道为空时**回退** NL 通道
+    # （历史口径逐字节不变——原实现即读 NL）。两通道不合并计数，避免
+    # 同一子句被编译两次产生重复断言。
+    pre_expr = [c for c in (spec.get("preconditions_expr") or []) if isinstance(c, str)]
+    post_expr = [c for c in (spec.get("postconditions_expr") or []) if isinstance(c, str)]
+    inv_expr = [c for c in (spec.get("invariants_expr") or []) if isinstance(c, str)]
+    if pre_expr or post_expr or inv_expr:
+        pre, post, inv = pre_expr, post_expr, inv_expr
+    else:
+        pre = [c for c in (spec.get("preconditions") or []) if isinstance(c, str)]
+        post = [c for c in (spec.get("postconditions") or []) if isinstance(c, str)]
+        inv = [c for c in (spec.get("invariants") or []) if isinstance(c, str)]
 
     # 可编译子句的绑定上下文（R1b 签名感知）：
     # - signature_params 非 None（签名已知，含 [] = 0 参）：{r} ∪ 签名参数名

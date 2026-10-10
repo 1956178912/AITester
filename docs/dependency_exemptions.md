@@ -12,7 +12,7 @@
 > - 每季度复审一次本表，过期未复审的条目在 CHANGELOG 标注"豁免过期"。
 >
 > **复审触发机制（2026-10 确认）**：
-> 1. **CI 自动门禁**：`scripts/check_dependency_exemptions.py`（经
+> 1. **CI 自动门禁**：`scripts/gates/check_dependency_exemptions.py`（经
 >    `.github/workflows/ci.yml` 在每次 PR / 推送时运行）把 `ci.yml` 实际生效的
 >    `--ignore-vuln` 列表与本表"当前豁免"节逐条对照——未登记的豁免阻断合并
 >    （退出码 1）；已登记但"复审期限"列缺失 / 空白时输出 warning。

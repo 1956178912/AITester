@@ -400,7 +400,7 @@ EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:custom \
     python main.py run examples/calculator.py
 
 # Docker vs venv 执行时间对比（实验环境选择依据）
-python scripts/compare_executor_modes.py \
+python scripts/tools/compare_executor_modes.py \
     --tasks examples/calculator.py examples/string_utils.py
 ```
 

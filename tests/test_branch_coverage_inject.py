@@ -136,7 +136,11 @@ class TestMeasureBranchCoverage:
             assert measure_branch_coverage(str(target), "def test(): pass") is None
 
     def test_subprocess_failure_returns_none(self, tmp_path):
-        """子进程 rc != 0 且无 result 文件 → None。"""
+        """子进程 rc != 0 且无 result 文件 → None。
+
+        2026-10-09：测量改走 `run_with_timeout`（进程组终止 + 有界收口，
+        修复孙进程持管道导致的批后挂死），故打桩目标随之改为该函数。
+        """
         from unittest.mock import MagicMock, patch
 
         target = tmp_path / "mod.py"
@@ -144,17 +148,34 @@ class TestMeasureBranchCoverage:
         proc = MagicMock()
         proc.returncode = 1
         proc.stderr = "boom"
-        with patch("subprocess.run", return_value=proc):
+        proc.timed_out = False
+        with patch("src.tools.branch_coverage_inject.run_with_timeout", return_value=proc):
             assert measure_branch_coverage(str(target), "def test(): pass") is None
 
     def test_timeout_returns_none(self, tmp_path):
-        """子进程超时 → TimeoutExpired → None。"""
+        """子进程超时（`timed_out=True`）→ None。"""
+        from unittest.mock import MagicMock, patch
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        proc = MagicMock()
+        proc.timed_out = True
+        proc.returncode = -9
+        proc.stderr = ""
+        with patch("src.tools.branch_coverage_inject.run_with_timeout", return_value=proc):
+            assert measure_branch_coverage(str(target), "def test(): pass") is None
+
+    def test_timeout_expired_exception_still_degrades(self, tmp_path):
+        """防御保留：若底层仍抛 TimeoutExpired，行为不变（保守 None）。"""
         import subprocess
         from unittest.mock import patch
 
         target = tmp_path / "mod.py"
         target.write_text("def f():\n    return 1\n", encoding="utf-8")
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="x", timeout=60)):
+        with patch(
+            "src.tools.branch_coverage_inject.run_with_timeout",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=60),
+        ):
             assert measure_branch_coverage(str(target), "def test(): pass") is None
 
     def test_unexpected_exception_returns_none(self, tmp_path):
@@ -163,5 +184,5 @@ class TestMeasureBranchCoverage:
 
         target = tmp_path / "mod.py"
         target.write_text("def f():\n    return 1\n", encoding="utf-8")
-        with patch("subprocess.run", side_effect=RuntimeError("boom")):
+        with patch("src.tools.branch_coverage_inject.run_with_timeout", side_effect=RuntimeError("boom")):
             assert measure_branch_coverage(str(target), "def test(): pass") is None

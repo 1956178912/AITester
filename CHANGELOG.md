@@ -1,10 +1,217 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-08（R2 落地批次：跨文件测量修复〔第三起伪影 R27〕+ 统计门泛化/脏树断言/spec_smt 受限 eval 收紧 + R4 工件入库与修正口径 v2〔ADR-0029〕+ 对外叙事对齐；此前 2026-10-07 修复引擎批次 XIV：外部报告净新增收割——FL Top-k 约束观测门 + Self-Repair Trap 观测器〔均观测层，ADR-0028〕+ Frame Lifetime Trace 设计输入 + BASELINE 测试链勘误；批次 XIII 见下方条目）
+> Last updated: 2026-10-09（R5 审查修订落地批次：2026 前沿修订版审查 + C-08 白名单默认开 + C-01 叙事收口 + LLM 端点收拢至 DeepSeek V4.1 Flash 官方 API；此前 R4 审查落地批次：逻辑驱动反例精化闭环〔S1 spec_smt 后件一致性 + spec_refine.py CEGIR〕+ nodes.py 续拆 patch_io.py〔S4〕+ E4 污染防控预注册增补〔S3〕+ llm_configs schema 守卫〔S9〕+ MAS 技能库编译设计文档〔S7〕；再此前 2026-10-09 R3 落地批次：spec_smt 去裸 eval〔S8〕+ nodes.py 三簇拆分〔S7〕+ PGH003 门禁重启用；再此前 2026-10-08 R2 落地批次）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-09 D1 修复 + CI 三红清零批次
+
+### Fixed
+
+- **D1：Planner 约 30–39% 任务回退空计划（`test_cases=[]`）——根因是 JSON 解析层**。
+  零 LLM 成本直读 4,041 个 LLM 缓存响应的原始文本，对 621 个 Planner 形态响应做结构裁决：
+  **188 个（30.3%）无法 `json.loads`**，错误分布为 `Expecting ',' delimiter` 94
+  （LLM 在 JSON 值里写 Python 表达式如 `{"key":"a"*10000}`、`inf`）/
+  `Extra data` 57（多个 JSON 对象背靠背拼接）/ `Expecting value` 35
+  （未加引号 Python 字面量如 `"expected_output":None`）/ `Expecting property name` 2
+  （元组作字典键 `{(0,1):5}`）。该异常经 `nodes.py:269` 的
+  `except json.JSONDecodeError` 走到 `_get_default_test_plan`，使 Generator 在约三成
+  任务上拿不到任何测试计划。
+  **修复**（`src/utils/helpers.py`，纯语法级、绝不改语义、**不使用 eval**）：
+  `_repair_json_text`（尾随逗号 + 值位置 Python 字面量）、
+  `_quote_python_expressions`（值位置纯字面量表达式，**自写受限求值器**只允许
+  `Constant`/`BinOp(Mult)`/`BinOp(Add)`，杜绝 `Call`/`Attribute`/`Name`；超长**截断**
+  而非丢弃整条计划）、`_quote_tuple_keys_once`（键位置数值元组，**字符串感知**——
+  按字符串边界切分，防误改 `"返回 {(0,0): 0}"` 这类描述文本）、
+  `_first_balanced_object`（多对象拼接取首个）、`_repair_json_bounded`
+  （有界迭代 ≤4 轮处理复合损坏）。
+  **实测回收**：可解析且含 `function_name` **427/621（68.8%）→ 555/621（89.4%），
+  +20.6pp（净回收 128 条）**。
+  **消融实测（受控臂，冷缓存 seed42 n=87）**：空计划回退 **34/87（39.1%）→ 22/87
+  （25.3%）**，但 **detection 无统计可辨变化**（6.9%→8.0%，McNemar p=1.0000，
+  贝叶斯 δ=−0.011 CI[−0.078,+0.053]）——即 **"空计划"不是 never-red 通道的主因**
+  （假说证否）；副产物为正：**repair 15→20 例、false_fix 75.9%→70.1%**。
+  新增 32 个单元测试（含"可执行构造必须被拒绝"与"字符串内容不得被修改"两类安全锁定）。
+- **CI 三红灯清零**（原审查报告 §7 的 P0-1/P0-2/P0-7）：
+  ① `ruff format --check .` **exit 0**（格式化 `tests/test_config_generator.py`、
+  `tests/test_whitelist_provider_coverage.py`）；
+  ② `check_zero_assert_tests.py` **exit 0**（`tests/test_r15_dirty_assert.py` 两个
+  "断言不抛错"用例补**显式断言**——捕获异常并断言为 `None`，把"必须不抛"变成可检出信号，
+  非削弱语义）；
+  ③ `pip-audit -r requirements.lock` **exit 0**（`No known vulnerabilities found, 5 ignored`）——
+  5 包按项目豁免政策**升级到修复版**（政策要求"有修复版即升级"而非登记豁免）：
+  PyJWT 2.13.0→**2.15.1**、urllib3 2.7.0→**2.8.0**、langgraph-sdk 0.4.2→**0.4.6**、
+  multidict 6.7.1→**6.9.1**（原拟 7.0.0 与 `aiohttp<7.0` 冲突，改取 6.9.1 修复版且满足上界）、
+  oauthlib 3.3.1→**4.0.0**（跨大版本，已回归）。
+  顶层与传递层审计**同时为绿**，且未新增任何 `--ignore-vuln` 豁免。
+
+### Changed
+
+- **移除依赖 `zhipuai`**（环境 + `requirements.lock`）。**理由**：`zhipuai 2.1.5.20250825`
+  硬钉 `pyjwt>=2.8.0,<2.9.0`，与 PyJWT 修复版（≥2.14）**不可同时满足**，且 zhipuai
+  已是 PyPI 最新版（无放宽约束的新版）；而证据表明其为**冗余依赖**——① 全仓**零代码
+  import**（仅 `dependency.py` 白名单与 `llm_client.py` 域名正则出现该字符串）；
+  ② `pip show` 的 `Required-by` **为空**；③ **不在 `requirements.txt`**（lock_sync
+  守卫原本已对其报 warning）；④ 项目智谱端点走 **`zai-sdk`**（`pyproject.toml` 显式声明，
+  `llm_client.py` 用 `from zai import ZhipuAiClient`）。其 `Authlib`/`CacheControl`/
+  `cryptography` 子树随之失依赖。`pip check` 仅剩既有的
+  `z3-solver not supported on this platform`（与本变更无关）。
+  **⚠️ 若存在未入库的 zhipuai 用途，须改回并登记豁免 + 记录 CVE 接受理由。**
+- **全量回归**：`5107 passed / 3 skipped / 0 failed`；ruff check / ruff format / mypy
+  全绿；10 个守卫脚本（env_budget / bilingual / baseline / baseline_numbers /
+  artifacts_tracked / lock_sync / dependency_exemptions / state_contract / tool_versions /
+  credential_scrub）全部 exit 0。
+
+## [Unreleased] — 2026-10-09 R5 审查修订落地批次（2026 前沿修订版审查 + P0 执行 + LLM 端点收拢）
+
+> 承接 2026-10-09 修订版审查报告（结合 2026 年前沿研究；报告原文
+> `docs/review/review_2026_10_09_revision.md` 已随 2026-10-09 清理批次删除，
+> 新增 2026 来源统一标注 [待核验]）：
+> - **C-08（P0 安全·供应链）包名白名单默认开**：`src/tools/dependency.py::suggest_package_names`
+>   的 `PIP_PACKAGE_WHITELIST_ENABLE` 默认值 `false` → `true`——Slopsquatting 已被
+>   USENIX Security 2025 量化为确认攻击（19.7% 代码样本含幻觉包名、205,474 唯一
+>   伪造包名 [待核验]），默认关不再可接受；显式设 `false` 退回历史放行口径
+>   （仅可信环境调试）。同步更新：`tests/test_dependency_branches.py`
+>   （默认开口径 + 显式关复现历史口径两用例）、`tests/test_executor_sandbox.py`
+>   （新增 `test_default_enforced_rejects_unknown`）、`docs/threat_model.md` /
+>   `.en.md`（A2 行状态"默认关"→"默认开（C-08 2026-10-09）"）、
+>   `README.md`（配置表默认值 + 安全警告节说明）。27 用例实测全绿。
+>   遗留待办：确认 `_PIP_PACKAGE_WHITELIST` 内置 ~40 包清单覆盖
+>   `requirements.lock` 的 9 个 provider 相关包，避免默认开后正常依赖被误拒
+>   （与 C-03 批次一并验证）。
+> - **C-01（P0 叙事收口）"为什么不用多智能体"段落**：`README.md` /
+>   `README.en.md` 顶部新增——引用 CANDOR（ICST 2026，one-shot 88.35% vs
+>   多智能体 35.92%）与 BOAD（ICLR 2026，bandit 自动搜索层级超越大单模型）
+>   [均待核验]，将项目 −28pp 结果重新语境化为**手工设计编排的负面证据**
+>   （而非多智能体范式的负面证据），转正判据维持 ADR-0016（预算对照下复现
+>   正向 detection 增量）。
+> - **LLM 端点收拢（仅保留 DeepSeek V4.1 Flash 官方 API）**：`llm_configs.json`
+>   17 条 → 1 条（`deepseek-v4.1-flash`，provider `deepseek`，
+>   `https://api.deepseek.com/v1`）；`.env` 删除 Agnes 国际/国内 + BigModel 备用
+>   全部 API Key 与 base_url（明文 Key 已按 C-02 轮换处理）；`config.local.example`
+>   / `.env.local.template` / `config.py` 注释 / `src/config/config_generator.py`
+>   （`COMMON_MODELS` 仅保留 DeepSeek；`PROVIDER_TEMPLATES` 保留全量 provider
+>   注册表以维持 schema 校验与 `credential_scrub` 联动）/ `README` 默认模型名
+>   同步；`tests/test_config_generator.py` 断言改为"仅 DeepSeek"口径；
+>   `scripts/check_llm_configs_schema.py` 通过（1 条）。
+> - **预注册增补（E2'/E1b 设计，落盘于修订版报告 §9，`docs/preregistration.md`
+>   正文条目待 C-03 批次并入）**：E2' Gemini 2.5 Pro one-shot 对照臂（C-09）；
+>   E1b 约束学习 recall/precision ≥ 0.8 判据（C-04b，对齐 Centaur ICSE 2026
+>   [待核验]）。
+>
+> 验证：`pytest tests/test_dependency_branches.py tests/test_executor_sandbox.py`
+> 27 passed；`tests/test_config_generator.py` 24 passed；`scripts/check_llm_configs_schema.py`
+> 1 条通过；`ruff check` 改动文件零警告。
+>
+> 2026 新增引用核验状态：本报告引用的 2026 年新文献（CANDOR / BOAD / Centaur /
+> TDFlow / ADI / PAGENT / AdverTest / JavaOracle / TestAgent / Slopsquatting /
+> SWE-Bench Illusion 等）统一标注 **[待核验]**——投稿 / 对外引用前必须逐条
+> 打开 arXiv / DOI 一手核验并补全 URL/DOI（核验清单原载于已删除的
+> `docs/review/review_2026_10_09_revision.md` §12.1，见上方承接说明）。
+
+## [Unreleased] — 2026-10-09 R4 审查落地批次（逻辑驱动反例精化闭环 + 模块化续拆 + 数据质量/污染防控加固）
+
+> 承接第四轮系统审查 R4 可落地项（全部默认关、零 LLM
+> 成本、离线单测验证；默认行为不变——新增能力均为默认关开关或独立可调用模块）：
+> - **S1（核心）逻辑驱动反例精化闭环，补齐"验证器给反例 → LLM 只改契约 → 再验证"
+>   缺失环**：
+>   ① `src/specs/spec_smt.py` 新增 `check_postcondition_consistency`（后件约束系统
+>   UNSAT=自相矛盾判定，前件 SMT 见证口径对偶）+ `check_spec_consistency`
+>   （前件空洞 + 后件矛盾统一入口）；
+>   ② 新增 `src/specs/spec_refine.py`：`refine_spec_with_counterexample`
+>   （CEGIR，counterexample-guided refinement）——检测规约矛盾 → 构造反例 prompt
+>   （被测代码 + 矛盾说明）→ 回灌 LLM **只修正契约（不改代码）** → SMT 复验，
+>   预算化迭代（`SPEC_REFINE_MAX_ROUNDS` 默认 2、上限 5）；LLM 返回非 JSON /
+>   无有效子句 / 调用异常 → 保守停止（保留当前 spec，不臆造、不静默覆盖，
+>   与"宁可无见证，不产坏约束"同口径）。`SPEC_REFINE_ENABLE` 默认 false，
+>   LLM 回调可注入（测试 mock，零真实 LLM）；
+>   ③ 独立可调用能力（可观测、可测试），**未接入主链路**——Planner/Generator
+>   调用点接入属后续批次（需先定"在哪一步消费精化结果、如何进 M1 指标"）；
+>   依据：Balestra et al. ICST 2026（LLM 反例丢弃 11.68% 无效断言、规格推断
+>   precision +7pp）与 SpecPylot（icontract+CrossHair 预算化反例精化）共识——
+>   把 H1（spec_compile_rate 灰区 E2=0.212）从"悬置"推进到"可验证"的唯一机制路径；
+> - **S4（nodes.py 续拆，模块化）**：补丁应用安全核心（路径白名单 + 原子写盘 +
+>   多候选选择 + 安全写盘 + 快照回滚六函数及其常量）拆出至新增
+>   `src/graph/patch_io.py`（478 行）；`src/graph/nodes.py` 2313→1909 行
+>   （R3 三簇拆分 3593→2313 的续完，四簇共 3593→1909，满足单文件 <800 行目标）；
+>   纯移动 + re-export，历史导入路径（`from src.graph.nodes import _safe_write_patch`
+>   等）逐字节不变，零行为变化；`_patch_applier_node` 编排节点留 nodes.py
+>   （依赖 `_MAX_REPAIR_HISTORY` 且与 debugger/evidence/rollback 协议深度交互）；
+>   连带更新 3 个测试文件 mock 口径（nodes→patch_io 命名空间）；
+> - **S3（E4 污染防控预注册增补，双语）**：`docs/preregistration.md` +
+>   `.en.md` 新增 E4 污染防控小节（预注册时点早于任何 E4 正式数据，git 可核）：
+>   ① 污染风险声明——SWE-bench 系基准系统性污染证据（Aleithan 2024：94% 实例早于
+>   训练截止；Liang 2025：凭 issue 猜中 buggy 路径 76%；Wang/PatchDiff 2025：
+>   至多 6.4pp 表观增益为幻影；Yu/UTBoost 2025：修正 24% leaderboard 条目）+
+>   QuixBugs 经典教学基准不可假设为零污染；② 强制披露口径——模型训练截止 vs
+>   实例时间 / 靶点错位声明 / PatchDiff 式差分测试复核 / 可复现性客观字段，
+>   四字段入 E4 报告；③ 判定增强——污染披露小节缺失 → E4 报告视为不完整、
+>   不得对外引用（硬约束）；④ 预算影响——离线字段记录 + 正结果行抽样差分重跑，
+>   ≈0.01M token，不改变 E4 预算口径；
+> - **S9（llm_configs.json schema 守卫，数据质量）**：`src/config/config_generator.py`
+>   新增 `validate_llm_configs`（provider 拼写 / required_api_key 漂移 / 模型名重复
+>   等违例清单）；新增 `scripts/check_llm_configs_schema.py`（纯 stdlib 快检、无网络）
+>   并接入 `.github/workflows/ci.yml`（Check lock sync 之后）；此前该模型路由目录
+>   （17 模型，provider→模型清单）无任何 schema 守卫，手改会静默导致路由歧义或
+>   凭证注入错误；
+> - **S7（MAS 技能库编译路线，设计文档）**：新增 `docs/design/mas_compilation.md`
+>   （探索性 Proposed，不落代码）——多智能体编排净负 −28pp（C2，已获 MAST
+>   NeurIPS 2025 + Nature MI 2026 外部背书）的"建设性出路"：把 Planner/
+>   Debugger/PatchApplier 的可复用决策知识离线蒸馏为单智能体技能库，推理期按
+>   任务检索技能串行执行（compilation advantage：−53.7% tokens / −49.5%
+>   latency，精度 ±0，二手聚合须核原文）；三阶段编译方案 + 接合点 + 风险
+>   停止规则；任何实现批次须另立 ADR 并预注册判定阈值；
+> - **确认已闭环（R4 报告核销）**：S2 repair 口径矩阵
+>   （`docs/design/repair_caliber_matrix.md` 已完备，唯一对外引用入口）、
+>   S5 依赖口径（make build-check + test_packaging + check_lock_sync 三重守卫）、
+>   S6 统计加载器扩 realbugs（R17 已落 `_SUPPORTED_DATASETS={synthetic,quixbugs}`）、
+>   S10 测试归并（批号文件均有主题 docstring，物理归并反破坏批次历史，维持现状）；
+> - **新增测试**：`tests/test_spec_postconsistency.py`（12 用例）+
+>   `tests/test_spec_refine.py`（10 用例）+ `tests/test_llm_configs_schema.py`
+>   （9 用例），净 +31 用例（spec_smt_more_branches 等 12 用例已计入 R3 的
+>   +279）；
+> 验证：全量 pytest 收集 5015（本机 --basetemp 隔离 5014 passed + 1 环境类
+> failed〔test_repo_baseline_zero_findings：审计扫描基线被上一会话残留
+> .pytest_tmp/docupdate 注入工件污染，gitignore 区非代码缺陷，清理后复跑全绿〕）；
+> mypy src/ config.py 119 源文件 0 错误（+2 = spec_refine.py / patch_io.py）；
+> ruff 全绿；env 预算 170→172（SPEC_REFINE_ENABLE / SPEC_REFINE_MAX_ROUNDS
+> 经 check_env_budget.py 自动登记，默认关零变化）；`docs/env_budget.yaml` 与
+> `docs/preregistration.{md,en.md}` 随批同步（工作树）；BASELINE/README 本批收口。
+
+## [Unreleased] — 2026-10-09 R3 评审落地批次（spec_smt 去裸 eval + nodes.py 三簇拆分 + PGH003 门禁重启用）
+
+> 承接 R3 系统审查报告落地项（全部零 LLM、离线
+> 单测/回放验证；默认行为不变）：
+> - **S8（spec_smt 去裸 eval）**：`src/specs/spec_smt.py` 彻底消除 bandit S307
+>   裸 eval 面——受限 AST 求值器 `_safe_eval` / `_safe_eval_clause`（节点白名单
+>   Constant/Name/BoolOp/UnaryOp/Compare/BinOp + Call 白名单名）；语义与旧 eval
+>   逐字一致（19 用例对比）；7 类越界构造保守拦截；
+> - **S8b（收窄 blanket ignore）**：`src/` 内 6 处 blanket `type: ignore` 收窄
+>   （embedding_utils 4 处可选 embedding 后端 + type_repair 2 处 mypy.api/pyright，
+>   mypy overrides 承接 import-not-found）；
+> - **S7（nodes.py 三簇拆分）**：`src/graph/nodes.py` 3593→~2200 行，拆出
+>   `trace_reward.py`（6 纯函数轨迹/奖励/迭代策略）/ `flags.py`（开关读取函数簇）/
+>   `agents_cache.py`（Executor/通用 Agent 实例复用缓存）/ `debugger.py`
+>   （_diagnosis_node/_debugger_node）四独立模块；nodes.py 全部 re-export，
+>   历史导入路径与 workflow.py 逐字节不变（R4 批次续完 S4：patch_io.py 拆分至
+>   1909 行）；
+> - **PGH003 门禁重启用**：pyproject 移除全局 ignore，ruff PGH003（blind
+>   type-ignore）门禁恢复；
+> - **S11b（笔误修复）**：`spec_ir_v2._ALLOWED_ATTRS` 误含 `len` 函数名 →
+>   修正为 `{value, real, imag}`；
+> - **S6（数据更正）**：`llm_configs.json` 9 处 provider_description 更正为
+>   provider 级描述（第三方模型经百炼 OpenAI 兼容端点路由，非复制粘贴错——
+>   已修正 R3 报告原表述）；
+> - **新增 9 个测试文件**（分支覆盖）：test_debugger_node_branches（638 行）/
+>   test_patch_evidence / test_patch_test_hacking / test_embedding_utils_more_branches /
+>   test_rag_retriever_more_branches / test_spec_smt_more_branches /
+>   test_type_repair_more_branches / test_testless_validation /
+>   test_control_flow_branches 等，测试链 4717→4996（+279）；
+> - **`.gitignore` 新增 `.pytest_tmp/`**（WorkBuddy TMPDIR 沙箱产物）；
+> 验证：mypy 全仓 114+ 文件 0 错误；ruff check 全仓通过；spec 85 /
+> graph 226 / embedding 118 相关测试全过。
 
 ## [Unreleased] — 2026-10-08 R2 落地批次（测量伪影第三起根修 + 存量批次入库 + 对外口径 v2 收口）
 
@@ -2042,9 +2249,8 @@ agnes 价目 + CITATION 真实作者。
 > - **P0 密钥守卫自锁修复**：`.git-hooks/check_secret_leak.sh` 头部注释含
 >   `sk-` 真实前缀样例，守卫扫描 untracked 文件时扫到**自身**→
 >   任何提交均被阻断（`sh check_secret_leak.sh` 实测 exit=1）。修复：
->   注释改为占位符表述 + 本地审查报告（`REVIEW_*.md` /
->   `review_infra_hygiene_report.md` 等，含取证用 `sk-` 截断样例、untracked、
->   全仓零引用）加入 `.gitignore`。守卫现 exit=0。
+>   注释改为占位符表述 + 本地审查报告（`review_infra_hygiene_report.md` 等，
+>   含取证用 `sk-` 截断样例、untracked、全仓零引用）加入 `.gitignore`。守卫现 exit=0。
 > - **真实缺陷 ①（rag 材料源误扫）**：`_iter_candidate_docs` 在
 >   `RAG_PERSIST_PATH` 为空时执行 `glob(os.path.join("", "*.json"))` =
 >   `glob("*.json")`——在当前工作目录误扫一切 JSON（coverage/benchmark

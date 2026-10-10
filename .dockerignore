@@ -17,6 +17,14 @@ venv_old
 .env
 .env.*
 config.local.example
+# R5 审查（2026-10-09，P0 SEC-01）：上面三个模式均不带路径分隔符，Docker 的
+# patternmatcher 对无分隔符模式只匹配构建上下文**根层级**，`src/.env.local`
+# 一类嵌套副本不在其中——实测工作树内 `src/.env.local`（2680 B，含真实形态
+# LLM_N_API_KEY）即属此类漏网。此处显式补 `**/` 前缀形态覆盖任意深度，
+# 与根级模式并存（防止未来 Docker 语义变更时反向失效）。
+**/.env
+**/.env.*
+**/config.local.example
 
 # ── 私有隔离目录（论文素材 / 实验原始数据，永不外泄）─────────────────────────
 .private

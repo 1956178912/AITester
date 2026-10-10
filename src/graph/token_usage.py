@@ -16,6 +16,7 @@ from src.budget.token_usage import (
     attach_usage,
     get_usage,
     global_usage,
+    record_cache_hit_usage,
     record_usage,
     reset,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "attach_usage",
     "get_usage",
     "global_usage",
+    "record_cache_hit_usage",
     "record_usage",
     "reset",
 ]

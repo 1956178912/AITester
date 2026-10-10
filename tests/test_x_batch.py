@@ -29,7 +29,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-_ENV_BUDGET_SCRIPT = PROJECT_ROOT / "scripts" / "check_env_budget.py"
+_ENV_BUDGET_SCRIPT = PROJECT_ROOT / "scripts" / "gates" / "check_env_budget.py"
 
 
 def _load_env_budget_module():

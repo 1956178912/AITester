@@ -142,15 +142,25 @@ class TestSuggestPackageNames:
         assert suggest_package_names({"cv2"}) == ["opencv-python-headless"]
         assert suggest_package_names({"yaml"}) == ["pyyaml"]
 
-    def test_unknown_module_identity(self):
-        # 未知模块默认"模块名即包名"
+    def test_unknown_module_identity(self, monkeypatch):
+        # 未知模块"模块名即包名"——历史口径（白名单关）。
+        # C-08（2026-10-09）默认开后，未知包名被守卫拒绝；本用例
+        # 显式关闭白名单复现历史映射语义，默认口径见
+        # tests/test_dependency_branches.py::test_default_now_enforces_builtin_whitelist
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST_ENABLE", "false")
         assert suggest_package_names({"somepkg"}) == ["somepkg"]
 
-    def test_stdlib_excluded(self):
-        # 标准库模块不应产生安装建议
+    def test_stdlib_excluded(self, monkeypatch):
+        # 标准库模块不应产生安装建议（白名单开/关口径一致——std 模块
+        # 根本不在映射表内，守卫前即被排除）
         assert suggest_package_names({"os"}) == []
 
-    def test_sorted_dedup(self):
+    def test_sorted_dedup(self, monkeypatch):
+        # 排序去重为守卫前行为；C-08 默认开后未知包名被拒，
+        # 本用例显式关闭白名单验证纯映射 + 排序 + 去重语义
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST_ENABLE", "false")
         result = suggest_package_names({"zeta", "alpha"})
         assert result == ["alpha", "zeta"]
 

@@ -17,10 +17,22 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 WORKSHEET = PROJECT_ROOT / "experiments" / "results" / "main_batch" / "e7_review_worksheet.md"
-SURVEY = (PROJECT_ROOT / "docs" / "Python工程化前沿基线（2024–2026）.md").read_text(encoding="utf-8")
+
+# 2026-10-09 清理批次：survey 文档与根目录 5 份 *_BASELINE_2023-2026.md 一并
+# 删除（scripts/gates/check_bilingual_docs.py 的 _EXEMPT_NO_EN 豁免条目亦同步移除）。
+# 本文件原先在**模块级**执行 read_text()——文档一旦缺失，pytest 会在
+# **收集阶段**即抛 FileNotFoundError，导致整个测试套件无法运行（实测：
+# 全量 pytest 在 tests/test_aq_batch.py 处 Interrupted: 1 error during
+# collection）。改为惰性读取 + 缺失即空串，配合下方 skip：
+#   - 不再阻断收集；
+#   - 文档若回归，两条断言自动恢复生效（不留死代码）。
+_SURVEY_PATH = PROJECT_ROOT / "docs" / "Python工程化前沿基线（2024–2026）.md"
+SURVEY = _SURVEY_PATH.read_text(encoding="utf-8") if _SURVEY_PATH.is_file() else ""
 
 _E7_ARTIFACTS = (
     "experiments/results/main_batch/e7_repair_sample_candidates.md",
@@ -29,10 +41,10 @@ _E7_ARTIFACTS = (
 
 
 def _load_artifacts_guard() -> Any:
-    """以 importlib 加载 scripts/check_artifacts_tracked.py（scripts 非包）。"""
+    """以 importlib 加载 scripts/gates/check_artifacts_tracked.py（scripts 非包）。"""
     spec = importlib.util.spec_from_file_location(
         "check_artifacts_tracked_under_test",
-        PROJECT_ROOT / "scripts" / "check_artifacts_tracked.py",
+        PROJECT_ROOT / "scripts" / "gates" / "check_artifacts_tracked.py",
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -97,12 +109,25 @@ class TestArtifactsManifestE7:
 
 
 class TestSurveyPackagingErrata:
-    """AQ2/AQ4：survey 打包陈旧声称勘误（PEP 621 系 O9 已达成项）。"""
+    """AQ2/AQ4：survey 打包陈旧声称勘误（PEP 621 系 O9 已达成项）。
+
+    前提说明：本组断言以 survey 文档为载体。该文档已于 2026-10-09 清理批次
+    删除，故两条用例在文档缺失时 **skip**（而非 fail / 而非阻断收集）。
+    """
+
+    def _require_survey(self) -> None:
+        """survey 文档缺失时显式跳过（清理批次已删除该文件，见模块级说明）。"""
+        if not SURVEY:
+            pytest.skip(
+                "survey 文档已随 2026-10-09 清理批次删除，勘误断言无载体；"
+                "打包事实本身由 tests/test_packaging.py 与 CI 门禁继续覆盖"
+            )
 
     def test_stale_packaging_claims_absent(self) -> None:
         """三处过期 ❌ 结论不得残留（无 [project] / 无 [build-system] /
         完全没有 license）——勘误文本对旧结论的**引用**不算残留，
         故断言锚定旧句的原始表格语境（❌ 前缀 / 完整旧句）。"""
+        self._require_survey()
         assert "无 `[project]`、无 `[build-system]`" not in SURVEY
         assert "元数据全在 `setup.py`（name/version/python_requires" not in SURVEY
         assert "❌ 完全没有 license 声明" not in SURVEY
@@ -113,6 +138,7 @@ class TestSurveyPackagingErrata:
         差距→AS 批闭环后的现状）。AS 批（同日）把 license 行推进为
         "已达成"，本测试的 AQ 时代断言随状态演进而更新（同 AO 改 cap
         常数时同步 test_am_batch 先例）。"""
+        self._require_survey()
         assert "已达成（O9 批，2026-09-29" in SURVEY
         assert "AQ 批 2026-10-07 勘误" in SURVEY
         assert "已达成（AS 批，2026-10-07）" in SURVEY

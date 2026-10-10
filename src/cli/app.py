@@ -884,7 +884,7 @@ def _print_missing_source(loader: Any, tasks: list[Any]) -> None:
             if len(missing_source) > 20:
                 warning_msg(f"  …（其余 {len(missing_source) - 20} 个略）")
             warning_msg(
-                "  补充方式：运行 scripts/export_swe_bench_source.py 按 base_commit 自动导出，"
+                "  补充方式：运行 scripts/tools/export_swe_bench_source.py 按 base_commit 自动导出，"
                 "再经 SWE_BENCH_ENRICHMENT 环境变量加载"
             )
         else:

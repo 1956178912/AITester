@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import re
@@ -90,6 +91,248 @@ def extract_code_block(text: str, language: str | None = None) -> str:
     return text.strip()
 
 
+def _repair_json_text(json_str: str) -> str:
+    """D1 修复层（2026-10-09 审查报告 §11.1b D1）：JSON 语法级保守修复。
+
+    背景（实测证据）：对 4,041 个 LLM 缓存响应做结构裁决，**188/621（30%）**
+    的 Planner 形态响应无法 ``json.loads``，错误分布为：
+    - 94 例 ``Expecting ',' delimiter`` —— LLM 在 JSON 值里写 **Python 表达式**
+      （如 ``"input_args":{"key":"a"*10000}``、``inf``）；
+    - 57 例 ``Extra data`` —— **多个 JSON 对象背靠背拼接**；
+    - 35 例 ``Expecting value`` —— **未加引号的 Python 字面量**
+      （``"expected_output":None``、未经转义的裸标识符）。
+    该失败经 `nodes.py:269` 的 ``except json.JSONDecodeError`` 走到
+    ``_get_default_test_plan``（test_cases=[]），使 Generator 在约 30% 任务上
+    **拿不到任何测试计划**——这是 never-red 通道（worker 报告 86/240）的
+    主因候选（D1）。
+
+    修复策略（**保守、只做语法级、绝不改语义**）：
+    1. 移除尾随逗号（``,]`` / ``,}``）；
+    2. 未加引号的 Python 字面量 → JSON 字面量（``: None`` → ``: null`` 等，
+       仅在**值位置**，且用负向后瞻避免命中字符串内部）；
+    3. 若整体解析失败但含**多个顶层对象**（{...}{...}），用括号平衡法
+       取**第一个完整对象**（LLM 常把多个任务的计划连写）。
+
+    不做的事（刻意）：不尝试把 ``"a"*10000`` 这类**表达式**求值为字面量——
+    那需要 eval，既有注入面又可能把 LLM 的表达式意图猜错；此类样本保持
+    原样交给既有降级链（诚实失败优于静默错误修复）。
+
+    Args:
+        json_str: 已做 markdown 剥离/括号平衡提取后的候选 JSON 文本。
+
+    Returns:
+        修复后的文本（可能仍不可解析，由调用方继续降级）。
+    """
+    s = json_str
+    # 1) 尾随逗号
+    s = re.sub(r",(\s*[\]}])", r"\1", s)
+    # 2) 值位置的未加引号 Python 字面量（负向后瞻排除字符串内部：
+    #    仅当前置字符是 : [ , 或空白时才替换）
+    for py_lit, json_lit in (
+        ("None", "null"),
+        ("True", "true"),
+        ("False", "false"),
+        ("Infinity", "1e999"),
+        ("NaN", "null"),
+    ):
+        s = re.sub(rf"(?<=[:\s,\[]){py_lit}(?=\s*[,}}\]])", json_lit, s)
+    return s
+
+
+def _first_balanced_object(text: str) -> str | None:
+    """取文本中**第一个**括号平衡的 ``{...}`` 片段（应对多对象拼接）。"""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def _quote_tuple_keys_once(s: str) -> tuple[str, bool]:
+    """把 JSON 对象**键位置**的 Python 元组字面量加引号。
+
+    D1 残余主因之一（实测）：LLM 用元组作字典键，如
+    ``{"length_by_edge":{(0,1):5,(1,0):5}}`` —— Python 合法、JSON 非法
+    （解析器报 ``Expecting property name enclosed in double quotes``）。
+    转换为 ``"（0,1)":5``（键变异为字符串）保留测试输入的**意图**（一组
+    带标签的边），且不改变值的类型。
+
+    仅在 ``{``/``,`` 之后（键位置）匹配，**不触碰值位置**——故形如
+    ``{"desc":"(0,1) 是边"}`` 的字符串不会被误改。
+    含字符串字面量的元组（``("a",1):2``）刻意不处理（需完整词法分析，
+    风险高于收益）。
+
+    **字符串感知（关键正确性）**：必须跳过 JSON 字符串**内部**的 ``{``/``,``
+    ——实测反例：``"n=1：单节点，返回 {"(0,0)": 0}"``（把 JSON 片段写进描述
+    文本），若不跳过就会被误改并把**本来可解析**的响应改坏。故先按字符串
+    边界切分，仅在字符串**之外**做替换。
+
+    Returns:
+        (新文本, 是否发生替换) —— 布尔值供"是否需要再试"的判断使用。
+    """
+    pat = re.compile(r"([{,]\s*)\((\s*-?\d+(?:\s*,\s*-?\d+)+)\)(\s*:)")
+
+    def _repl(m: re.Match[str]) -> str:
+        inner = m.group(2)
+        return m.group(1) + json.dumps(f"({inner})", ensure_ascii=False) + m.group(3)
+
+    # 字符串感知切分：只对"字符串之外"的片段做替换
+    segs: list[str] = []
+    buf: list[str] = []
+    in_str = False
+    esc = False
+    for ch in s:
+        if in_str:
+            buf.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+                segs.append("".join(buf))
+                buf = []
+            continue
+        if ch == '"':
+            if buf:
+                segs.append("".join(buf))
+                buf = []
+            in_str = True
+            buf.append(ch)
+        else:
+            buf.append(ch)
+    if buf:
+        segs.append("".join(buf))
+
+    changed = False
+    for i, seg in enumerate(segs):
+        if seg.startswith('"'):
+            continue  # 字符串段：跳过
+        new_seg, n = pat.subn(_repl, seg)
+        if n:
+            segs[i] = new_seg
+            changed = True
+    return "".join(segs), changed
+
+
+def _repair_json_bounded(s: str, rounds: int = 4) -> str:
+    """有界迭代修复：反复施加各类保守修复，直到可解析或用尽轮次。
+
+    单轮修复常不足以解决**复合**损坏（如"元组键 + 尾随逗号 + 未加引号
+    字面量"同时出现）；逐轮施加并在每轮后试解析，命中即停。
+    轮次上限防病态输入下的无限循环。
+    """
+    cur = s
+    for _ in range(max(1, rounds)):
+        try:
+            json.loads(cur)
+            return cur
+        except json.JSONDecodeError:
+            pass
+        nxt, changed = _quote_tuple_keys_once(cur)
+        nxt = _repair_json_text(nxt)
+        nxt = _quote_python_expressions(nxt)
+        if not changed and nxt == cur:
+            return cur
+        cur = nxt
+    return cur
+
+
+def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
+    """把 JSON 值位置上的**纯字面量 Python 表达式**替换为等值 JSON 字面量。
+
+    D1 残余主因（实测 93/188 失败样本）：LLM 在 ``input_args`` 里写
+    ``{"key":"a"*10000}``、``{"length_by_edge":{(0,1):5}}`` 这类 **Python
+    表达式/元组键** —— 语法上不是 JSON。
+
+    安全口径（**不使用 eval**）：只对匹配到的候选片段调用
+    ``ast.literal_eval``（仅接受字面量：常量/字符串/数字/容器/一元负号，
+    拒绝 Call/Attribute/Name 等一切可执行构造），并限制：
+    - 候选必须是**单行**且长度 ≤ ``max_len``（防 ReDoS/超长解析）；
+    - 求值结果必须是 ``str``（值位置的字面量只需处理字符串场景；
+      数字/容器由 JSON 自身语法覆盖，不做过度替换）；
+    - 求值异常/类型不符/超限 → 原样保留（保守失败，交既有降级链）。
+
+    覆盖形态：``"a"*10000``（字符串重复）、``"x"+y`` 中的纯字面量连接。
+    元组作**键**（``(0,1):5``）不在本函数处理范围——键位置需改写结构，
+    风险高于收益，保持既有降级（诚实失败）。
+    """
+    if '"' not in s:
+        return s
+
+    def _safe_eval(node: ast.AST, budget: int) -> Any:
+        """受限求值：只支持 常量 / 字符串重复``"a"*n`` / 字面量连接``+``。
+
+        ``ast.literal_eval`` 覆盖不了 ``"x"*3``（那是 ``BinOp`` 而非字面量），
+        故自写最小求值器：**只允许** ``Constant``、``BinOp(Mult)``（一侧为
+        字符串、另一侧为小整数）、``BinOp(Add)``。其余节点一律抛错拒绝——
+        不触达 Call/Attribute/Name/Subscript，故无任意代码执行面。
+        ``budget`` 为字符串长度上限（防 ``"a"*10**9`` 式内存放大）。
+        """
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.BinOp):
+            left = _safe_eval(node.left, budget)
+            right = _safe_eval(node.right, budget)
+            if isinstance(node.op, ast.Add) and isinstance(left, str) and isinstance(right, str):
+                out = left + right
+            elif isinstance(node.op, ast.Mult):
+                if isinstance(left, str) and isinstance(right, int) and not isinstance(right, bool):
+                    out = left * right
+                elif isinstance(right, str) and isinstance(left, int) and not isinstance(left, bool):
+                    out = right * left
+                else:
+                    raise TypeError("unsupported mult operands")
+            else:
+                raise TypeError("unsupported operator")
+            if len(out) > budget:
+                # 超预算不丢弃整条计划，而是**截断**：LLM 常写
+                # ``"a"*10000`` 之类的超长边界输入，测试语义上"一个长字符串"
+                # 已足够触发边界路径；截断保留该用例其余字段（远优于整任务
+                # 回退空计划）。截断是**保守失真**，不改类型/类别语义。
+                out = out[:budget]
+            return out
+        raise TypeError(f"unsupported node {type(node).__name__}")
+
+    def _repl(m: re.Match[str]) -> str:
+        raw = m.group(1)
+        if len(raw) > max_len or "\n" in raw:
+            return m.group(0)
+        try:
+            tree = ast.parse(raw, mode="eval")
+            val = _safe_eval(tree.body, max_len)
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            return m.group(0)
+        if not isinstance(val, str):
+            return m.group(0)
+        # 保留冒号前的原始前缀（含 ": " 与缩进），只替换表达式本体
+        prefix = m.group(0)[: m.start(1) - m.start(0)]
+        return prefix + json.dumps(val, ensure_ascii=False)
+
+    # 值位置：冒号后、由引号开头的表达式，直到遇到 , } ] 为止
+    return re.sub(r':\s*("(?:[^"\\]|\\.)*"(?:\s*\*\s*\d+|\s*\+\s*"(?:[^"\\]|\\.)*")+)', _repl, s)
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
     """
     从文本中提取 JSON 对象。
@@ -123,7 +366,43 @@ def extract_json_object(text: str) -> dict[str, Any]:
         try:
             return json.loads(json_str.strip())
         except json.JSONDecodeError:
-            pass  # 降级到正则方案
+            # D1 修复档 1：括号平衡片段先做语法级修复再试（尾随逗号 /
+            # 未加引号 Python 字面量）——实测该类占失败样本约 129/188。
+            _base = json_str.strip()
+            for _cand in (
+                _repair_json_text(_base),
+                _quote_python_expressions(_base),
+                _quote_python_expressions(_repair_json_text(_base)),
+                _repair_json_bounded(_base),
+            ):
+                if _cand == _base:
+                    continue
+                try:
+                    _obj = json.loads(_cand)
+                    if isinstance(_obj, dict):
+                        return _obj
+                except json.JSONDecodeError:
+                    continue
+            # 降级到正则方案
+
+    # D1 修复档 2：多对象背靠背拼接（实测 57/188）——取**第一个**平衡对象
+    # 并做语法修复。放在叶子方案之前：叶子方案会取到"最后一个"对象，
+    # 对"多个任务的计划连写"场景语义不符（应取首个，与 Planner 单任务契约一致）。
+    _first = _first_balanced_object(cleaned)
+    if _first is not None:
+        for cand in (
+            _first,
+            _repair_json_text(_first),
+            _quote_python_expressions(_first),
+            _quote_python_expressions(_repair_json_text(_first)),
+            _repair_json_bounded(_first),
+        ):
+            try:
+                _obj = json.loads(cand)
+                if isinstance(_obj, dict) and _obj:
+                    return _obj
+            except json.JSONDecodeError:
+                continue
 
     # 降级方案：用正则匹配最内层无嵌套的 {...}
     # 2026-09-26 优化：O(1) 记忆扫描"最后出现的叶子 JSON"（避免

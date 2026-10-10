@@ -121,6 +121,37 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   数据集——禁止静默换基准。
 - **预算**：≈ 0.3M token。
 
+### E4 污染防控（R4，2026-10-09 预注册增补，早于任何 E4 正式数据）
+
+> 背景：SWE-bench 系基准存在已被 2024–2025 文献证实的系统性训练数据污染。
+> 本增补把"污染防控"从隐性假设升级为预注册的**强制披露条款**，使 E4 的
+> "真实基准"结论不被污染质疑连带推翻。增补时点早于任何 E4 正式三臂数据
+> 产生（R4 阶段仅 R4 副产品单臂，非 E4），git 历史可核。
+
+- **污染风险声明（引用证据，均须在 E4 报告引用章节原文标注 DOI/URL）**：
+  ① Aleithan et al. 2024——原始 SWE-bench 94% 实例早于主流 LLM 训练截止，
+  高分可能部分来自直接/间接记忆而非泛化能力；② Liang et al. 2025——SOTA
+  LLM 仅凭 issue 描述猜中 buggy 文件路径达 76%（SWE-bench Verified）；
+  ③ Wang et al. 2025（PatchDiff）——差分测试显示至多 6.4pp 表观增益为
+  "幻影"（评估不健全所致）；④ Yu et al. 2025（UTBoost）——测试增强与更严
+  解析修正了 24% 的 leaderboard 条目。QuixBugs 为经典教学基准（Derrick
+  Lin 等），同样处于主流 LLM 训练语料覆盖范围，污染风险**不可假设为零**。
+- **强制披露口径（E4 报告须含独立小节）**：
+  1. **模型训练截止 vs 实例时间**：记录 E4 所用模型（deepseek-flash 等）的
+     公开训练截止日期，与 QuixBugs 实例引入时间对照，标注"潜在重叠"实例占比；
+  2. **靶点错位声明**：延续 SWE-bench Lite 0/20 的诚实披露口径——若 E4 为
+     负结果，须区分"方法无效"与"靶点错位"（函数级单文件修复 vs 仓库级任务）
+     两种解释，不得静默归因任一方向；
+  3. **差分测试复核（PatchDiff 式）**：对 E4 中 detection/resolved 为正的
+     行，抽样做"提示剔除定位线索后重跑"的差分检验——若剔除 issue/路径线索
+     后正结果显著下降，须在报告标注污染成分区间；
+  4. **可复现性**：污染披露不得依赖手工判断——以"模型截止日期 + 实例时间 +
+     差分重跑"三个客观字段入结果行或报告附录。
+- **判定增强**：原"任一臂 detection>0 ∧ resolved>0"维持不变；新增
+  "污染披露小节缺失 → E4 报告视为不完整，不得用于对外引用"的硬约束。
+- **预算影响**：污染防控为**离线字段记录 + 抽样差分重跑**，无额外 LLM 全量
+  成本（差分重跑仅在正结果行抽样，≈ 0.01M token 量级），不改变 E4 预算口径。
+
 ## E6：预算匹配四臂（编排 vs 算力归因；AL 批次预注册，执行待预算）
 
 - **动机（R4/AL7）**：R-P0-2 中 aitester 26,115 tok/任务 vs
@@ -209,7 +240,7 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   statistical_analysis.py 当前版本为准，分析代码与工件同批入库。
 - 主终点优先呈现；次要终点标注"探索性"；**不得因结果切换主终点或
   事后增删检验**。
-- 功效依据：`scripts/power_analysis.py`（基线检出 2%、检出差 10pp 需
+- 功效依据：`scripts/tools/power_analysis.py`（基线检出 2%、检出差 10pp 需
   n≈87；E2 双门若为近确定性通道消除，复核定位以通道归零为主、效应量
   估计为辅）。
 
@@ -221,7 +252,7 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
   一律**不得**使用 `--allow-dirty`（AK 勘误补注，AL1 改写为禁止语境：
   R-P0-2 当时即在该旗标口径下跑批，provenance 瑕疵已在 pooled 报告
   "AK 勘误"节登记；报告引用工件的入库由
-  `scripts/check_artifacts_tracked.py` CI 强制）；
+  `scripts/gates/check_artifacts_tracked.py` CI 强制）；
 - 复算命令逐份写进报告头（既有 R2 协议）；
 - 成本口径：$/task 由 `experiments/price_table.json` 价目表驱动（AE2），
   E1/E2/E4 报告生成前补齐对应模型价目（含来源与生效日期）。AK 补注
@@ -245,9 +276,113 @@ E6/E7 由 AL 批次（2026-10-06）增补——增补时点早于任何 E6/E7 �
 | E1 | 已执行（12/12 有效，其中 2 任务 recursion_limit 触顶无终态，E1 后置修复，见文首注记） | `experiments/results/ab1_validation_e1/`（AITESTER_PROFILE=logic，seed 42，temp 0.0，git_dirty=False，deepseek-flash，87,495 tok） | spec_compile_rate 均值=0.367（n=10/12 可测）；伴随观测：detection=20.0%（2 例均 specific_red 门确认）、repair=0.0%、false_fix=80.0% | **保留**（≥0.3） | 2026-10-07 |
 | E2+E3 | 已执行（首跑 + 迭代重跑各双种子 42/44 × 3 臂；迭代批逐位复现首跑主指标——temp 0.0 缓存命中确定性重放，本迭代为恰好一次，后续不再迭代） | 迭代批 `main_batch/benchmark_synthetic_20261007_181638.json` + `..._185941.json` + `statistical_report_e2_iter.md`；首跑 `..._161053.json` + `..._170147.json` + `statistical_report_e2.md` | 迭代终判：过红 88→31（降幅 64.8%）、抹红 28→2（降幅 92.9%）；aitester vs df δ=−0.3673 [−0.4552,−0.2785]（bayes_neg，与首跑逐位一致）；pooled detection：aitester 12.7% / plain_llm 1.7% / df 52.3%；repair 全线 0.0%；spec_compile_rate=0.212（灰区）；**FL@1 首度可测 19/53=35.8%**（gold diff 修复后）；mutation 可测 31/174 均值 0.767（保守口径）；触顶 16/174（56 上界下 df 臂失控回环仍在，如实披露） | H2a/H2b **不成立**（未归零；降幅均 ≥50% 但"恰好一次"迭代已用尽 → 按停止规则接受结果：门削减过红约 2/3、抹红约 93%）；H2c **"编排容器在检出口径下结构性劣后"结论最终确立**（ADR-0016 预写，可发表）；次要终点 repair 未破零；E3 非空率：fl 30% 可测（修复后）/mutation 18%（设计口径）/spec 91% | 2026-10-07 |
 | R4 A/B + QuixBugs 单臂（**预注册外调试豁免**，非 E4） | 已执行（R4 通道原型验证的副产品；synthetic 两臂系 **dirty 树跑批**、QuixBugs 两臂系干净树跑批） | `experiments/results/r4_batches/{r4_ab_arm_a,r4_ab_arm_b,r4_synth_arm_b2,r4_qb_arm_a,r4_qb_arm_b,loc_test_quix}`（2026-10-08 R2 入库，含 SHA256SUMS/README） | synthetic repair 8/50；QuixBugs A/B repair M1 可测口径 **37/41、36/41**（all-task 37/50、36/50） | R4 局部化约束**阴性**（A/B 无增益）；QuixBugs 单臂仅验证管道，**不构成 E4 正式执行** | 2026-10-08 |
-| E4 | 待执行 | — | — | 真实基准阶梯——2026-10-08 的 QuixBugs 复跑系 **R4 副产品单臂**（n=50、无统计报告、非 3 臂），**≠ E4 正式执行**；E4 须按上方预注册设计 3 臂 × logic 档 × 主终点 detection>0 ∧ resolved>0 + 统计报告，并先用 R17 统计门接入 quixbugs | — |
-| E6 | 待执行（前置旗标已实现，AM 批） | — | — | — | — |
+| E4 | **已执行（2026-10-09，双臂完整结算：`aitester` + `plain_llm_df`）** | `experiments/results/e6_a1_batches/e4_quixbugs_aitester/`（`benchmark_quixbugs_20261009_215514.json`） + `e4_quixbugs_plain_llm_df/`（`benchmark_quixbugs_20261009_223101.json`），各含 50 traces 与日志 | **41 缺陷程序口径：两臂 detection 均 0/41 = 0.0%**；aitester repair 35/40 = 87.5%、false_fix 2.5%、token/task 17,156、red_seen 40/41；df repair 0（无修复通道）、token/task 2,370、red_seen 41/41。**配对 McNemar（detection）：不一致对 = 0、p = 1.0000**（41/41 逐位一致）；贝叶斯 δ=+0.0000、95% CI [−0.0659, +0.0672]、P(\|δ\|≤ROPE)=0.8943 | **主终点失败**（双臂 `detection > 0` 均不成立）。**机制定案**：红测试普遍存在（red_seen 40–41/41）但**不特异**——F2P 三段判定第 2 段（fixed 上绿）不通过，故「0% 检出」的准确含义是**「红得不特异」**（断言错/过苛，或 30s 执行超时），与合成集 over-red 通道同源。**「修复依赖非 F2P 信号」假说被否证**：repair 由 gold 测试独立裁决，与生成测试通道不相交。**真实基准上编排 vs 纯提示 detection 无差异**（p=1.0）而编排贵 7.2× token。限定：两臂各自标准预算，非等预算对照 | 2026-10-09 |
+| E6 | **已执行（2026-10-09，两阶段：冷缓存 standard + matched）** | `experiments/results/e6_a1_batches/e6_phase1_standard_coldcache/`（standard 三臂）+ `e6_phase2_matched_coldcache/`（matched 两臂），含 SHA256SUMS/README | 四臂 detection：aitester standard 6.9%（6/87, 8,857 tok）· aitester matched 2.3%（2/87, 87/87 触顶）· df standard 31.0%（27/87, 2,586 tok）· df matched 26.4%（23/87, 2,602 tok） | **预算混杂被证否**：df(matched) vs aitester(standard) χ²=13.474 p=0.0002（BH q=0.0002）显著；df 抬预算后**不消费增量**（2,586→2,602）且检出无显著变化（p=0.2888）→ **−28pp 归因编排结构，ADR-0016 结论加固**。限定：aitester(matched) 的 cap 低于其单任务需求（84/87 行触顶提前终止），该臂测的是「预算不足时编排的表现」，非严格等能量对比 | 2026-10-09 |
 | E7 | 待人工复核（候选清单已生成，AO 批） | — | — | — | — |
+| **A1 消融（预注册外，2026-10-09 审查报告 §5 路径 A1）** | **执行中（2026-10-09，见下方 A1 设计声明）** | 待落盘 | — | **先声明后取数** | — |
+
+### E6 执行增补（2026-10-09，**数据产生前登记**）
+
+**动因**：E6 预注册（AO 修订）要求 budget-matched 上限取"**E2 同种子 standard 批次
+实测的每任务总 token 均值**"。执行前核查发现该前提**不成立**：E2 四个批次
+（`..._161053/_170147/_181638/_185941`）结果行中**仅 aitester 臂有
+`token_usage.total_tokens`**，`plain_llm_df` 与 `plain_llm` 两臂**无 token 行**
+（df 在 R-P0-2 尚有 79/87 行、E2 批为 **0 行**）。故 **df 臂 matched cap 在现有
+工件中不可推导**，E6 无法按原设计直接开跑。
+
+**增补决策（不改主终点/判定/停止规则）**：先跑一批 **E6 control**（E2 协议同参：
+seed 42、n=87、logic 档、双门、`TEMPERATURE=0`、`--max-pattern-repeat 2`、
+**`LLM_THINKING_MODE=disabled`**——与 E2 及 E6 预注册预算口径一致，
+见本文件 :96），用途：
+
+1. 补齐 **df 臂 token 实测**（原缺失项），使 matched cap 可推导；
+2. 提供 A1 消融臂所需的**同批 aitester 对照**（同代码状态、同种子、同协议）；
+3. 作为 E6 standard 臂的**当次复现基线**（代码状态已并入 R2–R5 落地改动，
+   与 E2 的 git 状态不同，故不可直接沿用 E2 行作对照）。
+
+**已知偏差（如实登记）**：control 批 `token_usage` 在 df 臂仍有**部分行为 0**
+（小样本冒烟实测 3/5 行有值；0 值来自"截断后无测试入选"与"检出未触发再生成"
+两类路径）——**故 df 的 matched cap 只能按"有值行均值"推导，分母非 87**，
+引用须注明分母。此偏差不改 E6 主终点判定（detection 配对差不依赖 cap 精度），
+但会影响 matched 臂是否**真正绑定**上限，须在结果报告中显式披露。
+
+### A1 消融设计声明（2026-10-09，**预注册外实验；先声明后取数**）
+
+**诚实前置**：A1 **不在**原 E1–E7 预注册内，系 2026-10-09 审查报告
+（§5 路径 A1、§8.6 红队 RT3）新提假设的**探索性验证**。本节在设计执行前登记，
+以保留"先声明后取数"的可审计性；**不得**据此声称与 E1–E7 同级证据强度。
+
+**假设（H-A1）**：R-P0-2 中 aitester 显著劣于 `plain_llm_df`（δ=−0.279）的
+主导机制**不是** ADR-0016 所述"编排结构性劣后"，而是 **oracle-from-
+implementation**：Planner 读**缺陷代码**产出 `test_cases[].expected_output`
+（`templates.py:25`）→ Generator 整段 plan JSON 入 prompt（`generator.py:353`）
+→ 期望值 = 实现当前（错误）行为 → 断言在 buggy 上全绿（never-red 通道 86/240）。
+
+**干预（单变量）**：`PLAN_STRIP_EXPECTED_OUTPUT_ENABLE=true` —— 仅从 Generator
+prompt 中剥除 `test_cases[].expected_output`，**保留** `case_name` /
+`input_args` / `category` / `description` / `logic_coverage` 与整个
+`logic_analysis`。默认 false（历史口径零变化，ADR-0003）。
+
+**设计**：2 臂 = {aitester(standard), aitester(strip)} × seed 42 × n=87 ×
+E2 协议同参（logic 档 / 双门 / temp 0.0 / thinking disabled /
+`--max-pattern-repeat 2`）；对照取上表 E6 control 批的 aitester 臂（同代码状态）。
+
+**主终点**：detection 配对差 δ（McNemar + BH-FDR；并按 pooled 报告先例补
+**模板级 DEFF 校正 + 符号检验**——n=87 名义样本下模板簇 k≈31，n_eff 远小于 87）。
+
+**判定规则（先声明）**：
+- strip 臂 detection 显著**高于** aitester(standard)（CI 不含 0 且 ROPE ±5pp 外）
+  → **H-A1 成立**：−28pp 主导机制是 oracle-from-implementation，ADR-0016 的
+  "编排结构性劣后"须**降格为"未与实现缺陷解耦"**；
+- δ≈0 → H-A1 不成立，never-red 另有成因（转向 A2/A3 路径）；
+- 混合/边缘 → 如实报告，不作二次迭代。
+
+**停止规则**：一次性实验，无迭代条款。**预算**：≈1.2M token（thinking 关口径）。
+
+### A1 执行结果（2026-10-09，**数据产生后追加，判定规则未改**）
+
+| 项 | 结果 |
+|---|---|
+| detection（standard） | **8/87 = 9.2%** |
+| detection（strip） | **8/87 = 9.2%** |
+| 配对 McNemar | 不一致对 **2**，χ²=0.500，p=0.4795，**BH-FDR q=1.0000** |
+| 贝叶斯配对 | δ=**+0.0000**，95% CI **[−0.0451, +0.0445]**，P(\|δ\|≤ROPE)=**0.9691** |
+| 模板簇校正 | k=29，ICC=0.671，DEFF=4.356，n_eff=39.9/174；符号检验 1:1，p=1.0000 |
+| **判定** | **H-A1 不成立**。95% CI **完全落在 ROPE ±5pp 内** → 按 equivalence 口径为**实际等价**（强于"不显著"）；本路径撤回 |
+
+**效力限定（必须并列）**：干预在 **34/87（39%）任务上结构性空转**——Planner 输出
+结构不完整回退默认计划时 `test_cases = []`，**无 `expected_output` 可剥**
+（`nodes.py:242-248` → `_get_default_test_plan`）。故效力范围为剩余 **61%** 任务；
+在该范围内仍为零效应。**副产物**：该 39% 空计划率是 never-red 通道的**新候选真因**
+（优先级高于原 A1/A2/A3）。
+
+**工件**：`experiments/results/e6_a1_batches/a1_strip_seed42/`（含 SHA256SUMS/README）。
+
+### E6 阶段 1 执行增补（2026-10-09，**数据产生前登记**）
+
+**动因（承接上方「E6 执行增补」的已知偏差）**：control 批实测确认
+`plain_llm`/`plain_llm_df` 两臂 token **0/87 行**、aitester 仅 37/87。根因定位：
+`src/agents/base_agent.py:389/437` 缓存命中时提前 `return`，**绕过 `record_usage`**
+——而该文件 `:339` 自述"缓存命中…不再消耗 token——历史口径保持。**正式实验须显式
+`AITESTER_LLM_CACHE=0`**"。即：**热缓存跑批的 token 记账天然不完整**，这是既有
+设计口径而非新缺陷；但 E6 的 matched cap 需要**完整**记账。
+
+**增补决策（不改主终点/判定/停止规则）**：E6 分两阶段执行——
+
+- **阶段 1（本次）**：standard 三臂 × **`AITESTER_LLM_CACHE=0`（冷缓存）**
+  × seed 42 × n=87 × 其余协议同 control（logic 档 / 双门 / temp 0.0 /
+  thinking disabled / `--max-pattern-repeat 2`）。用途：取得**完整**的每任务
+  token 记账（三臂全覆盖），据此按 AO 修订推导 matched cap；
+- **阶段 2（待阶段 1 出数）**：matched 两臂 `df(matched)`（cap 抬至 aitester 实测均值）
+  与 `aitester(matched)`（cap 压至 df 实测均值），经 `--per-task-token-caps` 注入。
+
+**已知代价（如实登记）**：冷缓存意味着**放弃缓存复用**，阶段 1 的 token/成本高于
+热缓存批次，且阶段 1 的 aitester 与 control 批**不可直接配对**（缓存状态不同）——
+阶段 1 仅用于**推导 cap**，E6 主终点对比在阶段 2 与阶段 1 的 standard 臂之间进行。
+
+**停止规则**：阶段 2 一次性执行，无迭代条款。
+
+**停止规则**：一次性实验，无迭代条款。
 
 **v2 修正口径指针（2026-10-08 R2，R27/R13）**：上表 E2+E3 行"repair 全线 0.0%"
 系 ADR-0021 围栏伪影 + **第三起伪影（跨文件任务未物化，R27）** 双重受染的原始值。
@@ -276,6 +411,92 @@ AITESTER_PROFILE=logic .venv/bin/python experiments/run_main_batch.py \
 E4 前置状态（AH1 更新）：QuixBugs 上游许可已核实为 MIT（GitHub API，
 2026-10-06）——前置条件①解除；数据获取后随 E4 工件登记 commit。
 BugsInPy（L2）无 SPDX 许可证，见 DATA_CARD §4 决策门槛，不在 E4 范围。
+
+### A1 假阴性更正与两个特异性修复的受控臂（2026-10-10）
+
+**A1 假阴性**：原 A1 批次 `a1_strip_seed42` 的
+`env_snapshot.PLAN_STRIP_EXPECTED_OUTPUT_ENABLE` 为 **`None`**（未设置）、
+日志中零条“A1 消融生效”行、且两臂 detection 逐点相同（8/87）
+—— 即 **消融从未生效**，原“零效应”是**假阴性**。
+**结论：结果一的 H-A1 证否作废。**
+
+**A1 首次真正生效的受控臂**（`PLAN_STRIP_EXPECTED_OUTPUT_ENABLE=true`，
+判分树为修复后版本，QuixBugs 41 缺陷程序口径，生效性已验）：
+detection **45.9% → 51.4%**（+5.5pp），首轮 `over_red` 21→17；
+配对 McNemar **p=0.7237**（不显著）。
+
+**over_red 强化段受控臂**（新增 `OVER_RED_SECTION_ENABLE`，**默认 false**）：
+detection **45.9% → 51.4%**（+5.5pp），首轮 `over_red` 21→18；
+配对 McNemar **p=0.7237**（不显著）。**两个方向数值完全一致且均不显著。**
+
+**两个审计缺口（均已修复）**
+
+1. **消融开关未入 provenance 快照**：over_red 首跑的 `env_snapshot`
+   不含该键 → **无法从工件证明干预生效**（与 A1 假阴性同类）；
+   已将 `OVER_RED_SECTION_ENABLE` 加入 `_env_snapshot_keys`，并加回归测试锁定。
+2. **会改变 prompt 的消融必须用独立 cache namespace**：
+   over_red 首跑复用了标准臂 namespace，而强化段恰好**只在再生成时注入**
+   → 已缓存的再生成响应被直接复用，**干预文本根本未送到模型**；
+   首跑的 59.5% 不作结论依据。
+
+**瓶颈重定位**：两个 prompt 方向均停在 +5.5pp，说明它们**未触及主因**——
+`over_red` 任务中相当一部分是**缺陷实现不终止**（挂起）：
+4 个 `detection=None` 任务（`bitcount`/`find_first_in_sorted`/`sqrt`/`wrap`）
+全属此类（`bitcount` 缺陷 `n ^= n - 1` 应为 `n &= n - 1`，对任何 n 不终止）。
+**再好的 prompt 也无法让一个挂起的测试“变红”**，需的是
+**测试侧超时判定**（将“挂起”记为检出），已列为后续独立设计任务。
+
+### 第四起测量伪影修正与 E4 重结算（2026-10-10）
+
+**伪影（已修）**：M1 判分树 `_prepare_packaged_test_tree` 仅提供 QuixBugs
+包结构 `python_programs/{module}.py`，而被测模块名取 `task_id` 末段、
+生产执行沙箱把模块**平铺**写成 `{module}.py`，故 Generator
+写出的**扁平 import**（如 `from bitcount import bitcount`，在其生成环境里
+是正确的）在判分树里一律 `ModuleNotFoundError` → pytest `rc=2`
+（收集中断）→ `detection` **构造性恒为 0**。
+
+**修复**：双布局（tmpdir 根同时写一份 `{module}.py`）。
+**三段判定逐字未改、口径未放松**（恒失败测试在新布局下同样得 0，
+已加回归测试）。
+
+**零 LLM 验证**：12 任务子集 9 个缺陷程序，修复前 **9/9 在 buggy 与
+fixed 两侧均 rc=2**；同一批工件仅改判分树 → F2P 检出 **0/7 → 6/7**。
+
+**E4 重结算（单变量：同协议、同 cache namespace 复用原响应）**
+
+| 臂 | detection（41 缺陷程序口径） | token/task |
+|---|---|---|
+| `aitester` | **17/37 = 45.9%**（修正前 0/41 = 0.0%） | 16,038 |
+| `plain_llm_df` | **31/37 = 83.8%** | **1,905** |
+
+配对 McNemar（修正前 vs 修正后，aitester）：不一致对 17、
+χ²=15.059、**p=1.042e-04**；2×2：**n10=17、n01=0**（单向翻转）。
+配对 McNemar（两臂）：不一致对14、χ²=12.071、**p=0.0005**。
+
+**结论（取代本预注册此前的 E4 行文）**：
+真实基准上完整编排的检出率显著低于纯提示
+（45.9% vs 83.8%）且成本高 8.4×；两臂能力互补
+（df 擅长检出、aitester 擅长修复 92.5%）。
+
+### E4 数据集口径增补（2026-10-09，**数据产生前登记**）
+
+**发现（零 LLM 成本，逐任务核对）**：`data/quixbugs` 复取成功
+（commit `4257f44b0ff1181dedaedee6a447e133219fcebf`，与上方登记一致），
+但加载器给出的 **50 个任务中 9 个是 QuixBugs 的"测试驱动脚本"**（`program`
+以 `_test` 结尾，如 `breadth_first_search_test`），**无 gold `test_cases`**，
+M1 判定必然 `detection=None` / `repair=None`。
+
+**决策（不改主终点定义，只改分母口径）**：
+- **E4 主终点 `detection>0 ∧ resolved>0` 只在 41 个有 gold 的缺陷程序上计算**；
+- 9 个测试驱动任务**从任务集剔除**（或单列为"非缺陷样本"，不计入分母）；
+- 理由：这 9 个任务**结构上不可能被"解决"**（它们本身就是测试脚本），
+  计入分母等于对系统无条件扣分，会使 E4 结果偏向假阴性。
+
+**时点声明**：本增补登记于**任何 E4 正式数据产生之前**（E4 执行记录仍为"待执行"），
+符合"修订效力声明早于数据产生"条款。
+
+**同时更正**：此前"QuixBugs 50 程序 / 41 gold"的表述应读作
+"**50 个 Python 文件 = 41 个缺陷程序 + 9 个测试驱动**"。
 
 ### E4 就绪命令（AJ 批补：数据已取，2026-10-06）
 

@@ -129,4 +129,4 @@ system is research code, not a deployed product).
 - Project code: see the repository root `LICENSE`.
 - Referenced benchmarks/methods: see the five `*_BASELINE_2023-2026.md`
   surveys at the repository root (citation liveness is checked weekly by
-  `scripts/check_citations.py`).
+  `scripts/gates/check_citations.py`).

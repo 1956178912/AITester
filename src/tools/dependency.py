@@ -60,6 +60,11 @@ _venv_dir_locks_guard = threading.Lock()
 # 内置清单覆盖常见测试/科学计算/数据/网络包（~40 个）；
 # PIP_PACKAGE_WHITELIST 环境变量（逗号分隔）可覆盖本清单。
 # PEP 503：pip 包名不区分大小写，匹配时统一 lower。
+# C-08 收尾（2026-10-09）：白名单默认开后，补充 requirements.lock 中
+# 的 LLM provider / 编排框架相关包（openai / zai-sdk / zhipuai /
+# langchain 族 / chromadb / langsmith / kubernetes 等）——这些是
+# LLM 测试生成 / 沙箱执行可能合理引入的依赖，默认放行避免正常依赖
+# 被误拒；tests/test_whitelist_provider_coverage.py 守卫该覆盖。
 _PIP_PACKAGE_WHITELIST: frozenset[str] = frozenset(
     {
         # 科学计算 / 数据
@@ -113,6 +118,21 @@ _PIP_PACKAGE_WHITELIST: frozenset[str] = frozenset(
         "bandit",
         "semgrep",
         "typing-extensions",
+        # LLM provider / 编排框架（C-08 收尾 2026-10-09：默认开后对齐
+        # requirements.lock 的 provider 相关包，防正常依赖误拒）
+        "openai",
+        "zai-sdk",
+        "zhipuai",
+        "langchain",
+        "langchain-core",
+        "langchain-openai",
+        "langgraph",
+        "langsmith",
+        "chromadb",
+        "tiktoken",
+        "tenacity",
+        "python-dotenv",
+        "kubernetes",
     }
 )
 
@@ -405,8 +425,10 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     已知不一致（PIL→pillow、cv2→opencv-python-headless 等）查映射表，
     未知模块默认"模块名即包名"（多数库如此）。
 
-    S6（M11，2026-09-29 审查 P0）：pip 包名白名单守卫
-    （PIP_PACKAGE_WHITELIST_ENABLE=true 时启用，默认 false 保持历史口径）。
+    S6（M11，2026-09-29 审查 P0；2026-10-09 审查修订 C-08 起默认开）：
+    pip 包名白名单守卫（PIP_PACKAGE_WHITELIST_ENABLE=true 时启用，
+    默认 true——Slopsquatting 已由 USENIX Security 2025 量化为确认攻击
+    [待核验]，默认关不再可接受；显式设 false 退回历史口径）。
     启用时仅返回白名单内的包名，未知名默认拒绝——防止 LLM 生成的测试代码
     引入任意第三方包（如含恶意 setup.py 的 typosquatting 包）污染 venv。
     白名单来源：PIP_PACKAGE_WHITELIST（逗号分隔）或内置
@@ -418,8 +440,8 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
     Returns:
         pip 包名列表（排序去重；白名单启用时仅含白名单内包名）。
     """
-    # S6：白名单守卫（默认关）
-    _whitelist_enabled = os.getenv("PIP_PACKAGE_WHITELIST_ENABLE", "false").lower() in ("true", "1", "on")
+    # S6：白名单守卫（默认开，2026-10-09 C-08）
+    _whitelist_enabled = os.getenv("PIP_PACKAGE_WHITELIST_ENABLE", "true").lower() in ("true", "1", "on")
     if _whitelist_enabled:
         _custom = os.getenv("PIP_PACKAGE_WHITELIST", "").strip()
         if _custom:

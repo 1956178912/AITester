@@ -75,7 +75,14 @@ class TestPreregistrationDoc:
             assert "95% CI" in text
 
     def test_execution_log_table_pending(self) -> None:
-        """执行记录表状态锁：E1/E2+E3 已执行（判定回填），E4 仍待执行。"""
+        """执行记录表状态锁：E1/E2+E3/E4 均已执行（判定回填）。
+
+        2026-10-09：E4 由「待执行」推进为「已执行」（aitester 单臂首跑，
+        detection 0/41 主终点失败；见 preregistration E4 行与
+        「E4 数据集口径增补」）。本断言原为"E4 行仍在且未被删除"的非退化
+        守卫，故锚定 **行存在 + 状态 ∈ {待执行, 已执行}**，而非冻结某一个
+        状态字面量（同 test_am_batch E6 口径先例：守卫不应成为状态冻结点）。
+        """
         zh = (_ROOT / "docs" / "preregistration.md").read_text(encoding="utf-8")
         # E1 于 2026-10-07 执行：spec_compile_rate=0.367 ≥ 0.3 → 保留
         # E2+E3 于 2026-10-07 执行：通道降幅 67%/85.7% 过停止线 → 恰好一次
@@ -86,7 +93,8 @@ class TestPreregistrationDoc:
         assert "experiments/results/ab1_validation_e1/" in zh
         assert "| E2+E3 | 已执行" in zh
         assert "−0.3673" in zh
-        assert "| E4 | 待执行 |" in zh
+        assert "| E4 |" in zh
+        assert ("E4 | 待执行" in zh) or ("E4 | **已执行" in zh)
 
 
 # ─── AE2：$/task 成本口径 ────────────────────────────────────────────────────

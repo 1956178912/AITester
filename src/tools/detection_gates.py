@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # unavailable（门降级，走历史路由），绝不放行到委托层。
 _SAFE_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-# 环境变量名以 _ENV 前缀常量声明（scripts/check_env_budget.py 的静态
+# 环境变量名以 _ENV 前缀常量声明（scripts/gates/check_env_budget.py 的静态
 # 扫描口径：os.getenv("字面量") 与模块级 _ENV* = "字面量" 两种模式，
 # 间接常量须走 _ENV 前缀才被识别）。
 _ENV_SPECIFICITY_GATE = "DETECTION_SPECIFICITY_GATE_ENABLE"

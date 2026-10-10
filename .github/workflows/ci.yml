@@ -178,19 +178,51 @@ jobs:
         run: python -m mypy src/ config.py
 
       - name: Check lock sync
-        run: python scripts/check_lock_sync.py
+        run: python scripts/gates/check_lock_sync.py
+
+      - name: Solver availability gate (R5 形式化通道 fail-closed)
+        # R5 审查（2026-10-09）P0：z3-solver 此前只声明在 pyproject 的
+        # [formal] extra，未进 requirements.txt / requirements.lock / CI。
+        # 后果：src/specs/spec_smt.py 的 smt_available() 在 CI 上恒 False，
+        # 整层静默降级为"无见证"——tests/test_spec_smt*.py 共 130 个用例的
+        # **求解器分支在 CI 上从未真实执行**（降级路径与求解路径同样返回 []，
+        # 用例仍绿），"逻辑驱动"的形式化内核在 CI 上是未验证的空转。
+        # 已将 z3-solver==5.1.0.0 补入 requirements.txt 与 lock（随本作业
+        # 前述 lock 全量钉版安装步骤一并装上）；此处做 fail-closed 断言：
+        # 求解器不可导入即阻断，杜绝"静默降级再次伪装成通过"。
+        # 注：注释中不得逐字复述本作业那条 lock 安装命令——
+        # tests/test_ao_batch.py::TestCILockInstall 统计该命令字面串出现
+        # 次数并锁定为 2，注释里复述会让计数变成 3 而误 fail。
+        run: |
+          python - <<'PY'
+          import sys
+          try:
+              import z3
+          except ImportError as exc:  # pragma: no cover - CI 守卫路径
+              sys.exit(f"[FAIL] z3-solver 不可导入，spec_smt 形式化通道将静默降级: {exc}")
+          from src.specs import spec_smt
+          if not spec_smt.smt_available():
+              sys.exit("[FAIL] spec_smt.smt_available() 为 False：SMT 见证层在 CI 上无效")
+          print(f"z3 {z3.get_version_string()} 可用，spec_smt 形式化通道在线")
+          PY
+
+      - name: Check llm_configs schema (R4 S9 数据质量守卫)
+        # R4（2026-10-09 审查落地·S9）：llm_configs.json 模型目录此前无
+        # schema 守卫——手改（provider 拼错 / required_api_key 漂移 / 模型名
+        # 重复）会静默导致路由歧义或凭证注入错误。纯 stdlib 快检，无网络。
+        run: python scripts/gates/check_llm_configs_schema.py
 
       - name: Check tool versions (B-05 三方版本一致)
         # AK4（2026-10-06 第十二轮审查 R10）：check_tool_versions.py 此前
         # 未接入 CI（脚本自述"CI 接线：Check lock sync 之后"未兑现）——
         # ci.yml / pre-commit / lock 三方工具版本漂移只在本地可发现。
-        run: python scripts/check_tool_versions.py
+        run: python scripts/gates/check_tool_versions.py
 
       - name: Check LangGraph state contract (P1-6 静态契约)
         # AK4（2026-10-06 第十二轮审查 R10）：check_state_contract.py 此前
         # 未接入 CI——状态通道"写不进 + 读不到"静默链（M14/O35 同类根因）
         # 的静态差集审计只在本地可发现。纯 stdlib AST 快检。
-        run: python scripts/check_state_contract.py
+        run: python scripts/gates/check_state_contract.py
 
       - name: Verify experiment artifact checksums (U1 证据链门禁)
         # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
@@ -199,7 +231,7 @@ jobs:
         # 校验"清单与实际入库文件集一致"（缺失/多余都报错）。纯 stdlib 快检，
         # 三档矩阵只跑 3.14（工件与 Python 版本无关）。
         if: matrix.python-version == '3.14'
-        run: python scripts/checksum_results.py --results-dir experiments/results/main_batch --verify
+        run: python scripts/gates/checksum_results.py --results-dir experiments/results/main_batch --verify
 
       - name: Check artifacts tracked (AK3 引用链入库守卫)
         # AK3（2026-10-06 第十二轮审查 R1）：报告引用的关键证据工件
@@ -208,7 +240,7 @@ jobs:
         # pooled 报告曾与工件 provenance 矛盾且全部 untracked）。仅查
         # git ls-files，零网络秒级；本地未提交时预期红（由 CI 承担）。
         if: matrix.python-version == '3.14'
-        run: python scripts/check_artifacts_tracked.py
+        run: python scripts/gates/check_artifacts_tracked.py
 
 
       - name: Check zero-assertion tests (U3 弱断言守卫)
@@ -216,7 +248,7 @@ jobs:
         # 无任何 assert 信号（assert 语句 / assert_* 调用 / pytest.raises 等）
         # 的用例使行覆盖率虚高。AST 静态扫描，豁免清单内置于脚本（EXEMPT）。
         if: matrix.python-version == '3.14'
-        run: python scripts/check_zero_assert_tests.py
+        run: python scripts/gates/check_zero_assert_tests.py
 
       - name: Check env budget (X3 开关预算守卫)
         # X3（2026-10-05 审查 P0-5）：环境变量开关冻结棘轮——产品开关面
@@ -224,16 +256,16 @@ jobs:
         # 登记到 docs/env_budget.yaml 并随改动提交（登记 = 显式 PR 动作），
         # CI 阻断未登记新增；删名允许（表随之收缩）。
         if: matrix.python-version == '3.14'
-        run: python scripts/check_env_budget.py --check
+        run: python scripts/gates/check_env_budget.py --check
 
       - name: Check baseline numbers (11. 漂移守卫)
         # 核心文档"当前基线"块不得硬编码会过期的测试/静态检查数字
         #（README "测试状态" 表指向 BASELINE.yaml；历史叙事章节豁免）
-        run: python scripts/check_baseline_numbers.py
+        run: python scripts/gates/check_baseline_numbers.py
 
       - name: Validate BASELINE.yaml (5b. 结构校验)
         # BASELINE.yaml 必填字段/取值区间/基线全绿约定结构校验（快检，不跑全量测试）
-        run: python scripts/check_baseline.py
+        run: python scripts/gates/check_baseline.py
 
       - name: Check bilingual docs pairing (P1 文档承诺落地门禁)
         # CONTRIBUTING.md / PULL_REQUEST_TEMPLATE.md / pre-commit.sh 声称
@@ -253,12 +285,12 @@ jobs:
         # continue-on-error 转为阻断门禁。
         # 注意：YAML 块标量（|）——此前写成 plain scalar 时续行的 "}" 触发
         # flow-mapping 解析错误（整个 ci.yml 无法被 YAML 解析器加载）。
-        run: python scripts/check_bilingual_docs.py --strict
+        run: python scripts/gates/check_bilingual_docs.py --strict
 
       - name: Generate static-check snapshot (5a. 归档 docs/history/)
         # 批次落地后把 ruff / mypy 实测输出归档为带时间戳的 Markdown 快照，
         # 取代 docs/code_analysis_report.md 的过期人肉快照；同日重跑覆盖同名文件
-        run: python scripts/generate_static_report.py
+        run: python scripts/tools/generate_static_report.py
 
       - name: Upload static snapshot (main branch)
         if: matrix.python-version == '3.14' && github.ref == 'refs/heads/main'
@@ -294,13 +326,13 @@ jobs:
         # mask_sensitive_info 脱敏 → 退出码 1 阻断合并。
         # 与 .pre-commit-config.yaml 的 audit-log-redaction 钩子同一脚本，
         # 本地提交与远端 CI 口径一致。
-        run: python scripts/audit_log_redaction.py
+        run: python scripts/gates/audit_log_redaction.py
 
       - name: Credential scrub sync guard (P2 动态推导)
         # 凭证剔除模式从 PROVIDER_TEMPLATES 动态推导（P2 批次）：
         # 新增 provider 键未同步到脱敏口径 → 阻断合并（防 LiteLLM
         # CVE-2026-89032 式静态枚举漂移）。
-        run: python scripts/check_credential_scrub.py
+        run: python scripts/gates/check_credential_scrub.py
 
       - name: 测试失败诊断（把失败用例清单写成注解，供 API 无权限读取）
         if: failure()
@@ -342,15 +374,15 @@ jobs:
         # + 总行覆盖 ≥85%（P1-8 新增行覆盖硬门禁，历史口径仅报告）
         # + 核心修复路由模块（graph/workflow.py、agents/error_classifier.py）
         # 逐模块 ≥90%（严格门槛）+ 其余核心路由模块 ≥85%
-        run: python scripts/check_branch_coverage.py coverage.xml
+        run: python scripts/gates/check_branch_coverage.py coverage.xml
 
       - name: Coverage ratchet gate (W2 渐进式紧箍，回退即失败)
         # W2（2026-10-05 审查落地）：静态门槛（85/77）之上的只升不降水位门禁。
         # 水位存 docs/coverage_ratchet.yaml（随提交演进）——本地跑
-        # `python scripts/coverage_ratchet.py` 实测高于水位+步长(0.5pp)时自动
+        # `python scripts/gates/coverage_ratchet.py` 实测高于水位+步长(0.5pp)时自动
         # 上调并随改动提交；CI 本步骤以 --check 模式阻断任何回退。消除
         # "贴基线设门槛 + 为门槛写测试"的动机（门禁从"不退化"变"单调提升"）。
-        run: python scripts/coverage_ratchet.py --check --coverage-xml coverage.xml
+        run: python scripts/gates/coverage_ratchet.py --check --coverage-xml coverage.xml
 
   # R10（2026-10-05 审查批次）：security 作业升级为 push/PR 即跑且阻断的
   # 安全门禁（此前仅周日 schedule / 手动触发、部分检查 info-only）：
@@ -508,22 +540,22 @@ jobs:
             echo "::warning title=Gitleaks 历史扫描仍有命中::已知存量见步骤注释（历史残留密钥待轮换 + filter-repo 清理；清理完成后本步骤可转阻断）"
 
       - name: Citation link check (G15：非阻断周检)
-        # 文档引用真实性核验（scripts/check_citations.py --online）：对 5 份
-        # 前沿基线综述中的 arXiv / DOI 做存在性 HEAD 核验。非阻断（continue-
-        # on-error）原因：外部端点限流 / DNS 抖动会造成假红，与"代码正确性"
-        # 无关的基建噪声不应阻断合并；missing 命中以 ::warning 提示人工修
-        # 正引用。仅周日全量档 / 手动安全审计时运行（push/PR 不引入网络依赖）。
+        # 文档引用真实性核验（scripts/gates/check_citations.py --online）：对扫描面内
+        # Markdown 的 arXiv / DOI 做存在性 HEAD 核验。原 5 份前沿基线综述文档
+        # 已于 2026-10-09 清理批次删除，当前 DEFAULT_GLOBS 无命中时仅打印 WARN
+        # 跳过（脚本内置兜底，不产生失败）。非阻断（continue-on-error）原因：
+        # 外部端点限流 / DNS 抖动会造成假红。仅周日全量档 / 手动安全审计时运行。
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_security_audit == 'true')
         continue-on-error: true
         run: |
-          python scripts/check_citations.py --online --no-strict || \
+          python scripts/gates/check_citations.py --online --no-strict || \
             echo "::warning title=引用核验出现 missing::见上方输出清单，人工核对对应综述文档中的编号"
 
       - name: Check dependency exemption registry
         # 依赖豁免治理门禁：ci.yml 的 --ignore-vuln 列表必须在
         # docs/dependency_exemptions.md 登记（每条漏洞 ID 命中登记表某一行）；
         # 未登记的豁免 → 退出码 1 阻断合并（防"加了 --ignore-vuln 却没留痕"漂移）。
-        run: python scripts/check_dependency_exemptions.py
+        run: python scripts/gates/check_dependency_exemptions.py
 
       - name: Check docs history baseline drift (warning-only)
         # 文档一致性治理（P2）：docs/history/ 下的历史快照文档若声明的
@@ -532,7 +564,7 @@ jobs:
         #（warning-only），保持历史叙事文档不受当前基线刷新影响。
         # 检测范围：docs/history/*.md 中匹配 "N passed" / "N tests" 的声明，
         # 与 BASELINE.yaml 的 tests.total_passed 对比。
-        run: python scripts/check_docs_history_drift.py --warn-only
+        run: python scripts/gates/check_docs_history_drift.py --warn-only
 
   # N10（2026-09-29 审查 P2）→ R10（2026-10-05 审查批次）：供应链安全
   # 工具链收敛为"SBOM 生成 + 归档"单一职责（保持非阻断 info-only）——

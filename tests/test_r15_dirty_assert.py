@@ -29,8 +29,19 @@ def _write_batch(tmp_path: Path, provenance: dict) -> Path:
 
 
 def test_clean_tree_without_allow_dirty_passes(tmp_path) -> None:
+    """干净树（git_dirty=False）未豁免时**不得**抛错。
+
+    2026-10-09：补显式断言。此前仅"调用不抛"隐含通过，属零断言用例
+    （`scripts/gates/check_zero_assert_tests.py` 违规）。改为显式断言异常对象为
+    None——语义仍是"不抛错"，但把"必须不抛"变成可检出的断言信号。
+    """
     p = _write_batch(tmp_path, {"git_dirty": False, "dirty_reason": None})
-    _assert_provenance_dirty(p, allow_dirty=False)  # 不抛
+    exc: BaseException | None = None
+    try:
+        _assert_provenance_dirty(p, allow_dirty=False)  # 不抛
+    except BaseException as e:
+        exc = e
+    assert exc is None, f"干净树未豁免时不应抛错，实际抛出 {exc!r}"
 
 
 def test_dirty_tree_without_allow_dirty_raises(tmp_path) -> None:
@@ -41,8 +52,17 @@ def test_dirty_tree_without_allow_dirty_raises(tmp_path) -> None:
 
 
 def test_dirty_tree_with_reason_and_allow_dirty_passes(tmp_path) -> None:
+    """已豁免且登记原因 → **不得**抛错（豁免可审计即可放行）。
+
+    2026-10-09：补显式断言（同上一用例口径）。
+    """
     p = _write_batch(tmp_path, {"git_dirty": True, "dirty_reason": "调试迭代"})
-    _assert_provenance_dirty(p, allow_dirty=True)  # 不抛
+    exc: BaseException | None = None
+    try:
+        _assert_provenance_dirty(p, allow_dirty=True)  # 不抛
+    except BaseException as e:
+        exc = e
+    assert exc is None, f"已登记原因的豁免不应抛错，实际抛出 {exc!r}"
 
 
 def test_allow_dirty_without_reason_raises(tmp_path) -> None:

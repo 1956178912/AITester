@@ -12,8 +12,11 @@
     1. 只处理可被 spec_ir_v2.is_expression_clause + 白名单接受的子句，
        且翻译层只支持保守算子集（布尔 / 比较 / +-*/% / 常量 / 名称）；
        调用（len() 等）、幂、下标、属性 → 整体保守跳过（返回 []）；
-    2. 后件引用结果变量 r，但实现未知 → **不做**"后件可满足性"判定
-       （无实现语义，判了也是空话）；本层只做：
+    2. 后件引用结果变量 r，实现未知 → **不做**"实现是否满足后件"的判定
+       （那需要被测函数实际语义，无实现判了也是空话）；但**做**"后件
+       自身一致性"判定（把 r 视为自由变量，UNSAT = 后件自相矛盾，
+       无论实现如何都无解）——该判定零实现语义依赖，见
+       check_postcondition_consistency（R4 补反例环节）。本层前件侧做：
        - 前件 SAT 见证（合法输入样本）；
        - 前件数值目标 optimize（边界极值输入）；
        - 前件 UNSAT 检测（规约空洞化 finding，check_precondition_vacuity）；
@@ -581,8 +584,135 @@ def check_precondition_vacuity(
     return {"status": status, "clauses": len(usable)}
 
 
+# ─── 4. 后件一致性检测（R4 补反例环节，2026-10-09）────────────────────────
+# 背景（2026-10-09 系统评审 R4·S1）：SpecSMT 此前只做**前件** SAT/UNSAT 判定，
+# 后件（postconditions / invariants）因"引用结果变量 r、实现未知"被明确
+# 排除在求解之外（本模块 docstring 第 15-16 行）。但"后件**自身**可满足性"
+# （把 r 视为自由变量）并不依赖实现语义——它判定的是"后件约束系统是否
+# 自洽"：若后件同时要求 ``r > 0`` 与 ``r < 0``，则**无论被测实现如何**都
+# 不存在能满足全部后件的返回值，即规约自相矛盾（LLM 形式化时的幻觉/语义
+# 漂移）。这正是"反例驱动精化"（Balestra ICST2026 / SpecPylot）的**求解器
+# 起点**：先由 SMT 判定矛盾，再由上层把矛盾子句回灌 LLM 修正契约。
+#
+# 能力边界（诚实口径，与既有前件层对齐）：
+#   1. 只处理可被 spec_ir_v2 白名单接受的后件子句，翻译层复用同一保守
+#      算子集；调用/幂/下标/属性 → 整体保守跳过；
+#   2. 只判定"后件自身一致性"（r 自由），**不**判定"实现是否满足后件"
+#      （那需要被测函数的实际语义，本层无实现 → 不做，防过度宣称）；
+#   3. z3 未安装 / 超时 / unknown → 保守 skipped（同前件口径）。
+
+
+def _collect_post_constraints(
+    spec: dict[str, Any] | None,
+    signature_params: list[str] | None,
+    z3: Any,
+) -> tuple[list[Any], dict[str, str], list[str]] | None:
+    """后件子句（post + invariant）→ z3 约束列表 + 排序表；r 纳入自由变量。
+
+    与前件层 `_collect_pre_constraints` 的唯一差异：变量域 = signature_params
+    ∪ {"r"}（结果变量 r 作为自由变量参与排序推断与翻译）。任一保守条件
+    不满足（无后件 / 不可翻译 / 白名单违例）→ None。
+    """
+    if not spec or signature_params is None or not signature_params:
+        return None
+    from src.specs.spec_ir_v2 import _whitelist_check, is_expression_clause
+
+    post = [c for c in (spec.get("postconditions") or []) if isinstance(c, str) and c.strip()]
+    inv = [c for c in (spec.get("invariants") or []) if isinstance(c, str) and c.strip()]
+    usable: list[str] = []
+    for clause in post + inv:
+        if not is_expression_clause(clause) or _whitelist_check(clause):
+            continue
+        usable.append(clause.strip())
+    if not usable:
+        return None
+    # r 作为结果变量纳入自由变量域（后件子句引用 r 是合法语义，非笔误）
+    params = frozenset(signature_params) | {"r"}
+    sorts = _infer_sorts(usable, params)
+    if sorts is None or not sorts:
+        return None
+    constraints: list[Any] = []
+    usable_bool: list[str] = []
+    try:
+        for clause in usable:
+            tree = ast.parse(clause, mode="eval")
+            translated = _translate(tree.body, sorts, z3)
+            if not z3.is_bool(translated):
+                continue  # 非 Bool 后件子句跳过（与前件层同口径）
+            constraints.append(translated)
+            usable_bool.append(clause)
+    except _Untranslatable:
+        return None
+    except Exception:
+        logger.debug("SpecSMT 后件子句翻译失败（保守跳过该规约）", exc_info=True)
+        return None
+    if not constraints:
+        return None
+    return constraints, sorts, usable_bool
+
+
+def check_postcondition_consistency(
+    spec: dict[str, Any] | None,
+    signature_params: list[str] | None,
+) -> dict[str, Any]:
+    """后件自洽性检测（UNSAT = 后件约束系统自相矛盾）。
+
+    语义：把后件（postconditions + invariants）的可编译子句视为关于
+    ``{signature_params} ∪ {r}`` 的约束系统；``r`` 为自由结果变量。判定：
+    - sat：存在某个 (inputs, r) 组合满足全部后件 → 规约自洽；
+    - unsat：任何 (inputs, r) 都无法同时满足全部后件 → 规约自相矛盾
+      （无论被测实现如何都无解），属"逻辑驱动"能发现的真实规约缺陷，
+      上层可据此把矛盾子句回灌 LLM 精化契约；
+    - unknown / skipped：求解器超时 / z3 缺失 / 无后件 / 不可翻译。
+
+    Returns:
+        {"status": "sat"|"unsat"|"unknown"|"skipped", "clauses": 后件子句数,
+         "variables": [变量名列表]}；z3 缺失 / 无可翻译后件 → skipped。
+    """
+    if not smt_available():
+        return {"status": "skipped", "clauses": 0, "variables": []}
+    import z3
+
+    bundle = _collect_post_constraints(spec, signature_params, z3)
+    if bundle is None:
+        return {"status": "skipped", "clauses": 0, "variables": []}
+    constraints, sorts, usable = bundle
+    solver = z3.Solver()
+    solver.set("timeout", _smt_timeout_ms())
+    solver.add(constraints)
+    result = solver.check()
+    status = "sat" if result == z3.sat else ("unsat" if result == z3.unsat else "unknown")
+    if status == "unsat":
+        logger.warning(
+            "SpecSMT：规约后件 UNSAT（自相矛盾，无论实现如何都无解），clauses=%s",
+            usable,
+        )
+    return {"status": status, "clauses": len(usable), "variables": sorted(sorts)}
+
+
+def check_spec_consistency(
+    spec: dict[str, Any] | None,
+    signature_params: list[str] | None,
+) -> dict[str, Any]:
+    """规约一致性联合检测（前件空洞 + 后件矛盾两 finding 汇总）。
+
+    这是"逻辑驱动"补反例环节的统一入口：一次调用产出前件可满足性与
+    后件自洽性两个独立判定，供上层（报告层 / 精化循环）聚合消费。
+    Returns:
+        {"precondition": {...}, "postcondition": {...}}——两个子结果分别
+        遵循 check_precondition_vacuity / check_postcondition_consistency
+        的返回契约。
+    """
+    return {
+        "precondition": check_precondition_vacuity(spec, signature_params),
+        "postcondition": check_postcondition_consistency(spec, signature_params),
+    }
+
+
 __all__ = [
+    "check_postcondition_consistency",
     "check_precondition_vacuity",
+    "check_spec_consistency",
     "generate_spec_witnesses",
     "smt_available",
     "spec_smt_enabled",

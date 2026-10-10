@@ -505,7 +505,7 @@ LLM_2_MODEL_NAME=model-2
 
 ## 九、性能剖析基准（2026-09-12 实测）
 
-> 依据 `scripts/performance_profile.py` 的 cProfile / tracemalloc 实测数据归纳。
+> 依据 `scripts/tools/performance_profile.py` 的 cProfile / tracemalloc 实测数据归纳。
 
 ### 9.1 运行时逻辑高效，无 CPU 热点
 
@@ -572,7 +572,7 @@ EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:with-pandas \
 **执行时间对比**：
 ```bash
 # 同一任务分别跑 Docker / venv 两种模式，输出 Markdown 对比表
-python scripts/compare_executor_modes.py \
+python scripts/tools/compare_executor_modes.py \
     --tasks examples/calculator.py examples/string_utils.py
 ```
 

@@ -47,7 +47,18 @@ repos:
     hooks:
       - id: audit-log-redaction
         name: audit-log-redaction (4.2)
-        entry: python scripts/audit_log_redaction.py
+        entry: python scripts/gates/audit_log_redaction.py
         language: system
         files: '^src/.*\.py$|^experiments/.*\.py$'
+        pass_filenames: false
+
+      # P1（2026-10-10 优化建议落地）：密钥泄漏守卫前移到本地提交时点。
+      # 复用 .git-hooks/check_secret_leak.sh（O17 全口径：sk- / 32+ hex /
+      # 命名凭证赋值 / JWT / Bearer / AWS / URL userinfo），扫描 staged 新文件
+      # + 未跟踪文件。与 CI gitleaks 工作树扫描形成双层防线——本地即时阻断，
+      # 而非等 push 后 CI 才发现。命中疑似真实凭证即 exit 1 阻断提交。
+      - id: secret-leak-guard
+        name: secret-leak-guard (O17 全口径密钥泄漏)
+        entry: sh .git-hooks/check_secret_leak.sh
+        language: system
         pass_filenames: false

@@ -54,18 +54,14 @@ class TestCommonModels:
             assert "name" in model
             assert "provider" in model
 
-    def test_qwen_models_exist(self):
+    def test_deepseek_v41_flash_is_the_only_model(self):
+        """2026-10-09 配置要求：仅保留用户配置的 DeepSeek V4.1 Flash（官方 API
+        现行 model 参数写法为 `deepseek-flash`），其余 qwen / glm / kimi /
+        agnes / deepseek-chat 等条目已删除。"""
         names = [m["name"] for m in COMMON_MODELS]
-        assert "qwen-max" in names
-        assert "qwen-plus" in names
-
-    def test_deepseek_models_exist(self):
-        names = [m["name"] for m in COMMON_MODELS]
-        assert "deepseek-chat" in names
-
-    def test_glm_models_exist(self):
-        names = [m["name"] for m in COMMON_MODELS]
-        assert "glm-4" in names
+        assert names == ["deepseek-flash"]
+        for model in COMMON_MODELS:
+            assert model["provider"] == "deepseek"
 
 
 class TestGenerateEnvTemplate:
@@ -77,22 +73,27 @@ class TestGenerateEnvTemplate:
         assert len(result) > 0
 
     def test_template_contains_api_key_placeholders(self):
-        """模板变量名与 generate_batch_config 的 {PROVIDER}_API_KEY 推导同源（全名）。"""
+        """模板变量名与 generate_batch_config 的 {PROVIDER}_API_KEY 推导同源（全名）。
+        2026-10-09 起目录仅保留 DeepSeek provider（与 COMMON_MODELS 对齐），
+        其余 provider 的占位符已删除。"""
         result = generate_env_template()
-        assert "ALIYUN_BAILIAN_API_KEY=your-aliyun-api-key-here" in result
-        assert "AGNES_DOMESTIC_API_KEY=your-agnes-api-key-here" in result
-        assert "AGNES_INTERNATIONAL_API_KEY=your-agnes-international-api-key-here" in result
-        assert "BIGMODEL_API_KEY=your-bigmodel-api-key-here" in result
         assert "DEEPSEEK_API_KEY=your-deepseek-api-key-here" in result
+        # 已删除 provider 的中间变量不再出现
+        assert "ALIYUN_BAILIAN_API_KEY=your-aliyun-api-key-here" not in result
+        assert "AGNES_DOMESTIC_API_KEY=your-agnes-api-key-here" not in result
+        assert "AGNES_INTERNATIONAL_API_KEY=your-agnes-international-api-key-here" not in result
+        assert "BIGMODEL_API_KEY=your-bigmodel-api-key-here" not in result
         # 旧短名变量已废弃，不再出现（与批处理脚本的推导名对齐）
         assert "ALIYUN_API_KEY=your-aliyun" not in result
         assert "AGNES_API_KEY=your" not in result
 
     def test_template_contains_model_examples(self):
         result = generate_env_template()
-        assert "qwen-max" in result
-        assert "agnes-3.0-flash" in result
-        assert "glm-4-flash" in result
+        assert "deepseek-flash" in result
+        # 已删除 provider 的模型示例不再出现
+        assert "qwen-max" not in result
+        assert "agnes-3.0-flash" not in result
+        assert "glm-4-flash" not in result
 
     def test_generate_template_writes_to_file(self, tmp_path):
         output = str(tmp_path / "test_template.env")
@@ -101,7 +102,7 @@ class TestGenerateEnvTemplate:
         with open(output, encoding="utf-8") as f:
             content = f.read()
         assert content == result
-        assert "ALIYUN_BAILIAN_API_KEY" in content
+        assert "DEEPSEEK_API_KEY" in content
 
 
 class TestGenerateConfigJson:
@@ -141,13 +142,12 @@ class TestPrintModelCatalog:
         # U3（2026-10-05 系统性审查落地）：补断言——目录打印实际产出了模型清单
         print_model_catalog()
         captured = capsys.readouterr()
-        assert "qwen-max" in captured.out
+        assert "deepseek-flash" in captured.out
 
     def test_catalog_contains_models(self, capsys):
         print_model_catalog()
         captured = capsys.readouterr()
-        assert "qwen-max" in captured.out
-        assert "deepseek-chat" in captured.out
+        assert "deepseek-flash" in captured.out
 
 
 class TestGenerateBatchConfigScript:

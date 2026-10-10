@@ -1,6 +1,6 @@
 """workflow.py 内部分支补测（2026-10-02 审查：分支覆盖门禁回绿）。
 
-背景：`graph/workflow.py` 是 `scripts/check_branch_coverage.py` 的
+背景：`graph/workflow.py` 是 `scripts/gates/check_branch_coverage.py` 的
 90% 严格门槛核心模块，StopReason / M12 checkpointer / M4 递归限制
 包装等本批次改动落地后分支覆盖跌至 82%，CI 门禁变红。本文件针对
 coverage.xml 中剩余 missing branches 逐一补测：

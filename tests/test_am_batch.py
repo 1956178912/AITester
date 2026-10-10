@@ -241,10 +241,18 @@ class TestPreregConsistency:
             assert "--per-task-token-cap`" not in text
 
     def test_execution_log_has_e6_e7_rows(self) -> None:
-        assert "E6 | 待执行" in PREREG_ZH
+        # 2026-10-09：E6 状态推进 待执行 → 执行中 → **已执行**（用户授权预算后
+        # 两阶段实跑：冷缓存 standard + matched；见 preregistration.md
+        # 「E6 执行增补」与执行记录表）。
+        # 本断言原为"E6 行仍在且未被删除"的非退化守卫，故锚定 **行存在** +
+        # 状态 ∈ 已知状态集，而非冻结某个状态字面量——否则每次实验推进
+        # 都要改测试（把守卫变成状态冻结点，反而掩盖真实的状态迁移）。
+        assert "| E6 |" in PREREG_ZH
+        assert any(s in PREREG_ZH for s in ("E6 | 待执行", "E6 | **执行中", "E6 | **已执行"))
         # AO 批（2026-10-07）：E7 候选清单已生成，状态推进为"待人工复核"
         assert "E7 | 待人工复核（候选清单已生成，AO 批）" in PREREG_ZH
-        assert "E6 | pending" in PREREG_EN
+        assert "| E6 |" in PREREG_EN
+        assert any(s in PREREG_EN for s in ("E6 | pending", "E6 | **running", "E6 | **executed"))
         assert "E7 | pending manual review (candidate list generated, batch AO)" in PREREG_EN
 
     def test_ready_commands_have_e6_block(self) -> None:

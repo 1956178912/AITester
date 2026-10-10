@@ -896,27 +896,25 @@ class TestDefaultOffFeatureBranches:
 
     def test_multi_candidate_selects_best(self, monkeypatch):
         """有有效候选时应用最优候选（选优路径）。"""
-        from src.agents import debugger as dbg
-        from src.agents import executor as exc
-        from src.graph import nodes
+        from src.graph import patch_io
         from src.tools.multi_candidate import CandidateResult
 
         # P0 3.2：默认 adaptive 策略下 iteration>=1 + 困难类别才启用多候选；
         # 历史口径 always 策略（显式设置）保留每次失败都启用多候选
         monkeypatch.setenv("MULTI_CANDIDATE_TRIGGER_STRATEGY", "always")
-        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
-        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "ExecutorAgent", MagicMock)
         best = CandidateResult(
             index=0,
             patch="def f():\n    return 2\n",
             new_code="def f():\n    return 2\n",
             static_passed=True,
         )
-        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
-        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [best])
-        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: best)
-        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: (patch, True))
-        new_code, applied, stats = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        monkeypatch.setattr(patch_io, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(patch_io, "generate_candidates", lambda **kw: [best])
+        monkeypatch.setattr(patch_io, "select_best_candidate", lambda **kw: best)
+        monkeypatch.setattr(patch_io, "apply_patch_to_code", lambda original_code, patch: (patch, True))
+        new_code, applied, stats = patch_io._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
         assert applied is True
         assert new_code == "def f():\n    return 2\n"
         # 5.2：多候选统计经 update dict 传递（不再原地写 state）
@@ -926,18 +924,16 @@ class TestDefaultOffFeatureBranches:
 
     def test_multi_candidate_fallback_to_single_patch(self, monkeypatch):
         """无有效候选（select 返回 None）→ 回退单补丁，不引入劣化。"""
-        from src.agents import debugger as dbg
-        from src.agents import executor as exc
-        from src.graph import nodes
+        from src.graph import patch_io
 
         monkeypatch.setenv("MULTI_CANDIDATE_TRIGGER_STRATEGY", "always")
-        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
-        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
-        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
-        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [])
-        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: None)
-        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: ("fallback_code", True))
-        new_code, applied, stats = nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        monkeypatch.setattr(patch_io, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "ExecutorAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(patch_io, "generate_candidates", lambda **kw: [])
+        monkeypatch.setattr(patch_io, "select_best_candidate", lambda **kw: None)
+        monkeypatch.setattr(patch_io, "apply_patch_to_code", lambda original_code, patch: ("fallback_code", True))
+        new_code, applied, stats = patch_io._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
         assert applied is True
         assert new_code == "fallback_code"
         # 回退路径也需返回 update dict（含统计，candidates=0）
@@ -945,21 +941,19 @@ class TestDefaultOffFeatureBranches:
 
     def test_multi_candidate_exec_validate_enabled(self, monkeypatch):
         """MULTI_CANDIDATE_EXEC_VALIDATE=true → 构造 ExecutorAgent 做执行验证。"""
-        from src.agents import debugger as dbg
-        from src.agents import executor as exc
-        from src.graph import nodes
+        from src.graph import patch_io
         from src.tools.multi_candidate import CandidateResult
 
         monkeypatch.setenv("MULTI_CANDIDATE_EXEC_VALIDATE", "true")
-        monkeypatch.setattr(dbg, "DebuggerAgent", MagicMock)
-        monkeypatch.setattr(exc, "ExecutorAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "DebuggerAgent", MagicMock)
+        monkeypatch.setattr(patch_io, "ExecutorAgent", MagicMock)
         best = CandidateResult(index=0, patch="def f():\n    return 2\n", static_passed=True)
-        monkeypatch.setattr(nodes, "multi_candidate_count", lambda: 2)
-        monkeypatch.setattr(nodes, "generate_candidates", lambda **kw: [best])
-        monkeypatch.setattr(nodes, "select_best_candidate", lambda **kw: best)
-        monkeypatch.setattr(nodes, "apply_patch_to_code", lambda original_code, patch: (patch, True))
-        nodes._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
-        assert exc.ExecutorAgent.called
+        monkeypatch.setattr(patch_io, "multi_candidate_count", lambda: 2)
+        monkeypatch.setattr(patch_io, "generate_candidates", lambda **kw: [best])
+        monkeypatch.setattr(patch_io, "select_best_candidate", lambda **kw: best)
+        monkeypatch.setattr(patch_io, "apply_patch_to_code", lambda original_code, patch: (patch, True))
+        patch_io._select_multi_candidate_patch(self._mc_state(), "def f():\n    return 1\n")
+        assert patch_io.ExecutorAgent.called
 
     # ── _patch_applier_node 跨文件 / 多候选分支 ─────────────────────────────
 

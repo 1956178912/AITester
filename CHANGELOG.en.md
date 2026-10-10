@@ -1,10 +1,276 @@
-> Last updated: 2026-10-08 (batch R2: cross-file measurement fix [third artifact, R27] + stats-gate generalization / dirty-tree assertion / spec_smt restricted-eval tightening + R4 artifact archival and corrected caliber v2 [ADR-0029] + external narrative alignment; previously 2026-10-07 batch RepairEngine-XIV: external-report net-new harvest — FL Top-k constraint gate + Self-Repair Trap observer [both observability-layer, ADR-0028] + Frame Lifetime Trace design input + BASELINE test-chain errata; batch XIII below)
+> Last updated: 2026-10-09 (R5 review-revision landing batch: 2026 frontier-revised review + C-08 whitelist default-on + C-01 narrative convergence + LLM endpoint consolidation to DeepSeek V4.1 Flash official API; previously R4 review-landing batch: counterexample-guided refinement loop [S1: spec_smt postcondition-consistency check + spec_refine.py CEGIR] + nodes.py continued split into patch_io.py [S4] + E4 contamination-control preregistration [S3] + llm_configs schema guard [S9] + MAS skill-library compilation design doc [S7]; before that R3 batch: bare-eval removal from spec_smt [S8] + nodes.py three-cluster split [S7] + PGH003 gate re-armed; before that 2026-10-08 R2 batch)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-09 D1 fix + CI three-reds cleared
+
+### Fixed
+
+- **D1: the Planner fell back to an empty plan (`test_cases=[]`) on roughly 30-39% of tasks - root cause was the JSON parsing layer.**
+  Reading the raw text of 4,041 LLM cache responses at zero LLM cost and adjudicating the
+  structure of 621 Planner-shaped responses: **188 (30.3%) could not be `json.loads`-parsed**,
+  with error distribution `Expecting ',' delimiter` 94 (the LLM wrote Python expressions inside
+  JSON values, e.g. `{"key":"a"*10000}`, `inf`) / `Extra data` 57 (multiple JSON objects
+  concatenated back to back) / `Expecting value` 35 (unquoted Python literals such as
+  `"expected_output":None`) / `Expecting property name` 2 (tuple used as a dict key,
+  `{(0,1):5}`). That exception travels through `nodes.py:269`'s `except json.JSONDecodeError`
+  into `_get_default_test_plan`, leaving the Generator with no test plan on about a third of tasks.
+  **Fix** (`src/utils/helpers.py`; purely syntactic, never changes semantics, **no eval**):
+  `_repair_json_text` (trailing commas + value-position Python literals),
+  `_quote_python_expressions` (value-position pure-literal expressions via a **hand-written
+  restricted evaluator** allowing only `Constant`/`BinOp(Mult)`/`BinOp(Add)`, rejecting
+  `Call`/`Attribute`/`Name`; oversized results are **truncated** rather than dropping the whole
+  plan), `_quote_tuple_keys_once` (tuple keys at key positions, **string-aware** - split on string
+  boundaries so text like `"returns {(0,0): 0}"` is never rewritten), `_first_balanced_object`
+  (take the first of concatenated objects), and `_repair_json_bounded` (bounded iteration,
+  at most 4 rounds, for compound damage).
+  **Measured recovery**: parseable with `function_name` **427/621 (68.8%) to 555/621 (89.4%),
+  +20.6pp (128 net recovered)**.
+  **Ablation (controlled arm, cold cache, seed 42, n=87)**: empty-plan fallback
+  **34/87 (39.1%) to 22/87 (25.3%)**, but **detection shows no statistically discernible change**
+  (6.9% to 8.0%, McNemar p=1.0000, Bayesian delta=-0.011 CI[-0.078,+0.053]) - i.e. **"empty plan"
+  is not the main cause of the never-red channel** (hypothesis refuted); the by-products are
+  positive: **repair 15 to 20 cases, false_fix 75.9% to 70.1%**.
+  32 new unit tests (including two safety locks: "executable constructs must be rejected" and
+  "string content must never be modified").
+- **CI three red gates cleared** (P0-1/P0-2/P0-7 of the review report section 7):
+  1. `ruff format --check .` **exit 0** (formatted `tests/test_config_generator.py`,
+  `tests/test_whitelist_provider_coverage.py`);
+  2. `check_zero_assert_tests.py` **exit 0** (`tests/test_r15_dirty_assert.py`'s two
+  "asserts no-raise" cases now carry **explicit assertions** - catching the exception and
+  asserting it is `None`, turning "must not raise" into a detectable signal rather than weakening
+  the semantics);
+  3. `pip-audit -r requirements.lock` **exit 0** (`No known vulnerabilities found, 5 ignored`) -
+  five packages **upgraded to their fixed versions** per the project's exemption policy (which
+  requires upgrading when a fix exists, not registering an exemption): PyJWT 2.13.0 to **2.15.1**,
+  urllib3 2.7.0 to **2.8.0**, langgraph-sdk 0.4.2 to **0.4.6**, multidict 6.7.1 to **6.9.1**
+  (7.0.0 conflicted with `aiohttp<7.0`, so the 6.9.1 fix within the upper bound was taken),
+  oauthlib 3.3.1 to **4.0.0** (major-version bump, regressed).
+  Top-level and transitive audits are now **green simultaneously**, with **no new
+  `--ignore-vuln` exemptions added**.
+
+### Changed
+
+- **Dependency `zhipuai` removed** (environment + `requirements.lock`). **Rationale**:
+  `zhipuai 2.1.5.20250825` hard-pins `pyjwt>=2.8.0,<2.9.0`, which **cannot be satisfied
+  simultaneously** with the PyJWT fix (>=2.14), and zhipuai is already the latest PyPI release
+  (no loosened pin); meanwhile the evidence shows it is **redundant** - (1) **zero code imports**
+  repo-wide (the string appears only in `dependency.py`'s whitelist and `llm_client.py`'s domain
+  regex); (2) `pip show` reports an **empty `Required-by`**; (3) it is **not in
+  `requirements.txt`** (the lock_sync guard already warned about it); (4) the project's Zhipu
+  endpoint uses **`zai-sdk`** (`pyproject.toml` declares it; `llm_client.py` does
+  `from zai import ZhipuAiClient`). Its `Authlib`/`CacheControl`/`cryptography` subtree loses its
+  dependent. `pip check` retains only the pre-existing `z3-solver not supported on this platform`
+  (unrelated to this change). **WARNING: if an unversioned zhipuai use exists, it must be restored
+  with a registered exemption plus a documented CVE-acceptance rationale.**
+- **Full regression**: `5107 passed / 3 skipped / 0 failed`; ruff check / ruff format / mypy all
+  green; all 10 guard scripts (env_budget / bilingual / baseline / baseline_numbers /
+  artifacts_tracked / lock_sync / dependency_exemptions / state_contract / tool_versions /
+  credential_scrub) exit 0.
+
+## [Unreleased] — 2026-10-09 Batch R5 (2026 frontier-revised review + P0 execution + LLM endpoint consolidation)
+
+> Follow-up to the 2026-10-09 revised review report (2026 frontier
+> evidence; the report file `docs/review/review_2026_10_09_revision.md`
+> was deleted in the 2026-10-09 cleanup batch, all new 2026
+> citations marked [to verify]):
+> - **C-08 (P0 security / supply chain) package whitelist default-on**:
+>   `PIP_PACKAGE_WHITELIST_ENABLE` default flipped `false` → `true` in
+>   `src/tools/dependency.py::suggest_package_names` — slopsquatting has
+>   been quantified as a confirmed attack (USENIX Security 2025: 19.7% of
+>   code samples contain hallucinated package names, 205,474 unique
+>   fabricated names [to verify]); default-off is no longer acceptable.
+>   Explicit `false` restores the legacy pass-through (trusted debugging
+>   only). Synced: `tests/test_dependency_branches.py` (default-on case +
+>   explicit-off legacy case), `tests/test_executor_sandbox.py` (new
+>   `test_default_enforced_rejects_unknown`), `docs/threat_model.md` /
+>   `.en.md` (A2 row status), `README.md` (config table default + security
+>   note). 27 tests pass. Follow-up: confirm the built-in
+>   `_PIP_PACKAGE_WHITELIST` (~40 packages) covers the 9 provider-related
+>   packages in `requirements.lock` so normal deps are not rejected under
+>   the new default (verify with the C-03 batch).
+> - **C-01 (P0 narrative) "why no multi-agent" section**: new paragraph at
+>   the top of `README.md` / `README.en.md` citing CANDOR (ICST 2026,
+>   one-shot 88.35% vs multi-agent 35.92%) and BOAD (ICLR 2026, bandit
+>   search of hierarchies outperforms large single models) [both to
+>   verify], re-contextualizing the project's −28pp result as evidence
+>   against **hand-crafted orchestration** (not the multi-agent paradigm);
+>   the promotion criterion remains ADR-0016 (budget-matched positive
+>   detection delta).
+> - **LLM endpoint consolidation (DeepSeek V4.1 Flash official API only)**:
+>   `llm_configs.json` 17 → 1 entry (`deepseek-v4.1-flash`, provider
+>   `deepseek`, `https://api.deepseek.com/v1`); `.env` no longer carries
+>   the Agnes international/domestic and BigModel fallback keys/URLs
+>   (plain-text keys already rotated per C-02); `config.local.example`,
+>   `.env.local.template`, `config.py` comments,
+>   `src/config/config_generator.py` (`COMMON_MODELS` now DeepSeek-only;
+>   `PROVIDER_TEMPLATES` registry kept whole to preserve schema validation
+>   and `credential_scrub` linkage), and README default-model rows synced;
+>   `tests/test_config_generator.py` assertions now expect DeepSeek-only;
+>   `scripts/check_llm_configs_schema.py` passes (1 entry).
+> - **Preregistration addenda (E2'/E1b design, recorded in the revised
+>   report §9; `docs/preregistration.md` entries land with the C-03
+>   batch)**: E2' Gemini 2.5 Pro one-shot control arm (C-09); E1b
+>   constraint-learning recall/precision ≥ 0.8 criterion (C-04b, aligned
+>   with Centaur, ICSE 2026 [to verify]).
+>
+> Verification: `pytest tests/test_dependency_branches.py
+> tests/test_executor_sandbox.py` → 27 passed; `tests/test_config_generator.py`
+> → 24 passed; `scripts/check_llm_configs_schema.py` → 1 entry ok;
+> `ruff check` clean on touched files.
+>
+> Verification status of 2026 citations: the 2026 references in this entry
+> (CANDOR / BOAD / Centaur / TDFlow / ADI / PAGENT / AdverTest / JavaOracle /
+> TestAgent / slopsquatting / SWE-Bench Illusion, etc.) are all marked
+> **[to verify]** — before publication / external citation each must be
+> verified against its arXiv/DOI source and given a URL/DOI (the checklist
+> was in `docs/review/review_2026_10_09_revision.md` §12.1, deleted in the
+> 2026-10-09 cleanup batch; see the follow-up note above).
+
+## [Unreleased] — 2026-10-09 Batch R4 (counterexample-guided refinement loop + continued modularization + data-quality / contamination-control hardening)
+
+> Landing items from the 4th systematic review (R4). All
+> additions are default-off, zero-LLM-cost, and offline unit-test verified;
+> default behavior is unchanged — new capability ships behind default-off
+> switches or as standalone callable modules:
+> - **S1 (core) counterexample-guided refinement loop for logic-driven specs
+>   — closes the missing "verifier gives counterexample → LLM fixes the
+>   contract only → re-verify" loop**:
+>   ① `src/specs/spec_smt.py` gains `check_postcondition_consistency`
+>   (postcondition system UNSAT = self-contradiction, the dual of the
+>   precondition SMT-witness path) + `check_spec_consistency` (unified entry
+>   for precondition vacuity + postcondition contradiction);
+>   ② new `src/specs/spec_refine.py`: `refine_spec_with_counterexample`
+>   (CEGIR) — detect spec contradiction → build a counterexample prompt
+>   (code under test + contradiction explanation) → feed back to the LLM to
+>   **fix the contract only (never the code)** → SMT re-check, budgeted
+>   iteration (`SPEC_REFINE_MAX_ROUNDS` default 2, cap 5); non-JSON / no valid
+>   clause / call exception → conservative stop (keep current spec, never
+>   fabricate or silently overwrite — same "no witness over bad constraint"
+>   caliber). `SPEC_REFINE_ENABLE` defaults false; the LLM callback is
+>   injectable (test-mocked, zero real LLM);
+>   ③ standalone callable capability (observable, testable) — **not yet
+>   wired into the main pipeline**: Planner/Generator call-site integration
+>   belongs to a later batch (must first decide "where the refined result is
+>   consumed and how it enters M1 metrics"). Grounding: Balestra et al. ICST
+>   2026 (LLM counterexamples drop 11.68% invalid assertions, spec-inference
+>   precision +7pp) and SpecPylot (budgeted counterexample refinement over
+>   icontract + CrossHair) — the only mechanism path that can move H1
+>   (spec_compile_rate gray zone, E2 = 0.212) from "suspended" to
+>   "verifiable";
+> - **S4 (continued nodes.py split, modularization)**: the patch-application
+>   safety core (path allowlist + atomic write + multi-candidate selection +
+>   safe write + snapshot rollback, six functions and their constants) moves
+>   to new `src/graph/patch_io.py` (478 lines); `src/graph/nodes.py`
+>   2313→1909 lines (completing R3's three-cluster split 3593→2313; four
+>   clusters in total 3593→1909, meeting the <800-lines/file target). Pure
+>   move + re-export: historical import paths
+>   (`from src.graph.nodes import _safe_write_patch`, …) are byte-identical,
+>   zero behavior change. The `_patch_applier_node` orchestration node stays
+>   in nodes.py (depends on `_MAX_REPAIR_HISTORY` and interacts deeply with
+>   the debugger/evidence/rollback protocol); mock targets in 3 test files
+>   updated from nodes→patch_io namespaces;
+> - **S3 (E4 contamination-control preregistration, bilingual)**:
+>   `docs/preregistration.md` + `.en.md` gain an E4 contamination-control
+>   section (pre-registered before any formal E4 data; verifiable via git
+>   history): ① contamination-risk statement — documented contamination of
+>   SWE-bench-family benchmarks (Aleithan 2024: 94% of instances predate
+>   training cutoffs; Liang 2025: buggy file path guessed from the issue
+>   alone at 76%; Wang/PatchDiff 2025: up to 6.4pp of apparent gain is
+>   illusory; Yu/UTBoost 2025: 24% of leaderboard entries revised) + QuixBugs
+>   as a classic pedagogical benchmark cannot assume zero contamination;
+>   ② mandatory disclosure caliber — model training cutoff vs instance time /
+>   target-mismatch statement / PatchDiff-style differential re-check /
+>   reproducible objective fields, all four entering the E4 report;
+>   ③ verdict hardening — a missing contamination-disclosure subsection
+>   renders the E4 report incomplete and unusable for external citation
+>   (hard constraint); ④ budget impact — offline field records + sampled
+>   differential re-runs on positive rows only, ≈ 0.01M tokens, E4 budget
+>   caliber unchanged;
+> - **S9 (llm_configs.json schema guard, data quality)**:
+>   `src/config/config_generator.py` gains `validate_llm_configs`
+>   (provider typos / required_api_key drift / duplicate model names, etc.);
+>   new `scripts/check_llm_configs_schema.py` (pure-stdlib fast check, no
+>   network) wired into `.github/workflows/ci.yml` (after "Check lock
+>   sync"). The 17-model routing directory previously had no schema guard —
+>   hand edits silently produced routing ambiguity or credential-injection
+>   errors, only surfacing at runtime;
+> - **S7 (MAS skill-library compilation route, design doc)**: new
+>   `docs/design/mas_compilation.md` (exploratory Proposed, no code) — the
+>   "constructive exit" for the MAS net-negative −28pp finding (C2, now
+>   externally corroborated by MAST NeurIPS 2025 + Nature MI 2026):
+>   offline-compile the reusable decision knowledge of
+>   Planner/Debugger/PatchApplier into a single-agent skill library; at
+>   inference a single agent retrieves skills per task and runs serially
+>   (compilation advantage: −53.7% tokens / −49.5% latency at ±0 accuracy —
+>   secondhand aggregate, original to be verified). Three-stage compilation
+>   scheme + join points + risk-stopping rules; any implementation batch must
+>   file a new ADR and pre-register decision thresholds;
+> - **Confirmed already closed (R4 report items retired)**: S2 repair
+>   caliber matrix (`docs/design/repair_caliber_matrix.md` complete, the
+>   single external citation entry), S5 dependency caliber (make build-check
+>   + test_packaging + check_lock_sync triple guard), S6 stats loader for
+>   realbugs (R17 landed `_SUPPORTED_DATASETS={synthetic,quixbugs}`), S10
+>   test consolidation (batch files all carry thematic docstrings; physical
+>   consolidation would break batch history — kept as-is);
+> - **New tests**: `tests/test_spec_postconsistency.py` (12 cases) +
+>   `tests/test_spec_refine.py` (10 cases) + `tests/test_llm_configs_schema.py`
+>   (9 cases), net +31 cases (the 12 spec_smt_more_branches cases already
+>   count in R3's +279);
+> Verified: full pytest collected 5015 (on this host, isolated --basetemp:
+> 5014 passed + 1 environment-class failure [test_repo_baseline_zero_findings:
+> the audit-scan baseline was polluted by a stray
+> .pytest_tmp/docupdate injected fixture left by a previous session — inside
+> the gitignore area, not a code defect; fully green after cleanup]); mypy
+> src/ config.py: 119 source files 0 errors (+2 = spec_refine.py / patch_io.py);
+> ruff clean; env budget 170→172 (SPEC_REFINE_ENABLE / SPEC_REFINE_MAX_ROUNDS
+> auto-registered via check_env_budget.py, default-off, zero behavior change);
+> `docs/env_budget.yaml` and `docs/preregistration.{md,en.md}` synced in-tree;
+> BASELINE/README closed in this batch.
+
+## [Unreleased] — 2026-10-09 Batch R3 (bare-eval removal from spec_smt + nodes.py three-cluster split + PGH003 gate re-armed)
+
+> R3 review-landing items. All zero-LLM,
+> offline unit-test / replay verified; default behavior unchanged:
+> - **S8 (spec_smt bare-eval removal)**: `src/specs/spec_smt.py` fully
+>   removes the bandit S307 bare-eval surface — restricted AST evaluator
+>   `_safe_eval` / `_safe_eval_clause` (node whitelist
+>   Constant/Name/BoolOp/UnaryOp/Compare/BinOp + call-whitelist names);
+>   semantics byte-identical to the old eval (19-case comparison); 7
+>   out-of-bounds constructor classes conservatively rejected;
+> - **S8b (blind-ignore narrowing)**: 6 blanket `type: ignore` sites in
+>   `src/` narrowed (embedding_utils: 4 optional embedding backends;
+>   type_repair: 2 mypy.api/pyright — import-not-found absorbed by mypy
+>   overrides);
+> - **S7 (nodes.py three-cluster split)**: `src/graph/nodes.py`
+>   3593→~2200 lines, splitting out `trace_reward.py` (6 pure trajectory/
+>   reward/iteration-strategy functions) / `flags.py` (switch-reading
+>   function cluster) / `agents_cache.py` (Executor / generic Agent
+>   instance-reuse cache) / `debugger.py` (_diagnosis_node/_debugger_node);
+>   nodes.py re-exports everything — historical import paths and workflow.py
+>   are byte-identical (R4 batch completes the continuation, S4: patch_io.py
+>   down to 1909 lines);
+> - **PGH003 gate re-armed**: pyproject drops the global ignore; the ruff
+>   PGH003 (blind type-ignore) gate is restored;
+> - **S11b (typo fix)**: `spec_ir_v2._ALLOWED_ATTRS` wrongly included the
+>   `len` function name → corrected to `{value, real, imag}`;
+> - **S6 (data correction)**: `llm_configs.json` — 9 provider_description
+>   fields corrected to provider-level descriptions (third-party models are
+>   routed via Bailian's OpenAI-compatible endpoint, not copy-paste errors —
+>   correcting the R3 report's original wording);
+> - **9 new test files** (branch coverage): test_debugger_node_branches
+>   (638 lines) / test_patch_evidence / test_patch_test_hacking /
+>   test_embedding_utils_more_branches / test_rag_retriever_more_branches /
+>   test_spec_smt_more_branches / test_type_repair_more_branches /
+>   test_testless_validation / test_control_flow_branches, etc.; test chain
+>   4717→4996 (+279);
+> - **`.gitignore` gains `.pytest_tmp/`** (WorkBuddy TMPDIR sandbox output);
+> Verified: mypy 114+ files repo-wide 0 errors; ruff clean; related suites —
+> spec 85 / graph 226 / embedding 118 — all pass.
 
 ## [Unreleased] — 2026-10-08 Batch R2 (third measurement artifact root-fix + legacy-batch archival + external caliber v2 closure)
 
@@ -2433,7 +2699,7 @@ real CITATION authors.
 >   comment contained real `sk-` prefix samples; the guard scans untracked files
 >   and found *itself*, so any commit was blocked (`sh check_secret_leak.sh`
 >   measured exit=1). Fixed: comment rewritten with placeholder wording + local
->   review reports (`REVIEW_*.md` / `review_infra_hygiene_report.md` etc., which
+>   review reports (`review_infra_hygiene_report.md` etc., which
 >   carry `sk-` forensic prefix samples, are untracked and referenced nowhere)
 >   added to `.gitignore`. Guard now exits 0.
 > - **Real defect ① (rag material-source over-scan)**: `_iter_candidate_docs`

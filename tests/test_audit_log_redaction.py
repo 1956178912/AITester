@@ -1,5 +1,5 @@
 """
-4.2 日志脱敏自动审计（scripts/audit_log_redaction.py）的回归测试。
+4.2 日志脱敏自动审计（scripts/gates/audit_log_redaction.py）的回归测试。
 
 覆盖目标（对应提案 4.2"模拟敏感信息注入"的 CI 门禁）：
 - 模拟注入未脱敏日志点（api_key/secret/password/Bearer/sk- 字段名）→ 审计报出可疑点；
@@ -16,7 +16,7 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from scripts.audit_log_redaction import audit  # noqa: E402
+from scripts.gates.audit_log_redaction import audit  # noqa: E402
 
 # 审计目标目录（脚本内相对仓库根的路径）：
 # - 全仓审计：传 PROJECT_ROOT（自动跳过 tests/ 等目录）

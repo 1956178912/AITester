@@ -2,7 +2,7 @@
 
 背景：`src/graph/workflow.py` 的 `determine_stop_reason`（O27 单点判定）
 落地后无独立单测——`graph/workflow.py` 分支覆盖从 92% 跌至 74%，
-`scripts/check_branch_coverage.py` 的 90% 严格门槛因此变红（CI 会拦）。
+`scripts/gates/check_branch_coverage.py` 的 90% 严格门槛因此变红（CI 会拦）。
 本文件对该纯函数的 11 个 StopReason 分支逐一锁定判定优先级，
 不依赖 LLM / 图执行（纯数据输入 → 枚举输出），CI 可安全运行。
 

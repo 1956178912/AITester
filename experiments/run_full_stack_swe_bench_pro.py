@@ -17,7 +17,7 @@ G8 全开链路 SWE-bench Pro 复测脚本。
     - AITESTER_TRACE_DIR=<dir>         节点级 JSONL 追踪（供事后分析）
 
 数据前置（必须先通过）：
-    SWE-bench Pro 数据目录需经 `scripts/check_swe_bench_pro_ready.py` 校验
+    SWE-bench Pro 数据目录需经 `scripts/gates/check_swe_bench_pro_ready.py` 校验
     （"数据集无可用源码"阻塞已解决：SWE_BENCH_ENRICHMENT 注入真实
     instance_code + RepoExecutor 仓库级验证）。本脚本执行前会先调用该
     检查，未通过时直接退出（不浪费 LLM token 跑无信息量批次）。
@@ -93,7 +93,7 @@ def _apply_full_stack_env(output_dir: str) -> dict[str, str]:
 
 
 def _check_pro_data_ready(data_dir: str | None, dataset: str) -> bool:
-    """执行 G8 数据前置检查（scripts/check_swe_bench_pro_ready.py）。
+    """执行 G8 数据前置检查（scripts/gates/check_swe_bench_pro_ready.py）。
 
     仅当 dataset 为 SWE-bench Pro / SWE-bench 时执行；内置 examples /
     synthetic 数据集无 Pro 数据前置要求，直接返回 True（跳过检查）。
@@ -107,7 +107,7 @@ def _check_pro_data_ready(data_dir: str | None, dataset: str) -> bool:
     """
     if dataset in ("examples", "synthetic", "synth"):
         return True
-    sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
+    sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts", "gates"))
     from check_swe_bench_pro_ready import check_pro_ready
 
     resolved_dir = data_dir or os.getenv("AITESTER_SWE_BENCH_PRO_DIR") or os.getenv("SWE_BENCH_DATA_DIR")

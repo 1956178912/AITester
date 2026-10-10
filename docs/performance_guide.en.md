@@ -489,7 +489,7 @@ LLM_2_MODEL_NAME=model-2
 
 ## 9. Performance Profiling Baseline (2026-09-12 measurements)
 
-> Summarized from cProfile / tracemalloc measurements in `scripts/performance_profile.py`.
+> Summarized from cProfile / tracemalloc measurements in `scripts/tools/performance_profile.py`.
 
 ### 9.1 Runtime Logic Is Efficient, No CPU Hotspots
 
@@ -556,7 +556,7 @@ EXECUTOR_USE_DOCKER=true EXECUTOR_DOCKER_IMAGE=aitester:with-pandas \
 **Execution time comparison**:
 ```bash
 # Run the same task under both Docker and venv modes; outputs a Markdown comparison table
-python scripts/compare_executor_modes.py \
+python scripts/tools/compare_executor_modes.py \
     --tasks examples/calculator.py examples/string_utils.py
 ```
 

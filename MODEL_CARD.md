@@ -113,4 +113,4 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
 
 - 本项目代码：见仓库根 `LICENSE`。
 - 引用的基准/方法来源：见根目录 5 份 `*_BASELINE_2023-2026.md` 综述
-  （引用真实性由 `scripts/check_citations.py` 周检）。
+  （引用真实性由 `scripts/gates/check_citations.py` 周检）。

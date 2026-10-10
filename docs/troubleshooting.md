@@ -46,7 +46,7 @@ export AITESTER_LLM_TIMEOUT=300
 - 配额故障转移已内置（重试耗尽自动切备用 API）；
 - `cost_budget`（`COST_BUDGET_ENABLE=true`）设任务级 token 预算，
   超限快速失败而非空转烧钱；
-- 批量跑批前跑 `scripts/check_quota.py`。
+- 批量跑批前跑 `scripts/tools/check_quota.py`。
 
 ## 2. RAG 检索器初始化失败
 
@@ -185,7 +185,7 @@ export ROGUE_AGENT_ZSCORE_LIMIT=5
 **解决步骤**：
 ```bash
 # 1) 双语文档守卫（CI 同款口径）
-python scripts/check_bilingual_docs.py
+python scripts/gates/check_bilingual_docs.py
 # 2) 文档链接体检（curl 抓取 raw 链接，Content-Type 验证）
 for f in $(grep -ohE '\]\([^)]*\.md\)' README.md | tr -d '](' | tr -d ')'); do
   curl -sI "https://raw.githubusercontent.com/<org>/<repo>/main/$f" | head -1

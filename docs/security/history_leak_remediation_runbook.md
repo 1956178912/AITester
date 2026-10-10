@@ -14,16 +14,25 @@
 | 本地事故：`.env.local.bak_g8` 曾含 22 条真实 key | `.git-hooks/check_secret_leak.sh` 注释记录（该文件未入库） |
 | 当前防线为何非阻断 | `.github/workflows/ci.yml` 全历史 gitleaks 步骤 `continue-on-error`（周日 schedule），注释注明"待凭证轮换" |
 
-## 1. 密钥轮换（先于一切）
+## 1. 密钥轮换（先于一切，零停机顺序）
 
 历史重写**不能替代轮换**——重写前的 fork/clone/PR 缓存仍可能持有旧密文。
+
+**核心原则：先创建新凭证，再销毁旧的（顺序颠倒会导致服务中断）。**
+一旦密钥被推送到远程仓库，唯一安全的假设是它已被复制（有效密钥从进入
+公共仓库到首次恶意使用的中位时间以分钟计），故轮换是**根本性修复**，
+purge 历史只是减少暴露面。
 
 1. 盘点泄漏涉及的全部 provider（agnes / aliyun_bailian / bigmodel / deepseek /
    anthropic / openai 编号变体——以 `gitleaks detect --log-opts="all" --redact`
    输出为准）；
-2. 在各 provider 控制台**吊销/重建**命中的 key；重建后的新 key 只入
-   `.env.local`（0600，gitignore）或 CI Secrets，**绝不入任何被跟踪文件**；
-3. 确认无业务依赖旧 key（`scripts/check_quota.py` 探测全绿）。
+2. **创建新密钥**（不触碰旧密钥）——在各 provider 控制台新建；
+3. **推送新值到单一真相源**——新 key 只入 `.env.local`（0600，gitignore）
+   或 CI Secrets，**绝不入任何被跟踪文件**；
+4. **重新部署/重载**使服务拾取新值，然后把旧密钥**设为非活跃**（非删除）；
+5. **观察一个轮换窗口**（建议 ≥7 天或一个完整实验周期）的错误后，永久删除旧密钥；
+6. **验证旧凭证确已失效**（而非假设撤销成功）：`scripts/tools/check_quota.py` 用旧
+   key 探测应返回 401/403。
 
 ## 2. git 历史重写
 
@@ -64,6 +73,6 @@ git push origin --force --tags
 ## 4. 验收标准
 
 - [ ] `gitleaks detect --log-opts="all"` 退出码 0（全历史零命中）
-- [ ] 旧 key 在 provider 侧全部失效（`scripts/check_quota.py` 用旧 key 探测应 401）
+- [ ] 旧 key 在 provider 侧全部失效（`scripts/tools/check_quota.py` 用旧 key 探测应 401）
 - [ ] ci.yml 全历史扫描步骤无 `continue-on-error`，周日 schedule 全绿
 - [ ] SECURITY.md "已知未了结事项"第 1 条移除

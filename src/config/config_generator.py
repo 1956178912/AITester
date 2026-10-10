@@ -4,7 +4,7 @@
 
 用法：
     # 生成全部产物（模型目录 + .env.local.template + llm_configs.json
-    # + scripts/generate_batch_config.py，写入项目根目录）
+    # + scripts/tools/generate_batch_config.py，写入项目根目录）
     python -m src.config.config_generator
 """
 # ruff: noqa: T201  — 本文件为 CLI 用户可见的报表/自检输出（print 属有意行为，非库代码副作用）
@@ -13,8 +13,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
-# 常见的 LLM API 提供商配置模板
+# 常见 LLM API 提供商配置模板
+# PROVIDER_TEMPLATES 是 provider 登记的全量注册表（schema 校验与
+# credential_scrub 动态凭证剔除名单都依赖它，见 validate_llm_configs /
+# src/utils/credential_scrub.py），保留全量 provider 键；
+# 当前项目实际启用的端点见 COMMON_MODELS（仅 DeepSeek 官方 deepseek-flash，
+# 2026-10-09 配置要求：删除其余 API，仅保留用户配置的 DeepSeek）。
 PROVIDER_TEMPLATES = {
     "aliyun_bailian": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -29,30 +35,13 @@ PROVIDER_TEMPLATES = {
     "bigmodel": {"base_url": "https://open.bigmodel.cn/api/paas/v4/", "description": "BigModel 智谱"},
     "deepseek": {"base_url": "https://api.deepseek.com/v1", "description": "DeepSeek"},
 }
-# 常见模型列表
+# 当前项目启用的模型目录（2026-10-09：仅保留用户配置的 DeepSeek V4.1 Flash；
+# 其余 qwen / glm / kimi / agnes / deepseek-chat 等条目已按要求移除。
+# generate_config_json / print_model_catalog 以本列表为唯一来源。
+# 注：model_name 使用 DeepSeek 官方 API 当前接受的写法 `deepseek-flash`
+# （历史别名 `deepseek-v4.1-flash` 已弃用，与 .env.local / llm_configs.json 对齐）。
 COMMON_MODELS = [
-    # 通义千问系列
-    {"name": "qwen-max", "provider": "aliyun_bailian"},
-    {"name": "qwen-plus", "provider": "aliyun_bailian"},
-    {"name": "qwen-turbo", "provider": "aliyun_bailian"},
-    {"name": "qwen-long", "provider": "aliyun_bailian"},
-    # DeepSeek 系列
-    {"name": "deepseek-chat", "provider": "deepseek"},
-    {"name": "deepseek-coder", "provider": "deepseek"},
-    {"name": "deepseek-v3", "provider": "aliyun_bailian"},
-    {"name": "deepseek-v4-pro", "provider": "aliyun_bailian"},
-    {"name": "deepseek-v4-flash", "provider": "aliyun_bailian"},
-    # GLM 系列
-    {"name": "glm-4", "provider": "bigmodel"},
-    {"name": "glm-4-plus", "provider": "bigmodel"},
-    {"name": "glm-4-air", "provider": "bigmodel"},
-    {"name": "glm-4-flash", "provider": "bigmodel"},
-    {"name": "glm-4.7", "provider": "aliyun_bailian"},
-    {"name": "glm-4.7-flash", "provider": "bigmodel"},
-    # Kimi 系列
-    {"name": "kimi-k2.7-code", "provider": "aliyun_bailian"},
-    # Agnes 系列
-    {"name": "agnes-3.0-flash", "provider": "agnes_domestic"},
+    {"name": "deepseek-flash", "provider": "deepseek"},
 ]
 
 
@@ -70,44 +59,23 @@ def generate_env_template(output_file: str = ".env.local.template") -> str:
         "# 脚本的中间变量；config.py 运行时直接读取 LLM_N_* 编号格式，不会读取这些",
         "# {PROVIDER}_API_KEY 变量。请勿直接复制本文件为 .env.local 使用！",
         "# 手动配置请改用：cp config.local.example .env.local（填入 LLM_N_* 格式）",
-        "# 批量生成用法：python scripts/generate_batch_config.py --models llm_configs.json",
+        "# 批量生成用法：python scripts/tools/generate_batch_config.py --models llm_configs.json",
         "",
         "# ─── API Key 配置（必填）────────────────────────────────────────────────────",
         "# 每个 LLM Provider 需要独立的 API Key",
         "# 变量名约定：{PROVIDER}_API_KEY（provider 全名大写 + _API_KEY），",
-        "# 与 generate_config_json / scripts/generate_batch_config.py 的推导规则同源",
-        "",
-        "# 阿里云百炼 API Key",
-        "ALIYUN_BAILIAN_API_KEY=your-aliyun-api-key-here",
-        "",
-        "# Agnes AI 国内站 API Key",
-        "AGNES_DOMESTIC_API_KEY=your-agnes-api-key-here",
-        "",
-        "# Agnes AI 国际站 API Key",
-        "AGNES_INTERNATIONAL_API_KEY=your-agnes-international-api-key-here",
-        "",
-        "# BigModel API Key",
-        "BIGMODEL_API_KEY=your-bigmodel-api-key-here",
+        "# 与 generate_config_json / scripts/tools/generate_batch_config.py 的推导规则同源",
+        "# （当前目录仅保留 DeepSeek 官方 provider，与 COMMON_MODELS 对齐）",
         "",
         "# DeepSeek API Key",
         "DEEPSEEK_API_KEY=your-deepseek-api-key-here",
         "",
         "# ─── 模型配置示例 ──────────────────────────────────────────────────────────",
         "",
-        "# 示例：添加通义千问模型",
-        "# LLM_1_API_KEY=${ALIYUN_BAILIAN_API_KEY}",
-        "# LLM_1_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "# LLM_1_MODEL_NAME=qwen-max",
-        "",
-        "# 示例：添加 Agnes AI 模型",
-        "# LLM_2_API_KEY=${AGNES_DOMESTIC_API_KEY}",
-        "# LLM_2_BASE_URL=https://api.agnes-ai.cn/v1",
-        "# LLM_2_MODEL_NAME=agnes-3.0-flash",
-        "",
-        "# 示例：添加智谱模型",
-        "# LLM_3_API_KEY=${BIGMODEL_API_KEY}",
-        "# LLM_3_BASE_URL=https://open.bigmodel.cn/api/paas/v4/",
-        "# LLM_3_MODEL_NAME=glm-4-flash",
+        "# 示例：添加 DeepSeek 官方模型（当前项目唯一配置的 LLM 端点）",
+        "# LLM_1_API_KEY=${DEEPSEEK_API_KEY}",
+        "# LLM_1_BASE_URL=https://api.deepseek.com/v1",
+        "# LLM_1_MODEL_NAME=deepseek-flash",
         "",
     ]
     content = "\n".join(template_lines)
@@ -140,6 +108,57 @@ def generate_config_json(output_file: str = "llm_configs.json") -> str:
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(content)
     return content
+
+
+def validate_llm_configs(configs: list[dict[str, Any]]) -> list[str]:
+    """校验 llm_configs.json 模型目录 schema，返回违例清单（空 = 合法）。
+
+    校验规则（与 PROVIDER_TEMPLATES 权威来源对齐，防数据质量漂移）：
+    1. 每条目必填字段：model_name（非空 str）/ provider / base_url /
+       required_api_key；缺字段或类型不符 → 违例；
+    2. provider 必须 ∈ PROVIDER_TEMPLATES 键（未登记 provider 拒绝，
+       与 credential_scrub 的 provider 键联动防漂移）；
+    3. required_api_key 必须 == f"{provider.upper()}_API_KEY"
+       （与 generate_config_json 的推导规则同源，防手改漂移）；
+    4. base_url 必须以 http(s):// 开头（防残缺/内网占位混入）；
+    5. model_name 全局唯一（重复条目会使 expand_models/check_quota
+       路由歧义）。
+
+    Args:
+        configs: json.load 读入的模型目录列表（顶层为 list[dict]）。
+
+    Returns:
+        违例描述列表（每条含 1-based 条目序数）；空列表 = 全通过。
+    """
+    violations: list[str] = []
+    if not isinstance(configs, list):
+        return ["顶层结构必须为 JSON 数组（list）"]
+    seen_models: set[str] = set()
+    for idx, entry in enumerate(configs, start=1):
+        if not isinstance(entry, dict):
+            violations.append(f"#{idx}: 条目必须是对象（dict）")
+            continue
+        model_name = entry.get("model_name")
+        provider = entry.get("provider")
+        base_url = entry.get("base_url")
+        required_key = entry.get("required_api_key")
+        if not isinstance(model_name, str) or not model_name.strip():
+            violations.append(f"#{idx}: 缺 model_name（非空字符串）")
+        elif model_name in seen_models:
+            violations.append(f"#{idx}: model_name {model_name!r} 重复（路由歧义）")
+        else:
+            seen_models.add(model_name)
+        if not isinstance(provider, str) or provider not in PROVIDER_TEMPLATES:
+            violations.append(
+                f"#{idx}: provider {provider!r} 未在 PROVIDER_TEMPLATES 登记（合法值：{sorted(PROVIDER_TEMPLATES)}）"
+            )
+        else:
+            expected_key = f"{provider.upper()}_API_KEY"
+            if required_key != expected_key:
+                violations.append(f"#{idx}: required_api_key {required_key!r} 应为 {expected_key!r}")
+        if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
+            violations.append(f"#{idx}: base_url {base_url!r} 必须以 http(s):// 开头")
+    return violations
 
 
 def print_model_catalog() -> None:
@@ -272,8 +291,8 @@ if __name__ == "__main__":
     print("JSON 配置已生成: llm_configs.json")
     # 生成批量配置脚本（移入 scripts/ 子目录，与独立运维脚本集中管理）
     script = generate_batch_config_script()
-    scripts_dir = _PROJECT_ROOT / "scripts"
-    scripts_dir.mkdir(exist_ok=True)
+    scripts_dir = _PROJECT_ROOT / "scripts" / "tools"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
     with open(scripts_dir / "generate_batch_config.py", "w", encoding="utf-8") as f:
         f.write(script)
-    print("批量配置脚本已生成: scripts/generate_batch_config.py")
+    print("批量配置脚本已生成: scripts/tools/generate_batch_config.py")

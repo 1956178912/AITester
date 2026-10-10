@@ -87,21 +87,34 @@ class TestFindMissingModulesBranches:
 
 
 class TestSuggestPackageNamesBranches:
-    def test_default_no_whitelist(self, monkeypatch):
+    def test_default_now_enforces_builtin_whitelist(self, monkeypatch):
+        """C-08（2026-10-09 审查修订）：白名单默认开——未设置环境变量时
+        走内置 `_PIP_PACKAGE_WHITELIST`（~40 常见包）过滤，未知包名被拒。"""
         from src.tools.dependency import suggest_package_names
 
         monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
-        out = suggest_package_names({"PIL", "numpy"})
-        # PIL → pillow 映射；numpy → numpy
-        assert "pillow" in out
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST", raising=False)
+        out = suggest_package_names({"numpy", "totally_hallucinated_pkg"})
         assert "numpy" in out
+        assert "totally_hallucinated_pkg" not in out
+
+    def test_default_off_preserves_legacy_passthrough(self, monkeypatch):
+        """显式 PIP_PACKAGE_WHITELIST_ENABLE=false 退回历史口径（调试场景）。"""
+        from src.tools.dependency import suggest_package_names
+
+        monkeypatch.setenv("PIP_PACKAGE_WHITELIST_ENABLE", "false")
+        monkeypatch.delenv("PIP_PACKAGE_WHITELIST", raising=False)
+        out = suggest_package_names({"PIL", "totally_hallucinated_pkg"})
+        # PIL → pillow 映射；未知名默认放行（历史行为）
+        assert "pillow" in out
+        assert "totally_hallucinated_pkg" in out
 
     def test_stdlib_excluded(self, monkeypatch):
         from src.tools.dependency import suggest_package_names
 
         monkeypatch.delenv("PIP_PACKAGE_WHITELIST_ENABLE", raising=False)
         out = suggest_package_names({"os", "numpy"})
-        # os 是 stdlib → 排除
+        # os 是 stdlib → 排除（白名单开与关口径一致）
         assert "os" not in out
         assert "numpy" in out
 

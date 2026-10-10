@@ -100,3 +100,76 @@ def test_run_pytest_single_file_unchanged(monkeypatch) -> None:
     test_code = "from add import add\n\ndef test_add():\n    assert add(1, 2) == 3\n"
     rc = _run_pytest_in_tmp(test_code, target, "add")
     assert rc is not None and rc[0] == 0
+
+
+# ─── 双布局（2026-10-10 第四起测量伪影修复）────────────────────────────────
+
+
+class TestDualLayout:
+    """被测模块须**同时**以扁平与包结构两种方式可 import。
+
+    背景（审查报告 §11.1b 结果二十一）：被测模块名取 task_id 末段（如
+    `bitcount`），生产执行沙箱把模块**平铺**写成 `{module}.py`，故 Generator
+    写出的测试用**扁平 import**（`from bitcount import bitcount`）——在它被
+    生成的环境里是正确的。但判分树此前只提供包结构，扁平 import 一律
+    `ModuleNotFoundError` → pytest rc=2（收集中断）→
+    `_looks_like_test_execution_error` 判"没跑起来" → **detection 构造性恒为 0**。
+    实测（12 任务子集 9 个缺陷程序）：修复前 **9/9 两侧 rc=2**、
+    F2P 检出 **0/7**；修复后 F2P 检出 **6/7**。
+    """
+
+    def test_root_level_module_written(self, tmp_path, monkeypatch) -> None:
+        """tmpdir 根须有 {module}.py（扁平 import 可解析）。"""
+        monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+        tmpdir = str(tmp_path / "run")
+        os.makedirs(tmpdir)
+        _prepare_packaged_test_tree(tmpdir, "def foo():\n    return 1\n", "def test_a():\n    assert True\n", "foo")
+        root = Path(tmpdir)
+        # 双布局：扁平 + 包结构并存，且内容一致
+        assert (root / "foo.py").is_file(), "扁平布局缺失（第四起伪影会复发）"
+        assert (root / "python_programs" / "foo.py").is_file(), "包结构布局缺失"
+        assert (root / "foo.py").read_text(encoding="utf-8") == (root / "python_programs" / "foo.py").read_text(
+            encoding="utf-8"
+        )
+
+    def test_flat_import_runs_green(self, monkeypatch) -> None:
+        """**关键回归锁**：扁平 import 的测试须能跑通（修复前 rc=2）。"""
+        monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+        target = "def bitcount(n):\n    return bin(n).count('1')\n"
+        test_code = "from bitcount import bitcount\n\ndef test_bitcount():\n    assert bitcount(7) == 3\n"
+        res = _run_pytest_in_tmp(test_code, target, "bitcount", task_metadata={"source": "quixbugs"})
+        assert res is not None
+        rc, out, err = res
+        assert rc == 0, f"扁平 import 应跑通，实际 rc={rc}\n{out[:400]}\n{err[:200]}"
+
+    def test_flat_import_detects_bug(self, monkeypatch) -> None:
+        """扁平 import 下 F2P 应能成立：buggy 红 ∧ fixed 绿。"""
+        monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+        buggy = "def bitcount(n):\n    return 0\n"
+        fixed = "def bitcount(n):\n    return bin(n).count('1')\n"
+        test_code = "from bitcount import bitcount\n\ndef test_bitcount():\n    assert bitcount(7) == 3\n"
+        rb = _run_pytest_in_tmp(test_code, buggy, "bitcount", task_metadata={"source": "quixbugs"})
+        rf = _run_pytest_in_tmp(test_code, fixed, "bitcount", task_metadata={"source": "quixbugs"})
+        assert rb is not None and rf is not None
+        assert rb[0] != 0, "buggy 侧应变红"
+        assert rf[0] == 0, "fixed 侧应变绿（F2P 第 2 段）"
+
+    def test_packaged_import_still_works(self, monkeypatch) -> None:
+        """包结构 import 不得因双布局而回归。"""
+        monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+        target = "def bitcount(n):\n    return bin(n).count('1')\n"
+        test_code = (
+            "from python_programs.bitcount import bitcount\n\ndef test_bitcount():\n    assert bitcount(7) == 3\n"
+        )
+        res = _run_pytest_in_tmp(test_code, target, "bitcount", task_metadata={"source": "quixbugs"})
+        assert res is not None
+        assert res[0] == 0, f"包结构 import 回归，rc={res[0]}\n{res[1][:400]}"
+
+    def test_invalid_test_still_scores_zero(self, monkeypatch) -> None:
+        """**口径未放松**：恒失败测试在新布局下仍不得算检出（buggy 侧也红）。"""
+        monkeypatch.delenv("AITESTER_QUIXBUGS_DATA", raising=False)
+        target = "def bitcount(n):\n    return bin(n).count('1')\n"
+        test_code = "from bitcount import bitcount\n\ndef test_always_fail():\n    assert bitcount(7) == 999\n"
+        rb = _run_pytest_in_tmp(test_code, target, "bitcount", task_metadata={"source": "quixbugs"})
+        assert rb is not None
+        assert rb[0] != 0, "恒失败测试在 buggy 侧也红 → 不构成 F2P（口径未放松）"

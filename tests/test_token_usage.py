@@ -128,3 +128,48 @@ class TestRecordUsageErrors:
         usage = get_usage()
         assert usage.input_tokens == 12
         assert usage.output_tokens == 6
+
+
+class TestRecordCacheHitUsage:
+    """P0 止血：缓存命中路径的 token 记账（独立口径，不污染真实消耗语义）。"""
+
+    def setup_method(self):
+        reset()
+
+    def test_cache_hit_accounts_independently(self):
+        from src.graph.token_usage import record_cache_hit_usage
+
+        record_usage(100, 50, model="m1")  # 一次真实调用
+        record_cache_hit_usage(150, model="m1")  # 一次缓存命中（避免 150 token）
+        usage = get_usage()
+        # 真实消耗口径不变（llm_calls 只计真实调用，total 不含缓存避免量）
+        assert usage.total_tokens == 150
+        assert usage.llm_calls == 1
+        # 缓存口径独立累计
+        assert usage.cache_hits == 1
+        assert usage.cache_avoided_tokens == 150
+
+    def test_cache_hit_zero_tokens_counts_hit_only(self):
+        from src.graph.token_usage import record_cache_hit_usage
+
+        record_cache_hit_usage(0)  # LRU 快路径：拿不到 token，仅记命中次数
+        usage = get_usage()
+        assert usage.cache_hits == 1
+        assert usage.cache_avoided_tokens == 0
+        assert usage.total_tokens == 0  # 不污染真实消耗
+
+    def test_as_dict_includes_cache_fields(self):
+        from src.graph.token_usage import record_cache_hit_usage
+
+        record_cache_hit_usage(42)
+        d = get_usage().as_dict()
+        assert d["cache_hits"] == 1
+        assert d["cache_avoided_tokens"] == 42
+        assert json.loads(json.dumps(d))["cache_avoided_tokens"] == 42
+
+    def test_merge_aggregates_cache_fields(self):
+        a = TokenUsage(cache_hits=2, cache_avoided_tokens=100)
+        b = TokenUsage(cache_hits=3, cache_avoided_tokens=50)
+        a.merge(b)
+        assert a.cache_hits == 5
+        assert a.cache_avoided_tokens == 150

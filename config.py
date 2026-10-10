@@ -221,11 +221,8 @@ def _parse_float_env(name: str, default: float, min_val: float | None = None, ma
 #
 # 示例（见 config.local.example）：
 #   LLM_1_API_KEY=sk-your-key-here
-#   LLM_1_BASE_URL=https://api.agnes-ai.cn/v1
-#   LLM_1_MODEL_NAME=agnes-3.0-flash
-#   LLM_2_API_KEY=sk-another-key
-#   LLM_2_BASE_URL=https://api.deepseek.com
-#   LLM_2_MODEL_NAME=deepseek-chat
+#   LLM_1_BASE_URL=https://api.deepseek.com/v1
+#   LLM_1_MODEL_NAME=deepseek-flash
 #
 # 注意：编号无需连续（删除中间某个 provider 后剩余编号自动保留），
 # _load_llm_configs 会扫描到固定上限并跳过不完整的编号。
@@ -472,7 +469,7 @@ RAG_TTL_SECONDS: int = _parse_int_env("RAG_TTL_SECONDS", 7 * 24 * 3600, 60, None
 # ─── 数据集配置 ────────────────────────────────────────────────────────────────
 # SWE-bench 源码补充文件路径（P0）：官方 SWE-bench JSONL 不含被测源码字段，
 # 通过该 JSONL 按 instance_id 补全 instance_code/test_code。默认空串 = 不补全。
-# 环境变量名保持不变（scripts/export_swe_bench_source.py 输出的正是此格式，
+# 环境变量名保持不变（scripts/tools/export_swe_bench_source.py 输出的正是此格式，
 # README 复现步骤也以 `SWE_BENCH_ENRICHMENT=<路径>` 引用），仅在此集中声明默认值。
 SWE_BENCH_ENRICHMENT: str = os.getenv("SWE_BENCH_ENRICHMENT", "")
 

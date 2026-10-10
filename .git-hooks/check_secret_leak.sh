@@ -16,11 +16,11 @@
 #   注：真实前缀样例不得写入本脚本注释（守卫扫描未跟踪文件时会扫到
 #   自身），否则守卫被自己的规则拦下（自锁）；示例一律用占位符形式。
 #
-# 已知误报登记（_KNOWN_FP，2026-10-01 基线 5 项）：基线核查类 Markdown 的
-# ICLR/NeurIPS proceedings URL 中 hex 片段（≥32 位十六进制串）非真实凭证。
-# 这些文档随批次新增/改动时命中数会漂移——守卫仍会对其运行正则并打印命中
-# 内容供人工复核，只是登记项不阻断提交。命中文件不在登记内且非占位符时
-# 照常阻断。维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
+# 已知误报登记（_KNOWN_FP）：原 2026-10-01 基线 5 项（基线核查类 Markdown
+# 的 ICLR/NeurIPS proceedings URL 中 hex 片段≥32 位十六进制串，非真实凭证）
+# 所涉文档已于 2026-10-09 清理批次删除，登记项随之清空（正则恒不命中，
+# 保留结构以便未来新增误报文档时扩展）。命中文件非占位符时照常阻断。
+# 维护：新增误报文档时同步加入 _KNOWN_FP 正则，并在头部登记。
 
 set -e
 
@@ -46,9 +46,9 @@ echo "[pre-commit] 密钥泄漏守卫（O17 全口径）：扫描 staged 新文�
 _SENSITIVE_RE='sk-[A-Za-z0-9._-]{10,}|[A-Fa-f0-9]{32,}|[A-Z][A-Z_]*(PASSWORD|PASSWD|SECRET|API_KEY|TOKEN|CREDENTIAL)=[A-Za-z0-9+/_=.-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|Bearer +[A-Za-z0-9\-_~+/=]{8,}|\b(AKIA|ASIA)[A-Z0-9]{16,20}\b|[a-zA-Z][a-zA-Z0-9+.\-]*://[^/@\s]+:[^@\s]+@'
 
 # 已知误报登记（占位符形式，与头部"已知误报登记"注释同步）。
-# 基线核查类文档（URL 含 hex 片段）匹配即登记：打印命中供人工复核，不阻断。
-# 新增误报文档时请同步扩展本正则。
-_KNOWN_FP='^(FORMAL_METHODS_BASELINE_2023-2026|FRONTIER_BASELINE_LLM_UNIT_TEST_GENERATION_2023-2026|MULTIAGENT_BASELINE_2023-2026|MULTI_AGENT_LLM_SE_FRONTIER_BASELINE_2023-2026|docs/frontier-baseline-2024-2026-python-ai-compliance)\.md$'
+# 原 5 项基线核查类文档已删除（2026-10-09 清理批次），登记清空；
+# 未来新增误报文档时请扩展本正则并同步头部注释。
+_KNOWN_FP='^$'
 
 LEAKED=""
 while IFS= read -r f; do

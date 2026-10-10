@@ -432,7 +432,7 @@ class SWEBenchDataset(BaseDatasetLoader):
         官方 SWE-bench JSONL 不含被测源码字段，未配 SWE_BENCH_ENRICHMENT
         补充文件时 instance_code 兜底为 issue 文本（validate_task 标记为
         "兜底为 issue 文本"）。本方法返回这些任务的 instance_id（加载顺序），
-        供 check-dataset 质量报告输出与 scripts/export_swe_bench_source.py
+        供 check-dataset 质量报告输出与 scripts/tools/export_swe_bench_source.py
         的 --instance-ids 批量导出筛选使用。
 
         Returns:

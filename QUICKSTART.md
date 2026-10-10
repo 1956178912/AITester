@@ -20,10 +20,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **一键引导（推荐）**：上面第 2-4 步可由 `bash scripts/bootstrap_dev.sh`
+> **一键引导（推荐）**：上面第 2-4 步可由 `bash scripts/tools/bootstrap_dev.sh`
 > 自动完成（venv 创建 + 依赖安装 + 两个 env 文件复制 + 配置加载校验，失败时
 > 给出具体缺失项提示）；只需在脚本完成后编辑 `.env.local` 填入真实
-> `LLM_N_API_KEY`。校验已配置的环境可用 `bash scripts/bootstrap_dev.sh --check-only`。
+> `LLM_N_API_KEY`。校验已配置的环境可用 `bash scripts/tools/bootstrap_dev.sh --check-only`。
 
 ## 3. 配置环境变量
 
@@ -56,7 +56,7 @@ vim .env.local
 python3 -c "from config import LLM_CONFIGS; print(f'已加载 {len(LLM_CONFIGS)} 个 LLM 配置')"
 
 # 如需真实探测各模型 API 连通性与额度（每个仅 1 token），用第 6 步的脚本：
-# python scripts/check_quota.py
+# python scripts/tools/check_quota.py
 ```
 
 ## 5. 运行测试
@@ -76,10 +76,10 @@ python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
 
 ```bash
 # 全量验证（配置加载 → 模块导入 → ruff → 快速单测 → 最小 LLM 生成流程）
-bash scripts/smoke_test.sh
+bash scripts/tools/smoke_test.sh
 
 # 纯离线模式（CI 无 LLM 密钥场景，跳过 S5 的 LLM 调用）
-bash scripts/smoke_test.sh --no-llm --skip-lint
+bash scripts/tools/smoke_test.sh --no-llm --skip-lint
 ```
 
 ## 6. 可选：模型额度探测与省 token 缓存
@@ -88,7 +88,7 @@ LLM 调用默认开启文件缓存（默认目录 `~/.cache/aitester/llm/`，202
 
 ```bash
 # 探测各已配置模型哪些还活着、哪些 403 额度用尽（每个仅 1-token，不打印 key）
-python scripts/check_quota.py
+python scripts/tools/check_quota.py
 
 # 关闭缓存 / 清缓存
 export AITESTER_LLM_CACHE=0
@@ -263,7 +263,7 @@ python -c "from src.tools.dependency import get_venv_cache_stats; print(get_venv
 docker build -t aitester:latest .
 EXECUTOR_USE_DOCKER=true python main.py run examples/calculator.py
 # Docker vs venv 执行时间对比（实验环境选择依据，输出 Markdown 表）
-python scripts/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
+python scripts/tools/compare_executor_modes.py --tasks examples/calculator.py examples/string_utils.py
 
 # 1.2 内置变异测试生成器：AST 级三类变异体（边界值替换 / 运算符翻转 / 布尔取反），
 # 每任务 ≤20 个，无 mutmut 依赖；mutation_score_from_details 汇总 details[].mutation_score。
@@ -285,7 +285,7 @@ python experiments/compare_failures.py \
 python -c "from src.tools.dependency import venv_cache_dir; print(venv_cache_dir(['pandas'], python_version='3.10'))"
 
 # 4.1 日志脱敏完整审计（全仓库 logger 调用点扫描，退出码 0=无可疑点，可挂 CI 门禁）
-python scripts/audit_log_redaction.py
+python scripts/gates/audit_log_redaction.py
 
 # P0 运行时探针（RUNTIME_PROBE_ENABLE，默认关）：被测代码抛异常时刻直接读
 # exc.__traceback__ 帧链采集精确失败时刻帧栈与局部变量快照（零 trace 开销，

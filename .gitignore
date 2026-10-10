@@ -33,6 +33,12 @@ venv_old/
 # 一次 git add -A 即永久泄漏进仓库历史（需重写历史清除）。通配覆盖任意后缀。
 .env.local.bak*
 
+# R5 审查（2026-10-09，P0 SEC-01）：私有隔离目录。此前 .private 只在
+# .dockerignore 中声明（构建上下文排除），.gitignore 未声明——一旦有人把
+# 敏感工件移入该目录，git status 会显示未跟踪而存在 `git add -A` 误提交风险。
+# 现已用于存放从包目录 src/ 迁出的遗留 .env.local 副本，双重忽略。
+.private/
+
 # Database
 *.db
 *.sqlite3
@@ -79,6 +85,10 @@ rag_data/
 # pytest 专用 TMPDIR 沙箱（WorkBuddy shim 对已存在目录 mkdir 转 PermissionError，
 # 用 TMPDIR=$(mktemp -d) 兜底产物目录，纯本地可再生，不提交）
 .pytest_tmp/
+
+# WorkBuddy 沙箱工具的工作记忆目录（第三方工具运行时产物，非项目内容，
+# 历史上曾误入库 2026-10-08 一份；目录整体不入库，避免再次污染 git status）
+.workbuddy/
 
 # 学术调研中间产物（APR 前沿基线爬取缓存等，本地一次性脚本，不提交）
 tmp_apr_baseline/
@@ -134,6 +144,12 @@ experiments/results/main_batch/**
 # 见上方 U1 注释的同一 gitignore 规范）。
 !experiments/results/r4_batches/
 !experiments/results/r4_batches/**
+# 2026-10-09：E6 control + A1 消融两批实跑工件入库——e6_a1_batches/ 全量
+# 子树放行（2 批次 JSON + 351 逐任务 trace + SHA256SUMS + README，与
+# 主批次 / r4_batches 同口径）。同上方规范：须同时 negation 目录与其递归
+# 内容，否则父目录被排除时其内文件不可 re-include。
+!experiments/results/e6_a1_batches/
+!experiments/results/e6_a1_batches/**
 data/
 /results/
 

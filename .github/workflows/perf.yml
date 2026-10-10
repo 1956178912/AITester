@@ -1,7 +1,7 @@
 name: AITester Performance Benchmark
 
 # R14（2026-10-05 审查批次）：每周日性能基准巡检。
-# 跑 scripts/performance_benchmark.py（Executor / ErrorClassifier / BaseAgent
+# 跑 scripts/tools/performance_benchmark.py（Executor / ErrorClassifier / BaseAgent
 # 关键操作微基准），与 docs/performance_baseline.json 基线比对（15% 相对阈值
 # + 0.05ms 绝对下限，non-blocking 告警——跨机硬件差异下阻断必生假阳性），
 # 跑分产物归档 90 天供人工对照与基线刷新（--update-baseline）。
@@ -57,19 +57,19 @@ jobs:
         # 脚本无 CLI 参数：跑 Executor._auto_fix_imports / ErrorClassifier.classify /
         # BaseAgent 解析三组微基准（各 100 次迭代取 avg/min/max ms），
         # 输出写 experiments/results/performance_benchmark.json
-        run: python scripts/performance_benchmark.py
+        run: python scripts/tools/performance_benchmark.py
 
       - name: Check regression vs docs/performance_baseline.json (non-blocking)
         # R14：15% 相对阈值 + 0.05ms 绝对下限（过滤亚毫秒指标的定时器噪声），
         # 默认仅告警不阻断（基线在开发机生成、CI 在 ubuntu 跑，跨机固有偏差
         # 下阻断必生假阳性）；手动 dispatch 可选 --strict 转阻断排查。
         # 基线漂移（代码性重构导致整体量级变化）时：下载下方工件后本地执行
-        # `python scripts/check_perf_regression.py --current <产物> --update-baseline`
+        # `python scripts/gates/check_perf_regression.py --current <产物> --update-baseline`
         # 并提交刷新后的 docs/performance_baseline.json。
         run: |
           STRICT_FLAG=""
           if [ "${{ inputs.strict }}" = "true" ]; then STRICT_FLAG="--strict"; fi
-          python scripts/check_perf_regression.py --baseline docs/performance_baseline.json --current experiments/results/performance_benchmark.json $STRICT_FLAG
+          python scripts/gates/check_perf_regression.py --baseline docs/performance_baseline.json --current experiments/results/performance_benchmark.json $STRICT_FLAG
 
       - name: Upload benchmark artifact
         # 跑分 JSON 归档 90 天：供人工对照历史趋势 + 基线刷新原料

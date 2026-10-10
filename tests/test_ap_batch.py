@@ -20,6 +20,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 PREREG_ZH = (PROJECT_ROOT / "docs" / "preregistration.md").read_text(encoding="utf-8")
@@ -39,10 +41,10 @@ _MATERIAL_HEADINGS = (
 
 
 def _load_checker_module() -> Any:
-    """以 importlib 加载 scripts/check_tool_versions.py（scripts 非包）。"""
+    """以 importlib 加载 scripts/gates/check_tool_versions.py（scripts 非包）。"""
     spec = importlib.util.spec_from_file_location(
         "check_tool_versions_under_test",
-        PROJECT_ROOT / "scripts" / "check_tool_versions.py",
+        PROJECT_ROOT / "scripts" / "gates" / "check_tool_versions.py",
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -157,8 +159,20 @@ class TestSurveyDocFreshness:
 
     def test_no_stale_ci_install_claim(self) -> None:
         """旧行"CI 里是裸 pip install -r requirements.txt"不得残留；
-        现口径（lock 安装 + 剩余无 hash 差距）在位。"""
-        survey = (PROJECT_ROOT / "docs" / "Python工程化前沿基线（2024–2026）.md").read_text(encoding="utf-8")
+        现口径（lock 安装 + 剩余无 hash 差距）在位。
+
+        2026-10-09 清理批次：survey 文档已删除（同
+        tests/test_aq_batch.py 模块级说明）。此处原为直接 read_text，
+        文档缺失会抛 FileNotFoundError 而 fail；改为缺失即 skip——
+        CI 安装口径本身由 .github/workflows/ci.yml 与 check_lock_sync 覆盖。
+        """
+        survey_path = PROJECT_ROOT / "docs" / "Python工程化前沿基线（2024–2026）.md"
+        if not survey_path.is_file():
+            pytest.skip(
+                "survey 文档已随 2026-10-09 清理批次删除；"
+                "CI 安装口径由 ci.yml（pip install -r requirements.lock）+ check_lock_sync 覆盖"
+            )
+        survey = survey_path.read_text(encoding="utf-8")
         assert "CI 里是裸 `pip install -r requirements.txt`" not in survey
         assert "requirements.lock`（132 项全钉）安装" in survey
 

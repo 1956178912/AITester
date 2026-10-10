@@ -9,6 +9,19 @@
 > criterion. Core innovations: **Detection-first Chain-of-Thought ("red before
 > green")** + **Hierarchical Repair Mechanism**. **Multi-agent orchestration** is an
 > **ablatable container** (not a primary claim; E2 δ=−0.3673, ADR-0016/R26).
+> **Why no *hand-crafted* multi-agent (added 2026-10-09, citations to verify):**
+> beyond the project's own n=261 decisive experiment (−28pp vs the
+> detection-first prompt protocol `plain_llm_df`), 2026 cross-paper evidence
+> now supports a consensus: one-shot prompting beats hand-designed
+> multi-agent orchestration (CANDOR, ICST 2026 [to verify]: one-shot Gemini
+> 88.35% vs CANDOR 35.92%, 45s vs 50h); while hierarchies *discovered by
+> bandit optimization* (BOAD, ICLR 2026 [to verify]) can outperform larger
+> single models — the negative evidence targets **hand-crafted
+> orchestration**, not the multi-agent paradigm itself. The orchestration
+> layer is kept as an ablatable research container under the ADR-0016
+> promotion criterion (budget-matched positive detection delta); future
+> exploration targets "automated orchestration search vs hand-crafted
+> orchestration".
 > Honest disclosure (AL5; 2026-10-08 R2 errata: two measurement artifacts
 > — ADR-0021 patch-field fence residue + ADR-0029 cross-file tasks not
 > materialized): across the three-seed main batch (n=261, gold
@@ -40,7 +53,7 @@
 | **Benchmark Metrics (honest reporting)** | ⚠️ Main-batch numbers: the [BASELINE.yaml](BASELINE.yaml) `benchmark` section is the single source of truth. The legacy `success` metric ("generated tests pass on the final code") **must never be quoted alone** — always present it alongside the M1 triple (`detection_rate` / `repair_rate` / `false_fix_rate`). Current caliber = R-P0-2 three-seed pooled (261 tasks/arm): detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%, **aitester vs df −28pp (net-negative orchestration contribution, robust under dual bounds for the 21 missing rows)**; **repair 39.31% under the corrected caliber** (ADR-0021/0029: the historical "0.0% across all arms" was two stacked measurement artifacts — patch-field fence residue and cross-file tasks not materialized; corrected replay 57/145 replayable rows; E1/E2 logic-profile batches 54.72%; the early 10-01 batch is a true zero at 0/15; corrected funnel: patch produced 94% / plausible 47% / correct 39.31%; the v1 calibers 35.86%/48.11% are artifact lower bounds, caliber matrix in `docs/design/repair_caliber_matrix.md`, ceiling attribution in `repair_ceiling_report.md` + ADR-0021/0027/0029); $/task 0.0259 vs 0.0045 (officially sourced price table); localization metrics ship alongside the result rows — `fl_at_k` (spectral Top-k line-level hit) and `localization_hit_function` (LLM reasoning localization function-level hit, since repair-engine batch I 2026-10-07, compared against the gold changed-function set, schema-isomorphic placeholder when unlocalized). Historical batch (2026-10-01, n=50) false_fix=89.8% stands as evidence of the false-success channel (ADR-0027 re-estimation: that batch's corrected repair is a true zero at 0/15 — the evidence holds; main-batch corrected false_fix = 87.2%); SWE-bench Lite (sqlfluff-20) 0/20 negative result and statistical tests disclosed as-is without cherry-picking |
 | **Known Failures** | ✅ 0 (RAG / dataset download tests fixed; CI 3.12/3.13/3.14 all green; when optional dependencies are missing, related cases are skipped via `skipif` instead of erroring) |
 | **Security Audit** | ✅ No hardcoded secrets (`.env*` / `.env.local.bak` / `.private` are gitignored / removed); three-layer log redaction defense (Handler-layer SensitiveFilter/Formatter + entry-point wiring + trace JSONL side-channel redaction); APIManager log points use in-place `_redact()` (independent of entry wiring, embedded-safe); `get_status()` redacts base_url at the exit; **all three execution paths (local/venv/Docker) now uniformly scrub LLM credentials via `credential_scrub.scrub_os_environ` (dynamic pattern covering the entire `LLM_N_API_KEY` family, closing the leak path where generated code inherits host credentials)**; P0 scrub hardening (2026-09-26: numbered variants `OPENAI_(API_KEY|BASE_URL)_\d+` + provider intermediate vars, coupled with `PROVIDER_TEMPLATES` keys to prevent list drift); redaction blind spots fixed (`APIManager.call` all-node-failure exception exit uniformly `_redact`-ed, `config_manager.add_llm_config` rejects newline/`#` var-value injection, `retry_with_backoff` log lazy-redacted, `SensitiveFormatter` fallback takes the pure-regex path first); LLM file cache logging is a known acceptable risk (local trusted domain, not committed to git; cache writes are now atomic replace) |
-| **Latest Optimization** | ✅ 2026-10-05 Review-optimization batch R1–R18 (default behavior unchanged): spec-oracle execution wiring (`SPEC_ORACLE_EXEC_ENABLE` — executable specs now run alongside LLM tests for the first time) + SpecIR v1 compile fixes (tautological assertion sealed) + signature-aware binding + mutation detection rate in the main benchmark (`mutation_detection_rate`, objective oracle adjudication) + complete statistical reports (McNemar/BH-FDR persisted + bootstrap CI + Cliff's delta + `--batches` allowlist) + rollback fail-closed switch + structured-routing switch + CI security scanning turned blocking + release/perf workflows + `AITESTER_PROFILE` presets; full-suite zero-regression + ruff/mypy all green; current baseline numbers: see [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
+| **Latest Optimization** | ✅ 2026-10-09 R4 review-landing batch (default behavior unchanged; all new capability is default-off / zero-LLM-cost): counterexample-guided refinement loop for logic-driven specs (`src/specs/spec_refine.py`, CEGIR — spec-contradiction counterexamples fed back to the LLM to fix the contract only + budgeted SMT re-verification, `SPEC_REFINE_ENABLE` default off; `spec_smt` gains a postcondition-consistency UNSAT check) + continued nodes.py split of the patch-application safety core into `src/graph/patch_io.py` (four clusters total 3593→1909 lines, historical import paths unchanged) + E4 contamination-control preregistration addendum (bilingual, mandatory-disclosure caliber) + `llm_configs.json` schema guard (`validate_llm_configs` + CI fast check) + MAS skill-library compilation route design doc (exploratory, Proposed); full-suite zero code regression + ruff/mypy clean (test case count and mypy source-file count: see [BASELINE.yaml](BASELINE.yaml)); current baseline numbers: see [BASELINE.yaml](BASELINE.yaml); earlier batches: see [CHANGELOG.en.md](CHANGELOG.en.md) |
 | **Core Module Coverage** | ✅ Per-module line coverage is sourced from [BASELINE.yaml](BASELINE.yaml) `coverage.line_core_modules` (single source of truth: base_agent 70 / api_manager 90 / dataset_loader 91 / graph_nodes 70 / code_analyzer 89 / planner 89 / dependency 82 / multi_candidate 84 / cross_file 91 / rag_retriever 86; branch coverage and core routing gates in the same file) |
 | **Code Style** | ✅ Ruff checks all pass (`ruff check` + `ruff format --check`, CI pinned to 0.16.3) + mypy 0 errors across the repo (source-file count and version pinning: see [BASELINE.yaml](BASELINE.yaml) `static_checks` section, `mypy_source_files`); historical lint-cleanup narratives are archived in [CHANGELOG.en.md](CHANGELOG.en.md) |
 | **Recent Changes** | ✅ 2026-10-07 repair-engine batch XIV (external-report net-new harvest per ADR-0028 — FL Top-k constraint gate [`patch_changed_functions` with insert anchoring × Top-3 localization candidates intersection, hit_rank; result rows emit `fl_constraint_verdict`/`fl_constraint_hit_rank`/`fl_constraint_changed_functions`; ADR-0024's generation-side dominance becomes row-level verifiable] + Self-Repair Trap observer [`oracle_quality_history` per-generation quality snapshots + `detect_self_repair_trap` three-signal core; three result-row keys] + Frame Lifetime Trace design input [docs/design/frame_lifetime_trace.md, activation gated on the Debugger-split batch] + BASELINE test-chain errata [pre-written count distortions for batches VII–XIII reconciled]; full suite 4669/0); previously the same day batches VII–XIII (repair=0 measurement-artifact resolution [corrected calibers 35.9%/48.1%] + test-hacking guard + statistical-report trio + counterfactual FL upper bound + ORACLE_CONTEXT_TIER ablation tier + interaction-centric attribution + corrected-caliber re-estimation closure, see CHANGELOG); previously the same day batch VI (--staging-dir batch-run operations — snapshot before the run, move new artifacts out afterwards so sequential multi-seed runs no longer trip the clean-tree gate [codifying the twice-manual E2 workaround; --skip-stats early exit also stages out; path-traversal defense]; plus `make cpr-idr` as the IDR/CPR + abstention-view report entry); previously the same day batch V (ADR-0020: patch abstention gate observability layer — five-signal decision core; result rows emit `patch_abstained`/`patch_abstain_signals`; the CPR/IDR abstention view replayed over existing artifacts shows 392 of the 443 passing rows [88.5%] would be suppressed with precision 1.0; blocking tier Proposed pending A/B); previously the same day batch IV (ADR-0019: deterministic-first repair routing — three zero-LLM conservative transformers + AST validation gate, skipping the LLM round on a hit with a retry sentinel); previously the same day batch III (ADR-0018: structured edit intents + deterministic landing + the AC2 over-red counter fix); previously the same day batch II (Top-3 ranked localization + Hit@3/MRR + the offline CPR/IDR caliber [IDR=27.78%] + ADR-0017 citation fixes); previously the same day batch I (paradigm pivot to the repair-engine route; standalone FaultLocalizer; `localization_hit_function` first measured); previously the same day batch AS (first end-to-end release-build verification + PEP 639); earlier batches see CHANGELOG; test counts: see the `tests` section of [BASELINE.yaml](BASELINE.yaml) |
@@ -92,7 +105,7 @@ The project is configured with GitHub Actions continuous integration, supporting
 - Ruff lint checks
 - pytest tests + coverage reports
 - Dependency security scanning (pip-audit; chromadb 1.5.9 hits 5 known vulnerabilities (PYSEC-2026-311 counted twice + PYSEC-2026-3813/3814/3815), explicitly exempted because no fixed version is yet available on PyPI; see the ci.yml comments and CHANGELOG for details)
-- Consistency validation between requirements and requirements.lock (scripts/check_lock_sync.py)
+- Consistency validation between requirements and requirements.lock (scripts/gates/check_lock_sync.py)
 - Test failure diagnostic annotations: when a test step fails, the list of FAILED/ERROR cases is automatically written as GitHub annotations (readable via the check-runs annotations API, no need for admin to download logs)
 
 ### Test Commands
@@ -194,15 +207,15 @@ The LLM clients in `base_agent` are now **reused** per configuration, avoiding a
 
 **Technical implementation**: `_get_or_create_chat_client()` and `_get_or_create_zai_client()` in `src/agents/base_agent.py`.
 
-### Model Quota Probing (scripts/check_quota.py)
+### Model Quota Probing (scripts/tools/check_quota.py)
 
 Probes whether each configured model is currently "alive / free quota exhausted (403) / rate-limited / key invalid / model not found"; each model receives only a 1-token request, and **no secret is ever printed**:
 
 ```bash
-.venv/bin/python scripts/check_quota.py                      # Probe all LLMs configured in .env.local
-.venv/bin/python scripts/check_quota.py --provider aliyun_bailian   # Scan all models in a provider directory
-.venv/bin/python scripts/check_quota.py --models qwen-max,qwen-plus --provider aliyun_bailian
-.venv/bin/python scripts/check_quota.py --dry-run           # Only list the targets to be probed, send no requests
+.venv/bin/python scripts/tools/check_quota.py                      # Probe all LLMs configured in .env.local
+.venv/bin/python scripts/tools/check_quota.py --provider aliyun_bailian   # Scan all models in a provider directory
+.venv/bin/python scripts/tools/check_quota.py --models qwen-max,qwen-plus --provider aliyun_bailian
+.venv/bin/python scripts/tools/check_quota.py --dry-run           # Only list the targets to be probed, send no requests
 ```
 
 ### LLM Call Timeout Configuration
@@ -312,7 +325,14 @@ AITester/
 │   │   └── cross_file.py             # 3.5 cross-file repair (coordinator-proposer architecture, off by default)
 │   ├── graph/                        # Workflow orchestration modules
 │   │   ├── workflow.py               # LangGraph workflow graph (supports ablation switches; node registration and RAG wiring)
-│   │   ├── nodes.py                  # Node function implementations (_planner/_generator/_executor/_debugger/_patch_applier/_cross_file_analyzer)
+│   │   ├── nodes.py                  # Node function implementations (_planner/_generator/_executor/_cross_file_analyzer + orchestration nodes; large
+│   │   │                               clusters split out per batches S7/S4 into trace_reward/flags/agents_cache/debugger/patch_io,
+│   │   │                               all re-exported to preserve historical import paths)
+│   │   ├── trace_reward.py           # R3 S7: 6 pure trajectory/reward/iteration-strategy functions (split from nodes.py, re-export preserved)
+│   │   ├── flags.py                  # R3 S7: switch-reading function cluster (split from nodes.py, re-export preserved)
+│   │   ├── agents_cache.py           # R3 S7: Executor / generic Agent instance-reuse cache (split from nodes.py, re-export preserved)
+│   │   ├── debugger.py               # R3 S7: _diagnosis_node/_debugger_node node implementations (split from nodes.py, re-export preserved)
+│   │   ├── patch_io.py               # R4 S4: patch-application safety core (path allowlist + atomic write + multi-candidate selection + safe write + snapshot rollback, split from nodes.py, re-export preserved)
 │   │   ├── rag.py                    # RAG retriever singleton management (get_rag_retriever, re-exported via workflow.py)
 │   │   ├── tracing.py                # Tracing layer wiring (task-level JSONL sessions, re-exported via workflow.py)
 │   │   ├── state.py                  # Global state definitions (TypedDict) + create_initial_state factory (single construction point)
@@ -361,6 +381,16 @@ AITester/
 │   ├── calculator.py                 # Calculator example (division by zero, negative factorial bugs)
 │   ├── buggy_library.py              # Algorithm library example (binary search, sort-merge, etc.)
 │   └── string_utils.py               # String utilities example (palindrome, Caesar cipher, etc.)
+├── scripts/                          # Repository-level scripts (see scripts/README.md)
+│   ├── gates/                        # CI / pre-commit blocking checks (20; non-zero = fail)
+│   │   ├── check_baseline.py         # BASELINE.yaml sanity
+│   │   ├── check_lock_sync.py        # requirements.txt ↔ requirements.lock sync
+│   │   ├── check_branch_coverage.py  # Core routing branch-coverage gate
+│   │   └── ...                       # Bilingual pairing / citations / artifact tracking / coverage ratchet, etc.
+│   └── tools/                        # Ops / generators / experiment helpers (17; non-blocking)
+│       ├── bootstrap_dev.sh          # Developer environment bootstrap
+│       ├── smoke_test.sh             # Pre-release smoke test
+│       └── performance_benchmark.py  # Performance benchmark
 ├── main.py                           # CLI entry point (thin wrapper, implementation in src/cli/)
 ├── config.py                         # Global configuration (includes ablation experiment switches)
 ├── init_db.py                        # Database initialization script
@@ -464,12 +494,12 @@ The `APIManager`'s circuit breaker enters a cooldown period (`APIManagerConfig.c
 The 4.2 half-open probe (on by default, `APIManagerConfig.enable_half_open_probe=True`): when the cooldown expires, the node does not immediately resume full routing but enters a "half-open" window — the node becomes a routing candidate (`in_circuit_half_open`) carrying one probe request; a successful probe closes the circuit breaker and restores full routing, while a failed one re-opens a half-cooldown (`min(cooldown/2, half_open_probe_penalty_cap_seconds)`, default cap 30s), preventing a dead provider from being repeatedly hit. The success and exception branches of `call()` and `check_health()` uniformly consume the probe result; setting `enable_half_open_probe=False` reverts to the 4.1 pass-through behavior, for comparison experiments.
 
 ### 5.7 SWE-bench Source Export Automation (2.1)
-The official SWE-bench JSONL has no `instance_code` field (a task only contains patch text). A new `scripts/export_swe_bench_source.py` automates the fill-in: it reads the downloaded JSONL, extracts the first non-test target file from the patch's `+++ b/<path>`, and exports it read-only via `git show <base_commit>:<path>` (without polluting the working tree), producing an enrichment JSONL in `SWE_BENCH_ENRICHMENT` format; it supports `--instance-ids` (comma-separated or @file, combined with the missing-list output of check-dataset for batch fill-in), `--dry-run`, and `--limit`. `SWEBenchDataset` adds `tasks_missing_source()` (identifies tasks whose instance_code falls back to issue text); the `check-dataset` quality report outputs the list of instance_ids missing source code and fill-in guidance.
+The official SWE-bench JSONL has no `instance_code` field (a task only contains patch text). A new `scripts/tools/export_swe_bench_source.py` automates the fill-in: it reads the downloaded JSONL, extracts the first non-test target file from the patch's `+++ b/<path>`, and exports it read-only via `git show <base_commit>:<path>` (without polluting the working tree), producing an enrichment JSONL in `SWE_BENCH_ENRICHMENT` format; it supports `--instance-ids` (comma-separated or @file, combined with the missing-list output of check-dataset for batch fill-in), `--dry-run`, and `--limit`. `SWEBenchDataset` adds `tasks_missing_source()` (identifies tasks whose instance_code falls back to issue text); the `check-dataset` quality report outputs the list of instance_ids missing source code and fill-in guidance.
 
 ```bash
 # Fill in all missing source (requires the SWE-bench repo cache + git)
-python scripts/export_swe_bench_source.py --dry-run          # Inspect the export plan first
-python scripts/export_swe_bench_source.py --instance-ids @missing_ids.txt
+python scripts/tools/export_swe_bench_source.py --dry-run          # Inspect the export plan first
+python scripts/tools/export_swe_bench_source.py --instance-ids @missing_ids.txt
 # Load the enrichment (auto-merged into tasks' instance_code)
 python main.py check-dataset swe_bench
 ```
@@ -708,7 +738,7 @@ G7)" section is rendered only when `total_oracles > 0`.
 `experiments/run_full_stack_swe_bench_pro.py` (one-key seven-switches:
 `RUNTIME_PROBE_ENABLE` / `STRATEGY_BANK_ENABLE` / `EXPERT_POOL_ENABLE` /
 `CROSS_FILE_ENABLE` / `CROSS_FILE_BIDIRECTIONAL` / `REPO_LEVEL_EXECUTION` /
-`SWE_REPO_VENV_ISOLATION`) + `scripts/check_swe_bench_pro_ready.py`
+`SWE_REPO_VENV_ISOLATION`) + `scripts/gates/check_swe_bench_pro_ready.py`
 (data pre-gate: JSONL existence + `instance_code` / `test_patch` /
 `FAIL_TO_PASS` / `base_commit` completeness check, blocks with `exit 1`
 when missing) + `experiments/summarize_full_stack.py` (ON/OFF contrast
@@ -730,9 +760,9 @@ New `docs/dependency_exemptions.md` (chromadb 1.5.9 hits 5 known
 vulnerabilities PYSEC-2026-311 / PYSEC-2026-3813 / PYSEC-2026-3814 /
 PYSEC-2026-3815 exemption registry: dependency / version / vulnerability ID /
 exemption reason / re-review trigger condition / re-review deadline) +
-`scripts/check_dependency_exemptions.py` (CI gate: when the `--ignore-vuln`
+`scripts/gates/check_dependency_exemptions.py` (CI gate: when the `--ignore-vuln`
 list is not registered in the registry, `exit 1` blocks merging) +
-`scripts/check_docs_history_drift.py` (warning-only: detects when
+`scripts/gates/check_docs_history_drift.py` (warning-only: detects when
 `docs/history/*.md` baseline numbers drift beyond the threshold and
 suggests archiving; non-blocking gate) + `CONTRIBUTING.md` "Dependency
 exemption registry" section. Full 2502 tests passed (baseline 2499, +3
@@ -1071,8 +1101,8 @@ All configuration items are managed uniformly in [config.py](config.py) and inje
 |--------|------|--------|
 | `LLM_N_API_KEY` | LLM API key (multi-config support, see `config.local.example`) | required |
 | `LLM_N_BASE_URL` | LLM Base URL | - |
-| `LLM_N_MODEL_NAME` | LLM model name | agnes-3.0-flash |
-| `MODEL_NAME` | Backward compatible: default LLM model name | agnes-3.0-flash |
+| `LLM_N_MODEL_NAME` | LLM model name | deepseek-flash |
+| `MODEL_NAME` | Backward compatible: default LLM model name | deepseek-flash |
 | `MAX_ITERATIONS` | Maximum number of repair iterations | 3 |
 | `COVERAGE_THRESHOLD` | Coverage threshold | 80.0 |
 | `CROSS_FILE_ENABLE` | 3.5 cross-file repair switch (coordinator-proposer architecture, off by default) | false |

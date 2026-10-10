@@ -31,20 +31,20 @@ test-cov:  ## 全量测试 + 覆盖率（CI 同口径）
 	$(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing
 
 docs-check:  ## 双语文档同步门禁（strict，CI 阻断项）
-	$(PY) scripts/check_bilingual_docs.py --strict
+	$(PY) scripts/gates/check_bilingual_docs.py --strict
 
 env-budget:  ## 环境变量开关预算棘轮（CI 阻断项）
-	$(PY) scripts/check_env_budget.py --check
+	$(PY) scripts/gates/check_env_budget.py --check
 
 baseline-check:  ## BASELINE.yaml 结构 + 文档数字漂移守卫
-	$(PY) scripts/check_baseline.py
-	$(PY) scripts/check_baseline_numbers.py
+	$(PY) scripts/gates/check_baseline.py
+	$(PY) scripts/gates/check_baseline_numbers.py
 
 state-contract:  ## LangGraph 状态通道静态契约守卫（AK4 接入 CI）
-	$(PY) scripts/check_state_contract.py
+	$(PY) scripts/gates/check_state_contract.py
 
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
-	$(PY) scripts/check_tool_versions.py
+	$(PY) scripts/gates/check_tool_versions.py
 
 gates: lint typecheck test docs-check env-budget baseline-check state-contract tool-versions  ## 本地全部门禁（合并前自检）
 
@@ -52,10 +52,10 @@ repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动
 	bash reproduce.sh
 
 power:  ## 统计功效分析速览（Z8：先算样本量，再跑实验）
-	$(PY) scripts/power_analysis.py
+	$(PY) scripts/tools/power_analysis.py
 
 self-check:  ## 功效分析往返一致性自检
-	$(PY) scripts/power_analysis.py --self-check
+	$(PY) scripts/tools/power_analysis.py --self-check
 
 clean-traces:  ## 清理失败追踪残留（tmp_trace/，--dump-trace-on-failure 运行时产物，可再生）
 	rm -rf tmp_trace
@@ -72,6 +72,9 @@ cf-upper-bound:  ## 反事实 FL 上界归因分解（批次 X/ADR-0024：FL×co
 
 corrected-metrics:  ## 修正口径重估总报告（批次 XIII/ADR-0027：repair/false_fix/CPR/弃权精确率 + bug_type 分层解混杂，零 LLM）
 	$(PY) -m experiments.corrected_metrics experiments/results/main_batch --arm aitester
+
+target-quality:  ## 目标质量存量重放（R5 审查批次：被测代码覆盖率 / 变异得分 / 规约可编译率，零 LLM 只读工件）
+	$(PY) -m experiments.target_quality_replay experiments/results/main_batch
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel

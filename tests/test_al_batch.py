@@ -83,8 +83,11 @@ class TestAL5Positioning:
         assert "Detection-First" in title
 
     def test_readme_honest_disclosure(self) -> None:
-        zh_head = _head(README_ZH, 18)
-        en_head = _head(README_EN, 22)
+        # 2026-10-09 C-01 叙事增补（"为什么不用多智能体"段）使披露段偏移
+        # 出历史 18/22 行窗口；扩容至 30/40 行（覆盖完整披露段 + CANDOR/BOAD
+        # 叙事段，防止披露段再被后续增补挤出锁窗口）。
+        zh_head = _head(README_ZH, 30)
+        en_head = _head(README_EN, 40)
         assert "诚实披露" in zh_head and "repair_ceiling_report.md" in zh_head
         assert "Honest disclosure" in en_head and "repair_ceiling_report.md" in en_head
         # 批次 XIII（2026-10-07，ADR-0021/0027）+ R2（2026-10-08，

@@ -39,6 +39,8 @@ import sys
 import tempfile
 from typing import Any
 
+from src.utils.process_utils import run_with_timeout
+
 logger = logging.getLogger(__name__)
 
 _ENV = "BRANCH_COVERAGE_INJECT_ENABLE"
@@ -158,7 +160,12 @@ def measure_branch_coverage(
         if env.get("PYTHONPATH"):
             pp = os.pathsep.join([pp, env["PYTHONPATH"]])
         env["PYTHONPATH"] = pp
-        proc = subprocess.run(
+        # 2026-10-09（审查报告 §11.1b 结果十二）：改用 run_with_timeout——
+        # subprocess.run(timeout=) 超时只 kill 直接子进程，孙进程持有管道写端
+        # 会让 communicate() 永久阻塞（实测 QuixBugs 批次因此挂死 30+ 分钟、
+        # 批次 JSON 从未写出）。run_with_timeout 以新进程组 + killpg 整树终止
+        # + 有界收口，**保证返回**。
+        proc = run_with_timeout(
             [
                 sys.executable,
                 "-c",
@@ -169,13 +176,14 @@ def measure_branch_coverage(
                 out_json,
                 result_file,
             ],
-            capture_output=True,
-            text=True,
             timeout=_measure_timeout(),
             cwd=exec_dir,
             env=env,
-            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+            logger_name="O3 branch 测量",
         )
+        if getattr(proc, "timed_out", False):
+            logger.warning("O3 branch 测量超时（>%ds），降级 None", _measure_timeout())
+            return None
         if proc.returncode != 0 or not os.path.exists(result_file):
             logger.debug(
                 "O3 branch 测量子进程失败（rc=%d）: %s",
@@ -194,7 +202,7 @@ def measure_branch_coverage(
             len(parsed.get("missing_branches", [])),
         )
         return parsed
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired:  # pragma: no cover - run_with_timeout 不抛此异常（防御保留）
         logger.warning("O3 branch 测量超时（>%ds），降级 None", _measure_timeout())
         return None
     except Exception as e:

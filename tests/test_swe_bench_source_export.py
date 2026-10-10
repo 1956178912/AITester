@@ -1,4 +1,4 @@
-"""tests for scripts/export_swe_bench_source.py（2.1 源码导出自动化）。
+"""tests for scripts/tools/export_swe_bench_source.py（2.1 源码导出自动化）。
 
 覆盖：
 - extract_target_file_from_patch：patch 目标文件提取（首个非测试文件 / 全测试文件 / 无 patch）
@@ -19,6 +19,7 @@ import importlib.util
 _SCRIPT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "scripts",
+    "tools",
     "export_swe_bench_source.py",
 )
 _spec = importlib.util.spec_from_file_location("export_swe_bench_source", _SCRIPT_PATH)

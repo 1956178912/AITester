@@ -154,6 +154,26 @@ def _prepare_packaged_test_tree(tmpdir: str, target_code: str, test_code: str, m
     pkg.mkdir(exist_ok=True)
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / f"{module_name}.py").write_text(target_code, encoding="utf-8")
+    # 2026-10-10（审查报告 §11.1b 结果二十一：第四起测量伪影）：**双布局**——
+    # 同时把被测模块放到 tmpdir 根，使 `from {module} import f`（扁平平铺）
+    # 与 `from python_programs.{module} import f`（QuixBugs 包结构）**都能解析**。
+    #
+    # 背景（实测证据）：`state["module_name"]` 取 task_id 末段（如 `bitcount`），
+    # 生产执行环境把被测模块**平铺**写成 `{module}.py`（`executor_runtime` 沙箱），
+    # 故 Generator 按提示写出的测试是**扁平 import**（`from bitcount import bitcount`）
+    # ——这在它被生成时的环境里是**正确**的。但本判分树此前**只**提供包结构
+    # `python_programs/{module}.py`，扁平 import 一律 `ModuleNotFoundError`
+    # → pytest rc=2（收集中断）→ `_looks_like_test_execution_error` 判"没跑起来"
+    # → **detection 恒为 0（构造性），与测试质量无关**。
+    #
+    # 零 LLM 复现（12 任务子集、9 个缺陷程序）：**9/9 在 buggy 与 fixed 两侧
+    # 均 rc=2**，全部"执行错误(收集失败)"；即 E4 的 0/41 检出有相当部分来自
+    # 该测量伪影，而非"红得不特异"。
+    #
+    # **判分口径不放松**：仅让两种**合法**的模块解析方式都能 import；
+    # 三段判定（buggy 红 ∧ fixed 绿 ∧ 两边无执行错误）**逐字不变**，
+    # 一个无效/恒失败的测试在新旧布局下同样得 0。
+    (root / f"{module_name}.py").write_text(target_code, encoding="utf-8")
     correct_pkg = root / "correct_python_programs"
     correct_pkg.mkdir(exist_ok=True)
     (correct_pkg / "__init__.py").write_text("", encoding="utf-8")

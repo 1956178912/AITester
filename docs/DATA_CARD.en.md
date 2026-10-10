@@ -29,7 +29,7 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
 - **Origin**: entirely hand-written by the project author (8 pattern pools,
   50 unique defect patterns after dedup by name; `BASELINE.yaml
   synthetic_templates` is the single source of truth, self-verified by
-  `scripts/verify_synthetic_templates.py` against three invariants);
+  `scripts/tools/verify_synthetic_templates.py` against three invariants);
 - **Construction**: each pattern carries a buggy `template` / `fixed` / gold
   `test_cases` triple; instantiation only appends a noise comment
   (`# noise_seed=<0-9999>`) and neutralizes task ids (`task_0000..`, the P1-4
@@ -67,7 +67,7 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
    update this card and that test);
 4. **Statistical power**: at n=50 with a 2% detection baseline, the test has
    insufficient power for a 10pp difference (recomputable via
-   `scripts/power_analysis.py`).
+   `scripts/tools/power_analysis.py`).
 
 ## 4. Real-Defect Ladder (L1/L2)
 
@@ -140,7 +140,7 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
 ## 5. Maintenance Conventions
 
 - This card is updated together with dataset changes (bilingual pairing is
-  guarded by CI `scripts/check_bilingual_docs.py --strict`);
+  guarded by CI `scripts/gates/check_bilingual_docs.py --strict`);
 - pattern totals / main-batch composition numbers use `BASELINE.yaml` as the
   single source of truth; this card describes semantics only and does not
   carry "current numbers";

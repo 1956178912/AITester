@@ -11,15 +11,20 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-08"   # 全量回归实测日期（R2 落地批次，2026-10-08：跨文件测量修复〔第三起伪影 R27〕+ M-suite/统计门泛化/脏树断言/spec_smt 受限 eval 收紧〔R16/R17/R15/R9〕+ R4 工件入库与修正口径 v2〔R14/R13〕+ DATA_CARD/prereg 叙事对齐〔R20/R26/R21〕+ BASELINE/CHANGELOG 收口；此前 R1-R18 + N 复审批次 + S/T 优化批次 + 同日 U 系统性审查落地批次 + 同日 V 独立审查优化批次 + 同日 W 审查优化落地批次（检出优先协议/基线健全性修复/真实基准加载器/ratchet/文档治理）+ 2026-10-05 X 第七轮审查落地批次（缓存命名空间/plain_llm_df 归因基线/统计 schema 过滤/C5 repo 守卫/env 预算棘轮/py.typed）+ 2026-10-06 凌晨 Y 冒烟补遗批次（真实 LLM 冒烟验证 + 检出优先终态第三值 red_not_repaired + regeneration_count 透出 + telemetry MAST 对齐 + README 瘦身）+ 2026-10-06 Z 第八轮审查落地批次（策略银行提示/补丁隔离 + 再生成上限单一事实源 + 缓存 commit 全等校验 + 功效分析脚本 + 贝叶斯配对分析 + 双语门禁扩围/数据卡/Makefile），全绿 4195）+ 同日 AA 代码优化批次（logic 档补 DETECTION_FIRST_ENABLE〔ADR-0015 漏配补齐〕/ synthetic max_pattern_repeat 采样上限 + run_benchmark --max-pattern-repeat / README CI 矩阵漂移修复与静态守卫），全绿 4207）+ 同日 R-P0-2 生死实验前置批次（run_main_batch 补 --max-pattern-repeat 透传，R-P0-4 口径），全绿 4210）+ 同日 AB 生死实验根因修复批次（M10 强校验降级出口〔21/261 任务死亡根因〕/ provenance 补 profile / spec_compile_rate 行级透出 / 统计多种子拼接 --pool-seeds），全绿 4226）+ 同日 AC 第十轮审查落地批次（AC1 prompt–DSL 规约契约修复〔spec_compile_rate 恒 0.0 根因：NL 中文 vs ASCII 白名单，表达式通道 *_expr + 分通道计率 + spec_expr_coverage〕/ AC2 检出优先双门〔特异性门过红路由 + 红回归门抹红恢复，ADR-0016/0015 修订 6〕/ AC3 ADR-0016 编排定位重述 / AC4 聚类稳健敏感性分析 + plain_llm_df 升统计一等基线 + canonical 报告三臂重生成 / CITATION.cff / .mimosa 运行时状态退跟踪），全绿 4247）+ 同日 AD 输出成本控制批次（LLM 传输层 thinking/reasoning_effort/max_tokens 三参数接入 OpenAI 兼容路径——R-P0-2 实测 90%+ 输出为 DeepSeek V4 系默认开启的思维链〔单任务最高 84k，工件仅 ~10%〕，默认关思考对齐 zai 路径先例；provenance 快照补三键 + token_metrics 补 output_share_pct），全绿 4263）+ 同日 AE 第十一轮审查落地批次（AE1 预注册文档 docs/preregistration 双语〔E1/E2/E3/E4 判定阈值与停止规则固化，E1 spec_compile_rate ≥0.3/<0.2/灰区一次迭代〕/ AE2 $/task 成本口径〔experiments/price_table.json 价目表驱动，价目缺失不编造，报告成本章节 + --price-table〕/ AE3 Makefile clean-traces〔tmp_trace 残留治理〕/ AE4 论文骨架 .private/paper/OUTLINE.md〔B/C/A 三点式 + AssertFlip 新颖性对齐，私有不入库〕），全绿 4283）+ 同日 AF 第二轮自主收口批次（AF-A/B 两项第十一轮陈旧结论更正〔N11 容器加固已由 S3 落地 / N10 传递依赖审计已由 P1-7 落地，本地全量复测零新增〕/ AF-C N12 统一执行原语被 Mimosa 污点扫描结构性阻塞并登记 ADR-0016 修订 2 / AF-D problem_statement 无 prompt 消费不变量静态锁定〔DATA_CARD 待办闭环〕/ pip_audit_lock.json 补入 CI 审计工件），全绿 4290）+ 同日 AG 批次（telemetry 展平缺陷修复〔output 内层字段提升兜底——修复前真实 trace 上 error_category 系列模式恒零命中〕+ MAST trace 分布分析〔963 trace 按臂离线聚合：aitester 54.6% 伞形命中、无异质多智能体失效类，值分布 assertion 23%/runtime 15.6%/type_error 11.3%；报告含 schema 诚实警示；SHA256SUMS 971→972〕），全绿 4303）+ 同日 AH 前置条件收口批次〔纯核查与文档，测试数不变：QuixBugs 许可 MIT 已核实（GitHub API，L1/E4 前置解除）/ BugsInPy 无 SPDX 许可证（L2 决策门槛登记 DATA_CARD §4）/ problem_statement 锁定待办同步闭环 / E1 就绪命令预置 preregistration"就绪命令"节 / .hypothesis 入 gitignore〕，全绿 4303）+ 同日 AI logic 档漏配审计批次〔FL_SPECTRAL_ENABLE 补齐——fl_at_k 0/87 根因（fl_spectral C3 修复后从未接入 logic 档）；13 实验开关完整性锁 test_ai_batch；E2 将首次产出 fl_at_k〕，全绿 4308）+ 同日 AJ E4 数据前置批次〔QuixBugs MIT 克隆 data/quixbugs（commit 4257f44b，gitignore 区，DATA_CARD §4 溯源登记）+ 零 LLM 加载器冒烟（50 程序/41 gold 齐全）+ E2/E4 就绪命令预置 prereg（含 --batches 去重陷阱警示与 --allow-dirty 红线行级守卫）〕，全绿 4316）+ 同日 AK 第十二轮审查落地批次〔修复上限归因 repair_ceiling_report（repair=0 漏斗：patch 产出 94.2%/plausible 46.8%/correct 0）+ pooled 报告 provenance 勘误（git_dirty=False 表述与工件不符，就地更正 + 勘误节）+ 21 行差异性缺失双界（两定性结论均稳健）+ 价目表官方登记（deepseek-flash/qwen-long，agnes 无官方页维持 null 待用户）+ 工件入库守卫 check_artifacts_tracked 接入 CI + state-contract/tool-versions 守卫接入 CI/Makefile〕，声称 4327 全绿——**AL1 勘误：AK 补注落盘后实测 4326+1F（AJ 红线守卫被补注非禁止语境触发），声明失真**〕+ 同日 AL 第十三轮审查落地批次〔AK 补注改写为禁止语境→AJ 守卫回绿 / 对外定位去"自修复"主张（README+MODEL_CARD 双语对齐 CITATION detection-first 口径 + 诚实披露行）/ E6 预算匹配四臂 + E7 修复上限分层抽样预注册增补（效力范围声明增补先于数据产生）/ E7 确定性抽样脚本 repair_sample_selection.py（seed=42，分层 ceil 10%）/ real_benchmark_upgrade L3 口径更新（Verified 2026-02-23 官方弃用→防污染滚动基准二选一预注册）/ ADR 索引陈旧编号注释修复（下一个 0017，0006–0010 经核实从未使用）〕，全绿 4349）+ 同日 AM 批次（E6 执行前置全链：cost_budget 实例级 token_cap_override + set_task_token_cap（cap>0 自动生效、attach_budget 跨线程继承、reset_budget 天然清零）/ run_benchmark+run_main_batch `--per-task-token-caps` 透传与 fail-fast 解析 / 结果行 token_budget_capped + provenance.per_task_token_caps / prereg 双语 E6 前置达成声明+执行记录 E6/E7 行+E6 就绪命令块〕）+ 同日 AN 批次（第十四轮审查落地：统计报告呈现性增补〔$/detection 推导列 + 测试套件可靠性节——主终点/阈值/停止规则不变，prereg E3 双语效力声明，增补时点早于 E2 数据产生〕+ TestGenEval L2 候补登记〔CC BY-NC 4.0 经 GitHub API spdx_id=NOASSERTION + LICENSE 原文核实 2026-10-07，与 BugsInPy 同列非清洁许可三选一门槛〕+ E1 失败出口属性模板路线草案骨架〔激活前零实验〕+ 工件卫生〔tmp_trace/空日志清理〕），全绿 4396）+ 同日 AO 批次（第十五轮审查落地：E6 预注册修订〔matched cap 改取 E2 实测均值——R-P0-2 无门控常数降为量级参照，双门改变 aitester token 消耗曲线致硬编码 cap 可能不绑定；就绪命令改两步式（提取均值→占位变量注入）；修订效力声明早于任何 E6 数据〕+ CI test/smoke 安装切 requirements.lock〔缓存键随 lock；落地前 PyPI 元数据全量核查 132 钉版 requires_python 无一排除 3.12、wheel 覆盖完整；mypy 不在 lock 保留显式钉版〕+ E7 候选清单生成〔repair_sample_selection 首跑真实工件：72 框行/sbfl 单层/ceil10%/seed42 确定性→8 候选行，两次复算逐位一致，仅欠人工比对；执行记录表 E7 行推进"待人工复核"〕+ README.en 头部日期同步 + U10 弃用别名定档 v0.8.0 移除 + tmp_trace 清理），全绿 4407）+ 同日 AP 批次（第十五轮审查续：E7 复核工作表生成器〔repair_review_worksheet.py 同参抽样→8 候选节，逐节内嵌 patch/gold fixed/gold 官方测试/最终生成测试 + 五选一判定勾选栏 + 整文件替换口径提示；四反引号围栏防破栏；两次复算逐位一致；人工比对素材备齐，结论仍以人工判定为准〕+ E6 提取命令端到端验证〔三种子批次 9 臂均值实测产出；种子间波动 ±10% 佐证实测均值口径；新增 token_usage.total_tokens 行级 schema 守卫〕+ B-05 检查器缩进盲区修复〔_pre_commit_rev 带缩进 rev 行 re.match 恒失配→pre-commit 恒报 absent、ci↔hook 校验形同虚设；strip 修复后首次真实检出且三方一致〕+ survey 文档 hash 行更新为 AO2 后口径），全绿 4415）+ 同日 AQ 批次（第十五轮审查续二：E7 工作表 v2〔每候选节增补 patch vs gold fixed 逐行差异〔difflib unified diff、四反引号 ```diff 围栏〕——机械对比备料不裁决，两次复算逐位一致〕+ E7 两工件纳入 check_artifacts_tracked MANIFEST〔11→13：候选清单+工作表系 prereg 双语 E7 节引用；清单长度测试锁定；本地预期红随终端提交转绿〕+ survey 打包陈旧结论勘误〔PEP 621/[build-system]/license 三处 P0 系 O9 批（2026-09-29）落地前过期评估——表格三行+正文 license 节改为"已达成（O9）"+剩余差距（PEP 639 SPDX 需 setuptools>=77，降级 P2）；动态版本行勘误为 O35 {attr=} 主路径；教训=勘误文本引用旧结论原文与残留断言互伤，断言锚定旧句原始表格语境收窄〕），全绿 4420）+ 同日 AR 批次（第十五轮审查续三：hypothesis 补入 [formal] extras 双源〔pyproject+setup.py；此前仅 requirements.txt 声明（G18/T5）、extras 无入口——G18/T5 SpecIR→Hypothesis 策略编译与 AN4 属性模板路线的打包入口缺口〕+ README 双语"已知失败"行 CI 矩阵勘误〔3.12/3.14→3.12/3.13/3.14，与 BASELINE python_ci_matrix 交叉锁 + 陈旧写法残留禁令〕+ prereg 双语结构奇偶锁〔zh/en 二级/三级标题与 bash 块计数逐项相等=13/3/9 + 非退化守卫——check_bilingual_docs 只查配对与日期，不查结构奇偶〕），全绿 4425）+ 同日 AS 批次（第十五轮审查续四：发行构建链路首次全链取证〔python -m build → 全新 venv 安装 → aitester --version 0.7/import config,src/CLI 入口/pip show 全绿——O9/O35/X4 打包链端到端无 latent bug，wheel 114 项内容物核验（config.py/py.typed/LICENSE 在位）；AL9 发布前置证据落袋〕+ PEP 639 license 现代化〔license="MIT" SPDX+license-files+[build-system] setuptools>=77；重建实测 METADATA Metadata-Version 2.4/License-Expression: MIT + --no-deps 重装冒烟；survey"许可证元数据"行闭环 ~~P2~~ 已达成——打包 3×P0+2×P2 缺口全清零〕+ Makefile build-check 本地冒烟目标〔刻意不接 CI，AL9 发布批次决定〕），全绿 4429）
+last_verified: "2026-10-09"   # 全量回归实测日期（R4 审查落地批次，2026-10-09 工作树未提交：S1 逻辑驱动反例精化闭环〔spec_smt 后件一致性 UNSAT 检测 + spec_refine.py CEGIR 反例回灌 LLM 修正契约预算化迭代，SPEC_REFINE_ENABLE/SPEC_REFINE_MAX_ROUNDS 默认关零 LLM 成本〕+ S4 nodes.py 续拆补丁应用安全核心至 patch_io.py（四簇拆分 3593→1909 行，re-export 保持历史导入路径）+ S3 prereg E4 污染防控预注册增补（双语）+ S7 MAS 技能库编译设计文档 mas_compilation.md（探索性 Proposed）+ S9 llm_configs schema 守卫（validate_llm_configs + scripts/gates/check_llm_configs_schema.py 接 CI）；本机实测 5014 passed + 1 环境类 failed〔残留 .pytest_tmp 注入工件污染审计扫描基线，清理后复跑全绿，非代码缺陷〕/ mypy 119 源文件 0 错误 / ruff 全绿 / env 预算 170→172；此前 R3 评审落地批次，2026-10-09（425f83d：S8 spec_smt 去裸 eval 受限 AST 求值器 + S7 nodes.py 三簇拆分 trace_reward/flags/agents_cache/debugger + PGH003 门禁重启用 + S8b 收窄 6 处 blanket type:ignore + S11b spec_ir_v2._ALLOWED_ATTRS 笔误 + S6 llm_configs.json 9 处 provider_description 更正 + 9 个新分支覆盖测试文件）；此前 R1-R18 + N 复审批次 + S/T 优化批次 + 同日 U 系统性审查落地批次 + 同日 V 独立审查优化批次 + 同日 W 审查优化落地批次（检出优先协议/基线健全性修复/真实基准加载器/ratchet/文档治理）+ 2026-10-05 X 第七轮审查落地批次（缓存命名空间/plain_llm_df 归因基线/统计 schema 过滤/C5 repo 守卫/env 预算棘轮/py.typed）+ 2026-10-06 凌晨 Y 冒烟补遗批次（真实 LLM 冒烟验证 + 检出优先终态第三值 red_not_repaired + regeneration_count 透出 + telemetry MAST 对齐 + README 瘦身）+ 2026-10-06 Z 第八轮审查落地批次（策略银行提示/补丁隔离 + 再生成上限单一事实源 + 缓存 commit 全等校验 + 功效分析脚本 + 贝叶斯配对分析 + 双语门禁扩围/数据卡/Makefile），全绿 4195）+ 同日 AA 代码优化批次（logic 档补 DETECTION_FIRST_ENABLE〔ADR-0015 漏配补齐〕/ synthetic max_pattern_repeat 采样上限 + run_benchmark --max-pattern-repeat / README CI 矩阵漂移修复与静态守卫），全绿 4207）+ 同日 R-P0-2 生死实验前置批次（run_main_batch 补 --max-pattern-repeat 透传，R-P0-4 口径），全绿 4210）+ 同日 AB 生死实验根因修复批次（M10 强校验降级出口〔21/261 任务死亡根因〕/ provenance 补 profile / spec_compile_rate 行级透出 / 统计多种子拼接 --pool-seeds），全绿 4226）+ 同日 AC 第十轮审查落地批次（AC1 prompt–DSL 规约契约修复〔spec_compile_rate 恒 0.0 根因：NL 中文 vs ASCII 白名单，表达式通道 *_expr + 分通道计率 + spec_expr_coverage〕/ AC2 检出优先双门〔特异性门过红路由 + 红回归门抹红恢复，ADR-0016/0015 修订 6〕/ AC3 ADR-0016 编排定位重述 / AC4 聚类稳健敏感性分析 + plain_llm_df 升统计一等基线 + canonical 报告三臂重生成 / CITATION.cff / .mimosa 运行时状态退跟踪），全绿 4247）+ 同日 AD 输出成本控制批次（LLM 传输层 thinking/reasoning_effort/max_tokens 三参数接入 OpenAI 兼容路径——R-P0-2 实测 90%+ 输出为 DeepSeek V4 系默认开启的思维链〔单任务最高 84k，工件仅 ~10%〕，默认关思考对齐 zai 路径先例；provenance 快照补三键 + token_metrics 补 output_share_pct），全绿 4263）+ 同日 AE 第十一轮审查落地批次（AE1 预注册文档 docs/preregistration 双语〔E1/E2/E3/E4 判定阈值与停止规则固化，E1 spec_compile_rate ≥0.3/<0.2/灰区一次迭代〕/ AE2 $/task 成本口径〔experiments/price_table.json 价目表驱动，价目缺失不编造，报告成本章节 + --price-table〕/ AE3 Makefile clean-traces〔tmp_trace 残留治理〕/ AE4 论文骨架 .private/paper/OUTLINE.md〔B/C/A 三点式 + AssertFlip 新颖性对齐，私有不入库〕），全绿 4283）+ 同日 AF 第二轮自主收口批次（AF-A/B 两项第十一轮陈旧结论更正〔N11 容器加固已由 S3 落地 / N10 传递依赖审计已由 P1-7 落地，本地全量复测零新增〕/ AF-C N12 统一执行原语被 Mimosa 污点扫描结构性阻塞并登记 ADR-0016 修订 2 / AF-D problem_statement 无 prompt 消费不变量静态锁定〔DATA_CARD 待办闭环〕/ pip_audit_lock.json 补入 CI 审计工件），全绿 4290）+ 同日 AG 批次（telemetry 展平缺陷修复〔output 内层字段提升兜底——修复前真实 trace 上 error_category 系列模式恒零命中〕+ MAST trace 分布分析〔963 trace 按臂离线聚合：aitester 54.6% 伞形命中、无异质多智能体失效类，值分布 assertion 23%/runtime 15.6%/type_error 11.3%；报告含 schema 诚实警示；SHA256SUMS 971→972〕），全绿 4303）+ 同日 AH 前置条件收口批次〔纯核查与文档，测试数不变：QuixBugs 许可 MIT 已核实（GitHub API，L1/E4 前置解除）/ BugsInPy 无 SPDX 许可证（L2 决策门槛登记 DATA_CARD §4）/ problem_statement 锁定待办同步闭环 / E1 就绪命令预置 preregistration"就绪命令"节 / .hypothesis 入 gitignore〕，全绿 4303）+ 同日 AI logic 档漏配审计批次〔FL_SPECTRAL_ENABLE 补齐——fl_at_k 0/87 根因（fl_spectral C3 修复后从未接入 logic 档）；13 实验开关完整性锁 test_ai_batch；E2 将首次产出 fl_at_k〕，全绿 4308）+ 同日 AJ E4 数据前置批次〔QuixBugs MIT 克隆 data/quixbugs（commit 4257f44b，gitignore 区，DATA_CARD §4 溯源登记）+ 零 LLM 加载器冒烟（50 程序/41 gold 齐全）+ E2/E4 就绪命令预置 prereg（含 --batches 去重陷阱警示与 --allow-dirty 红线行级守卫）〕，全绿 4316）+ 同日 AK 第十二轮审查落地批次〔修复上限归因 repair_ceiling_report（repair=0 漏斗：patch 产出 94.2%/plausible 46.8%/correct 0）+ pooled 报告 provenance 勘误（git_dirty=False 表述与工件不符，就地更正 + 勘误节）+ 21 行差异性缺失双界（两定性结论均稳健）+ 价目表官方登记（deepseek-flash/qwen-long，agnes 无官方页维持 null 待用户）+ 工件入库守卫 check_artifacts_tracked 接入 CI + state-contract/tool-versions 守卫接入 CI/Makefile〕，声称 4327 全绿——**AL1 勘误：AK 补注落盘后实测 4326+1F（AJ 红线守卫被补注非禁止语境触发），声明失真**〕+ 同日 AL 第十三轮审查落地批次〔AK 补注改写为禁止语境→AJ 守卫回绿 / 对外定位去"自修复"主张（README+MODEL_CARD 双语对齐 CITATION detection-first 口径 + 诚实披露行）/ E6 预算匹配四臂 + E7 修复上限分层抽样预注册增补（效力范围声明增补先于数据产生）/ E7 确定性抽样脚本 repair_sample_selection.py（seed=42，分层 ceil 10%）/ real_benchmark_upgrade L3 口径更新（Verified 2026-02-23 官方弃用→防污染滚动基准二选一预注册）/ ADR 索引陈旧编号注释修复（下一个 0017，0006–0010 经核实从未使用）〕，全绿 4349）+ 同日 AM 批次（E6 执行前置全链：cost_budget 实例级 token_cap_override + set_task_token_cap（cap>0 自动生效、attach_budget 跨线程继承、reset_budget 天然清零）/ run_benchmark+run_main_batch `--per-task-token-caps` 透传与 fail-fast 解析 / 结果行 token_budget_capped + provenance.per_task_token_caps / prereg 双语 E6 前置达成声明+执行记录 E6/E7 行+E6 就绪命令块〕）+ 同日 AN 批次（第十四轮审查落地：统计报告呈现性增补〔$/detection 推导列 + 测试套件可靠性节——主终点/阈值/停止规则不变，prereg E3 双语效力声明，增补时点早于 E2 数据产生〕+ TestGenEval L2 候补登记〔CC BY-NC 4.0 经 GitHub API spdx_id=NOASSERTION + LICENSE 原文核实 2026-10-07，与 BugsInPy 同列非清洁许可三选一门槛〕+ E1 失败出口属性模板路线草案骨架〔激活前零实验〕+ 工件卫生〔tmp_trace/空日志清理〕），全绿 4396）+ 同日 AO 批次（第十五轮审查落地：E6 预注册修订〔matched cap 改取 E2 实测均值——R-P0-2 无门控常数降为量级参照，双门改变 aitester token 消耗曲线致硬编码 cap 可能不绑定；就绪命令改两步式（提取均值→占位变量注入）；修订效力声明早于任何 E6 数据〕+ CI test/smoke 安装切 requirements.lock〔缓存键随 lock；落地前 PyPI 元数据全量核查 132 钉版 requires_python 无一排除 3.12、wheel 覆盖完整；mypy 不在 lock 保留显式钉版〕+ E7 候选清单生成〔repair_sample_selection 首跑真实工件：72 框行/sbfl 单层/ceil10%/seed42 确定性→8 候选行，两次复算逐位一致，仅欠人工比对；执行记录表 E7 行推进"待人工复核"〕+ README.en 头部日期同步 + U10 弃用别名定档 v0.8.0 移除 + tmp_trace 清理），全绿 4407）+ 同日 AP 批次（第十五轮审查续：E7 复核工作表生成器〔repair_review_worksheet.py 同参抽样→8 候选节，逐节内嵌 patch/gold fixed/gold 官方测试/最终生成测试 + 五选一判定勾选栏 + 整文件替换口径提示；四反引号围栏防破栏；两次复算逐位一致；人工比对素材备齐，结论仍以人工判定为准〕+ E6 提取命令端到端验证〔三种子批次 9 臂均值实测产出；种子间波动 ±10% 佐证实测均值口径；新增 token_usage.total_tokens 行级 schema 守卫〕+ B-05 检查器缩进盲区修复〔_pre_commit_rev 带缩进 rev 行 re.match 恒失配→pre-commit 恒报 absent、ci↔hook 校验形同虚设；strip 修复后首次真实检出且三方一致〕+ survey 文档 hash 行更新为 AO2 后口径），全绿 4415）+ 同日 AQ 批次（第十五轮审查续二：E7 工作表 v2〔每候选节增补 patch vs gold fixed 逐行差异〔difflib unified diff、四反引号 ```diff 围栏〕——机械对比备料不裁决，两次复算逐位一致〕+ E7 两工件纳入 check_artifacts_tracked MANIFEST〔11→13：候选清单+工作表系 prereg 双语 E7 节引用；清单长度测试锁定；本地预期红随终端提交转绿〕+ survey 打包陈旧结论勘误〔PEP 621/[build-system]/license 三处 P0 系 O9 批（2026-09-29）落地前过期评估——表格三行+正文 license 节改为"已达成（O9）"+剩余差距（PEP 639 SPDX 需 setuptools>=77，降级 P2）；动态版本行勘误为 O35 {attr=} 主路径；教训=勘误文本引用旧结论原文与残留断言互伤，断言锚定旧句原始表格语境收窄〕），全绿 4420）+ 同日 AR 批次（第十五轮审查续三：hypothesis 补入 [formal] extras 双源〔pyproject+setup.py；此前仅 requirements.txt 声明（G18/T5）、extras 无入口——G18/T5 SpecIR→Hypothesis 策略编译与 AN4 属性模板路线的打包入口缺口〕+ README 双语"已知失败"行 CI 矩阵勘误〔3.12/3.14→3.12/3.13/3.14，与 BASELINE python_ci_matrix 交叉锁 + 陈旧写法残留禁令〕+ prereg 双语结构奇偶锁〔zh/en 二级/三级标题与 bash 块计数逐项相等=13/3/9 + 非退化守卫——check_bilingual_docs 只查配对与日期，不查结构奇偶〕），全绿 4425）+ 同日 AS 批次（第十五轮审查续四：发行构建链路首次全链取证〔python -m build → 全新 venv 安装 → aitester --version 0.7/import config,src/CLI 入口/pip show 全绿——O9/O35/X4 打包链端到端无 latent bug，wheel 114 项内容物核验（config.py/py.typed/LICENSE 在位）；AL9 发布前置证据落袋〕+ PEP 639 license 现代化〔license="MIT" SPDX+license-files+[build-system] setuptools>=77；重建实测 METADATA Metadata-Version 2.4/License-Expression: MIT + --no-deps 重装冒烟；survey"许可证元数据"行闭环 ~~P2~~ 已达成——打包 3×P0+2×P2 缺口全清零〕+ Makefile build-check 本地冒烟目标〔刻意不接 CI，AL9 发布批次决定〕），全绿 4429）
 
 tests:
-  total_passed: 4717          # 全量 pytest tests/（2026-10-08 R2 落地批次实测：--collect-only 收集 4717（正常环境预期 4717 全绿）；本机受限环境实测 4707 passed + 10 环境类 failed（10 项涉及文件隔离复跑 170/170 全绿，非代码缺陷）；本批上次运行残留的 21 项失败=环境类 14 项〔macOS 下测试临时目录 realpath 为 /private/tmp 而 app 写根白名单按 os.sep 前缀比较 /tmp，_safe_write_patch 判"非法路径"拒写；属路径口径差异、非本批引入〕+ 本批已修复的文档守卫 7 项，均已消解）。此前 2026-10-07 修复引擎批次 XIV 实测：4669 全绿 0 失败。**勘误：批次 VII–XII 与 XIII 的记录数字系预写失真**——VII–XII 落 +84 新测试但只记 +5 净增（记 4542，应为 4621）、XIII +13 后记 4555（应为 4634）；本批实测 4669 = 4537+84+13+35 逐位复核吻合，BASELINE 测试链自 VII–XII 起低估 79 的漂移就此收口——批次 V"写文档数字前先实测"教训再现。链条：AS 4429→E2 迭代 4437→批次 I 4453→批次 II 4478→批次 III 4502→批次 IV 4520→批次 V 4530→批次 VI 4537→批次 VII–XII +84（=4621）→批次 XIII +13（=4634，AL5 诚实披露锁随 ADR-0021/0027 勘误推进重写）→批次 XIV +35 = tests/test_batch_xiv.py（=4669 实测）
+  total_passed: 5015          # 全量 pytest tests/（2026-10-09 R4 审查落地批次实测：--collect-only 收集 5015，正常环境预期全绿；本机 --basetemp 隔离跑批 5014 passed + 1 环境类 failed〔test_repo_baseline_zero_findings：日志脱敏审计扫描基线被上一会话残留的 .pytest_tmp/docupdate 注入工件污染（gitignore 区，非代码缺陷），清理残留目录后复跑全绿；教训=--basetemp 须用全新目录并跑批后清理，否则污染下批审计扫描〕。链条：R2（2026-10-08）4717 → R3（2026-10-09，425f83d：spec_smt 去裸 eval S8 + nodes.py 三簇拆分 S7 + 9 新分支覆盖测试文件 + PGH003 门禁重启用）4996 → R4 工作树批次（S1 逻辑驱动反例精化：spec_smt 后件一致性 12 用例 + spec_refine.py CEGIR 10 用例；S4 nodes.py 续拆 patch_io.py；S3 prereg E4 污染防控增补双语；S7 mas_compilation.md 设计文档；S9 llm_configs schema 守卫 9 用例）净 +19 = 5015 逐位复核吻合；R2 4717 实测注记保留于 CHANGELOG R2 条目）
   total_failed: 0
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；S/T/U/V/W/X/Y/Z/AA/AB/AC 批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径；AD 批新增用例仅触碰 ChatOpenAI 构造参数，无网络调用）
   suite_seconds: 35           # 全量耗时量级（pytest-xdist -n 4 实测 34.5s）
 
-coverage:
+# ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
+#   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
+#   两者同名易混，且 2025–2026 前沿论文（CoverUp/FSE'25、TestAgent 2026、
+#   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
+#   被测代码覆盖率见下方 target_quality 节。
+coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
   line_total_pct: 89         # --cov=src 总行覆盖（2026-10-07 AO 批次实测 89%（89.56），行覆盖 85% 硬门禁（P1-8）+ ratchet 水位 89.5（W2，AO 批触发步长上调 89.00→89.50）绿）
   line_core_modules:
     base_agent: 70
@@ -33,22 +38,54 @@ coverage:
     cross_file: 91
     rag_retriever: 86
   branch_total_pct: 83       # --cov=src --cov-branch 总分支覆盖（83%（82.78），2026-10-07 AO 批次实测：ratchet 口径；门禁 77% 绿 + ratchet 水位 82.5（W2）绿，AO 批次较 Z 批次 82.56 微升 0.22pp）
-  branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/check_branch_coverage.py 门槛 85%）
+  branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
     graph_state: 100         # 状态 schema 初始化路由（1.0000）
+
+# O-∞（R5 审查 2026-10-09，MET-01/EXP-01 收口）：**target_quality**——被测代码
+# 侧的一等公民指标。此前这批数字**已采集在批次工件里但从未登记**，导致项目
+# "测试生成系统"身份无法与 2025–2026 前沿（CoverUp 90% line+branch、
+# TestAgent 88.85% line / 55.4% mutation、ULT 45.10% stmt / 40.21% mutation）
+# 对话。本节由零 LLM 存量重放固化：
+#   python -m experiments.target_quality_replay experiments/results/main_batch
+# 产物：experiments/results/main_batch/target_quality_report.md（随批次入库）。
+target_quality:
+  # 口径纪律（与 repair_caliber_matrix.md §3 同）：引用须带批次 + 臂 + n；
+  # 跨代际合计仅作描述性概览，**不是对外口径**。
+  target_line_coverage_pct:  # 被测代码行覆盖率（results.<arm>.details[].coverage）
+    # 观察：aitester 84.0–93.6%，**系统性低于** plain_llm 86.0–97.2%——
+    # 与 detection 的 −28pp 同向，构成"完整系统覆盖率也更低"的第二条独立证据。
+    aitester: [84.0, 93.6]   # 10 批次区间（n=87/批，2026-10-06/07）
+    plain_llm: [86.0, 97.2]  # 同上
+    plain_llm_df: [81.5, 93.6]
+    note: "高覆盖 ≠ 高检出：aitester 覆盖率 84–94% 而检出率仅 13–16%，与 ULT/TOSEM'26 结论（覆盖率与缺陷检出弱相关）一致；覆盖率不得单独作为有效性证据"
+  mutation_score:            # 变异得分（0–1，details[].mutation_score）
+    aitester: [0.818, 0.976]  # 2026-10-06/07 七批次区间（n=77–81/批）
+    plain_llm: [0.951, 0.992]
+    plain_llm_df: [0.986, 0.997]
+    note: "接近饱和（尤其 df 0.986–0.997）：合成集变异体过弱，该指标在此数据集上鉴别力有限，须在 ULT/TestGenEval 外部基准重测"
+  spec_compile_rate:         # 规约可编译率（"逻辑驱动"内核的可测量证据）
+    aitester: [0.205, 0.219]  # E1/E2 logic 档四批次（2026-10-07），n=77/81
+    note: "AC 批（prompt–DSL 规约契约修复）后由恒 0.0 抬升到 ~0.21——'逻辑驱动'主张首次有非零实证；目标 ≥0.55（路径 D2：SpecExpr 升一阶/关系文法）"
+  spec_expr_coverage:        # 表达式通道覆盖率（与 spec_compile_rate 正交）
+    aitester: [0.723, 0.741]  # 同 E1/E2 logic 档四批次，n=45/51
+  specificity_gate:          # 特异性门终审分布（跨批次合计，描述性）
+    aitester: {specific_red: 40, over_red: 66}
+    plain_llm_df: {specific_red: 162, over_red: 140}
+    note: "df 的 specific_red/over_red ≈ 1.16 而 aitester ≈ 0.61——aitester 产出的'红'近 2/3 是非特异过红，是 −28pp 的主机制（对应超越路径 A1）"
 
 static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 113     # 2026-10-08 R2 实测：mypy src/ config.py 113 源文件 0 错误（= src/ 112 个 .py + config.py；较批次 XIV 的 112 增 1——R4 原型期落地的 src/ 新文件未逐批回写本行，本批校正；此前 2026-10-07 修复引擎批次 XIV：112 源文件 0 错误（+1 = 新增 src/tools/self_repair_trap.py；批次 VII 的 src/tools/patch_test_hacking.py（110→111）未逐批回写本行，一并补记）；CI mypy 与 pre-commit 均锁 1.15.0
+  mypy_source_files: 119     # 2026-10-09 R4 落地批次实测：mypy src/ config.py 119 源文件 0 错误（较 R3 的 117 增 2 = 新增 src/specs/spec_refine.py + src/graph/patch_io.py；较 R2 的 113 累计 +6：R3 批次新增 agents_cache/trace_reward/flags/debugger.py 四簇已并入 117；CI mypy 与 pre-commit 均锁 1.15.0；此前 2026-10-08 R2 实测 113 源文件 0 错误）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
 error_categories: 18         # ErrorCategory 当前类别数（18 类，2026-10-01 独立审查 N6 更正：此前误记 17，实跑枚举为 18）
 
-synthetic_templates: 50      # P0-5（2026-10-05 V 批次）：唯一缺陷 pattern 总数（30→50；scripts/verify_synthetic_templates.py 三重不变量全库自验证 50/50 通过——buggy 可检出 + fixed 自洽 + 测试数口径无漂移；6 个存量模板的 gold 材料缺陷已修复）
+synthetic_templates: 50      # P0-5（2026-10-05 V 批次）：唯一缺陷 pattern 总数（30→50；scripts/tools/verify_synthetic_templates.py 三重不变量全库自验证 50/50 通过——buggy 可检出 + fixed 自洽 + 测试数口径无漂移；6 个存量模板的 gold 材料缺陷已修复）
 
 # O30（D.4-7 修复）：benchmark 节——承载当前有效的主实验指标，
 # 守卫脚本 check_baseline_numbers.py 校验文档引用与本节一致性。
@@ -155,6 +192,415 @@ benchmark:
   #   single_agent success=0.0%）转入 history——false_fix=89.8% 作为"假成功
   #   通道"历史证据继续被 README/论文引用（ADR-0027 重估：该批修正
   #   repair=0/15 系真零，证据维持成立，与其他批次伪影性质不同）。
+  # 2026-10-09 实跑（用户授权 DeepSeek-flash 预算）：E6 control + A1 消融两批，
+  #   入库 experiments/results/e6_a1_batches/（含 SHA256SUMS/README）。
+  #   协议：seed 42 / n=87 / logic 档 / TEMPERATURE=0.0 / LLM_THINKING_MODE=disabled
+  #   （与 E2 及 E6 预注册预算口径一致，preregistration.md:96）/ parallelism=4 /
+  #   LLM 缓存开（namespace seed42）/ git_dirty=true（--allow-dirty，同 R-P0-2 先例）。
+  #   **A1 消融（plan 去 expected_output）**：aitester standard 9.2%（8/87）
+  #   vs strip 9.2%（8/87），配对 McNemar 不一致对仅 2、χ²=0.500、
+  #   精确二项 p=1.0000、δ=+0.0pp → **H-A1 不成立**（该路径撤回）。
+  #   效力限定：34/87（39%）任务 Planner 回退空计划（test_cases=[]），干预空转；
+  #   剩余 61% 任务上仍为零效应。
+  #   **E6 control（−28pp 第三次独立复现）**：detection aitester 9.2%（8/87）
+  #   vs plain_llm_df 34.5%（30/87）vs plain_llm 0.0%（0/87）；配对 χ²=16.962、
+  #   δ=−25.3pp（方向与量级复现 R-P0-2 δ=−0.279 / E2 δ=−0.3673）。
+  #   **E6 matched 臂不可执行**：plain_llm/plain_llm_df 两臂 token **0/87 行**
+  #   （aitester 仅 37/87）→ matched cap 无分母；根因 `src/agents/base_agent.py:437`
+  #   缓存命中提前 return 绕过 `record_usage`（LRU 快路径 :389 同）→
+  #   **token 记账仅覆盖非缓存调用，不得作预算配对基准**。E6 状态改"受阻"。
+  #   三项新登记缺陷：D1 Planner 39% 空计划 / D2 缓存命中不计 token /
+  #   D3 消融开关未入 env_snapshot（PLAN_STRIP_EXPECTED_OUTPUT_ENABLE 缺键）。
+  exec_2026_10_09:
+    # 统计（2026-10-09 补做，复用项目自带 statistical_analysis / bayesian_paired）：
+    #   A1: McNemar χ²=0.500 p=0.4795 BH-FDR q=1.0000；贝叶斯 δ=+0.0000
+    #       95% CI [−0.0451,+0.0445] **完全落在 ROPE ±5pp 内**、P(|δ|≤ROPE)=0.9691
+    #       → **实际等价**（equivalence 口径，强于"不显著"）；
+    #       模板簇 k=29 ICC=0.671 DEFF=4.356 n_eff=39.9，符号检验 1:1 p=1.0000。
+    #   E6 关键对比: McNemar χ²=16.962 BH-FDR q=0.0067；贝叶斯 δ=−0.2418
+    #       CI [−0.3447,−0.1432]；聚类校正 χ²_adj=6.60、符号检验 1:12 p=0.0034
+    #       → −25.3pp 在簇相关下仍显著（−28pp 第三次复现）。
+    #   注: aitester vs plain_llm 的 +8.8pp 在聚类校正后 **不再显著**（符号检验 p=0.0625）。
+    stats:
+      a1_mcnemar_chi2: 0.500
+      a1_bh_fdr_q: 1.0000
+      a1_bayes_delta: 0.0
+      a1_bayes_ci: [-0.0451, 0.0445]
+      a1_p_rope: 0.9691
+      a1_verdict: "实际等价（95% CI 完全落在 ROPE ±5pp 内）"
+      e6_df_mcnemar_chi2: 16.962
+      e6_df_bh_fdr_q: 0.0067
+      e6_df_bayes_delta: -0.2418
+      e6_df_cluster_chi2_adj: 6.60
+      e6_df_sign_test_p: 0.0034
+      e6_pl_sign_test_p: 0.0625
+      cluster_k: 29
+    # D1 修复（2026-10-09）：Planner 空计划的根因是 JSON 解析层——LLM 输出
+    #   Python 语法而非 JSON（实测 621 个 Planner 形态缓存响应中 188 个
+    #   =30.3% 无法 json.loads：表达式值 94 / 多对象拼接 57 / 未加引号字面量 35
+    #   / 元组键 2），异常经 nodes.py:269 走 _get_default_test_plan
+    #   （test_cases=[]）→ Generator 三成任务无计划。
+    #   修复 src/utils/helpers.py 五个纯语法级函数（不用 eval，受限求值器 +
+    #   字符串感知；超长截断不丢计划）：
+    #     可解析且含 function_name 427/621(68.8%) → 555/621(89.4%)，+20.6pp
+    #   消融（冷缓存 seed42 n=87）：空计划 34/87(39.1%) → 22/87(25.3%)，
+    #   但 detection 6.9%→8.0%（McNemar p=1.0000、贝叶斯 δ=−0.011
+    #   CI[−0.078,+0.053]）→ **"空计划"不是 never-red 主因（假说证否）**；
+    #   副产物正向：repair 15→20 例、false_fix 75.9%→70.1%。
+    d1_json_repair:
+      fix: "src/utils/helpers.py（_repair_json_text / _quote_python_expressions / _quote_tuple_keys_once / _first_balanced_object / _repair_json_bounded）"
+      parse_rate_before: "427/621 (68.8%)"
+      parse_rate_after: "555/621 (89.4%)"
+      net_recovered: 128
+      ablation:
+        dir: "experiments/results/e6_a1_batches/d1_json_repair_seed42"
+        batch: "benchmark_synthetic_20261009_200343.json"
+        empty_plan_before: "34/87 (39.1%)"
+        empty_plan_after: "22/87 (25.3%)"
+        detection_before: "6/87 (6.9%)"
+        detection_after: "7/87 (8.0%)"
+        mcnemar_p: 1.0
+        bayes_delta: -0.011
+        bayes_ci: [-0.0777, 0.053]
+        verdict: "空计划不是 never-red 主因（假说证否）"
+        side_effects_positive: {repair: "15 -> 20", false_fix: "75.9% -> 70.1%"}
+      security_tests: 32
+    # 批后挂死修复（2026-10-09，审查报告 §11.1b 结果十三）：QuixBugs 批次跑满
+    #   50 任务后主线程卡死 selectors.select←subprocess._communicate←
+    #   branch_coverage_inject.py:161（%CPU 0.0、30+ 分钟、批次 JSON 从未写出）。
+    #   根因：subprocess.run(timeout=) 超时只 kill 直接子进程，孙进程继承管道
+    #   写端 → communicate() 等 EOF 永久阻塞；EXECUTION_TIMEOUT(30s)/O3(60s)
+    #   只覆盖"单个子进程执行"，不覆盖"超时后无法回收"。
+    #   修复：新增 src/utils/process_utils.py::run_with_timeout
+    #   （start_new_session 新进程组 + killpg 整树终止 + 有界收口 ≤5s +
+    #    仍收不回则放弃读取并返回，保证不挂死），已接线 branch_coverage_inject。
+    #   验证：12 个单元测试（含"孙进程持管道"敌意场景，原实现永久挂死；
+    #   修复后 ~8s 返回且孙进程被终止）；真实 QuixBugs 单任务 411.4s 正常完成。
+    batch_hang_fix:
+      fix: "src/utils/process_utils.py::run_with_timeout"
+      wired_into: "src/tools/branch_coverage_inject.py::measure_branch_coverage"
+      root_cause: "subprocess.run(timeout) 只 kill 直接子进程；孙进程持管道 → communicate 永久阻塞"
+      tests: 12
+      verified: "真实 QuixBugs 单任务 411.4s 完成（原挂死）；5 任务 331s 端到端无挂死、结果落盘"
+      same_risk_registered_not_fixed: "src/ 内另 9 文件 20 处 subprocess.run（fl_spectral 风险最高）"
+    # E4 数据集口径勘误（2026-10-09，数据产生前登记，见 prereg E4 数据集口径增补）：
+    #   data/quixbugs 复取成功（commit 4257f44b…，与预注册登记一致）；50 任务中
+    #   **9 个是测试驱动脚本**（program 以 _test 结尾，无 gold test_cases，
+    #   M1 必然 detection=None）→ 50 = 41 缺陷程序 + 9 测试驱动。
+    #   E4 主终点口径：只在 41 个有 gold 的缺陷程序上计算，9 个剔除/单列。
+    e4_dataset_caliber:
+      total_tasks: 50
+      defect_programs_with_gold: 41
+      test_driver_scripts: 9
+      test_driver_ids: ["breadth_first_search_test","depth_first_search_test","detect_cycle_test","minimum_spanning_tree_test","reverse_linked_list_test","shortest_path_length_test","shortest_path_lengths_test","shortest_paths_test","topological_ordering_test"]
+      primary_endpoint_denominator: 41
+      registered_before_data: true
+      evidence_dir: "experiments/results/e6_a1_batches/quixbugs_e4_precheck"
+    # E4 真实基准首次执行（2026-10-09，aitester 单臂）：
+    #   协议：quixbugs（commit 4257f44b…）/ logic 档 / 双门 / TEMPERATURE=0 /
+    #   LLM_THINKING_MODE=disabled / 冷缓存（AITESTER_LLM_CACHE=0）/ seed 42。
+    #   主终点口径（预注册 E4 数据集口径增补）：只在 **41 个有 gold 的缺陷程序**上算。
+    #   结果：**detection 0/41 = 0.0%（主终点失败）**；repair 35/40 = 87.5%；
+    #   false_fix 2.5%；token/task 17,156。9 个测试驱动任务全部 detection=None
+    #   （与预注册预测逐一致，印证剔除必要性）。
+    #   诚实披露：**只跑 aitester 单臂**，无 df 对照 → 无配对差；E4 未完整结算。
+    #   成本：50 任务 / 37 分钟 / ≈0.7M token（三臂全套预计 ≈2.1M、约 2 小时）。
+    e4_quixbugs_first_run:
+      # 2026-10-09 完整结算（双臂）：aitester + plain_llm_df 对照臂，同协议冷缓存。
+      dir: "experiments/results/e6_a1_batches/e4_quixbugs_aitester"
+      control_dir: "experiments/results/e6_a1_batches/e4_quixbugs_plain_llm_df"
+      batches:
+        aitester: "benchmark_quixbugs_20261009_215514.json"
+        plain_llm_df: "benchmark_quixbugs_20261009_223101.json"
+      seed: 42
+      cold_cache: true
+      thinking_mode: "disabled"
+      profile: "logic"
+      defect_programs: 41
+      test_drivers_none: 9
+      arms:
+        aitester:
+          detection: "0/41 (0.0%)"
+          repair: "35/40 (87.5%)"
+          false_fix: "2.5%"
+          token_per_task: 17156
+          red_seen: "40/41"
+          wallclock: "21m07s"
+        plain_llm_df:
+          detection: "0/41 (0.0%)"
+          repair: "0/41 (no repair channel)"
+          false_fix: "0.0%"
+          token_per_task: 2370
+          red_seen: "41/41"
+          wallclock: "8m15s"
+      paired_mcnemar_detection: {discordant: 0, chi2: 0.0, p: 1.0, common: 41}
+      paired_bayes_detection: {delta: 0.0, ci: [-0.0659, 0.0672], p_rope: 0.8943}
+      primary_endpoint: "失败（双臂 detection 均 0）"
+      mechanism_finding: "红测试普遍存在（red_seen 40-41/41）但不特异——F2P 第 2 段（fixed 上绿）不通过；'会修不会检出'的精确含义是'红得不特异'（断言错/过苛 或 30s 执行超时），与合成集 over-red 同源"
+      repair_is_independent: "repair 由 gold 测试独立裁决，与生成测试不相交——'修复依赖非 F2P 信号'假说被否证"
+      no_difference_between_arms: "真实基准上编排 vs 纯提示 detection 逐位一致（p=1.0），且编排贵 7.2× token"
+      limitation: "两臂各自标准预算，非等预算对照（等预算口径见 E6，合成集已做）"
+    # 第四起测量伪影 + E4 修正结算（2026-10-10，审查报告结果二十一~二十三）
+    #   伪影：M1 判分树 _prepare_packaged_test_tree 只提供 QuixBugs 包结构
+    #     python_programs/{module}.py，而被测模块名取 task_id 末段、生产沙箱把
+    #     模块**平铺**写成 {module}.py，故 Generator 写出的**扁平 import**
+    #     （from bitcount import bitcount，在其生成环境里是正确的）在判分树里
+    #     一律 ModuleNotFoundError → pytest rc=2（收集中断）→
+    #     _looks_like_test_execution_error 判"没跑起来" → detection 构造性恒 0。
+    #   零 LLM 复现：12 任务子集 9 个缺陷程序 **9/9 在 buggy 与 fixed 两侧均 rc=2**。
+    #   修复：双布局——tmpdir 根同时写一份 {module}.py，使扁平与包结构
+    #     两种合法 import 都能解析。**三段判定逐字未改，口径未放松**
+    #     （恒失败测试在新布局下同样得 0，已加回归测试）。
+    #   零 LLM 验证：同一批工件 F2P 检出 **0/7 → 6/7**。
+    #   E4 修正结算（同协议、同 cache namespace 复用原响应，唯一变量=判分树）：
+    #     aitester  detection **0/41 (0.0%) → 17/37 = 45.9%**；false_fix 2.5% → 0.0%
+    #     配对 McNemar：不一致对 17、χ²=15.059、**p=1.042e-04**；
+    #     2x2：**n10=17、n01=0**（17 例单向翻转、零反向翻转 → 伪影特征）；
+    #     贝叶斯 δ=−0.4146、CI[−0.5762,−0.2519]、P(|δ|≤ROPE)=0.0001
+    #   修正后双臂终局（41 缺陷程序口径）：
+    #     aitester     detection 17/37 = 45.9%、repair 37/40 = 92.5%、token 16,038
+    #     plain_llm_df detection **31/37 = 83.8%**、token **1,905**
+    #     配对 McNemar：不一致对 14、χ²=12.071、**p=0.0005**、
+    #     贝叶斯 δ=−0.3415、CI[−0.5020,−0.1848]
+    #   → **真实基准上完整编排的检出显著低于纯提示，且成本高 8.4×**；
+    #     与本报告此前"编排有增益"的表述相反，与合成集 E6 的 −28pp 同向。
+    measurement_artifact_4:
+      name: "M1 判分树 import 布局不匹配（第四起测量伪影）"
+      fix: "experiments/_m1_metrics.py::_prepare_packaged_test_tree 双布局"
+      zero_llm_repro: "9/9 缺陷程序在 buggy 与 fixed 两侧均 rc=2"
+      zero_llm_verify: "F2P 检出 0/7 → 6/7（同批工件，仅判分树变化）"
+      verdict_not_relaxed: "三段判定逐字未改；恒失败测试仍得 0（回归测试锁定）"
+      regression_tests: "tests/test_m1_packaged_tests.py::TestDualLayout（5 例）"
+    e4_resettled:
+      dir: "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness"
+      single_variable: "判分树布局（同协议、同 cache namespace e4_quixbugs 复用原 LLM 响应）"
+      aitester_before: {detection: "0/41 (0.0%)", false_fix: "2.5%"}
+      aitester_after: {detection: "17/37 (45.9%)", repair: "37/40 (92.5%)", false_fix: "0.0%", token_per_task: 16038}
+      paired_mcnemar_vs_old: {discordant: 17, chi2: 15.059, p: 1.042e-04, n10: 17, n01: 0}
+      paired_bayes_vs_old: {delta: -0.4146, ci: [-0.5762, -0.2519], p_rope: 0.0001}
+      arms_final:
+        aitester: {detection: "17/37 (45.9%)", token_per_task: 16038}
+        plain_llm_df: {detection: "31/37 (83.8%)", token_per_task: 1905}
+      paired_mcnemar_arms: {discordant: 14, chi2: 12.071, p: 0.0005}
+      paired_bayes_arms: {delta: -0.3415, ci: [-0.5020, -0.1848], p_rope: 0.0001}
+      verdict: "真实基准上完整编排检出显著低于纯提示（45.9% vs 83.8%，p=0.0005），成本高 8.4×"
+      supersedes: "结果十五/十八的 detection=0/41 与'红得不特异'归因"
+      not_done: "df 检出 → aitester 修复的组合臂（本轮结论指向的下一步最高价值实验）"
+    # A1 消融从未生效（2026-10-10，结果二十四）：
+    #   原 A1 批次 a1_strip_seed42 的 env_snapshot 中
+    #   PLAN_STRIP_EXPECTED_OUTPUT_ENABLE = **None**（未设置），
+    #   日志中零条 "A1 消融生效" 行，且 detection 与标准臂
+    #   逐点相同（8/87 vs 8/87）。即原 A1 的"零效应"是
+    #   **假阴性**（开关未传入进程、剥除函数从未执行），
+    #   不是"干预无效"。**结果一的 H-A1 证否作废**。
+    a1_ablation_never_fired:
+      original_batch: "experiments/results/e6_a1_batches/a1_strip_seed42"
+      observed_env_snapshot: null
+      ablation_log_lines: 0
+      detection_identical_to_control: "8/87 vs 8/87"
+      verdict: "假阴性：消融未生效，非干预无效"
+      consequence: "结果一 H-A1 证否作废；J2 推理链中的该环需重审"
+    # A1 首次真正生效（2026-10-10，结果二十五）：
+    #   PLAN_STRIP_EXPECTED_OUTPUT_ENABLE=true，判分树为修复后版本，
+    #   QuixBugs 41 缺陷程序口径。生效性已验（env_snapshot=true）。
+    #   detection 45.9% → **51.4%**（+5.5pp）；首轮 specific_red 19 → 21、
+    #   over_red 21 → 17。配对 McNemar p=**0.7237**（不显著），
+    #   贝叶斯 δ=−0.0488 CI[−0.2004,+0.1002]。方向为正但未达显著。
+    a1_ablation_first_real_run:
+      dir: "/tmp/a1_fixed（待归档）"
+      batch: "benchmark_quixbugs_20261010_113757.json"
+      env_snapshot_flag: true
+      detection_standard: "17/37 (45.9%)"
+      detection_stripped: "19/37 (51.4%)"
+      first_round_specific_red: "19 → 21"
+      first_round_over_red: "21 → 17"
+      paired_mcnemar: {discordant: 8, chi2: 0.125, p: 0.7237, n01: 3, n10: 5}
+      paired_bayes: {delta: -0.0488, ci: [-0.2004, 0.1002], p_rope: 0.4146}
+      verdict: "方向为正（+5.5pp）但未达统计显著；三个过程指标同向"
+    # over_red 不可恢复与新增强化段（2026-10-10，结果二十四）：
+    #   首轮 over_red 占 aitester **30/50（60%）**而 detection **0%**；
+    #   specific_red 占 19/50（38%）而 detection **100%**。
+    #   根因：_detection_first_section 只覆盖 test_passed is True；
+    #   over_red 以 test_passed=False 进入 → 无强化提示 → 再生成
+    #   =同一计划再问一次 → 不可恢复。
+    #   新增 src/graph/nodes.py::_over_red_section（OVER_RED_SECTION_ENABLE，
+    #   **默认 false**）补三条指令：输入规模受控（针对
+    #   缺陷实现不终止）/ 期望值来自契约 / 保持特异性。
+    over_red_unrecoverable:
+      first_round_over_red_aitester: "30/50 (60%), detection 0%"
+      first_round_specific_red_aitester: "19/50 (38%), detection 100%"
+      first_round_over_red_df: "15/50 (30%), detection 0%"
+      first_round_specific_red_df: "34/50 (68%), detection 100%"
+      root_cause: "over_red 路径无强化提示（_detection_first_section 不覆盖 test_passed=False）"
+      fix: "src/graph/nodes.py::_over_red_section"
+      env_flag: "OVER_RED_SECTION_ENABLE（默认 false，已登记 env_budget）"
+      tests: "tests/test_over_red_section.py（21 例）"
+      ablation_verified:
+        dir: "experiments/results/e6_a1_batches/ablation_r9/over_red_section_verified.json"
+        env_snapshot_flag: true
+        detection_standard: "17/37 (45.9%)"
+        detection_over_red_section: "19/37 (51.4%)"
+        first_round_over_red: "21 -> 18"
+        paired_mcnemar: {discordant: 8, chi2: 0.125, p: 0.7237, n01: 3, n10: 5}
+        paired_bayes: {delta: -0.0488, ci: [-0.2004, 0.1002], p_rope: 0.4146}
+        verdict: "不显著（+5.5pp, p=0.72）——与 A1 数值完全一致"
+        default_kept: "false（无充分证据支持默认开，遵 ADR-0003）"
+      firstrun_not_verifiable:
+        file: "over_red_section_firstrun_NOTVERIFIABLE.json"
+        env_snapshot_flag: null
+        detection: "22/37 (59.5%)"
+        reason: "开关未入快照（无法验证）+ 复用了标准臂 cache namespace，再生成响应被缓存短路（强化段未送到模型）"
+        verdict: "不作结论依据"
+      real_bottleneck_refined: "两个 prompt 方向均停在 +5.5pp，未触及主因：over_red 里相当一部分是缺陷实现不终止（挂起），再好的 prompt 也无法让挂起的测试变红；需测试侧超时判定"
+    # 消融开关未入快照 —— 审计缺口（2026-10-10，结果二十七）
+    ablation_switch_snapshot_gap:
+      observed: "OVER_RED_SECTION_ENABLE 未出现在 provenance.env_snapshot"
+      same_class_as: "A1 假阴性（PLAN_STRIP 未生效却记为零效应）"
+      fix: "experiments/run_benchmark.py::_env_snapshot_keys 新增 OVER_RED_SECTION_ENABLE"
+      regression_test: "tests/test_over_red_section.py::TestSnapshotKeyRegistered"
+      followup: "建议把'新开关必须出现在 _env_snapshot_keys'做成门禁（未实施）"
+    # detection=None 的因果（2026-10-10，结果二十六）：
+    #   4 个 None 任务（bitcount / find_first_in_sorted / sqrt / wrap）
+    #   **均属"缺陷实现不终止"这一类**：被测函数在缺陷版上
+    #   **永不返回** → 判分层 120s 超时 → _run_pytest_in_tmp
+    #   返 None → fail-closed 记 None（不作为 0）。
+    #   一手证据：bitcount 缺陷为 `n ^= n - 1`（正确为 `n &= n - 1`）
+    #   → 对任何 n 都不终止。
+    detection_none_cause:
+      tasks: ["quixbugs__bitcount", "quixbugs__find_first_in_sorted", "quixbugs__sqrt", "quixbugs__wrap"]
+      cause: "缺陷实现不终止 → 判分层 120s 超时 → None（fail-closed）"
+      evidence: "bitcount 缺陷 `n ^= n - 1`（应为 `n &= n - 1`）对任何 n 不终止"
+      not_missing_material: "四任务均有完整 gold test_cases 与 fixed"
+    # 孤儿 pytest 进程（2026-10-09，结果十六）：病态 QuixBugs 任务的 pytest 子进程
+    #   在父层被 subprocess.run(timeout) kill 后**存活并被 launchd 收养**（ppid=1），
+    #   持续 ~100% CPU 空转 56–63 分钟，且持有管道写端 → communicate() 等 EOF 永久
+    #   阻塞（结果十三的挂死机制）。run_with_timeout 的 killpg 修复了第 2/3 环
+    #   （E4 全量 50 任务 37 分钟正常收尾已验证）；**第 1 环"病态任务不终止"未修**。
+    orphan_processes:
+      observed: 2
+      ppid: 1
+      cpu_pct: "~100"
+      uptime_minutes: "56-63"
+      fixed_rings: "2/3（kill 整进程树 + 有界收口）"
+      unfixed_ring: "1（病态任务本身不终止；建议资源上限 + 快速失败标记）"
+    # A2 逻辑链增量可测性判定（2026-10-09，审查报告 §11.1b 结果十七）；
+    #   **未新跑批**（判定为"合成集不可测"，省 ≈0.75M token）。
+    #   S6 接线生效证据：spec_compile_rate 由历史 0.205–0.219 升至 0.472–0.517；
+    #   规约 oracle 实际注入：合成 2–3/87（≈2.3%），**真实 QuixBugs 20/50 = 40%**。
+    #   离线可达性（427 个真实 Planner 规约）：含 *_expr 28.8%；_expr 子句
+    #   过 AST 判定 90.0%、过白名单 73.3%；端到端 compiler 非空 18.7%（上界）。
+    #   关键：合成集注入行的 detection **全部为 0** → 暴露率 2.3% 下任何跑批
+    #   都无法给出统计可辨增量（**无暴露，非无效应**）。
+    #   真实瓶颈：规约产出面窄 + 绑定材料不足（非编译器通道，后者已修）。
+    a2_logic_chain_reach:
+      ran_new_batch: false
+      reason: "合成集暴露率 ≈2.3%，效应不可测；应在真实基准上验证"
+      spec_compile_rate_before: "0.205-0.219"
+      spec_compile_rate_after: "0.472-0.517"
+      injection_synthetic: "2-3/87 (≈2.3%)"
+      injection_quixbugs: "20/50 (40%)"
+      offline_reach:
+        specs_with_expr: "123/427 (28.8%)"
+        clause_ast_pass: "404/449 (90.0%)"
+        clause_whitelist_pass: "329/449 (73.3%)"
+        compiler_nonempty_end_to_end: "80/427 (18.7%)"
+      injected_rows_detection: "全部为 0（合成）"
+      real_bottleneck: "Planner *_expr 产出面窄 + boundaries 绑定材料不足"
+    # CI 三红清零（2026-10-09，原审查报告 §7 P0-1/P0-2/P0-7）
+    ci_gates_2026_10_09:
+      ruff_format: "exit 0（格式化 test_config_generator.py / test_whitelist_provider_coverage.py）"
+      zero_assert: "exit 0（test_r15_dirty_assert.py 两例补显式断言）"
+      lock_audit: "exit 0（No known vulnerabilities found, 5 ignored）"
+      package_upgrades:
+        PyJWT: "2.13.0 -> 2.15.1"
+        urllib3: "2.7.0 -> 2.8.0"
+        langgraph-sdk: "0.4.2 -> 0.4.6"
+        multidict: "6.7.1 -> 6.9.1"
+        oauthlib: "3.3.1 -> 4.0.0"
+      removed_dependency: "zhipuai（未使用/无依赖者/不在 requirements.txt；其 pyjwt<2.9 钉死与安全修复不可兼容）"
+      new_exemptions: 0
+      full_suite: "5107 passed / 3 skipped / 0 failed"
+      guards: "10/10 exit 0"
+    # RT1 采样控制（2026-10-09）：新开关 DETECTION_FIRST_SECTION_ENABLE=false
+    #   保留再生成路由但关闭强化 prompt 段落，分离"协议文本"与"多一次采样"。
+    #   实测（冷缓存 seed42 n=87）：plain_llm 10.3% · RT1(无强化段) 11.5% ·
+    #   df(有强化段) 31.0%。RT1 vs plain_llm：不一致对 1、p=1.0000（采样效应
+    #   可忽略）；df vs RT1：不一致对 17、χ²=15.059、p=0.0001、贝叶斯
+    #   δ=+0.1868 CI[+0.1060,+0.2759]（强化段净效应 +19.5pp）。
+    #   → **+43pp 归因提示协议本身，非采样次数**（红队 RT1 假说证否）。
+    rt1_sampling_control:
+      dir: "experiments/results/e6_a1_batches/rt1_no_reinforcement_seed42"
+      batch: "benchmark_synthetic_20261009_193509.json"
+      switch: "DETECTION_FIRST_SECTION_ENABLE=false"
+      plain_llm: {detection: "9/87 (10.3%)", tokens: 1257, regenerated_rows: "0/87"}
+      rt1: {detection: "10/87 (11.5%)", tokens: 2368, regenerated_rows: "77/87"}
+      df_full: {detection: "27/87 (31.0%)", tokens: 2586, regenerated_rows: "76/87"}
+      rt1_vs_plain_llm: {delta_pp: 1.1, discordant: 1, p: 1.0, verdict: "采样效应可忽略"}
+      df_vs_rt1: {delta_pp: 19.5, discordant: 17, chi2: 15.059, p: 0.0001, bayes_delta: 0.1868, p_rope: 0.0003, verdict: "强化段净效应"}
+      interpretation: "+43pp 来自检出优先提示协议本身，非额外一次采样"
+    # S6（2026-10-09，零 LLM 成本）：compile_spec_oracle 改读表达式通道
+    #   （*_expr，空则回退 NL，历史口径逐字节不变）+ isinstance 入白名单。
+    #   实测：真实形态 spec 产物 0 → 224 字符；注入率 0/2 → 1/2（剩余阻塞为
+    #   调用未白名单用户函数与 ast 自检保守丢弃）；子句级可编译 3/5=60%。
+    s6_spec_oracle_expr_channel:
+      fixed: true
+      injection_rate_before: "0/2 (0%)"
+      injection_rate_after: "1/2 (50%)"
+      clause_compile_rate: "3/5 (60%)"
+      nl_fallback_byte_identical: true
+      isinstance_whitelisted: true
+      type_object_names_still_rejected: ["open", "eval", "exec", "__import__"]
+    dir: "experiments/results/e6_a1_batches"
+    batches:
+      e6_control_seed42: "benchmark_synthetic_20261009_181758.json"
+      a1_strip_seed42: "benchmark_synthetic_20261009_180655.json"
+    arms: ["aitester", "plain_llm", "plain_llm_df"]
+    seed: 42
+    n: 87
+    thinking_mode: "disabled"
+    git_dirty: true
+    a1_ablation:
+      metric: detection
+      standard: "8/87 (9.2%)"
+      strip: "8/87 (9.2%)"
+      mcnemar_chi2: 0.500
+      exact_binom_p: 1.0000
+      delta_pp: 0.0
+      verdict: "H-A1 不成立（路径撤回）"
+      inert_fraction: "34/87 (39%) 任务回退空计划，干预空转"
+    e6_control:
+      aitester_detection: "8/87 (9.2%)"
+      plain_llm_df_detection: "30/87 (34.5%)"
+      plain_llm_detection: "0/87 (0.0%)"
+      mcnemar_chi2: 16.962
+      delta_pp: -25.3
+      verdict: "−28pp 第三次独立复现（方向与量级一致）"
+    e6_matched:
+      # 2026-10-09 已执行（阶段1 冷缓存 standard + 阶段2 matched 两臂）：
+      #   cap 取阶段1 实测均值（aitester 8,857 / df 2,586），非 R-P0-2 无门控常数。
+      verdict: "已执行：预算混杂被证否 → −28pp 归因编排结构（ADR-0016 加固）"
+      phase1_standard_coldcache:
+        dir: "experiments/results/e6_a1_batches/e6_phase1_standard_coldcache"
+        batch: "benchmark_synthetic_20261009_190234.json"
+        cache_enabled: false
+        token_coverage: "87/87 三臂全覆盖"
+        aitester: {detection: "6/87 (6.9%)", tokens: 8857}
+        plain_llm_df: {detection: "27/87 (31.0%)", tokens: 2586}
+        plain_llm: {detection: "9/87 (10.3%)", tokens: 1257}
+      phase2_matched_coldcache:
+        dir: "experiments/results/e6_a1_batches/e6_phase2_matched_coldcache"
+        batch: "benchmark_synthetic_20261009_191716.json"
+        caps: {aitester: 2586, plain_llm_df: 8857}
+        aitester_matched: {detection: "2/87 (2.3%)", tokens: 3735, budget_capped_rows: "87/87", top_stop_reason: "budget_exceeded 84"}
+        df_matched: {detection: "23/87 (26.4%)", tokens: 2602, budget_capped_rows: "1/87"}
+      primary_endpoints:
+        df_matched_vs_aitester_standard: {discordant: 19, chi2: 13.474, p: 0.0002, bh_q: 0.0002, significant: true}
+        aitester_matched_vs_df_standard: {discordant: 2, chi2: 0.5, p: 0.4795, bh_q: 1.0, significant: false, note: "仅 11 共同任务，检验力不足不作判定"}
+      budget_instrumentality_check:
+        df_standard_vs_df_matched: {detection_delta_pp: -4.6, chi2: 1.125, p: 0.2888, bayes_delta: 0.0444, p_rope: 0.5778, tokens: "2586 -> 2602 (未消费增量预算)"}
+      interpretation: "低预算下 aitester 更差（87/87 触顶）且 df 不受预算约束 → 差异不可由预算分配解释，源于编排结构"
+      limitation: "aitester(matched) cap 低于其单任务实际需求（84/87 行触顶提前终止），测的是'预算不足时编排表现'，非严格等能量公平对比"
+    defects_registered: ["D1 Planner 39% 空计划", "D2 缓存命中不计 token", "D3 消融开关未入 env_snapshot"]
   # 历史批次（仅存档，不作当前口径引用）：
   history:
     - batch: "experiments/results/benchmark_synthetic_20260925_135638.json"

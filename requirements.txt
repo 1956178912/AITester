@@ -40,6 +40,17 @@ pytest-xdist==3.8.0
 # 策略的可选运行时（缺失时属性测试整文件跳过、SpecIR 降级为 pytest
 # 参数化断言——CI 全量口径应跑属性测试，故入本清单）
 hypothesis==6.168.4
+# z3-solver: SMT 求解器（G4，2026-10-05 优化批次·T2；R5 审查 2026-10-09 补入清单）
+# src/specs/spec_smt.py 的形式化见证层依赖：SPEC_SMT_ENABLE=true 时用它求
+# 规约前件的 SAT 见证 / 边界极值 / 前件空洞（UNSAT）检测。
+# 缺口背景：此前 z3-solver 只声明在 pyproject 的 [formal] extra，**未进本清单、
+# 未进 requirements.lock、CI 也未安装**——本地 .venv 手工装过（5.1.0.0）因而
+# `smt_available()` 恒 True，但 CI 跑 pip install -r requirements.lock 后恒 False，
+# spec_smt 整层静默降级为"无见证"，tests/test_spec_smt*.py 共 130 个用例的
+# **求解器分支在 CI 上从未真实执行**（降级路径与求解路径都返回 []，用例仍绿）。
+# 即"逻辑驱动"的形式化内核在 CI 上是**未验证的空转**。补入本清单 + lock + CI
+# 断言（fail-closed），使求解器分支受 CI 覆盖。
+z3-solver==5.1.0.0
 # python-dotenv: 从 .env 文件加载环境变量
 python-dotenv==1.2.2
 
@@ -48,7 +59,7 @@ python-dotenv==1.2.2
 rich==15.0.0
 # tqdm: 进度条库，显示任务执行进度
 tqdm==4.70.0
-# requests: HTTP 请求库，scripts/check_quota.py（LLM 额度探测）使用
+# requests: HTTP 请求库，scripts/tools/check_quota.py（LLM 额度探测）使用
 requests==2.34.2
 # chromadb: 向量数据库，RAG 模块依赖，用于存储检索历史测试用例
 chromadb==1.5.9

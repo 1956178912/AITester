@@ -10,7 +10,7 @@ Thanks for your interest in AITester! This document explains how to participate 
 > Chinese one (missing the parallel-test notes, still carrying outdated hard-coded
 > coverage numbers that violate the single-source rule, and missing the whole
 > "Dependency Exemption Registry" section). It has now been resynchronized with
-> CONTRIBUTING.md, and the bilingual gate (`scripts/check_bilingual_docs.py
+> CONTRIBUTING.md, and the bilingual gate (`scripts/gates/check_bilingual_docs.py
 > --strict`) now covers the root-level document pairs.
 
 ## Setting Up the Development Environment
@@ -83,7 +83,7 @@ the single source of truth (P1-9 fix: this section used to hard-code "core ≥ 9
 overall ≥ 90%", which had drifted from the measured values and violated the
 single-source rule). Merge gates follow the actual CI thresholds: total line
 coverage ≥ 85%, total branch coverage ≥ 77%, strict core modules ≥ 90%, other
-core routing modules ≥ 85% (the constants in `scripts/check_branch_coverage.py`
+core routing modules ≥ 85% (the constants in `scripts/gates/check_branch_coverage.py`
 are the authoritative values).
 
 ## Pull Request Process
@@ -103,9 +103,8 @@ Please use GitHub Issues to report bugs or propose features, in the following fo
 
 ## Documentation Organization Conventions
 
-- **Core maintenance docs** (updated with each release): `README.md` / `QUICKSTART.md` / `docs/api_reference.md` / `docs/algorithm_design.md` / `CHANGELOG.md` and their `.en.md` counterparts — must be refreshed after a feature batch lands; CI's `scripts/check_bilingual_docs.py` guards the Chinese/English pairing.
+- **Core maintenance docs** (updated with each release): `README.md` / `QUICKSTART.md` / `docs/api_reference.md` / `docs/algorithm_design.md` / `CHANGELOG.md` and their `.en.md` counterparts — must be refreshed after a feature batch lands; CI's `scripts/gates/check_bilingual_docs.py` guards the Chinese/English pairing.
 - **Historical archive docs** (`docs/history/`, including `optimization_plan.md` / `optimization_report.md`, etc.): record the decisions and experiment logs of past batches — **not current maintenance docs**; internal reference only, no need to update per release; each doc's header carries an archival note, and the CHANGELOG is the authority on current decisions.
-- **Review / audit reports** (`docs/review_*.md` / `docs/*_audit_findings.md`): snapshot of the corresponding review round; archived after completion, not required to stay in sync long-term.
 
 ### Hard rule: single source of truth for current baseline numbers (BASELINE.yaml)
 
@@ -118,7 +117,7 @@ Please use GitHub Issues to report bugs or propose features, in the following fo
 
 `requirements.txt` (top-level deps, pinned with `==`) and `requirements.lock` (full lockfile
 including transitive deps) form a **dual-track** scheme: CI guards their sync with
-`scripts/check_lock_sync.py` (top-level deps must appear in the lock with matching versions).
+`scripts/gates/check_lock_sync.py` (top-level deps must appear in the lock with matching versions).
 When changing any dependency you **must** run this checklist, otherwise you risk "added a package
 to requirements but forgot the lock → CI passes yet production / Docker behavior drifts":
 
@@ -127,7 +126,7 @@ to requirements but forgot the lock → CI passes yet production / Docker behavi
 2. **Regenerate `requirements.lock`**: on a target Python version (CI matrix 3.12 / 3.13 /
    3.14), rebuild the lock (pip-compile or `pip freeze` caliber, matching the lock's existing
    format — includes transitive deps);
-3. **Validate locally**: `python scripts/check_lock_sync.py` exits 0 (rules 1/2 block;
+3. **Validate locally**: `python scripts/gates/check_lock_sync.py` exits 0 (rules 1/2 block;
    rule 4's "extra lock entries" are WARNING only, but prompt a lock regeneration);
 4. **Docker image**: dependency changes require an image rebuild (`docker build -t
    aitester:latest .`; build-time pre-install uses the same locked versions, see the
@@ -151,13 +150,13 @@ knowledge required):
 - **Regression tests**: add boundary-condition cases under `tests/` (read the target
   module's docstring first to understand the contract).
 - **Dependency hygiene**: use of `pip-audit` / `requirements.lock` sync validator
-  (`scripts/check_lock_sync.py`).
+  (`scripts/gates/check_lock_sync.py`).
 - **CI debugging**: read the step comments in `.github/workflows/ci.yml` to understand
   each gate's intent.
 
 Larger algorithm / architecture changes (error-classifier expansion, cross-file repair
 strategy, etc.) should be discussed in an Issue first; read `docs/algorithm_design.md`
-and the most recent `docs/review_*.md` to understand the existing design trade-offs.
+and `CHANGELOG.md` to understand the existing design trade-offs.
 
 ## Dependency Exemption Registry (required steps for pip-audit vulnerability exemptions)
 

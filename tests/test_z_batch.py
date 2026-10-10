@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-_POWER_SCRIPT = PROJECT_ROOT / "scripts" / "power_analysis.py"
+_POWER_SCRIPT = PROJECT_ROOT / "scripts" / "tools" / "power_analysis.py"
 
 
 def _load_power_module():
@@ -125,7 +125,7 @@ class TestZ4TelemetryPlaceholderRemoved(unittest.TestCase):
 
 class TestZ5BilingualGateRootPairs(unittest.TestCase):
     def test_root_pairs_in_gate_and_on_disk(self):
-        import scripts.check_bilingual_docs as cbd
+        import scripts.gates.check_bilingual_docs as cbd
 
         for rel in ("README.md", "QUICKSTART.md", "CONTRIBUTING.md", "MODEL_CARD.md", "SECURITY.md"):
             self.assertIn(rel, cbd._CHECK_FILES)
@@ -135,7 +135,7 @@ class TestZ5BilingualGateRootPairs(unittest.TestCase):
 
     def test_gate_strict_passes_in_process(self):
         """扩围后 strict 门禁整体通过（进程内直调，与 CI CLI 同一函数）。"""
-        import scripts.check_bilingual_docs as cbd
+        import scripts.gates.check_bilingual_docs as cbd
 
         failures, warnings = cbd.check_bilingual(strict=True)
         self.assertEqual(failures, [], "\n".join(failures))

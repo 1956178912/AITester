@@ -1,7 +1,7 @@
 """
 总分支覆盖补齐批次（P0-1 配套，2026-10-02 审查）。
 
-目标：把全仓总分支覆盖从 76.4% 抬到 ≥77%（scripts/check_branch_coverage.py 门禁）。
+目标：把全仓总分支覆盖从 76.4% 抬到 ≥77%（scripts/gates/check_branch_coverage.py 门禁）。
 聚焦高价值且可单测的分支对：
 - src/agents/base_agent.py（62% 分支，24 未覆盖）；
 - src/graph/nodes.py（122 未覆盖，挑可纯逻辑消费的路由/守卫分支）；

@@ -1,5 +1,5 @@
 """
-8. 核心路由模块分支覆盖门槛守卫（scripts/check_branch_coverage.py 的配套测试）。
+8. 核心路由模块分支覆盖门槛守卫（scripts/gates/check_branch_coverage.py 的配套测试）。
 
 验证改进清单 #8（P1）：
 - 核心条件路由模块（workflow._should_debug 所在 graph/workflow.py、
@@ -17,7 +17,7 @@ from src.agents.error_classifier import refine_failure_category
 from src.graph.rag import _build_rag_stat, get_rag_retriever, rag_guarded
 from src.graph.workflow import _should_debug
 
-# 与 scripts/check_branch_coverage.py 单一来源同口径（改动需同步）
+# 与 scripts/gates/check_branch_coverage.py 单一来源同口径（改动需同步）
 _CORE_THRESHOLD = 0.85
 
 
@@ -26,7 +26,7 @@ class TestBranchGateScript:
 
     def test_script_parse_and_gate(self, tmp_path):
         """构造含门槛/未达标模块的 coverage.xml，校验脚本报警口径。"""
-        import scripts.check_branch_coverage as mod
+        import scripts.gates.check_branch_coverage as mod
 
         xml = (
             '<?xml version="1.0"?>'
@@ -65,7 +65,7 @@ class TestBranchGateScript:
         workflow / error_classifier 单模块维持 90% 严格门槛；
         state / tracing 维持 85%。
         """
-        import scripts.check_branch_coverage as mod
+        import scripts.gates.check_branch_coverage as mod
 
         assert mod._CORE_THRESHOLD == _CORE_THRESHOLD
         assert mod._TOTAL_THRESHOLD == 0.77

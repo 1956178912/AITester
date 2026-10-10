@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def _load_script_module(module_name: str, filename: str):
     """以 importlib 加载 scripts/ 目录下的脚本（scripts 非包，无 __init__.py）。"""
-    path = REPO_ROOT / "scripts" / filename
+    path = REPO_ROOT / "scripts" / "tools" / filename
     spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -16,6 +16,7 @@ import tempfile
 from unittest.mock import patch
 
 from src.graph import nodes as nodes_mod
+from src.graph import patch_io
 
 
 class TestRepoCoreProtection:
@@ -81,7 +82,7 @@ class TestRepoCoreProtection:
             # 开关关闭时 _is_repo_core_path 恒 False，安全检查 4 不命中；
             # 但安全检查 1-3 仍生效——构造能通过长度/函数定义/白名单的
             # 输入，验证"开关关闭即放行核心路径"的口径。
-            with patch.object(nodes_mod, "_write_file_atomic") as write_fn:
+            with patch.object(patch_io, "_write_file_atomic") as write_fn:
                 write_fn.return_value = None
                 result = nodes_mod._safe_write_patch(
                     original_code="def f():\n    return 1\n" * 20,

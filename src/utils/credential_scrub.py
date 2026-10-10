@@ -17,7 +17,7 @@ P2（2026-09-29 批次）：provider 中间变量不再静态枚举——
 `_provider_key_patterns()` 从 `config_generator.PROVIDER_TEMPLATES` 的键
 自动推导 `{PROVIDER}_API_KEY` / `{PROVIDER}_BASE_URL` 模式（键全名大写），
 新增 provider 时脱敏口径自动跟随（消除 LiteLLM CVE-2026-89032 式
-"静态枚举与动态接口漂移"根因）；CI 守卫 scripts/check_credential_scrub.py
+"静态枚举与动态接口漂移"根因）；CI 守卫 scripts/gates/check_credential_scrub.py
 在新增 provider 未同步时阻断合并。
 
 S4（M11，2026-09-29 审查 P0）：白名单最小化环境构建
