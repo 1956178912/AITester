@@ -1,10 +1,57 @@
-> Last updated: 2026-10-09 (R5 review-revision landing batch: 2026 frontier-revised review + C-08 whitelist default-on + C-01 narrative convergence + LLM endpoint consolidation to DeepSeek V4.1 Flash official API; previously R4 review-landing batch: counterexample-guided refinement loop [S1: spec_smt postcondition-consistency check + spec_refine.py CEGIR] + nodes.py continued split into patch_io.py [S4] + E4 contamination-control preregistration [S3] + llm_configs schema guard [S9] + MAS skill-library compilation design doc [S7]; before that R3 batch: bare-eval removal from spec_smt [S8] + nodes.py three-cluster split [S7] + PGH003 gate re-armed; before that 2026-10-08 R2 batch)
+> Last updated: 2026-10-10 (2026-10-10 documentation-cleanup batch: outdated docs and orphaned reports removed + local document safety net; previously R5 review-revision landing batch: 2026 frontier-revised review + C-08 whitelist default-on + C-01 narrative convergence + LLM endpoint consolidation to DeepSeek V4.1 Flash official API; previously R4 review-landing batch: counterexample-guided refinement loop [S1: spec_smt postcondition-consistency check + spec_refine.py CEGIR] + nodes.py continued split into patch_io.py [S4] + E4 contamination-control preregistration [S3] + llm_configs schema guard [S9] + MAS skill-library compilation design doc [S7]; before that R3 batch: bare-eval removal from spec_smt [S8] + nodes.py three-cluster split [S7] + PGH003 gate re-armed; before that 2026-10-08 R2 batch)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-10 documentation-cleanup batch (outdated docs & orphaned reports removed + local document safety net)
+
+### Removed
+
+- **Outdated historical snapshots (2, `docs/history/`)** — removed under the existing
+  maintenance convention in `scripts/gates/check_bilingual_docs.py:56-62` ("**round has
+  passed + no downstream references**"), verified as 0 references repo-wide (including
+  indexes inside `docs/history/` and experiment reports):
+  - `full_test_report_2026-09-28.md` (snapshot with hardcoded test counts; that role now
+    belongs to `BASELINE.yaml`);
+  - `implementation_2026-10_l25hard_n40_batch.md` (batch narrative already covered by this
+    CHANGELOG).
+- **Orphaned experiment reports (8, `experiments/results/`; all gitignored, never tracked)**:
+  `swe_bench_lite_statistical_report.md` (2026-09-26 early all-zero failure state, superseded
+  by `main_batch/statistical_report*.md`), six `g8_*` single-run all-failure debug summaries
+  (`full_stack_swe_bench_pro_*.md`; their **raw JSON and the aggregate report
+  `experiment_report_20260929_repo_level.md` are both retained**, so the citation chain stays
+  intact), and the 0-byte leftover `PA`.
+
+### Retention rulings (deliberately NOT removed, with criteria)
+
+- **`docs/history/code_analysis_report.md`**: although
+  `scripts/tools/generate_static_report.py:5` calls its content "fully outdated" (that
+  statement is the **rationale for building the auto-snapshot mechanism, not a deletion
+  decision**), it has **7 inbound references from inside the archive**
+  (`optimization_report.md`/`.en.md` call it the "complete static-analysis report" with 30
+  findings), so it fails the "no downstream references" criterion → **retained**.
+- **`docs/history/static_report_2026-09-27.md`**: `generate_static_report.py:77` states that
+  "**prior snapshots are retained** in the same directory (named by date); historical
+  conclusions follow the corresponding snapshot" → **retained**.
+- **`.private/review/**` (20 files, incl. the 5 baseline surveys under `recovered/`)**: a
+  cross-reference matrix shows a **connected citation graph with no orphans** —
+  `AITester_前沿对比与超越路径审查报告_v2.md` and `reverify_round2.md` both cite the v1 report
+  (v2 **inherits from** v1 rather than superseding it), and `frontier_reverify.md` ↔
+  `frontier_baselines.md` are companions → **all retained**.
+
+### Housekeeping
+
+- Comment in `scripts/gates/check_bilingual_docs.py` corrected: it previously listed 10 dead
+  exemption entries collectively as "now all located in docs/history/"; 2 of them were
+  confirmed deleted here, so the comment is now split to match the actual state.
+- Before deletion, a **local-only branch** `local/docs-archive-2026-10-10` (48 local
+  documents = 20 under `.private/` + 28 under `experiments/results/`) was created as a
+  recoverable safety net; `main` remains clean and in sync with `origin/main`. **This branch
+  must never be pushed** — the remote `1956178912/AITester` is public (GitHub API
+  `"visibility": "public"`).
 
 ## [Unreleased] — 2026-10-09 D1 fix + CI three-reds cleared
 

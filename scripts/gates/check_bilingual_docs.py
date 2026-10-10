@@ -68,14 +68,16 @@ _EXEMPT_NO_EN = frozenset(
         # 而本门禁以 dp.glob("*.md") **非递归**扫描 docs/，docs/history/ 不在
         # 扫描面 → 这些条目永不可能被命中，属纯死代码；死条目会让"豁免清单 =
         # 真实现状"的假设失真，后续维护者据以判断时会得出错误结论。
-        # 已移除（现均位于 docs/history/）：
+        # 已移除（其中 8 项现位于 docs/history/）：
         #   0.7_audit_findings / assessment_2026-09-25_improvement_directions /
         #   code_analysis_report / experiment_ab_results_2026-09-28 /
-        #   full_test_report_2026-09-28 /
         #   implementation_2026-09-25_improvement_directions /
         #   implementation_2026-09-25_p0_batch /
-        #   implementation_2026-10_ab_negative_batch /
-        #   implementation_2026-10_l25hard_n40_batch / log_redaction_audit
+        #   implementation_2026-10_ab_negative_batch / log_redaction_audit
+        # 2026-10-10 文档清理批次：另 2 项按上方维护约定判据（"对应轮次已过 +
+        # 无后续引用"）**确认删除**（实测全仓 0 引用，含 docs/history/ 内索引
+        # 与实验报告；内容留存于删除前提交历史）：
+        #   full_test_report_2026-09-28 / implementation_2026-10_l25hard_n40_batch
         # 保留项：docs/troubleshooting.md 是 docs/ 顶层真实存在且暂无英文
         # 配对的单语文档（本门禁仍会扫到它，故豁免仍然必要）。
         "docs/troubleshooting.md",

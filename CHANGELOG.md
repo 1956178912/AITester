@@ -1,10 +1,48 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-09（R5 审查修订落地批次：2026 前沿修订版审查 + C-08 白名单默认开 + C-01 叙事收口 + LLM 端点收拢至 DeepSeek V4.1 Flash 官方 API；此前 R4 审查落地批次：逻辑驱动反例精化闭环〔S1 spec_smt 后件一致性 + spec_refine.py CEGIR〕+ nodes.py 续拆 patch_io.py〔S4〕+ E4 污染防控预注册增补〔S3〕+ llm_configs schema 守卫〔S9〕+ MAS 技能库编译设计文档〔S7〕；再此前 2026-10-09 R3 落地批次：spec_smt 去裸 eval〔S8〕+ nodes.py 三簇拆分〔S7〕+ PGH003 门禁重启用；再此前 2026-10-08 R2 落地批次）
+> Last updated: 2026-10-10（2026-10-10 文档清理批次：过时文档与孤儿报告删除 + 本地文档安全网；此前 R5 审查修订落地批次：2026 前沿修订版审查 + C-08 白名单默认开 + C-01 叙事收口 + LLM 端点收拢至 DeepSeek V4.1 Flash 官方 API；此前 R4 审查落地批次：逻辑驱动反例精化闭环〔S1 spec_smt 后件一致性 + spec_refine.py CEGIR〕+ nodes.py 续拆 patch_io.py〔S4〕+ E4 污染防控预注册增补〔S3〕+ llm_configs schema 守卫〔S9〕+ MAS 技能库编译设计文档〔S7〕；再此前 2026-10-09 R3 落地批次：spec_smt 去裸 eval〔S8〕+ nodes.py 三簇拆分〔S7〕+ PGH003 门禁重启用；再此前 2026-10-08 R2 落地批次）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-10 文档清理批次（过时文档与孤儿报告删除 + 本地文档安全网）
+
+### Removed
+
+- **过时历史快照（2 份，`docs/history/`）**——按 `scripts/gates/check_bilingual_docs.py:56-62`
+  既有维护约定判据「**对应轮次已过 + 无后续引用**」确认删除，实测全仓 0 引用
+  （含 `docs/history/` 内索引与实验报告）：
+  - `full_test_report_2026-09-28.md`（硬编码测试数快照，职能已由 `BASELINE.yaml` 承担）；
+  - `implementation_2026-10_l25hard_n40_batch.md`（批次叙事已由本 CHANGELOG 覆盖）。
+- **孤儿实验报告（8 份，`experiments/results/`，均为 gitignore 未入库工件）**：
+  `swe_bench_lite_statistical_report.md`（2026-09-26 早期三方法全 0% 失效态，已被
+  `main_batch/statistical_report*.md` 取代）、6 份 `g8_*` 单次全失败调试汇总
+  （`full_stack_swe_bench_pro_*.md`；其**原始 JSON 与聚合报告
+  `experiment_report_20260929_repo_level.md` 均保留**，引用链完整）、0 字节残留 `PA`。
+
+### 保留裁定（明确不删，附判据）
+
+- **`docs/history/code_analysis_report.md`**：虽然
+  `scripts/tools/generate_static_report.py:5` 自述其「内容已全面过期」（该自述是创建
+  自动快照机制的**理由**，非删除决定），但它有 **7 处归档内回引**
+  （`optimization_report.md`/`.en.md` 称其为「完整静态分析报告」30 条发现），
+  不满足「无后续引用」判据 → **保留**。
+- **`docs/history/static_report_2026-09-27.md`**：`generate_static_report.py:77`
+  明载「**前序快照保留**在同目录（按日期命名），历史结论以对应快照为准」→ **保留**。
+- **`.private/review/**`（20 份，含 `recovered/` 5 份基线综述）**：经交叉引用矩阵核验
+  为**连通引用图、无孤儿**——`AITester_前沿对比与超越路径审查报告_v2.md` 与
+  `reverify_round2.md` 均引用 v1 报告（v2 为 v1 的**继承者而非取代者**），
+  `frontier_reverify.md` ↔ `frontier_baselines.md` 互为配套 → **全部保留**。
+
+### 配套
+
+- `scripts/gates/check_bilingual_docs.py` 死豁免条目注释同步勘误：原列 10 项统称
+  「现均位于 docs/history/」，其中 2 项本次确认删除，注释已按实际状态拆分标注。
+- 删除前建立**本地专用分支** `local/docs-archive-2026-10-10`（48 份本地文档 =
+  `.private/` 20 份 + `experiments/results/` 28 份）作为可恢复安全网；
+  `main` 保持与 `origin/main` 同步未被污染。**该分支禁止推送**——远端
+  `1956178912/AITester` 实测为 public（GitHub API `"visibility": "public"`）。
 
 ## [Unreleased] — 2026-10-09 D1 修复 + CI 三红清零批次
 
