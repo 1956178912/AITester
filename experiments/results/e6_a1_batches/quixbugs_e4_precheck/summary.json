@@ -1,0 +1,27 @@
+{
+  "quixbugs__bitcount": {
+    "detection": 0.0,
+    "repair": 1.0,
+    "secs": 198.3
+  },
+  "quixbugs__breadth_first_search": {
+    "detection": 0.0,
+    "repair": 1.0,
+    "secs": 32.7
+  },
+  "quixbugs__breadth_first_search_test": {
+    "detection": null,
+    "repair": null,
+    "secs": 30.9
+  },
+  "quixbugs__bucketsort": {
+    "detection": 0.0,
+    "repair": 1.0,
+    "secs": 41.8
+  },
+  "quixbugs__depth_first_search": {
+    "detection": 0.0,
+    "repair": 1.0,
+    "secs": 26.9
+  }
+}

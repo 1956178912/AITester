@@ -1,0 +1,23 @@
+{
+  "artifact": "benchmark_quixbugs_20261009_215514.json",
+  "defects": {
+    "n": 41,
+    "detection": 0,
+    "det_measured": 41,
+    "detection_pct": 0.0,
+    "repair": 35,
+    "det_none": 0,
+    "false_fix": 0.025,
+    "token_mean": 17156.463414634145
+  },
+  "all50": {
+    "n": 50,
+    "detection": 0,
+    "det_measured": 41,
+    "detection_pct": 0.0,
+    "repair": 35,
+    "det_none": 9,
+    "false_fix": 0.025,
+    "token_mean": 16462.76
+  }
+}

@@ -1,0 +1,550 @@
+⚠️ AITESTER_LLM_CACHE 未禁用：LLM 文件缓存（TTL 7 天）命中时同 prompt 不再调用 LLM——
+   重跑/重复实验请设 AITESTER_LLM_CACHE=0，否则观测非独立样本（p 值失真）。
+R4 主批次：dataset=synthetic task_count=87 seed=42
+基线：aitester；输出：/tmp/a1_batches；确定性采样：开（temp=0.0）
+基准测试 [aitester]:   0%|          | 0/87 [00:00<?, ?task/s]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester]:   1%|          | 1/87 [00:09<13:00,  9.07s/task]基准测试 [aitester] - 耗时: 3.9s:   1%|          | 1/87 [00:09<13:00,  9.07s/task]基准测试 [aitester] - 耗时: 3.9s:   2%|▏         | 2/87 [00:10<06:29,  4.58s/task]基准测试 [aitester] - 耗时: 7.8s:   2%|▏         | 2/87 [00:10<06:29,  4.58s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 7.8s:   3%|▎         | 3/87 [00:12<05:03,  3.62s/task]基准测试 [aitester] - 耗时: 17.1s:   3%|▎         | 3/87 [00:12<05:03,  3.62s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 17.1s:   5%|▍         | 4/87 [00:16<04:44,  3.42s/task]基准测试 [aitester] - 耗时: 28.7s:   5%|▍         | 4/87 [00:16<04:44,  3.42s/task]第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 28.7s:   6%|▌         | 5/87 [00:20<05:03,  3.70s/task]基准测试 [aitester] - 耗时: 32.5s:   6%|▌         | 5/87 [00:20<05:03,  3.70s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 32.5s:   7%|▋         | 6/87 [00:27<06:43,  4.98s/task]基准测试 [aitester] - 耗时: 39.6s:   7%|▋         | 6/87 [00:27<06:43,  4.98s/task]基准测试 [aitester] - 耗时: 39.6s:   8%|▊         | 7/87 [00:28<04:41,  3.52s/task]基准测试 [aitester] - 耗时: 51.7s:   8%|▊         | 7/87 [00:28<04:41,  3.52s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 51.7s:   9%|▉         | 8/87 [00:35<06:05,  4.63s/task]基准测试 [aitester] - 耗时: 63.8s:   9%|▉         | 8/87 [00:35<06:05,  4.63s/task]基准测试 [aitester] - 耗时: 63.8s:  10%|█         | 9/87 [00:39<05:56,  4.58s/task]基准测试 [aitester] - 耗时: 76.3s:  10%|█         | 9/87 [00:39<05:56,  4.58s/task]基准测试 [aitester] - 耗时: 76.3s:  11%|█▏        | 10/87 [00:40<04:17,  3.34s/task]基准测试 [aitester] - 耗时: 84.7s:  11%|█▏        | 10/87 [00:40<04:17,  3.34s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 84.7s:  13%|█▎        | 11/87 [00:50<06:58,  5.51s/task]基准测试 [aitester] - 耗时: 95.9s:  13%|█▎        | 11/87 [00:50<06:58,  5.51s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 95.9s:  14%|█▍        | 12/87 [00:52<05:29,  4.39s/task]基准测试 [aitester] - 耗时: 105.2s:  14%|█▍        | 12/87 [00:52<05:29,  4.39s/task]第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=26f0e7476af6）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=26f0e7476af6, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=becd9a435f76）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=becd9a435f76, disk_restored=True）
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=26f0e7476af6）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=26f0e7476af6, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 105.2s:  15%|█▍        | 13/87 [01:05<08:40,  7.03s/task]基准测试 [aitester] - 耗时: 120.9s:  15%|█▍        | 13/87 [01:05<08:40,  7.03s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=becd9a435f76）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=becd9a435f76, disk_restored=True）
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=26f0e7476af6）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=26f0e7476af6, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=becd9a435f76）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=becd9a435f76, disk_restored=True）
+基准测试 [aitester] - 耗时: 120.9s:  16%|█▌        | 14/87 [01:20<11:24,  9.38s/task]基准测试 [aitester] - 耗时: 133.2s:  16%|█▌        | 14/87 [01:20<11:24,  9.38s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 133.2s:  17%|█▋        | 15/87 [01:24<09:25,  7.86s/task]基准测试 [aitester] - 耗时: 168.0s:  17%|█▋        | 15/87 [01:24<09:25,  7.86s/task]基准测试 [aitester] - 耗时: 168.0s:  18%|█▊        | 16/87 [01:32<09:12,  7.78s/task]基准测试 [aitester] - 耗时: 185.6s:  18%|█▊        | 16/87 [01:32<09:12,  7.78s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 185.6s:  20%|█▉        | 17/87 [01:32<06:31,  5.59s/task]基准测试 [aitester] - 耗时: 217.7s:  20%|█▉        | 17/87 [01:32<06:31,  5.59s/task]第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 217.7s:  21%|██        | 18/87 [01:35<05:23,  4.69s/task]基准测试 [aitester] - 耗时: 227.2s:  21%|██        | 18/87 [01:35<05:23,  4.69s/task]第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=b70d7c296a35）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=b70d7c296a35, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 227.2s:  22%|██▏       | 19/87 [01:47<07:47,  6.88s/task]基准测试 [aitester] - 耗时: 234.8s:  22%|██▏       | 19/87 [01:47<07:47,  6.88s/task]第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 234.8s:  23%|██▎       | 20/87 [01:48<05:32,  4.97s/task]基准测试 [aitester] - 耗时: 251.1s:  23%|██▎       | 20/87 [01:48<05:32,  4.97s/task]第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=d5c1d16bb39e）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=d5c1d16bb39e, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 251.1s:  24%|██▍       | 21/87 [01:59<07:37,  6.92s/task]基准测试 [aitester] - 耗时: 259.3s:  24%|██▍       | 21/87 [01:59<07:37,  6.92s/task]基准测试 [aitester] - 耗时: 259.3s:  25%|██▌       | 22/87 [02:00<05:38,  5.21s/task]基准测试 [aitester] - 耗时: 277.7s:  25%|██▌       | 22/87 [02:00<05:38,  5.21s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=d5c1d16bb39e）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=d5c1d16bb39e, disk_restored=True）
+P0 源码补丁证据门：本轮补丁证据等级=keyword（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+P0 源码补丁证据门：本轮补丁证据等级=keyword（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=d5c1d16bb39e）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=d5c1d16bb39e, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ad1f8f9eba06）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ad1f8f9eba06, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 277.7s:  26%|██▋       | 23/87 [02:16<08:56,  8.38s/task]基准测试 [aitester] - 耗时: 287.2s:  26%|██▋       | 23/87 [02:16<08:56,  8.38s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ad1f8f9eba06）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ad1f8f9eba06, disk_restored=True）
+基准测试 [aitester] - 耗时: 287.2s:  28%|██▊       | 24/87 [02:24<08:36,  8.20s/task]基准测试 [aitester] - 耗时: 329.9s:  28%|██▊       | 24/87 [02:24<08:36,  8.20s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 329.9s:  29%|██▊       | 25/87 [02:24<05:58,  5.78s/task]基准测试 [aitester] - 耗时: 333.9s:  29%|██▊       | 25/87 [02:24<05:58,  5.78s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 333.9s:  30%|██▉       | 26/87 [02:28<05:19,  5.24s/task]基准测试 [aitester] - 耗时: 360.1s:  30%|██▉       | 26/87 [02:28<05:19,  5.24s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ad1f8f9eba06）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ad1f8f9eba06, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=59060e7ffecd）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=59060e7ffecd, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 360.1s:  31%|███       | 27/87 [02:39<07:01,  7.03s/task]基准测试 [aitester] - 耗时: 371.0s:  31%|███       | 27/87 [02:39<07:01,  7.03s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 371.0s:  32%|███▏      | 28/87 [02:41<05:17,  5.37s/task]基准测试 [aitester] - 耗时: 405.7s:  32%|███▏      | 28/87 [02:41<05:17,  5.37s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=59060e7ffecd）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=59060e7ffecd, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 405.7s:  33%|███▎      | 29/87 [02:47<05:26,  5.62s/task]基准测试 [aitester] - 耗时: 409.1s:  33%|███▎      | 29/87 [02:47<05:26,  5.62s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 409.1s:  34%|███▍      | 30/87 [02:49<04:16,  4.50s/task]基准测试 [aitester] - 耗时: 413.1s:  34%|███▍      | 30/87 [02:49<04:16,  4.50s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 413.1s:  36%|███▌      | 31/87 [02:52<03:45,  4.03s/task]基准测试 [aitester] - 耗时: 424.9s:  36%|███▌      | 31/87 [02:52<03:45,  4.03s/task]第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=59060e7ffecd）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=59060e7ffecd, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=15eca1b31112）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=15eca1b31112, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=05f1c8756600）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=05f1c8756600, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 424.9s:  37%|███▋      | 32/87 [03:06<06:28,  7.06s/task]基准测试 [aitester] - 耗时: 456.3s:  37%|███▋      | 32/87 [03:06<06:28,  7.06s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=15eca1b31112）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=15eca1b31112, disk_restored=True）
+基准测试 [aitester] - 耗时: 456.3s:  38%|███▊      | 33/87 [03:07<04:49,  5.35s/task]基准测试 [aitester] - 耗时: 466.3s:  38%|███▊      | 33/87 [03:07<04:49,  5.35s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=15eca1b31112）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=15eca1b31112, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 466.3s:  39%|███▉      | 34/87 [03:24<07:44,  8.77s/task]基准测试 [aitester] - 耗时: 475.4s:  39%|███▉      | 34/87 [03:24<07:44,  8.77s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=56ea05fe5e4c）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=56ea05fe5e4c, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 475.4s:  40%|████      | 35/87 [03:29<06:35,  7.60s/task]基准测试 [aitester] - 耗时: 507.0s:  40%|████      | 35/87 [03:29<06:35,  7.60s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 507.0s:  41%|████▏     | 36/87 [03:30<04:58,  5.85s/task]基准测试 [aitester] - 耗时: 529.9s:  41%|████▏     | 36/87 [03:30<04:58,  5.85s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=56ea05fe5e4c）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=56ea05fe5e4c, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 529.9s:  43%|████▎     | 37/87 [03:37<05:03,  6.07s/task]基准测试 [aitester] - 耗时: 533.1s:  43%|████▎     | 37/87 [03:37<05:03,  6.07s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=56ea05fe5e4c）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=56ea05fe5e4c, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=a999ef61c9df）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=a999ef61c9df, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 533.1s:  44%|████▎     | 38/87 [03:46<05:45,  7.04s/task]基准测试 [aitester] - 耗时: 543.4s:  44%|████▎     | 38/87 [03:46<05:45,  7.04s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=bf6cc15de3cb）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=bf6cc15de3cb, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=a999ef61c9df）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=a999ef61c9df, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 543.4s:  45%|████▍     | 39/87 [03:53<05:36,  7.01s/task]基准测试 [aitester] - 耗时: 580.2s:  45%|████▍     | 39/87 [03:53<05:36,  7.01s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=bf6cc15de3cb）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=bf6cc15de3cb, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=a999ef61c9df）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=a999ef61c9df, disk_restored=True）
+基准测试 [aitester] - 耗时: 580.2s:  46%|████▌     | 40/87 [04:00<05:27,  6.96s/task]基准测试 [aitester] - 耗时: 589.2s:  46%|████▌     | 40/87 [04:00<05:27,  6.96s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=bf6cc15de3cb）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=bf6cc15de3cb, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 589.2s:  47%|████▋     | 41/87 [04:11<06:08,  8.00s/task]基准测试 [aitester] - 耗时: 627.6s:  47%|████▋     | 41/87 [04:11<06:08,  8.00s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 627.6s:  48%|████▊     | 42/87 [04:15<05:15,  7.01s/task]基准测试 [aitester] - 耗时: 640.5s:  48%|████▊     | 42/87 [04:15<05:15,  7.01s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 640.5s:  49%|████▉     | 43/87 [04:16<03:46,  5.14s/task]基准测试 [aitester] - 耗时: 670.6s:  49%|████▉     | 43/87 [04:16<03:46,  5.14s/task]第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=c0a410a57f3a）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=c0a410a57f3a, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=cb5d3f7ca8cf）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=cb5d3f7ca8cf, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=c0a410a57f3a）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=c0a410a57f3a, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 670.6s:  51%|█████     | 44/87 [04:33<06:14,  8.70s/task]基准测试 [aitester] - 耗时: 683.7s:  51%|█████     | 44/87 [04:33<06:14,  8.70s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=cb5d3f7ca8cf）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=cb5d3f7ca8cf, disk_restored=True）
+第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=c0a410a57f3a）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=c0a410a57f3a, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 683.7s:  52%|█████▏    | 45/87 [04:39<05:33,  7.95s/task]基准测试 [aitester] - 耗时: 696.9s:  52%|█████▏    | 45/87 [04:39<05:33,  7.95s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 696.9s:  53%|█████▎    | 46/87 [04:42<04:27,  6.53s/task]基准测试 [aitester] - 耗时: 702.2s:  53%|█████▎    | 46/87 [04:42<04:27,  6.53s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=cb5d3f7ca8cf）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=cb5d3f7ca8cf, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 702.2s:  54%|█████▍    | 47/87 [04:48<04:07,  6.19s/task]基准测试 [aitester] - 耗时: 706.6s:  54%|█████▍    | 47/87 [04:48<04:07,  6.19s/task]基准测试 [aitester] - 耗时: 706.6s:  55%|█████▌    | 48/87 [04:51<03:20,  5.14s/task]基准测试 [aitester] - 耗时: 744.5s:  55%|█████▌    | 48/87 [04:51<03:20,  5.14s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=caf6783142b5）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=caf6783142b5, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 744.5s:  56%|█████▋    | 49/87 [04:58<03:46,  5.96s/task]基准测试 [aitester] - 耗时: 782.7s:  56%|█████▋    | 49/87 [04:58<03:46,  5.96s/task]基准测试 [aitester] - 耗时: 782.7s:  57%|█████▋    | 50/87 [05:02<03:09,  5.11s/task]基准测试 [aitester] - 耗时: 792.5s:  57%|█████▋    | 50/87 [05:02<03:09,  5.11s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=caf6783142b5）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=caf6783142b5, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 792.5s:  59%|█████▊    | 51/87 [05:05<02:42,  4.52s/task]基准测试 [aitester] - 耗时: 801.9s:  59%|█████▊    | 51/87 [05:05<02:42,  4.52s/task]第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=caf6783142b5）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=caf6783142b5, disk_restored=True）
+基准测试 [aitester] - 耗时: 801.9s:  60%|█████▉    | 52/87 [05:11<03:00,  5.16s/task]基准测试 [aitester] - 耗时: 810.8s:  60%|█████▉    | 52/87 [05:11<03:00,  5.16s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 810.8s:  61%|██████    | 53/87 [05:14<02:30,  4.43s/task]基准测试 [aitester] - 耗时: 818.5s:  61%|██████    | 53/87 [05:14<02:30,  4.43s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 818.5s:  62%|██████▏   | 54/87 [05:24<03:22,  6.15s/task]基准测试 [aitester] - 耗时: 849.6s:  62%|██████▏   | 54/87 [05:24<03:22,  6.15s/task]基准测试 [aitester] - 耗时: 849.6s:  63%|██████▎   | 55/87 [05:27<02:42,  5.09s/task]基准测试 [aitester] - 耗时: 859.1s:  63%|██████▎   | 55/87 [05:27<02:42,  5.09s/task]P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 859.1s:  64%|██████▍   | 56/87 [05:40<03:54,  7.56s/task]基准测试 [aitester] - 耗时: 877.6s:  64%|██████▍   | 56/87 [05:40<03:54,  7.56s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 877.6s:  66%|██████▌   | 57/87 [05:43<03:01,  6.06s/task]基准测试 [aitester] - 耗时: 888.0s:  66%|██████▌   | 57/87 [05:43<03:01,  6.06s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 888.0s:  67%|██████▋   | 58/87 [05:45<02:19,  4.83s/task]基准测试 [aitester] - 耗时: 914.2s:  67%|██████▋   | 58/87 [05:45<02:19,  4.83s/task]测试代码语法错误: invalid syntax → 需要重试
+Generator 检测到 parametrize 格式错误，触发重试
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=24bd4dc00791）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=24bd4dc00791, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 914.2s:  68%|██████▊   | 59/87 [05:53<02:44,  5.87s/task]基准测试 [aitester] - 耗时: 917.9s:  68%|██████▊   | 59/87 [05:53<02:44,  5.87s/task]第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=24bd4dc00791）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=24bd4dc00791, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 917.9s:  69%|██████▉   | 60/87 [06:01<02:53,  6.41s/task]基准测试 [aitester] - 耗时: 947.2s:  69%|██████▉   | 60/87 [06:01<02:53,  6.41s/task]第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=b9444454ac9d）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=b9444454ac9d, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 947.2s:  70%|███████   | 61/87 [06:07<02:44,  6.34s/task]基准测试 [aitester] - 耗时: 957.0s:  70%|███████   | 61/87 [06:07<02:44,  6.34s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=24bd4dc00791）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=24bd4dc00791, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=b9444454ac9d）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=b9444454ac9d, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 957.0s:  71%|███████▏  | 62/87 [06:16<02:58,  7.15s/task]基准测试 [aitester] - 耗时: 966.0s:  71%|███████▏  | 62/87 [06:16<02:58,  7.15s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=b9444454ac9d）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=b9444454ac9d, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 966.0s:  72%|███████▏  | 63/87 [06:22<02:41,  6.74s/task]基准测试 [aitester] - 耗时: 995.8s:  72%|███████▏  | 63/87 [06:22<02:41,  6.74s/task]基准测试 [aitester] - 耗时: 995.8s:  74%|███████▎  | 64/87 [06:25<02:11,  5.74s/task]基准测试 [aitester] - 耗时: 1000.7s:  74%|███████▎  | 64/87 [06:25<02:11,  5.74s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 1000.7s:  75%|███████▍  | 65/87 [06:26<01:33,  4.24s/task]基准测试 [aitester] - 耗时: 1010.6s:  75%|███████▍  | 65/87 [06:26<01:33,  4.24s/task]基准测试 [aitester] - 耗时: 1010.6s:  76%|███████▌  | 66/87 [06:31<01:32,  4.42s/task]基准测试 [aitester] - 耗时: 1047.7s:  76%|███████▌  | 66/87 [06:31<01:32,  4.42s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1047.7s:  77%|███████▋  | 67/87 [06:33<01:17,  3.86s/task]基准测试 [aitester] - 耗时: 1051.6s:  77%|███████▋  | 67/87 [06:33<01:17,  3.86s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1051.6s:  78%|███████▊  | 68/87 [06:41<01:37,  5.15s/task]基准测试 [aitester] - 耗时: 1055.5s:  78%|███████▊  | 68/87 [06:41<01:37,  5.15s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 1055.5s:  79%|███████▉  | 69/87 [06:42<01:10,  3.91s/task]基准测试 [aitester] - 耗时: 1065.9s:  79%|███████▉  | 69/87 [06:42<01:10,  3.91s/task]P0 源码补丁证据门：本轮补丁证据等级=keyword（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1065.9s:  80%|████████  | 70/87 [06:47<01:09,  4.08s/task]基准测试 [aitester] - 耗时: 1077.4s:  80%|████████  | 70/87 [06:47<01:09,  4.08s/task]第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1077.4s:  82%|████████▏ | 71/87 [06:49<00:56,  3.56s/task]基准测试 [aitester] - 耗时: 1081.3s:  82%|████████▏ | 71/87 [06:49<00:56,  3.56s/task]基准测试 [aitester] - 耗时: 1081.3s:  83%|████████▎ | 72/87 [06:59<01:19,  5.28s/task]基准测试 [aitester] - 耗时: 1090.4s:  83%|████████▎ | 72/87 [06:59<01:19,  5.28s/task]第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1090.4s:  84%|████████▍ | 73/87 [07:03<01:12,  5.18s/task]基准测试 [aitester] - 耗时: 1099.6s:  84%|████████▍ | 73/87 [07:03<01:12,  5.18s/task]基准测试 [aitester] - 耗时: 1099.6s:  85%|████████▌ | 74/87 [07:04<00:49,  3.82s/task]基准测试 [aitester] - 耗时: 1126.5s:  85%|████████▌ | 74/87 [07:04<00:49,  3.82s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1126.5s:  86%|████████▌ | 75/87 [07:05<00:35,  2.94s/task]基准测试 [aitester] - 耗时: 1136.8s:  86%|████████▌ | 75/87 [07:05<00:35,  2.94s/task]第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+Parametrize 参数不匹配：声明 1 个，实际 4 个 → 需要重试
+Generator 检测到 parametrize 格式错误，触发重试
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=13cd615c00b7）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=13cd615c00b7, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1136.8s:  87%|████████▋ | 76/87 [07:18<01:05,  5.94s/task]基准测试 [aitester] - 耗时: 1145.8s:  87%|████████▋ | 76/87 [07:18<01:05,  5.94s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1145.8s:  89%|████████▊ | 77/87 [07:24<00:58,  5.86s/task]基准测试 [aitester] - 耗时: 1158.0s:  89%|████████▊ | 77/87 [07:24<00:58,  5.86s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=13cd615c00b7）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=13cd615c00b7, disk_restored=True）
+基准测试 [aitester] - 耗时: 1158.0s:  90%|████████▉ | 78/87 [07:27<00:45,  5.10s/task]基准测试 [aitester] - 耗时: 1162.5s:  90%|████████▉ | 78/87 [07:27<00:45,  5.10s/task]第 1 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1162.5s:  91%|█████████ | 79/87 [07:31<00:38,  4.86s/task]基准测试 [aitester] - 耗时: 1175.8s:  91%|█████████ | 79/87 [07:31<00:38,  4.86s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=13cd615c00b7）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=13cd615c00b7, disk_restored=True）
+第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ceda0d409f6b）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ceda0d409f6b, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ceda0d409f6b）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ceda0d409f6b, disk_restored=True）
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1175.8s:  92%|█████████▏| 80/87 [07:48<00:58,  8.36s/task]基准测试 [aitester] - 耗时: 1186.1s:  92%|█████████▏| 80/87 [07:48<00:58,  8.36s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+基准测试 [aitester] - 耗时: 1186.1s:  93%|█████████▎| 81/87 [07:51<00:41,  6.85s/task]基准测试 [aitester] - 耗时: 1226.1s:  93%|█████████▎| 81/87 [07:51<00:41,  6.85s/task]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=ceda0d409f6b）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=ceda0d409f6b, disk_restored=True）
+第 1 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1226.1s:  94%|█████████▍| 82/87 [07:56<00:31,  6.29s/task]基准测试 [aitester] - 耗时: 1230.3s:  94%|█████████▍| 82/87 [07:56<00:31,  6.29s/task]第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1230.3s:  95%|█████████▌| 83/87 [08:09<00:33,  8.32s/task]基准测试 [aitester] - 耗时: 1264.5s:  95%|█████████▌| 83/87 [08:09<00:33,  8.32s/task]M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True
+M10 强校验拒绝已降级（LOGIC_SPEC_STRICT_FALLBACK_ENABLE=true）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底
+M10 schema 校验：5 条 findings（fields=['input_domain', 'output_domain', 'preconditions', 'postconditions', 'edge_cases']）
+M10 强校验后续拒绝（首因已标记，保留）：M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis schema 校验失败，拒绝静默兜底
+Planner 输出缺少必需字段: function_name
+Planner 输出结构不完整，使用默认计划
+基准测试 [aitester] - 耗时: 1264.5s:  97%|█████████▋| 84/87 [08:09<00:17,  5.93s/task]基准测试 [aitester] - 耗时: 1291.5s:  97%|█████████▋| 84/87 [08:09<00:17,  5.93s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=fc662d1be3de）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=fc662d1be3de, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1291.5s:  98%|█████████▊| 85/87 [08:17<00:12,  6.48s/task]基准测试 [aitester] - 耗时: 1295.5s:  98%|█████████▊| 85/87 [08:17<00:12,  6.48s/task]基准测试 [aitester] - 耗时: 1305.6s:  99%|█████████▉| 86/87 [08:17<00:06,  6.48s/task]A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=fc662d1be3de）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=fc662d1be3de, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+A-03 P2P 回归失败（rc=1），自动回滚补丁（snapshot=fc662d1be3de）
+A-03 P2P 回归失败，补丁已自动回滚（verdict=regression_failed, snapshot=fc662d1be3de, disk_restored=True）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+基准测试 [aitester] - 耗时: 1305.6s: 100%|██████████| 87/87 [08:39<00:00,  8.52s/task]基准测试 [aitester] - 耗时: 1347.1s: 100%|██████████| 87/87 [08:39<00:00,  8.52s/task]基准测试 [aitester] - 耗时: 1347.1s: 100%|██████████| 87/87 [08:39<00:00,  5.97s/task]
+
+============================================================
+基准测试完成！
+============================================================
+  [aitester] 成功率: 75.9%, 平均覆盖率: 97.7%
+  [aitester] 平均每任务Token: 6538.38, LLM调用次数: 249
+总耗时: 1347.1s
+结果文件: /tmp/a1_batches/benchmark_synthetic_20261009_180655.json
+============================================================
+批次工件：/tmp/a1_batches/benchmark_synthetic_20261009_180655.json
+
+============================================================
+R4 批次摘要（M1 三指标 + R52/R53/R8）
+============================================================
+  [aitester] success=75.9% (有效 87/87，剔除 harness_invalid=0)
+    M1 三指标（可测 87/87 任务）: detection=9.2% repair=21.8% false_fix=69.0%
+    R4 regression_rate=0.0% / N1 test_error_rate=21.8%
+    R8 FL@1 命中率: 11/34 (32.4%)
+--skip-stats：跳过 R14 统计协议

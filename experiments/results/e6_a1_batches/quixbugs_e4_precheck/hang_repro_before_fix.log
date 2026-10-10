@@ -1,0 +1,27 @@
+任务: quixbugs__bitcount
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_dlktjl49/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_dlktjl49', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_c6p7o8gj/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_c6p7o8gj', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_29adirun/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_29adirun', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+Timeout (0:04:00)!
+Thread 0x00000001f2a13f80 (most recent call first):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py", line 398 in select
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2153 in _communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221 in communicate
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557 in run
+  File "/Users/wangchenyu/Workspace/AITester/src/tools/branch_coverage_inject.py", line 161 in measure_branch_coverage
+  File "/Users/wangchenyu/Workspace/AITester/src/graph/nodes.py", line 1195 in _executor_node
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/_internal/_runnable.py", line 447 in invoke
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/_internal/_runnable.py", line 707 in invoke
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/pregel/_retry.py", line 617 in run_with_retry
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/pregel/_runner.py", line 207 in tick
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/pregel/main.py", line 2967 in stream
+  File "/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/langgraph/pregel/main.py", line 3913 in invoke
+  File "/Users/wangchenyu/Workspace/AITester/src/graph/workflow.py", line 920 in invoke
+  File "/Users/wangchenyu/Workspace/AITester/experiments/run_benchmark.py", line 213 in run_aitester_baseline
+  File "/Users/wangchenyu/Workspace/AITester/experiments/run_benchmark.py", line 1751 in run_single_task
+  File "/tmp/repro_hang.py", line 15 in <module>
+O3 branch 测量超时（>60s），降级 None

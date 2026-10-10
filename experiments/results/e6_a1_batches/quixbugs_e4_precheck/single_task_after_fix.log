@@ -1,0 +1,12 @@
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_19yex71w/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_19yex71w', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+P0 源码补丁证据门：本轮补丁证据等级=keyword（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_oxwn4l3t/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_oxwn4l3t', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_43cvnl9y/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_43cvnl9y', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+测试执行超时（>30s）: Command '['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '-m', 'pytest', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_u8r3e2v2/test_generated.py', '-v', '--tb=short', '--cov=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_sandbox_u8r3e2v2', '--cov-report=term', '-k', 'bitcount']' timed out after 30 seconds
+O3 branch 测量超时（>60s），降级 None
+完成，用时 411.4s
+detection: {'aitester': 0.0}

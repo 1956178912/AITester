@@ -1,0 +1,2068 @@
+{
+  "timestamp": "2026-10-10T09:42:52.281129",
+  "dataset": "quixbugs",
+  "subset": null,
+  "seed": 42,
+  "total_tasks": 12,
+  "baselines": [
+    "aitester"
+  ],
+  "enable_planner": true,
+  "enable_debugger": true,
+  "enable_rag": false,
+  "parallelism": 2,
+  "valid_apis": 1,
+  "environment": {
+    "python_version": "3.14.6",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "git_sha": "425f83dcc3814a642254130637cd7fb1dbd7d019",
+    "in_docker_repro": false
+  },
+  "p2p_gate_enabled": true,
+  "p2p_gate_threshold": 0.95,
+  "results": {
+    "aitester": {
+      "total_functions": 12,
+      "passed_count": 5,
+      "failure_count": 7,
+      "success_rate": 41.7,
+      "harness_invalid_count": 0,
+      "effective_total": 12,
+      "effective_success_rate": 41.7,
+      "avg_coverage": 56.2,
+      "avg_iterations": 1.67,
+      "avg_elapsed_seconds": 69.63,
+      "total_time": 835.61,
+      "failure_category_distribution": {
+        "patch_validation_failed": 6,
+        "assertion": 1
+      },
+      "token_metrics": {
+        "total_input_tokens": 96449,
+        "total_output_tokens": 39775,
+        "total_tokens": 136224,
+        "total_llm_calls": 57,
+        "avg_tokens_per_task": 11352.0,
+        "output_share_pct": 29.2,
+        "avg_output_per_task": 3314.58,
+        "avg_output_per_call": 697.81
+      },
+      "rag_metrics": {
+        "retrievals": 0,
+        "hits": 0,
+        "hit_rate": 0.0,
+        "avg_max_similarity": null
+      },
+      "details": [
+        {
+          "task_id": "quixbugs__breadth_first_search",
+          "repo": "quixbugs",
+          "passed": true,
+          "coverage": 95.0,
+          "iterations": 1,
+          "diagnosis": "函数 breadth_first_search 使用 `while True` 循环且无空队列终止条件（第 11-12 行）。当 goalnode 不可达时，队列最终被 popleft 清空，下一次循环对空 deque 调用 popleft() 抛出 IndexError，导致所有期望返回 False 的用例失败。此外第 17-18 行 `queue.extend(node for node in node.successors ...)` 与 `nodesseen.update(node.successors)` 存在变量遮蔽（生成器内 `node` 覆盖外层 `node`），且未过滤已入队节点，可能重复入队；正确做法是遍历时先判重再入队并同步更新 nodesseen。",
+          "error_category": "test_regenerated_pass_unverified",
+          "elapsed_seconds": 20.62,
+          "token_usage": {
+            "input_tokens": 8765,
+            "output_tokens": 3532,
+            "total_tokens": 12297,
+            "llm_calls": 5,
+            "by_model": {
+              "deepseek-flash": 12297
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\n\nfrom collections import deque as Queue\n\ndef breadth_first_search(startnode, goalnode):\n    queue = Queue()\n    queue.append(startnode)\n\n    nodesseen = set()\n    nodesseen.add(startnode)\n\n    while queue:\n        node = queue.popleft()\n\n        if node is goalnode:\n            return True\n        else:\n            for successor in node.successors:\n                if successor not in nodesseen:\n                    nodesseen.add(successor)\n                    queue.append(successor)\n\n    return False\n\n\n\n\"\"\"\nBreadth-First Search\n\n\nInput:\n    startnode: A digraph node\n    goalnode: A digraph node\n\nOutput:\n    Whether goalnode is reachable from startnode\n\"\"\"\n\n",
+          "generated_test": "import pytest\nfrom collections import deque\n\nfrom breadth_first_search import breadth_first_search\n\n\nclass Node:\n    \"\"\"简单的有向图节点，successors 为可迭代集合。\"\"\"\n\n    def __init__(self, name, successors=None):\n        self.name = name\n        self.successors = successors if successors is not None else []\n\n    def __repr__(self):\n        return f\"Node({self.name})\"\n\n\ndef test_breadth_first_search_start_is_goal():\n    \"\"\"起点即目标：startnode is goalnode 时应返回 True。\"\"\"\n    a = Node(\"a\")\n    assert breadth_first_search(a, a) is True\n\n\ndef test_breadth_first_search_direct_successor():\n    \"\"\"直接后继可达：a->b，目标 b 应返回 True。\"\"\"\n    b = Node(\"b\")\n    a = Node(\"a\", [b])\n    assert breadth_first_search(a, b) is True\n\n\ndef test_breadth_first_search_multi_hop():\n    \"\"\"多跳可达：a->b->c，目标 c 应返回 True。\"\"\"\n    c = Node(\"c\")\n    b = Node(\"b\", [c])\n    a = Node(\"a\", [b])\n    assert breadth_first_search(a, c) is True\n\n\ndef test_breadth_first_search_unreachable_returns_false():\n    \"\"\"目标不可达：规约要求返回 False（docstring 明确说明返回可达性）。\n\n    期望值来源：函数 docstring \"Whether goalnode is reachable from startnode\"，\n    不可达时必须返回 False，而非抛出异常。\n    \"\"\"\n    a = Node(\"a\")\n    z = Node(\"z\")\n    assert breadth_first_search(a, z) is False\n\n\ndef test_breadth_first_search_no_successors_unreachable():\n    \"\"\"起点无后继且目标不同：规约要求返回 False。\"\"\"\n    a = Node(\"a\", [])\n    b = Node(\"b\")\n    assert breadth_first_search(a, b) is False\n\n\ndef test_breadth_first_search_cycle_reachable():\n    \"\"\"图中存在环：a->b->a 且 b->c，目标 c 应返回 True（去重避免死循环）。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\")\n    c = Node(\"c\")\n    a.successors = [b]\n    b.successors = [a, c]\n    assert breadth_first_search(a, c) is True\n\n\ndef test_breadth_first_search_goal_none_unreachable():\n    \"\"\"目标为 None 且图中无 None 节点：规约要求返回 False。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\", [a])\n    assert breadth_first_search(a, None) is False\n\n\ndef test_breadth_first_search_shared_successor():\n    \"\"\"共享后继去重：a->b,a->c,b->d,c->d，目标 d 应返回 True。\"\"\"\n    d = Node(\"d\")\n    b = Node(\"b\", [d])\n    c = Node(\"c\", [d])\n    a = Node(\"a\", [b, c])\n    assert breadth_first_search(a, d) is True\n\n\ndef test_breadth_first_search_successors_generator():\n    \"\"\"successors 为生成器（只能消费一次）：a->b->c，目标 c 应返回 True。\n\n    期望值来源：docstring 说明 successors 可迭代，生成器属于可迭代对象。\n    \"\"\"\n    c = Node(\"c\")\n    b = Node(\"b\", (x for x in [c]))\n    a = Node(\"a\", (x for x in [b]))\n    assert breadth_first_search(a, c) is True\n\n\ndef test_breadth_first_search_cycle_unreachable_returns_false():\n    \"\"\"含环但目标不可达：a<->b，目标 z 应返回 False（去重后队列耗尽）。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\")\n    a.successors = [b]\n    b.successors = [a]\n    z = Node(\"z\")\n    assert breadth_first_search(a, z) is False\n\n\n# SpecIR v2 确定性 oracle（compile_readiness=0.25）\nfrom breadth_first_search import breadth_first_search\n\ndef test_specir_v2_oracle():\n    startnode, goalnode = 0, 0\n    # pre: startnode is not None\n    assert startnode is not None\n    # NL provenance (uncompiled pre): hasattr(startnode, 'successors')\n    r = breadth_first_search(startnode, goalnode)\n    # NL provenance (uncompiled post): result == True or result == False\n    # NL provenance (uncompiled post): len(nodesseen) >= 1",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": true,
+              "coverage": 95.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.61,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.98,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 95.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.99,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.967,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 95.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.5,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.983,
+                "simplicity": 0.967
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "breadth_first_search",
+            "test_cases": "import pytest\nfrom node import Node\n\nif pytest.use_correct:\n    from correct_python_programs.breadth_first_search import breadth_first_search\nelse:\n    from python_programs.breadth_first_search import breadth_first_search\n\n\ndef test1():\n    \"\"\"Case 1: Strongly connected graph\n    Output: Path found!\n    \"\"\"\n\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\", None, [station2, station3])\n    station5 = Node(\"London Bridge\", None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\", None, [station5, station4])\n\n    path_found = breadth_first_search(station6, station1)\n\n    assert path_found\n\n\ndef test2():\n    \"\"\"Case 2: Branching graph\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n    noded = Node(\"D\")\n    nodec = Node(\"C\", None, [nodef])\n    nodeb = Node(\"B\", None, [nodee])\n    nodea = Node(\"A\", None, [nodeb, nodec, noded])\n\n    path_found = breadth_first_search(nodea, nodee)\n\n    assert path_found\n\n\ndef test3():\n    \"\"\"Case 3: Two unconnected nodes in graph\n    Output: Path not found\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n\n    path_found = breadth_first_search(nodef, nodee)\n\n    assert not path_found\n\n\ndef test4():\n    \"\"\"Case 4: One node graph\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n\n    path_found = breadth_first_search(nodef, nodef)\n\n    assert path_found\n\n\ndef test5():\n    \"\"\"Case 5: Graph with cycles\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n    noded = Node(\"D\")\n    nodec = Node(\"C\", None, [nodef])\n    nodeb = Node(\"B\", None, [nodee])\n    nodea = Node(\"A\", None, [nodeb, nodec, noded])\n\n    nodee.successors = [nodea]\n\n    path_found = breadth_first_search(nodea, nodef)\n\n    assert path_found\n",
+            "fixed": "\nfrom collections import deque as Queue\n\ndef breadth_first_search(startnode, goalnode):\n    queue = Queue()\n    queue.append(startnode)\n\n    nodesseen = set()\n    nodesseen.add(startnode)\n\n    while queue:\n        node = queue.popleft()\n\n        if node is goalnode:\n            return True\n        else:\n            queue.extend(node for node in node.successors if node not in nodesseen)\n            nodesseen.update(node.successors)\n\n    return False\n\n\n\"\"\"\nfrom collections import deque as Queue\n\ndef breadth_first_search(startnode, goalnode):\n    queue = Queue()\n    queue.append(startnode)\n\n    nodesseen = set()\n    nodesseen.add(startnode)\n\n    while len(queue):\n        node = queue.popleft()\n\n        if node is goalnode:\n            return True\n        else:\n            queue.extend(node for node in node.successors if node not in nodesseen)\n            nodesseen.update(node.successors)\n\n    return False\n\n\n\nfrom collections import deque as Queue\n\ndef breadth_first_search(startnode, goalnode):\n    queue = Queue()\n    queue.append(startnode)\n\n    nodesseen = set()\n    nodesseen.add(startnode)\n\n    while len(queue) > 0:\n        node = queue.popleft()\n\n        if node is goalnode:\n            return True\n        else:\n            queue.extend(node for node in node.successors if node not in nodesseen)\n            nodesseen.update(node.successors)\n\n    return False\n\n\n\nfrom collections import deque as Queue\n\ndef breadth_first_search(startnode, goalnode):\n    queue = Queue()\n    queue.append(startnode)\n\n    nodesseen = set()\n    nodesseen.add(startnode)\n\n    while len(queue) != 0:\n        node = queue.popleft()\n\n        if node is goalnode:\n            return True\n        else:\n            queue.extend(node for node in node.successors if node not in nodesseen)\n            nodesseen.update(node.successors)\n\n    return False\n\n\"\"\"\n",
+            "suggested_function": "breadth_first_search",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": true,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_then_green",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.75,
+          "spec_expr_coverage": 0.8,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 0.0,
+            "fl_at_3": 0.0,
+            "fl_at_5": 0.0
+          },
+          "llm_localization": {
+            "function_name": "breadth_first_search",
+            "line_start": 11,
+            "line_end": 12,
+            "confidence": 0.95,
+            "expected_logic": "队列为空时应退出循环并返回 False，而非继续 popleft 抛 IndexError。",
+            "reasoning": "while True 无空队列终止条件，不可达时 popleft 空 deque 抛 IndexError，导致返回 False 的用例失败。",
+            "candidates": [
+              {
+                "function_name": "breadth_first_search",
+                "line_start": 11,
+                "line_end": 12,
+                "confidence": 0.95,
+                "expected_logic": "队列为空时应退出循环并返回 False，而非继续 popleft 抛 IndexError。",
+                "reasoning": "while True 无空队列终止条件，不可达时 popleft 空 deque 抛 IndexError，导致返回 False 的用例失败。"
+              },
+              {
+                "function_name": "breadth_first_search",
+                "line_start": 17,
+                "line_end": 18,
+                "confidence": 0.6,
+                "expected_logic": "应只把未访问的后继入队并标记，且对生成器只消费一次。",
+                "reasoning": "L17 消费 successors 生成器后 L18 再次遍历 node.successors，生成器已耗尽，去重与入队不一致。"
+              },
+              {
+                "function_name": "breadth_first_search",
+                "line_start": 20,
+                "line_end": 20,
+                "confidence": 0.3,
+                "expected_logic": "return False 应在队列耗尽时可达，作为不可达的返回路径。",
+                "reasoning": "该 return False 因 while True 永不退出而成为死代码，无法在不可达时返回 False。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "test_regenerated_pass_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "<module>",
+            "breadth_first_search"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 7,
+              "test_count": 10,
+              "parse_ok": true,
+              "mutation_score": null
+            },
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 11,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": 1.0,
+          "mutants_killed": 4,
+          "mutants_total": 4
+        },
+        {
+          "task_id": "quixbugs__breadth_first_search_test",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "breadth_first_search_test.py 第1-2行使用了相对导入 `from .node import Node` 和 `from .breadth_first_search import breadth_first_search`，但该文件被作为顶层模块直接导入（test_generated.py 中 `from breadth_first_search_test import main`），没有父包，导致 `ImportError: attempted relative import with no known parent package`。需将相对导入改为绝对导入。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 22.66,
+          "token_usage": {
+            "input_tokens": 8512,
+            "output_tokens": 4019,
+            "total_tokens": 12531,
+            "llm_calls": 5,
+            "by_model": {
+              "deepseek-flash": 12531
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nfrom node import Node\nfrom breadth_first_search import breadth_first_search\n\n\n\"\"\"\nDriver to test breadth first search\n\"\"\"\ndef main():\n    # Case 1: Strongly connected graph\n    # Output: Path found!\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\",  None, [station2, station3])\n    station5 = Node(\"London Bridge\",  None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\",  None, [station5, station4])\n\n    if breadth_first_search(station6, station1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 2: Branching graph\n    # Output: Path found!\n    nodef =  Node(\"F\")\n    nodee =  Node(\"E\")\n    noded =  Node(\"D\")\n    nodec =  Node(\"C\", None, [nodef])\n    nodeb =  Node(\"B\", None, [nodee])\n    nodea =  Node(\"A\", None, [nodeb, nodec, noded])\n\n    if breadth_first_search(nodea, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 3: Two unconnected nodes in graph\n    # Output: Path not found\n    if breadth_first_search(nodef, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 4: One node graph\n    # Output: Path found!\n    if breadth_first_search(nodef, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 5: Graph with cycles\n    # Output: Path found!\n    node1 = Node(\"1\")\n    node2 = Node(\"2\")\n    node3 = Node(\"3\")\n    node4 = Node(\"4\", None, [node1])\n    node5 = Node(\"5\", None, [node2])\n    node6 = Node(\"6\", None, [node5, node4, node3])\n\n    node2.successors = [node6]\n\n    if breadth_first_search(node6, node1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\nif __name__ == \"__main__\":\n    main()\n",
+          "generated_test": "import io\nimport sys\nfrom contextlib import redirect_stdout\n\nimport pytest\n\nfrom breadth_first_search_test import main\n\n\ndef _run_main_capture():\n    \"\"\"运行 main() 并捕获标准输出，返回按行分割的非空输出列表。\"\"\"\n    buf = io.StringIO()\n    with redirect_stdout(buf):\n        main()\n    output = buf.getvalue()\n    # 每行以 \"Path found! \" 或 \"Path not found! \" 结尾，按行拆分\n    lines = [line.strip() for line in output.splitlines() if line.strip()]\n    return lines\n\n\ndef test_main_outputs_five_lines():\n    \"\"\"main 应输出 5 行结果（对应 5 个测试用例）。\n\n    期望值来源：测试计划 postconditions 明确说明\"共输出 5 行结果\"。\n    \"\"\"\n    lines = _run_main_capture()\n    assert len(lines) == 5\n\n\ndef test_main_case1_strongly_connected_path_found():\n    \"\"\"Case1：强连通图 station6 -> station1 应输出 'Path found!'。\n\n    期望值来源：测试计划 test_cases[0].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[0] == \"Path found!\"\n\n\ndef test_main_case2_branching_path_found():\n    \"\"\"Case2：分支图 nodea -> nodee 应输出 'Path found!'。\n\n    期望值来源：测试计划 test_cases[1].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[1] == \"Path found!\"\n\n\ndef test_main_case3_unconnected_path_not_found():\n    \"\"\"Case3：非连通图 nodef -> nodee 应输出 'Path not found!'。\n\n    期望值来源：测试计划 test_cases[2].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[2] == \"Path not found!\"\n\n\ndef test_main_case4_single_node_self_path_found():\n    \"\"\"Case4：单节点图 nodef -> nodef 应输出 'Path found!'。\n\n    期望值来源：测试计划 test_cases[3].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[3] == \"Path found!\"\n\n\ndef test_main_case5_cyclic_graph_path_found():\n    \"\"\"Case5：含环图 node6 -> node1 应输出 'Path found!'。\n\n    期望值来源：测试计划 test_cases[4].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[4] == \"Path found!\"\n\n\n@pytest.mark.parametrize(\n    \"index, expected\",\n    [\n        (0, \"Path found!\"),\n        (1, \"Path found!\"),\n        (2, \"Path not found!\"),\n        (3, \"Path found!\"),\n        (4, \"Path found!\"),\n    ],\n)\ndef test_main_each_case_output(index, expected):\n    \"\"\"参数化验证 main 每一行的输出与测试计划一致。\n\n    期望值来源：测试计划 test_cases[*].expected_output。\n    \"\"\"\n    lines = _run_main_capture()\n    assert lines[index] == expected\n\n\ndef test_main_branch_true_path_found_branch():\n    \"\"\"覆盖 breadth_first_search 返回 True 的分支（第 18/33/49/66 行 -> 打印 'Path found!'）。\n\n    期望值来源：测试计划 postconditions 说明 Case1/2/4/5 输出 'Path found!'。\n    \"\"\"\n    lines = _run_main_capture()\n    found_count = sum(1 for line in lines if line == \"Path found!\")\n    assert found_count == 4\n\n\ndef test_main_branch_false_path_not_found_branch():\n    \"\"\"覆盖 breadth_first_search 返回 False 的分支（第 41 行 -> 打印 'Path not found!'）。\n\n    期望值来源：测试计划 postconditions 说明 Case3 输出 'Path not found!'。\n    \"\"\"\n    lines = _run_main_capture()\n    not_found_count = sum(1 for line in lines if line == \"Path not found!\")\n    assert not_found_count == 1\n\n\ndef test_main_dunder_main_guard_executes(capsys):\n    \"\"\"覆盖 `if __name__ == \"__main__\": main()` 分支（第 72 行 -> 第 73 行）。\n\n    通过 runpy 以 __main__ 方式执行模块，触发该分支。\n    期望值来源：目标代码第 72-73 行的 __main__ 守卫。\n    \"\"\"\n    import runpy\n\n    runpy.run_module(\"breadth_first_search_test\", run_name=\"__main__\")\n    captured = capsys.readouterr()\n    lines = [line.strip() for line in captured.out.splitlines() if line.strip()]\n    assert len(lines) == 5\n    assert lines[2] == \"Path not found!\"",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.05,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.965,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.05,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.965,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.04,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.965,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.02,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.966,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "breadth_first_search_test",
+            "test_cases": "",
+            "fixed": "from .node import Node\nfrom .breadth_first_search import breadth_first_search\n\n\n\"\"\"\nDriver to test breadth first search\n\"\"\"\ndef main():\n    # Case 1: Strongly connected graph\n    # Output: Path found!\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\",  None, [station2, station3])\n    station5 = Node(\"London Bridge\",  None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\",  None, [station5, station4])\n\n    if breadth_first_search(station6, station1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 2: Branching graph\n    # Output: Path found!\n    nodef =  Node(\"F\")\n    nodee =  Node(\"E\")\n    noded =  Node(\"D\")\n    nodec =  Node(\"C\", None, [nodef])\n    nodeb =  Node(\"B\", None, [nodee])\n    nodea =  Node(\"A\", None, [nodeb, nodec, noded])\n\n    if breadth_first_search(nodea, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 3: Two unconnected nodes in graph\n    # Output: Path not found\n    if breadth_first_search(nodef, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 4: One node graph\n    # Output: Path found!\n    if breadth_first_search(nodef, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 5: Graph with cycles\n    # Output: Path found!\n    node1 = Node(\"1\")\n    node2 = Node(\"2\")\n    node3 = Node(\"3\")\n    node4 = Node(\"4\", None, [node1])\n    node5 = Node(\"5\", None, [node2])\n    node6 = Node(\"6\", None, [node5, node4, node3])\n\n    node2.successors = [node6]\n\n    if breadth_first_search(node6, node1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\nif __name__ == \"__main__\":\n    main()\n",
+            "suggested_function": "main",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.0,
+          "spec_expr_coverage": 0.0,
+          "specificity_gate_verdict": "over_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "llm_localization": null,
+          "localization_hit_function": null,
+          "localization_hit_function_at_3": null,
+          "localization_mrr": null,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "specificity_gate_verdict",
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 7,
+              "test_count": 7,
+              "parse_ok": true,
+              "mutation_score": null
+            },
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 10,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 0.0,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__bucketsort",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 96.0,
+          "iterations": 3,
+          "diagnosis": "bucketsort 第 7-8 行遍历了 arr 而非 counts。第 6 行正确统计了 counts[x]，但第 7 行 `for i, count in enumerate(arr)` 中 i 是 arr 的下标、count 是 arr 的元素值，导致 `sorted_arr.extend([i] * count)` 用下标重复元素值，输出完全错误。应改为 `for i, count in enumerate(counts)`，使 i 为桶索引（即元素值）、count 为该值出现次数。",
+          "error_category": "assertion",
+          "elapsed_seconds": 33.07,
+          "token_usage": {
+            "input_tokens": 16059,
+            "output_tokens": 4180,
+            "total_tokens": 20239,
+            "llm_calls": 8,
+            "by_model": {
+              "deepseek-flash": 20239
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef bucketsort(arr, k):\n    counts = [0] * k\n    for x in arr:\n        counts[x] += 1\n\n    sorted_arr = []\n    for i, count in enumerate(counts):\n        sorted_arr.extend([i] * count)\n\n    return sorted_arr\n\n\n\n\"\"\"\nBucket Sort\n\n\nInput:\n    arr: A list of small ints\n    k: Upper bound of the size of the ints in arr (not inclusive)\n\nPrecondition:\n    all(isinstance(x, int) and 0 <= x < k for x in arr)\n\nOutput:\n    The elements of arr in sorted order\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom bucketsort import bucketsort\n\n\nclass TestBucketsortNormal:\n    \"\"\"正常路径测试：验证 bucketsort 对一般输入的排序行为。\"\"\"\n\n    def test_bucketsort_normal_unordered_small_ints(self):\n        \"\"\"无序小整数列表应返回升序排列。\n\n        期望值来源：docstring 约定 \"The elements of arr in sorted order\"。\n        \"\"\"\n        arr = [3, 1, 2, 1, 3]\n        k = 5\n        result = bucketsort(arr, k)\n        assert result == [1, 1, 2, 3, 3]\n\n    def test_bucketsort_normal_already_sorted(self):\n        \"\"\"已升序列表应保持有序。\n\n        期望值来源：docstring 约定升序输出。\n        \"\"\"\n        arr = [0, 1, 2, 3]\n        k = 4\n        result = bucketsort(arr, k)\n        assert result == [0, 1, 2, 3]\n\n    def test_bucketsort_normal_all_same_elements(self):\n        \"\"\"全部相同元素应正确计数并展开。\n\n        期望值来源：docstring 约定升序输出，多重集不变。\n        \"\"\"\n        arr = [2, 2, 2]\n        k = 3\n        result = bucketsort(arr, k)\n        assert result == [2, 2, 2]\n\n\nclass TestBucketsortBoundary:\n    \"\"\"边界条件测试。\"\"\"\n\n    def test_bucketsort_boundary_empty_list(self):\n        \"\"\"空列表应返回空列表。\n\n        期望值来源：docstring 约定输出为 arr 元素升序排列，空列表升序仍为空。\n        \"\"\"\n        arr = []\n        k = 3\n        result = bucketsort(arr, k)\n        assert result == []\n\n    def test_bucketsort_boundary_single_element(self):\n        \"\"\"单元素列表应返回该元素本身（k=1 仅允许元素 0）。\n\n        期望值来源：docstring 约定升序输出。\n        \"\"\"\n        arr = [0]\n        k = 1\n        result = bucketsort(arr, k)\n        assert result == [0]\n\n    def test_bucketsort_boundary_min_value_zero(self):\n        \"\"\"元素取到最小边界 0 时应正确排序。\n\n        期望值来源：docstring 约定升序输出。\n        \"\"\"\n        arr = [0, 0, 1]\n        k = 2\n        result = bucketsort(arr, k)\n        assert result == [0, 0, 1]\n\n    def test_bucketsort_boundary_max_value_k_minus_1(self):\n        \"\"\"元素取到上界 k-1 时应正确排序。\n\n        期望值来源：docstring 约定升序输出。\n        \"\"\"\n        arr = [4, 0, 4]\n        k = 5\n        result = bucketsort(arr, k)\n        assert result == [0, 4, 4]\n\n\nclass TestBucketsortPostconditions:\n    \"\"\"后置条件测试：长度与多重集不变。\"\"\"\n\n    @pytest.mark.parametrize(\n        \"arr,k\",\n        [\n            ([3, 1, 2, 1, 3], 5),\n            ([0, 1, 2, 3], 4),\n            ([2, 2, 2], 3),\n            ([], 3),\n            ([0], 1),\n            ([0, 0, 1], 2),\n            ([4, 0, 4], 5),\n        ],\n    )\n    def test_bucketsort_postcondition_length_and_multiset(self, arr, k):\n        \"\"\"返回列表长度等于 len(arr)，且与 sorted(arr) 一致。\n\n        期望值来源：docstring 约定升序输出。\n        \"\"\"\n        result = bucketsort(arr, k)\n        assert len(result) == len(arr)\n        assert result == sorted(arr)\n\n\nclass TestBucketsortError:\n    \"\"\"违反前置条件时的行为测试。\n\n    注意：以下用例的期望值来源不明（异常类型由运行环境决定），\n    仅记录实际行为，需人工确认。\n    \"\"\"\n\n    def test_bucketsort_error_element_equals_k(self):\n        \"\"\"元素等于 k 时越界访问 counts[k]，期望值来源不明，需人工确认。\n\n        前置条件要求 x < k，此处 arr 含 5 而 k=5，违反前置条件。\n        仅断言调用会抛出异常（不臆造具体异常类型）。\n        \"\"\"\n        arr = [0, 5]\n        k = 5\n        with pytest.raises(Exception):\n            bucketsort(arr, k)\n\n    def test_bucketsort_error_negative_element(self):\n        \"\"\"元素为负数时使用负索引，期望值来源不明，需人工确认。\n\n        前置条件要求 0 <= x，此处 arr 含 -1，违反前置条件。\n        负索引不会抛异常，仅记录实际行为（不臆造具体输出）。\n        \"\"\"\n        arr = [-1, 0]\n        k = 3\n        result = bucketsort(arr, k)\n        # 期望值来源不明，仅记录实际行为，需人工确认\n        assert isinstance(result, list)\n\n    def test_bucketsort_error_non_int_element(self):\n        \"\"\"元素非整数时 counts[1.5] 触发 TypeError，期望值来源不明，需人工确认。\n\n        前置条件要求 x 为 int，此处 arr 含 1.5，违反前置条件。\n        仅断言调用会抛出异常（不臆造具体异常类型）。\n        \"\"\"\n        arr = [1.5, 2]\n        k = 3\n        with pytest.raises(Exception):\n            bucketsort(arr, k)\n\n\n# SpecIR v2 确定性 oracle（compile_readiness=0.20）\nfrom bucketsort import bucketsort\n\ndef test_specir_v2_oracle():\n    arr, k = 0, 0\n    # NL provenance (uncompiled pre): all(isinstance(x, int) and 0 <= x < k for x in arr)\n    # pre: k > 0\n    assert k > 0\n    r = bucketsort(arr, k)\n    # NL provenance (uncompiled post): len(result) == len(arr)\n    # NL provenance (uncompiled post): result == sorted(arr)\n    # NL provenance (uncompiled post): len(counts) == k",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.966,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.967,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.966,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.967,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.04,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.965,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "bucketsort",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.bucketsort import bucketsort\nelse:\n    from python_programs.bucketsort import bucketsort\n\n\ntestdata = load_json_testcases(bucketsort.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_bucketsort(input_data, expected):\n    assert bucketsort(*input_data) == expected\n",
+            "fixed": "\ndef bucketsort(arr, k):\n    counts = [0] * k\n    for x in arr:\n        counts[x] += 1\n\n    sorted_arr = []\n    for i, count in enumerate(counts):\n        sorted_arr.extend([i] * count)\n\n    return sorted_arr\n\n\"\"\"\ndef bucketsort(arr, k):\n    counts = [0] * k\n    for x in arr:\n        counts[x] += 1\n\n    sorted_arr = []\n    for i, count in enumerate(arr):\n        sorted_arr.extend([i] * counts[i])\n\n    return sorted_arr\n\"\"\"\n",
+            "suggested_function": "bucketsort",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 1,
+          "spec_compile_rate": 1.0,
+          "spec_expr_coverage": 0.8333333333333334,
+          "specificity_gate_verdict": "over_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 1.0,
+            "fl_at_3": 1.0,
+            "fl_at_5": 1.0
+          },
+          "llm_localization": {
+            "function_name": "bucketsort",
+            "line_start": 7,
+            "line_end": 8,
+            "confidence": 0.97,
+            "expected_logic": "应遍历 counts 的索引 i 与计数 count，将 i 重复 count 次展开，得到升序结果。",
+            "reasoning": "实际遍历的是 arr 而非 counts，i 取到的是元素值而非桶索引，count 取到的是元素本身，展开结果完全错误。",
+            "candidates": [
+              {
+                "function_name": "bucketsort",
+                "line_start": 7,
+                "line_end": 8,
+                "confidence": 0.97,
+                "expected_logic": "应遍历 counts 的索引 i 与计数 count，将 i 重复 count 次展开，得到升序结果。",
+                "reasoning": "实际遍历的是 arr 而非 counts，i 取到的是元素值而非桶索引，count 取到的是元素本身，展开结果完全错误。"
+              },
+              {
+                "function_name": "bucketsort",
+                "line_start": 4,
+                "line_end": 4,
+                "confidence": 0.4,
+                "expected_logic": "对每个元素 x 在 counts[x] 处累加计数，正确统计各值出现次数。",
+                "reasoning": "该行本身正确，但计数结果未被正确使用；若前置条件被违反会越界，属次要可疑点。"
+              },
+              {
+                "function_name": "bucketsort",
+                "line_start": 6,
+                "line_end": 6,
+                "confidence": 0.2,
+                "expected_logic": "初始化空列表用于按桶索引顺序收集排序结果。",
+                "reasoning": "初始化正确，但后续填充逻辑错误导致结果非升序，属关联可疑行。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "specificity_gate_verdict"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "bucketsort"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            },
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "max_iterations",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__depth_first_search",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 93.0,
+          "iterations": 2,
+          "diagnosis": "search_from 内部从未将访问过的节点加入 nodesvisited 集合（第 4-11 行）。当图中存在环（如 a->b->a）且目标不可达时，递归会无限循环，最终触发 RecursionError（runtime 异常）。修复：在进入节点时将其加入 nodesvisited。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 21.0,
+          "token_usage": {
+            "input_tokens": 10703,
+            "output_tokens": 3065,
+            "total_tokens": 13768,
+            "llm_calls": 6,
+            "by_model": {
+              "deepseek-flash": 13768
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef depth_first_search(startnode, goalnode):\n    nodesvisited = set()\n\n    def search_from(node):\n        if node in nodesvisited:\n            return False\n        nodesvisited.add(node)\n        if node is goalnode:\n            return True\n        else:\n            return any(\n                search_from(nextnode) for nextnode in node.successors\n            )\n\n    return search_from(startnode)\n\n\n\n\"\"\"\nDepth-first Search\n\n\nInput:\n    startnode: A digraph node\n    goalnode: A digraph node\n\nOutput:\n    Whether goalnode is reachable from startnode\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom depth_first_search import depth_first_search\n\n\nclass Node:\n    \"\"\"简单的有向图节点，successors 为可迭代的后继节点集合。\"\"\"\n\n    def __init__(self, name, successors=None):\n        self.name = name\n        self.successors = list(successors) if successors else []\n\n    def __repr__(self):\n        return f\"Node({self.name})\"\n\n\n@pytest.fixture\ndef simple_graph():\n    \"\"\"构造 a->b->c 的链式图，外加孤立节点 z。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\")\n    c = Node(\"c\")\n    z = Node(\"z\")\n    a.successors = [b]\n    b.successors = [c]\n    return {\"a\": a, \"b\": b, \"c\": c, \"z\": z}\n\n\n@pytest.fixture\ndef cyclic_graph():\n    \"\"\"构造 a->b->a 的环，外加孤立节点 z。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\")\n    z = Node(\"z\")\n    a.successors = [b]\n    b.successors = [a]\n    return {\"a\": a, \"b\": b, \"z\": z}\n\n\ndef test_depth_first_search_start_is_goal(simple_graph):\n    \"\"\"startnode 与 goalnode 为同一对象时应直接返回 True。\"\"\"\n    a = simple_graph[\"a\"]\n    assert depth_first_search(a, a) is True\n\n\ndef test_depth_first_search_direct_successor(simple_graph):\n    \"\"\"node_a.successors 包含 node_b 时应返回 True。\"\"\"\n    a = simple_graph[\"a\"]\n    b = simple_graph[\"b\"]\n    assert depth_first_search(a, b) is True\n\n\ndef test_depth_first_search_multi_hop_path(simple_graph):\n    \"\"\"路径 a->b->c 应返回 True。\"\"\"\n    a = simple_graph[\"a\"]\n    c = simple_graph[\"c\"]\n    assert depth_first_search(a, c) is True\n\n\ndef test_depth_first_search_unreachable_goal(simple_graph):\n    \"\"\"图中不存在到 node_z 的路径时应返回 False。\"\"\"\n    a = simple_graph[\"a\"]\n    z = simple_graph[\"z\"]\n    assert depth_first_search(a, z) is False\n\n\ndef test_depth_first_search_no_successors_not_goal():\n    \"\"\"起点无后继且非目标时，any 对空迭代返回 False。\"\"\"\n    a = Node(\"a\")\n    b = Node(\"b\")\n    assert depth_first_search(a, b) is False\n\n\ndef test_depth_first_search_cycle_without_goal(cyclic_graph):\n    \"\"\"a->b->a 成环且不含目标时，nodesvisited 防止无限递归，应返回 False。\"\"\"\n    a = cyclic_graph[\"a\"]\n    z = cyclic_graph[\"z\"]\n    assert depth_first_search(a, z) is False\n\n\ndef test_depth_first_search_cycle_with_goal(cyclic_graph):\n    \"\"\"a->b->a 成环且 node_b 为目标时应返回 True。\"\"\"\n    a = cyclic_graph[\"a\"]\n    b = cyclic_graph[\"b\"]\n    assert depth_first_search(a, b) is True\n\n\ndef test_depth_first_search_value_equal_but_not_identical():\n    \"\"\"值相等但非同一对象：期望值来源不明，需人工确认。\n\n    该用例记录实际行为：node_a_copy 与 node_a 值相等但 is 比较为 False，\n    且 node_a_copy 无后继，因此按身份比较语义应返回 False。\n    期望值来源不明，需人工确认。\n    \"\"\"\n    a = Node(\"a\")\n    a_copy = Node(\"a\")\n    result = depth_first_search(a, a_copy)\n    assert isinstance(result, bool)\n\n\ndef test_depth_first_search_startnode_none():\n    \"\"\"startnode 为 None 时访问 successors 会抛 AttributeError。\n\n    期望值来源不明，需人工确认；此处记录实际行为。\n    \"\"\"\n    b = Node(\"b\")\n    with pytest.raises(AttributeError):\n        depth_first_search(None, b)\n\n\ndef test_depth_first_search_goalnode_none(simple_graph):\n    \"\"\"goalnode 为 None 时 is 比较恒为 False，最终返回 False。\n\n    期望值来源不明，需人工确认；此处记录实际行为。\n    \"\"\"\n    a = simple_graph[\"a\"]\n    result = depth_first_search(a, None)\n    assert isinstance(result, bool)\n\n\n# SpecIR v2 确定性 oracle（compile_readiness=0.50）\nfrom depth_first_search import depth_first_search\n\ndef test_specir_v2_oracle():\n    startnode, goalnode = 0, 0\n    # pre: startnode is not None\n    assert startnode is not None\n    # pre: goalnode is not None\n    assert goalnode is not None\n    r = depth_first_search(startnode, goalnode)\n    # NL provenance (uncompiled post): isinstance(result, bool)\n    # NL provenance (uncompiled post): len(nodesvisited) >= 0",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 93.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.967,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 93.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.03,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.966,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 93.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.05,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.965,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "depth_first_search",
+            "test_cases": "import pytest\nfrom node import Node\n\nif pytest.use_correct:\n    from correct_python_programs.depth_first_search import depth_first_search\nelse:\n    from python_programs.depth_first_search import depth_first_search\n\n\ndef test1():\n    \"\"\"Case 1: Strongly connected graph\n    Output: Path found!\n    \"\"\"\n\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\", None, [station2, station3])\n    station5 = Node(\"London Bridge\", None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\", None, [station5, station4])\n\n    path_found = depth_first_search(station6, station1)\n\n    assert path_found\n\n\ndef test2():\n    \"\"\"Case 2: Branching graph\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n    noded = Node(\"D\")\n    nodec = Node(\"C\", None, [nodef])\n    nodeb = Node(\"B\", None, [nodee])\n    nodea = Node(\"A\", None, [nodeb, nodec, noded])\n\n    path_found = depth_first_search(nodea, nodee)\n\n    assert path_found\n\n\ndef test3():\n    \"\"\"Case 3: Two unconnected nodes in graph\n    Output: Path not found\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n\n    path_found = depth_first_search(nodef, nodee)\n\n    assert not path_found\n\n\ndef test4():\n    \"\"\"Case 4: One node graph\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n\n    path_found = depth_first_search(nodef, nodef)\n\n    assert path_found\n\n\ndef test5():\n    \"\"\"Case 5: Graph with cycles\n    Output: Path found!\n    \"\"\"\n\n    nodef = Node(\"F\")\n    nodee = Node(\"E\")\n    noded = Node(\"D\")\n    nodec = Node(\"C\", None, [nodef])\n    nodeb = Node(\"B\", None, [nodee])\n    nodea = Node(\"A\", None, [nodeb, nodec, noded])\n\n    nodee.successors = [nodea]\n\n    path_found = depth_first_search(nodea, nodef)\n\n    assert path_found\n",
+            "fixed": "\ndef depth_first_search(startnode, goalnode):\n    nodesvisited = set()\n\n    def search_from(node):\n        if node in nodesvisited:\n            return False\n        elif node is goalnode:\n            return True\n        else:\n            nodesvisited.add(node)\n            return any(\n                search_from(nextnode) for nextnode in node.successors\n            )\n\n    return search_from(startnode)\n",
+            "suggested_function": "depth_first_search",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 0,
+          "spec_compile_rate": 1.0,
+          "spec_expr_coverage": 0.6666666666666666,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 1,
+          "patch_precision": null,
+          "fl_at_k": {
+            "fl_at_1": 0.0,
+            "fl_at_3": 0.0,
+            "fl_at_5": 0.0
+          },
+          "llm_localization": {
+            "function_name": "search_from",
+            "line_start": 5,
+            "line_end": 6,
+            "confidence": 0.95,
+            "expected_logic": "访问节点后应将其加入 nodesvisited，使后续重复访问返回 False，避免无限递归。",
+            "reasoning": "代码只检查 node in nodesvisited 却从未 add，环 a->b->a 导致无限递归，cycle_without_goal 失败。",
+            "candidates": [
+              {
+                "function_name": "search_from",
+                "line_start": 5,
+                "line_end": 6,
+                "confidence": 0.95,
+                "expected_logic": "访问节点后应将其加入 nodesvisited，使后续重复访问返回 False，避免无限递归。",
+                "reasoning": "代码只检查 node in nodesvisited 却从未 add，环 a->b->a 导致无限递归，cycle_without_goal 失败。"
+              },
+              {
+                "function_name": "search_from",
+                "line_start": 10,
+                "line_end": 12,
+                "confidence": 0.3,
+                "expected_logic": "递归遍历后继前应标记当前节点已访问，保证环检测生效。",
+                "reasoning": "any 递归处依赖 nodesvisited 生效，但标记缺失使该处成为环未终止的直接执行点。"
+              },
+              {
+                "function_name": "depth_first_search",
+                "line_start": 2,
+                "line_end": 2,
+                "confidence": 0.15,
+                "expected_logic": "nodesvisited 应被正确维护以记录已访问节点。",
+                "reasoning": "集合初始化后从未被写入，是环检测失效的根源所在。"
+              }
+            ]
+          },
+          "localization_hit_function": false,
+          "localization_hit_function_at_3": false,
+          "localization_mrr": 0.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "search_from"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 11,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": 0.6667,
+          "mutants_killed": 4,
+          "mutants_total": 6
+        },
+        {
+          "task_id": "quixbugs__depth_first_search_test",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "depth_first_search_test.py 第1-2行使用了相对导入 `from .node import Node` 和 `from .depth_first_search import depth_first_search`，但该文件被作为顶层模块直接导入（无父包），导致 ImportError: attempted relative import with no known parent package。需改为绝对导入或兼容性导入。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 26.02,
+          "token_usage": {
+            "input_tokens": 8917,
+            "output_tokens": 4841,
+            "total_tokens": 13758,
+            "llm_calls": 5,
+            "by_model": {
+              "deepseek-flash": 13758
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\nfrom node import Node\nfrom depth_first_search import depth_first_search\n\n\n\"\"\"\nDriver to test depth first search\n\"\"\"\ndef main():\n    # Case 1: Strongly connected graph\n    # Output: Path found!\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\",  None, [station2, station3])\n    station5 = Node(\"London Bridge\",  None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\",  None, [station5, station4])\n\n    if depth_first_search(station6, station1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 2: Branching graph\n    # Output: Path found!\n    nodef =  Node(\"F\")\n    nodee =  Node(\"E\")\n    noded =  Node(\"D\")\n    nodec =  Node(\"C\", None, [nodef])\n    nodeb =  Node(\"B\", None, [nodee])\n    nodea =  Node(\"A\", None, [nodeb, nodec, noded])\n\n    if depth_first_search(nodea, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 3: Two unconnected nodes in graph\n    # Output: Path not found\n    if depth_first_search(nodef, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 4: One node graph\n    # Output: Path found!\n    if depth_first_search(nodef, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 5: Graph with cycles\n    # Output: Path found!\n    nodee.successors = [nodea]\n\n    if depth_first_search(nodea, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\nif __name__ == \"__main__\":\n    main()\n",
+          "generated_test": "import io\nimport sys\nimport pytest\n\nfrom depth_first_search_test import main\n\n\n@pytest.fixture\ndef captured_output(monkeypatch):\n    \"\"\"捕获 main 执行期间的标准输出。\"\"\"\n    buffer = io.StringIO()\n    monkeypatch.setattr(sys, \"stdout\", buffer)\n    return buffer\n\n\ndef _run_main_and_get_lines(captured_output):\n    \"\"\"执行 main 并返回去除空行后的输出行列表。\"\"\"\n    result = main()\n    captured_output.seek(0)\n    lines = [line.strip() for line in captured_output.read().splitlines() if line.strip()]\n    return result, lines\n\n\ndef test_main_returns_none(captured_output):\n    \"\"\"main 无返回值，应返回 None。\"\"\"\n    result, _ = _run_main_and_get_lines(captured_output)\n    assert result is None\n\n\ndef test_main_strongly_connected_graph_path_found(captured_output):\n    \"\"\"Case1 强连通图 station6 -> station1，期望输出 Path found!。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert lines[0] == \"Path found!\"\n\n\ndef test_main_branching_graph_path_found(captured_output):\n    \"\"\"Case2 分支图 nodea -> nodee，期望输出 Path found!。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert lines[1] == \"Path found!\"\n\n\ndef test_main_unconnected_nodes_path_not_found(captured_output):\n    \"\"\"Case3 非连通图 nodef -> nodee，期望输出 Path not found!。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert lines[2] == \"Path not found!\"\n\n\ndef test_main_single_node_self_path_found(captured_output):\n    \"\"\"Case4 单节点图 nodef -> nodef，期望输出 Path found!。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert lines[3] == \"Path found!\"\n\n\ndef test_main_graph_with_cycles_path_found(captured_output):\n    \"\"\"Case5 带环图 nodea -> nodef，期望输出 Path found! 且不应无限递归。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert lines[4] == \"Path found!\"\n\n\ndef test_main_output_line_count_and_order(captured_output):\n    \"\"\"main 完整执行后应打印 5 行，顺序与注释一致。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    assert len(lines) == 5\n    assert lines == [\n        \"Path found!\",\n        \"Path found!\",\n        \"Path not found!\",\n        \"Path found!\",\n        \"Path found!\",\n    ]\n\n\ndef test_main_all_lines_are_valid_messages(captured_output):\n    \"\"\"每一行输出都必须是 Path found! 或 Path not found! 之一。\"\"\"\n    _, lines = _run_main_and_get_lines(captured_output)\n    for line in lines:\n        assert line in (\"Path found!\", \"Path not found!\")\n\n\ndef test_main_import_error_path(monkeypatch):\n    \"\"\"若依赖导入失败，main 所在模块导入将抛出 ImportError。\n\n    期望值来源不明，需人工确认：此处仅验证当依赖不可用时导入行为\n    会抛出 ImportError，而非断言具体错误消息。\n    \"\"\"\n    import importlib\n    import builtins\n\n    real_import = builtins.__import__\n\n    def fake_import(name, *args, **kwargs):\n        if name.endswith(\"depth_first_search\") or name.endswith(\"node\"):\n            raise ImportError(\"simulated import failure\")\n        return real_import(name, *args, **kwargs)\n\n    monkeypatch.setattr(builtins, \"__import__\", fake_import)\n    sys.modules.pop(\"depth_first_search_test\", None)\n    with pytest.raises(ImportError):\n        importlib.import_module(\"depth_first_search_test\")\n    # 恢复模块，避免影响其他测试\n    sys.modules.pop(\"depth_first_search_test\", None)\n    monkeypatch.undo()\n    importlib.import_module(\"depth_first_search_test\")\n\n\ndef test_main_depth_first_search_non_bool_truthy(monkeypatch, captured_output):\n    \"\"\"若 depth_first_search 返回非布尔真值，if 分支应走 Path found!。\n\n    期望值来源不明，需人工确认：此处仅验证真值语义下输出 Path found!。\n    \"\"\"\n    import depth_first_search_test as mod\n\n    class _Truthy:\n        def __bool__(self):\n            return True\n\n    monkeypatch.setattr(mod, \"depth_first_search\", lambda s, g: _Truthy())\n    mod.main()\n    captured_output.seek(0)\n    lines = [line.strip() for line in captured_output.read().splitlines() if line.strip()]\n    assert all(line == \"Path found!\" for line in lines)\n\n\ndef test_main_depth_first_search_non_bool_falsy(monkeypatch, captured_output):\n    \"\"\"若 depth_first_search 返回非布尔假值，if 分支应走 Path not found!。\n\n    期望值来源不明，需人工确认：此处仅验证假值语义下输出 Path not found!。\n    \"\"\"\n    import depth_first_search_test as mod\n\n    class _Falsy:\n        def __bool__(self):\n            return False\n\n    monkeypatch.setattr(mod, \"depth_first_search\", lambda s, g: _Falsy())\n    mod.main()\n    captured_output.seek(0)\n    lines = [line.strip() for line in captured_output.read().splitlines() if line.strip()]\n    assert all(line == \"Path not found!\" for line in lines)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.11,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.11,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.14,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.962,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.1,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "depth_first_search_test",
+            "test_cases": "",
+            "fixed": "from .node import Node\nfrom .depth_first_search import depth_first_search\n\n\n\"\"\"\nDriver to test depth first search\n\"\"\"\ndef main():\n    # Case 1: Strongly connected graph\n    # Output: Path found!\n    station1 = Node(\"Westminster\")\n    station2 = Node(\"Waterloo\", None, [station1])\n    station3 = Node(\"Trafalgar Square\", None, [station1, station2])\n    station4 = Node(\"Canary Wharf\",  None, [station2, station3])\n    station5 = Node(\"London Bridge\",  None, [station4, station3])\n    station6 = Node(\"Tottenham Court Road\",  None, [station5, station4])\n\n    if depth_first_search(station6, station1):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 2: Branching graph\n    # Output: Path found!\n    nodef =  Node(\"F\")\n    nodee =  Node(\"E\")\n    noded =  Node(\"D\")\n    nodec =  Node(\"C\", None, [nodef])\n    nodeb =  Node(\"B\", None, [nodee])\n    nodea =  Node(\"A\", None, [nodeb, nodec, noded])\n\n    if depth_first_search(nodea, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 3: Two unconnected nodes in graph\n    # Output: Path not found\n    if depth_first_search(nodef, nodee):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 4: One node graph\n    # Output: Path found!\n    if depth_first_search(nodef, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\n    # Case 5: Graph with cycles\n    # Output: Path found!\n    nodee.successors = [nodea]\n\n    if depth_first_search(nodea, nodef):\n        print(\"Path found!\", end=\" \")\n    else:\n        print(\"Path not found!\", end=\" \")\n    print()\n\nif __name__ == \"__main__\":\n    main()\n",
+            "suggested_function": "main",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.0,
+          "spec_expr_coverage": 0.0,
+          "specificity_gate_verdict": "over_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "llm_localization": null,
+          "localization_hit_function": null,
+          "localization_hit_function_at_3": null,
+          "localization_mrr": null,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "specificity_gate_verdict",
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 14,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            },
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 11,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 0.0,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__detect_cycle",
+          "repo": "quixbugs",
+          "passed": true,
+          "coverage": 99.0,
+          "iterations": 1,
+          "diagnosis": "detect_cycle 中循环体只检查了 hare.successor is None（第 8 行），但随后第 11 行执行 hare = hare.successor.successor。当链表长度为偶数且无环时，hare 会先到达最后一个节点，此时 hare.successor 为 None，第 8 行检查通过（因为 hare.successor is None 为 True 会 return False）——但问题在于 hare 到达倒数第二个节点时，hare.successor 非 None，第 11 行 hare.successor.successor 中 hare.successor 是最后一个节点，其 successor 为 None，于是 hare 被赋值为 None；下一轮循环第 8 行访问 hare.successor 触发 AttributeError。即缺少对 hare.successor.successor 是否为 None 的检查。",
+          "error_category": "test_regenerated_pass_unverified",
+          "elapsed_seconds": 15.57,
+          "token_usage": {
+            "input_tokens": 6428,
+            "output_tokens": 2449,
+            "total_tokens": 8877,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 8877
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef detect_cycle(node):\n    hare = tortoise = node\n\n    while True:\n        if hare.successor is None:\n            return False\n\n        tortoise = tortoise.successor\n        hare = hare.successor.successor\n\n        if hare is None:\n            return False\n\n        if hare is tortoise:\n            return True\n\n\n\n\"\"\"\nLinked List Cycle Detection\ntortoise-hare\n\nImplements the tortoise-and-hare method of cycle detection.\n\nInput:\n    node: The head node of a linked list\n\nOutput:\n    Whether the linked list is cyclic\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom detect_cycle import detect_cycle\n\n\nclass Node:\n    \"\"\"简单的单链表节点，具有 successor 属性。\"\"\"\n\n    def __init__(self, successor=None):\n        self.successor = successor\n\n\ndef build_chain(values):\n    \"\"\"根据值列表构建无环链表，返回头节点。\"\"\"\n    head = None\n    prev = None\n    for _ in values:\n        node = Node()\n        if head is None:\n            head = node\n        if prev is not None:\n            prev.successor = node\n        prev = node\n    return head\n\n\ndef test_detect_cycle_single_node_no_cycle():\n    \"\"\"单节点 successor 为 None，应返回 False。期望值来源：测试计划。\"\"\"\n    node = Node(successor=None)\n    assert detect_cycle(node) is False\n\n\ndef test_detect_cycle_single_node_self_loop():\n    \"\"\"单节点自环（successor 指向自身），应返回 True。期望值来源：测试计划。\"\"\"\n    node = Node()\n    node.successor = node\n    assert detect_cycle(node) is True\n\n\ndef test_detect_cycle_two_node_cycle():\n    \"\"\"两节点互相指向形成环，应返回 True。期望值来源：测试计划。\"\"\"\n    a = Node()\n    b = Node()\n    a.successor = b\n    b.successor = a\n    assert detect_cycle(a) is True\n\n\ndef test_detect_cycle_multi_node_no_cycle():\n    \"\"\"普通无环链表 A->B->C->D->None，应返回 False。期望值来源：测试计划。\"\"\"\n    head = build_chain([1, 2, 3, 4])\n    assert detect_cycle(head) is False\n\n\ndef test_detect_cycle_multi_node_with_cycle():\n    \"\"\"尾部节点指回中间节点形成环，应返回 True。期望值来源：测试计划。\"\"\"\n    a = Node()\n    b = Node()\n    c = Node()\n    d = Node()\n    a.successor = b\n    b.successor = c\n    c.successor = d\n    d.successor = b\n    assert detect_cycle(a) is True\n\n\ndef test_detect_cycle_long_chain_no_cycle():\n    \"\"\"100 节点无环链表，应返回 False。期望值来源：测试计划。\"\"\"\n    head = build_chain(range(100))\n    assert detect_cycle(head) is False\n\n\ndef test_detect_cycle_long_chain_with_cycle():\n    \"\"\"100 节点尾部成环，应返回 True。期望值来源：测试计划。\"\"\"\n    nodes = [Node() for _ in range(100)]\n    for i in range(99):\n        nodes[i].successor = nodes[i + 1]\n    nodes[99].successor = nodes[50]\n    assert detect_cycle(nodes[0]) is True\n\n\ndef test_detect_cycle_hare_successor_none_returns_false():\n    \"\"\"hare 的 successor 为 None 时提前返回 False。期望值来源：测试计划。\"\"\"\n    node = Node(successor=None)\n    assert detect_cycle(node) is False\n\n\ndef test_detect_cycle_two_node_no_cycle():\n    \"\"\"A->B->None 无环链表，应返回 False。期望值来源：测试计划。\"\"\"\n    a = Node()\n    b = Node()\n    a.successor = b\n    b.successor = None\n    assert detect_cycle(a) is False\n\n\ndef test_detect_cycle_empty_list_behavior():\n    \"\"\"空链表（node 为 None）行为：期望值来源不明，需人工确认。\n\n    代码未显式处理 None，访问 hare.successor 会抛 AttributeError。\n    此处记录实际行为，若实现变更则需人工确认期望。\n    \"\"\"\n    try:\n        result = detect_cycle(None)\n    except AttributeError:\n        # 记录实际行为：未处理 None 输入\n        assert True\n    else:\n        # 若实现返回布尔值，则记录该行为\n        assert result in (True, False)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 99.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.07,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.964,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 99.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.59,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.98,
+                "simplicity": 0.533
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "detect_cycle",
+            "test_cases": "import pytest\nfrom node import Node\n\nif pytest.use_correct:\n    from correct_python_programs.detect_cycle import detect_cycle\nelse:\n    from python_programs.detect_cycle import detect_cycle\n\n\nnode1 = Node(1)\nnode2 = Node(2, node1)\nnode3 = Node(3, node2)\nnode4 = Node(4, node3)\nnode5 = Node(5, node4)\n\n\ndef test1():\n    \"\"\"Case 1: 5-node list input with no cycle\n    Expected Output: Cycle not detected!\n    \"\"\"\n\n    detected = detect_cycle(node5)\n\n    assert not detected\n\n\ndef test2():\n    \"\"\"Case 2: 5-node list input with cycle\n    Expected Output: Cycle detected!\n    \"\"\"\n\n    node1.successor = node5\n\n    detected = detect_cycle(node5)\n\n    assert detected\n\n\ndef test3():\n    \"\"\"Case 3: 2-node list with cycle\n    Expected Output: Cycle detected!\n    \"\"\"\n\n    node1.successor = node2\n\n    detected = detect_cycle(node2)\n\n    assert detected\n\n\ndef test4():\n    \"\"\"Case 4: 2-node list with no cycle\n    Expected Output: Cycle not detected!\n    \"\"\"\n\n    node6 = Node(6)\n    node7 = Node(7, node6)\n\n    detected = detect_cycle(node7)\n\n    assert not detected\n\n\ndef test5():\n    \"\"\"Case 5: 1-node list\n    Expected Output: Cycle not detected\n    \"\"\"\n\n    node = Node(0)\n    detected = detect_cycle(node)\n\n    assert not detected\n\n\ndef test6():\n    \"\"\"Case 6: 5 nodes in total. the last 2 nodes form a cycle. input the first node\n    Expected Output: Cycle detected!\n    \"\"\"\n\n    node1.successor = node2\n\n    detected = detect_cycle(node5)\n\n    assert detected\n",
+            "fixed": "def detect_cycle(node):\n    hare = tortoise = node\n\n    while True:\n        if hare is None or hare.successor is None:\n            return False\n\n        tortoise = tortoise.successor\n        hare = hare.successor.successor\n\n        if hare is tortoise:\n            return True\n\n\n\"\"\"\ndef detect_cycle(node):\n    hare = tortoise = node\n\n    while True:\n        if hare.successor is None or hare.successor.successor is None:\n            return False\n\n        tortoise = tortoise.successor\n        hare = hare.successor.successor\n\n        if hare is tortoise:\n            return True\n\"\"\"\n",
+            "suggested_function": "detect_cycle",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": true,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_then_green",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.6666666666666666,
+          "spec_expr_coverage": 0.75,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 0.0,
+            "fl_at_3": 0.0,
+            "fl_at_5": 0.0
+          },
+          "llm_localization": {
+            "function_name": "detect_cycle",
+            "line_start": 9,
+            "line_end": 9,
+            "confidence": 0.9,
+            "expected_logic": "hare 前进两步前需检查 hare.successor 是否为 None，避免对 None 取 successor 或漏判终止。",
+            "reasoning": "无环偶数链中 hare 会走到末节点，其 successor 为 None，此处 hare.successor.successor 抛 AttributeError 而非返回 False。",
+            "candidates": [
+              {
+                "function_name": "detect_cycle",
+                "line_start": 9,
+                "line_end": 9,
+                "confidence": 0.9,
+                "expected_logic": "hare 前进两步前需检查 hare.successor 是否为 None，避免对 None 取 successor 或漏判终止。",
+                "reasoning": "无环偶数链中 hare 会走到末节点，其 successor 为 None，此处 hare.successor.successor 抛 AttributeError 而非返回 False。"
+              },
+              {
+                "function_name": "detect_cycle",
+                "line_start": 5,
+                "line_end": 5,
+                "confidence": 0.6,
+                "expected_logic": "循环内应同时检查 hare 与 hare.successor 是否为 None，任一为 None 即无环返回 False。",
+                "reasoning": "仅检查 hare.successor，未覆盖 hare 本身为 None 或 hare.successor 为 None 时仍需终止的情形。"
+              },
+              {
+                "function_name": "detect_cycle",
+                "line_start": 4,
+                "line_end": 4,
+                "confidence": 0.3,
+                "expected_logic": "循环条件应保证 hare 及其后继可安全访问，否则退出返回 False。",
+                "reasoning": "while True 无终止保护，依赖内部检查不足，导致无环链表访问 None.successor 崩溃。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "test_regenerated_pass_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "detect_cycle"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 11,
+              "test_count": 10,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": 0.8,
+          "mutants_killed": 4,
+          "mutants_total": 5
+        },
+        {
+          "task_id": "quixbugs__detect_cycle_test",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "detect_cycle_test.py 第1行使用了相对导入 `from .node import Node`，但该文件被作为顶层模块直接导入（无父包），导致 `ImportError: attempted relative import with no known parent package`。同样第2行 `from .detect_cycle import detect_cycle` 也存在相同问题。需改为绝对导入或兼容性导入。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 17.29,
+          "token_usage": {
+            "input_tokens": 6293,
+            "output_tokens": 3049,
+            "total_tokens": 9342,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 9342
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ntry:\n    from .node import Node\n    from .detect_cycle import detect_cycle\nexcept ImportError:\n    from node import Node\n    from detect_cycle import detect_cycle\n\n\n\"\"\"\nDriver to test reverse linked list\n\"\"\"\ndef main():\n    # Case 1: 5-node list input with no cycle\n    # Expected Output: Cycle not detected!\n    node1 = Node(1)\n    node2 = Node(2, node1)\n    node3 = Node(3, node2)\n    node4 = Node(4, node3)\n    node5 = Node(5, node4)\n\n    if detect_cycle(node5):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 2: 5-node list input with cycle\n    # Expected Output: Cycle detected!\n    node1.successor = node5\n\n    if detect_cycle(node5):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 3: 2-node list with cycle\n    # Expected Output: Cycle detected!\n    node1.successor = node2\n\n    if detect_cycle(node2):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 4: 2-node list with no cycle\n    # Expected Output: Cycle not detected!\n    node6 = Node(6)\n    node7 = Node(7, node6)\n\n    if detect_cycle(node7):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 5: 1-node list\n    # Expected Output: Cycle not detected!\n    node = Node(0)\n    if detect_cycle(node):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 6: 5 nodes in total. the last 2 nodes form a cycle. input the first node\n    node1.successor = node2\n    if detect_cycle(node5):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n\nif __name__ == \"__main__\":\n    main()\n",
+          "generated_test": "import io\nimport sys\nfrom contextlib import redirect_stdout\n\nimport pytest\n\nfrom detect_cycle_test import main\n\n\ndef _run_main_capture():\n    \"\"\"运行 main() 并捕获标准输出，返回按行分割的输出列表。\"\"\"\n    buf = io.StringIO()\n    with redirect_stdout(buf):\n        main()\n    return buf.getvalue().splitlines()\n\n\ndef test_main_outputs_six_lines():\n    \"\"\"main 应输出 6 行（每个用例一行）。\"\"\"\n    lines = _run_main_capture()\n    assert len(lines) == 6\n\n\ndef test_main_case1_5节点无环():\n    \"\"\"Case1：5 节点无环链表，期望输出 'Cycle not detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[0].strip() == \"Cycle not detected!\"\n\n\ndef test_main_case2_5节点含环():\n    \"\"\"Case2：node1.successor=node5 形成环，期望输出 'Cycle detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[1].strip() == \"Cycle detected!\"\n\n\ndef test_main_case3_2节点含环():\n    \"\"\"Case3：2 节点成环，期望输出 'Cycle detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[2].strip() == \"Cycle detected!\"\n\n\ndef test_main_case4_2节点无环():\n    \"\"\"Case4：2 节点无环，期望输出 'Cycle not detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[3].strip() == \"Cycle not detected!\"\n\n\ndef test_main_case5_单节点():\n    \"\"\"Case5：单节点链表，期望输出 'Cycle not detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[4].strip() == \"Cycle not detected!\"\n\n\ndef test_main_case6_尾部2节点成环():\n    \"\"\"Case6：5 节点中后 2 节点成环，期望输出 'Cycle detected!'。\"\"\"\n    lines = _run_main_capture()\n    assert lines[5].strip() == \"Cycle detected!\"\n\n\n@pytest.mark.parametrize(\n    \"index, expected\",\n    [\n        (0, \"Cycle not detected!\"),\n        (1, \"Cycle detected!\"),\n        (2, \"Cycle detected!\"),\n        (3, \"Cycle not detected!\"),\n        (4, \"Cycle not detected!\"),\n        (5, \"Cycle detected!\"),\n    ],\n)\ndef test_main_each_case_expected_output(index, expected):\n    \"\"\"参数化校验每个用例的输出与计划一致。\"\"\"\n    lines = _run_main_capture()\n    assert lines[index].strip() == expected\n\n\ndef test_main_detect_cycle_异常传播():\n    \"\"\"若 detect_cycle 对非法输入抛异常，main 未捕获将向上传播。\n\n    期望值来源不明，需人工确认：此处仅记录实际行为——若 main 正常\n    返回则视为无异常传播；若抛出异常则断言异常类型为 Exception 子类。\n    \"\"\"\n    try:\n        _run_main_capture()\n    except Exception as exc:  # noqa: BLE001\n        assert isinstance(exc, Exception)\n    else:\n        # 未发生异常，说明 detect_cycle 未对当前输入抛异常\n        assert True",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.12,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.11,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 1.11,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "detect_cycle_test",
+            "test_cases": "",
+            "fixed": "from .node import Node\nfrom .detect_cycle import detect_cycle\n\n\n\"\"\"\nDriver to test reverse linked list\n\"\"\"\ndef main():\n    # Case 1: 5-node list input with no cycle\n    # Expected Output: Cycle not detected!\n    node1 = Node(1)\n    node2 = Node(2, node1)\n    node3 = Node(3, node2)\n    node4 = Node(4, node3)\n    node5 = Node(5, node4)\n\n    if detect_cycle(node5):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 2: 5-node list input with cycle\n    # Expected Output: Cycle detected!\n    node1.successor = node5\n\n    if detect_cycle(node5):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 3: 2-node list with cycle\n    # Expected Output: Cycle detected!\n    node1.successor = node2\n\n    if detect_cycle(node2):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 4: 2-node list with no cycle\n    # Expected Output: Cycle not detected!\n    node6 = Node(6)\n    node7 = Node(7, node6)\n\n    if detect_cycle(node7):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\n    # Case 5: 1-node list\n    # Expected Output: Cycle not detected!\n    node = Node(0)\n    if detect_cycle(node):\n        print(\"Cycle detected!\", end=\" \")\n    else:\n        print(\"Cycle not detected!\", end=\" \")\n    print()\n\nif __name__ == \"__main__\":\n    main()\n\n",
+            "suggested_function": "main",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.0,
+          "spec_expr_coverage": 0.0,
+          "specificity_gate_verdict": "over_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": null,
+          "repair_rate": null,
+          "false_fix_rate": null,
+          "test_error_rate": null,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 0,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "llm_localization": null,
+          "localization_hit_function": null,
+          "localization_hit_function_at_3": null,
+          "localization_mrr": null,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "specificity_gate_verdict",
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 10,
+              "test_count": 9,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 0.0,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__bitcount",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "bitcount 函数中 `n ^= n - 1` 逻辑错误。对于 n>0，`n ^ (n-1)` 会翻转从最低位 1 开始的所有位（包括该 1 及其右侧的 0 变为 1），结果通常比 n 更大或不变，无法保证 n 递减到 0，导致 while 循环无法终止（例如 n=127 时 n 会变成 1，然后 1^0=1 永远循环），从而触发 timeout。正确做法应为 `n &= n - 1`，用于清除最低位的 1。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 342.26,
+          "token_usage": {
+            "input_tokens": 4460,
+            "output_tokens": 2657,
+            "total_tokens": 7117,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 7117
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef bitcount(n):\n    count = 0\n    while n:\n        n &= n - 1\n        count += 1\n    return count\n\n\n\"\"\"\nBitcount\nbitcount\n\n\nInput:\n    n: a nonnegative int\n\nOutput:\n    The number of 1-bits in the binary encoding of n\n\nExamples:\n    >>> bitcount(127)\n    7\n    >>> bitcount(128)\n    1\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom bitcount import bitcount\n\n\nclass TestBitcountNormal:\n    \"\"\"正常路径测试：验证 bitcount 在典型输入下的行为。\"\"\"\n\n    def test_bitcount_127(self):\n        \"\"\"docstring 示例：127 的二进制为 1111111，含 7 个 1。\"\"\"\n        assert bitcount(127) == 7\n\n    def test_bitcount_128(self):\n        \"\"\"docstring 示例：128 为 2^7，仅一位为 1，返回 1。\"\"\"\n        assert bitcount(128) == 1\n\n\nclass TestBitcountBoundary:\n    \"\"\"边界测试：验证 bitcount 在边界输入下的行为。\"\"\"\n\n    def test_bitcount_zero(self):\n        \"\"\"边界：n=0 时 while 条件为假，循环体不执行，返回 0。\"\"\"\n        assert bitcount(0) == 0\n\n    def test_bitcount_one(self):\n        \"\"\"边界：n=1 最小非零值，循环执行一次，返回 1。\"\"\"\n        assert bitcount(1) == 1\n\n    def test_bitcount_power_of_two(self):\n        \"\"\"边界：2 的幂（2^10 = 1024）只有一位为 1，返回 1。\"\"\"\n        assert bitcount(1024) == 1\n\n    def test_bitcount_all_ones(self):\n        \"\"\"边界：2^8-1 = 255 全为 1，循环执行 8 次，返回 8。\"\"\"\n        assert bitcount(255) == 8\n\n    def test_bitcount_large_int(self):\n        \"\"\"边界：2^64-1 大整数，含 64 个 1，验证大数不溢出。\"\"\"\n        assert bitcount(18446744073709551615) == 64\n\n\nclass TestBitcountPostconditions:\n    \"\"\"后置条件测试：验证返回值满足 docstring 声明的性质。\"\"\"\n\n    @pytest.mark.parametrize(\n        \"n\",\n        [0, 1, 2, 3, 7, 8, 15, 16, 127, 128, 255, 256, 1024, 2**64 - 1],\n    )\n    def test_bitcount_returns_nonnegative(self, n):\n        \"\"\"后置条件：返回值 count >= 0（docstring 声明输出为 1 的位数）。\"\"\"\n        assert bitcount(n) >= 0\n\n    @pytest.mark.parametrize(\n        \"n\",\n        [1, 2, 3, 7, 8, 15, 16, 127, 128, 255, 256, 1024, 2**64 - 1],\n    )\n    def test_bitcount_positive_for_positive_input(self, n):\n        \"\"\"后置条件：n > 0 时返回值 count > 0（至少有一位为 1）。\"\"\"\n        assert bitcount(n) > 0\n\n    @pytest.mark.parametrize(\n        \"n, expected\",\n        [\n            (0, 0),\n            (1, 1),\n            (2, 1),\n            (3, 2),\n            (4, 1),\n            (5, 2),\n            (6, 2),\n            (7, 3),\n            (8, 1),\n            (15, 4),\n            (16, 1),\n            (31, 5),\n            (32, 1),\n            (63, 6),\n            (64, 1),\n            (127, 7),\n            (128, 1),\n            (255, 8),\n            (256, 1),\n            (1024, 1),\n            (2**64 - 1, 64),\n        ],\n    )\n    def test_bitcount_matches_bin_count(self, n, expected):\n        \"\"\"后置条件：返回值等于 bin(n).count('1')，与 Python 内建实现一致。\"\"\"\n        assert bitcount(n) == expected\n        assert bitcount(n) == bin(n).count(\"1\")\n\n\nclass TestBitcountError:\n    \"\"\"异常路径测试：验证前置条件被违反时的行为。\"\"\"\n\n    def test_bitcount_negative(self):\n        \"\"\"异常路径：docstring 要求 n 为非负整数，负数输入行为未定义。\n\n        期望值来源不明，需人工确认：负数输入下 while n 恒为真，\n        n ^= n - 1 可能不收敛（死循环）。此处仅记录实际行为，\n        不臆造具体返回值，避免测试恒失败或恒真。\n        \"\"\"\n        # 负数输入行为未定义，无法断言具体返回值。\n        # 若实现会抛异常，则捕获；若会返回，则记录实际值。\n        try:\n            result = bitcount(-1)\n        except Exception as exc:  # noqa: BLE001\n            # 实现选择抛错也是可接受的行为\n            assert isinstance(exc, Exception)\n        else:\n            # 实现未抛错，记录实际行为（不臆造期望值）\n            assert isinstance(result, int)\n\n\n# SpecIR v2 确定性 oracle（compile_readiness=0.40）\nfrom bitcount import bitcount\n\ndef test_specir_v2_oracle():\n    n = 0\n    # pre: n >= 0\n    assert n >= 0\n    # pre: n == int(n)\n    assert n == int(n)\n    r = bitcount(n)\n    # NL provenance (uncompiled post): count >= 0\n    # NL provenance (uncompiled post): count == 0 or n > 0\n    # NL provenance (uncompiled post): count >= 0",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "bitcount",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.bitcount import bitcount\nelse:\n    from python_programs.bitcount import bitcount\n\n\ntestdata = load_json_testcases(bitcount.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_bitcount(input_data, expected):\n    assert bitcount(*input_data) == expected\n",
+            "fixed": "\ndef bitcount(n):\n    count = 0\n    while n:\n        n &= n - 1\n        count += 1\n    return count\n",
+            "suggested_function": "bitcount",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 0,
+          "spec_compile_rate": 1.0,
+          "spec_expr_coverage": 1.0,
+          "specificity_gate_verdict": "unavailable",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 1,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "llm_localization": null,
+          "localization_hit_function": null,
+          "localization_hit_function_at_3": null,
+          "localization_mrr": null,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 15,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 0.0,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__find_in_sorted",
+          "repo": "quixbugs",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 1,
+          "diagnosis": "binsearch 的递归边界处理有误：当 x > arr[mid] 时调用 binsearch(mid, end)，区间未排除 mid，导致 start 无法推进。当 x 大于数组中所有元素时，start 永远停在某个位置，end 也不变，造成无限递归（RecursionError/超时）。同时当 x < arr[mid] 时用 binsearch(start, mid) 是正确的（因为 mid 已排除）。修复：将 binsearch(mid, end) 改为 binsearch(mid + 1, end)。",
+          "error_category": "runtime",
+          "elapsed_seconds": 19.13,
+          "token_usage": {
+            "input_tokens": 7999,
+            "output_tokens": 3391,
+            "total_tokens": 11390,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 11390
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef find_in_sorted(arr, x):\n    def binsearch(start, end):\n        if start == end:\n            return -1\n        mid = start + (end - start) // 2\n        if x < arr[mid]:\n            return binsearch(start, mid)\n        elif x > arr[mid]:\n            return binsearch(mid + 1, end)\n        else:\n            return mid\n\n    return binsearch(0, len(arr))\n\n\n\n\n\"\"\"\nBinary Search\n\nInput:\n    arr: A sorted list of ints\n    x: A value to find\n\nOutput:\n    An index i such that arr[i] == x, or -1 if x not in arr\n\nExample:\n    >>> find_in_sorted([3, 4, 5, 5, 5, 5, 6], 5)\n    3\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom find_in_sorted import find_in_sorted\n\n\ndef _is_sorted(arr):\n    \"\"\"辅助函数：判断列表是否为非递减有序。\"\"\"\n    return all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))\n\n\ndef _check_postconditions(arr, x, result):\n    \"\"\"辅助函数：校验后置条件。\"\"\"\n    assert result >= -1\n    assert result < len(arr)\n    if result == -1:\n        assert x not in arr\n    else:\n        assert arr[result] == x\n\n\n@pytest.mark.parametrize(\n    \"arr, x, expected\",\n    [\n        ([3, 4, 5, 5, 5, 5, 6], 5, 3),\n        ([1, 2, 3, 4, 5], 3, 2),\n        ([10, 20, 30], 5, -1),\n        ([10, 20, 30], 50, -1),\n        ([], 1, -1),\n        ([7], 7, 0),\n        ([7], 3, -1),\n        ([1, 2, 2, 2, 3], 2, 2),\n        ([-5, -3, -1, 0, 2], -3, 1),\n        ([-2, -1, 0, 1, 2], 0, 2),\n        ([1, 2, 3], 0, -1),\n        ([1, 2], 2, 1),\n        ([1, 2], 3, -1),\n    ],\n)\ndef test_find_in_sorted_expected_output(arr, x, expected):\n    \"\"\"验证各测试用例的期望输出。\n\n    期望值来源：测试计划中给出的 expected_output。\n    \"\"\"\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == expected\n    _check_postconditions(arr, x, result)\n\n\n@pytest.mark.parametrize(\n    \"arr, x\",\n    [\n        ([3, 4, 5, 5, 5, 5, 6], 5),\n        ([1, 2, 3, 4, 5], 3),\n        ([10, 20, 30], 5),\n        ([10, 20, 30], 50),\n        ([], 1),\n        ([7], 7),\n        ([7], 3),\n        ([1, 2, 2, 2, 3], 2),\n        ([-5, -3, -1, 0, 2], -3),\n        ([-2, -1, 0, 1, 2], 0),\n        ([1, 2, 3], 0),\n        ([1, 2], 2),\n        ([1, 2], 3),\n    ],\n)\ndef test_find_in_sorted_postconditions(arr, x):\n    \"\"\"验证后置条件：返回值合法且与查找结果一致。\n\n    后置条件来源：logic_analysis.postconditions。\n    \"\"\"\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    _check_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_empty_list_returns_minus_one():\n    \"\"\"空列表应返回 -1。\n\n    期望值来源：docstring 约定，x 不在 arr 中时返回 -1。\n    \"\"\"\n    assert find_in_sorted([], 0) == -1\n    assert find_in_sorted([], -100) == -1\n    assert find_in_sorted([], 100) == -1\n\n\ndef test_find_in_sorted_single_element_hit():\n    \"\"\"单元素列表命中应返回下标 0。\n\n    期望值来源：docstring 约定，返回满足 arr[i]==x 的下标。\n    \"\"\"\n    assert find_in_sorted([42], 42) == 0\n\n\ndef test_find_in_sorted_single_element_miss():\n    \"\"\"单元素列表未命中应返回 -1。\n\n    期望值来源：docstring 约定，x 不在 arr 中时返回 -1。\n    \"\"\"\n    assert find_in_sorted([42], 41) == -1\n    assert find_in_sorted([42], 43) == -1\n\n\ndef test_find_in_sorted_duplicates_returns_valid_index():\n    \"\"\"重复元素时应返回任一满足 arr[result]==x 的下标。\n\n    期望值来源：docstring 约定，不保证返回首个匹配下标。\n    \"\"\"\n    arr = [1, 2, 2, 2, 3]\n    result = find_in_sorted(arr, 2)\n    assert result != -1\n    assert arr[result] == 2\n\n\ndef test_find_in_sorted_negative_values():\n    \"\"\"负数元素查找应正确返回下标。\n\n    期望值来源：docstring 约定，返回满足 arr[i]==x 的下标。\n    \"\"\"\n    arr = [-10, -5, -3, -1, 0]\n    assert find_in_sorted(arr, -10) == 0\n    assert find_in_sorted(arr, -1) == 3\n    assert find_in_sorted(arr, -7) == -1\n\n\ndef test_find_in_sorted_boundary_values():\n    \"\"\"边界值（最小、最大、0）查找应正确。\n\n    期望值来源：docstring 约定，返回满足 arr[i]==x 的下标或 -1。\n    \"\"\"\n    arr = [-2, -1, 0, 1, 2]\n    assert find_in_sorted(arr, -2) == 0\n    assert find_in_sorted(arr, 2) == 4\n    assert find_in_sorted(arr, 0) == 2\n    assert find_in_sorted(arr, -3) == -1\n    assert find_in_sorted(arr, 3) == -1\n\n\ndef test_find_in_sorted_large_list():\n    \"\"\"较大有序列表查找应正确。\n\n    期望值来源：docstring 约定，返回满足 arr[i]==x 的下标或 -1。\n    \"\"\"\n    arr = list(range(0, 1000, 2))\n    assert find_in_sorted(arr, 0) == 0\n    assert find_in_sorted(arr, 998) == 499\n    assert find_in_sorted(arr, 500) == 250\n    assert find_in_sorted(arr, 501) == -1\n    assert find_in_sorted(arr, -1) == -1\n    assert find_in_sorted(arr, 1000) == -1\n\n\ndef test_find_in_sorted_all_same_elements():\n    \"\"\"所有元素相同时应返回任一合法下标。\n\n    期望值来源：docstring 约定，返回满足 arr[i]==x 的下标。\n    \"\"\"\n    arr = [5, 5, 5, 5, 5]\n    result = find_in_sorted(arr, 5)\n    assert result != -1\n    assert arr[result] == 5\n    assert find_in_sorted(arr, 4) == -1\n    assert find_in_sorted(arr, 6) == -1\n\n\ndef test_find_in_sorted_returns_int():\n    \"\"\"返回值类型应为 int。\n\n    期望值来源：类型注解/描述，返回整数下标或 -1。\n    \"\"\"\n    assert isinstance(find_in_sorted([1, 2, 3], 2), int)\n    assert isinstance(find_in_sorted([1, 2, 3], 9), int)\n    assert isinstance(find_in_sorted([], 0), int)",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 96.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.2,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.96,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 4.0,
+              "elapsed_seconds": 0.56,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.981,
+                "simplicity": 0.6
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "find_in_sorted",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.find_in_sorted import find_in_sorted\nelse:\n    from python_programs.find_in_sorted import find_in_sorted\n\n\ntestdata = load_json_testcases(find_in_sorted.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_find_in_sorted(input_data, expected):\n    assert find_in_sorted(*input_data) == expected\n",
+            "fixed": "\ndef find_in_sorted(arr, x):\n    def binsearch(start, end):\n        if start == end:\n            return -1\n        mid = start + (end - start) // 2\n        if x < arr[mid]:\n            return binsearch(start, mid)\n        elif x > arr[mid]:\n            return binsearch(mid + 1, end)\n        else:\n            return mid\n\n    return binsearch(0, len(arr))\n",
+            "suggested_function": "find_in_sorted",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_then_green",
+          "regeneration_count": 0,
+          "spec_compile_rate": 0.75,
+          "spec_expr_coverage": 0.6666666666666666,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 1.0,
+            "fl_at_3": 1.0,
+            "fl_at_5": 1.0
+          },
+          "llm_localization": {
+            "function_name": "binsearch",
+            "line_start": 9,
+            "line_end": 9,
+            "confidence": 0.95,
+            "expected_logic": "x 大于 arr[mid] 时应在右半区间搜索，即 binsearch(mid+1, end)。",
+            "reasoning": "递归用 binsearch(mid, end) 未排除 mid，当 x 大于所有元素时区间不收缩，导致无限递归/超时。",
+            "candidates": [
+              {
+                "function_name": "binsearch",
+                "line_start": 9,
+                "line_end": 9,
+                "confidence": 0.95,
+                "expected_logic": "x 大于 arr[mid] 时应在右半区间搜索，即 binsearch(mid+1, end)。",
+                "reasoning": "递归用 binsearch(mid, end) 未排除 mid，当 x 大于所有元素时区间不收缩，导致无限递归/超时。"
+              },
+              {
+                "function_name": "binsearch",
+                "line_start": 3,
+                "line_end": 4,
+                "confidence": 0.3,
+                "expected_logic": "start >= end 时返回 -1，防止空区间继续递归。",
+                "reasoning": "仅用 start == end 判断终止，配合 L9 的 mid 不前进会无法终止；但根因在 L9。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": false,
+          "patch_abstain_signals": [],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "binsearch"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 36,
+              "test_count": 11,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": 1.0,
+          "mutants_killed": 7,
+          "mutants_total": 7
+        },
+        {
+          "task_id": "quixbugs__flatten",
+          "repo": "quixbugs",
+          "passed": true,
+          "coverage": 100.0,
+          "iterations": 1,
+          "diagnosis": "flatten 函数第 7 行 else 分支错误地写成 `yield flatten(x)`，对非列表元素再次递归调用 flatten，导致 yield 出的是生成器对象而非元素本身。正确应为 `yield x`。这解释了所有失败用例：单元素、混合类型、嵌套混合类型以及惰性生成器测试均因产出生成器对象而非实际值而失败。",
+          "error_category": "assertion",
+          "elapsed_seconds": 14.78,
+          "token_usage": {
+            "input_tokens": 5226,
+            "output_tokens": 2105,
+            "total_tokens": 7331,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 7331
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef flatten(arr):\n    for x in arr:\n        if isinstance(x, list):\n            for y in flatten(x):\n                yield y\n        else:\n            yield x\n\n\n\n\"\"\"\nFlatten\n\nFlattens a nested list data structure into a single list.\n\n\nInput:\n    arr: A list\n\nPrecondition:\n    The input has no list containment cycles\n\nOutput:\n    A generator for the input's non-list objects\n\nExample:\n    >>> list(flatten([[1, [], [2, 3]], [[4]], 5]))\n    [1, 2, 3, 4, 5]\n\"\"\"\n",
+          "generated_test": "import pytest\nfrom flatten import flatten\n\n\ndef test_flatten_empty_list():\n    \"\"\"空列表应返回空结果。期望值来源：docstring 描述输出为非列表对象生成器。\"\"\"\n    assert list(flatten([])) == []\n\n\ndef test_flatten_flat_list():\n    \"\"\"扁平列表应原样返回。期望值来源：docstring 示例语义。\"\"\"\n    assert list(flatten([1, 2, 3])) == [1, 2, 3]\n\n\ndef test_flatten_nested_list_example():\n    \"\"\"docstring 示例：[[1, [], [2, 3]], [[4]], 5] -> [1, 2, 3, 4, 5]。\"\"\"\n    assert list(flatten([[1, [], [2, 3]], [[4]], 5])) == [1, 2, 3, 4, 5]\n\n\ndef test_flatten_deeply_nested():\n    \"\"\"深层嵌套列表应被完全展平。期望值来源：docstring 语义。\"\"\"\n    assert list(flatten([[[[[1]]]], 2, [[3, [4]]]])) == [1, 2, 3, 4]\n\n\ndef test_flatten_with_empty_sublists():\n    \"\"\"包含空子列表时不应产生额外元素。期望值来源：docstring 示例。\"\"\"\n    assert list(flatten([[], [[]], [[], []]])) == []\n\n\ndef test_flatten_returns_generator():\n    \"\"\"flatten 应返回生成器对象。期望值来源：docstring 明确说明为 generator。\"\"\"\n    result = flatten([1, 2, 3])\n    assert hasattr(result, \"__iter__\")\n    assert hasattr(result, \"__next__\")\n\n\ndef test_flatten_single_element():\n    \"\"\"单元素列表应返回该元素。期望值来源：docstring 语义。\"\"\"\n    assert list(flatten([42])) == [42]\n\n\ndef test_flatten_mixed_types():\n    \"\"\"混合类型（非列表）元素应被保留。期望值来源：docstring 语义。\"\"\"\n    assert list(flatten([1, \"a\", 2.5, None, True])) == [1, \"a\", 2.5, None, True]\n\n\ndef test_flatten_nested_mixed_types():\n    \"\"\"嵌套结构中的混合类型元素应被展平保留。期望值来源：docstring 语义。\"\"\"\n    assert list(flatten([[1, \"a\"], [2.5, [None]]])) == [1, \"a\", 2.5, None]\n\n\ndef test_flatten_is_lazy_generator():\n    \"\"\"flatten 应为惰性生成器，未迭代时不执行。期望值来源：docstring 说明为 generator。\"\"\"\n    gen = flatten([1, 2, 3])\n    assert next(gen) == 1\n    assert next(gen) == 2\n    assert next(gen) == 3\n    with pytest.raises(StopIteration):\n        next(gen)\n\n\ndef test_flatten_non_iterable_input_raises():\n    \"\"\"非可迭代输入应抛出 TypeError。期望值来源：输入约定为 list。\"\"\"\n    with pytest.raises(TypeError):\n        list(flatten(123))\n\n\ndef test_flatten_none_input_raises():\n    \"\"\"None 输入应抛出 TypeError。期望值来源：输入约定为 list。\"\"\"\n    with pytest.raises(TypeError):\n        list(flatten(None))",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 91.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.1,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.963,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 9.0,
+              "elapsed_seconds": 0.55,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.982,
+                "simplicity": 0.467
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "flatten",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.flatten import flatten\nelse:\n    from python_programs.flatten import flatten\n\n\ntestdata = load_json_testcases(flatten.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_flatten(input_data, expected):\n    assert list(flatten(*input_data)) == expected\n",
+            "fixed": "\ndef flatten(arr):\n    for x in arr:\n        if isinstance(x, list):\n            for y in flatten(x):\n                yield y\n        else:\n            yield x\n\n",
+            "suggested_function": "flatten",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_then_green",
+          "regeneration_count": 0,
+          "spec_compile_rate": 0.0,
+          "spec_expr_coverage": null,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 1.0,
+            "fl_at_3": 1.0,
+            "fl_at_5": 1.0
+          },
+          "llm_localization": {
+            "function_name": "flatten",
+            "line_start": 7,
+            "line_end": 7,
+            "confidence": 0.98,
+            "expected_logic": "非列表元素应直接 yield x，而非递归调用 flatten(x)。",
+            "reasoning": "else 分支写成 yield flatten(x)，对非列表元素递归调用，导致返回生成器对象而非元素本身。",
+            "candidates": [
+              {
+                "function_name": "flatten",
+                "line_start": 7,
+                "line_end": 7,
+                "confidence": 0.98,
+                "expected_logic": "非列表元素应直接 yield x，而非递归调用 flatten(x)。",
+                "reasoning": "else 分支写成 yield flatten(x)，对非列表元素递归调用，导致返回生成器对象而非元素本身。"
+              },
+              {
+                "function_name": "flatten",
+                "line_start": 4,
+                "line_end": 5,
+                "confidence": 0.3,
+                "expected_logic": "对子列表递归展平并逐个 yield 其元素。",
+                "reasoning": "该分支逻辑本身正确，但受 L7 缺陷影响，递归结果中混入生成器对象。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": false,
+          "patch_abstain_signals": [],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "flatten"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 13,
+              "test_count": 12,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": null,
+          "mutation_detection_rate": null,
+          "mutants_killed": 0,
+          "mutants_total": 0
+        },
+        {
+          "task_id": "quixbugs__gcd",
+          "repo": "quixbugs",
+          "passed": true,
+          "coverage": 91.0,
+          "iterations": 1,
+          "diagnosis": "第 5 行递归调用参数顺序错误：`gcd(a % b, b)` 中第二个参数始终为 b，未随递归更新，导致无法收敛（如 gcd(35,21) 会无限递归或返回错误结果）。正确应为 `gcd(b, a % b)`，即把 b 作为新的 a、a % b 作为新的 b。",
+          "error_category": "test_regenerated_pass_unverified",
+          "elapsed_seconds": 17.99,
+          "token_usage": {
+            "input_tokens": 6918,
+            "output_tokens": 2700,
+            "total_tokens": 9618,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 9618
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef gcd(a, b):\n    if b == 0:\n        return a\n    else:\n        return gcd(b, a % b)\n\n\n\"\"\"\nInput:\n    a: A nonnegative int\n    b: A nonnegative int\n\n\nGreatest Common Divisor\n\nPrecondition:\n    isinstance(a, int) and isinstance(b, int)\n\nOutput:\n    The greatest int that divides evenly into a and b\n\nExample:\n    >>> gcd(35, 21)\n    7\n\n\"\"\"\n",
+          "generated_test": "import pytest\nfrom gcd import gcd\n\n\nclass TestGcdNormal:\n    \"\"\"常规用例：验证 gcd 在正常输入下的行为。\"\"\"\n\n    def test_gcd_two_coprime_positive_numbers(self):\n        \"\"\"docstring 示例 gcd(35, 21) == 7，验证基本递归路径。\"\"\"\n        assert gcd(35, 21) == 7\n\n    def test_gcd_two_non_coprime_positive_numbers(self):\n        \"\"\"验证多轮递归后收敛到正确公约数，gcd(48, 18) == 6。\"\"\"\n        assert gcd(48, 18) == 6\n\n    def test_gcd_a_is_multiple_of_b(self):\n        \"\"\"验证整除情形，gcd(100, 25) == 25。\"\"\"\n        assert gcd(100, 25) == 25\n\n    def test_gcd_a_less_than_b(self):\n        \"\"\"验证 a<b 时首次递归交换角色，gcd(21, 35) == 7。\"\"\"\n        assert gcd(21, 35) == 7\n\n    def test_gcd_equal_numbers(self):\n        \"\"\"验证 a==b 情形，gcd(9, 9) == 9。\"\"\"\n        assert gcd(9, 9) == 9\n\n\nclass TestGcdBoundary:\n    \"\"\"边界用例：验证 gcd 在边界输入下的行为。\"\"\"\n\n    def test_gcd_b_is_zero(self):\n        \"\"\"验证递归基例 b==0 直接返回 a，gcd(5, 0) == 5。\"\"\"\n        assert gcd(5, 0) == 5\n\n    def test_gcd_a_is_zero_b_nonzero(self):\n        \"\"\"验证 a==0 时返回 b，gcd(0, 7) == 7。\"\"\"\n        assert gcd(0, 7) == 7\n\n    def test_gcd_both_zero(self):\n        \"\"\"验证 b==0 基例返回 a=0，gcd(0, 0) == 0。\"\"\"\n        assert gcd(0, 0) == 0\n\n    def test_gcd_minimal_positive_integers(self):\n        \"\"\"验证最小非负整数输入，gcd(1, 1) == 1。\"\"\"\n        assert gcd(1, 1) == 1\n\n    def test_gcd_large_integers(self):\n        \"\"\"验证大整数下递归与取模正确性，gcd(1000000007, 998244353) == 1。\"\"\"\n        assert gcd(1000000007, 998244353) == 1\n\n\nclass TestGcdPostconditions:\n    \"\"\"后置条件：返回值能整除 a 和 b。\"\"\"\n\n    @pytest.mark.parametrize(\n        \"a, b\",\n        [\n            (35, 21),\n            (48, 18),\n            (100, 25),\n            (21, 35),\n            (9, 9),\n            (5, 0),\n            (0, 7),\n            (1, 1),\n            (1000000007, 998244353),\n        ],\n    )\n    def test_gcd_result_divides_both_inputs(self, a, b):\n        \"\"\"后置条件：gcd(a, b) 能整除 a 和 b。\"\"\"\n        result = gcd(a, b)\n        if result == 0:\n            assert a == 0 and b == 0\n        else:\n            assert a % result == 0\n            assert b % result == 0\n\n    @pytest.mark.parametrize(\n        \"a, b\",\n        [\n            (35, 21),\n            (48, 18),\n            (100, 25),\n            (21, 35),\n            (9, 9),\n            (5, 0),\n            (0, 7),\n            (1, 1),\n        ],\n    )\n    def test_gcd_is_symmetric(self, a, b):\n        \"\"\"不变式：gcd(a, b) == gcd(b, a)。\"\"\"\n        assert gcd(a, b) == gcd(b, a)\n\n\nclass TestGcdError:\n    \"\"\"错误用例：前置条件违反时的行为。\n\n    期望值来源不明，需人工确认。以下用例仅记录实际行为，\n    不强制断言具体异常或返回值，避免恒失败或恒真。\n    \"\"\"\n\n    def test_gcd_negative_input_behavior(self):\n        \"\"\"负数输入行为未在 docstring 中定义，期望值来源不明，需人工确认。\n\n        仅记录实际行为，不强制断言具体结果。\n        \"\"\"\n        try:\n            result = gcd(-4, 6)\n        except Exception as exc:  # noqa: BLE001\n            assert exc is not None\n        else:\n            # 若未抛异常，仅记录返回值，不做具体值断言\n            assert isinstance(result, int)\n\n    def test_gcd_non_integer_input_behavior(self):\n        \"\"\"非整数输入行为未在 docstring 中定义，期望值来源不明，需人工确认。\n\n        仅记录实际行为，不强制断言具体结果。\n        \"\"\"\n        try:\n            result = gcd(3.5, 2)\n        except Exception as exc:  # noqa: BLE001\n            assert exc is not None\n        else:\n            # 若未抛异常，仅记录返回值，不做具体值断言\n            assert result is not None",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 95.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 1.26,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.958,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": true,
+              "coverage": 91.0,
+              "coverage_delta": -4.0,
+              "elapsed_seconds": 0.56,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.981,
+                "simplicity": 0.433
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "gcd",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.gcd import gcd\nelse:\n    from python_programs.gcd import gcd\n\n\ntestdata = load_json_testcases(gcd.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_gcd(input_data, expected):\n    assert gcd(*input_data) == expected\n",
+            "fixed": "\ndef gcd(a, b):\n    if b == 0:\n        return a\n    else:\n        return gcd(b, a % b)\n\n",
+            "suggested_function": "gcd",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": true,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_then_green",
+          "regeneration_count": 1,
+          "spec_compile_rate": 0.5,
+          "spec_expr_coverage": 0.8571428571428571,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": false,
+          "patch_evidence_level": "sbfl",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 1,
+          "patch_correct": 1,
+          "patch_precision": 1.0,
+          "fl_at_k": {
+            "fl_at_1": 1.0,
+            "fl_at_3": 1.0,
+            "fl_at_5": 1.0
+          },
+          "llm_localization": {
+            "function_name": "gcd",
+            "line_start": 5,
+            "line_end": 5,
+            "confidence": 0.95,
+            "expected_logic": "递归调用应为 gcd(b, a % b)，即用余数替换第二个参数，保持参数顺序正确。",
+            "reasoning": "实际写成 gcd(a % b, b)，第二个参数始终不变，导致无限递归或错误结果，如 gcd(35,21) 无法收敛到 7。",
+            "candidates": [
+              {
+                "function_name": "gcd",
+                "line_start": 5,
+                "line_end": 5,
+                "confidence": 0.95,
+                "expected_logic": "递归调用应为 gcd(b, a % b)，即用余数替换第二个参数，保持参数顺序正确。",
+                "reasoning": "实际写成 gcd(a % b, b)，第二个参数始终不变，导致无限递归或错误结果，如 gcd(35,21) 无法收敛到 7。"
+              },
+              {
+                "function_name": "gcd",
+                "line_start": 2,
+                "line_end": 3,
+                "confidence": 0.3,
+                "expected_logic": "基例 b==0 时返回 a，这是正确的终止条件。",
+                "reasoning": "该基例本身正确，但配合错误的递归参数顺序，导致 b 永不为 0 或结果错误，是失败链上的相关行。"
+              }
+            ]
+          },
+          "localization_hit_function": true,
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "test_regenerated_pass_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "hit",
+          "fl_constraint_hit_rank": 1,
+          "fl_constraint_changed_functions": [
+            "gcd"
+          ],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 18,
+              "test_count": 14,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "test_passed",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 1.0,
+          "mutation_detection_rate": 1.0,
+          "mutants_killed": 4,
+          "mutants_total": 4
+        },
+        {
+          "task_id": "quixbugs__find_first_in_sorted",
+          "repo": "quixbugs",
+          "passed": false,
+          "coverage": 0.0,
+          "iterations": 2,
+          "diagnosis": "函数 find_first_in_sorted 中 hi 初始化为 len(arr)，且循环条件为 lo <= hi，当 x 大于数组中所有元素时，lo 会递增到 len(arr)，此时 mid = (lo+hi)//2 = len(arr)，访问 arr[mid] 触发 IndexError；更关键的是当 lo == hi == len(arr) 时循环仍继续，mid 始终等于 len(arr)，导致 arr[mid] 越界或死循环（在空列表场景下 lo=0, hi=0，mid=0，访问 arr[0] 越界）。空列表测试失败即源于此：len(arr)=0，hi=0，lo=0，lo<=hi 成立，mid=0，arr[0] 越界。修复：将 hi 初始化为 len(arr)-1，循环条件改为 lo <= hi，并相应调整 hi = mid - 1。",
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 285.22,
+          "token_usage": {
+            "input_tokens": 6169,
+            "output_tokens": 3787,
+            "total_tokens": 9956,
+            "llm_calls": 4,
+            "by_model": {
+              "deepseek-flash": 9956
+            }
+          },
+          "rag_stats": null,
+          "patch": "python\ndef find_first_in_sorted(arr, x):\n    lo = 0\n    hi = len(arr) - 1\n\n    while lo <= hi:\n        mid = (lo + hi) // 2\n\n        if x == arr[mid] and (mid == 0 or x != arr[mid - 1]):\n            return mid\n\n        elif x <= arr[mid]:\n            hi = mid - 1\n\n        else:\n            lo = mid + 1\n\n    return -1\n\n\n\"\"\"\nFancy Binary Search\nfancy-binsearch\n\n\nInput:\n    arr: A sorted list of ints\n    x: A value to find\n\nOutput:\n    The lowest index i such that arr[i] == x, or -1 if x not in arr\n\nExample:\n    >>> find_first_in_sorted([3, 4, 5, 5, 5, 5, 6], 5)\n    2\n\"\"\"\n",
+          "generated_test": "import pytest\n\nfrom find_first_in_sorted import find_first_in_sorted\n\n\nclass TestFindFirstInSortedNormal:\n    \"\"\"正常路径测试：命中重复值、唯一值、负数等。\"\"\"\n\n    def test_find_first_in_sorted_middle_duplicates(self):\n        \"\"\"docstring 示例：重复值 5 首次出现索引为 2。\"\"\"\n        arr = [3, 4, 5, 5, 5, 5, 6]\n        assert find_first_in_sorted(arr, 5) == 2\n\n    def test_find_first_in_sorted_unique_element(self):\n        \"\"\"普通命中路径：唯一元素 3 位于索引 2。\"\"\"\n        arr = [1, 2, 3, 4, 5]\n        assert find_first_in_sorted(arr, 3) == 2\n\n    def test_find_first_in_sorted_negative_element(self):\n        \"\"\"负数元素命中：-3 位于索引 1。\"\"\"\n        arr = [-5, -3, -1, 0]\n        assert find_first_in_sorted(arr, -3) == 1\n\n    def test_find_first_in_sorted_duplicates_at_end(self):\n        \"\"\"末尾重复值：3 首次出现索引为 2。\"\"\"\n        arr = [1, 2, 3, 3, 3]\n        assert find_first_in_sorted(arr, 3) == 2\n\n    def test_find_first_in_sorted_duplicates_at_start(self):\n        \"\"\"开头重复值：2 首次出现索引为 0。\"\"\"\n        arr = [2, 2, 2, 3, 4]\n        assert find_first_in_sorted(arr, 2) == 0\n\n\nclass TestFindFirstInSortedBoundary:\n    \"\"\"边界路径测试：首末元素、空列表、单元素、越界值等。\"\"\"\n\n    def test_find_first_in_sorted_first_element(self):\n        \"\"\"命中首元素：返回索引 0。\"\"\"\n        arr = [1, 2, 3]\n        assert find_first_in_sorted(arr, 1) == 0\n\n    def test_find_first_in_sorted_last_element(self):\n        \"\"\"命中末元素：返回索引 len(arr)-1。\"\"\"\n        arr = [1, 2, 3]\n        assert find_first_in_sorted(arr, 3) == 2\n\n    def test_find_first_in_sorted_all_elements_same(self):\n        \"\"\"全部元素相同：返回索引 0。\"\"\"\n        arr = [7, 7, 7, 7]\n        assert find_first_in_sorted(arr, 7) == 0\n\n    def test_find_first_in_sorted_empty_list(self):\n        \"\"\"空列表：返回 -1。\"\"\"\n        assert find_first_in_sorted([], 5) == -1\n\n    def test_find_first_in_sorted_single_element_hit(self):\n        \"\"\"单元素列表命中：返回索引 0。\"\"\"\n        assert find_first_in_sorted([5], 5) == 0\n\n    def test_find_first_in_sorted_single_element_miss(self):\n        \"\"\"单元素列表未命中：返回 -1。\"\"\"\n        assert find_first_in_sorted([5], 3) == -1\n\n    def test_find_first_in_sorted_x_less_than_all(self):\n        \"\"\"x 小于所有元素：返回 -1。\"\"\"\n        arr = [10, 20, 30]\n        assert find_first_in_sorted(arr, 5) == -1\n\n    def test_find_first_in_sorted_x_greater_than_all(self):\n        \"\"\"x 大于所有元素：返回 -1。\"\"\"\n        arr = [10, 20, 30]\n        assert find_first_in_sorted(arr, 40) == -1\n\n    def test_find_first_in_sorted_x_between_elements(self):\n        \"\"\"x 位于两元素之间且不存在：返回 -1。\"\"\"\n        arr = [1, 3, 5, 7]\n        assert find_first_in_sorted(arr, 4) == -1\n\n    def test_find_first_in_sorted_negative_x_miss(self):\n        \"\"\"负数 x 未命中：返回 -1。\"\"\"\n        arr = [-5, -3, -1, 0]\n        assert find_first_in_sorted(arr, -4) == -1\n\n\nclass TestFindFirstInSortedPostconditions:\n    \"\"\"后置条件验证：返回值语义与 docstring 一致。\"\"\"\n\n    @pytest.mark.parametrize(\n        \"arr, x\",\n        [\n            ([3, 4, 5, 5, 5, 5, 6], 5),\n            ([1, 2, 3, 4, 5], 3),\n            ([1, 2, 3], 1),\n            ([1, 2, 3], 3),\n            ([7, 7, 7, 7], 7),\n            ([5], 5),\n            ([-5, -3, -1, 0], -3),\n            ([1, 2, 3, 3, 3], 3),\n            ([2, 2, 2, 3, 4], 2),\n        ],\n    )\n    def test_find_first_in_sorted_hit_postconditions(self, arr, x):\n        \"\"\"命中时：返回值合法索引、arr[result]==x 且为首次出现。\"\"\"\n        result = find_first_in_sorted(arr, x)\n        assert result >= 0\n        assert result < len(arr)\n        assert arr[result] == x\n        assert result == 0 or arr[result - 1] != x\n\n    @pytest.mark.parametrize(\n        \"arr, x\",\n        [\n            ([], 5),\n            ([5], 3),\n            ([10, 20, 30], 5),\n            ([10, 20, 30], 40),\n            ([1, 3, 5, 7], 4),\n            ([-5, -3, -1, 0], -4),\n        ],\n    )\n    def test_find_first_in_sorted_miss_postconditions(self, arr, x):\n        \"\"\"未命中时：返回 -1 且 x 不在 arr 中。\"\"\"\n        result = find_first_in_sorted(arr, x)\n        assert result == -1\n        assert x not in arr",
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 30.01,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.0,
+                "simplicity": 0.0
+              }
+            }
+          ],
+          "contract_missing_symbols": null,
+          "patch_resample_stats": null,
+          "contamination_risk_level": "not_applicable",
+          "repo_verification": null,
+          "task_metadata": {
+            "source": "quixbugs",
+            "program": "find_first_in_sorted",
+            "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.find_first_in_sorted import find_first_in_sorted\nelse:\n    from python_programs.find_first_in_sorted import find_first_in_sorted\n\n\ntestdata = load_json_testcases(find_first_in_sorted.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_find_first_in_sorted(input_data, expected):\n    assert find_first_in_sorted(*input_data) == expected\n",
+            "fixed": "\ndef find_first_in_sorted(arr, x):\n    lo = 0\n    hi = len(arr)\n\n    while lo < hi:\n        mid = (lo + hi) // 2\n\n        if x == arr[mid] and (mid == 0 or x != arr[mid - 1]):\n            return mid\n\n        elif x <= arr[mid]:\n            hi = mid\n\n        else:\n            lo = mid + 1\n\n    return -1\n\n\"\"\"\ndef find_first_in_sorted(arr, x):\n    lo = 0\n    hi = len(arr)\n\n    while lo <= hi - 1:\n        mid = (lo + hi) // 2\n\n        if x == arr[mid] and (mid == 0 or x != arr[mid - 1]):\n            return mid\n\n        elif x <= arr[mid]:\n            hi = mid\n\n        else:\n            lo = mid + 1\n\n    return -1\n\ndef find_first_in_sorted(arr, x):\n    lo = 0\n    hi = len(arr)\n\n    while lo + 1 <= hi:\n        mid = (lo + hi) // 2\n\n        if x == arr[mid] and (mid == 0 or x != arr[mid - 1]):\n            return mid\n\n        elif x <= arr[mid]:\n            hi = mid\n\n        else:\n            lo = mid + 1\n\n    return -1\n\n\"\"\"\n",
+            "suggested_function": "find_first_in_sorted",
+            "is_cross_file": false
+          },
+          "risk_summary": {
+            "enabled": false,
+            "risk_score": null,
+            "risk_level": null,
+            "approval_action": null,
+            "factors": {},
+            "reasons": [],
+            "pause_requested": false
+          },
+          "test_regenerated_pass_unverified": null,
+          "detection_first_red_seen": true,
+          "detection_first_status": "red_not_repaired",
+          "regeneration_count": 0,
+          "spec_compile_rate": 0.8,
+          "spec_expr_coverage": 1.0,
+          "specificity_gate_verdict": "specific_red",
+          "red_regression_violation": null,
+          "source_patched_unverified": true,
+          "patch_evidence_level": "none",
+          "detection_rate": 0.0,
+          "repair_rate": 1.0,
+          "false_fix_rate": 0.0,
+          "test_error_rate": 1.0,
+          "oracle_type": "generated_test",
+          "test_visible_to_system": true,
+          "patch_plausible": 0,
+          "patch_correct": 1,
+          "patch_precision": null,
+          "fl_at_k": null,
+          "llm_localization": null,
+          "localization_hit_function": null,
+          "localization_hit_function_at_3": null,
+          "localization_mrr": null,
+          "edit_intent_status": null,
+          "edit_localization": null,
+          "deterministic_repair_status": null,
+          "patch_abstained": true,
+          "patch_abstain_signals": [
+            "patch_evidence_level",
+            "source_patched_unverified"
+          ],
+          "test_hacking_suspected": false,
+          "test_hacking_signals": [],
+          "fl_constraint_verdict": "not_evaluable",
+          "fl_constraint_hit_rank": null,
+          "fl_constraint_changed_functions": [],
+          "oracle_quality_history": [
+            {
+              "regeneration": 0,
+              "assert_count": 21,
+              "test_count": 17,
+              "parse_ok": true,
+              "mutation_score": null
+            }
+          ],
+          "self_repair_trap_suspected": false,
+          "self_repair_trap_signals": [],
+          "stop_reason": "skip_debugger_repair_invalid",
+          "regression_rate": null,
+          "harness_invalid": false,
+          "token_budget_capped": false,
+          "mutation_score": 0.0,
+          "mutation_detection_rate": 0.875,
+          "mutants_killed": 7,
+          "mutants_total": 8
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "git_sha": "425f83dcc3814a642254130637cd7fb1dbd7d019",
+    "git_dirty": true,
+    "dirty_reason": null,
+    "model_name": "deepseek-flash",
+    "temperature": "",
+    "max_iterations": 3,
+    "seed": 42,
+    "profile": "logic",
+    "env_snapshot": {
+      "MAX_ITERATIONS": "3",
+      "LLM_TIMEOUT": "60",
+      "EXECUTION_TIMEOUT": "30",
+      "TEMPERATURE": null,
+      "ENABLE_PLANNER": "true",
+      "ENABLE_DEBUGGER": "true",
+      "ENABLE_RAG": "false",
+      "DIAGNOSIS_NODE_ENABLE": null,
+      "TYPE_CHECK_ENABLE": null,
+      "COST_BUDGET_ENABLE": null,
+      "EXPERT_POOL_ENABLE": null,
+      "MUTATION_TEST_ENABLE": null,
+      "KERNEL_SANDBOX_ENABLE": null,
+      "PATCH_RESAMPLE_ENABLE": null,
+      "REPO_LEVEL_EXECUTION": null,
+      "AITESTER_LLM_CACHE": null,
+      "AITESTER_CACHE_ISOLATE_MODEL": null,
+      "MUTATION_ADVISOR_ENABLE": null,
+      "LOGIC_SPEC_STRICT_ENABLE": "true",
+      "BOUNDARY_TRIPLETS_ENABLE": null,
+      "FL_SPECTRAL_ENABLE": "true",
+      "FL_SPECTRAL_TOP_K": null,
+      "BRANCH_COVERAGE_INJECT_ENABLE": "true",
+      "RAG_POISONING_FILTER": null,
+      "SPEC_IR_ENABLE": "true",
+      "FLAKY_CHECK_ENABLE": null,
+      "FLAKY_REPEAT_COUNT": null,
+      "PIP_PACKAGE_WHITELIST_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_ENABLE": null,
+      "SWE_BENCH_P2P_GATE_THRESHOLD": null,
+      "DETECTION_FIRST_ENABLE": "true",
+      "AITESTER_CACHE_NAMESPACE": "e4_diag_specificity",
+      "AITESTER_PROFILE": "logic",
+      "LOGIC_SPEC_STRICT_FALLBACK_ENABLE": "true",
+      "LLM_THINKING_MODE": null,
+      "LLM_REASONING_EFFORT": null,
+      "LLM_MAX_OUTPUT_TOKENS": null,
+      "PLAN_STRIP_EXPECTED_OUTPUT_ENABLE": null
+    },
+    "cache_enabled": true,
+    "cache_isolate_model": true,
+    "cache_namespace": "e4_diag_specificity",
+    "per_task_token_caps": null,
+    "valid_apis": [
+      {
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-flash",
+        "key": "<REDACTED>"
+      }
+    ],
+    "harness": {
+      "snapshot_date": "2026-10-10",
+      "execution_isolation": {
+        "use_venv": true,
+        "use_docker": false,
+        "kernel_sandbox": false,
+        "auto_install_deps": false
+      },
+      "context_strategy": {
+        "rag_enabled": false,
+        "context_tier_downgrade": false,
+        "truncation_first": false,
+        "branch_coverage_inject": true
+      },
+      "retry_stop_rules": {
+        "executor_retry_on_fail": 1,
+        "max_iterations": 3,
+        "cost_budget_enabled": false,
+        "test_regeneration_cap": 2,
+        "stop_reasons": [
+          "test_passed",
+          "max_iterations",
+          "skip_debugger_repair_invalid",
+          "test_defect_regeneration_cap",
+          "budget_exceeded",
+          "regression_detected",
+          "unknown"
+        ]
+      },
+      "per_task_time_limit_seconds": 30,
+      "model_version": "deepseek-flash"
+    }
+  }
+}
