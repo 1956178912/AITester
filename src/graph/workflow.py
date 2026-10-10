@@ -957,7 +957,7 @@ _FILE_CACHE_COUNT_MEMORY_LOCK = threading.Lock()
 
 
 def _file_cache_entry_count() -> int:
-    """统计生产 LLM 文件缓存（src/cache/*.json）当前条目数。
+    """统计生产 LLM 文件缓存（默认 ~/.cache/aitester/llm/*.json）当前条目数。
 
     缓存目录不存在或为空时返回 0（只读操作，不改变缓存内容）。
     0.10 性能：带进程内记忆（见上方 _FILE_CACHE_COUNT_MEMORY 说明）——

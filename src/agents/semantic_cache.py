@@ -5,7 +5,8 @@
     现有 LLM 文件缓存基于 prompt 的 md5 精确匹配——语义相同但措辞不同的
     prompt（如修复轮次间温度微调、prompt 模板小改）无法命中，反复消耗
     token。本模块在文件缓存之上加一层**进程内语义索引**：
-    - 索引材料：从文件缓存条目（src/cache/*.json）中取 prompt 文本做嵌入；
+    - 索引材料：从文件缓存条目（默认 ~/.cache/aitester/llm/*.json，可经
+      AITESTER_LLM_CACHE_DIR 覆盖）中取 prompt 文本做嵌入；
     - 命中判定：新 prompt 的嵌入与索引条目的余弦相似度 >=
       SEMANTIC_CACHE_THRESHOLD（默认 0.92）→ 视为语义命中，直接返回该
       条目的缓存响应（省一次 LLM 调用）；

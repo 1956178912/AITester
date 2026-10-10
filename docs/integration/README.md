@@ -6,6 +6,7 @@
 > - [../../.pre-commit-config.yaml](../../.pre-commit-config.yaml) — 本地 pre-commit 钩子
 > - [../../.git-hooks/pre-commit.sh](../../.git-hooks/pre-commit.sh) — 独立 sh 钩子脚本
 > - [../../.env.example](../../.env.example) — 环境变量模板（含 `AITESTER_SMOKE_LLM`）
+> - [vendored_quixbugs.md](vendored_quixbugs.md) — 外部数据集（嵌套 git 仓库）的集成与还原
 
 ## 一、本地 pre-commit 钩子
 

@@ -296,7 +296,8 @@ class BaseAgent:
 
         缓存分层（性能优化）：
         1. 进程内 LRU 快路径：命中时零磁盘 IO 直接返回；
-        2. 文件缓存（src/cache/*.json）：LRU 未命中时完整读文件回填，
+        2. 文件缓存（默认 ~/.cache/aitester/llm/*.json，可经
+           AITESTER_LLM_CACHE_DIR 覆盖）：LRU 未命中时完整读文件回填，
            保证跨进程/跨会话命中（文件是事实来源）；
         3. LLM 调用成功且缓存开启时写文件并回填 LRU。
 
@@ -831,7 +832,7 @@ class BaseAgent:
 
 
 # ─── 进程内 LRU 维护接口（测试 / 缓存清理钩子）───────────────────────────────
-# AITESTER_LLM_CACHE_DIR 变更或外部清理 src/cache 后，进程内 LRU 可能持有
+# AITESTER_LLM_CACHE_DIR 变更或外部清理 LLM 缓存目录后，进程内 LRU 可能持有
 # 已被删除条目的响应值。由于 LRU 命中值与文件内容一致时行为等价（响应不可变），
 # 该风险可接受；需要强一致口径（如测试）时调用 clear_llm_lru_cache() 清空。
 def clear_llm_lru_cache() -> None:

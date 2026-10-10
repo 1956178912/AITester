@@ -62,25 +62,22 @@ _CHECK_FILES = [
 # 豁免条目）。
 _EXEMPT_NO_EN = frozenset(
     {
-        "docs/0.7_audit_findings.md",
-        "docs/assessment_2026-09-25_improvement_directions.md",
-        "docs/code_analysis_report.md",
-        "docs/experiment_ab_results_2026-09-28.md",
-        "docs/full_test_report_2026-09-28.md",
-        # 2026-10-09 清理批次：原登记的两份"前沿基线核查"单语文档
-        # （frontier-baseline-2024-2026-python-ai-compliance.md /
-        # Python工程化前沿基线（2024–2026）.md）已随同根目录 5 份
-        # *_BASELINE_2023-2026.md 综述一并删除，豁免条目随之移除；
-        # docs/history/ 下的 gap_report_2026-09-28_frontier_recommendations.md
-        # 亦已删除，豁免条目一并清理。
-        "docs/implementation_2026-09-25_improvement_directions.md",
-        "docs/implementation_2026-09-25_p0_batch.md",
-        "docs/implementation_2026-10_ab_negative_batch.md",
-        "docs/implementation_2026-10_l25hard_n40_batch.md",
-        "docs/log_redaction_audit.md",
-        # W1（2026-10-05 审查落地）：删除 5 个 review_2026-09-* 豁免项——
-        # 这些文件在 P1-9 文档治理归档时已删除，豁免登记与 README 链接
-        # 残留成"指向不存在文件"的死条目（本轮一并修复 README 断链）。
+        # 2026-10-10 目录治理批次：按上方既有维护约定（"移入 docs/history/
+        # 归档并从本清单删除"）清理 10 条**指向不存在路径**的死条目。
+        # 这 10 个文件在 HEAD 即已不在 docs/ 顶层（早已归档至 docs/history/），
+        # 而本门禁以 dp.glob("*.md") **非递归**扫描 docs/，docs/history/ 不在
+        # 扫描面 → 这些条目永不可能被命中，属纯死代码；死条目会让"豁免清单 =
+        # 真实现状"的假设失真，后续维护者据以判断时会得出错误结论。
+        # 已移除（现均位于 docs/history/）：
+        #   0.7_audit_findings / assessment_2026-09-25_improvement_directions /
+        #   code_analysis_report / experiment_ab_results_2026-09-28 /
+        #   full_test_report_2026-09-28 /
+        #   implementation_2026-09-25_improvement_directions /
+        #   implementation_2026-09-25_p0_batch /
+        #   implementation_2026-10_ab_negative_batch /
+        #   implementation_2026-10_l25hard_n40_batch / log_redaction_audit
+        # 保留项：docs/troubleshooting.md 是 docs/ 顶层真实存在且暂无英文
+        # 配对的单语文档（本门禁仍会扫到它，故豁免仍然必要）。
         "docs/troubleshooting.md",
     }
 )

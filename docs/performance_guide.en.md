@@ -3,7 +3,8 @@
 # AITester Performance Tuning Guide
 
 > This document describes AITester's performance optimization mechanisms, configuration methods, and common troubleshooting.
-> Last updated: 2026-09-28 (added "Concurrency & multi-process cache semantics" section: LLM file-cache / semantic-cache consistency
+> Last updated: 2026-10-10 (corrected the LLM file-cache directory to ~/.cache/aitester/llm — the runtime cache
+> moved out of the source tree on 2026-10-05, so the previous `src/cache/` wording was stale; previously 2026-09-28 added "Concurrency & multi-process cache semantics" section: LLM file-cache / semantic-cache consistency
 > strategy and hit-rate boundaries under `--parallel` multi-threaded vs multi-process execution; authoritative details in
 > [api_reference.md](api_reference.md) "LLM file-cache multiprocess / multithread consistency" section; previously the 2026-09-26
 > full-review & conservative-optimization round: §10.5 credential-stripping P0 hardening — numbered-variant wildcards + provider
@@ -181,7 +182,8 @@ LLM_2_MODEL_NAME=model-2
 
 ### 3.5 Concurrency & Multi-Process Cache Semantics (added 2026-09-28)
 
-Consistency strategy for the LLM file cache (`src/cache/`, on by default) and the
+Consistency strategy for the LLM file cache (default `~/.cache/aitester/llm`, overridable via
+`AITESTER_LLM_CACHE_DIR`, on by default) and the
 semantic cache (`SEMANTIC_CACHE_ENABLE`) under `--parallel` / `BENCHMARK_PARALLELISM`,
 by execution mode:
 
@@ -202,7 +204,7 @@ by execution mode:
 
 **Multi-process mode (each worker process maintains its own cache instance)**
 
-- The file layer is shared across processes (the same `src/cache/` directory);
+- The file layer is shared across processes (the same cache directory);
   atomic replacement on the write side rules out cross-process half-written JSON
   races; if the read side observes a half-written file in an extreme timing
   window, the `json.load` error is caught and silently degrades to re-calling

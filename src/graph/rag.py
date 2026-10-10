@@ -9,7 +9,7 @@ RAG 检索器单例、检索质量指标辅助，与 20. 关键词兜底检索�
 → 语义嵌入/关键词回退；任一高级路径失败时降级到仍可行的另一路径，返回
 归一化分数）：ChromaDB 向量检索器不可用（未安装 / 初始化失败 / 检索异常）
 或结果空时，`retriever_or_keyword_fallback()` 退回**纯词袋关键词检索**
-（对 src/cache/ 的缓存条目 prompt 文本与 rag_data/ 的失败案例 JSON 做
+（对 LLM 文件缓存目录的缓存条目 prompt 文本与 rag_data/ 的失败案例 JSON 做
 token 重叠打分，零外部依赖，确定性可复现）。该兜底让"检索增强"在
 向量后端缺失时不再是全有或全无——至少给出基于关键词的相似案例线索。
 """
@@ -323,7 +323,8 @@ def should_inject_refs(
 #   时才退回关键词打分（LeanKG 口径：任一路径失败，检索器降级到仍可行的
 #   另一路径，返回归一化分数）；
 # - 关键词材料源（两处，均项目内既有产物，零新依赖）：
-#   1. src/cache/*.json 的 prompt 文本（LLM 文件缓存条目，含历史任务文本）；
+#   1. LLM 文件缓存目录下的 *.json prompt 文本（默认 ~/.cache/aitester/llm，
+#      可经 AITESTER_LLM_CACHE_DIR 覆盖；含历史任务文本）；
 #   2. rag_data/*.json 失败案例（RAG 持久化目录，JSON 列表/对象扁平化）；
 # - 打分：分词（英文 \w+ 小写 + 中文按单字——无外部分词依赖，保守口径）
 #   后做 token 重叠度（query tokens 命中文档 tokens 的比例），除以

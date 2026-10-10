@@ -325,7 +325,7 @@ python experiments/rag_ab_experiment.py --analyze-only \
   `TestTopologicalOrder`（4：被调用方先改 / 无 deps 退字典序 / entry 强制首位 / 环打破）；
   `TestRepairPlanCache`（4：命中省 LLM / 缓存关闭不读 / use_cache=False 不缓存 / 不同指纹不命中）；
 - 修复计划缓存测试经 `monkeypatch.setenv("AITESTER_LLM_CACHE_DIR", str(tmp_path))`
-  隔离到临时目录（与 LLM 文件缓存同口径，不污染 `src/cache/`）。
+  隔离到临时目录（与 LLM 文件缓存同口径，不污染用户缓存目录）。
 
 ### 9.5 兼容性
 

@@ -185,15 +185,16 @@ The system implements a **lazy-loading singleton pattern** for the RAG retriever
 
 ### LLM File Cache (saves tokens)
 
-The LLM calls in `base_agent` are wired to a **persistent file cache** (`src/cache/*.json`, named by `md5(prompt + system_prompt)`). Identical input hits the cache from the second call onward, consuming no more tokens — for model providers that "stop once the free quota is used up", this significantly extends usable time.
+The LLM calls in `base_agent` are wired to a **persistent file cache** (`*.json` files in the cache directory, named by `md5(prompt + system_prompt)`). Identical input hits the cache from the second call onward, consuming no more tokens — for model providers that "stop once the free quota is used up", this significantly extends usable time.
 
 - **Enabled by default**; set the environment variable `AITESTER_LLM_CACHE=0` to disable it; the cache directory can be overridden with `AITESTER_LLM_CACHE_DIR`.
+- **Cache directory** (since the 2026-10-05 review batch): defaults to `~/.cache/aitester/llm/` (`XDG_CACHE_HOME` takes precedence) — the runtime cache no longer writes into the source tree `src/cache/`; set `AITESTER_LLM_CACHE_DIR=<repo>/src/cache` explicitly if you need to keep using a legacy cache.
 - **Only successful responses are cached**: failed calls (e.g. 403 quota exhausted) are not written to the cache.
-- The cache is a local optimization artifact; `src/cache/` is already in `.gitignore` and will not be committed.
+- The cache is a local optimization artifact and is not committed to version control (directory mode 0700 / file mode 0600, guarding against cross-user cache poisoning).
 
 ```bash
 export AITESTER_LLM_CACHE=0      # Temporarily disable the cache (when you need to "regenerate with a different approach")
-rm -rf src/cache                # Clear the cache so all prompts call the LLM again
+rm -rf ~/.cache/aitester/llm     # Clear the cache so all prompts call the LLM again
 ```
 
 ### LLM Client Reuse (shared connection pool)

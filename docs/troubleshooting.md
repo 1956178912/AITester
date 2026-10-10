@@ -130,7 +130,9 @@ ls ~/.cache/aitester/repo_envs/   # 按 repo 名删对应目录
 # 1) 创建者归属校验（19. 批次）：确认缓存文件 creator_uid 与当前用户一致
 python - <<'EOF'
 import glob, json, os
-for f in sorted(glob.glob("src/cache/*.json"))[-10:]:
+cache = os.environ.get("AITESTER_LLM_CACHE_DIR") or os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "aitester", "llm")
+for f in sorted(glob.glob(os.path.join(cache, "*.json")))[-10:]:
     d = json.load(open(f))
     print(f, d.get("creator_uid", "<无字段>"))
 EOF

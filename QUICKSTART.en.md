@@ -78,7 +78,7 @@ python3 main.py run examples/calculator.py examples/string_utils.py --parallel=2
 
 ## 6. Optional: Model Quota Probing and Token-Saving Cache
 
-LLM calls enable the file cache by default (`src/cache/`; a cache hit on the same prompt consumes no further tokens). This extends the usable time under "stop when the free quota is exhausted" providers.
+LLM calls enable the file cache by default (`~/.cache/aitester/llm/`; a cache hit on the same prompt consumes no further tokens). This extends the usable time under "stop when the free quota is exhausted" providers.
 
 ```bash
 # Probe which of the configured models are still alive and which have exhausted their 403 quota (1 token each, keys are not printed)
@@ -86,7 +86,7 @@ python scripts/tools/check_quota.py
 
 # Disable the cache / clear the cache
 export AITESTER_LLM_CACHE=0
-rm -rf src/cache
+rm -rf ~/.cache/aitester/llm
 ```
 
 ## 7. Optional: Advanced Switches (off by default unless noted; no impact on normal use)

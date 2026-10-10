@@ -3,7 +3,8 @@
 # AITester 性能调优指南
 
 > 本文档介绍 AITester 的性能优化机制、配置方法和常见问题排查。
-> 最后更新：2026-09-28（增"并发与多进程缓存语义"节：`--parallel` 多线程 vs 多进程
+> 最后更新：2026-10-10（修正 LLM 文件缓存目录口径为 ~/.cache/aitester/llm——2026-10-05 起
+> 运行时缓存已迁出源码树，原文 `src/cache/` 表述过期；此前 2026-09-28 增"并发与多进程缓存语义"节：`--parallel` 多线程 vs 多进程
 > 下 LLM 文件缓存 / 语义缓存的一致性策略与命中率边界；多进程一致性细节以
 > [api_reference.md](api_reference.md) "LLM 文件缓存的多进程 / 多线程一致性" 节为
 > 权威口径；此前 2026-09-26 全面审查与保守优化轮：11.5 凭证剔除 P0 补强
@@ -183,7 +184,8 @@ LLM_2_MODEL_NAME=model-2
 
 ### 3.5 并发与多进程缓存语义（2026-09-28 新增）
 
-`--parallel` / `BENCHMARK_PARALLELISM` 场景下 LLM 文件缓存（`src/cache/`，默认开启）
+`--parallel` / `BENCHMARK_PARALLELISM` 场景下 LLM 文件缓存（默认 `~/.cache/aitester/llm`，
+可经 `AITESTER_LLM_CACHE_DIR` 覆盖，默认开启）
 与语义缓存（`SEMANTIC_CACHE_ENABLE`）的一致性策略，按执行模式分述：
 
 **多线程模式（同进程内 N 线程，`BENCHMARK_PARALLELISM=N` 默认语义）**
@@ -200,7 +202,7 @@ LLM_2_MODEL_NAME=model-2
 
 **多进程模式（多个 worker 进程各自维护缓存实例）**
 
-- 文件层进程间共享（同一 `src/cache/` 目录），写侧原子替换保证跨进程
+- 文件层进程间共享（同一缓存目录），写侧原子替换保证跨进程
   无半截 JSON 竞态；读侧若极端时序读到半写文件，`json.load` 抛错被兜底
   静默降级为重调 LLM（不阻断主流程）；
 - 进程内 L1 负缓存仅本进程可见：其他进程刚写入的文件缓存对本进程 L1
@@ -241,7 +243,7 @@ LLM_2_MODEL_NAME=model-2
 - 命中率 < 0.5：各 worker 前 30s 负缓存窗口内重复发起 LLM 调用，
   建议二选一：
   1. **主进程预热缓存 + 共享目录**：跑基准前先用单进程顺序模式对高频
-     任务跑一遍（预热 `src/cache/` 下的文件缓存），再以多进程模式
+     任务跑一遍（预热缓存目录（默认 `~/.cache/aitester/llm`）下的文件缓存），再以多进程模式
      跑批——后续 worker 直接命中文件层，命中率显著抬升；
   2. **改用多线程模式**（`BENCHMARK_PARALLELISM=N`）：L1 进程内
      共享 dict 跨线程可见，命中率天然高于多进程，代价是 GIL 约束
