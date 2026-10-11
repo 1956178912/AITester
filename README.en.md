@@ -9,19 +9,38 @@
 > criterion. Core innovations: **Detection-first Chain-of-Thought ("red before
 > green")** + **Hierarchical Repair Mechanism**. **Multi-agent orchestration** is an
 > **ablatable container** (not a primary claim; E2 δ=−0.3673, ADR-0016/R26).
-> **Why no *hand-crafted* multi-agent (added 2026-10-09, citations to verify):**
-> beyond the project's own n=261 decisive experiment (−28pp vs the
-> detection-first prompt protocol `plain_llm_df`), 2026 cross-paper evidence
-> now supports a consensus: one-shot prompting beats hand-designed
-> multi-agent orchestration (CANDOR, ICST 2026 [to verify]: one-shot Gemini
-> 88.35% vs CANDOR 35.92%, 45s vs 50h); while hierarchies *discovered by
-> bandit optimization* (BOAD, ICLR 2026 [to verify]) can outperform larger
-> single models — the negative evidence targets **hand-crafted
-> orchestration**, not the multi-agent paradigm itself. The orchestration
-> layer is kept as an ablatable research container under the ADR-0016
-> promotion criterion (budget-matched positive detection delta); future
-> exploration targets "automated orchestration search vs hand-crafted
-> orchestration".
+> **Why we do not use *hand-crafted* multi-agent orchestration (revised 2026-10-10:
+> three sources listed side by side; the earlier "consensus" wording is retracted):**
+> beyond the project's own n=261 decisive experiment (−28pp vs the detection-first
+> prompt protocol `plain_llm_df`), the 2026 external evidence points in
+> **different directions and must be presented side by side — it is not a consensus**:
+> **(a) Unfavourable evidence** — an independent IEEE replication study (Radaideh &
+> Corriveau, *Understanding the Effect of Agentic Iteration on LLM-Based Unit Test
+> Generation*, IEEE Xplore **11655121**) reports, on **mutation score**, one-shot
+> Gemini 2.5 Flash **88.35%** vs CANDOR **35.92%**, and one-shot GPT-4o **69.90%**
+> vs CANDOR **45.63%**.
+> *(Correction note: this paragraph previously attributed those figures to
+> "CANDOR, ICST 2026". They are in fact from the IEEE third-party replication study,
+> and CANDOR is not an ICST 2026 paper.)*
+> **(b) Favourable evidence** — the CANDOR paper itself (Xu, Wang, Briand, Liu,
+> **TOSEM 2026**, DOI 10.1145/3803418) reports multi-agent line/branch/mutation of
+> **0.991/0.970/0.980** on HumanEvalJava; TestAgent (**FSE Companion 2026**,
+> DOI 10.1145/3803437.3806428) reports line **92.34%** / mutation **83.69%**.
+> **(c) Strongest negative evidence to date** — the ICST 2026 replication study
+> (Konstantinou, Degiovanni & Papadakis, arXiv:2601.09695) shows that across
+> **6 complete Java repositories / 393 classes / 3,657 methods**, with newer LLMs
+> injected into every tool, **Plain-LLM scores 49.95/35.33/33.82, outperforming
+> HITS/SymPrompt/CoverUp/TestSpark**, at no higher request count than CoverUp
+> (11,718 vs 12,264).
+> Note also: BOAD (**ICLR 2026**, arXiv:2512.23631, IBM Research) is real, but it
+> studies **repository-level SWE issue resolution** (localization/editing/validation
+> sub-agents), so it does **not** support arguments about test generation.
+> **The defensible narrow claim is therefore**: *hand-crafted, tool-specific
+> orchestration offers limited or no advantage over a plain strong-LLM prompt with a
+> uniform repair loop* — **not** "the multi-agent paradigm has been defeated". The
+> orchestration layer is kept as an ablatable research container under the ADR-0016
+> promotion criterion (budget-matched positive detection delta); future exploration
+> targets "automated orchestration search vs hand-crafted orchestration".
 > Honest disclosure (AL5; 2026-10-08 R2 errata: two measurement artifacts
 > — ADR-0021 patch-field fence residue + ADR-0029 cross-file tasks not
 > materialized): across the three-seed main batch (n=261, gold

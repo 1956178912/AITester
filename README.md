@@ -9,15 +9,29 @@
 > **多智能体编排**在本系统中定位为**可消融容器**（非主断言）——E2 双门后
 > `aitester vs plain_llm_df` δ=−0.3673 结构性劣后（ADR-0016），故标题与开篇
 > 不再以"多智能体"为主表述（叙事对齐 ADR-0016，R26）。
-> **为什么不用"手工设计"的多智能体（2026-10-09 补充，待核验引用）**：
+> **为什么不用"手工设计"的多智能体（2026-10-10 修订：三方并列，撤回原"共识"表述）**：
 > 项目自身 n=261 生死实验（−28pp，vs 检出优先提示协议 plain_llm_df）之外，
-> 2026 年跨论文证据已形成共识——one-shot 提示协议全面击败手工多智能体
-> 编排（CANDOR，ICST 2026 [待核验]：one-shot Gemini 88.35% vs CANDOR
-> 35.92%，且耗时 45s vs 50h）；但 bandit 自动搜索发现的层级多智能体
-> （BOAD，ICLR 2026 [待核验]）可超越更大的单模型——负面证据指向
-> **"手工设计的编排"而非"多智能体范式本身"**。因此本系统保留编排层
-> 作为可消融研究容器，转正判据与 ADR-0016 一致（预算对照下复现正向
-> detection 增量），后续探索方向为"自动搜索编排 vs 手工编排"对照。
+> 2026 年外部证据**方向不一，须并列呈现，不得择一表述为"共识"**：
+> **(a) 不利证据**——IEEE 独立复现研究（Radaideh & Corriveau，*Understanding the
+> Effect of Agentic Iteration on LLM-Based Unit Test Generation*，IEEE Xplore
+> **11655121**）在 **mutation score** 上报告 one-shot Gemini 2.5 Flash **88.35%**
+> vs CANDOR **35.92%**、one-shot GPT-4o **69.90%** vs CANDOR **45.63%**；
+> *(更正说明：此前本段把该结果误挂在"CANDOR, ICST 2026"名下，实为 IEEE 第三方复现，
+> 且 CANDOR 原文并非 ICST 2026。)*
+> **(b) 有利证据**——CANDOR 原文（Xu, Wang, Briand, Liu，**TOSEM 2026**，
+> DOI 10.1145/3803418）报告多智能体在 line/branch/mutation 上达
+> **0.991/0.970/0.980**（HumanEvalJava）；另有 TestAgent（**FSE Companion 2026**，
+> DOI 10.1145/3803437.3806428）line **92.34%** / mutation **83.69%**。
+> **(c) 迄今最强的负面证据**——ICST 2026 复现研究（Konstantinou, Degiovanni &
+> Papadakis，arXiv:2601.09695）在 **6 个完整 Java 仓库 / 393 类 / 3,657 方法**上，
+> 用更新 LLM 注入全部工具后证明 **Plain-LLM 49.95/35.33/33.82 全面优于
+> HITS/SymPrompt/CoverUp/TestSpark**，且请求数不高于 CoverUp（11,718 vs 12,264）。
+> 另注：BOAD（**ICLR 2026**，arXiv:2512.23631，IBM Research）为真，但研究对象是
+> **仓库级 SWE 任务解决**（定位/编辑/验证子智能体），**不适用于测试生成论证**。
+> **因此可辩护的窄主张是**：*手工的、工具特定的编排相对强 LLM 单提示 + 统一修复环，
+> 优势有限或无优势*——而非"多智能体范式被击败"。本系统保留编排层作为可消融研究
+> 容器，转正判据与 ADR-0016 一致（预算对照下复现正向 detection 增量），
+> 后续探索方向为"自动搜索编排 vs 手工编排"对照。
 > 诚实披露（AL5，2026-10-08 R2 勘误：ADR-0021 围栏残留 + ADR-0029 跨文件
 > 未物化两起测量伪影）：三种子主批次（n=261，gold 独立裁决）实测检出优先
 > 提示协议带来决定性检出增益；**repair 经测量口径修正后存量重放 = 39.31%**
