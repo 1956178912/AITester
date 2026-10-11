@@ -195,11 +195,16 @@ class TestVenvCacheDir:
 
 @pytest.mark.unit
 class TestCreateVenv:
-    """create_venv / install_packages（mock 子进程）。"""
+    """create_venv / install_packages（mock 子进程）。
 
-    @patch("src.tools.dependency.subprocess.run")
+    2026-10-11 全面优化批次：两处子进程调用改为 run_with_timeout（孤儿风险
+    消除）后，mock 点从 `src.tools.dependency.subprocess.run` 迁移到
+    `src.utils.process_utils.run_with_timeout`。
+    """
+
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_create_venv_runs_python_module(self, mock_run, tmp_path):
-        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": "", "timed_out": False})
         # 预置解释器文件避免走真实创建
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -210,41 +215,39 @@ class TestCreateVenv:
         # 复用语义：已有解释器时不应调用 subprocess
         mock_run.assert_not_called()
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_create_venv_creates_when_missing(self, mock_run, tmp_path):
-        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": "", "timed_out": False})
         create_venv(str(tmp_path))
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
         assert "venv" in cmd and "--system-site-packages" in cmd
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_create_venv_failure_raises(self, mock_run, tmp_path):
-        mock_run.return_value = type("P", (), {"returncode": 1, "stderr": "boom"})
+        mock_run.return_value = type("P", (), {"returncode": 1, "stderr": "boom", "timed_out": False})
         import pytest
 
         with pytest.raises(RuntimeError):
             create_venv(str(tmp_path))
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_install_packages_success(self, mock_run):
-        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "ok", "stderr": "", "timed_out": False})
         ok, _ = install_packages("/venv/bin/python", ["pandas"])
         assert ok is True
         cmd = mock_run.call_args[0][0]
         assert "pip" in " ".join(cmd) and "pandas" in cmd
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_install_packages_no_packages_noop(self, mock_run):
         ok, out = install_packages("/venv/bin/python", [])
         assert ok is True and out == ""
         mock_run.assert_not_called()
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_install_packages_timeout(self, mock_run):
-        import subprocess
-
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="pip", timeout=10)
+        mock_run.return_value = type("P", (), {"returncode": -9, "stdout": "", "stderr": "", "timed_out": True})
         ok, detail = install_packages("/venv/bin/python", ["pandas"], timeout=10)
         assert ok is False
         assert "超时" in detail

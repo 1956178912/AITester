@@ -85,30 +85,35 @@ def _run(cmd: list[str], cwd: str, timeout: int, env: dict[str, str] | None = No
     很常见，此前该异常穿透 verify() 的 try/finally 使整个验证任务崩溃
     而非记录该 node 失败；统一在此收敛后，所有调用方按 returncode 判断
     即可（124 一律视为失败，调用方无需感知区别）。
+
+    2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+    本 helper 是所有仓库级子进程（git clone / pip install / pytest 验证 /
+    swebench runner）的唯一收敛点；孙进程持管道写端时裸 subprocess.run
+    的 communicate 可能永久阻塞（2026-10-09 批后挂死事故同构风险面）。
+    run_with_timeout 以文件后端 + 进程组 kill 保证必然返回；超时归一为
+    returncode=124 哨兵（与历史 TimeoutExpired 分支逐字一致：stdout/stderr
+    取已捕获部分、stderr 追加超时前缀）。
     """
-    try:
-        return subprocess.run(
-            cmd,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env if env is not None else scrub_os_environ(),
-            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
-        )
-    except subprocess.TimeoutExpired as e:
-        # 超时：构造哨兵结果（stdout/stderr 取已捕获部分，None 兜底空串；
-        # text=True 模式下已捕获部分为 str，mypy 按 bytes|str 联合类型报
-        # arg-type，归一为 str；stderr 同口径归一后截尾），退出码 124
-        # （GNU timeout 超时常量）
-        stdout_part = e.stdout if isinstance(e.stdout, str) else ((e.stdout or b"").decode("utf-8", "replace"))
-        stderr_part = e.stderr if isinstance(e.stderr, str) else ((e.stderr or b"").decode("utf-8", "replace"))
+    from src.utils.process_utils import run_with_timeout
+
+    proc = run_with_timeout(
+        cmd,
+        cwd=cwd,
+        timeout=timeout,
+        env=env if env is not None else scrub_os_environ(),
+        text=True,
+    )
+    if proc.timed_out:
+        # 超时：构造哨兵结果（与历史 TimeoutExpired 分支口径逐字一致）
+        stdout_part = proc.stdout or ""
+        stderr_part = proc.stderr or ""
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=124,
             stdout=stdout_part,
             stderr=f"命令执行超时（>{timeout}s）\n{stderr_part[:300]}",
         )
+    return proc
 
 
 class RepoExecutor:
@@ -866,13 +871,13 @@ class RepoExecutor:
             # 官方 runner（pip install swebench）：python -m
             # swebench.harness.run_evaluation <pred_file>
             # 输出：日志 + 同目录 report.json（F2P/P2P 判定）
-            res = subprocess.run(
+            # 2026-10-11 全面优化批次：经 _run 收敛点走 run_with_timeout
+            # （孤儿风险消除；超时归一为 returncode=124 哨兵，下方
+            # res.returncode != 0 分支按历史口径降级自建）。
+            res = _run(
                 [sys.executable, "-m", "swebench.harness.run_evaluation", pred_file],
-                capture_output=True,
-                text=True,
-                timeout=max(self.timeout, 300),
-                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
-                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+                os.path.dirname(os.path.abspath(__file__)) or ".",
+                max(self.timeout, 300),
             )
             if res.returncode != 0:
                 logger.info(

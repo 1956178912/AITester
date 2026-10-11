@@ -30,7 +30,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -529,18 +528,19 @@ def create_venv(venv_dir: str, timeout: int = 120) -> str:
 
         os.makedirs(venv_dir, exist_ok=True)
         cmd = [sys.executable, "-m", "venv", "--system-site-packages", venv_dir]
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
-            )
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"venv 创建超时（>{timeout}s）: {venv_dir}") from e
+        # 2026-10-11 全面优化批次：run_with_timeout 接线——venv 创建可能
+        # 派生孙进程（pip 自举）；文件后端 + 进程组 kill 保证必然返回。
+        # 超时 → RuntimeError（与历史 TimeoutExpired → RuntimeError 同口径）。
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
+            cmd,
+            timeout=timeout,
+        )
+        if proc.timed_out:
+            raise RuntimeError(f"venv 创建超时（>{timeout}s）: {venv_dir}")
         if proc.returncode != 0:
-            raise RuntimeError(f"venv 创建失败: {proc.stderr.strip()[:300]}")
+            raise RuntimeError(f"venv 创建失败: {(proc.stderr or '').strip()[:300]}")
         interpreter = candidates[0] if os.path.exists(candidates[0]) else candidates[1]
         # 4.4 缓存命中统计：记录新建事件
         _record_venv_cache_event("create")
@@ -891,15 +891,15 @@ def install_packages(
     if not package_names:
         return True, ""
     cmd = [venv_interpreter, "-m", "pip", "install", "--disable-pip-version-check", *package_names]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
-        )
-    except subprocess.TimeoutExpired:
+    # 2026-10-11 全面优化批次：run_with_timeout 接线——pip 安装可派生孙进程；
+    # 超时 → timed_out=True（与历史 TimeoutExpired 分支同口径：False + "超时"）。
+    from src.utils.process_utils import run_with_timeout
+
+    proc = run_with_timeout(
+        cmd,
+        timeout=timeout,
+    )
+    if proc.timed_out:
         detail = f"pip install 超时（>{timeout}s）: {package_names}"
         logger.error(detail)
         return False, detail

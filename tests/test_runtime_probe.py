@@ -124,7 +124,7 @@ def test_capture_failure_snapshot_uses_subprocess_runner() -> None:
         return _FakeProc(0)
 
     with (
-        mock_patch("src.agents.runtime_probe.subprocess.run", side_effect=_fake_run) as run_fn,
+        mock_patch("src.utils.process_utils.run_with_timeout", side_effect=_fake_run) as run_fn,
         mock_patch("src.agents.runtime_probe.scrub_os_environ", wraps=_real_scrub) as scrub_fn,
     ):
         snapshot = capture_failure_snapshot(test_code)

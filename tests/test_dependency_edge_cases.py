@@ -13,7 +13,6 @@ src/tools/dependency.py 边界分支补充测试（优化轮次：覆盖率 90% 
 import json
 import os
 import shutil
-import subprocess
 import sys
 import time
 import types
@@ -75,16 +74,19 @@ class TestImportableCache:
 class TestCreateVvenvEdgeCases:
     """create_venv 超时与解释器路径回退。"""
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_create_venv_timeout_raises(self, mock_run, tmp_path):
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="venv", timeout=5)
+        # 2026-10-11 全面优化批次：create_venv 改走 run_with_timeout（孤儿
+        # 风险消除）后，超时口径从"抛 TimeoutExpired"迁移为
+        # "返回 timed_out=True → 调用点抛 RuntimeError(超时)"。
+        mock_run.return_value = type("P", (), {"returncode": -9, "stderr": "", "timed_out": True})
         with pytest.raises(RuntimeError, match="超时"):
             dep.create_venv(str(tmp_path), timeout=5)
 
-    @patch("src.tools.dependency.subprocess.run")
+    @patch("src.utils.process_utils.run_with_timeout")
     def test_create_venv_falls_back_to_windows_interpreter(self, mock_run, tmp_path, monkeypatch):
         """unix 解释器路径不存在时回退到 Scripts/python.exe。"""
-        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": ""})
+        mock_run.return_value = type("P", (), {"returncode": 0, "stderr": "", "timed_out": False})
         win_dir = tmp_path / "Scripts"
         win_dir.mkdir()
         (win_dir / "python.exe").write_text("")

@@ -464,13 +464,18 @@ def execute_docker(
             # 超时下限放宽到 120s 避免误判
             # 4.1 脱敏：容器继承宿主环境（docker run 未加 --env 隔离），
             # 经 scrub_os_environ 剔除 LLM_N_API_KEY 等凭证后再传入
-            result = subprocess.run(
+            # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+            # docker 子进程可能派生孙进程；文件后端 + 进程组 kill 保证必然
+            # 返回。raise_on_timeout=True 保持历史 TimeoutExpired 异常口径
+            # （下方 except 分支与既有 mock 测试逐字兼容）。
+            from src.utils.process_utils import run_with_timeout
+
+            result = run_with_timeout(
                 cmd,
-                capture_output=True,
-                text=True,
                 timeout=max(self.timeout, 120),
                 env=scrub_os_environ(),
-                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+                text=True,
+                raise_on_timeout=True,
             )
         except subprocess.TimeoutExpired as e:
             return {

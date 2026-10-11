@@ -8,7 +8,6 @@ subprocess 超时与失败。mypy/导入冒烟的 subprocess 均 mock，零真�
 
 from __future__ import annotations
 
-import subprocess
 from unittest.mock import MagicMock, patch
 
 from src.tools.testless_validation import (
@@ -77,13 +76,14 @@ class TestMypyLayer:
         proc.returncode = 0
         proc.stdout = ""
         proc.stderr = ""
-        with patch("subprocess.run", return_value=proc):
+        proc.timed_out = False
+        with patch("src.utils.process_utils.run_with_timeout", return_value=proc):
             result = _run_mypy_layer("def f(): pass", "mod")
         assert result["passed"] is True
         assert "通过" in result["detail"]
 
     def test_mypy_execution_failure(self):
-        with patch("subprocess.run", side_effect=OSError("no mypy")):
+        with patch("src.utils.process_utils.run_with_timeout", side_effect=OSError("no mypy")):
             result = _run_mypy_layer("def f(): pass", "mod")
         assert result["passed"] is True
         assert result.get("infra_degraded") is True
@@ -93,7 +93,8 @@ class TestMypyLayer:
         proc.returncode = 1
         proc.stdout = "file.py:1: error: x [name-defined]"
         proc.stderr = ""
-        with patch("subprocess.run", return_value=proc):
+        proc.timed_out = False
+        with patch("src.utils.process_utils.run_with_timeout", return_value=proc):
             result = _run_mypy_layer("def f():\n    return x\n", "mod")
         assert result["passed"] is False
         assert "mypy 发现" in result["detail"]
@@ -131,13 +132,18 @@ class TestImportSmokeLayer:
         assert "危险" in result["detail"]
 
     def test_timeout(self):
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10)):
+        proc = MagicMock()
+        proc.timed_out = True
+        proc.returncode = -9
+        proc.stdout = ""
+        proc.stderr = ""
+        with patch("src.utils.process_utils.run_with_timeout", return_value=proc):
             result = _run_import_smoke_layer("def f(): pass", "def g(): pass", "mod")
         assert result["passed"] is False
         assert "超时" in result["detail"]
 
     def test_os_error_infra_degraded(self):
-        with patch("subprocess.run", side_effect=OSError("boom")):
+        with patch("src.utils.process_utils.run_with_timeout", side_effect=OSError("boom")):
             result = _run_import_smoke_layer("def f(): pass", "def g(): pass", "mod")
         assert result["passed"] is True
         assert result.get("infra_degraded") is True
@@ -147,7 +153,8 @@ class TestImportSmokeLayer:
         proc.returncode = 1
         proc.stderr = "ImportError: no module"
         proc.stdout = ""
-        with patch("subprocess.run", return_value=proc):
+        proc.timed_out = False
+        with patch("src.utils.process_utils.run_with_timeout", return_value=proc):
             result = _run_import_smoke_layer("def f(): pass", "def g(): pass", "mod")
         assert result["passed"] is False
         assert "失败" in result["detail"]
@@ -157,7 +164,8 @@ class TestImportSmokeLayer:
         proc.returncode = 0
         proc.stderr = ""
         proc.stdout = ""
-        with patch("subprocess.run", return_value=proc):
+        proc.timed_out = False
+        with patch("src.utils.process_utils.run_with_timeout", return_value=proc):
             result = _run_import_smoke_layer("def f(): pass", "def g(): pass", "mod")
         assert result["passed"] is True
         assert "通过" in result["detail"]

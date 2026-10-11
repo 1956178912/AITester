@@ -235,7 +235,15 @@ def _measure_per_test_lines(
         if env.get("PYTHONPATH"):
             pp = os.pathsep.join([pp, env["PYTHONPATH"]])
         env["PYTHONPATH"] = pp
-        proc = subprocess.run(
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # fl_spectral 测量脚本执行 LLM 生成测试（pytest + coverage），孙进程
+        # 持管道写端时裸 subprocess.run(timeout=) 的 communicate 可能永久
+        # 阻塞（BASELINE.yaml 自注"fl_spectral 风险最高"）。文件后端 +
+        # 进程组 kill 保证必然返回；超时 → timed_out=True（下方归一到
+        # 历史 TimeoutExpired 降级 None 口径，逐字不变）。
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
             [
                 sys.executable,
                 "-c",
@@ -247,13 +255,14 @@ def _measure_per_test_lines(
                 result_file,
                 junit_path,
             ],
-            capture_output=True,
-            text=True,
             timeout=_measure_timeout(),
             cwd=exec_dir,
             env=env,
-            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+            text=True,
         )
+        if getattr(proc, "timed_out", False):
+            logger.warning("O2 FL_spectral 测量超时（>%ds），降级 None", _measure_timeout())
+            return None
         if proc.returncode != 0 or not os.path.exists(result_file):
             logger.debug(
                 "O2 FL_spectral 测量子进程失败（rc=%d）: %s",
@@ -283,6 +292,8 @@ def _measure_per_test_lines(
         )
         return {"outcomes": outcomes, "per_test_lines": per_test}
     except subprocess.TimeoutExpired:
+        # 兼容历史 mock 口径（tests/test_fl_spectral.py 若以 side_effect
+        # 抛 TimeoutExpired 模拟超时）：与上方 timed_out 分支同口径降级。
         logger.warning("O2 FL_spectral 测量超时（>%ds），降级 None", _measure_timeout())
         return None
     except Exception as e:

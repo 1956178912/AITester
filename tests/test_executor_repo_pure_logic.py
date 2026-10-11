@@ -112,16 +112,21 @@ class TestRunBranches:
     def test_timeout_bytes_stdout_decoded(self):
         """text=True 下超时已捕获的 stdout/stderr 为 str；模拟 bytes 兜底路径。
 
-        直接构造 TimeoutExpired(bytes) 验证 _run 的解码分支。
+        2026-10-11 全面优化批次：_run 改走 run_with_timeout（孤儿风险消除）后，
+        超时口径从"subprocess.run 抛 TimeoutExpired"迁移为"run_with_timeout
+        返回 timed_out=True + 已捕获 stdout/stderr"。本测试 mock 点相应变为
+        src.utils.process_utils.run_with_timeout（返回带 timed_out 属性的
+        CompletedProcess 扩展形态），验证 _run 的 124 哨兵 + stderr 截尾。
         """
         import src.agents.executor_repo as er
 
-        # monkeypatch subprocess.run 抛 TimeoutExpired（bytes stdout）
-        timeout_exc = subprocess.TimeoutExpired(cmd=["x"], timeout=1)
-        timeout_exc.stdout = b"partial-out"
-        timeout_exc.stderr = b"partial-err"
+        class _TimedProc:
+            returncode = -9
+            stdout = "partial-out"
+            stderr = "partial-err"
+            timed_out = True
 
-        with patch.object(er.subprocess, "run", side_effect=timeout_exc):
+        with patch("src.utils.process_utils.run_with_timeout", return_value=_TimedProc()):
             proc = er._run(["x"], cwd=".", timeout=1)
         assert proc.returncode == 124
         assert proc.stdout == "partial-out"
@@ -129,14 +134,20 @@ class TestRunBranches:
         assert "超时" in proc.stderr
 
     def test_timeout_none_output_empty_strings(self):
-        """超时且 stdout/stderr 均为 None → 空串兜底。"""
+        """超时且 stdout/stderr 均为空 → 空串兜底。
+
+        2026-10-11：mock 点同步迁移到 run_with_timeout（timed_out=True +
+        空输出 → 124 哨兵 + stderr 超时前缀，与历史口径逐字一致）。
+        """
         import src.agents.executor_repo as er
 
-        timeout_exc = subprocess.TimeoutExpired(cmd=["x"], timeout=1)
-        timeout_exc.stdout = None
-        timeout_exc.stderr = None
+        class _TimedProc:
+            returncode = -9
+            stdout = ""
+            stderr = ""
+            timed_out = True
 
-        with patch.object(er.subprocess, "run", side_effect=timeout_exc):
+        with patch("src.utils.process_utils.run_with_timeout", return_value=_TimedProc()):
             proc = er._run(["x"], cwd=".", timeout=1)
         assert proc.returncode == 124
         assert proc.stdout == ""

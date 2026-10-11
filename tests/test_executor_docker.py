@@ -125,7 +125,7 @@ class TestDockerExecutionFlow:
         target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         agent = ExecutorAgent(timeout=30, use_docker=True, docker_image="custom:2.0")
 
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.return_value = self._fake_docker_result(
                 stdout="============ short test summary ============\nTOTAL     100      20     80%\n1 passed in 0.5s",
             )
@@ -150,7 +150,7 @@ class TestDockerExecutionFlow:
         target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         agent = ExecutorAgent(timeout=30, use_docker=True)
 
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.return_value = self._fake_docker_result()
             agent.execute("def test_add(): pass\n", str(target), target_function="test_add")
 
@@ -168,7 +168,7 @@ class TestDockerExecutionFlow:
             "========== short test summary info ==========\n"
             "1 failed in 0.5s"
         )
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.return_value = self._fake_docker_result(returncode=1, stdout=failed_output)
             result = agent.execute("def test_add():\n    assert add(1, 0) == 0\n", str(target))
 
@@ -185,7 +185,7 @@ class TestDockerExecutionFlow:
         target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         agent = ExecutorAgent(timeout=30, use_docker=True)
 
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd="docker", timeout=120)
             result = agent.execute("def test_add(): pass\n", str(target))
 
@@ -202,7 +202,7 @@ class TestDockerExecutionFlow:
         agent = ExecutorAgent(timeout=30, use_docker=True)
         missing = tmp_path / "nope.py"
 
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.return_value = self._fake_docker_result()
             result = agent.execute("def test_x(): pass\n", str(missing))
 
@@ -217,7 +217,7 @@ class TestDockerExecutionFlow:
         target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
         agent = ExecutorAgent(timeout=30, use_docker=True)
 
-        with patch("subprocess.run") as mock_run:
+        with patch("src.utils.process_utils.run_with_timeout") as mock_run:
             mock_run.return_value = self._fake_docker_result()
             agent.execute("def test_add(): pass\n", str(target))
 

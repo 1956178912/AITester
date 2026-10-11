@@ -46,7 +46,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 from typing import Any
@@ -184,25 +183,31 @@ def run_p2p_regression(
             f.write(patched_target_code)
         with open(test_path, "w", encoding="utf-8") as f:
             f.write(test_code)
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "pytest", test_path, "-p", "no:cacheprovider", "--tb=line", "-q"],
-                cwd=tmpdir,
-                capture_output=True,
-                text=True,
-                timeout=out_timeout,
-                check=False,
-            )
-            rc = proc.returncode
-            output = (proc.stdout or "") + "\n" + (proc.stderr or "")
-        except subprocess.TimeoutExpired:
-            # R4b：fail-closed 时超时也回滚（回归无法裁决 ≠ 补丁安全）
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # P2P 回归执行的是 LLM 生成的回归测试（pytest 可派生子进程），
+        # 孙进程持管道写端时裸 subprocess.run(timeout=) 的 communicate
+        # 可能永久阻塞（2026-10-09 批后挂死事故同构风险面）。文件后端 +
+        # 进程组 kill 保证必然返回；超时 → returncode=-9 + timed_out。
+        # 与原 TimeoutExpired 分支同口径：fail_closed → regression_failed
+        # （回归无法裁决 = 不能证明补丁安全 = 回滚），否则 regression_error。
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
+            [sys.executable, "-m", "pytest", test_path, "-p", "no:cacheprovider", "--tb=line", "-q"],
+            timeout=out_timeout,
+            cwd=tmpdir,
+            text=True,
+        )
+        if proc.timed_out:
+            # 超时口径与历史 TimeoutExpired 分支逐字一致
             verdict = "regression_failed" if fail_closed else "regression_error"
             return {
                 "verdict": verdict,
                 "returncode": None,
                 "output_tail": f"p2p timeout after {out_timeout}s",
             }
+        rc = proc.returncode
+        output = (proc.stdout or "") + "\n" + (proc.stderr or "")
         # rc>=2 = 收集/编译阶段中断（import 失败 / 语法错误 / 无测试）→
         # 与 _m1_metrics._looks_like_test_execution_error 同口径归
         # regression_error（坏测试不触发回滚，防"测试自身坏 → 误杀好补丁"）；

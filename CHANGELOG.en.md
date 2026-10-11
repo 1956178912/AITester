@@ -1,4 +1,4 @@
-> Last updated: 2026-10-11 (2026-10-11 code-level comprehensive-optimization batch: _MAX_CLAUSE_LEN single source of truth [spec_ir_v2 literal-200 drift risk eliminated] + P0-1 specificity-gate decision fix [execution errors no longer misjudged as over_red; task_metadata transparently passed for cross-file companion modules] + test corpus comment erratum; full suite 5485 passed / 3 skipped / 1 xfailed / 0 failed; mypy 0 errors across 125 source files; ruff fully green. Previously 2026-10-11 comprehensive-optimization batch [gate wiring + test-artifact cleanup]; previously independent-review landing batch [P0 credibility fixes]; previously 2026-10-10 documentation-cleanup batch; previously R5/R4/R3 review-revision/landing batches; previously 2026-10-08 R2 batch)
+> Last updated: 2026-10-11 (2026-10-11 comprehensive-optimization batch #2: wired the remaining 9 bare `subprocess.run(timeout=)` call sites onto `run_with_timeout`, eliminating the orphan-subprocess hang surface [mdo / patch_rollback / dependency / testless_validation / type_repair / executor_modes / fl_spectral / runtime_probe / executor_repo] + migrated every affected mock target + hardened the `run_with_timeout` contract (timeout=0 normalisation + `capture_output` compatibility parameter); full suite 5485 passed / 3 skipped / 1 xfailed / 0 failed; mypy 0 errors across 125 source files; ruff fully green; all 18 loop gates green. Previously 2026-10-11 code-level comprehensive-optimization batch [drift-risk elimination + P0-1 gate decision fix + test corpus erratum]; previously 2026-10-11 comprehensive-optimization batch [gate wiring + test-artifact cleanup]; previously 2026-10-10 documentation-cleanup batch)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
@@ -6,7 +6,110 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] — 2026-10-11 code-level comprehensive-optimization batch (drift-risk elimination + P0-1 gate decision fix + test corpus erratum)
+## [Unreleased] — 2026-10-11 comprehensive-optimization batch #2 (run_with_timeout fully wired, orphan-subprocess surface cleared to zero)
+
+> Basis: root cause of the 2026-10-09 post-batch hang incident (a grandchild process
+> holding the write end of a pipe → `communicate()` on a bare
+> `subprocess.run(timeout=)` blocks forever; the audit found 3 orphan processes alive
+> for 16.5 h) + a full-repo sweep finding 9 remaining unwired sites. This batch routes
+> **all** remaining bare calls through `run_with_timeout` (file backend + process-group
+> `killpg` + bounded drain, which **guarantees return**) and migrates every affected mock
+> target, keeping the timeout semantics **letter-for-letter unchanged** (zero behavior
+> change, zero LLM calls).
+
+### Hardened (orphan-risk elimination + contract hardening)
+
+- **`run_with_timeout` contract hardening** (`src/utils/process_utils.py`):
+  - `timeout=0` / negative / `None` normalised to "no timeout": previously
+    `Popen.wait(timeout=0)` raised `TimeoutExpired` immediately, which would
+    **mistakenly trigger whole-tree kill** and conflicted with the historical callers
+    that pass `timeout=0` to mean "no extra cap here" (`executor_repo._run` /
+    `patch_rollback`). Now 0/None waits for natural exit; negative values are
+    conservatively normalised (no guessing caller intent).
+  - New `capture_output` transparent compatibility parameter: bare
+    `subprocess.run(capture_output=True)` sites migrating onto `run_with_timeout`
+    can pass the argument through verbatim (this implementation captures output via
+    files, not pipes, so the parameter is ignored). Zero behavior impact; purely for a
+    smooth migration.
+
+- **All 9 remaining bare `subprocess.run(timeout=)` sites wired** (root cause: a
+  grandchild holding the pipe write end → `communicate` blocks forever; file backend +
+  `start_new_session` + `killpg` guarantee return):
+  - `src/measurement/mdo.py`: `_run_probe` / `_run_tests_on_code` now use
+    `run_with_timeout`; timeout → returns None (same as the old `TimeoutExpired` →
+    degrade-to-None path).
+  - `src/tools/patch_rollback.py`: P2P regression (LLM-generated pytest can spawn
+    subprocesses) now uses `run_with_timeout`; timeout → `regression_failed` /
+    `regression_error` (word-for-word the same as the old branch).
+  - `src/tools/dependency.py`: `create_venv` (venv creation can spawn a pip-bootstrap
+    grandchild) and `install_packages` now use `run_with_timeout`; timeout →
+    RuntimeError / conservative degrade.
+  - `src/tools/testless_validation.py`: mypy layer + import-smoke layer now use
+    `run_with_timeout`; timeout is routed through `getattr(proc, "timed_out")` which
+    explicitly constructs a `TimeoutExpired` into the existing except branch (the
+    `infra_degraded` three-state semantics are preserved).
+  - `src/tools/type_repair.py`: the pyright backend call now uses `run_with_timeout`;
+    timeout → empty findings (same as the historical degrade branch).
+  - `src/agents/executor_modes.py`: the docker run call now uses `run_with_timeout`
+    (`raise_on_timeout=True` preserves the historical TimeoutExpired exception
+    semantics; the `except` branch is unchanged).
+  - `src/agents/fl_spectral.py`: the measurement call now uses `run_with_timeout`;
+    timeout → returns None (the `except subprocess.TimeoutExpired` fallback branch is
+    kept for mock compatibility).
+  - `src/agents/runtime_probe.py`: the probe-runner call now uses `run_with_timeout`;
+    timeout → silent degrade to None (the probe is a pure observation layer and does
+    not block the main flow).
+  - `src/agents/executor_repo.py`: the central `_run()` helper now delegates to
+    `run_with_timeout`; timeout is normalised to the `returncode=124` sentinel
+    (word-for-word the same as the old TimeoutExpired branch); the M3 swebench runner
+    call is likewise funnelled into `_run()`.
+
+- **All affected mock targets migrated** (the wiring site is the mock site; tests now
+  patch `"src.utils.process_utils.run_with_timeout"`, and fakes gain a `timed_out`
+  attribute):
+  - `tests/test_dependency.py` / `test_dependency_edge_cases.py` (venv create / timeout
+    → `timed_out=True` fake).
+  - `tests/test_type_repair_more_branches.py` / `test_roadmap_gaps_g1_g2_g3.py`
+    (pyright).
+  - `tests/test_testless_validation.py` (mypy + import-smoke layers; the timeout mock
+    moved from `side_effect=TimeoutExpired` to a `timed_out=True` fake, OSError
+    semantics retained).
+  - `tests/test_runtime_probe.py` (`_fake_run` migrated, fake gains `timed_out`).
+  - `tests/test_executor_docker.py` / `test_sandbox_hardening.py` (docker CLI).
+  - `tests/test_executor_repo_pure_logic.py` (`_run` 124 sentinel + bytes-decode
+    fallback).
+  - Removed 4 now-unused `subprocess` imports (`runtime_probe` / `dependency` /
+    `patch_rollback` / `type_repair`) and 1 on the test side
+    (`test_dependency_edge_cases`).
+
+### Governance (gate inventory conclusions, zero code change)
+
+- **`checksum_results.py` positioning**: confirmed as an **independent entry point**
+  (same tier as `check_swe_bench_pro_ready`) — it requires a `--write` / `--verify`
+  argument and fails with no args, so it is **deliberately excluded from the local gate
+  loop** (`make gates` does not include it). CI invokes it explicitly with `--verify`
+  against `main_batch` only (`.github/workflows/ci.yml`); `Makefile` does not wire it.
+  Status quo retained and documented.
+- **`r4_batches/SHA256SUMS` manifest is stale (pre-existing gap, not introduced by this
+  batch)**: the manifest was committed at `7f25408` (R4/R2 batch) *before*
+  `r4_batches/README.md` and `replay_r4_ab_arm_a_v2.md` were added; the `.gitignore`
+  whitelist intentionally admits `r4_batches/**`, so `--verify` reports 2
+  "unrecorded" entries. Fix path (**requires explicit authorisation**, because the
+  no-modify list includes `experiments/results/**`): `python
+  scripts/gates/checksum_results.py --results-dir experiments/results/r4_batches
+  --write` then commit in-batch. This batch does not touch the artifact.
+
+### Verification
+
+- Full `pytest tests/` (sequential): **5485 passed / 3 skipped / 1 xfailed / 0
+  failed** (194.54 s)
+- `ruff check src/ config.py experiments/ tests/ scripts/` fully green;
+  `mypy src/ config.py` 0 errors (125 source files)
+- All 18 loop gates green (`check_swe_bench_pro_ready` / `checksum_results` are
+  independent entries and, by tier, not in the loop)
+- Collection count unchanged (5489): this batch is a pure mock-target migration, no
+  test cases added or removed
+- Zero LLM calls (all changes are in the subprocess / pure-logic layers)
 
 > Basis: repo-wide code-level health check (not a document review) — per-module audit of
 > `src/specs/`, `src/tools/`, `src/graph/` for constant drift, decision-criterion

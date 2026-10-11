@@ -115,12 +115,24 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
         tmp_path = f.name
 
     try:
+        import subprocess
         import sys
 
-        result = subprocess.run(
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # mypy 子进程可能派生孙进程；文件后端 + 进程组 kill 保证必然返回，
+        # 消除"孙进程持管道写端 → communicate 永久阻塞"挂死风险。
+        # 调用点直连 process_utils.run_with_timeout（接线点即 mock 点：
+        # 测试 patch("src.utils.process_utils.run_with_timeout")，生产消费
+        # 真实实现）；超时口径与历史 TimeoutExpired 逐字归一：
+        # - mock 路径：测试直接以 side_effect 抛 TimeoutExpired（历史语义）；
+        # - 生产路径：run_with_timeout 超时返回 timed_out=True 不抛异常 →
+        #   调用点显式构造 TimeoutExpired 交给同一 except 分支。
+        from src.utils.process_utils import run_with_timeout
+
+        result = run_with_timeout(
             [
                 # O35（P2）：用当前解释器而非 PATH 上的 "python"——本模块
-                # sys_executable() 已为导入冒烟层统一口径（L231），mypy 层此前
+                # sys_executable() 已为导入冒烟层统一口径，mypy 层此前
                 # 硬编码 "python"：venv 场景可能解析到系统解释器（缺 mypy →
                 # OSError → 静默"保守跳过"，该层实际从未生效），且跳过原因
                 # 只进 detail 文本，调用方无从区分"没装 mypy"与"解释器不对"。
@@ -140,6 +152,8 @@ def _run_mypy_layer(patched_code: str, target_module: str) -> dict[str, Any]:
             timeout=60,
             check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
+        if getattr(result, "timed_out", False):
+            raise subprocess.TimeoutExpired(cmd="mypy", timeout=60)
         output = (result.stdout + result.stderr).strip()
         # mypy 返回码：0 = 无错误，1 = 有类型错误，2 = 致命错误，3 = 内部错误
         if result.returncode == 0:
@@ -224,8 +238,20 @@ def _run_import_smoke_layer(
     from src.utils.credential_scrub import scrub_os_environ
 
     env = scrub_os_environ()
+    # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+    # 导入冒烟执行的是 LLM 补丁代码，子进程可能派生孙进程；文件后端 +
+    # 进程组 kill 保证必然返回，消除"孙进程持管道写端 → communicate
+    # 永久阻塞"挂死风险（2026-10-09 批后挂死事故同构面）。
+    # 超时口径与历史 TimeoutExpired 逐字归一：
+    # - mock 路径：测试以 side_effect=OSError 模拟启动失败（infra_degraded
+    #   分支）或 mock 返回 timed_out=True 的 proc（下方构造 TimeoutExpired
+    #   → 超时分支）；
+    # - 生产路径（run_with_timeout）：超时返回 timed_out=True 不抛异常 →
+    #   调用点显式构造 TimeoutExpired 交给同一 except 分支。
+    from src.utils.process_utils import run_with_timeout
+
     try:
-        result = subprocess.run(
+        result = run_with_timeout(
             [sys_executable(), "-c", smoke_script],
             capture_output=True,
             text=True,
@@ -233,6 +259,8 @@ def _run_import_smoke_layer(
             env=env,
             check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
+        if getattr(result, "timed_out", False):
+            raise subprocess.TimeoutExpired(cmd=smoke_script, timeout=timeout)
     except subprocess.TimeoutExpired:
         return {"passed": False, "detail": f"导入冒烟超时（>{timeout}s）"}
     except OSError as e:

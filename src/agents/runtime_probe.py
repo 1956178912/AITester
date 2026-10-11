@@ -49,7 +49,6 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import textwrap
@@ -341,26 +340,32 @@ def capture_failure_snapshot(
         # 脱敏环境含 PYTHONPATH（被测代码的 import 解析依赖），子进程据此
         # 继承路径；LLM 凭证类变量（LLM_N_API_KEY 等全家族）已剔除。
         env = scrub_os_environ()
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # 探针 runner 执行的是 LLM 生成的测试/被测代码，子进程可能派生孙
+        # 进程；文件后端 + 进程组 kill 保证必然返回，消除"孙进程持管道
+        # 写端 → communicate 永久阻塞"挂死风险（2026-10-09 批后挂死事故
+        # 同构面）。超时口径与历史 TimeoutExpired 分支逐字一致：静默降级
+        # None（探针是纯观测层，不阻断主流程）。
+        from src.utils.process_utils import run_with_timeout
+
         try:
-            proc = subprocess.run(
+            proc = run_with_timeout(
                 [sys.executable, runner_file, probe_file, frames_dir],
-                capture_output=True,
-                text=True,
                 timeout=_PROBE_SUBPROCESS_TIMEOUT,
                 cwd=tmp_dir,
                 env=env,
-                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
+                text=True,
             )
-        except subprocess.TimeoutExpired:
-            # 被测代码死循环：子进程被 kill（与 venv/docker 执行链路同口径），
+        except OSError as e:
+            logger.debug("运行时探针子进程启动失败（降级为 None，不阻断修复）: %s", e)
+            return None
+        if getattr(proc, "timed_out", False):
+            # 被测代码死循环：进程组被 kill（与 venv/docker 执行链路同口径），
             # 静默降级——探针是纯观测层，不阻断主流程
             logger.debug(
                 "运行时探针子进程超时（>%ds，被测代码可能死循环），降级为 None",
                 _PROBE_SUBPROCESS_TIMEOUT,
             )
-            return None
-        except OSError as e:
-            logger.debug("运行时探针子进程启动失败（降级为 None，不阻断修复）: %s", e)
             return None
 
         # 子进程退出码非 0（runner 自身故障，非被测代码异常）：降级 None。

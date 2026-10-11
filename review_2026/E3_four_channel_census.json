@@ -1,0 +1,167 @@
+{
+  "root": "/Users/wangchenyu/Workspace/AITester/experiments/results/e6_a1_batches",
+  "total_rows": 1157,
+  "total_hang_suspect": 17,
+  "quixbugs_rows": 200,
+  "quixbugs_hang_suspect": 17,
+  "non_quixbugs_rows": 957,
+  "non_quixbugs_hang_suspect": 0,
+  "entries": [
+    {
+      "batch_dir": "a1_strip_seed42",
+      "batch_file": "benchmark_synthetic_20261009_180655.json",
+      "dataset": "synthetic",
+      "arm": "aitester",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "d1_json_repair_seed42",
+      "batch_file": "benchmark_synthetic_20261009_200343.json",
+      "dataset": "synthetic",
+      "arm": "aitester",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e4_quixbugs_FIXED_harness",
+      "batch_file": "aitester.json",
+      "dataset": "quixbugs",
+      "arm": "aitester",
+      "n_rows": 50,
+      "n_hang_suspect": 4,
+      "hang_ids": [
+        "bitcount",
+        "find_first_in_sorted",
+        "sqrt",
+        "wrap"
+      ]
+    },
+    {
+      "batch_dir": "e4_quixbugs_FIXED_harness",
+      "batch_file": "plain_llm_df.json",
+      "dataset": "quixbugs",
+      "arm": "plain_llm_df",
+      "n_rows": 50,
+      "n_hang_suspect": 4,
+      "hang_ids": [
+        "bitcount",
+        "find_first_in_sorted",
+        "sqrt",
+        "wrap"
+      ]
+    },
+    {
+      "batch_dir": "e4_quixbugs_aitester",
+      "batch_file": "benchmark_quixbugs_20261009_215514.json",
+      "dataset": "quixbugs",
+      "arm": "aitester",
+      "n_rows": 50,
+      "n_hang_suspect": 4,
+      "hang_ids": [
+        "bitcount",
+        "find_first_in_sorted",
+        "sqrt",
+        "wrap"
+      ]
+    },
+    {
+      "batch_dir": "e4_quixbugs_plain_llm_df",
+      "batch_file": "benchmark_quixbugs_20261009_223101.json",
+      "dataset": "quixbugs",
+      "arm": "plain_llm_df",
+      "n_rows": 50,
+      "n_hang_suspect": 5,
+      "hang_ids": [
+        "bitcount",
+        "find_first_in_sorted",
+        "sqrt",
+        "to_base",
+        "wrap"
+      ]
+    },
+    {
+      "batch_dir": "e6_control_seed42",
+      "batch_file": "benchmark_synthetic_20261009_181758.json",
+      "dataset": "synthetic",
+      "arm": "aitester",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_control_seed42",
+      "batch_file": "benchmark_synthetic_20261009_181758.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_control_seed42",
+      "batch_file": "benchmark_synthetic_20261009_181758.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm_df",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_phase1_standard_coldcache",
+      "batch_file": "benchmark_synthetic_20261009_190234.json",
+      "dataset": "synthetic",
+      "arm": "aitester",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_phase1_standard_coldcache",
+      "batch_file": "benchmark_synthetic_20261009_190234.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_phase1_standard_coldcache",
+      "batch_file": "benchmark_synthetic_20261009_190234.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm_df",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_phase2_matched_coldcache",
+      "batch_file": "benchmark_synthetic_20261009_191716.json",
+      "dataset": "synthetic",
+      "arm": "aitester",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "e6_phase2_matched_coldcache",
+      "batch_file": "benchmark_synthetic_20261009_191716.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm_df",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    },
+    {
+      "batch_dir": "rt1_no_reinforcement_seed42",
+      "batch_file": "benchmark_synthetic_20261009_193509.json",
+      "dataset": "synthetic",
+      "arm": "plain_llm_df",
+      "n_rows": 87,
+      "n_hang_suspect": 0,
+      "hang_ids": []
+    }
+  ]
+}

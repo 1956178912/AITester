@@ -248,7 +248,6 @@ def _run_pyright_findings(
     tmp_path: str | None = None
     try:
         import shutil
-        import subprocess
         import tempfile
 
         backend_cmd: list[str] | None = None
@@ -272,7 +271,14 @@ def _run_pyright_findings(
             _f.write(patched_code or "")
             tmp_path = _f.name
 
-        proc = subprocess.run(
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # 文件后端 + 进程组 kill 保证必然返回；超时 → timed_out=True，
+        # stdout/stderr 为已捕获部分（可能为空），下方 JSON 解析自然降级为
+        # 空 findings（与历史 TimeoutExpired → 降级分支同口径，见下方
+        # except Exception 兜底）。
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
             [
                 *backend_cmd,
                 "--outputjson",
@@ -281,10 +287,7 @@ def _run_pyright_findings(
                 "--",
                 tmp_path,
             ],
-            capture_output=True,
-            text=True,
             timeout=60,
-            check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
         )
         # 解析 JSON 输出：{"version":..., "generalDiagnostics": [...]}
         import json as _json

@@ -41,7 +41,7 @@ def _call_execute_docker(agent: MagicMock, monkeypatch_environ: dict[str, str]) 
 
     with (
         patch("shutil.which", return_value="/usr/bin/docker"),
-        patch("subprocess.run", side_effect=_fake_run),
+        patch("src.utils.process_utils.run_with_timeout", side_effect=_fake_run),
         patch("tempfile.mkdtemp", return_value=sandbox_dir),
         patch.dict(os.environ, monkeypatch_environ),
     ):

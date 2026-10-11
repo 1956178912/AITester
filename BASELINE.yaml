@@ -11,7 +11,7 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-11"   # 全量回归实测日期（2026-10-11 代码级全面优化批次：_MAX_CLAUSE_LEN 单一事实源〔spec_ir_v2 字面量 200 两处漂移风险消除〕+ P0-1 特异性门判据修复〔执行错误不再误判 over_red，task_metadata 透传跨文件伴生模块〕+ 语料库注释勘误；本机实测 5485 passed / 3 skipped / 1 xfailed / 0 failed / mypy 125 源文件 0 错误 / ruff 全绿；此前 2026-10-11 全面优化批次〔门禁接入 + 测试伪影消除〕/ 独立评审落地批次〔P0 可信度修复〕/ R4-R5 审查批次）
+last_verified: "2026-10-11"   # 全量回归实测日期（2026-10-11 全面优化批次·第二批：run_with_timeout 接线消除剩余裸 subprocess.run 孤儿风险面〔mdo/patch_rollback/dependency/testless_validation/type_repair/executor_modes/fl_spectral/runtime_probe/executor_repo〕+ 对应 mock 点全量迁移 + timeout=0 归一 + process_utils capture_output 兼容参数；本机实测 5485 passed / 3 skipped / 1 xfailed / 0 failed / mypy 125 源文件 0 错误 / ruff 全绿 / 18 项门禁全绿；此前 2026-10-11 代码级全面优化批次〔_MAX_CLAUSE_LEN 单一事实源 + P0-1 特异性门判据修复 + 语料库注释勘误〕/ 全面优化批次〔门禁接入 + 测试伪影消除〕/ 独立评审落地批次 / R4-R5 审查批次）
 
 tests:
   total_passed: 5485          # 全量 pytest tests/（2026-10-11 全面优化批次实测：--collect-only 收集 **5489**；跑批 = **5485 passed + 3 skipped + 1 xfailed + 0 failed**。上一批 5487/5491 → 本批 5485/5489（-2）：`patch_test_hacking.test_hacking_signal_names` 重命名为 `hacking_signal_names` 后，两个测试文件对该函数的 import 不再匹配 pytest `python_functions=test_*` 收集模式，误导入函数被误收为测试用例的 2 例伪影消除。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
@@ -19,7 +19,7 @@ tests:
   total_skipped: 3           # 全量实测（可选依赖缺失时优雅跳过）
   total_xfailed: 1          # strict xfail：推导式变量被标识符门误杀（P2-L3 已钉住）
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 62          # 全量耗时：xdist -n 4 loadfile 实测 62.48s（2026-10-11 全面优化批次，macOS 本机；CI 3.14 矩阵量级同档）
+  suite_seconds: 195          # 全量耗时：顺序 pytest 实测 194.54s（2026-10-11 全面优化批次·第二批，macOS 本机；CI 为 xdist -n 4 loadfile 62.48s 同档，取本机实测值）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -97,7 +97,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 123     # 2026-10-11 实测（`mypy src/ config.py` → Success: no issues found in 123 source files）；此前写 120 与实测不符（外部评审 §3.1 P6 记为 D 级过期声明）
+  mypy_source_files: 125     # 2026-10-11 实测（`mypy src/ config.py` → Success: no issues found in 125 source files）；此前写 123 与实测不符（2026-10-11 代码级批次同步至 123 后又增 2 源文件）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 

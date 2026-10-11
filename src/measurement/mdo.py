@@ -55,7 +55,6 @@ import logging
 import math
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -300,20 +299,23 @@ def _run_probe(code: str, module_name: str, timeout_seconds: int) -> str | None:
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONPATH": tmpdir,
         }
-        res = subprocess.run(
+        # 2026-10-11 全面优化批次：run_with_timeout 接线（孤儿风险消除）——
+        # 行为探针执行被测代码派生的子进程（探针体内 _call），孙进程持管道
+        # 写端时裸 subprocess.run(timeout=) 的 communicate 可能永久阻塞
+        # （2026-10-09 批后挂死事故同构风险面）。文件后端 + 进程组 kill 保证
+        # 本函数必然返回；超时 → returncode=-9 + timed_out → 走失败分支
+        # （与历史 TimeoutExpired → None 同口径）。
+        from src.utils.process_utils import run_with_timeout
+
+        res = run_with_timeout(
             [sys.executable, probe_path],
-            cwd=tmpdir,
-            capture_output=True,
-            text=True,
             timeout=timeout_seconds,
+            cwd=tmpdir,
             env=env,
-            check=False,
         )
-        if res.returncode != 0:
+        if res.timed_out or res.returncode != 0:
             return None
         return (res.stdout or "").strip()
-    except subprocess.TimeoutExpired:
-        return None
     except Exception:
         logger.debug("MDO 探针执行失败", exc_info=True)
         return None
@@ -335,7 +337,15 @@ def _run_tests_on_code(
         test_path = os.path.join(tmpdir, f"test_{module_name}.py")
         with open(test_path, "w", encoding="utf-8") as f:
             f.write(test_code)
-        res = subprocess.run(
+        # 2026-10-11 全面优化批次：run_with_timeout 接线——此处执行的是**LLM
+        # 生成的测试套件**（pytest 可派生子进程：插件 / multiprocessing /
+        # 测试内 subprocess），孙进程持管道写端时裸 subprocess.run 超时后
+        # communicate 可能永久阻塞（与 M1 判分层 2026-10-11 P0-4 同构）。
+        # 超时 → returncode=-9 + timed_out=True → 返回 None（fail-closed，
+        # 与历史 TimeoutExpired → None 同口径）。
+        from src.utils.process_utils import run_with_timeout
+
+        res = run_with_timeout(
             [
                 sys.executable,
                 "-m",
@@ -346,20 +356,17 @@ def _run_tests_on_code(
                 "no:cacheprovider",
                 test_path,
             ],
-            cwd=tmpdir,
-            capture_output=True,
-            text=True,
             timeout=timeout_seconds,
+            cwd=tmpdir,
             env={
                 **os.environ,
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONPATH": tmpdir,
             },
-            check=False,
         )
+        if res.timed_out:
+            return None
         return res.returncode, f"{res.stdout or ''}\n{res.stderr or ''}"
-    except subprocess.TimeoutExpired:
-        return None
     except Exception:
         return None
     finally:

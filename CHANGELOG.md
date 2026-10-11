@@ -1,12 +1,86 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-11（2026-10-11 代码级全面优化批次：_MAX_CLAUSE_LEN 单一事实源〔spec_ir_v2 字面量 200 两处漂移风险消除〕+ P0-1 特异性门判据修复〔执行错误不再误判 over_red，task_metadata 透传跨文件伴生模块〕+ 语料库注释勘误；全量 5485 passed / 3 skipped / 1 xfailed / 0 failed；mypy 125 源文件 0 错误；ruff 全绿。此前 2026-10-11 全面优化批次〔门禁接入 + 测试伪影消除〕；此前 2026-10-10 文档清理批次）
+> Last updated: 2026-10-11（2026-10-11 全面优化批次·第二批：run_with_timeout 接线消除剩余 9 处裸 subprocess.run(timeout=) 孤儿子进程风险面〔mdo/patch_rollback/dependency/testless_validation/type_repair/executor_modes/fl_spectral/runtime_probe/executor_repo〕+ 全量 mock 点迁移 + run_with_timeout 契约加固（timeout=0 归一 + capture_output 兼容参数）；全量 5485 passed / 3 skipped / 1 xfailed / 0 failed；mypy 125 源文件 0 错误；ruff 全绿；18 项门禁全绿。此前 2026-10-11 代码级全面优化批次〔漂移风险消除 + P0-1 门判据修复 + 注释勘误〕；此前 2026-10-11 全面优化批次〔门禁接入 + 测试伪影消除〕；此前 2026-10-10 文档清理批次）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased] — 2026-10-11 代码级全面优化批次（漂移风险消除 + P0-1 门判据修复 + 注释勘误）
+## [Unreleased] — 2026-10-11 全面优化批次·第二批（run_with_timeout 全量接线，孤儿子进程风险面清零）
+
+> 依据：2026-10-09 批后挂死事故根因（孙进程持管道写端 → 裸 `subprocess.run(timeout=)` 的
+> `communicate()` 永久阻塞；审计发现 3 个孤儿进程存活 16.5h）+ 本批次全仓体检发现剩余
+> 9 处未接线站点。本批次把全部剩余裸调用统一到 `run_with_timeout`（文件后端 + 进程组
+> kill + 有界 drain，**保证返回**），并同步迁移所有 mock 点，**超时口径逐字不变**
+> （零行为变化，零 LLM 调用）。
+
+### 加固（孤儿风险消除 + 契约加固）
+
+- **`run_with_timeout` 契约加固**（`src/utils/process_utils.py`）：
+  - `timeout=0`/负值/`None` 归一为"不设超时"：此前 `Popen.wait(timeout=0)` 立即抛
+    `TimeoutExpired` 会**误触发整树 kill**，与历史调用点以 `timeout=0` 表达
+    "本调用不额外设上限"（`executor_repo._run` / `patch_rollback`）的语义冲突。
+    现 0/None 归一为等待至进程自然退出，负值保守归一（不臆测调用意图）。
+  - 新增 `capture_output` 透明兼容参数：裸 `subprocess.run(capture_output=True)`
+    调用位迁移到 `run_with_timeout` 时参数可直接透传（本实现以文件后端承接输出，
+    无需管道，参数被忽略）。零行为影响，仅为接线平滑。
+
+- **9 处剩余裸 `subprocess.run(timeout=)` 全量接线**（根因：孙进程持管道写端
+  → `communicate` 永久阻塞；文件后端 + `start_new_session` + `killpg` 保证必然返回）：
+  - `src/measurement/mdo.py`：`_run_probe` / `_run_tests_on_code` 改走
+    `run_with_timeout`，超时 → 返回 None（与原 `TimeoutExpired` → 降级 None 同口径）。
+  - `src/tools/patch_rollback.py`：P2P 回归（LLM 生成的 pytest 可派生子进程）改走
+    `run_with_timeout`，超时 → `regression_failed`/`regression_error`（与原分支逐字一致）。
+  - `src/tools/dependency.py`：`create_venv`（venv 创建可派生 pip 自举孙进程）
+    与 `install_packages` 改走 `run_with_timeout`，超时 → RuntimeError / 保守降级。
+  - `src/tools/testless_validation.py`：mypy 层 + 导入冒烟层改走 `run_with_timeout`；
+    超时经 `getattr(proc, "timed_out")` 显式构造 `TimeoutExpired` 交给既有 except
+    分支（保留 `infra_degraded` 三态口径）。
+  - `src/tools/type_repair.py`：pyright 后端调用改走 `run_with_timeout`，超时 →
+    空 findings（与历史降级分支同口径）。
+  - `src/agents/executor_modes.py`：docker run 调用改走 `run_with_timeout`（
+    `raise_on_timeout=True` 保持历史 TimeoutExpired 异常口径，`except` 分支不变）。
+  - `src/agents/fl_spectral.py`：测量调用改走 `run_with_timeout`，超时 → 返回 None
+    （保留 `except subprocess.TimeoutExpired` 兜底分支兼容 mock）。
+  - `src/agents/runtime_probe.py`：探针 runner 调用改走 `run_with_timeout`，
+    超时 → 静默降级 None（探针为纯观测层，不阻断主流程）。
+  - `src/agents/executor_repo.py`：中心 `_run()` helper 委托 `run_with_timeout`，
+    超时归一为 `returncode=124` 哨兵（与历史 TimeoutExpired 分支逐字一致）；
+    M3 swebench runner 调用同步收敛到 `_run()`。
+
+- **全量 mock 点迁移**（接线点即 mock 点；测试 `patch("src.utils.process_utils.run_with_timeout")`，
+  fake 结果补 `timed_out` 属性）：
+  - `tests/test_dependency.py` / `test_dependency_edge_cases.py`（venv 创建/超时 →
+    `timed_out=True` fake）。
+  - `tests/test_type_repair_more_branches.py` / `test_roadmap_gaps_g1_g2_g3.py`（pyright）。
+  - `tests/test_testless_validation.py`（mypy + 导入冒烟两层；超时 mock 由
+    `side_effect=TimeoutExpired` 迁移为 `timed_out=True` fake，OSError 口径保留）。
+  - `tests/test_runtime_probe.py`（`_fake_run` 迁移，fake 补 `timed_out` 属性）。
+  - `tests/test_executor_docker.py` / `test_sandbox_hardening.py`（docker CLI）。
+  - `tests/test_executor_repo_pure_logic.py`（`_run` 124 哨兵 + bytes 解码兜底）。
+  - 清理 4 处 `subprocess` 未用 import（`runtime_probe` / `dependency` /
+    `patch_rollback` / `type_repair`）与测试侧 1 处（`test_dependency_edge_cases`）。
+
+### 治理（门禁盘点结论，零代码变更）
+
+- **`checksum_results.py` 定位**：确认为**独立入口**（与 `check_swe_bench_pro_ready`
+  同档）——需 `--write`/`--verify` 参数，默认无参即 fail，故**不纳入本地门禁循环**
+  （`make gates` 不含此步）。CI 仅在 `main_batch` 工件目录以 `--verify` 显式调用
+  （`.github/workflows/ci.yml`），`Makefile` 未接线。维持现状，文档化此口径。
+- **`r4_batches/SHA256SUMS` 清单陈旧（预存缺口，非本批次引入）**：该清单提交于
+  `7f25408`（R4/R2 批次），早于 `r4_batches/README.md` 与
+  `replay_r4_ab_arm_a_v2.md` 两个文件入库；`.gitignore` 白名单有意放行 `r4_batches/**`，
+  故 `--verify` 报 2 项"清单外新增"。修复路径（**需显式授权**，因禁改清单含
+  `experiments/results/**`）：`python scripts/gates/checksum_results.py
+  --results-dir experiments/results/r4_batches --write` 后随批提交。本批次不改工件。
+
+### 验证
+
+- 全量 `pytest tests/`（顺序）：**5485 passed / 3 skipped / 1 xfailed / 0 failed**（194.54s）
+- `ruff check src/ config.py experiments/ tests/ scripts/` 全绿；`mypy src/ config.py` 0 错误（125 源文件）
+- 18 项本地门禁全绿（`check_swe_bench_pro_ready` / `checksum_results` 为独立入口，按档不在循环内）
+- 收集数不变（5489）：本批次纯 mock 点迁移，零新增/删除测试用例
+- 零 LLM 调用（全部为子进程 / 纯逻辑层改造）
 
 > 依据：全仓代码级体检（非文档评审）——逐模块审查 `src/specs/`、`src/tools/`、`src/graph/` 的
 > 常量漂移、判据一致性、跨层调用契约，对照 2026-10-11 外部评审 P0-1 项。

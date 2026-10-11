@@ -67,6 +67,7 @@ def run_with_timeout(
     preexec_fn: Any = None,
     raise_on_timeout: bool = False,
     check: bool = False,
+    capture_output: bool | None = None,  # 兼容裸 subprocess.run 调用位的透明参数（文件后端忽略）
 ) -> CompletedProcess:
     """执行子进程并在超时后**可靠**返回（整树终止 + **文件后端**收口）。
 
@@ -85,7 +86,7 @@ def run_with_timeout(
 
     Args:
         cmd: 命令行参数序列（不经 shell）。
-        timeout: 超时秒数；None 表示不设超时（仍走进程组语义）。
+        timeout: 超时秒数；None 或 0 表示不设超时（仍走进程组语义）。
         cwd: 工作目录。
         env: 环境变量字典。
         text: 是否以文本模式返回输出（默认 True）。
@@ -95,6 +96,8 @@ def run_with_timeout(
             `.stdout`/`.stderr` 部分输出），以兼容原有
             `except subprocess.TimeoutExpired` 分支。默认 False = 返回
             `CompletedProcess(timed_out=True)`（历史口径，现有调用方不变）。
+        capture_output: 兼容裸 `subprocess.run(capture_output=True)` 调用位
+            的透明参数（本实现以文件后端承接输出，无需管道；参数被忽略）。
         check: 为 True 且进程以非零码退出时抛 `CalledProcessError`
             （与 `subprocess.run(check=True)` 同语义）。
 
@@ -129,7 +132,13 @@ def run_with_timeout(
                 **popen_kwargs,
             )
             try:
-                proc.wait(timeout=timeout)
+                # timeout=0（falsy）与 None 同义"不设超时"——历史调用点
+                # （executor_repo._run / patch_rollback）以 timeout=0 表达
+                # "本调用不额外设上限"；Popen.wait(0) 立即抛 TimeoutExpired
+                # 会误触发整树 kill，故 0/None 归一为等待至进程自然退出。
+                # 负值保守归一为 None（不臆测调用意图）。
+                effective_timeout = timeout if timeout and timeout > 0 else None
+                proc.wait(timeout=effective_timeout)
             except subprocess.TimeoutExpired:
                 timed_out = True
                 _terminate_process_group(proc, label=label)

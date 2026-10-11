@@ -283,9 +283,10 @@ class TestRunPyrightFindingsParse:
                 ]
             }
         )
+        proc.timed_out = False
         with (
             patch("shutil.which", return_value="/usr/bin/pyright"),
-            patch("subprocess.run", return_value=proc),
+            patch("src.utils.process_utils.run_with_timeout", return_value=proc),
         ):
             findings = _run_pyright_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
@@ -297,9 +298,10 @@ class TestRunPyrightFindingsParse:
         monkeypatch.setenv("TYPE_CHECK_BACKEND", "pyright")
         proc = MagicMock()
         proc.stdout = "path:2:3 - error: x not defined [reportUndefinedVariable]\n"
+        proc.timed_out = False
         with (
             patch("shutil.which", return_value="/usr/bin/pyright"),
-            patch("subprocess.run", return_value=proc),
+            patch("src.utils.process_utils.run_with_timeout", return_value=proc),
         ):
             findings = _run_pyright_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
@@ -310,7 +312,7 @@ class TestRunPyrightFindingsParse:
         monkeypatch.setenv("TYPE_CHECK_BACKEND", "pyright")
         with (
             patch("shutil.which", return_value="/usr/bin/pyright"),
-            patch("subprocess.run", side_effect=RuntimeError("boom")),
+            patch("src.utils.process_utils.run_with_timeout", side_effect=RuntimeError("boom")),
         ):
             findings = _run_pyright_findings("o", "def f():\n    return 1\n")
         assert findings == []
@@ -346,9 +348,10 @@ class TestRunPyrightFindingsParse:
                 ]
             }
         )
+        proc.timed_out = False
         with (
             patch("shutil.which", return_value="/usr/bin/pyright"),
-            patch("subprocess.run", return_value=proc),
+            patch("src.utils.process_utils.run_with_timeout", return_value=proc),
         ):
             findings = _run_pyright_findings("o", "def f():\n    return x\n")
         assert len(findings) == 1
