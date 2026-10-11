@@ -86,8 +86,15 @@ class TestAL5Positioning:
         # 2026-10-09 C-01 叙事增补（"为什么不用多智能体"段）使披露段偏移
         # 出历史 18/22 行窗口；扩容至 30/40 行（覆盖完整披露段 + CANDOR/BOAD
         # 叙事段，防止披露段再被后续增补挤出锁窗口）。
-        zh_head = _head(README_ZH, 30)
-        en_head = _head(README_EN, 40)
+        # 2026-10-10 独立审查 P0-0：CANDOR 引用改写为"不利证据 / 有利证据 /
+        # 最强负面证据"三方并列（撤回"共识"表述，补 IEEE 11655121 与
+        # Konstantinou et al. ICST 2026），叙事段由 ~9 行扩至 ~22 行 →
+        # 披露段落到第 35/44 行，**再次**被 30/40 窗口挤出。
+        # 扩容至 60/70。锁语义不变（披露必须留在文档头部区域，不得下沉到
+        # 正文中后段）；这是本窗口第 2 次因叙事增补而扩容，若第 3 次发生，
+        # 应改为"锚定披露小标题位置"而非继续调窗口大小。
+        zh_head = _head(README_ZH, 60)
+        en_head = _head(README_EN, 70)
         assert "诚实披露" in zh_head and "repair_ceiling_report.md" in zh_head
         assert "Honest disclosure" in en_head and "repair_ceiling_report.md" in en_head
         # 批次 XIII（2026-10-07，ADR-0021/0027）+ R2（2026-10-08，

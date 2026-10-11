@@ -53,6 +53,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _ENV = "PATCH_EVIDENCE_GATE_ENABLE"
+#: 分档门限（2026-10-10 I-29）：默认 "sbfl" = 历史口径
+_ENV_MIN_LEVEL = "PATCH_EVIDENCE_GATE_MIN_LEVEL"
 
 
 def patch_evidence_gate_enabled() -> bool:
@@ -188,15 +190,47 @@ def assess_patch_evidence(
     return "none"
 
 
-def evidence_allows_write(level: str) -> bool:
-    """证据门判定：该等级是否放行源码写盘。
+#: 证据等级强弱序（高 → 低）。用于分档放行判定与可读的日志措辞。
+_EVIDENCE_ORDER: tuple[str, ...] = ("gold", "sbfl", "keyword", "none")
 
+
+def evidence_allows_write(level: str) -> bool:
+    """证据门判定：该等级是否放行源码写盘（**分档**，2026-10-10 审查 I-29）。
+
+    默认档（`PATCH_EVIDENCE_GATE_MIN_LEVEL` 未设 / 设 "sbfl"）——历史口径：
     - "gold" / "sbfl" → True（有独立裁决 / 定位证据）；
     - "keyword" / "none" → False（仅 LLM 自由文本或无证据 → 拒绝，
       源码保持原样，该轮标记 source_patched_unverified）。
 
     设计意图：把"这是测试的错"的路由依据从关键词（非确定性）升级为
-    确定性证据；关键词只保留为"可观测"（仍可被 M5 的
-    test_regenerated_pass_unverified 标记），不再是写盘放行条件。
+    确定性证据；关键词只保留为"可观测"，不再是写盘放行条件。
+
+    分档扩展（默认关，零行为变化）
+    ------------------------------
+    2026-10-10 真实 A/B 证实两件事：
+      ① **二值旁路无收益**——关闸后 correct 总量不变（32/46），
+         而落盘精确率从 92.6% 降到 71.1%（`review_2026/E6_factorial_2x2_result.md`）；
+      ② 现有二值门把 `keyword` 级证据（LLM 结构化诊断命中）**一并丢弃**，
+         其中可能有真实修复。
+    因此提供 `PATCH_EVIDENCE_GATE_MIN_LEVEL`（取值为 `_EVIDENCE_ORDER` 中的
+    级别名）把门限**下移一档**到 keyword，用于 A/B 验证"放开一档是否净收益"。
+    默认不设 = `sbfl`（历史口径逐字不变，符合 ADR-0003 默认关原则）。
+    **注意：不要把门限设成 "none"**——那等价于关闭证据门，而二值旁路已被 A/B 证否。
     """
-    return level in ("gold", "sbfl")
+    min_level = os.getenv(_ENV_MIN_LEVEL, "sbfl").strip().lower()
+    if min_level not in _EVIDENCE_ORDER:
+        # 非法值 → 保守回退历史口径（不静默放宽）
+        logger.warning(
+            "%s=%r 非法（可选 %s），回退默认门限 'sbfl'",
+            _ENV_MIN_LEVEL,
+            min_level,
+            "/".join(_EVIDENCE_ORDER),
+        )
+        min_level = "sbfl"
+    if min_level == "none":
+        logger.warning("%s='none' 等价于关闭证据门；该口径已被 A/B 证否（E6），不推荐", _ENV_MIN_LEVEL)
+    try:
+        return _EVIDENCE_ORDER.index(level) <= _EVIDENCE_ORDER.index(min_level)
+    except ValueError:
+        # 未知等级 → 保守拒绝（与"任何异常降级 none"同口径）
+        return False

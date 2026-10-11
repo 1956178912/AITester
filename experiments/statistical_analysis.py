@@ -21,20 +21,44 @@ R2（2026-10-05 审查：统计协议完整性）新增（全部为增量，历�
 - cliffs_delta：非参数效应量，与 Cohen's d 并列输出；
 - --batches 批次白名单 CLI + 报告头部"数据来源"审计章节。
 
+S13/S11（2026-10-11 独立评审落地，均为增量；历史数字与默认输出不变）：
+
+- **唯一程序体聚类稳健统计（S13/F2）**：`build_cluster_map`（用与实验相同的
+  (task_count, seed) 重建合成数据集 → `instance_code` 去注释后 sha256 取簇 ID；
+  实测 87 个任务标签只对应 **26 个唯一程序体**——`BUG_PATTERNS` 仅 16 个模板，
+  逐任务"噪声"只是行尾注释）与 `cluster_robust_paired_test`（**先按簇求均值、
+  再在簇级做配对检验**：t + 精确符号检验 + Cliff's δ/A12 效应量 + 簇内判定
+  一致率）。由 `--cluster-robust` 开关启用，**默认关闭**（历史口径逐位不变）；
+  报告新增 `cluster_robust` 节。动机：把 87 个相关任务当独立样本使精确度被
+  高估约 3.35 倍（δ=−28.3pp @n=240 → −24.6pp @26 簇）。
+- **token 记账健全性（S11/F9）**：`token_accounting_sanity` —— 某臂 ≥50% 行的
+  `token_usage` 为 0/缺失（且有结果行）时判 `NOT_COMPUTABLE`，成本列一律输出
+  `NOT_COMPUTABLE` + 原因（**不输出数字**），`$/solved` 同步诚实降级。
+  实测：7 份批次中 `plain_llm` / `plain_llm_df` 的 `token_usage` 整臂全为 0
+  （含 `llm_calls`）而 `generated_test` 非空——成本结论不可计算却仍被输出。
+
 用法：
     python experiments/statistical_analysis.py
     python experiments/statistical_analysis.py \
         --results-dir experiments/results \
         --batches main_batch/benchmark_synthetic_20261001_112528.json,main_batch/benchmark_synthetic_20261001_112801.json
+    python experiments/statistical_analysis.py --results-dir experiments/results \
+        --output experiments/results/statistical_report_cluster_robust.md \
+        --pool-seeds --cluster-robust
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
+import hashlib
 import json
+import math
 import random
+import re
 import sys
-from collections.abc import Iterable
+from collections import Counter
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -68,6 +92,24 @@ _BASELINES = ("aitester", "plain_llm", "single_agent", "plain_llm_df")
 # 注意：SWE-bench 批次的 task_id 前缀与合成集冲突风险由调用侧 glob 路径隔离
 # （历史注释所述），不在本支持集范围。
 _SUPPORTED_DATASETS = frozenset({"synthetic", "quixbugs"})
+
+# ───── S13（2026-10-11 独立评审落地）：唯一程序体聚类稳健统计的配置常量 ─────
+# 常量集中在模块配置区（`run_all_statistics` 的默认参数在导入期求值，须先于
+# 其定义存在）；簇级实现见文件后部 S13 区块（build_cluster_map /
+# cluster_robust_paired_test / cluster_robust_analysis）。
+_CLUSTER_ROBUST_BATCH = "S13（2026-10-11 独立评审落地）"
+_DEFAULT_CLUSTER_TASK_COUNT = 87
+_DEFAULT_CLUSTER_SEED = 42
+_UNMAPPED_CLUSTER_PREFIX = "unmapped::"
+# AB4 多种子拼接口径的 task_id 前缀（`s<seed>__`）：同一程序体跨种子必须合并
+_SEED_PREFIX_RE = re.compile(r"^s\d+__(.+)$")
+# 报告的簇级对比顺序（与历史 comparisons 的基线顺序一致）
+_CLUSTER_ROBUST_BASELINES = ("plain_llm", "plain_llm_df", "single_agent")
+# 簇级稳健分析默认覆盖的指标（诚实指标在前，passed 自指口径仅作诊断）
+_CLUSTER_ROBUST_FIELDS: tuple[tuple[str, str], ...] = (
+    ("detection_rate", "detection（F2P 检出，gold 裁决）"),
+    ("passed", "passed（自指，仅诊断）"),
+)
 
 
 def load_experiment_results(
@@ -801,6 +843,76 @@ def _model_is_priced(entry: Any) -> bool:
     return all(isinstance(p, (int, float)) and not isinstance(p, bool) and p >= 0 for p in (p_in, p_out))
 
 
+# ───────── S11（2026-10-11 独立评审落地）：token 记账健全性检查 ─────────
+#
+# 背景（独立评审实测 F9）：7 份批次中 `plain_llm` / `plain_llm_df` 的
+# `token_usage` **整臂全为 0**（含 `llm_calls`），而这些行的 `generated_test`
+# 非空——生成了测试却没有任何 token 记账，成本结论不可计算，报告却照常
+# 输出 $/task 数字。本节的判定在**呈现层**拦截（成本表 + $/solved），
+# `cost_analysis` 的行级数学口径保持不变（AE2 历史口径锁定：缺 token_usage
+# 的行仍计 0 token 并进任务数分母），另在成本行上携带判定供下游消费。
+
+# 判定阈值：某臂"无记账行"占比 ≥ 50% 即判 NOT_COMPUTABLE（评审要求口径）
+_TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD = 0.5
+
+# 成本列在记账断裂时的占位符（**不得**替换为 0 或 "—"：前者会被读成免费，
+# 后者会被读成"未计价"，两者都掩盖"记账缺失"这一根因）
+_NOT_COMPUTABLE_CELL = "NOT_COMPUTABLE"
+
+
+def _row_has_token_accounting(row: dict) -> bool:
+    """S11：该结果行是否有**任何正向** token 记账。
+
+    `token_usage` 缺失 / 非 dict / 各计数字段全为 0（或无 by_model 正向项）
+    → 视为"无记账"。只看 token 数字，**不采信 `llm_calls`**：正是它整臂全为 0
+    才暴露记账缺失，若以"调用次数 > 0"作正向证据，反而会把缺失行误判为已记账。
+    """
+    tu = row.get("token_usage")
+    if not isinstance(tu, dict):
+        return False
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        value = tu.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            return True
+    by_model = tu.get("by_model")
+    if isinstance(by_model, dict):
+        return any(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in by_model.values())
+    return False
+
+
+def token_accounting_sanity(rows: list[dict]) -> dict[str, Any]:
+    """S11：单臂 token 记账健全性判定（成本结论可否计算）。
+
+    判定：`n_rows > 0` 且"无记账行"占比 **≥ 50%** → `computable=False`，
+    该臂成本列一律输出 `NOT_COMPUTABLE` + 原因（**不得输出数字**）。
+    `n_rows == 0`（无结果行）→ `computable=True`：无行即无成本可谈，
+    历史 "—" 降级口径不变（不把"空臂"误报成"记账断裂"）。
+
+    Returns:
+        {n_rows, n_without_accounting, zero_share, computable, reason}
+    """
+    rows = rows or []
+    n_rows = len(rows)
+    n_missing = sum(1 for r in rows if not _row_has_token_accounting(r))
+    zero_share = n_missing / n_rows if n_rows else 0.0
+    computable = not (n_rows > 0 and zero_share >= _TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD)
+    reason = ""
+    if not computable:
+        reason = (
+            f"{n_missing}/{n_rows} 行（{zero_share * 100:.1f}%）的 token_usage 为 0 或缺失"
+            f"（阈值 ≥{_TOKEN_ACCOUNTING_ZERO_SHARE_THRESHOLD * 100:.0f}%）"
+            "——token 记账断裂（实测形态：generated_test 非空而 llm_calls/token 全为 0），"
+            "成本结论不可计算：先修记账再重跑，不得在缺失记账上出 $/task 数字"
+        )
+    return {
+        "n_rows": n_rows,
+        "n_without_accounting": n_missing,
+        "zero_share": zero_share,
+        "computable": computable,
+        "reason": reason,
+    }
+
+
 def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) -> list[dict]:
     """AE2：按基线汇总 token_usage 并计算 $/task（None 安全，不编造价格）。
 
@@ -815,12 +927,16 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
     Returns:
         每个 baseline 一行（按 baseline 名排序）：{baseline, n_tasks,
         input_tokens, output_tokens, by_model, missing_models,
-        unattributed_tokens, cost, cost_per_task, currency, priced}
+        unattributed_tokens, cost, cost_per_task, currency, priced}，
+        以及 S11 记账健全性三元组 {token_accounting_ok,
+        token_accounting_reason, token_zero_rows}——`token_accounting_ok=False`
+        时呈现层（成本表 / $/solved）一律输出 NOT_COMPUTABLE，不得输出数字。
     """
     models = price_table.get("models", {}) if isinstance(price_table, dict) else {}
     cost_rows: list[dict] = []
     for baseline in sorted(results):
         rows = results[baseline] or []
+        accounting = token_accounting_sanity(rows)
         input_total = 0
         output_total = 0
         unattributed = 0
@@ -863,6 +979,10 @@ def cost_analysis(results: dict[str, list[dict]], price_table: dict[str, dict]) 
                 "cost_per_task": cost_per_task,
                 "currency": currency,
                 "priced": cost is not None,
+                # S11（2026-10-11 独立评审落地）：记账健全性判定随行携带
+                "token_accounting_ok": accounting["computable"],
+                "token_accounting_reason": accounting["reason"],
+                "token_zero_rows": accounting["n_without_accounting"],
             }
         )
     return cost_rows
@@ -982,6 +1102,10 @@ def cost_per_solved(cost_rows: list[dict], data: dict[str, list[dict]]) -> dict[
     生态 $/resolved 对齐）。correct=0（未解决任何任务）→ None（语义 ∞，
     与 cost_per_detection 的诚实降级同口径）；未计价 → None。
     存量批次 correct 恒 0 系 ADR-0021 伪影，修复后跑批起有效。
+
+    S11（2026-10-11 独立评审落地）：`token_accounting_ok=False` 的臂
+    （token 记账断裂）同样 → None——$ 数字与 $/task 同源，记账缺失时
+    $/solved 也必须诚实降级（手写 cost_rows 缺该键按 True，历史不变）。
     """
     out: dict[str, float | None] = {}
     for row in cost_rows:
@@ -989,7 +1113,7 @@ def cost_per_solved(cost_rows: list[dict], data: dict[str, list[dict]]) -> dict[
         cost = row.get("cost")
         rows = data.get(baseline) or []
         solved = sum(1 for r in rows if r.get("patch_correct") == 1)
-        if cost is None or solved == 0:
+        if cost is None or solved == 0 or not row.get("token_accounting_ok", True):
             out[baseline] = None
         else:
             out[baseline] = cost / solved
@@ -1114,6 +1238,12 @@ def _cost_report_lines(
     "成本/检出"列（= cost_per_task ÷ (det_rate/100)，推导见
     cost_per_detection）并附口径说明——呈现性增补，非新测量；
     det_rates=None（缺省）时输出与 AE2 逐位一致的历史格式（向后兼容）。
+
+    S11（2026-10-11 独立评审落地）：成本行携带 `token_accounting_ok`
+    判定（token_accounting_sanity 产物）。为 False（该臂 ≥50% 行的
+    token_usage 为 0/缺失）时，成本/任务与成本/检出一律渲染
+    `NOT_COMPUTABLE`（**不输出数字**），并追加原因清单。手写 cost_rows
+    （不含该键）按 True 处理 → 历史格式与既有测试逐位不变。
     """
     lines = [
         "成本口径：$/task = (Σ输入 token × 输入单价 + Σ输出 token × 输出单价) / 任务数；",
@@ -1127,6 +1257,38 @@ def _cost_report_lines(
             "测量的商，非独立测量；领域口径对齐 SWE-bench 生态 $/resolved）。检出率",
             "0% 的基线该列为 —（语义上趋于无穷，不得显示为有限数字）。",
         ]
+    # S11：记账断裂的臂（成本列一律 NOT_COMPUTABLE，不输出数字）
+    _bad_accounting = [r for r in cost_rows if not r.get("token_accounting_ok", True)]
+
+    def _cost_cells(r: dict) -> tuple[str, str]:
+        """成本/任务与成本/检出单元格：记账断裂 → NOT_COMPUTABLE。"""
+        if not r.get("token_accounting_ok", True):
+            return _NOT_COMPUTABLE_CELL, _NOT_COMPUTABLE_CELL
+        cpt_cell = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
+        if det_rates is None:
+            return cpt_cell, ""
+        cpd_val = cost_per_detection(r["cost_per_task"], det_rates.get(r["baseline"]))
+        return cpt_cell, (f"{cpd_val:.4f}" if cpd_val is not None else "—")
+
+    def _currency_cell(r: dict) -> str:
+        """币种单元格：记账断裂时无成本数字 → 币种一并置 —（不留 USD 误导）。"""
+        if not r.get("token_accounting_ok", True):
+            return "—"
+        return r["currency"] or "—"
+
+    def _s11_note_lines() -> list[str]:
+        """S11 原因清单（有记账断裂的臂时才追加——历史报告文本零变化）。"""
+        if not _bad_accounting:
+            return []
+        note = [
+            "",
+            "**NOT_COMPUTABLE（S11 token 记账健全性，2026-10-11 独立评审落地）**"
+            "——下列臂的 token 记账断裂，成本列**不输出数字**：",
+        ]
+        note += [f"- `{r['baseline']}`：{r.get('token_accounting_reason') or '记账缺失'}" for r in _bad_accounting]
+        note.append("解读：仅「输入/输出 token」为 0 时成本/任务看似为 0，那是记账缺失而**非**免费；须先修记账再重跑。")
+        return note
+
     priced = [r for r in cost_rows if r["priced"]]
     if not priced:
         models_seen = sorted({m for r in cost_rows for m, t in r["by_model"].items() if t > 0})
@@ -1137,6 +1299,7 @@ def _cost_report_lines(
             "补齐方式：在 experiments/price_table.json 对应模型条目填入",
             "input_per_mtok / output_per_mtok / source / as_of 后重跑本脚本。",
         ]
+        lines += _s11_note_lines()
         return lines
     if det_rates is None:
         lines += [
@@ -1145,8 +1308,8 @@ def _cost_report_lines(
             "|----------|--------|-----------|-----------|-----------|------|",
         ]
         for r in cost_rows:
-            cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
-            cur = r["currency"] or "—"
+            cpt, _ = _cost_cells(r)
+            cur = _currency_cell(r)
             lines.append(
                 f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} | {cpt} | {cur} |"
             )
@@ -1157,18 +1320,19 @@ def _cost_report_lines(
             "|----------|--------|-----------|-----------|-----------|-----------|------|",
         ]
         for r in cost_rows:
-            cpt = f"{r['cost_per_task']:.4f}" if r["cost_per_task"] is not None else "—"
-            cpd_val = cost_per_detection(r["cost_per_task"], det_rates.get(r["baseline"]))
-            cpd = f"{cpd_val:.4f}" if cpd_val is not None else "—"
-            cur = r["currency"] or "—"
+            cpt, cpd = _cost_cells(r)
+            cur = _currency_cell(r)
             lines.append(
                 f"| {r['baseline']} | {r['n_tasks']} | {r['input_tokens']} | {r['output_tokens']} "
                 f"| {cpt} | {cpd} | {cur} |"
             )
-    partial = [r for r in cost_rows if not r["priced"]]
+    # 未计价（价目缺失/多模型异价）与"记账断裂"是两种不同的降级，不得混为一谈：
+    # 记账断裂的臂已由上方的 S11 NOT_COMPUTABLE 清单单独披露
+    partial = [r for r in cost_rows if not r["priced"] and r.get("token_accounting_ok", True)]
     if partial:
         missing_desc = "；".join(f"{r['baseline']}（缺: {', '.join(r['missing_models'])}）" for r in partial)
         lines += ["", f"注：{len(partial)} 个基线未计价——{missing_desc}。"]
+    lines += _s11_note_lines()
     return lines
 
 
@@ -1179,6 +1343,9 @@ def run_all_statistics(
     allow_schema_mixed: bool = False,
     pool_seeds: bool = False,
     price_table: dict[str, dict] | None = None,
+    cluster_robust: bool = False,
+    cluster_task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
+    cluster_seed: int = _DEFAULT_CLUSTER_SEED,
 ) -> list[dict]:
     """
     运行所有统计检验并生成报告
@@ -1199,11 +1366,19 @@ def run_all_statistics(
         price_table: AE2（2026-10-06）——价目表（load_price_table 产物，
             {"models": {...}}）；None 时按"价目未登记"口径输出成本节
             （诚实降级，不编造价格）。
+        cluster_robust: S13（2026-10-11 独立评审落地）——True 时追加
+            `cluster_robust` 节（唯一程序体聚类稳健统计：簇内先取均值再在
+            簇级做 t + 符号检验，含效应量与簇内一致率）。**默认 False**：
+            历史报告与既有非聚类数字逐位不变（历史可比性）。
+        cluster_task_count: S13——重建合成数据集的任务数（与实验一致，
+            默认 87；仅 cluster_robust=True 时使用）。
+        cluster_seed: S13——重建合成数据集的种子（与实验一致，默认 42）。
 
     Returns:
         比较结果列表，每项含 comparison / n_pairs / t_stat / p_value / sig /
         cohens_d / effect，以及 R14 的 mcnemar_* / fdr_* 与 R2 的
-        cliffs_delta / cliffs_effect / bootstrap_* 字段
+        cliffs_delta / cliffs_effect / bootstrap_* 字段（S13 开启时**不**
+        改动本返回值——簇级结果只进报告，避免下游误把簇级数字当任务级）。
     """
     print("=" * 70)
     print("统计显著性检验报告")
@@ -1465,6 +1640,27 @@ def run_all_statistics(
                     f"({h['bayes_verdict']})"
                 )
 
+    # S13（2026-10-11 独立评审落地）：唯一程序体聚类稳健统计——**默认关闭**，
+    # 开启时只**追加**报告节与控制台输出，不改动上方任何历史数字。
+    cluster_analysis: dict[str, Any] | None = None
+    if cluster_robust:
+        cluster_analysis = cluster_robust_analysis(data, task_count=cluster_task_count, seed=cluster_seed)
+        _csum = cluster_analysis["cluster_map_summary"]
+        print("\n" + "=" * 70)
+        print(f"聚类稳健统计（S13：唯一程序体口径；任务 {_csum['n_tasks']} → 簇 {_csum['n_clusters']}）")
+        print("=" * 70)
+        print(f"  未映射任务（各成单例簇）：{_csum['n_unmapped']}")
+        for _c in cluster_analysis["comparisons"]:
+            print(
+                f"  [{_c['metric']}] {_c['comparison']}: 任务级 n={_c['n_pairs']} → 簇级 n={_c['n_clusters']}"
+                f"，δ={_fmt_stat_num(_c['delta'])}"
+                f"，95% CI(t) [{_fmt_stat_num(_c['ci_low'])}, {_fmt_stat_num(_c['ci_high'])}]"
+                f"，符号检验 p={_fmt_stat_num(_c['sign_p'])}"
+                f"，Cliff's δ={_fmt_stat_num(_c['cliffs_delta'])}"
+                f"，A12={_fmt_stat_num(_c['a12'])}"
+                f"，簇内一致率={_fmt_stat_num(_c['concordance'])}"
+            )
+
     if output_file:
         # 生成 Markdown 报告（R2：新增"数据来源 / McNemar / Bootstrap CI /
         # 效应量对比（Cliff's δ）/ BH-FDR"五个章节——历史 t 检验表原样保留）
@@ -1491,6 +1687,12 @@ def run_all_statistics(
             + (f" --batches {','.join(source_files)}" if source_files else "")
             + (" --allow-schema-mixed" if allow_schema_mixed else "")
             + (" --pool-seeds" if pool_seeds else "")
+            # S13：聚类稳健口径的复算命令须带同参（否则簇级数字不可复现）
+            + (
+                f" --cluster-robust --cluster-task-count {cluster_task_count} --cluster-seed {cluster_seed}"
+                if cluster_robust
+                else ""
+            )
         )
         report_lines += [
             "",
@@ -1641,6 +1843,11 @@ def run_all_statistics(
                 f"| {_fmt_stat_num(comp['cliffs_delta'])} | {comp['cliffs_effect']} |"
             )
 
+        # S13（2026-10-11 独立评审落地）：簇级（唯一程序体）稳健统计节——
+        # 仅在 --cluster-robust 时出现；不改动上方任何历史数字（可比性）。
+        if cluster_analysis is not None:
+            report_lines += _cluster_robust_report_lines(cluster_analysis)
+
         # Z9（2026-10-06 审查落地）：贝叶斯配对分析落盘——n=50 级样本量下
         # NHST p 值无分辨力（"不显著"≠"无差异"），后验分布直接量化效应量
         # 不确定度。诚实指标（detection/repair）与 passed（自指，仅诊断）
@@ -1731,7 +1938,11 @@ def run_all_statistics(
         _solved_costs = cost_per_solved(cost_rows, data)
         for _b in sorted(_solved_costs):
             _v = _solved_costs[_b]
-            _cell = f"{_v:.6f}" if _v is not None else "未定义（correct=0 或未计价）——与 $/detection 同口径诚实降级"
+            _cell = (
+                f"{_v:.6f}"
+                if _v is not None
+                else "未定义（correct=0 / 未计价 / token 记账不可用）——与 $/detection 同口径诚实降级"
+            )
             report_lines.append("- " + _b + ": " + _cell)
         report_lines += [
             "",
@@ -1944,6 +2155,414 @@ def run_cluster_sensitivity(
     return body
 
 
+# ──────────── S13（2026-10-11 独立评审落地）：唯一程序体聚类稳健统计 ────────────
+#
+# 背景（独立评审实测 F2）：项目把 87 个任务标签当独立样本做配对检验，但这些
+# 标签只对应 **26 个唯一程序体**——`BUG_PATTERNS` 仅 16 个模板，逐任务的
+# "噪声"只是行尾注释（`# noise_seed=`），去注释后程序体逐字节相同。簇内任务
+# 高度相关，独立性假设不成立 → 方差被低估、**精确度被高估约 3.35 倍**
+# （任务级 n=240 得 δ=−28.3pp；按唯一程序体聚类 n=26 得 δ=−24.6pp、
+# 95% CI [−33.7,−15.6]；分 seed 波动 aitester 13.8–19.0% / df 41.4–49.4%）。
+#
+# 本节做法（`--cluster-robust` 开关，**默认关闭** → 历史口径逐位不变）：
+# 1. **簇的构造可从工件复现**：用与实验相同的 (task_count, seed) 重建合成
+#    数据集（`src/datasets/synthetic_dataset.py`，**只读**导入），对
+#    `instance_code` 去注释后 sha256 取簇 ID（`build_cluster_map`）；
+# 2. **簇内先取均值，再在簇级做配对检验**（等价于"每个程序体只投一票"）：
+#    簇级配对 t（CI 给 t 与百分位 bootstrap 双口径）+ 精确符号检验；
+# 3. 报告同时给**效应量**（Cliff's δ + A12）与**簇内判定一致率**
+#    （concordance：同一程序体的任务是否给出同一方向判定——直接量化
+#    "把相关观测当独立样本"的严重程度；实测 aitester 仅 56.7%、df 33.3%）。
+#
+# 诚实边界：本节的簇级数字**不替换**任何历史任务级数字（两者并列，冲突时
+# 以簇级保守口径为准）；簇的构造若换成真实基准（task_id 无法映射）则退化为
+# 单例簇（见 build_cluster_map 的保守降级）。
+
+# S13 常量定义在文件头部模块配置区（`_DEFAULT_CLUSTER_TASK_COUNT` 等需在
+# run_all_statistics 的默认参数求值前就存在）；下方为簇级实现。
+
+
+def strip_line_comments(code: str) -> str:
+    """S13：去除行尾注释（`#` 至行尾）后 strip。
+
+    与独立评审的簇构造口径逐位一致（`re.sub(r"#.*", "", code).strip()`）：
+    合成数据集的逐任务差异**只在**行尾注释（`# noise_seed=`），程序体本身
+    逐字节相同 → 去注释后相同即同一程序体。
+
+    保守边界：字符串字面量内的 `#` 也会被剥离（合成模板不含 `#`，无影响）；
+    真实基准上则会把"仅注释不同"的实现合并为同簇——簇数偏少 → CI 偏宽，
+    属保守方向（不高估精确度）。
+    """
+    return re.sub(r"#.*", "", code or "").strip()
+
+
+def program_fingerprint(code: str) -> str:
+    """S13：程序体指纹 = 去注释后内容的 sha256（hex，64 字符）。"""
+    return hashlib.sha256(strip_line_comments(code).encode("utf-8")).hexdigest()
+
+
+def _strip_seed_prefix(task_id: str) -> str:
+    """剥离 AB4 多种子拼接口径的 `s<seed>__` 前缀（无前缀时原样返回）。"""
+    m = _SEED_PREFIX_RE.match(task_id)
+    return m.group(1) if m else task_id
+
+
+@functools.lru_cache(maxsize=8)
+def _rebuilt_task_fingerprints(task_count: int, seed: int) -> tuple[tuple[str, str], ...]:
+    """S13：用 (task_count, seed) 重建合成数据集 → ((task_id, 程序体指纹), ...)。
+
+    lru_cache：同参数只重建一次（默认 87 任务，每报告一次构建，开销可忽略）；
+    返回 tuple 以保证缓存值不可变（调用方不得原地修改）。
+    """
+    from src.datasets.synthetic_dataset import SyntheticDataset
+
+    tasks = list(SyntheticDataset(task_count=task_count, seed=seed))
+    return tuple((str(t.task_id), program_fingerprint(t.instance_code)) for t in tasks)
+
+
+def build_cluster_map(
+    task_ids: Iterable[str],
+    task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
+    seed: int = _DEFAULT_CLUSTER_SEED,
+) -> dict[str, str]:
+    """S13：task_id → 唯一程序体簇 ID（**可从工件复现**）。
+
+    口径：
+    - 用 (task_count, seed) 重建合成数据集（与实验同参；只读导入
+      `src/datasets/synthetic_dataset.py`）；
+    - 簇 ID = `instance_code` 去注释后 sha256（`program_fingerprint`）；
+    - 多种子拼接口径（`--pool-seeds`）的 task_id 带 `s<seed>__` 前缀（AB4），
+      剥离前缀后再查表——同一程序体**跨种子合并**为同一簇（这正是聚类
+      稳健性要修正的相关性来源）；
+    - **保守降级**：查不到的任务不并入任何簇、也不丢弃，而是各成
+      `unmapped::<task_id>` 单例簇——宁可多算簇（CI 偏窄）也不臆造相关性
+      （把无关任务并簇会人为抬高簇内一致率）。**实测成因**：2026-10-05
+      P1-4 之前的批次 task_id 末段是 pattern 名（如
+      `synthetic__boundary_and_exception_0024`），而重建数据集已按 P1-4
+      中性化为 `synthetic__task_XXXX`，故跨代混批时旧命名行全部落单例簇
+      （实测 10 份 main_batch 混批：311 行 → 76 簇，其中 50 行为旧命名；
+      同代批次内 aitester vs plain_llm_df 的 253 行 → **26** 簇，与独立
+      评审一致）。真实基准（QuixBugs）任务同理落单例簇。
+
+    实测（独立评审复核）：`task_count=87, seed=42` 时 87 个任务标签 →
+    **26** 个簇，簇规模分布 1×5 / 2×7 / 3×4 / 4×5 / 5×1 / 6×1 / 7×1 / 9×2。
+
+    Args:
+        task_ids: 待映射的任务 ID（可重复、顺序无关）。
+        task_count: 重建数据集的任务数（与实验一致，默认 87）。
+        seed: 重建数据集的种子（与实验一致，默认 42）。
+
+    Returns:
+        {task_id: cluster_id}；空输入返回空 dict（不抛异常）。
+    """
+    lookup = dict(_rebuilt_task_fingerprints(task_count, seed))
+    cluster_map: dict[str, str] = {}
+    for raw_tid in task_ids:
+        tid = str(raw_tid)
+        fingerprint = lookup.get(_strip_seed_prefix(tid))
+        cluster_map[tid] = fingerprint if fingerprint is not None else f"{_UNMAPPED_CLUSTER_PREFIX}{tid}"
+    return cluster_map
+
+
+def cluster_map_summary(cluster_map: dict[str, str]) -> dict[str, Any]:
+    """S13：簇映射摘要（任务数 / 簇数 / 簇规模分布 / 未映射数）。
+
+    Returns:
+        {n_tasks, n_clusters, n_unmapped, size_distribution}；size_distribution
+        为 {簇规模: 该规模的簇数}（升序键）。空输入 → 全 0 / 空分布。
+    """
+    sizes: Counter[str] = Counter(cluster_map.values())
+    distribution: Counter[int] = Counter(sizes.values())
+    return {
+        "n_tasks": len(cluster_map),
+        "n_clusters": len(sizes),
+        "n_unmapped": sum(1 for cid in sizes if cid.startswith(_UNMAPPED_CLUSTER_PREFIX)),
+        "size_distribution": dict(sorted(distribution.items())),
+    }
+
+
+def _cluster_pairs_from_rows(
+    rows_a: list[dict], rows_b: list[dict], field: str = "passed"
+) -> list[tuple[str, float, float]]:
+    """S13：结果行 → 簇级配对输入 [(task_id, 值A, 值B)]。
+
+    复用规范配对原语 `_pair_by_task`（task_id 配对 + 最新批次优先去重 +
+    None 不进分母），保证簇级与任务级共用同一套配对口径。
+    """
+    paired_a, paired_b, common_tasks = _pair_by_task(rows_a, rows_b, field=field)
+    return [(str(t), float(a), float(b)) for t, a, b in zip(common_tasks, paired_a, paired_b, strict=True)]
+
+
+def _cliffs_delta_from_values(values_a: list[float], values_b: list[float]) -> float:
+    """S13：簇级配对 Cliff's δ = (n⁺ − n⁻) / n（与 cliffs_delta 同口径）。
+
+    输入为**簇级均值**（每个程序体一票），而非逐任务行；n=0 → nan。
+    """
+    n = len(values_a)
+    if n == 0:
+        return float("nan")
+    n_pos = sum(1 for a, b in zip(values_a, values_b, strict=True) if a > b)
+    n_neg = sum(1 for a, b in zip(values_a, values_b, strict=True) if a < b)
+    return (n_pos - n_neg) / n
+
+
+def cluster_robust_paired_test(
+    pairs: Iterable[tuple[str, float, float]],
+    cluster_key_fn: Callable[[str], str],
+    *,
+    bootstrap_resamples: int = _BOOTSTRAP_N_RESAMPLES,
+    seed: int = _BOOTSTRAP_SEED,
+) -> dict[str, Any]:
+    """S13：聚类稳健配对检验——**簇内先取均值，再在簇级做配对检验**。
+
+    为什么必须聚类：87 个任务标签只对应 26 个唯一程序体（簇内高度相关），
+    逐任务配对检验的独立性假设不成立，方差被低估、精确度被高估约 3.35 倍。
+    本函数把每个程序体压缩成一个观测（簇内均值），再做 k=簇数 的配对检验
+    ——等价于"每个程序体只投一票"，是评审要求的保守口径。
+
+    检验与效应量（全部在**簇级**计算）：
+    - 配对 t：`scipy.stats.ttest_rel`（簇级均值对），df = k − 1；
+    - 95% CI 双口径：学生 t（`δ ± t_{0.975,k−1}·s/√k`）与百分位 bootstrap
+      （`random.Random(seed)` 固定 seed=42、10000 次重采样，逐位可复现）；
+    - 精确符号检验：簇级差值的正/负计数（0 差值不贡献符号），
+      全部持平 → p=1（与 `_exact_sign_test_p` 同口径）；
+    - 效应量：Cliff's δ =（n⁺ − n⁻)/k 与 A12 =（n⁺ + 0.5·n⁰)/k
+      （**必须有**——p 值不是效应量）；
+    - `concordance`：簇内判定方向一致率——size≥2 的簇内"最多数方向"占比，
+      按簇内配对数加权平均（1.0 = 同一程序体的所有任务方向一致）。
+
+    保守降级（不抛异常）：空输入 → n_clusters=0、delta/CI/t/df 全 nan、
+    `status="insufficient_data"`；k=1 → t/CI 为 nan（df=0）；簇级差值
+    零方差（全同向）→ t=±inf、p=0（与历史 t 检验的退化处理同口径），
+    全平 → t/p 均为 nan、`sign_p=1.0`。
+
+    Args:
+        pairs: [(task_id, 值A, 值B), ...]；None 值的对**跳过**（不可测，
+            与 M1 "None 不进分母"口径一致），不计入 n_pairs/n_clusters。
+        cluster_key_fn: task_id → 簇 ID（`build_cluster_map` 的产物字典
+            配 `lambda t: cmap.get(t, ...)` 使用）。
+        bootstrap_resamples: bootstrap 重采样次数（默认 10000）。
+        seed: bootstrap 随机种子（默认 42）。
+
+    Returns:
+        {n_pairs, n_clusters, delta, ci_low, ci_high, t, df, p_value, sign_p,
+        sign_wins, sign_losses, sign_ties, concordance, cliffs_delta,
+        cliffs_effect, a12, boot_ci_low, boot_ci_high, bootstrap_resamples,
+        bootstrap_seed, cluster_size_distribution, status}
+    """
+    grouped: dict[str, tuple[list[float], list[float]]] = {}
+    signs_by_cluster: dict[str, list[int]] = {}
+    n_pairs = 0
+    for task_id, value_a, value_b in pairs:
+        if value_a is None or value_b is None:
+            continue  # 不可测对跳过（不并入分母）
+        cluster = str(cluster_key_fn(str(task_id)))
+        slot = grouped.setdefault(cluster, ([], []))
+        a_val, b_val = float(value_a), float(value_b)
+        slot[0].append(a_val)
+        slot[1].append(b_val)
+        signs_by_cluster.setdefault(cluster, []).append(1 if a_val > b_val else (-1 if a_val < b_val else 0))
+        n_pairs += 1
+
+    cluster_ids = sorted(grouped)
+    n_clusters = len(cluster_ids)
+    mean_a = [sum(grouped[c][0]) / len(grouped[c][0]) for c in cluster_ids]
+    mean_b = [sum(grouped[c][1]) / len(grouped[c][1]) for c in cluster_ids]
+    diffs = [a - b for a, b in zip(mean_a, mean_b, strict=True)]
+
+    result: dict[str, Any] = {
+        "n_pairs": n_pairs,
+        "n_clusters": n_clusters,
+        "delta": float("nan"),
+        "ci_low": float("nan"),
+        "ci_high": float("nan"),
+        "t": float("nan"),
+        "df": float("nan"),
+        "p_value": float("nan"),
+        "sign_p": 1.0,
+        "sign_wins": 0,
+        "sign_losses": 0,
+        "sign_ties": 0,
+        "concordance": float("nan"),
+        "cliffs_delta": float("nan"),
+        "cliffs_effect": "unknown",
+        "a12": float("nan"),
+        "boot_ci_low": float("nan"),
+        "boot_ci_high": float("nan"),
+        "bootstrap_resamples": bootstrap_resamples,
+        "bootstrap_seed": seed,
+        "cluster_size_distribution": dict(sorted(Counter(len(v[0]) for v in grouped.values()).items())),
+        "status": "insufficient_data",
+    }
+    if n_clusters == 0:
+        return result
+
+    # 簇内判定方向一致率（concordance）：只统计 size≥2 的簇，按簇内配对数加权
+    concordant = 0
+    weight = 0
+    for c in cluster_ids:
+        signs = signs_by_cluster[c]
+        if len(signs) < 2:
+            continue
+        concordant += max(Counter(signs).values())
+        weight += len(signs)
+
+    delta = sum(diffs) / n_clusters
+    wins_a = sum(1 for d in diffs if d > 0)
+    wins_b = sum(1 for d in diffs if d < 0)
+    ties = n_clusters - wins_a - wins_b
+    cliffs = _cliffs_delta_from_values(mean_a, mean_b)
+
+    result.update(
+        {
+            "delta": delta,
+            "sign_wins": wins_a,
+            "sign_losses": wins_b,
+            "sign_ties": ties,
+            "sign_p": _exact_sign_test_p(wins_a, wins_b),
+            "concordance": (concordant / weight) if weight else float("nan"),
+            "cliffs_delta": cliffs,
+            "cliffs_effect": interpret_cliffs_delta(cliffs),
+            "a12": (wins_a + 0.5 * ties) / n_clusters,
+            "status": "ok" if n_clusters >= 2 else "single_cluster",
+            "df": n_clusters - 1,
+        }
+    )
+
+    if n_clusters >= 2:
+        arr = np.asarray(diffs, dtype=float)
+        se = float(arr.std(ddof=1)) / math.sqrt(n_clusters)
+        if se == 0:
+            # 簇级差值零方差：全平 → 无证据（nan）；全同向 → t=±inf、p=0
+            if delta != 0:
+                result["t"] = math.copysign(float("inf"), delta)
+                result["p_value"] = 0.0
+            result["ci_low"] = result["ci_high"] = delta
+        else:
+            t_stat, p_value = stats.ttest_rel(mean_a, mean_b)
+            t_crit = float(stats.t.ppf(0.975, n_clusters - 1))
+            result["t"] = float(t_stat)
+            result["p_value"] = float(p_value)
+            result["ci_low"] = delta - t_crit * se
+            result["ci_high"] = delta + t_crit * se
+        # 百分位 bootstrap（固定 seed，逐位可复现；与主口径并列呈现）
+        rng = random.Random(seed)
+        boot_means: list[float] = []
+        for _ in range(bootstrap_resamples):
+            total = 0.0
+            for _ in range(n_clusters):
+                total += diffs[rng.randrange(n_clusters)]
+            boot_means.append(total / n_clusters)
+        boot_means.sort()
+        result["boot_ci_low"] = _percentile(boot_means, 0.025)
+        result["boot_ci_high"] = _percentile(boot_means, 0.975)
+    return result
+
+
+def cluster_robust_analysis(
+    data: dict[str, list[dict]],
+    *,
+    task_count: int = _DEFAULT_CLUSTER_TASK_COUNT,
+    seed: int = _DEFAULT_CLUSTER_SEED,
+    fields: tuple[tuple[str, str], ...] = _CLUSTER_ROBUST_FIELDS,
+) -> dict[str, Any]:
+    """S13：对全部基线对比产出簇级配对检验（报告与下游共用的唯一入口）。
+
+    步骤：收集全部任务 ID → `build_cluster_map`（一次重建、全臂共用）→
+    逐 (指标, 基线) 调 `cluster_robust_paired_test`。
+
+    Returns:
+        {task_count, dataset_seed, cluster_map_summary, comparisons:[...]}；
+        `comparisons` 每项为 `cluster_robust_paired_test` 的返回字典 +
+        {metric, field, comparison, baseline}。
+    """
+    task_ids = [str(r["task_id"]) for rows in data.values() for r in (rows or []) if r.get("task_id")]
+    cluster_map = build_cluster_map(task_ids, task_count=task_count, seed=seed)
+
+    def _key(tid: str) -> str:
+        """簇键：映射命中取簇 ID；未映射任务各成单例簇（保守降级）。"""
+        return cluster_map.get(tid) or f"{_UNMAPPED_CLUSTER_PREFIX}{tid}"
+
+    comparisons: list[dict[str, Any]] = []
+    for field, metric_label in fields:
+        for baseline in _CLUSTER_ROBUST_BASELINES:
+            if not data.get("aitester") or not data.get(baseline):
+                continue
+            pairs = _cluster_pairs_from_rows(data["aitester"], data[baseline], field=field)
+            res = cluster_robust_paired_test(pairs, _key)
+            res.update(
+                {
+                    "metric": metric_label,
+                    "field": field,
+                    "baseline": baseline,
+                    "comparison": f"AITester vs {baseline}",
+                }
+            )
+            comparisons.append(res)
+    return {
+        "task_count": task_count,
+        "dataset_seed": seed,
+        "cluster_map_summary": cluster_map_summary(cluster_map),
+        "comparisons": comparisons,
+    }
+
+
+def _cluster_robust_report_lines(analysis: dict[str, Any]) -> list[str]:
+    """S13：报告 `cluster_robust` 节（簇结构披露 + 簇级配对检验表）。"""
+    summary = analysis["cluster_map_summary"]
+    dist_text = (
+        " / ".join(f"{size}×{count}" for size, count in sorted(summary["size_distribution"].items())) or "（无）"
+    )
+    lines = [
+        "",
+        "## 聚类稳健统计（cluster_robust，S13——唯一程序体口径）",
+        "",
+        f"{_CLUSTER_ROBUST_BATCH}：历史上的配对检验把任务标签当独立样本，但实测"
+        f"这些标签只对应 **{summary['n_clusters']} 个唯一程序体**（`BUG_PATTERNS` 仅 16 个"
+        "模板，逐任务差异只是行尾注释 `# noise_seed=`）——簇内观测高度相关，"
+        "独立性假设不成立，**精确度被高估约 3.35 倍**。",
+        "",
+        f"- 簇构造（可从工件复现）：`SyntheticDataset(task_count={analysis['task_count']}, "
+        f"seed={analysis['dataset_seed']})` 重建 → `instance_code` 去注释后 sha256 取簇 ID"
+        "（`build_cluster_map`）；多种子拼接的 `s<seed>__` 前缀先剥离，"
+        "同一程序体跨种子合并；",
+        f"- 簇结构：任务 {summary['n_tasks']} 个 → 簇 {summary['n_clusters']} 个；"
+        f"簇规模分布（规模×簇数）：{dist_text}；未映射任务 {summary['n_unmapped']} 个"
+        "（各成单例簇——保守降级，不臆造相关性；常见成因 = 2026-10-05 P1-4 前的"
+        "旧命名 task_id（末段为 pattern 名）或真实基准任务，重建数据集无法命中）；",
+        "- 口径：**簇内先取均值，再在簇级做配对检验**（每个程序体只投一票）。"
+        "本节的簇级数字**不替换**上方任务级数字；冲突时以本节（保守）为准。",
+        "",
+        "| 指标 | 比较 | 任务级 n | 簇级 n | δ（簇级均值差） | 95% CI（t） | 95% CI（bootstrap） "
+        "| df | 簇级 t | p | 符号检验 p | Cliff's δ | A12 | 簇内一致率 |",
+        "|------|------|---------|--------|-----------------|-------------|---------------------"
+        "|----|--------|-----|-----------|-----------|-----|-----------|",
+    ]
+    lines += [
+        (
+            f"| {comp['metric']} | {comp['comparison']} | {comp['n_pairs']} | {comp['n_clusters']} "
+            f"| {_fmt_stat_num(comp['delta'])} "
+            f"| [{_fmt_stat_num(comp['ci_low'])}, {_fmt_stat_num(comp['ci_high'])}] "
+            f"| [{_fmt_stat_num(comp['boot_ci_low'])}, {_fmt_stat_num(comp['boot_ci_high'])}] "
+            f"| {_fmt_stat_num(comp['df'], '{:.0f}')} | {_fmt_stat_num(comp['t'])} "
+            f"| {_fmt_stat_num(comp['p_value'])} | {_fmt_stat_num(comp['sign_p'])} "
+            f"| {_fmt_stat_num(comp['cliffs_delta'])} | {_fmt_stat_num(comp['a12'])} "
+            f"| {_fmt_stat_num(comp['concordance'])} |"
+        )
+        for comp in analysis["comparisons"]
+    ]
+    lines += [
+        "",
+        "读法：δ 为**簇级**均值差（每程序体一票），CI 不含 0 方向才稳健；"
+        "符号检验 p 只看簇级胜负符号（最保守）；Cliff's δ / A12 为效应量"
+        "（阈值见文末效应量说明）；簇内一致率 = size≥2 的簇内「最多数方向」"
+        "占比按簇内配对数加权平均——1.0 表示同一程序体的所有任务方向一致，"
+        "越低说明任务级 n 的独立性假设越不可信（实测 aitester 56.7% / df 33.3%）。",
+        "",
+    ]
+    return lines
+
+
 def main() -> None:
     """R2：命令行入口（--batches 批次白名单；未提供时行为与历史完全一致）。
 
@@ -1997,6 +2616,25 @@ def main() -> None:
         help="AE2（2026-10-06）：$/task 价目表路径（默认 experiments/price_table.json；"
         "文件不存在或价格未登记时成本节按'价目未登记'口径输出，不编造价格）",
     )
+    parser.add_argument(
+        "--cluster-robust",
+        action="store_true",
+        help="S13（2026-10-11 独立评审落地）：追加「唯一程序体」聚类稳健统计节"
+        "（簇内先取均值再在簇级做 t + 符号检验，含效应量/簇内一致率）；"
+        "默认关闭——现有报告数字逐位不变（历史可比性）",
+    )
+    parser.add_argument(
+        "--cluster-task-count",
+        type=int,
+        default=_DEFAULT_CLUSTER_TASK_COUNT,
+        help="S13：重建合成数据集的任务数（须与实验一致，默认 87）",
+    )
+    parser.add_argument(
+        "--cluster-seed",
+        type=int,
+        default=_DEFAULT_CLUSTER_SEED,
+        help="S13：重建合成数据集的种子（须与实验一致，默认 42）",
+    )
     args = parser.parse_args()
 
     if args.cluster_by_template:
@@ -2019,6 +2657,10 @@ def main() -> None:
         allow_schema_mixed=args.allow_schema_mixed,
         pool_seeds=args.pool_seeds,
         price_table=load_price_table(args.price_table),
+        # S13：聚类稳健节（默认关闭 → 历史口径逐位不变）
+        cluster_robust=args.cluster_robust,
+        cluster_task_count=args.cluster_task_count,
+        cluster_seed=args.cluster_seed,
     )
 
 

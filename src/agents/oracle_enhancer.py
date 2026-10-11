@@ -40,6 +40,10 @@ from typing import Any
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import ORACLE_ENHANCER_SYSTEM_PROMPT
 
+# T2（2026-10-11 独立评审落地）：预言增强的契约是顶层 JSON 数组，
+# 需与 extract_json_object（只解析对象）区分——见 enhance。
+from src.utils.helpers import extract_json_array
+
 logger = logging.getLogger(__name__)
 
 # 增强后注入的预言字段最大保留数（避免 test_cases 过多时 prompt 爆炸；
@@ -119,10 +123,19 @@ class OracleEnhancerAgent(BaseAgent):
         )
         try:
             raw = self._call_llm_with_cache(query)
-            parsed = self._extract_json(raw)
-            # _extract_json 可能返回单个对象（包裹在 {"oracles": [...]}）或列表
-            if isinstance(parsed, dict) and "oracles" in parsed:
-                parsed = parsed["oracles"]
+            # T2（2026-10-11 独立评审落地）：本提示词的契约是**顶层 JSON 数组**，
+            # 原实现走 `_extract_json`（extract_json_object，只解析对象）——
+            # 真实调用实测恒走"输出非列表，保守降级"分支，原子化预言从不生效。
+            # 现按契约先用 extract_json_array；{"oracles": [...]} 作为兼容回退。
+            parsed: Any = None
+            try:
+                parsed = extract_json_array(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            if parsed is None:
+                parsed = self._extract_json(raw)
+                if isinstance(parsed, dict) and "oracles" in parsed:
+                    parsed = parsed["oracles"]
             if not isinstance(parsed, list):
                 logger.warning("OracleEnhancer LLM 输出非列表，保守降级（保留原 test_cases）")
                 test_plan["oracle_enhanced"] = False

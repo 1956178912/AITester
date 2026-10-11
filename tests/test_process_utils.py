@@ -32,7 +32,22 @@ class TestReturnsOnTimeout:
     """核心契约：超时后保证返回。"""
 
     def test_grandchild_holding_pipe_does_not_hang(self) -> None:
-        """**关键回归锁**：孙进程持有管道时仍须在超时后返回。"""
+        """**关键回归锁**：孙进程持有输出写端时仍须立即返回。
+
+        2026-10-10 语义更新（根因级修复后）：
+            脚本的**父进程立即正常退出**（打印 "parent done"），挂死只源于
+            **管道**——孙进程继承了 stdout 写端，旧实现的 `communicate()`
+            要等 EOF，于是即便父进程已退出也永久阻塞。
+
+            新实现改用**临时文件**承接 stdout/stderr，父进程读取不依赖 EOF，
+            因此该场景**根本不会触发超时**：`timed_out=False` 且能读到
+            "parent done"——这正是修复成功的证据（旧实现会永久阻塞）。
+            原断言 `timed_out is True` 编码的是"旧实现必须靠中止才能返回"，
+            对文件后端已不适用。
+
+            "父进程自身超时"的场景由 `test_simple_timeout_returns` 与
+            `test_grandchild_holding_pipe_with_live_parent_times_out` 覆盖。
+        """
         t0 = time.monotonic()
         proc = run_with_timeout(
             [sys.executable, "-c", _GRANDCHILD_SCRIPT],
@@ -40,11 +55,35 @@ class TestReturnsOnTimeout:
             logger_name="test-grandchild",
         )
         elapsed = time.monotonic() - t0
-        assert proc.timed_out is True, "必须标记超时"
-        # 必须显著早于孙进程的 300s 睡眠返回（留足收口宽限 5s + 余量）
-        assert elapsed < 60, f"超时后仍等待过久：{elapsed:.1f}s"
-        # 注：父进程可能在到期前已正常退出（returncode=0），但孙进程仍持有
-        # 管道 → 这正是挂死场景；本函数必须仍能返回，故此处不断言 returncode。
+        # 核心回归锁：必须迅速返回（旧实现在此永久阻塞，孙进程睡眠 300s）
+        assert elapsed < 30, f"仍未及时返回：{elapsed:.1f}s"
+        # 文件后端下父进程正常退出即可读到其输出——证明输出未被管道阻塞吞掉
+        assert "parent done" in proc.stdout, f"未捕获到父进程输出：{proc.stdout!r}"
+        assert proc.timed_out is False
+
+    def test_grandchild_holding_pipe_with_live_parent_times_out(self) -> None:
+        """父进程自身不退出 + 孙进程持写端：必须超时返回且不挂死。
+
+        这是实跑中真正致命的组合（被测缺陷死循环 + pytest 孙进程持管道）。
+        文件后端下即使孙进程存活，父进程超时后 killpg 整树并立即返回。
+        """
+        script = (
+            "import subprocess, sys, time\n"
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+            "print('parent alive', flush=True)\n"
+            "while True:\n"
+            "    time.sleep(0.5)\n"
+        )
+        t0 = time.monotonic()
+        proc = run_with_timeout(
+            [sys.executable, "-c", script],
+            timeout=3,
+            logger_name="test-grandchild-live-parent",
+        )
+        elapsed = time.monotonic() - t0
+        assert proc.timed_out is True, "父进程未退出 → 必须标记超时"
+        assert elapsed < 30, f"超时后仍等待过久：{elapsed:.1f}s"
+        assert "parent alive" in proc.stdout, f"超时前输出应被保留：{proc.stdout!r}"
 
     def test_simple_timeout_returns(self) -> None:
         proc = run_with_timeout(

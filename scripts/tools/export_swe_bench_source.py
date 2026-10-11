@@ -188,7 +188,16 @@ def export_instance_sources(
         instance_id = data.get("instance_id", "")
         if instance_ids is not None and instance_id not in instance_ids:
             continue
-        repository = data.get("repository", "")
+        # 2026-10-10 独立审查修复（P0，实跑复现）：官方 SWE-bench JSONL 的
+        # 仓库字段名是 **`repo`**（如 "sqlfluff/sqlfluff"），**不是**
+        # `repository`。历史实现只读 `repository` → 恒取到 "" →
+        # `resolve_repo_dir("")` 回退到 cwd → `git show` 在**当前工作目录**
+        # 执行 → 全部实例报 "not a git repository" → **本脚本从未成功导出过
+        # 任何源码**（实测 225/225 失败，产物 0 行）。
+        # 这与 instance_code 兜底为 issue 文本是**同一类字段不匹配缺陷**
+        # （见 review_2026/E7_swe_bench_data_path_audit.md）。
+        # 两键都读以兼容自建/旧版 JSONL。
+        repository = data.get("repo") or data.get("repository") or ""
         base_commit = data.get("base_commit", "")
         target_file = extract_target_file_from_patch(data.get("patch", ""))
         if not target_file:

@@ -49,6 +49,10 @@ from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 from src.tools.patch_intent import edit_intent_enabled
 from src.tools.type_repair import type_repair_layer
 
+# T2（2026-10-11 独立评审落地）：对抗性意图假设的契约是顶层 JSON 数组，
+# 需与 extract_json_object（只解析对象）区分——见 _generate_adversarial_intents。
+from src.utils.helpers import extract_json_array
+
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
 
@@ -1013,12 +1017,23 @@ class DebuggerAgent(BaseAgent):
         )
         try:
             raw = self._call_llm_with_cache(query)
-            arr = self._extract_json(raw)
+            # T2（2026-10-11 独立评审落地）：本提示词的契约是**顶层 JSON 数组**，
+            # 而 `_extract_json`（extract_json_object）只解析 JSON 对象、对顶层
+            # 数组恒抛 JSONDecodeError——真实调用实测该分支**从设计上永不生效**，
+            # 对抗性推理（3.1）因此静默降级为空假设（连带 Critic 评估一并失效）。
+            # 现按契约先用 extract_json_array；对象包装形态
+            # （{"hypotheses": [...]}）作为兼容回退保留。
+            arr: Any = None
+            try:
+                arr = extract_json_array(raw)
+            except json.JSONDecodeError:
+                arr = None
             if isinstance(arr, list):
                 return [str(x) for x in arr[:_ADVERSARIAL_INTENT_COUNT]]
-            # LLM 输出非列表时尝试提取
-            if isinstance(arr, dict) and "hypotheses" in arr:
-                return [str(x) for x in arr["hypotheses"][:_ADVERSARIAL_INTENT_COUNT]]
+            # 兼容回退：LLM 违规输出对象包装形态
+            obj = self._extract_json(raw)
+            if isinstance(obj, dict) and "hypotheses" in obj:
+                return [str(x) for x in obj["hypotheses"][:_ADVERSARIAL_INTENT_COUNT]]
         except Exception as e:
             logger.warning("对抗性意图假设生成失败（跳过，3.1）: %s", e)
         return []

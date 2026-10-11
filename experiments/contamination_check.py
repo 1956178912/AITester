@@ -39,10 +39,13 @@ SWE-bench 数据污染检测（2.1 数据污染风险应对）。
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
 # 重叠度分级阈值（保守口径，见模块 docstring）
+#: 2026-10-10 E8：置 true 恢复旧"取 max"口径（假阳性 40.5%，默认关）
+_ENV_STRICT_MAX = "AITESTER_CONTAMINATION_STRICT_MAX"
 HIGH_OVERLAP_THRESHOLD = 0.85
 MEDIUM_OVERLAP_THRESHOLD = 0.6
 
@@ -294,24 +297,78 @@ def patch_semantic_similarity(generated_patch: str, golden_patch: str) -> dict[s
 
 
 def _combined_risk_level(similarities: dict[str, float | None]) -> str:
-    """综合多维度相似度得出污染风险等级（取最严重维度）。
+    """综合多维度相似度得出污染风险等级。
 
     O22（2026-09-29 审查 P1）：新增 "unknown" 档——此前缺 patch / 缺 gold /
     异常时一律 fail-open 归 "low"，导致 852 行 100% "low"（其中 580 行
     补丁为空串）的"零判别力"结果。现改为：
     - 数值维度全部为 None（缺 patch / 缺 gold）→ "unknown"（无法判定）；
     - 数值维度有值但均 < MEDIUM 阈值 → "low"（确实低重叠）；
-    - 其余按历史口径 high / medium。
+    - 其余按下方"佐证"口径 high / medium。
+
+    2026-10-10 独立审查（E8）：**修正 `structural` 单独升级造成的假阳性**
+    -----------------------------------------------------------------
+    实测证据：在 **639 条真实生成补丁**上随机取 **200 组无关补丁配对**
+    （不同任务，理应判 low），三通道各自的中/高判定率：
+
+    | 通道 | 判 medium/high 的比例 |
+    |---|---|
+    | `jaccard` | **4/200 = 2.0%**（判别力良好） |
+    | `structural` | **77/200 = 38.5%**（≈ 瞎猜） |
+    | 旧口径（取 max） | **81/200 = 40.5%** |
+
+    根因：`structural` 是"补丁修改行的 **AST 语句类型序列** 的 LCS 比率"。
+    同一代码生成器/同一模板产出的补丁**天然共享语句骨架**
+    （实测样例：jaccard=0.151 但 structural=0.726），故该维度对
+    "模板同源"缺乏判别力，而旧口径 `any(v >= 阈值)` 让最吵的维度
+    单方面决定等级 → **40.5% 假阳性**。
+
+    修法（**佐证原则**）：`structural` 是**弱证据**，**不得单独**把等级
+    升到 medium/high；必须与 `jaccard` 或 `semantic` **任一独立通道**
+    一致（即同一等级上 ≥2 维命中）才升级。
+    单一通道场景（只有 jaccard 有值，如缺 AST/嵌入）**保持历史口径不变**
+    ——此时没有"同源模板"这一个混淆源，且 jaccard 本身判别力良好。
+
+    可用 `AITESTER_CONTAMINATION_STRICT_MAX=true` 恢复旧的"取 max"口径
+    （默认关：假阳性已被实测量化，不应作为默认）。
     """
-    # 仅取数值维度（semantic_source 为字符串标注，不参与阈值比较）
     values = [v for v in similarities.values() if isinstance(v, (int, float))]
     if not values:
         # O22：无有效数值维度（缺 patch / 缺 gold / 解析异常）→ "unknown"
         return "unknown"
-    if any(v >= HIGH_OVERLAP_THRESHOLD for v in values):
-        return "high"
-    if any(v >= MEDIUM_OVERLAP_THRESHOLD for v in values):
-        return "medium"
+
+    def _level(v: float) -> str:
+        if v >= HIGH_OVERLAP_THRESHOLD:
+            return "high"
+        if v >= MEDIUM_OVERLAP_THRESHOLD:
+            return "medium"
+        return "low"
+
+    # 旧口径（可 opt-in，用于复现历史结果 / A/B）
+    if os.getenv(_ENV_STRICT_MAX, "false").lower() in ("true", "1", "on"):
+        if any(v >= HIGH_OVERLAP_THRESHOLD for v in values):
+            return "high"
+        if any(v >= MEDIUM_OVERLAP_THRESHOLD for v in values):
+            return "medium"
+        return "low"
+
+    structural = similarities.get("structural")
+    structural = structural if isinstance(structural, (int, float)) else None
+    others = [v for k, v in similarities.items() if k != "structural" and isinstance(v, (int, float))]
+
+    # 非 structural 通道：历史口径（jaccard / semantic 判别力已验证）
+    for lvl, thr in (("high", HIGH_OVERLAP_THRESHOLD), ("medium", MEDIUM_OVERLAP_THRESHOLD)):
+        if any(v >= thr for v in others):
+            return lvl
+
+    # structural 单独命中 → 需佐证；无其它通道时（others 为空）保持历史口径
+    if structural is not None and structural >= MEDIUM_OVERLAP_THRESHOLD:
+        if not others:
+            return _level(structural)  # 单通道场景：无同源混淆源，沿用历史
+        if any(_level(v) == _level(structural) for v in others):
+            return _level(structural)
+        return "low"  # 仅弱证据、无佐证 → 保守判低（避免 40.5% 假阳性）
+
     return "low"
 
 

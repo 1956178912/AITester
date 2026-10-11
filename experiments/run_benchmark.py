@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -42,7 +43,7 @@ import tempfile
 import time
 import zlib
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import openai
@@ -77,12 +78,14 @@ from src.api.complexity_router import (  # noqa: E402
 from src.datasets.dataset_loader import (  # noqa: E402
     BenchmarkTask,
     InMemoryDataset,
+    _strict_instance_code_enabled,
     load_dataset,
 )
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
 from src.graph.workflow import build_workflow, effective_stop_reason, end_task_trace, start_task_trace  # noqa: E402
 from src.tools.patch_abstain import evaluate_patch_abstention  # noqa: E402
+from src.tools.patch_validate import evaluate_patch_validation  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -601,8 +604,25 @@ def _oracle_type_label(final_state: dict[str, Any] | None) -> str:
 def _patch_plausible(final_state: dict[str, Any] | None) -> int:
     """R53：本轮是否产出"可行"补丁（plausible 计数，任务级 0/1）。
 
-    plausible = 有补丁文本 且 写盘成功（repair_history 末条 patch_applied=True）。
-    无补丁 / 无 repair_history → 0。
+    plausible = 有补丁文本 且 **任一** 迭代的补丁成功写盘。
+
+    ⚠️ **本次修正（2026-10-11，外部评审 §3.5.4 / P0-2 落地实测发现）**
+    ------------------------------------------------------------------
+    原口径只看 `repair_history[-1]["patch_applied"]`（**末条**），这是一个
+    **假阴性源**：当**早期**迭代成功写盘（补丁已进文件、gold 裁决可通过），
+    而**后续**迭代被 P0 源码补丁证据门拒绝（`patch_applied=False`）时，
+    文件里留着早期那次成功的补丁，但末条记录为 False → `plausible` 被误记 0。
+
+    实测证据（2026-10-11 真实 LLM 批次，QuixBugs n=10）：
+    `quixbugs__bitcount` 与 `quixbugs__find_first_in_sorted` 两行出现
+    `correct=1 ∧ plausible=0`，逐行证据 `evidence.basis='rejected'`、
+    `history_len=2`、`last_patch_applied=False`，但 `repair_rate=1.0`
+    （gold 裁决补丁正确）、`source_patched_unverified=True`。
+    这与外部评审在存量工件中记录的 **129 行**属同一形态。
+
+    修正后的口径与"补丁是否真的在文件里"一致：**任一*** `patch_applied=True`
+    即 plausible（且要求有补丁文本）。该修正使不变量 `correct ⊆ plausible`
+    在结构上成立（除被证据门回滚的极端情形，由守卫显式观测）。
     """
     if final_state is None:
         return 0
@@ -613,8 +633,7 @@ def _patch_plausible(final_state: dict[str, Any] | None) -> int:
     if not history:
         # 有补丁文本但无写盘记录（未进入 patch_applier）→ 保守 0
         return 0
-    last = history[-1] if isinstance(history[-1], dict) else {}
-    return 1 if bool(last.get("patch_applied")) else 0
+    return 1 if any(bool(h.get("patch_applied")) for h in history if isinstance(h, dict)) else 0
 
 
 def _patch_correct(task: Any, final_state: dict[str, Any] | None) -> int:
@@ -632,6 +651,81 @@ def _patch_correct(task: Any, final_state: dict[str, Any] | None) -> int:
         return 1 if val == 1.0 else 0
     except Exception:
         return 0
+
+
+def _repair_history_public(final_state: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """P0-2：repair_history 的**可落盘投影**（仅保留可序列化标量）。
+
+    此前该键从不落盘，导致 `patch_plausible` 无法复核（外部评审 §3.5.4）。
+    投影只保留标量字段，避免把大对象写进结果行；非标量字段丢弃并在
+    `patch_plausible_evidence` 中标注。
+    """
+    if not final_state:
+        return []
+    history = final_state.get("repair_history") or []
+    out: list[dict[str, Any]] = []
+    for item in history:
+        if not isinstance(item, dict):
+            continue
+        row: dict[str, Any] = {}
+        for key, val in item.items():
+            if isinstance(val, str | int | float | bool) or val is None:
+                row[str(key)] = val
+            elif isinstance(val, list):
+                row[str(key)] = [str(v)[:200] for v in val[:20]]
+        out.append(row)
+    return out
+
+
+def _patch_plausible_evidence(final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """P0-2：`patch_plausible` 的判据证据（供事后逐行复核）。
+
+    返回：`has_patch` / `history_len` / `last_patch_applied` / `basis`。
+    `basis` 取值：`no_patch`（无补丁文本）/ `no_history`（未进 patch_applier）
+    / `applied`（写盘成功）/ `rejected`（写盘被拒）。
+    """
+    if final_state is None:
+        return {"has_patch": False, "history_len": 0, "last_patch_applied": None, "basis": "no_state"}
+    has_patch = bool(str(final_state.get("patch") or "").strip())
+    history = final_state.get("repair_history") or []
+    last_applied: bool | None = None
+    if history and isinstance(history[-1], dict):
+        raw = history[-1].get("patch_applied")
+        last_applied = bool(raw) if raw is not None else None
+    # 修正（2026-10-11）：plausible 口径为"**任一**迭代写盘成功"，
+    # 因此证据须同时透出"是否曾成功"，否则无法区分
+    # ① 从未写盘成功（rejected）与 ② 早期成功、末条被拒（applied_then_rejected）。
+    ever_applied = any(bool(h.get("patch_applied")) for h in history if isinstance(h, dict))
+    if not has_patch:
+        basis = "no_patch"
+    elif not history:
+        basis = "no_history"
+    elif last_applied:
+        basis = "applied"
+    elif ever_applied:
+        basis = "applied_then_rejected"
+    else:
+        basis = "rejected"
+    return {
+        "has_patch": has_patch,
+        "history_len": len(history),
+        "last_patch_applied": last_applied,
+        "ever_patch_applied": ever_applied,
+        "basis": basis,
+    }
+
+
+def _patch_plausible_invariant_violation(task: Any, final_state: dict[str, Any] | None) -> bool:
+    """P0-2 不变量观测：`correct=1` 但 `plausible=0` 即记账缺陷。
+
+    该组合在语义上不可能（补丁被 gold 裁决通过 ⇒ 必然已写盘成功），
+    实测存量工件出现 129 行（外部评审 §11 C-7）。本字段把违反显式落盘，
+    以便：① 新批次可直接统计；② 与存量工件的 129 行对照。
+    """
+    try:
+        return bool(_patch_correct(task, final_state) == 1 and _patch_plausible(final_state) == 0)
+    except Exception:
+        return False
 
 
 def _patch_precision(task: Any, final_state: dict[str, Any] | None) -> float | None:
@@ -1055,10 +1149,33 @@ def _build_task_result(
             # 默认关恒 None（键集合同构，历史批次 JSON 向后兼容）；
             # 生死实验复审指出该缺口使规约 oracle 独立贡献无法评估。
             "spec_compile_rate": final_state.get("spec_compile_rate"),
+            # P0-4（2026-10-10 独立审查）：确定性规约 oracle 的**注入可观测性**。
+            # 此前 BASELINE.yaml:110-112 已在注释里"登记" spec_oracle_injected，
+            # 但**从未出现在 metrics_schema、也从未在结果行产出**——是一个
+            # "文档化了但未实现的指标"，导致"逻辑驱动通道是否真的注入"
+            # 无法从任何工件观测（审查者只能靠在 generated_test 文本里找
+            # `test_specir_v2_oracle` 这一脆弱手段；实测 QuixBugs FIXED 批
+            # 18/50 行注入）。
+            # 口径（三态，与 src/graph/nodes.py 的 _spec_oracle_injection_verdict 一致）：
+            #   spec_oracle_injected: True=实际注入 / False=尝试但产物为空 /
+            #     None=开关关或未尝试（历史默认口径，零行为变化）；
+            #   spec_oracle_verdict: "not_attempted" / "compiled_empty" /
+            #     "injected" / "injected_and_passed" / "injected_and_failed" /
+            #     None。
+            "spec_oracle_injected": final_state.get("spec_oracle_injected"),
+            "spec_oracle_verdict": final_state.get("spec_oracle_verdict"),
             # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率——LLM 把
             # NL 规约形式化为 *_expr 子句的占比（与 compile_rate 的编译器
             # 接受率正交；默认关恒 None，键集合同构）。
             "spec_expr_coverage": final_state.get("spec_expr_coverage"),
+            # T1（2026-10-11 独立评审落地）：规约**被拒原因分布**（纯观测、
+            # 零 LLM）——把"可编译率恒 0"拆成 {natural_language /
+            # unsupported_operator / unknown_name / parse_error / ...} 计数。
+            # 动机：全量 1,607 行实测 spec_compile_rate 中位数 0.200、47.6%
+            # 恒为 0，但"为何为 0"不可归因；真实 LLM 调用已定位根因是
+            # planner 系统性产出自然语言规约。本键使"修提示 vs 扩文法"的
+            # 取舍有据可依。默认关恒 None，键集合同构。
+            "spec_reject_reasons": final_state.get("spec_reject_reasons"),
             # AC2（T-P0-4）：双门观测——特异性门终审（specific_red /
             # over_red / unavailable）与红回归门违规标记（True = 抹红被
             # 门拦截并恢复红证人）。默认关恒 None，键集合同构。
@@ -1105,6 +1222,33 @@ def _build_task_result(
             "patch_plausible": _patch_plausible(final_state),
             "patch_correct": _patch_correct(task, final_state),
             "patch_precision": _patch_precision(task, final_state),
+            # P0-2（2026-10-11 外部评审 §10）：repair_history 落盘。
+            # 背景：patch_plausible 的判据是 repair_history[-1]["patch_applied"]，
+            # 但该键在**全库 7,153 行结果中从未落盘**（0 次出现）→ ① 无法从
+            # 任何工件复核 plausible；② 129 行出现 correct=1 ∧ plausible=0 的
+            # 不变量违反且无从定位。现把写盘记录与两项派生观测一并透出。
+            "repair_history": _repair_history_public(final_state),
+            "patch_plausible_evidence": _patch_plausible_evidence(final_state),
+            # 不变量观测：correct=1 但 plausible=0（应为 0 行；非 0 即记账缺陷）
+            "patch_plausible_invariant_violation": _patch_plausible_invariant_violation(task, final_state),
+            # MDO（2026-10-11 优化方案 v2 §3.1）：**政策无关**的变异判别力度量。
+            # 与 mutation_score 的区别：① 判据是行为差异（非退出码）；
+            # ② 触发/判别/崩溃三分；③ 池规模显式置位。计算在
+            # _compute_mdo_for_baseline（同 ENABLE_MUTATION_SCORING 挂点），
+            # 此处仅占位 None（键集合同构，默认关时零行为变化）。
+            "mdo_available": None,
+            "mtr": None,
+            "mdr": None,
+            "mdo_crash_rate": None,
+            "mdo_pool_size": None,
+            "mdo_pool_floor_ok": None,
+            "mdo_not_available_reason": None,
+            # T6（2026-10-11 独立评审落地）：池未达下限时 mdo.py 的 as_dict()
+            # 会把 mtr/mdr/crash_rate 规范键置 None 并给出 mdo_provisional=True
+            # + mdo_raw（原始值，审计用）。此处占位保持**键集合同构**——
+            # 不跑 MDO 的批次也必须带这两个键，否则分析侧无法按列读取。
+            "mdo_provisional": None,
+            "mdo_raw": None,
             # R8（2026-09-30 独立审查 N7，P1）：FL@1/3/5 定位命中指标
             # （Ochiai 谱系定位的"真实缺陷行是否落在 Top-k"量化口径）
             "fl_at_k": _fl_at_k(final_state, task),
@@ -1138,6 +1282,14 @@ def _build_task_result(
             # 率"与弃权精确率 A/B 消费（阻断档转正判据见 ADR-0020）。
             "patch_abstained": evaluate_patch_abstention(final_state)["abstain"],
             "patch_abstain_signals": evaluate_patch_abstention(final_state)["signals"],
+            # 修复引擎批次 XVI（ADR-0020 弃权+验证双策略·验证半边，观测层）：
+            # patch_validated = 补丁是否有独立于生成器的验证证据（gold 独立
+            # 裁决 / 确定性引擎产出 / 确定性证据门放行）；与弃权门对称——
+            # 弃权看"不可信信号"，验证看"正面证据"。历史口径零变化
+            # （passed 不受影响），供 filtered success rate 消费（阻断档
+            # 转正判据见 ADR-0020 修订）。
+            "patch_validated": evaluate_patch_validation(final_state)["validated"],
+            "patch_validate_verdict": evaluate_patch_validation(final_state)["verdict"],
             # 修复引擎批次 VIII（ADR-0022 观测层）：test-hacking 确定性检测——
             # 补丁新引入的硬编码输入分支 / 断言删除 / 吞异常（AST 差集，
             # 零 LLM）；补丁后代码经 _target_code_after_patch（批次 VII 修正
@@ -1224,8 +1376,15 @@ def _build_task_result(
         # AB3：规约可编译率失败分支占位（无 final_state / 生成测试，
         # SPEC_IR_DSL 链路未触达；键集合同构）
         "spec_compile_rate": None,
+        # P0-4（2026-10-10 独立审查）：规约 oracle 注入观测键失败分支占位
+        # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
+        "spec_oracle_injected": None,
+        "spec_oracle_verdict": None,
         # AC1：表达式通道覆盖率失败分支占位（键集合同构）
         "spec_expr_coverage": None,
+        # T1（2026-10-11 独立评审落地）：规约被拒原因分布失败分支占位
+        # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
+        "spec_reject_reasons": None,
         # AC2：双门观测失败分支占位（无 final_state，键集合同构）
         "specificity_gate_verdict": None,
         "red_regression_violation": None,
@@ -1243,6 +1402,26 @@ def _build_task_result(
         "oracle_type": "generated_test",
         "test_visible_to_system": True,
         "patch_plausible": 0,
+        # P0-2：键集合同构占位（失败分支无 final_state，因此无可落盘历史）
+        "repair_history": [],
+        "patch_plausible_evidence": {
+            "has_patch": False,
+            "history_len": 0,
+            "last_patch_applied": None,
+            "basis": "no_state",
+        },
+        "patch_plausible_invariant_violation": False,
+        # MDO 键集合同构占位（失败分支无 final_state）
+        "mdo_available": None,
+        "mtr": None,
+        "mdr": None,
+        "mdo_crash_rate": None,
+        "mdo_pool_size": None,
+        "mdo_pool_floor_ok": None,
+        "mdo_not_available_reason": None,
+        # T6：与成功分支同构（见 _build_task_result 的说明）
+        "mdo_provisional": None,
+        "mdo_raw": None,
         "patch_correct": 0,
         "patch_precision": None,
         "fl_at_k": None,
@@ -1263,6 +1442,10 @@ def _build_task_result(
         # 保守 False/[]——与求值核 None 口径一致，键集合同构）
         "patch_abstained": False,
         "patch_abstain_signals": [],
+        # 修复引擎批次 XVI：失败分支验证观测占位（无 final_state 不可评估，
+        # 保守 False/"not_applicable"——与求值核 None 口径一致，键集合同构）
+        "patch_validated": False,
+        "patch_validate_verdict": "not_applicable",
         # 修复引擎批次 VIII（ADR-0022）：失败分支无补丁可检测，
         # False/[] 占位（键集合同构）
         "test_hacking_suspected": False,
@@ -2197,6 +2380,135 @@ def _compute_mutation_scores_for_baseline(
         )
 
 
+# MDO「不可测」分支统一置 None 的键集合（单一来源）。
+#
+# 四条兜底路径（no_task_or_test / no_gold_fixed_material / no_gold_material /
+# exception）与本函数正常出口必须**键集合同构**——否则分析侧按列读取时，
+# "不可测"行会缺列。T6（2026-10-11 独立评审落地）：mdo.as_dict() 在池未达
+# 下限时新增 `mdo_provisional` / `mdo_raw` 两个键，兜底分支不带即破坏同构。
+_MDO_UNAVAILABLE_KEYS: tuple[str, ...] = (
+    "mdo_available",
+    "mtr",
+    "mdr",
+    "mdo_crash_rate",
+    "mdo_pool_size",
+    "mdo_pool_floor_ok",
+    "mdo_provisional",
+    "mdo_raw",
+)
+
+
+def _compute_mdo_for_baseline(
+    bl_results: list[dict[str, Any]],
+    dataset_tasks: dict[str, BenchmarkTask],
+    max_mutants: int = 120,
+) -> None:
+    """MDO（政策无关变异判别力度量）逐任务写回 details[] 七个字段。
+
+    **动机（外部评审 §3.4 / 优化方案 v2 §2.3）**：原有 `detection_rate` 与修复
+    策略**数学耦合**——系统用补丁把测试"改绿"后，最终测试在缺陷原码上不再变红，
+    该行 detection 归零（实测 `red_then_green` 93 行中 34 行因此丢失检出证据）。
+    因此"测试生成质量"无法与"修复策略"分离度量。MDO 以**行为差异 + 断言结果**
+    为判据、不涉及任何补丁动作，从而做到政策无关。
+
+    **与 `_compute_mutation_scores_for_baseline` 的分工**：
+    - `mutation_score`：对缺陷代码变异，判据 rc==1（退出码）；
+    - `mdr`（本函数）：判据是"行为发生偏差 **且** 测试以断言失败结束"，
+      并把崩溃（rc>=2/5）单列为 `mdo_crash_rate`，不计入判别。
+    实测差异：弱断言（只 `assert isinstance(...)`）在 `mutation_score` 下得
+    **1.0**，在 `mdr` 下只有 **0.2**——这是本指标存在的理由。
+
+    **前置条件（缺一即 None，不误报 0）**：测试在 **gold 修复后代码**上必须全绿
+    （= 与 M1 detection 的 F2P 第二段同源，保证"红"是缺陷特异而非恒失败）；
+    变异体池非空；gold 材料齐备。
+    池规模未达下限（p=10% → 29）时 `mdo_pool_floor_ok=False`，调用方须据此
+    避免在饱和池上出结论。
+
+    Args:
+        bl_results: 该基线的逐任务结果列表（就地修改）。
+        dataset_tasks: task_id → BenchmarkTask 映射。
+        max_mutants: 池上限（用扩展算子集，默认 120）。
+    """
+    from experiments.mutation_testing import ExtendedMutationGenerator
+    from src.measurement.mdo import compute_mdo
+
+    generator = ExtendedMutationGenerator(max_per_task=max_mutants)
+    for r in bl_results:
+        task_id = str(r.get("task_id") or "")
+        task = dataset_tasks.get(task_id)
+        test_code = r.get("generated_test")
+        if task is None or not test_code:
+            # 键集合同构：缺材料一律 None（不可测），不改既有键
+            for k in _MDO_UNAVAILABLE_KEYS:
+                r[k] = None
+            r["mdo_not_available_reason"] = "no_task_or_test"
+            continue
+        # **基准必须是 gold 修复后代码**（语义关键，2026-10-11 修正）：
+        # MDO 度量的是"测试对**正确实现**的变异体是否具备判别力"，因此测试
+        # 必须在基准上全绿——这与 M1 detection 的 F2P 第二段判据同源
+        # （buggy 红 ∧ gold 绿），保证"红"是**缺陷特异**的而非恒失败。
+        # 若误用 instance_code（缺陷代码），则测试本应红 → MDO 会大面积
+        # 记 not_measurable（实测 aitester 臂几乎全部不可测）。
+        from experiments._m1_metrics import _extract_gold_material, _gold_fixed_code
+
+        base_code = _gold_fixed_code(task)
+        if not base_code.strip():
+            for k in _MDO_UNAVAILABLE_KEYS:
+                r[k] = None
+            r["mdo_not_available_reason"] = "no_gold_fixed_material"
+            continue
+        mat = _extract_gold_material(task)
+        if mat is None:
+            for k in _MDO_UNAVAILABLE_KEYS:
+                r[k] = None
+            r["mdo_not_available_reason"] = "no_gold_material"
+            continue
+        try:
+            # 模块名与 M1 同源派生（保证测试 import 名与沙箱写盘名一致）
+            module_name = str(mat[0])
+            pool = generator.generate(base_code)
+            res = compute_mdo(
+                base_code=base_code,
+                test_code=str(test_code),
+                module_name=module_name,
+                mutants=pool,
+                # 单变异体超时与 M1 判分同量级（30s）；池大时总耗时为
+                # O(池) × 2 次执行（行为探针 + 测试），调用方须据此估预算。
+                timeout_seconds=30,
+            )
+        except Exception:
+            logger.warning("MDO 计算失败（task=%s），记不可测", task_id, exc_info=True)
+            for k in _MDO_UNAVAILABLE_KEYS:
+                r[k] = None
+            r["mdo_not_available_reason"] = "exception"
+            continue
+        payload = res.as_dict()
+        r["mdo_available"] = payload["mdo_available"]
+        r["mtr"] = payload["mtr"]
+        r["mdr"] = payload["mdr"]
+        r["mdo_crash_rate"] = payload["crash_rate"]
+        r["mdo_pool_size"] = payload["mdo_pool_size"]
+        r["mdo_pool_floor_ok"] = payload["mdo_pool_floor_ok"]
+        r["mdo_not_available_reason"] = payload["mdo_not_available_reason"]
+        # T6（2026-10-11 独立评审落地）：池未达下限时 as_dict() 已把规范键
+        # mtr/mdr/crash_rate 置 None 并把原始值移入 mdo_raw——本函数是**逐键
+        # 显式复制**，不补这两行则新语义在工件层不可见（mdo_provisional /
+        # mdo_raw 缺失 → 审计侧无法区分"未测"与"测得但池不足"）。
+        # 池达下限时为 False/None（与默认键集合同构）。
+        r["mdo_provisional"] = payload.get("mdo_provisional", False)
+        r["mdo_raw"] = payload.get("mdo_raw")
+        logger.info(
+            "    [%s] MDO: MTR=%s MDR=%s CRASH=%s 池=%s(达下限=%s) status=%s",
+            task_id,
+            payload["mtr"],
+            payload["mdr"],
+            payload["crash_rate"],
+            payload["mdo_pool_size"],
+            payload["mdo_pool_floor_ok"],
+            payload["mdo_status"],
+        )
+
+
 def _compute_mutation_detection_for_baseline(
     bl_results: list[dict[str, Any]],
     dataset_tasks: dict[str, BenchmarkTask],
@@ -2287,6 +2599,227 @@ def _apply_deterministic_temperature() -> None:
     _config_module.TEMPERATURE = 0.0
     _base_agent_module.TEMPERATURE = 0.0
     logger.info("R11 确定性采样模式：TEMPERATURE 强制 0.0（config + base_agent 级联）")
+
+
+# ─── S29（2026-10-11 独立评审落地）：模型版本指纹探针 ────────────────────────
+#
+# F13/S29：`deepseek-flash` 是**浮动别名**，provenance 此前只记录别名，无任何
+# 可校验的版本指纹 → 同一 87 任务 × 3 seed 的 plain_llm 检出率从存档 1.5%
+# (4/261) 漂移到 19.2%(50/261)，**全部历史结论失去可复现性**。
+#
+# 本探针在跑批开始时对**固定 prompt** 做一次贪心（temperature=0.0）调用，
+# 把 (a) API 实际返回的 model 名、(b) system_fingerprint、(c) 响应文本的
+# sha256 三者写入 provenance：同别名不同快照 → 指纹不同 → 批次不可与历史
+# 批次合并统计（预注册停止规则：快照失效即实验作废）。
+#
+# 纪律：
+#   1. **离线可降级**——探针失败（无凭证 / API 不可达 / 超时）绝不让整个
+#      跑批崩溃，只写 pinned=False + error（事实标注优先于"漂亮通过"）；
+#   2. **进程内缓存**——同进程只调一次（多基线 / 多 seed 复跑不重复烧配额）;
+#   3. 探针为**观测**，不参与任何评分路径（失败不影响任务执行）。
+
+# 固定探针 prompt：内容无关紧要，只要**跨批次逐字节一致**（同一 prompt 在
+# 同一模型快照上应产生同一贪心输出；不同快照可能产生不同输出）。
+_FINGERPRINT_PROBE_PROMPT = "Reply with exactly: PROBE"
+
+# 探针响应作为指纹证据的最小长度（更短视为无效证据—空响应无法区分快照）。
+_FINGERPRINT_MIN_RESPONSE_LEN = 1
+
+# 进程内缓存：{requested_alias: fingerprint_dict}。同一进程只探一次
+# （多 seed / 多基线 / 重入路径共享）；测试可清空本字典重置缓存。
+_MODEL_FINGERPRINT_CACHE: dict[str, dict[str, Any]] = {}
+
+# pinned=True 的必要条件：三项指纹证据齐全。system_fingerprint 缺失时
+# （部分兼容网关不返回该字段）如实记为 pinned=False——这正是本探针要
+# 暴露的"该 provider 无法锁定版本"状态，不得用"有 model 名就算锁定"糊过去。
+_FINGERPRINT_REQUIRED_KEYS: tuple[str, ...] = ("requested_alias", "returned_model", "system_fingerprint")
+
+
+def _fingerprint_missing_keys(requested_alias: str | None, returned_model: Any, system_fingerprint: Any) -> list[str]:
+    """计算未锁定项（必需键中取不到值的那些）。
+
+    键集合与判定口径的**单一来源**：成功路径与失败降级路径共用本函数，
+    保证"探针失败"与"provider 不返回 system_fingerprint"在工件里以同一种
+    方式表达（missing 列表），下游 gate / 分析不必分情况解析。
+    """
+    values: dict[str, Any] = {
+        "requested_alias": requested_alias,
+        "returned_model": returned_model,
+        "system_fingerprint": system_fingerprint,
+    }
+    return [key for key in _FINGERPRINT_REQUIRED_KEYS if not values.get(key)]
+
+
+def _fingerprint_response_text(response: Any) -> str | None:
+    """从 ChatCompletion 响应提取首条 message 的文本内容（取不到返回 None）。
+
+    分步 getattr（而非 `response.choices[0].message.content` 一步到底）：
+    mock / 兼容网关可能返回 choices 为空或 message 不是对象，任一步缺失
+    都返回 None，由调用方如实记 pinned=False，不抛异常中断跑批。
+    """
+    try:
+        choices = getattr(response, "choices", None)
+        if not choices:
+            return None
+        first = choices[0]
+        message = getattr(first, "message", None)
+        if message is None:
+            return None
+        content = getattr(message, "content", None)
+        return content if isinstance(content, str) else None
+    except (AttributeError, IndexError, KeyError, TypeError):
+        return None
+
+
+def _build_fingerprint_from_response(
+    response: Any,
+    requested_alias: str | None,
+    probe_at: str,
+) -> dict[str, Any]:
+    """从探针响应构造 model_fingerprint 块（纯函数——不发起任何调用）。
+
+    Args:
+        response: APIManager.call 返回的 ChatCompletion 对象（测试传 mock）。
+        requested_alias: 本次请求携带的模型别名（config 侧的 MODEL_NAME）。
+        probe_at: 探针时刻（UTC ISO 时间戳，由调用方注入以便测试断言）。
+
+    Returns:
+        含 requested_alias / returned_model / system_fingerprint / probe_sha256 /
+        probe_at / pinned / missing / error 的字典（键集合恒定，便于下游读取）。
+
+    Raises:
+        RuntimeError: 响应用例不足（无文本内容）时抛出——由调用方捕获并
+            降级为 pinned=False（本函数不做静默兜底，避免"空哈希"冒充指纹）。
+    """
+    content = _fingerprint_response_text(response)
+    if content is None or len(content) < _FINGERPRINT_MIN_RESPONSE_LEN:
+        raise RuntimeError("探针响应无文本内容，无法构造指纹")
+
+    returned_model = getattr(response, "model", None)
+    system_fingerprint = getattr(response, "system_fingerprint", None)
+
+    fingerprint: dict[str, Any] = {
+        "requested_alias": requested_alias,
+        "returned_model": returned_model,
+        "system_fingerprint": system_fingerprint,
+        "probe_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "probe_at": probe_at,
+    }
+    missing = _fingerprint_missing_keys(requested_alias, returned_model, system_fingerprint)
+    fingerprint["missing"] = missing
+    fingerprint["pinned"] = not missing
+    if missing:
+        # 如实给出"为何未锁定"：兼容网关不返回 system_fingerprint 是常见成因，
+        # 不能与"探针根本没跑"混为一谈。
+        fingerprint["error"] = f"指纹字段缺失（无法锁定模型版本）: {', '.join(missing)}"
+    else:
+        fingerprint["error"] = None
+    return fingerprint
+
+
+def collect_model_fingerprint(
+    requested_alias: str | None,
+    cache: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """采集（或复用缓存的）模型版本指纹（S29）。
+
+    Args:
+        requested_alias: 请求侧模型别名（None 时仍尝试探针，但 pinned 必为
+            False——无别名则"别名→快照"映射不可登记）。
+        cache: 进程内缓存（默认模块级 _MODEL_FINGERPRINT_CACHE）；测试可传
+            独立 dict 做隔离，无需清全局状态。
+
+    Returns:
+        model_fingerprint 块（键集合恒定）。探针失败时 pinned=False 且
+        error 为脱敏后的异常文本——**任何情况下都不抛异常**（跑批不得因
+        探针失败而崩溃）。
+    """
+    _cache = _MODEL_FINGERPRINT_CACHE if cache is None else cache
+    _cache_key = requested_alias or "<none>"
+    cached = _cache.get(_cache_key)
+    if cached is not None:
+        return cached
+
+    probe_at = datetime.now(UTC).isoformat()
+    try:
+        # enable_health_checker=False：探针无需后台健康检查线程（该线程会
+        # 周期性发起真实请求，消耗配额且是构造副作用）。
+        # 口径说明：APIManager 与 llm_client._get_llm_config 同源读
+        # config.LLM_CONFIGS，均取"第一个有效配置"——探针与跑批流量因此
+        # 落在同一 provider/model 上（这是指纹有效的前提）。**已知边界**：
+        # 线程局部覆盖（_thread_local.model_name）只在 worker 线程生效，
+        # 主线程探针取全局配置，故不覆盖"每线程不同模型"的场景。
+        from src.api.api_manager import APIManager
+
+        response = APIManager(enable_health_checker=False).call(
+            [{"role": "user", "content": _FINGERPRINT_PROBE_PROMPT}],
+            # 贪心解码：同快照应给出同一输出，使 probe_sha256 成为快照证据
+            temperature=0.0,
+            # 上限须容纳**思维链 token**（真实调用实测，2026-10-11）：
+            # deepseek-flash 系默认开启思考，单次探针实测 reasoning 56–65
+            # tokens。原 max_tokens=16 会把预算全部耗在思考上、正文被截成
+            # 'PRO' 且 finish_reason='length'——探针因此恒失败、pinned 恒
+            # False，S29 形同虚设。64 实测正文完整（'PROBE'，
+            # finish_reason='stop'），成本仍可忽略。
+            max_tokens=64,
+        )
+        fingerprint = _build_fingerprint_from_response(response, requested_alias, probe_at)
+        if requested_alias and fingerprint.get("returned_model") != requested_alias:
+            # 别名 → 实际模型不一致：可能只是命名口径差异，但必须留痕
+            # （"请求的"与"实际服务的"不是同一字符串时，跨批次可比性存疑）。
+            fingerprint["alias_mismatch"] = True
+        else:
+            fingerprint["alias_mismatch"] = False
+    except Exception as e:
+        fingerprint = {
+            "requested_alias": requested_alias,
+            "returned_model": None,
+            "system_fingerprint": None,
+            "probe_sha256": None,
+            "probe_at": probe_at,
+            # 失败路径的缺失项也走同一口径：别名本身可解析时**不**列为缺失
+            # （否则"探针没跑"与"别名读不到"混为一谈）
+            "missing": _fingerprint_missing_keys(requested_alias, None, None),
+            "pinned": False,
+            "alias_mismatch": None,
+            # 异常文本可能回显带 token 的 base_url / 网关体——出口统一脱敏
+            # （与 api_manager 的 _redact 口径一致）
+            "error": _redact_credential_text(f"{type(e).__name__}: {e}")[:300],
+        }
+
+    _cache[_cache_key] = fingerprint
+    if fingerprint.get("pinned"):
+        logger.info(
+            "S29 模型指纹：pinned=True（alias=%s, model=%s, fingerprint=%s, probe=%s…）",
+            requested_alias,
+            fingerprint.get("returned_model"),
+            fingerprint.get("system_fingerprint"),
+            str(fingerprint.get("probe_sha256"))[:12],
+        )
+    else:
+        logger.warning(
+            "S29 模型指纹：pinned=False（alias=%s，缺失=%s，error=%s）——"
+            "本批次模型版本未锁定，预注册停止规则下不得与历史批次合并统计",
+            requested_alias,
+            fingerprint.get("missing"),
+            fingerprint.get("error"),
+        )
+    return fingerprint
+
+
+def _redact_credential_text(text: str) -> str:
+    """对探针异常文本做凭证脱敏（复用项目统一的脱敏工具，缺失时降级）。
+
+    探针失败信息会写入结果 JSON（对外工件），异常里可能回显 base_url 的
+    api_key 查询串 / 网关响应体。脱敏工具不可用时退化为"截断"（不阻断
+    provenance 写入——宁可少信息，不可写入明文凭证）。
+    """
+    try:
+        from src.utils.logging_utils import redact_text
+
+        return str(redact_text(text))
+    except Exception:
+        return "[redact-unavailable] " + text[:200]
 
 
 def run_benchmark(
@@ -2445,6 +2978,18 @@ def run_benchmark(
         dataset = InMemoryDataset.create_with_samples()
 
     tasks = dataset.tasks
+    # S2（2026-10-11 独立评审落地）：**strict 剔除计数**——AITESTER_DATASET_
+    # STRICT_INSTANCE_CODE=true 时，加载器把"instance_code 兜底为 issue 文本"
+    # 的行**从批次剔除**（历史默认 false = 保留兜底口径）。剔除数必须入
+    # provenance：否则"389 行工件 389 行缺检测率"这类缺口在结果里不可见
+    # （F4/S2/K6 的根因之一就是"静默兜底 + 静默计数"）。
+    # getattr 防御：非 SWE-bench 加载器（InMemory / 合成集）无本属性。
+    _strict_skipped: list[str] = list(getattr(dataset, "strict_skipped_task_ids", []) or [])
+    if _strict_skipped:
+        logger.warning(
+            "S2 strict 模式：%d 个任务因 instance_code 兜底为 issue 文本被剔除（不参与跑批）",
+            len(_strict_skipped),
+        )
     # 2026-09-26 全面审查（P2 正确性）：task_limit 边界归一——负数原语义
     # 为 slice 静默截断（tasks[:-1] 丢最后一个任务），0 走 else 当全量；
     # 现统一 <1 视为不限制（全量），仅正数生效，消除负数静默改任务数。
@@ -2663,6 +3208,9 @@ def run_benchmark(
             # 上变红的比例）；缺 gold fixed 材料的任务记 None。默认关时
             # 零行为变化。
             _compute_mutation_detection_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS, seed=seed)
+            # MDO（2026-10-11 优化方案 v2 §3.1）：政策无关的变异判别力度量。
+            # 同开关同挂点；键默认 None，仅在本分支被赋值。
+            _compute_mdo_for_baseline(bl_results, task_map)
 
         summary["results"][baseline] = {
             "total_functions": total,
@@ -2768,6 +3316,97 @@ def run_benchmark(
         # **无法从工件证明干预是否生效**，与 A1 首跑（PLAN_STRIP 未生效却
         # 被当成"零效应"）是同一审计缺口。消融类开关一律在 provenance 留痕。
         "OVER_RED_SECTION_ENABLE",
+        # 2026-10-10（独立审查 P0-2 + D3 同类缺口收口）：**默认开（字面量默认
+        # true）的开关必须入快照**——这是审计缺口的最高优先档：
+        # 默认开的开关"已经在生效"这一事实，若不落 provenance，则
+        #   ① 无法从工件证明它确实开着；② 未来把它翻转为 false 时不可审计。
+        # 这正是 A1（PLAN_STRIP 未生效却被当成"零效应"）的同一机制。
+        # 清单来源：scripts/gates/check_env_snapshot_keys.py 的 P0 档
+        # （AST 扫描 src/**/*.py 得出，报告见 review_2026/E2_env_snapshot_report.md）。
+        # 另有 P1 档 41 键（修复/裁决主链路）与 P2/P3 档待后续批次补齐。
+        "CFG_ANALYSIS_ENABLE",
+        "CONTEST_AST_SCAN_ENABLE",
+        "DETECTION_FIRST_SECTION_ENABLE",
+        "EVENT_BUS_ENABLE",
+        "FAULT_LOCALIZER_ENABLE",
+        "INJECTION_GUARD_OUTPUT_ENABLE",
+        "P2P_GATE_ENABLE",
+        "PATCH_EVIDENCE_GATE_ENABLE",
+        "POSITION_AWARE_REPAIR_ENABLE",
+        "TRACE_MEMORY_BUFFER_ENABLE",
+        # 2026-10-10（独立审查 P0-4 配套）：规约 oracle 注入开关必须入快照——
+        # 实测 QuixBugs FIXED 批 18/50 行注入了 oracle，但该批 env_snapshot
+        # **没有这个键**，因此"逻辑通道是否开启"无法从工件证明。
+        "SPEC_ORACLE_EXEC_ENABLE",
+        # 2026-10-10（执行器挂死修复配套）：pytest 插件级超时开关入快照——
+        # 它改变了测试执行的超时语义（测试内部超时 → 非零 rc，而非外层 kill），
+        # 属"改变执行口径"的开关，必须可审计（否则跨批次对比无法归因）。
+        "PYTEST_TIMEOUT_ENABLE",
+        "PYTEST_TIMEOUT_SECONDS",
+        # 2026-10-10 E8：污染检测 structural 佐证口径开关（默认关=修正后口径）
+        "AITESTER_CONTAMINATION_STRICT_MAX",
+        # 2026-10-10（独立审查 P0-2 收口·第二批）：**补全剩余全部 46 个开关**。
+        # 依据：scripts/gates/check_env_snapshot_keys.py 的 AST 扫描（扫描面
+        # src/**/*.py，含经模块级常量间接引用者）。此前分批补入 P0/P1 后仍缺 46 键；
+        # 缺口机制与 A1 首跑假阴性完全同源——开关未入 provenance，则"它到底开没开"
+        # 无法从工件证明，干预生效性不可审计（这是本项目已发生 3 次的事故类）。
+        # 本批一次补齐，使门禁从 exit 1 转为 exit 0（真正的阻断门禁）。
+        # 门禁：scripts/gates/check_env_snapshot_keys.py（缺失即 exit 1）。
+        # 默认开（字面量默认 true）——最高优先：不落 provenance 则"默认已生效"不可证明
+        "API_HEALTH_CHECKER_ENABLE",
+        "CREDENTIAL_SCRUB_WHITELIST_ENABLE",
+        # 其余（默认关；同样必须可审计——消融/开启时需从工件可验证）
+        "ADVERSARIAL_DEBUGGING_ENABLE",
+        "AGENT_TELEMETRY_ENABLE",
+        "ASSERTION_AUGMENT_ENABLE",
+        "BIDIRECTIONAL_DIAGNOSIS_ENABLE",
+        "CONTEXT_TIER_DOWNGRADE_ENABLE",
+        "CONTRACT_ALIAS_ENABLE",
+        "COVERAGE_STALL_DETECT_ENABLE",
+        "CROSS_FILE_ENABLE",
+        "DETECTION_SPECIFICITY_GATE_ENABLE",
+        "DETERMINISTIC_GUARD_ENABLE",
+        "DETERMINISTIC_REPAIR_FIRST_ENABLE",
+        "EDIT_INTENT_ENABLE",
+        "EXPERT_POOL_DEBATE_ENABLE",
+        "FAILURE_FREQUENCY_ENABLE",
+        "FAILURE_KB_ENABLE",
+        "FL_GOLD_INJECTION_ENABLE",
+        "GRAPH_RAG_ENABLE",
+        "HIERARCHICAL_SUMMARY_ENABLE",
+        "IMPORT_REPAIR_ENABLE",
+        "INJECTION_GUARD_ENABLE",
+        "LOCALIZED_EDIT_ENABLE",
+        "ORACLE_ENHANCE_ENABLE",
+        "ORACLE_VALIDATE_ENABLE",
+        "PATCH_SNAPSHOT_ROLLBACK_ENABLE",
+        "PROBE_SNAPSHOT_LOCATE_ENABLE",
+        "RAG_CONDITIONAL_ENABLE",
+        "RAG_JUDGE_INSTRUCTION_ENABLE",
+        "RAG_KEYWORD_FALLBACK_ENABLE",
+        "RAG_RELEVANCE_THRESHOLD_ENABLE",
+        "RED_REGRESSION_GATE_ENABLE",
+        "REPRO_TEST_ENABLE",
+        "REWARD_PREDICTOR_ENABLE",
+        "RISK_APPROVAL_ENABLE",
+        "ROGUE_MONITOR_ENABLE",
+        "ROUTE_STRUCTURED_ENABLE",
+        "RUNTIME_PROBE_ENABLE",
+        "SEMANTIC_CACHE_ENABLE",
+        "SPEC_IR_DSL_ENABLE",
+        "SPEC_REFINE_ENABLE",
+        "SPEC_SMT_ENABLE",
+        "STRATEGY_BANK_ENABLE",
+        "TESTLESS_VALIDATION_ENABLE",
+        "TEST_SUITE_DEDUP_ENABLE",
+        "TYPE_REPAIR_LLM_ENABLE",
+        # 2026-10-11（外部评审 P0-3 / 第四次同类缺口复发）：三个消融类开关
+        # 在 src/graph/nodes.py 定义了 getenv 但未登记 → 快照门禁 exit 1、
+        # 单测 test_gate_reports_no_missing 长期红。缺口机制与 A1 首跑假阴性
+        # 完全同源（开关不入 provenance ⇒ 干预是否生效无法从工件证明）。
+        "EMPTY_PLAN_SHORTCUT_ENABLE",
+        "OPERATION_MAP_INJECT_ENABLE",
+        "PATH_ENUM_INJECT_ENABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:
@@ -2818,6 +3457,22 @@ def run_benchmark(
         # 非 allow-dirty 时为 None（干净树无豁免）。
         "dirty_reason": dirty_reason,
         "model_name": _model_version,
+        # S29（2026-10-11 独立评审落地，F13：同别名 12.5 倍漂移）：
+        # **模型版本指纹**——`model_name` 只是**请求侧浮动别名**，
+        # 不能证明"两次跑批用的是同一模型快照"。本子块记录 API 实际返回的
+        # model / system_fingerprint + 固定 prompt 贪心输出的 sha256：
+        # 同别名下探针哈希不一致 → 快照已变 → 该批次不得与历史批次合并统计
+        # （预注册停止规则：快照失效即实验作废）。
+        # 探针失败（离线 / 无凭证）时 pinned=False + error，**不表失败为成功**。
+        "model_fingerprint": collect_model_fingerprint(_model_version),
+        # S2（2026-10-11 独立评审落地，F4/K6：389/389 行缺 instance_code）：
+        # strict 模式下的剔除面必须可审计——记录开关是否启用 + 被剔除的
+        # 任务数 + 任务 ID 列表（上限 200 条，防 provenance 体积失控；被截断
+        # 时以 strict_skipped_truncated 标明，全量清单以日志为准）。
+        "strict_instance_code": _strict_instance_code_enabled(),
+        "strict_skipped_count": len(_strict_skipped),
+        "strict_skipped_task_ids": _strict_skipped[:200],
+        "strict_skipped_truncated": len(_strict_skipped) > 200,
         "temperature": _temperature_val,
         "max_iterations": int(os.environ.get("MAX_ITERATIONS", "3")),
         "seed": seed,

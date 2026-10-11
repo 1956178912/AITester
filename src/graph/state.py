@@ -399,12 +399,36 @@ class AITesterState(TypedDict, total=False):
     # 接受率"正交：rate×coverage = NL 子句最终可确定性执行占比；
     # SPEC_IR_DSL_ENABLE=true 时由 _planner_node 写入，默认关恒 None）。
     spec_expr_coverage: float | None
+    # T1（2026-10-11 独立评审落地）：规约子句**被拒原因分布**（纯观测、零 LLM）。
+    # 动机：全量实测 `spec_compile_rate` 中位数仅 0.200、47.6% 的行恒为 0，
+    # 但"为何为 0"不可归因——真实 LLM 调用定位到根因是 planner 系统性产出
+    # **自然语言**规约（如 "text 为 str 类型"）而编译器只接受形式表达式。
+    # 本字段把该比例拆成 {natural_language / unsupported_operator /
+    # unknown_name / parse_error / ...} 计数，使"修提示 vs 扩文法"的取舍
+    # 有据可依（SPEC_IR_DSL_ENABLE=true 时由 _planner_node 写入，默认关恒 None）。
+    spec_reject_reasons: dict[str, int] | None
     # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入标记（SPEC_ORACLE_EXEC_ENABLE=true
     # 时由 _generator_node 写入）——spec_ir_v2.compile_spec_oracle 的产物（签名感知绑定，
     # R1b）追加到 generated_test 尾部与 LLM 测试**并列**执行：LLM 测试通过 ≠ 规约 oracle
     # 通过，后者的失败是"逻辑驱动"通道的确定性检出（计入 detection 观测）。
-    # None/False = 未启用 / 无可编译子句 / 编译产物自检失败（默认关，历史口径零变化）。
+    # 三态口径（P0-4，2026-10-10）：True = 已实际注入；False = 尝试编译但产物为空
+    # （compiled_empty）；None = 开关关 / 未尝试（默认关，历史口径零变化）。
     spec_oracle_injected: bool | None
+    # P0-4（REVIEW_2026_FRONTIER I-07，2026-10-10）：规约 oracle 注入的**行级判定结果**
+    # （与 spec_oracle_injected 配对透出，供结果行直接读取——T3 审查指出的"注入 oracle
+    # 造成的红与 LLM 断言造成的红在结果行里逐位同构"缺口）。取值域：
+    #   "not_attempted"         开关关 / 无规约材料（未尝试编译）↔ injected=None
+    #   "compiled_empty"        尝试编译但产物为空（含无可编译子句）↔ injected=False
+    #   "injected"              产物已追加进 generated_test，尚未执行 ↔ injected=True
+    #   "injected_and_passed"   已注入且 oracle 用例执行通过（_executor_node 升级）
+    #   "injected_and_failed"   已注入且 oracle 用例执行失败（确定性检出信号）
+    # None = 该节点从未写入（历史批次 / 节点未运行）；默认关时 _generator_node 写
+    # "not_attempted"（键集合同构，失败分支由实验层 None 占位）。
+    spec_oracle_verdict: str | None
+    # 空计划短路标记（EMPTY_PLAN_SHORTCUT_ENABLE 默认关时恒 False；开启且
+    # Planner 产出空计划 test_cases=[] 时由 _generator_node 写入 True，供实验层
+    # 统计"短路省了多少次 LLM 调用"，纯观测不改变路由 / 主终点口径）。
+    empty_plan_shortcut: bool
     # R16（2026-10-05 审查 P1）：流氓 agent 行为监控 findings
     # （ROGUE_MONITOR_ENABLE=true 时由 _executor_node 每轮写入）。非空 =
     # 某核心 agent 触发 z-score / 熵 / 能力违规信号（只报警不熔断，
@@ -720,7 +744,15 @@ def create_initial_state(
         spec_provenance=None,
         # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率默认 None
         spec_expr_coverage=None,
+        # T1（2026-10-11 独立评审落地）：被拒原因分布默认 None（开关默认关）
+        spec_reject_reasons=None,
         spec_oracle_injected=None,
+        # P0-4（2026-10-10）：规约 oracle 注入行级判定结果默认 None（= 从未写入 /
+        # 历史口径；_generator_node 运行时写 not_attempted / compiled_empty / injected，
+        # _executor_node 执行后升级为 injected_and_passed / injected_and_failed）
+        spec_oracle_verdict=None,
+        # 空计划短路默认 False（EMPTY_PLAN_SHORTCUT_ENABLE 默认关，历史口径）
+        empty_plan_shortcut=False,
         rogue_findings=None,
         # R35/R31（2026-09-30 独立审查 P0）：flaky 门禁默认未检测
         flaky_detected=None,

@@ -15,6 +15,10 @@ import platform
 import subprocess
 from typing import Any
 
+# 2026-10-10：模块级导入（而非函数内局部导入），使测试可用
+# `@patch("src.agents.executor_runtime.run_with_timeout")` 稳定替换该调用点。
+from src.utils.process_utils import run_with_timeout
+
 try:
     import resource  # POSIX only; Windows 下 import 失败 → 静默降级
 
@@ -130,15 +134,32 @@ def run_pytest_with_retry(self, cmd: list[str], env: dict[str, str], project_roo
             # 设 resource.setrlimit（POSIX；Windows 静默跳过，历史不变）。
             _preexec = _make_resource_preexec_fn()
             _preexec_fn_arg = {"preexec_fn": _preexec} if _preexec is not None else {}
-            result = subprocess.run(
+            # 2026-10-10 独立审查修复（P0，实跑两次复现 + 敌意场景对照实证）：
+            # 改建在 `src.utils.process_utils.run_with_timeout` 之上。
+            #
+            # 根因：`subprocess.run(timeout=)` 用 **PIPE + communicate()**，超时只
+            # `kill()` 直接子进程；被测缺陷若死循环（本批实测 `to_base`、`bitcount`），
+            # pytest 的孙进程继续持有管道写端 → `communicate()` 等 EOF **永久阻塞**
+            # → 整臂挂死、批次 JSON 从不写出。
+            # 实证（同一敌意场景：孙进程 start_new_session 脱离进程组后持续写 stdout）：
+            #   旧实现：killpg 后 15s 宽限内仍收不回（复现挂死）
+            #   新实现：4.0s 返回（timed_out=True，仍捕获到 120 字符部分输出）
+            # 根因级修法是 run_with_timeout 改用**临时文件**承接 stdout/stderr：
+            # 父进程读取不依赖 EOF，"孙进程持写端"在结构上不再造成阻塞。
+            #
+            # 返回契约保持不变：`raise_on_timeout=True` 使超时仍抛
+            # `subprocess.TimeoutExpired`（携带 .stdout/.stderr 部分输出），
+            # 故下方 except 分支与既有 12 个 mock 测试的假设逐字不变；
+            # `check=False` 保持"按 returncode 判定"的本仓统一口径（PLW1510）。
+            result = run_with_timeout(
                 cmd,
-                capture_output=True,
-                text=True,
                 timeout=self.timeout,
                 cwd=project_root,
                 env=env,
+                logger_name="executor_runtime",
+                raise_on_timeout=True,
+                check=False,
                 **_preexec_fn_arg,
-                check=False,  # 显式声明按 returncode 判断（本仓统一口径，PLW1510）
             )
             last_result = result
             last_output = result.stdout + result.stderr

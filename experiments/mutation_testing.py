@@ -858,6 +858,261 @@ _OPERATOR_FLIP_MAP: dict[str, str] = {
 }
 
 
+class ExtendedMutationGenerator(MutationGenerator):
+    """扩展变异算子集（**默认不接入主链路**；供 MDO 测量层扩大变异体池）。
+
+    **为什么需要它**（外部评审 §3.4 / 优化方案 v2 §3.4）
+
+    基类 7 类算子在实测中每任务只产 4–5 个变异体（复杂函数至多 10 个），
+    而 `mutation_score` 在存量工件中 **89.4% 的行为 1.0**——池太小导致指标饱和、
+    无鉴别力。MDO 要求每任务池规模 ≥29（p=10% 效力下 95% 置信的可检出下限）。
+
+    新增 6 类算子（全部无外部依赖、AST 级、单点变异）：
+        8. arith_op_swap      算术运算符互换（+ ↔ -、* ↔ /、// ↔ %）
+        9. aug_assign_swap    增广赋值互换（+= ↔ -=、*= ↔ /=）
+       10. bool_op_swap       布尔运算符互换（and ↔ or）
+       11. cond_negate        条件取反（if X: → if not X:）——专攻分支语义
+       12. const_swap         常量置换（True ↔ False）
+       13. subscript_negate   下标取反（x[i] → x[-i - 1]，序列边界语义）
+
+    **与基类的关键差异（池规模）**：基类在超过 `_MAX_MUTANTS_PER_TASK` 时用
+    **类型轮转**取样（每类只保留少量代表），因此池被人为压小；本类在扩展算子
+    聚合完成后**保留全部去重变异体**，仅在超过 `max_per_task` 时截断
+    （默认 120，远高于基类 20）。这是 MDO 能拿到大池的前提。
+
+    **口径纪律**：
+    - **默认不改变任何既有行为**：基类 `MutationGenerator.generate` 逐字节未改
+      （新增算子只在显式实例化本类时生效）；
+    - 每个变异体仍是"单点、语法有效"的改动（沿用 Competent Programmer
+      Hypothesis / Coupling Effect 口径，与 AdverTest、SWE-Mutation 的
+      "单行改动"约束一致）。
+    """
+
+    def __init__(self, max_per_task: int = 120) -> None:
+        super().__init__()
+        self._MAX_MUTANTS_PER_TASK = max_per_task
+
+    def generate(self, source_code: str) -> list[Mutant]:
+        """基类 7 类 + 扩展 6 类，去重后按上限截断（**不做类型轮转压缩**）。"""
+        if not source_code or not source_code.strip():
+            return []
+        try:
+            tree = ast.parse(source_code)
+        except SyntaxError:
+            return super().generate(source_code)
+
+        # 逐算子直采（绕过基类的轮转取样，以保留同类型的多点变异）
+        all_mutants: list[Mutant] = []
+        for method in (
+            self._generate_comparison_flips,
+            self._generate_boolean_negations,
+            self._generate_numeric_offset,
+            self._generate_boundary_shifts,
+            self._generate_return_voids,
+            self._generate_return_empty,
+            self._generate_exception_removals,
+            self._gen_arith_swap,
+            self._gen_aug_assign_swap,
+            self._gen_bool_op_swap,
+            self._gen_cond_negate,
+            self._gen_const_swap,
+            self._gen_subscript_negate,
+        ):
+            try:
+                all_mutants.extend(method(tree, source_code))
+            except Exception:  # pragma: no cover - 单算子失败不拖垮整池
+                logger.debug("扩展变异算子 %s 失败", method.__name__, exc_info=True)
+
+        seen: set[str] = set()
+        deduped: list[Mutant] = []
+        for m in all_mutants:
+            if m.code in seen:
+                continue
+            seen.add(m.code)
+            deduped.append(m)
+        return deduped[: self._MAX_MUTANTS_PER_TASK]
+
+    # ---- 扩展算子实现 ----
+
+    @staticmethod
+    def _locate(tree: ast.Module, target: ast.AST) -> ast.AST | None:
+        """按 (type, lineno, col_offset) 在 deepcopy 树中定位同一节点。"""
+        for node in ast.walk(tree):
+            if (
+                type(node) is type(target)
+                and getattr(node, "lineno", None) == getattr(target, "lineno", None)
+                and getattr(node, "col_offset", None) == getattr(target, "col_offset", None)
+            ):
+                return node
+        return None
+
+    def _emit(
+        self,
+        tree: ast.Module,
+        target: ast.AST,
+        apply_fn: Any,
+        mutant_type: str,
+        description: str,
+        source_code: str,
+        out: list[Mutant],
+    ) -> None:
+        """通用单点变异：deepcopy → 定位 → 应用 → 反解析 → 校验后追加。"""
+        new_tree = copy.deepcopy(tree)
+        node = self._locate(new_tree, target)
+        if node is None:
+            return
+        try:
+            apply_fn(node)
+            new_code = ast.unparse(new_tree)
+        except Exception:
+            return
+        if not new_code.strip() or new_code == source_code:
+            return
+        out.append(
+            Mutant(
+                code=new_code,
+                mutant_type=mutant_type,
+                description=description,
+                line_no=int(getattr(target, "lineno", 0) or 0),
+            )
+        )
+
+    def _gen_arith_swap(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """8. 算术运算符互换：+ ↔ -、* ↔ /、// ↔ %。"""
+        swap = {
+            ast.Add: ast.Sub,
+            ast.Sub: ast.Add,
+            ast.Mult: ast.Div,
+            ast.Div: ast.Mult,
+            ast.FloorDiv: ast.Mod,
+            ast.Mod: ast.FloorDiv,
+        }
+        out: list[Mutant] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.BinOp):
+                continue
+            tgt = swap.get(type(node.op))
+            if tgt is None:
+                continue
+            name_from, name_to = type(node.op).__name__, tgt.__name__
+            self._emit(
+                tree,
+                node,
+                lambda n, _t=tgt: setattr(n, "op", _t()),
+                "arith_op_swap",
+                f"line {node.lineno}: {name_from} → {name_to}（算术互换）",
+                source_code,
+                out,
+            )
+        return out
+
+    def _gen_aug_assign_swap(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """9. 增广赋值互换：+= ↔ -=、*= ↔ /=。"""
+        swap = {ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.Div, ast.Div: ast.Mult}
+        out: list[Mutant] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.AugAssign):
+                continue
+            tgt = swap.get(type(node.op))
+            if tgt is None:
+                continue
+            self._emit(
+                tree,
+                node,
+                lambda n, _t=tgt: setattr(n, "op", _t()),
+                "aug_assign_swap",
+                f"line {node.lineno}: {type(node.op).__name__}= → {tgt.__name__}=（增广赋值互换）",
+                source_code,
+                out,
+            )
+        return out
+
+    def _gen_bool_op_swap(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """10. 布尔运算符互换：and ↔ or。"""
+        out: list[Mutant] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.BoolOp):
+                continue
+            new_op = ast.Or if isinstance(node.op, ast.And) else ast.And
+            label = "and → or" if isinstance(node.op, ast.And) else "or → and"
+            self._emit(
+                tree,
+                node,
+                lambda n, _o=new_op: setattr(n, "op", _o()),
+                "bool_op_swap",
+                f"line {node.lineno}: {label}（布尔互换）",
+                source_code,
+                out,
+            )
+        return out
+
+    def _gen_cond_negate(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """11. 条件取反：if X: → if not X:（含 while）。
+
+        专攻分支语义判别：若测试未覆盖"条件为假"的分支，该变异体将存活。
+        """
+        out: list[Mutant] = []
+
+        def _negate(n: Any) -> None:
+            n.test = ast.UnaryOp(op=ast.Not(), operand=n.test)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.If | ast.While):
+                self._emit(
+                    tree,
+                    node,
+                    _negate,
+                    "cond_negate",
+                    f"line {node.lineno}: 条件取反（not）",
+                    source_code,
+                    out,
+                )
+        return out
+
+    def _gen_const_swap(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """12. 常量置换：True ↔ False。"""
+        out: list[Mutant] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, bool):
+                continue
+            new_val = not node.value
+            self._emit(
+                tree,
+                node,
+                lambda n, _v=new_val: setattr(n, "value", _v),
+                "const_swap",
+                f"line {node.lineno}: {node.value} → {new_val}（常量置换）",
+                source_code,
+                out,
+            )
+        return out
+
+    def _gen_subscript_negate(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """13. 下标取反：x[i] → x[-i - 1]（序列边界语义）。"""
+        out: list[Mutant] = []
+
+        def _negate(n: ast.Subscript) -> None:
+            n.slice = ast.BinOp(
+                op=ast.Sub(),
+                left=ast.UnaryOp(op=ast.USub(), operand=n.slice),
+                right=ast.Constant(value=1),
+            )
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Subscript):
+                continue
+            self._emit(
+                tree,
+                node,
+                _negate,
+                "subscript_negate",
+                f"line {node.lineno}: 下标取反（序列边界）",
+                source_code,
+                out,
+            )
+        return out
+
+
 def _infer_imported_module_name(test_code: str) -> str:
     """从测试代码解析被测模块名（import 语句的被导入模块，取首个命中）。
 
@@ -931,7 +1186,6 @@ def _run_mutant_tests(
     下恢复区分度，同时修复 e2e 回归用例锁定的"import 名对齐"口径。
     """
     import os
-    import subprocess
     import sys
     import tempfile
 
@@ -956,7 +1210,22 @@ def _run_mutant_tests(
 
             # 执行测试：pytest 单文件（2026-09-26 全面审查：subprocess 改常规
             # 局部 import，与此处 os/sys/tempfile 口径一致，消除 __import__ 反模式）
-            proc = subprocess.run(
+            #
+            # 2026-10-10 独立审查修复（P0，实跑复现）：改建在
+            # `src.utils.process_utils.run_with_timeout` 之上。
+            # 根因：`subprocess.run(timeout=...)` 超时只 kill **直接子进程**；
+            # 若变异体使测试陷入死循环，pytest 的子进程（或孙进程）会继续持有
+            # 管道写端 → `communicate()` 等 EOF **永久阻塞**。
+            # 本次逻辑通道 A/B 实跑中**现场复现**：50/50 任务完成后主线程
+            # 卡死 25+ 分钟（%CPU 0.0），一个变异体 pytest 以 97.5% CPU 空转，
+            # 批次 JSON 从未写出；与 BASELINE.yaml 记录的 QuixBugs 批后挂死
+            # （selectors.select ← subprocess._communicate ←
+            # branch_coverage_inject.py:161）**同一机制**，只是触发点在变异层。
+            # run_with_timeout 用 start_new_session + killpg 整树终止 + 有界
+            # 收口，保证返回（timed_out=True 时按下方保守口径视为"存活"）。
+            from src.utils.process_utils import run_with_timeout as _run_with_timeout
+
+            proc = _run_with_timeout(
                 [
                     sys.executable,
                     "-m",
@@ -965,12 +1234,15 @@ def _run_mutant_tests(
                     "--tb=no",
                     "-q",
                 ],
-                capture_output=True,
-                text=True,
                 timeout=timeout_seconds,
                 cwd=tmpdir,
                 env={**os.environ, "PYTHONPATH": tmpdir},
+                logger_name="mutation_testing",
             )
+            # 超时终止（被 SIGKILL）→ 保守视为存活（不夸大变异得分）
+            if getattr(proc, "timed_out", False):
+                logger.debug("变异体执行超时，保守判为存活: %s", mutant_file)
+                return False
             # 2026-09-26 全面审查：仅 rc==1（有测试失败）才算"杀死"。
             # rc==0（全通过）= 存活；rc==2/5（收集错误/无测试）或超时 =
             # 套件未成功运行，按保守口径视为存活（不误杀、不夸大得分）。

@@ -14,10 +14,108 @@ from typing import Any
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import PLANNER_SYSTEM_PROMPT, SPEC_EXPR_CONTRACT_SECTION
 from src.specs import spec_ir_dsl_enabled
+from src.specs.spec_ir_v2 import spec_expr_grammar_terminals
 from src.tools.control_flow import build_cfg_prompt_section, cfg_analysis_enabled
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
+
+
+# ─── W2/T1（2026-10-11 独立评审落地）：SpecExpr 文法契约段 ─────────────────────
+# 根因（CONSOLIDATED_REVIEW_AND_PLAN.md §3.3 / F14，独立评审真实 LLM 调用实测）：
+# planner 要求 LLM 产出规约时，LLM **系统性输出自然语言**（如
+# preconditions[0] = "text 为 str 类型"、"成功时返回 int 类型结果"），而
+# src/specs/spec_ir_v2.py 的白名单编译器只接受形式表达式 → compile_spec_oracle
+# 产出 0 字节（日志记 "SpecIR v2 oracle 产物自检失败，保守丢弃"），全量 1,607 行
+# 里 spec_compile_rate 中位数 0.200、47.6% 为 0，真实调用下 3 个函数里 2 个
+# logic_degraded=True。
+# 既有 SPEC_EXPR_CONTRACT_SECTION（templates.py）只给了 2 个示例，未给出**文法
+# 边界**（哪些字形 / 算子 / 标识符真的被接受）→ LLM 只能猜。本段补齐四件东西
+# （仅在 SPEC_IR_DSL_ENABLE=true 时追加；默认档 prompt 零变化，ADR-0003）：
+#   1. SpecExpr BNF——白名单函数 / 属性由 spec_expr_grammar_terminals() 从
+#      spec_ir_v2 的代码常量渲染（单一事实源，杜绝提示与编译器再次漂移）；
+#   2. 5 个正例（逐条经 _clause_is_compilable 验证可编译，测试锁定）；
+#   3. 5 个反例（逐条实测被拒，含评审实测的真实失败形态 "text 为 str 类型"；
+#      每条标注拒绝原因分类，与 spec_ir_v2.clause_reject_reason 逐字一致）；
+#   4. 输出前自检指令（四道校验门的可操作版）。
+# 正 / 反例以模块级常量给出（不散落在提示文本里），tests/test_spec_contract_grammar.py
+# 可直接遍历验证"提示里的每条例子都真的能编译 / 真的被拒"。
+SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
+    ("b != 0", "precondition", "前置：除数非零"),
+    ("len(text) > 0 and isinstance(text, str)", "precondition", "前置：非空 + 类型判定（isinstance 在白名单内）"),
+    ("result == a + b", "postcondition", "后置：result 表示返回值，编译器自动对齐到内部绑定名"),
+    ("isinstance(result, int) and result >= 0", "postcondition", "后置：类型 + 范围"),
+    ("0 <= result <= 100", "invariant", "不变量：链式比较一次写完"),
+)
+SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
+    ("text 为 str 类型", "natural_language", "中文类型描述句——评审实测的真实失败形态"),
+    ("成功时返回 int 类型结果", "natural_language", "同上：自然语言，非 ASCII 字符被字符白名单拒绝"),
+    ("result = a + b", "parse_error", "赋值语句不是表达式（判等请写 ==）"),
+    ("r == total", "unknown_name", "total 未绑定；结果变量统一写 result，不要写 r"),
+    ('result.strip() == "abc"', "unsupported_operator", "strip 不在白名单函数内"),
+)
+# 示例所属字段标签（渲染进提示，避免 LLM 把后置示例写进前置）
+_SPEC_EXPR_KIND_FIELD = {
+    "precondition": "preconditions_expr",
+    "postcondition": "postconditions_expr",
+    "invariant": "invariants_expr",
+}
+
+
+def _build_spec_expr_grammar_section() -> str:
+    """渲染 SpecExpr 文法契约段（白名单终结符取自 spec_ir_v2 代码常量）。"""
+    terminals = spec_expr_grammar_terminals()
+    funcs = " | ".join(terminals["calls"])
+    attrs = " | ".join(terminals["attrs"])
+    positives = "\n".join(
+        f"{i}. {clause}    （{_SPEC_EXPR_KIND_FIELD[kind]}：{note}）"
+        for i, (clause, kind, note) in enumerate(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES, 1)
+    )
+    negatives = "\n".join(
+        f"{i}. {clause}    → 拒绝原因：{reason}（{note}）"
+        for i, (clause, reason, note) in enumerate(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES, 1)
+    )
+    return f"""
+【SpecExpr 文法（*_expr 字段的唯一合法形态；与编译器白名单逐字对应）】
+<clause>  ::= <or>
+<or>      ::= <and> ("or" <and>)*
+<and>     ::= <not> ("and" <not>)*
+<not>     ::= "not" <not> | <cmp>
+<cmp>     ::= <arith> (("==" | "!=" | "<" | "<=" | ">" | ">=" | "is" | "is not" | "in" | "not in") <arith>)*
+<arith>   ::= <term> (("+" | "-") <term>)*
+<term>    ::= <unary> (("*" | "/" | "//" | "%") <unary>)*
+<unary>   ::= ("-" | "+") <unary> | <atom>
+<atom>    ::= 数字 | 双引号字符串 | True | False | None
+            | 参数名 | result（仅后置 / 不变量，表示返回值）
+            | <call> | <atom>[<arith>] | <atom>.<attr>
+            | "(" <clause> ("," <clause>)* ")" | "[" <clause> ("," <clause>)* "]"
+<call>    ::= <func> "(" [<clause> ("," <clause>)*] ")"
+<func>    ::= {funcs}
+<attr>    ::= {attrs}
+注：位运算符（& | ^ ~ << >>）编译器虽放行，但布尔语义一律写 and / or / not。
+
+【正例（5 条，逐条都能通过全部校验门，可直接照抄）】
+{positives}
+
+【反例（5 条，逐条都会被整条丢弃；这些只写进 NL 字段，不要放进 *_expr）】
+{negatives}
+
+【输出前自检（逐条核对；任一条不满足，就把该条只写在 NL 字段）】
+① 字符：只含 ASCII 表达式字符——无中文、无单引号（字符串一律双引号）、无冒号
+   （不能用切片 text[0:2]）、无花括号、无 f-string、无 # 号；单条 ≤ 200 字符。
+② 调用：只允许 <func> 白名单内的调用与 <attr> 白名单内的属性；strip()/split()/
+   upper()/open()/eval() 等一律不得出现。
+③ 名字：只用被测函数的真实参数名；后置 / 不变量可另用 result 表示返回值
+   （不要写 r）；未绑定的名字（如 total）一律不得出现。
+④ 形态：每条必须整条能作为 assert 的条件——"result = a + b"（赋值）、
+   "如果 a 为负数"（自然语言）都不行；判等写 ==，判类型写 isinstance(x, int)，
+   判非空写 len(x) > 0 或 x != ""。
+⑤ 每条自检通过才写进 *_expr；拿不准就只写 NL 字段——编译器按条丢弃编不过的
+   子句，不会替你修正，塞进去只会拉低可编译率。
+"""
+
+
+SPEC_EXPR_GRAMMAR_SECTION = _build_spec_expr_grammar_section()
 
 
 def _logic_spec_strict_fallback_enabled() -> bool:
@@ -200,6 +298,9 @@ class PlannerAgent(BaseAgent):
         # 默认关不追加，prompt 零变化（ADR-0003）。
         if spec_ir_dsl_enabled():
             query += SPEC_EXPR_CONTRACT_SECTION
+            # W2/T1（2026-10-11 独立评审 F14）：契约段说"要哪三个字段"，文法段
+            # 说"什么形态才真的能被编译"——补上 BNF + 5 正例 + 5 反例 + 自检。
+            query += SPEC_EXPR_GRAMMAR_SECTION
 
         # 调用 LLM 获取原始响应（内含逻辑分析和测试计划），带文件缓存省 token
         raw = self._call_llm_with_cache(query)

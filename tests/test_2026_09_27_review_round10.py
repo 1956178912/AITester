@@ -167,7 +167,7 @@ class TestExecutorRuntimeTimeoutKeepsPriorOutput:
 
         import unittest.mock as mock
 
-        with mock.patch("subprocess.run", side_effect=fake_run):
+        with mock.patch("src.agents.executor_runtime.run_with_timeout", side_effect=fake_run):
             last_output, last_result = ex._run_pytest_with_retry(["pytest"], {}, "/tmp")
         # 第 1 次有效输出保留 + 第 2 次超时快照追加
         assert "first-fail-output" in last_output
@@ -185,7 +185,7 @@ class TestExecutorRuntimeTimeoutKeepsPriorOutput:
 
         import unittest.mock as mock
 
-        with mock.patch("subprocess.run", side_effect=fake_run):
+        with mock.patch("src.agents.executor_runtime.run_with_timeout", side_effect=fake_run):
             last_output, last_result = ex._run_pytest_with_retry(["pytest"], {}, "/tmp")
         # 单次超时时 last_output 原为空串，结果不变（无 [timeout attempt 1] 前缀污染）
         assert last_output == "only-partial"

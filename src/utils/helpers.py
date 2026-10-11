@@ -333,6 +333,140 @@ def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
     return re.sub(r':\s*("(?:[^"\\]|\\.)*"(?:\s*\*\s*\d+|\s*\+\s*"(?:[^"\\]|\\.)*")+)', _repl, s)
 
 
+def _find_balanced_bracket(text: str, start: int) -> str | None:
+    """括号平衡法提取从 ``start``（应为 ``[``）开始的第一个完整 JSON **数组**。
+
+    与 :func:`_find_balanced_json` 同构，仅括号类型不同（方括号）。
+    字符串字面量内的 ``[`` / ``]`` 不计入深度。
+
+    Args:
+        text: 待搜索文本。
+        start: 起始位置（应为 ``[`` 的下标）。
+
+    Returns:
+        完整的 JSON 数组字符串；未闭合时返回 None。
+    """
+    depth = 0
+    in_string = False
+    escape = False
+
+    if start < 0 or start >= len(text):
+        return None
+
+    i = start
+    while i < len(text):
+        ch = text[i]
+
+        if escape:
+            escape = False
+            i += 1
+            continue
+
+        if ch == "\\":
+            escape = True
+            i += 1
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+            i += 1
+            continue
+
+        if in_string:
+            i += 1
+            continue
+
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+        i += 1
+
+    return None
+
+
+# 匹配最内层无嵌套的 [...] JSON 数组（降级方案用）
+_JSON_ARRAY_LEAF_PATTERN = re.compile(r"\[[^\[\]]*\]")
+
+
+def extract_json_array(text: str) -> list[Any]:
+    """从文本中提取 JSON **数组**（对称于 :func:`extract_json_object`）。
+
+    T2（2026-10-11 独立评审落地）：修复"顶层 JSON 数组永远解析失败"缺陷。
+
+    背景（真实 LLM 调用实测）：``extract_json_object`` 只查找第一个 ``{``，
+    从不接受顶层数组——对合法数组输入 ``'["a","b"]'`` 直接抛
+    ``JSONDecodeError: No JSON found in response``。而以下调用点**以数组为
+    契约**，故从设计上永远不可能生效（静默降级为空结果）：
+
+    - ``debugger.py`` 的 ``_generate_adversarial_intents``（对抗性推理 3.1）
+      提示词要求"请输出 JSON 数组（字符串列表）"；
+    - ``oracle_enhancer.py`` 的 ``enhance``（原子化测试预言）提示词要求
+      "输出 JSON 数组，每项含 {case_name, oracle, ...}"。
+
+    处理流程与对象版逐档对齐：
+    1. 剥离 markdown 代码块标记；
+    2. 找到第一个 ``[``，括号平衡法提取完整数组；
+    3. 失败时对片段做语法级修复再试（尾随逗号等）；
+    4. 仍失败则用正则取最内层无嵌套数组；
+    5. 全部失败抛 ``json.JSONDecodeError``（与对象版同口径，调用方按
+       既有 ``except Exception`` 保守降级路径处理，行为不变）。
+
+    Args:
+        text: 包含 JSON 数组的文本。
+
+    Returns:
+        解析后的列表对象。
+
+    Raises:
+        json.JSONDecodeError: 无法找到有效 JSON 数组时抛出。
+    """
+    if not text:
+        raise json.JSONDecodeError("No JSON array found in response", text or "", 0)
+
+    cleaned = _JSON_FENCE_STRIP_PATTERN.sub("", text)
+    cleaned = _JSON_BACKTICK_STRIP_PATTERN.sub("", cleaned)
+
+    start = cleaned.find("[")
+    if start == -1:
+        raise json.JSONDecodeError("No JSON array found in response", text, 0)
+
+    # 档 1：括号平衡 + 语法级修复
+    json_str = _find_balanced_bracket(cleaned, start)
+    if json_str is not None:
+        _base = json_str.strip()
+        for _cand in (
+            _base,
+            _repair_json_text(_base),
+            _quote_python_expressions(_base),
+            _quote_python_expressions(_repair_json_text(_base)),
+            _repair_json_bounded(_base),
+        ):
+            try:
+                _arr = json.loads(_cand)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(_arr, list):
+                return _arr
+
+    # 档 2：正则取最内层（最后出现）的无嵌套数组
+    last_match: re.Match[str] | None = None
+    for m in _JSON_ARRAY_LEAF_PATTERN.finditer(cleaned):
+        last_match = m
+    if last_match is not None:
+        try:
+            _arr = json.loads(last_match.group())
+            if isinstance(_arr, list):
+                return _arr
+        except json.JSONDecodeError:
+            pass
+
+    raise json.JSONDecodeError("Could not find complete JSON array", text, start)
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
     """
     从文本中提取 JSON 对象。

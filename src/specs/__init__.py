@@ -46,19 +46,25 @@ from src.specs.spec_ir import (
     validate_spec_ir,
 )
 from src.specs.spec_ir_v2 import (
+    clause_reject_reason,
     compile_readiness,
     compile_spec_oracle,
     is_expression_clause,
     spec_expr_coverage,
+    spec_expr_grammar_terminals,
     spec_ir_dsl_enabled,
     spec_provenance,
+    spec_reject_reasons,
 )
 
 __all__ += [
+    "clause_reject_reason",
     "compile_readiness",
     "compile_spec_oracle",
     "is_expression_clause",
     "spec_expr_coverage",
+    "spec_expr_grammar_terminals",
     "spec_ir_dsl_enabled",
     "spec_provenance",
+    "spec_reject_reasons",
 ]

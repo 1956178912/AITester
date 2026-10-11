@@ -1,0 +1,421 @@
+"""W2/T1（2026-10-11 独立评审落地）提示-文法契约 + 拒绝原因归因测试。
+
+背景（CONSOLIDATED_REVIEW_AND_PLAN.md §3.3 / F14，独立评审真实 LLM 调用实测）：
+    独立评审用真实 LLM 调用定位到"逻辑驱动"失效根因——planner 要求 LLM 产出
+    规约时，LLM **系统性输出自然语言**（`preconditions[0] = "text 为 str 类型"`、
+    `postconditions[0] = "成功时返回 int 类型结果"`），而 src/specs/spec_ir_v2.py
+    的白名单编译器只接受形式表达式 → compile_spec_oracle 产出 0 字节、日志记
+    "SpecIR v2 oracle 产物自检失败，保守丢弃"、全量 1,607 行里 spec_compile_rate
+    中位数 0.200 / 47.6% 为 0。
+
+本文件锁定本轮两处修复（纯字符串断言 + 纯函数调用，**零真实 LLM 调用**）：
+    1. planner 规约提示里的 SpecExpr 文法段：BNF / 5 正例 / 5 反例 / 自检指令
+       确实存在（防未来被删），且白名单终结符与编译器真实白名单逐字一致
+       （防提示-文法契约再次漂移）；正例逐条真的可编译、反例逐条真的被拒
+       且拒绝原因分类与提示标注一致；
+    2. spec_ir_v2 的通道级失败归因：clause_reject_reason 与 _clause_is_compilable
+       判定一致（单一事实源）、spec_reject_reasons 聚合计数与通道口径正确、
+       空 / None 保守降级不抛异常、返回值可 JSON 序列化写入结果行。
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+
+from src.agents.planner import (
+    SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES,
+    SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES,
+    SPEC_EXPR_GRAMMAR_SECTION,
+    PlannerAgent,
+)
+from src.specs import compile_readiness
+from src.specs.spec_ir_v2 import (
+    SPEC_REJECT_REASONS,
+    _ALLOWED_ATTRS,
+    _ALLOWED_CALL_NAMES,
+    _clause_is_compilable,
+    _known_names_for_signature,
+    _whitelist_check,
+    clause_reject_reason,
+    is_expression_clause,
+    spec_expr_grammar_terminals,
+    spec_reject_reasons,
+)
+
+# 测试用被测函数签名（绑定上下文 = {r} ∪ 参数名 ∪ 白名单名 ∪ 常量）
+_PARAMS = ["a", "b", "text"]
+
+
+# ─── 1. 提示段内容：BNF + 正反例 + 自检指令 ─────────────────────────────────
+
+
+def test_prompt_section_contains_bnf_and_selfcheck() -> None:
+    """文法段必须含 BNF 产生式与输出前自检指令（防未来被删）。"""
+    section = SPEC_EXPR_GRAMMAR_SECTION
+    assert "::=" in section, "文法段必须给出 BNF 产生式"
+    for nonterminal in (
+        "<clause>",
+        "<or>",
+        "<and>",
+        "<not>",
+        "<cmp>",
+        "<arith>",
+        "<term>",
+        "<unary>",
+        "<atom>",
+        "<call>",
+        "<func>",
+        "<attr>",
+    ):
+        assert nonterminal in section, f"BNF 缺少产生式 {nonterminal}"
+    # 三个 *_expr 字段名与"正例 / 反例 / 自检"三节标题必须点名
+    for marker in ("preconditions_expr", "postconditions_expr", "invariants_expr", "正例", "反例", "输出前自检"):
+        assert marker in section, f"文法段缺少 {marker}"
+
+
+def test_prompt_section_renders_every_example() -> None:
+    """5 正例 / 5 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
+    section = SPEC_EXPR_GRAMMAR_SECTION
+    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 5, "提示契约要求 5 个正例"
+    assert len(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES) == 5, "提示契约要求 5 个反例"
+    for clause, _kind, _note in SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES:
+        assert clause in section, f"正例未渲染进提示：{clause}"
+    for clause, reason, _note in SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES:
+        assert clause in section, f"反例未渲染进提示：{clause}"
+        assert f"拒绝原因：{reason}" in section, f"反例未标注拒绝原因 {reason}：{clause}"
+
+
+def test_prompt_section_names_operators_truthfully() -> None:
+    """提示必须点名真实算子集：比较 / 布尔 / 链式比较 / result 语义 / 位运算告诫。"""
+    section = SPEC_EXPR_GRAMMAR_SECTION
+    for op in ("==", "!=", "<=", ">=", "and", "or", "not", "is not", "not in"):
+        assert op in section, f"文法段缺少算子 {op}"
+    # 真实失败形态（中文 NL 描述句）必须作为反例出现在提示里
+    assert "text 为 str 类型" in section
+    assert "成功时返回 int 类型结果" in section
+    # 单引号 / 切片 / 花括号 / f-string 等字符白名单边界必须写明（实测被拒）
+    assert "单引号" in section
+    assert "切片" in section
+    assert "位运算符" in section
+    # 白名单外的常见误用要作为反例点名
+    assert "strip" in section
+    assert "total" in section
+
+
+def test_bnf_claimed_operators_are_really_accepted() -> None:
+    """BNF 里列出的算子 / atom 形态必须真的可编译（防提示承诺编译器不认的算子）。"""
+    forms = (
+        # <cmp>：比较 / 同一性 / 成员 / 链式比较
+        "a == b",
+        "a != b",
+        "a < b",
+        "a <= b",
+        "a > b",
+        "a >= b",
+        "a is None",
+        "a is not None",
+        "a in [1, 2]",
+        "a not in [1, 2]",
+        "0 <= a < 10",
+        # <or> / <and> / <not>
+        "a > 0 and b > 0",
+        "a == 0 or b == 0",
+        "not a",
+        # <arith> / <term> / <unary>
+        "a + b == 0",
+        "a - b == 0",
+        "a * b == 0",
+        "a / b == 1",
+        "a // b == 0",
+        "a % b == 0",
+        "a**2 == 4",
+        "-a < 0",
+        # <atom>：下标 / 白名单属性 / 元组 / 列表字面量 / 白名单调用
+        "a[0] == 1",
+        "a.value == 1",
+        "a.real > 0",
+        "a.imag == 0",
+        "(a, b) == (1, 2)",
+        "a in [1, 2, 3]",
+        "len(text) > 0",
+        "abs(a) >= 0",
+        "isinstance(a, int)",
+        "0.5 < a",
+        'text != ""',
+    )
+    known = _known_names_for_signature(_PARAMS)
+    for form in forms:
+        assert _clause_is_compilable(form, "postcondition", known), f"BNF 声称支持但编译器拒绝：{form}"
+        assert clause_reject_reason(form, "postcondition", _PARAMS) is None, f"BNF 声称支持但被归因拒绝：{form}"
+
+
+# ─── 2. 提示白名单 == 编译器真实白名单（防漂移）─────────────────────────────
+
+
+def test_prompt_grammar_terminals_match_compiler_whitelist() -> None:
+    """BNF 里的 <func> / <attr> 必须与 spec_ir_v2 的真实白名单逐字一致。
+
+    这是 F14 根因（提示-文法契约断裂）的永久回归防线：白名单由
+    spec_expr_grammar_terminals() 从代码常量渲染，下一轮扩文法时提示自动跟随。
+    """
+    terminals = spec_expr_grammar_terminals()
+    assert terminals["calls"] == sorted(_ALLOWED_CALL_NAMES)
+    assert terminals["attrs"] == sorted(_ALLOWED_ATTRS)
+    assert terminals["calls"] == [
+        "abs",
+        "all",
+        "any",
+        "float",
+        "int",
+        "isinstance",
+        "len",
+        "max",
+        "min",
+        "round",
+        "sorted",
+        "str",
+    ]
+    assert terminals["attrs"] == ["imag", "real", "value"]
+    for name in terminals["calls"]:
+        assert name in SPEC_EXPR_GRAMMAR_SECTION, f"提示未列出白名单函数 {name}"
+    for attr in terminals["attrs"]:
+        assert attr in SPEC_EXPR_GRAMMAR_SECTION, f"提示未列出白名单属性 {attr}"
+    # S6b 实测补入的真实算子（提示必须包含，否则类型判定子句被系统性丢弃）
+    assert "isinstance" in SPEC_EXPR_GRAMMAR_SECTION
+
+
+# ─── 3. 提示正例：逐条真的可编译 ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(("clause", "kind", "_note"), SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES)
+def test_prompt_positive_examples_are_compilable(clause: str, kind: str, _note: str) -> None:
+    """提示里的每条正例都必须过形态门 + 白名单门 + 标识符门（契约不可自相矛盾）。"""
+    assert is_expression_clause(clause), f"正例不是表达式形态：{clause}"
+    assert _whitelist_check(clause) == [], f"正例有白名单违例：{clause}"
+    assert _clause_is_compilable(clause, kind, _known_names_for_signature(_PARAMS)), f"正例不可编译：{clause}"
+    assert clause_reject_reason(clause, kind, _PARAMS) is None, f"正例被归因为拒绝：{clause}"
+
+
+# ─── 4. 提示反例：逐条真的被拒，且原因分类与标注一致 ────────────────────────
+
+
+@pytest.mark.parametrize(("clause", "reason", "_note"), SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES)
+def test_prompt_negative_examples_rejected_with_labeled_reason(clause: str, reason: str, _note: str) -> None:
+    """提示里的每条反例都必须真的被拒，且提示标注的原因分类 == 代码真实归因。"""
+    assert not _clause_is_compilable(clause, "postcondition", _known_names_for_signature(_PARAMS))
+    assert clause_reject_reason(clause, "postcondition", _PARAMS) == reason
+    assert reason in SPEC_REJECT_REASONS
+
+
+def test_real_nl_failure_form_classified_natural_language() -> None:
+    """F14 实测真实失败形态：中文自然语言规约 → 归因 natural_language。
+
+    这是"47.6% 为 0 里有多少是 NL 形态"这一问题的判定内核：planner 产出的
+    NL 子句必须能被标记为 NL 形态，而不是被笼统记为"不可编译"。
+    """
+    nl_clauses = ("text 为 str 类型", "成功时返回 int 类型结果")
+    for clause in nl_clauses:
+        assert is_expression_clause(clause) is False
+        assert _clause_is_compilable(clause, "precondition", _known_names_for_signature(_PARAMS)) is False
+        assert clause_reject_reason(clause, "precondition", _PARAMS) == "natural_language"
+    # 混合规约（NL 通道回退口径）：两条 NL 子句全部归因 NL
+    spec = {"preconditions": ["text 为 str 类型"], "postconditions": ["成功时返回 int 类型结果"]}
+    assert spec_reject_reasons(spec) == {"natural_language": 2}
+    assert compile_readiness(spec) == 0.0
+    # 长中文句同样归 NL（内容信号优先于长度门，避免根因被 too_long 掩盖）
+    long_nl = "该函数的输入参数必须满足以下全部条件" * 12
+    assert len(long_nl) > 200
+    assert clause_reject_reason(long_nl) == "natural_language"
+    # 无空格中文短句恰好是合法 Python 标识符（能 parse）——仍必须归 NL，
+    # 否则"能 parse ⇒ 形式子句"的判据会把最常见的 NL 形态误记为语法问题
+    assert clause_reject_reason("文本必须为非空字符串") == "natural_language"
+    # 反向边界：中文只出现在字符串字面量内时是**形式子句**被字符白名单拦下
+    assert clause_reject_reason('text != "你好"') == "unsupported_syntax"
+
+
+def test_reject_reason_taxonomy_is_closed() -> None:
+    """归因返回值必须落在闭合集合内（下游 schema 可据此校验）。"""
+    expected = {
+        "natural_language",
+        "unsupported_syntax",
+        "unsupported_operator",
+        "unknown_name",
+        "parse_error",
+        "too_long",
+        "empty",
+        "not_a_string",
+    }
+    assert set(SPEC_REJECT_REASONS) == expected
+    observed = {clause_reject_reason(c, "postcondition", _PARAMS) for c in _CONSISTENCY_CORPUS}
+    observed.discard(None)
+    assert {
+        "natural_language",
+        "unsupported_syntax",
+        "unsupported_operator",
+        "unknown_name",
+        "parse_error",
+        "too_long",
+        "empty",
+    } <= observed
+    assert observed <= SPEC_REJECT_REASONS
+
+
+# ─── 5. 归因与判定一致（单一事实源）+ 聚合计数 ──────────────────────────────
+
+# 覆盖全部分类的语料（含实测真实失败形态、字符白名单边界、白名单外算子、未绑定名）
+_CONSISTENCY_CORPUS = (
+    "b != 0",  # 可编译
+    "len(text) > 0",  # 可编译
+    "result == a + b",  # 可编译（后置/不变量）
+    "0 <= a < 10",  # 可编译（链式比较）
+    "text 为 str 类型",  # natural_language（真实失败形态）
+    "文本必须为非空字符串",  # natural_language（无空格中文句：恰好是合法标识符，能 parse）
+    "text is str type",  # natural_language（ASCII 散文，英文 NL 兜底）
+    "a && b",  # parse_error（语法错）
+    "result = a + b",  # parse_error（赋值不是表达式）
+    "r == total",  # unknown_name
+    'result.strip() == "abc"',  # unsupported_operator
+    'open("x")',  # unsupported_operator
+    "a == 'x'",  # unsupported_syntax（单引号字符串）
+    'text[0:2] == "ab"',  # unsupported_syntax（冒号切片）
+    'text != "你好"',  # unsupported_syntax（形式子句被字符白名单拦下，非 NL）
+    "x" * 201,  # too_long
+    "",  # empty
+)
+
+
+def test_reject_reason_none_iff_compilable() -> None:
+    """clause_reject_reason 与 _clause_is_compilable 必须同判（重构后单一事实源）。"""
+    known = _known_names_for_signature(_PARAMS)
+    for kind in ("precondition", "postcondition", "invariant"):
+        for clause in _CONSISTENCY_CORPUS:
+            reason = clause_reject_reason(clause, kind, _PARAMS)
+            assert (reason is None) is _clause_is_compilable(clause, kind, known), f"判定/归因不一致：{clause!r}"
+            if reason is not None:
+                assert reason in SPEC_REJECT_REASONS
+
+
+def test_result_alias_scope_matches_prompt_claim() -> None:
+    """提示声称 result 只用于后置 / 不变量：前置条件里出现 result 必须被拒。"""
+    assert clause_reject_reason("result == a + b", "precondition", ["a", "b"]) == "unknown_name"
+    assert clause_reject_reason("result == a + b", "postcondition", ["a", "b"]) is None
+    assert clause_reject_reason("result == a + b", "invariant", ["a", "b"]) is None
+
+
+def test_spec_reject_reasons_aggregates_mixed_spec() -> None:
+    """混合规约的聚合计数正确，且与 compile_readiness 对账。"""
+    spec: dict[str, Any] = {
+        # 前置：1 条可编译 + 1 条 NL + 1 条 result 越界（前置无结果变量）
+        "preconditions_expr": ["b != 0", "text 为 str 类型", "result == a + b"],
+        # 后置：1 条可编译 + 1 条未绑定名 + 1 条空白（不进分母）
+        "postconditions_expr": ["result == a + b", "r == total", "   "],
+    }
+    # 5 条非空子句，2 条可编译 → 3 条被拒，其中 1 条 NL、2 条未绑定标识符
+    assert spec_reject_reasons(spec, _PARAMS) == {"natural_language": 1, "unknown_name": 2}
+    assert compile_readiness(spec, _PARAMS) == pytest.approx(2 / 5)
+    # 对账：非空子句数 - 被拒数 == 可编译数
+    nonblank = 5
+    compiled = nonblank - sum(spec_reject_reasons(spec, _PARAMS).values())
+    assert compile_readiness(spec, _PARAMS) == pytest.approx(compiled / nonblank)
+
+
+def test_reject_reasons_follow_consumed_channel() -> None:
+    """归因与 compile_readiness 同通道口径：*_expr 存在时不看 NL 通道，反之回退。"""
+    spec = {"preconditions": ["text 为 str 类型"], "preconditions_expr": ["b != 0"]}
+    assert spec_reject_reasons(spec, ["b"]) == {}
+    assert compile_readiness(spec, ["b"]) == 1.0
+    # 表达式通道为空（[]）→ 回退 NL 通道 → NL 子句被归因（历史口径）
+    fallback = {"preconditions": ["text 为 str 类型"], "preconditions_expr": []}
+    assert spec_reject_reasons(fallback) == {"natural_language": 1}
+    assert compile_readiness(fallback) == 0.0
+
+
+def test_reject_reasons_respect_signature_binding() -> None:
+    """签名三态口径与 compile_readiness 一致（0 参函数里参数名不可绑定）。"""
+    spec = {"preconditions_expr": ["b != 0"]}
+    assert spec_reject_reasons(spec, ["b"]) == {}
+    assert spec_reject_reasons(spec, []) == {"unknown_name": 1}
+    assert spec_reject_reasons(spec, None) == {}  # None = 历史默认集合含 b
+    assert compile_readiness(spec, []) == 0.0
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        None,
+        {},
+        {"preconditions_expr": []},
+        {"preconditions": ["", "   "]},
+        {"postconditions_expr": ["", None]},
+        {"preconditions_expr": [None, 123]},
+    ],
+)
+def test_reject_reasons_conservative_on_empty_or_polluted_spec(spec: Any) -> None:
+    """空规约 / None / 空白 / 类型污染 → 保守降级，不抛异常、不进计数。"""
+    assert spec_reject_reasons(spec) == {}
+    assert compile_readiness(spec) == 0.0
+
+
+def test_clause_reject_reason_handles_non_string_and_blank() -> None:
+    """非 str / 空白子句的归因不抛异常（上游类型污染的兜底观测）。"""
+    assert clause_reject_reason(None) == "not_a_string"
+    assert clause_reject_reason(123) == "not_a_string"
+    assert clause_reject_reason(["b != 0"]) == "not_a_string"
+    assert clause_reject_reason("") == "empty"
+    assert clause_reject_reason("   ") == "empty"
+
+
+def test_reject_reasons_json_serializable_for_result_rows() -> None:
+    """聚合结果必须可直接写入实验结果行（JSON 可序列化）。"""
+    spec = {"preconditions_expr": ["b != 0", "text 为 str 类型"], "postconditions_expr": ["r == total"]}
+    payload = json.dumps({"spec_reject_reasons": spec_reject_reasons(spec, _PARAMS)}, ensure_ascii=False)
+    assert json.loads(payload)["spec_reject_reasons"] == {"natural_language": 1, "unknown_name": 1}
+    assert all(isinstance(k, str) and isinstance(v, int) for k, v in spec_reject_reasons(spec, _PARAMS).items())
+
+
+# ─── 6. 提示注入门控（DSL 开关关 → prompt 零变化）──────────────────────────
+
+
+def test_grammar_section_injected_iff_dsl_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SPEC_IR_DSL_ENABLE=true 时文法段进查询；默认关时 prompt 零变化（ADR-0003）。"""
+    raw_response = json.dumps(
+        {
+            "function_name": "divide",
+            "description": "除法",
+            "logic_analysis": {
+                "input_domain": "数对",
+                "output_domain": "商",
+                "preconditions": ["b 不为零"],
+                "preconditions_expr": ["b != 0"],
+                "postconditions": [],
+                "edge_cases": [],
+            },
+            "test_cases": [],
+        },
+        ensure_ascii=False,
+    )
+    captured: list[str] = []
+
+    def fake_call(query: str, **_: Any) -> str:
+        captured.append(query)
+        return raw_response
+
+    agent = PlannerAgent()
+    monkeypatch.setattr(agent, "_call_llm_with_cache", fake_call)
+
+    monkeypatch.setenv("SPEC_IR_DSL_ENABLE", "true")
+    agent.plan("def divide(a, b):\n    return a / b\n", "divide")
+    assert captured, "planner 未调用 LLM 桩"
+    assert "::=" in captured[-1], "DSL 开启时文法段必须注入查询"
+    assert "<clause>" in captured[-1]
+    assert SPEC_EXPR_GRAMMAR_SECTION in captured[-1]
+
+    captured.clear()
+    monkeypatch.delenv("SPEC_IR_DSL_ENABLE", raising=False)
+    agent.plan("def divide(a, b):\n    return a / b\n", "divide")
+    assert captured, "planner 未调用 LLM 桩"
+    assert "::=" not in captured[-1], "默认关时 prompt 必须零变化"
+    assert SPEC_EXPR_GRAMMAR_SECTION not in captured[-1]

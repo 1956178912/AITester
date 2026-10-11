@@ -103,6 +103,13 @@ def test_ac1_contract_roundtrip_compile_rate_positive() -> None:
     spec = parse_logic_analysis(logic_analysis)
     assert spec is not None
     assert spec.get("preconditions_expr") == ["b != 0"]
+    # P0-3（2026-10-10）注释：本断言曾是"上界口径"的编码——注入通道
+    # （spec_ir_v2._compile_single_clause）做标识符绑定检查而 compile_readiness
+    # 的 expr 通道不做，故修复前"此处 1.0"与"注入侧丢弃该子句"并存。P0-3 起
+    # 两通道共用同一判据（spec_ir_v2._clause_is_compilable），且 prompt 契约
+    # （SPEC_EXPR_CONTRACT_SECTION，templates.py:48/50）**文档化**的结果变量名
+    # result 由注入通道精准归一为绑定名 r（同义替换，未放宽未知标识符门）
+    # → 1.0 即真实接受率（精确别名与上界回归见 tests/test_spec_oracle_metrics.py）。
     assert compile_readiness(spec) == 1.0
     assert spec_expr_coverage(spec) == pytest.approx(2 / 3)
 

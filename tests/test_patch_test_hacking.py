@@ -16,7 +16,7 @@ from src.tools.patch_test_hacking import (
     _is_swallow_body,
     _node_signatures,
     detect_test_hacking,
-    test_hacking_signal_names,
+    hacking_signal_names,
 )
 
 # ═══ 1. _is_const_node ════════════════════════════════════════════════════════
@@ -166,8 +166,8 @@ class TestDetectTestHacking:
         result = detect_test_hacking(original, patched)
         assert "exception_swallow_added" in result["signals"]
 
-    def test_signal_names(self):
-        assert test_hacking_signal_names() == (
+    def test_signal_names(self) -> None:
+        assert hacking_signal_names() == (
             "hardcoded_input_branch",
             "assert_weakened",
             "exception_swallow_added",

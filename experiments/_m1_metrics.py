@@ -30,7 +30,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 from typing import Any
@@ -97,16 +96,22 @@ def _python_interpreter() -> str:
     """
     override = os.getenv("AITESTER_M1_PYTHON", "").strip()
     interpreter = override or sys.executable
-    # 前置断言：解释器必须能 import pytest，否则 M1 指标会整体失效
-    probe = subprocess.run(
+    # 前置断言：解释器必须能 import pytest，否则 M1 指标会整体失效。
+    # P0-4（2026-10-11 外部评审 §10）：探测同样走 run_with_timeout，避免
+    # 解释器挂死时遗留孤儿进程（与判分路径同一修法）。
+    from src.utils.process_utils import run_with_timeout
+
+    probe = run_with_timeout(
         [interpreter, "-c", "import pytest"],
-        capture_output=True,
-        text=True,
         timeout=30,
+        text=True,
+        logger_name="m1_interpreter_probe",
     )
+    if getattr(probe, "timed_out", False):
+        raise RuntimeError(f"M1 指标解释器 {interpreter} 探测超时（30s），拒绝产出无效指标（超时非'无 pytest'）")
     if probe.returncode != 0:
         raise RuntimeError(
-            f"M1 指标解释器 {interpreter} 无法 import pytest，拒绝产出无效指标：{probe.stderr.strip()[:200]}"
+            f"M1 指标解释器 {interpreter} 无法 import pytest，拒绝产出无效指标：{(probe.stderr or '').strip()[:200]}"
         )
     return interpreter
 
@@ -354,8 +359,15 @@ def _run_pytest_in_tmp(
             with open(test_path, "w", encoding="utf-8") as f:
                 f.write(test_code)
             pythonpath = tmpdir
+        # P0-4（2026-10-11 外部评审 §10）：改用 run_with_timeout。
+        # 此前用裸 subprocess.run(timeout=)：超时只杀**直接子进程**，pytest
+        # 派生的子进程成为孤儿（实测遗留 3 个进程运行 16.5 小时、100% CPU）。
+        # run_with_timeout 以 start_new_session 建新进程组 + killpg 整树终止，
+        # 且以临时文件（非管道）承接输出，结构上不会因孙进程持管道写端而阻塞。
         try:
-            res = subprocess.run(
+            from src.utils.process_utils import run_with_timeout
+
+            res = run_with_timeout(
                 [
                     _python_interpreter(),
                     "-m",
@@ -366,18 +378,21 @@ def _run_pytest_in_tmp(
                     "no:cacheprovider",
                     test_path,
                 ],
-                cwd=tmpdir,
-                capture_output=True,
-                text=True,
                 timeout=timeout,
+                cwd=tmpdir,
+                text=True,
+                logger_name="m1_metrics",
                 env={
                     **os.environ,
                     "PYTHONDONTWRITEBYTECODE": "1",
                     "PYTHONPATH": pythonpath,
                 },
             )
+            if getattr(res, "timed_out", False):
+                # 超时 = 不可测（与历史口径一致：返回 None 不计为 0，不误报）
+                return None
             return res.returncode, res.stdout or "", res.stderr or ""
-        except subprocess.TimeoutExpired:
+        except Exception:
             return None
     except Exception:
         return None
@@ -607,6 +622,25 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
     patch = final_state.get("patch") or ""
     if not patch.strip():
         return 0.0  # 无修复动作（iterations=0）——早退，不假设修复发生（R28）
+    # P0-2b（2026-10-11，真实批次实测发现）：**补丁未写盘 ≠ 修复发生**。
+    # R28 只堵住了"空补丁"这一条路径；非空补丁**全部被证据门拒绝**
+    # （repair_history 全为 patch_applied=False）时，`_target_code_after_patch`
+    # 返回的仍是**原始缺陷代码**，gold 测试在它上面通过 → 误判 repair=1.0。
+    #
+    # 实测证据（2026-10-11 真实 LLM 批次，QuixBugs n=50，缓存关闭）：
+    # **8/50 行**（16%）出现 `patch_applied 全 False` + `repair_rate=1.0`
+    # + `source_patched_unverified=True` + `stop_reason=skip_debugger_repair_invalid`
+    # （get_factors / kheapsort / knapsack / rpn_eval / shunting_yard /
+    #   bitcount / find_first_in_sorted / sqrt）。这些行**根本没有补丁落地**，
+    # 其 1.0 完全来自"缺陷原码恰好过 gold 测试"——是该基准的已知属性
+    # （历史 FIXED harness 批同现象：24/50 提前终止、其中 13 行仍判正确）。
+    #
+    # 口径：修复率评估的对象是**补丁**。若没有任何一轮补丁成功写盘，
+    # 则"应用补丁后的代码"在语义上不存在 → 记 0.0（未修复），而非 1.0。
+    # 该口径使 `correct ⊆ plausible` 不变量在结构上成立。
+    history = final_state.get("repair_history") or []
+    if history and not any(bool(h.get("patch_applied")) for h in history if isinstance(h, dict)):
+        return 0.0  # 无任何一轮写盘成功 → 无补丁可评估
     new_code = _target_code_after_patch(original_code, patch)
     # R27：透传任务上下文（跨文件物化信号）供显式分派
     task_md = getattr(task, "metadata", None) or {}

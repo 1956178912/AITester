@@ -9,7 +9,7 @@ ExecutorAgent 沙箱执行路径单元测试（P1：依赖隔离）。
 - use_venv=False 时保持原本地执行路径（不创建沙箱）
 
 注：子进程执行逻辑拆分至 src.agents.executor_runtime 后，
-mock 子进程的 patch 目标同步改为 src.agents.executor_runtime.subprocess.run。
+mock 子进程的 patch 目标同步改为 src.agents.executor_runtime.run_with_timeout（2026-10-10：执行器改建在 run_with_timeout 之上，后者用临时文件承接输出，根除管道死锁）。
 """
 
 import os
@@ -30,7 +30,7 @@ def _make_target_file(tmp_path, source="def add(a, b):\n    return a + b\n"):
 class TestSandboxRouting:
     """use_venv 开关的路由行为。"""
 
-    @patch("src.agents.executor_runtime.subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_use_venv_routes_to_sandbox(self, mock_run, tmp_path):
         target = _make_target_file(tmp_path)
         mock_run.return_value = type("P", (), {"returncode": 0, "stdout": "2 passed\nTOTAL 100%", "stderr": ""})
@@ -42,7 +42,7 @@ class TestSandboxRouting:
         cwd = kwargs.get("cwd")
         assert cwd is not None and "aitester_sandbox_" in cwd
 
-    @patch("src.agents.executor_runtime.subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_default_mode_routes_to_sandbox(self, mock_run, tmp_path, monkeypatch):
         """R10（2026-09-30 独立审查 N8）：默认构造回落 config，
         EXECUTOR_USE_VENV 默认 true → 缺省 ExecutorAgent() 走 venv 沙箱
@@ -55,7 +55,7 @@ class TestSandboxRouting:
         kwargs = mock_run.call_args.kwargs
         assert "aitester_sandbox_" in str(kwargs.get("cwd", ""))
 
-    @patch("src.agents.executor_runtime.subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_explicit_optout_keeps_local_path(self, mock_run, tmp_path, monkeypatch):
         """显式 use_venv=False 可退回本地执行（调试 / 无 venv 权限环境）。"""
         monkeypatch.delenv("EXECUTOR_USE_VENV", raising=False)
@@ -71,7 +71,7 @@ class TestSandboxRouting:
 class TestSandboxDependencyDetection:
     """沙箱内的依赖检测与安装。"""
 
-    @patch("src.agents.executor_runtime.subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_missing_dependency_recorded(self, mock_run, tmp_path):
         """缺失第三方依赖写入 error_info.missing_dependencies。"""
         target = _make_target_file(tmp_path, source="import definitely_not_real_zzz\n\ndef f():\n    return 1\n")

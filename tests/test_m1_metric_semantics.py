@@ -215,7 +215,9 @@ class TestM1InterpreterPolicy:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="No module named pytest")
 
         monkeypatch.setenv("AITESTER_M1_PYTHON", sys.executable)
-        with mock.patch("experiments._m1_metrics.subprocess.run", side_effect=_fake_run):
+        # P0-4（2026-10-11 外部评审 §10）：探测改走 run_with_timeout（整树终止，
+        # 防解释器挂死遗留孤儿），因此 patch 点从 subprocess.run 改为该函数。
+        with mock.patch("src.utils.process_utils.run_with_timeout", side_effect=_fake_run):
             from experiments import _m1_metrics
 
             try:
@@ -224,6 +226,27 @@ class TestM1InterpreterPolicy:
             except RuntimeError:
                 raised = True
         assert raised, "无 pytest 的解释器必须 raise RuntimeError"
+
+    def test_interpreter_probe_timeout_raises(self, monkeypatch):
+        """探测超时 → RuntimeError（超时不得被误当作'无 pytest'静默降级）。"""
+        import sys
+        from unittest import mock
+
+        from src.utils.process_utils import CompletedProcess
+
+        def _fake_timeout(cmd, **_kwargs):
+            return CompletedProcess(cmd, -9, stdout="", stderr="", timed_out=True)
+
+        monkeypatch.setenv("AITESTER_M1_PYTHON", sys.executable)
+        with mock.patch("src.utils.process_utils.run_with_timeout", side_effect=_fake_timeout):
+            from experiments import _m1_metrics
+
+            try:
+                _m1_metrics._python_interpreter()
+                raised = False
+            except RuntimeError as exc:
+                raised = "超时" in str(exc)
+        assert raised, "探测超时必须 raise RuntimeError 且指明超时"
 
 
 class TestRegressionRate:

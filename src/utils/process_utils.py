@@ -32,8 +32,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shutil
 import signal
 import subprocess
+import tempfile
 from collections.abc import Sequence
 from typing import Any
 
@@ -62,50 +64,109 @@ def run_with_timeout(
     env: dict[str, str] | None = None,
     text: bool = True,
     logger_name: str = "",
+    preexec_fn: Any = None,
+    raise_on_timeout: bool = False,
+    check: bool = False,
 ) -> CompletedProcess:
-    """执行子进程并在超时后**可靠**返回（kill 整个进程组 + 有界收口）。
+    """执行子进程并在超时后**可靠**返回（整树终止 + **文件后端**收口）。
+
+    2026-10-10 第二次加固（实跑复现后的根因修复）
+    -------------------------------------------------
+    首版仍用 `stdout=PIPE` + `communicate()`：即使 killpg 杀掉整个进程组，
+    只要**任一孙进程在 killpg 之前已 fork 且未被同一进程组覆盖**（或
+    killpg 与 fork 竞态），管道写端仍可能存活，`communicate()` 等 EOF
+    **依然可能永久阻塞**——实测在 `to_base` 任务上再次挂死（外层 30s
+    超时已过、子进程 88% CPU 空转、主进程 0% CPU 持有 3 个 PIPE）。
+
+    **根因级修法：改用临时文件承接 stdout/stderr，彻底不用管道。**
+    子进程写的是**普通文件**，父进程读取不依赖 EOF，因此"孙进程持有写端"
+    这一阻塞条件在结构上不再存在——无论孙进程是否存活，本函数都必然返回。
+    进程组终止（killpg）仍保留，用于回收资源。
 
     Args:
         cmd: 命令行参数序列（不经 shell）。
         timeout: 超时秒数；None 表示不设超时（仍走进程组语义）。
         cwd: 工作目录。
         env: 环境变量字典。
-        text: 是否以文本模式捕获输出（默认 True）。
-        logger_name: 日志中标识调用方的标签（便于定位是哪个测量层超时）。
+        text: 是否以文本模式返回输出（默认 True）。
+        logger_name: 日志中标识调用方的标签。
+        preexec_fn: 可选，子进程 exec 前钩子（执行器链路用于设 rlimit）。
+        raise_on_timeout: 超时时是否抛 `subprocess.TimeoutExpired`（附
+            `.stdout`/`.stderr` 部分输出），以兼容原有
+            `except subprocess.TimeoutExpired` 分支。默认 False = 返回
+            `CompletedProcess(timed_out=True)`（历史口径，现有调用方不变）。
+        check: 为 True 且进程以非零码退出时抛 `CalledProcessError`
+            （与 `subprocess.run(check=True)` 同语义）。
 
     Returns:
-        `CompletedProcess`：`returncode` 为 `-9`（被 SIGKILL）时表示超时终止；
-        `timed_out=True` 明确标记超时。**本函数保证返回**（不会因孙进程持有
-        管道而永久阻塞）。
+        `CompletedProcess`（附加 `timed_out` 标记）。**本函数保证返回**。
     """
     label = logger_name or (os.path.basename(cmd[0]) if cmd else "subprocess")
-    proc = subprocess.Popen(
-        list(cmd),
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=text,
-        start_new_session=True,  # 关键：新进程组，便于整树终止
-    )
+    popen_kwargs: dict[str, Any] = {}
+    if preexec_fn is not None:
+        # 执行器链路既需要 rlimit（S5 防 fork 炸弹/内存/fd 打满宿主），又需要
+        # 本函数的整树终止（防"超时后孙进程持管道写端 → 永久阻塞"）。
+        # 早期二者只能择一（裸 subprocess.run 支持 preexec_fn 但会挂死；
+        # 本函数不挂死但不支持 preexec_fn），现同时提供——POSIX 上
+        # start_new_session 与 preexec_fn 均为 fork 后 exec 前的钩子，可共存。
+        popen_kwargs["preexec_fn"] = preexec_fn
+
+    tmpdir = tempfile.mkdtemp(prefix="aitester_proc_")
+    out_path = os.path.join(tmpdir, "stdout")
+    err_path = os.path.join(tmpdir, "stderr")
+    timed_out = False
     try:
-        out, err = proc.communicate(timeout=timeout)
-        return CompletedProcess(proc.args, proc.returncode, out, err, timed_out=False)
-    except subprocess.TimeoutExpired:
-        _terminate_process_group(proc, label=label)
-        # 有界收口：killpg 后进程树通常立即消亡，EOF 随之到达；
-        # 仍收不回则放弃（不阻塞），返回空输出 + timed_out 标记。
-        try:
-            out, err = proc.communicate(timeout=_DRAIN_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            logger.warning(
-                "%s：超时后进程组仍持有管道（%.0fs 宽限内未收口），放弃读取并返回（避免批次挂死）",
-                label,
-                _DRAIN_GRACE_SECONDS,
+        # 文件后端：不建管道 → 不存在"等 EOF"阻塞（见 docstring 根因说明）
+        with open(out_path, "wb") as out_f, open(err_path, "wb") as err_f:
+            proc = subprocess.Popen(
+                list(cmd),
+                cwd=cwd,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=out_f,
+                stderr=err_f,
+                start_new_session=True,  # 关键：新进程组，便于整树终止
+                **popen_kwargs,
             )
-            out, err = "", ""
-            _close_quietly(proc)
-        return CompletedProcess(proc.args, proc.returncode, out, err, timed_out=True)
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _terminate_process_group(proc, label=label)
+                # killpg 后主进程应立即消亡；给一个很短的等待，拿不到就继续
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    proc.wait(timeout=_DRAIN_GRACE_SECONDS)
+        out = _read_output(out_path, text=text)
+        err = _read_output(err_path, text=text)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    if timed_out:
+        logger.warning(
+            "%s：执行超时（>%ss），已终止整个进程组并返回（文件后端，不会挂死）",
+            label,
+            timeout,
+        )
+        if raise_on_timeout:
+            raise subprocess.TimeoutExpired(list(cmd), timeout or 0, output=out, stderr=err)
+        return CompletedProcess(proc.args, -9, out, err, timed_out=True)
+
+    result = CompletedProcess(proc.args, proc.returncode, out, err, timed_out=False)
+    if check and proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=out, stderr=err)
+    return result
+
+
+def _read_output(path: str, *, text: bool) -> Any:
+    """读取临时文件输出（文件不存在/读取失败时保守返回空串，不抛异常）。"""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError:  # pragma: no cover - 极端 IO 异常
+        raw = b""
+    if text:
+        return raw.decode("utf-8", errors="replace")
+    return raw
 
 
 def _terminate_process_group(proc: subprocess.Popen[str], *, label: str) -> None:

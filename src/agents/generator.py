@@ -217,6 +217,18 @@ class GeneratorAgent(BaseAgent):
         # 强化段落（OVER_RED_SECTION_ENABLE=true 且本轮由 over_red 路由进入时由
         # _generator_node 构建；None 时不注入，默认关 = 历史口径零变化）。
         over_red_section: str | None = None,
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：独立执行
+        # 路径枚举段落（PATH_ENUM_INJECT_ENABLE=true 时由 _generator_node 经
+        # control_flow.enumerate_paths + build_paths_prompt_section 构建；None 时
+        # 不注入，默认关 = 历史口径零变化）。与 CFG 摘要（Planner 侧）形成递进：
+        # 路径枚举给"每条路径需满足的条件组合"的细粒度提示。
+        paths_section: str | None = None,
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：已验证 utility
+        # helper 清单段落（OPERATION_MAP_INJECT_ENABLE=true 时由 _generator_node 经
+        # operation_map.build_operation_map + build_operation_map_section 构建；None
+        # 时不注入，默认关 = 历史口径零变化）。告诉 LLM"能调用哪些符号"，避免
+        # leap-to-code（编造不存在的 API / 错写参数签名）。
+        operation_map_section: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -283,6 +295,14 @@ class GeneratorAgent(BaseAgent):
         # 2026-10-10（结果二十四）：过红再生成强化段落（None 不注入）
         if over_red_section:
             query += "\n\n" + over_red_section
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：独立执行
+        # 路径枚举段落（PATH_ENUM_INJECT_ENABLE=true 时非空；None/空串时不注入）
+        if paths_section:
+            query += "\n\n" + paths_section
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：已验证符号清单
+        # 段落（OPERATION_MAP_INJECT_ENABLE=true 时非空；None/空串时不注入）
+        if operation_map_section:
+            query += "\n\n" + operation_map_section
         # P2（2026-10 批次·续二）：注入扫描系统侧警示追加到 query 尾部
         # （命中注入特征时非空；None/空串时不注入，历史口径零变化）
         if injection_warning:

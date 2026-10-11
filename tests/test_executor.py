@@ -366,7 +366,7 @@ class TestResolveModulePaths:
 class TestRunPytestWithRetry:
     """测试带重试的 pytest 执行。"""
 
-    @patch("subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_success_on_first_try(self, mock_run):
         """首次尝试成功。"""
         mock_result = MagicMock()
@@ -381,7 +381,7 @@ class TestRunPytestWithRetry:
         assert result.returncode == 0
         mock_run.assert_called_once()
 
-    @patch("subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_timeout_returns_early(self, mock_run):
         """超时时返回 EARLY_RETURN。"""
         import subprocess
@@ -394,7 +394,7 @@ class TestRunPytestWithRetry:
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "timeout"
 
-    @patch("subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_timeout_captures_partial_output(self, mock_run):
         """超时携带的部分 stdout/stderr 应合并进 output，供 Debugger 诊断现场。"""
         import subprocess
@@ -410,7 +410,7 @@ class TestRunPytestWithRetry:
         assert "collected 3 items" in output
         assert "some traceback line" in output
 
-    @patch("subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_file_not_found_returns_early(self, mock_run):
         """找不到执行文件时返回 EARLY_RETURN。"""
         mock_run.side_effect = FileNotFoundError("pytest not found")
@@ -421,7 +421,7 @@ class TestRunPytestWithRetry:
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "file_not_found"
 
-    @patch("subprocess.run")
+    @patch("src.agents.executor_runtime.run_with_timeout")
     def test_permission_error_returns_early(self, mock_run):
         """权限错误时返回 EARLY_RETURN。"""
         mock_run.side_effect = PermissionError("Permission denied")

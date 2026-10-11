@@ -155,8 +155,23 @@ _MAX_REPAIR_HISTORY = 5
 CODE_FOCUS_DEPTH: int = int(os.getenv("CODE_FOCUS_DEPTH", "1"))
 
 
-def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tuple[str, bool]:
-    """R1c：把确定性规约 oracle 测试追加到 LLM 生成测试尾部（可独立测试的纯函数）。
+# P0-4（REVIEW_2026_FRONTIER I-07，2026-10-10）：规约 oracle 行级判定取值域。
+# 结果行 spec_oracle_verdict 直接读取本取值域（键集合同构，失败分支由实验层
+# None 占位）——修复 T3 审查指出的"注入 oracle 造成的红与 LLM 断言造成的红
+# 在结果行里逐位同构"缺口（注入量 / 注入后判定首次可单独归因）。
+_SPEC_ORACLE_VERDICT_NOT_ATTEMPTED = "not_attempted"
+_SPEC_ORACLE_VERDICT_COMPILED_EMPTY = "compiled_empty"
+_SPEC_ORACLE_VERDICT_INJECTED = "injected"
+_SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED = "injected_and_passed"
+_SPEC_ORACLE_VERDICT_INJECTED_AND_FAILED = "injected_and_failed"
+# 注入产物的测试函数名前缀：主 oracle（spec_ir_v2.compile_spec_oracle）与
+# SMT 见证（spec_smt 追加的 test_specir_v2_smt_witness_*）。_executor_node
+# 用它们在 pytest 失败清单 / -v 输出里把 oracle 用例单独摘出来。
+_SPEC_ORACLE_TEST_NAMES: tuple[str, ...] = ("test_specir_v2_oracle", "test_specir_v2_smt_witness")
+
+
+def _append_spec_oracle_to_test_with_verdict(generated_test: str, state: AITesterState) -> tuple[str, bool, str]:
+    """R1c + P0-4：把确定性规约 oracle 追加到 LLM 生成测试尾部，并给出行级判定。
 
     compile_spec_oracle 产物（签名感知绑定的可执行断言）与 LLM 测试**并列**
     执行——LLM 测试通过 ≠ 规约 oracle 通过，后者失败 = "逻辑驱动"通道的
@@ -169,7 +184,11 @@ def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tu
             target_function）。
 
     Returns:
-        (追加后的测试代码, 是否注入)。编译失败 / 无材料 / 异常 → 原文 + False。
+        (追加后的测试代码, 是否注入, verdict)。verdict：
+        - 无规约材料 / 无函数名 / 无模块名 → "not_attempted"（未尝试编译）；
+        - 编译产物为空（无可编译子句 / 自检失败 / 意外异常兜底）→
+          "compiled_empty"；
+        - 注入成功 → "injected"。
     """
     from src.specs import compile_spec_oracle as _compile_spec_oracle
     from src.specs import extract_signature_params as _extract_signature_params
@@ -184,7 +203,7 @@ def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tu
         )
     oracle_func = state.get("target_function") or (spec_material or {}).get("function_name") or ""
     if not (spec_material and oracle_func and state.get("module_name")):
-        return generated_test, False
+        return generated_test, False, _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
     sig_params = _extract_signature_params(state.get("target_code") or "", str(oracle_func))
     try:
         oracle_code = _compile_spec_oracle(
@@ -196,16 +215,86 @@ def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tu
     except (SyntaxError, ValueError, TypeError, KeyError) as e:
         # 编译层内部已保守降级，此处兜底捕获意外异常（防注入链路崩图）
         logger.warning("R1c 规约 oracle 编译异常，保守跳过注入：%s", e)
-        return generated_test, False
+        return generated_test, False, _SPEC_ORACLE_VERDICT_COMPILED_EMPTY
     if not oracle_code:
-        return generated_test, False
+        return generated_test, False, _SPEC_ORACLE_VERDICT_COMPILED_EMPTY
     logger.info(
         "R1c 确定性规约 oracle 已注入（fn=%s, sig_params=%d, 追加 %d 字符）",
         oracle_func,
         len(sig_params or []),  # 签名提取失败时为 None，日志口径按 0 参计
         len(oracle_code),
     )
-    return f"{generated_test}\n\n\n{oracle_code}", True
+    return f"{generated_test}\n\n\n{oracle_code}", True, _SPEC_ORACLE_VERDICT_INJECTED
+
+
+def _append_spec_oracle_to_test(generated_test: str, state: AITesterState) -> tuple[str, bool]:
+    """R1c 兼容包装：二元返回（既有调用方 / 既有测试契约不变）。
+
+    需要行级判定（P0-4 spec_oracle_verdict）时改用
+    _append_spec_oracle_to_test_with_verdict。
+    """
+    merged, injected, _verdict = _append_spec_oracle_to_test_with_verdict(generated_test, state)
+    return merged, injected
+
+
+def _spec_oracle_injection_verdict(generated_test: str, state: AITesterState) -> tuple[str, bool | None, str]:
+    """开关守门 + 注入 + 行级判定（纯函数，_generator_node 的唯一调用点）。
+
+    Returns:
+        (测试代码, spec_oracle_injected, spec_oracle_verdict)
+
+        - 开关关（SPEC_ORACLE_EXEC_ENABLE=false，默认）→ (原文, None,
+          "not_attempted")——历史口径零注入，spec_oracle_injected 维持 None；
+        - 开关开但无规约材料（未尝试编译）→ (原文, None, "not_attempted")；
+        - 开关开、尝试编译但产物为空 → (原文, False, "compiled_empty")；
+        - 注入成功 → (追加产物, True, "injected")（执行后由 _executor_node
+          升级为 injected_and_passed / injected_and_failed）。
+    """
+    if not _spec_oracle_exec_enabled():
+        return generated_test, None, _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
+    merged, _injected, verdict = _append_spec_oracle_to_test_with_verdict(generated_test, state)
+    if verdict == _SPEC_ORACLE_VERDICT_INJECTED:
+        return merged, True, verdict
+    if verdict == _SPEC_ORACLE_VERDICT_COMPILED_EMPTY:
+        return merged, False, verdict
+    return merged, None, verdict
+
+
+def _spec_oracle_verdict_after_run(state: AITesterState, result: dict[str, Any]) -> str | None:
+    """P0-4：把本轮 "injected" 升级为执行后判定（纯函数，_executor_node 调用）。
+
+    判定口径（保守，宁缺毋滥）：
+    - 仅 spec_oracle_verdict == "injected" 且 spec_oracle_injected 为真时升级；
+      其余（None / not_attempted / compiled_empty / 已升级）返回 None（不写键）；
+    - 测试全过（result["passed"]=True）→ "injected_and_passed"（oracle 与
+      LLM 断言同文件执行，全过 ⇒ oracle 用例通过）；
+    - 失败清单含 oracle 用例名（test_specir_v2_oracle* / SMT 见证）→
+      "injected_and_failed"（"逻辑驱动"通道的确定性检出信号）；
+    - 失败但失败清单不含 oracle 用例：仅当 pytest -v 输出里显式出现 oracle
+      用例 PASSED 行才记 "injected_and_passed"；否则返回 None（收集错误 /
+      未执行 / 输出不可解析时保留 "injected" 未决态，不臆测）。
+
+    Args:
+        state: 本轮执行前的工作流状态（含 _generator_node 写入的 verdict）。
+        result: ExecutorAgent.execute 的返回（passed / failed_cases / output）。
+
+    Returns:
+        升级后的 verdict；不适用时为 None（调用方跳过写键）。
+    """
+    if state.get("spec_oracle_verdict") != _SPEC_ORACLE_VERDICT_INJECTED or not state.get("spec_oracle_injected"):
+        return None
+    failed_names = [
+        str(case.get("name") or "") for case in (result.get("failed_cases") or []) if isinstance(case, dict)
+    ]
+    if any(any(marker in name for marker in _SPEC_ORACLE_TEST_NAMES) for name in failed_names):
+        return _SPEC_ORACLE_VERDICT_INJECTED_AND_FAILED
+    if result.get("passed"):
+        return _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
+    output = str(result.get("output") or "")
+    for line in output.splitlines():
+        if "PASSED" in line and any(marker in line for marker in _SPEC_ORACLE_TEST_NAMES):
+            return _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
+    return None
 
 
 def _planner_node(state: AITesterState) -> dict[str, Any]:
@@ -330,7 +419,12 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     # 0.0~1.0，无规约材料时 0.0——可证伪口径："逻辑驱动"贡献 = 可编译率，
     # 而非 100% 宣称）。纯观测字段，不参与路由（与 spec_ir 同档位）。
     if _spec_ir_dsl_enabled():
-        from src.specs import compile_readiness, spec_expr_coverage, spec_provenance
+        from src.specs import (
+            compile_readiness,
+            spec_expr_coverage,
+            spec_provenance,
+            spec_reject_reasons,
+        )
 
         _dsl_spec = update.get("spec_ir")
         if _dsl_spec is None:
@@ -339,10 +433,31 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
             from src.specs import parse_logic_analysis
 
             _dsl_spec = parse_logic_analysis(test_plan.get("logic_analysis"))
-        update["spec_compile_rate"] = compile_readiness(_dsl_spec)
+        # P0-3（2026-10-10）：绑定上下文与注入通道**同口径**——注入侧
+        # （_append_spec_oracle_to_test）用 extract_signature_params(
+        # target_code, 函数名) 构造 signature_params；度量侧若缺席（历史默认
+        # 集合 {r,x,a,b,y}）会把"自定义参数名可编译"的子句误判为不可编译，
+        # 度量又变成下界。函数名解析口径与注入侧逐字一致：
+        # target_function → spec.function_name（注入侧同为这两级）。
+        from src.specs import extract_signature_params as _extract_sig_params
+
+        _dsl_func = state.get("target_function") or (_dsl_spec or {}).get("function_name") or ""
+        _dsl_signature_params = (
+            _extract_sig_params(state.get("target_code") or "", str(_dsl_func)) if _dsl_func else None
+        )
+        update["spec_compile_rate"] = compile_readiness(_dsl_spec, _dsl_signature_params)
         # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率并列透出
         # （compile_rate=编译器接受率，coverage=LLM 形式化覆盖率，正交观测）
         update["spec_expr_coverage"] = spec_expr_coverage(_dsl_spec)
+        # T1（2026-10-11 独立评审落地）：规约被拒原因分布——把"可编译率恒 0"
+        # 拆成 {natural_language / unsupported_operator / unknown_name / ...}
+        # 计数（纯观测、零 LLM，与 compile_readiness 同一判定门，可与之对账）。
+        # 动机：全量 1,607 行实测中位数仅 0.200、47.6% 恒为 0，但"为何为 0"
+        # 不可归因；真实调用已定位根因是 planner 产出自然语言规约。本字段使
+        # "修提示 vs 扩文法"的取舍有据可依。空 dict 不写入（保持键集合同构）。
+        _reject = spec_reject_reasons(_dsl_spec, _dsl_signature_params)
+        if _reject:
+            update["spec_reject_reasons"] = _reject
         _prov = spec_provenance(_dsl_spec)
         if _prov:
             update["spec_provenance"] = _prov
@@ -424,6 +539,56 @@ def _over_red_section_enabled() -> bool:
     （与 `DETECTION_FIRST_SECTION_ENABLE` 同一口径：开关只控制提示词，不控制路由）。
     """
     return os.getenv("OVER_RED_SECTION_ENABLE", "false").lower() in ("1", "true")
+
+
+def _empty_plan_shortcut_enabled() -> bool:
+    """空计划短路的消融开关（``EMPTY_PLAN_SHORTCUT_ENABLE``，默认 **false**）。
+
+    背景（独立审查 2026-10-10 落地，报告建议 13 置信度短路）：
+        Planner 产出空计划（``test_cases=[]``）时，Generator 无法据此生成
+        有效测试——D1 根因（JSON 解析失败兜底 `_get_default_test_plan`）
+        实测空计划率 39.1%（冷缓存 seed42 n=87）。空计划调用 Generator 只会
+        产出无用/空测试，白白消耗一次 LLM 调用（成本优化：报告 P0 建议 11
+        的"空计划短路"与建议 13 的"置信度短路"）。
+
+    默认关 = 历史口径零变化（ADR-0003）；置 "true"/"1" 时 `_generator_node`
+    在空计划下跳过 ``agent.generate`` 直接产出空测试并标记
+    ``empty_plan_shortcut=True``（纯观测，不改变路由 / 主终点口径）。
+    """
+    return os.getenv("EMPTY_PLAN_SHORTCUT_ENABLE", "false").lower() in ("1", "true")
+
+
+def _path_enum_inject_enabled() -> bool:
+    """路径枚举注入的消融开关（``PATH_ENUM_INJECT_ENABLE``，默认 **false**）。
+
+    背景（独立审查 2026-10-10 落地，报告建议 4 结构接地的静态基础）：
+        SPARC（arXiv:2602.16671）"路径定向测试合成"——把函数的独立执行路径
+        （if/elif/else 分支组合）枚举后注入 prompt，引导 LLM 按路径逐一生成
+        测试（而非一次性自由发挥）。与既有 CFG 摘要（build_cfg_prompt_section，
+        注入 Planner）形成递进：CFG 摘要给"分支/循环/异常"的粗粒度提示，
+        路径枚举给"每条路径需满足的条件组合"的细粒度提示。
+
+    默认关 = 历史口径零变化（ADR-0003）；置 "true"/"1" 时 `_generator_node`
+    在 generate 调用前构建路径段落并注入（纯静态零 LLM 成本，不改变调用次数）。
+    """
+    return os.getenv("PATH_ENUM_INJECT_ENABLE", "false").lower() in ("1", "true")
+
+
+def _operation_map_inject_enabled() -> bool:
+    """操作图注入的消融开关（``OPERATION_MAP_INJECT_ENABLE``，默认 **false**）。
+
+    背景（独立审查 2026-10-10 落地，报告建议 4 结构接地的第 2 阶段静态基础）：
+        SPARC（arXiv:2602.16671）第 2 阶段"Operation Map"——把 LLM 测试合成
+        **接地在已验证的 utility helper 上**（函数签名 / 类 / 常量 / 导入），
+        避免 leap-to-code 失败（LLM 凭空调用不存在的 helper / 编造 API / 错写
+        参数签名）。与路径枚举（PATH_ENUM_INJECT_ENABLE）共同构成结构接地
+        的静态两件套：路径枚举告诉 LLM"走哪些路径"，操作图告诉 LLM
+        "能调用哪些符号"。
+
+    默认关 = 历史口径零变化（ADR-0003）；置 "true"/"1" 时 `_generator_node`
+    在 generate 调用前构建操作图段落并注入（纯静态零 LLM 成本，不改变调用次数）。
+    """
+    return os.getenv("OPERATION_MAP_INJECT_ENABLE", "false").lower() in ("1", "true")
 
 
 def _over_red_section(state: AITesterState) -> str | None:
@@ -596,6 +761,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # （修代码）或 done，不再崩溃整图。历史行为是崩溃，新行为是优雅降级——
     # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
     _generator_budget_hit = False  # 5.4 预算封顶标记（O35；正常路径恒 False）
+    _empty_plan_shortcut = False  # 空计划短路标记（try 块外初始化，except 分支可达）
     try:
         # 修复引擎批次 XI（ADR-0025）：oracle 上下文消融档——minimal 时
         # 下方四个增强段（分支覆盖/AST 边界锚点/蜕变/差分）全部保持
@@ -625,6 +791,28 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             _bt_triplets = _derive_bt(state["target_code"], state.get("target_function"))
             if _bt_triplets:
                 _bt_section = _build_bt_section(_bt_triplets)
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：独立执行
+        # 路径枚举段落——control_flow.enumerate_paths（零 LLM 静态分析）枚举
+        # if/elif/else 分支组合 + 循环三边界，渲染为"路径定向"提示注入 Generator。
+        # PATH_ENUM_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
+        _paths_section: str | None = None
+        if not _ctx_minimal and _path_enum_inject_enabled():
+            from src.tools.control_flow import build_paths_prompt_section as _build_paths_section
+            from src.tools.control_flow import enumerate_paths as _enumerate_paths
+
+            _paths_result = _enumerate_paths(state["target_code"], state.get("target_function"))
+            _paths_section = _build_paths_section(_paths_result)
+        # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：已验证 utility
+        # helper 清单段落——operation_map.build_operation_map（零 LLM 静态分析）
+        # 收集函数签名/类/常量/导入，渲染为"已验证符号清单"注入 Generator，
+        # 避免 leap-to-code（编造不存在的 API / 错写参数签名）。
+        # OPERATION_MAP_INJECT_ENABLE=true 时非空；默认关时 None，历史口径零变化。
+        _opmap_section: str | None = None
+        if not _ctx_minimal and _operation_map_inject_enabled():
+            from src.tools.operation_map import build_operation_map as _build_opmap
+            from src.tools.operation_map import build_operation_map_section as _build_opmap_section
+
+            _opmap_section = _build_opmap_section(_build_opmap(state["target_code"]))
         # P2-7（N2/N4 接线审计，2026-10）：无 oracle 场景增强段落。
         # N2 蜕变关系：从函数名/签名/文档启发式匹配 MR 模板（零 LLM 成本），
         # 命中时渲染 prompt 段落注入（METAMORPHIC_ENABLE=true 时非空，默认关
@@ -700,39 +888,57 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                     logger.warning(
                         "P2 注入扫描：外部文本检出注入特征 %s（追加系统侧警示，不自动阻断）", _injection_findings
                     )
-        generated_test = agent.generate(
-            test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
-            state["target_code"],
-            module_name=state.get("module_name", ""),
-            rag_references=rag_refs,
-            focus_function=state.get("target_function"),
-            # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
-            # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
-            mutation_feedback=state.get("mutation_feedback"),
-            # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
-            temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
-            # O12（2026-09-29 审查 P1）：复杂度感知路由——complexity_class 非 None 时
-            # 经 _call_llm_with_cache → _call_llm → _reorder_api_groups_by_complexity
-            # 按档位重排 API 组（complex → 高成本端点在前），使
-            # MODEL_ROUTING_STRATEGY=complexity_aware（默认值）真实生效。
-            complexity_class=state.get("complexity_class"),
-            # O3（2026-09-29 审查 P1）：未覆盖分支清单提示段落（None 时不注入）
-            branch_coverage_section=_bc_section,
-            # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（None 时不注入）
-            boundary_triplets_section=_bt_section,
-            # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
-            metamorphic_section=_mr_section,
-            differential_section=_diff_section,
-            # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
-            # "先红后绿"强化段落（非该路径时 None 不注入，历史口径零变化）
-            detection_first_section=_detection_first_section(state),
-            # 2026-10-10（结果二十四）：过红再生成强化段落
-            # （OVER_RED_SECTION_ENABLE 默认关 → None 不注入，历史口径零变化）
-            over_red_section=_over_red_section(state),
-            # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
-            # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
-            injection_warning=_injection_warning,
+        # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
+        # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
+        # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
+        # LLM 调用直接产出空测试，省一次无用 LLM 调用（报告建议 13 置信度
+        # 短路）。默认关时零行为变化（历史口径不变）。
+        _empty_plan_shortcut = bool(
+            _empty_plan_shortcut_enabled() and isinstance(test_plan, dict) and not test_plan.get("test_cases")
         )
+        if _empty_plan_shortcut:
+            logger.info("空计划短路：test_plan.test_cases 为空，跳过 Generator LLM 调用")
+            generated_test = ""
+        else:
+            generated_test = agent.generate(
+                test_plan,  # Planner 节点在图中时必带 test_plan；缺席时为 None，Generator 自行推断
+                state["target_code"],
+                module_name=state.get("module_name", ""),
+                rag_references=rag_refs,
+                focus_function=state.get("target_function"),
+                # 1.2 改进（MutGen 式变异反馈闭环）：上一轮变异测试的存活变异体注入
+                # prompt，引导生成针对"当前未捕获故障"的更强断言（None 时不注入）
+                mutation_feedback=state.get("mutation_feedback"),
+                # 3.3 改进：执行反馈驱动的动态 temperature（覆盖率连降时减半，None 时不覆盖）
+                temperature=_dynamic_temperature_from_suggestion(state.get("iteration_strategy_suggestion")),
+                # O12（2026-09-29 审查 P1）：复杂度感知路由——complexity_class 非 None 时
+                # 经 _call_llm_with_cache → _call_llm → _reorder_api_groups_by_complexity
+                # 按档位重排 API 组（complex → 高成本端点在前），使
+                # MODEL_ROUTING_STRATEGY=complexity_aware（默认值）真实生效。
+                complexity_class=state.get("complexity_class"),
+                # O3（2026-09-29 审查 P1）：未覆盖分支清单提示段落（None 时不注入）
+                branch_coverage_section=_bc_section,
+                # M10（2026-09-29 审查 P0）：确定性边界锚点提示段落（None 时不注入）
+                boundary_triplets_section=_bt_section,
+                # P2-7（N2/N4）：无 oracle 场景增强段落（None 时不注入）
+                metamorphic_section=_mr_section,
+                differential_section=_diff_section,
+                # W3（2026-10-05 审查落地·检出优先协议）：检出优先再生成路径的
+                # "先红后绿"强化段落（非该路径时 None 不注入，历史口径零变化）
+                detection_first_section=_detection_first_section(state),
+                # 2026-10-10（结果二十四）：过红再生成强化段落
+                # （OVER_RED_SECTION_ENABLE 默认关 → None 不注入，历史口径零变化）
+                over_red_section=_over_red_section(state),
+                # 2026-10-10 独立审查落地（报告建议 4 结构接地·路径定向合成）：
+                # 独立执行路径枚举段落（PATH_ENUM_INJECT_ENABLE 默认关时 None 不注入）
+                paths_section=_paths_section,
+                # 2026-10-10 独立审查落地（报告建议 4 结构接地·操作图）：
+                # 已验证符号清单段落（OPERATION_MAP_INJECT_ENABLE 默认关时 None 不注入）
+                operation_map_section=_opmap_section,
+                # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
+                # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
+                injection_warning=_injection_warning,
+            )
     except (RuntimeError, OSError, json.JSONDecodeError) as e:
         # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
         # 后续迭代经 MAX_ITERATIONS 自然收敛（各节点前置预算守卫行为一致）
@@ -843,10 +1049,10 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
 
     # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入（SPEC_ORACLE_EXEC_ENABLE=true
     # 时启用，默认关时零注入，历史口径不变）。详见 _append_spec_oracle_to_test。
-    if _spec_oracle_exec_enabled():
-        generated_test, _spec_oracle_injected = _append_spec_oracle_to_test(generated_test, state)
-    else:
-        _spec_oracle_injected = False
+    # P0-4（2026-10-10）：注入与行级判定一步到位——开关关 → (原文, None,
+    # "not_attempted")；产物空 → (原文, False, "compiled_empty")；
+    # 注入成功 → (追加产物, True, "injected")（执行后由 _executor_node 升级）。
+    generated_test, _spec_oracle_injected, _spec_oracle_verdict = _spec_oracle_injection_verdict(generated_test, state)
 
     _trace_node(
         "generator",
@@ -859,10 +1065,15 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         "generated_test": generated_test,
         "rag_references": rag_refs,
     }
-    # R1c（2026-10-05 审查 P0）：确定性规约 oracle 注入标记（state 键已声明，
-    # 不会被 LangGraph 白名单丢弃；默认关时恒 False）
-    if _spec_oracle_injected:
-        update["spec_oracle_injected"] = True
+    # 空计划短路标记（EMPTY_PLAN_SHORTCUT_ENABLE 默认关时恒 False；开启且命中
+    # 时 True，供实验层统计"短路省了多少次 LLM 调用"，纯观测不改变路由）。
+    update["empty_plan_shortcut"] = _empty_plan_shortcut
+    # R1c（2026-10-05 审查 P0）+ P0-4（2026-10-10）：确定性规约 oracle 注入标记与
+    # 行级判定结果（state 键已声明，不会被 LangGraph 白名单丢弃）。三态：
+    # True = 已注入 / False = 尝试编译但产物空 / None = 开关关或未尝试；
+    # verdict 取值域见 _SPEC_ORACLE_VERDICT_* 常量（执行后由 _executor_node 升级）。
+    update["spec_oracle_injected"] = _spec_oracle_injected
+    update["spec_oracle_verdict"] = _spec_oracle_verdict
     # 5.4 预算封顶标记（O35）：Generator 捕获 BudgetExceededError 时置真
     # （planner / debugger 同口径），使 determine_stop_reason 可达 BUDGET_EXCEEDED。
     if _generator_budget_hit or state.get("budget_exceeded"):
@@ -1295,6 +1506,14 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
                 update["target_code"] = _restored["content"]
         # C10：本轮失败 → 上一轮补丁未通过验证，丢弃暂存（不入修复案例库）
         update["last_applied_repair"] = None
+    # P0-4（2026-10-10）：规约 oracle 行级判定升级——本轮 "injected"（_generator_node
+    # 写入）在本轮测试执行后升级为 injected_and_passed / injected_and_failed，
+    # 使"注入 oracle 造成的红"与"LLM 断言造成的红"在结果行里可分离（T3 审查
+    # 指出的逐位同构缺口）。纯观测：不改路由；未注入轮 / 不可判定轮不写键
+    # （返回 None，保留原判定，不臆测）。
+    _oracle_verdict_upgraded = _spec_oracle_verdict_after_run(state, result)
+    if _oracle_verdict_upgraded is not None:
+        update["spec_oracle_verdict"] = _oracle_verdict_upgraded
     return update
 
 

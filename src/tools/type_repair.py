@@ -34,6 +34,11 @@ import os
 import re
 from typing import Any
 
+# T7（2026-10-11 独立评审落地）：_repair_with_llm 需在语法校验前剥离
+# markdown 代码围栏（提示词要求 LLM 用 ```python 包裹输出）。helpers 无
+# 反向依赖 src.tools，模块级导入无循环风险。
+from src.utils.helpers import extract_code_block
+
 logger = logging.getLogger(__name__)
 
 # ─── 开关 ────────────────────────────────────────────────────────────────────
@@ -640,13 +645,29 @@ def _repair_with_llm(
         return None
     if not repaired:
         return None
+    # T7（2026-10-11 独立评审落地）：剥离 markdown 围栏后再做语法校验。
+    # 背景（真实 LLM 调用实测）：本提示词**明确要求** LLM 用 ```python 包裹
+    # 输出，而原实现直接对回调返回值 ast.parse——带围栏的正确代码被判
+    # SyntaxError 而拒绝，日志记"类型修复产出的代码语法不合法"。
+    # 生产路径（_auto_llm_repair，见下方 `_repair`）内部先调
+    # extract_code_block 因此不受影响，但文档化的 llm_repair 注入接口
+    # （本函数签名公开暴露的入口）恒失败——任何自定义回调用
+    # `_call_llm_with_cache` 原始返回即触发。现把围栏剥离下沉到本层，
+    # 使两条路径（自动注入 / 外部注入）口径一致。
+    # 仅在**确实存在**代码围栏时走 extraction：extract_code_block 对无围栏
+    # 输入会顺带剥掉尾随换行（实测 'def f():\n    return 1\n' →
+    # 'def f():\n    return 1'），无条件调用会改变已合规回调的返回值——
+    # 无围栏时原样透传，保持既有契约不变。
+    cleaned = repaired
+    if "```" in repaired:
+        cleaned = extract_code_block(repaired, language="python") or repaired
     # 修订代码必须能通过 ast.parse（保守：语法错误的修订直接拒绝）
     try:
-        ast.parse(repaired)
+        ast.parse(cleaned)
     except (SyntaxError, ValueError):
         logger.warning("类型修复产出的代码语法不合法（拒绝修订，保留原补丁）")
         return None
-    return repaired
+    return cleaned
 
 
 def type_repair_layer(

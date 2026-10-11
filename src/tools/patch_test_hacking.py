@@ -145,6 +145,13 @@ def detect_test_hacking(original_code: str, patched_code: str) -> dict[str, obje
     return {"suspected": bool(signals), "signals": signals}
 
 
-def test_hacking_signal_names() -> tuple[str, ...]:
-    """信号名清单（测试与文档对齐用，防口径漂移）。"""
+def hacking_signal_names() -> tuple[str, ...]:
+    """信号名清单（测试与文档对齐用，防口径漂移）。
+
+    命名纪律（2026-10-11 全面优化批次）：不以 `test_` 开头——测试文件对该
+    函数的 import 会创建匹配 `python_functions = test_*` 的模块级属性，pytest
+    收集时把导入的函数本体当成测试函数执行（其返回 tuple → 全量跑批下
+    PytestReturnNotNoneWarning 伪影，xdist 分片放大）。原名
+    `test_hacking_signal_names` 已同步重命名，两个测试文件的 import 已更新。
+    """
     return ("hardcoded_input_branch", "assert_weakened", "exception_swallow_added")

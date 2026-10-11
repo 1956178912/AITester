@@ -129,13 +129,41 @@ class TestPatchSemanticSimilarity:
 class TestCombinedRiskLevel:
     """综合风险等级（取最严重维度）。"""
 
-    def test_high_when_any_dimension_high(self):
-        sims = {"jaccard": 0.3, "structural": 0.9, "semantic": 0.5}
-        assert _combined_risk_level(sims) == "high"
+    def test_structural_alone_does_not_escalate(self):
+        """2026-10-10 E8：`structural` 是**弱证据**，单独命中不得升级等级。
 
-    def test_medium_when_any_dimension_medium(self):
-        sims = {"jaccard": 0.3, "structural": 0.7, "semantic": 0.5}
-        assert _combined_risk_level(sims) == "medium"
+        实测：639 条真实补丁的 200 组**无关**配对中，仅 `structural` 通道
+        就判 77/200 = 38.5% 为 medium/high（≈ 瞎猜）——因为它比的是
+        "AST 语句类型序列的 LCS"，而同模板产出的补丁天然共享骨架
+        （实测样例 jaccard=0.151 但 structural=0.726）。
+        故本用例的旧断言（取 max → high/medium）已被**实测量化证否**。
+        """
+        assert _combined_risk_level({"jaccard": 0.3, "structural": 0.9, "semantic": 0.5}) == "low"
+        assert _combined_risk_level({"jaccard": 0.3, "structural": 0.7, "semantic": 0.5}) == "low"
+
+    def test_structural_with_corroboration_escalates(self):
+        """structural + 任一独立通道同级命中 → 升级（佐证原则）。"""
+        assert _combined_risk_level({"jaccard": 0.9, "structural": 0.9, "semantic": 0.4}) == "high"
+        assert _combined_risk_level({"jaccard": 0.65, "structural": 0.7, "semantic": 0.4}) == "medium"
+        # semantic 佐证同样有效
+        assert _combined_risk_level({"jaccard": 0.2, "structural": 0.9, "semantic": 0.9}) == "high"
+
+    def test_jaccard_alone_still_escalates(self):
+        """jaccard / semantic 判别力已验证（2% 假阳性），单独可升级。"""
+        assert _combined_risk_level({"jaccard": 0.9, "structural": None, "semantic": None}) == "high"
+        assert _combined_risk_level({"jaccard": 0.65, "structural": None, "semantic": None}) == "medium"
+
+    def test_structural_single_channel_keeps_legacy(self, monkeypatch):
+        """**单通道**场景（缺 jaccard/semantic）沿用历史口径。"""
+        monkeypatch.delenv("AITESTER_CONTAMINATION_STRICT_MAX", raising=False)
+        assert _combined_risk_level({"structural": 0.9}) == "high"
+        assert _combined_risk_level({"structural": 0.7}) == "medium"
+
+    def test_legacy_max_mode_opt_in(self, monkeypatch):
+        """legacy 口径可 opt-in（复现历史结果 / A/B）。"""
+        monkeypatch.setenv("AITESTER_CONTAMINATION_STRICT_MAX", "true")
+        assert _combined_risk_level({"jaccard": 0.3, "structural": 0.9, "semantic": 0.5}) == "high"
+        assert _combined_risk_level({"jaccard": 0.3, "structural": 0.7, "semantic": 0.5}) == "medium"
 
     def test_low_when_all_low(self):
         sims = {"jaccard": 0.2, "structural": 0.3, "semantic": 0.4}

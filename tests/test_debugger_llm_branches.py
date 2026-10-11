@@ -7,19 +7,21 @@
   定位成功（probe_sourced=True）
 - _build_position_aware_prompt_section：focused=False 返回空串 / focused=True 返回 hint
 - _generate_adversarial_intents：LLM 输出 list / dict-with-hypotheses / 非 list+dict /
-  异常 → 空列表（mock _call_llm_with_cache + _extract_json）
+  异常 → 空列表（mock _call_llm_with_cache + extract_json_array + _extract_json）；
+  T2（2026-10-11 独立评审落地）：补「顶层 JSON 数组必须被解析」回归锁——修复前该路径恒失败
 - _build_adversarial_prompt_section：多假设注入 / 空假设
 - _run_critic_eval：LLM 返回 break_cases + all_passed / 异常降级 all_passed=True
 - _build_critic_feedback：break_cases 注入 / 空 break_cases
 - _run_review_diagnosis：defect_type 合法 / 非法值保守归一 / 异常降级
 
-所有 LLM 依赖方法经 mock _call_llm_with_cache + _extract_json 隔离，
+所有 LLM 依赖方法经 mock _call_llm_with_cache + 解析层隔离，
 零真实 LLM 调用（与本仓"纯静态 / 零 LLM"测试口径一致）。
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import json
+from unittest.mock import MagicMock, patch
 
 
 def _mk_ctx(line, filename=None, column=None, module_name=None) -> MagicMock:
@@ -213,33 +215,64 @@ class TestBuildPositionAwarePromptSectionBranches:
 
 
 class TestGenerateAdversarialIntentsBranches:
-    def _mock_llm(self, dbg, raw_response, extract_result):
-        """mock _call_llm_with_cache 返回 raw + _extract_json 返回 result。"""
+    def _run(self, dbg, raw_response, array_result, object_result=None):
+        """在**上下文管理器**内 stub 两级解析路径后调用被测方法。
+
+        T2（2026-10-11 独立评审落地）：本方法的契约是**顶层 JSON 数组**，
+        解析顺序为 `extract_json_array` → 回退 `_extract_json`（对象包装）。
+        因此需分别 stub 两级，而不是只 stub `_extract_json`（旧实现只走对象
+        路径，正是"数组永远解析失败"缺陷的根源）。
+
+        用 `with` 而非 `self._patch.start()`/`tearDown`：后者在同一测试类内
+        存在跨用例泄漏（前一个用例启动的 patch 未在下一个无 patch 用例前
+        撤销），会让"真实解析链"用例读到上一个用例的返回值。
+        """
         dbg._call_llm_with_cache = MagicMock(return_value=raw_response)
-        dbg._extract_json = MagicMock(return_value=extract_result)
+        if array_result is None:
+            array_patch = MagicMock(side_effect=json.JSONDecodeError("no array", "x", 0))
+        else:
+            array_patch = MagicMock(return_value=array_result)
+        dbg._extract_json = MagicMock(return_value=object_result if object_result is not None else {})
+        with patch("src.agents.debugger.extract_json_array", array_patch):
+            return dbg._generate_adversarial_intents("code", "RUNTIME")
 
     def test_list_result_returns_capped_intents(self):
         dbg = _mk_debugger()
-        self._mock_llm(dbg, "raw", ["h1", "h2", "h3", "h4", "h5"])
-        out = dbg._generate_adversarial_intents("code", "ASSERTION")
+        out = self._run(dbg, "raw", ["h1", "h2", "h3", "h4", "h5"])
         assert out == ["h1", "h2", "h3"]  # 上限 3
+
+    def test_json_array_raw_response_parses_via_array_path(self):
+        """T2 回归锁：真实 LLM 输出的顶层 JSON 数组必须被解析。
+
+        修复前 `_extract_json`（extract_json_object）只认 `{`，对顶层数组恒抛
+        JSONDecodeError，对抗性推理（3.1）因此静默降级为空假设。
+        本用例**不打任何补丁**——走真实解析链，确保契约端到端成立。
+        """
+        dbg = _mk_debugger()
+        dbg._call_llm_with_cache = MagicMock(return_value='["a", "b", "c", "d"]')
+        assert dbg._generate_adversarial_intents("code", "RUNTIME") == ["a", "b", "c"]
+
+    def test_array_path_unavailable_falls_back_to_object(self):
+        """数组路径抛 JSONDecodeError 时必须回退对象包装路径（不吞异常）。"""
+        dbg = _mk_debugger()
+        out = self._run(dbg, '{"hypotheses": ["z"]}', None, {"hypotheses": ["z"]})
+        assert out == ["z"]
 
     def test_dict_with_hypotheses_key(self):
         dbg = _mk_debugger()
-        self._mock_llm(dbg, "raw", {"hypotheses": ["a", "b"]})
-        out = dbg._generate_adversarial_intents("code", "RUNTIME")
+        # 数组路径不可用 → 回退对象包装形态
+        out = self._run(dbg, "raw", None, {"hypotheses": ["a", "b"]})
         assert out == ["a", "b"]
 
     def test_non_list_non_dict_returns_empty(self):
         dbg = _mk_debugger()
-        self._mock_llm(dbg, "raw", "just a string")
-        out = dbg._generate_adversarial_intents("code", "SYNTAX")
+        out = self._run(dbg, "raw", None, "just a string")
         assert out == []
 
     def test_none_result_returns_empty(self):
         dbg = _mk_debugger()
-        self._mock_llm(dbg, "raw", None)
-        assert dbg._generate_adversarial_intents("code", "UNKNOWN") == []
+        out = self._run(dbg, "raw", None, None)
+        assert out == []
 
     def test_llm_exception_returns_empty(self):
         dbg = _mk_debugger()

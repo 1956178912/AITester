@@ -156,10 +156,16 @@ class UXGroup(click.Group):
 @click.group(cls=UXGroup)
 @click.version_option(version=__version__, prog_name="AITester")
 def cli() -> None:
-    """AITester - 多智能体自动化测试与自修复系统
+    """AITester - 检出优先的测试生成与修复评估（归因）系统
 
-    一个基于 LangGraph 的多智能体系统，自动为 Python 代码生成测试、诊断错误、
-    并尝试修复问题，直至测试通过或达到最大迭代次数。
+    以**检出优先协议**为主成功口径：自动为 Python 代码生成测试、诊断错误、
+    尝试修复，直至测试通过或达到最大迭代次数；并如实报告 detection / repair /
+    false_fix 三指标与口径（见 BASELINE.yaml）。
+
+    注：编排层（LangGraph：Planner → Generator → Executor → Debugger →
+    PatchApplier）在本系统中定位为**可消融容器**，非主断言——项目自身 n=261
+    实验测得编排净贡献为负（δ≈−0.28，ADR-0016），故不再以"多智能体"为主表述
+    （与 README / MODEL_CARD 对齐）。
     """
     # U8：CLI 入口惰性日志初始化（幂等；库导入不再产生 aitester.log）
     _configure_cli_logging()
@@ -578,7 +584,7 @@ def run(
     流程：
         1. 读取目标代码
         2. 初始化工作流状态
-        3. 运行多智能体工作流（Planner → Generator → Executor → Debugger → PatchApplier）
+        3. 运行可消融编排工作流（Planner → Generator → Executor → Debugger → PatchApplier）
         4. 输出执行结果摘要或 JSON
     """
     _validate_run_args(parallel, max_iterations, coverage_threshold, timeout)

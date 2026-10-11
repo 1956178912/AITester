@@ -30,6 +30,36 @@ from config import SWE_BENCH_ENRICHMENT
 
 logger = logging.getLogger(__name__)
 
+# S2（2026-10-11 独立评审落地，F4/K6）：`instance_code` **兜底口径开关**。
+#
+# 事实：官方 SWE-bench JSONL 不含被测源码字段，历史口径把 `problem_statement`
+# （issue 文本）静默兜底为 `instance_code`。后果实测为 **389/389 行工件同时缺
+# `instance_code` 与 `detection_rate`**，20/20 任务 `llm_patch_apply_failed`
+# ——补丁从未成功应用，而跑批**照常出数**（"静默兜底 ⇒ 静默失效"）。
+#
+# 两档口径：
+#   false（默认，保持历史口径）：兜底为 issue 文本，任务照跑（下游据
+#       validate_task / tasks_missing_source 识别"仅验证流程"任务）；
+#   true（fail-fast）：该行**判定为无效并从批次剔除**，剔除数 + 任务 ID
+#       写入 `SWEBenchDataset.strict_skipped_task_ids`，由 run_benchmark 落
+#       provenance（strict_skipped_count）——宁缺毋滥：宁可少跑，不可把
+#       "补丁必然应用失败"的任务混进检出率分母。
+#
+# 命名与环境变量约定：`_ENV` 前缀常量（check_env_budget.py 的静态提取规则
+# 之一，登记于 docs/env_budget.yaml）。
+_ENV_STRICT_INSTANCE_CODE = "AITESTER_DATASET_STRICT_INSTANCE_CODE"
+
+
+def _strict_instance_code_enabled() -> bool:
+    """读取 instance_code fail-fast 开关（AITESTER_DATASET_STRICT_INSTANCE_CODE）。
+
+    默认 false（历史口径）；"true"/"1"/"yes"/"on" 视为启用。取值非法时
+    按默认 false 处理（与项目其余 `_ENV` 布尔开关同口径：不因环境变量
+    笔误让跑批崩溃）。
+    """
+    return os.getenv(_ENV_STRICT_INSTANCE_CODE, "false").strip().lower() in ("true", "1", "yes", "on")
+
+
 # 数据集下载依赖（HuggingFace datasets 库）。可选导入：
 # 未安装时模块仍可加载，download_from_huggingface 会在调用时抛出 ImportError。
 # 使用模块级引用（_datasets）以便测试通过 patch 替换，避免真实网络下载。
@@ -311,6 +341,11 @@ class SWEBenchDataset(BaseDatasetLoader):
                 if env_dir:
                     break
         super().__init__(subset=subset, data_dir=data_dir or env_dir)
+        # S2（2026-10-11 独立评审落地）：strict 模式剔除面（instance_id 列表，
+        # 加载顺序）——_load_raw_data 每次重载时重置。run_benchmark 读本属性
+        # 把剔除数写入 provenance（"有多少任务被剔除"必须可审计，不能只在
+        # 日志里一闪而过）。
+        self.strict_skipped_task_ids: list[str] = []
 
     def _resolve_jsonl_paths(self) -> list[str]:
         """解析本加载器实例应读取的 JSONL 文件路径列表。
@@ -493,6 +528,8 @@ class SWEBenchDataset(BaseDatasetLoader):
         """
         # 清空任务列表，避免重复加载时数据累积
         self._tasks.clear()
+        # S2：strict 剔除面同步重置（重载后旧剔除记录不得残留）
+        self.strict_skipped_task_ids.clear()
         # 跨文件去重集合：加载多子集 JSONL 时按 instance_id 去重（加载开始时重置，避免重复加载残留）
         self._seen_task_ids: set[str] = set()
 
@@ -535,6 +572,33 @@ class SWEBenchDataset(BaseDatasetLoader):
                     loaded += 1
 
         logger.info("SWE-bench 加载完成：%d 个任务", loaded)
+        if self.strict_skipped_task_ids:
+            # S2：strict 口径下**未打印剔除数等于静默**——历史缺陷正是
+            # "389/389 行缺 instance_code 而结果里看不出来"。这里显式点名。
+            logger.warning(
+                "S2 strict instance_code 模式：%d 个任务因 instance_code 兜底为 issue 文本被剔除"
+                "（%s=%s，宁可少跑不可混入无效分母）",
+                len(self.strict_skipped_task_ids),
+                _ENV_STRICT_INSTANCE_CODE,
+                os.getenv(_ENV_STRICT_INSTANCE_CODE),
+            )
+
+    @staticmethod
+    def _drop_malformed_test_ids(nodes: list[str]) -> tuple[list[str], list[str]]:
+        """剔除被截断的测试节点 ID，返回 (保留的, 被剔除的)。
+
+        判据：含 `[`（参数化）但**未以 `]` 收尾** → 判定为截断。
+        保守：仅按此形态判定，不做任何"补全"猜测；正常非参数化 ID
+        （无 `[`）一律保留。
+        """
+        kept: list[str] = []
+        dropped: list[str] = []
+        for node in nodes:
+            if "[" in node and not node.rstrip().endswith("]"):
+                dropped.append(node)
+            else:
+                kept.append(node)
+        return kept, dropped
 
     @staticmethod
     def _parse_swe_test_list(value: Any) -> list[str]:
@@ -606,7 +670,29 @@ class SWEBenchDataset(BaseDatasetLoader):
         # 补充文件可提供 instance_code/base_code）> problem_statement 兜底。
         # 官方 SWE-bench JSONL 不含源码字段，只能兜底为 issue 文本，
         # 此类任务在基准中仅验证流程、不产生有效修复对比。
-        instance_code = data.get("instance_code") or data.get("base_code") or problem_statement
+        #
+        # S2（2026-10-11 独立评审落地）：**兜底改为可配置 fail-fast**。
+        # 默认（AITESTER_DATASET_STRICT_INSTANCE_CODE 未设/false）保持历史口径
+        # ——兜底 + 照跑；置 true 时该行判定为**无效任务并从批次剔除**
+        # （返回 None），instance_id 记入 strict_skipped_task_ids 供
+        # run_benchmark 落 provenance。
+        #
+        # 为何是"剔除"而非"raise"：run_benchmark 对加载失败是**直接崩批**，
+        # 而缺源码在真实工件里是**大比例**现象（实测 389/389）——raise 会让
+        # strict 模式在当前数据上完全不可用，反而逼人回退到静默兜底。
+        # 剔除 + 计数 + 告警使"跑批继续"与"缺口可见"同时成立。
+        _instance_code_raw = data.get("instance_code") or data.get("base_code")
+        if _instance_code_raw:
+            # 保持历史语义：显式源码字段**原样使用**（不做 str() 强转，
+            # 避免改变非 str 字段的行为）
+            instance_code = _instance_code_raw
+        else:
+            if _strict_instance_code_enabled():
+                # 剔除口径：按 instance_id 记录（task_id 已在上方解析）
+                self.strict_skipped_task_ids.append(task_id)
+                logger.warning("S2 strict 模式剔除任务（instance_code 兜底为 issue 文本）: %s", task_id)
+                return None
+            instance_code = problem_statement
         # 从官方修复补丁提取目标函数（P0：target_function 定位）
         suggested_function = self._extract_suggested_function(data.get("patch", ""))
 
@@ -624,6 +710,26 @@ class SWEBenchDataset(BaseDatasetLoader):
         # JSONL）时仍以官方值为准，口径不变。
         fail_to_pass_list = self._parse_swe_test_list(data.get("FAIL_TO_PASS", ""))
         pass_to_pass_list = self._parse_swe_test_list(data.get("PASS_TO_PASS", ""))
+        # 2026-10-10 独立审查（E7 §5.4）：**剔除被截断的测试节点 ID**。
+        #
+        # 事实：上游 `princeton-nlp/SWE-bench` 的 FAIL_TO_PASS/PASS_TO_PASS
+        # 中存在被截断的参数化节点 ID（实测 530/24,122 = 2.20%，跨 4 个仓库：
+        # sqlfluff 279 / pydicom 173 / marshmallow 41 / astroid 37），例如
+        # `...jinja_test.py::test__templater_jinja_slice_file[{%`（缺 `-if ...-%}]`）。
+        # 成因在上游数据集（本项目下载脚本仅做 json.dumps 直通），**不可在此修复**。
+        #
+        # 危害（实测）：pytest 对无法匹配的节点 ID 报
+        # `ERROR: not found: <id>` 并以 **rc=4** 中止**整个调用** ——
+        # 即**一个坏 ID 毒化该任务的全部测试**（合法 ID 也不会被执行）。
+        # 好消息：M1 判分层的 `_looks_like_test_execution_error` 以 `rc>=2`
+        # 为执行错误（experiments/_m1_metrics.py:66-84），故该任务记为
+        # detection=0.0 而非假检出——**fail-closed 防线成立，无假信号**。
+        #
+        # 本处只做"标记 + 剔除坏 ID"，使：(a) 合法 ID 仍可被判分；
+        # (b) 下游能据 `*_malformed_ids` 获知该任务的 F2P 面不完整。
+        # 绝不"猜"补全被截断的 ID（宁缺毋滥）。
+        fail_to_pass_list, f2p_malformed = self._drop_malformed_test_ids(fail_to_pass_list)
+        pass_to_pass_list, p2p_malformed = self._drop_malformed_test_ids(pass_to_pass_list)
         if total_tests <= 0 and (fail_to_pass_list or pass_to_pass_list):
             total_tests = len(fail_to_pass_list) + len(pass_to_pass_list)
             total_pass = total_pass if total_pass > 0 else len(fail_to_pass_list) + len(pass_to_pass_list)
@@ -659,8 +765,16 @@ class SWEBenchDataset(BaseDatasetLoader):
                 # 官方 JSONL 的 FAIL_TO_PASS / PASS_TO_PASS 是 JSON 编码的
                 # 字符串列表（'["a::b", "c::d"]'），解析为 list；解析失败
                 # （非 list）时兜底空 list（路由条件永不命中，口径零变化）。
-                "fail_to_pass": self._parse_swe_test_list(data.get("FAIL_TO_PASS", "")),
-                "pass_to_pass": self._parse_swe_test_list(data.get("PASS_TO_PASS", "")),
+                # 2026-10-10（E7 §5.4）：改用**已剔除截断 ID** 的列表
+                # （此前在此处重新解析原始值 → 上面的净化白做）。截断的上游
+                # 节点 ID 会让 pytest 以 rc=4 中止整个调用（一个坏 ID 毒化
+                # 全任务，合法 ID 也不执行），故这里必须是净化后的列表。
+                "fail_to_pass": fail_to_pass_list,
+                "pass_to_pass": pass_to_pass_list,
+                # 被剔除的截断 ID（观测面）：非空即表示该任务的 F2P/P2P 面
+                # **不完整**，下游应据此知晓覆盖率折损，而非静默按完整处理。
+                "fail_to_pass_malformed_ids": f2p_malformed,
+                "pass_to_pass_malformed_ids": p2p_malformed,
                 "test_patch": data.get("test_patch", "") or "",
             },
         )
@@ -718,6 +832,7 @@ class SWEBenchDataset(BaseDatasetLoader):
 # ruff E402/I001：刻意置于模块中部（非顶层），忽略排序告警。
 from src.datasets.dataset_defects4j import Defects4JPYDataset  # noqa: E402, I001
 from src.datasets.dataset_realbugs import BugsInPyDataset, QuixBugsDataset  # noqa: E402
+from src.datasets.dataset_ult import ULTDataset  # noqa: E402
 from src.datasets.dataset_inmemory import InMemoryDataset  # noqa: E402
 
 
@@ -743,6 +858,8 @@ def load_dataset(
         - "quixbugs" / "quix_bugs": QuixBugs 真实缺陷基准（W4 阶梯 L1）
         - "bugsinpy" / "bugs_in_py": BugsInPy 真实缺陷基准（W4 阶梯 L2，
           manifest JSONL 口径，见 dataset_realbugs.BugsInPyDataset）
+        - "ult" / "unleaked_testbench": ULT 基准（W4b，TOSEM 2026；官方
+          不发布 ground-truth tests，评测走 mutation，见 dataset_ult.ULTDataset）
         - "in_memory": 内置示例数据集
         - 其他名称返回 InMemoryDataset（允许 graceful degradation）
 
@@ -781,6 +898,11 @@ def load_dataset(
         "quix_bugs": QuixBugsDataset,
         "bugsinpy": BugsInPyDataset,
         "bugs_in_py": BugsInPyDataset,
+        # W4b（2026-10-10 独立审查落地）：ULT 基准（TOSEM 2026，防污染）。
+        # 官方不发布 ground-truth tests → detection_rate 恒 None，评测走
+        # mutation；目录缺失时优雅降级（与 bugsinpy 同口径）。
+        "ult": ULTDataset,
+        "unleaked_testbench": ULTDataset,
         "in_memory": InMemoryDataset,
         # "synthetic": SyntheticDataset,  # 使用懒加载避免循环导入
         # "synth": SyntheticDataset,  # 使用懒加载避免循环导入
@@ -827,6 +949,8 @@ def get_available_datasets() -> list[str]:
             "quix_bugs",
             "bugsinpy",
             "bugs_in_py",
+            "ult",
+            "unleaked_testbench",
             "in_memory",
             "examples",
             "synthetic",

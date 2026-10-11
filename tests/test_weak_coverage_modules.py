@@ -183,6 +183,7 @@ class TestExecutorRuntimeCleanup:
 
     def test_run_pytest_with_retry_timeout_returns_early_return(self, tmp_path, monkeypatch):
         """超时分支：subprocess.run 抛 TimeoutExpired → EARLY_RETURN 标记。"""
+        import src.agents.executor_runtime as er
         from src.agents.executor_runtime import run_pytest_with_retry
 
         class FakeSelf:
@@ -193,7 +194,7 @@ class TestExecutorRuntimeCleanup:
 
         timeout_exc = sp.TimeoutExpired(cmd="pytest", output="partial", stderr="err", timeout=1)
         with monkeypatch.context() as mp:
-            mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(timeout_exc))
+            mp.setattr(er, "run_with_timeout", lambda *a, **k: (_ for _ in ()).throw(timeout_exc))
             output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "timeout"
@@ -201,15 +202,14 @@ class TestExecutorRuntimeCleanup:
 
     def test_run_pytest_with_retry_permission_error(self, tmp_path, monkeypatch):
         """权限错误分支：subprocess.run 抛 PermissionError → EARLY_RETURN。"""
+        import src.agents.executor_runtime as er
         from src.agents.executor_runtime import run_pytest_with_retry
 
         class FakeSelf:
             timeout = 1
 
-        import subprocess as sp
-
         perm_exc = PermissionError("permission denied")
-        monkeypatch.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(perm_exc))
+        monkeypatch.setattr(er, "run_with_timeout", lambda *a, **k: (_ for _ in ()).throw(perm_exc))
         _output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
         assert result[0] == "EARLY_RETURN"
         assert result[1]["type"] == "permission_error"
@@ -221,15 +221,14 @@ class TestExecutorRuntimeCleanup:
         有效结果），无任何有效结果时返回 ("UNAVAILABLE", …) 标记，与 EARLY_RETURN
         走同一早退分支。
         """
+        import src.agents.executor_runtime as er
         from src.agents.executor_runtime import run_pytest_with_retry
 
         class FakeSelf:
             timeout = 1
 
-        import subprocess as sp
-
         with monkeypatch.context() as mp:
-            mp.setattr(sp, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+            mp.setattr(er, "run_with_timeout", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
             output, result = run_pytest_with_retry(FakeSelf(), ["pytest"], {}, str(tmp_path))
         # 2026-09-26 round9：通用异常且无有效结果 → ("UNAVAILABLE", error_info) 标记
         assert isinstance(result, tuple) and result[0] == "UNAVAILABLE"

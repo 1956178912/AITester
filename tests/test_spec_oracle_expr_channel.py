@@ -97,14 +97,28 @@ class TestIsinstanceWhitelist:
         assert "isinstance" in _ALLOWED_CALL_NAMES
 
     def test_isinstance_clause_compiles(self) -> None:
+        """`isinstance` 必须**真的能编译出断言**（不只挂在白名单常量里）。
+
+        T1b（2026-10-11 独立评审落地）：原用例只要求 `isinstance(x, int)`
+        出现在产物里，且用**前件通道**——它此前"通过"只是侥幸：`isinstance`
+        挂在 `_ALLOWED_CALL_NAMES` 里，但未知标识符门会把调用名当作未绑定
+        `Name` 而拒绝（同一白名单前门放行、后门拒绝），所以该子句实际
+        **不可编译**，产物由后件通道撑起。现改为**直接断言该子句可编译**，
+        并把通道换成后件（结果变量断言），使用例真正验证白名单的可用性。
+        """
+        from src.specs.spec_ir_v2 import _clause_is_compilable
+
+        assert _clause_is_compilable("isinstance(x, int)", "precondition", frozenset({"x"})), (
+            "isinstance 在白名单里就必须真的可编译（T1b 修复）"
+        )
         spec = {
-            "preconditions_expr": ["isinstance(x, int)"],
-            "postconditions_expr": [],
+            "preconditions_expr": [],
+            "postconditions_expr": ["isinstance(result, int)"],
             "invariants_expr": [],
         }
         code = compile_spec_oracle(spec, "m", "f", signature_params=["x"])
-        assert code
-        assert "isinstance(x, int)" in code
+        assert code, "后件为白名单调用时必须产出可执行 oracle"
+        assert "isinstance(r, int)" in code
 
     def test_isinstance_passes_whitelist_check(self) -> None:
         assert _whitelist_check("isinstance(x, int)") == []

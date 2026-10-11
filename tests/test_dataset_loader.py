@@ -917,6 +917,9 @@ class TestGetAvailableDatasets:
             "quix_bugs",
             "bugsinpy",
             "bugs_in_py",
+            # W4b（2026-10-10 独立审查落地）：ULT 基准（TOSEM 2026，防污染）
+            "ult",
+            "unleaked_testbench",
             "in_memory",
             "examples",
             "synthetic",

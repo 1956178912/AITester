@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.tools.patch_test_hacking import (
     detect_test_hacking,
-    test_hacking_signal_names,
+    hacking_signal_names,
 )
 
 
@@ -108,7 +108,7 @@ class TestDegradationAndContracts:
         assert detect_test_hacking(None, None) == {"suspected": False, "signals": []}
 
     def test_signal_names_contract(self) -> None:
-        assert test_hacking_signal_names() == (
+        assert hacking_signal_names() == (
             "hardcoded_input_branch",
             "assert_weakened",
             "exception_swallow_added",

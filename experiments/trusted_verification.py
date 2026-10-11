@@ -33,6 +33,7 @@ import json
 from typing import Any
 
 from src.tools.patch_abstain import evaluate_patch_abstention
+from src.tools.patch_validate import evaluate_patch_validation
 
 
 def _load_rows(path: str) -> dict[str, list[dict[str, Any]]]:
@@ -57,6 +58,23 @@ def arm_trusted_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     # 可信通过 = 通过且未弃权（弃权 + 可信通过 = passed，可自洽校验）
     trusted_pass = sum(1 for r in rows if r.get("passed") and not evaluate_patch_abstention(r)["abstain"])
 
+    # 验证层（弃权+验证双策略的"验证"半边，2026-10-10 独立审查落地）：
+    # 与弃权门对称——弃权看"不可信信号"，验证看"正面证据"（gold 独立裁决 /
+    # 确定性引擎产出 / 确定性证据门放行）。filtered_pass = passed ∧ ¬abstain
+    # ∧ validated，是 Abstain-and-Validate（ICSE-SEIP 2026）的完整 filtered
+    # success 语义：既剥离"不可信通过"，又要求"有独立验证证据"。
+    # 现场重算（不依赖结果行是否已落 patch_validated 字段；字段缺失时该证据
+    # 不命中，与 evaluate_patch_validation 的保守语义一致）。
+    validated = sum(1 for r in rows if r.get("passed") and evaluate_patch_validation(r)["validated"])
+    filtered_pass = sum(
+        1
+        for r in rows
+        if r.get("passed") and not evaluate_patch_abstention(r)["abstain"] and evaluate_patch_validation(r)["validated"]
+    )
+    # filtered 口径分母：移除被弃权门拒绝的"通过"（Abstain-and-Validate 的
+    # "被弃权 bug 不计分母"语义）；分母为 0 时保守 None（与 _pct 同口径）。
+    filtered_denominator = total - abstain_count
+
     # 缓存命中（P0-1 后 token_usage.as_dict() 携带；历史批次缺字段记 0）
     cache_hits = sum((r.get("token_usage") or {}).get("cache_hits", 0) for r in rows)
     cache_avoided = sum((r.get("token_usage") or {}).get("cache_avoided_tokens", 0) for r in rows)
@@ -73,6 +91,12 @@ def arm_trusted_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "abstained": abstain_count,
         "trusted_pass": trusted_pass,
         "trusted_pass_rate_pct": _pct(trusted_pass, total),
+        # 验证层（弃权+验证双策略）：validated = 通过且有独立验证证据的行；
+        # filtered_pass = 通过 ∧ ¬弃权 ∧ 已验证（完整 filtered success）；
+        # filtered_pass_rate_pct 分母 = 移除弃权后的总数（Abstain-and-Validate 口径）。
+        "validated": validated,
+        "filtered_pass": filtered_pass,
+        "filtered_pass_rate_pct": _pct(filtered_pass, filtered_denominator),
         "cache_hits": cache_hits,
         "cache_avoided_tokens": cache_avoided,
         "cache_hit_rate_pct": _pct(cache_hits, cache_hits + llm_calls),
@@ -84,6 +108,34 @@ def build_report(batch_path: str) -> dict[str, Any]:
     """产出可信验证报告（弃权调整 + 缓存命中，按臂分组）。"""
     rows_by_arm = _load_rows(batch_path)
     return {arm: arm_trusted_metrics(rows) for arm, rows in rows_by_arm.items()}
+
+
+def build_report_by_repo(batch_path: str) -> dict[str, dict[str, Any]]:
+    """按 repo/project 分层的可信验证报告（建议 9：避免单一数字掩盖项目间差异）。
+
+    背景（独立审查 2026-10-10 落地，报告建议 9"按项目类型分层报告"）：
+        修复成功率在项目间差异显著（BugsInPy 17 个项目覆盖 ML / 开发者工具 /
+        科学计算 / Web 框架），单一数字会掩盖"某类项目系统完全失效"的真相。
+        本函数把每臂结果行按 repo 字段（task.repo_name）分组，逐组计算
+        arm_trusted_metrics，产出 {arm: {repo: metrics}} 的分层视图。
+
+    字段缺失保守兜底 "unknown"（与 evaluate_patch_abstention 的保守语义一致）。
+
+    Args:
+        batch_path: 批次 JSON 路径。
+
+    Returns:
+        {arm: {repo: {trusted_metrics...}}}（repo 按字母序稳定输出）。
+    """
+    rows_by_arm = _load_rows(batch_path)
+    result: dict[str, dict[str, Any]] = {}
+    for arm, rows in rows_by_arm.items():
+        by_repo: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            repo = r.get("repo") or "unknown"
+            by_repo.setdefault(repo, []).append(r)
+        result[arm] = {repo: arm_trusted_metrics(repo_rows) for repo, repo_rows in sorted(by_repo.items())}
+    return result
 
 
 def main() -> None:
@@ -104,6 +156,8 @@ def main() -> None:
         print(f"  passed（自指通过率）: {m['passed']} ({m['passed_rate_pct']}%)")
         print(f"  弃权（剥离不可信通过）: {m['abstained']}")
         print(f"  trusted_pass（可信通过）: {m['trusted_pass']} ({m['trusted_pass_rate_pct']}%)")
+        print(f"  验证（有独立验证证据）: {m['validated']}")
+        print(f"  filtered_pass（弃权+验证）: {m['filtered_pass']} ({m['filtered_pass_rate_pct']}%）")
         print(f"  缓存命中率: {m['cache_hit_rate_pct']}%（命中 {m['cache_hits']} / 调用 {m['cache_hits']} + 真实）")
         print(f"  无缓存理论 token: {m['uncached_theoretical_tokens']}（真实 + 避免 {m['cache_avoided_tokens']}）")
         print()

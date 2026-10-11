@@ -201,6 +201,31 @@ class ExecutorAgent:
             if target_function:
                 cmd.extend(["-k", target_function])
 
+            # 2026-10-10 独立审查修复（P0，实跑两次复现）：**pytest 插件级超时**。
+            #
+            # 根因：被测缺陷实现若陷入死循环（本批实测 `to_base` 等），LLM 生成的
+            # 测试会在被测代码里永不返回。此时 `executor_runtime` 的
+            # `subprocess.run(timeout=30)` 到点后只 kill **直接子进程**，而 pytest
+            # 自身的子进程/孙进程继续持有 stdout/stderr 管道写端 →
+            # `communicate()` 等 EOF **永久阻塞** → 整臂挂死、批次 JSON 从不写出
+            # （实测证据：主进程 %CPU 0.0、持有 3 个 PIPE、子进程 98.7% CPU 空转）。
+            #
+            # 为什么在**命令层**加超时而不是改 subprocess 调用层：pytest-timeout
+            # 在**测试内部**触发，进程正常退出并返回非零 rc，因此
+            # `subprocess.run` 的返回契约、超时分类（error_info.type）与既有
+            # 12 个 mock `subprocess.run` 的测试全部无需改动——属最小侵入。
+            #
+            # 口径：默认**关**（ADR-0003 默认行为不变）；置
+            # `PYTEST_TIMEOUT_ENABLE=true` 时生效，秒数取 `PYTEST_TIMEOUT_SECONDS`
+            # （默认 20 < EXECUTION_TIMEOUT 30，确保插件先于外层墙钟触发，
+            # 使外层走"正常返回"而非"超时 kill"路径）。
+            if os.getenv("PYTEST_TIMEOUT_ENABLE", "false").lower() in ("true", "1", "on"):
+                try:
+                    _pto = max(1, int(os.getenv("PYTEST_TIMEOUT_SECONDS", "20")))
+                except ValueError:
+                    _pto = 20
+                cmd.extend([f"--timeout={_pto}", "--timeout-method=thread"])
+
             # G3 内核级沙箱（KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）：
             # 把本地执行链路的 pytest 子进程包装进内核沙箱
             # （macOS Seatbelt / Linux Landlock+bwrap）。fail-closed：
