@@ -6,6 +6,90 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-11 全面优化批次（门禁接入 + 测试伪影消除 + 工作区卫生）
+
+> 依据：上一批"独立评审落地批次"（同日）的遗留项（OPTIMIZATION_LANDED_2026-10-11.md §5）+ 全仓体检发现。
+> 本批次不新增功能，**把已交付但游离在门禁体系外的资产接入正式防线**，并消除两处测试收集伪影。
+
+### Fixed
+
+- **`test_` 前缀函数被 pytest 误导入为测试用例**（`src/tools/patch_test_hacking.py`）：
+  `test_hacking_signal_names()` 以 `test_` 开头，两个测试文件对该函数的 import 会创建
+  匹配 `python_functions = test_*` 的模块级属性——pytest 收集时把**导入的函数本体**
+  当成测试用例执行（各文件 1 例伪影，共 2 例），且其返回 tuple 在全量跑批（xdist
+  分片）下触发 `PytestReturnNotNoneWarning`。重命名为 `hacking_signal_names()`
+  （两个测试文件的 import 已同步更新）。效果：收集数 5491 → 5489（消除 2 个伪影用例），
+  该告警归零；`BASELINE.yaml` 同步刷新（5487 → 5485，`suite_seconds` 按 xdist 实测 62s）。
+  无行为变化——真实测试语义不变（函数体断言均在，被消除的是"导入即用例"的误收集）。
+
+### Changed
+
+- **两个已交付门禁接入 CI**（`.github/workflows/ci.yml`）：
+  `check_env_snapshot_keys.py`（E-B / P0-2 环境开关 provenance 完备性，脚本自述
+  "接入 CI"一直未兑现）与 `check_model_fingerprint.py`（S29 模型版本锁定门槛条件）
+  此前只在本地 `make gates` 可发现，push 不阻断。现均作为 test 作业步骤阻断合并
+  （纯本地快检、无网络；模型指纹门禁默认仅扫近 2 天 `benchmark_*.json`，空扫描面放行）。
+  `Makefile` 同步补 `env-snapshot` / `model-fingerprint` 目标并入 `gates` 聚合。
+- **ruff 排除面扩容**（`pyproject.toml` `extend-exclude`）：
+  `audit_2026/` / `_independent_audit/` / `tmp_trace/` 三个审查资产目录 + 5 份
+  评审/优化方案类 Markdown（内嵌代码块的一次性评审文档，format 重排会破坏
+  "文档即证据"的逐字口径）。此前 `ruff check .` 的 418 错全部来自未跟踪的
+  审查目录，本地门禁噪音掩盖真实产品代码问题（OPTIMIZATION_LANDED §5 遗留项 7）。
+  扩容后 `ruff check .` 与 `ruff format --check .` 均全绿。
+- **`BASELINE.yaml` 刷新**：`total_passed` 5487 → **5485**、`suite_seconds` 203 → **62**
+  （xdist -n 4 实测 62.48s；上一值 203 为串行口径且已过期）。恒等式 5485+3+1=5489 ✅。
+
+### 验证
+
+- 全量 `pytest tests/ -n 4 --dist loadfile`：**5485 passed / 3 skipped / 1 xfailed / 0 failed**（62.5s）
+- 门禁：**18/18 全绿**（含新接入的 2 项；`check_swe_bench_pro_ready` 维持"数据前置校验"独立入口口径，未接入 CI 属设计）
+- `ruff check .` 全绿；`ruff format --check .` 611 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
+- 新增测试 0 例（本批次为接线与清理，无新功能）
+
+## [Unreleased] — 2026-10-11 独立评审落地批次（P0 可信度修复：门槛条件 + 死代码 + 统计口径 + 管道闸门）
+
+> 依据：三份独立评审（`INDEPENDENT_AUDIT_2026-10-11.md` / `EXTERNAL_REVIEW_PACKAGE_AITester.md` / `CONSOLIDATED_REVIEW_AND_PLAN.md`，均在仓库根，未跟踪）。
+> 本批次的最高优先级不是提升指标，而是**让实验能产出可信数据**：先锁模型快照，再修管道与死代码，最后修统计口径。
+
+### Added
+
+- **S29 模型版本锁定（门槛条件）**：`experiments/run_benchmark.py` 的 `provenance` 新增 `model_fingerprint` 块（`requested_alias` / `returned_model` / `system_fingerprint` / `probe_sha256` / `probe_at` / `pinned` / `missing` / `error` / `alias_mismatch`）。探针为固定 prompt 贪心调用、进程内按别名缓存、失败时降级为 `pinned=False` 而不中断跑批。新增门禁 `scripts/gates/check_model_fingerprint.py`（默认只查近 2 天的 `benchmark_*.json`；`--all-history` 审计历史；退出码 0=通过/无新批次、1=存在未锁定批次、2=路径错误）。**动机**：实测同一 87 任务 × 3 seed、同别名下 `plain_llm` 检出率由存档 1.5%(4/261) 漂移至 19.2%(50/261)，配对差由 +13.7pp 反转为 −5.7pp——历史结论的可复现性已失效。
+- **S2 `instance_code` fail-fast**：`src/datasets/dataset_loader.py` 新增 `AITESTER_DATASET_STRICT_INSTANCE_CODE`（默认 false 保持历史口径；true 时把兜底为 issue 文本的任务剔除并记 `strict_skipped_task_ids`，`run_benchmark` 落 provenance）。**动机**：SWE-bench 389/389 行同时缺 `instance_code` 与 `detection_rate`，补丁从未成功应用。
+- **T1 SpecExpr 文法契约 + 拒绝原因归因**：`src/agents/planner.py` 规约提示新增 BNF + 5 正例 + 5 反例 + 输出前自检（`<func>`/`<attr>` 白名单由 `spec_ir_v2.spec_expr_grammar_terminals()` 渲染，**提示与编译器单一事实源**，仅 `SPEC_IR_DSL_ENABLE=true` 时注入）；`src/specs/spec_ir_v2.py` 新增 8 类拒绝原因（`natural_language` / `unsupported_syntax` / `unsupported_operator` / `unknown_name` / `parse_error` / `too_long` / `empty` / `not_a_string`）与聚合 `spec_reject_reasons()`；`src/graph/nodes.py` + `state.py` + `run_benchmark.py` 全链透出为结果行 `spec_reject_reasons`。**动机**：`spec_compile_rate` 中位数 0.200、47.6% 恒为 0，真实调用定位根因是 planner 系统产出自然语言规约（如 `"text 为 str 类型"`）而编译器只收形式表达式。
+- **T2 顶层 JSON 数组解析**：`src/utils/helpers.py` 新增 `extract_json_array()`（对称于 `extract_json_object`，含 fenced/前缀/尾随逗号/最内层降级）；接入 `src/agents/debugger.py`（对抗性推理 3.1）与 `src/agents/oracle_enhancer.py`（原子化预言）。**动机**：原 `extract_json_object` 只找 `{`，对合法数组恒抛 `JSONDecodeError`，而这两处的提示词契约是**顶层数组**——实测该分支**从设计上永不生效**（LLM 输出的高质量假设被全部丢弃）。
+- **S13 聚类稳健统计**：`experiments/statistical_analysis.py` 新增 `build_cluster_map()` / `cluster_robust_paired_test()` / `cluster_robust_analysis()` 与 `--cluster-robust` 开关（默认关闭，历史输出逐行不变，已用 227 vs 227 IDENTICAL 验证）。**动机**：87 个任务标签实为 **26 个唯一程序体**，精确度被高估约 3.35 倍。
+- **S11 token 记账健全性**：`token_accounting_sanity()` → 某臂 ≥50% 行无记账时成本列渲染 `NOT_COMPUTABLE`（此前会静默输出数字）。
+- **T6 MDO 池饱和出口拦截**：`src/measurement/mdo.py` 新增第三态 `status="provisional_pool"`；`as_dict()` 在 `available and not pool_floor_ok` 时把 `mtr`/`mdr`/`crash_rate` 置 `None` 并新增 `mdo_provisional` / `mdo_raw`（原始值，审计用）——属性层计算不变（判别逻辑单测零改动）。
+- **门禁收紧（S7）**：`tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 的余量由固定 `+5` 收紧为 `skipped + xfailed + 1`，使任何新增测试必须同步刷新 `BASELINE.yaml`。
+
+### Fixed
+
+- **T7 `type_repair` 注入回调路径**：`_repair_with_llm` 现在**仅在确实存在代码围栏时**剥离 markdown（提示词要求 LLM 用 ```python 包裹，而原实现直接 `ast.parse` 回调返回值 → 带围栏的正确代码被判语法错误而拒绝，日志记"类型修复产出的代码语法不合法"）。生产路径（`_auto_llm_repair`）此前已剥离故不受影响，缺陷仅在文档化的 `llm_repair` 注入接口；无围栏输入原样透传，保持既有契约不变。
+- **S29 探针 `max_tokens` 过小（真实调用发现）**：原 `max_tokens=16` 被模型思维链 token 全部占用（实测 reasoning 56–65 tokens），正文被截断为 `'PRO'` 且 `finish_reason='length'`，导致探针**恒失败、`pinned` 恒 False**、S29 形同虚设。改为 64 后实测 `pinned=true`，`returned_model=deepseek-flash`、`system_fingerprint=aeb56401ca74e127821c4f9126dcb669`、`probe_sha256` 三次独立调用逐位一致。
+- **T5 撤回"过红是 −28pp 主机制"归因**（`BASELINE.yaml` `target_quality.specificity_gate.note`）：两条独立证据不支持——① 门与检出指标**同源**（450 个非 None verdict 上 `specific_red→det=1` 206/206、`over_red→det=0` 244/244，**真实分歧 0**）；② 该比例**随文件子集变动**（0.61/1.16 ↔ 0.50/1.00）且 84–93% 行无 verdict。真实主机制为**测试生成侧不产红**（aitester 296/609 = 48.6% 行全绿未检出、每行含均值 15.3 条 assert；df 仅 2.5%）。
+- **零断言用例（S8）**：`tests/test_mdo_metrics.py` 与 `tests/test_path_c_trigger.py` 各 1 例补有效断言，`check_zero_assert_tests` 由违规 2 例转为 0 例。
+- **`check_model_fingerprint` 范围错误**：默认扫描面由全部 `*.json` 收窄为 `benchmark_*.json` 且限于近 2 天修改（派生分析产物从不含 provenance，判其失败等于往 CI 塞永久红灯）；"近期无新批次"由阻断改为通过（S29 只要求**新批次**已锁定）。
+
+### Fixed（第二轮：全量测试 + 真实 LLM 复测暴露的三个 spec_ir 缺陷）
+
+> 来源：用户要求「所有测试都跑一次，包括 LLM 测试」。回归过程中定位到三个此前**从未被任何测试覆盖**的缺陷——它们共同解释了"逻辑驱动"在真实实验中为何空转（F5/F14 的最终机制）。
+
+- **T1b｜白名单调用名被未知标识符门拒绝**（`src/specs/spec_ir_v2.py`）：`_ALLOWED_CALL_NAMES` 的 12 个内建（abs/all/any/float/int/isinstance/len/max/min/round/sorted/str）在 `_whitelist_check` 中按调用位置放行，但它们在 AST 里同样是 `ast.Name` 节点，随即被 `identifiers - known` 判成 `unknown_name` —— **同一白名单在前一门放行、后一门拒绝**，导致白名单里的函数一个都用不了：`len(items) > 0` / `isinstance(a, int)` / `max(a, b) > 0` 全部不可编译，而 `a + b > 0` 可编译。修复：已知集合并入 `_ALLOWED_CALL_NAMES`（仅经白名单放行的调用名进入；未白名单调用如 `eval` 仍被前一门以 dangerous_call 拒掉，**危险面零放宽**）。验证：13 条正/反例全部符合预期（含 `eval("1")` / `__import__("os")` / `a.__class__` / `r == total` 仍被拒）。
+- **T1c｜oracle 产物因缩进错误恒被丢弃（决定性）**（`src/specs/spec_ir_v2.py`）：`_compile_single_clause` 返回**无缩进**语句，而 `compile_spec_oracle` 对 post/invariant 行额外做 `compiled.replace("assert ", "    assert ", 1)` 得到 **8 空格**缩进，pre 行则是 `f"    {compiled}"`（4 空格）。两者与 oracle 里 4 空格的一级语句（`items = 0` / `r = f(items)`）混排后必然 `SyntaxError: unexpected indent`，产物总自检失败并走"保守丢弃"分支（日志记 `SpecIR v2 oracle 产物自检失败`）——**即使 `readiness=1.0`（全部子句可编译），产物仍为 0 字节**。修复：新增 `_indent_oracle_body()` 把 pre/post/invariant 统一规整到函数体一级（4 空格）。验证：三函数产物长度 0 → **299 / 369 / 339 字节，且 `ast.parse` 通过**。
+- **T1d｜退化字面量绑定在正确实现上误报**（`src/specs/spec_ir_v2.py`）：T1c 修复后 oracle 首次真正产出可执行代码，随即暴露原"已知保守权衡"的实际后果——无边界材料时 `a, b = 0, 0` / `items = 0` 会**违反前件**（如 `b != 0`），使 oracle 在 **gold 实现上就断言失败**，产物由"确定性检出通道"退化为"确定性假报通道"（M1 三段判定按"两侧皆红"记 0）。修复（两条分支）：① 复用既有 z3 通道 `spec_smt.generate_spec_witnesses`（语义即"满足前件的合法输入"）取首个见证绑定，参数键在 `inputs` 子字典内；② **无见证时不发出前件断言**（降为注释保留 provenance），后件断言照发——前件由构造满足才断言，避免误报。
+
+### Changed
+
+- `BASELINE.yaml`：`tests.total_passed` **5389 → 5487**（`--collect-only` 收集 5491，实测 5487 passed + 3 skipped + 1 xfailed + 0 failed，耗时 203s）；`suite_seconds` 35 → 203；`last_verified` → 2026-10-11。**勘误**：该字段此前长期未随新增测试刷新（F12：字段 5389 / 注释 5323 / 实测 5390 三值互斥）。
+- 新增测试文件 3 个共 **94 例**：`tests/test_model_fingerprint.py`（27）、`tests/test_spec_contract_grammar.py`（31）、`tests/test_cluster_robust_stats.py`（37），全部零真实 LLM 调用。
+
+### 验证
+
+- 全量 `pytest tests/`：**5487 passed / 3 skipped / 1 xfailed / 0 failed**（203s）
+- 门禁：**18/19 绿**；唯一未绿 `check_swe_bench_pro_ready` 是**数据前置校验**（设计即如此：本地无 SWE-bench Pro 数据集，且未接入 CI）
+- `ruff check` 全绿；`ruff format --check` 491 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
+- 真实 API 验证：`model_fingerprint` 端到端 `pinned=true` 且探针哈希三次一致
+
 ## [Unreleased] — 2026-10-10 文档清理批次（过时文档与孤儿报告删除 + 本地文档安全网）
 
 ### Removed
@@ -125,6 +209,21 @@
 >   [均待核验]，将项目 −28pp 结果重新语境化为**手工设计编排的负面证据**
 >   （而非多智能体范式的负面证据），转正判据维持 ADR-0016（预算对照下复现
 >   正向 detection 增量）。
+>   ⚠️ **2026-10-10 勘误（独立审查发现，已就地修正 README 双语）**：上述
+>   "CANDOR（ICST 2026，one-shot 88.35% vs 多智能体 35.92%）"系**错误归属**——
+>   该组数字（mutation score 口径）实出自 **IEEE 独立复现研究**（Radaideh &
+>   Corriveau，*Understanding the Effect of Agentic Iteration on LLM-Based Unit
+>   Test Generation*，IEEE Xplore **11655121**；同文另报 one-shot GPT-4o
+>   69.90% vs CANDOR 45.63%）；**CANDOR 原文**为 TOSEM 2026（DOI
+>   10.1145/3803418），其结论对多智能体**为正**（line/branch/mutation
+>   0.991/0.970/0.980 on HumanEvalJava）。原表述的三处问题：① venue 错；
+>   ② 未标注第三方复现身份；③ "45s vs 50h" 无出处。另：BOAD（ICLR 2026，
+>   arXiv:2512.23631）为真，但研究对象是**仓库级 SWE 任务解决**，不适用于
+>   测试生成论证。**README 双语已改写为"不利证据 / 有利证据 / 最强负面证据"
+>   三方并列**，撤回"跨论文共识"表述；可辩护的窄主张改为"手工的、工具特定的
+>   编排相对强 LLM 单提示 + 统一修复环优势有限或无优势"。最强负面证据的
+>   正确出处为 **Konstantinou, Degiovanni & Papadakis, ICST 2026**
+>   （arXiv:2601.09695）。
 > - **LLM 端点收拢（仅保留 DeepSeek V4.1 Flash 官方 API）**：`llm_configs.json`
 >   17 条 → 1 条（`deepseek-v4.1-flash`，provider `deepseek`，
 >   `https://api.deepseek.com/v1`）；`.env` 删除 Agnes 国际/国内 + BigModel 备用

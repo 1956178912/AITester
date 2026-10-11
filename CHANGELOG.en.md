@@ -6,6 +6,89 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-11 comprehensive-optimization batch (gate wiring + test-artifact cleanup + workspace hygiene)
+
+> Basis: leftovers from the same-day "independent-review landing batch" (OPTIMIZATION_LANDED_2026-10-11.md §5) + repo-wide health check.
+> This batch adds **no new feature** — it wires already-delivered-but-unwired assets into the formal gate defense and removes two test-collection artifacts.
+
+### Fixed
+
+- **`test_`-prefixed function mis-collected as a test case** (`src/tools/patch_test_hacking.py`):
+  `test_hacking_signal_names()` is imported by two test files, creating a module-level
+  attribute matching `python_functions = test_*` — pytest collected the **imported function
+  body** as a test case (1 artifact per file, 2 total) and its tuple return triggered
+  `PytestReturnNotNoneWarning` under the full xdist suite. Renamed to
+  `hacking_signal_names()` (imports in both test files updated). Effect: collected 5491 → 5489
+  (the 2 artifact cases removed), warning eliminated, `BASELINE.yaml` refreshed
+  (5487 → 5485, `suite_seconds` 203 → 62 on the xdist measurement). No behavior change —
+  real test semantics are untouched; only the "imported-as-case" mis-collection was removed.
+
+### Changed
+
+- **Two delivered gates wired into CI** (`.github/workflows/ci.yml`):
+  `check_env_snapshot_keys.py` (E-B / P0-2 env-switch provenance completeness; the script's
+  own "wire into CI" note had never been honored) and `check_model_fingerprint.py`
+  (S29 model-version pinning, the gating prerequisite) were previously only discoverable via
+  local `make gates`, not blocking on push. Both are now blocking steps of the test job
+  (pure local fast checks, no network; the fingerprint gate scans recent `benchmark_*.json`
+  only by design, passing on an empty scan surface). The `Makefile` gained matching
+  `env-snapshot` / `model-fingerprint` targets, folded into the `gates` aggregate.
+- **Ruff exclusion surface expanded** (`pyproject.toml` `extend-exclude`):
+  the three review-asset directories `audit_2026/` / `_independent_audit/` / `tmp_trace/`
+  plus 5 review/optimization-plan Markdown docs (one-shot review documents with embedded
+  code blocks — reformatting would break the "document-as-evidence" byte-level integrity).
+  Before: `ruff check .` reported 418 errors, **all** from untracked review directories,
+  drowning out real product-code signal (OPTIMIZATION_LANDED §5 leftover item 7).
+  After: `ruff check .` and `ruff format --check .` are both fully green.
+- **`BASELINE.yaml` refresh**: `total_passed` 5487 → **5485**, `suite_seconds` 203 → **62**
+  (xdist -n 4 measured 62.48s; the previous 203s was a stale serial-mode figure).
+  Identity holds: 5485 + 3 + 1 = 5489 ✅.
+
+### Verification
+
+- Full `pytest tests/ -n 4 --dist loadfile`: **5485 passed / 3 skipped / 1 xfailed / 0 failed** (62.5s)
+- Gates: **18/18 green** (including the 2 newly wired; `check_swe_bench_pro_ready` remains an
+  unwired data-preflight entry point by design)
+- `ruff check .` clean; `ruff format --check .` 611 files formatted; `mypy src/ config.py` 0 errors (125 source files)
+- New tests: 0 (wiring and hygiene batch, no new functionality)
+
+## [Unreleased] — 2026-10-11 independent-review landing batch (P0 credibility fixes: gating prerequisite, dead code, statistical caliber, pipeline gate)
+
+> Basis: three independent reviews (`INDEPENDENT_AUDIT_2026-10-11.md` / `EXTERNAL_REVIEW_PACKAGE_AITester.md` / `CONSOLIDATED_REVIEW_AND_PLAN.md`, all at repo root, untracked).
+> The top priority of this batch is **not raising metrics but making experiments produce trustworthy data**: pin the model snapshot first, then fix the pipeline and dead code, then fix the statistical caliber.
+> Full detail (Chinese) in [CHANGELOG.md](CHANGELOG.md) under the same heading.
+
+### Added
+
+- **S29 model-version pinning (gating prerequisite)**: `provenance.model_fingerprint` (requested_alias / returned_model / system_fingerprint / probe_sha256 / probe_at / pinned / missing / error / alias_mismatch) with a fixed-prompt greedy probe, per-alias in-process cache, and offline-degradable failure (`pinned=false`, never aborts a batch). New gate `scripts/gates/check_model_fingerprint.py` (default: recent `benchmark_*.json` only; `--all-history` to audit). **Motivation**: with the same alias, `plain_llm` detection drifted 1.5% (4/261) → 19.2% (50/261) on the same 87 tasks × 3 seeds; the paired delta flipped +13.7pp → −5.7pp.
+- **S2 `instance_code` fail-fast**: `AITESTER_DATASET_STRICT_INSTANCE_CODE` (default false; when true, tasks falling back to issue text are dropped and counted in provenance). **Motivation**: 389/389 SWE-bench rows lacked both `instance_code` and `detection_rate`; no patch ever applied.
+- **T1 SpecExpr grammar contract + rejection attribution**: planner prompt gains BNF + 5 positive + 5 negative examples + a pre-output self-check (whitelist rendered from `spec_expr_grammar_terminals()`, so prompt and compiler share one source of truth; injected only when `SPEC_IR_DSL_ENABLE=true`); 8 rejection classes + `spec_reject_reasons()`, wired through to the result row. **Motivation**: `spec_compile_rate` median 0.200 with 47.6% zeros; live calls showed the planner emits natural-language clauses (`"text is of type str"`) while the compiler only accepts formal expressions.
+- **T2 top-level JSON array parsing**: `extract_json_array()` (symmetric to `extract_json_object`), wired into adversarial intent generation and the oracle enhancer. **Motivation**: the object-only extractor raised on arrays, so both features were **dead by construction** (high-quality LLM output silently discarded).
+- **S13 cluster-robust statistics**: `build_cluster_map()` / `cluster_robust_paired_test()` / `--cluster-robust` (off by default; legacy output verified byte-identical). **Motivation**: 87 task labels are **26 unique program bodies**; precision was overstated ~3.35×.
+- **S11 token-accounting sanity** → cost columns render `NOT_COMPUTABLE` when an arm has ≥50% unaccounted rows.
+- **T6 MDO pool-floor egress guard**: new `status="provisional_pool"`; `as_dict()` nulls `mtr`/`mdr`/`crash_rate` and adds `mdo_provisional` / `mdo_raw` when the pool is below the floor (attribute-level computation unchanged; discrimination unit tests untouched).
+- **Gate tightened (S7)**: baseline-numbers guard slack narrowed from fixed `+5` to `skipped + xfailed + 1`, so any new test must refresh `BASELINE.yaml`.
+
+### Fixed
+
+- **T7 `type_repair` injected-callback path**: fence stripping now happens only when fences are actually present (the prompt asks for ```python, while the implementation fed the raw callback return to `ast.parse`). Production path was unaffected; unfenced input passes through unchanged.
+- **S29 probe `max_tokens` too small (found by live call)**: `max_tokens=16` was fully consumed by reasoning tokens (measured 56–65), truncating output to `'PRO'` and making the probe fail permanently. With 64 the fingerprint pins: `returned_model=deepseek-flash`, `system_fingerprint=aeb56401ca74e127821c4f9126dcb669`, `probe_sha256` identical across three independent calls.
+- **T5 withdrawn "over_red is the −28pp main mechanism"** attribution: the gate and the detection metric are **deterministically complementary** (206/206 and 244/244, zero divergence), and the ratio shifts with the file subset (0.61/1.16 ↔ 0.50/1.00) while 84–93% of rows carry no verdict. The real mechanism is **the test-generation side produces no red** (aitester 296/609 = 48.6% all-green rows, mean 15.3 asserts each; df only 2.5%).
+- **Zero-assert tests**: two cases gained real assertions; `check_zero_assert_tests` now reports 0 violations.
+- **`check_model_fingerprint` scope error**: default scan narrowed to `benchmark_*.json` from the last 2 days; "no new batch to verify" now passes instead of blocking.
+
+### Changed
+
+- `BASELINE.yaml`: `tests.total_passed` **5389 → 5487** (5491 collected; 5487 passed + 3 skipped + 1 xfailed + 0 failed; 203s); `suite_seconds` 35 → 203; `last_verified` → 2026-10-11.
+- Three new test files, **94 cases total**, all with zero live LLM calls.
+
+### Verification
+
+- Full `pytest tests/`: **5487 passed / 3 skipped / 1 xfailed / 0 failed** (203s)
+- Gates: **18/19 green**; the only non-green (`check_swe_bench_pro_ready`) is a **data preflight** by design (no local SWE-bench Pro dataset; not wired into CI)
+- `ruff check` clean; `ruff format --check` 491 files formatted; `mypy src/ config.py` 0 errors (125 source files)
+- Live API check: `model_fingerprint` pins end-to-end with a reproducible probe hash
+
 ## [Unreleased] — 2026-10-10 documentation-cleanup batch (outdated docs & orphaned reports removed + local document safety net)
 
 ### Removed

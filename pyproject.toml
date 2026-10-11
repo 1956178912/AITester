@@ -108,7 +108,31 @@ line-length = 120
 # SHA256SUMS/E7 工作表 md）是数据不是代码——ruff 0.16 的 format --check
 # 会把工作表 md 按代码块重排（可能破坏受 SHA256SUMS 保护的工件字节），
 # lint/format 一律排除。
-extend-exclude = ["tmp_apr_baseline", "experiments/results"]
+#
+# 2026-10-10 独立审查批次补 review_2026/：审查过程产物目录（审计报告 md +
+# 分析脚本输出的 md 片段）是**审查记录**而非产品代码；其 md 内的代码块会被
+# ruff format 重排（与上面 experiments/results 同一类问题），且该目录按约定
+# 不随产品交付。lint/format 与实验工件同口径排除。
+extend-exclude = [
+  "tmp_apr_baseline",
+  "experiments/results",
+  "review_2026",
+  # 独立审查资产（2026-10-11 全面优化批次）：审计/评审的独立脚本与工件，
+  # 与产品代码同口径排除——它们是一次性分析工具，不参与产品 lint/format 门禁
+  # （此前 ruff check . 报 418 错全部来自该两类未跟踪目录，使本地门禁噪音掩盖
+  # 真实产品代码问题；OPTIMIZATION_LANDED_2026-10-11.md §5 遗留项第 7 条）。
+  "audit_2026",
+  "_independent_audit",
+  "tmp_trace",
+  # 评审/优化方案类审查交付物（同上）：含内嵌代码块的一次性评审文档，
+  # ruff format 会重排其内嵌代码（破坏"文档即证据"的逐字口径）；lint 面
+  # （ruff check）不受影响（check 不解析 md 内代码块）。
+  "CONSOLIDATED_REVIEW_AND_PLAN.md",
+  "EXTERNAL_REVIEW_2026-10-11.md",
+  "EXTERNAL_REVIEW_PACKAGE_AITester.md",
+  "INDEPENDENT_AUDIT_2026-10-11.md",
+  "OPTIMIZATION_PLAN_v2.md",
+]
 
 [tool.ruff.lint]
 # 启用的规则集

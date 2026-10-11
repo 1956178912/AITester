@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract tool-versions gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics
 
 PY := .venv/bin/python
 
@@ -43,10 +43,16 @@ baseline-check:  ## BASELINE.yaml 结构 + 文档数字漂移守卫
 state-contract:  ## LangGraph 状态通道静态契约守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_state_contract.py
 
+env-snapshot:  ## 环境开关 provenance 完备性守卫（E-B，接入 CI）
+	$(PY) scripts/gates/check_env_snapshot_keys.py
+
+model-fingerprint:  ## 模型版本指纹锁定守卫（S29，接入 CI；默认仅扫近期批次）
+	$(PY) scripts/gates/check_model_fingerprint.py
+
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint typecheck test docs-check env-budget baseline-check state-contract tool-versions  ## 本地全部门禁（合并前自检）
+gates: lint typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions  ## 本地全部门禁（合并前自检）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

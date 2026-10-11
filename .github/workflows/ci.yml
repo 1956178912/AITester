@@ -224,6 +224,26 @@ jobs:
         # 的静态差集审计只在本地可发现。纯 stdlib AST 快检。
         run: python scripts/gates/check_state_contract.py
 
+      - name: Check env snapshot keys (E-B 开关 provenance 完备性)
+        # E-B / P0-2（2026-10-10 独立评审落地）：run_benchmark.py 的
+        # _env_snapshot_keys 是"从工件证明干预是否生效"的唯一通道；源码新增
+        # 开关未同步进快照清单 → 消融臂未生效被误读为"零效应"（已有三起
+        # 事故：PLAN_STRIP / OVER_RED_SECTION / DETECTION_FIRST_SECTION）。
+        # 脚本自述接入 CI 后一直未兑现（本地可发现但 push 不阻断）。纯 stdlib
+        # AST 快检，默认 select=_ENABLE$ 形态；白名单 review_2026/E2_env_snapshot_allowlist.txt。
+        run: python scripts/gates/check_env_snapshot_keys.py
+
+      - name: Check model fingerprint (S29 模型版本锁定, 2026-10-11 独立评审落地)
+        # S29 / F13（最高优先级门槛条件）：deepseek-flash 是浮动别名，历史
+        # provenance 只记别名无可校验版本指纹，实测同别名 plain_llm 检出率
+        # 1.5%→19.2%（12.5 倍漂移）。本门禁消费 run_benchmark.py 新增的
+        # provenance.model_fingerprint 字段（pinned=true 是唯一通过条件）：
+        # 默认只扫近 2 天的 benchmark_*.json（S29 是"新批次必须已锁定"的
+        # 预注册停止规则，历史批次要求 pinned=true 是范畴错误——门禁自述
+        # "空扫描面放行"由脚本默认逻辑承担，CI 无需额外参数）。
+        # 纯本地快检，无网络；有真新批次落盘时自动生效。
+        run: python scripts/gates/check_model_fingerprint.py
+
       - name: Verify experiment artifact checksums (U1 证据链门禁)
         # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
         # traces + SHA256SUMS）已入库（.gitignore 白名单修复）。本步骤校验
