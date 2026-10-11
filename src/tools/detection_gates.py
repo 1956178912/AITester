@@ -71,6 +71,7 @@ def _run_test_against_code(
     target_code: str,
     module_name: str | None,
     timeout: int = _GATE_TIMEOUT_SECONDS,
+    task_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """委托 M1 既有原语执行（test 对 target_code），失败返回 None。
 
@@ -78,18 +79,32 @@ def _run_test_against_code(
     语义：rc==0 = 全过（绿）；非 0 = 红；None = 超时 / IO 异常 / 材料
     缺失 / module_name 非法（不可判定）。任何导入/执行异常均吞掉并
     返回 None（门降级为 unavailable，不阻断主流程）。
+
+    task_metadata：与 M1 事后裁决同口径透传（P0-1，2026-10-11 全面优化
+    批次：跨文件任务必传——否则委托层走单文件物化，伴生模块缺失
+    导致 rc>=2 被误判 over_red；未传时行为与历史逐位一致，零回归）。
     """
     if not module_name or not _SAFE_MODULE_RE.match(module_name):
         return None
     try:
         from experiments._m1_metrics import _run_pytest_in_tmp as _runner
 
-        res = _runner(test_code, target_code, module_name, timeout=timeout)
+        res = _runner(test_code, target_code, module_name, timeout=timeout, task_metadata=task_metadata)
     except Exception:
         logger.warning("AC2 门执行原语不可用（experiments._m1_metrics 委托失败），保守放行", exc_info=True)
         return None
     if res is None:
         return None
+    # P0-1（2026-10-11 全面优化批次）：复用 M1 既有的执行错误判据——
+    # rc>=2 / 收集错误 = "根本没跑起来"，与 M1 的 detection 三态（None
+    # 而非 0.0/1.0）同口径；此前只取 rc==0 当绿，rc>=2 被误判过红。
+    try:
+        from experiments._m1_metrics import _looks_like_test_execution_error as _exec_err
+
+        if _exec_err(res[0], res[1] + res[2]):
+            return {"green": False, "rc": res[0], "unavailable": True}
+    except Exception:
+        logger.warning("AC2 门执行错误判据不可用，回退历史 rc==0 口径", exc_info=True)
     return {"green": res[0] == 0, "rc": res[0], "unavailable": False}
 
 
@@ -97,6 +112,7 @@ def specificity_verdict(
     test_code: str,
     gold_fixed_code: str | None,
     module_name: str | None,
+    task_metadata: dict[str, Any] | None = None,
 ) -> str:
     """门①判定：当前红测试是否缺陷特异。
 
@@ -106,6 +122,10 @@ def specificity_verdict(
             合成任务由 run_benchmark 从任务材料管道注入；None / 空串 =
             无 gold 材料——真实仓库场景，后续批次以变异体裁决替代）。
         module_name: 目标模块名。
+        task_metadata: 与 M1 事后裁决同口径的任务材料（P0-1，
+            2026-10-11 全面优化批次）：跨文件任务必传（委托层据此
+            物化伴生模块树，避免 rc>=2 被误判过红）；未传时
+            行为与历史逐位一致，零回归。
 
     Returns:
         - "specific_red"：gold fixed 上转绿（buggy 红 + fixed 绿，缺陷特异）；
@@ -115,7 +135,7 @@ def specificity_verdict(
     """
     if not gold_fixed_code or not gold_fixed_code.strip() or not (test_code and test_code.strip()):
         return "unavailable"
-    res = _run_test_against_code(test_code, gold_fixed_code, module_name)
+    res = _run_test_against_code(test_code, gold_fixed_code, module_name, task_metadata=task_metadata)
     if res is None or res.get("unavailable"):
         return "unavailable"
     return "specific_red" if res["green"] else "over_red"

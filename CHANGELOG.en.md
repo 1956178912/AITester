@@ -1,10 +1,75 @@
-> Last updated: 2026-10-10 (2026-10-10 documentation-cleanup batch: outdated docs and orphaned reports removed + local document safety net; previously R5 review-revision landing batch: 2026 frontier-revised review + C-08 whitelist default-on + C-01 narrative convergence + LLM endpoint consolidation to DeepSeek V4.1 Flash official API; previously R4 review-landing batch: counterexample-guided refinement loop [S1: spec_smt postcondition-consistency check + spec_refine.py CEGIR] + nodes.py continued split into patch_io.py [S4] + E4 contamination-control preregistration [S3] + llm_configs schema guard [S9] + MAS skill-library compilation design doc [S7]; before that R3 batch: bare-eval removal from spec_smt [S8] + nodes.py three-cluster split [S7] + PGH003 gate re-armed; before that 2026-10-08 R2 batch)
+> Last updated: 2026-10-11 (2026-10-11 code-level comprehensive-optimization batch: _MAX_CLAUSE_LEN single source of truth [spec_ir_v2 literal-200 drift risk eliminated] + P0-1 specificity-gate decision fix [execution errors no longer misjudged as over_red; task_metadata transparently passed for cross-file companion modules] + test corpus comment erratum; full suite 5485 passed / 3 skipped / 1 xfailed / 0 failed; mypy 0 errors across 125 source files; ruff fully green. Previously 2026-10-11 comprehensive-optimization batch [gate wiring + test-artifact cleanup]; previously independent-review landing batch [P0 credibility fixes]; previously 2026-10-10 documentation-cleanup batch; previously R5/R4/R3 review-revision/landing batches; previously 2026-10-08 R2 batch)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-11 code-level comprehensive-optimization batch (drift-risk elimination + P0-1 gate decision fix + test corpus erratum)
+
+> Basis: repo-wide code-level health check (not a document review) — per-module audit of
+> `src/specs/`, `src/tools/`, `src/graph/` for constant drift, decision-criterion
+> consistency, and cross-layer call contracts, against external-review item P0-1.
+> This batch adds **no new feature** — it eliminates **three real code-level defects**
+> (literal drift / decision-masking / cross-file misjudgment).
+
+### Fixed
+
+- **`_MAX_CLAUSE_LEN` single source of truth** (`src/specs/spec_ir_v2.py`):
+  The clause length limit 200 appeared as the literal `> 200` in two places —
+  `is_expression_clause` (form gate, deciding "is this compilable?") and
+  `_form_gate_reject_reason` (too_long attribution gate, deciding "why was it rejected?").
+  An independent change to either side would silently cause the decision and the
+  attribution to drift apart (e.g. the decision says "compilable" while the attribution
+  says "too long", or vice versa), with no mechanism forcing the two to stay in sync.
+  The test corpus (`test_spec_contract_grammar.py`) also anchored on the literal `200`.
+  **Fix**: module-level constant `_MAX_CLAUSE_LEN = 200` (anchored to the historical
+  default, value unchanged); both code sites and the test assertion now reference the
+  constant. Drift surface: zero. Decision semantics: unchanged.
+
+- **Specificity gate P0-1: execution errors no longer misjudged as over_red**
+  (`src/tools/detection_gates.py` + `src/graph/nodes.py`):
+  Gate ①'s comparison execution previously treated only `rc==0` as green and any
+  non-zero rc as red, **without reusing M1's existing
+  `_looks_like_test_execution_error`** (rc≥2 / collection error = "the test never
+  actually ran"; M1's three-state semantics record `None`, not 0/1). For cross-file
+  tasks, the delegated call did not pass `task_metadata` → companion modules
+  missing → guaranteed rc≥2 → **misjudged as `over_red`**, polluting the over-red
+  statistics and adding noise to the abstention gate / CPR / IDR negative signals.
+  **Fix**:
+  - `_run_test_against_code` now accepts an optional `task_metadata` and passes it
+    to the delegated runner (cross-file materialisation branch is taken when
+    `is_cross_file` is set);
+  - Execution errors are now routed through `_looks_like_test_execution_error`;
+    if detected, the result is `{"unavailable": True}` (conservative fail-open,
+    consistent with M1's three-state semantics) instead of `over_red`;
+  - `specificity_verdict` gains a matching optional `task_metadata` parameter;
+  - `nodes.py` (executor node) now builds and passes
+    `{is_cross_file: True, target_module: <module_name>}` whenever
+    `state["cross_file_deps"]` is non-empty.
+  **Zero regression guarantee**: with `task_metadata=None` the delegated runner
+  takes the single-file materialisation path (byte-identical to historical behaviour);
+  if the execution-error criterion is unavailable, a `try/except` fallback +
+  `logger.warning` preserve the historical rc==0 semantics.
+
+- **Test corpus comment erratum** (`tests/test_spec_contract_grammar.py`):
+  The `"x" * 201` corpus entry was correctly annotated `# too_long` (201 'x'
+  characters trigger too_long), but the original comment did not make the length
+  explicit, inviting misreading. The comment now reads "201 'x' concatenated:
+  parseable + single clause >200 chars, length gate hit". The assertion
+  `assert len(long_nl) > 200` was changed to
+  `assert len(long_nl) > _MAX_CLAUSE_LEN` to keep the test anchored to the
+  single source of truth.
+
+### Verification
+
+- Full `pytest tests/ -n 4 --dist loadfile`: **5485 passed / 3 skipped / 1 xfailed / 0 failed** (62s)
+- Targeted `-k "detection or specificity or spec_ir or spec_contract or form_gate or reject_reason or ac_batch or executor"`: **403 passed**
+- Baseline consistency guard `tests/test_2026_10_10_optimization_batch.py`: **26 passed**
+- `ruff check .` clean; `ruff format --check .` 611 files formatted; `mypy src/ config.py` 0 errors (125 source files)
+- Gates: **18/19 green** (`check_swe_bench_pro_ready` remains a data-preflight entry point by design, not a code gate)
+- `--collect-only`: 5489 (identity 5485+3+1 holds)
 
 ## [Unreleased] — 2026-10-11 comprehensive-optimization batch (gate wiring + test-artifact cleanup + workspace hygiene)
 

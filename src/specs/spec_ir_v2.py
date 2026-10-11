@@ -92,6 +92,11 @@ def spec_ir_dsl_enabled() -> bool:
 # `r = f(x)` 是赋值语句（Expr 子节点为 Assign 时拒绝——规约里出现
 # 赋值是 LLM 话术，不机器化，保守 NL 注释）。
 _EXPR_TOKEN_RE = re.compile(r"^\s*[A-Za-z_\d\[\]\(\).\-+*/%<>=!&|~^, \"]*$")
+# 子句长度上限（形态门 / too_long 归因门 / 文档注释的单一事实源）。
+# 此前 200 以字面量出现两处（is_expression_clause :111 与 _form_gate_reject_reason），
+# 任何一侧改动都会使"可编译判定"与"拒绝归因"漂移——本常数杜绝该风险。
+# 值 200 由历史默认锚定（形态门 ≤200 字符的保守上限，防 LLM 产出超长垃圾子句）。
+_MAX_CLAUSE_LEN = 200
 
 
 def is_expression_clause(clause: Any) -> bool:
@@ -108,7 +113,7 @@ def is_expression_clause(clause: Any) -> bool:
     if not isinstance(clause, str):
         return False
     text = clause.strip()
-    if not text or len(text) > 200:
+    if not text or len(text) > _MAX_CLAUSE_LEN:
         return False
     # 通道 1：字符白名单（中文 / 动词短语必含白名单外字符 → 快速排除）
     if not _EXPR_TOKEN_RE.match(text):
@@ -402,7 +407,7 @@ def _form_gate_reject_reason(text: str) -> str:
         return "natural_language"
     if not _parses_as_expr(text):
         return "natural_language" if _looks_like_ascii_prose(text) else "parse_error"
-    if len(text) > 200:
+    if len(text) > _MAX_CLAUSE_LEN:
         return "too_long"
     if not _EXPR_TOKEN_RE.match(text):
         return "unsupported_syntax"

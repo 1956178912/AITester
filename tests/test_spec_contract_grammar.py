@@ -227,7 +227,10 @@ def test_real_nl_failure_form_classified_natural_language() -> None:
     assert compile_readiness(spec) == 0.0
     # 长中文句同样归 NL（内容信号优先于长度门，避免根因被 too_long 掩盖）
     long_nl = "该函数的输入参数必须满足以下全部条件" * 12
-    assert len(long_nl) > 200
+    # 断言与 _MAX_CLAUSE_LEN 单一事实源对账（防字面量漂移）
+    from src.specs.spec_ir_v2 import _MAX_CLAUSE_LEN
+
+    assert len(long_nl) > _MAX_CLAUSE_LEN
     assert clause_reject_reason(long_nl) == "natural_language"
     # 无空格中文短句恰好是合法 Python 标识符（能 parse）——仍必须归 NL，
     # 否则"能 parse ⇒ 形式子句"的判据会把最常见的 NL 形态误记为语法问题
@@ -282,7 +285,7 @@ _CONSISTENCY_CORPUS = (
     "a == 'x'",  # unsupported_syntax（单引号字符串）
     'text[0:2] == "ab"',  # unsupported_syntax（冒号切片）
     'text != "你好"',  # unsupported_syntax（形式子句被字符白名单拦下，非 NL）
-    "x" * 201,  # too_long
+    "x" * 201,  # too_long（201 个 'x' 拼接：可解析 + 单条 >200 字符，长度门命中）
     "",  # empty
 )
 

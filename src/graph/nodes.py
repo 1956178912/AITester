@@ -1445,10 +1445,25 @@ def _executor_node(state: AITesterState) -> dict[str, Any]:
         if int(state.get("iteration", 0)) == 0 and not _gate_passed:
             _verdict: str | None = None
             if detection_specificity_gate_enabled():
+                # P0-1（2026-10-11 全面优化批次）：透传 task_metadata——跨文件
+                # 任务的伴生模块（module_a/b/c 代码与名）由 M1 委托层据此物化；
+                # 缺失时委托层回退单文件口径（与历史逐位一致，零回归）。
+                # 构建与 M1 委托层同口径的 metadata：is_cross_file 由 cross_file_deps
+                # 非空推导；target_module 由 _resolve_target_module 口径（module_name）
+                # 填入；source 取 state 原始值（缺省 None，不注入）。
+                _has_cross_file = bool(state.get("cross_file_deps"))
+                _gate_task_metadata: dict[str, Any] | None = None
+                if _has_cross_file:
+                    # P0-1 勘误：模块代码/名键不在 TypedDict state 中（由
+                    # run_benchmark 写盘而非 state），委托层走单文件物化口径。
+                    _gate_task_metadata = {"is_cross_file": True}
+                    if state.get("module_name"):
+                        _gate_task_metadata["target_module"] = str(state["module_name"])
                 _verdict = specificity_verdict(
                     state.get("generated_test") or "",
                     state.get("gold_fixed_code"),
                     state.get("module_name"),
+                    task_metadata=_gate_task_metadata,
                 )
                 update["specificity_gate_verdict"] = _verdict
                 logger.info("AC2 特异性门判定：%s", _verdict)

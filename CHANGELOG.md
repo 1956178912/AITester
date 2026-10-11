@@ -1,10 +1,48 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-10（2026-10-10 文档清理批次：过时文档与孤儿报告删除 + 本地文档安全网；此前 R5 审查修订落地批次：2026 前沿修订版审查 + C-08 白名单默认开 + C-01 叙事收口 + LLM 端点收拢至 DeepSeek V4.1 Flash 官方 API；此前 R4 审查落地批次：逻辑驱动反例精化闭环〔S1 spec_smt 后件一致性 + spec_refine.py CEGIR〕+ nodes.py 续拆 patch_io.py〔S4〕+ E4 污染防控预注册增补〔S3〕+ llm_configs schema 守卫〔S9〕+ MAS 技能库编译设计文档〔S7〕；再此前 2026-10-09 R3 落地批次：spec_smt 去裸 eval〔S8〕+ nodes.py 三簇拆分〔S7〕+ PGH003 门禁重启用；再此前 2026-10-08 R2 落地批次）
+> Last updated: 2026-10-11（2026-10-11 代码级全面优化批次：_MAX_CLAUSE_LEN 单一事实源〔spec_ir_v2 字面量 200 两处漂移风险消除〕+ P0-1 特异性门判据修复〔执行错误不再误判 over_red，task_metadata 透传跨文件伴生模块〕+ 语料库注释勘误；全量 5485 passed / 3 skipped / 1 xfailed / 0 failed；mypy 125 源文件 0 错误；ruff 全绿。此前 2026-10-11 全面优化批次〔门禁接入 + 测试伪影消除〕；此前 2026-10-10 文档清理批次）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-11 代码级全面优化批次（漂移风险消除 + P0-1 门判据修复 + 注释勘误）
+
+> 依据：全仓代码级体检（非文档评审）——逐模块审查 `src/specs/`、`src/tools/`、`src/graph/` 的
+> 常量漂移、判据一致性、跨层调用契约，对照 2026-10-11 外部评审 P0-1 项。
+> 本批次无新功能，**消除三处真实代码级缺陷**（字面量漂移 / 判据吞没 / 跨文件误判）。
+
+### Fixed
+
+- **`_MAX_CLAUSE_LEN` 单一事实源**（`src/specs/spec_ir_v2.py`）：
+  子句长度上限 200 此前以字面量 `> 200` 出现两处（`is_expression_clause` 形态门 :111 与
+  `_form_gate_reject_reason` too_long 归因门 :405）——任何一侧独立改动会使"可编译判定"
+  与"拒绝归因"悄然漂移（判定说"可编译"而归因说"太长"，或反之）。引入模块级常数
+  `_MAX_CLAUSE_LEN = 200`，两处均引用该常数，漂移面归零。值 200 由历史默认锚定，
+  判定口径零变化。
+
+- **特异性门 P0-1：执行错误不再误判 over_red**（`src/tools/detection_gates.py`）：
+  门①对照执行原只取 `rc==0` 当绿、非 0 当红，未复用 M1 既有的
+  `_looks_like_test_execution_error`（rc≥2 / 收集错误 = "根本没跑起来"，M1 口径下
+  判 None 而非 0/1）。修复后执行错误 → `unavailable`（保守放行，与 M1 三态同口径），
+  不再污染过红统计。`specificity_verdict` 新增可选 `task_metadata` 参数，跨文件任务
+  透传伴生模块（module_a/b/c 代码与名）+ `is_cross_file` + `target_module`，
+  使委托层走跨文件物化分支（伴生模块缺失不再导致 rc≥2 误判过红）。
+  未传 `task_metadata` 时行为与历史逐位一致，零回归。
+
+- **`test_spec_contract_grammar.py` 语料库注释勘误**：
+  `"x" * 201` 条目注释 `# too_long` 语义正确（201 个 'x' 触发 too_long），
+  但原注释未说明长度 = 201（易误读为字面量 "x"×201 的字符表示）；补充注释
+  "201 个 'x' 拼接：可解析 + 单条 >200 字符，长度门命中"。
+  同时 `assert len(long_nl) > 200` 改为引用 `_MAX_CLAUSE_LEN` 常数，
+  与单一事实源对账，防字面量漂移。
+
+### 验证
+
+- 全量 `pytest tests/ -n 4 --dist loadfile`：**5485 passed / 3 skipped / 1 xfailed / 0 failed**（64s）
+- 定向 `pytest -k "detection or specificity or spec_ir or spec_contract or form_gate or reject_reason or ac_batch or executor"`：**403 passed**
+- `ruff check .` 全绿；`ruff format --check .` 611 文件已格式化；`mypy src/ config.py` 0 错误（125 源文件）
+- 新增测试 0 例（本批次为漂移风险消除与判据修复，无新功能）
 
 ## [Unreleased] — 2026-10-11 全面优化批次（门禁接入 + 测试伪影消除 + 工作区卫生）
 
