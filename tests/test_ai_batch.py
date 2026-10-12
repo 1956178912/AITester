@@ -54,6 +54,7 @@ class TestLogicProfileCompleteness:
         "LOGIC_SPEC_STRICT_FALLBACK_ENABLE",
         # 测试质量与定位（E3 全指标口径）
         "ENABLE_MUTATION_SCORING",
+        "MUTATION_ADVISOR_ENABLE",
         "FL_SPECTRAL_ENABLE",
         # 回滚安全（R4b fail-closed）
         "PATCH_SNAPSHOT_ROLLBACK_ENABLE",
@@ -74,7 +75,7 @@ class TestLogicProfileCompleteness:
                 _os.environ[k] = v
 
     def test_all_experiment_switches_injected_true(self):
-        """13 个实验相关开关在 logic 档全部注入且为 true。"""
+        """14 个实验相关开关在 logic 档全部注入且为 true。"""
         logic = _PROFILE_PRESETS["logic"]
         missing = [k for k in self._EXPERIMENT_SWITCHES if logic.get(k) != "true"]
         assert missing == [], (

@@ -243,6 +243,18 @@ class AITesterState(TypedDict, total=False):
     # {survived_mutants: list[str], mutation_score: float}
     # 由 run_benchmark 变异评估后写入，Generator 再生成时消费；None 表示无反馈
     mutation_feedback: dict[str, Any] | None
+    # P2 一期（2026-10 批次·观测级压缩）：Debugger→Generator 反馈的行粒度
+    # 压缩产物（FEEDBACK_COMPRESSION_ENABLE=true 时由 _generator_node 经
+    # src.tools.feedback_compression.build_compressed_feedback 从 state 既有
+    # 观测构建并写回）。结构：{"schema_version": int, "error_category": str,
+    # "failed_tests": [str], "target_lines": [{"lineno": int, "source": str,
+    # "origin": str}], "survived_mutants": [str], "mutation_score": float|None,
+    # "section_chars": int}。None = 开关关 / 无实质内容（历史口径不变）。
+    # 消费方：_generator_node 渲染为 prompt 注入段落（有界，替代朴素全量
+    # trace 注入）；实验层统计「压缩通道到达率 / 段落体积」。纯观测，
+    # 不参与路由。**必须在 TypedDict 显式声明**——未声明键会被 LangGraph
+    # 按 schema 白名单静默丢弃（O35 教训，见本文件末尾注释段）。
+    compressed_feedback: dict[str, Any] | None
     # 5.2 多候选补丁统计（ENABLE_MULTI_CANDIDATE_PATCH=true 时由 patch_applier 写入）：
     # {"candidates": N, "static_passed": M, "exec_validated": bool, "selected": int | None}
     multi_candidate_stats: dict[str, Any] | None
@@ -674,6 +686,9 @@ def create_initial_state(
         routing_hints=None,
         # 1.2 变异反馈闭环（默认 None，由 run_benchmark 变异评估后注入）
         mutation_feedback=None,
+        # P2 一期（观测级压缩）：压缩反馈产物默认 None（开关默认关，
+        # 历史口径；结构见 AITesterState 字段注释）
+        compressed_feedback=None,
         # 5.2 多候选补丁统计（默认 None，启用多候选时由 patch_applier 节点写入）
         multi_candidate_stats=None,
         # 3.2 改进：迭代策略建议（默认 None，executor 节点写入观测层建议）

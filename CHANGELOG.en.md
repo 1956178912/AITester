@@ -1,10 +1,282 @@
-> Last updated: 2026-10-11 (2026-10-11 comprehensive-optimization batch #2: wired the remaining 9 bare `subprocess.run(timeout=)` call sites onto `run_with_timeout`, eliminating the orphan-subprocess hang surface [mdo / patch_rollback / dependency / testless_validation / type_repair / executor_modes / fl_spectral / runtime_probe / executor_repo] + migrated every affected mock target + hardened the `run_with_timeout` contract (timeout=0 normalisation + `capture_output` compatibility parameter); full suite 5485 passed / 3 skipped / 1 xfailed / 0 failed; mypy 0 errors across 125 source files; ruff fully green; all 18 loop gates green. Previously 2026-10-11 code-level comprehensive-optimization batch [drift-risk elimination + P0-1 gate decision fix + test corpus erratum]; previously 2026-10-11 comprehensive-optimization batch [gate wiring + test-artifact cleanup]; previously 2026-10-10 documentation-cleanup batch)
+> Last updated: 2026-10-12 (2026-10-12 independent-review optimization batch, final: SpecExpr v3 grammar upgrade [finite-domain quantification + pure string-method whitelist + P2-L3 false-negative fix promoted to pass] + spec-first generation P0-A-2 + mutation operators v3 P0-B + orchestration auto-search P1-A + decontamination P1-B + MTTR-A recovery latency P1-B + observation-level compression P2-A + audit-gate pytest temp-dir skip regression; full suite 5689 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green; all 18 loop gates green. Previously 2026-10-11 comprehensive-optimization batch #2 [run_with_timeout fully wired, orphan-subprocess surface cleared to zero])
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-12 independent-review optimization batch, final (SpecExpr v3 grammar + spec-first generation + mutation operators v3 + orchestration auto-search + decontamination + MTTR-A + observation-level compression)
+
+> Basis: `INDEPENDENT_REVIEW_2026-10-12.md` (root, independent review) §6
+> surpass-the-frontier paths P1/P2/P3/P4/P5 and §10 recommendation table
+> S-05/S-06/S-08/S-09/S-10/S-16. This is a **feature-landing batch** (vs.
+> the code-level / wiring batches of 2026-10-11); every new switch follows
+> the ADR-0003 default-off discipline (`fast` profile `{}` unchanged,
+> historical behavior byte-for-byte), with only P0-B default-injected in the
+> `scientific` / `logic` profiles. Tests 5485/5489 → **5689/5692**
+> (+204/+203: 7 new test files + corpus expansion); full run 0 failed / 0
+> xfailed (the sole strict xfail, P2-L3, was fixed by the v3 free-variable
+> analysis and promoted to a passing test).
+
+### Added
+
+- **P0-A-1 | SpecExpr v3 grammar upgrade**
+  (`src/specs/spec_ir_v2.py` + `src/agents/planner.py` +
+  `tests/test_spec_contract_grammar.py` + `tests/test_spec_oracle_metrics.py`):
+  1. **Finite-domain quantification**: a `<quant>` production (comprehension
+     form of `all(...)` / `any(...)`) + free-variable analysis
+     `_free_names` (precise comprehension/lambda scoping) — comprehension
+     loop variables bind only inside the body; out-of-scope references
+     (`all(x > 0 for x in a) and x > 5`) are still rejected as
+     `unknown_name`. **Fixes the P2-L3 known false negative** (the former
+     strict xfail is now a regular passing case
+     `TestComprehensionQuantifierCompiles`; the suite has 0 xfail).
+  2. **Pure string-method whitelist**:
+     `startswith/endswith/split/join/strip/lstrip/rstrip/lower/upper/
+     isdigit/isalpha/isalnum/isspace/find/count/replace` (15 pure,
+     side-effect-free methods) enter the `<attr>` whitelist;
+     `title/center/encode/format` are deliberately excluded and kept as
+     negative-example teaching forms (`result.title() == "Abc"` →
+     `unsupported_operator`).
+  3. **Iteration-domain whitelist builtins**: `range` / `enumerate` are
+     harmless standalone (listed alongside `all`/`any`).
+  4. **Three-way prompt-contract synchronisation**:
+     `SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES` 5 → 7 (added the quantified
+     example `all(ch.isdigit() for ch in text)` and the string-method
+     example `text.startswith("a")`); negative example #5 swaps
+     `result.strip()` (now whitelisted) for `result.title()`
+     (deliberately not whitelisted); the planner BNF section gains the
+     `<quant>` production plus two self-check notes ("loop-variable
+     scope", "pure string methods");
+     `spec_expr_grammar_terminals()` gains a `quantifiers` key
+     (`["all", "any"]`) that the planner BNF renders — the
+     prompt–compiler **single source of truth** (W2/T1 precedent).
+  Evidence grade (`INDEPENDENT_REVIEW_2026-10-12.md` §4.4 / §10 S-05):
+  LogiCase (IJCAI'25, CCFG formal grammar) and SPARC (CFG path enumeration)
+  establish "spec executability depth" as a measurable dimension; the root
+  cause of the current spec_compile_rate 0.205–0.219 is **grammar
+  expressiveness**, not prompting (§3.3 row 3) — this batch upgrades the
+  grammar side.
+
+- **P0-A-2 | Spec-first generation**
+  (`src/tools/spec_first.py` + `src/graph/nodes.py::_generator_node` +
+  `src/agents/generator.py` + `src/graph/flags.py::_detection_spec_mode` +
+  `.env.example` + `tests/test_spec_first_prompt.py`):
+  With `DETECTION_SPEC_MODE=replace`, the "target code" block of the
+  Generator prompt is **replaced** by a **spec document** (signature +
+  docstring + NL spec + SpecExpr clauses + generation discipline) — the LLM
+  generates tests from the contract only and never sees the
+  implementation, cutting the oracle-from-implementation anchor at the
+  source. Three same-direction evidence lines
+  (`INDEPENDENT_REVIEW_2026-10-12.md` §6 P1): ① the project's own negative
+  result — plain_llm_df detection 44.8% vs aitester full orchestration
+  15.8% (−28pp), 48.6% of samples "all-green, undetected" (root cause:
+  Planner derives expected_output from the *buggy* code, so Generator
+  treats implementation behaviour as expected); ② Zhao et al. (ISSTA 2026)
+  misguidance effect — buggy code in the prompt induces tests that
+  "assert the wrong behaviour"; ③ Google Spec-Driven Test Generation
+  (SpecOps '26) — merely documenting preconditions / postconditions /
+  undefined behaviour on production code gives +9.8pp bug detection
+  (p=0.0352). Design discipline: default `off` (byte-identical historical
+  prompt); under `replace`, substitution happens only when spec material is
+  non-empty (no material → empty string → caller keeps the historical
+  path, never emitting an empty "no code, no spec" prompt); pure string
+  rendering (zero LLM / zero subprocesses), failure paths conservatively
+  return the empty string; aligned with the `ORACLE_CONTEXT_MINIMAL`
+  ablation tier (the section is not built in minimal). Pre-registered
+  success criterion: 3 seeds against the plain_llm_df arm, McNemar
+  p<0.01 and δ≥+10pp.
+
+- **P0-B | Mutation operators v3 (ULT/PiTest alignment) + in-loop
+  mutation feedback**
+  (`experiments/mutation_testing.py` +
+  `tests/test_mutation_operators_v3.py` + `config.py` scientific/logic
+  presets):
+  1. **Operator upgrades**: three new ULT/PiTest-aligned operators —
+     string-constant mutation (`_find_mutable_string_constants`, which
+     **skips docstrings**: docstring mutants always survive and would
+     pollute the feedback signal; the v3 first-cut bug is locked by the
+     new tests), statement deletion
+     (`_find_deletable_statements`, conservative boundary: only functions
+     with ≥2 effective body statements, so deleting one still leaves ≥1
+     and syntax stays valid), and unary-minus removal / `not` insertion
+     (`_UnaryRemoveTransformer` / `_NotInsertTransformer`, precise
+     `(lineno, col_offset)` targeting, never emitting invalid mutants).
+  2. **In-loop internalisation**: `MUTATION_ADVISOR_ENABLE` (the M7
+     in-graph node) now defaults **on** in the `scientific` and `logic`
+     profiles (`config.py::_PROFILE_PRESETS`, setdefault semantics,
+     explicit env still wins; `quick`/`fast` stay off for cost control).
+     Before this batch the switch was default-off with 0/154 observation
+     coverage (review item S-08); mutation feedback is the data source of
+     the "mutation-guided test strengthening" loop, so the research
+     profiles enable it by default.
+  3. **Mutation score as a first-class metric**: combined with the existing
+     `ENABLE_MUTATION_SCORING` (post-hoc scoring) this forms the dual
+     calibre "in-loop feedback + post-hoc scoring" (P2 mutation-first,
+     `INDEPENDENT_REVIEW_2026-10-12.md` §6 P2).
+  Evidence: MUTGEN (IEEE TSE 2026, arXiv:2506.02954) — suites with 100%
+  coverage but 4% mutation score exist; Ockhamareto (arXiv:2608.24473) —
+  49.9% vs MIST-RL 31.3% on ULT; the ULT benchmark (ACM TOSEM 2026) — LLM
+  mean mutation is only 40.21%, leaving clear headroom; Meta ACH
+  (FSE 2025) — 73% engineer acceptance.
+
+- **P1-A | Orchestration auto-search (bandit, BOAD-style)**
+  (`src/graph/orchestration_search.py` +
+  `experiments/run_orchestration_search.py` +
+  `tests/test_orchestration_search.py` + the orchestration-search switch
+  family in `config.py`):
+  1. **16-arm UCB1 search**: topology (4) × protocol gate (2) × enhancer
+     (2) × budget (2) = 16 arms, automatically discovering orchestration
+     configurations over the design set (synthetic 12 tasks × 3 seeds =
+     36 cells). BOAD (ICLR 2026): auto-discovered hierarchical agents
+     beat hand-designed ones (Seed-OSS-36B: auto 53.2% vs hand 47.4% vs
+     baseline 49.8%).
+  2. **Primary reward = M1 detection** (cost enters as a hard cap, **no**
+     λ-scalarisation — to avoid conflating cost and efficacy);
+     **hindsight credit feeds only the attribution report, never arm
+     selection** (reward-hacking prevention — the ADR-0016 lesson;
+     `INDEPENDENT_REVIEW_2026-10-12.md` §6 P3).
+  3. **Switch family** (all default off/neutral, **not injected into any
+     profile tier**): `ORCHESTRATION_SEARCH_ENABLE` (master, default
+     false) / `ORCHESTRATION_SEARCH_MAX_EVALS` (240) /
+     `ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS` (1,500,000) /
+     `ORCHESTRATION_SEARCH_UCB_C` (1.0) / `ORCHESTRATION_SEARCH_SEED`
+     (42) / `ORCHESTRATION_SEARCH_HINDSIGHT_GAMMA` (0.5) /
+     `ORCHESTRATION_SEARCH_MAX_UNMEASURABLE` (5).
+  4. **Champion-promotion discipline**: a champion configuration may only
+     enter a new profile tier after the Stage-2 confirmation batch
+     (champion vs plain_llm_df, n=87×3) passes and a new ADR is
+     drafted; this batch lands only the search primitives + stubbed
+     evaluator test paths — no real LLM budget is burned.
+  Evidence: the ADR-0016 follow-up direction ("auto-search vs hand-crafted
+  orchestration") + BOAD (arXiv:2512.23631, ICLR 2026, IBM Research) —
+  hand-added sub-agents actually lose points (47.4% vs 49.8%); 2
+  sub-agents is the optimal scale.
+
+- **P1-B | Evaluation decontamination (timestamp filtering)**
+  (`src/datasets/decontamination.py` + `tests/test_decontamination.py`):
+  1. **Timestamp slicing**: keep only tasks **created strictly after the
+     model knowledge cutoff** (same-day creation counts as possibly
+     contaminated); `parse_created_at` normalises ISO 8601 / epoch
+     numeric / date-only forms;
+  2. **Two modes**: `drop_unverifiable` (default — tasks without a
+     timestamp or with unparseable ones are excluded from the slice:
+     "cannot prove freshness = untrustworthy", preventing
+     contamination *laundering* into a clean slice) / `keep_flagged`
+     (retained but listed separately as `unverifiable`, enabling
+     sensitivity analysis: clean slice vs slice-with-unverified — the
+     score gap estimates contamination inflation);
+  3. **Audit report**: `decontamination_report` counts kept / dropped /
+     unverifiable — a decontamination slice must be auditable (how many
+     were dropped, and why; never silent).
+  Evidence: SWE-rebench (NeurIPS 2025, arXiv:2505.20411) — DeepSeek-V3
+  scores 39.7% on SWE-bench Verified vs 21.3% on the decontaminated
+  equivalent (**−18.4pp contamination inflation**); SWE-bench-Live
+  (since 2026-08, submissions must attach rollout trajectories); OpenAI's
+  deprecation of Verified.
+
+- **P1-B | MTTR-A style cognitive recovery latency (SRE-calibre metrics)**
+  (`src/measurement/recovery_latency.py` +
+  `tests/test_recovery_latency.py`):
+  1. **Detection latency**: wall-clock time from "a test failure is
+     observed" to "the first effective red test is generated" (an
+     "effective red test" = fails on the buggy code **and** is not
+     over-red — passes the specificity gate, or is conservatively counted
+     as red with an `unverified_specificity` marker when the gate is off);
+  2. **Reconfiguration latency**: wall-clock time from "patch
+     synthesized" to "gold adjudication passes";
+  3. **Conservative discipline**: any missing endpoint event → the
+     corresponding latency is **None** ("unmeasurable"); 0.0 is never
+     substituted (zero latency would be a myth); clocks must share a
+     source (one session's `time.time()` series; mixing sources raises
+     `ValueError`); aggregation reports only the actually-measured task
+     count (`n_measured`), never averaging None as 0.
+  Evidence: `INDEPENDENT_REVIEW_2026-10-12.md` §4.3 — the 2025-2026
+  first-hand record for this domain has no comparable numbers (VIGIL is
+  an n=1 case study; ESBMC-AI's abstract gives none) → a **first-mover
+  opportunity** (§6 P5).
+
+- **P2-A | Observation-level line-granularity compression
+  (feedback compression, phase 1)**
+  (`src/tools/feedback_compression.py` + `src/graph/nodes.py` +
+  `src/agents/generator.py` +
+  `src/graph/state.py::compressed_feedback` +
+  `tests/test_feedback_compression.py`):
+  1. **Bounded compression section**: extracts "source lines involved in
+     the failing tests + error category + survived-mutant digest" from
+     state observations already present (`runtime_probe` snapshot inner
+     frame / `fl_spectral` Top-k / traceback line numbers /
+     `mutation_feedback`), rendered as a **≤4000-character** section into
+     the Generator prompt (behind `FEEDBACK_COMPRESSION_ENABLE`, default
+     off) — replacing naive full-trace injection (line-level compression
+     calibre of arXiv:2605.15315).
+  2. **Bounded parameters** (invalid values auto-clamped):
+     `MAX_LINES=8` / `LINE_CHARS=200` / `MAX_MUTANTS=5` /
+     `MUTANT_CHARS=120` / `MAX_TESTS=3` / `MAX_CHARS=4000`.
+  3. **Pure text extraction, zero LLM cost**; when there is no material
+     content, `compressed_feedback=None` and the historical path is
+     unchanged; aligned with the `ORACLE_CONTEXT_MINIMAL` ablation tier
+     (not injected in minimal, same calibre as O3).
+     `compressed_feedback` is explicitly declared in `AITesterState`
+     (O35 lesson: undeclared keys are silently dropped by LangGraph's
+     schema whitelist).
+  Target: tokens/task 26.1k → ≤10k (−60%;
+  `INDEPENDENT_REVIEW_2026-10-12.md` §6 P4 phase-1 carrier; LaMAR-style
+  KV-Cache communication is phase 2).
+
+- **Audit-gate pytest temp-dir skip regression**
+  (`scripts/gates/audit_log_redaction.py` +
+  `tests/test_audit_log_redaction.py`): when `--basetemp` lands inside the
+  repo, fixture artifacts (e.g. `test_cache_security` deliberately
+  injecting fake credential strings into
+  `test_injected_bearer_and_sk_*.py`) were misreported as unredacted log
+  sites by the whole-repo audit, blocking
+  `test_repo_baseline_zero_findings` (a false-red CI gate). `_should_skip`
+  now skips every `.pytest_tmp*` variant; a control test proves the same
+  content placed under `src/` must still be flagged (so the skip logic
+  cannot silently become a no-op).
+
+- **`.gitignore` expansion**: `.pytest_tmp*/` (basetemp variants — the
+  exact pattern `.pytest_tmp/` does not cover suffixed variants),
+  `.pytest_full_*.log` and `.tmp_run/` (one-off local artifacts).
+
+### Changed
+
+- **`docs/DATA_CARD.md`**: the leakage-channel status section now
+  registers a second consumption point — the
+  `problem_statement` argument of `create_initial_state` in
+  `src/graph/orchestration_search.py` (same role as
+  `run_benchmark.run_single_task`: state construction, not a prompt
+  path). The guard test `tests/test_af_batch.py` locks its single-read
+  calibre; any new prompt-side consumption must update this card and that
+  test explicitly.
+- **`docs/env_budget.yaml`**: `env_total` 184 → 187 (new:
+  `DETECTION_SPEC_MODE` / `FEEDBACK_COMPRESSION_ENABLE` /
+  `ORCHESTRATION_SEARCH_ENABLE`; `OPERATION_MAP_INJECT_ENABLE` ordering
+  fixed).
+- **`.env.example`**: full commented registration of the P0-A-2 / P2-A /
+  P1-A switch families (defaults, legal ranges, semantics).
+- **`config.py`**: `scientific` / `logic` profiles now inject
+  `MUTATION_ADVISOR_ENABLE: "true"` (P0-B, setdefault semantics); the 7
+  orchestration-search switches are added (P1-A, all default off/neutral,
+  injected into no profile tier).
+
+### Verified
+
+- Full `pytest tests/` (sequential): **5689 passed / 3 skipped / 0
+  xfailed / 0 failed** (262.47s, macOS local; 5692 collected); prior batch
+  5485/5489 → this batch 5689/5692 (+204/+203)
+- `ruff check src/ config.py experiments/ scripts/` fully green;
+  `mypy src/ config.py` 0 errors (130 source files)
+- Guard test
+  `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency`
+  with slack `skipped + xfailed + 1` — the `BASELINE.yaml` field was
+  refreshed in lockstep
+- All 18 local loop gates green
+- Zero LLM calls (pure string rendering / pure functions / subprocess-layer
+  work only; the orchestration search lands primitives + stubbed evaluator
+  test paths in this batch, burning no real LLM budget)
 
 ## [Unreleased] — 2026-10-11 comprehensive-optimization batch #2 (run_with_timeout fully wired, orphan-subprocess surface cleared to zero)
 

@@ -201,6 +201,26 @@ def _spec_oracle_exec_enabled() -> bool:
     return os.getenv("SPEC_ORACLE_EXEC_ENABLE", "false").lower() in ("true", "1", "on")
 
 
+def _feedback_compression_enabled() -> bool:
+    """P2 一期（观测级压缩）：反馈压缩注入层开关
+    （FEEDBACK_COMPRESSION_ENABLE=true 时启用，默认 false 历史口径）。
+
+    启用后 _generator_node 在再生成轮经 src.tools.feedback_compression
+    的 build_compressed_feedback 从 state 既有观测（runtime_probe 快照 /
+    fl_spectral Top-k / traceback / mutation_feedback）提取「失败测试涉及
+    的源代码行 + 错误类型 + 存活变异体摘要」，渲染为有界段落（≤4000
+    字符）注入 Generator prompt——观测级行粒度压缩，替代朴素全量 trace
+    注入（arXiv:2605.15315 行级压缩口径）。纯文本提取零 LLM 成本；无实质
+    内容时 compressed_feedback=None，历史口径不变。
+
+    委托 src.tools.feedback_compression.feedback_compression_enabled
+    （env 解析唯一事实源，避免 branch_coverage 式的双份解析漂移）。
+    """
+    from src.tools.feedback_compression import feedback_compression_enabled
+
+    return feedback_compression_enabled()
+
+
 def _fl_spectral_enabled() -> bool:
     """O2（2026-09-29 审查 P1）：谱系故障定位开关。
 
@@ -274,12 +294,32 @@ def _plan_expected_output_strip_enabled() -> bool:
     return os.getenv("PLAN_STRIP_EXPECTED_OUTPUT_ENABLE", "false").lower() in ("true", "1", "on")
 
 
+def _detection_spec_mode() -> str:
+    """P0-A-2（2026-10-12 独立评审落地）：规格优先生成模式
+    （DETECTION_SPEC_MODE：off=历史口径 / replace=规约文档替代实现代码）。
+
+    默认 "off"：Generator prompt 的目标代码块与历史逐字节一致。
+    "replace" 时 _generator_node 经 src.tools.spec_first.
+    build_spec_replace_section 渲染规约文档（签名 + NL 规约 + SpecExpr
+    子句 + 生成纪律）替换目标代码块——依据：misguidance effect
+    （Zhao et al. ISSTA 2026：缺陷代码入提示诱发错误断言）、
+    项目 48.6% 全绿未检出（oracle-from-implementation）、
+    Google Spec-Driven 研究（+9.8pp，p=0.0352）。
+    无规约材料时渲染返回空串，调用方保持历史口径（不产空洞提示）。
+    """
+    from src.tools.spec_first import detection_spec_mode
+
+    return detection_spec_mode()
+
+
 __all__ = [
     "_agent_reuse_enabled",
     "_boundary_triplets_enabled",
     "_branch_coverage_inject_enabled",
     "_context_tier_downgrade_enabled",
+    "_detection_spec_mode",
     "_failure_frequency_enabled",
+    "_feedback_compression_enabled",
     "_fl_spectral_enabled",
     "_flaky_check_enabled",
     "_oracle_enhance_enabled",

@@ -52,13 +52,16 @@ class TestProblemStatementNoPromptConsumption:
         assert offenders == [], f"src/agents 出现 problem_statement（泄漏面扩大）：{offenders}"
 
     def test_graph_layer_consumption_whitelist(self) -> None:
-        """src/graph/ 消费白名单：state.py（schema 声明层）+ nodes.py。
+        """src/graph/ 消费白名单：state.py（schema 声明层）+ nodes.py + orchestration_search.py。
 
         nodes.py 的每一处命中必须是注释行或注入扫描块的唯一 state.get
         读取——运行时消费点恰为一个（注入特征扫描），无其他用途。
+        orchestration_search.py（2026-10-12 P1-A）：唯一运行时消费 =
+        构建评测初始状态（create_initial_state 的 problem_statement 入参，
+        与 run_benchmark.run_single_task 同角色——状态构造而非 prompt 消费）。
         """
         graph_dir = _ROOT / "src" / "graph"
-        allowed_files = {"state.py", "nodes.py"}
+        allowed_files = {"state.py", "nodes.py", "orchestration_search.py"}
         hits: dict[str, list[tuple[int, str]]] = {}
         for p in sorted(graph_dir.glob("*.py")):
             found = self._lines_with(p, "problem_statement")
@@ -78,6 +81,20 @@ class TestProblemStatementNoPromptConsumption:
             read_lines = [ln for _, ln in hits["nodes.py"] if 'state.get("problem_statement")' in ln]
             assert len(read_lines) == 1, (
                 f"nodes.py 出现 {len(read_lines)} 处 problem_statement 运行时读取（登记口径=1）"
+            )
+        if "orchestration_search.py" in hits:
+            for lineno, line in hits["orchestration_search.py"]:
+                stripped = line.strip()
+                is_comment = stripped.startswith("#")
+                is_state_build = 'getattr(task, "problem_statement", None)' in line
+                assert is_comment or is_state_build, (
+                    f"orchestration_search.py:{lineno} 出现非白名单 problem_statement 消费"
+                    f"（登记口径 = 仅初始状态构造；新用途须先更新 DATA_CARD 与本测试）：{stripped[:120]}"
+                )
+            # 唯一运行时读取 = 初始状态构造（若 >1 处即登记失真）
+            read_lines = [ln for _, ln in hits["orchestration_search.py"] if 'getattr(task, "problem_statement", None)' in ln]
+            assert len(read_lines) == 1, (
+                f"orchestration_search.py 出现 {len(read_lines)} 处 problem_statement 运行时读取（登记口径=1）"
             )
 
     def test_data_card_registration_current(self) -> None:

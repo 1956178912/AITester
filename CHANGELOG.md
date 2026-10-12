@@ -1,10 +1,206 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-11（2026-10-11 全面优化批次·第二批：run_with_timeout 接线消除剩余 9 处裸 subprocess.run(timeout=) 孤儿子进程风险面〔mdo/patch_rollback/dependency/testless_validation/type_repair/executor_modes/fl_spectral/runtime_probe/executor_repo〕+ 全量 mock 点迁移 + run_with_timeout 契约加固（timeout=0 归一 + capture_output 兼容参数）；全量 5485 passed / 3 skipped / 1 xfailed / 0 failed；mypy 125 源文件 0 错误；ruff 全绿；18 项门禁全绿。此前 2026-10-11 代码级全面优化批次〔漂移风险消除 + P0-1 门判据修复 + 注释勘误〕；此前 2026-10-11 全面优化批次〔门禁接入 + 测试伪影消除〕；此前 2026-10-10 文档清理批次）
+> Last updated: 2026-10-12（2026-10-12 独立评审优化批次·终版：SpecExpr v3 文法升阶〔有限域量化 + 字符串纯方法白名单 + P2-L3 假阴性修复转正〕+ 规格优先生成 P0-A-2 + 变异算子 v3 P0-B + 编排自动搜索 P1-A + 去污染 P1-B + MTTR-A 恢复延迟 P1-B + 观测级压缩 P2-A + 审计门 pytest 临时目录跳过回归；全量 5689 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿；18 项门禁全绿。此前 2026-10-11 全面优化批次·第二批〔run_with_timeout 全量接线，孤儿子进程风险面清零〕）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-12 独立评审优化批次·终版（SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩）
+
+> 依据：`INDEPENDENT_REVIEW_2026-10-12.md`（根目录，独立评审）的 §6 超越前沿路径 P1/P2/P3/P4/P5
+> 与 §10 建议表 S-05/S-06/S-08/S-09/S-10/S-16。本批次为**功能落地批次**（对比 2026-10-11
+> 的代码级/接线批次），全部新开关遵循 ADR-0003 默认关口径（`fast` 档 `{}` 不变，历史行为
+> 逐字节零变化），仅 `scientific`/`logic` 档默认注入 P0-B 一项。测试 5485/5489 →
+> **5689/5692**（+204/+203，新增 7 个测试文件 + 语料库扩充），全量 0 failed / 0 xfailed
+> （P2-L3 唯一 strict xfail 经 v3 自由变量分析修复后转正）。
+
+### Added
+
+- **P0-A-1｜SpecExpr v3 文法升阶**（`src/specs/spec_ir_v2.py` + `src/agents/planner.py`
+  + `tests/test_spec_contract_grammar.py` + `tests/test_spec_oracle_metrics.py`）：
+  1. **有限域量化**：`<quant>` 产生式（`all(...)` / `any(...)` 推导式形态）+ 自由变量
+     分析 `_free_names`（comprehension/lambda 作用域精确版）——推导式循环变量只在体内
+     绑定，越界引用（`all(x > 0 for x in a) and x > 5`）仍按 `unknown_name` 拒绝，
+     **修复 P2-L3 已知假阴性**（原 strict xfail 转正式用例
+     `TestComprehensionQuantifierCompiles`，套件现 0 xfail）；
+  2. **字符串纯方法白名单**：`startswith/endswith/split/join/strip/lstrip/rstrip/
+     lower/upper/isdigit/isalpha/isalnum/isspace/find/count/replace`（15 个，纯函数、
+     无副作用）入 `<attr>` 白名单；`title/center/encode/format` 等刻意不收，作为
+     反例教学形态（`result.title() == "Abc"` → `unsupported_operator`）；
+  3. **迭代域白名单内建**：`range` / `enumerate` 单独出现亦无害（与 `all/any` 同列）；
+  4. **提示契约三处同步**：`SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES` 5 → 7 条（新增
+     `all(ch.isdigit() for ch in text)` 量化正例 + `text.startswith("a")` 字符串方法
+     正例），`SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES` 第 5 条由 `result.strip()`（已入
+     白名单）换为 `result.title()`（刻意不收）；planner BNF 段新增 `<quant>` 产生式
+     与"循环变量作用域"、"字符串纯方法"两条自检注；`spec_expr_grammar_terminals()`
+     新增 `quantifiers` 键（`["all", "any"]`）供 planner BNF 渲染（**提示与编译器
+     单一事实源**——W2/T1 先例）。
+  证据等级（`INDEPENDENT_REVIEW_2026-10-12.md` §4.4 / §10 S-05）：LogiCase
+  （IJCAI'25，CCFG 形式文法）与 SPARC（CFG 路径枚举）证明"规格可执行化深度"
+  是可测维度；当前 spec_compile_rate 0.205–0.219 的根因在**文法表达力**而非
+  提示（§3.3 行 3），本批次为文法侧升级。
+
+- **P0-A-2｜规格优先生成（Spec-First Generation）**（`src/tools/spec_first.py` +
+  `src/graph/nodes.py::_generator_node` + `src/agents/generator.py` +
+  `src/graph/flags.py::_detection_spec_mode` + `.env.example` +
+  `tests/test_spec_first_prompt.py`）：
+  `DETECTION_SPEC_MODE=replace` 时，Generator prompt 的"目标代码"块被
+  **规约文档**（签名 + docstring + NL 规约 + SpecExpr 子句 + 生成纪律）
+  **替换**——LLM 只依据契约生成测试，接触不到实现细节，从源头切断
+  oracle-from-implementation 锚点。三源同向证据（`INDEPENDENT_REVIEW_2026-10-12.md`
+  §6 P1）：① 项目自身阴性结果——plain_llm_df（检出优先协议）detection 44.8% vs
+  aitester 完整编排 15.8%（−28pp），48.6% 样本"全绿未检出"（根因 = Planner 读
+  缺陷代码派生 expected_output → Generator 把实现行为当期望值）；② Zhao et al.
+  （ISSTA 2026）misguidance effect——缺陷代码入提示诱发"断言错误行为"的测试；
+  ③ Google Spec-Driven Test Generation（SpecOps '26）——生产代码上仅文档化
+  前条件/后条件/未定义行为即 bug detection +9.8pp（p=0.0352）。设计口径：
+  默认 `off`（历史口径逐字节不变）；`replace` 时仅当规约材料非空才替换
+  （无材料 → 空串 → 调用方保持历史口径，不产"无代码无规约"的空洞提示）；
+  纯字符串渲染（零 LLM / 零子进程），失败路径保守返回空串；与
+  `ORACLE_CONTEXT_MINIMAL` 消融档同口径（minimal 时不构建本段）。
+  判据（预注册）：与 plain_llm_df 臂同基准跑 3 种子，McNemar p<0.01 且
+  δ≥+10pp 为成功（`INDEPENDENT_REVIEW_2026-10-12.md` §6 P1 判定）。
+
+- **P0-B｜变异算子 v3（ULT/PiTest 对齐）+ 变异反馈环路内化**
+  （`experiments/mutation_testing.py` + `tests/test_mutation_operators_v3.py` +
+  `config.py` scientific/logic 档）：
+  1. **算子升级**：新增 3 类 ULT/PiTest 对齐变异算子——字符串常量变异
+     （`_find_mutable_string_constants`，**跳过 docstring**：docstring 变异恒
+     存活、污染反馈信噪比；v3 首版的真实 bug 由本测试锁定）、语句删除
+     （`_find_deletable_statements`，保守边界：函数体有效语句数 ≥2 才收，
+     删 1 后仍 ≥1 保证语法有效）、一元负号移除 / `not` 插入
+     （`_UnaryRemoveTransformer` / `_NotInsertTransformer`，按 `(lineno,
+     col_offset)` 精确定位，不产无效变异）；
+  2. **环路内化**：`MUTATION_ADVISOR_ENABLE`（M7 图内节点）在
+     `scientific` 与 `logic` 档默认开（`config.py::_PROFILE_PRESETS`，
+     setdefault 口径，显式 env 优先；`quick`/`fast` 档保持关闭控成本）——
+     此前该开关默认关、观测覆盖 0/154（`INDEPENDENT_REVIEW_2026-10-12.md`
+     S-08），变异反馈是"变异引导测试增强"闭环的数据源，科研评测档默认开启；
+  3. **变异得分入一等指标**：配合既有 `ENABLE_MUTATION_SCORING`（事后评分）
+     形成"环路内反馈 + 事后评分"双口径（P2 变异第一公民，
+     `INDEPENDENT_REVIEW_2026-10-12.md` §6 P2）。
+  依据：MUTGEN（IEEE TSE 2026，arXiv:2506.02954）——100% 覆盖但 4% 变异
+  得分的套件真实存在；Ockhamareto（arXiv:2608.24473）——ULT 上 49.9% vs
+  MIST-RL 31.3%；ULT 基准（ACM TOSEM 2026）——LLM 均值 mutation 仅
+  40.21% → 提升空间明确；Meta ACH（FSE 2025）——73% 工程师接受率。
+
+- **P1-A｜编排自动搜索（bandit，BOAD 式）**（`src/graph/orchestration_search.py`
+  + `experiments/run_orchestration_search.py` + `tests/test_orchestration_search.py`
+  + `config.py` 编排搜索开关族）：
+  1. **16 臂 UCB1 搜索**：拓扑（4）× 协议门（2）× 增强器（2）× 预算（2）
+     = 16 臂，在 design set（synthetic 12 任务 × 3 种子 = 36 cell）上自动
+     发现编排配置（BOAD，ICLR 2026：自动发现的层级智能体优于手工设计——
+     Seed-OSS-36B 上自动 53.2% vs 手工 47.4% vs 基线 49.8%）；
+  2. **主奖励 = M1 detection**（成本以硬顶约束进入，**不做 λ 标量化**——
+     防成本-有效性帕累托混淆）；**hindsight credit 只进归因报告、
+     不进臂选择**（防 reward hacking——ADR-0016 教训，
+     `INDEPENDENT_REVIEW_2026-10-12.md` §6 P3）；
+  3. **开关族**（`config.py`，全部默认关/中性，**不进任何 profile 档**）：
+     `ORCHESTRATION_SEARCH_ENABLE`（主开关，默认 false）/
+     `ORCHESTRATION_SEARCH_MAX_EVALS`（默认 240）/
+     `ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS`（默认 1,500,000）/
+     `ORCHESTRATION_SEARCH_UCB_C`（默认 1.0）/ `ORCHESTRATION_SEARCH_SEED`
+     （默认 42）/ `ORCHESTRATION_SEARCH_HINDSIGHT_GAMMA`（默认 0.5）/
+     `ORCHESTRATION_SEARCH_MAX_UNMEASURABLE`（默认 5）；
+  4. **champion 晋升纪律**：champion 配置晋升新档须待 Stage-2 确认批
+     （champion vs plain_llm_df，n=87×3）通过后另走 ADR（本批次只落
+     搜索原语 + 桩评估器测试路径，不烧真实 LLM 预算）。
+  依据：`ADR-0016` 后续方向（"自动搜索编排 vs 手工编排对照"）+ BOAD
+  （arXiv:2512.23631，ICLR 2026，IBM Research）——手工加子智能体反而掉点
+  （47.4% vs 49.8%），2 个子智能体为最优规模。
+
+- **P1-B｜评测去污染（decontamination）时间戳过滤**
+  （`src/datasets/decontamination.py` + `tests/test_decontamination.py`）：
+  1. **时间戳切片**：仅保留**创建时间晚于模型知识截止**的任务（严格
+  "严格晚于"——同日创建视为可能污染）；`parse_created_at` 归一 ISO 8601 /
+  epoch 数值 / 日期only 三形态；
+  2. **两种模式**：`drop_unverifiable`（默认，无时间戳/不可解析的任务不进
+  切片——"无法证明新鲜 = 不可信"，防"launder"把污染任务混进干净切片）/
+  `keep_flagged`（保留但单列 `unverifiable`，供敏感性分析：干净切片 vs
+  含未验证任务的分数差 = 污染膨胀估计）；
+  3. **审计报告**：`decontamination_report` 计数保留/剔除/无法验证——
+  "去污染切片"必须可审计（剔了多少、为什么剔，不能静默）。
+  依据：SWE-rebench（NeurIPS 2025，arXiv:2505.20411）——DeepSeek-V3 在
+  SWE-bench Verified 39.7% vs 去污染同源基准 21.3%（**污染膨胀 −18.4pp**）；
+  SWE-bench-Live（2026-08 起提交须附 rollout 轨迹防作弊）；OpenAI 弃用
+  Verified 声明。
+
+- **P1-B｜MTTR-A 式认知恢复延迟（SRE 口径指标）**
+  （`src/measurement/recovery_latency.py` + `tests/test_recovery_latency.py`）：
+  1. **Detection Latency**：从"测试失败被观测"到"首次有效红测试生成"的
+     墙钟时间（"有效红测试" = 在缺陷代码上失败且非过红——特异性门通过 /
+     无门时保守以"红"计并标注 `unverified_specificity`）；
+  2. **Reconfiguration Latency**：从"补丁合成"到"gold 裁决通过"的墙钟
+     时间；
+  3. **保守口径**（测量纪律）：任一端点事件缺失 → 对应延迟为 **None**
+     （"不可测量"），绝不以 0.0 冒充（零延迟 = 神话）；时钟必须同源
+     （同一会话 `time.time()` 序列），跨源时钟混用 → `ValueError`；
+     聚合只报实际有测量任务数（`n_measured`），不把 None 当 0 平均。
+  依据：`INDEPENDENT_REVIEW_2026-10-12.md` §4.3 一手数据显示该域
+  2025-2026 无可比数值（VIGIL 仅 n=1 案例、ESBMC-AI 摘要无数值）→
+  **先占机会**（§6 P5）。
+
+- **P2-A｜观测级行粒度压缩（feedback compression，一期）**
+  （`src/tools/feedback_compression.py` + `src/graph/nodes.py` +
+  `src/agents/generator.py` + `src/graph/state.py::compressed_feedback` +
+  `tests/test_feedback_compression.py`）：
+  1. **有界压缩段落**：从 state 既有观测（`runtime_probe` 快照最内层帧 /
+     `fl_spectral` Top-k / traceback 行号 / `mutation_feedback`）提取
+     "失败测试涉及的源代码行 + 错误类型 + 存活变异体摘要"，渲染为
+     **≤4000 字符**段落注入 Generator prompt（`FEEDBACK_COMPRESSION_ENABLE`
+     默认关）——替代朴素全量 trace 注入（arXiv:2605.15315 行级压缩
+     口径）；
+  2. **有界参数**（非法值自动钳制）：`MAX_LINES=8` / `LINE_CHARS=200` /
+     `MAX_MUTANTS=5` / `MUTANT_CHARS=120` / `MAX_TESTS=3` / `MAX_CHARS=4000`；
+  3. **纯文本提取零 LLM 成本**；无实质内容时 `compressed_feedback=None`，
+     历史口径不变；与 `ORACLE_CONTEXT_MINIMAL` 消融档联动（minimal 时不
+     注入，与 O3 同口径）；`compressed_feedback` 已在 `AITesterState`
+     显式声明（O35 教训：未声明键会被 LangGraph 按 schema 白名单静默
+     丢弃）。
+  目标：token/任务 26.1k → ≤10k（−60%，`INDEPENDENT_REVIEW_2026-10-12.md`
+  §6 P4 一期载体；LaMAR 式 KV-Cache 通信为二期）。
+
+- **审计门 pytest 临时目录跳过回归**（`scripts/gates/audit_log_redaction.py` +
+  `tests/test_audit_log_redaction.py`）：
+  `--basetemp` 落在仓内时，测试夹具生成物（如 `test_cache_security` 故意
+  注入假敏感串的 `test_injected_bearer_and_sk_*.py`）被全仓审计误报为未
+  脱敏日志点，阻断 `test_repo_baseline_zero_findings`（CI 门禁假红）。
+  `_should_skip` 新增 `.pytest_tmp*` 全部变体的前缀跳过；测试反证同内容
+  放 `src/` 下必须报出（防跳过逻辑失效而假通过）。
+
+- **`.gitignore` 扩容**：`.pytest_tmp*/`（basetemp 变体，精确模式不覆盖带
+  后缀变体）+ `.pytest_full_*.log` + `.tmp_run/`（本地一次性产物）。
+
+### Changed
+
+- **`docs/DATA_CARD.md`**：泄漏通道现状节登记第二消费点——
+  `src/graph/orchestration_search.py` 的 `create_initial_state` 入参
+  `problem_statement`（与 `run_benchmark.run_single_task` 同角色——状态
+  构造而非 prompt 路径），守卫测试 `tests/test_af_batch.py` 同步锁定其
+  唯一读取口径；新增 prompt 侧消费仍须显式更新本卡与该测试。
+- **`docs/env_budget.yaml`**：`env_total` 184 → 187（新增
+  `DETECTION_SPEC_MODE` / `FEEDBACK_COMPRESSION_ENABLE` /
+  `ORCHESTRATION_SEARCH_ENABLE`；`OPERATION_MAP_INJECT_ENABLE` 序位修正）。
+- **`.env.example`**：登记 P0-A-2 / P2-A / P1-A 三组新开关的完整注释
+  （含默认值、合法范围、语义）。
+- **`config.py`**：scientific/logic 档注入 `MUTATION_ADVISOR_ENABLE: "true"`
+  （P0-B，setdefault 口径）；新增编排搜索开关族 7 项（P1-A，全部默认关/
+  中性，不进任何 profile 档）。
+
+### 验证
+
+- 全量 `pytest tests/`（顺序）：**5689 passed / 3 skipped / 0 xfailed /
+  0 failed**（262.47s，macOS 本机；5692 collected）；上一批 5485/5489 →
+  本批 5689/5692（+204/+203）
+- `ruff check src/ config.py experiments/ scripts/` 全绿；
+  `mypy src/ config.py` 0 错误（130 源文件）
+- 守卫测试：`tests/test_2026_10_10_optimization_batch.py::
+  TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段
+  须与实测同步
+- 18 项本地门禁全绿
+- 零 LLM 调用（全部为纯文本渲染 / 纯函数 / 子进程层改造；编排搜索本批次
+  只落原语 + 桩评估器测试路径，不烧真实 LLM 预算）
 
 ## [Unreleased] — 2026-10-11 全面优化批次·第二批（run_with_timeout 全量接线，孤儿子进程风险面清零）
 

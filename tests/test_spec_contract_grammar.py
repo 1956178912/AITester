@@ -77,9 +77,9 @@ def test_prompt_section_contains_bnf_and_selfcheck() -> None:
 
 
 def test_prompt_section_renders_every_example() -> None:
-    """5 正例 / 5 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
+    """7 正例 / 5 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
     section = SPEC_EXPR_GRAMMAR_SECTION
-    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 5, "提示契约要求 5 个正例"
+    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 7, "提示契约要求 7 个正例（v3 量化 + 字符串方法）"
     assert len(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES) == 5, "提示契约要求 5 个反例"
     for clause, _kind, _note in SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES:
         assert clause in section, f"正例未渲染进提示：{clause}"
@@ -100,9 +100,14 @@ def test_prompt_section_names_operators_truthfully() -> None:
     assert "单引号" in section
     assert "切片" in section
     assert "位运算符" in section
-    # 白名单外的常见误用要作为反例点名
-    assert "strip" in section
+    # v3：白名单内字符串方法（正例侧点名）与白名单外方法（反例侧点名）都要在
+    assert "startswith" in section
+    assert "title" in section  # v3 反例：刻意不收的方法
+    # 未知标识符反例照旧
     assert "total" in section
+    # v3 量化产生式与循环变量作用域说明必须点名
+    assert "<quant>" in section
+    assert "all(" in section and "any(" in section
 
 
 def test_bnf_claimed_operators_are_really_accepted() -> None:
@@ -145,6 +150,24 @@ def test_bnf_claimed_operators_are_really_accepted() -> None:
         "isinstance(a, int)",
         "0.5 < a",
         'text != ""',
+        # v3（P0-A-1）：有限域量化（all/any 推导式；循环变量作用域内绑定）
+        "all(x > 0 for x in a)",
+        "any(x == b for x in a)",
+        "not any(x < 0 for x in a)",
+        "all(ch.isdigit() for ch in text)",
+        "all(a >= 0 for i in range(len(a)))",
+        "any(text[i] == b for i in enumerate(text))",
+        # v3：字符串纯方法白名单
+        'text.startswith("a")',
+        'text.endswith("z")',
+        'text.split(",") != []',
+        '",".join(text) != ""',
+        "text.strip() != \"\"",
+        "text.lower() == text",
+        "text.isdigit()",
+        "text.replace(\"a\", \"b\") != text",
+        # v3：迭代域白名单内建（range/enumerate 单独出现亦无害）
+        "range(3) == range(3)",
     )
     known = _known_names_for_signature(_PARAMS)
     for form in forms:
@@ -168,17 +191,41 @@ def test_prompt_grammar_terminals_match_compiler_whitelist() -> None:
         "abs",
         "all",
         "any",
+        "enumerate",
         "float",
         "int",
         "isinstance",
         "len",
         "max",
         "min",
+        "range",
         "round",
         "sorted",
         "str",
     ]
-    assert terminals["attrs"] == ["imag", "real", "value"]
+    assert terminals["attrs"] == [
+        "count",
+        "endswith",
+        "find",
+        "imag",
+        "isalnum",
+        "isalpha",
+        "isdigit",
+        "isspace",
+        "join",
+        "lower",
+        "lstrip",
+        "real",
+        "replace",
+        "rstrip",
+        "split",
+        "startswith",
+        "strip",
+        "upper",
+        "value",
+    ]
+    # v3（P0-A-1）：量化承载调用单独导出（planner BNF 的 <quant> 产生式渲染源）
+    assert terminals["quantifiers"] == ["all", "any"]
     for name in terminals["calls"]:
         assert name in SPEC_EXPR_GRAMMAR_SECTION, f"提示未列出白名单函数 {name}"
     for attr in terminals["attrs"]:
@@ -280,7 +327,7 @@ _CONSISTENCY_CORPUS = (
     "a && b",  # parse_error（语法错）
     "result = a + b",  # parse_error（赋值不是表达式）
     "r == total",  # unknown_name
-    'result.strip() == "abc"',  # unsupported_operator
+    'result.title() == "Abc"',  # unsupported_operator（v3：title 刻意不入白名单）
     'open("x")',  # unsupported_operator
     "a == 'x'",  # unsupported_syntax（单引号字符串）
     'text[0:2] == "ab"',  # unsupported_syntax（冒号切片）
@@ -422,3 +469,125 @@ def test_grammar_section_injected_iff_dsl_enabled(monkeypatch: pytest.MonkeyPatc
     assert captured, "planner 未调用 LLM 桩"
     assert "::=" not in captured[-1], "默认关时 prompt 必须零变化"
     assert SPEC_EXPR_GRAMMAR_SECTION not in captured[-1]
+
+
+# ─── 7. v3（2026-10-12 P0-A-1）文法升阶：量化 / 字符串方法 / 作用域纪律 ──────
+
+
+class TestV3QuantifierScoping:
+    """有限域量化子句的可编译化 + 循环变量作用域纪律（防 NameError 假红断言）。"""
+
+    @pytest.mark.parametrize(
+        "clause",
+        (
+            "all(x > 0 for x in a)",
+            "any(x == b for x in a)",
+            "not all(x > 0 for x in a)",
+            "all(ch.isdigit() for ch in text)",
+            "all(a >= 0 for i in range(len(a)))",
+            "all(a[i] > 0 for i in range(3))",
+            "any(text[i] == b for i in enumerate(text))",
+            "all(x > 0 for x in a) and any(x == b for x in a)",
+        ),
+    )
+    def test_quantifier_clauses_compilable(self, clause: str) -> None:
+        """全称 / 存在量化（all/any 推导式）在参数绑定时可编译。"""
+        assert _clause_is_compilable(clause, "postcondition", _known_names_for_signature(_PARAMS)), clause
+        assert clause_reject_reason(clause, "postcondition", _PARAMS) is None, clause
+
+    @pytest.mark.parametrize(
+        ("clause", "reason"),
+        (
+            # 推导式外引用循环变量 → 运行期 NameError，必须拒（防 gold 上假红）
+            ("all(x > 0 for x in a) and x > 5", "unknown_name"),
+            ("x > 0 and all(y > 0 for y in a)", "unknown_name"),
+            # 迭代域含未绑定名 → 照旧拒
+            ("all(x > 0 for x in items)", "unknown_name"),
+            # 白名单外调用在量化体内照样被拦（不因扩文法放宽）
+            ("all(open(x) for x in a)", "unsupported_operator"),
+            ("all(x.system for x in a)", "unsupported_operator"),
+        ),
+    )
+    def test_quantifier_scope_discipline(self, clause: str, reason: str) -> None:
+        """作用域纪律：越界引用 / 危险调用在量化子句内仍被拒。"""
+        assert clause_reject_reason(clause, "postcondition", _PARAMS) == reason, clause
+
+    def test_quantifier_compiles_to_executable_assert(self) -> None:
+        """量化子句经 compile_spec_oracle 产出 ast.parse 通过的可执行断言。"""
+        import ast
+
+        from src.specs.spec_ir_v2 import compile_spec_oracle
+
+        spec = {
+            "postconditions_expr": ["all(x > 0 for x in a)"],
+            "boundaries": [{"input": [1, 2, 3]}],
+        }
+        code = compile_spec_oracle(spec, target_module="m", target_function="f", signature_params=["a"])
+        assert code, "量化后置条件应产出 oracle"
+        assert "assert all(x > 0 for x in a)" in code
+        ast.parse(code)  # 产物必须可执行
+
+    def test_nested_comprehension_scoping(self) -> None:
+        """嵌套推导式：内层循环变量在内层体内绑定，不泄漏到外层自由名集合。"""
+        # a[i][j]：i 外层绑定、j 内层绑定；text 为参数名——应可编译
+        clause = "all(a[i][j] > 0 for i in range(len(a)) for j in range(len(a[i])))"
+        assert _clause_is_compilable(clause, "postcondition", _known_names_for_signature(_PARAMS)), clause
+
+
+class TestV3StringMethodWhitelist:
+    """v3 字符串纯方法白名单（回应评审 C1：高频不可编译子句来源）。"""
+
+    @pytest.mark.parametrize(
+        "clause",
+        (
+            'text.startswith("a")',
+            'text.endswith("z")',
+            'text.split(",") != []',
+            '",".join(text) != ""',
+            'text.strip() != ""',
+            'text.lstrip() != "" and text.rstrip() != ""',
+            "text.lower() == text",
+            "text.upper() != text",
+            "text.isdigit()",
+            "text.isalpha()",
+            "text.isalnum()",
+            "text.isspace()",
+            'text.find("x") >= 0',
+            'text.count("a") > 0',
+            'text.replace("a", "b") != text',
+            'result.startswith("ok")',
+        ),
+    )
+    def test_string_methods_compilable(self, clause: str) -> None:
+        """白名单内字符串纯方法全部可编译（含 result 别名归一）。"""
+        assert _clause_is_compilable(clause, "postcondition", _known_names_for_signature(_PARAMS)), clause
+        assert clause_reject_reason(clause, "postcondition", _PARAMS) is None, clause
+
+    @pytest.mark.parametrize(
+        ("clause", "reason"),
+        (
+            ('result.title() == "Abc"', "unsupported_operator"),
+            ('result.center(10) == "abc"', "unsupported_operator"),
+            ('result.encode() == b"x"', "unsupported_operator"),
+            ('result.format() == "x"', "unsupported_operator"),
+        ),
+    )
+    def test_non_whitelisted_methods_rejected(self, clause: str, reason: str) -> None:
+        """刻意不收的方法（title/center/encode/format）照旧被拒（反例教学形态）。"""
+        assert clause_reject_reason(clause, "postcondition", _PARAMS) == reason, clause
+
+    def test_method_call_gate_no_double_reject(self) -> None:
+        """方法调用不被调用名白名单二次拦截（T1b 同类同门冲突的 v3 修复）。"""
+        assert _whitelist_check('text.startswith("a")') == []
+        assert _whitelist_check('",".join(text)') == []
+        # 非白名单属性链仍被拦
+        assert any(v.startswith("attr_escape:") for v in _whitelist_check("text.title()"))
+
+    def test_string_method_spec_aggregation(self) -> None:
+        """含字符串方法子句的规约：归因为空、compile_readiness 满分。"""
+        spec = {
+            "preconditions_expr": ['text.startswith("a")'],
+            "postconditions_expr": ['text.isdigit() or text == ""'],
+        }
+        assert spec_reject_reasons(spec, _PARAMS) == {}
+        assert compile_readiness(spec, _PARAMS) == 1.0

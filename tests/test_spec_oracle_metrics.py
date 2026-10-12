@@ -17,10 +17,9 @@
    "injected_and_failed"）+ 默认关回归（SPEC_IR_DSL_ENABLE /
    SPEC_ORACLE_EXEC_ENABLE 默认 false，历史口径零变化）。
 
-已知假阴性（P2-L3 表达力缺口，本轮**不修**，见 TestKnownFalseNegative）：
-推导式绑定变量（``all(x > 0 for x in xs)`` 的 ``x``）被 ast.Name 全收集口径
-当作未知标识符 → 两通道一致拒绝（假阴性）；修复需自由变量分析（表达力批次），
-此处以 strict xfail 钉住，防止未来被误当成回归。
+推导式量化子句（``all(x > 0 for x in xs)`` 等）自 v3（2026-10-12 P0-A-1）起
+**可编译**（自由变量分析放行循环变量，原 P2-L3 已知假阴性已修复，见
+TestComprehensionQuantifierCompiles）；推导式外引用循环变量仍被拒。
 """
 
 from __future__ import annotations
@@ -64,10 +63,11 @@ CONSISTENCY_CASES: list[tuple[str, list[str]]] = [
     ("r == sorted(xs)", ["xs"]),
     ("xs[i] > 0", ["xs", "i"]),
 ]
-# 期望判定（与上表同序）：前 2 条 = 推导式假阴性（P2-L3）；第 3/4 条 =
-# 非 Python 表达式形态（implies 未知名 / "n is an integer" 语法非法）；
-# 后 4 条 = 受限 DSL 内可编译。
-EXPECTED_COMPILABLE: list[bool] = [False, False, False, False, True, True, True, True]
+# 期望判定（与上表同序）：前 2 条 = 推导式量化（v3 2026-10-12 P0-A-1 起**可编译**，
+# 自由变量分析 _free_names 放行循环变量，原 P2-L3 已知假阴性已修复）；第 3/4 条 =
+# 非 Python 表达式形态（implies 未知名 / "n is an integer" 语法非法）；后 4 条 =
+# 受限 DSL 内可编译。
+EXPECTED_COMPILABLE: list[bool] = [True, True, False, False, True, True, True, True]
 
 # 可编译规约材料（与 tests/test_2026_10_05_review_batch.py 同形状）
 _SPEC_COMPILABLE: dict = {
@@ -473,25 +473,34 @@ class TestDefaultOffRegression:
         assert "assert r > 0" in code
 
 
-# ─── 5. 已知假阴性（P2-L3，本轮不修，strict xfail 钉住）────────────────────
-
-
 @pytest.mark.unit
-class TestKnownFalseNegative:
-    """推导式绑定变量被标识符门误杀——两通道一致拒绝（假阴性，非口径漂移）。"""
+class TestComprehensionQuantifierCompiles:
+    """推导式量化子句可编译（v3 2026-10-12 P0-A-1 修复原 P2-L3 已知假阴性）。
 
-    def test_current_behavior_is_consistent_rejection(self) -> None:
+    历史缺口（P2-L3，已修复）：推导式绑定变量（``all(x > 0 for x in xs)`` 的
+    ``x``）被 ast.Name 全收集口径当作未知标识符 → 两通道一致拒绝（假阴性）。
+    v3 引入自由变量分析（``_free_names``，comprehension/lambda 作用域精确版）
+    后循环变量不再计入未绑定名，量化子句两通道一致**编译**；推导式**外**引用
+    循环变量照旧按 unknown_name 拒绝（防 NameError 假红断言）。
+    """
+
+    def test_comprehension_bound_variable_compiles(self) -> None:
+        """全称量化子句：度量通道 readiness=1.0 且注入通道产物非空（两通道一致）。"""
         spec = {"postconditions_expr": ["all(x > 0 for x in xs)"]}
+        assert compile_readiness(spec, ["xs"]) == 1.0
+        assert compile_spec_oracle(spec, "m", "f", signature_params=["xs"]) != ""
+
+    def test_quantifier_with_whitelisted_string_method_compiles(self) -> None:
+        """存在量化 + 字符串纯方法（v3 白名单）：any(c.isdigit() for c in s)。"""
+        spec = {"postconditions_expr": ["any(c.isdigit() for c in s)"]}
+        assert compile_readiness(spec, ["s"]) == 1.0
+        assert compile_spec_oracle(spec, "m", "f", signature_params=["s"]) != ""
+
+    def test_out_of_scope_comprehension_variable_still_rejected(self) -> None:
+        """作用域纪律：推导式外引用循环变量仍按 unknown_name 拒绝（防假红）。"""
+        spec = {"postconditions_expr": ["all(x > 0 for x in xs) and x > 5"]}
         assert compile_readiness(spec, ["xs"]) == 0.0
         assert compile_spec_oracle(spec, "m", "f", signature_params=["xs"]) == ""
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason="P2-L3 表达力缺口：ast.Name 全收集口径把推导式绑定变量 x 当未知标识符；"
-        "修复需自由变量分析（表达力批次，本轮范围外）",
-    )
-    def test_comprehension_bound_variable_should_compile(self) -> None:
-        assert compile_readiness({"postconditions_expr": ["all(x > 0 for x in xs)"]}, ["xs"]) == 1.0
 
 
 # ─── 6. 端到端（真实 pytest 子进程）：注入产物执行 → 行级 verdict 可归因 ────

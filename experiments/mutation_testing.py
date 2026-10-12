@@ -57,6 +57,177 @@ def _find_boolean_nodes(tree: ast.Module) -> list[ast.UnaryOp]:
     return [node for node in ast.walk(tree) if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not)]
 
 
+# ─── v3（2026-10-12 P0-B）ULT/PiTest 算子对齐的查找器 / 变换器 ──────────────
+
+
+def _is_docstring_stmt(stmt: ast.stmt) -> bool:
+    """语句是否为 docstring（模块/类/函数首Expr且值为 str 常量）。"""
+    return (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Constant)
+        and isinstance(stmt.value.value, str)
+    )
+
+
+def _find_mutable_string_constants(tree: ast.Module) -> list[ast.Constant]:
+    """收集可变异字符串常量（跳过 docstring：变异恒存活、污染反馈信噪比）。
+
+    语境敏感遍历：FunctionDef/AsyncFunctionDef/ClassDef/Module 的 body
+    首语句若是 str 常量 Expr（docstring）则跳过；注意
+    ``ast.iter_child_nodes`` 会把 body **打平**成直接子节点——若用通用
+    递归遍历定义类节点，其 docstring 会经"Expr 包装 → Constant"路径被
+    重新发现（v3 首版的真实 bug，本测试锁定）。故定义类节点显式分派到
+    _walk_body，其余节点才走通用递归。
+    """
+    found: list[ast.Constant] = []
+
+    def _walk_body(body: list[ast.stmt]) -> None:
+        for idx, stmt in enumerate(body):
+            if idx == 0 and _is_docstring_stmt(stmt):
+                continue  # docstring 不变异
+            _walk(stmt)
+
+    def _walk(node: ast.AST) -> None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value:
+            found.append(node)
+            return
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            _walk_body(node.body)
+            _walk(node.args)  # 默认参数值中的字符串字面量
+            for decorator in node.decorator_list:
+                _walk(decorator)
+            if node.returns is not None:
+                _walk(node.returns)
+            return
+        if isinstance(node, ast.ClassDef):
+            _walk_body(node.body)
+            for decorator in node.decorator_list:
+                _walk(decorator)
+            for base in node.bases:
+                _walk(base)
+            return
+        if isinstance(node, ast.Module):
+            _walk_body(node.body)
+            return
+        for child in ast.iter_child_nodes(node):
+            _walk(child)
+
+    _walk(tree)
+    return found
+
+
+def _find_deletable_statements(tree: ast.Module) -> list[ast.stmt]:
+    """收集可删除语句（函数体直接语句；删除后函数体必须非空）。
+
+    保守边界：只收函数体（含嵌套函数）的**直接**语句、跳过 docstring；
+    要求函数体有效语句数 ≥2（删 1 后仍 ≥1，保证语法有效——空语句块
+    是语句删除的主要陷阱）。
+    """
+    candidates: list[ast.stmt] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = node.body
+        doc = 1 if body and _is_docstring_stmt(body[0]) else 0
+        if len(body) - doc < 2:
+            continue  # 删除后会空 / 只剩 docstring，不产无效变异
+        candidates.extend(body[doc:])
+    return candidates
+
+
+class _UnaryRemoveTransformer(ast.NodeTransformer):
+    """按 (lineno, col_offset) 移除指定一元负号：-X → X（返回操作数）。"""
+
+    def __init__(self, lineno: int, col_offset: int) -> None:
+        self._lineno = lineno
+        self._col = col_offset
+        self.replaced = False
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> ast.AST:
+        self.generic_visit(node)
+        if (
+            not self.replaced
+            and isinstance(node.op, ast.USub)
+            and node.lineno == self._lineno
+            and getattr(node, "col_offset", None) == self._col
+        ):
+            self.replaced = True
+            return node.operand
+        return node
+
+
+class _NotInsertTransformer(ast.NodeTransformer):
+    """按 (lineno, col_offset) 在指定 Compare 前插入 not：X → not X。"""
+
+    def __init__(self, lineno: int, col_offset: int) -> None:
+        self._lineno = lineno
+        self._col = col_offset
+        self.replaced = False
+
+    def visit_Compare(self, node: ast.Compare) -> ast.AST:
+        self.generic_visit(node)
+        if (
+            not self.replaced
+            and node.lineno == self._lineno
+            and getattr(node, "col_offset", None) == self._col
+        ):
+            self.replaced = True
+            return ast.UnaryOp(op=ast.Not(), operand=node)
+        return node
+
+
+class _StmtDeleteTransformer(ast.NodeTransformer):
+    """按 (lineno, col_offset) 删除函数体内指定语句（删除后函数体非空）。"""
+
+    def __init__(self, lineno: int, col_offset: int) -> None:
+        self._lineno = lineno
+        self._col = col_offset
+        self.replaced = False
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self.generic_visit(node)
+        return self._filter_body(node)
+
+    # AsyncFunctionDef 同口径（NodeTransformer 按类名分派，别名即可）
+    visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
+
+    def _filter_body(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        kept = [
+            s
+            for s in node.body
+            if not (s.lineno == self._lineno and getattr(s, "col_offset", None) == self._col)
+        ]
+        if kept and len(kept) < len(node.body):
+            node.body = kept
+            self.replaced = True
+        return node
+
+
+class _BreakContinueTransformer(ast.NodeTransformer):
+    """按 (lineno, col_offset) 互换 break ↔ continue。"""
+
+    def __init__(self, lineno: int, col_offset: int, to_continue: bool) -> None:
+        self._lineno = lineno
+        self._col = col_offset
+        self._to_continue = to_continue
+        self.replaced = False
+
+    def _match(self, node: ast.stmt) -> bool:
+        return node.lineno == self._lineno and getattr(node, "col_offset", None) == self._col
+
+    def visit_Break(self, node: ast.Break) -> ast.AST:
+        if self._to_continue and self._match(node):
+            self.replaced = True
+            return ast.Continue()
+        return node
+
+    def visit_Continue(self, node: ast.Continue) -> ast.AST:
+        if not self._to_continue and self._match(node):
+            self.replaced = True
+            return ast.Break()
+        return node
+
+
 class _RemoveNotTransformer(ast.NodeTransformer):
     """按行号定位并改写 AST 中指定位置的 `not X` 为 `X`。
 
@@ -198,7 +369,7 @@ class MutationGenerator:
     - 仅对函数体内的语句变异（模块级赋值不纳入，保守口径）；
     - 返回空列表表示无可变异语句（如空函数 / 纯文档字符串）。
 
-    变异类型（P0 3.3 难度升级，共 7 类）：
+    变异类型（P0 3.3 难度升级共 7 类；v3 2026-10-12 P0-B 扩至 12 类）：
         1. operator_flip   比较运算符翻转（== ↔ !=、< ↔ > 等）
         2. boolean_negation 布尔取反（not X → X）
         3. numeric_offset  数字常量偏移（+1 / -1 / 0）
@@ -206,6 +377,13 @@ class MutationGenerator:
         5. return_void     返回值变异（return X → return None）
         6. return_empty    返回值变异（return X → return [] / return ""）
         7. exception_remove 异常路径变异（移除 raise 语句 / 修改异常类型）
+        8. unary_minus_remove 一元负号移除（-X → X，ULT unary operator removal）
+        9. unary_not_insert  比较前插 not（X → not X，ULT unary operator insertion）
+       10. string_const_swap 字符串常量置换（"abc" → "xxx"，ULT/PiTest，
+           跳过 docstring）
+       11. stmt_delete      语句删除（ULT statement deletion；仅函数体直接语句，
+           删除后非空）
+       12. break_continue_swap break ↔ continue 互换（PiTest loop control）
     """
 
     # 每任务最大变异体数量（来源：执行时间预算，每个变异体跑一遍测试 ~1-3s）
@@ -252,6 +430,14 @@ class MutationGenerator:
         # 检测"测试是否校验了异常抛出"：若测试用 pytest.raises 校验了特定异常，
         # 移除 raise 后测试应失败；存活说明测试未覆盖异常路径
         mutants.extend(self._generate_exception_removals(tree, source_code))
+        # 变异类型 8-12（v3 2026-10-12 P0-B）：ULT/PiTest 标准算子对齐
+        # （一元负号移除 / 比较前插 not / 字符串常量置换 / 语句删除 /
+        #  break↔continue）——回应独立评审 S-08"变异体过弱、无外部可比性"。
+        mutants.extend(self._generate_unary_minus_removals(tree, source_code))
+        mutants.extend(self._generate_unary_not_insertions(tree, source_code))
+        mutants.extend(self._generate_string_const_swaps(tree, source_code))
+        mutants.extend(self._generate_statement_deletions(tree, source_code))
+        mutants.extend(self._generate_break_continue_swaps(tree, source_code))
 
         # 2026-09-26 全面审查（P1 正确性）：按 mutant.code 去重——此前同行
         # 多个比较产生"描述与改动不一致 + 重复变异体"（同一份代码文本被登记
@@ -582,6 +768,185 @@ class MutationGenerator:
                     continue
         return mutants
 
+    # ─── v3（2026-10-12 独立评审落地·P0-B）：ULT/PiTest 标准算子对齐 ──────────
+    # 背景（独立评审 S-08）：内置变异体"过弱、近饱和"（存量工件 89.4% 的
+    # mutation_score 行为 1.0，无鉴别力），根因是算子集缺 ULT/PiTest 的
+    # 标准类目，得分无外部可比性。以下 5 类均为"单点、语法有效、语义合理"
+    # 改动（Competent Programmer Hypothesis / Coupling Effect 口径，与
+    # AdverTest / SWE-Mutation 的单行约束一致），零外部依赖、AST 级，
+    # 受 _MAX_MUTANTS_PER_TASK 类型轮转取样约束（不改变既有 7 类的
+    # 生成逻辑，只在桶里增加新类型）。
+
+    def _generate_unary_minus_removals(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """8. 一元负号移除：-x → x（ULT unary operator removal）。
+
+        检测"测试是否校验了数值符号语义"：若断言了具体数值，移除负号后
+        应被杀死；存活说明测试只校验了"能跑"未校验符号。
+        """
+        mutants: list[Mutant] = []
+        targets = [n for n in ast.walk(tree) if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub)]
+        for target in targets:
+            new_tree = copy.deepcopy(tree)
+            transformer = _UnaryRemoveTransformer(target.lineno, getattr(target, "col_offset", 0))
+            transformer.visit(new_tree)
+            if not transformer.replaced:
+                continue
+            try:
+                new_code = ast.unparse(new_tree)
+                ast.parse(new_code)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if new_code == source_code:
+                continue
+            mutants.append(
+                Mutant(
+                    code=new_code,
+                    mutant_type="unary_minus_remove",
+                    description=f"line {target.lineno}: -X → X（一元负号移除）",
+                    line_no=target.lineno,
+                )
+            )
+        return mutants
+
+    def _generate_unary_not_insertions(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """9. 比较前插 not：a > b → not a > b（ULT unary operator insertion）。
+
+        与 boolean_negation（移除既有 not）互补：本算子**新增**逻辑翻转点，
+        检测"测试是否校验了条件的正向语义"。
+        """
+        mutants: list[Mutant] = []
+        targets = [n for n in ast.walk(tree) if isinstance(n, ast.Compare)]
+        for target in targets:
+            new_tree = copy.deepcopy(tree)
+            transformer = _NotInsertTransformer(target.lineno, getattr(target, "col_offset", 0))
+            transformer.visit(new_tree)
+            if not transformer.replaced:
+                continue
+            try:
+                new_code = ast.unparse(new_tree)
+                ast.parse(new_code)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if new_code == source_code:
+                continue
+            mutants.append(
+                Mutant(
+                    code=new_code,
+                    mutant_type="unary_not_insert",
+                    description=f"line {target.lineno}: X → not X（比较前插 not）",
+                    line_no=target.lineno,
+                )
+            )
+        return mutants
+
+    def _generate_string_const_swaps(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """10. 字符串常量置换："abc" → "xxx"（ULT/PiTest string constant replacement）。
+
+        跳过 docstring（模块/类/函数首语句）——docstring 变异恒存活，
+        进反馈环只会产出无意义补强指令（MUTGEN 式反馈的信噪比纪律）。
+        """
+        mutants: list[Mutant] = []
+        for const in _find_mutable_string_constants(tree):
+            original = const.value
+            replacement = "x" * max(1, len(original))
+            new_tree = copy.deepcopy(tree)
+            node = self._locate_node(new_tree, const)
+            if node is None or not isinstance(node, ast.Constant):
+                continue
+            node.value = replacement
+            try:
+                new_code = ast.unparse(new_tree)
+                ast.parse(new_code)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if new_code == source_code:
+                continue
+            mutants.append(
+                Mutant(
+                    code=new_code,
+                    mutant_type="string_const_swap",
+                    description=f"line {const.lineno}: 字符串常量 {original!r} → {replacement!r}",
+                    line_no=const.lineno,
+                )
+            )
+        return mutants
+
+    def _generate_statement_deletions(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """11. 语句删除（ULT statement deletion；仅函数体直接语句）。
+
+        保守边界：只删函数体的**直接**语句（非 docstring、删除后函数体
+        非空）——if/for 等复合语句内的删除留待后续算子，本类保证语法恒
+        有效（空语句块是主要陷阱）。
+        """
+        mutants: list[Mutant] = []
+        for stmt in _find_deletable_statements(tree):
+            new_tree = copy.deepcopy(tree)
+            transformer = _StmtDeleteTransformer(stmt.lineno, getattr(stmt, "col_offset", 0))
+            transformer.visit(new_tree)
+            if not transformer.replaced:
+                continue
+            try:
+                new_code = ast.unparse(new_tree)
+                ast.parse(new_code)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if new_code == source_code:
+                continue
+            mutants.append(
+                Mutant(
+                    code=new_code,
+                    mutant_type="stmt_delete",
+                    description=f"line {stmt.lineno}: 删除语句（语句删除变异）",
+                    line_no=stmt.lineno,
+                )
+            )
+        return mutants
+
+    def _generate_break_continue_swaps(self, tree: ast.Module, source_code: str) -> list[Mutant]:
+        """12. break ↔ continue 互换（PiTest loop control 变异）。
+
+        检测"测试是否校验了循环控制语义"：互换后循环行为改变（提前退出
+        vs 跳过本轮），断言了迭代次数的测试应被杀死。
+        """
+        mutants: list[Mutant] = []
+        targets = [n for n in ast.walk(tree) if isinstance(n, (ast.Break, ast.Continue))]
+        for target in targets:
+            to_continue = isinstance(target, ast.Break)
+            new_tree = copy.deepcopy(tree)
+            transformer = _BreakContinueTransformer(target.lineno, getattr(target, "col_offset", 0), to_continue)
+            transformer.visit(new_tree)
+            if not transformer.replaced:
+                continue
+            try:
+                new_code = ast.unparse(new_tree)
+                ast.parse(new_code)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+            if new_code == source_code:
+                continue
+            label = "break → continue" if to_continue else "continue → break"
+            mutants.append(
+                Mutant(
+                    code=new_code,
+                    mutant_type="break_continue_swap",
+                    description=f"line {target.lineno}: {label}（循环控制变异）",
+                    line_no=target.lineno,
+                )
+            )
+        return mutants
+
+    @staticmethod
+    def _locate_node(tree: ast.Module, target: ast.AST) -> ast.AST | None:
+        """按 (type, lineno, col_offset) 在 deepcopy 树中定位同一节点。"""
+        for node in ast.walk(tree):
+            if (
+                type(node) is type(target)
+                and getattr(node, "lineno", None) == getattr(target, "lineno", None)
+                and getattr(node, "col_offset", None) == getattr(target, "col_offset", None)
+            ):
+                return node
+        return None
+
     def _generate_return_empty(self, tree: ast.Module, source_code: str) -> list[Mutant]:
         """P0 3.3 返回值变异增强（return X → return [] / return ""）。
 
@@ -863,17 +1228,21 @@ class ExtendedMutationGenerator(MutationGenerator):
 
     **为什么需要它**（外部评审 §3.4 / 优化方案 v2 §3.4）
 
-    基类 7 类算子在实测中每任务只产 4–5 个变异体（复杂函数至多 10 个），
+    基类算子在实测中每任务只产 4–5 个变异体（复杂函数至多 10 个），
     而 `mutation_score` 在存量工件中 **89.4% 的行为 1.0**——池太小导致指标饱和、
     无鉴别力。MDO 要求每任务池规模 ≥29（p=10% 效力下 95% 置信的可检出下限）。
 
-    新增 6 类算子（全部无外部依赖、AST 级、单点变异）：
-        8. arith_op_swap      算术运算符互换（+ ↔ -、* ↔ /、// ↔ %）
-        9. aug_assign_swap    增广赋值互换（+= ↔ -=、*= ↔ /=）
-       10. bool_op_swap       布尔运算符互换（and ↔ or）
-       11. cond_negate        条件取反（if X: → if not X:）——专攻分支语义
-       12. const_swap         常量置换（True ↔ False）
-       13. subscript_negate   下标取反（x[i] → x[-i - 1]，序列边界语义）
+    算子集构成（v3 2026-10-12 P0-B 起 **18 类**）：
+    - 基类 12 类：7 类经典算子 + 5 类 ULT/PiTest 标准算子（一元负号移除 /
+      比较前插 not / 字符串常量置换 / 语句删除 / break↔continue，见基类
+      `generate` 的变异类型 8-12）；
+    - 本类扩展 6 类：
+        13. arith_op_swap      算术运算符互换（+ ↔ -、* ↔ /、// ↔ %）
+        14. aug_assign_swap    增广赋值互换（+= ↔ -=、*= ↔ /=）
+        15. bool_op_swap       布尔运算符互换（and ↔ or）
+        16. cond_negate        条件取反（if X: → if not X:）——专攻分支语义
+        17. const_swap         常量置换（True ↔ False）
+        18. subscript_negate   下标取反（x[i] → x[-i - 1]，序列边界语义）
 
     **与基类的关键差异（池规模）**：基类在超过 `_MAX_MUTANTS_PER_TASK` 时用
     **类型轮转**取样（每类只保留少量代表），因此池被人为压小；本类在扩展算子
@@ -911,6 +1280,12 @@ class ExtendedMutationGenerator(MutationGenerator):
             self._generate_return_voids,
             self._generate_return_empty,
             self._generate_exception_removals,
+            # v3（2026-10-12 P0-B）：基类新增 5 类 ULT/PiTest 标准算子同步入扩展池
+            self._generate_unary_minus_removals,
+            self._generate_unary_not_insertions,
+            self._generate_string_const_swaps,
+            self._generate_statement_deletions,
+            self._generate_break_continue_swaps,
             self._gen_arith_swap,
             self._gen_aug_assign_swap,
             self._gen_bool_op_swap,

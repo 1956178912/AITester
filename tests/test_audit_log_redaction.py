@@ -74,6 +74,44 @@ def test_injected_redacted_not_flagged(tmp_path) -> None:
     assert result.ok, [f.line for f in result.findings]
 
 
+def test_pytest_temp_dirs_skipped(tmp_path) -> None:
+    """仓内 pytest basetemp 变体目录（.pytest_tmp_v1 等）必须被跳过。
+
+    回归背景（2026-10-12 全量回归实测）：--basetemp 落在仓内时，测试夹具
+    生成物（如 test_cache_security 故意注入假敏感串的
+    test_injected_bearer_and_sk_*.py）被全仓审计误报为未脱敏日志点，
+    阻断 test_repo_baseline_zero_findings（CI 门禁假红）。本测试锁定
+    _should_skip 对 `.pytest_tmp*` 全部变体的前缀跳过。
+    """
+    for variant in (".pytest_tmp", ".pytest_tmp_v1", ".pytest_tmp_fresh"):
+        _write(
+            str(tmp_path / variant),
+            f"test_injected_bearer_and_sk_{variant.strip('._')}.py",
+            (
+                "import logging\n"
+                "logger = logging.getLogger(__name__)\n"
+                "def call(api_key: str, url: str) -> None:\n"
+                '    logger.info("calling %s with api_key=%s", url, api_key)\n'
+            ),
+        )
+    result = audit(str(tmp_path))
+    assert result.ok, f"pytest 临时目录应被跳过，实际发现：{[f.file for f in result.findings]}"
+    # 反证：夹具内容本身确实可被检出（防测试因写法失效而假通过）——同内容放
+    # 在非跳过目录（src/）下必须报出
+    _write(
+        str(tmp_path / "src"),
+        "control_leak.py",
+        (
+            "import logging\n"
+            "logger = logging.getLogger(__name__)\n"
+            "def call(api_key: str, url: str) -> None:\n"
+            '    logger.info("calling %s with api_key=%s", url, api_key)\n'
+        ),
+    )
+    control = audit(str(tmp_path))
+    assert not control.ok, "同内容在 src/ 下应被检出（反证跳过逻辑未失效）"
+
+
 def test_injected_bearer_and_sk_flagged(tmp_path) -> None:
     """Authorization: Bearer <token> 与 sk- 前缀凭证注入 → 必须被检出。"""
     src_dir = str(tmp_path / "src")

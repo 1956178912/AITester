@@ -46,13 +46,17 @@ SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
     ("result == a + b", "postcondition", "后置：result 表示返回值，编译器自动对齐到内部绑定名"),
     ("isinstance(result, int) and result >= 0", "postcondition", "后置：类型 + 范围"),
     ("0 <= result <= 100", "invariant", "不变量：链式比较一次写完"),
+    # v3（2026-10-12 P0-A-1 文法升阶）：有限域量化 + 字符串纯方法正例
+    ("all(ch.isdigit() for ch in text)", "invariant", "全称量化：所有字符为数字（循环变量 ch 仅在推导式内绑定）"),
+    ('text.startswith("a")', "precondition", "字符串纯方法：前缀判定（startswith 在白名单属性内）"),
 )
 SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
     ("text 为 str 类型", "natural_language", "中文类型描述句——评审实测的真实失败形态"),
     ("成功时返回 int 类型结果", "natural_language", "同上：自然语言，非 ASCII 字符被字符白名单拒绝"),
     ("result = a + b", "parse_error", "赋值语句不是表达式（判等请写 ==）"),
     ("r == total", "unknown_name", "total 未绑定；结果变量统一写 result，不要写 r"),
-    ('result.strip() == "abc"', "unsupported_operator", "strip 不在白名单函数内"),
+    # v3：strip 已入白名单（字符串纯方法），反例换用刻意不收的 title
+    ('result.title() == "Abc"', "unsupported_operator", "title 不在白名单属性内（字符串纯方法只放行 startswith/split/lower 等）"),
 )
 # 示例所属字段标签（渲染进提示，避免 LLM 把后置示例写进前置）
 _SPEC_EXPR_KIND_FIELD = {
@@ -67,6 +71,7 @@ def _build_spec_expr_grammar_section() -> str:
     terminals = spec_expr_grammar_terminals()
     funcs = " | ".join(terminals["calls"])
     attrs = " | ".join(terminals["attrs"])
+    quants = " | ".join(terminals["quantifiers"])
     positives = "\n".join(
         f"{i}. {clause}    （{_SPEC_EXPR_KIND_FIELD[kind]}：{note}）"
         for i, (clause, kind, note) in enumerate(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES, 1)
@@ -87,14 +92,19 @@ def _build_spec_expr_grammar_section() -> str:
 <unary>   ::= ("-" | "+") <unary> | <atom>
 <atom>    ::= 数字 | 双引号字符串 | True | False | None
             | 参数名 | result（仅后置 / 不变量，表示返回值）
-            | <call> | <atom>[<arith>] | <atom>.<attr>
+            | <call> | <quant> | <atom>[<arith>] | <atom>.<attr>
             | "(" <clause> ("," <clause>)* ")" | "[" <clause> ("," <clause>)* "]"
 <call>    ::= <func> "(" [<clause> ("," <clause>)*] ")"
+<quant>   ::= ("{quants}") "(" <clause> "for" <name> "in" <clause> ")"
 <func>    ::= {funcs}
 <attr>    ::= {attrs}
-注：位运算符（& | ^ ~ << >>）编译器虽放行，但布尔语义一律写 and / or / not。
+注 1：位运算符（& | ^ ~ << >>）编译器虽放行，但布尔语义一律写 and / or / not。
+注 2：<quant> 是有限域量化——全称（对所有元素成立）写 all(...)，存在（至少一个成立）
+      写 any(...)；<name> 是循环变量，只在推导式内部绑定，不得在子句其他地方引用。
+注 3：<attr> 含字符串纯方法（startswith/split/join/lower 等，无副作用）；title()/
+      center()/encode() 等不在白名单内，不得出现。
 
-【正例（5 条，逐条都能通过全部校验门，可直接照抄）】
+【正例（7 条，逐条都能通过全部校验门，可直接照抄）】
 {positives}
 
 【反例（5 条，逐条都会被整条丢弃；这些只写进 NL 字段，不要放进 *_expr）】
@@ -103,10 +113,11 @@ def _build_spec_expr_grammar_section() -> str:
 【输出前自检（逐条核对；任一条不满足，就把该条只写在 NL 字段）】
 ① 字符：只含 ASCII 表达式字符——无中文、无单引号（字符串一律双引号）、无冒号
    （不能用切片 text[0:2]）、无花括号、无 f-string、无 # 号；单条 ≤ 200 字符。
-② 调用：只允许 <func> 白名单内的调用与 <attr> 白名单内的属性；strip()/split()/
-   upper()/open()/eval() 等一律不得出现。
+② 调用：只允许 <func> 白名单内的调用、<attr> 白名单内的属性 / 字符串纯方法；
+   title()/center()/encode()/open()/eval() 等一律不得出现。
 ③ 名字：只用被测函数的真实参数名；后置 / 不变量可另用 result 表示返回值
-   （不要写 r）；未绑定的名字（如 total）一律不得出现。
+   （不要写 r）；未绑定的名字（如 total）一律不得出现；量化循环变量
+   （如 all(x > 0 for x in items) 的 x）只在推导式内有效。
 ④ 形态：每条必须整条能作为 assert 的条件——"result = a + b"（赋值）、
    "如果 a 为负数"（自然语言）都不行；判等写 ==，判类型写 isinstance(x, int)，
    判非空写 len(x) > 0 或 x != ""。

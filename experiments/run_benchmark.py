@@ -3407,6 +3407,12 @@ def run_benchmark(
         "EMPTY_PLAN_SHORTCUT_ENABLE",
         "OPERATION_MAP_INJECT_ENABLE",
         "PATH_ENUM_INJECT_ENABLE",
+        # 2026-10-12（独立评审优化批次·P2-A/P1-A）：观测级压缩（改变
+        # Generator prompt 内容）与编排自动搜索（实验 harness 主门）入
+        # 快照——同类缺口第五次预防：两者"是否生效"必须能从工件 provenance
+        # 逐位证明（A1 首跑假阴性机制）。
+        "FEEDBACK_COMPRESSION_ENABLE",
+        "ORCHESTRATION_SEARCH_ENABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

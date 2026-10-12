@@ -58,6 +58,14 @@ _PROFILE_PRESETS: dict[str, dict[str, str]] = {
         "SPEC_SMT_ENABLE": "true",
         "SPEC_ORACLE_EXEC_ENABLE": "true",
         "ENABLE_MUTATION_SCORING": "true",
+        # P0-B（2026-10-12 独立评审落地）：变异反馈**环路内化**默认开——
+        # M7 mutation_advisor 图内节点（executor 失败后即时评估存活变异体，
+        # 下一轮 Generator 经 build_mutation_prompt_section 消费补强断言）。
+        # 此前该开关默认关、观测覆盖 0/154（评审 S-08）；本档为科研评测档，
+        # 变异反馈是"变异引导测试增强"闭环的数据源，默认开启。quick/fast
+        # 档（{}）保持关闭以控成本；显式设 MUTATION_ADVISOR_ENABLE=false
+        # 可关（setdefault 口径，显式 env 优先）。
+        "MUTATION_ADVISOR_ENABLE": "true",
         "ORACLE_VALIDATE_ENABLE": "true",
         "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
     },
@@ -110,6 +118,12 @@ _PROFILE_PRESETS: dict[str, dict[str, str]] = {
         # （AA1 同类"漏配补齐"先例：档位定义早于该能力落地）。纯测量
         # 开关，不改变生成/修复行为；默认档零变化。
         "FL_SPECTRAL_ENABLE": "true",
+        # P0-B（2026-10-12 独立评审落地）：变异反馈环路内化默认开（与
+        # scientific 档同口径）——logic 档是"逻辑驱动"完整链路主口径，
+        # 变异反馈（存活变异体 → Generator 补强断言）是变异引导测试增强
+        # 闭环的图内数据源；配合 ENABLE_MUTATION_SCORING 形成
+        # "环路内反馈 + 事后评分"双口径。quick/fast 档保持关闭控成本。
+        "MUTATION_ADVISOR_ENABLE": "true",
     },
     "fast": {},
 }
@@ -440,6 +454,36 @@ ENABLE_MUTATION_SCORING: bool = os.getenv("ENABLE_MUTATION_SCORING", "false").lo
 # mutation_detection_rate 的二值噪声区间过宽（±30pct），20 个起才有区分度；
 # 变异评估为 opt-in（ENABLE_MUTATION_SCORING 默认关），调默认不影响历史批次）
 MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 20, 1, None)
+
+# ─── 编排自动搜索（bandit）开关组（默认全关/中性，ADR-0003）──────────────────
+# P1-A（2026-10-12，ADR-0016 后续方向落地）：BOAD 式 bandit 自动搜索编排配置。
+# 背景：完整编排臂 detection 净负贡献 −28pp（ADR-0016），编排降级为"可消融
+# 容器"后用 bandit 在容器内**自动发现**配置（BOAD, ICLR 2026：自动发现的
+# 层级智能体优于手工设计）。本组开关只被 experiments/run_orchestration_search.py
+# 与 src/graph/orchestration_search.py 消费——实验 harness 族（与
+# ENABLE_MUTATION_SCORING 同区），**不进** safe/scientific/logic/fast 任何档
+# （保持 fast={} 与历史等价）；champion 配置晋升新档须待 Stage-2 确认后另走
+# ADR。主开关 ORCHESTRATION_SEARCH_ENABLE 默认 false：关时搜索模块全部公共
+# 入口立即拒绝执行、不触碰 os.environ、零 I/O（测试锁定零行为变化）。
+ORCHESTRATION_SEARCH_ENABLE: bool = os.getenv("ORCHESTRATION_SEARCH_ENABLE", "false").lower() == "true"
+# 总评估次数硬顶（先到先停的另一顶见 token 顶）：16 臂 × 均 15 次可测评估
+# 的量级设计（M1 设计集 12 任务 × 3 种子 = 36 cell）
+ORCHESTRATION_SEARCH_MAX_EVALS: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_EVALS", 240, 16, None)
+# 总 token 消耗硬顶：≈ df 臂 4.2k/任务的 ~85 个满配当量 / 全拓扑 26k 的 ~58 个
+ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS", 1_500_000, 100_000, None)
+# UCB1 探索常数 c（bonus = c·sqrt(2·ln t / n_a)）：[0.1, 5.0]，1.0 为二值奖励
+# 小预算下的标准起点；过大退化为近似均匀探索，过小退化为贪心
+ORCHESTRATION_SEARCH_UCB_C: float = _parse_float_env("ORCHESTRATION_SEARCH_UCB_C", 1.0, 0.1, 5.0)
+# 搜索种子：驱动 cell 洗牌与全部 tie-break（同 seed 同奖励历史 → 同结果）
+ORCHESTRATION_SEARCH_SEED: int = _parse_int_env("ORCHESTRATION_SEARCH_SEED", 42, 0, None)
+# Hindsight credit 折扣 γ（BOAD 式：orchestrator 终局失败时仍给推进步骤的
+# 奖励折扣）：[0, 1]，0.5 中点。仅影响归因报告，**不进 UCB 臂选择**（防
+# reward hacking——ADR-0016 教训）
+ORCHESTRATION_SEARCH_HINDSIGHT_GAMMA: float = _parse_float_env("ORCHESTRATION_SEARCH_HINDSIGHT_GAMMA", 0.5, 0.0, 1.0)
+# 单臂 unmeasurable（detection=None，无 gold 材料/无生成物/执行超时）累计上限：
+# 超过即该臂标记 excluded_structurally 退出 UCB 池（防不可测臂探索 bonus
+# 无限增长）；M1 口径 None 不进分母，但预算计数照记
+ORCHESTRATION_SEARCH_MAX_UNMEASURABLE: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_UNMEASURABLE", 5, 1, None)
 
 # ─── 4.4 API 观测层开关（0.6 轮次幽灵开关实装）──────────────────────────────
 # 0.6 轮次性能/文档审计发现：.env.example / QUICKSTART / api_reference /

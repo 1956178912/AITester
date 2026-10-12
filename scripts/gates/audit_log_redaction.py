@@ -96,8 +96,15 @@ class AuditResult:
         return not self.findings
 
 
-def _should_skip(path: str) -> bool:
-    """跳过测试/示例/生成物目录。"""
+def _should_skip(path: str, repo_root: str) -> bool:
+    """跳过测试/示例/生成物目录。
+
+    pytest 临时目录规则（P0，2026-10-12）仅对**仓库根下**的 `.pytest_tmp*`
+    顶层目录生效（--basetemp 落仓内时的 ephemeral 夹具产物）；审计测试自建的
+    tmp 仓库（位于 basetemp 内的 tmp_path）不在此列——否则注入检测测试会被
+    误跳过而假通过（实测：过宽的前缀匹配使 test_injected_* 系列 result.ok
+    恒真）。路径在仓库外（relpath 以 ".." 开头）时不命中本规则。
+    """
     parts = path.replace(os.sep, "/").split("/")
     for skip in (
         "tests",
@@ -114,7 +121,11 @@ def _should_skip(path: str) -> bool:
     ):
         if skip in parts:
             return True
-    return False
+    try:
+        rel = os.path.relpath(path, repo_root).replace(os.sep, "/")
+    except ValueError:  # 跨盘符等异常路径：不命中临时目录规则
+        return False
+    return rel.split("/")[0].startswith(".pytest_tmp")
 
 
 def audit(repo_root: str) -> AuditResult:
@@ -126,7 +137,7 @@ def audit(repo_root: str) -> AuditResult:
             if not fname.endswith(".py"):
                 continue
             full = os.path.join(root, fname)
-            if _should_skip(full):
+            if _should_skip(full, repo_root):
                 continue
             py_files.append(full)
     py_files.sort()

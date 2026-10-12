@@ -51,9 +51,14 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 2. **分布偏差**：函数级 Python 单语言、模板缺陷类型集中于 assertion /
    runtime 两类，不代表真实仓库缺陷分布；
 3. **泄漏通道现状**：`problem_statement`（= pattern description，字面上
-   是缺陷答案）当前仅被注入扫描消费、不进任何 prompt——该"无 prompt
+   是缺陷答案）当前仅被注入扫描消费与评测初始状态构造
+   （`src/graph/orchestration_search.py` 的 `create_initial_state` 入参，
+   与 `run_benchmark.run_single_task` 同角色——状态构造而非 prompt
+   路径）、不进任何 prompt——该"无 prompt
    消费点"不变量**已由静态守卫测试锁定**（AF-D，2026-10-06：
-   tests/test_af_batch.py；新增 prompt 侧消费必须显式更新本卡与该测试）；
+   tests/test_af_batch.py；新增 prompt 侧消费必须显式更新本卡与该测试；
+   2026-10-12 P1-A 登记第二消费点：orchestration_search.py 仅限状态构造，
+   守卫测试同步锁定其唯一读取口径）；
 4. **统计功效**：n=50 在 detection 2% 基线下对 10pp 差异的检验功效不足
    （`scripts/tools/power_analysis.py` 可复算）。
 

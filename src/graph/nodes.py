@@ -83,7 +83,9 @@ from src.graph.flags import (  # noqa: F401
     _boundary_triplets_enabled,
     _branch_coverage_inject_enabled,
     _context_tier_downgrade_enabled,
+    _detection_spec_mode,
     _failure_frequency_enabled,
+    _feedback_compression_enabled,
     _fl_spectral_enabled,
     _flaky_check_enabled,
     _oracle_enhance_enabled,
@@ -762,6 +764,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 对"LLM 完全不可用"场景更合理（崩溃 = 零产出，降级 = 仍有修复机会）。
     _generator_budget_hit = False  # 5.4 预算封顶标记（O35；正常路径恒 False）
     _empty_plan_shortcut = False  # 空计划短路标记（try 块外初始化，except 分支可达）
+    # P2 一期（观测级压缩）：压缩反馈产物与渲染段落（try 块外初始化，
+    # except 分支可达；FEEDBACK_COMPRESSION_ENABLE 默认关时恒 None，
+    # 历史口径零变化）
+    _compressed_feedback: dict[str, Any] | None = None
+    _fc_section: str | None = None
     try:
         # 修复引擎批次 XI（ADR-0025）：oracle 上下文消融档——minimal 时
         # 下方四个增强段（分支覆盖/AST 边界锚点/蜕变/差分）全部保持
@@ -778,6 +785,29 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
             from src.tools.branch_coverage_inject import build_branch_coverage_prompt_section as _build_bc_section
 
             _bc_section = _build_bc_section(state.get("branch_coverage"))
+        # P2 一期（观测级行粒度压缩）：Debugger→Generator 反馈的压缩段落。
+        # 从 state 既有观测（probe 快照最内层帧 / fl_spectral Top-k /
+        # traceback 行号 / mutation_feedback）提取「失败测试涉及的源代码行
+        # + 错误类型 + 存活变异体摘要」，渲染为有界段落（≤4000 字符）注入
+        # Generator prompt——替代朴素全量 trace 注入。零 LLM 成本（纯文本
+        # 提取）；无实质内容时 compressed_feedback=None，历史口径零变化；
+        # 与 oracle_context_minimal 消融档联动（minimal 时不注入，与 O3
+        # 同口径）。构建点选消费侧（本节点）而非 _debugger_node：_should_debug
+        # 的 over_red 再生成路由不过 debugger，消费侧构建覆盖全部再生成路径。
+        if not _ctx_minimal and _feedback_compression_enabled():
+            from src.tools.feedback_compression import build_compressed_feedback as _build_fc
+            from src.tools.feedback_compression import build_feedback_compression_section as _build_fc_section
+
+            _compressed_feedback = _build_fc(state)
+            _fc_section = _build_fc_section(_compressed_feedback)
+            if _fc_section:
+                logger.info(
+                    "P2 观测级压缩反馈：错误类型=%s 涉及行=%d 存活变异=%d（%d 字符）",
+                    (_compressed_feedback or {}).get("error_category"),
+                    len((_compressed_feedback or {}).get("target_lines") or []),
+                    len((_compressed_feedback or {}).get("survived_mutants") or []),
+                    len(_fc_section),
+                )
         # M10（2026-09-29 审查 P0）：确定性边界锚点——从 target_code 的 AST
         # 分支条件推导边界三元组（零 LLM 成本），渲染为 prompt 段落注入
         # Generator（BOUNDARY_TRIPLETS_ENABLE=true 时非空，默认关时 None，
@@ -888,6 +918,27 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                     logger.warning(
                         "P2 注入扫描：外部文本检出注入特征 %s（追加系统侧警示，不自动阻断）", _injection_findings
                     )
+        # P0-A-2（2026-10-12 独立评审落地）：规格优先生成（Spec-First）——
+        # DETECTION_SPEC_MODE=replace 时，把 Generator prompt 的"目标代码"块
+        # 替换为规约文档（签名 + NL 规约 + SpecExpr 子句 + 生成纪律），从源头
+        # 切断 oracle-from-implementation 锚点（misguidance effect：缺陷代码
+        # 入提示诱发"断言错误行为"的测试；项目 48.6% 全绿未检出同根因）。
+        # 默认 off / minimal 消融档 / 无规约材料 → None，prompt 与历史逐字节
+        # 一致（spec_first.build_spec_replace_section 保守返回空串）。
+        _spec_replace_section: str | None = None
+        if not _ctx_minimal and _detection_spec_mode() == "replace":
+            from src.tools.spec_first import build_spec_replace_section as _build_spec_replace
+
+            _spec_replace_section = _build_spec_replace(
+                test_plan,
+                state["target_code"],
+                module_name=state.get("module_name", ""),
+                # target_function 可缺席（state 可选字段）；spec_first 内按
+                # test_plan.function_name 回退，None 透传是显式契约
+                target_function=state.get("target_function") or "",
+            )
+            if _spec_replace_section:
+                logger.info("P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section))
         # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
         # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
         # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
@@ -938,6 +989,13 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 # P2（2026-10 批次·续二）：注入扫描系统侧警示（命中注入特征时非空，
                 # INJECTION_GUARD_ENABLE 默认关时恒 None，历史口径零变化）
                 injection_warning=_injection_warning,
+                # P0-A-2（2026-10-12）：规格优先生成规约文档段（replace 模式且
+                # 有规约材料时非空；None 时 _build_query 保持历史口径注入目标代码）
+                spec_replace_section=_spec_replace_section,
+                # P2 一期（观测级压缩）：失败行+错误类型+变异摘要的压缩反馈
+                # 段落（FEEDBACK_COMPRESSION_ENABLE 默认关时 None 不注入，
+                # 历史口径零变化）
+                feedback_compression_section=_fc_section,
             )
     except (RuntimeError, OSError, json.JSONDecodeError) as e:
         # 5.4 预算封顶：BudgetExceededError（isinstance 判定）快速降级空测试，
@@ -1089,6 +1147,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # AST 级断言一致性检查（ORACLE_VALIDATE_ENABLE=true 时非空，默认关时零变化）
     if oracle_findings:
         update["oracle_findings"] = oracle_findings
+    # P2 一期（观测级压缩）：压缩反馈产物持久化（FEEDBACK_COMPRESSION_ENABLE
+    # 默认关时恒 None，键集合同构；state 键已在 AITesterState 显式声明，
+    # 不会被 LangGraph 白名单丢弃——O35 教训）。供实验层统计「压缩通道
+    # 到达率 / 段落体积（section_chars）」消费，纯观测不参与路由。
+    update["compressed_feedback"] = _compressed_feedback
     # 修复引擎批次 XIV（ADR-0028 观测层）：oracle 质量历史快照——
     # Self-Repair Trap（DCAware：迭代自修复驱使断言退化）的数据面。
     # 每次生成/再生成的最终测试（去重与规约注入之后）落一份快照；

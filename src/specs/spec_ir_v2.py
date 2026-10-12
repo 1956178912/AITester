@@ -33,6 +33,24 @@
        结果行的聚合函数 spec_reject_reasons（纯观测、零 LLM；与可编译判定
        共用同一段门，见 §3b）——把"47.6% 为 0"拆成可行动的根因分布。
 
+v3（2026-10-12 独立评审落地·P0-A-1 文法升阶，回应评审报告 C1：
+    spec_compile_rate ~21% 的根因是文法表达力不足而非提示工程）：
+    5. **字符串纯方法白名单**：_ALLOWED_ATTRS 补入 startswith/endswith/
+       split/join/strip/lstrip/rstrip/lower/upper/isdigit/isalpha/isalnum/
+       isspace/find/count/replace（真实规约中频率最高的不可编译子句来源；
+       全部 str 无副作用方法，与 len/abs 同风险级；title/center/encode 等
+       刻意不收，保留为反例教学形态）；
+    6. **有限域量化**（forall/exists 的可编译形态）：all(...)/any(...) 推导式
+       经 _free_names 作用域精确判定——循环变量在推导式内绑定、可编译，
+       推导式外引用照旧按 unknown_name 拒绝（防 NameError 假红断言）；
+       _ALLOWED_CALL_NAMES 同步补入 range/enumerate（量化迭代域，纯内建）；
+    7. **方法调用门修正**：visit_Call 对 Attribute 方法调用不再以调用名
+       白名单二次拦截（属性白名单门已覆盖），修复"前一门放行、后一门拒绝"
+       的同门冲突（T1b 同类）。
+    比较算子（== != < <= > >=）、成员测试（in / not in）、链式比较、
+    布尔（and/or/not）、算术、一元正负号自 v2 起即在字符白名单与 AST
+    放行之列（tests/test_spec_contract_grammar.py 锁定，v3 补断言明示）。
+
 设计口径（与 ADR-0003 一致：默认关，新开关独立）：
     - SPEC_IR_DSL_ENABLE=true 时启用（默认 false，历史口径零变化）；
     - 本模块是纯静态函数（无 LLM / 无子进程），失败路径保守返回 [] / 0.0；
@@ -65,13 +83,37 @@ _ENV_DSL = "SPEC_IR_DSL_ENABLE"
 # 与既有 len/abs/sorted 同风险级；其第二参为类型对象（int/str/bool/float
 # 等内建），仍受 AST 白名单节点约束（属性链深度与 Name 解析照旧受限），
 # 不扩大"规约里藏命令"的注入面。
+#
+# v3（2026-10-12 独立评审落地·P0-A-1 文法升阶）：补入 `range` / `enumerate`。
+# 用途：有限域量化子句（forall/exists 的可编译形态，见 _free_names）的
+# 迭代域，如 `all(ch.isdigit() for ch in range(len(text)))`。二者为纯
+# 内建迭代器工厂（无 I/O、无用户代码触发），单独出现不构成表达式求值
+# 风险（range(10**10) 惰性、不物化；list/sum 等物化调用不在白名单）。
 _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
-    {"len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all", "isinstance"}
+    {
+        "len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all", "isinstance",
+        "range", "enumerate",
+    }
 )
-# 允许的属性访问（容器/数值边界锚点）：仅放行白名单属性（防 x.__class__
-# 类 introspection 逃逸）。注意：`len` 是函数（走 _ALLOWED_CALL_NAMES），
-# 不是属性——此处原含 "len" 系笔误（会放行无效的 x.len 属性访问），已移除。
-_ALLOWED_ATTRS: frozenset[str] = frozenset({"value", "real", "imag"})
+# 允许的属性访问（容器/数值边界锚点 + v3 字符串纯方法白名单）：
+# - value/real/imag：数值属性锚点（历史口径，防 x.__class__ 类 introspection 逃逸）；
+# - startswith/endswith/split/join/strip/lstrip/rstrip/lower/upper/isdigit/
+#   isalpha/isalnum/isspace/find/count/replace：v3（P0-A-1）补入的**字符串纯方法**。
+#   实测依据：spec_reject_reasons 归因分布中 unsupported_operator 的高频形态
+#   即 `text.startswith(...)` / `",".join(...)` 等字符串规约（评审报告 C1：
+#   真实规约中出现频率最高的不可编译子句来源）。全部为 str 无副作用方法
+#   （不触文件 / 不执行用户代码 / 不抛网络），与 len/abs 同风险级；
+#   刻意**不**收 title/center/encode/format 等（保留为反例教学形态）。
+# 注意：`len` 是函数（走 _ALLOWED_CALL_NAMES），不是属性——此处原含 "len"
+# 系笔误（会放行无效的 x.len 属性访问），已移除。
+_ALLOWED_ATTRS: frozenset[str] = frozenset(
+    {
+        "value", "real", "imag",
+        "startswith", "endswith", "split", "join", "strip", "lstrip", "rstrip",
+        "lower", "upper", "isdigit", "isalpha", "isalnum", "isspace",
+        "find", "count", "replace",
+    }
+)
 # 数值 / 字符串 / 布尔 / None / 容器字面量：全放行（ast 字面量）
 
 
@@ -154,15 +196,21 @@ class _WhitelistVisitor(ast.NodeVisitor):
         self.violations: list[str] = []
 
     def visit_Call(self, node: ast.Call) -> None:
-        # 调用名白名单（Name 直调）；Attribute 链（os.system）取末段名
-        name: str | None = None
+        # 调用名白名单分两种形态（v3 P0-A-1 修正）：
+        # - Name 直调（len(x) / isinstance(x, int)）→ 必须在 _ALLOWED_CALL_NAMES；
+        # - Attribute 方法调用（text.startswith("a") / ",".join(x)）→ 属性白名单
+        #   由 visit_Attribute 校验（.startswith ∈ _ALLOWED_ATTRS），**不再**以
+        #   调用名白名单二次拦截——否则字符串纯方法纵使在属性白名单内也会被
+        #   本门拒（"前一门放行、后一门拒绝"的同门冲突，T1b 同类缺陷）。
+        #   方法调用的安全性边界 = 属性白名单本身（纯方法、无副作用）。
         func = node.func
         if isinstance(func, ast.Name):
-            name = func.id
+            if func.id not in _ALLOWED_CALL_NAMES:
+                self.violations.append(f"dangerous_call:{func.id}")
         elif isinstance(func, ast.Attribute):
-            name = func.attr  # 末段属性名（len 之外的 attr 由 attr_escape 拦截）
-        if name is None or name not in _ALLOWED_CALL_NAMES:
-            self.violations.append(f"dangerous_call:{name or '(opaque)'}")
+            pass  # 属性白名单门（visit_Attribute）负责，避免双重拒绝
+        else:
+            self.violations.append("dangerous_call:(opaque)")  # 下标调用 / lambda 调用等
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
@@ -414,6 +462,90 @@ def _form_gate_reject_reason(text: str) -> str:
     return "parse_error"
 
 
+# ─── 3c. 推导式作用域（v3 P0-A-1：有限域量化的可编译化）────────────────────
+# 背景（独立评审 C1 / 优化方案 P0-A）：真实规约高频出现"对所有元素成立"
+# 类全称量化（如 `all(ch.isdigit() for ch in text)`）与存在量化
+# （`any(...)`）。历史实现用 ast.walk 全量收集 Name，推导式的 for 目标
+# （循环变量 ch）不在签名绑定集合里 → 整条按 unknown_name 拒绝，量化
+# 子句 100% 不可编译。
+#
+# 本段按 Python 真实作用域规则计算**自由名**（未绑定名）：
+# - comprehension（ListComp/SetComp/GeneratorExp/DictComp）的 for 目标在
+#   推导式体内绑定（elt / ifs / 后续 iter 可见），不流入自由名集合；
+# - 推导式**外**引用循环变量（如 `all(x > 0 for x in items) and x > 5` 的
+#   第二个 x）仍计入自由名 → 照旧按 unknown_name 拒绝（防 NameError 假红
+#   断言：编译产物是 assert 行，运行期 NameError 会在 gold 上误报）；
+# - lambda 参数默认值在外层作用域求值、参数名在 body 绑定（保守保持正确）。
+#
+# 安全性：自由名集合只**缩小**（量化子句从"必然被拒"变为"可编译"），
+# 不放宽任何既有拒绝路径；危险调用 / 属性逃逸仍由白名单门先行拦截。
+
+
+def _comprehension_target_names(target: ast.expr) -> set[str]:
+    """comprehension 的 for 目标绑定名集合（Name / Tuple / List 递归）。"""
+    names: set[str] = set()
+    if isinstance(target, ast.Name):
+        names.add(target.id)
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for elt in target.elts:
+            names |= _comprehension_target_names(elt)
+    # Starred 目标（*rest）罕见，保守不计入（引用时按未绑定拒绝）
+    return names
+
+
+def _lambda_param_names(args: ast.arguments) -> frozenset[str]:
+    """lambda 全部参数名（含 vararg / kwarg / kwonly）。"""
+    names = {a.arg for a in args.args} | {a.arg for a in args.kwonlyargs}
+    if args.vararg:
+        names.add(args.vararg.arg)
+    if args.kwarg:
+        names.add(args.kwarg.arg)
+    return frozenset(names)
+
+
+def _free_names(node: ast.AST, bound: frozenset[str] = frozenset()) -> set[str]:
+    """表达式的自由名集合（comprehension / lambda 作用域精确版）。
+
+    与历史 ast.walk 全量收集的差别只在推导式：循环变量不再计入自由名
+    （有限域量化子句因此可编译），其余子句的自由名集合逐字节等价
+    （无 comprehension 时 bound 恒空、全量 Name 即自由名）。
+    """
+    if isinstance(node, ast.Name):
+        return {node.id} if node.id not in bound else set()
+    if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+        generators = node.generators
+        if not generators:  # 理论不可达（AST 恒 ≥1 generator），保守走通用遍历
+            return set().union(*(_free_names(child, bound) for child in ast.iter_child_nodes(node)))
+        free: set[str] = set()
+        # 第一个 generator 的 iter 在 enclosing 作用域求值（Python 语义）
+        free |= _free_names(generators[0].iter, bound)
+        inner = set(bound)
+        for gen in generators:
+            inner |= _comprehension_target_names(gen.target)
+        # 后续 iter 可见此前 target；elt / ifs 可见全部 target
+        for gen in generators[1:]:
+            free |= _free_names(gen.iter, frozenset(inner))
+        for gen in generators:
+            for cond in gen.ifs:
+                free |= _free_names(cond, frozenset(inner))
+        if isinstance(node, ast.DictComp):
+            free |= _free_names(node.key, frozenset(inner))
+            free |= _free_names(node.value, frozenset(inner))
+        else:
+            free |= _free_names(node.elt, frozenset(inner))
+        return free
+    if isinstance(node, ast.Lambda):
+        # 默认值在外层求值；参数名 + 已有绑定在 body 内绑定
+        defaults: set[str] = set()
+        for default in [*node.args.defaults, *(d for d in node.args.kw_defaults if d is not None)]:
+            defaults |= _free_names(default, bound)
+        return defaults | _free_names(node.body, bound | _lambda_param_names(node.args))
+    free = set()
+    for child in ast.iter_child_nodes(node):
+        free |= _free_names(child, bound)
+    return free
+
+
 def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozenset[str] | None) -> str | None:
     """单子句拒绝原因（None = 可编译）；门顺序与 _clause_is_compilable 逐门一致。
 
@@ -434,11 +566,14 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
     known = known_names if known_names is not None else _default_known_names()
     normalized = _normalize_result_alias(clause, kind, known)
     tree = ast.parse(normalized, mode="eval")
-    identifiers = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    # v3（P0-A-1）：自由名集合（推导式 / lambda 作用域精确版）替代 ast.walk
+    # 全量 Name——有限域量化子句（all(x > 0 for x in items)）的循环变量
+    # 不再计入未绑定名；推导式外引用循环变量照旧被拒（防 NameError 假红）。
+    identifiers = _free_names(tree)
     # T1b（2026-10-11 独立评审落地·真实调用实测缺陷）：**白名单调用名不算未绑定
-    # 标识符**。`_ALLOWED_CALL_NAMES` 的 12 个内建（abs/all/any/float/int/
-    # isinstance/len/max/min/round/sorted/str）在 `_whitelist_check` 中已按调用
-    # 位置逐个放行，但它们在 AST 里同样是 `ast.Name` 节点，会被下面的
+    # 标识符**。`_ALLOWED_CALL_NAMES` 的内建（abs/all/any/float/int/isinstance/
+    # len/max/min/range/round/sorted/str/enumerate）在 `_whitelist_check` 中已按
+    # 调用位置逐个放行，但它们在 AST 里同样是 `ast.Name` 节点，会被下面的
     # `identifiers - known` 判成 unknown_name —— **同一白名单在前一门放行、
     # 在后一门拒绝**，使"白名单里的函数一个都用不了"（真实 LLM 实测）：
     #     `len(items) > 0`      → unknown_name（应为可编译）
@@ -514,8 +649,16 @@ def spec_expr_grammar_terminals() -> dict[str, list[str]]:
     `<func>` / `<attr>` 白名单，杜绝 "提示里写的算子集 ≠ 编译器真实接受的
     算子集"再次漂移（F14 根因即提示-文法契约断裂）。下一轮扩文法时只需改
     _ALLOWED_CALL_NAMES / _ALLOWED_ATTRS，提示与测试自动跟随。
+
+    v3（P0-A-1）：`quantifiers` 键给出有限域量化的承载调用（all/any 的
+    推导式形态）——planner BNF 的 `<quant>` 产生式据此渲染，循环变量
+    作用域规则见 _free_names。
     """
-    return {"calls": sorted(_ALLOWED_CALL_NAMES), "attrs": sorted(_ALLOWED_ATTRS)}
+    return {
+        "calls": sorted(_ALLOWED_CALL_NAMES),
+        "attrs": sorted(_ALLOWED_ATTRS),
+        "quantifiers": sorted(n for n in ("all", "any") if n in _ALLOWED_CALL_NAMES),
+    }
 
 
 def _compile_single_clause(
@@ -771,7 +914,14 @@ def compile_spec_oracle(
         # 数字字符串（含容器元素）保守转 int/float；转换失败保持原值（不臆测）。
         first_input = _coerce_boundary_literal(boundaries[0]["input"])
         if signature_params is not None:
-            if len(signature_params) == 1 and not isinstance(first_input, (tuple, list)):
+            # v3（P0-A-1）：单参函数不再排除 tuple/list 边界输入。历史判据
+            # `单参 + input 非 tuple/list` 把 `def f(items)` + 边界 [1,2,3]
+            # 判为"元数/形态不匹配"→ 返回空串——**列表型被测函数（量化后条件
+            # `all(x > 0 for x in result)` 的主场景）的 oracle 通道静默失效**。
+            # 单参场景无 *args 歧义：`p0 = <input>`（含 list/tuple）是唯一
+            # 合理绑定，f(p0) 即 f([1,2,3])。多参 + tuple/list 的 *args 展开
+            # 口径不变；多参 + 标量仍判不匹配返回空串（不臆测实参映射）。
+            if len(signature_params) == 1:
                 p0 = signature_params[0]
                 lines.append(f"    {p0} = {first_input!r}")
                 lines.extend(pre_lines)

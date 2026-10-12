@@ -229,6 +229,24 @@ class GeneratorAgent(BaseAgent):
         # 时不注入，默认关 = 历史口径零变化）。告诉 LLM"能调用哪些符号"，避免
         # leap-to-code（编造不存在的 API / 错写参数签名）。
         operation_map_section: str | None = None,
+        # P0-A-2（2026-10-12 独立审查落地）：规格优先生成（Spec-First）规约文档段
+        # （DETECTION_SPEC_MODE=replace 且规约材料非空时由 _generator_node 经
+        # src.tools.spec_first.build_spec_replace_section 构建）。非空时
+        # _build_query 用本段**替换**"目标代码"块——LLM 只依据规约生成测试，
+        # 从源头切断 oracle-from-implementation 锚点（misguidance effect：
+        # 缺陷代码入提示诱发错误断言；项目 48.6% 全绿未检出同根因；
+        # Google Spec-Driven 研究 +9.8pp 同向证据）。None/空串 = 历史口径
+        # （目标代码照常注入）。
+        spec_replace_section: str | None = None,
+        # P2 一期（观测级行粒度压缩）：Debugger→Generator 反馈的压缩段落
+        # （FEEDBACK_COMPRESSION_ENABLE=true 且再生成轮有失败观测时，由
+        # _generator_node 经 src.tools.feedback_compression 构建）。内容为
+        # 「失败测试涉及的源代码行 + 错误类型 + 存活变异体摘要」（有界，
+        # ≤4000 字符），替代朴素全量 trace 注入。None/空串时不注入，
+        # 默认关 = 历史口径零变化。与 O3 分支覆盖等预渲染段落同构：
+        # 一律在 generate() 体内追加，不经 _build_query（_build_query 只
+        # 接收 mutation_feedback 这类结构化数据）。
+        feedback_compression_section: str | None = None,
     ) -> str:
         """
         生成 pytest 测试代码。
@@ -275,7 +293,15 @@ class GeneratorAgent(BaseAgent):
         target_code = BaseAgent.truncate_code(target_code, focus_function=focus_function)
 
         # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈 + O3 分支覆盖率）
-        query = self._build_query(test_plan, target_code, module_name, rag_references, mutation_feedback)
+        # P0-A-2：spec_replace_section 非空时_query 的"目标代码"块被规约文档替换
+        query = self._build_query(
+            test_plan,
+            target_code,
+            module_name,
+            rag_references,
+            mutation_feedback,
+            spec_replace_section=spec_replace_section,
+        )
         # O3（2026-09-29 审查 P1）：未覆盖分支清单注入（BRANCH_COVERAGE_INJECT_ENABLE=true
         # 时非空字符串；None/空串时不注入，历史口径零变化）
         if branch_coverage_section:
@@ -307,6 +333,12 @@ class GeneratorAgent(BaseAgent):
         # （命中注入特征时非空；None/空串时不注入，历史口径零变化）
         if injection_warning:
             query += "\n\n" + injection_warning
+        # P2 一期（观测级压缩）：压缩反馈段落追加到 query 尾部
+        # （None/空串时不注入，历史口径零变化；与 O3/M10 等预渲染段落
+        # 同构，一律在 generate() 体内追加，不经 _build_query）
+        if feedback_compression_section:
+            query += "\n\n" + feedback_compression_section
+            logger.info("P2 观测级压缩反馈注入：%d 字符", len(feedback_compression_section))
 
         # 调用 LLM 生成测试代码，带文件缓存省 token
         raw = self._call_llm_with_cache(query, temperature=temperature, complexity_class=complexity_class)
@@ -418,8 +450,16 @@ class GeneratorAgent(BaseAgent):
         module_name: str,
         rag_references: list[dict[str, Any]] | None,
         mutation_feedback: dict[str, Any] | None = None,
+        spec_replace_section: str | None = None,
     ) -> str:
-        """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）。"""
+        """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）。
+
+        P0-A-2（2026-10-12）：spec_replace_section 非空时，"目标代码"块被
+        规格优先规约文档**替换**（而非并列追加）——misguidance effect 的缓解
+        要求实现代码完全不进提示（Zhao et al. ISSTA 2026；Google Spec-Driven
+        +9.8pp；项目 48.6% 全绿未检出的 oracle-from-implementation 根因）。
+        None / 空串 = 历史口径逐字节不变。
+        """
         # A1 消融（PLAN_STRIP_EXPECTED_OUTPUT_ENABLE，默认关）：剥除 Planner 由
         # 缺陷代码派生的 expected_output，切断 oracle-from-implementation 锚点。
         # 默认关时 _plan_without_expected_output 原样返回同一引用，行为零变化。
@@ -428,9 +468,11 @@ class GeneratorAgent(BaseAgent):
         plan_json = json.dumps(test_plan, ensure_ascii=False, indent=2)
 
         # 构建基础查询，包含测试计划和目标代码
+        # P0-A-2：replace 模式用规约文档替代目标代码块（见方法 docstring）
+        code_block = spec_replace_section or f"目标代码：\n```\n{target_code}\n```"
         query = (
             f"测试计划（JSON）：\n{plan_json}\n\n"
-            f"目标代码：\n```\n{target_code}\n```"
+            f"{code_block}"
             f"\n\n被测模块名：{module_name}"
             f"\n\n请根据以上计划生成完整的 pytest 测试代码。"
         )
