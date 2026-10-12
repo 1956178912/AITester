@@ -253,7 +253,49 @@ class ULTDataset(BaseDatasetLoader):
             # 官方任务描述（prompt 字段，可选；缺省时回退旧 manifest 的
             # problem_statement 字段）
             prompt = str(row.get("prompt") or row.get("problem_statement") or "").strip()
-
+            # M1 判分材料归一化（2026-10-12 批次）：ULT 官方测试材料两种形态：
+            #   a) 完整 pytest 函数（tests 字段元素以 `def ` 开头）——直接使用；
+            #   b) 裸断言片段（test_list 字段，元素形如 `assert fn(...) == ...`）
+            #      ——缺 pytest 函数包装，_m1_metrics._run_pytest_in_tmp 无法收集。
+            # 包装策略：裸断言行包装为 `import <module>` + `test_<i>` 函数；完整
+            # 函数直接拼接（与 _m1_metrics 单文件口径一致）。模块名 = task_id
+            # 末段（与 _extract_gold_material 派生规则同构）。写回
+            # metadata["test_cases"] / metadata["fixed"]（fixed = 被测函数全文，
+            # 即"无缺陷"基线）——M1 detection 三段判定可测。
+            alt_test_code = "\n".join(gold_tests) if gold_tests else ""
+            module_name_alt = func_name.replace("-", "_")[:50]
+            if alt_test_code.strip():
+                # 包装策略：含行首裸断言（`assert ` 在行首，无缩进）→ 包装为
+                # pytest 函数；否则（全部是完整 def/class 块）→ 直接拼接。
+                # 行首识别不 lstrip——避免把 def 块内缩进的 assert 误识别。
+                has_bare_asserts = alt_test_code.lstrip().startswith("assert ") or any(
+                    line.startswith("assert ") for line in alt_test_code.splitlines()
+                )
+                if has_bare_asserts:
+                    # 裸断言片段 → 包装为 pytest 函数。
+                    # import 用 `from <mod> import <fn>`：module 名（task_id
+                    # 末段）与函数名可能不一致（如 task_id 末段是中性化模块名，
+                    # 函数名是原始标识符）。`from <mod> import <fn>` 把函数名
+                    # 绑定到断言中调用的标识符（如 `assert fnA(1) == 2` 中的
+                    # `fnA`），使 M1 判分可直接收集运行。
+                    fn_name = func_name  # 与 assert_lines 中调用的标识符一致
+                    non_assert_lines = [
+                        line
+                        for line in alt_test_code.splitlines()
+                        if line.strip() and not line.strip().startswith("assert")
+                    ]
+                    assert_lines = [line for line in alt_test_code.splitlines() if line.strip().startswith("assert")]
+                    wrapped_lines: list[str] = [f"from {module_name_alt} import {fn_name}"]
+                    wrapped_lines.extend(non_assert_lines)
+                    wrapped_lines.extend(
+                        f"def test_{i}():\n    {line.strip()}\n" for i, line in enumerate(assert_lines, start=1)
+                    )
+                    wrapped_test = "\n".join(wrapped_lines) + "\n"
+                else:
+                    # 完整 pytest 函数 → 直接拼接
+                    wrapped_test = alt_test_code
+            else:
+                wrapped_test = ""
             self._tasks.append(
                 BenchmarkTask(
                     task_id=f"ult__{func_name}",
@@ -266,7 +308,10 @@ class ULTDataset(BaseDatasetLoader):
                     # 官方测试材料（2026-10-12 勘误）：ULT.jsonl tests 字段
                     # 实为 list[str] 官方测试函数——非空时作为 gold 材料记录，
                     # M1 detection 可测；空时按"诚实不可测"口径置空。
-                    test_code="\n\n".join(gold_tests),
+                    # 2026-10-12 M1 归一化：test_code = 包装后的 pytest 函数
+                    # 形式（_m1_metrics 可直接消费）；原始断言片段保留在
+                    # metadata["gold_tests_raw"]（审计用途）。
+                    test_code=wrapped_test,
                     expected_pass_count=len(gold_tests),
                     total_test_count=len(gold_tests),
                     metadata={
@@ -282,6 +327,13 @@ class ULTDataset(BaseDatasetLoader):
                         # "官方不发布 gold tests" 的误读，见模块 docstring）
                         "no_gold_tests": not gold_tests,
                         "gold_tests": gold_tests,
+                        "gold_tests_raw": alt_test_code,
+                        # M1 判分归一化材料（_extract_gold_material 消费）：
+                        # test_cases = 包装后的 pytest 函数（_m1_metrics 直接
+                        # 可判分）；fixed = 被测函数全文（ULT 无缺陷版本，
+                        # 即"无缺陷"基线，三段判定 fixed 侧 = 原码）。
+                        "test_cases": wrapped_test,
+                        "fixed": source_code,
                         "suggested_function": func_name,
                         "is_cross_file": False,
                     },

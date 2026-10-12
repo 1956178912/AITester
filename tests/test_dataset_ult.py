@@ -157,7 +157,11 @@ class TestULTLoader:
 
     def test_ult_lite_test_list_field(self, tmp_path: pytest.TempPathFactory) -> None:
         """ULT_Lite.jsonl 使用 test_list 字段（list[str] 断言片段）——归一化为
-        官方测试材料，no_gold_tests=False。"""
+        官方测试材料，no_gold_tests=False。
+
+        2026-10-12 M1 归一化：test_code 包装为 pytest 函数（import + test_<i>），
+        _m1_metrics 可直接判分；原始断言保留在 gold_tests_raw；fixed = 被测
+        函数全文（ULT 无缺陷基线）。"""
         _write_json_array(
             tmp_path,
             [
@@ -176,6 +180,15 @@ class TestULTLoader:
         assert task.metadata["no_gold_tests"] is False
         assert task.metadata["gold_tests"] == ["assert is_degree_in_degree_range(180, 360, 180) == True"]
         assert task.total_test_count == 1
+        # M1 归一化：test_code 包装为 pytest 函数（from 导入 + test_<i>）
+        assert "from is_degree_in_degree_range import is_degree_in_degree_range" in task.test_code
+        assert "def test_1" in task.test_code
+        # 原始断言保留
+        assert task.metadata["gold_tests_raw"] == "assert is_degree_in_degree_range(180, 360, 180) == True"
+        # M1 判分材料：test_cases 与 test_code 一致（可判分）
+        assert task.metadata["test_cases"] == task.test_code
+        # fixed = 被测函数全文（ULT 无缺陷基线）
+        assert task.metadata["fixed"] == "def is_degree_in_degree_range(a, b, c):\n    return True\n"
 
     def test_empty_tests_kept_no_gold(self, tmp_path: pytest.TempPathFactory) -> None:
         """tests 为空 list 时保持"诚实不可测"口径（no_gold_tests=True）。"""
