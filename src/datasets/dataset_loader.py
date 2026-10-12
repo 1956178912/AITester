@@ -858,8 +858,9 @@ def load_dataset(
         - "quixbugs" / "quix_bugs": QuixBugs 真实缺陷基准（W4 阶梯 L1）
         - "bugsinpy" / "bugs_in_py": BugsInPy 真实缺陷基准（W4 阶梯 L2，
           manifest JSONL 口径，见 dataset_realbugs.BugsInPyDataset）
-        - "ult" / "unleaked_testbench": ULT 基准（W4b，TOSEM 2026；官方
-          不发布 ground-truth tests，评测走 mutation，见 dataset_ult.ULTDataset）
+        - "ult" / "unleaked_testbench": ULT 基准（W4b，TOSEM 2026；
+          官方 JSON 数组 .jsonl 直接兼容；mutation score（Mut@k）为主
+          评测指标，见 dataset_ult.ULTDataset）
         - "in_memory": 内置示例数据集
         - 其他名称返回 InMemoryDataset（允许 graceful degradation）
 
@@ -898,9 +899,10 @@ def load_dataset(
         "quix_bugs": QuixBugsDataset,
         "bugsinpy": BugsInPyDataset,
         "bugs_in_py": BugsInPyDataset,
-        # W4b（2026-10-10 独立审查落地）：ULT 基准（TOSEM 2026，防污染）。
-        # 官方不发布 ground-truth tests → detection_rate 恒 None，评测走
-        # mutation；目录缺失时优雅降级（与 bugsinpy 同口径）。
+        # W4b（2026-10-10 独立审查落地；2026-10-12 官方仓库一手核验勘误）：
+        # ULT 基准（TOSEM 2026，防污染）。官方 JSON 数组 .jsonl 直接兼容；
+        # 官方测试材料（tests/test_list）记录为 gold 材料；mutation
+        # score（Mut@k）为主评测指标；目录缺失时优雅降级（与 bugsinpy 同口径）。
         "ult": ULTDataset,
         "unleaked_testbench": ULTDataset,
         "in_memory": InMemoryDataset,

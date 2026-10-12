@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-12"   # 全量回归实测日期（2026-10-12 独立评审优化批次·终版：SpecExpr v3 文法升阶〔有限域量化 + 字符串纯方法白名单〕+ 规格优先生成 P0-A-2 + 变异算子 v3 P0-B + 编排自动搜索 P1-A + 去污染 P1-B + MTTR-A 恢复延迟 P1-B + 观测级压缩 P2-A + 审计门 pytest 临时目录跳过回归；本机实测 5689 passed / 3 skipped / 0 xfailed / 0 failed〔5692 collected〕；mypy 125 源文件 0 错误 / ruff 全绿 / 18 项门禁全绿；此前 2026-10-11 全面优化批次·第二批〔run_with_timeout 全量接线，孤儿子进程风险面清零〕）
+last_verified: "2026-10-12"   # 全量回归实测日期（2026-10-12 ULT 接线批次：dataset_ult.py 官方仓库一手核验勘误——官方 ULT.jsonl 实为 JSON 数组格式 + 全量 3909 条记录携带 tests 字段（每函数 5 条官方测试），原 W4b "官方不发布 gold tests" 声明与数据文件实况不一致，加载器改为记录官方测试材料（test_code/total_test_count/metadata.gold_tests），no_gold_tests 仅在材料缺失时为 True；mypy 130 源文件 0 错误 / ruff format 全绿 / 全量 5695 passed + 3 skipped / 0 xfailed / 0 failed〔5698 collected〕；此前 2026-10-12 独立评审优化批次·终版〔SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩〕）
 
 tests:
-  total_passed: 5689          # 全量 pytest tests/（2026-10-12 独立评审优化批次·终版：--collect-only 收集 **5692**；跑批 = **5689 passed + 3 skipped + 0 xfailed + 0 failed**。上一批 5485/5489 → 本批 5689/5692（+204/+203）：SpecExpr v3 文法升阶、规格优先生成、变异算子 v3、去污染、MTTR-A 恢复延迟、审计门 pytest 临时目录跳过回归、P2-L3 假阴性修复转正、P2-A 观测级压缩（tests/test_feedback_compression.py）、P1-A 编排自动搜索（tests/test_orchestration_search.py）。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5695          # 全量 pytest tests/（2026-10-12 ULT 接线批次：--collect-only 收集 **5698**；跑批 = **5695 passed + 3 skipped + 0 xfailed + 0 failed**。上一批 5689/5692 → 本批 5695/5698（+6/+6）：tests/test_dataset_ult.py 增 8 用例（官方 JSON 数组格式 / 官方字段名 func_name·code·tests·test_list 归一化 / 字符串化 JSON tests / ULT_Lite test_list / 空 tests 保持诚实口径 / subset=lite 优先 ULT_Lite.jsonl / 多记录数组）+ 修复 dataset_ult.py 字段映射（func_name→function_name / code→source_code / tests·test_list→test_cases）。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 3           # 全量实测（可选依赖缺失时优雅跳过）
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
