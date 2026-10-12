@@ -60,7 +60,7 @@
 
 | ULT 指标 | 本项目最接近的量 | 同构？ | 差异与所需映射 |
 |---|---|---|---|
-| **accuracy**（生成测试在 FUT 上有效/通过） | `detection_rate` 的**第二段**（gold 修复代码上 `rc == 0`，`experiments/_m1_metrics.py:473-539`） | **否** | `detection_rate` 要求**两段同时成立**：buggy 侧 `rc != 0`（检出缺陷）∧ fixed 侧 `rc == 0` ∧ 两侧无收集错误。ULT **没有 buggy 版本**（被测函数就是正确实现）→ 缺"buggy 侧红"这一段。需要新谓词 `green_on_fut`（等价于 detection_rate 的第二段 + 收集错误防线） |
+| **accuracy**（生成测试在 FUT 上有效/通过） | `detection_rate` 的**第二段**（gold 修复代码上 `rc == 0`，`experiments/_m1_metrics.py:473-539`） | **否** | `detection_rate` 要求**两段同时成立**：buggy 侧 `rc != 0`（检出缺陷）∧ fixed 侧 `rc == 0` ∧ 两侧无收集错误。ULT **没有 buggy 版本**（被测函数就是正确实现）→ 缺"buggy 侧红"这一段。需要新谓词 `green_on_fut`（等价于 detection_rate 的第二段 + 收集错误防线）。**2026-10-12 M1 归一化批次**：`dataset_ult.py` 已把官方裸断言片段（`test_list`）包装为 `from <mod> import <fn>` + `test_<i>` pytest 函数并写回 `metadata.test_cases` / `metadata.fixed`（=被测函数全文，无缺陷基线），M1 三段判定对 ULT 任务由 None 变为可判分（恒 0.0"未检出"基线，对应本节的 `green_on_fut` 辅助口径）。mutation score 仍为主指标（见 `metadata.mutation_primary_metric`）。 |
 | **statement coverage** | `results[arm].avg_coverage`（`experiments/run_benchmark.py:2642,2676`；执行器 `parse_coverage` 解析，`src/agents/executor.py:259`） | **待确认** | 本项目的 coverage 是执行器解析出的单一覆盖率数值；**分支覆盖未单列**。ULT 报 stmt 与 branch 两个量 → 必须新增 branch 通道并对齐"被测单元"边界（ULT 是函数级 FUT） |
 | **branch coverage** | 无直接通道 | **否** | 需新增 `coverage --branch` 类采集，并核对与 ULT 的 branch 定义（函数级、去泄漏任务）一致 |
 | **mutation score** | `experiments/mutation_detection.py` 的 `mutation_detection_rate`：**对 gold 修复代码**做变异，要求"原码全绿 ∧ 变异体变红 ∧ 非收集错误" | **结构同构，实现不同** | 击杀定义与 ULT 一致（原码过 ∧ 变异码失败）。**但变异体来源不同**：本项目用自研 `MutationGenerator` + 采样 `n_mutants`（seed 可复现）；ULT 用 **cosmic-ray 全变异体 + 120s 超时** → **数值不可直接比**，必须换 cosmic-ray 后端 |

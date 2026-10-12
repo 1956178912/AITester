@@ -85,10 +85,26 @@ plain_llm_df≈1.9K token，总耗时≈24 分钟/臂）：
 
 ## 4. 工件
 
-- 实跑脚本：`experiments/spec_replace_ab_scale87.py`（本批次新增）
-- 输出目录：`/tmp/spec_ab_scale87/{off,replace}/`
+- 实跑脚本：`experiments/run_spec_replace_ab_scale87.sh`（本批次新增）
+- 输出目录：`/tmp/spec_ab_scale87/{quixbugs_off,quixbugs_replace}/`
+  （QuixBugs 臂）+ `/tmp/spec_ab_scale87_ultfix/{ult_lite46_off,
+  ult_lite46_replace}/`（ULT_Lite 46 臂，首轮 int(None) 崩溃后重跑，
+  缓存命名空间 `scale87_seed42_ultfix`）
 - 配对检验：内联于实跑脚本（scipy.stats.binomtest 回退口径）
-- 结果报告：`SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`（实跑后产出）
+- 结果报告：`SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`（已产出，
+  2026-10-12 实跑完成）
+- 实跑结果登记（post-run）：
+  - QuixBugs A(off) 65.7% / B(replace) 62.9% / C(df) 75.0%；
+  - B vs A δ=−2.9pp / p=1.00（不显著，共同可测 35）；
+  - C vs A δ=+8.6pp / p=0.58（不显著）；
+  - C vs B δ=−11.4pp / p=0.39（不显著）；
+  - ULT_Lite 46：detection 恒 0.0 基线（45/46 可测），
+    B 臂 spec_replace_applied 43 replaced + 3 fallback（机制在
+    cyclomatic 均值 14.87 真实函数上不变形）；
+  - 首轮 ULT 46/46 全崩（int(None) TypeError）→ run_benchmark.py
+    4 处防御性 `or` 兜底修复 + manifest 自检（详见报告 §4.1）；
+  - 成本 ≈$7.2（低于预注册 $9.0 上界），耗时 ≈47 min（低于
+    60–90 min 估算）。
 
 ## 5. 边界
 

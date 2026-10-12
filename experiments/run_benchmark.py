@@ -1814,7 +1814,11 @@ def run_single_task(
         # 供 LLM 调用路径选择对应档位的 LLM 实例。策略=fixed 时恒为 "medium"。
         if routing_enabled():
             num_lines = len(task.instance_code.splitlines())
-            num_files = int(task.metadata.get("num_files", 1))
+            # 2026-10-12 ULT 实跑勘误：metadata 键"存在但为显式 None"时
+            # （如 ULT_Lite 无 cyclomatic_complexity 字段 → 加载器写 None），
+            # dict.get(key, default) 返回的是 None 而非 default → int(None)
+            # TypeError，46 任务全崩。用 `or` 兜底 None/缺键双态。
+            num_files = int(task.metadata.get("num_files") or 1)
             # P0 审查修正：num_deps / cyclomatic_complexity 此前仅从
             # task.metadata 读取，而合成数据集 / SWE-bench 官方任务从未
             # 写入这两个键 → 永远走默认值（num_deps=0 / cc=1），评分退化为
@@ -1825,7 +1829,10 @@ def run_single_task(
             # 每任务 2 次 200ms 级解析。现统一 parse 一次，count_imports
             # 经 _tree 参数复用（独立调用方不传 _tree 时行为不变）。
             num_deps = 0
-            cc = int(task.metadata.get("cyclomatic_complexity", 1))
+            # 2026-10-12 ULT 实跑勘误：`or` 兜底"键存在但 None"态
+            # （ULT_Lite 无 cyclomatic_complexity 字段 → 加载器写 None，
+            # dict.get(key, 1) 返回 None → int(None) 崩溃）
+            cc = int(task.metadata.get("cyclomatic_complexity") or 1)
             try:
                 import ast as _ast
 
@@ -1847,14 +1854,15 @@ def run_single_task(
             except (SyntaxError, ValueError):
                 # 解析失败（含 MemoryError 等 ValueError 子类保守口径）：
                 # cc 回退 metadata（历史口径），count_imports 走独立 parse 路径
-                cc = int(task.metadata.get("cyclomatic_complexity", 1))
+                # 2026-10-12 ULT 实跑勘误：同上用 `or` 兜底 None 态
+                cc = int(task.metadata.get("cyclomatic_complexity") or 1)
                 _tree = None
             try:
                 from src.api.complexity_router import count_imports
 
                 num_deps = count_imports(task.instance_code, _tree=_tree)
             except Exception:
-                num_deps = int(task.metadata.get("num_imports", 0))
+                num_deps = int(task.metadata.get("num_imports") or 0)
             score_obj = compute_complexity_score(
                 lines=num_lines,
                 num_files=num_files,

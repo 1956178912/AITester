@@ -1,4 +1,4 @@
-> Last updated: 2026-10-12 (spec_replace A/B first-run batch: QuixBugs three-arm exploratory experiment [aitester-vanilla / aiterst+spec_replace / plain_llm_df], seed 42 × 41 gold tasks; spec_replace vs vanilla +8.1pp (p=0.75, not significant, underpowered); ULT benchmark wiring completed—official repo first-hand verification, loader format/field fixes, conversion script; full suite 5695 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 independent-review optimization batch, final [SpecExpr v3 grammar + spec-first generation P0-A-2 + mutation operators v3 P0-B + orchestration auto-search P1-A + decontamination P1-B + MTTR-A + observation-level compression])
+> Last updated: 2026-10-12 (spec_replace 87-scale expansion run batch: QuixBugs 41 F2P-pairable + ULT_Lite 46 descriptive [4-arm run, ~47 min, ≤$7.2; B vs A δ=−2.9pp / p=1.00 not significant, exploratory / negative screen as preregistered]; 46/46 ULT first-run `int(None)` crash diagnosed and fixed [run_benchmark.py 4 defensive `or` fallbacks + manifest self-check]; `spec_replace_applied` now 100%-auditable on the replace arm [46+4 QuixBugs / 43+3 ULT_Lite]; full suite 5703 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 ULT M1-scoring normalization batch [dataset_ult.py bare-assertion wrapping] + 87 expansion preregistration -> 5703/5706; before that the P0-A-2 auditability-observability batch [spec_replace_applied tri-state field + key-set-isomorphism tests +8]; before that the spec_replace A/B first-run + ULT benchmark wiring batch -> 5695/5698)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
@@ -136,15 +136,171 @@ All notable changes to this project will be documented in this file. Format foll
   `docs/design/ult_bridge_plan.md` §4.3, not implemented in this batch) +
   implementing `experiments/ult_adapter.py` (the core new module designed
   in §4.2, P2-level) before it can start.
-- **spec_replace sample-size expansion**: confirmatory experiment at
-  n≥87 gold tasks (80% power, δ≥+8pp); the current 41 gold tasks can only
-  serve as negative screening. Before expanding, add the
-  `spec_replace_section_chars` observation field for P0-A-2 (standalone
-  erratum item).
+- **spec_replace confirmatory 87-pair F2P-pairable supplement**:
+  first-run + this scale-87 expansion
+  (`SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`, QuixBugs 41 F2P +
+  ULT_Lite 46 descriptive) are both exploratory / negative screens
+  (QuixBugs common-measurable subset 35, underpowered, B vs A
+  δ=−2.9pp / p=1.00 not significant); confirming δ≥+8pp requires a
+  supplement of 87 F2P-pairable gold tasks (QuixBugs full 131 gold or
+  BugsInPy real-defect set) + raising the M1 measurable rate (current
+  35/41 → need ≥45/41).
+- **ULT primary metric (mutation score Mut@k) landing**: the scale-87
+  batch only observed ULT descriptively (detection constant 0.0
+  baseline); the mutation primary metric requires cosmic-ray install
+  (`docs/design/ult_bridge_plan.md` §4.3) +
+  `experiments/ult_adapter.py` (§4.2, P2-level).
+- **spec_replace material-granularity observation**: the 4 QuixBugs +
+  3 ULT_Lite `attempted_fallback` cases in the scale-87 batch
+  (spec material rendered empty string, corresponding to no
+  function-level docstring tasks) — a subsequent batch adds the
+  `spec_replace_section_chars` observation field (first-run §5 already
+  listed it as a standalone erratum item) so that fallback tasks also
+  carry auditable material granularity.
 - **Citation errata** (r=0.780 source confirmation, TestAgent author-list
   verification): external verification not yet done because web search has
   no API key (DEEPSEEK_API_KEY not configured); logged for a subsequent
   batch.
+
+## [Unreleased] — 2026-10-12 P0-A-2 auditability-observability batch (spec_replace_applied tri-state field + key-set-isomorphism tests, +8 cases)
+
+> Basis: `SPEC_REPLACE_AB_REPORT_2026-10-12.md` §5 recommendation — "before
+> scaling up, fix the spec_oracle_injected provenance field backfill so the
+> replace arm's 'did the spec doc actually get injected' is auditable per
+> task." This batch lands that prerequisite: a new **independent**
+> observability field `spec_replace_applied` for P0-A-2 spec replacement,
+> decoupled from the R1c deterministic oracle-execution injection
+> (`spec_oracle_injected` / `SPEC_ORACLE_EXEC_ENABLE`), making the replace
+> arm's per-task "was the target-code block actually replaced by the spec
+> doc" auditable. Commit e1ee10c.
+
+### Added
+
+- **`spec_replace_applied` tri-state observability field**
+  (`src/graph/state.py` + `src/graph/nodes.py` + `experiments/run_benchmark.py`
+  + `BASELINE.yaml` metrics_schema registration):
+  - `None` = `DETECTION_SPEC_MODE=off` / minimal ablation / Generator node
+    did not run (default off, zero historical-behavior change);
+  - `"attempted_replaced"` = replace mode with non-empty spec material; the
+    spec document (signature + NL + SpecExpr + discipline) actually
+    replaced the "target code" block in the Generator prompt;
+  - `"attempted_fallback"` = replace mode but spec material rendered empty,
+    prompt kept the historical caliber (target code still injected).
+  - Decoupled from R1c deterministic oracle injection
+    (`spec_oracle_injected`, `SPEC_ORACLE_EXEC_ENABLE`): the former audits
+    "was the target code replaced by the spec doc", the latter audits "was
+    the oracle assertion co-injected" — independent, both auditable.
+- **`tests/test_spec_replace_applied.py`** (8 cases, pure string-level /
+  patch `GeneratorAgent` to a MagicMock short-circuiting the LLM, zero LLM
+  cost): off / minimal / replace+material / replace+no-material /
+  key-set-isomorphism / tri-state value-domain / failure-branch None
+  placeholder, etc. Full suite +8 cases, 5695/5698 → **5703/5706**.
+
+### Verification
+
+- Full `pytest tests/`: **5703 passed / 3 skipped / 0 xfailed / 0 failed**
+  (63.5 s, xdist -n 4 loadfile; 5706 collected)
+- `mypy src/ config.py`: 0 errors (130 source files)
+- `ruff check` + `ruff format --check`: fully green
+- Guard test `TestBaselineNumbersConsistency` passed (total_passed 5703 vs
+  collected 5706 delta 3 = skipped 3 + xfailed 0 + slack 1, exactly within
+  slack)
+
+## [Unreleased] — 2026-10-12 ULT M1-scoring normalization + spec_replace 87-scale expansion preregistration batch (bare-assertion wrapping into pytest functions + preregistration + 4-arm run script)
+
+> Basis: first-run report §5 recommendation — before scaling up, make
+> spec_replace auditable on real complex functions, and fix the ULT
+> official test material (bare assertion fragments) which M1's three-way
+> verdict could not directly score (missing pytest function wrapping →
+> `_run_pytest_in_tmp` collected 0 cases → rc=5 → detection=None). This
+> batch is a **data-layer normalization + expansion preregistration batch**
+> (not a feature-landing batch). Commit 6f6f2d0. The 87-scale expansion run
+> (QuixBugs 41 F2P-pairable + ULT_Lite 46 descriptive observation) is
+> already launched in the background (4-arm run_benchmark, --save-state,
+> parallel=4); on completion it produces
+> `SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`.
+
+### Added
+
+- **ULT M1-scoring normalization** (`src/datasets/dataset_ult.py`): ULT's
+  official test material comes in two forms — full pytest functions
+  (`tests` field elements starting with `def `/`class `) are concatenated
+  as-is; bare assertion fragments (`test_list` field, lines starting with
+  `assert `) are wrapped as `from <mod> import <fn>` + `test_<i>` pytest
+  functions (directly scorable by `_m1_metrics`). Writes back
+  `metadata["test_cases"]` (= `test_code`, scorable) and `metadata["fixed"]`
+  (= the function-under-test's full text, ULT's no-defect baseline; the
+  three-way verdict's fixed side = original code); the raw assertion
+  fragments are kept in `metadata["gold_tests_raw"]` (audit use). M1
+  detection for ULT tasks goes from None to measurable (a constant
+  0.0 "not detected" baseline, corresponding to ULT's official
+  green_on_fut auxiliary caliber; mutation score remains the primary
+  metric, see `metadata["mutation_primary_metric"]`).
+  - Bare-assertion detection does not lstrip (avoids mis-identifying the
+    indented assert inside a def block as a bare assertion);
+  - import uses the `from <mod> import <fn>` form (module name and
+    function name may differ; `from` binds the function name to the
+    identifier called in the assertion, whereas `import ... as` binds only
+    the module name).
+- **`docs/design/spec_replace_ab_scale87_prereg.md`** (87-scale expansion
+  preregistration):
+  - Datasets: QuixBugs 41 gold tasks (F2P-pairable primary decision
+    criterion) + ULT_Lite 46 tasks (seed=42 random sample of 46, official
+    test material complete, descriptive observation — ULT has no buggy
+    version, detection is a constant 0.0 baseline);
+  - Three arms: A=aitester(off) / B=aitester(replace) / C=plain_llm_df;
+  - Decision criteria: McNemar / binom exact test p<0.05 and δ≥+8pp;
+    QuixBugs 41 pairs remain an **exploratory / negative screen**
+    (a confirmatory 87-pair power requires a future sample supplement);
+    ULT 46 are descriptive only (detection not measurable);
+  - Cost ceiling $9.0 (deepseek-flash peak-hour pricing), 60–90 minutes.
+- **`experiments/run_spec_replace_ab_scale87.sh`** (4-arm run script):
+  quixbugs off/replace + ult_lite46 off/replace, --save-state, parallel=4,
+  cache namespace `scale87_seed42`, seed=42 random sample of 46 tasks
+  written to a temporary JSONL manifest (`AITESTER_ULT_DATA` points at that
+  manifest), with a self-check that test_list is bare assertions (triggering
+  the M1 normalization wrapping path).
+
+### Changed
+
+- **`tests/test_dataset_ult.py`**: `test_ult_lite_test_list_field` extended
+  to assert the M1 normalization behavior (test_code contains `from` import
+  + `def test_1` + gold_tests_raw retained + test_cases==test_code +
+  fixed==instance_code); the official full-pytest-function path
+  (`test_official_json_array_format`) regression-verifies that it is NOT
+  wrapped. ULT dataset tests 12/12 green.
+
+### Verification
+
+- `pytest tests/test_dataset_ult.py`: **12 passed / 0 failed**
+- Full `pytest tests/`: **5703 passed / 3 skipped / 0 xfailed / 0 failed**
+  (76.3 s, xdist -n 4 loadfile; 5706 collected)
+- `mypy src/ config.py`: 0 errors (130 source files)
+- `ruff check` + `ruff format --check`: fully green
+- M1 normalization end-to-end verification (`_extract_gold_material` +
+  `_run_pytest_in_tmp` single-file caliber): ULT_Lite task[0] bare
+  assertions → wrapped → pytest collects 5 cases → 3 failed / 2 passed
+  (rc=1, `detection_rate=0.0` "not detected" baseline, consistent with
+  ULT's green_on_fut caliber)
+
+### Follow-up (subsequent batches)
+
+- **87-scale expansion report**: `SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`
+  (QuixBugs 41 F2P paired test + ULT_Lite 46 descriptive observation +
+  cost / runtime registration);
+- **ULT 200-task subset first run** (`ULT_Lite.jsonl`, subset="lite"):
+  mutation score (Mut@k) as primary metric + F2P detection as secondary;
+  requires installing cosmic-ray first (see `docs/design/ult_bridge_plan.md`
+  §4.3, not implemented in this batch) + implementing
+  `experiments/ult_adapter.py` (the core new module designed in §4.2,
+  P2-level) before it can start. M1 normalization (this batch) makes the
+  detection secondary metric measurable, but the mutation primary metric
+  still depends on cosmic-ray.
+- **Confirmatory 87-pair F2P-pairable gold task supplement**: QuixBugs has
+  only 41 pairs; this batch's "87" is the total measurable task count
+  (41 F2P + 46 ULT descriptive), NOT an 87-pair F2P power; a confirmatory
+  conclusion requires a future supplement of 87 F2P-pairable tasks (e.g.
+  expanding QuixBugs / BugsInPy).
 
 ## [Unreleased] — 2026-10-12 independent-review optimization batch, final (SpecExpr v3 grammar + spec-first generation + mutation operators v3 + orchestration auto-search + decontamination + MTTR-A + observation-level compression)
 

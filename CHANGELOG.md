@@ -1,6 +1,6 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-12（spec_replace A/B 首跑批次：QuixBugs 三臂探索性实验〔aitester-vanilla / aiterst+spec_replace / plain_llm_df〕单种子 42 × 41 gold 任务；spec_replace 相对 vanilla +8.1pp（p=0.75，不显著，功效不足）；同时完成 ULT 基准接线——官方仓库一手核验勘误 + 加载器格式/字段修复 + 转换脚本；全量 5695 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 独立评审优化批次·终版〔SpecExpr v3 文法升阶 + 规格优先生成 P0-A-2 + 变异算子 v3 P0-B + 编排自动搜索 P1-A + 去污染 P1-B + MTTR-A 恢复延迟 P1-B + 观测级压缩 P2-A + 审计门 pytest 临时目录跳过回归〕）
+> Last updated: 2026-10-12（spec_replace 87 扩样实跑批次：QuixBugs 41 F2P 可配对 + ULT_Lite 46 描述性〔4 臂实跑 ≈47 min、成本 ≤$7.2；B vs A δ=−2.9pp / p=1.00 不显著，按预注册为探索性/阴性筛查〕；ULT 首轮 46/46 全崩的 int(None) TypeError 诊断并修复〔run_benchmark.py 4 处防御性 `or` 兜底 + manifest 自检〕；spec_replace_applied 在 replace 臂 100% 可审计〔QuixBugs 46+4 / ULT_Lite 43+3〕；全量 5703 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 ULT M1 判分归一化批次〔dataset_ult.py 裸断言包装〕+ 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次〔spec_replace_applied 三态 + 键集合同构测试 +8〕；再前 spec_replace A/B 首跑 + ULT 基准接线批次 → 5695/5698）
 
 # Changelog
 
@@ -109,12 +109,137 @@
   依赖（`docs/design/ult_bridge_plan.md` §4.3，本批次未实现）+ 实现
   `experiments/ult_adapter.py`（§4.2 设计的核心新模块，P2 级）后方可
   启动。
-- **spec_replace 扩样**：n≥87 gold 任务（80% 功效，δ≥+8pp）确认性实验；
-  当前 41 gold 任务只能作阴性筛查。扩样前需为 P0-A-2 增设
-  `spec_replace_section_chars` 观测字段（独立勘误项）。
+- **spec_replace 确认性 87 对 F2P 可配对补样**：首跑 + 本批次扩样
+  （QuixBugs 41 F2P + ULT_Lite 46 描述性，
+  `SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`）均为探索性/阴性
+  筛查（QuixBugs 共同可测子集 35，功效不足，B vs A δ=−2.9pp / p=1.00
+  不显著）；确认 δ≥+8pp 需补 87 对 F2P 可配对 gold 任务
+  （QuixBugs 全量 131 gold 或 BugsInPy 真实缺陷集）+ 提升 M1 可测率
+  （当前 35/41 → 需 ≥45/41）。
+- **ULT 主指标（mutation score Mut@k）落地**：扩样批次 ULT 仅
+  detection 描述性（恒 0.0 基线），mutation 主指标需 cosmic-ray
+  安装（`docs/design/ult_bridge_plan.md` §4.3）+
+  `experiments/ult_adapter.py`（§4.2，P2 级）。
+- **spec_replace 材料粒度观测**：扩样批次 4 QuixBugs + 3 ULT_Lite
+  的 `attempted_fallback`（规约材料渲染空串，对应无函数级 docstring
+  任务）——后续为 spec_replace 增设 `spec_replace_section_chars`
+  观测字段（首跑 §5 已列独立勘误项），使 fallback 任务也具备可审计
+  材料粒度。
 - **引用勘误**（r=0.780 来源确认、TestAgent 作者列表核验）：因 web 检索
   无 API key（DEEPSEEK_API_KEY 未配），外部核验未做，登记为待后续批次
   处理。
+
+## [Unreleased] — 2026-10-12 P0-A-2 可审计观测字段批次（spec_replace_applied 三态字段 + 键集合同构测试 +8 例）
+
+> 依据：`SPEC_REPLACE_AB_REPORT_2026-10-12.md` §5 建议——"扩样前应先修复
+> spec_oracle_injected provenance 字段回填，使 replace 臂'是否真正注入了
+> 规约文档'可逐任务审计"。本批次落地该前置动作：为 P0-A-2 规格替换增设
+> **独立**观测字段 `spec_replace_applied`（与 R1c 确定性 oracle 执行注入
+> `spec_oracle_injected` / `SPEC_ORACLE_EXEC_ENABLE` 解耦），使 replace 臂
+> 每任务可审计"规约文档是否实际替换了目标代码块"。提交 e1ee10c。
+
+### Added
+
+- **`spec_replace_applied` 三态观测字段**（`src/graph/state.py` +
+  `src/graph/nodes.py` + `experiments/run_benchmark.py` + `BASELINE.yaml`
+  metrics_schema 登记）：
+  - `None` = `DETECTION_SPEC_MODE=off` / minimal 消融档 / Generator 节点
+    未运行（默认关，历史口径零变化）；
+  - `"attempted_replaced"` = replace 模式且规约材料非空，规约文档（签名 +
+    NL + SpecExpr + 纪律）实际替换了 Generator prompt 的「目标代码」块；
+  - `"attempted_fallback"` = replace 模式但规约材料渲染为空串，prompt
+    保持历史口径（继续注入目标代码）。
+  - 与 R1c 确定性 oracle 注入（`spec_oracle_injected`，
+    `SPEC_ORACLE_EXEC_ENABLE`）解耦：前者观测"规约文档是否替代了目标
+    代码"，后者观测"oracle 断言是否并列注入"，两字段独立可审计。
+- **`tests/test_spec_replace_applied.py`**（8 用例，纯字符串层 / patch
+  `GeneratorAgent` 为 MagicMock 短路 LLM，零 LLM 成本）：off / minimal /
+  replace+材料 / replace+无材料 / 键集合同构 / 三态取值域 / 失败分支
+  None 占位等。全量 +8 用例，5695/5698 → **5703/5706**。
+
+### Verification
+
+- 全量 `pytest tests/`：**5703 passed / 3 skipped / 0 xfailed / 0 failed**
+  （63.5s，xdist -n 4 loadfile；5706 collected）
+- `mypy src/ config.py` 0 错误（130 源文件）
+- `ruff check` + `ruff format --check` 全绿
+- 守卫测试 `TestBaselineNumbersConsistency` 通过（total_passed 5703 与
+  collected 5706 差额 3 = skipped 3 + xfailed 0 + 余量 1，恰好在 slack 内）
+
+## [Unreleased] — 2026-10-12 ULT M1 判分归一化 + spec_replace 87 扩样实跑预注册批次（裸断言包装为 pytest 函数 + 预注册 + 4 臂实跑脚本）
+
+> 依据：首跑报告 §5 建议"扩样前"须使 spec_replace 在真实复杂函数上可审计
+> + ULT 官方测试材料（裸断言片段）此前 M1 三段判定无法直接判分（缺 pytest
+> 函数包装 → `_run_pytest_in_tmp` 收集 0 用例 → rc=5 → detection=None）。
+> 本批次为**数据层归一化 + 扩样预注册批次**（非功能落地批次）。提交 6f6f2d0。
+> 87 扩样实跑（QuixBugs 41 F2P 可配对 + ULT_Lite 46 描述性观测）已在
+> 后台启动（4 臂 run_benchmark，--save-state，parallel=4），完成后产出
+> `SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`。
+
+### Added
+
+- **ULT M1 判分归一化**（`src/datasets/dataset_ult.py`）：ULT 官方测试
+  材料两种形态——完整 pytest 函数（`tests` 字段元素以 `def `/`class ` 开头）
+  直接拼接；裸断言片段（`test_list` 字段，行首 `assert `）包装为
+  `from <mod> import <fn>` + `test_<i>` pytest 函数（`_m1_metrics` 可直接
+  判分）。写回 `metadata["test_cases"]`（= `test_code`，可判分）与
+  `metadata["fixed"]`（= 被测函数全文，ULT 无缺陷基线，三段判定 fixed
+  侧 = 原码）；原始断言片段保留在 `metadata["gold_tests_raw"]`（审计用途）。
+  M1 detection 对 ULT 任务由 None 变为可判分（恒 0.0"未检出"基线，对应
+  ULT 官方 green_on_fut 辅助口径；mutation score 仍为主指标，见
+  `metadata["mutation_primary_metric"]`）。
+  - 行首裸断言识别不 lstrip（避免把 def 块内缩进的 assert 误识别为裸断言）；
+  - import 用 `from <mod> import <fn>` 形态（module 名与函数名可能不一致，
+    `from` 形态把函数名绑定到断言中调用的标识符，`import as` 仅绑定模块名）。
+- **`docs/design/spec_replace_ab_scale87_prereg.md`**（87 扩样实跑预注册）：
+  - 数据集：QuixBugs 41 gold 任务（F2P 可配对主判据）+ ULT_Lite 46 任务
+    （seed=42 随机抽 46，官方测试材料齐备，描述性观测——ULT 无 buggy 版本，
+    detection 恒 0.0 基线）；
+  - 三臂：A=aitester(off) / B=aitester(replace) / C=plain_llm_df；
+  - 判据：McNemar / binom 精确检验 p<0.05 且 δ≥+8pp；QuixBugs 41 对仍为
+    **探索性/阴性筛查**（确认性 87 对功效需后续补样）；ULT 46 仅描述性
+    （detection 不可测）；
+  - 成本上界 $9.0（deepseek-flash 峰时价），耗时 60–90 分钟。
+- **`experiments/run_spec_replace_ab_scale87.sh`**（4 臂实跑脚本）：
+  quixbugs off/replace + ult_lite46 off/replace，--save-state，parallel=4，
+  缓存命名空间 `scale87_seed42`，seed=42 随机抽 46 任务写入临时 JSONL
+  manifest（`AITESTER_ULT_DATA` 指向该 manifest），自检确认 test_list 为
+  裸断言（触发 M1 归一化包装路径）。
+
+### Changed
+
+- **`tests/test_dataset_ult.py`**：`test_ult_lite_test_list_field` 扩展断言
+  M1 归一化行为（test_code 含 `from` 导入 + `def test_1` + gold_tests_raw
+  保留 + test_cases==test_code + fixed==instance_code）；官方完整 pytest
+  函数路径（`test_official_json_array_format`）回归验证不包装。ULT 数据集
+  测试 12/12 绿。
+
+### Verification
+
+- `pytest tests/test_dataset_ult.py`：**12 passed / 0 failed**
+- 全量 `pytest tests/`：**5703 passed / 3 skipped / 0 xfailed / 0 failed**
+  （76.3s，xdist -n 4 loadfile；5706 collected）
+- `mypy src/ config.py` 0 错误（130 源文件）
+- `ruff check` + `ruff format --check` 全绿
+- M1 归一化端到端验证（`_extract_gold_material` + `_run_pytest_in_tmp`
+  单文件口径）：ULT_Lite task[0] 裸断言 → 包装 → pytest 收集 5 用例 →
+  3 failed / 2 passed（rc=1，`detection_rate=0.0`"未检出"基线，符合 ULT
+  green_on_fut 口径）
+
+### Follow-up（后续批次）
+
+- **87 扩样实跑报告**：`SPEC_REPLACE_AB_SCALE87_REPORT_2026-10-12.md`
+  （QuixBugs 41 F2P 配对检验 + ULT_Lite 46 描述性观测 + 成本 / 耗时
+  登记）；
+- **ULT 200 任务子集首跑**（`ULT_Lite.jsonl`，subset="lite"）：mutation
+  score（Mut@k）主指标 + F2P detection 辅助指标；需先安装 cosmic-ray
+  依赖（`docs/design/ult_bridge_plan.md` §4.3，本批次未实现）+ 实现
+  `experiments/ult_adapter.py`（§4.2 设计的核心新模块，P2 级）后方可
+  启动。M1 归一化（本批次）使 detection 辅助指标可判分，但 mutation
+  主指标仍依赖 cosmic-ray。
+- **确认性 87 对 F2P 可配对 gold 任务补样**：QuixBugs 仅 41 对，本批次
+  "87"为总可测任务数（41 F2P + 46 ULT 描述性），非 87 对 F2P 配对功效；
+  确认性结论需后续补 87 对 F2P 可配对任务（如扩充 QuixBugs / BugsInPy）。
 
 ## [Unreleased] — 2026-10-12 独立评审优化批次·终版（SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩）
 

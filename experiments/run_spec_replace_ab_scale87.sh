@@ -66,11 +66,16 @@ echo "=== [2/2] ULT_Lite 46 任务三臂 ==="
 # 用 AITESTER_ULT_DATA 指向该 manifest。
 
 # 生成 46 任务抽样 manifest（seed=42，可复现）
-# 注意：test_list 必须写官方**原始断言片段**（裸 assert 行），让
+# 注意 1：test_list 必须写官方**原始断言片段**（裸 assert 行），让
 # dataset_ult 的 M1 归一化层（has_bare_asserts → 包装为 pytest 函数）
 # 真正执行并产出可判分的 test_code / metadata.test_cases / fixed。
 # 若直接写已包装的 metadata.test_cases（from ... import ...），加载器
-# 会走"完整函数直接拼接"路径，绕过了本批次新加的 M1 归一化逻辑。
+# 会走"完整函数直接拼接"路径，绕过本批次新加的 M1 归一化逻辑。
+# 注意 2：官方 ULT_Lite 记录**不含** cyclomatic_complexity 字段，加载器
+# 写出的 metadata 该键为显式 None；run_benchmark 复杂度路由
+# int(task.metadata.get("cyclomatic_complexity", 1)) 在"键存在但 None"时
+# 取到 None → int(None) TypeError，46 任务全崩（首轮实测）。故 manifest
+# 行必须显式补该键（缺省 1），并加自检防回归。
 "$PY" - <<'PYEOF'
 import json, os, random, sys
 sys.path.insert(0, ".")
@@ -88,20 +93,30 @@ with open(manifest, "w", encoding="utf-8") as f:
     for t in sample:
         # 写原始官方记录（func_name/code/prompt/task_id/test_list=裸断言）
         # test_list 用 gold_tests_raw（官方原始断言片段，M1 归一化的输入）
+        # cyclomatic_complexity 显式写出（缺省 1）——run_benchmark 复杂度
+        # 路由 int(metadata.get(...,1)) 在键缺失时取 1，键存在但 None 时崩
+        cc = t.metadata.get("cyclomatic_complexity")
         row = {
             "func_name": t.metadata.get("function_name", ""),
             "code": t.instance_code,
             "prompt": t.problem_statement,
             "task_id": t.task_id,
             "test_list": (t.metadata.get("gold_tests_raw") or "").splitlines(),
+            "cyclomatic_complexity": cc if cc is not None else 1,
         }
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 print(f"WROTE: {manifest} ({len(sample)} tasks)")
-# 自检：抽查一条确认 test_list 是裸断言（触发 M1 包装路径）
+# 自检 1：test_list 是裸断言（触发 M1 包装路径）
 first = json.loads(open(manifest).readline())
 assert first["test_list"] and first["test_list"][0].strip().startswith("assert"), \
     f"test_list 非裸断言（M1 包装路径未触发）: {first['test_list'][:1]!r}"
 print("self-check OK: test_list 为裸断言片段（M1 归一化路径已触发）")
+# 自检 2：cyclomatic_complexity 全行非 None（复杂度路由 int() 不崩）
+for line in open(manifest):
+    row2 = json.loads(line)
+    assert row2.get("cyclomatic_complexity") is not None, \
+        f"manifest 行 cyclomatic_complexity=None 会触发 run_benchmark int(None) 崩溃: {row2['task_id']}"
+print("self-check OK: cyclomatic_complexity 全行非 None（复杂度路由 int() 安全）")
 PYEOF
 
 ULT46_DIR=/tmp/spec_ab_scale87/ult_lite46
