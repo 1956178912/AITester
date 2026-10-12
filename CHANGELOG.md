@@ -1,10 +1,141 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-12（spec_replace 87 扩样实跑批次：QuixBugs 41 F2P 可配对 + ULT_Lite 46 描述性〔4 臂实跑 ≈47 min、实测 3.21M token / ≈$3.0（低于预注册 \$9.0 上界）；B vs A δ=−2.9pp / p=1.00 不显著，按预注册为探索性/阴性筛查〕；ULT 首轮 46/46 全崩的 int(None) TypeError 诊断并修复〔run_benchmark.py 4 处防御性 `or` 兜底 + manifest 自检〕；spec_replace_applied 在 replace 臂 100% 可审计〔QuixBugs 46+4 / ULT_Lite 43+3〕；全量 5709 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 ULT M1 判分归一化批次〔dataset_ult.py 裸断言包装〕+ 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次〔spec_replace_applied 三态 + 键集合同构测试 +8〕；再前 spec_replace A/B 首跑 + ULT 基准接线批次 → 5695/5698）
+> Last updated: 2026-10-12（STVR 实证研究设计批次：把 AITester 从"展示一个工具"重塑为"报告一项关于测试技术有效性的严谨研究"——新增 `docs/design/stvr_empirical_study_design.md`（研究问题 RQ1/RQ2/RQ3 可归因性重塑 + 增强机制定义 M1-RAG 检索 / M2-历史用例学习 / M3-检索质量 + 6 臂消融矩阵 + mutation score 主指标口径 + 统计规范 + 威胁效度 + STVR 投稿路径）；实现 `src/measurement/retrieval_quality.py` 检索质量 Recall@k 观测（纯函数零 LLM，键集合同构，默认关历史口径零变化）+ 17 例回归测试；消融骨架 `experiments/stvr_ablation_study.py`（dry-run 预注册计划生成，不自动实跑）；api_reference 中/英新增 `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` / `RAG_RECALL_RELEVANT_THRESHOLD` 环境变量；全量 5726 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 spec_replace 87 扩样实跑批次〔quixbugs off/replace + ult off/replace 4 臂 + int(None) 崩溃诊断修复〕→ 5709/5712；再前 ULT M1 判分归一化批次 + 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次 → 5695/5698）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-12 STVR 实证研究设计批次（研究问题可归因性重塑 + 检索质量 Recall@k 观测 + 6 臂消融矩阵骨架，零 LLM 成本）
+
+> 依据：STVR（Software: Testing, Verification & Reliability）投稿导向优化——
+> 把 AITester 从"展示一个工具"转向"报告一项关于测试技术有效性的严谨研究"，
+> 核心是把工程实现提炼为**可检验的科学假设**并用符合社区规范的实验设计验证。
+> 本批次为**研究设计 + 可归因性基础设施批次**（非 LLM 实跑批次，符合"暂不用
+> LLM 测试"约束），全部产物为确定性/静态：
+> - `docs/design/stvr_empirical_study_design.md`（研究设计定稿，预注册纪律）
+> - `src/measurement/retrieval_quality.py` + `tests/test_retrieval_quality.py`
+>   （检索质量 Recall@k 观测 + 17 例回归测试）
+> - `experiments/stvr_ablation_study.py`（6 臂消融矩阵 dry-run 骨架）
+> 全量 5709/5712 → **5726/5729**（+17/+17），0 failed / 0 xfailed。
+
+### Added
+
+- **STVR 实证研究设计文档（`docs/design/stvr_empirical_study_design.md`）**：
+  把 87 扩样实跑的"探索性/阴性筛查"结论升级为一套**可归因的增强机制假设**：
+  - **RQ1（主）**：RAG 检索（领域知识注入 M1）+ 历史用例学习（变异反馈闭环 M2）
+    能否实质性提升**故障发现能力**（mutation score / F2P detection），增益
+    能否归因到单一机制？
+  - **RQ2**：RAG 检索策略（向量 vs 关键词 vs 无）对生成质量的差异化影响 +
+    检索质量（Recall@k）↔ 生成质量相关性；
+  - **RQ3**：冷启动（检索库为空）如何影响早期生成效果，"学习增益"是否随
+    任务数累积扩大。
+  - **6 臂消融矩阵**（both_off / rag_only / learn_only / both_on / cold_start /
+    full_cold）正交拆解 M1/M2 因子，把"总增益 / M1 单因子 / M2 单因子 / 交互项"
+    分离，审稿人可归因性要求。
+  - **主指标 = mutation score**（STVR 社区最认可，非仅覆盖率；内部自研 AST
+    变异体口径已实现 `experiments/mutation_testing.py`，ULT 官方口径需
+    cosmic-ray，见 `docs/design/ult_bridge_plan.md` §4.3）；
+    覆盖率降级为辅助指标（对测试数量敏感但对质量不敏感）。
+  - **统计规范**：每臂 ≥10 次独立运行 + 固定 seed 集配对 + Cliff's delta /
+    Cohen's d + 95% CI（不报均值）+ mcnemar/binom（复用
+    `experiments/statistical_analysis.py`）。
+  - **威胁效度**（内部 / 外部 / 构念三类）+ **STVR 投稿路径**（Research Paper
+    正刊 / Software Notes 备选）。
+  - **诚实边界**：87 扩样 B vs A δ=−2.9pp / p=1.00 不显著（功效不足）——
+    本设计不把它当作"增强无效"证据，而是把"为什么还不能下结论 + 如何能下
+    结论"同时写清（需 87 对 F2P 可配对补样 + 本消融矩阵）。
+- **检索质量 Recall@k 观测（`src/measurement/retrieval_quality.py`，
+  `src/graph/rag.py` `_build_rag_stat_with_relevance` 接线）**：
+  - `compute_recall_at_k(refs, k, threshold)`（纯函数，零 LLM，保守 None
+    口径）：Recall@k = |top-k 中 similarity ≥ 阈值的"相关"案例数| / k；
+    refs 空 / RAG 关闭 / 检索结果不足 k 个 → None（**不**记 0.0，与
+    _m1_metrics 的 None 保守口径一致——"根本没检索"与"检索到了但全低相关"
+    必须区分，防分母缩小抬分）；
+  - `retrieval_relevance(refs)`：返回
+    `{retrieval_relevance, retrieval_relevant_count, retrieval_total_refs}`
+    三字段键集合同构 dict（None / 0 占位，历史 JSON 消费方零变化）；
+  - `rag_stat_with_recall(refs, kind, ...)`：在既有 rag_stat
+    （kind/results/max_similarity/avg_similarity/relevance_filtered/
+    relevance_filter_rate）基础上追加 `recall_at_k` / `retrieval_relevance` /
+    `retrieval_relevant_count`；
+  - 开关（默认关，历史口径零变化）：`RAG_RETRIEVAL_RECALL_ENABLE` /
+    `RAG_RECALL_K`（默认 3，与 retrieve_test_cases top_k 一致）/
+    `RAG_RECALL_RELEVANT_THRESHOLD`（默认 0.7，与 RAG_RELEVANCE_THRESHOLD
+    同量级）。
+  - 解决 STVR 可归因性 RQ2 的核心度量缺口：现有 `avg_similarity` 只是
+    相似度分布，**不等于相关性命中率**（检索到 5 个高相似但全无关案例 =
+    高 similarity + 0 相关性）；Recall@k 让"检索质量 ↔ 生成质量"相关分析
+    可量化。
+- **消融实验骨架（`experiments/stvr_ablation_study.py`，默认 dry-run）**：
+  把研究设计 §3 的 6 臂矩阵固化为**可预注册、可复跑**的实验定义
+  （6 臂 × N_REPEATS=10 固定 seed 集），每臂透出 `ENABLE_MUTATION_SCORING=true`
+  （主指标门控）+ `RAG_RETRIEVAL_RECALL_ENABLE=true`（检索质量观测）+
+  冷启动钩子（`RAG_COLD_START=true` → run 前 `TestCaseRetriever.clear()` +
+  清空持久化目录）。`--dry-run`（默认）只生成计划 JSON，**不**调用 LLM、
+  **不**写结果；`--execute` 才驱动 `run_benchmark.py` 多臂实跑（耗 LLM，
+  需用户授权配额）。符合"暂不用 LLM 测试"约束——本批次只落地 dry-run
+  计划生成。
+
+### Changed
+
+- **`src/graph/rag.py` `_build_rag_stat_with_relevance`**：追加
+  `recall_at_k` / `retrieval_relevance` / `retrieval_relevant_count` 三字段
+  （默认开关关时均 None / 0，键集合同构，历史口径零变化；开关开时实算）。
+- **`docs/api_reference.md` / `.en.md`**：环境变量表新增
+  `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` / `RAG_RECALL_RELEVANT_THRESHOLD`
+  三行（STVR 批次检索质量观测）。
+- **`BASELINE.yaml`**：`total_passed` 5709→5726（+17 例
+  tests/test_retrieval_quality.py），`last_verified` 注释刷新为 STVR 批次口径。
+
+### Tests
+
+- **`tests/test_retrieval_quality.py`（+17 例，零 LLM 成本）**：
+  - `TestComputeRecallAtK`（9 例）：None/空 refs → None；默认关 → None；
+    全相关 → 1.0；半相关 → 1/3；全低相关 → 0.0（区别于 None）；
+    检索不足 k 个 → None（分母缩小守卫）；显式 k/threshold 覆盖 env；
+    非 dict 元素跳过。
+  - `TestRetrievalRelevance`（3 例）：None refs → 稳定键集合 + None 占位；
+    默认关 → 键在但 None；开启 → 实算。
+  - `TestRagStatWithRecall`（3 例）：默认关 → 三键在 + None/0 占位（键集合
+    同构）；开启 → 实算；refs=None → 整 stat None。
+  - `TestEnvReaders`（2 例）：k 默认 3 / 非法值回退 3；阈值默认 0.7 /
+    越界钳制 [0,1]；开关默认关。
+
+### 口径登记（与 87 扩样一致，本批次新增维度）
+
+- **mutation score 双口径分述**（研究设计 §4.2）：内部自研 AST 变异体
+  （`experiments/mutation_testing.py`，`ENABLE_MUTATION_SCORING`，确定性
+  本地执行零 LLM）vs ULT 官方 cosmic-ray 全变异体 + 120s 超时（**未安装**，
+  `ult_bridge_plan.md` §4.3，cosmic-ray 版本 + 配置哈希须入报告）。两口径
+  数值不可直接比，必须分述（本批次在研究设计 §4.2 锁死此口径）。
+- **检索质量观测默认关**（`RAG_RETRIEVAL_RECALL_ENABLE`）：与
+  `RAG_RELEVANCE_THRESHOLD_ENABLE` 同纪律——默认关时 rag_stats 三新字段
+  均 None / 0 占位，历史 JSON 消费方（`analyze_results.py` /
+  `rag_analysis.py`）零变化；开关开才实算 Recall@k（消融实跑批次启用）。
+
+### 验证
+
+- 全量 pytest 5726 passed / 3 skipped / 0 xfailed / 0 failed（xdist
+  -n 4 loadfile；5729 collected）；
+- `tests/test_retrieval_quality.py` 17/17 通过；`tests/test_run_benchmark.py`
+  / `tests/test_rag_metrics.py` / `tests/test_rag_retriever.py` 回归全绿
+  （键集合同构 + 历史口径零变化）；
+- mypy 130 源文件 0 错误；ruff check + ruff format 全绿；双语文档门禁
+  0 警告 / 0 失败。
+
+### Follow-up（后续批次，零 LLM 登记）
+
+- **消融实跑**（`experiments/stvr_ablation_study.py --execute`）：6 臂 ×
+  ≥10 次 × 基准（QuixBugs / ULT_Lite / BugsInPy），报 mutation/detection/
+  repair + 效应量 + CI + `retrieval_relevance` 相关；**需用户授权 LLM 配额**
+  后启动（本批次只落地 dry-run 计划生成）。
+- **确认性 87 对 F2P 可配对补样**：BugsInPy 本地化（需网络 clone + 官方
+  ckpt 导出，`real_benchmark_upgrade.md`）+ QuixBugs 全量 131 gold /
+  BugsInPy 真实缺陷集（研究设计 §7 数据任务）。
+- **ULT 主指标（mutation score cosmic-ray 口径）落地**：cosmic-ray 安装 +
+  版本钉锁（`requirements.lock`）+ `experiments/ult_adapter.py`
+  （`ult_bridge_plan.md` §4.2，P2 级）。
 
 ## [Unreleased] — 2026-10-12 spec_replace A/B 首跑 + ULT 基准接线批次（三臂探索性实验 + 官方仓库勘误 + 加载器格式/字段修复 + 转换脚本）
 

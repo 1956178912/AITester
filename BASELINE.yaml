@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-12"   # 全量回归实测日期（2026-10-12 ULT 实跑批次：run_benchmark 复杂度路由 int(None) 崩溃回归测试 +6 例（tests/test_run_benchmark_none_metadata.py，源码守卫 + 3 态行为探针，零 LLM 成本）；mypy 130 源文件 0 错误 / ruff format 全绿 / 全量 5709 passed + 3 skipped / 0 xfailed / 0 failed〔5712 collected〕；此前 2026-10-12 P0-A-2 可审计观测字段批次〔spec_replace_applied +8 例〕→ 5703/5706；再前 ULT 接线批次→ 5695/5698）
+last_verified: "2026-10-12"   # 全量回归实测日期（2026-10-12 STVR 实证研究设计批次：Retrieval Quality (Recall@k) observation 模块 + 17 例回归测试（tests/test_retrieval_quality.py，纯函数层 + 键集合同构，零 LLM 成本）；mypy 131 源文件 0 错误 / ruff format 全绿 / 全量 5730 passed + 3 skipped / 0 xfailed / 0 failed〔5733 collected〕；此前 2026-10-12 ULT 实跑批次〔int(None) 崩溃回归测试 +6 例〕→ 5709/5712；再前 P0-A-2 可审计观测字段批次→ 5703/5706）
 
 tests:
-  total_passed: 5709          # 全量 pytest tests/（2026-10-12 ULT 实跑批次：run_benchmark 复杂度路由 int(None) 崩溃回归测试 +6 例（tests/test_run_benchmark_none_metadata.py，源码守卫 + 3 态行为探针，零 LLM 成本）；--collect-only 收集 **5712**；跑批 = **5709 passed + 3 skipped + 0 xfailed + 0 failed**。上一批 5703/5706 → 本批 5709/5712（+6/+6）。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5730          # 全量 pytest tests/（2026-10-12 STVR 实证研究设计批次：Retrieval Quality (Recall@k) observation 模块 + 17 例回归测试（tests/test_retrieval_quality.py，纯函数层 + 键集合同构，零 LLM 成本）；--collect-only 收集 **5733**；跑批 = **5730 passed + 3 skipped + 0 xfailed + 0 failed**。上一批 5709/5712 → 本批 5730/5733（+17/+17）。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 3           # 全量实测（可选依赖缺失时优雅跳过）
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail

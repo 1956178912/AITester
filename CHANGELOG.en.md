@@ -1,10 +1,180 @@
-> Last updated: 2026-10-12 (spec_replace 87-scale expansion run batch: QuixBugs 41 F2P-pairable + ULT_Lite 46 descriptive [4-arm run, ~47 min, measured 3.21M tokens / ~$3.0 (below prereg $9.0 ceiling); B vs A δ=−2.9pp / p=1.00 not significant, exploratory / negative screen as preregistered]; 46/46 ULT first-run `int(None)` crash diagnosed and fixed [run_benchmark.py 4 defensive `or` fallbacks + manifest self-check]; `spec_replace_applied` now 100%-auditable on the replace arm [46+4 QuixBugs / 43+3 ULT_Lite]; full suite 5709 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 ULT M1-scoring normalization batch [dataset_ult.py bare-assertion wrapping] + 87 expansion preregistration -> 5703/5706; before that the P0-A-2 auditability-observability batch [spec_replace_applied tri-state field + key-set-isomorphism tests +8]; before that the spec_replace A/B first-run + ULT benchmark wiring batch -> 5695/5698)
+> Last updated: 2026-10-12 (STVR empirical-study design batch: reshaping AITester from "show a tool" to "report a rigorous study of test-technique effectiveness" — new `docs/design/stvr_empirical_study_design.md` [research questions RQ1/RQ2/RQ3 with attributability + augmentation-mechanism definitions M1-RAG retrieval / M2-historical-case learning / M3-retrieval quality + 6-arm ablation matrix + mutation-score primary-metric caliber + statistical rigor + threats to validity + STVR submission path]; implemented `src/measurement/retrieval_quality.py` retrieval-quality Recall@k observation [pure function, zero LLM cost, key-set isomorphism, default-off historical-caliber-zero-change] + 17 regression tests; ablation skeleton `experiments/stvr_ablation_study.py` [dry-run preregistration plan generation, no auto-run]; api_reference zh/en gained `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` / `RAG_RECALL_RELEVANT_THRESHOLD` env vars; full suite 5726 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 spec_replace 87-scale expansion run batch [quixbugs off/replace + ult off/replace 4 arms + int(None) crash diagnosis & fix] -> 5709/5712; before that the ULT M1-scoring normalization batch + 87 expansion preregistration -> 5703/5706; before that the P0-A-2 auditability-observability batch -> 5695/5698)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-12 STVR empirical-study design batch (research-question attributability reshape + retrieval-quality Recall@k observation + 6-arm ablation-matrix skeleton, zero LLM cost)
+
+> Basis: STVR (Software: Testing, Verification & Reliability) submission-
+> oriented optimization — reshape AITester from "show a tool" into "report
+> a rigorous study of test-technique effectiveness"; the core is
+> distilling the engineering implementation into a **testable scientific
+> hypothesis** and validating it with a community-standard experimental
+> design. This is a **research-design + attributability-infrastructure
+> batch** (not an LLM-run batch, consistent with the "no LLM tests for
+> now" constraint); all deliverables are deterministic/static:
+> - `docs/design/stvr_empirical_study_design.md` (research-design
+>   finalization, preregistration discipline)
+> - `src/measurement/retrieval_quality.py` + `tests/test_retrieval_quality.py`
+>   (retrieval-quality Recall@k observation + 17 regression tests)
+> - `experiments/stvr_ablation_study.py` (6-arm ablation-matrix dry-run
+>   skeleton)
+> Full suite 5709/5712 → **5726/5729** (+17/+17), 0 failed / 0 xfailed.
+
+### Added
+
+- **STVR empirical-study design document
+  (`docs/design/stvr_empirical_study_design.md`)**:
+  upgrades the 87-scale expansion's "exploratory / negative screen"
+  conclusion into a **set of attributable augmentation-mechanism
+  hypotheses**:
+  - **RQ1 (primary)**: can RAG retrieval (domain-knowledge injection M1)
+    + historical-case learning (mutation-feedback loop M2) *substantially*
+    improve **fault-revealing effectiveness** (mutation score / F2P
+    detection), and can the gain be attributed to a single mechanism?
+  - **RQ2**: differential impact of RAG retrieval strategies
+    (vector vs keyword vs none) on generation quality + retrieval-quality
+    (Recall@k) ↔ generation-quality correlation;
+  - **RQ3**: how cold-start (empty retrieval store) affects early
+    generation; does "learning gain" expand as the task count accumulates.
+  - **6-arm ablation matrix** (both_off / rag_only / learn_only / both_on /
+    cold_start / full_cold) orthogonally decomposes the M1/M2 factors,
+    separating "total gain / M1 single-factor / M2 single-factor /
+    interaction term" — the reviewer's attributability requirement.
+  - **Primary metric = mutation score** (the most-acknowledged in the
+    STVR community, not coverage alone; the in-house AST-mutant caliber is
+    implemented in `experiments/mutation_testing.py`, the ULT official
+    caliber needs cosmic-ray, see `docs/design/ult_bridge_plan.md` §4.3);
+    coverage demoted to an auxiliary metric (sensitive to test count, not
+    quality).
+  - **Statistical rigor**: ≥10 independent runs per arm + fixed-seed-set
+    pairing + Cliff's delta / Cohen's d + 95% CI (no mean-only reporting)
+    + mcnemar/binom (reusing `experiments/statistical_analysis.py`).
+  - **Threats to validity** (internal / external / construct) +
+    **STVR submission path** (Research Paper regular / Software Notes
+    alternative).
+  - **Honest boundary**: the 87-scale B vs A δ=−2.9pp / p=1.00 (not
+    significant, underpowered) — this design does *not* treat it as
+    "augmentation ineffective"; it writes down both "why we can't
+    conclude yet" and "how we can conclude" (needs 87-pair F2P-pairable
+    supplement + this ablation matrix).
+- **Retrieval-quality Recall@k observation
+  (`src/measurement/retrieval_quality.py`, wired into
+  `src/graph/rag.py` `_build_rag_stat_with_relevance`)**:
+  - `compute_recall_at_k(refs, k, threshold)` (pure function, zero LLM,
+    conservative None caliber): Recall@k = |references with similarity ≥
+    threshold among top-k| / k; empty refs / RAG off / fewer than k refs →
+    None (**not** 0.0, consistent with _m1_metrics' None conservative
+    caliber — "no retrieval at all" vs "retrieved but all low-relevance"
+    must be distinguished, preventing denominator-shrink inflation);
+  - `retrieval_relevance(refs)`: returns a
+    `{retrieval_relevance, retrieval_relevant_count, retrieval_total_refs}`
+    three-field key-set-isomorphic dict (None / 0 placeholders, zero change
+    for historical JSON consumers);
+  - `rag_stat_with_recall(refs, kind, ...)`: appends `recall_at_k` /
+    `retrieval_relevance` / `retrieval_relevant_count` on top of the
+    existing rag_stat (kind / results / max_similarity / avg_similarity /
+    relevance_filtered / relevance_filter_rate);
+  - switches (default off, zero historical-caliber change):
+    `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` (default 3, matching
+    retrieve_test_cases' top_k) / `RAG_RECALL_RELEVANT_THRESHOLD`
+    (default 0.7, same order as RAG_RELEVANCE_THRESHOLD).
+  - Closes the STVR attributability RQ2 measurement gap: the existing
+    `avg_similarity` is only a similarity distribution, **not** a
+    relevance-hit rate (5 high-similarity-but-all-irrelevant references =
+    high similarity + 0 relevance); Recall@k makes "retrieval quality ↔
+    generation quality" correlation quantifiable.
+- **Ablation-experiment skeleton
+  (`experiments/stvr_ablation_study.py`, default dry-run)**:
+  fixes the 6-arm matrix from research-design §3 into a **preregistrable,
+  re-runnable** experimental definition (6 arms × N_REPEATS=10 fixed seed
+  set), each arm exposing `ENABLE_MUTATION_SCORING=true` (primary-metric
+  gate) + `RAG_RETRIEVAL_RECALL_ENABLE=true` (retrieval-quality
+  observation) + a cold-start hook
+  (`RAG_COLD_START=true` → `TestCaseRetriever.clear()` before the run +
+  wipe the persist dir). `--dry-run` (default) only emits the plan JSON,
+  **does not** call the LLM and **does not** write results; `--execute`
+  drives `run_benchmark.py` multi-arm runs (LLM cost, requires user quota
+  authorization). Consistent with the "no LLM tests for now" constraint —
+  this batch lands only the dry-run plan generation.
+
+### Changed
+
+- **`src/graph/rag.py` `_build_rag_stat_with_relevance`**: appends
+  `recall_at_k` / `retrieval_relevance` / `retrieval_relevant_count`
+  three fields (default switch off → all None / 0, key-set isomorphic,
+  zero historical-caliber change; computed when the switch is on).
+- **`docs/api_reference.md` / `.en.md`**: the env-var table gains three
+  rows — `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` /
+  `RAG_RECALL_RELEVANT_THRESHOLD` (STVR-batch retrieval-quality
+  observation).
+- **`BASELINE.yaml`**: `total_passed` 5709→5726 (+17 tests in
+  tests/test_retrieval_quality.py), `last_verified` comment refreshed to
+  the STVR-batch caliber.
+
+### Tests
+
+- **`tests/test_retrieval_quality.py` (+17 cases, zero LLM cost)**:
+  - `TestComputeRecallAtK` (9 cases): None/empty refs → None; default off →
+    None; all relevant → 1.0; half relevant → 1/3; all low-relevance →
+    0.0 (distinct from None); fewer than k refs → None
+    (denominator-shrink guard); explicit k/threshold override env;
+    non-dict elements skipped.
+  - `TestRetrievalRelevance` (3 cases): None refs → stable key set + None
+    placeholders; default off → keys present but None; on → computed.
+  - `TestRagStatWithRecall` (3 cases): default off → three keys present +
+    None/0 placeholders (key-set isomorphism); on → computed;
+    refs=None → whole stat None.
+  - `TestEnvReaders` (2 cases): k default 3 / invalid falls back to 3;
+    threshold default 0.7 / out-of-range clamped to [0,1]; switch default
+    off.
+
+### Caliber registration (consistent with the 87-scale batch, new
+dimensions this batch)
+
+- **Dual mutation-score calibers stated separately**
+  (research-design §4.2): in-house AST mutants
+  (`experiments/mutation_testing.py`, `ENABLE_MUTATION_SCORING`,
+  deterministic local execution, zero LLM) vs ULT-official cosmic-ray
+  full-mutants + 120s timeout (**not installed**,
+  `ult_bridge_plan.md` §4.3, cosmic-ray version + config hash must enter
+  the report). The two calibers' numbers are not directly comparable and
+  must be stated separately (locked in research-design §4.2 this batch).
+- **Retrieval-quality observation default off**
+  (`RAG_RETRIEVAL_RECALL_ENABLE`): same discipline as
+  `RAG_RELEVANCE_THRESHOLD_ENABLE` — when off, the three new rag_stats
+  fields are None / 0 placeholders, zero change for historical JSON
+  consumers (`analyze_results.py` / `rag_analysis.py`); Recall@k is
+  computed only when the switch is on (the ablation-run batch enables it).
+
+### Verification
+
+- Full pytest 5726 passed / 3 skipped / 0 xfailed / 0 failed (xdist
+  -n 4 loadfile; 5729 collected);
+- `tests/test_retrieval_quality.py` 17/17 pass;
+  `tests/test_run_benchmark.py` / `tests/test_rag_metrics.py` /
+  `tests/test_rag_retriever.py` regressions all green (key-set
+  isomorphism + zero historical-caliber change);
+- mypy 0 errors across 130 source files; ruff check + ruff format fully
+  green; bilingual-docs gate 0 warnings / 0 failures.
+
+### Follow-up (subsequent batches, zero-LLM registration)
+
+- **Ablation run** (`experiments/stvr_ablation_study.py --execute`):
+  6 arms × ≥10 runs × benchmarks (QuixBugs / ULT_Lite / BugsInPy), report
+  mutation/detection/repair + effect sizes + CI + `retrieval_relevance`
+  correlation; **requires user LLM-quota authorization** before it starts
+  (this batch lands only dry-run plan generation).
+- **Confirmatory 87-pair F2P-pairable supplement**: BugsInPy localization
+  (needs network clone + official ckpt export, `real_benchmark_upgrade.md`)
+  + QuixBugs full 131 gold / BugsInPy real-defect set (research-design §7
+  data tasks).
+- **ULT primary metric (mutation score, cosmic-ray caliber) landing**:
+  cosmic-ray install + version pinning (`requirements.lock`) +
+  `experiments/ult_adapter.py` (`ult_bridge_plan.md` §4.2, P2-level).
 
 ## [Unreleased] — 2026-10-12 spec_replace A/B first run + ULT benchmark wiring batch (three-arm exploratory experiment + official-repo erratum + loader format/field fixes + conversion script)
 

@@ -3433,6 +3433,11 @@ def run_benchmark(
         # 逐位证明（A1 首跑假阴性机制）。
         "FEEDBACK_COMPRESSION_ENABLE",
         "ORCHESTRATION_SEARCH_ENABLE",
+        # 2026-10-12（STVR 实证研究设计批次·第六次同类缺口预防）：检索质量
+        # Recall@k 观测开关入快照——stvr_ablation_study 消融臂（RQ2 检索
+        # 策略差异化）必须从工件 provenance 可证明"该臂是否开启了
+        # RAG_RETRIEVAL_RECALL_ENABLE"，否则消融结果不可归因。
+        "RAG_RETRIEVAL_RECALL_ENABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

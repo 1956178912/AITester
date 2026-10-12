@@ -139,11 +139,18 @@ def _build_rag_stat_with_relevance(
     relevance_filtered: int = 0,
     relevance_filter_rate: float = 0.0,
 ) -> dict[str, Any] | None:
-    """P2 RAG 相关性观测：在 _build_rag_stat 基础上追加过滤比例指标。
+    """P2 RAG 相关性观测 + STVR 批次检索质量（Recall@k / retrieval_relevance）。
 
     2026-10 改进（A/B 阴性结果驱动）：RAG 命中率 100% 但成功率 0pp，
     根因是"检索到但没用上"。本函数把"被相关性阈值过滤掉的案例数/比例"
     写进 rag_stats，让实验报告能分析"高命中率中有多少是低相关"。
+
+    2026-10-12 STVR 实证研究批次：追加 `recall_at_k` /
+    `retrieval_relevance` / `retrieval_relevant_count` 三个观测字段
+    （检索精度——"检索到的案例中真正相关的比例"，STVR 可归因性
+    RQ2 的核心度量）。RAG_RETRIEVAL_RECALL_ENABLE 默认关时三字段
+    均为 None / 0（键集合同构，历史口径零变化）；开关开启时
+    按 similarity ≥ 阈值判定"相关"（确定性纯函数，零 LLM）。
     开关关闭时 relevance_filtered/relevance_filter_rate 均为 0，指标与
     _build_rag_stat 逐字段一致（历史口径零变化）。
     """
@@ -152,6 +159,14 @@ def _build_rag_stat_with_relevance(
         return None
     base["relevance_filtered"] = relevance_filtered
     base["relevance_filter_rate"] = relevance_filter_rate
+    # STVR 批次：检索质量观测（默认关，键集合同构）
+    from src.measurement.retrieval_quality import retrieval_relevance, compute_recall_at_k
+
+    recall = compute_recall_at_k(rag_refs)
+    base["recall_at_k"] = recall
+    rel = retrieval_relevance(rag_refs)
+    base["retrieval_relevance"] = rel.get("retrieval_relevance") if rel else None
+    base["retrieval_relevant_count"] = rel.get("retrieval_relevant_count", 0) if rel else 0
     return base
 
 
