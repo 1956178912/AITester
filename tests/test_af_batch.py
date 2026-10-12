@@ -92,7 +92,9 @@ class TestProblemStatementNoPromptConsumption:
                     f"（登记口径 = 仅初始状态构造；新用途须先更新 DATA_CARD 与本测试）：{stripped[:120]}"
                 )
             # 唯一运行时读取 = 初始状态构造（若 >1 处即登记失真）
-            read_lines = [ln for _, ln in hits["orchestration_search.py"] if 'getattr(task, "problem_statement", None)' in ln]
+            read_lines = [
+                ln for _, ln in hits["orchestration_search.py"] if 'getattr(task, "problem_statement", None)' in ln
+            ]
             assert len(read_lines) == 1, (
                 f"orchestration_search.py 出现 {len(read_lines)} 处 problem_statement 运行时读取（登记口径=1）"
             )

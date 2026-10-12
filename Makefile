@@ -52,7 +52,7 @@ model-fingerprint:  ## 模型版本指纹锁定守卫（S29，接入 CI；默认
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions  ## 本地全部门禁（合并前自检）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

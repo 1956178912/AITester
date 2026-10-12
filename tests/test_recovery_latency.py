@@ -123,7 +123,9 @@ class TestSummarizeRecoveryLatencies:
 
     def test_specificity_unverified_counted(self) -> None:
         tasks = [
-            compute_recovery_latency(_events(("failure_observed", 0.0), ("effective_red_generated", 1.0)), specificity_verified=False),
+            compute_recovery_latency(
+                _events(("failure_observed", 0.0), ("effective_red_generated", 1.0)), specificity_verified=False
+            ),
             RecoveryLatency(specificity_unverified=True),
         ]
         summary = summarize_recovery_latencies(tasks)

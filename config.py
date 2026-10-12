@@ -470,7 +470,9 @@ ORCHESTRATION_SEARCH_ENABLE: bool = os.getenv("ORCHESTRATION_SEARCH_ENABLE", "fa
 # 的量级设计（M1 设计集 12 任务 × 3 种子 = 36 cell）
 ORCHESTRATION_SEARCH_MAX_EVALS: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_EVALS", 240, 16, None)
 # 总 token 消耗硬顶：≈ df 臂 4.2k/任务的 ~85 个满配当量 / 全拓扑 26k 的 ~58 个
-ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS", 1_500_000, 100_000, None)
+ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS: int = _parse_int_env(
+    "ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS", 1_500_000, 100_000, None
+)
 # UCB1 探索常数 c（bonus = c·sqrt(2·ln t / n_a)）：[0.1, 5.0]，1.0 为二值奖励
 # 小预算下的标准起点；过大退化为近似均匀探索，过小退化为贪心
 ORCHESTRATION_SEARCH_UCB_C: float = _parse_float_env("ORCHESTRATION_SEARCH_UCB_C", 1.0, 0.1, 5.0)

@@ -938,7 +938,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 target_function=state.get("target_function") or "",
             )
             if _spec_replace_section:
-                logger.info("P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section))
+                logger.info(
+                    "P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section)
+                )
         # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
         # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
         # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过

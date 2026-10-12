@@ -91,8 +91,20 @@ _ENV_DSL = "SPEC_IR_DSL_ENABLE"
 # 风险（range(10**10) 惰性、不物化；list/sum 等物化调用不在白名单）。
 _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
     {
-        "len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all", "isinstance",
-        "range", "enumerate",
+        "len",
+        "abs",
+        "min",
+        "max",
+        "round",
+        "float",
+        "int",
+        "str",
+        "sorted",
+        "any",
+        "all",
+        "isinstance",
+        "range",
+        "enumerate",
     }
 )
 # 允许的属性访问（容器/数值边界锚点 + v3 字符串纯方法白名单）：
@@ -108,10 +120,25 @@ _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
 # 系笔误（会放行无效的 x.len 属性访问），已移除。
 _ALLOWED_ATTRS: frozenset[str] = frozenset(
     {
-        "value", "real", "imag",
-        "startswith", "endswith", "split", "join", "strip", "lstrip", "rstrip",
-        "lower", "upper", "isdigit", "isalpha", "isalnum", "isspace",
-        "find", "count", "replace",
+        "value",
+        "real",
+        "imag",
+        "startswith",
+        "endswith",
+        "split",
+        "join",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "lower",
+        "upper",
+        "isdigit",
+        "isalpha",
+        "isalnum",
+        "isspace",
+        "find",
+        "count",
+        "replace",
     }
 )
 # 数值 / 字符串 / 布尔 / None / 容器字面量：全放行（ast 字面量）

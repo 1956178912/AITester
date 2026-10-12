@@ -62,11 +62,7 @@ def _find_boolean_nodes(tree: ast.Module) -> list[ast.UnaryOp]:
 
 def _is_docstring_stmt(stmt: ast.stmt) -> bool:
     """语句是否为 docstring（模块/类/函数首Expr且值为 str 常量）。"""
-    return (
-        isinstance(stmt, ast.Expr)
-        and isinstance(stmt.value, ast.Constant)
-        and isinstance(stmt.value.value, str)
-    )
+    return isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str)
 
 
 def _find_mutable_string_constants(tree: ast.Module) -> list[ast.Constant]:
@@ -166,11 +162,7 @@ class _NotInsertTransformer(ast.NodeTransformer):
 
     def visit_Compare(self, node: ast.Compare) -> ast.AST:
         self.generic_visit(node)
-        if (
-            not self.replaced
-            and node.lineno == self._lineno
-            and getattr(node, "col_offset", None) == self._col
-        ):
+        if not self.replaced and node.lineno == self._lineno and getattr(node, "col_offset", None) == self._col:
             self.replaced = True
             return ast.UnaryOp(op=ast.Not(), operand=node)
         return node
@@ -192,11 +184,7 @@ class _StmtDeleteTransformer(ast.NodeTransformer):
     visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
 
     def _filter_body(self, node: ast.FunctionDef) -> ast.FunctionDef:
-        kept = [
-            s
-            for s in node.body
-            if not (s.lineno == self._lineno and getattr(s, "col_offset", None) == self._col)
-        ]
+        kept = [s for s in node.body if not (s.lineno == self._lineno and getattr(s, "col_offset", None) == self._col)]
         if kept and len(kept) < len(node.body):
             node.body = kept
             self.replaced = True

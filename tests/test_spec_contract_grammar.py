@@ -162,10 +162,10 @@ def test_bnf_claimed_operators_are_really_accepted() -> None:
         'text.endswith("z")',
         'text.split(",") != []',
         '",".join(text) != ""',
-        "text.strip() != \"\"",
+        'text.strip() != ""',
         "text.lower() == text",
         "text.isdigit()",
-        "text.replace(\"a\", \"b\") != text",
+        'text.replace("a", "b") != text',
         # v3：迭代域白名单内建（range/enumerate 单独出现亦无害）
         "range(3) == range(3)",
     )

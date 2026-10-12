@@ -102,7 +102,12 @@ def _should_debug_event(reason: str) -> dict[str, Any]:
 
 def _patch_applier_event(decision: str) -> dict[str, Any]:
     """构造 patch_applier trace 事件。"""
-    return {"event": "node", "node": "patch_applier", "decision": decision, "output": {"patch_applied": decision == "written"}}
+    return {
+        "event": "node",
+        "node": "patch_applier",
+        "decision": decision,
+        "output": {"patch_applied": decision == "written"},
+    }
 
 
 def _generator_event(decision: str) -> dict[str, Any]:
@@ -181,7 +186,12 @@ class TestHindsightCredit:
             _should_debug_event("test_gen_diagnosis"),  # 零信用 → 跳过
             _should_debug_event("review_test_defect"),  # 零信用 → 跳过
             _patch_applier_event("written"),  # debugger: +0.2
-            {"event": "node", "node": "mutation_advisor", "decision": "injected", "output": {}},  # mutation_advisor: +0.1
+            {
+                "event": "node",
+                "node": "mutation_advisor",
+                "decision": "injected",
+                "output": {},
+            },  # mutation_advisor: +0.1
         ]
         credits = hindsight_credits(records, 1.0)
         totals = attribute_mechanisms(records, arm, credits)
@@ -368,7 +378,11 @@ class TestArmRegistry:
     def test_spec_chain_atomic(self):
         """SPEC 链三开关在登记表中同进同退。"""
         for arm in ARM_REGISTRY:
-            states = {arm.env.get(k) for k in ("SPEC_IR_ENABLE", "SPEC_IR_DSL_ENABLE", "SPEC_ORACLE_EXEC_ENABLE") if k in arm.env}
+            states = {
+                arm.env.get(k)
+                for k in ("SPEC_IR_ENABLE", "SPEC_IR_DSL_ENABLE", "SPEC_ORACLE_EXEC_ENABLE")
+                if k in arm.env
+            }
             assert len(states) <= 1, f"{arm.arm_id} 拆开 SPEC 链"
 
     def test_allow_regeneration_resolution(self):
@@ -415,7 +429,9 @@ class TestUCB1Properties:
         arms = ARM_REGISTRY
         stub = StubEvaluator()
         budget = SearchBudget(max_evals=16, max_total_tokens=1_500_000)
-        search = OrchestrationSearch(arms=arms, cells=_make_cells(36), budget=budget, ucb_c=1.0, seed=42, evaluator=stub)
+        search = OrchestrationSearch(
+            arms=arms, cells=_make_cells(36), budget=budget, ucb_c=1.0, seed=42, evaluator=stub
+        )
         report = search.run()
         assert report["pull_sequence"] == [arm.arm_id for arm in arms]
 
@@ -430,7 +446,9 @@ class TestUCB1Properties:
         rewards = {arm.arm_id: (1.0 if arm.arm_id == "df_no_gates" else 0.0) for arm in arms}
         stub = StubEvaluator(rewards=rewards)
         budget = SearchBudget(max_evals=200, max_total_tokens=1_500_000)
-        search = OrchestrationSearch(arms=arms, cells=_make_cells(36), budget=budget, ucb_c=1.0, seed=42, evaluator=stub)
+        search = OrchestrationSearch(
+            arms=arms, cells=_make_cells(36), budget=budget, ucb_c=1.0, seed=42, evaluator=stub
+        )
         report = search.run()
         assert report["champion"] == "df_no_gates"
         best_n = report["arm_stats"]["df_no_gates"]["n_measurable"]
@@ -482,7 +500,12 @@ class TestMemoizeAndInvariants:
         """champion 选拔单元测试：token 超 2×  incumbent 的臂即使 detection 高也落选。"""
         arm_stats = {
             "df_incumbent": {"n_measurable": 10, "mean_detection": 0.45, "mean_tokens": 4000.0, "mean_false_fix": 0.0},
-            "expensive_best": {"n_measurable": 10, "mean_detection": 0.90, "mean_tokens": 20000.0, "mean_false_fix": 0.0},
+            "expensive_best": {
+                "n_measurable": 10,
+                "mean_detection": 0.90,
+                "mean_tokens": 20000.0,
+                "mean_false_fix": 0.0,
+            },
             "cheap_good": {"n_measurable": 10, "mean_detection": 0.55, "mean_tokens": 6000.0, "mean_false_fix": 0.1},
             "thin_evidence": {"n_measurable": 2, "mean_detection": 0.99, "mean_tokens": 100.0, "mean_false_fix": 0.0},
         }
@@ -502,7 +525,9 @@ class TestMemoizeAndInvariants:
 
     def test_champion_none_when_incumbent_unavailable(self):
         """incumbent 不可用 → 无从比较（None + 原因）。"""
-        arm_stats = {"df_incumbent": {"n_measurable": 1, "mean_detection": 0.0, "mean_tokens": 0.0, "mean_false_fix": 0.0}}
+        arm_stats = {
+            "df_incumbent": {"n_measurable": 1, "mean_detection": 0.0, "mean_tokens": 0.0, "mean_false_fix": 0.0}
+        }
         champion, reason = select_champion(arm_stats, min_evals=5)
         assert champion is None
         assert "incumbent" in reason

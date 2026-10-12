@@ -56,7 +56,11 @@ SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
     ("result = a + b", "parse_error", "赋值语句不是表达式（判等请写 ==）"),
     ("r == total", "unknown_name", "total 未绑定；结果变量统一写 result，不要写 r"),
     # v3：strip 已入白名单（字符串纯方法），反例换用刻意不收的 title
-    ('result.title() == "Abc"', "unsupported_operator", "title 不在白名单属性内（字符串纯方法只放行 startswith/split/lower 等）"),
+    (
+        'result.title() == "Abc"',
+        "unsupported_operator",
+        "title 不在白名单属性内（字符串纯方法只放行 startswith/split/lower 等）",
+    ),
 )
 # 示例所属字段标签（渲染进提示，避免 LLM 把后置示例写进前置）
 _SPEC_EXPR_KIND_FIELD = {

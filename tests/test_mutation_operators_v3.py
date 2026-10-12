@@ -207,7 +207,13 @@ class TestOperatorSetIntegration:
     def test_extended_generator_includes_new_operators(self) -> None:
         """扩展池（MDO 测量层）同步含新算子，且总量大于基类轮转池。"""
         ext_types = {m.mutant_type for m in ExtendedMutationGenerator().generate(_SOURCE)}
-        for expected in ("unary_minus_remove", "unary_not_insert", "string_const_swap", "stmt_delete", "break_continue_swap"):
+        for expected in (
+            "unary_minus_remove",
+            "unary_not_insert",
+            "string_const_swap",
+            "stmt_delete",
+            "break_continue_swap",
+        ):
             assert expected in ext_types, f"扩展池缺少算子 {expected}"
         assert len(ExtendedMutationGenerator().generate(_SOURCE)) > len(MutationGenerator().generate(_SOURCE))
 

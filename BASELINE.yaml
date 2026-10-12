@@ -27,7 +27,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 89         # --cov=src 总行覆盖（2026-10-07 AO 批次实测 89%（89.56），行覆盖 85% 硬门禁（P1-8）+ ratchet 水位 89.5（W2，AO 批触发步长上调 89.00→89.50）绿）
+  line_total_pct: 92.42      # --cov=src 总行覆盖（2026-10-12 实测 92.42%，14243/15411 行；此前 89（2026-10-07 AO 批次实测 89.56）滞后刷新——ratchet 水位（docs/coverage_ratchet.yaml）已 92.40，本声明值与 ratchet 对齐）
   line_core_modules:
     base_agent: 70
     api_manager: 90
@@ -39,7 +39,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     multi_candidate: 84
     cross_file: 91
     rag_retriever: 86
-  branch_total_pct: 83       # --cov=src --cov-branch 总分支覆盖（83%（82.78），2026-10-07 AO 批次实测：ratchet 口径；门禁 77% 绿 + ratchet 水位 82.5（W2）绿，AO 批次较 Z 批次 82.56 微升 0.22pp）
+  branch_total_pct: 86.91   # --cov=src --cov-branch 总分支覆盖（2026-10-12 实测 86.91%，4940/5684 分支；此前 83（2026-10-07 AO 批次实测 82.78）滞后刷新——ratchet 水位（docs/coverage_ratchet.yaml）已 86.90，本声明值与 ratchet 对齐）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
@@ -97,7 +97,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 125     # 2026-10-11 实测（`mypy src/ config.py` → Success: no issues found in 125 source files）；此前写 123 与实测不符（2026-10-11 代码级批次同步至 123 后又增 2 源文件）
+  mypy_source_files: 130     # 2026-10-12 质量债清偿批次实测（`mypy src/ config.py` → Success: no issues found in 130 source files）；此前 125（2026-10-11）与 10-12 批次新增 5 源文件（spec_ir_v2 / spec_first / orchestration_search 等）后未刷新
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 

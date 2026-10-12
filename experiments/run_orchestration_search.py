@@ -156,9 +156,13 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append("")
     lines.append("## 实验口径")
     lines.append("")
-    lines.append(f"- 设计集：synthetic {meta['task_count']} 任务 × 种子 {meta['seeds']} = {report['config']['n_cells']} cell")
+    lines.append(
+        f"- 设计集：synthetic {meta['task_count']} 任务 × 种子 {meta['seeds']} = {report['config']['n_cells']} cell"
+    )
     lines.append(f"- 臂空间：{report['config']['n_arms']} 臂（M1 精选；全因子上界 3072）")
-    lines.append(f"- 预算：max_evals={report['budget']['max_evals']} / max_tokens={report['budget']['max_total_tokens']}")
+    lines.append(
+        f"- 预算：max_evals={report['budget']['max_evals']} / max_tokens={report['budget']['max_total_tokens']}"
+    )
     lines.append(
         f"- 实际：evals={report['budget']['evals_used']} / tokens={report['budget']['tokens_used']}"
         f" / stop_reason={report['budget']['stop_reason']}"
@@ -168,7 +172,9 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append("")
     lines.append("## 逐臂结果（主奖励 = M1 detection，gold 独立裁决；None 不进分母）")
     lines.append("")
-    lines.append("| 臂 | n可测 | n不可测 | mean detection | SE | mean tokens | mean false_fix | repair_any | 退出原因 |")
+    lines.append(
+        "| 臂 | n可测 | n不可测 | mean detection | SE | mean tokens | mean false_fix | repair_any | 退出原因 |"
+    )
     lines.append("|---|---|---|---|---|---|---|---|---|")
     for arm_id, stats in report["arm_stats"].items():
         lines.append(
@@ -181,7 +187,9 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append("")
     lines.append(f"- champion：{report['champion']}")
     lines.append(f"- 依据：{report['champion_reason']}")
-    lines.append("- 约束：mean tokens ≤ 2× df_incumbent 且 mean false_fix ≤ 0.5；无臂过约束 = 阴性结果（按 ADR-0016 可发表）")
+    lines.append(
+        "- 约束：mean tokens ≤ 2× df_incumbent 且 mean false_fix ≤ 0.5；无臂过约束 = 阴性结果（按 ADR-0016 可发表）"
+    )
     lines.append("")
     lines.append("## 机制归因（hindsight credit——**仅诊断，不进臂选择**）")
     lines.append("")
@@ -189,14 +197,20 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
         lines.append("| 机制 | 出现次数 | mean credit | total credit |")
         lines.append("|---|---|---|---|")
         for mechanism, stats in attribution.items():
-            lines.append(f"| {mechanism} | {stats['count']} | {stats['mean_credit']:.4f} | {stats['total_credit']:.4f} |")
+            lines.append(
+                f"| {mechanism} | {stats['count']} | {stats['mean_credit']:.4f} | {stats['total_credit']:.4f} |"
+            )
     else:
         lines.append("（无 trace 记录可归因——AITESTER_TRACE_DIR 未启用或全部评估无 trace）")
     lines.append("")
     lines.append("## 已知口径说明")
     lines.append("")
-    lines.append("- hindsight credit 只回答「哪些机制的步骤在推进问题解决」，**不参与 UCB 臂选择**（防 reward hacking）；")
-    lines.append("- 抹红通道（red_then_green ∧ detection=0）中 debugger/patch 步骤仍获 hindsight 正信用——步骤级公式不可见终局抹红，")
+    lines.append(
+        "- hindsight credit 只回答「哪些机制的步骤在推进问题解决」，**不参与 UCB 臂选择**（防 reward hacking）；"
+    )
+    lines.append(
+        "- 抹红通道（red_then_green ∧ detection=0）中 debugger/patch 步骤仍获 hindsight 正信用——步骤级公式不可见终局抹红，"
+    )
     lines.append("  该判据由 final_state 级旗标（detection_first_status / red_regression_violation）单独陈述；")
     lines.append("- detection=None（无 gold 材料/无生成物/执行超时）不进臂统计，但预算计数照记；")
     lines.append("- Stage-2 确认（champion vs plain_llm_df，n=87×3）须前置 collect_model_fingerprint 版本钉住。")
@@ -221,13 +235,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", type=str, default=_DEFAULT_SEEDS, help="数据集生成种子（逗号分隔，默认 '42,43,44'）")
     parser.add_argument("--difficulty", type=str, default=_DEFAULT_DIFFICULTY, help="合成数据集分层难度（默认 mixed）")
     parser.add_argument(
-        "--max-pattern-repeat", type=int, default=_DEFAULT_MAX_PATTERN_REPEAT, help="同池同模板重复上限（默认 2；0/负 = 历史口径 None）"
+        "--max-pattern-repeat",
+        type=int,
+        default=_DEFAULT_MAX_PATTERN_REPEAT,
+        help="同池同模板重复上限（默认 2；0/负 = 历史口径 None）",
     )
     parser.add_argument("--output-dir", type=str, default="experiments/results", help="结果输出根目录")
-    parser.add_argument("--max-evals", type=int, default=None, help="总评估次数硬顶（默认读 config.ORCHESTRATION_SEARCH_MAX_EVALS）")
-    parser.add_argument("--max-tokens", type=int, default=None, help="总 token 硬顶（默认读 config.ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS）")
-    parser.add_argument("--ucb-c", type=float, default=None, help="UCB1 探索常数（默认读 config.ORCHESTRATION_SEARCH_UCB_C）")
-    parser.add_argument("--search-seed", type=int, default=None, help="搜索种子（默认读 config.ORCHESTRATION_SEARCH_SEED）")
+    parser.add_argument(
+        "--max-evals", type=int, default=None, help="总评估次数硬顶（默认读 config.ORCHESTRATION_SEARCH_MAX_EVALS）"
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="总 token 硬顶（默认读 config.ORCHESTRATION_SEARCH_MAX_TOTAL_TOKENS）",
+    )
+    parser.add_argument(
+        "--ucb-c", type=float, default=None, help="UCB1 探索常数（默认读 config.ORCHESTRATION_SEARCH_UCB_C）"
+    )
+    parser.add_argument(
+        "--search-seed", type=int, default=None, help="搜索种子（默认读 config.ORCHESTRATION_SEARCH_SEED）"
+    )
     args = parser.parse_args(argv)
 
     # 主开关守卫（默认 false：拒绝运行，退出码 2——对既有流程零侵入）
@@ -270,7 +298,15 @@ def main(argv: list[str] | None = None) -> int:
         "cache_namespace": cache_namespace,
         "trace_dir": trace_dir,
     }
-    logger.info("编排搜索启动：%s（臂 %d，预算 evals≤%d / tokens≤%d，UCB c=%.2f，seed=%d）", run_id, len(ARM_REGISTRY), max_evals, max_tokens, ucb_c, search_seed)
+    logger.info(
+        "编排搜索启动：%s（臂 %d，预算 evals≤%d / tokens≤%d，UCB c=%.2f，seed=%d）",
+        run_id,
+        len(ARM_REGISTRY),
+        max_evals,
+        max_tokens,
+        ucb_c,
+        search_seed,
+    )
 
     exit_code = 0
     try:
@@ -348,7 +384,11 @@ def main(argv: list[str] | None = None) -> int:
             result_path,
             md_path,
         )
-        print(json.dumps({"champion": report["champion"], "budget": report["budget"], "result": result_path}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"champion": report["champion"], "budget": report["budget"], "result": result_path}, ensure_ascii=False
+            )
+        )
     except Exception:
         logger.exception("编排搜索执行失败")
         exit_code = 1

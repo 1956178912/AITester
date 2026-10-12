@@ -23,9 +23,7 @@ from src.tools.spec_first import build_spec_replace_section, detection_spec_mode
 
 # 带缺陷的被测函数（减法实现冒充加法——oracle-from-implementation 的典型场景）
 _BUGGY_CODE = (
-    "def add(a: int, b: int) -> int:\n"
-    '    """Return the sum of a and b."""\n'
-    "    return a - b  # BUG: should be a + b\n"
+    'def add(a: int, b: int) -> int:\n    """Return the sum of a and b."""\n    return a - b  # BUG: should be a + b\n'
 )
 
 _FULL_PLAN: dict[str, Any] = {
