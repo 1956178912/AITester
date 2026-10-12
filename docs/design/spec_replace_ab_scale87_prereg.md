@@ -103,8 +103,8 @@ plain_llm_df≈1.9K token，总耗时≈24 分钟/臂）：
     cyclomatic 均值 14.87 真实函数上不变形）；
   - 首轮 ULT 46/46 全崩（int(None) TypeError）→ run_benchmark.py
     4 处防御性 `or` 兜底修复 + manifest 自检（详见报告 §4.1）；
-  - 成本 ≈$7.2（低于预注册 $9.0 上界），耗时 ≈47 min（低于
-    60–90 min 估算）。
+  - 实测成本 ≈$3.0（3.21M token，低于预注册 $9.0 上界），耗时 ≈47 min
+    （低于预注册 60–90 min 估算）。
 
 ## 5. 边界
 

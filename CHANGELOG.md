@@ -1,6 +1,6 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-12（spec_replace 87 扩样实跑批次：QuixBugs 41 F2P 可配对 + ULT_Lite 46 描述性〔4 臂实跑 ≈47 min、成本 ≤$7.2；B vs A δ=−2.9pp / p=1.00 不显著，按预注册为探索性/阴性筛查〕；ULT 首轮 46/46 全崩的 int(None) TypeError 诊断并修复〔run_benchmark.py 4 处防御性 `or` 兜底 + manifest 自检〕；spec_replace_applied 在 replace 臂 100% 可审计〔QuixBugs 46+4 / ULT_Lite 43+3〕；全量 5703 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 ULT M1 判分归一化批次〔dataset_ult.py 裸断言包装〕+ 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次〔spec_replace_applied 三态 + 键集合同构测试 +8〕；再前 spec_replace A/B 首跑 + ULT 基准接线批次 → 5695/5698）
+> Last updated: 2026-10-12（spec_replace 87 扩样实跑批次：QuixBugs 41 F2P 可配对 + ULT_Lite 46 描述性〔4 臂实跑 ≈47 min、实测 3.21M token / ≈$3.0（低于预注册 \$9.0 上界）；B vs A δ=−2.9pp / p=1.00 不显著，按预注册为探索性/阴性筛查〕；ULT 首轮 46/46 全崩的 int(None) TypeError 诊断并修复〔run_benchmark.py 4 处防御性 `or` 兜底 + manifest 自检〕；spec_replace_applied 在 replace 臂 100% 可审计〔QuixBugs 46+4 / ULT_Lite 43+3〕；全量 5709 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 ULT M1 判分归一化批次〔dataset_ult.py 裸断言包装〕+ 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次〔spec_replace_applied 三态 + 键集合同构测试 +8〕；再前 spec_replace A/B 首跑 + ULT 基准接线批次 → 5695/5698）
 
 # Changelog
 
