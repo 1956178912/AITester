@@ -437,6 +437,17 @@ class AITesterState(TypedDict, total=False):
     # None = 该节点从未写入（历史批次 / 节点未运行）；默认关时 _generator_node 写
     # "not_attempted"（键集合同构，失败分支由实验层 None 占位）。
     spec_oracle_verdict: str | None
+    # P0-A-2（2026-10-12 独立评审落地，SPEC_REPLACE_AB_REPORT §5）：规格优先
+    # 替换段**是否实际生效**的逐任务可审计观测。DETECTION_SPEC_MODE=replace
+    # 时由 _generator_node 写入；取值域：
+    #   "attempted_replaced"  规约材料非空，规约文档实际替换了目标代码块注入
+    #   "attempted_fallback"  规约材料为空，渲染返回空串，Generator prompt
+    #                         保持历史口径（继续注入目标代码）
+    #   None                  DETECTION_SPEC_MODE=off / minimal 消融档 /
+    #                         Generator 节点未运行（默认关历史口径零变化）
+    # 供实验层逐任务审计"replace 是否真正注入了规约文档"，与 R1c 确定性
+    # oracle 执行注入（spec_oracle_injected，SPEC_ORACLE_EXEC_ENABLE）解耦。
+    spec_replace_applied: str | None
     # 空计划短路标记（EMPTY_PLAN_SHORTCUT_ENABLE 默认关时恒 False；开启且
     # Planner 产出空计划 test_cases=[] 时由 _generator_node 写入 True，供实验层
     # 统计"短路省了多少次 LLM 调用"，纯观测不改变路由 / 主终点口径）。
@@ -766,6 +777,10 @@ def create_initial_state(
         # 历史口径；_generator_node 运行时写 not_attempted / compiled_empty / injected，
         # _executor_node 执行后升级为 injected_and_passed / injected_and_failed）
         spec_oracle_verdict=None,
+        # P0-A-2（2026-10-12）：规格优先替换段可审计观测默认 None（DETECTION_SPEC_MODE
+        # 默认 off，历史口径零变化；replace 时 _generator_node 写
+        # attempted_replaced / attempted_fallback）
+        spec_replace_applied=None,
         # 空计划短路默认 False（EMPTY_PLAN_SHORTCUT_ENABLE 默认关，历史口径）
         empty_plan_shortcut=False,
         rogue_findings=None,

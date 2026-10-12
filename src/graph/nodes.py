@@ -709,6 +709,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     """
     agent = get_or_create_agent(GeneratorAgent)
 
+    # P0-A-2（2026-10-12）：规格优先替换段可审计观测（默认 None，DETECTION_SPEC_MODE
+    # 默认 off 时历史口径零变化；replace 时 _generator_node 写
+    # attempted_replaced / attempted_fallback，见 update 与 _spec_replace_applied）。
+    _spec_replace_applied: str | None = None
+
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
     # 仅当 RAG 开关开启、模块可用时才进行检索（统一走 rag_guarded 降级守卫，P1 重构）
     # 闭包写回需要外层可变容器（list 包装：Python 闭包内无法 rebinding 外层局部名）
@@ -941,6 +946,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 logger.info(
                     "P0-A-2 规格优先模式：规约文档替换目标代码注入 Generator（%d 字符）", len(_spec_replace_section)
                 )
+                _spec_replace_applied = "attempted_replaced"
+            else:
+                _spec_replace_applied = "attempted_fallback"
         # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
         # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
         # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
@@ -1134,6 +1142,10 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # verdict 取值域见 _SPEC_ORACLE_VERDICT_* 常量（执行后由 _executor_node 升级）。
     update["spec_oracle_injected"] = _spec_oracle_injected
     update["spec_oracle_verdict"] = _spec_oracle_verdict
+    # P0-A-2（2026-10-12）：规格优先替换段可审计观测（state 键已声明，不会被
+    # LangGraph 白名单丢弃；取值域见 _spec_replace_applied 初始化处注释，
+    # 与 R1c 确定性 oracle 执行注入 spec_oracle_injected 独立）。
+    update["spec_replace_applied"] = _spec_replace_applied
     # 5.4 预算封顶标记（O35）：Generator 捕获 BudgetExceededError 时置真
     # （planner / debugger 同口径），使 determine_stop_reason 可达 BUDGET_EXCEEDED。
     if _generator_budget_hit or state.get("budget_exceeded"):

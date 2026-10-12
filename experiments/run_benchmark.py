@@ -1164,6 +1164,15 @@ def _build_task_result(
             #     None。
             "spec_oracle_injected": final_state.get("spec_oracle_injected"),
             "spec_oracle_verdict": final_state.get("spec_oracle_verdict"),
+            # P0-A-2（2026-10-12 独立评审落地，SPEC_REPLACE_AB_REPORT §5 建议）：
+            # 规格优先替换段逐任务可审计观测——DETECTION_SPEC_MODE=replace 时
+            # "attempted_replaced"（规约材料非空，规约文档实际替换了目标代码
+            # 块注入 Generator）/ "attempted_fallback"（规约材料为空，渲染返
+            # 回空串，prompt 保持历史口径注入目标代码）/ None（DETECTION_SPEC_MODE
+            # 默认 off 或 minimal 消融档，历史口径零变化）。与 R1c 确定性 oracle
+            # 执行注入（spec_oracle_injected，SPEC_ORACLE_EXEC_ENABLE）解耦——
+            # 前者是 prompt 构建路径观测，后者是执行链 oracle 注入观测。
+            "spec_replace_applied": final_state.get("spec_replace_applied"),
             # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率——LLM 把
             # NL 规约形式化为 *_expr 子句的占比（与 compile_rate 的编译器
             # 接受率正交；默认关恒 None，键集合同构）。
@@ -1380,6 +1389,9 @@ def _build_task_result(
         # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
         "spec_oracle_injected": None,
         "spec_oracle_verdict": None,
+        # P0-A-2（2026-10-12）：规格优先替换段观测键失败分支占位
+        # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
+        "spec_replace_applied": None,
         # AC1：表达式通道覆盖率失败分支占位（键集合同构）
         "spec_expr_coverage": None,
         # T1（2026-10-11 独立评审落地）：规约被拒原因分布失败分支占位
