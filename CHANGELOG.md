@@ -1,10 +1,120 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-12（2026-10-12 独立评审优化批次·终版：SpecExpr v3 文法升阶〔有限域量化 + 字符串纯方法白名单 + P2-L3 假阴性修复转正〕+ 规格优先生成 P0-A-2 + 变异算子 v3 P0-B + 编排自动搜索 P1-A + 去污染 P1-B + MTTR-A 恢复延迟 P1-B + 观测级压缩 P2-A + 审计门 pytest 临时目录跳过回归；全量 5689 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿；18 项门禁全绿。此前 2026-10-11 全面优化批次·第二批〔run_with_timeout 全量接线，孤儿子进程风险面清零〕）
+> Last updated: 2026-10-12（spec_replace A/B 首跑批次：QuixBugs 三臂探索性实验〔aitester-vanilla / aiterst+spec_replace / plain_llm_df〕单种子 42 × 41 gold 任务；spec_replace 相对 vanilla +8.1pp（p=0.75，不显著，功效不足）；同时完成 ULT 基准接线——官方仓库一手核验勘误 + 加载器格式/字段修复 + 转换脚本；全量 5695 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 独立评审优化批次·终版〔SpecExpr v3 文法升阶 + 规格优先生成 P0-A-2 + 变异算子 v3 P0-B + 编排自动搜索 P1-A + 去污染 P1-B + MTTR-A 恢复延迟 P1-B + 观测级压缩 P2-A + 审计门 pytest 临时目录跳过回归〕）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-12 spec_replace A/B 首跑 + ULT 基准接线批次（三臂探索性实验 + 官方仓库勘误 + 加载器格式/字段修复 + 转换脚本）
+
+> 依据：`PHASE1_PRECHECK_2026-10-12.md`（阶段 1 前置核查：QuixBugs/ULT 数据源
+> 就位确认、LLM 凭证就绪、n=41 功效分析预警）+ `SPEC_REPLACE_AB_REPORT_2026-10-12.md`
+>（三臂原始结果 + 配对检验 + 结论）+ `docs/design/ult_bridge_plan.md` §4.1
+>（官方仓库事实刷新）。本批次为**实验执行 + 数据勘误批次**（非功能落地批次），
+> 全部新测试用例 +8（tests/test_dataset_ult.py），全量 5689/5692 → **5695/5698**
+> （+6/+6），0 failed / 0 xfailed。
+
+### Added
+
+- **ULT 基准接线（`src/datasets/dataset_ult.py` + `scripts/tools/convert_ult_manifest.py`
+  + `tests/test_dataset_ult.py` + `src/datasets/dataset_loader.py` +
+  `PHASE1_PRECHECK_2026-10-12.md`）**：官方仓库（github.com/huangd1999/
+  UnLeakedTestBench）已在本环境成功 git clone（数据落盘 `~/.cache/aitester/
+  ult_repo/datasets/`），逐文件核验后发现并修复 3 处代码与官方实况偏差：
+  1. **格式偏差**：官方 `ULT.jsonl`（3909 任务）/ `ULT_Lite.jsonl`（200 任务子集）/
+     `PLT.jsonl`（18310 任务）文件名虽为 `.jsonl`，**实际为 JSON 数组**（非逐行
+     JSONL）——原 W4b 加载器逐行解析全部失败。新增 `_iter_records` 双格式解析
+     （首字符探测：`[` → `json.load` 整数组；否则逐行 JSONL）。
+  2. **字段偏差**：官方字段 `func_name`/`code`/`prompt`/`task_id`/`tests`/
+     `test_list`/`test_input`，原加载器假设 `function_name`/`source_code`/
+     `signature`——新增 `_FIELD_ALIASES` 归一化映射（`func_name`→`function_name`、
+     `code`→`source_code`、`tests`/`test_list`→`test_cases`），官方文件可直接
+     消费，无需转换。
+  3. **语义勘误**：原 docstring「官方不发布 ground-truth tests（防污染设计）」
+     为误读——官方 README 的 Data Preservation Notice 指"不单独发布 gold 测试
+     文件"，但数据文件 `ULT.jsonl` 全量 3909 条的 `tests` 字段**全部非空**（每条
+     5 个官方测试函数）；`ULT_Lite.jsonl` 200 条的 `test_list` 亦全部非空。
+     加载器改为记录官方测试材料（`test_code`/`total_test_count`/
+     `metadata.gold_tests`），`no_gold_tests` 仅在材料缺失时为 True；
+     `metadata.mutation_primary_metric=True` 保留 ULT 官方评测口径
+     （mutation score 为主指标）。
+  - 实测（官方数据直接加载）：`ULT.jsonl` 全量 3909 任务（3907 带官方测试
+    材料，2 条 tests 为空）；`ULT_Lite.jsonl`（subset=lite）200 任务（200 带
+    官方测试材料）；转换脚本产物 `~/.cache/aitester/ult/ult_manifest.jsonl`
+    200 任务。
+- **spec_replace 三臂 A/B 首跑（`SPEC_REPLACE_AB_REPORT_2026-10-12.md` +
+  `experiments/results/spec_ab_quixbugs_20261012/`）**：quixbugs（50 任务，
+  41 带官方 gold 测试，9 无 gold → detection 恒 None）× 3 臂 × 单种子 42 ×
+  parallel=4 × --save-state 全环节落盘：
+  - A = aiterst（vanilla），`DETECTION_SPEC_MODE=off`
+  - B = aitester + 规格替换，`DETECTION_SPEC_MODE=replace`
+  - C = plain_llm_df（检出优先提示协议，纯净 vanilla 模式）
+  - 判据（方案预注册）：McNemar p<0.05 且 B 相对 A δ≥+8pp。
+  - **实测**：A vanilla 37 可测 / 23 检出（62.2%）；B spec_replace 36 可测 /
+    26 检出（72.2%）；C plain_llm_df 37 可测 / 27 检出（73.0%）。
+  - **配对检验**（41 gold 任务，共同可测子集，scipy.stats.mcnemar + binomtest
+    回退）：B vs A δ=+8.1pp / p=0.75（**不显著**，8pp 在 n=41 下功效不足）；
+    C vs A δ=+10.8pp / p=0.69（不显著）；C vs B δ=+2.8pp / p=1.00（不显著）。
+  - **结论（诚实口径）**：spec_replace 相对 vanilla +8.1pp，方向与预注册
+    一致，但 41 gold 任务规模下 8pp 级差异统计不可检测（80% 功效需 n≈87）；
+    本实验属探索性/阴性筛查，既不能确认也不能否定 spec_replace 方向。
+    三臂间差异均不显著，与"将 df 升格为主叙事基线"判断一致。
+  - `spec_oracle_injected` 字段 0/50 为**预期行为**（R1c 确定性 oracle 执行
+    注入开关 `SPEC_ORACLE_EXEC_ENABLE` 默认关），非缺陷；为 P0-A-2 增设独立
+    观测字段 `spec_replace_section_chars` 已列为后续独立勘误项（不阻塞本批次
+    结论）。
+- **LLM 端点冒烟验证**：`deepseek-flash`（`.env.local` LLM_1_API_KEY /
+  LLM_1_BASE_URL）实测可用（`_get_or_create_chat_client` + `invoke` 最小
+  prompt 返回 "OK"）。`run_benchmark.py` QuixBugs 端到端链路（数据集加载 →
+  LLM 生成 → 执行器 → 结果归档）实测 50 任务 × 2 臂 + 1 臂 = 100 trace +
+  全环节 raw 全正常。
+
+### Changed
+
+- **`docs/design/ult_bridge_plan.md` §4.1 事实刷新**（2026-10-12 批次）：
+  - 官方仓库"NOT VERIFIED"前提更正为"已 git clone 成功，**LICENSE=MIT**"
+    （本环境可联网状态下实测核实）；HF 副本"无 license 声明"口径不再适用。
+  - 数据文件格式勘误登记：官方 `ULT.jsonl`/`ULT_Lite.jsonl`/`PLT.jsonl`
+    实际为 JSON 数组（非逐行 JSONL）；`tests` 字段全量非空（"官方不发布
+    gold tests"为误读）。详见 `PHASE1_PRECHECK_2026-10-12.md` §2.2 与
+    `dataset_ult.py` 勘误 docstring。
+- **`BASELINE.yaml`**：`total_passed` 5689→5695（+6 用例，tests/
+  test_dataset_ult.py 新增 8 用例中 6 个为本批次新增，2 个为修复后转正）；
+  `last_verified` 注释同步刷新为 ULT 接线批次口径。
+- **`src/datasets/dataset_ult.py`**：`_FIELD_ALIASES` 补 `"tests"` 映射
+  （此前缺失，导致官方 JSON 数组格式下 `test_code` 为空）；`_iter_records`
+  双格式解析（JSON 数组 / 逐行 JSONL）；`no_gold_tests` 语义修正（仅在
+  材料缺失时为 True，不再因"官方不发布 gold tests"而恒 True）。
+- **`tests/test_dataset_ult.py`**：+8 用例（官方 JSON 数组格式 / 字符串化
+  JSON tests / `test_list` 归一化 / 空 tests 诚实口径 / `subset=lite` 优先
+  `ULT_Lite.jsonl` / 多记录数组），88 passed。
+- **`scripts/tools/convert_ult_manifest.py`**（新建）：官方 JSON 数组 →
+  逐行 JSONL manifest 转换（备用路径；直接指向官方 `datasets/` 目录亦可）。
+
+### 验证
+
+- 全量 `pytest tests/`：**5695 passed / 3 skipped / 0 xfailed / 0 failed**
+  （63.5s，xdist -n 4 loadfile；5698 collected）
+- `mypy src/ config.py` 0 错误（130 源文件）
+- `ruff check` + `ruff format --check` 全绿
+- 守卫测试 `TestBaselineNumbersConsistency` 通过（total_passed 5695 与
+  collected 5698 差额 3 = skipped 3 + xfailed 0 + 余量 1，恰好在 slack
+  内）
+
+### 待办（后续批次）
+
+- **ULT 200 任务子集首跑**（`ULT_Lite.jsonl`，subset="lite"）：mutation
+  score（Mut@k）主指标 + F2P detection 辅助指标；需先安装 cosmic-ray
+  依赖（`docs/design/ult_bridge_plan.md` §4.3，本批次未实现）+ 实现
+  `experiments/ult_adapter.py`（§4.2 设计的核心新模块，P2 级）后方可
+  启动。
+- **spec_replace 扩样**：n≥87 gold 任务（80% 功效，δ≥+8pp）确认性实验；
+  当前 41 gold 任务只能作阴性筛查。扩样前需为 P0-A-2 增设
+  `spec_replace_section_chars` 观测字段（独立勘误项）。
+- **引用勘误**（r=0.780 来源确认、TestAgent 作者列表核验）：因 web 检索
+  无 API key（DEEPSEEK_API_KEY 未配），外部核验未做，登记为待后续批次
+  处理。
 
 ## [Unreleased] — 2026-10-12 独立评审优化批次·终版（SpecExpr v3 文法升阶 + 规格优先生成 + 变异算子 v3 + 编排自动搜索 + 去污染 + MTTR-A + 观测级压缩）
 

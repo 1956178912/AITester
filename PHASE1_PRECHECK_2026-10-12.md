@@ -131,9 +131,14 @@ TwinMem-Agent、FedDualFix（'26）等外部证据。
    （`QuixBugsDataset()` 默认路径实测：50 任务，41 带官方测试）；
 2. ~~获取 ULT manifest JSONL~~ ✅ 已完成（官方仓库克隆 + 加载器修复
    直接兼容官方 JSON 数组，无需 manifest 转换；转换脚本为备用路径）；
-3. 一次低成本 LLM 冒烟调用（任意 prompt，验证 `deepseek-flash`
-   端点实际可用、非仅代码就绪）；
-4. 再启动 spec_replace A/B 首跑（41 程序 × 3 臂 × 1 种子，探索性口径
-   登记，见 §3）。
+3. ~~一次低成本 LLM 冒烟调用（任意 prompt，验证 `deepseek-flash`
+   端点实际可用、非仅代码就绪）~~ ✅ 已完成（`_get_or_create_chat_client`
+   + `invoke` 最小 prompt 返回 "OK"；`.env.local` LLM_1_API_KEY /
+   LLM_1_BASE_URL 实测可用）；
+4. ~~再启动 spec_replace A/B 首跑（41 程序 × 3 臂 × 1 种子，探索性口径
+   登记，见 §3）~~ ✅ 已完成（结果见 `SPEC_REPLACE_AB_REPORT_2026-10-12.md`：
+   B vs A δ=+8.1pp / p=0.75 不显著，探索性/阴性筛查口径；三臂间差异均
+   不显著）。
 
-以上 1-4 均为数据/凭证层动作，不涉及代码修改。
+以上 1-4 均为数据/凭证层动作，不涉及代码修改。**4/4 全部完成**（截至
+本批次提交时点）。

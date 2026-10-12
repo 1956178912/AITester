@@ -1,10 +1,150 @@
-> Last updated: 2026-10-12 (2026-10-12 independent-review optimization batch, final: SpecExpr v3 grammar upgrade [finite-domain quantification + pure string-method whitelist + P2-L3 false-negative fix promoted to pass] + spec-first generation P0-A-2 + mutation operators v3 P0-B + orchestration auto-search P1-A + decontamination P1-B + MTTR-A recovery latency P1-B + observation-level compression P2-A + audit-gate pytest temp-dir skip regression; full suite 5689 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green; all 18 loop gates green. Previously 2026-10-11 comprehensive-optimization batch #2 [run_with_timeout fully wired, orphan-subprocess surface cleared to zero])
+> Last updated: 2026-10-12 (spec_replace A/B first-run batch: QuixBugs three-arm exploratory experiment [aitester-vanilla / aiterst+spec_replace / plain_llm_df], seed 42 × 41 gold tasks; spec_replace vs vanilla +8.1pp (p=0.75, not significant, underpowered); ULT benchmark wiring completed—official repo first-hand verification, loader format/field fixes, conversion script; full suite 5695 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 independent-review optimization batch, final [SpecExpr v3 grammar + spec-first generation P0-A-2 + mutation operators v3 P0-B + orchestration auto-search P1-A + decontamination P1-B + MTTR-A + observation-level compression])
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-12 spec_replace A/B first run + ULT benchmark wiring batch (three-arm exploratory experiment + official-repo erratum + loader format/field fixes + conversion script)
+
+> Basis: `PHASE1_PRECHECK_2026-10-12.md` (Phase-1 pre-check: QuixBugs/ULT
+> data-source readiness, LLM credentials, n=41 power-analysis warning) +
+> `SPEC_REPLACE_AB_REPORT_2026-10-12.md` (raw three-arm results + paired
+> tests + conclusions) + `docs/design/ult_bridge_plan.md` §4.1 (official-repo
+> fact refresh). This is an **experiment-execution + data-erratum batch**
+> (not a feature-landing batch). All new tests +8 (tests/test_dataset_ult.py);
+> full suite 5689/5692 → **5695/5698** (+6/+6), 0 failed / 0 xfailed.
+
+### Added
+
+- **ULT benchmark wiring** (`src/datasets/dataset_ult.py` +
+  `scripts/tools/convert_ult_manifest.py` + `tests/test_dataset_ult.py` +
+  `src/datasets/dataset_loader.py` + `PHASE1_PRECHECK_2026-10-12.md`):
+  The official repo (github.com/huangd1999/UnLeakedTestBench) was
+  successfully git-cloned in this environment (data persisted to
+  `~/.cache/aitester/ult_repo/datasets/`). File-by-file verification
+  revealed and fixed 3 deviations between the code and the official data:
+  1. **Format deviation**: official `ULT.jsonl` (3909 tasks) /
+     `ULT_Lite.jsonl` (200-task subset) / `PLT.jsonl` (18310 tasks) are
+     named `.jsonl` but are actually **JSON arrays** (not line-delimited
+     JSONL) — the original W4b loader's line-by-line parsing failed
+     entirely. New `_iter_records` dual-format parser (first-char probe:
+     `[` → `json.load` whole array; otherwise line-by-line JSONL).
+  2. **Field deviation**: official fields are `func_name`/`code`/`prompt`/
+     `task_id`/`tests`/`test_list`/`test_input`; the original loader assumed
+     `function_name`/`source_code`/`signature` — new `_FIELD_ALIASES`
+     normalization map (`func_name`→`function_name`,
+     `code`→`source_code`, `tests`/`test_list`→`test_cases`); official
+     files are now directly consumable without conversion.
+  3. **Semantic erratum**: the original docstring "official does not
+     release ground-truth tests (anti-contamination design)" was a
+     misreading — the official README's Data Preservation Notice refers to
+     "not shipping a separate gold-test file", but every one of the 3909
+     records in `ULT.jsonl` has a **non-empty** `tests` field (5 official
+     test functions per task); `ULT_Lite.jsonl`'s 200 records also all
+     have non-empty `test_list`. The loader now records the official test
+     material (`test_code`/`total_test_count`/`metadata.gold_tests`);
+     `no_gold_tests` is True only when material is absent;
+     `metadata.mutation_primary_metric=True` preserves ULT's official
+     evaluation caliber (mutation score as primary metric).
+  - Measured (loading official data directly): `ULT.jsonl` full set 3909
+    tasks (3907 with official test material, 2 with empty tests);
+    `ULT_Lite.jsonl` (subset=lite) 200 tasks (all 200 with official test
+    material); conversion-script output `~/.cache/aitester/ult/
+    ult_manifest.jsonl` 200 tasks.
+- **spec_replace three-arm A/B first run** (`SPEC_REPLACE_AB_REPORT_2026-10-12.md`
+  + `experiments/results/spec_ab_quixbugs_20261012/`): quixbugs (50 tasks,
+  41 with official gold tests, 9 without → detection always None) × 3 arms
+  × seed 42 × parallel=4 × --save-state full-pipeline artifacts:
+  - A = aiterst (vanilla), `DETECTION_SPEC_MODE=off`
+  - B = aiterst + spec replacement, `DETECTION_SPEC_MODE=replace`
+  - C = plain_llm_df (detection-first prompting protocol, pure vanilla mode)
+  - Criterion (pre-registered in the plan): McNemar p<0.05 and B vs A
+    δ≥+8pp.
+  - **Measured**: A vanilla 37 measurable / 23 detected (62.2%); B
+    spec_replace 36 measurable / 26 detected (72.2%); C plain_llm_df
+    37 measurable / 27 detected (73.0%).
+  - **Paired tests** (41 gold tasks, common-measurable subset,
+    scipy.stats.mcnemar + binomtest fallback): B vs A δ=+8.1pp /
+    p=0.75 (**not significant**, 8pp underpowered at n=41); C vs A
+    δ=+10.8pp / p=0.69 (not significant); C vs B δ=+2.8pp / p=1.00
+    (not significant).
+  - **Conclusion (honest caliber)**: spec_replace is +8.1pp vs vanilla,
+    in the pre-registered direction, but an 8pp-level difference is
+    statistically undetectable at n=41 gold tasks (80% power requires
+    n≈87); this experiment is exploratory / negative screening — it can
+    neither confirm nor reject the spec_replace direction. All three-arm
+    differences are non-significant, consistent with the "promote df to
+    primary narrative baseline" judgment.
+  - The `spec_oracle_injected` field being 0/50 is **expected behavior**
+    (R1c's deterministic-oracle execution-injection switch
+    `SPEC_ORACLE_EXEC_ENABLE` defaults to off), not a defect; adding a
+    dedicated `spec_replace_section_chars` observation field for P0-A-2
+    is logged as a follow-up standalone erratum item (does not block this
+    batch's conclusions).
+- **LLM endpoint smoke test**: `deepseek-flash` (`.env.local`
+  LLM_1_API_KEY / LLM_1_BASE_URL) confirmed working end-to-end
+  (`_get_or_create_chat_client` + `invoke` minimal prompt returns "OK").
+  The full `run_benchmark.py` QuixBugs pipeline (dataset load → LLM
+  generation → executor → result archiving) verified on 50 tasks × 2
+  arms + 1 arm = 100 traces + full-pipeline raw artifacts, all nominal.
+
+### Changed
+
+- **`docs/design/ult_bridge_plan.md` §4.1 fact refresh** (2026-10-12
+  batch): the "NOT VERIFIED" premise for the official repo is corrected to
+  "successfully git-cloned, **LICENSE=MIT**" (verified in this
+  environment); the HF-copy "no license declared" caliber is no longer
+  applicable. Data-format erratum logged: official `ULT.jsonl`/
+  `ULT_Lite.jsonl`/`PLT.jsonl` are JSON arrays (not line-delimited JSONL);
+  `tests` fields are all non-empty ("official does not release gold tests"
+  was a misreading). See `PHASE1_PRECHECK_2026-10-12.md` §2.2 and the
+  `dataset_ult.py` erratum docstring.
+- **`BASELINE.yaml`**: `total_passed` 5689→5695 (+6 test cases: 6 new in
+  tests/test_dataset_ult.py this batch, 2 promoted from fixes);
+  `last_verified` comment refreshed to the ULT-wiring-batch caliber.
+- **`src/datasets/dataset_ult.py`**: `_FIELD_ALIASES` now includes the
+  missing `"tests"` mapping (previously absent, leaving `test_code` empty
+  under the official JSON-array format); `_iter_records` dual-format
+  parser (JSON array / line-delimited JSONL); `no_gold_tests` semantics
+  corrected (True only when material is absent, no longer always True on
+  the grounds that "official does not release gold tests").
+- **`tests/test_dataset_ult.py`**: +8 test cases (official JSON-array
+  format / stringified JSON tests / `test_list` normalization / empty-tests
+  honest caliber / `subset=lite` prefers `ULT_Lite.jsonl` / multi-record
+  array), 88 passed.
+- **`scripts/tools/convert_ult_manifest.py`** (new): converts the official
+  JSON array to line-delimited JSONL manifest (fallback path; pointing
+  directly at the official `datasets/` directory is also supported).
+
+### Verification
+
+- Full `pytest tests/`: **5695 passed / 3 skipped / 0 xfailed / 0 failed**
+  (63.5 s, xdist -n 4 loadfile; 5698 collected)
+- `mypy src/ config.py`: 0 errors (130 source files)
+- `ruff check` + `ruff format --check`: fully green
+- Guard test `TestBaselineNumbersConsistency` passes (total_passed 5695 vs
+  collected 5698, gap 3 = skipped 3 + xfailed 0 + slack 1, within the
+  permitted band)
+
+### Follow-up (subsequent batches)
+
+- **ULT 200-task subset first run** (`ULT_Lite.jsonl`, subset="lite"):
+  mutation score (Mut@k) as primary metric + F2P detection as secondary;
+  requires installing cosmic-ray first (see
+  `docs/design/ult_bridge_plan.md` §4.3, not implemented in this batch) +
+  implementing `experiments/ult_adapter.py` (the core new module designed
+  in §4.2, P2-level) before it can start.
+- **spec_replace sample-size expansion**: confirmatory experiment at
+  n≥87 gold tasks (80% power, δ≥+8pp); the current 41 gold tasks can only
+  serve as negative screening. Before expanding, add the
+  `spec_replace_section_chars` observation field for P0-A-2 (standalone
+  erratum item).
+- **Citation errata** (r=0.780 source confirmation, TestAgent author-list
+  verification): external verification not yet done because web search has
+  no API key (DEEPSEEK_API_KEY not configured); logged for a subsequent
+  batch.
 
 ## [Unreleased] — 2026-10-12 independent-review optimization batch, final (SpecExpr v3 grammar + spec-first generation + mutation operators v3 + orchestration auto-search + decontamination + MTTR-A + observation-level compression)
 
