@@ -68,6 +68,10 @@ setup(
         # AR 批（2026-10-07）：补 hypothesis（G18/T5 属性测试底座 + AN4
         # 属性模板路线），与 pyproject [formal] 保持双源一致
         "formal": ["z3-solver>=4.12.0", "hypothesis>=6.100.0"],
+        # D3-W1（2026-10-13）：与 pyproject [ult] 对齐（ULT cosmic-ray 口径
+        # mutation-score 适配器可选依赖，钉 8.7.0；tests/test_packaging.py
+        # extras 守卫锁双源一致）
+        "ult": ["cosmic-ray==8.7.0"],
     },
     entry_points={
         "console_scripts": [

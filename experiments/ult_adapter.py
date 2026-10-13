@@ -55,6 +55,11 @@ logger = logging.getLogger(__name__)
 
 # ULT 官方评测口径（docs/design/ult_bridge_plan.md §4.3 锁死）
 ULT_MUTATION_TIMEOUT_SECONDS = 120
+# 注（2026-10-13 裁定）：算子集 = **全变异体**（cosmic-ray 不设 operators 键
+# 即默认全变异体；ULT 官方 README 未指定 operators 过滤）。以下 9 类是
+# **描述性分类，非实际算子集**——仅供 dry_run_plan 的 "operators" 字段作
+# 展示用，不参与 cosmic_ray_config_hash（哈希的是 "全变异体默认" 这一事实，
+# 见 cosmic_ray_config_hash 的 docstring）。
 ULT_MUTANT_OPERATORS = [
     "Arithmetic",
     "Assignment",
@@ -95,14 +100,28 @@ def cosmic_ray_version() -> str | None:
 
 
 def cosmic_ray_config_hash() -> str | None:
-    """cosmic-ray 配置的 SHA-256 哈希（不可用时返回 None）。
+    """cosmic-ray 配置的 SHA-256 哈希（cosmic-ray 未安装时返回 None）。
 
-    哈希覆盖：ULT_MUTATION_TIMEOUT_SECONDS + ULT_MUTANT_OPERATORS
-    （按 ULT 官方口径锁定的常量）。跨批次可比性要求版本 + 配置哈希
-    同时入报告（`ult_bridge_plan.md` §4.3 R3 风险登记）。
+    哈希覆盖**实际启用的口径**（`ult_bridge_plan.md` §4.3 已裁定）：
+    - ``operators`` = ``"all_mutants_default"``——不设 operators 键即
+      cosmic-ray 默认全变异体（ULT 官方 README 未指定 operators 过滤，
+      9 类描述常量 ``ULT_MUTANT_OPERATORS`` 非实际算子集）；
+    - ``timeout_seconds`` = ``ULT_MUTATION_TIMEOUT_SECONDS``（120s）；
+    - ``cosmic_ray_version`` = 实测版本（版本 + 配置哈希同时入报告，
+      跨批次可比性审计，`ult_bridge_plan.md` §4.3 R3 风险登记）。
+
+    因哈希含实测版本，cosmic-ray 未安装（版本不可测）时返回 None，
+    与 ``cosmic_ray_version()`` 同口径（不伪造哈希）。
     """
+    version = cosmic_ray_version()
+    if version is None:
+        return None
     payload = json.dumps(
-        {"timeout": ULT_MUTATION_TIMEOUT_SECONDS, "operators": ULT_MUTANT_OPERATORS},
+        {
+            "operators": "all_mutants_default",
+            "timeout_seconds": ULT_MUTATION_TIMEOUT_SECONDS,
+            "cosmic_ray_version": version,
+        },
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
