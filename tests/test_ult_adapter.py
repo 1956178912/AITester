@@ -3,11 +3,11 @@
 锁定 `experiments/ult_adapter.py` 的关键口径：
 - cosmic-ray 未安装 → `is_cosmic_ray_available()=False` + `ult_mutation_score`
   保守 skipped（**不**静默回退到自研 AST 变异体，口径可比性纪律）；
-- 版本 / 配置哈希字段键集合同构（cosmic-ray 不可用时 version=None，
-  但 config_hash 仍可算——配置常量与 cosmic-ray 安装无关）；
+- 版本 / 配置哈希字段键集合同构（cosmic-ray 不可用时 version=None 且
+  config_hash=None——哈希含实测版本，二者同步，见 ult_bridge_plan.md §4.3）；
 - 输入缺失 / max_mutants 无效 → 各分支均返回完整键集（None 保守口径）；
 - dry_run_plan 的字段键集合同构（cosmic-ray 不可用时 available=False /
-  version=None，但 config_hash 仍非 None）。
+  version=None / config_hash=None，三者同步保守口径）。
 
 全部零 LLM 成本（不触发变异生成，只探测 import + 纯函数）。
 """
@@ -29,21 +29,40 @@ class TestCosmicRayAvailability:
     """cosmic-ray 探测（确定性，不触发变异生成）。"""
 
     def test_config_hash_is_stable(self) -> None:
-        """配置哈希是纯函数（常量 + 常量）→ 跨进程稳定。"""
+        """配置哈希是纯函数（常量 + 实测版本）→ 跨进程稳定。
+
+        cosmic-ray 未安装时 version=None → 哈希返回 None（保守口径）；
+        已安装时返回 64 位 SHA-256 hexdigest。
+        """
         h1 = cosmic_ray_config_hash()
         h2 = cosmic_ray_config_hash()
         assert h1 == h2
-        assert h1 is not None
-        assert len(h1) == 64  # SHA-256 hexdigest 长度
+        if cosmic_ray_version() is None:
+            assert h1 is None
+        else:
+            assert h1 is not None
+            assert len(h1) == 64  # SHA-256 hexdigest 长度
 
-    def test_config_hash_includes_ult_constants(self) -> None:
-        """哈希覆盖 ULT_MUTATION_TIMEOUT_SECONDS + ULT_MUTANT_OPERATORS。"""
+    def test_config_hash_reflects_actual_operator_config(self) -> None:
+        """哈希覆盖实际启用的口径：全变异体默认 + 120s 超时 + cosmic-ray 版本。
+
+        （ult_bridge_plan.md §4.3 裁定：算子集 = 全变异体，不设 operators 键；
+        9 类描述常量 ULT_MUTANT_OPERATORS 非实际算子集，不参与哈希。）
+        """
         import hashlib
         import json
 
+        version = cosmic_ray_version()
+        if version is None:
+            assert cosmic_ray_config_hash() is None
+            return
         expected = hashlib.sha256(
             json.dumps(
-                {"timeout": ULT_MUTATION_TIMEOUT_SECONDS, "operators": ULT_MUTANT_OPERATORS},
+                {
+                    "operators": "all_mutants_default",
+                    "timeout_seconds": ULT_MUTATION_TIMEOUT_SECONDS,
+                    "cosmic_ray_version": version,
+                },
                 sort_keys=True,
             ).encode("utf-8")
         ).hexdigest()
@@ -54,7 +73,11 @@ class TestCosmicRayAvailability:
         assert ULT_MUTATION_TIMEOUT_SECONDS == 120
 
     def test_ult_operators_cover_official_set(self) -> None:
-        """ULT 官方 cosmic-ray 算子集（9 类，与 cosmic-ray 默认一致）。"""
+        """ULT_MUTANT_OPERATORS 为 9 类**描述性分类**（展示用，非实际算子集）。
+
+        ult_bridge_plan.md §4.3 裁定实际算子集 = 全变异体（不设 operators 键），
+        此常量仅供 dry_run_plan 的 "operators" 字段展示，不参与配置哈希。
+        """
         assert len(ULT_MUTANT_OPERATORS) == 9
         assert "Arithmetic" in ULT_MUTANT_OPERATORS
         assert "MethodCall" in ULT_MUTANT_OPERATORS
@@ -101,8 +124,8 @@ class TestUltMutationScore:
         assert out["available"] is False
         assert out["mutation_score"] is None
         assert "cosmic-ray not installed" in out["skip_reason"]
-        # 配置哈希仍可算（与 cosmic-ray 安装无关）
-        assert out["cosmic_ray_config_hash"] is not None
+        # 配置哈希含实测版本 → 未安装时与 version 同步为 None（保守口径）
+        assert out["cosmic_ray_config_hash"] is None
 
     def test_empty_inputs_returns_skipped(self) -> None:
         """输入材料缺失 → skipped=True + 完整键集合（优先于 cosmic-ray 探测）。"""
@@ -168,8 +191,8 @@ class TestDryRunPlan:
         if not is_cosmic_ray_available():
             assert plan["cosmic_ray_available"] is False
             assert plan["cosmic_ray_version"] is None
-            # 配置哈希仍可算
-            assert plan["cosmic_ray_config_hash"] is not None
+            # 配置哈希含实测版本 → 未安装时与 version 同步为 None
+            assert plan["cosmic_ray_config_hash"] is None
 
     def test_task_limit_passthrough(self) -> None:
         plan = dry_run_plan(task_limit=42, max_mutants=7)

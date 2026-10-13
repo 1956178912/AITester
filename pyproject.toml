@@ -89,6 +89,12 @@ formal = ["z3-solver>=4.12.0", "hypothesis>=6.100.0"]
 # P2-5：MySQL 持久化为可选功能（init_db.py 显式 import；src/db/mysql_client.py
 # 仅调用时导入）。
 db = ["pymysql>=1.0.0", "DBUtils>=3.0.0"]
+# D3-W1（2026-10-13）：ULT cosmic-ray 口径 mutation-score 适配器
+# （experiments/ult_adapter.py）依赖 cosmic-ray。钉 8.7.0（ULT 官方未钉
+# 版本、默认安装；本项目为可复现钉 8.7.0 与默认一致，见 docs/design/
+# ult_bridge_plan.md §4.3）。可选依赖——不进默认安装面 / requirements.lock
+# 强制区，避免 CI 面扩大（ult_mutation_score 在未安装时保守 skipped）。
+ult = ["cosmic-ray==8.7.0"]
 
 [project.scripts]
 aitester = "src.cli.app:cli"
