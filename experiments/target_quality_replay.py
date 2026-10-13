@@ -3,7 +3,7 @@
 背景（本次审查实测到的"数字已存在但从未登记"缺口）：
     项目此前对外（BASELINE.yaml / 统计报告 / README）**从未登记被测代码的
     覆盖率与变异得分**，而 2025–2026 前沿（CoverUp/FSE'25 90% line+branch、
-    TestAgent 88.85% line / 55.4% mutation、ULT/TOSEM'26 45.10% stmt /
+    TestAgent 92.34% line / 83.69% mutation（Java 主结果）、ULT/TOSEM'26 45.10% stmt /
     40.21% mutation）全部以这两项为一等公民指标——缺它们即无法与前沿对话。
 
     实测核实：受影响批次的行级明细（`results.<arm>.details[]`）**早已采集**

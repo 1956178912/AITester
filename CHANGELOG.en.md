@@ -1,10 +1,229 @@
-> Last updated: 2026-10-12 (STVR empirical-study design batch: reshaping AITester from "show a tool" to "report a rigorous study of test-technique effectiveness" — new `docs/design/stvr_empirical_study_design.md` [research questions RQ1/RQ2/RQ3 with attributability + augmentation-mechanism definitions M1-RAG retrieval / M2-historical-case learning / M3-retrieval quality + 6-arm ablation matrix + mutation-score primary-metric caliber + statistical rigor + threats to validity + STVR submission path]; implemented `src/measurement/retrieval_quality.py` retrieval-quality Recall@k observation [pure function, zero LLM cost, key-set isomorphism, default-off historical-caliber-zero-change] + 17 regression tests; ablation skeleton `experiments/stvr_ablation_study.py` [dry-run preregistration plan generation, no auto-run]; api_reference zh/en gained `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` / `RAG_RECALL_RELEVANT_THRESHOLD` env vars; full suite 5726 passed / 3 skipped / 0 xfailed / 0 failed; mypy 0 errors across 130 source files; ruff fully green. Previously 2026-10-12 spec_replace 87-scale expansion run batch [quixbugs off/replace + ult off/replace 4 arms + int(None) crash diagnosis & fix] -> 5709/5712; before that the ULT M1-scoring normalization batch + 87 expansion preregistration -> 5703/5706; before that the P0-A-2 auditability-observability batch -> 5695/5698)
+> Last updated: 2026-10-13 (EMSE submission-optimization batch: offline closure of the five journal-fit hard problems from the submission analysis §5.2 — AITESTER_PROFILE three-legacy-batch retro-registration [C-07/T-05] + false_fix caliber matrix [87.2% vs 59.6% denominator alignment, README/BASELINE citation-discipline errata] + SWE-bench "0/20 negative result" misstatement corrected to "429 rate-limit infrastructure failure" [C-11/T-06] + spec_replace power analysis (MDE + Bayes factors, C vs B direction erratum +11.43pp) + mutation-metric × detection correlation and saturation analysis; new `experiments/emse_optimization.py` (zero-LLM recompute tooling) + 40 regression tests; spec_replace expansion artifacts archived per T-10 (584 files + SHA256SUMS); 12-case sampled qualitative mechanism analysis of the 88 over-red rows [P1 contract inversion ×5 / P2 over-specification ×1 / P3 implementation coupling ×1]; newly registered fixed-material artifact completeness gap [53/261] and synthetic-dataset generator drift evidence; also closed the independent-review v2 P0 citation-zero-flaw four items [T-01 Radaideh re-grading / T-02 TestAgent conflict / T-03 Konstantinou request counts / T-04 Theorem-1 tautology]. Previously 2026-10-12 STVR empirical-study design batch
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-13 EMSE submission-optimization batch (offline closure of the five journal-fit hard problems + zero-LLM recompute tooling + T-10 artifact archival, zero LLM cost)
+
+> Basis: the EMSE (Empirical Software Engineering) submission-oriented journal-fit
+> analysis (Negative Results call / Registered Reports mechanism / Prompt-SE
+> special issue) §5.2 "five fixes required before submission" and §5.3
+> "recommended supplementary experiments". This is an **offline closure batch**
+> (everything done except two LLM runs pending budget decisions); all outputs
+> are deterministic, recomputable, and tested:
+> - `experiments/emse_optimization.py` + `tests/test_emse_optimization.py`
+>   (40 cases: statistical primitives against project-established values /
+>   caliber aggregation / Bayes-factor numerical-integration cross-check /
+>   rerun on fixed code / main-batch artifact value assertions)
+> - `docs/design/false_fix_caliber_matrix.md` (caliber matrix + citation discipline)
+> - `experiments/results/main_batch/PROFILE_RETRO_REGISTRATION_2026-10-13.md`
+>   (C-07/T-05 three-line retro-registration evidence + honesty boundary)
+> - `experiments/results/spec_ab_scale87_20261012/` (T-10 archival, 584 files)
+> - `docs/study/OPTIMIZATION_2026-10-13.md` (main report)
+> Full-suite count unchanged (40 new cases in a dedicated file); ruff/mypy green.
+
+### Added
+
+- **EMSE submission-optimization recompute tool (`experiments/emse_optimization.py`, zero-LLM pure stdlib)**:
+  false_fix caliber-matrix recompute (marginal/conditional dual caliber × 6
+  populations), spec_replace paired power analysis (exact McNemar + MDE +
+  required pairs + Jeffreys-prior Bayes factors), mutation-metric × detection
+  correlation (Pearson/Spearman + stratified means), SWE-bench
+  infrastructure-failure fact extraction, over-red case sampling and
+  **rerun on gold fixed code** with failure-mode classification
+  (P1 contract inversion / P2 over-specification / P3 implementation
+  coupling / P4 passes on fixed);
+- **Qualitative mechanism analysis of the 88 over-red rows (EMSE Negative
+  Results "failure with explanation")**: of 12 sampled cases (deterministic
+  seed=42), 7 are re-runnable on gold fixed code; failure signatures
+  converge on three modes — P1 contract inversion ×5 (expectations encode
+  buggy behavior: `assert 10 == 0` / off-by-one expectation / trailing-dot
+  format / type mismatch), P2 over-specification ×1, P3 implementation
+  coupling ×1; mutually reinforcing with the "detection-first protocol
+  +43pp" claim (the protocol's forced red-before-green is precisely the
+  remedy for P1);
+- **false_fix caliber matrix (`docs/design/false_fix_caliber_matrix.md`)**:
+  ends the "87.2% vs 59.6% denominator misalignment" (review §3.4-6) —
+  primary caliber = R-P0-2 marginal 59.58% (143/240); conditional 100%
+  (143/143, raw) / 87.16% (380/436, ADR-0027 corrected) as companion
+  disclosures; external citations must carry a caliber tag;
+- **spec_replace expansion artifact archival (T-10 closure)**:
+  `experiments/results/spec_ab_scale87_20261012/` (584 files + SHA256SUMS
+  + README) — previously `/tmp`-only (lost on restart), making the power
+  analysis and direction erratum externally recomputable.
+
+### Fixed
+
+- **C-07 / T-05 (profile reproducibility gap) closure**: the code-side dual
+  recording (`provenance.profile` + `env_snapshot["AITESTER_PROFILE"]`) was
+  verified already in place with a guard test; this batch adds the
+  **retro-registration note for the three legacy batches** (logic-exclusive
+  switch combination + preregistration declaration + later-batch positive
+  control, three independent lines of evidence + honesty boundary: 14 preset
+  switches were outside the then-whitelist and are unrecoverable from
+  artifacts), and corrects `statistical_report_3seed_pooled.md`'s inaccurate
+  "evidence lives in env_snapshot" statement;
+- **C-11 / T-06 (SWE-bench misstatement) closure**: README bilingual
+  benchmark row changed from "real-benchmark 0/20 negative result" to
+  "of 20 attempts, 7 completed and all 7 failed due to API 429 rate
+  limiting, 3 failed, 10 timed out — infrastructure failure with no valid
+  capability conclusion (on the re-run list)"; historical CHANGELOG entries
+  are preserved unrewritten, with this erratum taking precedence;
+- **SPEC_REPLACE_AB_SCALE87 report §3 direction erratum**: the
+  "C(df) vs B(replace)" row's −11.4pp (C-only=4/B-only=8) is arithmetically
+  incompatible with the artifact recompute and with the report's own §2.1
+  marginal rates (C 75.0% > B 62.9%) — the archived artifacts recompute to
+  **+11.43pp** (C-only=8/B-only=4, p=0.3877 unchanged); B vs A
+  (−2.86pp/p=1.0000) and C vs A (+8.57pp/p=0.5811) recompute bit-exact.
+  Erratum section §8 appended to the original report; review v2 §3.1 C-09
+  transcription corrected in the same case;
+- **README(.en) / BASELINE.yaml citation errata**: the historical
+  false_fix 89.8% citation is corrected to the artifact-recomputed 90.0%
+  (45/50) with a caliber tag; BASELINE comment gains a caliber-matrix
+  pointer.
+- **Citation-zero-flaw + scientific-credibility closure (T-01~T-04,
+  independent review v2 P0 items)**:
+  - **T-01 Radaideh citation re-grading**: the bilingual README header
+    "(a) Unfavourable evidence" is corrected from "independent IEEE
+    replication study / IEEE Xplore 11655121" to "Carleton University
+    honours-project replication (not peer-reviewed,
+    report-hub.scs.carleton.ca/projectPage/2872)", the unverifiable IEEE
+    document number is removed, and the "authors note this is a
+    configuration effect rather than evidence that iteration harms"
+    qualifier is added (the figures 88.35/69.90/45.63/35.92 were verified
+    by review and are retained);
+  - **T-02 TestAgent conflict cleanup**: the "88.85% line / 55.4%
+    mutation" in the BASELINE.yaml comment and
+    `experiments/target_quality_replay.py` docstring is unified to the Java
+    primary result "92.34% line / 83.69% mutation", dropping the
+    55.4% figure that has no primary source;
+  - **T-03 Konstantinou request-count conflict**: the bilingual README
+    drops the unverifiable concrete request counts "11,718 vs 12,264",
+    keeps the relative "no higher request count than CoverUp" claim, and
+    notes that two conflicting versions (11,718/12,264 vs 11,815/12,741)
+    are withheld until the full paper settles them;
+  - **T-04 Theorem-1 tautology**: `docs/algorithm_design.md` §5
+    "Theorem 1 (completeness)" assumes "the LLM is capable enough" as a
+    premise whose conclusion is already entailed by it; it is rewritten as
+    a falsifiable empirical proposition (repair success rate p measured via
+    the repair_rate/false_fix_rate dual caliber); "Theorem 2 (termination)"
+    is a structural guarantee (bounded by `MAX_ITERATIONS`) and is kept.
+
+### Documented
+
+- **Power and Bayesian analysis (spec_replace n=35 common-measurable subset)**:
+  MDE formula `(z_{1−α/2}+z_power)·sqrt(ψ/4n)` — across the three contrasts
+  MDE 8.95–14.43pp, required pairs for 8pp 44–114, power at 8pp 0.34–0.71;
+  BF10 (Jeffreys) 0.31–0.44, with C vs A reaching BF10<1/3 (moderate
+  support for H0) — the negative conclusion gains weak-to-moderate Bayesian
+  support, far stronger than a bare "p not significant";
+- **Mutation saturation evidence**: R-P0-2 aitester mutation_score mean
+  0.955 (0.993 in the det=1 group, near-saturated) while mutants_total mean
+  is only 1.15 (p50=0, 220/261 rows with zero mutants) — the synthetic
+  mutants are too weak for this metric to discriminate; papers citing
+  mutation_score must disclose this alongside; mutation_detection_rate
+  correlates positively with detection (Pearson 0.41, n=41);
+- **fixed-material artifact completeness gap (newly registered)**: 53 of
+  261 main-batch rows (20.3%) lack `task_metadata.fixed` (19 of the 88
+  over-red rows) — the over-red mechanism analysis coverage ceiling is
+  69/88; papers must disclose this denominator;
+- **Synthetic dataset generator drift (newly registered)**: the current
+  `SyntheticDataset(seed=42)` rebuild disagrees with main-batch artifact
+  metadata hashes — legacy-row mutation values can only be recomputed
+  against archived artifacts, providing empirical justification for the
+  T-10 "artifacts must be committed with each batch" discipline;
+- **Budget-decision items** (main report §6): D1 QuixBugs bare `plain_llm`
+  arm (the other half of the A/B, ~$0.1-0.3), D2 profile dual-field live
+  verification mini-batch (3-5 tasks, <$0.05), D3 ULT Mut@k primary
+  metric (original T-07 scope, no LLM cost, 6-week engineering effort).
+
+### Executed (D1/D2 live runs, 2026-10-13 afternoon, user-approved budget)
+
+- **D2 profile provenance live verification ✅**
+  (`experiments/results/emse_d2_profile_smoke_20261013/`, 5-task synthetic
+  smoke): `provenance.profile="logic"` +
+  `env_snapshot["AITESTER_PROFILE"]="logic"` both present; 6 sampled logic
+  preset switches all true; model fingerprint pinned and identical to the
+  10-12 batches (aeb56401…) — the C-07/T-05 chain is closed, and the run
+  doubles as an end-to-end smoke of the current working tree;
+- **D1 QuixBugs prompt-protocol A/B ✅**
+  (`experiments/results/emse_d1_quixbugs_ab_20261013/`, 50 tasks × 2 arms,
+  seed 42, logic profile, 101 files + SHA256SUMS): **the +43pp protocol
+  gain does not replicate on real code** — plain_llm 66.67% (24/36) vs
+  plain_llm_df 69.44% (25/36), δ=−2.78pp, p=1.0000, BF10=1.00, MDE
+  3.89pp at 80% power (effects ≥3.9pp excluded within power);
+- **Mechanism finding (code-verified)**: the two arms' **first-round
+  prompts are byte-identical** — the detection-first reinforcement section
+  is only injected on the regeneration call
+  (`nodes.py:_detection_first_section` requires first-round
+  `test_passed=True`); the protocol only engages via regeneration
+  (all-green false success → DETECTION_FIRST routing; over-red →
+  specificity gate). On QuixBugs, 49/50 first rounds are already red, so
+  the protocol's application window barely exists; the single task routed
+  through all-green→sectioned-regeneration (is_valid_parenthesization) was
+  rescued = the only discordant pair. **The protocol's value scales with
+  the first-round false-success rate — a dataset property, not a universal
+  gain** — papers must add a dataset qualifier to "+43pp" and report this
+  null on a real benchmark (a qualified finding in EMSE Negative Results
+  terms);
+- **Cache-replay disclosure**: 48/50 df rows made zero LLM calls
+  (first-round prompt identical to the same-batch plain_llm arm → hits on
+  the same-namespace cache; generated_test byte-identical); 2 rows'
+  regeneration calls were fresh. temp=0 + cross-batch-identical model
+  fingerprint ⇒ deterministically equivalent, unbiased; strict caliber
+  must disclose "df arm = same-process deterministic replay 48/50 + fresh
+  regeneration 2/50";
+- **"Execution failed" log-flood diagnosis** (answering the user's
+  question): `第 N 次执行失败，尝试重试...`
+  (`executor_runtime.py:168`) = pytest exiting non-zero on the buggy
+  target code (tests turning red) = the detection signal itself, not an
+  LLM/API failure; the real infrastructure events were 30s/60s subprocess
+  timeouts caused by the sandbox machine being saturated during the run
+  (main cause of the 2h36m wall clock). Model side healthy: zero API-error
+  signatures in the log, 100/100 rows with empty error_category,
+  fingerprint pinned and consistent, token accounting normal (plain_llm
+  95,628 fresh);
+- **Cost**: ≈100.6k real tokens (≈$0.06) + D2 smoke, total <$0.15
+  (within the $0.5 estimate);
+- **Docs synced**: main report §0/§6.1/§6.2/§6.3, appendix F
+  (auto-includes the D1 A/B), both batch archive READMEs + SHA256SUMS
+  (D1 101 files / D2 6 files).
+
+### Executed (T-08/T-11/D3 three tasks in parallel, 2026-10-13 evening, user-approved)
+
+- **T-08 dual-gate rerun (negative result) ✅** (`experiments/results/emse_t08_gates_20261013/`,
+  87 tasks seed42 aitester arm, $0.28): the dual gates (specificity gate +
+  red-regression gate) **cannot eliminate the −28pp and slightly worsen it** —
+  detection 14.81%→9.20% (paired net −4: det0→det1=4 / det1→det0=8).
+  Three mechanism chains: ① the specificity gate intercepts over-red (37→17)
+  but the regenerated output is all-green false-success (all_green 23→52);
+  ② the red-regression gate never fired (87/87); ③ the gates wiped out 8
+  originally-detected tasks. **Root bottleneck = all-green false-success 59.8%
+  ("the generation side produces no red"), the dual gates are correct-mechanism-
+  wrong-root** — protocol-layer additions are not the solution; the generator
+  side (spec-first / mutation feedback) is. Recompute: `experiments/emse_t08_gates_recompute.py`;
+- **T-11 spec_compile_rate recheck ✅** (zero LLM): the old registration
+  0.205–0.219 is doubly stale; zero post-grammar measurement on real benchmarks,
+  pre-grammar QuixBugs pooled 0.2696 (n=184) <0.35 → the "logic-driven" claim
+  still needs a qualifier; BASELINE registered in layers;
+- **D3 ULT Mut@k stage 1 ✅**: cosmic-ray 8.7.0 installed + `ult_adapter.py`
+  real init→exec→dump (fixed the probe package name cosmicray→cosmic_ray) +
+  smoke 0.9/0.9167; **four caliber rulings** (verified against ULT's primary
+  sources, ult_bridge_plan §4.3): timeout=killed (matches ULT's Cosmic-Ray
+  caliber; the old "count as survived" is corrected), operator set = all-mutants
+  (ULT has no filter), version pinned 8.7.0, incompetent counts as killed;
+- **New data-gap registration (scale87 SpecExpr channel unmeasured)**: scale87
+  has SPEC_IR_ENABLE=None → its spec_replace "spec document" is NL+docstring only,
+  without SpecExpr formal clauses — its negative result is "pure NL spec-first",
+  not "full spec-first";
+- **env_snapshot whitelist 7th-gap fix**: DETECTION_SPEC_MODE +
+  ENABLE_MUTATION_SCORING added to `_env_snapshot_keys` (gate missing 1→0);
+- **BASELINE refresh**: collected 5815, passed 5811 (derived; full-suite live
+  run blocked by the sandbox delete guard, needs elevated confirmation before
+  commit), last_verified→2026-10-13.
 
 ## [Unreleased] — 2026-10-12 STVR empirical-study design batch (research-question attributability reshape + retrieval-quality Recall@k observation + 6-arm ablation-matrix skeleton, zero LLM cost)
 

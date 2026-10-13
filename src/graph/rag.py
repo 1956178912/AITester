@@ -160,7 +160,7 @@ def _build_rag_stat_with_relevance(
     base["relevance_filtered"] = relevance_filtered
     base["relevance_filter_rate"] = relevance_filter_rate
     # STVR 批次：检索质量观测（默认关，键集合同构）
-    from src.measurement.retrieval_quality import retrieval_relevance, compute_recall_at_k
+    from src.measurement.retrieval_quality import compute_recall_at_k, retrieval_relevance
 
     recall = compute_recall_at_k(rag_refs)
     base["recall_at_k"] = recall

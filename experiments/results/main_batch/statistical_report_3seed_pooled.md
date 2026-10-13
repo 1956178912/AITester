@@ -95,7 +95,11 @@ canonical R14 报告的 `_pair_by_task` 去重口径为"同 task_id 最新批次
   开关注入已实证（env_snapshot SPEC_IR_ENABLE=true），但 spec 链指标
   未接线到结果行，本轮无法评估规约 oracle 的独立贡献。
 - provenance 无 profile 字段（AITESTER_PROFILE 生效证据在 env_snapshot
-  内，建议后续显式记录）。
+  内，建议后续显式记录）——**2026-10-13 勘误（T-05 收口）**：本报告
+  三批次（git b533cff1）的 env_snapshot 实际**均无** AITESTER_PROFILE
+  键（该写入逻辑于同日 AB2 批次才落地）；"logic 档生效"的补登记证据链
+  见 `experiments/results/main_batch/PROFILE_RETRO_REGISTRATION_2026-10-13.md`
+  （logic 独有开关组合 + 预注册声明 + 后续批次正向对照三线证据）。
 - aitester 21/261 行 detection=None（根因已定位：21 行全部为 M10
   `LOGIC_SPEC_STRICT_ENABLE` 强校验拒绝——Planner 第 0 轮 raise，
   error_category='error'；AB 批次已加 `LOGIC_SPEC_STRICT_FALLBACK_ENABLE`

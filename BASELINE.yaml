@@ -11,12 +11,12 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-12"   # 全量回归实测日期（2026-10-12 STVR 实证研究设计批次：Retrieval Quality (Recall@k) observation 模块 + 17 例回归测试（tests/test_retrieval_quality.py，纯函数层 + 键集合同构，零 LLM 成本）；mypy 131 源文件 0 错误 / ruff format 全绿 / 全量 5730 passed + 3 skipped / 0 xfailed / 0 failed〔5733 collected〕；此前 2026-10-12 ULT 实跑批次〔int(None) 崩溃回归测试 +6 例〕→ 5709/5712；再前 P0-A-2 可审计观测字段批次→ 5703/5706）
+last_verified: "2026-10-13"   # 全量回归实测日期（2026-10-13 EMSE 投稿优化批次·二：T-01~T-04 引用零瑕疵收口 + T-08 双门复跑阴性 + T-11 spec_compile_rate 复测 + D3 cosmic-ray 实装〔ult_adapter 13 例〕；--collect-only 实测 **5815**；沙箱全量实跑受删除守卫阻断，passed 按 collected − skipped 推导〔见 tests.total_passed 注释〕，提交前须提权前台确认准确 passed/skipped。此前 2026-10-12 STVR 批次 5730/5733）
 
 tests:
-  total_passed: 5730          # 全量 pytest tests/（2026-10-12 STVR 实证研究设计批次：Retrieval Quality (Recall@k) observation 模块 + 17 例回归测试（tests/test_retrieval_quality.py，纯函数层 + 键集合同构，零 LLM 成本）；--collect-only 收集 **5733**；跑批 = **5730 passed + 3 skipped + 0 xfailed + 0 failed**。上一批 5709/5712 → 本批 5730/5733（+17/+17）。⚠️ 守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5811          # 全量 pytest tests/（2026-10-13 EMSE 投稿优化批次·二；--collect-only 实测 **5815**；passed = collected − skipped − xfailed = 5815 − 4 − 0 = **5811**〔推导值〕。⚠️ 沙箱全量实跑受 sitecustomize bulk-delete 守卫阻断，本 passed 为推导非实测，提交前须提权前台全量跑确认准确 passed/skipped。上一批 5730/5733 → 本批 5811/5815〔+81/+82〕，新增：test_emse_optimization.py 37 例 + test_stvr_statistical_analysis.py 27 例 + test_ult_adapter.py 14 例〔D3 cosmic-ray 集成〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
-  total_skipped: 3           # 全量实测（可选依赖缺失时优雅跳过）
+  total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
   suite_seconds: 195          # 全量耗时：顺序 pytest 实测 194.54s（2026-10-11 全面优化批次·第二批，macOS 本机；CI 为 xdist -n 4 loadfile 62.48s 同档，取本机实测值）
@@ -48,7 +48,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
 # O-∞（R5 审查 2026-10-09，MET-01/EXP-01 收口）：**target_quality**——被测代码
 # 侧的一等公民指标。此前这批数字**已采集在批次工件里但从未登记**，导致项目
 # "测试生成系统"身份无法与 2025–2026 前沿（CoverUp 90% line+branch、
-# TestAgent 88.85% line / 55.4% mutation、ULT 45.10% stmt / 40.21% mutation）
+# TestAgent 92.34% line / 83.69% mutation（Java 主结果）、ULT 45.10% stmt / 40.21% mutation）
 # 对话。本节由零 LLM 存量重放固化：
 #   python -m experiments.target_quality_replay experiments/results/main_batch
 # 产物：experiments/results/main_batch/target_quality_report.md（随批次入库）。
@@ -68,10 +68,23 @@ target_quality:
     plain_llm_df: [0.986, 0.997]
     note: "接近饱和（尤其 df 0.986–0.997）：合成集变异体过弱，该指标在此数据集上鉴别力有限，须在 ULT/TestGenEval 外部基准重测"
   spec_compile_rate:         # 规约可编译率（"逻辑驱动"内核的可测量证据）
-    aitester: [0.205, 0.219]  # E1/E2 logic 档四批次（2026-10-07），n=77/81
-    note: "AC 批（prompt–DSL 规约契约修复）后由恒 0.0 抬升到 ~0.21——'逻辑驱动'主张首次有非零实证；目标 ≥0.55（路径 D2：SpecExpr 升一阶/关系文法）"
+    # T-11 复测（2026-10-13，零 LLM 存量重放，报告 experiments/results/emse_t11_spec_compile_20261013/T11_REPORT.md）。
+    # ⚠️ 2026-10-11 SpecExpr 文法契约（W2/T1，SPEC_IR_DSL_ENABLE=true）改变编译口径，
+    # 契约前后数值不可直接对比；契约后无成规模实测，无法给出单一"当前值"，按数据集/批次分层。
+    rechecked: "2026-10-13"
+    aitester:
+      synthetic_post_grammar: 0.520        # 契约后合成集，10-13 D2 冒烟 n=5（统计意义不足，仅方向性；行级值 [0.6,1.0,0.0,1.0,0.0]）
+      examples_post_grammar: 0.500         # 契约后 examples，10-12 n=2（仅方向性）
+      quixbugs_post_grammar: null          # 契约后无实测：10-12 scale87 SPEC_IR_ENABLE=None 管线关闭；10-13 emse_d1 无 aitester 臂
+      ult_post_grammar: null               # 契约后无实测：scale87 ult_lite46 同管线关闭
+      quixbugs_pre_grammar: [0.234, 0.324] # 契约前最新 QuixBugs（10-10 logic_ab c1-c4，n=46×4，pooled 0.2696/n=184，仍 <0.35）
+    note: "T-11 复测结论：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足；真实基准 QuixBugs 契约前最新仍 <0.35，且契约后零实测——'逻辑驱动'对外主张在真实基准上仍须加限定语（不得仅凭 n=5 合成冒烟放宽）。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议补样：契约后 QuixBugs n≥40 成规模重跑 + 合成集 n≥87 + ULT ultfix 重跑"
   spec_expr_coverage:        # 表达式通道覆盖率（与 spec_compile_rate 正交）
-    aitester: [0.723, 0.741]  # 同 E1/E2 logic 档四批次，n=45/51
+    aitester:
+      synthetic_post_grammar: 0.746        # 10-13 D2 冒烟 n=4（统计意义不足）
+      quixbugs_pre_grammar: [0.587, 0.625] # 10-10 logic_ab c1-c4，n=39–44（契约前最新可靠参考）
+      synthetic_pre_20261007: [0.723, 0.741] # 旧登记 E1/E2 n=45/51（历史参考，已滞后）
+    note: "契约后无成规模实测；契约前 QuixBugs 0.587–0.625 为最新可靠参考"
   specificity_gate:          # 特异性门终审分布（跨批次合计，**纯描述性**）
     aitester: {specific_red: 40, over_red: 66}
     plain_llm_df: {specific_red: 162, over_red: 140}
@@ -191,7 +204,10 @@ benchmark:
   #     2026-10-07：系 patch 字段围栏残留测量伪影——修正口径存量重放
   #     R-P0-2 = 35.86%（52/145 可重放行），E1/E2 logic 档 48.11%
   #     （51/106），早期 10-01 批 0/15 系真零；修正重估总报告
-  #     `make corrected-metrics`（ADR-0027）：修正 false_fix=87.2% /
+  #     `make corrected-metrics`（ADR-0027）：修正 false_fix=87.16%
+  #     （380/436 passed 可测行，**条件口径**；同总体边际口径
+  #     71.62%（434/606）、R-P0-2 边际口径 59.58%（143/240），
+  #     口径矩阵 docs/design/false_fix_caliber_matrix.md） /
   #     CPR=84.3% / 弃权精确率=86.0% 首次非平凡**）；上限归因
   #     （repair_ceiling_report.md，AK1）：修复循环 154/261 → patch 产出
   #     94.2% → plausible 46.8% → correct 0（伪影口径）——卡点修正为
