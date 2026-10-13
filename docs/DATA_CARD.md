@@ -20,7 +20,7 @@ MODEL_CARD §3，无独立数据卡；审查 R15 落地）
 | 合成缺陷模板库 | `synthetic` | ✅ 主批次在用（n=50 任务） | 主实验 / 消融 |
 | QuixBugs（Python 子集） | `quixbugs` | 单臂 aitester 复跑（R4 副产品，**非 E4 正式执行**）；L1 管道验证用 | 真实缺陷阶梯 L1 |
 | BugsInPy | `bugsinpy` | 加载器就绪，**零实跑** | 真实缺陷阶梯 L2 |
-| SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟 | 仓库级（靶点错位，见下） |
+| SWE-bench Lite | `swe_bench` | 历史 0/20 冒烟（**2026-10-13 勘误：系 API 429 限流基础设施故障，无有效能力结论**） | 仓库级（靶点错位，见下） |
 
 ## 2. 合成模板库（当前主批次基准）
 

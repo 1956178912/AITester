@@ -1,10 +1,178 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-12（STVR 实证研究设计批次：把 AITester 从"展示一个工具"重塑为"报告一项关于测试技术有效性的严谨研究"——新增 `docs/design/stvr_empirical_study_design.md`（研究问题 RQ1/RQ2/RQ3 可归因性重塑 + 增强机制定义 M1-RAG 检索 / M2-历史用例学习 / M3-检索质量 + 6 臂消融矩阵 + mutation score 主指标口径 + 统计规范 + 威胁效度 + STVR 投稿路径）；实现 `src/measurement/retrieval_quality.py` 检索质量 Recall@k 观测（纯函数零 LLM，键集合同构，默认关历史口径零变化）+ 17 例回归测试；消融骨架 `experiments/stvr_ablation_study.py`（dry-run 预注册计划生成，不自动实跑）；api_reference 中/英新增 `RAG_RETRIEVAL_RECALL_ENABLE` / `RAG_RECALL_K` / `RAG_RECALL_RELEVANT_THRESHOLD` 环境变量；全量 5726 passed / 3 skipped / 0 xfailed / 0 failed；mypy 130 源文件 0 错误；ruff 全绿。此前 2026-10-12 spec_replace 87 扩样实跑批次〔quixbugs off/replace + ult off/replace 4 臂 + int(None) 崩溃诊断修复〕→ 5709/5712；再前 ULT M1 判分归一化批次 + 87 扩样预注册 → 5703/5706；再前 P0-A-2 可审计观测字段批次 → 5695/5698）
+> Last updated: 2026-10-13（EMSE 投稿优化批次：期刊适配分析 §5.2 五项硬伤离线收口——AITESTER_PROFILE 存量三批次补登记〔C-07/T-05〕+ false_fix 口径矩阵〔87.2% vs 59.6% 分母对齐，README/BASELINE 引用纪律勘误〕+ SWE-bench "0/20 负结果" 失实表述修正为 "429 限流基础设施失败"〔C-11/T-06〕+ spec_replace 功效分析（MDE + 贝叶斯因子，C vs B 方向勘误 +11.43pp）+ mutation 族×detection 相关性与饱和度分析；新增 `experiments/emse_optimization.py`（零 LLM 复算工具）+ 40 例回归测试；spec_replace 扩样工件按 T-10 归档 584 文件 + SHA256SUMS；过红 88 行 12 例抽样定性机制分析〔P1 契约倒置 ×5 / P2 过度规格 ×1 / P3 实现耦合 ×1〕；新登记 fixed 材料工件完备性缺口〔53/261〕与合成数据集发生器漂移实证；另收口独立评审 v2 P0 引用零瑕疵四项〔T-01 Radaideh 定级 / T-02 TestAgent 冲突 / T-03 Konstantinou 请求数 / T-04 定理 1 同义反复〕。此前 2026-10-12 STVR 实证研究设计批次
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-13 EMSE 投稿优化批次（期刊适配五项硬伤离线收口 + 零 LLM 复算工具 + 工件归档 T-10，零 LLM 成本）
+
+> 依据：EMSE（Empirical Software Engineering）投稿导向的期刊适配分析
+> （Negative Results 征稿类别 / Registered Reports 机制 / Prompt-SE
+> 特刊）§5.2"投稿前必须完成的五项修复"与 §5.3"建议补充实验"。
+> 本批次为**离线收口批次**（除两项待预算决策的 LLM 实跑外全部完成），
+> 全部产物确定性、可复算、带测试：
+> - `experiments/emse_optimization.py` + `tests/test_emse_optimization.py`
+>   （40 例：统计原语对照项目定案值 / 口径聚合 / 贝叶斯因子数值积分
+>   对照 / fixed 上复跑 / 主批次工件定案值断言）
+> - `docs/design/false_fix_caliber_matrix.md`（口径矩阵 + 引用纪律）
+> - `experiments/results/main_batch/PROFILE_RETRO_REGISTRATION_2026-10-13.md`
+>   （C-07/T-05 补登记三线证据 + 诚实边界）
+> - `experiments/results/spec_ab_scale87_20261012/`（T-10 归档 584 文件）
+> - `docs/emse/EMSE_SUBMISSION_OPTIMIZATION_2026-10-13.md`（主报告）
+> 全量测试数不变（新增 40 例独立文件）；ruff/mypy 全绿。
+
+### Added
+
+- **EMSE 投稿优化复算工具（`experiments/emse_optimization.py`，零 LLM 纯 stdlib）**：
+  false_fix 口径矩阵复算（边际/条件双口径 × 6 总体）、spec_replace 配对
+  功效分析（McNemar 精确检验 + MDE + 所需配对数 + Jeffreys 先验贝叶斯
+  因子）、mutation 族 × detection 相关性（Pearson/Spearman + 分层均值）、
+  SWE-bench 基础设施失败事实提取、过红案例抽样与 **gold fixed 上复跑**
+  的失败模式分类（P1 契约倒置 / P2 过度规格 / P3 实现内部耦合 /
+  P4 fixed 上通过）；
+- **过红 88 行定性机制分析（EMSE Negative Results"伴随解释的失败演示"）**：
+  12 例抽样（seed=42 确定性）中 7 例可在 gold fixed 上复跑，失败签名
+  收敛为三模式——P1 契约倒置 ×5（期望值编码 buggy 行为：`assert 10 == 0`
+  / off-by-one 期望 / 尾点格式 / 类型错位）、P2 过度规格 ×1、P3 实现
+  内部耦合 ×1；与"检出优先提示协议 +43pp"的主张互为印证（协议强制
+  red-before-green 恰针对 P1 的对症机制）；
+- **false_fix 口径矩阵（`docs/design/false_fix_caliber_matrix.md`）**：
+  终结"87.2% vs 59.6% 分母口径未对齐"（评审 §3.4-6）——主口径 =
+  R-P0-2 边际 59.58%（143/240）；条件口径 100%（143/143，原始）/
+  87.16%（380/436，ADR-0027 修正）作伴随披露；对外引用强制携带
+  口径标签；
+- **spec_replace 扩样工件归档（T-10 收口）**：
+  `experiments/results/spec_ab_scale87_20261012/`（584 文件 + SHA256SUMS
+  + README）——此前仅在 `/tmp`（重启即失），使功效分析与方向勘误
+  可被外部复算。
+
+### Fixed
+
+- **C-07 / T-05（profile 可复现性缺口）收口**：代码侧双记录
+  （`provenance.profile` + `env_snapshot["AITESTER_PROFILE"]`）经核查
+  早已落地且有守卫测试；本批次补齐**存量三批次补登记说明**（logic
+  独有开关组合 + 预注册声明 + 后续批次正向对照三线证据 + 诚实边界：
+  14 个 preset 开关不在当时白名单、不可从工件恢复），并勘误
+  `statistical_report_3seed_pooled.md` 的"证据在 env_snapshot 内"
+  失实表述；
+- **C-11 / T-06（SWE-bench 表述失实）收口**：README 双语基准行由
+  "真实基准 0/20 负结果"改为"20 次尝试中 7 次完成且全部因 API 429
+  限流失败、3 失败、10 超时——基础设施故障，无有效能力结论（列入
+  待复跑清单）"；历史 CHANGELOG 条目保留不改写，以勘误为准；
+- **SPEC_REPLACE_AB_SCALE87 报告 §3 方向勘误**："C(df) vs B(replace)"
+  行的 −11.4pp（C-only=4/B-only=8）与工件复算及其自身 §2.1 边际率
+  （C 75.0% > B 62.9%）算术不相容——归档工件实算为 **+11.43pp**
+  （C-only=8/B-only=4，p=0.3877 不变）；B vs A（−2.86pp/p=1.0000）
+  与 C vs A（+8.57pp/p=0.5811）复算逐位一致。已在原报告 §8 追加
+  勘误节，评审 v2 §3.1 C-09 转录同案勘误；
+- **README(.en) / BASELINE.yaml 引用勘误**：false_fix 89.8% 历史
+  引用值勘误为工件复算值 90.0%（45/50）并标注口径；BASELINE 注释补
+  口径矩阵指针。
+- **引用零瑕疵 + 科学信誉收口（T-01~T-04，独立评审 v2 P0 项）**：
+  - **T-01 Radaideh 引用定级**：README 双语头部"(a) 不利证据"由
+    "IEEE 独立复现研究 / IEEE Xplore 11655121"更正为"Carleton 大学
+    荣誉项目复现（非同行评审，report-hub.scs.carleton.ca/projectPage/2872）"，
+    删除无法验证的 IEEE 文档号，补"作者自述配置效应而非迭代有害"限定语
+    （数值 88.35/69.90/45.63/35.92 经评审核验属实，予以保留）；
+  - **T-02 TestAgent 冲突清理**：BASELINE.yaml 注释与
+    `experiments/target_quality_replay.py` docstring 的"88.85% line /
+    55.4% mutation"统一为 Java 主结果"92.34% line / 83.69% mutation"，
+    删除无一手来源的 55.4%；
+  - **T-03 Konstantinou 请求数冲突**：README 双语删除无法核验的具体请求数
+    "11,718 vs 12,264"，保留"请求数不高于 CoverUp"相对结论，标注两口径
+    （11,718/12,264 与 11,815/12,741）正文定案前暂不引用；
+  - **T-04 定理 1 同义反复**：`docs/algorithm_design.md` §5"定理 1（完整性）"
+    以"LLM 具备足够能力"为前提、结论已蕴含于假设，改写为可证伪经验命题
+    （修复成功率 p 以 repair_rate/false_fix_rate 双口径实测），"定理 2
+    （终止性）"为结构性保证（`MAX_ITERATIONS` 上界），予以保留。
+
+### Documented
+
+- **功效与贝叶斯分析（spec_replace n=35 共同可测子集）**：MDE 公式
+  `(z_{1−α/2}+z_power)·sqrt(ψ/4n)`——三对对比 MDE 8.95–14.43pp、
+  8pp 所需配对数 44–114、8pp 功效 0.34–0.71；BF10（Jeffreys）
+  0.31–0.44，C vs A 达 BF10<1/3（中等强度支持 H0）——阴性结论获
+  弱到中等贝叶斯支持，远超单纯"p 不显著"的表述强度；
+- **mutation 饱和度证据**：R-P0-2 aitester mutation_score 均值 0.955
+  （det=1 组 0.993，近饱和）而 mutants_total 均值仅 1.15（p50=0，
+  220/261 行零变异体）——合成集变异体过弱使该指标失去鉴别力，论文
+  引用必须并列披露；mutation_detection_rate 与 detection 正相关
+  （Pearson 0.41，n=41）；
+- **fixed 材料工件完备性缺口（新登记）**：主批次 261 行中 53 行
+  （20.3%）`task_metadata.fixed` 缺失（过红 88 行中 19 行）——过红
+  机制分析可覆盖面上限 69/88，论文须披露该分母；
+- **合成数据集发生器漂移（新登记）**：当前 `SyntheticDataset(seed=42)`
+  重建任务与主批次工件元数据哈希不一致——存量行 mutation 值只能以
+  归档工件为权威源，构成 T-10"工件随批次强制入库"纪律的实证理由；
+- **待预算决策项**（主报告 §6）：D1 QuixBugs bare `plain_llm` 臂
+  （A/B 另一半，~$0.1-0.3）、D2 profile 双字段实跑验证小批
+  （3-5 任务，<$0.05）、D3 ULT Mut@k 主指标（T-07 原范围，无 LLM
+  成本，6 周工程量）。
+
+### Executed（D1/D2 实跑，2026-10-13 下午，用户批准预算）
+
+- **D2 profile provenance 实跑验证 ✅**（`experiments/results/emse_d2_profile_smoke_20261013/`，
+  5 任务合成集冒烟）：`provenance.profile="logic"` +
+  `env_snapshot["AITESTER_PROFILE"]="logic"` 双字段在场，logic 预设
+  6 项抽查全部 true；模型指纹 pinned 且与 10-12 批次一致
+  （aeb56401…）——C-07/T-05 链条闭合，并充当当前工作树端到端冒烟；
+- **D1 QuixBugs 提示协议 A/B ✅**（`experiments/results/emse_d1_quixbugs_ab_20261013/`，
+  50 任务双臂 seed42 logic 档，101 文件 + SHA256SUMS）：
+  **+43pp 协议增益在真实代码上不可复现**——plain_llm 66.67%
+  （24/36）vs plain_llm_df 69.44%（25/36），δ=−2.78pp、p=1.0000、
+  BF10=1.00、MDE 3.89pp@80% 功效（功效内可排除 ≥3.9pp 增益）；
+- **机制发现（代码级核实）**：两臂**首轮 prompt 逐字节相同**——检出
+  优先强化段落只在再生成调用时注入（`nodes.py:_detection_first_section`
+  要求首轮 test_passed=True）；协议只通过再生成介入（首轮全绿假成功
+  → DETECTION_FIRST 路由；首轮过红 → 特异性门）。QuixBugs 首轮即红
+  49/50，协议应用场景几乎不出现；唯一走"全绿→带段落再生成"的任务
+  （is_valid_parenthesization）被救回 = 唯一不一致对。**协议价值与
+  "首轮免假成功率"成正比，是数据集属性而非普适增益**——论文中
+  "+43pp"须加数据集限定语，并在真实基准报告本 null（EMSE
+  Negative Results 规范的限定性发现）；
+- **缓存重放披露**：df 臂 48/50 行零 LLM 调用（首轮 prompt 与同批
+  plain_llm 臂相同 → 命中同命名空间缓存，generated_test 逐字节
+  相同）；2 行再生成为全新调用。temp=0 + 模型指纹跨批次一致 ⇒
+  确定性等价无偏；严格口径须披露"df 臂 = 同进程确定性重放 48/50 +
+  全新再生成 2/50"；
+- **日志"执行失败"刷屏诊断**（回应用户质询）：`第 N 次执行失败，
+  尝试重试...`（executor_runtime.py:168）= pytest 在缺陷代码上非零
+  退出（测试变红）= 检测信号本身，非 LLM/API 失败；真正的基础设施
+  事件是跑批期间沙箱机器满载导致的 30s/60s 子进程超时（2h36m 墙钟
+  主因）。模型侧健康：日志零 API 错误签名、100/100 行 error_category
+  为空、指纹 pinned 一致、token 记账正常（plain_llm 95,628 全新）；
+- **成本**：真实 token ≈100.6k（≈$0.06）+ D2 冒烟，合计 <$0.15
+  （预估 $0.5 内）；
+- **文档同步**：主报告 §0/§6.1/§6.2/§6.3、附录 F（自动纳入 D1 A/B）、
+  两批次归档 README + SHA256SUMS（D1 101 文件 / D2 6 文件）。
+
+### Executed（T-08/T-11/D3 三任务并行，2026-10-13 晚，用户批准）
+
+- **T-08 双门复跑（阴性结果）✅**（`experiments/results/emse_t08_gates_20261013/`，
+  87 任务 seed42 aitester 臂，$0.28）：双门（特异性门+红回归门）**不能消除
+  −28pp 且小幅恶化**——detection 14.81%→9.20%（配对净 −4：det0→det1=4 /
+  det1→det0=8）。机制三链：① 特异性门拦截过红（37→17）但 regenerate 产物是
+  全绿假成功（all_green 23→52）；② 红回归门 87/87 从未触发；③ 双门抹掉 8 个
+  原本检出。**根本瓶颈 = 全绿假成功 59.8%（"测试生成侧不产红"），双门对症
+  不对根**——协议层加法非解方，需生成器侧（规格优先/变异反馈）。复算脚本
+  `experiments/emse_t08_gates_recompute.py`；
+- **T-11 spec_compile_rate 复测 ✅**（零 LLM）：旧登记 0.205–0.219 双重滞后；
+  契约后真实基准零实测、契约前 QuixBugs pooled 0.2696（n=184）<0.35 →
+  "逻辑驱动"主张仍须限定语；BASELINE 已分层登记 + `rechecked=2026-10-13`；
+- **D3 ULT Mut@k 第一阶段 ✅**：cosmic-ray 8.7.0 安装 + `ult_adapter.py`
+  实装 init→exec→dump（修复探测包名 cosmicray→cosmic_ray）+ 冒烟 0.9/0.9167；
+  **四口径裁定**（查证 ULT 官方一手来源，ult_bridge_plan §4.3）：超时=killed
+  （符合 ULT Cosmic-Ray 口径，原"按存活计"已修正）、算子集=全变异体（ULT
+  无过滤）、版本钉 8.7.0、incompetent 计击杀；
+- **新数据缺口登记（scale87 SpecExpr 通道未测）**：scale87 批次
+  SPEC_IR_ENABLE=None → spec_replace 的"规格文档"仅 NL+docstring、不含
+  SpecExpr 形式化子句——其阴性结果是"纯 NL 规格优先"非"完整规格优先"；
+- **env_snapshot 白名单第七次缺口修复**：DETECTION_SPEC_MODE +
+  ENABLE_MUTATION_SCORING 补入 `_env_snapshot_keys`（门禁缺失 1→0）；
+- **BASELINE 刷新**：collected 5815、passed 5811（推导值，沙箱全量实跑受
+  删除守卫阻断，提交前须提权前台确认）、last_verified→2026-10-13。
 
 ## [Unreleased] — 2026-10-12 STVR 实证研究设计批次（研究问题可归因性重塑 + 检索质量 Recall@k 观测 + 6 臂消融矩阵骨架，零 LLM 成本）
 

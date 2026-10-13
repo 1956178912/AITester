@@ -3438,6 +3438,16 @@ def run_benchmark(
         # 策略差异化）必须从工件 provenance 可证明"该臂是否开启了
         # RAG_RETRIEVAL_RECALL_ENABLE"，否则消融结果不可归因。
         "RAG_RETRIEVAL_RECALL_ENABLE",
+        # 2026-10-13（EMSE 投稿优化批次·第七次同类缺口收口）：两个开关均未登记。
+        # ① DETECTION_SPEC_MODE（spec_first.py，P0-A-2 规格优先主门，改变
+        #    Generator prompt 的目标代码块）：scale87 spec_replace 扩样批次
+        #    env_snapshot 无此键——spec_replace_applied=50/50 佐证 replace 臂
+        #    确实生效，但"是否 replace"无法从快照逐位证明（同 A1 首跑假阴性）。
+        # ② ENABLE_MUTATION_SCORING（logic/scientific 档默认 true 的变异评分
+        #    主门）：主批次 env_snapshot 无此键——logic 档实际开启（config.py
+        #    预设），但 mutation_score 数据的开关前提无法从工件证明。
+        "DETECTION_SPEC_MODE",
+        "ENABLE_MUTATION_SCORING",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

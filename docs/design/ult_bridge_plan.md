@@ -116,9 +116,32 @@
 
 ### 4.3 cosmic-ray 接入
 
-- 现状：**未安装**（全仓 `grep -i cosmic` 零命中），需 `pip install cosmic-ray` 并**钉版本进 `requirements.lock`**；
+- 现状：**已安装 8.7.0**（2026-10-13 D3 第一阶段，`experiments/ult_adapter.py`
+  已实装 `init → exec → dump` 工作流并冒烟通过）；需**钉版本进 `requirements.lock`**
+  （见 D3 报告 `experiments/results/emse_d3_ult_20261013/D3_REPORT.md` §5）；
 - 口径一致性：变异体集合必须与 ULT 论文一致（cosmic-ray 版本 + 算子配置）→ **报告里记录 cosmic-ray 版本与配置哈希**，否则 mutation score 不可比；
-- 每个变异体 **120s 超时**（ULT 口径）；超时按"存活"计（与 `mutation_detection.py` 的保守口径一致）；
+- 每个变异体 **120s 超时**（ULT 口径）；超时按**击杀（killed/detected）**计——与 ULT 官方 Cosmic-Ray 口径一致（见下）；
+  - ✅ **2026-10-13 已裁定（超时语义）**：cosmic-ray 8.7.0 的 `run_tests`
+    把 timeout 判为 **KILLED**（`TestOutcome.KILLED, "timeout"`）。一手核验：
+    ① ULT 官方仓库（huangd1999/UnLeakedTestBench）定义
+    `Mut@k = Σ Killed_Mutants / N`，明确用 **Cosmic-Ray**；② Cosmic-Ray 的
+    `is_killed` 把 timeout 计入 killed；③ mutation-testing-elements 标准口径
+    `detected = killed + timeout`（timeout 算检出——"若此变异体注入，CI 构建会
+    因测试永不完成而发现它"）。故 **cosmic-ray 的 timeout=killed 符合 ULT 官方
+    口径**；本条原"超时按存活计"系本项目保守口径，与 ULT 官方相反，已修正。
+    D3 适配器沿用 `is_killed`（timeout 计入 killed）无需改动；但 `mutation_detection.py`
+    （自研 AST 变异体的保守口径）保持"超时按存活计"，两者分述、不得混比。
+  - ✅ **2026-10-13 已裁定（算子集 / 版本 / incompetent）**：
+    ① **算子集 = 全变异体**——ULT 官方仓库 README 的 mutation 评测仅
+    `pip install cosmic-ray pytest pytest-cov`、**未指定 operators 过滤**
+    （Cosmic-Ray 默认全变异体）。故适配器"不设 operators 键 = 全变异体"与
+    ULT 一致；`ult_adapter.py` 的 `ULT_MUTANT_OPERATORS`（9 类描述）是
+    **描述性分类，非实际算子集**，`cosmic_ray_config_hash` 应改为哈希
+    "全变异体事实 + cosmic-ray 版本"（而非 9 类常量）——待 W1 工程落实；
+    ② **版本**——ULT 官方未钉 cosmic-ray 版本（默认安装），本项目为可复现
+    钉 `8.7.0`，报告须披露"ULT 官方未钉版本、本项目钉 8.7.0 与默认一致"；
+    ③ **incompetent 计击杀**——沿用 Cosmic-Ray 官方 `is_killed`
+    （`test_outcome != survived`），与 ULT（用 Cosmic-Ray 默认）一致。
 - 工程风险：cosmic-ray 需要可导入模块 + 会话初始化；本项目历史上有两类 import 伪影（跨文件未物化、包结构）
   → 复用 §4.2 的 tmp 树物化经验，先跑 smoke（阶段 0）。
 - 基线漂移：本项目自研 `MutationGenerator` 的分数**保留**，作为"内部可比"的旧口径；cosmic-ray 分数是**新口径**，两者不得混述。

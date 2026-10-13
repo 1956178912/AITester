@@ -22,7 +22,7 @@ only in MODEL_CARD §3 with no standalone card; review item R15)
 | Synthetic defect template library | `synthetic` | ✅ in use for the main batch (n=50 tasks) | main experiments / ablations |
 | QuixBugs (Python subset) | `quixbugs` | single-arm aitester rerun (an R4 by-product, **not the formal E4 execution**); used for L1 pipeline validation | real-defect ladder L1 |
 | BugsInPy | `bugsinpy` | loader ready, **never run** | real-defect ladder L2 |
-| SWE-bench Lite | `swe_bench` | historical 0/20 smoke run | repo-level (target mismatch, see below) |
+| SWE-bench Lite | `swe_bench` | historical 0/20 smoke run (**2026-10-13 erratum: an API 429 rate-limit infrastructure failure, no valid capability conclusion**) | repo-level (target mismatch, see below) |
 
 ## 2. Synthetic Template Library (current main-batch benchmark)
 

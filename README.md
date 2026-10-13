@@ -12,11 +12,13 @@
 > **为什么不用"手工设计"的多智能体（2026-10-10 修订：三方并列，撤回原"共识"表述）**：
 > 项目自身 n=261 生死实验（−28pp，vs 检出优先提示协议 plain_llm_df）之外，
 > 2026 年外部证据**方向不一，须并列呈现，不得择一表述为"共识"**：
-> **(a) 不利证据**——IEEE 独立复现研究（Radaideh & Corriveau，*Understanding the
-> Effect of Agentic Iteration on LLM-Based Unit Test Generation*，IEEE Xplore
-> **11655121**）在 **mutation score** 上报告 one-shot Gemini 2.5 Flash **88.35%**
-> vs CANDOR **35.92%**、one-shot GPT-4o **69.90%** vs CANDOR **45.63%**；
-> *(更正说明：此前本段把该结果误挂在"CANDOR, ICST 2026"名下，实为 IEEE 第三方复现，
+> **(a) 不利证据**——Carleton 大学荣誉项目复现（Radaideh & Corriveau，*Understanding the
+> Effect of Agentic Iteration on LLM-Based Unit Test Generation*，**非同行评审**，
+> report-hub.scs.carleton.ca/projectPage/2872）在 **mutation score** 上报告 one-shot
+> Gemini 2.5 Flash **88.35%** vs CANDOR **35.92%**、one-shot GPT-4o **69.90%**
+> vs CANDOR **45.63%**；作者自述该结果为**配置效应而非迭代有害**；
+> *(更正说明：此前本段把该结果误挂在"CANDOR, ICST 2026"名下，并误标为"IEEE 第三方复现，
+> IEEE Xplore 11655121"（该文档号无法验证）；实为 Carleton 大学荣誉项目仓库自报（非同行评审），
 > 且 CANDOR 原文并非 ICST 2026。)*
 > **(b) 有利证据**——CANDOR 原文（Xu, Wang, Briand, Liu，**TOSEM 2026**，
 > DOI 10.1145/3803418）报告多智能体在 line/branch/mutation 上达
@@ -25,7 +27,8 @@
 > **(c) 迄今最强的负面证据**——ICST 2026 复现研究（Konstantinou, Degiovanni &
 > Papadakis，arXiv:2601.09695）在 **6 个完整 Java 仓库 / 393 类 / 3,657 方法**上，
 > 用更新 LLM 注入全部工具后证明 **Plain-LLM 49.95/35.33/33.82 全面优于
-> HITS/SymPrompt/CoverUp/TestSpark**，且请求数不高于 CoverUp（11,718 vs 12,264）。
+> HITS/SymPrompt/CoverUp/TestSpark**，且请求数不高于 CoverUp（具体请求数存在
+> 11,718/12,264 与 11,815/12,741 两口径，正文定案前暂不引用）。
 > 另注：BOAD（**ICLR 2026**，arXiv:2512.23631，IBM Research）为真，但研究对象是
 > **仓库级 SWE 任务解决**（定位/编辑/验证子智能体），**不适用于测试生成论证**。
 > **因此可辩护的窄主张是**：*手工的、工具特定的编排相对强 LLM 单提示 + 统一修复环，
@@ -53,7 +56,7 @@
 | **总测试数** | ✅ 全量 collected（全量依赖）/ 精简环境（缺 chromadb/matplotlib 时 RAG/可视化用例自动跳过）——当前数值见 [BASELINE.yaml](BASELINE.yaml) `tests` 节（`total_passed` / `slim_environment`） |
 | **单元测试** | ✅ 全量通过、零失败（实测耗时与用例数见 [BASELINE.yaml](BASELINE.yaml) `tests` 节 `suite_seconds` / `total_passed` / `total_failed`）；精简环境 `skipif`/`importorskip` 优雅降级，非误报 ERROR |
 | **代码覆盖率** | 总行覆盖与分支覆盖见 [BASELINE.yaml](BASELINE.yaml) `coverage` 节（`line_total_pct` / `branch_total_pct`）；核心模块逐文件覆盖率以 CI 最新 `term-missing` 输出为准 |
-| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 修正口径 39.31%**（ADR-0021/0029：历史"全线 0.0%"系 patch 字段围栏残留 + 跨文件任务未物化两起测量伪影，修正重放 57/145 可重放行；E1/E2 logic 档 54.72%；早期 10-01 批 0/15 系真零；漏斗修正：patch 产出 94%/plausible 47%/correct 39.31%；v1 口径 35.86%/48.11% 系伪影下界，口径矩阵见 `docs/design/repair_caliber_matrix.md`，上限归因见 `repair_ceiling_report.md` + ADR-0021/0027/0029）；$/task 0.0259 vs 0.0045（价目表官方登记口径）；定位维度随结果行并列输出——`fl_at_k`（谱系 Top-k 行级命中）与 `localization_hit_function`（LLM 推理定位函数级命中，2026-10-07 修复引擎批次 I 起，与 gold 变更函数集合比对，未定位时键集合同构占位）。历史批（2026-10-01 n=50）false_fix=89.8% 为"假成功通道"证据（ADR-0027 重估：该批修正 repair=0/15 系真零，证据维持成立；主批次修正 false_fix=87.2%）；SWE-bench Lite（sqlfluff-20）真实基准 0/20 负结果与统计检验同样如实披露、不筛选 |
+| **基准指标（诚实口径）** | ⚠️ 主批次数字以 [BASELINE.yaml](BASELINE.yaml) `benchmark` 节为唯一事实来源：旧口径 `success`（"生成测试在最终代码上通过"）**不得单独引用**——必须与 M1 三指标（`detection_rate` / `repair_rate` / `false_fix_rate`）并列呈现。当前口径 = R-P0-2 三种子合并（261 任务/臂）：detection plain_llm_df 44.8% > aitester 15.8% > plain_llm 1.5%，**aitester vs df −28pp（编排净负贡献，21 行缺失双界下稳健）**；**repair 修正口径 39.31%**（ADR-0021/0029：历史"全线 0.0%"系 patch 字段围栏残留 + 跨文件任务未物化两起测量伪影，修正重放 57/145 可重放行；E1/E2 logic 档 54.72%；早期 10-01 批 0/15 系真零；漏斗修正：patch 产出 94%/plausible 47%/correct 39.31%；v1 口径 35.86%/48.11% 系伪影下界，口径矩阵见 `docs/design/repair_caliber_matrix.md`，上限归因见 `repair_ceiling_report.md` + ADR-0021/0027/0029）；$/task 0.0259 vs 0.0045（价目表官方登记口径）；定位维度随结果行并列输出——`fl_at_k`（谱系 Top-k 行级命中）与 `localization_hit_function`（LLM 推理定位函数级命中，2026-10-07 修复引擎批次 I 起，与 gold 变更函数集合比对，未定位时键集合同构占位）。历史批（2026-10-01 n=50）false_fix=90.0%（45/50，边际口径，工件复算；历史引用 89.8%）为"假成功通道"证据（ADR-0027 重估：该批修正 repair=0/15 系真零，证据维持成立）；**false_fix 口径矩阵**（`docs/design/false_fix_caliber_matrix.md`，零 LLM 可复算）：R-P0-2 主批次边际口径 59.58%（143/240）/ 条件口径 100%（143/143），10 批次 ADR-0027 修正口径 87.16%（380/436，passed 可测行重放）——对外引用必须携带口径标签；SWE-bench Lite（sqlfluff-20）20 次尝试中 7 次完成且全部因 API 429 限流失败、3 次失败、10 次超时——**基础设施故障，无有效能力结论**（不构成负结果证据，列入待复跑清单），与统计检验同样如实披露、不筛选 |
 | **已知失败** | ✅ 0（RAG / 数据集下载测试已修复；CI 3.12/3.13/3.14 全绿；缺可选依赖时相关用例 `skipif` 跳过而非报错） |
 | **安全审查** | ✅ 无硬编码密钥（`.env*` / `.env.local.bak` / `.private` 已 gitignore / 删除）；日志脱敏三层防线（Handler 层 SensitiveFilter/Formatter + 入口接线 + trace JSONL 旁路脱敏）；APIManager 日志点就地 `_redact()`（不依赖入口接线，嵌入式安全）；`get_status()` 出口 base_url 脱敏；**三条执行链路（本地/venv/Docker）统一剔除 LLM 凭证（`credential_scrub.scrub_os_environ` 动态模式，覆盖 `LLM_N_API_KEY` 全部编号，封堵生成代码继承宿主凭证的泄露面）**；凭证剔除 P0 补强（2026-09-26：`OPENAI_(API_KEY|BASE_URL)_\d+` 编号变体 + provider 中间变量（`ALIYUN_BAILIAN_API_KEY` / `AGNES_{DOMESTIC|INTERNATIONAL}_API_KEY` / `BIGMODEL_API_KEY` / `DEEPSEEK_API_KEY`，与 config_generator 的 PROVIDER_TEMPLATES 键联动消名单漂移））；脱敏盲区修复（`APIManager.call` 全节点失败异常出口统一 `_redact`、`config_manager.add_llm_config` 拒含换行/`#` 的变量值注入、`retry_with_backoff` 日志惰性脱敏、`SensitiveFormatter` 降级路径先走纯正则兜底）；LLM 文件缓存记录为已知可接受风险（本地可信域，不进 git；缓存写已改原子替换） |
 | **最新优化** | ✅ 2026-10-09 R4 审查落地批次（默认行为不变，新增能力均默认关/零 LLM 成本）：逻辑驱动反例精化闭环（`src/specs/spec_refine.py` CEGIR——规约矛盾反例回灌 LLM 只改契约 + SMT 复验预算化迭代，`SPEC_REFINE_ENABLE` 默认关；`spec_smt` 补后件一致性 UNSAT 检测）+ nodes.py 续拆补丁应用安全核心至 `src/graph/patch_io.py`（四簇共 3593→1909 行，历史导入路径不变）+ E4 污染防控预注册增补（prereg 双语，强制披露口径）+ llm_configs.json schema 守卫（`validate_llm_configs` + CI 快检）+ MAS 技能库编译路线设计文档（探索性 Proposed）；全量用例零代码回归 + ruff/mypy 全绿（测试用例数与 mypy 源文件数见 [BASELINE.yaml](BASELINE.yaml)）；当前基线数字见 [BASELINE.yaml](BASELINE.yaml)；更早批次详见 [CHANGELOG](CHANGELOG.md) |

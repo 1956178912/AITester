@@ -91,9 +91,7 @@ system is research code, not a deployed product).
   current detection gains attribute to the detection-first prompting
   protocol. E1 (preregistered thresholds ≥0.3 keep / <0.2 drop) is the
   deciding experiment for that claim.
-- Real SWE-bench Lite (n=20 smoke run): 0/20 resolved. The system's
-  effectiveness claims are **not yet supported by real-benchmark evidence**;
-  BASELINE.yaml is the single source of truth for numbers.
+- Real SWE-bench Lite (n=20 smoke run): **infrastructure failure with no valid capability conclusion** — of 20 attempts, 7 completed and all 7 failed due to API 429 rate limiting, 3 failed, 10 timed out (`experiments/results/swebench_20_summary.json`; 2026-10-13 erratum: the earlier "0/20 resolved" must not be read as a capability negative result). The system's effectiveness claims are **not yet supported by a real benchmark**, with BASELINE.yaml as the single source of truth; this benchmark is on the re-run list.
 - The full "logic-driven" chain (SpecIR DSL / deterministic oracle / structured
   routing) is off by default; enable with `AITESTER_PROFILE=logic`.
 
