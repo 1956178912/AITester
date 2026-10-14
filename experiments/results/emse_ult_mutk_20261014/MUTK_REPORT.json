@@ -1,0 +1,667 @@
+{
+  "caliber": {
+    "adapter": "experiments/ult_adapter.py (cosmic-ray init→exec→dump)",
+    "target_code": "task_metadata.fixed（正确实现；变异体从正确代码生成）",
+    "max_mutants": 10,
+    "timeout_seconds": 120,
+    "timeout_counts_as": "killed（2026-10-13 裁定，ULT 官方 Cosmic-Ray 口径）",
+    "llm_calls": 0
+  },
+  "specir_generated": {
+    "n_tasks": 25,
+    "n_measured": 25,
+    "n_skipped": 0,
+    "mutants_killed": 232,
+    "mutants_total": 250,
+    "pooled_mutation_score": 0.928,
+    "mean_mutation_score": 0.928,
+    "per_task": [
+      {
+        "task_id": "ult__is_degree_in_degree_range",
+        "killed": 7,
+        "total": 10,
+        "score": 0.7
+      },
+      {
+        "task_id": "ult__fix_labels",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__BinaryFromFraction",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__x0x1_after_extraction",
+        "killed": 8,
+        "total": 10,
+        "score": 0.8
+      },
+      {
+        "task_id": "ult__remove_strings",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__deg2HMS",
+        "killed": 7,
+        "total": 10,
+        "score": 0.7
+      },
+      {
+        "task_id": "ult__can_blas",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__single_defcom_extract",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_allen_relation",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__uoc_railfence_encrypt",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__point_box_relation",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__diffsents",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__create_three_random_v_indices",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__needleman_wunsch0",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__knapsack_indv",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__next_holiday",
+        "killed": 0,
+        "total": 10,
+        "score": 0.0
+      },
+      {
+        "task_id": "ult__replacement_template",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__calc_query_pos_from_cigar",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__maximal_matching_pairs",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_processor_types_from_config_class",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__longestNonWildcardSubsequence",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__lflverify",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__string_contrast",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__max_rewards",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__windows_k_distinct",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      }
+    ],
+    "cosmic_ray_version": "8.7.0",
+    "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22"
+  },
+  "replace_generated": {
+    "n_tasks": 46,
+    "n_measured": 46,
+    "n_skipped": 0,
+    "mutants_killed": 439,
+    "mutants_total": 460,
+    "pooled_mutation_score": 0.9543,
+    "mean_mutation_score": 0.9543,
+    "per_task": [
+      {
+        "task_id": "ult__levenshtein_shortcircuit_dist",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__movement_of_standard_element",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__time_in_swiss_german",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__deg2HMS",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__idx_for_diag_se_from_tr",
+        "killed": 9,
+        "total": 10,
+        "score": 0.9
+      },
+      {
+        "task_id": "ult__iterative_levenshtein",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__normalized_vcf",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__fileNamer",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__initiate_board",
+        "killed": 8,
+        "total": 10,
+        "score": 0.8
+      },
+      {
+        "task_id": "ult__Compress",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__poker_hand",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__convolution_size",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__lcsmatrix",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__drains_to",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_allen_relation",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__single_defcom_extract",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__circle_line_intersection",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__string_contrast",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__check_dead_corner",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__updateBall",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__num_agreeing_tuples",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_rgb_filters",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__horizontalMaxs",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__cal_overlap_neg_strand",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_robot_angles",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__formatTime",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__processQuery",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__match_diagonal_right_left",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__add_dummy_tags",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__BinaryFromFraction",
+        "killed": 4,
+        "total": 10,
+        "score": 0.4
+      },
+      {
+        "task_id": "ult__unmet_compare",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__decode_address_entry",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__centre_on_peak",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__oligo_complements",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__pre_processing",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__getNewCoordsAlongDirection",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__number_of_trees_bin_nt_partial",
+        "killed": 3,
+        "total": 10,
+        "score": 0.3
+      },
+      {
+        "task_id": "ult__splitIA2Attribs",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__process_spaces",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__windows_k_distinct",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__replace_repeated",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__transform_coors",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_text_point_at_line",
+        "killed": 5,
+        "total": 10,
+        "score": 0.5
+      },
+      {
+        "task_id": "ult__max_rewards",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__row_revile_indexes",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__change_display",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      }
+    ],
+    "cosmic_ray_version": "8.7.0",
+    "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22"
+  },
+  "gold_reference": {
+    "n_tasks": 25,
+    "n_measured": 25,
+    "n_skipped": 0,
+    "mutants_killed": 250,
+    "mutants_total": 250,
+    "pooled_mutation_score": 1.0,
+    "mean_mutation_score": 1.0,
+    "per_task": [
+      {
+        "task_id": "ult__BinaryFromFraction",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__calc_query_pos_from_cigar",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__can_blas",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__create_three_random_v_indices",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__deg2HMS",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__diffsents",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__fix_labels",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_allen_relation",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__get_processor_types_from_config_class",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__is_degree_in_degree_range",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__knapsack_indv",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__lflverify",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__longestNonWildcardSubsequence",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__max_rewards",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__maximal_matching_pairs",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__needleman_wunsch0",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__next_holiday",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__point_box_relation",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__remove_strings",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__replacement_template",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__single_defcom_extract",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__string_contrast",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__uoc_railfence_encrypt",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__windows_k_distinct",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      },
+      {
+        "task_id": "ult__x0x1_after_extraction",
+        "killed": 10,
+        "total": 10,
+        "score": 1.0
+      }
+    ],
+    "cosmic_ray_version": "8.7.0",
+    "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22"
+  },
+  "paired_subset": {
+    "n_common_tasks": 7,
+    "n_paired_measured": 7,
+    "pairs": [
+      {
+        "task_id": "ult__BinaryFromFraction",
+        "specir_score": 1.0,
+        "replace_score": 0.4
+      },
+      {
+        "task_id": "ult__deg2HMS",
+        "specir_score": 0.7,
+        "replace_score": 1.0
+      },
+      {
+        "task_id": "ult__get_allen_relation",
+        "specir_score": 1.0,
+        "replace_score": 1.0
+      },
+      {
+        "task_id": "ult__max_rewards",
+        "specir_score": 1.0,
+        "replace_score": 1.0
+      },
+      {
+        "task_id": "ult__single_defcom_extract",
+        "specir_score": 1.0,
+        "replace_score": 1.0
+      },
+      {
+        "task_id": "ult__string_contrast",
+        "specir_score": 1.0,
+        "replace_score": 1.0
+      },
+      {
+        "task_id": "ult__windows_k_distinct",
+        "specir_score": 1.0,
+        "replace_score": 1.0
+      }
+    ],
+    "note": "探针（25）与 ult_lite46（46）任务重叠仅 7——配对子集为描述性，不作推断检验"
+  }
+}
