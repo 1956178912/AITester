@@ -71,20 +71,21 @@ target_quality:
     # T-11 复测（2026-10-13，零 LLM 存量重放，报告 experiments/results/emse_t11_spec_compile_20261013/T11_REPORT.md）。
     # ⚠️ 2026-10-11 SpecExpr 文法契约（W2/T1，SPEC_IR_DSL_ENABLE=true）改变编译口径，
     # 契约前后数值不可直接对比；契约后无成规模实测，无法给出单一"当前值"，按数据集/批次分层。
-    rechecked: "2026-10-13"
+    rechecked: "2026-10-14"
     aitester:
-      synthetic_post_grammar: 0.520        # 契约后合成集，10-13 D2 冒烟 n=5（统计意义不足，仅方向性；行级值 [0.6,1.0,0.0,1.0,0.0]）
+      synthetic_post_grammar: 0.520        # 契约后合成集，10-13 D2 冒烟 n=5（统计意义不足，仅方向性；行级值 [0.6,1.0,0.0,1.0,0.0]）——10-14 确认性跑批（seed 45/46 × 87 × 2 臂）进行中，将刷新为 n≈174 成规模值
       examples_post_grammar: 0.500         # 契约后 examples，10-12 n=2（仅方向性）
-      quixbugs_post_grammar: null          # 契约后无实测：10-12 scale87 SPEC_IR_ENABLE=None 管线关闭；10-13 emse_d1 无 aitester 臂
-      ult_post_grammar: null               # 契约后无实测：scale87 ult_lite46 同管线关闭
+      quixbugs_post_grammar: 0.6321        # 契约后真实基准首测：10-14 spec_ir pilot（emse_spec_ir_quixbugs_20261013，SPEC_IR_ENABLE+SPEC_IR_DSL_ENABLE 干净口径，n=50；冒烟 synthetic n=3 为 0.0——SpecExpr 子句可编译率存在数据集差异，论文须披露）
+      ult_post_grammar: null               # 契约后无实测：scale87 ult_lite46 同管线关闭；ULT 补测待排（ult_lite46 detection 0/45，该数据集检测口径适配性另议）
       quixbugs_pre_grammar: [0.234, 0.324] # 契约前最新 QuixBugs（10-10 logic_ab c1-c4，n=46×4，pooled 0.2696/n=184，仍 <0.35）
-    note: "T-11 复测结论：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足；真实基准 QuixBugs 契约前最新仍 <0.35，且契约后零实测——'逻辑驱动'对外主张在真实基准上仍须加限定语（不得仅凭 n=5 合成冒烟放宽）。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议补样：契约后 QuixBugs n≥40 成规模重跑 + 合成集 n≥87 + ULT ultfix 重跑"
+    note: "T-11 复测结论（2026-10-13）：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足。**2026-10-14 更新**：spec_ir pilot 补齐契约后真实基准首测——QuixBugs n=50=0.6321（≥0.35 阈值），'逻辑驱动'主张获得真实基准单批次支持；但合成集成规模确认（n≈174）仍在跑批中，且 ULT 零实测，对外主张仍应带数据集限定语。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议补样：合成集 n≥87（进行中）+ ULT 重跑"
   spec_expr_coverage:        # 表达式通道覆盖率（与 spec_compile_rate 正交）
     aitester:
       synthetic_post_grammar: 0.746        # 10-13 D2 冒烟 n=4（统计意义不足）
+      quixbugs_post_grammar: 0.6069        # 10-14 spec_ir pilot n=45（emse_spec_ir_quixbugs_20261013）
       quixbugs_pre_grammar: [0.587, 0.625] # 10-10 logic_ab c1-c4，n=39–44（契约前最新可靠参考）
       synthetic_pre_20261007: [0.723, 0.741] # 旧登记 E1/E2 n=45/51（历史参考，已滞后）
-    note: "契约后无成规模实测；契约前 QuixBugs 0.587–0.625 为最新可靠参考"
+    note: "契约后：QuixBugs n=45=0.6069（10-14 pilot）与契约前 0.587–0.625 同档——表达式通道覆盖率契约前后稳定；与 spec_compile_rate 的契约后抬升（0.27→0.63）正交，两通道须并报"
   specificity_gate:          # 特异性门终审分布（跨批次合计，**纯描述性**）
     aitester: {specific_red: 40, over_red: 66}
     plain_llm_df: {specific_red: 162, over_red: 140}
