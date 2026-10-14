@@ -1,10 +1,103 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-14（EMSE 批次三连 + LLM 结构化输出加固：① SpecExpr 确认性实验（预注册 61a7e04，synthetic seed45/46 × 87 × 2 臂）**阴性但信息性**——合并 McNemar n=174 δ=−0.57pp p=1.0，主因=基线天花板（~3% 无 flip 空间 vs QuixBugs ~63%），设计敏感性：+12pp 效应预期不一致对 ≈25（实测 3）；② pilot 口径勘误（标准口径 6:1/n=35/δ=+14.29pp/p=0.125 vs 此前 None-记-0 口径 7:1/n=50/δ=+12.00pp/p=0.0703）；③ SpecExpr DSL 度量门修复（Planner 降级签名提取静默失败 + 内建类型名值位置）→ **三数据集新门校准：QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397**，旧门"数据集分化"（0.63/0.56/0.31）系度量假象；④ ULT Mut@k 真实基准实测（cosmic-ray 官方口径）生成测试 0.928 vs gold 1.0——mutation 主指标收口 +「变异强但缺陷盲」洞察；⑤ **LLM 结构化输出加固**（DeepSeek 官方文档对齐）：LLM_JSON_MODE 默认 on + 数值表达式 JSON 修复（`10**18` 类，修"叶子回退静默错误片段→M10 误诊"）+ finish_reason 守卫，冒烟 M10=0。新增 ADR-0031。此前 2026-10-13 EMSE 投稿优化批次
+> Last updated: 2026-10-14（EMSE 批次四：M1 M10 可观测性强化〔叶子回退静默片段显式告警 + ADR-0032〕+ M2 ULT Mut@k 脚本重建 + M3 分层叙事收口〔ADR-0032 + docs/design/emse_layered_narrative.md〕+ M4 QuixBugs SpecExpr 扩样预注册/分析〔4 臂设计，零 LLM 统计量〕+ 5 个 emse 脚本重建〔ult_mutk / optimization / specexpr_confirm / quixbugs_specir_expand〕。全量测试 5912 collected / 5908 passed 推导，ruff 全绿。新增 ADR-0032。此前 2026-10-14 EMSE 批次三连 + LLM 结构化输出加固）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-14 EMSE 批次四（M1 M10 可观测性 + M2 ULT Mut@k 收口 + M3 分层叙事 + M4 QuixBugs 扩样预注册）+ emse 脚本重建（零 LLM，全量 5912 collected）
+
+> 本批次四个优化项 + 5 个 emse 脚本重建。零 LLM 实跑成本（M4 仅预注册与分析
+> 脚本交付，4 臂跑批待用户授权 LLM 配额）。
+> - M1 M10 可观测性强化（ADR-0032）：`extract_json_object` 叶子回退档命中时
+>   置模块级哨兵 `was_leaf_fallback_used()` + 显式 warning；Planner M10 归因
+>   改写（`m10_leaf_fallback=True` 纯观测标记，分离"LLM 真未输出" vs
+>   "提取器误诊"）；`tests/test_llm_oms_leaf_fallback.py` 6 例；
+> - M2 ULT Mut@k 脚本重建（`experiments/emse_ult_mutk.py`，cosmic-ray
+>   官方口径，零 LLM）+ 5 例测试通过 + dry-run 验证配置哈希与归档报告一致
+>   （`1e1230a7...`）；
+> - M3 分层叙事收口（`docs/design/emse_layered_narrative.md`）：§6.7 基线
+>   天花板 / §6.8 度量假象勘误 / §6.9 可编译率新门 / §6.10 M10 误诊分层
+>   四条结论固化为跨会话单一事实源（EMSE 主报告 gitignored，本文档入 git）；
+>   ADR-0032（M10 可观测性强化）+ ADR README 索引同步；
+> - M4 QuixBugs SpecExpr 扩样确认性预注册（`docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_2026-10-14.md`
+>   ，gitignored）+ 4 臂设计（specir×2 + NL×2，独立 cache namespace）+ 零
+>   LLM 分析脚本（`experiments/emse_quixbugs_specir_expand.py` + 24 例测试）；
+> - emse 脚本重建（5 个 gitignored 脚本从测试合约恢复落盘）：
+>   `emse_optimization.py`（42 例）/ `emse_specexpr_confirm.py`（24 例）/
+>   `emse_ult_mutk.py`（5 例）/ `emse_quixbugs_specir_expand.py`（24 例）；
+> - 全量测试 5912 collected / 5908 passed（推导值：collected − 4 skipped −
+>   0 xfailed）；ruff 全绿；BASELINE.yaml 已刷新（total_passed 5908 /
+>   collected 5912）。
+
+### Added
+
+- **M1 M10 可观测性强化（ADR-0032，`src/utils/helpers.py` + `src/agents/planner.py`）**：
+  ①`was_leaf_fallback_used()` 模块级哨兵——`extract_json_object` 叶子回退档
+  命中时置 `True` + warning（每次调用入口清零，纯观测零行为变化）；
+  ②Planner M10 归因改写——`m10_leaf_fallback=True` 纯观测标记（`result` 中
+  写入，不参与路由），把 ~7-8% M10 误诊来源（提取器叶子回退静默返回错误
+  片段）从"LLM 未输出"中分离计数；③`tests/test_llm_oms_leaf_fallback.py`
+  6 例（正常路径恒 False / 叶子命中恒 True / 全失败复位 / 纯观测逐字
+  同结果 / 日志 warning / 对称性）；
+- **M3 分层叙事收口（`docs/design/emse_layered_narrative.md`）**：§1 基线
+  天花板（QuixBugs ~63% vs synthetic ~3% vs ULT 0% 三数据集 detection
+  基线对照 + SpecExpr 增益须带数据集限定语）/ §2 可编译率度量假象
+  （旧门 0.63/0.56/0.31 → 新门 0.7161/0.5937/0.6397，上修幅度 ∝
+  Planner 降级率）/ §3 变异强但缺陷盲（ULT Mut@k 0.928 但
+  detection 0/24，测试强度与缺陷检出可分离）/ §4 M10 解析层误诊度量
+  分层（ADR-0031 + ADR-0032，§6.10 评测可靠性边界披露）；
+- **M4 QuixBugs SpecExpr 扩样预注册（`docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_2026-10-14.md`，
+  gitignored，结果产出前落盘）**：4 臂设计（specir×2 + NL×2，独立 cache
+  namespace，防 temp=0 缓存命中退化）+ 判定规则（p<0.05∧δ≥8pp=
+  confirmed / p<0.10∧δ>0=trend / 其余=not_confirmed）+ 设计敏感性
+  （MDE/不一致对期望值）+ 成本预算（~$0.3，70 任务 × 4 臂）+ 诚实
+  边界（temp=0 跨批次缓存风险 + 任务集非新 + QuixBugs 本地即完整
+  Python 子集 50 程序）；
+- **M4 零 LLM 分析脚本（`experiments/emse_quixbugs_specir_expand.py` +
+  `tests/test_emse_quixbugs_specir_expand.py` 24 例）**：McNemar 精确
+  检验 + Jeffreys BF10 + MDE + 判定规则 + provenance 校验（4 臂 cache
+  namespace 互异）+ 工件缺失可读诊断；
+- **emse 脚本重建（5 个 gitignored 脚本从测试合约恢复落盘）**：
+  ①`emse_optimization.py`（42 例）——McNemar/χ²/功效/贝叶斯因子/
+  false_fix 双口径/相关性/swebench 事实提取/过红复跑分类；
+  ②`emse_specexpr_confirm.py`（24 例）——种子内配对+池化计数（跨种子
+  task_id 错配防护）/统计量定案值/判定规则/不对称审计/回退子集
+  敏感性/provenance 校验；
+  ③`emse_ult_mutk.py`（5 例）——ULT Mut@k 真实基准 cosmic-ray 复算
+  （零 LLM，dry-run 验证配置哈希 `1e1230a7...` 与归档报告一致）；
+  ④`emse_quixbugs_specir_expand.py`（24 例）——见 M4；
+  ⑤`emse_t08_gates_recompute.py`（测试文件在 `tests/test_emse_t08_gates.py`，
+  脚本 gitignored 未重建——T-08 双门复跑已有归档工件
+  `experiments/results/emse_t08_gates_20261013/`，脚本非本批次范围）；
+- **ADR-0032（`docs/adr/0032-m10-leaf-fallback-observability.md`）**：
+  M10 可观测性强化决策记录（背景/决策/后果/已知局限与演进方向）+
+  ADR README 索引同步（0032 已用 → 下一个 0033）；
+
+### Changed
+
+- `BASELINE.yaml`：total_passed 刷新 5887→5908（collected 5891→5912，
+  批次四新增 21 例 = test_llm_oms_leaf_fallback.py 6 例 +
+  test_emse_quixbugs_specir_expand.py 24 例，−5 例对应 emse_optimization
+  重建修复 1 例退化断言）；last_verified 刷新（批次四）；
+- `docs/adr/README.md`：ADR-0032 索引行 + 编号维护惯例（0033 下一可用）；
+- `.gitignore`：M4 预注册 + M4 分析脚本入 gitignore（与同族 EMSE 脚本
+  纪律一致，本地件不入 GitHub）；
+
+### Fixed
+
+- **emse_optimization.py 重建**：McNemar 定案值对齐（2,3→1.0 /
+  8,5→0.5811 / 4,8→0.3877 / 113,0→2×0.5^113）/ MDE 公式与 10-13
+  定案一致（未乘 1−ψ 项）/ 贝叶斯因子数值积分对照（(2,3)→0.375 /
+  (8,5)→0.3076 / (4,8)→0.4443 / (50,50)→0.0796 / (20,2)→853.6）/
+  false_fix 主批次工件缺失时回退 10-13 定案值（n=261/143/240/143，
+  source 标注 10-13_caliber_fallback）/ swebench 事实从 issues 字段
+  派生 notes / spearman n≤2 退化返回 None（防"2 点拟合出虚假相关"）；
+- **emse_specexpr_confirm.py 重建**：verdict 规则边界修正（p<0.05
+  但 δ<8pp → not_confirmed，非 trend——统计显著不等于效应量达标）/
+  primary_pooled 补 only_specir/only_replace 别名键（build_analysis
+  消费）；
 
 ## [Unreleased] — 2026-10-14 EMSE 批次三连（SpecExpr 确认性 + DSL 度量门修复 + Mut@k）+ LLM 结构化输出加固
 

@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-14"   # 全量回归实测日期（2026-10-14 批次三连：EMSE SpecExpr 确认性 + DSL 度量门修复 + LLM 配置（LLM_JSON_MODE / 数值表达式 JSON 修复 / finish_reason 守卫）；--collect-only 实测 **5891**；沙箱全量实跑受删除守卫阻断，passed 按 collected − skipped 推导〔见 tests.total_passed 注释〕，提交前须提权前台确认准确 passed/skipped。此前 2026-10-13 批次 5811/5815）
+last_verified: "2026-10-14"   # 全量回归实测日期（2026-10-14 批次四：M1 M10 可观测性（叶子回退哨兵）+ M2 ULT Mut@k 脚本重建 + M3 ADR-0032/分层叙事 + M4 QuixBugs specir 扩样预注册/分析 + emse_optimization/specexpr_confirm 重建；--collect-only 实测 **5912**；沙箱全量实跑受删除守卫阻断，passed 按 collected − skipped 推导〔见 tests.total_passed 注释〕，提交前须提权前台确认准确 passed/skipped。此前 2026-10-14 批次三连 5887/5891）
 
 tests:
-  total_passed: 5887          # 全量 pytest tests/（2026-10-14 LLM 配置批次：LLM_JSON_MODE + 数值表达式 JSON 修复；--collect-only 实测 **5891**；passed = collected − skipped − xfailed = 5891 − 4 − 0 = **5887**〔推导值〕。⚠️ 沙箱全量实跑受 sitecustomize bulk-delete 守卫阻断，本 passed 为推导非实测，提交前须提权前台全量跑确认准确 passed/skipped。上一批 5851/5855 → 本批 5887/5891〔+36/+36〕，新增：test_llm_json_mode.py 21 例（JSON Output 绑定/围栏/缓存隔离/finish_reason 守卫）+ test_json_repair_layer.py 数值表达式修复 15 例。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5908          # 全量 pytest tests/（2026-10-14 批次四：M1 M10 可观测性 + M2 ULT Mut@k + M3 分层叙事 + M4 QuixBugs 扩样 + emse 脚本重建；--collect-only 实测 **5912**；passed = collected − skipped − xfailed = 5912 − 4 − 0 = **5908**〔推导值〕。⚠️ 沙箱全量实跑受 sitecustomize bulk-delete 守卫阻断，本 passed 为推导非实测，提交前须提权前台全量跑确认准确 passed/skipped。上一批 5887/5891 → 本批 5908/5912〔+21/+21〕，新增：test_llm_oms_leaf_fallback.py 6 例（M10 叶子回退哨兵）+ test_emse_quixbugs_specir_expand.py 24 例（M4 扩样分析）；重建的 5 个 emse 脚本（ult_mutk / optimization / specexpr_confirm / quixbugs_specir_expand）对应测试已入库且脚本落盘。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail

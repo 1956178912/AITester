@@ -32,6 +32,7 @@
 | [0029](0029-measurement-artifact-cross-file-and-packaged-import.md) | 测量伪影连环——包结构 import + 跨文件任务未物化（R16/R27/R28 修复与治理） | 已采纳 | 测量层三度"假结论"的连环治理（ADR-0021 围栏残留 / 包结构 import 伪影 / 跨文件未物化伪影）；fail-closed + M-suite + 口径矩阵纪律 | `experiments/_m1_metrics.py`、`experiments/repair_replay.py`、`experiments/corrected_metrics.py`、`src/tools/detection_gates.py`、`src/datasets/synthetic_dataset.py`、`docs/design/repair_caliber_matrix.md` |
 | [0030](0030-spec-first-and-observation-compression-default-off.md) | 规格优先与观测压缩的默认关口径（2026-10-12 独立评审优化批次） | 已采纳 | 独立评审 `INDEPENDENT_REVIEW_2026-10-12.md` §6 路径 P1–P5 落地第一阶段原语——P0-A-1 SpecExpr v3 文法升阶〔有限域量化 + 字符串纯方法白名单 + P2-L3 假阴性修复转正〕/ P0-A-2 规格优先生成〔规约替换臂，三源同向证据〕/ P0-B 变异算子 v3 + 环路内化〔scientific/logic 档默认开〕/ P1-A 编排自动搜索〔UCB1 bandit 16 臂〕/ P1-B 去污染 + MTTR-A 恢复延迟 / P2-A 观测级行粒度压缩；全部默认关（唯一默认开例外 P0-B 科研档） | `src/tools/spec_first.py`、`src/tools/feedback_compression.py`、`src/graph/orchestration_search.py`、`src/datasets/decontamination.py`、`src/measurement/recovery_latency.py`、`src/specs/spec_ir_v2.py`、`experiments/mutation_testing.py`、`config.py` |
 | [0031](0031-llm-structured-output-hardening.md) | LLM 结构化输出加固（JSON Output + 数值表达式解析修复 + finish_reason 守卫） | 已采纳（JSON 模式默认 on，`off` 逃生门） | 日志归因（"执行失败/超时"多为检测信号与测试侧保护，真实缺陷 = 结构化解析失败）→ 三项加固：①`LLM_JSON_MODE`（DeepSeek 官方 JSON Output，`response_format=json_object` 绑定 7 处 JSON 契约调用点，默认 on）；②数值表达式 JSON 修复（`10**18`/`10**18+1`，受限求值无 eval，接入 `_repair_json_bounded`，修"叶子回退静默返回错误片段→M10 误诊"）；③finish_reason ∈ {length, insufficient_system_resource} 可恢复重试。修复后冒烟 M10=0、9/9 真实响应回归 | `src/agents/llm_client.py`、`src/agents/base_agent.py`、`src/agents/planner.py`、`src/agents/debugger.py`、`src/utils/helpers.py`、`experiments/run_benchmark.py` |
+| [0032](0032-m10-leaf-fallback-observability.md) | M10 可观测性强化（叶子回退静默片段显式告警） | 已采纳（纯观测，无开关——解析行为零变化） | ADR-0031 §已知局限②落实：叶子降级档命中时置模块级哨兵 `was_leaf_fallback_used()` + warning 日志；Planner M10 归因改写（`m10_leaf_fallback=True` 纯观测标记，分离"LLM 真未输出" vs "提取器误诊"）；6 例回归测试锁定纯观测纪律 | `src/utils/helpers.py`、`src/agents/planner.py`、`tests/test_llm_oms_leaf_fallback.py` |
 
 ## 状态约定
 
@@ -42,8 +43,8 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0031 已用 → 下一个
-   0032；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0032 已用 → 下一个
+   0033；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
    （`git log --diff-filter=A` 零命中），为避免与外部引用错位不再回收，
    新 ADR 勿占用该段）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；

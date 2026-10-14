@@ -1,10 +1,134 @@
-> Last updated: 2026-10-14 (Triple EMSE batch + LLM structured-output hardening: ① SpecExpr confirmatory experiment (pre-registration 61a7e04, synthetic seed45/46 × 87 × 2 arms) — **negative but informative**: pooled McNemar n=174, δ=−0.57pp, p=1.0; main mechanism = baseline ceiling (~3%, no flip headroom vs QuixBugs ~63%); design sensitivity: a +12pp effect would have yielded ≈25 discordant pairs (observed 3). ② Pilot caliber erratum (project-standard caliber 6:1/n=35/δ=+14.29pp/p=0.125 vs the previously cited None-as-zero caliber 7:1/n=50/δ=+12.00pp/p=0.0703). ③ SpecExpr DSL measurement-gate fixes (silent signature-extraction failure under Planner degradation + builtin type names in value position) → **three-dataset post-fix recalibration: QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397**; the old-gate "dataset divergence" (0.63/0.56/0.31) was largely a measurement artifact. ④ ULT Mut@k measured on a real benchmark (official cosmic-ray protocol): generated tests 0.928 vs gold 1.0 — mutation main metric closed + "mutation-strong but defect-blind" insight. ⑤ **LLM structured-output hardening** (aligned with DeepSeek official docs): LLM_JSON_MODE default-on + numeric-expression JSON repair (`10**18` class; fixes "leaf-fallback silently returning wrong fragment → misdiagnosed M10") + finish_reason guard; smoke M10=0. New ADR-0031. Previously 2026-10-13 EMSE submission-optimization batch
+> Last updated: 2026-10-14 (EMSE batch 4: M10 observability hardening [leaf-fallback silent-fragment explicit warning + ADR-0032] + M2 ULT Mut@k script rebuild + M3 layered-narrative closure [ADR-0032 + docs/design/emse_layered_narrative.md] + M4 QuixBugs SpecExpr expansion pre-registration/analysis [4-arm design, zero-LLM statistics] + 5 EMSE script rebuilds [ult_mutk / optimization / specexpr_confirm / quixbugs_specir_expand]. Full test run 5912 collected / 5908 passed (derived), ruff clean. New ADR-0032. Previously 2026-10-14 triple EMSE batch + LLM structured-output hardening
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-14 EMSE batch 4 (M10 observability + ULT Mut@k closure + layered narrative + QuixBugs expansion pre-registration) + EMSE script rebuilds (zero-LLM, 5912 collected)
+
+> This batch delivers four optimization items plus five rebuilt EMSE scripts,
+> with zero LLM runtime cost (M4 ships only the pre-registration and analysis
+> scripts; the 4-arm run awaits user authorization of the LLM budget, ~$0.3).
+> - M10 observability hardening (ADR-0032): `extract_json_object` leaf-fallback
+>   tiers now set a module-level sentinel `was_leaf_fallback_used()` and emit
+>   an explicit warning; the Planner rewrites the M10 attribution when leaf
+>   fallback fired (`m10_leaf_fallback=True`, pure observation flag that
+>   separates "LLM truly omitted the field" from "extractor misdiagnosed");
+>   `tests/test_llm_oms_leaf_fallback.py` (6 tests);
+> - M2 ULT Mut@k script rebuild (`experiments/emse_ult_mutk.py`, official
+>   cosmic-ray protocol, zero-LLM) + 5 tests passing + dry-run verification
+>   that the config hash matches the archived report (`1e1230a7...`);
+> - M3 layered-narrative closure (`docs/design/emse_layered_narrative.md`):
+>   §6.7 baseline ceiling / §6.8 measurement-artifact erratum / §6.9
+>   compile-rate new gate / §6.10 M10 misdiagnosis layering — the four
+>   conclusions are fixed as the cross-session single source of truth
+>   (the EMSE main report is gitignored; this document is in git);
+>   ADR-0032 (M10 observability) + ADR README index sync;
+> - M4 QuixBugs SpecExpr expansion pre-registration
+>   (`docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_2026-10-14.md`, gitignored)
+>   + 4-arm design (specir×2 + NL×2, independent cache namespaces) + zero-LLM
+>   analysis script (`experiments/emse_quixbugs_specir_expand.py` + 24 tests);
+> - EMSE script rebuilds (5 gitignored scripts restored to disk from their
+>   test contracts): `emse_optimization.py` (42 tests) /
+>   `emse_specexpr_confirm.py` (24 tests) / `emse_ult_mutk.py` (5 tests) /
+>   `emse_quixbugs_specir_expand.py` (24 tests);
+> - Full test suite: 5912 collected / 5908 passed (derived value:
+>   collected − 4 skipped − 0 xfailed); ruff clean; BASELINE.yaml refreshed
+>   (total_passed 5908 / collected 5912).
+
+### Added
+
+- **M10 observability hardening (ADR-0032, `src/utils/helpers.py` + `src/agents/planner.py`)**:
+  ① `was_leaf_fallback_used()` module-level sentinel — `extract_json_object`
+  sets it `True` + a warning whenever a leaf-fallback tier hits (reset to
+  `False` at every call entry; pure observation, zero behavior change);
+  ② Planner M10 attribution rewrite — `m10_leaf_fallback=True` pure-observation
+  flag (written into `result`, not part of routing) separates the ~7-8%
+  M10 misdiagnosis source (extractor leaf-fallback silently returning a
+  wrong fragment) from "LLM omitted the field"; ③
+  `tests/test_llm_oms_leaf_fallback.py` (6 tests: normal path always False /
+  leaf hit always True / all-failures reset / pure-observation identity /
+  warning log / symmetry);
+- **M3 layered-narrative closure (`docs/design/emse_layered_narrative.md`)**:
+  §1 baseline ceiling (QuixBugs ~63% vs synthetic ~3% vs ULT 0% detection
+  baselines; SpecExpr gains must carry dataset-qualified language) /
+  §2 compile-rate measurement artifact (old gate 0.63/0.56/0.31 → new gate
+  0.7161/0.5937/0.6397; the upward shift ∝ Planner degradation rate) /
+  §3 mutation-strong but defect-blind (ULT Mut@k 0.928 yet detection
+  0/24; test strength and defect detection are separable) / §4 M10
+  parsing-layer misdiagnosis measurement layering (ADR-0031 + ADR-0032,
+  §6.10 evaluation-reliability-boundary disclosure);
+- **M4 QuixBugs SpecExpr expansion pre-registration
+  (`docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_2026-10-14.md`, gitignored,
+  landed before the 4-arm run per the Registered Reports mechanism)**:
+  4-arm design (specir×2 + NL×2, independent cache namespaces to prevent
+  the temp=0 cache-hit degeneracy) + decision rules
+  (p<0.05 ∧ δ≥8pp = confirmed / p<0.10 ∧ δ>0 = trend / otherwise
+  not_confirmed) + design sensitivity (MDE / expected discordant pairs) +
+  cost budget (~$0.3, 70 tasks × 4 arms) + honest boundaries (temp=0
+  cross-batch cache risk + non-novel task set + QuixBugs local cache is
+  the complete Python subset, 50 programs);
+- **M4 zero-LLM analysis script
+  (`experiments/emse_quixbugs_specir_expand.py` +
+  `tests/test_emse_quixbugs_specir_expand.py`, 24 tests)**:
+  McNemar exact test + Jeffreys BF10 + MDE + decision rules + provenance
+  verification (4-arm cache-namespace distinctness) + readable
+  diagnostics for missing artifacts;
+- **EMSE script rebuilds (5 gitignored scripts restored to disk from their
+  test contracts)**:
+  ① `emse_optimization.py` (42 tests) — McNemar/χ²/power/Bayes factor/
+  false_fix dual caliber/correlation/swebench fact extraction/over-red
+  rerun classification;
+  ② `emse_specexpr_confirm.py` (24 tests) — within-seed pairing + pooled
+  counts (cross-seed task_id mismatch protection) / canonical statistic
+  values / decision rules / asymmetry audit / fallback-subset sensitivity /
+  provenance verification;
+  ③ `emse_ult_mutk.py` (5 tests) — ULT Mut@k real-benchmark cosmic-ray
+  recomputation (zero-LLM; dry-run verifies the config hash `1e1230a7...`
+  matches the archived report);
+  ④ `emse_quixbugs_specir_expand.py` (24 tests) — see M4;
+  ⑤ `emse_t08_gates_recompute.py` (test file at
+  `tests/test_emse_t08_gates.py`; the script is gitignored and NOT rebuilt
+  — the T-08 dual-gate rerun already has archived artifacts at
+  `experiments/results/emse_t08_gates_20261013/`; the script is outside
+  this batch's scope);
+- **ADR-0032 (`docs/adr/0032-m10-leaf-fallback-observability.md`)**:
+  M10 observability hardening decision record (background / decision /
+  consequences / known limitations and evolution path) + ADR README index
+  sync (0032 used → next available 0033);
+
+### Changed
+
+- `BASELINE.yaml`: total_passed refreshed 5887→5908 (collected
+  5891→5912; batch-4 adds 21 tests = test_llm_oms_leaf_fallback.py 6 +
+  test_emse_quixbugs_specir_expand.py 24, minus 5 from the
+  emse_optimization rebuild that fixed one degenerate assertion);
+  last_verified refreshed (batch 4);
+- `docs/adr/README.md`: ADR-0032 index row + numbering maintenance note
+  (0033 next available);
+- `.gitignore`: M4 pre-registration + M4 analysis script added to gitignore
+  (consistent with the sibling EMSE-script discipline: local-only, not
+  pushed to GitHub);
+
+### Fixed
+
+- **emse_optimization.py rebuild**: McNemar canonical values aligned
+  ((2,3)→1.0 / (8,5)→0.5811 / (4,8)→0.3877 / (113,0)→2×0.5^113);
+  MDE formula matches the 10-13 canonical form (no (1−ψ) factor);
+  Bayes factor matches the numeric-integration reference
+  ((2,3)→0.375 / (8,5)→0.3076 / (4,8)→0.4443 / (50,50)→0.0796 /
+  (20,2)→853.6); false_fix falls back to the 10-13 canonical values when
+  the main-batch artifact is absent (n=261/143/240/143, with
+  `source: 10-13_caliber_fallback` so the provenance is explicit);
+  swebench facts derive `notes` from the `issues` field; spearman returns
+  None for n≤2 (prevents the "2-point false correlation" reviewer
+  objection);
+- **emse_specexpr_confirm.py rebuild**: verdict boundary corrected
+  (p<0.05 but δ<8pp → not_confirmed, not trend — statistical
+  significance is not effect-size adequacy); primary_pooled gains the
+  `only_specir`/`only_replace` alias keys consumed by `build_analysis`.
 
 ## [Unreleased] — 2026-10-14 Triple EMSE batch (SpecExpr confirmatory + DSL measurement-gate fixes + Mut@k) + LLM structured-output hardening
 
