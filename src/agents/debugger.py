@@ -617,7 +617,9 @@ class DebuggerAgent(BaseAgent):
                 logger.info("1.3 降级链：上下文档位 %s，本轮 LLM 温度收紧为 %.2f", tier_name, tier_temperature)
 
         # 调用 LLM 获取修复响应，带文件缓存省 token
-        raw = self._call_llm_with_cache(query, temperature=eff_temperature)
+        # 2026-10-14：json_mode=True——本调用契约是 JSON 对象（root_cause/
+        # patch 等，官方 DeepSeek JSON Output 绑定 response_format）。
+        raw = self._call_llm_with_cache(query, temperature=eff_temperature, json_mode=True)
 
         # P0 4.1 响应格式重试：JSON 解析失败 / 空响应时用更严格 prompt 重新请求一次
         # ErrorCategory 在文件头已导入（与 ErrorClassifier 同模块），删除函数内
@@ -638,7 +640,7 @@ class DebuggerAgent(BaseAgent):
                 query + "\n\n【格式要求】只输出一个 JSON 对象，不要输出任何其他文本、注释或 markdown 代码块。"
                 'JSON 结构：{"root_cause": str, "error_category": str, "fix_strategy": str, "patch": str}'
             )
-            raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=eff_temperature)
+            raw2_strict = self._call_llm_with_cache(_strict_retry_query, temperature=eff_temperature, json_mode=True)
             _strict_response_format = ErrorClassifier.classify_llm_response(raw2_strict)
             if _strict_response_format not in (
                 ErrorCategory.LLM_EMPTY_RESPONSE,
@@ -730,7 +732,7 @@ class DebuggerAgent(BaseAgent):
                 )
                 # 把击穿用例注入 prompt 重新生成一次（带负面反馈）
                 requery = query + self._build_critic_feedback(critic_result)
-                raw2 = self._call_llm_with_cache(requery, temperature=temperature)
+                raw2 = self._call_llm_with_cache(requery, temperature=temperature, json_mode=True)
                 # 2026-09-26 round9 P2：critic requery 的 JSON 提取同样可能
                 # 失败（LLM 二次输出仍为坏 JSON），不捕获则对抗性分支
                 # 崩溃使整个 Debugger 节点失败。降级为保留原 patch。
@@ -1072,7 +1074,8 @@ class DebuggerAgent(BaseAgent):
             '请输出 JSON：{"break_cases": [测试用例描述...], "all_passed": bool}'
         )
         try:
-            raw = self._call_llm_with_cache(query)
+            # 2026-10-14：json_mode=True（契约 = JSON 对象，见上查询文本）
+            raw = self._call_llm_with_cache(query, json_mode=True)
             result = self._extract_json(raw)
             break_cases = [str(c) for c in (result.get("break_cases") or [])[:_MAX_CRITIC_BREAK_CASES]]
             return {
@@ -1150,7 +1153,8 @@ class DebuggerAgent(BaseAgent):
             '"reason": "一句话判断依据"}'
         )
         try:
-            raw = self._call_llm_with_cache(query)
+            # 2026-10-14：json_mode=True（契约 = JSON 对象，见上查询文本）
+            raw = self._call_llm_with_cache(query, json_mode=True)
             result = self._extract_json(raw)
             defect_type = str(result.get("defect_type", "implementation_defect"))
             if defect_type not in ("implementation_defect", "test_defect"):

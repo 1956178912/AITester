@@ -24,6 +24,7 @@ from typing import Any
 
 from config import LLM_CALL_BUDGET_SECONDS, LLM_TIMEOUT, TEMPERATURE
 from src.agents.llm_client import (
+    _ABNORMAL_FINISH_REASONS,
     _DEFAULT_LLM_MAX_RETRIES,
     _cache_creator_label,
     _call_zai,
@@ -37,6 +38,7 @@ from src.agents.llm_client import (
     _redact_log_text,
     _retry_with_exponential_backoff,
     cache_creator_ok,
+    json_output_mode_enabled,
 )
 from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.utils.helpers import extract_code_block, extract_json_object
@@ -287,6 +289,7 @@ class BaseAgent:
         max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
         temperature: float | None = None,
         complexity_class: str | None = None,
+        json_mode: bool = False,
     ) -> str:
         """
         带缓存的 LLM 调用方法。
@@ -315,6 +318,13 @@ class BaseAgent:
             complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
                 非 None 时经 _call_llm → _reorder_api_groups_by_complexity
                 按档位重排 API 组（complex → 高成本端点在前）。
+            json_mode: 结构化 JSON 调用标记（2026-10-14 LLM_JSON_MODE，
+                DeepSeek JSON Output）。仅期待 JSON 对象的调用点传 True
+                （Planner 测试计划 / Debugger 补丁/批评/分类）；True 时
+                （且 LLM_JSON_MODE≠off）对请求绑定
+                response_format={"type":"json_object"} 并计入缓存键——
+                与历史非 JSON 口径的响应严格隔离（同 prompt 不同模式
+                不共享缓存条目）。False 时全路径与历史逐字节一致。
 
         Returns:
             LLM 返回的文本字符串（来自缓存或实时调用）。
@@ -332,16 +342,22 @@ class BaseAgent:
             except Exception:  # 监控旁路失败静默（观测层不阻断主链路）
                 pass
         # 缓存开关关闭时直接透传（测试环境默认关闭，避免缓存文件污染与 flaky）
+        # json_mode 仅在 True 时透传（False 时调用签名与历史逐字节一致）
+        _jm_kwargs: dict[str, Any] = {"json_mode": True} if json_mode else {}
         if not _llm_cache_enabled():
             if complexity_class is not None:
                 if temperature is not None:
                     return self._call_llm(
-                        user_message, max_retries, temperature=temperature, complexity_class=complexity_class
+                        user_message,
+                        max_retries,
+                        temperature=temperature,
+                        complexity_class=complexity_class,
+                        **_jm_kwargs,
                     )
-                return self._call_llm(user_message, max_retries, complexity_class=complexity_class)
+                return self._call_llm(user_message, max_retries, complexity_class=complexity_class, **_jm_kwargs)
             if temperature is not None:
-                return self._call_llm(user_message, max_retries, temperature=temperature)
-            return self._call_llm(user_message, max_retries)
+                return self._call_llm(user_message, max_retries, temperature=temperature, **_jm_kwargs)
+            return self._call_llm(user_message, max_retries, **_jm_kwargs)
 
         # 生成缓存键（基于 user_message + system_prompt + temperature）
         # 使用 hashlib.md5 替代 hash()，确保跨会话稳定命中（hash() 在 Python 3.3+ 默认随机化）
@@ -357,6 +373,11 @@ class BaseAgent:
         cache_key = f"{user_message}\x00{self.system_prompt}"
         if temperature is not None:
             cache_key += f"\x00t{temperature}"
+        # 2026-10-14 LLM_JSON_MODE：json_mode 计入键材料——同 prompt 的
+        # JSON 模式响应与非 JSON 历史响应严格隔离（不跨模式串味）。仅
+        # True 时追加，False 时键与历史逐字节一致（旧缓存照常命中）。
+        if json_mode:
+            cache_key += "\x00jm1"
         cache_hash = hashlib.md5(cache_key.encode("utf-8")).hexdigest()[:16]  # 取前16位十六进制，固定长度
         cache_file = os.path.normpath(os.path.join(_llm_cache_dir(), f"{cache_hash}.json"))
         lru_key = (cache_file, user_message, temperature)
@@ -480,14 +501,14 @@ class BaseAgent:
         if complexity_class is not None:
             if temperature is not None:
                 response = self._call_llm(
-                    user_message, max_retries, temperature=temperature, complexity_class=complexity_class
+                    user_message, max_retries, temperature=temperature, complexity_class=complexity_class, **_jm_kwargs
                 )
             else:
-                response = self._call_llm(user_message, max_retries, complexity_class=complexity_class)
+                response = self._call_llm(user_message, max_retries, complexity_class=complexity_class, **_jm_kwargs)
         elif temperature is not None:
-            response = self._call_llm(user_message, max_retries, temperature=temperature)
+            response = self._call_llm(user_message, max_retries, temperature=temperature, **_jm_kwargs)
         else:
-            response = self._call_llm(user_message, max_retries)
+            response = self._call_llm(user_message, max_retries, **_jm_kwargs)
         _call_tokens = max(0, _get_usage().total_tokens - _before_total)
 
         # 写入缓存（文件是事实来源；写成功则同步回填 LRU 供后续快路径）
@@ -566,6 +587,7 @@ class BaseAgent:
         max_retries: int = _DEFAULT_LLM_MAX_RETRIES,
         temperature: float | None = None,
         complexity_class: str | None = None,
+        json_mode: bool = False,
     ) -> str:
         """
         调用 LLM 并返回文本响应。
@@ -584,6 +606,16 @@ class BaseAgent:
             complexity_class: P0 1.2 复杂度档位（"simple"/"medium"/"complex"）。
                 提供时传递给 APIManager 按档位选择 LLM 实例（同模型多 provider
                 端点场景下路由到对应复杂度档位）；None 走历史策略。
+            json_mode: 结构化 JSON 调用标记（默认 False）。True 且
+                LLM_JSON_MODE≠off 时对 OpenAI 兼容请求绑定
+                response_format={"type":"json_object"}（DeepSeek JSON
+                Output，保证合法 JSON；提示侧"必须指示输出 JSON"的前置
+                条件由调用点保证——Planner/Debugger 提示均含 JSON 字样
+                与格式示例，2026-10-14 逐一核查）。zai 路径不支持该参数，
+                保守忽略（不改变 zai 行为）。False 时请求体与历史逐字节
+                一致。响应 finish_reason ∈ {length, insufficient_system_
+                resource}（截断/资源中断）视为可恢复失败重试，不把残缺
+                内容交给下游解析。
 
         Returns:
             LLM 返回的文本字符串。
@@ -639,6 +671,11 @@ class BaseAgent:
         # 同一 API 内也尝试不同模型（额度用完时自动切换）
         # P0 1.2 修复：eff_temperature = 调用方覆盖值 or config 默认值
         eff_temperature = temperature if temperature is not None else TEMPERATURE
+        # 2026-10-14 LLM_JSON_MODE（DeepSeek JSON Output）：调用点显式
+        # json_mode=True 且环境开关非 off 时，对请求绑定
+        # response_format={"type":"json_object"}（默认 on；off=历史口径，
+        # 请求体逐字节一致，供旧批次复现）。zai 路径不适用（保守忽略）。
+        eff_json = bool(json_mode and json_output_mode_enabled())
 
         for base_url, models in api_groups.items():
             # 判断当前 API 是否为 zai SDK 兼容接口，分流至不同调用路径
@@ -664,13 +701,33 @@ class BaseAgent:
                             client: Any = llm,
                             model: str = model_name,
                         ) -> str:
+                            _invoke_kwargs: dict[str, Any] = {"timeout": LLM_TIMEOUT}
+                            if eff_json:
+                                # DeepSeek JSON Output（官方文档 guides/json_mode）：
+                                # 保证响应为合法 JSON 字符串。提示侧先决条件
+                                # （须指示输出 JSON）由调用点保证。
+                                _invoke_kwargs["response_format"] = {"type": "json_object"}
                             response = client.invoke(
                                 [
                                     SystemMessage(content=self.system_prompt),
                                     HumanMessage(content=user_message),
                                 ],
-                                timeout=LLM_TIMEOUT,
+                                **_invoke_kwargs,
                             )
+                            # 2026-10-14：异常 finish_reason 守卫（DeepSeek 官方
+                            # 文档）——length=被 max_tokens 截断 / insufficient_
+                            # system_resource=推理系统资源不足中断；残缺响应
+                            # 按可恢复失败重试，不交给下游解析。
+                            _finish = str(
+                                (getattr(response, "response_metadata", None) or {}).get("finish_reason") or ""
+                            )
+                            if _finish in _ABNORMAL_FINISH_REASONS:
+                                logger.warning(
+                                    "LLM 响应不完整（finish_reason=%s, model=%s），按可恢复失败重试",
+                                    _finish,
+                                    model,
+                                )
+                                raise RuntimeError(f"LLM 响应不完整（finish_reason={_finish}）")
                             text_ = response.content.strip()
                             # 空响应视为失败，触发重试（而非直接跨模型切换）
                             if not text_:

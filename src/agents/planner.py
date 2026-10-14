@@ -318,7 +318,7 @@ class PlannerAgent(BaseAgent):
             query += SPEC_EXPR_GRAMMAR_SECTION
 
         # 调用 LLM 获取原始响应（内含逻辑分析和测试计划），带文件缓存省 token
-        raw = self._call_llm_with_cache(query)
+        raw = self._call_llm_with_cache(query, json_mode=True)
         # 解析 JSON 响应
         result = self._extract_json(raw)
 

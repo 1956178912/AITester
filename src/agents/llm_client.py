@@ -71,6 +71,40 @@ _llm_client_cache: dict[tuple[str, float, str, str, str], ChatOpenAI] = {}
 _llm_client_cache_lock = threading.Lock()
 
 
+def json_output_mode_enabled() -> bool:
+    """JSON Output 开关（DeepSeek `response_format={"type":"json_object"}`）。
+
+    背景（2026-10-14，按 DeepSeek 官方文档 JSON Output 指南配置；触发：
+    EMSE 批次日志中 Planner/Debugger 的 JSON 解析失败——`M10：LLM 未输出
+    logic_analysis` 6 次/75 任务、`llm_json_parse_failed` 严格重试路径
+    多次触发）：官方文档明确 JSON Output 保证响应为**合法 JSON 字符串**，
+    并要求（a）提示中必须指示输出 JSON（各调用点提示均已含 "JSON" 与
+    格式示例——已逐一核查）、（b）合理设置 max_tokens 防截断（本开关不
+    改 max_tokens；截断由 finish_reason=length 守卫显式暴露并可重试）。
+
+    环境变量（登记 docs/env_budget.yaml）：
+    - LLM_JSON_MODE："on"（**默认**，减少结构化输出解析失败；对齐 AD1
+      LLM_THINKING_MODE 的"行为默认值"先例）/ "off"（历史口径——不附加
+      response_format，请求逐字节同历史批次，供旧批次复现/回归对照）。
+
+    **作用面**：仅"期待结构化 JSON 的调用点"显式传 json_mode=True 时生效
+    （Planner 测试计划 / Debugger 补丁与批评者/缺陷分类），代码生成类
+    调用（Generator 测试、重采样补丁）不受影响——避免把代码输出强制成
+    JSON。zai 兼容路径不支持该参数（保守忽略）。
+
+    Returns:
+        True = 对显式 json_mode 调用绑定 response_format；False = 历史口径。
+    """
+    raw = (os.getenv("LLM_JSON_MODE", "on") or "").strip().lower()
+    return raw not in ("off", "0", "false", "disabled")
+
+
+# finish_reason 异常值（DeepSeek 官方文档 Chat Completions）：length =
+# 达到 max_tokens 截断；insufficient_system_resource = 推理资源不足中断。
+# 两者均为"响应不完整"→ 按可恢复失败重试（而非把残缺内容交给下游解析）。
+_ABNORMAL_FINISH_REASONS: frozenset[str] = frozenset({"length", "insufficient_system_resource"})
+
+
 def _openai_extra_body() -> dict[str, Any]:
     """构建 OpenAI 兼容路径的额外请求体（AD1，2026-10-06 输出成本控制）。
 
