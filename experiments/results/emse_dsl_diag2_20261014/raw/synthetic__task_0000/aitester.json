@@ -1,0 +1,57 @@
+{
+  "task_id": "synthetic__task_0000",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "unknown",
+    "description": "自动生成的默认测试计划",
+    "logic_analysis": {
+      "input_domain": "未知",
+      "output_domain": "未知",
+      "preconditions": [],
+      "postconditions": [],
+      "edge_cases": []
+    },
+    "test_cases": [],
+    "logic_degraded": true
+  },
+  "generated_test": "import pytest\nfrom task_0000 import process\n\n\ndef test_process_returns_list():\n    \"\"\"process 应返回 list 类型。\n\n    期望值来源：函数签名 `-> list`。\n    \"\"\"\n    result = process([1, 2, 3])\n    assert isinstance(result, list)\n\n\ndef test_process_increments_each_element():\n    \"\"\"process 对输入列表中每个元素加 1。\n\n    期望值来源：函数体 `[x + 1 for x in items]`。\n    \"\"\"\n    result = process([1, 2, 3])\n    assert result[:3] == [2, 3, 4]\n\n\ndef test_process_appends_zero_at_end():\n    \"\"\"process 在结果末尾追加 0。\n\n    期望值来源：函数体 `+ [0]`。\n    \"\"\"\n    result = process([1, 2, 3])\n    assert result[-1] == 0\n\n\ndef test_process_output_length_is_input_plus_one():\n    \"\"\"输出长度等于输入长度加 1。\n\n    期望值来源：函数体推导式长度 + 追加的单个 0。\n    \"\"\"\n    items = [10, 20, 30, 40]\n    result = process(items)\n    assert len(result) == len(items) + 1\n\n\ndef test_process_empty_list():\n    \"\"\"空列表输入应返回仅含一个 0 的列表。\n\n    期望值来源：函数体对空列表推导得 []，再追加 [0]。\n    \"\"\"\n    result = process([])\n    assert result == [0]\n\n\ndef test_process_single_element():\n    \"\"\"单元素列表输入应返回 [x+1, 0]。\n\n    期望值来源：函数体逻辑。\n    \"\"\"\n    result = process([5])\n    assert result == [6, 0]\n\n\ndef test_process_negative_numbers():\n    \"\"\"负数元素同样加 1。\n\n    期望值来源：函数体 `x + 1` 对任意数值成立。\n    \"\"\"\n    result = process([-1, -2, -3])\n    assert result == [0, -1, -2, 0]\n\n\ndef test_process_float_elements():\n    \"\"\"浮点元素同样加 1。\n\n    期望值来源：函数体 `x + 1` 对浮点数成立。\n    \"\"\"\n    result = process([1.5, 2.5])\n    assert result == [2.5, 3.5, 0]\n\n\ndef test_process_does_not_mutate_input():\n    \"\"\"process 不应修改传入的原始列表。\n\n    期望值来源：函数体使用列表推导式创建新列表，未原地修改。\n    \"\"\"\n    items = [1, 2, 3]\n    original = list(items)\n    process(items)\n    assert items == original\n\n\n@pytest.mark.parametrize(\n    \"items, expected\",\n    [\n        ([0], [1, 0]),\n        ([100], [101, 0]),\n        ([1, 1, 1], [2, 2, 2, 0]),\n        ([-10, 10], [-9, 11, 0]),\n    ],\n)\ndef test_process_parametrized_cases(items, expected):\n    \"\"\"参数化验证多种输入下的输出。\n\n    期望值来源：函数体 `[x + 1 for x in items] + [0]`。\n    \"\"\"\n    assert process(items) == expected\n\n\ndef test_process_non_iterable_raises_type_error():\n    \"\"\"传入不可迭代对象应抛出 TypeError。\n\n    期望值来源：列表推导式要求可迭代对象。\n    \"\"\"\n    with pytest.raises(TypeError):\n        process(123)\n\n\ndef test_process_none_raises_type_error():\n    \"\"\"传入 None 应抛出 TypeError。\n\n    期望值来源：列表推导式要求可迭代对象，None 不可迭代。\n    \"\"\"\n    with pytest.raises(TypeError):\n        process(None)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": [
+    {
+      "source_module": "module_a",
+      "target_module": "module_b",
+      "symbol": "",
+      "call_line": 0,
+      "source": "benchmark_preset",
+      "context": "dep_chain[0]: module_a -> module_b"
+    }
+  ],
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "cross_file_api_contract",
+    "source": "synthetic",
+    "noise_seed": 9435,
+    "difficulty": 3,
+    "is_cross_file": true,
+    "module_a_code": "from module_b import process\n\ndef run_pipeline(items: list) -> list:\n    result = process(items)\n    return [x * 10 for x in result]",
+    "module_a_name": "module_a",
+    "module_b_code": "def process(items: list) -> list:\n    return [x + 1 for x in items] + [0]",
+    "module_b_name": "module_b",
+    "module_c_code": "",
+    "module_c_name": "module_c",
+    "target_module": "module_b",
+    "fixed_module_code": "def process(items: list) -> list:\n    if not items:\n        return []\n    return [x + 1 for x in items]",
+    "num_files": 2,
+    "dep_chain": null,
+    "suggested_function": null,
+    "test_cases": "from module_a import run_pipeline\nfrom module_b import process\n\ndef test_process_normal():\n    assert process([1, 2, 3]) == [2, 3, 4]\n\ndef test_process_empty():\n    assert process([]) == []\n\ndef test_run_pipeline_normal():\n    assert run_pipeline([1, 2, 3]) == [20, 30, 40]\n\ndef test_run_pipeline_empty():\n    assert run_pipeline([]) == []"
+  }
+}

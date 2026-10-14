@@ -1,0 +1,157 @@
+{
+  "task_id": "synthetic__task_0001",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "initials",
+    "description": "将全名按空白切分后取每段首字母大写并用点号连接；输入为 None 时抛出 AttributeError（None 无 split 方法）。",
+    "logic_analysis": {
+      "input_domain": "str 或 None；str 可为空串、纯空白串、单段、多段、含多余空白、含 Unicode 字符",
+      "output_domain": "str：由各段首字符大写形式以 '.' 连接；无段时为空串 ''",
+      "preconditions": [
+        "full_name 为 str 类型（None 会触发 AttributeError）",
+        "full_name 可被 str.split() 调用"
+      ],
+      "postconditions": [
+        "返回值中不含空白字符（除首字母本身为空白的情况外，split 已去除空白段）",
+        "返回值各段由 '.' 分隔，段数等于 split() 后的段数",
+        "每段长度为 1 且为大写形式"
+      ],
+      "edge_cases": [
+        "full_name 为空串 '' → split() 返回 [] → 返回 ''",
+        "full_name 为纯空白 '   ' → split() 返回 [] → 返回 ''",
+        "full_name 为 None → AttributeError",
+        "单段名 'alice' → 'A'",
+        "多段名 'john ronald reuel tolkien' → 'J.R.R.T'",
+        "含 Unicode 名 'éva marie' → 'É.M'",
+        "含连字符 'jean-luc picard' → 'J.P'（连字符不切分）"
+      ],
+      "preconditions_expr": [
+        "isinstance(full_name, str)"
+      ],
+      "postconditions_expr": [
+        "isinstance(result, str)",
+        "result == \".\".join(p[0].upper() for p in full_name.split())"
+      ],
+      "invariants_expr": [
+        "all(len(p) > 0 for p in full_name.split())"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "常规多段全名",
+        "input_args": {
+          "full_name": "john ronald reuel tolkien"
+        },
+        "expected_output": "J.R.R.T",
+        "category": "normal",
+        "description": "验证多段名取首字母大写并以点连接",
+        "logic_coverage": "主路径：split → 取首字母 → upper → join"
+      },
+      {
+        "case_name": "常规两段全名",
+        "input_args": {
+          "full_name": "Ada Lovelace"
+        },
+        "expected_output": "A.L",
+        "category": "normal",
+        "description": "验证两段名输出格式",
+        "logic_coverage": "主路径"
+      },
+      {
+        "case_name": "单段名",
+        "input_args": {
+          "full_name": "alice"
+        },
+        "expected_output": "A",
+        "category": "normal",
+        "description": "验证单段名只返回一个首字母",
+        "logic_coverage": "主路径"
+      },
+      {
+        "case_name": "空字符串",
+        "input_args": {
+          "full_name": ""
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "空串 split 后为空列表，join 结果为空串",
+        "logic_coverage": "边界：空输入"
+      },
+      {
+        "case_name": "纯空白字符串",
+        "input_args": {
+          "full_name": "   "
+        },
+        "expected_output": "",
+        "category": "boundary",
+        "description": "纯空白 split 后为空列表，返回空串",
+        "logic_coverage": "边界：空白输入"
+      },
+      {
+        "case_name": "含多余空白",
+        "input_args": {
+          "full_name": "  john   doe  "
+        },
+        "expected_output": "J.D",
+        "category": "boundary",
+        "description": "验证 split 自动忽略多余空白",
+        "logic_coverage": "边界：空白处理"
+      },
+      {
+        "case_name": "含 Unicode 字符",
+        "input_args": {
+          "full_name": "éva marie"
+        },
+        "expected_output": "É.M",
+        "category": "boundary",
+        "description": "验证 Unicode 首字母 upper 行为",
+        "logic_coverage": "边界：非 ASCII 字符"
+      },
+      {
+        "case_name": "含连字符",
+        "input_args": {
+          "full_name": "jean-luc picard"
+        },
+        "expected_output": "J.P",
+        "category": "boundary",
+        "description": "连字符不切分，取段首字符",
+        "logic_coverage": "边界：非空白分隔符"
+      },
+      {
+        "case_name": "None 输入",
+        "input_args": {
+          "full_name": null
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：None 无 split 方法，代码会抛 AttributeError，但 docstring/类型注解未约定异常类型，故不臆造具体异常信息",
+        "logic_coverage": "异常路径：None 输入"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0001 import initials\n\n\n# ---------------------------------------------------------------------------\n# 常规用例\n# ---------------------------------------------------------------------------\n\ndef test_initials_multi_segment_full_name():\n    \"\"\"常规多段全名：'john ronald reuel tolkien' → 'J.R.R.T'。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"john ronald reuel tolkien\") == \"J.R.R.T\"\n\n\ndef test_initials_two_segment_full_name():\n    \"\"\"常规两段全名：'Ada Lovelace' → 'A.L'。\n\n    期望值来源：规约后置条件 result == \".\".join(p[0].upper() for p in full_name.split())。\n    \"\"\"\n    assert initials(\"Ada Lovelace\") == \"A.L\"\n\n\ndef test_initials_single_segment_name():\n    \"\"\"单段名：'alice' → 'A'。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"alice\") == \"A\"\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\n\ndef test_initials_empty_string():\n    \"\"\"空串：'' → ''（split() 返回 []，join 结果为空串）。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"\") == \"\"\n\n\ndef test_initials_whitespace_only_string():\n    \"\"\"纯空白串：'   ' → ''（split() 返回 []）。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"   \") == \"\"\n\n\ndef test_initials_extra_whitespace():\n    \"\"\"含多余空白：'  john   doe  ' → 'J.D'（split 自动忽略多余空白）。\n\n    期望值来源：规约后置条件 result == \".\".join(p[0].upper() for p in full_name.split())。\n    \"\"\"\n    assert initials(\"  john   doe  \") == \"J.D\"\n\n\ndef test_initials_unicode_characters():\n    \"\"\"含 Unicode 字符：'éva marie' → 'É.M'。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"éva marie\") == \"É.M\"\n\n\ndef test_initials_hyphenated_name():\n    \"\"\"含连字符：'jean-luc picard' → 'J.P'（连字符不切分）。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    assert initials(\"jean-luc picard\") == \"J.P\"\n\n\n# ---------------------------------------------------------------------------\n# 异常用例\n# ---------------------------------------------------------------------------\n\ndef test_initials_none_raises_attribute_error():\n    \"\"\"None 输入：None 无 split 方法，应抛出 AttributeError。\n\n    期望值来源：规约边界情况明确给出（None → AttributeError）。\n    \"\"\"\n    with pytest.raises(AttributeError):\n        initials(None)\n\n\n# ---------------------------------------------------------------------------\n# 规约性质（后置条件 / 不变量）验证\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"full_name\",\n    [\n        \"john ronald reuel tolkien\",\n        \"Ada Lovelace\",\n        \"alice\",\n        \"  john   doe  \",\n        \"éva marie\",\n        \"jean-luc picard\",\n        \"a b c\",\n    ],\n)\ndef test_initials_postcondition_matches_spec(full_name):\n    \"\"\"后置条件：result == \".\".join(p[0].upper() for p in full_name.split())。\n\n    期望值来源：规约可执行后置子句。\n    \"\"\"\n    result = initials(full_name)\n    assert isinstance(result, str)\n    assert result == \".\".join(p[0].upper() for p in full_name.split())\n\n\n@pytest.mark.parametrize(\n    \"full_name\",\n    [\n        \"john ronald reuel tolkien\",\n        \"Ada Lovelace\",\n        \"alice\",\n        \"  john   doe  \",\n        \"éva marie\",\n        \"jean-luc picard\",\n    ],\n)\ndef test_initials_result_segments_are_single_uppercase(full_name):\n    \"\"\"后置条件：返回值各段由 '.' 分隔，段数等于 split() 后的段数，每段长度为 1 且为大写形式。\n\n    期望值来源：规约后置条件。\n    \"\"\"\n    result = initials(full_name)\n    segments = full_name.split()\n    result_segments = result.split(\".\")\n    assert len(result_segments) == len(segments)\n    for seg in result_segments:\n        assert len(seg) == 1\n        assert seg == seg.upper()\n\n\n@pytest.mark.parametrize(\n    \"full_name\",\n    [\n        \"john ronald reuel tolkien\",\n        \"Ada Lovelace\",\n        \"alice\",\n        \"  john   doe  \",\n        \"éva marie\",\n        \"jean-luc picard\",\n    ],\n)\ndef test_initials_invariant_split_segments_non_empty(full_name):\n    \"\"\"不变量：all(len(p) > 0 for p in full_name.split())。\n\n    期望值来源：规约可执行不变量子句。\n    \"\"\"\n    assert all(len(p) > 0 for p in full_name.split())\n    # 同时验证函数在该输入下可正常返回字符串\n    assert isinstance(initials(full_name), str)\n\n\n@pytest.mark.parametrize(\"full_name\", [\"\", \"   \", \"\\t\\n\"])\ndef test_initials_empty_or_whitespace_returns_empty_string(full_name):\n    \"\"\"边界：空串或纯空白串 → 返回 ''。\n\n    期望值来源：规约边界情况（'' 与 '   ' → ''），并推广到其它纯空白形式。\n    \"\"\"\n    assert initials(full_name) == \"\"",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "type_none_branch_missing",
+    "source": "synthetic",
+    "noise_seed": 4560,
+    "difficulty": 4,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0001 import initials\n\ndef test_two_words():\n    assert initials(\"Ada Lovelace\") == \"A.L\"\n\ndef test_none_input():\n    assert initials(None) == \"\"\n\ndef test_empty_input():\n    assert initials(\"\") == \"\"\n\ndef test_whitespace_input():\n    assert initials(\"   \") == \"\"\n\ndef test_single_word():\n    assert initials(\"guide\") == \"G\"",
+    "fixed": "def initials(full_name: str | None) -> str:\n    if not full_name or not full_name.strip():\n        return \"\"\n    parts = full_name.split()\n    return \".\".join(p[0].upper() for p in parts)"
+  }
+}

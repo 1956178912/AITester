@@ -1,0 +1,192 @@
+{
+  "task_id": "synthetic__task_0004",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "split_words",
+    "description": "将输入字符串按单个空格字符分割为子串列表（等价于 str.split(\" \")，保留空串片段）。",
+    "logic_analysis": {
+      "input_domain": "任意 str 实例（含空串、纯空格串、含连续空格、含制表符/换行等非空格空白、含前后导空格、Unicode 字符）",
+      "output_domain": "list 实例，元素均为 str；元素个数 = 输入中空格字符数 + 1；各元素按原顺序拼接（以单个空格连接）等于原输入",
+      "preconditions": [
+        "text 为 str 类型（类型注解约定）",
+        "无其他前置约束，任意字符串均可传入"
+      ],
+      "postconditions": [
+        "返回值为 list 类型",
+        "返回列表元素均为 str",
+        "\" \".join(result) == text",
+        "len(result) == text.count(\" \") + 1"
+      ],
+      "edge_cases": [
+        "空字符串 \"\" → 返回 [\"\"]（长度 1，非空列表）",
+        "单个空格 \" \" → 返回 [\"\", \"\"]",
+        "连续多个空格 \"a  b\" → 中间产生空串元素",
+        "前后导空格 \" a \" → 首尾产生空串元素",
+        "仅含非空格空白 \"\\t\\n\" → 不分割，返回 [\"\\t\\n\"]",
+        "超长字符串（大量空格）→ 列表长度线性增长，无溢出语义"
+      ],
+      "preconditions_expr": [
+        "isinstance(text, str)"
+      ],
+      "postconditions_expr": [
+        "isinstance(result, list)",
+        "all(isinstance(item, str) for item in result)",
+        "len(result) == text.count(\" \") + 1"
+      ],
+      "invariants_expr": [
+        "len(result) >= 1"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "普通多词字符串",
+        "input_args": {
+          "text": "hello world foo"
+        },
+        "expected_output": [
+          "hello",
+          "world",
+          "foo"
+        ],
+        "category": "normal",
+        "description": "验证常规以单空格分隔的字符串被正确切分为三段",
+        "logic_coverage": "主路径：text.split(\" \") 正常返回"
+      },
+      {
+        "case_name": "无空格单词",
+        "input_args": {
+          "text": "hello"
+        },
+        "expected_output": [
+          "hello"
+        ],
+        "category": "normal",
+        "description": "验证不含空格的字符串返回单元素列表",
+        "logic_coverage": "主路径：无分隔符时返回原串单元素列表"
+      },
+      {
+        "case_name": "空字符串",
+        "input_args": {
+          "text": ""
+        },
+        "expected_output": [
+          ""
+        ],
+        "category": "boundary",
+        "description": "空串按 \" \" 分割返回包含一个空串的列表（非空列表）",
+        "logic_coverage": "边界：空输入"
+      },
+      {
+        "case_name": "单个空格",
+        "input_args": {
+          "text": " "
+        },
+        "expected_output": [
+          "",
+          ""
+        ],
+        "category": "boundary",
+        "description": "仅一个空格字符时返回两个空串元素",
+        "logic_coverage": "边界：最小可分割输入"
+      },
+      {
+        "case_name": "连续多个空格",
+        "input_args": {
+          "text": "a  b"
+        },
+        "expected_output": [
+          "a",
+          "",
+          "b"
+        ],
+        "category": "boundary",
+        "description": "连续空格产生空串元素，验证不合并空白",
+        "logic_coverage": "边界：连续分隔符"
+      },
+      {
+        "case_name": "前后导空格",
+        "input_args": {
+          "text": " a "
+        },
+        "expected_output": [
+          "",
+          "a",
+          ""
+        ],
+        "category": "boundary",
+        "description": "首尾空格导致首尾空串元素",
+        "logic_coverage": "边界：前导/后导分隔符"
+      },
+      {
+        "case_name": "仅含非空格空白字符",
+        "input_args": {
+          "text": "\t\n"
+        },
+        "expected_output": [
+          "\t\n"
+        ],
+        "category": "boundary",
+        "description": "制表符与换行不属于分隔符 \" \"，整体作为单元素返回",
+        "logic_coverage": "边界：非空格空白不被分割"
+      },
+      {
+        "case_name": "Unicode 字符",
+        "input_args": {
+          "text": "你好 世界"
+        },
+        "expected_output": [
+          "你好",
+          "世界"
+        ],
+        "category": "normal",
+        "description": "验证 Unicode 字符按空格正常分割",
+        "logic_coverage": "主路径：非 ASCII 内容"
+      },
+      {
+        "case_name": "非字符串入参（整数）",
+        "input_args": {
+          "text": 123
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "类型注解约定 text 为 str；传入 int 时 int 无 split 方法，将抛出 AttributeError，具体异常类型与消息由运行时决定，期望值未知",
+        "logic_coverage": "异常路径：类型不符"
+      },
+      {
+        "case_name": "非字符串入参（None）",
+        "input_args": {
+          "text": null
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "传入 None 时 None 无 split 方法，将抛出 AttributeError，具体异常类型与消息由运行时决定，期望值未知",
+        "logic_coverage": "异常路径：None 输入"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0004 import split_words\n\n\n# ---------------------------------------------------------------------------\n# 普通用例\n# ---------------------------------------------------------------------------\n\ndef test_split_words_normal_multi_word():\n    \"\"\"普通多词字符串：'hello world foo' 应切分为三段。\n\n    期望值来源：规约边界/后置条件（\" \".join(result) == text 且\n    len(result) == text.count(\" \") + 1）。\n    \"\"\"\n    result = split_words(\"hello world foo\")\n    assert result == [\"hello\", \"world\", \"foo\"]\n\n\ndef test_split_words_normal_no_space():\n    \"\"\"无空格单词：'hello' 返回单元素列表。\n\n    期望值来源：规约后置条件 len(result) == text.count(\" \") + 1 == 1。\n    \"\"\"\n    result = split_words(\"hello\")\n    assert result == [\"hello\"]\n\n\ndef test_split_words_normal_unicode():\n    \"\"\"Unicode 字符：'你好 世界' 按空格正常分割。\n\n    期望值来源：规约后置条件（拼接还原 + 元素个数）。\n    \"\"\"\n    result = split_words(\"你好 世界\")\n    assert result == [\"你好\", \"世界\"]\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\n\ndef test_split_words_boundary_empty_string():\n    \"\"\"空字符串：'' 返回 ['']（长度 1，非空列表）。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    result = split_words(\"\")\n    assert result == [\"\"]\n    assert len(result) == 1\n\n\ndef test_split_words_boundary_single_space():\n    \"\"\"单个空格：' ' 返回 ['', '']。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    result = split_words(\" \")\n    assert result == [\"\", \"\"]\n\n\ndef test_split_words_boundary_consecutive_spaces():\n    \"\"\"连续多个空格：'a  b' 中间产生空串元素。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    result = split_words(\"a  b\")\n    assert result == [\"a\", \"\", \"b\"]\n\n\ndef test_split_words_boundary_leading_trailing_spaces():\n    \"\"\"前后导空格：' a ' 首尾产生空串元素。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    result = split_words(\" a \")\n    assert result == [\"\", \"a\", \"\"]\n\n\ndef test_split_words_boundary_non_space_whitespace():\n    \"\"\"仅含非空格空白：'\\\\t\\\\n' 不分割，返回 ['\\\\t\\\\n']。\n\n    期望值来源：规约边界情况明确给出。\n    \"\"\"\n    result = split_words(\"\\t\\n\")\n    assert result == [\"\\t\\n\"]\n\n\ndef test_split_words_boundary_long_string():\n    \"\"\"超长字符串（大量空格）：列表长度线性增长，无溢出语义。\n\n    期望值来源：规约边界情况 + 后置条件\n    len(result) == text.count(\" \") + 1。\n    \"\"\"\n    text = \" \".join([\"x\"] * 1000)\n    result = split_words(text)\n    assert len(result) == text.count(\" \") + 1\n    assert len(result) == 1000\n    assert all(item == \"x\" for item in result)\n\n\n# ---------------------------------------------------------------------------\n# 后置条件 / 不变量（参数化）\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"text\",\n    [\n        \"\",\n        \" \",\n        \"  \",\n        \"a\",\n        \"a b\",\n        \"a  b\",\n        \" a \",\n        \"  a  b  \",\n        \"\\t\\n\",\n        \"你好 世界\",\n        \"hello world foo\",\n        \"a b c d e f g\",\n    ],\n)\ndef test_split_words_postconditions(text):\n    \"\"\"对多种输入验证规约后置条件与不变量。\n\n    期望值来源：规约可执行子句：\n      - isinstance(result, list)\n      - all(isinstance(item, str) for item in result)\n      - \" \".join(result) == text\n      - len(result) == text.count(\" \") + 1\n      - len(result) >= 1\n    \"\"\"\n    result = split_words(text)\n    assert isinstance(result, list)\n    assert all(isinstance(item, str) for item in result)\n    assert \" \".join(result) == text\n    assert len(result) == text.count(\" \") + 1\n    assert len(result) >= 1\n\n\n# ---------------------------------------------------------------------------\n# 异常路径（前置条件不满足）\n# ---------------------------------------------------------------------------\n\ndef test_split_words_error_int_input():\n    \"\"\"非字符串入参（整数）：前置条件要求 text 为 str。\n\n    期望值来源：规约前置条件 isinstance(text, str) 不满足；\n    具体异常类型与消息由运行时决定，期望值未知，需人工确认。\n    此处仅断言会抛出异常，不臆造具体异常类型。\n    \"\"\"\n    with pytest.raises(Exception):\n        split_words(123)\n\n\ndef test_split_words_error_none_input():\n    \"\"\"非字符串入参（None）：前置条件要求 text 为 str。\n\n    期望值来源：规约前置条件 isinstance(text, str) 不满足；\n    具体异常类型与消息由运行时决定，期望值未知，需人工确认。\n    此处仅断言会抛出异常，不臆造具体异常类型。\n    \"\"\"\n    with pytest.raises(Exception):\n        split_words(None)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "string_split_empty",
+    "source": "synthetic",
+    "noise_seed": 3970,
+    "difficulty": 1,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0004 import split_words\n\ndef test_split_words_normal():\n    assert split_words(\"hello world\") == [\"hello\", \"world\"]\n\ndef test_split_words_empty():\n    assert split_words(\"\") == []\n\ndef test_split_words_whitespace():\n    assert split_words(\"   \") == []",
+    "fixed": "def split_words(text: str) -> list:\n    if not text or not text.strip():\n        return []\n    return text.split()"
+  }
+}
