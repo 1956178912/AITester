@@ -73,12 +73,12 @@ target_quality:
     # 契约前后数值不可直接对比；契约后无成规模实测，无法给出单一"当前值"，按数据集/批次分层。
     rechecked: "2026-10-14"
     aitester:
-      synthetic_post_grammar: 0.3102        # 契约后合成集成规模实测：10-14 确认性跑批（seed45/46 specir 臂，n=174，42% 行恒 0，unknown_name 拒绝为主）——**低于 0.35 阈值**，与 QuixBugs 0.6321 呈数据集强分化；此前 10-13 D2 冒烟 n=5=0.520 为方向性已被本值取代
+      synthetic_post_grammar: 0.6397        # 契约后合成集·**新度量门**（2026-10-14 §6.9 修门后重测，seed45/46 × 87 = n=174；s45 0.6761/s46 0.6033，s46 指纹探针瞬态失败已披露）——旧门值 0.3102（n=174，修前排）主要为**度量假象**：同任务新抽样 expr 覆盖率不变（0.693→0.686/0.748→0.707）而 unknown_name 拒绝崩塌（129→35/141→53）；QuixBugs/ULT 行为旧门值，新门重测进行中
       examples_post_grammar: 0.500         # 契约后 examples，10-12 n=2（仅方向性）
-      quixbugs_post_grammar: 0.6321        # 契约后真实基准首测：10-14 spec_ir pilot（emse_spec_ir_quixbugs_20261013，SPEC_IR_ENABLE+SPEC_IR_DSL_ENABLE 干净口径，n=50；冒烟 synthetic n=3 为 0.0——SpecExpr 子句可编译率存在数据集差异，论文须披露）
-      ult_post_grammar: 0.5626            # 契约后 ULT 首测：10-14 探针（emse_ult_specir_probe_20261014，25 任务干净口径 replace+SPEC_IR，n=25；spec_expr_coverage 0.6176 n=21；detection 0/24——ULT 生成测试不产红，该数据集检测口径适配性另议）
+      quixbugs_post_grammar: 0.6321        # 契约后真实基准首测（**旧度量门**）：10-14 spec_ir pilot（emse_spec_ir_quixbugs_20261013，干净口径，n=50）；新门重测进行中（QuixBugs Planner 降级率低，预计上修幅度小于 synthetic）
+      ult_post_grammar: 0.5626            # 契约后 ULT 首测（**旧度量门**）：10-14 探针（emse_ult_specir_probe_20261014，25 任务干净口径，n=25；detection 0/24——ULT 生成测试不产红，检测口径适配性另议）；新门重测进行中
       quixbugs_pre_grammar: [0.234, 0.324] # 契约前最新 QuixBugs（10-10 logic_ab c1-c4，n=46×4，pooled 0.2696/n=184，仍 <0.35）
-    note: "T-11 复测结论（2026-10-13）：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足。**2026-10-14 更新**：① spec_ir pilot 补齐契约后真实基准首测——QuixBugs n=50=0.6321（≥0.35）；② 确认性跑批（seed45/46，预注册 docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_2026-10-14.md）给出合成集成规模值 n=174=**0.3102（<0.35，42% 恒 0）**——SpecExpr 子句可编译率呈数据集强分化：真实基准 QuixBugs 0.6321（n=50）/ ULT 0.5626（n=25）均 ≥0.35，合成模板 0.31 未达——受限表达式 DSL 对真实代码规约接受率良好、对合成模板子句（unknown_name 拒绝为主）不足；且 synthetic detection 对比为阴性（δ=−0.57pp，见 EMSE 报告 §6.8）——形式化通道效力与可编译率正相关。对外引用必须带数据集标签。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议：受限表达式 DSL 覆盖率提升（扩白名单/扩文法，优先 synthetic 模板场景）"
+    note: "T-11 复测结论（2026-10-13）：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足。**2026-10-14 更新**：① spec_ir pilot 补齐契约后真实基准首测——QuixBugs n=50=0.6321（≥0.35）；② 确认性跑批（预注册 docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_2026-10-14.md）synthetic detection 阴性（δ=−0.57pp，§6.8，主因=基线天花板）；③ **§6.9 修门（Planner 降级静默失败 + 内建类型名值位置）后 synthetic 新门值 n=174=0.6397**——旧门 0.3102 的「数据集分化」主要为度量假象（同任务新抽样 expr 覆盖率不变、unknown_name 拒绝崩塌 129→35/141→53）；QuixBugs/ULT 新门重测进行中，完成后本表统一为新门口径。对外引用必须带数据集标签。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议：QuixBugs/ULT 新门重测收口后统一口径；后续如仍低于 0.35 再评估 DSL 扩展（当前 synthetic 新门 0.64 已高于阈值，扩展优先级下降）"
   spec_expr_coverage:        # 表达式通道覆盖率（与 spec_compile_rate 正交）
     aitester:
       synthetic_post_grammar: 0.7202       # 10-14 确认性跑批 specir 臂 pooled（seed45 0.6928/seed46 0.7477，n=70+70；替换 10-13 D2 冒烟 n=4=0.746）
