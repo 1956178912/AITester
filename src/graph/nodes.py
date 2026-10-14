@@ -441,9 +441,23 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         # 集合 {r,x,a,b,y}）会把"自定义参数名可编译"的子句误判为不可编译，
         # 度量又变成下界。函数名解析口径与注入侧逐字一致：
         # target_function → spec.function_name（注入侧同为这两级）。
+        # 2026-10-14 第三级回退（度量侧专用，EMSE SpecExpr 确认性实验诊断）：
+        # Planner 降级时前两级皆空**或为字面量 "unknown"**（M10 降级的两种
+        # 形态：JSON 解析失败缺字段 / 占位 "unknown"——实测 12 任务样本
+        # 2/12 为 "unknown"）→ 签名提取回退历史默认集 {r,x,a,b,y} →
+        # 自定义参数名的可编译子句被误判 unknown_name（合成集实测 270 次
+        # 拒绝的主要来源）。回退取模块唯一顶层函数名（确定性 AST，仅单
+        # 函数模块 fire，多函数模块保守空串）。刻意不动注入侧（改 injection
+        # 会动处理/prompt，属另一实验）。
         from src.specs import extract_signature_params as _extract_sig_params
+        from src.tools.spec_first import sole_top_level_function_name as _sole_fn_name
 
-        _dsl_func = state.get("target_function") or (_dsl_spec or {}).get("function_name") or ""
+        _dsl_func_raw = state.get("target_function") or (_dsl_spec or {}).get("function_name") or ""
+        _dsl_func = (
+            _dsl_func_raw
+            if _dsl_func_raw and _dsl_func_raw != "unknown"
+            else _sole_fn_name(state.get("target_code") or "")
+        )
         _dsl_signature_params = (
             _extract_sig_params(state.get("target_code") or "", str(_dsl_func)) if _dsl_func else None
         )

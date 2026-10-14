@@ -591,3 +591,38 @@ class TestV3StringMethodWhitelist:
         }
         assert spec_reject_reasons(spec, _PARAMS) == {}
         assert compile_readiness(spec, _PARAMS) == 1.0
+
+
+# ─── 5. 内建类型名值位置放行（2026-10-14 EMSE SpecExpr 诊断批次） ───
+
+
+class TestBuiltinTypeNamesValuePosition:
+    """`isinstance(x, str)` 的类型名以裸 Name（参数位置）出现——调用白名单
+    只覆盖调用位置，值位置的内建类型名须放行（运行期恒有定义，无 NameError
+    假红风险）。2026-10-14 实测：合成集 *_expr 子句 str×6/int×7/list×1
+    被误判 unknown_name。"""
+
+    @pytest.mark.parametrize(
+        ("clause", "params"),
+        [
+            ("isinstance(x, str)", ["x"]),
+            ("isinstance(x, int) or isinstance(x, float)", ["x"]),
+            ("isinstance(items, list) and len(items) > 0", ["items"]),
+            ("isinstance(x, (int, float))", ["x"]),
+            ("isinstance(text, str) and len(text) > 0", ["text"]),
+        ],
+    )
+    def test_builtin_type_names_accepted_in_value_position(self, clause: str, params: list[str]) -> None:
+        assert clause_reject_reason(clause, "precondition", params) is None, clause
+
+    def test_non_builtin_unknown_name_still_rejected(self) -> None:
+        """用户符号（模块级常量/未绑定名）照旧 unknown_name——不放宽危险面。"""
+        assert clause_reject_reason("_STOCK[sku] == qty", "postcondition", ["sku", "qty"]) == "unknown_name"
+        assert clause_reject_reason("total > 0", "postcondition", ["x"]) == "unknown_name"
+        # 非白名单调用在算子门即被拦（dangerous_call），到不了标识符门
+        assert clause_reject_reason("helper(x) > 0", "postcondition", ["x"]) == "unsupported_operator"
+
+    def test_type_name_gate_does_not_leak_into_other_reasons(self) -> None:
+        """类型名放行只影响标识符门；算子门/形态门不受影响。"""
+        assert clause_reject_reason("x.title()", "postcondition", ["x"]) == "unsupported_operator"
+        assert clause_reject_reason("x 为 str 类型", "precondition", ["x"]) == "natural_language"

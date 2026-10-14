@@ -232,3 +232,38 @@ class TestGeneratorNodeWiring:
     def test_default_mode_passes_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured = self._run_node(monkeypatch, None)
         assert captured.get("spec_replace_section") is None, "默认 off 时必须传 None（历史口径）"
+
+
+# ─── sole_top_level_function_name（2026-10-14 度量侧修正） ───
+
+
+def test_sole_top_level_function_name_single_function() -> None:
+    """单函数模块 → 无歧义回退名。"""
+    from src.tools.spec_first import sole_top_level_function_name
+
+    assert sole_top_level_function_name("def process(items):\n    return items\n") == "process"
+
+
+def test_sole_top_level_function_name_multi_function_returns_empty() -> None:
+    """多函数模块（含 helper）→ 歧义保守空串（不猜）。"""
+    from src.tools.spec_first import sole_top_level_function_name
+
+    code = "def _better(a, b):\n    return a > b\n\n\ndef best(xs):\n    return max(xs)\n"
+    assert sole_top_level_function_name(code) == ""
+
+
+def test_sole_top_level_function_name_no_function_or_syntax_error() -> None:
+    """无函数 / 语法错误 / 空输入 → 空串（保守）。"""
+    from src.tools.spec_first import sole_top_level_function_name
+
+    assert sole_top_level_function_name("x = 1\n") == ""
+    assert sole_top_level_function_name("def broken(:\n") == ""
+    assert sole_top_level_function_name("") == ""
+
+
+def test_sole_top_level_function_name_ignores_nested_and_async_counts() -> None:
+    """类内方法不算顶层；async def 算顶层函数。"""
+    from src.tools.spec_first import sole_top_level_function_name
+
+    assert sole_top_level_function_name("class C:\n    def m(self):\n        return 1\n") == ""
+    assert sole_top_level_function_name("async def fetch(url):\n    return url\n") == "fetch"
