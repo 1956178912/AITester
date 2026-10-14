@@ -1,6 +1,6 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-08（R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2；此前 2026-10-07 修复引擎批次 I：范式转向"局部化 → 合成 → 验证"——独立 FaultLocalizer 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，`FAULT_LOCALIZER_ENABLE` 默认开〕+ 局部化独立指标 `localization_hit_function` 首测）
+最后更新：2026-10-14（LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，六处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
 
 ## 1. 系统概述
 
@@ -32,6 +32,15 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
   **双通道**——谱系通道（Ochiai，非 LLM）之外，推理通道（RGFL 式
   `FaultLocalizerAgent`，`FAULT_LOCALIZER_ENABLE` 默认开）**消耗 LLM**
   且失败时保守降级 None；`FAULT_LOCALIZER_ENABLE=false` 退回纯谱系消融口径。
+- **调用配置（2026-10-14 ADR-0031，DeepSeek 官方文档对齐）**：
+  thinking 默认 **disabled**（`LLM_THINKING_MODE`，成本保护——V4 系思考
+  链默认开启且计入输出计费）；`LLM_JSON_MODE` **默认 on**——7 处 JSON
+  契约调用点绑定官方 JSON Output（`response_format=json_object`，保证
+  响应为合法 JSON 字符串；`off` 供历史逐字节复现）；响应
+  `finish_reason ∈ {length, insufficient_system_resource}` 按可恢复失败
+  重试；LLM 在 JSON 值位写 Python 数值表达式（`10**18` 类）由解析层
+  受限求值修复（无 eval）。全部配置入 `docs/env_budget.yaml` 与批次
+  provenance `env_snapshot`（可审计、可复现）。
 
 ## 3. 训练数据与数据来源
 

@@ -3,7 +3,7 @@
 # AITester API 参考文档
 
 > 本文档描述 AITester 的核心类和方法，供开发者集成和扩展使用。
-> 最后更新：2026-10-07（修复引擎批次 I：范式转向——独立 `FaultLocalizerAgent` 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，只定位不修复，失败保守降级 None〕，见智能体模块新增条目；`DebuggerAgent.debug()` 新增 `localization_section` 定位段落形参；工作流 `debugger` 节点内联推理定位并写 `state["llm_localization"]`）
+> 最后更新：2026-10-14（LLM 结构化输出加固批次：新增 `LLM_JSON_MODE` / `LLM_THINKING_MODE` / `LLM_REASONING_EFFORT` / `LLM_MAX_OUTPUT_TOKENS` 环境变量条目〔ADR-0031，DeepSeek 官方 JSON Output 与思考模式对齐〕。此前 2026-10-07 修复引擎批次 I：独立 `FaultLocalizerAgent` 落地〔RGFL 式 LLM 推理定位 + Ochiai 谱系佐证双通道，只定位不修复，失败保守降级 None〕；`DebuggerAgent.debug()` 新增 `localization_section` 形参；工作流 `debugger` 节点内联推理定位并写 `state["llm_localization"]`）
 > 上一批：2026-10-06（第十二轮审查落地批次 AK：实验侧新增 `experiments/repair_ceiling_analysis.py` 离线归因分析〔repair=0 修复漏斗 + detection=None 双界敏感性，见 2.x 统计分析配套条目〕；src/ 零改动、默认行为不变；AA 及更早批次见"上一批"与 CHANGELOG）
 > 上一批：2026-10-06（AA 代码优化批次：`AITESTER_PROFILE` 扩为四档并补齐 logic 档 `DETECTION_FIRST_ENABLE`〔ADR-0015 检出优先协议漏配补齐〕；`SyntheticDataset` 新增 `max_pattern_repeat` 同池模板重复上限 + `run_benchmark` CLI `--max-pattern-repeat`（均 opt-in，默认 None=历史口径，seed=42 复现性不变）；README CI 矩阵漂移修复；默认行为不变）
 >
@@ -962,6 +962,10 @@ print(MODEL_NAME)  # 默认模型（LLM_1）名称
 | `ENABLE_MULTI_CANDIDATE_PATCH` | bool | false | 3.1 多候选补丁生成与静态/执行验证筛选（默认关，无候选回退单补丁）；`reproduce.sh` 复现流程默认显式启用（`--no-multi-candidate` 可回退历史口径） |
 | `AITESTER_TRACE_DIR` | str | 未设（no-op） | 4.1 结构化 JSONL 追踪层输出目录（未设时追踪层 no-op，不影响运行）；`reproduce.sh` 默认启用（`experiments/results/traces`） |
 | `BENCHMARK_PARALLELISM` | int | 0 | 并行度（0=串行） |
+| `LLM_JSON_MODE` | str | "on" | ADR-0031（2026-10-14，DeepSeek 官方 JSON Output）：七处 JSON 契约调用点（Planner 测试计划 / Debugger 补丁·严格重试·批评者·击穿用例·缺陷分类 / FaultLocalizer 定位）绑定 `response_format={"type":"json_object"}`（保证响应为合法 JSON 字符串）；`off` 恢复历史逐字节口径（旧批次复现）；已登记 env_budget 与 `_env_snapshot_keys`（批次 provenance 可审计） |
+| `LLM_THINKING_MODE` | str | "disabled" | AD1（2026-10-06）输出成本控制：DeepSeek V4 系思考链默认 enabled 且计入输出计费，本项目默认 disabled；`enabled` 恢复思考模式（质量敏感实验显式开启） |
+| `LLM_REASONING_EFFORT` | str | 未设 | AD1：思考强度（`none`/`low`/`high`/`max`；`none` 亦关闭思考；官方默认 high）；未设时不发该字段 |
+| `LLM_MAX_OUTPUT_TOKENS` | int | 未设 | AD1：输出硬上限 1..393216（官方：不设时非思考 8K/思考 64K）；设小值可截断长响应；越界/非整数忽略并告警 |
 | `TEMPERATURE` | float | 0.2 | LLM 采样温度；R11（2026-10-05）确定性采样用法：`run_benchmark(deterministic=True)` 强制 TEMPERATURE=0.0（三处级联——`os.environ` + `config` + `base_agent` 命名空间，后二者 import 时求值仅改 env 不生效），供主批次复现实验使用 |
 | `MODEL_NAME` / `OPENAI_API_KEY` / `OPENAI_BASE_URL` | str | - | 仅派生值（取自 LLM_1，向后兼容），**不是配置输入** |
 | `EXECUTOR_USE_DOCKER` | bool | false | 4.3 Docker 隔离执行（经 docker CLI 在容器内跑 pytest；需本机安装 docker 且镜像已构建，不可用时返回 `docker_unavailable` 诊断不降级本地） |

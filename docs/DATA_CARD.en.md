@@ -2,25 +2,29 @@
 
 # Data Card
 
-Last updated: 2026-10-08 (R20: §4 adds the QuixBugs positioning downgrade —
+Last updated: 2026-10-14 (§1 dataset overview refreshed: new ULT row
+(real benchmark, mutation main-metric scenario; subset in use since
+2026-10-13/14, n=25–46) + QuixBugs status updated to multi-batch usage
+(D1 A/B / spec_ir pilot / recalibration n=50; positioning remains L1, the
+R20 near-saturation and memorization-contamination statements stand).
+Previously 2026-10-08 R20: §4 adds the QuixBugs positioning downgrade —
 near-saturation (citing 2025–2026 cross-model coordinates) + memorization-
 contamination risk, limited to L1 pipeline validation; §1 status column
-updated to "single-arm rerun (not the formal E4 execution)". Previously
-2026-10-07: AN1: §4 registers the TestGenEval L2-candidate
-evaluation — CC BY-NC 4.0, verified against the LICENSE text; joins BugsInPy
-in the non-clean-license gate; previously AH1: §4 licensing authoritatively
-verified — QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no
-SPDX license [new L2 decision gate registered]; previously AA2: §2 registers
-the `max_pattern_repeat` mitigation for the sampling-repetition bias;
-previously Z6: closing a data-governance gap — data provenance used to live
-only in MODEL_CARD §3 with no standalone card; review item R15)
+updated to "single-arm rerun (not the formal E4 execution)". Earlier:
+2026-10-07 AN1: §4 registers the TestGenEval L2-candidate evaluation —
+CC BY-NC 4.0, verified against the LICENSE text; joins BugsInPy in the
+non-clean-license gate; AH1: §4 licensing authoritatively verified —
+QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no SPDX
+license [new L2 decision gate registered]; AA2: §2 registers the
+`max_pattern_repeat` mitigation; Z6: standalone data card created (R15))
 
 ## 1. Dataset Overview
 
 | Dataset | Loader name | Status | Purpose |
 |---------|-------------|--------|---------|
-| Synthetic defect template library | `synthetic` | ✅ in use for the main batch (n=50 tasks) | main experiments / ablations |
-| QuixBugs (Python subset) | `quixbugs` | single-arm aitester rerun (an R4 by-product, **not the formal E4 execution**); used for L1 pipeline validation | real-defect ladder L1 |
+| Synthetic defect template library | `synthetic` | ✅ in use for the main batch (n=50 tasks; parameterized 87/120 variants used by confirmatory/recalibration batches) | main experiments / ablations |
+| QuixBugs (Python subset, complete 50 programs) | `quixbugs` | ✅ multi-batch in use (D1 A/B / spec_ir pilot / recalibration n=50; positioning remains L1 — near-saturation + memorization statements in §4) | real-defect ladder L1 |
+| ULT (UnLeakedTestBench, local clone) | `ult` | ✅ subset in use (ult_lite46 / specir probe / recalibration / Mut@k subset, n=25–46; **detection-caliber fitness under review** — generated tests show zero detections 0/45, 0/24 while gold assertions demonstrably fail on the buggy code, i.e. "LLM tests produce no red") | real benchmark (mutation main metric Mut@k / cyclomatic ≥10 filter) |
 | BugsInPy | `bugsinpy` | loader ready, **never run** | real-defect ladder L2 |
 | SWE-bench Lite | `swe_bench` | historical 0/20 smoke run (**2026-10-13 erratum: an API 429 rate-limit infrastructure failure, no valid capability conclusion**) | repo-level (target mismatch, see below) |
 

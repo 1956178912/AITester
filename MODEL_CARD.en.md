@@ -1,6 +1,6 @@
 # AITester Model Card
 
-Last updated: 2026-10-08 (R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2; previously 2026-10-07 repair-engine batch I: paradigm shift to "localization → synthesis → verification" — standalone FaultLocalizer landed [RGFL-style LLM reasoning localization + Ochiai spectral corroboration dual channel, `FAULT_LOCALIZER_ENABLE` on by default] + the standalone localization metric `localization_hit_function` first measured)
+Last updated: 2026-10-14 (LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at six JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
 
 ## 1. System Overview
 
@@ -40,6 +40,18 @@ system is research code, not a deployed product).
   `FAULT_LOCALIZER_ENABLE` on by default) **consumes LLM** and degrades
   conservatively to None on failure; `FAULT_LOCALIZER_ENABLE=false` falls
   back to the pure-spectral ablation caliber.
+- **Invocation configuration (2026-10-14, ADR-0031; aligned with DeepSeek
+  official docs)**: thinking **disabled** by default (`LLM_THINKING_MODE`;
+  cost protection — V4-family reasoning chains are on by default and billed
+  as output); `LLM_JSON_MODE` **on** by default — seven JSON-contract call
+  sites bind the official JSON Output (`response_format=json_object`,
+  guaranteeing valid JSON strings; `off` replays the historical
+  byte-identical caliber); responses with `finish_reason ∈ {length,
+  insufficient_system_resource}` are retried as recoverable failures;
+  Python numeric expressions in JSON value positions (`10**18` class)
+  are repaired by the parse layer via bounded evaluation (no eval). All
+  settings are registered in `docs/env_budget.yaml` and per-batch
+  provenance `env_snapshot` (auditable, reproducible).
 
 ## 3. Training Data and Data Sources
 
