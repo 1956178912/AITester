@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-13"   # 全量回归实测日期（2026-10-13 EMSE 投稿优化批次·二：T-01~T-04 引用零瑕疵收口 + T-08 双门复跑阴性 + T-11 spec_compile_rate 复测 + D3 cosmic-ray 实装〔ult_adapter 13 例〕；--collect-only 实测 **5815**；沙箱全量实跑受删除守卫阻断，passed 按 collected − skipped 推导〔见 tests.total_passed 注释〕，提交前须提权前台确认准确 passed/skipped。此前 2026-10-12 STVR 批次 5730/5733）
+last_verified: "2026-10-14"   # 全量回归实测日期（2026-10-14 EMSE SpecExpr 确认性批次：预注册 + 2 种子 × 2 臂实跑 + 分析脚本 24 例 + BASELINE spec_compile_rate/spec_expr_coverage 分层刷新；--collect-only 实测 **5839**；沙箱全量实跑受删除守卫阻断，passed 按 collected − skipped 推导〔见 tests.total_passed 注释〕，提交前须提权前台确认准确 passed/skipped。此前 2026-10-13 批次 5811/5815）
 
 tests:
-  total_passed: 5811          # 全量 pytest tests/（2026-10-13 EMSE 投稿优化批次·二；--collect-only 实测 **5815**；passed = collected − skipped − xfailed = 5815 − 4 − 0 = **5811**〔推导值〕。⚠️ 沙箱全量实跑受 sitecustomize bulk-delete 守卫阻断，本 passed 为推导非实测，提交前须提权前台全量跑确认准确 passed/skipped。上一批 5730/5733 → 本批 5811/5815〔+81/+82〕，新增：test_emse_optimization.py 37 例 + test_stvr_statistical_analysis.py 27 例 + test_ult_adapter.py 14 例〔D3 cosmic-ray 集成〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5835          # 全量 pytest tests/（2026-10-14 EMSE SpecExpr 确认性批次；--collect-only 实测 **5839**；passed = collected − skipped − xfailed = 5839 − 4 − 0 = **5835**〔推导值〕。⚠️ 沙箱全量实跑受 sitecustomize bulk-delete 守卫阻断，本 passed 为推导非实测，提交前须提权前台全量跑确认准确 passed/skipped。上一批 5811/5815 → 本批 5835/5839〔+24/+24〕，新增：test_emse_specexpr_confirm.py 24 例（10-14 SpecExpr 确认性分析脚本回归：种子内配对池化 / 预注册判定边界 / 双向不对称审计 / 设计敏感性 / 相对路径解析）。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
@@ -73,19 +73,19 @@ target_quality:
     # 契约前后数值不可直接对比；契约后无成规模实测，无法给出单一"当前值"，按数据集/批次分层。
     rechecked: "2026-10-14"
     aitester:
-      synthetic_post_grammar: 0.520        # 契约后合成集，10-13 D2 冒烟 n=5（统计意义不足，仅方向性；行级值 [0.6,1.0,0.0,1.0,0.0]）——10-14 确认性跑批（seed 45/46 × 87 × 2 臂）进行中，将刷新为 n≈174 成规模值
+      synthetic_post_grammar: 0.3102        # 契约后合成集成规模实测：10-14 确认性跑批（seed45/46 specir 臂，n=174，42% 行恒 0，unknown_name 拒绝为主）——**低于 0.35 阈值**，与 QuixBugs 0.6321 呈数据集强分化；此前 10-13 D2 冒烟 n=5=0.520 为方向性已被本值取代
       examples_post_grammar: 0.500         # 契约后 examples，10-12 n=2（仅方向性）
       quixbugs_post_grammar: 0.6321        # 契约后真实基准首测：10-14 spec_ir pilot（emse_spec_ir_quixbugs_20261013，SPEC_IR_ENABLE+SPEC_IR_DSL_ENABLE 干净口径，n=50；冒烟 synthetic n=3 为 0.0——SpecExpr 子句可编译率存在数据集差异，论文须披露）
       ult_post_grammar: null               # 契约后无实测：scale87 ult_lite46 同管线关闭；ULT 补测待排（ult_lite46 detection 0/45，该数据集检测口径适配性另议）
       quixbugs_pre_grammar: [0.234, 0.324] # 契约前最新 QuixBugs（10-10 logic_ab c1-c4，n=46×4，pooled 0.2696/n=184，仍 <0.35）
-    note: "T-11 复测结论（2026-10-13）：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足。**2026-10-14 更新**：spec_ir pilot 补齐契约后真实基准首测——QuixBugs n=50=0.6321（≥0.35 阈值），'逻辑驱动'主张获得真实基准单批次支持；但合成集成规模确认（n≈174）仍在跑批中，且 ULT 零实测，对外主张仍应带数据集限定语。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议补样：合成集 n≥87（进行中）+ ULT 重跑"
+    note: "T-11 复测结论（2026-10-13）：契约后仅合成集 n=5=0.52 与 examples n=2=0.50，统计意义不足。**2026-10-14 更新**：① spec_ir pilot 补齐契约后真实基准首测——QuixBugs n=50=0.6321（≥0.35）；② 确认性跑批（seed45/46，预注册 docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_2026-10-14.md）给出合成集成规模值 n=174=**0.3102（<0.35，42% 恒 0）**——SpecExpr 子句可编译率呈数据集强分化（QuixBugs 0.63 vs synthetic 0.31），'逻辑驱动'主张在真实基准（QuixBugs）上获单批次支持、在合成集上未达阈值；且该跑批的 detection 对比为阴性（δ=−0.57pp，见 EMSE 报告 §6.8）——形式化通道效力与可编译率正相关。ULT 仍零实测。对外引用必须带数据集标签。旧登记 0.205–0.219（10-07 E1/E2）双重滞后（既晚于文法契约，也晚于 10-09 合成 0.263–0.517 / 10-09·10 QuixBugs 0.23–0.32）。建议补样：ULT 重跑 + 受限表达式 DSL 覆盖率提升（扩白名单/扩文法）后再评估合成集"
   spec_expr_coverage:        # 表达式通道覆盖率（与 spec_compile_rate 正交）
     aitester:
-      synthetic_post_grammar: 0.746        # 10-13 D2 冒烟 n=4（统计意义不足）
+      synthetic_post_grammar: 0.7202       # 10-14 确认性跑批 specir 臂 pooled（seed45 0.6928/seed46 0.7477，n=70+70；替换 10-13 D2 冒烟 n=4=0.746）
       quixbugs_post_grammar: 0.6069        # 10-14 spec_ir pilot n=45（emse_spec_ir_quixbugs_20261013）
       quixbugs_pre_grammar: [0.587, 0.625] # 10-10 logic_ab c1-c4，n=39–44（契约前最新可靠参考）
       synthetic_pre_20261007: [0.723, 0.741] # 旧登记 E1/E2 n=45/51（历史参考，已滞后）
-    note: "契约后：QuixBugs n=45=0.6069（10-14 pilot）与契约前 0.587–0.625 同档——表达式通道覆盖率契约前后稳定；与 spec_compile_rate 的契约后抬升（0.27→0.63）正交，两通道须并报"
+    note: "契约后成规模实测（10-14）：synthetic n=140=0.7203、QuixBugs n=45=0.6069——表达式通道覆盖率契约前后稳定（契约前 0.587–0.625）；与 spec_compile_rate 的契约后数据集分化（0.63 vs 0.31）正交：**覆盖率稳定而可编译率分化**——LLM 能形式化，但受限表达式 DSL 对 synthetic 子句接受率低（unknown_name 拒绝为主），两通道必须并报"
   specificity_gate:          # 特异性门终审分布（跨批次合计，**纯描述性**）
     aitester: {specific_red: 40, over_red: 66}
     plain_llm_df: {specific_red: 162, over_red: 140}
