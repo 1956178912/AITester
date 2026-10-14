@@ -1,0 +1,181 @@
+{
+  "task_id": "synthetic__task_0005",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "aggregate",
+    "description": "计算列表元素的算术平均值，即 sum(values)/len(values)。",
+    "logic_analysis": {
+      "input_domain": "任意可被 sum() 求和的元素序列（数值列表），包括空列表、单元素列表、含负数/零/浮点数的列表",
+      "output_domain": "float 类型（Python 除法结果），空列表时因除零抛出 ZeroDivisionError",
+      "preconditions": [
+        "values 为可迭代且元素支持加法（sum 可用）",
+        "values 非空（否则 len(values)==0 导致除零）"
+      ],
+      "postconditions": [
+        "返回值等于 sum(values)/len(values)",
+        "返回值类型为 float（除非元素为复数等特殊类型）"
+      ],
+      "edge_cases": [
+        "空列表 []：len 为 0，触发 ZeroDivisionError",
+        "单元素列表 [x]：结果等于 x",
+        "含负数元素：结果可为负",
+        "含 0 元素：结果可为 0",
+        "大数/浮点精度边界"
+      ],
+      "preconditions_expr": [
+        "len(values) > 0"
+      ],
+      "postconditions_expr": [
+        "result == sum(values) / len(values)"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "正常_多元素整数列表",
+        "input_args": {
+          "values": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        "expected_output": 2.5,
+        "category": "normal",
+        "description": "验证常规整数列表的平均值计算，覆盖主路径",
+        "logic_coverage": "主路径：sum(values)/len(values)"
+      },
+      {
+        "case_name": "正常_单元素列表",
+        "input_args": {
+          "values": [
+            5
+          ]
+        },
+        "expected_output": 5.0,
+        "category": "boundary",
+        "description": "验证单元素列表返回该元素本身（边界：len==1）",
+        "logic_coverage": "边界：len(values)==1"
+      },
+      {
+        "case_name": "正常_含负数元素",
+        "input_args": {
+          "values": [
+            -1,
+            -2,
+            -3
+          ]
+        },
+        "expected_output": -2.0,
+        "category": "normal",
+        "description": "验证负数列表平均值计算",
+        "logic_coverage": "主路径：sum 为负"
+      },
+      {
+        "case_name": "正常_含零元素",
+        "input_args": {
+          "values": [
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_output": 0.0,
+        "category": "boundary",
+        "description": "验证全零列表返回 0.0",
+        "logic_coverage": "边界：sum==0"
+      },
+      {
+        "case_name": "正常_浮点列表",
+        "input_args": {
+          "values": [
+            1.5,
+            2.5
+          ]
+        },
+        "expected_output": 2.0,
+        "category": "normal",
+        "description": "验证浮点元素平均值",
+        "logic_coverage": "主路径：浮点元素"
+      },
+      {
+        "case_name": "错误_空列表除零",
+        "input_args": {
+          "values": []
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "空列表时 len(values)==0，sum([])/0 触发 ZeroDivisionError；期望值未知（异常类型由运行时决定，未在 docstring 中约定）",
+        "logic_coverage": "异常路径：len(values)==0"
+      },
+      {
+        "case_name": "错误_非数值元素",
+        "input_args": {
+          "values": [
+            "a",
+            "b"
+          ]
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "字符串元素导致 sum 抛 TypeError；期望值未知（类型错误未在 docstring 中约定）",
+        "logic_coverage": "异常路径：元素类型不支持加法"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0005 import aggregate\n\n\ndef test_aggregate_multi_element_integers():\n    \"\"\"正常路径：多元素整数列表，返回值等于 sum(values)/len(values)。\n\n    期望值来源：后置条件 result == sum(values)/len(values)。\n    \"\"\"\n    values = [1, 2, 3, 4]\n    result = aggregate(values)\n    assert result == sum(values) / len(values)\n    assert result == 2.5\n\n\ndef test_aggregate_single_element_returns_element():\n    \"\"\"边界：单元素列表 [x]，结果等于 x。\n\n    期望值来源：边界情况\"单元素列表 [x]：结果等于 x\"。\n    \"\"\"\n    values = [5]\n    result = aggregate(values)\n    assert result == sum(values) / len(values)\n    assert result == 5.0\n\n\ndef test_aggregate_negative_elements():\n    \"\"\"正常路径：含负数元素，结果可为负。\n\n    期望值来源：后置条件 result == sum(values)/len(values)。\n    \"\"\"\n    values = [-1, -2, -3]\n    result = aggregate(values)\n    assert result == sum(values) / len(values)\n    assert result == -2.0\n\n\ndef test_aggregate_all_zero_elements():\n    \"\"\"边界：全零列表，结果可为 0。\n\n    期望值来源：后置条件 result == sum(values)/len(values)。\n    \"\"\"\n    values = [0, 0, 0]\n    result = aggregate(values)\n    assert result == sum(values) / len(values)\n    assert result == 0.0\n\n\ndef test_aggregate_float_elements():\n    \"\"\"正常路径：浮点元素列表，返回值等于 sum/len。\n\n    期望值来源：后置条件 result == sum(values)/len(values)。\n    \"\"\"\n    values = [1.5, 2.5]\n    result = aggregate(values)\n    assert result == sum(values) / len(values)\n    assert result == 2.0\n\n\ndef test_aggregate_returns_float_type():\n    \"\"\"后置条件：返回值类型为 float（元素为普通数值时）。\n\n    期望值来源：后置条件\"返回值类型为 float\"。\n    \"\"\"\n    result = aggregate([1, 2, 3, 4])\n    assert isinstance(result, float)\n\n\ndef test_aggregate_empty_list_raises_zero_division_error():\n    \"\"\"异常路径：空列表 len(values)==0，触发 ZeroDivisionError。\n\n    期望值来源：边界情况\"空列表 []：len 为 0，触发 ZeroDivisionError\"。\n    \"\"\"\n    with pytest.raises(ZeroDivisionError):\n        aggregate([])\n\n\ndef test_aggregate_non_numeric_elements_raises():\n    \"\"\"异常路径：非数值元素（字符串）导致 sum 失败。\n\n    期望值来源：前置条件要求元素支持加法；具体异常类型未在规约中约定，\n    此处仅断言抛出异常（探索性，需人工确认具体异常类型）。\n    \"\"\"\n    with pytest.raises(Exception):\n        aggregate([\"a\", \"b\"])\n\n\n@pytest.mark.parametrize(\n    \"values\",\n    [\n        [1, 2, 3, 4],\n        [5],\n        [-1, -2, -3],\n        [0, 0, 0],\n        [1.5, 2.5],\n        [10, -10],\n        [0.1, 0.2, 0.3],\n    ],\n)\ndef test_aggregate_matches_spec_postcondition(values):\n    \"\"\"后置条件参数化：对满足前置条件的输入，result == sum(values)/len(values)。\n\n    期望值来源：可执行后置子句 result == sum(values) / len(values)。\n    \"\"\"\n    assert len(values) > 0\n    result = aggregate(values)\n    assert result == sum(values) / len(values)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 96.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": [
+    {
+      "source_module": "module_a",
+      "target_module": "module_b",
+      "symbol": "",
+      "call_line": 0,
+      "source": "benchmark_preset",
+      "context": "dep_chain[0]: module_a -> module_b"
+    },
+    {
+      "source_module": "module_b",
+      "target_module": "module_c",
+      "symbol": "",
+      "call_line": 0,
+      "source": "benchmark_preset",
+      "context": "dep_chain[1]: module_b -> module_c"
+    }
+  ],
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "cross_file_three_module_chain",
+    "source": "synthetic",
+    "noise_seed": 8496,
+    "difficulty": 3,
+    "is_cross_file": true,
+    "module_a_code": "from module_b import transform_batch\nfrom module_c import doubled\n\ndef analyze_dataset(records: list) -> dict:\n    cleaned = [r for r in records if r is not None]\n    transformed = transform_batch(records)\n    return {\"count\": len(cleaned), \"doubled_sum\": doubled(cleaned)}",
+    "module_a_name": "module_a",
+    "module_b_code": "from module_c import normalize_values, aggregate, doubled\n\ndef transform_batch(records: list) -> list:\n    cleaned = [r for r in records if r is not None]\n    normalized = normalize_values(cleaned)\n    mean = aggregate(normalized) if normalized else 0.0\n    return [float(v) for v in normalized]",
+    "module_b_name": "module_b",
+    "module_c_code": "def normalize_values(values: list) -> list:\n    return [v * 2 for v in values] + [0]  # 历史 bug：空列表返回 [0] 而非 []\n\ndef aggregate(values: list) -> float:\n    return sum(values) / len(values)  # 历史 bug：空列表除零\n\ndef doubled(values: list) -> float:\n    return 2 * sum(values, 0)  # 历史 bug：int 混用未归一化 float",
+    "module_c_name": "module_c",
+    "target_module": "module_c",
+    "fixed_module_code": "def normalize_values(values: list) -> list:\n    if not values:\n        return []\n    return [float(v) * 2 for v in values]\n\ndef aggregate(values: list) -> float:\n    if not values:\n        return 0.0\n    total = 0.0\n    for v in values:\n        total += float(v)\n    return total / len(values)\n\ndef doubled(values: list) -> float:\n    if not values:\n        return 0.0\n    return 2.0 * sum((float(v) for v in values), 0.0)",
+    "num_files": 3,
+    "dep_chain": [
+      "module_a",
+      "module_b",
+      "module_c"
+    ],
+    "suggested_function": "aggregate",
+    "test_cases": "from module_c import normalize_values, aggregate\nfrom module_a import analyze_dataset\nfrom module_b import transform_batch\n\ndef test_aggregate_empty():\n    # 置于首位：空列表除零（ZeroDivisionError）展开被测模块帧\n    # module_c.py:N: in aggregate，使位置感知定位阶段可被激活\n    # （--tb=short 下纯 assertion 失败不展开被测帧，运行时异常才展开）\n    assert aggregate([]) == 0.0\n\ndef test_normalize_normal():\n    assert normalize_values([1, 2, 3]) == [2.0, 4.0, 6.0]\n\ndef test_normalize_empty():\n    assert normalize_values([]) == []\n\ndef test_aggregate_normal():\n    assert abs(aggregate([1.0, 2.0, 3.0]) - 2.0) < 1e-9\n\ndef test_transform_batch_mixed_types():\n    # int/float 混用历史缺陷：sum([1, 2.5]) 旧口径 int*2 丢精度\n    assert transform_batch([1, 2.5]) == [2.0, 5.0]\n\ndef test_analyze_dataset_normal():\n    result = analyze_dataset([1, 2, 3])\n    assert result[\"count\"] == 3\n    assert abs(result[\"doubled_sum\"] - 12.0) < 1e-9\n\ndef test_analyze_dataset_empty():\n    result = analyze_dataset([])\n    assert result[\"count\"] == 0\n    assert result[\"doubled_sum\"] == 0\n\ndef test_analyze_dataset_with_none():\n    result = analyze_dataset([1, None, 3])\n    assert result[\"count\"] == 2\n    assert abs(result[\"doubled_sum\"] - 8.0) < 1e-9"
+  }
+}
