@@ -107,6 +107,32 @@ _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
         "enumerate",
     }
 )
+# 内建类型名（**值位置**放行集）：`isinstance(x, str)` / `isinstance(v, int)`
+# 等类型断言子句里，类型名以裸 Name（参数位置）出现——`_ALLOWED_CALL_NAMES`
+# 只覆盖**调用位置**（str(...)），值位置的 str/int/list 会被 unknown_name
+# 门误拒（2026-10-14 实测：12 任务合成集 *_expr 子句中 str×6/int×7/list×1）。
+# 这些名字在运行期恒有定义（内建命名空间），放行不引入 NameError 假红风险，
+# 与 _ALLOWED_CALL_NAMES 同一风险级（纯内建、无用户代码触发）。
+# 刻意只收内建**类型**名（可合法作 isinstance 第二参数或类型字面量），
+# 不收 Exception 子类以外的用户符号——后者仍应由签名参数/模块符号通道放行。
+_BUILTIN_TYPE_NAMES: frozenset[str] = frozenset(
+    {
+        "str",
+        "int",
+        "float",
+        "bool",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "frozenset",
+        "bytes",
+        "bytearray",
+        "complex",
+        "type",
+        "object",
+    }
+)
 # 允许的属性访问（容器/数值边界锚点 + v3 字符串纯方法白名单）：
 # - value/real/imag：数值属性锚点（历史口径，防 x.__class__ 类 introspection 逃逸）；
 # - startswith/endswith/split/join/strip/lstrip/rstrip/lower/upper/isdigit/
@@ -612,7 +638,7 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
     # （如 `eval`）仍被前一门以 dangerous_call 拒掉，到不了此处。
     # 隔离性：仅影响"白名单调用 + 其它标识符全部已绑定"的子句；纯 Name 的
     # 未绑定标识符（如 `r == total`）照旧按 unknown_name 拒绝。
-    known_with_calls = known | _ALLOWED_CALL_NAMES
+    known_with_calls = known | _ALLOWED_CALL_NAMES | _BUILTIN_TYPE_NAMES
     if identifiers - known_with_calls:
         return "unknown_name"
     try:

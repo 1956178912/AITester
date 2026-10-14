@@ -115,6 +115,31 @@ def _bullet_list(items: list[str], label: str) -> list[str]:
     return [f"- {label}：{item}" for item in items if item and item.strip()]
 
 
+def sole_top_level_function_name(source_code: str) -> str:
+    """模块唯一顶层函数名（确定性 AST 回退；无或>1 个顶层函数 → 空串）。
+
+    用途（2026-10-14 度量侧修正）：Planner 降级（M10：JSON 解析失败/
+    缺 function_name）时，spec 度量侧（nodes.py 的 spec_compile_rate /
+    spec_reject_reasons）拿不到函数名 → 签名参数提取回退历史默认集
+    {r,x,a,b,y} → 自定义参数名的可编译子句被误判 unknown_name（合成集
+    实测 270 次拒绝的主要来源）。本 helper 在**模块恰有一个顶层函数**时
+    给出无歧义回退（单函数模块是合成集/ULT 的主导形态）；多函数模块
+    （含 helper）歧义，保守返回空串（维持原保守口径，不猜）。
+
+    只读源码 AST，零 LLM、确定性。刻意**不**改注入侧（replace 段的
+    target_function 解析口径）——注入侧改变会动处理（prompt 内容），
+    属另一实验；本回退只修度量。
+    """
+    if not source_code:
+        return ""
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError):
+        return ""
+    names = [node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    return names[0] if len(names) == 1 else ""
+
+
 def build_spec_replace_section(
     test_plan: dict[str, Any] | None,
     target_code: str,
@@ -205,4 +230,5 @@ def build_spec_replace_section(
 __all__ = [
     "build_spec_replace_section",
     "detection_spec_mode",
+    "sole_top_level_function_name",
 ]
