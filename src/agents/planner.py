@@ -322,6 +322,22 @@ class PlannerAgent(BaseAgent):
         # 解析 JSON 响应
         result = self._extract_json(raw)
 
+        # OMS（M10 可观测性，EMSE 批次四 M1）：叶子回退静默片段检测。
+        # ADR-0031 §已知局限②：extract_json_object 的叶子降级档在括号平衡法
+        # 失败时会**静默返回最内层错误片段**（如 {'items': ...}）——此前下游
+        # 把"缺 logic_analysis"全部归因为"LLM 未输出"（10-14 批次 ~7-8% 的
+        # M10 误诊来源，实为提取器缺陷，LLM 输出了完整正确 JSON）。
+        # 现读取 helpers 哨兵：命中叶子回退时把归因改写为
+        # "M10 提取器叶子回退"（纯观测标记，不参与路由；解析行为零变化）。
+        from src.utils.helpers import was_leaf_fallback_used as _was_leaf_fallback
+
+        _leaf_fallback = _was_leaf_fallback()
+        if _leaf_fallback:
+            logger.warning(
+                "M10-OMS：logic_analysis 缺失源于**提取器叶子回退**（非 LLM 未输出），"
+                "最内层片段缺关键字段——归因已改写，M10 误诊计数 +1（可观测性改进）"
+            )
+
         # 兼容性处理：确保返回的 JSON 包含 logic_analysis 字段
         # 部分模型可能跳过思维链步骤直接输出测试计划，填充空值避免下游崩溃
         # M10（2026-09-29 审查 P0）：静默兜底改为显式标记。
@@ -340,7 +356,15 @@ class PlannerAgent(BaseAgent):
                 "edge_cases": [],
             }
             result["logic_degraded"] = True
-            logger.warning("M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True")
+            # OMS（EMSE 批次四 M1）：归因改写——命中叶子回退时记录提取器误诊
+            # 标记（纯观测，不参与路由）：供实验层把 M10 降级任务中"实为
+            # 提取器缺陷"的子集从"LLM 未输出"中分离计数。
+            if _leaf_fallback:
+                result["m10_leaf_fallback"] = True
+            logger.warning(
+                "M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True%s",
+                "（归因：提取器叶子回退误诊，非 LLM 缺字段）" if _leaf_fallback else "",
+            )
             if os.getenv("LOGIC_SPEC_STRICT_ENABLE", "false").lower() in ("true", "1", "on"):
                 _strict_reject(result, "M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底")
         else:

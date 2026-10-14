@@ -30,6 +30,19 @@ _JSON_LEAF_PATTERN = re.compile(r"\{[^{}]*\}")
 # 每次调用重复编译 re.sub 模式浪费；re 内部缓存有限，显式编译最稳妥）
 _JSON_FENCE_STRIP_PATTERN = re.compile(r"```(?:json)?\s*\n?")
 _JSON_BACKTICK_STRIP_PATTERN = re.compile(r"```")
+# OMS（M10 可观测性，2026-10-14 EMSE 批次四）：叶子回退静默片段检测。
+# 背景：extract_json_object 的叶子降级档（正则取最内层无嵌套 {...}）在
+# "括号平衡法失败 + 顶层对象残缺"时会**静默返回一个错误片段**（如
+# {'items': ...}）——下游（Planner M10 路径）把"缺关键字段"归因为
+# "LLM 未输出 logic_analysis"，实为提取器缺陷（LLM 输出了完整正确 JSON，
+# 只是解析链回退到了错的片段）。本模块以函数级哨兵
+# `_LEAF_FALLBACK_ACTIVE`（线程无关：Python GIL 下 extract_json_object
+# 为同步调用，无并发）记录"本次调用是否发生了叶子回退且返回的是
+# 最内层片段"，供调用方（planner/debugger）读取后显式告警，消除误诊。
+# 纪律：哨兵必须在 extract_json_object 返回前复位（finally 语义），
+# 调用方在**同一调用栈、同线程**内立即读取；跨线程/缓存回放路径
+# 不得依赖哨兵（历史缓存响应不经 extract_json_object，哨兵恒 False）。
+_LEAF_FALLBACK_ACTIVE: bool = False
 # "python:" 前缀剥离（extract_code_block 热路径：LLM 每次输出的代码提取都会走，
 # 显式预编译避免每次调用重复编译）
 _PYTHON_PREFIX_STRIP_PATTERN = re.compile(r"^python(?!\w)\s*:?\s*\n?", re.IGNORECASE)
@@ -578,6 +591,19 @@ def extract_json_array(text: str) -> list[Any]:
     raise json.JSONDecodeError("Could not find complete JSON array", text, start)
 
 
+def was_leaf_fallback_used() -> bool:
+    """OMS（M10 可观测性）：最近一次 extract_json_object 是否走了叶子回退档。
+
+    背景（ADR-0031 遗留，EMSE 批次四 M1）：extract_json_object 的叶子降级
+    档在括号平衡法失败时**静默返回最内层片段**（如 {'items': ...}），下游
+    Planner M10 路径把"缺 logic_analysis"误诊为"LLM 未输出"（实为提取器
+    缺陷，LLM 输出了完整正确 JSON）。本函数返回**最近一次**调用是否命中
+    叶子档且返回了片段（调用方须在同一调用栈立即读取——见模块级哨兵
+    纪律注释）。纯观测：不影响任何解析行为，历史口径零变化。
+    """
+    return _LEAF_FALLBACK_ACTIVE
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
     """
     从文本中提取 JSON 对象。
@@ -586,6 +612,9 @@ def extract_json_object(text: str) -> dict[str, Any]:
     1. 移除 markdown 代码块标记（```json 或 ```）
     2. 使用括号平衡法找到完整的 JSON 对象
     3. 若失败，用正则提取候选 JSON 作为降级方案
+       （OMS：叶子档命中时记录 warning + 置模块级哨兵 _LEAF_FALLBACK_ACTIVE，
+       调用方经 was_leaf_fallback_used() 读取后把 M10 归因改写为
+       "提取器叶子回退"——ADR-0031 §已知局限②，纯观测零行为变化）
 
     Args:
         text: 包含 JSON 对象的文本。
@@ -596,6 +625,8 @@ def extract_json_object(text: str) -> dict[str, Any]:
     Raises:
         json.JSONDecodeError: 无法找到有效 JSON 时抛出。
     """
+    global _LEAF_FALLBACK_ACTIVE
+    _LEAF_FALLBACK_ACTIVE = False
     # 移除 markdown 代码块标记（使用预编译正则，避免每次调用重复编译）
     cleaned = _JSON_FENCE_STRIP_PATTERN.sub("", text)
     cleaned = _JSON_BACKTICK_STRIP_PATTERN.sub("", cleaned)
@@ -668,16 +699,36 @@ def extract_json_object(text: str) -> dict[str, Any]:
     for m in _JSON_LEAF_PATTERN.finditer(cleaned):
         prev_match = last_match
         last_match = m
+    # OMS（M10 可观测性，EMSE 批次四）：叶子回退档命中时置哨兵 + 显式告警。
+    # 此前该路径**静默**返回最内层片段（如 {'items': ...}）——下游 Planner
+    # M10 把"缺 logic_analysis"归因为 LLM 未输出，实为提取器回退到错误片段
+    # （ADR-0031 §已知局限②）。现命中时记录 warning + 置模块级哨兵，
+    # 调用方经 was_leaf_fallback_used() 读取后可把 M10 归因改写为
+    # "提取器叶子回退"（消除 10-14 批次 ~7-8% 解析层误诊的度量盲区）。
+    # 纯观测：解析行为与返回值零变化（哨兵不复位到本调用结束，由下一次
+    # 调用覆盖；raise 路径不触发，哨兵保持 False）。
     if last_match is not None:
         try:
+            _LEAF_FALLBACK_ACTIVE = True
+            logger.warning(
+                "JSON 提取叶子回退：括号平衡法与首对象修复均失败，"
+                "返回最内层片段（len=%d, 前缀=%r）——下游缺字段归因须复核",
+                len(last_match.group()),
+                last_match.group()[:60],
+            )
             return json.loads(last_match.group())
         except json.JSONDecodeError:
-            pass
+            _LEAF_FALLBACK_ACTIVE = False
     if prev_match is not None:
         try:
+            _LEAF_FALLBACK_ACTIVE = True
+            logger.warning(
+                "JSON 提取叶子回退（次新候选）：返回倒数第二内层片段（len=%d）",
+                len(prev_match.group()),
+            )
             return json.loads(prev_match.group())
         except json.JSONDecodeError:
-            pass
+            _LEAF_FALLBACK_ACTIVE = False
     # 双候选均不可解析：反向全量扫描（旧 reversed(list(finditer)) 语义）——
     # 跳过最后两个叶子（上两档已试过），从倒数第三个起逐个尝试，
     # 首个可解析者即返回（覆盖"可解析叶子排在更早位置"的损坏响应场景）；
@@ -686,6 +737,8 @@ def extract_json_object(text: str) -> dict[str, Any]:
     if len(tail_matches) > 2:
         for m in reversed(tail_matches[:-2]):
             try:
+                _LEAF_FALLBACK_ACTIVE = True
+                logger.warning("JSON 提取叶子回退（尾扫）：返回更早位置的片段")
                 return json.loads(m.group())
             except json.JSONDecodeError:
                 continue
