@@ -1,10 +1,90 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-13（EMSE 投稿优化批次：期刊适配分析 §5.2 五项硬伤离线收口——AITESTER_PROFILE 存量三批次补登记〔C-07/T-05〕+ false_fix 口径矩阵〔87.2% vs 59.6% 分母对齐，README/BASELINE 引用纪律勘误〕+ SWE-bench "0/20 负结果" 失实表述修正为 "429 限流基础设施失败"〔C-11/T-06〕+ spec_replace 功效分析（MDE + 贝叶斯因子，C vs B 方向勘误 +11.43pp）+ mutation 族×detection 相关性与饱和度分析；新增 `experiments/emse_optimization.py`（零 LLM 复算工具）+ 40 例回归测试；spec_replace 扩样工件按 T-10 归档 584 文件 + SHA256SUMS；过红 88 行 12 例抽样定性机制分析〔P1 契约倒置 ×5 / P2 过度规格 ×1 / P3 实现耦合 ×1〕；新登记 fixed 材料工件完备性缺口〔53/261〕与合成数据集发生器漂移实证；另收口独立评审 v2 P0 引用零瑕疵四项〔T-01 Radaideh 定级 / T-02 TestAgent 冲突 / T-03 Konstantinou 请求数 / T-04 定理 1 同义反复〕。此前 2026-10-12 STVR 实证研究设计批次
+> Last updated: 2026-10-14（EMSE 批次三连 + LLM 结构化输出加固：① SpecExpr 确认性实验（预注册 61a7e04，synthetic seed45/46 × 87 × 2 臂）**阴性但信息性**——合并 McNemar n=174 δ=−0.57pp p=1.0，主因=基线天花板（~3% 无 flip 空间 vs QuixBugs ~63%），设计敏感性：+12pp 效应预期不一致对 ≈25（实测 3）；② pilot 口径勘误（标准口径 6:1/n=35/δ=+14.29pp/p=0.125 vs 此前 None-记-0 口径 7:1/n=50/δ=+12.00pp/p=0.0703）；③ SpecExpr DSL 度量门修复（Planner 降级签名提取静默失败 + 内建类型名值位置）→ **三数据集新门校准：QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397**，旧门"数据集分化"（0.63/0.56/0.31）系度量假象；④ ULT Mut@k 真实基准实测（cosmic-ray 官方口径）生成测试 0.928 vs gold 1.0——mutation 主指标收口 +「变异强但缺陷盲」洞察；⑤ **LLM 结构化输出加固**（DeepSeek 官方文档对齐）：LLM_JSON_MODE 默认 on + 数值表达式 JSON 修复（`10**18` 类，修"叶子回退静默错误片段→M10 误诊"）+ finish_reason 守卫，冒烟 M10=0。新增 ADR-0031。此前 2026-10-13 EMSE 投稿优化批次
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-14 EMSE 批次三连（SpecExpr 确认性 + DSL 度量门修复 + Mut@k）+ LLM 结构化输出加固
+
+> 本日五个批次：① SpecExpr 确认性实验（预注册 → 4 臂实跑 → 分析，
+> ~$0.6）；② SpecExpr DSL 度量门修复（零 LLM）；③ 三数据集新门可编译率
+> 校准（~$1.2）；④ ULT Mut@k 补测（零 LLM，cosmic-ray）；⑤ LLM 结构化
+> 输出加固（DeepSeek 官方文档对齐 + 冒烟 ~$0.1）。全部工件带
+> SHA256SUMS 归档，新增 ADR-0031。
+
+### Added
+
+- **SpecExpr 确认性实验（预注册 `docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_2026-10-14.md`，commit `61a7e04`，结果产出前落盘）**：
+  synthetic 新种子（seed45/46，当前生成器）× 87 任务 × 2 臂（replace 纯 NL
+  vs replace+SpecExpr），干净口径、独立缓存 namespace、四臂 provenance 全过；
+  **结果：未复现（信息性真阴性）**——合并 McNemar n=174，仅 specir 1 /
+  仅 replace 2，δ=−0.57pp，p=1.0，BF10=0.5 → 预注册判定 not_confirmed；
+  设计敏感性：若存在 QuixBugs 量级（+12pp）效应预期不一致对 ≈25（实测 3），
+  阴性非功效失败；**主机制=基线天花板**（synthetic 干净口径 detection 基线
+  ~3% 无 flip 空间 vs QuixBugs ~63%）；分析脚本
+  `experiments/emse_specexpr_confirm.py`（24 例测试）+ 工件归档
+  `experiments/results/emse_specexpr_synth_20261014/`（356 文件 + SHA256SUMS）；
+- **三数据集修门后可编译率校准（`experiments/emse_compile_rate_calib.py`）**：
+  QuixBugs **0.7161**（n=50，旧门 0.6321）/ ULT **0.5937**（n=25，旧门
+  0.5626）/ synthetic **0.6397**（n=174，旧门 0.3102）——旧门口径的
+  "数据集强分化"主要为**度量假象**（上修幅度 ∝ Planner 降级率；同任务
+  新抽样 expr 覆盖率不变而 unknown_name 拒绝崩塌 129→35/141→53）；
+  新门口径下三数据集全部 ≥0.35，"逻辑驱动"可编译率主张成立；
+- **ULT Mut@k 补测（`experiments/emse_ult_mutk.py` + 5 例测试，零 LLM）**：
+  cosmic-ray 8.7.0 官方口径（配置哈希入工件；target=fixed；max_mutants=10
+  确定性截断面；timeout=120s 计 killed）——生成测试·完整规格优先 0.928
+  （232/250，n=25）/ 纯 NL 规格优先 0.9543（439/460，n=46）/ gold 上界 1.0；
+  **「变异强但缺陷盲」洞察**：同批 specir 测试 detection=0/24 却杀死 92.8%
+  变异体——测试强度（变异维度）与缺陷检出（F2P 维度）可分离；工件
+  `experiments/results/emse_ult_mutk_20261014/`；
+- **LLM 结构化输出加固（ADR-0031，DeepSeek 官方文档对齐）**：
+  ①`LLM_JSON_MODE`（默认 on）——JSON Output（`response_format=
+  {"type":"json_object"}`）绑定 7 处 JSON 契约调用点（Planner 测试计划 /
+  Debugger 补丁·严格重试·批评者·击穿用例·缺陷分类 / FaultLocalizer 定位），官方前置条件
+  （提示含 JSON + 格式示例）逐一核查，`off` 供历史逐字节复现；env_budget
+  与 `_env_snapshot_keys` 双登记；②**数值表达式 JSON 修复**
+  （`_normalize_python_numeric_expressions`）——LLM 写 `10**18`/`10**18+1`/
+  `10_000` 致 JSON 非法且触发"叶子回退静默返回错误片段"误诊 M10；受限
+  求值无 eval、指数/位数有界、字符串内防护；③finish_reason 守卫——
+  length / insufficient_system_resource 按可恢复失败重试；新增
+  `tests/test_llm_json_mode.py`（21 例）+ repair 层数值用例（15 例）；
+  验证：冒烟 M10=0（修复前 1 例回退默认计划）+ 9/9 缓存真实响应回归；
+- **SpecExpr DSL 度量门修复（EMSE 报告 §6.9）**：①函数名确定性回退
+  （`sole_top_level_function_name`——Planner 两级皆空或字面量 "unknown"
+  时取模块唯一顶层函数名；Planner 降级时签名提取回退默认集 {r,x,a,b,y}
+  致参数名/result 子句被误判 unknown_name——合成集 270 次拒绝主源）；
+  ②内建类型名值位置放行（`_BUILTIN_TYPE_NAMES`——`isinstance(x, str)` 的
+  值位置类型名；7 例契约测试）；离线对账（12 任务/30 子句）：旧门 36.7%
+  → 新门 46.7%；
+
+### Fixed
+
+- **pilot 口径勘误（EMSE 报告 §6.7）**：spec_ir pilot 的 McNemar 此前引用值
+  （7:1 / n=50 / δ=+12.00pp / p=0.0703）为 None-记-0 口径；项目标准口径
+  （双方 detection 非 None，与 D1 n=36 / scale87 n=35 同族）为
+  **6:1 / n=35 / δ=+14.29pp / p=0.125**——方向一致、标准口径效应量更大
+  显著性更弱，对外引用以标准口径为准；
+- **EMSE 报告 §6.8 机制归因勘误**：`spec_compile_rate` 为纯观测字段
+  （"度量通道 ≠ 注入通道"——SpecExpr 子句进入 Generator prompt 不受
+  编译率过滤）；"完整规格优先退化为近纯 NL"的原推断有误，已更正为
+  **基线天花板**主机制；
+- **confirmation 批次审计披露**：①不对称应用 34/174（双向：seed45
+  forward7/reverse11、seed46 forward9/reverse7——reverse 违反材料包含律，
+  根因为 temp=0 下 Planner 对 synthetic 任务的跨跑批非确定性；实测
+  reverse 案例 iters=0/regen=0 排除再生成覆写）；②run1 git_dirty=true
+  （分析脚本未提交，src/ 管线未动）。
+
+### Changed
+
+- `BASELINE.yaml`：total_passed 推导刷新（5887 / collected 5891）；
+  spec_compile_rate 三分层统一为**新门口径**（QuixBugs 0.7161 / ULT 0.5937
+  / synthetic 0.6397，旧门值保留于行内注释供历史审计）；
+- `docs/design/ult_bridge_plan.md` §4.3：Mut@k 子集实测状态 +
+  「变异强但缺陷盲」洞察 + 局限（截断面/任务集不同/全量仍属 T-07）；
+- `docs/design/stvr_empirical_study_design.md` §7/§8：cosmic-ray 安装 +
+  Mut@k 子集实测勾选（`requirements.lock` 钉锁为剩余项）。
 
 ## [Unreleased] — 2026-10-13 EMSE 投稿优化批次（期刊适配五项硬伤离线收口 + 零 LLM 复算工具 + 工件归档 T-10，零 LLM 成本）
 

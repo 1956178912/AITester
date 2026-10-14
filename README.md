@@ -256,6 +256,23 @@ LLM_RETRY_WAIT=30       # LLM 重试等待时间（秒），默认 30
 EXECUTION_TIMEOUT=30    # pytest 执行超时（秒），默认 30
 ```
 
+### LLM 结构化输出加固（JSON Output 与解析层修复，2026-10-14）
+
+按 DeepSeek 官方文档配置的结构化输出加固（ADR-0031；日志归因显示
+"执行失败/超时"多为执行器重试与测试侧保护，真实缺陷是结构化解析失败）：
+
+- **`LLM_JSON_MODE`（默认 on）**：七处 JSON 契约调用点（Planner 测试计划 /
+  Debugger 补丁·严格重试·批评者·击穿用例·缺陷分类 / FaultLocalizer 定位）绑定官方 JSON Output
+  （`response_format={"type":"json_object"}`，保证响应为合法 JSON 字符串）；
+  设 `off` 恢复历史逐字节口径（旧批次复现用）。配置入批次 provenance
+  `env_snapshot`（可审计）。
+- **数值表达式解析修复**：LLM 在 JSON 值位写 Python 数值表达式
+  （`10**18` / `10**18+1` / `10_000`）时由解析层受限求值换算为等值 JSON
+  数字（无 eval、指数/位数有界、字符串内防护）——修复"叶子回退静默返回
+  错误片段"导致的 M10 误诊（LLM 实际输出了完整 JSON）。
+- **`finish_reason` 守卫**：响应 `length`（截断）/`insufficient_system_resource`
+  （推理资源中断）按可恢复失败重试，不把残缺内容交给下游。
+
 ### 并发执行（BENCHMARK_PARALLELISM）
 
 支持多线程并行执行多个 benchmark 任务，显著缩短大批量测试的总耗时。
@@ -1365,6 +1382,7 @@ docker run --rm \
 
 | `EXECUTION_TIMEOUT` | pytest 执行超时（秒） | 30 |
 | `LLM_TIMEOUT` | 单次 LLM 调用超时（秒） | 60 |
+| `LLM_JSON_MODE` | JSON Output（DeepSeek 官方，六处 JSON 契约调用点绑定 `response_format=json_object`；**2026-10-14 起默认 on**，设 off 恢复历史逐字节口径；ADR-0031） | on |
 | `LLM_RETRY_WAIT` | LLM 重试等待时间（秒） | 30 |
 | `ENABLE_PLANNER` | 启用 Planner（消融开关） | true |
 | `ENABLE_DEBUGGER` | 启用 Debugger 修复循环（消融开关） | true |

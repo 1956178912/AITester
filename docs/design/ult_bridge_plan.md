@@ -145,6 +145,24 @@
 - 工程风险：cosmic-ray 需要可导入模块 + 会话初始化；本项目历史上有两类 import 伪影（跨文件未物化、包结构）
   → 复用 §4.2 的 tmp 树物化经验，先跑 smoke（阶段 0）。
 - 基线漂移：本项目自研 `MutationGenerator` 的分数**保留**，作为"内部可比"的旧口径；cosmic-ray 分数是**新口径**，两者不得混述。
+- ✅ **2026-10-14 Mut@k 子集实测完成**（`experiments/emse_ult_mutk.py` +
+  `tests/test_emse_ult_mutk.py`，零 LLM；工件
+  `experiments/results/emse_ult_mutk_20261014/`）：对既有工件的生成测试
+  批量跑 cosmic-ray 口径 Mut@k——
+  | 组 | 任务 | killed/total | pooled |
+  |---|---|---|---|
+  | 生成测试·完整规格优先（specir 探针） | 25 | 232/250 | **0.928** |
+  | 生成测试·纯 NL 规格优先（ult_lite46 replace） | 46 | 439/460 | 0.9543 |
+  | gold 官方测试（上界参照，探针 25） | 25 | 250/250 | 1.0 |
+  口径：cosmic-ray 8.7.0（配置哈希 `1e1230a7e298d1e2d7856ca437332e27
+  702cfa1612dfc80ab71f9ca105b6ea22` 随工件透出），target=`fixed` 正确
+  实现，max_mutants=10（**确定性截断面，非全变异体**，引用须带此标签），
+  timeout=120s（timeout 计 killed，2026-10-13 裁定）。**「变异强但缺陷盲」
+  洞察**：同批 specir 生成测试 detection=0/24（不在缺陷码上变红）却杀死
+  92.8% 变异体——测试强度（变异维度）与缺陷检出（F2P 维度）是可分离的
+  两种质量。局限：① max_mutants=10 截断面；② 臂级任务集不同（25 vs 46，
+  重叠 7）——配对子集仅描述性；③ 全量 Mut@k（全变异体 × 3,909 任务）仍属
+  T-07 6 周原范围，本批次为子集实测。
 
 ---
 

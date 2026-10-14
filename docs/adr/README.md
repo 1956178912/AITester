@@ -31,6 +31,7 @@
 | [0028](0028-fl-constraint-gate-self-repair-trap.md) | 修复引擎批次 XIV——FL Top-k 约束观测门 + Self-Repair Trap 观测器（外部报告净新增收割） | 已采纳（观测层）；阻断/策略档 Proposed | 第三份外部报告对照评估净新增五条的离线收割——①`patch_changed_functions`（补丁变更函数集合，insert 锚定）+ `fl_constraint_verdict`（Top-3 候选与变更集合求交，hit_rank 分层）→ 结果行三键，ADR-0024"生成侧主导"行级可验证；③`oracle_quality_history` 快照序列 + `detect_self_repair_trap` 三信号（DCAware 口径）→ 结果行三键；④Frame Lifetime Trace 设计输入（docs/design，激活门槛=Debugger 拆分批立项）；②test-file-path 回收（M2+O35 已覆盖）；⑤PatchDiff 延后（E7 定案后） | `src/agents/fault_localizer.py`、`src/tools/self_repair_trap.py`、`src/graph/nodes.py`、`experiments/run_benchmark.py`、`docs/design/frame_lifetime_trace.md` |
 | [0029](0029-measurement-artifact-cross-file-and-packaged-import.md) | 测量伪影连环——包结构 import + 跨文件任务未物化（R16/R27/R28 修复与治理） | 已采纳 | 测量层三度"假结论"的连环治理（ADR-0021 围栏残留 / 包结构 import 伪影 / 跨文件未物化伪影）；fail-closed + M-suite + 口径矩阵纪律 | `experiments/_m1_metrics.py`、`experiments/repair_replay.py`、`experiments/corrected_metrics.py`、`src/tools/detection_gates.py`、`src/datasets/synthetic_dataset.py`、`docs/design/repair_caliber_matrix.md` |
 | [0030](0030-spec-first-and-observation-compression-default-off.md) | 规格优先与观测压缩的默认关口径（2026-10-12 独立评审优化批次） | 已采纳 | 独立评审 `INDEPENDENT_REVIEW_2026-10-12.md` §6 路径 P1–P5 落地第一阶段原语——P0-A-1 SpecExpr v3 文法升阶〔有限域量化 + 字符串纯方法白名单 + P2-L3 假阴性修复转正〕/ P0-A-2 规格优先生成〔规约替换臂，三源同向证据〕/ P0-B 变异算子 v3 + 环路内化〔scientific/logic 档默认开〕/ P1-A 编排自动搜索〔UCB1 bandit 16 臂〕/ P1-B 去污染 + MTTR-A 恢复延迟 / P2-A 观测级行粒度压缩；全部默认关（唯一默认开例外 P0-B 科研档） | `src/tools/spec_first.py`、`src/tools/feedback_compression.py`、`src/graph/orchestration_search.py`、`src/datasets/decontamination.py`、`src/measurement/recovery_latency.py`、`src/specs/spec_ir_v2.py`、`experiments/mutation_testing.py`、`config.py` |
+| [0031](0031-llm-structured-output-hardening.md) | LLM 结构化输出加固（JSON Output + 数值表达式解析修复 + finish_reason 守卫） | 已采纳（JSON 模式默认 on，`off` 逃生门） | 日志归因（"执行失败/超时"多为检测信号与测试侧保护，真实缺陷 = 结构化解析失败）→ 三项加固：①`LLM_JSON_MODE`（DeepSeek 官方 JSON Output，`response_format=json_object` 绑定 7 处 JSON 契约调用点，默认 on）；②数值表达式 JSON 修复（`10**18`/`10**18+1`，受限求值无 eval，接入 `_repair_json_bounded`，修"叶子回退静默返回错误片段→M10 误诊"）；③finish_reason ∈ {length, insufficient_system_resource} 可恢复重试。修复后冒烟 M10=0、9/9 真实响应回归 | `src/agents/llm_client.py`、`src/agents/base_agent.py`、`src/agents/planner.py`、`src/agents/debugger.py`、`src/utils/helpers.py`、`experiments/run_benchmark.py` |
 
 ## 状态约定
 
@@ -41,8 +42,8 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0030 已用 → 下一个
-   0031；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0031 已用 → 下一个
+   0032；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
    （`git log --diff-filter=A` 零命中），为避免与外部引用错位不再回收，
    新 ADR 勿占用该段）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；

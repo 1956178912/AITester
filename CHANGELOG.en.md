@@ -1,10 +1,113 @@
-> Last updated: 2026-10-13 (EMSE submission-optimization batch: offline closure of the five journal-fit hard problems from the submission analysis §5.2 — AITESTER_PROFILE three-legacy-batch retro-registration [C-07/T-05] + false_fix caliber matrix [87.2% vs 59.6% denominator alignment, README/BASELINE citation-discipline errata] + SWE-bench "0/20 negative result" misstatement corrected to "429 rate-limit infrastructure failure" [C-11/T-06] + spec_replace power analysis (MDE + Bayes factors, C vs B direction erratum +11.43pp) + mutation-metric × detection correlation and saturation analysis; new `experiments/emse_optimization.py` (zero-LLM recompute tooling) + 40 regression tests; spec_replace expansion artifacts archived per T-10 (584 files + SHA256SUMS); 12-case sampled qualitative mechanism analysis of the 88 over-red rows [P1 contract inversion ×5 / P2 over-specification ×1 / P3 implementation coupling ×1]; newly registered fixed-material artifact completeness gap [53/261] and synthetic-dataset generator drift evidence; also closed the independent-review v2 P0 citation-zero-flaw four items [T-01 Radaideh re-grading / T-02 TestAgent conflict / T-03 Konstantinou request counts / T-04 Theorem-1 tautology]. Previously 2026-10-12 STVR empirical-study design batch
+> Last updated: 2026-10-14 (Triple EMSE batch + LLM structured-output hardening: ① SpecExpr confirmatory experiment (pre-registration 61a7e04, synthetic seed45/46 × 87 × 2 arms) — **negative but informative**: pooled McNemar n=174, δ=−0.57pp, p=1.0; main mechanism = baseline ceiling (~3%, no flip headroom vs QuixBugs ~63%); design sensitivity: a +12pp effect would have yielded ≈25 discordant pairs (observed 3). ② Pilot caliber erratum (project-standard caliber 6:1/n=35/δ=+14.29pp/p=0.125 vs the previously cited None-as-zero caliber 7:1/n=50/δ=+12.00pp/p=0.0703). ③ SpecExpr DSL measurement-gate fixes (silent signature-extraction failure under Planner degradation + builtin type names in value position) → **three-dataset post-fix recalibration: QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397**; the old-gate "dataset divergence" (0.63/0.56/0.31) was largely a measurement artifact. ④ ULT Mut@k measured on a real benchmark (official cosmic-ray protocol): generated tests 0.928 vs gold 1.0 — mutation main metric closed + "mutation-strong but defect-blind" insight. ⑤ **LLM structured-output hardening** (aligned with DeepSeek official docs): LLM_JSON_MODE default-on + numeric-expression JSON repair (`10**18` class; fixes "leaf-fallback silently returning wrong fragment → misdiagnosed M10") + finish_reason guard; smoke M10=0. New ADR-0031. Previously 2026-10-13 EMSE submission-optimization batch
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-14 Triple EMSE batch (SpecExpr confirmatory + DSL measurement-gate fixes + Mut@k) + LLM structured-output hardening
+
+> Five batches today: ① SpecExpr confirmatory experiment (pre-registration →
+> 4-arm run → analysis, ~$0.6); ② SpecExpr DSL measurement-gate fixes
+> (zero LLM); ③ three-dataset post-fix compile-rate recalibration (~$1.2);
+> ④ ULT Mut@k measurement (zero LLM, cosmic-ray); ⑤ LLM structured-output
+> hardening (DeepSeek docs alignment + smoke ~$0.1). All artifacts archived
+> with SHA256SUMS; new ADR-0031.
+
+### Added
+
+- **SpecExpr confirmatory experiment (pre-registration
+  `docs/study/SPECEXPR_SYNTH_CONFIRM_PREREG_2026-10-14.md`, commit `61a7e04`,
+  frozen before results)**: synthetic fresh seeds (seed45/46, current
+  generator) × 87 tasks × 2 arms (replace pure-NL vs replace+SpecExpr),
+  clean caliber, isolated cache namespaces, all four arms provenance-verified.
+  **Result: not replicated (informative true negative)** — pooled McNemar
+  n=174, only-specir 1 / only-replace 2, δ=−0.57pp, p=1.0, BF10=0.5 →
+  pre-registered verdict not_confirmed. Design sensitivity: a QuixBugs-
+  magnitude (+12pp) effect would have produced ≈25 discordant pairs
+  (observed 3) — the null is informative, not a power failure. **Main
+  mechanism = baseline ceiling** (synthetic clean-caliber detection baseline
+  ~3%, no flip headroom vs QuixBugs ~63%). Analysis script
+  `experiments/emse_specexpr_confirm.py` (24 tests) + artifact archive
+  `experiments/results/emse_specexpr_synth_20261014/` (356 files + SHA256SUMS);
+- **Three-dataset post-fix compile-rate recalibration
+  (`experiments/emse_compile_rate_calib.py`)**: QuixBugs **0.7161** (n=50,
+  old gate 0.6321) / ULT **0.5937** (n=25, old 0.5626) / synthetic **0.6397**
+  (n=174, old 0.3102) — the old-gate "dataset divergence" was largely a
+  **measurement artifact** (uplift ∝ Planner degradation rate; same-task
+  fresh samples show unchanged expr coverage while unknown_name rejections
+  collapse 129→35/141→53). Under the new gate all three datasets are ≥0.35,
+  supporting the "logic-driven" compile-rate claim;
+- **ULT Mut@k measurement (`experiments/emse_ult_mutk.py` + 5 tests, zero
+  LLM)**: cosmic-ray 8.7.0 official protocol (config hash in artifacts;
+  target=fixed; max_mutants=10 deterministic cut; timeout=120s counted as
+  killed) — generated tests · complete-spec-first 0.928 (232/250, n=25) /
+  pure-NL spec-first 0.9543 (439/460, n=46) / gold upper bound 1.0.
+  **"Mutation-strong but defect-blind" insight**: the same specir tests with
+  detection=0/24 kill 92.8% of mutants — test strength (mutation dimension)
+  and defect detection (F2P dimension) are separable qualities. Artifacts:
+  `experiments/results/emse_ult_mutk_20261014/`;
+- **LLM structured-output hardening (ADR-0031, aligned with DeepSeek
+  official docs)**: ① `LLM_JSON_MODE` (default on) — JSON Output
+  (`response_format={"type":"json_object"}`) bound at 7 JSON-contract call
+  sites (Planner plan / Debugger patch·strict-retry·critic·break-cases·
+  defect-classification / FaultLocalizer localization); official prerequisites (prompt contains JSON +
+  format example) verified site-by-site; `off` replays the historical
+  byte-identical caliber; registered in env_budget and
+  `_env_snapshot_keys`; ② **numeric-expression JSON repair**
+  (`_normalize_python_numeric_expressions`) — LLM writes `10**18` /
+  `10**18+1` / `10_000` making JSON invalid and triggering the "leaf
+  fallback silently returns a wrong fragment" misdiagnosis of M10; bounded
+  evaluation without eval, exponent/digit bounds, in-string guard;
+  ③ finish_reason guard — length / insufficient_system_resource retried as
+  recoverable failures. New `tests/test_llm_json_mode.py` (21) + repair
+  numeric cases (15). Verified: smoke M10=0 (was 1 default-plan fallback
+  before) + 9/9 cached real-response regressions;
+- **SpecExpr DSL measurement-gate fixes (EMSE report §6.9)**: ① deterministic
+  function-name fallback (`sole_top_level_function_name` — when the Planner's
+  two levels are empty or the literal "unknown", use the module's sole
+  top-level function; Planner degradation previously fell back to the
+  default name set {r,x,a,b,y}, mis-rejecting parameter/result clauses —
+  the dominant source of 270 unknown_name rejections on synthetic);
+  ② builtin type names allowed in value position (`_BUILTIN_TYPE_NAMES` —
+  the type name in `isinstance(x, str)`; 7 contract tests). Offline
+  same-clause reconciliation (12 tasks / 30 clauses): old gate 36.7% → new
+  gate 46.7%;
+
+### Fixed
+
+- **Pilot caliber erratum (EMSE report §6.7)**: the previously cited
+  spec_ir pilot McNemar (7:1 / n=50 / δ=+12.00pp / p=0.0703) used a
+  None-as-zero denominator; the project-standard caliber (both detection
+  values non-None; same family as D1 n=36 / scale87 n=35) is
+  **6:1 / n=35 / δ=+14.29pp / p=0.125** — same direction, larger effect and
+  weaker significance under the standard caliber; external citations must
+  use the standard caliber;
+- **EMSE report §6.8 mechanism-attribution erratum**: `spec_compile_rate` is
+  a pure observation field ("measurement channel ≠ injection channel" — the
+  SpecExpr clauses injected into the Generator prompt are NOT filtered by
+  compilability); the original inference "complete spec-first degenerates to
+  near-pure-NL" was wrong and is corrected to the **baseline-ceiling** main
+  mechanism;
+- **Confirmation-batch audit disclosures**: ① asymmetric application 34/174
+  (bidirectional: seed45 forward7/reverse11, seed46 forward9/reverse7 —
+  reverse violates material containment, root cause is Planner
+  cross-run nondeterminism on synthetic tasks at temp=0; reverse cases show
+  iters=0/regen=0, ruling out regeneration-path overwrites); ② run1
+  git_dirty=true (analysis script uncommitted, src/ pipeline untouched).
+
+### Changed
+
+- `BASELINE.yaml`: total_passed derivation refreshed (5887 / collected
+  5891); spec_compile_rate three-layer values unified to the **new gate**
+  (QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397; old-gate values kept in
+  inline comments for historical audit);
+- `docs/design/ult_bridge_plan.md` §4.3: Mut@k subset-measurement status +
+  the "mutation-strong but defect-blind" insight + limitations (cut
+  max_mutants / different task sets / full-scale remains T-07 scope);
+- `docs/design/stvr_empirical_study_design.md` §7/§8: cosmic-ray install +
+  Mut@k subset measurement checked off (`requirements.lock` pinning remains).
 
 ## [Unreleased] — 2026-10-13 EMSE submission-optimization batch (offline closure of the five journal-fit hard problems + zero-LLM recompute tooling + T-10 artifact archival, zero LLM cost)
 

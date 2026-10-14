@@ -254,6 +254,28 @@ LLM_RETRY_WAIT=30       # LLM retry wait time (seconds), default 30
 EXECUTION_TIMEOUT=30    # pytest execution timeout (seconds), default 30
 ```
 
+### LLM Structured-Output Hardening (JSON Output and parse-layer repair, 2026-10-14)
+
+Structured-output hardening configured per DeepSeek official docs (ADR-0031;
+log triage shows most "execution failures/timeouts" are executor retries and
+test-side guards — the real defect class is structured-output parse failure):
+
+- **`LLM_JSON_MODE` (on by default)**: seven JSON-contract call sites (Planner
+  plan / Debugger patch·strict-retry·critic·break-cases·defect-classification /
+  FaultLocalizer localization) bind the official JSON Output (`response_format={"type":"json_object"}`,
+  guaranteeing valid JSON strings); set `off` for the historical
+  byte-identical caliber (old-batch replay). Recorded in per-batch provenance
+  `env_snapshot` (auditable).
+- **Numeric-expression parse repair**: Python numeric expressions in JSON
+  value positions (`10**18` / `10**18+1` / `10_000`) are converted to
+  equivalent JSON numbers by the parse layer via bounded evaluation (no eval,
+  exponent/digit bounds, in-string guard) — fixing the "leaf fallback
+  silently returns a wrong fragment" M10 misdiagnosis (the LLM did emit
+  complete JSON).
+- **`finish_reason` guard**: responses with `length` (truncation) /
+  `insufficient_system_resource` are retried as recoverable failures instead
+  of feeding truncated content downstream.
+
 ### Parallel Execution (BENCHMARK_PARALLELISM)
 
 Multi-threaded parallel execution of multiple benchmark tasks is supported, significantly reducing total wall time for large test batches.
@@ -1136,6 +1158,7 @@ All configuration items are managed uniformly in [config.py](config.py) and inje
 
 | `EXECUTION_TIMEOUT` | pytest execution timeout (seconds) | 30 |
 | `LLM_TIMEOUT` | Single LLM call timeout (seconds) | 60 |
+| `LLM_JSON_MODE` | JSON Output (DeepSeek official; six JSON-contract call sites bind `response_format=json_object`; **on by default since 2026-10-14**, set off for the historical byte-identical caliber; ADR-0031) | on |
 | `LLM_RETRY_WAIT` | LLM retry wait time (seconds) | 30 |
 | `ENABLE_PLANNER` | Enable Planner (ablation switch) | true |
 | `ENABLE_DEBUGGER` | Enable the Debugger repair loop (ablation switch) | true |
