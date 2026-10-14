@@ -3327,6 +3327,10 @@ def run_benchmark(
         "LLM_THINKING_MODE",
         "LLM_REASONING_EFFORT",
         "LLM_MAX_OUTPUT_TOKENS",
+        # 2026-10-14 LLM_JSON_MODE：DeepSeek JSON Output（response_format=
+        # json_object，Planner/Debugger 的 JSON 调用点）——改变结构化输出
+        # 的采样约束，跨批次质量对比必须可审计；默认 on，off=历史口径。
+        "LLM_JSON_MODE",
         # 2026-10-09（D3 修复）：A1 消融开关入快照——A1 首跑工件缺该键，
         # 消融臂可复现性证据缺失（无法从工件证明 strip 是否生效）。
         # 消融类开关必须在 provenance 留痕，否则臂间不可审计。

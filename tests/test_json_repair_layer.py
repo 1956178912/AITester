@@ -21,7 +21,9 @@ import pytest
 
 from src.utils.helpers import (
     _first_balanced_object,
+    _normalize_python_numeric_expressions,
     _quote_python_expressions,
+    _repair_json_bounded,
     _repair_json_text,
     extract_json_object,
 )
@@ -196,3 +198,71 @@ class TestTupleKeys:
 
         src = '{"m":{("a",1):2}}'
         assert _repair_json_bounded(src) == src
+
+
+class TestNumericPythonExpressions:
+    """数值 Python 表达式修复（2026-10-14，LLM_JSON_MODE 上线捕获）。
+
+    LLM 在 JSON 值位置写 `10**18` / `2**32` / `10_000_000` 等 Python 数值
+    表达式——语法上不是 JSON；修复为等值 JSON 数字字面量（受限求值，
+    无 eval；指数有界；字符串内不替换）。
+    """
+
+    @pytest.mark.parametrize(
+        ("src", "expected"),
+        [
+            ('{"items":[10**18]}', {"items": [1000000000000000000]}),
+            ('{"n":2**32}', {"n": 4294967296}),
+            ('{"m":10_000_000}', {"m": 10000000}),
+            ('{"x":-10**9}', {"x": -1000000000}),
+            ('{"a":[1,2**3,4]}', {"a": [1, 8, 4]}),
+            ('{"e":[10**18+1,0]}', {"e": [1000000000000000001, 0]}),
+            ('{"e":[10**18-1,0]}', {"e": [999999999999999999, 0]}),
+            ('{"n":2*10**9}', {"n": 2000000000}),
+            ('{"d":5-3}', {"d": 2}),
+        ],
+    )
+    def test_numeric_expression_normalized(self, src: str, expected: dict) -> None:
+        assert json.loads(_repair_json_bounded(src)) == expected
+
+    def test_plain_numbers_untouched(self) -> None:
+        """已是合法 JSON 数字的内联数字零改动。"""
+        src = '{"a":[1,2,30],"b":1.5}'
+        assert _repair_json_bounded(src) == src
+
+    def test_direct_call_normalizes_only_expressions(self) -> None:
+        """函数级直测：仅表达式替换，普通数字零改动。"""
+        assert _normalize_python_numeric_expressions('{"v":10**6}') == '{"v":1000000}'
+        assert _normalize_python_numeric_expressions('{"v":42}') == '{"v":42}'
+
+    def test_string_content_not_touched(self) -> None:
+        """字符串内的 `: 10**18,` 形态不替换（字符串内位置防护）。"""
+        src = '{"desc":"样例: 10**18, 是常量","v":1}'
+        repaired = _repair_json_bounded(src)
+        assert json.loads(repaired) == {"desc": "样例: 10**18, 是常量", "v": 1}
+
+    def test_huge_exponent_rejected(self) -> None:
+        """指数超界保守拒绝（防内存放大）——不产出等值数字。"""
+        src = '{"big":10**100000}'
+        assert "100000" in _repair_json_bounded(src)
+        assert "**" in _repair_json_bounded(src)
+
+    def test_non_numeric_expression_rejected(self) -> None:
+        """非数值构造（调用/属性）不受本层影响（保守失败）。"""
+        src = '{"a":len(x)}'
+        assert "len(x)" in _repair_json_bounded(src)
+
+    def test_end_to_end_planner_shape_response(self) -> None:
+        """端到端：真实 Planner 形态响应（含 10**18）经 extract_json_object
+        完整提取（修复前该形态叶子回退只取到 {'items': ...} → M10 误诊）。"""
+        raw = (
+            '{"function_name":"process","description":"d",'
+            '"logic_analysis":{"input_domain":"i","output_domain":"o",'
+            '"preconditions":["p"],"postconditions":["q"],"edge_cases":["e"]},'
+            '"test_cases":[{"case_name":"c","input_args":{"items":[10**18]},'
+            '"expected_output":"[1000000000000000001, 0]","category":"boundary",'
+            '"description":"x","logic_coverage":"y"}]}'
+        )
+        obj = extract_json_object(raw)
+        assert obj["function_name"] == "process"
+        assert obj["test_cases"][0]["input_args"]["items"] == [1000000000000000000]

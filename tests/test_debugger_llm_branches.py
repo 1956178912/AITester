@@ -415,7 +415,9 @@ class TestRunReviewDiagnosisBranches:
         dbg = _mk_debugger()
         captured = {}
 
-        def _fake_call(query):
+        def _fake_call(query, **kwargs):
+            # 2026-10-14：调用点携带 json_mode=True（LLM_JSON_MODE），
+            # fake 需接受该 kwarg（不影响本测试断言的 query 内容）
             captured["query"] = query
             return "raw"
 

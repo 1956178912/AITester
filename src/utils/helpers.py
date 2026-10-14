@@ -235,6 +235,113 @@ def _quote_tuple_keys_once(s: str) -> tuple[str, bool]:
     return "".join(segs), changed
 
 
+# 数值 Python 表达式（2026-10-14，LLM_JSON_MODE 上线捕获）：LLM 在 JSON 值
+# 位置写 Python 数值表达式 `10**18` / `2**32` / `10_000_000`（下划线分隔符
+# 为合法 Python 字面量、非法 JSON）——实测 Planner `input_args` 中
+# `{"items":[10**18]}` 致 json.loads 失败，且既有修复链（字符串表达式 /
+# 元组键）不含数值路径 → 叶子回退静默返回错误片段（{'items': ...}）→ 被
+# 误诊为「LLM 未输出 logic_analysis」（M10）。本函数把值位置的纯数值表达式
+# 换算为等值 JSON 数字字面量；仅 `**` / 下划线 / 前导 `+` 场景替换，
+# 已是合法 JSON 数字的零改动。
+_NUMERIC_EXPR_TOKEN_RE = re.compile(
+    r"(?<=[:,\[])(?P<ws>\s*)"
+    r"(?P<expr>-?\d[\d_]*(?:\s*\*\*\s*\d[\d_]*)?(?:\s*[+\-*]\s*\d[\d_]*(?:\s*\*\*\s*\d[\d_]*)?)*)"
+    r"(?=\s*[,}\]])"
+)
+# 指数上限：防 `10**10**9` 式内存放大（本函数出现前 JSON 必已解析失败，
+# 属罕见路径；预算给足常见工程常量 2**63、10**18 量级）
+_MAX_NUMERIC_EXPONENT = 4096
+# 结果十进制位数上限（4096 位 ≈ 13KB 字符串，远远超出正常边界输入）
+_MAX_NUMERIC_DIGITS = 4096
+
+
+def _position_in_string(s: str, pos: int) -> bool:
+    """pos 是否处于 JSON 字符串字面量内（转义感知的引号奇偶扫描）。
+
+    仅用于数值表达式修复的字符串内防护（该路径只在 json 已解析失败的
+    罕见输入上执行，O(n) 成本可接受），避免把字符串内容误当值位置替换。
+    """
+    in_str = False
+    esc = False
+    for i in range(min(pos, len(s))):
+        ch = s[i]
+        if esc:
+            esc = False
+            continue
+        if ch == "\\":
+            esc = True
+        elif ch == '"':
+            in_str = not in_str
+    return in_str
+
+
+def _safe_eval_numeric_expr(node: ast.AST) -> Any:
+    """受限数值求值：仅 常量 / 一元正负号 / 四则（``+ - *``）/ 幂运算。
+
+    不使用 eval / ast.literal_eval 的全量语义——拒绝 Call/Attribute/Name/
+    Subscript 等一切可执行构造，无任意代码执行面。指数先做界检查
+    （``abs(exp) <= _MAX_NUMERIC_EXPONENT``），防超巨整数计算；结果位数
+    由调用方 ``_MAX_NUMERIC_DIGITS`` 兜底。
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        val = _safe_eval_numeric_expr(node.operand)
+        return -val if isinstance(node.op, ast.USub) else val
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Pow)):
+        left = _safe_eval_numeric_expr(node.left)
+        right = _safe_eval_numeric_expr(node.right)
+        if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
+            raise TypeError("non-numeric operand")
+        if isinstance(node.op, ast.Pow):
+            if not isinstance(left, int) or not isinstance(right, int):
+                raise TypeError("unsupported pow operands (int-only)")
+            if abs(right) > _MAX_NUMERIC_EXPONENT:
+                raise ValueError("exponent too large")
+            return left**right
+        if isinstance(node.op, ast.Add):
+            return left + right
+        if isinstance(node.op, ast.Sub):
+            return left - right
+        return left * right
+    raise TypeError(f"unsupported node {type(node).__name__}")
+
+
+def _normalize_python_numeric_expressions(s: str) -> str:
+    """把 JSON 值位置的纯数值 Python 表达式替换为等值 JSON 数字。
+
+    覆盖形态：``{"items":[10**18]}`` → ``{"items":[1000000000000000000]}``、
+    ``{"n":2**32}`` → ``4294967296``、``{"m":10_000_000}`` → ``10000000``。
+    保守口径：字符串内位置不替换（_position_in_string 防护）；求值结果
+    超界/非数值/异常 → 原样保留（交既有降级链）。已是合法 JSON 数字的
+    内联数字零改动。
+    """
+
+    def _repl(m: re.Match[str]) -> str:
+        raw = m.group("expr")
+        # 已是合法 JSON 数字（含负数/科学计数/小数）→ 零改动
+        try:
+            jv = json.loads(raw)
+            if isinstance(jv, (int, float)) and not isinstance(jv, bool):
+                return m.group(0)
+        except (json.JSONDecodeError, ValueError):
+            pass
+        if _position_in_string(s, m.start("expr")):
+            return m.group(0)
+        try:
+            tree = ast.parse(raw, mode="eval")
+            val = _safe_eval_numeric_expr(tree.body)
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            return m.group(0)
+        if not isinstance(val, (int, float)) or isinstance(val, bool):
+            return m.group(0)
+        if len(str(val)) > _MAX_NUMERIC_DIGITS:
+            return m.group(0)
+        return m.group(0)[: m.start("expr") - m.start(0)] + json.dumps(val)
+
+    return _NUMERIC_EXPR_TOKEN_RE.sub(_repl, s)
+
+
 def _repair_json_bounded(s: str, rounds: int = 4) -> str:
     """有界迭代修复：反复施加各类保守修复，直到可解析或用尽轮次。
 
@@ -252,6 +359,8 @@ def _repair_json_bounded(s: str, rounds: int = 4) -> str:
         nxt, changed = _quote_tuple_keys_once(cur)
         nxt = _repair_json_text(nxt)
         nxt = _quote_python_expressions(nxt)
+        # 2026-10-14：数值 Python 表达式（10**18 / 10_000 等，JSON 非法）
+        nxt = _normalize_python_numeric_expressions(nxt)
         if not changed and nxt == cur:
             return cur
         cur = nxt
@@ -270,7 +379,9 @@ def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
     拒绝 Call/Attribute/Name 等一切可执行构造），并限制：
     - 候选必须是**单行**且长度 ≤ ``max_len``（防 ReDoS/超长解析）；
     - 求值结果必须是 ``str``（值位置的字面量只需处理字符串场景；
-      数字/容器由 JSON 自身语法覆盖，不做过度替换）；
+      数字内联字面量由 JSON 自身语法覆盖、**数值表达式**（``10**18``）
+      由 ``_normalize_python_numeric_expressions`` 单独处理，本函数不做
+      过度替换）；
     - 求值异常/类型不符/超限 → 原样保留（保守失败，交既有降级链）。
 
     覆盖形态：``"a"*10000``（字符串重复）、``"x"+y`` 中的纯字面量连接。
