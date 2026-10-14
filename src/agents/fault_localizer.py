@@ -180,7 +180,10 @@ class FaultLocalizerAgent(BaseAgent):
             spectral_top_k=spectral_top_k,
         )
         try:
-            raw = self._call_llm_with_cache(prompt, max_retries=max_retries, temperature=0.0)
+            # 2026-10-14 ADR-0031：json_mode=True——本调用契约是单个 JSON
+            # 对象（function_name/line_start/confidence 等，见提示词第 128 行
+            # "输出必须是单个 JSON 对象"；非 JSON 输出即解析失败保守降级 None）。
+            raw = self._call_llm_with_cache(prompt, max_retries=max_retries, temperature=0.0, json_mode=True)
         except Exception as e:  # 保守降级：定位失败不阻断修复主流程
             logger.warning("FaultLocalizer LLM 调用失败，保守降级 None: %s", e)
             return None
