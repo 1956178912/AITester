@@ -301,6 +301,39 @@ def test_build_analysis_flags_dirty_provenance(tmp_path: Path) -> None:
     assert analysis["provenance_ok"] is False
 
 
+def test_asymmetry_audit_splits_direction() -> None:
+    """双向分解：reverse（specir 应用/replace 回退）违反材料包含律，须单独计数。"""
+    replace_rows = [
+        {"task_id": "t1", "spec_replace_applied": "attempted_replaced"},
+        {"task_id": "t2", "spec_replace_applied": "attempted_fallback"},
+    ]
+    specir_rows = [
+        {"task_id": "t1", "spec_replace_applied": "attempted_fallback"},
+        {"task_id": "t2", "spec_replace_applied": "attempted_replaced"},
+    ]
+    audit = asymmetry_audit(replace_rows, specir_rows)
+    assert audit["n_asymmetric"] == 2
+    assert audit["n_forward_replace_applied_specir_fallback"] == 1
+    assert audit["n_reverse_replace_fallback_specir_applied"] == 1
+
+
+def test_build_analysis_reports_design_sensitivity(tmp_path: Path) -> None:
+    """设计敏感性陈述在场（区分真阴性与功效失败的关键字段）。"""
+    analysis = build_analysis(_make_batch_dir(tmp_path))
+    sens = analysis["design_sensitivity"]
+    assert sens["detection_available"] > 0
+    assert sens["replace_marginal"] is not None
+    assert sens["specir_marginal"] is not None
+
+
+def test_build_analysis_accepts_relative_batch_dir(tmp_path: Path, monkeypatch) -> None:
+    """相对路径 batch_dir 也必须可解析（CLI 默认值即相对路径）。"""
+    _make_batch_dir(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    analysis = build_analysis(Path("emse_specexpr_synth_test"))
+    assert analysis["primary_pooled"]["n_pairs"] == 8
+
+
 def test_build_analysis_missing_artifact_raises_readable_error(tmp_path: Path) -> None:
     """工件缺失 → MissingArtifactError（消息含目录路径，可读诊断）。"""
     with pytest.raises(MissingArtifactError, match="s45_replace"):
