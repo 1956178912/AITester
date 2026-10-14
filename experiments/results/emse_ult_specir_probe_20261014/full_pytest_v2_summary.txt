@@ -1,0 +1,15 @@
+# 全量 pytest 复跑摘要（full_pytest_v2，2026-10-14 13:09-13:18，--basetemp=.pytest_tmp_full_v2）
+# 完整日志 11MB 不入库（仅留本摘要；原始输出见会话记录）
+
+## 结果行
+= 2 failed, 1309 passed, 3 skipped, 2 warnings, 4525 errors in 520.87s (0:08:40) =
+
+## FAILED（2，均为沙箱 bulk-delete 守卫触发，非代码回归）
+FAILED tests/test_cache_security.py::TestCacheExpiry::test_removes_expired_keeps_fresh
+FAILED tests/test_cache_security.py::TestCacheExpiry::test_env_ttl_default_seven_days
+
+## 守卫触发签名
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":50,"threshold":50,"scope":"turn","targets":["/Users/wangchenyu/Workspace/AITester/.pytest_tmp_full_v2/test_coverage_threshold_out_ofcurrent"],"targetCount":1}
+
+## 单文件复跑验证（全部通过）
+test_z_batch.py 18/18; test_emse_specexpr_confirm.py 24/24; test_2026_10_10_optimization_batch.py 26/26
