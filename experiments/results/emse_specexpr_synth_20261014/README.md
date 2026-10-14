@@ -52,7 +52,7 @@ spec_compile_rate（specir 臂）：seed45 0.3383 / seed46 0.2820，池化
   DETECTION_SPEC_MODE=replace、缓存 namespace 独立、指纹钉锁一致；
   run1（s45_replace）git_dirty=true（当时分析脚本未提交，src/ 管线未动），
   run2-4 git_sha=7a91f83 clean。
-- **不对称应用 34/174（双向）**：seed45 11 forward / 7 reverse；seed46
+- **不对称应用 34/174（双向）**：seed45 7 forward / 11 reverse；seed46
   9 forward / 7 reverse。reverse 违反材料包含律（SpecExpr ⊇ NL），
   根因 = temp=0 下 Planner 对 synthetic 任务的跨跑批非确定性
   （JSON 解析失败频发；reverse 案例 iters=0/regen=0 排除再生成覆写）。
