@@ -216,7 +216,7 @@ def _mk_task(
         "set": "s",
         "arm_letter": "",
         "task_id": task_id,
-        "module": task_id.split("__")[-1],
+        "module": task_id.rsplit("__", maxsplit=1)[-1],
         "archived_detection_rate": archived_det,
         "archived_stop_reason": "test_passed",
         "n_generated_test_chars": 100,
@@ -312,7 +312,14 @@ def _suite(task_id: str, node_classes: dict[str, str], det: float | None = 1.0) 
     tests = []
     for node, cls in node_classes.items():
         counts[cls] += 1
-        tests.append({"node": node, "buggy": "fail" if cls in ("f2p", "f2f") else "pass", "fixed": "fail" if cls in ("f2f", "p2f") else "pass", "cls": cls})
+        tests.append(
+            {
+                "node": node,
+                "buggy": "fail" if cls in ("f2p", "f2f") else "pass",
+                "fixed": "fail" if cls in ("f2f", "p2f") else "pass",
+                "cls": cls,
+            }
+        )
     n_class = sum(v for k, v in counts.items() if k != "other")
     return {
         "task_id": task_id,
@@ -327,8 +334,24 @@ def _suite(task_id: str, node_classes: dict[str, str], det: float | None = 1.0) 
         "task_level_reproduced": det,
         "f2p_call_phase": counts["f2p"],
         "f2p_setup_teardown_error": 0,
-        "buggy": {"rc": 1, "timed_out": False, "parser": "plugin+verbose", "parse_agree_n": len(tests), "parse_mismatch": [], "exec_error_heuristic": False, "stdout_sha256": "b"},
-        "fixed": {"rc": 0, "timed_out": False, "parser": "plugin+verbose", "parse_agree_n": len(tests), "parse_mismatch": [], "exec_error_heuristic": False, "stdout_sha256": "f"},
+        "buggy": {
+            "rc": 1,
+            "timed_out": False,
+            "parser": "plugin+verbose",
+            "parse_agree_n": len(tests),
+            "parse_mismatch": [],
+            "exec_error_heuristic": False,
+            "stdout_sha256": "b",
+        },
+        "fixed": {
+            "rc": 0,
+            "timed_out": False,
+            "parser": "plugin+verbose",
+            "parse_agree_n": len(tests),
+            "parse_mismatch": [],
+            "exec_error_heuristic": False,
+            "stdout_sha256": "f",
+        },
     }
 
 
@@ -385,3 +408,90 @@ def test_merge_reconciliation_counts() -> None:
         {"archived_detection_rate": 0.0, "task_level_reproduced": None},
     ]
     assert _merge_reconciliation(tasks) == {"1.0->1.0": 1, "0.0->None": 1}
+
+
+# ─── 替代口径敏感性 / 独立复核解析 / 复用加载 ──────────────────────────
+
+
+def test_pytest_summary_regex_parsing() -> None:
+    """独立复核读取的是 pytest 自身汇总行（不依赖本脚本解析器）。"""
+    from experiments.emse_testlevel_detection import _PYTEST_SUMMARY_RE
+
+    def counts(line: str) -> dict[str, int]:
+        return {m.group(2): int(m.group(1)) for m in _PYTEST_SUMMARY_RE.finditer(line)}
+
+    assert counts("===== 37 failed, 9 passed in 0.08s =====") == {"failed": 37, "passed": 9}
+    assert counts("46 passed in 0.07s") == {"passed": 46}
+    assert counts("2 failed, 1 error, 5 passed in 0.1s") == {"failed": 2, "error": 1, "passed": 5}
+
+
+def test_mcnemar_from_maps_standard_caliber_skips_none() -> None:
+    """标准口径：任一侧 None 的任务退出配对分母（与既有 _effective_pair 同规则）。"""
+    from experiments.emse_testlevel_detection import _mcnemar_from_maps
+
+    x = {"t1": 1.0, "t2": 0.0, "t3": None, "t4": 1.0}
+    y = {"t1": 0.0, "t2": 1.0, "t3": 1.0, "t4": 1.0}
+    out = _mcnemar_from_maps(x, y, "X", "Y")
+    assert out["n_pairs"] == 3  # t3 被剔除
+    assert out["b_pos_x_only"] == 1 and out["b_neg_y_only"] == 1
+    assert out["ratio"] == "1:1"
+    assert out["p_value"] == 1.0
+
+
+def test_hang_sensitivity_flips_and_contrast() -> None:
+    """替代口径：buggy 侧挂死 ∧ fixed 侧 rc=0 → 记检出；只影响敏感性表，不影响主口径。"""
+    from experiments.emse_testlevel_detection import hang_sensitivity
+
+    def mk(tid: str, *, buggy_to: bool, fixed_rc: int, repro: float | None) -> dict:
+        t = _mk_task(tid, {"f2p": 0, "p2p": 2, "f2f": 0, "p2f": 0, "other": 0}, archived_det=None, reproduced=None)
+        t["buggy"]["timed_out"] = buggy_to
+        t["buggy"]["rc"] = None if buggy_to else 1
+        t["fixed"]["timed_out"] = False
+        t["fixed"]["rc"] = fixed_rc
+        t["task_level_reproduced"] = repro
+        return t
+
+    run_a = _mk_run([mk("quixbugs__a", buggy_to=True, fixed_rc=0, repro=None)])
+    run_a["source"]["label"], run_a["source"]["arm_letter"] = "A", "A"
+    run_b = _mk_run([mk("quixbugs__a", buggy_to=False, fixed_rc=0, repro=0.0)])
+    run_b["source"]["label"], run_b["source"]["arm_letter"] = "B", "B"
+    out = hang_sensitivity([run_a, run_b])
+    assert out["flip_task_ids_per_source"] == {"A": ["quixbugs__a"], "B": []}
+    assert out["n_flip_tasks_per_source"] == {"A": 1, "B": 0}
+    assert len(out["contrasts"]) == 1
+    assert out["contrasts"][0]["ratio"] == "1:0"
+    assert out["contrasts"][0]["n_pairs"] == 1
+    # 主口径（task_level_reproduced）不被改写
+    assert run_a["tasks"][0]["task_level_reproduced"] is None
+
+
+def test_load_reused_report_rebuilds_runs(tmp_path) -> None:
+    """--reuse-json：从既有工件重建 runs（measured 字段原样复用）。"""
+    from experiments.emse_testlevel_detection import load_reused_report
+
+    task = _mk_task("quixbugs__a", {"f2p": 1, "p2p": 1, "f2f": 0, "p2f": 0, "other": 0}, archived_det=1.0)
+    task["set"] = "quixbugs50_batch5"
+    prev = {
+        "meta": {"wall_clock_total_s": 12.5, "cmdline": "python ... --jobs 1", "n_pytest_runs": 410},
+        "tasks": [task],
+        "aggregates": {"per_source": [{"label": "quixbugs50_batch5", "n_rows_in_artifact": 50, "wall_s": 12.5}]},
+        "handcheck": [{"set": "quixbugs50_batch5", "task_id": "quixbugs__a", "buggy_stdout": "B", "fixed_stdout": "F"}],
+    }
+    path = tmp_path / "prev.json"
+    path.write_text(json.dumps(prev), encoding="utf-8")
+    sources = [
+        {
+            "label": "quixbugs50_batch5",
+            "kind": "batch5",
+            "arm_letter": "",
+            "cache_namespace": "",
+            "path": tmp_path / "bench.json",
+            "sha256": "x",
+        }
+    ]
+    out = load_reused_report(path, sources, {"excluded_task_ids": ["quixbugs__z"]})
+    assert out["wall_clock_total_s"] == 12.5
+    assert len(out["runs"]) == 1
+    assert out["runs"][0]["n_rows"] == 50
+    assert out["runs"][0]["skipped_no_gold"] == ["quixbugs__z"]
+    assert out["runs"][0]["handcheck_raw"][("quixbugs50_batch5", "quixbugs__a")]["buggy_stdout"] == "B"
