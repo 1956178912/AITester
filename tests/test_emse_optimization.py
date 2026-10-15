@@ -276,6 +276,49 @@ class TestCorrelation:
         assert out["mutants_total_distribution"]["n"] == 4
         assert out["mutants_total_distribution"]["max"] == 6
 
+    def test_mutation_correlation_computes_real_coefficients(self):
+        """EMSE 批次修复锁定：docstring 声称的 Pearson/Spearman 必须真算。
+
+        回归背景：修复前函数体只返回 n_pairs 与 mean_when_detection_1，
+        论文若据此声称"已交叉验证"即为不实陈述。
+        """
+        rows = [
+            {"detection_rate": 1.0, "mutation_score": 0.9, "mutants_total": 5},
+            {"detection_rate": 0.0, "mutation_score": 0.8, "mutants_total": 4},
+            {"detection_rate": 1.0, "mutation_score": 0.95, "mutants_total": 6},
+            {"detection_rate": 0.0, "mutation_score": 0.7, "mutants_total": 3},
+        ]
+        ms = mutation_correlation(rows)["mutation_score"]
+        # 检出组 MS 均值 0.925 > 未检出组 0.75 → 正相关，且系数非 None
+        assert ms["pearson"] is not None
+        assert ms["spearman"] is not None
+        assert ms["pearson"] > 0
+        assert ms["mean_when_detection_0"] == pytest.approx(0.75, abs=1e-3)
+        assert ms["mean_delta_det1_minus_det0"] == pytest.approx(0.175, abs=1e-3)
+        assert "convergent-validity" in ms["interpretation_caveat"]
+
+    def test_mutation_correlation_negative_direction_is_surfaced(self):
+        """分层方向为负时必须如实呈现（不得被弱正号掩盖）。"""
+        rows = [
+            {"detection_rate": 1.0, "mutation_score": 0.5, "mutants_total": 5},
+            {"detection_rate": 0.0, "mutation_score": 0.9, "mutants_total": 4},
+            {"detection_rate": 1.0, "mutation_score": 0.55, "mutants_total": 6},
+            {"detection_rate": 0.0, "mutation_score": 0.95, "mutants_total": 3},
+        ]
+        ms = mutation_correlation(rows)["mutation_score"]
+        assert ms["mean_delta_det1_minus_det0"] < 0
+        assert ms["pearson"] is not None and ms["pearson"] < 0
+
+    def test_mutation_correlation_degenerate_spearman_reason(self):
+        """退化路径给明确 reason，不臆造系数。"""
+        rows = [
+            {"detection_rate": 1.0, "mutation_score": 0.9, "mutants_total": 5},
+            {"detection_rate": 0.0, "mutation_score": 0.8, "mutants_total": 4},
+        ]
+        ms = mutation_correlation(rows)["mutation_score"]
+        assert ms["spearman"] is None
+        assert ms["spearman_reason"] == "n_pairs_lt_3"
+
 
 # ─── A/B 配对分析（--ab-pair 入口，D1 QuixBugs 复算用） ────────────────────
 

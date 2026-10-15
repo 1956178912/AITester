@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure
 
 PY := .venv/bin/python
 
@@ -49,10 +49,13 @@ env-snapshot:  ## 环境开关 provenance 完备性守卫（E-B，接入 CI）
 model-fingerprint:  ## 模型版本指纹锁定守卫（S29，接入 CI；默认仅扫近期批次）
 	$(PY) scripts/gates/check_model_fingerprint.py
 
+json-contract-sites:  ## JSON 契约调用点计数一致性（EMSE 批次 2026-10-15：口径 A=7，防文档 6/7 分裂）
+	$(PY) scripts/gates/check_json_contract_sites.py
+
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
@@ -81,6 +84,12 @@ corrected-metrics:  ## 修正口径重估总报告（批次 XIII/ADR-0027：repa
 
 target-quality:  ## 目标质量存量重放（R5 审查批次：被测代码覆盖率 / 变异得分 / 规约可编译率，零 LLM 只读工件）
 	$(PY) -m experiments.target_quality_replay experiments/results/main_batch
+
+mutation-det-correlation:  ## mutation × detection 交叉验证（EMSE 批次 2026-10-15：构念效度辅助证据 + 饱和纪律，零 LLM 只读工件）
+	$(PY) -m experiments.emse_optimization --mutation-correlation experiments/results/main_batch --out experiments/results/main_batch/mutation_detection_correlation.md
+
+swebench-disclosure:  ## SWE-bench Lite 基础设施失败披露（EMSE 批次 2026-10-15：四分账 + 无有效能力结论，零 LLM）
+	$(PY) -m experiments.emse_optimization --swebench-disclosure --out experiments/results/emse_swebench_disclosure.md
 
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel
