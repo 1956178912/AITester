@@ -243,3 +243,69 @@ class TestUltMutationScoreCosmicRayIntegration:
         assert 0.0 <= out["mutation_score"] <= 1.0
         assert 0 < out["mutants_total"] <= 4
         assert 0 <= out["mutants_killed"] <= out["mutants_total"]
+
+
+class TestWorkItemAccountingAndSentinel:
+    """exec 兜底超时按实际条目数计算（2026-10-15 批次八修复的回归锁定）。
+
+    背景：修复前 exec 兜底超时 = ``max_mutants × timeout + 60``，全变异体
+    哨兵（10**9）产出 ≈1.2e11s 的超时值，超出 C 层 PyTime_t（≈9.22e9s）
+    ⇒ subprocess 抛 OverflowError ⇒ 全变异体口径每任务以 skipped 失败。
+    修复后按 init+trim 后实测 ``work_items`` 条目数计算。
+    """
+
+    def test_count_work_items_reads_session_sqlite(self, tmp_path) -> None:
+        """``_count_work_items`` 读取合成 session.sqlite 的行数。"""
+        import sqlite3
+
+        from experiments.ult_adapter import _count_work_items
+
+        db = tmp_path / "session.sqlite"
+        conn = sqlite3.connect(str(db))
+        try:
+            conn.execute("CREATE TABLE work_items (job_id TEXT PRIMARY KEY)")
+            conn.executemany(
+                "INSERT INTO work_items (job_id) VALUES (?)",
+                [("a",), ("b",), ("c",)],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        assert _count_work_items(str(db)) == 3
+
+    def test_full_mutant_sentinel_no_overflow(self) -> None:
+        """全变异体哨兵（10**9）不再溢出——真实 cosmic-ray 路径端到端。
+
+        修复前该调用恒以 skipped（"cosmic-ray 子命令异常：
+        OverflowError(...)"）返回；修复后应走完整 init→exec→dump，
+        产出有效 mutation_score。
+        """
+        if not is_cosmic_ray_available():
+            import pytest
+
+            pytest.skip("cosmic-ray not installed; sentinel integration caliber not exercisable")
+
+        out = ult_mutation_score(
+            target_code="def f(x):\n    return x + 1\n",
+            test_code="import mod\n\n\ndef test_f():\n    assert mod.f(2) == 3\n",
+            module_name="mod",
+            max_mutants=10**9,
+        )
+        assert set(out.keys()) == self._expected_keys()
+        assert out["skipped"] is False
+        assert "OverflowError" not in out["skip_reason"]
+        assert isinstance(out["mutation_score"], float)
+        assert out["mutants_total"] >= 1
+
+    def _expected_keys(self) -> set[str]:
+        return {
+            "available",
+            "mutation_score",
+            "mutants_total",
+            "mutants_killed",
+            "skipped",
+            "skip_reason",
+            "cosmic_ray_version",
+            "cosmic_ray_config_hash",
+            "elapsed_seconds",
+        }

@@ -161,8 +161,15 @@ def _trim_work_items(session_path: str, max_mutants: int) -> None:
     """把 session 里超过 ``max_mutants`` 的变异体工作项删除（控制执行时间）。
 
     ``cosmic-ray init`` 后 session.sqlite 的 ``work_items`` 表即全量变异体；
-    本函数按 ``job_id`` 排序保留前 ``max_mutants`` 个（确定性），删除其余
-    （先删子表 ``mutation_specs`` 再删 ``work_items``，规避外键约束）。
+    本函数按 ``job_id`` 排序保留前 ``max_mutants`` 个，删除其余（先删子表
+    ``mutation_specs`` 再删 ``work_items``，规避外键约束）。
+
+    注意（2026-10-15 批次八勘误）：``job_id`` 是 cosmic-ray ``init`` 时为
+    每个工作项生成的 **uuid4 随机串**（``cosmic_ray/commands/init.py``），
+    因此本截断保留的是**等概率随机子集**，而非确定性前 N 个——同一任务
+    跨复跑会评估不同的变异体样本（此前文档"确定性截断面"的说法有误）。
+    需要逐位可复现的 Mut@k 数值时，请使用**全变异体口径**（不截断，
+    ``max_mutants`` 传哨兵值）。
     """
     conn = sqlite3.connect(session_path)
     try:
@@ -174,6 +181,22 @@ def _trim_work_items(session_path: str, max_mutants: int) -> None:
             conn.execute("DELETE FROM mutation_specs WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM work_items WHERE job_id = ?", (job_id,))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def _count_work_items(session_path: str) -> int:
+    """统计 session.sqlite 中 ``work_items`` 表的当前条目数。
+
+    用途：计算 cosmic-ray ``exec`` 的整体兜底超时——按 init 生成并修剪后
+    的**实际条目数**（而非调用方传入的 ``max_mutants`` 上界）计算，避免
+    全变异体哨兵（如 ``10**9``）产出的超大超时值串到 C 层 PyTime_t
+    （≈292 年上限）触发 ``OverflowError``（2026-10-15 批次八修复）。
+    """
+    conn = sqlite3.connect(session_path)
+    try:
+        (count,) = conn.execute("SELECT COUNT(*) FROM work_items").fetchone()
+        return int(count)
     finally:
         conn.close()
 
@@ -217,7 +240,9 @@ def ult_mutation_score(
             口径同 `experiments/mutation_testing.py`）。
         max_mutants: 最多评估的变异体数量（默认 10，与自研 AST 变异体
             口径一致；ULT 官方口径下 cosmic-ray 全变异体可能更多，
-            本参数控制子进程执行时间）。
+            本参数控制子进程执行时间）。注意（2026-10-15 批次八勘误）：
+            截断保留的是 uuid4 随机序子集（非确定性样本）；传哨兵值
+            （如 ``10**9``）即不截断 = 全变异体口径（逐位可复现）。
         timeout_seconds: 单次 pytest 超时（None = ULT 官方 120s）。
 
     Returns:
@@ -272,8 +297,11 @@ def ult_mutation_score(
     # 全程确定性本地执行（零 LLM）；任一子命令失败 / 超时 / 无输出均
     # 保守返回 skipped（不误报 0 分，与 _m1_metrics 的 None 保守口径一致）。
     try:
-        with tempfile.TemporaryDirectory(prefix="aitester_cr_") as tmpdir:
-            tmpdir = Path(tmpdir)
+        with tempfile.TemporaryDirectory(prefix="aitester_cr_") as tmpdir_str:
+            # 2026-10-15 批次八：显式中转名（此前 `tmpdir = Path(tmpdir)` 经
+            # str→Path 重赋值触发 mypy assignment/operator 报错——变更文件
+            # 的 mypy 全绿纪律）。
+            tmpdir = Path(tmpdir_str)
             (tmpdir / f"{module_name}.py").write_text(target_code, encoding="utf-8")
             test_file_name = f"test_{module_name}.py"
             (tmpdir / test_file_name).write_text(test_code, encoding="utf-8")
@@ -300,9 +328,14 @@ def ult_mutation_score(
 
             _run(["init", str(config_path), str(session_path)], timeout=120)
             _trim_work_items(str(session_path), max_mutants)
-            # 整体执行超时 = 变异体数 × 单变异体超时 + 缓冲（cosmic-ray 内部
-            # 已有逐变异体 timeout，此处为兜底防整体挂死）。
-            exec_timeout = max_mutants * timeout_seconds + 60
+            # 整体执行超时 = **trim 后实际条目数** × 单变异体超时 + 缓冲
+            # （cosmic-ray 内部已有逐变异体 timeout，此处为兜底防整体挂死）。
+            # 2026-10-15 批次八修复：原实现按 max_mutants × timeout + 60
+            # 计算，全变异体哨兵（如 10**9）产出 ~1.2e11s 超时值，超出 C 层
+            # PyTime_t（≈9.22e9s）⇒ subprocess 抛 OverflowError ⇒ 全变异体
+            # 口径每任务以 skipped 失败（不可执行）。改按实测条目数计算，
+            # 既精确又天然免疫哨兵溢出。
+            exec_timeout = _count_work_items(str(session_path)) * timeout_seconds + 60
             _run(["exec", str(config_path), str(session_path)], timeout=exec_timeout)
             dump_stdout = _run(["dump", str(session_path)], timeout=60).stdout
 

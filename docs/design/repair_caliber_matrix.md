@@ -19,6 +19,7 @@
 | ⑥ **v2：54.72%（58/106）** | 58/106 | 修正口径可重放行（含 R27 跨文件物化） | gold 独立裁决 | synthetic | aitester | {42,44} | logic 档双门开 | 同 ③ | 同 ③ | 同 ⑤ |
 | ⑦ **v2：55.6%（10/18）** | 10/18 | 修正口径可重放行（含 R27 跨文件物化） | gold 独立裁决 | synthetic | aitester | 42 | logic 档 EDIT_INTENT（A 臂） | `experiments/results/r4_batches/r4_ab_arm_a` | `experiments/results/r4_batches/replay_r4_ab_arm_a_v2.md` |
 | ⑧ v2：90.2%/87.8% | 37/41、36/41 | M1 可测口径 | QuixBugs 官方测试 | QuixBugs | aitester A/B | 42 | 同 ④ | 同 ④ | **逐位不变**（R27 不影响 QuixBugs 子串分派路径） |
+| ⑨ **Mut@k（全变异体·健全子集，批次八）**：QuixBugs **0.9396**（1182/1258）/ ULT replace **0.6749**（1590/2356）/ ULT specir **0.4395**（847/1927）/ ULT gold **n=0** | Σkilled/Σtotal | **健全子集**（套件在目标代码上 30s 内终止且通过——ULT 官方 `correct_tasks` 过滤的操作化；未过门任务保守跳过并全额披露） | 生成测试套件（Mut@k）；**gold 参照作废**（上游不一致 71/71，见叙事 §3） | QuixBugs 50 / ULT lite46 / ULT 探针 25 | 生成测试：quixbugs specir·replace / ULT specir·replace（gold 组 n=0） | 42（任务集固定；cache namespace 隔离） | 零 LLM（cosmic-ray 8.7.0；哨兵 10⁹ 不截断；timeout=120s 计 killed） | `experiments/results/emse_quixbugs_mutk_full_20261015/` + `emse_ult_mutk_full_20261015/` | `python experiments/emse_quixbugs_mutk_full.py`；`python experiments/emse_ult_mutk_full.py --groups replace`（或 `specir,gold`） |
 
 **读法**：① 与 ④ 是"all-task vs M1 可测"两口径，②③⑤⑥⑦ 是"修正口径（可重放行）"，
 ④ 与项目记忆中"74%/72%"是同一批数据的 all-task 口径（保守展示）。**不同口径之间的
@@ -55,6 +56,10 @@
 3. **禁止**引用未修正口径的旧数字（16.0% pooled R-P0-2 等的**跨文件零行**已知为伪影）——
    须引用 v2 修正值（⑤⑥⑦⑧）或明确标注为"修正前下界"。
 4. 新增 repair 数字须在本表新增一行（schema 见 §1 表头），否则不得进入对外材料。
+5. **Mut@k 数字（批次八新增）**：以 ⑨（全变异体·健全子集）为定案口径，引用
+   须带「全变异体 + 健全子集 + n（健全/全部）」标签；历史截断面值
+   （`max_mutants=10` = uuid4 随机序**单次随机抽样**）须带「单次随机抽样」
+   标签且不得作新对外口径；gold 参照作废（上游不一致，叙事 §3）。
 
 ## 4. 可复算工件与命令（零 LLM）
 

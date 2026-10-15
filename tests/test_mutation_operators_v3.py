@@ -223,6 +223,13 @@ class TestOperatorSetIntegration:
         assert len(gen.generate(_SOURCE)) <= gen._MAX_MUTANTS_PER_TASK
 
     def test_all_mutants_syntactically_valid(self) -> None:
-        """全部变异体语法有效（无效变异会虚增杀死率——测量纪律）。"""
-        for m in MutationGenerator().generate(_SOURCE):
-            ast.parse(m.code)
+        """全部变异体语法有效（无效变异会虚增杀死率——测量纪律）。
+
+        2026-10-15 批次八：零断言门禁（U3）暴露本用例只有隐式断言信号
+        （ast.parse 抛错即红）——补显式非空断言：生成器空转 = 测量失效，
+        与"语法有效"同为测量纪律的两半。
+        """
+        mutants = list(MutationGenerator().generate(_SOURCE))
+        assert mutants, "基类生成器应至少产出一个变异体（空生成器=测量失效）"
+        for m in mutants:
+            ast.parse(m.code)  # 语法错即抛（SyntaxError → 用例红）
