@@ -347,8 +347,21 @@ def spearman(xs: list[float], ys: list[float]) -> float | None:
 def mutation_correlation(rows: list[dict]) -> dict[str, Any]:
     """mutation 族 × detection 相关性（Pearson/Spearman + 分层均值）。
 
+    EMSE 批次（2026-10-15）修复：此前本函数 docstring 声称计算
+    Pearson/Spearman，**函数体实际只返回计数与检出=1 时的变异均值**——
+    论文若据此声称"detection_rate 与 mutation score 已交叉验证"即为
+    不实陈述（审稿人 1/3 的构念效度质疑点）。现补齐真实系数。
+
     返回 {n_det_measurable, detection_rate_pct, mutation_score:{...},
-    mutants_total_distribution:{...}}。
+    mutants_total_distribution:{...}}；mutation_score 子字典新增
+    pearson / spearman / spearman_reason（退化原因）与分组均值。
+
+    **已知统计局限（必须随数字一并披露）**：detection 在合成主批次为
+    强不平衡二值（aitester ≈ 15.8% 检出），与连续 mutation_score 的
+    Pearson 在低基率下对少数类不敏感；Spearman 含大量 ties。故本表
+    只作**收敛效度（convergent validity）的辅助证据**，不得单独作为
+    "detection_rate 是有效质量代理"的证据；解读须与分层均值（检出=1
+    组 vs 检出=0 组）并列。
     """
     det = [r.get("detection_rate") for r in rows if r.get("detection_rate") is not None]
     n_det = len(det)
@@ -359,10 +372,27 @@ def mutation_correlation(rows: list[dict]) -> dict[str, Any]:
         if r.get("detection_rate") is not None and r.get("mutation_score") is not None
     ]
     mean_when_det1 = None
+    mean_when_det0 = None
     if mut_pairs:
         det1_scores = [s for d, s in mut_pairs if d == 1.0]
+        det0_scores = [s for d, s in mut_pairs if d != 1.0]
         if det1_scores:
             mean_when_det1 = sum(det1_scores) / len(det1_scores)
+        if det0_scores:
+            mean_when_det0 = sum(det0_scores) / len(det0_scores)
+    # 真实相关系数（仅在有足够配对且双方非零方差时给出，否则 None 保守降级）
+    dets = [d for d, _s in mut_pairs]
+    muts = [s for _d, s in mut_pairs]
+    r_pearson = pearson(dets, muts) if len(mut_pairs) >= 2 else None
+    r_spearman = spearman(dets, muts) if len(mut_pairs) >= 3 else None
+    spearman_reason = None
+    if r_spearman is None:
+        if len(mut_pairs) < 3:
+            spearman_reason = "n_pairs_lt_3"
+        elif len(set(dets)) == 1:
+            spearman_reason = "detection_zero_variance"
+        elif len(set(muts)) == 1:
+            spearman_reason = "mutation_zero_variance"
     mt_dist = [r.get("mutants_total") for r in rows if r.get("mutants_total") is not None]
     return {
         "n_det_measurable": n_det,
@@ -370,6 +400,18 @@ def mutation_correlation(rows: list[dict]) -> dict[str, Any]:
         "mutation_score": {
             "n_pairs": len(mut_pairs),
             "mean_when_detection_1": mean_when_det1,
+            "mean_when_detection_0": mean_when_det0,
+            "mean_delta_det1_minus_det0": (
+                mean_when_det1 - mean_when_det0 if mean_when_det1 is not None and mean_when_det0 is not None else None
+            ),
+            "pearson": r_pearson,
+            "spearman": r_spearman,
+            "spearman_reason": spearman_reason,
+            "interpretation_caveat": (
+                "convergent-validity auxiliary evidence only: detection is a "
+                "strongly imbalanced binary at this base rate, and ties dominate "
+                "the mutation ranks; read alongside the stratified means, never alone"
+            ),
         },
         "mutants_total_distribution": {
             "n": len(mt_dist),
@@ -499,19 +541,77 @@ def swebench_infra_facts(summary_path: Path | None = None) -> dict[str, Any]:
             notes = str(issues)
         if not notes:
             notes = str(data.get("raw_notes") or "")
-    # 基础设施故障的修正陈述（若 429 / timeout 占主导）
-    corrected = ""
-    if "429" in notes or timeout > completed + failed:
-        corrected = "基础设施故障（429 限流 / 超时）主导，非模型能力信号"
+    # EMSE 批次（2026-10-15）：把"基础设施失败 ≠ 能力结论"从**字符串包含**
+    # 判据升级为**结构化判据 + 结构化字段**。
+    # 修复动机（审稿人 2/3 复核点）：旧判据 `timeout > completed + failed`
+    # 在超时占多数时恒真、且依赖 notes 里的 "429" 字面量；且结论只落在
+    # `corrected_statement` 文本里，结果行仍以 pass_rate 为一等指标。
+    attempted = total or (completed + failed + timeout)
+    non_capability = completed + failed + timeout
+    timeout_ratio = (timeout / non_capability) if non_capability else None
+    # 限流信号优先取**结构化嵌套字段** results_summary.notes（单次运行的权威
+    # 定性说明），其次 issues/notes 自由文本——避免结论只依赖一个大字符串。
+    run_notes = str((data.get("results_summary") or {}).get("notes") or "")
+    rate_limited = ("429" in run_notes or "rate limit" in run_notes.lower()) or "429" in notes
+    rate_limit_signals = notes.count("429") + run_notes.count("429")
+    # 有效能力结论的必要条件：存在"真实执行完成"的样本，且基础设施故障不占主导。
+    # 本工件（20 次尝试：7 完成 / 3 失败 / 10 超时，7/7 完成者均因 429 失败）
+    # 不满足该条件 → 明确输出"无有效能力结论"，且**不得**引用其 pass_rate。
+    infra_failure = rate_limited or (timeout_ratio is not None and timeout_ratio > 0.5)
+    capability_conclusion = "none_valid_infrastructure_failure" if infra_failure else "valid_conclusion_available"
+    corrected = "基础设施故障（429 限流 / 超时）主导，非模型能力信号" if infra_failure else ""
     return {
         "available": True,
-        "total_tasks_attempted": total,
+        "total_tasks_attempted": attempted,
         "tasks_completed": completed,
         "tasks_failed": failed,
         "tasks_timeout": timeout,
+        "timeout_ratio": timeout_ratio,
+        "rate_limit_signals": rate_limit_signals,
+        "capability_conclusion": capability_conclusion,
+        "pass_rate_must_not_be_quoted": infra_failure,
         "notes": notes,
         "corrected_statement": corrected,
     }
+
+
+def swebench_disclosure_report() -> str:
+    """SWE-bench Lite 基础设施失败披露（四分账 + 无有效能力结论）。
+
+    论文用途：真实基准失败必须**如实分账**并明确标注"无有效能力结论"
+    （不得作为阴性证据，也不得把 pass_rate 画进对比图）。
+    """
+    facts = swebench_infra_facts()
+    if not facts.get("available"):
+        return "# SWE-bench Lite 披露\n\n工件缺失，无法生成披露表。\n"
+    attempted = facts["total_tasks_attempted"]
+    completed = facts["tasks_completed"]
+    failed = facts["tasks_failed"]
+    timeout = facts["tasks_timeout"]
+    conclusion = facts["capability_conclusion"]
+    lines = [
+        "# SWE-bench Lite 基础设施失败披露（EMSE 批次 2026-10-15）",
+        "",
+        f"- 尝试任务数：**{attempted}**",
+        f"- 完成：**{completed}**；任务级失败：**{failed}**；超时：**{timeout}**",
+        f"- 超时占比：{facts['timeout_ratio']:.2%}" if facts["timeout_ratio"] is not None else "- 超时占比：—",
+        f"- 限流（429）信号计数：**{facts['rate_limit_signals']}**",
+        f"- **能力结论：`{conclusion}`**",
+        "",
+        "## 结论性陈述（须逐字进入论文 Limitations）",
+        "",
+        f"> {facts['corrected_statement'] or '（无基础设施故障信号）'}",
+        "",
+        "## 引用纪律",
+        "",
+        f"- 本数据集的 `pass_rate` **{'不得引用' if facts['pass_rate_must_not_be_quoted'] else '可引用（无基础设施故障信号）'}**"
+        "——它度量的是配额瓶颈，不是能力。",
+        "- 该数据集**不得进入任何跨方法能力对比图/表**；只能出现在 Limitations 与复跑清单中。",
+        "- 复跑前置：客户端已具备 429 退避（`src/agents/base_agent.py` 按 `Retry-After` 退避 + 跨模型 failover），"
+        "但下载器/跑批入口无配额预算控制——重跑前需先补配额闸。",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 # ─── A/B 配对分析（--ab-pair 入口，D1 QuixBugs 复算用） ──────────────────
@@ -575,14 +675,130 @@ def ab_pair_analysis(path_a: str, path_b: str, arm_a: str, arm_b: str) -> dict[s
     }
 
 
+def _load_arm_rows(paths: list[str], arm: str) -> tuple[list[dict], list[str]]:
+    """读取一个或多个批次 JSON，取 results[arm].details[] 行（缺失 → 跳过）。
+
+    与 repair_replay/_m1_metrics 同族口径：只读已归档工件，不触发 LLM。
+    返回 (rows, 参与的文件名列表) —— 文件名随报告输出，保证口径可追溯
+    （避免"不知混了哪些批次"的口径漂移）。
+    """
+    rows: list[dict] = []
+    used: list[str] = []
+    for p in paths:
+        path = Path(p)
+        files = sorted(path.glob("benchmark_*.json")) if path.is_dir() else [path]
+        for f in files:
+            if not f.is_file():
+                continue
+            data = json.loads(f.read_text(encoding="utf-8"))
+            arm_data = (data.get("results") or {}).get(arm) or {}
+            details = arm_data.get("details") or []
+            rows.extend(r for r in details if isinstance(r, dict))
+            used.append(f.name)
+    return rows, used
+
+
+# 饱和阈值：与 experiments/target_quality_replay.py 既有纪律同口径
+_MUTATION_SATURATION = 0.98
+
+
+def mutation_correlation_report(
+    paths: list[str], arms: tuple[str, ...] = ("aitester", "plain_llm", "plain_llm_df")
+) -> str:
+    """mutation × detection 交叉验证 Markdown 报告（EMSE 构念效度辅助证据）。
+
+    收敛效度证据：若 detection_rate 与 mutation_score 同向，则"检出率"与
+    "变异检出"在方向上一致；**但不构成"detection_rate 是通用质量代理"的
+    证明**——合成集变异体强度与被测任务模板耦合（饱和时该指标无鉴别力，
+    遵循 target_quality_replay 的诚实纪律）。本报告只呈现数字与局限。
+    """
+    lines = [
+        "# mutation × detection 交叉验证（EMSE 构念效度辅助证据，零 LLM）",
+        "",
+        "来源：已归档批次 JSON 的 `results[arm].details[]`；detection_rate 与",
+        "mutation_score 均非 None 的行才进配对（None = 不可测，遵循保守口径，",
+        "不计为 0）。变异得分饱和阈值 0.98（与 `experiments/target_quality_replay.py`",
+        "同口径）——饱和即标注**无鉴别力**，不得作为测试有效性证据。",
+        "",
+        "**解读纪律**：detection 为强不平衡二值（合成主批次检出率低），与连续",
+        "mutation_score 的 Pearson 对少数类不敏感、Spearman 受 ties 支配；本表",
+        "**只作收敛效度的辅助证据**，须与分层均值并列阅读，不得单独用于主张",
+        "detection_rate 是有效质量代理。",
+        "",
+        "| 臂 | 批次文件数 | 配对 n | detection 可测 n | detection 率 | mean(MS\\|det=1) | mean(MS\\|det=0) | Δ均值 | Pearson | Spearman | 饱和判定 |",
+        "|----|-----------|--------|------------------|--------------|------------------|------------------|--------|---------|----------|----------|",
+    ]
+    for arm in arms:
+        rows, used = _load_arm_rows(paths, arm)
+        if not rows:
+            lines.append(f"| {arm} | 0 | 0 | 0 | — | — | — | — | — | — | 无数据 |")
+            continue
+        out = mutation_correlation(rows)
+        ms = out["mutation_score"]
+
+        def _f(v: float | None, nd: int = 4) -> str:
+            return "—" if v is None else f"{v:.{nd}f}"
+
+        all_scores = [r.get("mutation_score") for r in rows if r.get("mutation_score") is not None]
+        mean_all = sum(all_scores) / len(all_scores) if all_scores else None
+        saturation = (
+            "**无鉴别力（饱和）**"
+            if mean_all is not None and mean_all >= _MUTATION_SATURATION
+            else ("近饱和，谨慎解读" if mean_all is not None and mean_all >= 0.95 else "可鉴别")
+        )
+        lines.append(
+            f"| {arm} | {len(used)} | {ms['n_pairs']} | {out['n_det_measurable']} | "
+            f"{_f(out['detection_rate_pct'], 2)}% | {_f(ms['mean_when_detection_1'])} | "
+            f"{_f(ms['mean_when_detection_0'])} | {_f(ms['mean_delta_det1_minus_det0'])} | "
+            f"{_f(ms['pearson'])} | {_f(ms['spearman'])} | {saturation} |"
+        )
+    lines += [
+        "",
+        "退化与不可测说明：Spearman 在 n<3 或任一侧零方差时记 None（不臆造）；",
+        "具体原因见 JSON 输出的 `mutation_score.spearman_reason`。",
+        "",
+        "**方向性发现（须与上表同读，不得单独引用）**：Δ均值（det=1 组减 det=0 组）",
+        "为正表示「检出组变异得分更高」（收敛），为负表示**不一致**——负号出现时须",
+        "如实披露，不得以 Pearson 的弱正号掩盖分层方向。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
-    """CLI 入口：`--ab-pair a.json b.json arm_a arm_b` 或默认 false_fix 矩阵。"""
+    """CLI 入口：`--ab-pair a.json b.json arm_a arm_b`、`--mutation-correlation` 或默认 false_fix 矩阵。"""
     import argparse
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ab-pair", nargs=4, metavar=("A", "B", "ARM_A", "ARM_B"), help="两臂批次 JSON 配对分析")
+    ap.add_argument(
+        "--mutation-correlation",
+        nargs="+",
+        metavar="PATH",
+        help="mutation × detection 交叉验证（批次 JSON 或目录，零 LLM）",
+    )
+    ap.add_argument(
+        "--swebench-disclosure",
+        action="store_true",
+        help="输出 SWE-bench Lite 基础设施失败披露（四分账 + 无有效能力结论）",
+    )
+    ap.add_argument("--out", help="报告写盘路径（缺省 stdout）")
     args = ap.parse_args(argv)
-    if args.ab_pair:
+    if args.swebench_disclosure:
+        report = swebench_disclosure_report()
+        if args.out:
+            Path(args.out).write_text(report + "\n", encoding="utf-8")
+            print(f"written: {args.out}")
+        else:
+            print(report)
+    elif args.mutation_correlation:
+        report = mutation_correlation_report(list(args.mutation_correlation))
+        if args.out:
+            Path(args.out).write_text(report + "\n", encoding="utf-8")
+            print(f"written: {args.out}")
+        else:
+            print(report)
+    elif args.ab_pair:
         path_a, path_b, arm_a, arm_b = args.ab_pair
         print(json.dumps(ab_pair_analysis(path_a, path_b, arm_a, arm_b), indent=2, ensure_ascii=False))
     else:
