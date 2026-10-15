@@ -11,7 +11,7 @@
     "cmdline": "AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py --reuse-json experiments/results/emse_testlevel_detection_20261015/TESTLEVEL_DETECTION.json --independent-check --out experiments/results/emse_testlevel_detection_20261015",
     "sweep_cmdline": "AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py --out experiments/results/emse_testlevel_detection_20261015 --cap-seconds 30 --jobs 1",
     "reuse_json": "experiments/results/emse_testlevel_detection_20261015/TESTLEVEL_DETECTION.json",
-    "generated_at_local": "2026-10-15T21:26:43+0800",
+    "generated_at_local": "2026-10-15T21:29:34+0800",
     "cap_seconds": 30,
     "jobs": 1,
     "python": "3.14.6",
@@ -45939,9 +45939,9 @@
     "",
     "| 任务 | buggy rc | buggy pytest 汇总行 | 工件 buggy(pass/fail) | fixed rc | fixed pytest 汇总行 | 工件 fixed(pass/fail) | 判定 |",
     "|---|---|---|---|---|---|---|---|",
-    "| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in 0.08s =============================================` | 9/37 | 0 | `========================================================================================== 46 passed in 0.08s ==================================================` | 46/0 | **match** |",
-    "| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in 0.08s =============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in 0.08s =============================================` | 22/11 | **match** |",
-    "| `quixbugs50_batch5/quixbugs__bitcount` | `unmeasured` | `../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_vkiu9zr3/python_testcases/test_bitcount.py::test_bitcount_127` | `unmeasured`/`unmeasured` | `unmeasured` | `../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_c_ypx5go/python_testcases/test_bitcount.py::test_bitcount_negative_undefined` | `unmeasured`/`unmeasured` | **reproduced_timeout** |",
+    "| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in 0.08s =============================================` | 9/37 | 0 | `========================================================================================== 46 passed in 0.07s ==================================================` | 46/0 | **match** |",
+    "| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in 0.09s =============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in 0.07s =============================================` | 22/11 | **match** |",
+    "| `quixbugs50_batch5/quixbugs__bitcount` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | **reproduced_timeout** |",
     "",
     "> `match` = pytest 自身汇总行计数与工件逐测试表推出的该侧 (pass, fail+error) 逐位相等；",
     "> `reproduced_timeout` = 两侧再次在 30s 上限超时（超时套件在工件中一律记 `other`，不产生 f2p）。",
@@ -45956,6 +45956,7 @@
           "rc": 1,
           "timed_out": false,
           "pytest_summary_line": "===================================================================================== 37 failed, 9 passed in 0.08s =============================================",
+          "last_output_line_before_kill": "",
           "pytest_counts": {
             "failed": 37,
             "passed": 9
@@ -45967,7 +45968,8 @@
         "fixed": {
           "rc": 0,
           "timed_out": false,
-          "pytest_summary_line": "========================================================================================== 46 passed in 0.08s ==================================================",
+          "pytest_summary_line": "========================================================================================== 46 passed in 0.07s ==================================================",
+          "last_output_line_before_kill": "",
           "pytest_counts": {
             "passed": 46
           },
@@ -45985,7 +45987,8 @@
         "buggy": {
           "rc": 1,
           "timed_out": false,
-          "pytest_summary_line": "===================================================================================== 9 failed, 24 passed in 0.08s =============================================",
+          "pytest_summary_line": "===================================================================================== 9 failed, 24 passed in 0.09s =============================================",
+          "last_output_line_before_kill": "",
           "pytest_counts": {
             "failed": 9,
             "passed": 24
@@ -45997,7 +46000,8 @@
         "fixed": {
           "rc": 1,
           "timed_out": false,
-          "pytest_summary_line": "==================================================================================== 11 failed, 22 passed in 0.08s =============================================",
+          "pytest_summary_line": "==================================================================================== 11 failed, 22 passed in 0.07s =============================================",
+          "last_output_line_before_kill": "",
           "pytest_counts": {
             "failed": 11,
             "passed": 22
@@ -46016,7 +46020,8 @@
         "buggy": {
           "rc": null,
           "timed_out": true,
-          "pytest_summary_line": "../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_vkiu9zr3/python_testcases/test_bitcount.py::test_bitcount_127",
+          "pytest_summary_line": "(超时终止，无 pytest 汇总行)",
+          "last_output_line_before_kill": "../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_mqbvtq_r/python_testcases/test_bitcount.py::test_bitcount_127",
           "pytest_counts": {},
           "artifact_pass": null,
           "artifact_fail": null,
@@ -46025,7 +46030,8 @@
         "fixed": {
           "rc": null,
           "timed_out": true,
-          "pytest_summary_line": "../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_c_ypx5go/python_testcases/test_bitcount.py::test_bitcount_negative_undefined",
+          "pytest_summary_line": "(超时终止，无 pytest 汇总行)",
+          "last_output_line_before_kill": "../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_x1_z68wx/python_testcases/test_bitcount.py::test_bitcount_negative_undefined",
           "pytest_counts": {},
           "artifact_pass": null,
           "artifact_fail": null,
