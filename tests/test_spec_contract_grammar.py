@@ -81,7 +81,9 @@ def test_prompt_section_contains_bnf_and_selfcheck() -> None:
 def test_prompt_section_renders_every_example() -> None:
     """10 正例 / 6 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
     section = SPEC_EXPR_GRAMMAR_SECTION
-    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 10, "提示契约要求 10 个正例（v3 量化 + 字符串方法 + v4 切片/字典读 API/set）"
+    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 10, (
+        "提示契约要求 10 个正例（v3 量化 + 字符串方法 + v4 切片/字典读 API/set）"
+    )
     assert len(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES) == 6, "提示契约要求 6 个反例（v4 增 lambda 护栏反例）"
     for clause, _kind, _note in SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES:
         assert clause in section, f"正例未渲染进提示：{clause}"
@@ -182,11 +184,11 @@ def test_bnf_claimed_operators_are_really_accepted() -> None:
         "bool(a) is True",
         'hasattr(a, "x") or a is None',
         # v4：切片（冒号入字符类；负步长 / 开边界 / 嵌套调用上界均合法）
-        "text[0:2] == \"ab\"",
-        "text[:2] == \"ab\"",
-        "text[1:] == \"bc\"",
-        "text[::-1] == \"ba\"",
-        "text[:len(text) - 1] == \"a\"",
+        'text[0:2] == "ab"',
+        'text[:2] == "ab"',
+        'text[1:] == "bc"',
+        'text[::-1] == "ba"',
+        'text[:len(text) - 1] == "a"',
         "a[0:1] == (1,)",
         # v3：迭代域白名单内建（range/enumerate 单独出现亦无害）
         "range(3) == range(3)",
@@ -374,7 +376,7 @@ _CONSISTENCY_CORPUS = (
     "",  # empty
     # v4：切片形态（冒号放行后归"可编译"——与 _CONSISTENCY_CORPUS 的判定一致性
     # 由 test_reject_reason_none_iff_compilable 全覆盖，此处显式记录迁移事实）
-    "text[0:2] == \"ab\"",
+    'text[0:2] == "ab"',
     "result == text[::-1]",
 )
 
@@ -677,11 +679,11 @@ class TestBuiltinTypeNamesValuePosition:
 # bit_length×1 / bool×1 / get×1。域名属性（successor/outgoing_nodes）与
 # 模块链（collections.abc.Sequence）刻意不收（任意属性链 = 注入面）。
 _V4_SLICE_FORMS = (
-    "text[0:2] == \"ab\"",  # 闭边界
-    "text[:2] == \"ab\"",  # 开下界
-    "text[1:] == \"bc\"",  # 开上界
-    "text[::-1] == \"ba\"",  # 负步长
-    "text[:len(text) - 1] == \"a\"",  # 调用作上界
+    'text[0:2] == "ab"',  # 闭边界
+    'text[:2] == "ab"',  # 开下界
+    'text[1:] == "bc"',  # 开上界
+    'text[::-1] == "ba"',  # 负步长
+    'text[:len(text) - 1] == "a"',  # 调用作上界
     "text[1:3] == text[0:2]",  # 双边切片比较
 )
 
@@ -724,7 +726,7 @@ class TestV4NoAssertSemanticsGuardrails:
             "lambda r: r > 0",  # 裸 lambda（BNF 无关键字参数产生式 ⇒ 只能裸出现）
             "lambda a, b: a > b",
             "(x := 5)",  # 海象赋值
-            "text[0:2] == \"ab\" and (x := 1)",  # 嵌套海象
+            'text[0:2] == "ab" and (x := 1)',  # 嵌套海象
         ],
     )
     def test_lambda_and_walrus_rejected(self, clause: str) -> None:
@@ -759,7 +761,7 @@ class TestV4WhitelistExtensions:
             "all(v > 0 for v in counts.values())",  # values（diag3 ×3）
             "len(counts) == len(counts.keys())",  # keys（values 同族）
             "all(k in counts for k in counts.items())",  # items（values 同族）
-            'counts.get(a, 0) >= 0',  # get（diag3 ×1）
+            "counts.get(a, 0) >= 0",  # get（diag3 ×1）
             "text.isupper()",  # isupper（diag3 ×1）
             "text.islower() or text.isupper()",  # islower（isupper 同族）
             "result <= n.bit_length()",  # bit_length（diag3 ×1）
@@ -771,7 +773,7 @@ class TestV4WhitelistExtensions:
     @pytest.mark.parametrize(
         "clause",
         [
-            'counts.setdefault(a, 0)',  # 字典写方法刻意不收
+            "counts.setdefault(a, 0)",  # 字典写方法刻意不收
             "counts.pop(a)",  # 字典写方法刻意不收
             "text.title()",  # v3 起刻意不收（反例教学形态）
             "node.successor",  # 域名属性：任意属性链是注入面（diag3 ×5）

@@ -15,8 +15,6 @@
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from experiments.stvr_statistical_analysis import (

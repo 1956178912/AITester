@@ -72,9 +72,11 @@ def test_leaf_fallback_logs_warning() -> None:
     """叶子档命中触发 logger.warning（可观测性改进的日志证据）。"""
     import logging
 
-    with logging.getLogger("src.utils.helpers").captureWarnings() if hasattr(
-        logging.getLogger("src.utils.helpers"), "captureWarnings"
-    ) else _NullContext():
+    with (
+        logging.getLogger("src.utils.helpers").captureWarnings()
+        if hasattr(logging.getLogger("src.utils.helpers"), "captureWarnings")
+        else _NullContext()
+    ):
         r = extract_json_object('xx {"outer": stuff, {"k": 42}')
     assert r == {"k": 42}
 
