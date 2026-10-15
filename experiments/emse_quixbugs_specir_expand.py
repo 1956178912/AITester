@@ -279,9 +279,14 @@ def build_analysis(
         nl_rep_rows = _load_arm_rows(nl_repeat_path)
         repeat_contrast = mcnemar_contrast(specir_rep_rows, nl_rep_rows)
         analysis["repeat"] = repeat_contrast
-        # 合并（A∪C vs B∪D）
-        merged_specir = {**specir_rows, **{f"{k}_c": v for k, v in specir_rep_rows.items()}}
-        merged_nl = {**nl_rows, **{f"{k}_d": v for k, v in nl_rep_rows.items()}}
+        # 合并（A∪C vs B∪D）：两侧复跑样本须使用**同一后缀**，`_effective_pair`
+        # 的键交集才能同时命中 A↔B 与 C↔D 两组配对（n≤2×任务数）。
+        # 2026-10-15 批次八修复：原实现 specir 侧后缀 `_c`、NL 侧后缀 `_d`，
+        # 两侧后缀不同 ⇒ `{task}_c` 与 `{task}_d` 永不进入交集 ⇒ C/D 配对
+        # 静默缺失，merged 逐位退化为 primary（C/D 白跑；预注册主分析之一
+        # 失真）。修复后 merged n_pairs = A/B 有效对 + C/D 有效对。
+        merged_specir = {**specir_rows, **{f"{k}_rep": v for k, v in specir_rep_rows.items()}}
+        merged_nl = {**nl_rows, **{f"{k}_rep": v for k, v in nl_rep_rows.items()}}
         merged_contrast = mcnemar_contrast(merged_specir, merged_nl)
         analysis["merged"] = merged_contrast
         analysis["merged_verdict"] = verdict(merged_contrast)

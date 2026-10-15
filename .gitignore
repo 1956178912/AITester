@@ -122,6 +122,7 @@ docs/emse/EMSE_SUBMISSION_*.md
 docs/emse/EMSE_OPTIMIZATION_APPENDIX_*.md
 docs/emse/SPECEXPR_SYNTH_CONFIRM_PREREG_*.md
 docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_*.md
+docs/emse/EMSE_BATCH8_MUTK_VALIDITY_*.md
 docs/design/stvr_empirical_study_design.md
 docs/design/false_fix_caliber_matrix.md
 SPEC_REPLACE_AB_SCALE87_REPORT_*.md
@@ -195,3 +196,8 @@ review_report_graph_api.md
 # 入库（安全审计链）。已跟踪的 4 个运行时文件待用户终端 git rm --cached。
 .mimosa/hook-state/
 .mimosa/hook-status/
+# 批次八（2026-10-15）：无入库测试引用的纯编排/诊断脚本维持 gitignored
+#（"有入库测试锁定契约的脚本必须随测试入库"的规则反面）。
+experiments/emse_quixbugs_mutk_full.py
+experiments/emse_ult_mutk_full.py
+experiments/emse_test_sanity_audit.py

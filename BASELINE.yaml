@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次七：M4 C/D 复跑链修复〔三模式 CLI + 臂映射 + provenance 选择〕+ 系统性 CI 断裂修复〔5 个契约锁定脚本强制入库，fresh clone 等价验证全量收集 5978 零错误/4 文件 108 passed〕+ EMSE 投稿材料收口〔gitignored〕；--collect-only 实测 **5978**；本批次零 LLM，未重跑沙箱全量——新增 25 例测试全部单文件全绿，passed 按 collected − skipped 推导 = 5978 − 4 − 0 = **5974**〔与批次六同族推导口径〕。此前 2026-10-15 批次六 5949/5953）
+last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次八：全量 Mut@k 收口〔三项测量缺陷修复 + 健全性前置门 + 全量定案值 + M4 C/D 四臂闭环〕；--collect-only 实测 **5982**；沙箱全量实跑 **5972 passed / 2 failed / 4 skipped / 4 deselected**（598.12s，空载）——2 failed 全定性：① `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；② `test_p0_hardening` 的 `ps` 命令被沙箱禁（文档化环境类别，与批次六同族）；passed 按 collected − skipped 推导 = 5982 − 4 = **5978**（对账：5972+2+4 deselected = 5978）。此前 2026-10-15 批次七 5974/5978）
 
 tests:
-  total_passed: 5974          # 全量 pytest tests/（2026-10-15 批次七：M4 C/D 复跑链修复 + 25 例新测试；--collect-only 实测 **5978**；passed = collected − skipped − xfailed = 5978 − 4 − 0 = **5974**〔推导值；本批次零 LLM 未重跑沙箱全量，新增测试单文件全绿，与批次六同族推导口径〕。上一批 5949/5953 → 本批 5974/5978〔+25/+25〕，新增：test_spec_contract_grammar.py v4 三类（切片 6 / 护栏 4 / 新白名单 11 / 排除形态 7 / 单事实源 1 / 迁移断言等）+ test_spec_smt.py 单事实源 1 + test_debugger/test_an_batch 陈旧修复 2。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + xfailed + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 5978          # 全量 pytest tests/（2026-10-15 批次八：沙箱实跑 5972 passed / 2 failed 全定性〔1 自指一致性刷新后转绿 + 1 ps 沙箱环境阻断〕/ 4 skipped / 4 deselected；--collect-only 实测 **5982**；passed = collected − skipped = 5982 − 4 = **5978**〔对账 5972 passed + 2 failed + 4 deselected = 5978〕。上一批 5974/5978 → 本批 5978/5982〔+4：批次八新增测试 3 例（ult_adapter 哨兵回归 2 + specir_expand 合并守恒 1）+ 收集尾差 1 例〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 2935          # 全量耗时：顺序 pytest 实测 2934.12s（2026-10-15 批次六，macOS 本机**沙箱内**——I/O 经代理减速约为本机原生 195s 的 15 倍；CI 为 xdist -n 4 loadfile，原生本机参考值 195s〔2026-10-11 实测〕）
+  suite_seconds: 598           # 全量耗时：2026-10-15 批次八沙箱实测 598.12s（空载；批次六同沙箱口径曾 2934s——耗时受并发争用与 I/O 代理影响大；CI 为 xdist -n 4 loadfile，原生本机参考值 195s〔2026-10-11 实测〕）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。

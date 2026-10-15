@@ -1,0 +1,1730 @@
+[
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__breadth_first_search",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.8,
+    "tail": "14 passed in 2.10s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__breadth_first_search_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.0,
+    "tail": "1 error in 2.34s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__bucketsort",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.0,
+    "tail": "16 passed in 2.30s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__depth_first_search",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.9,
+    "tail": "13 passed in 2.32s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__depth_first_search_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.2,
+    "tail": "1 error in 2.44s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__detect_cycle",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.3,
+    "tail": "10 passed in 2.51s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__detect_cycle_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.2,
+    "tail": "1 error in 2.46s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__bitcount",
+    "status": "nonterminate",
+    "rc": null,
+    "wall_s": 30.0,
+    "tail": ">30s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__find_in_sorted",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.5,
+    "tail": "14 passed in 2.34s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__flatten",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.2,
+    "tail": "15 passed in 2.38s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__gcd",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.1,
+    "tail": "28 passed in 2.28s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__get_factors",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.9,
+    "tail": "91 passed in 2.16s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__find_first_in_sorted",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.3,
+    "tail": "32 passed in 2.26s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__hanoi",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.0,
+    "tail": "56 passed in 2.87s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__is_valid_parenthesization",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.2,
+    "tail": "2 failed, 16 passed in 2.70s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__kheapsort",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.3,
+    "tail": "10 passed in 2.44s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__knapsack",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.6,
+    "tail": "22 passed in 3.14s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__kth",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.7,
+    "tail": "24 passed in 2.40s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__lcs_length",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.4,
+    "tail": "55 passed in 2.86s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__levenshtein",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.1,
+    "tail": "24 passed in 2.46s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__lis",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.2,
+    "tail": "22 passed in 2.40s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__longest_common_subsequence",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.1,
+    "tail": "30 passed in 2.46s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__max_sublist_sum",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.3,
+    "tail": "17 passed in 2.47s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__minimum_spanning_tree",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.7,
+    "tail": "12 passed in 2.51s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__minimum_spanning_tree_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.8,
+    "tail": "1 error in 2.38s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__mergesort",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.6,
+    "tail": "36 passed in 2.79s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__next_permutation",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.9,
+    "tail": "36 passed in 2.39s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__node",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.3,
+    "tail": "8 passed in 2.31s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__next_palindrome",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "11 failed, 22 passed in 2.33s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__pascal",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.6,
+    "tail": "46 passed in 2.56s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__possible_change",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.5,
+    "tail": "14 passed in 2.45s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__powerset",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.7,
+    "tail": "13 passed in 2.42s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__reverse_linked_list",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.3,
+    "tail": "9 passed in 2.42s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__quicksort",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.1,
+    "tail": "1 failed, 21 passed in 2.31s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__reverse_linked_list_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.0,
+    "tail": "1 error in 2.33s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__rpn_eval",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "1 failed, 13 passed in 2.23s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_path_length_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.7,
+    "tail": "1 error in 2.81s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_path_length",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.2,
+    "tail": "2 failed, 8 passed in 2.26s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_path_lengths_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 8.9,
+    "tail": "1 error in 2.36s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_path_lengths",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.7,
+    "tail": "16 passed in 2.04s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_paths_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 10.5,
+    "tail": "1 error in 2.62s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shortest_paths",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.4,
+    "tail": "9 failed, 17 passed in 2.97s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__shunting_yard",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.4,
+    "tail": "22 passed in 2.71s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__sieve",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.7,
+    "tail": "26 passed in 2.37s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__subsequences",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.6,
+    "tail": "1 failed, 37 passed in 2.44s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__to_base",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.9,
+    "tail": "32 passed in 2.46s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__topological_ordering",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "1 failed, 11 passed in 2.32s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__topological_ordering_test",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.7,
+    "tail": "1 error in 2.47s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__sqrt",
+    "status": "nonterminate",
+    "rc": null,
+    "wall_s": 30.0,
+    "tail": ">30s"
+  },
+  {
+    "set": "quixbugs50",
+    "kind": "generated",
+    "task_id": "quixbugs__wrap",
+    "status": "nonterminate",
+    "rc": null,
+    "wall_s": 30.0,
+    "tail": ">30s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__levenshtein_shortcircuit_dist",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.8,
+    "tail": "4 failed, 18 passed in 1.96s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__movement_of_standard_element",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 6.8,
+    "tail": "14 failed, 5 passed in 2.02s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__time_in_swiss_german",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.5,
+    "tail": "18 failed, 64 passed in 1.98s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__deg2HMS",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.0,
+    "tail": "6 failed, 19 passed in 2.04s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__idx_for_diag_se_from_tr",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.0,
+    "tail": "25 passed in 2.00s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__iterative_levenshtein",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.2,
+    "tail": "7 failed, 20 passed in 2.23s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__normalized_vcf",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 8.2,
+    "tail": "1 error in 2.09s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__fileNamer",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.2,
+    "tail": "5 failed, 24 passed in 2.06s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__initiate_board",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.2,
+    "tail": "13 passed in 2.00s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__Compress",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.4,
+    "tail": "5 failed, 19 passed in 2.13s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__poker_hand",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.2,
+    "tail": "2 failed, 7 passed in 2.07s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__convolution_size",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.4,
+    "tail": "18 passed in 1.98s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__lcsmatrix",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 8.4,
+    "tail": "1 error in 2.17s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__drains_to",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.2,
+    "tail": "1 failed, 22 passed in 2.61s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__get_allen_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.9,
+    "tail": "4 failed, 28 passed in 2.89s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__single_defcom_extract",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.0,
+    "tail": "5 failed, 13 passed in 2.01s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__circle_line_intersection",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.2,
+    "tail": "11 passed in 2.03s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__string_contrast",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.3,
+    "tail": "7 failed, 8 passed in 2.04s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__check_dead_corner",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.2,
+    "tail": "2 failed, 11 passed in 2.14s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__updateBall",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.1,
+    "tail": "5 failed, 11 passed in 1.99s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__num_agreeing_tuples",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.0,
+    "tail": "9 failed, 3 passed in 2.05s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__get_rgb_filters",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.8,
+    "tail": "9 failed, 5 passed in 1.96s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__horizontalMaxs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.7,
+    "tail": "1 failed, 16 passed in 1.93s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__cal_overlap_neg_strand",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.7,
+    "tail": "2 failed, 16 passed in 1.96s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__get_robot_angles",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.6,
+    "tail": "1 failed, 15 passed in 1.89s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__formatTime",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 7.5,
+    "tail": "36 passed in 1.84s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__processQuery",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.1,
+    "tail": "32 failed in 1.69s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__match_diagonal_right_left",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.6,
+    "tail": "1 failed, 13 passed in 2.06s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__add_dummy_tags",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.2,
+    "tail": "11 failed, 4 passed in 1.90s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__BinaryFromFraction",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 7.6,
+    "tail": "24 passed in 1.82s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__unmet_compare",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "2 failed, 10 passed in 2.43s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__decode_address_entry",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.7,
+    "tail": "5 failed, 24 passed in 2.41s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__centre_on_peak",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.0,
+    "tail": "42 failed, 2 passed in 2.61s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__oligo_complements",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.9,
+    "tail": "2 failed, 9 passed in 2.54s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__pre_processing",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.7,
+    "tail": "6 failed, 21 passed in 2.22s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__getNewCoordsAlongDirection",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.3,
+    "tail": "26 failed, 9 passed in 2.11s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__number_of_trees_bin_nt_partial",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.2,
+    "tail": "15 passed in 2.07s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__splitIA2Attribs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.1,
+    "tail": "1 failed, 23 passed in 2.01s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__process_spaces",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.1,
+    "tail": "5 failed, 21 passed in 2.06s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__windows_k_distinct",
+    "status": "nonterminate",
+    "rc": null,
+    "wall_s": 30.0,
+    "tail": ">30s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__replace_repeated",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.5,
+    "tail": "5 failed, 7 passed in 2.09s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__transform_coors",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 8.5,
+    "tail": "1 error in 2.01s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__get_text_point_at_line",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.1,
+    "tail": "26 passed in 1.95s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__max_rewards",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 7.9,
+    "tail": "39 passed in 1.97s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__row_revile_indexes",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.9,
+    "tail": "10 failed, 5 passed in 1.95s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "generated",
+    "task_id": "ult__change_display",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.3,
+    "tail": "2 failed, 14 passed in 2.12s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__levenshtein_shortcircuit_dist",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.3,
+    "tail": "4 failed, 1 passed in 2.55s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__movement_of_standard_element",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.8,
+    "tail": "4 failed, 1 passed in 2.46s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__time_in_swiss_german",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.2,
+    "tail": "5 failed in 2.66s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__deg2HMS",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.1,
+    "tail": "5 failed in 2.55s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__idx_for_diag_se_from_tr",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.8,
+    "tail": "3 failed, 2 passed in 2.47s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__iterative_levenshtein",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.1,
+    "tail": "5 failed in 2.53s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__normalized_vcf",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.5,
+    "tail": "1 error in 2.37s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__fileNamer",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "5 failed in 2.22s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__initiate_board",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.1,
+    "tail": "5 failed in 2.42s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__Compress",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.1,
+    "tail": "5 failed in 2.12s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__poker_hand",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.5,
+    "tail": "5 failed in 2.30s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__convolution_size",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 7.5,
+    "tail": "2 failed, 3 passed in 1.82s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__lcsmatrix",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 12.2,
+    "tail": "1 error in 3.13s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__drains_to",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.0,
+    "tail": "3 failed, 2 passed in 2.66s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__get_allen_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.1,
+    "tail": "4 failed, 1 passed in 2.72s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__single_defcom_extract",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.6,
+    "tail": "1 failed, 4 passed in 2.39s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__circle_line_intersection",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.2,
+    "tail": "2 failed, 3 passed in 2.47s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__string_contrast",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.8,
+    "tail": "5 failed in 2.49s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__check_dead_corner",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.0,
+    "tail": "4 failed, 1 passed in 2.56s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__updateBall",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.9,
+    "tail": "5 failed in 2.56s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__num_agreeing_tuples",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.9,
+    "tail": "5 failed in 2.52s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__get_rgb_filters",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.4,
+    "tail": "5 failed in 2.62s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__horizontalMaxs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "5 failed in 2.46s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__cal_overlap_neg_strand",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "5 failed in 2.19s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__get_robot_angles",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "4 failed, 1 passed in 2.21s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__formatTime",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "3 failed, 2 passed in 2.17s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__processQuery",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "5 failed in 2.21s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__match_diagonal_right_left",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "2 failed, 3 passed in 2.18s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__add_dummy_tags",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "5 failed in 2.16s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__BinaryFromFraction",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.3,
+    "tail": "5 failed in 2.02s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__unmet_compare",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "5 failed in 2.71s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__decode_address_entry",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.7,
+    "tail": "5 failed in 2.26s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__centre_on_peak",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.2,
+    "tail": "5 failed in 2.35s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__oligo_complements",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "4 failed, 1 passed in 2.31s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__pre_processing",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.6,
+    "tail": "5 failed in 2.45s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__getNewCoordsAlongDirection",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "5 failed in 2.46s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__number_of_trees_bin_nt_partial",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "5 failed in 2.42s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__splitIA2Attribs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.1,
+    "tail": "5 failed in 2.47s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__process_spaces",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "4 failed, 1 passed in 2.38s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__windows_k_distinct",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.0,
+    "tail": "3 failed, 2 passed in 2.38s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__replace_repeated",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.9,
+    "tail": "5 failed in 2.46s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__transform_coors",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.6,
+    "tail": "1 error in 2.54s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__get_text_point_at_line",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "5 failed in 2.26s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__max_rewards",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "5 failed in 2.20s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__row_revile_indexes",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "4 failed, 1 passed in 2.26s"
+  },
+  {
+    "set": "ult_lite46",
+    "kind": "gold",
+    "task_id": "ult__change_display",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.2,
+    "tail": "4 failed, 1 passed in 2.27s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__is_degree_in_degree_range",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "1 failed, 26 passed in 2.27s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__fix_labels",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "20 failed, 3 passed in 2.23s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__BinaryFromFraction",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.5,
+    "tail": "4 failed, 9 passed in 2.01s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__x0x1_after_extraction",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 10.1,
+    "tail": "15 passed in 2.65s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__remove_strings",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 9.6,
+    "tail": "1 error in 2.34s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__deg2HMS",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.4,
+    "tail": "21 passed in 2.50s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__can_blas",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.3,
+    "tail": "3 failed, 42 passed in 2.39s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__single_defcom_extract",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "3 failed, 18 passed in 2.41s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__get_allen_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "4 failed, 12 passed in 2.37s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__uoc_railfence_encrypt",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.5,
+    "tail": "1 failed, 12 passed in 2.41s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__point_box_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.8,
+    "tail": "1 failed, 35 passed in 2.72s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__diffsents",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.8,
+    "tail": "1 failed, 12 passed in 2.43s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__create_three_random_v_indices",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.7,
+    "tail": "5 failed, 3 passed in 2.42s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__needleman_wunsch0",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 9.7,
+    "tail": "15 passed in 2.39s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__knapsack_indv",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.4,
+    "tail": "4 failed, 8 passed in 2.35s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__next_holiday",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.9,
+    "tail": "28 passed in 2.19s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__replacement_template",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "1 failed, 25 passed in 2.24s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__calc_query_pos_from_cigar",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.9,
+    "tail": "22 failed, 1 passed, 1 warning in 2.25s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__maximal_matching_pairs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.0,
+    "tail": "15 failed, 6 passed in 2.42s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__get_processor_types_from_config_class",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "12 failed, 19 passed in 2.29s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__longestNonWildcardSubsequence",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.6,
+    "tail": "1 failed, 9 passed in 2.17s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__lflverify",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.6,
+    "tail": "19 failed in 2.24s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__string_contrast",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.6,
+    "tail": "10 failed, 21 passed in 2.20s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__max_rewards",
+    "status": "pass",
+    "rc": 0,
+    "wall_s": 8.6,
+    "tail": "31 passed in 2.16s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "generated",
+    "task_id": "ult__windows_k_distinct",
+    "status": "nonterminate",
+    "rc": null,
+    "wall_s": 30.0,
+    "tail": ">30s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__is_degree_in_degree_range",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.6,
+    "tail": "3 failed, 2 passed in 2.13s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__fix_labels",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.8,
+    "tail": "5 failed in 2.18s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__BinaryFromFraction",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "5 failed in 2.19s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__x0x1_after_extraction",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 8.7,
+    "tail": "3 failed, 2 passed in 2.17s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__remove_strings",
+    "status": "fail",
+    "rc": 2,
+    "wall_s": 8.8,
+    "tail": "1 error in 2.25s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__deg2HMS",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.3,
+    "tail": "5 failed in 2.33s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__can_blas",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.3,
+    "tail": "5 failed in 2.41s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__single_defcom_extract",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.1,
+    "tail": "1 failed, 4 passed in 3.04s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__get_allen_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 9.9,
+    "tail": "4 failed, 1 passed in 2.58s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__uoc_railfence_encrypt",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.0,
+    "tail": "5 failed in 2.48s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__point_box_relation",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.3,
+    "tail": "4 failed, 1 passed in 2.62s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__diffsents",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.7,
+    "tail": "5 failed in 2.80s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__create_three_random_v_indices",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.1,
+    "tail": "5 failed in 3.09s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__needleman_wunsch0",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.4,
+    "tail": "5 failed in 3.29s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__knapsack_indv",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 13.8,
+    "tail": "5 failed in 3.67s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__next_holiday",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 13.9,
+    "tail": "4 failed, 1 passed in 3.53s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__replacement_template",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 13.9,
+    "tail": "5 failed in 2.94s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__calc_query_pos_from_cigar",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.7,
+    "tail": "5 failed, 1 warning in 2.69s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__maximal_matching_pairs",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.7,
+    "tail": "5 failed in 2.65s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__get_processor_types_from_config_class",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.1,
+    "tail": "4 failed, 1 passed in 2.74s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__longestNonWildcardSubsequence",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.0,
+    "tail": "5 failed in 2.72s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__lflverify",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 10.7,
+    "tail": "5 failed in 2.83s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__string_contrast",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 13.3,
+    "tail": "5 failed in 2.97s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__max_rewards",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.9,
+    "tail": "5 failed in 3.07s"
+  },
+  {
+    "set": "ult_probe25",
+    "kind": "gold",
+    "task_id": "ult__windows_k_distinct",
+    "status": "fail",
+    "rc": 1,
+    "wall_s": 11.9,
+    "tail": "3 failed, 2 passed in 3.13s"
+  }
+]

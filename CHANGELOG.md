@@ -1,10 +1,100 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-15（EMSE 批次七（零 LLM）：M4 C/D 复跑链修复——分析脚本三模式 CLI（显式/--auto-map/--verify-provenance）+ namespace 臂字母映射 + orchestrator 每臂最新工件选择，修复后 --auto-map 在真实归档 A/B 工件上逐字段复现定案值（2:5/n=35/δ=−8.57pp/p=0.4531/BF10=0.5625 → not_confirmed）；测试 40 例（+25，含归档定案值复现最强回归）；EMSE 投稿材料收口（checklist/口径标签清单/审稿人预演 8 问/工件索引，gitignored）。全量测试 5978 collected / 5974 passed（推导值），ruff 全绿。此前 2026-10-15 批次六 DSL v4 覆盖率提升 0.8847→0.9127）
+> Last updated: 2026-10-15（EMSE 批次八：全量 Mut@k 收口——三项测量缺陷修复（哨兵溢出 / 抽样非确定性 / 健全性缺口）+ 测试有效性前置门（= ULT 官方 correct_tasks 操作化）+ 全量定案值（QuixBugs 0.9396 / ULT replace 0.6749 / specir 0.4395 / gold n=0）+ ULT gold 上游不一致勘误（71/71）+ M4 C/D 复跑四臂闭环（merged 4:12 / n=70 / δ=−11.43pp / p=0.0768 → not_confirmed）；测试 +3 例；ruff 全绿。此前 2026-10-15 批次七 M4 C/D 复跑链修复 + 投稿材料收口）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-15 EMSE 批次八（全量 Mut@k 收口：三项测量缺陷修复 + 测试有效性前置门 + M4 四臂闭环；零 LLM + 授权 LLM 跑 C/D）
+
+> 本批次把 Mut@k 从 `max_mutants=10` 截断面切到 cosmic-ray 全变异体口径，
+> 过程中发现并修复**三项测量有效性缺陷**与**一项上游数据问题**；全部对外
+> 数字在健全子集上重算；用户续费授权后补跑 M4 C/D 复跑臂闭合四臂设计。
+> - **修复（阻断级）**：全变异体哨兵（10⁹）使 `exec` 兜底超时 ≈1.2e11s，
+>   超出 C 层 PyTime_t（≈9.22e9s）⇒ subprocess OverflowError ⇒ 全变异体
+>   口径**此前不可执行**。`ult_adapter` 改按 init+trim 后**实测条目数**
+>   计算整体超时（`_count_work_items`）+ 端到端回归（sentinel 10⁹ 真实
+>   cosmic-ray 路径，`tests/test_ult_adapter.py` +2 例）；
+> - **勘误（抽样非确定性）**：截断面按 `job_id` 序保留——`job_id` 是
+>   cosmic-ray `init` 的 **uuid4 随机串** ⇒ 保留的是等概率随机子集
+>   （"确定性截断面"表述有误）。实证：同任务复跑 gcd 9/10 vs 10/10；
+>   ULT 首跑/复算 232/250 vs 230/250；**偏差方向不可预知**（QuixBugs
+>   略保守 −0.7pp；ULT `next_holiday` 0.40→0.087）；历史值须带
+>   「单次随机抽样」标签；
+> - **新增（测试有效性前置门）**：套件须在目标代码上 30s 内**终止且
+>   通过**（rc=0），否则保守跳过并全额披露——该门 = ULT 官方
+>   `correct_tasks` 过滤（Ray/main.py 一手核对）与官方击杀判据"原码上
+>   通过"锚点的**操作化**；审计工件
+>   `experiments/results/emse_test_sanity_20261015/`（121 gen + 71 gold
+>   任务分类 + 失败摘要）；
+> - **上游数据发现（ULT gold 作废）**：官方 `test_list` 在 **71/71 任务**
+>   上无法在 `fixed` 通过（官方物化风格复测仍败；`fixed` 与上游
+>   `ULT_Lite.jsonl` 的 `code` 逐字节一致）⇒「fixed = ULT 正确实现」
+>   假设不成立、归档 gold 上界 1.0 系恒红套件平凡击杀**伪影**；
+>   "距 gold 4–8pp"叙事作废，改以官方 12 模型基线（Mut@k 均值 40.21%）
+>   作量级对照；
+> - **全量定案值（健全子集，全变异体，零 LLM 逐位可复算）**：
+>   QuixBugs **0.9396**（1182/1258，n=29/50）；ULT replace **0.6749**
+>   （1590/2356，n=9/46）；ULT specir **0.4395**（847/1927，n=5/25）；
+>   ULT gold **n=0**（25/25 全跳过，pooled=None）；
+> - **M4 C/D 复跑臂（授权 LLM）**：臂 C 1731s / 臂 D 1751s，**4 臂
+>   provenance 互异校验通过**（预注册缓存隔离风险解除）；修复**合并
+>   分析链缺陷**（merged 构造两侧后缀 `_c`/`_d` 不一致 ⇒ C/D 配对静默
+>   丢弃、merged 逐位退化 primary）+ 回归（合并守恒律 + 归档回归适配
+>   4 臂现状，测试文件 42 例全绿）；
+> - **M4 四臂定案**：primary 2:5 / δ=−8.57pp / p=0.4531；repeat 2:7 /
+>   δ=−14.29pp / p=0.1797；**merged 4:12 / n=70 / δ=−11.43pp / p=0.0768
+>   → 全部 not_confirmed**。复现稳定性：方向稳定（均为负）、量级
+>   −8.6～−14.3pp，pilot 阳性（+14.29pp）未复现；
+> - **文档**：分层叙事 §0/§3/§5/§6 批次八修正（§3 全节重写：全变异体 +
+>   健全子集口径、三项勘误、有效性缺口现象、方法论偏差源）；
+>   `ult_bridge_plan` §4.3 勘误；口径矩阵新增 Mut@k 行；投稿 checklist 更新；
+> - 测试 +3 例（test_ult_adapter 哨兵回归 2 + specir_expand 合并守恒 1；
+>   另归档回归适配 4 臂现状）；ruff / mypy（变更文件）全绿；env_budget 无新增；
+>   **全量实跑 5972 passed / 2 failed / 4 skipped / 4 deselected（598.12s，
+>   空载）**——2 failed 全定性：① BaselineNumbersConsistency 自指一致性
+>   （BASELINE 已刷新为 5982 collected / 5978 passed，复验 3 例转绿）；
+>   ② test_p0_hardening `ps` 沙箱环境阻断（文档化类别）。
+
+### Added
+
+- **全量 Mut@k 跑批脚本（gitignored，无测试引用）**：
+  `experiments/emse_quixbugs_mutk_full.py`（健全性门 + 增量落盘）+
+  `experiments/emse_ult_mutk_full.py`（三组 + `--groups` + 增量落盘）；
+- **健全性审计脚本与工件**：`experiments/emse_test_sanity_audit.py`
+  + `experiments/results/emse_test_sanity_20261015/`（README + SANITY_AUDIT.json
+  + SHA256SUMS；gen 121 + gold 71 任务）；
+- **全量跑批工件**：`experiments/results/emse_quixbugs_mutk_full_20261015/`
+  （README + MUTK_QUIXBUGS_FULL.json + SHA256SUMS）+
+  `experiments/results/emse_ult_mutk_full_20261015/`（README +
+  MUTK_ULT_FULL_REPLACE.json + MUTK_ULT_FULL_SPECIR_GOLD.json + SHA256SUMS）；
+- **M4 四臂报告**：`experiments/results/emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json`
+  （primary/repeat/merged + 判定）。
+
+### Fixed
+
+- **全变异体哨兵 PyTime_t 溢出**（`experiments/ult_adapter.py`）：全变异体
+  口径从"每任务 skipped 失败"到实跑（回归：sentinel 10⁹ 端到端 +
+  `_count_work_items` 单元）；
+- **截断面"确定性"表述勘误**（`_trim_work_items` docstring：uuid4 随机序）；
+- **合并分析链后缀不一致缺陷**（`experiments/emse_quixbugs_specir_expand.py`：
+  `{k}_c` vs `{k}_d` 永不进交集 ⇒ C/D 静默丢失；修复为统一 `_rep` 后缀 +
+  守恒律回归锁定）；
+- **批次八起步件遗留**：`tests/test_mutation_operators_v3.py` 零断言用例
+  补显式非空断言（U3 门禁全绿）+ `main_batch/SHA256SUMS` 对账刷新。
+
+### Notes（批次八核心结论）
+
+- **mutation-score 报告的三个隐藏偏差源**：① 随机抽样截断面（uuid4 序，
+  样本量小且偏差方向不可预知）；② 恒红/挂死套件的平凡击杀；③ 分母不披露
+  ——报告规范建议：全变异体（或种子化确定性抽样）+ 有效性前置门 + 健全
+  子集分母 + 未过门清单披露；gold 参照须先验证"gold 在目标代码上通过"；
+- **投稿证据链更新**：QuixBugs 主证据保留（健全子集 0.9396，"高变异敏感度"
+  成立）；ULT 侧降格为"有效性缺口主导 + 有效子集内敏感度中等（0.44–0.67）
+  + 检出盲"，gold 参照作废；M4 四臂闭环（全部 not_confirmed，方向稳定为负）；
+- 残余：D3 全量（ULT 3,909 任务）仍属长期算力项；自递归 DSL 扩展设计评审
+  待启动（零 LLM）。
 
 ## [Unreleased] — 2026-10-15 EMSE 批次七（M4 C/D 复跑链修复 + 投稿材料收口，零 LLM）
 

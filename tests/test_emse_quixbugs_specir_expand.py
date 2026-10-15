@@ -354,10 +354,12 @@ class TestReproducesArchivedABReport:
     """
 
     def test_auto_map_reproduces_archived_primary(self, tmp_path: Path) -> None:
-        arm_jsons = sorted(_ARCHIVED_AB_DIR.glob("benchmark_quixbugs_*.json"))
-        assert len(arm_jsons) == 2, "归档 A/B 工件应为 2 个"
+        # 2026-10-15 批次八更新：目录内现有 4 臂工件（C/D 本批次补跑），
+        # 不能再用"恰有 2 个文件"假设；按 namespace 臂字母精确取 A/B。
+        arm_paths = map_arm_paths(sorted(_ARCHIVED_AB_DIR.glob("benchmark_quixbugs_*.json")))
+        assert "A" in arm_paths and "B" in arm_paths
         out = tmp_path / "recomputed.json"
-        rc = expand_main(["--auto-map", *[str(p) for p in arm_jsons], "--out", str(out)])
+        rc = expand_main(["--auto-map", str(arm_paths["A"]), str(arm_paths["B"]), "--out", str(out)])
         assert rc == 0
         recomputed = json.loads(out.read_text(encoding="utf-8"))
         archived = json.loads((_ARCHIVED_AB_DIR / "QUIXB_EXPAND_AB_REPORT.json").read_text(encoding="utf-8"))
@@ -365,6 +367,25 @@ class TestReproducesArchivedABReport:
         assert recomputed["verdict"] == archived["verdict"] == "not_confirmed"
         assert recomputed["primary"]["delta_pp"] == -8.57
         assert recomputed["primary"]["p_value"] == 0.4531
+
+    def test_auto_map_four_arms_merged_pools_cd(self, tmp_path: Path) -> None:
+        """4 臂齐备：merged = A/B 对 + C/D 对（批次八合并修复的真实工件回归）。
+
+        修复前 merged 因两侧后缀不同（specir 侧 ``_c`` / NL 侧 ``_d``）逐位
+        退化为 primary——本测试以配对守恒律锁定 C/D 纳入：
+        merged.n_pairs == primary.n_pairs + repeat.n_pairs（两侧键空间不相交，
+        有效对数为精确守恒）。
+        """
+        arm_paths = map_arm_paths(sorted(_ARCHIVED_AB_DIR.glob("benchmark_quixbugs_*.json")))
+        if not {"A", "B", "C", "D"} <= set(arm_paths):
+            pytest.skip("C/D 工件不在盘（批次八前归档）")
+        out = tmp_path / "abcd.json"
+        rc = expand_main(["--auto-map", *[str(p) for p in arm_paths.values()], "--out", str(out)])
+        assert rc == 0
+        recomputed = json.loads(out.read_text(encoding="utf-8"))
+        assert recomputed["merged"]["n_pairs"] == recomputed["primary"]["n_pairs"] + recomputed["repeat"]["n_pairs"]
+        assert recomputed["merged"]["n_pairs"] > recomputed["primary"]["n_pairs"]
+        assert "merged_verdict" in recomputed
 
     def test_verify_provenance_on_archived_artifacts(self) -> None:
         arm_jsons = sorted(_ARCHIVED_AB_DIR.glob("benchmark_quixbugs_*.json"))
@@ -402,3 +423,51 @@ class TestArmsOrchestratorSelection:
         selected = _select_latest_per_arm(tmp_path)
         assert list(selected) == ["A"]
         assert selected["A"].name == "benchmark_quixbugs_20261015_100000.json"
+
+
+class TestMergedContrastIncludesRepeats:
+    """合并对比（A∪C vs B∪D）必须纳入 C/D 配对（2026-10-15 批次八修复点）。
+
+    背景：原实现两侧复跑样本后缀不同（specir 侧 ``_c`` / NL 侧 ``_d``），
+    而 ``_effective_pair`` 按**相同键交集**配对 ⇒ C/D 对永不进入合并对比，
+    merged 逐位退化为 primary（C/D 跑批零贡献，预注册主分析之一失真）。
+    本组用可区分 A/B 与 C/D 的检测模式锁定修复。
+    """
+
+    @staticmethod
+    def _write_arm_rows(tmp_path: Path, name: str, ns: str, rows: dict[str, float | None]) -> Path:
+        detail = [
+            {
+                "task_id": tid,
+                "detection_rate": det,
+                "spec_replace_applied": "attempted_replaced",
+                "spec_compile_rate": 0.5,
+            }
+            for tid, det in rows.items()
+        ]
+        p = tmp_path / f"{name}.json"
+        p.write_text(
+            json.dumps({"results": {"aitester": {"details": detail}}, "provenance": {"cache_namespace": ns}}),
+            encoding="utf-8",
+        )
+        return p
+
+    def test_merged_pools_ab_and_cd_pairs(self, tmp_path: Path) -> None:
+        """merged n_pairs = A/B 有效对 + C/D 有效对（修复前 = primary）。"""
+        a = self._write_arm_rows(tmp_path, "a", "ns_a", {"t1": 1.0, "t2": 0.0, "t3": 0.0, "t4": None})
+        b = self._write_arm_rows(tmp_path, "b", "ns_b", {"t1": 0.0, "t2": 0.0, "t3": 0.0, "t4": 0.0})
+        c = self._write_arm_rows(tmp_path, "c", "ns_c", {"t1": 0.0, "t2": 1.0, "t3": 1.0, "t4": 0.0})
+        d = self._write_arm_rows(tmp_path, "d", "ns_d", {"t1": 0.0, "t2": 0.0, "t3": 0.0, "t4": 1.0})
+        res = build_analysis(a, b, c, d)
+
+        # primary：A/B 有效对 t1..t3（t4 因 specir=None 剔除）
+        assert res["primary"]["n_pairs"] == 3
+        assert res["primary"]["ratio"] == "1:0"
+        # repeat：C/D 全部 4 对（b_pos=t2,t3；b_neg=t4）
+        assert res["repeat"]["n_pairs"] == 4
+        assert res["repeat"]["ratio"] == "2:1"
+        # merged：3 + 4 = 7 对（修复前退化为 3 对、ratio 等同 primary）
+        assert res["merged"]["n_pairs"] == 7
+        assert res["merged"]["b_pos_specir_only"] == 3  # A: t1 + C: t2, t3
+        assert res["merged"]["b_neg_nl_only"] == 1  # D: t4
+        assert res["merged"]["ratio"] == "3:1"
