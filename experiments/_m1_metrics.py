@@ -590,13 +590,13 @@ def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> f
 
 
 def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
-    """M1 修复率（独立裁决）：gold 测试在"应用系统补丁后的代码"上是否全过。
+    """M1 修复率（gold 材料独立裁决，自动化 oracle）：gold 测试在"应用系统补丁后的代码"上是否全过。
 
     定义：
         系统生成补丁 → safe_apply_patch(original_code, patch) →
         new_code；再在 new_code 上跑 gold test_cases（模板自带）：
         rc == 0 → repair_rate = 1.0（修复被独立验证）；
-        rc != 0 → 0.0（补丁未通过独立裁决）；
+        rc != 0 → 0.0（补丁未通过 gold 材料独立裁决）；
         无补丁（iterations=0，patch 为空）→ 0.0（没有修复动作，与历史口径区分）；
         rc == 5（no tests collected，gold 材料未跑起来）→ None（R16
         fail-closed：不可测量，不误判为 0）。
@@ -657,7 +657,7 @@ def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float
 
 
 def _compute_false_fix_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
-    """M1 假修复率（任务级布尔）：passed=True 但 gold 独立裁决失败。
+    """M1 假修复率（任务级布尔）：passed=True 但 gold 材料独立裁决（自动化 oracle，无人工参与）失败。
 
     定义：
         passed（历史口径）= True 且 repair_rate = 0.0 → 1.0（假修复）；

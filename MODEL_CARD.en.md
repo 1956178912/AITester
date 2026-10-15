@@ -1,6 +1,6 @@
 # AITester Model Card
 
-Last updated: 2026-10-14 (LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at six JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
+Last updated: 2026-10-14 (LLM structured-output hardening batch: §2 gains an "Invocation configuration" bullet — thinking disabled by default [cost protection] + `LLM_JSON_MODE` on by default [DeepSeek official JSON Output at seven JSON-contract call sites] + finish_reason guard + parse-layer numeric-expression repair [ADR-0031]; previously 2026-10-08 R2 landing batch: narrative alignment with ADR-0016 — §1 drops "multi-agent" as the primary claim; "multi-agent orchestration" demoted to an ablatable container; repair numbers updated to corrected caliber v2)
 
 ## 1. System Overview
 

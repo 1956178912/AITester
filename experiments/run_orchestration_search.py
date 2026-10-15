@@ -170,7 +170,7 @@ def _render_attribution_md(report: dict, attribution: dict[str, dict[str, float]
     lines.append(f"- UCB1：c={report['config']['ucb_c']}，search_seed={report['config']['seed']}")
     lines.append(f"- 确定性：serial + temp=0.0 + cache_namespace={meta['cache_namespace']}")
     lines.append("")
-    lines.append("## 逐臂结果（主奖励 = M1 detection，gold 独立裁决；None 不进分母）")
+    lines.append("## 逐臂结果（主奖励 = M1 detection，gold 材料独立裁决（自动化 oracle，无人工参与）；None 不进分母）")
     lines.append("")
     lines.append(
         "| 臂 | n可测 | n不可测 | mean detection | SE | mean tokens | mean false_fix | repair_any | 退出原因 |"

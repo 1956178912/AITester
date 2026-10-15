@@ -59,7 +59,7 @@ def arm_trusted_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     trusted_pass = sum(1 for r in rows if r.get("passed") and not evaluate_patch_abstention(r)["abstain"])
 
     # 验证层（弃权+验证双策略的"验证"半边，2026-10-10 独立审查落地）：
-    # 与弃权门对称——弃权看"不可信信号"，验证看"正面证据"（gold 独立裁决 /
+    # 与弃权门对称——弃权看"不可信信号"，验证看"正面证据"（gold 材料独立裁决（自动化 oracle，无人工参与） /
     # 确定性引擎产出 / 确定性证据门放行）。filtered_pass = passed ∧ ¬abstain
     # ∧ validated，是 Abstain-and-Validate（ICSE-SEIP 2026）的完整 filtered
     # success 语义：既剥离"不可信通过"，又要求"有独立验证证据"。

@@ -61,7 +61,7 @@ def normalize_patch_text(patch: str | None) -> str:
     背景：debugger 的 ``state["patch"]`` 保存 LLM JSON 原始值——项目约定
     该字段可含 `````python`` 围栏 / ``python:`` 前缀（写盘链路由
     apply_patch_to_code Step 1/2 负责清理；类型修复层 / 编辑意图通道
-    替换补丁时也主动构造围栏形态）。但 M1 独立裁决（repair_rate /
+    替换补丁时也主动构造围栏形态）。但 M1 gold 材料独立裁决（repair_rate /
     false_fix_rate / regression_rate）与结果行透出直接消费该原始值，
     未经清理——E2 存量工件实测 **274/274 带补丁行的 patch 字段以
     "python\\n" 围栏残留开头**，gold 测试在未清理文本上 100% 因

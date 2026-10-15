@@ -3,7 +3,7 @@
 背景：
     E2 定案批次的 "repair 全线 0" 系**测量层伪影**——结果行 patch 字段
     保存 LLM JSON 原始值（项目约定可含 `````python`` 围栏 / ``python:``
-    前缀，写盘链路负责清理），而 M1 独立裁决（repair_rate）直接消费该
+    前缀，写盘链路负责清理），而 M1 gold 材料独立裁决（repair_rate）直接消费该
     原始值。E2 存量工件实测 **274/274 带补丁行的 patch 字段以
     "python\\n" 围栏残留开头**，gold 测试在未清理文本上 100% 因
     NameError 失败 → repair_rate 被系统性压零（首测重放：原样 0/106
@@ -167,7 +167,7 @@ def build_report(results_dir: str | Path, arm: str, timeout: int = 60) -> str:
         f"执行异常 {total['unver']} 行（不计入分母）。",
         "",
         "> 解读：原口径 repair=0 由 patch 字段围栏残留（'python\\n' 前缀）的测量伪影"
-        "贡献；修正口径 = 与写盘链路同口径清理后的 gold 独立裁决。历史批次的"
+        "贡献；修正口径 = 与写盘链路同口径清理后的 gold 材料独立裁决（自动化 oracle，无人工参与）。历史批次的"
         "repair / false_fix / CPR 分母应按本报告重估（ADR-0021 勘误注记）。",
         "",
     ]

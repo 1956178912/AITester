@@ -545,7 +545,7 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
 
 
 def _compute_repair_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
-    """M1（2026-09-29 审查 P0）：修复率（gold 独立裁决）—— 详见
+    """M1（2026-09-29 审查 P0）：修复率（gold 材料独立裁决／自动化 oracle）—— 详见
     experiments/_m1_metrics.py。
     """
     from experiments._m1_metrics import _compute_repair_rate as _impl
@@ -637,7 +637,7 @@ def _patch_plausible(final_state: dict[str, Any] | None) -> int:
 
 
 def _patch_correct(task: Any, final_state: dict[str, Any] | None) -> int:
-    """R53：本轮补丁是否被 gold 独立裁决背书（correct 计数，任务级 0/1）。
+    """R53：本轮补丁是否被 gold 材料独立裁决（自动化 oracle，无人工参与）背书（correct 计数，任务级 0/1）。
 
     口径：repair_rate == 1.0（gold 测试在应用补丁后的代码上全过）。
     无 gold 材料（repair_rate=None）→ 保守 0（不可证正确）。
@@ -1127,7 +1127,7 @@ def _build_task_result(
             # G2 风险分级人工回路（RISK_APPROVAL_ENABLE=true 时写入；默认关时
             # enabled=False 占位保持键集合同构，历史口径零变化）
             "risk_summary": _build_risk_summary_for_result(final_state),
-            # M1（2026-09-29 审查 P0）：假通过标记 + 独立裁决三指标。
+            # M1（2026-09-29 审查 P0）：假通过标记 + gold 材料独立裁决三指标（自动化 oracle）。
             # test_regenerated_pass_unverified：M5 执行层标记（测试重生成后
             # 通过且源码未改 → 假成功通道），直接读 state 键（缺省 None）。
             "test_regenerated_pass_unverified": final_state.get("test_regenerated_pass_unverified"),
@@ -1197,7 +1197,7 @@ def _build_task_result(
             "patch_evidence_level": final_state.get("patch_evidence_level"),
             # M1 三指标（并行产出，不改变 passed 的历史口径）：
             #   detection_rate（生成测试能否让带缺陷代码变红）/
-            #   repair_rate（gold 独立裁决修复是否正确）/
+            #   repair_rate（gold 材料独立裁决（自动化 oracle，无人工参与）修复是否正确）/
             #   false_fix_rate（passed=True 但 gold 裁决失败的占比）
             # 计算依赖 gold test_cases / fixed（合成模板自带），无 gold 材料时
             # 以 None 占位保持键集合同构（历史结果 JSON 结构向后兼容）。
@@ -1217,7 +1217,7 @@ def _build_task_result(
             #     "enhanced_generated_test"；
             #   - test_visible_to_system = True（生成测试由 Executor 直接
             #     执行并通过性作为验收信号——系统"看见"了测试）。
-            #   repair_rate / false_fix_rate 为独立裁决通道（gold 材料），
+            #   repair_rate / false_fix_rate 为 gold 材料独立裁决通道（自动化 oracle），
             #   与自生成验收并行产出，不改变 passed 的历史口径。
             "oracle_type": _oracle_type_label(final_state),
             "test_visible_to_system": True,
@@ -1225,7 +1225,7 @@ def _build_task_result(
             # （"plausible 精确率 = correct / plausible" 是信息量最大的
             # 修正指标）。口径：
             #   - patch_plausible = 本轮有补丁产出且写盘成功（静态守卫通过）；
-            #   - patch_correct = gold 独立裁决通过（repair_rate == 1.0）；
+            #   - patch_correct = gold 材料独立裁决（自动化 oracle，无人工参与）通过（repair_rate == 1.0）；
             #   - patch_precision = correct / plausible（无 plausible 时 None）。
             # 供统计层"过拟合度量"消费（假修复 = plausible 但 correct=0）。
             "patch_plausible": _patch_plausible(final_state),
