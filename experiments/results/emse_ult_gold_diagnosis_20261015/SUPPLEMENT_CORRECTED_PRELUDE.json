@@ -1,0 +1,3455 @@
+{
+  "caliber": {
+    "cap_seconds": 30,
+    "pytest": "9.1.1",
+    "python": "3.14.6",
+    "upstream_repo": "/Users/wangchenyu/.cache/aitester/ult_repo",
+    "upstream_official_contract": "Ray/main.py:140-153（mod.py=code_import+code；test.py=code_import+'from mod import *'+tests[:k]）",
+    "variants": {
+      "P": "项目物化（emse_test_sanity_audit._run_one + emse_ult_mutk._gold_tests_to_pytest_code）",
+      "P2": "项目加载器物化（src/datasets/dataset_ult.py wrapped_test）",
+      "O": "官方契约物化（Ray/main.py:140-153 逐字）",
+      "C": "纠正 harness（官方前置块 + 显式导入 code 全部顶层符号）",
+      "GP": "生成测试健全性门·项目物化（emse_ult_mutk_full._sanity_gate）",
+      "GO": "生成测试健全性门·模块加官方前置块（Ray/main.py:140-145）"
+    },
+    "zero_llm": true,
+    "deterministic": true
+  },
+  "wall_clock_s": 18.1,
+  "aggregate": {
+    "all71": {
+      "n_tasks": 3,
+      "attribution": {
+        "upstream_missing_module_dependency": 3
+      },
+      "signature_buckets": {
+        "P:fixture_or_harness_missing": 15,
+        "P2:fixture_or_harness_missing": 15,
+        "O:fixture_or_harness_missing": 15,
+        "C:fixture_or_harness_missing": 15,
+        "GP:fixture_or_harness_missing": 60,
+        "GO:fixture_or_harness_missing": 60,
+        "GP:signature_or_api_mismatch": 6,
+        "GP:other": 4,
+        "GO:signature_or_api_mismatch": 6,
+        "GO:other": 4
+      },
+      "run_status": {
+        "P:pass": 0,
+        "P:fail": 3,
+        "P:collection_error": 0,
+        "P:nonterminate": 0,
+        "P2:pass": 0,
+        "P2:fail": 3,
+        "P2:collection_error": 0,
+        "P2:nonterminate": 0,
+        "O:pass": 0,
+        "O:fail": 3,
+        "O:collection_error": 0,
+        "O:nonterminate": 0,
+        "C:pass": 0,
+        "C:fail": 3,
+        "C:collection_error": 0,
+        "C:nonterminate": 0,
+        "GP:pass": 0,
+        "GP:fail": 3,
+        "GP:collection_error": 0,
+        "GP:nonterminate": 0,
+        "GO:pass": 0,
+        "GO:fail": 3,
+        "GO:collection_error": 0,
+        "GO:nonterminate": 0
+      },
+      "gold_soundness_corrected": {
+        "n_gold_pass_under_C": 0,
+        "n_gold_pass_under_O": 0,
+        "n_gold_pass_under_P": 0,
+        "n_gold_pass_under_P2": 0
+      },
+      "generated_gate": {
+        "n_tasks_with_generated": 3,
+        "n_pass_under_project_gate": 0,
+        "n_pass_under_official_prelude_module": 0,
+        "n_flips_fail_to_pass": 0,
+        "flipped_tasks": []
+      }
+    },
+    "ult_lite46": {
+      "n_tasks": 2,
+      "attribution": {
+        "upstream_missing_module_dependency": 2
+      },
+      "signature_buckets": {
+        "P:fixture_or_harness_missing": 10,
+        "P2:fixture_or_harness_missing": 10,
+        "O:fixture_or_harness_missing": 10,
+        "C:fixture_or_harness_missing": 10,
+        "GP:fixture_or_harness_missing": 51,
+        "GO:fixture_or_harness_missing": 51
+      },
+      "run_status": {
+        "P:pass": 0,
+        "P:fail": 2,
+        "P:collection_error": 0,
+        "P:nonterminate": 0,
+        "P2:pass": 0,
+        "P2:fail": 2,
+        "P2:collection_error": 0,
+        "P2:nonterminate": 0,
+        "O:pass": 0,
+        "O:fail": 2,
+        "O:collection_error": 0,
+        "O:nonterminate": 0,
+        "C:pass": 0,
+        "C:fail": 2,
+        "C:collection_error": 0,
+        "C:nonterminate": 0,
+        "GP:pass": 0,
+        "GP:fail": 2,
+        "GP:collection_error": 0,
+        "GP:nonterminate": 0,
+        "GO:pass": 0,
+        "GO:fail": 2,
+        "GO:collection_error": 0,
+        "GO:nonterminate": 0
+      },
+      "gold_soundness_corrected": {
+        "n_gold_pass_under_C": 0,
+        "n_gold_pass_under_O": 0,
+        "n_gold_pass_under_P": 0,
+        "n_gold_pass_under_P2": 0
+      },
+      "generated_gate": {
+        "n_tasks_with_generated": 2,
+        "n_pass_under_project_gate": 0,
+        "n_pass_under_official_prelude_module": 0,
+        "n_flips_fail_to_pass": 0,
+        "flipped_tasks": []
+      }
+    },
+    "ult_probe25": {
+      "n_tasks": 1,
+      "attribution": {
+        "upstream_missing_module_dependency": 1
+      },
+      "signature_buckets": {
+        "P:fixture_or_harness_missing": 5,
+        "P2:fixture_or_harness_missing": 5,
+        "O:fixture_or_harness_missing": 5,
+        "C:fixture_or_harness_missing": 5,
+        "GP:fixture_or_harness_missing": 9,
+        "GP:signature_or_api_mismatch": 6,
+        "GP:other": 4,
+        "GO:fixture_or_harness_missing": 9,
+        "GO:signature_or_api_mismatch": 6,
+        "GO:other": 4
+      },
+      "run_status": {
+        "P:pass": 0,
+        "P:fail": 1,
+        "P:collection_error": 0,
+        "P:nonterminate": 0,
+        "P2:pass": 0,
+        "P2:fail": 1,
+        "P2:collection_error": 0,
+        "P2:nonterminate": 0,
+        "O:pass": 0,
+        "O:fail": 1,
+        "O:collection_error": 0,
+        "O:nonterminate": 0,
+        "C:pass": 0,
+        "C:fail": 1,
+        "C:collection_error": 0,
+        "C:nonterminate": 0,
+        "GP:pass": 0,
+        "GP:fail": 1,
+        "GP:collection_error": 0,
+        "GP:nonterminate": 0,
+        "GO:pass": 0,
+        "GO:fail": 1,
+        "GO:collection_error": 0,
+        "GO:nonterminate": 0
+      },
+      "gold_soundness_corrected": {
+        "n_gold_pass_under_C": 0,
+        "n_gold_pass_under_O": 0,
+        "n_gold_pass_under_P": 0,
+        "n_gold_pass_under_P2": 0
+      },
+      "generated_gate": {
+        "n_tasks_with_generated": 1,
+        "n_pass_under_project_gate": 0,
+        "n_pass_under_official_prelude_module": 0,
+        "n_flips_fail_to_pass": 0,
+        "flipped_tasks": []
+      }
+    }
+  },
+  "records": [
+    {
+      "subset": "ult_lite46",
+      "task_id": "ult__num_agreeing_tuples",
+      "function_name": "num_agreeing_tuples",
+      "n_gold": 5,
+      "upstream": {
+        "in_ULT_Lite_by_code": true,
+        "in_ULT_by_code": true,
+        "ULT_func_name": "num_agreeing_tuples",
+        "ULT_task_id": "8461",
+        "fixed_byte_identical_to_upstream_code": true,
+        "official_tests_source": "ULT.jsonl:tests",
+        "official_tests_equal_lite_test_list": true
+      },
+      "runs": {
+        "P": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_num_agreeing_tuples.py::test_gold_0": "FAILED",
+            "test_num_agreeing_tuples.py::test_gold_1": "FAILED",
+            "test_num_agreeing_tuples.py::test_gold_2": "FAILED",
+            "test_num_agreeing_tuples.py::test_gold_3": "FAILED",
+            "test_num_agreeing_tuples.py::test_gold_4": "FAILED"
+          },
+          "signatures": {
+            "test_num_agreeing_tuples.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P_project_audit",
+          "rc": 1,
+          "wall_s": 0.6,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_num_agreeing_tuples.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.09s ===============================",
+          "signature_detail": {
+            "test_num_agreeing_tuples.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test_num_agreeing_tuples.py::test_gold_0": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_gold_1": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_gold_2": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_gold_3": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_gold_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "P2": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_num_agreeing_tuples.py::test_1": "FAILED",
+            "test_num_agreeing_tuples.py::test_2": "FAILED",
+            "test_num_agreeing_tuples.py::test_3": "FAILED",
+            "test_num_agreeing_tuples.py::test_4": "FAILED",
+            "test_num_agreeing_tuples.py::test_5": "FAILED"
+          },
+          "signatures": {
+            "test_num_agreeing_tuples.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P2_project_loader",
+          "rc": 1,
+          "wall_s": 0.5,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_num_agreeing_tuples.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.09s ===============================",
+          "signature_detail": {
+            "test_num_agreeing_tuples.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test_num_agreeing_tuples.py::test_1": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_2": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_3": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_4": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_5": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "O": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_num_agreeing_tuples_0": "FAILED",
+            "test.py::test_num_agreeing_tuples_1": "FAILED",
+            "test.py::test_num_agreeing_tuples_2": "FAILED",
+            "test.py::test_num_agreeing_tuples_3": "FAILED",
+            "test.py::test_num_agreeing_tuples_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "O_official_contract",
+          "rc": 1,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.38s ===============================",
+          "signature_detail": {
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_num_agreeing_tuples_0": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_1": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_2": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_3": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_num_agreeing_tuples_0": "FAILED",
+            "test.py::test_num_agreeing_tuples_1": "FAILED",
+            "test.py::test_num_agreeing_tuples_2": "FAILED",
+            "test.py::test_num_agreeing_tuples_3": "FAILED",
+            "test.py::test_num_agreeing_tuples_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "C_corrected_harness",
+          "rc": 1,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.36s ===============================",
+          "signature_detail": {
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_num_agreeing_tuples_0": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_1": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_2": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_3": "fixture_or_harness_missing",
+            "test.py::test_num_agreeing_tuples_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C+": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_num_agreeing_tuples_0": "FAILED",
+            "test.py::test_num_agreeing_tuples_1": "FAILED",
+            "test.py::test_num_agreeing_tuples_2": "FAILED",
+            "test.py::test_num_agreeing_tuples_3": "FAILED",
+            "test.py::test_num_agreeing_tuples_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "AssertionError",
+              "message": "assert (2, 2) == (4, 4)"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "AssertionError",
+              "message": "assert (0, 0) == (0, 5)"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "AssertionError",
+              "message": "assert (1, 1) == (0, 4)"
+            },
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "assert (0, 1) == (1, 2)",
+              "message": ""
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "assert (0, 1) == (1, 2)",
+              "message": ""
+            }
+          },
+          "collection_error": null,
+          "variant": "Cplus_corrected_harness_extra_prelude",
+          "rc": 1,
+          "wall_s": 0.8,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.34s ===============================",
+          "signature_detail": {
+            "test.py::test_num_agreeing_tuples_0": {
+              "exc_type": "assert (0, 1) == (1, 2)",
+              "message": "",
+              "bucket": "other",
+              "subcause": "assert (0, 1) == (1, 2): "
+            },
+            "test.py::test_num_agreeing_tuples_1": {
+              "exc_type": "assert (0, 1) == (1, 2)",
+              "message": "",
+              "bucket": "other",
+              "subcause": "assert (0, 1) == (1, 2): "
+            },
+            "test.py::test_num_agreeing_tuples_2": {
+              "exc_type": "AssertionError",
+              "message": "assert (2, 2) == (4, 4)",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert (2, 2) == (4, 4)"
+            },
+            "test.py::test_num_agreeing_tuples_3": {
+              "exc_type": "AssertionError",
+              "message": "assert (0, 0) == (0, 5)",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert (0, 0) == (0, 5)"
+            },
+            "test.py::test_num_agreeing_tuples_4": {
+              "exc_type": "AssertionError",
+              "message": "assert (1, 1) == (0, 4)",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert (1, 1) == (0, 4)"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_num_agreeing_tuples_0": "other",
+            "test.py::test_num_agreeing_tuples_1": "other",
+            "test.py::test_num_agreeing_tuples_2": "assert_failed_expectation_mismatch",
+            "test.py::test_num_agreeing_tuples_3": "assert_failed_expectation_mismatch",
+            "test.py::test_num_agreeing_tuples_4": "assert_failed_expectation_mismatch"
+          },
+          "buckets": {
+            "other": 2,
+            "assert_failed_expectation_mismatch": 3
+          },
+          "extra_symbols": [
+            "bisect",
+            "itertools"
+          ]
+        },
+        "GP": {
+          "status": "fail",
+          "n_passed": 3,
+          "n_failed": 9,
+          "n_error": 0,
+          "per_test": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_length_mismatch_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_duplicate_in_perm1_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_duplicate_in_perm2_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": "FAILED"
+          },
+          "signatures": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GP_generated_project_gate",
+          "rc": 1,
+          "wall_s": 0.6,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_num_agreeing_tuples.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "========================= 9 failed, 3 passed in 0.11s ==========================",
+          "signature_detail": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 9
+          }
+        },
+        "GO": {
+          "status": "fail",
+          "n_passed": 3,
+          "n_failed": 9,
+          "n_error": 0,
+          "per_test": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_length_mismatch_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_duplicate_in_perm1_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_duplicate_in_perm2_raises": "PASSED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": "FAILED",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": "FAILED"
+          },
+          "signatures": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GO_generated_official_prelude",
+          "rc": 1,
+          "wall_s": 1.0,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_num_agreeing_tuples.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "========================= 9 failed, 3 passed in 0.41s ==========================",
+          "signature_detail": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            },
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": {
+              "exc_type": "NameError",
+              "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:itertools"
+            }
+          },
+          "bucket_by_test": {
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_identical_permutations": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_reversed_permutations": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_zero": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_sliced_length_zero": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_k_equals_sliced_length": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm10-perm20-1]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm11-perm21-1]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm12-perm22-2]": "fixture_or_harness_missing",
+            "test_num_agreeing_tuples.py::test_num_agreeing_tuples_postconditions[perm13-perm23-3]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 9
+          }
+        }
+      },
+      "generated_gate_flip": false,
+      "attribution": "upstream_missing_module_dependency",
+      "attribution_mechanism": "C（含官方前置块）仍报 NameError/ImportError：`code` 依赖官方前置块也未提供的模块（官方 README.md:30 \"Self-contained functions\" 反例；官方 harness 同样失败）",
+      "c_summary": {
+        "status": "fail",
+        "n_passed": 0,
+        "n_failed": 5,
+        "n_error": 0,
+        "buckets": {
+          "fixture_or_harness_missing": 5
+        }
+      },
+      "evidence": {
+        "upstream": {
+          "ULT_jsonl_task_id": "8461",
+          "ULT_Lite_jsonl_task_id": "8461",
+          "ULT_jsonl_tests_n": 5,
+          "ULT_Lite_jsonl_test_list_n": 5
+        },
+        "examples": [
+          {
+            "variant": "P",
+            "nodeid": "test_num_agreeing_tuples.py::test_gold_0",
+            "exc_type": "NameError",
+            "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:itertools",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "P",
+            "nodeid": "test_num_agreeing_tuples.py::test_gold_1",
+            "exc_type": "NameError",
+            "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:itertools",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_num_agreeing_tuples_0",
+            "exc_type": "NameError",
+            "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:itertools",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_num_agreeing_tuples_1",
+            "exc_type": "NameError",
+            "message": "name 'itertools' is not defined. Did you forget to import 'itertools'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:itertools",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          }
+        ]
+      }
+    },
+    {
+      "subset": "ult_lite46",
+      "task_id": "ult__centre_on_peak",
+      "function_name": "centre_on_peak",
+      "n_gold": 5,
+      "upstream": {
+        "in_ULT_Lite_by_code": true,
+        "in_ULT_by_code": true,
+        "ULT_func_name": "centre_on_peak",
+        "ULT_task_id": "3934",
+        "fixed_byte_identical_to_upstream_code": true,
+        "official_tests_source": "ULT.jsonl:tests",
+        "official_tests_equal_lite_test_list": true
+      },
+      "runs": {
+        "P": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_centre_on_peak.py::test_gold_0": "FAILED",
+            "test_centre_on_peak.py::test_gold_1": "FAILED",
+            "test_centre_on_peak.py::test_gold_2": "FAILED",
+            "test_centre_on_peak.py::test_gold_3": "FAILED",
+            "test_centre_on_peak.py::test_gold_4": "FAILED"
+          },
+          "signatures": {
+            "test_centre_on_peak.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P_project_audit",
+          "rc": 1,
+          "wall_s": 0.7,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_centre_on_peak.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.10s ===============================",
+          "signature_detail": {
+            "test_centre_on_peak.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test_centre_on_peak.py::test_gold_0": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_gold_1": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_gold_2": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_gold_3": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_gold_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "P2": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_centre_on_peak.py::test_1": "FAILED",
+            "test_centre_on_peak.py::test_2": "FAILED",
+            "test_centre_on_peak.py::test_3": "FAILED",
+            "test_centre_on_peak.py::test_4": "FAILED",
+            "test_centre_on_peak.py::test_5": "FAILED"
+          },
+          "signatures": {
+            "test_centre_on_peak.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P2_project_loader",
+          "rc": 1,
+          "wall_s": 0.6,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_centre_on_peak.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.10s ===============================",
+          "signature_detail": {
+            "test_centre_on_peak.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test_centre_on_peak.py::test_1": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_2": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_3": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_4": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_5": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "O": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_centre_on_peak_0": "FAILED",
+            "test.py::test_centre_on_peak_1": "FAILED",
+            "test.py::test_centre_on_peak_2": "FAILED",
+            "test.py::test_centre_on_peak_3": "FAILED",
+            "test.py::test_centre_on_peak_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "O_official_contract",
+          "rc": 1,
+          "wall_s": 1.0,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.41s ===============================",
+          "signature_detail": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_centre_on_peak_0": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_1": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_2": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_3": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_centre_on_peak_0": "FAILED",
+            "test.py::test_centre_on_peak_1": "FAILED",
+            "test.py::test_centre_on_peak_2": "FAILED",
+            "test.py::test_centre_on_peak_3": "FAILED",
+            "test.py::test_centre_on_peak_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "C_corrected_harness",
+          "rc": 1,
+          "wall_s": 1.0,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.42s ===============================",
+          "signature_detail": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_centre_on_peak_0": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_1": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_2": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_3": "fixture_or_harness_missing",
+            "test.py::test_centre_on_peak_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C+": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_centre_on_peak_0": "FAILED",
+            "test.py::test_centre_on_peak_1": "FAILED",
+            "test.py::test_centre_on_peak_2": "FAILED",
+            "test.py::test_centre_on_peak_3": "FAILED",
+            "test.py::test_centre_on_peak_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "AssertionError",
+              "message": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "AssertionError",
+              "message": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "AssertionError",
+              "message": "assert [8, 9, 10, 11, 12, 13, ...] == [15, 1, 2, 3, 4, 5, ...]"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "AssertionError",
+              "message": "assert [9, 10, 11, 12, 13, 14, ...] == [17, 1, 2, 3, 4, 5, ...]"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "AssertionError",
+              "message": "assert [10, 11, 12, 13, 14, 15, ...] == [19, 1, 2, 3, 4, 5, ...]"
+            }
+          },
+          "collection_error": null,
+          "variant": "Cplus_corrected_harness_extra_prelude",
+          "rc": 1,
+          "wall_s": 1.0,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.40s ===============================",
+          "signature_detail": {
+            "test.py::test_centre_on_peak_0": {
+              "exc_type": "AssertionError",
+              "message": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]"
+            },
+            "test.py::test_centre_on_peak_1": {
+              "exc_type": "AssertionError",
+              "message": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert [3, 4, 5, 1, 2] == [5, 1, 2, 3, 4]"
+            },
+            "test.py::test_centre_on_peak_2": {
+              "exc_type": "AssertionError",
+              "message": "assert [8, 9, 10, 11, 12, 13, ...] == [15, 1, 2, 3, 4, 5, ...]",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert [8, 9, 10, 11, 12, 13, ...] == [15, 1, 2, 3, 4, 5, ...]"
+            },
+            "test.py::test_centre_on_peak_3": {
+              "exc_type": "AssertionError",
+              "message": "assert [9, 10, 11, 12, 13, 14, ...] == [17, 1, 2, 3, 4, 5, ...]",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert [9, 10, 11, 12, 13, 14, ...] == [17, 1, 2, 3, 4, 5, ...]"
+            },
+            "test.py::test_centre_on_peak_4": {
+              "exc_type": "AssertionError",
+              "message": "assert [10, 11, 12, 13, 14, 15, ...] == [19, 1, 2, 3, 4, 5, ...]",
+              "bucket": "assert_failed_expectation_mismatch",
+              "subcause": "assert [10, 11, 12, 13, 14, 15, ...] == [19, 1, 2, 3, 4, 5, ...]"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_centre_on_peak_0": "assert_failed_expectation_mismatch",
+            "test.py::test_centre_on_peak_1": "assert_failed_expectation_mismatch",
+            "test.py::test_centre_on_peak_2": "assert_failed_expectation_mismatch",
+            "test.py::test_centre_on_peak_3": "assert_failed_expectation_mismatch",
+            "test.py::test_centre_on_peak_4": "assert_failed_expectation_mismatch"
+          },
+          "buckets": {
+            "assert_failed_expectation_mismatch": 5
+          },
+          "extra_symbols": [
+            "sys"
+          ]
+        },
+        "GP": {
+          "status": "fail",
+          "n_passed": 2,
+          "n_failed": 42,
+          "n_error": 0,
+          "per_test": {
+            "test_centre_on_peak.py::test_centre_on_peak_none_returns_empty_list": "PASSED",
+            "test_centre_on_peak.py::test_centre_on_peak_empty_list_returns_empty_list": "PASSED",
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": "FAILED"
+          },
+          "signatures": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GP_generated_project_gate",
+          "rc": 1,
+          "wall_s": 0.8,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_centre_on_peak.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "========================= 42 failed, 2 passed in 0.23s =========================",
+          "signature_detail": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 42
+          }
+        },
+        "GO": {
+          "status": "fail",
+          "n_passed": 2,
+          "n_failed": 42,
+          "n_error": 0,
+          "per_test": {
+            "test_centre_on_peak.py::test_centre_on_peak_none_returns_empty_list": "PASSED",
+            "test_centre_on_peak.py::test_centre_on_peak_empty_list_returns_empty_list": "PASSED",
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": "FAILED",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": "FAILED"
+          },
+          "signatures": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GO_generated_official_prelude",
+          "rc": 1,
+          "wall_s": 1.1,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_centre_on_peak.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "========================= 42 failed, 2 passed in 0.48s =========================",
+          "signature_detail": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            },
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": {
+              "exc_type": "NameError",
+              "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:sys"
+            }
+          },
+          "bucket_by_test": {
+            "test_centre_on_peak.py::test_centre_on_peak_single_element": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_centre": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_odd_length_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_centre": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_even_length_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_all_elements_equal": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_negative_values": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_with_zero": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_tiny_float_values": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_first": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_two_elements_max_at_last": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_same_length": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_max_value_at_midpoint_after_rotation": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_multiset_preserved": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data0]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data1]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data2]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data3]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data4]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data5]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data6]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data7]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data8]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data9]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data10]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data11]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data12]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_matches_spec_derived_expectation[data13]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data0]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data1]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data2]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data3]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data4]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data5]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data6]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data7]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data8]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data9]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data10]": "fixture_or_harness_missing",
+            "test_centre_on_peak.py::test_centre_on_peak_returns_list_type[data11]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 42
+          }
+        }
+      },
+      "generated_gate_flip": false,
+      "attribution": "upstream_missing_module_dependency",
+      "attribution_mechanism": "C（含官方前置块）仍报 NameError/ImportError：`code` 依赖官方前置块也未提供的模块（官方 README.md:30 \"Self-contained functions\" 反例；官方 harness 同样失败）",
+      "c_summary": {
+        "status": "fail",
+        "n_passed": 0,
+        "n_failed": 5,
+        "n_error": 0,
+        "buckets": {
+          "fixture_or_harness_missing": 5
+        }
+      },
+      "evidence": {
+        "upstream": {
+          "ULT_jsonl_task_id": "3934",
+          "ULT_Lite_jsonl_task_id": "3934",
+          "ULT_jsonl_tests_n": 5,
+          "ULT_Lite_jsonl_test_list_n": 5
+        },
+        "examples": [
+          {
+            "variant": "P",
+            "nodeid": "test_centre_on_peak.py::test_gold_0",
+            "exc_type": "NameError",
+            "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:sys",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "P",
+            "nodeid": "test_centre_on_peak.py::test_gold_1",
+            "exc_type": "NameError",
+            "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:sys",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_centre_on_peak_0",
+            "exc_type": "NameError",
+            "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:sys",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_centre_on_peak_1",
+            "exc_type": "NameError",
+            "message": "name 'sys' is not defined. Did you forget to import 'sys'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:sys",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          }
+        ]
+      }
+    },
+    {
+      "subset": "ult_probe25",
+      "task_id": "ult__lflverify",
+      "function_name": "lflverify",
+      "n_gold": 5,
+      "upstream": {
+        "in_ULT_Lite_by_code": true,
+        "in_ULT_by_code": true,
+        "ULT_func_name": "lflverify",
+        "ULT_task_id": "785",
+        "fixed_byte_identical_to_upstream_code": true,
+        "official_tests_source": "ULT.jsonl:tests",
+        "official_tests_equal_lite_test_list": true
+      },
+      "runs": {
+        "P": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_lflverify.py::test_gold_0": "FAILED",
+            "test_lflverify.py::test_gold_1": "FAILED",
+            "test_lflverify.py::test_gold_2": "FAILED",
+            "test_lflverify.py::test_gold_3": "FAILED",
+            "test_lflverify.py::test_gold_4": "FAILED"
+          },
+          "signatures": {
+            "test_lflverify.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P_project_audit",
+          "rc": 1,
+          "wall_s": 0.7,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_lflverify.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.09s ===============================",
+          "signature_detail": {
+            "test_lflverify.py::test_gold_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_gold_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_gold_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_gold_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_gold_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test_lflverify.py::test_gold_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_gold_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_gold_2": "fixture_or_harness_missing",
+            "test_lflverify.py::test_gold_3": "fixture_or_harness_missing",
+            "test_lflverify.py::test_gold_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "P2": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test_lflverify.py::test_1": "FAILED",
+            "test_lflverify.py::test_2": "FAILED",
+            "test_lflverify.py::test_3": "FAILED",
+            "test_lflverify.py::test_4": "FAILED",
+            "test_lflverify.py::test_5": "FAILED"
+          },
+          "signatures": {
+            "test_lflverify.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "P2_project_loader",
+          "rc": 1,
+          "wall_s": 0.6,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_lflverify.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.09s ===============================",
+          "signature_detail": {
+            "test_lflverify.py::test_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_5": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test_lflverify.py::test_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_2": "fixture_or_harness_missing",
+            "test_lflverify.py::test_3": "fixture_or_harness_missing",
+            "test_lflverify.py::test_4": "fixture_or_harness_missing",
+            "test_lflverify.py::test_5": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "O": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_lflverify_0": "FAILED",
+            "test.py::test_lflverify_1": "FAILED",
+            "test.py::test_lflverify_2": "FAILED",
+            "test.py::test_lflverify_3": "FAILED",
+            "test.py::test_lflverify_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_lflverify_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "O_official_contract",
+          "rc": 1,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.39s ===============================",
+          "signature_detail": {
+            "test.py::test_lflverify_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_lflverify_0": "fixture_or_harness_missing",
+            "test.py::test_lflverify_1": "fixture_or_harness_missing",
+            "test.py::test_lflverify_2": "fixture_or_harness_missing",
+            "test.py::test_lflverify_3": "fixture_or_harness_missing",
+            "test.py::test_lflverify_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 5,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_lflverify_0": "FAILED",
+            "test.py::test_lflverify_1": "FAILED",
+            "test.py::test_lflverify_2": "FAILED",
+            "test.py::test_lflverify_3": "FAILED",
+            "test.py::test_lflverify_4": "FAILED"
+          },
+          "signatures": {
+            "test.py::test_lflverify_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test.py::test_lflverify_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "C_corrected_harness",
+          "rc": 1,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 failed in 0.36s ===============================",
+          "signature_detail": {
+            "test.py::test_lflverify_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_2": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_3": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test.py::test_lflverify_4": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test.py::test_lflverify_0": "fixture_or_harness_missing",
+            "test.py::test_lflverify_1": "fixture_or_harness_missing",
+            "test.py::test_lflverify_2": "fixture_or_harness_missing",
+            "test.py::test_lflverify_3": "fixture_or_harness_missing",
+            "test.py::test_lflverify_4": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 5
+          }
+        },
+        "C+": {
+          "status": "pass",
+          "n_passed": 5,
+          "n_failed": 0,
+          "n_error": 0,
+          "per_test": {
+            "test.py::test_lflverify_0": "PASSED",
+            "test.py::test_lflverify_1": "PASSED",
+            "test.py::test_lflverify_2": "PASSED",
+            "test.py::test_lflverify_3": "PASSED",
+            "test.py::test_lflverify_4": "PASSED"
+          },
+          "signatures": {},
+          "collection_error": null,
+          "variant": "Cplus_corrected_harness_extra_prelude",
+          "rc": 0,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 5 passed in 0.33s ===============================",
+          "bucket_by_test": {},
+          "buckets": {},
+          "extra_symbols": [
+            "logging"
+          ]
+        },
+        "GP": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 19,
+          "n_error": 0,
+          "per_test": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": "FAILED",
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": "FAILED",
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_none_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_string_input_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": "FAILED"
+          },
+          "signatures": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_none_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_string_input_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GP_generated_project_gate",
+          "rc": 1,
+          "wall_s": 0.6,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_lflverify.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 19 failed in 0.12s ==============================",
+          "signature_detail": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_none_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_string_input_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": "other",
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": "other",
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_none_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_string_input_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": "other",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": "other",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 9,
+            "signature_or_api_mismatch": 6,
+            "other": 4
+          }
+        },
+        "GO": {
+          "status": "fail",
+          "n_passed": 0,
+          "n_failed": 19,
+          "n_error": 0,
+          "per_test": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": "FAILED",
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": "FAILED",
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_none_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_string_input_returns_0": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": "FAILED",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": "FAILED"
+          },
+          "signatures": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_none_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_string_input_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?"
+            }
+          },
+          "collection_error": null,
+          "variant": "GO_generated_official_prelude",
+          "rc": 1,
+          "wall_s": 0.9,
+          "cmd": "/Users/wangchenyu/Workspace/AITester/.venv/bin/python -m pytest test_lflverify.py -v --tb=short -rf -p no:cacheprovider",
+          "tail": "============================== 19 failed in 0.40s ==============================",
+          "signature_detail": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_none_returns_0": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_string_input_returns_0": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not subscriptable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not subscriptable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": {
+              "exc_type": "IndexError",
+              "message": "list index out of range",
+              "bucket": "other",
+              "subcause": "IndexError: list index out of range"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": {
+              "exc_type": "TypeError",
+              "message": "'int' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'int' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": {
+              "exc_type": "TypeError",
+              "message": "'NoneType' object is not iterable",
+              "bucket": "signature_or_api_mismatch",
+              "subcause": "'NoneType' object is not iterable"
+            },
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": {
+              "exc_type": "NameError",
+              "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+              "bucket": "fixture_or_harness_missing",
+              "subcause": "NameError:undefined_symbol:logging"
+            }
+          },
+          "bucket_by_test": {
+            "test_lflverify.py::test_lflverify_all_valid_sublists_returns_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_empty_list_returns_1": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_list_with_non_list_element_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_sublist_wrong_element_types_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_sublist_first_element_not_int_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_empty_sublist_returns_0": "other",
+            "test_lflverify.py::test_lflverify_sublist_length_one_returns_0": "other",
+            "test_lflverify.py::test_lflverify_non_list_int_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_none_returns_0": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_string_input_returns_0": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist0]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist1]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist2]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist3]": "fixture_or_harness_missing",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist4]": "other",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[mylist5]": "other",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[5]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[None]": "signature_or_api_mismatch",
+            "test_lflverify.py::test_lflverify_result_is_zero_or_one[ab]": "fixture_or_harness_missing"
+          },
+          "buckets": {
+            "fixture_or_harness_missing": 9,
+            "signature_or_api_mismatch": 6,
+            "other": 4
+          }
+        }
+      },
+      "generated_gate_flip": false,
+      "attribution": "upstream_missing_module_dependency",
+      "attribution_mechanism": "C（含官方前置块）仍报 NameError/ImportError：`code` 依赖官方前置块也未提供的模块（官方 README.md:30 \"Self-contained functions\" 反例；官方 harness 同样失败）",
+      "c_summary": {
+        "status": "fail",
+        "n_passed": 0,
+        "n_failed": 5,
+        "n_error": 0,
+        "buckets": {
+          "fixture_or_harness_missing": 5
+        }
+      },
+      "evidence": {
+        "upstream": {
+          "ULT_jsonl_task_id": "785",
+          "ULT_Lite_jsonl_task_id": "785",
+          "ULT_jsonl_tests_n": 5,
+          "ULT_Lite_jsonl_test_list_n": 5
+        },
+        "examples": [
+          {
+            "variant": "P",
+            "nodeid": "test_lflverify.py::test_gold_0",
+            "exc_type": "NameError",
+            "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:logging",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "P",
+            "nodeid": "test_lflverify.py::test_gold_1",
+            "exc_type": "NameError",
+            "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:logging",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_lflverify_0",
+            "exc_type": "NameError",
+            "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:logging",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          },
+          {
+            "variant": "C",
+            "nodeid": "test.py::test_lflverify_1",
+            "exc_type": "NameError",
+            "message": "name 'logging' is not defined. Did you forget to import 'logging'?",
+            "bucket": "fixture_or_harness_missing",
+            "subcause": "NameError:undefined_symbol:logging",
+            "code_line_of_actual_value": 0,
+            "code_line_text": ""
+          }
+        ]
+      }
+    }
+  ]
+}

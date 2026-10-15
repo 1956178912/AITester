@@ -257,6 +257,65 @@ class TestV5NeutralTaskIds:
         ids_b = [t.task_id for t in SyntheticDataset(task_count=5, seed=7).tasks]
         assert ids_a == ids_b, "同 seed 的中性 task_id 序列必须稳定"
 
+    def test_no_pattern_name_survives_in_gold_imports(self):
+        """O2（2026-10-15 批次九）：gold 测试中**任何形态**的 import 都不得残留 pattern 名。
+
+        判别式回归——原 `test_task_id_neutral_and_gold_import_matches` 只查
+        `f"from {mod} import" in gold or f"import {mod}" in gold`，**漏掉**
+        函数体内的 `import <pattern> as m` 形态：该形态使
+        `_neutralize_gold_imports` 的行级正则（`\\s*$` 要求行尾）不匹配 ⇒
+        gold 套件在 gold 目标代码上恒 `ModuleNotFoundError` ⇒ 该任务在
+        detection_rate 口径下结构性不可检出（主批次实测 25/261 任务受影响）。
+        本测试按**行首 import token 全量扫描**，任何非中性/非合法辅助件的
+        模块名即失败（模板 `import45_shadow_builtin` 即命中）。
+        """
+        import re
+
+        from src.datasets.synthetic_dataset import SyntheticDataset
+
+        # 合法 token：标准库 / 项目物化辅助件 / 跨文件中性模块（与审计脚本同源）
+        allowed = {
+            "pytest",
+            "os",
+            "sys",
+            "re",
+            "json",
+            "math",
+            "random",
+            "itertools",
+            "functools",
+            "collections",
+            "typing",
+            "string",
+            "copy",
+            "time",
+            "logging",
+            "datetime",
+            "node",
+            "load_testdata",
+            "module_a",
+            "module_b",
+            "module_c",
+            "python_programs",
+            "correct_python_programs",
+        }
+        token_re = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_]\w*)\b", re.MULTILINE)
+        for seed in (42, 43, 44):
+            ds = SyntheticDataset(task_count=87, seed=seed, max_pattern_repeat=2)
+            for t in ds.tasks:
+                md = t.metadata or {}
+                mod = t.task_id.split("__")[-1]
+                gold = md.get("test_cases") or ""
+                stray = [
+                    tok
+                    for tok in token_re.findall(gold)
+                    if tok not in allowed and tok != mod and not tok.startswith("task_")
+                ]
+                assert not stray, (
+                    f"gold import 残留非中性模块名 {stray}（seed={seed}，{t.task_id}，"
+                    f"pattern={md.get('pattern_name')}）——gold 裁决将恒 ModuleNotFoundError"
+                )
+
 
 class TestV6MainBatchReproGates:
     """V6：主批次 runner 复现性前置守卫（P0-1）。

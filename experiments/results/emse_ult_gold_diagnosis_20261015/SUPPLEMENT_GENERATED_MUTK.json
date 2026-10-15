@@ -1,0 +1,50 @@
+{
+  "purpose": "量化 §2c 健全性门翻转（ult__fix_labels）对已发布 specir Mut@k 0.4395 的因果影响（补充测量，非官方 gold 口径）",
+  "command": [
+    ".venv/bin/python experiments/emse_ult_mutk_full.py --groups specir,gold   # 已发布值来源（847/1927，n=5/25）",
+    "python - <<'EOF'  # 本补充测量：对单任务 ult__fix_labels 直接调 experiments.ult_adapter.ult_mutation_score",
+    "  target_code = fixed                      # (a) 项目物化（模块无前置块）",
+    "  target_code = CODE_IMPORT + fixed        # (b) 官方契约模块物化（Ray/main.py:140-145）",
+    "  test_code   = row['generated_test']      # 生成测试原文；module_name='fix_labels'",
+    "  max_mutants = 10**9（全变异体）; timeout_seconds = 120（ULT 官方口径）",
+    "EOF"
+  ],
+  "cosmic_ray_version": "8.7.0",
+  "cosmic_ray_config_hash": "1e1230a7e298d1e2d7856ca437332e27702cfa1612dfc80ab71f9ca105b6ea22",
+  "measured": {
+    "project_module_no_prelude": {
+      "available": true,
+      "mutation_score": 1.0,
+      "mutants_killed": 17,
+      "mutants_total": 17,
+      "skipped": false,
+      "skip_reason": "",
+      "wall_s": 14.2
+    },
+    "official_prelude_module": {
+      "available": true,
+      "mutation_score": 1.0,
+      "mutants_killed": 17,
+      "mutants_total": 17,
+      "skipped": false,
+      "skip_reason": "",
+      "wall_s": 21.2
+    }
+  },
+  "rebasing": {
+    "published_specir": {
+      "killed": 847,
+      "total": 1927,
+      "score": 0.439543,
+      "n_tasks": 5
+    },
+    "corrected_specir_if_fix_labels_admitted": {
+      "killed": 864,
+      "total": 1944,
+      "score": 0.444444,
+      "n_tasks": 6
+    },
+    "delta_score": 0.004901,
+    "caliber": "measured（fix_labels 单任务 Mut@k 为本脚本实测；池化重基为算术合成，非重跑全组）"
+  }
+}

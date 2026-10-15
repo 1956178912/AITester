@@ -1,0 +1,316 @@
+[
+ {
+  "task": "quixbugs__bitcount",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__breadth_first_search",
+  "status": "pass",
+  "rc": 0,
+  "tail": "5 passed in 0.06s"
+ },
+ {
+  "task": "quixbugs__breadth_first_search_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__bucketsort",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__depth_first_search",
+  "status": "pass",
+  "rc": 0,
+  "tail": "5 passed in 0.06s"
+ },
+ {
+  "task": "quixbugs__depth_first_search_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__detect_cycle",
+  "status": "pass",
+  "rc": 0,
+  "tail": "6 passed in 0.06s"
+ },
+ {
+  "task": "quixbugs__detect_cycle_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__find_first_in_sorted",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__find_in_sorted",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__flatten",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__gcd",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__get_factors",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__hanoi",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__is_valid_parenthesization",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__kheapsort",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__knapsack",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__kth",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__lcs_length",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__levenshtein",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__lis",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__longest_common_subsequence",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__max_sublist_sum",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__mergesort",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__minimum_spanning_tree",
+  "status": "pass",
+  "rc": 0,
+  "tail": "3 passed in 0.07s"
+ },
+ {
+  "task": "quixbugs__minimum_spanning_tree_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__next_palindrome",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__next_permutation",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__node",
+  "status": "fail",
+  "rc": 5,
+  "tail": "no tests ran in 0.08s",
+  "cls": "other"
+ },
+ {
+  "task": "quixbugs__pascal",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__possible_change",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__powerset",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.12s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__quicksort",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.14s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__reverse_linked_list",
+  "status": "pass",
+  "rc": 0,
+  "tail": "3 passed in 0.08s"
+ },
+ {
+  "task": "quixbugs__reverse_linked_list_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__rpn_eval",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__shortest_path_length",
+  "status": "pass",
+  "rc": 0,
+  "tail": "4 passed in 0.07s"
+ },
+ {
+  "task": "quixbugs__shortest_path_length_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__shortest_path_lengths",
+  "status": "pass",
+  "rc": 0,
+  "tail": "4 passed in 0.07s"
+ },
+ {
+  "task": "quixbugs__shortest_path_lengths_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__shortest_paths",
+  "status": "pass",
+  "rc": 0,
+  "tail": "3 passed in 0.08s"
+ },
+ {
+  "task": "quixbugs__shortest_paths_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__shunting_yard",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.15s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__sieve",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__sqrt",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.15s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__subsequences",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.15s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__to_base",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.14s",
+  "cls": "collection_error"
+ },
+ {
+  "task": "quixbugs__topological_ordering",
+  "status": "pass",
+  "rc": 0,
+  "tail": "3 passed in 0.06s"
+ },
+ {
+  "task": "quixbugs__topological_ordering_test",
+  "status": "material_missing"
+ },
+ {
+  "task": "quixbugs__wrap",
+  "status": "fail",
+  "rc": 2,
+  "tail": "1 error in 0.13s",
+  "cls": "collection_error"
+ }
+]
