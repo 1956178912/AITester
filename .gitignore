@@ -123,6 +123,7 @@ docs/emse/EMSE_OPTIMIZATION_APPENDIX_*.md
 docs/emse/SPECEXPR_SYNTH_CONFIRM_PREREG_*.md
 docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_*.md
 docs/emse/EMSE_BATCH8_MUTK_VALIDITY_*.md
+docs/emse/EMSE_GOLD_CONFORMANCE_*.md
 docs/design/stvr_empirical_study_design.md
 docs/design/false_fix_caliber_matrix.md
 SPEC_REPLACE_AB_SCALE87_REPORT_*.md
@@ -201,3 +202,9 @@ review_report_graph_api.md
 experiments/emse_quixbugs_mutk_full.py
 experiments/emse_ult_mutk_full.py
 experiments/emse_test_sanity_audit.py
+# 批次九（2026-10-15）：下列脚本**有**入库测试锁定契约（tests/test_emse_*.py
+# 直接 import），故按批次七纪律**入库**——gitignore 会致 fresh clone 收集即
+# ImportError（本地因脚本在盘而不可见）。
+# experiments/emse_gold_conformance_audit.py   （tests/test_2026_10_05_v_batch.py 契约）
+# experiments/emse_testlevel_detection.py      （tests/test_emse_testlevel_detection.py）
+# experiments/emse_ult_gold_diagnosis.py       （tests/test_emse_ult_gold_diagnosis.py）

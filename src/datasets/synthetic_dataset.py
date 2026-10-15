@@ -2254,6 +2254,18 @@ def _neutralize_gold_imports(test_cases: str, old_module: str, new_module: str) 
     import 同名模块。仅重写 import 语句中的模块 token（from/import 行首），
     不触碰测试正文中的同名词符串。跨文件模板 import module_a/b/c（与
     pattern 名无关），替换为 no-op。
+
+    O2（2026-10-15 批次九测量修复）：原实现的两个正则覆盖
+    ``from X import ...`` 与独占一行的 ``import X``（``\\s*$`` 要求行尾），
+    **不覆盖** ``import X as Y`` / ``import X  # 注释`` 形态。模板
+    ``import45_shadow_builtin`` 的 gold 测试在**函数体内**写
+    ``import import45_shadow_builtin as m`` ⇒ 模块名未被重写 ⇒
+    ``ModuleNotFoundError`` ⇒ 该模板的 gold 套件在 gold 目标代码上恒红 ⇒
+    该任务在 ``detection_rate`` 口径下**结构性不可检出**（主批次实测
+    25/261 任务受影响，且偏向压低 aitester：受影响任务上 aitester 检出
+    0/23 vs plain_llm_df 19/25）。补第三条正则覆盖 ``import X ...`` 任意
+    尾巴形态；前两条逐字保留（历史行为零变化）。审计与判别式见
+    ``experiments/emse_gold_conformance_audit.py``。
     """
     import re
 
@@ -2262,7 +2274,15 @@ def _neutralize_gold_imports(test_cases: str, old_module: str, new_module: str) 
     text = re.sub(
         rf"^(\s*from ){re.escape(old_module)}( import )", rf"\g<1>{new_module}\g<2>", test_cases, flags=re.MULTILINE
     )
-    return re.sub(rf"^(\s*import ){re.escape(old_module)}(\s*$)", rf"\g<1>{new_module}\g<2>", text, flags=re.MULTILINE)
+    text = re.sub(rf"^(\s*import ){re.escape(old_module)}(\s*$)", rf"\g<1>{new_module}\g<2>", text, flags=re.MULTILINE)
+    # O2：`import X as Y` / `import X  # 注释`（含函数体内缩进形态）。此形态
+    # 不会被上面第二条命中（其后不是行尾），故为纯增量修复。
+    return re.sub(
+        rf"^(\s*import ){re.escape(old_module)}(?=\s+(?:as\b|#))",
+        rf"\g<1>{new_module}",
+        text,
+        flags=re.MULTILINE,
+    )
 
 
 class SyntheticDataset(BaseDatasetLoader):

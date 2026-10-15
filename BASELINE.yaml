@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次八：全量 Mut@k 收口〔三项测量缺陷修复 + 健全性前置门 + 全量定案值 + M4 C/D 四臂闭环〕；--collect-only 实测 **5982**；沙箱全量实跑 **5972 passed / 2 failed / 4 skipped / 4 deselected**（598.12s，空载）——2 failed 全定性：① `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；② `test_p0_hardening` 的 `ps` 命令被沙箱禁（文档化环境类别，与批次六同族）；passed 按 collected − skipped 推导 = 5982 − 4 = **5978**（对账：5972+2+4 deselected = 5978）。此前 2026-10-15 批次七 5974/5978）
+last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次九：基准 gold 材料自洽性审计〔synthetic 模板残留 import 修复 25/261 + ULT gold 归因诊断 + QuixBugs 测试级检出画像〕；`--collect-only` 实测 **6018**；全量实跑 **6013 passed / 1 failed / 4 skipped**（277.72s）——1 failed 为 `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；passed = collected − skipped = 6018 − 4 = **6014**（对账：6013 + 1 failed = 6014）。此前 2026-10-15 批次八 5978/5982）
 
 tests:
-  total_passed: 5978          # 全量 pytest tests/（2026-10-15 批次八：沙箱实跑 5972 passed / 2 failed 全定性〔1 自指一致性刷新后转绿 + 1 ps 沙箱环境阻断〕/ 4 skipped / 4 deselected；--collect-only 实测 **5982**；passed = collected − skipped = 5982 − 4 = **5978**〔对账 5972 passed + 2 failed + 4 deselected = 5978〕。上一批 5974/5978 → 本批 5978/5982〔+4：批次八新增测试 3 例（ult_adapter 哨兵回归 2 + specir_expand 合并守恒 1）+ 收集尾差 1 例〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 6014          # 全量 pytest tests/（2026-10-15 批次九：实跑 6013 passed / 1 failed 全定性〔TestBaselineNumbersConsistency 自指一致性，本字段刷新后转绿〕/ 4 skipped；--collect-only 实测 **6018**；passed = collected − skipped = 6018 − 4 = **6014**〔对账 6013 + 1 failed = 6014〕。上一批 5978/5982 → 本批 6014/6018〔+36：批次九新增测试（gold 自洽性审计 1 + 测试级检出画像 + ULT gold 归因诊断 + 判别式回归 1）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail

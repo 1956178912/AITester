@@ -1,0 +1,93 @@
+{
+ "note": "O2 缺陷影响量化：排除 25 个「gold 套件结构性恒红」任务后的重算（零 LLM）",
+ "affected_task_keys": [
+  "42:synthetic__task_0007",
+  "42:synthetic__task_0009",
+  "42:synthetic__task_0021",
+  "42:synthetic__task_0041",
+  "42:synthetic__task_0051",
+  "42:synthetic__task_0053",
+  "42:synthetic__task_0074",
+  "43:synthetic__task_0007",
+  "43:synthetic__task_0009",
+  "43:synthetic__task_0015",
+  "43:synthetic__task_0016",
+  "43:synthetic__task_0039",
+  "43:synthetic__task_0047",
+  "43:synthetic__task_0048",
+  "43:synthetic__task_0053",
+  "43:synthetic__task_0068",
+  "43:synthetic__task_0070",
+  "44:synthetic__task_0011",
+  "44:synthetic__task_0015",
+  "44:synthetic__task_0018",
+  "44:synthetic__task_0030",
+  "44:synthetic__task_0056",
+  "44:synthetic__task_0069",
+  "44:synthetic__task_0071",
+  "44:synthetic__task_0072"
+ ],
+ "contrasts": [
+  {
+   "contrast": "aitester vs plain_llm_df",
+   "scope": "full",
+   "n": 240,
+   "ratio": "12:80",
+   "delta_pp": -28.33,
+   "chi2": 48.79,
+   "p": 1.715599535972955e-13,
+   "excluded_none": 21
+  },
+  {
+   "contrast": "aitester vs plain_llm_df",
+   "scope": "exclude",
+   "n": 217,
+   "ratio": "12:63",
+   "delta_pp": -23.5,
+   "chi2": 33.33,
+   "p": 1.693839376410126e-09,
+   "excluded_none": 19
+  },
+  {
+   "contrast": "plain_llm_df vs plain_llm",
+   "scope": "full",
+   "n": 261,
+   "ratio": "113:0",
+   "delta_pp": 43.3,
+   "chi2": 111.01,
+   "p": 1.925929944387236e-34,
+   "excluded_none": 0
+  },
+  {
+   "contrast": "plain_llm_df vs plain_llm",
+   "scope": "exclude",
+   "n": 236,
+   "ratio": "94:0",
+   "delta_pp": 39.83,
+   "chi2": 92.01,
+   "p": 1.0097419586828951e-28,
+   "excluded_none": 0
+  },
+  {
+   "contrast": "aitester vs plain_llm",
+   "scope": "full",
+   "n": 240,
+   "ratio": "37:3",
+   "delta_pp": 14.17,
+   "chi2": 27.23,
+   "p": 1.946500560734421e-08,
+   "excluded_none": 21
+  },
+  {
+   "contrast": "aitester vs plain_llm",
+   "scope": "exclude",
+   "n": 217,
+   "ratio": "37:3",
+   "delta_pp": 15.67,
+   "chi2": 27.23,
+   "p": 1.946500560734421e-08,
+   "excluded_none": 19
+  }
+ ],
+ "verdict": "三组对比结论方向与显著性不变；−28.33pp → −23.50pp（效应量上界收窄 4.83pp，报告值应改用保守口径）"
+}

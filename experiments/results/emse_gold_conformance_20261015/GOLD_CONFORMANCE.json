@@ -1,0 +1,3225 @@
+{
+ "generated_at": "2026-10-15T21:19:10",
+ "caliber": {
+  "predicate": "gold test_cases 在 gold fixed 目标代码上 rc==0（30s 界）",
+  "timeout_s": 30,
+  "synthetic": {
+   "n": 87,
+   "seeds": [
+    42,
+    43,
+    44
+   ],
+   "max_pattern_repeat": 2
+  },
+  "note": "零 LLM；只读数据集材料；不改动基准（冻结）"
+ },
+ "summary": {
+  "synthetic_seed42": {
+   "n": 87,
+   "status": {
+    "pass": 87
+   },
+   "failure_classes": {},
+   "stale_import_tasks": []
+  },
+  "synthetic_seed43": {
+   "n": 87,
+   "status": {
+    "pass": 87
+   },
+   "failure_classes": {},
+   "stale_import_tasks": []
+  },
+  "synthetic_seed44": {
+   "n": 87,
+   "status": {
+    "pass": 87
+   },
+   "failure_classes": {},
+   "stale_import_tasks": []
+  },
+  "quixbugs": {
+   "n": 50,
+   "status": {
+    "fail": 32,
+    "pass": 9,
+    "material_missing": 9
+   },
+   "failure_classes": {
+    "collection_error:missing_fixture_file": 31,
+    "no_tests_collected": 1
+   },
+   "stale_import_tasks": []
+  },
+  "ALL": {
+   "n": 311,
+   "status": {
+    "pass": 270,
+    "fail": 32,
+    "material_missing": 9
+   },
+   "failure_classes": {
+    "collection_error:missing_fixture_file": 31,
+    "no_tests_collected": 1
+   },
+   "stale_import_tasks": []
+  }
+ },
+ "rows": [
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0000",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0001",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0002",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0003",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0004",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0005",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0006",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0007",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0008",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0009",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0010",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0011",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0012",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0013",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0014",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0015",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0016",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0017",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0018",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0019",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0020",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0021",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0022",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0023",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0024",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0025",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0026",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0027",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0028",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0029",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0030",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0031",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0032",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0033",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0034",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0035",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0036",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0037",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0038",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0039",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0040",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0041",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0042",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0043",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0044",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0045",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0046",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0047",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0048",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0049",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0050",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0051",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0052",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0053",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0054",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0055",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0056",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0057",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0058",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0059",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0060",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0061",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0062",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0063",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0064",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0065",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0066",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0067",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0068",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0069",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0070",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0071",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0072",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0073",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0074",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0075",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0076",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0077",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0078",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0079",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0080",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0081",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0082",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0083",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0084",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0085",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0086",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 42
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0000",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0001",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0002",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0003",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0004",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0005",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0006",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0007",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0008",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0009",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0010",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0011",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0012",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0013",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0014",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0015",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0016",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0017",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0018",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0019",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0020",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0021",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0022",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0023",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0024",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0025",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0026",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0027",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0028",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0029",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0030",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0031",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0032",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0033",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0034",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0035",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0036",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0037",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0038",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0039",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0040",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0041",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0042",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0043",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0044",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0045",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0046",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0047",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0048",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0049",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0050",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0051",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0052",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0053",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0054",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0055",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0056",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0057",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0058",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0059",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0060",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0061",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0062",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0063",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0064",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0065",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0066",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0067",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0068",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0069",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0070",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0071",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0072",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0073",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0074",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0075",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0076",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0077",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0078",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0079",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0080",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0081",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0082",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0083",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0084",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0085",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0086",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 43
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0000",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0001",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0002",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0003",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0004",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0005",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0006",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0007",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0008",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0009",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0010",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0011",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0012",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0013",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0014",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0015",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0016",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0017",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0018",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0019",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0020",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0021",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0022",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0023",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0024",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0025",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0026",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0027",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0028",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0029",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0030",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0031",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0032",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0033",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0034",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0035",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0036",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0037",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0038",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0039",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0040",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0041",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0042",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0043",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0044",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0045",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0046",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0047",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0048",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0049",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0050",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0051",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0052",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0053",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0054",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0055",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0056",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0057",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0058",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0059",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0060",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0061",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0062",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0063",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0064",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0065",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0066",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0067",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0068",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0069",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0070",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0071",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0072",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0073",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0074",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0075",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0076",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0077",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0078",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0079",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0080",
+   "cross_file": true,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0081",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0082",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0083",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0084",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0085",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "synthetic",
+   "task_id": "synthetic__task_0086",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass",
+   "seed": 44
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__bitcount",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.13s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__breadth_first_search",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__breadth_first_search_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__bucketsort",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__depth_first_search",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__depth_first_search_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__detect_cycle",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__detect_cycle_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__find_first_in_sorted",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__find_in_sorted",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__flatten",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__gcd",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.15s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__get_factors",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__hanoi",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__is_valid_parenthesization",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__kheapsort",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__knapsack",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__kth",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__lcs_length",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__levenshtein",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__lis",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__longest_common_subsequence",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__max_sublist_sum",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__mergesort",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__minimum_spanning_tree",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__minimum_spanning_tree_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__next_palindrome",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__next_permutation",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__node",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 5,
+   "status": "fail",
+   "failure_class": "no_tests_collected",
+   "tail": "no tests ran in 0.06s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__pascal",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.13s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__possible_change",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__powerset",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.11s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__quicksort",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.11s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__reverse_linked_list",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__reverse_linked_list_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__rpn_eval",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_path_length",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_path_length_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_path_lengths",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_path_lengths_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_paths",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shortest_paths_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__shunting_yard",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.11s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__sieve",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__sqrt",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__subsequences",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__to_base",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.11s"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__topological_ordering",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [
+    "node"
+   ],
+   "rc": 0,
+   "status": "pass"
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__topological_ordering_test",
+   "cross_file": false,
+   "needs_quixbugs_support": false,
+   "stale_imports": [],
+   "status": "material_missing",
+   "missing": [
+    "test_cases"
+   ]
+  },
+  {
+   "set": "quixbugs",
+   "task_id": "quixbugs__wrap",
+   "cross_file": false,
+   "needs_quixbugs_support": true,
+   "stale_imports": [],
+   "rc": 2,
+   "status": "fail",
+   "failure_class": "collection_error:missing_fixture_file",
+   "tail": "1 error in 0.12s"
+  }
+ ]
+}
