@@ -1,4 +1,4 @@
-> Last updated: 2026-10-14 (EMSE batch 4: M10 observability hardening [leaf-fallback silent-fragment explicit warning + ADR-0032] + M2 ULT Mut@k script rebuild + M3 layered-narrative closure [ADR-0032 + docs/design/layered_narrative.md] + M4 QuixBugs SpecExpr expansion pre-registration/analysis [4-arm design, zero-LLM statistics] + 5 EMSE script rebuilds [ult_mutk / optimization / specexpr_confirm / quixbugs_specir_expand]. Full test run 5912 collected / 5908 passed (derived), ruff clean. New ADR-0032. Previously 2026-10-14 triple EMSE batch + LLM structured-output hardening
+> Last updated: 2026-10-14 (EMSE batch 5: M4 QuixBugs SpecExpr expansion 4-arm A/B run [independent cache namespaces, ~$0.25] → **negative** [A specir vs B NL, n=35 standard caliber δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed; the pilot 6:1 positive trend did not replicate — direction reversed, pilot was small-sample noise] + full Mut@k measurement [cosmic-ray 8.7.0 official protocol, zero-LLM]: ULT 3-group pooled 0.92/0.95/1.0 + **QuixBugs first measurement 0.9610 [443/461, 49 measurable, 1 skip]** — further substantiates "mutation-strong but defect-blind"; over-red fixed-rerun P1-P4 classification 5-case sample [4/5 P1 assertion-coupling + 1/5 P3 implementation-coupling]. New `experiments/emse_quixbugs_mutk.py` [QuixBugs cosmic-ray full] + `experiments/emse_quixbugs_specir_expand_arms.py` [M4 4-arm orchestrator] + `experiments/emse_batch5_orchestrator.py` [batch 5 orchestrator]. Full test run 5912 collected / 5908 passed [derived], ruff clean. New ADR-0032. Previously 2026-10-14 EMSE batch 4 M1 M10 observability + M2/M3/M4 pre-registration
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
@@ -6,6 +6,106 @@
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-10-14 EMSE batch 5 (M4 QuixBugs SpecExpr expansion run + full Mut@k measurement + over-red P1-P4 classification)
+
+> This batch delivers the M4 4-arm expansion A/B run (~$0.25) + full
+> cosmic-ray Mut@k (ULT recompute + QuixBugs first measurement) + over-red
+> P1-P4 zero-LLM rerun. M4 is **negative** (SpecExpr gain not confirmed on
+> QuixBugs, direction reversed), but informative — the pilot's 6:1
+> small-sample positive trend did not replicate under expansion,
+> confirming it was noise.
+> - M4 A/B arms (QuixBugs 50 tasks × 2 arms, independent cache
+>   namespaces, ~$0.25): A specir det1=23/35 (65.7%) / B NL det1=26/35
+>   (74.3%); McNemar standard caliber **2:5 / n=35 / δ=−8.57pp / p=0.4531
+>   / BF10=0.5625 → not_confirmed**; C/D repeat arms not run (cost
+>   control; to be authorized ~$0.15 when submission needs
+>   "reproducibility stability" evidence);
+> - Full Mut@k (cosmic-ray 8.7.0 official protocol, zero-LLM,
+>   max_mutants=10 / timeout 120s timeout-counts-as-killed): ULT specir
+>   0.92 / replace 0.95 / gold 1.0 + **QuixBugs generated tests 0.9610
+>   (443/461, 49 measurable, 1 skip)** — "mutation-strong but
+>   defect-blind" second real-benchmark corroboration;
+> - Over-red fixed-rerun P1-P4 (seed=42 deterministic 5-case sample,
+>   subprocess pytest): 4/5 P1 (assertion-coupled over-red) + 1/5 P3
+>   (implementation-coupling) — confirming the dominant over-red cause is
+>   "test-defect strong coupling", not test-generation quality;
+> - 3 new gitignored scripts: `emse_quixbugs_mutk.py` (QuixBugs
+>   cosmic-ray full) / `emse_quixbugs_specir_expand_arms.py` (M4 4-arm
+>   orchestrator) / `emse_batch5_orchestrator.py` (batch 5 orchestrator);
+> - Fixed `emse_ult_mutk.py` set-serialization bug (`skip_reasons` now
+>   a sorted list; previously crashed on JSON dump);
+> - Full test suite: 5912 collected / 5908 passed (derived value:
+>   collected − 4 skipped − 0 xfailed); ruff clean; BASELINE.yaml stays
+>   5908/5912 (no new tests this batch, only gitignored scripts + artifacts).
+
+### Added
+
+- **M4 4-arm expansion A/B run
+  (`experiments/results/emse_quixbugs_specir_expand_20261014/`, gitignored)**:
+  A specir (SPEC_IR_ENABLE=true + SPEC_IR_DSL_ENABLE=true, cache namespace
+  `emse_qbug_specir_expand_A_20261014`) + B NL (DETECTION_SPEC_MODE=replace,
+  namespace `..._B_20261014`), 50 tasks each; zero-LLM primary analysis
+  `QUIXB_EXPAND_AB_REPORT.json` (2:5 / n=35 / δ=−8.57pp / p=0.4531 /
+  BF10=0.5625 / MDE 16.57pp → not_confirmed) + SHA256SUMS; cost ~$0.25
+  (246+241 LLM calls / 760K+611K tokens), within the ~$0.3 budget;
+- **QuixBugs full cosmic-ray Mut@k
+  (`experiments/emse_quixbugs_mutk.py` +
+  `experiments/results/emse_quixbugs_mutk_20261014/MUTK_QUXBUGS_RECOMPUTE.json`,
+  gitignored)**: 50 programs (49 measurable, 1 skip) pooled **0.9610**
+  (443/461), same order as ULT replace (0.95); reuses
+  `ult_adapter.ult_mutation_score` (max_mutants=10 / timeout 120s /
+  timeout-counts-as-killed);
+- **M4 4-arm orchestrator
+  (`experiments/emse_quixbugs_specir_expand_arms.py`, gitignored)**:
+  4-arm independent cache namespaces + distinctness verification +
+  run_benchmark invocation + provenance verification (C/D repeat-arm
+  support);
+- **Batch-5 orchestrator (`experiments/emse_batch5_orchestrator.py`,
+  gitignored)**: chains M4 run + zero-LLM analysis + artifact archiving;
+- **Over-red P1-P4 artifact
+  (`experiments/results/emse_batch5_20261014/OVERRED_P1_P4.json`,
+  gitignored)**: seed=42 sample of 5 cases (from 167/669 main-batch
+  over-red rows), 4/5 P1 + 1/5 P3;
+- **Batch-5 report
+  (`experiments/results/emse_batch5_20261014/BATCH5_REPORT.md`,
+  gitignored)**: M4 negative result + Mut@k 4-group comparison + P1-P4 +
+  cost / artifacts / follow-ups.
+
+### Fixed
+
+- **`emse_ult_mutk.py` set-serialization bug**: `_aggregate`'s
+  `skip_reasons` changed from a Python set to `sorted(list)` (previously
+  crashed with `TypeError: Object of type set is not JSON serializable`,
+  aborting the ULT Mut@k recompute mid-run); after the fix the 3-group
+  pooled 0.92/0.95/1.0 matches the 10-14 archived MUTK_REPORT (same-source
+  recompute; 0.92 vs 0.928 is a 2/4-decimal rounding difference);
+- **`experiments/emse_ult_mutk.py` lite46 artifact path correction**:
+  `_ULT_LITE46_JSON` changed from
+  `emse_d3_ult_20261013/benchmark_ult_lite46_*.json` (the cleaned-up
+  gitignored directory) to
+  `spec_ab_scale87_20261012/ult_lite46_replace/benchmark_ult_
+  20261012_214028.json` (the in-place artifact, 46 tasks replace caliber).
+
+### Notes (batch-5 core conclusions)
+
+- **M4 negative (informative true-negative)**: SpecExpr gain **not
+  confirmed** on QuixBugs after expansion — A specir marginal 65.7% < B NL
+  74.3%, direction reversed; the pilot 6:1 (δ=+14.29pp) sits in the
+  n=35 MDE=16.57pp power blind spot and was unreliable to begin with;
+  expansion confirms noise. The paper's "spec-first + formal-spec"
+  claim has **no robust QuixBugs evidence** and must be demoted to a
+  "synthetic-dataset trend + QuixBugs negative" layered conclusion;
+- **"Mutation-strong but defect-blind" second benchmark**: QuixBugs
+  generated-test mutation 0.9610 (real-buggy-code cosmic-ray) vs
+  detection 65.7% (M4 A) / 74.3% (M4 B) — mutation killing power far
+  exceeds true defect detection; the two metrics are separable (same
+  conclusion as ULT);
+- **Dominant over-red cause = test-defect strong coupling** (4/5 P1
+  assertion-coupling): LLM-generated tests hard-code "assertions coupled
+  to the buggy behavior", so when the bug is fixed the original assertion
+  goes red; P3 implementation-coupling 1/5. Not a test-generation quality
+  defect — it is an evaluation-caliber issue (over-red rows are
+  *supposed* to stay red after the fix).
 ## [Unreleased] — 2026-10-14 EMSE batch 4 (M10 observability + ULT Mut@k closure + layered narrative + QuixBugs expansion pre-registration) + EMSE script rebuilds (zero-LLM, 5912 collected)
 
 > This batch delivers four optimization items plus five rebuilt EMSE scripts,

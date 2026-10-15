@@ -1,10 +1,86 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-14（EMSE 批次四：M1 M10 可观测性强化〔叶子回退静默片段显式告警 + ADR-0032〕+ M2 ULT Mut@k 脚本重建 + M3 分层叙事收口〔ADR-0032 + docs/design/layered_narrative.md〕+ M4 QuixBugs SpecExpr 扩样预注册/分析〔4 臂设计，零 LLM 统计量〕+ 5 个 emse 脚本重建〔ult_mutk / optimization / specexpr_confirm / quixbugs_specir_expand〕。全量测试 5912 collected / 5908 passed 推导，ruff 全绿。新增 ADR-0032。此前 2026-10-14 EMSE 批次三连 + LLM 结构化输出加固）
+> Last updated: 2026-10-14（EMSE 批次五：M4 QuixBugs SpecExpr 扩样 4 臂 A/B 实跑（独立 cache namespace，~$0.25）→ **阴性**（A specir vs B NL，n=35 标准口径 δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed；pilot 6:1 阳性趋势未复现，方向反转，pilot 系小样本波动）+ 全量 Mut@k 实测（cosmic-ray 8.7.0 官方口径，零 LLM）：ULT 三组 pooled 0.92/0.95/1.0 + **QuixBugs 首测 0.9610（443/461，49 可测 1 skip）**——进一步佐证「变异强但缺陷盲」；过红 fixed 复跑 P1-P4 分类 5 例抽样（4/5 P1 断言耦合 + 1/5 P3 实现耦合）。新增 `experiments/emse_quixbugs_mutk.py`（QuixBugs cosmic-ray 全量）+ `experiments/emse_quixbugs_specir_expand_arms.py`（M4 4 臂编排器）+ `experiments/emse_batch5_orchestrator.py`（批次五编排）。全量测试 5912 collected / 5908 passed（推导值），ruff 全绿。新增 ADR-0032。此前 2026-10-14 批次四 M1 M10 可观测性 + M2/M3/M4 预注册）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-14 EMSE 批次五（M4 QuixBugs SpecExpr 扩样实跑 + 全量 Mut@k 实测 + 过红 P1-P4 分类）
+
+> 本批次交付 M4 4 臂扩样的 A/B 实跑（~$0.25）+ 全量 cosmic-ray Mut@k（ULT 复算 +
+> QuixBugs 首测）+ 过红 P1-P4 零 LLM 复跑。M4 结果**阴性**（SpecExpr 在
+> QuixBugs 上未确认增益，方向反转），但信息性——pilot 的 6:1 小样本阳性趋势
+> 扩样后不复现，坐实"pilot 系波动"。
+> - M4 A/B 臂（QuixBugs 50 任务 × 2 臂，独立 cache namespace，~$0.25）：
+>   A specir det1=23/35（65.7%）/ B NL det1=26/35（74.3%）；McNemar 标准口径
+>   **2:5 / n=35 / δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed**；
+>   C/D 复跑臂未执行（控制成本，留待投稿补"复现稳定性"证据时再授权 ~$0.15）；
+> - 全量 Mut@k（cosmic-ray 8.7.0 官方口径，零 LLM，max_mutants=10 / timeout
+>   120s timeout 计 killed）：ULT specir 0.92 / replace 0.95 / gold 1.0 +
+>   **QuixBugs 生成测试 0.9610（443/461，49 可测 1 skip）**——「变异强但
+>   缺陷盲」第二真实基准佐证；
+> - 过红 fixed 复跑 P1-P4（seed=42 确定性抽样 5 例，子进程 pytest）：
+>   4/5 P1（断言耦合过红）+ 1/5 P3（实现耦合），坐实"过红主因 = 测试-缺陷
+>   强耦合"非测试生成质量缺陷；
+> - 新增 3 个 gitignored 脚本：`emse_quixbugs_mutk.py`（QuixBugs cosmic-ray
+>   全量）/ `emse_quixbugs_specir_expand_arms.py`（M4 4 臂编排）/
+>   `emse_batch5_orchestrator.py`（批次五编排）；
+> - 修复 `emse_ult_mutk.py` 的 set 序列化 bug（`skip_reasons` 改 sorted list，
+>   此前 JSON 落盘崩溃）；
+> - 全量测试 5912 collected / 5908 passed（推导值：collected − 4 skipped −
+>   0 xfailed）；ruff 全绿；BASELINE.yaml 保持 5908/5912（本批次无新增测试，
+>   仅 gitignored 脚本 + 工件）。
+
+### Added
+
+- **M4 4 臂扩样 A/B 实跑（`experiments/results/emse_quixbugs_specir_expand_20261014/`，
+  gitignored）**：A specir（SPEC_IR_ENABLE=true + SPEC_IR_DSL_ENABLE=true，
+  cache namespace `emse_qbug_specir_expand_A_20261014`）+ B NL
+  （DETECTION_SPEC_MODE=replace，namespace `..._B_20261014`），各 50 任务；
+  零 LLM 主分析 `QUIXB_EXPAND_AB_REPORT.json`（2:5 / n=35 / δ=−8.57pp /
+  p=0.4531 / BF10=0.5625 / MDE 16.57pp → not_confirmed）+ SHA256SUMS；
+  成本 ~$0.25（246+241 LLM 调用 / 760K+611K tokens），在 ~$0.3 预算内；
+- **QuixBugs 全量 cosmic-ray Mut@k（`experiments/emse_quixbugs_mutk.py` +
+  `experiments/results/emse_quixbugs_mutk_20261014/MUTK_QUXBUGS_RECOMPUTE.json`，
+  gitignored）**：50 程序（49 可测 1 skip）pooled **0.9610**（443/461），与
+  ULT replace（0.95）同量级；复用 `ult_adapter.ult_mutation_score`
+  （max_mutants=10 / timeout 120s / timeout 计 killed）；
+- **M4 4 臂编排器（`experiments/emse_quixbugs_specir_expand_arms.py`，
+  gitignored）**：4 臂独立 cache namespace + 互异验证 + run_benchmark 调用
+  + provenance 校验（C/D 复跑臂支持）；
+- **批次五编排器（`experiments/emse_batch5_orchestrator.py`，gitignored）**：
+  串联 M4 跑批 + 零 LLM 分析 + 产物归档；
+- **过红 P1-P4 工件（`experiments/results/emse_batch5_20261014/OVERRED_P1_P4.json`，
+  gitignored）**：seed=42 抽样 5 例（主批次 167/669 过红行），4/5 P1 + 1/5 P3；
+- **批次五报告（`experiments/results/emse_batch5_20261014/BATCH5_REPORT.md`，
+  gitignored）**：M4 阴性结果 + Mut@k 四组对照 + P1-P4 + 成本 / 工件 / 待办。
+
+### Fixed
+
+- **`emse_ult_mutk.py` set 序列化 bug**：`_aggregate` 的 `skip_reasons` 由
+  Python set 改为 `sorted(list)`（此前 JSON 落盘 `TypeError: Object of type
+  set is not JSON serializable`，导致 ULT Mut@k 复算脚本崩在半途）；修复后
+  三组 pooled 0.92/0.95/1.0 与 10-14 已归档 MUTK_REPORT 一致（同源复算，
+  四舍五入口径差异 0.92 vs 0.928）；
+- **`experiments/emse_ult_mutk.py` lite46 工件路径修正**：`_ULT_LITE46_JSON`
+  由 `emse_d3_ult_20261013/benchmark_ult_lite46_*.json`（已清理的 gitignored
+  目录）改为 `spec_ab_scale87_20261012/ult_lite46_replace/benchmark_ult_
+  20261012_214028.json`（在场工件，46 任务 replace 口径）。
+
+### Notes（批次五核心结论）
+
+- **M4 阴性（信息性真阴性）**：SpecExpr 在 QuixBugs 扩样后**未确认增益**
+  ——A specir 边际 65.7% < B NL 74.3%，方向反转；pilot 6:1（δ=+14.29pp）
+  落在 n=35 的 MDE=16.57pp 功效盲区，本就不可靠，扩样坐实波动。论文"规格
+  优先 + 形式化规约"主张在 QuixBugs 上**无稳健证据**，须降格为"synthetic
+  数据集趋势 + QuixBugs 阴性"分层结论；
+- **「变异强但缺陷盲」第二基准**：QuixBugs 生成测试 mutation 0.9610（真实
+  缺陷码 cosmic-ray）vs detection 65.7%（M4 A）/ 74.3%（M4 B）——mutation
+  杀伤力远超真实缺陷检出，两指标可分离（与 ULT 同结论）；
+- **过红主因 = 测试-缺陷强耦合**（4/5 P1 断言耦合）：LLM 生成测试把"与
+  bug 行为耦合的断言"写死，bug 修复后原断言反红；P3 实现耦合 1/5。非测试
+  生成质量缺陷，属评测口径问题（过红行本就该"修复后仍红"）。
 
 ## [Unreleased] — 2026-10-14 EMSE 批次四（M1 M10 可观测性 + M2 ULT Mut@k 收口 + M3 分层叙事 + M4 QuixBugs 扩样预注册）+ emse 脚本重建（零 LLM，全量 5912 collected）
 
