@@ -48,8 +48,7 @@ def _as_list(x: Any) -> list[float] | None:
     return None
 
 
-def cliffs_delta(a: list[float] | tuple[float, ...] | None,
-                 b: list[float] | tuple[float, ...] | None) -> float | None:
+def cliffs_delta(a: list[float] | tuple[float, ...] | None, b: list[float] | tuple[float, ...] | None) -> float | None:
     """计算 Cliff's delta（非参数效应量，Robinson 1992 / Tomczak & Dutton 2014）。
 
     定义（配对 / 独立样本通用）：
@@ -82,8 +81,7 @@ def cliffs_delta(a: list[float] | tuple[float, ...] | None,
     return round((gt - lt) / n, 4)
 
 
-def cohens_d(a: list[float] | tuple[float, ...] | None,
-             b: list[float] | tuple[float, ...] | None) -> float | None:
+def cohens_d(a: list[float] | tuple[float, ...] | None, b: list[float] | tuple[float, ...] | None) -> float | None:
     """计算 Cohen's d（参数化效应量，两组独立样本）。
 
     定义：
@@ -107,11 +105,10 @@ def cohens_d(a: list[float] | tuple[float, ...] | None,
     pooled = ((na - 1) * var_a + (nb - 1) * var_b) / (na + nb - 2)
     if pooled <= 0:
         return None  # 两组均常数 → 合并标准差 0，不除零
-    return round((statistics.mean(la) - statistics.mean(lb)) / (pooled ** 0.5), 4)
+    return round((statistics.mean(la) - statistics.mean(lb)) / (pooled**0.5), 4)
 
 
-def hedges_g(a: list[float] | tuple[float, ...] | None,
-             b: list[float] | tuple[float, ...] | None) -> float | None:
+def hedges_g(a: list[float] | tuple[float, ...] | None, b: list[float] | tuple[float, ...] | None) -> float | None:
     """计算 Hedges' g（Cohen's d 的小样本校正，n < 30 时更保守）。
 
     定义：
@@ -175,12 +172,15 @@ def paired_bootstrap_ci(
     n = len(la)
     rng = random.Random(seed)
     if stat_fn == "mean_diff":
+
         def _stat(s: list[float], t: list[float]) -> float:
             return statistics.mean(s) - statistics.mean(t)
     elif stat_fn == "proportion_diff":
+
         def _stat(s: list[float], t: list[float]) -> float:
             return (sum(1 for x in s if x >= 0.5) / len(s)) - (sum(1 for x in t if x >= 0.5) / len(t))
     elif stat_fn == "cliffs_delta":
+
         def _stat(s: list[float], t: list[float]) -> float:
             d = cliffs_delta(s, t)
             return d if d is not None else 0.0
@@ -228,7 +228,9 @@ def effect_size_summary(
         "cliffs_delta": cliffs_delta(la, lb),
         "cohens_d": cohens_d(la, lb),
         "hedges_g": hedges_g(la, lb),
-        "ci95_mean_diff": list(paired_bootstrap_ci(la, lb, "mean_diff")) if paired_bootstrap_ci(la, lb, "mean_diff") else None,
+        "ci95_mean_diff": list(paired_bootstrap_ci(la, lb, "mean_diff"))
+        if paired_bootstrap_ci(la, lb, "mean_diff")
+        else None,
         "n_a": len(la),
         "n_b": len(lb),
         "note": "paired design; bootstrap 95% CI (n_boot=1000, seed=42)",

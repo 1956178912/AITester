@@ -1,10 +1,128 @@
-> Last updated: 2026-10-15 (EMSE batch 6: SpecExpr DSL coverage improvement — colon/slices into the character gate + call whitelist +sum/set/bool/hasattr + attr whitelist +values/keys/items/get/isupper/islower/bit_length + lambda/walrus guardrails [no_assert_semantics, preventing always-true fake assertions]; zero-LLM: corpus = local Planner cache 719 entries / 607 deduplicated clauses [emse_dsl_diag3], before/after reconciliation = same-corpus controlled estimate 0.8847 → 0.9127 [+2.80pp, 17 recovered / 0 regressed]. Prompt layer synced: BNF gains a `<slice>` production, positives 7→10, negatives 5→6 [lambda]; whitelist terminals still rendered from the spec_expr_grammar_terminals single source of truth. Fixed spec_smt._EVAL_SAFE_FUNCS hardcoded drift [F14 family; now derived from _ALLOWED_CALL_NAMES]. Full test run 5953 collected / 5949 passed [derived], ruff/mypy clean. Previously 2026-10-14 batch 5 M4 negative + Mut@k + over-red P1-P4)
+> Last updated: 2026-10-15 (EMSE batch 7, zero-LLM): M4 C/D repeat-chain repair — three-mode CLI in the analysis script [explicit / --auto-map / --verify-provenance] + namespace arm-letter mapping + latest-artifact-per-arm selection in the orchestrator; after the repair, --auto-map reproduces the archived A/B decision values field-by-field on the real archived artifacts [2:5 / n=35 / δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed]; tests 40 cases [+25, including the strongest regression that reproduces the archived decision values]; EMSE submission material closure [checklist / caliber-label list / 8-question reviewer pre-mortem / artifact index, gitignored]. Full test run 5978 collected / 5974 passed [derived], ruff clean. Previously 2026-10-15 batch 6 DSL v4 coverage improvement 0.8847→0.9127)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-15 EMSE batch 7 (M4 C/D repeat-chain repair + submission material closure, zero-LLM)
+
+> This batch is zero-LLM (user constraint: "first skip projects that need LLM"):
+> repairs the wholesale breakage of the M4 C/D repeat orchestration chain +
+> submission-workflow closure. The C/D repeat-arm run itself (~$0.15) still
+> awaits authorization, but the chain is repaired and both the pre-gate and
+> the analysis entry are regression-locked — one command once authorized.
+> - **Root cause**: all three orchestration calls were broken — the arms
+>   orchestrator passed `--verify-provenance <paths>`, the batch5
+>   orchestrator passed `--arm-jsons <paths>`, while the analysis CLI only
+>   had `--specir/--nl/...` ⇒ argparse necessarily failed ⇒ the C/D repeat
+>   arm and analysis chain were irreproducible (an EMSE artifact
+>   reproducibility defect — the class an external reproducibility audit
+>   would catch);
+> - **Fix** (`experiments/emse_quixbugs_specir_expand.py`): three-mode CLI
+>   [explicit four-arm / `--auto-map` auto-mapping by cache-namespace arm
+>   letters A/B/C/D / `--verify-provenance` distinctness check with the exit
+>   code carrying the result]; `__main__` refactored into a testable
+>   `main(argv)`; arm-mapping helpers [namespace tokenization for arm
+>   letters + latest-mtime dedup per arm against rerun confusion];
+> - **Fix** (`experiments/emse_quixbugs_specir_expand_arms.py`): provenance
+>   verification changed from "the most recent 4 files" to "the latest
+>   artifact per arm letter" [the old selection pushed older arms out of the
+>   window on single-arm reruns / misreported duplicate namespaces when the
+>   same arm ran twice];
+> - **Fix** (`experiments/emse_batch5_orchestrator.py`): `--arm-jsons` →
+>   `--auto-map`;
+> - **Strongest regression**: after the repair, `--auto-map` reproduces the
+>   archived decision values field-by-field on the real archived A/B
+>   artifacts [n=35 / 2:5 / δ=−8.57pp / p=0.4531 / BF10=0.5625 /
+>   MDE=16.57pp → not_confirmed], identical to `QUIXB_EXPAND_AB_REPORT.json`;
+> - **Submission material closure**
+>   (`docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md`, gitignored
+>   submission-workflow internal): claim→artifact index [441 tracked
+>   artifacts + Docker reproduction entry], caliber-label list [8 number
+>   families with mandatory labels], 8-question reviewer pre-mortem
+>   [evidence strength / synthetic-benchmark validity / temp=0 caching /
+>   over-red attribution / coverage-detection / power / artifact
+>   reproducibility / DSL safety], 8-item mandatory-disclosure list,
+>   pre-submission gates, remaining authorization items;
+> - Tests +25 cases (`test_emse_quixbugs_specir_expand.py` 15→40):
+>   namespace extraction [missing/corrupt], arm-letter determination
+>   [parametrized 6 forms], mapping [same-arm mtime dedup], three CLI modes
+>   [normal / missing arm / mutual exclusion / explicit backward
+>   compatibility], orchestrator selector, archived decision-value
+>   reproduction [skipif artifacts absent];
+> - **Systemic CI breakage repaired (introduced in batch 4, invisible
+>   locally)**: four tracked test files [test_emse_optimization /
+>   test_emse_quixbugs_specir_expand / test_emse_specexpr_confirm /
+>   test_emse_ult_mutk] imported four gitignored emse scripts ⇒ on a fresh
+>   clone [CI `pytest tests/` / EMSE artifact reproduction] collection
+>   failed with ImportError [109 cases red]; locally everything was green
+>   because the scripts exist on disk, so no previous batch surfaced it.
+>   Fix: the five **contract-locked scripts with tracked tests** are
+>   force-added [emse_optimization / emse_quixbugs_specir_expand{,_arms} /
+>   emse_specexpr_confirm / emse_ult_mutk — scanned: no credentials, no
+>   absolute paths], the matching .gitignore entries are removed and a rule
+>   is established: "contract-locked scripts must be tracked with their
+>   tests"; fresh-clone equivalence verification [checkout-index export]:
+>   full collection 5978 with zero errors, 4 files 108 passed / 3 skipped
+>   [skips = optional deps + artifact skipif];
+> - **Three pre-existing CI format failures repaired as a consequence**
+>   [tracked but unformatted — `ruff format --check .` permanently red on a
+>   fresh clone]: experiments/stvr_statistical_analysis,
+>   experiments/ult_adapter, tests/test_llm_oms_leaf_fallback; together
+>   with this batch's newly tracked scripts, the whole repo is now
+>   **ruff check + format double-green**;
+> - Full test run 5978 collected / 5974 passed [derived: collected − 4
+>   skipped; this zero-LLM batch did not rerun the sandbox full suite —
+>   new tests are green in single-file runs]; ruff clean; env_budget
+>   unchanged.
+
+### Added
+
+- **M4 C/D repeat chain (repairable and executable)**: once authorized,
+  `python experiments/emse_quixbugs_specir_expand_arms.py --arms CD` runs
+  the repeat arms in one command [provenance pre-gate runs automatically],
+  and `--auto-map` zero-LLM analysis produces the repeat + merged
+  [A∪C vs B∪D] contrast — completing the submission's "reproducibility
+  stability" evidence;
+- **EMSE submission checklist (gitignored)**: caliber-label list +
+  8-question reviewer pre-mortem + artifact index + 8-item mandatory
+  disclosure list.
+
+### Fixed
+
+- **Three broken orchestration calls in the M4 chain**
+  [`--verify-provenance` / `--arm-jsons` did not exist in the analysis CLI
+  ⇒ argparse necessarily failed]: three-mode CLI + auto-mapping +
+  latest-artifact-per-arm selection; after the repair the archived A/B
+  artifacts reproduce the decision values field-by-field [locked by a
+  regression test].
+- **Systemic CI breakage (fresh-clone collection red)**: four tracked
+  tests imported four gitignored scripts [ModuleNotFoundError, 109 cases
+  red; invisible locally]. Five contract-locked scripts force-added +
+  .gitignore rule established; fresh-clone equivalence verification: full
+  collection 5978 with zero errors, 4 files 108 passed / 3 skipped.
+
+### Notes (batch-7 core conclusions)
+
+- The **engineering obstacle to the C/D repeat arms is cleared** (executable
+  upon ~$0.15 authorization); the only remaining LLM engineering is this
+  plus the D3 full Mut@k [6 weeks of compute, zero-LLM, can start in the
+  background];
+> - Lesson on reproducibility defects: an orchestrator calling a
+>   nonexistent CLI argument only surfaces in an **end-to-end run** or a
+>   **recompute against real artifacts** — full single-file/module test
+>   coverage once missed it too [the argparse failure happens across a
+>   subprocess boundary]. The archived-decision-value reproduction test
+>   [against real artifacts] is the permanent defense against this class.
+> - **A second, more insidious class**: tracked tests importing gitignored
+>   scripts — locally all green [scripts on disk] while a fresh clone is
+>   all red [CI / artifact reproduction]. Defense: fresh-clone equivalence
+>   verification [`git checkout-index` export + full collection] is now
+>   part of this batch's pre-commit checks; the .gitignore rule
+>   "contract-locked scripts must be tracked with their tests" is
+>   established.
 
 ## [Unreleased] — 2026-10-15 EMSE batch 6 (SpecExpr DSL coverage improvement: colon/slices + whitelist extensions + lambda/walrus guardrails, zero-LLM)
 

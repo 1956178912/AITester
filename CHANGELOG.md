@@ -1,10 +1,94 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-15（EMSE 批次六：SpecExpr DSL 覆盖率提升——冒号/切片入字符门 + 调用白名单 +sum/set/bool/hasattr + 属性白名单 +values/keys/items/get/isupper/islower/bit_length + lambda/海象护栏（no_assert_semantics，防恒真假断言）；零 LLM：语料=本地 Planner 缓存 719 条目/607 去重子句（emse_dsl_diag3），前后对账=同语料受控估计 0.8847→0.9127（+2.80pp，收复 17 条/回退 0 条）。提示层同步：BNF 增 <slice> 产生式、正例 7→10、反例 5→6（lambda），白名单终结符仍由 spec_expr_grammar_terminals 单一事实源渲染。修复 spec_smt._EVAL_SAFE_FUNCS 硬编码漂移（F14 同族，改从 _ALLOWED_CALL_NAMES 派生）。全量测试 5953 collected / 5949 passed（推导值），ruff/mypy 全绿。此前 2026-10-14 批次五 M4 阴性 + Mut@k + 过红 P1-P4）
+> Last updated: 2026-10-15（EMSE 批次七（零 LLM）：M4 C/D 复跑链修复——分析脚本三模式 CLI（显式/--auto-map/--verify-provenance）+ namespace 臂字母映射 + orchestrator 每臂最新工件选择，修复后 --auto-map 在真实归档 A/B 工件上逐字段复现定案值（2:5/n=35/δ=−8.57pp/p=0.4531/BF10=0.5625 → not_confirmed）；测试 40 例（+25，含归档定案值复现最强回归）；EMSE 投稿材料收口（checklist/口径标签清单/审稿人预演 8 问/工件索引，gitignored）。全量测试 5978 collected / 5974 passed（推导值），ruff 全绿。此前 2026-10-15 批次六 DSL v4 覆盖率提升 0.8847→0.9127）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-15 EMSE 批次七（M4 C/D 复跑链修复 + 投稿材料收口，零 LLM）
+
+> 本批次零 LLM（用户约束"先不考虑需要 LLM 的工程"）：修复 M4 C/D 复跑
+> 编排链的整体断裂 + 投稿工作流收口。C/D 复跑臂实跑本身（~$0.15）仍待
+> 授权，但链已修复、前置门与分析入口已回归锁定，授权后一条命令可跑。
+> - **根因**：M4 C/D 复跑编排链三处调用全部断裂——arms 编排器传
+>   `--verify-provenance <paths>`、batch5 编排器传 `--arm-jsons <paths>`，
+>   而分析脚本 CLI 只有 `--specir/--nl/...` ⇒ argparse 必失败 ⇒ C/D 复跑
+>   臂与分析链不可复现（EMSE artifact 复现性缺陷，外部复现审计会抓的一类）；
+> - **修复**（`experiments/emse_quixbugs_specir_expand.py`）：三模式 CLI
+>   （显式四臂 / `--auto-map` 按 cache namespace 臂字母 A/B/C/D 自动映射 /
+>   `--verify-provenance` 互异校验，退出码承载结果）；`__main__` 重构为
+>   可测 `main(argv)`；臂映射助手（namespace 分词取臂字母 + 同臂多文件取
+>   mtime 最新，防重跑混淆）；
+> - **修复**（`experiments/emse_quixbugs_specir_expand_arms.py`）：
+>   provenance 校验从"最近 4 个文件"改为"按臂字母选每臂最新工件"（原选法
+>   单臂重跑时旧臂被挤出窗口/同臂两次跑批误报重复 namespace）；
+> - **修复**（`experiments/emse_batch5_orchestrator.py`）：`--arm-jsons`
+>   → `--auto-map`；
+> - **最强回归**：修复后 `--auto-map` 在真实归档 A/B 工件上逐字段复现
+>   定案值（n=35 / 2:5 / δ=−8.57pp / p=0.4531 / BF10=0.5625 /
+>   MDE=16.57pp → not_confirmed），与 `QUIXB_EXPAND_AB_REPORT.json`
+>   完全一致；
+> - **投稿材料收口**（`docs/emse/EMSE_SUBMISSION_CHECKLIST_2026-10-15.md`，
+>   gitignored 投稿工作流内部件）：论断→工件索引（441 入库工件 + Docker
+>   复现入口）、口径标签清单（8 个数字族强制标签）、审稿人预演 8 问
+>   （证据强度/合成基准效度/temp=0 缓存/过红归因/覆盖率-检出/功效/
+>   artifact 复现/DSL 安全性）、必披露清单 8 项、提交前门禁、剩余授权项；
+> - 测试 +25 例（`test_emse_quixbugs_specir_expand.py` 15→40）：namespace
+>   提取（缺失/损坏）、臂字母判定（参数化 6 形态）、映射（同臂 mtime 去重）、
+>   CLI 三模式（正常/缺臂/互斥/显式向后兼容）、orchestrator 选择器、
+>   归档定案值复现（skipif 工件不在盘）；
+> - **修复系统性 CI 断裂（批次四引入，本地不可见）**：4 个入库测试文件
+>   （test_emse_optimization / test_emse_quixbugs_specir_expand /
+>   test_emse_specexpr_confirm / test_emse_ult_mutk）import 4 个被
+>   gitignore 的 emse 脚本 ⇒ fresh clone（CI `pytest tests/` / EMSE
+>   artifact 复现）收集即 ImportError（109 例全红）；本地因脚本在盘而
+>   全绿，故此前批次均未暴露。修复：5 个**有入库测试锁定契约**的脚本
+>   强制入库（emse_optimization / emse_quixbugs_specir_expand{,_arms} /
+>   emse_specexpr_confirm / emse_ult_mutk，扫过无凭证/无绝对路径），
+>   .gitignore 摘除对应条目并立规"契约锁定的脚本必须随测试入库"；
+>   fresh clone 等价验证（checkout-index 导出）：全量收集 5978 零错误、
+>   4 文件 108 passed / 3 skipped（跳过=可选依赖+工件 skipif）；
+> - **连带修复 3 个既有 CI 格式失败**（tracked 但未格式化，fresh clone
+>   的 `ruff format --check .` 恒红）：experiments/stvr_statistical_analysis、
+>   experiments/ult_adapter、tests/test_llm_oms_leaf_fallback；连同本批次
+>   新入库脚本一并格式化后**全仓 ruff check + format 双绿**；
+> - 全量测试 5978 collected / 5974 passed（推导值：collected − 4 skipped；
+>   本批次零 LLM 未重跑沙箱全量，新增测试单文件全绿）；ruff 全绿；
+>   env_budget 无新增。
+
+### Added
+
+- **M4 C/D 复跑链（修复后可执行）**：授权后
+  `python experiments/emse_quixbugs_specir_expand_arms.py --arms CD` 一条
+  命令跑复跑臂（provenance 前置门自动执行），`--auto-map` 零 LLM 分析产出
+  repeat + merged（A∪C vs B∪D）对比，补投稿"复现稳定性"证据；
+- **EMSE 投稿 checklist（gitignored）**：口径标签清单 + 审稿人预演 8 问
+  + 工件索引 + 必披露清单 8 项。
+
+### Fixed
+
+- **M4 编排链三处断裂调用**（`--verify-provenance` / `--arm-jsons` 均
+  不存在于分析 CLI ⇒ argparse 必失败）：三模式 CLI + 自动映射 + 每臂最新
+  工件选择；修复后归档 A/B 工件逐字段复现定案值（回归测试锁定）。
+- **系统性 CI 断裂（fresh clone 收集即红）**：4 个入库测试 import 4 个
+  gitignored 脚本（ModuleNotFoundError，109 例全红；本地不可见）。5 个
+  契约锁定脚本强制入库 + .gitignore 立规；fresh clone 等价验证全量收集
+  5978 零错误、4 文件 108 passed / 3 skipped。
+
+### Notes（批次七核心结论）
+
+- C/D 复跑臂的**工程障碍已清零**（授权 ~$0.15 后即可执行）；剩余 LLM
+  工程仅此一项 + D3 全量 Mut@k（6 周算力，零 LLM 可后台起）；
+- 复现性缺陷的教训：编排器调用不存在 CLI 参数的断裂，只有在**端到端
+  实跑**或**对真实工件复算**时暴露——单文件/单模块测试全覆盖也曾漏判
+  （argparse 失败发生在子进程边界）。归档定案值复现测试（对真实工件）
+  是此类断裂的永久防线；
+- **第二类复现性缺陷（更隐蔽）**：入库测试 import gitignored 脚本——
+  本地全绿（脚本在盘）而 fresh clone 全红（CI/artifact 复现场景）。
+  防线：fresh clone 等价验证（`git checkout-index` 导出后全量收集）
+  已并入本批次提交前检查；.gitignore 立规"有入库测试锁定契约的脚本
+  必须入库"。
 
 ## [Unreleased] — 2026-10-15 EMSE 批次六（SpecExpr DSL 覆盖率提升：冒号/切片 + 白名单扩容 + lambda/海象护栏，零 LLM）
 

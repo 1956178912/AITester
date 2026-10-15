@@ -137,9 +137,7 @@ def _cosmic_ray_base_cmd() -> list[str]:
     return [sys.executable, "-m", "cosmic_ray.cli"]
 
 
-def _write_cosmic_ray_config(
-    config_path: Path, module_name: str, test_file_name: str, timeout: float
-) -> None:
+def _write_cosmic_ray_config(config_path: Path, module_name: str, test_file_name: str, timeout: float) -> None:
     """写入 cosmic-ray TOML 配置（不设 ``operators`` 键 = 全变异体口径）。
 
     ``test-command`` 用当前解释器跑 pytest（与 cosmic-ray 同环境，保证
