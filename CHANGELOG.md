@@ -1,10 +1,83 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-14（EMSE 批次五：M4 QuixBugs SpecExpr 扩样 4 臂 A/B 实跑（独立 cache namespace，~$0.25）→ **阴性**（A specir vs B NL，n=35 标准口径 δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed；pilot 6:1 阳性趋势未复现，方向反转，pilot 系小样本波动）+ 全量 Mut@k 实测（cosmic-ray 8.7.0 官方口径，零 LLM）：ULT 三组 pooled 0.92/0.95/1.0 + **QuixBugs 首测 0.9610（443/461，49 可测 1 skip）**——进一步佐证「变异强但缺陷盲」；过红 fixed 复跑 P1-P4 分类 5 例抽样（4/5 P1 断言耦合 + 1/5 P3 实现耦合）。新增 `experiments/emse_quixbugs_mutk.py`（QuixBugs cosmic-ray 全量）+ `experiments/emse_quixbugs_specir_expand_arms.py`（M4 4 臂编排器）+ `experiments/emse_batch5_orchestrator.py`（批次五编排）。全量测试 5912 collected / 5908 passed（推导值），ruff 全绿。新增 ADR-0032。此前 2026-10-14 批次四 M1 M10 可观测性 + M2/M3/M4 预注册）
+> Last updated: 2026-10-15（EMSE 批次六：SpecExpr DSL 覆盖率提升——冒号/切片入字符门 + 调用白名单 +sum/set/bool/hasattr + 属性白名单 +values/keys/items/get/isupper/islower/bit_length + lambda/海象护栏（no_assert_semantics，防恒真假断言）；零 LLM：语料=本地 Planner 缓存 719 条目/607 去重子句（emse_dsl_diag3），前后对账=同语料受控估计 0.8847→0.9127（+2.80pp，收复 17 条/回退 0 条）。提示层同步：BNF 增 <slice> 产生式、正例 7→10、反例 5→6（lambda），白名单终结符仍由 spec_expr_grammar_terminals 单一事实源渲染。修复 spec_smt._EVAL_SAFE_FUNCS 硬编码漂移（F14 同族，改从 _ALLOWED_CALL_NAMES 派生）。全量测试 5953 collected / 5949 passed（推导值），ruff/mypy 全绿。此前 2026-10-14 批次五 M4 阴性 + Mut@k + 过红 P1-P4）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-15 EMSE 批次六（SpecExpr DSL 覆盖率提升：冒号/切片 + 白名单扩容 + lambda/海象护栏，零 LLM）
+
+> 本批次落地分层叙事收口后自述的下一优化方向——扩受限表达式 DSL 覆盖率
+> （非换数据集刷显著性）。全程零 LLM：语料=本地 Planner 缓存，对账=纯本地。
+> - 诊断（`experiments/emse_dsl_diag3.py`，工件 `emse_dsl_diag3_20261015/`）：
+>   719 个 Planner 缓存条目（含 `*_expr` 契约产物）→ 607 去重子句
+>   （QuixBugs 256 / 合成等其他 238 / ULT 113）；当前门（10-14 修复后）
+>   子句级可编译率 **88.5%**；unsupported_syntax 5 条**全部**是冒号形态
+>   （4 切片 + 1 条双引号字符串内冒号被字符门整体误拒）；算子级可收长尾
+>   sum×3 / set×3 / hasattr×2 / values×3 / isupper×1 / bit_length×1 /
+>   bool×1 / get×1；unknown_name 40 条全部是函数内部变量/模块级名
+>   （oracle 不绑定 ⇒ 正确拒绝，非 DSL 缺口）；
+> - v4 扩展（`src/specs/spec_ir_v2.py`，实测依据与风险级论证逐条入注释）：
+>   ① 冒号入字符白名单（切片 `text[::-1]` + 字符串内冒号 `"result: "`）；
+>   ② 配对护栏 `visit_Lambda` / `visit_NamedExpr` → `no_assert_semantics`
+>   违例 → 归因 unsupported_syntax（防 `assert lambda ...` 恒真假断言；
+>   归因闭合集合不变）；③ 调用白名单 +sum/set/bool/hasattr（纯内建，
+>   与 sorted/min/max 同风险级）；④ 属性白名单 +values/keys/items/get
+>   （字典读 API）/ isupper/islower（str is* 家族）/ bit_length（int 纯方法）；
+> - 提示层同步（`src/agents/planner.py`）：BNF 增 `<slice>` 产生式与注 4；
+>   自检①改"冒号只允许出现在切片与双引号字符串内"；正例 7→10（切片 /
+>   字典读 API / set 去重）、反例 5→6（lambda 护栏）；白名单终结符仍由
+>   `spec_expr_grammar_terminals()` 单一事实源渲染，提示-编译器零漂移；
+> - 前后对账（`experiments/emse_dsl_extend_recheck.py`，同语料受控估计）：
+>   子句级可编译率 **0.8847 → 0.9127（+2.80pp）**（quixbugs 0.8906 →
+>   0.9258，+3.52pp；ULT 0.885 不变——其拒绝全是模块链，合法）；
+>   收复 17 条 / 回退 0 条；
+> - 残余（下一轮候选，已写入工件 README）：被测函数自递归 6 条
+>   （fibonacci×4/gcd×1/factorial×1，需"目标函数名入绑定上下文"的语义
+>   扩展，单独设计）；域名属性 successor×5（任意属性链=注入面，建议
+>   Planner 提示侧收敛）；
+> - 测试 +41 例（切片 6 / 护栏 4 / 新白名单 11 / 刻意不收形态 7 /
+>   SMT 单事实源 1 / 迁移与注入行断言等）；ruff、mypy 全绿；
+>   env_budget 无新增（本批次零新环境变量）。
+
+### Added
+
+- **SpecExpr DSL v4 文法扩展（`src/specs/spec_ir_v2.py`）**：
+  - 字符门增冒号（切片 + 双引号字符串内冒号）——diag3 实测
+    unsupported_syntax 拒绝 5 条全部是冒号形态，LLM 无视提示"无冒号"
+    禁令高频自然写切片；
+  - `_WhitelistVisitor` 增 `visit_Lambda` / `visit_NamedExpr` 护栏
+    （`no_assert_semantics:` 违例族）——冒号放行的必要配对，防恒真
+    假断言；归因 unsupported_syntax，闭合集合 `SPEC_REJECT_REASONS`
+    不变；
+  - `_ALLOWED_CALL_NAMES` +sum/set/bool/hasattr（纯内建，物化暴露由
+    执行器 30s 超时兜底）；
+  - `_ALLOWED_ATTRS` +values/keys/items/get（字典读 API）/ isupper/
+    islower（str is* 家族补全）/ bit_length（int 纯方法）；
+- **SpecExpr 诊断与对账工具（gitignored）**：`experiments/emse_dsl_diag3.py`
+  （缓存语料提取 + 三口径归因）+ `experiments/emse_dsl_extend_recheck.py`
+  （常量摘除法精确复刻旧门，逐子句前后对账）；工件
+  `experiments/results/emse_dsl_diag3_20261015/` 与
+  `emse_dsl_extend_recheck_20261015/`（README 强制入库）。
+
+### Fixed
+
+- **`src/specs/spec_smt.py` `_EVAL_SAFE_FUNCS` 硬编码漂移（F14 同族）**：
+  原为硬编码元组，v3 收入 isinstance/range/enumerate 时漏同步，致这些
+  白名单调用的子句在 SMT 语义复核段被 `_Untranslatable` 静默丢弃；
+  改为从 `_ALLOWED_CALL_NAMES` 单一事实源派生，扩文法自动跟随
+  （回归测试锁定集合相等）。
+
+### Notes（批次六核心结论）
+
+- 编译器对"LLM 已形式化子句"的接受率 88.5% → **91.3%**——剩余拒绝多数
+  合法（内部变量 43 条 + 域名属性/模块链/自递归 10 条）；
+- 受控估计口径纪律：子句级对账≠端到端任务级增益（需 LLM 重跑，本批次
+  不做）；v4 只改度量/编译门，注入侧经 P0-3 单一事实源
+  （`_clause_is_compilable`）自动跟随（测试锁定切片 assert 行注入）；
+- 语料边界：只含"有 `*_expr` 产出的计划"，衡量编译器接受率，不衡量
+  LLM 形式化意愿（后者=spec_expr_coverage，正交指标）。
 
 ## [Unreleased] — 2026-10-14 EMSE 批次五（M4 QuixBugs SpecExpr 扩样实跑 + 全量 Mut@k 实测 + 过红 P1-P4 分类）
 

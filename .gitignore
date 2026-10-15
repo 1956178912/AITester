@@ -134,6 +134,8 @@ experiments/emse_quixbugs_specir_expand.py
 experiments/emse_quixbugs_mutk.py
 experiments/emse_quixbugs_specir_expand_arms.py
 experiments/emse_batch5_orchestrator.py
+experiments/emse_dsl_diag3.py
+experiments/emse_dsl_extend_recheck.py
 experiments/results/emse_*/
 
 # Private data and experiments

@@ -38,6 +38,22 @@ def test_flag_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
     assert spec_smt_enabled() is False
 
 
+def test_eval_safe_funcs_match_call_whitelist() -> None:
+    """_EVAL_SAFE_FUNCS 必须与 spec_ir_v2._ALLOWED_CALL_NAMES 逐字一致。
+
+    v4（2026-10-15 批次六）修复 F14 同族漂移：此处原是硬编码元组，v3 收入
+    isinstance/range/enumerate 时漏同步，致这些白名单调用的子句在语义复核段
+    被 _Untranslatable 静默丢弃。现从单一事实源派生——扩文法（如 v4 的
+    sum/set/bool/hasattr）自动跟随，本测试锁定不再漂移。
+    """
+    from src.specs.spec_ir_v2 import _ALLOWED_CALL_NAMES
+
+    assert set(spec_smt._EVAL_SAFE_FUNCS) == set(_ALLOWED_CALL_NAMES)
+    # 每个名字必须真的是可调用内建（双保险环境不含哑名）
+    for name, fn in spec_smt._EVAL_SAFE_FUNCS.items():
+        assert callable(fn), f"_EVAL_SAFE_FUNCS[{name}] 不可调用"
+
+
 def test_compile_oracle_flag_off_has_no_witness(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SPEC_SMT_ENABLE", raising=False)
     spec: dict[str, Any] = {"preconditions": ["n >= 5"], "postconditions": ["r >= 0"], "boundaries": []}

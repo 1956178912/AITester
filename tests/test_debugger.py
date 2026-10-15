@@ -732,7 +732,11 @@ class TestPositionAwareRepair:
         monkeypatch.setenv("POSITION_AWARE_REPAIR_ENABLE", "true")
         captured: dict = {}
 
-        def fake_call(query, temperature=None):
+        def fake_call(query, temperature=None, **kwargs):
+            # 2026-10-15 修复：调用点携带 json_mode=True（LLM_JSON_MODE，
+            # 2026-10-14 批次接线），fake 需接受该 kwarg——与
+            # test_debugger_llm_branches.py 同族模式（不影响本测试的
+            # query 内容断言）
             captured["query"] = query
             return json.dumps(
                 {
