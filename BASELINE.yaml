@@ -11,10 +11,10 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次九：基准 gold 材料自洽性审计〔synthetic 模板残留 import 修复 25/261 + ULT gold 归因诊断 + QuixBugs 测试级检出画像〕；`--collect-only` 实测 **6018**；全量实跑 **6013 passed / 1 failed / 4 skipped**（277.72s）——1 failed 为 `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；passed = collected − skipped = 6018 − 4 = **6014**（对账：6013 + 1 failed = 6014）。此前 2026-10-15 批次八 5978/5982）
+last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次九：基准 gold 材料自洽性审计〔synthetic 模板残留 import 修复 25/261 + ULT gold 归因诊断 + QuixBugs 测试级检出画像〕；`--collect-only` 实测 **6022**；全量实跑 **6017 passed / 1 failed / 4 skipped**（253.04s）——1 failed 为 `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；passed = collected − skipped = 6022 − 4 = **6018**（对账：6017 + 1 failed = 6018）。此前 2026-10-15 批次八 5978/5982）
 
 tests:
-  total_passed: 6014          # 全量 pytest tests/（2026-10-15 批次九：实跑 6013 passed / 1 failed 全定性〔TestBaselineNumbersConsistency 自指一致性，本字段刷新后转绿〕/ 4 skipped；--collect-only 实测 **6018**；passed = collected − skipped = 6018 − 4 = **6014**〔对账 6013 + 1 failed = 6014〕。上一批 5978/5982 → 本批 6014/6018〔+36：批次九新增测试（gold 自洽性审计 1 + 测试级检出画像 + ULT gold 归因诊断 + 判别式回归 1）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 6018          # 全量 pytest tests/（2026-10-15 批次九：实跑 6017 passed / 1 failed 全定性〔TestBaselineNumbersConsistency 自指一致性，本字段刷新后转绿〕/ 4 skipped；--collect-only 实测 **6022**；passed = collected − skipped = 6022 − 4 = **6018**〔对账 6017 + 1 failed = 6018〕。上一批 5978/5982 → 本批 6018/6022〔+40：批次九新增测试（gold 自洽性审计 1 + 测试级检出画像 23 + ULT gold 归因诊断 16 + 其他批次九测试）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
