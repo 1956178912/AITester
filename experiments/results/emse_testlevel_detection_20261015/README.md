@@ -45,7 +45,7 @@ AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/e
 全部 measured 字段来自上面那条完整跑批命令的工件）：
 
 ```bash
-AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py --reuse-json experiments/results/emse_testlevel_detection_20261015/TESTLEVEL_DETECTION.json --independent-check --out experiments/results/emse_testlevel_detection_20261015
+AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py --reuse-json experiments/results/emse_testlevel_detection_20261015/TESTLEVEL_DETECTION.json --independent-check --out experiments/results/emse_testlevel_detection_20261015 --cap-seconds 30 --jobs 1
 ```
 
 ### 1.1 来源工件（本次实际使用，含 sha256）
@@ -240,30 +240,45 @@ AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/e
 > 这说明任务级配对结论不仅样本小，而且**对「不可测」的记法敏感**；替代口径仅供敏感性披露，
 > 不作为本件或论文的主口径。
 
-### 4.6 任务聚类「计数 vs 占比」方向不一致的根因：**套件规模混淆**（measured，批次九补充核验）
+### 4.6 任务聚类「计数 vs 占比」方向不一致的根因：**套件规模混淆**（measured）
 
-§4.3 表中 primary 对比出现「计数方向 +0.1707（SpecExpr 多）vs 占比方向 −0.0289（NL 多）」
-的不一致。本节能性核验结论：**这是套件规模（生成测试数量）差异造成的混淆，不是度量矛盾**。
+§4.3 表中 primary 对比出现「计数方向为正（SpecExpr 多）vs 占比方向为负（NL 多）」
+的不一致。本节由逐任务计数导出其根因：**套件规模（生成测试数量）差异造成的混淆**，
+不是度量矛盾。
 
-| 量（primary A_specir vs B_nl，共同 41 任务） | A_specir | B_nl | 差 |
+**arm_A_specir vs arm_B_nl**（共同 41 任务）
+
+| 量 | arm_A_specir | arm_B_nl | 差 |
 |---|---|---|---|
 | 可分类测试总数 | **920** | **795** | +125（**+15.7%**） |
 | 每任务平均可分类测试数 | **22.4** | **19.4** | +3.0 |
-| Σf2p（阈值单位=测试计数） | 299 | 292 | +7 |
-| f2p 率（归一后） | **0.3250** | **0.3673** | **−4.23pp（NL 更高）** |
+| Σf2p（计数尺度） | 299 | 292 | +7 |
+| f2p 率（归一后） | **0.3250** | **0.3673** | **-4.23pp** |
+| Δf2p 逐任务均值 | 计数 **+0.1944** | 占比 **-0.0289** | 占比口径下 NL 更多 18 : SpecExpr 更多 16 |
 
-- 计数尺度比较的是「两臂各自生成的测试数量」，而 SpecExpr 臂系统性生成更多测试
-  （+15.7%）⇒ 计数口径**结构上偏向生成量大的臂**，其 +0.17 不代表检出能力更强；
-- 按规模归一后为 −0.0254（逐任务 f2p 分数均值），逐任务方向计数 **NL 更多 18 : SpecExpr 更多 16**（并列 7），
-  与合并口径 δ=−1.77pp / 任务聚类 merged 平均 −0.0393 同向；
-- 因此 §4.6 结论中「primary 任务聚类方向反向」的表述**不成立**：正确读法是
-  「primary 的计数方向由套件规模驱动，归一后与其余口径一致（均无正效应）」。
+**arm_C_specir_repeat vs arm_D_nl_repeat**（共同 41 任务）
+
+| 量 | arm_C_specir_repeat | arm_D_nl_repeat | 差 |
+|---|---|---|---|
+| 可分类测试总数 | **811** | **826** | -15（**-1.8%**） |
+| 每任务平均可分类测试数 | **19.8** | **20.1** | -0.4 |
+| Σf2p（计数尺度） | 284 | 343 | -59 |
+| f2p 率（归一后） | **0.3502** | **0.4153** | **-6.51pp** |
+| Δf2p 逐任务均值 | 计数 **-1.6389** | 占比 **-0.0496** | 占比口径下 NL 更多 20 : SpecExpr 更多 13 |
+
+
+> 读法：计数尺度比较的是「两臂各自生成的测试数量」，而两臂**生成量本身不同**
+> （primary 对 A 比 B 多 +15.7%；repeat 对 C 比 D 少 −1.8%）⇒ 计数口径被套件规模
+> 混淆，**其方向可随生成量差异而翻转**（primary 对即由 +0.19 翻为 −0.03），不等于
+> 检出能力差异；按规模归一后两对同向（均无正效应，NL 略高）。因此原「primary 任务
+> 聚类方向反向」的表述**不成立**。
 
 > **对论文的措辞要求**：跨臂比较**不得**使用「f2p 绝对计数」作因变量（未控生成量）；
-> 若报告计数，必须同时给出可分类测试总数或改用占比/率；本件 §4.3 的 Δf2p(计数) 列
-> 仅作描述性补充，判定以占比与任务级二值口径为准。
+> 若报告计数，必须同时给出可分类测试总数或改用占比/率。§4.3 的 Δf2p(计数) 列仅作
+> 描述性补充，判定以占比与任务级二值口径为准。
 
 ### 4.7 结论（逐条标注支撑口径）
+
 - （measured）pooled 122 个任务级检出中 4 个（3.3%）由**单个**测试函数扛下；det1 套件平均 f2p = 9.3033（占其可分类测试 39.75%）。
 - （measured）pooled 盲测质量 p2p=2530 vs f2p=1544：62.1% 的（p2p+f2p）测试不携带任何缺陷检出信号；f2f（在正确代码上失败）率 0.0305。
 - （computed）任务级 primary 复现：2:5，n=35，δ=-8.57pp，p=0.4531，BF10=0.5625 → 判定 `not_confirmed`（与既有结论一致）。
@@ -784,8 +799,8 @@ collecting ... collected 41 items
 
 | 任务 | buggy rc | buggy pytest 汇总行 | 工件 buggy(pass/fail) | fixed rc | fixed pytest 汇总行 | 工件 fixed(pass/fail) | 判定 |
 |---|---|---|---|---|---|---|---|
-| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in 0.08s =============================================` | 9/37 | 0 | `========================================================================================== 46 passed in 0.07s ==================================================` | 46/0 | **match** |
-| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in 0.09s =============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in 0.07s =============================================` | 22/11 | **match** |
+| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in <t>s ==============================================` | 9/37 | 0 | `========================================================================================== 46 passed in <t>s ===================================================` | 46/0 | **match** |
+| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in <t>s ==============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in <t>s ==============================================` | 22/11 | **match** |
 | `quixbugs50_batch5/quixbugs__bitcount` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | **reproduced_timeout** |
 
 > `match` = pytest 自身汇总行计数与工件逐测试表推出的该侧 (pass, fail+error) 逐位相等；

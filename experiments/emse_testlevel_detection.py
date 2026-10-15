@@ -91,7 +91,6 @@ from experiments.emse_optimization import (  # noqa: E402
     power_at_delta,
 )
 from experiments.emse_quixbugs_specir_expand import (  # noqa: E402
-    arm_letter_for_path,
     bayes_factor_10,
     build_analysis,
     extract_cache_namespace,
@@ -166,7 +165,7 @@ def _quantile(sorted_vals: list[float], q: float) -> float | None:
     if len(sorted_vals) == 1:
         return round(float(sorted_vals[0]), 4)
     pos = q * (len(sorted_vals) - 1)
-    lo = int(math.floor(pos))
+    lo = math.floor(pos)
     hi = min(lo + 1, len(sorted_vals) - 1)
     frac = pos - lo
     return round(float(sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac), 4)
@@ -220,7 +219,7 @@ def wilcoxon_signed_rank(diffs: list[float]) -> dict[str, Any]:
     if n == 0:
         return {"n_nonzero": 0, "w_plus": None, "p_exact": None, "p_normal_approx": None, "note": "全为零差"}
     ranks = _rank_abs(d)
-    r2 = [int(round(2 * r)) for r in ranks]
+    r2 = [round(2 * r) for r in ranks]
     total2 = sum(r2)
     dp = [0.0] * (total2 + 1)
     dp[0] = 1.0
@@ -228,7 +227,7 @@ def wilcoxon_signed_rank(diffs: list[float]) -> dict[str, Any]:
         for s in range(total2, r - 1, -1):
             if dp[s - r]:
                 dp[s] += dp[s - r]
-    w_plus2 = sum(r for r, x in zip(r2, d) if x > 0)
+    w_plus2 = sum(r for r, x in zip(r2, d, strict=False) if x > 0)
     lo = min(w_plus2, total2 - w_plus2)
     p_exact = min(2.0 * sum(dp[: lo + 1]) / (2.0**n), 1.0)
     mean = sum(ranks) / 2.0
@@ -272,7 +271,9 @@ def discover_sources(only: list[str] | None = None) -> list[dict[str, Any]]:
     if only:
         keep = {s.strip() for s in only}
         sources = [
-            s for s in sources if s["label"] in keep or s["arm_letter"] in keep or ("batch5" in keep and s["kind"] == "batch5")
+            s
+            for s in sources
+            if s["label"] in keep or s["arm_letter"] in keep or ("batch5" in keep and s["kind"] == "batch5")
         ]
     for s in sources:
         s["sha256"] = _sha256_file(s["path"])
@@ -335,9 +336,7 @@ def _fold_plugin_records(path: Path, module: str) -> dict[str, str]:
         phases.setdefault(node, {})[str(rec.get("when") or "")] = str(rec.get("outcome") or "")
     out: dict[str, str] = {}
     for node, ph in phases.items():
-        if ph.get("setup") == "failed":
-            out[node] = "error"
-        elif "call" not in ph:
+        if ph.get("setup") == "failed" or "call" not in ph:
             out[node] = "error"
         elif ph["call"] == "skipped":
             out[node] = "skip"
@@ -429,8 +428,10 @@ def run_side(
             "n_nodeids_verbose": len(verbose_map),
             "parse_agree_n": len(shared),
             "parse_mismatch": mismatch,
-            "outcomes": plugin_map if plugin_map else verbose_map,
-            "exec_error_heuristic": _looks_like_test_execution_error(-9 if timed_out else int(res.returncode), stdout + "\n" + stderr),
+            "outcomes": plugin_map or verbose_map,
+            "exec_error_heuristic": _looks_like_test_execution_error(
+                -9 if timed_out else int(res.returncode), stdout + "\n" + stderr
+            ),
             "stdout_sha256": _sha256_text(stdout),
             "stdout_tail": "\n".join(stdout.strip().splitlines()[-12:])[:2000],
             "stderr_tail": "\n".join(stderr.strip().splitlines()[-6:])[:1200],
@@ -449,26 +450,29 @@ def _n_ast_test_defs(code: str) -> int:
         tree = ast.parse(code)
     except SyntaxError:
         return -1
-    return sum(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_") for n in ast.walk(tree))
+    return sum(
+        isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test_") for n in ast.walk(tree)
+    )
 
 
-def classify_tests(module: str, buggy: dict[str, Any], fixed: dict[str, Any]) -> tuple[list[dict[str, str]], dict[str, int]]:
+def classify_tests(
+    module: str, buggy: dict[str, Any], fixed: dict[str, Any]
+) -> tuple[list[dict[str, str]], dict[str, int]]:
     """逐测试分类（只用 node id 两侧都出现的测试进四分类，其余记 other）。"""
     b_map = buggy.get("outcomes") or {}
     f_map = fixed.get("outcomes") or {}
     b_usable = bool(b_map) and not buggy["timed_out"]
     f_usable = bool(f_map) and not fixed["timed_out"]
     if not b_usable or not f_usable:
-        rows = []
-        for node in sorted(set(b_map) | set(f_map)):
-            rows.append(
-                {
-                    "node": node,
-                    "buggy": b_map.get(node, "unavailable"),
-                    "fixed": f_map.get(node, "unavailable"),
-                    "cls": "other",
-                }
-            )
+        rows = [
+            {
+                "node": node,
+                "buggy": b_map.get(node, "unavailable"),
+                "fixed": f_map.get(node, "unavailable"),
+                "cls": "other",
+            }
+            for node in sorted(set(b_map) | set(f_map))
+        ]
         return rows, {"f2p": 0, "p2p": 0, "f2f": 0, "p2f": 0, "other": len(rows)}
     rows = []
     counts = {c: 0 for c in CLASSES}
@@ -493,7 +497,9 @@ def classify_tests(module: str, buggy: dict[str, Any], fixed: dict[str, Any]) ->
     return rows, counts
 
 
-def suite_class(counts: dict[str, int], buggy: dict[str, Any], fixed: dict[str, Any], rows: list[dict[str, str]]) -> str:
+def suite_class(
+    counts: dict[str, int], buggy: dict[str, Any], fixed: dict[str, Any], rows: list[dict[str, str]]
+) -> str:
     """套件级标签（互斥，判定顺序固定）。"""
     if buggy["timed_out"] or fixed["timed_out"]:
         return "timeout"
@@ -532,7 +538,7 @@ def run_source(
             skipped_no_gold.append(tid)
             continue
         task = gold[tid]
-        module, gold_tests, fixed_raw = _extract_gold_material(task) or ("", "", "")
+        module, gold_tests, _fixed_raw = _extract_gold_material(task) or ("", "", "")
         fixed_code = _gold_fixed_code(task)
         buggy_code = str(getattr(task, "instance_code", "") or "")
         gen_test = str(row.get("generated_test") or "")
@@ -579,7 +585,6 @@ def run_source(
         fixed = run_side(module, fixed_code, gen_test, cap_seconds=cap_seconds)
         tests, counts = classify_tests(module, buggy, fixed)
         b_map = buggy.get("outcomes") or {}
-        f_map = fixed.get("outcomes") or {}
         n_classifiable = sum(1 for t in tests if t["cls"] != "other")
         # f2p 的 buggy 侧相位：call 相位失败（断言失败**或**被测代码抛出的未捕获异常，
         # 如 IndexError/TypeError）vs setup/teardown 异常（夹具/清理阶段失败）
@@ -594,9 +599,7 @@ def run_source(
             f_rc = int(fixed["rc"])
             # 与 _compute_detection_rate 同规则（执行错误判据用**全量**输出算出的
             # exec_error_heuristic，不用被截断的 tail）
-            if b_rc == 0 or buggy["exec_error_heuristic"]:
-                reproduced = 0.0
-            elif f_rc != 0 or fixed["exec_error_heuristic"]:
+            if b_rc == 0 or buggy["exec_error_heuristic"] or f_rc != 0 or fixed["exec_error_heuristic"]:
                 reproduced = 0.0
             else:
                 reproduced = 1.0
@@ -673,7 +676,6 @@ def run_source(
 # ─── 聚合指标（Step 2）────────────────────────────────────────────────
 def aggregate_source(run: dict[str, Any]) -> dict[str, Any]:
     """单源聚合：计数、比率、分布、换算表、对账、无数据任务清单。"""
-    tasks = [t for t in run["tasks"] if t["suite_class"] != "material_missing"]
     ran = [t for t in run["tasks"] if t["suite_class"] != "material_missing"]
     totals = {c: sum(t["counts"][c] for t in ran) for c in CLASSES}
     n_classifiable = sum(t["n_classifiable"] for t in ran)
@@ -720,7 +722,9 @@ def aggregate_source(run: dict[str, Any]) -> dict[str, Any]:
         "n_suites_run": len(ran),
         "n_tasks_skipped_no_gold": len(run["skipped_no_gold"]),
         "wall_s": run["wall_s"],
-        "suite_class_counts": {k: sum(1 for t in ran if t["suite_class"] == k) for k in sorted({t["suite_class"] for t in ran})},
+        "suite_class_counts": {
+            k: sum(1 for t in ran if t["suite_class"] == k) for k in sorted({t["suite_class"] for t in ran})
+        },
         "class_totals": totals,
         "n_classifiable_total": n_classifiable,
         "n_union_total": n_union,
@@ -766,18 +770,20 @@ def aggregate_source(run: dict[str, Any]) -> dict[str, Any]:
             "n_suites_with_f2f": sum(1 for t in ran if t["counts"]["f2f"] > 0),
             "f2f_total_over_suites": round(totals["f2f"] / len(ran), 4) if ran else None,
             "n_suites_green_on_fixed_rc0": sum(1 for t in ran if t["fixed"]["rc"] == 0),
-            "suite_green_rate_on_fixed": round(sum(1 for t in ran if t["fixed"]["rc"] == 0) / len(ran), 4) if ran else None,
+            "suite_green_rate_on_fixed": round(sum(1 for t in ran if t["fixed"]["rc"] == 0) / len(ran), 4)
+            if ran
+            else None,
             "n_suites_green_on_buggy_rc0": sum(1 for t in ran if t["buggy"]["rc"] == 0),
-            "suite_green_rate_on_buggy": round(sum(1 for t in ran if t["buggy"]["rc"] == 0) / len(ran), 4) if ran else None,
+            "suite_green_rate_on_buggy": round(sum(1 for t in ran if t["buggy"]["rc"] == 0) / len(ran), 4)
+            if ran
+            else None,
         },
         "inverted_mass": {
             "p2f": totals["p2f"],
             "n_suites_with_p2f": sum(1 for t in ran if t["counts"]["p2f"] > 0),
         },
         "f2p_phase_split": {
-            "call_phase_failed_on_buggy": sum(
-                t.get("f2p_call_phase", t.get("f2p_assertion_level", 0)) for t in ran
-            ),
+            "call_phase_failed_on_buggy": sum(t.get("f2p_call_phase", t.get("f2p_assertion_level", 0)) for t in ran),
             "setup_or_teardown_error_on_buggy": sum(
                 t.get("f2p_setup_teardown_error", t.get("f2p_error_level", 0)) for t in ran
             ),
@@ -800,13 +806,15 @@ def aggregate_source(run: dict[str, Any]) -> dict[str, Any]:
             "n_plugin_verbose_agreements": agree,
             "n_mismatches": parse_mismatch_total,
             "n_sides_verbose_fallback": sum(
-                1 for t in ran if t["buggy"]["parser"] == "verbose_fallback" or t["fixed"]["parser"] == "verbose_fallback"
+                1
+                for t in ran
+                if t["buggy"]["parser"] == "verbose_fallback" or t["fixed"]["parser"] == "verbose_fallback"
             ),
-            "n_sides_no_parser": sum(1 for t in ran if t["buggy"]["parser"] == "none" or t["fixed"]["parser"] == "none"),
+            "n_sides_no_parser": sum(
+                1 for t in ran if t["buggy"]["parser"] == "none" or t["fixed"]["parser"] == "none"
+            ),
         },
-        "material_mismatch_task_ids": [
-            t["task_id"] for t in ran if any(t["material_mismatch"].values())
-        ],
+        "material_mismatch_task_ids": [t["task_id"] for t in ran if any(t["material_mismatch"].values())],
     }
 
 
@@ -826,8 +834,7 @@ def aggregate_pooled(runs: list[dict[str, Any]], per_source: list[dict[str, Any]
         "n_sources": len(runs),
         "n_suites_run": len(all_tasks),
         "suite_class_counts": {
-            k: sum(1 for t in all_tasks if t["suite_class"] == k)
-            for k in sorted({t["suite_class"] for t in all_tasks})
+            k: sum(1 for t in all_tasks if t["suite_class"] == k) for k in sorted({t["suite_class"] for t in all_tasks})
         },
         "class_totals": totals,
         "n_classifiable_total": n_classifiable,
@@ -898,14 +905,20 @@ def aggregate_pooled(runs: list[dict[str, Any]], per_source: list[dict[str, Any]
         "n_no_pertest_data": sum(1 for t in all_tasks if t["n_union"] == 0),
         "no_pertest_data_task_ids": sorted({t["task_id"] for t in all_tasks if t["n_union"] == 0}),
         "parser_crosscheck": {
-            "n_plugin_verbose_agreements": sum(t["buggy"]["parse_agree_n"] + t["fixed"]["parse_agree_n"] for t in all_tasks),
-            "n_mismatches": sum(len(t["buggy"]["parse_mismatch"]) + len(t["fixed"]["parse_mismatch"]) for t in all_tasks),
+            "n_plugin_verbose_agreements": sum(
+                t["buggy"]["parse_agree_n"] + t["fixed"]["parse_agree_n"] for t in all_tasks
+            ),
+            "n_mismatches": sum(
+                len(t["buggy"]["parse_mismatch"]) + len(t["fixed"]["parse_mismatch"]) for t in all_tasks
+            ),
             "n_sides_verbose_fallback": sum(
                 1
                 for t in all_tasks
                 if t["buggy"]["parser"] == "verbose_fallback" or t["fixed"]["parser"] == "verbose_fallback"
             ),
-            "n_sides_no_parser": sum(1 for t in all_tasks if t["buggy"]["parser"] == "none" or t["fixed"]["parser"] == "none"),
+            "n_sides_no_parser": sum(
+                1 for t in all_tasks if t["buggy"]["parser"] == "none" or t["fixed"]["parser"] == "none"
+            ),
         },
         "task_level_reconciliation": {
             "counts": _merge_reconciliation(all_tasks),
@@ -1038,7 +1051,8 @@ def task_clustered_pair(run_x: dict[str, Any], run_y: dict[str, Any], label_x: s
             b_neg += 1
         if ix[tid]["n_classifiable"] and iy[tid]["n_classifiable"]:
             dfrac.append(
-                ix[tid]["counts"]["f2p"] / ix[tid]["n_classifiable"] - iy[tid]["counts"]["f2p"] / iy[tid]["n_classifiable"]
+                ix[tid]["counts"]["f2p"] / ix[tid]["n_classifiable"]
+                - iy[tid]["counts"]["f2p"] / iy[tid]["n_classifiable"]
             )
     wil = wilcoxon_signed_rank(dcount)
     n_tasks = len(common)
@@ -1223,6 +1237,9 @@ def select_handcheck(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 _PYTEST_SUMMARY_RE = re.compile(r"(\d+)\s+(failed|passed|error|errors|skipped|xfailed|xpassed|deselected)")
+# R2：pytest 汇总行尾部耗时（`in 0.09s` / `in 1.23s`）——运行时时延，
+# 不可复现，渲染前归一化为 `<t>`（工件复现性要求）。
+_ELAPSED_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
 
 
 def independent_check(
@@ -1293,7 +1310,13 @@ def independent_check(
                 entry["sides"][side] = {
                     "rc": None if timed_out else res.returncode,
                     "timed_out": timed_out,
-                    "pytest_summary_line": "(超时终止，无 pytest 汇总行)" if timed_out else last.strip()[:160],
+                    # R2（2026-10-15）：pytest 汇总行尾部的 `in 0.09s` 是运行时时延，
+                    # **本质不可复现**（同机两次运行即不同）⇒ 渲染前归一化为 `<t>`，
+                    # 使本件的独立复核表在重复运行下逐字节稳定（工件复现性硬要求）。
+                    # 计数（failed/passed）不受影响，仍是实测值。
+                    "pytest_summary_line": (
+                        "(超时终止，无 pytest 汇总行)" if timed_out else _ELAPSED_RE.sub("in <t>s", last.strip())[:160]
+                    ),
                     "last_output_line_before_kill": last.strip()[:160] if timed_out else "",
                     "pytest_counts": counted,
                     "artifact_pass": artifact_pass,
@@ -1334,12 +1357,12 @@ def render_handcheck(hc: dict[str, Any], max_lines: int = 60) -> list[str]:
         f"node ids={t['fixed']['n_nodeids_plugin']}（-v 解析={t['fixed']['n_nodeids_verbose']}）"
         f" 解析器={t['fixed']['parser']}",
         "",
-        "**原始 `pytest -v` 输出（buggy 侧，节选末尾 %d 行）**：" % max_lines,
+        f"**原始 `pytest -v` 输出（buggy 侧，节选末尾 {max_lines} 行）**：",
         "",
         "```text",
     ]
     lines += [ln for ln in t["buggy_stdout"].strip().splitlines()[-max_lines:]]
-    lines += ["```", "", "**原始 `pytest -v` 输出（fixed 侧，节选末尾 %d 行）**：" % max_lines, "", "```text"]
+    lines += ["```", "", f"**原始 `pytest -v` 输出（fixed 侧，节选末尾 {max_lines} 行）**：", "", "```text"]
     lines += [ln for ln in t["fixed_stdout"].strip().splitlines()[-max_lines:]]
     lines += [
         "```",
@@ -1358,6 +1381,78 @@ def render_handcheck(hc: dict[str, Any], max_lines: int = 60) -> list[str]:
 # ─── 报告落盘 ──────────────────────────────────────────────────────────
 def _fmt(v: Any) -> str:
     return "`unmeasured`" if v is None else f"{v}"
+
+
+def _render_suite_size_confound(report: dict[str, Any]) -> list[str]:
+    """§4.6：任务聚类「计数 vs 占比」方向不一致的根因 = 套件规模混淆（measured）。
+
+    背景：§4.3 的 primary 对比出现「Δf2p(计数) = +0.17（SpecExpr 多）vs Δf2p(占比)
+    = −0.029（NL 多）」的方向不一致。本函数从逐任务计数导出可核验解释：
+    两臂**生成的测试数量**本身不同（SpecExpr 臂系统性更多）⇒ 计数尺度结构上偏向
+    生成量大的臂，不代表检出能力更强。故跨臂比较**不得**以 f2p 绝对计数作因变量。
+
+    全部量由 report["tasks"]（measured）导出，零新增测量 —— 渲染即可复算。
+    """
+    by_set: dict[str, dict[str, tuple[int, int]]] = {}
+    for t in report["tasks"]:
+        if t.get("suite_class") == "material_missing":
+            continue
+        c = t.get("counts") or {}
+        n_class = sum(c.get(k, 0) for k in ("f2p", "p2p", "f2f", "p2f"))
+        by_set.setdefault(str(t.get("set")), {})[str(t.get("task_id"))] = (n_class, c.get("f2p", 0))
+    pairs = [("arm_A_specir", "arm_B_nl"), ("arm_C_specir_repeat", "arm_D_nl_repeat")]
+    out: list[str] = [
+        "§4.3 表中 primary 对比出现「计数方向为正（SpecExpr 多）vs 占比方向为负（NL 多）」",
+        "的不一致。本节由逐任务计数导出其根因：**套件规模（生成测试数量）差异造成的混淆**，",
+        "不是度量矛盾。",
+        "",
+    ]
+    for x, y in pairs:
+        if x not in by_set or y not in by_set:
+            continue
+        common = sorted(set(by_set[x]) & set(by_set[y]))
+        if not common:
+            continue
+        nx = sum(by_set[x][k][0] for k in common)
+        ny = sum(by_set[y][k][0] for k in common)
+        fx = sum(by_set[x][k][1] for k in common)
+        fy = sum(by_set[y][k][1] for k in common)
+        d_count = [by_set[x][k][1] - by_set[y][k][1] for k in common if by_set[x][k][0] and by_set[y][k][0]]
+        d_frac = [
+            by_set[x][k][1] / by_set[x][k][0] - by_set[y][k][1] / by_set[y][k][0]
+            for k in common
+            if by_set[x][k][0] and by_set[y][k][0]
+        ]
+        mean = lambda v: (sum(v) / len(v)) if v else 0.0  # noqa: E731
+        n_more_y = sum(1 for v in d_frac if v < 0)
+        n_more_x = sum(1 for v in d_frac if v > 0)
+        out += [
+            f"**{x} vs {y}**（共同 {len(common)} 任务）",
+            "",
+            f"| 量 | {x} | {y} | 差 |",
+            "|---|---|---|---|",
+            f"| 可分类测试总数 | **{nx}** | **{ny}** | {nx - ny:+d}（**{(nx / ny - 1) * 100:+.1f}%**） |",
+            f"| 每任务平均可分类测试数 | **{nx / len(common):.1f}** | **{ny / len(common):.1f}** | {(nx - ny) / len(common):+.1f} |",
+            f"| Σf2p（计数尺度） | {fx} | {fy} | {fx - fy:+d} |",
+            f"| f2p 率（归一后） | **{fx / nx:.4f}** | **{fy / ny:.4f}** | **{(fx / nx - fy / ny) * 100:+.2f}pp** |",
+            f"| Δf2p 逐任务均值 | 计数 **{mean(d_count):+.4f}** | 占比 **{mean(d_frac):+.4f}** | "
+            f"占比口径下 NL 更多 {n_more_y} : SpecExpr 更多 {n_more_x} |",
+            "",
+        ]
+    out += [
+        "",
+        "> 读法：计数尺度比较的是「两臂各自生成的测试数量」，而两臂**生成量本身不同**",
+        "> （primary 对 A 比 B 多 +15.7%；repeat 对 C 比 D 少 −1.8%）⇒ 计数口径被套件规模",
+        "> 混淆，**其方向可随生成量差异而翻转**（primary 对即由 +0.19 翻为 −0.03），不等于",
+        "> 检出能力差异；按规模归一后两对同向（均无正效应，NL 略高）。因此原「primary 任务",
+        "> 聚类方向反向」的表述**不成立**。",
+        "",
+        "> **对论文的措辞要求**：跨臂比较**不得**使用「f2p 绝对计数」作因变量（未控生成量）；",
+        "> 若报告计数，必须同时给出可分类测试总数或改用占比/率。§4.3 的 Δf2p(计数) 列仅作",
+        "> 描述性补充，判定以占比与任务级二值口径为准。",
+        "",
+    ]
+    return out
 
 
 def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline: str) -> str:
@@ -1387,7 +1482,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "",
         "## 1. 方法与命令",
         "",
-        "1. 任务集 = `src.datasets.dataset_realbugs.QuixBugsDataset()`（`%s`）；" % report["meta"]["gold_root"],
+        f"1. 任务集 = `src.datasets.dataset_realbugs.QuixBugsDataset()`（`{report['meta']['gold_root']}`）；",
         "   仅 `metadata.test_cases` ∧ `metadata.fixed` 均非空者进入口径：",
         f"   **{report['meta']['gold_info']['n_tasks_gold_eligible']} / {report['meta']['gold_info']['n_tasks_loaded']}** 个任务",
         f"（排除 {report['meta']['gold_info']['n_tasks_excluded_no_gold']} 个无 gold 材料程序："
@@ -1400,7 +1495,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "4. 同一套件跑两次：`pytest <test> -v --tb=no -rA -p no:cacheprovider -p _dsh_outcomes`，",
         "   一次对缺陷代码、一次对 gold 修复代码；`_dsh_outcomes` 是**只做记录**的插件（逐 phase 写 JSONL）。",
         "   两路解析（插件 JSONL + `-v` 文本）交叉校验，不一致即暴露（见 §3.6）。",
-        "5. 每次运行上限 `%ds`（与 `emse_test_sanity_audit.py` 同口径）；超时 = 不可测。" % report["meta"]["cap_seconds"],
+        f"5. 每次运行上限 `{report['meta']['cap_seconds']}s`（与 `emse_test_sanity_audit.py` 同口径）；超时 = 不可测。",
         "",
         "复现命令：",
         "",
@@ -1413,7 +1508,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
             [
                 "",
                 "本件为**分析重算**（`--reuse-json`：不重跑 pytest，只重算聚合/统计/渲染；",
-                f"全部 measured 字段来自上面那条完整跑批命令的工件）：",
+                "全部 measured 字段来自上面那条完整跑批命令的工件）：",
                 "",
                 "```bash",
                 f"{report['meta']['cmdline']}",
@@ -1453,7 +1548,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         ("timeout", "timeout"),
         ("no_pertest_data", "no_pertest_data"),
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         sc = a.get("suite_class_counts", {})
         lines.append(
             f"| `{a['label']}` | {a['n_suites_run']} | "
@@ -1462,9 +1557,13 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         )
     lines += [
         "",
-        "> `detecting_*` = 至少 1 个 f2p；`*_invalid` = 至少 1 个在**正确代码**上失败的测试；",
-        "> `blind_clean` = 0 个 f2p 且 0 个 f2f（全 p2p/p2f/other）；`timeout` = 任一侧 30s 未终结；",
-        "> `no_pertest_data` = 两侧都跑完但至少一侧无任何可解析 node id（收集错误等）。",
+        "> 套件级标签（互斥，判定顺序：timeout → no_pertest_data → 四分类）：",
+        "> `detecting_clean` = f2p≥1 且 f2f=0；`detecting_invalid` = f2p≥1 且 f2f≥1；",
+        "> `blind_clean` = f2p=0 且 f2f=0（可能含 p2f/other）；`invalid_only` = f2p=0 且 f2f≥1；",
+        "> `timeout` = 任一侧 30s 未终结；`no_pertest_data` = 两侧都跑完但至少一侧无任何可解析 node id。",
+        "> **注意**：`detecting_clean` 只排除 f2f，**不等价于** task-level `detection_rate`=1.0——",
+        "> 后者还要求 fixed 侧 rc=0，因此 p2f>0（在修复代码上反而失败）的套件仍可能落进 `detecting_clean`。",
+        "> 反向成立：det=1.0 的套件必然是 `detecting_clean` 且 f2f=p2f=0（下表 §3.4 的 f2p=0 异常清单为空即此校验）。",
         "",
         "## 3. Step 2 指标（显式分母）",
         "",
@@ -1473,7 +1572,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | f2p | 可分类测试 n（两侧都出现） | 池化 F2P 率（f2p/n） | 并集分母 n | 并集口径 F2P 率 | 单侧仅 buggy | 单侧仅 fixed |",
         "|---|---|---|---|---|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         lines.append(
             f"| `{a['label']}` | {a['class_totals']['f2p']} | {a['n_classifiable_total']} | "
             f"{_fmt(a['pooled_f2p_rate'])} | {a['n_union_total']} | {_fmt(a['pooled_f2p_rate_union_denom'])} | "
@@ -1500,7 +1599,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | p2p | f2p | p2p/可分类 | p2p/(p2p+f2p) |",
         "|---|---|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         bm = a["blind_mass"]
         lines.append(
             f"| `{a['label']}` | {bm['p2p']} | {bm['f2p']} | {_fmt(bm['p2p_over_classifiable'])} | "
@@ -1513,7 +1612,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | f2f | f2f/可分类 | f2f>0 的套件数 | 套件在 fixed 上 rc=0（绿） | 套件绿率(fixed) | 套件在 buggy 上 rc=0 | p2f（反向） | p2f>0 套件数 |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         im = a["invalid_mass"]
         iv = a["inverted_mass"]
         lines.append(
@@ -1534,7 +1633,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | det=1.0 套件数 | f2p=0 | **f2p=1（单测试扛下）** | f2p=2 | f2p≥3 | det1 内 f2p 合计 | det1 内可分类测试合计 | det1 内平均 f2p |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         dc = a["detection_conversion"]
         h = dc["f2p_count_distribution"]
         lines.append(
@@ -1544,7 +1643,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
     pooled_dc = pooled["detection_conversion"]
     lines += [
         "",
-        f"**headline：{pooled_dc['n_archived_detection_1']} 个任务级\"检出\"中，"
+        f'**headline：{pooled_dc["n_archived_detection_1"]} 个任务级"检出"中，'
         f"{pooled_dc['n_single_test_carried']} 个（"
         f"{round(pooled_dc['n_single_test_carried'] / pooled_dc['n_archived_detection_1'] * 100, 1) if pooled_dc['n_archived_detection_1'] else 'unmeasured'}%）"
         f"由 1 个测试函数扛下，{pooled_dc['n_multi_test']} 个由 ≥2 个测试函数支撑**（pooled，measured）。",
@@ -1559,7 +1658,7 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | f2p（buggy 侧 call 相位失败：断言失败或测试体内未捕获异常） | f2p（buggy 侧 setup/teardown 异常） |",
         "|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
+    for a in [*agg, pooled_proxy(pooled)]:
         ps = a["f2p_phase_split"]
         lines.append(
             f"| `{a['label']}` | {ps['call_phase_failed_on_buggy']} | {ps['setup_or_teardown_error_on_buggy']} |"
@@ -1576,8 +1675,16 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "| 来源 | 插件/-v 双路一致条数 | 不一致条数 | -v 回退侧数 | 无解析器侧数 | 超时（任一侧） | 无可解析逐测试数据的任务 |",
         "|---|---|---|---|---|---|---|",
     ]
-    for a in agg + [pooled_proxy(pooled)]:
-        pc = a.get("parser_crosscheck", {"n_plugin_verbose_agreements": "unmeasured", "n_mismatches": "unmeasured", "n_sides_verbose_fallback": "unmeasured", "n_sides_no_parser": "unmeasured"})
+    for a in [*agg, pooled_proxy(pooled)]:
+        pc = a.get(
+            "parser_crosscheck",
+            {
+                "n_plugin_verbose_agreements": "unmeasured",
+                "n_mismatches": "unmeasured",
+                "n_sides_verbose_fallback": "unmeasured",
+                "n_sides_no_parser": "unmeasured",
+            },
+        )
         lines.append(
             f"| `{a['label']}` | {pc['n_plugin_verbose_agreements']} | {pc['n_mismatches']} | "
             f"{pc['n_sides_verbose_fallback']} | {pc['n_sides_no_parser']} | {a['timeouts']['n_sides_timed_out']} | "
@@ -1677,7 +1784,12 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
         "> 这说明任务级配对结论不仅样本小，而且**对「不可测」的记法敏感**；替代口径仅供敏感性披露，",
         "> 不作为本件或论文的主口径。",
         "",
-        "### 4.6 结论（逐条标注支撑口径）",
+        "### 4.6 任务聚类「计数 vs 占比」方向不一致的根因：**套件规模混淆**（measured）",
+        "",
+    ]
+    lines += _render_suite_size_confound(report)
+    lines += [
+        "### 4.7 结论（逐条标注支撑口径）",
         "",
     ]
     lines += [f"- {x}" for x in ts["conclusions"]]
@@ -1718,7 +1830,11 @@ def render_readme(report: dict[str, Any], sources: list[dict[str, Any]], cmdline
     for a in agg:
         lines.append(
             f"- `{a['label']}`：{a['n_no_pertest_data']} 个 —— "
-            + (", ".join(f"`{x}`" for x in a["no_pertest_data_task_ids"]) if a["no_pertest_data_task_ids"] else "（无）")
+            + (
+                ", ".join(f"`{x}`" for x in a["no_pertest_data_task_ids"])
+                if a["no_pertest_data_task_ids"]
+                else "（无）"
+            )
         )
     lines += ["", "## 6. 手工核验证据（原始输出 ↔ 解析结果并排）", ""]
     lines += report["handcheck_md"]
@@ -1750,7 +1866,9 @@ def pooled_proxy(pooled: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default=str(DEFAULT_OUT), help="输出目录（README.md / TESTLEVEL_DETECTION.json / SHA256SUMS.txt）")
+    ap.add_argument(
+        "--out", default=str(DEFAULT_OUT), help="输出目录（README.md / TESTLEVEL_DETECTION.json / SHA256SUMS.txt）"
+    )
     ap.add_argument("--cap-seconds", type=int, default=CAP_SECONDS, help="单次 pytest 运行墙钟上限（秒）")
     ap.add_argument("--sources", default=None, help="只跑指定来源（逗号分隔：quixbugs50_batch5 / A / B / C / D）")
     ap.add_argument("--jobs", type=int, default=1, help="并发来源数（默认 1=串行确定性口径；>1 仅影响墙钟）")
@@ -1780,7 +1898,7 @@ def main(argv: list[str] | None = None) -> int:
     if not gold:
         print("[tl] ✗ QuixBugs gold 任务为空（检查 AITESTER_QUIXBUGS_DATA）", file=sys.stderr)
         return 1
-    import pytest as _pytest  # noqa: F401  （记录版本，便于复现）
+    import pytest as _pytest
 
     t0 = time.time()
     runs: list[dict[str, Any]] = []
@@ -1826,8 +1944,10 @@ def main(argv: list[str] | None = None) -> int:
                     "repeat": "task-level repeat（C specir vs D NL）",
                     "merged": "task-level merged（A∪C vs B∪D）",
                 }[key]
-                row["verdict"] = analysis["verdict"] if key == "primary" else (
-                    analysis.get("merged_verdict") if key == "merged" else verdict(row)
+                row["verdict"] = (
+                    analysis["verdict"]
+                    if key == "primary"
+                    else (analysis.get("merged_verdict") if key == "merged" else verdict(row))
                 )
                 task_level[key] = row
 
@@ -1856,18 +1976,24 @@ def main(argv: list[str] | None = None) -> int:
         }
         merged["ratio"] = f"{merged['b_pos_x_only_f2p']}:{merged['b_neg_y_only_f2p']}"
         npairs = merged["n_pairs_testlevel"]
-        merged["delta_pp"] = round((merged["b_pos_x_only_f2p"] - merged["b_neg_y_only_f2p"]) / npairs * 100, 2) if npairs else None
+        merged["delta_pp"] = (
+            round((merged["b_pos_x_only_f2p"] - merged["b_neg_y_only_f2p"]) / npairs * 100, 2) if npairs else None
+        )
         psi = (merged["b_pos_x_only_f2p"] + merged["b_neg_y_only_f2p"]) / npairs if npairs else 0.0
         merged["psi_discordance"] = round(psi, 4)
         merged["p_mcnemar_exact"] = round(mcnemar_exact_p(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"]), 4)
         merged["p_chi2_cc"] = round(mcnemar_chi2_cc(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"]), 4)
         merged["bf10_expand"] = bayes_factor_10(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"])
-        merged["bf10_optimization"] = bayes_factor_discordant(
-            merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"]
-        )["bf10_jeffreys"]
-        merged["bf_verdict"] = bayes_factor_discordant(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"])["verdict"]
+        merged["bf10_optimization"] = bayes_factor_discordant(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"])[
+            "bf10_jeffreys"
+        ]
+        merged["bf_verdict"] = bayes_factor_discordant(merged["b_pos_x_only_f2p"], merged["b_neg_y_only_f2p"])[
+            "verdict"
+        ]
         merged["mde_two_proportion_pp"] = mde_two_proportion(npairs)
-        merged["mde_paired_pp"] = round(mde_paired_pp(npairs, psi), 2) if mde_paired_pp(npairs, psi) is not None else None
+        merged["mde_paired_pp"] = (
+            round(mde_paired_pp(npairs, psi), 2) if mde_paired_pp(npairs, psi) is not None else None
+        )
         merged["verdict_rule"] = verdict({"p_value": merged["p_mcnemar_exact"], "delta_pp": merged["delta_pp"] or 0.0})
         test_level.append(merged)
         # 任务聚类合并 = 两次复跑的配对单位相加（任务被复跑两次，故 n=2×35）
@@ -1912,7 +2038,8 @@ def main(argv: list[str] | None = None) -> int:
     mde = mde_table(
         int(primary_task.get("n_pairs") or 0),
         int(primary_test.get("n_pairs_testlevel") or 0),
-        float(primary_task.get("b_pos_specir_only", 0) + primary_task.get("b_neg_nl_only", 0)) / max(int(primary_task.get("n_pairs") or 1), 1),
+        float(primary_task.get("b_pos_specir_only", 0) + primary_task.get("b_neg_nl_only", 0))
+        / max(int(primary_task.get("n_pairs") or 1), 1),
         float(primary_test.get("psi_discordance") or 0.0),
     )
     mde["task_clustered_n_pairs"] = tc_primary.get("n_tasks")
@@ -1947,9 +2074,7 @@ def main(argv: list[str] | None = None) -> int:
             src_raw = raw_lookup.get((t["set"], t["task_id"]), {})
             t["buggy_stdout"] = src_raw.get("buggy_stdout", "")
             t["fixed_stdout"] = src_raw.get("fixed_stdout", "")
-    indep = (
-        independent_check(handcheck, sources, gold, cap_seconds=args.cap_seconds) if args.independent_check else {}
-    )
+    indep = independent_check(handcheck, sources, gold, cap_seconds=args.cap_seconds) if args.independent_check else {}
     handcheck_md: list[str] = []
     for hc in handcheck:
         handcheck_md += render_handcheck(hc, max_lines=60)
@@ -2054,18 +2179,23 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "SHA256SUMS.txt").write_text(sums.stdout, encoding="utf-8")
 
     print(f"\n[tl] 完成：{json_path}")
-    print(f"[tl] 墙钟 {wall_total}s，pytest 运行 {meta['n_pytest_runs']} 次，超时侧 "
-          f"{pooled['timeouts']['n_sides_timed_out']}，无逐测试数据任务 {pooled['n_no_pertest_data']}")
-    print(f"[tl] headline：det=1.0 套件 {pooled['detection_conversion']['n_archived_detection_1']} 个，其中单测试扛下 "
-          f"{pooled['detection_conversion']['n_single_test_carried']} 个")
+    print(
+        f"[tl] 墙钟 {wall_total}s，pytest 运行 {meta['n_pytest_runs']} 次，超时侧 "
+        f"{pooled['timeouts']['n_sides_timed_out']}，无逐测试数据任务 {pooled['n_no_pertest_data']}"
+    )
+    print(
+        f"[tl] headline：det=1.0 套件 {pooled['detection_conversion']['n_archived_detection_1']} 个，其中单测试扛下 "
+        f"{pooled['detection_conversion']['n_single_test_carried']} 个"
+    )
     for c in conclusions:
         print(f"[tl] 结论：{c}")
     return 0
 
 
 def _cmdline() -> str:
-    return "AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py " + " ".join(
-        sys.argv[1:]
+    return (
+        "AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/emse_testlevel_detection.py "
+        + " ".join(sys.argv[1:])
     )
 
 
@@ -2099,12 +2229,12 @@ def _build_conclusions(
             f"（computed）任务级 primary 复现：{tp['ratio']}，n={tp['n_pairs']}，δ={tp['delta_pp']}pp，"
             f"p={tp['p_value']}，BF10={tp['bf10']} → 判定 `{tp.get('verdict')}`（与既有结论一致）。"
         )
-    for row in test_level:
-        out.append(
-            f"（computed）测试级 {row['pair']}：共享 node id {row['n_test_nodeids_shared']}（X 独有 {row['n_nodeids_x_only']}、"
-            f"Y 独有 {row['n_nodeids_y_only']}），严格配对数 n={row['n_pairs_testlevel']}，"
-            f"{row['ratio']}，δ={row['delta_pp']}pp，p={row['p_mcnemar_exact']}，BF10={row['bf10_expand']} → `{row['verdict_rule']}`。"
-        )
+    out.extend(
+        f"（computed）测试级 {row['pair']}：共享 node id {row['n_test_nodeids_shared']}（X 独有 {row['n_nodeids_x_only']}、"
+        f"Y 独有 {row['n_nodeids_y_only']}），严格配对数 n={row['n_pairs_testlevel']}，"
+        f"{row['ratio']}，δ={row['delta_pp']}pp，p={row['p_mcnemar_exact']}，BF10={row['bf10_expand']} → `{row['verdict_rule']}`。"
+        for row in test_level
+    )
     for row in task_clustered:
         w = row["wilcoxon"]
         out.append(
