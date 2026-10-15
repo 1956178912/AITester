@@ -1034,7 +1034,7 @@ def pass_at_k_summary(data: dict[str, list[dict]], field: str = "patch_correct")
 
     口径：同 task_id 的跨批次行 = 同一任务的多个采样轮次（默认加载
     模式保留全部轮次行）；行级成功 = row[field] 真值（patch_correct =
-    gold 独立裁决主口径；passed = 自指口径仅供对照）。k 上界取全臂
+    gold 材料独立裁决（自动化 oracle，无人工参与）主口径；passed = 自指口径仅供对照）。k 上界取全臂
     各任务轮次数的最小值（轮次不足 k 的任务无法参与该档，诚实截断）
     并披露轮次分布（min/中位/max）。
 
@@ -1403,7 +1403,7 @@ def run_all_statistics(
 
     # 计算基本统计量（2026-10-05 P0：并列统计 M1 诚实指标——passed 为
     # 自指指标（系统自产测试在未修复代码上通过，false_fix 主批次 89.8% 的
-    # 直接来源），detection/repair 为 gold 独立裁决，报告读者第一眼应看
+    # 直接来源），detection/repair 为 gold 材料独立裁决（自动化 oracle，无人工参与），报告读者第一眼应看
     # 诚实口径）
     stats_summary: dict[str, dict[str, float]] = {}
     for baseline in _BASELINES:
@@ -1424,7 +1424,7 @@ def run_all_statistics(
             }
             print(f"\n{baseline}: {passed}/{total} 通过 ({rate:.1f}%)")
             print(
-                f"  诚实指标（gold 独立裁决）: detection {sum(det_vals)}/{len(det_vals)}"
+                f"  诚实指标（gold 材料独立裁决／自动化 oracle）: detection {sum(det_vals)}/{len(det_vals)}"
                 f" ({stats_summary[baseline]['det_rate']:.1f}%)"
                 f" / repair {sum(rep_vals)}/{len(rep_vals)}"
                 f" ({stats_summary[baseline]['rep_rate']:.1f}%)"
@@ -1622,15 +1622,27 @@ def run_all_statistics(
                     "bayes_verdict": interpret_bayes(h_bayes),
                 }
             )
+    # EMSE 批次（2026-10-15）：BH-FDR 扩到首要结论口径——此前校正只作用于
+    # passed（自指、已降级为诊断参考）口径，而 detection/repair（报告声明
+    # 的首要结论口径）的 p 值无 q 值。审稿可判性要求主结论自带多重比较
+    # 校正。校正按**指标族**独立进行（detection 族 3 个比较、repair 族 3 个
+    # 比较）——跨指标混池会改变各族内的 FDR 分母语义。
+    for _field in {h["field"] for h in honest_comparisons}:
+        _family = [h for h in honest_comparisons if h["field"] == _field]
+        _q, _rej = bh_fdr_correct([h["p"] for h in _family])
+        for _h, _qi, _ri in zip(_family, _q, _rej, strict=True):
+            _h["fdr_adjusted_p"] = _qi
+            _h["fdr_rejected"] = _ri
     if honest_comparisons:
         print("\n" + "=" * 70)
-        print("诚实指标 McNemar（M1 三指标，gold 独立裁决——首要结论口径）")
+        print("诚实指标 McNemar（M1 三指标，gold 材料独立裁决 / 自动化 oracle——首要结论口径）")
         print("=" * 70)
         for h in honest_comparisons:
+            _q_txt = f"，BH-FDR q={_fmt_stat_num(h['fdr_adjusted_p'])}" if h.get("fdr_adjusted_p") is not None else ""
             print(
                 f"  [{h['metric']}] {h['comparison']}: 共同任务 {h['n_common']}"
                 f"，不一致对 {h['n_diff']}，χ²={_fmt_stat_num(h['chi2'])}"
-                f"，p={_fmt_stat_num(h['p'])} ({h['sig']})"
+                f"，p={_fmt_stat_num(h['p'])} ({h['sig']}){_q_txt}"
             )
             if h.get("bayes_p_greater") is not None:
                 print(
@@ -1715,7 +1727,7 @@ def run_all_statistics(
             "## 数据概览",
             "",
             # 2026-10-05 P0：passed（自指）与 M1 诚实指标（detection/repair，
-            # gold 独立裁决）并列——分母为该指标可测任务数（None = 无 gold
+            # gold 材料独立裁决／自动化 oracle）并列——分母为该指标可测任务数（None = 无 gold
             # 材料，不计入分母）
             "| Baseline | 任务数 | 通过数 (passed) | 通过率 | detection 可测数 | detection 率 | repair 可测数 | repair 率 |",
             "|----------|--------|-----------------|--------|------------------|--------------|---------------|-----------|",
@@ -1730,20 +1742,31 @@ def run_all_statistics(
 
         report_lines += [
             "",
-            "## 诚实指标 McNemar 检验（M1 三指标，gold 独立裁决）",
+            "## 诚实指标 McNemar 检验（M1 三指标，gold 材料独立裁决）",
             "",
             "2026-10-05 P0 协议：passed = 系统自产测试在（未修复的）缺陷代码上",
             "通过，为自指指标（奖励写不出能抓 bug 的测试）；detection / repair",
             "由留出 gold 材料独立裁决。**本节为报告的首要结论口径**——与",
             "下方 passed 系列检验并列呈现，解读冲突时以本节为准。",
             "",
-            "| 指标 | 比较 | 共同任务数 | 不一致对 | χ²（连续性校正） | p值 | 显著性 |",
-            "|------|------|-----------|---------|------------------|-----|--------|",
+            "口径说明（EMSE 批次，防止读者误读）：本节'独立裁决'指**判据材料",
+            "独立于被测系统**（留出 gold 测试与 gold 补丁），**不含任何人工",
+            "裁决**——全流程为零 LLM 的自动化 oracle 判定。人工复核（E7）为",
+            "预注册项但尚未执行，不得据此声称人工参与。",
+            "",
+            "多重比较校正（EMSE 批次 2026-10-15）：本节 p 值按**指标族**独立做",
+            "BH-FDR 校正（detection 族与 repair 族各自构成 FDR 分母），q 值见",
+            "末两列；此前校正只覆盖下方 passed 口径。",
+            "",
+            "| 指标 | 比较 | 共同任务数 | 不一致对 | χ²（连续性校正） | p值 | 显著性 | BH-FDR q值 | FDR后显著 |",
+            "|------|------|-----------|---------|------------------|-----|--------|-----------|----------|",
         ]
         for h in honest_comparisons:
+            _fd = "是" if h.get("fdr_rejected") else "否"
             report_lines.append(
                 f"| {h['metric']} | {h['comparison']} | {h['n_common']} | {h['n_diff']} "
-                f"| {_fmt_stat_num(h['chi2'])} | {_fmt_stat_num(h['p'])} | {h['sig']} |"
+                f"| {_fmt_stat_num(h['chi2'])} | {_fmt_stat_num(h['p'])} | {h['sig']} "
+                f"| {_fmt_stat_num(h.get('fdr_adjusted_p', float('nan')))} | {_fd} |"
             )
 
         report_lines += [
@@ -1922,7 +1945,7 @@ def run_all_statistics(
             "",
             "## pass@k（多轮采样并集解决率——批次 IX / ADR-0023 呈现性增补）",
             "",
-            "口径：同任务跨批次行 = 采样轮次；成功 = patch_correct（gold 独立裁决）。",
+            "口径：同任务跨批次行 = 采样轮次；成功 = patch_correct（gold 材料独立裁决／自动化 oracle）。",
             "k 上界 = 各任务轮次数的最小值（轮次不足诚实截断为 —）。",
             "",
         ]
