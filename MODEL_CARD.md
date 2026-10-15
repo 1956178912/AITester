@@ -1,6 +1,6 @@
 # AITester 模型卡（MODEL CARD）
 
-最后更新：2026-10-14（LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，六处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
+最后更新：2026-10-14（LLM 结构化输出加固批次：§2 新增"调用配置"节——thinking 默认 disabled〔成本保护〕+ `LLM_JSON_MODE` 默认 on〔DeepSeek 官方 JSON Output，七处 JSON 契约调用点〕+ finish_reason 守卫 + 数值表达式解析层修复〔ADR-0031〕。此前 2026-10-08 R2 落地批次：叙事对齐 ADR-0016——§1 去"多智能体"主断言，"多智能体编排"降为可消融容器；repair 数字更新为修正口径 v2）
 
 ## 1. 系统概述
 

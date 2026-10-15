@@ -14,7 +14,7 @@ version: "1"
 last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次九：基准 gold 材料自洽性审计〔synthetic 模板残留 import 修复 25/261 + ULT gold 归因诊断 + QuixBugs 测试级检出画像〕；`--collect-only` 实测 **6022**；全量实跑 **6017 passed / 1 failed / 4 skipped**（253.04s）——1 failed 为 `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；passed = collected − skipped = 6022 − 4 = **6018**（对账：6017 + 1 failed = 6018）。此前 2026-10-15 批次八 5978/5982）
 
 tests:
-  total_passed: 6018          # 全量 pytest tests/（2026-10-15 批次九：实跑 6017 passed / 1 failed 全定性〔TestBaselineNumbersConsistency 自指一致性，本字段刷新后转绿〕/ 4 skipped；--collect-only 实测 **6022**；passed = collected − skipped = 6022 − 4 = **6018**〔对账 6017 + 1 failed = 6018〕。上一批 5978/5982 → 本批 6018/6022〔+40：批次九新增测试（gold 自洽性审计 1 + 测试级检出画像 23 + ULT gold 归因诊断 16 + 其他批次九测试）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 6021          # 全量 pytest tests/（2026-10-15 EMSE 审稿可判性批次：xdist -n 4 loadfile 实跑 **6021 passed / 4 skipped / 0 failed**（85.3s）；--collect-only 实测 **6025**；passed = collected − skipped = 6025 − 4 = **6021**。上一批 6018/6022 → 本批 6021/6025〔+3：tests/test_emse_optimization.py 新增 mutation 相关性回归 3 例（系数真算 / 负方向如实呈现 / 退化 reason）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
   total_failed: 0
   total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
   total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
@@ -191,6 +191,30 @@ benchmark:
   #   experiments/results/r4_batches/（6 批次 JSON + SHA256SUMS/README——
   #   口径矩阵与勘误的证据链，此前滞留 /tmp）。
   current_main_batch: "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json"
+  # EMSE 批次（2026-10-15）术语范围 + 口径标签纪律（防审稿误读，两条）：
+  # ① **"gold 独立裁决" = 判据材料独立**（留出 gold 测试 / gold 补丁），
+  #    **不含人工裁决**——全流程零 LLM 自动化 oracle 判定；人工复核（E7）
+  #    预注册但尚未执行（docs/preregistration.md E7 节），任何位置不得据此
+  #    声称人工参与或评分者一致性（全仓无 Kappa）。对外表述建议用
+  #    "automated oracle adjudication against held-out gold material"。
+  # ② **δ 与 repair 的"多值"不是矛盾，是口径代际**，引用必须带标签：
+  #    · δ = −0.3673 → **E2 实验口径**（E2 报告；非三种子合并）
+  #    · δ = −0.279（−28pp）→ **R-P0-2 三种子合并口径**（n=261/臂，本文件口径）
+  #    二者样本与批次不同，禁止混引或取其一作"全局值"。
+  #    · repair 39.31%（57/145）→ **v2 修正口径**（含 R27 跨文件物化，
+  #      ADR-0029 第三起伪影修复后）；35.86%（52/145）→ **v1 修正口径**
+  #      （伪影下界，已被 v2 取代但保留为勘误链证据）。
+  #    论文引用应取 v2 并注明"corrected caliber (v2, incl. cross-file
+  #    materialization)"；不得在无标签情况下并列 v1/v2。
+  terminology_scope:
+    gold_adjudication_meaning: "independence of adjudicating material (held-out gold tests/patches); automated oracle verdict; NO human adjudication"
+    human_adjudication: "preregistered (E7) but NOT executed; no kappa/inter-rater artifacts exist"
+    recommended_en_phrase: "automated oracle adjudication against held-out gold material"
+  caliber_labels:
+    delta_net_negative_e2: "δ=−0.3673 (E2 experiment caliber)"
+    delta_net_negative_3seed_pooled: "δ=−0.279 / −28pp (R-P0-2 three-seed pooled caliber, n=261/arm)"
+    repair_corrected_v2: "39.31% (57/145; incl. R27 cross-file materialization, post-ADR-0029)"
+    repair_corrected_v1: "35.86% (52/145; artifact lower bound, superseded by v2, retained as erratum evidence)"
   # AK（2026-10-06 第十二轮审查）刷新：R-P0-2 生死实验三种子批次为当前口径
   # （姊妹批次：benchmark_synthetic_20261006_151907.json / _164357.json =
   # 种子 43/44；n=87 任务 × 3 臂 {aitester, plain_llm, plain_llm_df} × 3 种子

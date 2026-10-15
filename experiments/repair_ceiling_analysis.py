@@ -72,7 +72,7 @@ def build_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
     - patch_produced：修复循环行中 patch 字段非空（Debugger/多候选
       实际产出补丁文本）；
     - patch_plausible：patch_plausible==1（补丁通过证据门/合理性）；
-    - patch_correct：patch_correct==1（gold 独立裁决修复正确——
+    - patch_correct：patch_correct==1（gold 材料独立裁决（自动化 oracle，无人工参与）修复正确——
       R-P0-2 实测恒 0，本漏斗的"上限"层）。
 
     附分布（repair=0 的横向归因）：patch_evidence_level / stop_reason /
