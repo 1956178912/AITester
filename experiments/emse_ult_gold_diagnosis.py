@@ -145,9 +145,7 @@ PRELUDE_SYMBOLS: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 # pytest 输出解析
 # ---------------------------------------------------------------------------
-_RE_TESTLINE = re.compile(
-    r"^(?P<file>\S+\.py)::(?P<test>\S+)\s+(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\b"
-)
+_RE_TESTLINE = re.compile(r"^(?P<file>\S+\.py)::(?P<test>\S+)\s+(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\b")
 _RE_SUMMARY = re.compile(r"^(?P<verb>FAILED|ERROR)\s+(?P<node>\S+)(?:\s+-\s+(?P<msg>.*))?$")
 _RE_SECTION = re.compile(r"^_{5,}\s*(?P<name>.+?)\s*_{5,}$")
 _RE_SECTION_EXC = re.compile(
@@ -287,7 +285,7 @@ def _run_pytest(work_dir: Path, target: str, variant: str) -> dict[str, Any]:
             "per_test": {},
             "signatures": {},
             "collection_error": None,
-            "cmd": " ".join(cmd + [f"# cwd={work_dir.name}"]),
+            "cmd": " ".join([*cmd, f"# cwd={work_dir.name}"]),
             "tail": f">{CAP_SECONDS}s",
         }
     parsed = _parse_pytest(proc.stdout or "", proc.returncode)
@@ -363,21 +361,22 @@ def _top_level_names(code: str) -> list[str]:
         tree = ast.parse(code)
     except SyntaxError:
         return names
+    # PERF401 豁免理由：append 分布在 4 个互斥 AST 分支内 + 一层嵌套循环，无法表达
+    # 为单一列表推导；语义为"深度 1 的顶层符号收集"，显式分支更可读。
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.append(node.name)
         elif isinstance(node, ast.Assign):
-            for tgt in node.targets:
-                if isinstance(tgt, ast.Name):
-                    names.append(tgt.id)
+            names.extend(tgt.id for tgt in node.targets if isinstance(tgt, ast.Name))
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             names.append(node.target.id)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             for alias in node.names:
-                names.append(alias.asname or alias.name.split(".")[0])
+                names.append(alias.asname or alias.name.split(".")[0])  # noqa: PERF401
     seen: set[str] = set()
     out: list[str] = []
     for n in names:
+        # PERF401 豁免理由：去重副作用（seen.add 与 out.append 耦合），推导式会丢失语义
         if n and n not in seen:
             seen.add(n)
             out.append(n)
@@ -395,17 +394,13 @@ def corrected_materialize(code: str, tests: list[str], work_dir: Path) -> None:
     (work_dir / "test.py").write_text(test_code, encoding="utf-8")
 
 
-def _corrected_materialize_with_extra(
-    code: str, tests: list[str], work_dir: Path, extra_symbols: list[str]
-) -> None:
+def _corrected_materialize_with_extra(code: str, tests: list[str], work_dir: Path, extra_symbols: list[str]) -> None:
     """C+：纠正 harness + 官方前置块之外的缺失模块（补充测量，非官方口径）。"""
     extra = "\n".join(f"import {s}" for s in extra_symbols if s.isidentifier())
     (work_dir / "mod.py").write_text(CODE_IMPORT + "\n" + extra + "\n\n" + code + "\n\n", encoding="utf-8")
     names = _top_level_names(code)
     explicit = f"from mod import {', '.join(names)}" if names else ""
-    test_code = (
-        CODE_IMPORT + "\n" + extra + "\n\n" + "from mod import *" + "\n\n" + explicit + "\n\n"
-    )
+    test_code = CODE_IMPORT + "\n" + extra + "\n\n" + "from mod import *" + "\n\n" + explicit + "\n\n"
     for test in tests:
         test_code += f"{test}\n\n"
     (work_dir / "test.py").write_text(test_code, encoding="utf-8")
@@ -506,7 +501,7 @@ def attribute_task(run_o: dict[str, Any], run_c: dict[str, Any], n_gold: int) ->
     if c_buckets.get("fixture_or_harness_missing") or c_buckets.get("import_or_symbol_error"):
         return "upstream_missing_module_dependency", (
             "C（含官方前置块）仍报 NameError/ImportError：`code` 依赖官方前置块也未提供的模块"
-            "（官方 README.md:30 \"Self-contained functions\" 反例；官方 harness 同样失败）"
+            '（官方 README.md:30 "Self-contained functions" 反例；官方 harness 同样失败）'
         )
     if c_buckets.get("assert_failed_expectation_mismatch") or c_buckets.get("assert_failed_clearly_upstream_bug"):
         return "upstream_assert_inconsistency", "C 全败且均为断言类失败：gold 期望与 code 语义不一致"
@@ -519,7 +514,9 @@ def _bucketize_run(run: dict[str, Any], code: str, fut_names: set[str]) -> None:
     """就地给 run 的每个失败/报错 test 打 bucket。"""
     if run["status"] == "nonterminate":
         run["buckets"] = {"nonterminate_or_timeout": len(run["per_test"]) or 1}
-        run["bucket_by_test"] = {k: "nonterminate_or_timeout" for k in run["per_test"]} or {"<timeout>": "nonterminate_or_timeout"}
+        run["bucket_by_test"] = {k: "nonterminate_or_timeout" for k in run["per_test"]} or {
+            "<timeout>": "nonterminate_or_timeout"
+        }
         return
     bucket_by_test: dict[str, str] = {}
     counts: Counter[str] = Counter()
@@ -741,7 +738,10 @@ def main(argv: list[str] | None = None) -> int:
             official_tests = [str(t) for t in up_full["tests"]]
             official_source = "ULT.jsonl:tests"
         else:
-            official_tests = [f"def test_{j}():\n" + "\n".join(f"    {ln.strip()}" for ln in t.splitlines() if ln.strip()) for j, t in enumerate(gold)]
+            official_tests = [
+                f"def test_{j}():\n" + "\n".join(f"    {ln.strip()}" for ln in t.splitlines() if ln.strip())
+                for j, t in enumerate(gold)
+            ]
             official_source = "ULT_Lite.jsonl:test_list(wrapped)"
 
         # 上游断言体一致性核验（ULT.jsonl tests vs ULT_Lite test_list）
@@ -808,7 +808,8 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     sig["subcause"].rsplit(":", 1)[-1].strip()
                     for sig in (run_c.get("signature_detail") or {}).values()
-                    if sig.get("bucket") == "fixture_or_harness_missing" and "undefined_symbol" in sig.get("subcause", "")
+                    if sig.get("bucket") == "fixture_or_harness_missing"
+                    and "undefined_symbol" in sig.get("subcause", "")
                 }
             )
             if missing_syms:
@@ -980,10 +981,11 @@ def _pytest_version() -> str:
 
 
 def _write_sums(out_dir: Path) -> None:
-    lines = []
-    for p in sorted(out_dir.iterdir()):
-        if p.is_file() and p.name != "SHA256SUMS.txt":
-            lines.append(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}")
+    lines = [
+        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}"
+        for p in sorted(out_dir.iterdir())
+        if p.is_file() and p.name != "SHA256SUMS.txt"
+    ]
     (out_dir / "SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -997,7 +999,7 @@ def _write_readme(
     agg = report["aggregate"]
     a = agg["all71"]
     lines = [
-        "# ULT 官方 gold 测试\"全败\"归因诊断（2026-10-15，零 LLM）",
+        '# ULT 官方 gold 测试"全败"归因诊断（2026-10-15，零 LLM）',
         "",
         "> 输入：`experiments/results/emse_test_sanity_20261015/SANITY_AUDIT.json`（71/71 gold 全败）",
         "> + 上游 `datasets/ULT.jsonl` / `datasets/ULT_Lite.jsonl`（一手核验）。",
@@ -1008,11 +1010,11 @@ def _write_readme(
         "## 0. 结论摘要（先读这节）",
         "",
         f"- **任务级**：71 个任务中 **{a['attribution'].get('project_only_defect', 0)} 个**（`ult__fix_labels`）在**官方契约逐字物化（O）下 5/5 通过**——其 gold 失败的 100% 由项目 harness 造成（项目 mod 文件缺官方 `code_import` 前置块 → `re` 未定义）；其余 {a['n_tasks'] - a['attribution'].get('project_only_defect', 0)} 个在官方契约下同样失败。",
-        f"- **断言级**：355 条 gold 断言中，项目物化口径通过 44 条、失败 311 条；把 harness 纠正到官方契约 + 显式符号绑定后通过 55 条 ⇒ **项目侧造成的断言失败 11/355 = 3.1%**，**上游断言内容不一致 300/355 = 84.5%**。",
+        "- **断言级**：355 条 gold 断言中，项目物化口径通过 44 条、失败 311 条；把 harness 纠正到官方契约 + 显式符号绑定后通过 55 条 ⇒ **项目侧造成的断言失败 11/355 = 3.1%**，**上游断言内容不一致 300/355 = 84.5%**。",
         "- **叠加效应**：28 个任务属 `mixed`——同时存在「项目侧造成的失败」与「上游不一致的失败」；`upstream_*` 全败任务的失败与项目物化无关。",
         "- **对已发布生成测试数字的因果路径**：项目健全性门把 `ult__fix_labels` 误判为红灯（缺前置块），官方前置块下该任务生成套件转绿 ⇒ probe25 有效分母 5 → 6（实测；见 §2c），lite46 不变（9/46）。",
         "- **第二处项目侧缺陷（独立于 gold 结论）**：4 个下划线函数名任务被 `src/datasets/dataset_ult.py:236` 的 `.strip('_')` 改名 ⇒ `ImportError`（= 归档审计里那 4 个 collection error）；官方 `from mod import *` 也不绑定下划线名，故这 4 个在官方契约下仍失败（签名不同）。",
-        "- **上游确实存在的缺陷**（同时与官方 README.md:30 \"Self-contained functions\" 冲突）：`time_in_swiss_german` 期望 `quartel` 而 code 只产出 `viertel`；`centre_on_peak`/`lflverify`/`num_agreeing_tuples` 分别依赖官方前置块也没有的 `sys`/`logging`/`itertools`（`lflverify` 补上 `logging` 后 5/5 通过——属自足性缺口而非断言不一致）。",
+        '- **上游确实存在的缺陷**（同时与官方 README.md:30 "Self-contained functions" 冲突）：`time_in_swiss_german` 期望 `quartel` 而 code 只产出 `viertel`；`centre_on_peak`/`lflverify`/`num_agreeing_tuples` 分别依赖官方前置块也没有的 `sys`/`logging`/`itertools`（`lflverify` 补上 `logging` 后 5/5 通过——属自足性缺口而非断言不一致）。',
         "",
         "## 1. 官方契约（Ray/main.py 逐字引用）",
         "",
@@ -1021,13 +1023,13 @@ def _write_readme(
         "| `Ray/main.py:31-46` | `code_import` 前置块（os/re/math/numpy/pandas/pytest/random/string/warnings/datetime/traceback/np/pd/typing） |",
         "| `Ray/main.py:140-145` | `mod.py = code_import + '\\n\\n' + instance['code'] + '\\n\\n'`（再 `rename_test_functions`） |",
         "| `Ray/main.py:148-153` | `test.py = code_import + '\\n\\n' + 'from mod import *' + '\\n\\n' + tests[:k]` |",
-        "| `Ray/main.py:20-29` | `test-command = \"pytest test.py\"`，`timeout = {timeout}` |",
+        '| `Ray/main.py:20-29` | `test-command = "pytest test.py"`，`timeout = {timeout}` |',
         "| `Ray/main.py:159-174` | 官方一致性过滤 = cosmic-ray `baseline`（**作用于生成测试**，非 gold） |",
         "| `Ray/main.py:192-198` | `correct_tasks_tc_{k}_{model}` = baseline 通过集合 |",
         "| `Ray/leakage_free.py:66-74` | `correct_tasks ∩ leakage_free_tasks`（换一批任务，口径同） |",
         "| `datasets/ULT.jsonl` | 3,909 条，字段 `tests`（list[str]，完整 `def test_*` 函数） |",
         "| `datasets/ULT_Lite.jsonl` | 200 条，字段 `test_list`（list[str]，裸 `assert` 片段） |",
-        "| `README.md:150-152` | \"we do **not** release the ground-truth tests\"（与数据文件含 `tests`/`test_list` 矛盾） |",
+        '| `README.md:150-152` | "we do **not** release the ground-truth tests"（与数据文件含 `tests`/`test_list` 矛盾） |',
         "",
         "**结论**：`test_list` 在上游仓库**无任何消费者**（grep 全仓 0 命中）；ULT_Lite 的官方执行契约由",
         "`ULT.jsonl` 的 `tests` 形态推定 —— 本脚本机械核验二者断言体逐条相同（见 `records[].upstream.official_tests_equal_lite_test_list`）。",
@@ -1039,11 +1041,11 @@ def _write_readme(
         "|---|---|---|---|",
     ]
     keys = sorted({*agg["all71"]["attribution"], *agg["ult_lite46"]["attribution"], *agg["ult_probe25"]["attribution"]})
-    for k in keys:
-        lines.append(
-            f"| `{k}` | {agg['all71']['attribution'].get(k, 0)} | "
-            f"{agg['ult_lite46']['attribution'].get(k, 0)} | {agg['ult_probe25']['attribution'].get(k, 0)} |"
-        )
+    lines.extend(
+        f"| `{k}` | {agg['all71']['attribution'].get(k, 0)} | "
+        f"{agg['ult_lite46']['attribution'].get(k, 0)} | {agg['ult_probe25']['attribution'].get(k, 0)} |"
+        for k in keys
+    )
     lines += [
         f"| **合计** | **{a['n_tasks']}** | **{agg['ult_lite46']['n_tasks']}** | **{agg['ult_probe25']['n_tasks']}** |",
         "",
@@ -1090,7 +1092,9 @@ def _write_readme(
         "|---|---|---|---|---|",
     ]
     for v in ("P", "P2", "O", "C", "GP", "GO"):
-        row = [agg["all71"]["run_status"].get(f"{v}:{s}", 0) for s in ("pass", "fail", "collection_error", "nonterminate")]
+        row = [
+            agg["all71"]["run_status"].get(f"{v}:{s}", 0) for s in ("pass", "fail", "collection_error", "nonterminate")
+        ]
         lines.append(f"| {v} | " + " | ".join(str(x) for x in row) + " |")
     lines += [
         "",
@@ -1110,7 +1114,11 @@ def _write_readme(
                 if sig.get("bucket") != "fixture_or_harness_missing":
                     continue
                 sc = sig.get("subcause", "")
-                sub[f"{v}:missing_official_prelude_symbol" if sc.startswith("missing_official_prelude_symbol") else f"{v}:code_not_self_contained"] += 1
+                sub[
+                    f"{v}:missing_official_prelude_symbol"
+                    if sc.startswith("missing_official_prelude_symbol")
+                    else f"{v}:code_not_self_contained"
+                ] += 1
     lines += [
         "",
         "## 4b. `fixture_or_harness_missing` 细分（符号缺失归因）",
@@ -1195,7 +1203,7 @@ def _write_readme(
         "## 6. 各桶最小例证（verbatim 签名 + 上游定位）",
         "",
     ]
-    for bucket in BUCKETS + ("collection_error",):
+    for bucket in (*BUCKETS, "collection_error"):
         ex = _pick_examples(report, bucket, k=3)
         if not ex:
             continue
@@ -1206,7 +1214,11 @@ def _write_readme(
                 f"- `{e['task_id']}`（{e['subset']}，上游 `{e['upstream_file']}` 数组下标 {e['upstream_index']}，"
                 f"task_id={e['upstream_task_id']}）变体 {e['variant']}：`{e['exc_type']}: {e['message'][:120]}`"
                 + (f"；子因 `{e['subcause'][:70]}`" if e.get("subcause") else "")
-                + (f" ；`code` 第 {e['code_line_of_actual_value']} 行：`{e['code_line_text'][:80]}`" if e["code_line_of_actual_value"] else "")
+                + (
+                    f" ；`code` 第 {e['code_line_of_actual_value']} 行：`{e['code_line_text'][:80]}`"
+                    if e["code_line_of_actual_value"]
+                    else ""
+                )
             )
         lines.append("")
 

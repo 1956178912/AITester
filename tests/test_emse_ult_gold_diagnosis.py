@@ -70,8 +70,10 @@ def test_top_level_names_includes_underscore_symbols() -> None:
 def test_classify_signature_official_prelude_symbol() -> None:
     """NameError 指向官方前置块符号 → fixture_or_harness_missing（项目物化缺前置块）。"""
     bucket, cause = classify_signature(
-        "NameError", "name 're' is not defined. Did you forget to import 're'?",
-        code="def fix_labels(h):\n    return h\n", fut_names={"fix_labels"},
+        "NameError",
+        "name 're' is not defined. Did you forget to import 're'?",
+        code="def fix_labels(h):\n    return h\n",
+        fut_names={"fix_labels"},
     )
     assert bucket == "fixture_or_harness_missing"
     assert cause == "missing_official_prelude_symbol:re"
@@ -80,8 +82,10 @@ def test_classify_signature_official_prelude_symbol() -> None:
 def test_classify_signature_upstream_vocabulary_absent() -> None:
     """期望词汇在 code 中完全不出现 → assert_failed_clearly_upstream_bug。"""
     bucket, cause = classify_signature(
-        "AssertionError", "assert 'viertel vor 2 am namittag' == '1 vor quartel abig'",
-        code="def f(h, m):\n    return 'viertel vor 2 am namittag'\n", fut_names={"f"},
+        "AssertionError",
+        "assert 'viertel vor 2 am namittag' == '1 vor quartel abig'",
+        code="def f(h, m):\n    return 'viertel vor 2 am namittag'\n",
+        fut_names={"f"},
     )
     assert bucket == "assert_failed_clearly_upstream_bug"
     assert "quartel" in cause
@@ -90,13 +94,17 @@ def test_classify_signature_upstream_vocabulary_absent() -> None:
 def test_classify_signature_import_error_and_type_error() -> None:
     """ImportError 与 TypeError 各归其桶。"""
     b1, _ = classify_signature(
-        "ImportError", "cannot import name 'normalized_vcf' from 'normalized_vcf'",
-        code="def _normalized_vcf(a):\n    return a\n", fut_names={"normalized_vcf"},
+        "ImportError",
+        "cannot import name 'normalized_vcf' from 'normalized_vcf'",
+        code="def _normalized_vcf(a):\n    return a\n",
+        fut_names={"normalized_vcf"},
     )
     assert b1 == "import_or_symbol_error"
     b2, _ = classify_signature(
-        "TypeError", "f() missing 1 required positional argument: 'b'",
-        code="def f(a, b):\n    return a\n", fut_names={"f"},
+        "TypeError",
+        "f() missing 1 required positional argument: 'b'",
+        code="def f(a, b):\n    return a\n",
+        fut_names={"f"},
     )
     assert b2 == "signature_or_api_mismatch"
 
