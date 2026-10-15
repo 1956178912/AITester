@@ -51,6 +51,41 @@ v3（2026-10-12 独立评审落地·P0-A-1 文法升阶，回应评审报告 C1�
     布尔（and/or/not）、算术、一元正负号自 v2 起即在字符白名单与 AST
     放行之列（tests/test_spec_contract_grammar.py 锁定，v3 补断言明示）。
 
+v4（2026-10-15 EMSE 批次六·DSL 覆盖率提升，回应评审报告 C1 后续 +
+    emse_dsl_diag3 真实语料诊断）：
+    8. **冒号入字符白名单**（切片与字符串内冒号）：diag3 对 719 个 Planner
+       缓存条目（607 去重子句，QuixBugs/ULT/synthetic 三数据集）实测，
+       unsupported_syntax 拒绝 5 条**全部**是冒号形态——4 条切片
+       （`result == s[::-1]` / `result == s[:len(result)]` 等，LLM 无视
+       提示里"无冒号"禁令的高频自然写法）+ 1 条双引号字符串内冒号
+       （`result.startswith("result: ")`，被字符门整体误拒）。冒号入字符类
+       后新增两个**必须的护栏**（否则放行=放行假断言）：
+       - lambda 子句（`lambda r: r > 0`）：BNF 无关键字参数产生式 ⇒
+         lambda 只能裸出现在顶层，`assert lambda ...` 恒真、无断言语义；
+       - 海象赋值（`(x := 5)`）：赋值形态，同"规约里出现赋值是 LLM 话术"
+         的历史口径（v2 形态门注释）。
+       二者经 _WhitelistVisitor 新违例类型 no_assert_semantics 拦截，
+       归因 unsupported_syntax（闭合集合不变，见 §3b）。
+    9. **纯内建调用白名单扩容**：sum / set / bool / hasattr。实测依据
+       （diag3 算子级违例 Top）：sum×3（`len(arr) == len(set(arr))` 同族
+       去重判定）、set×3、hasattr×2（鸭子类型协议判定）、bool×1。风险级
+       论证：与既有 sorted/min/max 同族——纯函数、无 I/O、不触发用户代码
+       （hasattr 触发 __getattr__ 的暴露面与子句内任意属性访问等同，
+       后者本就放行）；物化暴露（sum/set 与大 sorted 同）由执行器 30s
+       超时兜底。刻意不收 list/tuple/dict/frozenset（语料零实例，
+       宁缺毋滥）与 fib/gcd/factorial 等**被测函数自递归**（语义扩展需
+       单独设计：oracle 断言调用被测函数自身，留作后续）。
+   10. **属性白名单扩容**（只收纯只读方法）：
+       - 字典读 API：values / keys / items / get（diag3：values×3、
+         get×1；四件套同族，只收读视图不收写方法）；
+       - 字符串 is* 家族补全：isupper / islower（diag3：isupper×1；
+         与 v3 收入的 isdigit/isalpha/isalnum/isspace 同族同风险级）；
+       - 整数纯方法：bit_length（diag3：×1；bit_count 需 3.10+ 且语料
+         零实例，暂不收）。
+       域名属性（successor×5 / outgoing_nodes）与模块链
+       （collections.abc.Sequence / heapq.*）**刻意不收**——任意属性链是
+       注入面，照旧 attr_escape 拒绝（diag3 已量化此为合法拒绝）。
+
 设计口径（与 ADR-0003 一致：默认关，新开关独立）：
     - SPEC_IR_DSL_ENABLE=true 时启用（默认 false，历史口径零变化）；
     - 本模块是纯静态函数（无 LLM / 无子进程），失败路径保守返回 [] / 0.0；
@@ -88,7 +123,20 @@ _ENV_DSL = "SPEC_IR_DSL_ENABLE"
 # 用途：有限域量化子句（forall/exists 的可编译形态，见 _free_names）的
 # 迭代域，如 `all(ch.isdigit() for ch in range(len(text)))`。二者为纯
 # 内建迭代器工厂（无 I/O、无用户代码触发），单独出现不构成表达式求值
-# 风险（range(10**10) 惰性、不物化；list/sum 等物化调用不在白名单）。
+# 风险（range(10**10) 惰性、不物化）。
+#
+# v4（2026-10-15 EMSE 批次六，emse_dsl_diag3 实测依据）：补入
+# `sum` / `set` / `bool` / `hasattr`。语料算子级违例 Top（607 去重子句）：
+# sum×3 / set×3 / hasattr×2 / bool×1——全部是**纯内建**（无 I/O、不触发
+# 用户代码；hasattr 触发 __getattr__ 的暴露面与子句内任意属性访问等同，
+# 后者本就放行），与 v3 已收入的 sorted/min/max 同风险级。典型合法形态：
+# `len(arr) == len(set(arr))`（去重判定）、`sum(values) == expected`、
+# `hasattr(node, "children")`（鸭子类型协议）、`bool(x) is True`。
+# 物化暴露（sum/set 与大 sorted 同族：sum(range(10**10)) 可挂起）由执行器
+# 30s 测试超时兜底，不构成新增拒绝理由。刻意不收：list/tuple/dict/
+# frozenset（语料零实例，宁缺毋滥）；被测函数自递归（fibonacci/gcd/
+# factorial，语料 6 实例）——oracle 断言调用被测函数自身属**语义扩展**，
+# 需单独设计评审（递归不终止 / 自指真值性），留作后续批次。
 _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
     {
         "len",
@@ -105,6 +153,10 @@ _ALLOWED_CALL_NAMES: frozenset[str] = frozenset(
         "isinstance",
         "range",
         "enumerate",
+        "sum",
+        "set",
+        "bool",
+        "hasattr",
     }
 )
 # 内建类型名（**值位置**放行集）：`isinstance(x, str)` / `isinstance(v, int)`
@@ -144,6 +196,19 @@ _BUILTIN_TYPE_NAMES: frozenset[str] = frozenset(
 #   刻意**不**收 title/center/encode/format 等（保留为反例教学形态）。
 # 注意：`len` 是函数（走 _ALLOWED_CALL_NAMES），不是属性——此处原含 "len"
 # 系笔误（会放行无效的 x.len 属性访问），已移除。
+#
+# v4（2026-10-15 EMSE 批次六，emse_dsl_diag3 实测依据）：三类纯只读方法扩容。
+# ① 字典读 API（values/keys/items/get）：diag3 实测 values×3、get×1，
+#    典型形态 `all(v > 0 for v in counts.values())` / `config.get("k")`。
+#    四件套同为 dict 只读视图/读取（无写方法、无 I/O）；刻意不收
+#    setdefault/update/pop 等写方法。
+# ② 字符串 is* 家族补全（isupper/islower）：diag3 实测 isupper×1；与 v3
+#    收入的 isdigit/isalpha/isalnum/isspace 同族同风险级（str 纯方法）。
+# ③ 整数纯方法（bit_length）：diag3 实测 ×1（`result <= n.bit_length()`）；
+#    bit_count 需 Python 3.10+ 且语料零实例，暂不收。
+# 域名属性（graph 的 successor×5 / outgoing_nodes）与模块链
+# （collections.abc.Sequence / heapq.heappushpop）**刻意不收**：任意属性链
+# 是"规约里藏命令"的注入面，照旧 attr_escape 拒绝。
 _ALLOWED_ATTRS: frozenset[str] = frozenset(
     {
         "value",
@@ -162,9 +227,16 @@ _ALLOWED_ATTRS: frozenset[str] = frozenset(
         "isalpha",
         "isalnum",
         "isspace",
+        "isupper",
+        "islower",
         "find",
         "count",
         "replace",
+        "values",
+        "keys",
+        "items",
+        "get",
+        "bit_length",
     }
 )
 # 数值 / 字符串 / 布尔 / None / 容器字面量：全放行（ast 字面量）
@@ -186,7 +258,13 @@ def spec_ir_dsl_enabled() -> bool:
 # 注意：`a > 0` 是合法表达式；"x 是正整数" 是 NL（parse 失败 → 不可编译）；
 # `r = f(x)` 是赋值语句（Expr 子节点为 Assign 时拒绝——规约里出现
 # 赋值是 LLM 话术，不机器化，保守 NL 注释）。
-_EXPR_TOKEN_RE = re.compile(r"^\s*[A-Za-z_\d\[\]\(\).\-+*/%<>=!&|~^, \"]*$")
+# v4（2026-10-15）：补入冒号 ":"——diag3 实测 unsupported_syntax 拒绝
+# 5 条**全部**是冒号形态（4 条切片 + 1 条双引号字符串内冒号，LLM 无视提示
+# "无冒号"禁令的高频自然写法）。冒号放行后由 _WhitelistVisitor 的
+# no_assert_semantics 护栏拦截 lambda / 海象两种新暴露形态（见该类注释）；
+# 花括号（字典/集合/f-string）仍**不在**字符类内，集合字面量与 f-string
+# 照旧不可编译（保守，语料零实例）。
+_EXPR_TOKEN_RE = re.compile(r"^\s*[A-Za-z_\d\[\]\(\).\-+*/%<>=!&|~^, \":]*$")
 # 子句长度上限（形态门 / too_long 归因门 / 文档注释的单一事实源）。
 # 此前 200 以字面量出现两处（is_expression_clause :111 与 _form_gate_reject_reason），
 # 任何一侧改动都会使"可编译判定"与"拒绝归因"漂移——本常数杜绝该风险。
@@ -198,8 +276,10 @@ def is_expression_clause(clause: Any) -> bool:
     """判定规约子句是否为"机器可解析表达式"形态（保守：双通道验证）。
 
     通道 1（字符白名单快判）：子句只含表达式可出现的字符（标识符 /
-        数字 / 运算符 / 括号 / 引号 / 点号 / 下标）；NL 子句（含
-        中文 / 空格动词）直接排除（零误报快路径，省 ast.parse 开销）；
+        数字 / 运算符 / 括号 / 引号 / 点号 / 下标 / 冒号——v4 切片支持，
+        lambda 与海象两种新暴露形态由白名单门 no_assert_semantics 护栏
+        拦截，见 _WhitelistVisitor）；NL 子句（含中文 / 空格动词）直接
+        排除（零误报快路径，省 ast.parse 开销）；
     通道 2（ast 精确判）：ast.parse(clause, mode="eval") 成功且顶层
         为单一 Expr 节点（拒绝赋值语句 / 多语句 / 控制流）。
 
@@ -242,6 +322,15 @@ class _WhitelistVisitor(ast.NodeVisitor):
     - dangerous_call: 调用名不在 _ALLOWED_CALL_NAMES（如 os.system）；
     - attr_escape: 属性访问不在 _ALLOWED_ATTRS 且不是 len() 调用；
     - stmt_in_expr: 表达式子树含语句节点（eval 模式理论不可达，双保险）；
+    - no_assert_semantics: 形态可解析但**无断言语义**——编译产物会是恒真
+      断言（假断言通道）。v4（2026-10-15）随冒号入字符类新增两种形态：
+      * lambda 子句（`lambda r: r > 0`）：BNF 无关键字参数产生式 ⇒
+        lambda 只能裸出现在顶层，`assert lambda ...` 恒真；
+      * 海象赋值（`(x := 5)`）：赋值形态（v2 起"规约里出现赋值是 LLM
+        话术"口径的延伸）。
+      历史既有的裸字面量/f-string 子句（`assert "abc"`）同属恒真断言，
+      但被 S11 锁定为合法表达式形态（见 TestIsExpressionClause），
+      且语料零实例，本轮不收敛（遗留风险已在批次工件披露）。
     - unknown_operator: 非常规运算符（AugmentedAssign 等 eval 不可达，双保险）。
     """
 
@@ -265,6 +354,19 @@ class _WhitelistVisitor(ast.NodeVisitor):
         else:
             self.violations.append("dangerous_call:(opaque)")  # 下标调用 / lambda 调用等
         self.generic_visit(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        # v4 护栏（冒号入字符类的必要配对）：lambda 子句无断言语义。
+        # BNF 的 <call> 产生式不含关键字参数 ⇒ lambda 无法作为 key= 等
+        # 实参合法出现，只能裸在顶层（`assert lambda ...` 恒真）——一律拒。
+        self.violations.append("no_assert_semantics:lambda")
+        # 不 generic_visit：整条已判拒，无需深入子节点收集更多违例
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        # v4 护栏（海象赋值）：`(x := 5)` 随冒号放行后可过形态门，但赋值
+        # 形态自 v2 起就不是合法规约子句（"规约里出现赋值是 LLM 话术"）。
+        self.violations.append("no_assert_semantics:walrus")
+        # 不 generic_visit：同上
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         # 属性白名单：len 之外的属性访问（如 .real/.value）需白名单
@@ -421,7 +523,9 @@ def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | 
 # 拒绝原因闭合集合（下游 schema / 报告层可据此校验，测试锁定）：
 #   natural_language     — 自然语言子句（字符串字面量外的中文 / ASCII 散文）；
 #   unsupported_syntax   — 可解析为表达式，但含字符白名单外字形（单引号串 /
-#                          冒号切片 / 花括号 / f-string / 非 ASCII 字符串字面量）；
+#                          花括号 / f-string / 非 ASCII 字符串字面量），或含
+#                          无断言语义形态（v4：lambda 子句 / 海象赋值——
+#                          编译产物会是恒真断言，见 _WhitelistVisitor）；
 #   unsupported_operator — 可解析但调用 / 属性不在白名单（strip() / open()）；
 #   unknown_name         — 形态与白名单均过，但含绑定上下文外的标识符；
 #   parse_error          — 语法错（"a && b" / 赋值语句 "result = a + b"）；
@@ -613,9 +717,14 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
         return _form_gate_reject_reason(text)
     violations = _whitelist_check(clause)
     if violations:
-        # dangerous_call: / attr_escape: = 算子级越界；parse_failed = 语法级
+        # dangerous_call: / attr_escape: = 算子级越界；no_assert_semantics: =
+        # 形态级无断言语义（v4：lambda / 海象，恒真假断言）；parse_failed = 语法级
         operator_level = any(v.startswith(("dangerous_call:", "attr_escape:")) for v in violations)
-        return "unsupported_operator" if operator_level else "parse_error"
+        if operator_level:
+            return "unsupported_operator"
+        if any(v.startswith("no_assert_semantics:") for v in violations):
+            return "unsupported_syntax"
+        return "parse_error"
     known = known_names if known_names is not None else _default_known_names()
     normalized = _normalize_result_alias(clause, kind, known)
     tree = ast.parse(normalized, mode="eval")

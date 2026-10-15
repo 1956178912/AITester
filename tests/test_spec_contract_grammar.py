@@ -46,7 +46,9 @@ from src.specs.spec_ir_v2 import (
 )
 
 # 测试用被测函数签名（绑定上下文 = {r} ∪ 参数名 ∪ 白名单名 ∪ 常量）
-_PARAMS = ["a", "b", "text"]
+# v4（2026-10-15）：补 counts——字典读 API 正例 all(v > 0 for v in counts.values())
+# 需要该绑定名（提示示例用真实感参数名，测试签名随之扩展）。
+_PARAMS = ["a", "b", "text", "counts"]
 
 
 # ─── 1. 提示段内容：BNF + 正反例 + 自检指令 ─────────────────────────────────
@@ -77,10 +79,10 @@ def test_prompt_section_contains_bnf_and_selfcheck() -> None:
 
 
 def test_prompt_section_renders_every_example() -> None:
-    """7 正例 / 5 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
+    """10 正例 / 6 反例必须逐条出现在提示文本里（常量与提示绑定，不可只留常量）。"""
     section = SPEC_EXPR_GRAMMAR_SECTION
-    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 7, "提示契约要求 7 个正例（v3 量化 + 字符串方法）"
-    assert len(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES) == 5, "提示契约要求 5 个反例"
+    assert len(SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES) == 10, "提示契约要求 10 个正例（v3 量化 + 字符串方法 + v4 切片/字典读 API/set）"
+    assert len(SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES) == 6, "提示契约要求 6 个反例（v4 增 lambda 护栏反例）"
     for clause, _kind, _note in SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES:
         assert clause in section, f"正例未渲染进提示：{clause}"
     for clause, reason, _note in SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES:
@@ -96,9 +98,12 @@ def test_prompt_section_names_operators_truthfully() -> None:
     # 真实失败形态（中文 NL 描述句）必须作为反例出现在提示里
     assert "text 为 str 类型" in section
     assert "成功时返回 int 类型结果" in section
-    # 单引号 / 切片 / 花括号 / f-string 等字符白名单边界必须写明（实测被拒）
+    # 单引号 / 花括号 / f-string 等字符白名单边界必须写明（实测被拒）；
+    # v4：冒号放行后的边界（切片与字符串内合法、lambda/海象被拒）也要写明
     assert "单引号" in section
     assert "切片" in section
+    assert "lambda" in section
+    assert "海象" in section
     assert "位运算符" in section
     # v3：白名单内字符串方法（正例侧点名）与白名单外方法（反例侧点名）都要在
     assert "startswith" in section
@@ -166,6 +171,23 @@ def test_bnf_claimed_operators_are_really_accepted() -> None:
         "text.lower() == text",
         "text.isdigit()",
         'text.replace("a", "b") != text',
+        # v4（2026-10-15 批次六）：字符串 is* 家族补全 + 字典读 API + set/sum/bool/hasattr
+        "text.isupper()",
+        "text.islower() or text.isupper()",
+        "len(counts) == len(counts.keys())",
+        "all(v > 0 for v in counts.values())",
+        "counts.get(a, 0) >= 0",
+        "len(set(a)) == len(a)",
+        "sum(a) >= 0",
+        "bool(a) is True",
+        'hasattr(a, "x") or a is None',
+        # v4：切片（冒号入字符类；负步长 / 开边界 / 嵌套调用上界均合法）
+        "text[0:2] == \"ab\"",
+        "text[:2] == \"ab\"",
+        "text[1:] == \"bc\"",
+        "text[::-1] == \"ba\"",
+        "text[:len(text) - 1] == \"a\"",
+        "a[0:1] == (1,)",
         # v3：迭代域白名单内建（range/enumerate 单独出现亦无害）
         "range(3) == range(3)",
     )
@@ -187,12 +209,15 @@ def test_prompt_grammar_terminals_match_compiler_whitelist() -> None:
     terminals = spec_expr_grammar_terminals()
     assert terminals["calls"] == sorted(_ALLOWED_CALL_NAMES)
     assert terminals["attrs"] == sorted(_ALLOWED_ATTRS)
+    # v4（2026-10-15 批次六）：+ sum/set/bool/hasattr（纯内建，diag3 实测）
     assert terminals["calls"] == [
         "abs",
         "all",
         "any",
+        "bool",
         "enumerate",
         "float",
+        "hasattr",
         "int",
         "isinstance",
         "len",
@@ -200,19 +225,29 @@ def test_prompt_grammar_terminals_match_compiler_whitelist() -> None:
         "min",
         "range",
         "round",
+        "set",
         "sorted",
         "str",
+        "sum",
     ]
+    # v4（2026-10-15 批次六）：+ 字典读 API（values/keys/items/get）+
+    # 字符串 is* 家族补全（isupper/islower）+ 整数纯方法（bit_length）
     assert terminals["attrs"] == [
+        "bit_length",
         "count",
         "endswith",
         "find",
+        "get",
         "imag",
         "isalnum",
         "isalpha",
         "isdigit",
+        "islower",
         "isspace",
+        "isupper",
+        "items",
         "join",
+        "keys",
         "lower",
         "lstrip",
         "real",
@@ -223,6 +258,7 @@ def test_prompt_grammar_terminals_match_compiler_whitelist() -> None:
         "strip",
         "upper",
         "value",
+        "values",
     ]
     # v3（P0-A-1）：量化承载调用单独导出（planner BNF 的 <quant> 产生式渲染源）
     assert terminals["quantifiers"] == ["all", "any"]
@@ -330,10 +366,16 @@ _CONSISTENCY_CORPUS = (
     'result.title() == "Abc"',  # unsupported_operator（v3：title 刻意不入白名单）
     'open("x")',  # unsupported_operator
     "a == 'x'",  # unsupported_syntax（单引号字符串）
-    'text[0:2] == "ab"',  # unsupported_syntax（冒号切片）
+    'result == {"a": 1}',  # unsupported_syntax（v4：冒号已放行，花括号字典字面量仍被字符门拦下）
+    "lambda r: r > 0",  # unsupported_syntax（v4 护栏：lambda 子句无断言语义）
+    "(x := 5)",  # unsupported_syntax（v4 护栏：海象赋值）
     'text != "你好"',  # unsupported_syntax（形式子句被字符白名单拦下，非 NL）
     "x" * 201,  # too_long（201 个 'x' 拼接：可解析 + 单条 >200 字符，长度门命中）
     "",  # empty
+    # v4：切片形态（冒号放行后归"可编译"——与 _CONSISTENCY_CORPUS 的判定一致性
+    # 由 test_reject_reason_none_iff_compilable 全覆盖，此处显式记录迁移事实）
+    "text[0:2] == \"ab\"",
+    "result == text[::-1]",
 )
 
 
@@ -626,3 +668,123 @@ class TestBuiltinTypeNamesValuePosition:
         """类型名放行只影响标识符门；算子门/形态门不受影响。"""
         assert clause_reject_reason("x.title()", "postcondition", ["x"]) == "unsupported_operator"
         assert clause_reject_reason("x 为 str 类型", "precondition", ["x"]) == "natural_language"
+
+
+# ─── 7. v4（2026-10-15 批次六）：切片 + lambda/海象护栏 + 白名单扩容 ──────────
+# 实测依据：emse_dsl_diag3（719 Planner 缓存条目 / 607 去重子句，零 LLM）——
+# unsupported_syntax 拒绝 5 条全部是冒号形态（4 切片 + 1 字符串内冒号）；
+# 算子级违例 Top 为 sum×3 / set×3 / hasattr×2 / values×3 / isupper×1 /
+# bit_length×1 / bool×1 / get×1。域名属性（successor/outgoing_nodes）与
+# 模块链（collections.abc.Sequence）刻意不收（任意属性链 = 注入面）。
+_V4_SLICE_FORMS = (
+    "text[0:2] == \"ab\"",  # 闭边界
+    "text[:2] == \"ab\"",  # 开下界
+    "text[1:] == \"bc\"",  # 开上界
+    "text[::-1] == \"ba\"",  # 负步长
+    "text[:len(text) - 1] == \"a\"",  # 调用作上界
+    "text[1:3] == text[0:2]",  # 双边切片比较
+)
+
+
+class TestV4SliceSupport:
+    """v4：冒号入字符白名单——切片与双引号字符串内冒号可编译。"""
+
+    @pytest.mark.parametrize("clause", _V4_SLICE_FORMS)
+    def test_slice_forms_compile(self, clause: str) -> None:
+        assert clause_reject_reason(clause, "postcondition", ["text"]) is None, clause
+
+    def test_colon_inside_double_quoted_string_compiles(self) -> None:
+        """字符串字面量内的冒号不再被字符门整体误拒（diag3 实测形态）。"""
+        assert clause_reject_reason('result.startswith("result: ")', "postcondition", []) is None
+
+    def test_single_quote_still_rejected(self) -> None:
+        """单引号仍在字符门外（自检①要求字符串一律双引号，未放宽）。"""
+        assert clause_reject_reason("a == 'x'", "postcondition", ["a"]) == "unsupported_syntax"
+
+    def test_dict_literal_still_rejected(self) -> None:
+        """花括号仍在字符门外——字典/集合字面量与 f-string 保守不收。"""
+        assert clause_reject_reason('result == {"a": 1}', "postcondition", []) == "unsupported_syntax"
+        assert clause_reject_reason('result == f"{a}"', "postcondition", ["a"]) == "unsupported_syntax"
+
+    def test_slice_clause_compiles_to_assert_line(self) -> None:
+        """切片子句必须真的注入为 assert 行（度量=注入，P0-3 单一事实源）。"""
+        from src.specs.spec_ir_v2 import compile_spec_oracle
+
+        spec = {"preconditions_expr": [], "postconditions_expr": ["result == text[::-1]"], "invariants_expr": []}
+        code = compile_spec_oracle(spec, "m", "rev", signature_params=["text"])
+        assert "assert r == text[::-1]" in code
+
+
+class TestV4NoAssertSemanticsGuardrails:
+    """v4 护栏：冒号放行后新暴露的两种无断言语义形态必须被拒（防假断言）。"""
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            "lambda r: r > 0",  # 裸 lambda（BNF 无关键字参数产生式 ⇒ 只能裸出现）
+            "lambda a, b: a > b",
+            "(x := 5)",  # 海象赋值
+            "text[0:2] == \"ab\" and (x := 1)",  # 嵌套海象
+        ],
+    )
+    def test_lambda_and_walrus_rejected(self, clause: str) -> None:
+        reason = clause_reject_reason(clause, "postcondition", ["a", "b", "text", "r"])
+        assert reason == "unsupported_syntax", f"{clause} 应归 unsupported_syntax，实得 {reason}"
+
+    def test_guardrail_reason_in_closed_set(self) -> None:
+        assert clause_reject_reason("lambda r: r > 0", "postcondition", ["r"]) in SPEC_REJECT_REASONS
+
+    def test_lambda_in_whitelist_check_reports_violation(self) -> None:
+        from src.specs.spec_ir_v2 import _whitelist_check
+
+        violations = _whitelist_check("lambda r: r > 0")
+        assert any(v.startswith("no_assert_semantics:") for v in violations), violations
+
+    def test_guardrail_does_not_block_ordinary_clauses(self) -> None:
+        """护栏只拦 lambda/海象；普通子句（含推导式/比较/调用）不受影响。"""
+        assert clause_reject_reason("all(x > 0 for x in a)", "invariant", ["a"]) is None
+        assert clause_reject_reason("text[1:] != text", "postcondition", ["text"]) is None
+
+
+class TestV4WhitelistExtensions:
+    """v4 白名单扩容：纯内建调用 + 纯只读属性（逐条实测依据见模块 docstring）。"""
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            "len(set(a)) == len(a)",  # set：去重判定（diag3 ×3）
+            "sum(a) >= 0",  # sum（diag3 ×3）
+            "bool(a) is True",  # bool（diag3 ×1）
+            'hasattr(a, "x") or a is None',  # hasattr：鸭子类型（diag3 ×2）
+            "all(v > 0 for v in counts.values())",  # values（diag3 ×3）
+            "len(counts) == len(counts.keys())",  # keys（values 同族）
+            "all(k in counts for k in counts.items())",  # items（values 同族）
+            'counts.get(a, 0) >= 0',  # get（diag3 ×1）
+            "text.isupper()",  # isupper（diag3 ×1）
+            "text.islower() or text.isupper()",  # islower（isupper 同族）
+            "result <= n.bit_length()",  # bit_length（diag3 ×1）
+        ],
+    )
+    def test_new_whitelist_entries_compile(self, clause: str) -> None:
+        assert clause_reject_reason(clause, "postcondition", ["a", "counts", "text", "n"]) is None, clause
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            'counts.setdefault(a, 0)',  # 字典写方法刻意不收
+            "counts.pop(a)",  # 字典写方法刻意不收
+            "text.title()",  # v3 起刻意不收（反例教学形态）
+            "node.successor",  # 域名属性：任意属性链是注入面（diag3 ×5）
+            "collections.abc.Sequence",  # 模块链（diag3 实测）
+            "heapq.heappushpop(a, b)",  # 模块链 + 非白名单调用
+            "fibonacci(a - 1)",  # 被测函数自递归：语义扩展留待后续（diag3 ×4+1+1）
+        ],
+    )
+    def test_deliberately_excluded_forms_still_rejected(self, clause: str) -> None:
+        reason = clause_reject_reason(clause, "postcondition", ["a", "b", "node", "counts", "text"])
+        assert reason == "unsupported_operator", f"{clause} 应归 unsupported_operator，实得 {reason}"
+
+    def test_dangerous_calls_still_rejected_after_extension(self) -> None:
+        """扩容不得放宽危险调用（既有哨兵，v4 复锁）。"""
+        for bad in ("open('x')", "eval('1')", "exec('x')", "__import__('os')", "list(a)", "dict(a)"):
+            assert _whitelist_check(bad) != [], bad

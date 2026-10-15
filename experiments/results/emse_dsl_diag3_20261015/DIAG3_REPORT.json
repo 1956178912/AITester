@@ -1,0 +1,249 @@
+{
+  "meta": {
+    "date": "2026-10-15",
+    "batch": "emse-batch6-dsl-diag3",
+    "cache_dir": "/Users/wangchenyu/.cache/aitester/llm",
+    "planner_entries": 719,
+    "unique_clause_instances": 607,
+    "unique_tasks": 91,
+    "func_path_distribution": {
+      "plan_name": 719
+    },
+    "gate_current": "pre-v4 (colon removed, v4 whitelist entries removed; --prior-gate snapshot)",
+    "gate_old": "pre-2026-10-14-fix (default known set, no type names)",
+    "prior_gate_snapshot": true
+  },
+  "overall": {
+    "total_clauses": 607,
+    "reasons": {
+      "compilable": 537,
+      "unknown_name": 40,
+      "unsupported_operator": 25,
+      "unsupported_syntax": 5
+    },
+    "old_gate_reasons": {
+      "compilable": 489,
+      "unknown_name": 88,
+      "unsupported_operator": 25,
+      "unsupported_syntax": 5
+    },
+    "compile_rate_new": 0.8847,
+    "compile_rate_old": 0.8056,
+    "unknown_name_identifiers": {
+      "left": 6,
+      "right": 6,
+      "scores": 4,
+      "best": 3,
+      "code": 2,
+      "i": 2,
+      "j": 2,
+      "nodesseen": 2,
+      "n": 2,
+      "lo": 1,
+      "hi": 1,
+      "_STOCK": 1,
+      "day": 1,
+      "month": 1,
+      "year": 1,
+      "dist": 1,
+      "memo": 1,
+      "S": 1,
+      "heapq": 1,
+      "_TABLE": 1,
+      "approx": 1,
+      "counts": 1,
+      "comstart": 1,
+      "comstyle": 1,
+      "longest": 1,
+      "la": 1,
+      "m": 1,
+      "lb": 1,
+      "group_by_node": 1
+    },
+    "operator_violations": {
+      "attr_escape:successor": 5,
+      "dangerous_call:fibonacci": 4,
+      "dangerous_call:sum": 3,
+      "attr_escape:values": 3,
+      "dangerous_call:set": 3,
+      "dangerous_call:hasattr": 2,
+      "attr_escape:isupper": 1,
+      "attr_escape:bit_length": 1,
+      "dangerous_call:bool": 1,
+      "dangerous_call:gcd": 1,
+      "attr_escape:get": 1,
+      "attr_escape:Sequence": 1,
+      "attr_escape:abc": 1,
+      "attr_escape:heappushpop": 1,
+      "dangerous_call:factorial": 1,
+      "attr_escape:outgoing_nodes": 1
+    }
+  },
+  "by_dataset": {
+    "other": {
+      "total_clauses": 238,
+      "reasons": {
+        "compilable": 209,
+        "unknown_name": 17,
+        "unsupported_operator": 8,
+        "unsupported_syntax": 4
+      },
+      "old_gate_reasons": {
+        "compilable": 191,
+        "unknown_name": 35,
+        "unsupported_operator": 8,
+        "unsupported_syntax": 4
+      },
+      "compile_rate_new": 0.8782,
+      "compile_rate_old": 0.8025,
+      "unknown_name_identifiers": {
+        "left": 5,
+        "right": 5,
+        "scores": 4,
+        "best": 3,
+        "_STOCK": 1,
+        "day": 1,
+        "month": 1,
+        "year": 1,
+        "_TABLE": 1
+      },
+      "operator_violations": {
+        "dangerous_call:fibonacci": 4,
+        "dangerous_call:sum": 2,
+        "attr_escape:isupper": 1,
+        "dangerous_call:bool": 1,
+        "attr_escape:get": 1,
+        "dangerous_call:factorial": 1
+      }
+    },
+    "quixbugs": {
+      "total_clauses": 256,
+      "reasons": {
+        "compilable": 228,
+        "unsupported_operator": 16,
+        "unknown_name": 11,
+        "unsupported_syntax": 1
+      },
+      "old_gate_reasons": {
+        "compilable": 207,
+        "unknown_name": 32,
+        "unsupported_operator": 16,
+        "unsupported_syntax": 1
+      },
+      "compile_rate_new": 0.8906,
+      "compile_rate_old": 0.8086,
+      "unknown_name_identifiers": {
+        "nodesseen": 2,
+        "lo": 1,
+        "hi": 1,
+        "left": 1,
+        "right": 1,
+        "memo": 1,
+        "heapq": 1,
+        "approx": 1,
+        "counts": 1,
+        "longest": 1,
+        "group_by_node": 1
+      },
+      "operator_violations": {
+        "attr_escape:successor": 5,
+        "attr_escape:values": 3,
+        "dangerous_call:set": 3,
+        "dangerous_call:hasattr": 2,
+        "attr_escape:bit_length": 1,
+        "dangerous_call:gcd": 1,
+        "attr_escape:heappushpop": 1,
+        "dangerous_call:sum": 1,
+        "attr_escape:outgoing_nodes": 1
+      }
+    },
+    "ult": {
+      "total_clauses": 113,
+      "reasons": {
+        "compilable": 100,
+        "unknown_name": 12,
+        "unsupported_operator": 1
+      },
+      "old_gate_reasons": {
+        "compilable": 91,
+        "unknown_name": 21,
+        "unsupported_operator": 1
+      },
+      "compile_rate_new": 0.885,
+      "compile_rate_old": 0.8053,
+      "unknown_name_identifiers": {
+        "code": 2,
+        "i": 2,
+        "j": 2,
+        "n": 2,
+        "dist": 1,
+        "S": 1,
+        "comstart": 1,
+        "comstyle": 1,
+        "la": 1,
+        "m": 1,
+        "lb": 1
+      },
+      "operator_violations": {
+        "attr_escape:Sequence": 1,
+        "attr_escape:abc": 1
+      }
+    }
+  },
+  "samples": {
+    "natural_language": [],
+    "unsupported_syntax": [
+      "n <= 0 or result == s[:n - 1]",
+      "result == (s == s[::-1])",
+      "result == result[::-1]",
+      "result == s[:len(result)]",
+      "result.startswith(\"result: \")"
+    ],
+    "unsupported_operator": [
+      "all(ch.isupper() or ch == \".\" for ch in result)",
+      "all(hasattr(node, \"incoming_nodes\") for node in nodes)",
+      "all(hasattr(node, \"outgoing_nodes\") for node in nodes)",
+      "all(heapq.heappushpop(heap, x) is not None for x in arr)",
+      "all(isinstance(v, (int, float)) for v in result.values())",
+      "all(len(group) > 0 for group in group_by_node.values())",
+      "all(length > 0 for length in length_by_edge.values())",
+      "all(node not in node.outgoing_nodes for node in nodes)",
+      "allowed_mappings is None or isinstance(allowed_mappings, collections.abc.Sequence)",
+      "b == 0 or result == gcd(a % b, b)",
+      "len(arr) == len(set(arr))",
+      "len(perm) == len(set(perm))",
+      "len(result) == sum(counts[i] for i in range(len(arr)))",
+      "n < 2 or result == fibonacci(n - 1) + fibonacci(n - 2)",
+      "n <= 0 or n == 1 or result == fibonacci(n - 1) + fibonacci(n - 2)",
+      "n == 0 or result == n * factorial(n - 1)",
+      "node is None or node.successor is None or node.successor != node",
+      "node is None or node.successor is not None or node.successor is None",
+      "result <= n.bit_length()",
+      "result == \"count=\" + str(len(data)) + \" total=\" + str(sum(data) * 2)"
+    ],
+    "unknown_name": [
+      "-1 <= right <= len(arr) - 1",
+      "-1 <= right and right <= len(arr) - 1",
+      "0 <= dist",
+      "0 <= hi <= len(arr)",
+      "0 <= i",
+      "0 <= la <= m",
+      "0 <= lb <= n",
+      "0 <= left <= len(arr)",
+      "0 <= left <= right + 1",
+      "0 <= left and left <= len(arr)",
+      "0 <= left and left <= right + 1",
+      "0 <= left and left <= right + 1 and right <= len(arr) - 1",
+      "0 <= lo <= len(arr)",
+      "0 <= n <= len(rep)",
+      "_STOCK[sku] == qty",
+      "all(S[j][v] >= 0 for j in range(n + 1) for v in range(W + 1))",
+      "all(best <= s for s in scores)",
+      "all(best >= s for s in scores)",
+      "all(heapq is not None for x in arr)",
+      "all(len(group_by_node[node]) >= 1 for node in group_by_node)"
+    ],
+    "parse_error": [],
+    "too_long": []
+  }
+}

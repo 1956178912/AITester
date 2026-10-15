@@ -1,10 +1,102 @@
-> Last updated: 2026-10-14 (EMSE batch 5: M4 QuixBugs SpecExpr expansion 4-arm A/B run [independent cache namespaces, ~$0.25] → **negative** [A specir vs B NL, n=35 standard caliber δ=−8.57pp / p=0.4531 / BF10=0.5625 → not_confirmed; the pilot 6:1 positive trend did not replicate — direction reversed, pilot was small-sample noise] + full Mut@k measurement [cosmic-ray 8.7.0 official protocol, zero-LLM]: ULT 3-group pooled 0.92/0.95/1.0 + **QuixBugs first measurement 0.9610 [443/461, 49 measurable, 1 skip]** — further substantiates "mutation-strong but defect-blind"; over-red fixed-rerun P1-P4 classification 5-case sample [4/5 P1 assertion-coupling + 1/5 P3 implementation-coupling]. New `experiments/emse_quixbugs_mutk.py` [QuixBugs cosmic-ray full] + `experiments/emse_quixbugs_specir_expand_arms.py` [M4 4-arm orchestrator] + `experiments/emse_batch5_orchestrator.py` [batch 5 orchestrator]. Full test run 5912 collected / 5908 passed [derived], ruff clean. New ADR-0032. Previously 2026-10-14 EMSE batch 4 M1 M10 observability + M2/M3/M4 pre-registration
+> Last updated: 2026-10-15 (EMSE batch 6: SpecExpr DSL coverage improvement — colon/slices into the character gate + call whitelist +sum/set/bool/hasattr + attr whitelist +values/keys/items/get/isupper/islower/bit_length + lambda/walrus guardrails [no_assert_semantics, preventing always-true fake assertions]; zero-LLM: corpus = local Planner cache 719 entries / 607 deduplicated clauses [emse_dsl_diag3], before/after reconciliation = same-corpus controlled estimate 0.8847 → 0.9127 [+2.80pp, 17 recovered / 0 regressed]. Prompt layer synced: BNF gains a `<slice>` production, positives 7→10, negatives 5→6 [lambda]; whitelist terminals still rendered from the spec_expr_grammar_terminals single source of truth. Fixed spec_smt._EVAL_SAFE_FUNCS hardcoded drift [F14 family; now derived from _ALLOWED_CALL_NAMES]. Full test run 5953 collected / 5949 passed [derived], ruff/mypy clean. Previously 2026-10-14 batch 5 M4 negative + Mut@k + over-red P1-P4)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-15 EMSE batch 6 (SpecExpr DSL coverage improvement: colon/slices + whitelist extensions + lambda/walrus guardrails, zero-LLM)
+
+> This batch implements the next optimization direction self-identified after the
+> layered-narrative closure — extending the restricted-expression DSL coverage
+> (not switching datasets to chase significance). Zero-LLM throughout: corpus =
+> local Planner cache; reconciliation = purely local.
+> - Diagnosis (`experiments/emse_dsl_diag3.py`, artifact
+>   `emse_dsl_diag3_20261015/`): 719 Planner cache entries (with `*_expr`
+>   contract products) → 607 deduplicated clauses (QuixBugs 256 / synthetic &
+>   other 238 / ULT 113); current gate (post-2026-10-14 fix) clause-level
+>   compile rate **88.5%**; all 5 unsupported_syntax rejections are colon forms
+>   (4 slices + 1 colon inside a double-quoted string rejected wholesale by the
+>   character gate); recoverable operator-level tail sum×3 / set×3 / hasattr×2 /
+>   values×3 / isupper×1 / bit_length×1 / bool×1 / get×1; all 40 unknown_name
+>   rejections are function-internal variables / module-level names (unbound by
+>   the oracle ⇒ correctly rejected, not a DSL gap);
+> - v4 extension (`src/specs/spec_ir_v2.py`, empirical basis and risk-class
+>   arguments documented per entry): ① colon into the character gate (slices
+>   `text[::-1]` + colons inside double-quoted strings `"result: "`); ② paired
+>   guardrails `visit_Lambda` / `visit_NamedExpr` → `no_assert_semantics`
+>   violation family → attributed unsupported_syntax (prevents always-true
+>   `assert lambda ...`; the closed reason set is unchanged); ③ call whitelist
+>   +sum/set/bool/hasattr (pure builtins, same risk class as sorted/min/max);
+>   ④ attr whitelist +values/keys/items/get (dict read API) / isupper/islower
+>   (str is* family) / bit_length (pure int method);
+> - Prompt layer synced (`src/agents/planner.py`): BNF gains a `<slice>`
+>   production and note 4; self-check ① changed to "colons only inside slices
+>   and double-quoted strings"; positives 7→10 (slice / dict read API / set
+>   dedup), negatives 5→6 (lambda guardrail); whitelist terminals still
+>   rendered from the `spec_expr_grammar_terminals()` single source of truth —
+>   zero prompt-compiler drift;
+> - Before/after reconciliation (`experiments/emse_dsl_extend_recheck.py`,
+>   same-corpus controlled estimate): clause-level compile rate
+>   **0.8847 → 0.9127 (+2.80pp)** (quixbugs 0.8906 → 0.9258, +3.52pp; ULT
+>   0.885 unchanged — all its rejections are module chains, legitimate);
+>   17 recovered / 0 regressed;
+> - Residuals (next-round candidates, recorded in artifact READMEs):
+>   self-recursive calls on the function under test ×6 (fibonacci×4 / gcd×1 /
+>   factorial×1 — needs a "target function name in the binding context"
+>   semantic extension, to be designed separately); domain attributes
+>   successor×5 (arbitrary attribute chains = injection surface; recommend
+>   converging via the Planner prompt side);
+> - Tests +41 cases (slices 6 / guardrails 4 / new whitelist 11 /
+>   deliberately-excluded forms 7 / SMT single-source 1 / transition and
+>   injection-line assertions); ruff and mypy clean; env_budget unchanged
+>   (zero new environment variables this batch).
+
+### Added
+
+- **SpecExpr DSL v4 grammar extension (`src/specs/spec_ir_v2.py`)**:
+  - Character gate gains the colon (slices + colons inside double-quoted
+    strings) — diag3 measured that all 5 unsupported_syntax rejections are
+    colon forms; the LLM writes slices naturally despite the prompt's
+    "no colon" prohibition;
+  - `_WhitelistVisitor` gains `visit_Lambda` / `visit_NamedExpr` guardrails
+    (`no_assert_semantics:` violation family) — the necessary pairing for
+    colon admission, preventing always-true fake assertions; attributed
+    unsupported_syntax, the closed set `SPEC_REJECT_REASONS` unchanged;
+  - `_ALLOWED_CALL_NAMES` +sum/set/bool/hasattr (pure builtins;
+    materialization exposure backstopped by the executor's 30s timeout);
+  - `_ALLOWED_ATTRS` +values/keys/items/get (dict read API) / isupper/
+    islower (str is* family completion) / bit_length (pure int method);
+- **SpecExpr diagnosis and reconciliation tooling (gitignored)**:
+  `experiments/emse_dsl_diag3.py` (cache-corpus extraction + three-caliber
+  attribution) + `experiments/emse_dsl_extend_recheck.py` (constant-removal
+  method for exact prior-gate replication, per-clause before/after
+  reconciliation); artifacts `experiments/results/emse_dsl_diag3_20261015/`
+  and `emse_dsl_extend_recheck_20261015/` (READMEs force-added to git).
+
+### Fixed
+
+- **`src/specs/spec_smt.py` `_EVAL_SAFE_FUNCS` hardcoded drift (F14 family)**:
+  originally a hardcoded tuple; when v3 admitted isinstance/range/enumerate
+  the sync was missed, so clauses using those whitelisted calls were silently
+  dropped as `_Untranslatable` in the SMT semantic-recheck stage; now derived
+  from the `_ALLOWED_CALL_NAMES` single source of truth so grammar extensions
+  follow automatically (regression test locks set equality).
+
+### Notes (batch-6 core conclusions)
+
+- Compiler acceptance of "clauses the LLM has already formalized" improved
+  88.5% → **91.3%** — most remaining rejections are legitimate (43 internal
+  variables + 10 domain attributes / module chains / self-recursion);
+- Controlled-estimate discipline: clause-level reconciliation ≠ end-to-end
+  task-level gain (requires an LLM rerun; not done this batch); v4 only
+  changes the measurement/compilation gate, the injection side follows the
+  same decision automatically via the P0-3 single source of truth
+  (`_clause_is_compilable`) — tests lock the slice assert-line injection;
+- Corpus boundary: only plans with `*_expr` products are included; it
+  measures compiler acceptance, not LLM formalization willingness
+  (the latter = spec_expr_coverage, an orthogonal metric).
 
 ## [Unreleased] — 2026-10-14 EMSE batch 5 (M4 QuixBugs SpecExpr expansion run + full Mut@k measurement + over-red P1-P4 classification)
 

@@ -33,9 +33,12 @@
 from __future__ import annotations
 
 import ast
+import builtins
 import logging
 import os
 from typing import Any
+
+from src.specs.spec_ir_v2 import _ALLOWED_CALL_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +51,14 @@ _ENV_MAX_WITNESSES = "SPEC_SMT_MAX_WITNESSES"
 _OPT_BOUND = 10**6
 
 # 见证 Python 语义复核时注入的纯函数环境（与 spec_ir_v2._ALLOWED_CALL_NAMES
-# 同一集合；子句经白名单后理论不含调用，此处双保险防 0 除 / 内建缺失）
+# **同一集合**——2026-10-15 批次六修复 F14 同族漂移：此处原是硬编码元组，
+# v3 收入 isinstance/range/enumerate 时漏同步，致这些白名单调用的子句在
+# 语义复核段被 _Untranslatable 静默丢弃；现从单一事实源派生，扩文法自动跟随）。
+# 子句经白名单后理论不含调用，此处双保险防 0 除 / 内建缺失。
 _EVAL_SAFE_FUNCS: dict[str, Any] = {
-    name: __builtins__[name] if isinstance(__builtins__, dict) else getattr(__builtins__, name)
-    for name in ("len", "abs", "min", "max", "round", "float", "int", "str", "sorted", "any", "all")
+    name: getattr(builtins, name)
+    for name in sorted(_ALLOWED_CALL_NAMES)
+    if hasattr(builtins, name)  # 白名单恒为内建子集；缺失名静默跳过（双保险口径）
 }
 
 

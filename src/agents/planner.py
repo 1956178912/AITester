@@ -49,6 +49,10 @@ SPEC_EXPR_GRAMMAR_POSITIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
     # v3（2026-10-12 P0-A-1 文法升阶）：有限域量化 + 字符串纯方法正例
     ("all(ch.isdigit() for ch in text)", "invariant", "全称量化：所有字符为数字（循环变量 ch 仅在推导式内绑定）"),
     ('text.startswith("a")', "precondition", "字符串纯方法：前缀判定（startswith 在白名单属性内）"),
+    # v4（2026-10-15 EMSE 批次六，emse_dsl_diag3 实测形态）：切片 + 字典读 API + set 去重
+    ("result == text[::-1]", "postcondition", "切片：逆序断言（冒号只允许出现在切片与双引号字符串内）"),
+    ("all(v > 0 for v in counts.values())", "invariant", "字典读 API：values() 只读遍历（keys/items/get 同族）"),
+    ("len(set(result)) == len(result)", "postcondition", "集合去重：元素互异判定（set 在白名单调用内）"),
 )
 SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
     ("text 为 str 类型", "natural_language", "中文类型描述句——评审实测的真实失败形态"),
@@ -60,6 +64,12 @@ SPEC_EXPR_GRAMMAR_NEGATIVE_EXAMPLES: tuple[tuple[str, str, str], ...] = (
         'result.title() == "Abc"',
         "unsupported_operator",
         "title 不在白名单属性内（字符串纯方法只放行 startswith/split/lower 等）",
+    ),
+    # v4（2026-10-15）：冒号放行后的护栏反例——lambda 子句无断言语义
+    (
+        "lambda r: r > 0",
+        "unsupported_syntax",
+        "lambda 子句编译产物是恒真断言（BNF 无关键字参数产生式，lambda 只能裸出现）",
     ),
 )
 # 示例所属字段标签（渲染进提示，避免 LLM 把后置示例写进前置）
@@ -96,8 +106,9 @@ def _build_spec_expr_grammar_section() -> str:
 <unary>   ::= ("-" | "+") <unary> | <atom>
 <atom>    ::= 数字 | 双引号字符串 | True | False | None
             | 参数名 | result（仅后置 / 不变量，表示返回值）
-            | <call> | <quant> | <atom>[<arith>] | <atom>.<attr>
+            | <call> | <quant> | <atom>[<slice>] | <atom>.<attr>
             | "(" <clause> ("," <clause>)* ")" | "[" <clause> ("," <clause>)* "]"
+<slice>   ::= <arith> | [<arith>] ":" [<arith>] [":" [<arith>]]
 <call>    ::= <func> "(" [<clause> ("," <clause>)*] ")"
 <quant>   ::= ("{quants}") "(" <clause> "for" <name> "in" <clause> ")"
 <func>    ::= {funcs}
@@ -107,24 +118,29 @@ def _build_spec_expr_grammar_section() -> str:
       写 any(...)；<name> 是循环变量，只在推导式内部绑定，不得在子句其他地方引用。
 注 3：<attr> 含字符串纯方法（startswith/split/join/lower 等，无副作用）；title()/
       center()/encode() 等不在白名单内，不得出现。
+注 4：<slice> 是 v4（2026-10-15）放行的切片形态——冒号只允许出现在切片与双引号
+      字符串内（如 text[1:] / text[::-1] / "result: "）；lambda 与海象赋值
+      （(x := 5)）会被整条拒绝（无断言语义）。
 
-【正例（7 条，逐条都能通过全部校验门，可直接照抄）】
+【正例（10 条，逐条都能通过全部校验门，可直接照抄）】
 {positives}
 
-【反例（5 条，逐条都会被整条丢弃；这些只写进 NL 字段，不要放进 *_expr）】
+【反例（6 条，逐条都会被整条丢弃；这些只写进 NL 字段，不要放进 *_expr）】
 {negatives}
 
 【输出前自检（逐条核对；任一条不满足，就把该条只写在 NL 字段）】
-① 字符：只含 ASCII 表达式字符——无中文、无单引号（字符串一律双引号）、无冒号
-   （不能用切片 text[0:2]）、无花括号、无 f-string、无 # 号；单条 ≤ 200 字符。
+① 字符：只含 ASCII 表达式字符——无中文、无单引号（字符串一律双引号）、
+   无花括号、无 f-string、无 # 号；冒号只允许出现在切片（text[1:] /
+   text[::-1]）与双引号字符串内；单条 ≤ 200 字符。
 ② 调用：只允许 <func> 白名单内的调用、<attr> 白名单内的属性 / 字符串纯方法；
    title()/center()/encode()/open()/eval() 等一律不得出现。
 ③ 名字：只用被测函数的真实参数名；后置 / 不变量可另用 result 表示返回值
-   （不要写 r）；未绑定的名字（如 total）一律不得出现；量化循环变量
-   （如 all(x > 0 for x in items) 的 x）只在推导式内有效。
+   （不要写 r）；未绑定的名字（如 total、left、scores 等函数内部变量）
+   一律不得出现；量化循环变量（如 all(x > 0 for x in items) 的 x）只在
+   推导式内有效。
 ④ 形态：每条必须整条能作为 assert 的条件——"result = a + b"（赋值）、
-   "如果 a 为负数"（自然语言）都不行；判等写 ==，判类型写 isinstance(x, int)，
-   判非空写 len(x) > 0 或 x != ""。
+   "如果 a 为负数"（自然语言）、lambda 子句、海象赋值 "(x := 5)" 都不行；
+   判等写 ==，判类型写 isinstance(x, int)，判非空写 len(x) > 0 或 x != ""。
 ⑤ 每条自检通过才写进 *_expr；拿不准就只写 NL 字段——编译器按条丢弃编不过的
    子句，不会替你修正，塞进去只会拉低可编译率。
 """
