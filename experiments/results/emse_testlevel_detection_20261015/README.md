@@ -71,9 +71,13 @@ AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/e
 | `arm_D_nl_repeat` | 41 | 25 | 9 | 1 | 1 | 5 | 0 | 5 | 4 | 0 |
 | `pooled_all_sources` | 205 | 127 | 39 | 9 | 6 | 24 | 0 | 5 | 4 | 0 |
 
-> `detecting_*` = 至少 1 个 f2p；`*_invalid` = 至少 1 个在**正确代码**上失败的测试；
-> `blind_clean` = 0 个 f2p 且 0 个 f2f（全 p2p/p2f/other）；`timeout` = 任一侧 30s 未终结；
-> `no_pertest_data` = 两侧都跑完但至少一侧无任何可解析 node id（收集错误等）。
+> 套件级标签（互斥，判定顺序：timeout → no_pertest_data → 四分类）：
+> `detecting_clean` = f2p≥1 且 f2f=0；`detecting_invalid` = f2p≥1 且 f2f≥1；
+> `blind_clean` = f2p=0 且 f2f=0（可能含 p2f/other）；`invalid_only` = f2p=0 且 f2f≥1；
+> `timeout` = 任一侧 30s 未终结；`no_pertest_data` = 两侧都跑完但至少一侧无任何可解析 node id。
+> **注意**：`detecting_clean` 只排除 f2f，**不等价于** task-level `detection_rate`=1.0——
+> 后者还要求 fixed 侧 rc=0，因此 p2f>0（在修复代码上反而失败）的套件仍可能落进 `detecting_clean`。
+> 反向成立：det=1.0 的套件必然是 `detecting_clean` 且 f2f=p2f=0（下表 §3.4 的 f2p=0 异常清单为空即此校验）。
 
 ## 3. Step 2 指标（显式分母）
 
@@ -236,8 +240,30 @@ AITESTER_QUIXBUGS_DATA=~/.cache/aitester/quixbugs .venv/bin/python experiments/e
 > 这说明任务级配对结论不仅样本小，而且**对「不可测」的记法敏感**；替代口径仅供敏感性披露，
 > 不作为本件或论文的主口径。
 
-### 4.6 结论（逐条标注支撑口径）
+### 4.6 任务聚类「计数 vs 占比」方向不一致的根因：**套件规模混淆**（measured，批次九补充核验）
 
+§4.3 表中 primary 对比出现「计数方向 +0.1707（SpecExpr 多）vs 占比方向 −0.0289（NL 多）」
+的不一致。本节能性核验结论：**这是套件规模（生成测试数量）差异造成的混淆，不是度量矛盾**。
+
+| 量（primary A_specir vs B_nl，共同 41 任务） | A_specir | B_nl | 差 |
+|---|---|---|---|
+| 可分类测试总数 | **920** | **795** | +125（**+15.7%**） |
+| 每任务平均可分类测试数 | **22.4** | **19.4** | +3.0 |
+| Σf2p（阈值单位=测试计数） | 299 | 292 | +7 |
+| f2p 率（归一后） | **0.3250** | **0.3673** | **−4.23pp（NL 更高）** |
+
+- 计数尺度比较的是「两臂各自生成的测试数量」，而 SpecExpr 臂系统性生成更多测试
+  （+15.7%）⇒ 计数口径**结构上偏向生成量大的臂**，其 +0.17 不代表检出能力更强；
+- 按规模归一后为 −0.0254（逐任务 f2p 分数均值），逐任务方向计数 **NL 更多 18 : SpecExpr 更多 16**（并列 7），
+  与合并口径 δ=−1.77pp / 任务聚类 merged 平均 −0.0393 同向；
+- 因此 §4.6 结论中「primary 任务聚类方向反向」的表述**不成立**：正确读法是
+  「primary 的计数方向由套件规模驱动，归一后与其余口径一致（均无正效应）」。
+
+> **对论文的措辞要求**：跨臂比较**不得**使用「f2p 绝对计数」作因变量（未控生成量）；
+> 若报告计数，必须同时给出可分类测试总数或改用占比/率；本件 §4.3 的 Δf2p(计数) 列
+> 仅作描述性补充，判定以占比与任务级二值口径为准。
+
+### 4.7 结论（逐条标注支撑口径）
 - （measured）pooled 122 个任务级检出中 4 个（3.3%）由**单个**测试函数扛下；det1 套件平均 f2p = 9.3033（占其可分类测试 39.75%）。
 - （measured）pooled 盲测质量 p2p=2530 vs f2p=1544：62.1% 的（p2p+f2p）测试不携带任何缺陷检出信号；f2f（在正确代码上失败）率 0.0305。
 - （computed）任务级 primary 复现：2:5，n=35，δ=-8.57pp，p=0.4531，BF10=0.5625 → 判定 `not_confirmed`（与既有结论一致）。
@@ -758,9 +784,9 @@ collecting ... collected 41 items
 
 | 任务 | buggy rc | buggy pytest 汇总行 | 工件 buggy(pass/fail) | fixed rc | fixed pytest 汇总行 | 工件 fixed(pass/fail) | 判定 |
 |---|---|---|---|---|---|---|---|
-| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in 0.08s =============================================` | 9/37 | 0 | `========================================================================================== 46 passed in 0.08s ==================================================` | 46/0 | **match** |
-| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in 0.08s =============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in 0.08s =============================================` | 22/11 | **match** |
-| `quixbugs50_batch5/quixbugs__bitcount` | `unmeasured` | `../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_vkiu9zr3/python_testcases/test_bitcount.py::test_bitcount_127` | `unmeasured`/`unmeasured` | `unmeasured` | `../../../../../../../var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/indep_bitcount_c_ypx5go/python_testcases/test_bitcount.py::test_bitcount_negative_undefined` | `unmeasured`/`unmeasured` | **reproduced_timeout** |
+| `quixbugs50_batch5/quixbugs__pascal` | 1 | `===================================================================================== 37 failed, 9 passed in 0.08s =============================================` | 9/37 | 0 | `========================================================================================== 46 passed in 0.07s ==================================================` | 46/0 | **match** |
+| `quixbugs50_batch5/quixbugs__next_palindrome` | 1 | `===================================================================================== 9 failed, 24 passed in 0.09s =============================================` | 24/9 | 1 | `==================================================================================== 11 failed, 22 passed in 0.07s =============================================` | 22/11 | **match** |
+| `quixbugs50_batch5/quixbugs__bitcount` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | `unmeasured` | `(超时终止，无 pytest 汇总行)` | `unmeasured`/`unmeasured` | **reproduced_timeout** |
 
 > `match` = pytest 自身汇总行计数与工件逐测试表推出的该侧 (pass, fail+error) 逐位相等；
 > `reproduced_timeout` = 两侧再次在 30s 上限超时（超时套件在工件中一律记 `other`，不产生 f2p）。
