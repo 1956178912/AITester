@@ -14,7 +14,7 @@
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **6571 passed / 5 skipped / 0 failed**（登记口径 = collected 6576 − skipped 5；全量实跑 582.20s） | `pytest tests/ -q -n 4 --dist loadfile` |
+| 全量测试 | **6580 passed / 5 skipped / 0 failed**（登记口径 = collected 6585 − skipped 5；全量实跑 645.62s） | `pytest tests/ -q -n 4 --dist loadfile` |
 | 总行覆盖 | **92.78%**（ratchet 水位 92.40，余量 +0.38pp） | `make test-cov` + `scripts/gates/coverage_ratchet.py --check` |
 | 总分支覆盖 | **87.29%**（水位 86.90，余量 +0.39pp） | 同上（`--cov-branch`） |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
