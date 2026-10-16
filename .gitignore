@@ -115,6 +115,9 @@ PAPER_GUIDE.md
 paper.md
 *.tex
 *.bib
+# 论文初稿（Typst，2026-10-16）：paper/ 目录与全部 .typ 稿一律不入库
+paper/
+*.typ
 # Sensitive local artifacts (academic/review/security) — kept out of GitHub
 .gitignore-sensitive
 INDEPENDENT_REVIEW_*.md

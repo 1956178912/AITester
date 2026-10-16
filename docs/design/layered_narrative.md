@@ -288,7 +288,7 @@ Open Science 清单与 P0 状态见
 |---|---|---|---|
 | Konstantinou, Degiovanni & Papadakis（ICST 2026） | DOI 10.1109/ICST69053.2026.00040；arXiv:2601.09695v2 | 393 类 / 3,657 方法上 plain LLM 在 line/branch/mutation 全面优于 HITS/SymPrompt/CoverUp/TestSpark 四工具（+17.72/+19.80/+20.92pp） | **最强外部同向证据**：复杂测试生成工程组件不敌轻量提示 |
 | BOAD（ICLR 2026，MIT/MIT-IBM） | arXiv:2512.23631 | 自动发现的层级多 agent 胜单 agent 与手工多 agent（SWE-bench Verified） | 反向锚点：若要多 agent，增益须来自**自动搜索**而非手工设计——支持"手工编排降级"而非"多 agent 无用"的强表述 |
-| Zhao, Song & Cohen（ISSTA 2026） | PACMSE 3(ISSTA) ISSTA113 | 缺陷代码 prompt 增加误导性测试；spec-based prompting 缓解 | 支持规格锚定路线（P1 超越路径的理论互证） |
+| Zhao, Zhou & Cohen（ISSTA 2026） | PACMSE 3(ISSTA) ISSTA113；DOI 10.1145/3832204；arXiv:2607.22883 | 缺陷代码 prompt 增加误导性测试（misguided 0.46%→3.84%、effective 8.51%→2.98%）；spec-based prompting 缓解 | 支持规格锚定路线（P1 超越路径的理论互证）。**勘误（2026-10-16）**：作者中名"Song"系"Zhou"（Shurui Zhou，多伦多大学）；同组另一篇复现研究见下条 DOI 10.1145/3832093 |
 
 **引用纪律**：上述三条已内联至 ADR-0030 背景节；citation_allowlist
 已于第十九轮清空（7 项存疑全部核销：3 项验证内联 + 4 项陈旧移除），
