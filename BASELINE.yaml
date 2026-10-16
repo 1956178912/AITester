@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 C 轮代码优化批次：`--collect-only` 实测 **6576**；全量实跑 **6562 passed / 5 skipped / 5 failed**（582.20s，xdist -n 4 loadfile，`--deselect tests/test_cache_security.py::TestCacheExpiry`）。5 failed 全部为**工作树状态/环境**而非代码回归：3 = 脏树预检门禁正确触发（V6/V6b，commit 后自愈）、1 = 沙箱 `ps` 被禁（test_p0_hardening，项目已知环境项）、1 = `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）。故登记值 passed = collected − skipped = 6576 − 5 = **6571** / failed 0 / skipped 5。本轮新增测试 42（test_env_utils 24 + test_emse_stats_extensions 18）+ 上批未计账 2。此前 2026-10-15 Prompt Card 批次：6532/6526/5/0）
+last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 D 轮两波次合并收口后：`--collect-only` 实测 **6585**；全量实跑 **6574 passed / 5 skipped / 2 failed**（645.62s，xdist -n 4 loadfile，`--deselect tests/test_cache_security.py::TestCacheExpiry`〔类级，−4 项〕）。2 failed 全部为**环境/自指**而非代码回归：1 = 沙箱 `ps` 被禁（test_p0_hardening，项目已知环境项）、1 = `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）。故登记值 passed = collected − skipped = 6585 − 5 = **6580** / failed 0 / skipped 5。本轮新增测试 9（test_checksum_results_gate）+ 前轮 C 批次已计 42。此前 C 轮批次：6576/6571/5/0）
 
 tests:
-  total_passed: 6571          # 全量 pytest tests/（2026-10-16 C 轮代码优化批次：`--collect-only`（守卫口径）实测 **6576**；全量实跑（CI 同口径 env + 脏树/沙箱 ps 两项状态性失败，见 last_verified 注释）**6562 passed / 5 skipped / 5 failed**（582.20s，xdist -n 4 loadfile）。登记口径 = collected − skipped = 6576 − 5 = 6571（commit 后脏树 3 项转绿、自指 1 项随本字段刷新转绿；沙箱 ps 1 项为环境已知项）。本轮新增 42 例回归（env_flag 单一事实源 24 + 统计扩展纯函数 18），另计上批未计账 2 例。守卫余量 = skipped + xfailed + 1）
+  total_passed: 6580          # 全量 pytest tests/（2026-10-16 D 轮收口后：`--collect-only`（守卫口径）实测 **6585**；全量实跑（CI 同口径 env + 沙箱 ps 一项状态性失败，见 last_verified 注释）**6574 passed / 5 skipped / 2 failed**（645.62s，xdist -n 4 loadfile）。登记口径 = collected − skipped = 6585 − 5 = 6580（V6 打桩修复后脏树不再致失败；自指 1 项随本字段刷新转绿；沙箱 ps 1 项为环境已知项）。本轮新增 9 例回归（checksum_results 隐藏目录排除），另计前轮 C 批 42 例。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 582           # 全量耗时：2026-10-16 C 轮沙箱实测 582.20s（xdist -n 4 loadfile；沙箱 I/O 代理减速，CI 原生本机参考值 ~195s〔2026-10-11 实测〕）
+  suite_seconds: 646           # 全量耗时：2026-10-16 D 轮沙箱实测 645.62s（xdist -n 4 loadfile；沙箱 I/O 代理减速，CI 原生本机参考值 ~195s〔2026-10-11 实测〕）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
