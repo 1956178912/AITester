@@ -127,6 +127,7 @@ docs/emse/SPECEXPR_SYNTH_CONFIRM_PREREG_*.md
 docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_*.md
 docs/emse/EMSE_BATCH8_MUTK_VALIDITY_*.md
 docs/emse/EMSE_GOLD_CONFORMANCE_*.md
+docs/emse/EMSE_DF_SPEC_PREREG_*.md
 docs/design/stvr_empirical_study_design.md
 docs/design/false_fix_caliber_matrix.md
 SPEC_REPLACE_AB_SCALE87_REPORT_*.md
