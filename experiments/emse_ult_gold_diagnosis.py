@@ -76,6 +76,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
+
 REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -266,7 +268,9 @@ def _run_pytest(work_dir: Path, target: str, variant: str) -> dict[str, Any]:
     ]
     t0 = time.time()
     try:
-        proc = subprocess.run(
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
             cmd,
             cwd=str(work_dir),
             capture_output=True,
@@ -705,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
             sub = [r for r in report["records"] if subset is None or r["subset"] == subset]
             report["aggregate"][key]["attribution"] = dict(Counter(r["attribution"] for r in sub))
         _assertion_level_split(report, repo)  # 计算并回写 records[].assertion_level
-        src.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json(src, report, indent=2, mode=0o644)
         _write_readme(out_dir, report, repo=repo, supplement=supplement)
         _write_sums(out_dir)
         print(f"[ult_gold_diag] 离线重算 README → {out_dir}/README.md", flush=True)
@@ -960,7 +964,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(out_path, report, indent=2, mode=0o644)
     if args.only_tasks:
         # 补充测量：只写 JSON，绝不动主 README / SHA256SUMS
         print(f"[ult_gold_diag] 补充测量完成（{len(records)} 任务）→ {out_path}", flush=True)

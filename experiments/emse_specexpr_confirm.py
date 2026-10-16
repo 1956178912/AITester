@@ -27,6 +27,8 @@ from math import comb
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -396,7 +398,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(analysis, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(out, analysis, indent=2, mode=0o644)
         print(f"\n[emse_specexpr_confirm] 结果已落盘 → {out}")
     return 0
 

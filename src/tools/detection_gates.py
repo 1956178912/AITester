@@ -27,10 +27,11 @@ graph→experiments 的函数内延迟导入沿 mutation_advisor.py / nodes.py
 from __future__ import annotations
 
 import logging
-import os
 import re
 from collections.abc import Mapping
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +59,12 @@ def detection_specificity_gate_enabled() -> bool:
     读取口径：函数调用时读 env（非 import 期常量），便于测试 monkeypatch
     与 logic 档 setdefault 注入（与 config.detection_first_enabled 同口径）。
     """
-    return os.getenv(_ENV_SPECIFICITY_GATE, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_SPECIFICITY_GATE)
 
 
 def red_regression_gate_enabled() -> bool:
     """红回归门开关（RED_REGRESSION_GATE_ENABLE，默认 false）。"""
-    return os.getenv(_ENV_RED_REGRESSION_GATE, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_RED_REGRESSION_GATE)
 
 
 def _run_test_against_code(

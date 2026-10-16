@@ -39,6 +39,7 @@ import sys
 import tempfile
 from typing import Any
 
+from src.utils.env_utils import env_flag
 from src.utils.process_utils import run_with_timeout
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ _MEASURE_TIMEOUT = 60  # branch 测量子进程超时（秒，默认 60）
 
 def branch_coverage_inject_enabled() -> bool:
     """O3 开关（BRANCH_COVERAGE_INJECT_ENABLE，默认 false 历史口径）。"""
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def _measure_timeout() -> int:

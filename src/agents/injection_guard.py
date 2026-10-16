@@ -34,8 +34,9 @@ Clinejection 事件——恶意 issue 标题经 prompt injection 污染构建缓
 
 from __future__ import annotations
 
-import os
 import re
+
+from src.utils.env_utils import env_flag
 
 # ─── 开关（环境变量，调用期读取，保留测试的 patch.dict 切换能力）────────────
 # 输入侧（外部数据注入检测）默认关：检测+警示语义，阻断需人工审核策略
@@ -50,7 +51,7 @@ _INJECTION_GUARD_OUTPUT_ENV = "INJECTION_GUARD_OUTPUT_ENABLE"
 
 def injection_guard_enabled() -> bool:
     """输入侧注入检测开关（INJECTION_GUARD_ENABLE，默认 false 历史口径）。"""
-    return os.getenv(_INJECTION_GUARD_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_INJECTION_GUARD_ENV)
 
 
 def injection_guard_output_enabled() -> bool:
@@ -62,7 +63,7 @@ def injection_guard_output_enabled() -> bool:
     （patch_applier.dangerous_api_added AST 级同口径默认开）后，
     默认配置下 LLM 补丁危险操作即有拦截，不再依赖 Docker 模式兜底。
     """
-    return os.getenv(_INJECTION_GUARD_OUTPUT_ENV, "true").lower() in ("true", "1", "on")
+    return env_flag(_INJECTION_GUARD_OUTPUT_ENV, True)
 
 
 # ─── 输入侧注入特征（指令覆盖 / 数据外传 / 编码绕过 / 多轮拼接）────────────

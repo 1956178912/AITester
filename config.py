@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+from src.utils.env_utils import env_flag
+
 # ─── 基础配置加载（.env，非敏感项）───────────────────────────────────────────
 load_dotenv()
 
@@ -425,7 +427,7 @@ def detection_first_enabled() -> bool:
     _override = getattr(_DETECTION_FIRST_THREAD_LOCAL, "override", None)
     if _override is not None:
         return bool(_override)
-    return os.getenv("DETECTION_FIRST_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("DETECTION_FIRST_ENABLE")
 
 
 # X1：检出优先协议的线程局部覆盖载体（与 llm_client._thread_local 同模式）

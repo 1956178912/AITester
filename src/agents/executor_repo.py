@@ -44,6 +44,7 @@ import threading
 from typing import Any
 
 from src.utils.credential_scrub import scrub_os_environ
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -808,7 +809,7 @@ class RepoExecutor:
     # 历史自建口径（零行为变化）。
     @staticmethod
     def _official_harness_enabled() -> bool:
-        return os.getenv("SWE_USE_OFFICIAL_HARNESS", "false").lower() in ("true", "1", "on")
+        return env_flag("SWE_USE_OFFICIAL_HARNESS")
 
     def _run_official_swebench_harness(
         self,

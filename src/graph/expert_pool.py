@@ -51,6 +51,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # 专家维度常量表（默认 3 个维度，EXPERT_POOL_SIZE 可调）：
@@ -83,7 +85,7 @@ _ERROR_CATEGORY_TO_PRIORITY_DIMENSION: dict[str, str] = {
 
 def _category_conditioned() -> bool:
     """P2-2 维度条件化开关（EXPERT_POOL_CATEGORY_CONDITIONED=true 时启用，默认关）。"""
-    return os.getenv("EXPERT_POOL_CATEGORY_CONDITIONED", "false").lower() in ("true", "1", "on")
+    return env_flag("EXPERT_POOL_CATEGORY_CONDITIONED")
 
 
 def _dimensions_for_category(error_category: str | None, count: int) -> list[str]:

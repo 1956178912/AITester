@@ -39,6 +39,7 @@ import os
 from typing import Any
 
 from src.specs.spec_ir_v2 import _ALLOWED_CALL_NAMES
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ _EVAL_SAFE_FUNCS: dict[str, Any] = {
 
 def spec_smt_enabled() -> bool:
     """SMT 见证层开关（SPEC_SMT_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_ENV_SMT, "false").strip().lower() in ("true", "1", "on")
+    return env_flag(_ENV_SMT)
 
 
 def smt_available() -> bool:

@@ -48,7 +48,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -58,6 +57,8 @@ import click
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.process_utils import run_with_timeout  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -421,18 +422,21 @@ def _run_benchmark_once(
         " ".join(cmd),
     )
     t0 = time.time()
-    proc = subprocess.run(
+    proc = run_with_timeout(
         cmd,
-        cwd=PROJECT_ROOT,
+        cwd=str(PROJECT_ROOT),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
         text=True,
         timeout=7200,
+        logger_name="rag_ab_benchmark",
     )
     elapsed = time.time() - t0
     if proc.returncode != 0:
-        logger.warning("benchmark 返回非零 (%d)，输出末尾:\n%s", proc.returncode, (proc.stdout or "")[-2000:])
+        logger.warning(
+            "benchmark 返回非零 (%d)，输出末尾:\n%s",
+            proc.returncode,
+            ((proc.stdout or "") + (proc.stderr or ""))[-2000:],
+        )
     else:
         logger.info("benchmark 完成（%.1fs）", elapsed)
     # run_benchmark 写出带时间戳文件名 benchmark_<dataset>_<ts>.json；

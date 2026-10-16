@@ -35,6 +35,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,8 +46,12 @@ def testless_validation_enabled() -> bool:
 
 
 def _layer_enabled(layer_name: str, env_name: str, default: str = "true") -> bool:
-    """单层验证开关（在总开关开启时逐层独立可关，默认开）。"""
-    return os.getenv(env_name, default).lower() in ("true", "1", "on")
+    """单层验证开关（在总开关开启时逐层独立可关，默认开）。
+
+    2026-10-16 C 轮收敛至 env_flag；default 为字符串字面量口径
+    （"true"/"false"），转换为布尔默认值。
+    """
+    return env_flag(env_name, default.strip().lower() in ("true", "1", "on"))
 
 
 def _import_smoke_timeout() -> int:

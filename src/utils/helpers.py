@@ -457,18 +457,24 @@ def _quote_python_expressions(s: str, max_len: int = 4096) -> str:
     return re.sub(r':\s*("(?:[^"\\]|\\.)*"(?:\s*\*\s*\d+|\s*\+\s*"(?:[^"\\]|\\.)*")+)', _repl, s)
 
 
-def _find_balanced_bracket(text: str, start: int) -> str | None:
-    """括号平衡法提取从 ``start``（应为 ``[``）开始的第一个完整 JSON **数组**。
+def _find_balanced_delimited(text: str, start: int, open_ch: str, close_ch: str) -> str | None:
+    """括号平衡法提取从 ``start``（应为 ``open_ch``）开始的第一个完整定界片段。
 
-    与 :func:`_find_balanced_json` 同构，仅括号类型不同（方括号）。
-    字符串字面量内的 ``[`` / ``]`` 不计入深度。
+    2026-10-16 C 轮去重：``_find_balanced_bracket`` 与 ``_find_balanced_json``
+    曾是同构双份实现（仅括号类型不同），合并为参数化单一实现；两个公共
+    包装函数行为逐字节不变（各有锁定测试）。
+
+    算法：遇 ``open_ch`` 深度 +1、遇 ``close_ch`` 深度 -1，归零时返回
+    ``text[start:i+1]``；字符串字面量内（含转义）的括号不计入深度。
 
     Args:
         text: 待搜索文本。
-        start: 起始位置（应为 ``[`` 的下标）。
+        start: 起始位置（应为 ``open_ch`` 的下标）。
+        open_ch: 开定界符（``[`` 或 ``{``）。
+        close_ch: 闭定界符（``]`` 或 ``}``）。
 
     Returns:
-        完整的 JSON 数组字符串；未闭合时返回 None。
+        完整片段字符串；未闭合时返回 None。
     """
     depth = 0
     in_string = False
@@ -500,9 +506,9 @@ def _find_balanced_bracket(text: str, start: int) -> str | None:
             i += 1
             continue
 
-        if ch == "[":
+        if ch == open_ch:
             depth += 1
-        elif ch == "]":
+        elif ch == close_ch:
             depth -= 1
             if depth == 0:
                 return text[start : i + 1]
@@ -510,6 +516,22 @@ def _find_balanced_bracket(text: str, start: int) -> str | None:
         i += 1
 
     return None
+
+
+def _find_balanced_bracket(text: str, start: int) -> str | None:
+    """括号平衡法提取从 ``start``（应为 ``[``）开始的第一个完整 JSON **数组**。
+
+    委托 :func:`_find_balanced_delimited`（方括号口径）；字符串字面量内的
+    ``[`` / ``]`` 不计入深度。
+
+    Args:
+        text: 待搜索文本。
+        start: 起始位置（应为 ``[`` 的下标）。
+
+    Returns:
+        完整的 JSON 数组字符串；未闭合时返回 None。
+    """
+    return _find_balanced_delimited(text, start, "[", "]")
 
 
 # 匹配最内层无嵌套的 [...] JSON 数组（降级方案用）
@@ -763,51 +785,8 @@ def _find_balanced_json(text: str, start: int) -> str | None:
     Returns:
         完整的 JSON 字符串，未找到时返回 None。
     """
-    depth = 0
-    in_string = False
-    escape = False
-
-    if start < 0 or start >= len(text):
-        return None
-
-    i = start
-    while i < len(text):
-        ch = text[i]
-
-        # 处理转义
-        if escape:
-            escape = False
-            i += 1
-            continue
-
-        # 遇到反斜杠，标记下一个字符为转义字符
-        if ch == "\\":
-            escape = True
-            i += 1
-            continue
-
-        # 遇到双引号，切换字符串状态
-        if ch == '"':
-            in_string = not in_string
-            i += 1
-            continue
-
-        # 在字符串内部时跳过
-        if in_string:
-            i += 1
-            continue
-
-        # 处理花括号深度变化
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-
-        i += 1
-
-    # JSON 对象未闭合（全文无匹配右括号）：返回 None，由调用方走正则降级方案。
+    # 2026-10-16 C 轮去重：委托参数化实现（花括号口径），行为不变。
+    # JSON 对象未闭合（全文无匹配右括号）时返回 None，由调用方走正则降级方案——
     # 此前返回 text[start:]（未闭合的残余文本），json.loads 必失败还要再付
-    # 一遍 O(n) 解析——直接 None 省掉该次无谓解析
-    return None
+    # 一遍 O(n) 解析；直接 None 省掉该次无谓解析
+    return _find_balanced_delimited(text, start, "{", "}")

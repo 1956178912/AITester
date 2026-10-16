@@ -16,8 +16,16 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # ─── 预编译正则表达式（避免重复编译开销）─────────────────────────────────────
-# 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比
-_RE_COVERAGE_TOTAL = re.compile(r"TOTAL\s+.+?(\d+)%")
+# 匹配 pytest-cov 输出的 TOTAL 行中的覆盖率百分比。
+# 2026-10-15（覆盖率收口批次发现并修复）两处缺陷：
+#   ① **小写回退失效**：`parse_coverage` 的小写分支会把 `total ...` 行选入候选集，
+#      但旧正则以大写字面量 `TOTAL` 锚定 → 小写行永不匹配，旧版 pytest-cov 的
+#      `total` 汇总行被静默读成 0.0（"没有覆盖率信息"与"覆盖率确实为 0"不可区分）；
+#   ② **相邻数字截断**：旧模式 `TOTAL\s+.+?(\d+)%` 在 `TOTAL   85%`（无 Stmts/Miss
+#      列的简写形态）下把 `85%` 里的 `5` 当作捕获组 → 返回 5.0 而非 85.0。
+# 修复口径：大小写各一正则；百分比组要求**前置空白**（数字必须是独立词元）。
+_RE_COVERAGE_TOTAL = re.compile(r"\bTOTAL\s+(?:.*?\s)?(\d+)%")
+_RE_COVERAGE_TOTAL_LOWER = re.compile(r"\btotal\s+(?:.*?\s)?(\d+)%")
 # 匹配 pytest 输出中 "FAILED test_file.py::test_func" 行（提取失败用例名）
 # 预编译到模块级：parse_failed_cases 每次执行测试都要调用，
 # 避免每次重新编译正则
@@ -40,6 +48,10 @@ def parse_coverage(output: str) -> float:
     从 pytest-cov 输出中解析覆盖率百分比。
     pytest-cov 会在输出末尾打印类似 "TOTAL  xxxxx  85%" 的行。
 
+    2026-10-15 修复（覆盖率收口批次）：小写 `total` 汇总行此前被静默读成 0.0
+    （回退分支选行、但正则大写锚定），简写形态 `TOTAL 85%` 此前被截断成 5.0。
+    现按**行首大小写**分别匹配，且要求百分比数字前置空白。
+
     Args:
         output: pytest 输出文本。
 
@@ -49,19 +61,21 @@ def parse_coverage(output: str) -> float:
     lines = output.splitlines()
     # 优先只扫描 TOTAL 汇总行（pytest-cov 覆盖率结果的权威来源），
     # 避免逐行全量正则匹配的性能开销
-    total_lines = [line for line in lines if line.startswith("TOTAL")]
-    # 兼容旧版 pytest-cov 的小写 total 行格式
-    if not total_lines:
-        total_lines = [line for line in lines if line.startswith("total")]
-    if not total_lines:
-        total_lines = lines  # 极端兜底：保持与原行为一致的全文扫描
-    for line in total_lines:
-        # 匹配 "TOTAL  xxxxx  85%" 格式，捕获百分比数字
-        m = _RE_COVERAGE_TOTAL.search(line)
+    upper_lines = [line for line in lines if line.lstrip().startswith("TOTAL")]
+    lower_lines = [line for line in lines if line.lstrip().startswith("total")]
+    # 大写优先（当两种行同时存在时，大写是 pytest-cov 的权威汇总行）
+    candidates: list[tuple[str, re.Pattern[str]]] = [(line, _RE_COVERAGE_TOTAL) for line in upper_lines]
+    candidates += [(line, _RE_COVERAGE_TOTAL_LOWER) for line in lower_lines]
+    if not candidates:
+        # 极端兜底：保持与历史一致的全文扫描（大写在前，避免误取小写噪声行）
+        candidates = [(line, _RE_COVERAGE_TOTAL) for line in lines]
+        candidates += [(line, _RE_COVERAGE_TOTAL_LOWER) for line in lines]
+    for line, pattern in candidates:
+        m = pattern.search(line)
         if m:
             try:
                 return float(m.group(1))
-            except ValueError:
+            except ValueError:  # pragma: no cover - 正则保证捕获组为纯数字
                 continue
     return 0.0
 

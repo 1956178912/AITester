@@ -312,7 +312,9 @@ def ult_mutation_score(
             base = _cosmic_ray_base_cmd()
 
             def _run(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
-                proc = subprocess.run(
+                from src.utils.process_utils import run_with_timeout
+
+                proc = run_with_timeout(
                     base + args,
                     cwd=str(tmpdir),
                     capture_output=True,

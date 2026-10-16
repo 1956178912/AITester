@@ -65,7 +65,6 @@ import json
 import math
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -99,6 +98,7 @@ from experiments.emse_quixbugs_specir_expand import (  # noqa: E402
     mde_two_proportion,
     verdict,
 )
+from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
 CAP_SECONDS = 30
 CLASSES: tuple[str, ...] = ("f2p", "p2p", "f2f", "p2f", "other")
@@ -2166,10 +2166,12 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "TESTLEVEL_DETECTION.json"
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(json_path, report, indent=2, mode=0o644)
     readme_path = out_dir / "README.md"
     readme_path.write_text(render_readme(report, sources, meta["sweep_cmdline"]), encoding="utf-8")
-    sums = subprocess.run(
+    from src.utils.process_utils import run_with_timeout
+
+    sums = run_with_timeout(
         ["shasum", "-a", "256", readme_path.name, json_path.name],
         cwd=str(out_dir),
         capture_output=True,

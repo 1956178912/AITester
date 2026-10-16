@@ -61,6 +61,7 @@ from experiments._m1_metrics import (  # noqa: E402
     _needs_quixbugs_support,
     _run_pytest_in_tmp,
 )
+from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
 RUN_TIMEOUT_S = 30
 
@@ -267,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
         "rows": rows,
     }
     json_path = out_dir / "GOLD_CONFORMANCE.json"
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    atomic_write_json(json_path, report, indent=1, mode=0o644)
 
     # 人类可读摘要
     lines = ["# 基准 gold 材料自洽性审计（零 LLM）", ""]

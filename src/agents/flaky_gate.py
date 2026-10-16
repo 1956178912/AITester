@@ -35,6 +35,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV_ENABLE = "FLAKY_CHECK_ENABLE"
@@ -44,7 +46,7 @@ _DEFAULT_REPEAT = 3
 
 def flaky_check_enabled() -> bool:
     """R35/R31 flaky 门禁开关（FLAKY_CHECK_ENABLE=true 时启用，默认 false 保持历史口径）。"""
-    return os.getenv(_ENV_ENABLE, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_ENABLE)
 
 
 def flaky_repeat_count() -> int:

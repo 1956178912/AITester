@@ -43,7 +43,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +52,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from config import LLM_CONFIGS  # noqa: E402
+from src.utils.process_utils import run_with_timeout  # noqa: E402
 
 RESULT_DIR = os.path.join(PROJECT_ROOT, "experiments", "results", "model_gradient")
 
@@ -273,7 +273,9 @@ def main() -> int:
                 "--output-dir",
                 str(Path(per_tier_dir) / f"{label}_out"),
             ]
-            proc = subprocess.run(cmd, env=env, cwd=PROJECT_ROOT)
+            proc = run_with_timeout(
+                cmd, env=env, cwd=str(PROJECT_ROOT), timeout=7200, logger_name="model_gradient_tier"
+            )
             if proc.returncode != 0:
                 print(f"警告：档位 {label} benchmark 退出码 {proc.returncode}，跳过该档位")
                 continue

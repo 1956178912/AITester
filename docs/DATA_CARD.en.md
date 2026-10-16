@@ -2,7 +2,9 @@
 
 # Data Card
 
-Last updated: 2026-10-14 (§1 dataset overview refreshed: new ULT row
+Last updated: 2026-10-15 (§6 adds the Data Availability Statement:
+included artifacts, per-source licensing citations, items not included
+(raw LLM responses), and the deposit placeholder. Previously 2026-10-14 (§1 dataset overview refreshed: new ULT row
 (real benchmark, mutation main-metric scenario; subset in use since
 2026-10-13/14, n=25–46) + QuixBugs status updated to multi-batch usage
 (D1 A/B / spec_ir pilot / recalibration n=50; positioning remains L1, the
@@ -16,7 +18,7 @@ CC BY-NC 4.0, verified against the LICENSE text; joins BugsInPy in the
 non-clean-license gate; AH1: §4 licensing authoritatively verified —
 QuixBugs MIT confirmed [L1 precondition lifted], BugsInPy has no SPDX
 license [new L2 decision gate registered]; AA2: §2 registers the
-`max_pattern_repeat` mitigation; Z6: standalone data card created (R15))
+`max_pattern_repeat` mitigation; Z6: standalone data card created (R15)))
 
 ## 1. Dataset Overview
 
@@ -151,3 +153,53 @@ license [new L2 decision gate registered]; AA2: §2 registers the
 - every new data source must be registered here: origin, construction method,
   gold-material location, leak-control measures, and license-verification
   conclusion.
+
+## 6. Data Availability Statement
+
+- **Included with the repository**:
+  - Synthetic defect template library (`synthetic`): 8 pattern pools holding
+    the buggy / `fixed` / gold `test_cases` triple of 50 unique defect
+    patterns after dedup by name, defined in
+    `src/datasets/synthetic_dataset.py`; the pattern total uses
+    `BASELINE.yaml`'s `synthetic_templates` as the single source of truth
+    (see §2);
+  - Aggregated result artifacts (partially committed): `experiments/results/`.
+    The batch JSONs, statistical reports and `SHA256SUMS` under
+    `experiments/results/main_batch/` are committed (2,029 files measured with
+    `git ls-files`); the remaining batch directories are ignored by
+    `.gitignore` line 158 (`experiments/results/**`) and only selected
+    artifacts/checksum files were force-added (18 of the 24 `SHA256SUMS*`
+    files under `experiments/results/` are git-tracked);
+  - Replication notes: `REPLICATION.md` at the repository root (environment,
+    zero-LLM recomputation path, expected artifacts and known deviations).
+- **Not included with the repository**:
+  - **Raw LLM responses**: LLM responses are only written to the local file
+    cache, whose default directory is the user cache directory
+    (`XDG_CACHE_HOME` or `~/.cache/aitester/llm`, `src/agents/llm_client.py`);
+    the historical in-tree cache directory `src/cache/` is excluded by
+    `.gitignore` lines 66–67 (verbatim: `# LLM 文件缓存（本地优化产物，
+    避免重复提交）` / `src/cache/`). That is, **the repository contains no raw
+    LLM responses**, so the original executions cannot be replayed offline —
+    only the metrics can be recomputed offline;
+  - Upstream third-party dataset bodies (QuixBugs / BugsInPy / TestGenEval)
+    are not distributed here; users fetch them under the upstream licenses:
+    QuixBugs is injected via `AITESTER_QUIXBUGS_DATA` and the local
+    `data/quixbugs` directory is gitignored (see §4).
+- **Licensing status** (quoted from §4 of this card and the repository
+  `LICENSE`, verbatim):
+  - This repository's software: `MIT License` (`LICENSE` line 1),
+    `Copyright (c) 2026 AITester Contributors` (`LICENSE` line 3);
+  - QuixBugs: "**QuixBugs: MIT License (verified — the L1/E4 precondition is
+    lifted)**" (§4);
+  - BugsInPy: "**BugsInPy: no SPDX-detectable license (new compliance gate —
+    a user decision is required before L2 runs)**" (§4);
+  - TestGenEval (L2 candidate, not loaded, never run): "**license: CC BY-NC
+    4.0**" (§4);
+  - Synthetic defect template library: hand-written by the project author
+    (§2); this card does not declare a separate redistribution license for the
+    synthetic templates. [TO BE COMPLETED: redistribution license statement
+    for the synthetic template library]
+- **Deposit and contact**: [TO BE COMPLETED: Zenodo DOI / archival plan];
+  [TO BE COMPLETED: corresponding author and contact email]. Citation
+  metadata lives in `CITATION.cff` at the repository root (which already
+  records the pending DOI as a YAML comment).

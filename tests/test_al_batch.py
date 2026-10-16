@@ -116,7 +116,11 @@ class TestAL5Positioning:
 
     def test_citation_alignment(self) -> None:
         title_line = next(line for line in _read(CITATION).splitlines() if line.startswith("title:"))
-        assert "Detection-first" in title_line
+        # 大小写不敏感锁定（2026-10-16 C 轮：CITATION.cff 标题随 R2/R26
+        # 叙事重构改为 "Detection-First Python Test Generation and Repair
+        # Evaluation (Attribution) System"；锁语义=检出优先定位在场、
+        # 自修复主张不在场，标题大小写不构成语义差异）
+        assert "detection-first" in title_line.lower()
         assert "Self-Repair" not in title_line
 
 

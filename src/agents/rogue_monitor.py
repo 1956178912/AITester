@@ -26,6 +26,8 @@ import threading
 from collections import Counter, deque
 from dataclasses import dataclass, field
 
+from src.utils.env_utils import env_flag
+
 # R16（2026-10-05 审查 P1）：监控接线开关（默认 false）。
 # 本模块 2026-09-29 落地后全仓无调用方（审查指出"孤儿代码"）——现接线：
 # BaseAgent._call_llm_with_cache 上报事件（agent_id=类名, tool="llm_call"），
@@ -36,7 +38,7 @@ _ENV_ROGUE_MONITOR_ENABLE = "ROGUE_MONITOR_ENABLE"
 
 def rogue_monitor_enabled() -> bool:
     """R16 监控接线开关（ROGUE_MONITOR_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_ENV_ROGUE_MONITOR_ENABLE, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_ROGUE_MONITOR_ENABLE)
 
 
 class _ConfigDefaults:

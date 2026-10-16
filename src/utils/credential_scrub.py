@@ -37,6 +37,8 @@ import os
 import re
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 # 凭证类环境变量剔除模式（按前缀匹配，N 为数字）
 # LLM_N_API_KEY / LLM_N_BASE_URL：LLM 配置（config.py _load_llm_configs 扫描口径 1-32）
 # LLM_N_MODEL_NAME 非凭证（模型名非敏感），不剔除。
@@ -119,7 +121,7 @@ def whitelist_enabled() -> bool:
     现改为默认 true（安全默认"拒绝"口径），如需回退到历史黑名单行为
     可显式设 CREDENTIAL_SCRUB_WHITELIST_ENABLE=false。
     """
-    return os.getenv("CREDENTIAL_SCRUB_WHITELIST_ENABLE", "true").lower() in ("true", "1", "on")
+    return env_flag("CREDENTIAL_SCRUB_WHITELIST_ENABLE", True)
 
 
 def build_minimal_env() -> dict[str, str]:

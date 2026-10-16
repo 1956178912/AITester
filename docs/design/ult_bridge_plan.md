@@ -23,8 +23,8 @@
 ## 1. ULT 事实基线（外部数据，已核验范围已标注）
 
 **来源**：Huang, Zhang, Harman, Zhang, Du, Ng. *Benchmarking LLMs for Unit Test Generation from Real-World Functions.*
-**ACM TOSEM**，Article 3805043，DOI `10.1145/3805043`（UCL Discovery 标注 "In press"）；预印本 arXiv:2508.00408（2025-08-01，CC BY 4.0）。
-核验途径：`https://discovery.ucl.ac.uk/id/eprint/10223971/`（作者接受稿落地页 + 摘要）与 `https://arxiv.org/abs/2508.00408`（摘要）。两处摘要数字**逐位一致**。
+**ACM TOSEM**，Article 3805043，DOI `10.1145/3805043`（2026-02-25 接受，2026-03-28 Online AM；2026-10-16 经 ACM DL 一手页面 `https://dl.acm.org/doi/10.1145/3805043` 核验归属与作者名单）；预印本 arXiv:2508.00408（2025-08-01，CC BY 4.0）。
+核验途径：`https://discovery.ucl.ac.uk/id/eprint/10223971/`（作者接受稿落地页 + 摘要）、`https://arxiv.org/abs/2508.00408`（摘要）与 ACM DL（归属/日期）。三处摘要数字**逐位一致**。
 
 | 项 | 值 | 可信度 |
 |---|---|---|

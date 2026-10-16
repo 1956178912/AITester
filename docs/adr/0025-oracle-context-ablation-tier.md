@@ -6,7 +6,7 @@
 
 ## 背景（Context）
 
-ASE 2025 实证研究（13,866 个 LLM 训练截止后的测试预言，135 个 Java 项目）：LLM 生成预言的平均 mutation score 43% 接近人类 45%；关键发现——**测试前缀与被测程序中调用的方法提供了足够信息，额外的代码上下文不带来相关收益**（引用核验状态：venue/数字未一手核验，方向锚点）。
+ASE 2025 实证研究（Molinelli, Di Grazia, Martin-Lopez, Ernst, Pezzè，*Do LLMs Generate Useful Test Oracles? An Empirical Study with an Unbiased Dataset*，ASE 2025 pp.278-290，DOI 10.1109/ASE63991.2025.00031；2026-10-16 第十九轮一手核验：13,866 个 LLM 训练截止后的测试预言 / 135 个 Java 项目 / 平均 mutation score 43% vs 人类 45% 均与摘要逐位吻合）：LLM 生成预言的平均 mutation score 43% 接近人类 45%；关键发现——**测试前缀与被测程序中调用的方法提供了足够信息，额外的代码上下文不带来相关收益**（引用核验状态：2026-10-16 已一手核验， venue/数字全部吻合）。
 
 本仓 Generator prompt 的"额外上下文"注入段有四：分支覆盖清单（O3）、AST 边界三元组（M10）、蜕变关系（N2）、差分测试（N4）——各段有独立开关但从未做"全有 vs 全无"的边际贡献消融；若 ASE 结论在本管线成立，可显著降低 token 成本。
 

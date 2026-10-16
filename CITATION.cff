@@ -1,8 +1,19 @@
 cff-version: 1.2.0
+# DOI pending deposit / DOI 待归档：CFF 1.2.0 不允许空的 doi 字段，故此处仅以
+# 注释登记。[待补充：Zenodo DOI / 归档计划] —— 归档完成后在顶层补充
+# `doi: 10.5281/zenodo.<id>`（该字段为可选字段，未归档前不得猜测填入）。
+# 归档元数据已备：experiments/results/zenodo_metadata.json。
 message: >-
   If you use AITester in your research, please cite this software.
-title: AITester — Logic-anchored Multi-agent Test Generation with Detection-first Protocol
+# 2026-10-16 定位对齐（R2/R26 叙事重构的漏网点）：标题不再以 multi-agent
+# 为主表述——完整编排臂相对轻量检出优先协议净负（−28pp，ADR-0016），
+# 多智能体编排在本项目中定位为可消融容器（非主断言）。
+title: AITester — Detection-First Python Test Generation and Repair Evaluation (Attribution) System
 authors:
+  # ORCID pending / ORCID 待补充：现有作者条目为集体署名
+  # （AITester Contributors），无个人 ORCID iD 可填；CFF 1.2.0 的 orcid 字段
+  # 需真实 ORCID iD（形如 0000-0000-0000-000X），不得以占位值填入，故此处
+  # 仅登记待补充项。[待补充：作者 ORCID iD（如需按个人署名提交）]
   - name: AITester Contributors
     website: https://github.com/1956178912/AITester
 version: 0.7
@@ -10,13 +21,17 @@ date-released: "2026-10-06"
 license: MIT
 repository-code: https://github.com/1956178912/AITester
 abstract: >-
-  A logic-anchored multi-agent system for Python unit test generation with a
-  detection-first protocol ("red before green"), SpecIR specification oracles,
+  A Python system for attribution-aware evaluation of LLM-based unit test
+  generation and repair, with the detection-first protocol ("red before
+  green") as the primary success criterion, SpecIR specification oracles,
   paired attribution baselines (plain_llm / plain_llm_df), and M1 honest
   metrics (detection / repair / false-fix) adjudicated by held-out gold
-  materials. The accompanying evaluation methodology — pooled multi-seed
-  statistics with McNemar, Bayesian paired analysis, BH-FDR, and
-  template-cluster sensitivity — is an integral part of the artifact.
+  materials. Multi-agent orchestration is included as an ablatable container
+  (not a primary claim: the full orchestration arm is net-negative versus the
+  detection-first prompt protocol, ADR-0016). The accompanying evaluation
+  methodology — pooled multi-seed statistics with McNemar, Bayesian paired
+  analysis, BH-FDR, Wilson intervals, effect sizes, and template-cluster
+  sensitivity — is an integral part of the artifact.
 keywords:
   - software testing
   - LLM agents

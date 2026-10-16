@@ -54,6 +54,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,7 +86,7 @@ def search_enabled() -> bool:
     Returns:
         `ORCHESTRATION_SEARCH_ENABLE` ∈ {true, 1, on} 时为 True；默认 false。
     """
-    return os.getenv("ORCHESTRATION_SEARCH_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("ORCHESTRATION_SEARCH_ENABLE")
 
 
 def _require_enabled() -> None:

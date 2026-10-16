@@ -33,6 +33,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV = "LOCALIZED_EDIT_ENABLE"
@@ -42,7 +44,7 @@ _DEFAULT_WINDOW = 3
 
 def localized_edit_enabled() -> bool:
     """定位锚定编辑通道开关（默认关；依赖 EDIT_INTENT_ENABLE 才生效）。"""
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def _window() -> int:

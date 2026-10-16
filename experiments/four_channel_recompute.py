@@ -59,6 +59,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_BATCH_DIR = "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness"
@@ -615,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
             if not out.is_absolute():
                 out = PROJECT_ROOT / out
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(json.dumps(census, ensure_ascii=False, indent=2), encoding="utf-8")
+            atomic_write_json(out, census, indent=2, mode=0o644)
             print(f"[four_channel] 普查 JSON → {out}")
         return 0
 

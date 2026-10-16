@@ -112,6 +112,21 @@ info "熔断器(4.4): 指数退避=$API_CIRCUIT_BACKOFF Prometheus导出=$API_PR
 # ─── 步骤 1/6：检查运行环境 ─────────────────────────────────────────────────────
 info "Step 1/6: 检查环境..."
 
+# 批次跑批前置闸（EMSE 批次 2026-10-15，可选）：配额预算 + 模型指纹 + 工作树状态。
+# 动机：SWE-bench Lite 20 次尝试因**批次级无配额闸**产生 10 次超时 + 7 次 429 失败，
+# 能力结论被判为 none_valid_infrastructure_failure（披露见
+# experiments/results/emse_swebench_disclosure.md）。默认**不启用**（保持历史行为，
+# ADR-0003 默认不变原则）；设 AITESTER_RUN_PREFLIGHT=true 时未过闸即中止，且
+# AITESTER_BATCH_MAX_CALLS 未配置即视为阻断（"未配置 ≠ 无限"）。
+if [[ "${AITESTER_RUN_PREFLIGHT:-false}" == "true" ]]; then
+    info "前置闸(EMSE): AITESTER_RUN_PREFLIGHT=true → 执行 scripts/tools/run_preflight.py --strict"
+    if ! python3 scripts/tools/run_preflight.py --expect-tasks "${TASK_LIMIT:-261}" --strict; then
+        error "批次前置闸未通过（配额/指纹/工作树）：修好后再跑，或显式设 AITESTER_RUN_PREFLIGHT=false 跳过（不推荐）"
+    fi
+else
+    info "前置闸(EMSE): 未启用（设 AITESTER_RUN_PREFLIGHT=true 启用；建议重跑真实基准前启用）"
+fi
+
 # 检查 Python 3.12+ 是否安装（锁定依赖 scipy==1.18.0 要求 >=3.12）
 if ! command -v python3 &>/dev/null; then
     error "未找到 python3，请安装 Python 3.12+"

@@ -41,6 +41,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV_STRICT = "LOGIC_SPEC_STRICT_ENABLE"
@@ -50,7 +52,7 @@ _DEFAULT_TRIPLETS_MAX = 20
 
 def logic_spec_strict_enabled() -> bool:
     """M10 强校验开关（LOGIC_SPEC_STRICT_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_ENV_STRICT, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_STRICT)
 
 
 def _triplets_max() -> int:

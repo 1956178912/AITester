@@ -50,13 +50,17 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.process_utils import run_with_timeout  # noqa: E402
+
 DEFAULT_RUNNER = "main_batch"
 DEFAULT_OUT_DIR = "experiments/results/e3_h1_payload"
 DEFAULT_SEED = 42
@@ -322,7 +326,9 @@ def run_arm(arm: dict[str, Any], runner: str, out_dir: Path, seed: int, task_cou
     argv = build_argv(arm, runner, out_dir, seed, task_count)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[run] {arm['name']} → {out_dir}")
-    proc = subprocess.run(argv, cwd=str(PROJECT_ROOT), env=env, check=False)
+    proc = run_with_timeout(
+        argv, cwd=str(PROJECT_ROOT), env=env, check=False, timeout=7200, logger_name="payload_ab_arm"
+    )
     return proc.returncode
 
 

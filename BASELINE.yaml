@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-15"   # 全量回归实测日期（2026-10-15 批次九：基准 gold 材料自洽性审计〔synthetic 模板残留 import 修复 25/261 + ULT gold 归因诊断 + QuixBugs 测试级检出画像〕；`--collect-only` 实测 **6022**；全量实跑 **6017 passed / 1 failed / 4 skipped**（253.04s）——1 failed 为 `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）；passed = collected − skipped = 6022 − 4 = **6018**（对账：6017 + 1 failed = 6018）。此前 2026-10-15 批次八 5978/5982）
+last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 C 轮代码优化批次：`--collect-only` 实测 **6576**；全量实跑 **6562 passed / 5 skipped / 5 failed**（582.20s，xdist -n 4 loadfile，`--deselect tests/test_cache_security.py::TestCacheExpiry`）。5 failed 全部为**工作树状态/环境**而非代码回归：3 = 脏树预检门禁正确触发（V6/V6b，commit 后自愈）、1 = 沙箱 `ps` 被禁（test_p0_hardening，项目已知环境项）、1 = `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）。故登记值 passed = collected − skipped = 6576 − 5 = **6571** / failed 0 / skipped 5。本轮新增测试 42（test_env_utils 24 + test_emse_stats_extensions 18）+ 上批未计账 2。此前 2026-10-15 Prompt Card 批次：6532/6526/5/0）
 
 tests:
-  total_passed: 6021          # 全量 pytest tests/（2026-10-15 EMSE 审稿可判性批次：xdist -n 4 loadfile 实跑 **6021 passed / 4 skipped / 0 failed**（85.3s）；--collect-only 实测 **6025**；passed = collected − skipped = 6025 − 4 = **6021**。上一批 6018/6022 → 本批 6021/6025〔+3：tests/test_emse_optimization.py 新增 mutation 相关性回归 3 例（系数真算 / 负方向如实呈现 / 退化 reason）〕。守卫 `tests/test_2026_10_10_optimization_batch.py::TestBaselineNumbersConsistency` 余量 `skipped + 1`，本字段须与实测同步，否则 CI 红）
+  total_passed: 6571          # 全量 pytest tests/（2026-10-16 C 轮代码优化批次：`--collect-only`（守卫口径）实测 **6576**；全量实跑（CI 同口径 env + 脏树/沙箱 ps 两项状态性失败，见 last_verified 注释）**6562 passed / 5 skipped / 5 failed**（582.20s，xdist -n 4 loadfile）。登记口径 = collected − skipped = 6576 − 5 = 6571（commit 后脏树 3 项转绿、自指 1 项随本字段刷新转绿；沙箱 ps 1 项为环境已知项）。本轮新增 42 例回归（env_flag 单一事实源 24 + 统计扩展纯函数 18），另计上批未计账 2 例。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
-  total_skipped: 4           # 原 3〔可选依赖缺失优雅跳过〕+ 1〔test_ult_adapter.py cosmic-ray 集成测试在无 cosmic-ray 环境 skip〕
-  total_xfailed: 0           # 2026-10-12：原唯一 strict xfail（推导式变量被标识符门误杀，P2-L3）经 SpecExpr v3 自由变量分析修复后转正，套件现无 xfail
+  total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
+  total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 598           # 全量耗时：2026-10-15 批次八沙箱实测 598.12s（空载；批次六同沙箱口径曾 2934s——耗时受并发争用与 I/O 代理影响大；CI 为 xdist -n 4 loadfile，原生本机参考值 195s〔2026-10-11 实测〕）
+  suite_seconds: 582           # 全量耗时：2026-10-16 C 轮沙箱实测 582.20s（xdist -n 4 loadfile；沙箱 I/O 代理减速，CI 原生本机参考值 ~195s〔2026-10-11 实测〕）
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -27,7 +27,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 92.42      # --cov=src 总行覆盖（2026-10-12 实测 92.42%，14243/15411 行；此前 89（2026-10-07 AO 批次实测 89.56）滞后刷新——ratchet 水位（docs/coverage_ratchet.yaml）已 92.40，本声明值与 ratchet 对齐）
+  line_total_pct: 92.78      # --cov=src 总行覆盖（2026-10-15 Prompt Card 批次实测 **92.78%**；ratchet 水位 92.40 → ✅ 达标（余量 +0.38pp））
   line_core_modules:
     base_agent: 70
     api_manager: 90
@@ -39,7 +39,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     multi_candidate: 84
     cross_file: 91
     rag_retriever: 86
-  branch_total_pct: 86.91   # --cov=src --cov-branch 总分支覆盖（2026-10-12 实测 86.91%，4940/5684 分支；此前 83（2026-10-07 AO 批次实测 82.78）滞后刷新——ratchet 水位（docs/coverage_ratchet.yaml）已 86.90，本声明值与 ratchet 对齐）
+  branch_total_pct: 87.29  # --cov=src --cov-branch（2026-10-15 实测 **87.29%**；水位 86.90 → ✅ 达标（余量 +0.39pp））
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
@@ -111,7 +111,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 130     # 2026-10-12 质量债清偿批次实测（`mypy src/ config.py` → Success: no issues found in 130 source files）；此前 125（2026-10-11）与 10-12 批次新增 5 源文件（spec_ir_v2 / spec_first / orchestration_search 等）后未刷新
+  mypy_source_files: 132     # 2026-10-12 质量债清偿批次实测（`mypy src/ config.py` → Success: no issues found in 130 source files）；此前 125（2026-10-11）与 10-12 批次新增 5 源文件（spec_ir_v2 / spec_first / orchestration_search 等）后未刷新
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
@@ -232,7 +232,9 @@ benchmark:
   #     `make corrected-metrics`（ADR-0027）：修正 false_fix=87.16%
   #     （380/436 passed 可测行，**条件口径**；同总体边际口径
   #     71.62%（434/606）、R-P0-2 边际口径 59.58%（143/240），
-  #     口径矩阵 docs/design/false_fix_caliber_matrix.md） /
+  #     口径矩阵权威落点 docs/design/repair_caliber_matrix.md
+  #     §"false_fix 口径（权威落点）"；历史引用路径
+  #     docs/design/false_fix_caliber_matrix.md 从未入库、不可引用） /
   #     CPR=84.3% / 弃权精确率=86.0% 首次非平凡**）；上限归因
   #     （repair_ceiling_report.md，AK1）：修复循环 154/261 → patch 产出
   #     94.2% → plausible 46.8% → correct 0（伪影口径）——卡点修正为

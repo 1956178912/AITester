@@ -45,6 +45,11 @@ SCAN_GLOBS = ["src/**/*.py", "config.py"]
 # 静态提取模式（按匹配优先级；同名去重）。
 # 注：字符类用 \x22（双引号）/ \x27（单引号）十六进制转义——避免在
 # Python 字符串字面量里嵌套两种引号转义（r"..." 内 \" 的可读性陷阱）。
+#
+# 2026-10-16 C 轮：布尔开关解析收敛至 src/utils/env_utils.py::env_flag 后，
+# 新增 env_flag("NAME") 字面量形态——不收该形态则新引用方式的开关将绕过
+# 本门禁的预算治理（ADR-0003 纪律的隐性缺口）。env_flag(_ENV) 间接引用
+# 由下方 _ENV* 常量模式覆盖。
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "os.getenv/environ.get/environ[]/setdefault",
@@ -54,6 +59,10 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"|os\.environ\[\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]\s*\]"
             r"|os\.environ\.setdefault\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"
         ),
+    ),
+    (
+        'env_flag("NAME") 单一事实源调用（2026-10-16 C 轮收敛后形态）',
+        re.compile(r"env_flag\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
     ),
     (
         "模块级 _ENV* 常量（os.getenv(_ENV) 间接引用）",

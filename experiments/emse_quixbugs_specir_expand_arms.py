@@ -17,7 +17,6 @@ AITESTER_CACHE_NAMESPACE），输出到 out_dir 下的 benchmark_quixbugs_*.json
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -96,7 +95,11 @@ def _run_arm(arm: str, out_dir: Path, dry_run: bool = False) -> dict[str, Any]:
 
     print(f"\n[M4] 跑臂 {arm}（QuixBugs 50 任务，cache namespace={_CACHE_NAMESPACES[arm]}）...")
     t0 = time.time()
-    proc = subprocess.run(cmd, env=env, cwd=_REPO_ROOT, capture_output=True, text=True, timeout=3600)
+    from src.utils.process_utils import run_with_timeout
+
+    proc = run_with_timeout(
+        cmd, env=env, cwd=str(_REPO_ROOT), capture_output=True, text=True, timeout=3600, logger_name="m4_arm"
+    )
     elapsed = time.time() - t0
     if proc.returncode != 0:
         print(f"[M4] 臂 {arm} 失败（rc={proc.returncode}，{elapsed:.0f}s）：")
@@ -166,7 +169,9 @@ def main(argv: list[str] | None = None) -> int:
         if not arm_paths:
             print("[M4] 未找到可判定臂的 benchmark_quixbugs_*.json，跳过 provenance 校验")
         elif analysis_script.is_file():
-            proc = subprocess.run(
+            from src.utils.process_utils import run_with_timeout
+
+            proc = run_with_timeout(
                 [sys.executable, str(analysis_script), "--verify-provenance", *[str(p) for p in arm_paths.values()]],
                 cwd=_REPO_ROOT,
                 capture_output=True,

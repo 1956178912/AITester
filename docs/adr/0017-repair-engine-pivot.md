@@ -11,7 +11,7 @@
 1. **repair 全线 0**：R-P0-2 生死实验三臂 repair=0.0%；AK1 上限归因（修复循环 154/261 → patch 产出 94.2% → plausible 46.8% → correct 0）证明瓶颈在补丁质量而非产出。
 2. **E2 正式定案（"恰好一次"迭代用尽）**：H2a 过红 88→31（降幅 64.8%）、H2b 抹红 28→2（降幅 92.9%）——门协议大幅削减两类失效通道但未归零；H2c aitester vs plain_llm_df δ=−0.3673 [−0.4552, −0.2785]（bayes_neg）——"编排容器在检出口径下结构性劣后"最终确立（承接 ADR-0016）。
 3. **局部化首度可测即见短板**：FL@1 首测 19/53=35.8%（E2 迭代批，gold diff 对齐修复后口径）——近 2/3 的真实缺陷行不在谱系 Top-1。
-4. **前沿 APR 共识范式**为"局部化 → 合成 → 验证"且局部化是公认瓶颈（引用核验 2026-10-07 第二轮/第十六轮：RGFL〔**Reasoning**-Guided，arXiv 2601.18044——全称勘误：非 Retrieval-Guided〕file-level Hit@1 71.4%→85%，接 Agentless 端到端 +12.8%；多 Hunk 行为研究 arXiv 2511.11012：修复准确率 Claude Code 92.82% vs Qwen Code 26.98%、随 hunk 数与分散度递减；定位主导性 500 实例 61 配置研究〔GPT-5-mini，file-level 为主因素〕。**勘误**：此前引用的"Hunk-SWE"与"PSR（四模式 LoRA）"两名经第十六轮三轮检索未能定位原文，暂以上述已核验锚点替代；Kronumos 2 Kairos 系单作者未评审预印本，慎引——其 93.5% token 削减数字摘要层未确认）。
+4. **前沿 APR 共识范式**为"局部化 → 合成 → 验证"且局部化是公认瓶颈（引用核验 2026-10-07 第二轮/第十六轮 + 2026-10-16 第十九轮复核：RGFL〔**Reasoning**-Guided，arXiv:2601.18044——全称勘误：非 Retrieval-Guided；2026-10-16 复核：摘要 "file-level Hit@1 improves from 71.4% to 85%, MRR from 81.8% to 88.8%... 12.8% end-to-end repair success improvement" 逐位吻合〕file-level Hit@1 71.4%→85%，接 Agentless 端到端 +12.8%；多 Hunk 行为研究 arXiv:2511.11012：修复准确率 Claude Code 92.82% vs Qwen Code 26.98%、随 hunk 数与分散度递减；定位主导性 500 实例 61 配置研究〔GPT-5-mini，file-level 为主因素〕。**勘误**：此前引用的"Hunk-SWE"与"PSR（四模式 LoRA）"两名经第十六轮三轮检索未能定位原文，暂以上述已核验锚点替代；Kronumos 2 Kairos 系单作者未评审预印本，慎引——其 93.5% token 削减数字摘要层未确认）。
 
 用户在 AI 给出"先完成论文轨道"建议后**否决该建议并拍板立即转向**（三阶段：局部化重建 → 模式专业化 + 确定性验证 → 成本效率）。ISSTA 2027 论文窗口放弃，可发表贡献转为 v2 基础设施；预注册序列 E4/E6 冻结（验证后可按新目标重定义）；E7 与论文成稿暂停。
 

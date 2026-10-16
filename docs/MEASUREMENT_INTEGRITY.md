@@ -1,0 +1,119 @@
+# 测量完整性：口径分叉的四种形态与修复方法论
+
+最后更新：2026-10-15（EMSE 批次：把四起测量伪影合并为"测量口径分叉"方法论章，
+逐起给出分叉的两种口径、检测方式、影响量级、修复、可重放证据与结论是否翻转）
+
+> **性质**：单语文档（中文），无英文配对——本文是**过程与口径记录**（审计/协议类），
+> 按 `scripts/gates/check_bilingual_docs.py` 的维护约定登记豁免（见该文件
+> `_EXEMPT_NO_EN`，2026-10-15 条目）。
+>
+> **证据纪律**：表内每个数字均取自下列四份决策记录原文，未做二次换算；凡原文未给出
+> 的数字一律留空或标注"原文未给"，不以估算填充：
+> `docs/adr/0021-repair-zero-measurement-artifact.md`、
+> `docs/adr/0029-measurement-artifact-cross-file-and-packaged-import.md`、
+> `docs/adr/0033-packaged-test-tree-flat-import-artifact.md`、
+> `docs/preregistration.md` §"第四起测量伪影修正与 E4 重结算"（2026-10-10）。
+
+---
+
+## 1. 四起伪影总表
+
+| 起 | 伪影 | 分叉的两种口径 | 检测方式 | 影响量级 | 修复 | 可重放证据 | 结论是否翻转 |
+|----|------|----------------|----------|----------|------|------------|--------------|
+| ①（ADR-0021，2026-10-07） | patch 字段**围栏残留**：`state["patch"]` 保存 LLM JSON 原始值，可含 ` ```python ` 围栏 / `python:` 前缀（类型修复层与编辑意图通道甚至**主动构造围栏形态**） | **测量/透出口径**（M1 独立裁决 `_target_code_after_patch` 与结果行透出**直接消费原始值，未经清理**）vs **写盘执行口径**（`apply_patch_to_code` Step 1/2 负责清理） | ①受染面扫描：10 个主批次工件 **274/274（100%）带补丁行的 patch 字段以 `"python\n"` 围栏残留开头**（对照组 `generated_test` 字段 **974/974 全干净**——仅 debugger 的 patch 通道受染）；②决定性重放（2026-10-07，本地 pytest，零 LLM）：原样执行 **0/106 通过**，与写盘同口径清理后 **51/106 通过** | "repair 全线 0"的最大单一成分是测量层伪影；全量重放（10 批次 × aitester 臂）可重放 266 行（patch ∧ gold test_cases 双非空），**修正 correct = 103、修正 repair_rate = 38.7%**；E2 双种子批稳定 **44.4%–53.8%**；后续进入 v2 口径链后 R-P0-2 由 **35.86%（52/145）→ 39.31%（57/145）** | `patch_applier.normalize_patch_text()` 收敛为**单一权威**（= `extract_code_block` + python 前缀剥离，幂等），`apply_patch_to_code` 改为调用它（行为等价重构）；`_m1_metrics._target_code_after_patch` 完整文件分支经清理后返回；`_PYTHON_PREFIX_RE` 补 `(?!\w)` 负向后瞻（旧正则会把 `python_x = 1` 剥成 `_x = 1`）；新增存量重放工具 `experiments/repair_replay.py`（零 LLM）+ `Makefile::repair-replay`；19 项测试锁 | `python -m experiments.repair_replay experiments/results/main_batch --arm aitester` → 266 可重放 / 103 correct / 38.7%（ADR-0021 §验证）；v2 增量见 `docs/design/repair_caliber_matrix.md` §2 | **是**。"repair 全线 0"被定案为伪影主导，真实修复率在主批次存量上约 38.7%；ADR-0017 的动机随之勘误（但范式转向**不因此撤销**——其余动机未受影响，且第二阶段优先级排序改变：从"从零破冰"变为"38.7% → 提升"，见 ADR-0021 §"ADR-0017 动机勘误"） |
+| ②（ADR-0029，2026-10-08） | **包结构 import**：`_run_pytest_in_tmp` 单文件口径 vs QuixBugs 官方测试依赖辅助模块（`from node import Node`）、包结构（`from python_programs.<module> import <name>`）与 `pytest.use_correct` | **判分口径**（历史只在 tmp 写 `{module}.py` + `test_{module}.py`）vs **上游真实依赖口径**（辅助模块 + 包结构 + 官方 conftest 机制齐备） | R2 系统性评审独立发现并量化；判分口径下上述 import 全部 `ModuleNotFoundError` → pytest 收集错误（rc=2） | 修复前 QuixBugs A/B 两臂 repair **均 0/50**；**9 个通过官方测试的正确补丁被误判 repair=0**；修复后 **A=37/50（可测 37/41）、B=36/50（36/41）** | 判分器按显式信号分派（`source=="quixbugs"` → 包结构物化；子串 `"python_programs" in test_code` 仅在 metadata 缺省时作兼容回退，`detection_gates.py:85` 委托调用不传 metadata → 行为逐位不变）；**fail-closed（R16）**：需要辅助模块而 `AITESTER_QUIXBUGS_DATA` 或辅助文件缺失 → 记 **None + logger.warning**（语义从"不误报"改为"不漏报"）；pytest `rc==5`（no tests collected）并入执行错误判定、repair 侧记 None，`rc==2` 在 repair 侧保留 0.0（补丁使目标模块不可导入 = 修复失败，属有意口径）；新增 `tests/test_m1_packaged_missing_support.py` 等 M-suite | QuixBugs 数字经独立重放**逐位确认 37/41 & 36/41**（ADR-0029 §后果；口径矩阵 ④/⑧，其中 ⑧ 标注 R27 修复后"逐位不变"） | **部分翻转**——QuixBugs 侧"真实基准 repair 系统性 0"被推翻（0/50 → 37/50 量级，其中 9 个正确补丁曾被误判）；对合成主批次的结论**无影响**（该路径不经过包结构分派） |
+| ③（ADR-0029，2026-10-08，本起为该 ADR 新发现） | **跨文件任务未物化**：合成跨文件任务（Level 3 / 3.5）的 gold test_cases 直接 `import module_a/module_b/module_c`（模块名中性化、不重写），历史单文件判分口径只物化 `{task_id末段}.py` | **判分口径**（只写目标模块单文件）vs **任务真实结构口径**（按 metadata 物化完整伴生模块树，被测目标模块内容 = `target_code` 三态统一规则、伴生模块取缺陷原版，与 `run_benchmark._write_cross_file_modules` 同口径） | 伴生模块缺失 → 收集错误 rc=2 → 跨文件行 repair 系统性 0；R2 评审量化；连带可观测 `false_fix` 被抬升（**R4-A 6/8 行 = 1.0**）与 detection 偏低 | **六批次**（R4-A、E2×2、R-P0-2×3）跨文件行 repair 系统性 0；修复后跨文件行由恒 0 变为可测：**25 跨文件行中 11 行 correct**（并非全部可判 1.0——说明跨文件任务本身更难，伪影只是擦除了本可测信号）；口径链更新：R-P0-2 **35.86% → 39.31%（57/145）**、E1/E2 **48.11% → 54.72%（58/106）**、R4-A **44.4%（8/18）→ 55.6%（10/18）**；连带污染"修正口径"数字（ADR-0027 的 35.9%/48.1% 仍含系统性零行） | 新增 `_prepare_cross_file_test_tree`（按 metadata 物化完整模块树；顶层模块直接落 `{name}.py`；PYTHONPATH 覆盖 tmpdir）；`_run_pytest_in_tmp(..., task_metadata=...)` 四入口透传上下文、优先消费显式信号（`is_cross_file=True` / `source=="quixbugs"`）；空补丁语义对齐（`return 0.0`，消除"缺陷原码恰好过 gold → 误判 1.0"边界假阳性）；新增 `tests/test_m1_cross_file_metric.py` / `tests/test_m1_dispatch_heuristic.py`；新增**口径矩阵纪律** `docs/design/repair_caliber_matrix.md` | `experiments/results/main_batch/corrected_report_v2.md`（v2 定案）与 `experiments/results/r4_batches/replay_r4_ab_arm_a_v2.md`；复算入口 `make corrected-metrics` / `experiments/repair_replay.py`（零 LLM） | **是**（对受影响数字）：v1 的 35.86% / 48.11% 被降级为"修正前下界"，对外材料一律替换为 v2 或显式标注下界；主批次检测/修复的**定性方向**不变 |
+| ④（ADR-0033，2026-10-10 修复 / 2026-10-15 补登记为 ADR；原始记录见 `docs/preregistration.md` §"第四起测量伪影修正与 E4 重结算"） | **判分树包结构 vs 平铺 import**：M1 判分树由 `_prepare_packaged_test_tree` 构造，只提供 QuixBugs 式 `python_programs/{module}.py`；生产执行沙箱把被测模块**平铺**写成 `{module}.py` | **判分树布局口径**（包结构）vs **生产执行沙箱布局口径**（平铺）——Generator 写出的扁平 import（如 `from bitcount import bitcount`）**在它自己的生成环境里是正确的**，送进判分树则一律 `ModuleNotFoundError` → rc=2 → 三段判定第 3 条不成立 → `detection_rate = 0.0` | 零 LLM 决定性证据：12 任务子集 9 个缺陷程序，修复前 **9/9 在 buggy 与 fixed 两侧均 rc=2**；**同一批工件仅改判分树布局 → F2P 检出 0/7 → 6/7**；E4 重结算（单变量：同协议、同 cache namespace 复用原响应） | 主指标 `detection_rate` 在整批任务上**构造性恒为 0**（不是偏低，是结构性不可测）；E4 重结算（41 缺陷程序口径）：`aitester` **17/37 = 45.9%**（修正前 0/41 = 0.0%，token/task 16,038）vs `plain_llm_df` **31/37 = 83.8%**（token/task 1,905）；配对 McNemar（修正前 vs 修正后，aitester）不一致对 17、χ²=15.059、**p=1.042e-04**，2×2：**n10=17、n01=0**（单向翻转，无反向证据）；配对 McNemar（两臂）不一致对 14、χ²=12.071、**p=0.0005** | **双布局物化**：判分树 tmpdir 根同时写一份 `{module}.py`，与包结构 `python_programs/{module}.py` 并存，使两种 import 均可解析；**三段判定逐字未改、口径未放松**（恒失败测试在新布局下同样得 `detection=0.0`，已加回归测试锁定）；物化布局权威定义收敛到 `src/datasets/synthetic_dataset.py`（判分树与执行沙箱从同一布局约定派生）；本起进入口径矩阵——跨批次 detection 引用必须标注是否含本修复 | `docs/preregistration.md` §"第四起测量伪影修正与 E4 重结算"（含零 LLM 验证与 E4 重结算表）；ADR-0033 §背景/§后果；口径矩阵第 ⑨ 行的 detection 侧 | **否**（方向未变）——修正后 `aitester` 45.9% **仍显著低于** `plain_llm_df` 83.8%（p=0.0005），"编排净负贡献"不依赖本伪影；但"aitester 检出率 0%"这一**数值主张被推翻**（构造性不可测 → 可测） |
+
+**读法（强制）**：四起伪影同族——**"意图口径 ≠ 执行口径"**（ADR-0029 §背景原话），
+且每一起的修复都遵循同一治理模式：**先把分叉的判据函数化为单一权威，再让判分/测量
+路径与执行路径从同一权威派生**，最后用零 LLM 重放锁定。①之后是
+`normalize_patch_text()`，②③之后是显式 dispatch + fail-closed，④之后是同一布局源。
+ADR-0033 §后果把该模式写成显式检查项："**凡'分叉的判分/执行路径'必产伪影**"。
+
+**残留风险（原文登记的，不得省略）**：
+
+- ADR-0029 §已知局限：metadata 畸形（缺模块名、字段冲突、`is_cross_file` 与模块树不一致）
+  时物化可能产出不完整模块树 → rc==2 → repair 侧记 **0.0**——该行会被记为"修复失败"
+  而非"不可测"；物化前置 fail-closed 校验**尚未实现**（列入待立项）。当前数据集生成器
+  不产出该形态（8/8 探针全过）。
+- ADR-0033 §代价与残余风险：双布局使判分树内同名模块出现两份，**不同 import 风格可能
+  解析到不同文件**——当前两者内容同源、未在任何批次触发，属结构性隐患；双布局一致性
+  守卫（内容等价断言）与"单一布局源"重构均未做。
+- ADR-0033 §已知局限 3：修复前历史批次的 detection 值在未来文档中须一律标注
+  **"修复前下界"**，不得与修复后批次混池。
+- ADR-0033 §代价与残余风险末条：本 ADR 为**补登记**（修复与验证发生于 2026-10-10，
+  ADR 落盘于 2026-10-15），时间序证据以 `docs/preregistration.md` 该节与批次工件为准。
+
+---
+
+## 2. 为什么这是方法学贡献而非技术细节
+
+**第一，它给出了一个可迁移的失效定律，而不是一个 bug 修复。** 四起伪影的机制各不相同
+（文本清理、import 解析、模块物化、目录布局），但**失效形态完全相同**：测量/判分路径
+与生产/执行路径各有一套"如何理解这份材料"的口径，二者分叉时，测量层记录的不是被测
+系统的能力，而是分叉本身。ADR-0029 §背景与 ADR-0033 §后果都把这句写成了项目级检查项。
+
+**第二，它量化了"不修会错到什么程度"，且量级足以改变结论。** ①使主批次 repair 从
+"全线 0"变为 38.7%（`docs/adr/0021-repair-zero-measurement-artifact.md`）；②使 9 个
+**正确**补丁被记为失败（`docs/adr/0029-measurement-artifact-cross-file-and-packaged-import.md`）；
+③使六批次跨文件行系统性 0、并抬升 false_fix（同文件）；④使主指标 `detection_rate`
+**构造性恒为 0**——不是偏低，而是结构性不可测（`docs/adr/0033-packaged-test-tree-flat-import-artifact.md`）。
+在 ④ 的情形下，如果不做布局 A/B，任何"本系统检不出缺陷"的结论都是关于**判分树**的
+陈述，而不是关于**系统**的陈述。
+
+**第三，它同时给出了"结论是否翻转"的判据。** 四起里只有①②③改变了数值结论的定性
+（①"repair 不是零"、②"QuixBugs 不是零"、③"跨文件行不是零"），④改变了数值但**没有**
+改变方向（45.9% 仍显著低于 83.8%，p=0.0005）。这正是方法学章节需要的结构：伪影治理
+的目标不是"把所有数字改大"，而是让每个数字都**知道自己属于哪条口径**——因此配套产出
+是 `docs/design/repair_caliber_matrix.md` 的"引用纪律"（编制口径编号、禁止 all-task 与
+M1 可测口径混用、禁止引用未修正的跨文件零行数字）。
+
+**第四，它把"修复"做成可重放的，而不是靠重跑。** ①提供 `experiments/repair_replay.py`
+（零 LLM，读存量 JSON 重放）；②提供 fail-closed 语义变更与 M-suite 回归；③提供
+`corrected_report_v2.md` / `replay_r4_ab_arm_a_v2.md`；④提供"同一批工件仅改判分树布局"
+的单变量对照与 E4 重结算（同协议、同 cache namespace 复用原响应）。审稿人因此可以
+**不消耗任何 LLM 配额**复核每一起伪影的量级——这是可判性的关键。
+
+---
+
+## 3. 如何作为论文 §Measurement Integrity 呈现
+
+建议按"定律 → 证据 → 纪律 → 影响"四段写，且**四起并列成一张表**（即本文 §1），
+不要拆成四个零散的技术脚注：
+
+1. **开篇给定律**（1 段）：测量口径与执行口径的分叉必然产出伪影；本文报告同一研究
+   项目中四次独立复现，机制各异而失效形态相同。引 ADR-0029 §背景原文与 ADR-0033 §后果
+   的显式检查项。
+2. **主表给四起证据**（本文 §1 的八列）：每起必须同时给出**两种口径**（分叉在哪里）、
+   **零 LLM 检测方式**（受染面扫描 / 布局 A/B / 重放）、**影响量级**（分子的绝对值与
+   分母定义）、**可重放入口**。表中的 274/274、0/106 → 51/106、9 个正确补丁被误判、
+   25 行中 11 行 correct、0/7 → 6/7、17/37 = 45.9% vs 31/37 = 83.8%（p=0.0005）
+   都是"可被审稿人当场复核"的锚点，不要只写百分比。
+3. **纪律段**（1 段）：单一权威函数；显式 dispatch 契约（禁止依赖测试文本子串）；
+   fail-closed（"没跑起来"记 None，不得静默记 0）；口径矩阵 + 引用必须带标签；
+   凡修复必须附带"修复后结论是否翻转"的判定。
+4. **影响段**（1 段，必须诚实）：修复**不总是**让数字变大或让主张变强——④纠正了
+   `aitester` 的 detection 数值，但**强化**了"编排净负贡献"这一负面结论；①纠正后
+   repair 基线重置为 38.7%，反而把研究目标从"破零"改成"提升"。把这段写清楚，等于向
+   审稿人证明这套治理不是"往有利方向调数字"。
+5. **Limitations 交叉引用**：把 §1 末尾登记的残余风险（畸形 metadata 记 0.0、
+   双布局同名模块、修复前 detection 为下界、ADR-0033 为补登记）原样搬进 Limitations，
+   并在 Methods 里说明"跨批次 detection 引用一律带修复标签"。
+
+---
+
+## 4. 引用纪律与不可核验事项
+
+1. **口径标签强制**：任何 repair / false_fix / detection 数字必须携带
+   `docs/design/repair_caliber_matrix.md` §1 的口径编号（repair ①–⑨；false_fix 见该文件
+   "false_fix 口径（权威落点）"节的 ⑩⑪）或同时给出
+   "分子/分母 + oracle + 数据集 + 臂 + 种子 + 开关 + 工件路径 + 可复算命令"。
+2. **禁止混池**：修复前批次的 detection 值（下界）不得与修复后批次混池（ADR-0033
+   §决策 4 与 §已知局限 3）；all-task 与 M1 可测口径不得互换陈述（ADR-0029 §决策 6）。
+3. **本文未做独立复算**：§1 表中所有数字均**逐字取自**四份来源文件，本次未重跑
+   `experiments/repair_replay.py` 或判分树布局 A/B（那需要本地数据目录与 pytest 环境，
+   且属对既有定案的重放，非本文档职责）。若需第三方复核，请按"可重放证据"列的入口
+   在干净树上复算——四起均为零 LLM 入口。
+4. **数字未在来源中给出者一律留空**：例如第 ④ 起修正前的 token/task 对比只引
+   `16,038`（修正后 aitester）与 `1,905`（df），不推算修正前的成本。

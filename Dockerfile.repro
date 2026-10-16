@@ -11,15 +11,17 @@
 #             aitester-repro:<sha> \
 #             bash reproduce.sh --dataset synthetic --full
 #
-# 口径说明（与 ci.yml 矩阵下限对齐）：
-# - python:3.14-slim 为开发环境基准（lock 生成自 3.14）；
+# 口径说明（与 Dockerfile / ci.yml 矩阵下限对齐）：
+# - python:3.12-slim 为发行基准，与 Dockerfile 一致（pyproject
+#   requires-python >=3.12 为下限；CI 矩阵 3.12/3.13/3.14 全绿）；
+#   requirements.lock 为纯 `==` 版本固定，与解释器小版本无关；
 # - requirements.txt 全量安装（含 chromadb / matplotlib / scipy，
 #   即"全量依赖"而非 slim_environment 精简口径，保证 BASELINE.yaml
 #   `tests` 节的 total_passed 口径可复现——具体数值以 BASELINE.yaml
 #   为唯一事实来源，此处不硬编码避免漂移）；
 # - git sha 由 docker build --build-arg 注入，结果 provenance 可追溯。
 
-FROM python:3.14-slim
+FROM python:3.12-slim
 
 # 系统依赖：pytest-cov 编译 + git（SWE-bench 源码导出脚本需要）
 RUN apt-get update && apt-get install -y --no-install-recommends \

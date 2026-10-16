@@ -20,6 +20,7 @@ from src.agents.executor_output import build_error_info, parse_coverage, parse_f
 from src.agents.executor_runtime import cleanup_sandbox
 from src.agents.kernel_sandbox import kernel_sandbox_enabled
 from src.utils.credential_scrub import scrub_os_environ
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -423,7 +424,7 @@ def execute_docker(
         _docker_cpu_limit = float(os.getenv("DOCKER_CPU_LIMIT", "2.0"))
         _docker_mem_limit_mb = int(os.getenv("DOCKER_MEM_LIMIT_MB", "2048"))
         _docker_pids_limit = int(os.getenv("DOCKER_PIDS_LIMIT", "256"))
-        _docker_read_only = os.getenv("DOCKER_READ_ONLY", "true").lower() in ("true", "1", "on")
+        _docker_read_only = env_flag("DOCKER_READ_ONLY", True)
         if _docker_cpu_limit > 0:
             cmd.extend(["--cpus", str(_docker_cpu_limit)])
         if _docker_mem_limit_mb > 0:
@@ -437,7 +438,7 @@ def execute_docker(
         cmd.extend(["--cap-drop=ALL", "--security-opt", "no-new-privileges"])
         # S3：默认断网（--network=none）；DOCKER_NETWORK_ISOLATION=false 且
         # DOCKER_DEFAULT_NETWORK_NONE=true（默认 true）时保持历史 bridge 口径
-        _default_network_none = os.getenv("DOCKER_DEFAULT_NETWORK_NONE", "true").lower() in ("true", "1", "on")
+        _default_network_none = env_flag("DOCKER_DEFAULT_NETWORK_NONE", True)
         if network_isolation == "true" or (_default_network_none and network_isolation != "allowlist"):
             cmd.append("--network=none")
         docker_image = self.docker_image

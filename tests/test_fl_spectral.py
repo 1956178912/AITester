@@ -285,3 +285,69 @@ class TestMeasureFlSpectralFocus:
             module_name="calc_mod",
         )
         assert result is None
+
+
+class TestMeasurePerTestLinesDegradation:
+    """`_measure_per_test_lines` 的守卫与降级分支（EMSE 批次覆盖补口）。
+
+    动机：该函数是"逐用例谱系定位"的数据入口，其**降级分支从未被测试覆盖**
+    （coverage.xml 中 205–301 段多处未命中）。这些分支决定"无证据 vs 假证据"
+    的边界——降级路径若无测试，误改一处就会从"保守 None"退化为"恒分数假证据"。
+    全部用例零 LLM；真实子进程用例由 pytest 自带超时兜底。
+    """
+
+    def test_empty_test_code_returns_none(self, tmp_path):
+        from src.agents.fl_spectral import _measure_per_test_lines
+
+        target = tmp_path / "mod.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        assert _measure_per_test_lines(str(target), "") is None
+        assert _measure_per_test_lines(str(target), "   \n  ") is None
+
+    def test_missing_target_file_returns_none(self, tmp_path):
+        from src.agents.fl_spectral import _measure_per_test_lines
+
+        assert _measure_per_test_lines(str(tmp_path / "nope.py"), "def test_x(): pass") is None
+
+    def test_timeout_branch_degrades_to_none(self, tmp_path, monkeypatch):
+        """超时 → None（不得产出部分数据）；走 run_with_timeout 的 timed_out 标记分支。"""
+        import src.agents.fl_spectral as fl
+
+        target = tmp_path / "mod_timeout.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        monkeypatch.setattr(fl, "_measure_timeout", lambda: 0)
+        result = fl._measure_per_test_lines(str(target), "def test_ok():\n    assert True\n")
+        assert result is None
+
+    def test_collection_error_degraded_to_none(self, tmp_path):
+        """生成测试本身报错（收集失败）→ rc!=0 → None（不伪造逐用例数据）。"""
+        from src.agents.fl_spectral import _measure_per_test_lines
+
+        target = tmp_path / "mod_syntax.py"
+        target.write_text("def f():\n    return 1\n", encoding="utf-8")
+        result = _measure_per_test_lines(str(target), "def broken(:\n    pass\n")
+        assert result is None
+
+    def test_valid_case_returns_outcomes_and_lines(self, tmp_path):
+        """真实测量路径：outcomes 与 per_test_lines 双非空才算成功（否则 None）。"""
+        from src.agents.fl_spectral import _measure_per_test_lines
+
+        target = tmp_path / "mod_ok.py"
+        target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        test_code = textwrap.dedent(
+            """
+            from mod_ok import add
+
+            def test_pass():
+                assert add(1, 2) == 3
+
+            def test_fail():
+                assert add(1, 2) == 4
+            """
+        )
+        result = _measure_per_test_lines(str(target), test_code, cwd=str(tmp_path))
+        assert result is not None, "合法用例应产出逐用例数据（否则说明测量链降级）"
+        assert set(result["outcomes"]) == {"test_pass", "test_fail"}
+        assert result["outcomes"]["test_pass"] == "passed"
+        assert result["outcomes"]["test_fail"] == "failed"
+        assert result["per_test_lines"]["test_pass"], result["per_test_lines"]

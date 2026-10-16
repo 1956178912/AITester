@@ -37,6 +37,7 @@ from src.agents.executor_modes import execute_docker, execute_sandboxed
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
 from src.agents.executor_runtime import cleanup_sandbox, cleanup_temp_file, run_pytest_with_retry
 from src.utils.credential_scrub import scrub_os_environ
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +220,7 @@ class ExecutorAgent:
             # `PYTEST_TIMEOUT_ENABLE=true` 时生效，秒数取 `PYTEST_TIMEOUT_SECONDS`
             # （默认 20 < EXECUTION_TIMEOUT 30，确保插件先于外层墙钟触发，
             # 使外层走"正常返回"而非"超时 kill"路径）。
-            if os.getenv("PYTEST_TIMEOUT_ENABLE", "false").lower() in ("true", "1", "on"):
+            if env_flag("PYTEST_TIMEOUT_ENABLE"):
                 try:
                     _pto = max(1, int(os.getenv("PYTEST_TIMEOUT_SECONDS", "20")))
                 except ValueError:

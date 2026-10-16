@@ -145,6 +145,7 @@ from src.tools.multi_candidate import (
 )
 from src.tools.patch_applier import apply_patch_to_code
 from src.tools.patch_rollback import snapshot_rollback_enabled
+from src.utils.env_utils import env_flag
 
 # 模块级 logger，用于记录节点执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -554,7 +555,7 @@ def _over_red_section_enabled() -> bool:
     `_over_red_section` 才可能注入段落。置 false 时**再生成路由与计数不受影响**
     （与 `DETECTION_FIRST_SECTION_ENABLE` 同一口径：开关只控制提示词，不控制路由）。
     """
-    return os.getenv("OVER_RED_SECTION_ENABLE", "false").lower() in ("1", "true")
+    return env_flag("OVER_RED_SECTION_ENABLE")
 
 
 def _empty_plan_shortcut_enabled() -> bool:
@@ -571,7 +572,7 @@ def _empty_plan_shortcut_enabled() -> bool:
     在空计划下跳过 ``agent.generate`` 直接产出空测试并标记
     ``empty_plan_shortcut=True``（纯观测，不改变路由 / 主终点口径）。
     """
-    return os.getenv("EMPTY_PLAN_SHORTCUT_ENABLE", "false").lower() in ("1", "true")
+    return env_flag("EMPTY_PLAN_SHORTCUT_ENABLE")
 
 
 def _path_enum_inject_enabled() -> bool:
@@ -587,7 +588,7 @@ def _path_enum_inject_enabled() -> bool:
     默认关 = 历史口径零变化（ADR-0003）；置 "true"/"1" 时 `_generator_node`
     在 generate 调用前构建路径段落并注入（纯静态零 LLM 成本，不改变调用次数）。
     """
-    return os.getenv("PATH_ENUM_INJECT_ENABLE", "false").lower() in ("1", "true")
+    return env_flag("PATH_ENUM_INJECT_ENABLE")
 
 
 def _operation_map_inject_enabled() -> bool:
@@ -604,7 +605,7 @@ def _operation_map_inject_enabled() -> bool:
     默认关 = 历史口径零变化（ADR-0003）；置 "true"/"1" 时 `_generator_node`
     在 generate 调用前构建操作图段落并注入（纯静态零 LLM 成本，不改变调用次数）。
     """
-    return os.getenv("OPERATION_MAP_INJECT_ENABLE", "false").lower() in ("1", "true")
+    return env_flag("OPERATION_MAP_INJECT_ENABLE")
 
 
 def _over_red_section(state: AITesterState) -> str | None:
@@ -1121,7 +1122,7 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 本层在 generator 产出后对 test_code 做 AST 级重复断言去除
     # （experiments/test_suite_minimize.dedup_assertions），纯数据
     # 零 LLM 成本，不改变路由 / 开关默认行为。
-    if os.getenv("TEST_SUITE_DEDUP_ENABLE", "false").lower() in ("true", "1", "on"):
+    if env_flag("TEST_SUITE_DEDUP_ENABLE"):
         from experiments.test_suite_minimize import dedup_assertions as _dedup_assertions
 
         _deduped_code, _dedup_removed = _dedup_assertions(generated_test)

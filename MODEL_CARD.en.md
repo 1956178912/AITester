@@ -103,7 +103,7 @@ system is research code, not a deployed product).
   current detection gains attribute to the detection-first prompting
   protocol. E1 (preregistered thresholds ≥0.3 keep / <0.2 drop) is the
   deciding experiment for that claim.
-- Real SWE-bench Lite (n=20 smoke run): **infrastructure failure with no valid capability conclusion** — of 20 attempts, 7 completed and all 7 failed due to API 429 rate limiting, 3 failed, 10 timed out (`experiments/results/swebench_20_summary.json`; 2026-10-13 erratum: the earlier "0/20 resolved" must not be read as a capability negative result). The system's effectiveness claims are **not yet supported by a real benchmark**, with BASELINE.yaml as the single source of truth; this benchmark is on the re-run list.
+- Real SWE-bench Lite (n=20 smoke run): **infrastructure failure with no valid capability conclusion** — of 20 attempts, 7 completed and all 7 failed due to API 429 rate limiting, 3 failed, 10 timed out (`experiments/results/swebench_20_summary.json`; 2026-10-13 erratum: the earlier "0/20 resolved" must not be read as a capability negative result). The system's effectiveness claims are **not yet supported by a real benchmark**, with BASELINE.yaml as the single source of truth; this benchmark is on the re-run list. (Rate-limit signal count = 2 under the de-duplicated all-structured-source caliber run_notes/notes/issues = 1 each; the 404 endpoint-misconfiguration entry is booked separately — see `experiments/results/emse_swebench_disclosure.md`.)
 - The full "logic-driven" chain (SpecIR DSL / deterministic oracle / structured
   routing) is off by default; enable with `AITESTER_PROFILE=logic`.
 
@@ -138,5 +138,8 @@ system is research code, not a deployed product).
 
 - Project code: see the repository root `LICENSE`.
 - Referenced benchmarks/methods: see the five `*_BASELINE_2023-2026.md`
-  surveys at the repository root (citation liveness is checked weekly by
-  `scripts/gates/check_citations.py`).
+  surveys under `.private/review/recovered/` (that directory is not part of
+  the distribution; for external citation rely on the pending items
+  registered in `docs/citation_allowlist.txt` and the paper's reference
+  list). Citation liveness is checked weekly by
+  `scripts/gates/check_citations.py`.

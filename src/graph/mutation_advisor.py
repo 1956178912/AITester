@@ -40,11 +40,11 @@ M7（2026-09-29 审查 P0）：变异反馈闭环——图内 mutation_advisor �
 from __future__ import annotations
 
 import logging
-import os
 import time
 from typing import Any
 
 from src.graph.state import AITesterState
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ _ENV = "MUTATION_ADVISOR_ENABLE"
 
 def mutation_advisor_enabled() -> bool:
     """M7 开关（MUTATION_ADVISOR_ENABLE=true 时启用，默认 false 历史口径）。"""
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def build_mutation_prompt_section(mutation_feedback: dict[str, Any] | None) -> str:

@@ -244,6 +244,32 @@ jobs:
         # 纯本地快检，无网络；有真新批次落盘时自动生效。
         run: python scripts/gates/check_model_fingerprint.py
 
+      - name: Check JSON-contract call sites (EMSE 口径 A=7 一致性)
+        # EMSE 批次（2026-10-15）：口径 A = `json_mode=True` 显式实参调用点，
+        # AST 权威计数 = 7。此前该事实在中英文文档间分裂为 6/7 且同文件自相矛盾
+        # （README.md:264 vs :1385；MODEL_CARD.md:3 vs :37）。脚本消费 src/**/*.py
+        # 的 AST 与 5 份文档的声明，任一侧漂移即失败。纯 stdlib、零网络秒级。
+        run: python scripts/gates/check_json_contract_sites.py
+
+      - name: Check instruction-artifact hash lock (EMSE prompt 复现纪律)
+        # EMSE / PROMPT-SE 复现底座：instruction artifact 全部活在源码里
+        # （templates.py 四个系统提示 + nodes.py 两个内联强化段 + 动态文法段），
+        # 故复现底座是"源码逐字抽取 + sha256 锁定"。本步骤在清单存在时逐位对账
+        # （prompt 改了没刷新清单即红）；清单是派生物不入库（experiments/results/**），
+        # 新鲜克隆下打 SKIP 但**仍执行一次实时抽取**，以验证登记表可解析。
+        run: python scripts/gates/check_prompt_artifacts.py
+
+      - name: Check report-to-artifact consistency (EMSE 报告→工件对账)
+        # EMSE 批次（2026-10-15）：本轮审计发现的最严重"可避免失分"是**同一事实在
+        # 文档与落盘工件之间静默分裂**（文档表 `n=261/Pearson +0.0995` vs 工件
+        # `配对 n=556/609/571、+0.1805`；结论标签"近饱和" vs"无鉴别力（饱和）"）。
+        # 本门禁在**源批次在场时现场再生成**工件表（派生物不入库 → 新鲜克隆同样
+        # 可跑），再与文档逐单元格对账（数值容差 5e-4 + 结论标签一致）。
+        # 2026-10-15 扩展：新增 T-10（通过率混淆）声明对账——匹配子集有严格
+        # （pattern×seed，29 行/25 可测）与宽松（仅 pattern，62 行/55 可测）两种口径，
+        # 文档必须显式声明严格口径，防止只引宽松值造成的"口径不可判读"。
+        run: python scripts/gates/check_artifact_doc_consistency.py
+
       - name: Verify experiment artifact checksums (U1 证据链门禁)
         # U1（2026-10-05 系统性审查落地）：主批次工件（汇总 JSON + 统计报告 +
         # traces + SHA256SUMS）已入库（.gitignore 白名单修复）。本步骤校验

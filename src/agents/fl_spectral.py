@@ -67,6 +67,8 @@ import sys
 import tempfile
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV = "FL_SPECTRAL_ENABLE"
@@ -87,7 +89,7 @@ def fl_spectral_enabled() -> bool:
     设 FL_SPECTRAL_ENABLE=false 可显式退回历史"关闭"口径
     （消融实验对照组使用）。
     """
-    return os.getenv(_ENV, "true").lower() in ("true", "1", "on")
+    return env_flag(_ENV, True)
 
 
 def _top_k() -> int:

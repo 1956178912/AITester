@@ -50,6 +50,8 @@ import sys
 import tempfile
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV_ENABLE = "PATCH_SNAPSHOT_ROLLBACK_ENABLE"
@@ -74,7 +76,7 @@ def rollback_fail_closed_enabled() -> bool:
     默认关闭：rc>=2 / 超时 / IO 异常归 regression_error 且保留补丁（历史
     口径）；开启后这些口径改判 regression_failed 触发自动回滚。
     """
-    return os.getenv(_ENV_FAIL_CLOSED, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_FAIL_CLOSED)
 
 
 def snapshot_rollback_enabled() -> bool:
@@ -84,7 +86,7 @@ def snapshot_rollback_enabled() -> bool:
     （逐字节历史口径）；开启时走 run() 协议（快照 + P2P + 自动回滚）。
     与 ADR-0003"新能力独立开关、默认行为不变"口径一致。
     """
-    return os.getenv(_ENV_ENABLE, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_ENABLE)
 
 
 def _p2p_timeout() -> int:

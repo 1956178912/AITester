@@ -81,6 +81,28 @@ _EXEMPT_NO_EN = frozenset(
         # 保留项：docs/troubleshooting.md 是 docs/ 顶层真实存在且暂无英文
         # 配对的单语文档（本门禁仍会扫到它，故豁免仍然必要）。
         "docs/troubleshooting.md",
+        # 2026-10-15 EMSE 批次新增 2 条：审计 / 协议记录类单语文档，无英文配对
+        # （按上方维护约定：非核心文档不强制英文配对）。
+        #   MEASUREMENT_INTEGRITY.md       = 四起测量伪影"口径分叉"方法论章
+        #                                    （逐起给出分叉口径 / 检测方式 / 量级 /
+        #                                    修复 / 可重放证据 / 结论是否翻转）
+        #   HUMAN_ADJUDICATION_PROTOCOL.md = E7 人工裁决操作协议（抽样框 / 五选一
+        #                                    量表 / 双人独立 / 冲突解决 / Cohen's
+        #                                    kappa；E7 尚未执行、无 Kappa 工件）
+        # 三者均为"过程与口径记录"而非对外参考文档，故不补英文版；若未来升级为
+        # 被论文正文直接引用的核心参考，按维护约定补英文配对并移出本清单。
+        "docs/MEASUREMENT_INTEGRITY.md",
+        "docs/HUMAN_ADJUDICATION_PROTOCOL.md",
+        #   EVALUATION_SCOPE.md = 声明→证据→范围对账表（EMSE 编辑初筛用；
+        #   含 contradicted 声明清单，属内部可判性工件）
+        "docs/EVALUATION_SCOPE.md",
+        #   COVERAGE_RATCHET_DEVIATION.md = 覆盖率棘轮偏差登记
+        #   （实测 vs 水位、归因核验、三条处置路径；属过程记录）
+        "docs/COVERAGE_RATCHET_DEVIATION.md",
+        #   PROJECT_STATUS_REGISTER.md = 项目状态与决策登记册
+        #   （已完成/遗留/阻断三类状态 + 每项验证入口 + 口径纪律；
+        #    属内部交接与自查工件，随 BASELINE 同步刷新）
+        "docs/PROJECT_STATUS_REGISTER.md",
     }
 )
 

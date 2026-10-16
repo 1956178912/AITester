@@ -17,7 +17,15 @@
 
 1. **编排净负 −28pp 是项目自身 A 级阴性结果**（F1 / ADR-0016）：完整多智能体
    编排（aitester 臂）detection 15.8% vs 单提示检出优先协议（plain_llm_df）
-   44.8%。评审进一步引入 BOAD（ICLR 2026，IBM Research）与 ICST'26 复现研究
+   44.8%（**仓内工件口径**，可由 `make mutation-det-correlation` 零 LLM 复算）。
+   评审另引入两项**外部**工作作为参考，2026-10-16 第十九轮已一手核验并内联编号：
+   BOAD（*Discovering Hierarchical Software Engineering Agents via Bandit
+   Optimization*，ICLR 2026，arXiv:2512.23631——SWE-bench-Verified 上自动发现的
+   层级多 agent 胜单 agent 与手工多 agent）；ICST'26 复现研究（Konstantinou,
+   Degiovanni, Papadakis，*How well LLM-based test generation techniques perform
+   with newer LLM versions?*，ICST 2026，DOI 10.1109/ICST69053.2026.00040，
+   arXiv:2601.09695v2——393 类 / 3,657 方法上 plain LLM 在 line/branch/mutation
+   全面胜 HITS/SymPrompt/TestSpark/CoverUp 四工具 +17.72/+19.80/+20.92pp）。
    两条**独立同向**证据（F7）——"手工编排"已不被前沿视为价值来源；
 2. **"逻辑驱动"内核薄弱**（F3）：spec_compile_rate 仅 0.205–0.219，
    约 79% 的规约子句不可机器化，根因在**文法表达力**而非提示

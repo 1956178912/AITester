@@ -50,6 +50,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV = "PATCH_EVIDENCE_GATE_ENABLE"
@@ -63,7 +65,7 @@ def patch_evidence_gate_enabled() -> bool:
     设 false 时保留历史口径（证据判定仍计算写入 state，但不阻断写盘），
     供"证据门 on/off"消融实验。
     """
-    return os.getenv(_ENV, "true").lower() in ("true", "1", "on")
+    return env_flag(_ENV, True)
 
 
 # 历史"测试生成错误"关键词（与 workflow._TEST_GEN_DIAGNOSIS_KEYWORDS

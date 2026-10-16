@@ -444,7 +444,25 @@ class BaseAgent:
             _sem_hit = find_semantic_cache(cache_file, user_message)
             if _sem_hit is not None:
                 _sem_resp = _sem_hit[1]
-                _lru_store(lru_key, _sem_resp)
+                # D2 收口（2026-10-16 第十九轮评审）：语义缓存命中同样还原
+                # "避免的 token"。LRU 快路径与文件路径已有记账（_lru_tokens
+                # 并行存储 / 文件 tokens 字段），但语义路径此前直接 return，
+                # cache_avoided_tokens 系统性低估。被命中条目是磁盘缓存文件
+                # （索引只存响应文本），读其 tokens 字段计入独立口径
+                # （不污染真实消耗语义）；文件缺失/损坏/无 tokens 字段时
+                # 保守记 0（fail-closed，与 LRU 快路径"历史条目无 token
+                # 记录时记 0"同口径）。同时把 token 数并入 LRU 回填，
+                # 使同一 key 的后续 LRU 命中也能还原正确值。
+                _sem_tokens = 0
+                try:
+                    with open(_sem_hit[0], encoding="utf-8") as _sem_f:
+                        _sem_tokens = int(json.load(_sem_f).get("tokens", 0) or 0)
+                except (OSError, ValueError):
+                    _sem_tokens = 0
+                from src.budget.token_usage import record_cache_hit_usage
+
+                record_cache_hit_usage(_sem_tokens)
+                _lru_store(lru_key, _sem_resp, _sem_tokens)
                 logger.info("5.1 语义缓存命中（复用响应，相似度 >= 阈值）: %s", cache_key[:50])
                 return _sem_resp
 

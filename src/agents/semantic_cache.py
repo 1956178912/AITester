@@ -36,12 +36,14 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 
 def _semantic_cache_enabled() -> bool:
     """语义缓存开关（SEMANTIC_CACHE_ENABLE，默认 false 保持历史精确缓存口径）。"""
-    return os.getenv("SEMANTIC_CACHE_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("SEMANTIC_CACHE_ENABLE")
 
 
 def _semantic_threshold() -> float:

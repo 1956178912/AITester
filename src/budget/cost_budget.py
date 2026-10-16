@@ -32,6 +32,8 @@ import os
 import threading
 from dataclasses import dataclass
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # ─── 预算配置解析（环境变量，模块级缓存 + 刷新入口，与 config.py 同模式）───
@@ -44,7 +46,7 @@ _process_stats: dict[str, int] = {"total_consumed": 0, "budget_exceeded_events":
 
 def _budget_enabled() -> bool:
     """预算开关（COST_BUDGET_ENABLE，默认 false 保持历史行为）。"""
-    return os.getenv("COST_BUDGET_ENABLE", "false").strip().lower() in ("true", "1", "on")
+    return env_flag("COST_BUDGET_ENABLE")
 
 
 def _budget_tokens_limit() -> int:

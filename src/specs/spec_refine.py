@@ -33,6 +33,8 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV_REFINE = "SPEC_REFINE_ENABLE"
@@ -41,7 +43,7 @@ _ENV_MAX_ROUNDS = "SPEC_REFINE_MAX_ROUNDS"
 
 def spec_refine_enabled() -> bool:
     """反例精化开关（SPEC_REFINE_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_ENV_REFINE, "false").strip().lower() in ("true", "1", "on")
+    return env_flag(_ENV_REFINE)
 
 
 def _max_refine_rounds() -> int:

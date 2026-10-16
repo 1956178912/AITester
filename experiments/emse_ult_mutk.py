@@ -41,6 +41,7 @@ from experiments.ult_adapter import (  # noqa: E402
     is_cosmic_ray_available,
     ult_mutation_score,
 )
+from src.utils.atomic_io import atomic_write_json  # noqa: E402
 
 # 口径常量（与 ult_bridge_plan.md §4.3 裁定一致，测试锁定）
 MAX_MUTANTS = 10  # 确定性截断面（与自研 AST 变异体口径一致）
@@ -290,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     out_path = (repo_root / args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(out_path, report, indent=2, mode=0o644)
     print(f"[emse_ult_mutk] 复算完成 → {out_path}")
     for g in groups:
         agg = g.get("aggregate")

@@ -269,7 +269,9 @@ def _behavior(code: str, fn_name: str, module: str, args: list[Any], timeout: in
         with open(probe, "w", encoding="utf-8") as f:
             f.write(_PROBE_TMPL.format(module=module, fn=fn_name, args=repr(args)))
         try:
-            res = subprocess.run(
+            from src.utils.process_utils import run_with_timeout
+
+            res = run_with_timeout(
                 [sys.executable, probe],
                 cwd=tmp,
                 capture_output=True,

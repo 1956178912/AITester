@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 
+from src.utils.env_utils import env_flag
+
 
 def _patch_resample_enabled() -> bool:
     """2.2 改进：补丁后处理重采样开关（PATCH_RESAMPLE_ENABLE=true 时启用，默认 false）。
@@ -126,7 +128,7 @@ def _branch_coverage_inject_enabled() -> bool:
     纯观测层（不阻断主流程）；测量失败 / coverage 不可用 / Docker 链路
     时 branch_coverage=None，历史口径不变。
     """
-    return os.getenv("BRANCH_COVERAGE_INJECT_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("BRANCH_COVERAGE_INJECT_ENABLE")
 
 
 def _boundary_triplets_enabled() -> bool:
@@ -141,7 +143,7 @@ def _boundary_triplets_enabled() -> bool:
     纯观测层（不阻断主流程）；AST 解析失败 / 无边界条件时
     boundary_triplets_section=None，prompt 与历史逐字节一致。
     """
-    return os.getenv("BOUNDARY_TRIPLETS_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("BOUNDARY_TRIPLETS_ENABLE")
 
 
 def _flaky_check_enabled() -> bool:
@@ -153,7 +155,7 @@ def _flaky_check_enabled() -> bool:
     False + flaky_detected 标记，统计层 flaky fraction 消费）。纯 subprocess
     （LLM 缓存命中下零成本）；仅失败轮触发。
     """
-    return os.getenv("FLAKY_CHECK_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("FLAKY_CHECK_ENABLE")
 
 
 def _spec_ir_enabled() -> bool:
@@ -166,7 +168,7 @@ def _spec_ir_enabled() -> bool:
     供实验层统计"SpecIR 覆盖率 / oracle 转换率 / 规约变异杀死率"。
     保守：解析失败 / 无规约材料 → spec_ir=None（纯观测，不阻断主流程）。
     """
-    return os.getenv("SPEC_IR_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("SPEC_IR_ENABLE")
 
 
 def _spec_ir_dsl_enabled() -> bool:
@@ -179,7 +181,7 @@ def _spec_ir_dsl_enabled() -> bool:
     "逻辑驱动"主张从不可证伪升级为"可编译规约占比"可测量量。
     纯静态零 LLM / 零子进程，失败路径保守返回 0.0 / []（不阻断主流程）。
     """
-    return os.getenv("SPEC_IR_DSL_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("SPEC_IR_DSL_ENABLE")
 
 
 def _spec_oracle_exec_enabled() -> bool:
@@ -198,7 +200,7 @@ def _spec_oracle_exec_enabled() -> bool:
        的独立降级口径一致）。
     编译失败 / 无可编译子句 / 产物自检失败 → 不追加（保守，零注入）。
     """
-    return os.getenv("SPEC_ORACLE_EXEC_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("SPEC_ORACLE_EXEC_ENABLE")
 
 
 def _feedback_compression_enabled() -> bool:
@@ -236,7 +238,7 @@ def _fl_spectral_enabled() -> bool:
     保守降级：测量失败 / coverage 不可用 / 无失败用例 / Docker 链路时
     fl_spectral_focus=None，定位先验段落为空串，prompt 与历史逐字节一致。
     """
-    return os.getenv("FL_SPECTRAL_ENABLE", "true").lower() in ("true", "1", "on")
+    return env_flag("FL_SPECTRAL_ENABLE", True)
 
 
 def _context_tier_downgrade_enabled() -> bool:
@@ -291,7 +293,7 @@ def _plan_expected_output_strip_enabled() -> bool:
     锚点"这一单变量，而非 plan 结构本身。判定用途见报告 §5 A1 的
     "plan 去 expected_output 消融臂"。
     """
-    return os.getenv("PLAN_STRIP_EXPECTED_OUTPUT_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("PLAN_STRIP_EXPECTED_OUTPUT_ENABLE")
 
 
 def _detection_spec_mode() -> str:

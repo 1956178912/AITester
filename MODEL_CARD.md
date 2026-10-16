@@ -91,7 +91,7 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
 - spec_compile_rate 在 logic 档实测恒 0.0（AB1 验证批 12/12）——"逻辑驱动"
   规格链未被激活，当前检出收益归因于检出优先提示协议；E1（预注册阈值
   ≥0.3 保留 / <0.2 放弃）为该主张的生死裁决。
-- 真实 SWE-bench Lite（n=20 冒烟）：**基础设施故障，无有效能力结论**——20 次尝试中 7 次完成且全部因 API 429 限流失败、3 次失败、10 次超时（`experiments/results/swebench_20_summary.json`；2026-10-13 勘误：此前的"resolved 0/20"不可读作能力负结果）。系统的有效性主张**尚未被真实基准支持**，数字以 BASELINE.yaml 为单一事实源；该基准列入待复跑清单。
+- 真实 SWE-bench Lite（n=20 冒烟）：**基础设施故障，无有效能力结论**——20 次尝试中 7 次完成且全部因 API 429 限流失败、3 次失败、10 次超时（`experiments/results/swebench_20_summary.json`；2026-10-13 勘误：此前的"resolved 0/20"不可读作能力负结果）。系统的有效性主张**尚未被真实基准支持**，数字以 BASELINE.yaml 为单一事实源；该基准列入待复跑清单。（限流信号计数口径 = 全结构化文本源 run_notes/notes/issues **去重后**统计 `429` 字面量 = 2，分源各 1；issues 中 404 端点错配条目独立记账，披露工件见 `experiments/results/emse_swebench_disclosure.md`。）
 - "逻辑驱动"全链路（SpecIR DSL / 确定性 oracle / 结构化路由）默认关闭，
   需 `AITESTER_PROFILE=logic` 显式启用。
 
@@ -120,5 +120,7 @@ ADR-0021/0027/0029 测量口径修正后为 **39.31%（v2，57/145 可重放行�
 ## 7. 引用与许可
 
 - 本项目代码：见仓库根 `LICENSE`。
-- 引用的基准/方法来源：见根目录 5 份 `*_BASELINE_2023-2026.md` 综述
-  （引用真实性由 `scripts/gates/check_citations.py` 周检）。
+- 引用的基准/方法来源：见 `.private/review/recovered/` 下 5 份
+  `*_BASELINE_2023-2026.md` 综述（该目录不随发行包分发；对外引用以
+  `docs/citation_allowlist.txt` 登记的待核验项与论文正文参考文献为准）。
+  引用真实性由 `scripts/gates/check_citations.py` 周检。
