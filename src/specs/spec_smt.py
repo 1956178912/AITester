@@ -425,7 +425,9 @@ def _collect_pre_constraints(
     pre = [c for c in (spec.get("preconditions") or []) if isinstance(c, str) and c.strip()]
     usable: list[str] = []
     for clause in pre:
-        if not is_expression_clause(clause) or _whitelist_check(clause):
+        # A-14（2026-10-16）：whitelist 走 strip 后文本（与 is_expression_clause
+        # 内部同口径；usable.append 本就 append(strip)）——防尾部控制分隔符门漂移
+        if not is_expression_clause(clause) or _whitelist_check(clause.strip()):
             continue
         usable.append(clause.strip())
     if not usable:
@@ -629,7 +631,9 @@ def _collect_post_constraints(
     inv = [c for c in (spec.get("invariants") or []) if isinstance(c, str) and c.strip()]
     usable: list[str] = []
     for clause in post + inv:
-        if not is_expression_clause(clause) or _whitelist_check(clause):
+        # A-14（2026-10-16）：whitelist 走 strip 后文本（与 is_expression_clause
+        # 内部同口径；usable.append 本就 append(strip)）——防尾部控制分隔符门漂移
+        if not is_expression_clause(clause) or _whitelist_check(clause.strip()):
             continue
         usable.append(clause.strip())
     if not usable:

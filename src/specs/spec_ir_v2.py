@@ -714,9 +714,13 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
     text = clause.strip()
     if not text:
         return "empty"
-    if not is_expression_clause(clause):
+    if not is_expression_clause(text):
         return _form_gate_reject_reason(text)
-    violations = _whitelist_check(clause)
+    # A-14（2026-10-16，property 测试发现的门漂移修复）：统一走 strip 后文本
+    # text——此前传原文 clause，而 is_expression_clause 内部先 strip
+    # （Python 把 \x1c-\x1f 等控制分隔符视为空白）⇒ 尾部含此类字符的输入
+    # 出现"形态门 True、归因门 parse_error"的不一致（反例 "0\x1f"）。
+    violations = _whitelist_check(text)
     if violations:
         # dangerous_call: / attr_escape: = 算子级越界；no_assert_semantics: =
         # 形态级无断言语义（v4：lambda / 海象，恒真假断言）；parse_failed = 语法级
@@ -727,7 +731,7 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
             return "unsupported_syntax"
         return "parse_error"
     known = known_names if known_names is not None else _default_known_names()
-    normalized = _normalize_result_alias(clause, kind, known)
+    normalized = _normalize_result_alias(text, kind, known)
     tree = ast.parse(normalized, mode="eval")
     # v3（P0-A-1）：自由名集合（推导式 / lambda 作用域精确版）替代 ast.walk
     # 全量 Name——有限域量化子句（all(x > 0 for x in items)）的循环变量
@@ -1395,7 +1399,8 @@ def spec_provenance(spec: dict[str, Any] | None) -> list[str]:
         for clause in spec.get(kind) or []:
             if not isinstance(clause, str) or not clause.strip():
                 continue
-            if not is_expression_clause(clause) or _whitelist_check(clause):
+            # A-14（2026-10-16）：与 is_expression_clause 内部同口径走 strip（防门漂移）
+            if not is_expression_clause(clause) or _whitelist_check(clause.strip()):
                 out.append(f"{kind}: {clause.strip()}")
     return out
 
