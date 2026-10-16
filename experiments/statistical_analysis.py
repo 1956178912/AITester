@@ -433,6 +433,7 @@ def paired_t_test(
 def cohens_d(
     aitester_results: list[dict],
     baseline_results: list[dict],
+    field: str = "passed",
 ) -> tuple[float, int]:
     """
     计算配对版 Cohen's d 效应量（差值均值 / 差值标准差）
@@ -443,13 +444,16 @@ def cohens_d(
     Args:
         aitester_results: AITester 结果列表
         baseline_results: 基线结果列表
+        field: 配对所用行字段（2026-10-16 B6：默认 "passed" 保持历史口径；
+            呈现层改用 "detection_rate" 等 M1 诚实指标——None 剔除语义
+            与 _pair_by_task 一致，且须与 t 检验的 field 保持一致）
 
     Returns:
         (d, n_pairs)；共同任务数 < 2 时返回 (nan, n_pairs)（n_pairs 恒为 0 或
         1，round10 P2 文档修正：旧注释误写 "返回 (nan, 0)"，实际返回当前
         n_pairs 值，便于调用方区分"无共同任务"与"仅 1 对"）
     """
-    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results)
+    paired_a, paired_b, common_tasks = _pair_by_task(aitester_results, baseline_results, field=field)
     n_pairs = len(common_tasks)
 
     if n_pairs < 2:
