@@ -325,11 +325,16 @@ class TestV6MainBatchReproGates:
     """
 
     def test_dirty_tree_rejected(self, tmp_path, monkeypatch):
-        import subprocess
-
         from experiments.run_main_batch import _check_repo_clean
 
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": " M f.py\n"})())
+        # W3 转换后 `_check_repo_clean` 经 `run_with_timeout` 执行 git——打桩目标
+        # 必须是 process_utils 模块属性（函数体内 `from ... import` 于调用时取
+        # 属性）；此前打桩 `subprocess.run` 已失效（2026-10-16 修复：
+        # dirty 用例曾失去拦截、静默依赖真实工作树状态）。
+        monkeypatch.setattr(
+            "src.utils.process_utils.run_with_timeout",
+            lambda *a, **k: type("R", (), {"stdout": " M f.py\n"})(),
+        )
         try:
             _check_repo_clean()
         except SystemExit as e:
@@ -338,11 +343,12 @@ class TestV6MainBatchReproGates:
             raise AssertionError("dirty tree 未被拒绝")
 
     def test_clean_tree_passes(self, monkeypatch):
-        import subprocess
-
         from experiments.run_main_batch import _check_repo_clean
 
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+        monkeypatch.setattr(
+            "src.utils.process_utils.run_with_timeout",
+            lambda *a, **k: type("R", (), {"stdout": ""})(),
+        )
         result = _check_repo_clean()  # 干净树返回 None（不抛 SystemExit）
         assert result is None
 
@@ -366,7 +372,6 @@ class TestV6bMainBatchPatternRepeatPassthrough:
 
     def _run_main_capture(self, monkeypatch, tmp_path, argv):
         """跑 rmb.main()，捕获透传给 run_benchmark 的 kwargs（统计被跳过）。"""
-        import subprocess
         import sys as _sys
 
         import experiments.run_benchmark as rb
@@ -381,7 +386,11 @@ class TestV6bMainBatchPatternRepeatPassthrough:
         monkeypatch.setattr(_sys, "argv", ["run_main_batch.py", *argv])
         monkeypatch.setattr(rb, "run_benchmark", fake_run_benchmark)
         # 密闭化：干净树检查打桩，不依赖运行测试时的真实工作树状态
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ""})())
+        # （打桩 process_utils 模块属性——见 test_dirty_tree_rejected 注释）
+        monkeypatch.setattr(
+            "src.utils.process_utils.run_with_timeout",
+            lambda *a, **k: type("R", (), {"stdout": ""})(),
+        )
         monkeypatch.setattr(rmb, "_warn_llm_cache_if_enabled", lambda: None)
         rmb.main()
         return captured
