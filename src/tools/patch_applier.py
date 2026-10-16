@@ -26,9 +26,11 @@ import difflib
 import logging
 import os
 import re
+import textwrap
 import threading
 from typing import Any
 
+from src.utils.env_utils import env_flag
 from src.utils.helpers import extract_code_block
 
 logger = logging.getLogger(__name__)
@@ -623,8 +625,11 @@ def _collect_dangerous_calls_core(code: str) -> set[str]:
     - 模块限定调用（_DANGEROUS_CALL_TARGETS 命中）→ 记限定名；
     - 凭证文件 open 读取（open 第一实参字符串字面量命中 _DANGEROUS_OPEN_PATHS）
       → 记 "open('<path>')"。
-    语法不合法时返回空集（不拦截——语法失败由 safe_apply_patch 的
-    ast.parse 校验先行拦截，本守卫只做危险调用差集，职责单一）。
+    语法不合法时返回空集——⚠️ 空集**不等于"安全"**，只是"读不懂"。本地链路
+    （safe_apply_patch）有 ast.parse 前置语法闸门，故此处职责单一只做差集；
+    任何**没有**前置语法闸门的调用方（如 repo 级 diff "+" 行片段）必须改走
+    :func:`collect_dangerous_calls_in_fragment`，它会把不可解析残行数如实上报
+    供调用方 fail-closed（G 轮，2026-10-16）。
     """
     try:
         tree = ast.parse(code)
@@ -665,6 +670,100 @@ def _collect_dangerous_calls(code: str) -> set[str]:
     found |= _collect_dynamic_import_bypass(code)
     found |= _collect_dynamic_bypass_constructions(code)
     return found
+
+
+def _parses_as_module(code: str) -> bool:
+    """判定文本能否作为模块解析（供片段扫描区分"无命中"与"读不懂"）。"""
+    try:
+        ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+    return True
+
+
+#: 片段脚手架（G 轮）：diff hunk 切片常是某个更大语法结构的**中段**——如往
+#: 跨行 dict/list/实参列表里插一行，切片会缺失开括号或闭括号，单靠 dedent 无法
+#: 解析。补上缺失的括号只补语法骨架，不改写、不删除任何调用节点，故不会掩盖
+#: 危险特征（漏检面为零），却能把"良性中段"从 fail-closed 拒绝里救回来。
+_FRAGMENT_SCAFFOLDS: tuple[tuple[str, str], ...] = (
+    ("", ""),
+    ("{", "}"),
+    ("[", "]"),
+    ("(", ")"),
+    ("{", ""),
+    ("", "}"),
+    ("[", ""),
+    ("", "]"),
+    ("(", ""),
+    ("", ")"),
+)
+
+
+def _scan_fragment_block(block: str) -> tuple[set[str], bool]:
+    """对已 dedent 的片段整段尽力解析扫描。
+
+    Returns:
+        ``(命中的危险特征集, 是否整段解析成功)``。解析成功时残行数为 0；
+        失败时特征集为空、由调用方走逐行兜底。
+    """
+    for prefix, suffix in _FRAGMENT_SCAFFOLDS:
+        candidate = block if not (prefix or suffix) else f"{prefix}\n{block}\n{suffix}"
+        if _parses_as_module(candidate):
+            return _collect_dangerous_calls(candidate), True
+    # 复合语句片段（相对缩进一致但缺外层套件头）：包一层 if True:
+    indented = "if True:\n" + textwrap.indent(block, "    ")
+    if _parses_as_module(indented):
+        return _collect_dangerous_calls(indented), True
+    return set(), False
+
+
+def collect_dangerous_calls_in_fragment(lines: list[str]) -> tuple[set[str], int]:
+    """对 diff hunk 切片做尽力 AST 危险调用扫描（G 轮，跨链路 fail-closed 口径）。
+
+    背景（2026-10-16 G 轮实测缺陷）：repo 级链路（executor_repo）此前把 unified
+    diff 的 "+" 行拼接后直接交给 :func:`_collect_dangerous_calls`，而该函数语法
+    失败返回空集——其 docstring 的前提是"语法失败由 safe_apply_patch 的
+    ast.parse 先行拦截"，该前提**只在本地链路成立**。repo 级链路没有前置语法
+    闸门，而最常见的补丁形态是"往既有函数体里插一行"——外层 ``def``/``class``
+    是上下文行（不参与拼接），"+" 行以缩进开头，拼接后必然抛 IndentationError。
+    实测该形态下 `+    os.system('curl … | sh')` 的收集结果为空集 → C5 守卫放行
+    → `git apply` 后在宿主 venv 内裸跑，即守卫对**主流补丁形态全盲**。
+
+    本函数按三级降级尽力解析，并把"读不懂"如实上报，供调用方 fail-closed：
+
+    1. 整段 ``textwrap.dedent`` 后，按 :data:`_FRAGMENT_SCAFFOLDS` 补齐缺失的
+       括号再解析（覆盖统一缩进的 hunk 与字面量中段——最常见形态）；
+    2. 失败则包一层 ``if True:`` 套件再解析（覆盖含复合语句的片段）；
+    3. 仍失败则逐行累积解析（覆盖跨行语句；每次成功即清空缓冲）。
+
+    Args:
+        lines: hunk 切片原文（**保留缩进**，不含 diff 前缀字符）。既可是仅
+            "+" 行，也可是含上下文行的 after/before 切片——后者结构更完整、
+            解析成功率更高（调用方 ``RepoExecutor._split_diff_hunks``）。
+
+    Returns:
+        ``(命中的危险特征集, 残行数)``。残行数 = 无法归入任何可解析片段的
+        **非空**行数；> 0 表示片段未被完整静态审查——调用方**不得**把空特征集
+        当作"安全"，必须拒绝应用（安全守卫读不懂输入时的处置方向由 G 轮决策
+        定为 fail-closed）。
+    """
+    if not lines:
+        return set(), 0
+    block = textwrap.dedent("\n".join(lines))
+    found, ok = _scan_fragment_block(block)
+    if ok:
+        return found, 0
+    residue: list[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        residue.append(line)
+        chunk_found, chunk_ok = _scan_fragment_block("\n".join(residue))
+        if chunk_ok:
+            found |= chunk_found
+            residue = []
+    return found, len(residue)
 
 
 # O19（2026-09-29 审查 P0）：危险调用目标 —— 在 5.4 S2 安全守卫基础上
@@ -920,7 +1019,7 @@ def _dangerous_api_guard_enabled() -> bool:
     与 PATCH_CONTRACT_CHECK 同模式（默认启用、可环境变量关闭）；
     设 false 时恒放行（历史对照场景）。
     """
-    return os.getenv("PATCH_DANGEROUS_API_GUARD", "true").lower() == "true"
+    return env_flag("PATCH_DANGEROUS_API_GUARD", True)
 
 
 # ─── P0 1.3 契约验证：命名契约检查 ─────────────────────────────────────────
@@ -1005,7 +1104,7 @@ def check_naming_contract(
     Returns:
         (通过?, 缺失符号列表)。解析失败或开关关闭时通过（不阻断，保守降级）。
     """
-    if os.getenv("PATCH_CONTRACT_CHECK", "true").lower() != "true":
+    if not env_flag("PATCH_CONTRACT_CHECK", True):
         return True, []
     if not original_code or not patched_code:
         return True, []
@@ -1049,7 +1148,7 @@ def safe_apply_patch_contract(
         return code, False, []
 
     if enforce_contract is None:
-        enforce_contract = os.getenv("PATCH_CONTRACT_CHECK", "true").lower() == "true"
+        enforce_contract = env_flag("PATCH_CONTRACT_CHECK", True)
     if not enforce_contract:
         return new_code, True, []
 

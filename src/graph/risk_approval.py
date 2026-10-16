@@ -42,6 +42,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # ─── 默认参数（保守口径；环境变量覆盖）──────────────────────────────────────
@@ -56,7 +58,7 @@ _MEDIUM_CHANGED_FILES = 2
 
 def risk_approval_enabled() -> bool:
     """风险分级人工回路开关（RISK_APPROVAL_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("RISK_APPROVAL_ENABLE", "false").lower() == "true"
+    return env_flag("RISK_APPROVAL_ENABLE")
 
 
 def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:

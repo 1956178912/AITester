@@ -154,3 +154,102 @@ if __name__ == "__main__":
     import pytest
 
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+class TestS6ConftestGuardWiring:
+    """G 轮：S6 conftest 危险调用扫描接线到 repo 级 pytest 咽喉点。
+
+    接线前 ``scan_conftest_ast_safety`` 只有测试调用、无生产调用点——守卫形同
+    不存在，而 repo 级链路正是在宿主上执行第三方仓库自带 conftest.py 的路径
+    （pytest 收集期即执行，早于任何断言）。
+    """
+
+    @staticmethod
+    def _executor():
+        from src.agents.executor_repo import RepoExecutor
+
+        return RepoExecutor(timeout=1, setup_timeout=1)
+
+    @staticmethod
+    def _write_conftest(root, code, rel="conftest.py"):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(code, encoding="utf-8")
+        return path
+
+    def test_benign_conftest_allows(self, tmp_path, monkeypatch):
+        """干净 conftest：无硬拒命中（默认开关开启）。"""
+        monkeypatch.delenv("CONTEST_AST_SCAN_ENABLE", raising=False)
+        self._write_conftest(tmp_path, "import pytest\n\n@pytest.fixture\ndef db():\n    return []\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path)) == []
+
+    def test_tier1_shell_call_hard_refuse(self, tmp_path):
+        """Tier 1（shell 字符串执行）→ 硬拒，返回相对路径 + 特征名。"""
+        self._write_conftest(tmp_path, "import os\nos.system('id')\n", rel="tests/conftest.py")
+        hits = self._executor()._scan_repo_conftests(str(tmp_path))
+        assert hits == [(os.path.join("tests", "conftest.py"), ["os.system"])]
+
+    def test_tier1_getattr_bypass_hard_refuse(self, tmp_path):
+        """Tier 1（getattr 取危险属性名）→ 硬拒。"""
+        self._write_conftest(tmp_path, "import os\nf = getattr(os, 'system')\nf('id')\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path))[0][1] == ["getattr"]
+
+    def test_benign_getattr_not_flagged(self, tmp_path):
+        """良性 getattr（真实 conftest 主流写法）不得命中——旧口径的 18.9% 误报源。"""
+        self._write_conftest(tmp_path, "import hypothesis\np = getattr(hypothesis.Phase, 'explain', None)\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path)) == []
+
+    def test_tier2_subprocess_warn_only(self, tmp_path):
+        """Tier 2（subprocess 等真实测试基建）→ 仅告警，不阻断。"""
+        self._write_conftest(tmp_path, "import subprocess\nsubprocess.run(['ls'])\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path)) == []
+
+    def test_unparseable_conftest_fail_closed(self, tmp_path):
+        """读不懂 → fail-closed（宿主 AST 解析失败 ≠ venv 里不会执行）。"""
+        self._write_conftest(tmp_path, "def f(:\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path))[0][1] == ["<unparseable>"]
+
+    def test_switch_off_skips_scan(self, tmp_path, monkeypatch):
+        """CONTEST_AST_SCAN_ENABLE=false → 跳过扫描（历史口径可复现）。"""
+        monkeypatch.setenv("CONTEST_AST_SCAN_ENABLE", "false")
+        self._write_conftest(tmp_path, "import os\nos.system('id')\n")
+        assert self._executor()._scan_repo_conftests(str(tmp_path)) == []
+
+    def test_vcs_and_venv_dirs_skipped(self, tmp_path):
+        """.git / .venv 内的 conftest.py 不参与（非被测仓库代码，且量大会拖慢）。"""
+        for rel in (".git/conftest.py", ".venv/conftest.py", "node_modules/conftest.py"):
+            self._write_conftest(tmp_path, "import os\nos.system('id')\n", rel=rel)
+        assert self._executor()._scan_repo_conftests(str(tmp_path)) == []
+
+    def test_run_test_nodes_refuses_without_invoking_pytest(self, tmp_path, monkeypatch):
+        """守卫拒绝时子进程零调用，全节点记失败（不会假过）。"""
+        from src.agents import executor_repo as mod
+
+        monkeypatch.delenv("CONTEST_AST_SCAN_ENABLE", raising=False)
+        self._write_conftest(tmp_path, "import os\nos.system('id')\n")
+        calls: list = []
+        monkeypatch.setattr(mod, "_run", lambda *a, **k: calls.append(a))
+        out = self._executor()._run_test_nodes(str(tmp_path), ["tests/test_a.py::test_b"])
+        assert calls == []
+        assert out["expected"] == 1
+        assert out["passed"] == 0
+        assert "S6 conftest" in out["failed_cases"][0]["error"]
+
+    def test_run_test_nodes_proceeds_when_clean(self, tmp_path, monkeypatch):
+        """干净仓库：守卫放行，照常进入 pytest 调用（不改变历史行为）。"""
+        from src.agents import executor_repo as mod
+
+        monkeypatch.delenv("CONTEST_AST_SCAN_ENABLE", raising=False)
+        self._write_conftest(tmp_path, "import pytest\n")
+        calls: list = []
+
+        class _Res:
+            returncode = 0
+            stdout = "1 passed"
+            stderr = ""
+
+        monkeypatch.setattr(mod, "_run", lambda *a, **k: (calls.append(a), _Res())[1])
+        monkeypatch.setattr(mod.RepoExecutor, "_venv_python", lambda *a, **k: None)
+        out = self._executor()._run_test_nodes(str(tmp_path), ["tests/test_a.py::test_b"])
+        assert len(calls) == 1
+        assert out["passed"] == 1

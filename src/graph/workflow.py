@@ -312,7 +312,7 @@ def _diagnosis_node_enabled() -> bool:
     默认关闭保持历史实验口径（历史路径由 _debugger_node 内部
     BIDIRECTIONAL_DIAGNOSIS_ENABLE 完成内联诊断，二者可叠加但默认都关）。
     """
-    return os.getenv("DIAGNOSIS_NODE_ENABLE", "false").lower() == "true"
+    return env_flag("DIAGNOSIS_NODE_ENABLE")
 
 
 def _route_after_diagnosis(state: AITesterState) -> str:

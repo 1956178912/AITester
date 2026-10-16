@@ -5,12 +5,15 @@
 - get_venv_cache_size_mb（目录不存在 / 存在）；
 - check_venv_cache_size 容量告警（未超限 / 超限）；
 - get_venv_cache_stats 命中率计算（hits/creates/total/hit_rate）；
+- cache_stats.json 原子落盘（F 轮：无临时残留 / 权限 0600 / 替换失败保旧值）；
 - clear_venv_cache 全量清理与按年龄/大小过滤。
 """
 
 from __future__ import annotations
 
+import json
 import os
+import stat
 
 import pytest
 
@@ -96,6 +99,40 @@ class TestGetVenvCacheStats:
         # 持久化文件应存在
         stats_file = _isolated_cache_dir / "cache_stats.json"
         assert stats_file.exists()
+
+
+class TestCacheStatsAtomicPersist:
+    """F 轮：cache_stats.json 改原子落盘（此前直写，半写会被静默读成零）。
+
+    缺陷形态：``open(path, "w")`` + ``json.dump`` 在进程被 kill / 磁盘满时留下
+    半写 JSON，而 ``_load_cache_stats`` 对损坏文件 ``except ValueError: pass``
+    静默回零——已累计的 hits/creates 无声消失且无告警。
+    """
+
+    def test_persist_leaves_no_tmp_and_tightens_mode(self, _isolated_cache_dir):
+        """落盘内容为完整 JSON、无临时文件残留、权限收敛 0600。"""
+        dep._record_venv_cache_event("hit")
+        stats_file = _isolated_cache_dir / "cache_stats.json"
+        assert json.loads(stats_file.read_text(encoding="utf-8"))["hits"] == 1
+        assert list(_isolated_cache_dir.glob(".aitester_tmp_*.tmp")) == []
+        # atomic_write_json 默认 0600（与 llm_client 缓存文件同口径）
+        assert stat.S_IMODE(stats_file.stat().st_mode) == 0o600
+
+    def test_failed_replace_preserves_previous_complete_stats(self, _isolated_cache_dir, monkeypatch):
+        """替换失败时既有统计保持完整（旧值不被半写覆盖、不抛异常）。"""
+        stats_file = _isolated_cache_dir / "cache_stats.json"
+        previous = {"hits": 5, "creates": 2, "last_event_at": "t0"}
+        stats_file.write_text(json.dumps(previous), encoding="utf-8")
+
+        def _boom(src, dst):
+            raise OSError("simulated disk failure")
+
+        monkeypatch.setattr(os, "replace", _boom)
+        monkeypatch.setattr(dep, "_venv_cache_stats", {"hits": 3, "creates": 0, "last_event_at": "t1"})
+        dep._persist_cache_stats()
+
+        assert json.loads(stats_file.read_text(encoding="utf-8")) == previous
+        assert list(_isolated_cache_dir.glob(".aitester_tmp_*.tmp")) == []
 
 
 class TestClearVenvCache:

@@ -48,6 +48,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # 默认故障频率阈值（同一 error_category 在 repair_history 中出现 ≥ N 次时触发）
@@ -56,7 +58,7 @@ _DEFAULT_THRESHOLD = 2
 
 def failure_frequency_enabled() -> bool:
     """故障频率策略切换开关（FAILURE_FREQUENCY_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("FAILURE_FREQUENCY_ENABLE", "false").lower() == "true"
+    return env_flag("FAILURE_FREQUENCY_ENABLE")
 
 
 def _failure_frequency_threshold() -> int:

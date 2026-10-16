@@ -37,13 +37,15 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 _RECALL_K_DEFAULT = 3
 _RELEVANT_THRESHOLD_DEFAULT = 0.7
 
 
 def _recall_enabled() -> bool:
     """RAG_RETRIEVAL_RECALL_ENABLE=true 时启用 Recall@k 观测（默认关）。"""
-    return os.getenv("RAG_RETRIEVAL_RECALL_ENABLE", "false").lower() == "true"
+    return env_flag("RAG_RETRIEVAL_RECALL_ENABLE")
 
 
 def _recall_k() -> int:

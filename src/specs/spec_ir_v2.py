@@ -526,7 +526,9 @@ def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | 
 #   unsupported_syntax   — 可解析为表达式，但含字符白名单外字形（单引号串 /
 #                          花括号 / f-string / 非 ASCII 字符串字面量），或含
 #                          无断言语义形态（v4：lambda 子句 / 海象赋值——
-#                          编译产物会是恒真断言，见 _WhitelistVisitor）；
+#                          编译产物会是恒真断言，见 _WhitelistVisitor；H5：
+#                          尾随逗号使子句成为 1-元组，同属恒真断言，由晚期
+#                          parse 门判定，见 _clause_reject_reason_for_known）；
 #   unsupported_operator — 可解析但调用 / 属性不在白名单（strip() / open()）；
 #   unknown_name         — 形态与白名单均过，但含绑定上下文外的标识符；
 #   parse_error          — 语法错（"a && b" / 赋值语句 "result = a + b"）；
@@ -755,10 +757,20 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
     known_with_calls = known | _ALLOWED_CALL_NAMES | _BUILTIN_TYPE_NAMES
     if identifiers - known_with_calls:
         return "unknown_name"
+    # H5（2026-10-16，A-14 property 模糊测试第二起反例）：本门的归因**不得**是
+    # `parse_error`。走到此处意味着形态门、白名单门、`mode="eval"` 解析**全部通过**
+    # ——子句本身是合法表达式，失败的只是"把它包成 `assert` 语句"这一步。按本模块
+    # 归因文档（见 SPEC_REJECT_REASONS 注释）：`parse_error` = 语法错，
+    # `unsupported_syntax` = 可解析为表达式但**编译产物是恒真断言**——后者才是本门
+    # 的语义（已知触发形态：尾随逗号使子句成为 1-元组，`assert (0,)` 恒真且缺 msg
+    # 直接 SyntaxError）。此前返回 `parse_error` 造成**门漂移**：形态门判 True 的
+    # 输入却拿到形态门家族的标签，违反 test_spec_expr_property 的不变式 2
+    # （反例 `"0,"`，与 A-14 首起反例 `"0\x1f"` 同类）。归因错则"修提示 vs 扩文法"
+    # 的取舍依据错，故按文档口径改正，不放宽任何拒绝面（仍拒绝，仅换标签）。
     try:
         ast.parse(f"assert {normalized}")
     except (SyntaxError, ValueError):
-        return "parse_error"
+        return "unsupported_syntax"
     return None
 
 

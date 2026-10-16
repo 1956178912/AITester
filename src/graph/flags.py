@@ -21,7 +21,7 @@ def _patch_resample_enabled() -> bool:
     把该轮标记为 patch_syntax_invalid（refine_failure_category 消费）。
     默认关闭保持历史单补丁口径（不产生额外 LLM 调用）。
     """
-    return os.getenv("PATCH_RESAMPLE_ENABLE", "false").lower() == "true"
+    return env_flag("PATCH_RESAMPLE_ENABLE")
 
 
 def _patch_resample_max() -> int:
@@ -63,7 +63,7 @@ def _oracle_enhance_enabled() -> bool:
     下游 Generator 经 _build_query 的 json.dumps(test_plan) 自然消费。
     默认关闭保持历史实验口径不变（Planner → Generator 零变化）。
     """
-    return os.getenv("ORACLE_ENHANCE_ENABLE", "false").lower() == "true"
+    return env_flag("ORACLE_ENHANCE_ENABLE")
 
 
 def _failure_frequency_enabled() -> bool:
@@ -75,7 +75,7 @@ def _failure_frequency_enabled() -> bool:
     继续用同一策略碰运气。零 LLM 成本（纯配置级策略映射表查询）。
     默认关闭保持历史修复口径不变（_debugger_node 零变化）。
     """
-    return os.getenv("FAILURE_FREQUENCY_ENABLE", "false").lower() == "true"
+    return env_flag("FAILURE_FREQUENCY_ENABLE")
 
 
 def _oracle_validate_enabled() -> bool:
@@ -86,7 +86,7 @@ def _oracle_validate_enabled() -> bool:
     state["oracle_findings"] 供实验分析消费（观测层，不阻断主流程）。
     默认关闭保持历史口径不变（_generator_node 零变化）。
     """
-    return os.getenv("ORACLE_VALIDATE_ENABLE", "false").lower() == "true"
+    return env_flag("ORACLE_VALIDATE_ENABLE")
 
 
 def _runtime_probe_enabled() -> bool:
@@ -97,7 +97,7 @@ def _runtime_probe_enabled() -> bool:
     _debugger_node 读取后把探针片段注入修复 prompt（运行时证据替代
     静态猜测，提升仓库级修复质量）。默认关闭保持历史实验口径不变。
     """
-    return os.getenv("RUNTIME_PROBE_ENABLE", "false").lower() == "true"
+    return env_flag("RUNTIME_PROBE_ENABLE")
 
 
 def _probe_snapshot_locate_enabled() -> bool:
@@ -112,7 +112,7 @@ def _probe_snapshot_locate_enabled() -> bool:
     与 POSITION_AWARE_REPAIR_ENABLE（定位消费方）才产生实际效果，
     任一缺失时 probe_snapshot=None，debugger 走历史降级口径。
     """
-    return os.getenv("PROBE_SNAPSHOT_LOCATE_ENABLE", "false").lower() == "true"
+    return env_flag("PROBE_SNAPSHOT_LOCATE_ENABLE")
 
 
 def _branch_coverage_inject_enabled() -> bool:
@@ -252,7 +252,7 @@ def _context_tier_downgrade_enabled() -> bool:
     重新生成。默认关闭时仅记录缺失符号（state["_1_3_contract_missing"]），
     不动档位（保持历史单补丁口径）。
     """
-    return os.getenv("CONTEXT_TIER_DOWNGRADE_ENABLE", "false").lower() == "true"
+    return env_flag("CONTEXT_TIER_DOWNGRADE_ENABLE")
 
 
 def _repo_core_protection_enabled() -> bool:

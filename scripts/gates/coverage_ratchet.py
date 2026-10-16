@@ -21,9 +21,11 @@
     python scripts/gates/coverage_ratchet.py --check            # CI：只检查不写（阻断回退）
     python scripts/gates/coverage_ratchet.py --coverage-xml path/to/coverage.xml
     python scripts/gates/coverage_ratchet.py --bump 0.5         # 步长（百分点，默认 0.5）
+    python scripts/gates/coverage_ratchet.py --init             # 状态文件缺失时初始化落盘
 
 退出码：0 = 达标（本地模式含成功上调）；1 = 实测低于水位（回退）；
-2 = 产物缺失 / 状态文件解析错误。
+2 = 产物缺失 / 状态文件缺失或解析错误（G 轮起状态文件缺失不再回退初始
+水位——那会让 ratchet 静默失效并判绿）。
 
 口径：与 check_branch_coverage.py 同源——coverage.xml 根节点的
 lines-covered/lines-valid 与 branches-covered/branches-valid 加权聚合；
@@ -48,13 +50,24 @@ _INIT_LINE = 89.0
 _INIT_BRANCH = 82.0
 
 
-def _parse_state(path: Path) -> dict[str, float]:
+def _parse_state(path: Path, *, allow_init: bool) -> dict[str, float]:
     """解析水位状态文件（key: value 简单格式，避免引入 yaml 依赖）。
 
-    文件缺失时返回初始水位并提示（首次运行自动落盘初始化）。
+    G 轮（2026-10-16）fail-closed：**文件缺失不再回退初始水位**。初始水位
+    （line 89.0 / branch 82.0）比当前已提交水位低约 4–5pp，状态文件一旦缺失
+    （误删 / ``--state`` 路径拼错 / 精简 clone 未带上），门禁会拿这几 pp 余量
+    判绿并输出 ✅——ratchet 静默失效，属典型假绿。现缺失即 exit 2（与
+    "coverage.xml 缺失"同档）；确需首次初始化时显式加 ``--init``。
     """
     if not path.exists():
-        print(f"[ratchet] 状态文件不存在，使用初始水位 line={_INIT_LINE} branch={_INIT_BRANCH}")
+        if not allow_init:
+            print(
+                f"[ratchet] ❌ 水位状态文件不存在：{path}\n"
+                "          不回退初始水位（那会让 ratchet 静默失效并判绿）。\n"
+                "          请从 git 恢复该文件；确需首次初始化请显式加 --init。"
+            )
+            sys.exit(2)
+        print(f"[ratchet] --init：状态文件不存在，使用初始水位 line={_INIT_LINE} branch={_INIT_BRANCH}")
         return {"line_total": _INIT_LINE, "branch_total": _INIT_BRANCH}
     state: dict[str, float] = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -134,9 +147,14 @@ def main() -> int:
     parser.add_argument("--state", default=str(STATE_FILE), help="水位状态文件路径")
     parser.add_argument("--check", action="store_true", help="只检查不写（CI 模式：回退即失败）")
     parser.add_argument("--bump", type=float, default=0.5, help="上调步长（百分点，默认 0.5）")
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="状态文件缺失时用初始水位落盘（仅首次初始化；默认缺失即 exit 2，见 _parse_state）",
+    )
     args = parser.parse_args()
 
-    state = _parse_state(Path(args.state))
+    state = _parse_state(Path(args.state), allow_init=args.init)
     line_pct, branch_pct = _read_actual(Path(args.coverage_xml))
 
     failed = False
@@ -161,7 +179,9 @@ def main() -> int:
 
     if failed:
         return 1
-    if not args.check and new_state != state:
+    if not args.check and (new_state != state or not Path(args.state).exists()):
+        # 后者覆盖 --init 首次落盘（水位未达步长也要把状态文件建出来，
+        # 否则下一次运行会因文件缺失 exit 2）。
         _write_state(Path(args.state), new_state)
         print(f"[ratchet] 水位已写回 {args.state}（随本次改动一并提交）")
     return 0

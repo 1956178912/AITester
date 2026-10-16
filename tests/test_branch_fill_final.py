@@ -152,24 +152,30 @@ class TestPatchPostprocessEffectiveCharsBranches:
 class TestConftestAstScanBranches:
     """tools/dependency.scan_conftest_ast_safety / conftest_ast_scan_enabled 分支。"""
 
-    def test_conftest_ast_scan_enabled_default(self):
+    def test_conftest_ast_scan_enabled_default(self, monkeypatch):
+        """（G 轮加强）此前断言 `in (True, False)` 恒真；现锁定"未设置 → 开启"。"""
         from src.tools.dependency import conftest_ast_scan_enabled
 
-        assert conftest_ast_scan_enabled() in (True, False)
+        monkeypatch.delenv("CONTEST_AST_SCAN_ENABLE", raising=False)
+        assert conftest_ast_scan_enabled() is True
 
     def test_scan_conftest_ast_safety_clean(self):
+        """（G 轮加强）干净 conftest 必须返回空命中，而非仅"是个 list"。"""
         from src.tools.dependency import scan_conftest_ast_safety
 
         code = "import pytest\n\n@pytest.fixture\ndef fake_db():\n    return []\n"
-        out = scan_conftest_ast_safety(code)
-        assert isinstance(out, list)
+        out, parsed = scan_conftest_ast_safety(code)
+        assert parsed is True
+        assert out == []
 
     def test_scan_conftest_ast_safety_suspicious(self):
+        """（G 轮加强）危险调用必须被点名，而非仅"是个 list"。"""
         from src.tools.dependency import scan_conftest_ast_safety
 
         code = "import os\n\ndef fixture():\n    os.system('rm -rf /')\n"
-        out = scan_conftest_ast_safety(code)
-        assert isinstance(out, list)
+        out, parsed = scan_conftest_ast_safety(code)
+        assert parsed is True
+        assert "os.system" in out
 
 
 class TestInjectionGuardDetectBranches:

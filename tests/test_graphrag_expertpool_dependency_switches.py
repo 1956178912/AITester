@@ -187,14 +187,31 @@ class TestDependencyPureLogicBranches:
         monkeypatch.setenv("CONTEST_AST_SCAN_ENABLE", "false")
         assert conftest_ast_scan_enabled() is False
 
+    def test_conftest_ast_scan_garbage_value_keeps_guard_on(self, monkeypatch):
+        """G 轮：垃圾值（如拼错的 "ture"）不得当成"关闭守卫"——负集合口径 fail-closed。"""
+        from src.tools.dependency import conftest_ast_scan_enabled
+
+        monkeypatch.setenv("CONTEST_AST_SCAN_ENABLE", "ture")
+        assert conftest_ast_scan_enabled() is True
+
     def test_suggest_package_names_empty_input(self):
         from src.tools.dependency import suggest_package_names
 
         assert suggest_package_names(set()) == []
 
     def test_scan_conftest_ast_safety_flags_subprocess(self):
+        """（G 轮加强）此前只断言 isinstance(list)，与测试名承诺的"flags"无关。"""
         from src.tools.dependency import scan_conftest_ast_safety
 
         code = "import subprocess\nsubprocess.run(['ls'])\n"
-        findings = scan_conftest_ast_safety(code)
-        assert isinstance(findings, list)
+        findings, parsed = scan_conftest_ast_safety(code)
+        assert parsed is True
+        assert "subprocess.run" in findings
+
+    def test_scan_conftest_ast_safety_syntax_error_reports_unparsed(self):
+        """G 轮：语法失败必须与"无危险调用"可区分（第二返回位 False）。"""
+        from src.tools.dependency import scan_conftest_ast_safety
+
+        findings, parsed = scan_conftest_ast_safety("def f(:\n")
+        assert parsed is False
+        assert findings == []

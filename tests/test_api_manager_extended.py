@@ -1188,6 +1188,41 @@ class TestSingletonThreadHygiene:
         assert len({id(m) for m in seen}) == 1
         reset_manager()
 
+    def test_double_checked_lock_skips_second_construction(self, monkeypatch):
+        """确定性覆盖双重检查锁的**内层 False 弧**（不再依赖线程调度运气）。
+
+        内层 `if _manager is None` 的 False 弧只在"另一线程于两次检查之间完成
+        初始化"时走到，上面那个 8 线程并发用例**能否命中取决于调度**：H 轮连跑
+        两次 CI 口径全量，该分支一次 `100% (2/2)`、一次 `50% (1/2)`，是修掉
+        config 档位预设 env 泄漏与晚期 parse 门之后**全仓最后一处**覆盖率漂移
+        （1 个分支 = 0.016pp）。此处用假锁在 `__enter__` 里注入"已被抢先初始化"
+        的单例，把交错钉成确定性；同时断言构造函数**未被二次调用**——这才是
+        双重检查锁真正要保证的性质，此前的并发用例只验证了"实例唯一"。
+        """
+        import src.api.api_manager as mod
+
+        reset_manager()
+        sentinel = object()
+        ctor_spy = MagicMock()
+
+        class _RacingLock:
+            """进入临界区的一刻模拟"另一线程已完成初始化"。"""
+
+            def __enter__(self):
+                mod._manager = sentinel
+                return True
+
+            def __exit__(self, *exc_info):
+                return False
+
+        monkeypatch.setattr(mod, "_manager_lock", _RacingLock())
+        monkeypatch.setattr(mod, "APIManager", ctor_spy)
+        try:
+            assert get_manager() is sentinel, "内层检查应发现单例已被抢先初始化并直接复用"
+        finally:
+            mod._manager = None
+        ctor_spy.assert_not_called()
+
     @patch("src.api.api_manager.openai.OpenAI")
     def test_call_failover_logs_transition(self, mock_openai_class, caplog):
         """call() 故障转移成功日志包含 "上一节点 -> 当前节点" 的迁移信息"""

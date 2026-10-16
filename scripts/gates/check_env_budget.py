@@ -17,7 +17,8 @@
     - 扫描范围：src/**/*.py + config.py（产品开关面）。experiments/ 与
       scripts/ 的实验性 os.getenv 不计入（实验脚本不属于产品开关矩阵）；
     - 静态提取：os.getenv("X") / os.environ.get("X") / os.environ["X"] /
-      os.environ.setdefault("X", ...) / 模块级 _ENV* = "X" 常量；
+      os.environ.setdefault("X", ...) / env_flag("X") / env_int("X") /
+      模块级名字含 ENV 的常量（_ENV_X、_X_ENV、_X_ENV_VAR 三式均收）；
       动态拼接（os.getenv(f"...") ）提取不到——已知漏网面，登记表是
       名字集合而非完备性证明；
     - 计数口径：唯一名字数（同一名多处引用只计一次）。
@@ -49,7 +50,19 @@ SCAN_GLOBS = ["src/**/*.py", "config.py"]
 # 2026-10-16 C 轮：布尔开关解析收敛至 src/utils/env_utils.py::env_flag 后，
 # 新增 env_flag("NAME") 字面量形态——不收该形态则新引用方式的开关将绕过
 # 本门禁的预算治理（ADR-0003 纪律的隐性缺口）。env_flag(_ENV) 间接引用
-# 由下方 _ENV* 常量模式覆盖。
+# 由下方常量模式覆盖。
+#
+# 2026-10-16 F 轮（盲区修复）：常量形态此前只认 `_ENV*` **前缀式**，而仓内
+# 另有 19 个开关以**后缀式**常量声明（`_TRACE_ENV_VAR = "AITESTER_TRACE_DIR"`
+# 于 src/observability/trace.py:55、`_CROSS_FILE_ENV_VAR`、`_SLEEP_ENV`、
+# `_EMBEDDING_BACKEND_ENV`、`_ORACLE_CONTEXT_TIER_ENV` 等），门禁既扫不到、
+# 也永不报红——`--check` 输出 "194/194 通过" 属**假绿**：这些名字对
+# ADR-0003 预算治理完全不可见。现放宽为"名字含 ENV 的模块级字符串常量"，
+# 三式（前缀/后缀/双段）一并覆盖。同批把 env_flag 形态扩为
+# `env_(?:flag|int)`：**刻意不加左词界**——如此可同时覆盖各模块自建的
+# 同族包装器（如 src/tools/feedback_compression.py::_clamp_env_int，其字面
+# 名此前同样不可见）；F 轮引入 env_utils.env_int 后该形态即为正向覆盖。
+# 合计新扫出 25 个真名（194 → 219），逐个人工核实均有实际取用点、零误报。
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "os.getenv/environ.get/environ[]/setdefault",
@@ -61,12 +74,15 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
     (
-        'env_flag("NAME") 单一事实源调用（2026-10-16 C 轮收敛后形态）',
-        re.compile(r"env_flag\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
+        'env_flag/env_int("NAME") 单一事实源调用（2026-10-16 C/F 轮收敛后形态）',
+        re.compile(r"env_(?:flag|int)\(\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]"),
     ),
     (
-        "模块级 _ENV* 常量（os.getenv(_ENV) 间接引用）",
-        re.compile(r"^_ENV[A-Z0-9_]*\s*=\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]", re.MULTILINE),
+        "模块级名字含 ENV 的字符串常量（os.getenv(_X_ENV) 间接引用）",
+        re.compile(
+            r"^_?[A-Z0-9_]*ENV[A-Z0-9_]*\s*=\s*[\x22\x27]([A-Z][A-Z0-9_]+)[\x22\x27]",
+            re.MULTILINE,
+        ),
     ),
 ]
 

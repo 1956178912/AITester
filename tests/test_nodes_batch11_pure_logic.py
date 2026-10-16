@@ -10,6 +10,7 @@
 - _patch_resample_enabled / _patch_resample_temperature / _patch_resample_max 开关
 - _repo_core_protection_enabled 开关默认 + env 覆盖
 - _planner_node 验证失败降级（mock PlannerAgent）
+- logic_degraded 顶层抬升（G3：写侧 test_plan 内标记 ↔ 归因读侧顶层键路径对齐）
 """
 
 from __future__ import annotations
@@ -483,3 +484,162 @@ class TestPlannerNodeFallbackBranches:
         assert "test_plan" in out
         # 异常路径仍产出可用计划（默认或降级）
         assert isinstance(out["test_plan"], dict)
+
+
+# ─── G3（2026-10-16）：logic_degraded 顶层抬升（写侧↔读侧键路径对齐）────────
+
+
+def _run_planner_with_mock(plan_return=None, plan_side_effect=None):
+    """用 mock 的 PlannerAgent 跑一次 _planner_node，返回其 update dict。
+
+    模块级（而非某个测试类的方法）：Planner 观测标记的顶层抬升现在有两条
+    （logic_degraded / m10_leaf_fallback），两个测试类共用同一构造点。
+    """
+    from src.graph import nodes
+
+    state = {"target_code": "def f(x):\n    return x", "target_function": "f", "iteration": 0}
+    mock_agent = MagicMock()
+    if plan_side_effect is not None:
+        mock_agent.plan.side_effect = plan_side_effect
+    else:
+        mock_agent.plan.return_value = plan_return
+    with patch.object(nodes, "get_or_create_agent", return_value=mock_agent):
+        return nodes._planner_node(state)
+
+
+class TestLogicDegradedTopLevelLift:
+    """`logic_degraded` 必须同时出现在**状态顶层**，否则归因读侧恒 None。
+
+    缺陷形态（G3）：三个写侧（_planner_node 两处降级分支 + PlannerAgent.plan 的
+    M10 兜底/schema findings）都只写进 test_plan 内部，而唯一读侧
+    `observability.failure_taxonomy.annotate_final_state` 读 `state.get("logic_degraded")`
+    ——键既未声明也未抬升，"规约降级弱信号"分支从未 fire。既有单测手工构造
+    顶层键（`{"logic_degraded": True}`）因此一直是绿的：测的是读侧纯函数，
+    没有一条用例把写侧接上读侧。
+    """
+
+    def _run_planner(self, plan_return=None, plan_side_effect=None):
+        return _run_planner_with_mock(plan_return, plan_side_effect)
+
+    def test_declared_as_state_channel_with_false_default(self):
+        from src.graph.state import AITesterState, create_initial_state
+
+        assert "logic_degraded" in AITesterState.__annotations__, "未声明的键会被 LangGraph 丢弃"
+        state = create_initial_state("u", "m.py", "x = 1\n", 3)
+        assert state["logic_degraded"] is False
+
+    def test_degraded_plan_lifts_flag_to_top_level(self):
+        out = self._run_planner(plan_return={"function_name": "f"})  # 缺 logic_analysis → 降级
+        assert out["test_plan"].get("logic_degraded") is True
+        assert out["logic_degraded"] is True, "顶层未抬升 → 读侧 state.get() 恒 None"
+
+    def test_llm_failure_path_lifts_flag_to_top_level(self):
+        out = self._run_planner(plan_side_effect=RuntimeError("LLM down"))
+        assert out["logic_degraded"] is True
+
+    def test_valid_plan_lifts_explicit_false(self):
+        """成功路径写显式 False（而非缺键）：False 本身是"逻辑驱动走通"的证据。"""
+        out = self._run_planner(plan_return={"function_name": "f", "logic_analysis": {"input_domain": "int"}})
+        assert out["logic_degraded"] is False
+
+    def test_writer_output_reaches_taxonomy_reader(self):
+        """端到端：写侧产物直接喂读侧 → 规约层失效桶（修复前落 UNCATEGORIZED）。"""
+        from src.observability.failure_taxonomy import FailureBucket, annotate_final_state
+
+        out = self._run_planner(plan_return={"function_name": "f"})
+        final_state = {**out, "test_passed": False}  # 无 stop_reason：走 logic_degraded 弱信号
+        annotation = annotate_final_state(final_state)
+        assert annotation["bucket"] is FailureBucket.SPECIFICATION_FAILURE
+        assert "logic_degraded" in annotation["detail"]
+
+    def test_valid_plan_does_not_trigger_specification_failure(self):
+        """反向锁：未降级时不得把任务误归入规约层失效桶（防"永远命中"）。"""
+        from src.observability.failure_taxonomy import FailureBucket, annotate_final_state
+
+        out = self._run_planner(plan_return={"function_name": "f", "logic_analysis": {"input_domain": "int"}})
+        annotation = annotate_final_state({**out, "test_passed": False})
+        assert annotation["bucket"] is FailureBucket.UNCATEGORIZED
+
+
+class TestM10LeafFallbackTopLevelLift:
+    """`m10_leaf_fallback` 必须抬到**状态顶层**，否则 ADR-0032 的可分离性不可机读。
+
+    缺陷形态（I2，与 G3 的 logic_degraded 完全同构）：唯一写侧
+    `PlannerAgent.plan` 的 M10 兜底分支把标记写进 `result["m10_leaf_fallback"]`
+    ——即 test_plan **内部**；该键又从未在 AITesterState 声明，于是 LangGraph 直接
+    丢弃、批次工件的投影行也读不到。ADR-0032 声称的
+    "logic_degraded=True ∧ m10_leaf_fallback=True ⇒ 提取器误诊（非 LLM 真未输出）"
+    因此无法从任何工件验证——正是登记册 §4 "只写不读（1 写侧、0 读侧）"条。
+    """
+
+    # PlannerAgent.plan 的 M10 兜底产物形状：logic_analysis 被填成空 dict，故
+    # _validate_planner_output **通过**、planner 写的标记得以留在 test_plan 里。
+    # 这与 G3 用例刻意缺 logic_analysis 触发**节点侧**默认计划降级（整份 plan
+    # 被替换、planner 的标记随之丢弃）是两条不同路径，不可混用 fixture。
+    def _m10_plan(self, leaf_fallback: bool) -> dict:
+        plan = {
+            "function_name": "f",
+            "logic_analysis": {
+                "input_domain": "",
+                "output_domain": "",
+                "preconditions": [],
+                "postconditions": [],
+                "edge_cases": [],
+            },
+            "logic_degraded": True,
+        }
+        if leaf_fallback:
+            plan["m10_leaf_fallback"] = True
+        return plan
+
+    def test_declared_as_state_channel_with_false_default(self):
+        from src.graph.state import AITesterState, create_initial_state
+
+        assert "m10_leaf_fallback" in AITesterState.__annotations__, "未声明的键会被 LangGraph 丢弃"
+        assert create_initial_state("u", "m.py", "x = 1\n", 3)["m10_leaf_fallback"] is False
+
+    def test_leaf_fallback_marker_lifts_to_top_level(self):
+        out = _run_planner_with_mock(plan_return=self._m10_plan(leaf_fallback=True))
+        assert out["test_plan"].get("m10_leaf_fallback") is True, "前提失效：写侧标记未留在 test_plan"
+        assert out["m10_leaf_fallback"] is True, "顶层未抬升 → 通道/投影行读不到"
+
+    def test_absent_marker_lifts_explicit_false(self):
+        """无条件抬升：False 同样有意义——证明该次 M10 降级确为 LLM 真未输出。"""
+        out = _run_planner_with_mock(plan_return=self._m10_plan(leaf_fallback=False))
+        assert out["logic_degraded"] is True
+        assert out["m10_leaf_fallback"] is False
+
+    def test_valid_plan_lifts_explicit_false(self):
+        out = _run_planner_with_mock(plan_return={"function_name": "f", "logic_analysis": {"input_domain": "int"}})
+        assert out["m10_leaf_fallback"] is False
+
+    def test_adr_0032_separability_is_machine_readable(self):
+        """ADR-0032 核心主张：两个**顶层**标记的组合可区分两种 M10 降级成因。"""
+        extractor_defect = _run_planner_with_mock(plan_return=self._m10_plan(leaf_fallback=True))
+        genuine_m10 = _run_planner_with_mock(plan_return=self._m10_plan(leaf_fallback=False))
+        assert (extractor_defect["logic_degraded"], extractor_defect["m10_leaf_fallback"]) == (True, True)
+        assert (genuine_m10["logic_degraded"], genuine_m10["m10_leaf_fallback"]) == (True, False)
+
+    def test_marker_survives_default_plan_replacement(self):
+        """端到端（真 PlannerAgent + 真 _planner_node）：叶子回退场景下标记不得丢。
+
+        这是 ADR-0032 最该生效、却恰好失效的路径：extract_json_object 的叶子
+        降级档返回**最内层片段**（如 ``{"k": 42}``），片段通常连 function_name
+        都没有 → `_validate_planner_output` 判 False → 节点用默认计划**整份替换**
+        test_plan，planner 刚写下的 m10_leaf_fallback 随之被丢弃 → 顶层抬升只能
+        读到 False，"提取器误诊"被记成"LLM 真未输出"（归因反向错误）。
+        """
+        from unittest.mock import patch as _patch
+
+        from src.agents.planner import PlannerAgent
+        from src.graph import nodes
+
+        real = PlannerAgent()
+        state = {"target_code": "def f(x):\n    return x", "target_function": "f", "iteration": 0}
+        with (
+            _patch.object(nodes, "get_or_create_agent", return_value=real),
+            _patch.object(real, "_call_llm_with_cache", return_value='xx {"outer": stuff, {"k": 42}'),
+        ):
+            out = nodes._planner_node(state)
+        assert out["logic_degraded"] is True
+        assert out["m10_leaf_fallback"] is True, "默认计划替换吞掉了叶子回退标记"

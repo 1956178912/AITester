@@ -3,6 +3,8 @@
 锁定 2026-10-02 批次策略银行低覆盖分支（纯静态，零 LLM / 零网络）：
 - select_strategy 三级匹配（精确 / 次级 / 末级）+ 预算约束 + 成功率加权
 - record_strategy_outcome 写盘降级（路径不可写时静默不抛）
+- 库文件损坏/结构异常时的 fail-closed（G 轮：不覆写主数据，见
+  TestBankCorruptionFailClosed）
 - strategy_bank_stats 观测统计
 - _strategy_success_rate / _rank_strategy_entries 聚合口径
 """
@@ -270,3 +272,73 @@ class TestLoadBankBranches:
         arr.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
         out = _load_bank(str(arr))
         assert out == {"strategies": []}
+
+
+class TestBankCorruptionFailClosed:
+    """G 轮：库文件读不懂时**不得覆写**（观测层追加无权销毁主数据）。
+
+    修复前：顶层非 JSON 对象 / JSON 损坏 → 用全新的
+    ``{"strategies": [], "outcomes": []}`` 原子覆写，人工审核过的 strategies
+    表连同历史 outcomes 一并清空，且日志只在 DEBUG 级（覆写路径甚至不进异常
+    分支——它"成功"了）。
+    """
+
+    @staticmethod
+    def _record(path):
+        from src.tools.strategy_bank import record_strategy_outcome
+
+        record_strategy_outcome(("assertion", None, False), "single_patch", True, task_id="g1", path=str(path))
+
+    def test_non_dict_top_level_not_clobbered(self, tmp_path):
+        """顶层是 JSON 数组 → 跳过写入，原内容逐字节保留。"""
+        path = tmp_path / "bank.json"
+        original = '[{"strategy": "curated_source_of_truth"}]'
+        path.write_text(original, encoding="utf-8")
+        self._record(path)
+        assert path.read_text(encoding="utf-8") == original
+
+    def test_corrupt_json_not_clobbered(self, tmp_path):
+        """JSON 截断损坏 → 跳过写入，原文件保留待人工处置。"""
+        path = tmp_path / "bank.json"
+        original = '{"strategies": [{"strategy": "keep_me"}], "outcomes": ['
+        path.write_text(original, encoding="utf-8")
+        self._record(path)
+        assert path.read_text(encoding="utf-8") == original
+
+    def test_non_list_outcomes_not_clobbered(self, tmp_path):
+        """outcomes 字段类型异常 → 跳过写入（不 crash、不覆写）。"""
+        path = tmp_path / "bank.json"
+        original = '{"strategies": [{"strategy": "keep_me"}], "outcomes": {"weird": 1}}'
+        path.write_text(original, encoding="utf-8")
+        self._record(path)
+        assert json.loads(path.read_text(encoding="utf-8"))["outcomes"] == {"weird": 1}
+
+    def test_missing_file_still_created(self, tmp_path):
+        """库文件不存在时照常新建（历史口径零变化）。"""
+        path = tmp_path / "new_bank.json"
+        self._record(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["strategies"] == []
+        assert any(o.get("task_id") == "g1" for o in data["outcomes"])
+
+    def test_valid_bank_still_appends(self, bank_file):
+        """结构合法的库照常追加（不因加固而退化）。"""
+        self._record(bank_file)
+        with open(bank_file, encoding="utf-8") as fh:
+            data = json.load(fh)
+        assert len(data["strategies"]) == 3
+        assert any(o.get("task_id") == "g1" for o in data["outcomes"])
+
+    def test_load_bank_non_dict_degrades_visibly(self, tmp_path, monkeypatch, caplog):
+        """读侧：顶层非对象 → 空库降级但**留 WARNING**（此前静默，select_strategy 永远 None 无人知）。"""
+        from src.tools import strategy_bank as sb
+
+        path = tmp_path / "bank.json"
+        path.write_text("[]", encoding="utf-8")
+        monkeypatch.setattr(sb, "_bank_cache", None)
+        monkeypatch.setattr(sb, "_bank_mtime", None)
+        with caplog.at_level("WARNING"):
+            bank = sb._load_bank(str(path))
+        assert bank == {"strategies": []}
+        assert "顶层不是 JSON 对象" in caplog.text
+        assert path.read_text(encoding="utf-8") == "[]"

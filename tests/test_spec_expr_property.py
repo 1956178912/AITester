@@ -242,3 +242,35 @@ class TestStripDriftRegression:
         # 修复前：is_expression_clause("0\x1f") 为 True 但归因 parse_error（门漂移）
         assert is_expression_clause("0\x1f")
         assert clause_reject_reason("0\x1f", "precondition", ["x"]) is None
+
+
+@pytest.mark.unit
+class TestLateParseGateDriftRegression:
+    """H5 反例回归：**晚期 parse 门**不得回形态门家族标签。
+
+    property 测试第二起反例（2026-10-16 H 轮，run 4 由 hypothesis 命中并入库回放）：
+    ``"0,"``。尾随逗号让子句成为 1-元组——形态门、白名单门、``mode="eval"`` 解析
+    全部通过，只有拼成 ``assert (0,)`` 语句时才 SyntaxError（且该断言恒真）。
+    修复前该门返回 ``parse_error``，即"形态 True、归因形态门家族"的第二种门漂移
+    （首起为 A-14 的 ``"0\\x1f"``）；现按 SPEC_REJECT_REASONS 文档改判
+    ``unsupported_syntax``（= 可解析为表达式但编译产物是恒真断言）。
+
+    本类把该反例钉成确定性用例：hypothesis 的例库若被清理，此处的覆盖不随之消失。
+    """
+
+    @pytest.mark.parametrize("clause", ["0,", "1 == 1,", "x > 0,", "x,"])
+    def test_trailing_comma_is_backend_reason_not_form_gate(self, clause: str) -> None:
+        """形态门判 True 的尾随逗号子句 → 归因必须落在后端家族。"""
+        assert is_expression_clause(clause), clause
+        reason = clause_reject_reason(clause, "precondition", ["x", "arr"])
+        assert reason in _BACKEND_REASONS, (clause, reason)
+        assert reason not in _FORM_GATE_REASONS, (clause, reason)
+
+    def test_trailing_comma_is_unsupported_syntax(self) -> None:
+        """精确标签：恒真断言族（与 lambda / 海象同族），非"语法错"。"""
+        assert clause_reject_reason("0,", "precondition", ["x"]) == "unsupported_syntax"
+
+    def test_legitimate_comma_clauses_still_compile(self) -> None:
+        """改正不得波及合法逗号形态（元组成员 / 调用实参 / in 元组）。"""
+        for clause in ("x in (1, 2, 3)", "isinstance(x, int)", "max(x, arr) > 0"):
+            assert clause_reject_reason(clause, "precondition", ["x", "arr"]) is None, clause

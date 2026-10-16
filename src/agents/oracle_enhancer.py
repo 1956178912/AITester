@@ -34,11 +34,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import ORACLE_ENHANCER_SYSTEM_PROMPT
+from src.utils.env_utils import env_flag
 
 # T2（2026-10-11 独立评审落地）：预言增强的契约是顶层 JSON 数组，
 # 需与 extract_json_object（只解析对象）区分——见 enhance。
@@ -56,7 +56,7 @@ def oracle_enhance_enabled() -> bool:
 
     默认关闭保持历史实验口径不变（Planner → Generator 零变化）。
     """
-    return os.getenv("ORACLE_ENHANCE_ENABLE", "false").lower() == "true"
+    return env_flag("ORACLE_ENHANCE_ENABLE")
 
 
 class OracleEnhancerAgent(BaseAgent):

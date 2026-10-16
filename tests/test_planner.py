@@ -80,6 +80,45 @@ class TestPlannerPlan:
         assert la["preconditions"] == []
         assert la["edge_cases"] == []
 
+    def test_plan_leaf_fallback_marks_m10_misattribution(self):
+        """ADR-0032 写侧：叶子回退导致的 M10 降级必须带 `m10_leaf_fallback=True`。
+
+        此前该标记**只有写侧没有读侧，且写侧本身也没有测试**——ADR-0032 声称的
+        "分离提取器误诊 vs LLM 真未输出"因此既不可机读也无回归护栏。
+        构造：外层 JSON 残缺（括号平衡法失败）→ extract_json_object 走叶子降级档
+        返回最内层片段 `{"k": 42}` 并置哨兵；该片段无 logic_analysis → 命中 M10
+        兜底分支，两个标记同时落下。
+        """
+        from src.utils.helpers import was_leaf_fallback_used
+
+        p = self._planner()
+        with patch.object(p, "_call_llm_with_cache", return_value='xx {"outer": stuff, {"k": 42}'):
+            result = p.plan(_CODE)
+        assert was_leaf_fallback_used() is True, "前提失效：叶子降级档未命中"
+        assert result["logic_degraded"] is True
+        assert result["m10_leaf_fallback"] is True
+
+    def test_plan_genuine_m10_omits_leaf_fallback_marker(self):
+        """反向锁：LLM 真未输出 logic_analysis（JSON 本身完好）→ 不带叶子回退标记。
+
+        两个标记的组合才是 ADR-0032 的可分离性口径：
+        (degraded=True, leaf=True) = 提取器误诊；(degraded=True, leaf=False) = 真 M10。
+        """
+        p = self._planner()
+        resp = {"function_name": "add", "description": "x", "test_cases": []}
+        with patch.object(p, "_call_llm_with_cache", return_value=json.dumps(resp)):
+            result = p.plan(_CODE)
+        assert result["logic_degraded"] is True
+        assert result.get("m10_leaf_fallback") is not True
+
+    def test_plan_full_response_has_no_degradation_markers(self):
+        """完整输出路径：logic_analysis 在场 → 显式 logic_degraded=False 且无叶子标记。"""
+        p = self._planner()
+        with patch.object(p, "_call_llm_with_cache", return_value=json.dumps(_FULL_RESPONSE)):
+            result = p.plan(_CODE)
+        assert result["logic_degraded"] is False
+        assert "m10_leaf_fallback" not in result
+
     def test_plan_target_function_appended_to_query(self):
         """target_function 应进入发给 LLM 的查询文本"""
         p = self._planner()

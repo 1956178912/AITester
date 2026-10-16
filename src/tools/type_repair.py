@@ -34,6 +34,8 @@ import os
 import re
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 # T7（2026-10-11 独立评审落地）：_repair_with_llm 需在语法校验前剥离
 # markdown 代码围栏（提示词要求 LLM 用 ```python 包裹输出）。helpers 无
 # 反向依赖 src.tools，模块级导入无循环风险。
@@ -50,7 +52,7 @@ def _type_repair_llm_enabled() -> bool:
     默认关闭：未启用时本模块只做静态疑点识别（观测层），不修改补丁，
     保持历史实验口径；启用后 LLM 推断 + 修订 + 契约回环验证生效。
     """
-    return os.getenv("TYPE_REPAIR_LLM_ENABLE", "false").lower() == "true"
+    return env_flag("TYPE_REPAIR_LLM_ENABLE")
 
 
 def _static_type_check_enabled() -> bool:
@@ -71,7 +73,7 @@ def _static_type_check_enabled() -> bool:
     （零 LLM token），TYPE_REPAIR_LLM_ENABLE 是"LLM 层"（把疑点交给
     LLM 推断与修复）。两者可独立开关，也可同时启用。
     """
-    return os.getenv("TYPE_CHECK_ENABLE", "false").lower() == "true"
+    return env_flag("TYPE_CHECK_ENABLE")
 
 
 def _static_type_check_backend() -> str:

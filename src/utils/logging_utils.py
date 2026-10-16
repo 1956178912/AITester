@@ -69,10 +69,18 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
     # 值长 <8 字符不命中（占位/示例值），值内不含空白与 JSON 分隔符。
     # 追加于列表末尾 → 既有下标 [0..9] 不移位，_FALLBACK_PATTERNS 的
     # (0,1,2,4,5,7) 选取与 verify_redaction_consistency 的键派生校验均不受影响。
+    # H 轮（2026-10-16）：字段名分隔符从 `[_-]?` 放宽到 `[ _-]?`，**补上空格变体**。
+    # 此前静态扫描器（audit_log_redaction._SENSITIVE_FIELD_RE，O33 落地）已按
+    # `api[-_ ]?key` 口径拦"日志调用点原样打印"，但**运行期脱敏**只认下划线/连字符：
+    # 实测 `api key: <值>` / `private key: <值>` / `refresh token: <值>` 经
+    # mask_sensitive_info 与 redact_text 后**逐字原样输出**——即 SensitiveFormatter、
+    # trace JSONL 落盘、exc_info 堆栈这些"全局兜底"路径对空格变体完全不设防，
+    # 只能靠人工改调用点。两侧口径由此对齐（同一概念两套派生正是
+    # verify_redaction_consistency 文档串引的 CVE-2026-59308 根因形态）。
     (
         re.compile(
-            r"(?i)(\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token"
-            r"|private[_-]?key|client[_-]?secret|credential)s?\b[\"']?\s*[:=]\s*[\"']?)"
+            r"(?i)(\b(?:password|passwd|secret|api[ _-]?key|access[ _-]?token|refresh[ _-]?token"
+            r"|private[ _-]?key|client[ _-]?secret|credential)s?\b[\"']?\s*[:=]\s*[\"']?)"
             r"([^\s\"',;}\]]{8,})"
         ),
         r"\g<1><REDACTED>",
@@ -306,6 +314,35 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
         # 字符串入参：脱敏后包成单键 dict（保持签名 dict 契约，值不丢弃）
         return {"value": mask_sensitive_info(data)}
     return {}
+
+
+# verify_redaction_consistency 的**规范探针语料**（全部为占位假值，非真实凭证）。
+# 单一事实源：门禁（scripts/gates/audit_log_redaction.py）与离线校验都从这里取，
+# 避免"守卫在 A 处用一套样本、在 B 处用另一套"——那正是本守卫要防的口径分叉。
+# 覆盖面与 _SENSITIVE_PATTERNS / _SENSITIVE_FIELD_RE 的凭证形态一一对应：
+# sk- 前缀、长 hex、base64 密钥、key=value 赋值、大写命名凭证、JWT、Bearer、
+# AWS Access Key、URL userinfo、DB DSN、字段名变体（api key: / access_token=）。
+_REDACTION_CONSISTENCY_PROBES: tuple[str, ...] = (
+    "sk-placeholder0000000000000000",
+    "0123456789abcdef0123456789abcdef",
+    "api_key=placeholderValue0000",
+    "MYSQL_PASSWORD=placeholderValue",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwbGFjZWhvbGRlciJ9.cGxhY2Vob2xkZXJzaWduYXR1cmU",
+    "Authorization: Bearer placeholderToken0000",
+    "AKIAPLACEHOLDERXXXXX",
+    "https://placeholder:placeholder@example.invalid/path",
+    "mysql://placeholder:placeholder@db.invalid:3306/placeholder",
+    # 空格分隔变体（H 轮实测的运行期盲区，现已补；留在语料里当回归锁）
+    "api key: placeholderValue0000",
+    "private key: placeholderValue0000",
+    "refresh token: placeholderValue0000",
+    "access_token=placeholderValue0000",
+)
+
+
+def redaction_consistency_probes() -> list[str]:
+    """返回规范探针语料的副本（供门禁/离线校验调用，避免外部改到常量本体）。"""
+    return list(_REDACTION_CONSISTENCY_PROBES)
 
 
 def verify_redaction_consistency(sample_texts: list[str]) -> bool:

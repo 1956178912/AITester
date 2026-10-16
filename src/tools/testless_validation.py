@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 def testless_validation_enabled() -> bool:
     """testless 验证总开关（TESTLESS_VALIDATION_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("TESTLESS_VALIDATION_ENABLE", "false").lower() == "true"
+    return env_flag("TESTLESS_VALIDATION_ENABLE")
 
 
 def _layer_enabled(layer_name: str, env_name: str, default: str = "true") -> bool:

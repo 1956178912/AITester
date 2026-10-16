@@ -38,8 +38,9 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ _CONST_TYPE_MAP: dict[str, str] = {
 
 def oracle_validate_enabled() -> bool:
     """断言一致性检查开关（ORACLE_VALIDATE_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("ORACLE_VALIDATE_ENABLE", "false").lower() == "true"
+    return env_flag("ORACLE_VALIDATE_ENABLE")
 
 
 def check_assertions(

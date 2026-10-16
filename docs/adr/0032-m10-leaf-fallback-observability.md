@@ -62,6 +62,45 @@ Planner M10 路径把"缺字段"归因为"LLM 未输出 logic_analysis"
   片段结构不同）——`m10_leaf_fallback` 标记的是"提取器回退事件"，
   不保证下游字段缺失由回退引起（需配合 `logic_degraded` 联合判读）。
 
+## 落地状态（2026-10-16 I 轮补记）
+
+本 ADR 采纳后**两天内其核心主张并不成立**——"可分离性"只是设计意图，不可机读。
+两处断口，均在 I 轮接线 `failure_taxonomy` 时实测发现：
+
+1. **标记写进了 `test_plan` 内部，从未抬到状态顶层**（登记册 §4 "G 轮新登记"条：
+   1 个写侧、0 个读侧）。`m10_leaf_fallback` 又未在 `AITesterState` 声明，故
+   LangGraph 直接丢弃该键，批次工件的投影行也读不到 → 无法从任何工件验证
+   某次运行是否真走了 M10 叶子回退。**已修**：`state.py` 声明 + 默认 False、
+   `_planner_node` 无条件抬升（与 G3 的 `logic_degraded` 同构）、批次工件
+   白名单与 per-task 行各加一键（I2）。
+
+2. **标记在它最该生效的路径上被吞掉**（更隐蔽，且方向是**反向错判**）。
+   叶子降级档返回的是最内层片段（如 `{"k": 42}`），片段通常连 `function_name`
+   都没有 → `_validate_planner_output` 判 False → `_planner_node` 用默认计划
+   **整份替换** `test_plan`，planner 刚写下的标记随之丢弃 → 顶层只能抬到
+   `False`，"提取器误诊"被记成"LLM 真未输出"。实测日志链：
+   `helpers.py:735`（叶子回退）→ `planner.py:380`（写标记）→
+   `nodes.py:2324`（缺 function_name）→ `nodes.py:337`（默认计划，标记消失）。
+   **已修**：替换前先摘出标记再回填（I2b）。
+
+两处修复的回归护栏均为端到端用例（真 `PlannerAgent` + 真 `_planner_node`），
+不再手工构造理想输入——本 ADR 原先的 6 例只覆盖 `helpers` 侧哨兵，
+**写侧的 `result["m10_leaf_fallback"]` 赋值本身此前无任何测试**，这正是
+断口能存活两天的原因。见
+`tests/test_nodes_batch11_pure_logic.py::TestM10LeafFallbackTopLevelLift`
+（含 `test_marker_survives_default_plan_replacement`）与
+`tests/test_planner.py::test_plan_leaf_fallback_marks_m10_misattribution`。
+
+"写侧从未被测过"有独立的覆盖率证据：`agents/planner.py` 在 H 轮终态为
+**0.9780（89/91 行）**，两行未覆盖恰是 `352`（叶子回退归因告警）与
+`379`（`result["m10_leaf_fallback"] = True`）——即本 ADR 决策 2 的写侧本体；
+I 轮补齐 3 例后该模块升至 **1.0000（91/91）**，两个半覆盖分支
+（`351(50%)` / `378(50%)`）同时补齐。
+
+> 方法论：本 ADR 的"后果"一节写的是**期望**，不是**已验证事实**。
+> "纯观测标记已写入"与"该标记可被下游读到"是两件事；后者需要一条
+> 从写侧到工件的端到端用例，否则装饰性观测标记可以无限期存活。
+
 ## 演进方向
 
 - 若 M10 误诊计数（`m10_leaf_fallback=True`）在成规模跑批中占比

@@ -27,8 +27,8 @@ typecheck:  ## mypy 类型检查（CI 同口径：src/ + config.py）
 test:  ## 全量测试（CI 同口径：xdist -n 4 loadfile）
 	$(PY) -m pytest tests/ -n 4 --dist loadfile
 
-test-cov:  ## 全量测试 + 覆盖率（CI 同口径）
-	$(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing
+test-cov:  ## 全量测试 + 覆盖率（CI 同口径；额外落 coverage.xml 供棘轮/登记册对账消费）
+	$(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing --cov-report=xml
 
 docs-check:  ## 双语文档同步门禁（strict，CI 阻断项）
 	$(PY) scripts/gates/check_bilingual_docs.py --strict
@@ -59,6 +59,9 @@ prompt-artifacts-check:  ## Instruction artifact 哈希锁（清单与源码逐�
 	$(PY) scripts/gates/check_prompt_artifacts.py --strict
 
 artifact-doc-consistency:  ## 报告→工件数值对账（两个数字族：mutation×detection 表逐格 + T-10 匹配子集严格口径声明；源批次在场时现场再生成）
+	# G6（2026-10-16）：本地不加 --require-coverage——coverage.xml 缺席时登记册
+	# 对账打 [SKIP]（明示"未对账"，不谎报 [OK]）。CI 在覆盖率集群里以
+	# --require-coverage 强制该支路（缺席即红）。
 	$(PY) scripts/gates/check_artifact_doc_consistency.py
 
 preflight:  ## 批次跑批前置闸（配额预算 + 模型指纹 + 工作树；零 LLM；strict 语义见脚本）

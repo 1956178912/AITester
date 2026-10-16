@@ -212,12 +212,41 @@ class TestRelDisplayNameAndRecomputeGuards:
 
 
 class TestStatusRegisterCoverageCheck:
-    """状态登记册的覆盖率声明必须等于 `coverage.xml` 实测（防文档自我美化）。"""
+    """状态登记册 §1 的覆盖率声明必须与 `coverage.xml` 实测相符（防文档自我美化）。
 
-    def test_skips_when_files_absent(self, tmp_path, monkeypatch):
+    G6（2026-10-16）：返回值扩成 ``(问题清单, 是否真正对过账)``——此前
+    "coverage.xml 缺席"与"对账通过"都返回空清单，调用方一律打 `[OK]`，而 CI 里
+    该步骤排在 coverage.xml 生成之前，于是这道对账常年假绿（从未真正运行）。
+    同日修正对账口径：锚定 §1 声明行 + ±0.10pp 容差（逐位相等不可满足：
+    分支覆盖同源码连跑两次即抖 ±1 分支 = 0.016pp，`graph/nodes.py` 行覆盖
+    同源码两次相差约 6 行 = 总行覆盖 0.035pp），声明行缺失按不通过处置。
+    """
+
+    def test_coverage_absent_skips_and_reports_not_checked(self, tmp_path, monkeypatch):
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("任何内容", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", tmp_path / "absent.xml")
+        problems, checked = gate.check_status_register()
+        assert problems == []
+        assert checked is False, "缺席必须报“未对账”，不得被读作通过"
+
+    def test_coverage_absent_fails_when_required(self, tmp_path, monkeypatch):
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("任何内容", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", tmp_path / "absent.xml")
+        problems, checked = gate.check_status_register(require_coverage=True)
+        assert checked is False
+        assert len(problems) == 1 and "不得跳过" in problems[0], problems
+
+    def test_register_missing_is_a_problem_not_a_skip(self, tmp_path, monkeypatch):
+        """登记册入库、与 coverage 产物无关——缺席属仓库级问题，不得静默放行。"""
         monkeypatch.setattr(gate, "_STATUS_REGISTER", tmp_path / "absent.md")
         monkeypatch.setattr(gate, "_COVERAGE_XML", tmp_path / "absent.xml")
-        assert gate.check_status_register() == []
+        problems, checked = gate.check_status_register()
+        assert checked is False
+        assert len(problems) == 1 and "文件缺失" in problems[0], problems
 
     def test_reports_stale_coverage_numbers(self, tmp_path, monkeypatch):
         cov = tmp_path / "coverage.xml"
@@ -226,13 +255,14 @@ class TestStatusRegisterCoverageCheck:
             encoding="utf-8",
         )
         reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
-        reg.write_text("| 总行覆盖 | 90.00% |\n| 总分支覆盖 | 80.00% |", encoding="utf-8")
+        reg.write_text("| 总行覆盖 | **90.00%** |\n| 总分支覆盖 | **80.00%** |", encoding="utf-8")
         monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
         monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
-        problems = gate.check_status_register()
+        problems, checked = gate.check_status_register()
+        assert checked is True
         assert len(problems) == 2, problems
-        assert any("91.23%" in p for p in problems)
-        assert any("84.56%" in p for p in problems)
+        assert any("总行覆盖 90.00%" in p and "91.23%" in p for p in problems), problems
+        assert any("总分支覆盖 80.00%" in p and "84.56%" in p for p in problems), problems
 
     def test_passes_when_numbers_match(self, tmp_path, monkeypatch):
         cov = tmp_path / "coverage.xml"
@@ -241,10 +271,95 @@ class TestStatusRegisterCoverageCheck:
             encoding="utf-8",
         )
         reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
-        reg.write_text("行覆盖 **92.80%**；分支 **87.27%**", encoding="utf-8")
+        reg.write_text("| 总行覆盖 | **92.80%** |\n| 总分支覆盖 | **87.27%** |", encoding="utf-8")
         monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
         monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
-        assert gate.check_status_register() == []
+        problems, checked = gate.check_status_register()
+        assert (problems, checked) == ([], True)
+
+    def test_measurement_jitter_within_tolerance_passes(self, tmp_path, monkeypatch):
+        """分支覆盖逐次抖动 ±1 分支（0.016pp）属测量噪声，不得据此判文档说谎。
+
+        实测依据（2026-10-16）：同一份源码连跑两次全量得 87.56% 与 87.54%。
+        逐位相等口径不可满足，只会把常年假绿换成随机真红。
+        """
+        cov = tmp_path / "coverage.xml"
+        cov.write_text(
+            '<coverage line-rate="0.9293" branch-rate="0.8754" lines-valid="100" branches-valid="10"/>',
+            encoding="utf-8",
+        )
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("| 总行覆盖 | **92.96%** |\n| 总分支覆盖 | **87.56%** |", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
+        problems, checked = gate.check_status_register()
+        assert (problems, checked) == ([], True)
+
+    def test_tolerance_boundary_is_tight_but_absorbs_jitter(self, tmp_path, monkeypatch):
+        """容差边界：吸收实测量级的抖动，但不放过任何超过噪声的错报。
+
+        实测抖动量级（2026-10-16，同源码连跑）：分支 0.016pp、`graph/nodes.py`
+        行覆盖约 6 行 → 总行覆盖 0.035pp。容差取其约 2 倍（0.10pp）。
+        """
+        cov = tmp_path / "coverage.xml"
+        cov.write_text(
+            '<coverage line-rate="0.9290" branch-rate="0.8750" lines-valid="100" branches-valid="10"/>',
+            encoding="utf-8",
+        )
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        # 行 +0.09pp（抖动量级内 → 通过）；分支 +0.12pp（超出 → 转红）
+        reg.write_text("| 总行覆盖 | **92.99%** |\n| 总分支覆盖 | **87.62%** |", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
+        problems, checked = gate.check_status_register()
+        assert checked is True
+        assert len(problems) == 1, problems
+        assert "总分支覆盖" in problems[0] and "+0.12pp" in problems[0], problems
+
+    def test_declaration_beyond_tolerance_reports_both_sides(self, tmp_path, monkeypatch):
+        """容差是双向的：文档**高报**（美化）与低报同样计为问题。"""
+        cov = tmp_path / "coverage.xml"
+        cov.write_text(
+            '<coverage line-rate="0.9280" branch-rate="0.8727" lines-valid="100" branches-valid="10"/>',
+            encoding="utf-8",
+        )
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("| 总行覆盖 | **93.00%** |\n| 总分支覆盖 | **87.00%** |", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
+        problems, checked = gate.check_status_register()
+        assert checked is True
+        assert len(problems) == 2, problems
+        assert any("+0.20pp" in p for p in problems), problems
+        assert any("-0.27pp" in p for p in problems), problems
+
+    def test_number_elsewhere_in_doc_does_not_satisfy_reconciliation(self, tmp_path, monkeypatch):
+        """旧口径漏判面：实测值出现在正文别处（如历史勘误）不算 §1 已声明。"""
+        cov = tmp_path / "coverage.xml"
+        cov.write_text(
+            '<coverage line-rate="0.9280" branch-rate="0.8727" lines-valid="100" branches-valid="10"/>',
+            encoding="utf-8",
+        )
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("> 勘误：上一版曾写 92.80% 与 87.27%，均已过期。", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
+        problems, checked = gate.check_status_register()
+        assert checked is True
+        assert len(problems) == 2, problems
+        assert all("未找到" in p for p in problems), problems
+
+    def test_missing_coverage_xml_attribute_fails_closed(self, tmp_path, monkeypatch):
+        """coverage.xml 缺 line-rate/branch-rate → 解析失败，不得计入已对账。"""
+        cov = tmp_path / "coverage.xml"
+        cov.write_text('<coverage lines-valid="100"/>', encoding="utf-8")
+        reg = tmp_path / "PROJECT_STATUS_REGISTER.md"
+        reg.write_text("| 总行覆盖 | **92.80%** |\n| 总分支覆盖 | **87.27%** |", encoding="utf-8")
+        monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
+        monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
+        problems, checked = gate.check_status_register()
+        assert checked is False
+        assert len(problems) == 1 and "解析失败" in problems[0], problems
 
     def test_corrupt_coverage_xml_reports_problem(self, tmp_path, monkeypatch):
         cov = tmp_path / "coverage.xml"
@@ -253,5 +368,6 @@ class TestStatusRegisterCoverageCheck:
         reg.write_text("anything", encoding="utf-8")
         monkeypatch.setattr(gate, "_STATUS_REGISTER", reg)
         monkeypatch.setattr(gate, "_COVERAGE_XML", cov)
-        problems = gate.check_status_register()
+        problems, checked = gate.check_status_register()
+        assert checked is False, "解析失败 = 没对上账，不得计入“已对账”"
         assert len(problems) == 1 and "解析失败" in problems[0]

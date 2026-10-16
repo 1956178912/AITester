@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.tools.patch_applier import _count_function_defs, apply_patch_to_code
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +340,7 @@ def multi_candidate_available() -> bool:
 
     启用条件：环境变量 ENABLE_MULTI_CANDIDATE_PATCH=true（默认 false）。
     """
-    return os.getenv("ENABLE_MULTI_CANDIDATE_PATCH", "false").lower() == "true"
+    return env_flag("ENABLE_MULTI_CANDIDATE_PATCH")
 
 
 def multi_candidate_count() -> int:
@@ -361,7 +362,7 @@ def multi_candidate_exec_validate() -> bool:
     multi_candidate_count 并列，集中管理多候选补丁的全部开关，避免各节点
     裸读 os.getenv 导致配置口径分裂。
     """
-    return os.getenv("MULTI_CANDIDATE_EXEC_VALIDATE", "false").lower() == "true"
+    return env_flag("MULTI_CANDIDATE_EXEC_VALIDATE")
 
 
 # ─── 3.2 改进：行级信用分配（BOOSTAPR 式）──────────────────────────────────
@@ -455,7 +456,7 @@ def reward_predictor_enabled() -> bool:
     启用后 select_best_candidate 在静态筛选模式下，用历史 execution_trace
     的覆盖率趋势调节候选排序（覆盖率连降偏最小改动、停滞偏更大改动）。
     """
-    return os.getenv("REWARD_PREDICTOR_ENABLE", "false").lower() == "true"
+    return env_flag("REWARD_PREDICTOR_ENABLE")
 
 
 def _coverage_trend(execution_trace: list[dict[str, Any]] | None) -> str:

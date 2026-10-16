@@ -380,6 +380,52 @@ class TestW2CoverageRatchet(unittest.TestCase):
             self.assertEqual(rc2, 0)
             self.assertIn("line_total: 90.0", state.read_text(encoding="utf-8"))
 
+    def test_missing_state_file_fail_closed(self):
+        """G 轮：状态文件缺失必须 exit 2，不得回退初始水位判绿。
+
+        假绿复现：实测 95%/95% 远高于初始水位 89/82，旧口径下状态文件一旦
+        缺失（误删 / --state 拼错 / 精简 clone）门禁输出 ✅ 并 exit 0——已提交
+        的 92.90/87.50 水位静默失效。
+        """
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"  # 刻意不创建
+            _write_cov_xml(xml, line_pct=95.0, branch_pct=95.0)
+            argv = ["ratchet", "--check", "--coverage-xml", str(xml), "--state", str(state)]
+            with patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as ctx:
+                mod.main()
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertFalse(state.exists(), "exit 2 路径不得创建状态文件")
+
+    def test_missing_state_file_with_explicit_init_bootstraps(self):
+        """显式 --init 才允许用初始水位落盘（首次初始化的合法出口）。"""
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"
+            _write_cov_xml(xml, line_pct=90.0, branch_pct=85.0)
+            argv = ["ratchet", "--coverage-xml", str(xml), "--state", str(state), "--init", "--bump", "0.5"]
+            with patch.object(sys, "argv", argv):
+                rc = mod.main()
+            self.assertEqual(rc, 0)
+            text = state.read_text(encoding="utf-8")
+            self.assertIn("line_total: 90.0", text)
+            self.assertIn("branch_total: 85.0", text)
+
+    def test_state_file_missing_key_fail_closed(self):
+        """状态文件缺 branch_total 键 → exit 2（既有 fail-closed 口径回归锁）。"""
+        mod = _load_ratchet_module()
+        with tempfile.TemporaryDirectory() as td:
+            xml = Path(td) / "coverage.xml"
+            state = Path(td) / "state.yaml"
+            _write_cov_xml(xml, line_pct=95.0, branch_pct=95.0)
+            state.write_text("line_total: 90.00\n", encoding="utf-8")
+            argv = ["ratchet", "--check", "--coverage-xml", str(xml), "--state", str(state)]
+            with patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as ctx:
+                mod.main()
+            self.assertEqual(ctx.exception.code, 2)
+
 
 # ═══ W4：QuixBugs / BugsInPy 加载器 ══════════════════════════════════════════
 

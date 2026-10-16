@@ -44,6 +44,40 @@ logger = logging.getLogger(__name__)
 # 超时后收口阶段等待 EOF 的宽限期（秒）：足够正常进程退出，又不至于久等
 _DRAIN_GRACE_SECONDS = 5.0
 
+# 宿主 pytest 配置键：嵌套 pytest 子进程**不得**继承。
+_HOST_PYTEST_ENV_KEYS: tuple[str, ...] = ("PYTEST_PLUGINS", "PYTEST_ADDOPTS")
+
+
+def nested_pytest_env(**overrides: str) -> dict[str, str]:
+    """为"tmp 目录里再跑一次 pytest"的子进程构造 env（剔除宿主 pytest 配置）。
+
+    历史口径是 ``env={**os.environ, "PYTHONPATH": tmpdir, ...}``：整体继承宿主
+    环境，同时把 ``PYTHONPATH`` 覆盖成 tmpdir。这两件事叠加会**静默改写测量结果**
+    ——宿主若设了 ``PYTEST_PLUGINS``（插件在宿主 sys.path 上、不在 tmpdir 上），
+    嵌套 pytest 会在**收集之前**就 ImportError 退出 rc=1。
+
+    实测复现（2026-10-16 H 轮）：宿主 ``PYTEST_PLUGINS=<不可导入模块>`` 时，
+    ``detection_gates._run_test_against_code`` 把这次 rc=1 读成"测试红"，
+    ``specificity_verdict`` 遂判 ``over_red``（正确结论应是 ``unavailable``——
+    根本没跑起来）。即宿主的 pytest 配置能让 M1 检出裁决与 AC2 双门得出
+    **与被测代码无关**的结论，且日志里看不出任何异常。
+
+    ``PYTEST_ADDOPTS`` 同理：宿主追加的 ``-p`` / ``--cov`` 等选项会落到嵌套
+    运行上，改变 rc 与输出形态。
+
+    干净环境（两者均未设）下本函数与 ``{**os.environ, **overrides}`` 逐位等价，
+    零行为变化。
+
+    Args:
+        **overrides: 需要显式设置的键（如 ``PYTHONPATH=tmpdir``），优先级最高。
+
+    Returns:
+        可直接传给 ``run_with_timeout(env=...)`` 的完整环境字典。
+    """
+    env = {k: v for k, v in os.environ.items() if k not in _HOST_PYTEST_ENV_KEYS}
+    env.update(overrides)
+    return env
+
 
 class CompletedProcess(subprocess.CompletedProcess[str]):
     """`subprocess.CompletedProcess` 的扩展：附加 `timed_out` 标记。

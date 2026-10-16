@@ -414,31 +414,16 @@ class TestProfilePresets:
 
     @pytest.fixture(autouse=True)
     def _cleanup_env(self):
-        """清理 setdefault 注入的键（setdefault 绕过 monkeypatch 追踪）。"""
-        keys = [
-            "AITESTER_PROFILE",
-            *dict.fromkeys(
-                k
-                for presets in (
-                    {
-                        "KERNEL_SANDBOX_ENABLE": "true",
-                        "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
-                        "PATCH_ROLLBACK_FAIL_CLOSED": "true",
-                        "INJECTION_GUARD_ENABLE": "true",
-                        "ROGUE_MONITOR_ENABLE": "true",
-                        "FLAKY_CHECK_ENABLE": "true",
-                    },
-                    {
-                        "SPEC_IR_ENABLE": "true",
-                        "SPEC_IR_DSL_ENABLE": "true",
-                        "SPEC_ORACLE_EXEC_ENABLE": "true",
-                        "ENABLE_MUTATION_SCORING": "true",
-                        "ORACLE_VALIDATE_ENABLE": "true",
-                    },
-                )
-                for k in presets
-            ),
-        ]
+        """清理 setdefault 注入的键（setdefault 绕过 monkeypatch 追踪）。
+
+        还原键集**从 config._PROFILE_PRESETS 派生**。此处曾内联 safe/scientific
+        两档的字面量副本，P0-B 给两档新增 MUTATION_ADVISOR_ENABLE 后副本未跟
+        → 该键跨测试残留（2026-10-16 H 轮 envprobe 实测）。tests/conftest.py
+        的 _isolate_profile_presets 是同口径的全局兜底。
+        """
+        from config import _PROFILE_PRESETS
+
+        keys = ["AITESTER_PROFILE", *sorted({k for presets in _PROFILE_PRESETS.values() for k in presets})]
         saved = {k: os.environ.get(k) for k in keys}
         yield
         for k, v in saved.items():

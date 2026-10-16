@@ -17,12 +17,12 @@ from __future__ import annotations
 import ast
 import json
 import logging
-import os
 import re
 from typing import Any, ClassVar
 
 from src.agents.base_agent import BaseAgent
 from src.prompts.templates import GENERATOR_SYSTEM_PROMPT
+from src.utils.env_utils import env_flag
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ _FROM_IMPORT_RE = re.compile(r"^from\s+(\S+)\s+import", re.MULTILINE)
 
 def _assertion_augment_enabled() -> bool:
     """3.4 断言增强开关：环境变量 ASSERTION_AUGMENT_ENABLE=true 时启用（默认 false）。"""
-    return os.getenv("ASSERTION_AUGMENT_ENABLE", "false").lower() == "true"
+    return env_flag("ASSERTION_AUGMENT_ENABLE")
 
 
 def _plan_without_expected_output(plan: Any) -> Any:
@@ -93,7 +93,7 @@ def _repro_test_enabled() -> bool:
     启用后 GeneratorAgent.generate_repro_test() 可用，跨文件修复场景下
     可生成覆盖缺陷触发路径的复现测试（先失败后通过）。
     """
-    return os.getenv("REPRO_TEST_ENABLE", "false").lower() == "true"
+    return env_flag("REPRO_TEST_ENABLE")
 
 
 def _extract_existing_assertions(target_code: str) -> list[str]:

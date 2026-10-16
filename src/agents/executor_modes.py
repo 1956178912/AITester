@@ -270,7 +270,7 @@ def _prepare_dependencies(
     # 独立，HOME 置空不影响 venv 解析——create_venv 的缓存目录在 _prepare_
     # dependencies 的 venv_cache_dir() 内解析为绝对路径，不依赖 HOME）。
     # 默认 false：不改动 env（历史实验口径逐字节不变）。
-    if os.getenv("SANDBOX_ENV_ISOLATION", "false").strip().lower() == "true":
+    if env_flag("SANDBOX_ENV_ISOLATION"):
         for _var in (
             "HOME",
             "USERPROFILE",

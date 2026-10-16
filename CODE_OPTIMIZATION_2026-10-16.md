@@ -157,4 +157,8 @@ close_ch)`，两个公共函数委托之（**公共 API 与行为逐字节不变
 
 1. experiments/ 散点脚本的 JSON 落盘可统一走 `src/utils/atomic_io.py`（需先评估离线脚本的导入约束）；
 2. `env_flag` 可增加 `env_int` / `env_float` 同族 helper（散点尚有数十处手写 int/float 解析）；
+   → **F 轮（2026-10-16）已部分实施**：`env_int` 落地并接管 3 处**模块级**裸
+   `int(os.getenv())`（坏值原会于 import 期崩溃）；函数体内散点数值解析（22 处已带
+   clamp、36 处已有 try/except）与 `config.py::_parse_int_env/_parse_float_env`
+   刻意未并入——并入会改 logger 名（可观测行为变更）且无缺陷收益。`env_float` 未实施。
 3. helpers.py 的 `_find_balanced_delimited` 可加 property-based 模糊测试（hypothesis 已在可选依赖）。

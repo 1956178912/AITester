@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 E 轮 df_spec/B6/加固 后：`--collect-only` 实测 **6617**；全量实跑 **6606 passed / 5 skipped / 2 failed**（534.61s，xdist -n 4 loadfile，`--deselect tests/test_cache_security.py::TestCacheExpiry`〔类级，−4 项〕）。2 failed 全部为**环境/自指**而非代码回归：1 = 沙箱 `ps` 被禁（test_p0_hardening，项目已知环境项）、1 = `TestBaselineNumbersConsistency` 自指一致性（本字段刷新后转绿）。故登记值 passed = collected − skipped = 6617 − 5 = **6612** / failed 0 / skipped 5。本轮新增测试 32（df_spec 臂 17 + SpecExpr property 10 + B6 呈现 5）。此前 D 轮批次：6585/6580/5/0）
+last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 I 轮〔失败归因链接线 I1 + `m10_leaf_fallback` 状态通道补声明/抬升 I2 + 默认计划替换吞标记 I2b + `"unknown"` 抢占弱信号 I3〕后：`--collect-only` 实测 **6764**，登记值 passed = collected − skipped = 6764 − 5 = **6759**。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`）**连跑两次**：86.94s〔6758 passed / 5 skipped / **1 failed**，唯一 failed 为文档↔工件**自指**一致性项 `TestBaselineNumbersConsistency`〕→ 刷新本文件后 86.99s〔**6759 passed / 5 skipped / 0 failed**，自指项转绿，非代码回归〕。两次 `coverage.xml` 逐行 + 逐分支比对**零漂移**（16941 行 / 3118 分支点全同），H 轮收口的可复现性在 I 轮改动后仍成立。本轮净增 **29** 例（collected 6735 → 6764）。此前 H 轮批次：6735/6730/5/0；G 轮批次：6703/6698/5/0；F 轮批次：6647/6642/5/0）
 
 tests:
-  total_passed: 6612          # 全量 pytest tests/（2026-10-16 E 轮后：`--collect-only`（守卫口径）实测 **6617**；全量实跑（CI 同口径 env + 沙箱 ps 一项状态性失败，见 last_verified 注释）**6606 passed / 5 skipped / 2 failed**（534.61s，xdist -n 4 loadfile）。登记口径 = collected − skipped = 6617 − 5 = 6612（自指 1 项随本字段刷新转绿；沙箱 ps 1 项为环境已知项）。本轮新增 32 例回归（df_spec 17 + property 10 + B6 5），另计前轮 D 批 9 例。守卫余量 = skipped + xfailed + 1）
+  total_passed: 6759          # 全量 pytest tests/（2026-10-16 I 轮后：`--collect-only` 实测 **6764**；登记口径 = collected − skipped = 6764 − 5 = 6759。本轮净增 29 例，全部服务于"失败归因链从只写不读变为可机读"：run_benchmark 接线（TestFailureAttributionWiring 7 + TestFailureBucketAggregation 5）、`"unknown"` 不再抢占弱信号（TestUnknownStopReasonDoesNotPreemptWeakSignal 6 + render_markdown 分母披露 2）、`m10_leaf_fallback` 顶层抬升（TestM10LeafFallbackTopLevelLift 6，含"默认计划替换吞标记"端到端反例）、Planner 写侧（test_planner 3——此前 `planner.py:352/379` 两行**零覆盖**，ADR-0032 决策 2 的写侧从未被测过）。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 535           # 全量耗时：2026-10-16 E 轮沙箱实测 534.61s（xdist -n 4 loadfile；沙箱 I/O 代理减速，CI 原生本机参考值 ~195s〔2026-10-11 实测〕）
+  suite_seconds: 87            # 全量耗时：2026-10-16 I 轮终态本机实测 86.94s / 86.99s（连跑两次；xdist -n 4 loadfile + `--cov=src --cov-branch`）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：H 轮同日两次 85.16s / 96.13s（本机波动约 ±11s，本轮 +29 例落在此波动内，不构成性能信号）、E 轮沙箱 534.61s（I/O 代理减速）、CI 原生参考 ~195s（2026-10-11）——差异来自执行环境而非代码性能变化
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -27,21 +27,24 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 92.78      # --cov=src 总行覆盖（2026-10-15 Prompt Card 批次实测 **92.78%**；ratchet 水位 92.40 → ✅ 达标（余量 +0.38pp））
-  line_core_modules:
-    base_agent: 70
-    api_manager: 90
-    dataset_loader: 91
-    graph_nodes: 70
-    code_analyzer: 89
-    planner: 89
-    dependency: 82
-    multi_candidate: 84
-    cross_file: 91
-    rag_retriever: 86
-  branch_total_pct: 87.29  # --cov=src --cov-branch（2026-10-15 实测 **87.29%**；水位 86.90 → ✅ 达标（余量 +0.39pp））
+  line_total_pct: 92.96      # --cov=src 总行覆盖（2026-10-16 I 轮终态实测 **92.96%**〔15748/16941 行 = 92.9579%〕；H 轮 15739/16934 = 92.9432%。分子 +9 / 分母 +7 已**逐文件完整归因**：`graph/nodes.py` +4/+4（I2 顶层抬升 + I2b 摘取标记，全部新覆盖）、`observability/failure_taxonomy.py` +2/+2（I3 的 `!= "unknown"` 条件与分母披露分支）、`graph/state.py` +1/+1（I2 通道声明）、`agents/planner.py` +0/+2（分母不变，**存量漏测被新测试收复**：`planner.py:352/379` 此前零覆盖）。ratchet 水位 92.90 → ✅ 达标（余量 +0.06pp）。水位未上调：bump 步长 0.5pp，余量不足。⚠️ **不得跨轮比较百分比**——引用以本行分数为准）
+  line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
+                             # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
+                             # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
+                             # 属"文档低于工件"的存量漂移（U7 只挡文档硬编码、不挡本节过期）。
+    base_agent: 87           # agents/base_agent.py（0.8663）
+    api_manager: 94          # api/api_manager.py（0.9368）
+    dataset_loader: 94       # datasets/dataset_loader.py（0.9385）
+    graph_nodes: 78          # graph/nodes.py（**0.7789**，未覆盖 **155/701** 行；H 轮为 0.7776 = 155/697）。I 轮 `_planner_node` 新增 4 行（I2 顶层抬升 + I2b 默认计划替换前摘出标记）**全部被新测试覆盖**，故未覆盖行数不变、分母 +4、比率微升。**H 轮已确定**：此前连跑得 0.7776 / 0.7862 的摆动不是"测量噪声"而是**真实污染**——`config` 在 import 期用 `setdefault` 注入档位开关、测试侧还原清单过期，6 个开关键跨测试残留使后续测试意外走进特异性门分支（nodes.py:1561-1563/1569/1575-1576）。H1 修复后连跑恒 0.7776，未覆盖行数 +6 属**测量变准**而非覆盖退步
+    code_analyzer: 99        # tools/code_analyzer.py（0.9938）
+    planner: 100             # agents/planner.py（**1.0000**，91/91 行；I 轮由 0.9780 升至满覆盖——新测试收复 `planner.py:352/379`，两行分别是叶子回退归因告警与 `result["m10_leaf_fallback"] = True`，即 ADR-0032 写侧本体）
+    dependency: 96           # tools/dependency.py（0.9626；G 轮 S6 conftest 分层扫描接线后由 95 升至 96）
+    multi_candidate: 92      # tools/multi_candidate.py（0.9167）
+    cross_file: 93           # tools/cross_file.py（0.9283）
+    rag_retriever: 98        # rag/retriever.py（0.9810）
+  branch_total_pct: 87.62  # --cov=src --cov-branch（2026-10-16 I 轮终态实测 **87.62%**〔5464/6236 分支 = 87.6203%〕；H 轮 5458/6232 = 87.5802%。分子 +6 / 分母 +4 逐文件归因：`nodes.py` +2/+2、`failure_taxonomy.py` +2/+2、`planner.py` +0/+2（存量 2 个半覆盖分支 `352`/`379` 由新测试补齐——同上行覆盖）。水位 87.50 → ✅ 达标（余量 +0.12pp）。水位未上调：bump 步长 0.5pp，余量不足。H 轮已消除全部三处覆盖率噪声源（H1 env 泄漏 / H5 晚期 parse 门 / H6 双重检查锁竞态弧），本轮沿用"连跑两次逐行逐分支比对"复核零漂移。⚠️ 对账容差历史：G6 初定的 ±0.05pp 因测量非确定而**不可满足**，已改 ±0.10pp（`check_artifact_doc_consistency._REGISTER_TOLERANCE_PP`）；噪声源消除后该容差偏宽，I 轮**仍不收紧**（防回退由棘轮独立把守），登记为口径精修项）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
-    graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9881）
+    graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9825）
     error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
     graph_state: 100         # 状态 schema 初始化路由（1.0000）
 
@@ -111,7 +114,7 @@ static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
   ruff_warnings: 0
   mypy_errors: 0
-  mypy_source_files: 132     # 2026-10-12 质量债清偿批次实测（`mypy src/ config.py` → Success: no issues found in 130 source files）；此前 125（2026-10-11）与 10-12 批次新增 5 源文件（spec_ir_v2 / spec_first / orchestration_search 等）后未刷新
+  mypy_source_files: 133     # 2026-10-16 I 轮复验（`mypy src/ config.py` → Success: no issues found in **133** source files，与 F/G/H 轮登记值一致；I 轮改动均在既有文件内，未新增 src 文件）。此前登记 132（2026-10-12 质量债清偿批次，其注释内实测值写作 130——存量漂移，F 轮按实测回填）
 
 python_ci_matrix: ["3.12", "3.13", "3.14"]   # CI 矩阵（scipy>=3.12 为下限）
 
@@ -169,6 +172,19 @@ benchmark:
   #   self_repair_trap_suspected / self_repair_trap_signals（Self-Repair
   #   Trap 三信号观测——DCAware 口径；passed 历史口径零变化，阻断/
   #   策略档 Proposed 待预注册）
+  # I 轮（2026-10-16，归因链接线）：failure_bucket / failure_bucket_detail /
+  #   attribution_edge / attribution_fault_side（`observability.failure_taxonomy`
+  #   的五桶终局失效分类 + 批次 XII 的 edge × fault_side 增补维度，此前
+  #   **零生产调用点**——写侧与单测齐备但批次工件一处不落，归因链末端不可
+  #   机读；现由 `run_benchmark._failure_attribution_for_result` 逐任务写入，
+  #   喂入口径为 `effective_stop_reason`〔O35：final_state 里 stop_reason 恒
+  #   None〕+ G3 抬升的顶层 logic_degraded。**无工作流终局状态的行（运行
+  #   异常/限流耗尽）四键为 None 而非 uncategorized——缺席 ≠ 通过**，且批次
+  #   聚合把它们单列 unclassified_rows 不折进任何桶）+ m10_leaf_fallback
+  #   （ADR-0032 的 M10 降级归因分离标记：logic_degraded=True 时区分"提取器
+  #   叶子回退误诊"与"LLM 真未输出 logic_analysis"；此前只写进 test_plan
+  #   内部 → 实验层读不到 → 可分离性不可机读，且默认计划替换会把标记一起
+  #   丢掉。纯观测，五键均不参与路由）
   metrics_schema:
     [detection_rate, repair_rate, false_fix_rate, regression_rate, test_error_rate,
      oracle_type, test_visible_to_system, patch_plausible, patch_correct,
@@ -182,7 +198,9 @@ benchmark:
      fl_constraint_verdict, fl_constraint_hit_rank, fl_constraint_changed_functions,
      oracle_quality_history, self_repair_trap_suspected, self_repair_trap_signals,
      spec_oracle_injected, spec_oracle_verdict,
-    spec_replace_applied]
+    spec_replace_applied,
+     failure_bucket, failure_bucket_detail, attribution_edge, attribution_fault_side,
+     m10_leaf_fallback]
   # R2 落地批次（2026-10-08）口径修正 v2：第三起测量伪影（跨文件任务未物化，
   #   R27）修复后，修正口径 repair 重估 R-P0-2=39.31%（57/145，v1 35.86%）、
   #   E1/E2=54.72%（58/106，v1 48.11%）；对外引用一律以口径矩阵

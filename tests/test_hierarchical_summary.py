@@ -170,16 +170,27 @@ def test_budget_env_invalid_falls_back() -> None:
         assert _budget_env("L1") == 2048
 
 
-def test_switch_requires_exact_true() -> None:
-    """开关仅接受 'true' 精确值（非 '1'/'on'——与实现 == 'true' 同口径）。"""
+def test_switch_accepts_unified_true_set() -> None:
+    """开关走 env_flag 统一真值集（true/1/on，大小写不敏感）。
+
+    口径变更披露（2026-10-16 F 轮）：本测试此前名为
+    test_switch_requires_exact_true，锁定的是实现侧 `== "true"` 的窄口径
+    ——`HIERARCHICAL_SUMMARY_ENABLE=1` 判 False。F 轮把 57 处窄口径布尔
+    解析统一到 env_flag 单一事实源后，`1`/`on` 同样为真（见
+    tests/test_env_utils.py::TestEnvFlagEquivalence 的等价性锁定）。
+    """
     from src.tools.hierarchical_summary import hierarchical_summary_enabled
 
     with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "1"}):
-        assert hierarchical_summary_enabled() is False  # 仅接受 'true' 字面量
+        assert hierarchical_summary_enabled() is True
+    with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "on"}):
+        assert hierarchical_summary_enabled() is True
     with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "TRUE"}):
-        assert hierarchical_summary_enabled() is True  # .lower() 归一后命中
+        assert hierarchical_summary_enabled() is True
     with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "true"}):
         assert hierarchical_summary_enabled() is True
+    with patch.dict(os.environ, {"HIERARCHICAL_SUMMARY_ENABLE": "false"}):
+        assert hierarchical_summary_enabled() is False
 
 
 def test_extract_functions_syntax_error_returns_empty() -> None:

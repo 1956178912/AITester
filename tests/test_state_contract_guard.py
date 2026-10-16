@@ -3,6 +3,11 @@
 锁定：scripts/gates/check_state_contract.py 对"未声明键读写"的捕获能力
 （M14 四键 / O35 三键 / problem_statement 死读均属此类——LangGraph
 channel 白名单外的键被静默丢弃或恒 None），守卫脚本本身回归即红。
+
+G3（2026-10-16）增补 TestScanSurface：门禁的**扫描面**同样是失效面——
+旧口径只硬编码 nodes.py / workflow.py 两个文件，真实的读侧断链在图外
+（observability/failure_taxonomy.py 读顶层 logic_degraded），门禁因此对着
+缺陷全绿。现锁住"整个 src/ 树都必须在扫描面内"（132 文件 / 0.15s）。
 """
 
 from __future__ import annotations
@@ -12,7 +17,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.gates.check_state_contract import _allowed, _audit_file, _literal_key, declared_state_keys
+from scripts.gates.check_state_contract import (
+    PROJECT_ROOT,
+    _allowed,
+    _audit_file,
+    _literal_key,
+    _rel,
+    declared_state_keys,
+    scan_files,
+)
 
 
 def _audit(tmp_path: Path, code: str) -> list[tuple[str, int, str, str]]:
@@ -75,3 +88,47 @@ class TestStateContractGuard:
         assert _allowed("target_code", declared)
         assert _allowed("_1_3_contract_missing", declared)
         assert not _allowed("undeclared_xyz", declared)
+
+
+class TestScanSurface:
+    """G3（2026-10-16）：扫描面本身也是门禁的失效面——面太窄 = 假绿。
+
+    旧口径硬编码 `("src/graph/nodes.py", "src/graph/workflow.py")` 两个文件，
+    而脚本 docstring 自称扫 `src/graph/*.py`；真实的读侧断链
+    （failure_taxonomy 读顶层 `logic_degraded`，写侧只写进 test_plan 内部且键未声明）
+    恰好落在扫描面之外 → 门禁对着缺陷全绿。
+    """
+
+    def test_whole_src_tree_is_scanned(self):
+        scanned = set(scan_files())
+        on_disk = set((PROJECT_ROOT / "src").rglob("*.py"))
+        assert on_disk == scanned, f"扫描面与 src/ 实际文件不一致：{sorted(on_disk ^ scanned)[:5]}"
+        assert len(scanned) > 100, f"扫描面异常收窄（{len(scanned)} 个文件）——glob 失效即假绿"
+
+    def test_known_state_readers_are_scanned(self):
+        rels = {_rel(p) for p in scan_files()}
+        for expected in (
+            "src/graph/nodes.py",  # 旧扫描面（写侧）
+            "src/graph/workflow.py",
+            "src/observability/failure_taxonomy.py",  # G3 断链所在（图外读侧）
+            "src/agents/debugger.py",  # 图外状态消费方（旧扫描面完全未覆盖）
+        ):
+            assert expected in rels, f"{expected} 不在扫描面内"
+
+    def test_real_repo_audit_is_clean(self):
+        """扩容后的扫描面在真实仓库上必须零违规（否则扩容即转红）。"""
+        declared = declared_state_keys()
+        violations = [v for p in scan_files() for v in _audit_file(p, declared)]
+        assert violations == []
+
+    def test_g3_defect_is_caught_when_key_undeclared(self):
+        """回归锁：把 `logic_degraded` 从声明集里去掉（还原修复前），门禁必须报出读侧。"""
+        declared = declared_state_keys() - {"logic_degraded"}
+        target = PROJECT_ROOT / "src" / "observability" / "failure_taxonomy.py"
+        violations = _audit_file(target, declared)
+        assert any(kind == "get" and key == "logic_degraded" for _, _, kind, key in violations), violations
+
+    def test_rel_falls_back_outside_repo(self):
+        assert _rel(PROJECT_ROOT / "README.md") == "README.md"
+        outside = Path("/tmp/not-in-repo.py")
+        assert _rel(outside) == str(outside)

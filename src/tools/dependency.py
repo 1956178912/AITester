@@ -35,6 +35,7 @@ import threading
 import time
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
 from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,11 @@ _PIP_PACKAGE_WHITELIST: frozenset[str] = frozenset(
 # 恶意 conftest.py 可在 pytest 收集阶段执行任意代码（subprocess /
 # os.system / eval / importlib 动态导入 / 网络外联），守卫在文件写入
 # 前做 AST 级扫描（纯标准库，零 LLM 成本），命中即拒绝执行。
+#
+# ⚠️ 2026-10-16 G 轮：本守卫此前**只有测试调用、无任何生产调用点**——即
+# "声明了 P0 守卫但从未接线"，而 repo 级链路（executor_repo._run_test_nodes）
+# 正是在宿主上执行第三方仓库自带 conftest.py 的路径。G 轮已接线到该 pytest
+# 咽喉点，并按下方 Tier 分层裁决。
 _CONTEST_DANGEROUS_CALLS: frozenset[str] = frozenset(
     {
         "os.system",
@@ -167,6 +173,69 @@ _CONTEST_DANGEROUS_CALLS: frozenset[str] = frozenset(
     }
 )
 
+# G 轮（2026-10-16）分层裁决口径。接线前实测：本机 37 个真实 conftest.py
+# （本仓 tests/ + site-packages 内 chromadb / nltk / fsspec / pyarrow 等）在
+# "全部命中即硬拒"口径下文件级误报率 18.9%（7/37），其中 5 个仅因裸 getattr
+# 命中。守卫一旦上线就拒掉近两成真实仓库，等于把 repo 级基准臂打成不可用，
+# 故按"意图"分两层：
+#   Tier 1（硬拒，不执行 pytest）：动态执行/动态导入/二进制加载/shell 字符串
+#     ——这些在正常测试基建里没有合法用途，是注入或混淆绕过的强信号；
+#     实测 37 个文件 **0 命中**（即接线零误拒）。
+#   Tier 2（仅告警，不阻断）：subprocess / socket / urllib / requests / httpx /
+#     shutil.rmtree——真实第三方测试基建常用（实测 3/37 文件命中：chromadb、
+#     fsspec、pyarrow）。且这些能力在**被测仓库自带的测试模块**里同样存在
+#     （pytest 收集即执行），只拦 conftest 并不构成真实边界，硬拒的收益远低于
+#     误拒成本；改为 WARNING 留审计线索。
+_CONTEST_HARD_REFUSE: frozenset[str] = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "eval",
+        "exec",
+        "importlib",
+        "importlib.import_module",
+        "ctypes",
+        "ctypes.CDLL",
+        "getattr",
+    }
+)
+
+# getattr 收紧口径（G 轮）：只有"用 getattr 取危险属性名"或"对危险模块取属性"
+# 才算命中。此前裸 getattr 一律命中，实测把 getattr(hypothesis.Phase,
+# "explain", None) / getattr(nltk.corpus, name, None) 这类主流 fixture 写法
+# 全判危险（5/37 文件），守卫无法上线。收紧后实测同批 37 文件 0 命中。
+_CONTEST_GETATTR_DANGEROUS_ATTRS: frozenset[str] = frozenset(
+    {
+        "system",
+        "popen",
+        "exec",
+        "execl",
+        "execv",
+        "execve",
+        "spawn",
+        "spawnl",
+        "eval",
+        "compile",
+        "run",
+        "call",
+        "check_call",
+        "check_output",
+        "Popen",
+        "rmtree",
+        "urlopen",
+        "socket",
+        "CDLL",
+        "WinDLL",
+        "PyDLL",
+        "import_module",
+        "load_module",
+        "__import__",
+    }
+)
+_CONTEST_DANGEROUS_MODULES: frozenset[str] = frozenset(
+    {"os", "subprocess", "shutil", "socket", "ctypes", "importlib", "requests", "httpx", "urllib"}
+)
+
 
 def _qualify_call_node(func_node: ast.AST) -> str | None:
     """把调用节点的 func 展开为模块限定名（与 patch_applier 同口径）。"""
@@ -181,27 +250,37 @@ def _qualify_call_node(func_node: ast.AST) -> str | None:
     return None
 
 
-def scan_conftest_ast_safety(code: str) -> list[str]:
+def scan_conftest_ast_safety(code: str) -> tuple[list[str], bool]:
     """S6（M11，2026-09-29 审查 P0）：conftest.py / setup.py 危险调用 AST 扫描。
 
     纯标准库（ast），零 LLM 成本。解析 Python 代码，收集命中的
-    `_CONTEST_DANGEROUS_CALLS` 特征（subprocess / os.system / eval /
-    importlib / ctypes / shutil.rmtree / 网络外联），返回命中的特征名
-    列表（空 = 安全；非空 = 恶意 conftest 候选，应拒绝执行）。
+    ``_CONTEST_DANGEROUS_CALLS`` 特征（subprocess / os.system / eval /
+    importlib / ctypes / shutil.rmtree / 网络外联），返回命中的特征名列表
+    （空 = 无命中；非空 = 恶意 conftest 候选）。命中特征是否阻断执行由调用方
+    按 :data:`_CONTEST_HARD_REFUSE`（Tier 1 硬拒 / Tier 2 仅告警）裁决。
 
-    语法不合法时返回空列表（保守：语法错误由 pytest 自身拦截，
-    本守卫只做危险调用差集，职责单一）。
+    G 轮（2026-10-16）两处口径修正：
+
+    1. **返回值补"是否解析成功"位**——此前语法不合法时返回空列表，与"扫描
+       通过、无危险调用"**同形**，调用方无从区分"安全"与"读不懂"。而扫描用
+       的是宿主解释器的 AST，被测仓库跑在旁 venv 的另一个解释器上：宿主解析
+       失败的 conftest 在 venv 里完全可能正常执行，即"未审查的代码被执行"。
+       故解析失败必须如实上报，由调用方 fail-closed。
+    2. **裸 getattr 不再一律命中**——收紧为"取危险属性名字面量"或"对危险
+       模块取属性"两种动态绕过形态（见 :data:`_CONTEST_GETATTR_DANGEROUS_ATTRS`
+       的实测依据）。
 
     Args:
         code: conftest.py / setup.py 的完整 Python 源码文本。
 
     Returns:
-        命中的危险调用特征名列表（去重，排序）。
+        ``(命中的危险调用特征名列表（去重、排序）, 是否成功解析)``。
+        第二项为 False 时第一项必为空，且调用方**不得**据此判定安全。
     """
     try:
         tree = ast.parse(code)
     except (SyntaxError, ValueError):
-        return []
+        return [], False
     found: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -212,14 +291,41 @@ def scan_conftest_ast_safety(code: str) -> list[str]:
         # importlib.import_module / __import__ 动态导入
         if qual in ("importlib.import_module", "__import__"):
             found.add(qual)
-        # getattr 动态获取（getattr(os, "system") 等混淆绕过）
-        if qual == "getattr":
+        # getattr 动态获取（getattr(os, "system") 等混淆绕过）——收紧口径见上
+        if qual == "getattr" and node.args and _is_dangerous_getattr(node):
             found.add("getattr")
-    return sorted(found)
+    return sorted(found), True
+
+
+def _is_dangerous_getattr(node: ast.Call) -> bool:
+    """判定 getattr 调用是否构成动态绕过（G 轮收紧口径）。
+
+    两种形态命中：
+    - 属性名是字面量且落在危险属性集（``getattr(x, "system")``）；
+    - 取值目标的最左名是危险模块（``getattr(os, name)``——属性名即使是变量，
+      对 os/subprocess/ctypes 这类模块做动态取属性本身就是绕过写法）。
+    """
+    attr_node = node.args[1] if len(node.args) > 1 else None
+    if (
+        isinstance(attr_node, ast.Constant)
+        and isinstance(attr_node.value, str)
+        and attr_node.value in _CONTEST_GETATTR_DANGEROUS_ATTRS
+    ):
+        return True
+    target_qual = _qualify_call_node(node.args[0])
+    root = target_qual.split(".", 1)[0] if target_qual else ""
+    return root in _CONTEST_DANGEROUS_MODULES
 
 
 def conftest_ast_scan_enabled() -> bool:
-    """S6 conftest.py AST 扫描守卫开关（默认 true 保持安全口径）。"""
+    """S6 conftest.py AST 扫描守卫开关（默认 true 保持安全口径）。
+
+    口径刻意**不**走 ``env_flag``（正集合 true/1/on）而用负集合
+    ``not in ("false", "0", "off")``：安全守卫的开关在取到垃圾值（如
+    ``CONTEST_AST_SCAN_ENABLE=ture`` 拼错）时应保持**开启**，负集合口径天然
+    fail-closed；正集合口径会把拼错当成"关闭守卫"。G 轮接线后本开关首次成为
+    生产路径上的真实开关（此前守卫无调用点，开关形同装饰）。
+    """
     return os.getenv("CONTEST_AST_SCAN_ENABLE", "true").lower() not in ("false", "0", "off")
 
 
@@ -630,8 +736,11 @@ def _persist_cache_stats() -> None:
     stats_file = _venv_cache_stats_file()
     try:
         os.makedirs(os.path.dirname(stats_file), exist_ok=True)
-        with open(stats_file, "w", encoding="utf-8") as f:
-            json.dump(merged, f)
+        # F 轮：改走原子写（同目录 tmp + os.replace）。此前 open(..., "w") 直写，
+        # 进程被 kill / 磁盘满会留下**半写 JSON**，而 _load_cache_stats 对损坏
+        # 文件静默回零（except ValueError: pass）——已累计的 hits/creates 被
+        # 无声清零且无任何告警。原子写保证读者只见完整旧值或完整新值。
+        atomic_write_json(stats_file, merged)
     except OSError as e:
         logger.debug("venv 缓存统计落盘失败（不影响主流程）: %s", e)
 

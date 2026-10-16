@@ -32,10 +32,15 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_int
+
 logger = logging.getLogger(__name__)
 
 # 摘要的字符预算（注入 Planner prompt 时截断，防超长代码摘要撑爆上下文）
-_CFG_SUMMARY_MAX_CHARS = int(os.getenv("CFG_SUMMARY_MAX_CHARS", "1500"))
+# F 轮加固：改经 env_int 容错解析——模块级裸 int() 在坏值时于 **import 期**
+# 抛 ValueError（一个拼错的环境变量即让本叶子模块不可导入，且本模块被
+# planner.py 顶层导入，故障面会向上扩散）；env_int 记 WARNING 后回退默认值。
+_CFG_SUMMARY_MAX_CHARS = env_int("CFG_SUMMARY_MAX_CHARS", 1500)
 
 
 def _cond_expr_text(node: ast.AST, source_lines: list[str]) -> str:
@@ -238,7 +243,8 @@ def build_cfg_prompt_section(cfg: dict[str, Any] | None) -> str:
 # CFG 摘要（branch_conditions 等），不枚举"到达某路径需满足的条件组合"。
 
 # 路径数上限（防指数爆炸）：决策路径数随 if 数量指数增长，硬性截断
-_PATH_MAX_DEFAULT = int(os.getenv("PATH_ENUM_MAX_PATHS", "32"))
+# （F 轮加固：同上，经 env_int 容错解析，坏值不再于 import 期崩溃）
+_PATH_MAX_DEFAULT = env_int("PATH_ENUM_MAX_PATHS", 32)
 # 循环边界三路径的语义标签（循环边界覆盖是系统化测试的经典三路径）
 _LOOP_BOUNDARY_LABELS: tuple[str, ...] = ("0次迭代", "1次迭代", "N次迭代")
 

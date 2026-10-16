@@ -55,6 +55,7 @@ import textwrap
 from typing import Any
 
 from src.utils.credential_scrub import scrub_os_environ
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ _PROBE_SUBPROCESS_TIMEOUT = 20
 
 def runtime_probe_enabled() -> bool:
     """运行时探针开关（RUNTIME_PROBE_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("RUNTIME_PROBE_ENABLE", "false").lower() == "true"
+    return env_flag("RUNTIME_PROBE_ENABLE")
 
 
 def _serialize_value(value: Any) -> str:

@@ -145,7 +145,7 @@ from src.tools.multi_candidate import (
 )
 from src.tools.patch_applier import apply_patch_to_code
 from src.tools.patch_rollback import snapshot_rollback_enabled
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_int
 
 # 模块级 logger，用于记录节点执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -155,7 +155,9 @@ _MAX_REPAIR_HISTORY = 5
 
 # P0 1.1 分层代码压缩：调用链展开层数（与 BaseAgent.truncate_code 同口径，
 # CODE_FOCUS_DEPTH 环境变量，默认 1；跨文件任务建议 2）
-CODE_FOCUS_DEPTH: int = int(os.getenv("CODE_FOCUS_DEPTH", "1"))
+# F 轮加固：改经 env_int 容错解析——此前裸 int() 在坏值（CODE_FOCUS_DEPTH=abc）
+# 时于 import 期抛 ValueError，即一个拼错的环境变量让整个 nodes 模块不可导入。
+CODE_FOCUS_DEPTH: int = env_int("CODE_FOCUS_DEPTH", 1)
 
 
 # P0-4（REVIEW_2026_FRONTIER I-07，2026-10-10）：规约 oracle 行级判定取值域。
@@ -332,12 +334,22 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
         test_plan = agent.plan(state["target_code"], state.get("target_function"))
         # 验证输出结构
         if not _validate_planner_output(test_plan):
+            # I2（2026-10-16，ADR-0032）：整份替换计划前先摘出 planner 已写下的
+            # M10 归因标记。extract_json_object 的叶子降级档返回**最内层片段**
+            # （如 {"k": 42}），片段通常连 function_name 都没有 → 本分支正是该
+            # 场景的必经之路；若标记随旧 test_plan 一起被丢弃，顶层抬升只能读到
+            # False，"提取器误诊"被记成"LLM 真未输出"——ADR-0032 的可分离性
+            # 恰好在它最该生效的场景下**反向错判**（实测日志链：helpers.py:735
+            # 叶子回退 → planner.py:380 写标记 → 本行默认计划替换 → 标记消失）。
+            _m10_leaf_fallback = bool(isinstance(test_plan, dict) and test_plan.get("m10_leaf_fallback"))
             logger.warning("Planner 输出结构不完整，使用默认计划")
             test_plan = _get_default_test_plan(state.get("target_function"))
             # M10（2026-09-29 审查 P0）：验证失败走默认计划 → 逻辑驱动路径
             # 实际未发生，标记 logic_degraded=True（纯观测，供实验层区分
             # "逻辑驱动成功"与"降级到默认计划"）。
             test_plan["logic_degraded"] = True
+            if _m10_leaf_fallback:
+                test_plan["m10_leaf_fallback"] = True
         # P0 测试预言增强（ORACLE_ENHANCE_ENABLE=true 时启用，默认关）：
         # 在 Planner 产出 logic_analysis（规约）后，由独立 LLM 调用对每个
         # test_case 做规约驱动预言推理，追加 oracle / oracle_source /
@@ -398,6 +410,18 @@ def _planner_node(state: AITesterState) -> dict[str, Any]:
     )
     # 观测层：把"预言增强是否触发"写回 state（供实验分析消费，默认关时不写）
     update: dict[str, Any] = {"test_plan": test_plan}
+    # G3（2026-10-16）：把 logic_degraded 抬到顶层通道。三个写侧（本节点两处
+    # 降级分支 + planner.plan 的 M10 兜底/schema findings）历史上只写进 test_plan
+    # 内部，而唯一读侧 failure_taxonomy.annotate_final_state 读顶层键 → 恒 None，
+    # "规约降级弱信号"归因分支从未 fire（既有单测手工构造顶层键，掩盖了断链）。
+    # 无条件抬升：False 同样有意义（证明逻辑驱动路径确实走通）。纯观测，不参与路由。
+    update["logic_degraded"] = bool(test_plan.get("logic_degraded"))
+    # I2（2026-10-16，ADR-0032）：同一缺陷形态的第二处——planner.plan 的 M10
+    # 兜底分支把 m10_leaf_fallback 只写进 test_plan 内部，实验层从投影行读不到，
+    # ADR-0032 声称的"logic_degraded=True ∧ m10_leaf_fallback=True ⇒ 提取器误诊
+    # （非 LLM 未输出）"因此不可机读。无条件抬升（False 同样有意义：证明该次
+    # M10 降级确为 LLM 真未输出）。纯观测，不参与路由。
+    update["m10_leaf_fallback"] = bool(test_plan.get("m10_leaf_fallback"))
     if _oracle_enhance_enabled():
         update["oracle_enhanced"] = bool(test_plan.get("oracle_enhanced"))
     # R7（2026-09-30 独立审查 P0）：SpecIR——把 logic_analysis（自然语言规约）
