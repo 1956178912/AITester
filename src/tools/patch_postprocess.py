@@ -36,6 +36,8 @@ import logging
 import os
 import re
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,13 +53,13 @@ def _empty_patch_guard_enabled() -> bool:
 # P2 导入断裂修复（默认 false，保持历史行为）：补丁应用前自动把原代码的
 # 顶层 import 行回填到补丁头部（仅当补丁是完整文件模式且丢失了原 import）。
 def _import_repair_enabled() -> bool:
-    return os.getenv("IMPORT_REPAIR_ENABLE", "false").lower() == "true"
+    return env_flag("IMPORT_REPAIR_ENABLE")
 
 
 # P3 契约符号别名回填（默认 false，保持历史行为）：检测 LLM 对模块级
 # 契约符号的重命名（Old → New 嫌疑），在补丁中补 `Old = New` 别名定义。
 def _contract_alias_enabled() -> bool:
-    return os.getenv("CONTRACT_ALIAS_ENABLE", "false").lower() == "true"
+    return env_flag("CONTRACT_ALIAS_ENABLE")
 
 
 # 空壳判定的最小代码字符数（去除 markdown/注释/空行后的有效代码）。

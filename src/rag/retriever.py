@@ -14,6 +14,8 @@ import threading
 import time
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # 延迟导入，避免未安装 chromadb 时整个项目无法启动
@@ -58,9 +60,7 @@ _POISONING_RE: re.Pattern[str] | None = None
 
 def _poisoning_filter_enabled() -> bool:
     """O8 记忆投毒过滤开关（RAG_POISONING_FILTER=true 时启用，默认 false 保持历史口径）。"""
-    import os as _os
-
-    return _os.getenv("RAG_POISONING_FILTER", "false").lower() == "true"
+    return env_flag("RAG_POISONING_FILTER")
 
 
 def _detect_poisoning(code: str) -> bool:

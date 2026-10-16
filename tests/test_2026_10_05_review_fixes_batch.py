@@ -426,7 +426,13 @@ class TestLogicProfilePreset:
     """logic 档 = scientific 超集 + 逻辑链强化开关（2026-10-05 审查 O1）。
 
     setdefault 绕过 monkeypatch 追踪——本类自带 env 保存/恢复（与 R15
-    测试的 _cleanup_env 同模式）。
+    测试的 _cleanup_env 同模式）；tests/conftest.py 的
+    _isolate_profile_presets 是全局兜底（键集从 _PROFILE_PRESETS 派生）。
+
+    _INJECTED 是**钉死的期望清单**（不从 _PROFILE_PRESETS 派生，否则
+    注入断言退化为"字典包含它自己"），配套 test_injected_list_is_not_stale
+    把它与真值锁死：历史上它漏掉过 AA/AB1/AC2/AI1/P0-B 五个批次新增的
+    6 个键，泄漏直接造成覆盖率测量非确定（详见 conftest 该 fixture）。
     """
 
     _INJECTED: tuple[str, ...] = (
@@ -443,7 +449,26 @@ class TestLogicProfilePreset:
         # U12（2026-10-05 系统性审查落地）：logic/scientific 档补齐项
         "SPEC_SMT_ENABLE",
         "PATCH_ROLLBACK_FAIL_CLOSED",
+        # AA / AB1（2026-10-06 代码优化批次 + 生死实验根因修复）
+        "DETECTION_FIRST_ENABLE",
+        "LOGIC_SPEC_STRICT_FALLBACK_ENABLE",
+        # AC2（2026-10-06 第十轮审查 T-P0-4）：检出优先协议双门
+        "DETECTION_SPECIFICITY_GATE_ENABLE",
+        "RED_REGRESSION_GATE_ENABLE",
+        # AI1（2026-10-06 第十一轮审查漏配审计）：FL 谱定位
+        "FL_SPECTRAL_ENABLE",
+        # P0-B（2026-10-12 独立评审落地）：变异反馈环路内化
+        "MUTATION_ADVISOR_ENABLE",
     )
+
+    def test_injected_list_is_not_stale(self):
+        """期望清单必须与 config 真值逐键相等（漂移即本用例红）。"""
+        from config import _PROFILE_PRESETS
+
+        assert set(self._INJECTED) == set(_PROFILE_PRESETS["logic"]), (
+            "TestLogicProfilePreset._INJECTED 与 config._PROFILE_PRESETS['logic'] 漂移；"
+            "过期清单会让 setdefault 注入的键逃过还原，污染后续测试与覆盖率测量"
+        )
 
     def test_logic_profile_injects_full_logic_chain(self, monkeypatch):
         import os as _os

@@ -1,10 +1,261 @@
-> Last updated: 2026-10-15 (EMSE batch 8: full-mutant Mut@k closure — three measurement-defect fixes [sentinel overflow / sampling non-determinism / sanity gap] + test-validity pre-gate [= operationalized ULT official correct_tasks filter] + full-mutant decision values [QuixBugs 0.9396 / ULT replace 0.6749 / specir 0.4395 / gold n=0] + ULT gold upstream-inconsistency erratum [71/71] + M4 C/D repeats completing the four-arm design [merged 4:12 / n=70 / δ=−11.43pp / p=0.0768 → not_confirmed]; tests +3 cases; ruff clean. Previously 2026-10-15 batch 7: M4 C/D chain repair + submission material closure)
+> Last updated: 2026-10-16 (four engineering rounds F/G/H/I: F switch-governance closure [env-budget gate false-green + 60-site boolean caliber + atomic persists] / G security-guard actuation [C5 fragment scanning + conftest wiring + two gate false-greens + attribution-chain break] / H coverage-measurement determinism closure [three noise sources to zero + runtime redaction blind spots + observation keys] / I failure-attribution wiring [five-bucket dump + machine-readable m10_leaf_fallback]; full suite **6759 passed / 5 skipped / 0 failed** (two consecutive CI-caliber runs), coverage.xml drift-free line- and branch-wise (16941 lines / 3118 branch points); ruff / mypy (133 source files) clean. Previously 2026-10-15 EMSE batch 8: full-mutant Mut@k closure + four-arm M4)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-16 Round I (failure-attribution wiring: five-bucket final-state classes dumped + machine-readable m10_leaf_fallback + two unreachable read-side branches fixed; zero-LLM)
+
+> Round I wires the failure-attribution chain from "written but never read"
+> into batch artifacts: the `failure_taxonomy` framework had zero production
+> call sites since U11; two unreachable read-side branches surfaced during
+> the wiring (I2b marker swallowed by default-plan replacement / I3
+> `"unknown"` preempting the weak signal) and were fixed with deterministic
+> regressions.
+
+### Added
+
+- **Failure-attribution end-to-end wiring (I1)**: per-task rows gain 4 keys
+  (`failure_bucket` / `failure_bucket_detail` / `attribution_edge` /
+  `attribution_fault_side`); arm-level summaries gain
+  `failure_bucket_distribution` (directly consumable by `render_markdown`).
+  Feeding caliber: `stop_reason` must go through `effective_stop_reason`
+  (feeding `final_state` directly misclassifies "iteration exhausted" as
+  UNCATEGORIZED); anomalous rows are listed separately as
+  `unclassified_rows` and the report discloses the denominator. Verify:
+  `pytest tests/test_run_benchmark.py -q -k "FailureAttributionWiring or FailureBucketAggregation"`
+  (13 cases);
+- **`m10_leaf_fallback` lifted to state top level + dumped (I2)**: the
+  ADR-0032 separability claim ("extractor misdiagnosis vs LLM genuinely
+  empty") is now machine-readable from artifacts — declared in `state.py`,
+  unconditionally lifted in `_planner_node` (False is meaningful too), and
+  added to the artifact whitelist and per-task rows. Verify:
+  `pytest tests/test_nodes_batch11_pure_logic.py -q -k M10LeafFallback` (6 cases).
+
+### Fixed
+
+- **I2b: the ADR-0032 marker swallowed by default-plan replacement**
+  (found during wiring): the leaf-degradation tier returns the innermost
+  fragment → structural validation fails → the default plan **replaces
+  `test_plan` wholesale**, discarding the marker → "extractor misdiagnosis"
+  recorded as "LLM genuinely empty" (attribution inverted). Fixed by
+  extracting the marker before replacement and re-attaching it (end-to-end
+  counterexample uses the real PlannerAgent + real node). Verify:
+  `pytest tests/test_nodes_batch11_pure_logic.py -q -k test_marker_survives_default_plan_replacement`;
+- **I3: `stop_reason="unknown"` no longer preempts the `logic_degraded`
+  weak signal**: `effective_stop_reason`'s fallback `"unknown"` is non-empty,
+  so the old implementation treated it as informative evidence and the weak
+  signal stayed unreachable on the only production path; the mapping table
+  keeps the `unknown` entry (total cover of `StopReason`), it merely no
+  longer preempts rows with a genuine weak signal. Verify:
+  `pytest tests/test_failure_taxonomy.py -q -k UnknownStopReason` (6 cases).
+
+### Notes
+
+- Coverage knock-on: `planner.py` write side (352/379, i.e. ADR-0032
+  decision 2 itself) was previously uncovered, reclaimed by 3 new write-side
+  tests → module line coverage **100%**; `nodes.py` uncovered lines hold at
+  155/701 (denominator +4, all covered; ratio 0.7776 → 0.7789);
+- Full suite **6759 passed / 5 skipped / 0 failed** (two consecutive CI-caliber
+  runs); coverage.xml drift-free line-by-line and branch-by-branch across the
+  two runs (16941 lines / 3118 branch points);
+- Registered, not touched: bucket vs interaction-edge attribution is
+  intentionally asymmetric (the weak signal suffices to locate the
+  specification layer, forcing an edge/fault side would fabricate
+  attribution); the 3 pre-existing aggregators inside `run_benchmark()` stay
+  nested functions (calibers cannot be unit-pinned; would touch frozen
+  experiment files).
+
+## [Unreleased] — 2026-10-16 Round H (coverage-measurement determinism closure: three noise sources located and eliminated + runtime redaction blind spots + observation signals dumped; zero-LLM)
+
+> Round H fully closes the "coverage-measurement non-determinism (root cause
+> unlocated)" item registered in Round G: three independent noise sources
+> located down to zero (H1 env leakage → H5 late parse gate → H6 race arc);
+> two consecutive CI-caliber runs produce byte-identical coverage.xml
+> line-by-line and branch-by-branch.
+
+### Fixed
+
+- **H1 main cause of coverage non-determinism (env leakage)**:
+  `config._apply_profile_presets()` injects profile switches at **import
+  time** via `os.environ.setdefault` (bypassing monkeypatch tracking, no
+  teardown) and the two tests' hand-copied restore lists were both stale →
+  6 switch keys leaked across tests → later tests accidentally entered
+  profile-on branches (the `nodes.py` 0.7776/0.7862 swing was exactly the 6
+  lines inside the specificity gate block). Fixed by
+  `tests/conftest.py::_isolate_profile_presets` global fallback (key set
+  **derived from `_PROFILE_PRESETS`**, new switches auto-included) + both
+  hand-copied lists converted to derivation + `_INJECTED` extended with a
+  drift lock. Verify: `pytest tests/test_conftest_env_isolation.py -q`
+  (including a "shrunk fallback set turns red" negative control);
+- **H2 nested pytest subprocesses strip host pytest config (measurement
+  integrity)**: host `PYTEST_PLUGINS` was unimportable in nested runs →
+  pytest exited rc=1 **before collection** → "never started" read as "tests
+  red" → `specificity_verdict` misjudged `over_red` (correct verdict:
+  `unavailable`; minimally reproduced). Added
+  `src/utils/process_utils.py::nested_pytest_env` wired into the M1
+  adjudication layer. Verify:
+  `pytest tests/test_process_utils.py -q -k NestedPytestEnv` (end-to-end:
+  old caliber rc≠0 / new caliber rc=0);
+- **H3 redaction-consistency guard wired in + runtime blind spots fixed
+  (security)**: `verify_redaction_consistency` had zero call sites repo-wide
+  (decorative guard); after wiring into the redaction-audit gate its **first
+  execution caught 3 runtime blind spots** (`api key:` / `private key:` /
+  `refresh token:` space-separated variants were unprotected on global
+  fallback paths: SensitiveFormatter, trace JSONL, `exc_info` stacks).
+  Both sides now share one caliber; 13 canonical probes with zero blind
+  spots (944 files / 594 logger call sites). Verify:
+  `python scripts/gates/audit_log_redaction.py` (rc=0);
+  `pytest tests/test_audit_log_redaction.py -q`;
+- **H4 two write-only observation signals now dumped**:
+  `state["testless_validation"]` and `state["deterministic_guard_report"]`
+  added to the `_dump_state_artifacts` whitelist (both switches default off →
+  the keys stay null in default-profile batches; historical artifacts
+  semantically unchanged). Verify:
+  `pytest tests/test_run_benchmark.py -q -k ObservationKeys` (artifact key
+  set pinned);
+- **H5 second A-14 property counterexample — late parse gate attribution
+  drift (real defect)**: when the late `assert <expr>` re-parse gate failed,
+  `_clause_reject_reason_for_known` returned `parse_error` (a form-gate-family
+  label), breaking the invariant "`is_expression_clause` true ⇒ attribution
+  contains no form-gate family" (counterexample `"0,"`). Re-labelled
+  `unsupported_syntax` — label only, no widening of the rejection surface;
+  zero impact on archived artifacts (of 36 artifacts containing
+  `parse_error`, only DIAG3 uses this attribution namespace and its bucket
+  is empty — regeneration is cell-identical). Verify:
+  `pytest tests/test_spec_expr_property.py tests/test_spec_ir_guards_matrix.py -q`
+  (incl. 6 deterministic counterexample locks);
+- **H6 double-checked-lock race branch pinned deterministic**: the inner
+  False arc of `api_manager.py:1068` previously depended on scheduling luck
+  of the 8-thread case (100% vs 50% across two runs); the new case injects
+  "already initialized by a racing thread" via a fake lock and asserts for
+  the first time that the constructor is not called twice. Verify:
+  `pytest tests/test_api_manager_extended.py -q -k SingletonThreadHygiene --cov=src.api.api_manager --cov-branch`
+  (1068 at 2/2 consistently).
+
+### Notes
+
+- **Closing evidence**: two consecutive CI-caliber full runs, coverage.xml
+  drift-free line-by-line and branch-by-branch (16934 lines / 3116 branch
+  points identical); **methodology lesson**: noise is not a single root
+  cause — closing order was 6 lines → 2 lines → 1 branch; only
+  layer-by-layer comparison down to zero counts as closure;
+- Registered, not touched: the G6 reconciliation **±0.10pp tolerance is now
+  loose** (not tightened — regression guard is the ratchet's rising-only
+  water level; ubuntu runner not yet observed); 5 remaining nested-pytest
+  sites / 4 files (batch-driven, frozen for published numbers; equivalent
+  under clean environments); 2 residual decorative guards are dead code
+  (disposal needs authorization).
+
+## [Unreleased] — 2026-10-16 Round G (security-guard actuation + three gate false-greens fixed + attribution-chain break fixed; zero-LLM)
+
+> Round G audits decorative guards/switches repo-wide under the criterion
+> "implementation + unit tests + env switch, but zero production call
+> sites" and wires the security guards into production paths; it also fixes
+> two gate false-greens (G1/G2), an attribution-chain break (G3) and a
+> reconciliation false-green (G6).
+
+### Fixed
+
+- **C5 dangerous-API guard actuated (repo path)**: the `+` lines were
+  concatenated and fed to AST scanning raw, so cross-hunk calls got
+  fragmented → parse failure meant "invisible" ⇒ allowed; now per-hunk
+  three-caliber merge (difference set ∪ `+`-only ∪ preserved context lines)
+  with **fail-closed on unreadable input**. Verify:
+  `pytest tests/test_x_batch.py -q`;
+- **Patch-fragment AST scanning**: diff hunk slices are often mid-structure,
+  so bare parsing always failed → fragment scaffolding added; still
+  unparseable ⇒ refuse to apply (a security guard must not read
+  unparseable input as "safe"). Known cost: fail-closed false positives may
+  reject benign patches (if rejection rate proves significant, fix by adding
+  scaffold shapes — never by reverting to "unreadable means allowed").
+  Verify: `pytest tests/test_patch_applier.py -q`;
+- **conftest dangerous-call guard wired into the production path**: it was
+  test-only with zero production call sites (a decorative switch), while the
+  repo execution chain runs third-party `conftest.py` on the host; now
+  layered adjudication before pytest execution. Measured: 37 real local
+  conftest.py files → Tier-1 hits 0/37, Tier-2 3/37 (layering suppresses
+  false positives, it does not grant passage). Verify:
+  `pytest tests/test_x_batch.py tests/test_venv_cache_monitoring.py -q`;
+- **`COST_BUDGET` bad values no longer equal "unconfigured"**: three numeric
+  configs previously **silently passed as unlimited** when non-numeric (the
+  budget guard effectively absent); now a three-state split
+  (valid/invalid/missing); invalid ⇒ refuse subsequent LLM calls + ERROR log
+  + separate event counter (distinct from real overruns). Verify:
+  `pytest tests/test_cost_budget_matrix.py -q`;
+- **`strategy_bank` structural corruption no longer overwrites the master
+  data**: a non-dict top level previously degraded silently to an empty bank
+  and **still wrote to disk** (wiping the existing `strategies` table); now
+  it degrades with a WARNING and does not overwrite. Verify:
+  `pytest tests/test_strategy_bank_branches.py -q -k Corruption`;
+- **G1+G2 two gate false-greens**: ① `check_llm_configs_schema.py` treated
+  "file unreadable" (corrupt JSON / non-array top level) the same as "empty
+  directory" (both green); ② `coverage_ratchet.py` fell back to the initial
+  water level when the state file was missing (a single accidental deletion
+  bypassed rising-only). Both now fail-closed (ratchet exit 2; first write
+  requires explicit `--init`). Verify:
+  `pytest tests/test_w_batch.py tests/test_x_batch.py -q`;
+- **G3 `logic_degraded` attribution-chain break + state-contract gate
+  widened**: three write sites only wrote inside `test_plan` while the only
+  reader read the **top-level** key → always `None`, the "spec-degraded weak
+  signal" branch never fired (hand-built unit inputs masked the break); now
+  lifted to a top-level channel by `_planner_node` (observation only, not in
+  routing). The gate scan surface widened from 2 hard-coded files to the
+  whole `src/` tree (132 files, zero pre-existing violations). Verify:
+  `make state-contract`;
+  `pytest tests/test_nodes_batch11_pure_logic.py tests/test_state_contract_guard.py -q`;
+- **G6 register ↔ coverage.xml reconciliation false-green**: the CI step sat
+  about 90 lines before artifact generation, so absence read `[OK]`; and the
+  original caliber (bitwise equality) was unsatisfiable under measurement
+  noise. The mandatory branch moved into the coverage cluster
+  (`--require-coverage`: absence fails) and the caliber is now "anchor §1
+  declaration lines + ±0.10pp tolerance", a missing declaration line fails.
+  Verify: CI step `Status register coverage reconciliation`;
+  `pytest tests/test_artifact_doc_consistency_gate.py -q`.
+
+## [Unreleased] — 2026-10-16 Round F (switch-governance closure: env-budget gate blind spot + boolean caliber unification + env_int hardening + atomic persists; zero-LLM)
+
+> Round F closes the environment-variable governance chain: the env-budget
+> gate false-green (+25 invisible switches), boolean switch parsing unified
+> (one fail-open security defect fixed; 60 sites / 27 files), module-level
+> numeric parsing hardened, cache stats made atomic on disk.
+
+### Fixed
+
+- **env-budget gate blind spot (false-green fix)**: suffixed `_X_ENV`
+  constants and the `env_flag/env_int` call shapes were previously
+  **invisible** — `--check` reporting "194/194 pass" was a false green; now
+  all **219** switches are registered (194 → 219, +25 each verified to have
+  a real read site). Verify: `make env-budget`;
+  `pytest tests/test_x_batch.py -q -k EnvBudget`;
+- **Boolean switch caliber unification (60 sites / 27 files) + fail-open
+  fix**: the narrow `.lower()=="true"` caliber consolidated into the single
+  source of truth `env_flag` (truth set true/1/on; `yes` requires explicit
+  declaration). Fixes `PATCH_DANGEROUS_API_GUARD=1` /
+  `PATCH_CONTRACT_CHECK=1` being judged False — **trying to enable a
+  security guard turned it off** with no warning. Verify:
+  `pytest tests/test_env_utils.py tests/test_patch_applier.py -q -k "EnvFlag or TruthyCaliber"`;
+- **Module-level bare `int(os.getenv())` hardened (3 sites)**: bad values
+  previously raised ValueError **at import time** (process would not start)
+  → `env_int` tolerant fallback + WARNING. Verify:
+  `pytest tests/test_env_utils.py -q -k ModuleLevelNumeric` (subprocess
+  import with bad values);
+- **`cache_stats.json` atomic persist**: previously written directly (a
+  killed process or full disk left half-written JSON, while the read side
+  **silently reset to zero** — accumulated counts lost silently) → now via
+  `atomic_write_json` (same-dir tmp + `os.replace`, mode 0600). Verify:
+  `pytest tests/test_venv_cache_monitoring.py -q -k AtomicPersist`.
+
+### Notes
+
+- Repository governance (committed same day as `f3d2dc0`): the academic
+  writing area (`paper/`, `*.typ`) entered the `.gitignore` sensitive zone —
+  paper artifacts are never committed, only the rules are;
+- Explicitly out of scope (no authorization to touch): dead code
+  (`event_bus.publish_workflow_completed` / `process_utils._close_quietly`),
+  `rag/retriever.py` clone merge.
 
 ## [Unreleased] — 2026-10-15 EMSE batch 8 (full-mutant Mut@k closure: three measurement-defect fixes + test-validity pre-gate + four-arm M4 closure; zero-LLM + authorized-LLM C/D)
 

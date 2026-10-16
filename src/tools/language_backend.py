@@ -35,9 +35,10 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 from typing import Protocol
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ def backend_enabled(language: str) -> bool:
     """
     upper = language.strip().upper()
     env_name = f"AITESTER_ENABLE_{upper}_BACKEND"
-    return os.getenv(env_name, "false").lower() == "true"
+    return env_flag(env_name)
 
 
 # ─── TypeScript 后端（零依赖词法层，保守精度）───────────────────────────────

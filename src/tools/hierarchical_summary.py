@@ -42,6 +42,8 @@ import ast
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 # ─── 预算参数（环境变量，模块级缓存 + 调用期读取，保留测试 patch.dict 能力）───
 # 各层默认预算（字符）：L1 函数级 1200 / L2 模块级 800 / L3 文件级 400
 _DEFAULT_BUDGETS = {"L1": 1200, "L2": 800, "L3": 400}
@@ -57,7 +59,7 @@ def _budget_env(level: str) -> int:
 
 def hierarchical_summary_enabled() -> bool:
     """分层摘要开关（HIERARCHICAL_SUMMARY_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("HIERARCHICAL_SUMMARY_ENABLE", "false").lower() == "true"
+    return env_flag("HIERARCHICAL_SUMMARY_ENABLE")
 
 
 # ─── 静态符号提取（ast 层，零 LLM 成本）─────────────────────────────────────

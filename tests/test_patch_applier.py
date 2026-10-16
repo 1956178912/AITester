@@ -497,6 +497,49 @@ class TestDangerousApiAdded:
 
 
 @pytest.mark.unit
+class TestSafetySwitchTruthyCaliber:
+    """安全守卫开关真值口径锁定（2026-10-16 F 轮，防 fail-open 回归）。
+
+    修复前这两个开关走窄口径 `os.getenv(NAME, "true").lower() == "true"`：
+    运维写 PATCH_DANGEROUS_API_GUARD=1 / PATCH_CONTRACT_CHECK=1 想**显式
+    开启**守卫，实际被判 False——危险 API 守卫与命名契约检查双双静默关闭
+    且无任何告警。统一到 env_flag 单一事实源后，1/on 与 true 同义，只有
+    false/0/off（及垃圾值）才关闭。
+    """
+
+    @pytest.mark.parametrize("raw", ["true", "TRUE", "1", "on"])
+    def test_dangerous_api_guard_enabled_for_truthy_values(self, monkeypatch, raw):
+        from src.tools.patch_applier import _dangerous_api_guard_enabled
+
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", raw)
+        assert _dangerous_api_guard_enabled() is True
+
+    @pytest.mark.parametrize("raw", ["false", "0", "off"])
+    def test_dangerous_api_guard_disabled_for_falsy_values(self, monkeypatch, raw):
+        from src.tools.patch_applier import _dangerous_api_guard_enabled
+
+        monkeypatch.setenv("PATCH_DANGEROUS_API_GUARD", raw)
+        assert _dangerous_api_guard_enabled() is False
+
+    def test_contract_check_not_bypassed_by_numeric_one(self, monkeypatch):
+        from src.tools.patch_applier import check_naming_contract
+
+        monkeypatch.setenv("PATCH_CONTRACT_CHECK", "1")
+        original = "def kept():\n    return 0\n\n\ndef dropped():\n    return 1\n"
+        patched = "def kept():\n    return 0\n"
+        ok, missing = check_naming_contract(original, patched)
+        assert ok is False
+        assert missing == ["dropped"]
+
+    def test_contract_check_bypassed_only_by_explicit_false(self, monkeypatch):
+        from src.tools.patch_applier import check_naming_contract
+
+        monkeypatch.setenv("PATCH_CONTRACT_CHECK", "false")
+        ok, missing = check_naming_contract("def dropped():\n    return 1\n", "x = 1\n")
+        assert (ok, missing) == (True, [])
+
+
+@pytest.mark.unit
 class TestGenerateDiff:
     """测试 diff 生成。"""
 
@@ -542,3 +585,42 @@ class TestCollapseBlankLines:
         result = _collapse_blank_lines(lines)
         blank_count = sum(1 for line in result if line.strip() == "")
         assert blank_count <= 1
+
+
+@pytest.mark.unit
+class TestCollectDangerousCallsInFragment:
+    """G 轮：diff hunk 切片的尽力 AST 扫描（跨链路 fail-closed 口径）。
+
+    与 :func:`_collect_dangerous_calls` 的关键差别是**第二个返回值**：残行数
+    > 0 表示切片未被完整静态审查，调用方不得把空特征集当作"安全"。
+    """
+
+    def test_indented_fragment_detected(self):
+        """统一缩进片段（既有函数体内插行）经 dedent 后可解析并检出。"""
+        from src.tools.patch_applier import collect_dangerous_calls_in_fragment
+
+        found, residue = collect_dangerous_calls_in_fragment(["    os.system('ls')"])
+        assert "os.system" in found
+        assert residue == 0
+
+    def test_literal_middle_scaffolded(self):
+        """字面量中段（缺开括号）由脚手架补齐后仍能检出内嵌危险调用。"""
+        from src.tools.patch_applier import collect_dangerous_calls_in_fragment
+
+        found, residue = collect_dangerous_calls_in_fragment(["    'a': 1,", "    'b': eval(payload),", "}"])
+        assert "eval" in found
+        assert residue == 0
+
+    def test_unparseable_reports_residue(self):
+        """读不懂时如实上报残行数——空特征集不等于安全（fail-closed 依据）。"""
+        from src.tools.patch_applier import collect_dangerous_calls_in_fragment
+
+        found, residue = collect_dangerous_calls_in_fragment(["    else:", "    x = 1"])
+        assert found == set()
+        assert residue == 2
+
+    def test_empty_input(self):
+        """空切片：无特征、无残行。"""
+        from src.tools.patch_applier import collect_dangerous_calls_in_fragment
+
+        assert collect_dangerous_calls_in_fragment([]) == (set(), 0)

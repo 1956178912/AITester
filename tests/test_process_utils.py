@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from src.utils.process_utils import CompletedProcess, run_with_timeout
+from src.utils.process_utils import CompletedProcess, nested_pytest_env, run_with_timeout
 
 # 复现脚本：spawn 一个长睡孙进程（继承 stdout/stderr 管道），父进程随即退出。
 # subprocess.run(timeout=) 会 kill 父进程，但孙进程仍持有写端 → communicate 挂死。
@@ -173,3 +173,58 @@ class TestEdgeCases:
         """空 argv 不应因取 label 而抛异常于日志路径（保守：由 Popen 报错）。"""
         with pytest.raises((IndexError, ValueError, OSError)):
             run_with_timeout([], timeout=1)
+
+
+# ─── H 轮（2026-10-16）：nested_pytest_env —— 宿主 pytest 配置不得污染嵌套测量 ───
+
+_TRIVIAL_TEST = "def test_ok():\n    assert True\n"
+
+
+def _run_nested_pytest(tmp_path, env: dict[str, str]) -> int:
+    """在 tmp 目录里跑一次最小 pytest，返回 rc（复现 M1/mdo 的嵌套口径）。"""
+    test_path = tmp_path / "test_nested.py"
+    test_path.write_text(_TRIVIAL_TEST, encoding="utf-8")
+    proc = run_with_timeout(
+        [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", str(test_path)],
+        timeout=120,
+        cwd=str(tmp_path),
+        text=True,
+        env=env,
+    )
+    assert proc.timed_out is False
+    return int(proc.returncode)
+
+
+class TestNestedPytestEnv:
+    def test_host_pytest_keys_are_stripped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PYTEST_PLUGINS", "some_host_plugin")
+        monkeypatch.setenv("PYTEST_ADDOPTS", "--color=no")
+        env = nested_pytest_env()
+        assert "PYTEST_PLUGINS" not in env
+        assert "PYTEST_ADDOPTS" not in env
+
+    def test_overrides_win_and_other_env_is_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PATH", "/usr/bin")
+        monkeypatch.setenv("PYTHONPATH", "/host/path")
+        env = nested_pytest_env(PYTHONPATH="/tmp/nested", PYTHONDONTWRITEBYTECODE="1")
+        assert env["PYTHONPATH"] == "/tmp/nested"
+        assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+        assert env["PATH"] == "/usr/bin"
+
+    def test_clean_env_is_bitwise_identical_to_legacy_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """干净环境下与历史 `{**os.environ, **overrides}` 逐位等价（零行为变化）。"""
+        monkeypatch.delenv("PYTEST_PLUGINS", raising=False)
+        monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+        overrides = {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": "/tmp/x"}
+        assert nested_pytest_env(**overrides) == {**os.environ, **overrides}
+
+    def test_unimportable_host_plugin_breaks_legacy_env_but_not_helper(self, tmp_path, monkeypatch) -> None:
+        """端到端复现：宿主插件不可导入 → 旧口径 rc≠0（被测代码根本没跑），新口径 rc=0。
+
+        这正是 specificity_verdict 把"没跑起来"误读成 over_red 的机制。
+        """
+        monkeypatch.setenv("PYTEST_PLUGINS", "no_such_host_plugin_xyz")
+        legacy = _run_nested_pytest(tmp_path, {**os.environ, "PYTHONPATH": str(tmp_path)})
+        assert legacy != 0, "前提不成立：宿主 PYTEST_PLUGINS 未能让嵌套 pytest 失败"
+        fixed = _run_nested_pytest(tmp_path, nested_pytest_env(PYTHONPATH=str(tmp_path)))
+        assert fixed == 0, "剔除宿主 pytest 配置后嵌套运行应正常通过"

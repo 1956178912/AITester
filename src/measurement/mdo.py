@@ -343,7 +343,7 @@ def _run_tests_on_code(
         # communicate 可能永久阻塞（与 M1 判分层 2026-10-11 P0-4 同构）。
         # 超时 → returncode=-9 + timed_out=True → 返回 None（fail-closed，
         # 与历史 TimeoutExpired → None 同口径）。
-        from src.utils.process_utils import run_with_timeout
+        from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
         res = run_with_timeout(
             [
@@ -358,11 +358,14 @@ def _run_tests_on_code(
             ],
             timeout=timeout_seconds,
             cwd=tmpdir,
-            env={
-                **os.environ,
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "PYTHONPATH": tmpdir,
-            },
+            # H 轮（2026-10-16）：剔除宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS——
+            # PYTHONPATH 已覆盖成 tmpdir，宿主插件在嵌套运行里不可导入会让
+            # pytest 在收集前就 rc=1 退出，被读成"测试红"（与 _m1_metrics
+            # 同构缺陷，实测复现见 nested_pytest_env 文档串）。
+            env=nested_pytest_env(
+                PYTHONDONTWRITEBYTECODE="1",
+                PYTHONPATH=tmpdir,
+            ),
         )
         if res.timed_out:
             return None

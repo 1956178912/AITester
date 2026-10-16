@@ -88,6 +88,12 @@ from src.datasets.dataset_loader import (  # noqa: E402
 from src.graph import token_usage  # noqa: E402
 from src.graph.state import AITesterState, create_initial_state  # noqa: E402
 from src.graph.workflow import build_workflow, effective_stop_reason, end_task_trace, start_task_trace  # noqa: E402
+from src.observability.failure_taxonomy import (  # noqa: E402
+    FAULT_SIDES,
+    INTERACTION_EDGES,
+    FailureBucket,
+    annotate_final_state,
+)
 from src.tools.patch_abstain import evaluate_patch_abstention  # noqa: E402
 from src.tools.patch_validate import evaluate_patch_validation  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
@@ -564,6 +570,25 @@ def _dump_state_artifacts(output_dir: str, task: BenchmarkTask, baseline: str, f
         # 此前 raw state 未落盘这两键 → 根因分析永远拿到 dep_edges=0 →
         # 失败任务全部误判为 DEP_GRAPH_INCOMPLETE，根因分析对真实瓶颈全盲）。
         "cross_file_deps": final_state.get("cross_file_deps"),
+        # H 轮（2026-10-16）：两个"只写不读"的观测信号补落盘。此前它们写进
+        # state 后既无路由消费方、也不在本白名单里 → LangGraph 直接丢弃，
+        # 节点注释承诺的用途全部落空：
+        #   - testless_validation（nodes.py 补丁应用后跑四层静态验证）注释称
+        #     "供 G2 风险分级放大风险分"，但 risk_approval 不读它；
+        #   - deterministic_guard_report（生成测试的非确定性 AST 扫描）注释称
+        #     "供实验层决定是否入库确定性套件"，实验层从未拿到过。
+        # 与本白名单前两次扩容（position_aware_focus / cross_file_deps）同一
+        # 缺陷形态：信号采到了、没落盘 → 下游永远读到 None → 指标失真。
+        # 两开关（TESTLESS_VALIDATION_ENABLE / DETERMINISTIC_GUARD_ENABLE）默认关，
+        # 默认档批次这两键恒为 null，历史工件语义零变化。
+        "testless_validation": final_state.get("testless_validation"),
+        "deterministic_guard_report": final_state.get("deterministic_guard_report"),
+        # I2（2026-10-16，ADR-0032）：M10 归因分离标记。此前只写进 test_plan
+        # 内部（本工件虽落 test_plan，但读侧需自行下钻嵌套字典，且 LangGraph
+        # 未声明该顶层键 → 状态通道读不到）；现由 _planner_node 抬到顶层后
+        # 显式登记进白名单，ADR-0032 的 logic_degraded ∧ m10_leaf_fallback
+        # 可分离性变为**可机读**。
+        "m10_leaf_fallback": final_state.get("m10_leaf_fallback"),
         "task_metadata": task.metadata,
     }
     raw_dir = os.path.join(output_dir, "raw", task.task_id)
@@ -1133,6 +1158,102 @@ def _check_swe_bench_p2p_gate(task: BenchmarkTask) -> dict[str, Any] | None:
     return None
 
 
+def _failure_attribution_for_result(final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """构建单任务结果行的终局失效归因（I1，2026-10-16；纯观测，零 LLM）。
+
+    接线动机：`observability.failure_taxonomy.annotate_final_state` 自 U11
+    （2026-10-05）落地以来**没有任何生产调用点**——五个终局桶与批次 XII 的
+    edge × fault_side 增补维度只在单测里被断言，批次工件与报表一处都不落，
+    "失败发生在哪个环节、属于哪类协作/能力失效"因此无法从工件复算（登记册
+    §4 "G 轮新登记"条：修键路径是必要非充分，末端不落盘则分布不产出）。
+
+    喂入口径（annotate_final_state docstring 的 G3 限定）：该函数读的是**状态
+    通道顶层键**，而结果行是投影——成功键叫 `passed`，且 `stop_reason` 必须经
+    `effective_stop_reason` 兜底（O35：条件边函数原地写入的 stop_reason 不被
+    LangGraph 回写，直读恒 None）。故此处按权威值重建状态视图再喂入；直接把
+    final_state 丢进去会让**失败任务全部落 UNCATEGORIZED**（stop_reason 恒空），
+    把"归因未接线"伪装成"系统失效无法分类"。
+
+    Returns:
+        {"failure_bucket": str | None, "failure_bucket_detail": str | None,
+         "attribution_edge": str | None, "attribution_fault_side": str | None}。
+        final_state 为 None（运行异常 / 限流耗尽，无工作流终局）时四键全 None：
+        那不是 UNCATEGORIZED 的语义（"状态信息不足"），而是**根本没有终局状态**
+        可分类；折进兜底桶会让桶分布的分母失去意义，故由
+        _aggregate_failure_buckets 单列 unclassified_rows 计数（缺席不等于消失）。
+    """
+    if final_state is None:
+        return {
+            "failure_bucket": None,
+            "failure_bucket_detail": None,
+            "attribution_edge": None,
+            "attribution_fault_side": None,
+        }
+    annotation = annotate_final_state(
+        {
+            "test_passed": bool(final_state.get("test_passed")),
+            # 与结果行 "stop_reason" 同源（effective_stop_reason），避免两处口径漂移
+            "stop_reason": effective_stop_reason(final_state),
+            "budget_exceeded": final_state.get("budget_exceeded"),
+            "regression_detected": final_state.get("regression_detected"),
+            "logic_degraded": final_state.get("logic_degraded"),
+        }
+    )
+    return {
+        "failure_bucket": annotation["bucket"].value,
+        "failure_bucket_detail": annotation["detail"],
+        "attribution_edge": annotation["edge"],
+        "attribution_fault_side": annotation["fault_side"],
+    }
+
+
+def _aggregate_failure_buckets(bl_results: list[dict[str, Any]]) -> dict[str, Any]:
+    """聚合一个基线的**终局失效桶**分布（I1，2026-10-16）。
+
+    与 failure_category_distribution 的分工：后者统计 error_category
+    （18 类任务侧错误分类，只覆盖失败任务），本项统计 annotate_final_state
+    的五桶终局归类 + 批次 XII 的 edge × fault_side 增补维度（**含收敛任务**，
+    分母是全部有终局状态的行）。两者互补：一个回答"错在哪类异常"，
+    一个回答"失效发生在哪个环节、故障侧指向 model 还是 harness"。
+
+    输出形状与 failure_taxonomy.summarize_batch 同构（counts / shares /
+    fault_side_counts / edge_counts / total），故 render_markdown 可直接
+    消费本 dict 渲染报告层表格；额外两键 total_rows / unclassified_rows
+    把分母口径显式化——运行异常行（无工作流终局状态）单列计数而**不**折进
+    uncategorized 桶，否则"归因未接线"与"状态信息不足"会同形。
+
+    位置说明：相邻三个聚合器（rag/token/failure_categories）都是 run_benchmark()
+    的**嵌套函数**，因此无法被单测直接钉住口径。本函数无闭包依赖，故提到模块
+    级——分母口径（total vs total_rows）是本项唯一容易读错的地方，必须可测。
+    """
+    counts = dict.fromkeys((b.value for b in FailureBucket), 0)
+    fault_side_counts = dict.fromkeys(FAULT_SIDES, 0)
+    edge_counts = dict.fromkeys(INTERACTION_EDGES, 0)
+    unclassified_rows = 0
+    for r in bl_results:
+        bucket = r.get("failure_bucket")
+        if bucket is None:
+            unclassified_rows += 1
+            continue
+        counts[bucket] = counts.get(bucket, 0) + 1
+        side = r.get("attribution_fault_side")
+        if side in fault_side_counts:
+            fault_side_counts[side] += 1
+        edge = r.get("attribution_edge")
+        if edge in edge_counts:
+            edge_counts[edge] += 1
+    classified = len(bl_results) - unclassified_rows
+    return {
+        "total": classified,
+        "total_rows": len(bl_results),
+        "unclassified_rows": unclassified_rows,
+        "counts": counts,
+        "shares": {k: (round(v / classified, 4) if classified else 0.0) for k, v in counts.items()},
+        "fault_side_counts": fault_side_counts,
+        "edge_counts": edge_counts,
+    }
+
+
 def _build_task_result(
     task: BenchmarkTask,
     elapsed: float,
@@ -1175,6 +1296,8 @@ def _build_task_result(
         # 下方结果行共享（观测异常在 helper 内降级，不阻断组装）
         _fl_constraint = _fl_constraint_result(task, final_state)
         _trap = _self_repair_trap_result(final_state)
+        # I1（2026-10-16）：终局失效归因单次计算，下方结果行四键共享
+        _attribution = _failure_attribution_for_result(final_state)
         return {
             "task_id": task.task_id,
             "repo": task.repo_name,
@@ -1421,6 +1544,22 @@ def _build_task_result(
             # 兜底：state 已有值则用之，否则按 determine_stop_reason 同一优先级
             # 对最终状态重新判定（各基线均可得终止原因，不再恒 None）。
             "stop_reason": effective_stop_reason(final_state),
+            # I1（2026-10-16）：终局失效桶 + 批次 XII 交互中心归因（edge ×
+            # fault_side）。四键由 annotate_final_state 单次推导（纯静态零 LLM，
+            # 状态视图重建口径见 _failure_attribution_for_result）。此前该框架
+            # **无任何生产消费方**——分桶只在单测里被断言，批次工件与报表一处
+            # 不落，"失败发生在哪个环节、属于哪类失效"无法从工件复算。历史
+            # 口径零变化（passed / stop_reason / failure_category_distribution
+            # 均不动），纯新增列。
+            "failure_bucket": _attribution["failure_bucket"],
+            "failure_bucket_detail": _attribution["failure_bucket_detail"],
+            "attribution_edge": _attribution["attribution_edge"],
+            "attribution_fault_side": _attribution["attribution_fault_side"],
+            # I2（2026-10-16，ADR-0032）：M10 降级归因分离标记（提取器叶子
+            # 回退误诊 vs LLM 真未输出）。此前只写进 test_plan 内部 → 投影行
+            # 读不到 → ADR-0032 声称的可分离性不可机读；现由 _planner_node
+            # 抬到顶层通道（state.py 已声明）后随行落盘。
+            "m10_leaf_fallback": final_state.get("m10_leaf_fallback"),
             # R4（2026-09-30 独立审查 P0）：回归率（修复引入回归观测）
             # 补丁应用后 gold P2P 基线测试出现回归 → 1.0；否则 0.0；
             # 无 P2P 材料 / 超时 → None（不可测量）
@@ -1565,6 +1704,16 @@ def _build_task_result(
         "regression_rate": None,
         # 2026-09-29 审查 P0（StopReason）：失败分支无 final_state，终止原因为 None
         "stop_reason": None,
+        # I1（2026-10-16）：失败分支（运行异常 / 限流耗尽）无工作流终局状态，
+        # 归因四键以 None 占位保持键集合同构。**不填 uncategorized**——那不是
+        # "状态信息不足"，而是"根本没有终局状态可分类"，折进兜底桶会让
+        # failure_bucket_distribution 的分母失去意义（改由 unclassified_rows 单列）。
+        "failure_bucket": None,
+        "failure_bucket_detail": None,
+        "attribution_edge": None,
+        "attribution_fault_side": None,
+        # I2（2026-10-16，ADR-0032）：失败分支无 final_state，占位 None
+        "m10_leaf_fallback": None,
         # M3 门禁：harness_invalid 标记（基线 P2P 不达标，不计入统计）
         "harness_invalid": harness_invalid,
         # AM1：失败分支同读当前线程预算快照（异常路径同线程，值为真实口径）
@@ -3339,6 +3488,10 @@ def run_benchmark(
             # 2.2 公平性对照：失败原因分布（1.2 细化后 LLM_FORMAT_ERROR/INDEX_ERROR
             # 可单独计数；未失败任务不记 error_category，不计入分布）
             "failure_category_distribution": _aggregate_failure_categories(bl_results),
+            # I1（2026-10-16）：终局失效桶分布（五桶 + edge × fault_side）。
+            # annotate_final_state 此前无生产消费方，分桶结果只在单测里被断言；
+            # 接线后论文级"失败归因分布"可直接从批次工件复算。
+            "failure_bucket_distribution": _aggregate_failure_buckets(bl_results),
             # P0-2 效率指标 + P1 RAG 检索质量（未启用 RAG 时指标全为 0/None）
             "token_metrics": _aggregate_token_metrics(bl_results),
             "rag_metrics": _aggregate_rag_metrics(bl_results),

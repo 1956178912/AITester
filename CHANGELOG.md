@@ -1,10 +1,198 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-15（EMSE 批次八：全量 Mut@k 收口——三项测量缺陷修复（哨兵溢出 / 抽样非确定性 / 健全性缺口）+ 测试有效性前置门（= ULT 官方 correct_tasks 操作化）+ 全量定案值（QuixBugs 0.9396 / ULT replace 0.6749 / specir 0.4395 / gold n=0）+ ULT gold 上游不一致勘误（71/71）+ M4 C/D 复跑四臂闭环（merged 4:12 / n=70 / δ=−11.43pp / p=0.0768 → not_confirmed）；测试 +3 例；ruff 全绿。此前 2026-10-15 批次七 M4 C/D 复跑链修复 + 投稿材料收口）
+> Last updated: 2026-10-16（F/G/H/I 四轮工程加固：F 开关治理收口（env 门禁假绿 + 布尔口径 60 处 + 原子落盘）/ G 安全守卫实效化（C5 片段扫描 + conftest 接线 + 两处门禁假绿 + 归因链断裂）/ H 覆盖率测量确定性收口（三噪声源归零 + 脱敏盲区 + 观测落盘）/ I 失败归因链接线（五桶落盘 + m10_leaf_fallback 可机读）；全量 **6759 passed / 5 skipped / 0 failed**（CI 口径连跑两次），`coverage.xml` 逐行逐分支零漂移（16941 行 / 3118 分支点）；ruff / mypy（133 源文件）全绿。此前 2026-10-15 EMSE 批次八：全量 Mut@k 收口 + M4 四臂闭环）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-16 I 轮（失败归因链接线：五桶终局分类落盘 + m10_leaf_fallback 可机读 + 两处读侧分支修复；零 LLM）
+
+> I 轮把失败归因链从"只写不读"接到批次落盘端：`failure_taxonomy` 框架
+> 自 U11 落地以来零生产调用点，本轮补齐末端；接线过程中又实测暴露两处
+> 读侧分支不可达（I2b 标记被默认计划替换吞掉 / I3 `"unknown"` 抢占弱
+> 信号），均已修复并加确定性回归。
+
+### Added
+
+- **失败归因末端接线（I1）**：per-task 行新增 4 键（`failure_bucket` /
+  `failure_bucket_detail` / `attribution_edge` / `attribution_fault_side`），
+  臂级 summary 新增 `failure_bucket_distribution`（`render_markdown` 可直接
+  消费）。喂入口径：`stop_reason` 必须经 `effective_stop_reason` 兜底
+  （实测直喂 `final_state` 会把"迭代耗尽"误判成 UNCATEGORIZED）；运行异常
+  行单列 `unclassified_rows` 不折进兜底桶，报告披露分母。验证：
+  `pytest tests/test_run_benchmark.py -q -k "FailureAttributionWiring or FailureBucketAggregation"`
+  （13 例）；
+- **`m10_leaf_fallback` 抬到状态顶层 + 落盘（I2）**：ADR-0032 的"提取器
+  误诊 vs LLM 真未输出"可分离性随工件可机读——`state.py` 声明 +
+  `_planner_node` 无条件抬升（False 同样有意义）+ 批次工件白名单与
+  per-task 行各加一键。验证：
+  `pytest tests/test_nodes_batch11_pure_logic.py -q -k M10LeafFallback`（6 例）。
+
+### Fixed
+
+- **I2b：ADR-0032 标记在默认计划替换时被吞**（接线实测发现）：叶子降级档
+  返回最内层片段 → 结构校验失败 → 默认计划**整份替换** `test_plan`，刚
+  写下的标记随之丢弃 → "提取器误诊"被记成"LLM 真未输出"（归因反向错误）；
+  修为替换前先摘出标记再回填（端到端反例走真 PlannerAgent + 真节点）。验证：
+  `pytest tests/test_nodes_batch11_pure_logic.py -q -k test_marker_survives_default_plan_replacement`；
+- **I3：`stop_reason="unknown"` 不再抢占 `logic_degraded` 弱信号**：
+  `effective_stop_reason` 的兜底返回值 `"unknown"` 非空，旧实现把它当作
+  有信息的归因证据走查表 → 弱信号分支在唯一生产路径上不可达；映射表仍
+  保留 `unknown` 条目（对 `StopReason` 全域封闭），仅不再抢占有真实弱
+  信号的行。验证：
+  `pytest tests/test_failure_taxonomy.py -q -k UnknownStopReason`（6 例）。
+
+### Notes
+
+- 覆盖率连带：`planner.py` 写侧（352/379，ADR-0032 决策 2 本体）此前零
+  覆盖，被 3 个新写侧测试收复 → 模块行覆盖 **100%**；`nodes.py` 未覆盖行
+  155/701 不变（分母 +4 全部被新测试覆盖，比率 0.7776 → 0.7789）；
+- 全量 **6759 passed / 5 skipped / 0 failed**（CI 口径连跑两次）；连跑两次
+  `coverage.xml` 逐行 + 逐分支比对零漂移（16941 行 / 3118 分支点全同）；
+- 本轮登记（未动）：桶归因与交互边归因**有意不对称**（弱信号只够判"失效
+  在规约层"，强行钉交互边/故障侧属编造归因）；`run_benchmark()` 内 3 个
+  既有聚合器仍为嵌套函数（口径无法被单测钉住，触及冻结实验文件 diff 面）。
+
+## [Unreleased] — 2026-10-16 H 轮（覆盖率测量确定性收口：三处噪声源定位消除 + 脱敏运行期盲区 + 观测信号落盘；零 LLM）
+
+> H 轮把 G 轮登记的"覆盖率测量非确定性（成因未定位）"完整收口：三处独立
+> 噪声源逐个定位到零（H1 env 泄漏 → H5 晚期 parse 门 → H6 竞态弧），连跑
+> 两次 CI 口径全量 `coverage.xml` 逐行逐分支比对零漂移。
+
+### Fixed
+
+- **H1 覆盖率非确定性主因（env 泄漏）**：`config._apply_profile_presets()`
+  在 import 期用 `os.environ.setdefault` 注入档位开关（绕过 monkeypatch
+  追踪、无 teardown），两处测试各自手抄的还原清单均已过期 → 6 个开关键
+  跨测试残留 → 后续测试意外走进档位开启分支（`nodes.py` 0.7776/0.7862
+  摆动正是特异性门块内 6 行）。修复：`tests/conftest.py::_isolate_profile_presets`
+  全局兜底（键集**从 `_PROFILE_PRESETS` 派生**，新增档位自动纳入）+ 两处
+  手抄清单改派生 + `_INJECTED` 补 6 键并加漂移锁。验证：
+  `pytest tests/test_conftest_env_isolation.py -q`（含"兜底集缩小即红"负控）；
+- **H2 嵌套 pytest 子进程剔除宿主 pytest 配置（测量完整性）**：宿主
+  `PYTEST_PLUGINS` 在嵌套运行里不可导入 → pytest **在收集前** rc=1 →
+  "根本没跑起来"被读成"测试红" → `specificity_verdict` 误判 `over_red`
+  （正确结论应为 `unavailable`；已最小复现）。新增
+  `src/utils/process_utils.py::nested_pytest_env` 并接线 M1 判分层。验证：
+  `pytest tests/test_process_utils.py -q -k NestedPytestEnv`（端到端：
+  旧口径 rc≠0 / 新口径 rc=0）；
+- **H3 脱敏一致性守卫接线 + 运行期盲区修复（安全）**：
+  `verify_redaction_consistency` 此前全仓零调用点（装饰守卫）；接进脱敏
+  审计门禁后**首次执行即抓出 3 个运行期盲区**（`api key:` / `private key:` /
+  `refresh token:` 空格分隔变体在 SensitiveFormatter、trace JSONL 落盘、
+  `exc_info` 堆栈等全局兜底路径完全不设防）。两侧口径对齐后 13 条规范
+  探针零盲区、零分叉（944 文件 / 594 logger 调用点）。验证：
+  `python scripts/gates/audit_log_redaction.py`（rc=0）；
+  `pytest tests/test_audit_log_redaction.py -q`；
+- **H4 两个"只写不读"观测信号补落盘**：`state["testless_validation"]` 与
+  `state["deterministic_guard_report"]` 补进 `_dump_state_artifacts` 白名单
+  （两开关默认关 → 默认档批次两键恒 null，历史工件语义零变化）。验证：
+  `pytest tests/test_run_benchmark.py -q -k ObservationKeys`（含工件键集合钉死）；
+- **H5 A-14 property 第二起反例——晚期 parse 门归因漂移（真缺陷）**：
+  `_clause_reject_reason_for_known` 晚期 `assert <expr>` 复解析门失败时误返
+  `parse_error`（形态门家族标签），打破"`is_expression_clause` 为真 ⇒ 归因
+  不含形态门家族"不变式（反例 `"0,"`）。改判 `unsupported_syntax`——只换
+  标签、不放宽任何拒绝面；对已入库工件零影响（36 个含 `parse_error` 工件中
+  唯 DIAG3 用规范归因命名空间，且该桶 0 条，重生成逐格相同）。验证：
+  `pytest tests/test_spec_expr_property.py tests/test_spec_ir_guards_matrix.py -q`
+  （含 `TestLateParseGateDriftRegression` 6 例确定性反例锁）；
+- **H6 双重检查锁竞态分支钉成确定性**：`api_manager.py:1068` 内层 False 弧
+  此前由 8 线程用例的调度运气决定（连跑两次 100% vs 50%）；新用例以假锁
+  注入"已被抢先初始化"钉死交错，并首次断言构造函数未被二次调用（原用例
+  只验证"实例唯一"）。验证：
+  `pytest tests/test_api_manager_extended.py -q -k SingletonThreadHygiene --cov=src.api.api_manager --cov-branch`
+  （1068 恒 2/2）。
+
+### Notes
+
+- **终局证据**：连跑两次 CI 口径全量，`coverage.xml` 逐行 + 逐分支比对
+  零漂移（16934 行 / 3116 分支点全同）；**方法论教训**：噪声非单一根因，
+  收口次序 = 6 行 → 2 行 → 1 分支，必须逐层比对到零才算收口；
+- 本轮登记（未动）：G6 对账 **±0.10pp 容差已偏宽**（不收紧——防回退由
+  棘轮只升水位独立把守，且 ubuntu 档尚未观测）；嵌套 pytest 剩余 5 处 /
+  4 文件（批次驱动、已冻结用于既有发表数字；干净环境下新旧写法逐位等价）；
+  装饰守卫残余 2 项属死代码（处置需清理授权）。
+
+## [Unreleased] — 2026-10-16 G 轮（安全守卫实效化 + 三处门禁假绿修复 + 归因链断裂修复；零 LLM）
+
+> G 轮按"有实现 + 有单测 + 有开关，但零生产调用点"口径全仓审计装饰
+> 守卫/开关，把安全守卫接到生产路径；同时修掉两处门禁假绿（G1/G2）与
+> 一处归因链断裂（G3）、一处对账假绿（G6）。
+
+### Fixed
+
+- **C5 危险 API 守卫实效化（repo 链路）**：此前把 `+` 行原样拼接后交给
+  AST 扫描，跨 hunk 的调用被切碎 → 解析失败即"看不见"＝放行；现逐 hunk
+  三口径合并（差集 ∪ `+`-only ∪ 保留上下文行），且**读不懂即拒绝**
+  （fail-closed）。验证：`pytest tests/test_x_batch.py -q`；
+- **补丁片段 AST 扫描**：diff hunk 切片常是某个更大语法结构的中段，裸解析
+  必然失败 → 加片段脚手架；仍解析不出则拒绝应用（安全守卫读不懂输入时
+  不得判"安全"）。已知代价：fail-closed 保守假阳性，可能拒掉良性补丁
+  （后续观测到误拒显著时处置是补脚手架形态，不得改回"读不懂即放行"）。
+  验证：`pytest tests/test_patch_applier.py -q`；
+- **conftest 危险调用守卫接线到生产路径**：此前只有测试调用、零生产调用点
+  （开关形同装饰），而 repo 执行链正是在宿主上执行第三方仓库自带的
+  `conftest.py`；现按分层裁决接入 pytest 执行前。实测口径：本机 37 个真实
+  conftest.py → Tier-1 命中 0/37、Tier-2 3/37（分层是为压误报，不是为
+  放行）。验证：`pytest tests/test_x_batch.py tests/test_venv_cache_monitoring.py -q`；
+- **`COST_BUDGET` 坏值不再等同"未配置"**：三项数值配置写成非数值此前
+  **静默按不限放行**（预算守卫形同不存在）；现三态区分（合法/非法/缺省），
+  非法 → 拒绝后续 LLM 调用 + ERROR 日志 + 独立事件计数（与真实超限分开）。
+  验证：`pytest tests/test_cost_budget_matrix.py -q`；
+- **`strategy_bank` 结构损坏不再覆写主数据**：顶层非 dict 此前静默降级为
+  空库并**照写盘**（等于清空既有 `strategies` 表）；现降级留 WARNING 且
+  不覆写。验证：`pytest tests/test_strategy_bank_branches.py -q -k Corruption`；
+- **G1+G2 两处门禁假绿**：① `check_llm_configs_schema.py` 把"文件读不懂"
+  （JSON 损坏 / 顶层非数组）与"目录为空"同形判绿；② `coverage_ratchet.py`
+  在状态文件缺失时回退初始水位判绿（"水位只升不降"被一次误删绕过）。现均
+  fail-closed（棘轮 exit 2，首次落盘须显式 `--init`）。验证：
+  `pytest tests/test_w_batch.py tests/test_x_batch.py -q`；
+- **G3 `logic_degraded` 归因链断裂 + 状态契约门禁扩容**：三个写侧只写进
+  `test_plan` 内部、唯一读侧读**顶层**键 → 恒 `None`，"规约降级弱信号"
+  分支从未 fire（既有单测手工构造顶层键恰好掩盖断链）；现由 `_planner_node`
+  抬升为顶层通道（纯观测不参与路由）。门禁扫描面从 2 个硬编码文件扩到
+  `src/` 全树 132 文件（0.15s、零存量违规）。验证：`make state-contract`；
+  `pytest tests/test_nodes_batch11_pure_logic.py tests/test_state_contract_guard.py -q`；
+- **G6 登记册↔`coverage.xml` 对账常年假绿**：CI 步骤排在产物生成之前约
+  90 行，产物缺席被判 `[OK]`；且原口径（逐位相等）与测量噪声不可调和。
+  现强制支路移入覆盖率集群（`--require-coverage`：缺席即红），口径改为
+  锚定 §1 声明行 + ±0.10pp 容差、声明行缺失按不通过处置。验证：CI 步骤
+  `Status register coverage reconciliation`；
+  `pytest tests/test_artifact_doc_consistency_gate.py -q`。
+
+## [Unreleased] — 2026-10-16 F 轮（开关治理收口：env 预算门禁盲区 + 布尔口径统一 + env_int 加固 + 原子落盘；零 LLM）
+
+> F 轮收口环境变量治理链：修掉 env 预算门禁假绿（+25 个不可见开关）、
+> 布尔开关解析口径统一（修一处 fail-open 安全缺陷，60 处 / 27 文件）、
+> 模块级数值解析加固、缓存统计原子落盘。
+
+### Fixed
+
+- **env 预算门禁盲区（假绿修复）**：后缀式 `_X_ENV` 常量 + `env_flag/env_int`
+  调用形态此前**不可见**——`--check` 报"194/194 通过"实为假绿；现 194 →
+  **219** 个开关全部在册（+25 名逐个核实有实际取用点）。验证：
+  `make env-budget`；`pytest tests/test_x_batch.py -q -k EnvBudget`；
+- **布尔开关口径统一（60 处 / 27 文件）+ fail-open 修复**：窄口径
+  `.lower()=="true"` 收敛到 `env_flag` 单一事实源（真值集 true/1/on；
+  `yes` 需显式声明）。修复 `PATCH_DANGEROUS_API_GUARD=1` /
+  `PATCH_CONTRACT_CHECK=1` 此前被判 False——**想开安全守卫反而关掉**且无
+  告警。验证：
+  `pytest tests/test_env_utils.py tests/test_patch_applier.py -q -k "EnvFlag or TruthyCaliber"`；
+- **模块级裸 `int(os.getenv())` 加固（3 处）**：坏值此前在 **import 期**
+  抛 ValueError（进程起不来）→ `env_int` 容错回退 + WARNING。验证：
+  `pytest tests/test_env_utils.py -q -k ModuleLevelNumeric`（子进程带坏值导入）；
+- **`cache_stats.json` 原子落盘**：此前直写（进程被 kill / 磁盘满留半写
+  JSON，而读侧对损坏文件**静默回零** → 已累计计数无声丢失）→ 走
+  `atomic_write_json`（同目录 tmp + `os.replace`，权限 0600）。验证：
+  `pytest tests/test_venv_cache_monitoring.py -q -k AtomicPersist`。
+
+### Notes
+
+- 仓库治理（同日已提交 `f3d2dc0`）：学术撰写区（`paper/`、`*.typ`）进入
+  `.gitignore` 敏感区——论文工件零入 git，仅规则随提交；
+- 明确排除（未授权不动）：死代码项（`event_bus.publish_workflow_completed` /
+  `process_utils._close_quietly`）、`rag/retriever.py` 克隆合并。
 
 ## [Unreleased] — 2026-10-15 EMSE 批次八（全量 Mut@k 收口：三项测量缺陷修复 + 测试有效性前置门 + M4 四臂闭环；零 LLM + 授权 LLM 跑 C/D）
 

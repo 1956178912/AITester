@@ -549,6 +549,25 @@ class RepoExecutor:
             # `python -m swebench.harness.run_evaluation`，成功则以官方结果为准；
             # 官方包未安装 / 执行失败时降级历史自建口径（零行为变化）。
             if self._official_harness_enabled():
+                # 官方 harness 自行 clone/执行，不经过 _run_test_nodes，故对其
+                # 前置一次 conftest 扫描。用本地缓存克隆（同 repo_url + 同
+                # base_commit → conftest 内容一致）作代理面：命中即不调用官方
+                # harness，全部节点记失败（passed=False，不会假过）。
+                _refuse = self._scan_repo_conftests(repo_dir) if os.path.isdir(repo_dir) else []
+                if _refuse:
+                    _detail = "; ".join(f"{rel}: {','.join(feats)}" for rel, feats in _refuse[:5])[:300]
+                    logger.warning(
+                        "S6 conftest 守卫：%d 个 conftest.py 命中硬拒特征，拒绝调用官方 swebench harness（%s）",
+                        len(_refuse),
+                        _detail,
+                    )
+                    base_result["output"] = f"[S6 conftest 守卫拒绝执行] {_detail}"
+                    base_result["failed_cases"] = [
+                        {"name": node, "error": f"S6 conftest 危险调用守卫拒绝执行: {_detail}"}
+                        for node in [*fail_to_pass, *pass_to_pass]
+                    ]
+                    base_result["repo_env"] = env
+                    return base_result
                 _official_result = self._run_official_swebench_harness(
                     repo_url=repo_url,
                     base_commit=base_commit,
@@ -707,6 +726,65 @@ class RepoExecutor:
         """运行 PASS_TO_PASS 回归测试节点。"""
         return self._run_test_nodes(repo_dir, pass_to_pass, repo_url=repo_url)
 
+    #: S6 conftest 扫描的单文件体积上限：超过即不解析，按"未审查"fail-closed
+    #: （2 MiB 远大于任何真实 conftest.py，仅用于阻断异常大文件拖慢验证）。
+    _CONFTEST_SCAN_MAX_BYTES = 2 * 1024 * 1024
+
+    #: os.walk 时跳过的目录：版本库/虚拟环境/依赖缓存里不会有被测仓库的
+    #: conftest.py（且数量巨大），跳过既省时也避免把旁 venv 的文件当仓库代码。
+    _CONFTEST_SCAN_SKIP_DIRS = frozenset({".git", ".venv", "venv", "env", "node_modules", "__pycache__", ".tox"})
+
+    @classmethod
+    def _scan_repo_conftests(cls, repo_dir: str) -> list[tuple[str, list[str]]]:
+        """扫描仓库工作树内全部 conftest.py，返回**硬拒**命中（空 = 可执行）。
+
+        裁决口径（依据见 ``src/tools/dependency.py`` 的
+        :data:`_CONTEST_HARD_REFUSE` 实测注释）：
+
+        - Tier 1 特征命中 → 硬拒；
+        - 文件读不懂（解析失败 / OSError / 超体积）→ 硬拒。扫描用宿主解释器的
+          AST，被测仓库跑在旁 venv 的另一解释器上，宿主读不懂 ≠ 不会执行，
+          故按 G 轮 fail-closed 决策拒绝；
+        - Tier 2 特征命中（subprocess / socket / urllib / shutil.rmtree 等真实
+          测试基建常用能力）→ 仅 WARNING 留审计线索，不阻断。
+
+        Returns:
+            ``[(相对路径, 命中特征列表)]``，仅含硬拒项。日志与返回值都只含
+            **路径与特征名**，不回显文件内容（第三方 conftest 可能含凭证）。
+        """
+        from src.tools.dependency import _CONTEST_HARD_REFUSE, conftest_ast_scan_enabled, scan_conftest_ast_safety
+
+        if not conftest_ast_scan_enabled():
+            return []
+        refused: list[tuple[str, list[str]]] = []
+        for root, dirs, files in os.walk(repo_dir):
+            dirs[:] = [d for d in dirs if d not in cls._CONFTEST_SCAN_SKIP_DIRS]
+            if "conftest.py" not in files:
+                continue
+            path = os.path.join(root, "conftest.py")
+            rel = os.path.relpath(path, repo_dir)
+            try:
+                if os.path.getsize(path) > cls._CONFTEST_SCAN_MAX_BYTES:
+                    refused.append((rel, ["<oversize>"]))
+                    continue
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    code = f.read()
+            except OSError as e:
+                logger.warning("S6 conftest 扫描读取失败 %s（按未审查 fail-closed）: %s", rel, e)
+                refused.append((rel, ["<unreadable>"]))
+                continue
+            findings, parsed = scan_conftest_ast_safety(code)
+            if not parsed:
+                logger.warning("S6 conftest 扫描无法解析 %s（按未审查 fail-closed）", rel)
+                refused.append((rel, ["<unparseable>"]))
+                continue
+            hard = sorted(set(findings) & _CONTEST_HARD_REFUSE)
+            if hard:
+                refused.append((rel, hard))
+            elif findings:
+                logger.warning("S6 conftest Tier 2 告警（不阻断）：%s 命中 %s", rel, sorted(findings))
+        return refused
+
     def _run_test_nodes(self, repo_dir: str, test_nodes: list[str], repo_url: str = "") -> dict[str, Any]:
         """对仓库目录运行指定 pytest 节点，解析 failed_cases。
 
@@ -721,6 +799,28 @@ class RepoExecutor:
         """
         if not test_nodes:
             return {"expected": 0, "passed": 0, "failed_cases": []}
+        # S6/M11（2026-09-29 审查 P0 声明，2026-10-16 G 轮接线）：conftest.py
+        # 危险调用扫描。pytest 在**收集阶段**就 import 并执行仓库自带
+        # conftest.py——早于任何测试断言，是 repo 级链路在宿主上执行第三方代码
+        # 的最早入口。此前 scan_conftest_ast_safety 无任何生产调用点（守卫形同
+        # 不存在），现于唯一的 pytest 咽喉点前置裁决：Tier 1 命中或文件"读不懂"
+        # 一律不执行 pytest（fail-closed），全部节点记失败并标注守卫拒绝，故
+        # 既不会假过（F2P/P2P 全 0），也能在批次日志里区分"守卫拒绝"与"用例失败"。
+        refuse = self._scan_repo_conftests(repo_dir)
+        if refuse:
+            detail = "; ".join(f"{rel}: {','.join(feats)}" for rel, feats in refuse[:5])[:300]
+            logger.warning(
+                "S6 conftest 守卫：%d 个 conftest.py 命中硬拒特征，拒绝在该仓库执行 pytest（%s）",
+                len(refuse),
+                detail,
+            )
+            return {
+                "expected": len(test_nodes),
+                "passed": 0,
+                "failed_cases": [
+                    {"name": node, "error": f"S6 conftest 危险调用守卫拒绝执行 pytest: {detail}"} for node in test_nodes
+                ],
+            }
         env = scrub_os_environ()
         # 被测仓库根目录入 PYTHONPATH：gold test_patch 的测试文件通常
         # `from <repo_pkg> import ...`，仓库根须可导入。
@@ -922,28 +1022,95 @@ class RepoExecutor:
                     pass
 
     @classmethod
-    def _llm_patch_dangerous_calls(cls, patch_text: str) -> set[str]:
-        """C5：从 unified diff 的 "+" 行提取新增代码，收集危险调用特征。
+    def _split_diff_hunks(cls, patch_text: str) -> list[tuple[list[str], list[str], list[str]]]:
+        """把 unified diff 按 hunk 切成 ``(after 行, before 行, 新增行)`` 三元组。
 
-        实现口径：
-        - 仅取 hunk 新增行（行首 "+" 且排除 "+++" 文件头）——新增行即
-          "补丁新引入"（无需与原代码做差集，与本地链路
-          patch_applier.dangerous_api_added 的差集口径在此处天然等价）；
-        - 复用 patch_applier._collect_dangerous_calls（模块限定调用 +
-          from-import 别名图（C4）+ 凭证读取 + 动态构造绕过，同一特征集）；
-        - 上下文行（" " 前缀）不参与——原代码既有危险调用不拦截（与
-          本地链路"只拦新增危险、放行既有"口径一致）。
+        三者都剥掉前缀字符并**保留原缩进**：
+        - after = 上下文行（" "）+ 新增行（"+"）≈ 打补丁后的 hunk 切片；
+        - before = 上下文行（" "）+ 删除行（"-"）≈ 打补丁前的 hunk 切片；
+        - added = 仅新增行（"+"）。
+
+        保留上下文行是 G 轮实效化的关键：只看 "+" 行会把 hunk 的结构信息
+        （外层 ``def``/``class``、多行表达式的开括号、``from os import system
+        as s`` 这类别名声明）全部丢掉，拼接结果既解析不了、也解析不出别名。
+
+        文件头（``diff --git`` / ``index`` / ``--- `` / ``+++ ``）出现在首个
+        ``@@`` 之前，故按"未进入 hunk"跳过；``\\ No newline at end of file``
+        标记跳过；hunk 内遇到非法前缀行（如下一份文件的 ``diff --git``）即
+        收尾当前 hunk。LLM 输出常把空上下文行的 " " 前缀丢掉，此处按上下文
+        行处理（空行不影响危险调用判定，但影响缩进结构）。
         """
-        from src.tools.patch_applier import _collect_dangerous_calls
+        hunks: list[tuple[list[str], list[str], list[str]]] = []
+        after: list[str] = []
+        before: list[str] = []
+        added: list[str] = []
+        in_hunk = False
 
-        added_lines: list[str] = []
+        def _flush() -> None:
+            if after or before or added:
+                hunks.append((after.copy(), before.copy(), added.copy()))
+            after.clear()
+            before.clear()
+            added.clear()
+
         for line in patch_text.splitlines():
-            if line.startswith("+++") or not line.startswith("+"):
+            if line.startswith("@@"):
+                if in_hunk:
+                    _flush()
+                in_hunk = True
                 continue
-            added_lines.append(line[1:])
-        if not added_lines:
-            return set()
-        return _collect_dangerous_calls("\n".join(added_lines))
+            if not in_hunk:
+                continue
+            if line.startswith("\\"):
+                continue
+            if line.startswith("+"):
+                after.append(line[1:])
+                added.append(line[1:])
+            elif line.startswith("-"):
+                before.append(line[1:])
+            elif line.startswith(" ") or not line.strip():
+                body = line[1:] if line.startswith(" ") else ""
+                after.append(body)
+                before.append(body)
+            else:
+                _flush()
+                in_hunk = False
+        if in_hunk:
+            _flush()
+        return hunks
+
+    @classmethod
+    def _llm_patch_dangerous_calls(cls, patch_text: str) -> tuple[set[str], int]:
+        """C5：扫描 unified diff 各 hunk，收集**补丁新引入**的危险调用特征。
+
+        逐 hunk 三口径合并（G 轮实效化）：
+        1. after 切片扫描 − before 切片扫描 = 差集，即"新引入"（与本地链路
+           ``patch_applier.dangerous_api_added`` 的 before/after 差集同口径，
+           上下文行里既有的危险调用不误判为新增）；
+        2. ∪ 仅 "+" 行的扫描结果——集合差有**遮蔽盲区**：上下文里既有同名
+           特征（如既有 os.system 调用）会把新增的同特征调用一并减掉；
+           "+"-only 只可能命中真正新增的行，无遮蔽，故取并集；
+        3. 扫描本身走 :func:`collect_dangerous_calls_in_fragment`（三级降级
+           解析：整段 dedent → ``if True:`` 套件 → 逐行累积），并把无法解析
+           的残行数如实上报。
+
+        Returns:
+            ``(命中的危险特征集, 无法解析的残行数)``。两者任一非零，调用方都
+            必须拒绝应用补丁（fail-closed）：残行数 > 0 意味着该 hunk 未被
+            完整静态审查，此时空特征集只表示"读不懂"而非"安全"。
+        """
+        from src.tools.patch_applier import collect_dangerous_calls_in_fragment
+
+        found: set[str] = set()
+        residue = 0
+        for after_lines, before_lines, added_lines in cls._split_diff_hunks(patch_text):
+            after_found, after_residue = collect_dangerous_calls_in_fragment(after_lines)
+            residue += after_residue
+            before_found, _ = collect_dangerous_calls_in_fragment(before_lines)
+            found |= after_found - before_found
+            plus_found, _ = collect_dangerous_calls_in_fragment(added_lines)
+            found |= plus_found
+        return found, residue
 
     @classmethod
     def _patch_touches_test_files(cls, patch_text: str) -> str | None:
@@ -998,23 +1165,37 @@ class RepoExecutor:
                 touched_test_file,
             )
             return False
-        # C5（2026-10-05 系统审查 P0·X 批次落地）：危险 API 静态守卫。
-        # 背景：本地链路（patch_applier.safe_apply_patch）有 AST 级危险调用
-        # 差集守卫（os.system / subprocess / eval / 网络外连 / 凭证读取 /
-        # 动态构造绕过，C4 起含 from-import 别名图），但 repo 级链路的
-        # unified diff 此前**直接 git apply 后在宿主/venv 裸跑**——同一
-        # 守卫口径的缺口。现从补丁 "+" 行（新增代码，新增即"新引入"，
-        # 无需与原代码做差集）提取伪模块跑同一收集器（_collect_dangerous_calls），
-        # 命中即拒绝应用（与 M2 测试文件保护同口径：FAIL_TO_PASS 实测裁决，
-        # 不误判通过）。能力边界：'+' 行片段 AST 解析失败时收集器返回空集
-        # （不拦截——与本地链路"语法失败由 ast.parse 先行拦截"的分工不同，
-        # 此处片段本就可能不独立成模块；git apply 后的执行仍受 venv 隔离
-        # 与 P2P 门禁约束，属纵深一层而非唯一防线）。
-        _dangerous = self._llm_patch_dangerous_calls(llm_patch)
+        # C5（2026-10-05 系统审查 P0·X 批次落地；2026-10-16 G 轮实效化）：
+        # 危险 API 静态守卫。背景：本地链路（patch_applier.safe_apply_patch）
+        # 有 AST 级危险调用差集守卫（os.system / subprocess / eval / 网络外连
+        # / 凭证读取 / 动态构造绕过，C4 起含 from-import 别名图），但 repo 级
+        # 链路的 unified diff 此前**直接 git apply 后在宿主/venv 裸跑**——同一
+        # 守卫口径的缺口。X 批次从补丁 "+" 行（新增代码，新增即"新引入"，
+        # 无需与原代码做差集）提取伪模块跑同一收集器，命中即拒绝应用（与 M2
+        # 测试文件保护同口径：FAIL_TO_PASS 实测裁决，不误判通过）。
+        #
+        # G 轮实测缺陷（已修）：X 批次把 "+" 行原样拼接后交给
+        # _collect_dangerous_calls，而该函数语法失败返回空集。最常见的补丁形态
+        # 是"往既有函数体里插一行"——外层 def/class 是上下文行（不参与拼接），
+        # "+" 行以缩进开头，拼接后必抛 IndentationError → 空集 → 守卫放行，
+        # 即 X 批次的 C5 对主流形态**全盲**。现改为逐 hunk 重建 after/before
+        # 切片（保留上下文行，结构完整可解析）跑三级降级扫描，取差集 ∪ "+"-only
+        # （差集有"既有同名特征遮蔽新增"的盲区，故并集）；并按 G 轮 fail-closed
+        # 决策：残行数 > 0（hunk 未被完整静态审查）同样拒绝应用——"读不懂"
+        # 不等于"安全"。日志只记特征名与残行数，不回显补丁内容（补丁可能含
+        # 凭证/PII）。
+        _dangerous, _unparsed = self._llm_patch_dangerous_calls(llm_patch)
         if _dangerous:
             logger.warning(
                 "C5 危险 API 守卫：LLM 补丁新增行命中危险调用 %s，拒绝应用（FAIL_TO_PASS 按无补丁实测）",
                 sorted(_dangerous),
+            )
+            return False
+        if _unparsed:
+            logger.warning(
+                "C5 危险 API 守卫：LLM 补丁新增行有 %d 行无法静态解析，按 fail-closed 拒绝应用"
+                "（FAIL_TO_PASS 按无补丁实测）",
+                _unparsed,
             )
             return False
         # 临时补丁文件按 (pid, thread) 隔离——2026-09-26 全面审查 P1 并发安全：

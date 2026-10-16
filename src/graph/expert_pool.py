@@ -129,7 +129,7 @@ _DEBATE_REVISED_CONFIDENCE: float = 0.6  # 辩论修订候选置信度（保守�
 
 def expert_pool_enabled() -> bool:
     """专家池开关（EXPERT_POOL_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("EXPERT_POOL_ENABLE", "false").lower() == "true"
+    return env_flag("EXPERT_POOL_ENABLE")
 
 
 def expert_pool_debate_enabled() -> bool:
@@ -141,7 +141,7 @@ def expert_pool_debate_enabled() -> bool:
     """
     if not expert_pool_enabled():
         return False
-    return os.getenv("EXPERT_POOL_DEBATE_ENABLE", "false").lower() == "true"
+    return env_flag("EXPERT_POOL_DEBATE_ENABLE")
 
 
 def _debate_top_k() -> int:

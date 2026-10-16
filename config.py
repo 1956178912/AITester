@@ -373,7 +373,7 @@ def _validate_timeout(value: int, name: str, min_val: int, max_val: int, default
 
 
 # ─── 执行环境配置 ────────────────────────────────────────────────────────────
-DOCKER_ENABLED: bool = os.getenv("DOCKER_ENABLED", "false").lower() == "true"
+DOCKER_ENABLED: bool = env_flag("DOCKER_ENABLED")
 # 锁定依赖集（scipy==1.18.0 等）要求 Python >= 3.12，镜像须匹配
 DOCKER_IMAGE: str = os.getenv("DOCKER_IMAGE", "python:3.12-slim")
 # 先容错解析（坏值回退默认 30），再走 _validate_timeout 范围校验（[10, 300]）
@@ -393,9 +393,9 @@ MAX_REGENERATIONS: int = 1
 COVERAGE_THRESHOLD: float = _parse_float_env("COVERAGE_THRESHOLD", 80.0, 0.0, 100.0)
 
 # ─── 消融实验开关 ────────────────────────────────────────────────────────────
-ENABLE_PLANNER: bool = os.getenv("ENABLE_PLANNER", "true").lower() == "true"
-ENABLE_RAG: bool = os.getenv("ENABLE_RAG", "false").lower() == "true"
-ENABLE_DEBUGGER: bool = os.getenv("ENABLE_DEBUGGER", "true").lower() == "true"
+ENABLE_PLANNER: bool = env_flag("ENABLE_PLANNER", True)
+ENABLE_RAG: bool = env_flag("ENABLE_RAG")
+ENABLE_DEBUGGER: bool = env_flag("ENABLE_DEBUGGER", True)
 
 
 def detection_first_enabled() -> bool:
@@ -450,7 +450,7 @@ def set_detection_first_thread_override(value: bool | None) -> None:
 # 20 变异体 ≈ 30-60s/任务），对全量实验是显著的时间税；显式开启（True）
 # 才在 run_benchmark 流水线末尾逐任务计算并写入 details[].mutation_score。
 # 与 ENABLE_RAG 同口径：消融实验开关，不影响核心修复管线，仅影响评估产出。
-ENABLE_MUTATION_SCORING: bool = os.getenv("ENABLE_MUTATION_SCORING", "false").lower() == "true"
+ENABLE_MUTATION_SCORING: bool = env_flag("ENABLE_MUTATION_SCORING")
 # 每任务最多评估的变异体数量（来源：mutation_testing.MutationGenerator._MAX_MUTANTS_PER_TASK
 # 的上限口径；T3（2026-10-05 优化批次）默认 10→20——审查 G10：10 个变异体下
 # mutation_detection_rate 的二值噪声区间过宽（±30pct），20 个起才有区分度；
@@ -467,7 +467,7 @@ MUTATION_MAX_MUTANTS: int = _parse_int_env("MUTATION_MAX_MUTANTS", 20, 1, None)
 # （保持 fast={} 与历史等价）；champion 配置晋升新档须待 Stage-2 确认后另走
 # ADR。主开关 ORCHESTRATION_SEARCH_ENABLE 默认 false：关时搜索模块全部公共
 # 入口立即拒绝执行、不触碰 os.environ、零 I/O（测试锁定零行为变化）。
-ORCHESTRATION_SEARCH_ENABLE: bool = os.getenv("ORCHESTRATION_SEARCH_ENABLE", "false").lower() == "true"
+ORCHESTRATION_SEARCH_ENABLE: bool = env_flag("ORCHESTRATION_SEARCH_ENABLE")
 # 总评估次数硬顶（先到先停的另一顶见 token 顶）：16 臂 × 均 15 次可测评估
 # 的量级设计（M1 设计集 12 任务 × 3 种子 = 36 cell）
 ORCHESTRATION_SEARCH_MAX_EVALS: int = _parse_int_env("ORCHESTRATION_SEARCH_MAX_EVALS", 240, 16, None)
@@ -498,11 +498,11 @@ ORCHESTRATION_SEARCH_MAX_UNMEASURABLE: int = _parse_int_env("ORCHESTRATION_SEARC
 # API_CIRCUIT_BACKOFF：熔断器指数退避开关（4.4）。默认 true（保持 4.4 行为，
 # 开启指数退避）；设 false 时熔断器使用固定冷却期（_CIRCUIT_COOLDOWN_S）
 # 作为 4.2 历史对照口径。
-API_CIRCUIT_BACKOFF: bool = os.getenv("API_CIRCUIT_BACKOFF", "true").lower() == "true"
+API_CIRCUIT_BACKOFF: bool = env_flag("API_CIRCUIT_BACKOFF", True)
 # API_PROMETHEUS_EXPORT：Prometheus 指标导出开关（4.4）。默认 false（保持
 # 历史行为：to_prometheus_text() 默认不输出指标，纯旁路不影响路由）；
 # 设 true 时 APIManager.to_prometheus_text() 导出 7 类指标供监控抓取。
-API_PROMETHEUS_EXPORT: bool = os.getenv("API_PROMETHEUS_EXPORT", "false").lower() == "true"
+API_PROMETHEUS_EXPORT: bool = env_flag("API_PROMETHEUS_EXPORT")
 
 # ─── RAG 检索增强配置 ────────────────────────────────────────────────────────
 # 持久化路径：默认项目根下 rag_data/（此前总是内存模式，进程重启数据全丢，
@@ -533,16 +533,16 @@ SWE_BENCH_ENRICHMENT: str = os.getenv("SWE_BENCH_ENRICHMENT", "")
 # 消除"默认在宿主机执行任意 LLM 生成代码"的攻击面。
 # 设 EXECUTOR_USE_VENV=false 可显式退回"本地系统 Python"历史口径
 # （仅调试 / 无 venv 权限的环境使用）。
-EXECUTOR_USE_VENV: bool = os.getenv("EXECUTOR_USE_VENV", "true").lower() == "true"
+EXECUTOR_USE_VENV: bool = env_flag("EXECUTOR_USE_VENV", True)
 # 是否自动 pip install 缺失的第三方依赖（需配合 venv 沙箱使用）
-EXECUTOR_AUTO_INSTALL_DEPS: bool = os.getenv("EXECUTOR_AUTO_INSTALL_DEPS", "false").lower() == "true"
+EXECUTOR_AUTO_INSTALL_DEPS: bool = env_flag("EXECUTOR_AUTO_INSTALL_DEPS")
 # 依赖安装等待超时（秒）：防止 pip 网络卡顿拖垮整个实验
 EXECUTOR_DEP_INSTALL_TIMEOUT: int = _parse_int_env("EXECUTOR_DEP_INSTALL_TIMEOUT", 120, 10, None)
 # 4.3 Docker 隔离执行（预留接口转正，默认关）：
 # EXECUTOR_USE_DOCKER=true 时 ExecutorAgent 经 docker CLI 在容器内跑 pytest，
 # 需本机安装 docker 且镜像已构建（镜像名可经 EXECUTOR_DOCKER_IMAGE 覆盖，
 # 默认 aitester:latest，对应仓库根 Dockerfile）。
-EXECUTOR_USE_DOCKER: bool = os.getenv("EXECUTOR_USE_DOCKER", "false").lower() == "true"
+EXECUTOR_USE_DOCKER: bool = env_flag("EXECUTOR_USE_DOCKER")
 EXECUTOR_DOCKER_IMAGE: str = os.getenv("EXECUTOR_DOCKER_IMAGE", "aitester:latest")
 
 # ─── P0 仓库级验证（SWE-bench 官方口径，默认关）─────────────────────────────
@@ -554,7 +554,7 @@ EXECUTOR_DOCKER_IMAGE: str = os.getenv("EXECUTOR_DOCKER_IMAGE", "aitester:latest
 # 合成数据集 / examples 任务无这些元数据字段，永不命中，历史口径零变化。
 # 环境缓存根目录 SWE_REPO_ENVS_DIR 默认 ~/.cache/aitester/repo_envs/
 # （(repo, commit) 分目录复用，同仓库多任务只 clone/pip 一次）。
-REPO_LEVEL_EXECUTION: bool = os.getenv("REPO_LEVEL_EXECUTION", "false").lower() == "true"
+REPO_LEVEL_EXECUTION: bool = env_flag("REPO_LEVEL_EXECUTION")
 # 仓库级环境 setup 子进程超时（秒）：clone + checkout + pip install -e 远慢于
 # 单任务测试执行，默认 600s；缓存命中后不再触发。
 SWE_REPO_SETUP_TIMEOUT: int = _parse_int_env("SWE_REPO_SETUP_TIMEOUT", 600, 60, None)
@@ -574,7 +574,7 @@ SWE_REPO_SETUP_TIMEOUT: int = _parse_int_env("SWE_REPO_SETUP_TIMEOUT", 600, 60, 
 # 仅对 source=swe_bench 且含 repo_url/base_commit 的任务生效（合成 /
 # examples 任务永不命中，零行为变化）；验证基线 PASS_TO_PASS ≥
 # SWE_BENCH_P2P_GATE_THRESHOLD，不可解实例标记 harness_invalid 剔除。
-SWE_BENCH_P2P_GATE_ENABLE: bool = os.getenv("SWE_BENCH_P2P_GATE_ENABLE", "true").lower() == "true"
+SWE_BENCH_P2P_GATE_ENABLE: bool = env_flag("SWE_BENCH_P2P_GATE_ENABLE", True)
 # 阈值经容错解析（坏值回退 0.95）+ [0, 1] 范围校验（通过率阈值超出区间无意义）：
 # 此前此处是裸 float(os.getenv(...))，与本文件"坏值不让 import 崩溃"的口径
 # 相悖——SWE_BENCH_P2P_GATE_THRESHOLD=abc 会让所有入口（import config）直接
@@ -586,7 +586,7 @@ SWE_BENCH_P2P_GATE_THRESHOLD: float = _parse_float_env("SWE_BENCH_P2P_GATE_THRES
 # 开启时 RepoExecutor 按 .venv_pip_installed 标记判缓存命中（新建 venv）。
 # venv 模式下不注入宿主 PYTHONPATH（实测带注入反而 ImportError），
 # PATH 前置 venv/bin（子进程内再调 python/pip 时指向 venv）。
-SWE_REPO_VENV_ISOLATION: bool = os.getenv("SWE_REPO_VENV_ISOLATION", "false").lower() == "true"
+SWE_REPO_VENV_ISOLATION: bool = env_flag("SWE_REPO_VENV_ISOLATION")
 
 # ─── 实验配置 ────────────────────────────────────────────────────────────────
 # 0 = 串行（合法值），最小 0 防止负并行度

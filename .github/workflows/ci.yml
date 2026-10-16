@@ -268,6 +268,9 @@ jobs:
         # 2026-10-15 扩展：新增 T-10（通过率混淆）声明对账——匹配子集有严格
         # （pattern×seed，29 行/25 可测）与宽松（仅 pattern，62 行/55 可测）两种口径，
         # 文档必须显式声明严格口径，防止只引宽松值造成的"口径不可判读"。
+        # G6（2026-10-16）：本步骤在 coverage.xml 生成之前，故其中"状态登记册
+        # 覆盖率对账"这一支只打 [SKIP]（不再谎报 [OK]）；该支的强制执行见下方
+        # 覆盖率集群里的 "Status register coverage reconciliation" 步骤。
         run: python scripts/gates/check_artifact_doc_consistency.py
 
       - name: Verify experiment artifact checksums (U1 证据链门禁)
@@ -406,6 +409,31 @@ jobs:
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
+
+      - name: Status register coverage reconciliation (G6 登记册数字必须与实测相符)
+        if: matrix.python-version == '3.14'
+        # G6（2026-10-16 审查落地）：修复常年假绿。docs/PROJECT_STATUS_REGISTER.md
+        # 开头自述"覆盖率声明与 coverage.xml 对账——数字过期即 CI 红"，但该
+        # 对账支路此前只存在于**排在 coverage.xml 生成之前约 90 行**的那个步骤里，
+        # 产物必然缺席 → 函数返回空清单 → 打印 [OK]（文案还自带"无 coverage.xml
+        # 时跳过"）。即：这道对账在 CI 里从未真正运行过。
+        # 现在把强制支路放进覆盖率集群（coverage.xml 已在上一组步骤生成），并以
+        # --require-coverage 把"产物缺席"从静默跳过改成失败。
+        # 只跑 3.14：登记册声明的是 3.14 档实测值（两位小数），其余矩阵档的
+        # 覆盖率可能合法地相差 ±0.0x pp；文档↔工件对账支路仍在上游步骤里对
+        # 全部三档生效。
+        # 口径说明：对账容差 ±0.10pp（`_REGISTER_TOLERANCE_PP`），**不是**逐位相等。
+        # 依据（2026-10-16 实测，同一份源码连跑多次全量）：分支覆盖曾得
+        # 5460/6236=87.56% 与 5459/6236=87.54%（单分支 = 0.016pp）；graph/nodes.py
+        # 行覆盖曾得 0.7776 与 0.7862（约 6 行 → 总行覆盖 0.035pp）。即本仓库的
+        # 覆盖率测量自带 ≈0.05pp 量级非确定性，跨平台（ubuntu vs darwin）差异同量级
+        # 或更大。逐位相等不可满足，真跑起来只会把"常年假绿"换成"随机真红"，
+        # 而 flaky 门禁的结局是被忽略。容差取观测抖动上界的约 2 倍。
+        # 防回退由 coverage_ratchet.py 的只升水位独立把守；本步骤的职责是
+        # "文档不得实质性错报工件"——声称 95% 而实测 92.9% 依然立刻转红。
+        # 同时把匹配从"实测值字符串出现在全文任意位置"收紧为"锚定 §1 声明行"，
+        # 声明行缺失即失败（缺席 ≠ 通过）。
+        run: python scripts/gates/check_artifact_doc_consistency.py --require-coverage
 
       - name: Branch coverage gate (8. 核心路由模块门槛)
         # R10-d（2026-10-05 审查批次）：从"仅 3.14 单档"扩到全部三个矩阵档

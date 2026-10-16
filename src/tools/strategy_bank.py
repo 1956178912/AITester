@@ -43,6 +43,8 @@ import os
 import threading
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # 策略库默认路径（experiments/results 下，与 failure_knowledge_base.json 同目录）
@@ -111,7 +113,7 @@ def _rank_strategy_entries(
 
 def strategy_bank_enabled() -> bool:
     """策略银行开关（STRATEGY_BANK_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("STRATEGY_BANK_ENABLE", "false").lower() == "true"
+    return env_flag("STRATEGY_BANK_ENABLE")
 
 
 def _bank_path() -> str:
@@ -131,6 +133,13 @@ def _load_bank(path: str | None = None) -> dict[str, Any]:
             with open(bank_file, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
+                # G 轮：降级为空库仍是对的（读侧不阻断修复），但必须**可见**——
+                # 否则 select_strategy 会永远返回 None，而操作者以为策略库在生效。
+                logger.warning(
+                    "策略库 %s 顶层不是 JSON 对象（实际 %s），本次按空库降级（原文件保留不覆写）",
+                    bank_file,
+                    type(data).__name__,
+                )
                 data = {"strategies": []}
             _bank_cache = data
             _bank_mtime = mtime
@@ -238,6 +247,14 @@ def record_strategy_outcome(
     本函数追加的是 outcomes 字段，二者不交叉）。
 
     写盘失败静默降级（纯观测层，不阻断修复主流程）。
+
+    G 轮（2026-10-16）fail-closed 修正——**既有内容读不懂时不覆写**：
+    此前若库文件顶层不是 JSON 对象（或 JSON 损坏），本函数会用全新的
+    ``{"strategies": [], "outcomes": []}`` 原子覆写整个文件，把人工审核过的
+    ``strategies`` 表（source of truth）连同历史 ``outcomes`` 一起清空，且只在
+    DEBUG 级留一行"写盘失败"（甚至根本不进异常分支——覆写是"成功"的）。
+    观测层的一次追加不该有能力销毁主数据，故改为：读不出可信结构 → 记
+    WARNING 并**跳过本次写入**，原文件原样保留待人工处置。
     """
     bank_file = path or _bank_path()
     try:
@@ -248,10 +265,32 @@ def record_strategy_outcome(
             os.makedirs(os.path.dirname(bank_file) or ".", exist_ok=True)
             data: dict[str, Any] = {"strategies": [], "outcomes": []}
             if os.path.isfile(bank_file):
-                with open(bank_file, encoding="utf-8") as f:
-                    loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    data = loaded
+                try:
+                    with open(bank_file, encoding="utf-8") as f:
+                        loaded = json.load(f)
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.warning(
+                        "策略库 %s 读取失败，跳过本次 outcome 追加（保留原文件待人工处置，不覆写）: %s",
+                        bank_file,
+                        e,
+                    )
+                    return
+                if not isinstance(loaded, dict):
+                    logger.warning(
+                        "策略库 %s 顶层不是 JSON 对象（实际 %s），跳过本次 outcome 追加"
+                        "——覆写会清空既有 strategies 表（G 轮 fail-closed）",
+                        bank_file,
+                        type(loaded).__name__,
+                    )
+                    return
+                data = loaded
+                if not isinstance(data.get("outcomes", []), list):
+                    logger.warning(
+                        "策略库 %s 的 outcomes 字段不是数组（实际 %s），跳过本次追加（不覆写）",
+                        bank_file,
+                        type(data["outcomes"]).__name__,
+                    )
+                    return
             entry = {
                 "error_category": signature[0],
                 "fix_strategy_tag": signature[1],
@@ -264,7 +303,7 @@ def record_strategy_outcome(
             from src.utils.atomic_io import atomic_write_json
 
             atomic_write_json(bank_file, data)
-    except (OSError, json.JSONDecodeError, TypeError) as e:
+    except (OSError, TypeError) as e:
         logger.debug("策略库 outcome 记录写盘失败（忽略，纯观测层）: %s", e)
 
 

@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, cast
 
 from src.agents.base_agent import BaseAgent
@@ -48,6 +47,7 @@ from src.agents.error_classifier import (
 from src.prompts.templates import DEBUGGER_SYSTEM_PROMPT
 from src.tools.patch_intent import edit_intent_enabled
 from src.tools.type_repair import type_repair_layer
+from src.utils.env_utils import env_flag
 
 # T2（2026-10-11 独立评审落地）：对抗性意图假设的契约是顶层 JSON 数组，
 # 需与 extract_json_object（只解析对象）区分——见 _generate_adversarial_intents。
@@ -83,7 +83,7 @@ def _adversarial_debugging_enabled() -> bool:
     3. 独立"批评者"LLM 调用尝试构造击穿补丁的对抗性测试；
     若批评者成功（all_passed=False），触发一次补丁重新生成（仍失败则保留当前补丁）。
     """
-    return os.getenv("ADVERSARIAL_DEBUGGING_ENABLE", "false").lower() == "true"
+    return env_flag("ADVERSARIAL_DEBUGGING_ENABLE")
 
 
 def _position_aware_repair_enabled() -> bool:
@@ -96,7 +96,7 @@ def _position_aware_repair_enabled() -> bool:
     该定位是纯静态（不消耗 LLM token）；LLM 调用失败或无法定位时降级为
     常规全文件修复（保持历史口径，不因定位失败阻断修复）。
     """
-    return os.getenv("POSITION_AWARE_REPAIR_ENABLE", "true").lower() == "true"
+    return env_flag("POSITION_AWARE_REPAIR_ENABLE", True)
 
 
 def _probe_snapshot_locate_enabled() -> bool:
@@ -110,7 +110,7 @@ def _probe_snapshot_locate_enabled() -> bool:
     激活定位阶段。纯静态（零 LLM 成本），探针快照缺失/帧不可解析时
     保持历史降级口径。需同时启用 POSITION_AWARE_REPAIR_ENABLE 才生效。
     """
-    return os.getenv("PROBE_SNAPSHOT_LOCATE_ENABLE", "false").lower() == "true"
+    return env_flag("PROBE_SNAPSHOT_LOCATE_ENABLE")
 
 
 def _bidirectional_diagnosis_enabled() -> bool:
@@ -120,7 +120,7 @@ def _bidirectional_diagnosis_enabled() -> bool:
     "实现缺陷"（修复代码）还是"测试缺陷"（重新生成测试），实现 BiVCoder
     式的双向诊断与分支修复。默认关闭保持历史实验口径不变。
     """
-    return os.getenv("BIDIRECTIONAL_DIAGNOSIS_ENABLE", "false").lower() == "true"
+    return env_flag("BIDIRECTIONAL_DIAGNOSIS_ENABLE")
 
 
 # ─── 1.3 分层压缩降级链（符号守卫拒绝后的收紧生成）────────────────────────────
@@ -491,7 +491,7 @@ class DebuggerAgent(BaseAgent):
                     )
             if refs_text:
                 _rag_header = "\n\n以下历史修复案例可作为参考："
-                if os.getenv("RAG_JUDGE_INSTRUCTION_ENABLE", "false").lower() == "true":
+                if env_flag("RAG_JUDGE_INSTRUCTION_ENABLE"):
                     _rag_header += (
                         "【判断指令】以下案例仅供参考，若与当前错误类型或代码上下文不匹配请忽略，不要强行套用历史补丁。"
                     )

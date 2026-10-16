@@ -10,12 +10,25 @@
 - autouse fixture 在每个测试前关闭缓存开关（AITESTER_LLM_CACHE=0），
   使 _call_llm_with_cache 直接透传 _call_llm，行为与旧逻辑完全一致。
 - 同时将缓存目录指向临时目录（AITESTER_LLM_CACHE_DIR），即使误开启也不污染默认缓存目录。
+- config._apply_profile_presets 在 import 期往进程 os.environ 注入档位开关
+  （setdefault 绕过 monkeypatch 追踪），由 _isolate_profile_presets 逐测试还原。
 """
+
+import os
+from collections.abc import Iterator
 
 import pytest
 
+import config as _config
 from src.agents.llm_client import clear_llm_cache_option_memory
 from src.graph import nodes as _nodes
+
+# 档位预设可能注入的全部环境变量键（含 AITESTER_PROFILE 自身）。**从 config
+# 单一事实源派生**，不手抄——手抄清单在历史上过期过两次（见
+# _isolate_profile_presets 文档串），过期即泄漏，泄漏即测量污染。
+_PRESET_ENV_KEYS: frozenset[str] = frozenset(
+    {"AITESTER_PROFILE", *(k for presets in _config._PROFILE_PRESETS.values() for k in presets)}
+)
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +47,42 @@ def _isolate_agent_instance_caches() -> None:
     yield
     _nodes.clear_agent_instance_cache()
     _nodes.clear_executor_agent_cache()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_profile_presets() -> Iterator[None]:
+    """逐测试还原 config 档位预设注入的环境变量（消除跨测试残留）。
+
+    ``config._apply_profile_presets()`` 在 **import 期**用 ``os.environ.setdefault``
+    注入档位开关（config.py:150），既绕过 monkeypatch 追踪、也没有 teardown。
+    任何调用它并把 ``AITESTER_PROFILE`` 设成 logic/scientific 的测试，都会在
+    进程里留下这批开关键——monkeypatch 只还原 AITESTER_PROFILE 本身。
+
+    实测后果（2026-10-16 H 轮定位）：残留使后续测试走到"档位开启"分支，
+    **覆盖率测量因此非确定**——同一份源码连跑三次，src/graph/nodes.py 分别
+    得 0.7776 / 0.7862 / 0.7776，总行覆盖在 92.94–92.96% 间漂移，登记册逐位
+    对账无法收敛。漂移全部落在特异性门块内的 6 行（1561-1563 / 1569 / 1575-1576），
+    即 ``DETECTION_SPECIFICITY_GATE_ENABLE`` 被残留开启时才执行的分支。
+
+    历史上有两份手抄的还原清单，均已过期：
+    tests/test_2026_10_05_review_fixes_batch.py 的 ``_INJECTED`` 元组漏掉
+    P0-1 / AI1 / P0-B 三个批次新增的 5 个键；
+    tests/test_2026_10_05_review_batch.py 更是把 safe/scientific 预设**内联成字面量**，
+    漏掉 MUTATION_ADVISOR_ENABLE。两处现均改为从 ``_PROFILE_PRESETS`` 派生，
+    本 fixture 是兜底安全网：未来新增档位开关**无需**再改任何测试即可被覆盖。
+
+    口径：只还原、不预清场——会话启动时的宿主环境（例如开发者显式
+    export AITESTER_PROFILE）对每个测试都同样可见，本 fixture 只保证
+    "上一个测试的注入"不外溢。需要干净基线的测试自行 delenv
+    （见 tests/test_aa_batch.py 的类内 fixture，它额外做预清场）。
+    """
+    saved = {k: os.environ.get(k) for k in _PRESET_ENV_KEYS}
+    yield
+    for key, value in saved.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 @pytest.fixture(autouse=True)

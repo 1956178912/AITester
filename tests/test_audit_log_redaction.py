@@ -201,3 +201,80 @@ def test_tests_dir_skipped(tmp_path) -> None:
     )
     result = audit(str(tmp_path))
     assert result.ok
+
+
+# ─── H 轮（2026-10-16）：运行期脱敏自检（audit_runtime_redaction） ──────────────
+
+import pytest  # noqa: E402
+
+from scripts.gates.audit_log_redaction import AuditResult, audit_runtime_redaction  # noqa: E402
+
+
+def test_runtime_selfcheck_passes_and_gate_ok() -> None:
+    """接线后的正例：守卫真跑、两口径一致、13 条探针零盲区。"""
+    result = AuditResult()
+    audit_runtime_redaction(result)
+    assert result.runtime_checked is True
+    assert result.runtime_error == ""
+    assert result.runtime_consistent is True, "mask_sensitive_info 与 redact_text 口径分叉"
+    assert result.runtime_blind_spots == [], f"运行期兜底盲区：{result.runtime_blind_spots}"
+    assert result.runtime_ok is True
+    assert result.gate_ok is True
+
+
+def test_unchecked_runtime_is_not_gate_ok() -> None:
+    """缺席 ≠ 通过：没跑自检的 AuditResult 不得判门禁通过（G 轮口径）。"""
+    result = AuditResult()
+    assert result.runtime_checked is False
+    assert result.runtime_ok is False
+    assert result.gate_ok is False
+    assert result.ok is True, "静态半区独立判定，不受运行期半区影响"
+
+
+def test_blind_spot_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """探针原样通过 = 盲区，必须报出并判不通过（一致性守卫查不出这类问题）。"""
+    monkeypatch.setattr("src.utils.logging_utils.mask_sensitive_info", lambda text: text)
+    result = AuditResult()
+    audit_runtime_redaction(result)
+    assert result.runtime_checked is True
+    assert len(result.runtime_blind_spots) > 0
+    assert result.runtime_ok is False
+    assert result.gate_ok is False
+
+
+def test_path_divergence_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """两口径分叉（CVE-2026-59308 同源形态）必须报出并判不通过。"""
+    monkeypatch.setattr("src.utils.logging_utils.verify_redaction_consistency", lambda samples: False)
+    result = AuditResult()
+    audit_runtime_redaction(result)
+    assert result.runtime_consistent is False
+    assert result.runtime_ok is False
+    assert result.gate_ok is False
+
+
+def test_selfcheck_exception_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """自检内部抛异常 → fail-closed（记 runtime_error 并判不通过），不得静默放行。"""
+
+    def _boom(text: str) -> str:
+        raise RuntimeError("脱敏模块损坏")
+
+    monkeypatch.setattr("src.utils.logging_utils.mask_sensitive_info", _boom)
+    result = AuditResult()
+    audit_runtime_redaction(result)
+    assert "脱敏模块损坏" in result.runtime_error
+    assert result.runtime_checked is False
+    assert result.runtime_ok is False
+    assert result.gate_ok is False
+
+
+def test_probe_corpus_locks_space_variant_field_names() -> None:
+    """H 轮修掉的 3 个盲区留在语料里当回归锁（静态扫描器 O33 早已按该口径拦调用点）。"""
+    from src.utils.logging_utils import mask_sensitive_info, redact_text, redaction_consistency_probes
+
+    probes = redaction_consistency_probes()
+    for shape in ("api key: ", "private key: ", "refresh token: "):
+        assert any(p.startswith(shape) for p in probes), f"语料缺空格变体探针：{shape!r}"
+    for shape in ("api key: ", "private key: ", "refresh token: "):
+        probe = next(p for p in probes if p.startswith(shape))
+        assert mask_sensitive_info(probe) != probe, f"运行期仍未脱敏：{probe!r}"
+        assert redact_text(probe) != probe, f"降级链仍未脱敏：{probe!r}"

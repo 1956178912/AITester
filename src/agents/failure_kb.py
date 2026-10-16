@@ -33,6 +33,8 @@ import os
 import time
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # 知识库默认路径（experiments/results 下，与 analyze_failures.py --knowledge-base
@@ -55,7 +57,7 @@ _SNIPPET_FIELD_TRUNCATE = 300
 
 def _kb_enabled() -> bool:
     """失败知识库开关（FAILURE_KB_ENABLE=true 时启用，默认 false，历史口径不变）。"""
-    return os.getenv("FAILURE_KB_ENABLE", "false").lower() == "true"
+    return env_flag("FAILURE_KB_ENABLE")
 
 
 def _kb_path() -> str:

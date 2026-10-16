@@ -43,12 +43,14 @@ import os
 import re
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 
 def graph_rag_enabled() -> bool:
     """GraphRAG 开关（GRAPH_RAG_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("GRAPH_RAG_ENABLE", "false").lower() == "true"
+    return env_flag("GRAPH_RAG_ENABLE")
 
 
 def _graph_rag_max_hops() -> int:

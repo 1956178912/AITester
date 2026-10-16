@@ -38,6 +38,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # ─── 配置常量 ─────────────────────────────────────────────────────────────────
@@ -50,7 +52,7 @@ _DEFAULT_MAX_MODULES = 5
 
 def cross_file_enabled() -> bool:
     """跨文件修复开关（CROSS_FILE_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_CROSS_FILE_ENV_VAR, "false").lower() == "true"
+    return env_flag(_CROSS_FILE_ENV_VAR)
 
 
 def cross_file_bidirectional() -> bool:
@@ -61,7 +63,7 @@ def cross_file_bidirectional() -> bool:
     调用方（双向拓扑序应用补丁：被调用方 entry 先改，调用方后改）。
     默认关闭保持历史"单入口视角"口径。
     """
-    return os.getenv("CROSS_FILE_BIDIRECTIONAL", "false").lower() == "true"
+    return env_flag("CROSS_FILE_BIDIRECTIONAL")
 
 
 def cross_file_max_modules() -> int:

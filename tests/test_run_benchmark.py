@@ -7,6 +7,7 @@
   （开关启用时计算，generated_test/instance_code 缺失时写 None 保持键集合同构）。
 """
 
+import json
 from typing import Any
 
 import experiments.run_benchmark as rb
@@ -293,3 +294,206 @@ class TestSlidingWindow:
         assert len(collected) == 5  # 所有任务（含异常）都回调
         assert collected["repo__repo-3"] == {}  # 异常任务收到空结果
         assert collected["repo__repo-1"] != {}  # 正常任务结果保留
+
+
+class TestDumpStateArtifactsObservationKeys:
+    """H 轮（2026-10-16）：环节级工件白名单必须包含"只写不读"的观测信号。
+
+    缺陷形态（与本白名单前两次扩容同构）：节点把信号写进 state，但白名单没登记
+    → LangGraph 状态在 run 结束后被丢弃 → 下游分析永远读到 None → 指标失真，
+    而节点注释承诺的用途（G2 风险分级 / 确定性套件入库）静默落空。
+    """
+
+    _OBSERVATION_KEYS = ("testless_validation", "deterministic_guard_report", "m10_leaf_fallback")
+
+    def _dump(self, tmp_path, state: dict[str, Any]) -> dict[str, Any]:
+        task = _make_task()
+        rb._dump_state_artifacts(str(tmp_path), task, "aitester", state)
+        artifact = tmp_path / "raw" / task.task_id / "aitester.json"
+        return json.loads(artifact.read_text(encoding="utf-8"))
+
+    def test_observation_signals_are_persisted(self, tmp_path) -> None:
+        state = {
+            "testless_validation": {"passed": False, "failed_layers": ["mypy"], "layers": {"mypy": {"passed": False}}},
+            "deterministic_guard_report": {
+                "filename": "m",
+                "findings": [{"rule": "random_usage", "detail": "random.random()", "line": 3}],
+                "is_deterministic": False,
+            },
+        }
+        data = self._dump(tmp_path, state)
+        assert data["testless_validation"] == state["testless_validation"]
+        assert data["deterministic_guard_report"] == state["deterministic_guard_report"]
+
+    def test_absent_signals_dump_as_null_not_missing_key(self, tmp_path) -> None:
+        """默认档（两开关关）键必须**在场且为 null**——键集合同构，下游无需 hasattr 式防御。"""
+        data = self._dump(tmp_path, {})
+        for key in self._OBSERVATION_KEYS:
+            assert key in data, f"工件缺键 {key}（白名单未登记 → 信号写进 state 即被丢弃）"
+            assert data[key] is None
+
+    def test_key_set_is_stable(self, tmp_path) -> None:
+        """工件键集合钉死（新增/删除键必须显式改本用例，防字段静默漂移）。"""
+        expected = {
+            "task_id",
+            "baseline",
+            "test_plan",
+            "generated_test",
+            "diagnosis",
+            "error_category",
+            "patch",
+            "test_passed",
+            "iterations",
+            "coverage",
+            "rag_stats",
+            "position_aware_focus",
+            "repo_verification",
+            "cross_file_deps",
+            "testless_validation",
+            "deterministic_guard_report",
+            "m10_leaf_fallback",
+            "task_metadata",
+        }
+        assert set(self._dump(tmp_path, {})) == expected
+
+
+class TestFailureAttributionWiring:
+    """I1（2026-10-16）：终局失效归因必须真的落进批次工件，且口径可复算。
+
+    缺陷形态：`observability.failure_taxonomy` 自 U11（2026-10-05）落地以来
+    **零生产调用点**——五桶分类与批次 XII 的 edge × fault_side 增补维度只在
+    单测里被断言，批次工件/报表一处不落。G3 修好了写侧→读侧的键路径
+    （logic_degraded 抬顶层），但整条归因链的末端仍不产出任何工件，
+    "失败发生在哪个环节"因此无法从批次结果复算。
+    """
+
+    _NEW_KEYS = (
+        "failure_bucket",
+        "failure_bucket_detail",
+        "attribution_edge",
+        "attribution_fault_side",
+        "m10_leaf_fallback",
+    )
+
+    def test_no_final_state_yields_none_not_uncategorized(self) -> None:
+        """无工作流终局（运行异常/限流）→ 四键全 None，**不**冒充兜底桶。
+
+        折进 uncategorized 会让桶分布的分母失去意义："归因未接线"与
+        "状态信息不足"同形。改由 _aggregate_failure_buckets 单列计数。
+        """
+        got = rb._failure_attribution_for_result(None)
+        assert set(got) == set(self._NEW_KEYS) - {"m10_leaf_fallback"}
+        assert all(v is None for v in got.values()), got
+
+    def test_state_view_rebuild_is_load_bearing(self) -> None:
+        """状态视图重建不是装饰：直喂 final_state 会把失败任务全部落兜底桶。
+
+        O35：stop_reason 由条件边函数原地写入，LangGraph 不回写 → 直读恒空。
+        不经 effective_stop_reason 兜底，"迭代耗尽"这类**最常见的**生成能力
+        失效会被误判成 UNCATEGORIZED——把"归因没接对"伪装成"系统失效无法分类"。
+        """
+        from src.observability.failure_taxonomy import annotate_final_state
+
+        state = {"test_passed": False, "iteration": 5, "max_iterations": 5}
+        assert annotate_final_state(state)["bucket"].value == "uncategorized", "前提失效：直喂已能分类"
+        got = rb._failure_attribution_for_result(state)
+        assert got["failure_bucket"] == "generation_capability_failure"
+        assert got["attribution_fault_side"] == "model_side"
+        assert got["attribution_edge"] == "debugger_to_executor"
+
+    def test_converged_row_is_task_completed(self) -> None:
+        """收敛优先于一切：即使迭代数达上限，test_passed=True 恒归 task_completed。"""
+        got = rb._failure_attribution_for_result(
+            {"test_passed": True, "iteration": 9, "max_iterations": 5, "budget_exceeded": True}
+        )
+        assert got["failure_bucket"] == "task_completed"
+        assert got["attribution_fault_side"] == "uncategorized", "收敛行不得冒充归因结论"
+
+    def test_verification_failure_beats_stop_reason(self) -> None:
+        got = rb._failure_attribution_for_result(
+            {"test_passed": False, "regression_detected": True, "iteration": 5, "max_iterations": 5}
+        )
+        assert got["failure_bucket"] == "verification_failure"
+        assert got["attribution_fault_side"] == "harness_side"
+
+    def test_row_carries_new_keys(self) -> None:
+        """结果行五键落盘（含 I2 的 m10_leaf_fallback 顶层标记）。"""
+        task = _make_task()
+        state = {"test_passed": False, "iteration": 5, "max_iterations": 5, "m10_leaf_fallback": True}
+        row = _build_task_result(task, 1.0, final_state=state)
+        assert row["failure_bucket"] == "generation_capability_failure"
+        assert row["attribution_fault_side"] == "model_side"
+        assert row["m10_leaf_fallback"] is True
+        assert isinstance(row["failure_bucket_detail"], str) and row["failure_bucket_detail"]
+
+    def test_success_and_failure_rows_share_new_keys(self) -> None:
+        """键集合同构：失败分支五键必须在场且为 None（下游无需 hasattr 式防御）。"""
+        task = _make_task()
+        success = _build_task_result(task, 1.0, final_state={"test_passed": True})
+        failure = _build_task_result(task, 1.0)
+        assert set(success) == set(failure)
+        for key in self._NEW_KEYS:
+            assert key in success, f"结果行缺键 {key}"
+            assert failure[key] is None, f"失败分支 {key} 应为 None 占位"
+
+    def test_row_is_json_serializable(self) -> None:
+        """桶值必须是 str 而非 StrEnum 实例（跨语言消费方/严格 JSON 校验器口径）。"""
+        row = _build_task_result(_make_task(), 1.0, final_state={"test_passed": True})
+        for key in ("failure_bucket", "attribution_edge", "attribution_fault_side"):
+            assert type(row[key]) is str, (key, type(row[key]))
+        assert json.loads(json.dumps({k: row[k] for k in self._NEW_KEYS}))
+
+
+class TestFailureBucketAggregation:
+    """I1：臂级桶分布聚合的分母口径（唯一容易读错的地方，必须钉死）。"""
+
+    def _rows(self) -> list[dict[str, Any]]:
+        task = _make_task()
+        return [
+            _build_task_result(task, 1.0, final_state={"test_passed": True}),
+            _build_task_result(task, 1.0, final_state={"test_passed": False, "iteration": 5, "max_iterations": 5}),
+            _build_task_result(task, 1.0, final_state={"test_passed": False, "budget_exceeded": True}),
+            _build_task_result(task, 1.0, final_state={"test_passed": False, "logic_degraded": True}),
+            _build_task_result(task, 1.0, diagnosis="执行异常: boom", error_category="error"),  # 无终局状态
+        ]
+
+    def test_denominator_excludes_rows_without_final_state(self) -> None:
+        agg = rb._aggregate_failure_buckets(self._rows())
+        assert agg["total_rows"] == 5
+        assert agg["unclassified_rows"] == 1
+        assert agg["total"] == 4, "分布分母只算有终局状态的行"
+        assert sum(agg["counts"].values()) == agg["total"]
+        assert agg["counts"]["uncategorized"] == 0, "异常行不得被折进兜底桶"
+
+    def test_shares_sum_to_one_over_classified(self) -> None:
+        agg = rb._aggregate_failure_buckets(self._rows())
+        assert abs(sum(agg["shares"].values()) - 1.0) < 1e-6
+        assert agg["counts"]["task_completed"] == 1
+        assert agg["counts"]["generation_capability_failure"] == 1
+        assert agg["counts"]["verification_failure"] == 1
+        # I3：stop_reason 为 unknown 时 logic_degraded 弱信号可达 → 规约层失效
+        assert agg["counts"]["specification_failure"] == 1
+
+    def test_all_buckets_edges_sides_present_even_at_zero(self) -> None:
+        """键集合全域在场（0 桶也列出）：分布口径跨批次可比。"""
+        from src.observability.failure_taxonomy import FAULT_SIDES, INTERACTION_EDGES, FailureBucket
+
+        agg = rb._aggregate_failure_buckets([_build_task_result(_make_task(), 1.0, final_state={"test_passed": True})])
+        assert set(agg["counts"]) == {b.value for b in FailureBucket}
+        assert set(agg["fault_side_counts"]) == set(FAULT_SIDES)
+        assert set(agg["edge_counts"]) == set(INTERACTION_EDGES)
+
+    def test_empty_batch_is_safe(self) -> None:
+        agg = rb._aggregate_failure_buckets([])
+        assert agg["total"] == 0 and agg["total_rows"] == 0 and agg["unclassified_rows"] == 0
+        assert all(v == 0.0 for v in agg["shares"].values())
+
+    def test_output_feeds_render_markdown_with_denominator_disclosure(self) -> None:
+        """聚合输出可直接喂报告层；分母披露行必须出现（否则报表把批次规模读小）。"""
+        from src.observability.failure_taxonomy import render_markdown
+
+        md = render_markdown(rb._aggregate_failure_buckets(self._rows()), title="臂级失效分布")
+        assert "## 臂级失效分布" in md
+        assert "总计：4 个任务" in md
+        assert "另有 1 个任务无工作流终局状态" in md
+        assert "批次共 5 行" in md

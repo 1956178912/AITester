@@ -366,7 +366,7 @@ def _run_pytest_in_tmp(
         # run_with_timeout 以 start_new_session 建新进程组 + killpg 整树终止，
         # 且以临时文件（非管道）承接输出，结构上不会因孙进程持管道写端而阻塞。
         try:
-            from src.utils.process_utils import run_with_timeout
+            from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
             res = run_with_timeout(
                 [
@@ -383,11 +383,14 @@ def _run_pytest_in_tmp(
                 cwd=tmpdir,
                 text=True,
                 logger_name="m1_metrics",
-                env={
-                    **os.environ,
-                    "PYTHONDONTWRITEBYTECODE": "1",
-                    "PYTHONPATH": pythonpath,
-                },
+                # H 轮（2026-10-16）：改用 nested_pytest_env——裸 {**os.environ}
+                # 会把宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS 带进嵌套运行，而 PYTHONPATH
+                # 已被覆盖成 tmpdir，宿主插件因此不可导入 → rc=1 被读成"测试红"
+                # → detection_gates 误判 over_red（实测复现，详见该函数文档串）。
+                env=nested_pytest_env(
+                    PYTHONDONTWRITEBYTECODE="1",
+                    PYTHONPATH=pythonpath,
+                ),
             )
             if getattr(res, "timed_out", False):
                 # 超时 = 不可测（与历史口径一致：返回 None 不计为 0，不误报）

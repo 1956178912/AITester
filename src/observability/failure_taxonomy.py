@@ -14,17 +14,26 @@
     3. summarize_batch(states)：桶计数 + 占比（观测层聚合）；
     4. render_markdown(summary)：Markdown 表渲染（报告层消费）。
 
-消费方：experiments/ 分析脚本（对 run_benchmark 产出的 per-task 终局
-状态批量标注）与报告层。**不接主流程路由**——桶判定纯观测，路由语义
-仍由 workflow.py 的 StopReason 体系单独负责。
+消费方（I1，2026-10-16 起为**生产接线**，此前只有单测消费）：
+    - experiments/run_benchmark.py::_failure_attribution_for_result —— 逐任务
+      把终局状态标注为四键（failure_bucket / failure_bucket_detail /
+      attribution_edge / attribution_fault_side）写进批次工件 details[]；
+    - 同文件 _aggregate_failure_buckets —— 臂级桶分布 + edge/fault_side 计数，
+      落 summary.results[臂].failure_bucket_distribution；
+    - render_markdown —— 报告层表格（分布 + 分母披露）。
+**不接主流程路由**——桶判定纯观测，路由语义仍由 workflow.py 的 StopReason
+体系单独负责。
 
-映射优先级（与 determine_stop_reason 的判定顺序对齐，workflow.py:119）：
+映射优先级（与 determine_stop_reason 的判定顺序对齐，workflow.py:127）：
     1. test_passed=True                    → TASK_COMPLETED（收敛优先于一切）
     2. budget_exceeded=True                → VERIFICATION_FAILURE
     3. regression_detected=True            → VERIFICATION_FAILURE
     4. stop_reason 命中规约/计划层失效集合  → SPECIFICATION_FAILURE
     5. stop_reason 命中生成能力失效集合     → GENERATION_CAPABILITY_FAILURE
-    6. 其余（含 stop_reason 缺失/UNKNOWN）  → UNCATEGORIZED（兜底可度量）
+    5.5 stop_reason 无信息（缺失或 "unknown"）且 logic_degraded=True
+                                           → SPECIFICATION_FAILURE（弱信号，
+                                             I3：unknown 不再抢占本步）
+    6. 其余                                → UNCATEGORIZED（兜底可度量）
 """
 
 from __future__ import annotations
@@ -78,7 +87,10 @@ _STOP_REASON_TO_BUCKET: dict[str, FailureBucket] = {
     # 验证侧拦截
     "budget_exceeded": FailureBucket.VERIFICATION_FAILURE,
     "regression_detected": FailureBucket.VERIFICATION_FAILURE,
-    # unknown 显式进兜底（不冒充分类结论）
+    # unknown 显式进兜底（不冒充分类结论）。I3（2026-10-16）：本条目现仅保证
+    # 映射表对 StopReason 全域**封闭**（test_mapping_covers_all_workflow_stop_reasons
+    # 依赖它），annotate_final_state 已不再用它抢占 logic_degraded 弱信号——
+    # "unknown" 语义是无信息，不是一条归因证据。
     "unknown": FailureBucket.UNCATEGORIZED,
 }
 
@@ -157,8 +169,18 @@ def annotate_final_state(state: dict) -> dict:
     不看 stop_reason——收敛后其他字段的残留状态不改变终局语义）。
 
     Args:
-        state: 工作流最终状态（run_benchmark per-task 行 / graph.invoke 输出）。
+        state: 工作流最终状态（`graph.invoke` 输出 / AITesterState 形状的 dict）。
             必需键：无（缺键保守落 UNCATEGORIZED）。
+            口径限定（G3，2026-10-16）：本函数读的是**状态通道顶层键**
+            （test_passed / stop_reason / budget_exceeded / regression_detected /
+            logic_degraded）。run_benchmark 落盘的 per-task 行是**投影**而非状态
+            本身（成功键叫 `passed`，且不含 test_plan / logic_degraded），直接喂进来
+            会把已收敛任务误判成 UNCATEGORIZED——需先按键名映射回状态形状。
+            该映射已由 I1（2026-10-16）实现在
+            run_benchmark._failure_attribution_for_result：test_passed 取
+            final_state 原值，stop_reason 走 effective_stop_reason（O35：条件边
+            函数原地写入的 stop_reason 不被 LangGraph 回写，直读恒 None →
+            失败任务会全部落兜底桶），其余三键直读顶层。
 
     Returns:
         {"bucket": FailureBucket, "stop_reason": str, "detail": str,
@@ -192,9 +214,16 @@ def annotate_final_state(state: dict) -> dict:
             "detail": "回归检测拒绝（P2P 门禁判过度修复/误删逻辑）",
             **attribution,
         }
-    # 其余按 stop_reason 查表；无 stop_reason 时（路由层写入会被 LangGraph
-    # 丢弃的已知问题）尝试用 logic_degraded 弱信号提示规约层失效
-    if stop_reason:
+    # 其余按 stop_reason 查表。I3（2026-10-16）：**"unknown" 不在此列**——它是
+    # determine_stop_reason 的保守兜底（第 8 优先级），语义等于"无信息"，而非
+    # 一条可用的归因证据。此前 `if stop_reason:` 把它当作有信息处理，于是任何
+    # 经 effective_stop_reason（唯一权威读取口径，O35）取终止原因的调用方都会
+    # 拿到非空 "unknown" → 查表 → UNCATEGORIZED，**永远走不到下面的
+    # logic_degraded 弱信号分支**：G3 把该标记抬到顶层通道修好了键路径，
+    # 但读侧分支在生产路径上依然不可达（既有单测只构造"stop_reason 缺失"
+    # 的输入，掩盖了这一点；接线批次落盘时才暴露）。弱信号本就是为
+    # "stop_reason 不可用"设计的，unknown 正是不可用。
+    if stop_reason and stop_reason != "unknown":
         bucket = _STOP_REASON_TO_BUCKET.get(stop_reason, FailureBucket.UNCATEGORIZED)
         return {
             "bucket": bucket,
@@ -202,11 +231,13 @@ def annotate_final_state(state: dict) -> dict:
             "detail": f"按 stop_reason={stop_reason} 查表映射",
             **attribution,
         }
+    # 顶层 logic_degraded 由 _planner_node 从 test_plan 抬升写入（G3，2026-10-16）；
+    # 在此之前该标记只存在于 test_plan 内部，本分支恒不可达。
     if state.get("logic_degraded"):
         return {
             "bucket": FailureBucket.SPECIFICATION_FAILURE,
-            "stop_reason": "",
-            "detail": "stop_reason 缺失且 logic_degraded=True（规约降级弱信号）",
+            "stop_reason": stop_reason,
+            "detail": f"stop_reason 无信息（{stop_reason or '缺失'}）且 logic_degraded=True（规约降级弱信号）",
             **attribution,
         }
     return {
@@ -269,6 +300,17 @@ def render_markdown(summary: dict, title: str = "终局失效分布") -> str:
         )
     lines.append("")
     lines.append(f"总计：{summary.get('total', 0)} 个任务")
+    # I1（2026-10-16）：分母诚实——批次聚合方（run_benchmark
+    # ._aggregate_failure_buckets）把"无工作流终局状态"的行（运行异常 /
+    # 限流耗尽）单列 unclassified_rows 而**不**折进 uncategorized 桶，故
+    # total 只是"有终局状态可分类"的行数。不显式披露会让报表把批次规模
+    # 读小，且"归因未接线"与"状态信息不足"同形。summarize_batch 的输出
+    # 无该键（全量分类）→ 不渲染此行，向后兼容。
+    if summary.get("unclassified_rows"):
+        lines.append(
+            f"（另有 {summary['unclassified_rows']} 个任务无工作流终局状态"
+            f"〔运行异常/限流〕，不计入分布；批次共 {summary.get('total_rows', 0)} 行）"
+        )
     # 批次 XII（ADR-0026）：交互中心归因表（增补维度，未命中键全零渲染）
     lines += ["", "### 交互中心归因（edge × fault_side，批次 XII 增补）", ""]
     lines.append("| 故障侧 | 数量 | 修复动作指向 |")

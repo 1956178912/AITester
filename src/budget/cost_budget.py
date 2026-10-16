@@ -23,6 +23,17 @@
 与 3.4 成本告警的关系：告警是"路由决策侧"的旁路观测（哪个 provider
 贵），预算是"任务执行侧"的硬闸（本任务还能花多少），两层独立、
 可叠加启用。
+
+G 轮（2026-10-16）坏值口径修正——**fail-closed**：
+    此前三个数值配置（COST_BUDGET_TOKENS / COST_BUDGET_USD /
+    COST_USD_PER_1K）解析失败一律 ``except ValueError: return 0``，而 0 在
+    本模块语义里是"未配置 = 不限 / 该侧口径不生效"。即：开了预算闸却把上限
+    拼错（``COST_BUDGET_TOKENS=500k``、``COST_USD_PER_1K=0.0O6`` 字母 O）时，
+    守卫**静默降级为无上限**，只留一条都没有的日志——正是"最该拦的场景拦不住，
+    且无人知晓"。现三态区分：未设置/空串 = 合法的"未配置"；可解析且非负 = 生效；
+    **不可解析或负数 = 配置错误**，记 ERROR（每 变量+原值 一次）并让
+    check_budget 直接返回 False（拒绝后续 LLM 调用），进程级统计单独计
+    ``budget_misconfigured_events``（不污染"真实超限"计数）。
 """
 
 from __future__ import annotations
@@ -41,7 +52,26 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 _lock = threading.Lock()
 # 进程级累计统计（观测层：全部任务的预算消耗/超限次数，供实验汇总）
-_process_stats: dict[str, int] = {"total_consumed": 0, "budget_exceeded_events": 0, "tasks_capped": 0}
+_process_stats: dict[str, int] = {
+    "total_consumed": 0,
+    "budget_exceeded_events": 0,
+    "tasks_capped": 0,
+    # G 轮新增：因**配置错误**（非真实超限）而拒绝 LLM 调用的事件数。与
+    # budget_exceeded_events 分开计，避免"拼错环境变量"被读成"任务烧爆预算"。
+    "budget_misconfigured_events": 0,
+}
+
+# 预算数值配置项名（模块级常量：ADR-0003 env 预算门禁按"名字含 ENV 的模块级
+# 字符串常量"扫描，字面量散在调用点会绕过预算治理）。
+_ENV_COST_BUDGET_TOKENS = "COST_BUDGET_TOKENS"
+_ENV_COST_BUDGET_USD = "COST_BUDGET_USD"
+_ENV_COST_USD_PER_1K = "COST_USD_PER_1K"
+
+#: 已记过 ERROR 的 (变量名, 原值)——check_budget 每次 LLM 调用都解析配置，
+#: 不去重会按调用次数刷屏（GIL 下 set.add 原子，最坏情况只是重复一行）。
+_bad_value_logged: set[tuple[str, str]] = set()
+#: 已记过 WARNING 的"启用但无任何上限"提示（同因去重）。
+_no_limit_warned: set[str] = set()
 
 
 def _budget_enabled() -> bool:
@@ -49,28 +79,52 @@ def _budget_enabled() -> bool:
     return env_flag("COST_BUDGET_ENABLE")
 
 
-def _budget_tokens_limit() -> int:
-    """token 硬上限（COST_BUDGET_TOKENS，默认 0 = 不限）。"""
+def _read_budget_number(name: str, *, integer: bool) -> tuple[int | float, bool]:
+    """读取预算数值配置，三态区分（G 轮 fail-closed 的核心）。
+
+    Args:
+        name: 环境变量名。
+        integer: True 按 int 解析（token 数），False 按 float 解析（美元）。
+
+    Returns:
+        ``(值, 是否可用)``：
+
+        - 未设置 / 空串 → ``(0, True)``：合法的"未配置"，该侧口径不生效
+          （历史文档口径，不变）；
+        - 可解析且非负 → ``(值, True)``；
+        - 不可解析或为负 → ``(0, False)``：**配置错误**，调用方必须
+          fail-closed。此前这里一律回退 ``(0, True)``，等于把"拼错上限"
+          静默当成"不限"。
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return 0, True
+    text = raw.strip()
+    kind = "整数" if integer else "浮点数"
     try:
-        return int(os.getenv("COST_BUDGET_TOKENS", "0").strip() or 0)
+        value: int | float = int(text) if integer else float(text)
     except ValueError:
-        return 0
+        _log_bad_budget_value(name, raw, f"无法解析为{kind}")
+        return 0, False
+    if value < 0:
+        _log_bad_budget_value(name, raw, f"为负数（{kind}上限不得为负）")
+        return 0, False
+    return value, True
 
 
-def _budget_usd_limit() -> float:
-    """费用硬上限（COST_BUDGET_USD，默认 0 = 未配置不生效）。"""
-    try:
-        return float(os.getenv("COST_BUDGET_USD", "0").strip() or 0)
-    except ValueError:
-        return 0
-
-
-def _usd_per_1k() -> float:
-    """每 1K token 费用（美元；COST_USD_PER_1K，默认 0 = 费用口径不生效）。"""
-    try:
-        return float(os.getenv("COST_USD_PER_1K", "0").strip() or 0)
-    except ValueError:
-        return 0
+def _log_bad_budget_value(name: str, raw: str, reason: str) -> None:
+    """预算配置坏值 ERROR（每 变量+原值 记一次）。"""
+    key = (name, raw)
+    if key in _bad_value_logged:
+        return
+    _bad_value_logged.add(key)
+    logger.error(
+        "预算配置 %s=%r %s：按 fail-closed 拒绝后续 LLM 调用。"
+        "坏值不等于“未配置”，不得静默降级为不限（G 轮 2026-10-16）",
+        name,
+        raw,
+        reason,
+    )
 
 
 class BudgetExceededError(RuntimeError):
@@ -126,22 +180,40 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
     """预算前置守卫：记录本次消耗并返回"是否仍允许继续调用 LLM"。
 
     流程：
-    1. 开关关闭 → 直接 True（历史口径，零行为变化）；
-    2. 累加消耗（token / 费用，费用未配单价时 0）；
-    3. 超限判定（token 上限与费用上限任一达到即超限，未配置的侧不参与）；
-    4. 超限 → 进程级统计 +1，记 WARNING，返回 False（调用方应停止）。
+    1. 开关关闭（且无实例级 cap 覆盖）→ 直接 True（历史口径，零行为变化）；
+    2. 解析三项预算配置，区分"未配置"与"配置错误"（G 轮）；
+    3. 累加消耗（token / 费用，费用未配单价时 0）；
+    4. 超限判定（token 上限与费用上限任一达到即超限，未配置的侧不参与）；
+    5. 超限 → 进程级统计 +1，记 WARNING，返回 False（调用方应停止）；
+    6. **配置错误 → 同样返回 False（fail-closed）**，记 ERROR 并单独计
+       ``budget_misconfigured_events``——坏值不得静默当成"不限"。
 
     Args:
         consumed_delta_tokens: 本次 LLM 调用的 token 消耗（入+出）。
         consumed_delta_usd: 本次调用的费用（美元，可为 0）。
 
     Returns:
-        True = 预算内可继续；False = 已超限（调用方应停止 LLM 调用）。
+        True = 预算内可继续；False = 已超限**或预算配置不可用**（调用方应停止
+        LLM 调用）。
     """
     # AM1：实例级 cap 覆盖存在时预算检查自动生效（无需 COST_BUDGET_ENABLE）——
     # CLI --per-task-token-caps 注入的 cap 自足生效，env 开关语义不变。
     if not _budget_enabled() and getattr(_current_budget(), "token_cap_override", 0) <= 0:
         return True
+    # G 轮：配置解析前置到锁外（每次 LLM 调用都会走一遍，锁内做字符串解析纯属
+    # 浪费），并把"坏值"与"未配置"分开——坏值 fail-closed（见模块 docstring）。
+    tokens_raw, tokens_ok = _read_budget_number(_ENV_COST_BUDGET_TOKENS, integer=True)
+    usd_raw, usd_ok = _read_budget_number(_ENV_COST_BUDGET_USD, integer=False)
+    per_1k_raw, per_1k_ok = _read_budget_number(_ENV_COST_USD_PER_1K, integer=False)
+    misconfigured = sorted(
+        name
+        for name, ok in (
+            (_ENV_COST_BUDGET_TOKENS, tokens_ok),
+            (_ENV_COST_BUDGET_USD, usd_ok),
+            (_ENV_COST_USD_PER_1K, per_1k_ok),
+        )
+        if not ok
+    )
     budget = _current_budget()
     # C8（2026-10-05 系统审查 P0）：字段读改写整体入锁——专家池 worker 经
     # attach_budget 与任务线程共享同一 BudgetSnapshot 实例，无锁并发
@@ -153,28 +225,41 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         budget.consumed_usd += consumed_delta_usd
         # AM1：cap 覆盖优先于 env（E6 预算匹配臂按臂设 cap，--parallel 下
         # env 全局值会串扰邻基线——X1 检出优先线程局部 override 同因）。
-        budget.token_limit = budget.token_cap_override if budget.token_cap_override > 0 else _budget_tokens_limit()
-        budget.usd_limit = _budget_usd_limit()
+        budget.token_limit = budget.token_cap_override if budget.token_cap_override > 0 else int(tokens_raw)
+        budget.usd_limit = float(usd_raw)
+        per_1k = float(per_1k_raw)
 
         exceeded = False
         if budget.token_limit > 0 and budget.consumed_tokens >= budget.token_limit:
             exceeded = True
-        if budget.usd_limit > 0 and _usd_per_1k() > 0 and budget.consumed_usd >= budget.usd_limit:
+        if budget.usd_limit > 0 and per_1k > 0 and budget.consumed_usd >= budget.usd_limit:
             exceeded = True
+        # G 轮：配置错误时上限值不可信，**不得**按"不限"放行——与真实超限同样
+        # 阻断，但计数分列（budget_misconfigured_events），避免把拼错环境变量
+        # 读成"任务烧爆预算"。
+        blocked = exceeded or bool(misconfigured)
         # O35（2026-09-30 全面审查 P2）：tasks_capped 语义修正——此前超限后的
         # **每一次** check_budget 调用都 +1（含被前置守卫拦下的后续调用），
         # 该字段名是"被封顶的任务数"，实际计的是"被拦下的 LLM 调用数"
         # （一次封顶任务可累计数十）。现只在 False→True 转跃沿 +1：
         # budget_exceeded_events 保持逐事件计数（语义本就是事件数），两者解耦。
-        budget.exceeded = exceeded
+        budget.exceeded = blocked
         if exceeded:
             _process_stats["budget_exceeded_events"] += 1
+        if misconfigured:
+            _process_stats["budget_misconfigured_events"] += 1
+        if blocked:
             if not _was_exceeded:
                 _process_stats["tasks_capped"] += 1
             _process_stats["total_consumed"] += consumed_delta_tokens
         elif consumed_delta_tokens:
             _process_stats["total_consumed"] += consumed_delta_tokens
-    if exceeded and not _was_exceeded:
+    if misconfigured and not _was_exceeded:
+        logger.error(
+            "5.4 预算守卫：配置项 %s 不可用，按 fail-closed 停止后续 LLM 调用（非真实超限）",
+            ", ".join(misconfigured),
+        )
+    elif exceeded and not _was_exceeded:
         logger.warning(
             "5.4 任务级预算超限：消耗 %d tokens / $%.4f >= 上限（tokens=%d, usd=%.4f），停止后续 LLM 调用",
             budget.consumed_tokens,
@@ -182,7 +267,22 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
             budget.token_limit,
             budget.usd_limit,
         )
-    return not exceeded
+    if (
+        not misconfigured
+        and not exceeded
+        and budget.token_limit <= 0
+        and budget.usd_limit <= 0
+        and "no_limit" not in _no_limit_warned
+    ):
+        # 守卫开着却没配任何上限 = 不设闸（历史默认口径，不改行为），但必须
+        # 让操作者在日志里看见，而不是误以为"预算已受控"。
+        _no_limit_warned.add("no_limit")
+        logger.warning(
+            "5.4 预算守卫已启用但无任何有效上限（%s / %s 均未配置或为 0）：等同不设闸",
+            _ENV_COST_BUDGET_TOKENS,
+            _ENV_COST_BUDGET_USD,
+        )
+    return not blocked
 
 
 def record_usage_and_check(input_tokens: int, output_tokens: int, usd_cost: float = 0.0) -> bool:

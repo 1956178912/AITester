@@ -110,6 +110,32 @@ class TestFormGateAndExpressionClause:
         assert clause_reject_reason("result == n * 2", "postcondition", ["n"]) is None
         assert clause_reject_reason("result == n * 2", "postcondition") == "unknown_name"
 
+    @pytest.mark.parametrize("clause", ["0,", "1 == 1,", "x > 0,", "result > 0,"])
+    def test_trailing_comma_hits_late_parse_gate(self, clause: str):
+        """尾随逗号使子句成为 1-元组（恒真），拼成 `assert <tuple>` 缺 msg → SyntaxError。
+
+        这是 `_clause_reject_reason_for_known` 的**晚期 parse 门**（eval 解析成功
+        之后、拼 `assert` 语句再解析一次）唯一已知的确定性触发形态：形态门放行、
+        白名单门放行、`mode="eval"` 也成功（逗号让它成为合法的元组表达式），
+        只有语句级二次解析才失败。
+
+        归因口径（H5，2026-10-16）：本门返回 **`unsupported_syntax`** 而非
+        `parse_error`——按 SPEC_REJECT_REASONS 的文档，前者正是"可解析为表达式但
+        编译产物是恒真断言"，与 lambda / 海象同族；后者意味着"语法错"，而此处
+        形态门已判 True。改正前该标签冲撞违反 test_spec_expr_property 不变式 2。
+
+        覆盖率意义：本门此前只能被 hypothesis 模糊测试碰运气命中，是修掉 config
+        档位预设 env 泄漏（H1）之后**唯一残留**的行覆盖漂移源——连跑两次 CI 口径
+        全量，逐行比对只差这 2 行（总行覆盖 92.9432% / 92.9314%，0.012pp）。补此
+        确定性用例后两次全量逐行比对**零漂移**（15739/16934 两次逐位相同）。
+        """
+        assert clause_reject_reason(clause, "postcondition") == "unsupported_syntax", clause
+
+    def test_late_parse_gate_is_distinguishable_from_unknown_name_gate(self):
+        """显式绑定后仍走晚期 parse 门——排除"其实是被未绑定名门拒掉"的误读。"""
+        assert clause_reject_reason("n >= 0,", "postcondition") == "unknown_name"
+        assert clause_reject_reason("n >= 0,", "postcondition", ["n"]) == "unsupported_syntax"
+
 
 class TestComprehensionTargetNames:
     def test_single_name_target(self):

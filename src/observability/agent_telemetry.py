@@ -31,8 +31,9 @@ G4 AgentTelemetry 故障检测基准（失败签名 → 已知模式匹配器，
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ def mast_top_category_of(mast_class: str | None) -> str | None:
 
 def agent_telemetry_enabled() -> bool:
     """AgentTelemetry 开关（AGENT_TELEMETRY_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("AGENT_TELEMETRY_ENABLE", "false").lower() == "true"
+    return env_flag("AGENT_TELEMETRY_ENABLE")
 
 
 def _pattern_llm_empty_response_loop(record: dict[str, Any]) -> bool:

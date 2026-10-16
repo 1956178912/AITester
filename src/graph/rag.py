@@ -234,7 +234,7 @@ _RAG_CONDITIONAL_ENABLE_ENV = "RAG_CONDITIONAL_ENABLE"
 
 def rag_relevance_threshold_enabled() -> bool:
     """P2 RAG 相关性阈值过滤开关（默认 false，历史口径零变化）。"""
-    return _os.getenv(_RAG_RELEVANCE_THRESHOLD_ENABLE_ENV, "false").lower() == "true"
+    return env_flag(_RAG_RELEVANCE_THRESHOLD_ENABLE_ENV)
 
 
 def rag_relevance_threshold() -> float:
@@ -254,7 +254,7 @@ def rag_conditional_enabled() -> bool:
     门控（where 过滤已保证同类目，本开关仅在注入侧做二次确认，避免
     跨类目案例被误注入）。
     """
-    return _os.getenv(_RAG_CONDITIONAL_ENABLE_ENV, "false").lower() == "true"
+    return env_flag(_RAG_CONDITIONAL_ENABLE_ENV)
 
 
 def filter_by_relevance(

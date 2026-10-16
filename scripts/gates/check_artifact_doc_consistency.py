@@ -316,29 +316,82 @@ def _rel(path: Path) -> str:
 _STATUS_REGISTER = _REPO_ROOT / "docs" / "PROJECT_STATUS_REGISTER.md"
 _COVERAGE_XML = _REPO_ROOT / "coverage.xml"
 
+# 对账锚点：登记册 §1 表格的覆盖率声明行。锚定表头文字而非"全文任意位置出现过
+# 该数字"——旧口径下正文任何角落（含历史勘误、别的指标）凑巧出现 92.93 就算对账通过。
+_REGISTER_DECL: dict[str, re.Pattern[str]] = {
+    "行": re.compile(r"总行覆盖\s*\|\s*\*\*(\d{1,3}(?:\.\d{1,2})?)\s*%\*\*"),
+    "分支": re.compile(r"总分支覆盖\s*\|\s*\*\*(\d{1,3}(?:\.\d{1,2})?)\s*%\*\*"),
+}
+# 对账容差（百分点）。**实测**依据（2026-10-16，同一份源码连跑多次全量）：
+#   - 分支：5460/6236=87.56% 与 5459/6236=87.54% —— 单分支抖动 0.016pp；
+#   - 行：`graph/nodes.py` 两次分别 0.7776 与 0.7862（约 6 行），对**总行覆盖**
+#     的贡献约 6/16926 = 0.035pp。
+# 即：本仓库的覆盖率测量本身带 ≈0.05pp 量级的非确定性（跨平台差异同量级或更大），
+# 逐位相等**不可满足**，真跑起来只会把"常年假绿"换成"随机真红"（flaky 门禁的结局
+# 是被忽略或加 continue-on-error）。故取观测抖动上界的约 2 倍 = ±0.10pp。
+# 容差不等于放松：防回退由 coverage_ratchet.py 的只升水位独立把守；本检查的职责是
+# "文档不得实质性错报工件"——要骗过 ±0.10pp，谎报幅度必须小于测量噪声，那种谎报
+# 既不划算也改变不了任何结论（声称 95% 而实测 92.9% 依然立刻转红）。
+_REGISTER_TOLERANCE_PP = 0.10
 
-def check_status_register() -> list[str]:
-    """状态登记册的覆盖率声明必须等于 `coverage.xml` 实测（防文档自我美化）。
 
-    缺文件时返回空清单（CI 中无 coverage 产物的作业同样适用），不阻断。
+def check_status_register(*, require_coverage: bool = False) -> tuple[list[str], bool]:
+    """状态登记册 §1 的覆盖率声明必须与 `coverage.xml` 实测相符（防文档自我美化）。
+
+    返回 ``(问题清单, 是否真正对过账)``。第二个返回位是 G6（2026-10-16）加的：
+    此前本函数在 coverage.xml 缺席时返回空清单，调用方一律打印 `[OK]`——而 CI 里
+    本步骤排在生成 coverage.xml 的测试步骤之前约 90 行，产物**必然不存在**，
+    于是"登记册数字过期即 CI 红"的声明（本册开头自述）长期是一句空话：这道对账
+    从未在 CI 真正运行过。现在缺席与通过可区分，且 `--require-coverage` 下缺席
+    即计为问题（CI 覆盖率集群用法）。
+
+    同日修正对账口径：从"实测值的两位小数字符串出现在全文任意位置"改成
+    "锚定 §1 声明行 + `_REGISTER_TOLERANCE_PP` 容差"。旧口径同时犯两个错——
+    漏判（全文凑巧出现即通过）与不可满足（分支覆盖逐次抖动 ±1 分支），
+    后者会让 CI 随机转红；声明行缺失一律计为问题（缺席 ≠ 通过）。
     """
-    if not _STATUS_REGISTER.is_file() or not _COVERAGE_XML.is_file():
-        return []
+    if not _STATUS_REGISTER.is_file():
+        # 登记册入库、与 coverage 产物无关，缺席属仓库级问题 → 一律计为问题
+        return ([f"{_rel(_STATUS_REGISTER)}：文件缺失，覆盖率声明无从对账"], False)
+    if not _COVERAGE_XML.is_file():
+        if require_coverage:
+            return (
+                [
+                    f"{_rel(_COVERAGE_XML)} 缺席：--require-coverage 下覆盖率对账不得跳过"
+                    "（本步骤必须排在生成 coverage.xml 的测试步骤之后）"
+                ],
+                False,
+            )
+        return ([], False)
     import xml.etree.ElementTree as _ET
 
     try:
         tree = _ET.parse(_COVERAGE_XML).getroot()
-        line = f"{float(tree.get('line-rate')) * 100:.2f}"
-        branch = f"{float(tree.get('branch-rate')) * 100:.2f}"
-    except Exception as exc:  # pragma: no cover - 工件损坏时给出明确告警
-        return [f"coverage.xml 解析失败（{type(exc).__name__}）——状态登记册无法对账"]
+        measured = {
+            "行": float(tree.get("line-rate")) * 100,
+            "分支": float(tree.get("branch-rate")) * 100,
+        }
+    except Exception as exc:  # pragma: no cover - 工件损坏/属性缺失时给出明确告警
+        return ([f"coverage.xml 解析失败（{type(exc).__name__}）——状态登记册无法对账"], False)
     text = _STATUS_REGISTER.read_text(encoding="utf-8")
     problems: list[str] = []
-    if line not in text:
-        problems.append(f"{_rel(_STATUS_REGISTER)}：未声明当前行覆盖 {line}%（实测值）")
-    if branch not in text:
-        problems.append(f"{_rel(_STATUS_REGISTER)}：未声明当前分支覆盖 {branch}%（实测值）")
-    return problems
+    for label, pattern in _REGISTER_DECL.items():
+        match = pattern.search(text)
+        if not match:
+            problems.append(
+                f"{_rel(_STATUS_REGISTER)}：§1 未找到总{label}覆盖声明行"
+                f"（期望 `| 总{label}覆盖 | **NN.NN%** |`）——无从对账，按不通过处置"
+            )
+            continue
+        declared = float(match.group(1))
+        delta = declared - measured[label]
+        if abs(delta) > _REGISTER_TOLERANCE_PP:
+            problems.append(
+                f"{_rel(_STATUS_REGISTER)}：§1 声明总{label}覆盖 {declared:.2f}%，"
+                f"实测 {measured[label]:.2f}%（偏差 {delta:+.2f}pp，容差 ±{_REGISTER_TOLERANCE_PP:.2f}pp）"
+                "——按 coverage.xml 刷新 §1"
+            )
+    return problems, True
 
 
 def check_t10_docs(facts: dict[str, int]) -> list[str]:
@@ -382,6 +435,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-t10",
         action="store_true",
         help="跳过 T-10（通过率混淆）文档对账（调试用）",
+    )
+    parser.add_argument(
+        "--require-coverage",
+        action="store_true",
+        help="coverage.xml 缺席即失败（CI 覆盖率集群用法；默认缺席只报 SKIP，不计通过）",
     )
     args = parser.parse_args(argv)
 
@@ -444,15 +502,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"    ✗ {item}")
                 failures.append(Mismatch(str(_T10_ANCHOR_DOCS[0]), "—", "t10_strict_caliber", "—", "—", item))
 
-    # ─── 状态登记册：覆盖率声明必须等于 coverage.xml 实测 ──────────────────
-    register_problems = check_status_register()
+    # ─── 状态登记册：覆盖率声明必须与 coverage.xml 实测相符（±容差） ────────
+    register_problems, register_checked = check_status_register(require_coverage=args.require_coverage)
     if register_problems:
         print(f"  [FAIL] 状态登记册覆盖率对账（{len(register_problems)} 项）")
         for item in register_problems:
             print(f"    ✗ {item}")
             failures.append(Mismatch(str(_STATUS_REGISTER), "—", "status_register_coverage", "—", "—", item))
+    elif register_checked:
+        print(
+            f"  [OK] 状态登记册覆盖率对账（§1 行/分支声明与 coverage.xml 实测相符，容差 ±{_REGISTER_TOLERANCE_PP:.2f}pp）"
+        )
     else:
-        print("  [OK] 状态登记册覆盖率对账（无 coverage.xml 时跳过）")
+        # G6：缺席 ≠ 通过。此前这里固定打印 "[OK] …（无 coverage.xml 时跳过）"，
+        # 把"根本没对过账"读作"对账通过"。
+        print("  [SKIP] 状态登记册覆盖率对账：coverage.xml 缺席，本次未对账（不得读作通过）")
 
     if failures:
         print(f"\n✗ 报告→工件对账失败：{len(failures)} 项不一致（文档数字必须来自工件再生成，不得手工复制）")

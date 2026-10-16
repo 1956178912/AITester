@@ -7,13 +7,19 @@ update dict / 节点内 state 写点中**未声明的键会被 LangGraph 静默�
 恒 None。本脚本做静态差集审计，CI 阻断：
 
 1. 从 src/graph/state.py 运行时导入 AITesterState.__annotations__ 键集；
-2. AST 扫描 src/graph/*.py 的：
+2. AST 扫描 `src/` 全树（rglob，新增模块自动纳管）：
    - ``state["k"] = ...`` 下标赋值（含 cast 到 dict 的别名变量，按
      "变量名含 state"启发式识别）——k 必须已声明或以 "_" 开头
      （模块内临时键约定，state.py 注释口径）；
    - ``state.get("k")`` / ``state["k"]`` 读取——k 必须已声明（读取未声明
      键恒 None，正是"写不进 + 读不到"静默链的读侧）；
 3. 未声明键输出到 stdout，exit 1。
+
+G3（2026-10-16）扩容理由：旧扫描面是硬编码的两个文件（nodes.py / workflow.py），
+与本 docstring 自称的 "src/graph/*.py" 不符；而当年真实存在的断链在**图外**——
+observability/failure_taxonomy.py 读顶层 ``logic_degraded``，写侧却只写进
+``test_plan`` 内部且该键从未声明，门禁因此对着缺陷全绿。扫描面过窄本身就是一种
+假绿，故改为递归 glob（实测 132 文件 0.15s，零存量违规）。
 
 豁免口径（--print 键清单随附）：
 - 下划线前缀键：节点内临时传递约定（如 _1_3_contract_missing），
@@ -36,8 +42,35 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-SCAN_FILES = ("src/graph/nodes.py", "src/graph/workflow.py")
+# G3（2026-10-16）扩容：扫描面从硬编码两个文件（nodes.py / workflow.py）扩到
+# **整个 src/ 树**。理由：状态的读侧散落在图外——本轮发现的断链正是
+# src/observability/failure_taxonomy.py 读顶层 `logic_degraded`（写侧只写进
+# test_plan 内部、键也从未在 AITesterState 声明），旧扫描面不覆盖该文件，
+# 于是门禁对着真实缺陷全绿（旧 docstring 还自称扫 src/graph/*.py，与实际不符）。
+# 实测扩容成本：132 个文件 0.15s、零存量违规（2026-10-16）。
+# 误报口径：宿主变量名启发式（见 _STATE_VAR_HINTS）可能命中与 LangGraph 通道
+# 无关的同名局部 dict——此时按"改名或改用下划线前缀临时键"处置，不放宽容差。
+SCAN_ROOTS = ("src",)
 _STATE_VAR_HINTS = ("state", "_state")  # 变量名启发式：state / cast 后别名
+
+
+def scan_files() -> list[Path]:
+    """实际扫描面：SCAN_ROOTS 下全部 .py（glob 递归，新增模块自动纳管）。"""
+    found: list[Path] = []
+    for rel_root in SCAN_ROOTS:
+        root = PROJECT_ROOT / rel_root
+        if root.is_dir():
+            found.extend(sorted(root.rglob("*.py")))
+    return found
+
+
+def _rel(path: str | Path) -> str:
+    """显示名：仓库内用相对路径，仓库外（测试 tmp_path）退化为原样。"""
+    p = Path(path)
+    try:
+        return str(p.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(p)
 
 
 def declared_state_keys() -> set[str]:
@@ -107,21 +140,22 @@ def main() -> None:
         print(f"AITesterState 声明键 {len(declared)} 个：")
         for k in sorted(declared):
             print(f"  {k}")
+        files = scan_files()
+        print(f"扫描面：{', '.join(SCAN_ROOTS)}/ 全树递归，共 {len(files)} 个 .py 文件")
         return
 
     violations: list[tuple[str, int, str, str]] = []
-    for rel in SCAN_FILES:
-        p = PROJECT_ROOT / rel
-        if p.exists():
-            violations.extend(_audit_file(p, declared))
+    files = scan_files()
+    for p in files:
+        violations.extend(_audit_file(p, declared))
 
     if not violations:
-        print(f"状态通道契约审计通过：{', '.join(SCAN_FILES)} 无未声明键读写")
+        print(f"状态通道契约审计通过：{len(files)} 个文件（{', '.join(SCAN_ROOTS)}/ 全树）无未声明键读写")
         return
 
     print(f"❌ 状态通道契约违规 {len(violations)} 处（未声明键会被 LangGraph 静默丢弃）：")
     for f, lineno, kind, key in violations:
-        print(f'  {f}:{lineno} [{kind}] "{key}"')
+        print(f'  {_rel(f)}:{lineno} [{kind}] "{key}"')
     print(
         "\n修复口径：声明键加入 src/graph/state.py AITesterState（含 create_initial_state 默认值）；"
         "\n节点内临时传递键改用下划线前缀（_xxx）约定。"

@@ -49,6 +49,21 @@ class AITesterState(TypedDict, total=False):
         - logic_analysis: 输入域/输出域/前置条件/后置条件/边界情况
         - test_cases: 测试用例列表
 
+    logic_degraded (bool):
+        逻辑驱动路径**实际未发生**的顶层观测标记（G3，2026-10-16）：Planner
+        输出结构校验失败 / LLM 失败走默认计划（M10）/ logic_analysis schema
+        校验有 findings，三者之一命中即 True，由 _planner_node 从 test_plan
+        抬升写入（此前只存在于 test_plan 内部，读侧读顶层键恒 None）。
+        纯观测，不参与路由。缺省 False。
+
+    m10_leaf_fallback (bool):
+        M10 降级的**归因分离**标记（I2，2026-10-16；ADR-0032）：logic_degraded
+        为 True 时，区分"提取器叶子回退误诊"（True）与"LLM 真未输出
+        logic_analysis"（False）。由 planner.plan 写进 test_plan 内部，
+        _planner_node 抬升到顶层（与 logic_degraded 同一缺陷形态：只写进
+        test_plan → 实验层从投影行读不到 → ADR-0032 声称的可分离性不可机读）。
+        纯观测，不参与路由。缺省 False。
+
     ── Generator 输出 ────────────────────────────────────────
     generated_test (str | None):
         GeneratorAgent 生成的 pytest 测试代码字符串。
@@ -145,6 +160,13 @@ class AITesterState(TypedDict, total=False):
     target_code: str
     # Planner 输出
     test_plan: dict[str, Any] | None
+    # G3（2026-10-16）：逻辑驱动降级的**顶层**观测标记（此前只活在 test_plan
+    # 内部，读侧 failure_taxonomy 读顶层键恒 None → 归因分支死路）。纯观测。
+    logic_degraded: bool
+    # I2（2026-10-16，ADR-0032）：M10 降级归因分离标记（提取器叶子回退误诊
+    # vs LLM 真未输出）。与 logic_degraded 同一缺陷形态——只写进 test_plan
+    # 内部则实验层读不到，ADR-0032 的"可分离性"不可机读。纯观测。
+    m10_leaf_fallback: bool
     # Generator 输出
     generated_test: str | None
     # Executor 输出
@@ -650,6 +672,12 @@ def create_initial_state(
         original_target_code=target_code,
         # Planner 输出
         test_plan=None,
+        # G3（2026-10-16）：逻辑驱动降级顶层标记（由 _planner_node 按 test_plan
+        # 内的同名标记抬升；未跑 Planner 的臂恒 False）
+        logic_degraded=False,
+        # I2（2026-10-16，ADR-0032）：M10 归因分离标记（同上抬升口径；
+        # 未跑 Planner 或未命中叶子回退时恒 False）
+        m10_leaf_fallback=False,
         # Generator 输出
         generated_test=None,
         # Executor 输出
