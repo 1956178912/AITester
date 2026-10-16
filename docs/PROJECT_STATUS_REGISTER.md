@@ -40,7 +40,7 @@
 | 总行覆盖 | **92.96%**（15748/16941；**连跑两次逐行比对零漂移**，见 §4 已收口条目；ratchet 水位 92.90，余量 +0.06pp） | `make test-cov` + `scripts/gates/coverage_ratchet.py --check` |
 | 总分支覆盖 | **87.62%**（5464/6236；**连跑两次逐分支比对零漂移**〔3118 个分支点全同〕；水位 87.50，余量 +0.12pp） | 同上（`--cov-branch`） |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
-| 门禁总数 | **17 道全绿**（14 硬门禁 + 引用可追溯性 + 覆盖率棘轮 + 分支硬下限） | `make gates`；逐项见 §3 |
+| 门禁总数 | **24 道全绿**（口径 = `ci.yml` 主工作流**逐提交阻断的门禁检查步骤**，不含测试执行本身；可枚举复算）【2026-10-16 勘误：原记"17 道（14 硬门禁 + 引用可追溯性 + 覆盖率棘轮 + 分支硬下限）"——"14"无出处、citations 在 CI 中实为非阻断周检、与独立评审/投稿骨架的"24"口径分裂；`scripts/gates/` 目录现为 25 脚本（CI 接入 23 项），主工作流阻断检查步骤实为 24，已按实测收口】 | `make gates`；逐项见 §3 |
 | 静态检查 | ruff 全绿 / 702 文件已格式化 / mypy 0 错（133 源文件） | `ruff check .`、`ruff format --check .`、`mypy src/ config.py` |
 | 构建基线 | `BASELINE.yaml` 与实测逐位对账（含守卫 `TestBaselineNumbersConsistency`） | `pytest tests/test_2026_10_10_optimization_batch.py -q` |
 
