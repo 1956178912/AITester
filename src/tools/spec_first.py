@@ -30,6 +30,7 @@ from __future__ import annotations
 import ast
 import logging
 import os
+import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,21 @@ _ENV_SPEC_MODE = "DETECTION_SPEC_MODE"
 # 合法取值（其余值按 "off" 处理并记 warning——保守：不认识的模式不改行为）
 _SPEC_MODES = ("off", "replace")
 
+# A-10（2026-10-16）：线程局部覆盖载体（与 config._DETECTION_FIRST_THREAD_LOCAL
+# 同模式）。df_spec 臂（plain_llm_df_spec）在 --parallel 下与邻线程其它臂并发
+# 执行——进程级 os.environ 无法区分"本线程在跑 df_spec 臂"，会串扰邻线程
+# （X1 df 臂同源教训：run_plain_llm_df_baseline 用线程覆盖隔离检出优先开关）。
+_SPEC_MODE_THREAD_LOCAL = threading.local()
+
+
+def set_spec_mode_thread_override(value: str | None) -> None:
+    """设置/清除当前线程的规格模式覆盖（None = 回落 env 开关）。
+
+    供 run_benchmark 的 plain_llm_df_spec 基线在自身 invoke 窗口内强制
+    "replace"；finally 中置 None 恢复，防线程池复用残留。
+    """
+    _SPEC_MODE_THREAD_LOCAL.override = value
+
 
 def detection_spec_mode() -> str:
     """规格优先模式开关（DETECTION_SPEC_MODE：off=历史口径 / replace=规约文档替代实现代码）。
@@ -45,7 +61,16 @@ def detection_spec_mode() -> str:
     默认 "off"：Generator prompt 与历史逐字节一致。实验层显式设
     "replace" 启用 P0-A-2 对照臂（建议与 plain_llm_df 臂同基准跑
     3 种子，判据 McNemar p<0.01 且 δ≥+10pp）。
+
+    读取口径：线程局部覆盖（set_spec_mode_thread_override，A-10 df_spec
+    臂用）优先于 env；覆盖值为非法模式串时记 warning 并回落 env 口径。
     """
+    _override = getattr(_SPEC_MODE_THREAD_LOCAL, "override", None)
+    if _override is not None:
+        raw_override = str(_override).strip().lower()
+        if raw_override in _SPEC_MODES:
+            return raw_override
+        logger.warning("DETECTION_SPEC_MODE 线程覆盖值 %r 未识别（可选：off/replace），回落 env 口径", _override)
     raw = (os.getenv(_ENV_SPEC_MODE, "off") or "off").strip().lower()
     if raw not in _SPEC_MODES:
         logger.warning("DETECTION_SPEC_MODE=%r 未识别（可选：off/replace），按 off 处理", raw)
@@ -230,5 +255,6 @@ def build_spec_replace_section(
 __all__ = [
     "build_spec_replace_section",
     "detection_spec_mode",
+    "set_spec_mode_thread_override",
     "sole_top_level_function_name",
 ]

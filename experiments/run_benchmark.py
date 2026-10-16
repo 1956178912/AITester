@@ -8,6 +8,10 @@
     - plain_llm_df : plain_llm + 检出优先协议（X1/2026-10-05 审查 P0-3，
                      归因基线：隔离"检出优先提示词效应"与"多智能体编排
                      效应"；显式 --baselines 指定，不进默认列表）
+    - plain_llm_df_spec : plain_llm_df + 规格锚（A-10/2026-10-16 独立评审 P0：
+                     Generator prompt 的"目标代码"块被预计算规格锚文档替换
+                     ——specification-anchored 归因臂；显式 --baselines 指定，
+                     不进默认列表）
 
 支持的数据集（通过 dataset 参数指定）：
     - examples     : 内置示例数据集（InMemoryDataset，无需下载）
@@ -422,6 +426,89 @@ def run_plain_llm_df_baseline(
         _cfg.set_detection_first_thread_override(None)
 
 
+# ─── A-10（2026-10-16，独立评审 P0）：df_spec 臂的规格锚表 ────────────────────
+# 表由 experiments/build_spec_anchor_table.py 从 Planner LLM 缓存零 LLM 物化
+# （{function_name, logic_analysis} 计划子集，按 target_code 内容哈希索引）。
+# env DF_SPEC_ANCHOR_TABLE 可覆盖路径（测试/复跑用；已入 env 快照）；默认
+# 指向归档工件目录。表缺失/损坏 → 臂整体回落 df 口径（逐任务
+# spec_replace_applied=attempted_fallback，命中率可审计）。
+_DF_SPEC_ANCHOR_TABLE_DEFAULT = os.path.join(
+    PROJECT_ROOT, "experiments", "results", "emse_spec_anchor_20261016", "SPEC_ANCHOR_TABLE.json"
+)
+
+_SPEC_ANCHOR_TABLE_CACHE: dict[str, dict[str, dict[str, Any]] | None] = {}
+
+
+def _load_spec_anchor_table() -> dict[str, dict[str, Any]] | None:
+    """加载规格锚表 anchors 映射（缺失/损坏/形状不符 → None）。按解析路径进程内缓存。"""
+    raw = (os.environ.get("DF_SPEC_ANCHOR_TABLE") or "").strip()
+    path = raw or _DF_SPEC_ANCHOR_TABLE_DEFAULT
+    if path in _SPEC_ANCHOR_TABLE_CACHE:
+        return _SPEC_ANCHOR_TABLE_CACHE[path]
+    anchors: dict[str, dict[str, Any]] | None = None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and isinstance(data.get("anchors"), dict):
+            anchors = data["anchors"]
+    except (OSError, ValueError):
+        anchors = None
+    _SPEC_ANCHOR_TABLE_CACHE[path] = anchors
+    return anchors
+
+
+def _lookup_spec_anchor(state: AITesterState) -> dict[str, Any] | None:
+    """按 target_code 内容哈希（strip 后 sha256）查锚材料；未命中/表不可用 → None。"""
+    table = _load_spec_anchor_table()
+    if not table:
+        return None
+    source = str(state.get("target_code") or "").strip()
+    if not source:
+        return None
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    material = table.get(digest)
+    return material if isinstance(material, dict) else None
+
+
+def run_plain_llm_df_spec_baseline(state: AITesterState) -> dict[str, Any]:
+    """plain_llm_df + 规格锚（A-10/2026-10-16，独立评审 P0：P1 超越路径核心对照臂）。
+
+    三效应隔离链（每步只增一个变量）：
+        plain_llm → +检出优先协议 = plain_llm_df → +规格锚 = plain_llm_df_spec
+
+    实现（与 plain_llm_df 同构，唯一增量 = Generator prompt 侧规格替换）：
+    - 锚材料预载：state["spec_anchor"] ← 预计算锚表（Planner 计划子集；由
+      experiments/build_spec_anchor_table.py 从既有 LLM 缓存零 LLM 物化）。
+      未命中不写键 → 回落 df 口径，逐任务 spec_replace_applied=
+      "attempted_fallback" 可审计（命中率即"锚覆盖率"，分析层按该字段
+      过滤命中子集）。
+    - 线程级规格模式覆盖 set_spec_mode_thread_override("replace")（非
+      os.environ——--parallel 下不串扰邻线程其它臂；与 df 臂检出优先
+      线程覆盖同模式）；finally 恢复 None，防线程池复用残留。
+    - 渲染路径与 aitester replace 臂共用（build_spec_replace_section）。
+
+    运行要求：先跑 experiments/build_spec_anchor_table.py 生成/更新锚表；
+    结果解释必须与该次填充的锚表版本（SPEC_ANCHOR_TABLE.json + SHA256SUMS）
+    成套归档（"replace 是否实际生效"以 details[].spec_replace_applied 为准）。
+    """
+    import config as _cfg
+    from src.tools.spec_first import set_spec_mode_thread_override
+
+    anchor = _lookup_spec_anchor(state)
+    if anchor is not None:
+        state["spec_anchor"] = anchor
+    else:
+        logger.info("df_spec：任务 %s 无规格锚材料（回落 df 口径）", state.get("task_id", "?"))
+    graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
+    _cfg.set_detection_first_thread_override(True)
+    set_spec_mode_thread_override("replace")
+    try:
+        return graph.invoke(state)
+    finally:
+        set_spec_mode_thread_override(None)
+        _cfg.set_detection_first_thread_override(None)
+
+
 # 基线方法注册表
 BASELINE_REGISTRY: dict[str, callable] = {
     "aitester": run_aitester_baseline,
@@ -430,6 +517,9 @@ BASELINE_REGISTRY: dict[str, callable] = {
     # X1（2026-10-05 审查 P0-3）：检出优先归因基线（显式 --baselines 指定，
     # 不进默认列表——默认三基线口径不变，历史批次可比性保持）
     "plain_llm_df": run_plain_llm_df_baseline,
+    # A-10（2026-10-16 独立评审 P0）：检出优先 + 规格锚归因臂（同上口径，
+    # 显式 --baselines 指定；依赖锚表工件，见 run_plain_llm_df_spec_baseline）
+    "plain_llm_df_spec": run_plain_llm_df_spec_baseline,
 }
 
 
@@ -3452,6 +3542,10 @@ def run_benchmark(
         #    预设），但 mutation_score 数据的开关前提无法从工件证明。
         "DETECTION_SPEC_MODE",
         "ENABLE_MUTATION_SCORING",
+        # 2026-10-16（A-10 df_spec 臂·第八次同类缺口预防）：规格锚表路径入
+        # 快照——表内容决定 df_spec 臂的 prompt 材料，"用了哪版锚表"必须
+        # 能从工件 provenance 逐位证明（同 A1 首跑假阴性机制）。
+        "DF_SPEC_ANCHOR_TABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

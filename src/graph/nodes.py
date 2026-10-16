@@ -945,12 +945,19 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         # 入提示诱发"断言错误行为"的测试；项目 48.6% 全绿未检出同根因）。
         # 默认 off / minimal 消融档 / 无规约材料 → None，prompt 与历史逐字节
         # 一致（spec_first.build_spec_replace_section 保守返回空串）。
+        # A-10（2026-10-16）：锚材料选择——df_spec 臂预载 state["spec_anchor"]
+        # （预计算 Planner 计划子集 {function_name, logic_analysis}）时优先；
+        # 缺席/非法类型回落 test_plan（历史口径：其它臂从不写 spec_anchor，
+        # 行为逐字节不变）。
+        _spec_material: Any = state.get("spec_anchor")
+        if not isinstance(_spec_material, dict):
+            _spec_material = test_plan
         _spec_replace_section: str | None = None
         if not _ctx_minimal and _detection_spec_mode() == "replace":
             from src.tools.spec_first import build_spec_replace_section as _build_spec_replace
 
             _spec_replace_section = _build_spec_replace(
-                test_plan,
+                _spec_material,
                 state["target_code"],
                 module_name=state.get("module_name", ""),
                 # target_function 可缺席（state 可选字段）；spec_first 内按
