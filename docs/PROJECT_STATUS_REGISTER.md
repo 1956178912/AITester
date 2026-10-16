@@ -14,7 +14,7 @@
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **6580 passed / 5 skipped / 0 failed**（登记口径 = collected 6585 − skipped 5；全量实跑 645.62s） | `pytest tests/ -q -n 4 --dist loadfile` |
+| 全量测试 | **6612 passed / 5 skipped / 0 failed**（登记口径 = collected 6617 − skipped 5；全量实跑 534.61s） | `pytest tests/ -q -n 4 --dist loadfile` |
 | 总行覆盖 | **92.78%**（ratchet 水位 92.40，余量 +0.38pp） | `make test-cov` + `scripts/gates/coverage_ratchet.py --check` |
 | 总分支覆盖 | **87.29%**（水位 86.90，余量 +0.39pp） | 同上（`--cov-branch`） |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
@@ -33,8 +33,8 @@
 | B2 | 锁指纹重跑主批次（261 任务 × 3 臂） | **LLM 配额** | 同上；新批次须带 `model_fingerprint.pinned=true`（近 5 个批次已实测均为 true） | 关掉"头条批次 10/10 `git_dirty=true`、0/10 有指纹"这一复现性缺口 |
 | B3 | SWE-bench Lite 重跑 | **LLM 配额** | 配额闸已补（`AITESTER_BATCH_MAX_CALLS`）；`make preflight --strict` 会阻断未配置状态 | 把 `not_evaluated` 变成有效能力结论（当前严禁引用其 `pass_rate`） |
 | B4 | E7 人工复核 | **人力** | 协议已可执行（抽样框/五选一量表/双人独立/Cohen's κ）：`docs/HUMAN_ADJUDICATION_PROTOCOL.md`；**预注册口径 = `ceil(10%/层)` → 当前 72 行单层为 8 行**（"≥40 行"是优化记录里的建议口径，二者冲突已在协议文档登记） | 给 `detection_rate` 一个**人类外部校标**（构念效度从 `open` 转 `reduced`） |
-| B5 | Prompt Card + 哈希锁 | **需你确认文本** | detection-first 段落现内联于 `src/graph/nodes.py:540-547`、over-red 于 `:650-667`；7 个 JSON 契约调用点已由门禁固定（口径 A=7） | 满足 PROMPT-SE "instruction artifacts as first-class objects" 的复现要求 |
-| B6 | `success` 呈现层降级 | **口径变更（需你确认）** | 变更点明确：`experiments/visualize_results.py:94`（主图仍以 `passed` 为依据）、报告首表列序、`_m1_metrics.py` 的"与 passed 并行"表述 | 让"三指标并列"从文字落到图表（当前图表与声明不一致） |
+| B5 | Prompt Card + 哈希锁 | **清单/哈希锁已就绪；文本已呈交目检（2026-10-16）** | detection-first 段落现内联于 `src/graph/nodes.py:540-547`、over-red 于 `:650-667`；7 个 JSON 契约调用点已由门禁固定（口径 A=7） | 满足 PROMPT-SE "instruction artifacts as first-class objects" 的复现要求 |
+| B6 | `success` 呈现层降级 | ✅ **已执行（2026-10-16，8c2b655）** | 三指标落图表/表格/显著性基口径：主图四联（检出/假修复/成功率*/覆盖率）；表列 Detection/False-Fix/Repair 前置；显著性基口径 detection（旧批次回退 passed 并标注） | "三指标并列"从文字落到图表，图表与声明一致 |
 | B7 | 原始 LLM 响应归档 | **存储/合规决策** | 现状：`traces/*.trace.jsonl` 只存结构化事件，**不含原始响应**（故无法量化单引号 JSON 发生率，也无法完整离线重放生成） | 提升 Open Science 的 Complete/Exercisable 等级 |
 
 ## 3. 已完成事项（按主题，含验证入口）
@@ -72,7 +72,7 @@
 
 | 分级 | 缺口 | 说明 |
 |---|---|---|
-| **建议做** | B5 Prompt Card、B6 success 降级 | 纯文档/呈现层，不需要配额；直接影响投稿可判性 |
+| **建议做** | B5 文本目检（清单/哈希锁已就绪，2026-10-16 呈交） | B6 已执行（8c2b655）；A-10 df_spec 臂已落地（6ddd1ca）；A-11 冻结 ADR-0034 |
 | **可做** | `graph/nodes.py` 155 行、`executor_repo.py` 101 行、`orchestration_search.py` 74 行 | 均属"配置门控装配/长链"，单模块约 30–50 例的成本；覆盖率已 +0.40/+0.37pp 余量，边际收益递减 |
 | **低优先** | `agents/debugger.py` 76 行 | LLM 调用链，需 mock 编排，测试价值低于其维护成本 |
 | **需外部输入** | Scholarship 对话表（5–8 篇 anchor 文献） | 需一手核验的书目/DOI；未核验不得写入参考文献 |
