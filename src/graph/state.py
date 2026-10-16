@@ -448,6 +448,12 @@ class AITesterState(TypedDict, total=False):
     # 供实验层逐任务审计"replace 是否真正注入了规约文档"，与 R1c 确定性
     # oracle 执行注入（spec_oracle_injected，SPEC_ORACLE_EXEC_ENABLE）解耦。
     spec_replace_applied: str | None
+    # A-10（2026-10-16）：df_spec 臂（plain_llm_df_spec）预载的规格锚材料
+    # （Planner 计划子集 {function_name, logic_analysis}，来自预计算锚表
+    # SPEC_ANCHOR_TABLE.json）。仅该臂写入；_generator_node 在
+    # DETECTION_SPEC_MODE=replace 时优先以其渲染替换段（缺席回落
+    # test_plan，历史口径零变化——其它臂从不写本键）。
+    spec_anchor: dict[str, Any] | None
     # 空计划短路标记（EMPTY_PLAN_SHORTCUT_ENABLE 默认关时恒 False；开启且
     # Planner 产出空计划 test_cases=[] 时由 _generator_node 写入 True，供实验层
     # 统计"短路省了多少次 LLM 调用"，纯观测不改变路由 / 主终点口径）。
@@ -781,6 +787,9 @@ def create_initial_state(
         # 默认 off，历史口径零变化；replace 时 _generator_node 写
         # attempted_replaced / attempted_fallback）
         spec_replace_applied=None,
+        # A-10（2026-10-16）：规格锚材料默认 None（仅 df_spec 臂写入；
+        # 其它臂恒 None，_generator_node 回落 test_plan，历史口径零变化）
+        spec_anchor=None,
         # 空计划短路默认 False（EMPTY_PLAN_SHORTCUT_ENABLE 默认关，历史口径）
         empty_plan_shortcut=False,
         rogue_findings=None,
