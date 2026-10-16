@@ -46,10 +46,10 @@ from __future__ import annotations
 import ast
 import difflib
 import logging
-import os
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +63,12 @@ _GOLD_INJECTION_ENV = "FL_GOLD_INJECTION_ENABLE"
 
 def fault_localizer_enabled() -> bool:
     """修复引擎第一阶段开关（默认开；显式 false 退回纯谱系消融口径）。"""
-    return os.getenv(_ENV, "true").lower() in ("true", "1", "on")
+    return env_flag(_ENV, True)
 
 
 def gold_injection_enabled() -> bool:
     """反事实臂开关（默认关）——开启时定位用 gold 函数构造，跳过 LLM。"""
-    return os.getenv(_GOLD_INJECTION_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_GOLD_INJECTION_ENV)
 
 
 def build_gold_injection_localization(target_code: str, gold_fixed_code: str) -> dict[str, Any] | None:

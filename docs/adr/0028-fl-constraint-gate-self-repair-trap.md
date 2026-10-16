@@ -49,7 +49,11 @@ Lifetime Trace 作 Debugger 拆分批设计输入、⑤PatchDiff 式差分行为
      （如强制切 ORACLE_CONTEXT_TIER=minimal 重生成）刻意不做，
      待 A/B 数据与预注册判据。
 3. **④Frame Lifetime Trace 设计输入**：`docs/design/frame_lifetime_trace.md`
-   （ADI FSE 2026 对齐；63.8% 锚点已核验，报告其余数字标 [未核验]；
+   （ADI = Xiang, Xu, Chu, Tian, Zhang，*Empowering Autonomous Debugging Agents
+   with Efficient Dynamic Analysis*，PACMSE 3(FSE) FSE0317，DOI 10.1145/3797126，
+   arXiv:2604.24212；2026-10-16 第十九轮一手核验：63.8% SWE-bench Verified
+   @ $1.28/task（Claude-Sonnet-3.7）、插入 SOTA agent +6.2~18.5% 均与摘要
+   逐位吻合——原 [未核验] 标记全部关闭；
    激活门槛 = Debugger 拆分批立项时评审，不预埋开关——ADR-0003）。
 4. **②回收（AF 纪律）**：报告 P1-5"test-file-path 冲突检测"在 repo
    模式**已覆盖**——M2 测试文件保护（2026-09-29，`_TEST_PATH_RE`

@@ -24,13 +24,14 @@ arXiv:2607.23002 的预注册实验口径一致。
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+from src.utils.atomic_io import atomic_write_json
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -197,7 +198,7 @@ def main() -> int:
         records.append(run_task(task, rounds=args.rounds, timeout=args.timeout, out_dir=out_dir))
 
     summary_path = out_dir / "ams_demo_summary.json"
-    summary_path.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(summary_path, records, indent=2, mode=0o644)
 
     lines = ["# 对抗式变异循环演示结果\n", f"- 任务数：{len(records)}；轮数：{args.rounds}\n"]
     lines.append("| 任务 | 初始 MTR | 初始 MDR | 累计盲区 | 最终盲区 | 判定 |")

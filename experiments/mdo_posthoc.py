@@ -30,6 +30,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_json
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 logger = logging.getLogger(__name__)
@@ -182,10 +184,7 @@ def main() -> int:
 
     summary = _summarize(rows_out)
     out_json = batch_path.with_suffix(".mdo.json")
-    out_json.write_text(
-        json.dumps({"batch": str(batch_path), "summary": summary, "rows": rows_out}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    atomic_write_json(out_json, {"batch": str(batch_path), "summary": summary, "rows": rows_out}, indent=2, mode=0o644)
 
     lines: list[str] = []
     lines.append("# 批后 MDO 报告（政策无关变异判别力度量）\n")

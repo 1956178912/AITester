@@ -27,6 +27,7 @@ from collections.abc import Callable
 from typing import Any
 
 from config import RAG_COLLECTION_NAME, RAG_PERSIST_PATH, RAG_TTL_SECONDS
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -353,7 +354,7 @@ _RAG_KEYWORD_FALLBACK_MAX_RESULTS_ENV = "RAG_KEYWORD_FALLBACK_MAX_RESULTS"
 
 def _keyword_fallback_enabled() -> bool:
     """关键词兜底开关（RAG_KEYWORD_FALLBACK_ENABLE，默认 false 历史口径）。"""
-    return os.getenv(_RAG_KEYWORD_FALLBACK_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_RAG_KEYWORD_FALLBACK_ENV)
 
 
 def _keyword_fallback_max_results() -> int:

@@ -268,3 +268,28 @@ p<0.10 ∧ δ>0 = trend / 其余 = not_confirmed。
    P0-3 单一事实源自动跟随；
 3. 残余（下一轮候选）：被测函数自递归 ×6（需"目标函数名入绑定上下文"
    语义扩展，单独设计）；域名属性 successor×5（注入面，建议提示侧收敛）。
+
+---
+
+## 8. EMSE 投稿定位与外部锚点（2026-10-16 第十九轮）
+
+**定位决策**：投稿叙事从"逻辑驱动的多智能体系统"重构为
+"**测量诚信 + 编排负结果 + 轻量协议**"的实证论文（对齐 EMSE 对 serious
+empirical basis 与 Negative Results 专刊的要求）。论文骨架、贡献声明、
+Open Science 清单与 P0 状态见
+`docs/emse/EMSE_SUBMISSION_SKELETON_2026-10-16.md`（**本地件**：
+`.gitignore-sensitive` 口径不入 GitHub 公开仓；公开仓对应内容以本文档
+§8 为准，主报告引用其章节号）。
+
+**外部同向锚点（2026-10-16 一手核验，三条独立来源支持"手工编排/复杂
+工程组件在现代 LLM 下不构成增益"——与本项目 −28pp 阴性同向）**：
+
+| 来源 | 一手编号 | 关键数字 | 与本项目结论的关系 |
+|---|---|---|---|
+| Konstantinou, Degiovanni & Papadakis（ICST 2026） | DOI 10.1109/ICST69053.2026.00040；arXiv:2601.09695v2 | 393 类 / 3,657 方法上 plain LLM 在 line/branch/mutation 全面优于 HITS/SymPrompt/CoverUp/TestSpark 四工具（+17.72/+19.80/+20.92pp） | **最强外部同向证据**：复杂测试生成工程组件不敌轻量提示 |
+| BOAD（ICLR 2026，MIT/MIT-IBM） | arXiv:2512.23631 | 自动发现的层级多 agent 胜单 agent 与手工多 agent（SWE-bench Verified） | 反向锚点：若要多 agent，增益须来自**自动搜索**而非手工设计——支持"手工编排降级"而非"多 agent 无用"的强表述 |
+| Zhao, Song & Cohen（ISSTA 2026） | PACMSE 3(ISSTA) ISSTA113 | 缺陷代码 prompt 增加误导性测试；spec-based prompting 缓解 | 支持规格锚定路线（P1 超越路径的理论互证） |
+
+**引用纪律**：上述三条已内联至 ADR-0030 背景节；citation_allowlist
+已于第十九轮清空（7 项存疑全部核销：3 项验证内联 + 4 项陈旧移除），
+`check_citations.py --traceability` 零豁免通过。

@@ -44,6 +44,8 @@ import uuid
 from collections.abc import Callable
 from typing import Any, ClassVar
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # ─── 追踪开关 ─────────────────────────────────────────────────────────────────
@@ -335,7 +337,7 @@ def _memory_buffer_enabled() -> bool:
     （快照口径独立于落盘追踪，供失败诊断复用）。设 false 完全关闭
     缓冲（零内存开销，回退历史"全 no-op"口径）。
     """
-    return os.getenv("TRACE_MEMORY_BUFFER_ENABLE", "true").strip().lower() in ("true", "1", "on")
+    return env_flag("TRACE_MEMORY_BUFFER_ENABLE", True)
 
 
 def memory_buffer_snapshot(task_id: str, records: list[dict[str, Any]]) -> None:

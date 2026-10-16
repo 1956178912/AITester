@@ -430,6 +430,68 @@ class TestCallLlmWithCache:
         assert data["prompt"] == "hello"
         assert data["response"] == "live response"
 
+    def test_semantic_cache_hit_records_avoided_tokens(self, cache_env, monkeypatch):
+        """D2 收口（2026-10-16 第十九轮）：语义缓存命中还原"避免的 token"。
+
+        被命中条目是磁盘缓存文件（语义索引只存响应文本），应读其 tokens
+        字段计入 cache_avoided_tokens 独立口径（不污染真实消耗语义）。
+        """
+        from src.agents import semantic_cache as _sc
+        from src.graph.token_usage import get_usage, reset
+
+        monkeypatch.setenv("SEMANTIC_CACHE_ENABLE", "true")
+        # 索引构建节流复位 + 清空进程内索引（测试间隔离；节流 60s 会跨测试残留）
+        monkeypatch.setattr(_sc, "_last_rebuild_ts", 0.0)
+        _sc.reset_semantic_index()
+        reset()
+        # 嵌入后端 mock：常值向量 → 任意两条 prompt 余弦相似度 1.0 ≥ 默认阈值 0.92
+        with patch("src.utils.embedding_utils.embed_text", return_value=[1.0, 0.0, 0.0]):
+            agent = self._make_agent()
+            agent._call_llm = MagicMock(return_value="live response")
+            # 预置一条"语义近似"的缓存文件（不同文件名 = 精确缓存未命中）
+            seeded = cache_env / "seeded_semantic.json"
+            seeded.write_text(
+                json.dumps(
+                    {
+                        "prompt": "hello there, old friend",
+                        "system": "sys prompt",
+                        "response": "semantic response",
+                        "tokens": 777,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = agent._call_llm_with_cache("hello")
+            assert result == "semantic response"
+            agent._call_llm.assert_not_called()
+            usage = get_usage()
+            assert usage.cache_hits == 1
+            assert usage.cache_avoided_tokens == 777
+            assert usage.total_tokens == 0  # 独立口径：不污染真实消耗
+            assert usage.llm_calls == 0
+
+    def test_semantic_cache_hit_missing_file_records_zero(self, cache_env, monkeypatch):
+        """语义命中但被命中文件已缺失（索引陈旧）时保守记 0，仍返回响应（fail-closed）。"""
+        from src.agents import semantic_cache as _sc
+        from src.graph.token_usage import get_usage, reset
+
+        monkeypatch.setenv("SEMANTIC_CACHE_ENABLE", "true")
+        _sc.reset_semantic_index()
+        reset()
+        gone = str(cache_env / "deleted_after_indexing.json")
+        with patch(
+            "src.agents.semantic_cache.find_semantic_cache",
+            return_value=(gone, "semantic response"),
+        ):
+            agent = self._make_agent()
+            agent._call_llm = MagicMock(return_value="live response")
+            result = agent._call_llm_with_cache("hello")
+            assert result == "semantic response"
+            agent._call_llm.assert_not_called()
+            usage = get_usage()
+            assert usage.cache_hits == 1
+            assert usage.cache_avoided_tokens == 0  # 文件缺失：保守记 0
+
     def test_cache_read_exception_logs_and_continues(self, cache_env):
         """缓存文件损坏（非法 JSON）时读取异常被吞掉，仍正常走 LLM 调用。"""
         agent = self._make_agent()

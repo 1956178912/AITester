@@ -127,8 +127,10 @@ def _check_repo_clean() -> None:
     """
     import subprocess
 
+    from src.utils.process_utils import run_with_timeout
+
     try:
-        out = subprocess.run(
+        out = run_with_timeout(
             ["git", "status", "--porcelain"],
             cwd=str(PROJECT_ROOT),
             capture_output=True,

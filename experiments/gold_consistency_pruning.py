@@ -96,7 +96,9 @@ def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int
         with open(test_path, "w", encoding="utf-8") as f:
             f.write(test_code)
         try:
-            res = subprocess.run(
+            from src.utils.process_utils import run_with_timeout
+
+            res = run_with_timeout(
                 [
                     sys.executable,
                     "-m",
@@ -113,6 +115,7 @@ def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int
                 timeout=timeout,
                 env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": tmp},
                 check=False,
+                raise_on_timeout=True,
             )
         except subprocess.TimeoutExpired:
             return None

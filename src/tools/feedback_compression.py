@@ -44,6 +44,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
+from src.utils.env_utils import env_flag
+
 if TYPE_CHECKING:
     from src.graph.state import AITesterState
 
@@ -75,7 +77,7 @@ def feedback_compression_enabled() -> bool:
     默认关 = 历史口径零变化（ADR-0003：新功能默认关）。调用期读取 env
     （非 import 期），测试可 monkeypatch.setenv 切换，保留消融能力。
     """
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def _clamp_env_int(name: str, default: int, lo: int, hi: int) -> int:

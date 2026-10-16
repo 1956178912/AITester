@@ -25,13 +25,15 @@ import ast
 import os
 from dataclasses import dataclass, field
 
+from src.utils.env_utils import env_flag
+
 _GUARD_ENV = "DETERMINISTIC_GUARD_ENABLE"
 _SLEEP_ENV = "DETERMINISTIC_GUARD_SLEEP_THRESHOLD"
 
 
 def deterministic_guard_enabled() -> bool:
     """确定性守卫开关（DETERMINISTIC_GUARD_ENABLE，默认 false 历史口径）。"""
-    return os.getenv(_GUARD_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_GUARD_ENV)
 
 
 def _sleep_threshold() -> float:

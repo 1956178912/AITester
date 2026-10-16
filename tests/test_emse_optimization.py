@@ -230,8 +230,42 @@ class TestFalseFixCaliber:
         assert pop["n_ff1"] == 143
         assert pop["marginal_pct"] == pytest.approx(59.58, abs=0.01)
         assert pop["conditional_pct"] == 100.0
-        # ADR-0027 修正口径引用值在场
-        adr = matrix["populations"]["ADR0027_corrected"]
+
+    def test_matrix_recomputes_live_when_artifacts_present(self):
+        """2026-10-15 修复回归：自动复算分支必须真的触发。
+
+        缺陷史：`_load_main_batch_rows()` 曾以 `timestamp > "2026-10-02"` 整批
+        跳过，而 R-P0-2 三种子批次的 timestamp 是 2026-10-06 → 复算分支永不触发，
+        矩阵长期返回硬编码 `source="10-13_caliber_fallback"`（数值相同故无人察觉）。
+        """
+        from experiments.emse_optimization import MAIN_BATCH_DIR
+
+        if not sorted(MAIN_BATCH_DIR.glob("benchmark_synthetic_20261006_1*.json")):
+            pytest.skip("R-P0-2 三种子批次工件不在工作树")
+        pop = build_false_fix_matrix()["populations"]["RP02_aitester"]
+        assert pop["source"] == "main_batch_artifact", pop
+        assert pop["n_measurable"] == 240
+        # 21 行 M10 第 0 轮死亡（false_fix_rate=None）不得进入 false-fix 分母
+        assert pop["n_passed_but_unmeasurable"] == 21
+
+    def test_denominator_is_metric_measurability_not_passed_measurability(self):
+        """分母必须是"被度量指标本身可测"的行（修复后的显式口径）。
+
+        构造 passed 可测但 false_fix 不可测的行：它必须**不进**边际分母。
+        """
+        rows = [
+            _ff_row(True, 1.0),
+            _ff_row(False, 0.0),
+            _ff_row(False, None),  # passed 可测（False），但 false_fix 不可测 → 不进分母
+        ]
+        out = false_fix_caliber(rows)
+        assert out["n_measurable"] == 2  # 不是 3
+        assert out["n_passed_but_unmeasurable"] == 1
+        assert out["marginal_pct"] == pytest.approx(50.0)
+
+    def test_adr0027_corrected_population_present(self):
+        """ADR-0027 修正口径引用值在场（同一矩阵的第二个总体）。"""
+        adr = build_false_fix_matrix()["populations"]["ADR0027_corrected"]
         assert adr["conditional_pct"] == 87.16
         assert (adr["n_ff1"], adr["n_measurable"]) == (380, 436)
 
@@ -438,6 +472,20 @@ class TestSamplingAndFacts:
         assert facts["tasks_timeout"] == 10
         assert "429" in facts["notes"]
         assert "基础设施故障" in facts["corrected_statement"]
+        # EMSE 批次（2026-10-15 一致性修复）：限流信号计数必须覆盖全部结构化
+        # 文本源，且 breakdown 之和与总数对账（旧实现只数 notes+run_notes=2，
+        # 与"7/7 完成者均因 429 失败"的散文叙述不一致）。
+        assert facts["rate_limit_signals"] >= 2, facts["rate_limit_signal_breakdown"]
+        breakdown = facts["rate_limit_signal_breakdown"]
+        # 真实工件（swebench_20_summary.json）：notes/run_notes/issues 各含 1 次
+        # "429" 字面量，去重并集总数 = 2（notes 与 run_notes 文本不同、issues 文本
+        # 亦不同）；issues 中"限流/429"条目共 3 条（含 404 端点错配条目不计）。
+        # 关键回归点：总数不得退回旧口径（旧实现只数 notes+run_notes 且当 notes
+        # 非空时完全忽略 issues）。
+        assert facts["rate_limit_signals"] == 2, breakdown
+        assert breakdown["issues"] == 1, breakdown
+        assert breakdown["issues_rate_limit_entries"] >= 2, breakdown
+        assert facts["rate_limit_signals"] >= max(breakdown[k] for k in ("run_notes", "notes", "issues")), breakdown
 
     def test_swebench_facts_missing_file(self, tmp_path):
         facts = swebench_infra_facts(tmp_path / "nope.json")

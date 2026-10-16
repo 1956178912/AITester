@@ -236,7 +236,9 @@ def _probe(code: str, module_name: str, fn_name: str, args: list[Any], timeout: 
         with open(probe, "w", encoding="utf-8") as f:
             f.write(_probe_source(module_name, fn_name, args_repr))
         try:
-            res = subprocess.run(
+            from src.utils.process_utils import run_with_timeout
+
+            res = run_with_timeout(
                 [sys.executable, probe],
                 cwd=tmp,
                 capture_output=True,

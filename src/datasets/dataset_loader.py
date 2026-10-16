@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 from config import SWE_BENCH_ENRICHMENT
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def _strict_instance_code_enabled() -> bool:
     按默认 false 处理（与项目其余 `_ENV` 布尔开关同口径：不因环境变量
     笔误让跑批崩溃）。
     """
-    return os.getenv(_ENV_STRICT_INSTANCE_CODE, "false").strip().lower() in ("true", "1", "yes", "on")
+    return env_flag(_ENV_STRICT_INSTANCE_CODE, extra_true=("yes",))
 
 
 # 数据集下载依赖（HuggingFace datasets 库）。可选导入：

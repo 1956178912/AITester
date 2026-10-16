@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import random
 import threading
 import time
@@ -33,6 +32,7 @@ import openai
 
 from config import LLM_CONFIGS, LLMConfig
 from src.api.api_health import APIHealth, APIManagerConfig, RotationStrategy
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class APIManager:
         # 免费/低配额场景建议 .env 设 API_HEALTH_CHECKER_ENABLE=false
         # （故障转移不受影响——调用失败时仍即时探测并熔断冷却）。
         if enable_health_checker is None:
-            enable_health_checker = os.getenv("API_HEALTH_CHECKER_ENABLE", "true").lower() in ("true", "1", "on")
+            enable_health_checker = env_flag("API_HEALTH_CHECKER_ENABLE", True)
         self.config = config or APIManagerConfig()
         self.health_nodes: dict[str, APIHealth] = {}
         self._rr_index: int = 0  # 轮询索引

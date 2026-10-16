@@ -97,9 +97,10 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 import re
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ def spec_ir_dsl_enabled() -> bool:
     _planner_node 的 DSL 编译调用点均以此开关守门（与 R7 SpecIR 主开关
     解耦——SpecIR v1 已默认关，v2 双层默认关，历史口径零变化）。
     """
-    return os.getenv(_ENV_DSL, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV_DSL)
 
 
 # ─── 1. 子句识别（NL 字符串 vs 表达式形态）────────────────────────────────

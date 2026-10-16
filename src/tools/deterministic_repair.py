@@ -37,9 +37,10 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 import re
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ _TAB_INCONSISTENT_RE = re.compile(r"inconsistent use of tabs and spaces", re.IGN
 
 def deterministic_repair_first_enabled() -> bool:
     """确定性优先修复路由开关（默认关；A/B 对照用）。"""
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def _top_level_names(code: str) -> set[str]:

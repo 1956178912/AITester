@@ -35,6 +35,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 _ENV = "SPEC_IR_ENABLE"
@@ -51,7 +53,7 @@ def spec_ir_enabled() -> bool:
     默认关闭：logic_analysis 解析 / 编译产物为"追加字段"，开启后
     Planner → Generator 主链路零变化（与 ADR-0003 默认关口径一致）。
     """
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 def _boundaries_max() -> int:

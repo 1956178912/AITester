@@ -86,6 +86,7 @@ from src.graph.rag import RAG_MODULE_AVAILABLE, TestCaseRetriever, get_rag_retri
 from src.graph.state import AITesterState
 from src.graph.tracing import _trace_local, _trace_node, end_task_trace, start_task_trace  # noqa: F401
 from src.tools.cross_file import cross_file_enabled
+from src.utils.env_utils import env_flag
 
 # 模块级 logger，用于记录工作流执行过程，便于实验追踪和问题排查
 logger = logging.getLogger(__name__)
@@ -282,7 +283,7 @@ _TEST_GEN_ERROR_CATEGORIES: frozenset[str] = frozenset({"logic_error"})
 
 def _structured_route_enabled() -> bool:
     """R17 结构化路由开关（ROUTE_STRUCTURED_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv(_ROUTE_STRUCTURED_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ROUTE_STRUCTURED_ENV)
 
 
 def _test_gen_signal_hit(state: AITesterState, diagnosis: str) -> tuple[bool, str]:
@@ -599,7 +600,7 @@ def _recent_repairs_invalid(state: AITesterState) -> bool:
 # 首轮 delta=None（无上一轮）不计入（保守不判）。
 def _coverage_stall_enabled() -> bool:
     """P2-4 停滞检测开关（COVERAGE_STALL_DETECT_ENABLE=true 时启用，默认关）。"""
-    return os.getenv("COVERAGE_STALL_DETECT_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("COVERAGE_STALL_DETECT_ENABLE")
 
 
 def _coverage_stall_rounds() -> int:
@@ -871,7 +872,7 @@ def build_workflow(planner: bool | None = None, debugger: bool | None = None, al
     try:
         # P2-2（2026-10-02 审查）：复用模块顶部 `import os`（L47），
         # 此前函数内 `import os as _os` 冗余。
-        if os.getenv("RISK_APPROVAL_ENABLE", "false").lower() in ("true", "1", "on"):
+        if env_flag("RISK_APPROVAL_ENABLE"):
             from langgraph.checkpoint.memory import MemorySaver
 
             _checkpointer = MemorySaver()

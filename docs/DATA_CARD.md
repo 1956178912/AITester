@@ -2,7 +2,9 @@
 
 # 数据卡（DATA CARD）
 
-最后更新：2026-10-14（§1 数据集总览刷新：新增 ULT 行（真实基准·变异
+最后更新：2026-10-15（§6 新增数据可用性声明（Data Availability
+Statement）：入库工件范围、按数据源引用的许可结论、未入库项（原始
+LLM 响应）与归档占位。此前 2026-10-14（§1 数据集总览刷新：新增 ULT 行（真实基准·变异
 主指标场景，2026-10-13/14 子集在用 n=25–46）+ QuixBugs 状态更新为
 多批次在用（D1 A/B / spec_ir pilot / 校准 n=50；定位仍为 L1，R20
 近饱和与记忆污染声明保持）。此前 2026-10-08 R20：§4 新增 QuixBugs
@@ -12,7 +14,7 @@ L1 管道验证；§1 状态列更新为"单臂复跑（非 E4 正式执行）"�
 CC BY-NC 4.0 经 LICENSE 原文核实，与 BugsInPy 同列非清洁许可门槛；
 AH1：§4 许可节权威核实——QuixBugs MIT 已确认〔L1 前置解除〕、
 BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采样偏差
-登记缓解机制 `max_pattern_repeat`；Z6 新增数据卡（R15））
+登记缓解机制 `max_pattern_repeat`；Z6 新增数据卡（R15）））
 
 ## 1. 数据集总览
 
@@ -122,3 +124,41 @@ BugsInPy 无 SPDX 许可证〔L2 决策门槛新登记〕；AA2：§2 重复采�
   本卡只描述口径不承载"当前数字"；
 - 新增数据源必须在本卡登记：来源、构造方式、gold 材料位置、泄漏
   控制措施、许可核实结论。
+
+## 6. 数据可用性声明（Data Availability Statement）
+
+- **随仓库分发的内容**：
+  - 合成缺陷模板库（`synthetic`）：8 个 pattern 池、按 name 去重后 50 个
+    唯一缺陷 pattern 的 buggy / `fixed` / gold `test_cases` 三件套，定义在
+    `src/datasets/synthetic_dataset.py`；pattern 总数以 `BASELINE.yaml` 的
+    `synthetic_templates` 为单一事实来源（见 §2）；
+  - 聚合结果工件（部分入库）：`experiments/results/`。其中
+    `experiments/results/main_batch/` 的批次 JSON、统计报告与 `SHA256SUMS`
+    已入库（`git ls-files` 实测 2,029 个文件）；其余批次目录默认被
+    `.gitignore` 第 158 行 `experiments/results/**` 忽略，仅部分工件/校验
+    文件被强制入库（`experiments/results/` 下 24 个 `SHA256SUMS*` 中 18 个
+    已被 git 跟踪）；
+  - 复现说明：仓库根 `REPLICATION.md`（环境、零 LLM 可复算路径、预期产物
+    与已知偏差）。
+- **不随仓库分发的内容**：
+  - **原始 LLM 响应**：本项目 LLM 响应仅落盘到本地文件缓存，默认目录为
+    用户缓存目录（`XDG_CACHE_HOME` 或 `~/.cache/aitester/llm`，
+    `src/agents/llm_client.py`）；历史上位于源码树内的 `src/cache/` 已被
+    `.gitignore` 第 66–67 行排除（原文：`# LLM 文件缓存（本地优化产物，
+    避免重复提交）` / `src/cache/`）。即**仓库内不含任何原始 LLM 响应**，
+    原始执行不可离线重放，仅指标可离线复算；
+  - 上游第三方数据集本体（QuixBugs / BugsInPy / TestGenEval）不随本仓库
+    分发，由使用者按上游许可自行获取：QuixBugs 经 `AITESTER_QUIXBUGS_DATA`
+    注入，本地 `data/quixbugs` 为 gitignore 区不入库（见 §4）。
+- **许可状态**（引自本卡 §4 与仓库 `LICENSE`，原文照录）：
+  - 本仓库软件：`MIT License`（`LICENSE` 第 1 行），
+    `Copyright (c) 2026 AITester Contributors`（`LICENSE` 第 3 行）；
+  - QuixBugs："**QuixBugs：MIT License（已核实，L1/E4 前置条件解除）**"（§4）；
+  - BugsInPy："**BugsInPy：无 SPDX 可识别许可证（新发现合规门槛，L2 实跑前
+    须用户决策）**"（§4）；
+  - TestGenEval（L2 候补，未加载零实跑）："**许可：CC BY-NC 4.0**"（§4）；
+  - 合成缺陷模板库：来源为项目作者手写（§2），本卡未就合成模板单独声明
+    再分发许可。[待补充：合成缺陷模板库的再分发许可声明]
+- **归档与联系**：[待补充：Zenodo DOI / 归档计划]；
+  [待补充：通讯作者与联系邮箱]。引用元数据见仓库根 `CITATION.cff`
+  （该文件内已以 YAML 注释登记 DOI 待归档）。

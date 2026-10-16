@@ -44,10 +44,11 @@ G3 内核级沙箱（Kernel Sandbox，默认关，平台相关最小可用集）
 from __future__ import annotations
 
 import logging
-import os
 import platform
 import shutil
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class SandboxUnavailable(RuntimeError):
 
 def kernel_sandbox_enabled() -> bool:
     """内核级沙箱开关（KERNEL_SANDBOX_ENABLE=true 时启用，默认 false）。"""
-    return os.getenv("KERNEL_SANDBOX_ENABLE", "false").lower() in ("true", "1", "on")
+    return env_flag("KERNEL_SANDBOX_ENABLE")
 
 
 def _seatbelt_available() -> bool:
@@ -238,7 +239,7 @@ def build_sandbox_command(
     # "忘检查 obs" 时 fail-open 裸跑）。设 ALLOW_UNSANDBOXED=true 可显式
     # 容忍无隔离（保守降级，供无沙箱工具的平台做本地调试，但工件须
     # 记录该档位）。
-    _allow_unsandboxed = os.getenv("ALLOW_UNSANDBOXED", "false").lower() in ("true", "1", "on")
+    _allow_unsandboxed = env_flag("ALLOW_UNSANDBOXED")
     obs_unsupported: dict[str, Any] = {
         "platform": _HOST_PLATFORM,
         "backend": "none",

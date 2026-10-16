@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import math
 import random
-import subprocess
 import sys
 import tempfile
 from math import comb
@@ -207,15 +206,27 @@ def bayes_factor_discordant(b: int, c: int) -> dict[str, Any]:
 def false_fix_caliber(rows: list[dict]) -> dict[str, Any]:
     """false_fix 双口径（边际 / 条件）。
 
-    边际 = ff=1 行数 / 可测行数（denom = n_measurable）；
-    条件 = ff=1 行数 / passed∧可测行数（denom = n_passed_measurable）；
+    边际 = ff=1 行数 / **该指标可测的行数**；
+    条件 = ff=1 行数 / passed ∧ 该指标可测的行数；
     无可测行 → marginal/conditional 均 None（不假报 0）。
+
+    分母口径修复（2026-10-15，M3 审计发现）：原实现用 `passed is not None`
+    作为"可测"判据，得到 R-P0-2 aitester 分母 261 → 边际 54.79%，与历史定案值
+    59.58%（分母 240）不一致。根因是**分母必须是"被度量指标本身可测"的行**：
+    R-P0-2 有 21 行 `error_category='error'`（M10 第 0 轮整任务死亡，iterations=0、
+    patch_evidence_level=None）→ `false_fix_rate is None`、`repair_rate is None`，
+    这些行**不能进入 false-fix 率的分母**（它们既不是"无假修复"，也不是"有假修复"）。
+    旧口径与本修复在 R-P0-2 上给出同一答案的巧合来自 `false_fix_rate is None`
+    ⟺ `detection_rate is None`（本例 21 行重叠），因此必须在代码中显式表达，
+    不能依赖巧合。两类分母同时输出：`n_passed_measurable`（passed 且指标可测）
+    与 `n_passed`（仅 passed 为 True），供读者核对差异。
     """
     n_rows = len(rows)
-    n_measurable = sum(1 for r in rows if r.get("passed") is not None)
+    n_measurable = sum(1 for r in rows if r.get("false_fix_rate") is not None)
     n_ff1 = sum(1 for r in rows if r.get("false_fix_rate") == 1.0)
     n_passed = sum(1 for r in rows if r.get("passed") is True)
-    n_passed_measurable = sum(1 for r in rows if r.get("passed") is True)
+    n_passed_measurable = sum(1 for r in rows if r.get("passed") is True and r.get("false_fix_rate") is not None)
+    n_passed_but_unmeasurable = sum(1 for r in rows if r.get("passed") is not None and r.get("false_fix_rate") is None)
     marginal = 100.0 * n_ff1 / n_measurable if n_measurable else None
     conditional = 100.0 * n_ff1 / n_passed_measurable if n_passed_measurable else None
     return {
@@ -224,27 +235,32 @@ def false_fix_caliber(rows: list[dict]) -> dict[str, Any]:
         "n_measurable": n_measurable,
         "n_ff1": n_ff1,
         "n_passed_measurable": n_passed_measurable,
+        "n_passed_but_unmeasurable": n_passed_but_unmeasurable,
         "marginal_pct": round(marginal, 2) if marginal is not None else None,
         "conditional_pct": round(conditional, 2) if conditional is not None else None,
     }
 
 
 def _load_main_batch_rows() -> dict[str, list[dict]]:
-    """加载主批次工件（R-P0-2 口径来源，aitester 行 + 修正口径行）。
+    """加载 R-P0-2 三种子主批次行（aitester 等臂的逐任务行）。
 
-    R-P0-2 定案（10-13）：主批次 = 2026-10-01 首个基准（n=261，含
-    df/llm 双基线 aiter 行）；后续 10-06/10-07 批次为重放批次（n=50，
-    非主批次，不计入 R-P0-2 口径）。本函数只取**首个**基准批次。
+    口径（2026-10-15 修复）：R-P0-2 主批次 = `benchmark_synthetic_20261006_1*.json`
+    三种子批次（seed 42/43/44，各 87 行 → **261 行/臂**），即
+    `statistical_report_3seed_pooled.md` 与 `BASELINE.yaml` `benchmark` 节所指的
+    当前对外口径。
+
+    缺陷史（本函数第一版）：过滤条件为 `timestamp > "2026-10-02"` 即整批跳过，
+    随后按 docstring 以为"主批次 = 2026-10-01 首个基准"，而 R-P0-2 三种子批次的
+    timestamp 是 2026-10-06 → **自动复算分支永不触发**，矩阵长期以
+    `source="10-13_caliber_fallback"` 返回硬编码定案值（数值恰好相同，故无人察觉）。
+    今日由 M3 审计发现；修复后 R-P0-2 行可从仓内工件实时复算，回退分支仅在
+    工件真缺席时生效。
     """
     populations: dict[str, list[dict]] = {}
-    for json_path in sorted(MAIN_BATCH_DIR.glob("benchmark_*.json")):
+    for json_path in sorted(MAIN_BATCH_DIR.glob("benchmark_synthetic_20261006_1*.json")):
         try:
             data = json.loads(json_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            continue
-        ts = data.get("timestamp", "")
-        # R-P0-2 主批次 = 首个基准（10-01）；重放批次（10-06/10-07）不计入
-        if ts and ts > "2026-10-02":
             continue
         for arm_key, arm_data in (data.get("results") or {}).items():
             details = arm_data.get("details") if isinstance(arm_data, dict) else None
@@ -456,7 +472,9 @@ def _rerun_on_fixed(task_id: str, fixed_code: str, test_code: str) -> dict[str, 
         (tmp / f"{module_name}.py").write_text(fixed_code, encoding="utf-8")
         test_file = tmp / f"test_{module_name}.py"
         test_file.write_text(test_code, encoding="utf-8")
-        proc = subprocess.run(
+        from src.utils.process_utils import run_with_timeout
+
+        proc = run_with_timeout(
             [sys.executable, "-m", "pytest", str(test_file), "-q", "--no-header"],
             capture_output=True,
             text=True,
@@ -552,8 +570,32 @@ def swebench_infra_facts(summary_path: Path | None = None) -> dict[str, Any]:
     # 限流信号优先取**结构化嵌套字段** results_summary.notes（单次运行的权威
     # 定性说明），其次 issues/notes 自由文本——避免结论只依赖一个大字符串。
     run_notes = str((data.get("results_summary") or {}).get("notes") or "")
-    rate_limited = ("429" in run_notes or "rate limit" in run_notes.lower()) or "429" in notes
-    rate_limit_signals = notes.count("429") + run_notes.count("429")
+    issues_raw = data.get("issues") or []
+    issues_text = "; ".join(str(i) for i in issues_raw) if isinstance(issues_raw, list) else str(issues_raw)
+    # EMSE 批次（2026-10-15，一致性修复）：**计数口径必须覆盖全部结构化文本源**。
+    # 缺陷（审稿人 2/3 复核点）：旧实现 `notes.count("429") + run_notes.count("429")`
+    # 在 `notes` 已由 issues 派生的场景下**不会重复计入 issues 之外的文本**，
+    # 且当 notes 非空时 issues 完全不参与计数——真实工件（swebench_20_summary.json）
+    # 的 issues 列表含 5 条限流/端点条目，而 notes 与 run_notes 各含 1 次 "429"，
+    # 旧口径输出 2，与散文叙述"7 次完成全部因 429 失败"不一致（曾构成
+    # "披露工件 vs README 表述"数字分裂）。
+    # 新口径：分源计数 + 去重后的并集文本计数，并在返回体给出 breakdown 供对账。
+    signal_breakdown = {
+        "run_notes": run_notes.count("429"),
+        "notes": notes.count("429"),
+        "issues": issues_text.count("429"),
+        "issues_rate_limit_entries": sum(
+            1
+            for i in (issues_raw if isinstance(issues_raw, list) else [])
+            if "rate limit" in str(i).lower() or "429" in str(i)
+        ),
+    }
+    # 去重语义：notes 可能由 issues 派生（见上方 fallback），同一文本只计一次，
+    # 否则"分源之和"会重复计数。breakdown 为**诊断用**，总数以去重并集为准。
+    distinct_sources = {t for t in (run_notes, notes, issues_text) if t}
+    combined_text = " ".join(sorted(distinct_sources))
+    rate_limit_signals = combined_text.count("429")
+    rate_limited = rate_limit_signals > 0 or "rate limit" in combined_text.lower()
     # 有效能力结论的必要条件：存在"真实执行完成"的样本，且基础设施故障不占主导。
     # 本工件（20 次尝试：7 完成 / 3 失败 / 10 超时，7/7 完成者均因 429 失败）
     # 不满足该条件 → 明确输出"无有效能力结论"，且**不得**引用其 pass_rate。
@@ -568,6 +610,7 @@ def swebench_infra_facts(summary_path: Path | None = None) -> dict[str, Any]:
         "tasks_timeout": timeout,
         "timeout_ratio": timeout_ratio,
         "rate_limit_signals": rate_limit_signals,
+        "rate_limit_signal_breakdown": signal_breakdown,
         "capability_conclusion": capability_conclusion,
         "pass_rate_must_not_be_quoted": infra_failure,
         "notes": notes,
@@ -596,6 +639,9 @@ def swebench_disclosure_report() -> str:
         f"- 完成：**{completed}**；任务级失败：**{failed}**；超时：**{timeout}**",
         f"- 超时占比：{facts['timeout_ratio']:.2%}" if facts["timeout_ratio"] is not None else "- 超时占比：—",
         f"- 限流（429）信号计数：**{facts['rate_limit_signals']}**",
+        f"- 信号分源（对账用）：`{facts['rate_limit_signal_breakdown']}`"
+        "——计数口径为**全结构化文本源（run_notes / notes / issues）去重后统计 `429` 字面量**；"
+        "单源计数会低估（旧口径仅 2，曾与叙述分裂）。",
         f"- **能力结论：`{conclusion}`**",
         "",
         "## 结论性陈述（须逐字进入论文 Limitations）",
@@ -755,7 +801,8 @@ def mutation_correlation_report(
     lines += [
         "",
         "退化与不可测说明：Spearman 在 n<3 或任一侧零方差时记 None（不臆造）；",
-        "具体原因见 JSON 输出的 `mutation_score.spearman_reason`。",
+        "退化原因字符串由 `experiments/emse_optimization.py::mutation_correlation()` 的返回体",
+        "键 `mutation_score.spearman_reason` 承载（本报告为派生物，不额外落盘 JSON）。",
         "",
         "**方向性发现（须与上表同读，不得单独引用）**：Δ均值（det=1 组减 det=0 组）",
         "为正表示「检出组变异得分更高」（收敛），为负表示**不一致**——负号出现时须",
@@ -763,6 +810,16 @@ def mutation_correlation_report(
         "",
     ]
     return "\n".join(lines)
+
+
+def _write_report(path_text: str, text: str) -> None:
+    """写报告文件：收尾统一为**恰好一个**换行。
+
+    报告正文（lines 列表经 join）末尾已含一个 ``\\n``；若调用方再 ``+ "\\n"``
+    会引入 EOF 空行（``git diff --check`` 报警 + 与同目录其他报告工件口径
+    不一，2026-10-16 修复）。本助手对两者统一收尾。
+    """
+    Path(path_text).write_text(text.rstrip("\n") + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -787,14 +844,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.swebench_disclosure:
         report = swebench_disclosure_report()
         if args.out:
-            Path(args.out).write_text(report + "\n", encoding="utf-8")
+            _write_report(args.out, report)
             print(f"written: {args.out}")
         else:
             print(report)
     elif args.mutation_correlation:
         report = mutation_correlation_report(list(args.mutation_correlation))
         if args.out:
-            Path(args.out).write_text(report + "\n", encoding="utf-8")
+            _write_report(args.out, report)
             print(f"written: {args.out}")
         else:
             print(report)

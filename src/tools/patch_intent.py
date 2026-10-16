@@ -34,8 +34,9 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 from typing import Any
+
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ _ENV = "EDIT_INTENT_ENABLE"
 
 def edit_intent_enabled() -> bool:
     """编辑意图通道开关（默认关；A/B 对照与灰度用）。"""
-    return os.getenv(_ENV, "false").lower() in ("true", "1", "on")
+    return env_flag(_ENV)
 
 
 EDIT_INTENT_PROMPT_SECTION = (

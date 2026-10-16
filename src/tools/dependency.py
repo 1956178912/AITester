@@ -35,6 +35,8 @@ import threading
 import time
 from typing import Any
 
+from src.utils.env_utils import env_flag
+
 logger = logging.getLogger(__name__)
 
 # ─── 预编译正则：import 语句提取的单一来源（executor._extract_imports 复用）──
@@ -440,7 +442,7 @@ def suggest_package_names(module_names: set[str]) -> list[str]:
         pip 包名列表（排序去重；白名单启用时仅含白名单内包名）。
     """
     # S6：白名单守卫（默认开，2026-10-09 C-08）
-    _whitelist_enabled = os.getenv("PIP_PACKAGE_WHITELIST_ENABLE", "true").lower() in ("true", "1", "on")
+    _whitelist_enabled = env_flag("PIP_PACKAGE_WHITELIST_ENABLE", True)
     if _whitelist_enabled:
         _custom = os.getenv("PIP_PACKAGE_WHITELIST", "").strip()
         if _custom:

@@ -8,7 +8,6 @@ Planner 在输出测试计划前，先对函数进行输入域、输出域、前
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from src.agents.base_agent import BaseAgent
@@ -16,6 +15,7 @@ from src.prompts.templates import PLANNER_SYSTEM_PROMPT, SPEC_EXPR_CONTRACT_SECT
 from src.specs import spec_ir_dsl_enabled
 from src.specs.spec_ir_v2 import spec_expr_grammar_terminals
 from src.tools.control_flow import build_cfg_prompt_section, cfg_analysis_enabled
+from src.utils.env_utils import env_flag
 
 # 模块级日志记录器
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ def _logic_spec_strict_fallback_enabled() -> bool:
     语义原样保留（CI 科学主张测试依赖）。logic profile 预设注入
     true（实验档吞吐恢复，行为经 provenance 可追溯）。
     """
-    return os.getenv("LOGIC_SPEC_STRICT_FALLBACK_ENABLE", "false").strip().lower() in ("true", "1", "on")
+    return env_flag("LOGIC_SPEC_STRICT_FALLBACK_ENABLE")
 
 
 def _strict_reject(result: dict[str, Any], message: str) -> None:
@@ -381,7 +381,7 @@ class PlannerAgent(BaseAgent):
                 "M10：LLM 未输出 logic_analysis，已填充空值并标记 logic_degraded=True%s",
                 "（归因：提取器叶子回退误诊，非 LLM 缺字段）" if _leaf_fallback else "",
             )
-            if os.getenv("LOGIC_SPEC_STRICT_ENABLE", "false").lower() in ("true", "1", "on"):
+            if env_flag("LOGIC_SPEC_STRICT_ENABLE"):
                 _strict_reject(result, "M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底")
         else:
             result.setdefault("logic_degraded", False)

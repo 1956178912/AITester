@@ -87,6 +87,7 @@ from src.graph.workflow import build_workflow, effective_stop_reason, end_task_t
 from src.tools.patch_abstain import evaluate_patch_abstention  # noqa: E402
 from src.tools.patch_validate import evaluate_patch_validation  # noqa: E402
 from src.utils.logging_utils import setup_logger_safety  # noqa: E402
+from src.utils.process_utils import run_with_timeout as _run_with_timeout  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -3260,11 +3261,10 @@ def run_benchmark(
     # subset / seed / baselines / results，无 git commit SHA、无模型版本、
     # 无 temperature、无 ~118 个环境开关快照 → 跨模型/跨代码版本串味且
     # 不可复算）。
-    import subprocess as _subprocess
 
     def _git_sha() -> str | None:
         try:
-            _res = _subprocess.run(
+            _res = _run_with_timeout(
                 ["git", "rev-parse", "HEAD"],
                 capture_output=True,
                 text=True,
@@ -3482,7 +3482,7 @@ def run_benchmark(
     # 实际运行的是该 commit + 本地 diff 的混合体）
     def _git_dirty() -> bool:
         try:
-            _res = _subprocess.run(
+            _res = _run_with_timeout(
                 ["git", "status", "--porcelain"],
                 capture_output=True,
                 text=True,

@@ -25,6 +25,42 @@
 ④ 与项目记忆中"74%/72%"是同一批数据的 all-task 口径（保守展示）。**不同口径之间的
 数字不可直接相减/比较**。
 
+## false_fix 口径（权威落点）
+
+> false_fix（"生成测试通过、gold 未过"的假成功通道）与 repair 同属"分母易混"的指标，故按
+> §1 同一纪律登记**双口径**：分子固定为 ff=1 行数，分母有二。编号沿 §1 续编（⑩⑪）。
+> **权威落点 = 本文件 + 代码 + 锁定测试**：`experiments/emse_optimization.py::false_fix_caliber()`
+> （口径聚合）与 `build_false_fix_matrix()`（定案值装配），由 `tests/test_emse_optimization.py`
+> 锁定（n_rows=261 / n_passed=143 / n_measurable=240 / marginal_pct≈59.58 / conditional_pct=100.0）。
+
+**两个口径（分母不同，禁止混用）**：
+
+- **边际口径** = ff=1 行数 / **可测行数**（`passed is not None` 的行）；
+- **条件口径** = ff=1 行数 / **passed ∧ 可测行数**（`passed is True` 的行）；
+- 无可测行时两口径均记 None（不假报 0）。
+
+| # | 人群 | n_rows | n_passed | n_measurable | n_ff1 | 边际口径 | 条件口径 |
+|---|------|--------|----------|--------------|-------|----------|----------|
+| ⑩ | R-P0-2 主批次 aitester | 261 | 143 | 240 | 143 | **59.58%（143/240）** | **100%（143/143）** |
+| ⑪ | ADR-0027 修正口径（10 批次重放） | 436 | 436 | 436 | 380 | **87.16%（380/436）** | **87.16%（380/436）** |
+
+**读法**：⑩ 为 R-P0-2 主批次（261 行）定案值；⑪ 为 ADR-0027 修正口径的 10 批次重放值——
+该人群 436 行**全部 passed 且可测**，两口径分母重合故同为 87.16%。**⑩ 与 ⑪ 人群不同，
+不可直接相减/比较**（与 §1 读法同纪律）。
+
+**引用纪律（强制）**：对外引用 false_fix 数字必须携带口径标签（边际 / 条件）+ 分子/分母 +
+人群（R-P0-2 主批次 261 行 vs ADR-0027 修正口径 436 行），不得只写一个裸百分比。
+**`docs/design/false_fix_caliber_matrix.md` 从未纳入版本控制**（该路径被 `.gitignore:128` 忽略），
+因此**不是可引用路径**——此前 README / CHANGELOG 对它的引用，一律以本文件 + 代码 + 锁定测试
+为权威落点。
+
+**可复算命令**（零 LLM，只读工件；主批次工件不在场时回退 10-13 定案值并在输出中标注
+`source`，不静默改数）：
+
+```bash
+.venv/bin/python -m experiments.emse_optimization   # 缺省输出 false_fix 双口径矩阵 JSON
+```
+
 ## 2. R27 跨文件测量修复的 v2 增量（受影响的六个批次）
 
 第三起测量伪影（跨文件任务 gold 测试 import `module_a/b/c` 未物化 → rc=2）使
@@ -80,5 +116,7 @@ make corrected-metrics   # 或：
 ## 5. 关联工件
 
 - ADR-0021（围栏伪影）、ADR-0027（修正口径重估）、**ADR-0029（跨文件未物化伪影 + 包结构 import 伪影）**；
+- false_fix 双口径（⑩⑪）：见本文件"false_fix 口径（权威落点）"节、
+  `experiments/emse_optimization.py`、`tests/test_emse_optimization.py`；
 - `experiments/results/main_batch/corrected_report_v2.md`、`experiments/results/r4_batches/README.md`；
 - 预注册执行记录（`docs/preregistration.md`）与 `docs/design/r4_localized_edit_ab.md` 勘误块。

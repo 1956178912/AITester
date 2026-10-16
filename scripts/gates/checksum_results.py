@@ -39,7 +39,22 @@ def _sha256(path: Path) -> str:
 
 
 def _collect(root: Path, manifest: Path) -> list[Path]:
-    return sorted(p for p in root.rglob("*") if p.is_file() and p != manifest and not p.name.startswith("."))
+    """收集待校验文件：排除清单自身、隐藏文件及**隐藏目录下的文件**。
+
+    隐藏目录（如工装在本地的 ``.mimosa/`` hook-state）不会入库，fresh clone
+    不含这些文件；若写入清单，CI ``--verify`` 在干净检出上必然报"缺失"。
+    2026-10-16 修复：此前仅按 basename 排除，漏掉 ``.mimosa/xx.json`` 这类
+    "点目录 + 常规文件名" 的路径——主批次清单曾因此含 2 条永不入库的
+    .mimosa 条目，使 U1 门禁在 fresh clone 下必红（本地不可见）。
+    """
+    files: list[Path] = []
+    for p in root.rglob("*"):
+        if not p.is_file() or p == manifest:
+            continue
+        if any(part.startswith(".") for part in p.relative_to(root).parts):
+            continue
+        files.append(p)
+    return sorted(files)
 
 
 def write_manifest(results_dir: Path) -> int:
