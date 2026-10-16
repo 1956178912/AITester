@@ -67,7 +67,11 @@ class TestVisualizeLoadLatestResult:
 
 
 class TestVisualizeSummaryMdTable:
-    """write_summary_md 的基线汇总表头与数据列对齐（8 列回归护栏）"""
+    """write_summary_md 的基线汇总表头与数据列对齐（B6/2026-10-16：9 列回归护栏）。
+
+    B6 变更：三指标（Detection/False-Fix/Repair，M1 诚实口径含可测 n）列前置，
+    Success*（自指）后移并加注"不得单独引用"——列数与顺序由本护栏锁定。
+    """
 
     @pytest.fixture()
     def module(self):
@@ -77,10 +81,10 @@ class TestVisualizeSummaryMdTable:
 
         return visualize_results
 
-    def test_header_single_row_with_8_columns(self, module, tmp_path, monkeypatch):
-        """表头只有一行，且 8 列与 8 个分隔符段一一对应。
+    def test_header_single_row_with_9_columns(self, module, tmp_path, monkeypatch):
+        """表头只有一行，且 9 列与 9 个分隔符段一一对应（B6：detection 列领衔）。
 
-        回归：此前表头被拆成 5 列 + 3 列两行，与 8 列的数据行错位。
+        回归：此前表头被拆成多行错位的旧病史；B6 后列数 8→9，列序重排。
         """
         monkeypatch.setattr(module, "_charts_dir", str(tmp_path))
         module.write_summary_md({"dataset": "d", "results": {}}, {"n_tasks": 0, "per_baseline": {}, "pairwise": []})
@@ -90,15 +94,16 @@ class TestVisualizeSummaryMdTable:
         headers = [line for line in lines if line.startswith("| Baseline")]
         assert len(headers) == 1
         assert headers[0] == (
-            "| Baseline | Tasks | Passed | Success Rate | Avg Coverage | Avg Iterations | Mean Rate | Std |"
+            "| Baseline | Tasks | Detection Rate (n) | False-Fix Rate (n) | Repair Rate (n) "
+            "| Success* % | Coverage % | Mean Rate | Std |"
         )
-        # 表头下一行必须是 8 段分隔符
+        # 表头下一行必须是 9 段分隔符
         idx = lines.index(headers[0])
-        assert len(lines[idx + 1].strip().split("|")) == 10  # 8 段 + 首尾空段
-        assert lines[idx + 1].count("-") >= 8 * 3
+        assert len(lines[idx + 1].strip().split("|")) == 11  # 9 段 + 首尾空段
+        assert lines[idx + 1].count("-") >= 9 * 3
 
     def test_data_row_column_count_matches_header(self, module, tmp_path, monkeypatch):
-        """有基线数据时，数据行同样是 8 列（与表头对齐）。"""
+        """有基线数据时，数据行同样是 9 列（与表头对齐）。"""
         monkeypatch.setattr(module, "_charts_dir", str(tmp_path))
         summary = {
             "dataset": "d",
@@ -117,8 +122,8 @@ class TestVisualizeSummaryMdTable:
         data_row = [
             line for line in content.splitlines() if line.startswith("| aitester")
         ]  # 数据行以基线名 aitester 开头
-        assert data_row, "数据行 8 列与表头对齐"
-        assert len(data_row[0].strip().split("|")) == 10
+        assert data_row, "数据行 9 列与表头对齐"
+        assert len(data_row[0].strip().split("|")) == 11
 
 
 class TestRunStandardizedExperimentReturnKeys:
