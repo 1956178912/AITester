@@ -37,6 +37,7 @@
 | false_fix 口径矩阵（100% / 59.58% / 87.16%） | `main_batch/` + `emse_optimization.py::false_fix_caliber` | `python -m experiments.emse_optimization`（零 LLM） |
 | Mut@k 全量 0.9396（QuixBugs，健全 29/50） | `emse_quixbugs_mutk_full_20261015/` | `python -m experiments.emse_quixbugs_mutk_full`（cosmic-ray 本地执行，无 LLM，耗时数小时） |
 | spec_compile_rate 0.7161/0.5937/0.6397 | `emse_calib_*_20261014/` | `python -m experiments.emse_dsl_diag3` / `emse_dsl_extend_recheck`（零 LLM） |
+| ULT 检出优先 accuracy 21.0%（42/200，Wilson [15.9%, 27.2%]） | `emse_ult_df200_20261017/` | `python experiments/emse_ult_dfsmoke_accuracy.py --benchmark <benchmark_ult_*.json> --arm plain_llm_df`（零 LLM 判定；跑批工件需 LLM 配额或 Zenodo） |
 
 ## 3. 一键复现（分层，按审稿人资源分级）
 
