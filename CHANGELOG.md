@@ -6,6 +6,140 @@
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased] — 2026-10-17 N 轮（全功能端到端验证 + 8 个功能缺陷修复 + oracle 独立判读 + 真实 LLM 重型路径）
+
+> N 轮回应"对项目**所有功能**全面优化、配额足够测试所有内容"：不再只盯研究链路，
+> 而是把**每个用户可见功能**变成一行可执行探针（56 探针 / 14 功能组 / 12 个真实
+> LLM 探针），在真实装配（CLI / workflow / 真 LLM / 真子进程）下验证；探针**当场
+> 驱动出 8 个此前无任何测试覆盖的真实缺陷**（其中 2 个 P0 级静默失效），并全部修复
+> 加回归。另落地 M 轮登记的 A-05 后续修复（oracle 接线 + 独立判读），用零 LLM 重放
+> 与真实 LLM 冒烟验证。LLM 实际花费 **< $0.1**（探针矩阵 $0.02 级 + 重型路径 $0.046）。
+
+### Fixed
+
+- **N-2a：kernel sandbox 在 `KERNEL_SANDBOX_ENABLE=true` 下 100% 静默失效（P0，safe 档）**。
+  SBPL profile 用 Python `repr()` 生成**单引号**路径字面量，而 `sandbox-exec` 只接受
+  双引号 → rc=65 整个 profile 被拒、每个 executor 调用 0.02s 失败、coverage=0，且被
+  误分类为 `test_failure`（污染诊断）。修复：`_sbpl_quote()`（JSON 双引号转义）；
+  修后再暴露 deny-default 缺根目录 read/metadata 导致 SIGABRT → 补根目录规则；
+  追加修复被掩盖的 realpath 变体（`/tmp→/private/tmp`）、`/dev` 设备节点、以及
+  **`.env.*` DENY 正则误伤 `.venv/` 整树**（Python 读 `pyvenv.cfg` 被拒）→ 改路径分量
+  匹配（`.env/.env.local/.ssh/.aws/llm_configs.json` 仍拒）。回归 14 例。
+- **N-2b：沙箱执行器接线未放行解释器路径（P0）**：`executor.py`/`executor_modes.py`
+  local+venv 模式下 `sandbox-exec: execvp() of '.venv/bin/python' failed`；修复为
+  **exec-only 最小放行面**（argv[0] 字面 + realpath + Python.app + venv 根只读）+
+  TMPDIR 读写 + `cwd_rw=False`（仓库根只读）+ coverage 数据落 TMPDIR；沙箱启动失败
+  显式返回 `error_info.type="kernel_sandbox_unavailable"`（不新增 ErrorCategory 枚举，
+  M1 口径不受影响）。回归 29 例；**safe 档真实 LLM 端到端 PASS**（执行器 passed=True /
+  coverage=100 / 最小 workflow test_passed）。
+- **N-2c：`run --json --verbose` stdout 污染（CLI JSON 契约破坏）**：提示信息经
+  `info_msg` 写入 stdout，`| jq` 首行解析失败。修复：提示改走 stderr。回归 6 例。
+- **N-2d：`list-examples` 列出并建议执行 `examples/__init__.py`**：无效示例。修复：
+  过滤下划线开头文件、建议优先 `calculator.py`。回归同文件。
+- **N-2e：日志过度脱敏误伤长路径段**：base64（≥40 位）模式把点号后连续路径段整体
+  当密钥 → `check-dataset quixbugs` 的 gold 路径显示为 `<REDACTED_KEY>`（诊断不可读）。
+  修复：模式**边界锚定** + 内容判定（路径形态原样、真实 base64 密钥仍脱敏）。回归 37 例。
+- **N-4a：`COST_BUDGET_USD` 生产记账未接线 → 费用上限永不生效（P0）**。真实 LLM 实测：
+  `COST_BUDGET_ENABLE=true COST_BUDGET_USD=0.0001`（+`COST_USD_PER_1K=0.3`）下 3 次调用
+  /6757 tokens 照常执行、`token_budget_capped=false`、日志无预算告警；而
+  `COST_BUDGET_TOKENS=100` 阳性对照正常触发 `budget_exceeded` → 定位为 USD 记账缺口：
+  `llm_client.py` 调 `check_budget()` 只传 tokens；`cost_budget.record_usage_and_check`
+  的 usd 参数全仓生产零调用。修复：LLM 调用后按价格表计算 USD 增量并记账/检查，
+  disabled 零差异、与 token 通道同口径停止、审计字段（consumed_usd）不再恒 0。
+  回归 23 例 + 修后真实复验（`05a_budget_usd_after_fix/`）：**1 次调用/3242 tok 即
+  `stop_reason=budget_exceeded`、`token_budget_capped=true`、`consumed_usd=$0.001644 ≥
+  cap $0.0001`**；token 通道阳性对照不回归。
+- **N-4b：跨文件路径结果行缺审计字段（P2）**：`cross_file_deps`/`cross_file_plan` 仅在
+  raw 落盘、批次行无该键（且 L3 两任务首轮即绿使 analyzer 从未进入）。修复：结果行
+  （成功/失败分支键位一致）新增 `cross_file_enabled` / `cross_file_deps` /
+  `cross_file_plan_present`（默认 None/None/False、键位一致）；零 LLM stub 复现证明机制
+  本身可用；回归 11 例。
+  （N-4 同时上报的 D2/D4 已由 N-2a/N-2b 修复；safe 档复验 `06_safe_profile_after_fix/`。）
+
+### Added
+
+- **N-1：全功能端到端探针矩阵（framework + 三组探针模块）**。新增
+  `scripts/tools/e2e_probe.py`（探针发现 / **子进程隔离执行** / 超时 / JSON+MD 报告 /
+  `--include-llm` 门禁 + `AITESTER_E2E_LLM` 双重开关 / 强制 `AITESTER_LLM_CACHE=0`）、
+  `docs/design/e2e_probe_matrix.md`（三层验证分工 / 功能矩阵 / 纪律 / 边界）、
+  `Makefile::e2e-probe`（零 LLM）与 `e2e-probe-llm`（真 LLM）+ 框架测试 26 例。
+  三组探针模块共 **56 探针**：`e2e_probes_workflow.py`（23：CLI/workflow/agents/repair/
+  safety/observability/localization）、`e2e_probes_platform.py`（25：budget/cache/RAG/
+  security/executor/dataset/observability）、`e2e_probes_logic.py`（10：SpecIR/白名单/
+  确定性 oracle/SMT/接线/独立判读/停滞/变异顾问/branch 覆盖）。实跑 **56/56 pass**
+  （12 个真实 LLM 探针，墙钟 119.8s）；零 LLM 子集 44 探针可安全 CI 化。
+- **N-3：oracle 接线 + 独立判读（A-05 后续修复）**。① `_append_spec_oracle_to_test_with_verdict`
+  材料优先级扩为 `spec_ir → test_plan.logic_analysis → spec_anchor.logic_analysis →
+  spec_anchor.human_spec`：生产锚材料臂（无 planner test_plan）不再永远 `not_attempted`；
+  人类 docstring 不强行编译，新增 3 个可审计 verdict（既有 5 值不变）。② M1 判分
+  **独立判读**：`detection_rate` 语义 = **LLM-suite**（`-k` 排除 oracle 测试），oracle
+  单独运行 → `oracle_suite_verdict ∈ correct/fp/silent/misguided/unavailable`；新增
+  `llm_suite_detection_rate` 字段，oracle 失败不再改写 LLM 检出。零 LLM 重放（40 口径）：
+  df_spec **20/40=50.00%** / df **31/40=77.50%** 与 M-2 逐位一致（mismatch 0），oracle
+  四分类 correct 0/fp 29/silent 9 与 M-2 逐任务一致 → **修复可测量性、不改变质量结论**。
+  真 LLM 冒烟（1 次/2423 tokens）：同一生成测试 **LLM-suite=1.0 vs 旧混判=0.0**，9/9 检查
+  通过。测试 48 例。
+- **N-4：真实 LLM 重型功能探针**（冻结干净快照 HEAD=`f194d67`、dirty=0、逐项
+  `git_dirty=false`）：00 LLM 冒烟 / 01 logic 全链路 aitester×3（planner/generator/
+  executor/debugger/patch_applier 全进入、spec_compile_rate 1.0/1.0/0.0、oracle verdict
+  injected/injected/compiled_empty）/ 02 RAG×2（rag_stats 非空、hit_rate 0.25）/
+  03 跨文件 L3×2（机制可用但首轮即绿未进入 → D3 审计字段修复）/ 04 venv 执行器
+  （快路径口径，use_venv=true）/ 05 budget（USD 缺陷 D1 + token 通道阳性对照）/
+  06 safe 档（旧快照 D2，主树已修）/ 07 oracle 冒烟（依 N-3，记录 blocked）。
+  总成本 **$0.0463**、有效墙钟 28.8min；产物 `experiments/results/e2e_llm_probes_20261017/`
+  （README/ITEM_RESULTS/逐项 logs+traces/meta/SHA256SUMS）、复现入口
+  `experiments/run_e2e_llm_probes.sh`。纪律：发现缺陷只立案不改源码；两次中止原因
+  （主树在途修改 / wall-time）归档披露；终检清理 1 个中止遗留孤儿 pytest（M-3 已知族）。
+
+### Changed
+
+- **detection_rate 口径变更（N-3 起）**：语义 = **LLM-suite**（oracle 测试分离执行）；
+  历史批次（N-3 前）为"oracle 混入同文件"的**混判旧口径**，历史 JSON 不改写——引用
+  历史 detection 必须标注口径，新旧不得混池（登记册 §5 / MEASUREMENT_INTEGRITY §6）。
+- **safe 档从"静默失效"变为可用**：`AITESTER_PROFILE=safe` 下沙箱执行链路真实 PASS；
+  `KERNEL_SANDBOX_ENABLE=true` 的 local+venv 执行器可用且启动失败可诊断。
+- **文档/BASELINE/登记册同步**：BASELINE 新增 `feature_matrix`（56 探针矩阵）与
+  `target_quality.oracle_independent_judging`（N-3 口径与数字）；登记册新增 §3.2
+  N-1~N-4 与 §4 N 轮收口（safe P0 / 功能矩阵 / oracle 质量新登记）/ §5 三条引用纪律；
+  README 双语"最新优化"同步 N 轮；INDEX 收录探针矩阵设计文档；
+  `docs/MEASUREMENT_INTEGRITY.md` §6 与 `docs/design/oracle_quality_metric.md` §10
+  记录 N-3 处置；EMSE 本地清单 §8 增加 N 轮增量。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8315 passed / 5 skipped / 0 failed**（collected **8320**；本机 **175.71s**；
+  运行注：`COVERAGE_FILE` 指向隔离目录，避免嵌套 pytest 子进程的 coverage 数据
+  与主进程合并冲突——N 轮新增探针/执行器测试会启动真实 pytest 子进程）；
+- **覆盖率**：行 **96.54%**（16720/17319）/ 分支 **92.65%**（5922/6392）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.14pp/+0.15pp——
+  增量 <0.5pp 步长故水位不上调）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（783 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **90/90** + `emse_*` 目录覆盖扫描通过（N 轮新增 15 项证据工件）；
+- **功能矩阵复跑**：`AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py --all
+  --include-llm` → **56/56 pass**（14 功能组 / 12 真实 LLM 探针；墙钟 119.8s；
+  零 LLM 子集 44 探针 `--all` 可重复）；`make e2e-probe` / `make e2e-probe-llm` 入口可用；
+- **N-3 oracle 独立判读复算（零 LLM）**：`python -m experiments.oracle_quality_replay
+  --independent-judging` → df_spec **20/40=50.00%** / df **31/40=77.50%**（与 M-2
+  逐位一致，mismatch 0），oracle 四分类 correct 0/fp 29/silent 9（38 注入任务）；
+  工件 `emse_oracle_independent_judging_20261017/` SHA256SUMS 10 项 verify 通过；
+- **N-4 真实 LLM 重型路径复算**：冻结快照（HEAD `f194d67`、dirty=0）7 项
+  logic/RAG/跨文件/venv/USD 预算/safe/oracle 全部 exit 0，成本 **$0.0463**、
+  墙钟 28.8min；工件 `e2e_llm_probes_20261017/` SHA256SUMS 67 项 verify 通过；
+- **N-5 缺陷收口复验**：D1 USD 预算 —— 修后 **1 次调用/3242 tok 即
+  `stop_reason=budget_exceeded`、`consumed_usd=$0.001644 ≥ cap $0.0001`**
+  （token 通道阳性对照不回归）；D2 safe 档 —— **passed=True / coverage=100.0**、
+  零 `sandbox-exec` 错误；证据 `05a_budget_usd_after_fix/`、`06_safe_profile_after_fix/`；
+- **探针驱动缺陷回归**：kernel sandbox 14 + executor sandbox 29 + over-redaction 37 +
+  CLI 6 + budget USD 23 + cross-file audit 11 + 探针模块测试 132 + 框架 26 例；
+  目标集合实跑 310+/237/197 分批通过（见登记册 §3.2 N-1~N-5）；
+- **真实 LLM 花费**：探针矩阵（12 次）≈$0.02 + N-4 重型 $0.0463 + N-3 冒烟
+  $0.0009 + N-5 复验 $0.005 + 探针缺陷诊断 ≈$0.02 → **合计 < $0.1**。
+
 ## [Unreleased] — 2026-10-17 M 轮（真 LLM：规格增广二臂 not_confirmed / 非劣成立 + oracle 质量度量揭示仪器净损伤 + 孤儿根因修复 + Q11 论文审计）
 
 > M 轮承接 L 轮（P1 replace 三臂阴性、代理指标失效修正）继续"全面优化至前沿水准"：

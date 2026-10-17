@@ -145,7 +145,8 @@ class TestBudgetGate:
         assert is_budget_exceeded() is True
 
     def test_usd_cap_requires_price_table(self, monkeypatch: pytest.MonkeyPatch):
-        """费用口径在未配单价时不生效（默认 0 → 不因费用拦任务）。"""
+        """仅 token 增量不自动计价（USD 由生产接线经 pricing 计算；check_budget 本身
+        不根据 token 推算 USD）→ 未传 usd 时不因费用拦任务。"""
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")
         monkeypatch.setenv("COST_BUDGET_TOKENS", "0")
         monkeypatch.setenv("COST_BUDGET_USD", "0.001")
@@ -162,12 +163,19 @@ class TestBudgetGate:
         assert check_budget(consumed_delta_tokens=1, consumed_delta_usd=0.005) is True
         assert check_budget(consumed_delta_tokens=1, consumed_delta_usd=0.006) is False
 
-    def test_usd_side_inactive_without_price_table(self, monkeypatch: pytest.MonkeyPatch):
+    def test_usd_side_active_without_per_1k_config(self, monkeypatch: pytest.MonkeyPatch):
+        """D1（N-5）口径更新：显式 USD 增量不再依赖 COST_USD_PER_1K 配置。
+
+        旧口径把"是否配置 COST_USD_PER_1K"当作 USD 侧生效闸（且生产路径从未传
+        usd → USD 上限恒不触发，N-4 D1）。现 USD 增量由生产接线按价目表计算，
+        显式 delta 直接累计判定；本用例锁"无 per_1k 仍触发"。
+        """
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")
         monkeypatch.setenv("COST_BUDGET_TOKENS", "100000")
         monkeypatch.setenv("COST_BUDGET_USD", "0.001")
         monkeypatch.delenv("COST_USD_PER_1K", raising=False)
-        assert check_budget(consumed_delta_tokens=1, consumed_delta_usd=999.0) is True
+        assert check_budget(consumed_delta_tokens=1, consumed_delta_usd=0.0005) is True
+        assert check_budget(consumed_delta_tokens=1, consumed_delta_usd=999.0) is False
 
     def test_record_usage_and_check_accumulates(self, monkeypatch: pytest.MonkeyPatch):
         """累计到上限才拦（限 200：3×60=180 通过，第 4 次 240 超限）。"""

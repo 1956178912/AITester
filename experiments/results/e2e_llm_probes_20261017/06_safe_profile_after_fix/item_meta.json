@@ -1,0 +1,52 @@
+{
+  "item": "06_safe_profile_after_fix",
+  "purpose": "N-5 D2 复验：AITESTER_PROFILE=safe 最小任务（真实 LLM），主树已含 kernel sandbox 修复 → 执行器必须真实执行（passed=True/coverage>0），不得再现 seatbelt 语法错误",
+  "status": "pass",
+  "defect": "D2（P0）：KERNEL_SANDBOX_ENABLE/safe 档 macOS 执行链路 100% 失败（N-4 立案；已被 N-2 修复，本项复验）",
+  "command": "CMD: AITESTER_PROFILE=safe TEMPERATURE=0.0 LLM_THINKING_MODE=disabled AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=n5_06_safe_after_fix .venv/bin/python experiments/run_main_batch.py --dataset synthetic --task-count 1 --seed 42 --baselines plain_llm_df --output-dir experiments/results/e2e_llm_probes_20261017/06_safe_profile_after_fix --skip-stats --allow-dirty --dirty-reason='N-5 D2 复验：主树含 N 轮并行交付（非本探针路径）'",
+  "artifact": "benchmark_synthetic_20261017_233851.json",
+  "dataset": "synthetic",
+  "task_count": 1,
+  "profile": "safe",
+  "env_snapshot_subset": {
+    "AITESTER_PROFILE": "safe",
+    "KERNEL_SANDBOX_ENABLE": "true",
+    "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+    "INJECTION_GUARD_ENABLE": "true",
+    "ROGUE_MONITOR_ENABLE": "true"
+  },
+  "row": {
+    "task_id": "synthetic__task_0000",
+    "passed": true,
+    "coverage": 100.0,
+    "stop_reason": "test_passed",
+    "diagnosis": null,
+    "token_usage": {
+      "input_tokens": 937,
+      "output_tokens": 1188,
+      "total_tokens": 2125,
+      "llm_calls": 2,
+      "cache_hits": 0,
+      "cache_avoided_tokens": 0,
+      "by_model": {
+        "deepseek-flash": 2125
+      }
+    }
+  },
+  "evidence": {
+    "success_rate": "100.0%",
+    "avg_coverage": "100.0%",
+    "sandbox_error_occurrences_in_log": 0,
+    "note": "N-4 item06 在旧快照（f194d67）每 task 0.02-0.03s 失败、coverage=0、diagnosis 含 'sandbox-exec: unexpected symbol argument'；本次无任何 sandbox 错误"
+  },
+  "before_after": {
+    "before_N4_06": "safe 档执行链路 100% 失败（coverage=0；sandbox-exec rc=65 单引号 profile）",
+    "after_N5": "safe 档最小任务 passed=True / coverage=100.0 / stop_reason=test_passed / diagnosis=None；四开关均 true；日志零 sandbox 错误"
+  },
+  "d3_cross_file_audit_keys": {
+    "cross_file_enabled": false,
+    "cross_file_deps": null,
+    "cross_file_plan_present": false
+  },
+  "n5_note": "N-5 修复后结果行同含 D1/D3 审计字段（见 README §7）；未 commit。"
+}

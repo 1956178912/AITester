@@ -10,17 +10,69 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from collections.abc import Callable
 from typing import Any
 
+#: 脱敏替换类型：静态占位符，或按匹配内容判定的可调用替换器（后者用于
+#: "长 base64" 这类需要排除文件系统路径形态、避免过度脱敏的模式）。
+_SensitiveReplacement = str | Callable[[re.Match[str]], str]
+
+#: 文件系统路径形态判定使用的"路径起始段"白名单（绝对路径常见首段）。
+_PATH_PREFIX_SEGMENTS: frozenset[str] = frozenset(
+    {"tmp", "Users", "home", "var", "private", "usr", "opt", "etc", "workspace", "Workspace"}
+)
+
+
+def _redact_base64_like(match: re.Match[str]) -> str:
+    """长 base64 串脱敏，但**排除文件系统路径形态**（D3 过度脱敏修复）。
+
+    背景（N-1 上报 D3，2026-10-17）：历史模式把点号后的长路径段误判为密钥——
+    `mask_sensitive_info('/tmp/.cache/aitester/quixbugs/correct_python_programs')`
+    → `/tmp/.<REDACTED_KEY>`；真实症状 `main.py check-dataset quixbugs` 打印
+    `gold 修复版目录：/Users/<user>/.<REDACTED_KEY>`（诊断可读性下降）。
+    根因：base64 字符类含 `/`，连续路径段长度 ≥40 即被整体当成 base64 密钥。
+
+    判定（保守，不影响真实密钥族）：
+    - 含 `/` 且**不含 `+` 且不以 `=` 结尾** → 视为路径，原样返回；
+    - 含 ≥2 个 `/`（多级路径形态）→ 原样返回；
+    - 单 `/` 且全小写/数字/下划线（典型目录段形态）→ 原样返回；
+    - 其余（无路径分隔符的 base64 密钥、含 +/= 的强 base64）→ 脱敏。
+
+    Args:
+        match: 正则匹配对象（group(1) 为候选长串）。
+
+    Returns:
+        占位符 `<REDACTED_KEY>` 或原文（路径形态）。
+    """
+    candidate = match.group(1) if match.lastindex else match.group(0)
+    if "/" in candidate or "\\" in candidate:
+        strong_base64 = "+" in candidate or candidate.endswith("=")
+        if not strong_base64:
+            return match.group(0)
+        if candidate.count("/") >= 2:
+            return match.group(0)
+        if not any(char.isupper() for char in candidate):
+            return match.group(0)
+    return "<REDACTED_KEY>"
+
+
 # 敏感信息模式匹配规则
-_SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
+_SENSITIVE_PATTERNS: list[tuple[re.Pattern[str], _SensitiveReplacement]] = [
     # API Key 模式：覆盖 sk- 前缀、带点号段、无 sk- 前缀的长十六进制/base64 密钥
     # （形如 sk-ws-xxx.yyy...、e2b08862968b... 两类此前不在此模式内）
     (re.compile(r"(sk-[A-Za-z0-9.\-_]{20,})"), "<REDACTED_API_KEY>"),
     # 长十六进制串（>=32 位，前后无字母数字/下划线粘连）
     (re.compile(r"(?<![\w-])[A-Fa-f0-9]{32,}(?!\w)"), "<REDACTED_KEY>"),
-    # 长 base64 串（>=40 位，须含大小写字母或 +/_，避免误伤普通长单词）
-    (re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9+/=_-]{40,}={0,2})(?![A-Za-z0-9+/_=])"), "<REDACTED_KEY>"),
+    # 长 base64 串（>=40 位）——D3 过度脱敏修复（2026-10-17）：
+    # ① 边界锚定：起始前不得是字母数字或路径上下文（`/ . _ ~ + -`），
+    #    首字符不得是 `/`（避免从绝对路径中间开始匹配整段路径）；
+    # ② 内容判定：`_redact_base64_like` 排除多级/小写路径段形态（`.cache/...`、
+    #    `.venv/...`），真实 base64 密钥（含 +/= 或混合大小写）仍脱敏。
+    # 正控：`AbCd...` 56 位混合大小写 base64 仍被脱敏（既有测试）。
+    (
+        re.compile(r"(?<![A-Za-z0-9/._~+-])([A-Za-z0-9+_=][A-Za-z0-9+/_=-]{39,}={0,2})(?![A-Za-z0-9+/_=])"),
+        _redact_base64_like,
+    ),
     # Base64 编码的密钥
     (re.compile(r'(?:key|token|secret|password)=(.{8,})(?:\s|$|")'), r"key=<REDACTED>"),
     # O17 残留（2026-09-29 审查 D.4-4 + 2026-10-02 修复）：大写命名凭证赋值
@@ -98,7 +150,9 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
 # O18：fallback 现扩展纳入 Bearer（索引 5）与 AWS key（索引 7）两条
 # 高优先级模式，URL userinfo / DSN 保持主模式覆盖（降级态保守，
 # 避免误伤普通 URL）。
-_FALLBACK_PATTERNS: tuple[tuple[re.Pattern, str], ...] = tuple(_SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4, 5, 7))
+_FALLBACK_PATTERNS: tuple[tuple[re.Pattern[str], _SensitiveReplacement], ...] = tuple(
+    _SENSITIVE_PATTERNS[i] for i in (0, 1, 2, 4, 5, 7)
+)
 
 # setup_logger_safety 的"检查-追加"段锁（2026-09-26 全面审查：并发调用幂等化）
 _logger_safety_lock = threading.Lock()

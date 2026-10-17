@@ -857,6 +857,19 @@ def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> f
     return _impl(task, final_state)
 
 
+def _compute_oracle_suite_verdict(task: Any, final_state: dict[str, Any] | None) -> str:
+    """N-3（2026-10-17，A-05 后续修复）：确定性 oracle 独立判定 —— 详见
+    experiments/_m1_metrics.py。
+
+    与 LLM 测试**分开执行/分开判定**（`-k` 只选 oracle 测试名）；无 oracle
+    注入时返回 "unavailable" 且不启动额外子进程（历史口径零差异）。
+    取值域：correct / fp / silent / misguided / unavailable。
+    """
+    from experiments._m1_metrics import _compute_oracle_suite_verdict as _impl
+
+    return _impl(task, final_state)
+
+
 def _oracle_type_label(final_state: dict[str, Any] | None) -> str:
     """R52（2026-09-30 独立审查 P0）：验收 oracle 类型标签。
 
@@ -1490,6 +1503,49 @@ def _aggregate_failure_categories(bl_results: list[dict[str, Any]]) -> dict[str,
     return dict(sorted(counter.items(), key=lambda kv: kv[1], reverse=True))
 
 
+def _cross_file_audit_fields(final_state: dict[str, Any] | None) -> dict[str, Any]:
+    """D3（N-5，2026-10-17）：跨文件结果行审计字段（成功/失败分支键位一致）。
+
+    N-4 item03 实测：synthetic level3 跨文件任务的结果行**不含**
+    `cross_file_deps`（只在 `_dump_state_artifacts` 的 raw 落盘），跨文件修复
+    路径是否被触达/依赖图是否为空**无法从批次工件逐行审计**。现新增三键
+    （纯观测，不改判分口径、不改既有键）：
+
+    - ``cross_file_enabled``：本行运行时 `CROSS_FILE_ENABLE` 是否开启
+      （bool；读取异常时 None，不阻断结果构造）；
+    - ``cross_file_deps``：终态依赖边列表（成功分支取 state；失败分支/无状态
+      为 None——失败分支本来就没有工作流终态，不臆造空列表）；
+    - ``cross_file_plan_present``：终态是否产出多文件修复计划
+      （`cross_file_plan` 非空；失败分支恒 False）。
+
+    Args:
+        final_state: 基线运行结束后的工作流状态；None 表示失败分支（无终态）。
+
+    Returns:
+        含三键的 dict（直接 ** 展开进结果行，成功/失败分支键集一致）。
+    """
+    enabled: bool | None
+    try:
+        from src.tools.cross_file import cross_file_enabled as _cross_file_enabled
+
+        enabled = bool(_cross_file_enabled())
+    except Exception:  # pragma: no cover - 极端 import 异常：显式 None（不阻断行构造）
+        enabled = None
+    if final_state is None:
+        return {
+            "cross_file_enabled": enabled,
+            "cross_file_deps": None,
+            "cross_file_plan_present": False,
+        }
+    deps = final_state.get("cross_file_deps")
+    plan = final_state.get("cross_file_plan")
+    return {
+        "cross_file_enabled": enabled,
+        "cross_file_deps": deps if isinstance(deps, list) else None,
+        "cross_file_plan_present": bool(plan),
+    }
+
+
 def _build_task_result(
     task: BenchmarkTask,
     elapsed: float,
@@ -1534,6 +1590,13 @@ def _build_task_result(
         _trap = _self_repair_trap_result(final_state)
         # I1（2026-10-16）：终局失效归因单次计算，下方结果行四键共享
         _attribution = _failure_attribution_for_result(final_state)
+        # N-3（2026-10-17，A-05 后续修复）：独立判读两键**单次计算**——
+        #   - detection_rate 语义收敛为 LLM-suite（排除 oracle 测试名执行）；
+        #   - oracle_suite_verdict 由 oracle 测试单独运行判定（oracle 失败不再
+        #     改写 LLM 检出结论；无 oracle 注入时恒 "unavailable" 且零额外子进程）。
+        # 复用同一计算值避免重复 pytest 子进程（两者共享 M1 gold 材料路径）。
+        _llm_suite_detection = _compute_detection_rate(task, final_state)
+        _oracle_suite_verdict = _compute_oracle_suite_verdict(task, final_state)
         return {
             "task_id": task.task_id,
             "repo": task.repo_name,
@@ -1658,7 +1721,12 @@ def _build_task_result(
             #   false_fix_rate（passed=True 但 gold 裁决失败的占比）
             # 计算依赖 gold test_cases / fixed（合成模板自带），无 gold 材料时
             # 以 None 占位保持键集合同构（历史结果 JSON 结构向后兼容）。
-            "detection_rate": _compute_detection_rate(task, final_state),
+            # detection_rate 语义（N-3 起）= LLM-suite；两键同值，后者为显式口径名。
+            "detection_rate": _llm_suite_detection,
+            "llm_suite_detection_rate": _llm_suite_detection,
+            # N-3：oracle 独立判定（correct/fp/silent/misguided/unavailable；
+            # 未注入/材料缺失/超时 → unavailable，fail-closed 不臆测）。
+            "oracle_suite_verdict": _oracle_suite_verdict,
             "repair_rate": _compute_repair_rate(task, final_state),
             "false_fix_rate": _compute_false_fix_rate(task, final_state),
             # 2026-09-30 独立审查 N1：测试执行错误率（坏测试直接防线，
@@ -1814,6 +1882,8 @@ def _build_task_result(
             # harness_invalid 早退路径为上一任务残留快照，但该行经 M3 门禁
             # 本就不计入统计）。cap 未注入（历史口径）时恒 False。
             "token_budget_capped": _current_budget_exceeded(),
+            # D3（N-5，2026-10-17）：跨文件审计字段（成功分支；与失败分支键位一致）
+            **_cross_file_audit_fields(final_state),
         }
     return {
         "task_id": task.task_id,
@@ -1881,6 +1951,10 @@ def _build_task_result(
         "source_patched_unverified": None,
         "patch_evidence_level": None,
         "detection_rate": None,
+        # N-3：失败分支无 final_state → LLM-suite 不可判（None）/ oracle 未运行
+        # （unavailable）；键集合同构（成功/失败两分支键集合完全一致）。
+        "llm_suite_detection_rate": None,
+        "oracle_suite_verdict": "unavailable",
         "repair_rate": None,
         "false_fix_rate": None,
         # 2026-09-30 独立审查 N1：失败分支无生成测试，测试执行错误率占位
@@ -1964,6 +2038,8 @@ def _build_task_result(
         "harness_invalid": harness_invalid,
         # AM1：失败分支同读当前线程预算快照（异常路径同线程，值为真实口径）
         "token_budget_capped": _current_budget_exceeded(),
+        # D3（N-5，2026-10-17）：跨文件审计字段（失败分支占位；键位与成功分支一致）
+        **_cross_file_audit_fields(None),
     }
 
 

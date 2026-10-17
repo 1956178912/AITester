@@ -1,0 +1,22 @@
+=== N-4 03_cross_file 跨文件 synthetic level3 aitester ×2 ===
+START_ISO_UTC=2026-10-17T15:13:40Z START_EPOCH=1792250020
+CODE_ROOT=/Users/wangchenyu/Workspace/AITester-n4-probe-f194d67 RUNNER_REPO=/Users/wangchenyu/Workspace/AITester
+GIT_HEAD=f194d679aaaba1c2fa97ef80fd53dbf47de203a9
+GIT_DIRTY_LINES=0
+CACHE_NAMESPACE=e2e_llm_probes_20261017_03_cross_file
+TRACE_DIR=/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/03_cross_file/traces
+ITEM_ENV: AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=1 AITESTER_LLM_CACHE=0 MAX_ITERATIONS=1 ENABLE_MUTATION_SCORING=false BRANCH_COVERAGE_INJECT_ENABLE=false MUTATION_ADVISOR_ENABLE=false CROSS_FILE_ENABLE=true
+CMD: /Users/wangchenyu/Workspace/AITester/.venv/bin/python /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/_helpers/run_cross_file.py /Users/wangchenyu/Workspace/AITester-n4-probe-f194d67 /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/03_cross_file ''
+基准测试 [aitester]:   0%|          | 0/2 [00:00<?, ?task/s]基准测试 [aitester]:  50%|█████     | 1/2 [00:12<00:12, 12.97s/task]基准测试 [aitester] - 耗时: 10.4s:  50%|█████     | 1/2 [00:12<00:12, 12.97s/task]基准测试 [aitester] - 耗时: 10.4s: 100%|██████████| 2/2 [00:25<00:00, 12.42s/task]基准测试 [aitester] - 耗时: 19.9s: 100%|██████████| 2/2 [00:25<00:00, 12.42s/task]基准测试 [aitester] - 耗时: 19.9s: 100%|██████████| 2/2 [00:25<00:00, 12.50s/task]
+
+============================================================
+基准测试完成！
+============================================================
+  [aitester] 成功率: 100.0%, 平均覆盖率: 97.5%
+  [aitester] 平均每任务Token: 7640.0, LLM调用次数: 6
+总耗时: 19.9s
+结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/03_cross_file/benchmark_synthetic_20261017_231407.json
+============================================================
+[watchdog] 子进程正常结束 rc=0 wall=27.5s
+END_ISO_UTC=2026-10-17T15:14:07Z END_EPOCH=1792250047 EXIT_CODE=0 WALL_SECONDS=27
+GIT_STATUS_AFTER_LINES=0

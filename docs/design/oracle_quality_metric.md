@@ -1,6 +1,7 @@
 # 确定性规约 oracle 质量度量（A-05）：设计、口径与已知限制
 
-> 状态：M 轮 T7-A（2026-10-17）零 LLM 重放工具的设计文档（本地件）。
+> 状态：M 轮 T7-A（2026-10-17）零 LLM 重放工具的设计文档（本地件）；
+> N-3（2026-10-17）更新：接线修复 + 独立判读已落地，质量控制口径见 §10。
 > 对应独立评审 §10 A-05 / G6 / D-4："spec_oracle 注入率 40%，正确率未度量"。
 > 工具：`experiments/oracle_quality_replay.py`；工件：
 > `experiments/results/emse_oracle_quality_20261017/`；单测：
@@ -246,3 +247,74 @@ nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
 
 工件 README 记录输入 sha256（两臂批次 JSON + 锚表 SHA256SUMS 校验）、
 复算命令、覆盖/分母、墙钟与限制。
+
+## 10. N-3 更新（2026-10-17）：接线修复 + 独立判读（落地 A-05 两个缺陷）
+
+§6 登记了两条独立缺陷：**仪器未自校验**（76% 假阳）与**判分对象耦合**（oracle
+与 LLM 测试同文件混判，oracle 失败抹掉既有检出）。N-3 处置其中的**结构性接线
+缺口**与**判分耦合**；"仪器自校验/质量改进"（编译器绑定、假阳治理）**不在本轮
+范围**，登记为下一轮任务。
+
+### 10.1 接线修复：`spec_anchor` 成为第三材料源
+
+- **缺陷**：生产 df_spec / doc / union / augment 类臂的 baseline **不跑
+  Planner** → state 里没有 `test_plan`；而注入口只读 `spec_ir` /
+  `test_plan.logic_analysis` → 这些臂的 `SPEC_ORACLE_EXEC_ENABLE=true` 永远
+  返回 `not_attempted`（A-05 重放只能用 test_plan 反事实绕过接线）。
+- **修复**：`src/graph/nodes.py::_append_spec_oracle_to_test_with_verdict`
+  材料优先级扩展为：
+  `spec_ir` → `test_plan.logic_analysis` → `spec_anchor.logic_analysis` →
+  `spec_anchor.human_spec`。**人类 docstring 锚不强行编译**（human_spec 是自然
+  语言、非 SpecExpr 通道），如实返回可审计 verdict。
+- **可审计 verdict 扩展**（既有 5 值逐字不变，state.py 注释同步）：
+  `not_attempted_missing_target`（有材料但缺函数名/模块名） /
+  `not_attempted_human_spec_only`（仅人类规格锚，不强行编译） /
+  `not_attempted_anchor_unparseable`（锚 logic_analysis 在场但解析为空）。
+- **零差异**：`SPEC_ORACLE_EXEC_ENABLE=false`（默认）时
+  `_spec_oracle_injection_verdict` 在开关守卫处即返回 → 生成测试逐字节不变、
+  历史批次 JSON 数字不受影响。
+
+### 10.2 独立判读：LLM-suite / oracle-suite 分开执行
+
+- **`detection_rate` 语义（自本修复起）= LLM-suite**：pytest
+  `-k "not test_specir_v2_oracle and not test_specir_v2_smt_witness"` 排除
+  oracle 测试后执行 buggy/fixed 两段 F2P 判定；oracle 单独以
+  `-k "test_specir_v2_oracle or test_specir_v2_smt_witness"` 运行，输出
+  **`oracle_suite_verdict`** ∈ correct / fp / silent / misguided / unavailable
+  （超时、收集错误、材料缺失 → unavailable，fail-closed 不臆测）。
+- **结果行新增两键**：`llm_suite_detection_rate`（同 detection_rate 值的显式
+  口径名）与 `oracle_suite_verdict`；失败分支同键位（None / unavailable）保持
+  键集合同构。`M1_PER_TEST_TIMEOUT` 语义不变（超时仍单列）。
+- **口径变更纪律（重要）**：变更**只影响未来批次**；默认开关关闭时生成测试
+  不含 oracle 测试名 → `-k` 不启用、命令逐位不变、oracle 判定零额外子进程，
+  历史工件 JSON 不被改写。对历史批次的引用须标注"detection = 混判旧口径"。
+- **耦合修复的直接效果**：在旧混判口径下，df_spec / df 两臂分别有 14 / 22 个
+  原本由 LLM 测试检出的任务被 oracle 假阳抹成未检出（§6）；新口径下
+  detection_rate 只由 LLM-suite 决定，oracle 失败不再改写它。
+
+### 10.3 零 LLM 重放验证与真 LLM 冒烟（工件在同名结果目录）
+
+工具新增 `experiments/oracle_quality_replay.py --independent-judging`：state
+**只带 spec_anchor**（复刻生产臂形态、同时验证接线修复），直接调用生产
+`_m1_metrics` 判分链，`M1_PER_TEST_TIMEOUT=1s` 与 M-2 重放口径对齐。工件：
+`experiments/results/emse_oracle_independent_judging_20261017/`
+（README + JSON + SHA256SUMS + `smoke/` 真 LLM 冒烟）。核心结果：
+
+| 指标 | df_spec（处理） | df（对照） |
+|---|---|---|
+| LLM-suite detection（40 口径） | **20/40 = 50.00%** | **31/40 = 77.50%** |
+| M-2 基线（40 口径） | 20/40 = 50.00% | 31/40 = 77.50% |
+| 逐任务对账（match / both_none / replay_none / **mismatch**） | 40 / 9 / 1 / **0** | 40 / 9 / 1 / **0** |
+| oracle 独立四分类（38 注入任务） | correct **0** / fp **29** / silent **9** / misguided 0 / unavailable 2 | 同左 |
+| oracle 类别 vs M-2 混判分类 | match 38 / both_unavailable 12 | 同左 |
+
+- **接线验证**：anchor-only state 注入 38/50（compiled_empty 12 = 9 个
+  `*_test` 驱动任务 + flatten + max_sublist_sum + node），未注入原因逐任务可审计。
+- **关键结论**：判分耦合修复后，LLM-suite detection 与 M-2 **逐位一致**；oracle
+  独立四分类与 M-2 混判逐任务分类一致（38/38）。即**"oracle 通道当前净负"
+  的质量结论不变**（correct 0 / fp 76%）——耦合是"可测量性"缺陷而非质量缺陷，
+  质量改进（编译器绑定自校验、假阳治理）仍需下一轮。
+- **真 LLM 冒烟**（`smoke/`，find_in_sorted，df_spec 臂，1 次真实调用）：注入
+  发生（`spec_oracle_injected=true`）、`oracle_suite_verdict=fp`；
+  **同一生成测试 LLM-suite detection=1.0，而 legacy 混判 detection=0.0**
+  ——直接演示独立判读防止既有检出被 oracle 失败抹掉（验证性，不作证据）。

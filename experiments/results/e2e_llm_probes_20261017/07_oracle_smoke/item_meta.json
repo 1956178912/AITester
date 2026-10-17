@@ -1,0 +1,10 @@
+{
+  "item": "07_oracle_smoke",
+  "status": "blocked",
+  "reason": "N-3 未提交（tests/test_oracle_independent_judging.py 缺失 / oracle_suite_verdict·llm_suite_detection_rate 接线未落地）——按 N-4 任务书记录 blocked 并跳过；未消耗 LLM 调用。",
+  "checked_markers": [
+    "tests/test_oracle_independent_judging.py",
+    "src/graph/nodes.py::oracle_suite_verdict",
+    "experiments/_m1_metrics.py::llm_suite_detection_rate"
+  ]
+}

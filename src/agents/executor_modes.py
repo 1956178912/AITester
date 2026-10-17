@@ -18,7 +18,7 @@ from typing import Any
 from src.agents.executor_imports import auto_fix_imports, extract_module_name_from_file
 from src.agents.executor_output import build_error_info, parse_coverage, parse_failed_cases
 from src.agents.executor_runtime import cleanup_sandbox
-from src.agents.kernel_sandbox import kernel_sandbox_enabled
+from src.agents.kernel_sandbox import interpreter_sandbox_allowances, kernel_sandbox_enabled, sandbox_launch_failure
 from src.utils.credential_scrub import scrub_os_environ
 from src.utils.env_utils import env_flag, env_float, env_int
 
@@ -144,12 +144,28 @@ def execute_sandboxed(
     if kernel_sandbox_enabled():
         from src.agents.kernel_sandbox import SandboxUnavailable, build_sandbox_command
 
-        _ks_allowed = [sandbox_dir, sys.executable]
+        # N-2（2026-10-17）venv 沙箱接线修复：此前 `_ks_allowed=[sandbox_dir,
+        # sys.executable]` 只把解释器**文件**放进 allowed_paths（SBPL subpath
+        # 对文件路径不匹配 exec），且未放行 venv 根/pyvenv.cfg/framework
+        # Python.app/TMPDIR → `sandbox-exec: execvp() of '.../python' failed:
+        # Operation not permitted`，被误报为 test_failure。现按解释器最小
+        # 放行面（exec/read 分离）+ TMPDIR 读写接线；沙箱内不写字节码/
+        # pytest cache，coverage 数据落 TMPDIR。
+        _ks_tmpdir = tempfile.gettempdir()
+        if not any(arg == "-p" and "no:cacheprovider" in cmd for arg in cmd):
+            cmd.extend(["-p", "no:cacheprovider"])
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        env["TMPDIR"] = _ks_tmpdir
+        env["COVERAGE_FILE"] = os.path.join(_ks_tmpdir, f".coverage_kernelsandbox_{os.getpid()}.data")
+        _ks_allow = interpreter_sandbox_allowances(cmd[0])
         try:
             sandboxed_cmd, ks_obs = build_sandbox_command(
                 cmd,
                 cwd=sandbox_dir,
-                allowed_paths=_ks_allowed,
+                allowed_paths=[sandbox_dir],
+                exec_paths=_ks_allow["exec_paths"],
+                read_paths=[sandbox_dir, _ks_tmpdir, *_ks_allow["read_paths"]],
+                write_paths=[_ks_tmpdir],
             )
         except SandboxUnavailable as ks_exc:
             # S1 fail-closed：平台无可用内核沙箱后端且未显式容忍无隔离 →
@@ -190,6 +206,7 @@ def execute_sandboxed(
         output, last_result = self._run_pytest_with_retry(cmd, env, sandbox_dir)
         # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
         # 结果时），与 EARLY_RETURN 走同一早退分支（error_info 透传）。
+        _ks_launch_error = sandbox_launch_failure(output) if result_extras.get("kernel_sandbox_obs") else None
         if isinstance(last_result, tuple) and last_result[0] in ("EARLY_RETURN", "UNAVAILABLE"):
             result = {
                 "passed": False,
@@ -199,6 +216,10 @@ def execute_sandboxed(
                 "error_info": last_result[1],
                 **result_extras,
             }
+            # N-2：沙箱启动/配置失败显式归因（不误报 test_failure；不新增枚举）
+            if _ks_launch_error:
+                result["error_info"] = {"type": "kernel_sandbox_unavailable", "message": _ks_launch_error}
+                result["kernel_sandbox_launch_failed"] = True
         else:
             coverage = parse_coverage(output)
             failed_cases = parse_failed_cases(output)
@@ -213,6 +234,16 @@ def execute_sandboxed(
             if last_result is not None and last_result.returncode != 0:
                 result["error_info"] = build_error_info(last_result, output)
                 result["error_info"]["missing_dependencies"] = sorted(missing_modules)
+                # N-2：沙箱启动/配置失败 → 显式 kernel_sandbox_unavailable
+                # （仅覆盖 error_info.type，不新增 ErrorCategory 枚举值）
+                if _ks_launch_error:
+                    result["error_info"] = {
+                        "type": "kernel_sandbox_unavailable",
+                        "returncode": last_result.returncode,
+                        "message": _ks_launch_error,
+                        "missing_dependencies": sorted(missing_modules),
+                    }
+                    result["kernel_sandbox_launch_failed"] = True
 
         # 依赖检测结论写入 dep_note，供 Debugger 与实验分析使用。
         # 注：原"安装失败优先覆盖 error_info"分支不可达（安装失败/venv 创建失败

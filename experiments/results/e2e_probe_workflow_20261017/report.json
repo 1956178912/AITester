@@ -1,0 +1,536 @@
+{
+  "schema": "e2e_probe_report/1",
+  "generated_at": "2026-10-17T23:00:39+0800",
+  "include_llm": true,
+  "probes": [
+    {
+      "name": "cli-help",
+      "group": "cli",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "CLI --help 正常，4 个子命令均在帮助面",
+      "evidence": {
+        "subcommands": [
+          "run",
+          "list-examples",
+          "check-dataset",
+          "clean-venv-cache"
+        ]
+      },
+      "duration_s": 1.69,
+      "description": "python main.py --help：退出码 0 且 4 个子命令在帮助面"
+    },
+    {
+      "name": "cli-list-examples",
+      "group": "cli",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "list-examples 正常，列出 5 个示例文件且建议 calculator.py",
+      "evidence": {
+        "listed": [
+          "api_manager_example.py",
+          "buggy_library.py",
+          "calculator.py",
+          "complex_logic.py",
+          "string_utils.py"
+        ]
+      },
+      "duration_s": 1.71,
+      "description": "list-examples：列出 examples 文件并给出使用示例"
+    },
+    {
+      "name": "cli-check-dataset-quixbugs",
+      "group": "cli",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "check-dataset quixbugs 正常（50 任务 / 质量通过）",
+      "evidence": {
+        "task_count": 50,
+        "redacted_path_segments": 2,
+        "redaction_note": "检出长路径段被日志脱敏误伤，属诊断可读性缺陷（非本探针功能失败）"
+      },
+      "duration_s": 2.42,
+      "description": "check-dataset quixbugs：加载 50 任务 + 质量报告"
+    },
+    {
+      "name": "cli-run-json-single",
+      "group": "cli",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "CLI --json 输出合法 JSON（passed=True, rc=0）",
+      "evidence": {
+        "rc": 0,
+        "passed": true,
+        "coverage": 100.0,
+        "iterations": 0,
+        "event_bus": {
+          "counts": {
+            "tests_executed": 1,
+            "workflow_completed": 1
+          },
+          "subscribed": []
+        },
+        "cost_budget": {
+          "total_consumed": 0,
+          "budget_exceeded_events": 0,
+          "tasks_capped": 0,
+          "budget_misconfigured_events": 0
+        },
+        "llm_calls": 0,
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "duration_s": 7.84,
+      "description": "run examples/calculator.py --json --verbose：真 LLM 下 stdout 为单一合法 JSON（1 次调用）"
+    },
+    {
+      "name": "cli-run-multi-parallel",
+      "group": "cli",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "多文件 --parallel --json 正常（2 份结果，passed=2/2，rc=0）",
+      "evidence": {
+        "rc": 0,
+        "payload_count": 2,
+        "passed_count": 2,
+        "llm_calls": 0,
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "duration_s": 5.31,
+      "description": "run 两文件 --parallel 2 --json：真 LLM 下每任务一份合法 JSON（2 次调用）"
+    },
+    {
+      "name": "workflow-fast-assembly",
+      "group": "workflow",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "fast 档装配正确（5 节点 / 8 边）",
+      "evidence": {
+        "profile": "fast",
+        "nodes": [
+          "debugger",
+          "executor",
+          "generator",
+          "patch_applier",
+          "planner"
+        ],
+        "edges": [
+          "__start__->planner",
+          "debugger->patch_applier",
+          "executor->__end__",
+          "executor->debugger",
+          "executor->generator",
+          "generator->executor",
+          "patch_applier->executor",
+          "planner->generator"
+        ]
+      },
+      "duration_s": 1.68,
+      "description": "fast 档 build_workflow：节点/边装配正确（无逻辑档节点）"
+    },
+    {
+      "name": "workflow-logic-assembly",
+      "group": "workflow",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "logic 档装配正确（6 节点，mutation_advisor 环在场，预设开关已注入）",
+      "evidence": {
+        "profile": "logic",
+        "nodes": [
+          "debugger",
+          "executor",
+          "generator",
+          "mutation_advisor",
+          "patch_applier",
+          "planner"
+        ],
+        "edges": [
+          "__start__->planner",
+          "debugger->patch_applier",
+          "executor->__end__",
+          "executor->debugger",
+          "executor->mutation_advisor",
+          "generator->executor",
+          "mutation_advisor->generator",
+          "patch_applier->executor",
+          "planner->generator"
+        ],
+        "flags": {
+          "DETECTION_FIRST_ENABLE": "true",
+          "FL_SPECTRAL_ENABLE": "true",
+          "MUTATION_ADVISOR_ENABLE": "true",
+          "PATCH_SNAPSHOT_ROLLBACK_ENABLE": "true",
+          "KERNEL_SANDBOX_ENABLE": null
+        }
+      },
+      "duration_s": 1.64,
+      "description": "logic 档 build_workflow：预设开关注入 + mutation_advisor 环在场"
+    },
+    {
+      "name": "workflow-logic-invoke",
+      "group": "workflow",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "logic 档 invoke 正常（stop_reason=test_passed，trace=1 条）",
+      "evidence": {
+        "elapsed_s": 7.15,
+        "stop_reason": "test_passed",
+        "test_passed": true,
+        "iteration": 0,
+        "test_cases": 9,
+        "generated_test_len": 1252,
+        "execution_trace_len": 1,
+        "checks": {
+          "test_plan_is_dict": true,
+          "test_plan_has_structure": true,
+          "generated_test_parseable": true,
+          "execution_trace_present": true,
+          "test_passed_is_bool": true,
+          "iteration_present": true,
+          "stop_reason_present": true
+        },
+        "llm_calls": 2,
+        "total_tokens": 5090,
+        "input_tokens": 3892,
+        "output_tokens": 1198
+      },
+      "duration_s": 8.8,
+      "description": "logic 档最小任务真实 invoke：test_plan/generated_test/trace/终态字段齐全（2 次调用）"
+    },
+    {
+      "name": "agents-planner-structured-plan",
+      "group": "agents",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "planner 结构化计划正常（10 用例，logic_degraded=False）",
+      "evidence": {
+        "test_cases": 10,
+        "logic_keys": [
+          "edge_cases",
+          "input_domain",
+          "output_domain",
+          "postconditions",
+          "preconditions"
+        ],
+        "logic_degraded": false,
+        "llm_calls": 1,
+        "total_tokens": 1214,
+        "input_tokens": 461,
+        "output_tokens": 753
+      },
+      "duration_s": 5.17,
+      "description": "planner 真实 LLM 输出结构化 test_plan（1 次调用）"
+    },
+    {
+      "name": "agents-generator-parseable-tests",
+      "group": "agents",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "generator 生成可解析 pytest（530 字符，3 个测试函数）",
+      "evidence": {
+        "generated_len": 530,
+        "test_functions": 3,
+        "llm_calls": 1,
+        "total_tokens": 810,
+        "input_tokens": 587,
+        "output_tokens": 223
+      },
+      "duration_s": 2.51,
+      "description": "generator 真实 LLM 生成可解析 pytest（import/断言齐全，1 次调用）"
+    },
+    {
+      "name": "agents-executor-run",
+      "group": "agents",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "executor 沙箱正常（通过用例 passed=True/coverage=100.0，失败用例失败可归因）",
+      "evidence": {
+        "pass_case": {
+          "passed": true,
+          "coverage": 100.0
+        },
+        "fail_case": {
+          "passed": false,
+          "failed_cases": 1
+        }
+      },
+      "duration_s": 2.87,
+      "description": "executor 本地沙箱运行生成测试并回报 passed/coverage/failed_cases"
+    },
+    {
+      "name": "repair-debugger-patch-chain",
+      "group": "repair",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "修复链正常：Debugger 产出补丁 → 安全应用 → 修复后测试通过",
+      "evidence": {
+        "patch_len": 82,
+        "patch_applied": true,
+        "dangerous_api_added": [],
+        "error_category": "assertion",
+        "root_cause": "被测函数 add 的实现逻辑错误：第3行 `return a - b` 使用了减法，而函数名 add 与文档字符串 'Return the sum of a and b.' 均明确要求返回两数之和。测试 add(2, 3) 期望 5，实际返回 -1，导致断言失败。",
+        "llm_calls": 1,
+        "total_tokens": 1390,
+        "input_tokens": 1224,
+        "output_tokens": 166,
+        "after_passed": true
+      },
+      "duration_s": 5.25,
+      "description": "真实修复链：Debugger(1 次 LLM)→安全应用补丁→修复后测试通过；区分模型未产出"
+    },
+    {
+      "name": "repair-graph-loop",
+      "group": "repair",
+      "requires_llm": true,
+      "status": "pass",
+      "detail": "修复环正常：debugger 进入 1 轮 → patch_applier 应用 → 复跑通过（stop_reason=test_passed）",
+      "evidence": {
+        "elapsed_s": 10.06,
+        "iteration": 1,
+        "test_passed": true,
+        "stop_reason": "test_passed",
+        "debugger_entered": true,
+        "repair_rounds": 1,
+        "patch_produced": true,
+        "patch_applied_rounds": 1,
+        "target_code_changed": true,
+        "dangerous_api_added": [],
+        "llm_calls": 3,
+        "total_tokens": 4393,
+        "input_tokens": 3633,
+        "output_tokens": 760
+      },
+      "duration_s": 11.82,
+      "description": "真实 graph 修复环：executor 失败→debugger→patch_applier→复跑通过（≈2 次调用）"
+    },
+    {
+      "name": "safety-dangerous-api-guard",
+      "group": "safety",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "危险 API 守卫正常：os.system / from-import 别名 / eval 均拒绝，正常补丁放行",
+      "evidence": {
+        "cases": {
+          "os_system": {
+            "applied": false,
+            "unchanged": true
+          },
+          "from_import_alias": {
+            "applied": false,
+            "unchanged": true
+          },
+          "eval": {
+            "applied": false,
+            "unchanged": true
+          }
+        }
+      },
+      "duration_s": 0.08,
+      "description": "补丁危险 API 守卫：os.system / from-import 别名 / eval 均拒绝"
+    },
+    {
+      "name": "safety-naming-contract-guard",
+      "group": "safety",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "命名契约守卫正常：删除模块级符号被拒（契约检查 missing=['g'] + apply 保守拒绝）",
+      "evidence": {
+        "contract_ok": false,
+        "missing": [
+          "g"
+        ],
+        "apply_applied": false
+      },
+      "duration_s": 0.08,
+      "description": "命名契约守卫：删除模块级符号被 apply 层 + 契约层双重拦截"
+    },
+    {
+      "name": "safety-test-hacking-detection",
+      "group": "safety",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "测试黑客检测正常：三类信号全部命中且正常补丁无误报",
+      "evidence": {
+        "cases": {
+          "assert_weakened": {
+            "suspected": true,
+            "signals": [
+              "assert_weakened"
+            ]
+          },
+          "hardcoded_branch": {
+            "suspected": true,
+            "signals": [
+              "hardcoded_input_branch"
+            ]
+          },
+          "exception_swallow": {
+            "suspected": true,
+            "signals": [
+              "exception_swallow_added"
+            ]
+          }
+        }
+      },
+      "duration_s": 0.08,
+      "description": "补丁测试黑客检测：删断言/硬编码分支/吞异常命中且正常补丁无 FP"
+    },
+    {
+      "name": "safety-deterministic-repair",
+      "group": "safety",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "确定性修复正常：NameError→import 零 LLM 产出补丁，无匹配场景显式 abstain",
+      "evidence": {
+        "hit": {
+          "attempted": true,
+          "method": "missing_import_inference",
+          "reason": "produced"
+        },
+        "miss": {
+          "attempted": false,
+          "method": null,
+          "reason": "no_matching_transformer"
+        },
+        "patch_has_import": true
+      },
+      "duration_s": 0.09,
+      "description": "确定性修复：NameError→import 零 LLM 产出补丁；无匹配显式 abstain"
+    },
+    {
+      "name": "safety-patch-rollback",
+      "group": "safety",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "快照回滚协议正常：P2P 失败自动回滚、通过则保留，开关默认关/开启生效",
+      "evidence": {
+        "rolled_back": {
+          "verdict": "regression_failed",
+          "rolled_back": true,
+          "success": false,
+          "p2p_returncode": 1
+        },
+        "kept": {
+          "verdict": "verified",
+          "rolled_back": false,
+          "success": true
+        }
+      },
+      "duration_s": 1.93,
+      "description": "快照回滚协议：P2P 回归失败自动回滚、通过保留、开关可观测"
+    },
+    {
+      "name": "observability-trace-redaction",
+      "group": "observability",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "trace 正常：JSONL 三事件落盘且敏感串已脱敏",
+      "evidence": {
+        "events": [
+          "task_start",
+          "node",
+          "task_end"
+        ],
+        "records": 3,
+        "redacted": true
+      },
+      "duration_s": 0.09,
+      "description": "trace JSONL 落盘三事件且敏感串已脱敏"
+    },
+    {
+      "name": "observability-event-bus",
+      "group": "observability",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "事件总线正常：发布→订阅回调/计数一致，关闭开关后 no-op",
+      "evidence": {
+        "received": [
+          "workflow_completed"
+        ],
+        "enabled_stats": {
+          "counts": {
+            "workflow_completed": 1
+          },
+          "subscribed": [
+            "workflow_completed"
+          ]
+        },
+        "disabled_stats": {
+          "counts": {},
+          "subscribed": []
+        }
+      },
+      "duration_s": 0.08,
+      "description": "事件总线发布/订阅/统计可用，关闭开关后 no-op"
+    },
+    {
+      "name": "analysis-fl-spectral-topk",
+      "group": "localization",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "FL_spectral 正常：Top-1 命中缺陷分支行 5（Top-k=[5, 2, 3]）",
+      "evidence": {
+        "buggy_line": 5,
+        "top": [
+          {
+            "line": 5,
+            "score": 1.0
+          },
+          {
+            "line": 2,
+            "score": 0.707107
+          },
+          {
+            "line": 3,
+            "score": 0.707107
+          }
+        ],
+        "candidate_lines": 5
+      },
+      "duration_s": 0.08,
+      "description": "FL_spectral（Ochiai）：Top-1 命中注入缺陷分支行"
+    },
+    {
+      "name": "analysis-fault-localizer-gold",
+      "group": "localization",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "fault localizer 正常：gold 变更函数 find_max 命中（MRR=1.0）",
+      "evidence": {
+        "function_name": "find_max",
+        "line_start": 1,
+        "line_end": 6,
+        "hit": {
+          "localization_hit_function": true
+        },
+        "rank": {
+          "localization_hit_function_at_3": true,
+          "localization_mrr": 1.0
+        }
+      },
+      "duration_s": 1.18,
+      "description": "fault localizer 反事实定位：gold 变更函数命中 + Hit@1/@3/MRR"
+    },
+    {
+      "name": "analysis-multi-candidate",
+      "group": "localization",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "multi-candidate 正常：静态筛选通过/拒绝正确，最小改动候选 index=1",
+      "evidence": {
+        "valid_reason": "",
+        "invalid_reason": "语法错误（line 2）: invalid syntax",
+        "best_index": 1
+      },
+      "duration_s": 0.09,
+      "description": "multi-candidate：静态筛选通过/拒绝 + 最小改动择优"
+    }
+  ],
+  "summary": {
+    "pass": 23
+  },
+  "load_errors": []
+}

@@ -1,0 +1,71 @@
+{
+  "kind": "n3_real_llm_smoke",
+  "evidence_status": "验证性冒烟，不作证据（≤3 次真实 LLM 调用）",
+  "generated_at": "2026-10-17T15:00:39+00:00",
+  "task_id": "quixbugs__find_in_sorted",
+  "module_name": "find_in_sorted",
+  "model_name": "deepseek-flash",
+  "env_snapshot": {
+    "AITESTER_PROFILE": "logic",
+    "TEMPERATURE": "0.0",
+    "LLM_THINKING_MODE": "disabled",
+    "SPEC_ORACLE_EXEC_ENABLE": "true",
+    "M1_PER_TEST_TIMEOUT": "1",
+    "AITESTER_CACHE_NAMESPACE": "n3_smoke_20261017_2",
+    "BENCHMARK_PARALLELISM": "1",
+    "AITESTER_BATCH_MAX_CALLS": "3",
+    "COST_BUDGET_ENABLE": "",
+    "COST_BUDGET_USD": ""
+  },
+  "wall_s": 13.966,
+  "row": {
+    "detection_rate": 1.0,
+    "llm_suite_detection_rate": 1.0,
+    "oracle_suite_verdict": "fp",
+    "spec_oracle_injected": true,
+    "spec_oracle_verdict": "injected",
+    "passed": false,
+    "iterations": 0,
+    "token_usage": {
+      "input_tokens": 921,
+      "output_tokens": 1502,
+      "total_tokens": 2423,
+      "llm_calls": 1,
+      "cache_hits": 1,
+      "cache_avoided_tokens": 2423,
+      "by_model": {
+        "deepseek-flash": 2423
+      }
+    },
+    "spec_replace_applied": "attempted_replaced"
+  },
+  "independence_probe": {
+    "llm_suite_detection": 1.0,
+    "legacy_mixed_detection": 0.0,
+    "oracle_suite_verdict": "fp",
+    "note": "legacy_mixed_detection = oracle 与 LLM 同文件混判（修复前口径）；llm_suite_detection = 独立判读 LLM-suite。oracle 在 fixed 侧失败时前者会被抹低。"
+  },
+  "anchor": {
+    "function_name": "find_in_sorted",
+    "has_human_spec": false,
+    "has_logic_analysis": true
+  },
+  "execution_trace_entries": 2,
+  "checks": {
+    "injection_occurred": true,
+    "generated_test_contains_oracle": true,
+    "spec_anchor_present": true,
+    "spec_anchor_has_logic_analysis": true,
+    "row_fields_present": true,
+    "oracle_suite_verdict_measurable": true,
+    "llm_suite_not_rewritten_by_oracle": true,
+    "trace_present": true,
+    "pdf_generated_test_present": true
+  },
+  "all_checks_pass": true,
+  "limitations": [
+    "单任务、单次运行；模型输出随机性与单任务代表性限制结论强度（验证性，不作证据）",
+    "df_spec 臂入口直接调用（等价 run_benchmark 该臂路径），未落盘正式批次工件",
+    "调用上限由外层 env AITESTER_BATCH_MAX_CALLS=3 硬约束；token 用量见 row.token_usage"
+  ]
+}

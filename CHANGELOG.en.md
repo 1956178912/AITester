@@ -1,10 +1,177 @@
-> Last updated: 2026-10-17 (round M: spec-augmentation two-arm **`not_confirmed` / non-inferiority holds** [df 80.56% vs augment 82.86%, δ=+2.86pp, p=0.5, MDE 16.57pp] + **A-05 oracle quality measured for the first time** [correct 0 / fp 76.3%; mixing into the same judging file erases 14/22 existing detections] + A-11 compile/exec rates + **m1_metrics orphan root-cause fix** [parent-death gap → two-stage termination + watchdog, reproduction 2→0] + **Q11 paper number audit** [67 claims, 100% traceable]; actual LLM spend **$0.1588**. Rounds L and K are registered the same day)
+> Last updated: 2026-10-17 (round N: **full-feature end-to-end probe matrix** 56/56 pass [14 groups, 12 real-LLM probes] + probes found **8 real defects** [safe-profile kernel sandbox P0, `COST_BUDGET_USD` production accounting P0, CLI JSON contract, over-redaction, ...] + **oracle wiring and independent judging** [LLM detection no longer erased by oracle failures] + real-LLM heavy paths [logic/RAG/cross-file/venv/safe] + 8300+ tests; actual LLM spend < $0.1. Rounds M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-17 Round N (full-feature end-to-end verification + 8 functional-defect fixes + oracle independent judging + real-LLM heavy paths)
+
+> Round N answers "optimize **all** features, the quota is enough to test everything":
+> instead of only watching research pipelines, every user-visible feature becomes one
+> executable probe (56 probes / 14 functional groups / 12 real-LLM probes) verified in
+> real assembly (CLI / workflow / real LLM / real subprocesses). The probes **found 8
+> real defects that had no test coverage before** (two of them P0-level silent
+> failures) and all were fixed with regressions. Round N also lands the A-05 follow-up
+> registered in round M (oracle wiring + independent judging), validated by zero-LLM
+> replay and real-LLM smoke. Total LLM spend **< $0.1** (probe matrix ~$0.02 + heavy
+> path $0.046).
+
+### Fixed
+
+- **N-2a: kernel sandbox silently 100% broken under `KERNEL_SANDBOX_ENABLE=true`
+  (P0, safe profile).** The SBPL profile built path literals with Python `repr()`
+  (single quotes) while `sandbox-exec` accepts only double quotes → rc=65 rejected the
+  whole profile, every executor call failed in 0.02s with coverage=0, and the failure
+  was misclassified as `test_failure` (polluting diagnosis). Fixed: `_sbpl_quote()`
+  (JSON double-quote escaping); fixing that exposed a deny-default missing-root
+  read/metadata rule causing SIGABRT → root rules added; three masked problems also
+  fixed: realpath variants (`/tmp→/private/tmp`), `/dev` device nodes, and the
+  **`.env.*` DENY regex accidentally matching `.venv/`** (Python could not read
+  `pyvenv.cfg`) → component-wise path matching (`.env/.env.local/.ssh/.aws/
+  llm_configs.json` still denied). 14 regression tests.
+- **N-2b: executor sandbox wiring did not allow the interpreter path (P0).**
+  `executor.py` / `executor_modes.py` in local+venv modes produced
+  `sandbox-exec: execvp() of '.venv/bin/python' failed`. Fixed with an **exec-only
+  minimal allowance** (argv[0] literal + realpath + Python.app + venv root read-only)
+  + TMPDIR read/write + `cwd_rw=False` (repo root read-only) + coverage data in TMPDIR;
+  sandbox launch failures now return `error_info.type="kernel_sandbox_unavailable"`
+  (no new `ErrorCategory` enum; M1 caliber unaffected). 29 regression tests;
+  **safe profile real-LLM end-to-end PASS** (executor passed=True / coverage=100 /
+  minimal workflow test_passed).
+- **N-2c: `run --json --verbose` polluted stdout (CLI JSON contract broken).**
+  The hint went through `info_msg` to stdout, so `| jq` failed on the first line.
+  Fixed: hints go to stderr. 6 regression tests.
+- **N-2d: `list-examples` listed and recommended `examples/__init__.py`.** Fixed:
+  filter underscore-prefixed files, recommend `calculator.py` first.
+- **N-2e: log over-redaction mangled long path segments.** The base64 (≥40 chars)
+  pattern treated dot-separated path segments as keys → `check-dataset quixbugs` showed
+  the gold path as `<REDACTED_KEY>` (unreadable diagnosis). Fixed: boundary-anchored
+  pattern + content check (path shapes kept, real base64 keys still redacted). 37 tests.
+- **N-4a: `COST_BUDGET_USD` production accounting not wired → the cost cap never
+  triggers (P0).** Real-LLM measurement: with `COST_BUDGET_ENABLE=true
+  COST_BUDGET_USD=0.0001` (+`COST_USD_PER_1K=0.3`) three calls / 6757 tokens ran
+  normally, `token_budget_capped=false`, no budget warning; the `COST_BUDGET_TOKENS=100`
+  positive control triggered `budget_exceeded` normally → the gap is USD accounting:
+  `llm_client.py` calls `check_budget()` with tokens only; `cost_budget.
+  record_usage_and_check`'s usd parameter has zero production call sites. Fixed:
+  compute the USD delta from the price table after each LLM call and record/check it;
+  disabled → zero behavior change; same stop channel as tokens; audit fields
+  (`consumed_usd`) no longer always 0. ≥15 regression tests + post-fix real
+  verification (`05a_budget_usd_after_fix/`): **one call / 3242 tokens already triggers
+  `stop_reason=budget_exceeded`, `token_budget_capped=true`, `consumed_usd=$0.001644 ≥
+  cap $0.0001`**; the token channel positive control shows no regression.
+- **N-4b: cross-file result rows lack audit fields (P2).** `cross_file_deps` /
+  `cross_file_plan` were only dumped in raw artifacts, the batch row had no key (and
+  two level-3 tasks passed on the first round so the analyzer was never entered).
+  Fixed: result rows (success/failure branches structurally identical) gain
+  `cross_file_enabled` / `cross_file_deps` / `cross_file_plan_present` (defaults
+  None/None/False, structurally identical); a zero-LLM stub reproduction shows the
+  mechanism itself works. 11 regression tests. (N-4's D2/D4
+  were already fixed by N-2a/N-2b; safe re-verification in `06_safe_profile_after_fix/`.)
+
+### Added
+
+- **N-1: full-feature end-to-end probe matrix (framework + three probe modules).**
+  New `scripts/tools/e2e_probe.py` (probe discovery / **subprocess isolation** /
+  timeouts / JSON+MD reports / `--include-llm` gate + `AITESTER_E2E_LLM` double switch /
+  forced `AITESTER_LLM_CACHE=0`), `docs/design/e2e_probe_matrix.md` (three-layer
+  verification division / feature matrix / discipline / boundaries), Makefile
+  `e2e-probe` (zero LLM) and `e2e-probe-llm` (real LLM) + 26 framework tests. Three
+  modules with **56 probes**: `e2e_probes_workflow.py` (23: CLI/workflow/agents/repair/
+  safety/observability/localization), `e2e_probes_platform.py` (25: budget/cache/RAG/
+  security/executor/dataset/observability), `e2e_probes_logic.py` (10: SpecIR/whitelist/
+  deterministic oracle/SMT/wiring/independent judging/stagnation/mutation advisor/branch
+  coverage). Actual run **56/56 pass** (12 real-LLM probes, 119.8s wall); the 44-probe
+  zero-LLM subset is CI-safe.
+- **N-3: oracle wiring + independent judging (A-05 follow-up).** (1)
+  `_append_spec_oracle_to_test_with_verdict` material priority extended to `spec_ir →
+  test_plan.logic_analysis → spec_anchor.logic_analysis → spec_anchor.human_spec`:
+  production anchor-material arms (no planner test_plan) are no longer permanently
+  `not_attempted`; human docstrings are not force-compiled, 3 auditable verdicts added
+  (existing 5 unchanged). (2) M1 scoring **independent judging**: `detection_rate`
+  semantics = **LLM-suite** (`-k` excludes oracle tests), oracle runs separately →
+  `oracle_suite_verdict ∈ correct/fp/silent/misguided/unavailable`; new
+  `llm_suite_detection_rate` field, oracle failures no longer rewrite LLM detection.
+  Zero-LLM replay (40 caliber): df_spec **20/40=50.00%** / df **31/40=77.50%** bit-equal
+  to the M-2 baseline (0 mismatches); oracle four classes correct 0/fp 29/silent 9
+  match M-2 per-task → **the fix restores measurability, not quality**. Real-LLM smoke
+  (1 call / 2423 tokens): the same generated test gives **LLM-suite=1.0 vs legacy
+  mixed=0.0**, 9/9 checks pass. 48 tests.
+- **N-4: real-LLM heavy functional probes** (frozen clean snapshot HEAD=`f194d67`,
+  dirty=0, per-item `git_dirty=false`): 00 LLM smoke / 01 logic full chain aitester×3
+  (planner/generator/executor/debugger/patch_applier all entered; spec_compile_rate
+  1.0/1.0/0.0; oracle verdict injected/injected/compiled_empty) / 02 RAG×2 (rag_stats
+  non-empty, hit_rate 0.25) / 03 cross-file L3×2 (mechanism works but passed first round
+  → D3 audit fields) / 04 venv executor (fast-path caliber, use_venv=true) / 05 budget
+  (USD defect D1 + token-channel positive control) / 06 safe profile (old snapshot D2,
+  fixed in main tree) / 07 oracle smoke (depends on N-3, recorded blocked). Total cost
+  **$0.0463**, effective wall 28.8min; artifacts
+  `experiments/results/e2e_llm_probes_20261017/` (README/ITEM_RESULTS/logs+traces/meta/
+  SHA256SUMS), reproduction entry `experiments/run_e2e_llm_probes.sh`. Discipline:
+  defects filed only, source untouched; two aborts (concurrent in-flight edits / wall
+  time) archived and disclosed; one orphan pytest left by the aborted rerun was cleaned
+  up (known M-3 family).
+
+### Changed
+
+- **detection_rate caliber change (since N-3)**: semantics = **LLM-suite** (oracle tests
+  run separately); historical batches (before N-3) are the "oracle mixed into the same
+  file" legacy caliber — historical JSON is not rewritten, so references to historical
+  detection must state the caliber and must not be pooled with new numbers (register §5 /
+  MEASUREMENT_INTEGRITY §6).
+- **The safe profile goes from "silently broken" to usable**: under
+  `AITESTER_PROFILE=safe` the sandbox execution chain really passes;
+  `KERNEL_SANDBOX_ENABLE=true` local+venv executors work and launch failures are
+  diagnosable.
+- **Documentation / BASELINE / register sync**: BASELINE gains `feature_matrix`
+  (56-probe matrix) and `target_quality.oracle_independent_judging` (N-3 caliber and
+  numbers); register gains §3.2 N-1..N-4, §4 round-N closures (safe P0 / feature matrix /
+  oracle-quality new entry) and three citation disciplines in §5; bilingual README
+  "latest optimization" synchronized to round N; INDEX lists the probe-matrix design
+  doc; `docs/MEASUREMENT_INTEGRITY.md` §6 and `docs/design/oracle_quality_metric.md` §10
+  record the N-3 disposition; the local EMSE checklist §8 gains round-N increments.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8315 passed / 5 skipped / 0 failed** (**8320** collected; **175.71s** locally;
+  note: `COVERAGE_FILE` is redirected to an isolated directory to avoid merges with
+  coverage data written by the real nested pytest subprocesses that the new probe and
+  executor tests spawn);
+- **Coverage**: lines **96.54%** (16720/17319) / branches **92.65%** (5922/6392);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.14pp/+0.15pp —
+  below the 0.5pp bump step, so the water level is unchanged);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (783 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **90/90** plus the `emse_*` directory coverage scan (15 new N-round
+  evidence entries);
+- **Feature matrix re-run**: `AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py
+  --all --include-llm` → **56/56 pass** (14 groups / 12 real-LLM probes; 119.8s wall;
+  the 44-probe zero-LLM subset is repeatable via `--all`); `make e2e-probe` /
+  `make e2e-probe-llm` entries available;
+- **N-3 oracle independent-judging recompute (zero LLM)**: `python -m
+  experiments.oracle_quality_replay --independent-judging` → df_spec **20/40=50.00%** /
+  df **31/40=77.50%** (bit-equal to M-2, 0 mismatches), oracle four classes correct
+  0/fp 29/silent 9 (38 injected tasks); artifact `emse_oracle_independent_judging_20261017/`
+  SHA256SUMS 10 entries verified;
+- **N-4 real-LLM heavy-path recompute**: frozen snapshot (HEAD `f194d67`, dirty=0),
+  7 items logic/RAG/cross-file/venv/USD-budget/safe/oracle all exit 0, cost **$0.0463**,
+  wall 28.8min; artifact `e2e_llm_probes_20261017/` SHA256SUMS 67 entries verified;
+- **N-5 defect-closure re-verification**: D1 USD budget — after the fix **one call /
+  3242 tokens already triggers `stop_reason=budget_exceeded`, `consumed_usd=$0.001644 ≥
+  cap $0.0001`** (token-channel positive control shows no regression); D2 safe profile —
+  **passed=True / coverage=100.0**, zero `sandbox-exec` errors; evidence
+  `05a_budget_usd_after_fix/`, `06_safe_profile_after_fix/`;
+- **Probe-driven defect regressions**: kernel sandbox 14 + executor sandbox 29 +
+  over-redaction 37 + CLI 6 + budget USD 23 + cross-file audit 11 + probe-module tests
+  132 + framework 26; staged target runs pass (see register §3.2 N-1..N-5);
+- **Real LLM spend**: probe matrix (12 calls) ~$0.02 + N-4 heavy $0.0463 + N-3 smoke
+  $0.0009 + N-5 re-verification $0.005 + probe-defect diagnosis ~$0.02 → **< $0.1 total**.
 
 ## [Unreleased] — 2026-10-17 Round M (real LLM: spec-augmentation two-arm `not_confirmed` / non-inferiority holds + oracle-quality measurement exposing a net-negative instrument + orphan root-cause fix + Q11 paper audit)
 
