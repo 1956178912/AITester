@@ -1,0 +1,596 @@
+{
+ "schema_version": "oracle_examples_metric/1",
+ "report": {
+  "arms": [
+   {
+    "arm": "plain_llm_df_spec",
+    "tasks": [
+     {
+      "task_id": "quixbugs__bitcount",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          1
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          7
+         ],
+         "expected": 3
+        }
+       ],
+       "prompt_sha256": "acd603e01f803e9cb1121a4303f75311c787e5ae1c7cd458f58aeb8325c4722b"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__breadth_first_search",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "69107b70a686962e5e551d3045d6447f514f1bfeefd340622aeaa0bc01083750"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__bucketsort",
+      "examples_generation": {
+       "status": "empty",
+       "examples": [],
+       "prompt_sha256": "32f44e4f6d31c2b18e556daf4607d0ae6ea21aac74de1ef0610d8202353164c3"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__depth_first_search",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "882efa58e72cb5c5be4877131845b0cc30100fdd25b4d8b98a02a08bf08ecb22"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__detect_cycle",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          null
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "5423c4c71a3373b94068bcb5b99412cc2ec9e26e8b5d04530ba027125dd59244"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5
+          ],
+          4
+         ],
+         "expected": -1
+        }
+       ],
+       "prompt_sha256": "4157add44d46b2bec201d8897501fbcf1df0c8919576124ed376804a301f35b8"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__find_in_sorted",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          4
+         ],
+         "expected": -1
+        }
+       ],
+       "prompt_sha256": "d5e19b3745c67af1a744321908955fd0c34ee6c14f23f147972c12dfe81f5eee"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__flatten",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [],
+           []
+          ]
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [
+            [
+             1
+            ]
+           ]
+          ]
+         ],
+         "expected": [
+          1
+         ]
+        }
+       ],
+       "prompt_sha256": "e7ec14545de0112803e6a505f891496a77edac6d7fff5014106e121499a1dade"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__gcd",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          0,
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          0,
+          5
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          12,
+          18
+         ],
+         "expected": 6
+        }
+       ],
+       "prompt_sha256": "998d71b843822310fb1a7f1ae9d6c6944e1e8bccfd23adb770b308a60ec4bdd0"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__get_factors",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          1
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          12
+         ],
+         "expected": [
+          2,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          101
+         ],
+         "expected": [
+          101
+         ]
+        }
+       ],
+       "prompt_sha256": "1040e1d43df553afcba68ab2012f3ef6e904242a8d44fd47fef676ae7f1e2931"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__hanoi",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          0,
+          1,
+          3
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          1,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           3
+          ]
+         ]
+        },
+        {
+         "input": [
+          2,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           2
+          ],
+          [
+           1,
+           3
+          ],
+          [
+           2,
+           3
+          ]
+         ]
+        }
+       ],
+       "prompt_sha256": "43f0fb0f180d430501b951528e04ed4e0c3ff645df4aeaff9123f89c55b44b06"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          ""
+         ],
+         "expected": true
+        }
+       ],
+       "prompt_sha256": "2ca9e6b4056a4478959220e05936fb4bd3feb8a94dd5e5600511cdb5bf4866db"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__kheapsort",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          [],
+          0
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ],
+          0
+         ],
+         "expected": [
+          1,
+          2,
+          3
+         ]
+        }
+       ],
+       "prompt_sha256": "0c785f6b7a7667d0185c541aff21ca410dad7125867eb981ff6c93e3a4fcc146"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__knapsack",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          0,
+          [
+           [
+            1,
+            5
+           ],
+           [
+            2,
+            10
+           ]
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          5,
+          []
+         ],
+         "expected": 0
+        }
+       ],
+       "prompt_sha256": "8b1aa817d0c14eb78b96640771569c6b6ed1b350a330ab48198b4cb6e251b306"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__kth",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          [
+           5
+          ],
+          0
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          0
+         ],
+         "expected": 1
+        }
+       ],
+       "prompt_sha256": "9aa82a19b7d9316a70a75fcfb27e52380b877a41e7d3987dec23ccdde8ded125"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__lcs_length",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": 3
+        }
+       ],
+       "prompt_sha256": "30c0aeb2b42773b31cd00502aff4a5c1467446508922ff90547ce009b48491c2"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__levenshtein",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": 3
+        }
+       ],
+       "prompt_sha256": "2407704411fdbbe495c8cfd2f68eb90bddcc707cafcc318722058f655a97dc90"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__lis",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ]
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "d47088784a89a7ba62674c4164d54fddab1fb718a3f5b8390481105051cbce3a"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__longest_common_subsequence",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": "abc"
+        },
+        {
+         "input": [
+          "abc",
+          "def"
+         ],
+         "expected": ""
+        }
+       ],
+       "prompt_sha256": "71809a3b005f676429b3171d3081aa2b2439f970cd769998e0e3483ddf2f5ed6"
+      },
+      "examples_self_validation": null
+     },
+     {
+      "task_id": "quixbugs__max_sublist_sum",
+      "examples_generation": {
+       "status": "ok",
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           -1,
+           -2,
+           -3
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ]
+         ],
+         "expected": 6
+        }
+       ],
+       "prompt_sha256": "d876b89ee11479a5978bad31c1ad37c67a9ed6ff89643885b16120c74812633b"
+      },
+      "examples_self_validation": null
+     }
+    ]
+   }
+  ]
+ },
+ "run_meta": {
+  "generated_at": "2026-10-18T06:16:51",
+  "source": "MULTISAMPLE_STATS.json intersection",
+  "body_digest": "878c08552b03c5b7aab3bf0f137df6b81b083af6a0f138897522a81b261fe4e6"
+ }
+}

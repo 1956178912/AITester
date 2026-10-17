@@ -72,6 +72,7 @@ class TestZeroLlmProbesPass:
             "logic-oracle-examples-production",
             "observability-postprocess-wall",
             "logic-examples-self-validation",
+            "logic-examples-multisample",
         ],
     )
     def test_probe_passes(self, probe_name):

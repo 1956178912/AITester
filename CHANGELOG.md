@@ -1,10 +1,111 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（R 轮：**Q-2 检出损失零 LLM 诊断 + seed-43 预注册复现**（区分 trade-off vs 噪声） + **示例自校验过滤器**（safe-AST 后置子句校验，90 条上 dropped=0 的诚实负结果）+ **postprocess_wall 接入 run_benchmark**（纯观测字段 + 23 测试 + golden 零行为变化）；Q/P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（S 轮：**A-19 停滞检测失败注入重做判定 confirmed**（stall 10/10、省 1.2 轮；并披露默认协议下 repair-invalid 抢占使 A-19 只改标签）+ **多采样示例自一致性判定 高风险默认关**（2/2 幻觉被清但 correct −5） + **seed-44 复现批与 3-seed 生产化决策**（结果见 CHANGELOG）；R/Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 S 轮（A-19 失败注入重做 + 多采样示例治理 + 3-seed 生产化决策）
+
+> S 轮回答两个悬而未决的问题：① A-19 覆盖率停滞检测在**确实多轮失败**时是否真提前
+> 停止（P-2/B8 的"无触发"限制）；② 示例幻觉能否用多采样自一致性治理。同时跑
+> seed-44 第三次复现，做 3-seed 生产化决策。真实 LLM 花费 ≈$0.42（S-1 复现批
+> ≈$0.28 + S-2 $0.14 + S-3 $0.011；预算 $0.8）。
+
+### Added
+
+- **S-2：B8/A-19 重做——实验层失败注入 harness（生产代码零改动）**。新增
+  `experiments/run_b8_injection.py`：进程内 monkeypatch `ExecutorAgent.execute`，前 3 轮
+  强制 `passed=False`、`coverage` 沿用上轮（trace delta 恒 0）→ 构造"确实多轮失败且
+  coverage 停滞"场景；第 4 轮起恢复真实执行。两臂注入完全相同，唯一差异
+  `COVERAGE_STALL_DETECT_ENABLE=true|false`；`ISOLATION.json` 全绿（生产文件零 diff、
+  两臂跑前跑后 dirty=0、模块 `__file__` 均来自 worktree）。10 任务 synthetic seed=42
+  fast 档、真实 LLM、两臂并发。
+  **预注册判定 `confirmed`**：on 臂 stall 触发 **10/10=100%**、off **0/10=0%**；
+  iterations 均值 **1.8 vs 3.0**（配对 Δ=**1.2 轮**，off>on 10/10）；成本
+  $0.046531 vs $0.060761、墙钟 65.3/84.3s、两臂 0 crash。主批 $0.107292（含冒烟
+  $0.140324）。
+  **伴生发现（如实）**：生产默认协议（`PATCH_EVIDENCE_GATE_ENABLE=true`）下
+  repair-invalid 与停滞窗口同迭代收敛 → on/off 均 iterations=2，A-19 **只改标签不省
+  迭代**（本批两臂同设 gate=false 解除抢占后测得真实收益）；需下一轮优化抢占优先级
+  /默认协议下提前停止。另披露 `iterations` 为修复索引语义（2 任务 regenerate 路径
+  trace_len=3/iter=1）。
+- **S-3：多采样示例自一致性过滤器（K=2，spec-only）**。`experiments/spec_examples_generator.py`
+  新增 `generate_examples_multisample(k=2)`：每任务 2 次 spec-only 采样（cache namespace
+  区分 sample_idx、strict JSON、失败透传），按归一化 JSON 键（sort_keys/ensure_ascii=False；
+  tuple/list 等价、int/float 不合并）求交（出现 ≥2/2 采样才保留、≤3 条），输出逐样本/
+  交集/丢弃审计；单采样 API 零变化。真实采样 40 次调用、$0.010912、31.3s；union 67→
+  交集 43（丢弃 24，19/20 任务非空）。**2/2 hallucination 被排除**（is_valid_parenthesization
+  两采样均未再现；knapsack 仅 1/2 采样），但零 LLM 重放 **correct 8→3（−5）**、
+  misguided 2→0 → 按预注册判定「**高风险，默认关**」：精确求交清了幻觉但杀掉 5 个
+  真检出（有判别力示例常只出现一次）。下一步 K=3+≥2 一致/canonical input 约束/
+  交集仅作高置信子集/示例级 LLM 二次核验。23 例测试。
+
+### S-1：seed-44 复现批 + 3-seed 生产化决策
+
+干净切点 `566f973`、seed=44、20 任务、与 Q-2/R-1 完全同协议（A=EXEC=true/EXAMPLES=false，
+B=均 true；预注册决策规则跑前冻结：`enable_candidate` = oracle-correct Δ≥5 任务 in
+≥2/3 seeds ∧ LLM-suite 损失 ≤5pp in ≥2/3 seeds；否则 `keep_off`）：**决策 `enable_candidate`**
+（两条判据均满足）：
+| seed | 来源 | Δ=A→B correct | A_det / B_det | loss_pp | McNemar p |
+|---|---|---|---|---|---|
+| 42 | Q-2 | 0→**6** | 15/15 / 12/15 | 20.00 | 0.015625 |
+| 43 | R-1 | 0→**6** | 13/15 / 13/15 | 0.00 | 0.015625 |
+| 44 | S-1 本批 | 0→**6** | 11/15 / 11/15 | 0.00 | 0.015625 |
+
+- 判据①（Δ≥5 in ≥2/3 seeds）：**PASS（3/3，均 +6）**；判据②（loss ≤5pp in ≥2/3 seeds）：
+  **PASS（2/3：seed43/44 均 0.0pp；seed42 为 20pp 未过）** → **决策 `enable_candidate`**。
+- **声明**：这是**决策支持（非能力主张）**；生产开关 `SPEC_ORACLE_EXAMPLES_ENABLE`
+  **默认关不变**，enabling 需另行变更 + 回归并引用本决策批；seed42 的 −20pp 维持
+  "单次运行噪声"归因（R-1 `not_reproduced`，S-1 复核 0pp）。
+- 本批两臂 20 行 exit=0、墙钟 2122/2108s、成本 $0.142296/$0.136544（**$0.27884**）；
+  三 seed 决策批总投入 **$0.840675**；worktree dirty=0、watchdog 未触发。
+- 工件 `s_round_examples_decision_20261018/`（README `32852020…`/ANALYSIS_REPORT
+  `b463ab89…`/PREREG_DECISION `95a79016…`/SHA256SUMS `354ba6c1…` 56 项 verify）。
+
+### Changed
+
+- 示例通道质量口径（S 轮起）：多采样自一致性（K=2 精确求交）**不用于生产**
+  （correct −5 高风险）；R-2 确定性过滤器保持默认开（安全网）；生产开关仍默认关，
+  3-seed 决策见 S-1。
+- A-19 口径更新：失败注入下**停滞检测确能提前停止（confirmed）**，但生产默认协议下
+  被 repair-invalid 同迭代抢占 → 仅标签生效；引用必须同时给"注入协议/默认协议"两种
+  结果，不得笼统称"停滞检测缩短迭代"。
+- BASELINE 新增 `target_quality.examples_decision` / `examples_multisample` /
+  `b8_injection`；`feature_matrix` 65→66；登记册 §3.2 S-1~S-3、§4 S 轮收口；
+  CHANGELOG/README/MEASUREMENT_INTEGRITY/EMSE 同步；MANIFEST +S 工件 + S 链门禁测试。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8841 passed / 5 skipped / 0 failed**（collected **8846**；本机 **161.6s**；
+  COVERAGE_FILE 隔离）；
+- **覆盖率**：行 **96.55%**（17448/18071）/ 分支 **92.73%**（6263/6754）——与 R 轮持平
+  （S-3 仅改 experiments/ 不在 `--cov=src` 范围）；`coverage_ratchet.py --check` 通过
+  （水位 96.40/92.50，余量 +0.15pp/+0.23pp）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（803 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **133/133** + `emse_*` 目录覆盖扫描通过（S 轮新增 13 项证据工件）；
+- **全功能探针矩阵（66）**：`AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py
+  --all --include-llm` → **66/66 pass**（14 功能组、12 真实 LLM 探针、墙钟 74.3s）；
+  新增 `logic-examples-multisample`（归一化键/交集/审计）；
+- **S-1 3-seed 生产化决策（真实 LLM）**：本批 seed44 两臂 20 行 exit=0、墙钟
+  2122/2108s、成本 $0.142296/$0.136544（$0.27884）；三 seed Δ 均 **+6**、loss
+  20/0/0pp → **`enable_candidate`**（决策支持、非能力主张，生产开关默认关）；
+  工件 SHA `354ba6c1…` **56 项 verify 通过**；三 seed 决策批总投入 $0.840675；
+- **S-2 B8/A-19 重做（真实 LLM）**：失败注入下 on stall **10/10**、off **0/10**、
+  iterations **1.8 vs 3.0**（Δ=1.2）、成本 $0.0465 vs $0.0608 → **`confirmed`**；
+  生产文件零 diff（ISOLATION 全绿）；伴生披露默认协议下 repair-invalid 同迭代抢占
+  → A-19 仅标签生效；工件 59 文件 SHA 0 失败、REPORT `b2b52aba…`；
+- **S-3 多采样示例自一致性（真实 LLM 采样 + 零 LLM 重放）**：40 次调用
+  $0.010912、31.3s；2/2 幻觉被排除但 **correct 8→3（−5）** → 「高风险，默认关」；
+  工件 SHA `8f1440a5…` 10 项 verify；23 例测试；
+- **S 轮真实 LLM 花费**：S-1 $0.27884 + S-2 $0.140324 + S-3 $0.010912 ≈ **$0.43**
+  （S 轮预算 $0.8 ✓）。
 
 ## [Unreleased] — 2026-10-18 R 轮（Q-2 损失诊断/复现 + 示例自校验 + 后处理墙钟接线）
 

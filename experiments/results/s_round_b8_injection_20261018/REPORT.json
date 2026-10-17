@@ -1,0 +1,1803 @@
+{
+  "experiment": "S-2 / B8 / A-19 coverage-stall ablation with deterministic failure injection",
+  "created_epoch": 1792275894.652222,
+  "out_dir": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018",
+  "prereg": {
+    "path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/PREREG.md",
+    "sha256": "982a19be5bc5955cd9abc1ee31d2efd47857f8fd63e5327369d05cd7d6c6ee80"
+  },
+  "isolation": {
+    "mechanism": "experiment-layer in-process monkeypatch only (no production file changes)",
+    "root": "/Users/wangchenyu/Workspace/AITester-s2-b8-566f973",
+    "git_before_on": {
+      "root": "/Users/wangchenyu/Workspace/AITester-s2-b8-566f973",
+      "head": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_after_on": {
+      "root": "/Users/wangchenyu/Workspace/AITester-s2-b8-566f973",
+      "head": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_before_off": {
+      "root": "/Users/wangchenyu/Workspace/AITester-s2-b8-566f973",
+      "head": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "git_after_off": {
+      "root": "/Users/wangchenyu/Workspace/AITester-s2-b8-566f973",
+      "head": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+      "status_porcelain": "",
+      "diff_stat": "",
+      "diff_name_only": "",
+      "dirty_lines": 0
+    },
+    "patched_targets": [
+      "src.agents.executor.ExecutorAgent.execute @ /Users/wangchenyu/Workspace/AITester-s2-b8-566f973/src/agents/executor.py",
+      "src.graph.nodes._executor_node @ /Users/wangchenyu/Workspace/AITester-s2-b8-566f973/src/graph/nodes.py",
+      "src.graph.workflow._executor_node @ /Users/wangchenyu/Workspace/AITester-s2-b8-566f973/src/graph/workflow.py"
+    ],
+    "production_diff": "git status/diff 前后均为空（见 git_* 字段与 ISOLATION.json）"
+  },
+  "price": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing",
+    "currency": "USD",
+    "as_of": "2026-10-06",
+    "model": "deepseek-flash",
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 1.2
+  },
+  "protocol": {
+    "root_head": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+    "dataset": "synthetic",
+    "tasks": 10,
+    "seed": 42,
+    "profile": "fast",
+    "parallel": 4,
+    "inject_rounds": 3,
+    "watchdog_seconds": 1500.0,
+    "arms": {
+      "on": "COVERAGE_STALL_DETECT_ENABLE=true",
+      "off": "COVERAGE_STALL_DETECT_ENABLE=false"
+    },
+    "extra_env": {
+      "PATCH_EVIDENCE_GATE_ENABLE": "false"
+    }
+  },
+  "arms": {
+    "on": {
+      "n_tasks": 10,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/arm_on/benchmark_synthetic_20261018_062303.json",
+      "batch_sha256": "2d04be5e11e9afb5eea009aa90b71ae5e21f3fb2c7acae0c9ff841e57a995146",
+      "wall_seconds": 65.26,
+      "token_metrics": {
+        "total_input_tokens": 59294,
+        "total_output_tokens": 23952,
+        "total_tokens": 83246,
+        "total_llm_calls": 58,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 83246,
+        "avg_tokens_per_task": 8324.6,
+        "output_share_pct": 28.77,
+        "avg_output_per_task": 2395.2,
+        "avg_output_per_call": 412.97
+      },
+      "cost_usd_standard_price": 0.046531,
+      "stop_reason_counts": {
+        "coverage_stall": 10
+      },
+      "coverage_stall_count": 10,
+      "coverage_stall_rate": 1.0,
+      "iterations_mean": 1.8,
+      "iterations_median": 2,
+      "iterations_max": 2,
+      "coverage_mean": 0.0,
+      "passed_count": 0,
+      "detection": {
+        "measurable": 10,
+        "positive": 0,
+        "rate": 0.0
+      },
+      "crash_rows": [],
+      "crash_count": 0,
+      "injection": {
+        "records": 30,
+        "injected_rounds": 30,
+        "real_rounds": 0,
+        "tasks_with_injection": 10,
+        "tasks_total": 10
+      },
+      "provenance": {
+        "git_sha": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+        "git_dirty": false,
+        "model_name": "deepseek-flash",
+        "coverage_stall_env": "true",
+        "cache_namespace": "s2_b8_injection_on"
+      },
+      "per_task": [
+        {
+          "task_id": "synthetic__task_0001",
+          "stop_reason": "coverage_stall",
+          "iterations": 1,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "",
+          "elapsed_seconds": 11.37,
+          "token_usage": {
+            "input_tokens": 4762,
+            "output_tokens": 2172,
+            "total_tokens": 6934,
+            "llm_calls": 5,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 6934
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.867
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0000",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 12.7,
+          "token_usage": {
+            "input_tokens": 5978,
+            "output_tokens": 2054,
+            "total_tokens": 8032,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8032
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0002",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 12.75,
+          "token_usage": {
+            "input_tokens": 5925,
+            "output_tokens": 1904,
+            "total_tokens": 7829,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7829
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.833
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0003",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 16.76,
+          "token_usage": {
+            "input_tokens": 7578,
+            "output_tokens": 3203,
+            "total_tokens": 10781,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10781
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0006",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 13.49,
+          "token_usage": {
+            "input_tokens": 6184,
+            "output_tokens": 2158,
+            "total_tokens": 8342,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8342
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0005",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 14.66,
+          "token_usage": {
+            "input_tokens": 5973,
+            "output_tokens": 2241,
+            "total_tokens": 8214,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8214
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.967
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0007",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "patch_validation_failed",
+          "elapsed_seconds": 12.71,
+          "token_usage": {
+            "input_tokens": 4882,
+            "output_tokens": 2122,
+            "total_tokens": 7004,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7004
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0004",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 19.12,
+          "token_usage": {
+            "input_tokens": 6445,
+            "output_tokens": 3695,
+            "total_tokens": 10140,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10140
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0008",
+          "stop_reason": "coverage_stall",
+          "iterations": 1,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "",
+          "elapsed_seconds": 11.88,
+          "token_usage": {
+            "input_tokens": 5341,
+            "output_tokens": 2245,
+            "total_tokens": 7586,
+            "llm_calls": 5,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 7586
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0009",
+          "stop_reason": "coverage_stall",
+          "iterations": 2,
+          "coverage": 0.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 13.17,
+          "token_usage": {
+            "input_tokens": 6226,
+            "output_tokens": 2158,
+            "total_tokens": 8384,
+            "llm_calls": 6,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 8384
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "off": {
+      "n_tasks": 10,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/arm_off/benchmark_synthetic_20261018_062322.json",
+      "batch_sha256": "18462c71d865c3be4d9caf8662a93ebe95b09f3a7ccac66fc2d10b62cda6531e",
+      "wall_seconds": 84.27,
+      "token_metrics": {
+        "total_input_tokens": 84005,
+        "total_output_tokens": 29633,
+        "total_tokens": 113638,
+        "total_llm_calls": 82,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 113638,
+        "avg_tokens_per_task": 11363.8,
+        "output_share_pct": 26.08,
+        "avg_output_per_task": 2963.3,
+        "avg_output_per_call": 361.38
+      },
+      "cost_usd_standard_price": 0.060761,
+      "stop_reason_counts": {
+        "max_iterations": 6,
+        "test_passed": 4
+      },
+      "coverage_stall_count": 0,
+      "coverage_stall_rate": 0.0,
+      "iterations_mean": 3.0,
+      "iterations_median": 3,
+      "iterations_max": 3,
+      "coverage_mean": 94.7,
+      "passed_count": 4,
+      "detection": {
+        "measurable": 10,
+        "positive": 0,
+        "rate": 0.0
+      },
+      "crash_rows": [],
+      "crash_count": 0,
+      "injection": {
+        "records": 42,
+        "injected_rounds": 32,
+        "real_rounds": 10,
+        "tasks_with_injection": 10,
+        "tasks_total": 10
+      },
+      "provenance": {
+        "git_sha": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+        "git_dirty": false,
+        "model_name": "deepseek-flash",
+        "coverage_stall_env": "false",
+        "cache_namespace": "s2_b8_injection_off"
+      },
+      "per_task": [
+        {
+          "task_id": "synthetic__task_0002",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 94.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 18.89,
+          "token_usage": {
+            "input_tokens": 7876,
+            "output_tokens": 2310,
+            "total_tokens": 10186,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10186
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.867
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 94.0,
+              "coverage_delta": 94.0,
+              "elapsed_seconds": 1.86,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.938,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0000",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 20.31,
+          "token_usage": {
+            "input_tokens": 8294,
+            "output_tokens": 2876,
+            "total_tokens": 11170,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 11170
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 2.04,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.932,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0001",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 93.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 21.21,
+          "token_usage": {
+            "input_tokens": 8585,
+            "output_tokens": 2641,
+            "total_tokens": 11226,
+            "llm_calls": 9,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 11226
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.833
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 93.0,
+              "coverage_delta": 93.0,
+              "elapsed_seconds": 1.79,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.94,
+                "simplicity": 0.833
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0003",
+          "stop_reason": "test_passed",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": true,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 22.08,
+          "token_usage": {
+            "input_tokens": 9311,
+            "output_tokens": 3528,
+            "total_tokens": 12839,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 12839
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.967
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": true,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 0.96,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.968,
+                "simplicity": 0.9
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0006",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 17.6,
+          "token_usage": {
+            "input_tokens": 8084,
+            "output_tokens": 2277,
+            "total_tokens": 10361,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10361
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 1.69,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.944,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0005",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 22.61,
+          "token_usage": {
+            "input_tokens": 8512,
+            "output_tokens": 3295,
+            "total_tokens": 11807,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 11807
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 1.63,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.946,
+                "simplicity": 1.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0004",
+          "stop_reason": "test_passed",
+          "iterations": 3,
+          "coverage": 70.0,
+          "passed": true,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 24.12,
+          "token_usage": {
+            "input_tokens": 8794,
+            "output_tokens": 4519,
+            "total_tokens": 13313,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 13313
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.967
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": true,
+              "coverage": 70.0,
+              "coverage_delta": 70.0,
+              "elapsed_seconds": 0.84,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.972,
+                "simplicity": 0.933
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0007",
+          "stop_reason": "test_passed",
+          "iterations": 3,
+          "coverage": 97.0,
+          "passed": true,
+          "detection_rate": 0.0,
+          "error_category": "test_regenerated_pass_unverified",
+          "elapsed_seconds": 21.48,
+          "token_usage": {
+            "input_tokens": 7544,
+            "output_tokens": 3167,
+            "total_tokens": 10711,
+            "llm_calls": 9,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10711
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": true,
+              "coverage": 97.0,
+              "coverage_delta": 97.0,
+              "elapsed_seconds": 0.87,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.971,
+                "simplicity": 0.0
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0008",
+          "stop_reason": "max_iterations",
+          "iterations": 3,
+          "coverage": 100.0,
+          "passed": false,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 19.2,
+          "token_usage": {
+            "input_tokens": 8110,
+            "output_tokens": 2474,
+            "total_tokens": 10584,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 10584
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.9
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.933
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": false,
+              "coverage": 100.0,
+              "coverage_delta": 100.0,
+              "elapsed_seconds": 1.55,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 0.948,
+                "simplicity": 0.7
+              }
+            }
+          ]
+        },
+        {
+          "task_id": "synthetic__task_0009",
+          "stop_reason": "test_passed",
+          "iterations": 3,
+          "coverage": 93.0,
+          "passed": true,
+          "detection_rate": 0.0,
+          "error_category": "assertion",
+          "elapsed_seconds": 17.33,
+          "token_usage": {
+            "input_tokens": 8895,
+            "output_tokens": 2546,
+            "total_tokens": 11441,
+            "llm_calls": 8,
+            "cache_hits": 0,
+            "cache_avoided_tokens": 0,
+            "by_model": {
+              "deepseek-flash": 11441
+            }
+          },
+          "execution_trace": [
+            {
+              "iteration": 0,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": null,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 0.0
+              }
+            },
+            {
+              "iteration": 1,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 2,
+              "passed": false,
+              "coverage": 0.0,
+              "coverage_delta": 0.0,
+              "elapsed_seconds": 0.0,
+              "reward_signals": {
+                "correctness": 0.0,
+                "efficiency": 1.0,
+                "simplicity": 1.0
+              }
+            },
+            {
+              "iteration": 3,
+              "passed": true,
+              "coverage": 93.0,
+              "coverage_delta": 93.0,
+              "elapsed_seconds": 0.76,
+              "reward_signals": {
+                "correctness": 1.0,
+                "efficiency": 0.975,
+                "simplicity": 1.0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "harness_smoke": [
+    {
+      "smoke_dir": "_harness_smoke",
+      "setting": "default_gate_on",
+      "arm": "on",
+      "coverage_stall_env": "true",
+      "patch_evidence_gate_env": "default(true)",
+      "n_tasks": 2,
+      "stop_reason_counts": {
+        "coverage_stall": 2
+      },
+      "iterations": [
+        2,
+        2
+      ],
+      "iterations_mean": 2.0,
+      "token_metrics": {
+        "total_input_tokens": 10909,
+        "total_output_tokens": 3486,
+        "total_tokens": 14395,
+        "total_llm_calls": 12,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 14395,
+        "avg_tokens_per_task": 7197.5,
+        "output_share_pct": 24.22,
+        "avg_output_per_task": 1743.0,
+        "avg_output_per_call": 290.5
+      },
+      "cost_usd_standard_price": 0.007456,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/benchmark_synthetic_20261018_061846.json"
+    },
+    {
+      "smoke_dir": "_harness_smoke",
+      "setting": "default_gate_on",
+      "arm": "off",
+      "coverage_stall_env": "false",
+      "patch_evidence_gate_env": "default(true)",
+      "n_tasks": 2,
+      "stop_reason_counts": {
+        "skip_debugger_repair_invalid": 2
+      },
+      "iterations": [
+        2,
+        2
+      ],
+      "iterations_mean": 2.0,
+      "token_metrics": {
+        "total_input_tokens": 12279,
+        "total_output_tokens": 4014,
+        "total_tokens": 16293,
+        "total_llm_calls": 13,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 16293,
+        "avg_tokens_per_task": 8146.5,
+        "output_share_pct": 24.64,
+        "avg_output_per_task": 2007.0,
+        "avg_output_per_call": 308.77
+      },
+      "cost_usd_standard_price": 0.008501,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_off/benchmark_synthetic_20261018_062000.json"
+    },
+    {
+      "smoke_dir": "_harness_smoke_gateoff",
+      "setting": "gate_off",
+      "arm": "on",
+      "coverage_stall_env": "true",
+      "patch_evidence_gate_env": "false",
+      "n_tasks": 2,
+      "stop_reason_counts": {
+        "coverage_stall": 2
+      },
+      "iterations": [
+        2,
+        2
+      ],
+      "iterations_mean": 2.0,
+      "token_metrics": {
+        "total_input_tokens": 10883,
+        "total_output_tokens": 3409,
+        "total_tokens": 14292,
+        "total_llm_calls": 12,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 14292,
+        "avg_tokens_per_task": 7146.0,
+        "output_share_pct": 23.85,
+        "avg_output_per_task": 1704.5,
+        "avg_output_per_call": 284.08
+      },
+      "cost_usd_standard_price": 0.007356,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke_gateoff/arm_on/benchmark_synthetic_20261018_062056.json"
+    },
+    {
+      "smoke_dir": "_harness_smoke_gateoff",
+      "setting": "gate_off",
+      "arm": "off",
+      "coverage_stall_env": "false",
+      "patch_evidence_gate_env": "false",
+      "n_tasks": 2,
+      "stop_reason_counts": {
+        "max_iterations": 1,
+        "test_passed": 1
+      },
+      "iterations": [
+        3,
+        3
+      ],
+      "iterations_mean": 3.0,
+      "token_metrics": {
+        "total_input_tokens": 15114,
+        "total_output_tokens": 4321,
+        "total_tokens": 19435,
+        "total_llm_calls": 16,
+        "total_cache_hits": 0,
+        "total_cache_avoided_tokens": 0,
+        "cache_hit_rate_pct": 0.0,
+        "uncached_theoretical_tokens": 19435,
+        "avg_tokens_per_task": 9717.5,
+        "output_share_pct": 22.23,
+        "avg_output_per_task": 2160.5,
+        "avg_output_per_call": 270.06
+      },
+      "cost_usd_standard_price": 0.009719,
+      "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke_gateoff/arm_off/benchmark_synthetic_20261018_062104.json"
+    }
+  ],
+  "paired": {
+    "n_pairs": 10,
+    "delta_iterations_mean_off_minus_on": 1.2,
+    "iterations_saved_off_minus_on": 1.2,
+    "direction": {
+      "off_gt_on": 10,
+      "equal": 0,
+      "off_lt_on": 0
+    },
+    "rows": [
+      {
+        "task_id": "synthetic__task_0000",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0001",
+        "iterations_on": 1,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 2,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 93.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 4
+      },
+      {
+        "task_id": "synthetic__task_0002",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 94.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0003",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "test_passed",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0004",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "test_passed",
+        "coverage_on": 0.0,
+        "coverage_off": 70.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0005",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0006",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0007",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "test_passed",
+        "coverage_on": 0.0,
+        "coverage_off": 97.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 4
+      },
+      {
+        "task_id": "synthetic__task_0008",
+        "iterations_on": 1,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 2,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "max_iterations",
+        "coverage_on": 0.0,
+        "coverage_off": 100.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      },
+      {
+        "task_id": "synthetic__task_0009",
+        "iterations_on": 2,
+        "iterations_off": 3,
+        "delta_iterations_off_minus_on": 1,
+        "stop_reason_on": "coverage_stall",
+        "stop_reason_off": "test_passed",
+        "coverage_on": 0.0,
+        "coverage_off": 93.0,
+        "injected_rounds_on": 3,
+        "injected_rounds_off": 3
+      }
+    ]
+  },
+  "verdict": {
+    "classification": "confirmed",
+    "criteria": {
+      "primary": {
+        "rule": "on.coverage_stall_rate >= 0.8 AND off.coverage_stall_count == 0",
+        "on_stall_rate": 1.0,
+        "on_stall_count": 10,
+        "off_stall_rate": 0.0,
+        "off_stall_count": 0,
+        "met": true
+      },
+      "secondary": {
+        "rule": "iterations_saved(off_mean-on_mean) >= 1.0 AND on/off crash_count == 0",
+        "iterations_saved": 1.2,
+        "on_crash": 0,
+        "off_crash": 0,
+        "met": true
+      },
+      "harness": {
+        "rule": "on arm injection coverage: tasks_with_injection >= 80% 且 injected_rounds > 0",
+        "on_tasks_with_injection": 10,
+        "on_tasks_total": 10,
+        "on_injected_rounds": 30,
+        "met": true
+      }
+    },
+    "cost_total_usd": 0.107292,
+    "wall_total_seconds": 149.53
+  }
+}

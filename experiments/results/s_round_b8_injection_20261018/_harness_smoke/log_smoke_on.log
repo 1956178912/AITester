@@ -1,0 +1,103 @@
+START=2026-10-17T22:18:27Z
+2026-10-18 06:18:29,275 INFO run_b8_injection: === S-2 注入臂 on 开始（HEAD=<REDACTED_KEY>）===
+2026-10-18 06:18:29,275 INFO experiments.run_benchmark: R11 确定性采样模式：TEMPERATURE 强制 0.0（config + base_agent 级联）
+2026-10-18 06:18:29,275 INFO experiments.run_benchmark: P0 4.2 追踪层默认启用：AITESTER_TRACE_DIR=/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/traces（节点级 JSONL 记录）
+2026-10-18 06:18:29,276 INFO experiments.run_benchmark: 加载数据集: synthetic (subset=None, seed=42)
+2026-10-18 06:18:29,276 INFO experiments.run_benchmark: 生成合成数据集：2 个任务（seed=42, difficulty=mixed, max_pattern_repeat=None）
+2026-10-18 06:18:29,276 INFO src.datasets.synthetic_dataset: 合成数据集生成完成：2 个任务（difficulty=mixed，分布={1: 2}）
+2026-10-18 06:18:29,276 INFO experiments.run_benchmark: 可用 API 配置数: 1
+2026-10-18 06:18:29,276 INFO experiments.run_benchmark: 待运行任务数: 2，基线: ['aitester']，并行度: 4
+基准测试 [aitester]:   0%|          | 0/2 [00:00<?, ?task/s]2026-10-18 06:18:29,283 INFO experiments.run_benchmark: 启用并行执行，并发度: 4
+2026-10-18 06:18:29,839 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:29,851 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:32,430 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:32,433 INFO src.agents.planner: Planner 完成对 get_second 的逻辑分析
+2026-10-18 06:18:32,433 INFO src.graph.nodes: Planner 完成规划，函数=get_second
+2026-10-18 06:18:32,571 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:33,597 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:33,598 INFO src.agents.planner: Planner 完成对 split_words 的逻辑分析
+2026-10-18 06:18:33,598 INFO src.graph.nodes: Planner 完成规划，函数=split_words
+2026-10-18 06:18:33,699 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:33,912 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:33,913 INFO src.graph.nodes: Generator 完成测试代码生成，长度=969
+2026-10-18 06:18:33,916 INFO src.graph.nodes: Executor 完成第 1 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:34,967 INFO src.agents.fl_spectral: O2 FL_spectral 逐用例测量：tests=6（failed=0 passed=6 skipped=0）
+2026-10-18 06:18:34,968 WARNING src.agents.fl_spectral: O2 FL_spectral：junit 裁决无失败用例（与 failed_cases 输入不一致，可能 flaky），保守降级 None
+2026-10-18 06:18:35,068 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:35,863 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:35,864 INFO src.graph.nodes: Generator 完成测试代码生成，长度=1828
+2026-10-18 06:18:35,866 INFO src.graph.nodes: Executor 完成第 1 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:35,945 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:35,945 INFO src.graph.debugger: FaultLocalizer 定位：fn=get_second conf=0.95
+2026-10-18 06:18:35,945 INFO src.agents.debugger: 错误分类结果: assertion
+2026-10-18 06:18:35,945 INFO src.agents.debugger: FaultLocalizer 定位段落注入 106 字符提示
+2026-10-18 06:18:36,040 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:37,070 INFO src.agents.fl_spectral: O2 FL_spectral 逐用例测量：tests=12（failed=0 passed=12 skipped=0）
+2026-10-18 06:18:37,071 WARNING src.agents.fl_spectral: O2 FL_spectral：junit 裁决无失败用例（与 failed_cases 输入不一致，可能 flaky），保守降级 None
+2026-10-18 06:18:37,171 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:37,507 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:37,508 INFO src.graph.debugger: Debugger 完成第 1 轮修复：类别=assertion，根因=失败信息明确标注为 INJECTED_FAILURE（由 experiments/run_b8_injection.py 注入的实验性 harness 失败），
+2026-10-18 06:18:37,517 INFO src.graph.patch_io: 补丁已应用到文件: /var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_synthetic__task_0001_vvuvc70z/task_0001.py（M6 快照=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_patch_snap_23718_6171422720/iter0_task_0001.py）
+2026-10-18 06:18:37,519 WARNING src.graph.nodes: P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+2026-10-18 06:18:37,520 INFO src.graph.nodes: Executor 完成第 2 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:38,255 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:38,256 INFO src.graph.debugger: FaultLocalizer 定位：fn=split_words conf=0.95
+2026-10-18 06:18:38,256 INFO src.agents.debugger: 错误分类结果: assertion
+2026-10-18 06:18:38,256 INFO src.agents.debugger: FaultLocalizer 定位段落注入 115 字符提示
+2026-10-18 06:18:38,349 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:38,677 INFO src.agents.fl_spectral: O2 FL_spectral 逐用例测量：tests=6（failed=0 passed=6 skipped=0）
+2026-10-18 06:18:38,677 WARNING src.agents.fl_spectral: O2 FL_spectral：junit 裁决无失败用例（与 failed_cases 输入不一致，可能 flaky），保守降级 None
+2026-10-18 06:18:38,786 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:39,482 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:39,483 INFO src.graph.debugger: Debugger 完成第 1 轮修复：类别=assertion，根因=split_words 函数（第2行）使用 text.split(" ") 仅按单个空格切分，但测试期望的是标准空白切分语义（即 split() 无参，按任意空
+2026-10-18 06:18:39,485 INFO src.graph.patch_io: 补丁已应用到文件: /var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_synthetic__task_0000_qlhfoesq/task_0000.py（M6 快照=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_patch_snap_23718_6154596352/iter0_task_0000.py）
+2026-10-18 06:18:39,485 WARNING src.graph.nodes: P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+2026-10-18 06:18:39,486 INFO src.graph.nodes: Executor 完成第 2 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:39,620 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:39,620 INFO src.graph.debugger: FaultLocalizer 定位：fn=get_second conf=0.95
+2026-10-18 06:18:39,620 INFO src.agents.debugger: 错误分类结果: assertion
+2026-10-18 06:18:39,620 INFO src.agents.debugger: FaultLocalizer 定位段落注入 105 字符提示
+2026-10-18 06:18:39,706 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:40,706 INFO src.agents.fl_spectral: O2 FL_spectral 逐用例测量：tests=12（failed=0 passed=12 skipped=0）
+2026-10-18 06:18:40,707 WARNING src.agents.fl_spectral: O2 FL_spectral：junit 裁决无失败用例（与 failed_cases 输入不一致，可能 flaky），保守降级 None
+2026-10-18 06:18:40,812 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:41,098 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:41,099 INFO src.graph.debugger: Debugger 完成第 2 轮修复：类别=assertion，根因=失败为实验性 harness 注入的 INJECTED_FAILURE（B8/A-19 round 2/3），并非 get_second 的真实逻辑缺陷。get
+2026-10-18 06:18:41,102 INFO src.graph.patch_io: 补丁已应用到文件: /var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_synthetic__task_0001_vvuvc70z/task_0001.py（M6 快照=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_patch_snap_23718_6171422720/iter1_task_0001.py）
+2026-10-18 06:18:41,102 WARNING src.graph.nodes: P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+2026-10-18 06:18:41,103 INFO src.graph.nodes: Executor 完成第 3 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:41,103 INFO src.graph.workflow: 连续多次修复无效，跳过 Debugger
+2026-10-18 06:18:41,817 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:41,817 INFO src.graph.debugger: FaultLocalizer 定位：fn=split_words conf=0.95
+2026-10-18 06:18:41,817 INFO src.agents.debugger: 错误分类结果: assertion
+2026-10-18 06:18:41,817 INFO src.agents.debugger: FaultLocalizer 定位段落注入 96 字符提示
+2026-10-18 06:18:41,908 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:43,335 INFO src.agents.base_agent: API 调用成功 (api=api.deepseek.com, model=deepseek-flash)
+2026-10-18 06:18:43,336 INFO src.graph.debugger: Debugger 完成第 2 轮修复：类别=assertion，根因=失败用例 test_injected_failure 抛出的 AssertionError 消息为 'INJECTED_FAILURE (B8/A-19 har
+2026-10-18 06:18:43,338 INFO src.graph.patch_io: 补丁已应用到文件: /var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_synthetic__task_0000_qlhfoesq/task_0000.py（M6 快照=/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/aitester_patch_snap_23718_6154596352/iter1_task_0000.py）
+2026-10-18 06:18:43,338 WARNING src.graph.nodes: P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+2026-10-18 06:18:43,339 INFO src.graph.nodes: Executor 完成第 3 轮测试：FAIL，覆盖率=0.0%，失败用例数=1
+2026-10-18 06:18:43,339 INFO src.graph.workflow: 连续多次修复无效，跳过 Debugger
+2026-10-18 06:18:44,355 INFO experiments.run_benchmark:     [aitester] synthetic__task_0001: FAIL (11.7s, coverage=0.0%, tokens=6585)
+基准测试 [aitester]:  50%|█████     | 1/2 [00:15<00:15, 15.07s/task]基准测试 [aitester] - 耗时: 11.7s:  50%|█████     | 1/2 [00:15<00:15, 15.07s/task]2026-10-18 06:18:46,253 INFO experiments.run_benchmark:     [aitester] synthetic__task_0000: FAIL (14.0s, coverage=0.0%, tokens=7810)
+基准测试 [aitester] - 耗时: 11.7s: 100%|██████████| 2/2 [00:16<00:00,  7.32s/task]基准测试 [aitester] - 耗时: 25.7s: 100%|██████████| 2/2 [00:16<00:00,  7.32s/task]基准测试 [aitester] - 耗时: 25.7s: 100%|██████████| 2/2 [00:16<00:00,  8.49s/task]
+2026-10-18 06:18:46,339 INFO src.api.api_manager: 注册 LLM 节点: deepseek-flash (https://api.deepseek.com/v1, cost_weight=1.00)
+2026-10-18 06:18:46,339 INFO src.api.api_manager: 已完成 1 个 LLM 节点初始化
+2026-10-18 06:18:46,470 INFO httpx: HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-10-18 06:18:46,937 INFO experiments.run_benchmark: S29 模型指纹：pinned=True（alias=deepseek-flash, model=deepseek-flash, fingerprint=<REDACTED_KEY>, probe=fc3d915941b8…）
+2026-10-18 06:18:46,938 INFO experiments.run_benchmark: 基准测试完成，结果已保存至: /Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/benchmark_synthetic_20261018_061846.json
+2026-10-18 06:18:46,938 INFO experiments.run_benchmark: 汇总：总耗时=25.7s
+2026-10-18 06:18:46,938 INFO experiments.run_benchmark:   [aitester] 成功率=0.0%, 平均覆盖率=0.0%, 平均迭代=2.0
+2026-10-18 06:18:46,938 INFO experiments.run_benchmark:   [aitester] Token效率: 总tokens=14395, 平均每任务tokens=7197.50, LLM调用次数=12
+2026-10-18 06:18:46,939 INFO run_b8_injection: 批次完成：/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/benchmark_synthetic_20261018_061846.json
+
+============================================================
+基准测试完成！
+============================================================
+  [aitester] 成功率: 0.0%, 平均覆盖率: 0.0%
+  [aitester] 平均每任务Token: 7197.5, LLM调用次数: 12
+总耗时: 25.7s
+结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/benchmark_synthetic_20261018_061846.json
+============================================================
+{"arm": "on", "status": "completed", "wall_seconds": 17.66, "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/benchmark_synthetic_20261018_061846.json", "meta": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke/arm_on/arm_on.meta.json"}
+EXIT=0

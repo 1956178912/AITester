@@ -1,10 +1,131 @@
-> Last updated: 2026-10-18 (round R: **Q-2 detection-loss zero-LLM diagnosis + pre-registered seed-43 reproduction** [trade-off vs noise] + **example self-validation filter** [safe-AST postcondition check; an honest negative result with dropped=0 on 90 examples] + **postprocess_wall wired into run_benchmark** [observability fields + 23 tests + golden zero-behavior-change]; rounds Q/P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-18 (round S: **A-19 stall detection failure-injection redo verdict confirmed** [stall 10/10, saves 1.2 rounds; with disclosure that under the default protocol repair-invalid preemption makes A-19 label-only] + **multi-sample example self-consistency verdict high-risk-default-off** [2/2 hallucinations removed but correct −5] + **seed-44 replication batch and 3-seed production decision** [results in CHANGELOG]; rounds R/Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round S (A-19 failure-injection redo + multi-sample example governance + 3-seed production decision)
+
+> Round S answers two open questions: ① whether A-19 coverage-stall detection really
+> stops early when tasks **do** fail for multiple rounds (the "no trigger" limitation of
+> P-2/B8); ② whether example hallucination can be governed by multi-sample
+> self-consistency. It also runs a third seed-44 replication and makes a 3-seed
+> productionization decision. Real LLM spend ≈$0.42 (S-1 ≈$0.28 + S-2 $0.14 +
+> S-3 $0.011; cap $0.8).
+
+### Added
+
+- **S-2: B8/A-19 redo — experimental failure-injection harness (zero production code
+  change)**. New `experiments/run_b8_injection.py`: in-process monkeypatch of
+  `ExecutorAgent.execute` forces `passed=False` and keeps `coverage` unchanged
+  (trace delta always 0) for the first 3 rounds → constructs "tasks really fail for
+  multiple rounds with stalled coverage"; real execution resumes from round 4. Both arms
+  receive identical injection; the only difference is
+  `COVERAGE_STALL_DETECT_ENABLE=true|false`; `ISOLATION.json` all-green (production files
+  zero diff, dirty=0 before/after in both arms, module `__file__` all from the worktree).
+  10 synthetic tasks seed=42 fast profile, real LLM, concurrent arms.
+  **Pre-registered verdict `confirmed`**: on-arm stall rate **10/10=100%**, off **0/10=0%**;
+  mean iterations **1.8 vs 3.0** (paired Δ=**1.2 rounds**, off>on 10/10); cost
+  $0.046531 vs $0.060761, walls 65.3/84.3s, 0 crashes in both arms. Main batch $0.107292
+  (with smoke $0.140324).
+  **Companion finding (honest)**: under the production default
+  (`PATCH_EVIDENCE_GATE_ENABLE=true`), repair-invalid converges in the same iteration as
+  the stall window → both arms have iterations=2, so A-19 **changes the label without
+  saving iterations** (the measured gain required setting gate=false in both arms to
+  remove preemption); next round must optimize preemption priority / default-protocol
+  early stopping. Also disclosed: `iterations` is a repair-round index (2 tasks via the
+  regenerate path have trace_len=3/iter=1).
+- **S-3: multi-sample example self-consistency filter (K=2, spec-only)**.
+  `experiments/spec_examples_generator.py` gains `generate_examples_multisample(k=2)`:
+  2 spec-only samples per task (cache namespace per sample_idx, strict JSON, failure
+  pass-through), intersected by normalized JSON keys (sort_keys/ensure_ascii=False;
+  tuple/list equivalent, int/float not merged; keep examples present in ≥2/2 samples,
+  ≤3), with per-sample/intersection/drop audits; single-sample API unchanged. Real
+  sampling: 40 calls, $0.010912, 31.3s; union 67→intersection 43 (24 dropped, 19/20
+  tasks non-empty). **2/2 hallucinations excluded** (is_valid_parenthesization not
+  reproduced in either sample; knapsack in only 1/2), but the zero-LLM replay shows
+  **correct 8→3 (−5)** and misguided 2→0 → pre-registered verdict "**high-risk, default
+  off**": exact intersection removes hallucinations but kills 5 real detections
+  (discriminative examples often appear only once). Next: K=3 with ≥2 agreement /
+  canonical-input constraints / intersection only as a high-confidence subset / per-example
+  LLM second-pass verification. 23 tests.
+
+### S-1: seed-44 replication batch + 3-seed productionization decision
+
+Clean cut `566f973`, seed=44, 20 tasks, exactly the Q-2/R-1 protocol (A=EXEC=true/
+EXAMPLES=false, B=both true; pre-registered decision rule frozen before the run:
+`enable_candidate` = oracle-correct Δ≥5 tasks in ≥2/3 seeds ∧ LLM-suite loss ≤5pp in
+≥2/3 seeds; otherwise `keep_off`): **decision `enable_candidate`** (both criteria met):
+| seed | source | Δ=A→B correct | A_det / B_det | loss_pp | McNemar p |
+|---|---|---|---|---|---|
+| 42 | Q-2 | 0→**6** | 15/15 / 12/15 | 20.00 | 0.015625 |
+| 43 | R-1 | 0→**6** | 13/15 / 13/15 | 0.00 | 0.015625 |
+| 44 | S-1 this batch | 0→**6** | 11/15 / 11/15 | 0.00 | 0.015625 |
+
+- Criterion ① (Δ≥5 in ≥2/3 seeds): **PASS (3/3, all +6)**; criterion ② (loss ≤5pp in
+  ≥2/3 seeds): **PASS (2/3: seed43/44 both 0.0pp; seed42 was 20pp)** → **`enable_candidate`**.
+- **Declaration**: this is **decision support (not a capability claim)**; the production
+  switch `SPEC_ORACLE_EXAMPLES_ENABLE` stays **default-off**, and enabling requires a
+  separate change + regression citing this decision batch; seed42's −20pp keeps the
+  "single-run noise" attribution (R-1 `not_reproduced`, S-1 recheck 0pp).
+- Both arms 20 rows exit=0, walls 2122/2108s, costs $0.142296/$0.136544 (**$0.27884**);
+  the three-seed decision batch totals **$0.840675**; worktree dirty=0, watchdog not
+  triggered.
+- Artifacts `s_round_examples_decision_20261018/` (README `32852020…`/ANALYSIS_REPORT
+  `b463ab89…`/PREREG_DECISION `95a79016…`/SHA256SUMS `354ba6c1…` 56 entries verified).
+
+### Changed
+
+- Example-channel quality caliber (since round S): multi-sample self-consistency (K=2
+  exact intersection) is **not for production** (correct −5, high-risk); the R-2
+  deterministic filter stays default-on (safety net); the production switch stays
+  default-off, see S-1 for the 3-seed decision.
+- A-19 caliber update: under failure injection stall detection **does stop early
+  (confirmed)**, but under the production default protocol it is preempted by
+  repair-invalid in the same iteration → only the label changes; citations must report
+  both the "injection protocol" and "default protocol" results and must not claim flatly
+  that "stall detection shortens iterations".
+- BASELINE gains `target_quality.examples_decision` / `examples_multisample` /
+  `b8_injection`; `feature_matrix` 65→66; register §3.2 S-1..S-3, §4 round-S closures;
+  CHANGELOG/README/MEASUREMENT_INTEGRITY/EMSE synchronized; MANIFEST +S artifacts +
+  S-chain gate test.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8841 passed / 5 skipped / 0 failed** (**8846** collected; **161.6s** locally;
+  COVERAGE_FILE isolated);
+- **Coverage**: lines **96.55%** (17448/18071) / branches **92.73%** (6263/6754) — flat
+  versus round R (S-3 only touches `experiments/`, outside `--cov=src`);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.15pp/+0.23pp);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (803 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **133/133** plus the `emse_*` directory coverage scan (13 new S-round evidence
+  entries);
+- **Full-feature probe matrix (66)**: `AITESTER_E2E_LLM=true python
+  scripts/tools/e2e_probe.py --all --include-llm` → **66/66 pass** (14 groups,
+  12 real-LLM probes, 74.3s wall); new `logic-examples-multisample` (normalized
+  keys/intersection/audit);
+- **S-1 3-seed productionization decision (real LLM)**: seed44 arms 20 rows exit=0,
+  walls 2122/2108s, costs $0.142296/$0.136544 ($0.27884); three seeds Δ all **+6**,
+  loss 20/0/0pp → **`enable_candidate`** (decision support, not a capability claim; the
+  production switch stays default-off); artifact SHA `354ba6c1…` **56 entries verified**;
+  three-seed decision batch totals $0.840675;
+- **S-2 B8/A-19 redo (real LLM)**: under failure injection ON stall **10/10**, OFF
+  **0/10**, iterations **1.8 vs 3.0** (Δ=1.2), costs $0.0465 vs $0.0608 →
+  **`confirmed`**; production files zero diff (ISOLATION all-green); companion disclosure:
+  under the default protocol repair-invalid preemption makes A-19 label-only; artifact
+  59-file SHA with 0 failures, REPORT `b2b52aba…`;
+- **S-3 multi-sample example self-consistency (real sampling + zero-LLM replay)**:
+  40 calls $0.010912, 31.3s; 2/2 hallucinations excluded but **correct 8→3 (−5)** →
+  "high-risk, default off"; artifact SHA `8f1440a5…` 10 entries verified; 23 tests;
+- **Round-S real LLM spend**: S-1 $0.27884 + S-2 $0.140324 + S-3 $0.010912 ≈ **$0.43**
+  (round-S cap $0.8 ✓).
 
 ## [Unreleased] — 2026-10-18 Round R (Q-2 loss diagnosis/reproduction + example self-validation + postprocess wall hook)
 

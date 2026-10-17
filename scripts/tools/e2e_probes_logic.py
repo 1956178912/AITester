@@ -752,6 +752,35 @@ def probe_examples_self_validation():
     return ok("示例自校验正常（矛盾示例丢弃/safe-AST 危险子句保留/env 开关）", checks=checks)
 
 
+def probe_examples_multisample():
+    """S-3：多采样示例自一致性（归一化键 + 交集过滤，零 LLM）。"""
+    import importlib
+
+    gen = importlib.import_module("experiments.spec_examples_generator")
+    checks: dict[str, bool] = {}
+    checks["api"] = hasattr(gen, "generate_examples_multisample") and hasattr(gen, "intersect_examples")
+    checks["single_api"] = hasattr(gen, "generate_spec_examples")
+    if not all(checks.values()):
+        return fail(f"多采样 API 缺失：{checks}")
+    key = gen.normalize_example_key
+    checks["dict_order_insensitive"] = key({"input": [1], "expected": {"a": 1, "b": 2}}) == key(
+        {"expected": {"b": 2, "a": 1}, "input": [1]}
+    )
+    checks["unicode_stable"] = key({"input": ["中文"], "expected": 1}) == key({"input": ["中文"], "expected": 1})
+    checks["int_float_distinct"] = key({"input": [1], "expected": 1}) != key({"input": [1], "expected": 1.0})
+    checks["list_tuple_equivalent"] = key({"input": [[1, 2]], "expected": 3}) == key({"input": [(1, 2)], "expected": 3})
+    samples = [
+        [{"input": [1], "expected": 2}, {"input": [3], "expected": 4}],
+        [{"input": [1], "expected": 2}, {"input": [5], "expected": 6}],
+    ]
+    merged, audit = gen.intersect_examples(samples, k=2)
+    checks["intersection"] = merged == [{"input": [1], "expected": 2}]
+    checks["audit"] = isinstance(audit, dict)
+    if not all(checks.values()):
+        return fail(f"多采样契约不完整：{checks}", audit=audit)
+    return ok("多采样自一致性正常（归一化键/求交/审计/单采样 API 保持）", checks=checks)
+
+
 PROBES = [
     Probe(
         name="logic-spec-ir-parse",
@@ -871,6 +900,13 @@ PROBES = [
         func=probe_examples_self_validation,
         timeout_s=60,
         description="R-2：示例自校验（safe-AST 后置子句校验/矛盾丢弃/不可机检保守放行/env 开关）",
+    ),
+    Probe(
+        name="logic-examples-multisample",
+        group="logic",
+        func=probe_examples_multisample,
+        timeout_s=60,
+        description="S-3：多采样示例自一致性（归一化键/交集过滤/审计，零 LLM）",
     ),
     Probe(
         name="logic-profile-spec-fields",
