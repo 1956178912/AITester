@@ -64,7 +64,7 @@ target_quality:
     aitester: [84.0, 93.6]   # 10 批次区间（n=87/批，2026-10-06/07）
     plain_llm: [86.0, 97.2]  # 同上
     plain_llm_df: [81.5, 93.6]
-    note: "高覆盖 ≠ 高检出：aitester 覆盖率 84–94% 而检出率仅 13–16%。归因依据（2026-10-10 独立审查更正引用）：① MUTGEN（TSE 2026, DOI 10.1109/tse.2026.3682975）实测存在 100% 行覆盖仅 4% 变异得分的套件；② 覆盖率-缺陷检出相关性批评的正确出处为 Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093），其结论为限定性而非全称——覆盖+变异在回归（无缺陷代码）设定下做**跨模型比较**是有效的（branch vs raw mutation r=0.780 @k=10，控制规模后），而在**被测代码可能有缺陷**时不可靠（此时变异分析不适用）。本项目场景属后者，故不得单独以覆盖率作为有效性证据。⚠️ 此前本条把该结论误挂到 'ULT/TOSEM 26' 名下——ULT（UnLeakedTestbench, TOSEM 2026, DOI 10.1145/3805043）是**基准论文**，不主张相关性结论"
+    note: "高覆盖 ≠ 高检出：aitester 覆盖率 84–94% 而检出率仅 13–16%。归因依据（2026-10-10 独立审查更正引用）：① MUTGEN（TSE 2026, DOI 10.1109/tse.2026.3682975）实测存在 100% 行覆盖仅 4% 变异得分的套件；② 覆盖率-缺陷检出相关性批评的正确出处为 Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093），其结论为限定性而非全称——覆盖+变异在回归（无缺陷代码）设定下做**跨模型比较**是有效的（branch vs raw mutation r=0.780 @k=10，控制规模后），而在**被测代码可能有缺陷**时不可靠（此时变异分析不适用）。本项目场景属后者，故不得单独以覆盖率作为有效性证据。⚠️ 此前本条把该结论误挂到 'ULT/TOSEM 26' 名下——ULT（UnLeakedTestbench, TOSEM 2026, DOI 10.1145/3805043）是**基准论文**，不主张相关性结论。【2026-10-17 独立评审 A-10 补验：该 DOI 已定位一手论文——《Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study)》，PACMSE 3(ISSTA) Article ISSTA002, pp.30-53, arXiv:2607.22880；r=0.780@k=10 已逐位核验（论文 §4.3 正文 + Table 7：branch coverage vs raw mutation score，Pearson r=0.780, p=0.002，inter-model 视图/平均聚合/bug-free 输入/固定套件规模 k=10），引用准确】"
   mutation_score:            # 变异得分（0–1，details[].mutation_score）
     aitester: [0.818, 0.976]  # 2026-10-06/07 七批次区间（n=77–81/批）
     plain_llm: [0.951, 0.992]
