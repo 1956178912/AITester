@@ -80,38 +80,56 @@ value = v[lo] + (rank - lo) * (v[hi] - v[lo])
   阶段名、实测墙钟、阈值与 env 名；**模块不直接打日志**，由调用方
   `logger.warning`（保持库纯度，也便于测试/门禁接管）。
 
-## 5. Hook 集成（run_benchmark 批后处理，3 行核心 + 1 行落盘）
+## 5. Hook 集成（已接入 run_benchmark，R-3，2026-10-18）
 
-集成 hook 由 Lead 在 Q-1 完成后插入 `experiments/run_benchmark.py`；本模块不改
-run_benchmark.py（避免与 Q-1 同文件并发写入）。插入点：批次后处理中逐任务执行
-mutation / M1 / MDO 的循环处（每阶段一个 `StageTimer`）。
+**状态：已接入。** `experiments/run_benchmark.py` 的逐基线批后处理块（mutation
+scoring/detection + MDO 调用）已用 `StageTimer` 包住，并经三个小 helper 落盘
+（`_run_postprocess_stage` / `_run_baseline_postprocess_with_wall` /
+`_attach_postprocess_wall_to_summary`；默认调用路径逐字节等价，纯观测）。
 
-```python
-from experiments.postprocess_wall import StageTimer, build_postprocess_wall, postprocess_warn_s
+**当前粒度 = `per_baseline`**：每个基线在每个阶段记一个 wall 样本（该基线该阶段
+全部后处理调用总 wall），在批次 summary 中记录：
 
-# 1) 每个后处理阶段各建一个计时器；逐任务耗时用 measure_task / record_task 记录
-mdo_timer = StageTimer("mdo")
-for task in tasks:
-    with mdo_timer.measure_task(timed_out=task.timed_out):
-        run_mdo_postprocess(task)  # 原后处理逻辑（计时零行为变化）
-
-# 2) 聚合为稳定 JSON（warn_s 从 env AITESTER_POSTPROCESS_WARN_S 读，默认 600s）
-wall = build_postprocess_wall(
-    {timer.stage: timer.durations for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
-    timed_out={timer.stage: timer.timed_out_tasks for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
-    warn_s=postprocess_warn_s(),
-)
-for message in wall.warnings:  # 3) 阈值超限由调用方 logger.warning
-    logger.warning("%s", message)
-batch_report["postprocess_wall"] = wall  # 4) 写入批次 JSON 的 postprocess_wall 键
+```json
+{
+  "postprocess_wall": {
+    "mutation": {"wall_s": 1.1e-05, "n_tasks": 1, "mean_s": 1.1e-05,
+                  "p50_s": 1.1e-05, "p95_s": 1.1e-05, "max_s": 1.1e-05,
+                  "timed_out_tasks": 0},
+    "mdo":      {"wall_s": 3e-06, "n_tasks": 1}
+  },
+  "postprocess_wall_granularity": "per_baseline"
+}
 ```
 
-- `StageTimer` 同时支持 `with timer:`（阶段总 wall）、`with timer.measure_task():`
-  （逐任务耗时）、`timer.record_task(duration, timed_out=...)`（调用方已测好时长）
-  与 `@timer.measure` 装饰器（单函数调用记为一个任务）；
-- 异常**不吞**：计时范围内异常只计数（`timer.exceptions`）并原样上抛；
-- `timed_out_tasks` 由调用方传入已判定集合（watchdog 截断值本身即为该任务耗时，
-  模块不做二次截断，按传入值如实统计）。
+- **字段总在**：`mutation_enabled=False`（默认）时 `postprocess_wall={}`（空映射，
+  只包含实际执行的阶段；不产生空阶段键），`postprocess_wall_granularity` 仍为
+  `"per_baseline"`；
+- 阈值告警由 hook 逐条 `logger.warning`（阈值 `AITESTER_POSTPROCESS_WARN_S`，
+  默认 600s，读取实现见 §4），JSON 内不含 warnings；
+- 异常路径：阶段调用抛异常时仍先追加该阶段 wall 样本，随后原异常上抛——
+  不吞异常、不改变重试/超时/判分逻辑；
+- 更细粒度（逐任务/逐变异体）为后续可选扩展；当前不改 Q-3 模块 API。
+
+集成代码形态（`run_benchmark.py` 现状）：
+
+```python
+# 批后处理收集器（R-3）：阶段名 → 每基线实测 wall 样本
+postprocess_stage_durations: dict[str, list[float]] = {}
+
+# 逐基线后处理（原三个调用的顺序/入参/日志不变，仅新增 wall 观测）
+_run_baseline_postprocess_with_wall(
+    bl_results,
+    tasks,
+    postprocess_stage_durations,
+    mutation_enabled=mutation_enabled,
+    mutation_max_mutants=MUTATION_MAX_MUTANTS,
+    seed=seed,
+)
+
+# 批汇总：写入 summary 两键并对超阈值告警 logger.warning
+_attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
+```
 
 ## 6. 设计取舍与已知边界
 
@@ -135,5 +153,13 @@ batch_report["postprocess_wall"] = wall  # 4) 写入批次 JSON 的 postprocess_
   集成样例。
 - smoke 工件：`experiments/results/q_round_postprocess_wall_20261018/`（构造数据
   的确定性 JSON 样例 + SHA256 清单，仅演示形状，不代表真实批次数字）。
-- 验收命令：`python -m pytest -q tests/test_postprocess_wall_metrics.py`；
-  `ruff check` / `mypy` 目标文件干净。
+- 接入测试（R-3）：`tests/test_run_benchmark_postprocess_hook.py`（23 例）：
+  mutation 关闭零行为、三调用顺序/入参等价、每基线样本粒度、阈值告警、
+  异常路径仍写样本且原异常上抛、summary 仅新增两键且 JSON 可序列化；
+- 默认零行为变化证据（R-3）：以同一 fake 基线分别运行 **HEAD（接入前）** 与
+  当前工作树的 `run_benchmark()`（examples 1 任务；provenance/耗时等易失字段
+  归一化后比较）：mutation 关闭与开启两种模式的历史 summary 字段**完全相等**，
+  差异仅为新增的 `postprocess_wall` / `postprocess_wall_granularity` 两键；
+- 验收命令：`python -m pytest -q tests/test_postprocess_wall_metrics.py
+  tests/test_run_benchmark_postprocess_hook.py`；`ruff check` / `mypy` 目标文件
+  干净（run_benchmark 既有 mypy 错误数不新增）。

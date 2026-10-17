@@ -347,3 +347,19 @@ detect_cycle/hanoi/knapsack A=1→B=0）。两臂 20 行、exit=0、成本 $0.27
 生产化；在此之前不得引用"示例通道提升检出"作为能力主张（本批只证明"能增加
 oracle-correct 任务"同时**伴随** LLM-suite 下降）。工件
 `experiments/results/q_round_examples_ab_20261018/`（101 项 SHA verify）。
+
+**R-1/R-2/R-3 口径（2026-10-18）**：Q-2 的 −20pp LLM-suite 下降需要先区分"真实
+trade-off vs 单次噪声"。R-1 先做**零 LLM 诊断**：Q-2 两臂 20/20 任务 generated_test
+均不同（test-name Jaccard 均值 0.197、gt_len 相对差 0.217），3 个损失任务差异幅度
+与全量同级（0.189/0.445）→ 结构性 trade-off 证据不足，候选机制以 LLM 非确定性为主
+（结果行不落 test_plan 原对象，只能间接推断）；随后用 **seed-43 预注册复现批**
+（判定规则跑前冻结：B_det<A_det 且损失 ≥10pp → `reproducible_tradeoff`，否则
+`not_reproduced`）。**结果**：A/B detection 均 **13/15=86.67%**（loss=0.0pp<10pp）→
+**`not_reproduced`**，Q-2 的 −20pp 视为单次运行噪声；而 **oracle-correct +6 两 seed
+可复现**（A 0→B 6，McNemar p=0.015625）。→ 处置：仍不自动生产化（保守），下一轮
+3 臂（关/开 + 更多 seed）复核 + hanoi 类"契约段改变修复轨迹"机制归因。**R-2 口径**：示例自校验过滤器在 90 条 P-1 示例上 **dropped=0**
+（2 例幻觉未被命中——锚后置子句只编码 isinstance/>=0 类约束）→ 判定"未达有效过滤、
+非高风险"；引用时必须给过滤统计与"规约表达力是根因"的结论，不得声称过滤器解决
+示例质量问题。**R-3 口径**：`postprocess_wall` 为**每基线样本**粒度（n_tasks=该阶段
+被计时基线数，非任务数），`timed_out_tasks` 当前恒 0，仅用于观测不可当任务级超时
+证据；hook 为纯观测，历史 summary 字段逐项不变。

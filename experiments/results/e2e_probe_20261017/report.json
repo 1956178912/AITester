@@ -1,6 +1,6 @@
 {
   "schema": "e2e_probe_report/1",
-  "generated_at": "2026-10-18T05:04:42+0800",
+  "generated_at": "2026-10-18T06:00:37+0800",
   "include_llm": true,
   "probes": [
     {
@@ -17,7 +17,7 @@
           "clean-venv-cache"
         ]
       },
-      "duration_s": 0.78,
+      "duration_s": 0.76,
       "description": "python main.py --help：退出码 0 且 4 个子命令在帮助面"
     },
     {
@@ -35,7 +35,7 @@
           "string_utils.py"
         ]
       },
-      "duration_s": 0.74,
+      "duration_s": 0.77,
       "description": "list-examples：列出 examples 文件并给出使用示例"
     },
     {
@@ -82,7 +82,7 @@
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "duration_s": 6.14,
+      "duration_s": 6.07,
       "description": "run examples/calculator.py --json --verbose：真 LLM 下 stdout 为单一合法 JSON（1 次调用）"
     },
     {
@@ -100,7 +100,7 @@
         "input_tokens": 0,
         "output_tokens": 0
       },
-      "duration_s": 3.32,
+      "duration_s": 3.72,
       "description": "run 两文件 --parallel 2 --json：真 LLM 下每任务一份合法 JSON（2 次调用）"
     },
     {
@@ -129,7 +129,7 @@
           "planner->generator"
         ]
       },
-      "duration_s": 0.78,
+      "duration_s": 0.79,
       "description": "fast 档 build_workflow：节点/边装配正确（无逻辑档节点）"
     },
     {
@@ -177,12 +177,12 @@
       "status": "pass",
       "detail": "logic 档 invoke 正常（stop_reason=test_passed，trace=1 条）",
       "evidence": {
-        "elapsed_s": 7.51,
+        "elapsed_s": 7.41,
         "stop_reason": "test_passed",
         "test_passed": true,
         "iteration": 0,
-        "test_cases": 10,
-        "generated_test_len": 1665,
+        "test_cases": 8,
+        "generated_test_len": 2350,
         "execution_trace_len": 1,
         "checks": {
           "test_plan_is_dict": true,
@@ -194,11 +194,11 @@
           "stop_reason_present": true
         },
         "llm_calls": 2,
-        "total_tokens": 5350,
-        "input_tokens": 4011,
-        "output_tokens": 1339
+        "total_tokens": 5381,
+        "input_tokens": 3848,
+        "output_tokens": 1533
       },
-      "duration_s": 8.31,
+      "duration_s": 8.2,
       "description": "logic 档最小任务真实 invoke：test_plan/generated_test/trace/终态字段齐全（2 次调用）"
     },
     {
@@ -206,9 +206,9 @@
       "group": "agents",
       "requires_llm": true,
       "status": "pass",
-      "detail": "planner 结构化计划正常（11 用例，logic_degraded=False）",
+      "detail": "planner 结构化计划正常（7 用例，logic_degraded=False）",
       "evidence": {
-        "test_cases": 11,
+        "test_cases": 7,
         "logic_keys": [
           "edge_cases",
           "input_domain",
@@ -218,11 +218,11 @@
         ],
         "logic_degraded": false,
         "llm_calls": 1,
-        "total_tokens": 1304,
+        "total_tokens": 1060,
         "input_tokens": 461,
-        "output_tokens": 843
+        "output_tokens": 599
       },
-      "duration_s": 4.39,
+      "duration_s": 3.71,
       "description": "planner 真实 LLM 输出结构化 test_plan（1 次调用）"
     },
     {
@@ -230,16 +230,16 @@
       "group": "agents",
       "requires_llm": true,
       "status": "pass",
-      "detail": "generator 生成可解析 pytest（810 字符，5 个测试函数）",
+      "detail": "generator 生成可解析 pytest（822 字符，5 个测试函数）",
       "evidence": {
-        "generated_len": 810,
+        "generated_len": 822,
         "test_functions": 5,
         "llm_calls": 1,
-        "total_tokens": 932,
+        "total_tokens": 927,
         "input_tokens": 587,
-        "output_tokens": 345
+        "output_tokens": 340
       },
-      "duration_s": 2.55,
+      "duration_s": 2.4,
       "description": "generator 真实 LLM 生成可解析 pytest（import/断言齐全，1 次调用）"
     },
     {
@@ -258,7 +258,7 @@
           "failed_cases": 1
         }
       },
-      "duration_s": 1.39,
+      "duration_s": 1.4,
       "description": "executor 本地沙箱运行生成测试并回报 passed/coverage/failed_cases"
     },
     {
@@ -272,14 +272,14 @@
         "patch_applied": true,
         "dangerous_api_added": [],
         "error_category": "assertion",
-        "root_cause": "calc_add.py 中 add 函数第 3 行实现为 `return a - b`，与函数名 add 及文档字符串 'Return the sum of a and b.' 描述不符；测试期望 add(2, 3) == 5，实际返回 -1，导致断言失败。属于被测代码逻辑错误。",
+        "root_cause": "被测代码 calc_add.py 中 add 函数第3行实现为 `return a - b`，与函数名 add 及文档字符串 'Return the sum of a and b.' 描述的加法语义不符。测试调用 add(2, 3) 期望 5，实际返回 -1，导致断言失败。属于代码逻辑错误，而非测试预期值错误。",
         "llm_calls": 1,
-        "total_tokens": 1396,
-        "input_tokens": 1232,
-        "output_tokens": 164,
+        "total_tokens": 1390,
+        "input_tokens": 1216,
+        "output_tokens": 174,
         "after_passed": true
       },
-      "duration_s": 3.4,
+      "duration_s": 3.03,
       "description": "真实修复链：Debugger(1 次 LLM)→安全应用补丁→修复后测试通过；区分模型未产出"
     },
     {
@@ -289,7 +289,7 @@
       "status": "pass",
       "detail": "修复环正常：debugger 进入 1 轮 → patch_applier 应用 → 复跑通过（stop_reason=test_passed）",
       "evidence": {
-        "elapsed_s": 6.32,
+        "elapsed_s": 6.64,
         "iteration": 1,
         "test_passed": true,
         "stop_reason": "test_passed",
@@ -300,11 +300,11 @@
         "target_code_changed": true,
         "dangerous_api_added": [],
         "llm_calls": 3,
-        "total_tokens": 4367,
-        "input_tokens": 3617,
-        "output_tokens": 750
+        "total_tokens": 4364,
+        "input_tokens": 3608,
+        "output_tokens": 756
       },
-      "duration_s": 7.16,
+      "duration_s": 7.45,
       "description": "真实 graph 修复环：executor 失败→debugger→patch_applier→复跑通过（≈2 次调用）"
     },
     {
@@ -420,7 +420,7 @@
           "success": true
         }
       },
-      "duration_s": 0.82,
+      "duration_s": 0.81,
       "description": "快照回滚协议：P2P 回归失败自动回滚、通过保留、开关可观测"
     },
     {
@@ -551,7 +551,7 @@
           "error": 0
         }
       },
-      "duration_s": 1.3,
+      "duration_s": 1.28,
       "description": "main.py doctor --json 零 LLM 自检入口（schema/聚合/不泄漏凭证）"
     },
     {
@@ -640,7 +640,7 @@
         },
         "error": "LLM 预算耗尽：已消耗 29 tokens >= 上限 1 tokens"
       },
-      "duration_s": 1.47,
+      "duration_s": 1.45,
       "description": "真 LLM 1 次：预算耗尽后下一次调用抛 BudgetExceededError（停止通道）"
     },
     {
@@ -672,7 +672,7 @@
       "group": "cache",
       "requires_llm": true,
       "status": "pass",
-      "detail": "两次同 prompt：第二次缓存命中（0.000s vs 首次 0.58s）；llm_calls=1, cache_hits=1, avoided_tokens=29",
+      "detail": "两次同 prompt：第二次缓存命中（0.000s vs 首次 0.97s）；llm_calls=1, cache_hits=1, avoided_tokens=29",
       "evidence": {
         "usage": {
           "input_tokens": 28,
@@ -686,12 +686,12 @@
           }
         },
         "cache_files": [
-          "dfed66809de8dbfb.json"
+          "b164fb65c6d67499.json"
         ],
-        "first_elapsed_s": 0.577,
+        "first_elapsed_s": 0.971,
         "second_elapsed_s": 0.0
       },
-      "duration_s": 1.23,
+      "duration_s": 1.61,
       "description": "真 LLM 1 次：同 prompt 两次调用 → 命中 + avoided tokens 记账"
     },
     {
@@ -708,7 +708,7 @@
           "embed_failures": 0
         }
       },
-      "duration_s": 0.45,
+      "duration_s": 0.46,
       "description": "语义缓存索引真实嵌入：同义命中 / 无关未命中（零 LLM）"
     },
     {
@@ -716,9 +716,9 @@
       "group": "rag",
       "requires_llm": false,
       "status": "pass",
-      "detail": "检索器初始化 0.04s；写入 1 案例后检索到 1 条（top similarity=0.7143）",
+      "detail": "检索器初始化 0.03s；写入 1 案例后检索到 1 条（top similarity=0.7143）",
       "evidence": {
-        "init_elapsed_s": 0.04,
+        "init_elapsed_s": 0.03,
         "retrieved": 1,
         "similarity": 0.7143
       },
@@ -730,9 +730,9 @@
       "group": "rag",
       "requires_llm": true,
       "status": "pass",
-      "detail": "ENABLE_RAG 下最小任务 2.3s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1178 字符",
+      "detail": "ENABLE_RAG 下最小任务 3.4s 完成；rag_stats 1 条（kinds=['test_cases']）；generated_test 1142 字符",
       "evidence": {
-        "elapsed_s": 2.34,
+        "elapsed_s": 3.38,
         "rag_stats": [
           {
             "kind": "test_cases",
@@ -741,9 +741,9 @@
             "avg_similarity": null
           }
         ],
-        "generated_test_len": 1178
+        "generated_test_len": 1142
       },
-      "duration_s": 3.15,
+      "duration_s": 4.19,
       "description": "真 LLM：ENABLE_RAG=true 最小任务终态断言 rag_stats（检索观测接线）"
     },
     {
@@ -849,12 +849,12 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "本地执行器 0.97s 通过最小测试（coverage=100.0，failed_cases=0）",
+      "detail": "本地执行器 0.95s 通过最小测试（coverage=100.0，failed_cases=0）",
       "evidence": {
-        "elapsed_s": 0.97,
+        "elapsed_s": 0.95,
         "coverage": 100.0
       },
-      "duration_s": 1.0,
+      "duration_s": 0.99,
       "description": "本地执行器真实跑生成测试 → passed/coverage（零 LLM）"
     },
     {
@@ -862,9 +862,9 @@
       "group": "executor",
       "requires_llm": false,
       "status": "pass",
-      "detail": "venv 执行器 0.45s 通过最小测试（coverage=100.0）",
+      "detail": "venv 执行器 0.46s 通过最小测试（coverage=100.0）",
       "evidence": {
-        "elapsed_s": 0.45,
+        "elapsed_s": 0.46,
         "coverage": 100.0
       },
       "duration_s": 0.5,
@@ -978,7 +978,7 @@
           "decontamination_rate": 0.5
         }
       },
-      "duration_s": 0.45,
+      "duration_s": 0.46,
       "description": "去污染时间戳解析/切片报告/unverifiable 披露（零 LLM）"
     },
     {
@@ -999,22 +999,22 @@
       "group": "observability",
       "requires_llm": true,
       "status": "pass",
-      "detail": "模型指纹 1.01s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…",
+      "detail": "模型指纹 1.25s：alias=deepseek-flash returned=deepseek-flash pinned=True probe=fc3d915941b8…",
       "evidence": {
-        "elapsed_s": 1.01,
+        "elapsed_s": 1.25,
         "fingerprint": {
           "requested_alias": "deepseek-flash",
           "returned_model": "deepseek-flash",
           "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
           "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
-          "probe_at": "2026-10-17T21:04:24.976216+00:00",
+          "probe_at": "2026-10-17T22:00:20.008220+00:00",
           "missing": [],
           "pinned": true,
           "error": null,
           "alias_mismatch": false
         }
       },
-      "duration_s": 2.15,
+      "duration_s": 2.4,
       "description": "真 LLM 1 次：S29 模型指纹 pinned=True（快照可锁定）"
     },
     {
@@ -1122,7 +1122,7 @@
       "evidence": {
         "verdict": "compiled_empty"
       },
-      "duration_s": 0.71,
+      "duration_s": 0.68,
       "description": "N-3 接线：仅 spec_anchor 材料也能注入确定性 oracle"
     },
     {
@@ -1155,7 +1155,7 @@
       "status": "pass",
       "detail": "mutation advisor 环装配正确（开=7 节点 / 关=6 节点）",
       "evidence": {},
-      "duration_s": 0.78,
+      "duration_s": 0.79,
       "description": "mutation advisor 环装配随开关变化"
     },
     {
@@ -1168,7 +1168,7 @@
         "branch_coverage": 25.0,
         "missing": 3
       },
-      "duration_s": 0.55,
+      "duration_s": 0.57,
       "description": "branch 覆盖注入真实测量（含空测试保守降级）"
     },
     {
@@ -1282,7 +1282,7 @@
       "group": "observability",
       "requires_llm": false,
       "status": "pass",
-      "detail": "后处理墙钟模块正常（稳定 JSON/线性分位/env 默认与坏值回退）",
+      "detail": "后处理墙钟模块正常（稳定 JSON/线性分位/env 回退）+ run_benchmark hook 已接入",
       "evidence": {
         "checks": {
           "stages": true,
@@ -1294,28 +1294,50 @@
           "empty_stage_zero": true,
           "env_default_600": true,
           "env_override": true,
-          "env_bad_fallback": true
+          "env_bad_fallback": true,
+          "hook_mounted": true,
+          "hook_granularity": true
+        }
+      },
+      "duration_s": 1.06,
+      "description": "Q-3：后处理墙钟模块（稳定 JSON/线性分位/env 默认与坏值回退）"
+    },
+    {
+      "name": "logic-examples-self-validation",
+      "group": "logic",
+      "requires_llm": false,
+      "status": "pass",
+      "detail": "示例自校验正常（矛盾示例丢弃/safe-AST 危险子句保留/env 开关）",
+      "evidence": {
+        "checks": {
+          "dropped_contradiction": true,
+          "reason": true,
+          "kept_valid": true,
+          "fully_validated": true,
+          "default_enabled": true,
+          "unsafe_kept": true,
+          "env_off": true
         }
       },
       "duration_s": 0.04,
-      "description": "Q-3：后处理墙钟模块（稳定 JSON/线性分位/env 默认与坏值回退）"
+      "description": "R-2：示例自校验（safe-AST 后置子句校验/矛盾丢弃/不可机检保守放行/env 开关）"
     },
     {
       "name": "logic-profile-spec-fields",
       "group": "logic",
       "requires_llm": true,
       "status": "pass",
-      "detail": "logic 档 spec 链路正常（9.4s，compile_rate=1.0，generated_test=有）",
+      "detail": "logic 档 spec 链路正常（7.7s，compile_rate=1.0，generated_test=有）",
       "evidence": {
         "compile_rate": 1.0,
-        "elapsed_s": 9.4
+        "elapsed_s": 7.72
       },
-      "duration_s": 10.21,
+      "duration_s": 8.52,
       "description": "logic 档最小真实任务：spec 链路状态字段落态（真 LLM ≤1 调用）"
     }
   ],
   "summary": {
-    "pass": 64
+    "pass": 65
   },
   "load_errors": [
     "scripts.tools.e2e_probes_platform: 探针名重复 observability-trace-redaction",

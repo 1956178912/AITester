@@ -71,6 +71,7 @@ class TestZeroLlmProbesPass:
             "logic-oracle-precondition-input-filter",
             "logic-oracle-examples-production",
             "observability-postprocess-wall",
+            "logic-examples-self-validation",
         ],
     )
     def test_probe_passes(self, probe_name):

@@ -39,6 +39,29 @@ class TestManifestHygiene:
         missing = [rel for rel in gate.MANIFEST if not (PROJECT_ROOT / rel).exists()]
         assert not missing, f"MANIFEST 条目不存在于工作区: {missing}"
 
+    def test_manifest_covers_q_round_chain(self):
+        """Q 轮（2026-10-18）：示例生产化 A/B / 事故披露 / 后处理墙钟工件必须在清单。"""
+        required_substrings = (
+            "q_round_examples_ab_20261018/ANALYSIS_REPORT.json",
+            "q_round_examples_ab_20261018/SHA256SUMS",
+            "q_round_examples_ab_20261018/_incident_unintended_llm_launch_20261018/README_INCIDENT.md",
+            "q_round_postprocess_wall_20261018/SHA256SUMS",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 Q 轮工件条目: {needle}"
+
+    def test_manifest_covers_r_round_chain(self):
+        """R 轮（2026-10-18）：seed-43 复现批与示例自校验工件必须在清单。"""
+        required_substrings = (
+            "r_round_examples_repro_20261018/DIAGNOSIS.md",
+            "r_round_examples_repro_20261018/PREREG_REPRO.md",
+            "r_round_examples_repro_20261018/SHA256SUMS",
+            "r_round_examples_selfcheck_20261018/FILTER_STATS.json",
+            "r_round_examples_selfcheck_20261018/SHA256SUMS",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 R 轮工件条目: {needle}"
+
     def test_manifest_covers_df_spec_chain(self):
         """A-04：df_spec / M4 / D1 / ULT-df200 四批旗舰工件的关键件必须在清单。"""
         required_substrings = (

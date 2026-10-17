@@ -88,40 +88,62 @@ value = v[lo] + (rank - lo) * (v[hi] - v[lo])
   warn) containing stage name, measured wall, threshold and env name; the module
   never logs itself, leaving `logger.warning` to the caller.
 
-## 5. Hook Integration (3 core lines + 1 archive line)
+## 5. Hook Integration (wired into run_benchmark, R-3, 2026-10-18)
 
-The integration hook is inserted into `experiments/run_benchmark.py` by the Lead
-after Q-1 completes; this module does not modify run_benchmark.py (avoiding
-concurrent writes to the same file). Insertion point: the per-task mutation / M1 /
-MDO post-processing loops (one `StageTimer` per stage).
+**Status: wired in.** The per-baseline post-processing block in
+`experiments/run_benchmark.py` (mutation scoring/detection + MDO calls) is wrapped
+with `StageTimer` and archived through three small helpers
+(`_run_postprocess_stage` / `_run_baseline_postprocess_with_wall` /
+`_attach_postprocess_wall_to_summary`; the default call path is byte-equivalent,
+observation only).
 
-```python
-from experiments.postprocess_wall import StageTimer, build_postprocess_wall, postprocess_warn_s
+**Current granularity = `per_baseline`**: one wall sample per baseline per stage
+(total wall of that baseline's post-processing calls in that stage), recorded in
+the batch summary:
 
-# 1) one timer per stage; record per-task durations with measure_task / record_task
-mdo_timer = StageTimer("mdo")
-for task in tasks:
-    with mdo_timer.measure_task(timed_out=task.timed_out):
-        run_mdo_postprocess(task)  # unchanged post-processing logic
-
-# 2) aggregate into stable JSON (warn_s from env AITESTER_POSTPROCESS_WARN_S, default 600s)
-wall = build_postprocess_wall(
-    {timer.stage: timer.durations for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
-    timed_out={timer.stage: timer.timed_out_tasks for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
-    warn_s=postprocess_warn_s(),
-)
-for message in wall.warnings:  # 3) caller turns threshold violations into logger.warning
-    logger.warning("%s", message)
-batch_report["postprocess_wall"] = wall  # 4) archive under the postprocess_wall key
+```json
+{
+  "postprocess_wall": {
+    "mutation": {"wall_s": 1.1e-05, "n_tasks": 1, "mean_s": 1.1e-05,
+                  "p50_s": 1.1e-05, "p95_s": 1.1e-05, "max_s": 1.1e-05,
+                  "timed_out_tasks": 0},
+    "mdo":      {"wall_s": 3e-06, "n_tasks": 1}
+  },
+  "postprocess_wall_granularity": "per_baseline"
+}
 ```
 
-- `StageTimer` supports `with timer:` (stage wall), `with timer.measure_task():`
-  (per-task), `timer.record_task(duration, timed_out=...)` (caller-measured
-  durations), and the `@timer.measure` decorator (one call = one task);
-- exceptions are never swallowed: they are counted (`timer.exceptions`) and
-  re-raised;
-- `timed_out_tasks` is supplied by the caller (watchdog-truncated duration is the
-  task duration; the module does not re-truncate, it reports the given values).
+- **field always present**: with `mutation_enabled=False` (default),
+  `postprocess_wall={}` (empty mapping; only actually executed stages are included,
+  no empty stage keys) while `postprocess_wall_granularity` stays `"per_baseline"`;
+- threshold warnings are emitted one by one via the hook's `logger.warning`
+  (threshold `AITESTER_POSTPROCESS_WARN_S`, default 600s; reader in §4); JSON does
+  not contain warnings;
+- exception path: the stage wall sample is still appended before the original
+  exception is re-raised - exceptions are never swallowed and retry/timeout/scoring
+  logic is unchanged;
+- finer granularity (per task / per mutant) is a possible follow-up; the Q-3 module
+  API is unchanged.
+
+Integration shape (as in `run_benchmark.py` now):
+
+```python
+# post-processing collector (R-3): stage -> per-baseline wall samples
+postprocess_stage_durations: dict[str, list[float]] = {}
+
+# per-baseline post-processing (same call order/args/log as before, wall added)
+_run_baseline_postprocess_with_wall(
+    bl_results,
+    tasks,
+    postprocess_stage_durations,
+    mutation_enabled=mutation_enabled,
+    mutation_max_mutants=MUTATION_MAX_MUTANTS,
+    seed=seed,
+)
+
+# batch summary: write the two keys and log threshold warnings
+_attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
+```
 
 ## 6. Trade-offs and Known Boundaries
 
@@ -150,5 +172,16 @@ batch_report["postprocess_wall"] = wall  # 4) archive under the postprocess_wall
 - Smoke artifact: `experiments/results/q_round_postprocess_wall_20261018/`
   (deterministic JSON sample built from synthetic durations + SHA256 manifest; shape
   demo only, not real batch numbers).
-- Acceptance: `python -m pytest -q tests/test_postprocess_wall_metrics.py`; target
-  files clean under `ruff check` / `mypy`.
+- Integration tests (R-3): `tests/test_run_benchmark_postprocess_hook.py`
+  (23 cases): mutation-off zero behavior, identical call order/args, per-baseline
+  granularity, threshold warnings, exception path still records a sample and
+  re-raises, summary adds exactly two keys and stays JSON-serializable;
+- Default zero-behavior evidence (R-3): running `run_benchmark()` with the same
+  fake baseline on **HEAD (pre-integration)** and the current working tree
+  (examples, 1 task; provenance/timing volatile fields normalized) yields
+  **identical** legacy summary fields for both mutation-off and mutation-on
+  modes; the only difference is the two added keys `postprocess_wall` /
+  `postprocess_wall_granularity`;
+- Acceptance: `python -m pytest -q tests/test_postprocess_wall_metrics.py
+  tests/test_run_benchmark_postprocess_hook.py`; target files clean under
+  `ruff check` / `mypy` (no new errors beyond the pre-existing run_benchmark ones).

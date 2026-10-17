@@ -100,7 +100,7 @@ import logging
 import re
 from typing import Any
 
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -1289,6 +1289,299 @@ def _binding_lines_for_witness(
     return body
 
 
+# ─── R-2（2026-10-18）：示例自校验过滤器（确定性后置子句校验）─────────────
+# 背景：P-1 的 2 例 misguided 来自 LLM 示例期望值幻觉（is_valid_parenthesization
+# 对 "(((" 期望 True、knapsack 对 (5,[[5,10]]) 期望 0），Q-1 接入生产后同样
+# 会带入。R-2 在示例进入 oracle 编译前做**确定性自校验**：用可机检后置子句
+# （postconditions_expr）+ 前件域检查对每条示例做受限安全求值，若后置条件可
+# 求值且为 False → 丢弃该示例（原因 ``postcondition_false``）。
+#
+# 安全边界（零 eval/exec，AST 白名单；与 spec_smt 同族纪律）：
+#   - 只允许：比较（== != < <= > >= in not in is is not）、布尔（and/or/not）、
+#     算术（+ - * / // % 与一元 ±）、常量、Name（仅示例环境变量）、list/tuple；
+#   - **拒绝**：Call（含 len/isinstance/__import__）、属性访问、下标、lambda、
+#     推导式、dict/set、walrus、f-string 等——不可用即"不可机检"；
+#   - 表达式长度 ≤500 字符、AST 节点 ≤200（DoF 上限，防大输入）；
+#   - 语法/名称缺失/异常（如除零）/超限 → ``unevaluable`` → **保留示例**
+#     （保守放行：不因过滤器自身能力不足误杀合法示例）。
+#   - 环境变量映射：signature_params[i] ← input[i]（单参 args-list 展开规则与
+#     编译器一致）；``r`` 与 ``result`` ← expected。
+# 默认开启（opt-out：``SPEC_EXAMPLES_SELF_VALIDATE=false/0/off`` 关闭）；
+# 无 examples 的路径零变化（不产出任何额外代码/审计键）。
+_ENV_SELF_VALIDATE = "SPEC_EXAMPLES_SELF_VALIDATE"
+_SELF_VALIDATE_MAX_EXPR_CHARS = 500
+_SELF_VALIDATE_MAX_NODES = 200
+_UNEVALUABLE = object()
+
+
+def examples_self_validation_enabled() -> bool:
+    """R-2 示例自校验开关（默认开启，``SPEC_EXAMPLES_SELF_VALIDATE=false`` 关闭）。"""
+    return env_flag_opt_out(_ENV_SELF_VALIDATE)
+
+
+_ALLOWED_EVAL_NODES: tuple[type[ast.AST], ...] = (
+    ast.Expression,
+    ast.BoolOp,
+    ast.And,
+    ast.Or,
+    ast.UnaryOp,
+    ast.Not,
+    ast.USub,
+    ast.UAdd,
+    ast.Compare,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.In,
+    ast.NotIn,
+    ast.Is,
+    ast.IsNot,
+    ast.BinOp,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Constant,
+    ast.Name,
+    ast.Load,
+    ast.List,
+    ast.Tuple,
+)
+
+
+def _eval_guarded_node(node: ast.AST, env: dict[str, Any]) -> Any:
+    """白名单 AST 递归求值（仅由 evaluate_guarded_expression 调用；零 eval）。"""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id in env:
+            return env[node.id]
+        raise ValueError(f"name_not_in_example_env:{node.id}")
+    if isinstance(node, ast.List):
+        return [_eval_guarded_node(item, env) for item in node.elts]
+    if isinstance(node, ast.Tuple):
+        return tuple(_eval_guarded_node(item, env) for item in node.elts)
+    if isinstance(node, ast.UnaryOp):
+        operand = _eval_guarded_node(node.operand, env)
+        if isinstance(node.op, ast.Not):
+            return not operand
+        if isinstance(node.op, ast.USub):
+            return -operand
+        if isinstance(node.op, ast.UAdd):
+            return +operand
+        raise TypeError("unsupported_unary_op")
+    if isinstance(node, ast.BoolOp):
+        # 与 Python 语义一致：and 返回最后一个真值（或首个假值）；or 返回首个真值
+        values = node.values
+        if isinstance(node.op, ast.And):
+            result: Any = True
+            for value_node in values:
+                result = _eval_guarded_node(value_node, env)
+                if not result:
+                    return result
+            return result
+        if isinstance(node.op, ast.Or):
+            for value_node in values:
+                result = _eval_guarded_node(value_node, env)
+                if result:
+                    return result
+            return result
+        raise TypeError("unsupported_bool_op")
+    if isinstance(node, ast.BinOp):
+        left = _eval_guarded_node(node.left, env)
+        right = _eval_guarded_node(node.right, env)
+        op = node.op
+        if isinstance(op, ast.Add):
+            return left + right
+        if isinstance(op, ast.Sub):
+            return left - right
+        if isinstance(op, ast.Mult):
+            return left * right
+        if isinstance(op, ast.Div):
+            return left / right
+        if isinstance(op, ast.FloorDiv):
+            return left // right
+        if isinstance(op, ast.Mod):
+            return left % right
+        raise TypeError("unsupported_bin_op")
+    if isinstance(node, ast.Compare):
+        left = _eval_guarded_node(node.left, env)
+        for cmp_op, comparator in zip(node.ops, node.comparators, strict=True):
+            right = _eval_guarded_node(comparator, env)
+            if isinstance(cmp_op, ast.Eq):
+                keep = left == right
+            elif isinstance(cmp_op, ast.NotEq):
+                keep = left != right
+            elif isinstance(cmp_op, ast.Lt):
+                keep = left < right
+            elif isinstance(cmp_op, ast.LtE):
+                keep = left <= right
+            elif isinstance(cmp_op, ast.Gt):
+                keep = left > right
+            elif isinstance(cmp_op, ast.GtE):
+                keep = left >= right
+            elif isinstance(cmp_op, ast.In):
+                keep = left in right
+            elif isinstance(cmp_op, ast.NotIn):
+                keep = left not in right
+            elif isinstance(cmp_op, ast.Is):
+                keep = left is right
+            elif isinstance(cmp_op, ast.IsNot):
+                keep = left is not right
+            else:
+                raise TypeError("unsupported_compare_op")
+            if not keep:
+                return False
+            left = right
+        return True
+    raise TypeError("unsupported_ast_node")
+
+
+def evaluate_guarded_expression(expr: Any, env: dict[str, Any]) -> tuple[bool, Any]:
+    """受限安全求值（R-2 自校验用；零 eval/exec）。
+
+    Returns:
+        ``(True, value)`` 可求值；``(False, None)`` 不可机检（语法/白名单/
+        名称缺失/超长/异常），调用方据此**保留**示例（保守放行）。
+    """
+    if not isinstance(expr, str) or not expr.strip():
+        return False, None
+    if len(expr) > _SELF_VALIDATE_MAX_EXPR_CHARS:
+        return False, None
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return False, None
+    if sum(1 for _ in ast.walk(tree)) > _SELF_VALIDATE_MAX_NODES:
+        return False, None
+    for node in ast.walk(tree):
+        if type(node) not in _ALLOWED_EVAL_NODES:
+            return False, None
+    try:
+        return True, _eval_guarded_node(tree.body, env)
+    except (ArithmeticError, TypeError, ValueError, KeyError, IndexError, AttributeError, RecursionError):
+        return False, None
+
+
+def _example_input_env(example: Any, signature_params: list[str] | None) -> dict[str, Any] | None:
+    """示例 → 变量环境（映射规则与编译器 args-list 契约一致；不可映射 → None）。"""
+    if not isinstance(example, dict) or "input" not in example or "expected" not in example:
+        return None
+    inp = example.get("input")
+    expected = example.get("expected")
+    env: dict[str, Any] = {"r": expected, "result": expected}
+    if signature_params is None:
+        return env if not isinstance(inp, (list, dict)) else None
+    arity = len(signature_params)
+    if arity == 0:
+        return env if inp == [] else None
+    if arity == 1:
+        value = inp[0] if isinstance(inp, list) and len(inp) == 1 else inp
+        env[signature_params[0]] = value
+        return env
+    if not isinstance(inp, list) or len(inp) < arity:
+        return None
+    for index, param in enumerate(signature_params):
+        env[param] = inp[index]
+    return env
+
+
+def self_validate_examples(
+    spec: dict[str, Any] | None,
+    signature_params: list[str] | None,
+    examples: Any = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """R-2 示例自校验：后置子句可求值且为 False 的示例丢弃（其余保守保留）。
+
+    Args:
+        spec: SpecIR（取 ``postconditions_expr``；``preconditions_expr`` 仅做
+            域检查审计——前件为 False **不丢弃**，保守放行以不误杀边界示例）。
+        signature_params: 参数名列表（input → 变量映射；None/[] 规则同编译器）。
+        examples: 待校验示例（默认取 ``spec["examples"]``）。
+
+    Returns:
+        (kept_examples, audit)。audit 键位稳定：enabled / n_input / n_kept /
+        n_dropped / n_fully_validated / n_partially_validated /
+        n_no_post_clause / n_unevaluable / n_precondition_false_kept / reasons。
+
+    Raises:
+        无：任何异常路径都按"不可机检"保留示例（过滤器自身故障不误杀）。
+    """
+    raw = examples if examples is not None else (spec or {}).get("examples")
+    items = [item for item in (raw or []) if isinstance(item, dict) and "input" in item and "expected" in item]
+    audit: dict[str, Any] = {
+        "enabled": examples_self_validation_enabled(),
+        "n_input": len(items),
+        "n_kept": 0,
+        "n_dropped": 0,
+        "n_fully_validated": 0,
+        "n_partially_validated": 0,
+        "n_no_post_clause": 0,
+        "n_unevaluable": 0,
+        "n_precondition_false_kept": 0,
+        "reasons": {},
+    }
+    if not audit["enabled"] or not items:
+        audit["n_kept"] = len(items)
+        return list(items), audit
+    post_exprs = [
+        clause.strip()
+        for clause in ((spec or {}).get("postconditions_expr") or [])
+        if isinstance(clause, str) and clause.strip()
+    ]
+    pre_exprs = [
+        clause.strip()
+        for clause in ((spec or {}).get("preconditions_expr") or [])
+        if isinstance(clause, str) and clause.strip()
+    ]
+    if not post_exprs:
+        audit["n_no_post_clause"] = len(items)
+        audit["n_kept"] = len(items)
+        return list(items), audit
+    kept: list[dict[str, Any]] = []
+    for example in items:
+        env = _example_input_env(example, signature_params)
+        if env is None:
+            audit["n_unevaluable"] += 1
+            audit["n_kept"] += 1
+            kept.append(example)
+            continue
+        evaluable_count = 0
+        contradicted = False
+        for expr in post_exprs:
+            evaluable, value = evaluate_guarded_expression(expr, env)
+            if not evaluable:
+                continue
+            evaluable_count += 1
+            if not value:
+                contradicted = True
+                break
+        if contradicted:
+            audit["n_dropped"] += 1
+            audit["reasons"]["postcondition_false"] = audit["reasons"].get("postcondition_false", 0) + 1
+            continue
+        if evaluable_count == len(post_exprs):
+            audit["n_fully_validated"] += 1
+        elif evaluable_count > 0:
+            audit["n_partially_validated"] += 1
+        else:
+            audit["n_unevaluable"] += 1
+        # 前件域检查（审计，不丢弃）：前件可求值且 False → 记录但保留示例
+        for expr in pre_exprs:
+            pre_evaluable, pre_value = evaluate_guarded_expression(expr, env)
+            if pre_evaluable and not pre_value:
+                audit["n_precondition_false_kept"] += 1
+                break
+        audit["n_kept"] += 1
+        kept.append(example)
+    return kept, audit
+
+
 def _compile_example_assertions(
     examples: Any,
     signature_params: list[str] | None,
@@ -1464,7 +1757,17 @@ def compile_spec_oracle(
     # `assert f(*input) == expected`（签名展开/repr/零 eval），与既有
     # pre/post/boundary 断言共用同一崩溃安全 harness。无示例（或缺 key /
     # 全部非法）时 example_lines 为空，下面所有路径与 O-1 产物**逐字节一致**。
-    example_lines, example_stats = _compile_example_assertions(spec.get("examples"), signature_params, target_function)
+    # R-2：示例自校验（默认开、可选关）——后置子句可求值且为 False 的示例
+    # 在编译前丢弃；不可求值/异常保守保留。无 examples 路径零变化。
+    kept_examples, examples_validation = self_validate_examples(spec, signature_params, spec.get("examples"))
+    if examples_validation.get("n_dropped"):
+        logger.info(
+            "SpecIR v2 示例自校验：丢弃 %d/%d 条（reasons=%s）",
+            examples_validation["n_dropped"],
+            examples_validation["n_input"],
+            examples_validation["reasons"],
+        )
+    example_lines, example_stats = _compile_example_assertions(kept_examples, signature_params, target_function)
     if example_stats["dropped"]:
         logger.debug(
             "SpecIR v2 示例通道：丢弃 %d/%d 条非法或元数不匹配示例（保守，不抛异常）",

@@ -1,13 +1,13 @@
-# Q 轮全功能端到端探针矩阵报告（2026-10-18）
+# R 轮全功能端到端探针矩阵报告（2026-10-18）
 
 > **性质**：全功能功能矩阵实跑工件（不是研究证据）。
 > 引擎：`scripts/tools/e2e_probe.py`；设计：`docs/design/e2e_probe_matrix.md`。
 > 三组探针模块：`e2e_probes_workflow.py`（24）、`e2e_probes_platform.py`（25）、
-> `e2e_probes_logic.py`（17；O/P/Q 轮新增 3 个 oracle 仪器探针 + 2 个示例通道探针 + 示例生产契约 + 后处理墙钟）。
+> `e2e_probes_logic.py`（18；O/P/Q/R 轮新增 3 个 oracle 仪器探针 + 2 个示例通道探针 + 示例生产契约 + 后处理墙钟/hook + 示例自校验）。
 >
-> **结果**：**64/64 pass**（pass=64, fail=0, error=0, skip=0；含 **12 个真实 LLM 探针**），
-> 总墙钟 **75.9s**。运行环境：HEAD `a48a53f` + P 轮收口工作树（内容即本批提交内容；
-> 运行时刻 2026-10-18 05:0x Asia/Shanghai），Python 3.14.6，模型 `deepseek-flash`
+> **结果**：**65/65 pass**（pass=65, fail=0, error=0, skip=0；含 **12 个真实 LLM 探针**），
+> 总墙钟 **76.2s**。运行环境：HEAD `282b361` + P 轮收口工作树（内容即本批提交内容；
+> 运行时刻 2026-10-18 06:1x Asia/Shanghai），Python 3.14.6，模型 `deepseek-flash`
 > （`AITESTER_LLM_CACHE=0` 由框架强制 → 全部真实调用）。
 >
 > **纪律**：LLM 探针在无 `AITESTER_E2E_LLM=true` 时一律 skip（不静默通过）；失败必须带
@@ -16,11 +16,11 @@
 ## 1. 命令（可复现）
 
 ```bash
-# 零 LLM 子集（52 探针）
+# 零 LLM 子集（53 探针）
 .venv/bin/python scripts/tools/e2e_probe.py --all \
   --json-out experiments/results/e2e_probe_20261017/report_zero_llm.json
 
-# 全量（64 探针，含 12 个真实 LLM 探针；本报告来源）
+# 全量（65 探针，含 12 个真实 LLM 探针；本报告来源）
 AITESTER_E2E_LLM=true .venv/bin/python scripts/tools/e2e_probe.py --all --include-llm \
   --json-out experiments/results/e2e_probe_20261017/report.json \
   --md-out experiments/results/e2e_probe_20261017/report.md
@@ -41,7 +41,7 @@ Makefile：`make e2e-probe`（零 LLM，CI 同口径）/ `make e2e-probe-llm`（
 | `dataset` | 4 | 0 | pass |
 | `executor` | 5 | 0 | pass |
 | `localization` | 3 | 0 | pass |
-| `logic` | 16 | 1 | pass |
+| `logic` | 17 | 1 | pass |
 | `observability` | 4 | 1 | pass |
 | `rag` | 2 | 1 | pass |
 | `repair` | 2 | 2 | pass |
@@ -66,6 +66,7 @@ Makefile：`make e2e-probe`（零 LLM，CI 同口径）/ `make e2e-probe-llm`（
 | RepoExecutor stale pyc 假红（O-5） | 补丁已应用却随机失败 6/15 | `-B` + `PYTHONDONTWRITEBYTECODE` 根修 |
 | A-19 停滞检测纸面功能（P-2） | 开关存在但无路由消费、标签被遮蔽 | 短路提前停止 + 优先级前移（26 测试） |
 | 示例通道未接生产（Q-1） | 重放有检出但生产默认无通路 | Planner 契约 + 双门开关 + 行字段（默认关零差异） |
+| 后处理墙钟不可观测（Q-3/R-3） | 批后处理超时/波动无法诊断 | postprocess_wall 模块 + run_benchmark hook（per_baseline 粒度） |
 
 ## 4. 与其它工件的关系
 

@@ -75,6 +75,11 @@ from config import (  # noqa: E402
     SWE_BENCH_P2P_GATE_THRESHOLD,
     SWE_REPO_SETUP_TIMEOUT,
 )
+from experiments.postprocess_wall import (  # noqa: E402
+    StageTimer,
+    build_postprocess_wall,
+    postprocess_warn_s,
+)
 from src.api.complexity_router import (  # noqa: E402
     complexity_class_to_routing_hints,
     compute_complexity_score,
@@ -3580,6 +3585,118 @@ def _redact_credential_text(text: str) -> str:
         return "[redact-unavailable] " + text[:200]
 
 
+# ─── Q-3/R-3（2026-10-18）：批后处理墙钟可观测 hook ──────────────────────────
+# 纯观测：只把实测 wall 收集进 stage_durations，不改变任何判分/重试/超时逻辑。
+# 字段语义：summary["postprocess_wall"] = {stage: {wall_s, n_tasks, mean_s,
+# p50_s, p95_s, max_s, timed_out_tasks}}；当前样本粒度 = 每基线一次
+# （summary["postprocess_wall_granularity"]="per_baseline"）；mutation 关闭时
+# 字段仍存在但为空映射（只包含实际执行的阶段）。
+
+
+def _run_postprocess_stage(
+    stage_durations: dict[str, list[float]],
+    stage: str,
+    *callables: Callable[[], Any],
+) -> None:
+    """跑一个后处理阶段并把实测 wall 追加到 ``stage_durations[stage]``。
+
+    Q-3/R-3：阶段内调用**原样执行**（异常不吞、不改重试/超时）；无论成功或
+    异常都追加一条 wall 样本（StageTimer.__exit__ 已在异常路径 stop），随后
+    异常原样上抛。每基线调用一次 ⇒ 样本粒度 per_baseline。
+
+    Args:
+        stage_durations: {阶段名: 每基线实测 wall 列表}（就地追加）。
+        stage: 后处理阶段名（``mutation`` / ``mdo``；Q-3 模块登记名）。
+        *callables: 该阶段内按序执行的调用（零参可调用，返回忽略）。
+    """
+    timer = StageTimer(stage)
+    try:
+        with timer:
+            for func in callables:
+                func()
+    finally:
+        # 异常路径也记录（finally 先于异常继续传播执行）；timer.wall_s 在
+        # __exit__ 中已累计本次 wall。
+        stage_durations.setdefault(stage, []).append(timer.wall_s)
+
+
+def _run_baseline_postprocess_with_wall(
+    bl_results: list[dict[str, Any]],
+    tasks: list[Any],
+    stage_durations: dict[str, list[float]],
+    *,
+    mutation_enabled: bool,
+    mutation_max_mutants: int,
+    seed: int,
+) -> None:
+    """单基线后处理（1.2 mutation scoring/detection + MDO）——Q-3 wall 计时包装。
+
+    **默认调用路径与历史内联块逐字节等价**：执行顺序/入参/日志（logger.info
+    "启用变异得分评估"）完全不变；唯一新增是每阶段墙钟样本追加到
+    ``stage_durations``。``mutation_enabled=False`` 时立即返回——不构建 task_map
+    （零额外工作、零行为差异），也不产生任何阶段键。
+
+    Args:
+        bl_results: 该基线逐任务结果行（就地写入 mutation/MDO 字段）。
+        tasks: 数据集任务列表（仅在开关启用时构建 task_id → task 映射）。
+        stage_durations: 墙钟样本收集器（就地追加）。
+        mutation_enabled: 1.2 变异得分开关（mutation/MDO 共用挂点）。
+        mutation_max_mutants: 每任务变异体上限。
+        seed: 变异体生成种子（与历史调用一致）。
+    """
+    if not mutation_enabled:
+        return
+    # task_id → BenchmarkTask 映射（同一任务跨基线复用 instance_code）
+    task_map = {t.task_id: t for t in tasks}
+    logger.info("启用变异得分评估（1.2）：每任务 ≤ %d 变异体", mutation_max_mutants)
+    _run_postprocess_stage(
+        stage_durations,
+        "mutation",
+        lambda: _compute_mutation_scores_for_baseline(bl_results, task_map, mutation_max_mutants),
+        lambda: _compute_mutation_detection_for_baseline(bl_results, task_map, mutation_max_mutants, seed=seed),
+    )
+    _run_postprocess_stage(
+        stage_durations,
+        "mdo",
+        lambda: _compute_mdo_for_baseline(bl_results, task_map),
+    )
+
+
+def _postprocess_wall_summary_fields(
+    stage_durations: dict[str, list[float]],
+) -> tuple[dict[str, Any], list[str]]:
+    """构建批次 summary 的 postprocess_wall 两个键 + 阈值告警列表。
+
+    Returns:
+        ``(fields, warnings)``：fields 含 ``postprocess_wall``（稳定 JSON 形状，
+        无执行阶段时为 ``{}``）与 ``postprocess_wall_granularity="per_baseline"``；
+        warnings 为超阈值阶段消息（供调用方 logger.warning）。
+    """
+    wall = build_postprocess_wall(stage_durations, warn_s=postprocess_warn_s())
+    fields: dict[str, Any] = {
+        "postprocess_wall": wall,
+        # 当前 hook 粒度：每基线一个样本（每阶段 wall = 该基线后处理调用总 wall）。
+        # 任务级/变异体级更细粒度留待后续，Q-3 模块 API 不变。
+        "postprocess_wall_granularity": "per_baseline",
+    }
+    return fields, list(wall.warnings)
+
+
+def _attach_postprocess_wall_to_summary(
+    summary: dict[str, Any],
+    stage_durations: dict[str, list[float]],
+) -> None:
+    """把后处理墙钟字段写入批次 summary，并逐条 logger.warning 阈值告警。
+
+    纯新增：只 update 两个键（``postprocess_wall`` / ``postprocess_wall_granularity``），
+    不触碰既有 summary 字段（判分/统计口径零变化）。
+    """
+    fields, warnings = _postprocess_wall_summary_fields(stage_durations)
+    summary.update(fields)
+    for message in warnings:
+        logger.warning("%s", message)
+
+
 def run_benchmark(
     dataset_name: str = "examples",
     subset: str | None = None,
@@ -3858,6 +3975,10 @@ def run_benchmark(
         "results": {},
     }
 
+    # Q-3/R-3（2026-10-18）：批后处理墙钟观测收集器（阶段名 → 每基线实测 wall）。
+    # 仅包含实际执行的阶段；mutation 关闭时保持空 dict，summary 字段仍存在。
+    postprocess_stage_durations: dict[str, list[float]] = {}
+
     for baseline in baselines:
         bl_results = all_results[baseline]
         passed = sum(1 for r in bl_results if r["passed"])
@@ -3882,20 +4003,18 @@ def run_benchmark(
         # 后续 summary["details"] 直接携带该字段，供
         # analyze_results._mutation_score_metrics 汇总
         mutation_enabled = ENABLE_MUTATION_SCORING if enable_mutation_scoring is None else bool(enable_mutation_scoring)
-        if mutation_enabled:
-            # task_id → BenchmarkTask 映射（同一任务跨基线复用 instance_code）
-            task_map = {t.task_id: t for t in tasks}
-            logger.info("启用变异得分评估（1.2）：每任务 ≤ %d 变异体", MUTATION_MAX_MUTANTS)
-            _compute_mutation_scores_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS)
-            # R5（2026-10-05 审查建议）：变异检出率（SWE-Mutation 2026 口径）
-            # 挂同一开关（ENABLE_MUTATION_SCORING）与同一挂点——测试有效性
-            # 的客观裁决（生成的测试在 gold 修复代码上全绿、在其 AST 变异体
-            # 上变红的比例）；缺 gold fixed 材料的任务记 None。默认关时
-            # 零行为变化。
-            _compute_mutation_detection_for_baseline(bl_results, task_map, MUTATION_MAX_MUTANTS, seed=seed)
-            # MDO（2026-10-11 优化方案 v2 §3.1）：政策无关的变异判别力度量。
-            # 同开关同挂点；键默认 None，仅在本分支被赋值。
-            _compute_mdo_for_baseline(bl_results, task_map)
+        # R5（2026-10-05 审查建议）/ MDO（2026-10-11 优化方案 v2 §3.1）：mutation
+        # scoring/detection + MDO 同开关同挂点。Q-3/R-3 起三个调用移入
+        # _run_baseline_postprocess_with_wall（顺序/入参/日志逐字节等价），
+        # 仅新增每阶段 wall 观测（纯观测，判分/重试/超时零变化）。
+        _run_baseline_postprocess_with_wall(
+            bl_results,
+            tasks,
+            postprocess_stage_durations,
+            mutation_enabled=mutation_enabled,
+            mutation_max_mutants=MUTATION_MAX_MUTANTS,
+            seed=seed,
+        )
 
         summary["results"][baseline] = {
             "total_functions": total,
@@ -3922,6 +4041,11 @@ def run_benchmark(
             "rag_metrics": _aggregate_rag_metrics(bl_results),
             "details": bl_results,
         }
+
+    # Q-3/R-3（2026-10-18）：批后处理墙钟可观测（纯观测，判分/重试/超时零变化）。
+    # 字段总在：mutation 关闭时 postprocess_wall={}（只包含实际执行的阶段）；
+    # 粒度 per_baseline（每基线每阶段一个 wall 样本）。
+    _attach_postprocess_wall_to_summary(summary, postprocess_stage_durations)
 
     # M9（2026-09-29 审查 P0）：实验 provenance 块 —— 把结果 JSON 顶层
     # 补全 git SHA / 模型版本 / 温度 / max_iterations / 开关快照 / seed，

@@ -76,6 +76,7 @@ from experiments.misguided_metrics import (  # noqa: E402
     sha256_text,
 )
 from src.specs import extract_signature_params, parse_logic_analysis  # noqa: E402
+from src.specs.spec_ir_v2 import self_validate_examples  # noqa: E402
 
 SCHEMA_VERSION = "oracle_examples_metric/1"
 TOOL_NAME = "experiments.oracle_examples_replay"
@@ -285,6 +286,7 @@ def analyze_row(
         or {"status": "missing", "examples": [], "reason": "not_generated"},
         "injection": {CONDITION_A: None, CONDITION_B: None},
         "conditions": {CONDITION_A: None, CONDITION_B: None},
+        "examples_self_validation": None,
         "timing": {"wall_s": 0.0},
     }
     t0 = time.time()
@@ -330,6 +332,11 @@ def analyze_row(
     for condition in CONDITIONS:
         examples = _condition_examples(gen_record, condition)
         spec = _build_spec(logic_analysis, examples)
+        if condition == CONDITION_B and spec is not None:
+            # R-2：示例自校验审计（与编译器同一纯函数；不改变示例内容本身）
+            _sig = extract_signature_params(buggy_code, target_function)
+            _kept, _validation = self_validate_examples(spec, _sig, spec.get("examples") or [])
+            record["examples_self_validation"] = _validation
         if spec is None:
             record["injection"][condition] = {"verdict": "not_attempted", "injected": False}
             record["conditions"][condition] = {
@@ -438,6 +445,30 @@ def aggregate_arm(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             "fp_kind_counts": dict(sorted(fp_kinds.items())),
             "skip_reason_counts": dict(sorted(skip_reasons.items())),
         }
+    filter_totals: Counter[str] = Counter()
+    filter_reasons: Counter[str] = Counter()
+    n_filter_tasks = 0
+    n_drop_tasks = 0
+    for task in tasks:
+        validation = task.get("examples_self_validation") or {}
+        if not validation:
+            continue
+        n_filter_tasks += 1
+        for key in (
+            "n_input",
+            "n_kept",
+            "n_dropped",
+            "n_fully_validated",
+            "n_partially_validated",
+            "n_no_post_clause",
+            "n_unevaluable",
+            "n_precondition_false_kept",
+        ):
+            filter_totals[key] += int(validation.get(key) or 0)
+        if int(validation.get("n_dropped") or 0) > 0:
+            n_drop_tasks += 1
+        for reason, count in (validation.get("reasons") or {}).items():
+            filter_reasons[str(reason)] += int(count or 0)
     transitions: Counter[str] = Counter()
     transition_tasks: list[dict[str, Any]] = []
     for task in tasks:
@@ -455,6 +486,12 @@ def aggregate_arm(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             )
     return {
         "conditions": conditions,
+        "examples_self_validation": {
+            "n_tasks_with_examples": n_filter_tasks,
+            "n_tasks_with_drop": n_drop_tasks,
+            **{key: int(value) for key, value in sorted(filter_totals.items())},
+            "reasons": dict(sorted(filter_reasons.items())),
+        },
         "task_category_transitions": dict(sorted(transitions.items())),
         "transition_tasks": transition_tasks,
     }
@@ -822,6 +859,18 @@ def main(argv: list[str] | None = None) -> int:
             "normalized（P-1.1：tuple/list 递归→list、Iterator→list 一次性消费、str/bytes/dict 不误归）"
         ),
         "reuse_examples": args.reuse_examples,
+        "examples_self_validation": {
+            "enabled_default": True,
+            "env": os.environ.get("SPEC_EXAMPLES_SELF_VALIDATE", "<unset: default true>"),
+            "mode": "guarded_AST（比较/布尔/算术/常量/Name/List/Tuple；拒绝 Call/属性/下标/lambda/推导式）",
+        },
+        # R-2 起生产 injection 受 Q-1 双门守门：重放必须显式开启 EXAMPLES/EXEC，
+        # 否则 B 臂示例会被 nodes 剥离（本报告配置记录实际 env 供复核）。
+        "production_env": {
+            "SPEC_ORACLE_EXEC_ENABLE": os.environ.get("SPEC_ORACLE_EXEC_ENABLE"),
+            "SPEC_ORACLE_EXAMPLES_ENABLE": os.environ.get("SPEC_ORACLE_EXAMPLES_ENABLE"),
+            "SPEC_EXAMPLES_SELF_VALIDATE": os.environ.get("SPEC_EXAMPLES_SELF_VALIDATE"),
+        },
     }
 
     # ── 选择任务集合（按 task_id 排序，缺陷程序优先；limit 控制预算）────────
@@ -960,6 +1009,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "prompt_sha256": (t.get("examples_generation") or {}).get("prompt_sha256"),
                             },
                             "injection": t.get("injection"),
+                            "examples_self_validation": t.get("examples_self_validation"),
                             "conditions": {c: _condition_public(t, c) for c in CONDITIONS},
                             "category": {c: _category_of(t, c) for c in CONDITIONS},
                         }

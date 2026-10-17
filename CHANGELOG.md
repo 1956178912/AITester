@@ -1,10 +1,103 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（Q 轮：**示例通道生产接线**（Planner 契约/双门开关/行字段，默认关零差异） + **预注册二臂 A/B 生产化验证**（aitester logic QuixBugs 20 任务；判定规则跑前冻结）+ **批后处理墙钟可观测模块**（StageTimer/线性分位/阈值警告 + src 内 env 读取）+ 一次准备期零 LLM 事故如实披露；P/O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（R 轮：**Q-2 检出损失零 LLM 诊断 + seed-43 预注册复现**（区分 trade-off vs 噪声） + **示例自校验过滤器**（safe-AST 后置子句校验，90 条上 dropped=0 的诚实负结果）+ **postprocess_wall 接入 run_benchmark**（纯观测字段 + 23 测试 + golden 零行为变化）；Q/P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 R 轮（Q-2 损失诊断/复现 + 示例自校验 + 后处理墙钟接线）
+
+> R 轮回答 Q 轮留下的核心问题：Q-2 示例通道的 **LLM-suite 检出下降 20pp** 是真实
+> trade-off 还是单次运行噪声？同时补"示例幻觉期望"的确定性防线，并把 Q-3 的
+> postprocess_wall 模块真正接入批后处理。真实 LLM 花费 ≈$0.30（仅 seed-43 复现批；
+> 其余零 LLM），R 轮预算 ≤$0.8。
+
+### Added
+
+- **R-2：示例自校验过滤器（确定性、零 LLM）**。`src/specs/spec_ir_v2.py` 新增
+  `self_validate_examples`：对每条示例把 `signature_params←input`、`r←expected` 代入
+  `postconditions_expr` 做**受限 AST 求值**（仅比较/布尔/算术/常量/Name/List/Tuple；
+  拒绝 Call/属性/下标/lambda/推导式/dict/set；≤500 字符/≤200 节点；异常/不可求值→
+  保守保留），可求值且为 False 的示例**丢弃**（reason `postcondition_false`），默认开、
+  `SPEC_EXAMPLES_SELF_VALIDATE=false` 关（env 已登记 251/251）。**离线评估（90 条
+  P-1 示例）**：dropped=**0**、fully/partially validated 9/16、unevaluable 55——
+  2 例 LLM 幻觉期望**均未被命中**（锚后置子句只编码 `isinstance`/`>=0` 类约束，语义
+  未机器化）；零 LLM 重放 correct/fp/silent/misguided/unavailable 与 P-1.1 逐位相同。
+  **判定**：「未达有效过滤（无效拦截），非高风险」——过滤器是零误杀的安全网，但
+  **不能修复示例幻觉**；根因=规约表达力，下一步=规约强化/示例独立验证/多次采样
+  自一致性。48 例测试（安全边界/DoS/异常放行/post_false/env 开关/无 examples 零变化/
+  2 个真实 hallucination 用例）。
+- **R-3：postprocess_wall 接入 run_benchmark（纯观测）**。逐基线后处理块用
+  `StageTimer("mutation")`/`StageTimer("mdo")` 包住原调用（顺序/入参/日志逐字节等价），
+  批 summary 新增 `postprocess_wall`（字段总在；mutation 关闭时 `{}`）与
+  `postprocess_wall_granularity="per_baseline"`，`.warnings` 逐条 logger.warning；
+  helper 抽取后 23 例测试 + golden 对比（历史 summary 字段逐项相等，仅新增两键）；
+  判分/重试/超时逻辑零变化；`docs/COST_MODEL.md/.en.md` 双语更新"已接入"（粒度说明）。
+- **全功能探针矩阵 64→65**：新增 `logic-examples-self-validation`（safe-AST 校验/
+  矛盾丢弃/危险子句保留/env 开关）；`observability-postprocess-wall` 扩展为同时校验
+  run_benchmark hook 已接入。
+
+### R-1：Q-2 检出损失诊断 + seed-43 预注册复现
+
+**零 LLM 诊断**（`DIAGNOSIS.md`）：Q-2 两臂 **20/20** 任务 generated_test 均不同
+（test-name Jaccard 均值 0.197、gt_len 相对差均值 0.217）；3 个 detection 损失任务
+（detect_cycle/hanoi/knapsack）的差异幅度与全量同级（Jaccard 0.189 / gt_len 相对差
+0.445），未见结构性 trade-off 迹象；候选机制以 **LLM 非确定性生成差异**为主
+（temp=0 仍非确定；结果行不落 test_plan 原对象，只能间接推断）。
+
+**seed-43 复现批**（干净切点 `282b361`、20 任务、预注册判定规则跑前冻结：
+direction_consistent = B_det < A_det 且损失 ≥10pp）：**判定 `not_reproduced`**——两臂
+LLM-suite detection **13/15=86.67% vs 13/15=86.67%**（loss_pp=**0.0pp** < 10pp，
+direction_consistent=False）→ Q-2 的 −20pp 检出损失**视为单次运行噪声**；而
+**oracle-correct 增益可复现**（A 0 → B 6，McNemar p=0.015625，与 seed-42 相同任务集）。
+- 两臂 20 行 exit=0；墙钟 2214s/2209s；成本 $0.140701/$0.145256（**$0.285957**）；
+  `spec_oracle_examples_source` A none×20 / B planner×17,none×3（count mean 2.25）；
+  worktree 跑前跑后 dirty=0、watchdog 未触发、孤儿巡检 0。
+- 处置：**仍不自动生产化**（保守）；登记下一轮 3 臂（关/开 examples + 更多 seed）复核，
+  并对 `hanoi` 类"契约段可能改变修复轨迹"做机制归因；生产开关保持默认关。
+- 工件 `r_round_examples_repro_20261018/`（README `946a795f…`/ANALYSIS_REPORT `bf7e10f2…`/
+  DIAGNOSIS `25887538…`/PREREG_REPRO `242e08da…`/SHA256SUMS `2724aea6…` 58 项 verify）。
+- R 轮预算对账：R-1 $0.285957（≤$0.8 ✓）；Q+R 轮累计 ≈$0.77–0.82（含 Q 轮事故估算）。
+
+### Changed
+
+- 示例通道质量口径（R 轮起）：Q-2 的 +6 oracle-correct 与 −20pp LLM-suite **不可
+  分离引用**；R-2 过滤器不改变该结论（dropped=0）；生产开关保持默认关。
+- BASELINE 新增 `target_quality.examples_repro` / `examples_selfcheck`，`postprocess_wall`
+  状态更新为"已接入（per_baseline 粒度）"；`feature_matrix` 64→65；登记册 §3.2
+  R-1~R-3、§4 R 轮收口；CHANGELOG/README/MEASUREMENT_INTEGRITY/EMSE 同步；MANIFEST
+  112→120 + R 链门禁测试。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8816 passed / 5 skipped / 0 failed**（collected **8821**；本机 **161.8s**；
+  COVERAGE_FILE 隔离）；
+- **覆盖率**：行 **96.55%**（17448/18071）/ 分支 **92.73%**（6263/6754）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.15pp/+0.23pp；
+  R-2 新源码分母 +179，新增 `tests/test_r_round_coverage_fill.py`（58 例）守住水位）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（801 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **120/120** + `emse_*` 目录覆盖扫描通过（R 轮新增 8 项证据工件）；
+- **全功能探针矩阵（65）**：`AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py
+  --all --include-llm` → **65/65 pass**（14 功能组、12 真实 LLM 探针、墙钟 76.2s）；
+  新增 `logic-examples-self-validation` + `observability-postprocess-wall` 扩展为
+  同时校验 run_benchmark hook；
+- **R-1 诊断 + seed-43 复现（真实 LLM）**：诊断=两臂 20/20 任务生成测试不同
+  （Jaccard 0.197），损失任务差异与全量同级；复现批两臂 20 行 exit=0、detection
+  均 13/15=86.67%（loss=0.0pp<10pp）→ **`not_reproduced`**（Q-2 −20pp 视为单次噪声），
+  **oracle-correct +6 两 seed 可复现**（McNemar p=0.015625）；墙钟 2214/2209s、
+  成本 $0.140701/$0.145256（$0.285957）；有 SHA `2724aea6…` **58 项 verify 通过**；
+- **R-2 示例自校验**：48 例测试；90 条 examples 上 dropped=**0**（2 幻觉未命中，
+  规约表达力根因）→ 判定"未达有效过滤、非高风险"；零 LLM 重放与 P-1.1 逐位相同；
+- **R-3 后处理接线**：23 例测试 + golden 对比（历史 summary 字段逐项相等，仅新增
+  `postprocess_wall`/`postprocess_wall_granularity` 两键）；判分/重试/超时零变化；
+- **R 轮真实 LLM 花费**：R-1 $0.285957 + 探针 ≈$0.02 ≈ **$0.31**（R 轮预算 $0.8 ✓）；
+  Q+R 轮累计 ≈**$0.77–0.82**（含 Q 轮事故粗估 $0.15–0.20）。
 
 ## [Unreleased] — 2026-10-18 Q 轮（示例通道生产化 + 预注册二臂 A/B + 后处理墙钟可观测）
 

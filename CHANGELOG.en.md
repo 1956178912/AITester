@@ -1,10 +1,121 @@
-> Last updated: 2026-10-18 (round Q: **examples-channel production wiring** [Planner contract / double-gate switch / row fields, zero difference when off] + **pre-registered two-arm A/B production validation** [aitester logic QuixBugs 20 tasks; decision rule frozen before the run] + **batch post-processing wall observability module** [StageTimer/linear percentiles/threshold warnings + env reader in src] + an honestly disclosed preparation-phase zero-LLM incident; rounds P/O/N/M/L/K registered the same day)
+> Last updated: 2026-10-18 (round R: **Q-2 detection-loss zero-LLM diagnosis + pre-registered seed-43 reproduction** [trade-off vs noise] + **example self-validation filter** [safe-AST postcondition check; an honest negative result with dropped=0 on 90 examples] + **postprocess_wall wired into run_benchmark** [observability fields + 23 tests + golden zero-behavior-change]; rounds Q/P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round R (Q-2 loss diagnosis/reproduction + example self-validation + postprocess wall hook)
+
+> Round R answers the core question left by Q: is the Q-2 examples channel's
+> **20pp LLM-suite detection drop** a real trade-off or single-run noise? It also adds a
+> deterministic line of defense against hallucinated example expectations and finally
+> wires Q-3's postprocess_wall module into batch post-processing. Real LLM spend ≈$0.30
+> (seed-43 reproduction batch only; everything else zero-LLM), round-R cap ≤$0.8.
+
+### Added
+
+- **R-2: example self-validation filter (deterministic, zero-LLM)**.
+  `src/specs/spec_ir_v2.py` gains `self_validate_examples`: for each example it maps
+  `signature_params←input`, `r←expected` and **safely evaluates** `postconditions_expr`
+  under a restricted AST (comparisons/booleans/arithmetic/constants/Name/List/Tuple only;
+  Call/attribute/subscript/lambda/comprehensions/dict/set rejected; ≤500 chars/≤200 AST
+  nodes; errors or non-evaluable → conservatively keep), dropping examples whose
+  machine-checkable postcondition evaluates to False (`postcondition_false`). Enabled by
+  default, disabled via `SPEC_EXAMPLES_SELF_VALIDATE=false` (env registered 251/251).
+  **Offline evaluation on the 90 P-1 examples**: dropped=**0**, fully/partially validated
+  9/16, unevaluable 55 — the 2 LLM hallucination expectations are **not caught** (anchor
+  postconditions only encode `isinstance`/`>=0`-style constraints; semantics are not
+  machine-encoded); the zero-LLM replay's correct/fp/silent/misguided/unavailable are
+  bit-identical to P-1.1. **Verdict**: "no effective interception, not high-risk" — the
+  filter is a zero-false-kill safety net but **cannot fix example hallucination**; the root
+  cause is spec expressiveness, next steps = spec strengthening / independent example
+  verification / multi-sample self-consistency. 48 tests (safety boundaries/DoS/exception
+  passthrough/post_false/env switch/no-examples zero change/2 real hallucination cases).
+- **R-3: postprocess_wall wired into run_benchmark (observability only)**. The per-baseline
+  post-processing block now wraps the original calls in `StageTimer("mutation")` /
+  `StageTimer("mdo")` (order/arguments/logs byte-equivalent); batch summary gains
+  `postprocess_wall` (always present; `{}` when mutation is disabled) and
+  `postprocess_wall_granularity="per_baseline"`, with `.warnings` logged via
+  logger.warning; helper extraction + 23 tests + golden comparison (historical summary
+  fields item-by-item equal, only the two new keys added); scoring/retry/timeout logic
+  unchanged; bilingual `docs/COST_MODEL.md/.en.md` updated to "wired" (granularity noted).
+- **Full-feature probe matrix 64→65**: new `logic-examples-self-validation` (safe-AST
+  validation/contradiction drop/dangerous-clause keep/env switch);
+  `observability-postprocess-wall` extended to also verify the run_benchmark hook.
+
+### R-1: Q-2 detection-loss diagnosis + pre-registered seed-43 reproduction
+
+**Zero-LLM diagnosis** (`DIAGNOSIS.md`): in Q-2 the two arms' generated tests differ on
+**20/20** tasks (test-name Jaccard mean 0.197, gt_len relative difference mean 0.217); the
+3 detection-loss tasks (detect_cycle/hanoi/knapsack) show difference magnitudes on par
+with all tasks (Jaccard 0.189 / gt_len relative difference 0.445), with no structural
+trade-off signature; the candidate mechanism is primarily **LLM non-deterministic
+generation** (temp=0 is still non-deterministic; result rows do not store the raw
+test_plan, so this is indirect evidence).
+
+**seed-43 reproduction batch** (clean cut `282b361`, 20 tasks, decision rule frozen before
+the run: direction_consistent = B_det < A_det and loss ≥10pp): **verdict `not_reproduced`** —
+both arms' LLM-suite detection **13/15=86.67% vs 13/15=86.67%** (loss_pp=**0.0pp** < 10pp,
+direction_consistent=False) → Q-2's −20pp detection loss is **treated as single-run noise**;
+meanwhile the **oracle-correct gain reproduces** (A 0 → B 6, McNemar p=0.015625, same task
+set as seed-42).
+- Both arms 20 rows exit=0; walls 2214s/2209s; costs $0.140701/$0.145256 (**$0.285957**);
+  `spec_oracle_examples_source` A none×20 / B planner×17,none×3 (count mean 2.25);
+  worktree dirty=0 before/after, watchdog not triggered, orphan patrols 0.
+- Disposition: **still no automatic productionization** (conservative); register a 3-arm
+  next round (off/on examples + more seeds) and mechanism attribution for the `hanoi`-class
+  "contract may change repair trajectory" case; production switch stays default-off.
+- Artifacts `r_round_examples_repro_20261018/` (README `946a795f…`/ANALYSIS_REPORT `bf7e10f2…`/
+  DIAGNOSIS `25887538…`/PREREG_REPRO `242e08da…`/SHA256SUMS `2724aea6…` 58 entries verified).
+- Round-R budget reconciliation: R-1 $0.285957 (≤$0.8 ✓); Q+R cumulative ≈$0.77–0.82
+  (including the Q-round incident estimate).
+
+### Changed
+
+- Examples-channel quality caliber (since round R): Q-2's +6 oracle-correct and −20pp
+  LLM-suite **must not be cited separately**; the R-2 filter does not change this
+  conclusion (dropped=0); the production switch stays default-off.
+- BASELINE gains `target_quality.examples_repro` / `examples_selfcheck`, and
+  `postprocess_wall` is updated to "wired (per_baseline granularity)"; `feature_matrix`
+  64→65; register §3.2 R-1..R-3, §4 round-R closures; CHANGELOG/README/
+  MEASUREMENT_INTEGRITY/EMSE synchronized; MANIFEST 112→120 + R-chain gate test.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8816 passed / 5 skipped / 0 failed** (**8821** collected; **161.8s** locally;
+  COVERAGE_FILE isolated);
+- **Coverage**: lines **96.55%** (17448/18071) / branches **92.73%** (6263/6754);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.15pp/+0.23pp;
+  R-2's new source adds 179 lines to the denominator; a new
+  `tests/test_r_round_coverage_fill.py` (58 tests) keeps the ratchet above water);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (801 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **120/120** plus the `emse_*` directory coverage scan (8 new R-round evidence
+  entries);
+- **Full-feature probe matrix (65)**: `AITESTER_E2E_LLM=true python
+  scripts/tools/e2e_probe.py --all --include-llm` → **65/65 pass** (14 groups,
+  12 real-LLM probes, 76.2s wall); new `logic-examples-self-validation` and
+  `observability-postprocess-wall` extended to also verify the run_benchmark hook;
+- **R-1 diagnosis + seed-43 reproduction (real LLM)**: diagnosis = both arms' tests differ
+  on 20/20 tasks (Jaccard 0.197) and loss-task differences are on par with all tasks;
+  reproduction batch both arms 20 rows exit=0, detection both 13/15=86.67%
+  (loss=0.0pp<10pp) → **`not_reproduced`** (Q-2's −20pp treated as single-run noise), and
+  **oracle-correct +6 reproduces across both seeds** (McNemar p=0.015625); walls
+  2214/2209s, costs $0.140701/$0.145256 ($0.285957); artifact SHA `2724aea6…`
+  **58 entries verified**;
+- **R-2 example self-validation**: 48 tests; dropped=**0** on the 90 examples (2
+  hallucinations not caught — root cause is spec expressiveness) → verdict "no effective
+  interception, not high-risk"; zero-LLM replay bit-identical to P-1.1;
+- **R-3 post-processing hook**: 23 tests + golden comparison (historical summary fields
+  item-by-item equal, only the two new keys added); scoring/retry/timeout unchanged;
+- **Round-R real LLM spend**: R-1 $0.285957 + probes ≈$0.02 ≈ **$0.31** (round-R cap $0.8 ✓);
+  Q+R cumulative ≈**$0.77–0.82** (including the Q-round incident estimate $0.15–0.20).
 
 ## [Unreleased] — 2026-10-18 Round Q (examples production wiring + pre-registered two-arm A/B + postprocess wall observability)
 

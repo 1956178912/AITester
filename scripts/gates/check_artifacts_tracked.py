@@ -189,6 +189,16 @@ MANIFEST: tuple[str, ...] = (
     # Q 轮：批后处理墙钟可观测模块（smoke + 说明）
     "experiments/results/q_round_postprocess_wall_20261018/README.md",
     "experiments/results/q_round_postprocess_wall_20261018/SHA256SUMS",
+    # R 轮（2026-10-18）：Q-2 检出损失诊断 + seed-43 复现批
+    "experiments/results/r_round_examples_repro_20261018/README.md",
+    "experiments/results/r_round_examples_repro_20261018/DIAGNOSIS.md",
+    "experiments/results/r_round_examples_repro_20261018/PREREG_REPRO.md",
+    "experiments/results/r_round_examples_repro_20261018/SHA256SUMS",
+    # R 轮：示例自校验过滤器离线评估
+    "experiments/results/r_round_examples_selfcheck_20261018/README.md",
+    "experiments/results/r_round_examples_selfcheck_20261018/FILTER_STATS.json",
+    "experiments/results/r_round_examples_selfcheck_20261018/ORACLE_EXAMPLES_REPORT_selfcheck.json",
+    "experiments/results/r_round_examples_selfcheck_20261018/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
