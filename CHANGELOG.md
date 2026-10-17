@@ -1,10 +1,48 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-16（F/G/H/I 四轮工程加固：F 开关治理收口（env 门禁假绿 + 布尔口径 60 处 + 原子落盘）/ G 安全守卫实效化（C5 片段扫描 + conftest 接线 + 两处门禁假绿 + 归因链断裂）/ H 覆盖率测量确定性收口（三噪声源归零 + 脱敏盲区 + 观测落盘）/ I 失败归因链接线（五桶落盘 + m10_leaf_fallback 可机读）；全量 **6759 passed / 5 skipped / 0 failed**（CI 口径连跑两次），`coverage.xml` 逐行逐分支零漂移（16941 行 / 3118 分支点）；ruff / mypy（133 源文件）全绿。此前 2026-10-15 EMSE 批次八：全量 Mut@k 收口 + M4 四臂闭环）
+> Last updated: 2026-10-17（df_spec 实验（P1 主实验）实跑：判定 `not_confirmed`——方向为负的显著证据（df_spec 54.3% vs df 77.8%、配对 1:10、δ=−25.7pp、双向精确 p=0.0117）；预注册与判定口径均于结果产出前锁定。此前 2026-10-16 F/G/H/I 四轮工程加固：开关治理收口 + 安全守卫实效化 + 覆盖率测量确定性收口 + 失败归因链接线；全量 **6759 passed / 5 skipped / 0 failed**）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-17 df_spec 实验（P1 主实验实跑：判定 not_confirmed，方向为负的显著证据）
+
+> 独立评审 §6 P1 / 投稿骨架 §8 T-6 主实验执行（LLM 授权批次）。预注册与
+> 判定口径于**结果产出前**落盘/入库；QuixBugs 双臂同批实跑（单变量 =
+> prompt 代码块替换为预计算规格锚）。
+
+### Added
+
+- **预注册（跑批前）**：`docs/emse/EMSE_DF_SPEC_PREREG_2026-10-16.md`
+  （本地件；sha256 `a19a6c29…` 承诺哈希记录于跑批前入库提交 `cd514d2`）；
+- **判定口径（跑批前入库）**：`experiments/emse_df_spec_analysis.py`
+  （+ `tests/test_emse_df_spec_analysis.py` 25 例）——主判定 C1
+  detection ≥60% ∧ C2 单向 McNemar p<0.05；trend p<0.10 ∧ δ>0；
+  失败线 <50%；机制 proxy：over_red 占比降 ≥30%（描述性）；
+- **实验工件**：`experiments/results/emse_df_spec_20261016/`（两臂
+  50 任务批次 JSON + `DF_SPEC_REPORT.json` 预注册判定 + README +
+  SHA256SUMS 104 项校验通过）。
+
+### Notes（核心结论）
+
+- **结果 = `not_confirmed`（方向为负的显著证据）**：df_spec **54.3%
+  （19/35）** vs df（同批对照）**77.8%（28/36）**；配对 **1:10**、
+  δ=**−25.7pp**、双向精确 p=**0.0117**、BF10=16.4（MDE 16.6pp）；
+  预注册三条件全未满足；失败线（<50%）未触发；
+- **机制侧（描述性）**：over_red 占比 **46.0% vs 22.5%**——预注册预期
+  "下降 ≥30%"，实测反向上升 104%；
+- **机制假设（待独立预注册检验）**：锚材料为 Planner 对**缺陷代码**的
+  历史分析物化（`logic_analysis` 再描述，非独立正确规格）→ 误导航↑、
+  特异检出↓。**不读作**对 Zhao et al.（ISSTA 2026）"spec-based
+  prompting 缓解误导航"的反证（其设定用独立 spec docstring）；
+- **定位**：P1 成功判定未达 → 论文主标题不升级；分层叙事新增 §9；
+  骨架 §8 T-6 收口为已完成（负结果）；
+- **环境披露**：沙箱 I/O 减速致变异后处理大量 30s 超时防御（有界终止，
+  不挂死）；`mutation_detection_rate` 非空 19/50、30/50，MDO available
+  20/50、31/50——主指标 detection 不受影响（任务阶段完成）；
+- 两臂 provenance `git_dirty=false`；cache namespace 互异
+  （`emse_df_spec_20261016_dfspec` / `_df`）。
 
 ## [Unreleased] — 2026-10-16 I 轮（失败归因链接线：五桶终局分类落盘 + m10_leaf_fallback 可机读 + 两处读侧分支修复；零 LLM）
 
