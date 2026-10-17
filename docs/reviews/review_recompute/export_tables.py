@@ -8,6 +8,7 @@
 （同一数据源=报告本身；若正文改动需重跑本脚本）。
 """
 
+# ruff: noqa: T201 — 本脚本为一次性 CLI 工具，stdout 进度输出即其用户界面
 from __future__ import annotations
 
 import csv
@@ -28,24 +29,20 @@ TABLES = [
 
 
 def parse_row(line: str) -> list[str]:
-    cells = [c.strip() for c in line.strip().strip("|").split("|")]
-    return cells
+    return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
 def main() -> None:
     lines = REPORT.read_text(encoding="utf-8").splitlines()
-    # 定位每个锚点后的第一个表格
     for csv_name, header_sig, anchor in TABLES:
         start = None
         for i, ln in enumerate(lines):
-            if ln.startswith("## ") or ln.startswith("### "):
-                if anchor.split()[-1] in ln and anchor[:6] in ln:
-                    start = i
-                    break
+            if ln.startswith(("## ", "### ")) and anchor.split()[-1] in ln and anchor[:6] in ln:
+                start = i
+                break
         if start is None:
             print(f"WARN: anchor not found: {anchor}")
             continue
-        # 向后找表头行
         j = start
         while j < len(lines) and header_sig.split("|")[0].strip() not in lines[j]:
             j += 1
@@ -60,9 +57,8 @@ def main() -> None:
             k += 1
         out = HERE / csv_name
         with out.open("w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            w.writerows(rows)
-        print(f"OK: {csv_name} ({len(rows)-1} data rows)")
+            csv.writer(f).writerows(rows)
+        print(f"OK: {csv_name} ({len(rows) - 1} data rows)")
 
 
 if __name__ == "__main__":

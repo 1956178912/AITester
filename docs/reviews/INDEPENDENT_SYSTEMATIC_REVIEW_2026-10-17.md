@@ -603,7 +603,7 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | P-7 | 性能 | xdist -n 4 loadfile；语义缓存；token 记账；**缓存命中记账已于 b12b8a4（2026-10-16）收口：三条命中路径均还原"避免的 token"（record_cache_hit_usage），test_token_usage 13 例覆盖——初版评审误判为缺口，已更正** | ✅ 良 | — |
 | P-8 | 数据/实验管线 | 口径矩阵+fail-closed None+None 不计 0+去污染检查+难度分层+模板匹配敏感性 | ✅ 优（方法论亮点） | — |
 | P-9 | 文档 | 双语文档门+BASELINE 单一事实源+35 ADR+MODEL/DATA CARD+API 参考+威胁模型 | ✅ 优 | A-16（§15 待澄清项回填） |
-| P-10 | 已知技术债（项目自报+本人核验） | ① 9 文件 20 处 subprocess.run 未换 run_with_timeout（挂死风险，E4 已验证 killpg 修复有效但未推广）；② graph→experiments 反向导入冻结；③ orchestration_search 16 臂未实跑；④ env_flag 之外 22 处裸 int(os.getenv()) 未并入 clamp 口径 | ⚠️ 中 | A-17 |
+| P-10 | 已知技术债（项目自报+本人核验） | ① ~~9 文件 20 处 subprocess.run 未换~~ **【已核验为零】**：src/ 内裸 `subprocess.run(` 调用为 0（现存命中均为解释历史缺陷的注释/docstring，2026-10-17 grep 实测）；② graph→experiments 反向导入冻结；③ orchestration_search 16 臂未实跑；④ env_flag 之外 22 处裸 int(os.getenv()) 未并入 clamp 口径 | ⚠️ 中（②③④） | A-17 已废弃 |
 
 ---
 
@@ -634,15 +634,11 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | A-02 | `src/tools/spec_first.py`；`experiments/results/emse_spec_anchor_20261016/` | 规格锚=Planner 对 buggy 代码再描述，约一半概率固化缺陷为预期 | ISSTA'26 DOI 10.1145/3832204；SpecOps'26 DOI 10.1145/3842652.3843195 | 按 P1 增加 docstring 独立锚三级回退 + misguided/effective 三分度量 | 必须改进 | P0 | 修复规格锚路线；把 over_red proxy 升级为真度量 | 中（新臂+新判分维度，需回归测试） | misguided 占比 −30%；detection 回升 | 2-4 月 | `pytest tests/test_emse_df_spec_analysis.py` |
 | A-03 | `src/graph/workflow.py`；ADR-0016 | 编排增益 −28pp 未止损重构 | TwinMem FSE'26（89.1% vs 60.0%，18× 低成本） | 按 P5 实现顺序任务记忆（固定预算）+ 等预算重测 | 建议优化 | P1 | δ 从 −28pp 收敛；token −50%+ | 中 | 等预算 δ≥+8pp ∧ p<0.05 | 3-4 月 | `make pass-matched` 口径扩展 |
 | A-04 | `experiments/results/{emse_df_spec_20261016,emse_quixbugs_specir_expand_20261014,emse_d1_quixbugs_ab_20261013,emse_ult_df200_20261017}/` | 四目录 0 git 跟踪（本人 `git ls-files` 实测）；`check_artifacts_tracked.py` 未覆盖 | 顶会 Open Science artifact 要求 | force-add 四目录 + SHA256SUMS；扩展 check_artifacts_tracked 扫描面至全部 `emse_*` 结果目录 | 必须改进 | **P0** | 论文核心实验可异地复现 | 低（git add -f + 门禁扩展） | CI 门禁对四目录 exit 0 | 1 周 | `git add -f experiments/results/emse_df_spec_20261016/`；`python scripts/gates/check_artifacts_tracked.py` |
-
-> **执行状态（2026-10-17）**：✅ **已完成**——除四旗舰目录外，另入库证据性目录 8 个（4×calib、stats_extensions、batch5、t08 seed43/44），共 1195 文件 / 20MB；门禁扩展为 MANIFEST 41 项 + emse_* 目录覆盖扫描 + 15 个显式豁免（带理由）；新增 `tests/test_artifacts_tracked_gate.py`（8 例全过）；为 emse_ult_df200 生成 SHA256SUMS（203 项验证通过）。
 | A-05 | `src/tools/oracle_validator.py`；run_benchmark 指标 schema | spec_oracle 正确率未度量 | Tratto 73%/TOGLL 63%（ISSTA'25/arXiv'24） | 增加 oracle_correct/oracle_fp/oracle_silent 三指标（gold fixed 上假阳率 + 注入任务检出贡献） | 可新增 | P1 | 逻辑驱动通道的有效性可量化 | 低-中 | oracle 质量报告随批次产出 | 2 月 | 扩 `metrics_schema` + `tests/test_emse_*` |
 | A-06 | `docs/design/frame_lifetime_trace.md`（未落地） | 4 个 None 任务（不终止）+ Debugger 二值反馈 | ADI FSE'26（+6.2-18.5pp；PDB 53% 放弃率） | 按 P2：先 per-test 超时（判分层，零 LLM），后 FLT v1 | 必须改进（超时部分） | P0（超时）/P1（FLT） | None 归零；detection +9pp | 中 | 41 口径 detection ≥55% | 1-3 月 | `pytest tests/test_m1_packaged_tests.py` 扩展 |
 | A-07 | `experiments/statistical_analysis.py` 报告层 | 缺 Wilson CI 与成本-效果 Pareto | 2025-2026 统计报告惯例 | 比例型端点全部补 Wilson 95% CI；新增 $/detection Pareto 节 | 可新增 | P2 | 报告完整性 | 低 | 报告含 CI 列 | 2 周 | `python -m experiments.emse_stats_report` 扩展 |
 | A-08 | `docs/preregistration.md` E7 节；`docs/HUMAN_ADJUDICATION_PROTOCOL.md` | 人工裁决未执行 | Google AI-SQE'26（κ=0.307，需共享 rubric） | 执行 E7：n≥100 双人盲审 + 共享 rubric + Cohen's κ | 建议优化 | P1 | 填补"无人工验证"缺口 | 中（人工成本） | κ≥0.7 | 2-3 月 | 协议文档已在场 |
 | A-09 | `docs/design/layered_narrative.md` §1；BASELINE §benchmark | "~63% 首轮基线"与"45.9% F2P"未桥接；df 臂跨批 83.8→77.8% 未归因 | — | 显式口径桥接段；跨批方差纳入功效与解读 | 必须改进 | P0 | 防审稿误读 | 低（文档） | 文档口径表 | 1 周 | `make docs-check` |
-
-> **执行状态（2026-10-17）**：✅ **已完成**——layered_narrative.md §1 增加口径桥接表（首轮即红率 vs F2P 三段判定）与跨批 6pp 波动披露段；SUBMISSION_CHECKLIST 的 batch5 标注更新为已入库。
 | A-10 | BASELINE §target_quality note（DOI 10.1145/3832093） | 该 DOI 未独立定位 | — | 定位原文或改引已核论文（ISSTA'26 误导效应 10.1145/3832204） | 必须改进 | P0 | 引用诚信 | 低 | `check_citations.py --online` exit 0 | 1 周 | `python scripts/gates/check_citations.py --online` |
 | A-11 | `experiments/run_benchmark.py` 指标 schema | 编译率/执行率未单列 | TestAgent 99.11%/97.46% | 增加 compile_rate/exec_rate 行级字段 | 可新增 | P2 | 与 TestGenEval/TestAgent 可比 | 低 | 新字段非空率 | 1 月 | schema 扩展 + 测试 |
 | A-12 | `pyproject.toml`；release.yml | 无 SBOM | OWASP/OpenSSF 2025-2026 供应链指南（本次检索见 aidlc.io 汇总，C 级） | release 作业产出 CycloneDX SBOM | 可新增 | P2 | 供应链合规 | 低 | SBOM 随 release | 1 月 | `cyclonedx-py` |
@@ -650,9 +646,19 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | A-14 | ~~`.github/workflows/ci.yml`~~ | ~~bandit 配置在场但未接 CI 主链~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：bandit 1.9.4 自 R10（2026-10-05）起已作为 security 作业阻断步骤（`bandit -r src/ -c pyproject.toml -q`），本次本地实跑 exit 0 / 零 findings | 已废弃 | — | — | — | — | — | `bandit -r src/ -c pyproject.toml`（实跑通过） |
 | A-15 | ~~`src/agents/base_agent.py:437/389`~~ | ~~缓存命中绕过 record_usage → token 记账仅覆盖非缓存调用~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：D2 已于 b12b8a4（2026-10-16 三波次收口）修复——三条命中路径（LRU 快路径 / 语义缓存 / 文件缓存）均经 `record_cache_hit_usage` 还原"避免的 token"（独立口径），未命中路径以调用前后 total 差值（含重试/故障转移）写入缓存文件 `tokens` 字段；`tests/test_token_usage.py` 13 例覆盖（本次实跑全过）。本评审初版沿用了 IR 报告的过期清单（IR 成稿与修复同日落地） | 已废弃 | — | — | — | — | — | `pytest tests/test_token_usage.py`（13 例实跑通过） |
 | A-16 | `docs/` 全量 | §15 待澄清项（repair 分母/orchestration_search 状态等）未回填 | — | 逐项澄清后更新文档 | 建议优化 | P1 | 文档完整性 | 低 | 待澄清清单关闭 | 2 周 | — |
-| A-17 | `src/` 9 文件 20 处 `subprocess.run` | 超时只杀直接子进程（孙进程持管道挂死，E4 实测 411s 任务） | — | 统一换 `src/utils/process_utils.py::run_with_timeout`（killpg） | 必须改进 | P1 | 消除挂死类故障 | 中（逐处回归） | 20/20 处转换+测试 | 1 月 | `grep -rn 'subprocess.run' src/`；`pytest tests/test_process_utils.py` |
+| A-17 | ~~`src/` 9 文件 20 处 `subprocess.run`~~ | ~~超时只杀直接子进程（孙进程持管道挂死）~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：src/ 内裸 `subprocess.run(` 实际调用为 0（`grep -rnE '^\s*(return \|await )?subprocess\.run\(' src/` 空；现存文本命中均为注释/docstring）；`run_with_timeout`（killpg）已全面接管。IR/CO 报告所述缺口在此前轮次已修复 | 已废弃 | — | — | — | — | — | `grep -rnE '^\s*(return \|await )?subprocess\.run\(' src/`（实测空） |
 | A-18 | `src/specs/spec_smt.py`；`[formal]` extra | z3 层默认关且无启用批次 | SPARC（ICLR'26）神经符号 +20.78pp mutation | 设计最小启用批次（QuixBugs n=50，观测 UN SAT 见证率与检出关系） | 可新增 | P2 | 逻辑驱动第二通道证据 | 中 | 见证率+检出关联报告 | 2-3 月 | `pip install 'aitester[formal]'` |
 | A-19 | `src/graph/workflow.py` 停滞检测 | 覆盖停滞检测默认关且无消融 | TraceCoder RM（+5.31% 相对） | 停滞检测开/关消融一批 | 可新增 | P2 | 闭环收敛证据 | 低 | 消融报告 | 1 月 | `--enable-stagnation` 类开关 |
+
+---
+
+
+
+**建议执行状态（2026-10-17 更新）**：
+
+> **执行状态（2026-10-17）**：✅ **已完成**——除四旗舰目录外，另入库证据性目录 8 个（4×calib、stats_extensions、batch5、t08 seed43/44），共 1195 文件 / 20MB；门禁扩展为 MANIFEST 41 项 + emse_* 目录覆盖扫描 + 15 个显式豁免（带理由）；新增 `tests/test_artifacts_tracked_gate.py`（8 例全过）；为 emse_ult_df200 生成 SHA256SUMS（203 项验证通过）。
+
+> **执行状态（2026-10-17）**：✅ **已完成**——layered_narrative.md §1 增加口径桥接表（首轮即红率 vs F2P 三段判定）与跨批 6pp 波动披露段；SUBMISSION_CHECKLIST 的 batch5 标注更新为已入库。
 
 ---
 
@@ -671,7 +677,7 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | IR-11-10 / A-03 | §11-10 | ULT DOI 归属正确（初版误报已自更正） | 本人核验 ACM DL/UCL/arXiv 三处 | **支持** | 支持 | §4.1 |
 | IR-11-12 / 11-13 | §11 | "gold 独立裁决不含人工、无 Kappa"；"SWE-bench 20 次全失败" | 子代理核验披露 | **支持** | 支持 | §3.1 C20 |
 | IR-§12.1 | §12.1 | 战略重定位："规格锚定的轻量协议 + 评测诚信方法论"双支柱 | 本人独立判断 | **支持**（与本报告竞争位置结论一致：工程/诚信领先 + 规格锚待修复） | 支持 | §5 |
-| IR-A-04 / A-06 / A-07 / A-11 | §10 | E7 未执行 / D2 token 记账 / subprocess 未转换 / 16 臂未实跑 | 源码与 CI 核验 | **部分支持**：E7 未执行、subprocess 未转换、16 臂未实跑三项在场；**D2 token 记账已于 b12b8a4（2026-10-16，IR 成稿同日）收口**——IR 清单过期，本报告初版沿用属误判（已更正，见 §10 A-15） | 部分支持 | §8 P-7/P-10 |
+| IR-A-04 / A-06 / A-07 / A-11 | §10 | E7 未执行 / D2 token 记账 / subprocess 未转换 / 16 臂未实跑 | 源码与 CI 核验 | **部分支持**：E7 未执行、16 臂未实跑两项在场；**D2 token 记账（b12b8a4）与 subprocess 转换均已完成**（2026-10-17 实测：src/ 裸调用为 0、13 例 token 测试通过）——IR 清单过期，本报告初版沿用属误判（已更正，见 §10 A-15/A-17） | 部分支持 | §8 P-7/P-10 |
 | IR-§3.3.4 / §7-8 / §8-9（stale 段） | §3.3.4 | "ULT DOI 列入无法验证"（与 C12 已更正结论冲突） | 本人核对 IR 内部一致性 | **IR 自身不一致**（stale 段落未随更近结论刷新）——不影响事实判定，但削弱其"逐条独立"完成度声称 | 无法验证（作为评审质量声明） | 子代理审计 U3 |
 | IR-P4 | §6 P4 | ULT 对标成功判定"probe mutation ≥55%" | 本人核验：该判定基于 replace 臂 0.6749（9/46 健全子集）——**子集过小且全量健全值 0.6749 已被批次八修正为更低置信**；55% 阈值缺乏同协议依据（Ockhamareto RL 为 49.9%@N=5） | **需修正**：成功判定应改为 §6 P4 的预注册常量（mutation≥40% ∧ accuracy≥35%），而非拍死 55% | 推翻（阈值设定） | §4.1/§6 P4 |
 | IR-§0.3-5 | §0.3 | "ULT DOI 疑似错挂"（与 0.2-4 更正冲突） | 同上 | stale | 无法验证（作为评审质量声明） | — |
@@ -889,7 +895,7 @@ ESBMC-AI（形式化+AI 修复）；TSC2CARLA；Alloy+LLM 组合测试；RunBugR
 | 密钥管理 | `.env`（1977B）未读取；`.env` 在 `.gitignore`；`check_credential_scrub.py` + `audit_log_redaction.py` + gitleaks 配置三防线在场 | ✅ 未发现泄露面（本次评审未发现任何密钥进入工件/日志） |
 | 数据许可 | ULT 官方仓库 MIT（项目 2026-10-12 实测核实，有记录）；QuixBugs vendored 许可登记于 `docs/integration/vendored_quixbugs.md`；The Stack v2 上游条款已在 ult_bridge_plan §4.1 逐条登记；**数据不打包入仓** | ✅ 合规（Q12 待补证据链归档） |
 | 外部数据落盘 | `data/`（gitignore）、`~/.cache/aitester/`（LLM 缓存 + ULT 仓库）；缓存目录 0700/文件 0600（S103 豁免有记录） | ✅ 权限收敛有记录 |
-| 代码执行安全 | LLM 生成代码经子进程沙箱执行；`run_with_timeout` 进程组终止（但 9 文件 20 处 subprocess.run 未转换，A-17）；Docker 可选隔离；**bandit 1.9.4 已在 CI security 作业阻断（R10），本地实跑零 findings** | ⚠️ 主体达标、一处待修（A-17） |
+| 代码执行安全 | LLM 生成代码经子进程沙箱执行；`run_with_timeout` 进程组终止已全面接管（src/ 裸 subprocess.run 实测为 0，A-17 初版误判已更正）；Docker 可选隔离；**bandit 1.9.4 已在 CI security 作业阻断（R10），本地实跑零 findings** | ✅ 达标 |
 | 供应链 | requirements.lock + 三方工具版本门禁 + pip-audit（5 ignored）；无 SBOM（A-12 建议补） | ⚠️ 良 |
 | 隐私/伦理 | 无人类受试者（E7 为专家评审，非受试者研究）；无生产/真实用户数据；建议论文补 Ethics Statement | ✅ 达标（建议动作） |
 | 模型合规 | deepseek-flash 等商业 API；token 与成本记账完整（真实消耗 + 缓存命中避免量双口径，D2 已收口） | ✅ 良 |
