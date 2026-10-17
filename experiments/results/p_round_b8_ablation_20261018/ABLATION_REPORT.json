@@ -1,0 +1,646 @@
+{
+  "schema": "p2_b8_stagnation_ablation_report/1",
+  "sample": {
+    "difficulty_distribution_A": {
+      "1": 4,
+      "2": 3,
+      "3": 1,
+      "5": 2
+    },
+    "difficulty_distribution_B": {
+      "1": 4,
+      "2": 3,
+      "3": 1,
+      "5": 2
+    },
+    "note": "synthetic mixed difficulty; all tasks passed at iteration 0 in fast profile -> no repair loop -> stagnation criteria unreachable in this sample"
+  },
+  "nature": "exploratory non-confirmatory",
+  "run_stamp": "p_round_b8_ablation_20261018",
+  "cut": {
+    "root": "/Users/wangchenyu/Workspace/AITester-p2-b8-14a9662",
+    "root_head": "aeadb7bac0741313c09d3af58b5a3ce271ed091e",
+    "expected_sha": "aeadb7bac0741313c09d3af58b5a3ce271ed091e",
+    "dirty_lines_before": 0
+  },
+  "protocol": {
+    "arms": {
+      "A_stagnation": {
+        "cli": "--enable-stagnation",
+        "env": "COVERAGE_STALL_DETECT_ENABLE=true",
+        "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/p_round_b8_ablation_20261018/benchmark_synthetic_20261018_030519.json",
+        "batch_sha256": "5164eca3909b7b928b4595a691e09e7b4f2bd23fdb4a3e4e72e65b68ce3deda5"
+      },
+      "B_no_stagnation": {
+        "cli": "--no-stagnation",
+        "env": "COVERAGE_STALL_DETECT_ENABLE=false",
+        "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/p_round_b8_ablation_20261018/benchmark_synthetic_20261018_030521.json",
+        "batch_sha256": "0950a9fe58ef94f4507508993df4aaf290acd2ce426723cdae81a873f7168bd2"
+      }
+    },
+    "task_count": 10,
+    "parallelism": 4,
+    "watchdog_seconds": 3600,
+    "budget_usd_limit": 0.3,
+    "profile": "fast"
+  },
+  "arms": {
+    "A_stagnation": {
+      "rows": 10,
+      "wall_seconds": 29,
+      "tokens": 32993,
+      "cost_usd": 0.022606,
+      "exit_code": 0,
+      "env_snapshot_stall": "true",
+      "stop_reason_counts": {
+        "test_passed": 10
+      },
+      "coverage_stall_label_count": 0,
+      "trace_reason_counts": {
+        "test_passed": 10
+      },
+      "trace_node_decisions": {
+        "_should_debug:done": 10
+      },
+      "field_present_counts": {
+        "task_id": 10,
+        "passed": 10,
+        "coverage": 10,
+        "iterations": 10,
+        "stop_reason": 10,
+        "detection_rate": 10,
+        "repair_rate": 10,
+        "false_fix_rate": 10
+      },
+      "detection_aggregate": {
+        "measurable": 10,
+        "detected": 0,
+        "rate": 0.0
+      }
+    },
+    "B_no_stagnation": {
+      "rows": 10,
+      "wall_seconds": 31,
+      "tokens": 36612,
+      "cost_usd": 0.024666,
+      "exit_code": 0,
+      "env_snapshot_stall": "false",
+      "stop_reason_counts": {
+        "test_passed": 10
+      },
+      "coverage_stall_label_count": 0,
+      "trace_reason_counts": {
+        "test_passed": 10
+      },
+      "trace_node_decisions": {
+        "_should_debug:done": 10
+      },
+      "field_present_counts": {
+        "task_id": 10,
+        "passed": 10,
+        "coverage": 10,
+        "iterations": 10,
+        "stop_reason": 10,
+        "detection_rate": 10,
+        "repair_rate": 10,
+        "false_fix_rate": 10
+      },
+      "detection_aggregate": {
+        "measurable": 10,
+        "detected": 0,
+        "rate": 0.0
+      }
+    }
+  },
+  "paired": {
+    "common_tasks": 10,
+    "primary": {
+      "iterations": {
+        "metric": "iterations",
+        "n": 10,
+        "mean_arm_A": 0.0,
+        "mean_arm_B": 0.0,
+        "median_arm_A": 0.0,
+        "median_arm_B": 0.0,
+        "delta_mean_A_minus_B": 0.0,
+        "delta_median": 0.0,
+        "sd_delta": 0.0,
+        "bootstrap_95ci": [
+          0.0,
+          0.0
+        ],
+        "mde_post_hoc": 0.0,
+        "sign_consistency": {
+          "a_lt_b": 0,
+          "equal": 10,
+          "a_gt_b": 0
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      },
+      "coverage": {
+        "metric": "coverage",
+        "n": 10,
+        "mean_arm_A": 95.7,
+        "mean_arm_B": 95.8,
+        "median_arm_A": 100.0,
+        "median_arm_B": 100.0,
+        "delta_mean_A_minus_B": -0.1,
+        "delta_median": 0.0,
+        "sd_delta": 0.737865,
+        "bootstrap_95ci": [
+          -0.6,
+          0.3
+        ],
+        "mde_post_hoc": 0.653703,
+        "sign_consistency": {
+          "a_lt_b": 1,
+          "equal": 8,
+          "a_gt_b": 1
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 94.0,
+            "B": 93.0,
+            "delta_A_minus_B": 1.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 73.0,
+            "B": 75.0,
+            "delta_A_minus_B": -2.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 97.0,
+            "B": 97.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 100.0,
+            "B": 100.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 93.0,
+            "B": 93.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      },
+      "passed": {
+        "metric": "passed",
+        "n": 10,
+        "mean_arm_A": 1.0,
+        "mean_arm_B": 1.0,
+        "median_arm_A": 1.0,
+        "median_arm_B": 1.0,
+        "delta_mean_A_minus_B": 0.0,
+        "delta_median": 0.0,
+        "sd_delta": 0.0,
+        "bootstrap_95ci": [
+          0.0,
+          0.0
+        ],
+        "mde_post_hoc": 0.0,
+        "sign_consistency": {
+          "a_lt_b": 0,
+          "equal": 10,
+          "a_gt_b": 0
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      }
+    },
+    "secondary": {
+      "detection_rate": {
+        "metric": "detection_rate",
+        "n": 10,
+        "mean_arm_A": 0.0,
+        "mean_arm_B": 0.0,
+        "median_arm_A": 0.0,
+        "median_arm_B": 0.0,
+        "delta_mean_A_minus_B": 0.0,
+        "delta_median": 0.0,
+        "sd_delta": 0.0,
+        "bootstrap_95ci": [
+          0.0,
+          0.0
+        ],
+        "mde_post_hoc": 0.0,
+        "sign_consistency": {
+          "a_lt_b": 0,
+          "equal": 10,
+          "a_gt_b": 0
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      },
+      "repair_rate": {
+        "metric": "repair_rate",
+        "n": 10,
+        "mean_arm_A": 0.0,
+        "mean_arm_B": 0.0,
+        "median_arm_A": 0.0,
+        "median_arm_B": 0.0,
+        "delta_mean_A_minus_B": 0.0,
+        "delta_median": 0.0,
+        "sd_delta": 0.0,
+        "bootstrap_95ci": [
+          0.0,
+          0.0
+        ],
+        "mde_post_hoc": 0.0,
+        "sign_consistency": {
+          "a_lt_b": 0,
+          "equal": 10,
+          "a_gt_b": 0
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 0.0,
+            "B": 0.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      },
+      "false_fix_rate": {
+        "metric": "false_fix_rate",
+        "n": 10,
+        "mean_arm_A": 1.0,
+        "mean_arm_B": 1.0,
+        "median_arm_A": 1.0,
+        "median_arm_B": 1.0,
+        "delta_mean_A_minus_B": 0.0,
+        "delta_median": 0.0,
+        "sd_delta": 0.0,
+        "bootstrap_95ci": [
+          0.0,
+          0.0
+        ],
+        "mde_post_hoc": 0.0,
+        "sign_consistency": {
+          "a_lt_b": 0,
+          "equal": 10,
+          "a_gt_b": 0
+        },
+        "per_task": [
+          {
+            "task_id": "synthetic__task_0000",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0001",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0002",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0003",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0005",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0006",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0004",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0007",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0008",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          },
+          {
+            "task_id": "synthetic__task_0009",
+            "A": 1.0,
+            "B": 1.0,
+            "delta_A_minus_B": 0.0
+          }
+        ]
+      }
+    },
+    "test_passed_2x2": {
+      "both_pass": 10,
+      "a_only_pass": 0,
+      "b_only_pass": 0,
+      "both_fail": 0
+    }
+  },
+  "stall_evidence": {
+    "early_stop_or_stall_tasks": [],
+    "A_coverage_stall_label_count": 0,
+    "A_trace_coverage_stall": 0
+  },
+  "secondary_metrics_availability": {
+    "detection_rate_pairs": 10,
+    "repair_rate_pairs": 10,
+    "false_fix_rate_pairs": 10,
+    "note": "本批行级 detection/repair/false_fix 在场但为常量（两臂均 detection=0、repair=0、false_fix=1.0 → 无配对变异）；主指标可用"
+  },
+  "cost_total_usd": 0.047272,
+  "trigger_feasibility": {
+    "A_zero_iteration_passed": 10,
+    "B_zero_iteration_passed": 10,
+    "A_passed": 10,
+    "B_passed": 10,
+    "note": "all tasks passed at iteration 0 => no repair loop => stagnation criteria (K=2 failed stalled rounds) unreachable"
+  },
+  "classification": "no_stall_trigger_observed"
+}

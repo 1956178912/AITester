@@ -1118,20 +1118,90 @@ def _wrap_oracle_body(body_lines: list[str]) -> list[str]:
     return try_block
 
 
+# ─── P-1.1（2026-10-18）：示例断言的返回值表示归一（stdlib-only）──────────
+# 动机：P-1 报告中 3 个 fp（flatten/kheapsort 返回 generator、hanoi 返回
+# list[tuple]）并非语义错误，而是"返回容器表示形态"与示例期望的 JSON list
+# 直接 `==` 不等。归一规则（**仅用于示例断言的比较**，不改变被测函数/其它
+# 断言）：
+#   - tuple → list，list → 逐元素递归（嵌套归一）；
+#   - dict 保持 dict（键不归一），值递归（"不误归"：dict/generator 不会被当 list）；
+#   - str / bytes / bytearray 原样（Iterable 但不是 Iterator，勿误判）；
+#   - **Iterator（非 str/bytes/dict）→ list 一次性消费**（generator/iter(...)）；
+#   - 其余（int/float/bool/None/set/自定义对象）原样。
+# 生成的 oracle 产物内联同名辅助函数；无示例产物**不引入任何归一代码**。
+_SPECIR_NORMALIZE_FUNC = "_specir_norm_return"
+
+
+def normalize_return_value(value: Any) -> Any:
+    """P-1.1 示例比较用返回值表示归一（纯 stdlib；零 eval/exec）。
+
+    规则（与生成产物内联的 ``_specir_norm_return`` 逐字一致）：
+    tuple→list 递归；list 逐元素递归；dict 保持 dict、值递归；
+    str/bytes/bytearray 原样；Iterator（generator/iter）→ list 一次性消费；
+    其余原样。
+
+    Args:
+        value: 被测函数返回值（或示例 expected 字面量）。
+
+    Returns:
+        归一后的 JSON 可比较值（不修改入参；iterator 会被消费一次）。
+    """
+    from collections.abc import Iterator
+
+    if isinstance(value, tuple):
+        return [normalize_return_value(item) for item in value]
+    if isinstance(value, list):
+        return [normalize_return_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: normalize_return_value(item) for key, item in value.items()}
+    if isinstance(value, (str, bytes, bytearray)):
+        return value
+    if isinstance(value, Iterator):
+        return [normalize_return_value(item) for item in value]
+    return value
+
+
+_NORMALIZE_HELPER_SOURCE = '''
+def _specir_norm_return(value):
+    """P-1.1 返回表示归一：tuple/list→list（递归）、iterator→list、str/bytes/dict 不误归。"""
+    if isinstance(value, tuple):
+        return [_specir_norm_return(item) for item in value]
+    if isinstance(value, list):
+        return [_specir_norm_return(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _specir_norm_return(item) for key, item in value.items()}
+    if isinstance(value, (str, bytes, bytearray)):
+        return value
+    if isinstance(value, Iterator):
+        return [_specir_norm_return(item) for item in value]
+    return value
+'''
+
+
 def _render_harnessed_oracle(
     target_module: str,
     target_function: str,
     body_lines: list[str],
     readiness: float,
+    examples_n: int = 0,
 ) -> str:
-    """渲染主 oracle 测试（try/except 崩溃安全 harness + 断言保留）。"""
-    lines: list[str] = [
-        f"# SpecIR v2 确定性 oracle（compile_readiness={readiness:.2f}）",
-        "import pytest",
-        f"from {target_module} import {target_function}",
-        "",
-        "def test_specir_v2_oracle():",
-    ]
+    """渲染主 oracle 测试（try/except 崩溃安全 harness + 断言保留）。
+
+    P-1：``examples_n>0`` 时在产物首行注释追加 ``；examples=N`` 审计标记；
+    ``examples_n==0`` 时首行与 O-1 产物**逐字节一致**（无示例零差异要求）。
+    """
+    header = f"# SpecIR v2 确定性 oracle（compile_readiness={readiness:.2f}"
+    header += f"；examples={examples_n}）" if examples_n else "）"
+    lines: list[str] = [header, "import pytest"]
+    if examples_n:
+        # P-1.1：示例断言比较归一后的值（stdlib-only；无示例产物不含任何归一代码）
+        lines.append("from collections.abc import Iterator")
+    lines.append(f"from {target_module} import {target_function}")
+    lines.append("")
+    if examples_n:
+        lines.extend(_NORMALIZE_HELPER_SOURCE.strip("\n").split("\n"))
+        lines.append("")
+    lines.append("def test_specir_v2_oracle():")
     lines.extend(_wrap_oracle_body(body_lines))
     return "\n".join(lines)
 
@@ -1179,11 +1249,18 @@ def _binding_lines_for_boundary_selection(
         body.extend(pre_lines)
         body.append(f"    r = {target_function}({p0})")
         body.extend(post_lines)
-    else:
-        body.append(f"    args = {selected_input!r}")
-        body.extend(pre_lines)
-        body.append(f"    r = {target_function}(*args)")
-        body.extend(post_lines)
+        return body
+    # 多参：历史口径 `args = X; f(*args)` 会让 pre 断言（引用参数名 a/b）NameError
+    # （O-1 仪器 bug：合法输入被误判不可用→skip）。P-1 修复：**同时**逐位绑定
+    # 参数名（pre 断言可求值）并保留 `args = X` + `f(*args)` 历史调用形态
+    # （额外位置实参语义不变；既有产物断言文本兼容）。
+    names = ", ".join(signature_params)
+    inline_values = ", ".join(repr(item) for item in selected_input[: len(signature_params)])
+    body.append(f"    {names} = {inline_values}")
+    body.append(f"    args = {selected_input!r}")
+    body.extend(pre_lines)
+    body.append(f"    r = {target_function}(*args)")
+    body.extend(post_lines)
     return body
 
 
@@ -1210,6 +1287,77 @@ def _binding_lines_for_witness(
     body.append(f"    r = {target_function}({names})")
     body.extend(post_lines)
     return body
+
+
+def _compile_example_assertions(
+    examples: Any,
+    signature_params: list[str] | None,
+    target_function: str,
+) -> tuple[list[str], dict[str, int]]:
+    """把规格可执行示例编译为逐条断言行（P-1 示例通道；零 eval/exec）。
+
+    产物形态（每条示例一行，4 空格缩进，随后由 harness 再缩进）：
+    - 多参函数：``assert f(<inp0>, <inp1>, ...) == <expected>``（input 必须
+      是长度恰为参数个数的 list；按位展开，不使用 ``*``/eval/exec）；
+    - 单参函数：``assert f(<input>) == <expected>``（input 可为标量/容器）；
+    - P-1.1：两侧（实参与 expected）都经 ``_specir_norm_return`` 归一后再比较
+      （tuple/generator→list，消除容器表示形态假阳；str/bytes/dict 不误归）；
+    - 0 参函数：``assert f() == <expected>``（input 必须为空 list）；
+    - 签名未知（signature_params is None）：仅接受**标量** input，按单参
+      ``f(<input>)`` 调用（无法判定元数时不臆测容器展开）。
+
+    安全门（任一不满足 → 该示例丢弃并计数，不抛异常）：
+    - input/expected 必须是安全 JSON 字面量（``spec_ir.is_literal_value``，
+      拒绝 NaN/inf/自定义对象）；
+    - 多参 input 长度必须恰等于参数个数；0 参 input 必须为 ``[]``。
+
+    Returns:
+        (assert 行列表, {"used": n, "dropped": m, "input": 原始条数})。
+        used=0 时调用方保持 O-1 旧产物路径（逐字节不变）。
+    """
+    from src.specs.spec_ir import is_literal_value
+
+    raw = examples if isinstance(examples, list) else []
+    lines: list[str] = []
+    dropped = 0
+    for example in raw:
+        if not isinstance(example, dict) or "input" not in example or "expected" not in example:
+            dropped += 1
+            continue
+        inp = example.get("input")
+        expected = example.get("expected")
+        if not is_literal_value(inp) or not is_literal_value(expected):
+            dropped += 1
+            continue
+        if signature_params is None:
+            if isinstance(inp, (list, dict)):
+                dropped += 1
+                continue
+            call = f"{target_function}({inp!r})"
+        else:
+            arity = len(signature_params)
+            if arity == 0:
+                if inp != []:
+                    dropped += 1
+                    continue
+                call = f"{target_function}()"
+            elif arity == 1:
+                # 示例 input 契约 = **位置实参列表**（生成器 prompt 同口径）：
+                # 单参函数 input=[x] → f(x)（含 x 为容器：input=[[1,2]] → f([1,2])）；
+                # 兼容人类/旧格式"input 直接是单参值"：长度≠1 的 list 原样作为值
+                # （f([1,2])）。歧义（单参且值恰为 1 元素 list）按 args-list 口径。
+                single_value = inp[0] if isinstance(inp, list) and len(inp) == 1 else inp
+                call = f"{target_function}({single_value!r})"
+            else:
+                if not isinstance(inp, list) or len(inp) != arity:
+                    dropped += 1
+                    continue
+                args = ", ".join(repr(item) for item in inp)
+                call = f"{target_function}({args})"
+        # P-1.1：比较归一后的值（tuple/generator→list），消除"表示形态"假阳；
+        # 期望值同样归一（JSON 字面量通常已是 list，归一是幂等的）。
+        lines.append(f"    assert _specir_norm_return({call}) == _specir_norm_return({expected!r})")
+    return lines, {"used": len(lines), "dropped": dropped, "input": len(raw)}
 
 
 def compile_spec_oracle(
@@ -1312,8 +1460,32 @@ def compile_spec_oracle(
     total_n = len(pre) + len(post) + len(inv)
     readiness = (pre_compiled_n + post_compiled_n) / total_n if total_n else 0.0
 
-    # 无任何可编译子句 → 保守返回空串（不产出无断言的空测试）
-    if pre_compiled_n + post_compiled_n == 0:
+    # P-1（2026-10-18）：**规格可执行示例**通道。有示例时逐条编译为
+    # `assert f(*input) == expected`（签名展开/repr/零 eval），与既有
+    # pre/post/boundary 断言共用同一崩溃安全 harness。无示例（或缺 key /
+    # 全部非法）时 example_lines 为空，下面所有路径与 O-1 产物**逐字节一致**。
+    example_lines, example_stats = _compile_example_assertions(spec.get("examples"), signature_params, target_function)
+    if example_stats["dropped"]:
+        logger.debug(
+            "SpecIR v2 示例通道：丢弃 %d/%d 条非法或元数不匹配示例（保守，不抛异常）",
+            example_stats["dropped"],
+            example_stats["input"],
+        )
+
+    def _examples_fallback_or_empty() -> str:
+        """无绑定材料/无有效输入时的降级：有示例 → 只渲染示例断言；否则空串。"""
+        if not example_lines:
+            return ""
+        return _render_harnessed_oracle(
+            target_module,
+            target_function,
+            example_lines,
+            readiness,
+            examples_n=len(example_lines),
+        )
+
+    # 无任何可编译子句且无示例 → 保守返回空串（不产出无断言的空测试）
+    if pre_compiled_n + post_compiled_n == 0 and not example_lines:
         return ""
 
     # O-1（2026-10-18）仪器加固：绑定/调用/断言执行体统一由崩溃安全 harness
@@ -1328,7 +1500,19 @@ def compile_spec_oracle(
     #   层 3：无任何输入材料路径不可达 → return ""（不臆测）。
     boundaries = [b for b in (spec.get("boundaries") or []) if b.get("input") is not None]
     body_lines: list[str] = []
-    if boundaries:
+    # P-1：仅有示例、无可编译 pre/post 时**不生成**退化的绑定/调用体
+    # （如 `a, b = 0, 0; r = f(a, b)`）——否则该调用的 TypeError 会在示例
+    # 断言之前触发 harness skip，白白丢掉语义信号（示例通道应独立可测）。
+    examples_only = (pre_compiled_n + post_compiled_n) == 0 and bool(example_lines)
+    # 退化绑定标记：无有效 boundary/witness 时 O-1 历史口径用字面量 0 臆造
+    # 输入（`p = 0` / `a, b = 0, 0`）——P-1 有示例时**丢弃**该退化体：示例
+    # 已提供合法输入与期望值，继续执行臆造输入的调用会让 fixed 侧 TypeError/
+    # ZeroDivisionError 把整个 oracle 变 unavailable（自伤测量）。无示例时
+    # 行为与 O-1 逐字节一致（flag 仅在 example_lines 非空时生效）。
+    degenerate_binding = False
+    if examples_only:
+        body_lines = []
+    elif boundaries:
         if signature_params is None:
             # 历史口径（签名未知）逐字保留：x = <first_input>
             first_input = _coerce_boundary_literal(boundaries[0]["input"])
@@ -1337,7 +1521,9 @@ def compile_spec_oracle(
             body_lines.append(f"    r = {target_function}(x)")
             body_lines.extend(post_lines)
         elif not signature_params:
-            return ""  # 0 参函数无输入可绑定，不臆测（历史口径不变）
+            # 0 参函数无输入可绑定：有示例则示例降级（示例输入必须为 []），
+            # 否则保持历史口径空串（不臆测）
+            return _examples_fallback_or_empty()
         else:
             pre_exprs = _machine_checkable_precondition_exprs(pre, target_module, target_function, known_names)
             selection = _select_valid_boundary_candidate(boundaries, pre_exprs, signature_params)
@@ -1356,7 +1542,10 @@ def compile_spec_oracle(
                         _binding_lines_for_witness(signature_params, witness, pre_lines, post_lines, target_function)
                     )
                 else:
-                    # SMT 亦无见证：带可审计 skip 原因的保守骨架（不产假断言）
+                    # 有规格示例时优先走示例通道（不因 boundary 不可用而丢语义）；
+                    # 否则带可审计 skip 原因的保守骨架（不产假断言）
+                    if example_lines:
+                        return _examples_fallback_or_empty()
                     return _render_skip_skeleton(
                         target_module,
                         target_function,
@@ -1371,7 +1560,7 @@ def compile_spec_oracle(
         pre_refs_ab = [c for c in pre if c and any(v in c for v in ("a", "b", "y"))]
         if signature_params is not None:
             if not signature_params:
-                return ""  # 0 参函数无输入可绑定，不臆测
+                return _examples_fallback_or_empty()  # 0 参：有示例则示例降级
             # T1d（2026-10-11 独立评审落地）：有 SMT 见证 → 绑定见证值并照发
             # 前件断言（见证已保证满足前件）；无见证 → 退化字面量 0 且前件
             # 断言降级为注释（历史口径；harness 兜底崩溃→skip）。
@@ -1382,24 +1571,46 @@ def compile_spec_oracle(
                 )
             elif len(signature_params) == 1:
                 p0 = signature_params[0]
+                degenerate_binding = True
                 body_lines.append(f"    {p0} = 0")
                 body_lines.extend(_as_comments(pre_lines))
                 body_lines.append(f"    r = {target_function}({p0})")
                 body_lines.extend(post_lines)
             else:
                 p0, p1 = signature_params[0], signature_params[1]
+                degenerate_binding = True
                 body_lines.append(f"    {p0}, {p1} = 0, 0")
                 body_lines.extend(_as_comments(pre_lines))
                 body_lines.append(f"    r = {target_function}({p0}, {p1})")
                 body_lines.extend(post_lines)
         elif pre_refs_ab:
+            degenerate_binding = True
             body_lines.append("    a, b = 0, 0")
             body_lines.extend(pre_lines)
             body_lines.append(f"    r = {target_function}(a, b)")
             body_lines.extend(post_lines)
         else:
-            return ""
-    code = _render_harnessed_oracle(target_module, target_function, body_lines, readiness)
+            return _examples_fallback_or_empty()
+    if example_lines and degenerate_binding:
+        # 有示例时丢弃"0 字面量臆造输入"的退化体（只保留示例断言，避免
+        # 自伤 crash 把 fixed 侧变 unavailable）；无示例路径不受影响。
+        body_lines = []
+    if example_lines:
+        # 示例断言放在执行体**最前**（同一 harness）：它们是规格语义的第一
+        # 优先级信号；后续退化的 0 字面量绑定/调用若崩溃，不得先于示例断言
+        # 触发 skip（否则语义信号被仪器噪声抢占）。注释保留来源。
+        body_lines = [
+            f"    # examples（{len(example_lines)} 条规格可执行示例；期望值来自规约，不是实现）",
+            *example_lines,
+            *body_lines,
+        ]
+    code = _render_harnessed_oracle(
+        target_module,
+        target_function,
+        body_lines,
+        readiness,
+        examples_n=len(example_lines),
+    )
     # 产物总自检（ast 不合法 → 保守返回空串，不产出坏代码）
     try:
         ast.parse(code)

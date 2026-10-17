@@ -172,6 +172,15 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/emse_oracle_enabled_validation_20261017/README.md",
     "experiments/results/emse_oracle_enabled_validation_20261017/ARM_COMPARISON.json",
     "experiments/results/emse_oracle_enabled_validation_20261017/SHA256SUMS",
+    # P 轮（2026-10-18）：规格可执行示例通道质量重放（P-1/P-1.1；raw + 表示归一双报告）
+    "experiments/results/p_round_oracle_examples_20261018/README.md",
+    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT.json",
+    "experiments/results/p_round_oracle_examples_20261018/ORACLE_EXAMPLES_REPORT_norm.json",
+    "experiments/results/p_round_oracle_examples_20261018/SHA256SUMS",
+    # P 轮：A-19 停滞检测 wiring 修复 + B8 缩小消融（探索性，无触发场景如实披露）
+    "experiments/results/p_round_b8_ablation_20261018/README.md",
+    "experiments/results/p_round_b8_ablation_20261018/ABLATION_REPORT.json",
+    "experiments/results/p_round_b8_ablation_20261018/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

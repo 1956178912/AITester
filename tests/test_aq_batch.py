@@ -115,9 +115,9 @@ class TestArtifactsManifestE7:
         # M 轮（2026-10-17）：59 → 75（增广二臂批 / 增广机制重放 / oracle 质量 /
         # 编译执行率 / 孤儿根因证据）；N 轮（2026-10-17）：75 → 90（功能矩阵三组探针
         # 报告 / oracle 独立判读 / 真实 LLM 重型探针证据）；O 轮（2026-10-18）：90 → 99
-        # （oracle 仪器治疗 / 跨文件真实路径 / oracle-enabled 二臂验证）。漏登记属新缺口，
-        # 故仍锁精确长度。
-        assert len(module.MANIFEST) == 99
+        # （oracle 仪器治疗 / 跨文件真实路径 / oracle-enabled 二臂验证）；P 轮（2026-10-18）：
+        # 99 → 106（示例通道 raw/norm 双报告 / B8 消融）。漏登记属新缺口，故仍锁精确长度。
+        assert len(module.MANIFEST) == 106
 
 
 class TestSurveyPackagingErrata:

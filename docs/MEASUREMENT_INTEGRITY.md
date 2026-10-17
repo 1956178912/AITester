@@ -308,3 +308,17 @@ injected_and_passed 的风险**已在 O 轮配套修复**：输出显式出现 o
 `oracle_suite_verdict=unavailable` 对齐（`tests/test_oracle_instrument_safety.py`
 3 例锁定正常 passed/全 skip/失败三态）。
 
+
+**P-1 示例通道口径（2026-10-18，探索性）**：O-1 之后 oracle 仪器可判定（fp 29→2），
+但 correct 仍 0——断言不触达缺陷行为。P-1 增加"规格可执行示例"通道：LLM **spec-only**
+（不发送缺陷代码）生成 concrete examples → `compile_spec_oracle` 逐示例断言
+`assert f(args…) == expected`（repr 字面量、零 eval/exec、O-1 崩溃安全 harness）。
+df_spec 归档 20 任务 A/B：correct **0→6**（真实检出，逐例核验 fixed 全过、buggy 至少
+一例败）、同引入 fp 3（全表示型）+ misguided 2（LLM 示例期望值幻觉），精确率 42.9%；
+P-1.1 返回表示归一（tuple/generator→list）后 **fp 3→0、correct 6→8、精确率 61.5%、
+错误率 15.4%**（分母 13；2 幻觉仍存在、flatten 转 unavailable）。**口径纪律**：这是
+**探索性机制证据**（n=20、单次生成/重放、spec-only），不得作为"oracle 生产可用"或
+"检出能力提升"的能力主张；引用必须同时给分母/精确率/错误率/生成方式；生产接线与
+示例自校验需下一轮同批 A/B + 预注册。工件
+`experiments/results/p_round_oracle_examples_20261018/`（raw + norm 双报告、ATTRIBUTION、
+SHA256SUMS）。

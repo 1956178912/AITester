@@ -1,0 +1,1257 @@
+{
+ "purpose": "P-1 人工归因：B 臂新增 correct/fp/misguided 的逐示例真相核验（oracle 分类之外，用 buggy/fixed 真实实现回放示例）",
+ "normalization": "norm_eq 对序列做 JSON 归一（generator/tuple→list，递归），用于识别\"表示形态差异\"而非语义差异；不用于重放分类",
+ "entries": [
+  {
+   "task_id": "quixbugs__bucketsort",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      [],
+      1
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      [
+       0
+      ],
+      1
+     ],
+     "expected": [
+      0
+     ]
+    },
+    {
+     "input": [
+      [
+       2,
+       0,
+       1
+      ],
+      3
+     ],
+     "expected": [
+      0,
+      1,
+      2
+     ]
+    },
+    {
+     "input": [
+      [
+       1,
+       1,
+       0,
+       1
+      ],
+      2
+     ],
+     "expected": [
+      0,
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "input": [
+      [
+       0,
+       0,
+       0
+      ],
+      1
+     ],
+     "expected": [
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[0]",
+     "err": null
+    },
+    {
+     "got": "[0, 1, 2]",
+     "err": null
+    },
+    {
+     "got": "[0, 1, 1, 1]",
+     "err": null
+    },
+    {
+     "got": "[0, 0, 0]",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[0, 0, 2]",
+     "err": null
+    },
+    {
+     "got": "[0, 1, 3]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__flatten",
+   "B_category": "fp",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "buggy_raw_mismatch_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    2,
+    3,
+    4
+   ],
+   "attribution": "representation_mismatch_only(iterator/tuple-vs-list)",
+   "examples": [
+    {
+     "input": [
+      []
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      [
+       [],
+       []
+      ]
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      [
+       [
+        [
+         1
+        ]
+       ]
+      ]
+     ],
+     "expected": [
+      1
+     ]
+    },
+    {
+     "input": [
+      [
+       1,
+       "a",
+       null,
+       true
+      ]
+     ],
+     "expected": [
+      1,
+      "a",
+      null,
+      true
+     ]
+    },
+    {
+     "input": [
+      [
+       5
+      ]
+     ],
+     "expected": [
+      5
+     ]
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "<generator object flatten at 0x10a6c5300>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x105bc4a90>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x10a6c5300>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x105bc4a90>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x10a6c5300>",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "<generator object flatten at 0x105bc4a90>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x10a6c5300>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x105bc4a90>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x10a6c5300>",
+     "err": null
+    },
+    {
+     "got": "<generator object flatten at 0x10a72f5b0>",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__get_factors",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      1
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      2
+     ],
+     "expected": [
+      2
+     ]
+    },
+    {
+     "input": [
+      4
+     ],
+     "expected": [
+      2,
+      2
+     ]
+    },
+    {
+     "input": [
+      12
+     ],
+     "expected": [
+      2,
+      2,
+      3
+     ]
+    },
+    {
+     "input": [
+      101
+     ],
+     "expected": [
+      101
+     ]
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[2]",
+     "err": null
+    },
+    {
+     "got": "[2, 2]",
+     "err": null
+    },
+    {
+     "got": "[2, 2, 3]",
+     "err": null
+    },
+    {
+     "got": "[101]",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[2]",
+     "err": null
+    },
+    {
+     "got": "[2, 2]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__hanoi",
+   "B_category": "fp",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [
+    2,
+    3,
+    4
+   ],
+   "buggy_raw_mismatch_indices": [
+    2,
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    2,
+    3,
+    4
+   ],
+   "attribution": "representation_mismatch_only(iterator/tuple-vs-list)",
+   "examples": [
+    {
+     "input": [
+      0,
+      1,
+      3
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      -1,
+      1,
+      3
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      1,
+      1,
+      3
+     ],
+     "expected": [
+      [
+       1,
+       3
+      ]
+     ]
+    },
+    {
+     "input": [
+      1,
+      2,
+      1
+     ],
+     "expected": [
+      [
+       2,
+       1
+      ]
+     ]
+    },
+    {
+     "input": [
+      2,
+      1,
+      3
+     ],
+     "expected": [
+      [
+       1,
+       2
+      ],
+      [
+       1,
+       3
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[(1, 3)]",
+     "err": null
+    },
+    {
+     "got": "[(2, 1)]",
+     "err": null
+    },
+    {
+     "got": "[(1, 2), (1, 3), (2, 3)]",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[]",
+     "err": null
+    },
+    {
+     "got": "[(1, 2)]",
+     "err": null
+    },
+    {
+     "got": "[(2, 3)]",
+     "err": null
+    },
+    {
+     "got": "[(1, 3), (1, 2), (2, 1)]",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__is_valid_parenthesization",
+   "B_category": "misguided",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [
+    1
+   ],
+   "buggy_raw_mismatch_indices": [],
+   "fixed_norm_mismatch_indices": [
+    1
+   ],
+   "buggy_norm_mismatch_indices": [],
+   "attribution": "llm_example_error_buggy_matches_wrong_expected",
+   "examples": [
+    {
+     "input": [
+      ""
+     ],
+     "expected": true
+    },
+    {
+     "input": [
+      "((("
+     ],
+     "expected": true
+    },
+    {
+     "input": [
+      ")))"
+     ],
+     "expected": false
+    },
+    {
+     "input": [
+      ")("
+     ],
+     "expected": false
+    },
+    {
+     "input": [
+      "((()()))()"
+     ],
+     "expected": true
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "True",
+     "err": null
+    },
+    {
+     "got": "False",
+     "err": null
+    },
+    {
+     "got": "False",
+     "err": null
+    },
+    {
+     "got": "False",
+     "err": null
+    },
+    {
+     "got": "True",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "True",
+     "err": null
+    },
+    {
+     "got": "True",
+     "err": null
+    },
+    {
+     "got": "False",
+     "err": null
+    },
+    {
+     "got": "False",
+     "err": null
+    },
+    {
+     "got": "True",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__kheapsort",
+   "B_category": "fp",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "buggy_raw_mismatch_indices": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    3,
+    4
+   ],
+   "attribution": "representation_mismatch_only(iterator/tuple-vs-list)",
+   "examples": [
+    {
+     "input": [
+      [],
+      0
+     ],
+     "expected": []
+    },
+    {
+     "input": [
+      [
+       5
+      ],
+      0
+     ],
+     "expected": [
+      5
+     ]
+    },
+    {
+     "input": [
+      [
+       1,
+       2,
+       3
+      ],
+      0
+     ],
+     "expected": [
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "input": [
+      [
+       3,
+       1,
+       2
+      ],
+      2
+     ],
+     "expected": [
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "input": [
+      [
+       5,
+       4,
+       3,
+       2,
+       1
+      ],
+      4
+     ],
+     "expected": [
+      1,
+      2,
+      3,
+      4,
+      5
+     ]
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738b40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738b40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738b40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738b40>",
+     "err": null
+    },
+    {
+     "got": "<generator object kheapsort at 0x10a738a40>",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__knapsack",
+   "B_category": "misguided",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [
+    3
+   ],
+   "buggy_raw_mismatch_indices": [],
+   "fixed_norm_mismatch_indices": [
+    3
+   ],
+   "buggy_norm_mismatch_indices": [],
+   "attribution": "llm_example_error_buggy_matches_wrong_expected",
+   "examples": [
+    {
+     "input": [
+      0,
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      10,
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      5,
+      [
+       [
+        6,
+        10
+       ]
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      5,
+      [
+       [
+        5,
+        10
+       ]
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      10,
+      [
+       [
+        2,
+        3
+       ],
+       [
+        3,
+        4
+       ],
+       [
+        4,
+        5
+       ]
+      ]
+     ],
+     "expected": 12
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "10",
+     "err": null
+    },
+    {
+     "got": "12",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "12",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__lcs_length",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    3
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    3
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      "",
+      "abc"
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      "abc",
+      ""
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      "",
+      ""
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      "abc",
+      "abc"
+     ],
+     "expected": 3
+    },
+    {
+     "input": [
+      "abc",
+      "xyz"
+     ],
+     "expected": 0
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__levenshtein",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    3,
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    3,
+    4
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      "",
+      ""
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      "abc",
+      ""
+     ],
+     "expected": 3
+    },
+    {
+     "input": [
+      "",
+      "abc"
+     ],
+     "expected": 3
+    },
+    {
+     "input": [
+      "abc",
+      "abc"
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      "cat",
+      "cut"
+     ],
+     "expected": 1
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__lis",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    4
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    4
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      [
+       5
+      ]
+     ],
+     "expected": 1
+    },
+    {
+     "input": [
+      [
+       3,
+       2,
+       1
+      ]
+     ],
+     "expected": 1
+    },
+    {
+     "input": [
+      [
+       1,
+       2,
+       3,
+       4
+      ]
+     ],
+     "expected": 4
+    },
+    {
+     "input": [
+      [
+       -3,
+       0,
+       2,
+       -1,
+       5
+      ]
+     ],
+     "expected": 4
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    },
+    {
+     "got": "4",
+     "err": null
+    },
+    {
+     "got": "4",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    },
+    {
+     "got": "1",
+     "err": null
+    },
+    {
+     "got": "4",
+     "err": null
+    },
+    {
+     "got": "3",
+     "err": null
+    }
+   ]
+  },
+  {
+   "task_id": "quixbugs__max_sublist_sum",
+   "B_category": "correct",
+   "n_examples": 5,
+   "fixed_raw_mismatch_indices": [],
+   "buggy_raw_mismatch_indices": [
+    3
+   ],
+   "fixed_norm_mismatch_indices": [],
+   "buggy_norm_mismatch_indices": [
+    3
+   ],
+   "attribution": "genuine_detection",
+   "examples": [
+    {
+     "input": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      [
+       -1,
+       -2,
+       -3
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "input": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": 6
+    },
+    {
+     "input": [
+      [
+       -2,
+       1,
+       -3,
+       4,
+       -1,
+       2,
+       1,
+       -5,
+       4
+      ]
+     ],
+     "expected": 6
+    },
+    {
+     "input": [
+      [
+       5
+      ]
+     ],
+     "expected": 5
+    }
+   ],
+   "fixed_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "6",
+     "err": null
+    },
+    {
+     "got": "6",
+     "err": null
+    },
+    {
+     "got": "5",
+     "err": null
+    }
+   ],
+   "buggy_raw_results": [
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "0",
+     "err": null
+    },
+    {
+     "got": "6",
+     "err": null
+    },
+    {
+     "got": "2",
+     "err": null
+    },
+    {
+     "got": "5",
+     "err": null
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,136 @@
+{
+  "schema": "p2_b8_stagnation_ablation_prereg/1",
+  "task": "P-2 B8: A-19 coverage stagnation detection on/off ablation (exploratory)",
+  "nature": "exploratory non-confirmatory",
+  "created_at_utc": "2026-10-18",
+  "cut": {
+    "commit": "aeadb7bac0741313c09d3af58b5a3ce271ed091e",
+    "commit_subject": "feat(p-stagnation): 修复 A-19 覆盖率停滞检测 wiring（纸面功能→真提前停止）",
+    "commit_files": [
+      "src/graph/workflow.py",
+      "tests/test_p_round_stagnation_wiring.py"
+    ],
+    "commit_stat": "+329/-23",
+    "worktree": "/Users/wangchenyu/Workspace/AITester-p2-b8-14a9662",
+    "require_clean_before_after": true,
+    "baseline_defect_commit": "14a9662"
+  },
+  "arms": {
+    "A_stagnation_on": {
+      "cli_flag": "--enable-stagnation",
+      "env": {
+        "COVERAGE_STALL_DETECT_ENABLE": "true"
+      },
+      "cache_namespace": "p_round_b8_ablation_20261018_stagnation"
+    },
+    "B_stagnation_off": {
+      "cli_flag": "--no-stagnation",
+      "env": {
+        "COVERAGE_STALL_DETECT_ENABLE": "false"
+      },
+      "cache_namespace": "p_round_b8_ablation_20261018_no_stagnation"
+    }
+  },
+  "command_template": "python -m experiments.run_benchmark --dataset synthetic --task-count 15 --seed 42 --baselines aitester --output-dir <staging> <flag>",
+  "profile": {
+    "AITESTER_PROFILE": "fast",
+    "rationale": "隔离 workflow 迭代/停止路由单变量；避免 logic/scientific 档的 oracle/mutation/branch-coverage/detection-first 等非目标后处理噪声与迭代改变；planner/generator/executor/debugger 主链路与 MAX_ITERATIONS=3 保持默认",
+    "difference_vs_logic": "logic = scientific 超集：SPEC_IR/DSL/SMT/SPEC_ORACLE_EXEC/MUTATION_SCORING/MUTATION_ADVISOR/DETERMINISTIC_GUARD/BRANCH_COVERAGE_INJECT/ROUTE_STRUCTURED/DETECTION_FIRST 等开启；本批结论仅对 fast 档负责"
+  },
+  "protocol": {
+    "dataset": "synthetic",
+    "task_count": 10,
+    "task_count_downgrade_if_estimate_over_usd": {
+      "threshold": 0.3,
+      "downgrade_to": 8
+    },
+    "seed": 42,
+    "baselines": [
+      "aitester"
+    ],
+    "parallelism": 4,
+    "temperature": 0.0,
+    "llm_thinking_mode": "disabled",
+    "llm_cache": 0,
+    "cost_budget": {
+      "COST_BUDGET_ENABLE": "true",
+      "COST_BUDGET_USD": 1,
+      "AITESTER_BATCH_MAX_CALLS": 100
+    },
+    "watchdog_seconds_per_arm": 3600,
+    "wall_limit_minutes": 60,
+    "budget_limit_usd": 0.3
+  },
+  "metrics": {
+    "primary": [
+      "iterations",
+      "coverage",
+      "test_passed"
+    ],
+    "secondary": [
+      "stop_reason_distribution",
+      "coverage_stall_label_count",
+      "detection_rate",
+      "repair_rate",
+      "false_fix_rate",
+      "tokens",
+      "cost_usd",
+      "wall_seconds"
+    ],
+    "paired": {
+      "method": "paired by task_id on common tasks",
+      "continuous": [
+        "mean/median per arm",
+        "delta_mean_A_minus_B",
+        "sign_consistency",
+        "bootstrap_95CI_10000_seed"
+      ],
+      "binary": [
+        "2x2 paired table (A only / B only / both / neither)"
+      ],
+      "mde": "post-hoc (z_0.975 + z_0.8) * sd(delta) / sqrt(n); alpha=0.05, power=0.8"
+    }
+  },
+  "decision": {
+    "classes": [
+      "no_detectable_difference",
+      "direction_hint",
+      "mechanism_defect"
+    ],
+    "note": "exploratory only; no confirmatory/causal claims"
+  },
+  "pre_run_structural_check": {
+    "finding": "stagnation detection appears observation-only: determine_stop_reason can label coverage_stall, but _should_debug/_route_after_diagnosis have no stall short-circuit; priority 5 (MAX_ITERATIONS) shadows priority 6.5 (COVERAGE_STALL) at natural termination",
+    "minimal_repro": "state iteration=2<max=3, execution_trace=[{passed:False, coverage_delta:0.0},{passed:False, coverage_delta:0.0}], COVERAGE_STALL_DETECT_ENABLE=true => _coverage_stall_detected=True; determine_stop_reason=coverage_stall; _should_debug='debug' (no early stop)",
+    "source_locations": [
+      "src/graph/workflow.py:172-176 (claim of consumer branch)",
+      "src/graph/workflow.py:654+ (_should_debug, no stall branch)",
+      "src/graph/workflow.py:622-648 (_coverage_stall_detected only used by determine_stop_reason)"
+    ],
+    "expected_if_confirmed": "ON vs OFF: no behavioral difference (iterations/coverage/test_passed), coverage_stall label count ~0"
+  },
+  "risks_and_limitations": [
+    "single model / single synthetic dataset / single seed; n=15 paired",
+    "post-hoc MDE disclosure only",
+    "temp=0 still run-to-run nondeterministic; concurrent CPU contention affects post-processing metrics",
+    "watchdog 3600s/arm; termination reported honestly, no rerun",
+    "if wiring gap confirmed, cannot infer efficacy of correctly-wired stagnation detection"
+  ],
+  "artifacts_dir": "experiments/results/p_round_b8_ablation_20261018",
+  "fix_disclosure": {
+    "what": "A-19 wiring fixed: _should_debug/_route_after_diagnosis short-circuit to done on stalled state; determine_stop_reason stall branch moved before MAX_ITERATIONS; docs synced",
+    "why": "before fix, stall detection was observation-only (label unreachable/no early stop)",
+    "tests": {
+      "new_file": "tests/test_p_round_stagnation_wiring.py",
+      "new_tests_passed": 26,
+      "existing_workflow_regressions_passed": 205,
+      "ruff": "pass",
+      "mypy": "pass"
+    },
+    "evidence_before": "WIRING_EVIDENCE_before.json",
+    "evidence_after": "WIRING_EVIDENCE_after.json",
+    "diff_patch": "WIRING_DIFF.patch",
+    "expected": "ON arm may stop early at iteration=2 after 2 stalled failed rounds (stop_reason=coverage_stall, fewer iterations/tokens); trade-off on repair/detection reported descriptively"
+  },
+  "prereg_r3_note": "reduced from 15 to 10 tasks/arm per Lead r3 decision (budget <= $0.3, wall <= 60min); auto-downgrade to 8 if preflight estimate exceeds budget"
+}

@@ -448,3 +448,141 @@ nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
 - 仪器加固只影响开关开启后的**未来批次**；历史工件数字不得与加固后数字
   混池引用（须标 mixed/instrument-hardened 口径）。
 
+## 12. P-1 规格可执行示例通道（2026-10-18，v1 探索性）
+
+> **性质**：探索性机制验证（**非 confirmatory**）。本节的任何"提升"数字都
+> 不是能力主张——n=20、单次 LLM 生成、单次重放，结论只用于定位下一步。
+
+### 12.1 背景与目标
+
+O-1 仪器治疗后 oracle 崩溃可记账（fp 29→2、unavailable 27），但 **correct
+仍为 0**：语义质量瓶颈是"机器化断言不触达缺陷行为"（§11）。P-1 给 oracle
+增加一条**规格可执行示例**通道：LLM **只看规约材料**（Planner 锚
+`logic_analysis` / 人类 docstring / 参数名元数据，**不发送缺陷代码**，防
+oracle-from-implementation 固化 misguided）生成
+`[{"input": ..., "expected": ...}]`，编译为 `assert f(*args) == expected`。
+
+### 12.2 实现（写域内 4 文件 + 测试 + 工件）
+
+1. **数据通道**（`src/specs/spec_ir.py`）：`parse_logic_analysis` 透传
+   `examples`（≤5；非法形状/NaN/非 JSON 字面量丢弃不抛；重复去重；无有效
+   示例不写键）。
+2. **编译器**（`src/specs/spec_ir_v2.py::compile_spec_oracle`）：逐示例断言
+   （repr 字面量、零 eval/exec、与 O-1 同一崩溃安全 harness：AssertionError
+   re-raise、其余 Exception→pytest.skip）；示例断言置于执行体最前；**有示例
+   时丢弃 0 字面量退化绑定**（避免 fixed 侧自伤 crash 把整 oracle 变
+   unavailable）；input 契约 = 位置实参列表（单参 `[x]`→`f(x)`，容器
+   `[[1,2]]`→`f([1,2])`）。
+3. **生成器**（`experiments/spec_examples_generator.py`）：spec-only prompt、
+   strict JSON 校验、失败透传空+原因、每任务 1 次调用、`LLM_MAX_OUTPUT_TOKENS`
+   默认 512、cache namespace、token/成本快照、价目表成本估算（缺失不编造）。
+4. **质量重放**（`experiments/oracle_examples_replay.py`）：df_spec 归档双臂
+   A（无示例）/ B（LLM spec-only 示例）逐任务本地 pytest 分类（O-1 口径），
+   任务级转移 + 生成审计 + 确定性 JSON 报告。
+
+另修复 O-1 遗留仪器 bug：multi-param boundary 的 pre 断言在
+`args = X; f(*args)` 下 NameError（合法输入被误判不可用）。该修复使
+"无示例与 O-1 逐字节不变"在 multi-param boundary 子集上出现一行参数名绑定
+（调用保持 `f(*args)`），已在工件 §8 披露。
+
+### 12.3 结果（df_spec 双臂，工件 `p_round_oracle_examples_20261018/`）
+
+任务子集：缺陷程序按 task_id 排序前 20 个；两源臂 oracle 材料相同、结果逐位
+相同。生成：**20/20 成功**、90 条 examples、20 次调用、13,835/1,704 tokens、
+**$0.006195**（预算 $0.1 的 7%）。
+
+| 指标（oracle 测试级；分母=可分类） | A 无示例 | B 加示例 |
+|---|---|---|
+| 注入成功任务 | 18/20 | **20/20** |
+| 可分类 oracle 测试数（分母） | 5 | **14** |
+| correct | 0 | **6** |
+| fp（全部断言型） | 0 | **3** |
+| silent | 5 | 3 |
+| misguided | 0 | **2** |
+| unavailable（单列） | 13 | **6** |
+
+任务级 A→B：unavailable→correct 5、silent→correct 1、unavailable→misguided 2、
+unavailable→fp 2、silent→fp 1、unavailable→silent 3、silent→unavailable 3、
+unavailable→unavailable 3。
+
+**逐例归因**（`ATTRIBUTION.json`，buggy/fixed 真实实现回放示例）：
+
+- 6 个 correct **全部为真检出**（fixed 全过、buggy 至少一例败）；
+- 3 个 fp 均为**返回容器表示形态差异**（generator/tuple vs list，直接 `==`
+  不等；JSON 归一后 fixed 全过、buggy 仍败 → 归一化后可转为 3 个额外真检出）；
+- 2 个 misguided 均为 **LLM 示例期望值错误**且 buggy 恰好匹配错误值：
+  `is_valid_parenthesization('(((')` 期望 True（应 False）、
+  `knapsack(5, [[5,10]])` 期望 0（fixed 返回 10）。
+
+### 12.4 诚实结论
+
+- 示例通道**有真实检出能力**（0→6 个真检出），但 **v1 不提升净质量**：
+  同时引入 5 个错误分类（3 表示型 fp + 2 示例幻觉 misguided）；精确率
+  6/14、错误率 5/14。任何"oracle 质量提升"的表述都不成立。
+- 5 个错误分类里 **3 个是表示比较口径问题**（可通过 v2 归一化消除）、
+  **2 个是 spec-only 示例正确性问题**（需示例自校验/二次过滤），说明下一步
+  方向明确、通道本身不是死路。
+- unavailable 单列（A 13 / B 6）：A 的 13 不等于漏检——O-1 harness 把崩溃
+  记 skip；B 的 6 同样不进分母。
+- 与 O-1 数字不可混池（口径不同：O-1 是仪器处置前后，P-1 是示例通道 A/B）。
+
+### 12.5 下一步
+
+1. **v2 表示归一**：示例断言比较前对 generator/tuple/迭代器做 JSON 归一
+   （预期 3 个表示型 fp→correct，correct 6→9、错误 5→2）；需明确"比较规格
+   语义而非容器实现表示"的口径与误报风险。
+2. **示例自校验**：用 spec 自身 post 表达式/类型域过滤矛盾示例（消除 2 例
+   幻觉型 misguided）。
+3. **扩大 n 与重复采样**（50 任务 × 2 采样，成本仍 <$0.1），给描述性区间。
+4. **生产接线**（run_benchmark/nodes 写域 + 配额）需 Lead 裁决，本轮仅重放。
+
+### 12.6 工件与复算
+
+```bash
+# 真实质量重放（每任务 1 次 LLM 调用，预算 ≤$0.1；本轮 $0.006195，墙钟 271.4s）
+nice -n 15 .venv/bin/python -m experiments.oracle_examples_replay \
+    --out experiments/results/p_round_oracle_examples_20261018 \
+    --limit 20 --jobs 4 --per-test-timeout 1 --file-timeout 180 --no-llm-cache
+
+# 契约/自含 demo 测试（零 LLM/零网络）
+.venv/bin/python -m pytest tests/test_oracle_examples.py -q
+```
+
+工件：`experiments/results/p_round_oracle_examples_20261018/`
+（`ORACLE_EXAMPLES_REPORT.json` + `ATTRIBUTION.json` + `README.md` +
+`SHA256SUMS`；输入 sha256/prompt sha256/生成 examples/成本/限制齐全）。
+
+
+### 12.7 P-1.1 表示归一（2026-10-18，零 LLM 复算）
+
+P-1 §12.3 的 3 个 fp（`flatten`/`kheapsort` 返回 generator、`hanoi` 返回
+list[tuple]）是**容器表示形态**而非语义错误。P-1.1 在示例断言比较处引入
+stdlib-only 归一（`spec_ir_v2.normalize_return_value`，产物内联
+`_specir_norm_return`）：tuple/list 递归→list、dict 保持 dict 值递归、
+str/bytes/bytearray 原样、**Iterator（generator/iter）→list 一次性消费**、
+其余原样；两侧（返回值与 expected）比较归一后值。无示例路径不引入任何
+归一代码（A 臂 20/20 任务 oracle code sha256 与 P-1 逐字节一致）。
+
+复用 P-1 已生成 examples（重放工具 `--reuse-examples`，**零 LLM**），仅重跑
+分类（墙钟 255.3s；工件 `ORACLE_EXAMPLES_REPORT_norm.json`，body digest
+`9c101a60…`；来源报告 `87ee536b…` / `f5d5d241…`）：
+
+| B 臂（oracle 测试级；分母=可分类） | P-1 raw | P-1.1 norm |
+|---|---|---|
+| 可分类分母 | 14 | **13** |
+| correct | 6 | **8** |
+| fp | 3 | **0** |
+| silent | 3 | 3 |
+| misguided | 2 | **2** |
+| unavailable | 6 | 7 |
+| 精确率 / 错误率 | 42.9% / 35.7% | **61.5% / 15.4%** |
+
+逐任务：`hanoi` fp→**correct**、`kheapsort` fp→**correct**（归一后 fixed
+全过、buggy 仍败）；`flatten` fp→**unavailable**（fixed 归一后通过，但 buggy
+在一个混合类型示例上 TypeError→O-1 harness skip，全 oracle 不可判定；已不再是
+fp）。**2 个 misguided 原样保留**（`'((('` 期望 True、`knapsack` 期望 0 均为
+LLM 示例期望值错误，归一只改表示比较、不改错误期望）。
+
+结论：表示型误差清零，剩余错误仅 2 例 spec-only 示例幻觉；correct 8/13、
+错误 2/13（n=20、单次重放，**探索性**）。下一步按 Lead 裁决：示例自校验/
+二次过滤（消除幻觉）→ 生产接线（下一轮，涉及 nodes/run_benchmark 写域与配额）。

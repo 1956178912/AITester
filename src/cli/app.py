@@ -7,6 +7,7 @@ AITester CLI 应用：click 命令组、任务执行与结果输出。
     python main.py run examples/calculator.py --timeout=60
     python main.py run examples/calculator.py --json
     python main.py list-examples
+    python main.py doctor
 
 命令行为说明：
     - --parallel=N：并发执行多个测试文件（默认单线程）
@@ -149,6 +150,7 @@ class UXGroup(click.Group):
   $ python main.py run examples/calculator.py --timeout=60       # 设置超时时间
   $ python main.py run examples/calculator.py --json             # 输出 JSON 格式结果
   $ python main.py list-examples                                 # 列出所有示例文件
+  $ python main.py doctor                                        # 零 LLM 自检（环境/配置 + 功能矩阵，不消耗 API 配额）
 """
         return help_text + examples
 
@@ -907,3 +909,634 @@ def _print_missing_source(loader: Any, tasks: list[Any]) -> None:
             )
         else:
             info_msg(f"✓ 全部 {len(tasks)} 个任务均含被测源码")
+
+
+# ─── doctor：零 LLM 自检命令（P-3，2026-10-18）────────────────────────────────
+#
+# 定位：把"N 轮全功能探针矩阵（零 LLM 子集）"与"运行环境/配置就绪度"收敛为
+# 一个用户可执行入口：`python main.py doctor`。
+#
+# 设计口径（与 O-4 CI 作业、docs/design/e2e_probe_matrix.md §5 同源）：
+# - **零 LLM**：矩阵子进程强制移除 AITESTER_E2E_LLM，且不传 --include-llm；
+#   真实 LLM 探针由探针框架置 skip（不消耗任何 API 配额）；环境检查纯只读
+#   （不发起网络/LLM 调用、不打印任何密钥值，输出统一过脱敏层）；
+# - **子进程隔离**：矩阵走 `scripts/tools/e2e_probe.py`（其内部每探针再独立
+#   子进程，崩溃/挂死/污染隔离由框架保证），doctor 只负责总超时与 JSON 聚合；
+# - **退出码**：矩阵 fail/error 或环境检查 fail → 1；仅 warn/skip → 0；
+#   `--strict` 时 warn/skip 也返回 1（发布前/CI 严格自检用）。
+
+_DOCTOR_SCHEMA = "aitester_doctor/1"
+_DOCTOR_DEFAULT_TIMEOUT_S = 180
+_DOCTOR_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_DOCTOR_LLM_SCAN_LIMIT = 32
+_DOCTOR_STATUS_ICON = {"pass": "✅", "warn": "⚠️", "fail": "❌"}
+_DOCTOR_STATUS_COLOR = {"pass": Colors.GREEN, "warn": Colors.YELLOW, "fail": Colors.RED}
+
+#: 关键可选依赖（缺失 = warn，不 fail）：module 名 → (pip 安装名, 用途说明)。
+_DOCTOR_OPTIONAL_DEPS: tuple[tuple[str, str, str], ...] = (
+    ("z3", "z3-solver", "SMT 见证层（SPEC_SMT_ENABLE）"),
+    ("coverage", "coverage", "branch 覆盖率注入/测量"),
+    ("pytest", "pytest", "测试执行链路（executor）"),
+    ("chromadb", "chromadb", "RAG / 语义缓存"),
+    ("datasets", "datasets", "SWE-bench / ULT 数据加载"),
+)
+
+
+def _doctor_check(
+    name: str,
+    label: str,
+    status: str,
+    detail: str,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """构造一条 doctor 检查结果（统一过脱敏层，杜绝密钥进输出）。"""
+    safe_status = status if status in _DOCTOR_STATUS_ICON else "warn"
+    return {
+        "name": name,
+        "label": label,
+        "status": safe_status,
+        "detail": mask_sensitive_info(str(detail)),
+        "evidence": evidence or {},
+    }
+
+
+def _doctor_check_python(version_info: tuple[int, int, int] | None = None) -> dict[str, Any]:
+    """Python 版本检查（项目 requires-python >=3.12；<3.10 fail，3.10/3.11 warn）。"""
+    import platform as _platform
+
+    major, minor, micro = version_info or (sys.version_info.major, sys.version_info.minor, sys.version_info.micro)
+    version = f"{major}.{minor}.{micro}"
+    if (major, minor) >= (3, 12):
+        status = "pass"
+        detail = f"Python {version}（满足 requires-python >=3.12）"
+    elif (major, minor) >= (3, 10):
+        status = "warn"
+        detail = f"Python {version} 低于项目下限 3.12（部分锁定依赖可能无 wheel；建议升级）"
+    else:
+        status = "fail"
+        detail = f"Python {version} 不受支持（项目要求 >=3.12）"
+    return _doctor_check(
+        "python",
+        "Python 版本",
+        status,
+        detail,
+        {"version": version, "requires": ">=3.12", "implementation": _platform.python_implementation()},
+    )
+
+
+def _doctor_check_optional_deps(find_spec: Callable[[str], Any] | None = None) -> dict[str, Any]:
+    """关键可选依赖检查（缺失 = warn：只影响对应功能，不阻断零 LLM 自检）。"""
+    import importlib.util as _importlib_util
+
+    probe = find_spec or _importlib_util.find_spec
+    missing: list[dict[str, str]] = []
+    for module, pip_name, purpose in _DOCTOR_OPTIONAL_DEPS:
+        try:
+            available = probe(module) is not None
+        except (ImportError, ValueError, AttributeError):
+            available = False
+        if not available:
+            missing.append({"module": module, "install": pip_name, "purpose": purpose})
+    if missing:
+        missing_hint = "、".join(f"{item['module']}（pip install {item['install']}）" for item in missing)
+        detail = f"缺失 {len(missing)} 项：{missing_hint}（缺失只影响对应功能，不影响零 LLM 自检；按需安装）"
+        status = "warn"
+    else:
+        status = "pass"
+        detail = f"全部 {len(_DOCTOR_OPTIONAL_DEPS)} 项可选依赖可用"
+    return _doctor_check(
+        "optional_dependencies",
+        "可选依赖",
+        status,
+        detail,
+        {
+            "available": [m for m, _, _ in _DOCTOR_OPTIONAL_DEPS if m not in {i["module"] for i in missing}],
+            "missing": missing,
+        },
+    )
+
+
+def _doctor_check_llm_endpoints(environ: dict[str, str] | None = None) -> dict[str, Any]:
+    """LLM 端点配置存在性检查（只报数量/缺键，**绝不输出任何凭证值**）。"""
+    env = os.environ if environ is None else environ
+    configured = 0
+    incomplete: list[int] = []
+    for idx in range(1, _DOCTOR_LLM_SCAN_LIMIT + 1):
+        values = [str(env.get(f"LLM_{idx}_{field}", "")).strip() for field in ("API_KEY", "BASE_URL", "MODEL_NAME")]
+        if all(values):
+            configured += 1
+        elif any(values):
+            incomplete.append(idx)
+    env_local_present = os.path.isfile(os.path.join(_DOCTOR_REPO_ROOT, ".env.local"))
+    parts = [f"已配置 {configured} 个 LLM 端点"]
+    if incomplete:
+        parts.append(f"{len(incomplete)} 个编号不完整（缺 API_KEY/BASE_URL/MODEL_NAME 之一，已跳过）")
+    if not env_local_present:
+        parts.append("未发现 .env.local（可复制 config.local.example 配置）")
+    if configured:
+        status = "pass"
+    else:
+        status = "warn"
+        parts.append("零 LLM 自检不受影响；`python main.py run` 需要至少一个端点")
+    return _doctor_check(
+        "llm_endpoints",
+        "LLM 端点配置",
+        status,
+        "；".join(parts),
+        {
+            "configured": configured,
+            "incomplete_indices": incomplete,
+            "env_local_present": env_local_present,
+        },
+    )
+
+
+def _doctor_check_datasets(load_dataset_fn: Callable[..., Any] | None = None) -> dict[str, Any]:
+    """数据集缓存可加载性检查（QuixBugs / ULT / examples；ULT 缺失属正常降级）。"""
+    loader = load_dataset_fn
+    if loader is None:
+        from src.datasets.dataset_loader import load_dataset as _load_dataset
+
+        loader = _load_dataset
+    sizes: dict[str, int] = {}
+    errors: dict[str, str] = {}
+    for name in ("examples", "quixbugs", "ult"):
+        try:
+            dataset = loader(name)
+            sizes[name] = int(getattr(dataset, "size", len(getattr(dataset, "tasks", []) or [])))
+        except Exception as exc:  # 数据不可加载不阻断自检，只降级为 warn/fail 明细
+            sizes[name] = 0
+            errors[name] = f"{type(exc).__name__}: {str(exc)[:120]}"
+    if sizes.get("examples", 0) <= 0:
+        status = "fail"
+    elif sizes.get("quixbugs", 0) < 41:
+        status = "warn"
+    else:
+        status = "pass"
+    parts = [
+        f"examples={sizes.get('examples', 0)}",
+        f"QuixBugs={sizes.get('quixbugs', 0)}",
+        f"ULT={sizes.get('ult', 0) if sizes.get('ult', 0) > 0 else '未配置（正常降级）'}",
+    ]
+    if sizes.get("quixbugs", 0) < 41:
+        parts.append("QuixBugs <41：dataset 探针将显式 skip（可克隆 QuixBugs 或设 AITESTER_QUIXBUGS_DATA）")
+    if errors:
+        parts.append("加载异常：" + "；".join(f"{k}（{v}）" for k, v in errors.items()))
+    return _doctor_check(
+        "datasets",
+        "数据集缓存",
+        status,
+        " / ".join(parts),
+        {"sizes": sizes, "errors": errors},
+    )
+
+
+def _doctor_check_kernel_sandbox(
+    supported: bool | None = None,
+    capabilities: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """内核沙箱能力检查（supported/unsupported 明确降级，不视为失败）。"""
+    if supported is None or capabilities is None:
+        from src.agents.kernel_sandbox import describe_capabilities, sandbox_supported
+
+        if supported is None:
+            supported = sandbox_supported()
+        if capabilities is None:
+            capabilities = describe_capabilities()
+    enabled_raw = os.getenv("KERNEL_SANDBOX_ENABLE", "").strip().lower()
+    enabled = enabled_raw in ("1", "true", "yes", "on")
+    # describe_capabilities() 返回 {"platform","supported","backends":[...],"notes"}；
+    # 兼容旧 dict 形态（backend 单值）——两者都只用于展示，不影响判据。
+    capabilities = capabilities or {}
+    raw_backends = capabilities.get("backends")
+    if isinstance(raw_backends, (list, tuple)) and raw_backends:
+        backend = "、".join(str(item) for item in raw_backends)
+    else:
+        backend = str(capabilities.get("backend") or "none")
+    platform_name = str(capabilities.get("platform") or sys.platform)
+    if supported:
+        status = "pass"
+        detail = f"可用（backend={backend}，platform={platform_name}）；KERNEL_SANDBOX_ENABLE={str(enabled).lower()}"
+    else:
+        status = "warn"
+        detail = (
+            f"当前平台无内核沙箱后端（platform={platform_name}）：执行器按设计 fail-closed/显式 "
+            f"kernel_sandbox_unavailable，不会静默裸跑；属平台能力差异"
+        )
+    return _doctor_check(
+        "kernel_sandbox",
+        "内核沙箱",
+        status,
+        detail,
+        {"supported": bool(supported), "backend": backend, "platform": platform_name, "enabled": enabled},
+    )
+
+
+def _doctor_check_git(runner: Callable[..., Any] | None = None) -> dict[str, Any]:
+    """工作树状态检查（HEAD sha / dirty 行数，只读；非 git 树降级 warn）。"""
+    import subprocess as _subprocess
+
+    run = runner or _subprocess.run
+
+    def _git(*args: str) -> Any:
+        return run(["git", *args], cwd=_DOCTOR_REPO_ROOT, capture_output=True, text=True, timeout=10)
+
+    try:
+        head = _git("rev-parse", "--short", "HEAD")
+        dirty = _git("status", "--porcelain")
+    except Exception as exc:
+        return _doctor_check(
+            "git",
+            "工作树状态",
+            "warn",
+            f"git 检查不可用（{type(exc).__name__}）：非 git 工作树或未安装 git，不影响功能自检",
+            {"available": False},
+        )
+    if getattr(head, "returncode", 1) != 0:
+        stderr = (getattr(head, "stderr", "") or "").strip()[:120]
+        return _doctor_check(
+            "git",
+            "工作树状态",
+            "warn",
+            f"非 git 工作树（{stderr or 'git rev-parse 失败'}），跳过 HEAD/dirty 检查",
+            {"available": False},
+        )
+    sha = (getattr(head, "stdout", "") or "").strip()
+    dirty_lines = [line for line in (getattr(dirty, "stdout", "") or "").splitlines() if line.strip()]
+    status = "pass" if not dirty_lines else "warn"
+    detail = f"HEAD {sha}，工作树{'干净' if not dirty_lines else f'有 {len(dirty_lines)} 项未提交改动（只读检查，不影响自检）'}"
+    return _doctor_check("git", "工作树状态", status, detail, {"head": sha, "dirty_lines": len(dirty_lines)})
+
+
+def _doctor_collect_checks() -> list[dict[str, Any]]:
+    """执行全部环境/配置检查（单项异常降级 warn，不阻断 doctor 其余部分）。"""
+    factories: tuple[tuple[str, Callable[[], dict[str, Any]]], ...] = (
+        ("python", _doctor_check_python),
+        ("optional_dependencies", _doctor_check_optional_deps),
+        ("llm_endpoints", _doctor_check_llm_endpoints),
+        ("datasets", _doctor_check_datasets),
+        ("kernel_sandbox", _doctor_check_kernel_sandbox),
+        ("git", _doctor_check_git),
+    )
+    checks: list[dict[str, Any]] = []
+    for fallback_name, factory in factories:
+        try:
+            checks.append(factory())
+        except Exception as exc:
+            checks.append(
+                _doctor_check(
+                    fallback_name,
+                    fallback_name,
+                    "warn",
+                    f"检查项异常（{type(exc).__name__}: {str(exc)[:160]}）；不影响零 LLM 自检其余部分",
+                )
+            )
+    return checks
+
+
+def _doctor_run_probe_matrix(groups: list[str], timeout_s: int) -> dict[str, Any]:
+    """在隔离子进程中跑零 LLM 探针矩阵（强制零 LLM，读 JSON 汇总）。
+
+    Returns:
+        ``{"status": "ok"|"error"|"timeout", "report": <探针报告 dict>|None,
+        "duration_s": float, "returncode": int|None, "detail": str, "stderr_tail": str}``。
+    """
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+
+    script = os.path.join(_DOCTOR_REPO_ROOT, "scripts", "tools", "e2e_probe.py")
+    tmpdir = _tempfile.mkdtemp(prefix="aitester_doctor_")
+    json_path = os.path.join(tmpdir, "e2e_probe.json")
+    env = dict(os.environ)
+    # 强制零 LLM：移除外部可能注入的开关（doctor 永不传 --include-llm，双保险）
+    env.pop("AITESTER_E2E_LLM", None)
+    env["AITESTER_LLM_CACHE"] = "0"
+    cmd = [sys.executable, script, "--all", "--json-out", json_path]
+    for group in groups:
+        cmd.extend(["--group", group])
+    started = time.perf_counter()
+    try:
+        try:
+            proc = _subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                cwd=_DOCTOR_REPO_ROOT,
+                env=env,
+                check=False,
+            )
+        except _subprocess.TimeoutExpired as exc:
+            stderr_tail = mask_sensitive_info(str(getattr(exc, "stderr", "") or "")[-400:])
+            return {
+                "status": "timeout",
+                "report": None,
+                "duration_s": round(time.perf_counter() - started, 2),
+                "returncode": 124,
+                "detail": f"探针矩阵执行超时（>{timeout_s}s，可用 --timeout 调大；子进程已终止）",
+                "stderr_tail": stderr_tail,
+            }
+        duration_s = round(time.perf_counter() - started, 2)
+        stderr_tail = mask_sensitive_info((proc.stderr or "")[-400:])
+        report: dict[str, Any] | None = None
+        if os.path.isfile(json_path):
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                report = loaded if isinstance(loaded, dict) else None
+            except (OSError, json.JSONDecodeError):
+                report = None
+        if report is None:
+            return {
+                "status": "error",
+                "report": None,
+                "duration_s": duration_s,
+                "returncode": proc.returncode,
+                "detail": f"探针子进程未产出可解析 JSON（rc={proc.returncode}）",
+                "stderr_tail": stderr_tail,
+            }
+        return {
+            "status": "ok",
+            "report": report,
+            "duration_s": duration_s,
+            "returncode": proc.returncode,
+            "detail": "",
+            "stderr_tail": stderr_tail,
+        }
+    except OSError as exc:
+        return {
+            "status": "error",
+            "report": None,
+            "duration_s": round(time.perf_counter() - started, 2),
+            "returncode": None,
+            "detail": f"无法启动探针子进程：{type(exc).__name__}: {exc}",
+            "stderr_tail": "",
+        }
+    finally:
+        _shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _doctor_aggregate_probe_result(probe_result: dict[str, Any]) -> dict[str, Any]:
+    """把探针子进程结果聚合为 doctor 的 matrix 段（含分组汇总/失败/跳过）。"""
+    status = str(probe_result.get("status") or "error")
+    matrix: dict[str, Any] = {
+        "status": status,
+        "duration_s": float(probe_result.get("duration_s") or 0.0),
+        "returncode": probe_result.get("returncode"),
+        "summary": {"pass": 0, "fail": 0, "skip": 0, "error": 0},
+        "groups": {},
+        "failures": [],
+        "skips": [],
+        "load_errors": [],
+        "detail": str(probe_result.get("detail") or ""),
+        "stderr_tail": str(probe_result.get("stderr_tail") or ""),
+        "probe_report": None,
+    }
+    report = probe_result.get("report")
+    if status != "ok" or not isinstance(report, dict):
+        matrix["summary"] = {"pass": 0, "fail": 0, "skip": 0, "error": 1}
+        return matrix
+    rows = report.get("probes") or []
+    summary = {"pass": 0, "fail": 0, "skip": 0, "error": 0}
+    groups: dict[str, dict[str, int]] = {}
+    failures: list[dict[str, Any]] = []
+    skips: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_status = str(row.get("status") or "error")
+        if row_status not in summary:
+            row_status = "error"
+        summary[row_status] += 1
+        group = str(row.get("group") or "unknown")
+        group_counts = groups.setdefault(group, {"pass": 0, "fail": 0, "skip": 0, "error": 0})
+        group_counts[row_status] += 1
+        if row_status in ("fail", "error"):
+            failures.append(
+                {
+                    "name": str(row.get("name") or "?"),
+                    "group": group,
+                    "status": row_status,
+                    "detail": mask_sensitive_info(str(row.get("detail") or ""))[:400],
+                }
+            )
+        elif row_status == "skip":
+            skips.append(
+                {
+                    "name": str(row.get("name") or "?"),
+                    "detail": mask_sensitive_info(str(row.get("detail") or ""))[:300],
+                    "requires_llm": bool(row.get("requires_llm")),
+                }
+            )
+    matrix.update(
+        {
+            "summary": summary,
+            "groups": groups,
+            "failures": failures,
+            "skips": skips,
+            "load_errors": [mask_sensitive_info(str(item)) for item in (report.get("load_errors") or [])],
+            "probe_report": report,
+        }
+    )
+    return matrix
+
+
+def _doctor_parse_groups(raw_groups: tuple[str, ...]) -> list[str]:
+    """解析 --groups（支持多次传入与逗号分隔；去空/去重保序）。"""
+    groups: list[str] = []
+    for raw in raw_groups:
+        for item in str(raw).split(","):
+            group = item.strip()
+            if group and group not in groups:
+                groups.append(group)
+    return groups
+
+
+def _doctor_build_report(
+    *,
+    groups: list[str],
+    timeout_s: int,
+    strict: bool,
+    checks: list[dict[str, Any]] | None = None,
+    probe_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """构建 doctor 完整报告（环境检查 + 探针矩阵聚合 + 退出码判定）。"""
+    check_items = checks if checks is not None else _doctor_collect_checks()
+    matrix = _doctor_aggregate_probe_result(
+        probe_result if probe_result is not None else _doctor_run_probe_matrix(groups, timeout_s)
+    )
+    check_summary = {"pass": 0, "warn": 0, "fail": 0}
+    for item in check_items:
+        check_status = str(item.get("status") or "warn")
+        if check_status not in check_summary:
+            check_status = "warn"
+        check_summary[check_status] += 1
+    matrix_fail = int(matrix["summary"].get("fail", 0)) + int(matrix["summary"].get("error", 0))
+    matrix_skip = int(matrix["summary"].get("skip", 0))
+    fail_total = check_summary["fail"] + matrix_fail
+    warn_total = check_summary["warn"]
+    ok = fail_total == 0
+    if fail_total > 0:
+        conclusion = "fail"
+    elif warn_total > 0:
+        conclusion = "warn"
+    else:
+        conclusion = "pass"
+    exit_code = 0 if ok else 1
+    if strict and (warn_total > 0 or matrix_skip > 0):
+        exit_code = 1
+    return {
+        "schema": _DOCTOR_SCHEMA,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "cwd": os.getcwd(),
+        "command": {"groups": list(groups), "timeout_s": timeout_s, "strict": bool(strict), "zero_llm": True},
+        "python": {"version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"},
+        "checks": check_items,
+        "check_summary": check_summary,
+        "matrix": matrix,
+        "conclusion": conclusion,
+        "ok": ok,
+        "strict": bool(strict),
+        "exit_code": exit_code,
+    }
+
+
+def _doctor_print_human(report: dict[str, Any]) -> None:
+    """人类可读输出（✅/⚠️/❌ + 分组汇总 + 失败建议 + 结论）。"""
+    click.echo(colorize("AITester Doctor — 零 LLM 自检", Colors.BOLD))
+    click.echo(colorize("环境 / 配置：", Colors.BOLD))
+    for item in report.get("checks") or []:
+        status = str(item.get("status") or "warn")
+        icon = _DOCTOR_STATUS_ICON.get(status, "•")
+        color = _DOCTOR_STATUS_COLOR.get(status, Colors.BLUE)
+        click.echo(colorize(f"  {icon} {item.get('label')}: {item.get('detail')}", color))
+    click.echo(colorize("功能矩阵（零 LLM 子集；强制不设置 AITESTER_E2E_LLM，不消耗 LLM 配额）：", Colors.BOLD))
+    matrix = report.get("matrix") or {}
+    status = str(matrix.get("status") or "error")
+    if status == "ok":
+        summary = matrix.get("summary") or {}
+        click.echo(
+            f"  总计：✅{summary.get('pass', 0)} 通过 / ❌{summary.get('fail', 0)} 失败 / "
+            f"❌{summary.get('error', 0)} 错误 / ⏭️{summary.get('skip', 0)} 跳过"
+            f"（{float(matrix.get('duration_s') or 0.0):.1f}s）"
+        )
+        for group in sorted((matrix.get("groups") or {}).keys()):
+            counts = (matrix.get("groups") or {})[group]
+            click.echo(
+                f"    - {group:<14s} pass={counts.get('pass', 0)} fail={counts.get('fail', 0)} "
+                f"error={counts.get('error', 0)} skip={counts.get('skip', 0)}"
+            )
+        failures = matrix.get("failures") or []
+        if failures:
+            click.echo("  失败明细与建议：")
+            for failure in failures[:10]:
+                click.echo(
+                    colorize(
+                        f"    ❌ {failure.get('name')}（{failure.get('group')}，{failure.get('status')}）："
+                        f"{str(failure.get('detail'))[:200]}",
+                        Colors.RED,
+                    )
+                )
+                click.echo(
+                    f"       建议：单独复跑 `python scripts/tools/e2e_probe.py --name {failure.get('name')}`；"
+                    "若属平台能力差异可忽略或按提示补齐依赖"
+                )
+        skips = matrix.get("skips") or []
+        llm_skips = [item for item in skips if item.get("requires_llm")]
+        other_skips = [item for item in skips if not item.get("requires_llm")]
+        if llm_skips:
+            click.echo(f"  ⏭️ 跳过 {len(llm_skips)} 个真实 LLM 探针（doctor 强制零 LLM；不影响自检判据）")
+        if other_skips:
+            names = "、".join(str(item.get("name")) for item in other_skips[:6])
+            click.echo(f"  ⏭️ 环境能力差异跳过 {len(other_skips)} 个：{names}")
+        load_errors = matrix.get("load_errors") or []
+        if load_errors:
+            click.echo(
+                f"  ⚠️ 探针模块加载告警 {len(load_errors)} 条：" + "；".join(str(item)[:120] for item in load_errors[:3])
+            )
+    else:
+        click.echo(
+            colorize(
+                f"  ❌ 功能矩阵执行失败（{status}）：{matrix.get('detail') or ''!s}",
+                Colors.RED,
+            )
+        )
+        if matrix.get("stderr_tail"):
+            click.echo(f"     子进程 stderr（尾部）：{str(matrix.get('stderr_tail'))[:300]}")
+    conclusion = str(report.get("conclusion") or "fail")
+    icon = _DOCTOR_STATUS_ICON.get(conclusion, "❌")
+    color = _DOCTOR_STATUS_COLOR.get(conclusion, Colors.RED)
+    conclusion_text = {
+        "pass": "通过（环境与零 LLM 功能矩阵均就绪）",
+        "warn": "通过（存在警告项，见上）",
+        "fail": "未通过（存在失败项，见上）",
+    }.get(conclusion, "未通过")
+    reason = ""
+    if report.get("strict") and int(report.get("exit_code") or 0) != 0 and report.get("ok"):
+        reason = "；--strict：warn/skip 视为不通过"
+    elif report.get("strict") and int(report.get("exit_code") or 0) != 0:
+        reason = "；--strict 下 warn/skip 亦算不通过"
+    click.echo(colorize(f"结论：{icon} {conclusion_text}{reason}（exit={report.get('exit_code')}）", color))
+
+
+@cli.command(name="doctor")
+@click.option("--json", "json_output", is_flag=True, help="输出 JSON 报告（stdout 纯 JSON，适合 CI/管道/jq）")
+@click.option(
+    "--groups",
+    "groups",
+    multiple=True,
+    help="只跑指定功能组（可多次或逗号分隔，如 budget,executor；默认全部零 LLM 探针）",
+)
+@click.option(
+    "--timeout",
+    "timeout_s",
+    default=_DOCTOR_DEFAULT_TIMEOUT_S,
+    type=click.IntRange(min=5),
+    show_default=True,
+    help="探针矩阵子进程总超时（秒）",
+)
+@click.option("--strict", is_flag=True, help="警告/跳过也返回非零退出码（发布前严格自检）")
+def doctor(json_output: bool, groups: tuple[str, ...], timeout_s: int, strict: bool) -> None:
+    """零 LLM 自检：环境/配置检查 + 全功能探针矩阵（零 LLM 子集）。
+
+    检查项：Python 版本、可选依赖（z3/coverage/pytest/chromadb/datasets）、
+    LLM 端点配置存在性（只报数量/缺键，绝不输出凭证）、数据集缓存
+    （QuixBugs/ULT/examples）、内核沙箱能力、git HEAD/dirty（只读）。
+    随后在隔离子进程内跑 N 轮全功能探针的**零 LLM 子集**（真实 LLM 探针
+    置 skip，不消耗任何 API 配额），汇总 pass/fail/skip/error。
+
+    退出码：存在 fail/error → 1；仅 warn/skip → 0；--strict 时 warn/skip → 1。
+
+    示例：
+        python main.py doctor
+        python main.py doctor --json
+        python main.py doctor --groups budget,executor
+        python main.py doctor --strict --timeout 240
+    """
+    group_list = _doctor_parse_groups(groups)
+    try:
+        if json_output:
+            # stdout 只承载 JSON：静音 root logger 的 stdout 控制台 handler
+            with _quiet_console_logs():
+                report = _doctor_build_report(groups=group_list, timeout_s=timeout_s, strict=strict)
+                click.echo(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            # 检查期（数据加载器等）的 INFO 日志仍落 aitester.log，但不刷屏 stdout
+            with _quiet_console_logs():
+                report = _doctor_build_report(groups=group_list, timeout_s=timeout_s, strict=strict)
+            _doctor_print_human(report)
+    except Exception as exc:  # 兜底 fail-closed：doctor 自身异常也必须非零退出且可诊断
+        safe_error = mask_sensitive_info(f"{type(exc).__name__}: {exc}")
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {"schema": _DOCTOR_SCHEMA, "ok": False, "error": safe_error, "exit_code": 1},
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            error_msg(f"doctor 执行失败：{safe_error}")
+        click.get_current_context().exit(1)
+        return
+    click.get_current_context().exit(int(report.get("exit_code") or 0))

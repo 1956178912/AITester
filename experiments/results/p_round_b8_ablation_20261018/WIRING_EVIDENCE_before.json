@@ -1,0 +1,40 @@
+{
+  "schema": "p2_b8_wiring_evidence/1",
+  "phase": "before_fix",
+  "git_head": "14a9662db88c3fd66dd5b0a8a6909704087e0fd0",
+  "source": "src/graph/workflow.py (unmodified)",
+  "state_used": {
+    "iteration": 2,
+    "max_iterations": 3,
+    "execution_trace": [
+      {
+        "passed": false,
+        "coverage_delta": 0.0
+      },
+      {
+        "passed": false,
+        "coverage_delta": 0.0
+      }
+    ],
+    "test_passed": false
+  },
+  "observed": {
+    "on": {
+      "stall_detected_iter2": true,
+      "determine_stop_reason_iter2": "coverage_stall",
+      "should_debug_iter2": "debug",
+      "determine_stop_reason_iter3_at_max": "max_iterations",
+      "should_debug_iter3_at_max": "done",
+      "state_check_side_effect_free_before_route": null
+    },
+    "off": {
+      "stall_detected_iter2": false,
+      "determine_stop_reason_iter2": "unknown",
+      "should_debug_iter2": "debug",
+      "determine_stop_reason_iter3_at_max": "max_iterations",
+      "should_debug_iter3_at_max": "done",
+      "state_check_side_effect_free_before_route": null
+    }
+  },
+  "conclusion": "BEFORE FIX: stall detection only sets a label via determine_stop_reason (iteration<max), but _should_debug returns \"debug\" (no short-circuit) and at iteration>=max the label is shadowed by max_iterations -> observation-only / label unreachable in normal runs."
+}

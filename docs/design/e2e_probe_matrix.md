@@ -100,6 +100,13 @@ Makefile：`make e2e-probe`（零 LLM）、`make e2e-probe-llm`（真 LLM）。
   "baseline/补丁两阶段同秒同尺寸源码 → pyc 复用"造成的 `executor-repo-verify`
   随机假红，本地 6/15 → 修复后 15/15；`make e2e-probe` 目标内嵌同一钩子，
   本地 "合并前建议跑" 与 CI 同口径）。
+- **用户入口 `python main.py doctor`（P-3 产品化包装，2026-10-18）**：一条命令输出
+  环境/配置检查（Python/可选依赖/LLM 端点存在性/数据集缓存/内核沙箱/git 状态）
+  + 零 LLM 探针矩阵聚合（内部隔离子进程调本框架 `--all --json-out`，强制剥除
+  `AITESTER_E2E_LLM`）；支持 `--json`（stdout 纯 JSON）/`--groups`/
+  `--timeout`/`--strict`；退出码 fail/error→1、仅 warn/skip→0（`--strict` 时
+  warn/skip→1）。本机实测全量零 LLM 自检约 20s 量级；pass/skip 数量随探针
+  矩阵演进而变，以命令实际输出（或 `--json` 报告）为准，本文不复制具体计数。
 - **真实 LLM 探针不进 CI**：成本与模型非确定性不适合每次 push 阻断；仍按
   `make e2e-probe-llm`（或 `AITESTER_E2E_LLM=true ... --include-llm`）在发布前/
   季度巡检按需跑。

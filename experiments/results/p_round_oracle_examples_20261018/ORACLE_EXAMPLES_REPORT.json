@@ -1,0 +1,5328 @@
+{
+ "schema_version": "oracle_examples_metric/1",
+ "report": {
+  "schema_version": "oracle_examples_metric/1",
+  "tool": {
+   "name": "experiments.oracle_examples_replay",
+   "version": "1.0.0"
+  },
+  "metric_definition": {
+   "name": "P-1 规格可执行示例通道（A=无示例 vs B=LLM spec-only 示例）",
+   "condition_A": "O-1 现状编译产物（锚材料 logic_analysis → pre/post/boundary 通道；无示例）",
+   "condition_B": "同一锚材料 + LLM spec-only 生成的 examples（parse_logic_analysis 透传 → compile_spec_oracle 逐示例断言）",
+   "classification": "oracle 测试在 buggy/fixed 两侧执行：correct=buggy 败∧fixed 过；misguided=buggy 过∧fixed 败；silent=两侧过；fp=fixed 败（断言型，含两侧败）；unavailable=skipped/timeout/collect/import/材料等不可判（O-1 harness：崩溃→skip）",
+   "denominator": "可分类 oracle 测试数（correct/fp/silent/misguided）；unavailable 单列、不进分母",
+   "evidence_status": "探索性验证（非 confirmatory）；B 臂示例为 LLM spec-only 生成、n 小，不得外推"
+  },
+  "config": {
+   "limit": 20,
+   "jobs": 4,
+   "per_test_timeout_s": 1.0,
+   "collect_timeout_s": 60.0,
+   "file_timeout_s": 180.0,
+   "examples": {
+    "mode": "spec-only（不发送缺陷代码）",
+    "max_examples": 5,
+    "max_output_tokens": "512",
+    "cache_namespace": "p1_oracle_examples_20261018",
+    "llm_cache_enabled": "0",
+    "per_task_calls": 1,
+    "generator": "experiments/spec_examples_generator.py"
+   },
+   "quixbugs_roots": [
+    "/Users/wangchenyu/.cache/aitester/quixbugs",
+    "/Users/wangchenyu/Workspace/AITester/data/quixbugs"
+   ]
+  },
+  "inputs": [
+   {
+    "path": "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json",
+    "sha256": "813c437fc53a84c1517cce234b12184e5047bf483fb982cb9382d1c61307245a",
+    "arms": [
+     "plain_llm_df_spec"
+    ]
+   },
+   {
+    "path": "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json",
+    "sha256": "536da803dbb290dab9dff26ae14302a8ce8d452e058b1d2c4c1705852900d0ec",
+    "arms": [
+     "plain_llm_df"
+    ]
+   }
+  ],
+  "anchor_table": {
+   "path": "experiments/results/emse_spec_anchor_20261016/SPEC_ANCHOR_TABLE.json",
+   "sha256": "3e90b2ad5ed365ad5ee989c73c92b84956a83c0fa8cb51368d288ae3ea53bf22",
+   "expected_sha256_source": "experiments/results/emse_spec_anchor_20261016/SHA256SUMS",
+   "n_anchors": 416
+  },
+  "generation": {
+   "n_tasks": 20,
+   "status_counts": {
+    "ok": 20
+   },
+   "n_tasks_with_examples": 20,
+   "n_examples_total": 90,
+   "examples_per_ok_task": 4.5,
+   "llm_calls": 20,
+   "cache_hits": 0,
+   "input_tokens": 13835,
+   "output_tokens": 1704,
+   "estimated_cost_usd": 0.006195,
+   "model": "deepseek-flash",
+   "per_task": [
+    {
+     "task_id": "quixbugs__bitcount",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "128fffeec4f270071e080234989e0f9f77e0af94e9c8bdd1280653816b5291b8",
+     "wall_s": 1.134,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__breadth_first_search",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 2,
+     "prompt_sha256": "110de570a275d976986dcd8d74d7601f207fe7fc3b4a4f53754decfef8fe2122",
+     "wall_s": 0.779,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__bucketsort",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "0fe40476ce8f53be698594b6ea2a7cad1ef233054181d75ebaef5814c99b1fcc",
+     "wall_s": 0.868,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__depth_first_search",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 2,
+     "prompt_sha256": "600e4aa9abf0fe005c4dd48a7c7b496324342162e6c8e0e6df98b4f49cadc17d",
+     "wall_s": 0.688,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__detect_cycle",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 1,
+     "prompt_sha256": "533ffa2166702d52695e6dc61b5a25867b3c41a4c4335322b86f73532b8e1dda",
+     "wall_s": 0.584,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__find_first_in_sorted",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "b980656297a2737536645db733c378c9bfbc1ddcd2fb9627782a6b63f1fa9518",
+     "wall_s": 0.752,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__find_in_sorted",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "c8a3ea15db9150d77b6cea611db0432634a33a8ec37437d0c08324140557b26c",
+     "wall_s": 0.988,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__flatten",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "73b7a47c43e527b40ce4253b6fbe8e99b1f07797b107d3b0f6db8adf03b5881c",
+     "wall_s": 0.576,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__gcd",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "492c63a8b785a53772bd0142443e8786e2e08b836258502a36afbabe66aff673",
+     "wall_s": 0.846,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__get_factors",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "71d845ca69d5d13c1d18348db851fb2ac16220eea8cd146d1cca471858daac07",
+     "wall_s": 0.767,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__hanoi",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "8bf7591023999b892464c6eb310cd369e98387d9934257ac0fc612d4455a4093",
+     "wall_s": 0.768,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__is_valid_parenthesization",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "c27ef38cf2ceb6c7afc67421f9d3854dd545f05cd3fbac5e088635f2c157fb4a",
+     "wall_s": 0.912,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__kheapsort",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "8ca79eea3dc9431cbd095a28c3346fd6c97da45352923e1ce9a8977889a815f2",
+     "wall_s": 0.733,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__knapsack",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "ef9e2d26e67c1c5dcd7674cf16d306864a894f8e20e753a9a0aa61d43bb458d8",
+     "wall_s": 0.721,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__kth",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "b02827476fb3be5054c4a60fa664ae465b325ddd196bd73fa2bd81231de13e08",
+     "wall_s": 1.025,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__lcs_length",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "3ff6954a22b4bd163807e73180382ff8364d7c0dfd60270a516a8c2269994f9d",
+     "wall_s": 0.888,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__levenshtein",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "e35e7efe44e748f217e16baa923924d20e5b841e2d4375c329c48fa03b95a958",
+     "wall_s": 0.936,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__lis",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "c39aa171d548507bc0df6d56653c7ceb0fd0f03b953f9561ff0a44de3c509025",
+     "wall_s": 0.98,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__longest_common_subsequence",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "b30477508b49816fd967db0c12a814dee6e3baff458b8f16916187e6e1c42d2f",
+     "wall_s": 0.672,
+     "llm_calls": 1
+    },
+    {
+     "task_id": "quixbugs__max_sublist_sum",
+     "status": "ok",
+     "reason": null,
+     "n_examples": 5,
+     "prompt_sha256": "46a5eb9cc6547c0e33cabd5e68c06fafa68ab6d473a25f0cfeb2fbe69eef18d9",
+     "wall_s": 0.727,
+     "llm_calls": 1
+    }
+   ]
+  },
+  "arms": [
+   {
+    "artifact": "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json",
+    "artifact_sha256": "813c437fc53a84c1517cce234b12184e5047bf483fb982cb9382d1c61307245a",
+    "arm": "plain_llm_df_spec",
+    "n_rows": 20,
+    "aggregate": {
+     "conditions": {
+      "A_no_examples": {
+       "n_tasks": 20,
+       "n_tasks_injected": 18,
+       "n_tasks_measurable": 18,
+       "n_oracle_tests_measured": 18,
+       "counts": {
+        "correct": 0,
+        "fp": 0,
+        "silent": 5,
+        "misguided": 0,
+        "unavailable": 13
+       },
+       "n_classifiable": 5,
+       "n_unavailable": 13,
+       "rates_of_classifiable": {
+        "correct": 0.0,
+        "fp": 0.0,
+        "silent": 1.0,
+        "misguided": 0.0
+       },
+       "fp_kind_counts": {},
+       "skip_reason_counts": {
+        "oracle-unavailable: AttributeError": 1,
+        "oracle-unavailable: TypeError": 11,
+        "oracle-unavailable: ZeroDivisionError": 1
+       }
+      },
+      "B_llm_examples": {
+       "n_tasks": 20,
+       "n_tasks_injected": 20,
+       "n_tasks_measurable": 20,
+       "n_oracle_tests_measured": 20,
+       "counts": {
+        "correct": 6,
+        "fp": 3,
+        "silent": 3,
+        "misguided": 2,
+        "unavailable": 6
+       },
+       "n_classifiable": 14,
+       "n_unavailable": 6,
+       "rates_of_classifiable": {
+        "correct": 0.428571,
+        "fp": 0.214286,
+        "silent": 0.214286,
+        "misguided": 0.142857
+       },
+       "fp_kind_counts": {
+        "fp_assertion_fail": 3
+       },
+       "skip_reason_counts": {
+        "oracle-unavailable: AttributeError": 1,
+        "oracle-unavailable: IndexError": 1,
+        "oracle-unavailable: RecursionError": 1,
+        "oracle-unavailable: TypeError": 2
+       }
+      }
+     },
+     "task_category_transitions": {
+      "silent->correct": 1,
+      "silent->fp": 1,
+      "silent->unavailable": 3,
+      "unavailable->correct": 5,
+      "unavailable->fp": 2,
+      "unavailable->misguided": 2,
+      "unavailable->silent": 3,
+      "unavailable->unavailable": 3
+     },
+     "transition_tasks": [
+      {
+       "task_id": "quixbugs__bitcount",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__breadth_first_search",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 2
+      },
+      {
+       "task_id": "quixbugs__bucketsort",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__depth_first_search",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 2
+      },
+      {
+       "task_id": "quixbugs__find_in_sorted",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__flatten",
+       "A": "unavailable",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__get_factors",
+       "A": "silent",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__hanoi",
+       "A": "silent",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__is_valid_parenthesization",
+       "A": "unavailable",
+       "B": "misguided",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__kheapsort",
+       "A": "unavailable",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__knapsack",
+       "A": "unavailable",
+       "B": "misguided",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__kth",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__lcs_length",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__levenshtein",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__lis",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__longest_common_subsequence",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__max_sublist_sum",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      }
+     ]
+    },
+    "tasks": [
+     {
+      "task_id": "quixbugs__bitcount",
+      "program": "bitcount",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          1
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          2
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          7
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          10
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "128fffeec4f270071e080234989e0f9f77e0af94e9c8bdd1280653816b5291b8"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f73d05a57a959a2623d2ce44584b0b956949ec7ac77a027ec0c65b96edffa153"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "739542047951fec3f6a627a05d28c1b207b8b564cd611a9c83e61ebbda8b7e57"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 96,
+        "merged_test_sha256": "d4b862aa364e56ff623c33f8c67de21c553aa31dbdf5eb79ab1c0cacfa92e2f2"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {
+         "timeout": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 96,
+        "merged_test_sha256": "b0fc7bc220ca9ac760e57895944e45311ec703478d5ca0fc4251843b619149c6"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__breadth_first_search",
+      "program": "breadth_first_search",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 2,
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "110de570a275d976986dcd8d74d7601f207fe7fc3b4a4f53754decfef8fe2122"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "eac93d886a83bcbe095c08a723771ce2fcdd37861aec5afc8f9e3c4080750e18"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "784f8664fcca63a3dda471fd8b6b429b3ee0893e287b658b72b6175637e5888e"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 16,
+        "merged_test_sha256": "f15dce5b79ec3b4e31ef1a17f3e14224bff1a7282ef11b0698aaf3dee6ad16cb"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 16,
+        "merged_test_sha256": "9f4eb3228a06c387651ee7ac1f068a9d60e690891b22ef75faffc2b552ce2895"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__bucketsort",
+      "program": "bucketsort",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          1
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           0
+          ],
+          1
+         ],
+         "expected": [
+          0
+         ]
+        },
+        {
+         "input": [
+          [
+           2,
+           0,
+           1
+          ],
+          3
+         ],
+         "expected": [
+          0,
+          1,
+          2
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           1,
+           0,
+           1
+          ],
+          2
+         ],
+         "expected": [
+          0,
+          1,
+          1,
+          1
+         ]
+        },
+        {
+         "input": [
+          [
+           0,
+           0,
+           0
+          ],
+          1
+         ],
+         "expected": [
+          0,
+          0,
+          0
+         ]
+        }
+       ],
+       "prompt_sha256": "0fe40476ce8f53be698594b6ea2a7cad1ef233054181d75ebaef5814c99b1fcc"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "dc3a7a9ed80a95205bbb470ced20baf4d158798245aa0f6efc932c240f4a7341"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "07167e4004684445448574dcaf836ce0700ad4eab825f25b23656001c5905df9"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "e84dc0901c973f6c8be7ca385fa779e8fdfe88878e22b92ad1f3ced753cf0787"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "5a9a15c19b718ef98df831a2cd04d215960d8fb794478e5f8ddec72b4696b9a2"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__depth_first_search",
+      "program": "depth_first_search",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 2,
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "600e4aa9abf0fe005c4dd48a7c7b496324342162e6c8e0e6df98b4f49cadc17d"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "3dd3dbb956ec677fd88f8c810f4e40aa95ae76cf02b5162a6879c65ce3083b6f"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "acc6de99a22255ba92547bb3bf52668e1b01c70b0d47597a3e317c89808784a9"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 12,
+        "merged_test_sha256": "68f8052cdc97cdd67b0ff134f59a4fe015fa83f5958037295c2d631bd8e06e00"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 12,
+        "merged_test_sha256": "196b971b51fb39850475954763379ab1c7293948e923aed8a81751e6525a2513"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__detect_cycle",
+      "program": "detect_cycle",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 1,
+       "examples": [
+        {
+         "input": [
+          null
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "533ffa2166702d52695e6dc61b5a25867b3c41a4c4335322b86f73532b8e1dda"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "0502ff8f7aa4cbc84db0406c8de19e956ad91bf098f6edfde7157a1016a8577c"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f9d33996a3988a1085568f6da19975f6720c89deb7925c45c1d79b069195b6d5"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: AttributeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 19,
+        "merged_test_sha256": "7f115b1d2fe8d174a1eca9187ed8059b399b357e613b130d98bbee8a86821503"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: AttributeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 19,
+        "merged_test_sha256": "fbb727a18886c956e56eba13247fc3643efd194fee2d1bd63e97d2e470a9dd70"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "program": "find_first_in_sorted",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           3
+          ],
+          3
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           3
+          ],
+          4
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           2,
+           2,
+           3
+          ],
+          2
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           -5,
+           -3,
+           0,
+           0,
+           7
+          ],
+          0
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "b980656297a2737536645db733c378c9bfbc1ddcd2fb9627782a6b63f1fa9518"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "38cd6baddd9930a8a64ce4f6960d6076cf6cb7c5b85da046c36a604b5d5d3c2d"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "2bb41634ba5e93c6ec169eca568f291c3f606461725402d13a80aa76f41f9dcf"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 38,
+        "merged_test_sha256": "17f89dff82e8c8ca60af9017b7efa0236e17418f6f4bccaa2a4edcacf928b148"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: IndexError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 38,
+        "merged_test_sha256": "7aae38318d2d688f90f26c009f93efb9c73c494e28e52f68e38121225a6d7e66"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__find_in_sorted",
+      "program": "find_in_sorted",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          1
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          7
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          0
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           2,
+           2,
+           2
+          ],
+          2
+         ],
+         "expected": 1
+        }
+       ],
+       "prompt_sha256": "c8a3ea15db9150d77b6cea611db0432634a33a8ec37437d0c08324140557b26c"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "9807e4e5d93d331efa4cc712ebced8fe6e92f1b94b4ac8a247a3ccdf17ec4a05"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "784060d32f7631e75b92a553b055b139dbda5673fd0dae92354853a617c0a4d0"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 30,
+        "merged_test_sha256": "c1ca4b40e46b72814e3e886723f92c75a812d193062a70abe6d481df6722d134"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 30,
+        "merged_test_sha256": "e7ec42f989430151d59565125e28e7f997fe36c17c2e76e0b34d16a00c549546"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__flatten",
+      "program": "flatten",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [],
+           []
+          ]
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [
+            [
+             1
+            ]
+           ]
+          ]
+         ],
+         "expected": [
+          1
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           "a",
+           null,
+           true
+          ]
+         ],
+         "expected": [
+          1,
+          "a",
+          null,
+          true
+         ]
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": [
+          5
+         ]
+        }
+       ],
+       "prompt_sha256": "73b7a47c43e527b40ce4253b6fbe8e99b1f07797b107d3b0f6db8adf03b5881c"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "compiled_empty",
+        "injected": false,
+        "oracle_code_sha256": null
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "be3b23baf04a53374588d120e47a18a0cd56304a0193e1f972ae9a131ed9f739"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "not_run",
+        "skip_reason": "injection_failed",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "unclassifiable": {}
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 20,
+        "merged_test_sha256": "9456de04f98f482f6230a1cbe70e406895843f17b79d4aab8135241e865d2771"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__gcd",
+      "program": "gcd",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          12,
+          18
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          7,
+          0
+         ],
+         "expected": 7
+        },
+        {
+         "input": [
+          0,
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          0,
+          5
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          9,
+          9
+         ],
+         "expected": 9
+        }
+       ],
+       "prompt_sha256": "492c63a8b785a53772bd0142443e8786e2e08b836258502a36afbabe66aff673"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f5545e12e402d22384c0ce1b09fc556098c7b00d8ebe37baa0443ec97e739ed8"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "7cd4bfcf17939cdfe18bddb9298c02bc2f58c9ae24ac298599ecaff019624bcf"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: ZeroDivisionError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 57,
+        "merged_test_sha256": "e126ae1c6b2ff2da3223503660dc5cc6baa325c1e3a2600543ae166eab087512"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: RecursionError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 57,
+        "merged_test_sha256": "ec622b5e1be4c07eb6d1e4d8e6330c609416755dd40c7a4d4652370a68e7d8c0"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__get_factors",
+      "program": "get_factors",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          1
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          2
+         ],
+         "expected": [
+          2
+         ]
+        },
+        {
+         "input": [
+          4
+         ],
+         "expected": [
+          2,
+          2
+         ]
+        },
+        {
+         "input": [
+          12
+         ],
+         "expected": [
+          2,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          101
+         ],
+         "expected": [
+          101
+         ]
+        }
+       ],
+       "prompt_sha256": "71d845ca69d5d13c1d18348db851fb2ac16220eea8cd146d1cca471858daac07"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "ba680c7a7c2f8b3fab98f607396d30c7b3d58ae27a82682bc57a635598a35f45"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "d21ecaa414ff348c6ffb933ed04229f0efdc02e399918d4dad11c6df846692f4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 54,
+        "merged_test_sha256": "799d102d2c7fd661502a8d8ebbc7e6ae77e8373689d01225b40477f826a45708"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 54,
+        "merged_test_sha256": "efe1a489b7e7743925e5eb6d614bd9241e43dd850806db4ec4fd0a4516d6b134"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__hanoi",
+      "program": "hanoi",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0,
+          1,
+          3
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          -1,
+          1,
+          3
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          1,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           3
+          ]
+         ]
+        },
+        {
+         "input": [
+          1,
+          2,
+          1
+         ],
+         "expected": [
+          [
+           2,
+           1
+          ]
+         ]
+        },
+        {
+         "input": [
+          2,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           2
+          ],
+          [
+           1,
+           3
+          ],
+          [
+           2,
+           3
+          ]
+         ]
+        }
+       ],
+       "prompt_sha256": "8bf7591023999b892464c6eb310cd369e98387d9934257ac0fc612d4455a4093"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "24ed2ccd197d01befa443e24e95ee18f4e7ed756e6075d0fc79ed47dea4e39cf"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "a80647098bb4c3759e8839bf7232e7fc79892f01b2439b24b0163205ba1553d8"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "80f3d01c97e19ca3eb018f07c508b8b8f9d6fb4ff46aa211056242eb2972802c"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "90a94910aad4ddce15b5a0dda965b40cb80624a9100e03aacfda04a9526b24ab"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "program": "is_valid_parenthesization",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          ""
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          "((("
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          ")))"
+         ],
+         "expected": false
+        },
+        {
+         "input": [
+          ")("
+         ],
+         "expected": false
+        },
+        {
+         "input": [
+          "((()()))()"
+         ],
+         "expected": true
+        }
+       ],
+       "prompt_sha256": "c27ef38cf2ceb6c7afc67421f9d3854dd545f05cd3fbac5e088635f2c157fb4a"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "53cb8c0b72cdcb5b612380cd6d1ef56fe871efce4be093a50da2d9dac7bbf944"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "02960edca96fb2468f767a29d53a84fdc327d3b610fba7d80f794b9013cd85d4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 39,
+        "merged_test_sha256": "7cbe43e34705057dc1b0b1b0fa89fbce11e2f0fcdb2d91aac3bcfe90a6cc6894"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 1,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 39,
+        "merged_test_sha256": "5b40a415551feb05943ad08bb9b15551bffeb5910b88cdee5f57301923eaed71"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "misguided"
+      }
+     },
+     {
+      "task_id": "quixbugs__kheapsort",
+      "program": "kheapsort",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          0
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           5
+          ],
+          0
+         ],
+         "expected": [
+          5
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ],
+          0
+         ],
+         "expected": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          2
+         ],
+         "expected": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          [
+           5,
+           4,
+           3,
+           2,
+           1
+          ],
+          4
+         ],
+         "expected": [
+          1,
+          2,
+          3,
+          4,
+          5
+         ]
+        }
+       ],
+       "prompt_sha256": "8ca79eea3dc9431cbd095a28c3346fd6c97da45352923e1ce9a8977889a815f2"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "6bba5b86c3749ce90d3cbc50a8a9f77b12812c24e5ef369b0ff6d31d8729360c"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "ac949b552b2d86bc912dd2ac9baf4cb8f2000f7d481d693252170369383a62a7"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 42,
+        "merged_test_sha256": "2d59485d57ebde11db37a084d69104ce219f1672ad364ea08e3b82a4a34857d1"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 42,
+        "merged_test_sha256": "7b1815033852b999e2bfebc9df05dd42a3426afca24887eaedb5d1cb6a726d65"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__knapsack",
+      "program": "knapsack",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0,
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          10,
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          5,
+          [
+           [
+            6,
+            10
+           ]
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          5,
+          [
+           [
+            5,
+            10
+           ]
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          10,
+          [
+           [
+            2,
+            3
+           ],
+           [
+            3,
+            4
+           ],
+           [
+            4,
+            5
+           ]
+          ]
+         ],
+         "expected": 12
+        }
+       ],
+       "prompt_sha256": "ef9e2d26e67c1c5dcd7674cf16d306864a894f8e20e753a9a0aa61d43bb458d8"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "d6e6d2da0644ec909fe808963d196323c0872627b8baef3145bfc2ff54c99e51"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "413731254a150bc10d299053f07d08d54066107356c8a29704ab3287062a829f"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "356a6151e836c903ccde6c8924c8d6552bc78968dadfdc213a9bbabed7c7469b"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 1,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "59e97ea247b4f7c7a1b6eb9c4631bfb06a23192207961b1111d3ae5cb9004a3c"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "misguided"
+      }
+     },
+     {
+      "task_id": "quixbugs__kth",
+      "program": "kth",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [
+           5
+          ],
+          0
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          0
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          2
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          [
+           4,
+           4,
+           4,
+           4
+          ],
+          2
+         ],
+         "expected": 4
+        },
+        {
+         "input": [
+          [
+           2,
+           1,
+           2,
+           1,
+           3
+          ],
+          3
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "b02827476fb3be5054c4a60fa664ae465b325ddd196bd73fa2bd81231de13e08"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "cbb835b42a387e07e8ec7e3c254f7b725842284df7e0c944ca7a7f8fcc4b9b53"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "3ede2f011cc5929c1c2859c9f3f2f96685f1d51982708eae8ea04c5444ea1c27"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 23,
+        "merged_test_sha256": "ccaaf4d9d5830969ba2f5c687be1c87a2ec904e9e469b952fb2526ed90062ffe"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 23,
+        "merged_test_sha256": "a59c3de24dc7293732be7c0d454fa4e7cf1c8e603198dd257f8d11a8729a7a62"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__lcs_length",
+      "program": "lcs_length",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "abc",
+          "xyz"
+         ],
+         "expected": 0
+        }
+       ],
+       "prompt_sha256": "3ff6954a22b4bd163807e73180382ff8364d7c0dfd60270a516a8c2269994f9d"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "b511bd1a3ab8373ffa718afd56b3cf64b8a28df983ce15a2ec3e620259dcc480"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "359989db5742d0e4f48b222a213082066f3ef0bcc64c9029298d1010354efce4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 45,
+        "merged_test_sha256": "c72f3ec439f892de2ee0ad0ebe5bf905978f276c772d2957272184b0b8e65d78"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 45,
+        "merged_test_sha256": "045b2a726e07c244a437328e8d4202eb9061834405b0b7825bb67d29ad12f999"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__levenshtein",
+      "program": "levenshtein",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "cat",
+          "cut"
+         ],
+         "expected": 1
+        }
+       ],
+       "prompt_sha256": "e35e7efe44e748f217e16baa923924d20e5b841e2d4375c329c48fa03b95a958"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "5ca6b5dec2aa7fa819469e321e9e9dc4e220605ae774acee0a551d89a440a062"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "96bf5991dc9a731bb8578e542d733158ca767f4651c475d68d6e7a1984b8b439"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 71,
+        "merged_test_sha256": "03da1f251076b3444c982e971d2ec6448ed43dc1a41820f05ec57c07ec859ad2"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 71,
+        "merged_test_sha256": "43d02b25158559fa02f9d2ce49e30cf49b79c78f76095e53dcd4777fba3430e7"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__lis",
+      "program": "lis",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           3,
+           2,
+           1
+          ]
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3,
+           4
+          ]
+         ],
+         "expected": 4
+        },
+        {
+         "input": [
+          [
+           -3,
+           0,
+           2,
+           -1,
+           5
+          ]
+         ],
+         "expected": 4
+        }
+       ],
+       "prompt_sha256": "c39aa171d548507bc0df6d56653c7ceb0fd0f03b953f9561ff0a44de3c509025"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "1467f5ee32b1b0576c9b5d4f55efd46598e7efb62ec4917345f993038bbd17b2"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "a756b90c4f39e57e86586976885e2b4184f3f14067c7831a5778ea16dfe80367"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "c75e559e7c26ddea4d5a4c165d7cf9f86753567ad5b8498edd5b94eba0e7eed3"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "317228bd6904277f51fe9f8483a8cd4c66d3a670757ade8820dfd6a106b165ca"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__longest_common_subsequence",
+      "program": "longest_common_subsequence",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": "abc"
+        },
+        {
+         "input": [
+          "abc",
+          "def"
+         ],
+         "expected": ""
+        }
+       ],
+       "prompt_sha256": "b30477508b49816fd967db0c12a814dee6e3baff458b8f16916187e6e1c42d2f"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "5450a9bb716c8f2950d44c05cff9394f3a1db14f5eca35f8cc8b29b2898bd400"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "aece9400f2e8ca67481f2915258ec180e7cc3d2335c6abf56708097e00176098"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 35,
+        "merged_test_sha256": "3f57a512a153351fd6b19ab6e104f59b770f26d96ad3f4eaefaf8f5711ac797a"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 35,
+        "merged_test_sha256": "f159f701d724f85f6aef63e0b1134a1817d5f983438295ba4665cb05dca85a7e"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__max_sublist_sum",
+      "program": "max_sublist_sum",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           -1,
+           -2,
+           -3
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ]
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          [
+           -2,
+           1,
+           -3,
+           4,
+           -1,
+           2,
+           1,
+           -5,
+           4
+          ]
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": 5
+        }
+       ],
+       "prompt_sha256": "46a5eb9cc6547c0e33cabd5e68c06fafa68ab6d473a25f0cfeb2fbe69eef18d9"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "compiled_empty",
+        "injected": false,
+        "oracle_code_sha256": null
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "cc0aac6b9c5718fa091c7964921902c5d90988c3819643a38a049497ed033d7f"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "not_run",
+        "skip_reason": "injection_failed",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "unclassifiable": {}
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 27,
+        "merged_test_sha256": "15d7cfce2d32e887599bfbb1e328adf11ff1ff97c63459a5fb11ede582acfcf5"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     }
+    ]
+   },
+   {
+    "artifact": "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json",
+    "artifact_sha256": "536da803dbb290dab9dff26ae14302a8ce8d452e058b1d2c4c1705852900d0ec",
+    "arm": "plain_llm_df",
+    "n_rows": 20,
+    "aggregate": {
+     "conditions": {
+      "A_no_examples": {
+       "n_tasks": 20,
+       "n_tasks_injected": 18,
+       "n_tasks_measurable": 18,
+       "n_oracle_tests_measured": 18,
+       "counts": {
+        "correct": 0,
+        "fp": 0,
+        "silent": 5,
+        "misguided": 0,
+        "unavailable": 13
+       },
+       "n_classifiable": 5,
+       "n_unavailable": 13,
+       "rates_of_classifiable": {
+        "correct": 0.0,
+        "fp": 0.0,
+        "silent": 1.0,
+        "misguided": 0.0
+       },
+       "fp_kind_counts": {},
+       "skip_reason_counts": {
+        "oracle-unavailable: AttributeError": 1,
+        "oracle-unavailable: TypeError": 11,
+        "oracle-unavailable: ZeroDivisionError": 1
+       }
+      },
+      "B_llm_examples": {
+       "n_tasks": 20,
+       "n_tasks_injected": 20,
+       "n_tasks_measurable": 20,
+       "n_oracle_tests_measured": 20,
+       "counts": {
+        "correct": 6,
+        "fp": 3,
+        "silent": 3,
+        "misguided": 2,
+        "unavailable": 6
+       },
+       "n_classifiable": 14,
+       "n_unavailable": 6,
+       "rates_of_classifiable": {
+        "correct": 0.428571,
+        "fp": 0.214286,
+        "silent": 0.214286,
+        "misguided": 0.142857
+       },
+       "fp_kind_counts": {
+        "fp_assertion_fail": 3
+       },
+       "skip_reason_counts": {
+        "oracle-unavailable: AttributeError": 1,
+        "oracle-unavailable: IndexError": 1,
+        "oracle-unavailable: RecursionError": 1,
+        "oracle-unavailable: TypeError": 2
+       }
+      }
+     },
+     "task_category_transitions": {
+      "silent->correct": 1,
+      "silent->fp": 1,
+      "silent->unavailable": 3,
+      "unavailable->correct": 5,
+      "unavailable->fp": 2,
+      "unavailable->misguided": 2,
+      "unavailable->silent": 3,
+      "unavailable->unavailable": 3
+     },
+     "transition_tasks": [
+      {
+       "task_id": "quixbugs__bitcount",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__breadth_first_search",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 2
+      },
+      {
+       "task_id": "quixbugs__bucketsort",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__depth_first_search",
+       "A": "silent",
+       "B": "unavailable",
+       "examples_n": 2
+      },
+      {
+       "task_id": "quixbugs__find_in_sorted",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__flatten",
+       "A": "unavailable",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__get_factors",
+       "A": "silent",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__hanoi",
+       "A": "silent",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__is_valid_parenthesization",
+       "A": "unavailable",
+       "B": "misguided",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__kheapsort",
+       "A": "unavailable",
+       "B": "fp",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__knapsack",
+       "A": "unavailable",
+       "B": "misguided",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__kth",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__lcs_length",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__levenshtein",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__lis",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__longest_common_subsequence",
+       "A": "unavailable",
+       "B": "silent",
+       "examples_n": 5
+      },
+      {
+       "task_id": "quixbugs__max_sublist_sum",
+       "A": "unavailable",
+       "B": "correct",
+       "examples_n": 5
+      }
+     ]
+    },
+    "tasks": [
+     {
+      "task_id": "quixbugs__bitcount",
+      "program": "bitcount",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          1
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          2
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          7
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          10
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "128fffeec4f270071e080234989e0f9f77e0af94e9c8bdd1280653816b5291b8"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f73d05a57a959a2623d2ce44584b0b956949ec7ac77a027ec0c65b96edffa153"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "739542047951fec3f6a627a05d28c1b207b8b564cd611a9c83e61ebbda8b7e57"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 33,
+        "merged_test_sha256": "1431e6d95ff893b71e5b3d069d67a9c1568966bfc71493f70c9bd8c9c886c467"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {
+         "timeout": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 33,
+        "merged_test_sha256": "122ccae3e37dda4c7334852ac5009aa2f2589f95e90495ed158cd6f24587fa7a"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__breadth_first_search",
+      "program": "breadth_first_search",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 2,
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "110de570a275d976986dcd8d74d7601f207fe7fc3b4a4f53754decfef8fe2122"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "eac93d886a83bcbe095c08a723771ce2fcdd37861aec5afc8f9e3c4080750e18"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "784f8664fcca63a3dda471fd8b6b429b3ee0893e287b658b72b6175637e5888e"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 14,
+        "merged_test_sha256": "3a1f93123d3cc9109a3e3d150799adb8aefed4daf7a2dc1ef19db431605dc3c9"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 14,
+        "merged_test_sha256": "245152d40b6c5037588166530de4ac115a4b2ecb61407366f1dfd07934046339"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__bucketsort",
+      "program": "bucketsort",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          1
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           0
+          ],
+          1
+         ],
+         "expected": [
+          0
+         ]
+        },
+        {
+         "input": [
+          [
+           2,
+           0,
+           1
+          ],
+          3
+         ],
+         "expected": [
+          0,
+          1,
+          2
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           1,
+           0,
+           1
+          ],
+          2
+         ],
+         "expected": [
+          0,
+          1,
+          1,
+          1
+         ]
+        },
+        {
+         "input": [
+          [
+           0,
+           0,
+           0
+          ],
+          1
+         ],
+         "expected": [
+          0,
+          0,
+          0
+         ]
+        }
+       ],
+       "prompt_sha256": "0fe40476ce8f53be698594b6ea2a7cad1ef233054181d75ebaef5814c99b1fcc"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "dc3a7a9ed80a95205bbb470ced20baf4d158798245aa0f6efc932c240f4a7341"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "07167e4004684445448574dcaf836ce0700ad4eab825f25b23656001c5905df9"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 18,
+        "merged_test_sha256": "a2bc0dd449d5bc62ceb5d5348c31740a2a8abcf1db33f9d23db804d0243ec880"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 18,
+        "merged_test_sha256": "605b143768e3b0e1c43d95caca4da3dc77fcf4454cedd8de8936d26ffb637540"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__depth_first_search",
+      "program": "depth_first_search",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 2,
+       "examples": [
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          {
+           "successors": []
+          },
+          {
+           "successors": []
+          }
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "600e4aa9abf0fe005c4dd48a7c7b496324342162e6c8e0e6df98b4f49cadc17d"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "3dd3dbb956ec677fd88f8c810f4e40aa95ae76cf02b5162a6879c65ce3083b6f"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "acc6de99a22255ba92547bb3bf52668e1b01c70b0d47597a3e317c89808784a9"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 11,
+        "merged_test_sha256": "4a40d53d93b3d7988a751276d2608875d400c6123084dd25089ddeb2d13ba22d"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 11,
+        "merged_test_sha256": "14d98fb3e75c11cad841bd1a55123ac96fcbdfad2a3798502d005df82ba8549c"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__detect_cycle",
+      "program": "detect_cycle",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 1,
+       "examples": [
+        {
+         "input": [
+          null
+         ],
+         "expected": false
+        }
+       ],
+       "prompt_sha256": "533ffa2166702d52695e6dc61b5a25867b3c41a4c4335322b86f73532b8e1dda"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "0502ff8f7aa4cbc84db0406c8de19e956ad91bf098f6edfde7157a1016a8577c"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f9d33996a3988a1085568f6da19975f6720c89deb7925c45c1d79b069195b6d5"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: AttributeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 25,
+        "merged_test_sha256": "fd5295ec6ebdd92aa834df71c9c330cd00ad3a35c99a17fe00bd1e7656b992c1"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: AttributeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 25,
+        "merged_test_sha256": "405e26adf03136d699dece649779a7ec56cee6476190981e93305c26db68b2cc"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "program": "find_first_in_sorted",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           3
+          ],
+          3
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           3
+          ],
+          4
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           2,
+           2,
+           3
+          ],
+          2
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           -5,
+           -3,
+           0,
+           0,
+           7
+          ],
+          0
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "b980656297a2737536645db733c378c9bfbc1ddcd2fb9627782a6b63f1fa9518"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "38cd6baddd9930a8a64ce4f6960d6076cf6cb7c5b85da046c36a604b5d5d3c2d"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "2bb41634ba5e93c6ec169eca568f291c3f606461725402d13a80aa76f41f9dcf"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 35,
+        "merged_test_sha256": "39a9fa39c4785c57bab13f805bd195bf97c4c1b656bcf247dd221a038fbf0a36"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: IndexError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 35,
+        "merged_test_sha256": "cf6babe63c54bd12a22b4881786bdc35d1ee30147f882ba08e5fc81c1619a158"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__find_in_sorted",
+      "program": "find_in_sorted",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          5
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          1
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          7
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          [
+           1,
+           3,
+           5,
+           7
+          ],
+          0
+         ],
+         "expected": -1
+        },
+        {
+         "input": [
+          [
+           2,
+           2,
+           2
+          ],
+          2
+         ],
+         "expected": 1
+        }
+       ],
+       "prompt_sha256": "c8a3ea15db9150d77b6cea611db0432634a33a8ec37437d0c08324140557b26c"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "9807e4e5d93d331efa4cc712ebced8fe6e92f1b94b4ac8a247a3ccdf17ec4a05"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "784060d32f7631e75b92a553b055b139dbda5673fd0dae92354853a617c0a4d0"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "c76629cb4eacefee8a77c04a3546f0337056973f2925dd9351232a246e684534"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "f1fdf061832482c0d6b5dd0c54bdcdecfdd9f8494dcd1e31c0c5ba4295e4343f"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__flatten",
+      "program": "flatten",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [],
+           []
+          ]
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           [
+            [
+             1
+            ]
+           ]
+          ]
+         ],
+         "expected": [
+          1
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           "a",
+           null,
+           true
+          ]
+         ],
+         "expected": [
+          1,
+          "a",
+          null,
+          true
+         ]
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": [
+          5
+         ]
+        }
+       ],
+       "prompt_sha256": "73b7a47c43e527b40ce4253b6fbe8e99b1f07797b107d3b0f6db8adf03b5881c"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "compiled_empty",
+        "injected": false,
+        "oracle_code_sha256": null
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "be3b23baf04a53374588d120e47a18a0cd56304a0193e1f972ae9a131ed9f739"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "not_run",
+        "skip_reason": "injection_failed",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "unclassifiable": {}
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 12,
+        "merged_test_sha256": "721b27d9ed54a63a195be6457c9fb97736e22448affef0d3bae3b1189f788066"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__gcd",
+      "program": "gcd",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          12,
+          18
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          7,
+          0
+         ],
+         "expected": 7
+        },
+        {
+         "input": [
+          0,
+          0
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          0,
+          5
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          9,
+          9
+         ],
+         "expected": 9
+        }
+       ],
+       "prompt_sha256": "492c63a8b785a53772bd0142443e8786e2e08b836258502a36afbabe66aff673"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "f5545e12e402d22384c0ce1b09fc556098c7b00d8ebe37baa0443ec97e739ed8"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "7cd4bfcf17939cdfe18bddb9298c02bc2f58c9ae24ac298599ecaff019624bcf"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: ZeroDivisionError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "2d81a7114f41797b29e9117654e11303b76df3ee92b747088521d7f39ff14dc0"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: RecursionError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 22,
+        "merged_test_sha256": "040f5bbbe54926c4c9b87817ddbb71abcf8bf24fded2cd19ac88b3b26d7ede7f"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "unavailable"
+      }
+     },
+     {
+      "task_id": "quixbugs__get_factors",
+      "program": "get_factors",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          1
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          2
+         ],
+         "expected": [
+          2
+         ]
+        },
+        {
+         "input": [
+          4
+         ],
+         "expected": [
+          2,
+          2
+         ]
+        },
+        {
+         "input": [
+          12
+         ],
+         "expected": [
+          2,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          101
+         ],
+         "expected": [
+          101
+         ]
+        }
+       ],
+       "prompt_sha256": "71d845ca69d5d13c1d18348db851fb2ac16220eea8cd146d1cca471858daac07"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "ba680c7a7c2f8b3fab98f607396d30c7b3d58ae27a82682bc57a635598a35f45"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "d21ecaa414ff348c6ffb933ed04229f0efdc02e399918d4dad11c6df846692f4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 78,
+        "merged_test_sha256": "5bfbe446e8de72ff2925402d05906c800f4da614dd7ee8ea2ba29e2aff4f9930"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 78,
+        "merged_test_sha256": "0e1c8353bb79aa0c35622f79f2081442e5352331bbed164c8c8a95bb10485c9c"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__hanoi",
+      "program": "hanoi",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0,
+          1,
+          3
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          -1,
+          1,
+          3
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          1,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           3
+          ]
+         ]
+        },
+        {
+         "input": [
+          1,
+          2,
+          1
+         ],
+         "expected": [
+          [
+           2,
+           1
+          ]
+         ]
+        },
+        {
+         "input": [
+          2,
+          1,
+          3
+         ],
+         "expected": [
+          [
+           1,
+           2
+          ],
+          [
+           1,
+           3
+          ],
+          [
+           2,
+           3
+          ]
+         ]
+        }
+       ],
+       "prompt_sha256": "8bf7591023999b892464c6eb310cd369e98387d9934257ac0fc612d4455a4093"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "24ed2ccd197d01befa443e24e95ee18f4e7ed756e6075d0fc79ed47dea4e39cf"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "a80647098bb4c3759e8839bf7232e7fc79892f01b2439b24b0163205ba1553d8"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 36,
+        "merged_test_sha256": "63e0da5bc064610965bb79961565c372266aaa785accec775b2a74fe14c5a109"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 36,
+        "merged_test_sha256": "0fa6bf2d5c2986999228582e93148073bc958d008b807a0751f6844fa4231d1f"
+       }
+      },
+      "category": {
+       "A_no_examples": "silent",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "program": "is_valid_parenthesization",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          ""
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          "((("
+         ],
+         "expected": true
+        },
+        {
+         "input": [
+          ")))"
+         ],
+         "expected": false
+        },
+        {
+         "input": [
+          ")("
+         ],
+         "expected": false
+        },
+        {
+         "input": [
+          "((()()))()"
+         ],
+         "expected": true
+        }
+       ],
+       "prompt_sha256": "c27ef38cf2ceb6c7afc67421f9d3854dd545f05cd3fbac5e088635f2c157fb4a"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "53cb8c0b72cdcb5b612380cd6d1ef56fe871efce4be093a50da2d9dac7bbf944"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "02960edca96fb2468f767a29d53a84fdc327d3b610fba7d80f794b9013cd85d4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "2c1994be84366866d56c7c378e94edb27c2d2d5cb87ab27119419837d744ee19"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 1,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "70a34dc1c4bcaab5aedfa7a77e3ab0d27649ffe7a082d24c01a5f765270fd178"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "misguided"
+      }
+     },
+     {
+      "task_id": "quixbugs__kheapsort",
+      "program": "kheapsort",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [],
+          0
+         ],
+         "expected": []
+        },
+        {
+         "input": [
+          [
+           5
+          ],
+          0
+         ],
+         "expected": [
+          5
+         ]
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ],
+          0
+         ],
+         "expected": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          2
+         ],
+         "expected": [
+          1,
+          2,
+          3
+         ]
+        },
+        {
+         "input": [
+          [
+           5,
+           4,
+           3,
+           2,
+           1
+          ],
+          4
+         ],
+         "expected": [
+          1,
+          2,
+          3,
+          4,
+          5
+         ]
+        }
+       ],
+       "prompt_sha256": "8ca79eea3dc9431cbd095a28c3346fd6c97da45352923e1ce9a8977889a815f2"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "6bba5b86c3749ce90d3cbc50a8a9f77b12812c24e5ef369b0ff6d31d8729360c"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "ac949b552b2d86bc912dd2ac9baf4cb8f2000f7d481d693252170369383a62a7"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 19,
+        "merged_test_sha256": "ff01adb9400c4b8c0d33b14e9bb8c28e1a1c643e623e4746f40bb32e963a17ce"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 1,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {
+         "fp_assertion_fail": 1
+        },
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 19,
+        "merged_test_sha256": "71d9be8231eb46fe297edc20fb2fad2d953b42d6d754943235a09511b6adc4bc"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "fp"
+      }
+     },
+     {
+      "task_id": "quixbugs__knapsack",
+      "program": "knapsack",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          0,
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          10,
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          5,
+          [
+           [
+            6,
+            10
+           ]
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          5,
+          [
+           [
+            5,
+            10
+           ]
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          10,
+          [
+           [
+            2,
+            3
+           ],
+           [
+            3,
+            4
+           ],
+           [
+            4,
+            5
+           ]
+          ]
+         ],
+         "expected": 12
+        }
+       ],
+       "prompt_sha256": "ef9e2d26e67c1c5dcd7674cf16d306864a894f8e20e753a9a0aa61d43bb458d8"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "d6e6d2da0644ec909fe808963d196323c0872627b8baef3145bfc2ff54c99e51"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "413731254a150bc10d299053f07d08d54066107356c8a29704ab3287062a829f"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 14,
+        "merged_test_sha256": "68d52ce5285a2a95039413a9447e0ba55e4a3e06b72379ea41c7b2650af7ab04"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 1,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 14,
+        "merged_test_sha256": "644c7077c9c46b41c91d5eb384221186acba7318db9f50534c35228d94635bc1"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "misguided"
+      }
+     },
+     {
+      "task_id": "quixbugs__kth",
+      "program": "kth",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          [
+           5
+          ],
+          0
+         ],
+         "expected": 5
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          0
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           3,
+           1,
+           2
+          ],
+          2
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          [
+           4,
+           4,
+           4,
+           4
+          ],
+          2
+         ],
+         "expected": 4
+        },
+        {
+         "input": [
+          [
+           2,
+           1,
+           2,
+           1,
+           3
+          ],
+          3
+         ],
+         "expected": 2
+        }
+       ],
+       "prompt_sha256": "b02827476fb3be5054c4a60fa664ae465b325ddd196bd73fa2bd81231de13e08"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "cbb835b42a387e07e8ec7e3c254f7b725842284df7e0c944ca7a7f8fcc4b9b53"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "3ede2f011cc5929c1c2859c9f3f2f96685f1d51982708eae8ea04c5444ea1c27"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 25,
+        "merged_test_sha256": "7fe7a9c08cdd51760f3577008c38b77b90cb70d97762b8a20ebc42e2d4e1858b"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 25,
+        "merged_test_sha256": "ddcbe46b6c29956db149f90f3e6fd5a08eb1fe54b6ea160c9ce8251fabf7ef8f"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__lcs_length",
+      "program": "lcs_length",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "abc",
+          "xyz"
+         ],
+         "expected": 0
+        }
+       ],
+       "prompt_sha256": "3ff6954a22b4bd163807e73180382ff8364d7c0dfd60270a516a8c2269994f9d"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "b511bd1a3ab8373ffa718afd56b3cf64b8a28df983ce15a2ec3e620259dcc480"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "359989db5742d0e4f48b222a213082066f3ef0bcc64c9029298d1010354efce4"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 33,
+        "merged_test_sha256": "83762d5664f803fc3523ea68e1298bdca9ffb758b4463b9bcfd3e8434a888f60"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 33,
+        "merged_test_sha256": "a6f9a38c7032885a7882726e24a0de256894e653034c6a075dec045a09cf09a1"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__levenshtein",
+      "program": "levenshtein",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": 3
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          "cat",
+          "cut"
+         ],
+         "expected": 1
+        }
+       ],
+       "prompt_sha256": "e35e7efe44e748f217e16baa923924d20e5b841e2d4375c329c48fa03b95a958"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "5ca6b5dec2aa7fa819469e321e9e9dc4e220605ae774acee0a551d89a440a062"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "96bf5991dc9a731bb8578e542d733158ca767f4651c475d68d6e7a1984b8b439"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 37,
+        "merged_test_sha256": "3a0ac5a77456ca9cabaaaf3f00a2733a444519d04fcadd865b47795de03e2fc6"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 37,
+        "merged_test_sha256": "74411f7aea3b686b980d23ca090c64a554b3a592d8b9847ada1795681c2eba20"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__lis",
+      "program": "lis",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           3,
+           2,
+           1
+          ]
+         ],
+         "expected": 1
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3,
+           4
+          ]
+         ],
+         "expected": 4
+        },
+        {
+         "input": [
+          [
+           -3,
+           0,
+           2,
+           -1,
+           5
+          ]
+         ],
+         "expected": 4
+        }
+       ],
+       "prompt_sha256": "c39aa171d548507bc0df6d56653c7ceb0fd0f03b953f9561ff0a44de3c509025"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "1467f5ee32b1b0576c9b5d4f55efd46598e7efb62ec4917345f993038bbd17b2"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "a756b90c4f39e57e86586976885e2b4184f3f14067c7831a5778ea16dfe80367"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "d0e6fd8de88ccb3d0d0184b3a8eeb02725fdb526a82de8372a8ffd3b3329204b"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 24,
+        "merged_test_sha256": "849daea55cab87fca844cb598300e78213e33eda42be25af759c2b5bbcd4345c"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     },
+     {
+      "task_id": "quixbugs__longest_common_subsequence",
+      "program": "longest_common_subsequence",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          "",
+          "abc"
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "abc",
+          ""
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "",
+          ""
+         ],
+         "expected": ""
+        },
+        {
+         "input": [
+          "abc",
+          "abc"
+         ],
+         "expected": "abc"
+        },
+        {
+         "input": [
+          "abc",
+          "def"
+         ],
+         "expected": ""
+        }
+       ],
+       "prompt_sha256": "b30477508b49816fd967db0c12a814dee6e3baff458b8f16916187e6e1c42d2f"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "5450a9bb716c8f2950d44c05cff9394f3a1db14f5eca35f8cc8b29b2898bd400"
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "aece9400f2e8ca67481f2915258ec180e7cc3d2335c6abf56708097e00176098"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 1
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {
+         "oracle-unavailable: TypeError": 1
+        },
+        "unclassifiable": {
+         "skipped": 1
+        },
+        "n_oracle_tests": 1,
+        "n_collected_total": 17,
+        "merged_test_sha256": "c2e7445a39a6ae0db130e4e54bc5cf28743a916f2f9a500eb1ca949bd096f189"
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 1,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 17,
+        "merged_test_sha256": "fea6ea1059bab1d1884a4b623276ff8a27a384d2a9c051ab06d03e81f9711c23"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "silent"
+      }
+     },
+     {
+      "task_id": "quixbugs__max_sublist_sum",
+      "program": "max_sublist_sum",
+      "analysis_set": "defect_program",
+      "status": "ok",
+      "skip_reason": null,
+      "skip_detail": "",
+      "examples_generation": {
+       "status": "ok",
+       "reason": null,
+       "n_examples": 5,
+       "examples": [
+        {
+         "input": [
+          []
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           -1,
+           -2,
+           -3
+          ]
+         ],
+         "expected": 0
+        },
+        {
+         "input": [
+          [
+           1,
+           2,
+           3
+          ]
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          [
+           -2,
+           1,
+           -3,
+           4,
+           -1,
+           2,
+           1,
+           -5,
+           4
+          ]
+         ],
+         "expected": 6
+        },
+        {
+         "input": [
+          [
+           5
+          ]
+         ],
+         "expected": 5
+        }
+       ],
+       "prompt_sha256": "46a5eb9cc6547c0e33cabd5e68c06fafa68ab6d473a25f0cfeb2fbe69eef18d9"
+      },
+      "injection": {
+       "A_no_examples": {
+        "verdict": "compiled_empty",
+        "injected": false,
+        "oracle_code_sha256": null
+       },
+       "B_llm_examples": {
+        "verdict": "injected",
+        "injected": true,
+        "oracle_code_sha256": "cc0aac6b9c5718fa091c7964921902c5d90988c3819643a38a049497ed033d7f"
+       }
+      },
+      "conditions": {
+       "A_no_examples": {
+        "status": "not_run",
+        "skip_reason": "injection_failed",
+        "counts": {
+         "correct": 0,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "unclassifiable": {}
+       },
+       "B_llm_examples": {
+        "status": "ok",
+        "skip_reason": null,
+        "skip_detail": "",
+        "counts": {
+         "correct": 1,
+         "fp": 0,
+         "silent": 0,
+         "misguided": 0,
+         "unavailable": 0
+        },
+        "fp_kind_counts": {},
+        "skip_reason_counts": {},
+        "unclassifiable": {},
+        "n_oracle_tests": 1,
+        "n_collected_total": 23,
+        "merged_test_sha256": "f38f6d5abd9aca47c0587a5d6ca7c4b1c369e7e39916cac9d5e61c9ffdcbdb54"
+       }
+      },
+      "category": {
+       "A_no_examples": "unavailable",
+       "B_llm_examples": "correct"
+      }
+     }
+    ]
+   }
+  ],
+  "limitations": [
+   "B 臂示例来自 LLM spec-only 生成（不发送缺陷代码）；示例正确性完全取决于规约可执行程度，n≤limit、探索性",
+   "每任务仅 1 次生成调用（无重试采样）；生成失败/为空的任务 B 回退为 A（逐任务可审计，不作静默替换）",
+   "分类复用 O-1 口径：崩溃→skip/unavailable 单列；断言失败保留为 fp（断言型）/correct 等",
+   "正确率不提升 ≠ 通道无效：示例通道能力由单测自含 demo（buggy/fixed fixture）证明——若生产侧 correct 仍 0，应归因示例质量/规约可执行程度，而非通道不存在",
+   "B 臂 LLM 调用存在模型随机性（temperature=0 但服务端非严格确定）；工件记录了 prompt/response sha256 与 usage",
+   "描述性度量；不提供显著性推断；与 M-2/O-1 数字不同口径（A 臂是 O-1 后编译产物）",
+   "df_spec 归档两臂的锚材料相同（oracle 与源臂无关），B 臂示例按 task_id 生成一次、两臂复用（预算纪律）",
+   "B 臂治疗同时包含：示例断言通道 + 有示例时丢弃 0 字面量退化绑定（避免 fixed 侧自伤 crash）；无示例 A 臂保持 O-1 行为，因此 A/B 是整包治疗对比、不是单变量消融",
+   "实现偏差：P-1 同时修复 O-1 multi-param boundary pre 断言的 NameError（参数名绑定），故『无示例与 O-1 逐字节不变』在 multi-param boundary 子集上不再成立（详见 README §8）"
+  ]
+ },
+ "run_meta": {
+  "generated_at": "2026-10-17T19:31:13+00:00",
+  "tool_wall_s": 271.369,
+  "body_digest": "f5d5d2411489df83169a57f58bbb7582549d4b64cf3fdd8ff30f9c0dac9804ef",
+  "argv": [
+   "/Users/wangchenyu/Workspace/AITester/experiments/oracle_examples_replay.py",
+   "--out",
+   "experiments/results/p_round_oracle_examples_20261018",
+   "--limit",
+   "20",
+   "--jobs",
+   "4",
+   "--per-test-timeout",
+   "1",
+   "--file-timeout",
+   "180",
+   "--no-llm-cache"
+  ],
+  "python": "3.14.6",
+  "platform": "darwin",
+  "command": [
+   "python",
+   "-m",
+   "experiments.oracle_examples_replay",
+   "--out",
+   "experiments/results/p_round_oracle_examples_20261018",
+   "--limit",
+   "20",
+   "--jobs",
+   "4",
+   "--per-test-timeout",
+   "1",
+   "--file-timeout",
+   "180",
+   "--no-llm-cache"
+  ],
+  "postprocess": {
+   "kind": "append_only_limitations",
+   "reason": "P-1 收尾补记两条口径披露（不改变任何分类/生成/成本数值）；工具源已同步，未来运行直接包含",
+   "applied_at": "2026-10-18"
+  }
+ }
+}

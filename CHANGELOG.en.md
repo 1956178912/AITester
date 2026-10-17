@@ -1,10 +1,145 @@
-> Last updated: 2026-10-18 (round O: **oracle instrument treatment** [crash-safe + precondition-validated input; fp 29→2, instrument_error 27→0, correct still 0 with honest correction] + **cross-file repair path really entered** [real-LLM 8-node chain + atomic multi-file rollback] + **CI zero-LLM e2e-probe/Docker jobs** + **runtime-hygiene root fixes** [branch-measurement orphan / stale-pyc false red / oracle all-skip mis-grade] + oracle-enabled two-arm validation batch. Rounds N/M/L/K registered the same day)
+> Last updated: 2026-10-18 (round P: **spec executable-examples channel** exploratory validation [oracle correct 0→6→8, representation normalization brings fp 3→0 and precision 42.9%→61.5%; 2 LLM-hallucination errors remain] + **A-19 coverage-stall detection paper-feature fix** [wiring→real early stop, 26 tests + zero-LLM evidence; B8 reduced ablation structurally untriggered because all tasks passed first round, honestly disclosed] + **`main.py doctor` zero-LLM self-check** [21.45s / 47 pass; env + feature matrix]; rounds O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round P (oracle examples channel exploration + A-19 paper-feature fix + doctor self-check)
+
+> Round P continues from O's "instrument is judgeable but correct is still 0" toward
+> **semantic quality**, while handling the quota-unlocked A-19 ablation as "check the
+> mechanism first, then claim effects", and ships a user-facing zero-LLM self-check
+> entry. Honest core conclusions: the examples channel **does have detection
+> capability** (correct 0→8), but v1 still has 2 LLM-hallucinated errors and is **not a
+> net quality gain**; the A-19 ablation is **structurally untriggered** because all 10
+> tasks pass on the first round (mechanism fix independently verified). Real LLM spend
+> **≈$0.054** (examples generation $0.0062 + B8 two arms $0.0473).
+
+### Fixed
+
+- **P-2: A-19 coverage-stall detection was a "paper feature" → now a real early stop
+  (with the ablation honestly disclosed).** Zero-LLM evidence: `COVERAGE_STALL` was only
+  used by `determine_stop_reason`, and its branch sat after `MAX_ITERATIONS` (label
+  shadowed), with no routing consumer anywhere — a switch with no behavior (same family
+  as O-round N-4 D1). Fix: `_should_debug` / `_route_after_diagnosis` now **consume** the
+  stall decision before entering the debugger (trace `decision=done`/`reason=coverage_stall`,
+  `state["stop_reason"]="coverage_stall"`, `return "done"`), only intercepting the
+  "about to debug" path and never preempting test_passed / detection-first /
+  specificity-gate / repair-invalid / test_defect-cap / keyword-regenerate;
+  `determine_stop_reason`'s stall branch moved before MAX_ITERATIONS (OFF historical
+  labels bit-identical). 26 new tests (including delete-short-circuit negative controls,
+  no-preemption, diagnosis-route symmetry, graph smoke) + 205 existing workflow
+  regressions passed; zero-LLM before/after: before stalled `_should_debug=debug` and
+  at-max=`max_iterations`, after `done`+`coverage_stall` and at-max=`coverage_stall`,
+  OFF all identical. **Reduced ablation** (synthetic 10 tasks/arm, fast profile,
+  concurrent, $0.0473): both arms **coverage_stall triggered=0**, detection 0/10,
+  iterations=0 — 10/10 tasks all-green on the first round (`false_fix_rate=1.0`) → the
+  debugger was never entered, so the stall criterion is **structurally unreachable**;
+  paired Δ iterations=0, coverage=−0.1 (95% CI crosses 0). **Classified as a scenario/
+  power limitation, not a wiring defect**; next round needs tasks guaranteed to fail
+  ≥2 rounds with |Δcoverage|<eps (harder QuixBugs / DETECTION_FIRST forced-red /
+  explicit failure injection).
+- **P-1 companion: O-1 legacy instrument bug**: the multi-param boundary pre-assertion
+  raised NameError under `args = X; f(*args)` (legal inputs judged unavailable) → fixed
+  and disclosed (the no-examples product only gains a parameter-name binding line in
+  that subset; the call itself is unchanged).
+
+### Added
+
+- **P-1/P-1.1: spec executable-examples channel (oracle semantic-quality governance v1,
+  exploratory).** `parse_logic_analysis` passes through `examples` (≤5, invalid shapes
+  dropped without raising, no key written when absent); `compile_spec_oracle` compiles
+  each example into `assert f(args…) == expected` (repr literals, zero eval/exec, same
+  crash-safe harness as O-1; examples take precedence and the "0-literal fabricated
+  input" degenerate body is dropped when examples exist; the no-examples product is
+  byte-identical to O-1); new **spec-only examples generator** (spec/human docstring/param
+  names only, **never sends the defect code**; 1 call/task, 512 tokens, strict JSON,
+  failure passes through empty) and an `oracle_examples_replay` quality-replay tool.
+  **Exploratory A/B (df_spec archived 20 tasks)**: injected tasks 18→20; classifiable
+  denominator 5→14; **correct 0→6** (real detections, verified per-case against the real
+  buggy/fixed implementations); also fp 0→3 (all representational: generator/tuple vs
+  list), misguided 0→2 (LLM example-expectation hallucination), silent 5→3,
+  unavailable 13→6. **P-1.1 representation normalization**
+  (`normalize_return_value`: tuple/list recursively→list, Iterator/generator one-shot→list,
+  str/bytes/dict semantics kept; `--reuse-examples` zero-LLM replay): **fp 3→0,
+  correct 6→8**, denominator 13, **precision 42.9%→61.5%, error rate 35.7%→15.4%**;
+  2 hallucination misguideds remain, `flatten` fp→unavailable (buggy mixed-type TypeError,
+  correctly recorded by the O-1 harness); A-arm 20/20 oracle code sha256 identical to P-1.
+  Cost 20 calls/$0.006195 (P-1.1 zero cost), 62 tests. **Conclusion**: the examples
+  channel **has detection capability** but v1 is **not a net quality gain**; next steps =
+  example self-validation/second-pass filtering + production wiring (needs same-batch A/B
+  + pre-registration).
+- **P-3: `main.py doctor` zero-LLM self-check command.** Environment/config 6 checks
+  (Python version / optional deps / LLM endpoints **count only, values never printed** /
+  dataset-cache loadability / kernel-sandbox capability / git HEAD+dirty) + a zero-LLM
+  feature-matrix subset (isolated subprocess call to `e2e_probe.py`, **forcibly strips
+  `AITESTER_E2E_LLM`**, `--groups` passthrough, timeout fail-closed); human-readable and
+  `--json` (schema `aitester_doctor/1`, embeds probe_report); exit codes fail/error→1,
+  warn/skip→0 (`--strict` →1). Measured full run **21.45s**: 47 pass/0 fail/0 error/12
+  skip, 6 checks 5 pass+1 warn; `--groups budget` 1.39s; 0 credential leaks (programmatic
+  comparison). 46 new tests; bilingual README quick-start + matrix doc §5 updated.
+- **Full-feature probe matrix 59→62**: new `cli-doctor-json` (doctor JSON contract /
+  aggregation / no credential leak), `logic-oracle-examples-compile`
+  (examples→per-example assertion compilation), `logic-oracle-examples-detection`
+  (buggy must fail / fixed must pass / no-examples control does not detect).
+
+### Changed
+
+- **Oracle semantic-quality caliber (since P-1)**: the examples channel is
+  **exploratory mechanism evidence**; correct 0→8 coexists with 2 hallucination errors —
+  citations must include "denominator/precision/error-rate/generation mode (spec-only)",
+  and it **must not** be used as a "production-ready oracle" or "detection capability
+  improvement" claim; production wiring needs a same-batch A/B + pre-registration next
+  round.
+- **A-19 exit criterion update**: stall detection is now a real early stop (`aeadb7b`),
+  but **B8 ablation still needs a redo** (tasks guaranteed to fail ≥2 rounds); until then
+  neither "stall detection improves convergence" nor "no effect" may be cited.
+- **BASELINE/register/CHANGELOG/README/EMSE sync**: BASELINE gains
+  `target_quality.oracle_examples_validation`, `ablation_batches.b8_stagnation_detection`,
+  `engineering_runtime_hygiene.stagnation_wiring / product_doctor`; `feature_matrix` 62;
+  register §3.2 P-1..P-3, §4 round-P closures and new registrations, §5 two citation
+  disciplines; bilingual README "latest optimization" synchronized to round P;
+  `MEASUREMENT_INTEGRITY` gains the P-1 caliber paragraph; local EMSE checklist gains
+  round-P increments.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8561 passed / 5 skipped / 0 failed** (**8566** collected; **162.1s** locally;
+  COVERAGE_FILE isolated);
+- **Coverage**: lines **96.52%** (17235/17857) / branches **92.70%** (6137/6620);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.12pp/+0.20pp;
+  `tests/test_p_round_coverage_fill.py` (30 tests) was added to keep the ratchet above
+  water by covering doctor/examples/normalization branches);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (793 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **106/106** plus the `emse_*` directory coverage scan (7 new P-round
+  evidence entries);
+- **Full-feature probe matrix (62)**: `AITESTER_E2E_LLM=true python
+  scripts/tools/e2e_probe.py --all --include-llm` → **62/62 pass** (14 groups,
+  12 real-LLM probes, 75.6s wall; the 50-probe zero-LLM subset is CI-safe); 3 new
+  probes (doctor / examples compilation / examples detection);
+- **P-1/P-1.1 examples channel (exploratory)**: `python -m
+  experiments.oracle_examples_replay --out ... --reuse-examples ...` → arm A correct 0 /
+  fp 0 / denominator 5; arm B raw correct 6 / fp 3 / misguided 2 / denominator 14;
+  **norm correct 8 / fp 0 / misguided 2 / denominator 13** (precision 61.5%, error rate
+  15.4%); artifact SHA256SUMS `546a6035…` verified (7 entries);
+- **P-2 A-19 wiring**: `aeadb7b` 26 new tests + 205 existing workflow regressions;
+  zero-LLM before/after (before `_should_debug=debug`/at-max=`max_iterations`, after
+  `done`+`coverage_stall`/at-max=`coverage_stall`, OFF all identical); the reduced B8
+  ablation cost $0.047272 with stall triggered=0 (10/10 first-round all-green —
+  structurally untriggered, honestly disclosed); artifact `p_round_b8_ablation_20261018/`
+  SHA256SUMS `01370be9…` verified (40 entries);
+- **P-3 doctor**: `python main.py doctor` measured **21.45s**, 47 pass / 0 fail /
+  0 error / 12 skip; `--json` pure JSON (schema `aitester_doctor/1`), 0 credential leaks;
+  `--groups budget` 1.39s; `--strict`/`--timeout` semantics verified; 46 tests;
+- **Real LLM spend**: round P ≈ **$0.054** (examples generation 20 calls $0.006195 +
+  B8 two arms $0.047272 + probe matrix 12 calls ≈$0.02; within the $0.8 budget).
 
 ## [Unreleased] — 2026-10-18 Round O (oracle instrument treatment + cross-file path evidence + CI release engineering + runtime hygiene)
 
