@@ -1,0 +1,6 @@
+START=2026-10-17T22:20:31Z
+总耗时: 25.8s
+结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke_gateoff/arm_on/benchmark_synthetic_20261018_062056.json
+============================================================
+{"arm": "on", "status": "completed", "wall_seconds": 22.74, "batch": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke_gateoff/arm_on/benchmark_synthetic_20261018_062056.json", "meta": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_b8_injection_20261018/_harness_smoke_gateoff/arm_on/arm_on.meta.json"}
+EXIT=0

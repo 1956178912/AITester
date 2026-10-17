@@ -1,0 +1,697 @@
+{
+  "arm_label": "examples",
+  "cli": "",
+  "env_expected_SPEC_ORACLE_EXAMPLES_ENABLE": "true",
+  "cache_namespace": "s_round_examples_decision_20261018_examples",
+  "batch_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_examples_decision_20261018/benchmark_quixbugs_20261018_065026.json",
+  "batch_sha256": "0bafbfbb59615f957f129a7f7f2e94377bda694af7366292ccefb6c1390495b4",
+  "rows": 20,
+  "task_ids": [
+    "quixbugs__bucketsort",
+    "quixbugs__breadth_first_search_test",
+    "quixbugs__breadth_first_search",
+    "quixbugs__depth_first_search",
+    "quixbugs__depth_first_search_test",
+    "quixbugs__detect_cycle_test",
+    "quixbugs__find_in_sorted",
+    "quixbugs__detect_cycle",
+    "quixbugs__flatten",
+    "quixbugs__gcd",
+    "quixbugs__get_factors",
+    "quixbugs__hanoi",
+    "quixbugs__is_valid_parenthesization",
+    "quixbugs__kheapsort",
+    "quixbugs__kth",
+    "quixbugs__knapsack",
+    "quixbugs__lcs_length",
+    "quixbugs__levenshtein",
+    "quixbugs__bitcount",
+    "quixbugs__find_first_in_sorted"
+  ],
+  "tasks": [
+    {
+      "task_id": "quixbugs__bucketsort",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 72.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 17.75,
+      "token_usage": {
+        "input_tokens": 9315,
+        "output_tokens": 2617,
+        "total_tokens": 11932,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11932
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search_test",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 0.0,
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "none",
+      "spec_oracle_examples_count": 0,
+      "elapsed_seconds": 19.57,
+      "token_usage": {
+        "input_tokens": 8624,
+        "output_tokens": 3189,
+        "total_tokens": 11813,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11813
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search",
+      "passed": false,
+      "iterations": 0,
+      "coverage": 77.0,
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "test_defect_regeneration_cap",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 1,
+      "elapsed_seconds": 22.41,
+      "token_usage": {
+        "input_tokens": 6377,
+        "output_tokens": 2799,
+        "total_tokens": 9176,
+        "llm_calls": 3,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 9176
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__depth_first_search",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 80.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "silent",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 1,
+      "elapsed_seconds": 16.23,
+      "token_usage": {
+        "input_tokens": 8633,
+        "output_tokens": 2263,
+        "total_tokens": 10896,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 10896
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__depth_first_search_test",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 0.0,
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "none",
+      "spec_oracle_examples_count": 0,
+      "elapsed_seconds": 20.26,
+      "token_usage": {
+        "input_tokens": 8396,
+        "output_tokens": 3002,
+        "total_tokens": 11398,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11398
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__detect_cycle_test",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 0.0,
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "none",
+      "spec_oracle_examples_count": 0,
+      "elapsed_seconds": 20.46,
+      "token_usage": {
+        "input_tokens": 8530,
+        "output_tokens": 3294,
+        "total_tokens": 11824,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11824
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__find_in_sorted",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 81.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 17.33,
+      "token_usage": {
+        "input_tokens": 9553,
+        "output_tokens": 2708,
+        "total_tokens": 12261,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 12261
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__detect_cycle",
+      "passed": true,
+      "iterations": 2,
+      "coverage": 86.0,
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 1,
+      "elapsed_seconds": 65.46,
+      "token_usage": {
+        "input_tokens": 15161,
+        "output_tokens": 4117,
+        "total_tokens": 19278,
+        "llm_calls": 7,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 19278
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__flatten",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 68.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 16.5,
+      "token_usage": {
+        "input_tokens": 8327,
+        "output_tokens": 1607,
+        "total_tokens": 9934,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 9934
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__gcd",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 69.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 27.47,
+      "token_usage": {
+        "input_tokens": 10740,
+        "output_tokens": 3136,
+        "total_tokens": 13876,
+        "llm_calls": 5,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 13876
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__get_factors",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 73.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 25.13,
+      "token_usage": {
+        "input_tokens": 13960,
+        "output_tokens": 3274,
+        "total_tokens": 17234,
+        "llm_calls": 6,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 17234
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__hanoi",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 76.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 18.6,
+      "token_usage": {
+        "input_tokens": 10053,
+        "output_tokens": 2862,
+        "total_tokens": 12915,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 12915
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 77.0,
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 37.69,
+      "token_usage": {
+        "input_tokens": 15522,
+        "output_tokens": 3686,
+        "total_tokens": 19208,
+        "llm_calls": 7,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 19208
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__kheapsort",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 71.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 26.83,
+      "token_usage": {
+        "input_tokens": 14889,
+        "output_tokens": 3602,
+        "total_tokens": 18491,
+        "llm_calls": 6,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 18491
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__kth",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 74.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "silent",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 17.02,
+      "token_usage": {
+        "input_tokens": 9222,
+        "output_tokens": 2392,
+        "total_tokens": 11614,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11614
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__knapsack",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 74.0,
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 40.91,
+      "token_usage": {
+        "input_tokens": 17173,
+        "output_tokens": 4712,
+        "total_tokens": 21885,
+        "llm_calls": 7,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 21885
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__lcs_length",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 74.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 18.24,
+      "token_usage": {
+        "input_tokens": 9386,
+        "output_tokens": 2681,
+        "total_tokens": 12067,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 12067
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__levenshtein",
+      "passed": true,
+      "iterations": 1,
+      "coverage": 77.0,
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "repair_rate": null,
+      "false_fix_rate": null,
+      "stop_reason": "test_passed",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected_and_passed",
+      "oracle_suite_verdict": "correct",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 37.93,
+      "token_usage": {
+        "input_tokens": 11667,
+        "output_tokens": 3889,
+        "total_tokens": 15556,
+        "llm_calls": 5,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 15556
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__bitcount",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 0.0,
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 340.05,
+      "token_usage": {
+        "input_tokens": 6379,
+        "output_tokens": 2148,
+        "total_tokens": 8527,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 8527
+        }
+      }
+    },
+    {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "passed": false,
+      "iterations": 2,
+      "coverage": 0.0,
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "repair_rate": 0.0,
+      "false_fix_rate": 0.0,
+      "stop_reason": "skip_debugger_repair_invalid",
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable",
+      "spec_oracle_examples_source": "planner",
+      "spec_oracle_examples_count": 3,
+      "elapsed_seconds": 284.45,
+      "token_usage": {
+        "input_tokens": 7988,
+        "output_tokens": 3335,
+        "total_tokens": 11323,
+        "llm_calls": 4,
+        "cache_hits": 0,
+        "cache_avoided_tokens": 0,
+        "by_model": {
+          "deepseek-flash": 11323
+        }
+      }
+    }
+  ],
+  "token_metrics": {
+    "total_input_tokens": 209895,
+    "total_output_tokens": 61313,
+    "total_tokens": 271208,
+    "total_llm_calls": 94,
+    "total_cache_hits": 0,
+    "total_cache_avoided_tokens": 0,
+    "cache_hit_rate_pct": 0.0,
+    "uncached_theoretical_tokens": 271208,
+    "avg_tokens_per_task": 13560.4,
+    "output_share_pct": 22.61,
+    "avg_output_per_task": 3065.65,
+    "avg_output_per_call": 652.27
+  },
+  "cost_usd_standard_price": 0.136544,
+  "wall_seconds": 2108,
+  "start_epoch": 1792275319,
+  "start_iso_utc": "2026-10-17T22:15:19Z",
+  "end_iso_utc": "2026-10-17T22:50:27Z",
+  "exit_code": 0,
+  "log_path": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_examples_decision_20261018/log_examples.log",
+  "trace_dir": "/Users/wangchenyu/Workspace/AITester/experiments/results/s_round_examples_decision_20261018/traces_examples",
+  "provenance": {
+    "git_sha": "566f97339b0b9728f8a948afbf449a2eb87408c2",
+    "git_dirty": false,
+    "model_fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-17T22:50:25.922443+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "env_snapshot_SPEC_ORACLE_EXEC_ENABLE": "true",
+    "env_snapshot_SPEC_ORACLE_EXAMPLES_ENABLE": "true",
+    "env_snapshot_DETECTION_SPEC_MODE": null
+  },
+  "stop_reason_counts": {
+    "test_passed": 10,
+    "skip_debugger_repair_invalid": 9,
+    "test_defect_regeneration_cap": 1
+  },
+  "oracle_suite_verdict_counts": {
+    "correct": 6,
+    "unavailable": 10,
+    "silent": 4
+  },
+  "oracle_verdict_counts": {
+    "injected_and_passed": 10,
+    "compiled_empty": 3,
+    "injected": 7
+  },
+  "examples_source_counts": {
+    "planner": 17,
+    "none": 3
+  },
+  "examples_count_stats": {
+    "n_rows_with_count": 20,
+    "mean": 2.25,
+    "max": 3,
+    "total": 45
+  },
+  "field_present_counts": {
+    "task_id": 20,
+    "passed": 20,
+    "coverage": 20,
+    "iterations": 20,
+    "stop_reason": 20,
+    "spec_oracle_injected": 20,
+    "spec_oracle_verdict": 20,
+    "oracle_suite_verdict": 20,
+    "llm_suite_detection_rate": 20,
+    "detection_rate": 20,
+    "repair_rate": 20,
+    "false_fix_rate": 20,
+    "spec_oracle_examples_source": 20,
+    "spec_oracle_examples_count": 20
+  },
+  "trace_events": {
+    "planner:plan_complete": 20,
+    "generator:generated": 26,
+    "executor:FAIL": 43,
+    "_should_debug:debug": 29,
+    "debugger:timeout": 4,
+    "patch_applier:rejected": 19,
+    "_should_debug:done": 20,
+    "executor:PASS": 12,
+    "_should_debug:regenerate": 6,
+    "mutation_advisor:injected": 2,
+    "debugger:import_error": 6,
+    "debugger:assertion": 13,
+    "patch_applier:written": 10,
+    "debugger:runtime": 5,
+    "mutation_advisor:no_surge": 4,
+    "debugger:index_error": 1
+  },
+  "detection_aggregate": {
+    "measurable": 15,
+    "detected": 11,
+    "rate": 0.7333
+  }
+}

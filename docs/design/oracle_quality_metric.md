@@ -720,3 +720,62 @@ correct 8→8、fp 0→0、silent 3→3、misguided **2→2**、unavailable 7→
   （本批 25/90 可求值），但对 2 例仍无效且引入语义求值风险，需谨慎。
 - 生产接线无额外开关编排需求；R 轮判定"无效"意味着 Q-2 类 A/B 不应假设本
   过滤器带来质量提升。限制：n=20/90、单次零 LLM 重放、不外推。
+
+## 15. S-3 多采样自一致性过滤器（2026-10-18，K=2 探索性）
+
+### 15.1 动机与协议
+
+R-2 的确定性后置子句过滤器在 90 条 P-1 examples 上 `dropped=0`（2 例幻觉
+未命中，根因=锚后置子句表达力不足）。S-3 试**多采样自一致性**：同一任务独立
+采样 K=2 次 spec-only examples，只有**出现于 ≥2 个采样**的 `(input, expected)`
+才保留（归一化 JSON 键：`json.dumps({input,expected}, sort_keys=True,
+ensure_ascii=False, separators)`；int/float 不合并、tuple/list 经 JSON 等价；
+每样本 ≤3 条、交集 ≤3 条）。实现于
+`experiments/spec_examples_generator.generate_examples_multisample`（零生产
+代码改动；每采样 cache namespace 区分 `:sample0/:sample1`）。
+
+PREREG（`s_round_examples_multisample_20261018/PREREG.md` 跑前冻结）：对
+P-1 的 20 任务重新做真实 K=2 采样（40 次小调用、关闭缓存、预算 ≤$0.05），
+交集版用 `--reuse-examples` 零 LLM 重放（显式开 Q-1 双门、关闭 R-2 确定性
+过滤器以隔离效应），与 P-1.1 norm 对比。判定：≥1 hallucination 不在交集
+且 correct 损失 ≤1 → 有效过滤；correct 损失 ≥2 → 高风险默认关；否则未达
+有效过滤。
+
+### 15.2 采样与交集统计（工件 `s_round_examples_multisample_20261018/`）
+
+- 40 次调用、27,670/2,176 tokens、**$0.010912**（预算 22%）、墙钟 31.3s；
+- 每样本 1-3 条（均成功）→ union **67** → 交集 **43**（丢弃 **24**）；
+- **19/20 任务交集非空**；`bucketsort` 两采样完全不相交（交集 0）。
+- **2 个 hallucination 均被排除出 oracle**：
+  `is_valid_parenthesization` 的 `'(((' → True` 在两个新采样中**均未再现**
+  （重采样从未产生 → 交集自然不含）；`knapsack` 的 `(5,[[5,10]]) → 0` 仅在
+  1/2 采样出现 → **被交集剔除**。
+
+### 15.3 重放前后（B 臂；两源臂相同；A 臂不变 0/5/13）
+
+| 指标（oracle 测试级；分母=可分类） | P-1.1 norm | K=2 交集版 |
+|---|---|---|
+| 可分类分母 | 13 | 11 |
+| correct | **8** | **3**（损失 5） |
+| fp | 0 | 0 |
+| silent | 3 | 8 |
+| misguided | **2** | **0** |
+| unavailable（单列） | 7 | 9 |
+
+逐任务：`bucketsort` correct→unavailable（交集空）；`kheapsort`/`levenshtein`/
+`lis`/`max_sublist_sum` correct→silent（交集示例不再区分 buggy/fixed）；
+`get_factors`/`hanoi`/`lcs_length` 保持 correct；2 个 hallucination 任务
+misguided→silent；`find_in_sorted` silent→unavailable。
+
+### 15.4 判定与结论
+
+hallucination 排除 2/2（满足第一子句），但 correct 损失 5（≥2）→ 按冻结规则
+判定 **「高风险，默认关」**：多采样精确求交在 K=2 时**召回代价过高**——它清除
+了 2 例幻觉 misguided，却把 5 个真检出降级。根因：自由采样示例集合重叠有限，
+有判别力的示例常只出现一次，精确 JSON 键求交把它们一并丢弃。
+
+**下一步（按收益）**：① **K=3 + ≥2 一致**（多数一致，提高保留率、仍可剔除
+仅 1 次出现的幻觉；60 次小调用仍 ≤$0.02）；② **canonical input 约束**（prompt
+要求固定边界值/标准输入模板，提高跨采样重叠）；③ 交集只作高置信子集，与
+R-2 过滤器通过的另一部分示例合并；④ 示例级 LLM 二次核验（与一致性正交）。
+生产不建议启用（默认关）；本评估为探索性（n=20、K=2、单次），不外推。

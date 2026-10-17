@@ -363,3 +363,16 @@ trade-off vs 单次噪声"。R-1 先做**零 LLM 诊断**：Q-2 两臂 20/20 任
 示例质量问题。**R-3 口径**：`postprocess_wall` 为**每基线样本**粒度（n_tasks=该阶段
 被计时基线数，非任务数），`timed_out_tasks` 当前恒 0，仅用于观测不可当任务级超时
 证据；hook 为纯观测，历史 summary 字段逐项不变。
+
+**S-2/S-3/S-1 口径（2026-10-18）**：**A-19 停滞检测**：P-2 的 B8 消融因首轮全绿无触发；S-2 用
+**实验层确定性失败注入**（前 3 轮强制失败 + coverage 沿用上轮，生产文件零 diff）构造可触发场景，
+stagnation ON/OFF 两臂（唯一差异=开关）实测：on **10/10** 触发、iterations **1.8**；off **0/10**、
+iterations **3.0**；配对 Δ=1.2 轮 → `confirmed`。**但必须同时披露**：生产默认协议
+（`PATCH_EVIDENCE_GATE_ENABLE=true`）下 repair-invalid 同迭代抢占 → on/off 均 iterations=2，
+A-19 **只改标签不省迭代**；引用时须给"注入协议/默认协议"两种口径，不得笼统称"停滞检测缩短
+迭代"。**S-3 多采样自一致性**：K=2 精确求交在 20 任务上排除 **2/2** 幻觉期望，但零 LLM 重放
+correct **8→3（−5）** → 判定「高风险，默认关」；不得把"清掉幻觉"单独引用为质量提升，必须同时
+给出 correct 损失与判定。**S-1 3-seed 决策**：seed42/43/44 合并（Δ 均 **+6**；loss 20/0/0pp）、按预注册规则
+（enable_candidate = Δ≥5 in ≥2/3 seeds ∧ loss ≤5pp in ≥2/3 seeds）→ **`enable_candidate`**；
+该结论仅为**决策支持**，生产开关默认关、enabling 需另行变更+回归，不得当作能力主张。
+seed42 的 −20pp 维持"单次运行噪声"归因（R-1 not_reproduced + S-1 复核 0pp）。

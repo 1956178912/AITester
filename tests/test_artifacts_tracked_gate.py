@@ -62,6 +62,18 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 R 轮工件条目: {needle}"
 
+    def test_manifest_covers_s_round_chain(self):
+        """S 轮（2026-10-18）：3-seed 决策 / B8 注入 / 多采样评估工件必须在清单。"""
+        required_substrings = (
+            "s_round_examples_decision_20261018/PREREG_DECISION.md",
+            "s_round_examples_decision_20261018/SHA256SUMS",
+            "s_round_b8_injection_20261018/ISOLATION.json",
+            "s_round_b8_injection_20261018/REPORT.json",
+            "s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 S 轮工件条目: {needle}"
+
     def test_manifest_covers_df_spec_chain(self):
         """A-04：df_spec / M4 / D1 / ULT-df200 四批旗舰工件的关键件必须在清单。"""
         required_substrings = (

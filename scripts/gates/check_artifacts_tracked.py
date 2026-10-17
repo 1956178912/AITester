@@ -199,6 +199,22 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/r_round_examples_selfcheck_20261018/FILTER_STATS.json",
     "experiments/results/r_round_examples_selfcheck_20261018/ORACLE_EXAMPLES_REPORT_selfcheck.json",
     "experiments/results/r_round_examples_selfcheck_20261018/SHA256SUMS",
+    # S 轮（2026-10-18）：seed-44 复现批 + 3-seed 生产化决策
+    "experiments/results/s_round_examples_decision_20261018/README.md",
+    "experiments/results/s_round_examples_decision_20261018/PREREG_DECISION.md",
+    "experiments/results/s_round_examples_decision_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/s_round_examples_decision_20261018/SHA256SUMS",
+    # S 轮：B8/A-19 失败注入重做
+    "experiments/results/s_round_b8_injection_20261018/README.md",
+    "experiments/results/s_round_b8_injection_20261018/PREREG.md",
+    "experiments/results/s_round_b8_injection_20261018/REPORT.json",
+    "experiments/results/s_round_b8_injection_20261018/ISOLATION.json",
+    "experiments/results/s_round_b8_injection_20261018/SHA256SUMS",
+    # S 轮：多采样示例自一致性评估
+    "experiments/results/s_round_examples_multisample_20261018/README.md",
+    "experiments/results/s_round_examples_multisample_20261018/PREREG.md",
+    "experiments/results/s_round_examples_multisample_20261018/MULTISAMPLE_STATS.json",
+    "experiments/results/s_round_examples_multisample_20261018/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
