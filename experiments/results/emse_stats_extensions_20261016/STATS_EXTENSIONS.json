@@ -1,0 +1,239 @@
+{
+  "caliber": "Wilson CI / Cohen's g / OR / 配对 bootstrap（第十九轮评审 A-15）",
+  "bootstrap": {
+    "n": 10000,
+    "seed": 42,
+    "z95": 1.959963985
+  },
+  "inputs": {
+    "main_batch": [
+      "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json",
+      "experiments/results/main_batch/benchmark_synthetic_20261006_151907.json",
+      "experiments/results/main_batch/benchmark_synthetic_20261006_164357.json"
+    ],
+    "e6": "experiments/results/e6_a1_batches/e6_control_seed42/benchmark_synthetic_20261009_181758.json",
+    "e4": {
+      "aitester": "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/aitester.json",
+      "plain_llm_df": "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/plain_llm_df.json"
+    }
+  },
+  "arms": {
+    "rp02_aitester": {
+      "detection": {
+        "killed": 38,
+        "denominator": 240,
+        "rate": 0.15833333333333333,
+        "wilson95": [
+          0.11758132711211292,
+          0.20985051818625852
+        ]
+      },
+      "tokens_per_task": 26114.854406130267,
+      "tokens_per_task_bootstrap95": [
+        24226.310344827587,
+        28086.015325670498
+      ],
+      "usd_per_task": 0.025884977011494247,
+      "usd_note": "价目加权（in:out=1581326:5234651）；未计价模型：无"
+    },
+    "rp02_plain_llm": {
+      "detection": {
+        "killed": 4,
+        "denominator": 261,
+        "rate": 0.01532567049808429,
+        "wilson95": [
+          0.005975572945484241,
+          0.03873592681420218
+        ]
+      },
+      "tokens_per_task": 3209.44061302682,
+      "tokens_per_task_bootstrap95": [
+        2964.015325670498,
+        3474.2337164750957
+      ],
+      "usd_per_task": 0.003358973563218391,
+      "usd_note": "价目加权（in:out=142783:694881）；未计价模型：无"
+    },
+    "rp02_plain_llm_df": {
+      "detection": {
+        "killed": 117,
+        "denominator": 261,
+        "rate": 0.4482758620689655,
+        "wilson95": [
+          0.38912665651808365,
+          0.50892555887129
+        ]
+      },
+      "tokens_per_task": 4223.103448275862,
+      "tokens_per_task_bootstrap95": [
+        3822.942528735632,
+        4642.52490421456
+      ],
+      "usd_per_task": 0.004543231034482759,
+      "usd_note": "价目加权（in:out=152103:950127）；未计价模型：无"
+    },
+    "e4_aitester": {
+      "detection": {
+        "killed": 17,
+        "denominator": 37,
+        "rate": 0.4594594594594595,
+        "wilson95": [
+          0.310385698012828,
+          0.6161595311123501
+        ]
+      },
+      "repair": {
+        "killed": 37,
+        "denominator": 40,
+        "rate": 0.925,
+        "wilson95": [
+          0.8013576647190122,
+          0.9741639742314014
+        ]
+      }
+    },
+    "e4_plain_llm_df": {
+      "detection": {
+        "killed": 31,
+        "denominator": 37,
+        "rate": 0.8378378378378378,
+        "wilson95": [
+          0.6886351629503464,
+          0.92348792767317
+        ]
+      },
+      "repair": {
+        "killed": 0,
+        "denominator": 41,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.08566757022119471
+        ]
+      }
+    },
+    "e6_aitester": {
+      "detection": {
+        "killed": 8,
+        "denominator": 87,
+        "rate": 0.09195402298850575,
+        "wilson95": [
+          0.04733289224785486,
+          0.17108564791745673
+        ]
+      }
+    },
+    "e6_plain_llm": {
+      "detection": {
+        "killed": 0,
+        "denominator": 87,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.042287506963128316
+        ]
+      }
+    },
+    "e6_plain_llm_df": {
+      "detection": {
+        "killed": 30,
+        "denominator": 87,
+        "rate": 0.3448275862068966,
+        "wilson95": [
+          0.25342661171642417,
+          0.44935226975489145
+        ]
+      }
+    }
+  },
+  "comparisons": {
+    "rp02_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 12,
+      "n01_b_only": 80,
+      "n_paired": 240,
+      "cohens_g": 0.7391304347826086,
+      "odds_ratio": {
+        "point": 0.15527950310559005,
+        "ci95": [
+          0.08557363083719341,
+          0.28176581791407546
+        ]
+      },
+      "mcnemar_exact_p": 1.073374741074801e-12,
+      "paired_bootstrap_diff95": [
+        -0.35,
+        -0.2125
+      ],
+      "rate_a": 0.15833333333333333,
+      "rate_b": 0.44166666666666665
+    },
+    "rp02_df_vs_plain_llm": {
+      "arm_a": "plain_llm_df",
+      "arm_b": "plain_llm",
+      "n10_a_only": 113,
+      "n01_b_only": 0,
+      "n_paired": 261,
+      "cohens_g": 1.0,
+      "odds_ratio": {
+        "point": 227.0,
+        "ci95": [
+          14.112257896436251,
+          3651.364677300333
+        ]
+      },
+      "mcnemar_exact_p": 1.93144963207924e-12,
+      "paired_bootstrap_diff95": [
+        0.37547892720306514,
+        0.4904214559386973
+      ],
+      "rate_a": 0.4482758620689655,
+      "rate_b": 0.01532567049808429
+    },
+    "e6_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 2,
+      "n01_b_only": 24,
+      "n_paired": 87,
+      "cohens_g": 0.8461538461538461,
+      "odds_ratio": {
+        "point": 0.10204081632653061,
+        "ci95": [
+          0.02777327981568345,
+          0.37490452210491026
+        ]
+      },
+      "mcnemar_exact_p": 1.049041748046875e-05,
+      "paired_bootstrap_diff95": [
+        -0.3563218390804598,
+        -0.16091954022988506
+      ],
+      "rate_a": 0.09195402298850575,
+      "rate_b": 0.3448275862068966
+    },
+    "e4_aitester_vs_df": {
+      "arm_a": "aitester",
+      "arm_b": "plain_llm_df",
+      "n10_a_only": 0,
+      "n01_b_only": 14,
+      "n_paired": 37,
+      "cohens_g": 1.0,
+      "odds_ratio": {
+        "point": 0.034482758620689655,
+        "ci95": [
+          0.002057037909220285,
+          0.5780450796570186
+        ]
+      },
+      "mcnemar_exact_p": 0.0001220703125,
+      "paired_bootstrap_diff95": [
+        -0.5405405405405406,
+        -0.21621621621621623
+      ],
+      "rate_a": 0.4594594594594595,
+      "rate_b": 0.8378378378378378
+    }
+  }
+}

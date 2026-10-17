@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791869649.417171, "meta": {"dataset_task_id": "quixbugs__topological_ordering", "baseline": "plain_llm", "target_function": "topological_ordering"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791869654.089779, "run_id": "aab88f1fdcad4727", "span_id": "3e2aca20bd5f", "output": {"generated_test_len": 3565}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791869655.972079, "run_id": "aab88f1fdcad4727", "span_id": "51b5aa50fc4f", "output": {"passed": false, "coverage": 95.0, "failed_cases": 1}, "decision": "FAIL", "duration_ms": 1868.19, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791869726.913669, "passed": false, "duration_s": 77.5, "token_usage": {"input_tokens": 514, "output_tokens": 962, "total_tokens": 1476, "llm_calls": 1, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 1476}}}

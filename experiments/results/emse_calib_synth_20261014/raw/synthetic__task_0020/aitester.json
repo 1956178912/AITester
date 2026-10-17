@@ -1,0 +1,164 @@
+{
+  "task_id": "synthetic__task_0020",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "compare",
+    "description": "比较两个整数a与b的大小，a>b返回1，a<b返回-1，相等返回0",
+    "logic_analysis": {
+      "input_domain": "任意两个整数a、b（int类型，含0、负数、极值）",
+      "output_domain": "整数集合{1, -1, 0}",
+      "preconditions": [
+        "a为int类型",
+        "b为int类型"
+      ],
+      "postconditions": [
+        "a>b时返回1",
+        "a<b时返回-1",
+        "a==b时返回0"
+      ],
+      "edge_cases": [
+        "a与b相等",
+        "a为0",
+        "b为0",
+        "a、b均为负数",
+        "a、b均为0",
+        "极大整数与极小整数比较"
+      ],
+      "preconditions_expr": [
+        "isinstance(a, int) and isinstance(b, int)"
+      ],
+      "postconditions_expr": [
+        "(a > b and result == 1) or (a < b and result == -1) or (a == b and result == 0)"
+      ],
+      "invariants_expr": [
+        "result == 1 or result == -1 or result == 0"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "a大于b",
+        "input_args": {
+          "a": 5,
+          "b": 3
+        },
+        "expected_output": 1,
+        "category": "normal",
+        "description": "验证a>b分支返回1",
+        "logic_coverage": "a > b"
+      },
+      {
+        "case_name": "a小于b",
+        "input_args": {
+          "a": 3,
+          "b": 5
+        },
+        "expected_output": -1,
+        "category": "normal",
+        "description": "验证a<b分支返回-1",
+        "logic_coverage": "a < b"
+      },
+      {
+        "case_name": "a等于b",
+        "input_args": {
+          "a": 4,
+          "b": 4
+        },
+        "expected_output": 0,
+        "category": "normal",
+        "description": "验证相等时返回0（两分支均不进入）",
+        "logic_coverage": "not (a > b) and not (a < b)"
+      },
+      {
+        "case_name": "a为0b为正",
+        "input_args": {
+          "a": 0,
+          "b": 1
+        },
+        "expected_output": -1,
+        "category": "boundary",
+        "description": "验证a为0的边界",
+        "logic_coverage": "a < b"
+      },
+      {
+        "case_name": "a为0b为0",
+        "input_args": {
+          "a": 0,
+          "b": 0
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "验证双0边界",
+        "logic_coverage": "not (a > b) and not (a < b)"
+      },
+      {
+        "case_name": "a为负数b为0",
+        "input_args": {
+          "a": -3,
+          "b": 0
+        },
+        "expected_output": -1,
+        "category": "boundary",
+        "description": "验证负数与0比较",
+        "logic_coverage": "a < b"
+      },
+      {
+        "case_name": "a为负数b为负数",
+        "input_args": {
+          "a": -2,
+          "b": -8
+        },
+        "expected_output": 1,
+        "category": "boundary",
+        "description": "验证两负数比较",
+        "logic_coverage": "a > b"
+      },
+      {
+        "case_name": "极大与极小整数",
+        "input_args": {
+          "a": 9223372036854775807,
+          "b": -9223372036854775808
+        },
+        "expected_output": 1,
+        "category": "boundary",
+        "description": "验证极值比较不溢出",
+        "logic_coverage": "a > b"
+      },
+      {
+        "case_name": "a为字符串",
+        "input_args": {
+          "a": "x",
+          "b": 1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：类型注解要求int，传入字符串时Python比较将抛TypeError，具体异常信息未在代码中约定",
+        "logic_coverage": "a > b"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0020 import compare\n\n\n# ---------------------------------------------------------------------------\n# 正常分支：a > b / a < b / a == b\n# ---------------------------------------------------------------------------\n\ndef test_compare_a_greater_than_b_returns_1():\n    \"\"\"规约后置条件：a > b 时返回 1。\"\"\"\n    assert compare(5, 3) == 1\n\n\ndef test_compare_a_less_than_b_returns_minus_1():\n    \"\"\"规约后置条件：a < b 时返回 -1。\"\"\"\n    assert compare(3, 5) == -1\n\n\ndef test_compare_a_equal_to_b_returns_0():\n    \"\"\"规约后置条件：a == b 时返回 0。\"\"\"\n    assert compare(4, 4) == 0\n\n\n# ---------------------------------------------------------------------------\n# 边界情况\n# ---------------------------------------------------------------------------\n\ndef test_compare_a_zero_b_positive_returns_minus_1():\n    \"\"\"边界：a 为 0，b 为正数，a < b，返回 -1。\"\"\"\n    assert compare(0, 1) == -1\n\n\ndef test_compare_a_positive_b_zero_returns_1():\n    \"\"\"边界：b 为 0，a 为正数，a > b，返回 1。\"\"\"\n    assert compare(1, 0) == 1\n\n\ndef test_compare_both_zero_returns_0():\n    \"\"\"边界：a、b 均为 0，相等，返回 0。\"\"\"\n    assert compare(0, 0) == 0\n\n\ndef test_compare_a_negative_b_zero_returns_minus_1():\n    \"\"\"边界：a 为负数，b 为 0，a < b，返回 -1。\"\"\"\n    assert compare(-3, 0) == -1\n\n\ndef test_compare_both_negative_a_greater_returns_1():\n    \"\"\"边界：a、b 均为负数且 a > b，返回 1。\"\"\"\n    assert compare(-2, -8) == 1\n\n\ndef test_compare_both_negative_a_less_returns_minus_1():\n    \"\"\"边界：a、b 均为负数且 a < b，返回 -1。\"\"\"\n    assert compare(-8, -2) == -1\n\n\ndef test_compare_extreme_max_vs_min_returns_1():\n    \"\"\"边界：极大整数与极小整数比较，a > b，返回 1。\"\"\"\n    assert compare(9223372036854775807, -9223372036854775808) == 1\n\n\ndef test_compare_extreme_min_vs_max_returns_minus_1():\n    \"\"\"边界：极小整数与极大整数比较，a < b，返回 -1。\"\"\"\n    assert compare(-9223372036854775808, 9223372036854775807) == -1\n\n\n# ---------------------------------------------------------------------------\n# 不变量：返回值必须属于 {1, -1, 0}\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"a, b\",\n    [\n        (5, 3),\n        (3, 5),\n        (4, 4),\n        (0, 0),\n        (0, 1),\n        (1, 0),\n        (-3, 0),\n        (0, -3),\n        (-2, -8),\n        (-8, -2),\n        (9223372036854775807, -9223372036854775808),\n        (-9223372036854775808, 9223372036854775807),\n    ],\n)\ndef test_compare_result_invariant_in_allowed_set(a, b):\n    \"\"\"规约不变量：返回值必须为 1、-1 或 0 之一。\"\"\"\n    result = compare(a, b)\n    assert result in (1, -1, 0)\n\n\n# ---------------------------------------------------------------------------\n# 后置条件整体一致性（可执行规约直接转写）\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"a, b\",\n    [\n        (5, 3),\n        (3, 5),\n        (4, 4),\n        (0, 0),\n        (0, 1),\n        (1, 0),\n        (-3, 0),\n        (0, -3),\n        (-2, -8),\n        (-8, -2),\n        (9223372036854775807, -9223372036854775808),\n        (-9223372036854775808, 9223372036854775807),\n    ],\n)\ndef test_compare_postcondition_consistency(a, b):\n    \"\"\"规约后置条件：(a>b and r==1) or (a<b and r==-1) or (a==b and r==0)。\"\"\"\n    result = compare(a, b)\n    assert (\n        (a > b and result == 1)\n        or (a < b and result == -1)\n        or (a == b and result == 0)\n    )\n\n\n# ---------------------------------------------------------------------------\n# 前置条件不满足：非 int 输入\n# ---------------------------------------------------------------------------\n\ndef test_compare_non_int_a_raises():\n    \"\"\"前置条件要求 a 为 int；传入字符串时规约未约定行为，期望抛出异常。\n\n    期望值来源不明，需人工确认：规约仅声明前置条件为 int，\n    未约定非 int 输入的具体异常类型，此处仅断言会抛出异常。\n    \"\"\"\n    with pytest.raises(Exception):\n        compare(\"x\", 1)\n\n\ndef test_compare_non_int_b_raises():\n    \"\"\"前置条件要求 b 为 int；传入字符串时规约未约定行为，期望抛出异常。\n\n    期望值来源不明，需人工确认：规约仅声明前置条件为 int，\n    未约定非 int 输入的具体异常类型，此处仅断言会抛出异常。\n    \"\"\"\n    with pytest.raises(Exception):\n        compare(1, \"x\")",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 80.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "multi_func_off_by_one",
+    "source": "synthetic",
+    "noise_seed": 1183,
+    "difficulty": 2,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0020 import compare, sort_desc, top_k\n\ndef test_compare_basic():\n    assert compare(1, 2) == -1\n    assert compare(2, 1) == 1\n    assert compare(1, 1) == 0\n\ndef test_sort_desc_normal():\n    assert sort_desc([3, 1, 2]) == [3, 2, 1]\n\ndef test_top_k_normal():\n    assert top_k([3, 1, 4, 1, 5], 2) == [5, 4]\n\ndef test_top_k_edge():\n    assert top_k([1, 2, 3], 0) == []\n    assert top_k([1, 2, 3], 10) == [3, 2, 1]",
+    "fixed": "def compare(a: int, b: int) -> int:\n    if a > b:\n        return 1\n    elif a < b:\n        return -1\n    return 0\n\ndef sort_desc(arr: list) -> list:\n    n = len(arr)\n    for i in range(n - 1):\n        for j in range(n - 1 - i):\n            if compare(arr[j], arr[j + 1]) < 0:\n                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n    return arr\n\ndef top_k(arr: list, k: int) -> list:\n    if k <= 0:\n        return []\n    if k >= len(arr):\n        return sort_desc(arr)\n    sorted_arr = sort_desc(arr)\n    return sorted_arr[:k]"
+  }
+}

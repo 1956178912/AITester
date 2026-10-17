@@ -1,0 +1,40 @@
+{
+  "task_id": "synthetic__task_0022",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "unknown",
+    "description": "自动生成的默认测试计划",
+    "logic_analysis": {
+      "input_domain": "未知",
+      "output_domain": "未知",
+      "preconditions": [],
+      "postconditions": [],
+      "edge_cases": []
+    },
+    "test_cases": [],
+    "logic_degraded": true
+  },
+  "generated_test": "import pytest\n\nfrom task_0022 import add_item, stock_of, _STOCK\n\n\n@pytest.fixture(autouse=True)\ndef clean_stock():\n    \"\"\"在每个测试前后清空全局库存字典，保证测试隔离。\"\"\"\n    _STOCK.clear()\n    yield\n    _STOCK.clear()\n\n\ndef test_add_item_sets_stock_value():\n    \"\"\"add_item 应将指定 sku 的库存设置为 qty。\n\n    期望值来源：函数签名 add_item(sku: int, qty: int) -> None 与实现\n    _STOCK[sku] = qty。\n    \"\"\"\n    add_item(1, 10)\n    assert stock_of(1) == 10\n\n\ndef test_add_item_overwrites_existing_value():\n    \"\"\"add_item 对同一 sku 重复调用应覆盖旧值。\n\n    期望值来源：实现使用赋值而非累加。\n    \"\"\"\n    add_item(1, 10)\n    add_item(1, 3)\n    assert stock_of(1) == 3\n\n\ndef test_add_item_zero_quantity():\n    \"\"\"add_item 允许将库存设置为 0。\n\n    期望值来源：实现无任何校验，直接赋值。\n    \"\"\"\n    add_item(1, 0)\n    assert stock_of(1) == 0\n\n\ndef test_add_item_negative_quantity():\n    \"\"\"add_item 对负数 qty 不做校验，直接存储。\n\n    期望值来源：实现无校验逻辑；期望值来源不明，需人工确认是否应拒绝负数。\n    \"\"\"\n    add_item(1, -5)\n    assert stock_of(1) == -5\n\n\ndef test_add_item_returns_none():\n    \"\"\"add_item 的返回值为 None。\n\n    期望值来源：类型注解 -> None。\n    \"\"\"\n    assert add_item(1, 10) is None\n\n\ndef test_stock_of_returns_zero_for_unknown_sku():\n    \"\"\"stock_of 对不存在的 sku 应返回 0。\n\n    期望值来源：实现 _STOCK.get(sku, 0)。\n    \"\"\"\n    assert stock_of(999) == 0\n\n\ndef test_stock_of_returns_stored_value():\n    \"\"\"stock_of 应返回已存储的库存值。\n\n    期望值来源：实现 _STOCK.get(sku, 0)。\n    \"\"\"\n    add_item(2, 7)\n    assert stock_of(2) == 7\n\n\ndef test_stock_of_unknown_sku_after_other_inserts():\n    \"\"\"插入其他 sku 后，未插入的 sku 仍返回 0。\n\n    期望值来源：实现 _STOCK.get(sku, 0)。\n    \"\"\"\n    add_item(1, 5)\n    add_item(2, 6)\n    assert stock_of(3) == 0\n\n\ndef test_stock_of_type_mismatch_int_vs_str():\n    \"\"\"stock_of 使用 str 类型注解，但 add_item 使用 int 作为 key。\n\n    期望值来源不明，需人工确认：此处记录实际行为——用 int 存入、用 str 查询\n    时，由于 dict 键类型不同，应返回默认值 0。\n    \"\"\"\n    add_item(1, 42)\n    assert stock_of(\"1\") == 0\n\n\ndef test_stock_of_accepts_int_key_used_by_add_item():\n    \"\"\"stock_of 实际可接受 int 键（与 add_item 一致）。\n\n    期望值来源不明，需人工确认：类型注解标注为 str，但实现未做类型检查，\n    因此用 int 查询可命中 add_item 存入的值。\n    \"\"\"\n    add_item(5, 8)\n    assert stock_of(5) == 8",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "type_int_str_key_contract",
+    "source": "synthetic",
+    "noise_seed": 3834,
+    "difficulty": 4,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0022 import add_item, stock_of, _STOCK\n\ndef test_add_then_query():\n    add_item(42, 7)\n    assert stock_of(\"42\") == 7\n\ndef test_unknown_sku_zero():\n    assert stock_of(\"999\") == 0\n\ndef test_key_type_contract():\n    add_item(7, 1)\n    assert 7 in _STOCK and isinstance(next(iter(_STOCK)), int)",
+    "fixed": "_STOCK = {}\n\ndef add_item(sku: int, qty: int) -> None:\n    _STOCK[sku] = qty\n\ndef stock_of(sku: str) -> int:\n    return _STOCK.get(int(sku), 0)"
+  }
+}

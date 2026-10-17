@@ -1,0 +1,93 @@
+{
+  "task_id": "synthetic__task_0024",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "first_item",
+    "description": "返回全局列表 list 的第一个元素（字符串）",
+    "logic_analysis": {
+      "input_domain": "无入参；依赖模块级全局变量 list（初始为 [\"a\",\"b\",\"c\"]）",
+      "output_domain": "str 类型，即 list[0] 的值",
+      "preconditions": [
+        "全局变量 list 已定义",
+        "全局变量 list 非空（len(list) > 0）"
+      ],
+      "postconditions": [
+        "返回值等于 list[0]",
+        "返回值类型为 str"
+      ],
+      "edge_cases": [
+        "全局 list 为空列表时触发 IndexError",
+        "全局 list 被重新赋值为非列表对象",
+        "全局 list 仅含一个元素",
+        "全局 list 首元素为空字符串"
+      ],
+      "preconditions_expr": [
+        "len(list) > 0"
+      ],
+      "postconditions_expr": [
+        "result == list[0]",
+        "isinstance(result, str)"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "正常取首元素",
+        "input_args": {},
+        "expected_output": "a",
+        "category": "normal",
+        "description": "默认全局 list=[\"a\",\"b\",\"c\"]，返回首元素 \"a\"",
+        "logic_coverage": "postconditions_expr: result == list[0]；无分支（圈复杂度1）"
+      },
+      {
+        "case_name": "单元素列表",
+        "input_args": {},
+        "expected_output": "x",
+        "category": "boundary",
+        "description": "将全局 list 置为 [\"x\"]，验证最小非空边界仍返回首元素",
+        "logic_coverage": "preconditions_expr: len(list) > 0（下界=1）"
+      },
+      {
+        "case_name": "空列表触发 IndexError",
+        "input_args": {},
+        "expected_output": null,
+        "category": "error",
+        "description": "将全局 list 置为 []，期望抛出 IndexError；具体异常消息未知，故 expected_output 置 null",
+        "logic_coverage": "preconditions_expr: len(list) > 0 被违反（异常路径）"
+      },
+      {
+        "case_name": "首元素为空字符串",
+        "input_args": {},
+        "expected_output": "",
+        "category": "boundary",
+        "description": "将全局 list 置为 [\"\",\"b\"]，验证返回空字符串而非异常",
+        "logic_coverage": "postconditions_expr: result == list[0]（空串边界）"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0024 import first_item\n\n\n@pytest.fixture\ndef restore_global_list():\n    \"\"\"保存并恢复被测模块的全局 list，避免用例间相互污染。\"\"\"\n    import task_0024\n\n    original = getattr(task_0024, \"list\", None)\n    yield task_0024\n    task_0024.list = original\n\n\ndef test_first_item_normal_returns_first_element(restore_global_list):\n    \"\"\"默认全局 list=[\"a\",\"b\",\"c\"] 时，返回首元素 \"a\"。\n\n    期望值来源：规约后置条件 result == list[0] 与计划用例 expected_output=\"a\"。\n    \"\"\"\n    module = restore_global_list\n    module.list = [\"a\", \"b\", \"c\"]\n    result = first_item()\n    assert result == module.list[0]\n    assert result == \"a\"\n    assert isinstance(result, str)\n\n\ndef test_first_item_single_element_list(restore_global_list):\n    \"\"\"全局 list 仅含一个元素时，返回该唯一元素。\n\n    期望值来源：规约前置 len(list) > 0 的下界（len==1）与后置 result == list[0]。\n    \"\"\"\n    module = restore_global_list\n    module.list = [\"x\"]\n    result = first_item()\n    assert result == module.list[0]\n    assert result == \"x\"\n    assert isinstance(result, str)\n\n\ndef test_first_item_empty_list_raises_index_error(restore_global_list):\n    \"\"\"全局 list 为空列表时触发 IndexError。\n\n    期望值来源：规约边界情况\"全局 list 为空列表时触发 IndexError\"。\n    具体异常消息未知，故仅断言异常类型。\n    \"\"\"\n    module = restore_global_list\n    module.list = []\n    with pytest.raises(IndexError):\n        first_item()\n\n\ndef test_first_item_first_element_empty_string(restore_global_list):\n    \"\"\"全局 list 首元素为空字符串时，返回空字符串而非异常。\n\n    期望值来源：规约边界情况\"全局 list 首元素为空字符串\"与后置 result == list[0]。\n    \"\"\"\n    module = restore_global_list\n    module.list = [\"\", \"b\"]\n    result = first_item()\n    assert result == module.list[0]\n    assert result == \"\"\n    assert isinstance(result, str)\n\n\ndef test_first_item_non_list_global_exploratory(restore_global_list):\n    \"\"\"全局 list 被重新赋值为非列表对象时的行为探索。\n\n    期望值来源不明，需人工确认：规约仅列出该边界情况，未约定具体异常类型\n    （可能是 TypeError 或 AttributeError 等）。此处记录实际行为，不做具体值断言。\n    \"\"\"\n    module = restore_global_list\n    module.list = \"not-a-list\"\n    try:\n        result = first_item()\n    except Exception as exc:  # noqa: BLE001 - 探索性记录实际异常类型\n        assert exc is not None\n    else:\n        # 若未抛异常，则记录返回值类型，供人工确认是否符合预期\n        assert isinstance(result, str)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 94.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "import45_shadow_builtin",
+    "source": "synthetic",
+    "noise_seed": 9416,
+    "difficulty": 5,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0024 import first_item, char_count\n\ndef test_first_item():\n    assert first_item() == \"a\"\n\ndef test_char_count_uses_real_builtin():\n    assert char_count(\"xyz\") == 3\n\ndef test_no_builtin_shadow():\n    import import45_shadow_builtin as m\n\n    assert m.__dict__.get(\"list\") in (None, list)",
+    "fixed": "ITEMS = [\"a\", \"b\", \"c\"]\n\ndef first_item() -> str:\n    return ITEMS[0]\n\ndef char_count(s: str) -> int:\n    return len(list(s))"
+  }
+}
