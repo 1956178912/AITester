@@ -128,6 +128,7 @@ docs/emse/EMSE_QUIXBUGS_SPECIR_EXPAND_PREREG_*.md
 docs/emse/EMSE_BATCH8_MUTK_VALIDITY_*.md
 docs/emse/EMSE_GOLD_CONFORMANCE_*.md
 docs/emse/EMSE_DF_SPEC_PREREG_*.md
+docs/emse/EMSE_DOCSTRING_ANCHOR_PREREG_*.md
 docs/emse/EMSE_ULT_DFSMOKE_PREREG_*.md
 docs/emse/EMSE_ULT_DF200_PREREG_*.md
 docs/design/stvr_empirical_study_design.md
