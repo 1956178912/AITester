@@ -3593,6 +3593,10 @@ def run_benchmark(
         # 另有 P1 档 41 键（修复/裁决主链路）与 P2/P3 档待后续批次补齐。
         "CFG_ANALYSIS_ENABLE",
         "CONTEST_AST_SCAN_ENABLE",
+        # A-06（2026-10-17 独立评审）：M1 判分 per-test 超时开关——改变
+        # detection 判分语义（None→可判定的转换只发生在该开关生效的批次），
+        # provenance 必须留痕，否则跨批次 None 率差异不可审计。
+        "M1_PER_TEST_TIMEOUT",
         "DETECTION_FIRST_SECTION_ENABLE",
         "EVENT_BUS_ENABLE",
         "FAULT_LOCALIZER_ENABLE",

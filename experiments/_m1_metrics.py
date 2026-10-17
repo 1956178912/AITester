@@ -54,6 +54,58 @@ _COLLECTION_ERROR_MARKERS: tuple[str, ...] = (
     "error in 0.",
 )
 
+# ─── per-test 超时（A-06，2026-10-17 独立评审）─────────────────────────────
+# 背景：QuixBugs 41 缺陷程序口径有 4 个任务（bitcount / sqrt / wrap /
+# find_first_in_sorted）的**缺陷实现本身不终止**（如 bitcount 的
+# `n ^= n - 1` 对任何 n 不终止）——生成测试在 buggy 侧整套餐被 120s
+# 墙钟超时击杀 → `_run_pytest_in_tmp` 返回 None → detection=None 被
+# 剔除（fail-closed 口径正确，但损失了 4 个可判定样本：这些任务在
+# fixed 侧快速通过，本应判检出）。
+#
+# 修复口径：**per-test 超时**（pytest-timeout 的 --timeout=N，signal
+# 方法可中断纯 Python 死循环）——单条挂死测试被单独判失败（红），
+# 其余测试照常完赛，整套餐得出退出码而非 None。墙钟超时（120s）
+# 保留为外层兜底。
+#
+# 纪律（与项目"零默认行为变化"一致）：
+#   - 开关 M1_PER_TEST_TIMEOUT（秒；0/缺省 = 历史口径，零行为变化）；
+#   - pytest-timeout 不可用（未安装/探测失败）时静默回退历史口径并
+#     记 warning（不因缺插件改变判分语义）；
+#   - 判分语义变化只发生在"原本整套餐超时记 None"的任务上
+#     （None → 可判定），历史已判定任务逐位不变——单变量重放验证
+#     见 tests/test_m1_per_test_timeout.py。
+_PER_TEST_TIMEOUT_ENV = "M1_PER_TEST_TIMEOUT"
+_PER_TEST_TIMEOUT_DEFAULT = 0
+_pytest_timeout_available: bool | None = None
+
+
+def per_test_timeout_seconds() -> int:
+    """读取 M1_PER_TEST_TIMEOUT（秒）。非正/缺省/非法值 → 0（历史口径）。"""
+    raw = os.environ.get(_PER_TEST_TIMEOUT_ENV, "")
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return _PER_TEST_TIMEOUT_DEFAULT
+    return value if value > 0 else _PER_TEST_TIMEOUT_DEFAULT
+
+
+def _pytest_timeout_plugin_available() -> bool:
+    """pytest-timeout 是否可被 M1 解释器加载（进程内探测，缓存一次）。
+
+    判据：`import pytest_timeout` 成功即插件在（pytest 经 entry point
+    自动加载，无需 -p 显式指定）。探测异常（解释器故障等）→ False
+    （保守回退历史口径）。
+    """
+    global _pytest_timeout_available
+    if _pytest_timeout_available is None:
+        try:
+            import pytest_timeout  # noqa: F401
+
+            _pytest_timeout_available = True
+        except Exception:
+            _pytest_timeout_available = False
+    return _pytest_timeout_available
+
 
 def _looks_like_test_execution_error(returncode: int, output: str) -> bool:
     """判定一次 pytest 运行是否属于"测试执行错误"（根本没跑起来）。
@@ -307,6 +359,7 @@ def _run_pytest_in_tmp(
     module_name: str,
     timeout: int = 120,
     task_metadata: dict[str, Any] | None = None,
+    per_test_timeout: int | None = None,
 ) -> tuple[int, str, str] | None:
     """在临时目录里写 target + test 文件并跑 pytest。
 
@@ -323,7 +376,21 @@ def _run_pytest_in_tmp(
         - 其余走历史单文件口径（synthetic 单文件）。
     task_metadata 为 None 时行为与历史逐位一致（detection_gates.py:85 的
     委托调用不传该参数 → 零回归）。
+
+    A-06（2026-10-17）：per_test_timeout 为 None 时读环境变量
+    M1_PER_TEST_TIMEOUT（0/缺省 = 历史口径）；为正且 pytest-timeout
+    可用时，pytest 追加 ``--timeout=N``（signal 方法）——单条挂死
+    测试被单独判失败而非拖垮整套餐（缺陷实现不终止类任务由 None
+    转为可判定）。墙钟 timeout 参数保持外层兜底语义不变。
     """
+    if per_test_timeout is None:
+        per_test_timeout = per_test_timeout_seconds()
+    use_per_test = per_test_timeout > 0 and _pytest_timeout_plugin_available()
+    if per_test_timeout > 0 and not use_per_test:
+        logger.warning(
+            "M1_PER_TEST_TIMEOUT=%d 已设置但 pytest-timeout 不可用——回退历史口径（整套餐墙钟超时）",
+            per_test_timeout,
+        )
     tmpdir = tempfile.mkdtemp(prefix=f"aitester_m1_{module_name}_")
     try:
         md = task_metadata or {}
@@ -377,6 +444,10 @@ def _run_pytest_in_tmp(
                     "--no-header",
                     "-p",
                     "no:cacheprovider",
+                    # A-06：per-test 超时（仅当开关为正且插件可用；signal
+                    # 方法可中断纯 Python 死循环——缺陷实现不终止类任务的
+                    # 单条挂死测试据此被单独判失败，整套餐得以完赛）。
+                    *(["--timeout", str(per_test_timeout)] if use_per_test else []),
                     test_path,
                 ],
                 timeout=timeout,

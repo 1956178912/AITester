@@ -638,6 +638,8 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | A-04 | `experiments/results/{emse_df_spec_20261016,emse_quixbugs_specir_expand_20261014,emse_d1_quixbugs_ab_20261013,emse_ult_df200_20261017}/` | 四目录 0 git 跟踪（本人 `git ls-files` 实测）；`check_artifacts_tracked.py` 未覆盖 | 顶会 Open Science artifact 要求 | force-add 四目录 + SHA256SUMS；扩展 check_artifacts_tracked 扫描面至全部 `emse_*` 结果目录 | 必须改进 | **P0** | 论文核心实验可异地复现 | 低（git add -f + 门禁扩展） | CI 门禁对四目录 exit 0 | 1 周 | `git add -f experiments/results/emse_df_spec_20261016/`；`python scripts/gates/check_artifacts_tracked.py` |
 | A-05 | `src/tools/oracle_validator.py`；run_benchmark 指标 schema | spec_oracle 正确率未度量 | Tratto 73%/TOGLL 63%（ISSTA'25/arXiv'24） | 增加 oracle_correct/oracle_fp/oracle_silent 三指标（gold fixed 上假阳率 + 注入任务检出贡献） | 可新增 | P1 | 逻辑驱动通道的有效性可量化 | 低-中 | oracle 质量报告随批次产出 | 2 月 | 扩 `metrics_schema` + `tests/test_emse_*` |
 | A-06 | `docs/design/frame_lifetime_trace.md`（未落地） | 4 个 None 任务（不终止）+ Debugger 二值反馈 | ADI FSE'26（+6.2-18.5pp；PDB 53% 放弃率） | 按 P2：先 per-test 超时（判分层，零 LLM），后 FLT v1 | 必须改进（超时部分） | P0（超时）/P1（FLT） | None 归零；detection +9pp | 中 | 41 口径 detection ≥55% | 1-3 月 | `pytest tests/test_m1_packaged_tests.py` 扩展 |
+
+> **执行状态（2026-10-17，per-test 超时部分）**：✅ **已完成**——`_run_pytest_in_tmp` 新增 per-test 超时（pytest-timeout `--timeout=N`，signal 方法；env 开关 `M1_PER_TEST_TIMEOUT`，默认 0=历史口径零行为变化；插件不可用回退并告警）；`M1_PER_TEST_TIMEOUT` 已入 `run_benchmark._env_snapshot_keys`（provenance 留痕）。**零 LLM 重放实证**（`experiments/a06_per_test_timeout_replay.py`，工件 `emse_a06_replay_20261017/replay.json`）：E4 aitester 臂 4 个"缺陷实现不终止"任务全部由 None 转为可判定——bitcount 与 find_first_in_sorted 反事实 F2P=1.0（检出），sqrt 与 wrap=0.0（其生成测试在 fixed 侧亦红，诚实记 0 不夸大）。**影响评估（反事实，不 retroactively 改写历史数字）**：aitester 41 口径 detection 将由 17/37=45.9% 变为 19/41=46.3%——幅度近似中性，但 None 归零、分母更干净；新批次启用后判分严格更信息充分。FLT v1 仍待中期实施。
 | A-07 | `experiments/statistical_analysis.py` 报告层 | 缺 Wilson CI 与成本-效果 Pareto | 2025-2026 统计报告惯例 | 比例型端点全部补 Wilson 95% CI；新增 $/detection Pareto 节 | 可新增 | P2 | 报告完整性 | 低 | 报告含 CI 列 | 2 周 | `python -m experiments.emse_stats_report` 扩展 |
 | A-08 | `docs/preregistration.md` E7 节；`docs/HUMAN_ADJUDICATION_PROTOCOL.md` | 人工裁决未执行 | Google AI-SQE'26（κ=0.307，需共享 rubric） | 执行 E7：n≥100 双人盲审 + 共享 rubric + Cohen's κ | 建议优化 | P1 | 填补"无人工验证"缺口 | 中（人工成本） | κ≥0.7 | 2-3 月 | 协议文档已在场 |
 | A-09 | `docs/design/layered_narrative.md` §1；BASELINE §benchmark | "~63% 首轮基线"与"45.9% F2P"未桥接；df 臂跨批 83.8→77.8% 未归因 | — | 显式口径桥接段；跨批方差纳入功效与解读 | 必须改进 | P0 | 防审稿误读 | 低（文档） | 文档口径表 | 1 周 | `make docs-check` |
@@ -721,7 +723,7 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 
 | 阶段 | 时间 | 内容 | 出口判据 |
 |---|---|---|---|
-| S0 修复期 | 0-1 月 | A-04（工件入 git，✅ 已完成）、A-10（DOI 定位）、A-09（口径桥接，✅ 已完成）；P2 的 per-test 超时 | 全部 P0 门禁 exit 0；None 任务归零 |
+| S0 修复期 | 0-1 月 | A-04（工件入 git，✅ 已完成）、A-10（DOI 定位，✅ 已完成）、A-09（口径桥接，✅ 已完成）、A-07（Wilson CI，✅ 已完成）、A-06 per-test 超时（✅ 已完成）；P2 的 FLT v1 | 全部 P0 门禁 exit 0；None 任务归零（重放实证 4/4 转换） |
 | S1 验证期 | 1-3 月 | P1 misguided 度量 + docstring 锚探索批；P4 ULT probe200 三臂；E7 人工裁决启动 | 探索批出趋势数据；ULT 三臂管线通 |
 | S2 决胜期 | 3-5 月 | P1 预注册三臂正式跑批（QuixBugs 41）；P4 ULT 500 分层预注册；P5 等预算记忆臂 | 按预注册三态判定出结论（可阴性） |
 | S3 发表期 | 5-8 月 | 支柱 B 清单开源 + TestGenEval-Lite 伪影演示；论文主结果整合；Data Availability 定稿 | ≥1 篇一手 venue 投稿；artifact 包可异地复现 |
