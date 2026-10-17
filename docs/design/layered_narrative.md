@@ -293,3 +293,45 @@ Open Science 清单与 P0 状态见
 **引用纪律**：上述三条已内联至 ADR-0030 背景节；citation_allowlist
 已于第十九轮清空（7 项存疑全部核销：3 项验证内联 + 4 项陈旧移除），
 `check_citations.py --traceability` 零豁免通过。
+
+---
+
+## 9. 分层结论 5：df_spec 实验——"替代码为规格锚"呈现显著负效应（P1 主实验，2026-10-17）
+
+**事实**（预注册 `docs/study/DF_SPEC_PREREG_2026-10-16.md`，sha256
+`a19a6c29…`（承诺哈希记录于跑批前入库提交 `cd514d2`）；判定口径
+`experiments/emse_df_spec_analysis.py` 于结果产出前入库锁定）：
+
+- **设计**：QuixBugs 双臂（`plain_llm_df_spec` vs `plain_llm_df`，单变量 =
+  prompt 代码块替换为预计算规格锚），41 缺陷程序口径、同批同日、独立 cache
+  namespace、logic 档 / temp=0；锚命中 **50/50**（`spec_replace_applied=
+  attempted_replaced`，仪器无故障）；两臂 provenance `git_dirty=false`；
+- **主终点：`not_confirmed`（方向为负的显著证据）**——df_spec
+  **54.3%（19/35）vs** df **77.8%（28/36）**；配对 **1:10**、δ=**−25.7pp**、
+  双向精确 p=**0.0117**、BF10=16.4（MDE 16.6pp）；预注册三条件
+  （≥60% ∧ 单向 p<0.05 ∧ 误导 proxy −30%）**全未满足**；失败线（<50%）未触发；
+- **机制侧（描述性）**：over_red 占比 **46.0% vs 22.5%**——预注册预期
+  "下降 ≥30%"，实测**反向上升 104%**；specific_red 20 vs 31；
+- **参照**：df_spec 与 E4 历史 df 的 35 共同可判定中，df_spec 独有 **0**、
+  E4 df 独有 11（方向一致、量级更强）；同批 df 对照为主配对（隔离模型版本/环境）；
+- **工件**：`experiments/results/emse_df_spec_20261016/`（两臂批次 JSON +
+  `DF_SPEC_REPORT.json` 判定 + README + SHA256SUMS，104 文件校验通过）。
+
+**推论**（基于证据的机制假设，待独立预注册检验，不作定论）：
+
+锚材料由 Planner 对**目标（缺陷）代码**的历史分析物化
+（`build_spec_anchor_table` 自既有 LLM 缓存提取 `logic_analysis`）——
+它是"对缺陷行为的再描述"，**不是独立于缺陷的正确规格**。据其生成测试
+→ 更易断言缺陷行为（over_red↑）→ 特异检出↓——与实测方向一致。**本负结果
+不读作对 Zhao et al.（ISSTA 2026）"spec-based prompting 缓解误导航"的
+反证**（其设定使用独立 spec docstring），而读作一条**操作性警示**：
+锚材料的来源必须是独立正确规格，而非对缺陷代码的再描述。
+
+**定位纪律（对外引用强制）**：
+
+1. P1 成功判定全未满足 → 论文主标题不升级（维持现版本）；
+2. spec-first/规格锚定路线的三个独立检验（D1 协议增益不可外推 / M4 specir
+   扩样未确认 / 本实验显著负）均**未显示检测增益**——对外表述统一为
+   "本系统内、以此实现方式"的路线级负证据，不得扩大为"规格锚定普遍无效"；
+3. 引用本实验必须带隔离链标签（处理 = df + 锚替换；非 aitester spec_first
+   路径的直接检验）；机制假设（锚材料来源）标注为"待检验假设"。

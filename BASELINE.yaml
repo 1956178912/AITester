@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-16"   # 全量回归实测日期（2026-10-16 I 轮〔失败归因链接线 I1 + `m10_leaf_fallback` 状态通道补声明/抬升 I2 + 默认计划替换吞标记 I2b + `"unknown"` 抢占弱信号 I3〕后：`--collect-only` 实测 **6764**，登记值 passed = collected − skipped = 6764 − 5 = **6759**。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`）**连跑两次**：86.94s〔6758 passed / 5 skipped / **1 failed**，唯一 failed 为文档↔工件**自指**一致性项 `TestBaselineNumbersConsistency`〕→ 刷新本文件后 86.99s〔**6759 passed / 5 skipped / 0 failed**，自指项转绿，非代码回归〕。两次 `coverage.xml` 逐行 + 逐分支比对**零漂移**（16941 行 / 3118 分支点全同），H 轮收口的可复现性在 I 轮改动后仍成立。本轮净增 **29** 例（collected 6735 → 6764）。此前 H 轮批次：6735/6730/5/0；G 轮批次：6703/6698/5/0；F 轮批次：6647/6642/5/0）
+last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 df_spec 实验批次〔LLM 授权实跑 + 分析契约入库〕后：`--collect-only` 实测 **6789**，登记值 passed = collected − skipped = 6789 − 5 = **6784**。本轮净增 **25** 例 = df_spec 预注册判定契约（tests/test_emse_df_spec_analysis.py：单侧精确 p 尾 / 有效配对 / 41 缺陷程序口径切分 / 三态判定边界 / 域统计 / 臂名防错配）。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`，沙箱 fresh basetemp）500.83s：**6782 passed / 5 skipped / 2 failed**，两 failed 全非代码回归：① `TestBaselineNumbersConsistency` 自指（本字段刷新后转绿）；② 沙箱 `ps` 被禁（test_p0_hardening，环境已知项）。覆盖率与 I 轮一致（行 15749/16941=92.96%、分支 5463/6236=87.60%，分支 −1 为 ps 项伴生）。此前 I 轮批次：6759/5/0）
 
 tests:
-  total_passed: 6759          # 全量 pytest tests/（2026-10-16 I 轮后：`--collect-only` 实测 **6764**；登记口径 = collected − skipped = 6764 − 5 = 6759。本轮净增 29 例，全部服务于"失败归因链从只写不读变为可机读"：run_benchmark 接线（TestFailureAttributionWiring 7 + TestFailureBucketAggregation 5）、`"unknown"` 不再抢占弱信号（TestUnknownStopReasonDoesNotPreemptWeakSignal 6 + render_markdown 分母披露 2）、`m10_leaf_fallback` 顶层抬升（TestM10LeafFallbackTopLevelLift 6，含"默认计划替换吞标记"端到端反例）、Planner 写侧（test_planner 3——此前 `planner.py:352/379` 两行**零覆盖**，ADR-0032 决策 2 的写侧从未被测过）。守卫余量 = skipped + xfailed + 1）
+  total_passed: 6784          # 全量 pytest tests/（2026-10-17 df_spec 批次后：`--collect-only` 实测 **6789**；登记口径 = collected − skipped = 6789 − 5 = 6784。本轮净增 25 例 = `tests/test_emse_df_spec_analysis.py`（df_spec 预注册判定契约：单侧精确 p 尾定义 / 有效配对（双方非 None）/ 41 缺陷程序口径切分（_test 后缀排除）/ 三态判定边界（60%·50%·0.05·0.10）/ spec_replace_applied 与 verdict 域统计 / 臂名防错配）。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 87            # 全量耗时：2026-10-16 I 轮终态本机实测 86.94s / 86.99s（连跑两次；xdist -n 4 loadfile + `--cov=src --cov-branch`）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：H 轮同日两次 85.16s / 96.13s（本机波动约 ±11s，本轮 +29 例落在此波动内，不构成性能信号）、E 轮沙箱 534.61s（I/O 代理减速）、CI 原生参考 ~195s（2026-10-11）——差异来自执行环境而非代码性能变化
+  suite_seconds: 501           # 全量耗时：2026-10-17 沙箱实测 500.83s（xdist -n 4 loadfile + `--cov=src --cov-branch`；fresh basetemp）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：本机口径 I 轮 86.94s / 86.99s（同日在沙箱外）、CI 原生参考 ~195s（2026-10-11）、E 轮沙箱 534.61s——差异来自执行环境而非代码性能变化
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。

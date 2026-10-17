@@ -1,10 +1,57 @@
-> Last updated: 2026-10-16 (four engineering rounds F/G/H/I: F switch-governance closure [env-budget gate false-green + 60-site boolean caliber + atomic persists] / G security-guard actuation [C5 fragment scanning + conftest wiring + two gate false-greens + attribution-chain break] / H coverage-measurement determinism closure [three noise sources to zero + runtime redaction blind spots + observation keys] / I failure-attribution wiring [five-bucket dump + machine-readable m10_leaf_fallback]; full suite **6759 passed / 5 skipped / 0 failed** (two consecutive CI-caliber runs), coverage.xml drift-free line- and branch-wise (16941 lines / 3118 branch points); ruff / mypy (133 source files) clean. Previously 2026-10-15 EMSE batch 8: full-mutant Mut@k closure + four-arm M4)
+> Last updated: 2026-10-17 (df_spec experiment [P1 main experiment] executed: verdict `not_confirmed` — significant negative-direction evidence [df_spec 54.3% vs df 77.8%, paired 1:10, δ=−25.7pp, two-sided exact p=0.0117]; pre-registration and decision caliber locked before results. Previously 2026-10-16 rounds F/G/H/I: switch-governance closure + security-guard actuation + coverage-measurement determinism closure + failure-attribution wiring; full suite 6759 passed / 5 skipped / 0 failed)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-17 df_spec experiment (P1 main experiment executed: `not_confirmed`, significant negative-direction evidence)
+
+> Execution of the independent review §6 P1 / skeleton §8 T-6 main experiment
+> (LLM-authorized batch). Pre-registration and decision caliber were landed
+> before results; two QuixBugs arms ran in one batch (single variable =
+> prompt code block replaced by the precomputed specification anchor).
+
+### Added
+
+- **Pre-registration (pre-run)**: `docs/study/DF_SPEC_PREREG_2026-10-16.md`
+  (local artifact; sha256 `a19a6c29…` committed as a hash promise in the
+  pre-run commit `cd514d2`);
+- **Decision caliber (committed pre-run)**: `experiments/emse_df_spec_analysis.py`
+  (+ `tests/test_emse_df_spec_analysis.py`, 25 cases) — main decision C1
+  detection ≥60% ∧ C2 one-sided McNemar p<0.05; trend p<0.10 ∧ δ>0; fail
+  line <50%; mechanism proxy: over_red share drop ≥30% (descriptive);
+- **Artifacts**: `experiments/results/emse_df_spec_20261016/` (two-arm
+  50-task batch JSONs + `DF_SPEC_REPORT.json` + README + SHA256SUMS,
+  104 files verified).
+
+### Notes (headline findings)
+
+- **Result = `not_confirmed` (significant negative-direction evidence)**:
+  df_spec **54.3% (19/35)** vs df (same-batch control) **77.8% (28/36)**;
+  paired **1:10**, δ=**−25.7pp**, two-sided exact p=**0.0117**, BF10=16.4
+  (MDE 16.6pp); all three pre-registered conditions unmet; fail line
+  (<50%) not triggered;
+- **Mechanism side (descriptive)**: over_red share **46.0% vs 22.5%** —
+  pre-registration expected a ≥30% drop; the measured direction is a
+  104% increase;
+- **Mechanism hypothesis (to be tested independently)**: anchor material
+  was materialized from Planner analyses of the *buggy* code
+  (`logic_analysis` re-description, not an independent correct
+  specification) → misguidance↑, specific detection↓. This is *not* a
+  refutation of Zhao et al. (ISSTA 2026) spec-based prompting (which uses
+  an independent spec docstring);
+- **Positioning**: P1 success criteria unmet → paper title remains
+  unchanged; layered narrative gains §9; skeleton §8 T-6 closed (negative
+  result);
+- **Environment disclosure**: sandbox I/O slowdown caused defensive 30s
+  timeouts in mutation post-processing (bounded, no hangs);
+  `mutation_detection_rate` non-null 19/50 and 30/50, MDO available 20/50
+  and 31/50 — the primary detection metric is unaffected (computed in the
+  task phase);
+- Both arms provenance `git_dirty=false`; cache namespaces distinct
+  (`emse_df_spec_20261016_dfspec` / `_df`).
 
 ## [Unreleased] — 2026-10-16 Round I (failure-attribution wiring: five-bucket final-state classes dumped + machine-readable m10_leaf_fallback + two unreachable read-side branches fixed; zero-LLM)
 

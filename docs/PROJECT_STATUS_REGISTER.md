@@ -1,6 +1,6 @@
 # 项目状态与决策登记册（Status & Decision Register）
 
-- 最后更新：2026-10-16（I 轮"失败归因链接线 + `m10_leaf_fallback` 状态通道补全 + `unknown` 抢占弱信号缺陷修复"；§1 快照随 `BASELINE.yaml` 同步至当日终态）
+- 最后更新：2026-10-17（df_spec 实验（P1 主实验）实跑 + 判定 `not_confirmed`（方向为负的显著证据）+ 判定契约 25 例入库；§1 快照随 `BASELINE.yaml` 同步至当日终态）
 - **自我对账**：本册的覆盖率声明由 `scripts/gates/check_artifact_doc_consistency.py`
   的 `check_status_register()` 与 `coverage.xml` 实测对账——数字实质性错报即 CI 红，
   因此本册不允许手工美化。对账口径 = **锚定 §1 声明行 + ±0.10pp 容差**（见下）。
@@ -36,7 +36,7 @@
 
 | 维度 | 数值 | 验证入口 |
 |---|---|---|
-| 全量测试 | **6759 passed / 5 skipped / 0 failed**（登记口径 = collected 6764 − skipped 5；全量实跑连跑两次 86.94s / 86.99s，第二次 rc=0，含 `--cov-branch`） | `pytest tests/ -q -n 4 --dist loadfile` |
+| 全量测试 | **6784 passed / 5 skipped / 0 failed**（登记口径 = collected 6789 − skipped 5；2026-10-17 沙箱实跑 500.83s：6782 passed / 2 failed 全**非代码回归**——① BASELINE 自指（随本行刷新转绿）② ps 被禁（环境已知项）；本轮净增 25 例 = df_spec 判定契约） | `pytest tests/ -q -n 4 --dist loadfile` |
 | 总行覆盖 | **92.96%**（15748/16941；**连跑两次逐行比对零漂移**，见 §4 已收口条目；ratchet 水位 92.90，余量 +0.06pp） | `make test-cov` + `scripts/gates/coverage_ratchet.py --check` |
 | 总分支覆盖 | **87.62%**（5464/6236；**连跑两次逐分支比对零漂移**〔3118 个分支点全同〕；水位 87.50，余量 +0.12pp） | 同上（`--cov-branch`） |
 | 静态硬下限覆盖 | 达标（行 ≥85% / 分支总 ≥77% / 核心路由 ≥85–90%） | `scripts/gates/check_branch_coverage.py coverage.xml` |
@@ -123,6 +123,7 @@
 | **I2**：**`m10_leaf_fallback` 抬到状态顶层 + 落盘**（ADR-0032 可分离性变可机读）。此前 1 个写侧、0 个读侧：`PlannerAgent.plan` 的 M10 兜底分支把标记写进 `result`（即 `test_plan` **内部**），该键又从未在 `AITesterState` 声明 → LangGraph 直接丢弃、投影行也读不到，ADR-0032 声称的"`logic_degraded=True ∧ m10_leaf_fallback=True` ⇒ 提取器误诊（非 LLM 真未输出）"无法从任何工件验证。现三处补齐：`state.py` 声明 + `create_initial_state` 默认 False、`_planner_node` 无条件抬升（与 G3 的 `logic_degraded` 同构，False 同样有意义）、批次工件白名单与 per-task 行各加一键 | `src/graph/state.py`、`src/graph/nodes.py::_planner_node`、`experiments/run_benchmark.py` | `pytest tests/test_nodes_batch11_pure_logic.py -q -k M10LeafFallback`（6 例）+ `scripts/gates/check_state_contract.py` |
 | **I2b**：**修 ADR-0032 标记在默认计划替换时被吞**（接线过程中实测发现，非登记项）。`extract_json_object` 的叶子降级档返回**最内层片段**（如 `{"k": 42}`），片段通常连 `function_name` 都没有 → `_validate_planner_output` 判 False → `_planner_node` 用默认计划**整份替换** `test_plan`，planner 刚写下的 `m10_leaf_fallback` 随之丢弃 → 顶层只能抬到 False，"提取器误诊"被记成"LLM 真未输出"，**归因反向错误**。即 ADR-0032 的可分离性恰好在它最该生效的场景下失效。实测日志链：`helpers.py:735`（叶子回退）→ `planner.py:380`（写标记）→ `nodes.py:2324`（缺 function_name）→ `nodes.py:337`（默认计划，标记消失）。修为替换前先摘出该标记再回填 | `src/graph/nodes.py::_planner_node` 结构校验失败分支 | `pytest tests/test_nodes_batch11_pure_logic.py -q -k test_marker_survives_default_plan_replacement`（真 PlannerAgent + 真节点，端到端） |
 | **I3**：**`stop_reason="unknown"` 不再抢占 `logic_degraded` 弱信号**。I1 接线时按 G3 文档口径必须经 `effective_stop_reason` 取终止原因，而其兜底返回值是 `"unknown"`——**非空字符串**，于是旧实现 `if stop_reason:` 把它当作有信息的归因证据走查表 → UNCATEGORIZED，**永远走不到**弱信号分支：G3 抬升键路径修好了，读侧分支在唯一的生产路径上依然不可达。既有单测只构造"stop_reason 缺失"的输入（`test_logic_degraded_weak_signal`），因此一直是绿的——与 G3 同一失效形态（单测手工构造理想输入，掩盖生产路径不可达）。`"unknown"` 是 `determine_stop_reason` 第 8 优先级的保守兜底，语义等于"无信息"，而弱信号本就是为"stop_reason 不可用"设计的。映射表仍保留 `unknown → UNCATEGORIZED` 条目（保证对 `StopReason` 全域封闭，`test_mapping_covers_all_workflow_stop_reasons` 依赖它），只是不再让它抢占有真实弱信号的行 | `src/observability/failure_taxonomy.py::annotate_final_state` | `pytest tests/test_failure_taxonomy.py -q -k UnknownStopReason`（6 例，含经 `effective_stop_reason` 的端到端一例） |
+| **df_spec 实验（P1 主实验，2026-10-17 凌晨实跑）**：预注册 + 判定口径**跑批前**锁定（`DF_SPEC_PREREG_2026-10-16.md` sha256 `a19a6c29…` → 承诺于 `cd514d2`；分析脚本 25 例测试同批入库）→ QuixBugs 双臂同批实跑（50/50 锚命中 `attempted_replaced`、独立 namespace、logic 档 temp=0、双 provenance `git_dirty=false`）→ **`not_confirmed`（方向为负的显著证据）**：df_spec **54.3%（19/35）vs df 77.8%（28/36）**、配对 **1:10**、δ=**−25.7pp**、双向精确 p=**0.0117**、BF10=16.4；over_red 占比 **46.0% vs 22.5%**（预注册预期 −30%，实测反向上升 104%）；预注册三条件全未满足、失败线（<50%）未触发。机制假设（锚材料=对缺陷代码的再描述，非独立正确规格）标注"待检验"，见分层叙事 §9 | 工件 `experiments/results/emse_df_spec_20261016/`（两臂 JSON + `DF_SPEC_REPORT.json` + README + SHA256SUMS 104 项校验通过） | `python -m experiments.emse_df_spec_analysis --dfspec … --df …`；`pytest tests/test_emse_df_spec_analysis.py -q` |
 
 ## 4. 遗留缺口（按"是否值得继续"分级）
 
