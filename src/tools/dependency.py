@@ -36,7 +36,7 @@ import time
 from typing import Any
 
 from src.utils.atomic_io import atomic_write_json
-from src.utils.env_utils import env_flag
+from src.utils.env_utils import env_flag, env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -320,13 +320,17 @@ def _is_dangerous_getattr(node: ast.Call) -> bool:
 def conftest_ast_scan_enabled() -> bool:
     """S6 conftest.py AST 扫描守卫开关（默认 true 保持安全口径）。
 
-    口径刻意**不**走 ``env_flag``（正集合 true/1/on）而用负集合
-    ``not in ("false", "0", "off")``：安全守卫的开关在取到垃圾值（如
-    ``CONTEST_AST_SCAN_ENABLE=ture`` 拼错）时应保持**开启**，负集合口径天然
-    fail-closed；正集合口径会把拼错当成"关闭守卫"。G 轮接线后本开关首次成为
-    生产路径上的真实开关（此前守卫无调用点，开关形同装饰）。
+    口径刻意**不**走 :func:`env_flag`（正集合 ``true/1/on``）而用负集合：安全
+    守卫的开关在取到垃圾值（如 ``CONTEST_AST_SCAN_ENABLE=ture`` 拼错）时应保持
+    **开启**，负集合天然 fail-closed；正集合会把拼错读成"关闭守卫"。G 轮接线后
+    本开关首次成为生产路径上的真实开关（此前守卫无调用点，开关形同装饰）。
+
+    J-2（2026-10-17）：负集合表达式收敛到 :func:`env_flag_opt_out`（单一事实源，
+    关闭集与本处手抄的 ``("false", "0", "off")`` 逐项相同）。唯一行为差异：新增
+    空白容忍——``" 0 "`` 此前判"开启"（未 strip），现判"关闭"（与仓内其余 opt-out
+    开关同口径）。
     """
-    return os.getenv("CONTEST_AST_SCAN_ENABLE", "true").lower() not in ("false", "0", "off")
+    return env_flag_opt_out("CONTEST_AST_SCAN_ENABLE")
 
 
 def _get_venv_dir_lock(venv_dir: str) -> threading.Lock:

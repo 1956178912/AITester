@@ -29,10 +29,9 @@ from __future__ import annotations
 
 import ast
 import logging
-import os
 from typing import Any
 
-from src.utils.env_utils import env_int
+from src.utils.env_utils import env_flag_opt_out, env_int
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +214,7 @@ def cfg_analysis_enabled() -> bool:
     """CFG 分析开关（CFG_ANALYSIS_ENABLE，默认 true——纯静态零成本，
     注入 prompt 为增量信息，不改变历史 LLM 调用次数；设 false 回退
     历史口径，供 A/B 消融）。"""
-    return os.getenv("CFG_ANALYSIS_ENABLE", "true").lower() not in ("false", "0")
+    return env_flag_opt_out("CFG_ANALYSIS_ENABLE")
 
 
 def build_cfg_prompt_section(cfg: dict[str, Any] | None) -> str:

@@ -1,10 +1,4 @@
 {
-  "_meta": {
-    "description": "R14 性能基准基线：结构与 scripts/tools/performance_benchmark.py 的输出一致（category -> metric -> {avg_ms, min_ms, max_ms, iterations}）。每周日 perf.yml 用 check_perf_regression.py 与最新跑分比对（15% 相对阈值 + 0.05ms 绝对下限，仅告警不阻断）。",
-    "generated_at": "2026-10-05",
-    "generated_on": "macOS arm64 开发机, Python 3.14.6",
-    "note": "CI 跑分在 ubuntu-latest 上执行，硬件与开发机不同，亚毫秒级指标存在跨机固有偏差（_auto_fix_imports_complex 首轮含 tree-sitter 懒加载预热，max_ms 波动大属正常）。阈值比对只看 avg_ms 且带绝对下限过滤定时器噪声。基线漂移需刷新时：下载 CI 产物 performance_benchmark.json 后本地执行 python scripts/gates/check_perf_regression.py --current <产物路径> --update-baseline 并提交。"
-  },
   "executor": {
     "_auto_fix_imports_simple": {
       "avg_ms": 0.0010517245391383767,
@@ -82,5 +76,37 @@
       "avg_ms": 0.0013867608504369855,
       "iterations": 100
     }
+  },
+  "json_extraction": {
+    "object_fenced_typical": {
+      "avg_ms": 0.0073226537788286805,
+      "min_ms": 0.006417045369744301,
+      "max_ms": 0.08150003850460052,
+      "iterations": 2000
+    },
+    "object_fenced_large": {
+      "avg_ms": 0.0433418401516974,
+      "min_ms": 0.03937515430152416,
+      "max_ms": 0.18474995158612728,
+      "iterations": 500
+    },
+    "object_truncated_repair": {
+      "avg_ms": 0.04115779139101505,
+      "min_ms": 0.03350013867020607,
+      "max_ms": 0.45241694897413254,
+      "iterations": 500
+    },
+    "array_fenced": {
+      "avg_ms": 0.002111003967002034,
+      "min_ms": 0.0019997823983430862,
+      "max_ms": 0.005166977643966675,
+      "iterations": 1000
+    }
+  },
+  "_meta": {
+    "description": "R14 性能基准基线：结构与 scripts/tools/performance_benchmark.py 的输出一致（category -> metric -> {avg_ms, min_ms, max_ms, iterations}）。每周日 perf.yml 用 check_perf_regression.py 与最新跑分比对（15% 相对阈值 + 0.05ms 绝对下限，仅告警不阻断）。",
+    "generated_at": "2026-10-05",
+    "generated_on": "macOS arm64 开发机, Python 3.14.6",
+    "note": "CI 跑分在 ubuntu-latest 上执行，硬件与开发机不同，亚毫秒级指标存在跨机固有偏差（_auto_fix_imports_complex 首轮含 tree-sitter 懒加载预热，max_ms 波动大属正常）。阈值比对只看 avg_ms 且带绝对下限过滤定时器噪声。基线漂移需刷新时：下载 CI 产物 performance_benchmark.json 后本地执行 python scripts/gates/check_perf_regression.py --current <产物路径> --update-baseline 并提交。 K 轮（2026-10-17）新增 json_extraction 类别（extract_json_object/array 三条真实路径 + 数组契约；值为开发机实测、均在绝对下限 0.05ms 之下，故只作趋势参考不作阻断依据）；其余类别仍为 2026-10-05 空闲机基线，本轮未在负载下重测刷新（避免把并行任务噪声写进回归阈值）。"
   }
 }

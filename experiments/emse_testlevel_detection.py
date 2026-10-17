@@ -370,7 +370,7 @@ def run_side(
     keep_stdout: bool = True,
 ) -> dict[str, Any]:
     """物化（packaged 分支，与 _run_pytest_in_tmp 同链路）并跑一次 pytest。"""
-    from src.utils.process_utils import run_with_timeout
+    from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
     tmpdir = tempfile.mkdtemp(prefix=f"tl_{module}_")
     try:
@@ -378,14 +378,13 @@ def run_side(
         plugin_path = Path(tmpdir) / "_dsh_outcomes.py"
         plugin_path.write_text(_PLUGIN_SRC, encoding="utf-8")
         jsonl = Path(tmpdir) / "outcomes.jsonl"
-        env = {
-            **os.environ,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONHASHSEED": "0",
-            "PYTHONPATH": pythonpath,
-            "DSH_OUTCOME_JSONL": str(jsonl),
-            "COLUMNS": "200",
-        }
+        env = nested_pytest_env(
+            PYTHONDONTWRITEBYTECODE="1",
+            PYTHONHASHSEED="0",
+            PYTHONPATH=pythonpath,
+            DSH_OUTCOME_JSONL=str(jsonl),
+            COLUMNS="200",
+        )
         cmd = [
             sys.executable,
             "-m",
@@ -1255,7 +1254,7 @@ def independent_check(
     (fail+error, pass) 计数。超时套件在两侧都会再次超时（记 `reproduced_timeout`），
     其部分 node 数据不参与对照（工件对超时套件一律记 `other`，本就不产生 f2p）。
     """
-    from src.utils.process_utils import run_with_timeout
+    from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
     out: dict[str, Any] = {}
     src_by_label = {s["label"]: s for s in sources}
@@ -1279,7 +1278,7 @@ def independent_check(
                 test_path, pythonpath = _prepare_packaged_test_tree(
                     tmpdir, code, str(row.get("generated_test") or ""), module
                 )
-                env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": pythonpath, "COLUMNS": "200"}
+                env = nested_pytest_env(PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=pythonpath, COLUMNS="200")
                 res = run_with_timeout(
                     [
                         sys.executable,

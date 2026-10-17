@@ -8,7 +8,10 @@
 """
 
 import json
+import os
 from typing import Any
+
+import pytest
 
 import experiments.run_benchmark as rb
 from experiments.run_benchmark import _build_task_result
@@ -497,3 +500,166 @@ class TestFailureBucketAggregation:
         assert "总计：4 个任务" in md
         assert "另有 1 个任务无工作流终局状态" in md
         assert "批次共 5 行" in md
+
+
+class TestModuleLevelAggregators:
+    """J-1b（2026-10-17）：三个原 `run_benchmark()` 嵌套聚合器的口径锁定。
+
+    外提前它们只能靠端到端跑批间接覆盖；现在逐口径钉死——分母、零除守卫、
+    剔除规则都是报表读者最容易误读的地方。
+    """
+
+    def test_they_are_module_level_not_closures(self) -> None:
+        """重构目的本身：qualname 必须无 `<locals>`，否则单测再度够不着。"""
+        for fn in (
+            rb._aggregate_rag_metrics,
+            rb._aggregate_token_metrics,
+            rb._aggregate_failure_categories,
+        ):
+            assert "<locals>" not in fn.__qualname__, f"{fn.__name__} 仍是嵌套函数：{fn.__qualname__}"
+
+    def test_rag_hit_rate_denominator_is_retrievals(self) -> None:
+        """hit_rate 分母 = 检索次数（不是任务数）；results==0 记未命中。"""
+        got = rb._aggregate_rag_metrics(
+            [
+                {"rag_stats": [{"results": 2, "max_similarity": 0.9}, {"results": 0, "max_similarity": None}]},
+                {"rag_stats": [{"results": 1, "max_similarity": 0.7}]},
+                {"no_rag_stats_here": True},
+            ]
+        )
+        assert got["retrievals"] == 3
+        assert got["hits"] == 2
+        assert got["hit_rate"] == 0.6667
+
+    def test_rag_similarity_avg_skips_none_but_counts_them_as_retrievals(self) -> None:
+        """max_similarity 缺失不入均值分母，但仍是 1 次检索（两个分母不得混用）。"""
+        got = rb._aggregate_rag_metrics([{"rag_stats": [{"results": 1, "max_similarity": None}] * 2}])
+        assert got == {"retrievals": 2, "hits": 2, "hit_rate": 1.0, "avg_max_similarity": None}
+
+    def test_rag_empty_batch_shape_is_zero_not_crash(self) -> None:
+        assert rb._aggregate_rag_metrics([]) == {
+            "retrievals": 0,
+            "hits": 0,
+            "hit_rate": 0.0,
+            "avg_max_similarity": None,
+        }
+
+    def test_token_cache_hit_rate_denominator_includes_real_calls(self) -> None:
+        """cache_hit_rate = 命中 /(命中 + 真实调用)；写成 命中/调用 会把命中率虚高。"""
+        got = rb._aggregate_token_metrics(self._two_rows())
+        assert got["total_cache_hits"] == 1 and got["total_llm_calls"] == 5
+        assert got["cache_hit_rate_pct"] == round(1 / 6 * 100, 2)
+
+    def test_token_uncached_theoretical_restores_cache_savings(self) -> None:
+        """无缓存理论成本必须含避免 token，否则跨批缓存命中率漂移会伪装成成本下降。"""
+        got = rb._aggregate_token_metrics(self._two_rows())
+        assert got["total_tokens"] == 450
+        assert got["uncached_theoretical_tokens"] == 480
+        assert got["output_share_pct"] == 33.33
+        assert (got["avg_tokens_per_task"], got["avg_output_per_task"]) == (225.0, 75.0)
+
+    def test_token_per_task_and_per_call_use_different_denominators(self) -> None:
+        """per_task 分母 = 行数，per_call 分母 = 调用数（两者混用即成本口径错报）。"""
+        got = rb._aggregate_token_metrics(self._two_rows())
+        assert got["avg_output_per_call"] == 30.0
+        assert got["avg_output_per_task"] == 75.0
+
+    def test_token_missing_usage_row_is_zero_safe(self) -> None:
+        """历史落盘行可无 token_usage；None 视为 0 且零除分支不得抛。"""
+        got = rb._aggregate_token_metrics([{"passed": True}])
+        assert got["total_tokens"] == 0
+        assert got["cache_hit_rate_pct"] == 0.0
+        assert got["avg_tokens_per_task"] == 0
+        assert got["output_share_pct"] == 0.0
+        assert got["avg_output_per_call"] == 0
+
+    def test_failure_categories_excludes_passed_and_uncategorized(self) -> None:
+        """只统计失败且有 error_category 的行；成功行的类别残留不得计入。"""
+        got = rb._aggregate_failure_categories(
+            [
+                {"passed": False, "error_category": "timeout"},
+                {"passed": False, "error_category": "timeout"},
+                {"passed": True, "error_category": "timeout"},
+                {"passed": False},
+            ]
+        )
+        assert got == {"timeout": 2}
+
+    def test_failure_categories_sorted_desc_and_ties_keep_row_order(self) -> None:
+        """按计数降序；同数以行序稳定排列（否则跨批表格顺序随机、diff 无意义）。"""
+        got = rb._aggregate_failure_categories(
+            [
+                {"passed": False, "error_category": "beta"},
+                {"passed": False, "error_category": "alpha"},
+                {"passed": False, "error_category": "gamma"},
+                {"passed": False, "error_category": "gamma"},
+            ]
+        )
+        assert list(got) == ["gamma", "beta", "alpha"]
+
+    @staticmethod
+    def _two_rows() -> list[dict[str, Any]]:
+        return [
+            {
+                "token_usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "llm_calls": 2,
+                    "cache_hits": 1,
+                    "cache_avoided_tokens": 30,
+                }
+            },
+            {
+                "token_usage": {
+                    "input_tokens": 200,
+                    "output_tokens": 100,
+                    "llm_calls": 3,
+                    "cache_hits": 0,
+                    "cache_avoided_tokens": 0,
+                }
+            },
+        ]
+
+
+class TestStagnationArm:
+    """A-19（2026-10-17）：覆盖率停滞检测消融臂的 CLI→env 映射。
+
+    为什么单独测：`workflow` 每次判定都现读 `COVERAGE_STALL_DETECT_ENABLE`
+    （`_coverage_stall_enabled` → `env_flag`），CLI 写 env 即全链路生效；
+    若映射写反，消融臂的"开"与"关"在工件 provenance 里看不出差别，
+    整批对照会在无告警的情况下变成同一臂重复跑两次。
+    """
+
+    def test_no_arm_selected_returns_none_and_leaves_env_untouched(self, monkeypatch) -> None:
+        """两臂都未指定：返回 None=沿用配置默认，且不得写入该 env 键。"""
+        monkeypatch.delenv("COVERAGE_STALL_DETECT_ENABLE", raising=False)
+        assert rb._apply_stagnation_arm() is None
+        assert "COVERAGE_STALL_DETECT_ENABLE" not in os.environ
+
+    def test_enable_arm_writes_true(self, monkeypatch) -> None:
+        monkeypatch.delenv("COVERAGE_STALL_DETECT_ENABLE", raising=False)
+        assert rb._apply_stagnation_arm(enable=True) == "true"
+        assert os.environ["COVERAGE_STALL_DETECT_ENABLE"] == "true"
+
+    def test_disable_arm_writes_false_overriding_profile_preset(self, monkeypatch) -> None:
+        """对照臂必须能覆盖环境里既有值（否则"锁定不提前停"口径不成立）。"""
+        monkeypatch.setenv("COVERAGE_STALL_DETECT_ENABLE", "true")
+        assert rb._apply_stagnation_arm(disable=True) == "false"
+        assert os.environ["COVERAGE_STALL_DETECT_ENABLE"] == "false"
+
+    def test_both_arms_raise_and_do_not_touch_env(self, monkeypatch) -> None:
+        """互斥臂 fail fast：静默取一会让工件臂标签与命令意图不一致。"""
+        monkeypatch.setenv("COVERAGE_STALL_DETECT_ENABLE", "keep-me")
+        with pytest.raises(ValueError, match="互斥"):
+            rb._apply_stagnation_arm(enable=True, disable=True)
+        assert os.environ["COVERAGE_STALL_DETECT_ENABLE"] == "keep-me"
+
+    def test_value_is_read_back_by_env_flag(self, monkeypatch) -> None:
+        """落盘值必须被生产读侧 `env_flag` 判为预期的开/关（端到端语义锁）。"""
+        from src.utils.env_utils import env_flag
+
+        monkeypatch.delenv("COVERAGE_STALL_DETECT_ENABLE", raising=False)
+        rb._apply_stagnation_arm(enable=True)
+        assert env_flag("COVERAGE_STALL_DETECT_ENABLE") is True
+        rb._apply_stagnation_arm(disable=True)
+        assert env_flag("COVERAGE_STALL_DETECT_ENABLE") is False

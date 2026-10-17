@@ -55,18 +55,23 @@ _L0_COMMANDS: list[tuple[str, list[str], int]] = [
     (
         "mutation × detection 交叉验证",
         [
-            "-m", "experiments.emse_optimization",
-            "--mutation-correlation", "experiments/results/main_batch",
-            "--out", str(OUT_DIR / "main_batch" / "mutation_detection_correlation.md"),
+            "-m",
+            "experiments.emse_optimization",
+            "--mutation-correlation",
+            "experiments/results/main_batch",
+            "--out",
+            str(OUT_DIR / "main_batch" / "mutation_detection_correlation.md"),
         ],
         6,
     ),
     (
         "SWE-bench Lite 基础设施失败披露",
         [
-            "-m", "experiments.emse_optimization",
+            "-m",
+            "experiments.emse_optimization",
             "--swebench-disclosure",
-            "--out", str(OUT_DIR / "emse_swebench_disclosure.md"),
+            "--out",
+            str(OUT_DIR / "emse_swebench_disclosure.md"),
         ],
         6,
     ),
@@ -125,29 +130,38 @@ def _verify_checksums() -> list[dict[str, Any]]:
             continue
         proc = subprocess.run(
             ["shasum", "-a", "256", "-c", "SHA256SUMS"],
-            cwd=str(d), capture_output=True, text=True, timeout=300,
+            cwd=str(d),
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
         ok = proc.returncode == 0
-        out.append({
-            "dir": rel,
-            "status": "ok" if ok else "FAILED",
-            "detail": (proc.stdout or proc.stderr or "").strip().splitlines()[-1][:120] if not ok else "全部通过",
-        })
+        out.append(
+            {
+                "dir": rel,
+                "status": "ok" if ok else "FAILED",
+                "detail": (proc.stdout or proc.stderr or "").strip().splitlines()[-1][:120] if not ok else "全部通过",
+            }
+        )
     return out
 
 
 def _git_sha() -> str:
     proc = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"],
-        cwd=str(REPO), capture_output=True, text=True, timeout=30,
+        cwd=str(REPO),
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     return (proc.stdout or "").strip() or "unknown"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--level", choices=["l0", "l1"], default="l0",
-                    help="复算层级：l0（默认，五分钟级）/ l1（含小时级 Mut@k）")
+    ap.add_argument(
+        "--level", choices=["l0", "l1"], default="l0", help="复算层级：l0（默认，五分钟级）/ l1（含小时级 Mut@k）"
+    )
     args = ap.parse_args()
 
     commands = list(_L0_COMMANDS)
@@ -180,7 +194,7 @@ def main() -> int:
         "",
         f"> 生成时间：{started}；git sha：`{sha}`；Python：{sys.version.split()[0]}；",
         f"> 层级：{args.level.upper()}；**{n_ok}/{n_total} 条命令通过**；"
-        f"SHA256SUMS：{cs_ok} 通过 / {cs_fail} 失败 / {len(checksums)-cs_ok-cs_fail} 跳过。",
+        f"SHA256SUMS：{cs_ok} 通过 / {cs_fail} 失败 / {len(checksums) - cs_ok - cs_fail} 跳过。",
         "",
         "本报告由 `scripts/reproduce_zero_llm.py` 生成，零 LLM 逐位复算论文主数字。",
         "每条命令的输出尾供审稿人核对复现值。",
@@ -223,8 +237,7 @@ def main() -> int:
         "git_sha": sha,
         "python": sys.version.split()[0],
         "level": args.level,
-        "summary": {"commands_ok": n_ok, "commands_total": n_total,
-                    "checksums_ok": cs_ok, "checksums_failed": cs_fail},
+        "summary": {"commands_ok": n_ok, "commands_total": n_total, "checksums_ok": cs_ok, "checksums_failed": cs_fail},
         "commands": results,
         "checksums": checksums,
     }

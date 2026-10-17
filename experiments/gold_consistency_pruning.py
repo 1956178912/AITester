@@ -96,7 +96,7 @@ def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int
         with open(test_path, "w", encoding="utf-8") as f:
             f.write(test_code)
         try:
-            from src.utils.process_utils import run_with_timeout
+            from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
             res = run_with_timeout(
                 [
@@ -113,7 +113,7 @@ def _run_suite(code: str, test_code: str, module_name: str, timeout: int) -> int
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": tmp},
+                env=nested_pytest_env(PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=tmp),
                 check=False,
                 raise_on_timeout=True,
             )

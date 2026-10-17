@@ -73,6 +73,49 @@ def git_state() -> dict[str, Any]:
     return out
 
 
+_NESTED_ORPHAN_SCRIPT = _REPO_ROOT / "scripts" / "tools" / "detect_orphan_procs.py"
+
+
+def proc_hygiene(timeout: float = 15.0) -> dict[str, Any]:
+    """孤儿嵌套测试进程巡检（K 轮 2026-10-17，委托 detect_orphan_procs.py）。
+
+    为什么前置闸要看它：实测两个被 init 收养的变异体 pytest 进程各占 ~97% CPU
+    空转 7 小时（见 detect_orphan_procs.py docstring）。跑批前若宿主机已有这种
+    泄漏，并行度 4 的批次会被 CPU 饥饿拖出大量超时——超时任务在 M1 口径里
+    是 **None/不可判定**而不是"能力失败"，等于用测量伪影污染整批结论。
+
+    口径：只读巡检（不自动 kill——前置闸不应有副作用）；返回结构化字典，
+    `available=false` 时明确表示"读不到进程表"而非"零泄漏"。
+
+    Args:
+        timeout: 子进程超时秒数。
+
+    Returns:
+        detect_orphan_procs.py `--json` 的报告；不可用时含 `available=False`。
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(_NESTED_ORPHAN_SCRIPT), "--json"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - 环境异常
+        return {"available": False, "reason": f"调用失败：{type(exc).__name__}", "leaked": [], "leaked_count": 0}
+    if proc.returncode not in (0, 1):  # 0=无泄漏 1=有泄漏，其余为脚本自身异常
+        return {
+            "available": False,
+            "reason": f"退出码 {proc.returncode}：{(proc.stderr or '').strip()[:120]}",
+            "leaked": [],
+            "leaked_count": 0,
+        }
+    try:
+        payload = json.loads((proc.stdout or "").strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        return {"available": False, "reason": "输出不可解析", "leaked": [], "leaked_count": 0}
+    return payload if isinstance(payload, dict) else {"available": False, "reason": "输出结构异常"}
+
+
 def recent_fingerprints(limit: int = 5) -> list[dict[str, Any]]:
     """近期批次的模型指纹状态（新批次必须 pinned=true 才能锁住可复现性）。"""
     rows: list[dict[str, Any]] = []
@@ -173,6 +216,22 @@ def main(argv: list[str] | None = None) -> int:
         blocking.append("工作树不干净：新批次 provenance 将记 git_dirty=true（复现性主张打折）")
     if prints and not pinned_recent:
         blocking.append("近期批次均无 pinned=true 模型指纹：新批次须确认带指纹后再跑")
+
+    hygiene = proc_hygiene()
+    if hygiene.get("available"):
+        print(
+            f"孤儿进程巡检：扫描 {hygiene.get('scanned', 0)} 个进程，"
+            f"泄漏的嵌套测试子进程 {hygiene.get('leaked_count', 0)} 个"
+        )
+        for row in hygiene.get("leaked") or []:
+            print(f"  - pid={row.get('pid')} 存活={row.get('etime')} 命中={row.get('matched_marker')}")
+        if hygiene.get("leaked_count"):
+            blocking.append(
+                "宿主存在泄漏的嵌套测试子进程：会与批次争抢 CPU 导致超时（None 任务=不可判定，"
+                "会污染批次结论）；先跑 `python scripts/tools/detect_orphan_procs.py --kill` 清理"
+            )
+    else:
+        print(f"孤儿进程巡检：跳过（{hygiene.get('reason', 'ps 不可用')}）")
 
     if args.check_quota:
         probe = quota_probe()

@@ -223,11 +223,3 @@ def _terminate_process_group(proc: subprocess.Popen[str], *, label: str) -> None
     if not killed_group:
         with contextlib.suppress(OSError):  # pragma: no cover - 进程已消亡
             proc.kill()
-
-
-def _close_quietly(proc: subprocess.Popen[str]) -> None:
-    """尽力关闭管道，避免 fd 泄漏（进程仍存活时 close 可能抛错，忽略）。"""
-    for stream in (proc.stdout, proc.stderr, proc.stdin):
-        if stream is not None:
-            with contextlib.suppress(OSError):  # pragma: no cover - 已被回收
-                stream.close()

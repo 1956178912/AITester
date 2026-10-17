@@ -252,6 +252,11 @@ module = [
     # G4（2026-10-05）：z3-solver 为可选依赖（[formal] extra，SMT 见证层），
     # 无 py.typed 声明（CPython 扩展分发）
     "z3",
+    # J-3（2026-10-17）：pytest-timeout 为可选插件（M1 判分 per-test 超时，
+    # experiments/_m1_metrics.py 以 `import pytest_timeout` 探测在否、不在则
+    # 保守回退历史口径），无 py.typed 声明。经 src/tools/detection_gates.py
+    # 的运行时 import 被 mypy 跟进 → 不列此处则 `make typecheck` 直接报红。
+    "pytest_timeout",
     # S8b（2026-10-08 R3）：embedding 后端（transformers / sentence_transformers
     # / torch）与 pyright-python 为可选依赖，未安装时 mypy 报 import-not-found；
     # 收窄 blanket `# type: ignore` 后改为模块级 ignore_missing_imports（与

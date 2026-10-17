@@ -27,6 +27,7 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 
 from config import LLM_CONFIGS, LLM_TIMEOUT
+from src.utils.env_utils import env_flag_opt_out
 
 logger = logging.getLogger(__name__)
 
@@ -783,7 +784,7 @@ def _llm_cache_enabled() -> bool:
     global _llm_cache_option_memory
     if _llm_cache_option_memory is not None:
         return _llm_cache_option_memory
-    _llm_cache_option_memory = os.environ.get("AITESTER_LLM_CACHE", "1") != "0"
+    _llm_cache_option_memory = env_flag_opt_out("AITESTER_LLM_CACHE")
     return _llm_cache_option_memory
 
 

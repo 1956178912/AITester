@@ -336,6 +336,21 @@ jobs:
         # flow-mapping 解析错误（整个 ci.yml 无法被 YAML 解析器加载）。
         run: python scripts/gates/check_bilingual_docs.py --strict
 
+      - name: Documentation link integrity (G16 文档链接完整性门禁)
+        # G16（K 轮 2026-10-17）：109 份 markdown 文档（README 133KB + docs/ 90 份
+        # + examples/ 4 份 + 根目录 15 份）的相对链接 / 行锚目标 / 标题锚点完整性。
+        # 背景：此前全仓无任何链接检查——文档互相引用断链只能靠读者撞见，
+        # 与"文档↔工件静默分裂"同一失效形态（本项目既往失分点）。
+        # 口径（零网络纯静态）：外链 http(s) 只统计不 fetch；fenced/inline code
+        # 内示例链接忽略；锚点按 github-slugger v2 近似（ASCII 未命中=error，
+        # CJK 未命中降级 warning 且当前实测 0 条）；行锚 #L24 只校验文件存在。
+        # 扫描面排除 CHANGELOG*.md 与 docs/history/（历史快照不可回写，排除理由
+        # 见脚本 docstring；它们作为**链接目标**仍校验存在）。例外登记：
+        # docs/link_check_allowlist.txt（每行必须带理由，无理由豁免本身判 error）。
+        # 基线→终态实测：107 文件/351 链接/1 错误 → 109 文件/528 链接/0 错误。
+        if: matrix.python-version == '3.14'
+        run: python scripts/gates/check_doc_links.py --strict
+
       - name: Generate static-check snapshot (5a. 归档 docs/history/)
         # 批次落地后把 ruff / mypy 实测输出归档为带时间戳的 Markdown 快照，
         # 取代 docs/code_analysis_report.md 的过期人肉快照；同日重跑覆盖同名文件

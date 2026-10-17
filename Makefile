@@ -5,7 +5,7 @@
 #
 # 用法：make help 查看全部目标。
 
-.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites prompt-artifacts-check preflight artifact-doc-consistency gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
+.PHONY: help install lint format typecheck test test-cov docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites prompt-artifacts-check preflight artifact-doc-consistency proc-hygiene perf-bench perf-check zero-assert self-mutation self-mutation-ci gates repro power self-check clean-traces build-check cpr-idr repair-replay cf-upper-bound corrected-metrics target-quality mutation-det-correlation swebench-disclosure pass-matched emse-stats
 
 PY := .venv/bin/python
 
@@ -30,8 +30,9 @@ test:  ## 全量测试（CI 同口径：xdist -n 4 loadfile）
 test-cov:  ## 全量测试 + 覆盖率（CI 同口径；额外落 coverage.xml 供棘轮/登记册对账消费）
 	$(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing --cov-report=xml
 
-docs-check:  ## 双语文档同步门禁（strict，CI 阻断项）
+docs-check:  ## 双语文档同步 + 文档链接完整性门禁（strict，CI 阻断项）
 	$(PY) scripts/gates/check_bilingual_docs.py --strict
+	$(PY) scripts/gates/check_doc_links.py --strict
 
 env-budget:  ## 环境变量开关预算棘轮（CI 阻断项）
 	$(PY) scripts/gates/check_env_budget.py --check
@@ -64,13 +65,40 @@ artifact-doc-consistency:  ## 报告→工件数值对账（两个数字族：mu
 	# --require-coverage 强制该支路（缺席即红）。
 	$(PY) scripts/gates/check_artifact_doc_consistency.py
 
-preflight:  ## 批次跑批前置闸（配额预算 + 模型指纹 + 工作树；零 LLM；strict 语义见脚本）
+zero-assert:  ## 零断言测试守卫（U3，CI 阻断项；K 轮补入本地 gates，此前 HEAD 曾因此红而不自知）
+	$(PY) scripts/gates/check_zero_assert_tests.py
+
+self-mutation:  ## 自身测试套件变异测试（零 LLM；临时副本内变异；默认 3 个核心模块等距抽样 120/文件）
+	$(PY) scripts/tools/self_mutation.py
+
+self-mutation-ci:  ## 自身变异测试 CI 门禁口径（env_utils+atomic_io，阈值 0.85，约 2-4 分钟）
+	# --test-map 必须显式接入击杀批次测试 tests/test_self_mutation_targets.py：
+	# 自动发现只按模块名匹配（test_<stem>.py），击杀测试不在该命名族里；
+	# 漏接的后果是门禁回退到"击杀前"分数（实测 env 0.8889 / atomic 0.3810，
+	# 合计 0.7467 会被阈值 0.85 判红——这不是测试变弱，是测试集合选错）。
+	$(PY) scripts/tools/self_mutation.py --files src/utils/env_utils.py,src/utils/atomic_io.py \
+		--workers 2 --max-mutants 60 --fail-under 0.85 \
+		--test-map src/utils/env_utils.py=tests/test_env_utils.py,tests/test_self_mutation_targets.py \
+		--test-map src/utils/atomic_io.py=tests/test_atomic_io.py,tests/test_self_mutation_targets.py \
+		--json-out experiments/results/self_mutation_ci/gate.json \
+		--md-out experiments/results/self_mutation_ci/gate.md
+
+preflight:  ## 批次跑批前置闸（配额预算 + 模型指纹 + 工作树 + 孤儿进程；零 LLM；strict 语义见脚本）
 	$(PY) scripts/tools/run_preflight.py --strict
+
+proc-hygiene:  ## 孤儿嵌套测试子进程巡检（只读；--kill 清理需手动，防 CPU 空转污染批次）
+	$(PY) scripts/tools/detect_orphan_procs.py
+
+perf-bench:  ## 性能基准跑分（写 experiments/results/performance_benchmark.json；perf.yml 同口径）
+	$(PY) scripts/tools/performance_benchmark.py
+
+perf-check:  ## 性能回归比对（默认 non-blocking 告警；本地同机排查可加 --strict）
+	$(PY) scripts/gates/check_perf_regression.py --current experiments/results/performance_benchmark.json
 
 tool-versions:  ## CI/pre-commit/lock 三方工具版本一致守卫（AK4 接入 CI）
 	$(PY) scripts/gates/check_tool_versions.py
 
-gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites artifact-doc-consistency  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入）
+gates: lint format typecheck test docs-check env-budget baseline-check state-contract env-snapshot model-fingerprint tool-versions json-contract-sites artifact-doc-consistency zero-assert  ## 本地全部门禁（合并前自检；format = ruff format --check，2026-10-12 质量债清偿批次补入；zero-assert = K 轮补入，此前 CI 阻断但本地 gates 缺席）
 
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh

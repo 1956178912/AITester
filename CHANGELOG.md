@@ -1,10 +1,199 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-17（df_spec 实验（P1 主实验）实跑：判定 `not_confirmed`——方向为负的显著证据（df_spec 54.3% vs df 77.8%、配对 1:10、δ=−25.7pp、双向精确 p=0.0117）；预注册与判定口径均于结果产出前锁定。此前 2026-10-16 F/G/H/I 四轮工程加固：开关治理收口 + 安全守卫实效化 + 覆盖率测量确定性收口 + 失败归因链接线；全量 **6759 passed / 5 skipped / 0 failed**）
+> Last updated: 2026-10-17（K 轮全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 **96.47% 行 / 92.57% 分支** + 自身变异测试 **0.6419→0.7674** + G16 文档链接门禁 + 变异生成器无效变异体修复〔测量伪影第⑤起〕+ 孤儿进程巡检 + 性能回归面扩展；全量 **7530 passed / 5 skipped / 0 failed**。同日 J 轮收口与 df_spec 实验（`not_confirmed`）亦已登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-17 K 轮（全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 96.47%/92.57% + 自身变异测试 0.6419→0.7674 + 文档链接门禁 + 运行期卫生；零 LLM）
+
+> K 轮是"全面优化至前沿水准"批次：一次真缺陷修复（P0，静默数据篡改）、
+> 一次元层能力建设（项目自身测试套件的变异强度首次可度量）、一次测量伪影
+> 治理（第⑤起：变异生成器的无效变异体）、覆盖率收口与三项工程卫生
+> （文档链接门禁 / 孤儿进程巡检 / 性能回归面）。全部改动零 LLM、默认行为
+> 不变，所有数字均来自本机实测且逐条给出验证入口。
+
+### Fixed
+
+- **K-1（P0）：JSON 提取围栏内容篡改**。`extract_json_object/array` 的历史
+  清洗链用 `re.compile(r"```")` **无条件删除全文任意位置的三连反引号**——
+  合法 JSON 字符串值里出现反引号（LLM 输出补丁/命令/代码片段时极常见）会被
+  静默改写：`{"cmd": "```bash"}` → `{"cmd": "bash"}`、`{"```": null}` →
+  `{"": null}`。解析"成功"但内容错误，比解析失败更危险（所有调用方只看有没有
+  抛 `JSONDecodeError`，不会复核字符串内容）。修复：① 原始文本先行快路径
+  （合法 JSON 未清洗即解析，内容零改写）；② 围栏只在**行首**剥离，修复档的
+  兜底输入不再触碰字符串内容。**发现路径**：A-13 property 模糊测试（hypothesis
+  300 例）随机命中反例 → 本批补确定性回归锁 29 例。验证：
+  `pytest tests/test_helpers_json_fence_content.py tests/test_helpers_json_property.py -q`；
+- **K-5：变异生成器无效变异体修复（测量伪影第⑤起）**。`experiments/mutation_testing.py`
+  两类假变异体会把生成器缺陷记成"测试弱"、**系统性压低 mutation_score**：
+  ① identity——`_generate_numeric_offset` 对 Compare 中任意 Constant 登记
+  `const X → +1`，但 `_offset_numeric` 只偏移 int/float（`x is None` /
+  `s == "abc"` 零改动）；字符串置换对原文 `'x'` 的置换值 `"x" * 1` 仍为 `'x'`；
+  ② 语法非法——`_gen_subscript_negate` 对 Slice 下标 unparse 出
+  `x[-(a:b) - 1]`（实测单文件 5 个；执行期 rc=2 被保守口径记作"存活"）。
+  修复：数值类型守卫 + AST 级变化校验 + 字符串置换值强制 ≠ 原值 + Slice 跳过 +
+  `_emit` 通用语法守卫。语料验证：30 文件 **4603 变异体 0 invalid / 0 identity**
+  （修复前实测每模块 1 identity、单文件最多 5 语法非法；`src/` 可触达面：非数值
+  比较常量 668 处、Slice 下标 268 处）。新增
+  `tests/test_mutation_generator_validity.py`（16 例不变量 + 反例锁）。存量工件
+  该指标一律按**旧口径下界**处置（本轮未重算）；cosmic-ray 口径的 QuixBugs
+  Mut@k **0.9396 不受影响**（外部工具计算）。披露：
+  `docs/MEASUREMENT_INTEGRITY.md` 新增第⑤起；
+- **K-8：HEAD 存量零断言违规（"本地全绿≠CI 绿"复现）**。实测 U3 零断言门禁
+  **长期只在 CI、不在本地 `make gates` 链**——HEAD（fde68ae）带 1 例违规
+  （`tests/test_helpers_json_property.py::test_class_method_not_confused_with_top_level`
+  只在 `if ok:` 里 `ast.parse(out)` 且无断言，而实测该分支从不执行）。修复：
+  改成双路径硬断言（拒绝路径逐字节回滚 + 类内方法定义仍在），并把 `zero-assert`
+  补入本地 `make gates`。
+
+### Added
+
+- **K-3：自身测试套件变异测试能力（meta 层）**。新增
+  `scripts/tools/self_mutation.py`（零 LLM/零网络：复用 18 类 AST 算子 +
+  每 worker 独立 tempfile 副本〔工作树零改动〕+ `nested_pytest_env` 隔离 +
+  `run_with_timeout` killpg 整树超时 + rc 分类〔1=kill / 0=survive / 其余与
+  超时=invalid 不进分母〕+ 绿基线前置 + JSON/MD 报告 + `--test-map/--fail-under`）。
+  **首次量化"项目自己的测试有多强"**：3 模块基线 **0.6419**（138/215）→
+  击杀批次后 **0.7674**（165/215，**+19.6% 相对**；27 survived→killed、0 反向
+  翻转）；分模块 env_utils 0.8933→**0.9467** / helpers 0.5294→**0.6471**
+  （120/468=25.6% 抽样点估计）/ atomic_io 0.3810→**0.8095**。剩余 50 个存活
+  逐条归因（可证明等价 5 / 强证据实践等价 17 / 公开契约外 5 / **待补 23，不声称
+  等价**）。新增 `tests/test_self_mutation_tool.py`（47 例）+
+  `tests/test_self_mutation_targets.py`（11 例击杀测试）+
+  `docs/design/self_mutation_harness.md`；工件
+  `experiments/results/self_mutation_20261017/`（before/after + 归因，随批次入库）。
+  验证：`make self-mutation`；
+- **K-2：G16 文档链接完整性门禁 + 文档 INDEX**。新增
+  `scripts/gates/check_doc_links.py`（零网络纯静态：相对链接 / 行锚目标 /
+  标题锚点；大小写逐级精确校验；github-slugger v2 近似，CJK 未命中降级 warning
+  且当前实测 0 条；fenced/inline code 忽略；外链只统计不 fetch；allowlist
+  无理由豁免本身判 error）。基线 107 文件/351 链接/**1 错误** → 终态
+  **109 文件/528 链接/0 错误**（allowlist 0 条，未用例外兜底）。新增
+  `docs/INDEX.md` + `INDEX.en.md`（4 角色阅读路径：新贡献者/审稿人 15 分钟/
+  复现者/维护者）+ README 双语导航块 + `tests/test_check_doc_links.py`（47 例）。
+  验证：`make docs-check`；
+- **K-6：孤儿嵌套测试进程巡检（运行期卫生）**。实测发现两个 PPID=1 的变异体
+  pytest 进程各空转 **7h04m / 6h53m**、各占 ~97% CPU（合计约 14 CPU·小时，期间
+  全量测试被拖慢一倍）。成因：父进程被外部 SIGKILL 时 `run_with_timeout` 的
+  killpg 分支永不执行（macOS 无 `PR_SET_PDEATHSIG` 等价物）。新增
+  `scripts/tools/detect_orphan_procs.py`（四条件交集：沙箱标记 + pytest 调用 +
+  PPID=1 + 龄期≥600s；只读默认，`--kill` 先 SIGTERM 后 SIGKILL；ps 不可用时
+  **不得同形于"零泄漏"**）；接入 `make proc-hygiene` 与 `run_preflight.py`
+  （泄漏计入阻断项：CPU 饥饿会制造超时任务＝不可判定＝污染批次结论）。新增
+  `tests/test_detect_orphan_procs.py`（32 例）+ preflight 6 例；
+- **K-7：性能基准扩展（JSON 提取家族）**。`scripts/tools/performance_benchmark.py`
+  新增 `json_extraction` 类别 4 条真实路径（典型围栏 / 2KB 大计划 / 截断修复档 /
+  数组契约）——每条 LLM 响应都走该解析入口，此前无回归面。基线
+  `docs/performance_baseline.json` 增补该类别（键值在 0.05ms 绝对下限之下，
+  仅作趋势参考）；新增 `make perf-bench` / `make perf-check` +
+  `tests/test_perf_benchmark_k_round.py`（10 例，含基线漂移守卫）；
+- **K-9：CI 工作流**。`ci.yml` 新增 `Documentation link integrity (G16)` 阻断
+  步骤（主工作流阻断门禁 24 → **25**）；新增 `mutation.yml`（每周一 07:00 UTC +
+  手动触发）：自身变异测试门禁（env_utils + atomic_io，阈值 0.85，实测
+  **0.9067**）+ 3 模块全量巡检报告归档 90 天 + Step Summary；action 全部固定
+  SHA（与 ci.yml 同源）。
+
+### Changed
+
+- **K-4：覆盖率收口（行 +1.82pp / 分支 +2.31pp）**。10 个
+  `tests/test_closeout_k_*.py`（**155 例**，全部确定性/零 LLM/零真实等待）补口
+  18 个文件、**0 回退**：debugger 76 / base_agent 40 / api_manager 29 /
+  llm_client 23 / multi_candidate 21 / cli-app 18 / workflow 16 /
+  error_classifier 16 等。行 16061/16968=94.65% → **16369/16968=96.47%**；
+  分支 5638/6246=90.27% → **5782/6246=92.57%**。棘轮水位
+  **94.60→96.4 / 90.30→92.5**（只升不降）；剩余未覆盖分支逐条归因
+  （import 期坏 env 回退为避免 `importlib.reload` 污染共享进程而刻意不覆盖 /
+  静态不可达 / `__main__` 自检块）；
+- **K-8b：本地 `make gates` 与 CI 对等**——`zero-assert` 纳入本地门禁链；
+  `BASELINE.yaml` 新增 `self_mutation` 节（与 `target_quality.mutation_score`
+  口径不同、**禁止混引**）；README 双语"最新优化/核心模块覆盖"两行改为指向
+  BASELINE（删除已过期的硬编码覆盖率数字，消除"文档低于工件"存量漂移）。
+
+### Notes
+
+- 全量 **7535 collected / 7530 passed / 5 skipped / 0 failed**（本机 162.60s，
+  xdist -n 4 loadfile + `--cov=src --cov-branch`；3 个文档对账门禁自指失败随
+  BASELINE/登记册刷新转绿）；本轮净增 **358** 例；
+- 本轮**零 LLM 配额消耗**：所有优化与验证均为本地计算（变异测试/覆盖率/链接
+  检查/性能基准）；
+- 工件入库：`experiments/results/self_mutation_20261017/`（5 文件，`git add -f`，
+  受 `experiments/results` gitignore 规则约束）；文档侧数字与工件逐项对账；
+- 剩余风险（已在登记册 §4 登记）：50 个存活变异体中 23 个"待补"不声称等价；
+  存量 mutation_score/MDO 指标为旧口径下界；覆盖率对账容差 ±0.10pp 仍偏宽
+  （本轮实测逐位一致，收紧留待 ubuntu 档连续观测）。
+
+## [Unreleased] — 2026-10-17 J 轮（聚合器外提 + 开关口径二次复现收口 + 覆盖率收口/死代码清理 + 停滞检测消融臂；零 LLM）
+
+> J 轮是一次"工程债收口"批次：J-1b 把 `run_benchmark()` 内三个聚合器外提为
+> 模块级（口径首次可被单测钉住），J-2 修复 ADR-0003 环境开关预算门禁的
+> **第二次同族盲区**（新取用形态静默脱离治理），J-4 把两处最大未覆盖模块补到
+> 100% 并删除四处零调用死代码，A-19 落地覆盖率停滞检测的开/关消融臂 CLI。
+> 全部改动零 LLM、零默认行为变化。
+
+### Added
+
+- **J-1b：三个聚合器外提为模块级**（`_aggregate_rag_metrics` /
+  `_aggregate_token_metrics` / `_aggregate_failure_categories`，此前是
+  `run_benchmark()` 的嵌套函数，只能靠端到端跑批间接覆盖）。行为逐字节
+  不变；10 例口径锁定测试（分母 = 检索次数 / 行数 / 调用数三者不得混用、
+  零除守卫、失败类别排序稳定）。验证：
+  `pytest tests/test_run_benchmark.py -q -k ModuleLevelAggregators`；
+- **J-2：`env_flag_opt_out` 负集口径 + `env_float` 数值口径**
+  （`src/utils/env_utils.py`）：10 处手抄"显式关闭才算关"开关收敛到单一事实源
+  （补大小写/空白/关闭字面量集差异——`AITESTER_LLM_CACHE=false` 此前仍判
+  "开"），`env_float` 补齐浮点同族（含 NaN/±inf 回退，防坏阈值静默穿透）。
+  垃圾值方向保持 fail-closed；`EXECUTOR_RLIMIT_AS_FORCE`（opt-in 单值式）
+  刻意不并（并入会翻转 `=""` 语义）。验证：`pytest tests/test_env_utils.py -q`；
+- **J-4：覆盖率收口**——`test_nodes_j4_*` 五文件 +
+  `test_executor_repo_j4_coverage.py` 合计 **193 例**，把 `graph/nodes.py`
+  （155 未覆盖行）与 `agents/executor_repo.py`（118 未覆盖行）补至
+  **100.00%（行 + 分支）**；总行覆盖 **92.96% → 94.68%**、分支
+  **87.62% → 90.30%**，棘轮水位上调至 94.60 / 90.30。验证：`make test-cov` +
+  `scripts/gates/coverage_ratchet.py --check`；
+- **A-19：覆盖率停滞检测消融臂**（`experiments/run_benchmark.py`
+  `--enable-stagnation` / `--no-stagnation`）：CLI 层写
+  `COVERAGE_STALL_DETECT_ENABLE` 即全链路生效（workflow 每次判定现读 env），
+  该键已在 provenance 清单内，工件可复核臂是否真开；两臂同时指定 fail fast。
+  5 例映射/互斥/读侧回读测试。**消融批次本身待 LLM 配额**（登记 §2 B8），
+  本批只交付可执行臂与开关语义。
+
+### Changed
+
+- **J-2：环境开关预算门禁第二次盲区修复**
+  （`scripts/gates/check_env_budget.py`）：`env_flag_opt_out`（`env_flag` 后是
+  `_`，旧正则 `env_(?:flag|int)\(` 匹配不到）与
+  `config.py::_parse_int_env/_parse_float_env` 两式此前不可见——**24 个真实
+  产品旋钮**（`TEMPERATURE` / `MAX_ITERATIONS` / `MYSQL_PORT` /
+  `EXECUTION_TIMEOUT` …）从未进过登记表，10 个刚收敛的守卫开关也会静默脱管。
+  登记表 219 → **248**，新增名字逐个核实有实际取用点、零误报。验证：
+  `make env-budget`；
+- **J-3：可选插件类型面**——`pytest-timeout`（M1 per-test 超时的可选插件）
+  加入 mypy `ignore_missing_imports` override（未安装时保守回退历史口径）；
+  否则经 `detection_gates` 运行时 import 跟进后 `make typecheck` 报红；
+- `experiments/` 五个脚本与 `scripts/reproduce_zero_llm.py` 仅做 ruff format
+  归一（零语义变化）。
+
+### Removed
+
+- **J-4：四处零生产调用点死代码**——`deterministic_guard.guard_generated_test`、
+  `patch_applier.safe_apply_patch_contract`、`event_bus.publish_workflow_completed`、
+  `process_utils._close_quietly`（前者是 `scan_test_file` 的薄包装、后者契约检查
+  实经 `check_naming_contract` 接线；`grep` 确认全仓无残留调用，
+  `nodes.py:2041` 保留历史注释说明）。
+
+### Notes
+
+- J 轮单独口径全量 **7172 passed / 5 skipped / 0 failed**（登记口径 =
+  collected 7177 − skipped 5；本轮净增 **393** 例）；coverage.xml 连跑两次
+  逐行逐分支零漂移的口径在 I 轮已锁定，本批未引入新的测量不确定性；
+- 覆盖率数值变动≠能力变动：本轮 +1.72pp 行覆盖全部来自**既有代码被真实执行**
+  （J-4 补口），无生产逻辑改动；ratchet 只升不降，余量行 +0.08pp /
+  分支 +0.00pp（薄余量已登记为登记册 §1 一致性提示）；
+- 未动项：`graph/orchestration_search.py` 74 行未覆盖（ADR-0034 冻结的
+  16 臂 bandit，Q6 未澄清前不投入）；`agents/debugger.py` 76 行（LLM 调用链，
+  mock 成本 > 测试价值，登记低优先）。
 
 ## [Unreleased] — 2026-10-17 df_spec 实验（P1 主实验实跑：判定 not_confirmed，方向为负的显著证据）
 

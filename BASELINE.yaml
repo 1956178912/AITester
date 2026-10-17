@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 df_spec 实验批次〔LLM 授权实跑 + 分析契约入库〕后：`--collect-only` 实测 **6789**，登记值 passed = collected − skipped = 6789 − 5 = **6784**。本轮净增 **25** 例 = df_spec 预注册判定契约（tests/test_emse_df_spec_analysis.py：单侧精确 p 尾 / 有效配对 / 41 缺陷程序口径切分 / 三态判定边界 / 域统计 / 臂名防错配）。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`，沙箱 fresh basetemp）500.83s：**6782 passed / 5 skipped / 2 failed**，两 failed 全非代码回归：① `TestBaselineNumbersConsistency` 自指（本字段刷新后转绿）；② 沙箱 `ps` 被禁（test_p0_hardening，环境已知项）。覆盖率与 I 轮一致（行 15749/16941=92.96%、分支 5463/6236=87.60%，分支 −1 为 ps 项伴生）。此前 I 轮批次：6759/5/0）
+last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 K 轮优化批次〔零 LLM〕后：`--collect-only` 实测 **7535**，登记值 passed = collected − skipped = 7535 − 5 = **7530**。本轮净增 **358** 例（7172 → 7530）= 覆盖率收口 155 例（10 个 `test_closeout_k_*.py`）+ self-mutation 工具与击杀 58 例 + G16 文档链接门禁 47 例 + 生成器有效性 16 例 + 孤儿进程巡检 32 例 + preflight 6 例 + 性能基准扩展 10 例 + 反引号内容回归 29 例 + A-19 停顿检测臂 5 例。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`）：见 `tests.suite_seconds`。零代码回归。此前 J 轮批次：7177/5/0）
 
 tests:
-  total_passed: 6784          # 全量 pytest tests/（2026-10-17 df_spec 批次后：`--collect-only` 实测 **6789**；登记口径 = collected − skipped = 6789 − 5 = 6784。本轮净增 25 例 = `tests/test_emse_df_spec_analysis.py`（df_spec 预注册判定契约：单侧精确 p 尾定义 / 有效配对（双方非 None）/ 41 缺陷程序口径切分（_test 后缀排除）/ 三态判定边界（60%·50%·0.05·0.10）/ spec_replace_applied 与 verdict 域统计 / 臂名防错配）。守卫余量 = skipped + xfailed + 1）
+  total_passed: 7530          # 全量 pytest tests/（2026-10-17 K 轮批次后：`--collect-only` 实测 **7535**；登记口径 = collected − skipped = 7535 − 5 = 7530。本轮净增 358 例 = 覆盖率收口 155 + self-mutation 58 + 文档链接门禁 47 + 生成器有效性 16 + 孤儿进程巡检 32 + preflight 6 + 性能基准扩展 10 + 反引号内容回归 29 + A-19 臂 5。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 501           # 全量耗时：2026-10-17 沙箱实测 500.83s（xdist -n 4 loadfile + `--cov=src --cov-branch`；fresh basetemp）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：本机口径 I 轮 86.94s / 86.99s（同日在沙箱外）、CI 原生参考 ~195s（2026-10-11）、E 轮沙箱 534.61s——差异来自执行环境而非代码性能变化
+  suite_seconds: 163           # 全量耗时：2026-10-17 K 轮批次本机实测 162.60s（xdist -n 4 loadfile + `--cov=src --cov-branch`，7527 passed / 5 skipped / 3 failed——3 failed 均为文档对账门禁自指，刷新本文件后转绿）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：df_spec 批次沙箱 500.83s、I 轮沙箱外 ~87s、CI 原生参考 ~195s——差异来自执行环境而非代码性能变化
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -27,25 +27,25 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 92.96      # --cov=src 总行覆盖（2026-10-16 I 轮终态实测 **92.96%**〔15748/16941 行 = 92.9579%〕；H 轮 15739/16934 = 92.9432%。分子 +9 / 分母 +7 已**逐文件完整归因**：`graph/nodes.py` +4/+4（I2 顶层抬升 + I2b 摘取标记，全部新覆盖）、`observability/failure_taxonomy.py` +2/+2（I3 的 `!= "unknown"` 条件与分母披露分支）、`graph/state.py` +1/+1（I2 通道声明）、`agents/planner.py` +0/+2（分母不变，**存量漏测被新测试收复**：`planner.py:352/379` 此前零覆盖）。ratchet 水位 92.90 → ✅ 达标（余量 +0.06pp）。水位未上调：bump 步长 0.5pp，余量不足。⚠️ **不得跨轮比较百分比**——引用以本行分数为准）
+  line_total_pct: 96.47      # --cov=src 总行覆盖（2026-10-17 K 轮覆盖率收口批次实测 **96.47%**〔16369/16968 行 = 96.4698%〕；J 轮 16049/16950 = 94.6844%。分子 +320 / 分母 +18 主因：K 轮 10 个 `test_closeout_k_*.py`（155 例）把 debugger 76 / base_agent 40 / api_manager 29 / llm_client 23 / multi_candidate 21 / cli-app 18 / workflow 16 / error_classifier 16 等 18 个文件的未覆盖行补至 96.47%；分母 +18 为 `utils/helpers.py` K 轮 JSON 围栏修复新增语句。ratchet 水位 94.60 → **96.4**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ **不得跨轮比较百分比**——引用以本行分数为准）
   line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
                              # 属"文档低于工件"的存量漂移（U7 只挡文档硬编码、不挡本节过期）。
-    base_agent: 87           # agents/base_agent.py（0.8663）
-    api_manager: 94          # api/api_manager.py（0.9368）
+    base_agent: 99           # agents/base_agent.py（0.9879，326/330；K 轮 +40 行）
+    api_manager: 100         # api/api_manager.py（1.0000，459/459；K 轮 +29 行）
     dataset_loader: 94       # datasets/dataset_loader.py（0.9385）
-    graph_nodes: 78          # graph/nodes.py（**0.7789**，未覆盖 **155/701** 行；H 轮为 0.7776 = 155/697）。I 轮 `_planner_node` 新增 4 行（I2 顶层抬升 + I2b 默认计划替换前摘出标记）**全部被新测试覆盖**，故未覆盖行数不变、分母 +4、比率微升。**H 轮已确定**：此前连跑得 0.7776 / 0.7862 的摆动不是"测量噪声"而是**真实污染**——`config` 在 import 期用 `setdefault` 注入档位开关、测试侧还原清单过期，6 个开关键跨测试残留使后续测试意外走进特异性门分支（nodes.py:1561-1563/1569/1575-1576）。H1 修复后连跑恒 0.7776，未覆盖行数 +6 属**测量变准**而非覆盖退步
+    graph_nodes: 100         # graph/nodes.py（**1.0000**，702/702 行；J-4 批次由 0.7789〔155/701 未覆盖〕收口至满覆盖——`test_nodes_j4_planner_specir.py` / `test_nodes_j4_generator_sections.py` / `test_nodes_j4_executor_node.py` / `test_nodes_j4_cross_file.py` 覆盖配置门控装配/长链。同批 `agents/executor_repo.py` 亦由 118 未覆盖行 → **0**（100.00%），二者正是 §4 "可做"清单里最大的两处覆盖率空洞）
     code_analyzer: 99        # tools/code_analyzer.py（0.9938）
     planner: 100             # agents/planner.py（**1.0000**，91/91 行；I 轮由 0.9780 升至满覆盖——新测试收复 `planner.py:352/379`，两行分别是叶子回退归因告警与 `result["m10_leaf_fallback"] = True`，即 ADR-0032 写侧本体）
     dependency: 96           # tools/dependency.py（0.9626；G 轮 S6 conftest 分层扫描接线后由 95 升至 96）
-    multi_candidate: 92      # tools/multi_candidate.py（0.9167）
+    multi_candidate: 99      # tools/multi_candidate.py（0.9867，296/300；K 轮 +21 行）
     cross_file: 93           # tools/cross_file.py（0.9283）
     rag_retriever: 98        # rag/retriever.py（0.9810）
-  branch_total_pct: 87.62  # --cov=src --cov-branch（2026-10-16 I 轮终态实测 **87.62%**〔5464/6236 分支 = 87.6203%〕；H 轮 5458/6232 = 87.5802%。分子 +6 / 分母 +4 逐文件归因：`nodes.py` +2/+2、`failure_taxonomy.py` +2/+2、`planner.py` +0/+2（存量 2 个半覆盖分支 `352`/`379` 由新测试补齐——同上行覆盖）。水位 87.50 → ✅ 达标（余量 +0.12pp）。水位未上调：bump 步长 0.5pp，余量不足。H 轮已消除全部三处覆盖率噪声源（H1 env 泄漏 / H5 晚期 parse 门 / H6 双重检查锁竞态弧），本轮沿用"连跑两次逐行逐分支比对"复核零漂移。⚠️ 对账容差历史：G6 初定的 ±0.05pp 因测量非确定而**不可满足**，已改 ±0.10pp（`check_artifact_doc_consistency._REGISTER_TOLERANCE_PP`）；噪声源消除后该容差偏宽，I 轮**仍不收紧**（防回退由棘轮独立把守），登记为口径精修项）
+  branch_total_pct: 92.57  # --cov=src --cov-branch（2026-10-17 K 轮覆盖率收口批次实测 **92.57%**〔5782/6246 分支 = 92.5712%〕；J 轮 5633/6238 = 90.3014%。分子 +149 来自 18 个文件的缺失分支补口（debugger 42→8 / api_manager 22→5 / llm_client 10→1 / error_classifier 10→4 / fault_localizer 6→0 等）。水位 90.30 → **92.5**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ 对账容差仍为 ±0.10pp（`check_artifact_doc_consistency._REGISTER_TOLERANCE_PP`）；H 轮起噪声源已全消除故该容差偏宽，收紧登记为口径精修项，K 轮未动）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
-    graph_workflow: 98      # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（0.9825）
-    error_classifier: 91     # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（0.9123）
+    graph_workflow: 100     # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（1.0000，K 轮 +1 行）
+    error_classifier: 100    # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（1.0000，K 轮 +16 行）
     graph_state: 100         # 状态 schema 初始化路由（1.0000）
 
 # O-∞（R5 审查 2026-10-09，MET-01/EXP-01 收口）：**target_quality**——被测代码
@@ -109,6 +109,40 @@ target_quality:
     # 对齐"产红率"贡献 44.2%、对齐"红→检出转化率"贡献 26.1%、交互 29.7%。
     # 本字段保留为描述性分布，**不得再用于机制归因**。
     note: "纯描述性：aitester specific_red/over_red = 40/66，plain_llm_df = 162/140。⚠️ 不得用于机制归因——门与检出指标同源（206/206 与 244/244 零分歧），且该比例随文件子集变动（0.61/1.16 ↔ 0.50/1.00）、84–93% 的行无 verdict。真实主机制是'测试生成侧不产红'（aitester 48.6% 行全绿未检出，df 仅 2.5%）"
+
+# ── 项目自身测试套件的变异强度（meta 层，K 轮 2026-10-17 新增）────────────
+# 与下面 target_quality.mutation_score 的口径区分（**禁止混引**）：
+#   - 本节 = **项目自身测试套件 × 项目自身源码** 的变异强度（"我们的测试有多强"）；
+#   - target_quality.mutation_score = **LLM 生成的测试 × 任务代码**（"被测系统有多强"）。
+# 工具：scripts/tools/self_mutation.py（零 LLM；临时副本内变异；killpg 超时；
+#       invalid/timeout 不进分母）；门禁：make self-mutation-ci（env_utils+atomic_io，
+#       阈值 0.85，实测 0.9067）；周巡检：.github/workflows/mutation.yml。
+# 报告工件：`git add -f experiments/results/self_mutation_20261017/`（含 before/after
+#       与 50 个剩余存活的逐条归因）。
+self_mutation:
+  measured_at: "2026-10-17"
+  generator: "experiments/mutation_testing.py::ExtendedMutationGenerator（K 轮修复 identity/语法非法变异体后）"
+  calibers: "抽样执行（每文件 120，等距）；helpers 为 120/468=25.6% 抽样点估计；invalid/timeout 不进分母"
+  before_kill:            # 击杀批次前（3 模块 / 抽样 224 / 有效分母 215）
+    env_utils: 0.8933     # 67 killed / 75 valid
+    helpers: 0.5294       # 63 / 119（抽样点估计）
+    atomic_io: 0.3810     # 8 / 21（全量）
+    total: 0.6419         # 138 / 215
+  after_kill:             # 击杀批次后（同一测试集合 + tests/test_self_mutation_targets.py）
+    env_utils: 0.9467     # 71 / 75
+    helpers: 0.6471       # 77 / 119
+    atomic_io: 0.8095     # 17 / 21
+    total: 0.7674         # 165 / 215（相对 +19.6%；27 survived→killed，0 反向翻转）
+  ci_gate:                # make self-mutation-ci（env_utils + atomic_io，每文件 60 变异体）
+    files: ["src/utils/env_utils.py", "src/utils/atomic_io.py"]
+    threshold: 0.85
+    measured: 0.9067      # 68 killed / 75 valid（2026-10-17 实测）
+  survivors_after_kill:   # 剩余 50 个：可证明等价 5 / 强证据实践等价 17 / 公开契约外 5 / 待补 23（不声称等价）
+    equivalent_provable: 5
+    equivalent_strong_evidence: 17
+    outside_public_contract: 5
+    pending_kill: 23
+  note: "待补 23 个属防御性字符串感知/叶子回退守卫分支，公开 API 差分探测未命中差异——**不声称等价**、记为测试强度提升空间，不得对外表述为'已知等价变异体'"
 
 static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）

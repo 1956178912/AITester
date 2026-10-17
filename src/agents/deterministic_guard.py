@@ -205,15 +205,9 @@ def scan_test_file(source: str, filename: str = "<memory>") -> GuardReport:
     return report
 
 
-def guard_generated_test(source: str, filename: str = "<memory>") -> GuardReport:
-    """LLM 生成测试的确定性守卫入口（开关关闭时恒判定确定性，历史口径）。"""
-    return scan_test_file(source, filename)
-
-
 __all__ = [
     "GuardFinding",
     "GuardReport",
     "deterministic_guard_enabled",
-    "guard_generated_test",
     "scan_test_file",
 ]

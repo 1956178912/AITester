@@ -27,9 +27,24 @@ _CODE_BLOCK_PATTERN = re.compile(r"```(?:python)?\s*\n(.*?)\n\s*```", re.DOTALL)
 # 匹配最内层无嵌套的 {...} JSON 对象
 _JSON_LEAF_PATTERN = re.compile(r"\{[^{}]*\}")
 # 预编译 JSON 清理正则（extract_json_object 热路径：LLM 响应可能很长，
-# 每次调用重复编译 re.sub 模式浪费；re 内部缓存有限，显式编译最稳妥）
-_JSON_FENCE_STRIP_PATTERN = re.compile(r"```(?:json)?\s*\n?")
-_JSON_BACKTICK_STRIP_PATTERN = re.compile(r"```")
+# 每次调用重复编译 re.sub 模式浪费；re 内部缓存有限，显式编译最稳妥）。
+#
+# K 轮（2026-10-17 属性模糊测试反例）修复：此前两个模式**无条件删除全文
+# 任意位置的三连反引号**（`_JSON_BACKTICK_STRIP_PATTERN = r"```"`），会把
+# 合法 JSON **字符串内容里**的反引号一并删掉——`{"cmd": "```bash"}` 被静默
+# 改写为 `{"cmd": "bash"}`、`{"```": null}` 变成 `{"": null}`：解析成功但
+# 内容错误，比解析失败更危险（下游拿到的补丁/命令被篡改且无任何告警）。
+# 反例来源：`tests/test_helpers_json_property.py` 的围栏直通性质（hypothesis
+# 生成 `{'```': None}` 后该性质失败）。
+# 修复口径：① 围栏只在**行首**剥离（markdown 围栏的语法位置），不触碰字符串
+# 内容；② 解析主路径新增"原始文本先行"快路径（`_try_parse_raw_json`）——
+# 合法 JSON 在未清洗文本上直接解析，内容零改写；清洗后的文本只作为修复档
+# 的兜底输入。行首剥离仍是无损的：围栏本身不是 JSON 令牌，剥离只是让
+# 修复档的括号平衡切片不被围栏噪声干扰。
+_JSON_FENCE_STRIP_PATTERN = re.compile(r"(?m)^[ \t]*```[ \t]*(?:json)?[ \t]*\r?\n?")
+# 行首裸围栏（无语言标记）：语义上区分"裸围栏行"，与上一模式叠加为幂等清洗
+# （上一模式已覆盖该形态；保留独立常量以免破坏历史调用语义与测试引用）。
+_JSON_BACKTICK_STRIP_PATTERN = re.compile(r"(?m)^[ \t]*```[ \t]*\r?\n?")
 # OMS（M10 可观测性，2026-10-14 EMSE 批次四）：叶子回退静默片段检测。
 # 背景：extract_json_object 的叶子降级档（正则取最内层无嵌套 {...}）在
 # "括号平衡法失败 + 顶层对象残缺"时会**静默返回一个错误片段**（如
@@ -534,6 +549,42 @@ def _find_balanced_bracket(text: str, start: int) -> str | None:
     return _find_balanced_delimited(text, start, "[", "]")
 
 
+def _try_parse_raw_json(text: str, opener: str, expected_type: type) -> Any | None:
+    """在**未经围栏清洗**的原始文本上尝试首个括号平衡片段（K 轮快路径）。
+
+    为什么需要这条快路径：围栏清洗只应服务于"异常形态的修复档"，不应改写
+    合法 JSON 的字符串内容（见 ``_JSON_FENCE_STRIP_PATTERN`` 上方 K 轮修复
+    说明）。快路径在原始文本上做与主链**同构**的首片段提取（首个 opener
+    起、括号平衡、``json.loads``），成功即返回——对合法 LLM 输出（含
+    markdown 围栏、前后自然语言）内容零改写；失败才落到既有"清洗 + 修复"
+    链，历史行为逐字节不变。
+
+    与主链的选择口径一致性：清洗只删除行首围栏、不改变花括号/方括号的
+    相对结构与首个 opener 的位置，因此快路径与主链选中的是**同一个片段**，
+    区别仅在于快路径保留字符串字面量内的反引号（这正是本函数要保住的语义）。
+
+    Args:
+        text: 原始响应文本（未清洗）。
+        opener: ``"{"``（对象）或 ``"["``（数组）。
+        expected_type: 期望的顶层类型（``dict`` / ``list``），不匹配时返回
+            None 交回主链（主链对顶层类型不做强制，保持既有宽松口径）。
+
+    Returns:
+        解析成功且顶层类型匹配时返回对象；否则 None。
+    """
+    start = text.find(opener)
+    if start == -1:
+        return None
+    fragment = _find_balanced_json(text, start) if opener == "{" else _find_balanced_bracket(text, start)
+    if fragment is None:
+        return None
+    try:
+        value = json.loads(fragment.strip())
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, expected_type) else None
+
+
 # 匹配最内层无嵌套的 [...] JSON 数组（降级方案用）
 _JSON_ARRAY_LEAF_PATTERN = re.compile(r"\[[^\[\]]*\]")
 
@@ -554,8 +605,8 @@ def extract_json_array(text: str) -> list[Any]:
       "输出 JSON 数组，每项含 {case_name, oracle, ...}"。
 
     处理流程与对象版逐档对齐：
-    1. 剥离 markdown 代码块标记；
-    2. 找到第一个 ``[``，括号平衡法提取完整数组；
+    1. 原始文本直解析（K 轮快路径：合法数组的字符串内容零改写）；
+    2. 剥离**行首** markdown 围栏后，找到第一个 ``[``，括号平衡法提取完整数组；
     3. 失败时对片段做语法级修复再试（尾随逗号等）；
     4. 仍失败则用正则取最内层无嵌套数组；
     5. 全部失败抛 ``json.JSONDecodeError``（与对象版同口径，调用方按
@@ -572,6 +623,12 @@ def extract_json_array(text: str) -> list[Any]:
     """
     if not text:
         raise json.JSONDecodeError("No JSON array found in response", text or "", 0)
+
+    # K 轮快路径：原始文本直解析（合法数组的字符串内容零改写；
+    # 失败才落到既有清洗 + 修复链，历史行为不变）
+    _fast = _try_parse_raw_json(text, "[", list)
+    if _fast is not None:
+        return _fast
 
     cleaned = _JSON_FENCE_STRIP_PATTERN.sub("", text)
     cleaned = _JSON_BACKTICK_STRIP_PATTERN.sub("", cleaned)
@@ -631,9 +688,11 @@ def extract_json_object(text: str) -> dict[str, Any]:
     从文本中提取 JSON 对象。
 
     处理流程：
-    1. 移除 markdown 代码块标记（```json 或 ```）
-    2. 使用括号平衡法找到完整的 JSON 对象
-    3. 若失败，用正则提取候选 JSON 作为降级方案
+    1. 原始文本直解析（K 轮快路径：合法对象的字符串内容零改写——反引号等
+       字面量不被围栏清洗误删）
+    2. 失败时剥离**行首** markdown 围栏（```json 或 ```），再用括号平衡法
+       找到完整的 JSON 对象
+    3. 若仍失败，用正则提取候选 JSON 作为降级方案
        （OMS：叶子档命中时记录 warning + 置模块级哨兵 _LEAF_FALLBACK_ACTIVE，
        调用方经 was_leaf_fallback_used() 读取后把 M10 归因改写为
        "提取器叶子回退"——ADR-0031 §已知局限②，纯观测零行为变化）
@@ -649,6 +708,12 @@ def extract_json_object(text: str) -> dict[str, Any]:
     """
     global _LEAF_FALLBACK_ACTIVE
     _LEAF_FALLBACK_ACTIVE = False
+    # K 轮快路径：原始文本直解析（合法对象的字符串内容零改写——反引号等
+    # 字面量不被围栏清洗误删；见模块头部 K 轮修复说明）。
+    # 快路径成功不属于任何降级档，哨兵保持 False。
+    _fast = _try_parse_raw_json(text, "{", dict)
+    if _fast is not None:
+        return _fast
     # 移除 markdown 代码块标记（使用预编译正则，避免每次调用重复编译）
     cleaned = _JSON_FENCE_STRIP_PATTERN.sub("", text)
     cleaned = _JSON_BACKTICK_STRIP_PATTERN.sub("", cleaned)
