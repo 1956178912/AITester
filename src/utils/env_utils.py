@@ -181,6 +181,48 @@ def env_int(name: str, default: int, *, lo: int | None = None, hi: int | None = 
     return value
 
 
+#: 批后处理墙钟告警阈值环境变量（Q-3；默认 600s）。
+#: 读取点刻意放在 ``src/`` 扫描面内（ADR-0003 env 预算门禁扫描
+#: ``src/**/*.py`` + ``config.py``，``experiments/`` 不计入产品开关面）——
+#: 由 ``experiments/postprocess_wall.py::postprocess_warn_s`` 委托本函数消费；
+#: 若把 env 读取留在 experiments/，登记表会被门禁判为"未使用"而收缩移除。
+POSTPROCESS_WARN_ENV = "AITESTER_POSTPROCESS_WARN_S"
+
+#: 批后处理墙钟告警默认阈值（秒；O-2 中 control 臂 >2400s 撞后处理 watchdog，
+#: 600s 为"单阶段后处理明显异常"的经验阈值）。
+_DEFAULT_POSTPROCESS_WARN_S = 600.0
+
+
+def postprocess_warn_seconds(default: float = _DEFAULT_POSTPROCESS_WARN_S) -> float:
+    """读取批后处理墙钟告警阈值（秒），坏值一律回退默认值。
+
+    Q-3（2026-10-18）新增：``experiments/postprocess_wall.py`` 的
+    ``build_postprocess_wall`` 用它判定阶段墙钟是否超阈值。放在 ``src/``
+    而非实验模块，是为了让 ``scripts/gates/check_env_budget.py`` 的扫描面
+    （``src/**/*.py`` + ``config.py``）看见该 env，从而保持 ADR-0003
+    "新增开关显式登记、登记表即现状"的语义（experiments/ 不在扫描面）。
+
+    口径（与 ``build_postprocess_wall`` 的 ``warn_s`` 一致）：
+    未设置/空串/非数值/NaN/inf/≤0 → ``default``；合法正有限数 → 该值。
+
+    Args:
+        default: 未设置或非法时的回退阈值（秒，默认 600）。
+
+    Returns:
+        生效的告警阈值（秒）。
+    """
+    raw = os.getenv(POSTPROCESS_WARN_ENV)
+    if raw is None or not str(raw).strip():
+        return float(default)
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return float(default)
+    if not math.isfinite(value) or value <= 0:
+        return float(default)
+    return value
+
+
 def env_float(name: str, default: float, *, lo: float | None = None, hi: float | None = None) -> float:
     """容错读取浮点环境变量（坏值/非有限值/越界一律回退默认值，**绝不抛异常**）。
 

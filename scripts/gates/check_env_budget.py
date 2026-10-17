@@ -43,6 +43,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATE_FILE = PROJECT_ROOT / "docs" / "env_budget.yaml"
 # 扫描范围：产品开关面（src/ 全部 .py + 根 config.py）
 SCAN_GLOBS = ["src/**/*.py", "config.py"]
+# Q-1（2026-10-18）：**人工登记**（不是扫描盲区静默豁免）——该键由 Q-3 的
+# experiments/postprocess_wall.py 消费；扫描面刻意不含 experiments/（实验脚本
+# 不属产品开关矩阵），故在登记表保留但不在扫描结果里。若不加此集合，本地模式
+# 会把登记表收缩掉该行（CI --check 虽不阻断，但"显式登记"语义丢失）。
+# 仅登记展示键，**不改变**产品开关扫描/阻断逻辑。
+MANUALLY_REGISTERED: frozenset[str] = frozenset({"AITESTER_POSTPROCESS_WARN_S"})
 
 # 静态提取模式（按匹配优先级；同名去重）。
 # 注：字符类用 \x22（双引号）/ \x27（单引号）十六进制转义——避免在
@@ -153,13 +159,13 @@ def main() -> int:
     args = parser.parse_args()
 
     scanned = scan_env_names()
-    registered = load_registered()
+    registered = load_registered() | set(MANUALLY_REGISTERED)
     if STATE_FILE.exists() and not registered:
         print(f"[env-budget] 错误：登记表存在但解析出 0 个名字（格式损坏？{STATE_FILE}）", file=sys.stderr)
         return 2
 
     unregistered = scanned - registered
-    removed = registered - scanned
+    removed = registered - scanned - set(MANUALLY_REGISTERED)
 
     print(
         f"[env-budget] 扫描产品开关面（src/ + config.py）：{len(scanned)} 个唯一环境变量；登记表 {len(registered)} 个"
@@ -168,7 +174,7 @@ def main() -> int:
         print(f"[env-budget] 已移除（登记表将收缩）：{sorted(removed)}")
     if not unregistered:
         if removed and not args.check:
-            write_registered(scanned)
+            write_registered(scanned | set(MANUALLY_REGISTERED))
             print(f"[env-budget] 登记表已收缩至 {len(scanned)} 个名字")
         print("[env-budget] 通过：无未登记新增")
         return 0

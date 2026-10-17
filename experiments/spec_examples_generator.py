@@ -48,11 +48,29 @@ from pathlib import Path
 from typing import Any
 
 from src.specs.spec_ir import _DEFAULT_EXAMPLES_MAX, parse_examples
+from src.utils.env_utils import env_flag
 
 logger = logging.getLogger(__name__)
 
 # 默认小 max_tokens（P-1 预算口径；环境变量显式给出时优先）
 DEFAULT_MAX_OUTPUT_TOKENS = 512
+# Q-1（2026-10-18）生产接线：Planner 契约请求 ≤3 条示例；无 Planner 臂的
+# spec_generator 调用同口径（≤3）——与 P-1 重放（≤5）有意区分：生产 prompt/断言
+# 体积更保守。双门 env 与 Planner 侧一致：EXAMPLES ∧ EXEC 才启用。
+PRODUCTION_MAX_EXAMPLES = 3
+_ENV_SPEC_ORACLE_EXAMPLES = "SPEC_ORACLE_EXAMPLES_ENABLE"
+_ENV_SPEC_ORACLE_EXEC = "SPEC_ORACLE_EXEC_ENABLE"
+
+
+def spec_examples_production_enabled() -> bool:
+    """Q-1 双门开关（无 Planner 臂的 spec_generator 调用门）。
+
+    ``SPEC_ORACLE_EXAMPLES_ENABLE=true`` ∧ ``SPEC_ORACLE_EXEC_ENABLE=true``
+    才为 True；默认关 → 不调用 LLM、不产生任何示例（历史口径零变化）。
+    """
+    return env_flag(_ENV_SPEC_ORACLE_EXAMPLES) and env_flag(_ENV_SPEC_ORACLE_EXEC)
+
+
 _ENV_MAX_OUTPUT_TOKENS = "LLM_MAX_OUTPUT_TOKENS"
 _ENV_CACHE_NAMESPACE = "AITESTER_CACHE_NAMESPACE"
 _PRICE_TABLE_PATH = Path(__file__).resolve().parents[1] / "experiments" / "price_table.json"
