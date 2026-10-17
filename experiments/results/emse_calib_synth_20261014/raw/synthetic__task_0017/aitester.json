@@ -1,0 +1,149 @@
+{
+  "task_id": "synthetic__task_0017",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "distance",
+    "description": "返回两个整数参数之差 a - b",
+    "logic_analysis": {
+      "input_domain": "任意两个整数 a、b（Python int，无范围限制）",
+      "output_domain": "整数，等于 a - b",
+      "preconditions": [
+        "a 与 b 均为 int 类型（类型注解约定）"
+      ],
+      "postconditions": [
+        "返回值等于 a - b"
+      ],
+      "edge_cases": [
+        "a == b（结果为 0）",
+        "a 为 0",
+        "b 为 0",
+        "a 为负数",
+        "b 为负数",
+        "a、b 均为负数",
+        "大整数（超出 64 位范围）导致结果溢出常规整型宽度"
+      ],
+      "preconditions_expr": [
+        "isinstance(a, int) and isinstance(b, int)"
+      ],
+      "postconditions_expr": [
+        "result == a - b"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "正数相减",
+        "input_args": {
+          "a": 5,
+          "b": 3
+        },
+        "expected_output": 2,
+        "category": "normal",
+        "description": "验证常规正数相减返回 a-b",
+        "logic_coverage": "postconditions_expr: result == a - b"
+      },
+      {
+        "case_name": "负数相减",
+        "input_args": {
+          "a": -5,
+          "b": -3
+        },
+        "expected_output": -2,
+        "category": "normal",
+        "description": "验证负数入参下仍返回 a-b",
+        "logic_coverage": "postconditions_expr: result == a - b"
+      },
+      {
+        "case_name": "正负混合",
+        "input_args": {
+          "a": 3,
+          "b": -4
+        },
+        "expected_output": 7,
+        "category": "normal",
+        "description": "验证一正一负相减结果",
+        "logic_coverage": "postconditions_expr: result == a - b"
+      },
+      {
+        "case_name": "两数相等",
+        "input_args": {
+          "a": 7,
+          "b": 7
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "边界：a == b 时结果为 0",
+        "logic_coverage": "edge_cases: a == b"
+      },
+      {
+        "case_name": "a 为零",
+        "input_args": {
+          "a": 0,
+          "b": 5
+        },
+        "expected_output": -5,
+        "category": "boundary",
+        "description": "边界：被减数为 0",
+        "logic_coverage": "edge_cases: a 为 0"
+      },
+      {
+        "case_name": "b 为零",
+        "input_args": {
+          "a": 5,
+          "b": 0
+        },
+        "expected_output": 5,
+        "category": "boundary",
+        "description": "边界：减数为 0",
+        "logic_coverage": "edge_cases: b 为 0"
+      },
+      {
+        "case_name": "大整数溢出",
+        "input_args": {
+          "a": 9223372036854775807,
+          "b": -1
+        },
+        "expected_output": 9223372036854775808,
+        "category": "boundary",
+        "description": "边界：结果超出 64 位有符号整型范围，Python int 无溢出仍返回精确值",
+        "logic_coverage": "edge_cases: 大整数溢出"
+      },
+      {
+        "case_name": "非整数入参",
+        "input_args": {
+          "a": "5",
+          "b": 3
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：类型注解约定为 int，传入 str 时行为未在代码中定义（实际会抛 TypeError），此处不臆造具体返回值",
+        "logic_coverage": "preconditions_expr: isinstance(a, int) and isinstance(b, int)"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0017 import distance\n\n\n# ---------------------------------------------------------------------------\n# 常规用例：后置条件 result == a - b\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"a, b, expected\",\n    [\n        (5, 3, 2),        # 正数相减\n        (-5, -3, -2),     # 负数相减\n        (3, -4, 7),       # 正负混合\n    ],\n)\ndef test_distance_normal_returns_difference(a, b, expected):\n    \"\"\"常规用例：验证后置条件 result == a - b（期望值来源：规约后置条件）。\"\"\"\n    assert distance(a, b) == expected\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"a, b, expected\",\n    [\n        (7, 7, 0),        # a == b -> 0\n        (0, 5, -5),       # a 为 0\n        (5, 0, 5),        # b 为 0\n        (-5, 0, -5),      # a 为负数，b 为 0\n        (0, -5, 5),       # a 为 0，b 为负数\n        (-5, -3, -2),     # a、b 均为负数\n    ],\n)\ndef test_distance_boundary_cases(a, b, expected):\n    \"\"\"边界用例：a==b、a 为 0、b 为 0、负数入参（期望值来源：规约边界情况 + 后置条件）。\"\"\"\n    assert distance(a, b) == expected\n\n\ndef test_distance_large_integer_no_overflow():\n    \"\"\"边界：结果超出 64 位有符号整型范围，Python int 无溢出仍返回精确值。\n\n    期望值来源：规约后置条件 result == a - b（Python int 无范围限制）。\n    \"\"\"\n    a = 9223372036854775807  # 2**63 - 1\n    b = -1\n    assert distance(a, b) == a - b\n    assert distance(a, b) == 9223372036854775808\n\n\ndef test_distance_large_integer_negative_overflow():\n    \"\"\"边界：负向超出 64 位范围，验证 Python int 精确性。\n\n    期望值来源：规约后置条件 result == a - b。\n    \"\"\"\n    a = -9223372036854775808  # -2**63\n    b = 1\n    assert distance(a, b) == a - b\n    assert distance(a, b) == -9223372036854775809\n\n\n# ---------------------------------------------------------------------------\n# 后置条件一致性（属性式验证）\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"a, b\",\n    [\n        (0, 0),\n        (1, 1),\n        (100, -100),\n        (-100, 100),\n        (123456789, 987654321),\n    ],\n)\ndef test_distance_postcondition_holds(a, b):\n    \"\"\"属性验证：对满足前置条件的输入，返回值恒等于 a - b（规约后置条件）。\"\"\"\n    assert distance(a, b) == a - b\n\n\n# ---------------------------------------------------------------------------\n# 前置条件违反：非 int 入参\n# ---------------------------------------------------------------------------\n\ndef test_distance_non_int_input_raises():\n    \"\"\"前置条件违反：传入 str 时行为未在规约中定义。\n\n    期望值来源不明，需人工确认：规约仅约定 a、b 为 int，\n    未定义非 int 入参的返回行为。此处仅记录实际行为——\n    若实现未做类型校验，Python 会抛 TypeError；若实现做了校验，\n    可能抛 TypeError 或返回其他值。因此断言\"要么抛 TypeError，\n    要么返回值等于 a - b 的字符串拼接语义\"均不可靠，改为\n    探索性断言：记录实际行为，不臆造具体值。\n    \"\"\"\n    try:\n        result = distance(\"5\", 3)\n    except TypeError:\n        # 实现未做类型校验时，Python 原生抛 TypeError，符合预期\n        return\n    # 若未抛异常，则记录实际返回值，需人工确认是否符合预期\n    # 期望值来源不明，需人工确认\n    assert result is not None, (\n        f\"distance('5', 3) 未抛 TypeError 且返回 None，实际行为需人工确认\"\n    )",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 97.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "distance_abs_missing",
+    "source": "synthetic",
+    "noise_seed": 6590,
+    "difficulty": 1,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0017 import distance\n\ndef test_distance_forward():\n    assert distance(10, 3) == 7\n\ndef test_distance_backward():\n    assert distance(3, 10) == 7\n\ndef test_distance_zero():\n    assert distance(5, 5) == 0",
+    "fixed": "def distance(a: int, b: int) -> int:\n    return abs(a - b)"
+  }
+}

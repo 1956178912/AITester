@@ -1,0 +1,194 @@
+{
+  "task_id": "synthetic__task_0015",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "is_palindrome",
+    "description": "判断字符串 s 是否与其反转相等（回文判定）",
+    "logic_analysis": {
+      "input_domain": "任意 str 类型对象（含空串、单字符、多字符、含空格/标点/大小写混合、Unicode 字符）",
+      "output_domain": "bool 类型：True 表示 s == s[::-1]，False 表示 s != s[::-1]",
+      "preconditions": [
+        "入参 s 为 str 类型（类型注解声明，运行时不做校验）"
+      ],
+      "postconditions": [
+        "返回值等于表达式 s == s[::-1] 的布尔结果",
+        "返回值为 bool 类型"
+      ],
+      "edge_cases": [
+        "空字符串 \"\"（反转仍为空，应返回 True）",
+        "单字符字符串（反转等于自身，应返回 True）",
+        "两字符相同/不同",
+        "全相同字符的长串",
+        "大小写混合（如 \"Aa\"，因区分大小写应返回 False）",
+        "含空格或标点的对称串（如 \"a b a\"）",
+        "非 ASCII/Unicode 字符（如中文、emoji）",
+        "超长字符串（性能与递归无关，仅切片开销）"
+      ],
+      "preconditions_expr": [
+        "isinstance(s, str)"
+      ],
+      "postconditions_expr": [
+        "result == (s == s[::-1])",
+        "isinstance(result, bool)"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "普通回文串",
+        "input_args": {
+          "s": "racecar"
+        },
+        "expected_output": true,
+        "category": "normal",
+        "description": "验证典型奇数长度回文返回 True",
+        "logic_coverage": "postcondition: result == (s == s[::-1])"
+      },
+      {
+        "case_name": "普通非回文串",
+        "input_args": {
+          "s": "hello"
+        },
+        "expected_output": false,
+        "category": "normal",
+        "description": "验证典型非回文返回 False",
+        "logic_coverage": "postcondition: result == (s == s[::-1])"
+      },
+      {
+        "case_name": "偶数长度回文",
+        "input_args": {
+          "s": "abba"
+        },
+        "expected_output": true,
+        "category": "normal",
+        "description": "验证偶数长度回文返回 True",
+        "logic_coverage": "postcondition: result == (s == s[::-1])"
+      },
+      {
+        "case_name": "空字符串",
+        "input_args": {
+          "s": ""
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "空串反转仍为空串，按 s == s[::-1] 应返回 True",
+        "logic_coverage": "edge_case: 空字符串"
+      },
+      {
+        "case_name": "单字符字符串",
+        "input_args": {
+          "s": "a"
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "单字符反转等于自身，应返回 True",
+        "logic_coverage": "edge_case: 单字符"
+      },
+      {
+        "case_name": "两字符相同",
+        "input_args": {
+          "s": "aa"
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "最小偶数长度回文边界",
+        "logic_coverage": "edge_case: 两字符相同"
+      },
+      {
+        "case_name": "两字符不同",
+        "input_args": {
+          "s": "ab"
+        },
+        "expected_output": false,
+        "category": "boundary",
+        "description": "最小非回文边界",
+        "logic_coverage": "edge_case: 两字符不同"
+      },
+      {
+        "case_name": "大小写混合",
+        "input_args": {
+          "s": "Aa"
+        },
+        "expected_output": false,
+        "category": "boundary",
+        "description": "代码区分大小写，'A' != 'a'，应返回 False",
+        "logic_coverage": "edge_case: 大小写敏感"
+      },
+      {
+        "case_name": "含空格的对称串",
+        "input_args": {
+          "s": "a b a"
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "空格参与比较，对称串仍为回文",
+        "logic_coverage": "edge_case: 含空格"
+      },
+      {
+        "case_name": "Unicode 回文",
+        "input_args": {
+          "s": "上海自来水来自海上"
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "Unicode 字符按码点比较，对称串返回 True",
+        "logic_coverage": "edge_case: 非 ASCII 字符"
+      },
+      {
+        "case_name": "超长回文串",
+        "input_args": {
+          "s": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "expected_output": true,
+        "category": "boundary",
+        "description": "验证长输入下切片反转逻辑仍正确",
+        "logic_coverage": "edge_case: 超长字符串"
+      },
+      {
+        "case_name": "非字符串入参",
+        "input_args": {
+          "s": 12321
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "类型注解声明 s 为 str 但运行时无校验；传入 int 时 s[::-1] 会抛 TypeError，期望值未知（取决于调用方约定，代码未定义）",
+        "logic_coverage": "precondition: isinstance(s, str) 被违反"
+      },
+      {
+        "case_name": "None 入参",
+        "input_args": {
+          "s": null
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "传入 None 时 s[::-1] 抛 TypeError，期望值未知（代码未定义异常处理）",
+        "logic_coverage": "precondition: isinstance(s, str) 被违反"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0015 import is_palindrome\n\n\n# ---------------------------------------------------------------------------\n# 正常用例\n# ---------------------------------------------------------------------------\n\ndef test_is_palindrome_normal_racecar():\n    \"\"\"普通奇数长度回文 'racecar' 应返回 True。\n\n    期望值来源：规约后置条件 result == (s == s[::-1])。\n    \"\"\"\n    s = \"racecar\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_normal_hello():\n    \"\"\"普通非回文 'hello' 应返回 False。\n\n    期望值来源：规约后置条件 result == (s == s[::-1])。\n    \"\"\"\n    s = \"hello\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is False\n\n\ndef test_is_palindrome_normal_abba():\n    \"\"\"偶数长度回文 'abba' 应返回 True。\n\n    期望值来源：规约后置条件 result == (s == s[::-1])。\n    \"\"\"\n    s = \"abba\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\n# ---------------------------------------------------------------------------\n# 边界用例\n# ---------------------------------------------------------------------------\n\ndef test_is_palindrome_boundary_empty_string():\n    \"\"\"空字符串反转仍为空串，应返回 True。\n\n    期望值来源：规约边界情况 '空字符串 \"\"（反转仍为空，应返回 True）'。\n    \"\"\"\n    s = \"\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_single_char():\n    \"\"\"单字符字符串反转等于自身，应返回 True。\n\n    期望值来源：规约边界情况 '单字符字符串（反转等于自身，应返回 True）'。\n    \"\"\"\n    s = \"a\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_two_same_chars():\n    \"\"\"两字符相同 'aa' 为最小偶数长度回文，应返回 True。\n\n    期望值来源：规约边界情况 '两字符相同/不同'。\n    \"\"\"\n    s = \"aa\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_two_diff_chars():\n    \"\"\"两字符不同 'ab' 为最小非回文，应返回 False。\n\n    期望值来源：规约边界情况 '两字符相同/不同'。\n    \"\"\"\n    s = \"ab\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is False\n\n\ndef test_is_palindrome_boundary_case_sensitive():\n    \"\"\"大小写混合 'Aa' 因区分大小写应返回 False。\n\n    期望值来源：规约边界情况 '大小写混合（如 \"Aa\"，因区分大小写应返回 False）'。\n    \"\"\"\n    s = \"Aa\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is False\n\n\ndef test_is_palindrome_boundary_with_spaces():\n    \"\"\"含空格的对称串 'a b a' 空格参与比较，仍为回文，应返回 True。\n\n    期望值来源：规约边界情况 '含空格或标点的对称串（如 \"a b a\"）'。\n    \"\"\"\n    s = \"a b a\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_unicode_chinese():\n    \"\"\"Unicode 中文回文 '上海自来水来自海上' 按码点比较应返回 True。\n\n    期望值来源：规约边界情况 '非 ASCII/Unicode 字符（如中文、emoji）'。\n    \"\"\"\n    s = \"上海自来水来自海上\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_unicode_emoji():\n    \"\"\"Unicode emoji 回文 '😀😀' 按码点比较应返回 True。\n\n    期望值来源：规约边界情况 '非 ASCII/Unicode 字符（如中文、emoji）'。\n    \"\"\"\n    s = \"😀😀\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_long_repeated_chars():\n    \"\"\"全相同字符的长串应返回 True。\n\n    期望值来源：规约边界情况 '全相同字符的长串' 与 '超长字符串'。\n    \"\"\"\n    s = \"a\" * 5000\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is True\n\n\ndef test_is_palindrome_boundary_long_non_palindrome():\n    \"\"\"超长非回文串应返回 False。\n\n    期望值来源：规约边界情况 '超长字符串（性能与递归无关，仅切片开销）'。\n    \"\"\"\n    s = \"a\" * 4999 + \"b\"\n    result = is_palindrome(s)\n    assert result == (s == s[::-1])\n    assert result is False\n\n\n# ---------------------------------------------------------------------------\n# 后置条件：返回值类型\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"s\",\n    [\"\", \"a\", \"aa\", \"ab\", \"racecar\", \"hello\", \"Aa\", \"a b a\", \"上海自来水来自海上\"],\n)\ndef test_is_palindrome_returns_bool_type(s):\n    \"\"\"返回值必须为 bool 类型。\n\n    期望值来源：规约后置条件 isinstance(result, bool)。\n    \"\"\"\n    result = is_palindrome(s)\n    assert isinstance(result, bool)\n\n\n# ---------------------------------------------------------------------------\n# 前置条件被违反：非 str 入参\n# ---------------------------------------------------------------------------\n\ndef test_is_palindrome_non_str_int_raises():\n    \"\"\"前置条件声明 s 为 str，运行时无校验；传入 int 时切片操作会抛 TypeError。\n\n    期望值来源：规约前置条件 isinstance(s, str) 被违反；\n    实现未定义异常处理，此处仅验证其不会静默返回 bool。\n    期望值来源不明，需人工确认：具体异常类型取决于实现（此处按切片语义预期 TypeError）。\n    \"\"\"\n    with pytest.raises(TypeError):\n        is_palindrome(12321)\n\n\ndef test_is_palindrome_none_raises():\n    \"\"\"前置条件声明 s 为 str，运行时无校验；传入 None 时切片操作会抛 TypeError。\n\n    期望值来源：规约前置条件 isinstance(s, str) 被违反；\n    实现未定义异常处理，此处仅验证其不会静默返回 bool。\n    期望值来源不明，需人工确认：具体异常类型取决于实现（此处按切片语义预期 TypeError）。\n    \"\"\"\n    with pytest.raises(TypeError):\n        is_palindrome(None)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "palindrome_case_sensitive",
+    "source": "synthetic",
+    "noise_seed": 7320,
+    "difficulty": 1,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0015 import is_palindrome\n\ndef test_is_palindrome_simple():\n    assert is_palindrome(\"aba\") is True\n\ndef test_is_palindrome_mixed_case():\n    assert is_palindrome(\"Racecar\") is True\n\ndef test_is_palindrome_with_punctuation():\n    assert is_palindrome(\"A man, a plan, a canal: Panama\") is True",
+    "fixed": "def is_palindrome(s: str) -> bool:\n    s = \"\".join(c.lower() for c in s if c.isalnum())\n    return s == s[::-1]"
+  }
+}

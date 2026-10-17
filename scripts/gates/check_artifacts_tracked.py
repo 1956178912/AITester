@@ -66,7 +66,60 @@ MANIFEST: tuple[str, ...] = (
     # 预注册（时间顺序审计条款的执行前提）
     "docs/preregistration.md",
     "docs/preregistration.en.md",
+    # 独立评审 A-04（2026-10-17）：2026-10-14 之后四批旗舰实验工件此前
+    # 全部 0 git 跟踪（新结果目录静默缺口——本守卫的硬编码清单不覆盖
+    # 新目录，缺口无声复发）。补齐引用链关键件（df_spec / M4 specir 扩样 /
+    # D1 / ULT df200），并新增 emse_* 目录覆盖扫描（见 _scan_emse_dirs）。
+    "experiments/results/emse_df_spec_20261016/DF_SPEC_REPORT.json",
+    "experiments/results/emse_df_spec_20261016/SHA256SUMS",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json",
+    "experiments/results/emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json",
+    "experiments/results/emse_quixbugs_specir_expand_20261014/SHA256SUMS.txt",
+    "experiments/results/emse_d1_quixbugs_ab_20261013/README.md",
+    "experiments/results/emse_d1_quixbugs_ab_20261013/SHA256SUMS",
+    "experiments/results/emse_ult_df200_20261017/ACCURACY_REPORT.json",
+    "experiments/results/emse_ult_df200_20261017/SHA256SUMS",
+    "experiments/results/emse_ult_df200_20261017/benchmark_ult_20261017_110803.json",
+    # spec_compile_rate / spec_expr_coverage 校准链（BASELINE 引用的证据源；
+    # 各目录的聚合报告名以实物为准：CALIB.md / CALIB_QB_ULT.json）
+    "experiments/results/emse_calib_quixbugs_20261014/benchmark_quixbugs_20261014_165103.json",
+    "experiments/results/emse_calib_ult_20261014/benchmark_ult_20261014_165906.json",
+    "experiments/results/emse_calib_synth_20261014/CALIB.md",
+    "experiments/results/emse_calib_synth_20261014/CALIB.json",
+    "experiments/results/emse_calib_synth174_20261014/CALIB_QB_ULT.json",
+    # 过红 P1-P4 分类（SUBMISSION_CHECKLIST 引用的证据源）
+    "experiments/results/emse_batch5_20261014/OVERRED_P1_P4.json",
+    # T-08 双门多种子原始数据（BASELINE §exec_2026_10_09 的 3 种子声称；
+    # seed43 目录仅含 traces，由下方 emse_* 目录扫描兜底"整目录入库"）
+    "experiments/results/emse_t08_gates_seed44_20261013/benchmark_synthetic_20261014_002657.json",
+    # 统计扩展（SUBMISSION_SKELETON 引用的证据源）
+    "experiments/results/emse_stats_extensions_20261016/README.md",
+    "experiments/results/emse_stats_extensions_20261016/STATS_EXTENSIONS.json",
 )
+
+# emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。
+# 口径：冒烟批次 / 被更新批次取代 / 结论性数字经聚合报告入库的原始数据，
+# 按项目"本地件"惯例保留工作树——但必须**显式登记理由**，禁止静默缺席
+# （独立评审 A-04： silent gap 曾使四批旗舰工件脱离 git 而无人察觉）。
+STUDY_DIR_EXEMPTIONS: dict[str, str] = {
+    "emse_d2_profile_smoke_20261013": "D2 profile 冒烟；结论性数字经 df_spec/主批次聚合报告入库",
+    "emse_d3_ult_20261013": "D3 cosmic-ray 冒烟；正式 Mut@k 见 emse_ult_mutk_full_20261015（已入库）",
+    "emse_dsl_diag_20261014": "DSL diag v1 初版；被 emse_dsl_diag3_20261015（已入库）取代",
+    "emse_jsonmode_smoke_20261013": "JSON mode 冒烟",
+    "emse_jsonmode_smoke_20261014": "JSON mode 冒烟",
+    "emse_jsonmode_smoke_v2_20261014": "JSON mode 冒烟（被 v4 已入库版取代）",
+    "emse_jsonmode_smoke_v3_20261014": "JSON mode 冒烟（被 v4 已入库版取代）",
+    "emse_quixbugs_mutk_20261014": "Mut@k 截断面初版；被 emse_quixbugs_mutk_full_20261015（已入库）取代",
+    "emse_spec_ir_qb_smoke_20261013": "SpecIR QuixBugs 冒烟",
+    "emse_spec_ir_quixbugs_20261013": "SpecIR QuixBugs 初版；正式见 spec_replace_ab_scale87 链（已入库）",
+    "emse_spec_ir_quixbugs_smoke_20261013": "SpecIR QuixBugs 冒烟",
+    "emse_specexpr_smoke_20261014": "SpecExpr 冒烟；确认性正式批见 emse_specexpr_synth_20261014（已入库）",
+    "emse_stats_2026-10-15": "统计报告初版；被 emse_stats_extensions_20261016（已入库）取代",
+    "emse_t08_gates_seed43_v2_20261013": "T-08 seed43 重跑中间态；定稿见 seed43 主目录（已入库）",
+    "emse_t11_spec_compile_20261013": "T-11 spec 编译率冒烟；正式校准见 emse_calib_*（已入库）",
+    "emse_ult_dfsmoke_20261017": "ULT df 冒烟；正式 200 任务批见 emse_ult_df200_20261017（已入库）",
+}
 
 
 def _is_tracked(path: Path) -> tuple[bool, str]:
@@ -85,6 +138,38 @@ def _is_tracked(path: Path) -> tuple[bool, str]:
     return False, "存在于工作区但未被 git 跟踪（git add 后提交）"
 
 
+def _scan_emse_dirs() -> list[tuple[str, str]]:
+    """覆盖扫描：experiments/results/emse_*/ 每个目录必须入库或显式豁免。
+
+    防"新结果目录静默缺席"复发（独立评审 A-04：四批旗舰工件曾 0 跟踪
+    而无任何门禁察觉——MANIFEST 是硬编码白名单，天然不覆盖未来目录）。
+    """
+    offenders: list[tuple[str, str]] = []
+    results_root = PROJECT_ROOT / "experiments/results"
+    if not results_root.is_dir():
+        return offenders
+    for child in sorted(results_root.glob("emse_*")):
+        if not child.is_dir():
+            continue
+        rel = child.relative_to(PROJECT_ROOT).as_posix()
+        name = child.name
+        if name in STUDY_DIR_EXEMPTIONS:
+            continue
+        ls = subprocess.run(["git", "ls-files", "--", rel], cwd=PROJECT_ROOT, capture_output=True, text=True)
+        if ls.returncode != 0:
+            offenders.append((rel, f"git ls-files 失败: {ls.stderr.strip()}"))
+            continue
+        if not ls.stdout.strip():
+            offenders.append(
+                (
+                    rel,
+                    "整个目录 0 git 跟踪。若为证据性批次：git add -f 后提交；"
+                    "若为冒烟/被取代批次：在 STUDY_DIR_EXEMPTIONS 显式登记理由",
+                )
+            )
+    return offenders
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="主批次工件 git 入库守卫（AK3）")
     parser.add_argument("--list", action="store_true", help="仅打印清单后退出")
@@ -101,13 +186,16 @@ def main(argv: list[str] | None = None) -> int:
         if not tracked:
             offenders.append((rel, reason))
 
+    emse_offenders = _scan_emse_dirs()
+    offenders.extend(emse_offenders)
+
     if offenders:
-        print(f"✗ {len(offenders)}/{len(MANIFEST)} 个关键工件未入库（引用链断裂，CI 阻断）：")
+        print(f"✗ {len(offenders)} 个关键工件/目录未入库（引用链断裂，CI 阻断）：")
         for rel, reason in offenders:
             print(f"  - {rel}: {reason}")
         print("修复：git add <路径> 并随本批提交（预注册时间顺序审计的前提）。")
         return 1
-    print(f"✓ {len(MANIFEST)}/{len(MANIFEST)} 关键工件均已入库（引用链完整）")
+    print(f"✓ {len(MANIFEST)}/{len(MANIFEST)} 关键工件均已入库；emse_* 目录覆盖扫描通过（引用链完整）")
     return 0
 
 

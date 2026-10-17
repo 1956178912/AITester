@@ -1,0 +1,136 @@
+{
+  "task_id": "synthetic__task_0013",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "sqrt",
+    "description": "计算非负浮点数 x 的平方根；x 为 0 时直接返回 0，否则返回 x ** 0.5",
+    "logic_analysis": {
+      "input_domain": "float 类型的数值 x（按 docstring/类型注解约定为非负实数；负数输入未定义）",
+      "output_domain": "float 类型返回值：x==0 时为 0；x>0 时为 x 的平方根（x ** 0.5）",
+      "preconditions": [
+        "x 为 float 类型",
+        "x 为非负数（负数平方根在实数域无定义，代码未做校验）"
+      ],
+      "postconditions": [
+        "x == 0 时返回 0",
+        "x > 0 时返回 x ** 0.5",
+        "返回值非负"
+      ],
+      "edge_cases": [
+        "x == 0（分支 1 命中，返回 0）",
+        "x 为极小正数（如 1e-300）",
+        "x 为极大数（如 1e308，可能溢出为 inf）",
+        "x 为负数（未定义行为，Python 中返回复数）",
+        "x 为 NaN / inf"
+      ],
+      "preconditions_expr": [
+        "isinstance(x, float)",
+        "x >= 0"
+      ],
+      "postconditions_expr": [
+        "result >= 0",
+        "x == 0 or result == x ** 0.5"
+      ],
+      "invariants_expr": [
+        "result >= 0"
+      ]
+    },
+    "test_cases": [
+      {
+        "case_name": "正数平方根_常规",
+        "input_args": {
+          "x": 4.0
+        },
+        "expected_output": 2.0,
+        "category": "normal",
+        "description": "验证 x>0 时走 return x ** 0.5 主路径，4.0 的平方根为 2.0",
+        "logic_coverage": "分支 x == 0 为假"
+      },
+      {
+        "case_name": "正数平方根_非完全平方",
+        "input_args": {
+          "x": 2.0
+        },
+        "expected_output": 1.4142135623730951,
+        "category": "normal",
+        "description": "验证非完全平方正数返回浮点平方根",
+        "logic_coverage": "分支 x == 0 为假"
+      },
+      {
+        "case_name": "零输入",
+        "input_args": {
+          "x": 0.0
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "验证 x==0 分支命中，直接返回 0（注意返回 int 0 而非 0.0）",
+        "logic_coverage": "分支 x == 0 为真"
+      },
+      {
+        "case_name": "极小正数",
+        "input_args": {
+          "x": 1e-300
+        },
+        "expected_output": 1e-150,
+        "category": "boundary",
+        "description": "验证接近 0 的正数不误入 x==0 分支且结果正确",
+        "logic_coverage": "分支 x == 0 为假"
+      },
+      {
+        "case_name": "极大数_溢出边界",
+        "input_args": {
+          "x": 1e+308
+        },
+        "expected_output": 1e+154,
+        "category": "boundary",
+        "description": "验证极大数平方根计算不溢出（1e308 ** 0.5 == 1e154）",
+        "logic_coverage": "分支 x == 0 为假"
+      },
+      {
+        "case_name": "负数输入_未定义",
+        "input_args": {
+          "x": -4.0
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：代码未对负数做校验，Python 中 (-4.0) ** 0.5 返回复数 (1.2246467991473532e-16+2j)，与类型注解 float 不符；此用例用于暴露缺失的输入校验",
+        "logic_coverage": "分支 x == 0 为假（负数路径）"
+      },
+      {
+        "case_name": "NaN输入",
+        "input_args": {
+          "x": null
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "期望值未知：NaN 与 0 比较为 False，走 x ** 0.5 返回 NaN，行为未在 docstring 中约定",
+        "logic_coverage": "分支 x == 0 为假"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import math\n\nimport pytest\n\nfrom task_0013 import sqrt\n\n\n# ---------------------------------------------------------------------------\n# 常规用例：x > 0，走 x ** 0.5 主路径\n# ---------------------------------------------------------------------------\n\ndef test_sqrt_positive_perfect_square():\n    \"\"\"x=4.0 时，规约要求返回 x ** 0.5 == 2.0。\"\"\"\n    result = sqrt(4.0)\n    assert result == 2.0\n    assert result >= 0\n\n\ndef test_sqrt_positive_non_perfect_square():\n    \"\"\"x=2.0 时，规约要求返回 x ** 0.5 == math.sqrt(2.0)。\"\"\"\n    result = sqrt(2.0)\n    assert result == 2.0 ** 0.5\n    assert result >= 0\n\n\n@pytest.mark.parametrize(\"x\", [1.0, 9.0, 16.0, 0.25, 100.0])\ndef test_sqrt_positive_various_values(x):\n    \"\"\"对若干正数，规约要求 result == x ** 0.5 且 result >= 0。\"\"\"\n    result = sqrt(x)\n    assert result == x ** 0.5\n    assert result >= 0\n\n\n# ---------------------------------------------------------------------------\n# 边界用例：x == 0\n# ---------------------------------------------------------------------------\n\ndef test_sqrt_zero_returns_zero():\n    \"\"\"x == 0.0 时，规约要求直接返回 0（分支 1 命中）。\"\"\"\n    result = sqrt(0.0)\n    assert result == 0\n    assert result >= 0\n\n\n# ---------------------------------------------------------------------------\n# 边界用例：极小 / 极大正数\n# ---------------------------------------------------------------------------\n\ndef test_sqrt_tiny_positive():\n    \"\"\"x=1e-300 为极小正数，规约要求返回 x ** 0.5 == 1e-150。\"\"\"\n    result = sqrt(1e-300)\n    assert result == 1e-300 ** 0.5\n    assert result >= 0\n\n\ndef test_sqrt_huge_positive():\n    \"\"\"x=1e308 为极大数，规约要求返回 x ** 0.5 == 1e154（不溢出）。\"\"\"\n    result = sqrt(1e308)\n    assert result == 1e308 ** 0.5\n    assert result >= 0\n\n\n# ---------------------------------------------------------------------------\n# 边界用例：inf\n# ---------------------------------------------------------------------------\n\ndef test_sqrt_positive_infinity():\n    \"\"\"x=inf 时，规约未明确约定；记录实际行为：inf ** 0.5 == inf。\n\n    期望值来源：Python 浮点语义 inf ** 0.5 == inf，与规约\n    'x > 0 时返回 x ** 0.5' 一致。需人工确认。\n    \"\"\"\n    result = sqrt(float(\"inf\"))\n    assert result == float(\"inf\")\n    assert result >= 0\n\n\n# ---------------------------------------------------------------------------\n# 未定义行为：负数 / NaN\n# 规约明确说明负数未做校验，NaN 行为未约定。\n# 这些用例采用\"记录实际行为\"的探索性断言，不臆造具体值。\n# ---------------------------------------------------------------------------\n\ndef test_sqrt_negative_input_undefined_behavior():\n    \"\"\"负数输入为未定义行为（规约未约定）。\n\n    期望值来源不明，需人工确认。此处仅记录实际返回类型/值，\n    并断言其与规约 'x > 0 时返回 x ** 0.5' 的 Python 语义一致\n    （即 (-4.0) ** 0.5 的结果），不强制要求 float。\n    \"\"\"\n    x = -4.0\n    result = sqrt(x)\n    # 记录实际行为：Python 中 (-4.0) ** 0.5 返回复数\n    assert result == x ** 0.5\n\n\ndef test_sqrt_nan_input_undefined_behavior():\n    \"\"\"NaN 输入行为未在规约中约定。\n\n    期望值来源不明，需人工确认。NaN 与 0 比较为 False，\n    因此按规约 'x > 0 时返回 x ** 0.5' 的 Python 语义，\n    实际结果应为 NaN。此处记录实际行为。\n    \"\"\"\n    x = float(\"nan\")\n    result = sqrt(x)\n    # 记录实际行为：nan ** 0.5 为 nan\n    assert math.isnan(result)",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "sqrt_negative_input",
+    "source": "synthetic",
+    "noise_seed": 6426,
+    "difficulty": 1,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0013 import sqrt\n\ndef test_sqrt_positive():\n    import math\n    assert abs(sqrt(4) - 2.0) < 1e-9\n\ndef test_sqrt_zero():\n    assert sqrt(0) == 0\n\ndef test_sqrt_negative():\n    import pytest\n    with pytest.raises(ValueError):\n        sqrt(-1)",
+    "fixed": "def sqrt(x: float) -> float:\n    if x < 0:\n        raise ValueError(\"不能对负数开平方\")\n    if x == 0:\n        return 0\n    return x ** 0.5"
+  }
+}

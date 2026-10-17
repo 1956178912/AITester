@@ -1,0 +1,4 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1791869112.343627, "meta": {"dataset_task_id": "quixbugs__reverse_linked_list_test", "baseline": "plain_llm", "target_function": "main"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1791869116.622893, "run_id": "05407f9ff6c64c33", "span_id": "3e17772933c0", "output": {"generated_test_len": 3396}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1791869118.1620321, "run_id": "05407f9ff6c64c33", "span_id": "2eaef1020655", "output": {"passed": false, "coverage": 0.0, "failed_cases": 0}, "decision": "FAIL", "duration_ms": 1529.2, "iteration": 0}
+{"event": "task_end", "task": "<REDACTED_KEY>", "ts": 1791869134.334529, "passed": false, "duration_s": 21.99, "token_usage": {"input_tokens": 727, "output_tokens": 898, "total_tokens": 1625, "llm_calls": 1, "cache_hits": 0, "cache_avoided_tokens": 0, "by_model": {"deepseek-flash": 1625}}}

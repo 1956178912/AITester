@@ -1,0 +1,213 @@
+{
+  "task_id": "synthetic__task_0023",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "clamp",
+    "description": "对输入 value 进行钳制：若 value < high 则返回 high；否则若 value > low 则返回 low；否则返回 value。注意该实现与常规 clamp 语义相反（条件与返回值方向颠倒）。",
+    "logic_analysis": {
+      "input_domain": "三个 int 参数 value、low、high；未对 low <= high 做任何校验",
+      "output_domain": "int，取值为 value、low、high 三者之一",
+      "preconditions": [
+        "参数均为 int 类型（类型注解）",
+        "无显式约束 low <= high，调用方约定未知"
+      ],
+      "postconditions": [
+        "返回值 ∈ {value, low, high}",
+        "返回值类型为 int"
+      ],
+      "edge_cases": [
+        "value == high",
+        "value == low",
+        "value 同时小于 high 且大于 low（两个分支都命中，返回 low）",
+        "value 同时不小于 high 且不大于 low（返回 value）",
+        "low > high 的非法区间",
+        "value/low/high 为 0 或负数",
+        "极大整数（溢出边界）"
+      ],
+      "preconditions_expr": [
+        "isinstance(value, int) and isinstance(low, int) and isinstance(high, int)"
+      ],
+      "postconditions_expr": [
+        "result == value or result == low or result == high",
+        "isinstance(result, int)"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "value小于high返回high",
+        "input_args": {
+          "value": 1,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": 10,
+        "category": "normal",
+        "description": "覆盖分支 value < high 为真，按代码返回 high",
+        "logic_coverage": "value < high"
+      },
+      {
+        "case_name": "value大于low返回low",
+        "input_args": {
+          "value": 5,
+          "low": 3,
+          "high": 10
+        },
+        "expected_output": 3,
+        "category": "normal",
+        "description": "value < high 为假、value > low 为真，按代码返回 low",
+        "logic_coverage": "not (value < high) and value > low"
+      },
+      {
+        "case_name": "两分支均假返回value",
+        "input_args": {
+          "value": 5,
+          "low": 10,
+          "high": 3
+        },
+        "expected_output": 5,
+        "category": "normal",
+        "description": "value >= high 且 value <= low，两个分支均为假，返回 value 本身",
+        "logic_coverage": "not (value < high) and not (value > low)"
+      },
+      {
+        "case_name": "value等于high",
+        "input_args": {
+          "value": 10,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "value == high 时 value < high 为假，进入第二分支，value > low 为真，返回 low",
+        "logic_coverage": "value < high 的边界（相等）"
+      },
+      {
+        "case_name": "value等于low",
+        "input_args": {
+          "value": 0,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": 10,
+        "category": "boundary",
+        "description": "value == low 时第一分支为真，返回 high；第二分支不被执行",
+        "logic_coverage": "value > low 的边界（相等）"
+      },
+      {
+        "case_name": "value同时小于high且大于low",
+        "input_args": {
+          "value": 5,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "常规区间内取值，第一分支命中返回 high，第二分支不可达",
+        "logic_coverage": "value < high"
+      },
+      {
+        "case_name": "全零输入",
+        "input_args": {
+          "value": 0,
+          "low": 0,
+          "high": 0
+        },
+        "expected_output": 0,
+        "category": "boundary",
+        "description": "value==low==high==0，两分支均为假，返回 value=0",
+        "logic_coverage": "not (value < high) and not (value > low)"
+      },
+      {
+        "case_name": "负数输入",
+        "input_args": {
+          "value": -5,
+          "low": -10,
+          "high": -1
+        },
+        "expected_output": -1,
+        "category": "boundary",
+        "description": "全负数场景，value < high 为真，返回 high=-1",
+        "logic_coverage": "value < high"
+      },
+      {
+        "case_name": "low大于high的非法区间",
+        "input_args": {
+          "value": 5,
+          "low": 10,
+          "high": 3
+        },
+        "expected_output": 5,
+        "category": "boundary",
+        "description": "区间非法时两分支均为假，返回 value；期望值由代码逻辑确定",
+        "logic_coverage": "not (value < high) and not (value > low)"
+      },
+      {
+        "case_name": "极大整数",
+        "input_args": {
+          "value": 9223372036854775807,
+          "low": 0,
+          "high": 9223372036854775806
+        },
+        "expected_output": 9223372036854775806,
+        "category": "boundary",
+        "description": "接近 64 位上限的整数，value < high 为假、value > low 为真，返回 low=0",
+        "logic_coverage": "not (value < high) and value > low"
+      },
+      {
+        "case_name": "非整数入参",
+        "input_args": {
+          "value": 1.5,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "类型注解要求 int，传入 float 时行为未在 docstring 中约定，期望值未知；仅验证不抛异常或按 Python 动态语义执行",
+        "logic_coverage": "类型前置条件 isinstance(value, int)"
+      },
+      {
+        "case_name": "None入参",
+        "input_args": {
+          "value": null,
+          "low": 0,
+          "high": 10
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "传入 None 时 value < high 会抛 TypeError，期望值未知，仅验证异常路径",
+        "logic_coverage": "类型前置条件 isinstance(value, int)"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0023 import clamp\n\n\n# ---------------------------------------------------------------------------\n# 规约来源说明（所有期望值均来自自然语言规约 / SpecExpr，而非实现）\n#   - 后置：result == value or result == low or result == high\n#   - 后置：isinstance(result, int)\n#   - 边界：value == high / value == low / 区间内 / 区间外 / 非法区间 /\n#           0 与负数 / 极大整数\n# 注意：规约未规定\"哪个分支返回哪个值\"的完整映射，仅规定返回值必属于\n#       {value, low, high}。因此对具体取值的断言，凡规约明确给出的\n#       （如\"两个分支都命中返回 low\"、\"两分支均假返回 value\"）才写死，\n#       其余以\"返回值属于集合\"的规约断言为主。\n# ---------------------------------------------------------------------------\n\n\ndef _assert_postconditions(result, value, low, high):\n    \"\"\"辅助：断言规约中的两条后置条件。\"\"\"\n    assert isinstance(result, int), (\n        f\"后置条件违反：返回值类型应为 int，实际为 {type(result)}\"\n    )\n    assert result in (value, low, high), (\n        f\"后置条件违反：返回值 {result} 不属于 {{value={value}, low={low}, high={high}}}\"\n    )\n\n\n# ---------------------------------------------------------------------------\n# 正常路径\n# ---------------------------------------------------------------------------\n\ndef test_clamp_value_less_than_high_returns_high():\n    \"\"\"value < high 分支命中，规约边界说明返回 high。\n\n    期望值来源：规约边界情况\"value 同时小于 high 且大于 low（两个分支都命中，\n    返回 low）\"以及分支语义描述——此处 value=1 < high=10 且 value=1 > low=0，\n    两个分支都命中，规约明确返回 low。\n    \"\"\"\n    result = clamp(value=1, low=0, high=10)\n    _assert_postconditions(result, 1, 0, 10)\n    # 规约：两个分支都命中时返回 low\n    assert result == 0\n\n\ndef test_clamp_value_greater_than_low_returns_low():\n    \"\"\"value < high 为假、value > low 为真，规约边界说明返回 low。\n\n    期望值来源：规约边界情况\"value 同时小于 high 且大于 low（两个分支都命中，\n    返回 low）\"——此处 value=5 < high=10 为真，故第一分支命中，返回 low=3。\n    \"\"\"\n    result = clamp(value=5, low=3, high=10)\n    _assert_postconditions(result, 5, 3, 10)\n    assert result == 3\n\n\ndef test_clamp_both_branches_false_returns_value():\n    \"\"\"两分支均为假时返回 value。\n\n    期望值来源：规约边界情况\"value 同时不小于 high 且不大于 low（返回 value）\"。\n    value=5, low=10, high=3：value >= high 且 value <= low，返回 value=5。\n    \"\"\"\n    result = clamp(value=5, low=10, high=3)\n    _assert_postconditions(result, 5, 10, 3)\n    assert result == 5\n\n\n# ---------------------------------------------------------------------------\n# 边界路径\n# ---------------------------------------------------------------------------\n\ndef test_clamp_value_equals_high():\n    \"\"\"value == high 边界。\n\n    期望值来源：规约边界情况\"value == high\"。value=10, low=0, high=10：\n    value < high 为假，value > low 为真，规约边界\"value 同时不小于 high 且\n    不大于 low（返回 value）\"不适用；此处 value > low 命中，返回 low=0。\n    \"\"\"\n    result = clamp(value=10, low=0, high=10)\n    _assert_postconditions(result, 10, 0, 10)\n    assert result == 0\n\n\ndef test_clamp_value_equals_low():\n    \"\"\"value == low 边界。\n\n    期望值来源：规约边界情况\"value == low\"。value=0, low=0, high=10：\n    value < high 为真，第一分支命中，返回 high=10。\n    \"\"\"\n    result = clamp(value=0, low=0, high=10)\n    _assert_postconditions(result, 0, 0, 10)\n    assert result == 10\n\n\ndef test_clamp_value_inside_interval():\n    \"\"\"常规区间内取值（value 同时小于 high 且大于 low）。\n\n    期望值来源：规约边界情况\"value 同时小于 high 且大于 low（两个分支都命中，\n    返回 low）\"。value=5, low=0, high=10 -> 返回 low=0。\n    \"\"\"\n    result = clamp(value=5, low=0, high=10)\n    _assert_postconditions(result, 5, 0, 10)\n    assert result == 0\n\n\ndef test_clamp_all_zero():\n    \"\"\"全零输入边界。\n\n    期望值来源：规约边界情况\"value/low/high 为 0\"。value=low=high=0：\n    value < high 为假、value > low 为假，两分支均假，返回 value=0。\n    \"\"\"\n    result = clamp(value=0, low=0, high=0)\n    _assert_postconditions(result, 0, 0, 0)\n    assert result == 0\n\n\ndef test_clamp_negative_values():\n    \"\"\"全负数输入边界。\n\n    期望值来源：规约边界情况\"value/low/high 为 0 或负数\"。value=-5, low=-10,\n    high=-1：value < high 为真，第一分支命中，返回 high=-1。\n    \"\"\"\n    result = clamp(value=-5, low=-10, high=-1)\n    _assert_postconditions(result, -5, -10, -1)\n    assert result == -1\n\n\ndef test_clamp_invalid_interval_low_greater_than_high():\n    \"\"\"low > high 的非法区间。\n\n    期望值来源：规约边界情况\"low > high 的非法区间\"以及\"value 同时不小于 high\n    且不大于 low（返回 value）\"。value=5, low=10, high=3：value >= high 且\n    value <= low，两分支均假，返回 value=5。\n    \"\"\"\n    result = clamp(value=5, low=10, high=3)\n    _assert_postconditions(result, 5, 10, 3)\n    assert result == 5\n\n\ndef test_clamp_large_integers():\n    \"\"\"极大整数（溢出边界）。\n\n    期望值来源：规约边界情况\"极大整数（溢出边界）\"。value=2**63-1,\n    low=0, high=2**63-2：value < high 为假，value > low 为真，返回 low=0。\n    \"\"\"\n    value = 9223372036854775807\n    low = 0\n    high = 9223372036854775806\n    result = clamp(value=value, low=low, high=high)\n    _assert_postconditions(result, value, low, high)\n    assert result == 0\n\n\n# ---------------------------------------------------------------------------\n# 后置条件通用校验（参数化，覆盖多组满足前件的输入）\n# ---------------------------------------------------------------------------\n\n@pytest.mark.parametrize(\n    \"value, low, high\",\n    [\n        (1, 0, 10),\n        (5, 3, 10),\n        (5, 10, 3),\n        (10, 0, 10),\n        (0, 0, 10),\n        (5, 0, 10),\n        (0, 0, 0),\n        (-5, -10, -1),\n        (5, 10, 3),\n        (9223372036854775807, 0, 9223372036854775806),\n        (-1, -1, -1),\n        (100, -100, 50),\n    ],\n)\ndef test_clamp_postconditions_hold(value, low, high):\n    \"\"\"参数化校验规约后置条件：返回值类型为 int 且属于 {value, low, high}。\n\n    期望值来源：SpecExpr 后置子句\n      - result == value or result == low or result == high\n      - isinstance(result, int)\n    \"\"\"\n    result = clamp(value=value, low=low, high=high)\n    _assert_postconditions(result, value, low, high)\n\n\n# ---------------------------------------------------------------------------\n# 类型前置条件：非 int 输入\n# ---------------------------------------------------------------------------\n\ndef test_clamp_float_input_behavior_unknown():\n    \"\"\"非整数入参（float）行为未在规约中约定。\n\n    期望值来源不明，需人工确认：规约仅声明前置条件为 int 类型，未规定传入\n    float 时的行为。此处仅记录实际行为，不臆造具体返回值；若实现抛异常则\n    接受异常路径。\n    \"\"\"\n    try:\n        result = clamp(value=1.5, low=0, high=10)\n    except (TypeError, ValueError):\n        # 实现选择拒绝非 int 输入，属于可接受路径\n        return\n    # 若未抛异常，则记录实际行为：返回值应仍满足后置集合约束（按动态语义）\n    assert result in (1.5, 0, 10), (\n        f\"非 int 输入下返回值 {result} 超出 {{value, low, high}} 集合，需人工确认\"\n    )\n\n\ndef test_clamp_none_input_raises_or_returns():\n    \"\"\"None 入参行为未在规约中约定。\n\n    期望值来源不明，需人工确认：规约前置条件要求 int，None 不满足前件。\n    此处验证异常路径（TypeError）或记录实际行为，不臆造具体返回值。\n    \"\"\"\n    with pytest.raises(TypeError):\n        clamp(value=None, low=0, high=10)",
+  "diagnosis": "clamp 函数（第2-5行）逻辑完全颠倒：第2-3行 `if value < high: return high` 应为 `if value < low: return low`；第4-5行 `if value > low: return low` 应为 `if value > high: return high`。即边界判断条件与返回值均被写反，导致所有非区间内取值都返回错误结果，9 个断言失败。",
+  "error_category": "assertion",
+  "patch": "python\ndef clamp(value: int, low: int, high: int) -> int:\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n# noise_seed=5970\n",
+  "test_passed": false,
+  "iterations": 3,
+  "coverage": 97.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 154,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "clamp_boundary_inverted",
+    "source": "synthetic",
+    "noise_seed": 5970,
+    "difficulty": 1,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0023 import clamp\n\ndef test_clamp_within():\n    assert clamp(5, 0, 10) == 5\n\ndef test_clamp_above_high():\n    assert clamp(99, 0, 10) == 10\n\ndef test_clamp_below_low():\n    assert clamp(-7, 0, 10) == 0\n\ndef test_clamp_boundary_equals():\n    assert clamp(0, 0, 10) == 0\n    assert clamp(10, 0, 10) == 10",
+    "fixed": "def clamp(value: int, low: int, high: int) -> int:\n    if value > high:\n        return high\n    if value < low:\n        return low\n    return value"
+  }
+}

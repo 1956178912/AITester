@@ -1,0 +1,57 @@
+{
+  "task_id": "synthetic__task_0003",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "unknown",
+    "description": "自动生成的默认测试计划",
+    "logic_analysis": {
+      "input_domain": "未知",
+      "output_domain": "未知",
+      "preconditions": [],
+      "postconditions": [],
+      "edge_cases": []
+    },
+    "test_cases": [],
+    "logic_degraded": true
+  },
+  "generated_test": "import pytest\n\nfrom task_0003 import process\n\n\ndef test_process_returns_list():\n    \"\"\"process 应返回 list 类型。\"\"\"\n    result = process([1, 2, 3])\n    assert isinstance(result, list)\n\n\ndef test_process_increments_each_element():\n    \"\"\"process 应对输入列表中每个元素加 1。\"\"\"\n    result = process([1, 2, 3])\n    assert result[:3] == [2, 3, 4]\n\n\ndef test_process_appends_zero():\n    \"\"\"process 应在结果末尾追加 0。\"\"\"\n    result = process([1, 2, 3])\n    assert result[-1] == 0\n\n\ndef test_process_empty_list():\n    \"\"\"process 对空列表应返回仅包含 0 的列表。\"\"\"\n    result = process([])\n    assert result == [0]\n\n\ndef test_process_single_element():\n    \"\"\"process 对单元素列表应返回 [x+1, 0]。\"\"\"\n    result = process([5])\n    assert result == [6, 0]\n\n\ndef test_process_negative_numbers():\n    \"\"\"process 应正确处理负数元素。\"\"\"\n    result = process([-1, -2])\n    assert result == [0, -1, 0]\n\n\ndef test_process_zero_element():\n    \"\"\"process 对 0 应返回 [1, 0]。\"\"\"\n    result = process([0])\n    assert result == [1, 0]\n\n\ndef test_process_output_length():\n    \"\"\"process 输出长度应比输入长度多 1。\"\"\"\n    items = [1, 2, 3, 4]\n    result = process(items)\n    assert len(result) == len(items) + 1\n\n\n@pytest.mark.parametrize(\n    \"items, expected\",\n    [\n        ([1, 2, 3], [2, 3, 4, 0]),\n        ([], [0]),\n        ([10], [11, 0]),\n        ([-5, 5], [-4, 6, 0]),\n        ([0, 0, 0], [1, 1, 1, 0]),\n    ],\n)\ndef test_process_parametrized(items, expected):\n    \"\"\"process 在多种输入下应返回预期结果（期望值来源：函数实现逻辑）。\"\"\"\n    assert process(items) == expected\n\n\ndef test_process_does_not_mutate_input():\n    \"\"\"process 不应修改输入列表。\"\"\"\n    items = [1, 2, 3]\n    original = list(items)\n    process(items)\n    assert items == original\n\n\ndef test_process_float_elements():\n    \"\"\"process 应支持浮点数元素。\"\"\"\n    result = process([1.5, 2.5])\n    assert result == [2.5, 3.5, 0]",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": [
+    {
+      "source_module": "module_a",
+      "target_module": "module_b",
+      "symbol": "",
+      "call_line": 0,
+      "source": "benchmark_preset",
+      "context": "dep_chain[0]: module_a -> module_b"
+    }
+  ],
+  "task_metadata": {
+    "bug_type": "runtime",
+    "pattern_name": "cross_file_api_contract",
+    "source": "synthetic",
+    "noise_seed": 5396,
+    "difficulty": 3,
+    "is_cross_file": true,
+    "module_a_code": "from module_b import process\n\ndef run_pipeline(items: list) -> list:\n    result = process(items)\n    return [x * 10 for x in result]",
+    "module_a_name": "module_a",
+    "module_b_code": "def process(items: list) -> list:\n    return [x + 1 for x in items] + [0]",
+    "module_b_name": "module_b",
+    "module_c_code": "",
+    "module_c_name": "module_c",
+    "target_module": "module_b",
+    "fixed_module_code": "def process(items: list) -> list:\n    if not items:\n        return []\n    return [x + 1 for x in items]",
+    "num_files": 2,
+    "dep_chain": null,
+    "suggested_function": null,
+    "test_cases": "from module_a import run_pipeline\nfrom module_b import process\n\ndef test_process_normal():\n    assert process([1, 2, 3]) == [2, 3, 4]\n\ndef test_process_empty():\n    assert process([]) == []\n\ndef test_run_pipeline_normal():\n    assert run_pipeline([1, 2, 3]) == [20, 30, 40]\n\ndef test_run_pipeline_empty():\n    assert run_pipeline([]) == []"
+  }
+}

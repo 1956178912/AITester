@@ -1,0 +1,173 @@
+{
+  "task_id": "synthetic__task_0002",
+  "baseline": "aitester",
+  "test_plan": {
+    "function_name": "add_item",
+    "description": "将指定 SKU 的库存数量写入全局库存字典 _STOCK（覆盖式写入）",
+    "logic_analysis": {
+      "input_domain": "sku: int（任意整数，含 0、负数）；qty: int（任意整数，含 0、负数）",
+      "output_domain": "None（无返回值，副作用为修改全局字典 _STOCK）",
+      "preconditions": [
+        "_STOCK 为可用的全局字典（模块级已初始化为 {}）",
+        "sku 与 qty 为 int 类型（按类型注解约定）"
+      ],
+      "postconditions": [
+        "_STOCK[sku] == qty（写入后该键的值等于传入 qty）",
+        "函数返回值为 None"
+      ],
+      "edge_cases": [
+        "sku 为 0",
+        "sku 为负数",
+        "qty 为 0",
+        "qty 为负数",
+        "qty 为极大整数（溢出边界）",
+        "对同一 sku 重复调用（覆盖旧值）",
+        "sku 为 bool（bool 是 int 子类，True/False 会被当作 1/0 键）"
+      ],
+      "preconditions_expr": [
+        "isinstance(sku, int) and isinstance(qty, int)"
+      ],
+      "postconditions_expr": [
+        "result is None"
+      ],
+      "invariants_expr": []
+    },
+    "test_cases": [
+      {
+        "case_name": "正常写入正整数库存",
+        "input_args": {
+          "sku": 1,
+          "qty": 10
+        },
+        "expected_output": "None",
+        "category": "normal",
+        "description": "验证常规 sku/qty 写入后返回 None 且 _STOCK[1] == 10",
+        "logic_coverage": "postconditions: _STOCK[sku] == qty; result is None"
+      },
+      {
+        "case_name": "sku 为 0 的边界写入",
+        "input_args": {
+          "sku": 0,
+          "qty": 5
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "验证 sku 为 0 时仍能正常写入 _STOCK[0] == 5",
+        "logic_coverage": "edge_cases: sku 为 0"
+      },
+      {
+        "case_name": "qty 为 0 的边界写入",
+        "input_args": {
+          "sku": 2,
+          "qty": 0
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "验证 qty 为 0 时写入 _STOCK[2] == 0",
+        "logic_coverage": "edge_cases: qty 为 0"
+      },
+      {
+        "case_name": "sku 为负数的边界写入",
+        "input_args": {
+          "sku": -1,
+          "qty": 7
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "验证负数 sku 作为字典键可正常写入 _STOCK[-1] == 7",
+        "logic_coverage": "edge_cases: sku 为负数"
+      },
+      {
+        "case_name": "qty 为负数的边界写入",
+        "input_args": {
+          "sku": 3,
+          "qty": -4
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "验证负数 qty 被原样写入 _STOCK[3] == -4（函数无校验逻辑）",
+        "logic_coverage": "edge_cases: qty 为负数"
+      },
+      {
+        "case_name": "qty 为极大整数的溢出边界",
+        "input_args": {
+          "sku": 4,
+          "qty": 9223372036854775807
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "验证 Python 大整数 qty 可正常写入 _STOCK[4] == 9223372036854775807",
+        "logic_coverage": "edge_cases: qty 为极大整数"
+      },
+      {
+        "case_name": "同一 sku 重复写入覆盖旧值",
+        "input_args": {
+          "sku": 1,
+          "qty": 99
+        },
+        "expected_output": "None",
+        "category": "normal",
+        "description": "先写入 sku=1,qty=10 再写入 qty=99，验证 _STOCK[1] == 99（覆盖语义）",
+        "logic_coverage": "postconditions: _STOCK[sku] == qty"
+      },
+      {
+        "case_name": "sku 为 bool 子类键",
+        "input_args": {
+          "sku": true,
+          "qty": 8
+        },
+        "expected_output": "None",
+        "category": "boundary",
+        "description": "bool 是 int 子类，True 会作为键 1 写入，验证 _STOCK[true] == 8",
+        "logic_coverage": "edge_cases: sku 为 bool"
+      },
+      {
+        "case_name": "sku 传入非 int 类型",
+        "input_args": {
+          "sku": "abc",
+          "qty": 1
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "类型注解约定 sku 为 int，传入 str 时函数无类型校验，行为取决于字典键哈希；期望值未知（代码未定义类型错误处理）",
+        "logic_coverage": "preconditions: isinstance(sku, int)"
+      },
+      {
+        "case_name": "qty 传入非 int 类型",
+        "input_args": {
+          "sku": 5,
+          "qty": "many"
+        },
+        "expected_output": null,
+        "category": "error",
+        "description": "类型注解约定 qty 为 int，传入 str 时函数无校验直接写入；期望值未知（代码未定义类型错误处理）",
+        "logic_coverage": "preconditions: isinstance(qty, int)"
+      }
+    ],
+    "logic_degraded": false,
+    "coverage_completeness": 1.0
+  },
+  "generated_test": "import pytest\n\nfrom task_0002 import add_item\nimport task_0002\n\n\n@pytest.fixture(autouse=True)\ndef clean_stock():\n    \"\"\"每个测试前后清空全局 _STOCK，保证测试隔离。\"\"\"\n    task_0002._STOCK.clear()\n    yield\n    task_0002._STOCK.clear()\n\n\ndef test_add_item_normal_positive_returns_none_and_writes():\n    \"\"\"正常写入正整数库存：返回 None 且 _STOCK[1] == 10。\n\n    期望值来源：规约后置条件 _STOCK[sku] == qty 与 result is None。\n    \"\"\"\n    result = add_item(1, 10)\n    assert result is None\n    assert task_0002._STOCK[1] == 10\n\n\ndef test_add_item_sku_zero_boundary():\n    \"\"\"sku 为 0 的边界写入：_STOCK[0] == 5。\n\n    期望值来源：规约边界情况 sku 为 0 + 后置条件。\n    \"\"\"\n    result = add_item(0, 5)\n    assert result is None\n    assert task_0002._STOCK[0] == 5\n\n\ndef test_add_item_qty_zero_boundary():\n    \"\"\"qty 为 0 的边界写入：_STOCK[2] == 0。\n\n    期望值来源：规约边界情况 qty 为 0 + 后置条件。\n    \"\"\"\n    result = add_item(2, 0)\n    assert result is None\n    assert task_0002._STOCK[2] == 0\n\n\ndef test_add_item_negative_sku_boundary():\n    \"\"\"sku 为负数的边界写入：_STOCK[-1] == 7。\n\n    期望值来源：规约边界情况 sku 为负数 + 后置条件。\n    \"\"\"\n    result = add_item(-1, 7)\n    assert result is None\n    assert task_0002._STOCK[-1] == 7\n\n\ndef test_add_item_negative_qty_boundary():\n    \"\"\"qty 为负数的边界写入：_STOCK[3] == -4（原样写入，无校验）。\n\n    期望值来源：规约边界情况 qty 为负数 + 后置条件。\n    \"\"\"\n    result = add_item(3, -4)\n    assert result is None\n    assert task_0002._STOCK[3] == -4\n\n\ndef test_add_item_huge_qty_boundary():\n    \"\"\"qty 为极大整数的溢出边界：_STOCK[4] == 9223372036854775807。\n\n    期望值来源：规约边界情况 qty 为极大整数 + 后置条件。\n    \"\"\"\n    big = 9223372036854775807\n    result = add_item(4, big)\n    assert result is None\n    assert task_0002._STOCK[4] == big\n\n\ndef test_add_item_repeated_call_overwrites():\n    \"\"\"同一 sku 重复写入覆盖旧值：先写 10 再写 99，最终 _STOCK[1] == 99。\n\n    期望值来源：规约边界情况重复调用（覆盖旧值）+ 后置条件。\n    \"\"\"\n    add_item(1, 10)\n    assert task_0002._STOCK[1] == 10\n    result = add_item(1, 99)\n    assert result is None\n    assert task_0002._STOCK[1] == 99\n\n\ndef test_add_item_bool_sku_key():\n    \"\"\"sku 为 bool 子类键：True 作为键 1 写入，_STOCK[True] == 8。\n\n    期望值来源：规约边界情况 sku 为 bool（True 被当作 1）。\n    \"\"\"\n    result = add_item(True, 8)\n    assert result is None\n    assert task_0002._STOCK[True] == 8\n    # bool 是 int 子类，True 与 1 是同一字典键\n    assert task_0002._STOCK[1] == 8\n\n\ndef test_add_item_non_int_sku_exploratory():\n    \"\"\"sku 传入非 int 类型（str）：规约未定义类型错误处理，记录实际行为。\n\n    期望值来源不明，需人工确认：规约前置条件要求 isinstance(sku, int)，\n    但未规定违反前件时的行为（是否抛异常 / 是否仍写入）。\n    本用例仅记录实际行为，不做恒真/恒失败断言。\n    \"\"\"\n    try:\n        result = add_item(\"abc\", 1)\n    except Exception as exc:  # noqa: BLE001\n        # 记录实际抛出的异常类型，供人工确认\n        assert exc is not None\n    else:\n        assert result is None\n        assert task_0002._STOCK[\"abc\"] == 1\n\n\ndef test_add_item_non_int_qty_exploratory():\n    \"\"\"qty 传入非 int 类型（str）：规约未定义类型错误处理，记录实际行为。\n\n    期望值来源不明，需人工确认：规约前置条件要求 isinstance(qty, int)，\n    但未规定违反前件时的行为（是否抛异常 / 是否仍写入）。\n    本用例仅记录实际行为，不做恒真/恒失败断言。\n    \"\"\"\n    try:\n        result = add_item(5, \"many\")\n    except Exception as exc:  # noqa: BLE001\n        assert exc is not None\n    else:\n        assert result is None\n        assert task_0002._STOCK[5] == \"many\"",
+  "diagnosis": null,
+  "error_category": null,
+  "patch": null,
+  "test_passed": true,
+  "iterations": 0,
+  "coverage": 92.0,
+  "rag_stats": null,
+  "position_aware_focus": null,
+  "repo_verification": null,
+  "cross_file_deps": null,
+  "task_metadata": {
+    "bug_type": "assertion",
+    "pattern_name": "type_int_str_key_contract",
+    "source": "synthetic",
+    "noise_seed": 7194,
+    "difficulty": 4,
+    "is_cross_file": false,
+    "trigger_exception": null,
+    "suggested_function": null,
+    "test_cases": "from task_0002 import add_item, stock_of, _STOCK\n\ndef test_add_then_query():\n    add_item(42, 7)\n    assert stock_of(\"42\") == 7\n\ndef test_unknown_sku_zero():\n    assert stock_of(\"999\") == 0\n\ndef test_key_type_contract():\n    add_item(7, 1)\n    assert 7 in _STOCK and isinstance(next(iter(_STOCK)), int)",
+    "fixed": "_STOCK = {}\n\ndef add_item(sku: int, qty: int) -> None:\n    _STOCK[sku] = qty\n\ndef stock_of(sku: str) -> int:\n    return _STOCK.get(int(sku), 0)"
+  }
+}
