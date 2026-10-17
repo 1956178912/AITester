@@ -1,0 +1,22 @@
+﻿编号,所在文件/位置,声明内容,原始记录,可复现性,证据等级,复核结论,可用于对比？
+---,---,---,---,---,---,---,---
+C1,BASELINE §benchmark,R-P0-2 三种子：aitester detection 15.8%（38/240）/ plain_llm 1.5%（4/261）/ plain_llm_df 44.8%（117/261）,"`main_batch/benchmark_synthetic_20261006_{140906,151907,164357}.json`",**本人复算逐位一致**（git 跟踪，provenance 含 git_sha/git_dirty/seed/temp/env_snapshot）,**A**,**独立验证通过**,✅ 是
+C2,BASELINE/ADR-0016,aitester vs df 配对 McNemar 显著（−28pp）：n10=12/n01=80，χ²=48.79，p≈2.8e-12,同上,**本人复算**：n10=12/n01=80/n11=26/n00=122，χ²_cc=48.79，精确二项 p=1.7e-13,**A**,**独立验证通过**（p 值量级一致，检验方法差异）,✅ 是
+C3,BASELINE §benchmark,df vs plain_llm +43pp（检出优先协议归因）,同上,**本人复算**：不一致对 n10=113/n01=0，p=1.9e-34,**A**,**独立验证通过**（113:0 单向，df 提示协议包整体优于裸提示；协议内部因素分解未做消融——仅作协议级对比）,✅ 是（仅协议包级）
+C4,BASELINE §e4_resettled,QuixBugs（41 缺陷程序口径）：aitester detection 17/37=45.9% vs df 31/37=83.8%，p=0.0005；repair 37/40=92.5%；token/task 16038 vs 1905,`e6_a1_batches/e4_quixbugs_FIXED_harness/`（5 文件 git 跟踪）,子代理从原始 JSON 复算一致,**A**,**独立验证通过**（注：token 为 41 口径；50 任务口径为 15253/2309）,✅ 是（带 41 口径标签）
+C5,BASELINE §caliber_labels,false_fix：条件 100%（143/143）/ 边际 59.58%（143/240）/ 修正 87.16%（380/436）,main_batch 批次 + corrected_metrics 重放,子代理复算前两口径一致；87.16% 未逐位复算（项目自标 B）,A/A/B,前两项通过；第三项采信但标注 B,✅ 是（必须带口径标签）
+C6,BASELINE §benchmark,成本：aitester $0.0259 / plain_llm $0.0034 / df $0.0045 每任务,"`experiments/price_table.json`（deepseek-flash $0.3/M in, $1.2/M out，as_of 2026-10-06）+ 三批 token 汇总",子代理按 token 复算一致,**A**,**独立验证通过**,✅ 是
+C7,BASELINE §coverage,meta_coverage（自身源码）92.96% 行 / 87.62% 分支,`coverage.xml`（2026-10-17 00:41）,文件在场；本人未逐行重算（IR 逐位复算过）,A,采信（IR 复算 + 棘轮门禁把守）,✅ 是（须标 meta_coverage，勿与被测代码覆盖率混淆）
+C8,BASELINE §tests,6784 passed / 5 skipped / 0 failed（6789 collected）,全量 pytest,**本人实测：collect-only = 6799；全量实跑 6792 passed / 5 skipped / 2 failed（883.42s 单进程，fresh basetemp）**,**A**,"**独立验证通过（含失败归因）**：2 个失败均非代码回归——① `TestBaselineNumbersConsistency::test_tests_and_mypy_are_current`（BASELINE 登记值滞后于 HEAD 的自指一致性测试，项目已预先申报""刷新后转绿""）；② `TestProcessGroupTimeout`（沙箱 `ps` 被 broker 禁止的环境已知项，项目 CO 报告已申报）。净增 8 例通过与 BASELINE 的""df_spec 批次 +25 例""轨迹及后续 2 提交增量一致","✅ 是（须带""2 失败均非代码""注）"
+C9,layered_narrative §3,QuixBugs 全变异体 Mut@k 0.9396（1182/1258，健全子集 29/50）；ULT replace 0.6749（9/46）；ULT specir 0.4395（5/25）,`emse_quixbugs_mutk_full_20261015/`、`emse_ult_mutk_full_20261015/`（cosmic-ray 8.7.0，timeout 计 killed）,子代理核验一致,**B**,数字通过；**但健全子集极小（29/50、9/46、5/25）且 ULT 官方 gold 参照作废（71/71 在 fixed 上失败，传导分析见 §3.10）**——引用必须带三重标签（子集规模/gold 失效/门标签）,⚠️ 带标签可用
+C10,BASELINE §spec_compile_rate,QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397（v4 前门）,`emse_calib_*_20261014/`,"子代理核验一致；BASELINE 自注""受控估计≠全任务重测""",**B**,数字通过；v4 后门 +3pp 为语料受控估计（607 子句），非全任务实测,⚠️ 带门标签可用
+C11,BASELINE §spec_expr_coverage,synthetic 0.7202 / QuixBugs 0.6069,同批工件,子代理核验一致,B,通过（与 C10 正交：覆盖率稳定而可编译率分化已修正为度量假象）,⚠️ 可用
+C12,BASELINE §exec_2026_10_09,E6 control：aitester 9.2% vs df 34.5% vs plain_llm 0%；χ²=16.962；−28pp 第三次复现,`e6_a1_batches/e6_control_seed42/`,子代理核验一致,**A**,**独立验证通过**,✅ 是
+C13,BASELINE §e4_quixbugs_first_run,E4 修正结算全过程（0/41→17/37 伪影修复链，第四起测量伪影双布局修复）,`e6_a1_batches/e4_quixbugs_FIXED_harness/` + 回归测试 5 例,子代理核验一致,**A**,**独立验证通过**（伪影修复有零 LLM 复现 9/9 证据）,✅ 是
+C14,BASELINE §benchmark,df_spec：not_confirmed；df_spec 19/35=54.3% vs df 28/36=77.8%；δ=−25.7pp；双向精确 p=0.0117；BF10=16.4,`emse_df_spec_20261016/DF_SPEC_REPORT.json`,子代理复算一致；预注册哈希+判定脚本先于数据入库,**B**,"数字通过；**但整目录 0 git 跟踪**（见 R-1）；单向方向 p=0.9995（双向显著但方向相反——实为""规格锚显著更差""）",⚠️ 本地可验、异地不可复现
+C15,BASELINE §history,M4 QuixBugs specir 扩样：primary δ=−8.57pp/p=0.4531；repeat δ=−14.29pp/p=0.1797；merged 4:12/n=70/δ=−11.43pp/p=0.0768,`emse_quixbugs_specir_expand_20261014/QUIXB_EXPAND_ABCD_REPORT.json`,子代理核验一致,**B**,数字通过；0 git 跟踪,⚠️ 同上
+C16,BASELINE §history,D1 QuixBugs A/B（plain_llm vs df）：δ=−2.78pp/p=1.0，n=36,`emse_d1_quixbugs_ab_20261013/`,子代理核验一致,**B**,数字通过；0 git 跟踪,⚠️ 同上
+C17,BASELINE §history,SpecExpr 确认性（synthetic）：δ=−0.57pp/n=174/p=1.0 → not_confirmed,`emse_specexpr_synth_20261014/CONFIRM_REPORT.json`,子代理核验一致；**该目录 git 跟踪**,**A**,**独立验证通过**,✅ 是
+C18,BASELINE §exec（U1）,ULT accuracy 对标：plain_llm_df 21.0%（42/200）vs ULT 论文 12 模型均值 41.32%,`emse_ult_df200_20261017/ACCURACY_REPORT.json`,子代理核验一致（green_on_fut 口径，seed 42，200 任务）,**B**,数字通过；0 git 跟踪且无 SHA256SUMS,⚠️ 同上
+C19,BASELINE §static_checks,ruff 0.16.3 零告警 / mypy 0 错误（133 源文件）/ CI 矩阵 3.12-3.14,`pyproject.toml` + ci.yml,配置在场；CI 实际输出未触发（本地可跑但耗时）,B,采信（门禁脚本与 CI 接线实测存在）,✅ 是
+C20,BASELINE §benchmark,SWE-bench Lite 20 次尝试全失败（429 限流）→ 无有效能力结论,README §59 + 披露文档,子代理核验披露存在,"A（作为""无结论""披露）",**通过**（诚实披露本身是正面证据）,✅ 是（仅作无结论披露）

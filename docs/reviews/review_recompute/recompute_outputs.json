@@ -1,0 +1,303 @@
+{
+  "meta": {
+    "generated_at": "2026-10-17T04:20:35.385802+00:00",
+    "python": "3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "cwd": "/Users/wangchenyu/Workspace/AITester",
+    "scipy_available": true
+  },
+  "inputs": {
+    "experiments/results/main_batch/benchmark_synthetic_20261006_140906.json": "6e31c07dd76ce7c356a1f6bef9c011925b07dd653a09547f9a7ae2a2cbdf4aec",
+    "experiments/results/main_batch/benchmark_synthetic_20261006_151907.json": "bb5fcfc8afebeb5a1859767257f7c7d4d20dd3449e395a489b688a527292f1ae",
+    "experiments/results/main_batch/benchmark_synthetic_20261006_164357.json": "be6a42e5597a449b498caebd324f604d0beefa02eb8bfe21fda36926aed07e57",
+    "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/aitester.json": "2cbf4009e427306b1598a10761aa3cf403df96bc1e79e76b8a035c3c51ace698",
+    "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/plain_llm_df.json": "d23402fb03602e3b547a51824cda76e6e8b333936a636649dd8734072e6db3ac",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261016_232138.json": "813c437fc53a84c1517cce234b12184e5047bf483fb982cb9382d1c61307245a",
+    "experiments/results/emse_df_spec_20261016/benchmark_quixbugs_20261017_003023.json": "536da803dbb290dab9dff26ae14302a8ce8d452e058b1d2c4c1705852900d0ec"
+  },
+  "claims": {
+    "C1_three_arm_detection": {
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "arms": {
+        "aitester": {
+          "positive": 38,
+          "n": 240,
+          "rate": 0.1583,
+          "wilson95": [
+            0.1176,
+            0.2099
+          ]
+        },
+        "plain_llm": {
+          "positive": 4,
+          "n": 261,
+          "rate": 0.0153,
+          "wilson95": [
+            0.006,
+            0.0387
+          ]
+        },
+        "plain_llm_df": {
+          "positive": 117,
+          "n": 261,
+          "rate": 0.4483,
+          "wilson95": [
+            0.3891,
+            0.5089
+          ]
+        }
+      }
+    },
+    "C2_aitester_vs_df_mcnemar": {
+      "name": "aitester vs plain_llm_df",
+      "n_pairs": 240,
+      "b_only_a": 12,
+      "c_only_b": 80,
+      "both": 26,
+      "neither": 122,
+      "delta_pp": -28.33,
+      "delta_boot95_pp": [
+        -35.42,
+        -21.25
+      ],
+      "mcnemar_exact_two_sided_p": 1.7155995359729554e-13,
+      "mcnemar_exact_one_sided_a_greater_p": 0.9999999999999875,
+      "chi2_no_cc": 50.26,
+      "chi2_yates_cc": 48.79,
+      "odds_ratio": 0.15,
+      "or_ci95": [
+        0.0818,
+        0.2752
+      ]
+    },
+    "C3_df_vs_plain_llm_mcnemar": {
+      "name": "plain_llm_df vs plain_llm",
+      "n_pairs": 261,
+      "b_only_a": 113,
+      "c_only_b": 0,
+      "both": 4,
+      "neither": 144,
+      "delta_pp": 43.3,
+      "delta_boot95_pp": [
+        37.16,
+        49.04
+      ],
+      "mcnemar_exact_two_sided_p": 1.925929944387236e-34,
+      "mcnemar_exact_one_sided_a_greater_p": 9.62964972193618e-35,
+      "chi2_no_cc": 113.0,
+      "chi2_yates_cc": 111.01,
+      "odds_ratio": Infinity,
+      "or_ci95": [
+        14.1123,
+        3651.3647
+      ]
+    },
+    "C4_e4_quixbugs": {
+      "name": "aitester vs plain_llm_df (QuixBugs E4 FIXED harness)",
+      "n_pairs": 37,
+      "b_only_a": 0,
+      "c_only_b": 14,
+      "both": 17,
+      "neither": 6,
+      "delta_pp": -37.84,
+      "delta_boot95_pp": [
+        -54.05,
+        -21.62
+      ],
+      "mcnemar_exact_two_sided_p": 0.0001220703125,
+      "mcnemar_exact_one_sided_a_greater_p": 1.0,
+      "chi2_no_cc": 14.0,
+      "chi2_yates_cc": 12.07,
+      "odds_ratio": 0.0,
+      "or_ci95": [
+        0.0021,
+        0.578
+      ],
+      "arm_rates": {
+        "aitester": {
+          "positive": 17,
+          "n": 37,
+          "rate": 0.4595,
+          "wilson95": [
+            0.3104,
+            0.6162
+          ]
+        },
+        "plain_llm_df": {
+          "positive": 31,
+          "n": 37,
+          "rate": 0.8378,
+          "wilson95": [
+            0.6886,
+            0.9235
+          ]
+        }
+      }
+    },
+    "C14_df_spec": {
+      "name": "plain_llm_df_spec vs plain_llm_df (df_spec, 41 口径可判定配对)",
+      "n_pairs": 35,
+      "b_only_a": 1,
+      "c_only_b": 10,
+      "both": 18,
+      "neither": 6,
+      "delta_pp": -25.71,
+      "delta_boot95_pp": [
+        -42.86,
+        -8.57
+      ],
+      "mcnemar_exact_two_sided_p": 0.01171875,
+      "mcnemar_exact_one_sided_a_greater_p": 0.99951171875,
+      "chi2_no_cc": 7.36,
+      "chi2_yates_cc": 5.82,
+      "odds_ratio": 0.1,
+      "or_ci95": [
+        0.0128,
+        0.7812
+      ],
+      "arm_rates": {
+        "plain_llm_df_spec": {
+          "positive": 19,
+          "n": 35,
+          "rate": 0.5429,
+          "wilson95": [
+            0.3819,
+            0.6953
+          ]
+        },
+        "plain_llm_df": {
+          "positive": 28,
+          "n": 36,
+          "rate": 0.7778,
+          "wilson95": [
+            0.6192,
+            0.8828
+          ]
+        }
+      },
+      "note": "p_one_sided 方向为 df_spec > df（H1 方向）；实测 b<c 故单向 p 接近 1，即显著方向与 H1 相反"
+    },
+    "wilson_ci_table": {
+      "C9_quixbugs_mutk_0.9396": {
+        "k": 1182,
+        "n": 1258,
+        "rate": 0.9396,
+        "wilson95": [
+          0.925,
+          0.9515
+        ]
+      },
+      "C9_ult_replace_mutk_0.6749": {
+        "k": 1590,
+        "n": 2356,
+        "rate": 0.6749,
+        "wilson95": [
+          0.6557,
+          0.6935
+        ]
+      },
+      "C9_ult_specir_mutk_0.4395": {
+        "k": 847,
+        "n": 1927,
+        "rate": 0.4395,
+        "wilson95": [
+          0.4175,
+          0.4618
+        ]
+      },
+      "C18_ult_accuracy_0.21": {
+        "k": 42,
+        "n": 200,
+        "rate": 0.21,
+        "wilson95": [
+          0.1593,
+          0.2716
+        ]
+      },
+      "C4_aitester_17_37": {
+        "k": 17,
+        "n": 37,
+        "rate": 0.4595,
+        "wilson95": [
+          0.3104,
+          0.6162
+        ]
+      },
+      "C4_df_31_37": {
+        "k": 31,
+        "n": 37,
+        "rate": 0.8378,
+        "wilson95": [
+          0.6886,
+          0.9235
+        ]
+      },
+      "C14_dfspec_19_35": {
+        "k": 19,
+        "n": 35,
+        "rate": 0.5429,
+        "wilson95": [
+          0.3819,
+          0.6953
+        ]
+      },
+      "C14_df_28_36": {
+        "k": 28,
+        "n": 36,
+        "rate": 0.7778,
+        "wilson95": [
+          0.6192,
+          0.8828
+        ]
+      }
+    },
+    "multiplicity_sensitivity": {
+      "pre_registered_primary_comparisons": 1,
+      "note": "R-P0-2 主终点为预注册的单一主对比（aitester vs plain_llm_df）；E4/df_spec/M4/D1 为各自独立预注册批次的主对比。",
+      "bonferroni_if_3_primary_compared": {
+        "p_C2": 5.146798607918867e-13,
+        "p_C4": 0.0003662109375,
+        "p_C14": 0.03515625,
+        "conclusion": "三项主对比在 Bonferroni ×3 校正下均仍显著（p_C2/C4/C14 校正后均 <0.05）；探索性子组分析（按 bug_type/error_category）项目已用 BH-FDR 控制（见 statistical_analysis.py），本报告不引入新的未校正声明。"
+      }
+    },
+    "E7_gold_error_sensitivity": {
+      "model": "gold 判定错误率 q → 期望翻转 n*q → detection 率偏差上界 ±q（线性放大不考虑方向抵消）",
+      "bounds": {
+        "quixbugs_41_caliber": {
+          "q=0.05": {
+            "expected_flips": 1.9,
+            "detection_rate_bound_pp": 5.0
+          },
+          "q=0.1": {
+            "expected_flips": 3.7,
+            "detection_rate_bound_pp": 10.0
+          },
+          "q=0.2": {
+            "expected_flips": 7.4,
+            "detection_rate_bound_pp": 20.0
+          }
+        },
+        "quixbugs_all_50": {
+          "q=0.05": {
+            "expected_flips": 2.5,
+            "detection_rate_bound_pp": 5.0
+          },
+          "q=0.1": {
+            "expected_flips": 5.0,
+            "detection_rate_bound_pp": 10.0
+          },
+          "q=0.2": {
+            "expected_flips": 10.0,
+            "detection_rate_bound_pp": 20.0
+          }
+        }
+      },
+      "interpretation": "即使 10% 的 gold 三段判定有误，F2P detection 率的偏差上界约 ±10pp；C4 的 45.9% vs 83.8%（37.9pp 差距）与 C2 的 −28.3pp 均大于该上界，结论方向不翻转；但 C14 的 −25.7pp 与单批 QuixBugs 的 6pp 跨批波动处于同一量级，解读须并列披露。"
+    }
+  }
+}

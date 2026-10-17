@@ -1,0 +1,17 @@
+﻿维度,2025-2026 前沿 SOTA,证据等级,项目现状（可验证部分）,项目证据等级,绝对差距,相对差距,竞争位置,超越路径编号,可否对比
+---,---,---,---,---,---,---,---,---,---
+**测试生成：语句覆盖（被测代码）**,ULT 12 模型均值 45.10%（3909 真实函数）,A,synthetic 84.0-93.6%（自研模板，plain_llm_df 81.5-97.2%）,A（自研基准内）,—,—,**内部口径领先自身轻量臂**（但低于 plain_llm_df）,—,❌ 不同基准（synthetic vs ULT）
+**测试生成：语句覆盖（外部基准）**,ULT 均值 45.10% / 最佳 17.83%@Pass@1,A,ULT df200：green_on_fut 21.0%（42/200）,B,≈ −24pp（vs 均值，口径部分可比）,≈ −53%,**落后（中低梯队）**,P4,⚠️ 口径近似可比（项目更严：30s 终止+全过）
+**测试生成：变异得分**,MUTGEN 89.5%（HumanEval-Java）/ Ockhamareto 49.9%@N=5（ULT）/ TestAgent 83.69%（Java）/ ULT 均值 40.21%,A,QuixBugs 0.9396（29/50 健全子集）/ ULT replace 0.6749（9/46）/ ULT specir 0.4395（5/25）,B,QuixBugs 小基准内 0.94 高于 ULT 均值 0.40 但基准不同,—,**小基准内高、外部基准中低**；带三重标签,P4,❌ 协议不同（单次生成 vs K-query/RL）
+**测试生成：编译/执行率**,TestAgent 99.11% 编译 / 97.46% 执行（Java）,A,"项目未单列该指标（detection 三段判定内含""无收集错误""防线）",—,—,—,无法对比（未申报）,P6（新增指标）,❌
+**缺陷检出（F2P detection）**,Zhao ISSTA'26 effective tests 8.51%（fixed 提示）/ SpecOps'26 63.2%（fixed+spec，5 跑）,A,QuixBugs df 83.8%（31/37）/ aitester 45.9% / synthetic df 44.8% / ULT 0/24,A/B,QuixBugs df 83.8% 高于 ISSTA'26 的 8.51%（协议不同：后者按测试条计、前者按任务计）,—,**内部：轻量臂强于完整编排（−28pp~−37.9pp，A 级）**,P1/P2,⚠️ 协议不同，须谨慎
+**多智能体协作增益**,LaMAR 超基线（ASE'26）；TraceCoder +34.43% 相对 Pass@1（ICSE'26）；TwinMem 89.1% vs 60.0%（FSE'26）；LatentMAS +14.6%（arXiv'25）,A,编排净 **−28pp**（synthetic，p=1.7e-13 本人复算）/ −37.9pp（QuixBugs，p=0.0005）/ 成本 6-8×,**A**,与前沿方向相反,—,"**落后（项目已自行降级为""消融容器""，止损诚实）**",P5,⚠️ 任务不同构（APR vs 测试检出），不得互证
+**多智能体通信机制**,LaMAR KV-cache 潜通信 O(N²)→O(N)；LatentMAS token −70.8~83.7%,A,文本 prompt + 语义缓存；API 架构下 KV 传递不可行,A（架构事实）,—,—,落后（API 约束下短期无解）,P5b（长期）,⚠️
+**修复（APR）成功率**,SWE-bench Verified 官方 76.80%（Claude 4.5 Opus，仓库级）；TwinMem 89.1%（Pro 顺序子集）,A/B,QuixBugs repair 92.5%（37/40，gold 裁决，函数级）；SWE-bench 无有效数据（基础设施失败）,A/B,函数级 92.5% 数字高于仓库级 SOTA 但**任务粒度不同**,—,**函数级单文件：与轻量 prompt 基线相当（E4 df 无修复通道）**；仓库级未测,P2,❌ 粒度不同
+**成本（$/任务）**,TwinMem $0.0044；SWE 官方 $0.07-0.96；ADI $1.28,A,aitester $0.0259 / df $0.0045（synthetic，deepseek-flash）,A,与 TwinMem 同量级；低于 ADI,—,**轻量臂成本有竞争力；完整编排 6-8× 于轻量臂**,P5,⚠️ 模型/任务不同
+**逻辑驱动：规格可编译率**,无同口径外部指标（项目独创）,—,QuixBugs 0.7161 / ULT 0.5937 / synthetic 0.6397（v4 前门）,B,—,—,指标独创、无外部对照；**增益未证实（三连阴性）**,P1,❌ 无同口径前沿
+**逻辑驱动：规格锚增益**,SpecOps'26 +9.8pp（fixed 提取契约，5 跑）；Zhao ISSTA'26 spec 替换 −40% misguided,A,df_spec **−25.7pp（显著为负）**；D1 −2.78pp；M4 −11.43pp,A/B,与前沿正向差距 ~35pp,—,**落后且方向相反；机制假设已定位（锚=缺陷代码再描述）**,**P1（修复后重测）**,⚠️ 协议可比（均为规格锚替换）
+**测试预言正确性**,Tratto 73% acc（Java）；TOGLL 63%；Di Grazia 43% mutation,A,spec_oracle 注入率 40%（QuixBugs）；**oracle 正确率未系统度量**,—,—,—,无法对比（缺指标）,P3（补齐 oracle 质量度量）,❌
+**自修复运行时机制**,VIGIL（延迟 97→8s，单案例）；ADI FLT（+6.2-18.5pp 即插即用）,B/A,快照回滚+红回归门+弃权门（精确率 86%）+防黑客门+进程组终止；FLT 仅设计文档,A（机制在场）,—,—,**安全机制设计领先；运行时诊断能力缺（FLT 未落地）**,P2,⚠️
+**工程化/可复现性**,2025-2026 LLM4SE 文献普遍缺 provenance/门禁（MUTGEN/TestAgent 等均无同类披露）,A（文献缺口事实）,24 CI 门禁+覆盖率棘轮+口径矩阵+SHA256SUMS+模型指纹+env 快照门+双语文档门+零 LLM 复算链,A,—,—,**显著领先学术前沿**（本报告认定的最强竞争优势）,保持+产品化（P3）,✅ 可断言领先
+**评估诚信方法论**,PatchDiff/UTBoost 等指出基准高分含幻影；Google SpecOps'26 用 greenfield+McNemar,A,4 起测量伪影主动披露修正+false_fix 五口径矩阵+预注册先落盘+等预算对照,A,—,—,**领先（唯一系统报告 false_fix 多口径的系统）**,P3,✅

@@ -1,0 +1,12 @@
+﻿前沿方法,关键指标,指标值,评测基准,一手来源,年份/venue,证据等级
+---,---,---,---,---,---,---
+SWE-bench Verified 官方榜（swebench.com）,% Resolved（mini-SWE-agent 统一 harness）,Claude 4.5 Opus **76.80%** / Gemini 3 Flash & MiniMax M2.5 75.80% / DeepSeek V3.2 70.00%（成本 $0.07-0.96/任务）,SWE-bench Verified（500）,swebench.com 官方榜,2026-02,**A**
+SWE-bench Verified 厂商自报（跟踪榜）,% Resolved,Claude Opus 5 96-97%（Vals.ai 第三方测 97.0±0.76；系统卡自报 96.0）,同上,steel.dev 跟踪榜（聚合官方/厂商来源）,2026-07/09,**B**（自报+第三方转述）
+"SWE-bench Pro（Deng et al., Scale）",Pass@1,"GPT-5 **25.9%**（最高）；公开集 GPT-5 23.3 / Opus 4.1 22.7 / Live-SWE-agent 45.8%（Pro v2, 642 任务）",SWE-bench Pro（1865 问题 / 41 仓库；v2 642）,PMLR v306 deng26f + labs.scale.com,2025-2026,**A**
+"LaMAR（Jiao, Zhang, Feng, Li）",repair success,Qwen3-8B：Defects4J **24.5%**；DebugBench/QuixBugs **62.1-87.5%**；KV-cache 潜通信 O(N²)→O(N),Defects4J + DebugBench + QuixBugs（Java/Python/C++）,ACM DOI 10.1145/3832783.3837423 + ASE'26 程序页,2026-10 / ASE,**A**
+"TraceCoder（Huang, Ye, Sun, Zhang, Zhang, Liu）",Pass@1 相对提升,最高 **+34.43%** 相对；HLLM +2.64pp；RM +5.31% 相对；插桩语义保留 >99%,HumanEval/+/ClassEval/BigCodeBench ×3 模型,arXiv:2602.06875 + ICSE'26,2026 / ICSE,**A**
+"TwinMem-Agent（Wu, Luo, Mu, Xiang）",Pass@1 / 成本,**89.1% vs mini-swe-agent 60.0%**（SWE-bench Pro 8×25 顺序设定）；**$0.0044 vs $0.0798（约 18× 低成本）**；去记忆 −8pp/−12pp,SWE-bench Pro 子集,ACM DOI 10.1145/3803437.3807664 + FSE Companion'26,2026-07 / FSE Companion,**A**
+LatentMAS（Gen-Verse）,accuracy / token,最高 **+14.6%** 准确率；输出 token **−70.8~83.7%**；推理 **4-4.3×** 加速；training-free,9 基准（数学/科学/代码）,arXiv:2511.20639,2025-11 / arXiv,**A**（预印本）
+"LANTERN（Luo, Keung, Yang, Klein, Bissyandé, Tian, Le）",Pass@10 绝对提升,Rust **+22.09pp**（跨语言翻译修复）；Python ~90% vs Rust ~65% 基线差距,xCodeEval（5068 bug / 11 语言）+ Defects4J + SWE-bench Lite,arXiv:2503.22512,2025 / arXiv,**A**（预印本）
+"AgentCoder（Huang, Zhang, Luck, Bu, Qing, Cui）",pass@1 / token,GPT-4：HumanEval **96.3%** / MBPP **91.8%** @ 56.9K/66.3K token（SOTA 90.2%/78.9% @ 138.2K/206.5K）,HumanEval + MBPP ×9 模型,arXiv:2312.13010,2024 / arXiv,**A**（预印本）
+"ADI（Xiang, Xu, Chu, Tian, Zhang）",resolved / 成本,FramePilot **63.8%** Verified @ **$1.28/任务**（Claude-Sonnet-3.7，超 Claude-Tools 63.2%）；即插即用 **+6.2~18.5%**,SWE-bench Verified + Lite,arXiv:2604.24212 + DOI 10.1145/3797126,2026 / FSE (PACMSE),**A**
