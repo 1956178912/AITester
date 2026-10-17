@@ -1,0 +1,3 @@
+{"event": "task_start", "task": "<REDACTED_KEY>", "ts": 1792232061.292371, "meta": {"dataset_task_id": "quixbugs__find_first_in_sorted", "baseline": "plain_llm_df", "target_function": "find_first_in_sorted"}}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "generator", "ts": 1792232066.172971, "run_id": "f3b611453cc94c3f", "span_id": "0b695cad90f7", "output": {"generated_test_len": 4479}, "decision": "generated"}
+{"event": "node", "task": "<REDACTED_KEY>", "node": "executor", "ts": 1792232096.193131, "run_id": "f3b611453cc94c3f", "span_id": "bcb0bc23a4f7", "output": {"passed": false, "coverage": 0.0, "failed_cases": 0}, "decision": "FAIL", "duration_ms": 30018.28, "iteration": 0}

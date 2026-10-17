@@ -27,6 +27,12 @@ R4（2026-09-30 独立审查 P0）：主批次运行脚手架。
     .venv/bin/python experiments/run_main_batch.py --dataset synthetic \
         --task-count 50 --seed 42 --baselines aitester,plain_llm,single_agent
 
+    # 真实数据集（如 quixbugs / ult）的任务数截断（L 轮 2026-10-17 修复）：
+    .venv/bin/python experiments/run_main_batch.py --dataset quixbugs \
+        --task-limit 3 --baselines plain_llm_df        # 或 --task-count 3（等价）
+    注：--task-count 在真实数据集上历史口径被静默忽略（只对合成数据集生成任务数
+    生效）；L 轮起显式给出时按任务上限生效（等价 --task-limit），不显式给出则全量。
+
 注：需 LLM API 配置（config.LLM_API_*）；无 API 时 run_benchmark 的
 各基线会按 rate_limit/error 占位，本脚手架仍会落盘工件 + 跑统计
 （供人工补跑后重算）。
@@ -52,6 +58,77 @@ DEFAULT_SEED = 42
 DEFAULT_BASELINES = "aitester,plain_llm,single_agent"
 MAIN_BATCH_DIR = "experiments/results/main_batch"
 
+# L 轮（2026-10-17）CLI 语义修复：run_benchmark 里 task_count 只对合成数据集
+# 生效（生成 N 个任务），真实数据集的"限制运行任务数"是 task_limit；本脚手架
+# 此前只暴露 --task-count 且原样透传，导致 `--task-count 3 --dataset quixbugs`
+# **静默跑满 50 任务**（pilot 实测：进度条从 0/50 开始，--task-count 3 被忽略；
+# 缺陷证据见 experiments/results/l_round_pilot_20261017/defect_repro/）。
+# 修复口径（最小惊讶 + 历史命令向后兼容）：
+#   - --task-count 默认改 None（不显式给 = 历史默认行为）；
+#   - 合成数据集：None → DEFAULT_TASK_COUNT（与历史默认 50 一致）；
+#   - 真实数据集：显式 --task-count 现在**按任务上限生效**（等价 --task-limit，
+#     这是用户写该参数时的本意）；不显式给则全量（历史行为不变）；
+#   - 新增 --task-limit 显式入口（对任意数据集生效，优先于 --task-count）。
+_SYNTHETIC_DATASETS = ("synthetic", "synth")
+
+
+def resolve_task_scope(
+    dataset: str,
+    task_count: int | None,
+    task_limit: int | None,
+) -> tuple[int | None, int | None, list[str]]:
+    """把 CLI 的 ``--task-count`` / ``--task-limit`` 解析为 run_benchmark 的两个入参。
+
+    主批次 runner 的 ``--task-count`` 历史语义只覆盖合成数据集（生成任务数），
+    但真实数据集上它会被 run_benchmark **静默忽略**（真实数据集限任务是
+    ``task_limit``）——L 轮 pilot 实测 ``--task-count 3 --dataset quixbugs``
+    跑满 50 任务。本函数把口径收敛为一处、可单测：
+
+    Args:
+        dataset: 数据集名（大小写/空白不敏感）。
+        task_count: CLI 显式给出的任务数（None = 未给出）。
+        task_limit: CLI 显式给出的任务上限（None = 未给出）。
+
+    Returns:
+        ``(effective_task_count, effective_task_limit, notices)``：
+        - 合成数据集：effective_task_count = 显式值或 DEFAULT_TASK_COUNT；
+          effective_task_limit 原样透传（两者可叠加：先生成后截断）；
+        - 真实数据集：effective_task_count = None（不生成）；limit 取
+          ``task_limit``，未给时回退显式 ``task_count``（修复静默忽略）；
+        - notices: 面向操作者的告警/说明行（不阻断）。
+
+    边界归一（与 run_benchmark.task_limit 口径一致）：<1 视为无效并归 None，
+    同时追加 notice（不静默改变任务数）。
+    """
+    name = (dataset or "").strip().lower()
+    notices: list[str] = []
+
+    def _normalize(value: int | None, flag: str) -> int | None:
+        if value is None:
+            return None
+        if value < 1:
+            notices.append(f"{flag}={value} 无效（需正整数），按未给出处理")
+            return None
+        return value
+
+    count = _normalize(task_count, "--task-count")
+    limit = _normalize(task_limit, "--task-limit")
+
+    if name in _SYNTHETIC_DATASETS:
+        effective_count = count if count is not None else DEFAULT_TASK_COUNT
+        return effective_count, limit, notices
+
+    effective_limit = limit
+    if limit is None and count is not None:
+        effective_limit = count
+        notices.append(
+            f"非合成数据集 {name}：--task-count={count} 按任务上限生效"
+            "（等价 --task-limit；历史口径该参数被静默忽略，L 轮修复）"
+        )
+    elif limit is not None and count is not None and limit != count:
+        notices.append(f"非合成数据集 {name}：--task-limit={limit} 优先，--task-count={count} 被忽略")
+    return None, effective_limit, notices
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -59,7 +136,19 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument("--dataset", default="synthetic", help="数据集名称（默认 synthetic，固定 task_id 前缀可复现）")
     p.add_argument(
-        "--task-count", type=int, default=DEFAULT_TASK_COUNT, help=f"合成任务数（默认 {DEFAULT_TASK_COUNT}）"
+        "--task-count",
+        type=int,
+        default=None,
+        help=(
+            f"任务数：合成数据集=生成任务数（缺省 {DEFAULT_TASK_COUNT}）；"
+            "真实数据集=按上限截断（等价 --task-limit，显式给出时生效）"
+        ),
+    )
+    p.add_argument(
+        "--task-limit",
+        type=int,
+        default=None,
+        help="限制运行任务数量（对任意数据集生效；优先于 --task-count；缺省=全量）",
     )
     p.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"合成数据集随机种子（默认 {DEFAULT_SEED}）")
     p.add_argument("--baselines", default=DEFAULT_BASELINES, help="基线方法列表（逗号分隔）")
@@ -293,7 +382,19 @@ def main() -> None:
     import experiments.run_benchmark as rb
 
     deterministic = not args.no_deterministic
-    print(f"R4 主批次：dataset={args.dataset} task_count={args.task_count} seed={args.seed}")
+    # L 轮：任务范围解析（--task-count 在真实数据集上的静默忽略缺陷修复；
+    # 两个入参分开透传：task_count=生成数 / task_limit=截断数）。
+    effective_task_count, effective_task_limit, _task_notices = resolve_task_scope(
+        args.dataset, args.task_count, args.task_limit
+    )
+    for _notice in _task_notices:
+        print(f"⚠️ {_notice}", file=sys.stderr)
+    _scope_desc = (
+        f"生成 {effective_task_count} 个"
+        if effective_task_count is not None
+        else ("全量任务" if effective_task_limit is None else f"全量数据集前 {effective_task_limit} 个任务")
+    )
+    print(f"R4 主批次：dataset={args.dataset} task_count={args.task_count} seed={args.seed}（{_scope_desc}）")
     print(
         f"基线：{args.baselines}；输出：{out_dir}；确定性采样：{'开（temp=0.0）' if deterministic else '关（对照口径）'}"
     )
@@ -303,7 +404,8 @@ def main() -> None:
         dataset_name=args.dataset,
         baselines=args.baselines.split(","),
         output_dir=str(out_dir),
-        task_count=args.task_count,
+        task_count=effective_task_count,
+        task_limit=effective_task_limit,
         seed=args.seed,
         deterministic=deterministic,
         max_pattern_repeat=args.max_pattern_repeat,

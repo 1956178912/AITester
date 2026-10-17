@@ -1,10 +1,249 @@
-> Last updated: 2026-10-17 (round K comprehensive optimization: P0 JSON-fence content-corruption fix + coverage **96.47% lines / 92.57% branches** + self-mutation **0.6419→0.7674** + G16 documentation link gate + mutation-generator invalid-mutant fix [measurement artifact #5] + orphan-process patrol + performance-regression surface extension; full suite **7530 passed / 5 skipped / 0 failed**. Round J closeout and the df_spec experiment [`not_confirmed`] are registered the same day)
+> Last updated: 2026-10-17 (round L real-LLM optimization: P1 independent-anchor three-arm verdict **`not_confirmed`** [df 86.11% / doc 60.00% / union 61.76%, δ=−25.71pp, p_two=0.0352] + proxy-metric invalidation fix [misguided/effective per-test metric; `over_red` proxy withdrawn] + runner `--task-count` semantics fix + self-mutation **0.7674→0.8233** + H2 regression locks; actual LLM spend **$0.3170**. Round K comprehensive optimization and round J closeout are registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-17 Round L (real LLM: P1 independent-anchor three-arm negative verdict + proxy-metric invalidation + runner semantics fix + test-strength improvement)
+
+> Round L lands on the same day as round K and is the "comprehensive optimization to
+> frontier level" **real-LLM-quota batch**: it completes three work items that had only
+> been registerable as "blocked on quota" and delivers two findings that **change the
+> research narrative** — (1) the independent-review §6 P1 line (replacing the buggy-code
+> prompt block with a human-docstring independent anchor) is judged **`not_confirmed`
+> with a negative direction** in a same-batch, same-caliber three-arm QuixBugs run
+> (doc vs control δ=−25.7pp, two-sided p=0.0352; the failure line was not triggered);
+> (2) using the ISSTA'26 per-test operationalization, we show for the first time that
+> the "anchor harm = misguidance (buggy behavior asserted as expected)" mechanism is
+> **not supported** — the misguided share did not rise but fell slightly, and the harm
+> is carried by over-constraint induced `both_fail` tests (tests that fail even on the
+> correct implementation). In addition, a real-LLM pilot exposed and we fixed a runner
+> semantics defect (`--task-count` silently ignored on real datasets), round K's 23
+> "pending" surviving mutants were cleared (12 killed / 11 attributed equivalent,
+> score 0.7674→0.8233), and H2 received 37 regression-lock tests plus full-suite
+> closeout. Every number is locally measured with a verification entry; actual LLM
+> spend **$0.3170** across the three arms (within the pre-registered $0.5 cap).
+
+### Fixed
+
+- **L-1 (P0, CLI semantics): `--task-count` silently ignored on non-synthetic datasets**.
+  The real-LLM 3-task pilot measured `run_main_batch.py --task-count 3 --dataset
+  quixbugs` actually running the full 50 tasks (progress bar starts at 0/50; evidence:
+  `experiments/results/l_round_pilot_20261017/defect_repro/aborted_full50_run.log` and
+  9 executed traces). Root cause: `run_benchmark`'s `task_count` only applies to
+  synthetic datasets (generates N tasks); for real datasets the "limit tasks" parameter
+  is `task_limit` (available on the `run_benchmark` CLI as `--task-limit`), but
+  `run_main_batch.py` neither exposed it nor mapped the pass-through — so a small
+  rehearsal was silently scaled up 16×. Fix (least surprise + backward compatibility):
+  new pure function `run_main_batch.resolve_task_scope()` — `--task-count` default
+  becomes `None` (**not given = historical behavior unchanged**: synthetic still
+  generates `DEFAULT_TASK_COUNT=50`, real datasets still run full); an **explicit**
+  `--task-count` on a real dataset now acts as the task cap (equivalent to
+  `--task-limit`, with a stderr notice); new explicit `--task-limit` (takes priority
+  over `--task-count`); `<1` values are normalized to "not given" with a warning (no
+  silent task-count change); `main()` passes the two scope parameters separately.
+  Verified by `pytest tests/test_run_main_batch_task_scope.py -q` (**22 cases**:
+  synthetic/real/alias/case/ill-formed/both-flags priority/`main()` wiring/historical
+  defaults preserved). The defect does not affect the T5 formal batch
+  (`--task-count 50` = all QuixBugs tasks; all three arms `total_tasks=50`). The same
+  batch also uncovered and fixed an **isolation defect in the new test itself**: because
+  `main()` uses `import experiments.run_benchmark as rb`, when the real module has
+  already been imported by another test the package attribute wins, so replacing only
+  `sys.modules` fails to inject the fake module → the full suite **ran a real benchmark**
+  (observed real LLM calls and a nested m1 hang). Fixed by monkeypatching the
+  `experiments` package attribute as well, plus a regression self-check that pre-imports
+  the real module before running this file;
+- **L-2 (register correction): the §4 entry "H2 fixed only 2/7 sites" was stale**.
+  Measured `git log -S nested_pytest_env`: only round K's `8d4f35c` touched it; all 5
+  remaining sites (including the two `emse_testlevel_detection` sites that keep the
+  self-written plugin's `PYTHONPATH` semantics) were already converged = **7/7**, with
+  zero source diff in round L. Round L adds 37 regression-lock tests
+  `tests/test_nested_pytest_env_convergence.py` (per-site AST locks, repo-wide
+  dataflow-lite scan, clean-environment key-set equivalence, end-to-end negative
+  control under a host `PYTEST_PLUGINS` injection) and corrects the register so a
+  closed item is not perpetually listed as outstanding.
+
+### Added
+
+- **L-3: P1 independent docstring spec anchor — implementation + pre-registration +
+  real-LLM three-arm experiment.** *Implementation*: `src/tools/spec_first.py` gains
+  `module_spec_text()` (module-level human-spec extraction: trailing spec block first →
+  leading module docstring → empty string; pure-AST, deterministic, no exception
+  leakage; **40 of 41** QuixBugs defect programs carry a human-written
+  Input/Output/Examples block, only `node.py` lacks one); `build_spec_replace_section`
+  supports a material's **explicit** `human_spec` key (the key's presence enters the
+  material decision and renders the "independent-of-implementation spec anchor" block;
+  **all historical materials without that key render byte-identically** — golden-mark
+  tests lock the reproducibility of the df_spec line). *Two arms*:
+  `plain_llm_df_doc` (fallback tier (a): human spec only) and
+  `plain_llm_df_doc_union` (tier (b): human spec ∪ existing Planner
+  `logic_analysis`) are registered in `experiments/run_benchmark.py`, isomorphic to
+  df_spec (thread-local spec-mode override, per-task fallback to df when the table is
+  missing without crashing, `DOC_ANCHOR_TABLE` env override recorded in provenance).
+  *Zero-LLM artifacts*: `experiments/build_docstring_anchor_table.py`
+  (content-addressed `sha256(source.strip())`; doc table 41 entries with human_spec
+  40/41; union table 41 entries with Planner clauses merged 41/41; two builds are
+  byte-identical; sha256 `2a650afd…` / `6120ea40…`, committed in 61493ce).
+  *Pre-registration*: `docs/study/DOCSTRING_ANCHOR_PREREG_2026-10-17.md` (local-only
+  file, sha256 `76c7ced181ffc0f1a9d6f9e88cf45e8ee69aa5d7e63985883476d928b9259a6e`,
+  recorded in the pre-batch commit message; decision constants 0.65/0.55/0.05/0.10 are
+  locked by the analysis script committed before any result existed).
+  *Three-arm measurement* (clean worktree HEAD=61493ce, `git status` 0 dirty before and
+  after, provenance `git_dirty=false`, model fingerprint `pinned=true`; distinct cache
+  namespaces, `AITESTER_PROFILE=logic`, `TEMPERATURE=0.0`, `BENCHMARK_PARALLELISM=4`,
+  seed=42; df/doc concurrent and union overlapping post-processing — Lead-approved and
+  disclosed in the artifact README):
+
+  | Arm | detection (41-program measurable subset) | tokens | cost (standard price) | wall clock |
+  |---|---|---|---|---|
+  | `plain_llm_df` (same-batch control) | **86.11% (31/36)** | 88,964 | $0.0751 | 76m08s |
+  | `plain_llm_df_doc` (human-spec anchor) | **60.00% (21/35)** | 134,789 | $0.1182 | 67m49s |
+  | `plain_llm_df_doc_union` (union anchor) | **61.76% (21/34)** | 151,125 | $0.1238 | 73m06s |
+
+  *Verdict (script-emitted)*: primary doc vs df **`not_confirmed`** — paired **3:12**,
+  δ=**−25.71pp**, two-sided exact p=**0.0352**, one-sided p=0.9963, BF10=**3.6274**,
+  MDE=**16.57pp**; C1 (doc ≥65%) not met, C2 (one-sided p<0.05) not met, C3 (δ>0) not
+  met; the **failure line (<55%) was not triggered** (60.0% ≥ 55%); union vs df is
+  secondary and same-direction (δ=−23.53pp, p_two=0.0215, BF10=9.4961).
+  **Narrative impact**: switching to an independent anchor did not reverse the df_spec
+  negative direction (df_spec 54.3% vs doc 60.0% are cross-batch references; the
+  same-batch control is 86.11%); the same-batch control differs from historical batches
+  (77.8% on 10-16, 83.8% on 10-09) by **8.3pp**, re-confirming that a **same-batch
+  control is the only defensible pairing** (Q5 unresolved; cross-batch numbers must not
+  be pooled). Artifacts: `experiments/results/emse_docstring_anchor_20261017/` (README,
+  `DF_DOC_REPORT.{json,md}`, three-arm batch JSONs, 150 traces, SHA256SUMS with 165
+  entries verified 0 failures);
+- **L-4: misguided/effective per-test three-way metric (ISSTA'26 operationalization,
+  zero-LLM replay).** New `experiments/misguided_metrics.py` (~2.2k lines): reads batch
+  JSON → materializes buggy/fixed versions in both flat and package layouts → one
+  pytest run per version (`--junitxml` per-test results) → four classes
+  `effective` / `misguided` / `both_pass` / `both_fail`; timeouts / collection failures
+  / import failures are **listed separately and excluded from the denominator**
+  (`--per-test-timeout` plus a file-level `run_with_timeout` killpg wall clock);
+  `nested_pytest_env` isolates host pytest configuration; `--repeat` validates
+  determinism via a report body digest; the report embeds input sha256, denominator
+  disclosure and a cross-check against archived `detection_rate` /
+  `specificity_gate_verdict`. *Two batches (40 defect-program main analysis set; the
+  41 caliber excludes signal-free `node`)*: df_spec batch — df effective **44.72%** /
+  misguided **1.29%** / both_fail **1.29%**; df_spec **32.07%** / **0.74%** /
+  **12.04%** (Δ effective −12.65pp, Δ both_fail **+10.75pp**); round-L doc batch
+  (three arms) — df **49.61%** / **1.18%** / **1.70%**; doc **40.32%** / **0.20%** /
+  **8.64%** (Δ effective −9.29pp, Δ both_fail **+6.94pp**); union **41.06%** / **0.55%** /
+  **3.09%** (Δ effective −8.55pp, Δ both_fail **+1.38pp**; same direction as doc with a
+  lower both_fail share). *Conclusion*: a rising `over_red`
+  share is **not** rising misguidance — under strict operationalization the misguided
+  share did not rise but fell slightly, and the harm form is over-constraint induced
+  both_fail ("over-constrained / distorted-expectation tests that the correct
+  implementation also fails"); the number of tasks containing at least one effective
+  test is identical across arms (37/40 in the df_spec batch), so the task-level
+  detection drop comes from **invalid tests mixed into the suite plus the binary
+  task-level aggregation blind spot**, not from a blanket inability to write effective
+  tests. Cross-checks against archived detection/verdict show **0 mismatches** (the
+  only differences are fully explained by the per-test timeout caliber and the
+  signal-free `node` task); `--repeat 2` report bodies are byte-identical.
+  **74 tests**; caliber document `docs/design/misguided_effective_metric.md`; artifacts
+  `experiments/results/emse_misguided_20261017/` and
+  `experiments/results/emse_misguided_docstring_anchor_20261017/`;
+- **L-5: self-mutation "pending survivors" cleared (zero LLM).** Same caliber as round
+  K, 3 modules: before **165/215 = 0.7674** → after **177/215 = 0.8233**
+  (helpers 77/42 → **89/30**; env_utils 0.9467 and atomic_io 0.8095 unchanged;
+  invalid 8 / timeout 1 excluded from the denominator; no reverse flips). Round K's 23
+  "pending" surviving mutants are cleared: **12 killed** (11 behavioral kills + 1
+  diagnostic-text indirect kill — after rewriting the logger format string the call
+  still passes arguments and pytest logging raises a TypeError that escapes; mechanism
+  disclosed, no log-text assertion) + **11 attributed strong-evidence equivalent**
+  (mechanism argument + fixed-seed 20,200-input × 2-public-API differential probing
+  with **zero differences**); the remaining **38** survivors = 5 provable + 28
+  strong-evidence practical equivalent + 5 outside public contract. New
+  `tests/test_self_mutation_survivors_l.py` (13 cases, public API only; 12/12 mutants
+  re-run in a throwaway sandbox copy confirm rc=1); artifacts
+  `experiments/results/self_mutation_l_round/` (before/after JSON+MD,
+  `SELF_MUTATION_L_ROUND.md` per-mutant attribution, 3 reproducible scripts);
+- **L-6: H2 convergence regression locks (37 cases).** See L-2; test file
+  `tests/test_nested_pytest_env_convergence.py` (5+2 site AST locks, override key-set
+  pinning, repo-wide dataflow-lite scan for the "assign env variable, pass later"
+  hidden regression, clean-environment key-set bit-for-bit equivalence, end-to-end
+  negative control under host `PYTEST_PLUGINS` injection [old rc≠0 / new rc=0],
+  minimal invocations of the real `_run_suite` / `run_side` sites);
+- **L-7: real-LLM path validation (smoke + pilot) and batch runner script.**
+  `run_smoke_llm.py --require-json` exit 0 (real response "2", 1.59s); config-layer
+  direct call to deepseek-flash (response "21", 0.511s, 30 in / 1 out tokens); a 3-task
+  pilot (real calls, wall 13m13s, 5,747 tokens / 4 calls / 0 cache hits, cost $0.00456,
+  provenance `pinned=true`) found the real L-1 defect (above). Delivered the
+  reproducible batch entry `experiments/run_docstring_anchor_batch.sh` (three arms in
+  order, preflight, clean-tree check, timestamped artifacts, cost summary, post-run
+  orphan patrol, analysis call; `--dry-run` verified); pilot artifacts in
+  `experiments/results/l_round_pilot_20261017/` (README + SHA256SUMS +
+  `defect_repro/` evidence).
+
+### Changed
+
+- **L-8: the P1 verdict enters the measurement-integrity methodology.**
+  `docs/MEASUREMENT_INTEGRITY.md` gains §5 "construct-validity failure of a proxy
+  metric (not an artifact)": it separates "caliber-divergence artifacts" from
+  "proxy/construct non-overlap" failures; the `over_red` share may **no longer be used
+  as misguidance evidence** from now on; the df_spec pre-registered mechanism-side
+  proxy signal is withdrawn (its primary `not_confirmed` verdict is unaffected — it
+  depends only on detection and McNemar); future materials must use the L-4 four-class
+  caliber and disclose denominators;
+- **L-9: documentation / BASELINE / register synchronization.** `BASELINE.yaml` gains
+  `benchmark.docstring_anchor` (three-arm numbers/verdict/artifact and anchor-table
+  sha256) and `target_quality.mechanism_metrics` (misguided/effective numbers for both
+  batches plus caliber tags), refreshes `self_mutation.after_kill` (0.8233) and the
+  `tests`/`coverage` measurements; `docs/PROJECT_STATUS_REGISTER.md` gains §3.2
+  L-1..L-6, §4 H2 register correction + "pending cleared" + the new `m1_metrics`
+  orphan-recurrence entry + the P1-line research conclusion, and six new citation
+  disciplines in §5; `docs/INDEX{,.en}.md` list the two new design documents; the
+  bilingual README "latest optimization" rows are synchronized (the English README's
+  stale hard-coded core-module coverage row now points to BASELINE as the single
+  source of truth);
+- **L-10 (runtime observation, no src change):** during the formal batch the
+  `m1_metrics` path showed an **orphan pytest recurrence** (PID 57034, ppid=1, ~98% CPU,
+  age 9m42s; bitcount non-terminating family), cleaned up and recorded; the round-K
+  patrol's 600s age window had not yet fired at discovery (582s). Registered as an
+  open runtime risk (§4); follow-up is minimal reproduction + regression test; this
+  batch was covered by a read-only patrol every 5 minutes (`proc_hygiene.log`) and the
+  primary metric verdict is unaffected.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **7763 passed / 5 skipped / 0 failed** (7768 collected; **164.32s** locally; the
+  intermediate run with 5 artifact-registration/manifest self-referential failures took
+  198.29s and is not a valid caliber — it turned green after `git add -f` plus the
+  MANIFEST/BASELINE refresh);
+- **Coverage**: lines **96.53%** (16414/17004) / branches **92.72%** (5810/6266);
+  `scripts/gates/coverage_ratchet.py --check` passes (water 96.40/92.50, headroom
+  +0.13pp/+0.22pp — below the 0.5pp bump step so the water level is not raised);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (**755** files
+  formatted); `mypy src/ config.py` 0 errors (133 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **59/59** plus the `emse_*` directory coverage scan (16 new L-round
+  evidence entries); three-arm batch `shasum -a 256 -c SHA256SUMS` **165/165 OK**;
+- **Three-arm verdict recompute (zero LLM)**: `python -m
+  experiments.emse_docstring_anchor_analysis --df <df.json> --doc <doc.json>
+  --union <union.json>` → `verdict=not_confirmed` (numbers in the L-3 table and
+  `experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.json`; input
+  sha256 embedded in the report);
+- **Mechanism-side recompute (zero LLM)**: three-arm `experiments/misguided_metrics.py`
+  report `body_digest=678463c8…` (`--repeat 2` bit-identical); cross-checks against
+  archived detection/verdict show **0 mismatches** for all three arms;
+- **CLI semantics fix**: `pytest tests/test_run_main_batch_task_scope.py -q` → 22 passed
+  (including the isolation regression that keeps injecting the fake module when the real
+  module was already imported; the first version of this test accidentally ran a real
+  benchmark in the full suite and was fixed in the same batch);
+- **Self-mutation strength**: `scripts/tools/self_mutation.py` (same 3-module caliber)
+  before 165/215 → after 177/215 (0.7674 → 0.8233; 12 killed, 0 reverse flips);
+- **Real LLM path**: `AITESTER_SMOKE_LLM=true run_smoke_llm.py --require-json` exit 0;
+  3-task pilot exit 0 (artifacts `experiments/results/l_round_pilot_20261017/`, DEF-1
+  evidence `defect_repro/aborted_full50_run.log` + 9 traces);
+- **Batch reproducibility**: all three arms' provenance shows `git_sha=61493ce`,
+  `git_dirty=false`, `model_fingerprint.pinned=true`; worktree `git status` 0 dirty
+  before and after; anchor-table sha256 matches the main tree; total cost **$0.3170**.
 
 ## [Unreleased] — 2026-10-17 Round K (comprehensive optimization: P0 JSON-fence content corruption fix + coverage 96.47%/92.57% + self-mutation 0.6419→0.7674 + documentation link gate + runtime hygiene; zero LLM)
 
