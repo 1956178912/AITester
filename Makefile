@@ -146,6 +146,9 @@ pass-matched:  ## 通过率混淆敏感性分析（EMSE 审稿人 A3 复核点�
 emse-stats:  ## 统计报告补口（EMSE 批次 2026-10-15：三主要对比 MDE/功效 + 比例型端点 bootstrap 95% CI，零 LLM 只读工件）
 	$(PY) -m experiments.emse_stats_report
 
+paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本地工具，paper/ 不入库，缺失时跳过）
+	$(PY) scripts/tools/audit_paper_numbers.py --md docs/emse/PAPER_CONSISTENCY_AUDIT_2026-10-17.md --strict
+
 build-check:  ## 发行构建链路冒烟（AS 批 2026-10-07：build wheel → 全新 venv 安装 → CLI/import 冒烟；本地验证用，未接 CI——发布批次 AL9 再定）
 	$(PY) -m build --wheel
 	rm -rf /tmp/aitester_build_check
