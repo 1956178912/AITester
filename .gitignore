@@ -162,6 +162,11 @@ experiments/results/emse_*/
 #      而非本块规则）——改为锚定 "/results/"（仅根目录，当前不存在该目录，
 #      保留防误建语义）。
 experiments/results/**
+# EMSE Open Science（2026-10-17）：复制包顶层索引与许可证须入 git——
+# 审稿人 fresh clone 需自带复制包 README（指向 Zenodo 归档 + 复算入口），
+# 否则「可下载/文档化」两维度缺索引。重产物仍走 Zenodo，不入 git。
+!experiments/results/REPLICATION_PACKAGE.md
+!experiments/results/REPLICATION_LICENSE.md
 !experiments/results/main_batch/
 experiments/results/main_batch/**
 !experiments/results/main_batch/*.json
