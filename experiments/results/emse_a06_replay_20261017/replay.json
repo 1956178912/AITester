@@ -1,0 +1,41 @@
+{
+  "batch": "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness/aitester.json",
+  "arm": "aitester",
+  "per_test_timeout_s": 2,
+  "wall_timeout_s": 90,
+  "results": [
+    {
+      "program": "bitcount",
+      "historical_detection": null,
+      "buggy_rc": 1,
+      "fixed_rc": 0,
+      "counterfactual_detection": 1.0,
+      "buggy_source_available": true
+    },
+    {
+      "program": "sqrt",
+      "historical_detection": null,
+      "buggy_rc": 1,
+      "fixed_rc": 1,
+      "counterfactual_detection": 0.0,
+      "buggy_source_available": true
+    },
+    {
+      "program": "wrap",
+      "historical_detection": null,
+      "buggy_rc": 1,
+      "fixed_rc": 1,
+      "counterfactual_detection": 0.0,
+      "buggy_source_available": true
+    },
+    {
+      "program": "find_first_in_sorted",
+      "historical_detection": null,
+      "buggy_rc": 1,
+      "fixed_rc": 0,
+      "counterfactual_detection": 1.0,
+      "buggy_source_available": true
+    }
+  ],
+  "note": "反事实判分，不 retroactively 改写历史批次数字（口径纪律）"
+}
