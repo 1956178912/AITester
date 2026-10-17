@@ -432,6 +432,14 @@ def _run_pytest_in_tmp(
         # 派生的子进程成为孤儿（实测遗留 3 个进程运行 16.5 小时、100% CPU）。
         # run_with_timeout 以 start_new_session 建新进程组 + killpg 整树终止，
         # 且以临时文件（非管道）承接输出，结构上不会因孙进程持管道写端而阻塞。
+        #
+        # M-3（2026-10-17，孤儿 pytest 根因修复）：额外启用 orphan_guard——
+        # start_new_session 让本 pytest 自成会话（killpg 整树终止所需）的代价是
+        # **调用方进程被外部 SIGKILL 时本 pytest 会变 ppid=1 孤儿**（L 轮实测
+        # PID 57034：bitcount 挂死 + 父进程异常消亡；仅超时路径的 killpg 覆盖不到）。
+        # orphan_guard 起一个父死亡看门狗（与 pytest 同进程组）：调用方消亡后
+        # 0.1s 级检测并 killpg 回收本 pytest 进程组；超时路径仍由 killpg 整组回收。
+        # 嵌套 pytest 命令自身不建新会话，故看门狗对新会话逃逸形态的边界不在此处触发。
         try:
             from src.utils.process_utils import nested_pytest_env, run_with_timeout
 
@@ -454,6 +462,7 @@ def _run_pytest_in_tmp(
                 cwd=tmpdir,
                 text=True,
                 logger_name="m1_metrics",
+                orphan_guard=True,
                 # H 轮（2026-10-16）：改用 nested_pytest_env——裸 {**os.environ}
                 # 会把宿主 PYTEST_PLUGINS/PYTEST_ADDOPTS 带进嵌套运行，而 PYTHONPATH
                 # 已被覆盖成 tmpdir，宿主插件因此不可导入 → rc=1 被读成"测试红"

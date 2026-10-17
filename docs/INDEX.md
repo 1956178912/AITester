@@ -84,6 +84,7 @@
 | [docs/design/multilanguage_extension.md](design/multilanguage_extension.md) | 多语言扩展架构预留（语言适配层与准入条件）。 |
 | [docs/design/docstring_anchor.md](design/docstring_anchor.md) | P1 独立 docstring 规格锚：两臂设计、锚表口径、预注册与三臂实测结论（`not_confirmed`）。 |
 | [docs/design/misguided_effective_metric.md](design/misguided_effective_metric.md) | misguided/effective 逐测试三分度量（ISSTA'26 操作化）：分类树、分母、执行口径与已知限制。 |
+| [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) | 确定性规约 oracle 质量度量（A-05）：四分类、注入 fidelity、检出贡献与判分耦合限制。 |
 | [docs/dependency_exemptions.md](dependency_exemptions.md) | 依赖豁免登记表：每个豁免的替代方案与到期复核条件。 |
 | [docs/threat_model.md](threat_model.md) | 威胁模型：T1–T8 威胁、攻击面与现有缓解措施。 |
 

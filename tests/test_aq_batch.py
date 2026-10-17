@@ -111,9 +111,10 @@ class TestArtifactsManifestE7:
         module = _load_artifacts_guard()
         for rel in _E7_ARTIFACTS:
             assert rel in module.MANIFEST, f"MANIFEST 缺少 {rel}"
-        # L 轮（2026-10-17）：MANIFEST 41 → 59（新增 P1 三臂批 / misguided 度量 /
-        # 自身变异 L 轮 / pilot 四链证据工件；漏登记属新缺口，故仍锁精确长度）
-        assert len(module.MANIFEST) == 59
+        # L 轮（2026-10-17）：MANIFEST 41 → 59（P1 三臂批 / misguided 度量 / 自身变异 / pilot）；
+        # M 轮（2026-10-17）：59 → 75（增广二臂批 / 增广机制重放 / oracle 质量 /
+        # 编译执行率 / 孤儿根因证据）。漏登记属新缺口，故仍锁精确长度。
+        assert len(module.MANIFEST) == 75
 
 
 class TestSurveyPackagingErrata:

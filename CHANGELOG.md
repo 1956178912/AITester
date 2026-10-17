@@ -1,10 +1,169 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-17（L 轮真 LLM 优化：P1 独立锚三臂实测 **`not_confirmed`**〔df 86.11% / doc 60.00% / union 61.76%，δ=−25.71pp，p_two=0.0352〕+ 代理指标失效修正〔misguided/effective 逐测试度量；`over_red` proxy 撤回〕+ runner `--task-count` 语义缺陷修复 + 自身变异强度 **0.7674→0.8233** + H2 回归锁；实际 LLM 花费 **$0.3170**。同日 K 轮全面优化与 J 轮收口亦已登记）
+> Last updated: 2026-10-17（M 轮：规格增广二臂 **not_confirmed / 非劣成立**（df 80.56% vs augment 82.86%，δ=+2.86pp、p=0.5、MDE 16.57pp）+ **A-05 oracle 质量首次度量**（correct 0 / fp 76.3%，混判抹掉 14/22 既有检出）+ A-11 编译/执行率 + **m1_metrics 孤儿根因修复**（父死亡缺口 → 两段式终止+watchdog，复现 2→0）+ **Q11 论文数字审计**（67 声明综合可追溯 100%）；实际 LLM 花费 **$0.1588**。L 轮与 K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-17 M 轮（真 LLM：规格增广二臂 not_confirmed / 非劣成立 + oracle 质量度量揭示仪器净损伤 + 孤儿根因修复 + Q11 论文审计）
+
+> M 轮承接 L 轮（P1 replace 三臂阴性、代理指标失效修正）继续"全面优化至前沿水准"：
+> ① 用**同批二臂**回答 L 轮留下的机制问题——保留缺陷代码 + 并列人类规格（augment）
+> 是否能在不损失检出的前提下提升检出；② 补齐独立评审两个指标缺口（A-05 oracle
+> 质量 / A-11 编译-执行率），其中 A-05 **首次实测出确定性 oracle 通道为净损伤**
+> （0 正确检出、76.3% 假阳、混判抹掉 14/22 个既有 LLM 检出）；③ 定位并修复 L 轮
+> 登记的 m1_metrics 孤儿 pytest **真根因**（`run_with_timeout` 父进程死亡缺口）；
+> ④ 完成 Q11 论文数字-SRC 全量审计（67 声明综合可追溯 100%）。LLM 实际花费
+> **$0.1588**（预注册上界 $0.45 内）。
+
+### Fixed
+
+- **M-5：m1_metrics 路径孤儿 pytest 根因定位与修复（运行期卫生）**。L 轮正式批
+  实测 1 例孤儿（PID 57034，ppid=1，~98% CPU，age 9m42s）当时只做了巡检兜底、
+  根因未定位。本轮以现场证据定案：M1 判分 tmpdir 与 `run_with_timeout` 文件后端
+  tmpdir **同秒出生**、两者 `finally` 均未执行、stdout 仅 1 个 "."（超时门根本没到）
+  ⇒ **调用方进程在超时分支之前被外部杀死**；`start_new_session=True` 的嵌套 pytest
+  不被连带回收 → 被 init 收养。**"超时直接 SIGKILL 无宽限"被证伪为根因**（事件中
+  超时分支从未执行；A→B→C 最小复现亦证明 killpg 覆盖不到中间进程的新会话子进程）。
+  修复两层：① `_terminate_process_group` 两段式终止（`SIGTERM` → 宽限 **0.5s**
+  （可配 0–10s）→ **总是** `SIGKILL` 清扫；超时语义逐位不变）；②
+  `run_with_timeout(orphan_guard=True)` **父死亡看门狗**（`python -c` 监督进程与
+  真实命令同进程组，0.1s 级检查父 PID，父死即 killpg 回收）；M1 嵌套 pytest 已接线。
+  最小复现 before/after：孤儿场景 **2 → 0**（命令自身 `start_new_session` 的子孙仍
+  逃逸为主动披露边界）。回归 **25 例**（23 新 + 2 detector CLI）；目标集 253 passed。
+  证据：`experiments/results/orphan_repro_20261017/`（README + before/after + SHA256SUMS）。
+
+### Added
+
+- **M-1：规格增广臂——缺陷代码 + 人类 docstring 规格并列（实现 + 预注册）**。
+  `src/tools/spec_first.py` 新增 `DETECTION_SPEC_MODE="augment"` 与
+  `build_spec_augment_section()`（与 replace 共享材料抽取/渲染管线
+  `_collect_spec_material` / `_render_spec_section`，分帧改为"规格锚与目标代码并列、
+  实现与规格不一致时按规格构造期望值"，**不**出现"本提示刻意不包含实现代码"）；
+  `src/agents/generator.py` `generate()`/`_build_query()` 新增 `spec_augment_section`
+  （增广段追加在 code block 之后、代码完整保留；None/空串历史 query 逐字节不变）；
+  `src/graph/nodes.py` + `state.py` 新增可审计 state 键 `spec_augment_applied`
+  （attempted_augmented/attempted_fallback，与 `spec_replace_applied` 互斥）；
+  `experiments/run_benchmark.py` 参数化锚臂 runner 并注册
+  `plain_llm_df_doc_augment`。**既有 replace/off 渲染逐字节不变**（金标记双重锁定 +
+  新旧实现对 5 组材料逐字节比对 True×5）。预注册本地件 sha256
+  `df2d3b9b…e847e3ed`（成功线 88% / 失败线 78% / p 0.05 / trend 0.10 +
+  non-inferiority δ≥−5pp + MDE 16.57pp + 成本预算 $0.20–0.35，跑批前锁定）。
+  新增测试 **109 例**（69+40）；目标集 244 passed。提交 `e2f3faf`（M-4 切点）。
+- **M-3：A-05 确定性规约 oracle 质量度量（零 LLM 重放）**。新增
+  `experiments/oracle_quality_replay.py`：对 df_spec 双臂归档批次**原样调用生产注入
+  函数** `_append_spec_oracle_to_test_with_verdict`（state 由锚表重建并 sha256 校验，
+  QuixBugs 命中 50/50），再按逐测试 buggy/fixed 分类 oracle 四类并与归档
+  detection/verdict 交叉校验。**首次实测**：注入率 **76.0%**（38/49 attempted）；
+  oracle 四分类（分母 38）**correct 0 / fp 29（76.32%）/ silent 9 / misguided 0**
+  （假阳主因 fixed 侧异常 27 条，其中 **TypeError 24** = 编译层 0 字面量绑定）；
+  **任务级检出贡献为净损伤**：df_spec 54.29%→LLM-only 50.00%→**10.53%**
+  （Δ−36.84pp、lost 14 / added 0）、df 77.78%→77.50%→**18.42%**
+  （Δ−57.89pp、lost 22 / added 0）；归档交叉校验 **0 mismatch**。
+  口径纪律：**仅锚表材料重建 state 的受控反事实（质量下界）**，非 LLM 能力指标、
+  不与 TestAgent/Tratto/TOGLL 横向对比、描述性无显著性推断。工件
+  `experiments/results/emse_oracle_quality_20261017/`（SHA256SUMS 6 项 verify 通过）；
+  口径文档 `docs/design/oracle_quality_metric.md`；分析
+  `docs/MEASUREMENT_INTEGRITY.md` §6（新增：**仪器未校验 + 判分对象耦合**）。测试 32 例。
+- **M-4：A-11 编译率 / 执行率（零 LLM 重放）**。新增
+  `experiments/compile_exec_metrics.py`（`compile_rate` = ast.parse 成功行占比；
+  `exec_rate` = `pytest --collect-only` 可收集行占比；材料不可重建/收集超时**单列**
+  不进分母；跨 seed 按计数重算；`--repeat 2` body digest 逐位一致
+  `2f614275…`）。覆盖 5 个 QuixBugs 臂 + main_batch 3 seed×3 臂 = **1033 行**：
+  QuixBugs compile **100%**（union 98%，1 例 powerset 语法错误）/ exec **82%**
+  （排除 9 个 `*_test` 驱动任务后 **100%**，41/41）；main_batch pooled
+  aitester 99.58%/99.49%、plain_llm 100%/100%、plain_llm_df 100%/99.52%；
+  与 TestAgent 99.11%/97.46% **仅方向参考**（数据集/语言/执行定义不同，禁止横向断言）。
+  工件 `experiments/results/emse_compile_exec_20261017/`（SHA256SUMS 10 项通过）。
+  测试 30 例。
+- **M-6：Q11 论文数字-SRC 一致性审计（本地工具 + 首次全文对账）**。新增
+  `scripts/tools/audit_paper_numbers.py`（数字声明识别 / SRC 窗口覆盖 / 段落级引文
+  覆盖 / SRC 引用有效性[仓库路径含 experiments/results/ 历史相对口径回退·ADR·
+  BASELINE 键] / 引文卫生 / TODO / strict 退出码；**paper 缺失时 CI 安全 exit 0**）
+  + `Makefile::paper-audit` + **29 例测试**（顺带修出并锁定"同行 DOI 未被解析"
+  真实工具缺陷）。`paper/draft.typ` 首次全文对账：`// SRC:` **6 → 18 条**；
+  67 条数字声明 → SRC 覆盖 61（91.0%）+ 段落引文覆盖 6 = **综合可追溯率 100.0%**；
+  引用无效 **0**、引文问题 **0**；TODO 10 项（双盲信息/Zenodo DOI/两条文献 DOI
+  回填）列入投稿前清零清单。报告本地件
+  `docs/emse/PAPER_CONSISTENCY_AUDIT_2026-10-17.md`。提交 `fae8f45`。
+
+### Changed
+
+- **M-2：规格增广二臂真 LLM 正式批判定（`not_confirmed`，但非劣成立）**。
+  干净 worktree HEAD=`fae8f45`（跑前/跑后 `git status` 0 dirty；两臂 provenance
+  `git_dirty=false`、`git_sha=fae8f45`、指纹 `pinned=true`、logic 档 / temp=0.0 /
+  P4 / seed=42；同秒并发、互异 namespace；锚表 sha256 `2a650afd…`；预注册 sha256
+  `df2d3b9b…`）。**detection（41 口径）**：df **80.56%（29/36）** /
+  augment **82.86%（29/35）**；配对 n=35 **4:3**、δ=**+2.86pp**、单向 p=0.5、
+  双向 p=1.0、BF10=**0.3125**、MDE=**16.57pp** → 绝对线 88% 未达 + 不显著 ⇒
+  **`not_confirmed`**；但 **失败线（<78%）未触发**、**non-inferiority（δ≥−5pp）成立**。
+  审计（仪器无故障）：`spec_augment_applied` = attempted_augmented **40** /
+  attempted_fallback **10**（41 口径 40/1，node.py 空 human_spec 回落；
+  **与 M-1 实测口径一致**）；`spec_replace_applied` 两臂全 none（模式互斥）。
+  **prompt 一等证据**：时间窗内 generator 缓存 108 条 → augment framing 命中
+  **43**（=augment 臂）vs 含代码无 framing **42**（=df 对照），两例人工核验
+  prompt 同时含完整缺陷代码块 + 人类规格锚段落。成本合计 **$0.1588**
+  （df $0.0743 / aug $0.0845），墙钟 4175s/臂（后处理主导），15 次孤儿巡检
+  （`--min-age 60`）**0 泄漏**。工件
+  `experiments/results/emse_docstring_augment_20261017/`（128 文件，
+  SHA256SUMS 127 条全 OK）、`experiments/results/emse_misguided_augment_20261017/`。
+  **机制侧（零 LLM 重放，描述性）**：effective **47.85% → 56.92%（+9.07pp）**、
+  misguided **1.32% → 0.31%（−1.01pp）**、both_pass −8.07pp、both_fail 持平；
+  可分类测试 836 → 954、collected 933 → 1317、挂死单列 timeout 97 → 363。
+  **综合叙事（L+M）**：① replace 移除实现代码 → 检出 −26pp（L 轮显著负）；
+  ② augment 保留代码 + 并列规格 → 检出与 df 同水平（非劣，+2.9pp n.s.）且逐测试
+  effective +9.07pp / misguided −1.01pp ⇒ **检出损失来自"移除实现代码"而非"加入
+  规格"**；③ 但增广**未带来任务级检出提升**（二值判定饱和），且有测试膨胀/成本代价；
+  ④ 逻辑驱动路线的真正瓶颈已被 M-3 定位为 **oracle 仪器未校验/判分耦合**。
+  **不得表述为"增广提升检出"**；跨批参照：同批 df 80.56% vs L 轮 df 86.11%
+  （−5.55pp，Q5 未归因，禁止混池）。
+- **M-7：测量完整性方法论扩展**。`docs/MEASUREMENT_INTEGRITY.md` 新增 §6
+  "确定性 oracle 的'未校验注入 + 判分耦合'"（与 §1 五起伪影、§5 代理失效并列）：
+  oracle 编译层 0 字面量绑定使断言在正确实现上崩溃（76.3% 假阳），且与 LLM 测试
+  同文件判分让 oracle 失败**改写任务级 detection**；处置：`SPEC_ORACLE_EXEC_ENABLE`
+  保持默认关，下一轮修复 = oracle 自校验 + **独立文件独立判读**（不与 LLM suite
+  混判），修复+验证前不得用于能力主张。
+- **M-8：文档/BASELINE/登记册/README 同步**。`BASELINE.yaml` 新增
+  `benchmark.docstring_augment`（二臂/判定/审计/prompt 证据/成本/sha256）、
+  `target_quality.oracle_quality`（A-05）、`target_quality.compile_exec`（A-11）、
+  `target_quality.mechanism_metrics.augment_batch_20261017`（逐测试四分类）；
+  `docs/PROJECT_STATUS_REGISTER.md` 新增 §3.2 M-1~M-6、§4 M 轮收口（孤儿根因、
+  A-05/A-11/Q11、研究结论）、§5 新增 4 条引用纪律；`docs/INDEX{,.en}.md` 收录
+  oracle 质量口径文档；README 双语"最新优化"同步为 M 轮；本地
+  `docs/emse/EMSE_SUBMISSION_CHECKLIST` 增补 §8 L/M 增量与投稿前清单。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **7989 passed / 5 skipped / 0 failed**（collected **7994**；本机 **170.54s**；中间
+  BASELINE 未刷新自指失败 1 例，刷新后复跑转绿）；
+- **覆盖率**：行 **96.56%**（16470/17057）/ 分支 **92.76%**（5829/6284）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.16pp/+0.26pp——
+  增量 <0.5pp 步长故水位不上调）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿；`mypy src/ config.py`
+  0 错（133 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **75/75** + `emse_*` 目录覆盖扫描通过（M 轮新增 16 项证据工件）；
+- **规格增广二臂复算（零 LLM）**：`python -m experiments.emse_docstring_augment_analysis
+  --df <df.json> --augment <aug.json>` → `verdict=not_confirmed`、`fail_line=false`、
+  `non_inferiority=true`；两臂工件 `shasum -a 256 -c SHA256SUMS` **127/127 OK**；
+  机制重放 `misguided_metrics` 两臂（零 LLM）body_digest `0df41d24…`；
+- **oracle 质量 / 编译执行率复算（零 LLM）**：
+  `python -m experiments.oracle_quality_replay` → 交叉校验 0 mismatch、body_digest
+  `ce10e33b…`；`python -m experiments.compile_exec_metrics --repeat 2` → body_digest
+  `2f614275…` 逐位一致；两工件目录 `checksum_results.py --verify` 通过（6/10 项）；
+- **孤儿根因复现**：`nice -n 15 .venv/bin/python
+  experiments/results/orphan_repro_20261017/run_minimal_repro.py` → before 2 个孤儿
+  场景 / after 0；`pytest tests/test_orphan_repro_20261017.py tests/test_process_utils.py
+  tests/test_detect_orphan_procs.py -q` → 75 passed；
+- **Q11 论文审计**：`make paper-audit`（strict）→ exit 0：**77 条数字声明、SRC 覆盖 71
+  + 引文覆盖 6 = 综合可追溯 100.0%**、SRC 注释 20 条、0 无效引用、TODO 10 项；
+- **真实 LLM 链路**：M-4 两臂 exit 0（墙钟 4175s/臂；合计 **$0.1588**；provenance
+  `git_sha=fae8f45`/`git_dirty=false`/指纹 pinned；prompt 一等证据 43 vs 42；
+  15 次孤儿巡检 0 泄漏）；L 轮链路/批次工件保持入库可复算。
 
 ## [Unreleased] — 2026-10-17 L 轮（真 LLM：P1 独立锚三臂阴性判定 + 代理指标失效修正 + runner 语义缺陷修复 + 测试强度提升）
 

@@ -1,10 +1,206 @@
-> Last updated: 2026-10-17 (round L real-LLM optimization: P1 independent-anchor three-arm verdict **`not_confirmed`** [df 86.11% / doc 60.00% / union 61.76%, δ=−25.71pp, p_two=0.0352] + proxy-metric invalidation fix [misguided/effective per-test metric; `over_red` proxy withdrawn] + runner `--task-count` semantics fix + self-mutation **0.7674→0.8233** + H2 regression locks; actual LLM spend **$0.3170**. Round K comprehensive optimization and round J closeout are registered the same day)
+> Last updated: 2026-10-17 (round M: spec-augmentation two-arm **`not_confirmed` / non-inferiority holds** [df 80.56% vs augment 82.86%, δ=+2.86pp, p=0.5, MDE 16.57pp] + **A-05 oracle quality measured for the first time** [correct 0 / fp 76.3%; mixing into the same judging file erases 14/22 existing detections] + A-11 compile/exec rates + **m1_metrics orphan root-cause fix** [parent-death gap → two-stage termination + watchdog, reproduction 2→0] + **Q11 paper number audit** [67 claims, 100% traceable]; actual LLM spend **$0.1588**. Rounds L and K are registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-17 Round M (real LLM: spec-augmentation two-arm `not_confirmed` / non-inferiority holds + oracle-quality measurement exposing a net-negative instrument + orphan root-cause fix + Q11 paper audit)
+
+> Round M continues "comprehensive optimization to frontier level" after round L
+> (P1 replacement negative, proxy-metric invalidation): (1) a **same-batch two-arm**
+> test of the mechanism question round L left open — does keeping the buggy code and
+> *adding* a human specification (augmentation) improve detection without losing any;
+> (2) fills two independent-review metric gaps (A-05 oracle quality / A-11
+> compile-exec rates), and A-05 **for the first time measures the deterministic-oracle
+> channel as net-negative** (0 correct detections, 76.3% false positives, mixing it
+> into the same judging file erases 14/22 pre-existing LLM detections); (3) locates and
+> fixes the **true root cause** of the m1_metrics orphan pytest registered in round L
+> (`run_with_timeout` parent-death gap); (4) completes the Q11 paper number-SRC audit
+> (67 claims, 100% traceable). Actual LLM spend **$0.1588** (within the pre-registered
+> $0.45 cap).
+
+### Fixed
+
+- **M-5: m1_metrics orphan-pytest root cause located and fixed (runtime hygiene).**
+  Round L measured one orphan (PID 57034, ppid=1, ~98% CPU, age 9m42s) and only added
+  patrol coverage; the root cause is now established from evidence: the M1 judging
+  tmpdir and the `run_with_timeout` file-backend tmpdir are **born in the same second**,
+  both `finally` blocks never ran, and stdout held a single "." (the timeout gate was
+  never reached) ⇒ **the caller process was killed externally before the timeout
+  branch**; its `start_new_session=True` nested pytest was therefore not reaped and was
+  adopted by init. **"Timeout kills with SIGKILL without a SIGTERM grace" was refuted as
+  the root cause** (the timeout branch never executed; an A→B→C minimal reproduction
+  also shows killpg cannot reach a middle process's new-session children). Two-layer
+  fix: (1) `_terminate_process_group` now terminates in two stages (`SIGTERM` → 0.5s
+  configurable grace (0–10s) → **always** `SIGKILL` sweep; timeout semantics unchanged);
+  (2) `run_with_timeout(orphan_guard=True)` **parent-death watchdog** (a `python -c`
+  supervisor in the same process group as the real command checks the parent PID every
+  0.1s and killpgs on parent death); wired for the M1 nested pytest. Minimal
+  reproduction before/after: orphan scenarios **2 → 0** (commands that themselves
+  `start_new_session` still escape — disclosed boundary). **25 regression tests**
+  (23 new + 2 detector CLI); target set 253 passed. Evidence:
+  `experiments/results/orphan_repro_20261017/` (README + before/after + SHA256SUMS).
+
+### Added
+
+- **M-1: spec-augmentation arm — buggy code + human docstring spec side by side
+  (implementation + pre-registration).** `src/tools/spec_first.py` gains
+  `DETECTION_SPEC_MODE="augment"` and `build_spec_augment_section()` (shares the
+  material-extraction/rendering pipeline `_collect_spec_material` /
+  `_render_spec_section` with replacement; framing becomes "spec anchor and target code
+  side by side; when implementation and spec disagree, derive expectations from the
+  spec", and **never** says "this prompt deliberately contains no implementation
+  code"); `src/agents/generator.py` `generate()`/`_build_query()` gain
+  `spec_augment_section` (appended after the code block, code kept complete; None/empty
+  path is byte-identical to history); `src/graph/nodes.py` + `state.py` add the
+  audit-visible state key `spec_augment_applied`
+  (attempted_augmented/attempted_fallback, mutually exclusive with
+  `spec_replace_applied`); `experiments/run_benchmark.py` parameterizes the anchor-arm
+  runner and registers `plain_llm_df_doc_augment`. **Existing replace/off rendering is
+  byte-identical** (double golden locks + old/new implementation byte comparison over 5
+  material cases: True×5). Pre-registration local file sha256
+  `df2d3b9b…e847e3ed` (success line 88% / failure line 78% / p 0.05 / trend 0.10 +
+  non-inferiority δ≥−5pp + MDE 16.57pp + cost $0.20–0.35, locked before the run).
+  **109 new tests** (69+40); target set 244 passed. Commit `e2f3faf` (M-4 cut).
+- **M-3: A-05 deterministic spec-oracle quality measurement (zero-LLM replay).** New
+  `experiments/oracle_quality_replay.py`: for the df_spec two-arm archived batch it
+  **calls the production injection function** `_append_spec_oracle_to_test_with_verdict`
+  as-is (state rebuilt from the anchor table after sha256 verification; QuixBugs hit
+  50/50), then classifies oracle tests per-test on buggy/fixed and cross-checks against
+  archived detection/verdict. **First measurement**: injection rate **76.0%** (38/49
+  attempted); oracle four classes (denominator 38) **correct 0 / fp 29 (76.32%) /
+  silent 9 / misguided 0** (false positives driven by fixed-side exceptions: **TypeError
+  24** from 0-literal bindings in the compiler); **task-level detection contribution is
+  net-negative**: df_spec 54.29%→LLM-only 50.00%→**10.53%** (Δ−36.84pp, lost 14 / added
+  0), df 77.78%→77.50%→**18.42%** (Δ−57.89pp, lost 22 / added 0); archived cross-check
+  **0 mismatches**. Caliber discipline: a **controlled counterfactual lower bound**
+  (anchor-table material only, no live `spec_ir`/`boundary_triplets`), not an LLM
+  capability metric, no horizontal comparison with TestAgent/Tratto/TOGLL, descriptive
+  without significance claims. Artifacts
+  `experiments/results/emse_oracle_quality_20261017/` (SHA256SUMS 6 entries verified);
+  caliber doc `docs/design/oracle_quality_metric.md`; analysis
+  `docs/MEASUREMENT_INTEGRITY.md` §6 (new: **unvalidated instrument + verdict
+  coupling**). 32 tests.
+- **M-4: A-11 compile / exec rates (zero-LLM replay).** New
+  `experiments/compile_exec_metrics.py` (`compile_rate` = share of rows whose
+  `generated_test` parses; `exec_rate` = share of rows collectable via `pytest
+  --collect-only`; material-incomplete / collect-timeout rows are **listed separately**
+  and excluded from denominators; cross-seed pooling recomputes by counts; `--repeat 2`
+  body digest is bit-identical `2f614275…`). Covers 5 QuixBugs arms + main_batch 3
+  seeds × 3 arms = **1033 rows**: QuixBugs compile **100%** (union 98%, one powerset
+  syntax error) / exec **82%** (**100%** excluding the 9 `*_test` driver tasks, 41/41);
+  main-batch pooled aitester 99.58%/99.49%, plain_llm 100%/100%, plain_llm_df
+  100%/99.52%; vs TestAgent 99.11%/97.46% this is a **direction-only reference**
+  (different dataset/language/execution definition; no horizontal assertion). Artifacts
+  `experiments/results/emse_compile_exec_20261017/` (SHA256SUMS 10 entries verified).
+  30 tests.
+- **M-6: Q11 paper number-SRC consistency audit (local tool + first full-text
+  reconciliation).** New `scripts/tools/audit_paper_numbers.py` (numeric-claim
+  detection / SRC-window coverage / paragraph-level citation coverage / SRC-reference
+  validity [repo paths incl. the historical experiments/results/-relative fallback, ADR
+  ids, BASELINE keys] / bibliography hygiene / TODOs / strict exit code; **CI-safe exit
+  0 when paper/ is absent**) + `Makefile::paper-audit` + **29 tests** (which also found
+  and locked a real tool bug: a same-line DOI was not parsed). First full-text
+  reconciliation of `paper/draft.typ`: `// SRC:` **6 → 18**; 67 numeric claims → 61 SRC
+  covered (91.0%) + 6 paragraph-citation covered = **100.0% traceable**; invalid
+  references **0**, bibliography problems **0**; 10 TODOs (blinding info / Zenodo DOI /
+  two literature DOIs) on the pre-submission list. Local report
+  `docs/emse/PAPER_CONSISTENCY_AUDIT_2026-10-17.md`. Commit `fae8f45`.
+
+### Changed
+
+- **M-2: spec-augmentation two-arm real-LLM formal-batch verdict (`not_confirmed`, but
+  non-inferiority holds).** Clean worktree HEAD=`fae8f45` (0 dirty before/after; both
+  arms' provenance `git_dirty=false`, `git_sha=fae8f45`, fingerprint `pinned=true`,
+  logic profile / temp=0.0 / P4 / seed=42; started the same second, distinct
+  namespaces; anchor table sha256 `2a650afd…`; pre-registration sha256 `df2d3b9b…`).
+  **detection (41 caliber)**: df **80.56% (29/36)** / augment **82.86% (29/35)**;
+  paired n=35 **4:3**, δ=**+2.86pp**, one-sided p=0.5, two-sided p=1.0,
+  BF10=**0.3125**, MDE=**16.57pp** → absolute line 88% not met and not significant ⇒
+  **`not_confirmed`**; however the **failure line (<78%) was not triggered** and
+  **non-inferiority (δ≥−5pp) holds**. Audit (instrument healthy):
+  `spec_augment_applied` = attempted_augmented **40** / attempted_fallback **10**
+  (41-caliber 40/1; `node.py` empty human_spec fallback; **matches the M-1 measured
+  caliber**); `spec_replace_applied` all none (mode exclusivity). **Prompt-level
+  first-class evidence**: 108 generator cache entries in the window → augment framing
+  hits **43** (= augment arm) vs code-without-framing **42** (= df control); two manual
+  verifications show prompts containing both the full buggy code block and the human
+  spec anchor. Total cost **$0.1588** (df $0.0743 / aug $0.0845), wall 4175s/arm
+  (post-processing dominated), 15 orphan patrols (`--min-age 60`) **0 leaks**.
+  Artifacts `experiments/results/emse_docstring_augment_20261017/` (128 files,
+  SHA256SUMS 127 entries all OK) and
+  `experiments/results/emse_misguided_augment_20261017/`. **Mechanism side (zero-LLM
+  replay, descriptive)**: effective **47.85% → 56.92% (+9.07pp)**, misguided
+  **1.32% → 0.31% (−1.01pp)**, both_pass −8.07pp, both_fail flat; classifiable tests
+  836 → 954, collected 933 → 1317, hang-test timeouts 97 → 363. **Combined narrative
+  (L+M)**: (1) replacement removing the implementation → detection −26pp (round L,
+  significantly negative); (2) augmentation keeping the code plus a side-by-side spec →
+  detection at parity with df (non-inferior, +2.9pp n.s.) while per-test effective
+  +9.07pp / misguided −1.01pp ⇒ **the detection loss comes from *removing the
+  implementation*, not from *adding a specification***; (3) augmentation does **not**
+  improve task-level detection (binary saturation) and costs test bloat/budget; (4) the
+  real bottleneck of the logic-driven line is now located by M-3 as the **unvalidated
+  oracle instrument + verdict coupling**. **Must not be phrased as "augmentation
+  improves detection"**; cross-batch reference: same-batch df 80.56% vs round-L df
+  86.11% (−5.55pp, Q5 unresolved, must not be pooled).
+- **M-7: measurement-integrity methodology extended.**
+  `docs/MEASUREMENT_INTEGRITY.md` gains §6 "unvalidated injection + verdict coupling of
+  the deterministic oracle" (alongside §1's five artifacts and §5's proxy failure): the
+  oracle compiler's 0-literal bindings make assertions crash on the correct
+  implementation (76.3% false positives), and judging the oracle in the same file as the
+  LLM tests lets an oracle failure **rewrite the task-level detection verdict**.
+  Disposition: `SPEC_ORACLE_EXEC_ENABLE` stays default-off; next-round fix = oracle
+  self-validation + **independent file/independent verdict** (no mixing with the LLM
+  suite); no capability claims before fix+validation.
+- **M-8: documentation / BASELINE / register / README synchronization.**
+  `BASELINE.yaml` gains `benchmark.docstring_augment` (two arms / verdict / audit /
+  prompt evidence / cost / sha256), `target_quality.oracle_quality` (A-05),
+  `target_quality.compile_exec` (A-11) and
+  `target_quality.mechanism_metrics.augment_batch_20261017` (per-test four classes);
+  `docs/PROJECT_STATUS_REGISTER.md` gains §3.2 M-1..M-6 and §4 M-round closures
+  (orphan root cause, A-05/A-11/Q11, research conclusion) plus 4 new citation
+  disciplines in §5; `docs/INDEX{,.en}.md` lists the oracle-quality caliber document;
+  the bilingual README "latest optimization" rows are synchronized to round M; the
+  local `docs/emse/EMSE_SUBMISSION_CHECKLIST` gains §8 L/M increments and a
+  pre-submission list.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **7989 passed / 5 skipped / 0 failed** (**7994** collected; **170.54s** locally; the
+  one intermediate self-referential BASELINE failure turned green after the refresh);
+- **Coverage**: lines **96.56%** (16470/17057) / branches **92.76%** (5829/6284);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.16pp/+0.26pp —
+  below the 0.5pp bump step, so the water level is unchanged);
+- **Static checks**: `ruff check .` / `ruff format --check .` green; `mypy src/ config.py`
+  0 errors (133 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **75/75** plus the `emse_*` directory coverage scan (16 new M-round evidence
+  entries);
+- **Spec-augmentation two-arm recompute (zero LLM)**: `python -m
+  experiments.emse_docstring_augment_analysis --df <df.json> --augment <aug.json>` →
+  `verdict=not_confirmed`, `fail_line=false`, `non_inferiority=true`; both artifacts pass
+  `shasum -a 256 -c SHA256SUMS` **127/127 OK**; mechanism replay (`misguided_metrics`,
+  zero LLM) body digest `0df41d24…`;
+- **Oracle-quality / compile-exec recompute (zero LLM)**:
+  `python -m experiments.oracle_quality_replay` → 0 cross-check mismatches, body digest
+  `ce10e33b…`; `python -m experiments.compile_exec_metrics --repeat 2` → body digest
+  `2f614275…` bit-identical; both artifact directories pass
+  `checksum_results.py --verify` (6/10 entries);
+- **Orphan root-cause reproduction**: `nice -n 15 .venv/bin/python
+  experiments/results/orphan_repro_20261017/run_minimal_repro.py` → 2 orphan scenarios
+  before / 0 after; `pytest tests/test_orphan_repro_20261017.py tests/test_process_utils.py
+  tests/test_detect_orphan_procs.py -q` → 75 passed;
+- **Q11 paper audit**: `make paper-audit` (strict) → exit 0: **77 numeric claims, SRC
+  coverage 71 + citation coverage 6 = 100.0% traceable**, 20 SRC comments, 0 invalid
+  references, 10 TODOs;
+- **Real LLM path**: M-4 both arms exit 0 (4175s/arm; total **$0.1588**; provenance
+  `git_sha=fae8f45`/`git_dirty=false`/fingerprint pinned; prompt-level evidence 43 vs 42;
+  15 orphan patrols with 0 leaks); round-L batch artifacts remain tracked and recomputable.
 
 ## [Unreleased] — 2026-10-17 Round L (real LLM: P1 independent-anchor three-arm negative verdict + proxy-metric invalidation + runner semantics fix + test-strength improvement)
 
