@@ -647,7 +647,7 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 
 > **执行状态（2026-10-17）**：✅ **已完成（且证明项目引用原本正确）**——该 DOI 已定位一手论文：Zhao, Zhou & Cohen《Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study)》，ISSTA 2026 / PACMSE 3(ISSTA) Article ISSTA002, pp.30-53，arXiv:2607.22880；**r=0.780@k=10 已从论文 §4.3 正文 + Table 7 逐位核验**（branch coverage vs raw mutation score，Pearson r=0.780, p=0.002，inter-model 视图/平均聚合/bug-free 输入/固定套件规模 k=10），与 BASELINE 转述的条件（跨模型比较、控制规模、回归设定）逐项一致。本评审初版"无法定位"系检索疏漏（已致歉并更正）；BASELINE.yaml 该 note 已补验记载。
 | A-11 | `experiments/run_benchmark.py` 指标 schema | 编译率/执行率未单列 | TestAgent 99.11%/97.46% | 增加 compile_rate/exec_rate 行级字段 | 可新增 | P2 | 与 TestGenEval/TestAgent 可比 | 低 | 新字段非空率 | 1 月 | schema 扩展 + 测试 |
-| A-12 | `pyproject.toml`；release.yml | 无 SBOM | OWASP/OpenSSF 2025-2026 供应链指南（本次检索见 aidlc.io 汇总，C 级） | release 作业产出 CycloneDX SBOM | 可新增 | P2 | 供应链合规 | 低 | SBOM 随 release | 1 月 | `cyclonedx-py` |
+| A-12 | ~~`pyproject.toml`；release.yml~~ | ~~无 SBOM~~ **【评审误判，2026-10-17 更正】** | OWASP/OpenSSF 2025-2026 供应链指南（本次检索见 aidlc.io 汇总，C 级） | **无需动作**：release.yml R13 已有完整 SBOM 步骤——`cyclonedx-bom==4.5.0`（与 ci.yml supply-chain 同版本，失败回退 `cyclonedx-python`），产物 `sbom.cyclonedx.json` 随 GitHub Release 上传（lines 103-108/149/151）。本地工具链按项目惯例不入 requirements.txt（ruff/bandit/pip-audit 同口径：CI 钉版本安装） | 已废弃 | — | — | — | — | — | `grep -n cyclonedx .github/workflows/release.yml` |
 | A-13 | `tests/test_spec_expr_property.py` | property 覆盖面可扩（打桩/回归函数） | — | 对 patch_applier/spec_ir_v2/helpers JSON 修复函数扩 hypothesis 策略 | 可新增 | P2 | 模糊测试深度 | 低 | 新增 property 用例 | 1 月 | `pytest tests/test_spec_expr_property.py` |
 | A-14 | ~~`.github/workflows/ci.yml`~~ | ~~bandit 配置在场但未接 CI 主链~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：bandit 1.9.4 自 R10（2026-10-05）起已作为 security 作业阻断步骤（`bandit -r src/ -c pyproject.toml -q`），本次本地实跑 exit 0 / 零 findings | 已废弃 | — | — | — | — | — | `bandit -r src/ -c pyproject.toml`（实跑通过） |
 | A-15 | ~~`src/agents/base_agent.py:437/389`~~ | ~~缓存命中绕过 record_usage → token 记账仅覆盖非缓存调用~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：D2 已于 b12b8a4（2026-10-16 三波次收口）修复——三条命中路径（LRU 快路径 / 语义缓存 / 文件缓存）均经 `record_cache_hit_usage` 还原"避免的 token"（独立口径），未命中路径以调用前后 total 差值（含重试/故障转移）写入缓存文件 `tokens` 字段；`tests/test_token_usage.py` 13 例覆盖（本次实跑全过）。本评审初版沿用了 IR 报告的过期清单（IR 成稿与修复同日落地） | 已废弃 | — | — | — | — | — | `pytest tests/test_token_usage.py`（13 例实跑通过） |
@@ -903,7 +903,7 @@ ESBMC-AI（形式化+AI 修复）；TSC2CARLA；Alloy+LLM 组合测试；RunBugR
 | 数据许可 | ULT 官方仓库 MIT（项目 2026-10-12 实测核实，有记录）；QuixBugs vendored 许可登记于 `docs/integration/vendored_quixbugs.md`；The Stack v2 上游条款已在 ult_bridge_plan §4.1 逐条登记；**数据不打包入仓** | ✅ 合规（Q12 待补证据链归档） |
 | 外部数据落盘 | `data/`（gitignore）、`~/.cache/aitester/`（LLM 缓存 + ULT 仓库）；缓存目录 0700/文件 0600（S103 豁免有记录） | ✅ 权限收敛有记录 |
 | 代码执行安全 | LLM 生成代码经子进程沙箱执行；`run_with_timeout` 进程组终止已全面接管（src/ 裸 subprocess.run 实测为 0，A-17 初版误判已更正）；Docker 可选隔离；**bandit 1.9.4 已在 CI security 作业阻断（R10），本地实跑零 findings** | ✅ 达标 |
-| 供应链 | requirements.lock + 三方工具版本门禁 + pip-audit（5 ignored）；无 SBOM（A-12 建议补） | ⚠️ 良 |
+| 供应链 | requirements.lock + 三方工具版本门禁 + pip-audit（5 ignored）；**SBOM 已随 release 产出（R13，cyclonedx-bom 4.5.0 钉版+回退）——初版评审"无 SBOM"系误判，已更正** | ✅ 良 |
 | 隐私/伦理 | 无人类受试者（E7 为专家评审，非受试者研究）；无生产/真实用户数据；建议论文补 Ethics Statement | ✅ 达标（建议动作） |
 | 模型合规 | deepseek-flash 等商业 API；token 与成本记账完整（真实消耗 + 缓存命中避免量双口径，D2 已收口） | ✅ 良 |
 
