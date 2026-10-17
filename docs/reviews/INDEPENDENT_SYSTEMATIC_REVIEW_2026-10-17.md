@@ -27,7 +27,7 @@
 1. **项目自称的核心负面结论全部经独立复算成立（A 级）**：完整多智能体编排的缺陷检出率显著**低于**轻量提示协议（synthetic −28.3pp、QuixBugs −37.8pp，成本 6-8×）——这不是自谦，是可复算的事实；增益的绝大部分来自检出优先提示协议本身。
 2. **项目的数据诚信与工程化水平在本评审的抽查范围内显著高于 2025-2026 LLM4SE 文献常态**（provenance 内嵌、四起测量伪影主动披露修正、预注册先于数据、24 个 CI 门禁）——但"学术前沿顶部"是强断言，本报告已按领域对比表（附录 C）限定表述。
 3. **真实竞争位置**：工程/评测诚信领先；ULT 外部基准 accuracy 21.0%（42/200，Wilson 95% CI 15.9-27.2%）低于论文 12 模型均值 41.32%；规格锚增益三连阴性中**两次达显著**（D1 属协议对照，M4 未达显著，df_spec 显著为负）。
-4. **最高优先级修复**（均可一周内完成）：四批旗舰实验工件入 git（当前 0 跟踪，异地不可复现——2026-10-17 当日已完成）；1 处 DOI 待定位。（初版所列"token 记账缺口"经核验已于 2026-10-16 收口，系误判，见 §10 A-15 更正。）
+4. **最高优先级修复**（均可一周内完成）：四批旗舰实验工件入 git（✅ 2026-10-17 已完成）。（初版所列"1 处 DOI 待定位"已解决——10.1145/3832093 定位为 Zhao/Zhou/Cohen 复现性研究且 r 值逐位核验通过，项目引用准确；"token 记账缺口"亦为误判，见 §10 A-15。）
 5. **最高优先级研究方向**：改用人类 docstring 作独立规格锚（修复 ISSTA'26/Google SpecOps'26 已证明的机制）+ ULT 同协议三臂对决。预注册判定标准已写入 §6 P1/P4。
 
 ## 符号与编号约定
@@ -52,7 +52,7 @@
 
 1. **不信任项目内既有评审数据**：BASELINE.yaml、README、CHANGELOG、`INDEPENDENT_REVIEW_2026-10-16.md`、`CODE_OPTIMIZATION_2026-10-16.md`、`emse_layered_narrative.md` 等文件中的全部性能声明均被当作"待验证声明"处理。本评审通过三条独立路径验证：(a) 核心统计量由本人从原始批次 JSON 直接重算（脚本、命令、输入 SHA256、时间戳、输出全部落盘于 `docs/reviews/review_recompute/`，可重放，见 §3.6）；(b) 只读子代理对工件存在性/数字/provenance 的逐项核验；(c) 源码与配置直接阅读。
 2. **不信任既有前沿基线数据**：项目文档中出现的全部前沿引用（ULT、TestGenEval、CoverUp、TestAgent、MUTGEN、Tratto、TOGLL、Ockhamareto、MIST-RL、TwinMem、ADI、LaMAR、TraceCoder、Zhao ISSTA'26、Google SpecOps'26 等）均由本人从一手来源重新检索核验，未沿用项目给出的数字。
-3. **独立重建基线**：第 4 节前沿基线表全部来自本次检索的一手来源，与项目文档的引用**逐条交叉核对**——结果是：项目对 ULT/TOSEM、TestAgent、MUTGEN、Tratto、Ockhamareto/MIST-RL、TwinMem、ADI、Zhao ISSTA'26、Google SpecOps'26 的引用**全部准确**（含 DOI 与指标值），仅 1 处 DOI（`10.1145/3832093`，覆盖-缺陷相关性）未能独立定位，列为待澄清。
+3. **独立重建基线**：第 4 节前沿基线表全部来自本次检索的一手来源，与项目文档的引用**逐条交叉核对**——结果是：项目对 ULT/TOSEM、TestAgent、MUTGEN、Tratto、Ockhamareto/MIST-RL、TwinMem、ADI、Zhao ISSTA'26（两篇：误导效应 10.1145/3832204 + 相关性复现 10.1145/3832093）、Google SpecOps'26 的引用**全部准确**（含 DOI 与指标值；10.1145/3832093 的 r=0.780@k=10 已于 2026-10-17 从论文 §4.3/Table 7 逐位核验，初版"未能定位"系本评审检索疏漏，已更正）。
 4. **独立复核既有结论**：第 11 节对既有评审（IR 报告）的 13 条核心裁定逐条独立复核，结论：**9 条支持、2 条部分支持、1 条无法验证、1 条因新证据需修正**（IR 未发现 2026-10-16/17 两批新工件；且 IR 自身存在 stale 段落，已指出）。
 
 **事实引用与评价背书的区分**：本报告在 0.2/§3 中引用项目自评（如"预期显著低于 41.32%"的预告、四起伪影的披露）时，仅作为**可核实的事实陈述**（即"项目文档确实如此声明，且该声明与工件一致"），不构成对项目质量的价值背书；凡价值判断（如"领先/落后"）均以本报告独立复算或一手来源为依据。
@@ -78,10 +78,10 @@
 
 | 类别 | 数量 | 判定 |
 |---|---|---|
-| 项目性能声明（核心 20 项） | 20 | **11 项 A 级独立复算通过**（含 −28pp/+43pp/E4/成本/统计量/全量测试实跑）；6 项 B 级（工件在场、数字复算一致但未入 git 或口径附条件）；2 项部分可验（spec_compile_rate v4 估计、repair 分母口径）；1 项需修正（DOI 10.1145/3832093 待定位） |
+| 项目性能声明（核心 20 项） | 20 | **11 项 A 级独立复算通过**（含 −28pp/+43pp/E4/成本/统计量/全量测试实跑）；6 项 B 级（工件在场、数字复算一致；其中未入 git 问题已于 2026-10-17 修复）；2 项部分可验（spec_compile_rate v4 估计、repair 分母口径）；1 项引用需修正（DOI 10.1145/3832093——2026-10-17 已定位并逐位核验，证明项目引用原本正确，系本评审初版检索疏漏） |
 | 项目架构/工程声明 | 12 | 11 项验证为真（src layout、24 门禁、6799 测试收集、SpecExpr DSL 在场、z3 可选层等）；1 项存疑（16 臂 bandit 编排搜索无实跑工件——项目已自报） |
-| 前沿 SOTA 数据点 | 26 | **24 项 A 级**（一手论文/官方榜单/官方仓库，本次检索核验）；2 项 B 级（VIGIL 案例研究、TOGA 大规模复评论文）；0 项 D 级（未发现编造；2 处项目引用需补定位：见 §3.4） |
-| 项目对前沿的引用准确性 | 14 处抽查 | 12 处逐位准确；1 处 DOI 待定位；1 处（Google SpecOps'26）本次补验为真且项目引用数字准确 |
+| 前沿 SOTA 数据点 | 26 | **24 项 A 级**（一手论文/官方榜单/官方仓库，本次检索核验）；2 项 B 级（VIGIL 案例研究、TOGA 大规模复评论文）；0 项 D 级（未发现编造；初版 2 处"待补定位"中 1 处（DOI 10.1145/3832093）已解决） |
+| 项目对前沿的引用准确性 | 14 处抽查 | **13 处逐位准确**（含 r=0.780@k=10 等具体数值）；1 处（Google SpecOps'26）补验为真且项目引用数字准确；**准确率 14/14（初版漏核 1 处已补齐）** |
 
 > **分类口径脚注**：上表四行互斥且完备（每条声明只计入其最高达成等级）；"部分可验"指数字在场但口径附条件或分母待澄清，**不计入 B**；"需修正"指引用/编号层问题而非数字错误。前沿 26 个数据点中，B 级 2 项均未单独支撑任何关键结论（仅作方向佐证）。
 
@@ -254,7 +254,7 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 
 | # | 声明 | 来源 | 状态 |
 |---|---|---|---|
-| U1 | "Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093）覆盖+变异在回归设定下跨模型比较有效（r=0.780@k=10）" | BASELINE §target_quality note | **DOI 未独立定位**（同组已定位论文为 10.1145/3832204 误导效应论文）。该结论作为"覆盖率≠检出"的佐证方向与 MUTGEN/ULT 一手证据一致，但**具体数字不得单独引用** |
+| U1 | ~~"Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093）覆盖+变异在回归设定下跨模型比较有效（r=0.780@k=10）"~~ **【已解决】** | BASELINE §target_quality note | **已定位并逐位核验（2026-10-17）**：论文=Zhao/Zhou/Cohen《Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study)》，PACMSE 3(ISSTA) ISSTA002，arXiv:2607.22880；r=0.780@k=10 见论文 §4.3/Table 7（Pearson r=0.780, p=0.002，inter-model、平均聚合、bug-free、k=10）。项目引用（含条件限定）准确；初版"未定位"系本评审检索疏漏 |
 | U2 | `orchestration_search.py` 16 臂 bandit 实跑状态 | ADR-0034 + 源码 | 不可验证（冻结中 vs 已废弃需澄清） |
 | U3 | repair 92.5% 分母口径（37/40）与 9 个测试驱动任务剔除的影响 | E4 工件 + IR §15.7 | 待项目方澄清 |
 | U4 | QuixBugs 首轮 detection 基线"~63%（49/50）"与 E4 的 45.9%（17/37）的口径桥接 | emse_layered_narrative §1 | 两个数字分属不同口径（首轮红率 vs F2P 三段判定），文档未显式桥接，**存在误导性并列风险** |
@@ -586,6 +586,8 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | G9 | 人工评估 | E7 未执行（无 Kappa） | Google AI-SQE'26： Fleiss' κ=0.307（人工裁决本身不可靠，需 rubric） | 缺失（已披露） | 中 | A-08 |
 | G10 | QuixBugs 口径桥接 | "~63% 首轮基线"与"45.9% F2P"未显式桥接；df 臂跨批 83.8→77.8% 波动 6pp | — | 文档误导风险 + 单批脆弱 | 中 | A-09 |
 | G11 | 引用精确性 | 12/14 处一手核验为真；DOI 10.1145/3832093 未定位 | — | 1 处待澄清 | 低 | A-10 |
+
+> **执行状态（2026-10-17）**：✅ **已解决**——该 DOI 定位为 Zhao/Zhou/Cohen 复现性研究（ISSTA'26 ISSTA002，arXiv:2607.22880），r=0.780@k=10 逐位核验通过；**项目前沿引用准确率实为 13/13（除 1 处初版检索疏漏外全部为真）**。
 | G12 | 编译/执行率指标 | 未单列 | TestAgent 99.11%/97.46% | 指标缺项 | 低 | A-11 |
 
 ---
@@ -640,6 +642,8 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | A-08 | `docs/preregistration.md` E7 节；`docs/HUMAN_ADJUDICATION_PROTOCOL.md` | 人工裁决未执行 | Google AI-SQE'26（κ=0.307，需共享 rubric） | 执行 E7：n≥100 双人盲审 + 共享 rubric + Cohen's κ | 建议优化 | P1 | 填补"无人工验证"缺口 | 中（人工成本） | κ≥0.7 | 2-3 月 | 协议文档已在场 |
 | A-09 | `docs/design/emse_layered_narrative.md` §1；BASELINE §benchmark | "~63% 首轮基线"与"45.9% F2P"未桥接；df 臂跨批 83.8→77.8% 未归因 | — | 显式口径桥接段；跨批方差纳入功效与解读 | 必须改进 | P0 | 防审稿误读 | 低（文档） | 文档口径表 | 1 周 | `make docs-check` |
 | A-10 | BASELINE §target_quality note（DOI 10.1145/3832093） | 该 DOI 未独立定位 | — | 定位原文或改引已核论文（ISSTA'26 误导效应 10.1145/3832204） | 必须改进 | P0 | 引用诚信 | 低 | `check_citations.py --online` exit 0 | 1 周 | `python scripts/gates/check_citations.py --online` |
+
+> **执行状态（2026-10-17）**：✅ **已完成（且证明项目引用原本正确）**——该 DOI 已定位一手论文：Zhao, Zhou & Cohen《Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study)》，ISSTA 2026 / PACMSE 3(ISSTA) Article ISSTA002, pp.30-53，arXiv:2607.22880；**r=0.780@k=10 已从论文 §4.3 正文 + Table 7 逐位核验**（branch coverage vs raw mutation score，Pearson r=0.780, p=0.002，inter-model 视图/平均聚合/bug-free 输入/固定套件规模 k=10），与 BASELINE 转述的条件（跨模型比较、控制规模、回归设定）逐项一致。本评审初版"无法定位"系检索疏漏（已致歉并更正）；BASELINE.yaml 该 note 已补验记载。
 | A-11 | `experiments/run_benchmark.py` 指标 schema | 编译率/执行率未单列 | TestAgent 99.11%/97.46% | 增加 compile_rate/exec_rate 行级字段 | 可新增 | P2 | 与 TestGenEval/TestAgent 可比 | 低 | 新字段非空率 | 1 月 | schema 扩展 + 测试 |
 | A-12 | `pyproject.toml`；release.yml | 无 SBOM | OWASP/OpenSSF 2025-2026 供应链指南（本次检索见 aidlc.io 汇总，C 级） | release 作业产出 CycloneDX SBOM | 可新增 | P2 | 供应链合规 | 低 | SBOM 随 release | 1 月 | `cyclonedx-py` |
 | A-13 | `tests/test_spec_expr_property.py` | property 覆盖面可扩（打桩/回归函数） | — | 对 patch_applier/spec_ir_v2/helpers JSON 修复函数扩 hypothesis 策略 | 可新增 | P2 | 模糊测试深度 | 低 | 新增 property 用例 | 1 月 | `pytest tests/test_spec_expr_property.py` |
@@ -812,7 +816,7 @@ seeds + env_snapshot + git sha + Dockerfile.repro + SHA256SUMS + `make reproduce
 | # | 问题 | 建议责任方 | 截止建议 | 未澄清时的降级处理 |
 |---|---|---|---|---|
 | Q1 | 四目录（df_spec/M4/D1/ULT-df200）未入 git：本地化约定还是遗漏？若是约定，Open Science 如何保证可复现？ | 项目负责人 | 2026-10-24（1 周） | 论文中相应结论标注"artifact 仅存于作者本地工作树，审稿人不可独立复现"；投稿前必须完成 git 或 Zenodo 双轨归档（A-04） |
-| Q2 | BASELINE 引用的 "Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093）"（r=0.780@k=10）对应论文？ | 项目负责人 | 2026-10-24 | 该数字从论文中删除或改引已核论文（ISSTA'26 误导效应 DOI 10.1145/3832204 / MUTGEN TSE'26）；本报告已按"不可单独引用"处理 |
+| Q2 | ~~BASELINE 引用的 "Zhao, Zhou & Cohen（ISSTA 2026, DOI 10.1145/3832093）"（r=0.780@k=10）对应论文？~~ | — | — | **已解决（2026-10-17）**：论文定位 + r 值逐位核验，项目引用准确（见 U1/A-10 执行状态） |
 | Q3 | QuixBugs repair 92.5%（37/40）分母定义与 9 个测试驱动任务的影响 | 项目实验负责人 | 2026-10-31 | 该指标对外引用一律带"分母口径待澄清"标签；不进任何横向对比 |
 | Q4 | "~63% 首轮基线（49/50）"与 E4 F2P 45.9%（17/37）的口径桥接 | 项目实验负责人 | 2026-10-31 | 文档增加显式口径表；在桥接前两个数字不得同句出现 |
 | Q5 | df 臂跨批 83.8%→77.8% 波动 6pp 的归因 | 项目实验负责人 | 2026-11-07 | 所有单批 QuixBugs 结论须附"跨批波动 6pp"披露；功效解读以 MDE=16.1pp 为准 |
@@ -843,7 +847,8 @@ seeds + env_snapshot + git sha + Dockerfile.repro + SHA256SUMS + `make reproduce
 | TOGLL | arXiv:2405.03786, 2024 | oracle 63%/93.4% |
 | Tratto | Molinelli D., Martin-Lopez A., Zackrone E., Eken B., Ernst M.D., Pezzè M. ISSTA 2025. DOI 10.1145/3728960；arXiv:2504.04251 | 神经符号 oracle 73/72/61 |
 | SPARC | Fu C.-A., Chowdhury J.M., Jabbarvand R. 2026（alphaXiv 著录 ICLR 2026） | +31.36pp 覆盖 vs KLEE |
-| Zhao ISSTA'26 | Zhao J., Zhou S., Cohen E. *Evaluating and Mitigating the Misguidance Effect of Buggy Code in LLM-Generated Unit Tests.* PACMSE 3(ISSTA), ISSTA113, 2026. DOI 10.1145/3832204；arXiv:2607.22883 | 误导效应 + 规格缓解 |
+| Zhao ISSTA'26（误导效应） | Zhao J., Zhou S., Cohen E. *Evaluating and Mitigating the Misguidance Effect of Buggy Code in LLM-Generated Unit Tests.* PACMSE 3(ISSTA), ISSTA113, 2026. DOI 10.1145/3832204；arXiv:2607.22883 | 误导效应 + 规格缓解 |
+| Zhao ISSTA'26（相关性复现） | Zhao J., Zhou S., Cohen E. *Do Coverage and Mutation Scores of LLM-Generated Test Suites Correlate with Their Effectiveness? (Replicability Study).* PACMSE 3(ISSTA), ISSTA002, pp.30-53, 2026. DOI 10.1145/3832093；arXiv:2607.22880 | 覆盖/变异相关性限定条件（r=0.780@k=10 已逐位核验：§4.3/Table 7，inter-model、平均聚合、bug-free、k=10，p=0.002） |
 | Google SpecOps'26 | Tufano M., McClure J., Cambronero J., Cheng R., Shi S.Y., Wei R., Chen D., Ivančić F., Dalloro L., Rondon P. SpecOps'26. DOI 10.1145/3842652.3843195；arXiv:2608.17177v2；research.google/pubs | Spec-driven +9.8pp |
 | SWE-bench 官方榜 | swebench.com（2026-02 快照） | Verified 76.80% 等 |
 | SWE-bench Pro | Deng X. et al. PMLR v306（deng26f）；labs.scale.com（Pro v2, 2026-09） | Pro 25.9% / v2 642 任务 |
