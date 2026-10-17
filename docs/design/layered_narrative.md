@@ -146,7 +146,10 @@ spec_compile_rate **必须带数据集标签 + 门口径标签**（新门 vs 旧
 - **测试有效性缺口本身作为可报告现象**（对齐 ULT 官方 accuracy /
   `green_on_fut` 口径，**不与 detection 混用**，per ult_bridge_plan §3.2）：
   生成套件在目标代码上的有效性通过率 QuixBugs **60.0%**（30/50）、
-  ULT lite46 **19.6%**（9/46）、probe25 **20.0%**（5/25）；失败四分类：
+  ULT lite46 **19.6%**（9/46）、probe25 **20.0%**（5/25，pooled 14/71）
+  ——对照官方 12 模型 accuracy 均值 **41.32%**（量级对照，非同集/同协议：
+  本项目单次规格优先 + ULT_Lite 子集，官方 K=20 greedy + 全量 3909）；
+  失败四分类：
   ① 相对导入收集错误（QuixBugs `*_test` 变体 9 例）；② 函数名不一致
   （ULT `_normalized_vcf` 类 4 例）；③ 断言失败/恒红（QuixBugs 8 +
   ULT 51，含上游不一致样本 time_in_swiss_german 拼写 "quartel" vs
