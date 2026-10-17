@@ -53,9 +53,12 @@ python -m experiments.emse_quixbugs_mutk_full
 bash reproduce.sh            # 快速模式（3 任务，冒烟）
 bash reproduce.sh --full     # 完整模式（全部任务）
 
-# L3 容器化（环境完全隔离，结果含 provenance）
+# L3 容器化（环境完全隔离，结果含 provenance；需挂载 .env.local 提供 LLM 凭证）
 docker build -f Dockerfile.repro -t aitester-repro:$(git rev-parse --short HEAD) .
-docker run --rm -v $(pwd)/experiments/results:/workspace/experiments/results aitester-repro:$(git rev-parse --short HEAD)
+docker run --rm \
+  -v $(pwd)/experiments/results:/workspace/experiments/results \
+  -v $(pwd)/.env.local:/workspace/.env.local:ro \
+  aitester-repro:$(git rev-parse --short HEAD)
 ```
 
 ## 4. 环境锁定
