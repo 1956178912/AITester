@@ -11,15 +11,15 @@
 #   - 过期内容不得就地标注在本文件，历史快照归 docs/history/。
 
 version: "1"
-last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 K 轮优化批次〔零 LLM〕后：`--collect-only` 实测 **7535**，登记值 passed = collected − skipped = 7535 − 5 = **7530**。本轮净增 **358** 例（7172 → 7530）= 覆盖率收口 155 例（10 个 `test_closeout_k_*.py`）+ self-mutation 工具与击杀 58 例 + G16 文档链接门禁 47 例 + 生成器有效性 16 例 + 孤儿进程巡检 32 例 + preflight 6 例 + 性能基准扩展 10 例 + 反引号内容回归 29 例 + A-19 停顿检测臂 5 例。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`）：见 `tests.suite_seconds`。零代码回归。此前 J 轮批次：7177/5/0）
+last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 L 轮真 LLM 优化批次后：`--collect-only` 实测 **7764**，登记值 passed = collected − skipped = 7768 − 5 = **7763**。本轮净增 **233** 例（7535 → 7768）= P1 锚臂 83（49+34）+ misguided 度量 74 + H2 收敛回归锁 37 + CLI 任务范围 22 + self-mutation 击杀 13 + 其他 5；另 K 轮指标保持。全量实跑（xdist -n 4 loadfile + `--cov=src --cov-branch`）：见 `tests.suite_seconds`。零代码回归。此前 K 轮批次：7535/5/0）
 
 tests:
-  total_passed: 7530          # 全量 pytest tests/（2026-10-17 K 轮批次后：`--collect-only` 实测 **7535**；登记口径 = collected − skipped = 7535 − 5 = 7530。本轮净增 358 例 = 覆盖率收口 155 + self-mutation 58 + 文档链接门禁 47 + 生成器有效性 16 + 孤儿进程巡检 32 + preflight 6 + 性能基准扩展 10 + 反引号内容回归 29 + A-19 臂 5。守卫余量 = skipped + xfailed + 1）
+  total_passed: 7763          # 全量 pytest tests/（2026-10-17 L 轮批次后：`--collect-only` 实测 **7768**；登记口径 = collected − skipped = 7768 − 5 = 7763。本轮净增 233 例 = P1 锚臂 83 + misguided 度量 74 + H2 回归锁 37 + CLI 任务范围 23 + self-mutation 击杀 13 + 其他 3。守卫余量 = skipped + xfailed + 1）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 163           # 全量耗时：2026-10-17 K 轮批次本机实测 162.60s（xdist -n 4 loadfile + `--cov=src --cov-branch`，7527 passed / 5 skipped / 3 failed——3 failed 均为文档对账门禁自指，刷新本文件后转绿）。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：df_spec 批次沙箱 500.83s、I 轮沙箱外 ~87s、CI 原生参考 ~195s——差异来自执行环境而非代码性能变化
+  suite_seconds: 164           # 全量耗时：2026-10-17 L 轮**全绿收口全量**本机实测 164.32s（xdist -n 4 loadfile + `--cov=src --cov-branch`，7763 passed / 5 skipped / 0 failed）。中间跑 198.29s（5 个工件门禁自指失败）不可作为性能口径。⚠️ 本字段只登记"最近一次实测"，**不可跨主机比较**：df_spec 批次沙箱 500.83s、I 轮沙箱外 ~87s、CI 原生参考 ~195s——差异来自执行环境而非代码性能变化
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -27,7 +27,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 96.47      # --cov=src 总行覆盖（2026-10-17 K 轮覆盖率收口批次实测 **96.47%**〔16369/16968 行 = 96.4698%〕；J 轮 16049/16950 = 94.6844%。分子 +320 / 分母 +18 主因：K 轮 10 个 `test_closeout_k_*.py`（155 例）把 debugger 76 / base_agent 40 / api_manager 29 / llm_client 23 / multi_candidate 21 / cli-app 18 / workflow 16 / error_classifier 16 等 18 个文件的未覆盖行补至 96.47%；分母 +18 为 `utils/helpers.py` K 轮 JSON 围栏修复新增语句。ratchet 水位 94.60 → **96.4**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ **不得跨轮比较百分比**——引用以本行分数为准）
+  line_total_pct: 96.53      # --cov=src 总行覆盖（2026-10-17 L 轮**全绿收口全量**实测 **96.53%**〔16414/17004 行 = 96.5302%〕；分母 +36 = spec_first.py P1 人类规格提取/渲染 + 其余 L 轮源码改动；K 轮 96.47%〔16369/16968〕。⚠️ 同批"含 5 个工件门禁失败"的中间跑为 96.56%——失败路径提前终止导致覆盖路径不同，**只登记全绿口径**；J 轮 16049/16950 = 94.6844%。分子 +320 / 分母 +18 主因：K 轮 10 个 `test_closeout_k_*.py`（155 例）把 debugger 76 / base_agent 40 / api_manager 29 / llm_client 23 / multi_candidate 21 / cli-app 18 / workflow 16 / error_classifier 16 等 18 个文件的未覆盖行补至 96.47%；分母 +18 为 `utils/helpers.py` K 轮 JSON 围栏修复新增语句。ratchet 水位 94.60 → **96.4**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ **不得跨轮比较百分比**——引用以本行分数为准）
   line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
@@ -42,7 +42,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     multi_candidate: 99      # tools/multi_candidate.py（0.9867，296/300；K 轮 +21 行）
     cross_file: 93           # tools/cross_file.py（0.9283）
     rag_retriever: 98        # rag/retriever.py（0.9810）
-  branch_total_pct: 92.57  # --cov=src --cov-branch（2026-10-17 K 轮覆盖率收口批次实测 **92.57%**〔5782/6246 分支 = 92.5712%〕；J 轮 5633/6238 = 90.3014%。分子 +149 来自 18 个文件的缺失分支补口（debugger 42→8 / api_manager 22→5 / llm_client 10→1 / error_classifier 10→4 / fault_localizer 6→0 等）。水位 90.30 → **92.5**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ 对账容差仍为 ±0.10pp（`check_artifact_doc_consistency._REGISTER_TOLERANCE_PP`）；H 轮起噪声源已全消除故该容差偏宽，收紧登记为口径精修项，K 轮未动）
+  branch_total_pct: 92.72  # --cov=src --cov-branch（2026-10-17 L 轮**全绿收口全量**实测 **92.72%**〔5810/6266 分支 = 92.7226%〕；K 轮 92.57%〔5782/6246〕；J 轮 5633/6238 = 90.3014%。分子 +149 来自 18 个文件的缺失分支补口（debugger 42→8 / api_manager 22→5 / llm_client 10→1 / error_classifier 10→4 / fault_localizer 6→0 等）。水位 90.30 → **92.5**（本轮随收口上调）→ ✅ 达标（余量 +0.07pp）。⚠️ 对账容差仍为 ±0.10pp（`check_artifact_doc_consistency._REGISTER_TOLERANCE_PP`）；H 轮起噪声源已全消除故该容差偏宽，收紧登记为口径精修项，K 轮未动）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     graph_workflow: 100     # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（1.0000，K 轮 +1 行）
     error_classifier: 100    # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（1.0000，K 轮 +16 行）
@@ -109,40 +109,66 @@ target_quality:
     # 对齐"产红率"贡献 44.2%、对齐"红→检出转化率"贡献 26.1%、交互 29.7%。
     # 本字段保留为描述性分布，**不得再用于机制归因**。
     note: "纯描述性：aitester specific_red/over_red = 40/66，plain_llm_df = 162/140。⚠️ 不得用于机制归因——门与检出指标同源（206/206 与 244/244 零分歧），且该比例随文件子集变动（0.61/1.16 ↔ 0.50/1.00）、84–93% 的行无 verdict。真实主机制是'测试生成侧不产红'（aitester 48.6% 行全绿未检出，df 仅 2.5%）"
+  mechanism_metrics:         # L 轮（2026-10-17）新增：misguided/effective 逐测试三分（ISSTA'26 操作化，零 LLM 重放）
+    # 定义：effective = buggy 败 ∧ fixed 过；misguided = buggy 过 ∧ fixed 败；
+    #       both_pass / both_fail 非缺陷信号；timeout/收集失败/导入失败单列不进分母。
+    # 主分析集 = 40 个有缺陷信号的缺陷程序（41 口径剔除 node：其 test_cases 实为辅助类源码）
+    # 工具：experiments/misguided_metrics.py（--repeat body digest 确定性；交叉校验 0 mismatch）
+    # 工件：experiments/results/emse_misguided_20261017/（df_spec 批）
+    #       experiments/results/emse_misguided_docstring_anchor_20261017/（L 轮三臂批）
+    # ⚠️ 该节替代 over_red proxy（MEASUREMENT_INTEGRITY §5）；引用必须带可分类分母 + 输入 sha256。
+    df_spec_batch_20261016:  # df（对照 776 可分类）vs df_spec（处理 1213 可分类）
+      df: {effective_pct: 44.72, misguided_pct: 1.29, both_pass_pct: 52.71, both_fail_pct: 1.29, timeout: 56}
+      df_spec: {effective_pct: 32.07, misguided_pct: 0.74, both_pass_pct: 55.15, both_fail_pct: 12.04, timeout: 122}
+      delta_pp: {effective: -12.65, misguided: -0.55, both_pass: 2.45, both_fail: 10.75}
+      effective_task_count: {df: "37/40", df_spec: "37/40"}
+    docstring_anchor_batch_20261017:  # L 轮三臂（40 缺陷程序主分析集；可分类测试数 df 764 / doc 1007 / union 1264）
+      df: {effective_pct: 49.61, misguided_pct: 1.18, both_pass_pct: 47.51, both_fail_pct: 1.70, timeout: 67}
+      doc: {effective_pct: 40.32, misguided_pct: 0.20, both_pass_pct: 50.84, both_fail_pct: 8.64, timeout: 141}
+      union: {effective_pct: 41.06, misguided_pct: 0.55, both_pass_pct: 55.30, both_fail_pct: 3.09, timeout: 145, n_tasks_ok: 39}
+      delta_pp: {doc_minus_df: {effective: -9.29, misguided: -0.98, both_pass: 3.33, both_fail: 6.94}, union_minus_df: {effective: -8.55, misguided: -0.62, both_pass: 7.79, both_fail: 1.38}}
+      artifact: "experiments/results/emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.json（三臂；body_digest 7248b145…；交叉校验 0 mismatch）"
+    interpretation: "两批同签名：`over_red` 上升不是 misguidance 上升（misguided 未升反略降）；伤害形态是 over-constraint 导致 both_fail（+10.75pp / +6.94pp）——'锚=缺陷再描述→misguided 固化'机制假设**未获支持**；任务级 detection 下降源于无效测试混入 + 二值聚合盲点（含 effective 测试的任务数两臂相同 37/40）"
 
-# ── 项目自身测试套件的变异强度（meta 层，K 轮 2026-10-17 新增）────────────
+# ── 项目自身测试套件的变异强度（meta 层，K 轮 2026-10-17 新增；L 轮刷新）────
 # 与下面 target_quality.mutation_score 的口径区分（**禁止混引**）：
 #   - 本节 = **项目自身测试套件 × 项目自身源码** 的变异强度（"我们的测试有多强"）；
 #   - target_quality.mutation_score = **LLM 生成的测试 × 任务代码**（"被测系统有多强"）。
 # 工具：scripts/tools/self_mutation.py（零 LLM；临时副本内变异；killpg 超时；
 #       invalid/timeout 不进分母）；门禁：make self-mutation-ci（env_utils+atomic_io，
 #       阈值 0.85，实测 0.9067）；周巡检：.github/workflows/mutation.yml。
-# 报告工件：`git add -f experiments/results/self_mutation_20261017/`（含 before/after
-#       与 50 个剩余存活的逐条归因）。
+# 报告工件：`git add -f experiments/results/self_mutation_20261017/`（K 轮 before/after）
+#       与 `experiments/results/self_mutation_l_round/`（L 轮 after + 逐条归因）。
 self_mutation:
   measured_at: "2026-10-17"
+  round: "L"               # L 轮（K 轮 after 作为本轮 before；同口径 3 模块 / 抽样 224 / 有效分母 215）
   generator: "experiments/mutation_testing.py::ExtendedMutationGenerator（K 轮修复 identity/语法非法变异体后）"
   calibers: "抽样执行（每文件 120，等距）；helpers 为 120/468=25.6% 抽样点估计；invalid/timeout 不进分母"
-  before_kill:            # 击杀批次前（3 模块 / 抽样 224 / 有效分母 215）
+  before_kill:            # K 轮基线（3 模块 / 抽样 224 / 有效分母 215）
     env_utils: 0.8933     # 67 killed / 75 valid
     helpers: 0.5294       # 63 / 119（抽样点估计）
     atomic_io: 0.3810     # 8 / 21（全量）
     total: 0.6419         # 138 / 215
-  after_kill:             # 击杀批次后（同一测试集合 + tests/test_self_mutation_targets.py）
+  k_after_kill:           # K 轮收口（tests/test_self_mutation_targets.py；L 轮 before）
     env_utils: 0.9467     # 71 / 75
     helpers: 0.6471       # 77 / 119
     atomic_io: 0.8095     # 17 / 21
     total: 0.7674         # 165 / 215（相对 +19.6%；27 survived→killed，0 反向翻转）
+  after_kill:             # L 轮收口（K 轮测试集合 + tests/test_self_mutation_survivors_l.py）
+    env_utils: 0.9467     # 71 / 75（不变）
+    helpers: 0.7479       # 89 / 119（77 → 89；120/468 抽样点估计）
+    atomic_io: 0.8095     # 17 / 21（不变）
+    total: 0.8233         # 177 / 215（相对 K 轮 after +7.3% 相对；12 survived→killed，0 反向翻转）
   ci_gate:                # make self-mutation-ci（env_utils + atomic_io，每文件 60 变异体）
     files: ["src/utils/env_utils.py", "src/utils/atomic_io.py"]
     threshold: 0.85
     measured: 0.9067      # 68 killed / 75 valid（2026-10-17 实测）
-  survivors_after_kill:   # 剩余 50 个：可证明等价 5 / 强证据实践等价 17 / 公开契约外 5 / 待补 23（不声称等价）
+  survivors_after_kill:   # L 轮剩余 38：可证明等价 5 / 强证据实践等价 28 / 公开契约外 5 / 待补 0
     equivalent_provable: 5
-    equivalent_strong_evidence: 17
+    equivalent_strong_evidence: 28   # K 轮 17 + L 轮新增归因 11（20,200 输入 × 2 API 差分零差异）
     outside_public_contract: 5
-    pending_kill: 23
-  note: "待补 23 个属防御性字符串感知/叶子回退守卫分支，公开 API 差分探测未命中差异——**不声称等价**、记为测试强度提升空间，不得对外表述为'已知等价变异体'"
+    pending_kill: 0
+  note: "K 轮'待补 23'已在 L 轮清零：12 killed（11 行为击杀 + 1 诊断文本间接击杀，机制披露）+ 11 归因强证据等价。**剩余 28 个'强证据实践等价'是强证据而非可证明等价**——不得对外表述为'已知等价变异体'；helpers 为抽样点估计不得写成全量分数。L 轮报告 experiments/results/self_mutation_l_round/SELF_MUTATION_L_ROUND.md"
 
 static_checks:
   ruff_version: "0.16.3"     # 与 CI 固定版本一致（requirements.lock）
@@ -724,3 +750,58 @@ benchmark:
     - batch: "experiments/results/main_batch/benchmark_synthetic_20261001_121523.json"
       metric: "M1 三指标（n=50 seed 42：detection=2.0% / repair=0.0% / false_fix=89.8%）"
       note: "2026-10-01 R4 批；2026-10-06 AK 起被 R-P0-2 三种子口径取代；false_fix=89.8% 为历史'假成功通道'证据继续被 README/论文引用"
+  docstring_anchor:          # L 轮（2026-10-17）新增：P1 独立 docstring 规格锚三臂正式批（真 LLM，pre-registered）
+    # 目的：检验"把锚材料换成独立于缺陷实现的人类规格（docstring）能否逆转 df_spec 负向"
+    # 预注册：docs/emse/EMSE_DOCSTRING_ANCHOR_PREREG_2026-10-17.md（本地件）
+    #         sha256=76c7ced181ffc0f1a9d6f9e88cf45e8ee69aa5d7e63985883476d928b9259a6e
+    #         判定常量（脚本内锁定、先于跑批入库）：成功线 0.65 / 失败线 0.55 / p 0.05 / trend 0.10
+    # 协议：干净 worktree HEAD=61493ce（git_dirty=false，跑前跑后 0 dirty）、模型指纹 pinned=true
+    #       AITESTER_PROFILE=logic / TEMPERATURE=0.0 / LLM_THINKING_MODE=disabled / P4 / seed=42
+    #       三臂互异 cache namespace；df+doc 并发、union 与后处理重叠（Lead 批准，工件 README 披露）
+    # 工件：experiments/results/emse_docstring_anchor_20261017/（三臂 JSON + DF_DOC_REPORT + README + SHA256SUMS 165 条）
+    measured_at: "2026-10-17"
+    dataset: "QuixBugs（50 任务 = 41 缺陷程序 + 9 测试驱动；主分析集 = 41 口径可判定子集）"
+    arms:
+      df_control:            # plain_llm_df（同批同日新跑；历史 83.8%/77.8% 仅次级参照，禁止混池）
+        detection: "31/36 = 86.11%"
+        tokens: 88964
+        cost_usd: 0.0751
+        wall_seconds: 4568
+        batch: "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json"
+        sha256: "9405176136db2c2e4e7885ca4e6a7116d1647893c31ddd0b8e76b512f1239672"
+      doc:                   # plain_llm_df_doc（人类模块级规格锚；40/41 有锚，node.py 空串键在场）
+        detection: "21/35 = 60.00%"
+        tokens: 134789
+        cost_usd: 0.1182
+        wall_seconds: 4070
+        batch: "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_193626.json"
+        sha256: "3e2a69896d308d389bdd35ed5ce38ae532b9accf89109b297391c265696f78b2"
+        spec_replace_applied: {attempted_replaced: 41, attempted_fallback: 9}
+      doc_union:             # plain_llm_df_doc_union（人类规格 ∪ Planner SpecExpr 并集）
+        detection: "21/34 = 61.76%"
+        tokens: 151125
+        cost_usd: 0.1238
+        wall_seconds: 4386
+        batch: "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_201928.json"
+        sha256: "746090a277cc6a91fa12151aa1a01f4702efc5e4df1289ceb1afc18bf7e842b2"
+    total_cost_usd: 0.3170   # 三臂合计（预注册区间 $0.28–0.42；上界 $0.5 内）
+    decision:                # 分析脚本 experiments/emse_docstring_anchor_analysis.py 直出
+      verdict: "not_confirmed"
+      primary_contrast: "doc vs df"
+      paired: "3:12（仅 doc 检出 3 / 仅 df 检出 12 / 共同 21）"
+      delta_pp: -25.71
+      mcnemar_two_sided_p: 0.0352
+      mcnemar_one_sided_p: 0.9963
+      bf10: 3.6274
+      mde_pp: 16.57
+      success_line: {threshold: 0.65, met: false}
+      fail_line: {threshold: 0.55, triggered: false}
+      secondary_union_vs_df: {paired: "1:9", delta_pp: -23.53, p_two: 0.0215, bf10: 9.4961, verdict: "not_confirmed（secondary）"}
+      report: "experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.json"
+      report_sha256: "de3f2023aeb7009f43004b864a7a6903d0f5cea43d62822c2b60ae2c9a1b2e18"
+    anchor_tables:
+      doc: "experiments/results/emse_docstring_anchor_20261017/DOCSTRING_ANCHOR_TABLE.json（41 条，human_spec 40/41，缺失 node）"
+      doc_sha256: "2a650afdb181cc7035745d9f6c50b105317e5e1a5268fc309b24c52f3734272d"
+      union: "experiments/results/emse_docstring_anchor_20261017/DOCSTRING_ANCHOR_TABLE_UNION.json（41 条，Planner 并入 41/41）"
+      union_sha256: "6120ea40c7a8be47d5ed4b8456955c2bf050f49f1e8bc2f32c85089980f7a8e8"
+    interpretation: "换独立人类规格锚**未逆转** df_spec 负向（doc 60.0% / union 61.8% vs 同批对照 86.1%）。同批对照与历史批（77.8%/83.8%）相差 8.3pp → 单批检测脆弱，同批对照是唯一可辩护配对（Q5 未归因）。机制侧见 target_quality.mechanism_metrics：misguided 未升反降、both_fail 上升 → '锚伤害=misguidance' 假设被撤回（MEASUREMENT_INTEGRITY §5）。失败线未触发 ≠ 路线有效（方向为负）"

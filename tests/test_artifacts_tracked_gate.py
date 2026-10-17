@@ -52,6 +52,25 @@ class TestManifestHygiene:
         for needle in required_substrings:
             assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少旗舰工件条目: {needle}"
 
+    def test_manifest_covers_l_round_chain(self):
+        """L 轮（2026-10-17）：P1 三臂批 / misguided 度量 / 自身变异 / pilot 四链证据必须在清单。
+
+        这些工件被 BASELINE `benchmark.docstring_anchor`、`target_quality.
+        mechanism_metrics`、`self_mutation` 与登记册 L-1~L-6 直接引用——清单漏登记
+        即为"报告引用未入库工件"的引用链断裂（本守卫的核心失效形态）。
+        """
+        required_substrings = (
+            "emse_docstring_anchor_20261017/DF_DOC_REPORT.json",
+            "emse_docstring_anchor_20261017/SHA256SUMS",
+            "emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json",
+            "emse_misguided_20261017/MISGUIDED_REPORT.json",
+            "emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.json",
+            "self_mutation_l_round/SELF_MUTATION_L_ROUND.md",
+            "l_round_pilot_20261017/defect_repro/aborted_full50_run.log",
+        )
+        for needle in required_substrings:
+            assert any(needle in rel for rel in gate.MANIFEST), f"清单缺少 L 轮工件条目: {needle}"
+
 
 class TestEmseDirScan:
     def test_exemptions_have_reasons(self):

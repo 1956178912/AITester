@@ -83,6 +83,8 @@
 | [docs/design/cross_file_repair.en.md](design/cross_file_repair.en.md) | Cross-file repair design (context construction and landing constraints for multi-file tasks). |
 | [docs/design/repair_caliber_matrix.md](design/repair_caliber_matrix.md) (Chinese) | Repair-caliber matrix: repair rates under different decision calibers and the rationale for choosing one. |
 | [docs/design/multilanguage_extension.md](design/multilanguage_extension.md) (Chinese) | Multilanguage-extension architecture reservation (language adapter layer and admission criteria). |
+| [docs/design/docstring_anchor.md](design/docstring_anchor.md) (Chinese) | P1 independent docstring spec anchor: two-arm design, anchor-table caliber, pre-registration and three-arm verdict (`not_confirmed`). |
+| [docs/design/misguided_effective_metric.md](design/misguided_effective_metric.md) (Chinese) | Misguided/effective per-test three-way metric (ISSTA'26 operationalization): class tree, denominators, execution caliber and known limits. |
 | [docs/dependency_exemptions.en.md](dependency_exemptions.en.md) | Dependency-exemption registry: alternative for each exemption and its re-review deadline. |
 | [docs/threat_model.en.md](threat_model.en.md) | Threat model: T1-T8 threats, attack surfaces and existing mitigations. |
 

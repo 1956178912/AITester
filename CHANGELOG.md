@@ -1,10 +1,200 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-17（K 轮全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 **96.47% 行 / 92.57% 分支** + 自身变异测试 **0.6419→0.7674** + G16 文档链接门禁 + 变异生成器无效变异体修复〔测量伪影第⑤起〕+ 孤儿进程巡检 + 性能回归面扩展；全量 **7530 passed / 5 skipped / 0 failed**。同日 J 轮收口与 df_spec 实验（`not_confirmed`）亦已登记）
+> Last updated: 2026-10-17（L 轮真 LLM 优化：P1 独立锚三臂实测 **`not_confirmed`**〔df 86.11% / doc 60.00% / union 61.76%，δ=−25.71pp，p_two=0.0352〕+ 代理指标失效修正〔misguided/effective 逐测试度量；`over_red` proxy 撤回〕+ runner `--task-count` 语义缺陷修复 + 自身变异强度 **0.7674→0.8233** + H2 回归锁；实际 LLM 花费 **$0.3170**。同日 K 轮全面优化与 J 轮收口亦已登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-17 L 轮（真 LLM：P1 独立锚三臂阴性判定 + 代理指标失效修正 + runner 语义缺陷修复 + 测试强度提升）
+
+> L 轮与 K 轮同日，是"全面优化至前沿水准"的**真 LLM 配额批次**：完成三件此前只能
+> 登记为"待配额度"的工作，并给出两条**改变研究叙事**的实测结论——① 独立评审 §6 P1
+> 路线（用人类 docstring 独立锚替代缺陷代码提示）在 QuixBugs 同批同判分三臂上判定
+> **`not_confirmed` 且方向为负**（doc vs 对照 δ=−25.7pp、双向 p=0.0352；失败线未触发）；
+> ② 用 ISSTA'26 逐测试操作化首次证明"规格锚伤害机制 = 把缺陷行为固化成期望
+> （misguidance）"**不成立**——misguided 占比未升反略降，伤害形态是 over-constraint
+> 导致的 both_fail（正确实现也过不了的过约束测试）。另有真实链路 pilot 暴露并修复的
+> runner 语义缺陷（`--task-count` 对真实数据集静默忽略）、自身变异测试 K 轮"待补"
+> 23 个存活变异体清零（12 killed / 11 归因等价，score 0.7674→0.8233）、H2 收敛
+> 37 例回归锁与全量收口。所有数字均本机实测并逐条给出验证入口；LLM 实际花费
+> **$0.3170**（三臂合计，预注册上界 $0.5 内）。
+
+### Fixed
+
+- **L-1（P0，CLI 语义）：`--task-count` 对非合成数据集静默忽略**。真实链路 3 任务
+  pilot 实测 `run_main_batch.py --task-count 3 --dataset quixbugs` **跑满 50 任务**
+  （进度条 0/50 起步；证据 `experiments/results/l_round_pilot_20261017/defect_repro/
+  aborted_full50_run.log` + 9 条已执行 trace）。根因：`run_benchmark` 的 `task_count`
+  只对合成数据集生效（生成 N 个任务），真实数据集的"限制任务数"参数是 `task_limit`
+  （CLI 有 `--task-limit`），而 `run_main_batch.py` 未暴露它且原样透传 `task_count`
+  → 操作者以为限了 3 个、实际全量（小批演练被静默放大 16×）。
+  修复（最小惊讶 + 历史命令向后兼容）：新增 `run_main_batch.py` 纯函数
+  `resolve_task_scope()` 统一口径——`--task-count` 默认改 `None`（**不显式给 =
+  历史默认行为**：合成集仍生成 `DEFAULT_TASK_COUNT=50` 个、真实集仍全量）；
+  真实数据集**显式** `--task-count` 按任务上限生效（等价 `--task-limit`，
+  stderr notice 说明口径变更）；新增显式 `--task-limit`（优先于 `--task-count`）；
+  `<1` 坏值归一为"未给出"并告警（不静默改变任务数）；`main()` 两个入参分开透传。
+  验证：`pytest tests/test_run_main_batch_task_scope.py -q`（**22 例**：合成/真实/
+  别名/大小写/坏值/双开关优先级/main() 接线断言/历史默认保持）；
+  另：该缺陷不影响 T5 正式批（`--task-count 50` = QuixBugs 全量，三臂 `total_tasks=50`）；
+  同批还暴露并修复**新测试自身的隔离缺陷**：`main()` 内 `import experiments.run_benchmark
+  as rb` 在"真模块已被其它测试导入"时经包属性解析，仅替换 `sys.modules` 不足以注入假
+  模块 → 全量套件中会**误跑真实基准**（实测触发真实 LLM 调用与嵌套 m1 挂死）。修复：
+  同时 monkeypatch `experiments` 包属性；并加"先导入真模块再跑本文件"的回归自证。
+- **L-2（台账勘误）：登记册 §4 "H2 只修 2/7 处" 已过时**。实测 `git log -S
+  nested_pytest_env` 只有 K 轮 `8d4f35c` 一次提交，5 处剩余站点（含 emse 两处自写
+  插件 `PYTHONPATH` 语义）均已收敛 = **7/7**；源码改动量 0。L 轮补 37 例回归锁
+  `tests/test_nested_pytest_env_convergence.py`（逐站点 AST 锁、仓库面 dataflow-lite
+  扫描、干净环境键集合等价、宿主 `PYTEST_PLUGINS` 污染端到端负控）。登记册 §4 同批
+  改正，防"已收口事项被永续登记为遗留"。
+
+### Added
+
+- **L-3：P1 独立 docstring 规格锚——实现 + 预注册 + 真 LLM 三臂实测**。
+  *实现*：`src/tools/spec_first.py` 新增 `module_spec_text()`（模块级人类规格提取：
+  尾部规格块优先 → 首句模块 docstring → 空串；纯 AST 确定性、无异常泄漏；
+  QuixBugs 41 个缺陷程序中 **40 个**带人类书写的 Input/Output/Examples 规格块，
+  仅 `node.py` 缺失）；`build_spec_replace_section` 支持材料**显式**携带
+  `human_spec` 键（键在场即进入材料判定并渲染"独立于实现的规格锚"段；**不带该键
+  的全部历史材料渲染逐字节不变**——金标记测试锁定 df_spec 历史可复现性）。
+  *两臂*：`experiments/run_benchmark.py` 注册 `plain_llm_df_doc`（回退 (a) 档：
+  纯人类规格）与 `plain_llm_df_doc_union`（回退 (b) 档：人类规格 ∪ 既有 Planner
+  `logic_analysis`），与 df_spec 同构（线程级 spec_mode 覆盖、表缺失逐任务回落 df
+  不 crash、`DOC_ANCHOR_TABLE` env 覆盖并入 provenance 快照）。*零 LLM 工件*：
+  `experiments/build_docstring_anchor_table.py`（内容寻址 sha256(source.strip())，
+  doc 表 41 条 / human_spec 40/41，union 表 41 条 / Planner 并入 41/41；
+  两次构建逐字节一致；sha256 `2a650afd…` / `6120ea40…`，随提交 61493ce 入库）。
+  *预注册*：`docs/emse/EMSE_DOCSTRING_ANCHOR_PREREG_2026-10-17.md`（本地件，
+  sha256 `76c7ced181ffc0f1a9d6f9e88cf45e8ee69aa5d7e63985883476d928b9259a6e`，
+  记录于跑批前提交信息；判定常量 0.65/0.55/0.05/0.10 由分析脚本在结果产出前入库）。
+  *三臂实测*（干净 worktree HEAD=61493ce、跑前跑后 `git status` 0 dirty、
+  provenance `git_dirty=false`、模型指纹 `pinned=true`；三臂互异 cache namespace、
+  `AITESTER_PROFILE=logic`、`TEMPERATURE=0.0`、`BENCHMARK_PARALLELISM=4`、seed=42；
+  df/doc 并发、union 与后处理重叠——Lead 批准并在工件 README 披露调度偏差）：
+
+  | 臂 | detection（41 口径可判定子集） | tokens | 成本（标准价） | 墙钟 |
+  |---|---|---|---|---|
+  | `plain_llm_df`（同批对照） | **86.11%（31/36）** | 88,964 | $0.0751 | 76m08s |
+  | `plain_llm_df_doc`（人类规格锚） | **60.00%（21/35）** | 134,789 | $0.1182 | 67m49s |
+  | `plain_llm_df_doc_union`（并集锚） | **61.76%（21/34）** | 151,125 | $0.1238 | 73m06s |
+
+  *判定（分析脚本直出）*：主对比 doc vs df **`not_confirmed`**——配对 **3:12**、
+  δ=**−25.71pp**、双向精确 p=**0.0352**、单向 p=0.9963、BF10=**3.6274**、
+  MDE=**16.57pp**；C1（doc ≥65%）未达、C2（单向 p<0.05）未达、C3（δ>0）未达；
+  **失败线（<55%）未触发**（60.0% ≥ 55%）；union vs df 为次级同向
+  （δ=−23.53pp、p_two=0.0215、BF10=9.4961）。**叙事影响**：换独立锚未逆转 df_spec
+  的负向（df_spec 54.3% vs doc 60.0% 为跨批参考，同批对照 86.11%）；同批对照与
+  历史批 77.8%（10-16）/83.8%（10-09）相差 **8.3pp**，再次证明**同批对照是唯一
+  可辩护的配对方式**（Q5 未归因，跨批数字不得混池）。工件
+  `experiments/results/emse_docstring_anchor_20261017/`（README + `DF_DOC_REPORT.
+  {json,md}` + 三臂批次 JSON + 150 trace + SHA256SUMS 165 条校验 0 失败）；
+- **L-4：misguided/effective 逐测试三分度量（ISSTA'26 操作化，零 LLM 重放）**。
+  新增 `experiments/misguided_metrics.py`（~2.2k 行）：读批次 JSON →
+  buggy/fixed 双版本 + 平铺/包结构双布局物化 → 每版本一次 pytest（`--junitxml`
+  逐测试）→ 四分类 `effective`/`misguided`/`both_pass`/`both_fail`；
+  超时/收集失败/导入失败**单列不进分母**（`--per-test-timeout` + 文件墙钟
+  `run_with_timeout` killpg）；`nested_pytest_env` 隔离宿主 pytest 配置；
+  `--repeat` 以报告 body digest 验证确定性；报告含输入 sha256、分母披露、
+  与归档 `detection_rate`/`specificity_gate_verdict` 交叉校验。
+  *两批实测（40 缺陷程序主分析集，41 口径剔除无缺陷信号的 `node`）*：
+  df_spec 批（`emse_df_spec_20261016`）：df effective **44.72%** / misguided **1.29%**
+  / both_fail **1.29%**；df_spec **32.07%** / **0.74%** / **12.04%**
+  （Δ effective −12.65pp、Δ both_fail **+10.75pp**）；
+  L 轮 doc 批（三臂）：df **49.61%** / **1.18%** / **1.70%**；doc **40.32%** / **0.20%** /
+  **8.64%**（Δ effective −9.29pp、Δ both_fail **+6.94pp**）；union **41.06%** / **0.55%** /
+  **3.09%**（Δ effective −8.55pp、Δ both_fail **+1.38pp**，与 doc 同向、both_fail 低于 doc）。
+  *结论*：`over_red` 占比上升**不是** misguidance 上升——严格操作化下 misguided
+  未升反略降，伤害形态是 over-constraint 导致的 both_fail（"正确实现也过不了的
+  过约束/期望值失真测试"）；两臂"含 effective 测试的任务数"相同（df_spec 批 37/40），
+  说明任务级 detection 下降源于**套件混入无效测试 + 任务级二值聚合盲点**，不是全面
+  写不出有效测试。交叉校验与归档 detection/verdict **0 mismatch**（差异仅由 per-test
+  超时口径与 `node` 无缺陷信号完整解释）；`--repeat 2` body digest 两次完全相同。
+  测试 **74 例**；口径文档 `docs/design/misguided_effective_metric.md`；工件
+  `experiments/results/emse_misguided_20261017/` 与
+  `experiments/results/emse_misguided_docstring_anchor_20261017/`；
+- **L-5：自身变异测试"待补"清零（零 LLM）**。3 模块同 K 轮口径 before
+  **165/215 = 0.7674** → after **177/215 = 0.8233**（helpers 77/42 → **89/30**；
+  env_utils 0.9467 / atomic_io 0.8095 不变；invalid 8 / timeout 1 不进分母；
+  无反向翻转）。K 轮登记的 23 个"待补"存活变异体清零：**12 killed**（11 个行为
+  击杀 + 1 个诊断文本间接击杀〔改写 logger 格式串后调用仍传参 → 格式化 TypeError
+  逃逸，机制如实披露，未断言日志文本〕）+ **11 归因强证据等价**（机制论证 +
+  固定种子 20,200 输入 × 2 公开 API 差分**零差异**）；剩余存活 **38** = 可证明
+  等价 5 + 强证据实践等价 28 + 公开契约外 5。新增
+  `tests/test_self_mutation_survivors_l.py`（13 例，仅公开 API；12/12 变异体经
+  临时沙箱副本逐条复跑确认 rc=1）；工件
+  `experiments/results/self_mutation_l_round/`（before/after JSON+MD、
+  `SELF_MUTATION_L_ROUND.md` 逐条归因、3 个可复算脚本）；
+- **L-6：H2 收敛回归锁（37 例）**。见 L-2；测试文件
+  `tests/test_nested_pytest_env_convergence.py`（5+2 站点 AST 锁、override 键集合
+  钉死、"先赋 env 变量再传"隐蔽回退的仓库面 dataflow-lite 扫描、干净环境键集合
+  逐位等价、宿主 `PYTEST_PLUGINS` 注入的端到端负控〔旧写法 rc≠0 / 新写法 rc=0〕、
+  真实站点 `_run_suite`/`run_side` 最小化调用）；
+- **L-7：真实 LLM 链路验证（冒烟 + pilot）与跑批脚本**。`run_smoke_llm.py
+  --require-json` exit 0（真实响应 "2"，1.59s）；配置层直连 deepseek-flash
+  （响应 "21"，0.511s，30 in / 1 out tokens）；3 任务 pilot（真实调用，墙钟
+  13m13s，tokens 5,747 / 4 calls / 0 cache hits，成本 $0.00456，provenance
+  `pinned=true`；发现 L-1 真缺陷，见上）。交付可复现跑批入口
+  `experiments/run_docstring_anchor_batch.sh`（三臂顺序、preflight、干净树检查、
+  时间戳工件、成本汇总、跑后孤儿巡检、分析调用；`--dry-run` 已验）；pilot 工件
+  `experiments/results/l_round_pilot_20261017/`（README + SHA256SUMS +
+  `defect_repro/` 缺陷证据）。
+
+### Changed
+
+- **L-8：P1 结论进入测量完整性方法论**。`docs/MEASUREMENT_INTEGRITY.md` 新增 §5
+  "代理指标的构念效度失效（非伪影）"：区分"口径分叉伪影"与"proxy 与构念不重叠"
+  两类失效；`over_red` 占比自即日起**不得再作为 misguidance 证据**；df_spec
+  预注册的机制侧 proxy 信号撤回（主判定 `not_confirmed` 不受影响——它只依赖
+  detection 与 McNemar）；后续材料改用 L-4 的四分类口径并必须披露分母；
+- **L-9：文档/BASELINE/登记册同步**。`BASELINE.yaml` 新增
+  `benchmark.docstring_anchor`（三臂数字/判定/工件与锚表 sha256）与
+  `target_quality.mechanism_metrics`（misguided/effective 两批数字 + 口径标签）、
+  刷新 `self_mutation.after_kill`（0.8233）与 `tests`/`coverage` 实测；
+  `docs/PROJECT_STATUS_REGISTER.md` 新增 §3.2 L-1~L-6、§4 H2 台账勘误 +
+  "待补清零" + `m1_metrics` 孤儿复发新登记 + P1 路线研究结论，§5 新增 6 条引用
+  纪律；`docs/INDEX{,.en}.md` 收录两份新设计文档；README 双语"最新优化/最近批"
+  同步（英文版过期的硬编码核心模块覆盖率改为指向 BASELINE 单一事实来源）；
+- **L-10（运行期观察，未改 src）**：正式批期间 `m1_metrics` 路径**孤儿 pytest
+  复发** 1 例（PID 57034，ppid=1，~98% CPU，age 9m42s；bitcount 不终止家族），
+  已清理并记录；K-6 巡检器 600s 年龄窗口在发现时（582s）尚未触发。登记为开放
+  运行期风险（§4），后续做最小复现定位 + 回归测试；本批以每 5min 只读巡检
+  （`proc_hygiene.log`）兜底，主指标判分不受影响。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **7763 passed / 5 skipped / 0 failed**（collected 7768；本机 **164.32s**；中间"5 个
+  工件入库/清单自指失败"跑 198.29s 为工件入库前状态，随 `git add -f` + MANIFEST/
+  BASELINE 刷新后复跑转绿）；
+- **覆盖率**：行 **96.53%**（16414/17004）/ 分支 **92.72%**（5810/6266）；
+  `scripts/gates/coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量
+  +0.13pp/+0.22pp——增量小于 0.5pp 步长故水位不上调）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（**755** 文件已格式化）；
+  `mypy src/ config.py` 0 错（133 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **59/59** + `emse_*` 目录覆盖扫描通过（L 轮新增四链证据 16 项）；
+  三臂批 `shasum -a 256 -c SHA256SUMS` **165/165 OK**（0 失败）；
+- **三臂判定复算（零 LLM）**：`python -m experiments.emse_docstring_anchor_analysis
+  --df <df.json> --doc <doc.json> --union <union.json>` → `verdict=not_confirmed`
+  （数字见 L-3 表与 `experiments/results/emse_docstring_anchor_20261017/
+  DF_DOC_REPORT.json`；输入 sha256 内嵌报告）；
+- **机制侧复算（零 LLM）**：`experiments/misguided_metrics.py` 三臂报告
+  `body_digest=678463c8…`（`--repeat 2` 逐位一致）；与归档 detection/verdict
+  交叉校验三臂 **0 mismatch**；
+- **CLI 语义修复**：`pytest tests/test_run_main_batch_task_scope.py -q` → 22 passed
+  （含"真模块已导入"时仍注入假模块的隔离回归；本测试首版在全量套件中误跑真实基准的
+  缺陷已在同批修复）；
+- **自身变异强度**：`scripts/tools/self_mutation.py`（3 模块同口径）before
+  165/215 → after 177/215（0.7674 → 0.8233，12 killed、0 反向翻转）；
+- **真实 LLM 链路**：`AITESTER_SMOKE_LLM=true run_smoke_llm.py --require-json` exit 0；
+  3 任务 pilot exit 0（工件 `experiments/results/l_round_pilot_20261017/`，DEF-1 证据
+  `defect_repro/aborted_full50_run.log` + 9 trace）；
+- **跑批可复现性**：三臂 provenance `git_sha=61493ce`、`git_dirty=false`、
+  `model_fingerprint.pinned=true`；worktree 跑前/跑后 `git status` 0 dirty；锚表
+  sha256 与主仓逐字节一致；合计成本 **$0.3170**。
 
 ## [Unreleased] — 2026-10-17 K 轮（全面优化：JSON 围栏内容篡改 P0 修复 + 覆盖率 96.47%/92.57% + 自身变异测试 0.6419→0.7674 + 文档链接门禁 + 运行期卫生；零 LLM）
 

@@ -1,0 +1,22 @@
+{
+  "driver": "T4 pilot driver (run_benchmark.task_limit=3 workaround)",
+  "batch_path": "experiments/results/l_round_pilot_20261017/benchmark_quixbugs_20261017_182835.json",
+  "summary_top_keys": [
+    "baselines",
+    "dataset",
+    "enable_debugger",
+    "enable_planner",
+    "enable_rag",
+    "environment",
+    "p2p_gate_enabled",
+    "p2p_gate_threshold",
+    "parallelism",
+    "provenance",
+    "results",
+    "seed",
+    "subset",
+    "timestamp",
+    "total_tasks",
+    "valid_apis"
+  ]
+}

@@ -96,6 +96,30 @@ MANIFEST: tuple[str, ...] = (
     # 统计扩展（EMSE_SUBMISSION_SKELETON 引用的证据源）
     "experiments/results/emse_stats_extensions_20261016/README.md",
     "experiments/results/emse_stats_extensions_20261016/STATS_EXTENSIONS.json",
+    # L 轮（2026-10-17）：P1 独立 docstring 锚三臂正式批（真 LLM，预注册判定）
+    # —— BASELINE benchmark.docstring_anchor / README 最新优化 / 登记册 L-2 的证据源
+    "experiments/results/emse_docstring_anchor_20261017/README.md",
+    "experiments/results/emse_docstring_anchor_20261017/SHA256SUMS",
+    "experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.json",
+    "experiments/results/emse_docstring_anchor_20261017/DF_DOC_REPORT.md",
+    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json",
+    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_193626.json",
+    "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_201928.json",
+    # L 轮：misguided/effective 逐测试三分度量报告（MEASUREMENT_INTEGRITY §5 /
+    # BASELINE target_quality.mechanism_metrics 的证据源）
+    "experiments/results/emse_misguided_20261017/README.md",
+    "experiments/results/emse_misguided_20261017/MISGUIDED_REPORT.json",
+    "experiments/results/emse_misguided_20261017/MISGUIDED_REPORT.md",
+    "experiments/results/emse_misguided_docstring_anchor_20261017/README.md",
+    "experiments/results/emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.json",
+    "experiments/results/emse_misguided_docstring_anchor_20261017/MISGUIDED_REPORT.md",
+    # L 轮：自身变异测试击杀批次（BASELINE self_mutation 的证据源）
+    "experiments/results/self_mutation_l_round/SELF_MUTATION_L_ROUND.md",
+    "experiments/results/self_mutation_l_round/self_mutation_l_round.json",
+    # L 轮：真实 LLM 链路 pilot（DEF-1 缺陷证据链；验证性、不构成能力证据）
+    "experiments/results/l_round_pilot_20261017/README.md",
+    "experiments/results/l_round_pilot_20261017/SHA256SUMS",
+    "experiments/results/l_round_pilot_20261017/defect_repro/aborted_full50_run.log",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

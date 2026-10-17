@@ -1,0 +1,166 @@
+{
+  "verdict": "not_confirmed",
+  "conditions": {
+    "absolute_line": {
+      "threshold": 0.65,
+      "rate": 0.6,
+      "met": false
+    },
+    "one_sided_p_lt_0.05": false,
+    "direction_positive": false
+  },
+  "fail_line_triggered": false,
+  "secondary": {
+    "verdict": "not_confirmed",
+    "conditions": {
+      "absolute_line": {
+        "threshold": 0.65,
+        "rate": 0.6176,
+        "met": false
+      },
+      "one_sided_p_lt_0.05": false,
+      "direction_positive": false
+    },
+    "fail_line_triggered": false,
+    "role": "secondary",
+    "note": "次级对比（预注册声明），不参与主判定"
+  },
+  "contrast": {
+    "doc_vs_df": {
+      "n_pairs": 35,
+      "a_only": 3,
+      "b_only": 12,
+      "ratio": "3:12",
+      "delta_pp": -25.71,
+      "p_two_sided": 0.0352,
+      "p_one_sided": 0.9963,
+      "bf10": 3.6274,
+      "mde_pp": 16.57
+    },
+    "union_vs_df": {
+      "n_pairs": 34,
+      "a_only": 1,
+      "b_only": 9,
+      "ratio": "1:9",
+      "delta_pp": -23.53,
+      "p_two_sided": 0.0215,
+      "p_one_sided": 0.999,
+      "bf10": 9.4961,
+      "mde_pp": 16.81
+    }
+  },
+  "detection": {
+    "df": {
+      "denominator_rows": 41,
+      "measurable": 36,
+      "positive": 31,
+      "rate": 0.8611
+    },
+    "doc": {
+      "denominator_rows": 41,
+      "measurable": 35,
+      "positive": 21,
+      "rate": 0.6
+    },
+    "union": {
+      "denominator_rows": 41,
+      "measurable": 34,
+      "positive": 21,
+      "rate": 0.6176
+    }
+  },
+  "audit": {
+    "caliber": "QuixBugs 41 缺陷程序（task_id 非 _test 后缀）；可判定子集（detection 非 None）",
+    "denominators": {
+      "arm_rows": 50,
+      "defect_program_ids_41": 41,
+      "measurable_pairs_doc_vs_df": 35
+    },
+    "spec_replace_applied": {
+      "df": {
+        "none": 50
+      },
+      "doc": {
+        "attempted_fallback": 9,
+        "attempted_replaced": 41
+      },
+      "doc_41": {
+        "attempted_replaced": 41
+      },
+      "union": {
+        "attempted_fallback": 9,
+        "attempted_replaced": 41
+      },
+      "union_41": {
+        "attempted_replaced": 41
+      }
+    },
+    "specificity_gate_verdict": {
+      "df_41": {
+        "over_red": 6,
+        "specific_red": 33,
+        "unavailable": 2
+      },
+      "doc_41": {
+        "over_red": 15,
+        "specific_red": 22,
+        "unavailable": 4
+      },
+      "union_41": {
+        "over_red": 13,
+        "specific_red": 22,
+        "unavailable": 6
+      }
+    },
+    "detection_none_rows": {
+      "df_41": 5,
+      "doc_41": 6,
+      "union_41": 7
+    }
+  },
+  "prereg": {
+    "file": "docs/emse/EMSE_DOCSTRING_ANCHOR_PREREG_2026-10-17.md",
+    "constants": {
+      "success_line": 0.65,
+      "fail_line": 0.55,
+      "confirm_p": 0.05,
+      "trend_p": 0.1,
+      "misguided_drop_target": 0.3,
+      "primary_contrast": "doc_vs_df",
+      "secondary_contrast": "union_vs_df"
+    }
+  },
+  "mechanism": {
+    "metric": "misguided_effective_per_test",
+    "status": "external_declared",
+    "producer": "experiments/misguided_metrics.py",
+    "caliber_doc": "docs/design/misguided_effective_metric.md",
+    "classes": [
+      "effective",
+      "misguided",
+      "both_pass",
+      "both_fail"
+    ],
+    "misguided_drop_target": 0.3,
+    "primary_arm": "plain_llm_df_doc",
+    "control_arm": "plain_llm_df",
+    "note": "机制指标为描述性/次级信号，不参与主判定；与 detection 分开报告，不得互相顶替"
+  },
+  "inputs": {
+    "df": {
+      "path": "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_194444.json",
+      "arm": "plain_llm_df",
+      "sha256": "9405176136db2c2e4e7885ca4e6a7116d1647893c31ddd0b8e76b512f1239672"
+    },
+    "doc": {
+      "path": "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_193626.json",
+      "arm": "plain_llm_df_doc",
+      "sha256": "3e2a69896d308d389bdd35ed5ce38ae532b9accf89109b297391c265696f78b2"
+    },
+    "union": {
+      "path": "experiments/results/emse_docstring_anchor_20261017/benchmark_quixbugs_20261017_201928.json",
+      "arm": "plain_llm_df_doc_union",
+      "sha256": "746090a277cc6a91fa12151aa1a01f4702efc5e4df1289ceb1afc18bf7e842b2"
+    }
+  }
+}

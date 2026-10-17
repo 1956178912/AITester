@@ -1,0 +1,540 @@
+{
+  "schema_version": 1,
+  "tool": "scripts/tools/self_mutation.py",
+  "round": "L",
+  "generated_from": {
+    "before": "self_mutation_before.json",
+    "after": "self_mutation_after.json",
+    "before_generated_at": "2026-10-17T18:10:38+0800",
+    "after_generated_at": "2026-10-17T20:10:49+0800"
+  },
+  "commands": {
+    "before": ".venv/bin/python scripts/tools/self_mutation.py --files src/utils/env_utils.py,src/utils/helpers.py,src/utils/atomic_io.py --workers 2 --test-map src/utils/env_utils.py=tests/test_env_utils.py,tests/test_self_mutation_targets.py --test-map src/utils/helpers.py=tests/test_helpers_json_property.py,tests/test_helpers_json_robustness.py,tests/test_helpers_json_fence_content.py,tests/test_self_mutation_targets.py --test-map src/utils/atomic_io.py=tests/test_atomic_io.py,tests/test_self_mutation_targets.py --json-out experiments/results/self_mutation_l_round/self_mutation_before.json --md-out experiments/results/self_mutation_l_round/self_mutation_before.md",
+    "after": ".venv/bin/python scripts/tools/self_mutation.py --files src/utils/env_utils.py,src/utils/helpers.py,src/utils/atomic_io.py --workers 2 --test-map src/utils/env_utils.py=tests/test_env_utils.py,tests/test_self_mutation_targets.py --test-map src/utils/helpers.py=tests/test_helpers_json_property.py,tests/test_helpers_json_robustness.py,tests/test_helpers_json_fence_content.py,tests/test_self_mutation_targets.py,tests/test_self_mutation_survivors_l.py --test-map src/utils/atomic_io.py=tests/test_atomic_io.py,tests/test_self_mutation_targets.py --json-out experiments/results/self_mutation_l_round/self_mutation_after.json --md-out experiments/results/self_mutation_l_round/self_mutation_after.md"
+  },
+  "caliber": {
+    "modules": [
+      "src/utils/env_utils.py",
+      "src/utils/helpers.py",
+      "src/utils/atomic_io.py"
+    ],
+    "workers": 2,
+    "max_mutants_per_file": 120,
+    "sampling": "等距抽样（按源码行号+变异类型排序；0=全量）",
+    "test_map_before": {
+      "src/utils/env_utils.py": [
+        "tests/test_env_utils.py",
+        "tests/test_self_mutation_targets.py"
+      ],
+      "src/utils/helpers.py": [
+        "tests/test_helpers_json_property.py",
+        "tests/test_helpers_json_robustness.py",
+        "tests/test_helpers_json_fence_content.py",
+        "tests/test_self_mutation_targets.py"
+      ],
+      "src/utils/atomic_io.py": [
+        "tests/test_atomic_io.py",
+        "tests/test_self_mutation_targets.py"
+      ]
+    },
+    "test_map_after": {
+      "src/utils/env_utils.py": [
+        "tests/test_env_utils.py",
+        "tests/test_self_mutation_targets.py"
+      ],
+      "src/utils/helpers.py": [
+        "tests/test_helpers_json_property.py",
+        "tests/test_helpers_json_robustness.py",
+        "tests/test_helpers_json_fence_content.py",
+        "tests/test_self_mutation_targets.py",
+        "tests/test_self_mutation_survivors_l.py"
+      ],
+      "src/utils/atomic_io.py": [
+        "tests/test_atomic_io.py",
+        "tests/test_self_mutation_targets.py"
+      ]
+    },
+    "score_definition": "killed/(killed+survived)；invalid/timeout 不进分母",
+    "note": "helpers 为 120/468 等距抽样点估计，非全量 mutation score"
+  },
+  "summary": {
+    "before": {
+      "modules": 3,
+      "total_generated_mutants": 572,
+      "generator_filtered_identity": 0,
+      "generator_filtered_syntax_error": 0,
+      "executable_pool": 572,
+      "sampled_mutants": 224,
+      "killed": 165,
+      "survived": 50,
+      "invalid": 8,
+      "timeout": 1,
+      "not_run": 0,
+      "valid_denominator": 215,
+      "mutation_score": 0.7674418604651163,
+      "baseline_green": true,
+      "measurement_valid": true
+    },
+    "after": {
+      "modules": 3,
+      "total_generated_mutants": 572,
+      "generator_filtered_identity": 0,
+      "generator_filtered_syntax_error": 0,
+      "executable_pool": 572,
+      "sampled_mutants": 224,
+      "killed": 177,
+      "survived": 38,
+      "invalid": 8,
+      "timeout": 1,
+      "not_run": 0,
+      "valid_denominator": 215,
+      "mutation_score": 0.8232558139534883,
+      "baseline_green": true,
+      "measurement_valid": true
+    },
+    "delta": {
+      "killed": 12,
+      "survived": -12,
+      "mutation_score": 0.05581395348837204
+    }
+  },
+  "modules": [
+    {
+      "module": "src/utils/env_utils.py",
+      "before": {
+        "killed": 71,
+        "survived": 4,
+        "invalid": 8,
+        "timeout": 0,
+        "not_run": 0,
+        "mutation_score": 0.9466666666666667,
+        "sampled": 83
+      },
+      "after": {
+        "killed": 71,
+        "survived": 4,
+        "invalid": 8,
+        "timeout": 0,
+        "not_run": 0,
+        "mutation_score": 0.9466666666666667,
+        "sampled": 83
+      }
+    },
+    {
+      "module": "src/utils/helpers.py",
+      "before": {
+        "killed": 77,
+        "survived": 42,
+        "invalid": 0,
+        "timeout": 1,
+        "not_run": 0,
+        "mutation_score": 0.6470588235294118,
+        "sampled": 120
+      },
+      "after": {
+        "killed": 89,
+        "survived": 30,
+        "invalid": 0,
+        "timeout": 1,
+        "not_run": 0,
+        "mutation_score": 0.7478991596638656,
+        "sampled": 120
+      }
+    },
+    {
+      "module": "src/utils/atomic_io.py",
+      "before": {
+        "killed": 17,
+        "survived": 4,
+        "invalid": 0,
+        "timeout": 0,
+        "not_run": 0,
+        "mutation_score": 0.8095238095238095,
+        "sampled": 21
+      },
+      "after": {
+        "killed": 17,
+        "survived": 4,
+        "invalid": 0,
+        "timeout": 0,
+        "not_run": 0,
+        "mutation_score": 0.8095238095238095,
+        "sampled": 21
+      }
+    }
+  ],
+  "killed": {
+    "helpers:29836f6132a3": {
+      "mutation": "extract_json_array 修复候选循环 continue→break",
+      "killing_tests": "test_numeric_expression_repaired_in_array",
+      "contract": "数组路径数值表达式修复：首个候选失败后必须继续尝试后续修复档，不得提前终止"
+    },
+    "helpers:396a28db8ca8": {
+      "mutation": "_quote_python_expressions 超长/多行守卫 or→and",
+      "killing_tests": "test_overlong_single_line_expression_is_not_evaluated",
+      "contract": "超长单行表达式保守不评估（文档 max_len 口径）→ 诚实失败而非静默截断改写"
+    },
+    "helpers:5f59874830d1": {
+      "mutation": "_find_balanced_json 闭合符 '}'→'x'",
+      "killing_tests": "test_empty_object_via_direct_path_is_not_leaf_fallback; test_fenced_empty_object_is_not_leaf_fallback",
+      "contract": "合法空对象直解析不得被误记为叶子回退（OMS 哨兵公开可观测契约）"
+    },
+    "helpers:5f886043809a": {
+      "mutation": "叶子回退尾扫档哨兵置位 True→False",
+      "killing_tests": "test_tail_scan_fallback_returns_later_fragment_and_sets_flag",
+      "contract": "尾扫档命中时必须置位 OMS 哨兵（返回值 + 可观测标记成对承诺）"
+    },
+    "helpers:608205e3bd2f": {
+      "mutation": "_quote_tuple_keys_once 字符串开引号判定改写",
+      "killing_tests": "test_tuple_key_repair_preserves_string_literal_content",
+      "contract": "元组键修复必须字符串感知：字符串内部 ',(0,1):' 文本不得被当键替换"
+    },
+    "helpers:925bf0576cf6": {
+      "mutation": "数值结果位数上限 >→>=",
+      "killing_tests": "test_numeric_expression_digit_boundary_is_conservative",
+      "contract": "恰好 4096 位的结果仍须修复（严格大于才拒绝，边界语义）"
+    },
+    "helpers:a3ee749e3485": {
+      "mutation": "叶子回退尾扫阈值 2→3",
+      "killing_tests": "test_tail_scan_fallback_returns_later_fragment_and_sets_flag",
+      "contract": "≥3 个叶子且末两个不可解析时尾扫必须触发（返回更早可解析片段）"
+    },
+    "helpers:a93688ca6eb0": {
+      "mutation": "_quote_tuple_keys_once esc 初值 False→True",
+      "killing_tests": "test_tuple_key_repair_with_empty_first_string",
+      "contract": "字符串感知状态机对「空串/首字符转义」边界正确，元组键才能修复"
+    },
+    "helpers:cc058e223acc": {
+      "mutation": "叶子回退失败分支哨兵复位 False→True",
+      "killing_tests": "test_leaf_flag_resets_when_extraction_ultimately_fails",
+      "contract": "解析最终失败时哨兵必须复位 False（不得残留「发生过回退」的假标记）"
+    },
+    "helpers:e6b7f907a2b1": {
+      "mutation": "_repair_json_bounded 尾部 return cur→None",
+      "killing_tests": "test_bounded_repair_failure_raises_json_decode_error_not_type_error",
+      "contract": "修复轮次耗尽必须抛 json.JSONDecodeError（调用方降级契约），不得泄漏 TypeError"
+    },
+    "helpers:f95a3a18c5c3": {
+      "mutation": "_quote_tuple_keys_once 字符串闭合判定取反",
+      "killing_tests": "test_tuple_key_repair_preserves_string_literal_content",
+      "contract": "元组键修复必须字符串感知（同 608205 契约的另一处状态机分支）"
+    },
+    "helpers:383bf2851ceb": {
+      "mutation": "叶子回退「次新候选」logger.warning 文本整体改写（诊断文本变异）",
+      "killing_tests": "test_second_newest_leaf_fallback_sets_flag; test_tail_scan_fallback_returns_later_fragment_and_sets_flag",
+      "contract": "【间接击杀，机制如实披露】改写后的格式串不含占位符但调用仍传参 → 在会格式化日志记录的运行环境（pytest logging 捕获）触发 TypeError，调用方观测到异常而非返回字典；未断言日志消息文本，属诊断文本变异在测试运行环境下的可观测崩溃（非「公开契约外」硬杀）"
+    }
+  },
+  "survivor_attribution": {
+    "env_utils:64503fd89fd3": {
+      "module_line": 70,
+      "mutation_type": "subscript_negate",
+      "description": "line 70: 下标取反（序列边界）",
+      "category": "provable_equivalent_annotation_only",
+      "mechanism": "from __future__ import annotations 下注解运行期从不求值"
+    },
+    "env_utils:d878f6d742fa": {
+      "module_line": 74,
+      "mutation_type": "subscript_negate",
+      "description": "line 74: 下标取反（序列边界）",
+      "category": "provable_equivalent_annotation_only",
+      "mechanism": "from __future__ import annotations 下注解运行期从不求值"
+    },
+    "env_utils:f4f329f903f1": {
+      "module_line": 77,
+      "mutation_type": "subscript_negate",
+      "description": "line 77: 下标取反（序列边界）",
+      "category": "provable_equivalent_annotation_only",
+      "mechanism": "from __future__ import annotations 下注解运行期从不求值"
+    },
+    "env_utils:e45234decf0a": {
+      "module_line": 101,
+      "mutation_type": "subscript_negate",
+      "description": "line 101: 下标取反（序列边界）",
+      "category": "provable_equivalent_annotation_only",
+      "mechanism": "from __future__ import annotations 下注解运行期从不求值"
+    },
+    "helpers:076b4fb6bd68": {
+      "module_line": 24,
+      "mutation_type": "string_const_swap",
+      "description": "line 24: 字符串常量 '```python\\\\s*\\\\n(.*?)\\\\n\\\\s*```' → 'xxxxxxxxxxxxxxxxxxxxxxxxxxx'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "_CODE_BLOCK_PYTHON_PATTERN 改写：次档 _CODE_BLOCK_PATTERN 为其超集，同输入同结果"
+    },
+    "helpers:fc7613504be5": {
+      "module_line": 47,
+      "mutation_type": "string_const_swap",
+      "description": "line 47: 字符串常量 '(?m)^[ \\\\t]*```[ \\\\t]*\\\\r?\\\\n?' → 'xxxxxxxxxxxxxxxxxxxxxxxxxx'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "_JSON_BACKTICK_STRIP_PATTERN 改写：前一条围栏剥离已覆盖同一行集合（幂等叠加）"
+    },
+    "helpers:8f110b11781a": {
+      "module_line": 164,
+      "mutation_type": "string_const_swap",
+      "description": "line 164: 字符串常量 'NaN' → 'xxx'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "修复表 'NaN' 改写：json.loads 原生接受 NaN，raw 快路径先行，公开输入无差异"
+    },
+    "helpers:499e052e17f3": {
+      "module_line": 185,
+      "mutation_type": "unary_not_insert",
+      "description": "line 185: X → not X（比较前插 not）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_first_balanced_object 字符串闭合判定取反：唯一调用点即上述不可达修复环，公开面不可观测"
+    },
+    "helpers:969a4fdc693d": {
+      "module_line": 188,
+      "mutation_type": "string_const_swap",
+      "description": "line 188: 字符串常量 '\"' → 'x'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_first_balanced_object 开引号判定改写：唯一调用点即上述不可达修复环，公开面不可观测"
+    },
+    "helpers:99254d5ff306": {
+      "module_line": 323,
+      "mutation_type": "string_const_swap",
+      "description": "line 323: 字符串常量 'non-numeric operand' → 'xxxxxxxxxxxxxxxxxxx'",
+      "category": "outside_public_contract_internal_diagnostic",
+      "round": "K",
+      "reason": "TypeError 消息被改写（同上）"
+    },
+    "helpers:114f04d5d4a0": {
+      "module_line": 326,
+      "mutation_type": "string_const_swap",
+      "description": "line 326: 字符串常量 'unsupported pow operands (int-only)' → 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'",
+      "category": "outside_public_contract_internal_diagnostic",
+      "round": "K",
+      "reason": "TypeError 消息被改写（调用方捕获后不可观测）"
+    },
+    "helpers:fdaf4935266c": {
+      "module_line": 353,
+      "mutation_type": "boolean_negation",
+      "description": "line 353: not X → X",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "合法 JSON 数字早退守卫取反：回退路径对整数重序列化文本等价（解析值相同；'-0'→'0' 同值）"
+    },
+    "helpers:b7e3f4dfe70b": {
+      "module_line": 364,
+      "mutation_type": "bool_op_swap",
+      "description": "line 364: or → and（布尔互换）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_normalize 结果类型守卫 or→and：求值成功值恒为 int/float 且非 bool，守卫空转"
+    },
+    "helpers:4b692477a69f": {
+      "module_line": 439,
+      "mutation_type": "bool_op_swap",
+      "description": "line 439: and → or（布尔互换）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_safe_eval Mult 首分支 and→or：正则文法保证 Mult 左操作数恒为 str、右操作数恒为 int（非 bool），首分支恒真，elif/else 不可达"
+    },
+    "helpers:9d7b56bee4bd": {
+      "module_line": 441,
+      "mutation_type": "bool_op_swap",
+      "description": "line 441: and → or（布尔互换）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_safe_eval Mult 次分支 and→or：同上，次分支与 else 在匹配文法下不可达"
+    },
+    "helpers:9da8ba489b67": {
+      "module_line": 444,
+      "mutation_type": "exception_remove",
+      "description": "line 444: 移除 raise TypeError('unsupported mult operands')（异常路径变异）",
+      "category": "outside_public_contract_internal_diagnostic",
+      "round": "K",
+      "reason": "删除 raise TypeError('unsupported mult operands')：后续路径同样降级/抛错，公开结果一致"
+    },
+    "helpers:9716aa32b00c": {
+      "module_line": 446,
+      "mutation_type": "exception_type_swap",
+      "description": "line 446: raise TypeError → raise ValueError（异常类型变异）",
+      "category": "outside_public_contract_internal_diagnostic",
+      "round": "K",
+      "reason": "私有 _quote_python_expressions 内 TypeError→ValueError（公开契约只承诺 JSONDecodeError）"
+    },
+    "helpers:8011133ca57c": {
+      "module_line": 454,
+      "mutation_type": "string_const_swap",
+      "description": "line 454: 字符串常量 'unsupported node ' → 'xxxxxxxxxxxxxxxxx'",
+      "category": "outside_public_contract_internal_diagnostic",
+      "round": "K",
+      "reason": "TypeError 消息前缀被改写（同上）"
+    },
+    "helpers:90f214353202": {
+      "module_line": 465,
+      "mutation_type": "stmt_delete",
+      "description": "line 465: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "_quote_python_expressions 非 str 守卫删除：匹配文法下 _safe_eval 恒返回 str，守卫空转"
+    },
+    "helpers:380f944f4d05": {
+      "module_line": 469,
+      "mutation_type": "const_swap",
+      "description": "line 469: False → True（常量置换）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "ensure_ascii=False→True：仅 JSON 文本转义表示差异，解析后字符串值相同"
+    },
+    "helpers:f024186d57c1": {
+      "module_line": 498,
+      "mutation_type": "boundary_shift",
+      "description": "line 498: GtE → Gt（边界变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "balanced 搜索越界守卫 >=→>：start==len(text) 时后续循环无字符可匹配，同样 None"
+    },
+    "helpers:1fbc17a82a71": {
+      "module_line": 498,
+      "mutation_type": "stmt_delete",
+      "description": "line 498: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "删除同一越界守卫：越界输入在后续切分路径同样得 None"
+    },
+    "helpers:d4e24d830a4e": {
+      "module_line": 533,
+      "mutation_type": "stmt_delete",
+      "description": "line 533: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "删除函数尾部 return None：Python 尾部隐式返回 None，逐字节恒等"
+    },
+    "helpers:5e361b2a0469": {
+      "module_line": 576,
+      "mutation_type": "unary_not_insert",
+      "description": "line 576: X → not X（比较前插 not）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "raw 快路径 start 守卫取反（等价于禁用快路径）：合法片段直解析与主链同片段同结果，纯性能路径"
+    },
+    "helpers:708a96fb4c79": {
+      "module_line": 578,
+      "mutation_type": "unary_not_insert",
+      "description": "line 578: X → not X（比较前插 not）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "raw 快路径 opener 分派取反（等价于禁用快路径）：同上，公开输出零差异"
+    },
+    "helpers:181ced4c9a27": {
+      "module_line": 585,
+      "mutation_type": "return_void",
+      "description": "line 585: return value if isinstance(value, expected_type) else None → return None",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "_try_parse_raw_json 返回 None：快路径失败后修复链对同输入产出相同结果"
+    },
+    "helpers:2676fb402fc5": {
+      "module_line": 625,
+      "mutation_type": "exception_remove",
+      "description": "line 625: 移除 raise json.JSONDecodeError('No JSON array found in response', text or '', 0)（异常路径变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "删除早期 JSONDecodeError：后续兜底 raise 同类型异常，公开契约不变"
+    },
+    "helpers:48aefe5bc7c2": {
+      "module_line": 630,
+      "mutation_type": "stmt_delete",
+      "description": "line 630: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "删除数组快路径：修复链兜底同结果"
+    },
+    "helpers:6e7072a0ce66": {
+      "module_line": 634,
+      "mutation_type": "stmt_delete",
+      "description": "line 634: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "删除反引号剥离：与前一条围栏剥离冗余（幂等叠加）"
+    },
+    "helpers:dfceeed070e0": {
+      "module_line": 714,
+      "mutation_type": "string_const_swap",
+      "description": "line 714: 字符串常量 '{' → 'x'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "对象快路径首字符 '{' 改写：慢速修复链兜底同结果"
+    },
+    "helpers:df6a1908286d": {
+      "module_line": 742,
+      "mutation_type": "break_continue_swap",
+      "description": "line 742: continue → break（循环控制变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "搜索循环 continue→break：循环最多命中一个候选，提前终止结果一致"
+    },
+    "helpers:b96d0e079983": {
+      "module_line": 755,
+      "mutation_type": "stmt_delete",
+      "description": "line 755: 删除语句（语句删除变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "删除 extract_json_object 首对象修复环整段：环不可达，等价于死代码删除"
+    },
+    "helpers:1567052b264f": {
+      "module_line": 768,
+      "mutation_type": "break_continue_swap",
+      "description": "line 768: continue → break（循环控制变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "L",
+      "mechanism": "extract_json_object 首对象修复环 continue→break：该环在可修复片段上不可达（可修复/可解析片段必然先被主链同候选集返回；差分语料零差异）"
+    },
+    "helpers:1f497e6d172a": {
+      "module_line": 785,
+      "mutation_type": "subscript_negate",
+      "description": "line 785: 下标取反（序列边界）",
+      "category": "provable_equivalent_annotation_only",
+      "mechanism": "from __future__ import annotations 下注解运行期从不求值"
+    },
+    "atomic_io:1e70830a0a5a": {
+      "module_line": 62,
+      "mutation_type": "numeric_offset",
+      "description": "line 62: const 0 → +1",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "if fd >= 0 的 fd==0 分支正常进程不可达（stdio 占 0/1/2）"
+    },
+    "atomic_io:d1ee323e21c3": {
+      "module_line": 62,
+      "mutation_type": "boundary_shift",
+      "description": "line 62: GtE → Gt（边界变异）",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "if fd >= 0 → fd > 0：同上，fd==0 分支不可达"
+    },
+    "atomic_io:1cd56015792b": {
+      "module_line": 46,
+      "mutation_type": "string_const_swap",
+      "description": "line 46: 字符串常量 '.' → 'x'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "dirname(abspath(path)) or '.' 的 '.' 为死代码（abspath 后 dirname 恒非空）"
+    },
+    "atomic_io:3d86e2a8cfa5": {
+      "module_line": 51,
+      "mutation_type": "string_const_swap",
+      "description": "line 51: 字符串常量 'w' → 'x'",
+      "category": "strong_evidence_practical_equivalence",
+      "round": "K",
+      "mechanism": "os.fdopen(fd, 'x') 对已打开 fd 忽略创建语义（Python 3.14 实测相同）"
+    }
+  },
+  "survivor_attribution_counts": {
+    "provable_equivalent": 5,
+    "practical_equivalent": 28,
+    "outside_contract": 5,
+    "total": 38,
+    "k_round_carry_over": {
+      "annotation_only": 5,
+      "practical_equivalent": 17,
+      "outside_contract": 5
+    }
+  }
+}
