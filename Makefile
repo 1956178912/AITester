@@ -75,6 +75,12 @@ gates: lint format typecheck test docs-check env-budget baseline-check state-con
 repro:  ## 复现主批次（详见 reproduce.sh；消耗 LLM 配额，勿自动触发）
 	bash reproduce.sh
 
+reproduce-zero-llm:  ## 零 LLM 复算链（EMSE Open Science 复制包 L0：统计扩展/口径矩阵/引用核验 + SHA256SUMS 校验，产出 REPRODUCTION_REPORT）
+	$(PY) scripts/reproduce_zero_llm.py
+
+reproduce-zero-llm-l1:  ## 零 LLM 复算链 L1（含小时级 cosmic-ray Mut@k 全量重算）
+	$(PY) scripts/reproduce_zero_llm.py --level l1
+
 power:  ## 统计功效分析速览（Z8：先算样本量，再跑实验）
 	$(PY) scripts/tools/power_analysis.py
 
