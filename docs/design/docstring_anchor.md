@@ -160,3 +160,40 @@ pytest tests/test_docstring_anchor.py tests/test_emse_docstring_anchor_analysis.
 python experiments/build_docstring_anchor_table.py            # doc 表（确定性）
 python experiments/build_docstring_anchor_table.py --union    # union 表
 ```
+
+## 10. 规格增广模式（M-1，2026-10-17；L 轮 replace 阴性结论的后续假设）
+
+L 轮三臂正式批判定 `not_confirmed`：**df 86.11%（31/36）/ doc 60.00%（21/35）
+/ union 61.76%（21/34）**，doc vs df δ=−25.71pp（双向精确 p=0.0352）。
+doc/union 两条 replace 臂几乎重合、且都**移除了实现代码**——指向"代码移除"
+是检出损失主因，而非"锚不独立"。
+
+**增广是这一解释的直接可证伪预测**：保留完整缺陷代码，把人类规格锚作为
+**独立 prompt 段并列追加**（不替换代码）。
+
+| 项 | replace（既有） | augment（新增） |
+|---|---|---|
+| 目标代码块 | 被规约文档**替换**（代码不进提示） | **完整保留** |
+| 规格锚位置 | 代码块位置 | 代码块**之后**并列追加（独立段） |
+| framing | "本提示刻意不包含实现代码" | "规格锚与目标代码并列；当实现与规格不一致时，按规格构造期望值（这是检出缺陷的关键）" |
+| 模式值 | `DETECTION_SPEC_MODE=replace` | `DETECTION_SPEC_MODE=augment` |
+| 审计字段 | `spec_replace_applied` | `spec_augment_applied`（`attempted_augmented` / `attempted_fallback`；与 replace 互斥，另一恒 None） |
+| 臂 | `plain_llm_df_doc` / `_union` | `plain_llm_df_doc_augment`（锚表同 doc 臂） |
+
+- 渲染实现：`src/tools/spec_first.py::build_spec_augment_section` 与
+  `build_spec_replace_section` **共享材料抽取（`_collect_spec_material`）与
+  主体渲染（`_render_spec_section`）管线**，仅分帧（header）/生成纪律不同；
+  **replace / off 的既有渲染逐字节不变**（`tests/test_docstring_anchor.py`
+  金标记 + `tests/test_docstring_augment.py` 新增金标记双重锁定）。
+- 材料判定更严格：augment 只认**非空内容**（human_spec / docstring / NL /
+  SpecExpr 任一非空）。`node.py`（human_spec 空串）与 9 个测试驱动任务
+  回落纯 df 代码口径（`attempted_fallback`，不产出"并列不存在的锚"的误导段）。
+- 接线：`_generator_node`（mode=augment 构建增广段并写
+  `spec_augment_applied`）→ `GeneratorAgent.generate(spec_augment_section=...)`
+  → `_build_query` 在 code block 之后追加；`None` 时历史查询逐字节不变；
+  `run_benchmark` 行字典两处透出；state 键 `spec_augment_applied` 已声明。
+- 判定：`docs/study/DOCSTRING_AUGMENT_PREREG_2026-10-17.md`（成功线
+  88% / 失败线 78% / α=0.05 / trend 0.10 / non-inferiority δ ≥ −5pp 独立标记 /
+  MDE≈16.6pp 披露）；分析脚本
+  [emse_docstring_augment_analysis.py](../../experiments/emse_docstring_augment_analysis.py)
+  两臂 `--df/--augment`，JSON/MD 直出、fail-closed。

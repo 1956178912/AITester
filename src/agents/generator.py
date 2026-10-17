@@ -238,6 +238,13 @@ class GeneratorAgent(BaseAgent):
         # Google Spec-Driven 研究 +9.8pp 同向证据）。None/空串 = 历史口径
         # （目标代码照常注入）。
         spec_replace_section: str | None = None,
+        # M-1（2026-10-17）：规格增广段（DETECTION_SPEC_MODE=augment 且存在
+        # 非空人类规格材料时由 _generator_node 经
+        # src.tools.spec_first.build_spec_augment_section 构建）。与
+        # spec_replace_section 语义互斥：目标是**保留完整缺陷代码**，并把
+        # 规格锚作为独立 prompt 段并列追加在 code block 之后（_build_query
+        # 消费）。None/空串 = 历史口径逐字节不变（纯 df 代码提示）。
+        spec_augment_section: str | None = None,
         # P2 一期（观测级行粒度压缩）：Debugger→Generator 反馈的压缩段落
         # （FEEDBACK_COMPRESSION_ENABLE=true 且再生成轮有失败观测时，由
         # _generator_node 经 src.tools.feedback_compression 构建）。内容为
@@ -294,6 +301,8 @@ class GeneratorAgent(BaseAgent):
 
         # 构建完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈 + O3 分支覆盖率）
         # P0-A-2：spec_replace_section 非空时_query 的"目标代码"块被规约文档替换
+        # M-1：spec_augment_section 非空时作为独立段并列追加在 code block 之后
+        # （目标代码仍完整注入；两者 None 时 _build_query 与历史逐字节一致）。
         query = self._build_query(
             test_plan,
             target_code,
@@ -301,6 +310,7 @@ class GeneratorAgent(BaseAgent):
             rag_references,
             mutation_feedback,
             spec_replace_section=spec_replace_section,
+            spec_augment_section=spec_augment_section,
         )
         # O3（2026-09-29 审查 P1）：未覆盖分支清单注入（BRANCH_COVERAGE_INJECT_ENABLE=true
         # 时非空字符串；None/空串时不注入，历史口径零变化）
@@ -451,6 +461,7 @@ class GeneratorAgent(BaseAgent):
         rag_references: list[dict[str, Any]] | None,
         mutation_feedback: dict[str, Any] | None = None,
         spec_replace_section: str | None = None,
+        spec_augment_section: str | None = None,
     ) -> str:
         """构建生成测试的完整查询（基础 prompt + import 约束 + RAG 参考 + 断言增强 + 变异反馈）。
 
@@ -459,6 +470,12 @@ class GeneratorAgent(BaseAgent):
         要求实现代码完全不进提示（Zhao et al. ISSTA 2026；Google Spec-Driven
         +9.8pp；项目 48.6% 全绿未检出的 oracle-from-implementation 根因）。
         None / 空串 = 历史口径逐字节不变。
+
+        M-1（2026-10-17）：spec_augment_section 非空时，目标代码块照常完整
+        注入，该段作为**独立 prompt 段并列追加在 code block 之后**（"规格锚
+        与目标代码并列"；L 轮 replace 阴性结论表明移除实现代码是检出损失
+        主因）。None / 空串 = 历史口径逐字节不变（与上面 replace 段互斥，
+        由 _generator_node 的模式分支保证）。
         """
         # A1 消融（PLAN_STRIP_EXPECTED_OUTPUT_ENABLE，默认关）：剥除 Planner 由
         # 缺陷代码派生的 expected_output，切断 oracle-from-implementation 锚点。
@@ -470,9 +487,13 @@ class GeneratorAgent(BaseAgent):
         # 构建基础查询，包含测试计划和目标代码
         # P0-A-2：replace 模式用规约文档替代目标代码块（见方法 docstring）
         code_block = spec_replace_section or f"目标代码：\n```\n{target_code}\n```"
+        # M-1：增广段作为独立段并列追加在 code block 之后（代码块之后、
+        # "被测模块名"之前；None/空串时不追加 → 历史查询逐字节不变）。
+        augment_block = f"\n\n{spec_augment_section}" if spec_augment_section else ""
         query = (
             f"测试计划（JSON）：\n{plan_json}\n\n"
             f"{code_block}"
+            f"{augment_block}"
             f"\n\n被测模块名：{module_name}"
             f"\n\n请根据以上计划生成完整的 pytest 测试代码。"
         )

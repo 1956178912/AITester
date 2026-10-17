@@ -752,6 +752,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # 默认 off 时历史口径零变化；replace 时 _generator_node 写
     # attempted_replaced / attempted_fallback，见 update 与 _spec_replace_applied）。
     _spec_replace_applied: str | None = None
+    # M-1（2026-10-17）：规格增广段可审计观测（默认 None；augment 时写
+    # attempted_augmented / attempted_fallback，见 update 与 _spec_augment_applied）。
+    _spec_augment_applied: str | None = None
 
     # 初始化 RAG 参考列表为 None（默认不使用检索增强）
     # 仅当 RAG 开关开启、模块可用时才进行检索（统一走 rag_guarded 降级守卫，P1 重构）
@@ -976,8 +979,11 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
         _spec_material: Any = state.get("spec_anchor")
         if not isinstance(_spec_material, dict):
             _spec_material = test_plan
+        # 模式只解析一次（minimal 消融档不解析：该档意图"无额外上下文"，
+        # 与修复前 short-circuit 口径一致）；replace / augment 二选一。
+        _spec_mode = "off" if _ctx_minimal else _detection_spec_mode()
         _spec_replace_section: str | None = None
-        if not _ctx_minimal and _detection_spec_mode() == "replace":
+        if _spec_mode == "replace":
             from src.tools.spec_first import build_spec_replace_section as _build_spec_replace
 
             _spec_replace_section = _build_spec_replace(
@@ -995,6 +1001,30 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 _spec_replace_applied = "attempted_replaced"
             else:
                 _spec_replace_applied = "attempted_fallback"
+        # M-1（2026-10-17）：规格增广模式（承接 L 轮 replace 阴性结论）——
+        # 保留完整缺陷代码，把人类独立规格锚作为**独立 prompt 段并列追加**
+        # （generator._build_query 在 code block 之后消费）。与 replace 分支
+        # 互斥（同一 DETECTION_SPEC_MODE 只走一支，代码块不被替换）。
+        # 无非空规格材料（如 QuixBugs node.py / 表缺失）→ None + 审计
+        # attempted_fallback → prompt 即纯 df 代码口径（不产出空洞/误导段）。
+        _spec_augment_section: str | None = None
+        if _spec_mode == "augment":
+            from src.tools.spec_first import build_spec_augment_section as _build_spec_augment
+
+            _spec_augment_section = (
+                _build_spec_augment(
+                    _spec_material,
+                    state["target_code"],
+                    module_name=state.get("module_name", ""),
+                    target_function=state.get("target_function") or "",
+                )
+                or None
+            )
+            if _spec_augment_section:
+                logger.info("M-1 规格增广模式：人类规格锚并列追加在目标代码之后（%d 字符）", len(_spec_augment_section))
+                _spec_augment_applied = "attempted_augmented"
+            else:
+                _spec_augment_applied = "attempted_fallback"
         # 空计划短路（EMPTY_PLAN_SHORTCUT_ENABLE，默认关，ADR-0003）：
         # Planner 产出空计划（test_cases=[]，D1 根因：JSON 解析失败兜底
         # _get_default_test_plan）时，Generator 无法据此生成有效测试——跳过
@@ -1048,6 +1078,9 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
                 # P0-A-2（2026-10-12）：规格优先生成规约文档段（replace 模式且
                 # 有规约材料时非空；None 时 _build_query 保持历史口径注入目标代码）
                 spec_replace_section=_spec_replace_section,
+                # M-1（2026-10-17）：规格增广段（augment 模式且存在非空规格材料
+                # 时非空；None 时 _build_query 保持历史查询逐字节不变）
+                spec_augment_section=_spec_augment_section,
                 # P2 一期（观测级压缩）：失败行+错误类型+变异摘要的压缩反馈
                 # 段落（FEEDBACK_COMPRESSION_ENABLE 默认关时 None 不注入，
                 # 历史口径零变化）
@@ -1192,6 +1225,10 @@ def _generator_node(state: AITesterState) -> dict[str, Any]:
     # LangGraph 白名单丢弃；取值域见 _spec_replace_applied 初始化处注释，
     # 与 R1c 确定性 oracle 执行注入 spec_oracle_injected 独立）。
     update["spec_replace_applied"] = _spec_replace_applied
+    # M-1（2026-10-17）：规格增广段可审计观测（state 键已声明，不会被 LangGraph
+    # 白名单丢弃；取值域见 _spec_augment_applied 初始化处注释：
+    # attempted_augmented / attempted_fallback / None）。
+    update["spec_augment_applied"] = _spec_augment_applied
     # 5.4 预算封顶标记（O35）：Generator 捕获 BudgetExceededError 时置真
     # （planner / debugger 同口径），使 determine_stop_reason 可达 BUDGET_EXCEEDED。
     if _generator_budget_hit or state.get("budget_exceeded"):

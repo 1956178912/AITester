@@ -259,6 +259,7 @@ benchmark:
      oracle_quality_history, self_repair_trap_suspected, self_repair_trap_signals,
      spec_oracle_injected, spec_oracle_verdict,
     spec_replace_applied,
+    spec_augment_applied,
      failure_bucket, failure_bucket_detail, attribution_edge, attribution_fault_side,
      m10_leaf_fallback]
   # R2 落地批次（2026-10-08）口径修正 v2：第三起测量伪影（跨文件任务未物化，
