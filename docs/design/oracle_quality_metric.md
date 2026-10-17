@@ -660,3 +660,63 @@ experiments/postprocess_wall.py 消费，实验脚本不在产品开关扫描面
   `examples=1`；开关关时同一路径产物与无示例编译逐字节一致（见
   `test_planner_examples_compile_to_assertions` /
   `test_disabled_strips_examples_and_matches_no_example_output`）。
+
+## 14. R-2 示例自校验过滤器（2026-10-18，确定性后置子句校验）
+
+### 14.1 动机与协议
+
+P-1 的 2 例 misguided 来自 LLM 示例期望值幻觉（`is_valid_parenthesization`
+对 `'((('` 期望 True、`knapsack` 对 `(5, [[5,10]])` 期望 0），Q-1 接入生产后
+同样会带入。R-2 在示例进入 oracle 编译前做**确定性自校验**：用可机检后置子句
+（`postconditions_expr`）对每条示例做受限安全求值；**可求值且为 False** →
+丢弃（原因 `postcondition_false`）；不可求值/语法/异常/超长 → **保留**
+（保守放行，不误杀）。默认开启（`SPEC_EXAMPLES_SELF_VALIDATE=false/0/off`
+可关）；无 examples 路径零变化（单测锁定与无示例产物逐字节一致）。
+
+协议（`experiments/results/r_round_examples_selfcheck_20261018/PREREG.md`
+跑前冻结）：输入 = P-1 raw 的 20 任务/90 条 examples；基线 = P-1.1 norm
+（correct 8 / fp 0 / silent 3 / misguided 2 / unavailable 7，分母 13）；
+零 LLM 复用重放（`--reuse-examples`，显式开 Q-1 生产双门）；判定 =
+misguided 2→≤1 且 correct 损失 ≤1 → 有效过滤；correct 损失 ≥2 → 高风险默认关；
+其余 → 未达有效过滤。
+
+### 14.2 安全边界（零 eval/exec）
+
+允许 AST：比较（`== != < <= > >= in not in is is not`）、布尔（`and/or/not`）、
+算术（`+ - * / // %`、一元 `±`）、常量、`Name`（仅示例环境变量：参数名←input、
+`r`/`result`←expected）、`list`/`tuple`；**拒绝** `Call`（含 `len/isinstance/
+__import__`）、属性访问、下标、lambda、推导式、dict/set、f-string、walrus；
+表达式 ≤500 字符、AST 节点 ≤200（DoS 上界）。`preconditions_expr` 仅做域检查
+审计（可求值 False 记 `n_precondition_false_kept`，**不丢弃**）。
+
+### 14.3 评估结果（90 条；工件 `r_round_examples_selfcheck_20261018/`）
+
+| 指标 | 计数 |
+|---|---|
+| n_input / n_kept / **n_dropped** | 90 / 90 / **0** |
+| n_fully_validated / n_partially_validated | 9 / 16 |
+| n_no_post_clause / n_unevaluable | 10 / 55 |
+| n_precondition_false_kept | 1 |
+| 有丢弃任务数 | **0 / 20** |
+
+**2 个 hallucination 均未命中**：两任务的真实锚后置子句分别是
+`isinstance(result, bool)` 与 `isinstance(result, int)` / `result >= 0`——
+幻觉期望（True / 0）与之**不构成可机检矛盾**（类型/非负约束都满足），且严格
+AST 白名单下 Call/下标/推导式不可求值。反例（单测）：若后置子句编码语义
+（如 `result == 10`），同一幻觉示例会被 `postcondition_false` 丢弃。
+
+重放前后（B 臂，零 LLM）：过滤后与 P-1.1 norm **逐位相同**——
+correct 8→8、fp 0→0、silent 3→3、misguided **2→2**、unavailable 7→7、
+分母 13→13。判定 = **「未达有效过滤（无效拦截），非高风险」**（correct
+零损失、misguided 未降）。
+
+### 14.4 结论与下一步
+
+- 过滤器是**安全网**（零误杀、DoF 有界、异常保守放行），保留默认开启无观测
+  代价；但**不能**修复示例幻觉——它只能剔除与可机检后置子句直接矛盾的示例。
+- 根因是**规约表达力**而非过滤器实现：2 例 hallucination 的锚后置子句未编码
+  语义。下一步按收益：① 规约强化（关键语义 → `*_expr`）；② 示例级独立验证/
+  多次采样自一致性；③ 放宽求值白名单（纯内建调用/推导式）——可提升可求值率
+  （本批 25/90 可求值），但对 2 例仍无效且引入语义求值风险，需谨慎。
+- 生产接线无额外开关编排需求；R 轮判定"无效"意味着 Q-2 类 A/B 不应假设本
+  过滤器带来质量提升。限制：n=20/90、单次零 LLM 重放、不外推。

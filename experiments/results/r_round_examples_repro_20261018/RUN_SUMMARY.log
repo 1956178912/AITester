@@ -1,0 +1,6 @@
+==============================================================
+R-1 examples A/B (seed-43) run summary
+RUN_STAMP=20261017T211752Z
+ROOT=/Users/wangchenyu/Workspace/AITester-r1-repro-282b361 HEAD=282b361fcba1bfc0f55566883eb44969795cb572 dirty_before=0 dirty_after=0
+exit control=0 examples=0 wall_total=2222s task_limit=20
+PREREG_sha256=242e08da847b8708ee6e6033b9ca21c8347fea7e459bd1fff42be151829588ea

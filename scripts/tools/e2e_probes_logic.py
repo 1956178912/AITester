@@ -689,9 +689,67 @@ def probe_postprocess_wall_observability():
             os.environ.pop("AITESTER_POSTPROCESS_WARN_S", None)
         else:
             os.environ["AITESTER_POSTPROCESS_WARN_S"] = orig
+    # R-3：run_benchmark 接入校验（纯观测字段 + 粒度键 + 警告附加 helper）
+    try:
+        import importlib as _importlib
+        import inspect as _inspect
+
+        rb = _importlib.import_module("experiments.run_benchmark")
+        rb_src = _inspect.getsource(rb)
+        checks["hook_mounted"] = "postprocess_wall" in rb_src and "_attach_postprocess_wall_to_summary" in rb_src
+        checks["hook_granularity"] = "postprocess_wall_granularity" in rb_src
+    except Exception as exc:  # pragma: no cover - 仅探针防御
+        return fail(f"run_benchmark hook 检查异常：{type(exc).__name__}: {exc}")
     if not all(checks.values()):
-        return fail(f"后处理墙钟模块契约不完整：{checks}")
-    return ok("后处理墙钟模块正常（稳定 JSON/线性分位/env 默认与坏值回退）", checks=checks)
+        return fail(f"后处理墙钟模块/hook 契约不完整：{checks}")
+    return ok("后处理墙钟模块正常（稳定 JSON/线性分位/env 回退）+ run_benchmark hook 已接入", checks=checks)
+
+
+def probe_examples_self_validation():
+    """R-2：示例自校验过滤器（safe-AST 后置子句校验；保守放行；env 开关）。"""
+    from src.specs.spec_ir import parse_logic_analysis
+    from src.specs.spec_ir_v2 import self_validate_examples
+
+    spec = parse_logic_analysis(
+        {
+            "function_name": "add",
+            "postconditions_expr": ["r == a + b"],
+            "preconditions": [],
+        }
+    )
+    examples = [
+        {"input": [2, 3], "expected": 5},
+        {"input": [2, 3], "expected": 6},  # 与后置子句矛盾 → 丢弃
+        {"input": [1, 1], "expected": 2},
+    ]
+    kept, audit = self_validate_examples(spec, ["a", "b"], examples)
+    checks = {
+        "dropped_contradiction": audit.get("n_dropped") == 1 and len(kept) == 2,
+        "reason": "postcondition_false" in (audit.get("reasons") or {}),
+        "kept_valid": [item["expected"] for item in kept] == [5, 2],
+        "fully_validated": int(audit.get("n_fully_validated", 0)) >= 2,
+        "default_enabled": audit.get("enabled") is True,
+    }
+    # 安全边界：不可机检/危险子句保守保留（不误杀、不执行）
+    unsafe_spec = parse_logic_analysis(
+        {"function_name": "f", "postconditions_expr": ["__import__('os').system('echo hi') == r"], "preconditions": []}
+    )
+    kept_u, audit_u = self_validate_examples(unsafe_spec, ["a"], [{"input": [1], "expected": 1}])
+    checks["unsafe_kept"] = len(kept_u) == 1 and int(audit_u.get("n_unevaluable", 0)) == 1
+    # env 关闭：全部保留、enabled=False
+    orig = os.environ.get("SPEC_EXAMPLES_SELF_VALIDATE")
+    try:
+        os.environ["SPEC_EXAMPLES_SELF_VALIDATE"] = "false"
+        kept_off, audit_off = self_validate_examples(spec, ["a", "b"], examples)
+        checks["env_off"] = len(kept_off) == 3 and audit_off.get("enabled") is False and audit_off.get("n_dropped") == 0
+    finally:
+        if orig is None:
+            os.environ.pop("SPEC_EXAMPLES_SELF_VALIDATE", None)
+        else:
+            os.environ["SPEC_EXAMPLES_SELF_VALIDATE"] = orig
+    if not all(checks.values()):
+        return fail(f"示例自校验契约不完整：{checks}", audit=audit)
+    return ok("示例自校验正常（矛盾示例丢弃/safe-AST 危险子句保留/env 开关）", checks=checks)
 
 
 PROBES = [
@@ -806,6 +864,13 @@ PROBES = [
         func=probe_postprocess_wall_observability,
         timeout_s=60,
         description="Q-3：后处理墙钟模块（稳定 JSON/线性分位/env 默认与坏值回退）",
+    ),
+    Probe(
+        name="logic-examples-self-validation",
+        group="logic",
+        func=probe_examples_self_validation,
+        timeout_s=60,
+        description="R-2：示例自校验（safe-AST 后置子句校验/矛盾丢弃/不可机检保守放行/env 开关）",
     ),
     Probe(
         name="logic-profile-spec-fields",

@@ -1,0 +1,1008 @@
+{
+  "schema": "r1_q2_detection_loss_diagnosis/2",
+  "inputs": {
+    "B_examples": "experiments/results/q_round_examples_ab_20261018/benchmark_quixbugs_20261018_045359.json",
+    "A_control": "experiments/results/q_round_examples_ab_20261018/benchmark_quixbugs_20261018_045812.json"
+  },
+  "common_tasks": 20,
+  "detection_lost_tasks": [
+    "quixbugs__detect_cycle",
+    "quixbugs__hanoi",
+    "quixbugs__knapsack"
+  ],
+  "B_oracle_correct_tasks": [
+    "quixbugs__bucketsort",
+    "quixbugs__get_factors",
+    "quixbugs__hanoi",
+    "quixbugs__kheapsort",
+    "quixbugs__lcs_length",
+    "quixbugs__levenshtein"
+  ],
+  "lost_overlap_correct": [
+    "quixbugs__hanoi"
+  ],
+  "table": [
+    {
+      "task_id": "quixbugs__breadth_first_search_test",
+      "A_detection": null,
+      "B_detection": null,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 2454,
+      "B_gt_len": 1552,
+      "A_n_tests": 7,
+      "B_n_tests": 6,
+      "test_jaccard": 0.3,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "none",
+      "B_examples_count": 0,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__bucketsort",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 4385,
+      "B_gt_len": 4505,
+      "A_n_tests": 13,
+      "B_n_tests": 11,
+      "test_jaccard": 0.2,
+      "A_trace_len": 3,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "test_regenerated_pass_unverified",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__depth_first_search",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "silent",
+      "B_oracle": "silent",
+      "A_iter": 1,
+      "B_iter": 2,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 4942,
+      "B_gt_len": 4300,
+      "A_n_tests": 13,
+      "B_n_tests": 12,
+      "test_jaccard": 0.5625,
+      "A_trace_len": 2,
+      "B_trace_len": 3,
+      "A_repair_hist": 1,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 1,
+      "A_error": "runtime",
+      "B_error": "runtime",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__depth_first_search_test",
+      "A_detection": null,
+      "B_detection": null,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 2192,
+      "B_gt_len": 2217,
+      "A_n_tests": 8,
+      "B_n_tests": 8,
+      "test_jaccard": 0.0667,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "none",
+      "B_examples_count": 0,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__breadth_first_search",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "silent",
+      "B_oracle": "unavailable",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 4221,
+      "B_gt_len": 3361,
+      "A_n_tests": 13,
+      "B_n_tests": 10,
+      "test_jaccard": 0.15,
+      "A_trace_len": 3,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 1,
+      "A_error": "test_regenerated_pass_unverified",
+      "B_error": "index_error",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__detect_cycle_test",
+      "A_detection": null,
+      "B_detection": null,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 2487,
+      "B_gt_len": 2597,
+      "A_n_tests": 8,
+      "B_n_tests": 9,
+      "test_jaccard": 0.0625,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "none",
+      "B_examples_count": 0,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__detect_cycle",
+      "A_detection": 1.0,
+      "B_detection": 0.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 2604,
+      "B_gt_len": 5329,
+      "A_n_tests": 9,
+      "B_n_tests": 15,
+      "test_jaccard": 0.2632,
+      "A_trace_len": 2,
+      "B_trace_len": 3,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 1,
+      "A_error": "runtime",
+      "B_error": "test_regenerated_pass_unverified",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__find_in_sorted",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 3816,
+      "B_gt_len": 4591,
+      "A_n_tests": 13,
+      "B_n_tests": 16,
+      "test_jaccard": 0.16,
+      "A_trace_len": 2,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "runtime",
+      "B_error": "runtime",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__flatten",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 2513,
+      "B_gt_len": 2784,
+      "A_n_tests": 12,
+      "B_n_tests": 9,
+      "test_jaccard": 0.4,
+      "A_trace_len": 2,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "assertion",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__gcd",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 2556,
+      "B_gt_len": 3441,
+      "A_n_tests": 8,
+      "B_n_tests": 11,
+      "test_jaccard": 0.0556,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "test_regenerated_pass_unverified",
+      "B_error": "test_regenerated_pass_unverified",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__get_factors",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 2896,
+      "B_gt_len": 3862,
+      "A_n_tests": 11,
+      "B_n_tests": 11,
+      "test_jaccard": 0.1579,
+      "A_trace_len": 4,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__hanoi",
+      "A_detection": 1.0,
+      "B_detection": 0.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 1,
+      "B_iter": 3,
+      "A_stop": "test_passed",
+      "B_stop": "max_iterations",
+      "A_gt_len": 3430,
+      "B_gt_len": 3432,
+      "A_n_tests": 13,
+      "B_n_tests": 11,
+      "test_jaccard": 0.0435,
+      "A_trace_len": 2,
+      "B_trace_len": 5,
+      "A_repair_hist": 1,
+      "B_repair_hist": 3,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "assertion",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__kheapsort",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 2,
+      "B_iter": 1,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "test_passed",
+      "A_gt_len": 2993,
+      "B_gt_len": 4139,
+      "A_n_tests": 13,
+      "B_n_tests": 14,
+      "test_jaccard": 0.08,
+      "A_trace_len": 3,
+      "B_trace_len": 2,
+      "A_repair_hist": 2,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__is_valid_parenthesization",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "silent",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 3668,
+      "B_gt_len": 4367,
+      "A_n_tests": 14,
+      "B_n_tests": 16,
+      "test_jaccard": 0.0714,
+      "A_trace_len": 4,
+      "B_trace_len": 4,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__kth",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "silent",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 3246,
+      "B_gt_len": 3906,
+      "A_n_tests": 13,
+      "B_n_tests": 12,
+      "test_jaccard": 0.25,
+      "A_trace_len": 2,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "index_error",
+      "B_error": "index_error",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__knapsack",
+      "A_detection": 1.0,
+      "B_detection": 0.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "silent",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 4299,
+      "B_gt_len": 3059,
+      "A_n_tests": 24,
+      "B_n_tests": 10,
+      "test_jaccard": 0.2593,
+      "A_trace_len": 4,
+      "B_trace_len": 4,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__lcs_length",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 4275,
+      "B_gt_len": 4538,
+      "A_n_tests": 17,
+      "B_n_tests": 16,
+      "test_jaccard": 0.1379,
+      "A_trace_len": 2,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "assertion",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__levenshtein",
+      "A_detection": 1.0,
+      "B_detection": 1.0,
+      "A_oracle": "unavailable",
+      "B_oracle": "correct",
+      "A_iter": 1,
+      "B_iter": 1,
+      "A_stop": "test_passed",
+      "B_stop": "test_passed",
+      "A_gt_len": 4612,
+      "B_gt_len": 3811,
+      "A_n_tests": 16,
+      "B_n_tests": 14,
+      "test_jaccard": 0.1538,
+      "A_trace_len": 2,
+      "B_trace_len": 2,
+      "A_repair_hist": 1,
+      "B_repair_hist": 1,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "assertion",
+      "B_error": "assertion",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__bitcount",
+      "A_detection": null,
+      "B_detection": null,
+      "A_oracle": "silent",
+      "B_oracle": "unavailable",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 2490,
+      "B_gt_len": 2959,
+      "A_n_tests": 10,
+      "B_n_tests": 10,
+      "test_jaccard": 0.1765,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    },
+    {
+      "task_id": "quixbugs__find_first_in_sorted",
+      "A_detection": null,
+      "B_detection": null,
+      "A_oracle": "unavailable",
+      "B_oracle": "unavailable",
+      "A_iter": 2,
+      "B_iter": 2,
+      "A_stop": "skip_debugger_repair_invalid",
+      "B_stop": "skip_debugger_repair_invalid",
+      "A_gt_len": 3921,
+      "B_gt_len": 4010,
+      "A_n_tests": 16,
+      "B_n_tests": 13,
+      "test_jaccard": 0.381,
+      "A_trace_len": 3,
+      "B_trace_len": 3,
+      "A_repair_hist": 2,
+      "B_repair_hist": 2,
+      "B_examples_source": "planner",
+      "B_examples_count": 3,
+      "A_error": "patch_validation_failed",
+      "B_error": "patch_validation_failed",
+      "A_patch_correct": 0,
+      "B_patch_correct": 0
+    }
+  ],
+  "mismatch_detail": {
+    "quixbugs__detect_cycle": {
+      "A": {
+        "detection": 1.0,
+        "oracle_suite": "unavailable",
+        "spec_oracle_verdict": "injected_and_passed",
+        "iterations": 1,
+        "stop_reason": "test_passed",
+        "passed": true,
+        "gt_len": 2604,
+        "n_tests": 9,
+        "n_asserts": 10,
+        "trace_len": 2,
+        "repair_history_len": 1,
+        "patch_correct": 0,
+        "error_category": "runtime",
+        "failure_bucket": "task_completed",
+        "examples_source": "none",
+        "examples_count": 0,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 88.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 1.38,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.954,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": true,
+            "coverage": 89.0,
+            "coverage_delta": 1.0,
+            "elapsed_seconds": 0.71,
+            "reward_signals": {
+              "correctness": 1.0,
+              "efficiency": 0.976,
+              "simplicity": 0.4
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "detect_cycle 中 while True 循环内，第 5 行 hare = hare.successor.successor 在 hare.successor 为 None 时会抛出 AttributeError（对 None 取 .successor）。第 4 行只检查了 hare.successor is None，但未检查 hare.successor.successor 是否为 None；对于无环链表（空链表、单节点、两节点、多节点），hare 在推进过程中会到达末尾，导致 hare.successor 为 None 或 hare.successor.successor 为 None，从而在 L5 崩溃。空链表时 node 本身为 None，L4 直接对 None 取 .successor 也会抛 AttributeError。",
+            "error_category": "runtime",
+            "patch_applied": true
+          }
+        ],
+        "diagnosis": "detect_cycle 中 while True 循环内，第 5 行 hare = hare.successor.successor 在 hare.successor 为 None 时会抛出 AttributeError（对 None 取 .successor）。第 4 行只检查了 hare.successor is None，但未检查 hare.successor.successor 是否为 None；对于无环链表（空链表、单节点、两节点、多节点），hare 在推进过程中会到达末尾，导致 hare.successor 为 None 或 hare.successor.successor 为 "
+      },
+      "B": {
+        "detection": 0.0,
+        "oracle_suite": "unavailable",
+        "spec_oracle_verdict": "injected_and_passed",
+        "iterations": 1,
+        "stop_reason": "test_passed",
+        "passed": true,
+        "gt_len": 5329,
+        "n_tests": 15,
+        "n_asserts": 19,
+        "trace_len": 3,
+        "repair_history_len": 1,
+        "patch_correct": 0,
+        "error_category": "test_regenerated_pass_unverified",
+        "failure_bucket": "task_completed",
+        "examples_source": "planner",
+        "examples_count": 1,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 83.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 1.17,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.961,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 79.0,
+            "coverage_delta": -4.0,
+            "elapsed_seconds": 1.56,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.948,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": true,
+            "coverage": 85.0,
+            "coverage_delta": 6.0,
+            "elapsed_seconds": 0.81,
+            "reward_signals": {
+              "correctness": 1.0,
+              "efficiency": 0.973,
+              "simplicity": 0.533
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "detect_cycle 中 hare 每次前进两步（第 9 行 `hare = hare.successor.successor`），但只检查了 `hare.successor is None`（第 5 行），未检查 `hare.successor.successor` 是否为 None。对于偶数长度的无环链表，hare 会先到达最后一个节点，此时 hare.successor 为 None，但代码在下一轮循环前已执行 `hare.successor.successor`，对 None 取 .successor 抛出 AttributeError（runtime 异常）。此外，当 hare 到达倒数第二个节点时，hare.successor 非 None 但 hare.successor.successor 为 None，同样会出错。正确做法是在移动 hare 前检查 hare.successor 和 hare.successor.successor 是否为空。",
+            "error_category": "runtime",
+            "patch_applied": true
+          }
+        ],
+        "diagnosis": "detect_cycle 中 hare 每次前进两步（第 9 行 `hare = hare.successor.successor`），但只检查了 `hare.successor is None`（第 5 行），未检查 `hare.successor.successor` 是否为 None。对于偶数长度的无环链表，hare 会先到达最后一个节点，此时 hare.successor 为 None，但代码在下一轮循环前已执行 `hare.successor.successor`，对 None 取 .successor 抛出 AttributeError（runtime 异常）。此外，当 hare "
+      }
+    },
+    "quixbugs__hanoi": {
+      "A": {
+        "detection": 1.0,
+        "oracle_suite": "unavailable",
+        "spec_oracle_verdict": "injected_and_passed",
+        "iterations": 1,
+        "stop_reason": "test_passed",
+        "passed": true,
+        "gt_len": 3430,
+        "n_tests": 13,
+        "n_asserts": 15,
+        "trace_len": 2,
+        "repair_history_len": 1,
+        "patch_correct": 0,
+        "error_category": "assertion",
+        "failure_bucket": "task_completed",
+        "examples_source": "none",
+        "examples_count": 0,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 96.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 1.59,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.947,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": true,
+            "coverage": 96.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 0.64,
+            "reward_signals": {
+              "correctness": 1.0,
+              "efficiency": 0.979,
+              "simplicity": 0.267
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 错误：递归分解应为「将 height-1 个盘从 start 移到 helper，再将最大盘从 start 移到 end，最后将 height-1 个盘从 helper 移到 end」。原代码把最大盘的目标写成了 helper，导致所有步骤序列错误，首步/末步断言失败。",
+            "error_category": "assertion",
+            "patch_applied": true
+          }
+        ],
+        "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 错误：递归分解应为「将 height-1 个盘从 start 移到 helper，再将最大盘从 start 移到 end，最后将 height-1 个盘从 helper 移到 end」。原代码把最大盘的目标写成了 helper，导致所有步骤序列错误，首步/末步断言失败。"
+      },
+      "B": {
+        "detection": 0.0,
+        "oracle_suite": "correct",
+        "spec_oracle_verdict": "injected",
+        "iterations": 3,
+        "stop_reason": "max_iterations",
+        "passed": false,
+        "gt_len": 3432,
+        "n_tests": 11,
+        "n_asserts": 16,
+        "trace_len": 5,
+        "repair_history_len": 3,
+        "patch_correct": 0,
+        "error_category": "assertion",
+        "failure_bucket": "generation_capability_failure",
+        "examples_source": "planner",
+        "examples_count": 3,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 76.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 1.5,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.95,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 76.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.62,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.946,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": false,
+            "coverage": 76.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.53,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.949,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 2,
+            "passed": false,
+            "coverage": 76.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.59,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.947,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 3,
+            "passed": false,
+            "coverage": 76.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.48,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.951,
+              "simplicity": 0.0
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 错误：递归移动 height-1 个盘到 helper 后，应把最大盘从 start 移到 end，即 `steps.append((start, end))`。当前代码把最大盘移到辅助柱 helper，导致所有非零高度的移动序列与步数均错误（height=1 时返回 (start, helper) 而非 (start, end)），从而断言失败。",
+            "error_category": "assertion",
+            "patch_applied": true
+          },
+          {
+            "iteration": 2,
+            "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 错误：递归移动 height-1 个盘子到 helper 后，应把最大盘从 start 移到 end，即 `steps.append((start, end))`。当前写成 (start, helper)，导致所有移动序列错误（height=1 时返回 (1,2) 而非 (1,3)），三个失败用例均由此断言不一致引起。",
+            "error_category": "assertion",
+            "patch_applied": true
+          },
+          {
+            "iteration": 3,
+            "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 记录的是从 start 移到辅助柱 helper 的步骤，但根据汉诺塔算法，递归移动 height-1 个盘到 helper 后，应把最大的盘从 start 移到目标柱 end，即应为 `steps.append((start, end))`。当前实现导致 height=1 时返回 [(1,2)] 而非期望的 [(1,3)]，所有序列断言失败。",
+            "error_category": "assertion",
+            "patch_applied": true
+          }
+        ],
+        "diagnosis": "hanoi 函数第 6 行 `steps.append((start, helper))` 记录的是从 start 移到辅助柱 helper 的步骤，但根据汉诺塔算法，递归移动 height-1 个盘到 helper 后，应把最大的盘从 start 移到目标柱 end，即应为 `steps.append((start, end))`。当前实现导致 height=1 时返回 [(1,2)] 而非期望的 [(1,3)]，所有序列断言失败。"
+      }
+    },
+    "quixbugs__knapsack": {
+      "A": {
+        "detection": 1.0,
+        "oracle_suite": "unavailable",
+        "spec_oracle_verdict": "injected",
+        "iterations": 2,
+        "stop_reason": "skip_debugger_repair_invalid",
+        "passed": false,
+        "gt_len": 4299,
+        "n_tests": 24,
+        "n_asserts": 28,
+        "trace_len": 4,
+        "repair_history_len": 2,
+        "patch_correct": 0,
+        "error_category": "patch_validation_failed",
+        "failure_bucket": "generation_capability_failure",
+        "examples_source": "none",
+        "examples_count": 0,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": true,
+            "coverage": 85.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 0.86,
+            "reward_signals": {
+              "correctness": 1.0,
+              "efficiency": 0.971,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 88.0,
+            "coverage_delta": 3.0,
+            "elapsed_seconds": 1.81,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.94,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": false,
+            "coverage": 88.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.76,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.941,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 2,
+            "passed": false,
+            "coverage": 88.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.77,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.941,
+              "simplicity": 0.0
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "knapsack 函数第 12 行条件 `if weight < j:` 使用了严格小于，导致当物品重量恰好等于当前容量 j（即 weight == j）时被排除，无法选取该物品。正确条件应为 `weight <= j`。这解释了 test_knapsack_weight_equal_capacity_boundary、test_knapsack_capacity_one_weight_one 等失败用例：容量为 1、物品重量为 1 时，j=1 且 weight=1，条件不成立，返回 0 而非物品价值。",
+            "error_category": "assertion",
+            "patch_applied": false
+          },
+          {
+            "iteration": 2,
+            "diagnosis": "knapsack 函数第 12 行条件 `if weight < j:` 使用了严格小于，导致物品重量恰好等于当前容量 j 时被错误排除。正确条件应为 `weight <= j`。这解释了 test_knapsack_weight_equal_capacity_boundary、test_knapsack_capacity_one_weight_one 等失败用例（重量等于容量时返回 0 而非物品价值）。",
+            "error_category": "assertion",
+            "patch_applied": false
+          }
+        ],
+        "diagnosis": "knapsack 函数第 12 行条件 `if weight < j:` 使用了严格小于，导致物品重量恰好等于当前容量 j 时被错误排除。正确条件应为 `weight <= j`。这解释了 test_knapsack_weight_equal_capacity_boundary、test_knapsack_capacity_one_weight_one 等失败用例（重量等于容量时返回 0 而非物品价值）。"
+      },
+      "B": {
+        "detection": 0.0,
+        "oracle_suite": "silent",
+        "spec_oracle_verdict": "injected",
+        "iterations": 2,
+        "stop_reason": "skip_debugger_repair_invalid",
+        "passed": false,
+        "gt_len": 3059,
+        "n_tests": 10,
+        "n_asserts": 13,
+        "trace_len": 4,
+        "repair_history_len": 2,
+        "patch_correct": 0,
+        "error_category": "patch_validation_failed",
+        "failure_bucket": "generation_capability_failure",
+        "examples_source": "planner",
+        "examples_count": 3,
+        "execution_trace": [
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 74.0,
+            "coverage_delta": null,
+            "elapsed_seconds": 1.46,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.951,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 0,
+            "passed": false,
+            "coverage": 70.0,
+            "coverage_delta": -4.0,
+            "elapsed_seconds": 1.46,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.951,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 1,
+            "passed": false,
+            "coverage": 70.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.45,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.952,
+              "simplicity": 0.0
+            }
+          },
+          {
+            "iteration": 2,
+            "passed": false,
+            "coverage": 70.0,
+            "coverage_delta": 0.0,
+            "elapsed_seconds": 1.53,
+            "reward_signals": {
+              "correctness": 0.0,
+              "efficiency": 0.949,
+              "simplicity": 0.0
+            }
+          }
+        ],
+        "repair_history": [
+          {
+            "iteration": 1,
+            "diagnosis": "knapsack 函数第 13 行使用 `if weight < j:` 严格小于判断，导致 weight == j 时物品无法被装入（应使用 `<=`）。此外，零重量物品（weight=0）时，`j - weight == j`，此时 `value + memo[i-1, j]` 与 `memo[i-1, j]` 比较，虽然理论上 max 能取到 value+memo[i-1,j]，但由于第 13 行条件 `0 < j` 在 j>=1 时成立，实际零重量物品在 j>=1 时能正确累加；真正问题在于 weight == j 的边界被排除，以及零重量物品在 j 从 1 开始时 memo[i-1,0] 未被正确初始化利用。核心 bug 是第 13 行应改为 `weight <= j`，使 weight == j 的物品可装入，同时零重量物品在 j 任意值时都能正确累加价值。",
+            "error_category": "assertion",
+            "patch_applied": false
+          },
+          {
+            "iteration": 2,
+            "diagnosis": "knapsack 函数第 13 行（`if weight < j:`）使用了严格小于比较，导致当物品重量恰好等于当前容量 j（weight == j）时该物品被跳过；更关键的是零重量物品（weight == 0）时，条件 `0 < j` 对 j>=1 成立，但 `j - weight = j`，此时 memo[i-1][j] 与 memo[i][j] 相同，无法体现「取该物品」的收益，且当 j 从 1 开始时零重量物品在 j=0 列从未被处理，导致零重量物品的价值未被正确累加。正确条件应为 `weight <= j`，并需处理 j=0 列（零重量物品可在容量 0 时被选取）。",
+            "error_category": "assertion",
+            "patch_applied": false
+          }
+        ],
+        "diagnosis": "knapsack 函数第 13 行（`if weight < j:`）使用了严格小于比较，导致当物品重量恰好等于当前容量 j（weight == j）时该物品被跳过；更关键的是零重量物品（weight == 0）时，条件 `0 < j` 对 j>=1 成立，但 `j - weight = j`，此时 memo[i-1][j] 与 memo[i][j] 相同，无法体现「取该物品」的收益，且当 j 从 1 开始时零重量物品在 j=0 列从未被处理，导致零重量物品的价值未被正确累加。正确条件应为 `weight <= j`，并需处理 j=0 列（零重量物品可在容量 0 时被选取）。"
+      }
+    }
+  },
+  "aggregate": {
+    "test_jaccard_all_mean": 0.1966,
+    "test_jaccard_mismatch_mean": 0.1887,
+    "n_tasks_tests_differ": 20,
+    "gt_len_rel_delta_all_mean": 0.2167,
+    "gt_len_rel_delta_mismatch_mean": 0.4452,
+    "B_examples_source_dist": {
+      "none": 3,
+      "planner": 17
+    },
+    "B_examples_count_dist": {
+      "0": 3,
+      "3": 14,
+      "1": 3
+    }
+  }
+}
