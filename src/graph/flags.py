@@ -297,8 +297,9 @@ def _plan_expected_output_strip_enabled() -> bool:
 
 
 def _detection_spec_mode() -> str:
-    """P0-A-2（2026-10-12 独立评审落地）：规格优先生成模式
-    （DETECTION_SPEC_MODE：off=历史口径 / replace=规约文档替代实现代码）。
+    """P0-A-2 / M-1（2026-10-12 / 2026-10-17）：规格干预模式
+    （DETECTION_SPEC_MODE：off=历史口径 / replace=规约文档替代实现代码 /
+    augment=代码保留 + 人类规格锚并列追加）。
 
     默认 "off"：Generator prompt 的目标代码块与历史逐字节一致。
     "replace" 时 _generator_node 经 src.tools.spec_first.
@@ -307,6 +308,10 @@ def _detection_spec_mode() -> str:
     （Zhao et al. ISSTA 2026：缺陷代码入提示诱发错误断言）、
     项目 48.6% 全绿未检出（oracle-from-implementation）、
     Google Spec-Driven 研究（+9.8pp，p=0.0352）。
+    "augment"（M-1）时经 build_spec_augment_section 在**保留完整代码**的
+    前提下并列追加人类 docstring 规格锚——承接 L 轮 replace 阴性结论
+    （df 86.11% vs doc 60.00%）：移除实现代码是检出损失主因，增广检验
+    "代码 + 独立规格并列"能否不损失检出。
     无规约材料时渲染返回空串，调用方保持历史口径（不产空洞提示）。
     """
     from src.tools.spec_first import detection_spec_mode

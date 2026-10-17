@@ -574,15 +574,21 @@ def _run_plain_llm_df_anchor_baseline(
     *,
     default_anchor_path: str,
     arm_label: str,
+    spec_mode: str = "replace",
 ) -> dict[str, Any]:
-    """plain_llm_df + 独立锚（doc / union 两臂共享实现；与 df_spec 臂同构）。
+    """plain_llm_df + 独立锚（doc / union / augment 三臂共享实现；与 df_spec 臂同构）。
 
-    实现（与 run_plain_llm_df_spec_baseline 唯一差别 = 锚表来源/默认路径）：
+    实现（与 run_plain_llm_df_spec_baseline 唯一差别 = 锚表来源/默认路径/模式）：
     - 锚材料预载：state["spec_anchor"] ← 预计算锚表条目。未命中不写键 →
-      回落 df 口径（节点渲染空串 → spec_replace_applied=attempted_fallback）。
-    - 线程级规格模式覆盖 set_spec_mode_thread_override("replace")（非
+      回落 df 口径（节点渲染空串 → spec_replace_applied=attempted_fallback
+      ［replace］或 spec_augment_applied=attempted_fallback ［augment］）。
+    - 线程级规格模式覆盖 set_spec_mode_thread_override(spec_mode)（非
       os.environ——--parallel 下不串扰邻线程其它臂）；finally 恢复 None。
-    - 渲染路径与 aitester replace 臂共用（build_spec_replace_section）。
+    - spec_mode="replace"（默认，既有 doc / union 两臂行为不变）：渲染路径
+      与 aitester replace 臂共用（build_spec_replace_section，目标代码被替换）。
+    - spec_mode="augment"（M-1，2026-10-17）：渲染路径改用
+      build_spec_augment_section——缺陷代码完整保留 + 人类规格锚并列追加
+      （L 轮 replace 阴性结论的直接后续假设）。
 
     运行要求：先跑 experiments/build_docstring_anchor_table.py 生成锚表；
     结果解释必须与该次填充的锚表版本（.json + SHA256SUMS）成套归档。
@@ -597,7 +603,7 @@ def _run_plain_llm_df_anchor_baseline(
         logger.info("%s：任务 %s 无锚材料（回落 df 口径）", arm_label, state.get("task_id", "?"))
     graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
     _cfg.set_detection_first_thread_override(True)
-    set_spec_mode_thread_override("replace")
+    set_spec_mode_thread_override(spec_mode)
     try:
         return graph.invoke(state)
     finally:
@@ -617,6 +623,7 @@ def run_plain_llm_df_doc_baseline(state: AITesterState) -> dict[str, Any]:
         state,
         default_anchor_path=_DOC_ANCHOR_TABLE_DEFAULT,
         arm_label="df_doc",
+        spec_mode="replace",
     )
 
 
@@ -631,6 +638,30 @@ def run_plain_llm_df_doc_union_baseline(state: AITesterState) -> dict[str, Any]:
         state,
         default_anchor_path=_DOC_ANCHOR_TABLE_UNION_DEFAULT,
         arm_label="df_doc_union",
+        spec_mode="replace",
+    )
+
+
+def run_plain_llm_df_doc_augment_baseline(state: AITesterState) -> dict[str, Any]:
+    """plain_llm_df + 人类规格锚**并列增广**（M-1，2026-10-17；L 轮阴性后续假设）。
+
+    与 doc 臂的唯一差别 = 规格模式 "augment"（而非 "replace"）：
+    - Generator prompt **保留完整缺陷代码**（代码块不替换）；
+    - 人类独立规格锚作为独立段并列追加在代码块之后
+      （build_spec_augment_section 渲染）；
+    - 动机：L 轮 replace 三臂实测 df 86.11% / doc 60.00% / union 61.76%
+      （not_confirmed）——"移除实现代码"是检出损失主因；增广检验"代码 + 独立
+      规格并列"能否在不损失检出的前提下提升检出。
+
+    锚表同 doc 臂（默认 ``DOCSTRING_ANCHOR_TABLE.json``；env DOC_ANCHOR_TABLE
+    可覆盖）。表缺失/命中失败 → 不写 spec_anchor → 节点渲染空串 →
+    spec_augment_applied=attempted_fallback（纯 df 代码口径，不 crash）。
+    """
+    return _run_plain_llm_df_anchor_baseline(
+        state,
+        default_anchor_path=_DOC_ANCHOR_TABLE_DEFAULT,
+        arm_label="df_doc_augment",
+        spec_mode="augment",
     )
 
 
@@ -651,6 +682,10 @@ BASELINE_REGISTRY: dict[str, callable] = {
     # Planner SpecExpr 子句并集）
     "plain_llm_df_doc": run_plain_llm_df_doc_baseline,
     "plain_llm_df_doc_union": run_plain_llm_df_doc_union_baseline,
+    # M-1（2026-10-17，L 轮 replace 阴性结论的后续假设）：人类 docstring 规格锚
+    # **并列增广**臂——保留完整缺陷代码 + 规格锚并列追加（显式 --baselines 指定；
+    # 锚表同 doc 臂，模式 augment，见 run_plain_llm_df_doc_augment_baseline）
+    "plain_llm_df_doc_augment": run_plain_llm_df_doc_augment_baseline,
 }
 
 
@@ -1588,6 +1623,13 @@ def _build_task_result(
             # 执行注入（spec_oracle_injected，SPEC_ORACLE_EXEC_ENABLE）解耦——
             # 前者是 prompt 构建路径观测，后者是执行链 oracle 注入观测。
             "spec_replace_applied": final_state.get("spec_replace_applied"),
+            # M-1（2026-10-17）：规格**增广**段逐任务可审计观测——
+            # DETECTION_SPEC_MODE=augment 时 "attempted_augmented"（人类规格
+            # 锚已并列追加在完整缺陷代码之后）/ "attempted_fallback"（无非空
+            # 规格材料，渲染空串 → prompt 保持纯 df 代码口径）/ None（模式
+            # 非 augment，历史口径零变化）。与 spec_replace_applied 互斥
+            # （同一模式只写其一，另一恒 None），供实验层审计增广覆盖率。
+            "spec_augment_applied": final_state.get("spec_augment_applied"),
             # AC1（2026-10-06 第十轮审查 T-P0-2）：表达式通道覆盖率——LLM 把
             # NL 规约形式化为 *_expr 子句的占比（与 compile_rate 的编译器
             # 接受率正交；默认关恒 None，键集合同构）。
@@ -1823,6 +1865,9 @@ def _build_task_result(
         # P0-A-2（2026-10-12）：规格优先替换段观测键失败分支占位
         # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
         "spec_replace_applied": None,
+        # M-1（2026-10-17）：规格增广段观测键失败分支占位
+        # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
+        "spec_augment_applied": None,
         # AC1：表达式通道覆盖率失败分支占位（键集合同构）
         "spec_expr_coverage": None,
         # T1（2026-10-11 独立评审落地）：规约被拒原因分布失败分支占位

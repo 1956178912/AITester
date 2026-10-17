@@ -470,6 +470,17 @@ class AITesterState(TypedDict, total=False):
     # 供实验层逐任务审计"replace 是否真正注入了规约文档"，与 R1c 确定性
     # oracle 执行注入（spec_oracle_injected，SPEC_ORACLE_EXEC_ENABLE）解耦。
     spec_replace_applied: str | None
+    # M-1（2026-10-17，承接 L 轮 replace 阴性结论）：规格**增广**段是否实际
+    # 生效的逐任务可审计观测。DETECTION_SPEC_MODE=augment 时由
+    # _generator_node 写入；取值域：
+    #   "attempted_augmented" 存在非空人类规格材料，增广段已并列追加在
+    #                         完整缺陷代码块之后（代码仍注入 prompt）
+    #   "attempted_fallback"  无非空规格材料（如 QuixBugs node.py / 锚表缺失），
+    #                         渲染返回空串，prompt 保持纯 df 代码口径
+    #   None                  DETECTION_SPEC_MODE=off/replace / minimal 消融档 /
+    #                         Generator 节点未运行（默认关历史口径零变化）
+    # 与 spec_replace_applied 互斥（同一模式只写其一，另一恒 None）。
+    spec_augment_applied: str | None
     # A-10（2026-10-16）：df_spec 臂（plain_llm_df_spec）预载的规格锚材料
     # （Planner 计划子集 {function_name, logic_analysis}，来自预计算锚表
     # SPEC_ANCHOR_TABLE.json）。仅该臂写入；_generator_node 在
@@ -815,6 +826,10 @@ def create_initial_state(
         # 默认 off，历史口径零变化；replace 时 _generator_node 写
         # attempted_replaced / attempted_fallback）
         spec_replace_applied=None,
+        # M-1（2026-10-17）：规格增广段可审计观测默认 None（DETECTION_SPEC_MODE
+        # 默认 off，历史口径零变化；augment 时 _generator_node 写
+        # attempted_augmented / attempted_fallback）
+        spec_augment_applied=None,
         # A-10（2026-10-16）：规格锚材料默认 None（仅 df_spec 臂写入；
         # 其它臂恒 None，_generator_node 回落 test_plan，历史口径零变化）
         spec_anchor=None,
