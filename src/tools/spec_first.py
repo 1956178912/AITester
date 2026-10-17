@@ -23,6 +23,10 @@ oracle-from-implementation 锚点。
     - 纯字符串渲染（零 LLM / 零子进程），失败路径保守返回空串；
     - 与 ORACLE_CONTEXT_MINIMAL 消融档同口径：minimal 时调用方不构建
       本段（该档意图是"无额外上下文"对照臂）。
+    - P1（2026-10-17 独立评审 §6 P1 / A-02）：材料可选携带 `human_spec`
+      键（模块级人类规格文本，见 module_spec_text）——键在场即进入材料
+      判定并渲染"独立于实现的规格锚"段落；不携带该键的既有材料（全部
+      历史臂）渲染逐字节不变（tests/test_docstring_anchor.py 金标记锁定）。
 """
 
 from __future__ import annotations
@@ -140,6 +144,62 @@ def _bullet_list(items: list[str], label: str) -> list[str]:
     return [f"- {label}：{item}" for item in items if item and item.strip()]
 
 
+def module_spec_text(source_code: str) -> str:
+    """提取模块级人类规格文本（独立于缺陷实现的规格锚候选，P1 三级回退 (a) 档）。
+
+    背景（独立评审 2026-10-17 §6 P1 / A-02）：QuixBugs 缺陷程序**没有函数
+    docstring**，但 40/41 个程序在文件尾部有一个顶层字符串字面量——人类书写的
+    Input/Output/Examples 规格块（只有 ``node.py`` 缺失）。既有 `_docstring_of`
+    只取函数 docstring，取不到该块；本 helper 补上这条"独立于缺陷实现"的
+    人类规格来源（锚材料不来自对 buggy 代码的再描述，故不受
+    oracle-from-implementation 机制污染）。
+
+    提取规则（纯 stdlib AST，确定性、零 LLM）：
+        1. 只认**模块级** ``Expr(Constant str)`` 语句（函数/类内部的不算——
+           那不是模块级规格块）；
+        2. 忽略 strip 后为空的字面量；
+        3. 若存在"非首句"字面量（即不是模块 docstring 的顶层字符串），优先
+           取**最靠后**的一个（QuixBugs 风格尾部规格块语义；多处时取尾部）；
+        4. 否则回退首句模块 docstring（``ast.get_docstring`` 同口径）；
+        5. 语法错误 / 空输入 / 无字面量 → 空串（保守：调用方自行决定回退）。
+
+    Returns:
+        规格文本（已 strip）；无可提取材料时返回空串。
+    """
+    if not source_code:
+        return ""
+    try:
+        tree = ast.parse(source_code)
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return ""
+    body = getattr(tree, "body", None)
+    if not body:
+        return ""
+    # 模块 docstring 只可能是"首条语句且为字符串字面量"
+    first_is_docstring = (
+        isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0].value.value, str)
+    )
+    literals: list[tuple[int, str]] = []
+    for index, node in enumerate(body):
+        value = getattr(node, "value", None)
+        if not isinstance(node, ast.Expr) or not isinstance(value, ast.Constant):
+            continue
+        if not isinstance(value.value, str):
+            continue
+        text = value.value.strip()
+        if text:
+            literals.append((index, text))
+    if not literals:
+        return ""
+    # 非首句字面量 = 不是模块 docstring 的顶层字符串（尾部规格块语义优先）
+    non_doc = [text for index, text in literals if not (first_is_docstring and index == 0)]
+    if non_doc:
+        return non_doc[-1]
+    return literals[0][1]
+
+
 def sole_top_level_function_name(source_code: str) -> str:
     """模块唯一顶层函数名（确定性 AST 回退；无或>1 个顶层函数 → 空串）。
 
@@ -174,8 +234,13 @@ def build_spec_replace_section(
     """渲染规格优先提示段（规约文档，替代目标代码注入 Generator prompt）。
 
     Args:
-        test_plan: Planner 产出的测试计划（含 logic_analysis 的 NL 规约
-            与 *_expr 形式化子句）；None / 无规约材料 → 空串。
+        test_plan: 规约材料（Planner 测试计划的 ``logic_analysis`` 子集；或
+            df_spec / docstring 锚臂预载的锚材料 dict）。None / 无规约材料
+            → 空串。P1（2026-10-17）：键 ``human_spec`` **显式存在**时即为
+            人类独立规格锚（docstring 锚臂），其值可为空串——"键在场"本身
+            就进入材料判定（锚臂语义：无锚也必须走替换口径，不得注入缺陷
+            实现代码）；渲染为空时省略该段落。未携带该键的材料（既有
+            Planner 锚 / 全部历史臂）渲染结果逐字节不变。
         target_code: 被测源码（**只用于提取签名与 docstring**，函数体
             不进入产物——replace 模式的核心纪律）。
         module_name: 模块名（import 约束用）。
@@ -201,8 +266,16 @@ def build_spec_replace_section(
     post_expr = [str(c) for c in (logic.get("postconditions_expr") or []) if str(c).strip()]
     inv_expr = [str(c) for c in (logic.get("invariants_expr") or []) if str(c).strip()]
     docstring = _docstring_of(target_code, fn)
+    # P1 独立锚（2026-10-17）：human_spec 键的**在场**决定材料判定（空串也算
+    # 材料——docstring 锚臂对"无人类规格"任务仍走替换口径而不是回落注入代码；
+    # 是否渲染该段落由非空性决定）。不在场 → 历史材料判定逐字节不变。
+    has_human_spec_key = "human_spec" in test_plan
+    human_spec = ""
+    if has_human_spec_key:
+        raw_human_spec = test_plan.get("human_spec")
+        human_spec = "" if raw_human_spec is None else str(raw_human_spec).strip()
 
-    has_material = any([pre_nl, post_nl, inv_nl, edge, pre_expr, post_expr, inv_expr, docstring])
+    has_material = any([pre_nl, post_nl, inv_nl, edge, pre_expr, post_expr, inv_expr, docstring]) or has_human_spec_key
     if not has_material:
         return ""  # 无规约材料：调用方保持历史口径（注入目标代码）
 
@@ -218,6 +291,11 @@ def build_spec_replace_section(
         lines.append(f"函数签名：{sig}")
     if module_name:
         lines.append(f"被测模块名：{module_name}（import 必须 `from {module_name} import ...`）")
+    if human_spec:
+        # 顺序纪律：人类独立锚优先于函数 docstring（后者可能缺失/被实现污染）
+        lines.append("")
+        lines.append("【独立于实现的规格锚（人类 docstring）】")
+        lines.append(human_spec)
     if docstring:
         lines.append("")
         lines.append("【文档化契约（docstring）】")
@@ -255,6 +333,7 @@ def build_spec_replace_section(
 __all__ = [
     "build_spec_replace_section",
     "detection_spec_mode",
+    "module_spec_text",
     "set_spec_mode_thread_override",
     "sole_top_level_function_name",
 ]

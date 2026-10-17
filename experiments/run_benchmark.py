@@ -516,6 +516,124 @@ def run_plain_llm_df_spec_baseline(state: AITesterState) -> dict[str, Any]:
         _cfg.set_detection_first_thread_override(None)
 
 
+# ─── P1（2026-10-17 独立评审 §6 P1 / A-02）：人类 docstring 独立规格锚两臂 ────
+# df_spec（A-10）的锚材料 = Planner 对**缺陷代码**的再描述；P1 修复路径改用
+# 独立于缺陷实现的人类规格锚。表由 experiments/build_docstring_anchor_table.py
+# 零 LLM 从 QuixBugs 数据目录物化（模块级人类规格块；union 变体另并入既有
+# Planner 锚的 logic_analysis）。env DOC_ANCHOR_TABLE 可覆盖路径（测试/复跑
+# 用；已入 env 快照）；默认路径按臂区分（doc / union 两套工件互不覆盖）。
+# 表缺失/损坏 → 臂整体回落 df 口径（逐任务 spec_replace_applied=
+# attempted_fallback，与 df_spec 同字段语义；命中率可审计，不 crash）。
+_DOC_ANCHOR_TABLE_DEFAULT = os.path.join(
+    PROJECT_ROOT, "experiments", "results", "emse_docstring_anchor_20261017", "DOCSTRING_ANCHOR_TABLE.json"
+)
+_DOC_ANCHOR_TABLE_UNION_DEFAULT = os.path.join(
+    PROJECT_ROOT, "experiments", "results", "emse_docstring_anchor_20261017", "DOCSTRING_ANCHOR_TABLE_UNION.json"
+)
+
+_DOC_ANCHOR_TABLE_CACHE: dict[str, dict[str, dict[str, Any]] | None] = {}
+
+
+def _load_doc_anchor_table(default_path: str) -> dict[str, dict[str, Any]] | None:
+    """加载 docstring 锚表 anchors 映射（env DOC_ANCHOR_TABLE 优先；缺失/损坏/形状不符 → None）。
+
+    按**解析路径**进程内缓存（与 df_spec 锚表缓存同模式）；env 覆盖对两臂
+    同时生效——正式跑批不得设该变量（默认路径即预注册锚表）。
+    """
+    raw = (os.environ.get("DOC_ANCHOR_TABLE") or "").strip()
+    path = raw or default_path
+    if path in _DOC_ANCHOR_TABLE_CACHE:
+        return _DOC_ANCHOR_TABLE_CACHE[path]
+    anchors: dict[str, dict[str, Any]] | None = None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and isinstance(data.get("anchors"), dict):
+            anchors = data["anchors"]
+    except (OSError, ValueError):
+        anchors = None
+    _DOC_ANCHOR_TABLE_CACHE[path] = anchors
+    return anchors
+
+
+def _lookup_doc_anchor(state: AITesterState, default_path: str) -> dict[str, Any] | None:
+    """按 target_code 内容哈希（strip 后 sha256）查 doc 锚材料；未命中/表不可用 → None。"""
+    table = _load_doc_anchor_table(default_path)
+    if not table:
+        return None
+    source = str(state.get("target_code") or "").strip()
+    if not source:
+        return None
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    material = table.get(digest)
+    return material if isinstance(material, dict) else None
+
+
+def _run_plain_llm_df_anchor_baseline(
+    state: AITesterState,
+    *,
+    default_anchor_path: str,
+    arm_label: str,
+) -> dict[str, Any]:
+    """plain_llm_df + 独立锚（doc / union 两臂共享实现；与 df_spec 臂同构）。
+
+    实现（与 run_plain_llm_df_spec_baseline 唯一差别 = 锚表来源/默认路径）：
+    - 锚材料预载：state["spec_anchor"] ← 预计算锚表条目。未命中不写键 →
+      回落 df 口径（节点渲染空串 → spec_replace_applied=attempted_fallback）。
+    - 线程级规格模式覆盖 set_spec_mode_thread_override("replace")（非
+      os.environ——--parallel 下不串扰邻线程其它臂）；finally 恢复 None。
+    - 渲染路径与 aitester replace 臂共用（build_spec_replace_section）。
+
+    运行要求：先跑 experiments/build_docstring_anchor_table.py 生成锚表；
+    结果解释必须与该次填充的锚表版本（.json + SHA256SUMS）成套归档。
+    """
+    import config as _cfg
+    from src.tools.spec_first import set_spec_mode_thread_override
+
+    anchor = _lookup_doc_anchor(state, default_anchor_path)
+    if anchor is not None:
+        state["spec_anchor"] = anchor
+    else:
+        logger.info("%s：任务 %s 无锚材料（回落 df 口径）", arm_label, state.get("task_id", "?"))
+    graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
+    _cfg.set_detection_first_thread_override(True)
+    set_spec_mode_thread_override("replace")
+    try:
+        return graph.invoke(state)
+    finally:
+        set_spec_mode_thread_override(None)
+        _cfg.set_detection_first_thread_override(None)
+
+
+def run_plain_llm_df_doc_baseline(state: AITesterState) -> dict[str, Any]:
+    """plain_llm_df + 人类 docstring 独立规格锚（P1 回退 (a) 档）。
+
+    锚材料 = 模块级人类规格块（QuixBugs 尾部 Input/Output/Examples），
+    **不含**任何 Planner 对缺陷代码的再描述——从源头切断
+    oracle-from-implementation 锚点。缺人类规格的任务（QuixBugs ``node.py``）
+    仍走替换口径但锚文本为空（human_spec 键在场语义，见 spec_first）。
+    """
+    return _run_plain_llm_df_anchor_baseline(
+        state,
+        default_anchor_path=_DOC_ANCHOR_TABLE_DEFAULT,
+        arm_label="df_doc",
+    )
+
+
+def run_plain_llm_df_doc_union_baseline(state: AITesterState) -> dict[str, Any]:
+    """plain_llm_df + 人类规格锚 ∪ Planner SpecExpr 子句（P1 回退 (b) 档）。
+
+    锚材料 = 人类规格块 + 既有 Planner 锚表的 ``logic_analysis``（内容寻址
+    命中时并入；未命中只保留人类规格）——保留形式化子句增益，但不让
+    Planner 再描述**替换**人类规格。
+    """
+    return _run_plain_llm_df_anchor_baseline(
+        state,
+        default_anchor_path=_DOC_ANCHOR_TABLE_UNION_DEFAULT,
+        arm_label="df_doc_union",
+    )
+
+
 # 基线方法注册表
 BASELINE_REGISTRY: dict[str, callable] = {
     "aitester": run_aitester_baseline,
@@ -527,6 +645,12 @@ BASELINE_REGISTRY: dict[str, callable] = {
     # A-10（2026-10-16 独立评审 P0）：检出优先 + 规格锚归因臂（同上口径，
     # 显式 --baselines 指定；依赖锚表工件，见 run_plain_llm_df_spec_baseline）
     "plain_llm_df_spec": run_plain_llm_df_spec_baseline,
+    # P1（2026-10-17 独立评审 §6 P1 / A-02）：人类 docstring 独立规格锚两臂
+    # （显式 --baselines 指定；依赖 docstring 锚表工件，见
+    # docs/design/docstring_anchor.md——doc=纯人类规格 / union=人类规格 +
+    # Planner SpecExpr 子句并集）
+    "plain_llm_df_doc": run_plain_llm_df_doc_baseline,
+    "plain_llm_df_doc_union": run_plain_llm_df_doc_union_baseline,
 }
 
 
@@ -3737,6 +3861,11 @@ def run_benchmark(
         # 快照——表内容决定 df_spec 臂的 prompt 材料，"用了哪版锚表"必须
         # 能从工件 provenance 逐位证明（同 A1 首跑假阴性机制）。
         "DF_SPEC_ANCHOR_TABLE",
+        # 2026-10-17（P1 docstring 锚臂·第九次同类缺口预防）：docstring 锚表
+        # 路径入快照——plain_llm_df_doc / plain_llm_df_doc_union 两臂的 prompt
+        # 材料完全由该表决定（人类规格 / 人类规格 ∪ Planner 子句），"用了哪版
+        # 锚表"必须从工件 provenance 逐位证明（同 A1 首跑假阴性机制）。
+        "DOC_ANCHOR_TABLE",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:
