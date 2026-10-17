@@ -16,13 +16,14 @@ C1/C2/C3/C4/C14 等核心声明提供可重放的独立复算。
 环境：Python 3.14（.venv）；依赖 scipy（仅用于 binomtest/wilson 的交叉核对）。
 """
 
+# ruff: noqa: T201 — 本脚本为一次性 CLI 复算工具，stdout 全量 JSON 即其输出界面
 from __future__ import annotations
 
 import hashlib
 import json
 import platform
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -73,7 +74,9 @@ def or_exact_ci(b: int, c: int, z: float = 1.959963984540054) -> tuple[float, fl
     return (float(__import__("math").exp(lor - z * se)), float(__import__("math").exp(lor + z * se)))
 
 
-def cluster_bootstrap_diff(pairs: list[tuple[int, int]], n_boot: int = 20000, seed: int = 42) -> tuple[float, float, float]:
+def cluster_bootstrap_diff(
+    pairs: list[tuple[int, int]], n_boot: int = 20000, seed: int = 42
+) -> tuple[float, float, float]:
     """配对风险差（arm_a − arm_b）的 cluster bootstrap 95%CI。
     pairs: [(a_i, b_i)]，a/b ∈ {0,1}。聚类单位 = 配对单元本身（task×seed）。"""
     import random
@@ -121,7 +124,7 @@ def sha256(path: Path) -> str:
 def main() -> None:
     report: dict = {
         "meta": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "python": sys.version,
             "platform": platform.platform(),
             "cwd": str(ROOT),
@@ -154,8 +157,16 @@ def main() -> None:
     report["claims"]["C1_three_arm_detection"] = c1
 
     # 配对（同 seed 同 task）：aitester vs plain_llm_df
-    pairs_ad = [(per_arm["aitester"][k], per_arm["plain_llm_df"][k]) for k in per_arm["aitester"] if k in per_arm["plain_llm_df"]]
-    pairs_dp = [(per_arm["plain_llm_df"][k], per_arm["plain_llm"][k]) for k in per_arm["plain_llm_df"] if k in per_arm["plain_llm"]]
+    pairs_ad = [
+        (per_arm["aitester"][k], per_arm["plain_llm_df"][k])
+        for k in per_arm["aitester"]
+        if k in per_arm["plain_llm_df"]
+    ]
+    pairs_dp = [
+        (per_arm["plain_llm_df"][k], per_arm["plain_llm"][k])
+        for k in per_arm["plain_llm_df"]
+        if k in per_arm["plain_llm"]
+    ]
 
     def mcnemar_block(pairs: list[tuple[int, int]], name: str) -> dict:
         b = sum(1 for a, x in pairs if a == 1 and x == 0)
@@ -187,7 +198,7 @@ def main() -> None:
     # ---- C4：E4 FIXED harness ---------------------------------------------
     e4_dir = ROOT / "experiments/results/e6_a1_batches/e4_quixbugs_FIXED_harness"
     e4 = {}
-    for arm, fname in [("aitester", "aitester.json"), ("plain_llm_df", "plain_llm_df.json")]:
+    for _arm, fname in [("aitester", "aitester.json"), ("plain_llm_df", "plain_llm_df.json")]:
         f = e4_dir / fname
         report["inputs"][str(f.relative_to(ROOT))] = sha256(f)
         e4.update(load_arm_details(f))
@@ -196,25 +207,52 @@ def main() -> None:
     k_a, n_a = sum(e4["aitester"].values()), len(e4["aitester"])
     k_b, n_b = sum(e4["plain_llm_df"].values()), len(e4["plain_llm_df"])
     blk["arm_rates"] = {
-        "aitester": {"positive": k_a, "n": n_a, "rate": round(k_a / n_a, 4), "wilson95": [round(x, 4) for x in wilson_ci(k_a, n_a)]},
-        "plain_llm_df": {"positive": k_b, "n": n_b, "rate": round(k_b / n_b, 4), "wilson95": [round(x, 4) for x in wilson_ci(k_b, n_b)]},
+        "aitester": {
+            "positive": k_a,
+            "n": n_a,
+            "rate": round(k_a / n_a, 4),
+            "wilson95": [round(x, 4) for x in wilson_ci(k_a, n_a)],
+        },
+        "plain_llm_df": {
+            "positive": k_b,
+            "n": n_b,
+            "rate": round(k_b / n_b, 4),
+            "wilson95": [round(x, 4) for x in wilson_ci(k_b, n_b)],
+        },
     }
     report["claims"]["C4_e4_quixbugs"] = blk
 
     # ---- C14：df_spec 双臂（41 缺陷程序口径）-------------------------------
     dfs_dir = ROOT / "experiments/results/emse_df_spec_20261016"
     dfs = {}
-    for arm, fname in [("plain_llm_df_spec", "benchmark_quixbugs_20261016_232138.json"), ("plain_llm_df", "benchmark_quixbugs_20261017_003023.json")]:
+    for _arm, fname in [
+        ("plain_llm_df_spec", "benchmark_quixbugs_20261016_232138.json"),
+        ("plain_llm_df", "benchmark_quixbugs_20261017_003023.json"),
+    ]:
         f = dfs_dir / fname
         report["inputs"][str(f.relative_to(ROOT))] = sha256(f)
         dfs.update(load_arm_details(f))
-    pairs_dfs = [(dfs["plain_llm_df_spec"][k], dfs["plain_llm_df"][k]) for k in dfs["plain_llm_df_spec"] if k in dfs["plain_llm_df"]]
+    pairs_dfs = [
+        (dfs["plain_llm_df_spec"][k], dfs["plain_llm_df"][k])
+        for k in dfs["plain_llm_df_spec"]
+        if k in dfs["plain_llm_df"]
+    ]
     blk14 = mcnemar_block(pairs_dfs, "plain_llm_df_spec vs plain_llm_df (df_spec, 41 口径可判定配对)")
     k_s, n_s = sum(dfs["plain_llm_df_spec"].values()), len(dfs["plain_llm_df_spec"])
     k_d, n_d = sum(dfs["plain_llm_df"].values()), len(dfs["plain_llm_df"])
     blk14["arm_rates"] = {
-        "plain_llm_df_spec": {"positive": k_s, "n": n_s, "rate": round(k_s / n_s, 4), "wilson95": [round(x, 4) for x in wilson_ci(k_s, n_s)]},
-        "plain_llm_df": {"positive": k_d, "n": n_d, "rate": round(k_d / n_d, 4), "wilson95": [round(x, 4) for x in wilson_ci(k_d, n_d)]},
+        "plain_llm_df_spec": {
+            "positive": k_s,
+            "n": n_s,
+            "rate": round(k_s / n_s, 4),
+            "wilson95": [round(x, 4) for x in wilson_ci(k_s, n_s)],
+        },
+        "plain_llm_df": {
+            "positive": k_d,
+            "n": n_d,
+            "rate": round(k_d / n_d, 4),
+            "wilson95": [round(x, 4) for x in wilson_ci(k_d, n_d)],
+        },
     }
     blk14["note"] = "p_one_sided 方向为 df_spec > df（H1 方向）；实测 b<c 故单向 p 接近 1，即显著方向与 H1 相反"
     report["claims"]["C14_df_spec"] = blk14
@@ -255,7 +293,10 @@ def main() -> None:
     # detection 率变动上界 = 期望翻转数 / n。
     e7 = {}
     for label, n in [("quixbugs_41_caliber", 37), ("quixbugs_all_50", 50)]:
-        e7[label] = {f"q={q}": {"expected_flips": round(n * q, 1), "detection_rate_bound_pp": round(n * q / n * 100, 1)} for q in (0.05, 0.10, 0.20)}
+        e7[label] = {
+            f"q={q}": {"expected_flips": round(n * q, 1), "detection_rate_bound_pp": round(n * q / n * 100, 1)}
+            for q in (0.05, 0.10, 0.20)
+        }
     report["claims"]["E7_gold_error_sensitivity"] = {
         "model": "gold 判定错误率 q → 期望翻转 n*q → detection 率偏差上界 ±q（线性放大不考虑方向抵消）",
         "bounds": e7,
