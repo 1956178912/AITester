@@ -477,6 +477,139 @@ def _lookup_spec_anchor(state: AITesterState) -> dict[str, Any] | None:
     return material if isinstance(material, dict) else None
 
 
+def _attach_generated_spec_examples(state: AITesterState) -> int:
+    """Q-1（2026-10-18）：无 Planner 臂（df_spec/doc/union/augment）的示例生成接线。
+
+    双门 ``SPEC_ORACLE_EXAMPLES_ENABLE ∧ SPEC_ORACLE_EXEC_ENABLE`` 开启时，
+    对这些"Planner 关闭、只有锚材料"的臂调用
+    ``experiments/spec_examples_generator.py``（**spec-only**，不发送缺陷代码）：
+    - 每任务 **+1 次 LLM 调用**（小 max_tokens、示例 ≤3 条、cache namespace
+      沿用当前 ``AITESTER_CACHE_NAMESPACE``）；
+    - 成功 → 把 examples 并入锚材料（``spec_anchor.logic_analysis``；仅
+      human_spec 的锚则构造 ``{"function_name", "examples"}`` 的 logic_analysis），
+      N-3 材料解析器随后解析并编译为逐示例断言；
+    - 失败/空 → 透传空、不修改锚材料（回落无示例口径，可审计：行字段
+      ``spec_oracle_examples_source=none``）。
+
+    Args:
+        state: 任务初始状态（需已写入 ``spec_anchor``）。
+
+    Returns:
+        附加示例条数（0 = 开关关/无材料/生成失败/空示例）。
+    """
+    try:
+        from experiments.spec_examples_generator import (
+            PRODUCTION_MAX_EXAMPLES,
+            generate_spec_examples,
+            spec_examples_production_enabled,
+        )
+    except Exception:  # pragma: no cover - 实验层导入失败不阻断主链路
+        return 0
+    if not spec_examples_production_enabled():
+        return 0
+    anchor = state.get("spec_anchor")
+    if not isinstance(anchor, dict) or not anchor:
+        return 0
+    logic = anchor.get("logic_analysis")
+    logic_material: dict[str, Any] | None = None
+    if isinstance(logic, dict) and logic:
+        logic_material = logic
+        material: dict[str, Any] = dict(logic)
+        kind = "logic"
+    else:
+        human_spec = anchor.get("human_spec")
+        if not (isinstance(human_spec, str) and human_spec.strip()):
+            return 0
+        material = {"function_name": str(anchor.get("function_name") or ""), "human_spec": human_spec}
+        kind = "human"
+    human_anchor = anchor.get("human_spec")
+    if isinstance(human_anchor, str) and human_anchor.strip():
+        material.setdefault("human_spec", human_anchor)
+    target_function = str(
+        state.get("target_function") or anchor.get("function_name") or material.get("function_name") or ""
+    )
+    from src.specs import extract_signature_params
+
+    sig_params = extract_signature_params(str(state.get("target_code") or ""), target_function)
+    try:
+        result = generate_spec_examples(
+            material,
+            signature_params=sig_params,
+            task_id=str(state.get("task_id") or ""),
+            max_examples=PRODUCTION_MAX_EXAMPLES,
+        )
+    except Exception as e:  # 失败透传（不阻断任务）
+        logger.warning("Q-1 示例生成异常，透传空（无示例口径）：%s", e)
+        return 0
+    examples = result.get("examples") or []
+    if not examples:
+        logger.info(
+            "Q-1 示例生成无有效示例（status=%s reason=%s），回落无示例口径",
+            result.get("status"),
+            result.get("reason"),
+        )
+        return 0
+    new_anchor = dict(anchor)
+    if kind == "logic" and logic_material is not None:
+        new_logic = dict(logic_material)
+        new_logic["examples"] = examples
+        new_anchor["logic_analysis"] = new_logic
+    else:
+        new_anchor["logic_analysis"] = {"function_name": target_function, "examples": examples}
+    state["spec_anchor"] = new_anchor
+    logger.info(
+        "Q-1 已附加 %d 条 spec-only 示例（source=spec_generator, fn=%s）",
+        len(examples),
+        target_function or "?",
+    )
+    return len(examples)
+
+
+def _spec_oracle_examples_fields(state: dict[str, Any] | None) -> dict[str, Any]:
+    """Q-1 行字段：示例来源/条数（成功/失败两分支键位一致）。
+
+    口径（只报"实际被 oracle 使用的示例"）：
+    - ``planner``：examples 来自 Planner 现场输出（``spec_ir`` 优先，
+      ``test_plan.logic_analysis`` 兜底）；
+    - ``spec_generator``：无 Planner 臂由 spec-only 生成器附加到
+      ``spec_anchor.logic_analysis`` 的示例；
+    - ``none``：开关关 / 无示例（含生成失败/空）；
+    ``count`` = 该来源实际示例条数（int，关闭时 0）。开关关时恒 none/0
+    （历史批次 JSON 键位同构，值语义不变）。
+    """
+    source = "none"
+    count = 0
+    try:
+        from src.agents.planner import spec_oracle_examples_enabled
+
+        enabled = spec_oracle_examples_enabled()
+    except Exception:  # pragma: no cover
+        enabled = False
+    if state and enabled:
+
+        def _count(container: Any) -> int:
+            if isinstance(container, dict):
+                examples = container.get("examples")
+                if isinstance(examples, list) and examples:
+                    return len(examples)
+            return 0
+
+        n = _count(state.get("spec_ir"))
+        if n:
+            source, count = "planner", n
+        else:
+            test_plan = state.get("test_plan")
+            n = _count(test_plan.get("logic_analysis")) if isinstance(test_plan, dict) else 0
+            if n:
+                source, count = "planner", n
+            else:
+                anchor = state.get("spec_anchor")
+                n = _count(anchor.get("logic_analysis")) if isinstance(anchor, dict) else 0
+                if n:
+                    source, count = "spec_generator", n
+    return {"spec_oracle_examples_source": source, "spec_oracle_examples_count": count}
+
+
 def run_plain_llm_df_spec_baseline(state: AITesterState) -> dict[str, Any]:
     """plain_llm_df + 规格锚（A-10/2026-10-16，独立评审 P0：P1 超越路径核心对照臂）。
 
@@ -506,6 +639,8 @@ def run_plain_llm_df_spec_baseline(state: AITesterState) -> dict[str, Any]:
         state["spec_anchor"] = anchor
     else:
         logger.info("df_spec：任务 %s 无规格锚材料（回落 df 口径）", state.get("task_id", "?"))
+    # Q-1：无 Planner 臂在双门开时 +1 次 spec-only 示例生成（默认关零变化）
+    _attach_generated_spec_examples(state)
     graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
     _cfg.set_detection_first_thread_override(True)
     set_spec_mode_thread_override("replace")
@@ -601,6 +736,8 @@ def _run_plain_llm_df_anchor_baseline(
         state["spec_anchor"] = anchor
     else:
         logger.info("%s：任务 %s 无锚材料（回落 df 口径）", arm_label, state.get("task_id", "?"))
+    # Q-1：无 Planner 臂在双门开时 +1 次 spec-only 示例生成（默认关零变化）
+    _attach_generated_spec_examples(state)
     graph = build_workflow(planner=False, debugger=False, allow_regeneration=True)
     _cfg.set_detection_first_thread_override(True)
     set_spec_mode_thread_override(spec_mode)
@@ -1677,6 +1814,11 @@ def _build_task_result(
             #     None。
             "spec_oracle_injected": final_state.get("spec_oracle_injected"),
             "spec_oracle_verdict": final_state.get("spec_oracle_verdict"),
+            # Q-1（2026-10-18，示例通道生产接线）：examples 来源/条数审计。
+            # source ∈ planner / spec_generator / none；count = 实际被 oracle
+            # 使用的示例数（默认关恒 none/0，历史键位同构）。成功/失败分支
+            # 键位一致（失败分支见下方 None 占位段）。
+            **_spec_oracle_examples_fields(final_state),
             # P0-A-2（2026-10-12 独立评审落地，SPEC_REPLACE_AB_REPORT §5 建议）：
             # 规格优先替换段逐任务可审计观测——DETECTION_SPEC_MODE=replace 时
             # "attempted_replaced"（规约材料非空，规约文档实际替换了目标代码
@@ -1932,6 +2074,10 @@ def _build_task_result(
         # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
         "spec_oracle_injected": None,
         "spec_oracle_verdict": None,
+        # Q-1：示例审计键失败分支占位（无 final_state → 键集合同构；默认关
+        # 恒 none/0，历史批次 JSON 向后兼容）
+        "spec_oracle_examples_source": "none",
+        "spec_oracle_examples_count": 0,
         # P0-A-2（2026-10-12）：规格优先替换段观测键失败分支占位
         # （无 final_state → 键集合同构；不影响历史批次 JSON 的键集合）
         "spec_replace_applied": None,
@@ -3987,6 +4133,13 @@ def run_benchmark(
         # 材料完全由该表决定（人类规格 / 人类规格 ∪ Planner 子句），"用了哪版
         # 锚表"必须从工件 provenance 逐位证明（同 A1 首跑假阴性机制）。
         "DOC_ANCHOR_TABLE",
+        # Q-1（2026-10-18）：示例通道生产接线双门之一入快照——examples 会改变
+        # Planner prompt 契约与 oracle 产物（逐示例断言），Q-2 A/B 的干预
+        # 生效性必须能从工件 provenance 逐位证明（同 A1 首跑假阴性机制）。
+        "SPEC_ORACLE_EXAMPLES_ENABLE",
+        # Q-3（2026-10-18）：批后处理墙钟告警阈值——仅登记（默认 600s），
+        # 用于从工件审计后处理告警阈值口径（不改变主链路行为）。
+        "AITESTER_POSTPROCESS_WARN_S",
     ]
     _env_snapshot: dict[str, str | None] = {}
     for _k in _env_snapshot_keys:

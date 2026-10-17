@@ -38,7 +38,7 @@ from config import (
 from src.agents.debugger import DebuggerAgent  # noqa: F401
 from src.agents.executor import ExecutorAgent  # noqa: F401
 from src.agents.generator import GeneratorAgent, _repro_test_enabled
-from src.agents.planner import PlannerAgent
+from src.agents.planner import PlannerAgent, spec_oracle_examples_enabled
 from src.agents.rogue_monitor import rogue_monitor_enabled
 from src.budget.cost_budget import BudgetExceededError
 
@@ -282,6 +282,12 @@ def _append_spec_oracle_to_test_with_verdict(generated_test: str, state: AITeste
     # 锚材料）永远 not_attempted。human_spec（人类 docstring）不强行编译，
     # 如实记 not_attempted_human_spec_only。
     spec_material, material_source, not_attempted_verdict = _resolve_spec_oracle_material(state)
+    # Q-1（2026-10-18）：examples 通道双门守门——开关关时即使材料里带 examples
+    # （历史缓存/外部构造）也**剥离**后再编译，保证关闭口径与历史逐字节一致；
+    # 开关开且材料带 examples 时由 compile_spec_oracle 逐示例编译断言。
+    if not spec_oracle_examples_enabled() and isinstance(spec_material, dict) and "examples" in spec_material:
+        spec_material = {key: value for key, value in spec_material.items() if key != "examples"}
+        material_source = f"{material_source}+examples_stripped"
     oracle_func = str(state.get("target_function") or "")
     if not oracle_func and isinstance(spec_material, dict):
         oracle_func = str(spec_material.get("function_name") or "")

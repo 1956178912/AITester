@@ -149,6 +149,64 @@ def _build_spec_expr_grammar_section() -> str:
 SPEC_EXPR_GRAMMAR_SECTION = _build_spec_expr_grammar_section()
 
 
+# ─── Q-1（2026-10-18）：规格可执行示例通道（Planner prompt 契约）─────────────
+# 背景：P-1/P-1.1 在重放中验证"LLM spec-only 生成的可执行示例"能带来真检出，
+# 但从未进入真实 Planner 链路。Q-1 新增双门 env：
+#   SPEC_ORACLE_EXAMPLES_ENABLE=true ∧ SPEC_ORACLE_EXEC_ENABLE=true
+# 时才在 Planner prompt 追加 examples 契约段；默认关 → prompt 逐字节不变
+# （ADR-0003 零变化口径）。examples 由 compile_spec_oracle 编译为逐示例断言，
+# 经 N-3 独立判读（oracle_suite_verdict）真实计入质量测量。
+_SPEC_EXAMPLES_PROMPT_MAX = 3
+
+
+def spec_oracle_examples_enabled() -> bool:
+    """Q-1 双门开关：SPEC_ORACLE_EXAMPLES_ENABLE ∧ SPEC_ORACLE_EXEC_ENABLE。
+
+    默认两个都关 → False（历史 prompt/产物零变化）。只有执行注入开关也开着
+    才请求 examples——否则请求了也不会被编译注入，纯浪费 prompt token。
+    """
+    return env_flag("SPEC_ORACLE_EXAMPLES_ENABLE") and env_flag("SPEC_ORACLE_EXEC_ENABLE")
+
+
+SPEC_EXPR_EXAMPLES_SECTION = """
+【规格可执行示例（SPEC_ORACLE_EXAMPLES_ENABLE=true，严格执行）】
+在 logic_analysis 中追加可选字段 "examples"（与 pre/post/*_expr 字段并行，不替代）：
+"examples": [{"input": [...], "expected": ...}]
+规则：
+1. 最多 3 条；每条必须是 {"input": <JSON 字面量列表>, "expected": <JSON 字面量>}，必须是合法 JSON。
+2. input 是**按函数参数顺序展开的实参列表**（单参函数也写成 [x]）；input 中每个值
+   必须是 int/float/str/True/False/None/列表/字典等 JSON 字面量。
+3. expected 必须是 JSON 字面量，且**由规格（docstring / 类型注解 / 前置后置条件 /
+   边界情况）推导**，不得根据实现代码猜测；规格未定义该输入的行为时不要输出。
+4. 输入尽量小（避免大整数 / 长序列 / 深递归），保证能快速执行。
+5. 只输出能由规格明确判定的示例；无法确定 expected 就宁可不输出该条。
+6. 输出前自检：examples 是否为合法 JSON、条数 ≤3、input 为实参列表、expected 为 JSON 字面量。
+"""
+
+
+def _sanitize_logic_analysis_examples(result: dict[str, Any], enabled: bool) -> None:
+    """Q-1：Planner 返回的 examples 严格净化（≤3、非法丢弃、关闭时删除）。
+
+    - 开关开：只保留合法 JSON 字面量示例，最多 ``_SPEC_EXAMPLES_PROMPT_MAX`` 条
+      （抽取逻辑与 ``spec_ir.parse_examples`` 同源；非法形状丢弃不抛）；
+    - 开关关：**删除** ``logic_analysis.examples``（即使模型/缓存自发输出），
+      保证关闭时下游 SpecIR/oracle 产物与历史口径逐字节一致。
+    """
+    logic = result.get("logic_analysis")
+    if not isinstance(logic, dict):
+        return
+    if not enabled:
+        logic.pop("examples", None)
+        return
+    from src.specs.spec_ir import parse_examples
+
+    examples = parse_examples(logic.get("examples"), max_examples=_SPEC_EXAMPLES_PROMPT_MAX)
+    if examples:
+        logic["examples"] = examples
+    else:
+        logic.pop("examples", None)
+
+
 def _logic_spec_strict_fallback_enabled() -> bool:
     """AB1（2026-10-06 生死实验根因修复）：M10 强校验拒绝的降级出口开关。
 
@@ -332,6 +390,10 @@ class PlannerAgent(BaseAgent):
             # W2/T1（2026-10-11 独立评审 F14）：契约段说"要哪三个字段"，文法段
             # 说"什么形态才真的能被编译"——补上 BNF + 5 正例 + 5 反例 + 自检。
             query += SPEC_EXPR_GRAMMAR_SECTION
+        # Q-1（2026-10-18）：规格可执行示例契约段。双门（EXAMPLES ∧ EXEC）都开
+        # 才追加——默认关时 prompt 与历史**逐字节一致**（零变化口径）。
+        if spec_oracle_examples_enabled():
+            query += SPEC_EXPR_EXAMPLES_SECTION
 
         # 调用 LLM 获取原始响应（内含逻辑分析和测试计划），带文件缓存省 token
         raw = self._call_llm_with_cache(query, json_mode=True)
@@ -385,6 +447,9 @@ class PlannerAgent(BaseAgent):
                 _strict_reject(result, "M10 LOGIC_SPEC_STRICT_ENABLE=true：logic_analysis 缺失，拒绝静默兜底")
         else:
             result.setdefault("logic_degraded", False)
+        # Q-1：examples 严格净化（≤3、非法丢弃；关闭时删除键）——在 schema
+        # 校验/下游 parse_logic_analysis 之前收敛，防止脏示例进入 oracle 编译。
+        _sanitize_logic_analysis_examples(result, spec_oracle_examples_enabled())
         # M10（2026-09-29 审查 P0）：schema 强校验——对 logic_analysis 做
         # 必填字段 + 类型 + 非空校验（纯数据，零 LLM 成本）。findings 非空时
         # 写入 result["logic_spec_findings"]（纯观测，不参与路由），供

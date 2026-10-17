@@ -586,3 +586,77 @@ LLM 示例期望值错误，归一只改表示比较、不改错误期望）。
 结论：表示型误差清零，剩余错误仅 2 例 spec-only 示例幻觉；correct 8/13、
 错误 2/13（n=20、单次重放，**探索性**）。下一步按 Lead 裁决：示例自校验/
 二次过滤（消除幻觉）→ 生产接线（下一轮，涉及 nodes/run_benchmark 写域与配额）。
+
+## 13. Q-1 示例通道生产接线（2026-10-18）
+
+P-1/P-1.1 只在重放工具中验证示例通道；Q-1 把它接入真实生产链路，为 Q-2 二臂
+A/B 提供开关。**默认关 → 零行为变化**。
+
+### 13.1 开关与 Planner 契约
+
+新 env `SPEC_ORACLE_EXAMPLES_ENABLE`（默认 false），与既有
+`SPEC_ORACLE_EXEC_ENABLE` 组成**双门**：两者都为 true 时
+`PlannerAgent.plan` 在 prompt 末尾追加 `SPEC_EXPR_EXAMPLES_SECTION`
+（`src/agents/planner.py`）——请求 `logic_analysis.examples`：≤3 条、
+`[{"input": <JSON 字面量列表>, "expected": <JSON 字面量>}]`、input 为按参数
+顺序展开的实参列表、expected **由规格推导而非实现猜测**、输入尽量小、无法
+判定则不输出。关闭时该段不追加（prompt 与历史**逐字节一致**，单测以
+`on_query == off_query + SECTION` 锁定；删契约负控亦覆盖）。
+
+Planner 返回后 `_sanitize_logic_analysis_examples` 严格净化：≤3 条、非法
+JSON 字面量/形状丢弃不抛；开关关时**删除** `logic_analysis.examples`（即使
+模型/缓存自发输出），保证下游 SpecIR/oracle 产物与历史口径一致。
+
+### 13.2 链路生效与材料源
+
+`Planner → parse_logic_analysis（examples 透传）→ compile_spec_oracle
+（逐示例断言，P-1.1 归一比较 + O-1 harness）→ N-3 独立判读` 全链路真实
+生效：`nodes._resolve_spec_oracle_material` 四源优先级不变，`spec_ir` /
+`test_plan.logic_analysis` 中的 examples 直接进入编译。开关关时
+`_append_spec_oracle_to_test_with_verdict` 在编译前**剥离**材料中的 examples
+（`material_source` 追加 `+examples_stripped` 日志），关闭口径与历史逐字节
+一致（单测锁定）。
+
+无 Planner 臂（`plain_llm_df_spec` / `_doc` / `_doc_union` / `_doc_augment`）：
+`run_benchmark._attach_generated_spec_examples` 在双门开时调用
+`experiments/spec_examples_generator.py`（**spec-only**、不发送缺陷代码、
+每任务 **+1 次 LLM 调用**、示例 ≤3、max_tokens 默认 512、cache namespace
+沿用 `AITESTER_CACHE_NAMESPACE`）；成功 → examples 并入
+`spec_anchor.logic_analysis`（仅 human_spec 的锚构造
+`{"function_name", "examples"}` 的 logic_analysis），失败/空/异常透传空且
+不改锚材料。
+
+### 13.3 审计字段与 env 门禁
+
+结果行新增两键（成功/失败分支键位一致）：
+`spec_oracle_examples_source ∈ {planner, spec_generator, none}`、
+`spec_oracle_examples_count`（int，实际被 oracle 使用的条数；默认关恒
+none/0）。`spec_ir`/`test_plan.logic_analysis` → `planner`；
+`spec_anchor.logic_analysis` → `spec_generator`；无示例 → `none`。
+
+env 门禁：`SPEC_ORACLE_EXAMPLES_ENABLE` 与 Q-3 的
+`AITESTER_POSTPROCESS_WARN_S`（默认 600，仅登记）已登记入
+`docs/env_budget.yaml` 与 `experiments/run_benchmark.py::_env_snapshot_keys`；
+`check_env_budget.py --check` / `check_env_snapshot_keys.py` / `check_baseline.py`
+全绿。Q-3 的键由 `check_env_budget.py::MANUALLY_REGISTERED` 保登记（该键由
+experiments/postprocess_wall.py 消费，实验脚本不在产品开关扫描面）。
+
+### 13.4 零差异证据 / 成本 / 测试
+
+- **关闭零差异**：Planner prompt 逐字节不变（单测 on=off+SECTION）；节点层
+  剥离 examples 后产物与无示例编译逐字节一致；行字段 none/0；`SPEC_ORACLE_*`
+  历史批次工件不受影响。
+- **成本估算**（Q-2 aitester 双臂）：契约段约 +250 input tokens/任务；20 任务
+  ×2 臂 ≈ +10k tokens，按 deepseek-flash 峰时价 < **$0.01**；无 Planner 臂
+  的 spec_generator 每任务 +1 次小调用（max_tokens 512），20 任务约
+  +$0.006/臂（Q-2 不用该路径）。
+- **测试**：`tests/test_oracle_examples_production.py` 33 例（双门开关、prompt
+  逐字节/契约内容/删契约负控、净化≤3、planner→oracle 端到端断言、关闭剥离
+  逐字节、生成器调用/降级/human_spec 锚、行字段三分支两键位、env 门禁子进程）；
+  相关回归 395+202 例通过；ruff/mypy 目标文件干净。
+- **端到端 demo（mock LLM，零真实调用）**：mock Planner 返回 examples
+  `[{"input":[2,3],"expected":5}]` → `plan()` → `nodes` 注入产物出现
+  `assert _specir_norm_return(add(2, 3)) == _specir_norm_return(5)` 且
+  `examples=1`；开关关时同一路径产物与无示例编译逐字节一致（见
+  `test_planner_examples_compile_to_assertions` /
+  `test_disabled_strips_examples_and_matches_no_example_output`）。
