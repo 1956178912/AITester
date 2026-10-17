@@ -35,6 +35,7 @@
 | [0032](0032-m10-leaf-fallback-observability.md) | M10 可观测性强化（叶子回退静默片段显式告警） | 已采纳（纯观测，无开关——解析行为零变化） | ADR-0031 §已知局限②落实：叶子降级档命中时置模块级哨兵 `was_leaf_fallback_used()` + warning 日志；Planner M10 归因改写（`m10_leaf_fallback=True` 纯观测标记，分离"LLM 真未输出" vs "提取器误诊"）；6 例回归测试锁定纯观测纪律 | `src/utils/helpers.py`、`src/agents/planner.py`、`tests/test_llm_oms_leaf_fallback.py` |
 | [0033](0033-packaged-test-tree-flat-import-artifact.md) | 测量伪影第四起——判分树包结构 vs 平铺 import（detection 构造性恒 0） | 已采纳（2026-10-10 修复，2026-10-15 补登记） | 判分树只提供 `python_programs/{module}.py` 包结构、生产沙箱平铺写 `{module}.py` ⇒ 扁平 import 在判分树 `ModuleNotFoundError`/rc=2 ⇒ detection **构造性恒 0**；9/9 双侧 rc=2 → 修双布局后 F2P 0/7→6/7；E4 重结算 aitester 0.0%→45.9% vs df 83.8%（p=0.0005，方向不变）；三段判定逐字未改且有回归锁定 | `experiments/_m1_metrics.py`、`src/datasets/synthetic_dataset.py`、`docs/preregistration.md` |
 | [0034](0034-orchestration-search-freeze-and-unblock.md) | 编排自动搜索（16 臂 bandit）冻结登记——工程骨架就绪、未经实跑验证 | 已采纳（冻结；解锁条件在案） | 评审 A-11 审计歧义关闭：实现+测试矩阵在场但**从未实跑**（无工件）；冻结期间禁止"自动搜索增益"类表述；解锁五条件=预注册先落盘 / 等预算对照（E6 教训）/ 前置闸全绿 / 终点跑批前后一致 / 多重比较校正；优先级低于 B1/T-1/P1；下一投稿周期前不跑则删除或降格 experimental | `src/graph/orchestration_search.py`、`experiments/run_orchestration_search.py`、`tests/test_orchestration_search_matrix.py` |
+| [0035](0035-self-recursive-clause-binding.md) | SpecExpr 被测函数自递归子句——目标函数名入绑定上下文 | 已采纳 | 把 `target_function` 作为受限自调用注入 SpecExpr DSL 的绑定上下文与调用白名单（`_WhitelistVisitor.extra_call_names`），使 `fibonacci(5) == 5` 一类自递归规约（语料 6 实例：fibonacci×4/gcd×1/factorial×1）从「被 unsupported_operator 拒绝」变为「可编译为确定性 oracle 断言」；注入面只扩到被测函数自身（其余任意名字照旧危险调用门拒）；自指真值性与既有 `x == x` 恒真子句同一风险类、递归不终止由执行器 30s 超时兜底；与 df_spec 负结果的关系已限定（值取决于 Planner 是否从缺陷代码推导出正确属性，属规格优先路线通用风险） | `src/specs/spec_ir_v2.py`、`tests/test_spec_ir_v2.py` |
 
 ## 状态约定
 
@@ -45,8 +46,8 @@
 
 ## 维护惯例
 
-1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0033 已用 → 下一个
-   0034；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
+1. 新增 ADR 用下一个可用编号（当前 0001–0005、0011–0035 已用 → 下一个
+   0036；0006–0010 为历史保留段——AL 批次经 git 历史核实**从未被使用**
    （`git log --diff-filter=A` 零命中），为避免与外部引用错位不再回收，
    新 ADR 勿占用该段）；
 2. 文件命名 `NNNN-<kebab-slug>.md`；
