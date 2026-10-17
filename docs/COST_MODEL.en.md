@@ -102,7 +102,7 @@ from experiments.postprocess_wall import StageTimer, build_postprocess_wall, pos
 mdo_timer = StageTimer("mdo")
 for task in tasks:
     with mdo_timer.measure_task(timed_out=task.timed_out):
-        run_mdo_postprocess(task)              # unchanged post-processing logic
+        run_mdo_postprocess(task)  # unchanged post-processing logic
 
 # 2) aggregate into stable JSON (warn_s from env AITESTER_POSTPROCESS_WARN_S, default 600s)
 wall = build_postprocess_wall(
@@ -110,9 +110,9 @@ wall = build_postprocess_wall(
     timed_out={timer.stage: timer.timed_out_tasks for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
     warn_s=postprocess_warn_s(),
 )
-for message in wall.warnings:                  # 3) caller turns threshold violations into logger.warning
+for message in wall.warnings:  # 3) caller turns threshold violations into logger.warning
     logger.warning("%s", message)
-batch_report["postprocess_wall"] = wall        # 4) archive under the postprocess_wall key
+batch_report["postprocess_wall"] = wall  # 4) archive under the postprocess_wall key
 ```
 
 - `StageTimer` supports `with timer:` (stage wall), `with timer.measure_task():`

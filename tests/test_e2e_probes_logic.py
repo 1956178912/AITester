@@ -34,7 +34,8 @@ class TestRegistrationContract:
         assert len(logic.PROBES) >= 12
 
     def test_all_in_logic_group(self):
-        assert {p.group for p in logic.PROBES} == {"logic"}
+        # Q 轮新增 observability-postprocess-wall（后处理墙钟模块属可观测组）
+        assert {p.group for p in logic.PROBES} == {"logic", "observability"}
 
     def test_exactly_one_llm_probe(self):
         llm = [p for p in logic.PROBES if p.requires_llm]
@@ -45,8 +46,9 @@ class TestRegistrationContract:
             assert 10 <= probe.timeout_s <= 600, f"{probe.name} timeout 越界：{probe.timeout_s}"
 
     def test_names_prefixed(self):
+        allowed = ("logic-", "observability-")
         for probe in logic.PROBES:
-            assert probe.name.startswith("logic-"), f"{probe.name} 未按组前缀命名"
+            assert probe.name.startswith(allowed), f"{probe.name} 未按组前缀命名"
 
 
 class TestZeroLlmProbesPass:
@@ -67,6 +69,8 @@ class TestZeroLlmProbesPass:
             "logic-oracle-instrument-safety",
             "logic-oracle-replay-instrument-breakdown",
             "logic-oracle-precondition-input-filter",
+            "logic-oracle-examples-production",
+            "observability-postprocess-wall",
         ],
     )
     def test_probe_passes(self, probe_name):

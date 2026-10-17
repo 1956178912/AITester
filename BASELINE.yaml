@@ -14,12 +14,12 @@ version: "1"
 last_verified: "2026-10-17"   # 全量回归实测日期（2026-10-17 N 轮全功能优化批次后：`--collect-only` 实测 **8320**，登记值 passed = collected − skipped = 8320 − 5 = **8315**。本轮净增 **326** 例（7989 → 8315）= 探针框架/三组探针测试 26+56+54+22 + N 轮缺陷回归 146 + oracle 独立判读 48 + 其他，零代码回归。此前 M 轮：7994/5/0）
 
 tests:
-  total_passed: 8561          # 全量 pytest tests/（2026-10-18 P 轮批次后：`--collect-only` 实测 **8566**；登记口径 = collected − skipped = 8566 − 5 = 8561。本轮净增 **165** 例（8401 → 8566）= oracle 示例通道 62 + doctor 46 + A-19 wiring 26 + 覆盖率补齐 30 + 其他 1，零代码回归。此前 O 轮：8401/5）
+  total_passed: 8684          # 全量 pytest tests/（2026-10-18 Q 轮批次后：`--collect-only` 实测 **8689**；登记口径 = collected − skipped = 8689 − 5 = 8684。本轮净增 **123** 例（8566 → 8689）= Q-1 示例生产接线 33 + Q-3 后处理墙钟 88 + 探针新增 2，零代码回归。此前 P 轮：8566/5）
   total_failed: 0
   total_skipped: 5           # 2026-10-16 实测 5〔含 3 可选依赖缺失优雅跳过 + 1〔test_ult_adapter cosmic-ray 在场时"不可用口径不可演练"反跳〕+ 1 新增来源待定位〕
   total_xfailed: 0           # 2026-10-15：上一批次登记的 strict xfail（`parse_coverage` 小写 total 回退失效）已随缺陷修复解除；套件重新回到零 xfail。历史：2026-10-12 推导式变量误杀修复后转正 → 本批为第二轮零 xfail
   slim_environment: 1863     # 上一次精简环境实测（2026-10-05 N 批次；此后续批次未重测精简环境——新增用例均为纯 stdlib 或仅依赖既有可选依赖口径）
-  suite_seconds: 163           # 全量耗时：2026-10-18 P 轮**全绿收口全量**本机实测 163.03s（xdist -n 4 loadfile + `--cov=src --cov-branch`，8561 passed / 5 skipped / 0 failed；COVERAGE_FILE 隔离）。
+  suite_seconds: 162           # 全量耗时：2026-10-18 Q 轮**全绿收口全量**本机实测 162.1s（xdist -n 4 loadfile + `--cov=src --cov-branch`，8684 passed / 5 skipped / 0 failed；COVERAGE_FILE 隔离）。
 
 # ⚠️ 口径澄清（R5 审查 2026-10-09，MET-01）：本节是 **meta_coverage**——
 #   即 AITester **自身源码**（--cov=src）的测试覆盖率，不是被测代码的覆盖率。
@@ -27,7 +27,7 @@ tests:
 #   ULT/TOSEM'26）中的 "coverage" 一律指**被测代码**。对外引用必须显式区分；
 #   被测代码覆盖率见下方 target_quality 节。
 coverage:                    # = meta_coverage（项目自身源码），勿与 target_quality 混用
-  line_total_pct: 96.52      # --cov=src 总行覆盖（2026-10-18 P 轮**全绿收口全量**实测 **96.52%**〔17235/17857 行 = 96.5168%〕；分母 +446 = oracle 示例通道（解析/归一/编译）+ doctor 命令 + A-19 wiring 等 P 轮改动；O 轮 96.54%〔16720/17319〕。⚠️ 登记口径 = 全绿收口全量）
+  line_total_pct: 96.52      # --cov=src 总行覆盖（2026-10-18 Q 轮**全绿收口全量**实测 **96.52%**〔17269/17892 行 = 96.5180%〕；分母 +35 = Q-1 planner 契约/nodes 守门/env_utils 读取等；P 轮 96.52%〔17235/17857〕。⚠️ 登记口径 = 全绿收口全量）
   line_core_modules:         # 逐模块行覆盖（%，coverage.xml 实测四舍五入）。2026-10-16 I 轮逐项复核：**10 项中 1 项变动**（planner 98 → **100**，I 轮新增的 3 个写侧测试收复了 `planner.py:352/379`——即 ADR-0032 决策 2「Planner M10 归因改写」的写侧，此前**从未被任何测试执行过**）；graph_nodes 仍记 78，但其分数由 0.7776 升至 0.7789（分母 +4，见该行注）。其余 8 项 0 变动。G 轮复核记录：10 项中 1 项变动（dependency 95 → 96）；F 轮回填时的存量漂移记录：
                              # 本节此前为早期批次快照，10 项中 9 项已低于实测 3–14pp（如
                              # code_analyzer 记 89 / 实测 99、rag_retriever 记 86 / 实测 98），
@@ -42,7 +42,7 @@ coverage:                    # = meta_coverage（项目自身源码），勿与 
     multi_candidate: 99      # tools/multi_candidate.py（0.9867，296/300；K 轮 +21 行）
     cross_file: 93           # tools/cross_file.py（0.9283）
     rag_retriever: 98        # rag/retriever.py（0.9810）
-  branch_total_pct: 92.70  # --cov=src --cov-branch（2026-10-18 P 轮实测 **92.70%**〔6137/6620 = 92.7039%〕；ratchet 水位 92.5，余量 +0.20pp）
+  branch_total_pct: 92.70  # --cov=src --cov-branch（2026-10-18 Q 轮实测 **92.70%**〔6150/6634 = 92.7043%〕；ratchet 水位 92.5，余量 +0.20pp）
   branch_core_routing:       # 核心条件路由模块分支覆盖（scripts/gates/check_branch_coverage.py 门槛 85%）
     graph_workflow: 100     # _should_debug / _route_after_diagnosis / determine_stop_reason 条件路由（1.0000，K 轮 +1 行）
     error_classifier: 100    # classify 优先级链 + refine_failure_category 状态细化 + classify_with_confidence 置信度分层（1.0000，K 轮 +16 行）
@@ -198,6 +198,32 @@ target_quality:
     postprocessing_wall_variance: "同 cut/协议 control 墙钟 2102.4s（成功）→ >2400s（看门狗终止）→ 2297.4s（成功）：≥14% run-to-run 波动且出现 >2400s 尾部；建议 watchdog 按任务阶段+后处理预算+margin 配置（20 任务 ≥3600s）并输出逐阶段墙钟"
     artifacts: "experiments/results/emse_oracle_enabled_validation_20261017/（README + ARM_COMPARISON.json + PREFLIGHT.json + SHA256SUMS 00e3c6dc…，134 项 verify；含 _invalid_control_attempt_20261018/ 与 _attempt2_partial_control_timeout_20261018/ 归档）"
     interpretation: "oracle 注入链路可用且独立判读下不改变 LLM-suite 检出（19/20 一致，1 例在重跑噪声内）；O-1 之后 oracle verdict 无 fp（crash→unavailable/silent），本子集无 correct/misguided → 仅方向性支持，不作 oracle 质量结论；sequential pairing/小样本/后处理墙钟波动为已披露局限"
+  oracle_examples_production:  # Q-1（2026-10-18）：示例通道生产接线（默认关零差异；Q-2 A/B 的开关基础）
+    switch: "SPEC_ORACLE_EXAMPLES_ENABLE（默认 false；双门 SPEC_ORACLE_EXAMPLES_ENABLE ∧ SPEC_ORACLE_EXEC_ENABLE）"
+    wiring: "Planner prompt 契约段请求 logic_analysis.examples（≤3 条/JSON 形状/期望值由规格推导）→ parse_logic_analysis→compile_spec_oracle 逐示例断言→N-3 独立判读；无 Planner 臂双门开时 +1 次 spec-only 生成器调用（cache namespace/失败透传），行字段 spec_oracle_examples_source(planner/spec_generator/none)/_count"
+    zero_diff: "关闭时 prompt 逐字节不变、节点剥离 examples 后产物与无示例编译逐字节一致、行字段 none/0、无 Planner 臂零生成器调用（33 例单测锁定）"
+    tests: "tests/test_oracle_examples_production.py（33 例）"
+    cut_commit: "a48a53ffe1844d098b5a84e59ab70fb6375e661c（q-examples-cut）"
+  examples_ab:  # Q-2（2026-10-18）：示例通道生产化预注册二臂 A/B（aitester logic QuixBugs 20 任务）
+    nature: "预注册同批二臂 A/B；单次运行、n=20、低基数起步（A correct=0）；结论按冻结规则"
+    cut_commit: "a48a53ffe1844d098b5a84e59ab70fb6375e661c"
+    design: {arms: {A_control: "SPEC_ORACLE_EXEC_ENABLE=true / SPEC_ORACLE_EXAMPLES_ENABLE=false", B_examples: "true/true"}, dataset: quixbugs, task_limit: 20, seed: 42, profile: logic, concurrent: true, real_calls: true, cache: "AITESTER_LLM_CACHE=0", watchdog_seconds: 3600}
+    decision_rule: "confirmed = oracle-correct 新增 Δ≥2 ∧ LLM-suite 非劣(B≥A−5pp) ∧ McNemar 单侧 p<0.05；否则 not_confirmed"
+    criteria: {delta_oracle_correct: {value: 6, pass: true}, llm_suite_non_inferior: {A: "15/15=100.0%", B: "12/15=80.0%", delta_pp: -20.0, pass: false}, mcnemar: {b: 6, c: 0, one_sided_p: 0.015625, pass: true}}
+    verdict: "not_confirmed"
+    arms:
+      control: {rows: 20, exit: 0, wall_seconds: 2336, tokens: 267640, calls: 94, cost_usd: 0.137792, oracle_suite_verdict: {unavailable: 17, silent: 3}, examples_source: {none: 20}, llm_suite_detection: "15/15"}
+      examples: {rows: 20, exit: 0, wall_seconds: 2084, tokens: 276377, calls: 97, cost_usd: 0.138086, oracle_suite_verdict: {correct: 6, unavailable: 10, silent: 4}, examples_source: {planner: 17, none: 3}, examples_count: {mean: 2.25, total: 45, max: 3}, llm_suite_detection: "12/15"}
+    mismatch_tasks_detection: [detect_cycle, hanoi, knapsack]  # A=1→B=0（单次运行；需复核 trade-off vs 噪声）
+    batch_cost_usd: 0.275878
+    q_round_budget_estimate_usd: [0.48, 0.53]
+    artifacts: "experiments/results/q_round_examples_ab_20261018/（README 6d383619…/ANALYSIS_REPORT 5185d468…/SHA256SUMS e4b1dd5f… 101 项 verify）"
+    interpretation: "示例通道在生产链路显著增加 oracle-correct（+6 任务），但本单次运行同时观测 LLM-suite detection 下降 20pp → 按冻结规则 not_confirmed；**生产默认仍关**；下一轮先复核 detection 损失再决定是否生产化"
+  postprocess_wall:  # Q-3（2026-10-18）：批后处理墙钟可观测模块（hook 集成下一轮）
+    module: "experiments/postprocess_wall.py：StageTimer / build_postprocess_wall（wall/n/mean/p50/p95/max/timed_out，纯 stdlib 线性分位）/ 稳定 JSON / 阈值 warnings"
+    env: "AITESTER_POSTPROCESS_WARN_S（默认 600，坏值回退；读取实现 src/utils/env_utils.py::postprocess_warn_seconds，env 门禁可扫描）"
+    status: "模块+测试+文档交付；run_benchmark 后处理 hook（3 行示例已给）集成登记下一轮（默认零行为变化）"
+    tests: "tests/test_postprocess_wall_metrics.py（88 例）"
   oracle_examples_validation:  # P-1/P-1.1（2026-10-18）：规格可执行示例通道质量重放（**探索性**，非能力主张）
     # 机制：LLM **spec-only（不发送缺陷代码）** 生成 concrete examples → compile_spec_oracle 逐示例断言；
     # 用途：回答"correct 仍 0"是否只因断言不触达缺陷行为（示例提供 concrete 期望值）。
@@ -295,14 +321,14 @@ feature_matrix:            # N 轮（2026-10-17）：全功能端到端探针矩
   #       AITESTER_E2E_LLM=true + --include-llm；运行器强制 AITESTER_LLM_CACHE=0（真实调用）。
   measured_at: "2026-10-18"
   probe_modules: [scripts/tools/e2e_probes_workflow.py, scripts/tools/e2e_probes_platform.py, scripts/tools/e2e_probes_logic.py]
-  probes_total: 62
-  probes_by_group: {cli: 6, workflow: 3, agents: 3, repair: 2, safety: 5, localization: 3, observability: 3, budget: 4, cache: 3, rag: 2, security: 4, executor: 5, dataset: 4, logic: 15}
+  probes_total: 64
+  probes_by_group: {cli: 6, workflow: 3, agents: 3, repair: 2, safety: 5, localization: 3, observability: 4, budget: 4, cache: 3, rag: 2, security: 4, executor: 5, dataset: 4, logic: 16}
   llm_probes: 12
-  status: {pass: 62, fail: 0, error: 0, skip: 0}
-  wall_seconds: 75.7
+  status: {pass: 64, fail: 0, error: 0, skip: 0}
+  wall_seconds: 75.9
   artifacts: {report: "experiments/results/e2e_probe_20261017/report.json", md: "experiments/results/e2e_probe_20261017/report.md", readme: "experiments/results/e2e_probe_20261017/README.md"}
   probes_found_and_fixed: 10  # kernel sandbox SBPL 引号 / 沙箱执行器接线 / .env 误伤 .venv / --json --verbose stdout 污染 / list-examples 引 __init__ / 过度脱敏 / COST_BUDGET_USD 生产记账（N-4→N-5） / 跨文件结果行审计字段（N-4→N-5）
-  interpretation: "62/62 pass（含 12 真实 LLM 探针；O 轮 3 个 oracle 仪器探针 + P 轮 doctor/示例通道 3 个探针）；探针驱动 8 个真实功能缺陷修复（其中 kernel sandbox 两处为 safe 档 P0 静默失效、USD 预算记账为费用上限 P0 纸面开关）。矩阵不接 CI 阻断（启动子进程/本机能力差异），发布前手动跑 make e2e-probe(-llm)"
+  interpretation: "64/64 pass（含 12 真实 LLM 探针；O 轮 3 个 oracle 仪器探针 + P 轮 doctor/示例通道 3 个 + Q 轮示例生产契约/后处理墙钟 2 个）；探针驱动 8 个真实功能缺陷修复（其中 kernel sandbox 两处为 safe 档 P0 静默失效、USD 预算记账为费用上限 P0 纸面开关）。矩阵不接 CI 阻断（启动子进程/本机能力差异），发布前手动跑 make e2e-probe(-llm)"
 
 ablation_batches:          # 消融批次（P 轮起登记；与 benchmark 区分：考的是机制效果而非能力主张）
   b8_stagnation_detection:

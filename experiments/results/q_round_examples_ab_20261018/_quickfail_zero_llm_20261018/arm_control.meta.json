@@ -1,0 +1,7 @@
+{
+  "arm_label": "control",
+  "status": "failed",
+  "exit_code": 2,
+  "log": "experiments/results/q_round_examples_ab_20261018/log_control.log",
+  "note": "臂失败/超时：保留日志与部分工件，不重跑"
+}

@@ -1,0 +1,2 @@
+{"event": "task_start", "task": "quixbugs__knapsack_aitester_1792268077", "ts": 1792268077.166868, "meta": {"dataset_task_id": "quixbugs__knapsack", "baseline": "aitester", "target_function": "knapsack"}}
+{"event": "node", "task": "quixbugs__knapsack_aitester_1792268077", "node": "planner", "ts": 1792268082.2675798, "run_id": "6b99474325584f16", "span_id": "aa06b809c7f4", "output": {"function_name": "knapsack", "test_cases": 13}, "decision": "plan_complete", "duration_ms": 5051.27}

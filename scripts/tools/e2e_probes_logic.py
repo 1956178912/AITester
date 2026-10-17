@@ -616,6 +616,84 @@ def probe_oracle_examples_detection():
     )
 
 
+def probe_oracle_examples_production():
+    """Q-1：示例通道生产接线静态/行为契约（双门开关、prompt 段、行字段、env 登记）。"""
+    import importlib
+    import inspect as _inspect
+
+    planner = importlib.import_module("src.agents.planner")
+    run_benchmark = importlib.import_module("experiments.run_benchmark")
+    checks: dict[str, bool] = {}
+    checks["planner_section_present"] = hasattr(planner, "SPEC_EXPR_EXAMPLES_SECTION")
+    section = getattr(planner, "SPEC_EXPR_EXAMPLES_SECTION", "") or ""
+    checks["planner_section_mentions_examples"] = "examples" in section
+    checks["planner_gate_function"] = hasattr(planner, "spec_oracle_examples_enabled")
+    orig = {k: os.environ.get(k) for k in ("SPEC_ORACLE_EXEC_ENABLE", "SPEC_ORACLE_EXAMPLES_ENABLE")}
+    try:
+        os.environ.pop("SPEC_ORACLE_EXEC_ENABLE", None)
+        os.environ.pop("SPEC_ORACLE_EXAMPLES_ENABLE", None)
+        checks["default_off"] = planner.spec_oracle_examples_enabled() is False
+        os.environ["SPEC_ORACLE_EXEC_ENABLE"] = "true"
+        os.environ["SPEC_ORACLE_EXAMPLES_ENABLE"] = "false"
+        checks["exec_only_off"] = planner.spec_oracle_examples_enabled() is False
+        os.environ["SPEC_ORACLE_EXAMPLES_ENABLE"] = "true"
+        checks["both_on"] = planner.spec_oracle_examples_enabled() is True
+    finally:
+        for key, old in orig.items():
+            if old is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old
+    src = _inspect.getsource(run_benchmark)
+    checks["row_field_source"] = "spec_oracle_examples_source" in src
+    checks["row_field_count"] = "spec_oracle_examples_count" in src
+    checks["env_snapshot_key"] = "SPEC_ORACLE_EXAMPLES_ENABLE" in src
+    if not all(checks.values()):
+        return fail(f"Q-1 生产接线契约不完整：{checks}")
+    return ok("Q-1 生产接线契约齐备（双门默认关/prompt 段/行字段/env 登记）", checks=checks)
+
+
+def probe_postprocess_wall_observability():
+    """Q-3：后处理墙钟可观测模块（稳定 JSON 形状 / 分位 / env 默认）。"""
+    import importlib
+    import json as _json
+
+    wall = importlib.import_module("experiments.postprocess_wall")
+    payload = wall.build_postprocess_wall(
+        {"mutation": [1.0, 2.0, 3.0, 4.0], "m1": [0.5], "mdo": [], "other": []},
+        timed_out={"mutation": 1},
+        warn_s=3.0,
+    )
+    checks: dict[str, bool] = {}
+    checks["stages"] = set(wall.registered_stage_names()) == {"mutation", "m1", "mdo", "other"}
+    checks["shape"] = all(
+        key in payload.get("mutation", {})
+        for key in ("wall_s", "n_tasks", "mean_s", "p50_s", "p95_s", "max_s", "timed_out_tasks")
+    )
+    checks["p50"] = abs(float(payload["mutation"]["p50_s"]) - 2.5) < 1e-6
+    checks["p95"] = abs(float(payload["mutation"]["p95_s"]) - 3.85) < 1e-6
+    checks["n_tasks"] = payload["mutation"]["n_tasks"] == 4
+    checks["timeout"] = payload["mutation"]["timed_out_tasks"] == 1
+    checks["empty_stage_zero"] = payload["mdo"]["n_tasks"] == 0 and payload["mdo"]["wall_s"] == 0.0
+    _json.dumps(payload)
+    orig = os.environ.get("AITESTER_POSTPROCESS_WARN_S")
+    try:
+        os.environ.pop("AITESTER_POSTPROCESS_WARN_S", None)
+        checks["env_default_600"] = wall.postprocess_warn_s() == 600.0
+        os.environ["AITESTER_POSTPROCESS_WARN_S"] = "123"
+        checks["env_override"] = wall.postprocess_warn_s() == 123.0
+        os.environ["AITESTER_POSTPROCESS_WARN_S"] = "not-a-number"
+        checks["env_bad_fallback"] = wall.postprocess_warn_s() == 600.0
+    finally:
+        if orig is None:
+            os.environ.pop("AITESTER_POSTPROCESS_WARN_S", None)
+        else:
+            os.environ["AITESTER_POSTPROCESS_WARN_S"] = orig
+    if not all(checks.values()):
+        return fail(f"后处理墙钟模块契约不完整：{checks}")
+    return ok("后处理墙钟模块正常（稳定 JSON/线性分位/env 默认与坏值回退）", checks=checks)
+
+
 PROBES = [
     Probe(
         name="logic-spec-ir-parse",
@@ -714,6 +792,20 @@ PROBES = [
         func=probe_oracle_examples_detection,
         timeout_s=180,
         description="P-1：示例 oracle 检出能力（buggy 必败/fixed 必过/无示例对照不检出）",
+    ),
+    Probe(
+        name="logic-oracle-examples-production",
+        group="logic",
+        func=probe_oracle_examples_production,
+        timeout_s=90,
+        description="Q-1：示例通道生产接线契约（双门开关/prompt 段/行字段/env 登记）",
+    ),
+    Probe(
+        name="observability-postprocess-wall",
+        group="observability",
+        func=probe_postprocess_wall_observability,
+        timeout_s=60,
+        description="Q-3：后处理墙钟模块（稳定 JSON/线性分位/env 默认与坏值回退）",
     ),
     Probe(
         name="logic-profile-spec-fields",

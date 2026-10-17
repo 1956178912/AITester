@@ -1,0 +1,82 @@
+{
+  "schema": "q2_examples_ab_preflight/1",
+  "source_hashes": {
+    "experiments/run_benchmark.py": "b707d5493e49d160a0eda6d6d1ed8f6e47898682f233f41edb831a9d1cd3a49d",
+    "src/agents/planner.py": "4be3471f3f496bd6ed9bf894e48515f91f4985354e85ddfda6ba0d3bf8845b2c"
+  },
+  "run_stamp": "q_round_examples_ab_20261018",
+  "git": {
+    "root": "/Users/wangchenyu/Workspace/AITester",
+    "root_head": "6e6c3392c1a884e3061efde527511d9dec87d8bd",
+    "expected_sha": "6e6c3392c1a884e3061efde527511d9dec87d8bd",
+    "dirty_lines_before": 14
+  },
+  "prereg_sha256": "5e67dc8e7446248dfe0e5e1ab82b29a1790782a63b0df10e69cfa632034f5b06",
+  "checks": {
+    "run_benchmark_has_SPEC_ORACLE_EXAMPLES_ENABLE": true,
+    "run_benchmark_has_row_field_spec_oracle_examples_source": true,
+    "run_benchmark_has_row_field_spec_oracle_examples_count": true,
+    "planner_mentions_SPEC_ORACLE_EXAMPLES_ENABLE": true,
+    "planner_mentions_examples_contract": true,
+    "q1_contract_tests_file_present": true
+  },
+  "feature_present": true,
+  "require_feature": false,
+  "env_probe": {
+    "A_control": {
+      "SPEC_ORACLE_EXEC_ENABLE": "true",
+      "SPEC_ORACLE_EXAMPLES_ENABLE": "false",
+      "stdout": "true false",
+      "stderr_tail": ""
+    },
+    "B_examples": {
+      "SPEC_ORACLE_EXEC_ENABLE": "true",
+      "SPEC_ORACLE_EXAMPLES_ENABLE": "true",
+      "stdout": "true true",
+      "stderr_tail": ""
+    }
+  },
+  "contract_tests": {
+    "ran": false,
+    "reason": "missing tests file or dry-run"
+  },
+  "estimate": {
+    "per_task_tokens": 16000,
+    "in_share": 0.72,
+    "price_model": "deepseek-flash",
+    "input_per_mtok": 0.3,
+    "output_per_mtok": 1.2,
+    "task_limit_initial": 20,
+    "task_limit_effective": 20,
+    "estimated_tokens_total": 640000,
+    "estimated_cost_usd": 0.35328,
+    "estimated_wall_min": 48.3,
+    "downgraded_to": null,
+    "budget_usd": 0.5,
+    "wall_limit_min": 110.0
+  },
+  "run": {
+    "task_limit": 20,
+    "parallelism": 4,
+    "watchdog_seconds": 3600,
+    "budget_usd": 0.5,
+    "wall_limit_min": 110.0,
+    "profile": "logic",
+    "temperature": 0.0,
+    "thinking": "disabled",
+    "cache": 0,
+    "batch_max_calls": 200,
+    "seed": 42,
+    "dataset": "quixbugs",
+    "baseline": "aitester"
+  },
+  "blocking": [],
+  "warnings": [],
+  "_note": "zero-LLM dry-run evidence (main repo HEAD 6e6c339; Q-1 in-flight edits visible => feature_present=True; real run still requires frozen PREREG + clean cut worktree)",
+  "guards_after_incident": {
+    "real_mode_requires_clean_root": true,
+    "prereg_freeze_required": true,
+    "preflight_only_mode": true,
+    "toctou_source_hash_guard": true
+  }
+}

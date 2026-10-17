@@ -1,0 +1,7 @@
+2026-10-17T20:29:43Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 593, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:34:36Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 594, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:39:29Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 593, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:44:21Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 595, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:49:14Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 599, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:54:07Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 596, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T20:57:49Z phase=q2_in_batch detector_exit=0 {"available": true, "scanned": 595, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}

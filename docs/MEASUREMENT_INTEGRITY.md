@@ -322,3 +322,28 @@ P-1.1 返回表示归一（tuple/generator→list）后 **fp 3→0、correct 6�
 示例自校验需下一轮同批 A/B + 预注册。工件
 `experiments/results/p_round_oracle_examples_20261018/`（raw + norm 双报告、ATTRIBUTION、
 SHA256SUMS）。
+
+**Q-1/Q-2 示例通道路径口径（2026-10-18，生产接线 + 预注册 A/B）**：P-1 证明示例通道
+"在受控重放中有检出能力但不提升净质量"；Q-1 把它接入生产（`SPEC_ORACLE_EXAMPLES_ENABLE`
+默认关、双门 ∧ oracle exec；Planner 契约段只在开启时追加，关闭时 prompt 逐字节不变；
+无 Planner 臂 +1 次 spec-only 生成调用；行字段 `spec_oracle_examples_source/count` 可审计）。
+Q-2 在干净切点 `a48a53f` 上做**预注册同批二臂 A/B**（A=oracle 开/示例关 vs B=oracle 开/
+示例关；aitester logic QuixBugs 20 任务；判定规则跑前冻结：oracle-correct 新增 Δ≥2 ∧
+LLM-suite 非劣 ∧ McNemar 单侧 p<0.05，否则 not_confirmed；MDE/小样本/单次运行披露）。
+**口径纪律**：Q-2 结论只覆盖"该切点/该任务子集/单次运行"；引用必须给两臂分母、
+oracle verdict 分布（correct/fp/silent/misguided/unavailable）、LLM-suite 一致性与判定
+三判据；不得把重放机制的 correct 增益直接移植为生产能力主张。**事故披露**：准备期
+零 LLM 自测误用真实模式（TOCTOU）导致两臂意外真实调用约 4min，无数据可用，粗估
+$0.15–0.20，已归档 `_incident_unintended_llm_launch_20261018/`（禁止作为证据），并加固
+runner（dirty=0/PREREG 冻结/--preflight-only/TOCTOU sha 复核）。
+
+**Q-2 结果（2026-10-18，预注册 A/B）**：`not_confirmed`——oracle-correct 新增
+**Δ=+6**（A 0→B 6，McNemar b=6/c=0，单侧 p=0.015625），但 LLM-suite detection
+A **15/15=100%** vs B **12/15=80%**（δ=−20pp），**非劣判据失败**（3 任务
+detect_cycle/hanoi/knapsack A=1→B=0）。两臂 20 行、exit=0、成本 $0.275878；
+`spec_oracle_examples_source` A none×20 / B planner×17,none×3（count mean 2.25）。
+**处置**：生产开关保持默认关；下一轮先复核 detection 下降是 trade-off 还是单次
+重跑噪声（换 seed/复跑/检查 examples 是否经 Planner 契约改动下游行为）再决定是否
+生产化；在此之前不得引用"示例通道提升检出"作为能力主张（本批只证明"能增加
+oracle-correct 任务"同时**伴随** LLM-suite 下降）。工件
+`experiments/results/q_round_examples_ab_20261018/`（101 项 SHA verify）。
