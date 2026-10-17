@@ -649,11 +649,17 @@ Planner（LLM：输入域/输出域/前置/后置/边界 + SpecExpr 受限表达
 | A-11 | `experiments/run_benchmark.py` 指标 schema | 编译率/执行率未单列 | TestAgent 99.11%/97.46% | 增加 compile_rate/exec_rate 行级字段 | 可新增 | P2 | 与 TestGenEval/TestAgent 可比 | 低 | 新字段非空率 | 1 月 | schema 扩展 + 测试 |
 | A-12 | ~~`pyproject.toml`；release.yml~~ | ~~无 SBOM~~ **【评审误判，2026-10-17 更正】** | OWASP/OpenSSF 2025-2026 供应链指南（本次检索见 aidlc.io 汇总，C 级） | **无需动作**：release.yml R13 已有完整 SBOM 步骤——`cyclonedx-bom==4.5.0`（与 ci.yml supply-chain 同版本，失败回退 `cyclonedx-python`），产物 `sbom.cyclonedx.json` 随 GitHub Release 上传（lines 103-108/149/151）。本地工具链按项目惯例不入 requirements.txt（ruff/bandit/pip-audit 同口径：CI 钉版本安装） | 已废弃 | — | — | — | — | — | `grep -n cyclonedx .github/workflows/release.yml` |
 | A-13 | `tests/test_spec_expr_property.py` | property 覆盖面可扩（打桩/回归函数） | — | 对 patch_applier/spec_ir_v2/helpers JSON 修复函数扩 hypothesis 策略 | 可新增 | P2 | 模糊测试深度 | 低 | 新增 property 用例 | 1 月 | `pytest tests/test_spec_expr_property.py` |
+
+> **执行状态（2026-10-17）**：✅ **已完成**——新增 `tests/test_helpers_json_property.py`（13 例）：extract_json_object/array 异常纪律（任意文本只许 JSONDecodeError）+ dict/list 直通（含围栏）；_repair_json_bounded/extract_code_block 不抛+围栏直通；replace_function_code 无效新代码零伤害逐字节回滚+未命中零伤害+成功路径保结构+任意新函数体不 panic。
 | A-14 | ~~`.github/workflows/ci.yml`~~ | ~~bandit 配置在场但未接 CI 主链~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：bandit 1.9.4 自 R10（2026-10-05）起已作为 security 作业阻断步骤（`bandit -r src/ -c pyproject.toml -q`），本次本地实跑 exit 0 / 零 findings | 已废弃 | — | — | — | — | — | `bandit -r src/ -c pyproject.toml`（实跑通过） |
 | A-15 | ~~`src/agents/base_agent.py:437/389`~~ | ~~缓存命中绕过 record_usage → token 记账仅覆盖非缓存调用~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：D2 已于 b12b8a4（2026-10-16 三波次收口）修复——三条命中路径（LRU 快路径 / 语义缓存 / 文件缓存）均经 `record_cache_hit_usage` 还原"避免的 token"（独立口径），未命中路径以调用前后 total 差值（含重试/故障转移）写入缓存文件 `tokens` 字段；`tests/test_token_usage.py` 13 例覆盖（本次实跑全过）。本评审初版沿用了 IR 报告的过期清单（IR 成稿与修复同日落地） | 已废弃 | — | — | — | — | — | `pytest tests/test_token_usage.py`（13 例实跑通过） |
 | A-16 | `docs/` 全量 | §15 待澄清项（repair 分母/orchestration_search 状态等）未回填 | — | 逐项澄清后更新文档 | 建议优化 | P1 | 文档完整性 | 低 | 待澄清清单关闭 | 2 周 | — |
+
+> **执行状态（2026-10-17）**：✅ **已完成（未决项登记制）**——`docs/PROJECT_STATUS_REGISTER.md` 新增 §4.1 开放问题登记表：8 项仍未决问题（Q3/Q5/Q6/Q7/Q8/Q10/Q11/Q12）各含建议责任方、截止日与"未澄清时的降级处理"（不可验证项不得支撑结论的纪律）；已收口 4 项（Q1/Q2/Q4/Q9）不重复登记。
 | A-17 | ~~`src/` 9 文件 20 处 `subprocess.run`~~ | ~~超时只杀直接子进程（孙进程持管道挂死）~~ **【评审误判，2026-10-17 更正】** | — | **无需动作**：src/ 内裸 `subprocess.run(` 实际调用为 0（`grep -rnE '^\s*(return \|await )?subprocess\.run\(' src/` 空；现存文本命中均为注释/docstring）；`run_with_timeout`（killpg）已全面接管。IR/CO 报告所述缺口在此前轮次已修复 | 已废弃 | — | — | — | — | — | `grep -rnE '^\s*(return \|await )?subprocess\.run\(' src/`（实测空） |
 | A-18 | `src/specs/spec_smt.py`；`[formal]` extra | z3 层默认关且无启用批次 | SPARC（ICLR'26）神经符号 +20.78pp mutation | 设计最小启用批次（QuixBugs n=50，观测 UN SAT 见证率与检出关系） | 可新增 | P2 | 逻辑驱动第二通道证据 | 中 | 见证率+检出关联报告 | 2-3 月 | `pip install 'aitester[formal]'` |
+
+> **执行状态（2026-10-17）**：✅ **设计已完成**——`docs/design/smt_witness_batch_plan.md`：单臂观测批（QuixBugs 50 任务）、spec 材料零 LLM 缓存物化优先、per 子句 `smt_status`/`smt_solve_ms` 观测字段、判定规则跑批前落盘（机制层=见证率>0∧timeout<20%；关联层=探索性，MDE 16pp 披露）、成本零 LLM 优先最坏 ~$0.3-0.5、新目录自动落入 A-04 后的 emse_* 入库扫描。实跑待配额授权（属 Q7 澄清后的执行项）。
 | A-19 | `src/graph/workflow.py` 停滞检测 | 覆盖停滞检测默认关且无消融 | TraceCoder RM（+5.31% 相对） | 停滞检测开/关消融一批 | 可新增 | P2 | 闭环收敛证据 | 低 | 消融报告 | 1 月 | `--enable-stagnation` 类开关 |
 
 ---
