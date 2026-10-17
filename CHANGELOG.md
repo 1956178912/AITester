@@ -1,10 +1,119 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-18（P 轮：**规格可执行示例通道**探索性验证（oracle correct 0→6→8、表示归一后 fp 3→0、精确率 42.9%→61.5%；仍 2 例 LLM 幻觉错误）+ **A-19 覆盖率停滞检测纸面功能修复**（接线→真提前停止，26 测试+零 LLM 证据；B8 缩小消融因任务集首轮全绿结构性无触发，如实披露）+ **`main.py doctor` 零 LLM 自检命令**（21.45s/47 pass，环境+功能矩阵）；O/N/M/L/K 轮同日登记）
+> Last updated: 2026-10-18（Q 轮：**示例通道生产接线**（Planner 契约/双门开关/行字段，默认关零差异） + **预注册二臂 A/B 生产化验证**（aitester logic QuixBugs 20 任务；判定规则跑前冻结）+ **批后处理墙钟可观测模块**（StageTimer/线性分位/阈值警告 + src 内 env 读取）+ 一次准备期零 LLM 事故如实披露；P/O/N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 Q 轮（示例通道生产化 + 预注册二臂 A/B + 后处理墙钟可观测）
+
+> Q 轮承接 P 轮"示例通道重放有检出能力但未接生产"：把示例通道接入真实链路（Planner
+> 契约 + 双门开关 + 可审计行字段），在干净切点上跑**预注册同批二臂 A/B**（aitester
+> logic QuixBugs 20 任务），并补 O-2 暴露的批后处理墙钟可观测缺口。真实 LLM 花费
+> ≈$0.4-0.55（Q-2 A/B + 一次准备期事故 $0.15–0.20，详见"事故与预算披露"）。
+
+### Added
+
+- **Q-1：示例通道生产接线（默认关零差异）**。新开关 `SPEC_ORACLE_EXAMPLES_ENABLE`
+  （默认 false；双门 = `SPEC_ORACLE_EXAMPLES_ENABLE ∧ SPEC_ORACLE_EXEC_ENABLE`）：
+  开启时 Planner prompt 契约段请求 `logic_analysis.examples`（≤3 条、明确 JSON 形状、
+  期望值由规格推导而非实现猜测、输入尽量小），经 `parse_logic_analysis` →
+  `compile_spec_oracle` 逐示例断言（P-1.1 归一）→ N-3 独立判读全链路生效；**关闭时
+  prompt 逐字节不变**、注入路径开关守门（关时剥离示例材料→产物与无示例编译逐字节一致）。
+  无 Planner 臂（df_spec/doc/union/augment）在双门开时可选 +1 次 spec-only 生成器调用
+  （cache namespace、失败/空透传）。结果行新增 `spec_oracle_examples_source`
+  （planner/spec_generator/none）与 `spec_oracle_examples_count`（成功/失败分支键位一致）；
+  env 预算/快照门禁登记。测试 **33 例**（双门默认关、prompt 逐字节 + 删契约负控、
+  剥离、无 Planner 分支、行字段两部分支、demo mock LLM 端到端）。切点 commit `a48a53f`。
+- **Q-3：批后处理墙钟可观测模块**。新增 `experiments/postprocess_wall.py`（纯 stdlib）：
+  `StageTimer`（阶段总 wall / 逐任务计时 / 异常只计数不吞）、`build_postprocess_wall`
+  （每阶段 wall/mean/p50/p95/max/timed_out，线性分位，无任务全 0，稳定 JSON）、
+  `registered_stage_names()`；阈值警告以 `.warnings` 返回由调用方日志输出。env
+  `AITESTER_POSTPROCESS_WARN_S`（默认 600、坏值回退；读取实现放
+  `src/utils/env_utils.py::postprocess_warn_seconds` 使 env 门禁可扫描）。双语
+  `docs/COST_MODEL.md/.en.md`（含 run_benchmark hook 3 行集成示例）；测试 **88 例**。
+  **hook 尚未接入 run_benchmark**（登记下一轮，纯观测、默认零行为变化）。
+- **全功能探针矩阵 62→64**：新增 `logic-oracle-examples-production`（生产接线契约：
+  双门默认关/prompt 段/行字段/env 登记）与 `observability-postprocess-wall`
+  （模块稳定 JSON/线性分位/env 默认与坏值回退）。
+
+### Q-2：预注册二臂 A/B 生产化验证
+
+干净切点 `a48a53f`（dirty=0，复制 `.env.local`）上的**同批并发**两臂
+（aitester logic QuixBugs 20 任务 seed=42、P4、temp=0、thinking disabled、真实调用、
+cap 200/$1、watchdog 3600s/臂）：A=oracle 开/示例关，B=oracle 开/示例开；判定规则
+跑前冻结（confirmed = oracle-correct 新增 Δ≥2 ∧ LLM-suite 非劣(≥A−5pp) ∧ McNemar
+单侧 p<0.05；否则 not_confirmed；附 MDE/小样本/单次运行局限）。**结果：`not_confirmed`**
+（判据①③通过、②非劣失败）：
+- ① oracle-correct 新增 **Δ=+6**（A 0 → B 6；新增任务 bucketsort/get_factors/hanoi/
+  kheapsort/lcs_length/levenshtein），**PASS**；
+- ② LLM-suite detection A **15/15=100.0%** vs B **12/15=80.0%**（δ=−20.0pp），**FAIL**
+  （不一致 3 任务：detect_cycle/hanoi/knapsack，均 A=1→B=0；另有 5 个两臂均不可判）；
+- ③ McNemar（b=6,c=0）单向 p=**0.015625**，**PASS**。
+→ 按冻结规则 **不宣称成功**；示例通道显著增加 oracle-correct，但单次运行同时观测到
+LLM-suite 检出下降，需下一轮复核是真实 trade-off 还是重跑噪声（历史同配置重跑差异
+~2/20 量级；本批 3/15 值得复核）。两臂各 20 行、exit=0；墙钟 2336s/2084s；成本
+A $0.137792 / B $0.138086（本批 **$0.275878**）；worktree 跑前跑后 dirty=0；watchdog
+未触发；`spec_oracle_examples_source` = A `{none:20}` / B `{planner:17,none:3}`，
+count B mean 2.25/total 45/max 3。工件 `q_round_examples_ab_20261018/`
+（README `6d383619…`、ANALYSIS_REPORT `5185d468…`、SHA256SUMS `e4b1dd5f…` 101 项 verify）。
+Q 轮预算对账：事故 ≈$0.15–0.20 + 本批 $0.275878 + 探针/其它 ≈$0.05 ≈ **$0.48–0.53**
+（上限 $0.7 ✓）。
+
+### 事故与预算披露（如实）
+
+- **准备期零 LLM 自测事故**（04:10）：为验证"feature 缺失应阻断"时误用真实执行模式，
+  且恰逢主树被并发编辑造成 TOCTOU（接线标记翻转）→ 两臂真实 LLM 意外启动约 4 分钟，
+  04:14 发现后立即终止（kill job + SIGTERM 进程组）。**后果**：无批次 JSON/无研究
+  数据可用；无孤儿进程、无仓库写入；**花费不可精确记账，粗估 $0.15–0.20**（计入 Q 轮
+  预算与最终答案）。证据归档 `experiments/results/q_round_examples_ab_20261018/
+  _incident_unintended_llm_launch_20261018/`（README_INCIDENT 标注"禁止作为研究证据"）。
+- **加固**：真实模式强制 `ROOT dirty=0`、要求 PREREG 已冻结且含切点 sha、新增
+  `--preflight-only`（真实门禁语义绝不 launch）、preflight→launch TOCTOU sha256 复核；
+  此后所有零 LLM 自测在临时仓库副本执行，不再对主树启用真实模式。
+- **quick-fail**（04:16）：Q-2 首跑因 runner 在 worktree 下缺少 helper 路径而 exit=2、
+  墙钟 0s、**零 LLM 调用**（已修复后重跑，成本 0）。
+
+### Changed
+
+- 示例通道口径（Q-1 起）：生产默认关；开启时每任务最多 +3 条示例断言，Planner 契约段
+  ~300 input tokens/任务（Q-2 估算 ≤$0.01/臂）；引用必须给 examples 来源/计数与分母，
+  不得把"重放机制的 correct 提升"直接移植为生产能力主张（Q-2 判定为准）。
+- BASELINE 新增 `target_quality.oracle_examples_production` / `postprocess_wall`；
+  `feature_matrix` 62→64；登记册 §3.2 Q-1~Q-3、§4 Q 轮收口与事故披露、§5 引用纪律；
+  README/INDEX/EMSE 本地清单同步；`docs/COST_MODEL.md/.en.md` 新增并纳入 INDEX。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8684 passed / 5 skipped / 0 failed**（collected **8689**；本机 **162.1s**；
+  COVERAGE_FILE 隔离）；
+- **覆盖率**：行 **96.52%**（17269/17892）/ 分支 **92.70%**（6150/6634）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.12pp/+0.20pp）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（798 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **112/112** + `emse_*` 目录覆盖扫描通过（Q 轮新增 6 项证据工件；
+  含事故披露件 README_INCIDENT）；
+- **全功能探针矩阵（64）**：`AITESTER_E2E_LLM=true python scripts/tools/e2e_probe.py
+  --all --include-llm` → **64/64 pass**（14 功能组、12 真实 LLM 探针、墙钟 75.9s）；
+  新增 `logic-oracle-examples-production`（生产接线契约）与
+  `observability-postprocess-wall`（后处理墙钟模块）；
+- **Q-1 生产接线**：33 例单测锁定默认关零差异（prompt 逐字节/剥离后产物逐字节/
+  行字段 none/0/无 Planner 臂零调用）；切点 commit `a48a53f`；
+- **Q-2 预注册 A/B（真实 LLM）**：判定 **`not_confirmed`**（详见表）——两臂
+  20 行 exit=0、墙钟 2336/2084s、成本 $0.137792/$0.138086（本批 $0.275878）；
+  oracle-correct Δ=+6（McNemar p=0.015625）但 LLM-suite 100%→80%（−20pp）非劣失败；
+  worktree 跑前跑后 dirty=0、watchdog 未触发、孤儿巡检 0；工件 SHA256SUMS
+  `e4b1dd5f…` **101 项 verify 通过**（含 quick-fail 归档与事故目录）；
+- **Q-3 后处理墙钟模块**：88 例测试；`build_postprocess_wall` 构造数据验证
+  分位/JSON 形状/坏值回退；env 读取实现位于 `src/utils/env_utils.py`（门禁
+  `check_env_budget`/`check_env_snapshot_keys` 通过）；hook 集成登记下一轮；
+- **Q 轮真实 LLM 花费**：Q-2 $0.275878 + 准备期事故粗估 $0.15–0.20 + 探针/其它
+  ≈$0.05 ≈ **$0.48–0.53**（上限 $0.7 ✓）。
 
 ## [Unreleased] — 2026-10-18 P 轮（oracle 示例通道探索 + A-19 纸面功能修复 + doctor 自检命令）
 

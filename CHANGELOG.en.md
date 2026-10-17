@@ -1,10 +1,143 @@
-> Last updated: 2026-10-18 (round P: **spec executable-examples channel** exploratory validation [oracle correct 0→6→8, representation normalization brings fp 3→0 and precision 42.9%→61.5%; 2 LLM-hallucination errors remain] + **A-19 coverage-stall detection paper-feature fix** [wiring→real early stop, 26 tests + zero-LLM evidence; B8 reduced ablation structurally untriggered because all tasks passed first round, honestly disclosed] + **`main.py doctor` zero-LLM self-check** [21.45s / 47 pass; env + feature matrix]; rounds O/N/M/L/K registered the same day)
+> Last updated: 2026-10-18 (round Q: **examples-channel production wiring** [Planner contract / double-gate switch / row fields, zero difference when off] + **pre-registered two-arm A/B production validation** [aitester logic QuixBugs 20 tasks; decision rule frozen before the run] + **batch post-processing wall observability module** [StageTimer/linear percentiles/threshold warnings + env reader in src] + an honestly disclosed preparation-phase zero-LLM incident; rounds P/O/N/M/L/K registered the same day)
 
 > **Language**: [简体中文](CHANGELOG.md) | English (this file)
 
 # Changelog
 
 All notable changes to this project will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased] — 2026-10-18 Round Q (examples production wiring + pre-registered two-arm A/B + postprocess wall observability)
+
+> Round Q continues from P's "examples channel detects in replay but is not wired into
+> production": wire it into the real pipeline (Planner contract + double-gate switch +
+> auditable row fields), run a **pre-registered same-batch two-arm A/B** on a clean cut
+> (aitester logic QuixBugs 20 tasks), and fill the batch post-processing wall-clock
+> observability gap exposed by O-2. Real LLM spend ≈$0.4–0.55 (Q-2 A/B + one preparation
+> incident $0.15–0.20; see "Incident and budget disclosure").
+
+### Added
+
+- **Q-1: examples-channel production wiring (zero difference when off).** New switch
+  `SPEC_ORACLE_EXAMPLES_ENABLE` (default false; double gate =
+  `SPEC_ORACLE_EXAMPLES_ENABLE ∧ SPEC_ORACLE_EXEC_ENABLE`): when enabled the Planner
+  prompt contract requests `logic_analysis.examples` (≤3, explicit JSON shape, expectations
+  derived from the spec rather than guessed from the implementation, small inputs), flowing
+  through `parse_logic_analysis` → `compile_spec_oracle` per-example assertions (P-1.1
+  normalization) → N-3 independent judging end-to-end; **when disabled the prompt is
+  byte-identical** and the injection path strips example material (product byte-identical
+  to no-example compilation). Non-Planner arms (df_spec/doc/union/augment) may add one
+  spec-only generation call under the double gate (cache namespace, failures pass through).
+  Result rows gain `spec_oracle_examples_source` (planner/spec_generator/none) and
+  `spec_oracle_examples_count` (success/failure branches structurally identical); env
+  budget/snapshot gates registered. **33 tests** (double-gate default off, prompt
+  byte-identical + deleted-contract negative control, stripping, non-Planner branch,
+  row-field branches, mock-LLM end-to-end demo). Cut commit `a48a53f`.
+- **Q-3: batch post-processing wall observability module.** New
+  `experiments/postprocess_wall.py` (pure stdlib): `StageTimer` (stage wall / per-task
+  timing / exceptions counted not swallowed), `build_postprocess_wall` (per-stage
+  wall/mean/p50/p95/max/timed_out, linear percentiles, zeros for empty, stable JSON),
+  `registered_stage_names()`; threshold warnings returned via `.warnings` for the caller
+  to log. Env `AITESTER_POSTPROCESS_WARN_S` (default 600, bad values fall back; reader in
+  `src/utils/env_utils.py::postprocess_warn_seconds` so the env gate can scan it).
+  Bilingual `docs/COST_MODEL.md/.en.md` (with the 3-line run_benchmark hook example);
+  **88 tests**. **Hook not yet wired into run_benchmark** (registered for next round;
+  observability only, zero behavior change by default).
+- **Full-feature probe matrix 62→64**: new `logic-oracle-examples-production`
+  (production wiring contract: double-gate default off / prompt section / row fields / env
+  registration) and `observability-postprocess-wall` (module stable JSON / linear
+  percentiles / env default and bad-value fallback).
+
+### Q-2: pre-registered two-arm A/B production validation
+
+On clean cut `a48a53f` (dirty=0, `.env.local` copied), **same-batch concurrent** arms
+(aitester logic QuixBugs 20 tasks seed=42, P4, temp=0, thinking disabled, real calls,
+cap 200/$1, watchdog 3600s/arm): A = oracle on/examples off, B = oracle on/examples on;
+decision rule frozen before the run (confirmed = oracle-correct new Δ≥2 ∧ LLM-suite
+non-inferior (≥A−5pp) ∧ McNemar one-sided p<0.05; otherwise not_confirmed; with MDE /
+small-sample / single-run limitations). **Result: `not_confirmed`** (criteria ①③ pass,
+② non-inferiority fails):
+- ① oracle-correct gain **Δ=+6** (A 0 → B 6; new tasks bucketsort/get_factors/hanoi/
+  kheapsort/lcs_length/levenshtein) — **PASS**;
+- ② LLM-suite detection A **15/15=100.0%** vs B **12/15=80.0%** (δ=−20.0pp) — **FAIL**
+  (3 mismatched tasks: detect_cycle/hanoi/knapsack, all A=1→B=0; another 5 tasks
+  unjudgeable in both arms);
+- ③ McNemar (b=6, c=0) one-sided p=**0.015625** — **PASS**.
+→ Per the frozen rule this is **not a success claim**: the examples channel significantly
+raises oracle-correct, but this single run also shows an LLM-suite detection drop; the next
+round must determine whether this is a real trade-off or rerun noise (historical same-config
+reruns differ by ~2/20; 3/15 here warrants replication). Both arms 20 rows, exit=0; walls
+2336s/2084s; costs A $0.137792 / B $0.138086 (batch **$0.275878**); worktree dirty=0 before
+and after; watchdog not triggered; `spec_oracle_examples_source` = A `{none:20}` / B
+`{planner:17,none:3}`, count B mean 2.25/total 45/max 3. Artifacts
+`q_round_examples_ab_20261018/` (README `6d383619…`, ANALYSIS_REPORT `5185d468…`,
+SHA256SUMS `e4b1dd5f…` 101 entries verified). Round-Q budget reconciliation: incident
+≈$0.15–0.20 + batch $0.275878 + probes/other ≈$0.05 ≈ **$0.48–0.53** (cap $0.7 ✓).
+
+### Incident and budget disclosure (honest)
+
+- **Preparation-phase zero-LLM self-test incident** (04:10): while validating
+  "missing feature must block", the real execution mode was accidentally used, and a
+  concurrent edit of the main tree created a TOCTOU (wiring marker flipped) → both arms
+  launched real LLM calls for ~4 minutes before being terminated immediately at 04:14
+  (job kill + SIGTERM process groups). **Consequences**: no batch JSON / no usable study
+  data; no orphan processes, no repo writes; **spend cannot be accounted precisely, rough
+  estimate $0.15–0.20** (counted in the round-Q budget and in the final answer). Evidence
+  archived under `experiments/results/q_round_examples_ab_20261018/
+  _incident_unintended_llm_launch_20261018/` (README_INCIDENT marks it "must not be used
+  as research evidence").
+- **Hardening**: real mode now requires `ROOT dirty=0`, a frozen PREREG containing the cut
+  sha, a new `--preflight-only` (same gates, never launches), and a preflight→launch
+  TOCTOU sha256 re-check; all subsequent zero-LLM self-tests run on temporary repo copies
+  instead of the live main tree.
+- **Quick-fail** (04:16): the first Q-2 real run exited rc=2 with wall 0s because the
+  runner referenced a helper path under the worktree that did not exist — **zero LLM
+  calls** (fixed and re-run; cost 0).
+
+### Changed
+
+- Examples-channel caliber (since Q-1): production default off; when enabled each task
+  adds at most 3 example assertions and the Planner contract adds ~300 input tokens/task
+  (Q-2 estimate ≤$0.01/arm); citations must state examples source/count and denominators,
+  and must not transplant the replay mechanism's correct gains as production capability
+  claims (Q-2 decision rules).
+- BASELINE gains `target_quality.oracle_examples_production` / `postprocess_wall`;
+  `feature_matrix` 62→64; register §3.2 Q-1..Q-3, §4 round-Q closures and incident
+  disclosure, §5 citation discipline; README/INDEX/EMSE local checklist synchronized;
+  `docs/COST_MODEL.md/.en.md` added and listed in INDEX.
+
+### Verification
+
+### Verification
+
+- **Full suite (CI caliber)**: `pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8684 passed / 5 skipped / 0 failed** (**8689** collected; **162.1s** locally;
+  COVERAGE_FILE isolated);
+- **Coverage**: lines **96.52%** (17269/17892) / branches **92.70%** (6150/6634);
+  `coverage_ratchet.py --check` passes (water 96.40/92.50, headroom +0.12pp/+0.20pp);
+- **Static checks**: `ruff check .` / `ruff format --check .` green (798 files);
+  `mypy src/ config.py` 0 errors (134 source files);
+- **Gates**: `make gates` green (25 CI-blocking gates); `check_artifacts_tracked`
+  MANIFEST **112/112** plus the `emse_*` directory coverage scan (6 new Q-round evidence
+  entries; including the incident-disclosure README_INCIDENT);
+- **Full-feature probe matrix (64)**: `AITESTER_E2E_LLM=true python
+  scripts/tools/e2e_probe.py --all --include-llm` → **64/64 pass** (14 groups,
+  12 real-LLM probes, 75.9s wall); new `logic-oracle-examples-production`
+  (production-wiring contract) and `observability-postprocess-wall`;
+- **Q-1 production wiring**: 33 tests lock zero difference when off (prompt
+  byte-identical / stripped product byte-identical / row fields none-0 / zero
+  generator calls for non-Planner arms); cut commit `a48a53f`;
+- **Q-2 pre-registered A/B (real LLM)**: verdict **`not_confirmed`** — both arms 20
+  rows exit=0, walls 2336/2084s, costs $0.137792/$0.138086 (batch $0.275878);
+  oracle-correct Δ=+6 (McNemar p=0.015625) but LLM-suite 100%→80% (−20pp) fails
+  non-inferiority; worktree dirty=0 before/after, watchdog not triggered, orphan patrols
+  0; artifact SHA256SUMS `e4b1dd5f…` **101 entries verified** (includes quick-fail archive
+  and incident directory);
+- **Q-3 post-processing wall module**: 88 tests; `build_postprocess_wall` verified on
+  constructed data (percentiles / JSON shape / bad-value fallback); env reader lives in
+  `src/utils/env_utils.py` (`check_env_budget` / `check_env_snapshot_keys` pass); hook
+  integration registered for next round;
+- **Round-Q real LLM spend**: Q-2 $0.275878 + preparation incident rough estimate
+  $0.15–0.20 + probes/other ≈$0.05 ≈ **$0.48–0.53** (cap $0.7 ✓).
 
 ## [Unreleased] — 2026-10-18 Round P (oracle examples channel exploration + A-19 paper-feature fix + doctor self-check)
 

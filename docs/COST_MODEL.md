@@ -93,7 +93,7 @@ from experiments.postprocess_wall import StageTimer, build_postprocess_wall, pos
 mdo_timer = StageTimer("mdo")
 for task in tasks:
     with mdo_timer.measure_task(timed_out=task.timed_out):
-        run_mdo_postprocess(task)              # 原后处理逻辑（计时零行为变化）
+        run_mdo_postprocess(task)  # 原后处理逻辑（计时零行为变化）
 
 # 2) 聚合为稳定 JSON（warn_s 从 env AITESTER_POSTPROCESS_WARN_S 读，默认 600s）
 wall = build_postprocess_wall(
@@ -101,9 +101,9 @@ wall = build_postprocess_wall(
     timed_out={timer.stage: timer.timed_out_tasks for timer in (mutation_timer, m1_timer, mdo_timer, other_timer)},
     warn_s=postprocess_warn_s(),
 )
-for message in wall.warnings:                  # 3) 阈值超限由调用方 logger.warning
+for message in wall.warnings:  # 3) 阈值超限由调用方 logger.warning
     logger.warning("%s", message)
-batch_report["postprocess_wall"] = wall        # 4) 写入批次 JSON 的 postprocess_wall 键
+batch_report["postprocess_wall"] = wall  # 4) 写入批次 JSON 的 postprocess_wall 键
 ```
 
 - `StageTimer` 同时支持 `with timer:`（阶段总 wall）、`with timer.measure_task():`

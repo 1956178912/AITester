@@ -181,6 +181,14 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/p_round_b8_ablation_20261018/README.md",
     "experiments/results/p_round_b8_ablation_20261018/ABLATION_REPORT.json",
     "experiments/results/p_round_b8_ablation_20261018/SHA256SUMS",
+    # Q 轮（2026-10-18）：示例通道生产化预注册 A/B（含事故披露件）
+    "experiments/results/q_round_examples_ab_20261018/README.md",
+    "experiments/results/q_round_examples_ab_20261018/ANALYSIS_REPORT.json",
+    "experiments/results/q_round_examples_ab_20261018/SHA256SUMS",
+    "experiments/results/q_round_examples_ab_20261018/_incident_unintended_llm_launch_20261018/README_INCIDENT.md",
+    # Q 轮：批后处理墙钟可观测模块（smoke + 说明）
+    "experiments/results/q_round_postprocess_wall_20261018/README.md",
+    "experiments/results/q_round_postprocess_wall_20261018/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

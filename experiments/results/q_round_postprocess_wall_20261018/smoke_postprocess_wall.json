@@ -1,0 +1,53 @@
+{
+  "schema": "postprocess_wall_smoke/1",
+  "generated_at": "2026-10-18T00:00:00+0000",
+  "note": "构造数据 smoke：演示 build_postprocess_wall 的稳定 JSON 形状与告警；非真实批次数字",
+  "registered_stages": [
+    "mutation",
+    "m1",
+    "mdo",
+    "other"
+  ],
+  "warn_s": 600.0,
+  "postprocess_wall": {
+    "mutation": {
+      "wall_s": 13.78,
+      "n_tasks": 5,
+      "mean_s": 2.756,
+      "p50_s": 0.47,
+      "p95_s": 9.702,
+      "max_s": 12.0,
+      "timed_out_tasks": 1
+    },
+    "m1": {
+      "wall_s": 0.14,
+      "n_tasks": 4,
+      "mean_s": 0.035,
+      "p50_s": 0.035,
+      "p95_s": 0.0485,
+      "max_s": 0.05,
+      "timed_out_tasks": 0
+    },
+    "mdo": {
+      "wall_s": 742.1,
+      "n_tasks": 3,
+      "mean_s": 247.366667,
+      "p50_s": 1.2,
+      "p95_s": 666.12,
+      "max_s": 740.0,
+      "timed_out_tasks": 0
+    },
+    "other": {
+      "wall_s": 0.0,
+      "n_tasks": 0,
+      "mean_s": 0.0,
+      "p50_s": 0.0,
+      "p95_s": 0.0,
+      "max_s": 0.0,
+      "timed_out_tasks": 0
+    }
+  },
+  "derived_warnings": [
+    "后处理阶段 'mdo' 墙钟 742.1s 超过阈值 600.0s（可能撞后处理 watchdog/后处理退化；建议拆分阶段或调大 watchdog 裕量；阈值可用 AITESTER_POSTPROCESS_WARN_S 覆盖）"
+  ]
+}

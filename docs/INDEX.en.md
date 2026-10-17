@@ -87,6 +87,7 @@
 | [docs/design/misguided_effective_metric.md](design/misguided_effective_metric.md) (Chinese) | Misguided/effective per-test three-way metric (ISSTA'26 operationalization): class tree, denominators, execution caliber and known limits. |
 | [docs/design/oracle_quality_metric.md](design/oracle_quality_metric.md) (Chinese) | Deterministic spec-oracle quality (A-05): four classes, injection fidelity, detection contribution and verdict-coupling limits. |
 | [docs/design/e2e_probe_matrix.md](design/e2e_probe_matrix.md) (Chinese) | Full-feature end-to-end probe matrix: feature-checklist verification, zero-LLM default with opt-in real LLM, reporting and boundaries. |
+| [docs/COST_MODEL.md](COST_MODEL.md) (bilingual pair) | Cost model: batch post-processing wall observability (StageTimer/percentiles/thresholds), budget caliber and batch guidance. |
 | [docs/dependency_exemptions.en.md](dependency_exemptions.en.md) | Dependency-exemption registry: alternative for each exemption and its re-review deadline. |
 | [docs/threat_model.en.md](threat_model.en.md) | Threat model: T1-T8 threats, attack surfaces and existing mitigations. |
 
