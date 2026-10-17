@@ -231,3 +231,34 @@ logic_analysis}`、`target_function`、`module_name`、`target_code`；锚表 sh
 不是 LLM 生成能力指标，也不与 TestAgent / Tratto / TOGLL 的 oracle 数字横向对比；
 描述性、无显著性推断。工件：`experiments/results/emse_oracle_quality_20261017/`
 （输入 sha256、命令、分母、失败类型逐类披露、0 mismatch 交叉校验）。
+
+**N-3 处置（2026-10-17，A-05 后续修复）**：两条缺陷**分治**——
+
+- **① 接线缺口（P0，结构性）已修复**：`_append_spec_oracle_to_test_with_verdict`
+  材料源扩展为 `spec_ir → test_plan.logic_analysis → spec_anchor.logic_analysis →
+  spec_anchor.human_spec`。此前生产 df_spec/doc/union/augment 类臂（Planner 关闭、
+  只有 `spec_anchor`）的 oracle 注入**永远 not_attempted**——即"注入率"本身
+  也被接线缺口人为压低。人类 docstring 锚**不强行编译**，如实记
+  `not_attempted_human_spec_only`；另有 `not_attempted_missing_target` /
+  `not_attempted_anchor_unparseable` 两个可审计原因（既有 verdict 值逐字不变）。
+- **② 判分对象耦合已修复**：`detection_rate` 语义收敛为 **LLM-suite**
+  （pytest `-k` 排除 `test_specir_v2_oracle` / `test_specir_v2_smt_witness`）；
+  oracle 测试独立 `-k` 运行并以 `oracle_suite_verdict` ∈
+  correct/fp/silent/misguided/unavailable 单列（超时/收集错误 → unavailable，
+  fail-closed）。oracle 失败**不再改写** LLM 检出结论。默认开关关闭时零行为
+  差异（命令逐位不变、零额外子进程）；口径变更**只影响未来批次**，历史工件
+  JSON 不改写，引用历史 detection 须标注"混判旧口径"。
+
+**零 LLM 重放验证**（`experiments/oracle_quality_replay.py --independent-judging`；
+工件 `experiments/results/emse_oracle_independent_judging_20261017/`）：
+state 只带 `spec_anchor`（复刻生产臂形态，同时验证接线修复），直接调用生产
+`_m1_metrics` 判分链，`M1_PER_TEST_TIMEOUT=1s` 对齐 M-2 重放。结果：两臂
+LLM-suite detection **20/40 = 50.00% / 31/40 = 77.50%** 与 M-2 基线**逐位一致**
+（逐任务 match 40 + both_none 9 + replay_none 1（node 无 gold），**mismatch 0**）；
+oracle 独立四分类（38 个注入任务）仍为 **correct 0 / fp 29 / silent 9 /
+misguided 0 / unavailable 2**，与 M-2 逐任务类别 match 38/38。**判分修复不改变
+"oracle 通道当前净负"的质量结论，只让它可被独立测量**——质量改进（编译器绑定
+自校验 / 假阳治理）仍是下一轮任务。真 LLM 单任务冒烟（`smoke/`，df_spec 臂 +
+`SPEC_ORACLE_EXEC_ENABLE=true`，find_in_sorted，1 次调用 2423 tokens）直接演示：
+同一生成测试 **LLM-suite detection=1.0 而 legacy 混判=0.0**（oracle verdict=fp
+抹掉了既有检出）——验证性，不作证据。

@@ -450,14 +450,27 @@ class AITesterState(TypedDict, total=False):
     spec_oracle_injected: bool | None
     # P0-4（REVIEW_2026_FRONTIER I-07，2026-10-10）：规约 oracle 注入的**行级判定结果**
     # （与 spec_oracle_injected 配对透出，供结果行直接读取——T3 审查指出的"注入 oracle
-    # 造成的红与 LLM 断言造成的红在结果行里逐位同构"缺口）。取值域：
-    #   "not_attempted"         开关关 / 无规约材料（未尝试编译）↔ injected=None
-    #   "compiled_empty"        尝试编译但产物为空（含无可编译子句）↔ injected=False
-    #   "injected"              产物已追加进 generated_test，尚未执行 ↔ injected=True
-    #   "injected_and_passed"   已注入且 oracle 用例执行通过（_executor_node 升级）
-    #   "injected_and_failed"   已注入且 oracle 用例执行失败（确定性检出信号）
+    # 造成的红与 LLM 断言造成的红在结果行里逐位同构"缺口）。取值域
+    # （N-3 2026-10-17 向后兼容扩展，事实源 =
+    # src/graph/nodes.py::_SPEC_ORACLE_VERDICT_DOMAIN）：
+    #   "not_attempted"                       开关关 / 无任何规约材料 ↔ injected=None
+    #   "not_attempted_human_spec_only"       仅有 spec_anchor.human_spec（人类 docstring，
+    #                                         非 SpecExpr；不强行编译） ↔ injected=None
+    #   "not_attempted_anchor_unparseable"    spec_anchor.logic_analysis 在场但解析为空
+    #                                         ↔ injected=None
+    #   "not_attempted_missing_target"        有材料但缺函数名 / 模块名 ↔ injected=None
+    #   "compiled_empty"                      尝试编译但产物为空（含无可编译子句）
+    #                                         ↔ injected=False
+    #   "injected"                            产物已追加进 generated_test，尚未执行
+    #                                         ↔ injected=True
+    #   "injected_and_passed"                 已注入且 oracle 用例执行通过（_executor_node 升级）
+    #   "injected_and_failed"                 已注入且 oracle 用例执行失败（确定性检出信号）
     # None = 该节点从未写入（历史批次 / 节点未运行）；默认关时 _generator_node 写
     # "not_attempted"（键集合同构，失败分支由实验层 None 占位）。
+    # 材料优先级（N-3）：spec_ir → test_plan.logic_analysis →
+    # spec_anchor.logic_analysis / spec_anchor.human_spec（见 nodes 的
+    # _resolve_spec_oracle_material）——修复 df_spec/doc/augment 臂"只有锚材料时
+    # 永不注入"的接线缺口；默认关（SPEC_ORACLE_EXEC_ENABLE=false）时行为逐字节不变。
     spec_oracle_verdict: str | None
     # P0-A-2（2026-10-12 独立评审落地，SPEC_REPLACE_AB_REPORT §5）：规格优先
     # 替换段**是否实际生效**的逐任务可审计观测。DETECTION_SPEC_MODE=replace
@@ -486,6 +499,10 @@ class AITesterState(TypedDict, total=False):
     # SPEC_ANCHOR_TABLE.json）。仅该臂写入；_generator_node 在
     # DETECTION_SPEC_MODE=replace 时优先以其渲染替换段（缺席回落
     # test_plan，历史口径零变化——其它臂从不写本键）。
+    # N-3（2026-10-17）：本键同时是确定性 oracle 注入的材料源——
+    # `_append_spec_oracle_to_test_with_verdict` 在 spec_ir / test_plan 均缺
+    # 时读取 spec_anchor.logic_analysis（df_spec/union 臂）或
+    # spec_anchor.human_spec（doc/augment 臂，仅记录不可编译原因）。
     spec_anchor: dict[str, Any] | None
     # 空计划短路标记（EMPTY_PLAN_SHORTCUT_ENABLE 默认关时恒 False；开启且
     # Planner 产出空计划 test_cases=[] 时由 _generator_node 写入 True，供实验层

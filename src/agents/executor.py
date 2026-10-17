@@ -233,29 +233,69 @@ class ExecutorAgent:
             # 当前平台无可用沙箱后端时直接拒绝执行（不静默降级到无隔离
             # 本地——避免"以为隔离了其实没有"污染对比实验口径，
             # 与 executor_modes 的 docker_unavailable 同口径）。
-            from src.agents.kernel_sandbox import build_sandbox_command, kernel_sandbox_enabled
+            #
+            # N-2（2026-10-17）接线修复：此前只放行 [target_dir]，解释器自身
+            # （venv/bin/python 字面路径 / framework Python.app / venv 根）与
+            # pytest 临时目录均不可见 → `sandbox-exec: execvp() of
+            # '.../.venv/bin/python' failed: Operation not permitted`（rc=71），
+            # 且被误分类为 test_failure。现按"exec 仅执行 / read 只读 / write
+            # 读写"细分放行面：
+            #   - exec：解释器 argv[0] 字面 + realpath + framework 安装根；
+            #   - read：项目根（pytest 读配置但**不得写仓库根**）+ venv 根 +
+            #     framework 安装根 + TMPDIR；
+            #   - write：TMPDIR（pytest 临时文件 / coverage 数据文件）。
+            # 同时沙箱内禁写 .pyc/.pytest_cache、coverage 数据落 TMPDIR，
+            # 避免写仓库根造成工件污染与安全面扩大。
+            from src.agents.kernel_sandbox import (
+                SandboxUnavailable,
+                build_sandbox_command,
+                interpreter_sandbox_allowances,
+                kernel_sandbox_enabled,
+                sandbox_launch_failure,
+            )
 
+            _ks_tmpdir = tempfile.gettempdir()
             if kernel_sandbox_enabled():
-                sandboxed_cmd, obs = build_sandbox_command(cmd, cwd=project_root, allowed_paths=[target_dir])
+                # 沙箱模式专有：不写字节码/不写 pytest cache/coverage 数据落 TMPDIR
+                if not any(arg == "-p" and "no:cacheprovider" in cmd for arg in cmd):
+                    cmd.extend(["-p", "no:cacheprovider"])
+                env["PYTHONDONTWRITEBYTECODE"] = "1"
+                # 显式传 TMPDIR（默认 exec 环境白名单不含它）：pytest/tempfile 的
+                # 临时目录必须与沙箱放行的可写路径一致，否则 tempfile 探测失败
+                # （No usable temporary directory found）。
+                env["TMPDIR"] = _ks_tmpdir
+                env["COVERAGE_FILE"] = os.path.join(_ks_tmpdir, f".coverage_kernelsandbox_{os.getpid()}.data")
+                _ks_allow = interpreter_sandbox_allowances(python_path)
+                try:
+                    sandboxed_cmd, obs = build_sandbox_command(
+                        cmd,
+                        cwd=project_root,
+                        allowed_paths=[target_dir],
+                        cwd_rw=False,
+                        exec_paths=_ks_allow["exec_paths"],
+                        read_paths=[project_root, _ks_tmpdir, *_ks_allow["read_paths"]],
+                        write_paths=[_ks_tmpdir],
+                    )
+                except SandboxUnavailable as ks_exc:
+                    # S1（2026-09-29 审查 P0）fail-closed：平台无可用沙箱后端且
+                    # 未显式 ALLOW_UNSANDBOXED → 拒绝执行（显式错误类型，不裸跑）。
+                    return {
+                        "passed": False,
+                        "output": f"内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行）: {ks_exc}",
+                        "coverage": 0.0,
+                        "failed_cases": [],
+                        "error_info": {"type": "kernel_sandbox_unavailable", "message": str(ks_exc)},
+                    }
                 if obs.get("supported"):
                     self._kernel_sandbox_obs = obs
-                    # 2026-10-01 全面审查 P1 修复：此前 `cmd = sandboxed_cmd[1:]` 把
-                    # sandboxed_cmd[0]（"sandbox-exec" / "bwrap"）取出存到
-                    # self._kernel_sandbox_executable，但该字段全仓从未被
-                    # run_pytest_with_retry 的 subprocess.run(executable=...) 消费
-                    # （注释 L88 承诺与实现脱节）——cmd[0] 此时是 "-p"（seatbelt）/
-                    # "--ro-bind"（bwrap），子进程按 cmd[0] 查找可执行文件抛
-                    # FileNotFoundError: '-p'，开关目标场景 100% 失效。
-                    # 现改为保留完整 sandboxed_cmd 作为 argv（零 subprocess 语义
-                    # 歧义——seatbelt/bwrap 的 argv[0] 即工具自身，后续是参数），
-                    # self._kernel_sandbox_executable 仅作观测/校验用途。
+                    # 2026-10-01 全面审查 P1 修复：保留完整 sandboxed_cmd 作为 argv
+                    # （seatbelt/bwrap 的 argv[0] 即工具自身），_kernel_sandbox_executable
+                    # 仅作观测/校验用途。
                     self._kernel_sandbox_executable = sandboxed_cmd[0]
                     cmd = sandboxed_cmd
                 else:
                     # S1（2026-09-29 审查 P0）：fail-closed —— obs["supported"]=False
-                    # 时此前直接返回"无隔离执行"结果（调用方忘检查 obs 时
-                    # fail-open 裸跑）；现改为拒绝执行（与 docker_unavailable
-                    # 同口径），返回 error_info type=kernel_sandbox_unavailable。
+                    # 时拒绝执行，返回 error_info type=kernel_sandbox_unavailable。
                     return {
                         "passed": False,
                         "output": "内核级沙箱在当前平台不可用（S1 fail-closed 拒绝执行；"
@@ -274,13 +314,25 @@ class ExecutorAgent:
             # 2026-09-26 round9 P2：新增 "UNAVAILABLE" 标记（通用异常且无有效
             # 结果时），与 EARLY_RETURN 走同一早退分支（error_info 透传）。
             if isinstance(last_result, tuple) and last_result[0] in ("EARLY_RETURN", "UNAVAILABLE"):
-                return {
+                result_early: dict[str, Any] = {
                     "passed": False,
                     "output": output,
                     "coverage": 0.0,
                     "failed_cases": [],
                     "error_info": last_result[1],
                 }
+                # N-2：沙箱启动/配置失败显式归因（不得误报为 test_failure；
+                # 不新增 ErrorCategory 枚举值，error_info.type 为自由字符串）
+                _ks_launch_error = sandbox_launch_failure(output) if self._kernel_sandbox_obs else None
+                if _ks_launch_error:
+                    result_early["error_info"] = {
+                        "type": "kernel_sandbox_unavailable",
+                        "message": _ks_launch_error,
+                    }
+                    result_early["kernel_sandbox_launch_failed"] = True
+                if self._kernel_sandbox_obs:
+                    result_early["kernel_sandbox_obs"] = self._kernel_sandbox_obs
+                return result_early
 
             coverage = self._parse_coverage(output)  # type: ignore[attr-defined]
             failed_cases = self._parse_failed_cases(output)  # type: ignore[attr-defined]
@@ -299,6 +351,18 @@ class ExecutorAgent:
 
             if last_result and last_result.returncode != 0:
                 result_dict["error_info"] = self._build_error_info(last_result, output)  # type: ignore[attr-defined]
+                # N-2（2026-10-17）：沙箱启动/配置失败（profile 语法/exec 被拒/
+                # bwrap 配置错）→ 显式 kernel_sandbox_unavailable，不得记为
+                # test_failure（否则 Debugger 会去"修代码"、失败归因与 M1 观测口径
+                # 被污染）。仅用 error_info.type 显式值，不新增 ErrorCategory 枚举。
+                _ks_launch_error = sandbox_launch_failure(output) if self._kernel_sandbox_obs else None
+                if _ks_launch_error:
+                    result_dict["error_info"] = {
+                        "type": "kernel_sandbox_unavailable",
+                        "returncode": last_result.returncode,
+                        "message": _ks_launch_error,
+                    }
+                    result_dict["kernel_sandbox_launch_failed"] = True
             # 执行路径结束（成功/失败）：清理实例级内核沙箱状态，
             # 避免下次调用（含关闭开关的场景）透传旧观测层
             self._kernel_sandbox_executable = None

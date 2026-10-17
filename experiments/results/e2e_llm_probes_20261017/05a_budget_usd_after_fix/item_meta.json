@@ -1,0 +1,52 @@
+{
+  "item": "05a_budget_usd_after_fix",
+  "purpose": "N-5 D1 复验：COST_BUDGET_USD=$0.0001 + COST_USD_PER_1K=0.3 真实 LLM 场景，修复后 USD 通道必须触发并走既有停止通道",
+  "status": "pass",
+  "defect": "D1（P0）：COST_BUDGET_USD 生产记账未接线（N-4 立案）",
+  "fix_commit_state": "主树 N 轮工作树（未 commit）：pricing.py + llm_client 接线 + cost_budget USD 闸",
+  "command": "CMD: COST_BUDGET_ENABLE=true COST_BUDGET_USD=0.0001 COST_USD_PER_1K=0.3 AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=1 AITESTER_LLM_CACHE=0 AITESTER_CACHE_NAMESPACE=n5_05a_usd_after_fix .venv/bin/python experiments/run_main_batch.py --dataset quixbugs --task-limit 1 --seed 42 --baselines aitester --output-dir experiments/results/e2e_llm_probes_20261017/05a_budget_usd_after_fix --skip-stats --allow-dirty --dirty-reason='N-5 D1 复验：主树含 N 轮并行交付（非本探针路径）'",
+  "artifact": "benchmark_quixbugs_20261017_234049.json",
+  "dataset": "quixbugs",
+  "task_count": 1,
+  "profile": "logic",
+  "row": {
+    "task_id": "quixbugs__bitcount",
+    "passed": false,
+    "stop_reason": "budget_exceeded",
+    "token_budget_capped": true,
+    "error_category": "patch_validation_failed",
+    "diagnosis": "JSON 解析失败: LLM 预算耗尽：已消耗 $0.001644 >= 上限 $0.000100（美元口径）",
+    "token_usage": {
+      "input_tokens": 2496,
+      "output_tokens": 746,
+      "total_tokens": 3242,
+      "llm_calls": 1,
+      "cache_hits": 0,
+      "cache_avoided_tokens": 0,
+      "by_model": {
+        "deepseek-flash": 3242
+      }
+    }
+  },
+  "budget_enabled": true,
+  "cost_budget_usd_cap": 0.0001,
+  "cost_usd_per_1k": 0.3,
+  "evidence": {
+    "stop_reason": "budget_exceeded",
+    "token_budget_capped": true,
+    "llm_calls": 1,
+    "total_tokens": 3242,
+    "usd_consumed_evidence": "run.log: 任务级预算超限：消耗 3242 tokens / $0.001644 >= 上限（tokens=0, usd=0.0001）",
+    "usd_stop_channel": "Generator/Debugger LLM 调用失败（5.4 预算封顶）"
+  },
+  "before_after": {
+    "before_N4_05a": "3 次调用/6757 tok 照常完成；stop_reason=max_iterations；token_budget_capped=false；consumed_usd 恒 0；无预算告警",
+    "after_N5": "1 次调用（3242 tok）后 USD 超限即停止：stop_reason=budget_exceeded；token_budget_capped=true；日志含 $0.001644 >= $0.0001；消息单位正确（美元口径）"
+  },
+  "d3_cross_file_audit_keys": {
+    "cross_file_enabled": false,
+    "cross_file_deps": null,
+    "cross_file_plan_present": false
+  },
+  "n5_note": "N-5 修复后结果行同含 D1/D3 审计字段（见 README §7）；未 commit。"
+}

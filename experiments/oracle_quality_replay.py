@@ -104,6 +104,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -213,6 +214,21 @@ _DEFAULT_DF = _REPO_ROOT / "experiments/results/emse_df_spec_20261016/benchmark_
 DEFAULT_ARTIFACTS: tuple[Path, ...] = (_DEFAULT_DF_SPEC, _DEFAULT_DF)
 DEFAULT_ANCHOR_TABLE = _REPO_ROOT / "experiments/results/emse_spec_anchor_20261016/SPEC_ANCHOR_TABLE.json"
 DEFAULT_OUT = _REPO_ROOT / "experiments/results/emse_oracle_quality_20261017"
+
+# N-3（2026-10-17，A-05 后续修复）：独立判读模式。
+# 语义：把生产独立判读链（nodes 注入 + _m1_metrics 的 LLM-suite/oracle-suite
+# 分开执行）**原样**套到归档 df_spec 两臂上，验证：
+#   ① 接线修复（仅 spec_anchor 材料的 state 也能注入）；
+#   ② LLM-suite detection 与 M-2 已测值一致（40 口径 df_spec 50.00% / df 77.50%）；
+#   ③ oracle 独立四分类与 M-2 逐任务分类的一致性。
+M2_REPORT_DEFAULT = _REPO_ROOT / "experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json"
+INDEPENDENT_OUT_DEFAULT = _REPO_ROOT / "experiments/results/emse_oracle_independent_judging_20261017"
+INDEPENDENT_SCHEMA_VERSION = "oracle_independent_judging/1"
+# 与 _m1_metrics 同一 M1 判分 caliber：M-2 重放用 --per-test-timeout 1；
+# 独立判读复用生产 _m1_metrics 路径时通过 M1_PER_TEST_TIMEOUT 显式对齐，
+# 否则挂死任务族（bitcount/find_first_in_sorted/sqrt/wrap）会退化为
+# 整套餐超时 None，无法与 M-2 的 40 口径分母对账。
+INDEPENDENT_M1_PER_TEST_TIMEOUT_S = 1
 
 _PY_IDENT_RE = mm._PY_IDENT_RE
 
@@ -386,6 +402,41 @@ def reconstruct_state(
             "function_name": anchor_entry.get("function_name"),
             "logic_analysis": anchor_entry.get("logic_analysis"),
         }
+    return state
+
+
+def reconstruct_state_anchor_only(
+    task_id: str,
+    task_metadata: dict[str, Any],
+    anchor_entry: dict[str, Any] | None,
+    target_code: str,
+) -> AITesterState:
+    """N-3：只带 ``spec_anchor`` 的 state（复刻生产 df_spec/doc/union/augment 类臂）。
+
+    生产这些臂 Planner 关闭（``baseline`` 不跑 planner）→ state 里**没有**
+    ``test_plan``，只有 ``run_benchmark`` 预载的 ``state["spec_anchor"]``。
+    N-3 修复前注入口只认 ``spec_ir`` / ``test_plan`` → 这些臂永远
+    ``not_attempted``（接线缺口）；修复后 spec_anchor.logic_analysis 成为
+    第三材料源。本函数用于独立判读重放，同时充当接线修复的生产态验证。
+
+    Args:
+        task_id: 任务 id（末段 = module_name）。
+        task_metadata: 归档行 task_metadata（取 suggested_function）。
+        anchor_entry: 锚表条目（logic_analysis / human_spec / function_name）。
+        target_code: 缺陷版源码。
+
+    Returns:
+        AITesterState（不含 test_plan / spec_ir；只带 spec_anchor）。
+    """
+    state: AITesterState = {
+        "target_code": str(target_code),
+        "module_name": module_name_for_task(task_id),
+    }
+    suggested = task_metadata.get("suggested_function")
+    if isinstance(suggested, str) and suggested.strip():
+        state["target_function"] = suggested.strip()
+    if isinstance(anchor_entry, dict):
+        state["spec_anchor"] = dict(anchor_entry)
     return state
 
 
@@ -619,11 +670,16 @@ def analyze_task(
     collect_timeout_s: float,
     file_timeout_s: float,
     siblings_cache: dict[str, dict[str, str]],
+    independent_judging: bool = False,
 ) -> dict[str, Any]:
     """分析一个归档任务行：state 重建 → 生产注入 → LLM-only 重放 → 增强重放分类。
 
     任何材料/执行不可用都记 ``structural_skip`` + 原因码（不静默跳过）；
     注入统计为纯函数结果，即使后续 replay 不可用也保留（可审计）。
+
+    ``independent_judging=True``（N-3）：state 只带 ``spec_anchor``（复刻生产
+    df_spec 类臂形态，同时验证接线修复），并用生产 ``_m1_metrics`` 的 LLM-suite /
+    oracle-suite 分离判读替代本工具的混判复算；结果写入 ``independent`` 字段。
     """
     task_id = str(row.get("task_id") or "")
     raw_meta = row.get("task_metadata")
@@ -695,6 +751,16 @@ def analyze_task(
             "augmented_replay": None,
             "transition": "undecidable",
         },
+        # N-3 独立判读（--independent-judging；非该模式时保持默认"未判读"）
+        "independent": {
+            "status": "not_run",
+            "skip_reason": None,
+            "skip_detail": "",
+            "llm_suite_detection": None,
+            "oracle_suite_verdict": "unavailable",
+            "state_mode": None,
+            "judge_wall_s": 0.0,
+        },
         "timing": {"total_wall_s": 0.0, "llm_only_wall_s": 0.0, "augmented_wall_s": 0.0},
     }
     t_total = time.time()
@@ -757,7 +823,15 @@ def analyze_task(
             t_total,
         )
     record["anchor"]["function_name"] = function_name.strip()
-    state = reconstruct_state(task_id, task_metadata, anchor_entry, buggy_code)
+    if independent_judging:
+        # N-3 独立判读：忠实复刻生产 df_spec/doc/union/augment 臂的 state 形态
+        # ——只有 spec_anchor、**没有** test_plan（修复前的接线缺口正是此形态
+        # 永远 not_attempted）。本模式因此同时验证生产接线修复。
+        state = reconstruct_state_anchor_only(task_id, task_metadata, anchor_entry, buggy_code)
+        record["independent"]["state_mode"] = "anchor_only"
+    else:
+        state = reconstruct_state(task_id, task_metadata, anchor_entry, buggy_code)
+        record["independent"]["state_mode"] = "test_plan"
     record["target"]["module_name"] = state.get("module_name")
     record["target"]["target_function"] = state.get("target_function")
 
@@ -787,6 +861,22 @@ def analyze_task(
         record["archived_check"]["verdict_agreement"] = "match"
     else:
         record["archived_check"]["verdict_agreement"] = "mismatch"
+
+    # N-3 独立判读模式：不走 M-2 的 LLM-only/增强混判路径，改为直接调用
+    # **生产判读链**（_m1_metrics：LLM-suite detection + oracle-suite 独立判定）。
+    if independent_judging:
+        record["detection"]["archived"] = record["artifact_detection_rate"]
+        record["independent"] = judge_task_independent(
+            task_id=task_id,
+            task_metadata=task_metadata,
+            buggy_code=buggy_code,
+            fixed_code=fixed_code,
+            generated_test=generated_test,
+            merged_test=merged_test,
+            injected=bool(injected),
+            injection_verdict=verdict,
+        )
+        return _finish_fast(record, t_total)
 
     # ⑥ LLM-only 重放（复用 T2 工具的完整分析：detection 交叉校验 + 材料校验）
     t_llm = time.time()
@@ -945,6 +1035,346 @@ def _llm_only_side_replayable(base: dict[str, Any]) -> bool:
     return bool(base.get("buggy_side")) and bool(base.get("fixed_side"))
 
 
+# ─── N-3 独立判读（生产 _m1_metrics 链原样套用） ────────────────────────────
+@dataclass(frozen=True)
+class _ArchivedTask:
+    """把归档行包装成 ``_m1_metrics`` 判分函数可消费的最小任务对象。
+
+    只提供判分路径实际读取的属性（``task_id`` / ``instance_code`` /
+    ``metadata``）：metadata 必须保留归档原始字段（``source`` /
+    ``test_cases`` / ``fixed`` / ``is_cross_file`` 等），由 _m1_metrics 的
+    ``_extract_gold_material`` / ``_gold_fixed_code`` / 物化分派消费。
+    """
+
+    task_id: str
+    instance_code: str
+    metadata: dict[str, Any]
+    repo_name: str = "quixbugs"
+
+
+def m1_llm_suite_detection(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """生产 M1 判分：LLM-suite detection（N-3 语义，排除 oracle 测试）。
+
+    惰性 import 生产函数（单测可 monkeypatch 本包装器以避开真实子进程）。
+    """
+    from experiments._m1_metrics import _compute_llm_suite_detection_rate
+
+    return _compute_llm_suite_detection_rate(task, final_state)
+
+
+def m1_oracle_suite_verdict(task: Any, final_state: dict[str, Any] | None) -> str:
+    """生产 M1 判分：oracle-suite 独立判定（correct/fp/silent/misguided/unavailable）。"""
+    from experiments._m1_metrics import _compute_oracle_suite_verdict
+
+    return _compute_oracle_suite_verdict(task, final_state)
+
+
+def judge_task_independent(
+    *,
+    task_id: str,
+    task_metadata: dict[str, Any],
+    buggy_code: str,
+    fixed_code: str,
+    generated_test: str,
+    merged_test: str,
+    injected: bool,
+    injection_verdict: str,
+) -> dict[str, Any]:
+    """N-3：对单任务跑生产独立判读链（LLM-suite detection + oracle-suite 判定）。
+
+    Args:
+        task_id / task_metadata / buggy_code: 归档任务与缺陷版源码（构造判分对象）。
+        fixed_code: 归档 gold fixed（_m1_metrics 从 metadata 自行读取；参数保留
+            以便调用方语义完整/未来扩展）。
+        generated_test / merged_test: LLM-only 与注入后测试全文（仅用于审计字段）。
+        injected / injection_verdict: 生产注入结果（未注入 → 不判 read）。
+
+    Returns:
+        independent 记录 dict（status/skip_reason/llm_suite_detection/
+        oracle_suite_verdict/state_mode/judge_wall_s + 审计字段）。
+    """
+    record: dict[str, Any] = {
+        "status": "not_run",
+        "skip_reason": None,
+        "skip_detail": "",
+        "llm_suite_detection": None,
+        "oracle_suite_verdict": "unavailable",
+        "state_mode": "anchor_only",
+        "judge_wall_s": 0.0,
+        "injection_verdict": injection_verdict,
+        "merged_has_oracle_markers": is_oracle_node(merged_test),
+        "merged_test_sha256": sha256_text(merged_test),
+        "generated_test_sha256": sha256_text(generated_test),
+    }
+    task = _ArchivedTask(task_id=task_id, instance_code=str(buggy_code), metadata=dict(task_metadata))
+    final_state: dict[str, Any] = {"generated_test": str(merged_test)}
+    t0 = time.time()
+    try:
+        # LLM-suite detection 与注入与否**无关**：未注入（compiled_empty /
+        # not_attempted_* / human_spec_only）任务的 LLM 测试仍有检出语义，
+        # 必须照常计算，否则 40 口径分母会因"未注入"被动缩小、与 M-2 基线
+        # 不可比。oracle-suite 判定仅在真正注入时执行（未注入 = unavailable）。
+        detection = m1_llm_suite_detection(task, final_state)
+        oracle_verdict = m1_oracle_suite_verdict(task, final_state) if injected else "unavailable"
+    except Exception as e:  # pragma: no cover - 生产函数内部已 fail-closed；此处兜底不崩报告
+        record.update(status="error", skip_reason="independent_judge_error", skip_detail=str(e))
+        record["judge_wall_s"] = round(time.time() - t0, 3)
+        return record
+    record.update(
+        status="ok",
+        llm_suite_detection=detection,
+        oracle_suite_verdict=oracle_verdict,
+    )
+    if not injected:
+        record["skip_reason"] = "not_injected"
+        record["skip_detail"] = f"注入 verdict={injection_verdict}（oracle 判定 unavailable；LLM-suite 照常判读）"
+    record["judge_wall_s"] = round(time.time() - t0, 3)
+    return record
+
+
+# ─── M-2 报告加载与逐任务对账 ─────────────────────────────────────────────
+def load_m2_report(path: Path) -> dict[str, Any]:
+    """加载 M-2 oracle 质量报告（独立判读对账的权威基线；缺失 fail-closed）。
+
+    Returns:
+        {"path", "sha256", "report", "arm_index"}；arm_index 见
+        ``index_m2_report``。
+
+    Raises:
+        OracleQualityError: 文件缺失 / JSON 非法 / 结构不合法。
+    """
+    if not path.is_file():
+        raise OracleQualityError(f"M-2 基线报告不存在（--independent-judging 需要）: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise OracleQualityError(f"M-2 基线报告无法解析: {path}: {e}") from e
+    report = payload.get("report") if isinstance(payload, dict) else None
+    if not isinstance(report, dict) or not report.get("arms"):
+        raise OracleQualityError(f"M-2 基线报告结构不合法（缺 report.arms）: {path}")
+    return {
+        "path": _display_path(path),
+        "sha256": sha256_file(path),
+        "body_digest": (payload.get("run_meta") or {}).get("body_digest"),
+        "report": report,
+        "arm_index": index_m2_report(report),
+    }
+
+
+def index_m2_report(m2_report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """把 M-2 报告索引成 {arm: {task_id: 对账字段}}。
+
+    对账字段：
+        - ``llm_only_replay_detection``：M-2 LLM-only 重放任务级 detection；
+        - ``oracle_class``：M-2 四分类（每任务 1 条 oracle 测试 → 类别即任务级）；
+        - ``injection_verdict``：M-2 反事实注入 verdict；
+        - ``oracle_status``/``status``：M-2 可测性上下文。
+    另把臂级 40 口径基线放进 ``"aggregate"`` 键（用于 pooled 率对账）。
+    """
+    index: dict[str, dict[str, Any]] = {}
+    for arm in m2_report.get("arms") or []:
+        tasks: dict[str, dict[str, Any]] = {}
+        for task in arm.get("tasks") or []:
+            counts = (task.get("oracle") or {}).get("counts") or {}
+            oracle_class = next((cls for cls in ORACLE_CLASSES if int(counts.get(cls) or 0) > 0), None)
+            tasks[str(task.get("task_id"))] = {
+                "llm_only_replay_detection": (task.get("llm_only") or {}).get("replay_detection"),
+                "oracle_class": oracle_class,
+                "oracle_status": (task.get("oracle") or {}).get("status"),
+                "injection_verdict": (task.get("injection") or {}).get("verdict"),
+                "status": task.get("status"),
+            }
+        subsets = arm.get("subsets") or {}
+        defect = subsets.get("defect_programs") or {}
+        index[str(arm.get("arm"))] = {
+            "tasks": tasks,
+            "aggregate": {
+                "llm_only_replay_40": (defect.get("detection") or {}).get("llm_only_replay") or {},
+                "oracle_counts_40": (defect.get("oracle") or {}).get("counts") or {},
+                "injection_40": (defect.get("injection") or {}),
+            },
+        }
+    return index
+
+
+def _oracle_class_agreement_tag(m2_class: Any, new_verdict: Any) -> str:
+    """M-2 oracle 类别 vs N-3 独立 oracle verdict 的对账标签。"""
+    m2_norm = str(m2_class) if m2_class else None
+    new_norm = None if new_verdict in (None, "unavailable") else str(new_verdict)
+    if m2_norm is None and new_norm is None:
+        return "both_unavailable"
+    if m2_norm is None:
+        return "new_measured_m2_unavailable"
+    if new_norm is None:
+        return "m2_measured_new_unavailable"
+    return "match" if m2_norm == new_norm else "mismatch"
+
+
+def build_independent_cross_check(
+    tasks: list[dict[str, Any]],
+    m2_arm: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """N-3 独立判读 vs M-2 基线的逐任务对账（detection 0 mismatch 要求）。
+
+    Returns:
+        - detection 对账计数（match / both_none / mismatch / m2_task_missing）；
+        - 逐条 mismatch 归因（不静默）；
+        - oracle 类别对账计数与差异清单（描述性，不要求 0 mismatch）；
+        - injection 对账（anchor-only 接线后的注入 verdict vs M-2 反事实注入）；
+        - ``all_ok`` = detection mismatch 0 且无缺失任务。
+    """
+    detection_counts: Counter[str] = Counter()
+    detection_mismatches: list[dict[str, Any]] = []
+    class_counts: Counter[str] = Counter()
+    class_mismatches: list[dict[str, Any]] = []
+    injection_counts: Counter[str] = Counter()
+    m2_tasks: dict[str, Any] = (m2_arm or {}).get("tasks") or {}
+    for task in tasks:
+        task_id = str(task.get("task_id"))
+        independent = task.get("independent") or {}
+        m2 = m2_tasks.get(task_id)
+        if not isinstance(m2, dict):
+            detection_counts["m2_task_missing"] += 1
+            detection_mismatches.append({"task_id": task_id, "reason": "M-2 基线报告缺该任务（无法对账）"})
+            continue
+        new_detection = independent.get("llm_suite_detection") if independent.get("status") == "ok" else None
+        m2_detection = m2.get("llm_only_replay_detection")
+        tag = _detection_agreement(m2_detection, new_detection)
+        detection_counts[tag] += 1
+        if tag == "mismatch":
+            detection_mismatches.append(
+                {
+                    "task_id": task_id,
+                    "m2_llm_only_replay_detection": m2_detection,
+                    "n3_llm_suite_detection": new_detection,
+                    "agreement": tag,
+                    "reason": (
+                        "独立 LLM-suite 与 M-2 LLM-only 重放在同一任务上结论不同——需人工归因（物化/超时/执行环境差异）"
+                    ),
+                }
+            )
+        class_tag = _oracle_class_agreement_tag(m2.get("oracle_class"), independent.get("oracle_suite_verdict"))
+        class_counts[class_tag] += 1
+        if class_tag in {"mismatch", "m2_measured_new_unavailable", "new_measured_m2_unavailable"}:
+            class_mismatches.append(
+                {
+                    "task_id": task_id,
+                    "m2_oracle_class": m2.get("oracle_class"),
+                    "n3_oracle_suite_verdict": independent.get("oracle_suite_verdict"),
+                    "agreement": class_tag,
+                }
+            )
+        task_injection = (task.get("injection") or {}).get("verdict")
+        m2_injection = m2.get("injection_verdict")
+        if task_injection == m2_injection:
+            injection_counts["same_verdict"] += 1
+        elif bool((task.get("injection") or {}).get("injected")) == bool(
+            str(m2_injection) in {"injected", "injected_and_passed", "injected_and_failed"}
+        ):
+            injection_counts["same_injected_flag_refined_verdict"] += 1
+        else:
+            injection_counts["injected_flag_mismatch"] += 1
+    detection_mismatch_n = detection_counts.get("mismatch", 0)
+    all_ok = detection_mismatch_n == 0 and detection_counts.get("m2_task_missing", 0) == 0
+    return {
+        "requirement": "LLM-suite detection 与 M-2 基线逐任务 0 mismatch（差异逐条归因）",
+        "detection_vs_m2": {
+            "agreement_counts": dict(sorted(detection_counts.items())),
+            "n_mismatch": detection_mismatch_n,
+            "mismatches": detection_mismatches,
+        },
+        "oracle_class_vs_m2": {
+            "agreement_counts": dict(sorted(class_counts.items())),
+            "n_mismatch": class_counts.get("mismatch", 0),
+            "mismatches": class_mismatches,
+            "note": (
+                "M-2 类别来自『LLM+oracle 同文件混判重放』的逐测试分类；N-3 为生产独立判读"
+                "（oracle 单独 -k 运行）。类别差异属预期可比对项（描述性），不作 0 mismatch 要求"
+            ),
+        },
+        "injection_vs_m2": {
+            "agreement_counts": dict(sorted(injection_counts.items())),
+            "note": (
+                "N-3 用 anchor-only state（复刻生产 df_spec 臂）注入；M-2 反事实用 test_plan state。"
+                "same_injected_flag_refined_verdict = 注入与否一致、但 N-3 细分了未尝试原因"
+                "（如 node：not_attempted → not_attempted_anchor_unparseable）"
+            ),
+        },
+        "all_ok": all_ok,
+    }
+
+
+def aggregate_independent(
+    tasks: list[dict[str, Any]],
+    m2_arm: dict[str, Any] | None,
+    *,
+    limited: bool = False,
+) -> dict[str, Any]:
+    """N-3 独立判读臂级聚合（分子/分母按子集重算，不做比率平均）。
+
+    Args:
+        tasks: 任务记录（含 independent 段）。
+        m2_arm: M-2 基线臂索引（tasks/aggregate）。
+        limited: 本次是否 --limit 截断（截断运行不能要求与 M-2 全量 40 口径
+            计数一致；只保留逐任务 0 mismatch 要求，并在报告披露）。
+
+    Returns:
+        {"subsets": {subset: {...llm_suite/oracle_suite 计数与率...}},
+         "cross_check_vs_m2": {...}, "m2_baseline_40caliber": {...},
+         "m2_rates_match": bool, "measurement_limited": bool, "all_ok": bool}
+    """
+    subsets_out: dict[str, Any] = {}
+    for subset in _SUBSETS:
+        subset_tasks = _subset_tasks(tasks, subset)
+        judged = [t for t in subset_tasks if (t.get("independent") or {}).get("status") == "ok"]
+        det_values: list[float] = []
+        for judged_task in judged:
+            value = (judged_task.get("independent") or {}).get("llm_suite_detection")
+            if value is not None:
+                det_values.append(float(value))
+        n_detected = sum(1 for value in det_values if round(value) == 1)
+        verdicts: Counter[str] = Counter(
+            str((t.get("independent") or {}).get("oracle_suite_verdict") or "unavailable") for t in judged
+        )
+        subsets_out[subset] = {
+            "n_tasks": len(subset_tasks),
+            "n_tasks_judged": len(judged),
+            "n_tasks_structural_skip": sum(1 for t in subset_tasks if t.get("status") != "ok"),
+            "n_tasks_not_injected": sum(
+                1 for t in subset_tasks if (t.get("independent") or {}).get("skip_reason") == "not_injected"
+            ),
+            "llm_suite_detection": {
+                "n_detected": n_detected,
+                "n_denominator": len(det_values),
+                "rate": round(n_detected / len(det_values), 6) if det_values else None,
+            },
+            "oracle_suite_counts": {
+                verdict: int(verdicts.get(verdict, 0))
+                for verdict in ("correct", "fp", "silent", "misguided", "unavailable")
+            },
+        }
+    cross_check = build_independent_cross_check(tasks, m2_arm)
+    aggregate = (m2_arm or {}).get("aggregate") or {}
+    m2_baseline_40 = aggregate.get("llm_only_replay_40") or {}
+    n3_40 = subsets_out.get("defect_programs", {}).get("llm_suite_detection") or {}
+    rates_match = m2_baseline_40.get("n_detected") == n3_40.get("n_detected") and m2_baseline_40.get(
+        "n_denominator"
+    ) == n3_40.get("n_denominator")
+    return {
+        "subsets": subsets_out,
+        "cross_check_vs_m2": cross_check,
+        "m2_baseline_40caliber": m2_baseline_40,
+        "m2_rates_match": bool(rates_match),
+        "measurement_limited": bool(limited),
+        "all_ok": bool(cross_check["all_ok"] and (rates_match or limited)),
+        "note": (
+            "--limit 截断运行：40 口径计数不要求与 M-2 全量一致（只验证逐任务 0 mismatch）"
+            if limited
+            else "全量运行：40 口径计数必须与 M-2 基线完全一致"
+        ),
+    }
+
+
 # ─── 聚合 ──────────────────────────────────────────────────────────────────
 def _subset_tasks(tasks: list[dict[str, Any]], subset: str) -> list[dict[str, Any]]:
     """取任务子集（all_tasks / defect_programs / defect_programs_41 / injected_measurable）。"""
@@ -979,8 +1409,12 @@ def aggregate_injection(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         if injection.get("injected"):
             n_injected += 1
             oracle = task.get("oracle") or {}
+            independent = task.get("independent") or {}
             if oracle.get("status") == "ok":
                 oracle_test_counts.append(float(oracle.get("n_oracle_nodes") or 0))
+            elif independent.get("status") == "ok":
+                # N-3 独立判读模式：生产 _m1 判分链每任务 1 条 oracle-suite 判定
+                oracle_test_counts.append(float(1))
         elif verdict == "compiled_empty":
             n_compiled_empty += 1
     n_rows = len(tasks)
@@ -1244,8 +1678,14 @@ def build_arm_result(
     jobs: int,
     limit: int,
     progress: bool = True,
+    independent_judging: bool = False,
+    m2_arm: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """跑一个（工件, 臂）的全部任务并返回臂级结果（并行、确定性排序）。"""
+    """跑一个（工件, 臂）的全部任务并返回臂级结果（并行、确定性排序）。
+
+    ``independent_judging=True``（N-3）：每任务改用生产 _m1_metrics 独立判读链，
+    并额外产出 ``independent_judging`` 段（含与 M-2 基线逐任务对账）。
+    """
     work_rows = sorted(rows, key=lambda r: str(r.get("task_id") or ""))
     if limit > 0:
         work_rows = work_rows[:limit]
@@ -1264,6 +1704,7 @@ def build_arm_result(
             collect_timeout_s=collect_timeout_s,
             file_timeout_s=file_timeout_s,
             siblings_cache=siblings_cache,
+            independent_judging=independent_judging,
         )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
@@ -1284,7 +1725,7 @@ def build_arm_result(
                 )
     tasks.sort(key=lambda t: str(t.get("task_id") or ""))
     skip_reasons: Counter[str] = Counter(str(t.get("skip_reason")) for t in tasks if t.get("status") != "ok")
-    return {
+    arm_result: dict[str, Any] = {
         "artifact": artifact_label,
         "artifact_sha256": artifact_sha256,
         "arm": arm,
@@ -1308,6 +1749,9 @@ def build_arm_result(
         "tasks": tasks,
         "timing": {"wall_s": round(time.time() - started, 3)},
     }
+    if independent_judging:
+        arm_result["independent_judging"] = aggregate_independent(tasks, m2_arm, limited=limit > 0)
+    return arm_result
 
 
 def _arm_role(arm: str) -> str:
@@ -1382,6 +1826,13 @@ def build_comparison(arms: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
+def _m1_oracle_suite_verdict_domain() -> tuple[str, ...]:
+    """oracle-suite verdict 取值域（单一事实源 = experiments/_m1_metrics.py）。"""
+    from experiments._m1_metrics import ORACLE_SUITE_VERDICTS
+
+    return tuple(ORACLE_SUITE_VERDICTS)
+
+
 def build_report(
     *,
     artifact_entries: list[dict[str, Any]],
@@ -1389,10 +1840,17 @@ def build_report(
     arms: list[dict[str, Any]],
     config: dict[str, Any],
     command: list[str],
+    independent_judging: bool = False,
+    m2_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """组装确定性报告 body（不含时间戳/墙钟；这些只进 run_meta）。"""
-    return {
-        "schema_version": SCHEMA_VERSION,
+    """组装确定性报告 body（不含时间戳/墙钟；这些只进 run_meta）。
+
+    ``independent_judging=True``（N-3）：body 顶层加 ``mode`` 与
+    ``independent_judging`` 段（M-2 基线输入 sha256、逐臂对账口径说明）。
+    """
+    body: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION if not independent_judging else INDEPENDENT_SCHEMA_VERSION,
+        "mode": "independent_judging" if independent_judging else "mixed_replay",
         "tool": {"name": TOOL_NAME, "version": TOOL_VERSION},
         "metric_definition": {
             "name": "A-05 确定性规约 oracle 质量度量（零 LLM 重放）",
@@ -1434,6 +1892,25 @@ def build_report(
         "anchor_table": anchor_info,
         "arms": arms,
         "comparison": build_comparison(arms),
+        "independent_judging": (
+            {
+                "m2_baseline": m2_info,
+                "caliber": (
+                    "生产独立判读链：_m1_metrics LLM-suite detection（-k 排除 "
+                    "test_specir_v2_oracle / test_specir_v2_smt_witness）+ oracle-suite "
+                    "verdict（-k 只选 oracle 测试名）；state 只带 spec_anchor（复刻生产 "
+                    "df_spec 类臂，同时验证 N-3 接线修复）；M1_PER_TEST_TIMEOUT 与 M-2 重放"
+                    "对齐为 1s"
+                ),
+                "requirement": (
+                    "LLM-suite detection 逐任务与 M-2 基线 0 mismatch，且 40 口径 pooled "
+                    "计数与 M-2 完全一致（df_spec 20/40=50.00%、df 31/40=77.50%）"
+                ),
+                "oracle_suite_verdict_domain": list(_m1_oracle_suite_verdict_domain()),
+            }
+            if independent_judging
+            else None
+        ),
         "limitations": [
             "反事实注入口径：锚表材料直接重建 test_plan（无 Planner 现场 spec_ir / boundary_triplets），"
             "不声称等同完整 logic 链路生产注入质量",
@@ -1446,8 +1923,19 @@ def build_report(
             "oracle 假阳/误导若因编译器提供的 0 字面量绑定导致（如 TypeError），属确定性通道自身缺陷，"
             "由 failure_stats.fixed_side_exception_types 逐类披露，不在本工具内修复",
             "描述性对比，不提供显著性推断；两臂差异仅作机制侧方向参考",
+            *(
+                [
+                    "独立判读模式的 M1 判分使用生产 _m1_metrics（M1_PER_TEST_TIMEOUT=1s 对齐 M-2 重放）；"
+                    "与 M-2 基线差异逐条归因，未静默平均",
+                    "oracle-suite verdict 每任务单值（correct/fp/silent/misguided/unavailable），"
+                    "与 M-2 逐测试四分类的类别差异属预期可比对项（描述性）",
+                ]
+                if independent_judging
+                else []
+            ),
         ],
     }
+    return body
 
 
 # ─── Markdown / README 渲染 ────────────────────────────────────────────────
@@ -2041,6 +2529,187 @@ def render_readme(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ─── 独立判读报告渲染与校验 ────────────────────────────────────────────────
+def independent_checks_all_ok(arms: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    """独立判读模式的校验汇总（检测 0 mismatch + 40 口径率与 M-2 一致）。
+
+    Returns:
+        (ok, failures)：ok=False 时 failures 给出逐臂原因（--fail-on-mismatch 用）。
+    """
+    failures: list[str] = []
+    for arm in arms:
+        independent = arm.get("independent_judging") or {}
+        if not independent:
+            failures.append(f"{arm.get('arm')}: 缺 independent_judging 段")
+            continue
+        if not independent.get("all_ok"):
+            cross = independent.get("cross_check_vs_m2") or {}
+            failures.append(
+                f"{arm.get('arm')}: detection mismatch="
+                f"{(cross.get('detection_vs_m2') or {}).get('n_mismatch')}、"
+                f"40 口径计数与 M-2 一致={independent.get('m2_rates_match')}"
+            )
+    return (not failures, failures)
+
+
+def _fmt6_rate(stats: Any) -> str:
+    """detection 统计 dict → ``n/n = %%`` 字符串（分母 0 → "—"）。"""
+    if not isinstance(stats, dict):
+        return "—"
+    denominator = stats.get("n_denominator")
+    if not denominator:
+        return "—"
+    return f"{stats.get('n_detected', 0)}/{denominator} = {float(stats.get('rate') or 0.0) * 100:.2f}%"
+
+
+def render_independent_readme(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
+    """渲染独立判读工件 README（输入 sha256/命令/口径/核心数字/限制）。"""
+    lines: list[str] = []
+    add = lines.append
+    add("# A-05 后续修复：独立判读零 LLM 重放验证（N-3）")
+    add("")
+    add("> **性质**：N-3 任务的**零 LLM 验证工件**（验证性，不作能力证据/预注册证据）。")
+    add("> 验证两处生产修复：① `nodes._append_spec_oracle_to_test_with_verdict` 的")
+    add("> `spec_anchor` 接线（修复 df_spec/doc/union/augment 类臂永远 not_attempted 的缺口）；")
+    add("> ② `_m1_metrics` 的 LLM-suite / oracle-suite **独立判读**（oracle 失败不再改写 LLM 检出）。")
+    add("> 对账权威基线 = M-2 `emse_oracle_quality_20261017`（df_spec 50.00% / df 77.50%，40 口径）。")
+    add("")
+    add("## 1. 输入 sha256（只读消费）")
+    add("")
+    add("| 输入 | sha256 |")
+    add("|---|---|")
+    for entry in report.get("inputs") or []:
+        add(f"| `{entry['path']}` | `{entry['sha256']}` |")
+    anchor = report.get("anchor_table") or {}
+    add(f"| `{anchor.get('path')}` | `{anchor.get('sha256')}` |")
+    m2 = (report.get("independent_judging") or {}).get("m2_baseline") or {}
+    add(f"| `{m2.get('path')}`（M-2 基线报告） | `{m2.get('sha256')}` |")
+    add("")
+    add("## 2. 复算命令")
+    add("")
+    add("```bash")
+    add(" ".join(str(x) for x in report.get("command") or []))
+    add("```")
+    add("")
+    add("## 3. 口径")
+    add("")
+    add("- **state 形态**：只带 `spec_anchor`（复刻生产 df_spec/doc/union/augment 臂，无 `test_plan`）")
+    add("  —— 注入成功本身即 N-3 接线修复的生产态证据。")
+    add("- **LLM-suite detection**：`_m1_metrics._compute_llm_suite_detection_rate`")
+    add("  （pytest `-k` 排除 `test_specir_v2_oracle` / `test_specir_v2_smt_witness`）。")
+    add("- **oracle-suite verdict**：`_m1_metrics._compute_oracle_suite_verdict`")
+    add("  （`-k` 只选 oracle 测试名，独立运行 buggy/fixed 两侧；取值域见报告 metric 段）。")
+    add(f"- **M1 判分口径**：`M1_PER_TEST_TIMEOUT={run_meta.get('m1_per_test_timeout_s')}`s（与 M-2 重放对齐）。")
+    add("")
+    add("## 4. 核心数字")
+    add("")
+    add("| 指标 | " + " | ".join(f"`{arm['arm']}`" for arm in report.get("arms") or []) + " |")
+    add("|---|" + "---|" * len(report.get("arms") or []))
+    add(
+        "| 锚命中 / 注入成功（anchor-only state） | "
+        + " | ".join(
+            f"{(arm['subsets']['all_tasks']['injection']['n_anchor_hit'])}"
+            f" / {arm['subsets']['all_tasks']['injection']['n_injected']}"
+            for arm in report.get("arms") or []
+        )
+        + " |"
+    )
+    add(
+        "| LLM-suite detection（40 口径） | "
+        + " | ".join(
+            _fmt6_rate(
+                (arm.get("independent_judging") or {})
+                .get("subsets", {})
+                .get("defect_programs", {})
+                .get("llm_suite_detection")
+            )
+            for arm in report.get("arms") or []
+        )
+        + " |"
+    )
+    add(
+        "| M-2 40 口径基线（对账） | "
+        + " | ".join(
+            _fmt6_rate((arm.get("independent_judging") or {}).get("m2_baseline_40caliber"))
+            for arm in report.get("arms") or []
+        )
+        + " |"
+    )
+    add(
+        "| 与 M-2 计数一致 | "
+        + " | ".join(
+            str((arm.get("independent_judging") or {}).get("m2_rates_match")) for arm in report.get("arms") or []
+        )
+        + " |"
+    )
+    add(
+        "| detection 对账 mismatch 数 | "
+        + " | ".join(
+            str(
+                ((arm.get("independent_judging") or {}).get("cross_check_vs_m2") or {})
+                .get("detection_vs_m2", {})
+                .get("n_mismatch")
+            )
+            for arm in report.get("arms") or []
+        )
+        + " |"
+    )
+    add("")
+    if any((arm.get("independent_judging") or {}).get("measurement_limited") for arm in report.get("arms") or []):
+        add(
+            "> **注意**：本次为 `--limit` 截断运行——40 口径计数**不**与 M-2 全量对账"
+            "（只验证逐任务 0 mismatch；全量运行才要求计数一致）。"
+        )
+        add("")
+    add("oracle-suite 四分类（独立判读；40 口径）：")
+    add("")
+    verdicts = ("correct", "fp", "silent", "misguided", "unavailable")
+    add("| 类别 | " + " | ".join(f"`{arm['arm']}`" for arm in report.get("arms") or []) + " |")
+    add("|---|" + "---|" * len(report.get("arms") or []))
+    for verdict in verdicts:
+        add(
+            f"| `{verdict}` | "
+            + " | ".join(
+                str(
+                    ((arm.get("independent_judging") or {}).get("subsets", {}).get("defect_programs", {}))
+                    .get("oracle_suite_counts", {})
+                    .get(verdict, 0)
+                )
+                for arm in report.get("arms") or []
+            )
+            + " |"
+        )
+    add("")
+    add("oracle 类别 vs M-2 逐测试分类对账（描述性）：")
+    add("")
+    for arm in report.get("arms") or []:
+        cross = (arm.get("independent_judging") or {}).get("cross_check_vs_m2") or {}
+        add(f"- `{arm['arm']}`：{cross.get('oracle_class_vs_m2', {}).get('agreement_counts')}")
+    add("")
+    add("注入 verdict 对账（anchor-only 接线 vs M-2 反事实）：")
+    add("")
+    for arm in report.get("arms") or []:
+        cross = (arm.get("independent_judging") or {}).get("cross_check_vs_m2") or {}
+        add(f"- `{arm['arm']}`：{cross.get('injection_vs_m2', {}).get('agreement_counts')}")
+    add("")
+    add("## 5. 确定性 / 墙钟")
+    add("")
+    determinism = run_meta.get("determinism") or {}
+    add(f"- body digest：`{run_meta.get('body_digest')}`（不含时间戳/墙钟）")
+    add(
+        f"- repeat={determinism.get('repeat')}；deterministic={determinism.get('deterministic')}；"
+        f"各次 digest={determinism.get('body_digests')}"
+    )
+    add(f"- 本次重放墙钟：{run_meta.get('tool_wall_s')} s（只进 run_meta）")
+    add("")
+    add("## 6. 已知限制")
+    add("")
+    for item in report.get("limitations") or []:
+        add(f"- {item}")
+    add("")
+    return "\n".join(lines) + "\n"
+
+
 # ─── CLI 入口 ──────────────────────────────────────────────────────────────
 def _build_arg_parser() -> argparse.ArgumentParser:
     """CLI 参数定义。"""
@@ -2079,7 +2748,26 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="SHA256SUMS 路径覆盖（缺省 = 锚表同目录 SHA256SUMS）",
     )
-    parser.add_argument("--out", default=str(DEFAULT_OUT), metavar="DIR", help="输出目录")
+    parser.add_argument(
+        "--out",
+        default=None,
+        metavar="DIR",
+        help=f"输出目录（缺省：混合重放 {_display_path(DEFAULT_OUT)}；独立判读 {_display_path(INDEPENDENT_OUT_DEFAULT)}）",
+    )
+    parser.add_argument(
+        "--independent-judging",
+        action="store_true",
+        help=(
+            "N-3 独立判读模式：state 只带 spec_anchor（复刻生产 df_spec 臂），"
+            "调用生产 _m1_metrics 的 LLM-suite/oracle-suite 分离判读，并与 M-2 基线逐任务对账"
+        ),
+    )
+    parser.add_argument(
+        "--m2-report",
+        default=str(M2_REPORT_DEFAULT),
+        metavar="PATH",
+        help="M-2 基线报告（独立判读对账权威基线；缺省 = emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json）",
+    )
     parser.add_argument(
         "--quixbugs-root",
         default=None,
@@ -2090,9 +2778,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--per-test-timeout",
         type=float,
-        default=10.0,
+        default=None,
         metavar="SEC",
-        help="pytest-timeout 单测超时秒数（0=不用插件，仅整文件墙钟；默认 10）",
+        help=(
+            "pytest-timeout 单测超时秒数（0=不用插件，仅整文件墙钟）；"
+            "缺省：混合重放 10.0 / 独立判读 1.0（与 M-2 重放口径对齐）"
+        ),
     )
     parser.add_argument(
         "--collect-timeout", type=float, default=60.0, metavar="SEC", help="收集阶段墙钟上限（默认 60）"
@@ -2147,8 +2838,13 @@ def _run_replay(
     jobs: int,
     limit: int,
     progress: bool,
+    independent_judging: bool = False,
+    m2_baseline: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """执行完整重放，返回 (报告 body, 本次运行的易变元信息)。"""
+    """执行完整重放，返回 (报告 body, 本次运行的易变元信息)。
+
+    ``independent_judging``（N-3）：每臂额外产出独立判读段（与 M-2 基线对账）。
+    """
     started = time.time()
     anchors = anchor_table["anchors"]
     arms: list[dict[str, Any]] = []
@@ -2167,6 +2863,8 @@ def _run_replay(
             jobs=jobs,
             limit=limit,
             progress=progress,
+            independent_judging=independent_judging,
+            m2_arm=((m2_baseline or {}).get("arm_index") or {}).get(arm),
         )
         for entry in selection
         for arm in entry["arms"]
@@ -2188,12 +2886,23 @@ def _run_replay(
         "n_anchors": len(anchor_table["anchors"]),
         "meta": anchor_table["meta"],
     }
+    m2_info = (
+        {
+            "path": (m2_baseline or {}).get("path"),
+            "sha256": (m2_baseline or {}).get("sha256"),
+            "body_digest": (m2_baseline or {}).get("body_digest"),
+        }
+        if independent_judging
+        else None
+    )
     body = build_report(
         artifact_entries=artifact_entries,
         anchor_info=anchor_info,
         arms=arms,
         config=config,
         command=_command_line(),
+        independent_judging=independent_judging,
+        m2_info=m2_info,
     )
     meta = {
         "generated_at": _now_iso(),
@@ -2248,9 +2957,11 @@ def _check_cross_check(arms: list[dict[str, Any]]) -> tuple[bool, list[str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI 主入口：解析 → 锚表校验 → 重放（可重复）→ 落盘 JSON/Markdown/README。"""
+    """CLI 主入口：解析 → 锚表校验（+ 独立判读的 M-2 基线）→ 重放 → 落盘工件。"""
     args = _build_arg_parser().parse_args(argv)
-    out_dir = Path(args.out)
+    independent = bool(args.independent_judging)
+    out_dir = Path(args.out) if args.out else (INDEPENDENT_OUT_DEFAULT if independent else DEFAULT_OUT)
+    m2_baseline: dict[str, Any] | None = None
     try:
         anchor_path = Path(args.anchor_table).expanduser()
         anchor_table = load_anchor_table(
@@ -2260,55 +2971,88 @@ def main(argv: list[str] | None = None) -> int:
         )
         artifact_paths = [Path(p).expanduser() for p in args.artifact] or list(DEFAULT_ARTIFACTS)
         selection = _resolve_selection(artifact_paths, list(args.arm or []))
+        if independent:
+            m2_baseline = load_m2_report(Path(args.m2_report).expanduser())
     except (OracleQualityError, mm.ArtifactError) as e:
         print(f"[oracle] 错误: {e}", file=sys.stderr)
         return 2
     out_dir.mkdir(parents=True, exist_ok=True)
     roots = resolve_quixbugs_roots(args.quixbugs_root)
     pytest_timeout_ok = pytest_timeout_available()
-    per_test_timeout = float(args.per_test_timeout)
+    # 单测超时口径：混合重放历史默认 10s；独立判读缺省 1s（对齐 M-2 重放）。
+    default_per_test_timeout = 1.0 if independent else 10.0
+    per_test_timeout = float(default_per_test_timeout if args.per_test_timeout is None else args.per_test_timeout)
     if per_test_timeout > 0 and not pytest_timeout_ok:
         print(
             "[oracle] 警告: pytest-timeout 不可用——回退整文件墙钟口径（超时测试整体单列 timeout）",
             file=sys.stderr,
         )
         per_test_timeout = 0.0
-    config = {
-        "per_test_timeout_s": per_test_timeout,
-        "pytest_timeout_plugin_available": pytest_timeout_ok,
-        "collect_timeout_s": float(args.collect_timeout),
-        "file_timeout_s": float(args.file_timeout),
-        "jobs": int(args.jobs),
-        "limit": int(args.limit),
-        "test_filename": TEST_FILENAME,
-        "layout": "dual(flat+python_programs package)",
-        "quixbugs_roots": [str(p) for p in roots],
-        "pytest_version": _pytest_version(),
-        "oracle_test_markers": list(ORACLE_TEST_MARKERS),
-        "injection_function": "src.graph.nodes._append_spec_oracle_to_test_with_verdict",
-        "state_reconstruction": (
-            "test_plan={function_name, logic_analysis} + target_function(归档 suggested_function) + "
-            "module_name(task_id 末段) + target_code(缺陷版源码)；不写 spec_ir/boundary_triplets"
-        ),
-    }
-    repeats: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    n_repeat = max(1, int(args.repeat))
-    for index in range(n_repeat):
-        if n_repeat > 1:
-            print(f"[oracle] 确定性重放 {index + 1}/{n_repeat}", file=sys.stderr)
-        body, meta = _run_replay(
-            selection,
-            anchor_table=anchor_table,
-            roots=roots,
-            config=config,
-            jobs=int(args.jobs),
-            limit=int(args.limit),
-            progress=not args.quiet,
-        )
-        repeats.append((body, meta))
+    # 独立判读：生产 _m1_metrics 走 M1_PER_TEST_TIMEOUT 环境变量；显式对齐到
+    # 同一秒数（默认 1s），跑批结束后恢复宿主值（不污染进程外环境）。
+    previous_m1_timeout = os.environ.get("M1_PER_TEST_TIMEOUT")
+    m1_per_test_timeout_s: int | None = None
+    if independent:
+        m1_per_test_timeout_s = int(per_test_timeout) if per_test_timeout > 0 else 0
+        os.environ["M1_PER_TEST_TIMEOUT"] = str(m1_per_test_timeout_s)
+    try:
+        config = {
+            "mode": "independent_judging" if independent else "mixed_replay",
+            "per_test_timeout_s": per_test_timeout,
+            "m1_per_test_timeout_s": m1_per_test_timeout_s,
+            "pytest_timeout_plugin_available": pytest_timeout_ok,
+            "collect_timeout_s": float(args.collect_timeout),
+            "file_timeout_s": float(args.file_timeout),
+            "jobs": int(args.jobs),
+            "limit": int(args.limit),
+            "test_filename": TEST_FILENAME,
+            "layout": "dual(flat+python_programs package)",
+            "quixbugs_roots": [str(p) for p in roots],
+            "pytest_version": _pytest_version(),
+            "oracle_test_markers": list(ORACLE_TEST_MARKERS),
+            "injection_function": "src.graph.nodes._append_spec_oracle_to_test_with_verdict",
+            "state_reconstruction": (
+                "只带 spec_anchor（复刻生产 df_spec/doc/union/augment 臂；无 test_plan/spec_ir）"
+                if independent
+                else (
+                    "test_plan={function_name, logic_analysis} + target_function(归档 suggested_function) + "
+                    "module_name(task_id 末段) + target_code(缺陷版源码)；不写 spec_ir/boundary_triplets"
+                )
+            ),
+            "m2_baseline": ({"path": m2_baseline["path"], "sha256": m2_baseline["sha256"]} if m2_baseline else None),
+        }
+        repeats: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        n_repeat = max(1, int(args.repeat))
+        for index in range(n_repeat):
+            if n_repeat > 1:
+                print(f"[oracle] 确定性重放 {index + 1}/{n_repeat}", file=sys.stderr)
+            body, meta = _run_replay(
+                selection,
+                anchor_table=anchor_table,
+                roots=roots,
+                config=config,
+                jobs=int(args.jobs),
+                limit=int(args.limit),
+                progress=not args.quiet,
+                independent_judging=independent,
+                m2_baseline=m2_baseline,
+            )
+            repeats.append((body, meta))
+    finally:
+        if independent:
+            if previous_m1_timeout is None:
+                os.environ.pop("M1_PER_TEST_TIMEOUT", None)
+            else:
+                os.environ["M1_PER_TEST_TIMEOUT"] = previous_m1_timeout
     body, meta = repeats[0]
     determinism = _determinism_meta(repeats)
-    ok, failures = _check_cross_check(body["arms"])
+    archive_ok, archive_failures = _check_cross_check(body["arms"])
+    if independent:
+        independent_ok, independent_failures = independent_checks_all_ok(body["arms"])
+        ok = bool(archive_ok and independent_ok)
+        failures = [*archive_failures, *independent_failures]
+    else:
+        ok, failures = archive_ok, archive_failures
     run_meta = {
         **meta,
         "argv": list(sys.argv),
@@ -2317,19 +3061,26 @@ def main(argv: list[str] | None = None) -> int:
         "determinism": determinism,
         "cross_check_ok": ok,
         "cross_check_failures": failures,
+        "m1_per_test_timeout_s": m1_per_test_timeout_s,
     }
-    payload = {"schema_version": SCHEMA_VERSION, "report": body, "run_meta": run_meta}
-    json_path = out_dir / "ORACLE_QUALITY_REPORT.json"
+    schema = INDEPENDENT_SCHEMA_VERSION if independent else SCHEMA_VERSION
+    payload = {"schema_version": schema, "report": body, "run_meta": run_meta}
+    json_path = out_dir / ("ORACLE_INDEPENDENT_JUDGING_REPORT.json" if independent else "ORACLE_QUALITY_REPORT.json")
     from src.utils.atomic_io import atomic_write_json, atomic_write_text
 
     atomic_write_json(str(json_path), payload)
     print(f"[oracle] JSON 报告: {json_path}", flush=True)
     if not args.skip_markdown:
-        md_path = out_dir / "ORACLE_QUALITY_REPORT.md"
-        atomic_write_text(str(md_path), render_markdown(body, run_meta))
-        readme_path = out_dir / "README.md"
-        atomic_write_text(str(readme_path), render_readme(body, run_meta))
-        print(f"[oracle] Markdown/README: {md_path} / {readme_path}", flush=True)
+        if independent:
+            readme_path = out_dir / "README.md"
+            atomic_write_text(str(readme_path), render_independent_readme(body, run_meta))
+            print(f"[oracle] README: {readme_path}", flush=True)
+        else:
+            md_path = out_dir / "ORACLE_QUALITY_REPORT.md"
+            atomic_write_text(str(md_path), render_markdown(body, run_meta))
+            readme_path = out_dir / "README.md"
+            atomic_write_text(str(readme_path), render_readme(body, run_meta))
+            print(f"[oracle] Markdown/README: {md_path} / {readme_path}", flush=True)
     if not ok:
         print("[oracle] 交叉校验未通过（0 mismatch 要求）: " + "；".join(failures), file=sys.stderr)
         if args.fail_on_mismatch:

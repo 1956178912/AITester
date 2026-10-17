@@ -11,8 +11,9 @@
     - 预算开关：COST_BUDGET_ENABLE（默认 false，保持历史行为）；
     - 预算值（二选一，先 token 后费用）：
         COST_BUDGET_TOKENS：单任务 token 硬上限（默认 0 = 不限）；
-        COST_BUDGET_USD：单任务费用硬上限（美元，需配 COST_USD_PER_1K，
-          默认 0 = 未配置时费用口径不生效）；
+        COST_BUDGET_USD：单任务费用硬上限（美元；USD 增量由
+          `src/budget/pricing.py` 按价目表 `experiments/price_table.json`
+          计算，价目缺失时回退 COST_USD_PER_1K，默认 0 = 未配置时不生效）；
     - 行为：超预算时 record_budget() 返回 False，调用方
       （BaseAgent._call_llm 前置守卫）抛出 BudgetExceededError；
       工作流捕获后把任务标记为 BUDGET_EXCEEDED（不继续迭代，
@@ -23,6 +24,18 @@
 与 3.4 成本告警的关系：告警是"路由决策侧"的旁路观测（哪个 provider
 贵），预算是"任务执行侧"的硬闸（本任务还能花多少），两层独立、
 可叠加启用。
+
+D1（N-5，2026-10-17）：USD 生产记账接线
+--------------------------------------
+N-4 实测：USD 上限"纸面开关"——`llm_client._record_response_usage` 只传
+token 增量、`consumed_delta_usd` 恒 0，`consumed_usd` 永不增长。现生产路径
+（`_record_response_usage`）在预算开关启用时调用
+`src/budget/pricing.estimate_usd` 计算 USD 增量并传给
+`record_usage_and_check`；价目不可用（模型未登记 / 非 USD / 文件缺失）→
+回退 `COST_USD_PER_1K`，两者皆无则**不编造价格**：计
+``usd_pricing_unavailable_events`` + 一次性 WARNING（不静默当 0）。USD 与
+token 两通道同口径触发停止（`budget.exceeded`，调用方下一次 LLM 调用抛
+`BudgetExceededError`）；`COST_BUDGET_ENABLE=false` 时零行为差异（不做价目 IO）。
 
 G 轮（2026-10-16）坏值口径修正——**fail-closed**：
     此前三个数值配置（COST_BUDGET_TOKENS / COST_BUDGET_USD /
@@ -59,6 +72,10 @@ _process_stats: dict[str, int] = {
     # G 轮新增：因**配置错误**（非真实超限）而拒绝 LLM 调用的事件数。与
     # budget_exceeded_events 分开计，避免"拼错环境变量"被读成"任务烧爆预算"。
     "budget_misconfigured_events": 0,
+    # D1（N-5）：USD 口径下"无美元价目"的调用事件数——价目表未登记该模型 /
+    # 非 USD 币种 / 价目文件缺失且未配 COST_USD_PER_1K 回退价。该计数 >0 时
+    # USD 上限对相应调用**无判定依据**（不静默当 0，见 note_usd_pricing_unavailable）。
+    "usd_pricing_unavailable_events": 0,
 }
 
 # 预算数值配置项名（模块级常量：ADR-0003 env 预算门禁按"名字含 ENV 的模块级
@@ -72,6 +89,8 @@ _ENV_COST_USD_PER_1K = "COST_USD_PER_1K"
 _bad_value_logged: set[tuple[str, str]] = set()
 #: 已记过 WARNING 的"启用但无任何上限"提示（同因去重）。
 _no_limit_warned: set[str] = set()
+#: D1（N-5）：已记过 WARNING 的"无美元价目"模型（按模型去重，防刷屏）。
+_usd_unpriced_warned: set[str] = set()
 
 
 def _budget_enabled() -> bool:
@@ -130,8 +149,15 @@ def _log_bad_budget_value(name: str, raw: str, reason: str) -> None:
 class BudgetExceededError(RuntimeError):
     """单任务 LLM 预算耗尽（BaseAgent._call_llm 前置守卫抛出）。"""
 
-    def __init__(self, consumed: int, limit: int, unit: str) -> None:
-        super().__init__(f"LLM 预算耗尽：已消耗 {consumed} {unit} >= 上限 {limit} {unit}")
+    def __init__(self, consumed: int | float, limit: int | float, unit: str) -> None:
+        # D1（N-5）：USD 与 token 两通道共用本异常；单位必须与数值同口径，
+        # 否则 USD 触发时消息会显示"已消耗 3234 usd >= 上限 0 usd"（把 token
+        # 数当美元、把 token 上限当 USD 上限），可诊断性失效。
+        if unit == "usd":
+            message = f"LLM 预算耗尽：已消耗 ${float(consumed):.6f} >= 上限 ${float(limit):.6f}（美元口径）"
+        else:
+            message = f"LLM 预算耗尽：已消耗 {consumed} {unit} >= 上限 {limit} {unit}"
+        super().__init__(message)
         self.consumed = consumed
         self.limit = limit
         self.unit = unit
@@ -232,8 +258,13 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
         exceeded = False
         if budget.token_limit > 0 and budget.consumed_tokens >= budget.token_limit:
             exceeded = True
-        if budget.usd_limit > 0 and per_1k > 0 and budget.consumed_usd >= budget.usd_limit:
+        # D1（N-5）：USD 侧不再要求 "COST_USD_PER_1K > 0"——USD 增量自 N-5 起由
+        # `pricing.estimate_usd` 按价目表计算（与 token 通道同口径触发）；旧
+        # 口径只有 COST_USD_PER_1K 配置才算数，而生产调用方从未传 usd，
+        # 导致 USD 上限是"纸面开关"（N-4 D1）。per_1k 仍参与配置坏值 fail-closed。
+        if budget.usd_limit > 0 and budget.consumed_usd >= budget.usd_limit:
             exceeded = True
+        _ = per_1k  # 旧口径回退价在 pricing 模块内读取；此处保留解析用于坏值判定
         # G 轮：配置错误时上限值不可信，**不得**按"不限"放行——与真实超限同样
         # 阻断，但计数分列（budget_misconfigured_events），避免把拼错环境变量
         # 读成"任务烧爆预算"。
@@ -285,6 +316,32 @@ def check_budget(consumed_delta_tokens: int = 0, consumed_delta_usd: float = 0.0
     return not blocked
 
 
+def note_usd_pricing_unavailable(model_name: str = "") -> None:
+    """记录"本次调用无美元价目"事件（D1 审计面；不静默当 0）。
+
+    D1（N-5）修复后，生产路径只在预算开关启用时计算 USD；价目表未登记 /
+    非 USD 币种 / 价目文件缺失且未配 `COST_USD_PER_1K` 回退价时**不编造价格**：
+    本次调用 USD 增量按 0 记账（不因未知价格误杀），但必须让操作者可见——
+    进程级计数 `usd_pricing_unavailable_events` + 每模型一次性 WARNING，
+    使"USD 未触发"可与"根本没计价"区分（N-4 D1 的可诊断性要求）。
+
+    Args:
+        model_name: 实际服务模型名（空串计入 <unknown>）。
+    """
+    key = str(model_name or "<unknown>")
+    with _lock:
+        _process_stats["usd_pricing_unavailable_events"] += 1
+    if key in _usd_unpriced_warned:
+        return
+    _usd_unpriced_warned.add(key)
+    logger.warning(
+        "预算 USD 口径：模型 %r 无可用美元价目（price_table.json 未登记/非 USD 币种，"
+        "且 COST_USD_PER_1K 未配置）→ 本次调用不计 USD、不参与 USD 上限判定；"
+        "如需 USD 封顶请在 experiments/price_table.json 登记价目或配置 COST_USD_PER_1K",
+        key,
+    )
+
+
 def record_usage_and_check(input_tokens: int, output_tokens: int, usd_cost: float = 0.0) -> bool:
     """record_usage 的预算包装：本调用消耗记账 + 前置守卫一步完成。
 
@@ -332,8 +389,15 @@ def get_process_budget_stats() -> dict[str, int]:
 
 
 def reset_budget() -> None:
-    """重置当前线程的预算累计器（每个任务开始前调用，与 token_usage.reset 同口径）。"""
+    """重置当前线程的预算累计器（每个任务开始前调用，与 token_usage.reset 同口径）。
+
+    N 轮（2026-10-17）：同时清进程级"每模型一次性 USD 无价目 WARNING"集合
+    （`_usd_unpriced_warned`）——它是纯提示状态、不参与判定；不清会让
+    "同进程内先跑的任务已告警过"导致后续任务/测试的告警断言静默失败
+    （N 轮全量套件曾因此出现跨测试文件状态泄漏）。
+    """
     _thread_local.budget = BudgetSnapshot()
+    _usd_unpriced_warned.clear()
 
 
 def set_task_token_cap(cap: int) -> None:

@@ -360,10 +360,35 @@ def _record_response_usage(usage: Any, model_name: str) -> bool:
             input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
             output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
         record_usage(input_tokens, output_tokens, model=model_name)
-        # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）
-        from src.budget.cost_budget import check_budget
+        # 5.4 预算守卫（默认关：未启用时 check_budget 恒 True，零行为变化）。
+        # D1（N-5，2026-10-17）：USD 生产记账接线——N-4 实测此路径只传 token、
+        # consumed_delta_usd 恒 0 → COST_BUDGET_USD 永不触发（纸面开关）。
+        # 现预算启用时按价目表（experiments/price_table.json，回退
+        # COST_USD_PER_1K）计算本次调用 USD 增量并交给 record_usage_and_check：
+        # token 与 USD 两通道在同一 `budget.exceeded` 标志上触发停止通道
+        # （后续 LLM 调用在 BaseAgent._call_llm 前置守卫抛 BudgetExceededError）。
+        # 价目不可用 → 不编造价格：note_usd_pricing_unavailable 记事件+一次性
+        # WARNING（可区分"USD 未触发"与"根本没计价"）。
+        from src.budget.cost_budget import _budget_enabled, note_usd_pricing_unavailable, record_usage_and_check
 
-        return check_budget(consumed_delta_tokens=input_tokens + output_tokens)
+        usd_cost = 0.0
+        if _budget_enabled():
+            from src.budget.pricing import estimate_usd
+
+            estimated_usd, pricing_source = estimate_usd(model_name, input_tokens, output_tokens)
+            if estimated_usd is None:
+                note_usd_pricing_unavailable(model_name)
+            else:
+                usd_cost = float(estimated_usd)
+                logger.debug(
+                    "D1 USD 记账：model=%s tokens=%d/%d usd=%.8f source=%s",
+                    model_name,
+                    input_tokens,
+                    output_tokens,
+                    usd_cost,
+                    pricing_source,
+                )
+        return record_usage_and_check(input_tokens, output_tokens, usd_cost=usd_cost)
     except Exception as e:  # O14（2026-09-29 审查 P0）：记账异常 fail-closed。
         # 历史口径：except Exception: return True（统计失败不影响主流程）——
         # 缺陷：记账层任何异常（含磁盘满 / import 失败）都会静默把

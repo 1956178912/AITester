@@ -169,10 +169,80 @@ _SPEC_ORACLE_VERDICT_COMPILED_EMPTY = "compiled_empty"
 _SPEC_ORACLE_VERDICT_INJECTED = "injected"
 _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED = "injected_and_passed"
 _SPEC_ORACLE_VERDICT_INJECTED_AND_FAILED = "injected_and_failed"
+# N-3（2026-10-17，A-05 后续修复）：**未尝试注入**的可审计原因细分。
+# 历史批次只有 "not_attempted" 一个值（无规约材料 / 开关关）；A-05 修复接
+# `state["spec_anchor"]` 材料源后，需要把"有材料但不可编译"与"根本没有材料"
+# 区分开，否则 df/doc 臂的接线缺口再次不可归因。取值域**向后兼容扩展**：
+# 旧值逐字不变（历史 JSON 不受影响），新值只在
+# SPEC_ORACLE_EXEC_ENABLE=true 且命中下列材料形态时出现。
+_SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_MISSING_TARGET = "not_attempted_missing_target"
+_SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_HUMAN_SPEC_ONLY = "not_attempted_human_spec_only"
+_SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_ANCHOR_UNPARSEABLE = "not_attempted_anchor_unparseable"
+# 判定取值域（state.py 注释与结果行 schema 的共同事实源；新增值须同步文档）
+_SPEC_ORACLE_VERDICT_DOMAIN: tuple[str, ...] = (
+    _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED,
+    _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_MISSING_TARGET,
+    _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_HUMAN_SPEC_ONLY,
+    _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_ANCHOR_UNPARSEABLE,
+    _SPEC_ORACLE_VERDICT_COMPILED_EMPTY,
+    _SPEC_ORACLE_VERDICT_INJECTED,
+    _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED,
+    _SPEC_ORACLE_VERDICT_INJECTED_AND_FAILED,
+)
 # 注入产物的测试函数名前缀：主 oracle（spec_ir_v2.compile_spec_oracle）与
 # SMT 见证（spec_smt 追加的 test_specir_v2_smt_witness_*）。_executor_node
 # 用它们在 pytest 失败清单 / -v 输出里把 oracle 用例单独摘出来。
 _SPEC_ORACLE_TEST_NAMES: tuple[str, ...] = ("test_specir_v2_oracle", "test_specir_v2_smt_witness")
+
+
+def _resolve_spec_oracle_material(state: AITesterState) -> tuple[dict[str, Any] | None, str, str]:
+    """N-3（2026-10-17，A-05 后续修复）：解析确定性 oracle 的规约材料。
+
+    四源优先级（**接线缺口修复的关键**：生产 df_spec/doc/union/augment 类臂
+    只写 ``state["spec_anchor"]``、Planner 关闭无 ``test_plan``——修复前
+    这些臂的 oracle 注入永远 ``not_attempted``）：
+
+    1. ``state["spec_ir"]``：R7/Planner 现场产物（最权威，历史口径不变）；
+    2. ``state["test_plan"]["logic_analysis"]``：现场解析（R7 关闭时的历史
+       降级口径，与 DSL 层独立降级同源）；
+    3. ``state["spec_anchor"]["logic_analysis"]``：预计算锚表材料
+       （df_spec / union 臂；A-05 修复新增）；
+    4. ``state["spec_anchor"]["human_spec"]``：人类 docstring 规格锚
+       （doc / augment 臂）。**非 SpecExpr 材料，不强行编译**——如实返回
+       ``not_attempted_human_spec_only``（人类规格→可执行断言的翻译是独立
+       研究问题，超出本修复范围）。
+
+    Args:
+        state: 工作流状态（spec_ir / test_plan / spec_anchor）。
+
+    Returns:
+        (spec_material | None, source 标签, 未尝试时的 verdict)。
+        ``source`` 只用于日志/审计；verdict 取值见 ``_SPEC_ORACLE_VERDICT_DOMAIN``。
+    """
+    from src.specs import parse_logic_analysis as _parse_logic_analysis
+
+    spec_ir = state.get("spec_ir")
+    if isinstance(spec_ir, dict) and spec_ir:
+        return spec_ir, "spec_ir", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
+
+    test_plan = state.get("test_plan")
+    if isinstance(test_plan, dict):
+        parsed = _parse_logic_analysis(test_plan.get("logic_analysis"))
+        if parsed:
+            return parsed, "test_plan.logic_analysis", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
+
+    anchor = state.get("spec_anchor")
+    if isinstance(anchor, dict):
+        parsed = _parse_logic_analysis(anchor.get("logic_analysis"))
+        if parsed:
+            return parsed, "spec_anchor.logic_analysis", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
+        if anchor.get("logic_analysis") is not None:
+            # 锚材料在场但解析为空（形态不合法 / 无任何可识别字段）→ 可审计原因
+            return None, "spec_anchor.logic_analysis", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_ANCHOR_UNPARSEABLE
+        human_spec = anchor.get("human_spec")
+        if isinstance(human_spec, str) and human_spec.strip():
+            return None, "spec_anchor.human_spec", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_HUMAN_SPEC_ONLY
+    return None, "", _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
 
 
 def _append_spec_oracle_to_test_with_verdict(generated_test: str, state: AITesterState) -> tuple[str, bool, str]:
@@ -185,30 +255,44 @@ def _append_spec_oracle_to_test_with_verdict(generated_test: str, state: AITeste
 
     Args:
         generated_test: LLM 生成的测试代码。
-        state: 工作流状态（spec_ir / test_plan / target_code / module_name /
-            target_function）。
+        state: 工作流状态（spec_ir / test_plan / spec_anchor / target_code /
+            module_name / target_function）。材料优先级见
+            ``_resolve_spec_oracle_material``：spec_ir →
+            test_plan.logic_analysis → spec_anchor.logic_analysis /
+            spec_anchor.human_spec。
 
     Returns:
-        (追加后的测试代码, 是否注入, verdict)。verdict：
-        - 无规约材料 / 无函数名 / 无模块名 → "not_attempted"（未尝试编译）；
+        (追加后的测试代码, 是否注入, verdict)。verdict（完整取值域见
+        ``_SPEC_ORACLE_VERDICT_DOMAIN``）：
+        - 无任何规约材料 → "not_attempted"（未尝试编译，历史口径）；
+        - 仅人类 docstring 锚（human_spec，非 SpecExpr）→
+          "not_attempted_human_spec_only"（不强行编译）；
+        - 锚材料在场但解析为空 → "not_attempted_anchor_unparseable"；
+        - 有材料但缺函数名 / 模块名 → "not_attempted_missing_target"；
         - 编译产物为空（无可编译子句 / 自检失败 / 意外异常兜底）→
           "compiled_empty"；
         - 注入成功 → "injected"。
     """
     from src.specs import compile_spec_oracle as _compile_spec_oracle
     from src.specs import extract_signature_params as _extract_signature_params
-    from src.specs import parse_logic_analysis as _parse_logic_analysis
 
-    # 规约材料两级降级：state["spec_ir"]（R7 开关产物）→ 现场解析
-    # test_plan.logic_analysis（与 DSL 层独立降级同口径）
-    spec_material: dict[str, Any] | None = state.get("spec_ir")
-    if spec_material is None:
-        spec_material = _parse_logic_analysis(
-            (state.get("test_plan") or {}).get("logic_analysis") if isinstance(state.get("test_plan"), dict) else None
-        )
-    oracle_func = state.get("target_function") or (spec_material or {}).get("function_name") or ""
-    if not (spec_material and oracle_func and state.get("module_name")):
-        return generated_test, False, _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED
+    # N-3（2026-10-17，A-05 后续修复）：四源材料优先级解析（spec_ir →
+    # test_plan.logic_analysis → spec_anchor.logic_analysis / human_spec）。
+    # 修复前只试前两级 → df_spec/doc/union/augment 类臂（Planner 关闭、只有
+    # 锚材料）永远 not_attempted。human_spec（人类 docstring）不强行编译，
+    # 如实记 not_attempted_human_spec_only。
+    spec_material, material_source, not_attempted_verdict = _resolve_spec_oracle_material(state)
+    oracle_func = str(state.get("target_function") or "")
+    if not oracle_func and isinstance(spec_material, dict):
+        oracle_func = str(spec_material.get("function_name") or "")
+    if not oracle_func and isinstance(state.get("spec_anchor"), dict):
+        # 人类规格锚条目通常自带 function_name；无可编译材料时仍保留来源，
+        # 便于审计"该任务缺的是材料还是目标函数"（verdict 不变）。
+        oracle_func = str((state.get("spec_anchor") or {}).get("function_name") or "")
+    if not spec_material:
+        return generated_test, False, not_attempted_verdict
+    if not (oracle_func and state.get("module_name")):
+        return generated_test, False, _SPEC_ORACLE_VERDICT_NOT_ATTEMPTED_MISSING_TARGET
     sig_params = _extract_signature_params(state.get("target_code") or "", str(oracle_func))
     try:
         oracle_code = _compile_spec_oracle(
@@ -224,10 +308,11 @@ def _append_spec_oracle_to_test_with_verdict(generated_test: str, state: AITeste
     if not oracle_code:
         return generated_test, False, _SPEC_ORACLE_VERDICT_COMPILED_EMPTY
     logger.info(
-        "R1c 确定性规约 oracle 已注入（fn=%s, sig_params=%d, 追加 %d 字符）",
+        "R1c 确定性规约 oracle 已注入（fn=%s, sig_params=%d, 追加 %d 字符, material=%s）",
         oracle_func,
         len(sig_params or []),  # 签名提取失败时为 None，日志口径按 0 参计
         len(oracle_code),
+        material_source,
     )
     return f"{generated_test}\n\n\n{oracle_code}", True, _SPEC_ORACLE_VERDICT_INJECTED
 
@@ -251,6 +336,9 @@ def _spec_oracle_injection_verdict(generated_test: str, state: AITesterState) ->
         - 开关关（SPEC_ORACLE_EXEC_ENABLE=false，默认）→ (原文, None,
           "not_attempted")——历史口径零注入，spec_oracle_injected 维持 None；
         - 开关开但无规约材料（未尝试编译）→ (原文, None, "not_attempted")；
+        - 开关开、有材料但不可尝试（仅人类规格锚 / 锚不可解析 / 缺目标）
+          → (原文, None, "not_attempted_*")——N-3 新增的细粒度可审计值，
+          语义均为"未注入"，injected 仍为 None（向后兼容）；
         - 开关开、尝试编译但产物为空 → (原文, False, "compiled_empty")；
         - 注入成功 → (追加产物, True, "injected")（执行后由 _executor_node
           升级为 injected_and_passed / injected_and_failed）。

@@ -28,7 +28,12 @@ test:  ## 全量测试（CI 同口径：xdist -n 4 loadfile）
 	$(PY) -m pytest tests/ -n 4 --dist loadfile
 
 test-cov:  ## 全量测试 + 覆盖率（CI 同口径；额外落 coverage.xml 供棘轮/登记册对账消费）
-	$(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing --cov-report=xml
+	# N 轮（2026-10-17）：COVERAGE_FILE 指向独立数据文件——探针/执行器测试会启动真实
+	# pytest 子进程，宿主 pytest-cov 的默认 .coverage 数据文件可能被子进程写入的
+	# 非分支数据污染（实测报 "Can't combine branch coverage data with statement data"
+	# 的 coverage INTERNALERROR）。隔离后 coverage.xml 仍落在仓库根供对账消费。
+	rm -f .coverage.ci .coverage.ci.*
+	COVERAGE_FILE=$(CURDIR)/.coverage.ci $(PY) -m pytest tests/ -n 4 --dist loadfile --cov=src --cov-branch --cov-report=term-missing --cov-report=xml
 
 docs-check:  ## 双语文档同步 + 文档链接完整性门禁（strict，CI 阻断项）
 	$(PY) scripts/gates/check_bilingual_docs.py --strict
@@ -145,6 +150,12 @@ pass-matched:  ## 通过率混淆敏感性分析（EMSE 审稿人 A3 复核点�
 
 emse-stats:  ## 统计报告补口（EMSE 批次 2026-10-15：三主要对比 MDE/功效 + 比例型端点 bootstrap 95% CI，零 LLM 只读工件）
 	$(PY) -m experiments.emse_stats_report
+
+e2e-probe:  ## 全功能端到端探针（零 LLM 子集；功能矩阵报告）
+	$(PY) scripts/tools/e2e_probe.py --all --json-out experiments/results/e2e_probe_latest.json --md-out experiments/results/e2e_probe_latest.md
+
+e2e-probe-llm:  ## 全功能端到端探针（含真实 LLM 探针；消耗配额，默认不接 CI）
+	AITESTER_E2E_LLM=true $(PY) scripts/tools/e2e_probe.py --all --include-llm --json-out experiments/results/e2e_probe_llm_latest.json --md-out experiments/results/e2e_probe_llm_latest.md
 
 paper-audit:  ## 论文草稿数字-SRC 一致性审计（Q11 独立评审；本地工具，paper/ 不入库，缺失时跳过）
 	$(PY) scripts/tools/audit_paper_numbers.py --md docs/emse/PAPER_CONSISTENCY_AUDIT_2026-10-17.md --strict

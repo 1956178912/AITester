@@ -597,8 +597,15 @@ def run(
         # 2026-09-26 round10 P2：--json 静音 stdout 控制台日志（让 stdout 只
         # 承载 JSON），--verbose 把 root logger 提到 DEBUG 也无效（stdout
         # handler 被 _quiet_console_logs 提到 CRITICAL+1 拦截）——显式提示
-        # 用户两 flag 组合时 verbose 不生效，避免参数语义冲突导致误判
-        info_msg("提示：--json 模式下控制台日志被静音，--verbose 不生效（DEBUG 日志仅在非 JSON 模式输出）")
+        # 用户两 flag 组合时 verbose 不生效，避免参数语义冲突导致误判。
+        # N 轮 N-1 e2e 探针（cli-run-json-single）实测修复：本提示此前经
+        # info_msg 走 stdout，直接污染 `run ... --json --verbose` 的 JSON
+        # 输出（`| jq` 首行解析失败），与 --quiet_console_logs 文档承诺的
+        # "stdout 只承载 JSON"契约矛盾——提示改走 stderr（--json 模式下
+        # stderr 才是人读通道；非 JSON 模式的 verbose 提示路径不变）。
+        click.echo(
+            "ℹ 提示：--json 模式下控制台日志被静音，--verbose 不生效（DEBUG 日志仅在非 JSON 模式输出）", err=True
+        )
 
     # 使用命令行指定的 timeout，否则使用配置默认值
     exec_timeout = timeout if timeout is not None else EXECUTION_TIMEOUT
@@ -755,14 +762,19 @@ def list_examples() -> None:
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     examples_dir = os.path.join(project_root, "examples")
     if os.path.exists(examples_dir):
-        files = sorted([f for f in os.listdir(examples_dir) if f.endswith(".py")])
+        # N 轮 N-1 e2e 探针（cli-list-examples）实测修复：此前把
+        # `examples/__init__.py` 等下划线开头文件也列为示例，并把它当作
+        # "使用示例"建议执行——用户复制首条命令得到空模块任务（无意义）。
+        # 过滤下划线开头文件（包初始化/私有模块不是可运行示例）；
+        # 使用示例优先建议 calculator.py（README/文档主推示例）。
+        files = sorted([f for f in os.listdir(examples_dir) if f.endswith(".py") and not f.startswith("_")])
         if files:
             click.echo(f"\n{Colors.BOLD}可用示例文件（共 {len(files)} 个）{Colors.RESET}\n")
             for f in files:
                 click.echo(f"  {Colors.CYAN}•{Colors.RESET} {f}")
             click.echo(f"\n{Colors.BOLD}使用示例：{Colors.RESET}")
-            # 此处 files 非空（上方 if files 分支保证），直接取首个文件
-            click.echo(f"  python main.py run examples/{files[0]}")
+            suggested = "calculator.py" if "calculator.py" in files else files[0]
+            click.echo(f"  python main.py run examples/{suggested}")
         else:
             warning_msg("examples 目录下没有找到 Python 文件")
     else:

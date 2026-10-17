@@ -1,0 +1,52 @@
+=== N-4 06_safe_profile safe 档 aitester ×1 ===
+START_ISO_UTC=2026-10-17T15:25:43Z START_EPOCH=1792250743
+CODE_ROOT=/Users/wangchenyu/Workspace/AITester-n4-probe-f194d67 RUNNER_REPO=/Users/wangchenyu/Workspace/AITester
+GIT_HEAD=f194d679aaaba1c2fa97ef80fd53dbf47de203a9
+GIT_DIRTY_LINES=0
+CACHE_NAMESPACE=e2e_llm_probes_20261017_06_safe
+TRACE_DIR=/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/06_safe_profile/traces
+ITEM_ENV: AITESTER_PROFILE=logic TEMPERATURE=0.0 LLM_THINKING_MODE=disabled BENCHMARK_PARALLELISM=1 AITESTER_LLM_CACHE=0 MAX_ITERATIONS=1 ENABLE_MUTATION_SCORING=false BRANCH_COVERAGE_INJECT_ENABLE=false MUTATION_ADVISOR_ENABLE=false AITESTER_PROFILE=safe
+CMD: /Users/wangchenyu/Workspace/AITester/.venv/bin/python /Users/wangchenyu/Workspace/AITester-n4-probe-f194d67/experiments/run_main_batch.py --dataset quixbugs --task-limit 1 --seed 42 --baselines aitester --output-dir /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/06_safe_profile --skip-stats
+R4 主批次：dataset=quixbugs task_count=None seed=42（全量数据集前 1 个任务）
+基线：aitester；输出：/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/06_safe_profile；确定性采样：开（temp=0.0）
+基准测试 [aitester]:   0%|          | 0/1 [00:00<?, ?task/s]第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+P0 源码补丁证据门：本轮补丁证据等级=none（不足 gold/sbfl），已恢复原文件（拒绝写盘，patch_applied=False）
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
+m1_metrics：执行超时（>120s），已终止整个进程组并返回（文件后端，不会挂死）
+基准测试 [aitester]: 100%|██████████| 1/1 [04:08<00:00, 248.78s/task]基准测试 [aitester] - 耗时: 8.4s: 100%|██████████| 1/1 [04:08<00:00, 248.78s/task]基准测试 [aitester] - 耗时: 8.4s: 100%|██████████| 1/1 [04:08<00:00, 248.78s/task]
+
+============================================================
+基准测试完成！
+============================================================
+  [aitester] 成功率: 0.0%, 平均覆盖率: 0.0%
+  [aitester] 平均每任务Token: 4520.0, LLM调用次数: 3
+总耗时: 8.4s
+结果文件: /Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/06_safe_profile/benchmark_quixbugs_20261017_232954.json
+============================================================
+批次工件：/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017/06_safe_profile/benchmark_quixbugs_20261017_232954.json
+
+============================================================
+R4 批次摘要（M1 三指标 + R52/R53/R8）
+============================================================
+  [aitester] success=0.0% (有效 1/1，剔除 harness_invalid=0)
+    M1 三指标（可测 0/1 任务）: detection=None% repair=None% false_fix=None%
+    R4 regression_rate=0.0% / N1 test_error_rate=0.0%
+--skip-stats：跳过 R14 统计协议
+[watchdog] 子进程正常结束 rc=0 wall=251.2s
+END_ISO_UTC=2026-10-17T15:29:55Z END_EPOCH=1792250995 EXIT_CODE=0 WALL_SECONDS=252
+GIT_STATUS_AFTER_LINES=0

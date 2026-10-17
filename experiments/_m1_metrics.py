@@ -78,6 +78,25 @@ _PER_TEST_TIMEOUT_ENV = "M1_PER_TEST_TIMEOUT"
 _PER_TEST_TIMEOUT_DEFAULT = 0
 _pytest_timeout_available: bool | None = None
 
+# N-3（2026-10-17）：确定性 oracle 与 LLM 测试的**独立判读**口径。
+# 测试名单一事实源在 src/graph/nodes.py::_SPEC_ORACLE_TEST_NAMES；本模块用
+# 同值常量（避免把 langgraph 依赖拖进判分轻路径），由
+# tests/test_oracle_independent_judging.py 锁定两处相等。
+_ORACLE_SUITE_TEST_NAMES: tuple[str, ...] = ("test_specir_v2_oracle", "test_specir_v2_smt_witness")
+# pytest -k 表达式（一条即可同时覆盖主 oracle 与 SMT 见证）：
+#   LLM-suite = 排除 oracle 测试名；或acle-suite = 只选 oracle 测试名。
+_LLM_SUITE_KEYWORD_FILTER = "not test_specir_v2_oracle and not test_specir_v2_smt_witness"
+_ORACLE_SUITE_KEYWORD_FILTER = "test_specir_v2_oracle or test_specir_v2_smt_witness"
+# oracle-suite 独立判定取值域（写入结果行 oracle_suite_verdict）：
+#   correct     oracle 在缺陷版失败 ∧ 修复版通过（真检出）
+#   fp          oracle 在修复版失败（对正确实现假阳；含两侧皆失败的恒红型）
+#   silent      两侧都通过（对该缺陷无信号）
+#   misguided   缺陷版通过 ∧ 修复版失败（把缺陷行为断言成期望）
+#   unavailable 未注入 / 材料缺失 / 超时 / 收集错误（fail-closed，不臆测）
+ORACLE_SUITE_VERDICTS: tuple[str, ...] = ("correct", "fp", "silent", "misguided", "unavailable")
+# pytest-timeout 的失败摘要标记（单条挂死测试 → 不可判，不并入 oracle 判定）
+_ORACLE_SUITE_TIMEOUT_MARKERS: tuple[str, ...] = ("failed: timeout (>", "timeout (>")
+
 
 def per_test_timeout_seconds() -> int:
     """读取 M1_PER_TEST_TIMEOUT（秒）。非正/缺省/非法值 → 0（历史口径）。"""
@@ -131,6 +150,52 @@ def _looks_like_test_execution_error(returncode: int, output: str) -> bool:
         return False
     low = output.lower()
     return any(marker in low for marker in _COLLECTION_ERROR_MARKERS)
+
+
+def has_oracle_suite(generated_test: Any) -> bool:
+    """生成测试文本是否含确定性 oracle 注入测试名（marker 子串判定）。
+
+    用途：独立判读的**零差异开关**——无 marker（SPEC_ORACLE_EXEC_ENABLE=false
+    的历史口径）时所有执行路径与修复前逐位一致（不过滤、不新增子进程）。
+    """
+    text = str(generated_test or "")
+    return any(marker in text for marker in _ORACLE_SUITE_TEST_NAMES)
+
+
+def llm_suite_keyword_filter(generated_test: Any) -> str | None:
+    """LLM-suite 的 pytest -k 过滤表达式；无 oracle 测试时返回 None（历史口径）。
+
+    Returns:
+        ``_LLM_SUITE_KEYWORD_FILTER``（排除 oracle 测试）或 None（不过滤）。
+    """
+    return _LLM_SUITE_KEYWORD_FILTER if has_oracle_suite(generated_test) else None
+
+
+def suite_filters(generated_test: Any) -> tuple[str | None, str | None]:
+    """返回 (LLM-suite filter, oracle-suite filter)；无 oracle 测试时均为 None。"""
+    if not has_oracle_suite(generated_test):
+        return None, None
+    return _LLM_SUITE_KEYWORD_FILTER, _ORACLE_SUITE_KEYWORD_FILTER
+
+
+def _suite_run_verdict(run: tuple[int, str, str] | None) -> str:
+    """一次 pytest 子进程结果 → ``pass`` / ``fail`` / ``unavailable``（fail-closed）。
+
+    - 超时 / IO 异常（``run is None``）→ unavailable（不误判为 fail）；
+    - 收集/语法/无测试等执行错误（``_looks_like_test_execution_error``）→ unavailable；
+    - pytest-timeout 单测超时标记 → unavailable（超时单列，不并入四分类）；
+    - rc==0 → pass；其余（rc==1，含断言失败）→ fail。
+    """
+    if run is None:
+        return "unavailable"
+    rc, out, err = run
+    combined = f"{out}\n{err}"
+    if _looks_like_test_execution_error(rc, combined):
+        return "unavailable"
+    low = combined.lower()
+    if any(marker in low for marker in _ORACLE_SUITE_TIMEOUT_MARKERS):
+        return "unavailable"
+    return "pass" if rc == 0 else "fail"
 
 
 def _python_interpreter() -> str:
@@ -360,6 +425,7 @@ def _run_pytest_in_tmp(
     timeout: int = 120,
     task_metadata: dict[str, Any] | None = None,
     per_test_timeout: int | None = None,
+    keyword_filter: str | None = None,
 ) -> tuple[int, str, str] | None:
     """在临时目录里写 target + test 文件并跑 pytest。
 
@@ -382,6 +448,11 @@ def _run_pytest_in_tmp(
     可用时，pytest 追加 ``--timeout=N``（signal 方法）——单条挂死
     测试被单独判失败而非拖垮整套餐（缺陷实现不终止类任务由 None
     转为可判定）。墙钟 timeout 参数保持外层兜底语义不变。
+
+    N-3（2026-10-17，A-05 独立判读）：``keyword_filter`` 非空时追加
+    ``-k <表达式>`` 选择子集（LLM-suite / oracle-suite 分开执行）。
+    **缺省 None 时不追加任何参数**——命令与修复前逐位一致（SPEC_ORACLE_EXEC_ENABLE
+    =false 的历史口径零差异；由 tests 锁定）。
     """
     if per_test_timeout is None:
         per_test_timeout = per_test_timeout_seconds()
@@ -456,6 +527,8 @@ def _run_pytest_in_tmp(
                     # 方法可中断纯 Python 死循环——缺陷实现不终止类任务的
                     # 单条挂死测试据此被单独判失败，整套餐得以完赛）。
                     *(["--timeout", str(per_test_timeout)] if use_per_test else []),
+                    # N-3：独立判读的 -k 子集过滤（None = 历史逐位一致的命令）
+                    *(["-k", keyword_filter] if keyword_filter else []),
                     test_path,
                 ],
                 timeout=timeout,
@@ -592,6 +665,12 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
 
     gold 修复代码缺失时（有 test_cases 但无 fixed 材料）无法完成
     F2P 第二段，保守记 None（不误报，与"无 gold 材料"同口径）。
+
+    N-3（2026-10-17）：本函数判定对象 = **LLM-suite**（排除
+    test_specir_v2_oracle / test_specir_v2_smt_witness 的独立运行）。
+    生成测试无 oracle 注入测试名时行为与历史逐位一致。oracle 单独判定见
+    ``_compute_oracle_suite_verdict``；结果行另有显式
+    ``llm_suite_detection_rate`` / ``oracle_suite_verdict`` 两键。
     """
     if final_state is None:
         return None
@@ -615,11 +694,21 @@ def _compute_detection_rate(task: Any, final_state: dict[str, Any] | None) -> fl
     # R27：把任务上下文（跨文件物化信号）透传执行器——显式分派，不再依赖
     # 测试文本子串启发式。
     task_md = getattr(task, "metadata", None) or {}
-    rc_buggy = _run_pytest_in_tmp(generated_test, original_code, module_name, task_metadata=task_md)
+    # N-3（2026-10-17）：detection_rate 语义 = **LLM-suite**。生成测试含确定性
+    # oracle（SPEC_ORACLE_EXEC_ENABLE=true）时，本判定只跑排除 oracle 测试名
+    # 的子集——oracle 在 fixed 侧的失败不得改写 LLM 检出结论（A-05 实测混判
+    # 抹掉 14/22 个既有检出）。无 oracle 测试（默认关）时 filter=None，
+    # 命令与修复前逐位一致（零差异由 tests 锁定）。
+    llm_filter = llm_suite_keyword_filter(generated_test)
+    rc_buggy = _run_pytest_in_tmp(
+        generated_test, original_code, module_name, task_metadata=task_md, keyword_filter=llm_filter
+    )
     if rc_buggy is None:
         return None
     buggy_rc, buggy_out, buggy_err = rc_buggy
-    rc_fixed = _run_pytest_in_tmp(generated_test, fixed_code, module_name, task_metadata=task_md)
+    rc_fixed = _run_pytest_in_tmp(
+        generated_test, fixed_code, module_name, task_metadata=task_md, keyword_filter=llm_filter
+    )
     if rc_fixed is None:
         return None
     fixed_rc, fixed_out, fixed_err = rc_fixed
@@ -664,7 +753,15 @@ def _compute_test_error_rate(task: Any, final_state: dict[str, Any] | None) -> f
         return None
     # R27：透传任务上下文（跨文件物化信号）供显式分派
     task_md = getattr(task, "metadata", None) or {}
-    rc = _run_pytest_in_tmp(generated_test, original_code, module_name, task_metadata=task_md)
+    # N-3：测试执行错误率同样只看 LLM-suite（oracle 自身的收集/崩溃属
+    # oracle_suite_verdict 的 unavailable 语义，不污染 LLM 测试健康度）。
+    rc = _run_pytest_in_tmp(
+        generated_test,
+        original_code,
+        module_name,
+        task_metadata=task_md,
+        keyword_filter=llm_suite_keyword_filter(generated_test),
+    )
     if rc is None:
         return None
     rc_val, out, err = rc
@@ -813,12 +910,91 @@ def _compute_regression_rate(task: Any, final_state: dict[str, Any] | None) -> f
     return 0.0
 
 
+def _compute_llm_suite_detection_rate(task: Any, final_state: dict[str, Any] | None) -> float | None:
+    """N-3：LLM-suite 检出率（语义 = ``detection_rate`` 的新口径名，显式字段）。
+
+    与 ``_compute_detection_rate`` 完全同口径（同一实现）：生成测试含 oracle
+    测试名时只跑排除 oracle 的子集；无 oracle 测试时与历史逐位一致。
+    结果行同时写两个键（``detection_rate`` / ``llm_suite_detection_rate``），
+    目标是让"detection_rate 的语义已收敛为 LLM-suite"在工件层显式可审计，
+    并保留既有消费者零改动。
+    """
+    return _compute_detection_rate(task, final_state)
+
+
+def _compute_oracle_suite_verdict(task: Any, final_state: dict[str, Any] | None) -> str:
+    """N-3：确定性 oracle 的**独立判定**（与 LLM-suite 分开执行）。
+
+    判定对象：生成测试里的 ``test_specir_v2_oracle`` / ``test_specir_v2_smt_witness``
+    测试——用 ``-k`` 只选 oracle 测试名，在 buggy / fixed 两版代码上各跑一次。
+
+    Returns（取值域见 ``ORACLE_SUITE_VERDICTS``）：
+        - "unavailable"：未注入 oracle / 无 gold 材料 / 超时 / 收集错误 /
+          单测超时（fail-closed，宁记不可判不臆测）；
+        - "correct"：buggy 失败 ∧ fixed 通过（真检出）；
+        - "fp"：fixed 失败（对正确实现假阳；含两侧皆失败）；
+        - "silent"：两侧都通过（对该缺陷无信号）；
+        - "misguided"：buggy 通过 ∧ fixed 失败（把缺陷行为断言成期望）。
+
+    纪律：oracle 失败**不再改写** ``detection_rate``（LLM-suite 独立跑）；
+    超时/收集错误单列（unavailable），不并入四分类。无 oracle 测试时
+    不启动任何子进程（历史口径零成本/零行为变化）。
+    """
+    if final_state is None:
+        return "unavailable"
+    mat = _extract_gold_material(task)
+    if mat is None:
+        return "unavailable"
+    module_name, _test_cases, _fixed = mat
+    generated_test = final_state.get("generated_test") or ""
+    if not generated_test.strip() or not has_oracle_suite(generated_test):
+        return "unavailable"
+    original_code = str(getattr(task, "instance_code", "") or "")
+    if not original_code.strip():
+        return "unavailable"
+    fixed_code = _gold_fixed_code(task)
+    if not fixed_code.strip():
+        return "unavailable"
+    task_md = getattr(task, "metadata", None) or {}
+    filter_expr = _ORACLE_SUITE_KEYWORD_FILTER
+    buggy_verdict = _suite_run_verdict(
+        _run_pytest_in_tmp(
+            generated_test,
+            original_code,
+            module_name,
+            task_metadata=task_md,
+            keyword_filter=filter_expr,
+        )
+    )
+    fixed_verdict = _suite_run_verdict(
+        _run_pytest_in_tmp(
+            generated_test,
+            fixed_code,
+            module_name,
+            task_metadata=task_md,
+            keyword_filter=filter_expr,
+        )
+    )
+    if "unavailable" in (buggy_verdict, fixed_verdict):
+        return "unavailable"
+    if buggy_verdict == "fail" and fixed_verdict == "pass":
+        return "correct"
+    if buggy_verdict == "pass" and fixed_verdict == "fail":
+        return "misguided"
+    if buggy_verdict == "pass" and fixed_verdict == "pass":
+        return "silent"
+    return "fp"
+
+
 def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict[str, Any]:
     """M1 指标集（供 run_benchmark._build_task_result 消费）。
 
-    返回 {"detection_rate": ..., "repair_rate": ..., "false_fix_rate": ...,
+    返回 {"detection_rate": ..., "llm_suite_detection_rate": ...,
+    "oracle_suite_verdict": ..., "repair_rate": ..., "false_fix_rate": ...,
     "test_error_rate": ..., "regression_rate": ...,
     "test_regenerated_pass_unverified": ...}。
+    N-3（2026-10-17）起 detection_rate 语义收敛为 LLM-suite（与
+    llm_suite_detection_rate 同值），oracle 独立判定见 oracle_suite_verdict。
     键集合同构（历史结果 JSON 结构向后兼容）：无 gold 材料时各指标均
     None；假通过标记仅 passed=True 且 regeneration_count > 0 时 True，
     否则 None。
@@ -832,8 +1008,14 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
     false_fix_rate: float | None = None
     test_error_rate: float | None = None
     regression_rate: float | None = None
+    # N-3（2026-10-17）：独立判读的两键（无 oracle 注入时 detection 口径与
+    # 历史逐位一致、oracle 判定为 unavailable 且零子进程成本）。
+    llm_suite_detection_rate: float | None = None
+    oracle_suite_verdict = "unavailable"
     if final_state is not None:
         detection_rate = _compute_detection_rate(task, final_state)
+        llm_suite_detection_rate = detection_rate  # 同一实现/同一次判定
+        oracle_suite_verdict = _compute_oracle_suite_verdict(task, final_state)
         repair_rate = _compute_repair_rate(task, final_state)
         false_fix_rate = _compute_false_fix_rate(task, final_state)
         test_error_rate = _compute_test_error_rate(task, final_state)
@@ -846,7 +1028,11 @@ def build_m1_task_metrics(task: Any, final_state: dict[str, Any] | None) -> dict
     ):
         test_regenerated_pass_unverified = True
     return {
+        # detection_rate 语义（N-3 起）= LLM-suite（与 llm_suite_detection_rate 同值；
+        # 保留既有键名供历史消费者零改动，新键用于显式审计口径）
         "detection_rate": detection_rate,
+        "llm_suite_detection_rate": llm_suite_detection_rate,
+        "oracle_suite_verdict": oracle_suite_verdict,
         "repair_rate": repair_rate,
         "false_fix_rate": false_fix_rate,
         "test_error_rate": test_error_rate,

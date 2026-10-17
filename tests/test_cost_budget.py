@@ -4,7 +4,8 @@
 覆盖：
 - 开关默认关闭（历史口径零行为变化）；
 - token 预算：超限时 check_budget 返回 False + BudgetExceededError 可构造；
-- 费用预算：需 COST_USD_PER_1K 配合才生效；
+- 费用预算：USD 增量由调用方/生产接线（pricing 价目表或显式 delta）传入；
+  D1（N-5）起不再要求 COST_USD_PER_1K 才算数（旧 gate 是 USD 上限纸面化根因之一）；
 - 线程局部隔离（--parallel 口径）与 reset_budget；
 - 进程级统计（get_process_budget_stats）。
 """
@@ -91,14 +92,16 @@ class TestTokenBudget:
 
 
 class TestUsdBudget:
-    """费用口径：COST_BUDGET_USD 需 COST_USD_PER_1K 配合。"""
+    """费用口径：COST_BUDGET_USD 的 USD 增量由调用方传入（D1/N-5 起不再要求
+    COST_USD_PER_1K 才算数——旧 gate 是 N-4 D1"USD 上限纸面开关"的成因之一；
+    生产路径的 USD 增量由 `src/budget/pricing.py` 按价目表计算）。"""
 
-    def test_usd_without_price_disabled(self, monkeypatch) -> None:
-        """未配费用单价时费用上限不生效（保守：无计价信息不封顶）。"""
+    def test_explicit_usd_delta_triggers_without_per_1k(self, monkeypatch) -> None:
+        """显式 USD 增量（生产接线/调用方传入）应直接参与上限判定，无需单价配置。"""
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")
         monkeypatch.setenv("COST_BUDGET_USD", "0.01")
-        # 无 COST_USD_PER_1K → 费用口径不生效，token 口径未配 → 永不超限
-        assert check_budget(consumed_delta_usd=10.0) is True
+        assert check_budget(consumed_delta_usd=0.005) is True
+        assert check_budget(consumed_delta_usd=10.0) is False
 
     def test_usd_exceeded_blocks(self, monkeypatch) -> None:
         monkeypatch.setenv("COST_BUDGET_ENABLE", "true")

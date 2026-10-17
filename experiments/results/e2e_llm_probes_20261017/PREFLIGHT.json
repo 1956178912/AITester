@@ -1,0 +1,21 @@
+{
+  "run": "N-4 e2e llm probes",
+  "code_root": "/Users/wangchenyu/Workspace/AITester-n4-probe-f194d67",
+  "runner_repo": "/Users/wangchenyu/Workspace/AITester",
+  "out_dir": "/Users/wangchenyu/Workspace/AITester/experiments/results/e2e_llm_probes_20261017",
+  "probe_context_note": "代码根为冻结快照（--root worktree）；产物写入主仓 results 目录（gitignored）。",
+  "git": {
+    "head": "f194d679aaaba1c2fa97ef80fd53dbf47de203a9",
+    "branch": "HEAD",
+    "dirty": false,
+    "dirty_lines": []
+  },
+  "llm_smoke": {
+    "exit_code": 0,
+    "wall_seconds": 2,
+    "log": "00_llm_smoke/run.log"
+  },
+  "oracle_ready_n3": false,
+  "python": "3.14.6",
+  "price_table": "/Users/wangchenyu/Workspace/AITester-n4-probe-f194d67/experiments/price_table.json"
+}

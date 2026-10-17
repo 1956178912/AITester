@@ -1,0 +1,29 @@
+{
+  "run": "N-4 e2e llm probes",
+  "git": {
+    "head": "f194d679aaaba1c2fa97ef80fd53dbf47de203a9",
+    "branch": "main",
+    "dirty": true,
+    "dirty_lines": [
+      "M Makefile",
+      " M docs/INDEX.en.md",
+      " M docs/INDEX.md",
+      " M experiments/_m1_metrics.py",
+      " M src/agents/kernel_sandbox.py",
+      " M src/graph/nodes.py",
+      " M src/graph/state.py",
+      "?? docs/design/e2e_probe_matrix.md",
+      "?? experiments/run_e2e_llm_probes.sh",
+      "?? scripts/tools/e2e_probe.py",
+      "?? tests/test_e2e_probe.py"
+    ]
+  },
+  "llm_smoke": {
+    "exit_code": 0,
+    "wall_seconds": 2,
+    "log": "00_llm_smoke/run.log"
+  },
+  "oracle_ready_n3": false,
+  "python": "3.14.6",
+  "price_table": "/Users/wangchenyu/Workspace/AITester/experiments/price_table.json"
+}

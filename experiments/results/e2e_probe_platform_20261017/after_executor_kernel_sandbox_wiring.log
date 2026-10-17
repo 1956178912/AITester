@@ -1,0 +1,14 @@
+KERNEL_SANDBOX_ENABLE = true
+sys.executable = /Users/wangchenyu/Workspace/AITester/.venv/bin/python
+elapsed_s = 1.09
+passed = True
+error_info = None
+kernel_sandbox_obs = {'platform': 'darwin', 'backend': 'seatbelt', 'supported': True, 'allowed_paths': ['/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/n2_repro_s2i5zm0m'], 'exec_paths': ['/Users/wangchenyu/Workspace/AITester/.venv/bin/python', '/Library/Frameworks/Python.framework/Versions/3.14/bin/python3.14', '/Users/wangchenyu/Workspace/AITester/.venv/bin', '/Library/Frameworks/Python.framework/Versions/3.14/bin', '/Library/Frameworks/Python.framework/Versions/3.14'], 'read_paths': ['/Users/wangchenyu/Workspace/AITester', '/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T', '/Users/wangchenyu/Workspace/AITester/.venv', '/Library/Frameworks/Python.framework/Versions/3.14', '/Users/wangchenyu/Workspace/AITester/.venv/bin', '/Library/Frameworks/Python.framework/Versions/3.14/bin'], 'write_paths': ['/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T'], 'cwd_rw': False, 'profile_summary': '1 路径写放行 + 6 只读 + 5 仅执行 + 全文件系统只读 + 断网'}
+output_tail:
+                                                                     2      0   100%
+============================== 1 passed in 0.27s ===============================
+/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/hypothesis/_settings.py:1114: HypothesisWarning: The database setting is not configured, and the default location is unusable - falling back to an in-memory database for this session.  path=PosixPath('/Users/wangchenyu/Workspace/AITester/.hypothesis/examples')
+  value = getattr(self, name)
+/Users/wangchenyu/Workspace/AITester/.venv/lib/python3.14/site-packages/hypothesis/_settings.py:1115: HypothesisWarning: The database setting is not configured, and the default location is unusable - falling back to an in-memory database for this session.  path=PosixPath('/Users/wangchenyu/Workspace/AITester/.hypothesis/examples')
+  if value != getattr(default, name):
+

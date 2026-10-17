@@ -119,8 +119,11 @@ def test_venv_sandbox_kernel_on_supported(captured, monkeypatch):
     monkeypatch.setenv("KERNEL_SANDBOX_ENABLE", "true")
     fake_obs: dict = {"platform": "darwin", "backend": "seatbelt", "supported": True, "allowed_paths": []}
 
-    def _fake_build(args, cwd, allowed_paths=None):
+    def _fake_build(args, cwd, allowed_paths=None, **kwargs):
+        # N-2（2026-10-17）：build_sandbox_command 增加细粒度放行面参数
+        # （cwd_rw/exec_paths/read_paths/write_paths），mock 需透传记录。
         fake_obs["allowed_paths"] = list(allowed_paths or [])
+        fake_obs.update(kwargs)
         fake_obs["cwd"] = cwd
         return ["sandbox-exec", "-p", "(version 1)", *args], fake_obs
 
@@ -131,8 +134,15 @@ def test_venv_sandbox_kernel_on_supported(captured, monkeypatch):
     # 完整 argv 传法：cmd 被替换为沙箱命令（argv[0] = sandbox-exec）
     assert captured["cmd"][0] == "sandbox-exec"
     assert captured["cmd"][1] == "-p"
-    # 允许路径口径：sandbox_dir + sys.executable
-    assert sys.executable in fake_obs["allowed_paths"]
+    # 允许路径口径（N-2 后）：解释器在 exec/read 细粒度放行面（不再混入可写
+    # allowed_paths——避免把 venv/framework 目录变成可写面）。
+    _all_granted = [
+        *list(fake_obs.get("allowed_paths") or []),
+        *list(fake_obs.get("exec_paths") or []),
+        *list(fake_obs.get("read_paths") or []),
+    ]
+    assert sys.executable in _all_granted
+    assert fake_obs.get("cwd_rw", True) is True
     # 观测层透传（纯观测，不改结果口径）
     assert "kernel_sandbox_obs" in result
     assert result["kernel_sandbox_obs"]["backend"] == "seatbelt"
@@ -162,7 +172,7 @@ def test_venv_sandbox_kernel_unavailable_fail_closed(captured, monkeypatch):
 def test_venv_sandbox_kernel_supported_false_double_safety(captured, monkeypatch):
     monkeypatch.setenv("KERNEL_SANDBOX_ENABLE", "true")
 
-    def _return_unsupported(args, cwd, allowed_paths=None):
+    def _return_unsupported(args, cwd, allowed_paths=None, **kwargs):
         obs = {
             "platform": "windows",
             "backend": "none",

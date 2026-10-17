@@ -189,14 +189,26 @@ def _lru_clear() -> None:
 
 
 def _budget_exceeded_error() -> Exception:
-    """5.4 预算超限异常工厂（延迟构造，避免模块加载期对 cost_budget 的依赖）。"""
+    """5.4 预算超限异常工厂（延迟构造，避免模块加载期对 cost_budget 的依赖）。
+
+    D1（N-5）：按快照的实际生效单位取数——USD 口径取 consumed_usd/usd_limit
+    （历史上无 USD 生产记账，该分支不可达；USD 接线后必须同口径，否则 USD
+    触发时异常消息会把 token 数当美元展示，可诊断性失效）。
+    """
     from src.budget.cost_budget import BudgetExceededError, get_budget_stats
 
     stats = get_budget_stats()
+    unit = str(stats.get("unit", "none"))
+    if unit == "usd":
+        return BudgetExceededError(
+            consumed=float(stats.get("consumed_usd", 0.0)),
+            limit=float(stats.get("usd_limit", 0.0)),
+            unit="usd",
+        )
     return BudgetExceededError(
         consumed=int(stats.get("consumed_tokens", 0)),
         limit=int(stats.get("token_limit", 0)),
-        unit=str(stats.get("unit", "none")),
+        unit=unit,
     )
 
 

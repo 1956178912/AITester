@@ -142,6 +142,24 @@ MANIFEST: tuple[str, ...] = (
     # M 轮：m1_metrics 孤儿根因证据（M-3；before/after + 现场残留证据）
     "experiments/results/orphan_repro_20261017/README.md",
     "experiments/results/orphan_repro_20261017/SHA256SUMS",
+    # N 轮（2026-10-17）：全功能 e2e 探针矩阵（三组探针 + 汇总报告；功能矩阵证据源）
+    "experiments/results/e2e_probe_20261017/README.md",
+    "experiments/results/e2e_probe_20261017/report.json",
+    "experiments/results/e2e_probe_20261017/SHA256SUMS",
+    "experiments/results/e2e_probe_workflow_20261017/README.md",
+    "experiments/results/e2e_probe_workflow_20261017/report.json",
+    "experiments/results/e2e_probe_workflow_20261017/SHA256SUMS",
+    "experiments/results/e2e_probe_platform_20261017/README.md",
+    "experiments/results/e2e_probe_platform_20261017/llm_report.json",
+    "experiments/results/e2e_probe_platform_20261017/SHA256SUMS",
+    # N 轮：oracle 接线 + 独立判读（N-3；口径变更与重放对账证据）
+    "experiments/results/emse_oracle_independent_judging_20261017/README.md",
+    "experiments/results/emse_oracle_independent_judging_20261017/ORACLE_INDEPENDENT_JUDGING_REPORT.json",
+    "experiments/results/emse_oracle_independent_judging_20261017/SHA256SUMS",
+    # N 轮：真实 LLM 重型功能探针（N-4；logic/RAG/跨文件/venv/预算/safe 路径证据）
+    "experiments/results/e2e_llm_probes_20261017/README.md",
+    "experiments/results/e2e_llm_probes_20261017/ITEM_RESULTS.json",
+    "experiments/results/e2e_llm_probes_20261017/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

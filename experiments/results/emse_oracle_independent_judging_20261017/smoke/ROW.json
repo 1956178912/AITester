@@ -1,0 +1,161 @@
+{
+  "task_id": "quixbugs__find_in_sorted",
+  "repo": "quixbugs",
+  "passed": false,
+  "coverage": 92.0,
+  "iterations": 0,
+  "diagnosis": null,
+  "error_category": "",
+  "elapsed_seconds": 13.97,
+  "token_usage": {
+    "input_tokens": 921,
+    "output_tokens": 1502,
+    "total_tokens": 2423,
+    "llm_calls": 1,
+    "cache_hits": 1,
+    "cache_avoided_tokens": 2423,
+    "by_model": {
+      "deepseek-flash": 2423
+    }
+  },
+  "rag_stats": null,
+  "patch": null,
+  "generated_test": "import pytest\n\nfrom find_in_sorted import find_in_sorted\n\n\ndef _is_sorted(arr):\n    \"\"\"辅助：判断 arr 是否升序（非严格）。\"\"\"\n    return all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))\n\n\ndef _assert_postconditions(arr, x, result):\n    \"\"\"辅助：断言规约中的后置条件与不变量。\"\"\"\n    # 返回值类型为 int\n    assert isinstance(result, int)\n    # 不变量：0 <= result < len(arr) 或 result == -1\n    assert (0 <= result < len(arr)) or result == -1\n    # 后置：result != -1 则 arr[result] == x\n    if result != -1:\n        assert arr[result] == x\n    # 后置：result == -1 则 x 不在 arr 中\n    if result == -1:\n        assert x not in arr\n\n\ndef test_find_in_sorted_empty_list_returns_minus_one():\n    \"\"\"空列表应返回 -1（规约边界情况）。\"\"\"\n    arr = []\n    x = 5\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_single_element_hit():\n    \"\"\"长度为 1 且命中：返回下标 0（规约边界情况）。\"\"\"\n    arr = [7]\n    x = 7\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == 0\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_single_element_miss():\n    \"\"\"长度为 1 且未命中：返回 -1（规约边界情况）。\"\"\"\n    arr = [7]\n    x = 3\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_x_less_than_all():\n    \"\"\"x 小于所有元素：返回 -1（规约边界情况）。\"\"\"\n    arr = [10, 20, 30, 40]\n    x = 5\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_x_greater_than_all():\n    \"\"\"x 大于所有元素：返回 -1（规约边界情况）。\"\"\"\n    arr = [10, 20, 30, 40]\n    x = 100\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_x_equals_first_element():\n    \"\"\"x 等于首元素：返回下标 0（规约边界情况）。\"\"\"\n    arr = [10, 20, 30, 40]\n    x = 10\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == 0\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_x_equals_last_element():\n    \"\"\"x 等于末元素：返回末位下标（规约边界情况）。\"\"\"\n    arr = [10, 20, 30, 40]\n    x = 40\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == len(arr) - 1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_middle_element():\n    \"\"\"x 位于中间：返回的下标处元素等于 x（规约后置条件）。\"\"\"\n    arr = [1, 3, 5, 7, 9]\n    x = 5\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result != -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_duplicates_returns_any_match():\n    \"\"\"含重复元素：返回任一匹配下标，且该下标处元素等于 x（规约边界情况）。\"\"\"\n    arr = [1, 2, 2, 2, 3]\n    x = 2\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result != -1\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_duplicates_miss():\n    \"\"\"含重复元素但未命中：返回 -1（规约后置条件）。\"\"\"\n    arr = [1, 2, 2, 2, 3]\n    x = 4\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert result == -1\n    _assert_postconditions(arr, x, result)\n\n\n@pytest.mark.parametrize(\n    \"arr, x\",\n    [\n        ([], 0),\n        ([1], 1),\n        ([1], 2),\n        ([1, 2, 3, 4, 5], 1),\n        ([1, 2, 3, 4, 5], 5),\n        ([1, 2, 3, 4, 5], 3),\n        ([1, 2, 3, 4, 5], 0),\n        ([1, 2, 3, 4, 5], 6),\n        ([1, 1, 1, 1], 1),\n        ([1, 1, 1, 1], 2),\n        ([-5, -3, 0, 2, 8], -3),\n        ([-5, -3, 0, 2, 8], 8),\n        ([-5, -3, 0, 2, 8], -10),\n        ([-5, -3, 0, 2, 8], 10),\n    ],\n)\ndef test_find_in_sorted_postconditions_and_invariants(arr, x):\n    \"\"\"参数化验证：所有输入满足前置条件时，返回值满足后置条件与不变量。\"\"\"\n    assert len(arr) >= 0\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    _assert_postconditions(arr, x, result)\n\n\ndef test_find_in_sorted_returns_int_type():\n    \"\"\"返回值类型必须为 int（规约后置条件）。\"\"\"\n    arr = [1, 2, 3]\n    x = 2\n    assert _is_sorted(arr)\n    result = find_in_sorted(arr, x)\n    assert isinstance(result, int)\n\n\n# SpecIR v2 确定性 oracle（compile_readiness=1.00）\nfrom find_in_sorted import find_in_sorted\n\ndef test_specir_v2_oracle():\n    arr, x = 0, 0\n    # [未断言·无满足前件的见证] # pre: len(arr) >= 0\n    # [未断言·无满足前件的见证] assert len(arr) >= 0\n    # [未断言·无满足前件的见证] # pre: all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))\n    # [未断言·无满足前件的见证] assert all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))\n    r = find_in_sorted(arr, x)\n    # post: result == -1 or arr[result] == x\n    assert r == -1 or arr[r] == x\n    # post: isinstance(result, int)\n    assert isinstance(r, int)\n    # invariant: 0 <= result < len(arr) or result == -1\n    assert 0 <= r < len(arr) or r == -1",
+  "execution_trace": [
+    {
+      "iteration": 0,
+      "passed": false,
+      "coverage": 92.0,
+      "coverage_delta": null,
+      "elapsed_seconds": 1.79,
+      "reward_signals": {
+        "correctness": 0.0,
+        "efficiency": 0.94,
+        "simplicity": 0.0
+      }
+    },
+    {
+      "iteration": 0,
+      "passed": false,
+      "coverage": 92.0,
+      "coverage_delta": 0.0,
+      "elapsed_seconds": 2.29,
+      "reward_signals": {
+        "correctness": 0.0,
+        "efficiency": 0.924,
+        "simplicity": 0.0
+      }
+    }
+  ],
+  "contract_missing_symbols": null,
+  "patch_resample_stats": null,
+  "contamination_risk_level": "not_applicable",
+  "repo_verification": null,
+  "task_metadata": {
+    "source": "quixbugs",
+    "program": "find_in_sorted",
+    "test_cases": "import pytest\nfrom load_testdata import load_json_testcases\n\nif pytest.use_correct:\n    from correct_python_programs.find_in_sorted import find_in_sorted\nelse:\n    from python_programs.find_in_sorted import find_in_sorted\n\n\ntestdata = load_json_testcases(find_in_sorted.__name__)\n\n\n@pytest.mark.parametrize(\"input_data,expected\", testdata)\ndef test_find_in_sorted(input_data, expected):\n    assert find_in_sorted(*input_data) == expected\n",
+    "fixed": "\ndef find_in_sorted(arr, x):\n    def binsearch(start, end):\n        if start == end:\n            return -1\n        mid = start + (end - start) // 2\n        if x < arr[mid]:\n            return binsearch(start, mid)\n        elif x > arr[mid]:\n            return binsearch(mid + 1, end)\n        else:\n            return mid\n\n    return binsearch(0, len(arr))\n",
+    "suggested_function": "find_in_sorted",
+    "is_cross_file": false
+  },
+  "risk_summary": {
+    "enabled": false,
+    "risk_score": null,
+    "risk_level": null,
+    "approval_action": null,
+    "factors": {},
+    "reasons": [],
+    "pause_requested": false
+  },
+  "test_regenerated_pass_unverified": null,
+  "detection_first_red_seen": true,
+  "detection_first_status": "red_not_repaired",
+  "regeneration_count": 1,
+  "spec_compile_rate": null,
+  "spec_oracle_injected": true,
+  "spec_oracle_verdict": "injected",
+  "spec_replace_applied": "attempted_replaced",
+  "spec_augment_applied": null,
+  "spec_expr_coverage": null,
+  "spec_reject_reasons": null,
+  "specificity_gate_verdict": "over_red",
+  "red_regression_violation": null,
+  "source_patched_unverified": null,
+  "patch_evidence_level": null,
+  "detection_rate": 1.0,
+  "llm_suite_detection_rate": 1.0,
+  "oracle_suite_verdict": "fp",
+  "repair_rate": 0.0,
+  "false_fix_rate": 0.0,
+  "test_error_rate": 0.0,
+  "oracle_type": "generated_test",
+  "test_visible_to_system": true,
+  "patch_plausible": 0,
+  "patch_correct": 0,
+  "patch_precision": null,
+  "repair_history": [],
+  "patch_plausible_evidence": {
+    "has_patch": false,
+    "history_len": 0,
+    "last_patch_applied": null,
+    "ever_patch_applied": false,
+    "basis": "no_patch"
+  },
+  "patch_plausible_invariant_violation": false,
+  "mdo_available": null,
+  "mtr": null,
+  "mdr": null,
+  "mdo_crash_rate": null,
+  "mdo_pool_size": null,
+  "mdo_pool_floor_ok": null,
+  "mdo_not_available_reason": null,
+  "mdo_provisional": null,
+  "mdo_raw": null,
+  "fl_at_k": null,
+  "llm_localization": null,
+  "localization_hit_function": null,
+  "localization_hit_function_at_3": null,
+  "localization_mrr": null,
+  "edit_intent_status": null,
+  "edit_localization": null,
+  "deterministic_repair_status": null,
+  "patch_abstained": true,
+  "patch_abstain_signals": [
+    "specificity_gate_verdict"
+  ],
+  "patch_validated": false,
+  "patch_validate_verdict": "unvalidated",
+  "test_hacking_suspected": false,
+  "test_hacking_signals": [],
+  "fl_constraint_verdict": "not_evaluable",
+  "fl_constraint_hit_rank": null,
+  "fl_constraint_changed_functions": [],
+  "oracle_quality_history": [
+    {
+      "regeneration": 0,
+      "assert_count": 31,
+      "test_count": 13,
+      "parse_ok": true,
+      "mutation_score": null
+    },
+    {
+      "regeneration": 0,
+      "assert_count": 31,
+      "test_count": 13,
+      "parse_ok": true,
+      "mutation_score": null
+    }
+  ],
+  "self_repair_trap_suspected": false,
+  "self_repair_trap_signals": [],
+  "stop_reason": "unknown",
+  "failure_bucket": "uncategorized",
+  "failure_bucket_detail": "状态信息不足，未命中任何映射（兜底桶）",
+  "attribution_edge": "uncategorized",
+  "attribution_fault_side": "uncategorized",
+  "m10_leaf_fallback": false,
+  "regression_rate": null,
+  "harness_invalid": false,
+  "token_budget_capped": false
+}

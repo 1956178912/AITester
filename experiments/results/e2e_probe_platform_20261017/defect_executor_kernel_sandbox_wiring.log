@@ -1,0 +1,11 @@
+第 1 次执行失败，尝试重试...
+第 2 次执行失败，尝试重试...
+KERNEL_SANDBOX_ENABLE = true
+sys.executable = /Users/wangchenyu/Workspace/AITester/.venv/bin/python
+elapsed_s = 0.19
+passed = False
+error_info = {'type': 'test_failure', 'returncode': 71, 'has_syntax_error': False, 'has_runtime_error': False}
+kernel_sandbox_obs = {'platform': 'darwin', 'backend': 'seatbelt', 'supported': True, 'allowed_paths': ['/var/folders/pj/frxc6s715_x9x19hkk6pj2nh0000gn/T/n2_repro_xfsfz7c_', '/Users/wangchenyu/Workspace/AITester'], 'profile_summary': '2 路径写放行 + 全文件系统只读 + 断网'}
+output_tail:
+sandbox-exec: execvp() of '/Users/wangchenyu/Workspace/AITester/.venv/bin/python' failed: Operation not permitted
+
