@@ -981,6 +981,237 @@ def _precondition_witness_binding(pre: list[str], signature_params: list[str]) -
     return {p: binding[p] for p in signature_params}
 
 
+# ─── O-1（2026-10-18）：仪器加固辅助（崩溃安全 harness / 前件校验输入选择）─────
+# 背景（M-2/N-3 证据）：M-2 零 LLM 重放测得 oracle 四分类 correct 0 / fp 29
+# （76.32%），其中 fixed 侧失败 27 条是 **异常崩溃**（TypeError 24 等）、
+# 仅 2 条是断言失败——即"确定性 oracle 通道净负"很大比例是**仪器缺陷**
+# （崩溃被当成假阳断言），不是判定语义错误。O-1 做三件事：
+#   ① 执行体崩溃 → pytest.skip("oracle-unavailable: ...")，不再伪装成 fail；
+#   ② 有 boundaries 时用受限安全求值筛选"满足全部可机检前件"的第一个候选，
+#      避免把违反前件的输入绑进 oracle（旧口径字面量 0 绑定是假阳主源）；
+#   ③ 全候选不满足前件且 SMT 无见证 → 产出带 skip 原因的保守骨架
+#      （不臆造输入、也不产假断言）。
+# 全部改动只在 SPEC_ORACLE_EXEC_ENABLE=true 的注入产物中生效；开关关闭时
+# compile_spec_oracle 不会被生产调用（历史批次数字不变）。
+_ORACLE_INSTRUMENT_MARKER = "oracle-unavailable:"
+# 全部前件候选不可用（boundaries 全违反前件/元数不兼容 且 SMT 无见证）时的
+# 保守骨架 skip 原因（可审计；replay/判分侧据此记 unavailable，而非 fail）。
+_ORACLE_SKIP_REASON_NO_VALID_INPUT = "oracle-unavailable: no-valid-input"
+
+
+def _machine_checkable_precondition_exprs(
+    pre: list[str],
+    target_module: str,
+    target_function: str,
+    known_names: frozenset[str],
+) -> list[str]:
+    """提取**可机检**的前件表达式（已过 DSL 白名单与编译门）。
+
+    口径：只取 ``_compile_single_clause`` 能编译为 `assert <expr>` 的前件
+    子句（与最终产物里真正发出的前件断言同一集合）。自然语言/不可编译
+    前件保持 provenance 注释（历史口径），**不参与**候选输入筛选（不可机检
+    不等于违反）。返回 `expr` 列表供受限安全求值。
+    """
+    out: list[str] = []
+    for clause in pre:
+        compiled = _compile_single_clause(clause, "precondition", target_module, target_function, known_names)
+        if compiled.startswith("assert "):
+            out.append(compiled[len("assert ") :])
+    return out
+
+
+def _evaluate_precondition_exprs(exprs: list[str], binding: dict[str, Any]) -> bool | None:
+    """用受限安全求值检查绑定是否满足全部可机检前件（零 eval/exec）。
+
+    Returns:
+        True = 全部满足（或无可机检前件，空真）；
+        False = 至少一条不满足（候选应被拒绝）；
+        None = 无法安全判定（白名单外节点 / 求值异常 / 求值层不可用）——
+            保守视为"不可证明满足"，候选不被接受（不臆造输入）。
+    """
+    try:
+        from src.specs.spec_smt import safe_eval_clause
+    except Exception:  # pragma: no cover - 可选依赖降级（z3 与求值器同模块）
+        return None
+    for expr in exprs:
+        try:
+            value = safe_eval_clause(expr, binding)
+        except Exception:
+            return None
+        if not value:
+            return False
+    return True
+
+
+def _boundary_candidate_binding(
+    signature_params: list[str],
+    value: Any,
+) -> dict[str, Any] | None:
+    """把一条 boundary 输入值映射为参数绑定（元数/形态不兼容 → None）。
+
+    与最终产物绑定口径一致：
+    - 单参函数：``p0 = value``（含 list/tuple 值）；
+    - 多参函数：value 必须是长度 ≥ 参数个数的 tuple/list（``args = value;
+      f(*args)``）；长度不足 → 不兼容；
+    - 多参 + 标量：无法确定实参映射 → 不兼容（旧口径对整个函数返回空串，
+      新口径只跳过该候选、继续尝试后续候选）。
+    """
+    if len(signature_params) == 1:
+        return {signature_params[0]: value}
+    if not signature_params:
+        return None
+    if isinstance(value, (tuple, list)) and len(value) >= len(signature_params):
+        return {param: value[idx] for idx, param in enumerate(signature_params)}
+    return None
+
+
+def _select_valid_boundary_candidate(
+    boundaries: list[dict[str, Any]],
+    pre_exprs: list[str],
+    signature_params: list[str],
+) -> tuple[Any, dict[str, Any], int] | None:
+    """按顺序选出第一个"元数兼容且满足全部可机检前件"的 boundary 候选。
+
+    Returns:
+        (coerced_input, binding, rejected_count) 或 None（全部候选被拒）。
+    """
+    rejected = 0
+    for boundary in boundaries:
+        coerced = _coerce_boundary_literal(boundary.get("input"))
+        binding = _boundary_candidate_binding(signature_params, coerced)
+        if binding is None:
+            rejected += 1
+            continue
+        verdict = _evaluate_precondition_exprs(pre_exprs, binding)
+        if verdict is True:
+            return coerced, binding, rejected
+        rejected += 1
+    return None
+
+
+def _wrap_oracle_body(body_lines: list[str]) -> list[str]:
+    """把 4 空格缩进的 oracle 执行体包进**崩溃安全 harness**（O-1 核心）。
+
+    harness 语义（不得偏离）：
+    - 执行体 = 绑定 + 前件断言 + 调用 + 后件断言全部包进 try；
+    - **AssertionError 必须原样 re-raise**（断言失败是 oracle 的判定信号，
+      不得降级为 skip —— 否则"判断错误"与"仪器失效"再次不可区分）；
+    - 其余 Exception（TypeError / ZeroDivisionError / NameError 等**仪器
+      失效**形态）→ ``pytest.skip("oracle-unavailable: <ExcType>: <msg>")``
+      （pytest.skip 抛 Skipped，不记为 pass 或 fail；M1 oracle-suite 判定
+      侧把它记 unavailable，见 _m1_metrics._suite_run_verdict）；
+    - pytest-timeout 的 Failed 属 BaseException → 不在此捕获（超时仍单列）。
+    """
+    try_block: list[str] = ["    try:"]
+    for stmt in body_lines:
+        stripped = stmt.strip()
+        try_block.append(("        " + stripped) if stripped else "")
+    try_block.extend(
+        [
+            "    except AssertionError:",
+            "        # 断言失败 = oracle 的语义判定信号，必须保留为 fail（不得 skip）",
+            "        raise",
+            "    except Exception as exc:",
+            '        pytest.skip(f"oracle-unavailable: {type(exc).__name__}: {exc}")',
+        ]
+    )
+    return try_block
+
+
+def _render_harnessed_oracle(
+    target_module: str,
+    target_function: str,
+    body_lines: list[str],
+    readiness: float,
+) -> str:
+    """渲染主 oracle 测试（try/except 崩溃安全 harness + 断言保留）。"""
+    lines: list[str] = [
+        f"# SpecIR v2 确定性 oracle（compile_readiness={readiness:.2f}）",
+        "import pytest",
+        f"from {target_module} import {target_function}",
+        "",
+        "def test_specir_v2_oracle():",
+    ]
+    lines.extend(_wrap_oracle_body(body_lines))
+    return "\n".join(lines)
+
+
+def _render_skip_skeleton(
+    target_module: str,
+    target_function: str,
+    readiness: float,
+    *,
+    reason: str,
+    detail: str,
+) -> str:
+    """渲染"仪器不可用"保守骨架（带可审计 skip 原因；不产假断言）。
+
+    选择"骨架 + pytest.skip"而非"返回空串"的理由：空串会让注入率静默下降且
+    丢失原因（接线/材料缺口再次不可归因）；骨架保留可执行测试名与原因文本，
+    replay/报告可把 skipped 单列为 unavailable，与"没有 oracle"明确区分。
+    **不提供假 assert**：无有效输入时任何断言都是假信号（skip 后的 assert
+    不可达，属自欺），故本骨架无 assert 行，由调用方自检分支显式放行。
+    """
+    lines: list[str] = [
+        f"# SpecIR v2 确定性 oracle（compile_readiness={readiness:.2f}；instrument: no-valid-input）",
+        "import pytest",
+        f"from {target_module} import {target_function}",
+        "",
+        "def test_specir_v2_oracle():",
+        f"    # 仪器不可用原因：{reason}（{detail}）",
+        f'    pytest.skip("{reason}")',
+    ]
+    return "\n".join(lines)
+
+
+def _binding_lines_for_boundary_selection(
+    signature_params: list[str],
+    selected_input: Any,
+    pre_lines: list[str],
+    post_lines: list[str],
+    target_function: str,
+) -> list[str]:
+    """候选输入选中后的绑定/调用/断言行（4 空格缩进；与历史口径兼容）。"""
+    body: list[str] = []
+    if len(signature_params) == 1:
+        p0 = signature_params[0]
+        body.append(f"    {p0} = {selected_input!r}")
+        body.extend(pre_lines)
+        body.append(f"    r = {target_function}({p0})")
+        body.extend(post_lines)
+    else:
+        body.append(f"    args = {selected_input!r}")
+        body.extend(pre_lines)
+        body.append(f"    r = {target_function}(*args)")
+        body.extend(post_lines)
+    return body
+
+
+def _binding_lines_for_witness(
+    signature_params: list[str],
+    witness: dict[str, Any],
+    pre_lines: list[str],
+    post_lines: list[str],
+    target_function: str,
+) -> list[str]:
+    """SMT 见证绑定行（绑定全部签名参数；见证已保证满足前件，照发前件断言）。"""
+    body: list[str] = []
+    if len(signature_params) == 1:
+        p0 = signature_params[0]
+        body.append(f"    {p0} = {witness[p0]!r}")
+        body.extend(pre_lines)
+        body.append(f"    r = {target_function}({p0})")
+        body.extend(post_lines)
+        return body
+    names = ", ".join(signature_params)
+    values = ", ".join(repr(witness[p]) for p in signature_params)
+    body.append(f"    {names} = {values}")
+    body.extend(pre_lines)
+    body.append(f"    r = {target_function}({names})")
+    body.extend(post_lines)
+    return body
+
+
 def compile_spec_oracle(
     spec: dict[str, Any] | None,
     target_module: str = "",
@@ -1085,118 +1316,100 @@ def compile_spec_oracle(
     if pre_compiled_n + post_compiled_n == 0:
         return ""
 
-    lines: list[str] = [
-        f"# SpecIR v2 确定性 oracle（compile_readiness={readiness:.2f}）",
-        f"from {target_module} import {target_function}",
-        "",
-        "def test_specir_v2_oracle():",
-    ]
-    # 绑定上下文（保守分层，杜绝 NameError 断言）：
-    # 层 1（有边界输入材料）：按签名元数绑定——
-    #   - signature_params 有效：
-    #     · 单参 + input 非 tuple/list → <p0> = <input>; r = func(<p0>)
-    #     · 多参 + input 为 tuple/list → args = <input>; r = func(*args)
-    #     · 0 参（签名感知下才发现的边界，保守跳过不臆测输入）
-    #   - signature_params 缺席（历史口径）：x = <input>; r = func(x)
-    # 层 2（无边界输入）：保守数值字面量 0 绑定——
-    #   - signature_params 有效：按签名前 1~2 个参数名（修正历史
-    #     `a, b = 0, 0` + `func(a, b)` 对单参/0 参函数的 TypeError）；
-    #   - 缺席：a, b = 0, 0（历史口径不变）。
-    # 层 3（无任何输入材料路径不可达）：无绑定不臆测，return ""
-    #   （防"无断言测试"假通过）。
-    # 注意：层 2 的字面量 0 绑定可能本身违反前置条件（preconditions）——
-    # 已知保守权衡（有边界材料时层 1 优先，层 2 仅在无任何边界时兜底）。
+    # O-1（2026-10-18）仪器加固：绑定/调用/断言执行体统一由崩溃安全 harness
+    # 包裹；有 boundaries 时用受限安全求值做**前件校验输入选择**：
+    #   层 1（有边界、签名已知）：按顺序筛选"元数兼容且满足全部可机检前件"的
+    #        第一个候选；全不满足 → 不自造输入：SMT 见证兜底；仍无见证 →
+    #        带 skip 原因的保守骨架（no-valid-input）。
+    #   层 1'（有边界、签名未知）：历史口径逐字保留（x = first_input；无法
+    #        安全映射参数，不做前件筛选）。
+    #   层 2（无边界）：SMT 见证 → 退化字面量 0（历史口径）→ 空串；0 绑定
+    #        可能违反前件，但 harness 已把"崩溃"降级为 skip（不再伪装 fp）。
+    #   层 3：无任何输入材料路径不可达 → return ""（不臆测）。
     boundaries = [b for b in (spec.get("boundaries") or []) if b.get("input") is not None]
+    body_lines: list[str] = []
     if boundaries:
-        # P0（2026-10-05 独立审查）：边界输入字面量类型矫正。derive_boundary_triplets
-        # 历史产出字符串型 input（如 "4"），直绑成 str 字面量 `'4'` 会让 int 型被测
-        # 函数在运行期 TypeError——"确定性检出"通道变"确定性假检出"通道。
-        # 数字字符串（含容器元素）保守转 int/float；转换失败保持原值（不臆测）。
-        first_input = _coerce_boundary_literal(boundaries[0]["input"])
-        if signature_params is not None:
-            # v3（P0-A-1）：单参函数不再排除 tuple/list 边界输入。历史判据
-            # `单参 + input 非 tuple/list` 把 `def f(items)` + 边界 [1,2,3]
-            # 判为"元数/形态不匹配"→ 返回空串——**列表型被测函数（量化后条件
-            # `all(x > 0 for x in result)` 的主场景）的 oracle 通道静默失效**。
-            # 单参场景无 *args 歧义：`p0 = <input>`（含 list/tuple）是唯一
-            # 合理绑定，f(p0) 即 f([1,2,3])。多参 + tuple/list 的 *args 展开
-            # 口径不变；多参 + 标量仍判不匹配返回空串（不臆测实参映射）。
-            if len(signature_params) == 1:
-                p0 = signature_params[0]
-                lines.append(f"    {p0} = {first_input!r}")
-                lines.extend(pre_lines)
-                lines.append(f"    r = {target_function}({p0})")
-                lines.extend(post_lines)
-            elif len(signature_params) >= 2 and isinstance(first_input, (tuple, list)):
-                lines.append(f"    args = {first_input!r}")
-                lines.extend(pre_lines)
-                lines.append(f"    r = {target_function}(*args)")
-                lines.extend(post_lines)
-            else:
-                # 元数/形态不匹配（0 参、单参配 tuple、多参配标量等）：
-                # 保守不绑定（不臆测输入如何映射到参数），返回空串
-                return ""
+        if signature_params is None:
+            # 历史口径（签名未知）逐字保留：x = <first_input>
+            first_input = _coerce_boundary_literal(boundaries[0]["input"])
+            body_lines.append(f"    x = {first_input!r}")
+            body_lines.extend(pre_lines)
+            body_lines.append(f"    r = {target_function}(x)")
+            body_lines.extend(post_lines)
+        elif not signature_params:
+            return ""  # 0 参函数无输入可绑定，不臆测（历史口径不变）
         else:
-            lines.append(f"    x = {first_input!r}")
-            lines.extend(pre_lines)
-            lines.append(f"    r = {target_function}(x)")
-            lines.extend(post_lines)
+            pre_exprs = _machine_checkable_precondition_exprs(pre, target_module, target_function, known_names)
+            selection = _select_valid_boundary_candidate(boundaries, pre_exprs, signature_params)
+            if selection is not None:
+                selected_input, _binding, _rejected = selection
+                body_lines.extend(
+                    _binding_lines_for_boundary_selection(
+                        signature_params, selected_input, pre_lines, post_lines, target_function
+                    )
+                )
+            else:
+                # 全部候选不满足前件/元数不兼容：不自造输入 → SMT 见证兜底
+                witness = _precondition_witness_binding(pre, signature_params)
+                if witness:
+                    body_lines.extend(
+                        _binding_lines_for_witness(signature_params, witness, pre_lines, post_lines, target_function)
+                    )
+                else:
+                    # SMT 亦无见证：带可审计 skip 原因的保守骨架（不产假断言）
+                    return _render_skip_skeleton(
+                        target_module,
+                        target_function,
+                        readiness,
+                        reason=_ORACLE_SKIP_REASON_NO_VALID_INPUT,
+                        detail=(
+                            f"boundaries={len(boundaries)} 候选全部违反可机检前件或元数不兼容；"
+                            "SMT 见证不可用（开关/z3/求解）"
+                        ),
+                    )
     else:
         pre_refs_ab = [c for c in pre if c and any(v in c for v in ("a", "b", "y"))]
         if signature_params is not None:
             if not signature_params:
                 return ""  # 0 参函数无输入可绑定，不臆测
-            # T1d（2026-10-11 独立评审落地）：用 **SMT 见证**替代退化字面量 0
-            # 绑定。T1c 修复后 oracle 首次真正产出可执行代码，随即暴露原
-            # "已知保守权衡"的后果：`a, b = 0, 0` 会违反前件（如 `b != 0`），
-            # 于是 oracle 在 **gold 实现上就断言失败** —— 该产物本应"在正确
-            # 实现上通过"，否则它从"确定性检出通道"退化为"确定性假报通道"
-            # （M1 三段判定按"两侧皆红"记 0，既不检出也污染观测）。
-            # `spec_smt.generate_spec_witnesses` 本就是"满足前件的合法输入"
-            # 求解器通道（z3），故直接复用。
-            #
-            # **两种绑定分支（缺一不可）**：
-            # (a) 有见证 → 绑定见证值，并正常发出前件断言（前件由构造满足，
-            #     不会在 gold 上误报）；
-            # (b) 无见证 → 绑定退化字面量 0，但**不发出前件断言**（改为注释
-            #     保留 provenance）。理由：无见证意味着"0 是否满足前件未知"，
-            #     此时发出前件断言等于让 oracle 在**正确实现上**断言失败——
-            #     产物从"确定性检出通道"退化为"确定性假报通道"。后件断言
-            #     仍照发：后件是契约义务，在正确实现 + 任意合法输入下应成立，
-            #     且它才是"逻辑驱动"的确定性检出源。
+            # T1d（2026-10-11 独立评审落地）：有 SMT 见证 → 绑定见证值并照发
+            # 前件断言（见证已保证满足前件）；无见证 → 退化字面量 0 且前件
+            # 断言降级为注释（历史口径；harness 兜底崩溃→skip）。
             witness = _precondition_witness_binding(pre, signature_params)
-            if len(signature_params) == 1:
+            if witness:
+                body_lines.extend(
+                    _binding_lines_for_witness(signature_params, witness, pre_lines, post_lines, target_function)
+                )
+            elif len(signature_params) == 1:
                 p0 = signature_params[0]
-                lines.append(f"    {p0} = {witness[p0]!r}" if witness else f"    {p0} = 0")
-                lines.extend(pre_lines if witness else _as_comments(pre_lines))
-                lines.append(f"    r = {target_function}({p0})")
-                lines.extend(post_lines)
+                body_lines.append(f"    {p0} = 0")
+                body_lines.extend(_as_comments(pre_lines))
+                body_lines.append(f"    r = {target_function}({p0})")
+                body_lines.extend(post_lines)
             else:
                 p0, p1 = signature_params[0], signature_params[1]
-                if witness:
-                    lines.append(f"    {p0}, {p1} = {witness[p0]!r}, {witness[p1]!r}")
-                    lines.extend(pre_lines)
-                else:
-                    lines.append(f"    {p0}, {p1} = 0, 0")
-                    lines.extend(_as_comments(pre_lines))
-                lines.append(f"    r = {target_function}({p0}, {p1})")
-                lines.extend(post_lines)
+                body_lines.append(f"    {p0}, {p1} = 0, 0")
+                body_lines.extend(_as_comments(pre_lines))
+                body_lines.append(f"    r = {target_function}({p0}, {p1})")
+                body_lines.extend(post_lines)
         elif pre_refs_ab:
-            lines.append("    a, b = 0, 0")
-            lines.extend(pre_lines)
-            lines.append(f"    r = {target_function}(a, b)")
-            lines.extend(post_lines)
+            body_lines.append("    a, b = 0, 0")
+            body_lines.extend(pre_lines)
+            body_lines.append(f"    r = {target_function}(a, b)")
+            body_lines.extend(post_lines)
         else:
             return ""
-    code = "\n".join(lines)
+    code = _render_harnessed_oracle(target_module, target_function, body_lines, readiness)
     # 产物总自检（ast 不合法 → 保守返回空串，不产出坏代码）
     try:
         ast.parse(code)
     except (SyntaxError, ValueError):
         logger.warning("SpecIR v2 oracle 产物自检失败，保守丢弃（防坏代码注入执行链路）")
         return ""
-    # 产物必须有可执行断言（无 assert 行 = 假通过空测试 → 保守丢弃）
-    if not any(line.strip().startswith("assert") for line in lines):
+    # 产物必须有可执行断言（无 assert 行 = 假通过空测试 → 保守丢弃）。
+    # O-1：instrument 不可用骨架已在上面显式返回（带可审计 skip 原因、无断言）；
+    # 走到这里的正常产物必须保留至少一条 assert（防"全 skip 假安全"）。
+    if not any(line.strip().startswith("assert") for line in code.splitlines()):
         return ""
     # G4（2026-10-05 优化批次·T2）：SPEC_SMT_ENABLE=true 且 z3 可用时，
     # 追加 SMT 见证测试（前件驱动的求解器输入，与主 oracle 并列执行）。
@@ -1271,21 +1484,23 @@ def _compile_smt_witness_tests(
             f"# SMT witness #{idx}（kind={witness.get('kind')}, "
             f"objective={witness.get('objective')}，前件求解产物，非 LLM 举例）"
         )
-        test_lines = [header]
-        test_lines.append(f"def test_specir_v2_smt_witness_{idx}():")
+        body_lines: list[str] = []
         bound = 0
         for param in signature_params:
             if param in inputs:
-                test_lines.append(f"    {param} = {inputs[param]!r}")
+                body_lines.append(f"    {param} = {inputs[param]!r}")
                 bound += 1
         if bound == 0:
             continue  # 见证输入与签名无交集（理论不可达，保守跳过）
         call_args = ", ".join(p for p in signature_params if p in inputs)
-        test_lines.extend(pre_lines)
-        test_lines.append(f"    r = {target_function}({call_args})")
-        test_lines.extend(post_lines)
-        if not any(line.strip().startswith("assert") for line in test_lines):
+        body_lines.extend(pre_lines)
+        body_lines.append(f"    r = {target_function}({call_args})")
+        body_lines.extend(post_lines)
+        if not any(line.strip().startswith("assert") for line in body_lines):
             continue
+        # O-1：见证测试同样包崩溃安全 harness（fixed 侧崩溃 → skip，不伪装 fail）；
+        # AssertionError 仍原样 re-raise（见证判定信号保留）。
+        test_lines = [header, f"def test_specir_v2_smt_witness_{idx}():", *_wrap_oracle_body(body_lines)]
         blocks.append("\n".join(test_lines))
     if not blocks:
         return ""

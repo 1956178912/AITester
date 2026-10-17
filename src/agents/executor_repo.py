@@ -859,6 +859,14 @@ class RepoExecutor:
         )
         failed_cases: list[dict[str, Any]] = []
         passed_count = 0
+        # O 轮（2026-10-18）确定性修复：禁止子 pytest 写 __pycache__。
+        # 根因（O-4 在 CI/探针复现）：baseline 与 llm_patch 两阶段在 1s 内写入
+        # **同尺寸**源码时，CPython 缓存的 pyc 头 (源 mtime 整秒, size) 不变 →
+        # 第二轮复用 baseline 字节码 → "补丁明明应用成功却仍失败"的随机假红
+        # （本地 executor-repo-verify 6/15 复现；CI 侧曾用 sitecustomize 规避）。
+        # 在唯一 pytest 咽喉点写 PYTHONDONTWRITEBYTECODE + -B 双保险（env 可
+        # 传播到 pytest 子进程），彻底消除 mtime 粒度竞态。
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         # venv 隔离：pytest 用该环境旁 venv 的 python（依赖/版本与全局解耦）
         env_dir = os.path.dirname(repo_dir)  # repo_dir = <env_dir>/repo
         _py = self._venv_python(env_dir, repo_url=repo_url, repo_dir=repo_dir) or sys.executable
@@ -870,7 +878,7 @@ class RepoExecutor:
             env["PATH"] = _venv_bin + os.pathsep + _existing_path if _existing_path else _venv_bin
         for node in test_nodes:
             res = _run(
-                [_py, "-m", "pytest", "-p", "no:cacheprovider", node, "--tb=short", "-q"],
+                [_py, "-B", "-m", "pytest", "-p", "no:cacheprovider", node, "--tb=short", "-q"],
                 repo_dir,
                 self.timeout,
                 env,

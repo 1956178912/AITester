@@ -692,3 +692,217 @@ jobs:
           name: sbom-cyclonedx-${{ github.run_number }}
           path: sbom.cyclonedx.json
           retention-days: 90
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # O-4（2026-10-18）发布工程加固：N 轮全功能 e2e 探针接入 CI（零 LLM）
+  #
+  # 设计纪律（沿用既有 CI 口径，不引入新第三方 action——本作业全部 action 均
+  # 复用文件内已 SHA 钉版版本）：
+  # - 零 LLM：env 显式 AITESTER_E2E_LLM=false，只跑 44 个零 LLM 探针；12 个
+  #   requires_llm 探针由运行器置 skip（报告可见原因），不消耗任何 API 配额；
+  # - job 绿判据：0 fail / 0 error（skip 允许，且摘要逐条打印）；probe 运行器
+  #   有 fail/error 时 exit 1，直接阻断；
+  # - 环境差异导致的预期 skip 均由探针内既有 skip 逻辑覆盖并打印原因：
+  #     · executor-docker-degrade：CI 有 docker CLI → skip（探针不拉镜像/不联网）；
+  #     · security-kernel-sandbox / executor-kernel-sandbox：ubuntu-latest 未装
+  #       bwrap（本作业刻意不装：宿主 runner 的 user-namespace 可用性未保证，
+  #       装了会让"支持平台"判定为真但真实沙箱执行失败）→ 显式 skip；
+  #     · dataset-ult：CI 无 ULT 数据 → 显式 skip。
+  # - 依赖准备（非 secrets）：pip lock 全量安装（cache 命中 1-3min / 冷装 5-8min）、
+  #   pinned QuixBugs 数据（dataset 探针需要 ≥41 程序；公开仓库钉 SHA）、chromadb
+  #   默认嵌入模型预热（RAG/语义缓存探针需要，首次下载 ~79MB，之后走 HOME 缓存）。
+  # - 报告：e2e_probe.json/md 上传为工件（复用已钉版 upload-artifact）。
+  # - 本地等价入口：`make e2e-probe`（命令同口径；产物写 experiments/results/）。
+  # ─────────────────────────────────────────────────────────────────────────────
+  e2e-probe:
+    name: E2E probes (zero-LLM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # 显式零 LLM：即使仓库/环境误设，LLM 探针仍 skip（双保险；不设 secrets）
+      AITESTER_E2E_LLM: 'false'
+      AITESTER_LLM_CACHE: '0'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Check out code
+        # O10：SHA 固定——actions/checkout@v4
+        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+
+      - name: Set up Python 3.14
+        # 与 test/smoke-llm 作业同版本 + 同 pip 缓存口径
+        uses: actions/setup-python@8d5bc5b086458bc1c9e4c01b4f9f123f37c1c4c0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 与 test 作业同口径：lock 全量钉版安装（132 项含传递依赖）
+          pip install -r requirements.lock
+
+      - name: Configure git identity (RepoExecutor 临时仓库需要)
+        # executor-repo-verify 探针在临时 git 仓库里 commit base 版本；
+        # GitHub runner 默认无 global user.name/email → commit 直接失败。
+        run: |
+          git config --global user.email "ci@aitester.invalid"
+          git config --global user.name "AITester CI"
+
+      - name: Fetch pinned QuixBugs data (dataset probes)
+        # 数据不入仓（data/ 在 .gitignore），dataset-loaders / dataset-check-cli
+        # 探针需要 ≥41 个 QuixBugs 程序（本数据 50 个）。公开仓库 + 钉死 SHA
+        # （2026-10-18 实测 master HEAD；升级数据需同步改此 SHA 并本地重跑探针）。
+        # 网络依赖仅限本数据准备步骤；失败即 job 红（缺数据会让 dataset 探针
+        # 预期 pass 变 fail，不静默豁免）。
+        run: |
+          git init -q /tmp/quixbugs
+          git -C /tmp/quixbugs remote add origin https://github.com/jkoppel/QuixBugs
+          git -C /tmp/quixbugs fetch -q --depth 1 origin 4257f44b0ff1181dedaedee6a447e133219fcebf
+          git -C /tmp/quixbugs checkout -q FETCH_HEAD
+          echo "AITESTER_QUIXBUGS_DATA=/tmp/quixbugs" >> "$GITHUB_ENV"
+          test "$(ls /tmp/quixbugs/python_programs/*.py | wc -l)" -ge 41
+
+      - name: Warm up chromadb default embedding model (RAG/semantic probes)
+        # cache-semantic-index / rag-retriever 使用 chromadb 默认嵌入（ONNX MiniLM，
+        # 首次调用下载 ~79MB 到 $HOME/.cache/chroma）。不预热时首个探针要自付下载，
+        # 网络抖动会撞探针 120s 超时（本地实测冷启动 8.5s，但 CI 网络不可控）。
+        # 预热一次后两个探针走本地缓存（<10s），且把网络失败前移到独立步骤、
+        # 失败信息可诊断（不让它伪装成功能探针失败）。
+        timeout-minutes: 5
+        run: |
+          python - <<'PY'
+          from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+
+          ef = DefaultEmbeddingFunction()
+          ef(["aitester-ci-warmup"])
+          print("chromadb default embedding model ready")
+          PY
+
+      - name: Ensure no bwrap so kernel-sandbox probes use their explicit skip path
+        # Linux 内核沙箱探针的"支持平台"判定 = bwrap 是否存在（kernel_sandbox
+        # ._landlock_available）。GitHub 托管 runner 的 non-root user-namespace
+        # 可用性不归仓库控制：若 runner 恰好预装 bwrap，探针会走"真实执行"分支，
+        # 沙箱启动被拒时会把**环境差异**伪装成功能回归（本地 macOS 走 Seatbelt，
+        # 覆盖不到该路径）。本作业的 CI 口径是"无后端 → 显式 skip 并打印原因"，
+        # 故显式保证 bwrap 不在 PATH；如有预装则移除（移除失败 job 红，不静默）。
+        run: |
+          if command -v bwrap >/dev/null 2>&1; then
+            echo "检测到预装 bwrap：移除，使内核沙箱探针走显式 skip（见步骤注释）"
+            sudo apt-get remove -y bubblewrap
+          fi
+          ! command -v bwrap
+
+      - name: Configure deterministic nested-pytest bytecode (CI stability)
+        # 最小复现的 CI 稳定性缺陷（本地 6/15 概率假红，定位后无源码改动）：
+        # executor-repo-verify 探针先跑 baseline（buggy 源码）再应用 llm_patch 跑第二轮；
+        # 两阶段在 1s 内写同尺寸源码时，CPython pyc 头的 (源 mtime 整秒, 源文件大小)
+        # 完全不变 → 第二轮 import 复用 baseline 字节码 → 探针随机假红。
+        # 修复手段（不触碰探针源码）：通过 PYTHONPATH 注入 sitecustomize，把
+        # sys.dont_write_bytecode 置真；嵌套 pytest 子进程（RepoExecutor 走
+        # scrub_os_environ 白名单，不透传 PYTHONDONTWRITEBYTECODE）仍会从
+        # PYTHONPATH 加载该 sitecustomize，从而不产出 pyc → 消除时序耦合。
+        # 本地验证：15/15 次通过（未注入时 6/15 假红）。
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-sitecustomize"
+          cat > "$RUNNER_TEMP/ci-sitecustomize/sitecustomize.py" <<'PY'
+          # CI-only：确定性嵌套 pytest（见 ci.yml e2e-probe job 注释）。
+          import sys
+
+          sys.dont_write_bytecode = True
+          PY
+          {
+            echo "PYTHONPATH=$RUNNER_TEMP/ci-sitecustomize"
+            echo "PYTHONDONTWRITEBYTECODE=1"
+          } >> "$GITHUB_ENV"
+
+      - name: Run zero-LLM e2e probes (44 zero-LLM; LLM probes skip by design)
+        # 等价本地命令：make e2e-probe（产物路径不同；CI 产物走 artifact）。
+        run: |
+          python scripts/tools/e2e_probe.py --all --json-out e2e_probe.json --md-out e2e_probe.md
+
+      - name: Print e2e probe summary (always)
+        if: always()
+        run: |
+          if [ -f e2e_probe.json ]; then
+            python - <<'PY'
+          import json
+
+          with open("e2e_probe.json", encoding="utf-8") as f:
+              report = json.load(f)
+          summary = report.get("summary") or {}
+          total = sum(summary.values())
+          print(
+              f"e2e probes: pass={summary.get('pass', 0)} fail={summary.get('fail', 0)} "
+              f"error={summary.get('error', 0)} skip={summary.get('skip', 0)} total={total}"
+          )
+          for row in report.get("probes") or []:
+              if row.get("status") in ("fail", "error"):
+                  print(f"::error title=e2e probe {row.get('name')}::{str(row.get('detail'))[:300]}")
+              elif row.get("status") == "skip":
+                  print(f"skip: {row.get('name')} — {str(row.get('detail'))[:160]}")
+          PY
+            sed -n '1,12p' e2e_probe.md
+          else
+            echo "::warning title=e2e probe report missing::e2e_probe.json 未生成（探针步骤可能在写报告前失败）"
+          fi
+
+      - name: Upload e2e probe report
+        if: always()
+        # O10：SHA 固定——actions/upload-artifact@v4（复用文件内已钉版本）
+        uses: actions/upload-artifact@84488ed32758509799cae3ed5e43ef903669d08b
+        with:
+          name: e2e-probe-report-${{ github.run_number }}
+          path: |
+            e2e_probe.json
+            e2e_probe.md
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # O-4（2026-10-18）：Docker 构建校验（发布工程）
+  #
+  # 纯 shell docker 步骤（ubuntu-latest 预装 docker，无新 action）：
+  # - 构建运行时镜像 Dockerfile（EXECUTOR_USE_DOCKER 被执行侧镜像）；
+  # - 镜像内 import 链 + CLI --help 冒烟（零 LLM、零网络）；
+  # - 镜像内不得含 .env*（.dockerignore 防线回归；密钥从来不进构建上下文）；
+  # - Dockerfile.repro 只做存在性 + 可选 `docker build --check` 静态检查
+  #   （不真构建，避免复制实验镜像安装全量依赖的 5-10min 成本）。
+  # 依赖：PyPI 网络（pip install -r requirements.txt）；无 CI secrets。
+  # ─────────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker build (runtime image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3f3f7fd89f09a93f8006f723897ab77c52b0d3e7
+
+      - name: Build runtime image (Dockerfile)
+        # 构建上下文由 .dockerignore 收窄（排除 .venv/experiments/results/.env*），
+        # 仅 requirements.txt 的 25 个顶层钉版依赖 + 源码；无 secrets 注入。
+        run: docker build -f Dockerfile -t aitester:ci .
+
+      - name: Smoke test image (import chain + CLI, zero LLM/network)
+        # 每步独立 docker run；不依赖管道退出码（GitHub bash 默认无 pipefail，
+        # `cmd | sed` 会把失败吞成 0）——需要断言的输出先落文件再检查。
+        run: |
+          docker run --rm aitester:ci python -c "import sys; print('image python', sys.version.split()[0])"
+          docker run --rm aitester:ci python -c "import config, src.graph.workflow; print('import chain ok')"
+          docker run --rm aitester:ci python main.py --help > /tmp/main_help.txt
+          sed -n '1,10p' /tmp/main_help.txt
+          grep -q "check-dataset" /tmp/main_help.txt
+          docker run --rm aitester:ci python -c \
+            "import glob; leaks = glob.glob('/workspace/.env*'); assert not leaks, leaks; print('no .env* in image')"
+
+      - name: Validate Dockerfile.repro (existence + optional static check)
+        run: |
+          test -f Dockerfile.repro
+          echo "Dockerfile.repro present"
+          # `docker build --check`（BuildKit 静态检查，不执行构建）为加分项：
+          # 老版本 docker 不支持时降级为 warning（不阻断发布门禁）。
+          if docker build --check -f Dockerfile.repro . 2>/tmp/repro_check.log; then
+            echo "Dockerfile.repro static check passed"
+          else
+            echo "::warning title=Dockerfile.repro 静态检查不可用或失败::$(tail -5 /tmp/repro_check.log | tr '\n' ' ')"
+          fi

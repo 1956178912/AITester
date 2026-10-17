@@ -1,6 +1,6 @@
 # 全功能端到端探针矩阵（e2e probe matrix）
 
-> 最后更新：2026-10-17（N 轮）
+> 最后更新：2026-10-18（O 轮：接入 CI 零 LLM 作业 + Docker 构建校验）
 >
 > **一句话**：`scripts/tools/e2e_probe.py` + 三个探针模块，把"项目所有用户可见
 > 功能"变成一张可执行、可重复、可审计的**功能矩阵**——每个功能一行探针，状态
@@ -84,9 +84,28 @@ Makefile：`make e2e-probe`（零 LLM）、`make e2e-probe-llm`（真 LLM）。
 
 ## 5. 与门禁/CI 的关系
 
-- 本框架**不自动接入 CI 阻断**：零 LLM 子集会启动子进程编排（耗时可达分钟级），
-  且部分探针依赖本机能力（venv/docker/内核沙箱）。建议在发布前/季度巡检时
-  手动跑 `make e2e-probe`，真 LLM 探针按需跑。
+- **CI 已有零 LLM `e2e-probe` job**（`.github/workflows/ci.yml`，O 轮 2026-10-18
+  接入，ubuntu-latest）：跑 `python scripts/tools/e2e_probe.py --all`（44 个零 LLM
+  探针；12 个真实 LLM 探针默认 skip，不设 secrets、零 API 配额）。job 判据是
+  **0 fail / 0 error**；预期 skip 由探针内既有逻辑显式产生并在摘要逐条打印：
+  `executor-docker-degrade`（CI 有 docker CLI）、`security-kernel-sandbox` /
+  `executor-kernel-sandbox`（CI 明确不装 bwrap → 无 Linux 沙箱后端）、
+  `dataset-ult`（CI 无 ULT 数据）。报告（`e2e_probe.json` / `e2e_probe.md`）
+  以 artifact 归档。
+- **CI 环境的非 secrets 前置准备**（失败即 job 红，不静默豁免）：`requirements.lock`
+  全量安装；pinned QuixBugs 数据（dataset 探针需要 ≥41 程序，公开仓库钉 SHA）；
+  chromadb 默认嵌入模型预热（RAG/语义缓存探针，首次 ~79MB，之后走 runner HOME 缓存）；
+  git 身份（`RepoExecutor` 临时仓库 commit 需要）；嵌套 pytest 确定性钩子
+  （`PYTHONPATH` 注入 `sitecustomize` 置 `sys.dont_write_bytecode`，消除
+  "baseline/补丁两阶段同秒同尺寸源码 → pyc 复用"造成的 `executor-repo-verify`
+  随机假红，本地 6/15 → 修复后 15/15；`make e2e-probe` 目标内嵌同一钩子，
+  本地 "合并前建议跑" 与 CI 同口径）。
+- **真实 LLM 探针不进 CI**：成本与模型非确定性不适合每次 push 阻断；仍按
+  `make e2e-probe-llm`（或 `AITESTER_E2E_LLM=true ... --include-llm`）在发布前/
+  季度巡检按需跑。
+- 另有随 CI 新增的 `docker-build` job（同文件，纯 shell）：构建 `Dockerfile`
+  运行时镜像 + 镜像内 import/CLI 冒烟 + `.env*` 不入镜像检查；`Dockerfile.repro`
+  只做存在性 + 可选 `docker build --check` 静态检查（不真构建）。
 - 功能矩阵的**长期价值**在于"每次新功能落地都补一行探针"——它比一次性 e2e
   脚本更难腐化（每行都有断言与原因），也比门禁更灵活（skip 允许披露能力缺口）。
 
@@ -98,3 +117,11 @@ Makefile：`make e2e-probe`（零 LLM）、`make e2e-probe-llm`（真 LLM）。
   的 pytest 文件、字段非空"），不得断言具体内容/具体检出结果。
 - 本机能力差异（无 docker CLI、macOS seatbelt 不可用等）一律显式 skip/限定
   "unsupported"，不得静默 pass。
+- CI（ubuntu-latest）与本地 macOS 的探针覆盖差异（均为**显式 skip**、不是静默
+  放过）：内核沙箱探针在 CI 因无 bwrap 而 skip（macOS 本地走 Seatbelt 真实
+  执行）；`executor-docker-degrade` 在 CI 因 docker CLI 存在而 skip（本地无
+  docker CLI 时走降级断言）。需要覆盖这些路径时用对应平台/专门 job 跑。
+- 探针模块间存在**同名探针**（`observability-trace-redaction` /
+  `observability-event-bus` 同时定义在 workflow 与 platform 模块）；`--all`
+  加载时运行器保留首个并打印"探针名重复"告警。不影响 pass/fail 判据，但同名
+  探针的 platform 版本在当前 `--all` 口径下不会被执行（已知边界，见 O 轮报告）。

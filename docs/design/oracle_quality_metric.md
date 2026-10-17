@@ -318,3 +318,133 @@ nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
   发生（`spec_oracle_injected=true`）、`oracle_suite_verdict=fp`；
   **同一生成测试 LLM-suite detection=1.0，而 legacy 混判 detection=0.0**
   ——直接演示独立判读防止既有检出被 oracle 失败抹掉（验证性，不作证据）。
+
+## 11. O-1 仪器加固（2026-10-18）：崩溃安全 harness + 前件校验输入
+
+> **性质**：**仪器治疗 ≠ 检出能力提升**。本节修复的是"仪器失效如何被记账"
+> （崩溃被误判为 fp、前件违反输入被绑进 oracle），不改变 oracle 断言语义；
+> `correct` 仍为 0（语义质量治理是独立任务）。生产开关
+> `SPEC_ORACLE_EXEC_ENABLE` 默认关 → 历史批次数字不变。
+
+### 11.1 两条仪器缺陷（承接 §10 的 M-2 证据）
+
+§6/§10 的 M-2 重放显示 oracle 四分类 correct 0 / fp 29（76.32%），其中 fixed
+侧失败 **27 例是异常崩溃**（TypeError 24 / AttributeError 2 /
+ZeroDivisionError 1）、**仅 2 例是断言失败**——即"净负"的绝大多数是**仪器
+把崩溃记成假阳判定**，而不是 oracle 判定"语义错误"。此外旧口径的输入绑定
+（`boundaries[0]` 直绑 / 无边界时字面量 0）可能**违反前置条件**，前件断言
+失败被混入 fp，无法区分"输入不合法"与"实现不满足规约"。
+
+### 11.2 修复（`src/specs/spec_ir_v2.py` / `src/specs/spec_smt.py`）
+
+1. **崩溃安全 harness**：`compile_spec_oracle` 生成的主 oracle
+   `test_specir_v2_oracle`（以及 `test_specir_v2_smt_witness_*`）把
+   绑定/前件断言/调用/后件断言全部包进 `try`：
+   - `AssertionError` **原样 re-raise**（断言失败 = oracle 的语义判定信号，
+     必须保留为 fail，不得 skip）；
+   - 其余 `Exception`（TypeError / ZeroDivisionError 等仪器失效形态）→
+     `pytest.skip("oracle-unavailable: <ExcType>: <msg>")`（不静默 pass、
+     不伪装 fail；`pytest-timeout` 的 Failed 属 BaseException 不在此捕获，
+     超时仍单列）；
+   - BaseException（KeyboardInterrupt 等）不捕获（不掩盖进程级故障）。
+2. **前件校验输入选择**：有 `boundaries` 且签名已知时，按顺序用**受限安全
+   求值**（`spec_smt.safe_eval_clause`，白名单 AST + 内建调用白名单，零
+   eval/exec）检查候选 input 是否满足全部**可机检前件**（= 能编译为
+   `assert <expr>` 的表达式子句；NL 前件不可机检、保持 provenance 注释）：
+   - 只绑定"元数兼容且满足前件"的第一个候选（违反前件的候选不绑定、
+     继续试下一个）；
+   - 全部候选被拒 → 不自造输入：改走 **SMT 见证**绑定（`spec_smt` 求解器
+     通道，见证值满足前件）；
+   - SMT 亦无见证（开关关/z3 缺失/UNSAT）→ 产出带
+     `pytest.skip("oracle-unavailable: no-valid-input")` 的**保守骨架**。
+     选骨架而非返回空串：空串会让注入率静默下降且丢失原因；骨架保留审计
+     原因、可被判分/重放记为 unavailable，且**不产假断言**（skip 后不可达的
+     assert 属自欺）。
+3. **判分/重放细化**：
+   - `experiments/_m1_metrics.py`：pytest 摘要解析——skipped>0 且无
+     failed → `oracle_suite_verdict="unavailable"`（不再把 rc=0 的 skip-only
+     套件误判为 pass/silent；断言失败仍计 fail/fp）；
+   - `experiments/oracle_quality_replay.py`：旧四分类键保留，新增
+     `fp_breakdown`（`fp_assertion_fail` / `instrument_error` /
+     `fp_unattributed`）、`skipped_count`、`skip_reason_counts`；
+     `--compare-report` 直出 before/after 对照表。
+
+### 11.3 before/after（df_spec 双臂，零 LLM 重放，工件见 §11.5）
+
+| 指标（分母=可分类 oracle 测试数） | before（M-2 工件） | after（加固后重放） |
+|---|---|---|
+| `correct` | 0 | **0**（语义质量未变） |
+| `fp`（旧键） | **29** | **2**（仅断言型） |
+| └ `fp_assertion_fail` | 2 | **2** |
+| └ `instrument_error`（崩溃型） | **27** | **0** |
+| `silent` | 9 | 9 |
+| `misguided` | 0 | 0 |
+| `skipped`（仪器不可用，单列不进分母） | 0 | **27** |
+| 可分类 oracle 测试数（分母） | 38 | **11** |
+| （混判口径）oracle-augmented 40 口径 detection | 10.53% / 18.42% | **44.74% / 71.05%** |
+| （混判口径）LLM-only → augmented 转移 lost | 14 / 22 | **1 / 2** |
+
+- 崩溃→skip 原因分布（27）：`oracle-unavailable: TypeError` 24 /
+  `AttributeError` 2 / `ZeroDivisionError` 1（与 before 的异常类型分布
+  逐类一致）；
+- **断言型 fp 保留（2）**：`reverse_linked_list` / `pascal` 类 oracle 在
+  fixed 上断言失败，属"oracle 断言与实现不一致"的语义问题，不被 harness
+  吞掉——这是"判断错误"与"仪器失效"在测量上可区分的关键证据；
+- correct 0 → 0：**加固没有、也不声称提升检出能力**；可分类分母 38→11
+  （27 例转为 skipped 单列），任何占比引用必须同时给出分母与 skipped 数。
+- **重要修正（诚实披露）**：M-2/N-3 记录的"oracle 混判抹掉 14/22 个 LLM 检出"
+  同样被仪器缺陷**放大**——那 14/22 个 lost 任务绝大多数是**崩溃型 oracle 在
+  fixed 侧恒红**（仪器失效），而非 oracle 断言真的判错。加固后混判 lost 降至
+  **1/2**，augmented detection 由 10.53%/18.42% 升至 44.74%/71.05%。这**不是**
+  检出能力提升：LLM-suite detection 不变（50.00%/77.50%）、correct 仍 0；
+  只说明"混合判分净损伤"的原量级是仪器伪影主导。剩余 lost 1/2 对应断言型
+  fp（语义质量问题），仍需质量治理。
+
+### 11.4 生产判分路径验证（N-3 `--independent-judging` 重放）
+
+加固后以生产 `_m1_metrics` 独立判读链重放 df_spec 双臂（工件
+`emse_oracle_instrument_hardening_20261017/independent_judging/`）：
+`oracle_suite_verdict` 分布（40 口径）= **unavailable 29 / fp 2 / silent 9 /
+correct 0**（两臂相同；29 = 27 个崩溃 skip + 2 个未注入任务 flatten /
+max_sublist_sum），即生产判分同样把崩溃 skip 记为 **unavailable**（不混入
+fp/silent）；LLM-suite detection 与 M-2 基线逐位一致（df_spec 20/40=50.00%、
+df 31/40=77.50%，逐任务 mismatch 0）——仪器加固不影响 LLM 检出测量。
+
+### 11.5 工件与复算
+
+```bash
+# 目标单测（零 LLM/零网络；微型 fixture）
+.venv/bin/python -m pytest tests/test_oracle_instrument_safety.py -q
+
+# 加固后 before/after 重放（df_spec 两臂；--compare-report 指定 before 基线）
+nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
+    --out experiments/results/emse_oracle_instrument_hardening_20261017 \
+    --compare-report experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json \
+    --jobs 4 --per-test-timeout 1 --file-timeout 240 --repeat 1
+
+# 生产独立判读验证（同一结果目录 subdir）
+nice -n 15 .venv/bin/python -m experiments.oracle_quality_replay \
+    --independent-judging \
+    --out experiments/results/emse_oracle_instrument_hardening_20261017/independent_judging \
+    --jobs 4 --repeat 1
+```
+
+工件：`experiments/results/emse_oracle_instrument_hardening_20261017/`
+（README + JSON + MD + `independent_judging/` + SHA256SUMS；输入 sha256/命令/
+分母/限制齐全）。
+
+### 11.6 残余风险（不得省略）
+
+- harness 只捕获 `Exception` 子类：段错误/SIGSEGV/BaseException 类故障仍
+  会崩（由外层 subprocess 超时与执行错误单列兜底）；
+- **skip 暴露而非修复编译器绑定缺陷**：本治疗只让"仪器失效"不再伪装成
+  假阳；绑定/输入选择的语义质量（correct 仍 0）需独立质量治理；
+- 前件校验只覆盖**可机检的表达式前件**；NL 前件仍不可机检（保持注释），
+  边界候选筛选可能因此宽松；
+- `src/graph/nodes.py::_spec_oracle_verdict_after_run` 仍可能把"oracle 全
+  skip"的轮次记成 `injected_and_passed`（nodes 写域归 O-3 的 augment-dev，
+  本轮未改）——**风险登记**：行级 verdict 与 oracle_suite_verdict 应以
+  `oracle_suite_verdict` 为准；
+- 仪器加固只影响开关开启后的**未来批次**；历史工件数字不得与加固后数字
+  混池引用（须标 mixed/instrument-hardened 口径）。
+

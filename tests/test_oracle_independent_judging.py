@@ -92,14 +92,28 @@ def _state_with_anchor(
 
 
 def _fake_run_factory(*, buggy: tuple[Any, ...] | None, fixed: tuple[Any, ...] | None):
-    """构造 _run_pytest_in_tmp 替身：按 target_code 返回 buggy/fixed 侧结果。"""
+    """构造 _run_pytest_in_tmp 替身：按 target_code 返回 buggy/fixed 侧结果。
+
+    O-1 起 ``_suite_run_verdict`` 会解析 pytest 摘要行区分 pass/skip/unavailable；
+    替身输出为空时补一个最小摘要（与真实 pytest 输出同形），避免把"无摘要"的
+    合成结果误当成 unavailable。
+    """
+
+    def _with_summary(run: tuple[Any, ...] | None) -> tuple[Any, ...] | None:
+        if run is None:
+            return None
+        rc, out, err = run
+        if not str(out).strip() and rc in (0, 1):
+            out = "1 passed in 0.01s" if rc == 0 else "1 failed in 0.01s"
+        return (rc, out, err)
+
     calls: list[dict[str, Any]] = []
 
     def fake(test_code: str, target_code: str, module_name: str, **kwargs: Any) -> tuple[Any, ...] | None:
         calls.append({"test_code": test_code, "target_code": target_code, "module_name": module_name, **kwargs})
         if str(target_code).strip() == _FIXED_CODE.strip():
-            return fixed
-        return buggy
+            return _with_summary(fixed)
+        return _with_summary(buggy)
 
     return fake, calls
 

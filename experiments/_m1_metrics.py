@@ -96,6 +96,12 @@ _ORACLE_SUITE_KEYWORD_FILTER = "test_specir_v2_oracle or test_specir_v2_smt_witn
 ORACLE_SUITE_VERDICTS: tuple[str, ...] = ("correct", "fp", "silent", "misguided", "unavailable")
 # pytest-timeout 的失败摘要标记（单条挂死测试 → 不可判，不并入 oracle 判定）
 _ORACLE_SUITE_TIMEOUT_MARKERS: tuple[str, ...] = ("failed: timeout (>", "timeout (>")
+# O-1（2026-10-18）：pytest 摘要行计数解析（区分"skip/unavailable"与 pass/fail）。
+# 背景：oracle 仪器加固后，崩溃被 harness 转成 pytest.skip → 该测试的 rc=0；
+# 若只看退出码会把"仪器不可用"误判为"pass"（进而把 oracle 判成 silent/fp）。
+# 摘要行形如 "1 skipped in 0.12s" / "2 passed, 1 skipped in 0.3s"。
+_PYTEST_SUMMARY_COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|errors?|deselected|xfailed|xpassed)")
+_ORACLE_SKIP_SENTINEL = "oracle-unavailable:"
 
 
 def per_test_timeout_seconds() -> int:
@@ -178,13 +184,31 @@ def suite_filters(generated_test: Any) -> tuple[str | None, str | None]:
     return _LLM_SUITE_KEYWORD_FILTER, _ORACLE_SUITE_KEYWORD_FILTER
 
 
+def pytest_summary_counts(output: str) -> dict[str, int]:
+    """从 pytest 摘要行解析结果计数（O-1：skip/unavailable 识别用）。
+
+    只解析标准摘要片段（``N passed`` / ``N skipped`` / ...）；重复出现取首个
+    出现值（pytest 摘要行只出现一次）。解析失败 → 空 dict（调用方保守处理）。
+    """
+    counts: dict[str, int] = {}
+    for match in _PYTEST_SUMMARY_COUNT_RE.finditer(str(output or "")):
+        kind = "error" if match.group(2).startswith("error") else match.group(2)
+        counts.setdefault(kind, int(match.group(1)))
+    return counts
+
+
 def _suite_run_verdict(run: tuple[int, str, str] | None) -> str:
     """一次 pytest 子进程结果 → ``pass`` / ``fail`` / ``unavailable``（fail-closed）。
 
     - 超时 / IO 异常（``run is None``）→ unavailable（不误判为 fail）；
     - 收集/语法/无测试等执行错误（``_looks_like_test_execution_error``）→ unavailable；
     - pytest-timeout 单测超时标记 → unavailable（超时单列，不并入四分类）；
-    - rc==0 → pass；其余（rc==1，含断言失败）→ fail。
+    - **O-1 仪器加固**：``pytest.skip("oracle-unavailable: ...")``（崩溃安全
+      harness 产物）在 pytest 里记 skipped、**退出码仍为 0**；只看 rc 会把它
+      误判成 pass（→ silent/fp）。故解析摘要行：``skipped>0 且 failed==0``
+      → unavailable（"仪器不可用"不是判定信号，也不能算通过）；无任何
+      passed/failed/skipped（被 deselect）→ unavailable。
+    - 其余 rc==0 → pass；rc==1（含断言失败）→ fail。
     """
     if run is None:
         return "unavailable"
@@ -195,7 +219,18 @@ def _suite_run_verdict(run: tuple[int, str, str] | None) -> str:
     low = combined.lower()
     if any(marker in low for marker in _ORACLE_SUITE_TIMEOUT_MARKERS):
         return "unavailable"
-    return "pass" if rc == 0 else "fail"
+    counts = pytest_summary_counts(combined)
+    skipped = int(counts.get("skipped", 0))
+    failed = int(counts.get("failed", 0))
+    passed = int(counts.get("passed", 0))
+    if rc == 0:
+        if skipped > 0 and failed == 0:
+            # 全 skip 或部分 skip 但无失败：无有效判定信号
+            return "unavailable"
+        if passed == 0 and skipped == 0:
+            return "unavailable"
+        return "pass"
+    return "fail"
 
 
 def _python_interpreter() -> str:
@@ -939,6 +974,13 @@ def _compute_oracle_suite_verdict(task: Any, final_state: dict[str, Any] | None)
     纪律：oracle 失败**不再改写** ``detection_rate``（LLM-suite 独立跑）；
     超时/收集错误单列（unavailable），不并入四分类。无 oracle 测试时
     不启动任何子进程（历史口径零成本/零行为变化）。
+
+    O-1（2026-10-18 仪器加固）：oracle 产物自带崩溃安全 harness——fixed/buggy
+    侧 TypeError 等**仪器失效**会 ``pytest.skip("oracle-unavailable: ...")``
+    （rc=0 + skipped摘要），本函数经 ``_suite_run_verdict`` 把任一侧
+    unavailable 记 overall "unavailable"（**不混入 fp/silent**）；只有真正的
+    断言失败（rc=1）才进入 correct/fp/silent/misguided 判定。断言型失败仍保留
+    （instrument 安全网不吞 AssertionError）。
     """
     if final_state is None:
         return "unavailable"
