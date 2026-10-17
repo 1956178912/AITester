@@ -335,8 +335,11 @@ class _WhitelistVisitor(ast.NodeVisitor):
     - unknown_operator: 非常规运算符（AugmentedAssign 等 eval 不可达，双保险）。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, extra_call_names: frozenset[str] | None = None) -> None:
         self.violations: list[str] = []
+        # ADR-0035：被测函数自递归子句——仅放行 target_function 这一个
+        # 名字（注入通道显式传入）；默认空 = 历史口径零变化。
+        self._extra_call_names: frozenset[str] = extra_call_names or frozenset()
 
     def visit_Call(self, node: ast.Call) -> None:
         # 调用名白名单分两种形态（v3 P0-A-1 修正）：
@@ -348,7 +351,8 @@ class _WhitelistVisitor(ast.NodeVisitor):
         #   方法调用的安全性边界 = 属性白名单本身（纯方法、无副作用）。
         func = node.func
         if isinstance(func, ast.Name):
-            if func.id not in _ALLOWED_CALL_NAMES:
+            # ADR-0035：直调名须在内建白名单或受限自调用集（target_function）内。
+            if func.id not in _ALLOWED_CALL_NAMES and func.id not in self._extra_call_names:
                 self.violations.append(f"dangerous_call:{func.id}")
         elif isinstance(func, ast.Attribute):
             pass  # 属性白名单门（visit_Attribute）负责，避免双重拒绝
@@ -384,13 +388,17 @@ class _WhitelistVisitor(ast.NodeVisitor):
             self.visit(child)
 
 
-def _whitelist_check(expr_text: str) -> list[str]:
-    """对白名单内的表达式做"可执行节点"验证，返回违例列表（空 = 全通过）。"""
+def _whitelist_check(expr_text: str, extra_call_names: frozenset[str] | None = None) -> list[str]:
+    """对白名单内的表达式做"可执行节点"验证，返回违例列表（空 = 全通过）。
+
+    extra_call_names：受限自调用放行集（ADR-0035，仅 target_function）；
+    None/空 = 历史口径（只放行 _ALLOWED_CALL_NAMES 内建）。
+    """
     try:
         tree = ast.parse(expr_text, mode="eval")
     except (SyntaxError, ValueError):
         return ["parse_failed"]
-    visitor = _WhitelistVisitor()
+    visitor = _WhitelistVisitor(extra_call_names)
     visitor.visit(tree)
     return visitor.violations
 
@@ -478,7 +486,7 @@ def _known_names_for_signature(signature_params: list[str] | None) -> frozenset[
     return frozenset({"r"} | set(signature_params) | _ALLOWED_CALL_NAMES | {"True", "False", "None"})
 
 
-def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | None = None) -> bool:
+def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | None = None, extra_call_names: frozenset[str] | None = None) -> bool:
     """单一子句"可编译为可执行断言"判定（度量通道与注入通道共用的唯一口径）。
 
     kind:
@@ -505,7 +513,7 @@ def _clause_is_compilable(clause: Any, kind: str, known_names: frozenset[str] | 
     归因不会与判定漂移；四门顺序 / 返回语义 / 性能口径逐字不变
     （归因函数返回 None 即本函数返回 True）。
     """
-    return _clause_reject_reason_for_known(clause, kind, known_names) is None
+    return _clause_reject_reason_for_known(clause, kind, known_names, extra_call_names) is None
 
 
 # ─── 3b. 通道级失败归因（W2/T1，2026-10-11 独立评审落地）────────────────────
@@ -706,10 +714,11 @@ def _free_names(node: ast.AST, bound: frozenset[str] = frozenset()) -> set[str]:
     return free
 
 
-def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozenset[str] | None) -> str | None:
+def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozenset[str] | None, extra_call_names: frozenset[str] | None = None) -> str | None:
     """单子句拒绝原因（None = 可编译）；门顺序与 _clause_is_compilable 逐门一致。
 
     known_names 语义与原 _clause_is_compilable 相同（None = 历史默认绑定集合）。
+    extra_call_names：受限自调用放行集（ADR-0035）；None = 历史口径。
     """
     if not isinstance(clause, str):
         return "not_a_string"
@@ -722,7 +731,7 @@ def _clause_reject_reason_for_known(clause: Any, kind: str, known_names: frozens
     # text——此前传原文 clause，而 is_expression_clause 内部先 strip
     # （Python 把 \x1c-\x1f 等控制分隔符视为空白）⇒ 尾部含此类字符的输入
     # 出现"形态门 True、归因门 parse_error"的不一致（反例 "0\x1f"）。
-    violations = _whitelist_check(text)
+    violations = _whitelist_check(text, extra_call_names)
     if violations:
         # dangerous_call: / attr_escape: = 算子级越界；no_assert_semantics: =
         # 形态级无断言语义（v4：lambda / 海象，恒真假断言）；parse_failed = 语法级
@@ -866,7 +875,10 @@ def _compile_single_clause(
     未知标识符 / 产物自检）；任一不满足 → 返回空串（调用方按 NL 注释处理，
     不产出 NameError 的坏断言）。
     """
-    if not _clause_is_compilable(clause, kind, known_names):
+    # ADR-0035：被测函数自递归子句——仅把 target_function 作为受限自调用
+    # 放行集传入（默认空/None = 历史口径）。
+    extra = frozenset({target_function}) if target_function else None
+    if not _clause_is_compilable(clause, kind, known_names, extra):
         return ""  # 调用方按 NL 注释处理
     known = known_names if known_names is not None else _default_known_names()
     return f"assert {_normalize_result_alias(clause, kind, known)}"
@@ -1029,6 +1041,11 @@ def compile_spec_oracle(
     # 两种口径均并入调用白名单 + 布尔/None 常量，未知标识符 → 不编译
     # （保守，防 NameError 断言）。
     known_names = _known_names_for_signature(signature_params)
+    # ADR-0035：被测函数自递归子句——target_function 并入绑定上下文，
+    # 使 `fibonacci(5) == 5` 的 Name 不撞 unknown_name 门（调用门由
+    # _compile_single_clause 的 extra_call_names 放行）。
+    if target_function:
+        known_names = known_names | {target_function}
     # 计数在构建断言行的同一轮循环内累积，避免每个子句被
     # _compile_single_clause 二次编译（该函数内含 ast.parse 白名单校验，
     # 双重编译是纯浪费；readiness 数值与逐字复用编译结果完全一致）。

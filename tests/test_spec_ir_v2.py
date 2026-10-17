@@ -14,6 +14,9 @@ from __future__ import annotations
 import ast
 
 from src.specs.spec_ir_v2 import (
+    _clause_is_compilable,
+    _default_known_names,
+    clause_reject_reason,
     compile_readiness,
     compile_spec_oracle,
     is_expression_clause,
@@ -184,6 +187,44 @@ class TestCompileSpecOracle:
             "boundaries": [{"input": 0, "expected": "r == 0", "rationale": "t"}],
         }
         assert compile_spec_oracle(spec, "m", "f") == ""
+
+
+class TestSelfRecursiveClause:
+    """ADR-0035：被测函数自递归子句——目标函数名入绑定上下文。"""
+
+    def test_self_recursive_call_compiles(self):
+        # fibonacci(5) == 5 在 target_function=fibonacci 时编译为确定性断言
+        spec = {"postconditions": ["fibonacci(5) == 5"]}
+        code = compile_spec_oracle(spec, "fib", "fibonacci", ["n"])
+        assert "assert fibonacci(5) == 5" in code
+        assert "from fib import fibonacci" in code
+        ast.parse(code)
+
+    def test_gcd_self_recursive_compiles(self):
+        # 后置条件自递归：gcd(0, 0) == 0（已知正确属性）
+        spec = {"postconditions": ["gcd(0, 0) == 0"]}
+        code = compile_spec_oracle(spec, "math_utils", "gcd", ["a", "b"])
+        assert "assert gcd(0, 0) == 0" in code
+        ast.parse(code)
+
+    def test_without_target_function_still_rejected(self):
+        # 历史口径：无 target_function 时自递归调用照旧被拒
+        assert not _clause_is_compilable("fibonacci(5) == 5", "postcondition", _default_known_names())
+
+    def test_dangerous_call_still_rejected_with_target(self):
+        # 注入面不扩大：target_function 之外的危险调用照旧被拒
+        reason = clause_reject_reason("eval(x)", "postcondition", ["n"])
+        assert reason == "unsupported_operator"
+        reason = clause_reject_reason('os.system("rm")', "postcondition", ["n"])
+        assert reason == "unsupported_operator"
+
+    def test_nested_self_recursive_call_compiles(self):
+        # 嵌套自调用（fibonacci(fibonacci(3))）也编译——实参为字面量，有界，
+        # 不构成无界递归（执行器 30s 超时兜底）
+        spec = {"postconditions": ["fibonacci(fibonacci(3)) == 5"]}
+        code = compile_spec_oracle(spec, "fib", "fibonacci", ["n"])
+        assert "assert fibonacci(fibonacci(3)) == 5" in code
+        ast.parse(code)
 
 
 class TestSpecProvenance:
