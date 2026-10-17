@@ -43,5 +43,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN echo "GIT_SHA=${GIT_SHA}" > /workspace/.repro_provenance
 
-# 默认命令：全量复现（quick 模式 + 内置示例，零 LLM 成本路径）
+# 默认命令：quick 模式复现（内置示例 3 任务，需 LLM 配额——最小成本冒烟；
+# 无 API key 时各基线产出占位结果、统计为 nan，故"零成本"仅指不跑 LLM 的
+# 环境检查/单测路径，与 REPLICATION_PACKAGE.md §3 L2「需 LLM 配额」口径一致）
 CMD ["bash", "reproduce.sh"]
