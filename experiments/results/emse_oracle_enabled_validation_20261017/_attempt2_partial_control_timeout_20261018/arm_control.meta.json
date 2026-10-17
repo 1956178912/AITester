@@ -1,0 +1,11 @@
+{
+  "arm_label": "control",
+  "arm_baseline": "plain_llm_df_spec",
+  "cache_namespace": "emse_oracle_enabled_validation_20261017_control",
+  "status": "failed",
+  "exit_code": 124,
+  "end_iso_utc": "2026-10-17T17:56:47Z",
+  "wall_seconds": 2402,
+  "log": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/log_control.log",
+  "note": "臂失败/中断：日志与部分工件保留，按协议不重跑"
+}

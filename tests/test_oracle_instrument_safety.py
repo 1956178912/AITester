@@ -319,8 +319,11 @@ class TestPreconditionAwareInputSelection:
             _spec(pre_expr=["x > 0"], post_expr=["result == x * 2"], boundaries=[{"input": 0}, {"input": 4}]),
             ["x"],
         )
+        # 新口径必须绑定满足前件的候选 x=4（旧口径会绑首个候选 x=0 → 前件断言失败）
+        assert "x = 4" in code
+        assert "x = 0" not in code
         namespace = _exec_oracle(code, {"f": lambda x: x * 2})
-        namespace["test_specir_v2_oracle"]()  # 不抛异常（x=4 满足前件且后件成立）
+        assert namespace["test_specir_v2_oracle"]() is None  # 不抛异常（x=4 满足前件且后件成立）
 
     def test_nl_precondition_kept_as_provenance_comment(self) -> None:
         # 纯 NL 通道（无 *_expr 字段）才会选 NL 通道并把不可编译前件降为注释

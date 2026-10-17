@@ -1,0 +1,50 @@
+{
+  "task_id": "synthetic__o3_target",
+  "baseline": "aitester",
+  "test_plan": null,
+  "generated_test": "import pytest\n\nfrom o3_target import add\n\n\ndef test_add_returns_sum_of_positive_integers():\n    \"\"\"add(2, 3) 应返回 5（依据 docstring：Return the sum of a and b）。\n\n    该用例用于暴露预置缺陷（实现为减法），期望值来源：docstring。\n    \"\"\"\n    assert add(2, 3) == 5\n\n\ndef test_add_returns_sum_with_zero():\n    \"\"\"add(0, 7) 应返回 7（依据 docstring：Return the sum of a and b）。\"\"\"\n    assert add(0, 7) == 7\n\n\ndef test_add_returns_sum_of_negative_numbers():\n    \"\"\"add(-2, -3) 应返回 -5（依据 docstring：Return the sum of a and b）。\"\"\"\n    assert add(-2, -3) == -5\n\n\ndef test_add_returns_sum_of_mixed_sign_numbers():\n    \"\"\"add(-4, 9) 应返回 5（依据 docstring：Return the sum of a and b）。\"\"\"\n    assert add(-4, 9) == 5\n\n\ndef test_add_returns_sum_of_floats():\n    \"\"\"add(1.5, 2.5) 应返回 4.0（依据 docstring：Return the sum of a and b）。\"\"\"\n    assert add(1.5, 2.5) == pytest.approx(4.0)\n\n\ndef test_add_is_commutative():\n    \"\"\"加法应满足交换律：add(a, b) == add(b, a)（依据 docstring 的求和语义）。\"\"\"\n    assert add(3, 8) == add(8, 3)\n\n\ndef test_add_identity_element():\n    \"\"\"0 是加法单位元：add(x, 0) == x（依据 docstring 的求和语义）。\"\"\"\n    x = 42\n    assert add(x, 0) == x",
+  "diagnosis": "被测模块 add 函数第 6 行实现为 `return a - b`，与函数名及文档字符串 'Return the sum of a and b' 的语义不符，应为加法。所有 6 个失败用例（正整数、零、负数、混合符号、浮点、交换律）均因减法结果与期望和值不一致而断言失败；唯一通过的用例可能是 a-b 与 a+b 恰好相等的边界（如 b=0 且 a 任意，或 a=0,b=0）。",
+  "error_category": "assertion",
+  "patch": "```python\n\"\"\"O-3 跨文件场景：被调方模块（预置确定性缺陷：add 实现为减法）。\"\"\"\n\n\ndef add(a, b):\n    \"\"\"Return the sum of a and b.\"\"\"\n    return a + b\n```",
+  "test_passed": true,
+  "iterations": 1,
+  "coverage": 100.0,
+  "rag_stats": null,
+  "position_aware_focus": {
+    "focused": false,
+    "function_name": null,
+    "line": 39,
+    "hint": ""
+  },
+  "repo_verification": null,
+  "cross_file_deps": [
+    {
+      "source_module": "o3_caller",
+      "target_module": "o3_target",
+      "symbol": "",
+      "call_line": 0,
+      "source": "benchmark_preset",
+      "context": "dep_chain[0]: o3_caller -> o3_target"
+    }
+  ],
+  "testless_validation": null,
+  "deterministic_guard_report": null,
+  "m10_leaf_fallback": false,
+  "task_metadata": {
+    "source": "synthetic",
+    "is_cross_file": true,
+    "difficulty": 3,
+    "target_module": "o3_target",
+    "suggested_function": "add",
+    "module_a_name": "o3_caller",
+    "module_a_code": "\"\"\"O-3 跨文件场景：调用方模块（import 被调方 add）。\"\"\"\n\nfrom o3_target import add\n\n\ndef add_twice(a, b):\n    return add(a, b) + add(a, b)\n",
+    "dep_chain": [
+      "o3_caller",
+      "o3_target"
+    ],
+    "num_files": 2,
+    "test_cases": "from o3_target import add\n\n\ndef test_add_positive():\n    assert add(2, 3) == 5\n\n\ndef test_add_zero():\n    assert add(0, 5) == 5\n",
+    "fixed": "\"\"\"O-3 跨文件场景：被调方模块（gold 正确实现）。\"\"\"\n\n\ndef add(a, b):\n    \"\"\"Return the sum of a and b.\"\"\"\n    return a + b\n",
+    "o3_injected_scenario": true
+  }
+}

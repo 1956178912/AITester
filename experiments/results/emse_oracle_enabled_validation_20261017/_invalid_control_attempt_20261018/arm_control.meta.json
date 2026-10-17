@@ -1,0 +1,211 @@
+{
+  "arm_label": "control",
+  "arm_baseline": "plain_llm_df_spec",
+  "cache_namespace": "emse_oracle_enabled_validation_20261017_control",
+  "spec_oracle_exec_enabled_requested": "0",
+  "batch_file": "/Users/wangchenyu/Workspace/AITester/experiments/results/emse_oracle_enabled_validation_20261017/benchmark_quixbugs_20261018_010923.json",
+  "batch_sha256": "e7c10524d1f29769c43e625a4056d178bb35cd14f7101217fd04fdeb3e071130",
+  "rows": 20,
+  "token_metrics": {
+    "total_input_tokens": 21452,
+    "total_output_tokens": 30954,
+    "total_tokens": 52406,
+    "total_llm_calls": 24,
+    "total_cache_hits": 0,
+    "total_cache_avoided_tokens": 0,
+    "cache_hit_rate_pct": 0.0,
+    "uncached_theoretical_tokens": 52406,
+    "avg_tokens_per_task": 2620.3,
+    "output_share_pct": 59.07,
+    "avg_output_per_task": 1547.7,
+    "avg_output_per_call": 1289.75
+  },
+  "cost_usd_standard_price": 0.04358,
+  "provenance": {
+    "git_sha": "70b5436a9b8786b18b5bd80a83ce8a4741b2bfce",
+    "git_dirty": false,
+    "dirty_reason": null,
+    "model_name": "deepseek-flash",
+    "model_fingerprint": {
+      "requested_alias": "deepseek-flash",
+      "returned_model": "deepseek-flash",
+      "system_fingerprint": "e72d3c7f663d3e1383b00b3884cb4501",
+      "probe_sha256": "fc3d915941b87e39064ba2075b6e2b29fc0de33bd9fd2b046f6857036edefda3",
+      "probe_at": "2026-10-17T17:09:22.820237+00:00",
+      "missing": [],
+      "pinned": true,
+      "error": null,
+      "alias_mismatch": false
+    },
+    "temperature": 0.0,
+    "profile": "logic",
+    "env_snapshot_spec_oracle_exec_enable": "true",
+    "env_snapshot_cache_namespace": "emse_oracle_enabled_validation_20261017_control",
+    "env_snapshot_detection_spec_mode": null
+  },
+  "field_completeness": {
+    "spec_oracle_injected": "20/20",
+    "spec_oracle_verdict": "20/20",
+    "oracle_suite_verdict": "20/20",
+    "llm_suite_detection_rate": "20/20",
+    "detection_rate": "20/20"
+  },
+  "spec_oracle_injected_counts": {
+    "False": 4,
+    "True": 16
+  },
+  "spec_oracle_verdict_counts": {
+    "compiled_empty": 4,
+    "injected": 16
+  },
+  "oracle_suite_verdict_counts": {
+    "unavailable": 15,
+    "silent": 5
+  },
+  "llm_suite_detection": {
+    "measurable": 15,
+    "detected": 12
+  },
+  "per_task_llm_suite": {
+    "quixbugs__breadth_first_search_test": {
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__bucketsort": {
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__depth_first_search": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent"
+    },
+    "quixbugs__depth_first_search_test": {
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__breadth_first_search": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent"
+    },
+    "quixbugs__detect_cycle_test": {
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__detect_cycle": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__flatten": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": false,
+      "spec_oracle_verdict": "compiled_empty",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__find_in_sorted": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__gcd": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__get_factors": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent"
+    },
+    "quixbugs__hanoi": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent"
+    },
+    "quixbugs__is_valid_parenthesization": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__kheapsort": {
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__kth": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__knapsack": {
+      "detection_rate": 0.0,
+      "llm_suite_detection_rate": 0.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__lcs_length": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__levenshtein": {
+      "detection_rate": 1.0,
+      "llm_suite_detection_rate": 1.0,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    },
+    "quixbugs__bitcount": {
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "silent"
+    },
+    "quixbugs__find_first_in_sorted": {
+      "detection_rate": null,
+      "llm_suite_detection_rate": null,
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": "injected",
+      "oracle_suite_verdict": "unavailable"
+    }
+  }
+}

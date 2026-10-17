@@ -1,10 +1,162 @@
 > **语言 / Language**：[English](CHANGELOG.en.md) | 简体中文（本文）
 >
-> Last updated: 2026-10-17（M 轮：规格增广二臂 **not_confirmed / 非劣成立**（df 80.56% vs augment 82.86%，δ=+2.86pp、p=0.5、MDE 16.57pp）+ **A-05 oracle 质量首次度量**（correct 0 / fp 76.3%，混判抹掉 14/22 既有检出）+ A-11 编译/执行率 + **m1_metrics 孤儿根因修复**（父死亡缺口 → 两段式终止+watchdog，复现 2→0）+ **Q11 论文数字审计**（67 声明综合可追溯 100%）；实际 LLM 花费 **$0.1588**。L 轮与 K 轮同日登记）
+> Last updated: 2026-10-18（O 轮：**oracle 仪器治疗**（崩溃安全 + 前件校验输入；fp 29→2、instrument_error 27→0、correct 仍 0 的诚实修正）+ **跨文件修复路径真实进入**（真 LLM 8 节点链 + 多文件补丁整体回滚）+ **CI 零 LLM e2e 探针/Docker 构建 job** + **运行期卫生根修**（branch 测量孤儿/stale pyc 假红/oracle 全 skip 误升）+ oracle-enabled 二臂真实验证批。N/M/L/K 轮同日登记）
 
 # Changelog
 
 所有重要变更将记录在此文件中。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
+## [Unreleased] — 2026-10-18 O 轮（oracle 仪器治疗 + 跨文件路径实证 + CI 发布工程 + 运行期卫生）
+
+> O 轮承接 N 轮"全功能验证"暴露的两条主线继续收口：① 把 M-2 发现、N-3 部分修复的
+> "确定性 oracle 通道净损伤"从**仪器可判定性**方向治疗（崩溃/前件违反不再冒充假阳），
+> 并对 M-2 的"净损伤"量级做**诚实修正**；② 把 N-4 登记的"跨文件修复路径从未真实进入"
+> 用**构造首轮必失败场景**强制跑通并验证多文件补丁安全语义；③ 发布工程（CI 零 LLM
+> e2e 探针 + Docker 构建校验）；④ 清理探针/CI 工作踩出的三个真实运行期缺陷
+> （branch 测量孤儿 82min、RepoExecutor stale pyc 随机假红、oracle 全 skip 误升 passed）。
+> 真实 LLM 花费 **< $0.05**（O-3 2 运行 5 调用 ≈$0.0035 + O-2 二臂 20 任务 ≈$0.03 + 探针冒烟）。
+
+### Fixed
+
+- **O-1：oracle 仪器未自校验 → 崩溃安全 + 前件校验输入（A-05 后续"仪器治疗"）**。
+  `compile_spec_oracle` 生成产物改造：① 执行体（绑定/前件断言/调用/后件断言）整体包
+  `try`，`AssertionError` 原样 re-raise（语义判定仍记 fail）、其余 `Exception` →
+  `pytest.skip("oracle-unavailable: <ExcType>: …")`（不静默 pass、不伪装 fail；
+  BaseException/超时不吞）；② 有 boundaries 材料时按序用 `spec_smt.safe_eval_clause`
+  （白名单 AST、零 eval/exec）筛选**满足全部可机检前件**的候选，全部被拒 → SMT 见证
+  兜底 → 仍无 → `no-valid-input` 保守骨架（不臆造输入、不产假断言）；③
+  `_m1_metrics` 把 skip-only 套件记 `oracle_suite_verdict=unavailable`（不再误判
+  pass/silent）；replay 保留旧四分类键并新增 `fp_breakdown{fp_assertion_fail,
+  instrument_error}` / `skipped_count` / `skip_reason_counts` / `--compare-report`。
+  **零 LLM before/after**（df_spec 双臂，墙钟 279.9s）：fp **29 → 2**（仅断言型）、
+  `instrument_error` **27 → 0**、`skipped` **0 → 27**（TypeError 24 / AttributeError 2 /
+  ZeroDivisionError 1，与 before 异常类型逐类一致）、correct **0 → 0**、可分类分母
+  **38 → 11**；生产独立判读路径 `oracle_suite_verdict` = unavailable 29 / fp 2 /
+  silent 9 / correct 0，LLM-suite detection 与 M-2 逐位一致（mismatch 0）。
+  **诚实修正**：M-2 记录的"spec-oracle 混判抹掉 14/22 个 LLM 检出"**主要成分是仪器
+  伪影**（崩溃型 oracle 在 fixed 侧恒红）——加固后混判 lost **14/22 → 1/2**、
+  oracle-augmented 40 口径 detection **10.53%/18.42% → 44.74%/71.05%**，LLM-suite
+  detection 不变（50.00%/77.50%）——**不是检出能力提升**，剩余 lost 1/2 才是断言型 fp
+  的语义质量信号。配套修 `nodes._spec_oracle_verdict_after_run`：输出显式 oracle
+  `SKIPPED` 行时保留未决态 `injected`（不再误升 `injected_and_passed`，与独立判读对齐）。
+  测试 **53 例**；目标+回归 378 passed。
+- **O-5a：branch 测量孤儿 pytest（ppid=1、99% CPU、82min 现场）**。QuixBugs 非终止家族
+  让 branch 覆盖测量子进程内 pytest 永久挂起；父进程被外部杀死后该子进程被 init 收养
+  （M-3 父死亡缺口族）。修复：测量子进程内 pytest-timeout 单测 **10s**（插件缺失自动
+  降级）+ 调用点 `orphan_guard=True`（外层 60s 超时不变）。回归 7 例（含死循环有界
+  11.5s、传参契约、超时降级）。
+- **O-5b：RepoExecutor stale pyc 随机假红（6/15 复现）**。baseline 与 llm_patch 两阶段
+  1s 内写入**同尺寸**源码 → CPython pyc 头 `(mtime 整秒, size)` 不变 → 第二轮复用
+  baseline 字节码 →"补丁已应用却仍失败"。根修：`executor_repo` 唯一 pytest 咽喉点加
+  `-B` + `PYTHONDONTWRITEBYTECODE=1`（env 可传播子进程）；CI/Makefile 侧 sitecustomize
+  规避保留为双保险。回归 3 例（传参契约 / repo 内不产 `__pycache__` / 同秒同尺寸改写
+  读到新源码）。
+- **O-3：跨文件修复路径强制真 LLM 端到端 + D3c 审计误标修复**。构造确定性首轮必失败
+  双模块场景后，真实 LLM 完整图链路**真实进入**：
+  `generator → executor(FAIL) → _should_debug(debug) → cross_file_analyzer → debugger →
+  patch_applier(written) → executor(PASS) → done`（8 节点 trace）；`cross_file_enabled=true`、
+  `cross_file_deps` 预置边落态、`repair_history.patch_applied=true`、
+  `patch_evidence_level=sbfl`、`passed=true`。**D3c 修复**：analyzer trace 分列
+  `ast/preset/有效 dep_edges`，预置 dep_chain 边不再误标 `single_file_fallback`（纯观测，
+  路由/落态零变化）。Run2 组件级真实 LLM 证明非法整文件重写补丁被 apply 层拒绝 →
+  **整体回滚**（安全语义正确）。N-4 D3 根因澄清 = 场景频率/首轮全绿，**非装配缺陷**。
+  真实 LLM 2 运行 / 5 调用 / ≈$0.0035；回归 11 例。
+- **O-4：发布工程加固**。`.github/workflows/ci.yml` **纯追加**（既有 job 零改动）：
+  `e2e-probe` job（ubuntu-latest、零 LLM、44 零 LLM 探针、判据 0 fail/0 error；pinned
+  QuixBugs 数据 + chromadb 预热 + bwrap 守卫 + 嵌套 pytest 确定性钩子 + skip 原因摘要 +
+  artifact 上传；未引入新 action）与 `docker-build` job（纯 shell：`docker build` +
+  镜像内 import/CLI/`.env*` 断言 + Reprofile 检查）；Makefile `e2e-probe` 内嵌同口径
+  确定性钩子（修复前随机假红 6/15 → 3/3 全绿）。CI 等价环境实测 **44 pass / 0 fail /
+  0 error / 12 skip（27.8s）**；YAML `safe_load` + 11/11 `bash -n` + 结构断言通过。
+
+### Added
+
+- **O-2：oracle-enabled 二臂真实 LLM 验证批**（干净切点 worktree HEAD=`70b5436`，
+  dirty=0）：两臂均 `plain_llm_df_spec`（协议修正：仅该臂有 `spec_anchor` 材料可注入
+  oracle；任务书默认 `plain_llm_df` 无 planner/无锚表 → 退化 not_attempted），A/B 仅
+  `SPEC_ORACLE_EXEC_ENABLE` 不同、20 任务 seed=42、并发、独立 namespace、真实调用、
+  AITESTER_LLM_CACHE=0。核验：注入率与 `oracle_suite_verdict` 分布（O-1 后崩溃应落
+  unavailable 而非 fp）、LLM-suite detection 两臂一致、行字段完整、成本。**结果**：
+  **有效 A/B（20 任务；sequential pairing 披露）**：**A control（oracle off）** LLM-suite
+  detection **10/14 = 71.43%**、成本 $0.050887；**B oracle（oracle on）11/14 = 78.57%**、
+  成本 $0.051041；共同任务 **20/20 配对、不一致 1 例**（`kheapsort` control 0.0 / oracle
+  1.0，在 temp=0 重跑噪声量级内——attempt#1 同配置重复曾 2/20 不一致）→ **未发现 oracle
+  注入改变 LLM-suite 检出的证据**（N-3 起 detection_rate 语义=LLM-suite、oracle 测试被
+  排除在判分外）。注入/独立判读：control `spec_oracle_injected` 全 None /
+  `spec_oracle_verdict` 全 not_attempted / `oracle_suite_verdict` 全 unavailable；oracle 臂
+  injected **16** / compiled_empty **4**（3 个 `*_test` 驱动任务 + flatten，材料不可编译非
+  注入故障）/ `oracle_suite_verdict` unavailable **15** + silent **5**、**fp=0**（O-1 崩溃
+  安全方向性验证；本子集无 correct/misguided → 不作质量结论）；行字段 5 键 20/20 在场。
+  **过程如实披露**：① attempt#1 因 `AITESTER_PROFILE=logic` 档位预设 setdefault 开
+  `SPEC_ORACLE_EXEC_ENABLE=true`，仅 unset 无法关闭 → 两臂同配置**对照无效**
+  （$0.0947，归档 `_invalid_control_attempt_20261018/`）；② attempt#2 修正后 control 在
+  **MDO 后处理阶段**撞 2400s 看门狗（无批次工件，oracle 有效）；③ attempt#3 control 补跑
+  （watchdog 3600s）成功取得有效 A/B。**后处理墙钟 run-to-run 波动**（同 cut/协议
+  2102.4s→>2400s→2297.4s，≥14% 尾部）作为防御性证据登记：建议下一轮 watchdog 按"任务
+  阶段+后处理预算+margin"配置（20 任务 ≥3600s）+ 逐阶段墙钟日志。O-2 实测合计
+  **$0.19665 + 未记账 ≈$0.04 ≈ $0.23**（豁免 $0.25 ✓）、墙钟 ≈117min。工件
+  入口 `experiments/run_oracle_validation_batch.sh --arm-baseline plain_llm_df_spec`。
+- **O-1/O-5 训练场探针**：`scripts/tools/e2e_probes_logic.py` 新增 3 个探针
+  （`logic-oracle-instrument-safety` 崩溃→skip 真 pytest 验证 / 
+  `logic-oracle-replay-instrument-breakdown` 分类细化 / 
+  `logic-oracle-precondition-input-filter` 前件校验输入选择）——全功能探针矩阵 56 → **59**。
+
+### Changed
+
+- **profile 预设优先级陷阱（O-2 实证）**：`AITESTER_PROFILE=logic` 会 **setdefault
+  开启 `SPEC_ORACLE_EXEC_ENABLE`**；要关闭必须**显式 `=false`**（unset 不等于显式
+  关闭）。批量跑批必须在预检核对两臂 `provenance.env_snapshot` 开关值互异
+  （O-2 invalid attempt 即由此产生，已归档披露并写入登记册 §5 纪律）。
+- **oracle 引用口径（O-1 起）**：必须同时给"可分类分母 + skipped 数 + fp 拆分"；
+  O-1 前（38 分母/29 fp）与后（11 分母/2 fp）**禁止混池**；仪器治疗 ≠ 检出提升
+  （correct 仍 0，语义质量治理另立项）。
+- **跨文件能力披露**：图通路只应用入口模块补丁、`cross_file_plan_present=false` 属已知
+  登记状态；多模块协同（D3b `build_cross_file_repair_plan` 图内零调用点）接线需设计+
+  预注册+同批对照，登记下一轮；`patch_rollback_verdict/rolled_back` 进结果行 schema 同
+  批登记。
+- **文档/BASELINE/登记册同步**：BASELINE 新增 `target_quality.oracle_instrument_hardening`
+  与 `engineering_runtime_hygiene`；`feature_matrix` 56→59；登记册新增 §3.2 O-1~O-5、
+  §4 O 轮收口/A-05 诚实修正/下一轮登记、§5 三条引用纪律；MEASUREMENT_INTEGRITY §6 增
+  "对 M-2/N-3 结论的修正"段；README 双语"最新优化"同步 O 轮；EMSE 本地清单增补 O 增量。
+
+### Verification
+
+### Verification
+
+- **全量测试（CI 同口径）**：`pytest tests/ -q -n 4 --dist loadfile --cov=src --cov-branch`
+  → **8396 passed / 5 skipped / 0 failed**（collected **8401**；本机 **160.54s**；
+  `COVERAGE_FILE` 隔离避免嵌套 pytest 子进程 coverage 数据污染）；
+- **覆盖率**：行 **96.51%**（16803/17411）/ 分支 **92.65%**（5952/6424）；
+  `coverage_ratchet.py --check` 通过（水位 96.40/92.50，余量 +0.11pp/+0.15pp）；
+- **静态检查**：`ruff check .` / `ruff format --check .` 全绿（787 文件）；
+  `mypy src/ config.py` 0 错（134 源文件）；
+- **门禁**：`make gates` 全绿（25 道 CI 阻断门禁）；`check_artifacts_tracked`
+  MANIFEST **99/99** + `emse_*` 目录覆盖扫描通过（O 轮新增 9 项证据工件）；
+- **全功能探针矩阵（O 轮扩到 59）**：`AITESTER_E2E_LLM=true python
+  scripts/tools/e2e_probe.py --all --include-llm` → **59/59 pass**（14 功能组、
+  12 真实 LLM 探针、墙钟 73.6s；零 LLM 子集 47 pass/12 skip 可 CI 化）；
+  `make e2e-probe` / `make e2e-probe-llm` 可用；CI 已有零 LLM `e2e-probe` job；
+- **O-1 仪器加固复算（零 LLM）**：`python -m experiments.oracle_quality_replay
+  --compare-report experiments/results/emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json`
+  → fp **29→2**（instrument_error 27→0、skipped 27 单列、correct 0→0、分母 38→11）；
+  生产独立判读 `oracle_suite_verdict` = unavailable 29 / fp 2 / silent 9 / correct 0，
+  LLM-suite 与 M-2 mismatch 0；工件 SHA256SUMS `44a1f3ab…` verify 9 项；
+- **O-2 二臂验证（真实 LLM，clean cut 70b5436）**：LLM-suite detection control
+  **10/14=71.43%**（$0.050887）/ oracle **11/14=78.57%**（$0.051041）；20/20 配对、
+  不一致 1（重跑噪声内）；control 零注入、oracle 臂 fp=0；工件 SHA256SUMS
+  `00e3c6dc…` 134 项 verify；含 invalid attempt / attempt2 partial 归档；
+- **O-3 跨文件真实验证**：真 LLM 8 节点链真实进入 analyzer（trace 在案）、
+  预置 dep 边落态、多文件非法补丁整体回滚；2 运行/5 调用 ≈$0.0035；
+  工件 `o_round_cross_file_20261017/`（22 文件 SHA verify 通过）；
+- **O-4 CI/发布工程**：`python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`
+  OK（jobs 含 smoke-llm/test/security/supply-chain/e2e-probe/docker-build）；
+  11/11 新增 run 块 `bash -n` OK；CI 等价环境零 LLM 探针 47 pass/0 fail/0 error/12 skip；
+  actionlint 本机未装（已披露）、docker build 首跑验证（本机无 docker CLI）；
+- **运行期卫生复验**：branch 死循环测试测量有界（约 11.5s，远小于外层 60s）；
+  RepoExecutor 同秒同尺寸改写读到新源码且 repo 内无 `__pycache__`；
+  oracle 全 skip 时行级 verdict 保留未决态（三态测试锁定）；
+- **成本**：O 轮真实 LLM ≈ **$0.24**（O-2 ≈$0.23 + O-3 $0.0035 + 探针 ≈$0.02，
+  含 O-2 invalid/partial attempt 的已发生成本；O 轮豁免上限 $0.30）。
 
 ## [Unreleased] — 2026-10-17 N 轮（全功能端到端验证 + 8 个功能缺陷修复 + oracle 独立判读 + 真实 LLM 重型路径）
 

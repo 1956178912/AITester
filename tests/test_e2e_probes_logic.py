@@ -31,7 +31,7 @@ class TestRegistrationContract:
     def test_probes_registered_with_unique_names(self):
         names = [p.name for p in logic.PROBES]
         assert len(names) == len(set(names)), f"探针名重复：{names}"
-        assert len(logic.PROBES) >= 9
+        assert len(logic.PROBES) >= 12
 
     def test_all_in_logic_group(self):
         assert {p.group for p in logic.PROBES} == {"logic"}
@@ -64,6 +64,9 @@ class TestZeroLlmProbesPass:
             "logic-stagnation-switch",
             "logic-mutation-advisor-assembly",
             "logic-branch-coverage-inject",
+            "logic-oracle-instrument-safety",
+            "logic-oracle-replay-instrument-breakdown",
+            "logic-oracle-precondition-input-filter",
         ],
     )
     def test_probe_passes(self, probe_name):
@@ -72,6 +75,33 @@ class TestZeroLlmProbesPass:
         assert outcome.status in ("pass", "skip"), f"{probe_name}: {outcome.status} — {outcome.detail}"
         if outcome.status == "skip":
             assert outcome.detail.strip(), "skip 必须带原因"
+
+
+class TestOracleInstrumentProbesNegativeControls:
+    """O-1 探针必须能识别"仪器回退"（打坏后 fail/skip 而非静默 pass）。"""
+
+    def test_precondition_filter_detects_unguarded_binding(self, monkeypatch):
+        from src.specs import spec_ir_v2
+
+        # 模拟加固回退：产物直接绑定首个（违反前件的）候选、无 skip harness
+        monkeypatch.setattr(
+            spec_ir_v2,
+            "compile_spec_oracle",
+            lambda *a, **k: "def test_specir_v2_oracle():\n    side = 0\n    assert side == 0\n",
+        )
+        outcome = logic.probe_oracle_precondition_input_filter()
+        assert outcome.status == "fail"
+        assert "未生效" in outcome.detail
+
+    def test_replay_breakdown_skips_without_artifact(self, monkeypatch, tmp_path):
+        fresh_root = tmp_path / "no_such_root"
+        real_path = logic.__file__
+        # 让探针解析到不存在的结果目录 → 应 skip（带原因），而不是 fail/静默 pass
+        monkeypatch.setattr(logic, "__file__", str(fresh_root / "scripts" / "tools" / "e2e_probes_logic.py"))
+        outcome = logic.probe_oracle_replay_instrument_breakdown()
+        assert outcome.status == "skip"
+        assert outcome.detail.strip()
+        assert real_path  # 保留原路径引用（防未使用告警）
 
 
 class TestNegativeControls:

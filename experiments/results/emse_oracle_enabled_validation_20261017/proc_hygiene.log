@@ -1,0 +1,11 @@
+O-2 attempt#3 (control-only rescue) proc hygiene: 每 5min 只读巡检（--min-age 60）；不自动 kill
+2026-10-17T18:01:29Z phase=control_rescue_pre_batch detector_exit=0 {"available": true, "scanned": 624, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:06:13Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 614, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:11:06Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 513, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:16:00Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 516, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:20:53Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 535, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:25:46Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 536, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:30:40Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 537, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:35:34Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 541, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:40:28Z phase=control_rescue_in_batch detector_exit=0 {"available": true, "scanned": 546, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}
+2026-10-17T18:40:34Z phase=control_rescue_post_batch detector_exit=0 {"available": true, "scanned": 545, "min_age_seconds": 60, "leaked": [], "leaked_count": 0}

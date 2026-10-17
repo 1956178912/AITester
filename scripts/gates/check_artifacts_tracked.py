@@ -160,6 +160,18 @@ MANIFEST: tuple[str, ...] = (
     "experiments/results/e2e_llm_probes_20261017/README.md",
     "experiments/results/e2e_llm_probes_20261017/ITEM_RESULTS.json",
     "experiments/results/e2e_llm_probes_20261017/SHA256SUMS",
+    # O 轮（2026-10-18）：oracle 仪器治疗（O-1；before/after + 生产独立判读验证）
+    "experiments/results/emse_oracle_instrument_hardening_20261017/README.md",
+    "experiments/results/emse_oracle_instrument_hardening_20261017/ORACLE_QUALITY_REPORT.json",
+    "experiments/results/emse_oracle_instrument_hardening_20261017/SHA256SUMS",
+    # O 轮：跨文件修复路径真实进入（O-3；8 节点 trace + 多文件回滚证据）
+    "experiments/results/o_round_cross_file_20261017/README.md",
+    "experiments/results/o_round_cross_file_20261017/O3_EVIDENCE.json",
+    "experiments/results/o_round_cross_file_20261017/SHA256SUMS",
+    # O 轮：oracle-enabled 二臂真实验证（O-2；同批 only-switch 差异 + 无 fp 分布）
+    "experiments/results/emse_oracle_enabled_validation_20261017/README.md",
+    "experiments/results/emse_oracle_enabled_validation_20261017/ARM_COMPARISON.json",
+    "experiments/results/emse_oracle_enabled_validation_20261017/SHA256SUMS",
 )
 
 # emse_* 目录覆盖扫描的显式豁免登记（相对 experiments/results/）。

@@ -1,0 +1,77 @@
+{
+  "graph_assembly": {
+    "off_nodes": [
+      "debugger",
+      "executor",
+      "generator",
+      "patch_applier"
+    ],
+    "on_nodes": [
+      "cross_file_analyzer",
+      "debugger",
+      "executor",
+      "generator",
+      "patch_applier"
+    ],
+    "added_nodes": [
+      "cross_file_analyzer"
+    ],
+    "analyzer_route_edges_present": {
+      "executor->cross_file_analyzer": true,
+      "cross_file_analyzer->debugger": true
+    },
+    "on_edges": [
+      "__start__->generator",
+      "cross_file_analyzer->debugger",
+      "debugger->patch_applier",
+      "executor->__end__",
+      "executor->cross_file_analyzer",
+      "executor->generator",
+      "generator->executor",
+      "patch_applier->executor"
+    ]
+  },
+  "analyzer_node": {
+    "update_keys": [
+      "cross_file_deps",
+      "cross_file_plan"
+    ],
+    "cross_file_deps": [
+      {
+        "source_module": "o3_caller",
+        "target_module": "o3_target",
+        "symbol": "",
+        "call_line": 0,
+        "source": "benchmark_preset",
+        "context": "dep_chain[0]: o3_caller -> o3_target"
+      }
+    ],
+    "cross_file_plan": null,
+    "cross_file_contexts": null,
+    "deps_source": [
+      "benchmark_preset"
+    ]
+  },
+  "orphan_plan_builder": {
+    "plan_target_modules": [
+      "o3_caller",
+      "o3_target"
+    ],
+    "plan_per_module_patches": [
+      "o3_caller",
+      "o3_target"
+    ],
+    "plan_estimated_token_cost": 62,
+    "multi_file_apply_applied": true,
+    "target_fixed_in_new_files": true,
+    "caller_touched_in_new_files": true,
+    "graph_call_sites": [],
+    "graph_call_sites_count": 0
+  },
+  "scenario_determinism": {
+    "gold_test_on_buggy_passed": false,
+    "gold_test_on_buggy_failed_cases": 1,
+    "gold_test_on_fixed_passed": true,
+    "note": "缺陷代码（docstring=sum / 实现=减法）上按意图断言必失败 → 图路由必进入修复分支"
+  }
+}

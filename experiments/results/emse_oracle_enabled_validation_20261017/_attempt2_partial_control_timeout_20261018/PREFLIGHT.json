@@ -1,0 +1,74 @@
+{
+  "run": "O-2 oracle-enabled validation batch",
+  "code_root": "/Users/wangchenyu/Workspace/AITester-o2-oracle-70b5436",
+  "git_head": "70b5436a9b8786b18b5bd80a83ce8a4741b2bfce",
+  "arm_baseline": "plain_llm_df_spec",
+  "task_limit": 20,
+  "parallelism": 4,
+  "checks": {
+    "baseline_registered": true,
+    "row_fields": {
+      "spec_oracle_injected": true,
+      "spec_oracle_verdict": true,
+      "oracle_suite_verdict": true,
+      "llm_suite_detection_rate": true
+    },
+    "env_snapshot_has_SPEC_ORACLE_EXEC_ENABLE": true,
+    "profile_logic_presets_SPEC_ORACLE_EXEC_ENABLE": true,
+    "llm_configs_count": 1,
+    "env_local_present": true,
+    "effective_env_probe": {
+      "control_SPEC_ORACLE_EXEC_ENABLE": "false",
+      "oracle_SPEC_ORACLE_EXEC_ENABLE": "true",
+      "distinct": true
+    }
+  },
+  "material_probe": {
+    "arm_baseline": "plain_llm_df_spec",
+    "no_anchor_state": {
+      "material_found": false,
+      "source": "",
+      "initial_verdict": "not_attempted",
+      "injected": false,
+      "verdict": "not_attempted"
+    },
+    "spec_anchor_state": {
+      "table": "/Users/wangchenyu/Workspace/AITester-o2-oracle-70b5436/experiments/results/emse_spec_anchor_20261016/SPEC_ANCHOR_TABLE.json",
+      "table_present": true,
+      "table_sha256": "3e90b2ad5ed365ad5ee989c73c92b84956a83c0fa8cb51368d288ae3ea53bf22",
+      "material_found": true,
+      "source": "spec_anchor.logic_analysis",
+      "initial_verdict": "not_attempted",
+      "injected": true,
+      "verdict": "injected",
+      "oracle_test_in_merged": true
+    },
+    "human_spec_only_state": {
+      "source": "spec_anchor.human_spec",
+      "verdict": "not_attempted_human_spec_only"
+    },
+    "arm_can_inject_oracle": true
+  },
+  "blocking": [],
+  "warnings": [
+    "AITESTER_PROFILE=logic 的档位预设默认注入 SPEC_ORACLE_EXEC_ENABLE=true；control 臂必须显式 false（脚本已处理）。"
+  ],
+  "registered_baselines": [
+    "aitester",
+    "plain_llm",
+    "plain_llm_df",
+    "plain_llm_df_doc",
+    "plain_llm_df_doc_augment",
+    "plain_llm_df_doc_union",
+    "plain_llm_df_spec",
+    "single_agent"
+  ],
+  "protocol_correction": {
+    "approved_by": "Lead",
+    "approved_at_utc": "2026-10-17",
+    "default_baseline_in_task": "plain_llm_df",
+    "effective_baseline": "plain_llm_df_spec",
+    "kind": "验证性协议修正（不改变任何判定规则/判分口径）",
+    "reason": "N-3 oracle 材料优先级 = spec_ir → test_plan.logic_analysis → spec_anchor.logic_analysis / spec_anchor.human_spec；plain_llm_df 无 planner（无 test_plan）且不加载锚表（无 spec_anchor）→ 材料为空 → SPEC_ORACLE_EXEC_ENABLE=true 只会记 not_attempted，无法验证 oracle 注入；plain_llm_df_spec 携带 spec_anchor.logic_analysis（SPEC_ANCHOR_TABLE）为可编译锚材料。"
+  }
+}

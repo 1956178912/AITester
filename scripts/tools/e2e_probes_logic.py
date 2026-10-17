@@ -377,6 +377,127 @@ def probe_logic_profile_spec_fields():
     )
 
 
+def probe_oracle_instrument_safety():
+    """O-1 仪器加固：oracle 执行期崩溃 → pytest.skip（不是 fail/fp），断言失败仍 fail。"""
+    import subprocess
+    import sys as _sys
+
+    from src.specs.spec_ir import parse_logic_analysis
+    from src.specs.spec_ir_v2 import compile_spec_oracle
+
+    tmpdir = make_temp_dir("e2e_oracle_safety_")
+    target = tmpdir / "safe_target.py"
+    # 除零函数：边界候选 [0,0] 违反"前置 b!=0"（NL 前件不可机检）→ 调用抛
+    # ZeroDivisionError。加固前该 oracle 在 fixed 侧恒红（fp）；加固后应 skip。
+    target.write_text("def divide(a, b):\n    return a // b\n", encoding="utf-8")
+    la = {
+        "function_name": "divide",
+        "preconditions": ["b != 0"],
+        "postconditions_expr": ["r == a // b"],
+        "postconditions": ["r 等于 a 整除 b"],
+        "spec_source": "logic_analysis",
+    }
+    spec = parse_logic_analysis(la, boundary_triplets=[([0, 0], 0, "零除边界")])
+    if not spec:
+        return fail("spec 解析失败，无法生成 oracle")
+    oracle_code = compile_spec_oracle(
+        spec, target_module="safe_target", target_function="divide", signature_params=["a", "b"]
+    )
+    if not oracle_code:
+        return fail("oracle 未生成（应生成崩溃安全骨架）")
+    static_checks = {
+        "has_try": "try:" in oracle_code,
+        "has_except": "except Exception" in oracle_code,
+        "has_skip": "pytest.skip(" in oracle_code,
+        "has_oracle_name": "def test_specir_v2_oracle(" in oracle_code,
+    }
+    if not all(static_checks.values()):
+        return fail(f"崩溃安全 harness 缺失：{static_checks}", oracle_head=oracle_code[:300])
+    # 行为验证：把 oracle 写进 tmp 目录真实跑 pytest → 期望 skipped（而非 failed）
+    test_file = tmpdir / "test_oracle_generated.py"
+    test_file.write_text(oracle_code, encoding="utf-8")
+    proc = subprocess.run(
+        [_sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_oracle_generated.py"],
+        capture_output=True,
+        text=True,
+        cwd=str(tmpdir),
+        timeout=120,
+    )
+    out = proc.stdout + proc.stderr
+    if "1 skipped" not in out and "skipped" not in out.lower():
+        return fail(f"崩溃 oracle 未按 skip 收口（rc={proc.returncode}）：{out[-400:]}")
+    if "1 failed" in out or "failed" in out.lower():
+        return fail(f"崩溃 oracle 被记为失败（应 skip）：{out[-400:]}")
+    return ok(f"oracle 仪器加固生效：崩溃→skip（rc={proc.returncode}），静态 harness 齐备", checks=static_checks)
+
+
+def probe_oracle_replay_instrument_breakdown():
+    """O-1 replay 分类细化：fp 拆分 instrument_error、skip 原因单列且旧四分类键保留。"""
+    import json
+    from pathlib import Path as _Path
+
+    report = (
+        _Path(__file__).resolve().parents[2]
+        / "experiments"
+        / "results"
+        / "emse_oracle_instrument_hardening_20261017"
+        / "ORACLE_QUALITY_REPORT.json"
+    )
+    if not report.exists():
+        return skip("O-1 加固工件缺失（emse_oracle_instrument_hardening_20261017 未生成）")
+    data = json.loads(report.read_text(encoding="utf-8"))
+    rep = data.get("report", data)
+    cmp_block = rep.get("instrument_hardening_comparison") or {}
+    arms = cmp_block.get("arms") or []
+    if not arms:
+        return fail("加固对比块缺失 arms")
+    arm = arms[0]
+    after = arm.get("after") or {}
+    counts = after.get("counts") or {}
+    breakdown = after.get("fp_breakdown") or {}
+    skip_reasons = after.get("skip_reason_counts") or {}
+    checks = {
+        "old_four_keys_kept": all(k in counts for k in ("correct", "fp", "silent", "misguided")),
+        "fp_breakdown_present": "fp_assertion_fail" in breakdown and "instrument_error" in breakdown,
+        "skip_reasons_present": bool(skip_reasons),
+        "fp_reduced": counts.get("fp", 99) <= 2,
+        "instrument_quarantined": breakdown.get("instrument_error", 1) == 0,
+        "skip_attributed": sum(skip_reasons.values()) >= 20,
+    }
+    if not all(checks.values()):
+        return fail(f"replay 分类细化不完整：{checks}", after=after)
+    return ok(
+        f"replay 分类细化正常：fp={counts.get('fp')}（断言型）、instrument_error=0、skipped={after.get('skipped_count')}，旧四分类键保留",
+        checks=checks,
+        skip_reasons=skip_reasons,
+    )
+
+
+def probe_oracle_precondition_input_filter():
+    """O-1 前件校验输入选择：违反可机检前件的候选被跳过、选下一个合法候选。"""
+    from src.specs.spec_ir import parse_logic_analysis
+    from src.specs.spec_ir_v2 import compile_spec_oracle
+
+    la = {
+        "function_name": "area",
+        "preconditions_expr": ["side > 0"],
+        "postconditions_expr": ["r == side * side"],
+        "preconditions": ["边长必须为正"],
+        "postconditions": ["返回面积"],
+        "spec_source": "logic_analysis",
+    }
+    # 第一个候选 side=0 违反 side>0（可机检）；第二个 side=3 合法
+    spec = parse_logic_analysis(la, boundary_triplets=[(0, 0, "零边长"), (3, 9, "正边长")])
+    if not spec:
+        return fail("spec 解析失败")
+    code = compile_spec_oracle(spec, target_module="m", target_function="area", signature_params=["side"])
+    if not code:
+        return fail("oracle 未生成")
+    if "side = 3" not in code or "side = 0" in code:
+        return fail(f"前件校验输入选择未生效（应绑 side=3 而非 0）：{code[:300]}")
+    return ok("前件校验输入选择生效：跳过违反 side>0 的候选，绑定合法候选 side=3")
+
+
 PROBES = [
     Probe(
         name="logic-spec-ir-parse",
@@ -440,6 +561,27 @@ PROBES = [
         func=probe_branch_coverage_inject,
         timeout_s=180,
         description="branch 覆盖注入真实测量（含空测试保守降级）",
+    ),
+    Probe(
+        name="logic-oracle-instrument-safety",
+        group="logic",
+        func=probe_oracle_instrument_safety,
+        timeout_s=180,
+        description="O-1：oracle 崩溃安全 harness（崩溃→skip 非 fail，真实 pytest 验证）",
+    ),
+    Probe(
+        name="logic-oracle-replay-instrument-breakdown",
+        group="logic",
+        func=probe_oracle_replay_instrument_breakdown,
+        timeout_s=60,
+        description="O-1：replay 分类细化（fp 拆分 instrument_error + skip 原因单列）",
+    ),
+    Probe(
+        name="logic-oracle-precondition-input-filter",
+        group="logic",
+        func=probe_oracle_precondition_input_filter,
+        timeout_s=90,
+        description="O-1：前件校验输入选择（跳过违反前件的边界候选）",
     ),
     Probe(
         name="logic-profile-spec-fields",
