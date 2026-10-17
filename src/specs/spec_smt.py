@@ -209,6 +209,34 @@ def _safe_eval_clause(clause: str, env: dict[str, Any]) -> Any:
     return _safe_eval(tree.body, env)
 
 
+def safe_eval_clause(clause: str, env: dict[str, Any]) -> Any:
+    """O-1（2026-10-18）：受限安全求值的**公开复用入口**（零 eval/exec）。
+
+    供 ``spec_ir_v2.compile_spec_oracle`` 的前件校验输入筛选复用（"候选 input
+    是否满足全部前件"），避免跨模块依赖私有 ``_Untranslatable`` 异常类型。
+
+    安全边界与 ``_safe_eval`` 完全一致：白名单常量/名称/布尔/一元/比较/算术/
+    白名单内建调用；属性、下标、lambda、推导式、import、关键字实参一律拒绝。
+    环境仅含调用方显式提供的绑定（不注入 ``__builtins__``）。
+
+    Args:
+        clause: 表达式子句全文（已过 spec_ir_v2 DSL 白名单的形态）。
+        env: 绑定环境（参数名 → 字面量值）。
+
+    Returns:
+        求值结果（真值语义由调用方判定）。
+
+    Raises:
+        ValueError: 子句不可解析 / 含白名单外节点或调用（安全拒绝）。
+        ZeroDivisionError / TypeError 等: 表达式在给定绑定下求值失败
+            （调用方按"不可安全判定"保守处理）。
+    """
+    try:
+        return _safe_eval_clause(clause, env)
+    except _Untranslatable as e:
+        raise ValueError(f"unsafe clause rejected: {e}") from e
+
+
 # ─── 1. 排序推断（名称 → z3 Int/Real/Bool，冲突即不可翻译）───────────────────
 
 

@@ -151,8 +151,21 @@ pass-matched:  ## 通过率混淆敏感性分析（EMSE 审稿人 A3 复核点�
 emse-stats:  ## 统计报告补口（EMSE 批次 2026-10-15：三主要对比 MDE/功效 + 比例型端点 bootstrap 95% CI，零 LLM 只读工件）
 	$(PY) -m experiments.emse_stats_report
 
+# O-4（2026-10-18）：CI 零 LLM 作业 `.github/workflows/ci.yml::e2e-probe` 与本目标
+# 同口径（同命令、只跑零 LLM 子集；CI 额外准备 pinned QuixBugs 数据 + chromadb
+# 嵌入预热，产出报告走 artifact）。合并前建议本地先跑 `make e2e-probe`。
 e2e-probe:  ## 全功能端到端探针（零 LLM 子集；功能矩阵报告）
-	$(PY) scripts/tools/e2e_probe.py --all --json-out experiments/results/e2e_probe_latest.json --md-out experiments/results/e2e_probe_latest.md
+	@# O-4（2026-10-18）：与 CI 零 LLM 作业同口径的嵌套 pytest 确定性钩子。
+	@# 根因：executor-repo-verify 的 baseline/补丁两阶段在 1s 内写同尺寸源码时，
+	@# pyc 头 (源 mtime 整秒, size) 不变 → 第二轮复用 baseline 字节码 → 随机假红
+	@# （本地实测 6/15）。RepoExecutor 的嵌套 pytest 走 scrub_os_environ 白名单，
+	@# 不透传 PYTHONDONTWRITEBYTECODE；故用 PYTHONPATH 注入 sitecustomize 置
+	@# sys.dont_write_bytecode=True（CI 同机制，见 ci.yml e2e-probe job 注释）。
+	@_ci_site=$$(mktemp -d) && \
+	printf 'import sys\nsys.dont_write_bytecode = True\n' > "$$_ci_site/sitecustomize.py" && \
+	PYTHONPATH="$$_ci_site" PYTHONDONTWRITEBYTECODE=1 \
+	$(PY) scripts/tools/e2e_probe.py --all --json-out experiments/results/e2e_probe_latest.json --md-out experiments/results/e2e_probe_latest.md; \
+	_rc=$$?; rm -rf "$$_ci_site"; exit $$_rc
 
 e2e-probe-llm:  ## 全功能端到端探针（含真实 LLM 探针；消耗配额，默认不接 CI）
 	AITESTER_E2E_LLM=true $(PY) scripts/tools/e2e_probe.py --all --include-llm --json-out experiments/results/e2e_probe_llm_latest.json --md-out experiments/results/e2e_probe_llm_latest.md

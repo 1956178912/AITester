@@ -381,9 +381,17 @@ def _spec_oracle_verdict_after_run(state: AITesterState, result: dict[str, Any])
     ]
     if any(any(marker in name for marker in _SPEC_ORACLE_TEST_NAMES) for name in failed_names):
         return _SPEC_ORACLE_VERDICT_INJECTED_AND_FAILED
+    output = str(result.get("output") or "")
+    # O-1（2026-10-18）仪器加固配套：oracle 执行体在绑定/前件/调用/后件抛非断言
+    # 异常时 `pytest.skip("oracle-unavailable: ...")`。此时套件 passed=True 并不
+    # 意味着 oracle 通过（它根本没判定）——若显式出现 SKIPPED 行，保留未决态
+    # "injected"（不臆测 passed），与独立判读 oracle_suite_verdict=unavailable 对齐。
+    if any(
+        "SKIPPED" in line and any(marker in line for marker in _SPEC_ORACLE_TEST_NAMES) for line in output.splitlines()
+    ):
+        return None
     if result.get("passed"):
         return _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
-    output = str(result.get("output") or "")
     for line in output.splitlines():
         if "PASSED" in line and any(marker in line for marker in _SPEC_ORACLE_TEST_NAMES):
             return _SPEC_ORACLE_VERDICT_INJECTED_AND_PASSED
@@ -1848,13 +1856,24 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
     # 若有其他模块内容（未来扩展），在此追加到 source_files 与 entry_modules
 
     deps = analyze_multi_entry_deps(entry_modules, source_files)
+    # O-3（2026-10-18）可观测性修复：此前 trace 的 dep_edges/decision 只看
+    # **AST 推导边**（deps），而 benchmark 层预置依赖边（state["cross_file_deps"]，
+    # 由 _write_cross_file_state 按 dep_chain 注入）在下游会被保留——于是
+    # "预置边非空 + AST 边为空"的真实跨文件任务在 trace 里被标成
+    # `single_file_fallback`/`dep_edges=0`（O-3 实跑实测），审计侧误判
+    # "analyzer 没找到依赖"。现把两条来源分列并让 decision 反映**有效依赖边**
+    # （AST 优先；AST 空时预置边即有效）。纯观测口径，路由/落态零变化。
+    _preset_deps = state.get("cross_file_deps") or []
+    _effective_dep_count = len(deps) if deps else len(_preset_deps)
     _trace_node(
         "cross_file_analyzer",
         output_summary={
             "entry_module": entry_module,
-            "dep_edges": len(deps),
+            "ast_dep_edges": len(deps),
+            "preset_dep_edges": len(_preset_deps),
+            "dep_edges": _effective_dep_count,
         },
-        decision="deps_found" if deps else "single_file_fallback",
+        decision="deps_found" if _effective_dep_count else "single_file_fallback",
         duration_ms=(time.time() - t0) * 1000,
         iteration=state.get("iteration", 0),
     )
@@ -1870,7 +1889,6 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
     # 修复：AST 分析结果为空、且预置边非空时，保留预置边（双向依赖图：被调方
     # 视角缺失的"调用方 → 被调方"反向边由 dep_chain 预置补全）。预置边为空时
     # 维持历史 AST 单视角口径（零行为变化）。
-    _preset_deps = state.get("cross_file_deps") or []
     if deps:
         # AST 分析命中 → 用 AST 结果（历史口径）
         # O11（2026-09-29 审查 P1）：显式标记边来源为 AST 推导
@@ -1926,14 +1944,15 @@ def _cross_file_analyzer_node(state: AITesterState) -> dict[str, Any]:
                 state.get("module_name") or os.path.basename(state.get("target_file") or ""),
             )
 
-    # 单文件项目降级：依赖边为空时不生成跨文件计划（保持单文件路径）
-    if not deps:
+    # 跨文件计划落态：当前实现只写 None 占位（完整计划构建器
+    # cross_file.build_cross_file_repair_plan 尚未接入图——O-3 实测确认
+    # src/graph/ 内零调用点，属已登记的二期缺口；见 O-3 报告缺陷 D3b）。
+    if not deps and not _preset_deps:
         logger.info("3.5 跨文件修复：依赖图为空（单文件项目），降级为单文件模式")
-        update["cross_file_plan"] = None
-    else:
+    elif deps:
         logger.info("3.5 跨文件修复：发现 %d 条跨文件依赖边", len(deps))
-        # 完整修复计划由 _debugger_node 后续生成（协调器-提议者：提议者=debugger）
-        update["cross_file_plan"] = None  # 占位，待二期实现完整计划构建
+    # 预置边分支的日志已在上方 elif _preset_deps 分支给出（不再重复打印误导性"降级"）
+    update["cross_file_plan"] = None  # 占位，待二期实现完整计划构建
     return update
 
 

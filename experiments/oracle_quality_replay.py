@@ -536,6 +536,11 @@ def classify_oracle_outcomes(
                 "cls": cls,
                 "reason": row.get("reason"),
                 "mm_cls": row.get("cls"),
+                # O-1：fp 细分与 skip 归因（由 analyze_task 在解析 junit 后填充；
+                # 分类本身仍复用 T2 分类器，旧四分类键不变）
+                "fp_kind": None,
+                "buggy_skip_reason": None,
+                "fixed_skip_reason": None,
             }
         )
     # 防御：映射不丢计数（mm_counts 总和 = 映射后 counts 总和）
@@ -546,6 +551,46 @@ def classify_oracle_outcomes(
 
 # ─── 失败类型归因（论文级诊断：假阳是断言失败还是 oracle 自身崩溃） ──────
 _EXCEPTION_RE = re.compile(r"\b([A-Z][A-Za-z0-9_]*(?:Error|Exception|Warning))\b")
+# O-1（2026-10-18）：仪器不可用 skip 原因归一（崩溃 harness / no-valid-input）。
+# 报告只保留稳定前缀（"oracle-unavailable: <ExcType|no-valid-input>"），异常
+# 消息正文不进入聚合键（保证重复重放 digest 稳定）。
+_ORACLE_SKIP_SENTINEL = "oracle-unavailable:"
+FP_FLAG_ASSERTION = "fp_assertion_fail"
+FP_INSTRUMENT_ERROR = "instrument_error"
+FP_UNATTRIBUTED = "fp_unattributed"
+
+
+def _normalize_oracle_skip_reason(message: str) -> str:
+    """把 skip 消息归一为稳定原因键（``oracle-unavailable: <reason>``）。"""
+    text = str(message or "").replace("\n", " ").strip()
+    if _ORACLE_SKIP_SENTINEL not in text:
+        return "skipped_other"
+    tail = text.split(_ORACLE_SKIP_SENTINEL, 1)[1].strip().lstrip(":").strip()
+    # 形如 "TypeError: ..." / "no-valid-input"：只保留第一段（异常类型或原因码）
+    first = tail.split(":", 1)[0].strip()
+    return f"{_ORACLE_SKIP_SENTINEL} {first or 'unknown'}"
+
+
+def classify_fp_kind(fixed_note: dict[str, Any] | None) -> str:
+    """O-1：把 oracle fp 拆成"断言失败型"与"仪器失效型"（旧四分类兼容）。
+
+    - fixed 侧 junit 记录为 ``failure`` 且失败类型是 assertion → ``fp_assertion_fail``
+      （oracle 断言在正确实现上失败 = 语义判断错误，保留为 fp）；
+    - fixed 侧 junit 记录为 ``error`` / 失败类型是 exception/timeout → ``instrument_error``
+      （崩溃等仪器失效；加固后新产物应转为 skipped/unavailable）；
+    - 无诊断记录（junit 缺失/未解析）→ ``fp_unattributed``（保守，不臆测归因）。
+    """
+    note = fixed_note or {}
+    if not note:
+        return FP_UNATTRIBUTED
+    if note.get("tag") == "error":
+        return FP_INSTRUMENT_ERROR
+    kind = str(note.get("kind") or "")
+    if kind == "assertion":
+        return FP_FLAG_ASSERTION
+    if kind in {"exception", "timeout", "other"}:
+        return FP_INSTRUMENT_ERROR
+    return FP_UNATTRIBUTED
 
 
 def failure_kind(message: str) -> str:
@@ -589,15 +634,26 @@ def parse_junit_failure_notes(path: Path) -> dict[str, dict[str, Any]]:
         if node is None:
             continue
         for child in case:
-            if child.tag not in {"failure", "error"}:
+            if child.tag not in {"failure", "error", "skipped"}:
                 continue
             message = f"{child.get('message') or ''}\n{child.text or ''}"
-            notes[node] = {
-                "tag": child.tag,
-                "kind": failure_kind(message),
-                "exception": exception_name(message),
-                "message": _truncate(message, 300),
-            }
+            if child.tag == "skipped":
+                # O-1 仪器加固：崩溃安全 harness 的 pytest.skip 详情（诊断列）
+                notes[node] = {
+                    "tag": "skipped",
+                    "kind": "skipped",
+                    "exception": None,
+                    "message": _truncate(message, 300),
+                    "skip_reason": _normalize_oracle_skip_reason(message),
+                }
+            else:
+                notes[node] = {
+                    "tag": child.tag,
+                    "kind": failure_kind(message),
+                    "exception": exception_name(message),
+                    "message": _truncate(message, 300),
+                    "skip_reason": None,
+                }
             break
     return notes
 
@@ -646,11 +702,17 @@ def _oracle_failure_stats(
     buggy_kinds: Counter[str] = Counter()
     fixed_kinds: Counter[str] = Counter()
     fixed_exceptions: Counter[str] = Counter()
+    skip_reasons: Counter[str] = Counter()
     for row in rows:
-        if row.get("buggy") == "fail" and row.get("node") in buggy_notes:
-            buggy_kinds[str(buggy_notes[row["node"]].get("kind") or "other")] += 1
-        if row.get("fixed") == "fail" and row.get("node") in fixed_notes:
-            note = fixed_notes[row["node"]]
+        node = str(row.get("node"))
+        if row.get("buggy") == "skip" and node in buggy_notes:
+            skip_reasons[str(buggy_notes[node].get("skip_reason") or "skipped_other")] += 1
+        if row.get("fixed") == "skip" and node in fixed_notes:
+            skip_reasons[str(fixed_notes[node].get("skip_reason") or "skipped_other")] += 1
+        if row.get("buggy") == "fail" and node in buggy_notes:
+            buggy_kinds[str(buggy_notes[node].get("kind") or "other")] += 1
+        if row.get("fixed") == "fail" and node in fixed_notes:
+            note = fixed_notes[node]
             fixed_kinds[str(note.get("kind") or "other")] += 1
             if note.get("exception"):
                 fixed_exceptions[str(note["exception"])] += 1
@@ -658,6 +720,8 @@ def _oracle_failure_stats(
         "buggy_side_failure_kinds": dict(sorted(buggy_kinds.items())),
         "fixed_side_failure_kinds": dict(sorted(fixed_kinds.items())),
         "fixed_side_exception_types": dict(sorted(fixed_exceptions.items())),
+        # O-1：仪器不可用 skip 原因分布（oracle-unavailable: <ExcType|no-valid-input>）
+        "skip_reason_counts": dict(sorted(skip_reasons.items())),
     }
 
 
@@ -982,8 +1046,15 @@ def analyze_task(
         fixed_missing_reason=aug_fixed.get("missing_reason") or "missing_side",
     )
     for row_out in rows:
-        row_out["buggy_failure_kind"] = (buggy_notes.get(str(row_out["node"])) or {}).get("kind")
-        row_out["fixed_failure_kind"] = (fixed_notes.get(str(row_out["node"])) or {}).get("kind")
+        node = str(row_out["node"])
+        buggy_note = buggy_notes.get(node) or {}
+        fixed_note = fixed_notes.get(node) or {}
+        row_out["buggy_failure_kind"] = buggy_note.get("kind")
+        row_out["fixed_failure_kind"] = fixed_note.get("kind")
+        # O-1：fp 细分（断言型 vs 仪器失效型）与 skip 原因（稳定键，不含消息正文）
+        row_out["fp_kind"] = classify_fp_kind(fixed_note) if row_out.get("cls") == "fp" else None
+        row_out["buggy_skip_reason"] = buggy_note.get("skip_reason") if buggy_note.get("tag") == "skipped" else None
+        row_out["fixed_skip_reason"] = fixed_note.get("skip_reason") if fixed_note.get("tag") == "skipped" else None
     record["oracle"].update(
         {
             "status": "ok",
@@ -1441,12 +1512,18 @@ def aggregate_oracle(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     buggy_kinds: Counter[str] = Counter()
     fixed_kinds: Counter[str] = Counter()
     fixed_exceptions: Counter[str] = Counter()
+    skip_reasons: Counter[str] = Counter()
+    fp_breakdown: Counter[str] = Counter({FP_FLAG_ASSERTION: 0, FP_INSTRUMENT_ERROR: 0, FP_UNATTRIBUTED: 0})
     per_task_tests: list[float] = []
     task_counts: Counter[str] = Counter()
     n_measured_tasks = 0
     for task in tasks:
         oracle = task.get("oracle") or {}
-        if oracle.get("status") != "ok":
+        # O-1：做过 oracle 收集（n_oracle_nodes>0）但全部不可分类的任务
+        # （status=not_run + skip_reason=no_classifiable_oracle_tests）也必须
+        # 计入不可分类统计——否则加固后 skipped 会"凭空消失"（分母缩小的
+        # 原因不可见，正是 M-2 类测量伪影的复发形态）。
+        if oracle.get("status") != "ok" and not int(oracle.get("n_oracle_nodes") or 0):
             continue
         n_measured_tasks += 1
         per_task_tests.append(float(oracle.get("n_oracle_nodes") or 0))
@@ -1468,20 +1545,50 @@ def aggregate_oracle(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         for exc, value in (stats.get("fixed_side_exception_types") or {}).items():
             if value:
                 fixed_exceptions[str(exc)] += int(value)
+        # O-1：逐测试 fp 细分（断言型 / 仪器失效型 / 无归因）与 skip 侧归因。
+        # skip 原因优先从 per-test 行取（唯一来源）；仅当旧/外部报告没有
+        # per-test 行时才回退 failure_stats，避免同一 skip 被双计。
+        test_rows = oracle.get("tests") or []
+        if not test_rows:
+            for reason, value in (stats.get("skip_reason_counts") or {}).items():
+                if value:
+                    skip_reasons[str(reason)] += int(value)
+        for test_row in test_rows:
+            if test_row.get("cls") == "fp":
+                fp_breakdown[str(test_row.get("fp_kind") or FP_UNATTRIBUTED)] += 1
+            # skip 原因按**测试**计一次（fixed 侧优先、回退 buggy 侧）——
+            # 两侧同为 skip（崩溃 harness 常见形态）时不得双计。
+            reason = test_row.get("fixed_skip_reason") or test_row.get("buggy_skip_reason")
+            if reason:
+                skip_reasons[str(reason)] += 1
     n_classifiable = sum(counts.values())
+    n_skipped = int(unclassifiable.get("skipped", 0))
     return {
         "n_tasks_measured": n_measured_tasks,
         "n_oracle_tests_classifiable": n_classifiable,
         "n_oracle_tests_unclassifiable": sum(unclassifiable.values()),
         "counts": counts,
+        # 旧四分类兼容映射：fp = fp_assertion_fail + instrument_error + fp_unattributed
+        "counts_legacy_mapping": {
+            "fp": counts["fp"],
+            "fp_breakdown": dict(sorted(fp_breakdown.items())),
+            "note": (
+                "旧键 counts.fp 保留（= fp_assertion_fail + instrument_error + fp_unattributed）；"
+                "instrument_error 为 fixed 侧异常/收集失败等非断言失败（O-1 从 fp 拆出，"
+                "加固后新产物应转为 skipped/unavailable）；fp_assertion_fail 为断言型假阳"
+            ),
+        },
         "rates": {cls: (round(counts[cls] / n_classifiable, 6) if n_classifiable else None) for cls in ORACLE_CLASSES},
         "unclassifiable_counts": dict(sorted(unclassifiable.items())),
         "n_tasks_with_class": {cls: int(task_counts.get(cls, 0)) for cls in ORACLE_CLASSES},
         "per_task_oracle_tests": _summary(per_task_tests),
+        "skipped_count": n_skipped,
+        "skip_reason_counts": dict(sorted(skip_reasons.items())),
         "failure_stats": {
             "buggy_side_failure_kinds": dict(sorted(buggy_kinds.items())),
             "fixed_side_failure_kinds": dict(sorted(fixed_kinds.items())),
             "fixed_side_exception_types": dict(sorted(fixed_exceptions.items())),
+            "skip_reason_counts": dict(sorted(skip_reasons.items())),
         },
     }
 
@@ -1826,6 +1933,143 @@ def build_comparison(arms: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
+def load_oracle_quality_report(path: Path) -> dict[str, Any]:
+    """加载任意 A-05 oracle 质量报告（O-1 before/after 对照的 before 侧）。
+
+    Returns:
+        {"path","sha256","body_digest","report"}。
+
+    Raises:
+        OracleQualityError: 缺失 / JSON 非法 / 结构不合法（fail-closed）。
+    """
+    if not path.is_file():
+        raise OracleQualityError(f"对照基线报告不存在（--compare-report）: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise OracleQualityError(f"对照基线报告无法解析: {path}: {e}") from e
+    report = payload.get("report") if isinstance(payload, dict) else None
+    if not isinstance(report, dict) or not isinstance(report.get("arms"), list):
+        raise OracleQualityError(f"对照基线报告结构不合法（缺 report.arms）: {path}")
+    return {
+        "path": _display_path(path),
+        "sha256": sha256_file(path),
+        "body_digest": (payload.get("run_meta") or {}).get("body_digest"),
+        "report": report,
+    }
+
+
+def _baseline_oracle_breakdown(oracle: dict[str, Any]) -> dict[str, Any]:
+    """从报告聚合的 oracle 段推导 before 侧 fp 细分（O-1 对照用）。
+
+    M-2 工件没有 per-test fp_kind 字段；可由 failure_stats 推导：
+    - ``fixed_side_failure_kinds.assertion`` = 断言型 fp；
+    - ``fixed_side_exception_types`` 求和 = 仪器失效型 fp；
+    - 差额 = 无归因（保守）。
+    """
+    counts = oracle.get("counts") or {}
+    failure_stats = oracle.get("failure_stats") or {}
+    fixed_kinds = failure_stats.get("fixed_side_failure_kinds") or {}
+    fixed_exceptions = failure_stats.get("fixed_side_exception_types") or {}
+    assertion = int(fixed_kinds.get("assertion", 0) or 0)
+    instrument = sum(int(v or 0) for v in fixed_exceptions.values())
+    fp_total = int(counts.get("fp", 0) or 0)
+    unattributed = max(0, fp_total - assertion - instrument)
+    return {
+        "fp_assertion_fail": assertion,
+        "instrument_error": instrument,
+        "fp_unattributed": unattributed,
+        "fp_total": fp_total,
+        "fixed_side_exception_types": dict(sorted(fixed_exceptions.items())),
+        "fixed_side_failure_kinds": dict(sorted(fixed_kinds.items())),
+    }
+
+
+def build_instrument_hardening_comparison(
+    arms: list[dict[str, Any]],
+    baseline: dict[str, Any],
+) -> dict[str, Any]:
+    """O-1 仪器加固 before/after 对照（同一 replay 工具口径；before = 基线工件）。
+
+    诚实口径：这是**仪器治疗**对照，不是检出能力提升证据。加固后崩溃应从
+    fp 变为 skipped/unavailable（不再被当假阳），断言型 fp 保留；correct 的
+    语义质量不受影响（预期仍为 0）。
+    """
+    baseline_arms = {
+        str(arm.get("arm")): arm for arm in (baseline.get("report") or {}).get("arms") or [] if isinstance(arm, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for arm in arms:
+        name = str(arm.get("arm"))
+        current_oracle = ((arm.get("subsets") or {}).get("all_tasks") or {}).get("oracle") or {}
+        baseline_arm = baseline_arms.get(name)
+        if baseline_arm is None:
+            rows.append({"arm": name, "before": None, "after": None, "delta": None, "note": "基线工件缺该臂"})
+            continue
+        before_oracle = ((baseline_arm.get("subsets") or {}).get("all_tasks") or {}).get("oracle") or {}
+        before_counts = dict(before_oracle.get("counts") or {})
+        after_counts = dict(current_oracle.get("counts") or {})
+        before_breakdown = _baseline_oracle_breakdown(before_oracle)
+        after_breakdown = dict(((current_oracle.get("counts_legacy_mapping") or {}).get("fp_breakdown")) or {})
+        before_unclassifiable = dict(before_oracle.get("unclassifiable_counts") or {})
+        after_unclassifiable = dict(current_oracle.get("unclassifiable_counts") or {})
+        delta = {
+            cls: int(after_counts.get(cls, 0) or 0) - int(before_counts.get(cls, 0) or 0) for cls in ORACLE_CLASSES
+        }
+        delta["classifiable"] = int(current_oracle.get("n_oracle_tests_classifiable") or 0) - int(
+            before_oracle.get("n_oracle_tests_classifiable") or 0
+        )
+        delta["skipped"] = int(after_unclassifiable.get("skipped", 0) or 0) - int(
+            before_unclassifiable.get("skipped", 0) or 0
+        )
+        rows.append(
+            {
+                "arm": name,
+                "before": {
+                    "n_oracle_tests_classifiable": int(before_oracle.get("n_oracle_tests_classifiable") or 0),
+                    "counts": before_counts,
+                    "fp_breakdown": before_breakdown,
+                    "unclassifiable_counts": before_unclassifiable,
+                    "failure_stats": before_oracle.get("failure_stats") or {},
+                },
+                "after": {
+                    "n_oracle_tests_classifiable": int(current_oracle.get("n_oracle_tests_classifiable") or 0),
+                    "counts": after_counts,
+                    "fp_breakdown": after_breakdown,
+                    "skipped_count": int(after_unclassifiable.get("skipped", 0) or 0),
+                    "skip_reason_counts": current_oracle.get("skip_reason_counts") or {},
+                    "unclassifiable_counts": after_unclassifiable,
+                    "failure_stats": current_oracle.get("failure_stats") or {},
+                },
+                "delta": delta,
+            }
+        )
+    return {
+        "kind": "instrument_hardening_before_after",
+        "baseline": {
+            "path": baseline.get("path"),
+            "sha256": baseline.get("sha256"),
+            "body_digest": baseline.get("body_digest"),
+        },
+        "caliber": (
+            "同一 experiments/oracle_quality_replay.py 混合重放口径（LLM-only 重放 + oracle-augmented 混判）；"
+            "before 取基线工件聚合、after 为本次加固后重放聚合；分母 = 可分类 oracle 测试数"
+            "（加固后 skipped/不可分类单列、不进分母）"
+        ),
+        "arms": rows,
+        "expected_mapping": (
+            "before 的 fp = fp_assertion_fail（断言型，保留）+ instrument_error（崩溃型；"
+            "加固后应转为 skipped/unavailable，由 unclassifiable_counts.skipped 与 "
+            "skip_reason_counts 观测）"
+        ),
+        "honesty_note": (
+            "**仪器治疗 ≠ 检出能力提升**：加固只改变「崩溃如何被记账」（fp → skipped/unavailable），"
+            "不改变 oracle 断言语义；correct 的语义质量预期不变（仍为 0，需质量治理另立项）。"
+            "加固后可分类分母变小，引用占比必须同时给出 skipped 数与分母。"
+        ),
+    }
+
+
 def _m1_oracle_suite_verdict_domain() -> tuple[str, ...]:
     """oracle-suite verdict 取值域（单一事实源 = experiments/_m1_metrics.py）。"""
     from experiments._m1_metrics import ORACLE_SUITE_VERDICTS
@@ -1842,6 +2086,7 @@ def build_report(
     command: list[str],
     independent_judging: bool = False,
     m2_info: dict[str, Any] | None = None,
+    instrument_comparison: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """组装确定性报告 body（不含时间戳/墙钟；这些只进 run_meta）。
 
@@ -1892,6 +2137,7 @@ def build_report(
         "anchor_table": anchor_info,
         "arms": arms,
         "comparison": build_comparison(arms),
+        "instrument_hardening_comparison": instrument_comparison,
         "independent_judging": (
             {
                 "m2_baseline": m2_info,
@@ -1953,6 +2199,57 @@ def _fmt_rate(value: Any) -> str:
     if value is None:
         return "—"
     return f"{float(value) * 100:.2f}%"
+
+
+def _render_comparison_rows(comparison: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """把 before/after 对照渲染为 (指标, before, after) 行（Markdown 共用）。"""
+    rows: list[tuple[str, str, str]] = []
+    for arm_row in comparison.get("arms") or []:
+        before = arm_row.get("before") or {}
+        after = arm_row.get("after") or {}
+        before_counts = before.get("counts") or {}
+        after_counts = after.get("counts") or {}
+        before_break = before.get("fp_breakdown") or {}
+        after_break = after.get("fp_breakdown") or {}
+        before_skip = int((before.get("unclassifiable_counts") or {}).get("skipped", 0) or 0)
+        after_skip = int(after.get("skipped_count", 0) or 0)
+        rows.append(
+            (
+                f"`{arm_row.get('arm')}` 可分类 oracle 测试数",
+                str(before.get("n_oracle_tests_classifiable")),
+                str(after.get("n_oracle_tests_classifiable")),
+            )
+        )
+        rows.extend(
+            (
+                f"`{arm_row.get('arm')}` `{cls}`",
+                str(int(before_counts.get(cls, 0) or 0)),
+                str(int(after_counts.get(cls, 0) or 0)),
+            )
+            for cls in ORACLE_CLASSES
+        )
+        rows.append(
+            (
+                f"`{arm_row.get('arm')}` `fp_assertion_fail`（断言型假阳，保留）",
+                str(int(before_break.get("fp_assertion_fail", 0) or 0)),
+                str(int(after_break.get("fp_assertion_fail", 0) or 0)),
+            )
+        )
+        rows.append(
+            (
+                f"`{arm_row.get('arm')}` `instrument_error`（崩溃型假阳，拆出）",
+                str(int(before_break.get("instrument_error", 0) or 0)),
+                str(int(after_break.get("instrument_error", 0) or 0)),
+            )
+        )
+        rows.append(
+            (
+                f"`{arm_row.get('arm')}` `skipped`（仪器不可用单列，不进分母）",
+                str(before_skip),
+                str(after_skip),
+            )
+        )
+    return rows
 
 
 def render_markdown(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
@@ -2395,6 +2692,52 @@ def render_markdown(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
                 f" | {(task.get('archived_check') or {}).get('verdict_agreement')} |"
             )
         add("")
+    comparison_hardening = report.get("instrument_hardening_comparison")
+    if comparison_hardening:
+        add("## 10. O-1 仪器加固前后对照（before/after）")
+        add("")
+        baseline = comparison_hardening.get("baseline") or {}
+        add(
+            f"> 对照基线：`{baseline.get('path')}`（sha256 `{baseline.get('sha256')}`）。"
+            "**这是仪器治疗对照，不是检出能力提升证据**——加固后崩溃由 fp 转为 "
+            "skipped/unavailable，断言语义不变。"
+        )
+        add("")
+        add("| 指标 | before | after |")
+        add("|---|---|---|")
+        for label, before, after in _render_comparison_rows(comparison_hardening):
+            add(f"| {label} | {before} | {after} |")
+        add("")
+        skip_reasons = sorted(
+            {
+                reason
+                for arm_row in comparison_hardening.get("arms") or []
+                for reason in ((arm_row.get("after") or {}).get("skip_reason_counts") or {})
+            }
+        )
+        if skip_reasons:
+            add("after 侧仪器不可用 skip 原因分布：")
+            add("")
+            add(
+                "| skip 原因 | "
+                + " | ".join(f"`{a.get('arm')}`" for a in comparison_hardening.get("arms") or [])
+                + " |"
+            )
+            add("|---|" + "---|" * len(comparison_hardening.get("arms") or []))
+            for reason in skip_reasons:
+                add(
+                    f"| `{reason}` | "
+                    + " | ".join(
+                        str(((arm_row.get("after") or {}).get("skip_reason_counts") or {}).get(reason, 0))
+                        for arm_row in comparison_hardening.get("arms") or []
+                    )
+                    + " |"
+                )
+            add("")
+        add("> " + str(comparison_hardening.get("expected_mapping") or ""))
+        add("")
+        add("> " + str(comparison_hardening.get("honesty_note") or ""))
+        add("")
     add("## 10. 确定性声明")
     add("")
     determinism = run_meta.get("determinism") or {}
@@ -2521,7 +2864,26 @@ def render_readme(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
     add(f"- 本次重放墙钟：{run_meta.get('tool_wall_s')} s（只进 run_meta，不进 body digest）")
     add("- **确定性口径**：A-05 repeat=1（单测锁 body 结构；窗口结束后可选补 repeat=2）；A-11 repeat=2 逐位一致。")
     add("")
-    add("## 7. 已知限制")
+    comparison_hardening = report.get("instrument_hardening_comparison")
+    if comparison_hardening:
+        add("## 7. O-1 仪器加固前后对照（before/after）")
+        add("")
+        baseline = comparison_hardening.get("baseline") or {}
+        add(
+            f"> 对照基线：`{baseline.get('path')}`（sha256 `{baseline.get('sha256')}`）。"
+            "**仪器治疗 ≠ 检出能力提升**：加固只改变崩溃的记账方式（fp → skipped/unavailable），"
+            "oracle 断言语义与 correct 语义质量不变。"
+        )
+        add("")
+        add("| 指标 | before | after |")
+        add("|---|---|---|")
+        for label, before, after in _render_comparison_rows(comparison_hardening):
+            add(f"| {label} | {before} | {after} |")
+        add("")
+        add("> " + str(comparison_hardening.get("expected_mapping") or ""))
+        add("")
+        add("## 8. 已知限制（与 §7 前合并引用）")
+        add("")
     add("")
     for item in report.get("limitations") or []:
         add(f"- {item}")
@@ -2769,6 +3131,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="M-2 基线报告（独立判读对账权威基线；缺省 = emse_oracle_quality_20261017/ORACLE_QUALITY_REPORT.json）",
     )
     parser.add_argument(
+        "--compare-report",
+        default=None,
+        metavar="PATH",
+        help=(
+            "O-1 仪器加固 before/after 对照基线（任一 A-05 oracle 质量报告；给定时报告增加 "
+            "instrument_hardening_comparison 段与 README 对照表）"
+        ),
+    )
+    parser.add_argument(
         "--quixbugs-root",
         default=None,
         metavar="DIR",
@@ -2840,6 +3211,7 @@ def _run_replay(
     progress: bool,
     independent_judging: bool = False,
     m2_baseline: dict[str, Any] | None = None,
+    compare_baseline: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """执行完整重放，返回 (报告 body, 本次运行的易变元信息)。
 
@@ -2895,6 +3267,9 @@ def _run_replay(
         if independent_judging
         else None
     )
+    instrument_comparison: dict[str, Any] | None = None
+    if compare_baseline is not None:
+        instrument_comparison = build_instrument_hardening_comparison(arms, compare_baseline)
     body = build_report(
         artifact_entries=artifact_entries,
         anchor_info=anchor_info,
@@ -2903,6 +3278,7 @@ def _run_replay(
         command=_command_line(),
         independent_judging=independent_judging,
         m2_info=m2_info,
+        instrument_comparison=instrument_comparison,
     )
     meta = {
         "generated_at": _now_iso(),
@@ -2973,6 +3349,11 @@ def main(argv: list[str] | None = None) -> int:
         selection = _resolve_selection(artifact_paths, list(args.arm or []))
         if independent:
             m2_baseline = load_m2_report(Path(args.m2_report).expanduser())
+        if getattr(args, "compare_report", None):
+            # O-1：before/after 对照基线 fail-closed 前置加载（不消耗重放时间）
+            compare_baseline = load_oracle_quality_report(Path(args.compare_report).expanduser())
+        else:
+            compare_baseline = None
     except (OracleQualityError, mm.ArtifactError) as e:
         print(f"[oracle] 错误: {e}", file=sys.stderr)
         return 2
@@ -3020,6 +3401,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
             ),
             "m2_baseline": ({"path": m2_baseline["path"], "sha256": m2_baseline["sha256"]} if m2_baseline else None),
+            "instrument_compare_report": (
+                _display_path(Path(args.compare_report).expanduser()) if getattr(args, "compare_report", None) else None
+            ),
         }
         repeats: list[tuple[dict[str, Any], dict[str, Any]]] = []
         n_repeat = max(1, int(args.repeat))
@@ -3036,6 +3420,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress=not args.quiet,
                 independent_judging=independent,
                 m2_baseline=m2_baseline,
+                compare_baseline=compare_baseline,
             )
             repeats.append((body, meta))
     finally:

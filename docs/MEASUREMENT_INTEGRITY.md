@@ -262,3 +262,46 @@ misguided 0 / unavailable 2**，与 M-2 逐任务类别 match 38/38。**判分�
 `SPEC_ORACLE_EXEC_ENABLE=true`，find_in_sorted，1 次调用 2423 tokens）直接演示：
 同一生成测试 **LLM-suite detection=1.0 而 legacy 混判=0.0**（oracle verdict=fp
 抹掉了既有检出）——验证性，不作证据。
+
+**O-1 仪器处置（2026-10-18，A-05 后续"仪器治疗"）**：M-2/N-3 已把 §6 的两条缺陷
+分开——判分耦合由 N-3 修（独立判读），**仪器未自校验**由 O-1 修（崩溃安全 +
+前件校验输入）。O-1 修复 `compile_spec_oracle` 产物：① 执行体（绑定/前件/
+调用/后件）包 `try`，`AssertionError` 原样 re-raise、其余 `Exception` →
+`pytest.skip("oracle-unavailable: <ExcType>: ...")`（不静默 pass、不伪装 fail；
+BaseException/超时不吞）；② 有 boundaries 时按序用受限安全求值
+（`spec_smt.safe_eval_clause`，白名单 AST、零 eval/exec）筛选满足全部可机检
+前件的候选；全部被拒 → SMT 见证兜底；仍无 → 带
+`pytest.skip("oracle-unavailable: no-valid-input")` 的保守骨架（不臆造输入、
+不产假断言）；③ `_m1_metrics` 把 pytest skipped 记 `oracle_suite_verdict=
+unavailable`（不混入 fp/silent），replay 四分类新增
+`fp_breakdown`（`fp_assertion_fail` / `instrument_error` / 未归因）、
+`skipped_count`、`skip_reason_counts`（旧四分类键兼容）。
+
+**零 LLM before/after 重放**（df_spec 双臂，工件
+`experiments/results/emse_oracle_instrument_hardening_20261017/`；墙钟 279.9s）：
+before（M-2 工件）fp **29** = `fp_assertion_fail` **2** + `instrument_error`
+**27**（TypeError 24 / AttributeError 2 / ZeroDivisionError 1），可分类分母 38；
+after：fp **2**（仅断言型，保留）、`instrument_error` **0**、
+**skipped 27**（`oracle-unavailable: TypeError` 24 / AttributeError 2 /
+ZeroDivisionError 1，与 before 异常类型逐类一致）、可分类分母 **11**、
+correct **0→0**、silent 9→9。生产独立判读路径（N-3 模式）复核：40 口径
+`oracle_suite_verdict` = unavailable 29 / fp 2 / silent 9 / correct 0，
+LLM-suite detection 与 M-2 逐位一致（20/40=50.00%、31/40=77.50%，mismatch 0）。
+
+**对 M-2/N-3 结论的修正（诚实披露）**：原记录"oracle 混判抹掉 14/22 个 LLM
+检出"**主要成分是仪器伪影**——那些 lost 任务绝大多数是崩溃型 oracle 在 fixed
+侧恒红；加固后混判 lost 降至 **1/2**，oracle-augmented 40 口径 detection 由
+10.53%/18.42% 升至 44.74%/71.05%。这**不是**检出能力提升（LLM-suite detection
+不变 50.00%/77.50%、correct 仍 0）：原"净损伤"量级被仪器缺陷放大，剩余
+lost 1/2 才是断言型 fp 的语义质量信号；"判分耦合"缺陷本身（N-3 已修）仍会
+让断言型 fp 改写混判检出，独立判读是正确修法。
+
+**口径纪律（长期有效）**：这是**仪器治疗，不是检出能力提升**——correct 仍 0
+（语义质量治理另立项）；修复只让"崩溃/前件违反"从"假阳判定"变为"不可用
+（skipped/unavailable）"单列。**加固后可分类分母由 38 降为 11**：引用 oracle
+占比必须同时给分母与 skipped 数，禁止与加固前数字混池；历史批次（开关默认
+关）数字不受影响。残余风险：harness 只捕获 `Exception` 子类（段错误等由外层
+subprocess 兜底）；skip 暴露而非修复编译器绑定缺陷；NL 前件仍不可机检；
+`nodes._spec_oracle_verdict_after_run` 对"oracle 全 skip"轮次仍可能记
+injected_and_passed（nodes 写域归 O-3，本任务未改，风险登记）。
+

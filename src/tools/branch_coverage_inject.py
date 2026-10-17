@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 
 _ENV = "BRANCH_COVERAGE_INJECT_ENABLE"
 _MEASURE_TIMEOUT = 60  # branch 测量子进程超时（秒，默认 60）
+# O 轮（2026-10-18）运行期卫生：测量子进程内 pytest 单测超时（秒）。
+# 背景：QuixBugs 非终止家族（bitcount 等）的生成测试会让 pytest 永久挂起，
+# 历史上只依赖外层 run_with_timeout 的 60s 超时兜底；一旦**调用方进程先被外部
+# 杀死**（M-3 父进程死亡缺口族），该子进程被 init 收养后 99% CPU 空转 82 分钟
+# （O 轮现场实测 PID 19663，ppid=1）。两层修复：① pytest-timeout 在子进程内
+# 按单测 10s 超时（无插件时自动降级）；② 调用点启用 orphan_guard 父死回收。
+_PER_TEST_TIMEOUT_SECONDS = 10
 
 
 def branch_coverage_inject_enabled() -> bool:
@@ -75,7 +82,12 @@ _MEASURE_SCRIPT = (
     "cov.erase()\n"
     "cov.start()\n"
     "import pytest\n"
-    "pytest.main([test_path, '-q', '--tb=no', '-p', 'no:cacheprovider'])\n"
+    "try:\n"
+    "    import pytest_timeout  # noqa: F401\n"
+    "    _timeout_args = ['--timeout=10']\n"
+    "except ImportError:\n"
+    "    _timeout_args = []\n"
+    "pytest.main([test_path, '-q', '--tb=no', '-p', 'no:cacheprovider', *_timeout_args])\n"
     "cov.stop()\n"
     "cov.json_report(outfile=out_json)\n"
     "with open(out_json, encoding='utf-8') as f:\n"
@@ -181,6 +193,9 @@ def measure_branch_coverage(
             cwd=exec_dir,
             env=env,
             logger_name="O3 branch 测量",
+            # O 轮：父进程被外部杀死时由看门狗 killpg 回收嵌套 pytest（M-3 族；
+            # 现场实测孤儿 pytest 空转 82min，99% CPU）。
+            orphan_guard=True,
         )
         if getattr(proc, "timed_out", False):
             logger.warning("O3 branch 测量超时（>%ds），降级 None", _measure_timeout())
